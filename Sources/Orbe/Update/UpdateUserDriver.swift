@@ -1,10 +1,23 @@
 import AppKit
 import Sparkle
 
+extension UpdateState.ReadyInfo {
+  /// appcast item → 表示情報（driver の found/ready 経路と UpdaterService のサイレント staged 経路が共有）。
+  init(_ item: SUAppcastItem) {
+    self.init(
+      version: item.displayVersionString, notes: item.itemDescription, date: item.date,
+      size: item.contentLength)
+  }
+}
+
 /// カスタム `SPUUserDriver`。Sparkle の UI 要求を `UpdateState` へ写像する（標準 Sparkle UI は不使用）。
 ///
-/// フロー（既定・全トグルオン）: サイレント確認 → 自動DL＋検証（Sparkle）→ stage `.installing` で
-/// `showUpdateFound` → `.dismiss` 応答（Sparkle の意味論＝終了時に自動適用）＋ `markReady` でトースト一度だけ。
+/// **バックグラウンドの自動DL（既定・全トグルオン）はこの driver を通らない**——Sparkle の
+/// SPUAutomaticUpdateDriver は UI 無しで staging まで完了し、`UpdaterService` の
+/// `willInstallUpdateOnQuit`（SPUUpdaterDelegate）だけが通知を受けて readyToRestart へ写像する。
+/// この driver に stage `.installing` の `showUpdateFound` が来るのは **staged 済み更新の resume**
+/// （staged のまま再起動した後の確認・「今すぐ再起動」の再チェック経路）で、`.dismiss` 応答
+/// （Sparkle の意味論＝終了時に自動適用）＋ `markReady` で状態カードとトーストに乗せる。
 ///
 /// 「終了時に自動で適用」オフ時は自動 staging 自体を止め（`UpdaterService` が実効
 /// `automaticallyDownloadsUpdates` を落とす）、DL・検証後の `showReadyToInstallAndRelaunch` の reply を
@@ -51,11 +64,7 @@ final class UpdateUserDriver: NSObject, SPUUserDriver {
     with appcastItem: SUAppcastItem, state updateState: SPUUserUpdateState,
     reply: @escaping (SPUUserUpdateChoice) -> Void
   ) {
-    let info = UpdateState.ReadyInfo(
-      version: appcastItem.displayVersionString,
-      notes: appcastItem.itemDescription,
-      date: appcastItem.date,
-      size: appcastItem.contentLength)
+    let info = UpdateState.ReadyInfo(appcastItem)
     pendingReadyInfo = info
     switch updateState.stage {
     case .installing:
