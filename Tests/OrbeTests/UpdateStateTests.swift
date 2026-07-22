@@ -49,8 +49,23 @@ final class UpdateStateTests: XCTestCase {
     XCTAssertEqual(state.phase, .failed(message: "offline"))
   }
 
+  /// トーストは時間で消えない——明示的な dismiss（✕・今すぐ再起動・変更内容）だけが下ろす。
+  /// 時間経過に相当する状態イベント（再チェック・セッション終了）を挟んでも立ったまま。
+  func testToastPersistsUntilExplicitDismiss() {
+    let state = makeState()
+    state.markReady(ready())
+    XCTAssertTrue(state.toastVisible)
+
+    state.beginCheck()
+    state.settleTransientPhase()
+    XCTAssertTrue(state.toastVisible, "状態イベントではトーストを下ろさない（自動消滅は存在しない）")
+
+    state.dismissToast()
+    XCTAssertFalse(state.toastVisible, "明示的な dismiss だけが下ろす")
+  }
+
   /// トーストは readyToRestart への遷移時に一度だけ。閉じた後の再 markReady（再確認・resume）では
-  /// 同一バージョンなら再表示しない。別バージョンなら再び一度だけ出る。
+  /// 同一バージョンなら再表示しない（設定の状態カードには残る）。別バージョンなら再び一度だけ出る。
   func testToastShowsOncePerVersion() {
     let state = makeState()
     XCTAssertFalse(state.toastVisible)

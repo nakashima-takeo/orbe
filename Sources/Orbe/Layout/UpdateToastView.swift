@@ -1,19 +1,14 @@
 import SwiftUI
 
 /// アップデートの「準備完了」トースト（見本 2a）。再起動待ちになった瞬間に一度だけ右下へ出る非モーダル層
-/// （提示条件は `UpdateState.toastVisible`＝1 バージョンにつき一度）。10 秒で自動消滅し、ホバー中は
-/// カウントを止める。✕ も放置も同じ結果（終了時適用）——「今すぐ再起動」は近道であって義務ではない。
+/// （提示条件は `UpdateState.toastVisible`＝1 バージョンにつき一度）。**明示的に閉じるまで残る**——
+/// 適用は再起動/終了時で、ターミナルは何日も起動しっぱなしが普通のため、時間で消える通知は役目に
+/// 対して儚すぎる（非モーダルな右下の小さな面なので残っても邪魔にならない）。閉じる操作は
+/// ✕・「今すぐ再起動」・「変更内容」（シートが開けば情報の受け取りが成立）のいずれか。
+/// ✕ も放置も同じ結果（終了時適用）——「今すぐ再起動」は近道であって義務ではない。
 struct UpdateToastView: View {
   let state: UpdateState
   @Environment(\.localization) private var l10n
-  /// 残り時間（1.0 → 0.0）。下端の細いラインの幅がこれに追従する。
-  @State private var remaining: Double = 1.0
-  @State private var hovering = false
-
-  /// 自動消滅までの秒数（見本 2a の設計注記「10秒で消え、ホバー中はカウント停止」）。
-  private let lifetime: Double = 10
-  private let tick: Double = 0.1
-  private let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
 
   var body: some View {
     GlassPanel(level: .popup, cornerRadius: Theme.Radius.card) {
@@ -71,21 +66,6 @@ struct UpdateToastView: View {
       .padding(.horizontal, Theme.Space.beat + 2)
       .padding(.bottom, Theme.Space.bar - 1)
       .frame(width: 340, alignment: .leading)
-      // 下端の細いライン＝自動消滅までの残り時間（見本 2a）。
-      .overlay(alignment: .bottomLeading) {
-        GeometryReader { geo in
-          Rectangle()
-            .fill(Color.theme.stateWaiting.opacity(0.45))
-            .frame(width: geo.size.width * remaining, height: 2)
-            .frame(maxHeight: .infinity, alignment: .bottom)
-        }
-      }
-    }
-    .onHover { hovering = $0 }
-    .onReceive(timer) { _ in
-      guard !hovering else { return }
-      remaining = max(0, remaining - tick / lifetime)
-      if remaining <= 0 { state.dismissToast() }
     }
   }
 
