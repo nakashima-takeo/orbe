@@ -36,7 +36,7 @@ struct UpdateStatusCardRow: View {
     case .checking:
       shell(border: Color.theme.surface1) {
         HStack(spacing: Theme.Space.step + 1) {
-          ProgressView().controlSize(.small)
+          StatusGlyphView(kind: .working, size: 10)
           Text(l10n.string(.updateStateChecking))
             .font(Font.theme.label)
             .foregroundStyle(Color.theme.textPrimary)
@@ -124,10 +124,10 @@ struct UpdateStatusCardRow: View {
             .font(Font.theme.label)
             .foregroundStyle(Color.theme.textPrimary)
           Spacer(minLength: 0)
-          (Text("v\(state.currentVersion)").font(Font.theme.meta)
-            + Text(" · " + UpdateLastCheckText.string(state.lastCheck, l10n)))
+          (Text("v\(state.currentVersion)").foregroundStyle(Color.theme.textSecondary)
+            + Text(" · " + UpdateLastCheckText.string(state.lastCheck, l10n))
+            .foregroundStyle(Color.theme.textMuted))
             .font(Font.theme.meta)
-            .foregroundStyle(Color.theme.textMuted)
         }
       }
     }
@@ -215,7 +215,7 @@ struct UpdateCheckNowRow: View {
   var body: some View {
     HStack(spacing: Theme.Space.step) {
       if case .checking = state.phase {
-        ProgressView().controlSize(.small)
+        StatusGlyphView(kind: .working, size: 10)
         Text(l10n.string(.updateStateChecking))
           .font(Font.theme.caption)
           .foregroundStyle(Color.theme.textMuted)

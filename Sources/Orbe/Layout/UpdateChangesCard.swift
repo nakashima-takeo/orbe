@@ -56,7 +56,7 @@ struct UpdateChangesCard: View {
         state.onCloseChanges()
       } label: {
         Text("✕")
-          .font(Font.theme.meta)
+          .font(Font.theme.label)
           .foregroundStyle(Color.theme.textMuted)
       }
       .buttonStyle(.plain)
@@ -153,7 +153,7 @@ struct UpdateNotesView: View {
           ForEach(Array(section.items.enumerated()), id: \.offset) { _, item in
             HStack(alignment: .firstTextBaseline, spacing: Theme.Space.note + 1) {
               Text(section.id < 2 ? "＋" : "✓")
-                .font(Font.theme.bodySmall)
+                .font(Font.theme.body)
                 .foregroundStyle(Color.theme.stateDone)
               Text(item)
                 .font(Font.theme.body)

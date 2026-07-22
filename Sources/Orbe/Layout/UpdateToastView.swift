@@ -39,7 +39,7 @@ struct UpdateToastView: View {
               state.dismissToast()
             } label: {
               Text("✕")
-                .font(Font.theme.meta)
+                .font(Font.theme.label)
                 .foregroundStyle(Color.theme.textMuted)
             }
             .buttonStyle(.plain)
@@ -89,13 +89,14 @@ struct UpdateToastView: View {
     }
   }
 
-  /// 「vX.Y.Z — 次回終了時に自動で適用されます」。バージョンだけ mono（見本の ver 表記）。
+  /// 「vX.Y.Z — 次回終了時に自動で適用されます」。バージョンは一段明るい secondary（見本の ver 表記）。
   private var subtitle: some View {
     let version = state.ready.map { "v\($0.version)" } ?? ""
     let tail = l10n.string(
       state.autoInstallOnQuit ? .updateToastAutoApply : .updateToastManualApply)
-    return (Text(version).font(Font.theme.codeSmall) + Text(" — \(tail)").font(Font.theme.meta))
-      .foregroundStyle(Color.theme.textMuted)
+    return (Text(version).foregroundStyle(Color.theme.textSecondary)
+      + Text(" — \(tail)").foregroundStyle(Color.theme.textMuted))
+      .font(Font.theme.codeSmall)
       .lineLimit(1)
   }
 }
