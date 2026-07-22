@@ -62,6 +62,16 @@ mkdir -p "$APP/Contents/Resources/bin"
 cp "$ROOT/.build/release/orbe-report" "$APP/Contents/Resources/bin/orbe-report"  # エージェント hook が env パスで指す状態報告 CLI（署名対象）
 cp "$ROOT/.build/release/orbe-cli" "$APP/Contents/Resources/bin/orb"  # Orbe 構成 CLI（bare `orb` へ改名・ペイン PATH で解決・署名対象）
 cp "$ROOT/app/Info.plist" "$APP/Contents/Info.plist"
+# Sparkle.framework（アプリ内アップデート）を同梱する。SwiftPM の binary artifact（xcframework）の
+# macOS slice を Frameworks へコピーし（cp -R で Versions/ の symlink 構造を保持）、実行ファイルに
+# @rpath 解決先を足す（重複追加は otool で冪等ガード）。
+SPARKLE_FW="$(echo "$ROOT"/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-*/Sparkle.framework)"
+[ -d "$SPARKLE_FW" ] || { echo "エラー: Sparkle.framework が見つからない ($SPARKLE_FW)。swift build 済みか確認せよ" >&2; exit 1; }
+mkdir -p "$APP/Contents/Frameworks"
+cp -R "$SPARKLE_FW" "$APP/Contents/Frameworks/Sparkle.framework"
+if ! otool -l "$APP/Contents/MacOS/Orbe" | grep -q "@executable_path/../Frameworks"; then
+  install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/Orbe"
+fi
 # git 短縮 SHA を build-id として刻む（検証インスタンスが鮮度を名乗るため。dirty なら +）。
 BUILD_ID="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 git -C "$ROOT" diff --quiet -- . ':(exclude)vendor/ghostty' 2>/dev/null || BUILD_ID="$BUILD_ID+"
