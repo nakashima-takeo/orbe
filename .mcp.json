@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "peekaboo": {
+      "type": "stdio",
+      "command": "peekaboo",
+      "args": [
+        "mcp"
+      ],
+      "env": {}
+    },
+    "orbe": {
+      "type": "stdio",
+      "command": "./scripts/orbe-mcp.sh",
+      "args": [],
+      "env": {}
+    }
+  }
+}

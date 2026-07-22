@@ -1,0 +1,26 @@
+# Orbe 端末テーマ（ライト）— 16 色＋bg/fg/cursor/selection。
+# OrbePalette.swift（識別色 SSOT）が生成。手編集不可（swift test が drift 検出）。
+# 無彩色ランプ 0/7/15 は Catppuccin Latte 由来（8 のみ AA 是正）。有彩色 1–6 は light 向けの
+# 確定配色値（bright 9–14 は 1–6 のミラー）。
+palette = 0=#5c5f77
+palette = 1=#e02d33
+palette = 2=#279a4d
+palette = 3=#b17b00
+palette = 4=#145deb
+palette = 5=#ab3c91
+palette = 6=#007a8a
+palette = 7=#acb0be
+palette = 8=#64677d
+palette = 9=#e02d33
+palette = 10=#279a4d
+palette = 11=#b17b00
+palette = 12=#145deb
+palette = 13=#ab3c91
+palette = 14=#007a8a
+palette = 15=#bcc0cc
+background = fcfbfe
+foreground = 3a3151
+cursor-color = 6d43d8
+cursor-text = fcfbfe
+selection-background = c9d9f2
+selection-foreground = 3a3151

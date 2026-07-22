@@ -1,0 +1,10 @@
+{
+  "orbe-agent": {
+    "PreInvocation": [
+      { "type": "command", "command": "./hooks/orbe-agent-status.sh agy working", "timeout": 5 }
+    ],
+    "Stop": [
+      { "type": "command", "command": "./hooks/orbe-agent-status.sh agy done", "timeout": 5 }
+    ]
+  }
+}

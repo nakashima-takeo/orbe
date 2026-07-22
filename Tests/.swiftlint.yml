@@ -1,0 +1,3 @@
+# テストでは fail-fast の as! を許容する（失敗＝テスト失敗で即発覚するため）
+disabled_rules:
+  - force_cast

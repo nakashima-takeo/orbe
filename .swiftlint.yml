@@ -1,0 +1,24 @@
+included:
+  - Sources
+  - Tests
+excluded:
+  - vendor
+  - build
+  - .build
+
+# 整形は swift format が所有する。swift format の正準出力と衝突するルールは SwiftLint 側を無効化。
+disabled_rules:
+  - trailing_comma # swift format は複数行コレクションに trailing comma を付ける
+  - opening_brace # swift format は複数行宣言・条件の { を独立行に置く
+
+identifier_name:
+  min_length: 1 # 座標 (x, y, w, h)・ループ変数等の短い局所名は本リポジトリのイディオム
+
+cyclomatic_complexity:
+  ignores_case_statements: true # アクション/キーディスパッチの網羅 switch が中核イディオム
+
+function_body_length:
+  warning: 60
+
+type_body_length:
+  warning: 300

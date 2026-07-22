@@ -1,0 +1,7 @@
+{
+  "name": "orbe-agent",
+  "version": "0.1.0",
+  "description": "Orbe にエージェント状態と session_id を通知する状態追跡 hooks",
+  "author": { "name": "Orbe" },
+  "hooks": "./hooks/claude-hooks.json"
+}

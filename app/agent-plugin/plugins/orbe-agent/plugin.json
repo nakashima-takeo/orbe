@@ -1,0 +1,5 @@
+{
+  "name": "orbe-agent",
+  "version": "0.1.0",
+  "description": "Orbe にエージェント状態と conversationId を通知する状態追跡 hooks"
+}

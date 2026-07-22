@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-format:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
+      - name: lint (SwiftLint)
+        run: mise exec -- swiftlint lint --strict --quiet
+      - name: format (swift format)
+        run: swift format lint --strict --recursive Sources Tests Package.swift
+
+  build-test:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - name: GhosttyKit cache key
+        id: ghostty
+        run: echo "sha=$(git ls-tree --object-only HEAD vendor/ghostty)" >> "$GITHUB_OUTPUT"
+      - name: GhosttyKit cache
+        id: ghosttykit
+        uses: actions/cache@v5
+        with:
+          path: vendor/ghostty/macos/GhosttyKit.xcframework
+          key: ghosttykit-${{ runner.arch }}-${{ steps.ghostty.outputs.sha }}
+      - name: GhosttyKit build (cache miss)
+        if: steps.ghosttykit.outputs.cache-hit != 'true'
+        run: |
+          git submodule update --init --depth 1 vendor/ghostty
+          brew install zig@0.15
+          sudo xcodebuild -downloadComponent MetalToolchain
+          cd vendor/ghostty
+          "$(brew --prefix zig@0.15)/bin/zig" build -Demit-xcframework=true -Dxcframework-target=native
+      - name: build
+        run: swift build
+      - name: test
+        run: swift test

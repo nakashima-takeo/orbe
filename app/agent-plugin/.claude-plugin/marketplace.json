@@ -1,0 +1,8 @@
+{
+  "name": "orbe-agent",
+  "owner": { "name": "Orbe" },
+  "plugins": [
+    { "name": "orbe-agent", "source": "./plugins/orbe-agent",
+      "description": "Orbe にエージェント状態と session_id を通知する状態追跡 hooks" }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "orbe-completion-engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Prebuilt JSC completion engine for Orbe (trimmed inshellisense runtime + curated withfig specs).",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@fig/autocomplete-generators": "2.4.0",
+    "@withfig/autocomplete": "2.692.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
+  }
+}

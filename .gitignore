@@ -1,0 +1,29 @@
+.DS_Store
+build/
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.swiftpm/
+
+# research clones (do not commit, ~370MB)
+.research/
+
+# local planning/reviews
+.claude.local/
+
+# Claude Code がローカル生成する許可設定（このファイルだけを無視する）
+.claude/settings.local.json
+
+# 補完エンジン vendor の依存（package-lock で再現・prebuilt は app/ に commit）
+vendor/completion-engine/node_modules/
+
+# editor
+.vscode/
+
+# デザイン preview の出力（スナップショット PNG）
+.preview/
+
+# エージェントのローカル生成物（フック用キャッシュ・linked worktree）
+.impeccable/
+.claude/worktrees/

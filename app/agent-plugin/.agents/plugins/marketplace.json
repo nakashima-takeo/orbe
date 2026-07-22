@@ -1,0 +1,7 @@
+{
+  "name": "orbe-agent",
+  "plugins": [
+    { "name": "orbe-agent", "source": { "source": "local", "path": "./plugins/orbe-agent" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Productivity" }
+  ]
+}

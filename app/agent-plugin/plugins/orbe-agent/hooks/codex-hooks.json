@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "\"${PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh codex working" }] }
+    ],
+    "PermissionRequest": [
+      { "hooks": [{ "type": "command", "command": "\"${PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh codex waiting" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "\"${PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh codex done" }] }
+    ]
+  }
+}
