@@ -26,22 +26,26 @@ import SwiftUI
   // ドリル遷移（drillIn/returnTo*）を `SettingsPaletteModel+Navigation` へ分離するため internal。
   enum Mode {
     case root, font, tabTitleFont, emojiFont, theme, agent, agentStates,
-      agentIcon(AgentStateIcon.Kind), language
+      agentIcon(AgentStateIcon.Kind), language, update
   }
 
   /// root 行。先頭のスコープ切替行と、レジストリ表示順の各設定行。
   /// キー操作は行 index でなくこの kind で分岐する（スコープ行の差し込みで index がズレないため）。
-  private enum RootRow {
+  /// 行組み立て（`SettingsPaletteModel+Root`）と共有するため internal。
+  enum RootRow {
     case scope
     case setting(SettingDescriptor)
     case language  // レジストリ非経由の特別行（UI 言語のドリルイン）。末尾固定。
+    case update  // レジストリ非経由の特別行（アップデートのドリルイン）。言語の後ろ・末尾固定。
   }
 
   // ドリル復元（drillIn が全行 index を引く）で `+Navigation` が使うため internal。
   let rootOrder = SettingsRegistry.rootOrder
-  private var rootRows: [RootRow] { [.scope] + rootOrder.map { .setting($0) } + [.language] }
+  var rootRows: [RootRow] {
+    [.scope] + rootOrder.map { .setting($0) } + [.language] + (update == nil ? [] : [.update])
+  }
   /// 絞り込み後に実際に表示している root 行（選択 index → 行の対応）。クエリ空なら `rootRows` 全行。
-  private var visibleRootRows: [RootRow] = []
+  var visibleRootRows: [RootRow] = []
 
   let render = PaletteModel()
   private var mode: Mode = .root
@@ -57,6 +61,8 @@ import SwiftUI
 
   /// 設定値の解決モデル（global 層・workspace 上書き層・現在スコープ・表示の語彙）。
   var values: ScopedSettingsValues
+  /// アップデートの状態モデル（nil＝アップデート面なし。テスト・provider 無し環境では行ごと出さない）。
+  let update: UpdateState?
   let fontNames: [String]
   /// 全 family（等幅制限なし）。タブタイトルフォントサブパレットの列挙が使う。
   let allFontNames: [String]
@@ -78,9 +84,10 @@ import SwiftUI
 
   init(
     values: ScopedSettingsValues, fontNames: [String], allFontNames: [String] = [],
-    agents: [String], localization: LocalizationStore
+    agents: [String], localization: LocalizationStore, update: UpdateState? = nil
   ) {
     self.values = values
+    self.update = update
     self.fontNames = fontNames
     self.allFontNames = allFontNames
     self.agents = agents
@@ -152,6 +159,8 @@ import SwiftUI
       guard Language.allCases.indices.contains(render.selected) else { return }
       onSelectLanguage(Language.allCases[render.selected])  // ストア更新はここで反映される
       returnToRoot()  // 新言語で root を組み直す
+    case .update:
+      activateUpdateRow()
     }
   }
 
@@ -167,6 +176,7 @@ import SwiftUI
       case .drillIn: drillIn(d.id)
       }
     case .language: drillIntoLanguage()
+    case .update: drillIntoUpdate()
     }
   }
 
@@ -199,9 +209,10 @@ import SwiftUI
         case .toggle: toggleValue(d)
         case .drillIn: break
         }
-      case .language: break  // drillIn 行と同じく ← は無反応
+      case .language, .update: break  // drillIn 行と同じく ← は無反応
       }
-    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .language: returnToRoot()
+    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .language, .update:
+      returnToRoot()
     case .agentIcon: returnToStates()  // 1 段ずつ浅く（アイコン候補→状態一覧）
     }
   }
@@ -210,6 +221,10 @@ import SwiftUI
   private func rightArrow() -> Bool {
     if case .agentStates = mode {
       activate()  // → は状態一覧からアイコン候補へ潜る（↵ と同義）
+      return true
+    }
+    if case .update = mode {
+      rightArrowUpdateRow()  // トグル行は反転、他は no-op（↵ と同じ意味の部分集合）
       return true
     }
     guard case .root = mode, visibleRootRows.indices.contains(render.selected) else { return false }
@@ -222,6 +237,7 @@ import SwiftUI
       case .drillIn: drillIn(d.id)
       }
     case .language: drillIntoLanguage()
+    case .update: drillIntoUpdate()
     }
     return true
   }
@@ -247,7 +263,8 @@ import SwiftUI
   private func escape() {
     switch mode {
     case .root: onDismiss()
-    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .language: returnToRoot()
+    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .language, .update:
+      returnToRoot()
     case .agentIcon: returnToStates()  // 1 段ずつ浅く
     }
   }
@@ -281,18 +298,6 @@ import SwiftUI
     rebuild()
   }
 
-  /// root 設定行の現在値表示（そのスコープの実効値）。defaultAgent は解決済みデフォルト、
-  /// フォント未設定は既定の実フォント名。検出ゼロで解決不能のときだけ「（未設定）」へ縮退する。
-  private func rootValueDisplay(_ d: SettingDescriptor) -> String {
-    if case .defaultAgent = d.id { return resolvedAgent ?? unsetText(d) }
-    return values.effectiveDisplay(d, localization) ?? unsetText(d)
-  }
-
-  /// drillIn 項目の未設定表示（現在言語）。placeholder キー未設定は空文字。
-  private func unsetText(_ d: SettingDescriptor) -> String {
-    d.unsetPlaceholderKey.map { localization.string($0) } ?? ""
-  }
-
   // MARK: - モード遷移・描画
 
   /// mode を切り替えて行を組み直し、選択を決める（ドリル遷移は `SettingsPaletteModel+Navigation`）。
@@ -317,65 +322,9 @@ import SwiftUI
     case .agentStates: rebuildAgentStates()
     case .agentIcon(let kind): rebuildAgentIcon(kind: kind)
     case .language: rebuildLanguage()
+    case .update: rebuildUpdate()
     }
     render.clampSelection()
-  }
-
-  private func rebuildRoot() {
-    render.fieldVisible = true
-    render.fieldIsFilter = true  // ← を onLeft に回す＝root の stepper/toggle/scope/戻る意味を維持
-    render.breadcrumb = nil
-    render.placeholder = localization.string(.settingsFilterPlaceholder)
-    render.hint =
-      values.scope == .workspace
-      ? localization.string(.settingsRootHintWorkspace)
-      : localization.string(.settingsRootHintGlobal)
-
-    let query = render.query.trimmingCharacters(in: .whitespaces)
-    visibleRootRows =
-      query.isEmpty
-      ? rootRows
-      : rootRows.filter { rootSearchText($0).localizedCaseInsensitiveContains(query) }
-
-    guard !visibleRootRows.isEmpty else {
-      render.rows = [
-        PaletteModel.RowItem(label: localization.string(.settingsNoMatch), enabled: false)
-      ]
-      return
-    }
-    render.rows = visibleRootRows.map { row in
-      switch row {
-      case .scope:
-        return PaletteModel.RowItem(
-          label: localization.string(.settingsScopeWord) + "  " + values.scopeLabel(localization),
-          chevron: false)
-      case .setting(let d):
-        let inherited = values.scope == .workspace && !values.isOverriddenByWorkspace(d.id)
-        // workspace スコープ: 未上書きは「（継承）」＋淡色。global スコープ: WS が上書き中の行は
-        // 画面に効いている値を注記する（淡色にはしない——ここでの ↵ の着地点は global 値のまま）。
-        let note =
-          inherited
-          ? localization.string(.settingsInheritedNote)
-          : values.workspaceOverrideNote(d, localization)
-        return PaletteModel.RowItem(
-          label: localization.string(d.labelKey) + "  " + rootValueDisplay(d), chevron: d.isDrillIn,
-          inherited: inherited, detail: note)
-      case .language:
-        return PaletteModel.RowItem(
-          label: localization.string(.settingsLanguageLabel) + "  "
-            + localization.language.displayName,
-          chevron: true)
-      }
-    }
-  }
-
-  /// root 行の絞り込み対象テキスト（ラベル本体のみ。現在値・（継承）は含めず値変動で一致が揺れない）。
-  private func rootSearchText(_ row: RootRow) -> String {
-    switch row {
-    case .scope: return localization.string(.settingsScopeWord)
-    case .setting(let d): return localization.string(d.labelKey)
-    case .language: return localization.string(.settingsLanguageLabel)
-    }
   }
 
 }

@@ -292,6 +292,46 @@ enum L10n {
     // MARK: Agent palette
     .agentPaletteSetDefault: ("デフォルトに設定", "Set as default"),
     .agentPaletteHintList: ("↵ 起動   → 詳細   esc 閉じる", "↵ Launch   → Details   esc Close"),
+
+    // MARK: Update
+    .menuCheckForUpdates: ("更新を確認…", "Check for Updates…"),
+    .settingsUpdateLabel: ("アップデート", "Updates"),
+    .settingsUpdateBreadcrumb: ("‹ アップデート", "‹ Updates"),
+    .settingsUpdateHint: ("↵ 実行/切替   ←/esc 戻る", "↵ Apply/Toggle   ←/esc Back"),
+    .updateToastTitle: ("アップデートの準備ができました", "Update ready to install"),
+    .updateToastAutoApply: ("次回終了時に自動で適用されます", "Applies automatically on next quit"),
+    .updateToastManualApply: ("「今すぐ再起動」で適用されます", "Applies via “Restart Now”"),
+    .updateRestartNow: ("今すぐ再起動", "Restart Now"),
+    .updateShowChanges: ("変更内容", "What’s New"),
+    .updateSheetTitle: ("%@ の変更内容", "What’s New in %@"),
+    .updateVerifiedLine: (
+      "Developer ID 署名と公証を検証済み", "Developer ID signature and notarization verified"
+    ),
+    .updateRestartAndUpdate: ("再起動して更新", "Restart & Update"),
+    .updateCloseButton: ("閉じる", "Close"),
+    .updateSheetFootnote: ("閉じても終了時に自動で適用されます", "Closing still applies the update on quit"),
+    .updateStateChecking: ("アップデートを確認中…", "Checking for updates…"),
+    .updateStateDownloading: ("%@ をダウンロード中", "Downloading %@"),
+    .updateStateUpToDate: ("最新です", "Up to date"),
+    .updateStateFailedTitle: ("ダウンロードに失敗しました", "Download failed"),
+    .updateStateFailedHint: (
+      "接続を確認してください。次回の自動確認でも再試行します",
+      "Check your connection. It will retry on the next automatic check"
+    ),
+    .updateRetry: ("再試行", "Retry"),
+    .updateStateWaiting: ("%@ 適用待ち", "%@ ready to install"),
+    .updateWaitingApplyOnQuit: ("終了時に自動で更新されます", "Updates automatically on quit"),
+    .updateWaitingApplyManual: ("「今すぐ再起動」で適用されます", "Applies via “Restart Now”"),
+    .updateCurrentVersion: ("現在のバージョン", "Current version"),
+    .updateLastChecked: ("最終確認: %@", "Last checked: %@"),
+    .updateLastCheckedNever: ("最終確認: —", "Last checked: —"),
+    .updateAutoCheckLabel: ("自動でアップデートを確認", "Check for updates automatically"),
+    .updateAutoCheckSub: ("1日1回、バックグラウンドで", "Once a day, in the background"),
+    .updateAutoDownloadLabel: ("自動でダウンロード", "Download automatically"),
+    .updateAutoDownloadSub: ("署名の検証まで済ませておく", "Verifies the signature ahead of time"),
+    .updateAutoInstallLabel: ("終了時に自動で適用", "Install automatically on quit"),
+    .updateAutoInstallSub: ("オフにすると再起動ボタンからのみ", "When off, install only via the restart button"),
+    .updateCheckNow: ("今すぐ確認", "Check Now"),
   ]
 
   /// 型付きキーを指定言語の文言へ引く。網羅はテストで保証（欠落は開発時にクラッシュで気づく）。

@@ -46,4 +46,10 @@ extension SettingsPaletteModel {
     rootRowBeforeDrill = 1 + rootOrder.count  // scope(0) ＋ 設定行 ＋ 末尾の言語行
     setMode(.language)
   }
+
+  /// root のアップデート行（言語の次・末尾固定）からアップデートサブパレットへ潜る。
+  func drillIntoUpdate() {
+    rootRowBeforeDrill = 1 + rootOrder.count + 1  // scope(0) ＋ 設定行 ＋ 言語行 ＋ アップデート行
+    setMode(.update)
+  }
 }
