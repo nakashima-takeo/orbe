@@ -94,7 +94,8 @@ struct UpdateToastView: View {
     let version = state.ready.map { "v\($0.version)" } ?? ""
     let tail = l10n.string(
       state.autoInstallOnQuit ? .updateToastAutoApply : .updateToastManualApply)
-    return (Text(version).foregroundStyle(Color.theme.textSecondary)
+    return
+      (Text(version).foregroundStyle(Color.theme.textSecondary)
       + Text(" — \(tail)").foregroundStyle(Color.theme.textMuted))
       .font(Font.theme.codeSmall)
       .lineLimit(1)
