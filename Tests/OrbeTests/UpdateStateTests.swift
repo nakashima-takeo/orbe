@@ -101,6 +101,32 @@ final class UpdateStateTests: XCTestCase {
     XCTAssertEqual(received, [false, true])
   }
 
+  /// バックグラウンド自動DL経路のコールバック順序で readyToRestart が維持される。
+  /// ① サイレント staged（driver 経由なし・進行表示なし）: idle からの markReady 直行でトーストが立つ。
+  /// ② ready 確定後の `.dismiss` 応答に続く dismissUpdateInstallation（セッション終了）が
+  ///    readyToRestart とトーストを clobber しない。
+  func testBackgroundStagedFlowKeepsReadyThroughSessionTeardown() {
+    let state = makeState()
+
+    // ① サイレント経路: checking/downloading を経ずに ready へ（willInstallUpdateOnQuit の写像）。
+    state.markReady(ready())
+    XCTAssertEqual(state.phase, .readyToRestart)
+    XCTAssertTrue(state.toastVisible)
+
+    // ② driver の後続コールバック（.dismiss 応答後の dismissUpdateInstallation）＝ settleTransientPhase。
+    state.settleTransientPhase()
+    XCTAssertEqual(state.phase, .readyToRestart, "セッション終了で適用待ちを idle/最新へ戻さない")
+    XCTAssertTrue(state.toastVisible, "セッション終了でトーストを下ろさない")
+
+    // resume（staged のまま再チェック）で checking→found(.installing)→dismiss と流れても維持される。
+    state.dismissToast()
+    state.beginCheck()
+    state.markReady(ready())
+    state.settleTransientPhase()
+    XCTAssertEqual(state.phase, .readyToRestart)
+    XCTAssertFalse(state.toastVisible, "同一プロセス内の再 ready はトーストを再表示しない")
+  }
+
   func testSeedLastCheckDoesNotOverwrite() {
     let state = makeState()
     let seeded = Date(timeIntervalSince1970: 1000)
