@@ -2,49 +2,44 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleExecutable</key>
-  <string>Orbe</string>
-  <key>CFBundleIdentifier</key>
-  <string>dev.orbe.app</string>
-  <key>CFBundleName</key>
-  <string>Orbe</string>
-  <key>CFBundleIconFile</key>
-  <string>Orbe</string>
-  <key>CFBundleIconName</key>
-  <string>Orbe</string>
-  <key>CFBundleDisplayName</key>
-  <string>Orbe</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>NSHumanReadableCopyright</key>
-  <string>Copyright (C) 2026 Takeo Nakashima</string>
-  <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
-  <key>CFBundleVersion</key>
-  <string>1</string>
-  <key>LSMinimumSystemVersion</key>
-  <string>14.0</string>
-  <key>NSHighResolutionCapable</key>
-  <true/>
-  <key>NSPrincipalClass</key>
-  <string>NSApplication</string>
-  <key>LSApplicationCategoryType</key>
-  <string>public.app-category.developer-tools</string>
-  <!-- 埋め込みブラウザが dev サーバーの http://localhost を読み込むための ATS 例外（loopback のみ許可）。 -->
-  <key>NSAppTransportSecurity</key>
-  <dict>
-    <key>NSAllowsLocalNetworking</key>
-    <true/>
-  </dict>
-  <!-- Sparkle（アプリ内アップデート）。appcast は最新リリースのアセット（安定 URL）。
-       dev ビルドは ORBE_DEV の起動ゲートにより defaults/起動引数の SUFeedURL 上書きが無い限り不活性。 -->
-  <key>SUFeedURL</key>
-  <string>https://github.com/nakashima-takeo/orbe/releases/latest/download/appcast.xml</string>
-  <!-- EdDSA 公開鍵（対の秘密鍵はこの Mac のログイン Keychain。リポジトリには入れない）。 -->
-  <key>SUPublicEDKey</key>
-  <string>qiCtPDzeYmOGJDdVTXWRMwXdzHDFIlyLDjHld/J20w4=</string>
-  <!-- 自動確認を既定オンにし、Sparkle 標準の初回許可プロンプトを出さない。 -->
-  <key>SUEnableAutomaticChecks</key>
-  <true/>
+	<key>CFBundleDisplayName</key>
+	<string>Orbe</string>
+	<key>CFBundleExecutable</key>
+	<string>Orbe</string>
+	<key>CFBundleIconFile</key>
+	<string>Orbe</string>
+	<key>CFBundleIconName</key>
+	<string>Orbe</string>
+	<key>CFBundleIdentifier</key>
+	<string>dev.orbe.app</string>
+	<key>CFBundleName</key>
+	<string>Orbe</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.2.0</string>
+	<key>CFBundleVersion</key>
+	<string>2</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.developer-tools</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright (C) 2026 Takeo Nakashima</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/nakashima-takeo/orbe/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>qiCtPDzeYmOGJDdVTXWRMwXdzHDFIlyLDjHld/J20w4=</string>
 </dict>
 </plist>
