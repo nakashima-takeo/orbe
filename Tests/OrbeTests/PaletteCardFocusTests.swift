@@ -14,7 +14,10 @@ import XCTest
 final class PaletteCardFocusTests: XCTestCase {
   private var windows: [NSWindow] = []
 
+  /// 窓は ordered-in の間 AppKit が保持するため、参照を捨てるだけでは解放されず居座る。
+  /// `orderOut` で下ろしてから手放す（`close` は `isReleasedWhenClosed` と ARC が二重解放になる）。
   override func tearDown() {
+    windows.forEach { $0.orderOut(nil) }
     windows.removeAll()
     super.tearDown()
   }
@@ -39,9 +42,11 @@ final class PaletteCardFocusTests: XCTestCase {
     pump(0.15)
   }
 
-  /// borderless の窓は既定で key になれない。SwiftUI の focus 解決は key 窓を要求するため、
-  /// この一点だけを開ける。
-  private final class OffscreenKeyWindow: NSWindow {
+  /// borderless の窓は既定で `canBecomeKey` が false で、`NSApp.sendEvent` は key になれない窓へ
+  /// keyDown を渡さない（窓の `sendEvent` すら呼ばれない）。配送を通すこの一点だけを開ける。
+  /// 窓が実際に key になる必要はない——`.accessory` の非アクティブなテストでは
+  /// `isKeyWindow` は最後まで false のまま、キーは first responder へ届く。
+  private final class KeyDeliveryWindow: NSWindow {
     override var canBecomeKey: Bool { true }
   }
 
@@ -50,7 +55,7 @@ final class PaletteCardFocusTests: XCTestCase {
   /// 枠のある窓は macOS が画面内へ押し戻す（`constrainFrameRect`）ので borderless で作る。
   private func mount(_ model: PaletteModel) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
-    let window = OffscreenKeyWindow(
+    let window = KeyDeliveryWindow(
       contentRect: NSRect(x: -20000, y: -20000, width: 600, height: 500),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = NSHostingView(rootView: PaletteCard(model: model).frame(width: 560))
