@@ -21,8 +21,13 @@ import SwiftUI
     self.localization = localization
     render.breadcrumb = "attention"
     render.headerBadge = "⌘⌘"
+    render.surface = .popup  // デザイン第10シーン rgba(panel, 0.9)＝popup 級の面（枠・幾何は panel 級）
     render.scrimStrength = .normal  // 頻繁に開く軽いパレット（workspace 切替と同じ通常暗幕）
-    render.hint = localization.string(.attentionPaletteHint)
+    render.hintKeys = [
+      ("↩", localization.string(.attentionHintJump)),
+      ("↑↓", localization.string(.attentionHintSelect)),
+      ("esc", localization.string(.attentionHintClose)),
+    ]
     render.onScrimTap = { [weak self] in self?.onDismiss?() }
     render.onTapRow = { [weak self] i in
       self?.render.selected = i

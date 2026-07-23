@@ -20,7 +20,12 @@ struct PaletteCard: View {
   private let capHeight: CGFloat = 320
 
   var body: some View {
-    GlassPanel(level: .panel) {
+    // 面の濃度だけ model.surface（panel .72 / attention は popup .90）で変え、
+    // 幾何（radius 16）・blur（hudWindow≒24）・枠（panel .08/.12）・影（panel）は panel 級に固定する。
+    GlassPanel(
+      level: model.surface, cornerRadius: Theme.Glass.radius(.panel),
+      materialOverride: .hudWindow, elevationOverride: .panel, borderOverride: .panel
+    ) {
       VStack(alignment: .leading, spacing: 0) {
         // ヘッダのスロットは入力欄と breadcrumb の 2 つ。両方空なら行ごと描かない
         // （他スロット同様「埋まっているものだけ描く」）。入力欄の常設（header 参照）はこの器の中で
@@ -55,13 +60,26 @@ struct PaletteCard: View {
           }
         }
 
-        if !model.hint.isEmpty {
+        if !model.hint.isEmpty || !model.hintKeys.isEmpty {
           divider
-          Text(model.hint)
-            .font(Font.theme.meta)
-            .foregroundStyle(Color.theme.textMuted)
-            .padding(.horizontal, Theme.Space.bar)
-            .padding(.vertical, Theme.Space.step + Theme.Space.hair)
+          // フッターヒント（デザイン第10シーン: padding 9×20・セグメント間隔 14・キー副色/ラベル muted）。
+          Group {
+            if model.hintKeys.isEmpty {
+              Text(model.hint).foregroundStyle(Color.theme.textMuted)
+            } else {
+              HStack(spacing: Theme.Space.beat + Theme.Space.hair) {
+                ForEach(model.hintKeys.indices, id: \.self) { i in
+                  HStack(spacing: Theme.Space.tick) {
+                    Text(model.hintKeys[i].key).foregroundStyle(Color.theme.textSecondary)
+                    Text(model.hintKeys[i].label).foregroundStyle(Color.theme.textMuted)
+                  }
+                }
+              }
+            }
+          }
+          .font(Font.theme.meta)
+          .padding(.horizontal, Theme.Space.span)
+          .padding(.vertical, 9)
         }
       }
     }

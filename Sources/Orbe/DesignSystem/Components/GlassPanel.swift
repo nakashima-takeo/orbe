@@ -30,6 +30,8 @@ struct GlassPanel<Content: View>: View {
   var materialOverride: NSVisualEffectView.Material?
   /// 影の上書き（nil で level 既定）。上と同じく Dispatch の大型フローティング影（panel 級）を指定する。
   var elevationOverride: Theme.ElevationLevel?
+  /// 枠の上書き（nil で level 既定）。Attention パレットは面が popup 級（α.90）でも枠は panel 級（.08/.12）。
+  var borderOverride: Theme.GlassLevel?
   @ViewBuilder let content: () -> Content
 
   /// blur 半径は material に固定（`--blur-panel: 24px` の厳密一致は原理不可）。見本に最も近い material を採る。
@@ -63,7 +65,7 @@ struct GlassPanel<Content: View>: View {
       .clipShape(shape)
       .overlay(
         shape.strokeBorder(
-          Color(nsColor: Theme.Glass.border(level)),
+          Color(nsColor: Theme.Glass.border(borderOverride ?? level)),
           lineWidth: Theme.Stroke.hairline)
       )
       .elevation(elevation)

@@ -289,7 +289,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case updateCheckNow
 
   // MARK: - Attention（パレット・メニューバー投影・グローバル ⌘⌘ の権限）
-  case attentionPaletteHint
+  case attentionHintJump
+  case attentionHintSelect
+  case attentionHintClose
   case attentionEmpty
   case menubarClickToPane
   case menubarOpenOrbe

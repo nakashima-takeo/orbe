@@ -51,6 +51,9 @@ struct AttentionRowView: View {
           .padding(.leading, Theme.Space.span)
       }
     }
+    // 器（SelectableRow・ドロップダウン行）の縦 padding は 5。attention の 2 段行は
+    // デザイン第10/11シーンで 7×10 なので、差分 2 を行内で足して実効 7 にする。
+    .padding(.vertical, Theme.Space.hair)
   }
 }
 

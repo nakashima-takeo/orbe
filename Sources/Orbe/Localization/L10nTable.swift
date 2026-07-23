@@ -340,9 +340,9 @@ private let l10nTable: [L10nKey: (ja: String, en: String)] = [
   .updateCheckNow: ("今すぐ確認", "Check Now"),
 
   // MARK: Attention
-  .attentionPaletteHint: (
-    "↩ そのペインへ移動   ↑↓ 選択   esc 閉じる", "↩ Jump to pane   ↑↓ Select   esc Close"
-  ),
+  .attentionHintJump: ("そのペインへ移動", "Jump to pane"),
+  .attentionHintSelect: ("選択", "Select"),
+  .attentionHintClose: ("閉じる", "Close"),
   .attentionEmpty: ("対応するものはありません", "Nothing needs your attention"),
   .menubarClickToPane: ("クリックでそのペインへ", "Click to jump to the pane"),
   .menubarOpenOrbe: ("orbe を開く", "Open orbe"),
