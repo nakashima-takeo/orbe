@@ -17,6 +17,8 @@ import SwiftUI
   var fkey: String?
   /// ホバー中の行（行 id と combo）。キーボード可視化の点灯に使う。
   var hoverRow: (id: String, combo: [String])?
+  /// 実押下中のキー id 集合（表示中のみ NSEvent ローカルモニタが増減。キーボード点灯用）。
+  var pressed: Set<String> = []
   /// 検索欄へ focus を確定するためのトークン（描画後に `@FocusState` を立て直す）。
   private(set) var focusToken = 0
   /// 閉じ要求（esc / scrim クリック）。WindowController が dismissHelp を配線する。

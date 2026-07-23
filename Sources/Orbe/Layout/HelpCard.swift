@@ -74,9 +74,31 @@ struct HelpCard: View {
           content
         }
         .frame(maxHeight: .infinity)
+        ink.border(0.06).frame(height: Theme.Stroke.hairline)
+        HelpKeyboardView(model: model, ink: ink)
+        ink.border(0.08).frame(height: Theme.Stroke.hairline)
+        footer
       }
     }
     .onChange(of: model.focusToken, initial: true) { fieldFocused = true }
+  }
+
+  // MARK: - フッター
+
+  private var footer: some View {
+    HStack(spacing: 14) {
+      Text(l10n.string(.helpFooterType))
+      HStack(spacing: Theme.Space.tick) {
+        Text("esc").foregroundStyle(Color.theme.textPrimary)
+        Text(l10n.string(.helpFooterEscClose))
+      }
+      Spacer(minLength: Theme.Space.step)
+      Text("orbe \(Self.version)").opacity(0.6)
+    }
+    .font(Font.theme.helpSection)
+    .foregroundStyle(Color.theme.textMuted)
+    .padding(.horizontal, Theme.Space.bar)
+    .padding(.vertical, 9)
   }
 
   // MARK: - ヘッダ（検索・キー絞り込みチップ・件数・⌘H バッジ）
