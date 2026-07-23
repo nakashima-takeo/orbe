@@ -7,17 +7,20 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-# 祖先を辿り、Orbe Dev 本体の中から実行されているか調べる（居ればその pid を掴む）。
+# 祖先を辿り、dev チャネルの Orbe の中から実行されているか調べる（居ればその pid を掴む）。
 # 中から入れ替えると quit した瞬間に置換作業ごと自滅するため、後段で swap を切り離す。
-# 固定文字列の完全パス一致で見る: 部分一致だと本番 Orbe の中からの実行まで拾って
-# 自己入れ替え扱いになるが、本番には触れないので切り離しは不要（＝マッチしないのが正しい）。
+# 判定範囲は _swap.sh が quit する範囲（bundle id dev.orbe.app.dev）に一致させる: 据えた
+# /Applications/Orbe Dev.app と、build/Orbe.app の直起動（docs/BUILD.md の open・sandbox-run）の両方。
+# 本番 Orbe は別 identity で quit の射程外なので、マッチしない＝前景で完了するのが正しい。
 orbe_pid=""
 guard_pid=$$
 while [ "${guard_pid:-0}" -gt 1 ]; do
-  if ps -o args= -p "$guard_pid" 2>/dev/null | grep -qF "/Applications/Orbe Dev.app/Contents/MacOS/Orbe"; then
-    orbe_pid="$guard_pid"
-    break
-  fi
+  case "$(ps -o args= -p "$guard_pid" 2>/dev/null)" in
+    *"/Applications/Orbe Dev.app/Contents/MacOS/Orbe"* | *"build/Orbe.app/Contents/MacOS/Orbe"*)
+      orbe_pid="$guard_pid"
+      break
+      ;;
+  esac
   guard_pid="$(ps -o ppid= -p "$guard_pid" 2>/dev/null | tr -d ' ')"
 done
 
