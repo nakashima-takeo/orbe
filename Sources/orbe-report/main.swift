@@ -67,10 +67,15 @@ func writeAll(_ fd: Int32, _ data: Data) {
 let resumeId =
   sessionId(from: hookObj)
   ?? env["ANTIGRAVITY_CONVERSATION_ID"].flatMap { $0.isEmpty ? nil : $0 }
+let reportedState = effectiveState(state, stdin: hookObj)
 var params: [String: Any] = [
-  "paneId": paneId, "agent": agent, "state": effectiveState(state, stdin: hookObj),
+  "paneId": paneId, "agent": agent, "state": reportedState,
 ]
 if let resumeId { params["sessionId"] = resumeId }
+// waiting/done の文言（Notification message・質問文・最終応答）。無ければ載せない。
+if let message = agentMessage(state: reportedState, stdin: hookObj) {
+  params["message"] = message
+}
 
 // Orbe が動いていなければ接続できない＝no-op（exit 0）。
 guard let fd = connectControl() else { exit(0) }
