@@ -1,13 +1,13 @@
 import Foundation
 
-/// 開発ビルドか（未設定時の「開発中の機能を有効化」default を決める SSOT）。`build-app.sh` が既定で焼く
-/// `-DORBE_DEV` で true、公開リリース（`release-app.sh` は ORBE_CHANNEL=release でフラグ抑止）で false。
-/// `#if ORBE_DEV` はこの 1 箇所だけに閉じる。`#if DEBUG` は両ビルドとも -c release で焼くため使えない。
+/// 開発ビルドか（未設定時の「開発中の機能を有効化」default を決める SSOT）。公開リリース
+/// （`release-app.sh` が ORBE_CHANNEL=release で焼く `-DORBE_RELEASE`）で false、それ以外で true。
+/// `#if DEBUG` は両ビルドとも -c release で焼くため使えない。
 let isDevBuild: Bool = {
-  #if ORBE_DEV
-    return true
-  #else
+  #if ORBE_RELEASE
     return false
+  #else
+    return true
   #endif
 }()
 

@@ -37,7 +37,9 @@ fi
 
 # 1. 自己完結バンドルを生成し、リリース用ディレクトリへ隔離する
 #    （build-app.sh は最後に ad-hoc 署名する。隔離したコピーを以降 Developer ID で署名し直す）。
-#    公開ビルドは -DORBE_DEV を焼かない（「開発中の機能を有効化」トグルの未設定 default を off にする）。
+#    ORBE_CHANNEL=release はチャネルの唯一の入力で、build-app.sh がここから identity
+#    （bundle id `dev.orbe.app` / 表示名「Orbe」）・`-DORBE_RELEASE`・アイコンを導出する。
+#    これを立てないビルドは別 identity の「Orbe Dev」になり、公開物にはならない。
 export ORBE_CHANNEL=release
 "$ROOT/scripts/build-app.sh"
 rm -rf "$RELEASE_DIR"
