@@ -45,6 +45,8 @@ import SwiftUI
   func hoverSelect(_ i: Int) { selection.hoverSelect(i) }
   /// ヘッダ左のテキスト（サブメニューの「‹ 親」等）。nil で非表示。入力欄も無ければヘッダ行ごと描かれない。
   var breadcrumb: String?
+  /// ヘッダ右端の表示専用バッジ（Attention の `⌘⌘` 等）。nil で出さない（既存パレットは無影響）。
+  var headerBadge: String?
   var hint = ""
   /// 背後の暗幕の強さ。workspace は normal、設定等の強いパレットは strong。
   var scrimStrength: Scrim.Strength = .strong

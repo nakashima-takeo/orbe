@@ -233,8 +233,17 @@ extension WindowController {
       allFontNames: FontCatalog.allNames(),  // タブタイトルフォント用（等幅制限なし）
       agents: agentLauncher.detectedCommands,  // 検出済みのみ（起動パレットと同じ検出結果）
       localization: localization,
-      update: updateState)  // アップデートセクション（状態カード・トグル・今すぐ確認）
+      update: updateState,  // アップデートセクション（状態カード・トグル・今すぐ確認）
+      cmdTapPermissionGranted: { CmdDoubleTapMonitor.globalMonitoringPermitted })
     p.onApply = { [weak self] change, scope in self?.applySetting(change, scope: scope) }
+    // グローバル ⌘⌘ の権限状態行 → System Settings（プライバシーとセキュリティ › アクセシビリティ）。
+    p.onOpenAccessibilitySettings = {
+      guard
+        let url = URL(
+          string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+      else { return }
+      NSWorkspace.shared.open(url)
+    }
     // 言語行（descriptor 非経由）: ストア更新→メインメニュー再構築→preferredLanguage 永続化を束ねる。
     p.onSelectLanguage = { [weak self] language in
       guard let self else { return }
@@ -297,6 +306,7 @@ extension WindowController {
     model.dispatchPalette = nil
     model.dispatchProvider = nil
     model.settingsPalette = nil
+    model.attentionPalette = nil
     focusActivePane()
     // teardown 後の次 tick で focus を再確定する。overlay==.none のままなら端末へ、直後に別 overlay へ
     // 差し替わっていれば（例: 切替パレットの ＋新規 → dismiss→作成フォーム）その overlay の入力欄へ当たる。

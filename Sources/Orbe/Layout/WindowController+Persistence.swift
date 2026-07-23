@@ -11,6 +11,36 @@ extension WindowController {
     scheduleSave()
   }
 
+  /// 永続スナップショットから全 workspace・タブ・分割ツリーを再構築する（init の復元経路）。
+  func restore(from file: WorkspacesFile) {
+    restoreWindowSize(file.windowSize)
+    let resume: TerminalController.ResumeSpawn = { [agentLauncher] in
+      agentLauncher.resumeSpawn(for: $0)
+    }
+    var restored: [Workspace] = []
+    for state in file.workspaces {
+      let ws = Workspace(name: state.name, rootPath: state.rootPath)
+      ws.lastUsedAt = state.lastUsedAt  // MRU 並べ替えキーを読み戻す（旧データは nil）
+      ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
+      for tab in state.tabs {
+        let tc = TerminalController(restoring: tab.tree, resumeSpawn: resume)
+        tc.explicitTitle = tab.explicitTitle
+        tc.editorUI.paneOpen = tab.editor.open
+        tc.editorUI.tool = EditorTool(persistKey: tab.editor.tool)
+        ws.tabs.append(wire(tc))
+      }
+      // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・activateCurrent）は空表示
+      // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。
+      ws.active = ws.tabs.isEmpty ? 0 : min(max(0, state.activeTab), ws.tabs.count - 1)
+      restored.append(ws)
+    }
+    // workspaces 非空は load() が保証する（空 workspaces のファイルは load が nil を返す）。
+    store.load(
+      workspaces: restored,
+      activeWorkspace: min(max(0, file.activeWorkspace), restored.count - 1))
+    activateCurrent()  // 復元アクティブが0タブ（休眠保存）なら空表示（シェルは起こさない）
+  }
+
   /// 記憶サイズ（クランプ前の意図サイズ）を保持しつつ、起動時画面（visibleFrame）にクランプして
   /// 適用する。位置は触らない（init 末尾の center() が毎回中央化する）。保存値が無ければ init 生成の
   /// 800×500 を残す。クランプは表示用で記憶は元サイズのまま——小画面で開いても次回大画面で元に戻せる。

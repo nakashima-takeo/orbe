@@ -56,6 +56,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   let agentLauncher = AgentLauncher()
   // アップデート面。状態（UI 唯一の情報源）は updaterService が生成・所有し、提示配線は WindowController+Update。
   let updaterService = UpdaterService()
+  // Attention 一覧の単一情報源。flushChrome が snapshot を流し込み、パレットとメニューバーが読む。
+  let attentionStore = AttentionStore()
 
   // 読みは store へ転送する（制御チャネル・chrome・パレット・永続・テストが多数の箇所で読むため、
   // 従来の可視性（internal）を保って読み site を無改変にする）。所有と全ミューテーションは store。
@@ -137,6 +139,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   private func wireChromeCallbacks() {
     statusModel.onSelect = { [weak self] i in self?.select(i) }
     statusModel.onNewTab = { [weak self] in self?.newTab() }
+    statusModel.onAttentionTap = { [weak self] in self?.showAttentionPalette() }
     // pane 非依存 chrome コマンドの window レベル配信（surface が居ない0タブでも届く）。
     hostingView.onWindowCommand = { [weak self] command in
       self?.handleWindowKeyCommand(command) ?? false
@@ -309,6 +312,7 @@ final class WindowController: NSObject, NSWindowDelegate {
         cwd: store.activePaneCwd(),
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
     editorPane.retarget(cwd: store.activePaneCwd(), ui: store.activeEditorUI())
+    refreshAttentionSnapshot()  // Attention 一覧も同じ coalesce 契機で追従（WindowController+Attention）
   }
 
   // MARK: - エディタペイン
@@ -357,37 +361,6 @@ final class WindowController: NSObject, NSWindowDelegate {
     store.appendTabToActive(wire(tc))
     select(current.tabs.count - 1)
     scheduleSave()
-  }
-
-  // MARK: - 復元（保存系は WindowController+Persistence）
-
-  private func restore(from file: WorkspacesFile) {
-    restoreWindowSize(file.windowSize)
-    let resume: TerminalController.ResumeSpawn = { [agentLauncher] in
-      agentLauncher.resumeSpawn(for: $0)
-    }
-    var restored: [Workspace] = []
-    for state in file.workspaces {
-      let ws = Workspace(name: state.name, rootPath: state.rootPath)
-      ws.lastUsedAt = state.lastUsedAt  // MRU 並べ替えキーを読み戻す（旧データは nil）
-      ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
-      for tab in state.tabs {
-        let tc = TerminalController(restoring: tab.tree, resumeSpawn: resume)
-        tc.explicitTitle = tab.explicitTitle
-        tc.editorUI.paneOpen = tab.editor.open
-        tc.editorUI.tool = EditorTool(persistKey: tab.editor.tool)
-        ws.tabs.append(wire(tc))
-      }
-      // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）は空表示
-      // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。
-      ws.active = ws.tabs.isEmpty ? 0 : min(max(0, state.activeTab), ws.tabs.count - 1)
-      restored.append(ws)
-    }
-    // workspaces 非空は load() が保証する（空 workspaces のファイルは load が nil を返す）。
-    store.load(
-      workspaces: restored,
-      activeWorkspace: min(max(0, file.activeWorkspace), restored.count - 1))
-    activateCurrent()  // 復元アクティブが0タブ（休眠保存）なら空表示（シェルは起こさない）
   }
 
   // アプリ前面復帰：背面で届いていたアクティブ表示タブの done を消費する。

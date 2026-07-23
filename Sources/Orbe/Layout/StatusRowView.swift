@@ -37,6 +37,8 @@ enum Chrome {
 
   var onSelect: (Int) -> Void = { _ in }
   var onNewTab: () -> Void = {}
+  /// 右端の件数ストリップのクリック（Attention パレットを開く）。
+  var onAttentionTap: () -> Void = {}
   /// タブを `from` から挿入先 index `to`（0…count）へ並び替える（同一 workspace 内・commit-on-drop）。
   var onReorder: (Int, Int) -> Void = { _, _ in }
 
@@ -208,8 +210,11 @@ struct StatusRowView: View {
       Spacer(minLength: Theme.Space.beat)
 
       if !model.rollup.isEmpty {
+        // クリックで Attention パレット。見た目は変えない（hover 装飾は足さない）。
         StatusRollupView(rollup: model.rollup)
           .fixedSize()
+          .contentShape(Rectangle())
+          .onTapGesture { model.onAttentionTap() }
       }
     }
     .padding(.leading, Chrome.leftColumn)

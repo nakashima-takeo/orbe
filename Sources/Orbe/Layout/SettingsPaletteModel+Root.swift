@@ -52,6 +52,15 @@ extension SettingsPaletteModel {
           label: localization.string(.settingsUpdateLabel) + "  v"
             + (update?.currentVersion ?? ""),
           chevron: true)
+      case .cmdTapPermission:
+        // 権限状態は設定値ではない（読み取り表示のみ）。未許可のときは補足に再起動の注記を出す。
+        let granted = cmdTapPermissionGranted?() == true
+        return PaletteModel.RowItem(
+          label: localization.string(.settingsGlobalCmdTapLabel) + "  "
+            + localization.string(
+              granted ? .settingsGlobalCmdTapGranted : .settingsGlobalCmdTapDenied),
+          chevron: false,
+          detail: granted ? nil : localization.string(.settingsGlobalCmdTapRestartNote))
       }
     }
   }
@@ -63,6 +72,7 @@ extension SettingsPaletteModel {
     case .setting(let d): return localization.string(d.labelKey)
     case .language: return localization.string(.settingsLanguageLabel)
     case .update: return localization.string(.settingsUpdateLabel)
+    case .cmdTapPermission: return localization.string(.settingsGlobalCmdTapLabel)
     }
   }
 

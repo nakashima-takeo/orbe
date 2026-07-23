@@ -57,16 +57,31 @@ extension WindowController: ControlTarget {
   /// エージェント hook の状態報告を発信元ペインへ適用する。`state=="clear"` で状態を消し、
   /// それ以外は state/command を立て sessionId があれば更新する。didSet が agent_state を
   /// emit し、paneAgentStateChanged がタブ・横断ロールアップを更新する。
-  func controlReportAgent(pane: SurfaceView, agent: String, state: String, sessionId: String?) {
+  ///
+  /// Attention 用の保持: stateChangedAt は **state の値が実際に変わったときだけ** now に更新する
+  /// （working→working の連続報告で一覧の並びが暴れない）。message は clear 以外の報告で常に
+  /// 上書きする（省略時は nil＝stale な質問文を残さない）。waiting / done への実変化は
+  /// メニューバーの一過性表示（AttentionStore.noteTransient）へも流す。
+  func controlReportAgent(
+    pane: SurfaceView, agent: String, state: String, sessionId: String?, message: String?
+  ) {
     if state == "clear" {
       pane.agentState = nil
       pane.agentSessionId = nil
       pane.agentCommand = nil
+      pane.agentMessage = nil
+      pane.agentStateChangedAt = nil
     } else {
+      let changed = pane.agentState != state
+      if changed { pane.agentStateChangedAt = Date() }
       pane.agentState = state
       pane.agentCommand = agent
+      pane.agentMessage = message
       if let sessionId {
         pane.agentSessionId = sessionId
+      }
+      if changed, state == "waiting" || state == "done", let row = attentionRow(for: pane) {
+        attentionStore.noteTransient(row)
       }
     }
     pane.controller?.paneAgentStateChanged()

@@ -109,6 +109,16 @@ struct PaletteCard: View {
         .frame(maxWidth: model.fieldVisible ? .infinity : 0)
         .opacity(model.fieldVisible ? 1 : 0)
         .allowsHitTesting(model.fieldVisible)
+      // ヘッダ右端の表示専用バッジ（Attention の ⌘⌘）。opt-in（nil の既存パレットは従来どおり）。
+      if let badge = model.headerBadge {
+        Text(badge)
+          .font(Font.theme.meta)
+          .foregroundStyle(Color.theme.textMuted)
+          .padding(.horizontal, Theme.Space.step)
+          .padding(.vertical, Theme.Space.hair)
+          .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.sm).fill(Color.theme.smallPillFill))
+      }
     }
     .padding(.horizontal, Theme.Space.span)
     .padding(.vertical, Theme.Space.bar)

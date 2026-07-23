@@ -287,4 +287,15 @@ enum L10nKey: String, CaseIterable, Sendable {
   case updateAutoInstallLabel
   case updateAutoInstallSub
   case updateCheckNow
+
+  // MARK: - Attention（パレット・メニューバー投影・グローバル ⌘⌘ の権限）
+  case attentionPaletteHint
+  case attentionEmpty
+  case menubarClickToPane
+  case menubarOpenOrbe
+  case menubarPermissionHint
+  case settingsGlobalCmdTapLabel
+  case settingsGlobalCmdTapGranted
+  case settingsGlobalCmdTapDenied
+  case settingsGlobalCmdTapRestartNote
 }
