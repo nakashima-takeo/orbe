@@ -119,7 +119,10 @@ struct HelpCard: View {
       }
       Text("⌘H")
         .font(Font.theme.meta)
+        .tracking(Theme.Typography.trackingKey)
         .foregroundStyle(Color.theme.textMuted)
+        // tracking は末尾グリフの後にも付くため、その分だけ trailing を詰めて光学中央を保つ。
+        .padding(.trailing, -Theme.Typography.trackingKey)
         .padding(.horizontal, Theme.Space.step)
         .padding(.vertical, Theme.Space.hair)
         .background(

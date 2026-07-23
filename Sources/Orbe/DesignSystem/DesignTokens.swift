@@ -207,6 +207,9 @@ enum Theme {
     // tracking / line-height スカラ（NSFont では表せないため使用側で .tracking() / lineSpacing 換算）
     static let trackingLabel: CGFloat = 1  // 大文字セクション見出し
     static let trackingStatus: CGFloat = 0.3  // ステータスストリップ
+    // ⌘⇧ 等の修飾記号は SF Mono に無く fallback グリフの詰まったアドバンスで描かれる
+    // （design のブラウザレンダは等幅アドバンス）。キー表記だけ tracking で design 相当の字間へ戻す。
+    static let trackingKey: CGFloat = 1  // ⌘H バッジ・キーバッジ・チップのキー表記
     static let lineBody: CGFloat = 1.6  // 本文プローズ
     static let lineTerminal: CGFloat = 1.55  // ターミナル本文
     static let linePane: CGFloat = 1.7  // EditorPane の本文・diff 行送り

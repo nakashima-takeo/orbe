@@ -93,9 +93,12 @@ private struct HelpTopRow: View {
     HStack(spacing: 9) {
       Text(row.key)
         .font(Font.theme.chrome)
+        .tracking(Theme.Typography.trackingKey)
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(1)
         .fixedSize()
+        // tracking は末尾グリフの後にも付くため、その分だけ trailing を詰めて光学中央を保つ。
+        .padding(.trailing, -Theme.Typography.trackingKey)
         .padding(.horizontal, 7)
         .padding(.vertical, Theme.Space.hair)
         .frame(minWidth: 46)
@@ -173,9 +176,12 @@ private struct HelpListRow: View {
       // 幅 text+16 / 高さ 18。SwiftUI は stroke が内側なので padding 8・高さ 18 で寸を合わせる。
       Text(row.key)
         .font(Font.theme.helpKeyList)
+        .tracking(Theme.Typography.trackingKey)
         .foregroundStyle(Color.theme.statusText)
         .lineLimit(1)
         .fixedSize()
+        // tracking は末尾グリフの後にも付くため、その分だけ trailing を詰めて光学中央を保つ。
+        .padding(.trailing, -Theme.Typography.trackingKey)
         .padding(.horizontal, Theme.Space.step)
         .frame(height: 18)
         .background(RoundedRectangle(cornerRadius: Theme.Radius.sm).fill(ink.surface(0.06)))
