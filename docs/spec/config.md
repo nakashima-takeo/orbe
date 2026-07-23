@@ -1,12 +1,12 @@
 ---
 title: 設定（現状）
 description: キュレート既定 → user 設定 → GUI 生成 conf の後勝ち3層読み込みと、テーマ（Auto/Dark/Light 外観スイッチ）によるライト/ダーク決定
-updated: 2026-07-22
+updated: 2026-07-23
 ---
 
 ## 3 層読み込み
 
-`Config.load()` が3層を後勝ちで読む: ① キュレート既定 `app/orbe-defaults.conf`（バンドル同梱・dev では不在でスキップ）、② user の `~/.config/ghostty`、③ `StateDir.base()/gui.conf`（存在時のみ）。後勝ちなので user が既定を上書きし、GUI 生成 conf が user 設定にも勝つ。user の `~/.config/ghostty` は一切書き換えない。
+`Config.load()` が3層を後勝ちで読む: ① キュレート既定 `app/orbe-defaults.conf`（バンドル同梱・非バンドル起動〔素の `swift build`〕では不在でスキップ）、② user の `~/.config/ghostty`、③ `StateDir.base()/gui.conf`（存在時のみ）。後勝ちなので user が既定を上書きし、GUI 生成 conf が user 設定にも勝つ。user の `~/.config/ghostty` は一切書き換えない。
 
 層1（キュレート既定）が持つのは端末テーマ・フォントチェーン・背景不透明度/ブラー・パディング・カーソル・シェル統合の既定。うち意図が値に宿るもの:
 

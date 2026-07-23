@@ -1,10 +1,10 @@
 ---
 title: workspace 永続（現状）
 description: 構成（workspace・タブ・明示タイトル・分割ツリー・cwd・エージェントセッション・最終使用時刻）の JSON 保存と起動時復元・エージェント resume・デバウンス保存
-updated: 2026-07-22
+updated: 2026-07-23
 ---
 
-保存先は `~/Library/Application Support/<bundle-id>/` 直下。環境変数 `ORBE_STATE_DIR`（非空）を設定するとその dir 直下へ移る——検証用の隔離インスタンス用途で、settings.json・gui.conf・[control-api](control-api.md) の control.sock も同じ dir に同居する。テスト用にファイル位置を差し替える seam を持つ。
+保存先は `~/Library/Application Support/<bundle-id>/` 直下。`<bundle-id>` はビルドチャネルごとに異なるため（[channel](channel.md)）、dev（Orbe Dev）と release は state を共有しない。環境変数 `ORBE_STATE_DIR`（非空）を設定するとその dir 直下へ移る——検証用の隔離インスタンス用途で、settings.json・gui.conf・[control-api](control-api.md) の control.sock も同じ dir に同居する。テスト用にファイル位置を差し替える seam を持つ。
 
 ## workspaces.json — 構成の永続
 
