@@ -71,7 +71,7 @@ final class CompletionShimTests: XCTestCase {
     process.environment = env
     let stdout = Pipe()
     process.standardOutput = stdout
-    process.standardError = Pipe()
+    process.standardError = FileHandle.nullDevice  // 未読 Pipe はバッファ満杯で子を block しうる。捨てる意図を明示
     try process.run()
     let data = stdout.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
