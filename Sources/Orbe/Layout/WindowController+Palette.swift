@@ -232,7 +232,8 @@ extension WindowController {
       fontNames: FontCatalog.names(),
       allFontNames: FontCatalog.allNames(),  // タブタイトルフォント用（等幅制限なし）
       agents: agentLauncher.detectedCommands,  // 検出済みのみ（起動パレットと同じ検出結果）
-      localization: localization)
+      localization: localization,
+      update: updateState)  // アップデートセクション（状態カード・トグル・今すぐ確認）
     p.onApply = { [weak self] change, scope in self?.applySetting(change, scope: scope) }
     // 言語行（descriptor 非経由）: ストア更新→メインメニュー再構築→preferredLanguage 永続化を束ねる。
     p.onSelectLanguage = { [weak self] language in

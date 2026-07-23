@@ -36,5 +36,15 @@
     <key>NSAllowsLocalNetworking</key>
     <true/>
   </dict>
+  <!-- Sparkle（アプリ内アップデート）。appcast は最新リリースのアセット（安定 URL）。
+       dev ビルドは ORBE_DEV の起動ゲートにより defaults/起動引数の SUFeedURL 上書きが無い限り不活性。 -->
+  <key>SUFeedURL</key>
+  <string>https://github.com/nakashima-takeo/orbe/releases/latest/download/appcast.xml</string>
+  <!-- EdDSA 公開鍵（対の秘密鍵はこの Mac のログイン Keychain。リポジトリには入れない）。 -->
+  <key>SUPublicEDKey</key>
+  <string>qiCtPDzeYmOGJDdVTXWRMwXdzHDFIlyLDjHld/J20w4=</string>
+  <!-- 自動確認を既定オンにし、Sparkle 標準の初回許可プロンプトを出さない。 -->
+  <key>SUEnableAutomaticChecks</key>
+  <true/>
 </dict>
 </plist>

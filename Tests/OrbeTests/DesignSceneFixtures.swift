@@ -152,4 +152,72 @@ enum DesignSceneFixtures {
       name: "git checkout <branch>", kind: .subcommand,
       description: "ブランチを切り替える。最近のブランチ:")
   }
+
+  // MARK: - Update（見本 UpdateCheckDoc 2a–2d 同データ。Sparkle 実体なしで各状態を注入する）
+
+  /// 見本のリリースノート（2b の 3 分類・ユーザー語）。appcast description と同じ Markdown 形。
+  static let updateSampleNotes = """
+    ### 新機能
+    - ペインからそのまま使える `orbe` コマンドを同梱しました
+    ### 改善
+    - タブ補完の候補表示が速くなりました
+    ### 修正
+    - エージェント実行中にタブ表示が止まる問題を修正しました
+    """
+
+  private static func baseUpdateState() -> UpdateState {
+    let state = UpdateState(currentVersion: "0.1.0")
+    state.seedLastCheck(Date(timeIntervalSinceNow: -300))
+    return state
+  }
+
+  /// 適用待ち（2a トースト・2b シート・2c 状態カードの正）。v0.2.0 / 2026-07-13 / 13 MB。
+  static func updateReadyState() -> UpdateState {
+    let state = baseUpdateState()
+    state.markReady(
+      UpdateState.ReadyInfo(
+        version: "0.2.0", notes: updateSampleNotes,
+        date: DateComponents(
+          calendar: .init(identifier: .gregorian), year: 2026, month: 7, day: 13
+        ).date,
+        size: 13_000_000))
+    return state
+  }
+
+  static func updateCheckingState() -> UpdateState {
+    let state = baseUpdateState()
+    state.beginCheck()
+    return state
+  }
+
+  /// DL中 64%（見本 2d の `8.3 MB / 13 MB` mono 表記）。
+  static func updateDownloadingState() -> UpdateState {
+    let state = baseUpdateState()
+    state.beginDownload(version: "0.2.0")  // 実フローと同順（found→DL 開始、ready はまだ立たない）
+    state.setExpectedLength(13_000_000)
+    state.receiveData(length: 8_300_000)
+    return state
+  }
+
+  static func updateUpToDateState() -> UpdateState {
+    let state = baseUpdateState()
+    state.markUpToDate()
+    return state
+  }
+
+  static func updateFailedState() -> UpdateState {
+    let state = baseUpdateState()
+    state.fail(message: "接続に失敗しました")
+    return state
+  }
+
+  /// 設定パレットをアップデートセクションへ潜らせたモデル（2c/2d。gallery/flow が状態カードを撮る）。
+  static func updateSettingsModel(_ state: UpdateState) -> SettingsPaletteModel {
+    let model = SettingsPaletteModel(
+      values: ScopedSettingsValues(global: SettingsLayer(), override: SettingsLayer()),
+      fontNames: [], agents: ["claude"], localization: LocalizationStore(language: .ja),
+      update: state)
+    model.drillIntoUpdate()
+    return model
+  }
 }

@@ -43,12 +43,36 @@ VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/
 # 2. Developer ID で内側から個別署名（hardened runtime + secure timestamp）。
 #    署名対象はハードコードせず、バンドル内の Mach-O を全て拾う。同梱バイナリが増えても
 #    取りこぼさないため（未署名が1つでも残ると公証が Invalid で弾く）。
+#    Contents/Frameworks は bundle 型 nested（XPC・Updater.app・framework 本体）を含むため
+#    この flat 走査から除外し、下の bundle-aware パスで内側から署名する（flat に Mach-O 単位で
+#    署名すると bundle の CodeResources 封が作られず公証が Invalid で弾く）。
 echo "==> Developer ID 署名 (hardened runtime)"
 while IFS= read -r bin; do
   echo "    sign: ${bin#"$APP/"}"
   codesign --force --timestamp --options runtime --sign "$SIGN_ID" "$bin"
-done < <(find "$APP/Contents" -type f -perm +111 \
+done < <(find "$APP/Contents" -path "$APP/Contents/Frameworks" -prune -o -type f -perm +111 \
            -exec sh -c 'file -b "$1" | grep -q "Mach-O"' _ {} \; -print)
+
+# 2b. Contents/Frameworks の bundle-aware 署名（内側から）。各 framework について
+#     ① 内包する bundle（*.xpc / *.app。Sparkle は Downloader/Installer XPC と Updater.app）
+#     ② bundle 外の単体実行体（Sparkle の Autoupdate 等）
+#     ③ framework 本体
+#     の順で署名する。XPC の entitlements は上流の同梱値を保持する（--preserve-metadata）。
+while IFS= read -r fw; do
+  while IFS= read -r nested; do
+    echo "    sign(bundle): ${nested#"$APP/"}"
+    codesign --force --timestamp --options runtime --preserve-metadata=entitlements \
+      --sign "$SIGN_ID" "$nested"
+  done < <(find "$fw" \( -name "*.xpc" -o -name "*.app" \) -type d)
+  while IFS= read -r bin; do
+    case "$bin" in */*.xpc/*|*/*.app/*) continue;; esac  # bundle 内は ① が封済み（再署名すると封が壊れる）
+    echo "    sign: ${bin#"$APP/"}"
+    codesign --force --timestamp --options runtime --sign "$SIGN_ID" "$bin"
+  done < <(find "$fw" -type f -perm +111 \
+             -exec sh -c 'file -b "$1" | grep -q "Mach-O"' _ {} \; -print)
+  echo "    sign(framework): ${fw#"$APP/"}"
+  codesign --force --timestamp --options runtime --sign "$SIGN_ID" "$fw"
+done < <(find "$APP/Contents/Frameworks" -maxdepth 1 -name "*.framework" -type d 2>/dev/null)
 
 # 最後にバンドル本体（entitlements 付き）。
 codesign --force --timestamp --options runtime \
@@ -100,4 +124,27 @@ spctl -a -vv -t exec "$APP"
 # 5. 配布用 zip（staple 済みの .app を固める。これを GitHub Releases 等に上げる）。
 DIST_ZIP="$RELEASE_DIR/orbe-${VERSION}-macos.zip"
 /usr/bin/ditto -c -k --keepParent "$APP" "$DIST_ZIP"
+
+# 6. appcast.xml を生成する（Sparkle のアプリ内アップデートが読む feed。EdDSA 署名は
+#    ログイン Keychain の秘密鍵で自動付与される）。最新 1 項目のみ・delta 無し（YAGNI）。
+#    リリースノート: ORBE_RELEASE_NOTES=<md へのパス> で渡す（zip と同名の .md として並置すると
+#    generate_appcast が description へ埋め込む。RELEASE_DIR は冒頭で作り直すため事前配置は消える）。
+#    zip と appcast.xml は必ず**同じリリースのアセット**として一緒にアップロードする——
+#    SUFeedURL は releases/latest/download/appcast.xml（最新リリースのアセット）を指すため、
+#    載せ忘れると全クライアントの更新確認が 404 になる。
+if [ -n "${ORBE_RELEASE_NOTES:-}" ] && [ -f "$ORBE_RELEASE_NOTES" ]; then
+  cp "$ORBE_RELEASE_NOTES" "$RELEASE_DIR/orbe-${VERSION}-macos.md"
+fi
+SPARKLE_BIN="$ROOT/.build/artifacts/sparkle/Sparkle/bin"
+[ -x "$SPARKLE_BIN/generate_appcast" ] \
+  || { echo "エラー: generate_appcast が見つからない ($SPARKLE_BIN)。swift build 済みか確認せよ" >&2; exit 1; }
+echo "==> appcast.xml 生成 (EdDSA 署名)"
+"$SPARKLE_BIN/generate_appcast" \
+  --download-url-prefix "https://github.com/nakashima-takeo/orbe/releases/download/v${VERSION}/" \
+  --embed-release-notes \
+  --maximum-versions 1 \
+  --maximum-deltas 0 \
+  -o "$RELEASE_DIR/appcast.xml" \
+  "$RELEASE_DIR"
 echo "==> 完了: $DIST_ZIP"
+echo "==> 完了: $RELEASE_DIR/appcast.xml (zip と同じリリースへ必ず一緒にアップロードする)"

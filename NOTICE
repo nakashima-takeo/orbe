@@ -91,6 +91,26 @@ Terminal engine (Contents/MacOS/Orbe, Contents/Resources/{ghostty,terminfo})
   License: licenses/bash-preexec-LICENSE.txt
 
 --------------------------------------------------------------------------------
+Software update (Contents/Frameworks/Sparkle.framework)
+--------------------------------------------------------------------------------
+
+* Sparkle — Copyright (c) 2006-2013 Andy Matuschak; Copyright (c) 2009-2013
+  Elgato Systems GmbH; Copyright (c) 2011-2014 Kornel Lesiński; Copyright (c)
+  2015-2017 Mayur Pawashe; Copyright (c) 2014 C.W. Betts; Copyright (c) 2014
+  Petroules Corporation; Copyright (c) 2014 Big Nerd Ranch — composite
+  (MIT main license plus the external licenses of bundled components:
+  bsdiff/bspatch (Copyright 2003-2005 Colin Percival, BSD-2-Clause), sais-lite
+  (Copyright (c) 2008-2010 Yuta Mori, MIT), portable ed25519 (Copyright (c)
+  2015 Orson Peters, zlib-style), SUSignatureVerifier.m (Copyright (c) 2011
+  Mark Hamlin, BSD-2-Clause); see the bundled text)
+  Bundled unmodified as Contents/Frameworks/Sparkle.framework (the prebuilt
+  Sparkle-for-Swift-Package-Manager distribution, including its XPC services,
+  Autoupdate, and Updater.app helpers) and linked from Contents/MacOS/Orbe for
+  in-app software updates.
+  https://github.com/sparkle-project/Sparkle
+  License: licenses/sparkle-LICENSE.txt
+
+--------------------------------------------------------------------------------
 Markdown parsing (Contents/MacOS/Orbe)
 --------------------------------------------------------------------------------
 

@@ -6,7 +6,9 @@ let package = Package(
   platforms: [.macOS(.v14)],
   dependencies: [
     // CommonMark + GFM パーサ（公式）。EditorPane の markdown を AST へ起こし SwiftUI へ再帰描画する。
-    .package(url: "https://github.com/apple/swift-markdown.git", from: "0.6.0")
+    .package(url: "https://github.com/apple/swift-markdown.git", from: "0.6.0"),
+    // アプリ内アップデート（appcast + EdDSA 署名検証 + 終了時適用）。UI は自前（SPUUserDriver 実装）。
+    .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
   ],
   targets: [
     .binaryTarget(
@@ -25,6 +27,7 @@ let package = Package(
         "GhosttyKit",
         "OrbePaths",
         .product(name: "Markdown", package: "swift-markdown"),
+        .product(name: "Sparkle", package: "Sparkle"),
       ],
       // EditorPane のファイル種別アイコン（catppuccin/vscode-icons mocha・MIT。出所は NOTICE）。
       resources: [.copy("Resources/icons")],

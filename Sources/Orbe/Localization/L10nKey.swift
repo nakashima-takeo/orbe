@@ -252,4 +252,39 @@ enum L10nKey: String, CaseIterable, Sendable {
   // MARK: - Agent palette
   case agentPaletteSetDefault
   case agentPaletteHintList
+
+  // MARK: - Update（メニュー・トースト・変更内容シート・設定›アップデート）
+  case menuCheckForUpdates
+  case settingsUpdateLabel
+  case settingsUpdateBreadcrumb
+  case settingsUpdateHint
+  case updateToastTitle
+  case updateToastAutoApply
+  case updateToastManualApply
+  case updateRestartNow
+  case updateShowChanges
+  case updateSheetTitle
+  case updateVerifiedLine
+  case updateRestartAndUpdate
+  case updateCloseButton
+  case updateSheetFootnote
+  case updateStateChecking
+  case updateStateDownloading
+  case updateStateUpToDate
+  case updateStateFailedTitle
+  case updateStateFailedHint
+  case updateRetry
+  case updateStateWaiting
+  case updateWaitingApplyOnQuit
+  case updateWaitingApplyManual
+  case updateCurrentVersion
+  case updateLastChecked
+  case updateLastCheckedNever
+  case updateAutoCheckLabel
+  case updateAutoCheckSub
+  case updateAutoDownloadLabel
+  case updateAutoDownloadSub
+  case updateAutoInstallLabel
+  case updateAutoInstallSub
+  case updateCheckNow
 }

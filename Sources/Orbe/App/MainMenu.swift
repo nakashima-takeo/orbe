@@ -20,6 +20,13 @@ enum MainMenu {
   private static func appMenuItem(appName: String, language: Language) -> NSMenuItem {
     let item = NSMenuItem()
     let menu = NSMenu(title: appName)
+    // 「更新を確認…」。target=nil で responder chain（AppDelegate）へ配送し、設定パレットの
+    // 「今すぐ確認」と同一導線に接続する（About 項目が無いため先頭に置く。macOS 慣例の位置）。
+    menu.addItem(
+      withTitle: L10n.string(.menuCheckForUpdates, language),
+      action: #selector(AppDelegate.checkForUpdates(_:)),
+      keyEquivalent: "")
+    menu.addItem(.separator())
     menu.addItem(
       withTitle: L10n.format(.menuHide, language, appName),
       action: #selector(NSApplication.hide(_:)),

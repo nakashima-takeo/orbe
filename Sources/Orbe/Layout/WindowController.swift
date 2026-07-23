@@ -54,6 +54,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   var devFeaturesEnabled = false  // 右バー gate。アクティブ WS 実効値から applyActiveWorkspaceConfig が派生。
   // パレット提示の拡張（WindowController+Palette）が設定パレットの defaultAgent 配線で触るため internal。
   let agentLauncher = AgentLauncher()
+  // アップデート面。状態（UI 唯一の情報源）は updaterService が生成・所有し、提示配線は WindowController+Update。
+  let updaterService = UpdaterService()
 
   // 読みは store へ転送する（制御チャネル・chrome・パレット・永続・テストが多数の箇所で読むため、
   // 従来の可視性（internal）を保って読み site を無改変にする）。所有と全ミューテーションは store。
@@ -127,6 +129,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     }
     showFirstRunFlow()  // 初回言語選択（preferredLanguage 未設定時）→ 既存 Onboarding（各 CLI へ導入）
     installCompletionIfNeeded()  // 初回のみ・zshrc へ補完 managed block を冪等追記
+    wireUpdateUI()  // アップデート提示導線を配線し、ゲートを通れば update サイクル開始
     window.center()
   }
 

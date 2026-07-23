@@ -13,7 +13,7 @@ import SwiftUI
   /// 前面 overlay の種別。`AppShell` が `.overlay` で対応する SwiftUI を compose する。
   enum Overlay {
     case none, languageSelect, workspacePalette, workspaceCreate, agentPalette, dispatchPalette,
-      settingsPalette, onboarding
+      settingsPalette, onboarding, updateChanges
   }
 
   /// 上段 chrome（ネイティブ SwiftUI `StatusRowView` の状態）。
@@ -43,6 +43,9 @@ import SwiftUI
   var dispatchProvider: DispatchDataProvider?
   var settingsPalette: SettingsPaletteModel?
   var onboarding: OnboardingModel?
+  /// アップデートの状態モデル（トースト層・変更内容シート・設定パレットが共有する唯一の情報源）。
+  /// 提示元（WindowController）が起動時に据える。nil＝アップデート面なし（テスト等）。
+  var update: UpdateState?
 
   init(statusModel: StatusRowModel, content: NSView) {
     self.statusModel = statusModel
@@ -63,6 +66,7 @@ import SwiftUI
     case .dispatchPalette: dispatchPalette?.focus()
     case .settingsPalette: settingsPalette?.focus()
     case .onboarding: onboarding?.focus()
+    case .updateChanges: update?.focusChanges()
     }
   }
 }
@@ -102,6 +106,14 @@ struct AppShell: View {
             }
           }
         }
+      }
+    }
+    // アップデートの「準備完了」トースト（非モーダル・scrim なし）。モーダル overlay の下に置く
+    // （パレット表示中はパレットが前）。Overlay enum に入れないのは modality を伴わないため。
+    .overlay(alignment: .bottomTrailing) {
+      if let update = model.update, update.toastVisible {
+        UpdateToastView(state: update)
+          .padding(Theme.Space.bar)
       }
     }
     // パレット・オンボーディング等のフルウィンドウ overlay はネイティブ SwiftUI で重ねる
@@ -145,6 +157,8 @@ struct AppShell: View {
       if let palette = model.settingsPalette { PaletteOverlay(model: palette.render) }
     case .onboarding:
       if let onboarding = model.onboarding { OnboardingOverlay(model: onboarding) }
+    case .updateChanges:
+      if let update = model.update { UpdateChangesOverlay(model: update) }
     }
   }
 }

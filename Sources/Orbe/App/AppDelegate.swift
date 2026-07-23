@@ -21,6 +21,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     NSApp.mainMenu = MainMenu.build(appName: "Orbe", language: language)
   }
 
+  /// App メニュー「更新を確認…」（target=nil の responder chain 配送でここへ届く）。
+  /// 設定パレットの「今すぐ確認」と同一導線——結果は設定›アップデートの状態カードに現れる。
+  @objc func checkForUpdates(_ sender: Any?) {
+    windowController?.showUpdateCheck()
+  }
+
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
   // ⌘Q（メニュー）による終了も、ウィンドウ閉じと同じく実行中プロセスを無警告で殺さない（1 回だけ確認）。

@@ -41,9 +41,20 @@ extension SettingsPaletteModel {
     setMode(.agentStates, select: stateRowBeforeDrill)
   }
 
-  /// root の言語行（末尾固定）から言語サブパレットへ潜る。戻り時の選択復元用に末尾 index を覚える。
+  /// root の言語行（末尾固定）から言語サブパレットへ潜る。戻り時の選択復元用に index を覚える。
+  /// `drillIn` と同じく行の同一性から全行 index を引く（`rootRows` は scope 込みなので +1 は不要）。
   func drillIntoLanguage() {
-    rootRowBeforeDrill = 1 + rootOrder.count  // scope(0) ＋ 設定行 ＋ 末尾の言語行
+    rootRowBeforeDrill =
+      rootRows.firstIndex { if case .language = $0 { return true } else { return false } }
+      ?? rootRowBeforeDrill
     setMode(.language)
+  }
+
+  /// root のアップデート行（言語の次・末尾固定）からアップデートサブパレットへ潜る。
+  func drillIntoUpdate() {
+    rootRowBeforeDrill =
+      rootRows.firstIndex { if case .update = $0 { return true } else { return false } }
+      ?? rootRowBeforeDrill
+    setMode(.update)
   }
 }
