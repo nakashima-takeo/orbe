@@ -79,7 +79,7 @@ struct HelpCard: View {
       .tint(Color.theme.accentPrimary)
       .focused($fieldFocused)
       .imePlaceholder(
-        "ショートカットを検索…", showWhenEmpty: model.query.isEmpty,
+        l10n.string(.helpSearchPlaceholder), showWhenEmpty: model.query.isEmpty,
         focused: fieldFocused, font: .system(size: 13, design: .monospaced),
         color: Color.theme.textMuted
       )
