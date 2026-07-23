@@ -25,7 +25,7 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
 
   /// アクションを 1 つ呼んでから現状の view を撮る、を順に繰り返し連番 PNG を書く。
   /// `name_<NN>_<label>.png` で出力。fixture と違い、状態はアクションが生む（壊れたら画に出る）。
-  /// ファイル分割の拡張（+Update）も使うため internal。
+  /// 分割した拡張ファイル（+Settings / +Update）からも使うため internal。
   func flow<V: View>(
     _ name: String, size: NSSize, render: () -> V,
     steps: [(label: String, action: () -> Void)]

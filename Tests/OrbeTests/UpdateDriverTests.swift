@@ -16,6 +16,8 @@ final class UpdateDriverTests: XCTestCase {
   func testWillInstallUpdateOnQuitMapsToReadyAndKeepsImmediateHandler() {
     let service = UpdaterService()
     var installed = 0
+    // delegate 実装は第1引数の updater を参照せず self.state だけを触るため、SPUUpdater は
+    // 必須引数を満たすためのダミー（渡す driver / state は結果に影響しない）。
     let handled = service.updater(
       SPUUpdater(
         hostBundle: .main, applicationBundle: .main,

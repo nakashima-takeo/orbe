@@ -135,7 +135,9 @@ DIST_ZIP="$RELEASE_DIR/orbe-${VERSION}-macos.zip"
 if [ -n "${ORBE_RELEASE_NOTES:-}" ] && [ -f "$ORBE_RELEASE_NOTES" ]; then
   cp "$ORBE_RELEASE_NOTES" "$RELEASE_DIR/orbe-${VERSION}-macos.md"
 fi
-SPARKLE_BIN="$(echo "$ROOT"/.build/artifacts/sparkle/Sparkle/bin)"
+SPARKLE_BIN="$ROOT/.build/artifacts/sparkle/Sparkle/bin"
+[ -x "$SPARKLE_BIN/generate_appcast" ] \
+  || { echo "エラー: generate_appcast が見つからない ($SPARKLE_BIN)。swift build 済みか確認せよ" >&2; exit 1; }
 echo "==> appcast.xml 生成 (EdDSA 署名)"
 "$SPARKLE_BIN/generate_appcast" \
   --download-url-prefix "https://github.com/nakashima-takeo/orbe/releases/download/v${VERSION}/" \
