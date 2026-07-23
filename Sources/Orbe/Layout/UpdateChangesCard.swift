@@ -68,7 +68,7 @@ struct UpdateChangesCard: View {
     var parts: [String] = []
     if let date = state.ready?.date {
       let formatter = DateFormatter()
-      formatter.locale = Locale(identifier: l10n.language == .ja ? "ja_JP" : "en_US")
+      formatter.locale = l10n.language.dateLocale
       formatter.dateStyle = .long
       formatter.timeStyle = .none
       parts.append(formatter.string(from: date))
@@ -152,7 +152,7 @@ struct UpdateNotesView: View {
           }
           ForEach(Array(section.items.enumerated()), id: \.offset) { _, item in
             HStack(alignment: .firstTextBaseline, spacing: Theme.Space.note + 1) {
-              Text(section.id < 2 ? "＋" : "✓")
+              Text(section.id % 3 < 2 ? "＋" : "✓")  // 色（index % 3）と同じ循環で揃える
                 .font(Font.theme.body)
                 .foregroundStyle(Color.theme.stateDone)
               Text(item)

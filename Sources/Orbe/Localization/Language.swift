@@ -24,4 +24,12 @@ enum Language: String, CaseIterable, Sendable {
     case .en: return "English"
     }
   }
+
+  /// 日付整形用のロケール（アップデートの日時表示などが使う）。言語追加時に case 網羅を強制する。
+  var dateLocale: Locale {
+    switch self {
+    case .ja: return Locale(identifier: "ja_JP")
+    case .en: return Locale(identifier: "en_US")
+    }
+  }
 }

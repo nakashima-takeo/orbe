@@ -12,7 +12,7 @@ enum UpdateLastCheckText {
       return l10n.format(.updateLastChecked, l10n.string(.relativeJustNow))
     }
     let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: l10n.language == .ja ? "ja_JP" : "en_US")
+    formatter.locale = l10n.language.dateLocale
     formatter.dateStyle = .short
     formatter.timeStyle = .short
     formatter.doesRelativeDateFormatting = true
