@@ -99,7 +99,7 @@ BUILD_ID="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 git -C "$ROOT" diff --quiet -- . ':(exclude)vendor/ghostty' 2>/dev/null || BUILD_ID="$BUILD_ID+"
 /usr/libexec/PlistBuddy -c "Add :OrbeBuildID string $BUILD_ID" "$APP/Contents/Info.plist"
 cp "$ROOT/app/orbe-defaults.conf" "$APP/Contents/Resources/orbe-defaults.conf"
-cp "$ROOT/app/orbe-completion.zsh" "$APP/Contents/Resources/orbe-completion.zsh"  # zsh ドロップダウン補完 widget（env ORBE_COMPLETION_ZSH が指す source 先・署名対象）
+cp -R "$ROOT/app/zsh" "$APP/Contents/Resources/zsh"  # zsh 補完の ZDOTDIR shim（.zshenv/.zprofile/.zshrc + orbe-completion.zsh。GUI が ZDOTDIR をここへ向ける・署名対象）
 cp "$ROOT/app/completion-engine.js" "$APP/Contents/Resources/completion-engine.js"  # JSC 補完エンジン（inshellisense runtime + curated withfig spec の prebuilt バンドル・署名対象）
 cp "$ROOT/LICENSE" "$APP/Contents/Resources/LICENSE"    # Orbe 自身のライセンス (GPL-3.0-or-later)
 cp "$ROOT/NOTICE" "$APP/Contents/Resources/NOTICE"      # 第三者の帰属表示

@@ -23,6 +23,10 @@ for key in inheritedSessionMarkers {
   unsetenv(key)
 }
 
+// zsh 補完の ZDOTDIR shim を GUI プロセス env に据える。surface spawn の base env は
+// プロセス env そのものなので、Ghostty 初期化（下の Ghostty.shared）より前に一度だけ行う。
+CompletionShim.activate()
+
 // エントリポイント。AppKit ライフサイクルで起動する。
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)

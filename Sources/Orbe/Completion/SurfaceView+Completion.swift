@@ -6,14 +6,6 @@ import SwiftUI
 /// popup 表示・accept・キー横取りは main で行う（libghostty surface API と AppKit は main 規律）。
 /// 候補算出は `CompletionEngine`（専用 queue・JSContext）に委ね、結果を main へ hop して受ける。
 extension SurfaceView {
-  /// `.app` 同梱の zsh 補完スクリプト（`<bundle>/Contents/Resources/orbe-completion.zsh`）の
-  /// 絶対パス。`swift run`（バンドル無し）では nil → env 未注入で widget が no-op。
-  static var completionScriptPath: String? {
-    guard let resources = Bundle.main.resourceURL else { return nil }
-    let path = resources.appendingPathComponent("orbe-completion.zsh").path
-    return FileManager.default.isReadableFile(atPath: path) ? path : nil
-  }
-
   /// `completion_update`: engine で現在トークンの候補を算出し、1 件以上なら popup を出す/更新する。
   /// 非同期（engine は専用 queue）。連続入力は debounce で coalesce し、結果は stale ガードで
   /// 最新リクエストのみ採用する。IME 変換中（preedit）は誤誘導になるため抑止する。
