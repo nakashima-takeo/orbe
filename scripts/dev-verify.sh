@@ -5,7 +5,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SOCK="$HOME/Library/Application Support/dev.orbe.app/control.sock"
+SOCK="$HOME/Library/Application Support/dev.orbe.app.dev/control.sock"  # build-app.sh 既定の dev チャネル固定
 MCP="$ROOT/.build/release/orbe-mcp"
 APP="$ROOT/build/Orbe.app"
 
@@ -30,8 +30,10 @@ echo "==> 再ビルド"
 swift build -c release --package-path "$ROOT" --product orbe-mcp >/dev/null
 
 echo "==> 既存インスタンスを終了"
-osascript -e 'tell application "Orbe" to quit' 2>/dev/null || true
-pkill -f "Orbe.app/Contents/MacOS/Orbe" 2>/dev/null || true
+# quit も pkill も dev チャネルの実体だけを狙う（アプリ名解決・部分一致だと本番 Orbe や
+# /Applications 側のインスタンスまで巻き添えにする）。
+osascript -e 'tell application id "dev.orbe.app.dev" to quit' 2>/dev/null || true
+pkill -f "$APP/Contents/MacOS/Orbe" 2>/dev/null || true
 rm -f "$SOCK"
 sleep 0.5
 
