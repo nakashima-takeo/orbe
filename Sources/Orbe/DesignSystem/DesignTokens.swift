@@ -36,6 +36,9 @@ enum Theme {
       light: OrbePalette.Chrome.accentLight,
       dark: OrbePalette.Chrome.accentDark)  // 選択・自分の出番・プロンプト（SSOT）
     static let accentFocus = accentPrimary  // フォーカス（accentPrimary へ収束）
+    // accent の明色変種。tint(accent) 面上の強調文字（ヘルプの絞り込みチップ等）。
+    // light は紙面で accent 自体のコントラストが十分なため accent と同値。
+    static let accentBright = dyn(light: 0x6d43d8, dark: 0xb18aff)
     static let onAccent = dyn(
       light: OrbePalette.Chrome.backgroundLight,
       dark: OrbePalette.Chrome.backgroundDark)  // accent 塗り上のインク＝地色（SSOT）
@@ -70,6 +73,11 @@ enum Theme {
     // ステータスストリップ（件数の文字）と done グリフ check 線色
     static let statusText = dyn(light: 0x4d4368, dark: 0xcdc7e2)
     static let checkStroke = dyn(light: 0xf3f0fa, dark: 0x0a0a0a)
+
+    // ヘルプ（⌘H）キーボード可視化のキー文字色。使用キー＝secondary と muted の中点（藤系色相維持）、
+    // 未使用キー＝dark は muted より沈め / light は紙面へ近づけて薄める（明暗はキー背景でも冗長化）。
+    static let kbKeyText = dyn(light: 0x766e8d, dark: 0xa99fb8)
+    static let kbKeyMutedText = dyn(light: 0xa49cb5, dark: 0x6f6880)
 
     // セグメント形タブバー（2段目）。選択セグメントの地は textPrimary（前景色反転）。
     static let tabRowBg = dynA(light: 0x3a3151, lightA: 0.08, dark: 0x000000, darkA: 0.28)
@@ -176,6 +184,22 @@ enum Theme {
     static let paneFootnote = NSFont.monospacedSystemFont(ofSize: 8.5, weight: .regular)
     static let paneBadge = NSFont.monospacedSystemFont(ofSize: 8, weight: .regular)
     static let paneTag = NSFont.monospacedSystemFont(ofSize: 7.5, weight: .regular)
+
+    // Help（⌘H チートシート）専用の実寸タイポ（デザイン px をそのまま pt に。
+    // 11=chrome / 10=meta は既存トークンを再利用し、無いサイズだけ持つ）
+    // helpTitle=見出し・検索・プロンプト / helpRow=行ラベル・凡例語 / helpSidebarItem=カテゴリ名 /
+    // helpKeyList=一覧キーバッジ / helpCount=サイドバー件数 / helpSection=大文字見出し・フッター /
+    // helpCaption=キーボード説明 / helpKeyFn=fn 行キー / helpKeyArrow=▲▼ キー
+    static let helpTitle = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+    static let helpRow = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+    static let helpSidebarItem = NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular)
+    static let helpKeyList = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
+    static let helpCount = NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)
+    static let helpSection = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
+    static let helpCaption = NSFont.monospacedSystemFont(ofSize: 8.5, weight: .regular)
+    static let helpKeyFn = NSFont.monospacedSystemFont(ofSize: 7.5, weight: .regular)
+    static let helpKeyArrow = NSFont.monospacedSystemFont(ofSize: 6, weight: .regular)
+
     static let proseBody = NSFont.systemFont(ofSize: 11.5, weight: .regular)
     static let proseHeading = NSFont.systemFont(ofSize: 13, weight: .semibold)
     static let proseTitle = NSFont.systemFont(ofSize: 17, weight: .bold)
