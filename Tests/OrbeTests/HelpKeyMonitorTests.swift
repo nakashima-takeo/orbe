@@ -40,6 +40,15 @@ final class HelpKeyMonitorTests: XCTestCase {
     XCTAssertNil(HelpKeyMonitor.keyID(for: arrow(.f1)))
   }
 
+  /// ⇧ 併用の記号は shift 後の文字で届く（charactersIgnoringModifiers は Shift だけ反映）ため、
+  /// base キーへ戻して解決する（⌘⇧] の点灯・行一致の前提）。
+  func testKeyIDMapsShiftedSymbolsToBaseKeys() {
+    XCTAssertEqual(HelpKeyMonitor.keyID(for: key("}")), "]")
+    XCTAssertEqual(HelpKeyMonitor.keyID(for: key("{")), "[")
+    XCTAssertEqual(HelpKeyMonitor.keyID(for: key("%")), "5")
+    XCTAssertEqual(HelpKeyMonitor.keyID(for: key("+")), "=")
+  }
+
   func testSyncingModifiersDistinguishesLeftRight() {
     // 左 ⌘ 押下（device マスク 0x0008）。
     let leftCmd = flags(.command, raw: 0x0008)

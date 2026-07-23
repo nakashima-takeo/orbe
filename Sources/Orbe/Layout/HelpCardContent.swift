@@ -116,11 +116,21 @@ private struct HelpTopRow: View {
     .background(
       RoundedRectangle(cornerRadius: 6)
         .fill(
-          model.hoverRow?.id == rowID
-            ? Color.theme.accentPrimary.opacity(0.12) : Color.clear)
+          model.pressedRowIDs.contains(rowID)
+            ? Color.theme.accentPrimary.opacity(0.16)
+            : model.hoverRow?.id == rowID
+              ? Color.theme.accentPrimary.opacity(0.12) : Color.clear)
     )
+    // 実押下一致のハイライト枠（キーボード点灯と同期。ホバーの塗りと同系＋accent 枠で区別）。
+    .overlay {
+      if model.pressedRowIDs.contains(rowID) {
+        RoundedRectangle(cornerRadius: 6)
+          .strokeBorder(Color.theme.accentPrimary.opacity(0.4), lineWidth: Theme.Stroke.hairline)
+      }
+    }
     // デザインの margin 0 -8px 相当: 塗りは左右 8px はみ出し、テキストは列に揃う。
     .padding(.horizontal, -Theme.Space.step)
+    .id(rowID)
     .onHover { entered in
       if entered {
         model.hoverRow = (id: rowID, combo: row.combo)
@@ -194,11 +204,21 @@ private struct HelpListRow: View {
     .background(
       RoundedRectangle(cornerRadius: 6)
         .fill(
-          model.hoverRow?.id == rowID
-            ? Color.theme.accentPrimary.opacity(0.1) : Color.clear)
+          model.pressedRowIDs.contains(rowID)
+            ? Color.theme.accentPrimary.opacity(0.16)
+            : model.hoverRow?.id == rowID
+              ? Color.theme.accentPrimary.opacity(0.1) : Color.clear)
     )
+    // 実押下一致のハイライト枠（キーボード点灯と同期。ホバーの塗りと同系＋accent 枠で区別）。
+    .overlay {
+      if model.pressedRowIDs.contains(rowID) {
+        RoundedRectangle(cornerRadius: 6)
+          .strokeBorder(Color.theme.accentPrimary.opacity(0.4), lineWidth: Theme.Stroke.hairline)
+      }
+    }
     // デザインの margin 0 -8px 相当: 塗りは左右 8px はみ出し、テキストは列に揃う。
     .padding(.horizontal, -Theme.Space.step)
+    .id(rowID)
     .onHover { entered in
       if entered {
         model.hoverRow = (id: rowID, combo: row.combo)

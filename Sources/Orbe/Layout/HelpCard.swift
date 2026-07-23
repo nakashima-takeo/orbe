@@ -93,6 +93,7 @@ struct HelpCard: View {
       }
     }
     .onChange(of: model.focusToken, initial: true) { fieldFocused = true }
+    .onChange(of: model.pressed) { model.syncPressedMatch(l10n) }
   }
 
   // MARK: - フッター
@@ -236,20 +237,32 @@ struct HelpCard: View {
   // MARK: - コンテンツ（トップビュー ⇔ 一覧ビュー）
 
   private var content: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 0) {
-        if model.isTopView {
-          HelpTopView(model: model, ink: ink)
-        } else {
-          HelpListView(model: model, ink: ink)
+    ScrollViewReader { proxy in
+      ScrollView {
+        VStack(alignment: .leading, spacing: 0) {
+          if model.isTopView {
+            HelpTopView(model: model, ink: ink)
+          } else {
+            HelpListView(model: model, ink: ink)
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(.top, Theme.Space.note)
+        .padding(.horizontal, 18)
+        .padding(.bottom, Theme.Space.beat)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      // 実押下一致の行が画面外なら自動スクロールで見せる。カテゴリ自動遷移と同時に立つことが
+      // あるため、次 tick（新しい一覧のレイアウト後）に寄せてから scrollTo する。
+      .onChange(of: model.revealRowID) { _, id in
+        guard let id else { return }
+        DispatchQueue.main.async {
+          withAnimation(.linear(duration: Theme.Motion.quick)) {
+            proxy.scrollTo(id, anchor: .center)
+          }
         }
       }
-      .frame(maxWidth: .infinity, alignment: .topLeading)
-      .padding(.top, Theme.Space.note)
-      .padding(.horizontal, 18)
-      .padding(.bottom, Theme.Space.beat)
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }
 
@@ -315,6 +328,13 @@ private struct HelpSidebarRow: View {
     helpPreview { model in
       model.fkey = "t"
       model.pressed = ["cmd", "shift"]
+    }
+  }
+
+  #Preview("Help — pressed match") {
+    helpPreview { model in
+      model.pressed = ["cmd", "r"]
+      model.syncPressedMatch(LocalizationStore(language: .ja))
     }
   }
 #endif

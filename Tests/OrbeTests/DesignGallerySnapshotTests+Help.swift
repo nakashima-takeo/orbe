@@ -40,6 +40,12 @@ extension DesignGallerySnapshotTests {
     lit.pressed = ["cmd", "shift"]
     try write("help_keyboard_lit.png", lit)
 
+    // 実押下一致（⌘R はトップ厳選外 →「すべて」一覧へ自動遷移して行をハイライト＋キー点灯）。
+    let match = HelpModel()
+    match.pressed = ["cmd", "r"]
+    match.syncPressedMatch(LocalizationStore(language: .ja))
+    try write("help_pressed_match.png", match)
+
     // 縮小域（パネルが 760×656 を下回る小窓）。design 見本は未定義＝Orbe 設計の縮小挙動を検証する。
     let small = HelpModel()
     small.category = .all

@@ -179,16 +179,28 @@ enum HelpKeyMonitor {
       }
     }
     // デザイン見本 keyId() の移植: charactersIgnoringModifiers の 1 文字で解決する
-    // （Shift 併用の記号（⇧5=%等）は見本同様に対象外。修飾キー自体は flagsChanged が担う）。
+    // （修飾キー自体は flagsChanged が担う）。
     guard let scalar = event.charactersIgnoringModifiers?.unicodeScalars.first else {
       return nil
     }
     if scalar.value == 0x1b { return "esc" }
     if scalar.value == 0x20 { return "space" }
-    let s = String(Character(scalar)).lowercased()
+    var s = String(Character(scalar)).lowercased()
+    // charactersIgnoringModifiers は Shift だけは反映するため、⇧ 併用の記号は shift 後の文字で
+    // 届く（⌘⇧] は "}"）。base キーへ戻さないと ⌘⇧] 等の点灯・行一致が成立しない。
+    // 見本 keyId() は shift 後の文字を対象外にするが、Orbe は US 配列対応で戻す（意図的逸脱。
+    // 物理可視化が ANSI 配列である近似と同等）。
+    if let base = shiftedSymbols[s] { s = base }
     guard "abcdefghijklmnopqrstuvwxyz0123456789`-=[];',./\\".contains(s) else { return nil }
     return s
   }
+
+  /// US 配列の ⇧ 記号 → base キー（`shiftedSymbols["}"] == "]"`）。
+  private static let shiftedSymbols: [String: String] = [
+    "~": "`", "!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7",
+    "*": "8", "(": "9", ")": "0", "_": "-", "+": "=", "{": "[", "}": "]", "|": "\\",
+    ":": ";", "\"": "'", "<": ",", ">": ".", "?": "/",
+  ]
 
   /// 修飾キーの押下集合を flagsChanged で同期する（左右を device マスクで区別。ctrl は左右とも
   /// 物理配列の単一 `ctrl` へ合流）。⌘ が完全に離れたら非修飾キーの残留を全クリアする
