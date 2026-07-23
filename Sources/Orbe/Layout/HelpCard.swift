@@ -269,3 +269,35 @@ private struct HelpSidebarRow: View {
     .onHover { hovering = $0 }
   }
 }
+
+#if DEBUG
+  /// 見た目検証用の共通ステージ（design 原典と同寸 920×720・BackgroundGlow の上に overlay ごと描く）。
+  private func helpPreview(_ configure: (HelpModel) -> Void = { _ in }) -> some View {
+    let model = HelpModel()
+    configure(model)
+    return ZStack {
+      BackgroundGlow()
+      HelpOverlay(model: model)
+    }
+    .frame(width: 920, height: 720)
+  }
+
+  #Preview("Help — top") {
+    helpPreview()
+  }
+
+  #Preview("Help — list (all)") {
+    helpPreview { $0.category = .all }
+  }
+
+  #Preview("Help — search") {
+    helpPreview { $0.query = "タブ" }
+  }
+
+  #Preview("Help — keyboard lit") {
+    helpPreview { model in
+      model.fkey = "t"
+      model.pressed = ["cmd", "shift"]
+    }
+  }
+#endif
