@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
-# Orbe.app を Developer ID で署名・公証し、配布用 zip を作る。
+# Orbe.app を Developer ID で署名・公証し、配布用 DMG を作る。
 # build-app.sh が自己完結バンドルを作り、こちらが配布用の署名・公証・パッケージングを担う
 # （ローカル常用の ad-hoc 署名ビルドとは別）。
+#
+# 配布形式は DMG。zip 展開は受領者の展開ツール（unzip 等）によって framework の symlink 構造
+# （Versions/Current → B）が壊れ "a sealed resource is missing or invalid" で起動不能になるため。
+# ディスクイメージ内では symlink がそのまま保たれ「展開」の概念が無いのでこの問題が起きない。
+# .app と DMG の両方を公証・staple する（Sparkle は DMG をマウントして .app を取り出すため
+# .app 単体の staple も要る）。
 #
 # 事前準備（一度だけ）:
 #   1. Xcode で「Developer ID Application」証明書を作成し Keychain に入れる
@@ -15,7 +21,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_APP="$ROOT/build/Orbe.app"     # build-app.sh の出力。開発ビルドがいつでも上書きする。
 RELEASE_DIR="$ROOT/build/release"
-APP="$RELEASE_DIR/Orbe.app"          # 署名・公証・staple・zip は隔離したこちらに対して行う。
+APP="$RELEASE_DIR/Orbe.app"          # 署名・公証・staple・DMG 化は隔離したこちらに対して行う。
                                        # 公証は初回だと数時間かかることがあり、その間に BUILD_APP が
                                        # 差し替わると cdhash が変わって staple が永久に通らなくなるため。
 ENTITLEMENTS="$ROOT/app/orbe.entitlements"
@@ -108,56 +114,85 @@ while IFS= read -r t; do assert_signed "$t"; done < <(
     -exec sh -c 'file -b "$1" | grep -q "Mach-O"' _ {} \; -print
 )
 
-# 3. 公証（zip にして submit。.app 単体は submit できないため一度 zip にする）。
+# 公証はどちらの成果物でも同じ手順（submit → status 厳格ポーリング → staple）。
+# --wait は接続が切れると死ぬ。初回公証は数時間かかることがあり、その間のスリープ・ネットワーク
+# 瞬断を跨いで待てる必要があるため info を自前ポーリングする。
+# $1 = notarytool へ submit するパス（.app は直接出せないため zip。DMG はそのまま）。
+# $2 = staple 対象（.app / .dmg）。
+notarize_and_staple() {
+  local submit_path="$1" staple_target="$2" rel="${2#"$RELEASE_DIR/"}"
+  local submit_out sub_id info st stapled
+  echo "==> 公証 submit: $rel"
+  submit_out="$(xcrun notarytool submit "$submit_path" --keychain-profile "$NOTARY_PROFILE" 2>&1)"
+  echo "$submit_out"
+  sub_id="$(printf '%s\n' "$submit_out" | awk -F': *' '/^ *id:/{print $2; exit}')"
+  [ -n "$sub_id" ] || { echo "エラー: submission id を取得できなかった: $rel" >&2; exit 1; }
+
+  echo "==> 公証完了を待機 (id=$sub_id, $rel)"
+  while :; do
+    info="$(xcrun notarytool info "$sub_id" --keychain-profile "$NOTARY_PROFILE" 2>&1)" \
+      || { echo "    $(date '+%H:%M:%S') info失敗（一時的?）→60s後に再試行"; sleep 60; continue; }
+    st="$(printf '%s\n' "$info" | awk -F': *' '/^ *status:/{print $2}')"
+    echo "    $(date '+%H:%M:%S') status=${st:-unknown}"
+    case "${st:-}" in
+      Accepted) break;;
+      Invalid|Rejected)
+        echo "エラー: 公証が通らなかった（status=${st}, $rel）。ログ:" >&2
+        xcrun notarytool log "$sub_id" --keychain-profile "$NOTARY_PROFILE"
+        exit 1;;
+      *) sleep 60;;
+    esac
+  done
+
+  # 公証チケットを添付（オフラインでも Gatekeeper が通る）。Accepted 直後はチケットが CDN に
+  # 伝播しておらず "Record not found" で落ちるため、通るまで再試行する。
+  echo "==> staple: $rel"
+  stapled=""
+  for i in $(seq 1 20); do
+    if xcrun stapler staple "$staple_target"; then stapled=1; break; fi
+    echo "    チケット未伝播 → 60s後に再試行 ($i/20)"
+    sleep 60
+  done
+  [ -n "$stapled" ] || { echo "エラー: staple が完了しなかった: $rel" >&2; exit 1; }
+  xcrun stapler validate "$staple_target"
+}
+
+# 3. .app を公証・staple（.app は notarytool へ直接出せないため一度 zip に固めて submit する。
+#    Sparkle は DMG をマウントして .app を取り出すので、.app 単体の staple も必要）。
 NOTARIZE_ZIP="$RELEASE_DIR/orbe-notarize.zip"
 /usr/bin/ditto -c -k --keepParent "$APP" "$NOTARIZE_ZIP"
-echo "==> 公証 submit"
-SUBMIT_OUT="$(xcrun notarytool submit "$NOTARIZE_ZIP" --keychain-profile "$NOTARY_PROFILE" 2>&1)"
-echo "$SUBMIT_OUT"
-SUB_ID="$(printf '%s\n' "$SUBMIT_OUT" | awk -F': *' '/^ *id:/{print $2; exit}')"
-[ -n "$SUB_ID" ] || { echo "エラー: submission id を取得できなかった。" >&2; exit 1; }
-
-# 完了までポーリングする（--wait は接続が切れると死ぬ。初回公証は数時間かかることがあり、
-# その間のスリープ・ネットワーク瞬断を跨いで待てる必要がある）。
-echo "==> 公証完了を待機 (id=$SUB_ID)"
-while :; do
-  INFO="$(xcrun notarytool info "$SUB_ID" --keychain-profile "$NOTARY_PROFILE" 2>&1)" \
-    || { echo "    $(date '+%H:%M:%S') info失敗（一時的?）→60s後に再試行"; sleep 60; continue; }
-  ST="$(printf '%s\n' "$INFO" | awk -F': *' '/^ *status:/{print $2}')"
-  echo "    $(date '+%H:%M:%S') status=${ST:-unknown}"
-  case "${ST:-}" in
-    Accepted) break;;
-    Invalid|Rejected)
-      echo "エラー: 公証が通らなかった（status=${ST}）。ログ:" >&2
-      xcrun notarytool log "$SUB_ID" --keychain-profile "$NOTARY_PROFILE"
-      exit 1;;
-    *) sleep 60;;
-  esac
-done
+notarize_and_staple "$NOTARIZE_ZIP" "$APP"
 rm -f "$NOTARIZE_ZIP"
-
-# 4. 公証チケットを .app に添付（オフラインでも Gatekeeper が通る）。
-# Accepted 直後はチケットが CDN に伝播しておらず "Record not found" で落ちるため、通るまで再試行する。
-echo "==> staple"
-stapled=""
-for i in $(seq 1 20); do
-  if xcrun stapler staple "$APP"; then stapled=1; break; fi
-  echo "    チケット未伝播 → 60s後に再試行 ($i/20)"
-  sleep 60
-done
-[ -n "$stapled" ] || { echo "エラー: staple が完了しなかった。" >&2; exit 1; }
-xcrun stapler validate "$APP"
 spctl -a -vv -t exec "$APP"
 
-# 5. 配布用 zip（staple 済みの .app を固める。これを GitHub Releases 等に上げる）。
-DIST_ZIP="$RELEASE_DIR/orbe-${VERSION}-macos.zip"
-/usr/bin/ditto -c -k --keepParent "$APP" "$DIST_ZIP"
+# 4. 配布用 DMG を作る（read-only・圧縮）。「ドラッグでインストール」レイアウト——
+#    staple 済み .app と /Applications への symlink を置く。ditto は cp -R と違い symlink・
+#    拡張属性を正確に複製する。
+DMG="$RELEASE_DIR/orbe-${VERSION}-macos.dmg"
+DMG_STAGE="$RELEASE_DIR/dmg-stage"
+rm -rf "$DMG_STAGE"
+mkdir -p "$DMG_STAGE"
+/usr/bin/ditto "$APP" "$DMG_STAGE/Orbe.app"
+ln -s /Applications "$DMG_STAGE/Applications"
+echo "==> DMG 生成"
+/usr/bin/hdiutil create -volname "Orbe" -srcfolder "$DMG_STAGE" \
+  -fs HFS+ -format UDZO -ov "$DMG"
+rm -rf "$DMG_STAGE"
+
+# 5. DMG 自体を Developer ID で署名し、公証・staple（.app と DMG の二重公証・二重 staple）。
+#    DMG は実行コードではないため hardened runtime / entitlements は不要。
+echo "==> DMG 署名"
+codesign --force --timestamp --sign "$SIGN_ID" "$DMG"
+codesign --verify --verbose=2 "$DMG"
+notarize_and_staple "$DMG" "$DMG"
+spctl -a -vv -t open --context context:primary-signature "$DMG"
 
 # 6. appcast.xml を生成する（Sparkle のアプリ内アップデートが読む feed。EdDSA 署名は
 #    ログイン Keychain の秘密鍵で自動付与される）。最新 1 項目のみ・delta 無し（YAGNI）。
-#    リリースノート: ORBE_RELEASE_NOTES=<md へのパス> で渡す（zip と同名の .md として並置すると
+#    generate_appcast は RELEASE_DIR の DMG を拾い、enclosure が .dmg を指す appcast を作る。
+#    リリースノート: ORBE_RELEASE_NOTES=<md へのパス> で渡す（DMG と同名の .md として並置すると
 #    generate_appcast が description へ埋め込む。RELEASE_DIR は冒頭で作り直すため事前配置は消える）。
-#    zip と appcast.xml は必ず**同じリリースのアセット**として一緒にアップロードする——
+#    DMG と appcast.xml は必ず**同じリリースのアセット**として一緒にアップロードする——
 #    SUFeedURL は releases/latest/download/appcast.xml（最新リリースのアセット）を指すため、
 #    載せ忘れると全クライアントの更新確認が 404 になる。
 if [ -n "${ORBE_RELEASE_NOTES:-}" ] && [ -f "$ORBE_RELEASE_NOTES" ]; then
@@ -174,5 +209,5 @@ echo "==> appcast.xml 生成 (EdDSA 署名)"
   --maximum-deltas 0 \
   -o "$RELEASE_DIR/appcast.xml" \
   "$RELEASE_DIR"
-echo "==> 完了: $DIST_ZIP"
-echo "==> 完了: $RELEASE_DIR/appcast.xml (zip と同じリリースへ必ず一緒にアップロードする)"
+echo "==> 完了: $DMG"
+echo "==> 完了: $RELEASE_DIR/appcast.xml (DMG と同じリリースへ必ず一緒にアップロードする)"
