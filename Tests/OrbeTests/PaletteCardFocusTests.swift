@@ -9,7 +9,7 @@ import XCTest
 /// 宛先が同じ更新 pass で新規 mount されると SwiftUI はその pass で当てた `@FocusState` を取りこぼし、
 /// first responder が常設のカード器に残る。器は `fieldVisible` のとき ←→↵ を入力欄へ委ねて `.ignored`
 /// を返すため、**↑↓ だけ効いて ↵（決定）と →（ドリルイン）が誰にも届かない**状態になる
-/// ——ドリルイン→Esc 復帰でパレットが半死にした退行がこれ。実キーイベントを窓へ流して固定する。
+/// ——ドリルイン→Esc 復帰でパレットが半死にした退行がこれ。実キーイベントを画面外の窓へ流して固定する。
 @MainActor
 final class PaletteCardFocusTests: XCTestCase {
   private var windows: [NSWindow] = []
@@ -39,14 +39,22 @@ final class PaletteCardFocusTests: XCTestCase {
     pump(0.15)
   }
 
+  /// borderless の窓は既定で key になれない。SwiftUI の focus 解決は key 窓を要求するため、
+  /// この一点だけを開ける。
+  private final class OffscreenKeyWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+  }
+
+  /// カードを載せた窓を**物理画面の外**に出す。`NSApp.sendEvent` は `windowNumber` で直接配送するため、
+  /// 窓が見えていなくてもキーは届く——テストがユーザーの画面とフォーカスを触らずに済む。
+  /// 枠のある窓は macOS が画面内へ押し戻す（`constrainFrameRect`）ので borderless で作る。
   private func mount(_ model: PaletteModel) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
-    let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
-      styleMask: [.titled, .closable], backing: .buffered, defer: false)
+    let window = OffscreenKeyWindow(
+      contentRect: NSRect(x: -20000, y: -20000, width: 600, height: 500),
+      styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = NSHostingView(rootView: PaletteCard(model: model).frame(width: 560))
     window.makeKeyAndOrderFront(nil)
-    NSApplication.shared.activate(ignoringOtherApps: true)
     windows.append(window)
     pump(0.4)
     return window
