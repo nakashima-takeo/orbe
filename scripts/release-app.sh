@@ -64,11 +64,15 @@ while IFS= read -r fw; do
     codesign --force --timestamp --options runtime --preserve-metadata=entitlements \
       --sign "$SIGN_ID" "$nested"
   done < <(find "$fw" \( -name "*.xpc" -o -name "*.app" \) -type d)
+  #     ② の走査は nested bundle（*.xpc / *.app）を find の -prune で丸ごと除外する。
+  #     以前は絶対パスに対する case "$bin" in */*.app/* で除外していたが、親バンドルの
+  #     "Orbe.app/" がパスに常に含まれるため全 Mach-O が誤って除外され、Autoupdate
+  #     （Versions/B/Autoupdate）が prebuilt の ad-hoc 署名のまま提出され公証 Invalid になっていた。
   while IFS= read -r bin; do
-    case "$bin" in */*.xpc/*|*/*.app/*) continue;; esac  # bundle 内は ① が封済み（再署名すると封が壊れる）
     echo "    sign: ${bin#"$APP/"}"
     codesign --force --timestamp --options runtime --sign "$SIGN_ID" "$bin"
-  done < <(find "$fw" -type f -perm +111 \
+  done < <(find "$fw" \( -name "*.xpc" -o -name "*.app" \) -prune -o \
+             -type f -perm +111 \
              -exec sh -c 'file -b "$1" | grep -q "Mach-O"' _ {} \; -print)
   echo "    sign(framework): ${fw#"$APP/"}"
   codesign --force --timestamp --options runtime --sign "$SIGN_ID" "$fw"
@@ -79,6 +83,30 @@ codesign --force --timestamp --options runtime \
   --entitlements "$ENTITLEMENTS" \
   --sign "$SIGN_ID" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
+
+# 2c. 提出前アサーション。notarytool へ上げる前に、Sparkle.framework 内の全 nested code と
+#     アプリ本体が「Developer ID 署名・hardened runtime・secure timestamp」を満たすか機械検査する。
+#     1つでも欠けたらその場で非ゼロ exit（1回数分〜数時間の公証を無駄撃ちしないため。
+#     v0.2.0 は Autoupdate の取りこぼしを提出まで気付けず Invalid を食らった）。
+assert_signed() {
+  local target="$1" out rel="${1#"$APP/"}"
+  out="$(codesign -dvv "$target" 2>&1)" \
+    || { echo "NG 署名検査に失敗: $rel" >&2; exit 1; }
+  printf '%s\n' "$out" | grep -q '^Authority=Developer ID Application' \
+    || { echo "NG Developer ID 署名なし: $rel" >&2; exit 1; }
+  printf '%s\n' "$out" | grep -q 'flags=[^ ]*runtime' \
+    || { echo "NG hardened runtime なし: $rel" >&2; exit 1; }
+  printf '%s\n' "$out" | grep -q '^Timestamp=' \
+    || { echo "NG secure timestamp なし: $rel" >&2; exit 1; }
+  echo "    OK: $rel"
+}
+echo "==> 提出前アサーション (Developer ID + runtime + timestamp)"
+assert_signed "$APP"
+while IFS= read -r t; do assert_signed "$t"; done < <(
+  find "$APP/Contents/Frameworks" \( -name "*.framework" -o -name "*.app" -o -name "*.xpc" \) -type d
+  find "$APP/Contents" -type f -perm +111 \
+    -exec sh -c 'file -b "$1" | grep -q "Mach-O"' _ {} \; -print
+)
 
 # 3. 公証（zip にして submit。.app 単体は submit できないため一度 zip にする）。
 NOTARIZE_ZIP="$RELEASE_DIR/orbe-notarize.zip"
