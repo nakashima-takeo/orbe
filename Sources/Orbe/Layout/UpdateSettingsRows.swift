@@ -48,7 +48,7 @@ struct UpdateStatusCardRow: View {
         VStack(alignment: .leading, spacing: Theme.Space.step + 1) {
           HStack(spacing: Theme.Space.step + 1) {
             dot(Color.theme.stateWorking)
-            Text(l10n.format(.updateStateDownloading, "v\(state.ready?.version ?? "")"))
+            Text(l10n.format(.updateStateDownloading, "v\(state.downloadVersion ?? "")"))
               .font(Font.theme.label)
               .foregroundStyle(Color.theme.textPrimary)
             Spacer(minLength: 0)

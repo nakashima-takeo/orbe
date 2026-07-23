@@ -27,6 +27,9 @@ import Observation
 
   private(set) var phase: Phase = .idle
   private(set) var ready: ReadyInfo?
+  /// DL 中に表示する版（found 時点で判る）。`ready` と別なのは、DL 中断時に `settleTransientPhase` が
+  /// `.idle` へ畳めるようにするため——`ready` を DL 前に埋めると中断が readyToRestart へ化ける。
+  private(set) var downloadVersion: String?
   private(set) var lastCheck: Date?
   /// トースト可視。readyToRestart への遷移時に **1 バージョンにつき一度だけ** 立つ（見本 2a の設計注記）。
   private(set) var toastVisible = false
@@ -72,7 +75,10 @@ import Observation
 
   func beginCheck() { phase = .checking }
 
-  func beginDownload() { phase = .downloading(received: 0, total: 0) }
+  func beginDownload(version: String? = nil) {
+    downloadVersion = version
+    phase = .downloading(received: 0, total: 0)
+  }
 
   func setExpectedLength(_ total: UInt64) {
     if case .downloading(let received, _) = phase {

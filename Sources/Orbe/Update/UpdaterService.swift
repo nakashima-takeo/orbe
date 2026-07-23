@@ -102,6 +102,7 @@ final class UpdaterService: NSObject {
     }
     guard started else { return }
     if driver.consumePendingInstallReply() { return }
+    guard updater.canCheckForUpdates else { return }  // 進行中は no-op（installRequested を立てず残留を防ぐ）
     driver.installRequested = true
     updater.checkForUpdates()
   }

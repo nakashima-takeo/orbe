@@ -105,7 +105,7 @@ final class UpdateUserDriver: NSObject, SPUUserDriver {
   }
 
   func showDownloadInitiated(cancellation: @escaping () -> Void) {
-    state.beginDownload()
+    state.beginDownload(version: pendingReadyInfo?.version)  // found 時の版を DL カードへ渡す
   }
 
   func showDownloadDidReceiveExpectedContentLength(_ expectedContentLength: UInt64) {
@@ -143,6 +143,7 @@ final class UpdateUserDriver: NSObject, SPUUserDriver {
 
   func dismissUpdateInstallation() {
     pendingInstallReply = nil  // セッション破棄で無効化（呼ばずに捨てる）
+    installRequested = false  // resume 要求もセッション終了で破棄（消費されず残ると次サイクルを無操作 install させる）
     state.settleTransientPhase()
   }
 }

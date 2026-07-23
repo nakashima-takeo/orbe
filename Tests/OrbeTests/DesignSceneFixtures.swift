@@ -193,11 +193,7 @@ enum DesignSceneFixtures {
   /// DL中 64%（見本 2d の `8.3 MB / 13 MB` mono 表記）。
   static func updateDownloadingState() -> UpdateState {
     let state = baseUpdateState()
-    state.markReady(
-      UpdateState.ReadyInfo(version: "0.2.0", notes: updateSampleNotes, date: nil, size: 13_000_000)
-    )
-    state.dismissToast()
-    state.beginDownload()
+    state.beginDownload(version: "0.2.0")  // 実フローと同順（found→DL 開始、ready はまだ立たない）
     state.setExpectedLength(13_000_000)
     state.receiveData(length: 8_300_000)
     return state
