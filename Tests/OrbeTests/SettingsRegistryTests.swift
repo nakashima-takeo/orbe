@@ -90,7 +90,7 @@ final class SettingsRegistryTests: XCTestCase {
   }
 
   /// 既定値は現行の値（fontSize 12・opacity 95・blur true・blink true・theme auto・icons 空・
-  /// devFeatures はビルド種別 = swift test は release 相当 off）。
+  /// devFeatures はチャネル由来 = dev で on・release で off）。
   func testDefaultValues() {
     XCTAssertEqual(SettingsRegistry.descriptor(.fontSize).defaultValue(), .int(12))
     XCTAssertEqual(SettingsRegistry.descriptor(.backgroundOpacity).defaultValue(), .int(95))
@@ -100,8 +100,8 @@ final class SettingsRegistryTests: XCTestCase {
     XCTAssertEqual(SettingsRegistry.descriptor(.emojiFont).defaultValue(), .string("noto"))
     XCTAssertEqual(SettingsRegistry.descriptor(.agentStateIcons).defaultValue(), .stringMap([:]))
     XCTAssertEqual(
-      SettingsRegistry.descriptor(.devFeaturesEnabled).defaultValue(), .bool(false),
-      "非 dev ビルド（swift test）は既定 off")
+      SettingsRegistry.descriptor(.devFeaturesEnabled).defaultValue(), .bool(isDevBuild),
+      "既定はチャネル由来（dev=on / release=off）。リテラルで固定すると出荷構成 -DORBE_RELEASE で落ちる")
   }
 
   // MARK: - guiConf 橋渡し（実効設定の raw を読む・未設定は行を出さない）

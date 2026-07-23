@@ -62,4 +62,4 @@ auto:review に乗る。**加えて Orbe の検証を挿入する**。
 
 ### マージの後に — ローカル反映
 
-マージ後、`AskUserQuestion` で「自分の Mac の Orbe を最新版に入れ替えるか」を問い、同意したら `Skill` ツールで `local-release` を呼ぶ（確定した main を常用環境 `/Applications/Orbe.app` へ配達する最後の一押し）。最後に、詰め・実装・検証・確定・マージ（・ローカル反映）の結果をまとめて報告する。
+マージ後、`AskUserQuestion` で「自分の Mac の Orbe Dev を最新版に入れ替えるか」を問い、同意したら `Skill` ツールで `local-release` を呼ぶ（確定した main を常用の開発版 `/Applications/Orbe Dev.app` へ配達する最後の一押し。本番の `/Applications/Orbe.app` には触れない）。最後に、詰め・実装・検証・確定・マージ（・ローカル反映）の結果をまとめて報告する。

@@ -11,8 +11,15 @@ import Foundation
 /// 通るため、一致は偶然でなく構造として保証される。
 public enum OrbePaths {
   /// bundle を持たない実行体（CLI/MCP）の fallback bundle id。GUI では
-  /// `Bundle.main.bundleIdentifier` が優先されるが、Info.plist と同値なので結果は一致する。
-  public static let fallbackBundleId = "dev.orbe.app"
+  /// `Bundle.main.bundleIdentifier` が優先されるが、ビルド時のチャネルから導出するため
+  /// 同じチャネルで焼かれた GUI の Info.plist と必ず同値になる（`build-app.sh` が両方を導出する）。
+  public static let fallbackBundleId: String = {
+    #if ORBE_RELEASE
+      return "dev.orbe.app"
+    #else
+      return "dev.orbe.app.dev"
+    #endif
+  }()
 
   /// runtime 契約の環境変数名（GUI がペインへ注入し、CLI/report/補完が読む）。
   public static let stateDirEnvVar = "ORBE_STATE_DIR"

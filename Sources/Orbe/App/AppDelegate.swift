@@ -18,7 +18,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   /// 同期するのと同じ位置づけ。言語未確定（初回）は起動時の描画言語（OS 追従）で建てる。
   func installMainMenu() {
     let language = windowController?.localization.language ?? .systemDefault
-    NSApp.mainMenu = MainMenu.build(appName: "Orbe", language: language)
+    // 表示名は Info.plist（＝ビルド時のチャネルが導出した値）から取る。ここを固定にすると
+    // Orbe Dev のメニューだけ「Orbeを終了」と名乗り、共存時の見分けが最も目に付く場所で崩れる。
+    let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Orbe"
+    NSApp.mainMenu = MainMenu.build(appName: appName, language: language)
   }
 
   /// App メニュー「更新を確認…」（target=nil の responder chain 配送でここへ届く）。

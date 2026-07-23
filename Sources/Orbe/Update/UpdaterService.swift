@@ -13,7 +13,7 @@ import Sparkle
 ///
 /// 起動ゲート:
 /// - `.app` 以外（テスト・素の `swift build` バイナリ）は Info.plist に `SUFeedURL` が無く常に不活性。
-/// - dev ビルド（`ORBE_DEV`）は defaults/起動引数の `SUFeedURL` 上書きがあるときだけ開始する
+/// - dev ビルド（`ORBE_RELEASE` 未定義）は defaults/起動引数の `SUFeedURL` 上書きがあるときだけ開始する
 ///   （dev/sandbox インスタンスが GitHub へ確認に行かない。localhost appcast でのテストは可能）。
 /// - release ビルドは常に開始。
 ///
@@ -75,7 +75,7 @@ final class UpdaterService: NSObject {
   /// 起動ゲートを通れば update サイクルを開始する（ゲート仕様は型コメント）。
   func startIfPermitted() {
     guard Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil else { return }
-    #if ORBE_DEV
+    #if !ORBE_RELEASE
       guard UserDefaults.standard.string(forKey: "SUFeedURL") != nil else { return }
     #endif
     do {
