@@ -8,9 +8,9 @@ import XCTest
 /// トップ / 一覧（すべて）/ 検索絞り込み / キー絞り込み＋実押下点灯を撮る（ファイル分割の拡張）。
 extension DesignGallerySnapshotTests {
   func renderHelpSnapshots(dir: URL) throws {
-    let stage = NSSize(width: 920, height: 720)
-
-    func write(_ name: String, _ model: HelpModel) throws {
+    func write(
+      _ name: String, _ model: HelpModel, stage: NSSize = NSSize(width: 920, height: 720)
+    ) throws {
       try writePNG(
         ZStack {
           BackgroundGlow()
@@ -39,5 +39,11 @@ extension DesignGallerySnapshotTests {
     lit.fkey = "t"
     lit.pressed = ["cmd", "shift"]
     try write("help_keyboard_lit.png", lit)
+
+    // 縮小域（パネルが 760×656 を下回る小窓）。design 見本は未定義＝Orbe 設計の縮小挙動を検証する。
+    let small = HelpModel()
+    small.category = .all
+    try write("help_small.png", small, stage: NSSize(width: 640, height: 520))
+    try write("help_tiny.png", HelpModel(), stage: NSSize(width: 420, height: 360))
   }
 }

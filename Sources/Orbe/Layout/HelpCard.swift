@@ -8,17 +8,29 @@ struct HelpOverlay: View {
   /// カードの基準寸法（デザイン見本のモーダル上限 760×656。窓が狭ければ −32 マージンで縮む）。
   private let cardWidth: CGFloat = 760
   private let cardHeight: CGFloat = 656
+  /// 内部リフローが成立する最小カード寸（床）。幅はキーボード可視化の実寸（約 570＋左右 16）、
+  /// 高さはヘッダ＋キーボード＋フッター＋サイドバー実寸が決める。design 見本は縮小域を定義しない
+  /// ため Orbe の設計: 床まではリフローで縮み、床を下回る小窓ではカードを床寸で描いて等倍縮小する
+  /// （レイアウトは常に成立し、design の構成が崩れない）。
+  private let floorWidth: CGFloat = 608
+  private let floorHeight: CGFloat = 540
 
   var body: some View {
     GeometryReader { geo in
+      let availWidth = max(1, geo.size.width - Theme.Space.bar * 2)
+      let availHeight = max(1, geo.size.height - Theme.Space.bar * 2)
+      let width = max(floorWidth, min(cardWidth, availWidth))
+      let height = max(floorHeight, min(cardHeight, availHeight))
+      let scale = min(1, availWidth / width, availHeight / height)
       ZStack {
         Scrim(strength: .help)
           .contentShape(Rectangle())
           .onTapGesture { model.onDismiss() }
         HelpCard(model: model)
-          .frame(
-            width: min(cardWidth, geo.size.width - Theme.Space.bar * 2),
-            height: min(cardHeight, geo.size.height - Theme.Space.bar * 2))
+          .frame(width: width, height: height)
+          .scaleEffect(scale)
+          // レイアウト境界を縮小後の視覚寸法に合わせる（ZStack の中央配置と当たり判定を一致させる）。
+          .frame(width: width * scale, height: height * scale)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
