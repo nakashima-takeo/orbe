@@ -5,7 +5,8 @@ import Foundation
 struct AppStateFile: Codable, Equatable {
   /// 状態追跡プラグインを各 CLI へ導入済みか。nil/false なら起動時に一度だけ導入を試みる。
   var agentPluginsInstalled: Bool?
-  /// 補完 managed block を zshrc へ追記済みか。nil/false なら起動時に一度だけ追記を試みる。
+  /// 旧 managed block 方式の導入済み flag。読み取りは legacy 掃除（除去して nil へ戻す）のみで、
+  /// 新規に true を書く者はいない。
   var completionInstalled: Bool?
   /// ログインシェル PATH のディスクキャッシュ。起動復元の resume が同期で読む（subprocess を避ける）。
   var cachedShellPath: String?

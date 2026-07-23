@@ -128,7 +128,7 @@ final class WindowController: NSObject, NSWindowDelegate {
       self?.reconfirmFocusNextTick()
     }
     showFirstRunFlow()  // 初回言語選択（preferredLanguage 未設定時）→ 既存 Onboarding（各 CLI へ導入）
-    installCompletionIfNeeded()  // 初回のみ・zshrc へ補完 managed block を冪等追記
+    cleanupLegacyCompletionIfNeeded()  // 旧方式が zshrc へ書いた managed block を一度だけ除去
     wireUpdateUI()  // アップデート提示導線を配線し、ゲートを通れば update サイクル開始
     window.center()
   }

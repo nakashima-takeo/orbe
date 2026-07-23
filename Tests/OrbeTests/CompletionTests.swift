@@ -2,9 +2,10 @@ import XCTest
 
 @testable import Orbe
 
-/// CompletionInstaller（zshrc への managed block 冪等追記）と accept 系純ロジック
+/// CompletionLegacyCleanup（旧 managed block の除去）と accept 系純ロジック
 /// （applyChoice・insertText・isRedundantSoleChoice）を検証する。ユーザ資産編集の安全性
-/// （冪等・block 外不可侵・除去）とトークン置換の契約を担保する。
+/// （block 外不可侵・除去）とトークン置換の契約を担保する。
+/// shim（ZDOTDIR interposition）の契約は CompletionShimTests が持つ。
 /// エンジン（prebuilt JS バンドル）の契約は CompletionEngineTests が持つ。
 final class CompletionTests: XCTestCase {
   private var dir: URL!
@@ -23,45 +24,36 @@ final class CompletionTests: XCTestCase {
 
   private func read() -> String { (try? String(contentsOf: zshrc, encoding: .utf8)) ?? "" }
 
-  // MARK: - CompletionInstaller
+  // MARK: - CompletionLegacyCleanup
 
-  func testInstallCreatesBlockWhenAbsent() {
-    try? Data("export FOO=1\n".utf8).write(to: zshrc)
-    CompletionInstaller.install(at: zshrc)
-    let text = read()
-    XCTAssertTrue(text.contains("export FOO=1"), "既存行は不変")
-    XCTAssertTrue(text.contains("# >>> orbe completion >>>"))
-    XCTAssertTrue(text.contains(#"source "$ORBE_COMPLETION_ZSH""#))
-    XCTAssertTrue(text.contains("# <<< orbe completion <<<"))
-  }
+  /// 旧 install が書いていた形（前置空行 1 つ＋マーカー対）を再現する。
+  private let legacyBlock = """
 
-  func testInstallIsIdempotent() {
-    try? Data("export FOO=1\n".utf8).write(to: zshrc)
-    CompletionInstaller.install(at: zshrc)
-    CompletionInstaller.install(at: zshrc)
-    let occurrences = read().components(separatedBy: "# >>> orbe completion >>>").count - 1
-    XCTAssertEqual(occurrences, 1, "2 回実行してもブロックは 1 個")
-  }
+    # >>> orbe completion >>>
+    [[ -n $LEGACY_GUARD ]] && source "$LEGACY_GUARD"
+    # <<< orbe completion <<<
 
-  func testInstallCreatesFileWhenMissing() {
-    CompletionInstaller.install(at: zshrc)
-    XCTAssertTrue(read().contains("# >>> orbe completion >>>"))
-  }
+    """
 
-  func testUninstallRemovesBlockButKeepsRest() {
-    try? Data("export FOO=1\nexport BAR=2\n".utf8).write(to: zshrc)
-    CompletionInstaller.install(at: zshrc)
-    CompletionInstaller.uninstall(at: zshrc)
+  func testRemoveManagedBlockKeepsRest() {
+    try? Data(("export FOO=1\nexport BAR=2\n" + legacyBlock).utf8).write(to: zshrc)
+    CompletionLegacyCleanup.removeManagedBlock(at: zshrc)
     let text = read()
     XCTAssertFalse(text.contains("orbe completion"), "マーカー間が除去される")
     XCTAssertTrue(text.contains("export FOO=1"))
     XCTAssertTrue(text.contains("export BAR=2"))
   }
 
-  func testUninstallNoOpWhenAbsent() {
+  func testRemoveManagedBlockTakesPrecedingBlankLine() {
+    try? Data(("export FOO=1\n" + legacyBlock).utf8).write(to: zshrc)
+    CompletionLegacyCleanup.removeManagedBlock(at: zshrc)
+    XCTAssertEqual(read(), "export FOO=1\n", "旧 install が入れた前置空行も 1 つ巻き込む")
+  }
+
+  func testRemoveManagedBlockNoOpWhenAbsent() {
     let original = "export FOO=1\n"
     try? Data(original.utf8).write(to: zshrc)
-    CompletionInstaller.uninstall(at: zshrc)
+    CompletionLegacyCleanup.removeManagedBlock(at: zshrc)
     XCTAssertEqual(read(), original, "block 外は一切触らない")
   }
 

@@ -197,11 +197,6 @@ final class SurfaceView: NSView {
     if let bin = Self.reportBinaryPath { env["ORBE_REPORT_BIN"] = bin }
     let sock = ControlServer.shared.socketPath
     if !sock.isEmpty { env["ORBE_SOCK"] = sock }
-    // 補完 widget が source される zsh スクリプトの絶対パス（バンドル有時のみ。
-    // swift run では未解決→未設定＝managed block は env ガードで no-op）。
-    if let completionZsh = Self.completionScriptPath {
-      env["ORBE_COMPLETION_ZSH"] = completionZsh
-    }
     var envs = env.map { ghostty_env_var_s(key: retain($0.key), value: retain($0.value)) }
     let surf: ghostty_surface_t? = envs.withUnsafeMutableBufferPointer { buf in
       if let base = buf.baseAddress, buf.count > 0 {
