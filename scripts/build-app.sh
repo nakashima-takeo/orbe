@@ -11,11 +11,9 @@ SHARE="$ROOT/vendor/ghostty/zig-out/share"
 # dev は本番と別 identity の「Orbe Dev」として共存し、bundle id 由来の state dir・control.sock・
 # UserDefaults が自動で分かれる。成果物パスは build/Orbe.app 固定（見分けはインストール先の
 # ファイル名と CFBundleName が担うため、ここを改名しても寄与しない）。
+# release の identity は app/Info.plist がそのまま持つ（＝SSOT）。ここで導出するのは dev の分だけ。
 CHANNEL="${ORBE_CHANNEL:-dev}"
-if [ "$CHANNEL" = "release" ]; then
-  BUNDLE_ID="dev.orbe.app"
-  APP_NAME="Orbe"
-else
+if [ "$CHANNEL" != "release" ]; then
   BUNDLE_ID="dev.orbe.app.dev"
   APP_NAME="Orbe Dev"
 fi
@@ -125,13 +123,11 @@ icon["fill"] = {
         "srgb:0.98039,0.72549,0.30196,1.00000",
     ]
 }
-icon["dark"] = {
-    "fill": {
-        "linear-gradient": [
-            "srgb:0.32157,0.20000,0.05098,1.00000",
-            "srgb:0.15294,0.09412,0.02745,1.00000",
-        ]
-    }
+icon["dark"]["fill"] = {
+    "linear-gradient": [
+        "srgb:0.32157,0.20000,0.05098,1.00000",
+        "srgb:0.15294,0.09412,0.02745,1.00000",
+    ]
 }
 json.dump(icon, open(path, "w"), indent=2)
 PY
