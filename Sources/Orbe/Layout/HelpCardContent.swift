@@ -128,6 +128,79 @@ private struct HelpTopRow: View {
   }
 }
 
+/// 一覧ビュー。検索 × カテゴリ × キー絞り込み（AND）で残ったグループを見出し付きで縦に並べる。
+/// 行ホバーで accent 淡塗り＋キーボード点灯（`model.hoverRow`）。
+struct HelpListView: View {
+  @Bindable var model: HelpModel
+  let ink: HelpInk
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      ForEach(model.filteredGroups(l10n), id: \.title) { group in
+        HelpSectionLabel(text: l10n.string(group.title))
+          .padding(.top, 10)
+          .padding(.bottom, Theme.Space.tick)
+        VStack(alignment: .leading, spacing: 0) {
+          ForEach(group.rows, id: \.key) { row in
+            HelpListRow(model: model, ink: ink, group: group, row: row)
+          }
+        }
+      }
+    }
+  }
+}
+
+/// 一覧ビューの 1 行（ラベル左・キーバッジ右）。ホバーで accent 0.1 塗り。
+private struct HelpListRow: View {
+  @Bindable var model: HelpModel
+  let ink: HelpInk
+  let group: HelpCatalog.Group
+  let row: HelpCatalog.Row
+  @Environment(\.localization) private var l10n
+
+  /// トップと一覧で同キーが別行になるため、行 id はビュー/グループ/キーの合成で衝突させない。
+  private var rowID: String { "\(group.title.rawValue)/\(row.key)" }
+
+  var body: some View {
+    HStack(spacing: Theme.Space.step) {
+      Text(l10n.string(row.label))
+        .font(Font.theme.helpRow)
+        .foregroundStyle(Color.theme.textSecondary)
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      Text(row.key)
+        .font(Font.theme.helpKeyList)
+        .foregroundStyle(Color.theme.statusText)
+        .lineLimit(1)
+        .fixedSize()
+        .padding(.horizontal, 7)
+        .padding(.vertical, Theme.Space.hair)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.sm).fill(ink.surface(0.06)))
+        .overlay(
+          RoundedRectangle(cornerRadius: Theme.Radius.sm)
+            .strokeBorder(ink.border(0.12), lineWidth: Theme.Stroke.hairline))
+    }
+    .padding(.vertical, Theme.Space.tick)
+    .padding(.horizontal, Theme.Space.step)
+    .background(
+      RoundedRectangle(cornerRadius: 6)
+        .fill(
+          model.hoverRow?.id == rowID
+            ? Color.theme.accentPrimary.opacity(0.1) : Color.clear)
+    )
+    // デザインの margin 0 -8px 相当: 塗りは左右 8px はみ出し、テキストは列に揃う。
+    .padding(.horizontal, -Theme.Space.step)
+    .onHover { entered in
+      if entered {
+        model.hoverRow = (id: rowID, combo: row.combo)
+      } else if model.hoverRow?.id == rowID {
+        model.hoverRow = nil
+      }
+    }
+  }
+}
+
 /// グループ見出し（9pt・大文字・tracking 1・muted）。トップと一覧で共用する。
 struct HelpSectionLabel: View {
   let text: String

@@ -201,6 +201,8 @@ struct HelpCard: View {
       VStack(alignment: .leading, spacing: 0) {
         if model.isTopView {
           HelpTopView(model: model, ink: ink)
+        } else {
+          HelpListView(model: model, ink: ink)
         }
       }
       .frame(maxWidth: .infinity, alignment: .topLeading)
