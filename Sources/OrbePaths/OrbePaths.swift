@@ -5,10 +5,11 @@ import Foundation
 ///
 /// 解決規則:
 /// - state dir: `ORBE_STATE_DIR`（非空なら隔離）→ Apple 規定の `~/Library/Application Support/<bundle-id>/`
-/// - control.sock: `ORBE_SOCK`（GUI がペインへ注入する実パス）→ `stateDirBase()/control.sock`
+/// - control.sock: `ORBE_STATE_DIR`（非空の明示指定。`ORBE_SOCK` は見ない）→ `ORBE_SOCK`
+///   （GUI がペインへ注入する実パス）→ `appSupportDir()/control.sock`
 ///
-/// クライアントの socket 既定はサーバ（ControlServer）と同じ `appSupportDir()/control.sock` を
-/// 通るため、一致は偶然でなく構造として保証される。
+/// クライアントの socket 解決はサーバ（ControlServer = `stateDirBase()/control.sock`）と同じ
+/// `stateDirBase()` を通るため、一致は偶然でなく構造として保証される。
 public enum OrbePaths {
   /// bundle を持たない実行体（CLI/MCP）の fallback bundle id。GUI では
   /// `Bundle.main.bundleIdentifier` が優先されるが、ビルド時のチャネルから導出するため
@@ -41,9 +42,11 @@ public enum OrbePaths {
   }
 
   /// state ディレクトリ。`ORBE_STATE_DIR` が非空ならその直下へ隔離、未設定なら `appSupportDir()`。
-  /// 存在しなければ作成する。解決不能なら nil。
-  public static func stateDirBase() -> URL? {
-    if let override = ProcessInfo.processInfo.environment[stateDirEnvVar], !override.isEmpty {
+  /// 存在しなければ作成する。解決不能なら nil。env はテスト seam（既定は実環境）。
+  public static func stateDirBase(
+    env: [String: String] = ProcessInfo.processInfo.environment
+  ) -> URL? {
+    if let override = env[stateDirEnvVar], !override.isEmpty {
       let dir = URL(fileURLWithPath: override, isDirectory: true)
       try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
       return dir
@@ -51,13 +54,18 @@ public enum OrbePaths {
     return appSupportDir()
   }
 
-  /// control.sock の絶対パス。`ORBE_SOCK`（注入された実パス）を最優先し、無ければ
-  /// `stateDirBase()/control.sock`。解決不能なら nil。
-  public static func controlSocketPath() -> String? {
-    if let sock = ProcessInfo.processInfo.environment[sockEnvVar], !sock.isEmpty {
-      return sock
+  /// control.sock の絶対パス。`ORBE_STATE_DIR`（明示指定）が非空なら `$ORBE_STATE_DIR/control.sock`
+  /// を使い、`ORBE_SOCK` は見ない（明示＞暗黙）。未設定時は `ORBE_SOCK`（GUI がペインへ注入する
+  /// 実パス）→ `appSupportDir()/control.sock`。解決不能なら nil。env はテスト seam（既定は実環境）。
+  public static func controlSocketPath(
+    env: [String: String] = ProcessInfo.processInfo.environment
+  ) -> String? {
+    if let dir = env[stateDirEnvVar], !dir.isEmpty {
+      return stateDirBase(env: env)?
+        .appendingPathComponent("control.sock", isDirectory: false).path
     }
-    guard let base = stateDirBase() else { return nil }
-    return base.appendingPathComponent("control.sock", isDirectory: false).path
+    if let sock = env[sockEnvVar], !sock.isEmpty { return sock }
+    return stateDirBase(env: env)?
+      .appendingPathComponent("control.sock", isDirectory: false).path
   }
 }

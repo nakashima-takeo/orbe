@@ -70,6 +70,11 @@ let package = Package(
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
+      name: "OrbePathsTests",
+      dependencies: ["OrbePaths"],
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .testTarget(
       name: "OrbeTests",
       dependencies: ["Orbe"],
       swiftSettings: [.swiftLanguageMode(.v5)]

@@ -206,7 +206,7 @@ let topUsage = """
 
   pane / tab default to the current pane via ORBE_PANE. Outside a Orbe pane,
   pass an explicit id (see: orb pane list).
-  Resolves the target instance from ORBE_SOCK / ORBE_STATE_DIR. Run inside a
+  Resolves the target instance from ORBE_STATE_DIR / ORBE_SOCK. Run inside a
   Orbe pane, or the control socket must be reachable; otherwise exits non-zero.
   Exit codes: 0 success, 2 usage error, 1 RPC/connection error.
   """
