@@ -169,13 +169,15 @@ private struct HelpListRow: View {
         .foregroundStyle(Color.theme.textSecondary)
         .lineLimit(1)
         .frame(maxWidth: .infinity, alignment: .leading)
+      // 外形はデザインの CSS 外形（padding 2px 7px ＋ border 1px が外に付く）と同寸=
+      // 幅 text+16 / 高さ 18。SwiftUI は stroke が内側なので padding 8・高さ 18 で寸を合わせる。
       Text(row.key)
         .font(Font.theme.helpKeyList)
         .foregroundStyle(Color.theme.statusText)
         .lineLimit(1)
         .fixedSize()
-        .padding(.horizontal, 7)
-        .padding(.vertical, Theme.Space.hair)
+        .padding(.horizontal, Theme.Space.step)
+        .frame(height: 18)
         .background(RoundedRectangle(cornerRadius: Theme.Radius.sm).fill(ink.surface(0.06)))
         .overlay(
           RoundedRectangle(cornerRadius: Theme.Radius.sm)

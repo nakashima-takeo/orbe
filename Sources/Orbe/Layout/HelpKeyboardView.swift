@@ -18,11 +18,15 @@ struct HelpKeyboardView: View {
   private let gap: CGFloat = 4
 
   var body: some View {
+    // 行はデザイン見本どおり左揃え（行幅は fn 行が最長で不揃い。中央揃えにしない）。
+    // 行ブロックごとパネル中央に置き、キャプションはその下で中央。
     VStack(spacing: gap) {
-      ForEach(Array(HelpCatalog.keyboard.enumerated()), id: \.offset) { rowIndex, row in
-        HStack(spacing: gap) {
-          ForEach(row, id: \.id) { key in
-            keyCap(key, fnRow: rowIndex == 0)
+      VStack(alignment: .leading, spacing: gap) {
+        ForEach(Array(HelpCatalog.keyboard.enumerated()), id: \.offset) { rowIndex, row in
+          HStack(spacing: gap) {
+            ForEach(row, id: \.id) { key in
+              keyCap(key, fnRow: rowIndex == 0)
+            }
           }
         }
       }

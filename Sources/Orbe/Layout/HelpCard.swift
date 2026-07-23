@@ -130,6 +130,8 @@ struct HelpCard: View {
   }
 
   /// キー絞り込みチップ（accent 淡塗り・accentBright 文字）。タップで解除。
+  /// 外形はデザインの CSS 外形（padding 2px 8px ＋ border 1px が外に付く）と同寸=
+  /// 幅 text+18 / 高さ 18。SwiftUI は stroke が内側なので padding 9・高さ 18 で寸を合わせる。
   private func keyFilterChip(_ fkey: String) -> some View {
     HStack(spacing: 5) {
       Text(l10n.format(.helpKeyFilterChip, HelpCatalog.symbol(for: fkey)))
@@ -139,8 +141,8 @@ struct HelpCard: View {
     .foregroundStyle(Color.theme.accentBright)
     .lineLimit(1)
     .fixedSize()
-    .padding(.horizontal, Theme.Space.step)
-    .padding(.vertical, Theme.Space.hair)
+    .padding(.horizontal, 9)
+    .frame(height: 18)
     .background(Capsule().fill(Color.theme.accentPrimary.opacity(0.16)))
     .overlay(
       Capsule().strokeBorder(
