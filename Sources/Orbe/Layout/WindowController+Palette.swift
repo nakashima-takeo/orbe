@@ -289,6 +289,25 @@ extension WindowController {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
   }
 
+  /// Cmd+H。ヘルプオーバーレイ（ショートカットチートシート）を開く。閉じ側（トグル・esc・scrim）は
+  /// dismissHelp。0タブでも開く（availableWithoutTabs）。
+  func showHelp() {
+    let m = HelpModel()
+    m.onDismiss = { [weak self] in self?.dismissHelp() }
+    model.help = m
+    model.overlay = .help
+    m.focus()
+    reconfirmFocusNextTick()
+  }
+
+  /// ヘルプを畳み、アクティブペインへ first responder を戻す（パレット dismiss と同じ規則）。
+  func dismissHelp() {
+    model.help = nil
+    model.overlay = .none
+    focusActivePane()
+    reconfirmFocusNextTick()
+  }
+
   func dismissPalette() {
     model.overlay = .none
     model.languageSelect = nil
@@ -297,6 +316,7 @@ extension WindowController {
     model.dispatchPalette = nil
     model.dispatchProvider = nil
     model.settingsPalette = nil
+    model.help = nil
     focusActivePane()
     // teardown 後の次 tick で focus を再確定する。overlay==.none のままなら端末へ、直後に別 overlay へ
     // 差し替わっていれば（例: 切替パレットの ＋新規 → dismiss→作成フォーム）その overlay の入力欄へ当たる。

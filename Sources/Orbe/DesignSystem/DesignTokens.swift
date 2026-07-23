@@ -102,6 +102,8 @@ enum Theme {
     // オーバーレイ暗幕（色のみ。blur は Scrim が用途別に担う）
     static let scrim = dynA(light: 0x3a3151, lightA: 0.18, dark: 0x0a080e, darkA: 0.35)
     static let scrimStrong = dynA(light: 0x3a3151, lightA: 0.22, dark: 0x0a080e, darkA: 0.40)
+    // ヘルプ（⌘H）の最暗幕。全画面チートシートは背後の情報を要さず、最も深く沈める。
+    static let scrimHelp = dynA(light: 0x3a3151, lightA: 0.30, dark: 0x0a080e, darkA: 0.55)
 
     // EditorPane（Git ワークベンチ）。面と罫線をフルアルファの基色 2 本として持ち、
     // view 側が用途ごとの α を .opacity(α) で掛ける

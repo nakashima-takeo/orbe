@@ -36,13 +36,18 @@ struct GlassPanel<Content: View>: View {
   private var material: NSVisualEffectView.Material {
     if let materialOverride { return materialOverride }
     switch level {
-    case .panel, .settings: return .hudWindow
+    case .panel, .settings, .help: return .hudWindow
     case .popup: return .menu
     }
   }
 
   private var elevation: Theme.ElevationLevel {
-    elevationOverride ?? (level == .popup ? .popup : .panel)
+    if let elevationOverride { return elevationOverride }
+    switch level {
+    case .panel, .settings: return .panel
+    case .popup: return .popup
+    case .help: return .help
+    }
   }
 
   var body: some View {

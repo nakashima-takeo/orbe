@@ -82,6 +82,14 @@ final class KeybindingsTests: XCTestCase {
     XCTAssertNil(Keybindings.chromeAction(for: key("c")))
   }
 
+  func testHelpToggle() {
+    // ⌘H はヘルプオーバーレイのトグル（macOS Hide から奪取）。
+    XCTAssertEqual(Keybindings.chromeAction(for: key("h")), .toggleHelp)
+    // ⌘⌥H（ほかを隠す）・⌘⇧H は奪わない。
+    XCTAssertNil(Keybindings.chromeAction(for: key("h", [.command, .option])))
+    XCTAssertNil(Keybindings.chromeAction(for: key("H", [.command, .shift])))
+  }
+
   func testDispatchPalette() {
     XCTAssertEqual(
       Keybindings.chromeAction(for: key("X", [.command, .shift])), .showDispatchPalette)
@@ -117,7 +125,7 @@ final class KeybindingsTests: XCTestCase {
   }
 
   /// `ChromeAction.windowCommand`（surface 経路・window レベル経路が共有する単一ソース mapping）を網羅固定する。
-  /// window 系14アクションは対応する WindowCommand へ、surface ローカル9アクションは nil へ写す。
+  /// window 系15アクションは対応する WindowCommand へ、surface ローカル9アクションは nil へ写す。
   /// この分類が回帰すると 0タブ配信の可否（availableWithoutTabs）とキー振り分け全体がズレる。
   func testWindowCommandMappingIsExhaustive() {
     let mapped: [(ChromeAction, TerminalController.WindowCommand)] = [
@@ -135,6 +143,7 @@ final class KeybindingsTests: XCTestCase {
       (.openEditor, .openEditor),
       (.rename, .renameTab),
       (.showSettings, .showSettings),
+      (.toggleHelp, .toggleHelp),
     ]
     for (action, command) in mapped {
       XCTAssertEqual(action.windowCommand, command, "\(action) は window コマンド \(command) へ写す")
@@ -151,12 +160,12 @@ final class KeybindingsTests: XCTestCase {
   }
 
   /// `WindowCommand.availableWithoutTabs`（0タブでも window レベルで配信してよいか）の分類を網羅固定する。
-  /// pane 非依存7コマンドのみ true、content/エディタ依存7コマンドは false。この分類が回帰すると
+  /// pane 非依存8コマンドのみ true、content/エディタ依存7コマンドは false。この分類が回帰すると
   /// 0タブで効くべきキーが死ぬ／効くべきでない content 依存キーが暴発する。
   func testAvailableWithoutTabsClassification() {
     let available: [TerminalController.WindowCommand] = [
       .newTab, .newWorkspace, .switchWorkspace,
-      .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings,
+      .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings, .toggleHelp,
     ]
     for command in available {
       XCTAssertTrue(command.availableWithoutTabs, "\(command) は pane 非依存ゆえ 0タブでも配信する")
