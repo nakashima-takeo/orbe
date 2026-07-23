@@ -145,6 +145,7 @@ enum HelpCatalog {
   static let symbols: [String: String] = [
     "cmd": "⌘", "shift": "⇧", "ctrl": "⌃", "opt": "⌥", "tab": "⇥", "return": "⏎",
     "esc": "esc", "space": "space", "delete": "⌫",
+    "left": "◀", "right": "▶", "ud": "▲▼",
   ]
 
   /// combo id のチップ表示（記号があれば記号、無ければ大文字）。
