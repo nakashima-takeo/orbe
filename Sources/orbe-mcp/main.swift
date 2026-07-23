@@ -7,7 +7,7 @@ import OrbePaths
 // ツール定義をここに置くことで、Orbe 本体を再ビルド/再起動せずツールを反復できる。
 
 // control.sock の解決は OrbePaths.controlSocketPath() に一本化（GUI 本体・cli と同一実装）。
-// ORBE_SOCK 最優先 → ORBE_STATE_DIR 直下 → Apple 規定の既定パス。
+// ORBE_STATE_DIR 直下・最優先 → ORBE_SOCK → Apple 規定の既定パス。
 let socketPath: String = OrbePaths.controlSocketPath() ?? ""
 
 // MARK: - control.sock クライアント（1 リクエスト 1 接続・同期）
