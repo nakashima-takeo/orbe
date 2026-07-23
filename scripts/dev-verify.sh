@@ -30,8 +30,11 @@ echo "==> 再ビルド"
 swift build -c release --package-path "$ROOT" --product orbe-mcp >/dev/null
 
 echo "==> 既存インスタンスを終了"
-# quit も pkill も dev チャネルの実体だけを狙う（アプリ名解決・部分一致だと本番 Orbe や
-# /Applications 側のインスタンスまで巻き添えにする）。
+# 本番 Orbe（dev.orbe.app）を巻き添えにしないため、アプリ名解決ではなく bundle id で指す。
+# quit は dev チャネルの実体すべてに届く: build/Orbe.app と /Applications/Orbe Dev.app は同一
+# bundle id で $SOCK を共有するため、常用の Orbe Dev も落とさないと open が既存インスタンスを
+# 前面化するだけになりソケットの持ち主が入れ替わらない。pkill は quit に応じなかった build/ 側の
+# 取りこぼし用なので、こちらは $APP 限定でよい。
 osascript -e 'tell application id "dev.orbe.app.dev" to quit' 2>/dev/null || true
 pkill -f "$APP/Contents/MacOS/Orbe" 2>/dev/null || true
 rm -f "$SOCK"
