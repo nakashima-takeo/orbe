@@ -114,6 +114,94 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
+  /// Settings パレット worktree 作成先（textInput 編集面）: root の現在テンプレ値表示 → 潜って編集面
+  /// （プリフィル＋ライブ展開プレビュー行）→ 別の妥当テンプレを打鍵しプレビュー追従 → 未知トークンで
+  /// フッター赤インラインエラー → {slug} 欠落エラー。既存 stepper/toggle 行と同じトーンで並ぶかを撮る。
+  func testSettingsPaletteWorktree() throws {
+    var global = SettingsLayer()
+    global[SettingKeys.fontSize] = 14
+    global[SettingKeys.backgroundOpacity] = 90
+    global[SettingKeys.backgroundBlur] = false
+    global[SettingKeys.cursorStyleBlink] = false
+    global[SettingKeys.defaultAgent] = "claude"
+    global[SettingKeys.devFeaturesEnabled] = true
+    let settings = SettingsPaletteModel(
+      values: ScopedSettingsValues(global: global),
+      fontNames: ["Menlo", "Monaco", "SF Mono"],
+      agents: ["claude", "codex", "agy"],
+      localization: LocalizationStore(language: .ja),
+      worktreePreviewRoot: "~/dev/orbe")
+    let worktreeRow = 12  // scope(0) + 12 設定行のうち worktreePath は末尾
+    try flow(
+      "settings_palette_worktree", size: NSSize(width: 500, height: 360),
+      render: { paletteSnapshot(settings.render) },
+      steps: [
+        ("root", {}),  // 末尾に「Worktree の作成先  ../{repo}-worktrees/{slug}」
+        (
+          "editor",
+          {  // 潜ると現在テンプレでプリフィル＋展開プレビュー行（作成先 → 絶対パス）
+            settings.render.selected = worktreeRow
+            settings.render.onActivate()
+          }
+        ),
+        (
+          "typed_valid",
+          {  // 別の妥当テンプレを打鍵 → プレビューが追従する
+            settings.render.query = "~/worktrees/{repo}/{slug}"
+            settings.render.onQueryChange()
+          }
+        ),
+        (
+          "invalid_token",
+          {  // 未知トークン {branch} → フッターに赤インラインエラー・プレビュー消える
+            settings.render.query = "../{repo}-worktrees/{branch}"
+            settings.render.onQueryChange()
+          }
+        ),
+        (
+          "invalid_missing_slug",
+          {  // {slug} 欠落 → 別のエラー文言（衝突警告）
+            settings.render.query = "../{repo}-worktrees"
+            settings.render.onQueryChange()
+          }
+        ),
+      ])
+  }
+
+  /// Settings パレット worktree 編集面の小窓耐性: 幅 380 の窄い窓で、長い絶対パスのプレビュー行と
+  /// エラー文言がカード/入力欄を破綻させず 1 行省略・折返しで収まるかを撮る（最悪条件の張り込み）。
+  func testSettingsPaletteWorktreeNarrow() throws {
+    var global = SettingsLayer()
+    global[SettingKeys.devFeaturesEnabled] = true
+    let settings = SettingsPaletteModel(
+      values: ScopedSettingsValues(global: global),
+      fontNames: [], agents: [],
+      localization: LocalizationStore(language: .ja),
+      worktreePreviewRoot: "~/Developer/very-long-repository-name")
+    let worktreeRow = 12
+    try flow(
+      "settings_palette_worktree_narrow", size: NSSize(width: 380, height: 340),
+      render: { paletteSnapshot(settings.render) },
+      steps: [
+        (
+          "editor_long",
+          {  // 潜って長い絶対パスのプレビュー（窄い窓で 1 行に収まるか・省略の見え方）
+            settings.render.selected = worktreeRow
+            settings.render.onActivate()
+            settings.render.query = "~/Developer/deeply/nested/worktrees/{repo}/{slug}"
+            settings.render.onQueryChange()
+          }
+        ),
+        (
+          "error_long",
+          {  // 長い未知トークンエラーがフッターで折返し・カードを割らない
+            settings.render.query = "../{repo}-worktrees/{feature-branch-name}"
+            settings.render.onQueryChange()
+          }
+        ),
+      ])
+  }
+
   /// Settings パレット agent 空状態: agent 検出ゼロでサブリストへ潜り、情報行（選択不可・text.muted）が
   /// 起動パレットの CLI 検出ゼロと同じ様式で出るかを撮る。テーマ行と違い ● も実行対象も無い。
   func testSettingsPaletteAgentEmpty() throws {
