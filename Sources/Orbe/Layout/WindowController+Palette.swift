@@ -124,12 +124,10 @@ extension WindowController {
     p.onDismiss = { [weak self] in self?.dismissPalette() }
 
     let cwd = store.activePaneCwd() ?? FileManager.default.homeDirectoryForCurrentUser.path
-    // global 層に現 WS の上書きを重ねた実効テンプレートを注入する（二層が worktree 作成先に効く）。
-    let effectiveSettings = EffectiveSettings(
-      settingsStore.global.overlaid(with: current.settingsOverride ?? SettingsLayer()))
+    // アクティブ WS の実効テンプレート（global 層→WS 上書き層）を注入する。解決は SSOT の集約点を共有する。
     let provider = DispatchDataProvider(
       cwd: cwd, model: p, localization: localization,
-      worktreePathTemplate: effectiveSettings[SettingKeys.worktreePath])
+      worktreePathTemplate: activeEffectiveSettings()[SettingKeys.worktreePath])
 
     // クロージャは兄弟パレット同様 [weak self] のみとし、p/provider は self.model 経由で辿る
     // （p が onExecute を保持するため、p を強参照すると開くたびに自己循環でリークする）。
