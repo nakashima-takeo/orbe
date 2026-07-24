@@ -26,6 +26,7 @@ enum ChromeAction {
   case showSettings  // 設定パレットを開く
   case scrollToTop  // スクロールバック先頭へジャンプ
   case scrollToBottom  // スクロールバック末尾へジャンプ
+  case toggleHelp  // ヘルプオーバーレイ（ショートカットチートシート）をトグル開閉
 }
 
 extension ChromeAction {
@@ -48,6 +49,7 @@ extension ChromeAction {
     case .openEditor: return .openEditor
     case .rename: return .renameTab
     case .showSettings: return .showSettings
+    case .toggleHelp: return .toggleHelp
     case .increaseFontSize, .decreaseFontSize, .resetFontSize,
       .splitRight, .splitDown, .closePane, .find,
       .scrollToTop, .scrollToBottom:
@@ -63,7 +65,7 @@ extension TerminalController.WindowCommand {
   var availableWithoutTabs: Bool {
     switch self {
     case .newTab, .newWorkspace, .switchWorkspace,
-      .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings:
+      .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings, .toggleHelp:
       return true
     case .nextTab, .prevTab, .prevTool, .nextTool,
       .toggleEditorPane, .openEditor, .renameTab:
@@ -115,6 +117,7 @@ enum Keybindings {
     case "X": return .showDispatchPalette  // Cmd+Shift+X
     case "C": return .launchDefaultAgent  // Cmd+Shift+C
     case "E": return .openEditor  // Cmd+Shift+E
+    case "h": return .toggleHelp  // Cmd+H（macOS Hide から奪取。メニューの Hide は無割当で残す）
     default: return nil
     }
   }

@@ -27,10 +27,12 @@ enum MainMenu {
       action: #selector(AppDelegate.checkForUpdates(_:)),
       keyEquivalent: "")
     menu.addItem(.separator())
+    // Hide はメニュー項目として残すが、⌘H は chrome（ヘルプオーバーレイ）が先取りするため無割当。
+    // keyEquivalent を残すとメニュー表記が嘘になる（機能は Keybindings 側が先に消費する）。
     menu.addItem(
       withTitle: L10n.format(.menuHide, language, appName),
       action: #selector(NSApplication.hide(_:)),
-      keyEquivalent: "h")
+      keyEquivalent: "")
     let hideOthers = menu.addItem(
       withTitle: L10n.string(.menuHideOthers, language),
       action: #selector(NSApplication.hideOtherApplications(_:)),

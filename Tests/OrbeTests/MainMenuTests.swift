@@ -64,6 +64,29 @@ final class MainMenuTests: XCTestCase {
     XCTAssertEqual(editMenuTitle(.en), "Edit")
   }
 
+  /// ⌘H は chrome（ヘルプオーバーレイ）が先取りするため、Hide 項目は無割当で残す
+  /// （keyEquivalent を残すとメニュー表記が嘘になる）。⌘⌥H の「ほかを隠す」は従来どおり。
+  func testHideItemHasNoKeyEquivalent() {
+    let main = MainMenu.build(appName: "Orbe", language: .en)
+    guard let appMenu = main.items[0].submenu else {
+      return XCTFail("items[0] がアプリメニューでない")
+    }
+    guard let hide = appMenu.items.first(where: { $0.action == #selector(NSApplication.hide(_:)) })
+    else {
+      return XCTFail("Hide 項目が無い")
+    }
+    XCTAssertEqual(hide.keyEquivalent, "", "Hide は無割当（⌘H はヘルプが使う）")
+    guard
+      let hideOthers = appMenu.items.first(where: {
+        $0.action == #selector(NSApplication.hideOtherApplications(_:))
+      })
+    else {
+      return XCTFail("Hide Others 項目が無い")
+    }
+    XCTAssertEqual(hideOthers.keyEquivalent, "h")
+    XCTAssertEqual(hideOthers.keyEquivalentModifierMask, [.command, .option], "⌘⌥H は現状維持")
+  }
+
   func testAppMenuIsFirstAndHasQuit() {
     let main = MainMenu.build(appName: "orbe", language: .en)
     XCTAssertGreaterThanOrEqual(main.items.count, 2, "アプリメニュー＋Edit メニュー")

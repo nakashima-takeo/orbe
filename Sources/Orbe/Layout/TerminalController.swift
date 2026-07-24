@@ -60,6 +60,7 @@ final class TerminalController {
     case openEditor
     case renameTab
     case showSettings
+    case toggleHelp
   }
 
   /// 制御チャネルの宛先 ID（外部からこのタブを一意に指す）。

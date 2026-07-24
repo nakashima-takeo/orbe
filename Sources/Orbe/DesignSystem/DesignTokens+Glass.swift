@@ -7,9 +7,10 @@ import SwiftUI
 /// elevation は dark/light で geometry（radius/y）自体が異なるため `@Environment(\.colorScheme)` を読む ViewModifier。
 extension Theme {
 
-  /// ガラスパネルの階層。面 opacity と枠濃度が段階で変わる（panel < settings < popup）。
+  /// ガラスパネルの階層。面 opacity と枠濃度が段階で変わる（panel < settings < popup < help）。
+  /// help はヘルプオーバーレイ（⌘H）の大型モーダル: 面 α.92・枠は popup と同値・radius 16。
   /// swiftlint の nesting 規約（1 段まで）に合わせ `Glass` の外へ出す。
-  enum GlassLevel { case panel, settings, popup }
+  enum GlassLevel { case panel, settings, popup, help }
 
   // MARK: - Glass（面・枠・角丸・blur・glow）
 
@@ -20,6 +21,7 @@ extension Theme {
       case .panel: dynA(light: 0xffffff, lightA: 0.72, dark: 0x1e1a26, darkA: 0.72)
       case .settings: dynA(light: 0xffffff, lightA: 0.85, dark: 0x1e1a26, darkA: 0.85)
       case .popup: dynA(light: 0xffffff, lightA: 0.90, dark: 0x1e1a26, darkA: 0.90)
+      case .help: dynA(light: 0xffffff, lightA: 0.92, dark: 0x1e1a26, darkA: 0.92)
       }
     }
 
@@ -27,14 +29,14 @@ extension Theme {
     static func border(_ l: GlassLevel) -> NSColor {
       switch l {
       case .panel, .settings: dynA(light: 0x6e5aaa, lightA: 0.12, dark: 0xc7b9eb, darkA: 0.08)
-      case .popup: dynA(light: 0x6e5aaa, lightA: 0.14, dark: 0xc7b9eb, darkA: 0.10)
+      case .popup, .help: dynA(light: 0x6e5aaa, lightA: 0.14, dark: 0xc7b9eb, darkA: 0.10)
       }
     }
 
     /// 角丸。panel/settings=radius-panel 16 / popup=radius-control 10。
     static func radius(_ l: GlassLevel) -> CGFloat {
       switch l {
-      case .panel, .settings: 16
+      case .panel, .settings, .help: 16
       case .popup: 10
       }
     }
@@ -51,8 +53,9 @@ extension Theme {
     static let glowSecondary = dynA(light: 0x1f66c9, lightA: 0.05, dark: 0x85adff, darkA: 0.07)
   }
 
-  /// elevation の階層。panel=大型フローティング / popup=端末上の小ポップアップ。
-  enum ElevationLevel { case panel, popup }
+  /// elevation の階層。panel=大型フローティング / popup=端末上の小ポップアップ /
+  /// help=ヘルプモーダル（geometry は panel と同じ 0 20 60、濃度だけ design 値 .6/.24 で深い）。
+  enum ElevationLevel { case panel, popup, help }
 
   // MARK: - 生成ヘルパ（`DesignTokens.swift` の private ヘルパは参照不可なので自前で持つ）
 
@@ -96,14 +99,17 @@ private struct ElevationModifier: ViewModifier {
 
   private var spec: Spec {
     let shadowTint = Color(.sRGB, red: 90 / 255, green: 70 / 255, blue: 150 / 255, opacity: 1)
-    // CSS box-shadow → radius = blur / 2（`--shadow-panel` / `--shadow-popup`）:
+    // CSS box-shadow → radius = blur / 2（`--shadow-panel` / `--shadow-popup` / help panelShadow）:
     //   panel dark  0 20 60 rgba(0,0,0,.5)     / panel light 0 20 60 rgba(90,70,150,.22)
     //   popup dark  0 16 48 rgba(0,0,0,.55)    / popup light 0 16 48 rgba(90,70,150,.20)
+    //   help  dark  0 20 60 rgba(0,0,0,.6)     / help  light 0 20 60 rgba(90,70,150,.24)
     switch (level, scheme) {
     case (.panel, .dark): return Spec(color: .black.opacity(0.5), radius: 30, y: 20)
     case (.panel, _): return Spec(color: shadowTint.opacity(0.22), radius: 30, y: 20)
     case (.popup, .dark): return Spec(color: .black.opacity(0.55), radius: 24, y: 16)
     case (.popup, _): return Spec(color: shadowTint.opacity(0.20), radius: 24, y: 16)
+    case (.help, .dark): return Spec(color: .black.opacity(0.6), radius: 30, y: 20)
+    case (.help, _): return Spec(color: shadowTint.opacity(0.24), radius: 30, y: 20)
     }
   }
 }

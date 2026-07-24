@@ -287,4 +287,53 @@ enum L10nKey: String, CaseIterable, Sendable {
   case updateAutoInstallLabel
   case updateAutoInstallSub
   case updateCheckNow
+
+  // MARK: - Help（⌘H チートシート）
+  case helpSearchPlaceholder
+  case helpHitCountOne
+  case helpHitCountOther
+  case helpCatBasics
+  case helpCatAllShortcuts
+  case helpCatGeneral
+  case helpCatWorkspaceTabs
+  case helpCatPanesEditor
+  case helpCatAgents
+  case helpCatTerminal
+  case helpTopSubtitle
+  case helpLegendTitle
+  case helpLegendWorking
+  case helpLegendWaiting
+  case helpLegendDone
+  case helpLegendIdle
+  case helpKeyFilterChip
+  case helpKeyboardCaption
+  case helpFooterType
+  case helpFooterEscClose
+  case helpShortcutHelp
+  case helpShortcutSettings
+  case helpShortcutQuit
+  case helpShortcutSwitchWorkspace
+  case helpShortcutNewWorkspace
+  case helpShortcutNewTab
+  case helpShortcutRenameTab
+  case helpShortcutNextTab
+  case helpShortcutPrevTab
+  case helpShortcutSplitRight
+  case helpShortcutSplitDown
+  case helpShortcutClosePane
+  case helpShortcutToggleEditorPane
+  case helpShortcutOpenEditor
+  case helpShortcutPrevTool
+  case helpShortcutNextTool
+  case helpShortcutLaunchDefaultAgent
+  case helpShortcutAgentPalette
+  case helpShortcutDispatchPalette
+  case helpShortcutFind
+  case helpShortcutScrollTop
+  case helpShortcutScrollBottom
+  case helpShortcutCopy
+  case helpShortcutPaste
+  case helpShortcutFontLarger
+  case helpShortcutFontSmaller
+  case helpShortcutFontReset
 }

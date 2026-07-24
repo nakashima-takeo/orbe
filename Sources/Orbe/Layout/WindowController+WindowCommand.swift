@@ -20,12 +20,19 @@ extension WindowController {
     case .openEditor: EditorLauncher.openCwd(store.activePaneCwd(), localization: localization)
     case .renameTab: beginTabRename()
     case .showSettings: showSettingsPalette()
+    case .toggleHelp: showHelp()
     }
   }
 
   /// window レベルの pane 非依存コマンドのハンドラ。overlay 表示中・タブのインライン改名中は不活性
   /// （パレット入力中／改名編集中の window コマンド暴発を防ぐ）。surface の有無に依らず届く。
   func handleWindowKeyCommand(_ command: TerminalController.WindowCommand) -> Bool {
+    // ⌘H はトグル: help 表示中の再打鍵だけは overlay ガードの前で閉じ側として消費する
+    // （他 overlay 表示中は従来どおり不活性＝他パレットのキーと同じ規律）。
+    if command == .toggleHelp, model.overlay == .help {
+      dismissHelp()
+      return true
+    }
     guard model.overlay == .none, statusModel.editingIndex == nil else { return false }
     handleWindowCommand(command)
     return true
