@@ -35,9 +35,10 @@ enum WorktreePathTemplate {
   }
 
   /// テンプレを絶対パスへ展開する。`repoRoot` は相対解決の基準（リポジトリルート＝CWD 基準にしない）。
+  /// 前後空白は `validate` の空判定と同じく無意味とみなして落とす（先頭空白で絶対→相対に化けるのを防ぐ）。
   static func expand(_ template: String, repoRoot: String, branch: String) -> String {
     let substituted =
-      template
+      template.trimmingCharacters(in: .whitespaces)
       .replacingOccurrences(of: "{repo}", with: (repoRoot as NSString).lastPathComponent)
       .replacingOccurrences(of: "{slug}", with: slug(branch))
     return resolve(substituted, repoRoot: repoRoot)
