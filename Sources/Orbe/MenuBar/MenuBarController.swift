@@ -14,6 +14,7 @@ final class MenuBarController: NSObject {
   private unowned let windowController: WindowController
   private let localization: LocalizationStore
   private let statusItem: NSStatusItem
+  private let host: MenuBarItemHostingView
   private let ui = MenuBarUIState()
   private var dropdown: MenuBarDropdown?
   private var transientTimer: Timer?
@@ -23,25 +24,55 @@ final class MenuBarController: NSObject {
     self.windowController = windowController
     self.localization = localization
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    host = MenuBarItemHostingView(rootView: MenuBarStatusView(store: store, ui: ui))
     super.init()
 
     // button に SwiftUI を貼る（静的 NSImage では②の滲み出し・波紋が表現できない）。
     // クリックは button の target/action で受けるため、hosting view はヒットテストを素通しする。
-    let host = ClickThroughHostingView(rootView: MenuBarStatusView(store: store, ui: ui))
+    //
+    // サイズは制約でなく statusItem.length へ明示反映する——variableLength の status bar は
+    // button 内子ビューの制約を幅に読まず、既定の空 button 幅（実測 16px）へ潰して content を
+    // 切り詰める（最小再現スパイクで確定）。intrinsic 変化のたびに length と frame を同期する。
     host.sizingOptions = .intrinsicContentSize
     if let button = statusItem.button {
       button.target = self
       button.action = #selector(statusItemClicked)
-      host.translatesAutoresizingMaskIntoConstraints = false
+      host.autoresizingMask = [.width, .height]
       button.addSubview(host)
-      NSLayoutConstraint.activate([
-        host.leadingAnchor.constraint(equalTo: button.leadingAnchor),
-        host.trailingAnchor.constraint(equalTo: button.trailingAnchor),
-        host.topAnchor.constraint(equalTo: button.topAnchor),
-        host.bottomAnchor.constraint(equalTo: button.bottomAnchor),
-      ])
+      host.onIntrinsicSizeChange = { [weak self] in
+        DispatchQueue.main.async { self?.syncItemSize() }
+      }
+      syncItemSize()
     }
+    // メニューバーはアプリの theme 強制（NSApp.appearance）でなく**システム外観**で描かれる。
+    // 強制テーマのままだと明るいメニューバーに dark 用インクを塗って不可視になるため、
+    // hosting view の外観をシステム外観へ固定し、切替の配信通知で追従する。
+    syncSystemAppearance()
+    DistributedNotificationCenter.default().addObserver(
+      self, selector: #selector(systemAppearanceChanged),
+      name: NSNotification.Name("AppleInterfaceThemeChangedNotification"), object: nil)
     observeTransient()
+  }
+
+  deinit {
+    DistributedNotificationCenter.default().removeObserver(self)
+  }
+
+  /// hosting view の intrinsic 幅を statusItem.length へ反映し、frame を button に合わせる。
+  private func syncItemSize() {
+    statusItem.length = max(host.intrinsicContentSize.width, 1)
+    if let button = statusItem.button {
+      host.frame = button.bounds
+    }
+  }
+
+  @objc private func systemAppearanceChanged() {
+    DispatchQueue.main.async { [weak self] in self?.syncSystemAppearance() }
+  }
+
+  private func syncSystemAppearance() {
+    let dark = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
+    host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
   }
 
   // MARK: - クリック分岐
@@ -149,8 +180,16 @@ final class MenuBarController: NSObject {
   var transientHovered = false
 }
 
-/// クリックを NSStatusBarButton（背後の target/action）へ素通しする hosting view。
-/// ホバー（tracking area 由来）は生きたまま、ヒットテストだけを無効化する。
-private final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
+/// メニューバーアイテム用の hosting view。クリックを NSStatusBarButton（背後の target/action）へ
+/// 素通しし（ホバー〔tracking area 由来〕は生きたまま、ヒットテストだけ無効化）、
+/// intrinsic サイズの変化を controller へ通知する（statusItem.length の明示反映に使う）。
+private final class MenuBarItemHostingView: NSHostingView<MenuBarStatusView> {
+  var onIntrinsicSizeChange: (() -> Void)?
+
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+  override func invalidateIntrinsicContentSize() {
+    super.invalidateIntrinsicContentSize()
+    onIntrinsicSizeChange?()
+  }
 }

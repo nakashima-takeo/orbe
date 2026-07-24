@@ -27,14 +27,14 @@ struct MenuBarStatusView: View {
     }
     .animation(reduceMotion ? nil : .easeOut(duration: Theme.Motion.slow), value: store.count)
     .padding(.horizontal, Theme.Space.hair)
-    .frame(height: 24)  // メニューバー高の中でピル（22）を縦センターに置く
+    // 高さは固定しない。メニューバー厚は 22/24 の 2 系があり、固定 24 は 22 の bar で
+    // content が縦に潰れる。ピル（22）以下の content を bar 高の中で SwiftUI が縦センターする。
   }
 
-  /// ◐ グリフ（ブランドグラデ・PaletteCard ヘッダと同じ字形）。
+  /// ◐ ブランドグリフ（app icon と同比率の Path 描画）。フォント任せの字形（Text "◐"）は
+  /// メニューバーの小サイズでフォールバック字形に化けうるため、形は自前で持つ。
   private func glyph(size: CGFloat) -> some View {
-    Text("◐")
-      .font(.system(size: size))
-      .foregroundStyle(Color.theme.glyphGradient)
+    OrbeMarkGlyph(size: size)
   }
 
   // ① 静か（要対応 0）。
