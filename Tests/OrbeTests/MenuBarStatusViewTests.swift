@@ -57,4 +57,19 @@ final class MenuBarStatusViewTests: XCTestCase {
     XCTAssertGreaterThan(size.width, countWidth, "transient は収縮ピル（③）より広く滲み出る")
     XCTAssertGreaterThan(size.width, quietWidth, "transient は静的グリフ（①）より広く滲み出る")
   }
+
+  /// 長い WS 名＋長文でもピル全体が幅上限を超えない（メニューバーの他アイテムを圧迫しない）。
+  func testTransientPillCapsOverallWidth() {
+    let store = AttentionStore()
+    let longRow = AttentionRow(
+      paneId: 1, workspaceName: String(repeating: "workspace-name-", count: 10),
+      tabTitle: "tab", state: "waiting",
+      message: String(repeating: "とても長い文言 ", count: 40), stateChangedAt: Date())
+    store.noteTransient(longRow)
+    let size = fittingSize(store: store)
+    // 上限＝ピル cap ＋ 外側の水平 padding（hair×2）。
+    XCTAssertLessThanOrEqual(
+      size.width, MenuBarStatusView.transientMaxWidth + Theme.Space.hair * 2)
+    XCTAssertLessThanOrEqual(size.height, 22)
+  }
 }

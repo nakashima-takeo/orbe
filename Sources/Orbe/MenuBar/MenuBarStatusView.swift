@@ -39,10 +39,21 @@ struct MenuBarStatusView: View {
     OrbeMarkGlyph(size: 15, color: .primary).opacity(0.45)
   }
 
+  /// ②ピル全体の幅上限（メニューバーの他アイテムを圧迫しない）。WS 名 cap 120＋文言 cap 150＋
+  /// 固定部（グリフ・状態アイコン・spacing・padding）から導かれる上限で、テストがサイズ契約として
+  /// 固定する。ピル自体には maxWidth frame を掛けない——掛けると提案幅が Text の flexible frame へ
+  /// 流れ、短い内容でも cap まで膨張して余白が出る（内容ハグを保つ）。
+  static let transientMaxWidth: CGFloat = 330
+
   // ②状態変化の瞬間。WS 名＋文言の先頭が滲み出る（文言なしはタブタイトル）。
+  //
+  // 地はデザイン見本（tint(accent, 0.35)）から**不透明の暗地＋accent 被せ**へ逸脱する——
+  // メニューバーの実背景（壁紙由来・半透明）の上では 35% tint が薄すぎて読めない（実機 NG）。
+  // 地が固定の暗色になるため、インクは `.environment(\.colorScheme, .dark)` で dark トークンに
+  // 固定して解決する（ライトメニューバー上でも文字・状態グリフが地に対して読める）。
   private func transientPill(_ row: AttentionRow) -> some View {
     HStack(spacing: Theme.Space.note) {
-      OrbeMarkGlyph(size: 15)  // accent 地の上ではブランドグラデを保つ
+      OrbeMarkGlyph(size: 15)  // 暗地の上ではブランドグラデを保つ
       if let kind = AgentStateIcon.kind(state: row.state) {
         StatusGlyphView(kind: kind, size: 11)
       }
@@ -50,9 +61,12 @@ struct MenuBarStatusView: View {
         .font(.system(size: 11, design: .monospaced))
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(1)
+        .truncationMode(.tail)
+        .frame(maxWidth: 120, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: false)
       Text(row.message ?? row.tabTitle)
         .font(.system(size: 11, design: .monospaced))
-        .foregroundStyle(Color.theme.textMuted)
+        .foregroundStyle(Color.theme.statusText)  // muted は暗地で沈む——読める階調へ上げる
         .lineLimit(1)
         .truncationMode(.tail)
         .frame(maxWidth: 150, alignment: .leading)
@@ -61,9 +75,16 @@ struct MenuBarStatusView: View {
     .padding(.horizontal, Theme.Space.step)
     .frame(height: 22)
     .background(
-      RoundedRectangle(cornerRadius: 5).fill(Color.theme.accentPrimary.opacity(0.35))
+      RoundedRectangle(cornerRadius: 5)
+        .fill(Color.theme.bgBase)  // 不透明の暗地（メニューバー実背景に依存しない）
+        .overlay(RoundedRectangle(cornerRadius: 5).fill(Color.theme.accentPrimary.opacity(0.35)))
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: 5)
+        .strokeBorder(Color.theme.accentPrimary.opacity(0.6), lineWidth: Theme.Stroke.hairline)
     )
     .overlay { if !reduceMotion { PillRipple() } }
+    .environment(\.colorScheme, .dark)  // 固定暗地に合わせてインクを dark トークンで解決
     .onHover { ui.transientHovered = $0 }
   }
 

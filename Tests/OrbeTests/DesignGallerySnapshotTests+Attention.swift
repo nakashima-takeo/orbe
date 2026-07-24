@@ -70,11 +70,13 @@ extension DesignGallerySnapshotTests {
     countStore.rows = rows
     let openUI = MenuBarUIState()
     openUI.dropdownOpen = true
+    // .fixedSize() で実メニューバーと同じ ideal サイズ（intrinsicContentSize）で撮る。
+    // 固定幅の提案を流すと Text の flexible frame（cap）が cap まで膨張し、実機に無い余白が写る。
     let strip = VStack(alignment: .trailing, spacing: Theme.Space.beat) {
-      MenuBarStatusView(store: quietStore, ui: MenuBarUIState())
-      MenuBarStatusView(store: transientStore, ui: MenuBarUIState())
-      MenuBarStatusView(store: countStore, ui: MenuBarUIState())
-      MenuBarStatusView(store: countStore, ui: openUI)
+      MenuBarStatusView(store: quietStore, ui: MenuBarUIState()).fixedSize()
+      MenuBarStatusView(store: transientStore, ui: MenuBarUIState()).fixedSize()
+      MenuBarStatusView(store: countStore, ui: MenuBarUIState()).fixedSize()
+      MenuBarStatusView(store: countStore, ui: openUI).fixedSize()
     }
     .padding(Theme.Space.bar)
     .background(Color.theme.bgBase)
