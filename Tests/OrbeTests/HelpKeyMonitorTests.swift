@@ -6,9 +6,12 @@ import XCTest
 /// ヘルプのキーボード可視化のイベント解決（NSEvent → キー id / 修飾同期）を固定する。
 /// 特に「⌘ 解放で非修飾キーの残留を全クリア」（macOS は ⌘ 押下中の他キー keyUp を配らない）が要。
 final class HelpKeyMonitorTests: XCTestCase {
-  private func key(_ chars: String, type: NSEvent.EventType = .keyDown) -> NSEvent {
+  private func key(
+    _ chars: String, type: NSEvent.EventType = .keyDown,
+    modifierFlags: NSEvent.ModifierFlags = []
+  ) -> NSEvent {
     NSEvent.keyEvent(
-      with: type, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+      with: type, location: .zero, modifierFlags: modifierFlags, timestamp: 0, windowNumber: 0,
       context: nil, characters: chars, charactersIgnoringModifiers: chars, isARepeat: false,
       keyCode: 0)!
   }
@@ -19,6 +22,23 @@ final class HelpKeyMonitorTests: XCTestCase {
       modifierFlags: NSEvent.ModifierFlags(rawValue: modifierFlags.rawValue | raw),
       timestamp: 0, windowNumber: 0, context: nil, characters: "", charactersIgnoringModifiers: "",
       isARepeat: false, keyCode: 0)!
+  }
+
+  /// ヘルプ表示中の ⌘ 併用 keyDown は実動作（メニュー keyEquivalent 含む）を消費して
+  /// 点灯にだけ使う。素通しは ⌘H（トグル閉じ）だけ。
+  func testConsumesCommandKeyDownExceptHelpToggle() {
+    XCTAssertTrue(HelpKeyMonitor.consumesKeyDown(key("q", modifierFlags: .command)))  // ⌘Q 終了
+    XCTAssertTrue(HelpKeyMonitor.consumesKeyDown(key(",", modifierFlags: .command)))  // ⌘, 設定
+    XCTAssertTrue(HelpKeyMonitor.consumesKeyDown(key("t", modifierFlags: .command)))  // ⌘T chrome
+    XCTAssertTrue(  // ⌘⌥H ほかを隠す
+      HelpKeyMonitor.consumesKeyDown(key("h", modifierFlags: [.command, .option])))
+    XCTAssertTrue(  // ⌘⇧H はトグルではない
+      HelpKeyMonitor.consumesKeyDown(key("H", modifierFlags: [.command, .shift])))
+    // ⌘H だけは閉じ経路（performKeyEquivalent のトグル特例）へ素通し。
+    XCTAssertFalse(HelpKeyMonitor.consumesKeyDown(key("h", modifierFlags: .command)))
+    // 非修飾キー（検索欄への入力）と esc（閉じ）は素通し。
+    XCTAssertFalse(HelpKeyMonitor.consumesKeyDown(key("a")))
+    XCTAssertFalse(HelpKeyMonitor.consumesKeyDown(key("\u{1b}")))
   }
 
   func testKeyIDResolvesCharactersAndSpecialKeys() {

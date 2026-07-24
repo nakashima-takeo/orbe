@@ -4,7 +4,9 @@ import SwiftUI
 
 /// キーボード物理可視化（6段配列）。点灯＝行ホバーの combo ∪ 実押下 ∪ キー絞り込み選択。
 /// 使用キー（ショートカットに登場するキー）はクリックで絞り込みトグル、非使用キーは暗く非対話。
-/// 実押下は表示中のみ張る NSEvent ローカルモニタで拾う（イベントは消費せず素通し）。
+/// 実押下は表示中のみ張る NSEvent ローカルモニタで拾う。ヘルプは「試し押しの場」なので、
+/// ⌘ 併用 keyDown は実動作（⌘Q 終了などメニュー keyEquivalent 含む）を消費して点灯にだけ使い、
+/// ⌘H（トグル閉じ）だけを既定経路へ素通しする。
 struct HelpKeyboardView: View {
   @Bindable var model: HelpModel
   let ink: HelpInk
@@ -135,8 +137,9 @@ struct HelpKeyboardView: View {
 
   // MARK: - 実押下の NSEvent ローカルモニタ
 
-  /// keyDown/keyUp/flagsChanged を表示中のみ購読する。イベントは必ず素通し（return event）＝
-  /// 検索欄への入力・⌘H トグル・esc 閉じ等の既存経路と共存する。
+  /// keyDown/keyUp/flagsChanged を表示中のみ購読する。非修飾キー（検索欄への入力・esc 閉じ）と
+  /// keyUp/flagsChanged は素通しで既存経路と共存し、⌘ 併用 keyDown だけは消費（return nil）して
+  /// 実動作を抑止する（消費判定は `HelpKeyMonitor.consumesKeyDown`）。
   private func installMonitor() {
     guard monitor == nil else { return }
     monitor = NSEvent.addLocalMonitorForEvents(
@@ -145,6 +148,7 @@ struct HelpKeyboardView: View {
       switch event.type {
       case .keyDown:
         if let id = HelpKeyMonitor.keyID(for: event) { model.pressed.insert(id) }
+        if HelpKeyMonitor.consumesKeyDown(event) { return nil }
       case .keyUp:
         if let id = HelpKeyMonitor.keyID(for: event) { model.pressed.remove(id) }
       case .flagsChanged:
@@ -165,6 +169,15 @@ struct HelpKeyboardView: View {
 
 /// NSEvent → キーボード可視化のキー id 解決と修飾キー同期（純ロジック・テスト可能）。
 enum HelpKeyMonitor {
+  /// ヘルプ表示中に消費する keyDown か。⌘ 併用はメニュー keyEquivalent（⌘Q 終了・⌘⌥H 等）まで
+  /// 含めて実動作を抑止し点灯にだけ使う（デザイン見本 CmdHelp.tsx の preventDefault と同意図）。
+  /// 例外は ⌘H のみ＝閉じ経路（`ChromeHostingView.performKeyEquivalent` →
+  /// `handleWindowKeyCommand` のトグル特例）と同一判定で素通しする。
+  static func consumesKeyDown(_ event: NSEvent) -> Bool {
+    guard event.modifierFlags.contains(.command) else { return false }
+    return Keybindings.chromeAction(for: event) != .toggleHelp
+  }
+
   /// keyDown/keyUp → キー id。可視化対象外（F キー・未知文字）は nil。↑↓ は `ud` に合流。
   static func keyID(for event: NSEvent) -> String? {
     if let special = event.specialKey {
