@@ -2,10 +2,10 @@ import Foundation
 
 /// UI 文言の辞書（`L10nKey` → 日英）と言語別のルックアップ。`LocalizationStore` と AppKit `MainMenu` の
 /// 両方がここを通す（`language == .ja` 分岐を 1 箇所へ集約）。全 `L10nKey` の網羅は `L10nCompletenessTests`。
-/// 辞書はドメイン分冊（本体＋`L10nTable+Help.swift`）を `table` が結合する。
+/// 辞書はドメイン分冊（本体＋`L10nTable+Settings.swift`＋`L10nTable+Help.swift`）を `table` が結合する。
 enum L10n {
   static let table: [L10nKey: (ja: String, en: String)] =
-    baseTable.merging(helpTable) { a, _ in a }
+    baseTable.merging(settingsTable) { a, _ in a }.merging(helpTable) { a, _ in a }
 
   private static let baseTable: [L10nKey: (ja: String, en: String)] = [
     // MARK: Menu
@@ -228,35 +228,6 @@ enum L10n {
     .wsActionSetDir: ("ディレクトリ", "Directory"),
     .wsActionClose: ("削除", "Delete"),
 
-    // MARK: Settings パレット
-    .settingsScopeGlobal: ("グローバル", "Global"),
-    .settingsScopeWorkspace: ("この workspace", "This workspace"),
-    .settingsScopeWord: ("スコープ", "Scope"),
-    .settingsInheritGlobal: ("グローバルを継承（%@）", "Inherit global (%@)"),
-    .settingsWorkspaceOverrideNote: ("（この WS では %@）", "(this workspace: %@)"),
-    .settingsInheritedNote: ("（継承）", "(inherited)"),
-    .settingsFilterPlaceholder: ("設定を絞り込み", "Filter settings"),
-    .settingsRootHintWorkspace: (
-      "↵/→ 開く   ←→ 増減/切替   delete 継承へ戻す   esc 閉じる",
-      "↵/→ Open   ←→ Adjust/Toggle   delete Reset to inherited   esc Close"
-    ),
-    .settingsRootHintGlobal: (
-      "↵/→ 開く   ←→ 増減/切替   esc 閉じる", "↵/→ Open   ←→ Adjust/Toggle   esc Close"
-    ),
-    .settingsNoMatch: ("一致する設定がありません", "No matching settings"),
-    .settingsThemeBreadcrumb: ("‹ テーマ", "‹ Theme"),
-    .settingsAgentBreadcrumb: ("‹ デフォルトエージェント", "‹ Default agent"),
-    .settingsFontBreadcrumb: ("‹ フォント", "‹ Font"),
-    .settingsFontFilterPlaceholder: ("フォントを絞り込み", "Filter fonts"),
-    .settingsFontHint: ("↵ 適用   ←/esc 戻る", "↵ Apply   ←/esc Back"),
-    .settingsNoFonts: ("フォントが見つかりません", "No fonts found"),
-    .settingsNoMatchingFonts: ("一致するフォントがありません", "No matching fonts"),
-    .settingsEmojiFontBreadcrumb: ("‹ 絵文字フォント", "‹ Emoji Font"),
-    .settingsTabTitleFontBreadcrumb: ("‹ タブタイトルのフォント", "‹ Tab Title Font"),
-    .settingsAgentIconsBreadcrumb: ("‹ エージェントアイコン", "‹ Agent icons"),
-    .settingsSubHintOpen: ("↵/→ 開く   ←/esc 戻る", "↵/→ Open   ←/esc Back"),
-    .settingsGlassDefault: ("Glass（既定）", "Glass (default)"),
-
     // MARK: Search バー
     .searchPlaceholder: ("検索", "Search"),
     .searchNoMatch: ("一致なし", "No matches"),
@@ -269,29 +240,6 @@ enum L10n {
       "VS Code・Cursor・Windsurf・Zed・Sublime のいずれかを PATH に追加するか、$VISUAL／$EDITOR に GUI エディタを設定してください。",
       "Add one of VS Code, Cursor, Windsurf, Zed, or Sublime to your PATH, or set a GUI editor in $VISUAL/$EDITOR."
     ),
-
-    // MARK: Settings registry
-    .settingsFontSize: ("フォントサイズ", "Font Size"),
-    .settingsFontFamily: ("フォント", "Font"),
-    .settingsEmojiFont: ("絵文字フォント", "Emoji Font"),
-    .settingsEmojiFontNoto: ("Noto（同梱）", "Noto (bundled)"),
-    .settingsEmojiFontApple: ("Apple（システム）", "Apple (system)"),
-    .settingsTabTitleFont: ("タブタイトルのフォント", "Tab Title Font"),
-    .settingsTabTitleFontSystemName: ("システム等幅", "System monospace"),
-    .settingsTheme: ("テーマ", "Theme"),
-    .settingsDefaultAgent: ("デフォルトエージェント", "Default Agent"),
-    .settingsBackgroundOpacity: ("背景の不透明度", "Background Opacity"),
-    .settingsBackgroundBlur: ("背景のブラー", "Background Blur"),
-    .settingsCursorBlink: ("カーソルの点滅", "Cursor Blink"),
-    .settingsAgentIcons: ("エージェントアイコン", "Agent Icons"),
-    .settingsDevFeatures: ("開発中の機能を有効化", "Enable In-Development Features"),
-    .settingsUnset: ("（未設定）", "(unset)"),
-    .settingsToggleOn: ("オン", "On"),
-    .settingsToggleOff: ("オフ", "Off"),
-    .settingsIconsDefault: ("既定", "Default"),
-    .settingsIconsCustomOne: ("%lld 状態カスタム", "%lld state customized"),
-    .settingsIconsCustomOther: ("%lld 状態カスタム", "%lld states customized"),
-    .settingsDefaultFont: ("既定（%@）", "Default (%@)"),
 
     // MARK: Agent palette
     .agentPaletteSetDefault: ("デフォルトに設定", "Set as default"),
