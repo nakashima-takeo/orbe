@@ -45,7 +45,15 @@ import SwiftUI
   func hoverSelect(_ i: Int) { selection.hoverSelect(i) }
   /// ヘッダ左のテキスト（サブメニューの「‹ 親」等）。nil で非表示。入力欄も無ければヘッダ行ごと描かれない。
   var breadcrumb: String?
+  /// ヘッダ右端の表示専用バッジ（Attention の `⌘⌘` 等）。nil で出さない（既存パレットは無影響）。
+  var headerBadge: String?
   var hint = ""
+  /// フッターヒントのキー付きセグメント（key=副色・label=muted・デザイン第10シーン）。
+  /// 空なら `hint` の素文字列を muted 一色で描く（既存パレットは無影響）。
+  var hintKeys: [(key: String, label: String)] = []
+  /// カード面の濃度（GlassLevel）。既定は panel（α.72）。Attention は popup（α.90＝デザイン第10シーン
+  /// rgba(panel, 0.9)）。幾何（radius 16）・blur（24）・枠（.08/.12）・影は面によらず panel 級で固定。
+  var surface: Theme.GlassLevel = .panel
   /// 背後の暗幕の強さ。workspace は normal、設定等の強いパレットは strong。
   var scrimStrength: Scrim.Strength = .strong
 

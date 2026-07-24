@@ -19,6 +19,8 @@ import SwiftUI
   /// UI 言語の選択を提示元へ通知する（descriptor 非経由の特別行＝レジストリの SettingChange と別経路）。
   /// 提示元が「ストア更新 → メインメニュー再構築 → preferredLanguage 永続化」を束ねる。
   var onSelectLanguage: (Language) -> Void = { _ in }
+  /// グローバル ⌘⌘ 権限行の ↵/→ で System Settings（Accessibility）を開く（提示元が配線）。
+  var onOpenAccessibilitySettings: () -> Void = {}
 
   /// 現在の UI 言語ホルダー。言語行のマーカー・root 行の現在値表示・自身の文言（breadcrumb/hint）が読む。
   let localization: LocalizationStore
@@ -37,12 +39,14 @@ import SwiftUI
     case setting(SettingDescriptor)
     case language  // レジストリ非経由の特別行（UI 言語のドリルイン）。末尾固定。
     case update  // レジストリ非経由の特別行（アップデートのドリルイン）。言語の後ろ・末尾固定。
+    case cmdTapPermission  // グローバル ⌘⌘（メニューバー）の権限状態行。設定値ではない（読み取り表示のみ）。
   }
 
   // ドリル復元（drillIn が全行 index を引く）で `+Navigation` が使うため internal。
   let rootOrder = SettingsRegistry.rootOrder
   var rootRows: [RootRow] {
     [.scope] + rootOrder.map { .setting($0) } + [.language] + (update == nil ? [] : [.update])
+      + (cmdTapPermissionGranted == nil ? [] : [.cmdTapPermission])
   }
   /// 絞り込み後に実際に表示している root 行（選択 index → 行の対応）。クエリ空なら `rootRows` 全行。
   var visibleRootRows: [RootRow] = []
@@ -67,6 +71,9 @@ import SwiftUI
   /// 全 family（等幅制限なし）。タブタイトルフォントサブパレットの列挙が使う。
   let allFontNames: [String]
   let agents: [String]  // 検出済み agent コマンド（起動パレットと同じ検出結果）
+  /// グローバル ⌘⌘（背面 global monitor）の権限判定。nil＝行を出さない（テスト・gallery の既定）。
+  /// 開くたびに評価する（System Settings で付与して戻った直後の再表示に追従）。
+  let cmdTapPermissionGranted: (() -> Bool)?
   /// theme サブパレットの固定3択（見本 Settings 画面の Seg 順）。選択 index → ThemeMode の対応。
   static let themeModes: [ThemeMode] = [.auto, .dark, .light]
   /// emoji フォントサブパレットの固定2択（既定 Noto を先頭）。選択 index → EmojiFontMode の対応。
@@ -84,7 +91,8 @@ import SwiftUI
 
   init(
     values: ScopedSettingsValues, fontNames: [String], allFontNames: [String] = [],
-    agents: [String], localization: LocalizationStore, update: UpdateState? = nil
+    agents: [String], localization: LocalizationStore, update: UpdateState? = nil,
+    cmdTapPermissionGranted: (() -> Bool)? = nil
   ) {
     self.values = values
     self.update = update
@@ -92,6 +100,7 @@ import SwiftUI
     self.allFontNames = allFontNames
     self.agents = agents
     self.localization = localization
+    self.cmdTapPermissionGranted = cmdTapPermissionGranted
     render.onScrimTap = { [weak self] in self?.onDismiss() }
     render.onTapRow = { [weak self] i in
       self?.render.selected = i
@@ -177,6 +186,7 @@ import SwiftUI
       }
     case .language: drillIntoLanguage()
     case .update: drillIntoUpdate()
+    case .cmdTapPermission: onOpenAccessibilitySettings()  // 権限あり時も System Settings を開くだけ
     }
   }
 
@@ -209,7 +219,7 @@ import SwiftUI
         case .toggle: toggleValue(d)
         case .drillIn: break
         }
-      case .language, .update: break  // drillIn 行と同じく ← は無反応
+      case .language, .update, .cmdTapPermission: break  // drillIn 行と同じく ← は無反応
       }
     case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .language, .update:
       returnToRoot()
@@ -238,6 +248,7 @@ import SwiftUI
       }
     case .language: drillIntoLanguage()
     case .update: drillIntoUpdate()
+    case .cmdTapPermission: onOpenAccessibilitySettings()
     }
     return true
   }

@@ -2,6 +2,10 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private var windowController: WindowController!
+  private var menuBarController: MenuBarController?
+  // ⌘⌘ 検知の 2 面。local は前面時（権限不要・常時）、global は背面時（権限あるときだけ install）。
+  private var localCmdTap: CmdDoubleTapMonitor?
+  private var globalCmdTap: CmdDoubleTapMonitor?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     windowController = WindowController()
@@ -12,6 +16,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     windowController.window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
     ControlServer.shared.start(target: windowController)  // 外部 → Orbe 制御チャネル
+    // メニューバー投影（Attention の件数・状態変化の一過性表示・ドロップダウン）。
+    menuBarController = MenuBarController(
+      store: windowController.attentionStore, windowController: windowController,
+      localization: windowController.localization)
+    // 前面時の ⌘⌘ → Attention パレットのトグル（local monitor は自アプリのイベントのみ・権限不要）。
+    localCmdTap = CmdDoubleTapMonitor(scope: .local) { [weak self] in
+      self?.windowController.toggleAttentionPalette()
+    }
+    syncGlobalCmdTapMonitor()
+  }
+
+  /// 権限（Accessibility / Input Monitoring）の付与・剥奪を activation 契機で再評価し、
+  /// 背面 ⌘⌘ の global monitor を install/remove する（再起動不要。ただし TCC は付与後も
+  /// プロセス再起動まで効かないことがある——誘導文言に再起動の注記がある）。
+  func applicationDidBecomeActive(_ notification: Notification) {
+    syncGlobalCmdTapMonitor()
+  }
+
+  private func syncGlobalCmdTapMonitor() {
+    let granted = CmdDoubleTapMonitor.globalMonitoringPermitted
+    if granted, globalCmdTap == nil {
+      // 背面時の ⌘⌘ → メニューバードロップダウン（global monitor は他アプリのイベントのみ）。
+      globalCmdTap = CmdDoubleTapMonitor(scope: .global) { [weak self] in
+        self?.menuBarController?.showDropdown()
+      }
+    } else if !granted {
+      globalCmdTap = nil  // 剥奪を検知したら判定ごと止める（flagsChanged だけの誤爆判定はしない）
+    }
   }
 
   /// メインメニューを現在の UI 言語で組み直す（起動時・言語変更時の集約点）。theme が `NSApp.appearance` を
