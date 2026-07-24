@@ -9,6 +9,9 @@ final class DispatchDataProvider {
   private weak var model: DispatchPaletteModel?
   /// 実行失敗メッセージ（palette 表示）を現在言語で出すためのストア（提示元＝WindowController が渡す）。
   private let localization: LocalizationStore
+  /// worktree 新規作成先のテンプレート（実効設定 `worktree-dir`）。パレットは開くたびに生成されるため、
+  /// 提示元が開く時点の実効値を注入する＝常に最新値で解決する。
+  private let worktreeTemplate: String
 
   private(set) var repo: GitRepo?
   private var mainWorktree: String?
@@ -26,10 +29,14 @@ final class DispatchDataProvider {
   /// gh 取得の上限件数。
   private let ghLimit = 30
 
-  init(cwd: String, model: DispatchPaletteModel, localization: LocalizationStore) {
+  init(
+    cwd: String, model: DispatchPaletteModel, localization: LocalizationStore,
+    worktreeTemplate: String
+  ) {
     self.cwd = cwd
     self.model = model
     self.localization = localization
+    self.worktreeTemplate = worktreeTemplate
   }
 
   // MARK: - ロード
@@ -268,13 +275,16 @@ final class DispatchDataProvider {
 
   // MARK: - パス導出
 
-  /// `<リポジトリ親>/<repo名>-worktrees/<slug>`（main worktree の basename と親から導く）。
+  /// 実効テンプレート（設定 `worktree-dir`）から作成先を解決する。`{parent}`/`{repo}` は
+  /// base（main worktree、無ければ repo root / cwd）から導き、置換・`~` 展開・standardize は
+  /// `WorktreePathTemplate` に一本化する。
   private func worktreeDir(forSlug slug: String) -> String {
     let base = mainWorktree ?? repo?.root ?? cwd
-    let repoName = (base as NSString).lastPathComponent
-    let parent = (base as NSString).deletingLastPathComponent
-    let container = (parent as NSString).appendingPathComponent("\(repoName)-worktrees")
-    return (container as NSString).appendingPathComponent(slug)
+    return WorktreePathTemplate.resolve(
+      template: worktreeTemplate,
+      parent: (base as NSString).deletingLastPathComponent,
+      repo: (base as NSString).lastPathComponent,
+      slug: slug)
   }
 
   private func slug(_ name: String) -> String {
