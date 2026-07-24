@@ -1,8 +1,9 @@
 import Foundation
 
 /// root でのキー操作の意味。stepper は ←→ で増減（fontSize）、toggle は ←/→/↵ で反転（cursor-style-blink）、
-/// drillIn は ↵/→ でサブパレットへ潜る。値域・既定は `domain`/`defaultValue` が持つ（activation は操作種別のみ）。
-enum RootActivation: Equatable { case stepper, toggle, drillIn }
+/// drillIn は ↵/→ でサブパレットへ潜る。textInput は ↵/→ で編集面（テキスト入力）へ潜る（worktree-path）。
+/// 値域・既定は `domain`/`defaultValue` が持つ（activation は操作種別のみ）。
+enum RootActivation: Equatable { case stepper, toggle, drillIn, textInput }
 
 /// 設定値の値域（検証と control の domain 提示・永続 codec の型決定の SSOT）。
 enum SettingDomain {
@@ -12,6 +13,8 @@ enum SettingDomain {
   case enumeration(values: () -> [String])
   /// agentStateIcons（状態名→SF Symbol 名）。allowedKeys は提示用（値域として縛らない）。
   case stringMap(allowedKeys: () -> [String])
+  /// worktree-path（パステンプレ文字列）。検証は `WorktreePathTemplate.validate` に委譲する。
+  case pathTemplate
 
   /// control config_list の type 提示。
   var typeName: String {
@@ -20,6 +23,7 @@ enum SettingDomain {
     case .toggle: return "bool"
     case .enumeration: return "enum"
     case .stringMap: return "map"
+    case .pathTemplate: return "string"
     }
   }
 
@@ -44,6 +48,12 @@ enum SettingDomain {
       // マップの key を状態名・値を SF Symbol 文字列として受ける（curated 外の symbol も許す）。
       guard let m = jsonValue as? [String: String] else { return nil }
       return .stringMap(m)
+    case .pathTemplate:
+      // 空・必須トークン欠落・未知トークンは拒否（唯一の検証点をテンプレ展開器と共有）。
+      guard let s = jsonValue as? String, WorktreePathTemplate.validate(s) == nil else {
+        return nil
+      }
+      return .string(s)
     }
   }
 
@@ -56,6 +66,7 @@ enum SettingDomain {
     case .toggle: return .bool(try c.decode(Bool.self, forKey: key))
     case .enumeration: return .string(try c.decode(String.self, forKey: key))
     case .stringMap: return .stringMap(try c.decode([String: String].self, forKey: key))
+    case .pathTemplate: return .string(try c.decode(String.self, forKey: key))
     }
   }
 }
@@ -84,6 +95,8 @@ struct SettingDescriptor {
   let unsetPlaceholderKey: L10nKey?
 
   var isDrillIn: Bool { activation == .drillIn }
+  /// ↵/→ でサブパレット（ドリルイン一覧 or テキスト編集面）へ潜る行か。root 行の chevron 表示に使う。
+  var opensSubpalette: Bool { activation == .drillIn || activation == .textInput }
 }
 
 /// 設定項目を 1 箇所で宣言するレジストリ（SSOT）。
@@ -236,16 +249,24 @@ enum SettingsRegistry {
       domain: .toggle,
       guiConf: nil,  // gui.conf 非経由（右バーの UI gate 専用）
       display: boolLabel, unsetPlaceholderKey: nil),
+    SettingDescriptor(
+      id: .worktreePath, key: "worktree-path", labelKey: .settingsWorktreePath,
+      activation: .textInput,
+      // 既定は現状導出を完全再現するテンプレ（未設定・移行後は現状と同じ場所に作られる＝後方互換）。
+      defaultValue: { .string(WorktreePathTemplate.defaultTemplate) }, domain: .pathTemplate,
+      guiConf: nil,  // gui.conf 非経由（アプリ内部の worktree 作成先・端末に影響しない）
+      display: { v, _ in if case .string(let s) = v { return s } else { return "" } },
+      unsetPlaceholderKey: nil),
   ]
 
   /// パレット root の表示順（fontSize → backgroundOpacity → backgroundBlur → cursorStyleBlink →
   /// theme → agent → fontFamily → tabTitleFontFamily → emojiFont → agentStateIcons →
-  /// devFeaturesEnabled）。背景関連・フォント関連をそれぞれ隣接させる。
+  /// devFeaturesEnabled → worktreePath）。背景関連・フォント関連をそれぞれ隣接させる。
   static let rootOrder: [SettingDescriptor] =
     [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
       .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
-      .devFeaturesEnabled,
+      .devFeaturesEnabled, .worktreePath,
     ].map { id in all.first { $0.id == id }! }
 
   static func descriptor(_ id: SettingID) -> SettingDescriptor { all.first { $0.id == id }! }

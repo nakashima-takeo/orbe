@@ -124,7 +124,10 @@ extension WindowController {
     p.onDismiss = { [weak self] in self?.dismissPalette() }
 
     let cwd = store.activePaneCwd() ?? FileManager.default.homeDirectoryForCurrentUser.path
-    let provider = DispatchDataProvider(cwd: cwd, model: p, localization: localization)
+    // アクティブ WS の実効テンプレート（global 層→WS 上書き層）を注入する。解決は SSOT の集約点を共有する。
+    let provider = DispatchDataProvider(
+      cwd: cwd, model: p, localization: localization,
+      worktreePathTemplate: activeEffectiveSettings()[SettingKeys.worktreePath])
 
     // クロージャは兄弟パレット同様 [weak self] のみとし、p/provider は self.model 経由で辿る
     // （p が onExecute を保持するため、p を強参照すると開くたびに自己循環でリークする）。
@@ -233,7 +236,8 @@ extension WindowController {
       allFontNames: FontCatalog.allNames(),  // タブタイトルフォント用（等幅制限なし）
       agents: agentLauncher.detectedCommands,  // 検出済みのみ（起動パレットと同じ検出結果）
       localization: localization,
-      update: updateState)  // アップデートセクション（状態カード・トグル・今すぐ確認）
+      update: updateState,  // アップデートセクション（状態カード・トグル・今すぐ確認）
+      worktreePreviewRoot: current.rootPath)  // worktree 作成先プレビューの基準（現 WS ルート）
     p.onApply = { [weak self] change, scope in self?.applySetting(change, scope: scope) }
     // 言語行（descriptor 非経由）: ストア更新→メインメニュー再構築→preferredLanguage 永続化を束ねる。
     p.onSelectLanguage = { [weak self] language in

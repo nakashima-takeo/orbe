@@ -201,4 +201,24 @@ final class SettingsResolutionTests: XCTestCase {
     XCTAssertNil(
       SettingChange(key: "font-family", jsonValue: "__no_such_font__"), "catalog 外 family")
   }
+
+  // MARK: - worktree-path（pathTemplate domain・唯一の検証点）
+
+  /// 妥当テンプレは受理、null は解除。不正（空・{slug} 欠落・未知トークン・型不一致）は拒否。
+  func testWorktreePathValidationThroughSettingChange() {
+    XCTAssertEqual(
+      SettingChange(key: "worktree-path", jsonValue: "~/wt/{repo}/{slug}"),
+      SettingChange(SettingKeys.worktreePath, "~/wt/{repo}/{slug}"))
+    XCTAssertEqual(
+      SettingChange(key: "worktree-path", jsonValue: WorktreePathTemplate.defaultTemplate),
+      SettingChange(SettingKeys.worktreePath, WorktreePathTemplate.defaultTemplate))
+    XCTAssertEqual(
+      SettingChange(key: "worktree-path", jsonValue: NSNull()),
+      SettingChange(id: .worktreePath, value: nil), "null は解除（既定へ戻す）")
+
+    XCTAssertNil(SettingChange(key: "worktree-path", jsonValue: ""), "空は拒否")
+    XCTAssertNil(SettingChange(key: "worktree-path", jsonValue: "wt/no-token"), "{slug} 欠落は拒否")
+    XCTAssertNil(SettingChange(key: "worktree-path", jsonValue: "{foo}/{slug}"), "未知トークンは拒否")
+    XCTAssertNil(SettingChange(key: "worktree-path", jsonValue: 1), "String 期待に Int")
+  }
 }

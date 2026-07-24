@@ -9,6 +9,8 @@ final class DispatchDataProvider {
   private weak var model: DispatchPaletteModel?
   /// 実行失敗メッセージ（palette 表示）を現在言語で出すためのストア（提示元＝WindowController が渡す）。
   private let localization: LocalizationStore
+  /// worktree 作成先の実効パステンプレート（global＋WS 上書きを解決済み）。提示元が注入する。
+  private let worktreePathTemplate: String
 
   private(set) var repo: GitRepo?
   private var mainWorktree: String?
@@ -26,10 +28,14 @@ final class DispatchDataProvider {
   /// gh 取得の上限件数。
   private let ghLimit = 30
 
-  init(cwd: String, model: DispatchPaletteModel, localization: LocalizationStore) {
+  init(
+    cwd: String, model: DispatchPaletteModel, localization: LocalizationStore,
+    worktreePathTemplate: String
+  ) {
     self.cwd = cwd
     self.model = model
     self.localization = localization
+    self.worktreePathTemplate = worktreePathTemplate
   }
 
   // MARK: - ロード
@@ -195,7 +201,7 @@ final class DispatchDataProvider {
         completion(.ready(existing))
         return
       }
-      let path = worktreeDir(forSlug: slug(name))
+      let path = worktreeDir(forBranch: name)
       repo.addWorktree(path: path, base: name, newBranch: nil, track: false) {
         completion($0 == nil ? .ready(path) : .failed($0!))
       }
@@ -206,7 +212,7 @@ final class DispatchDataProvider {
         return
       }
       let local = localName(fromRemote: name)
-      let path = worktreeDir(forSlug: slug(local))
+      let path = worktreeDir(forBranch: local)
       repo.addWorktree(path: path, base: name, newBranch: local, track: true) {
         completion($0 == nil ? .ready(path) : .failed($0!))
       }
@@ -217,7 +223,7 @@ final class DispatchDataProvider {
         return
       }
       let branch = "issue/\(number)"
-      let path = worktreeDir(forSlug: slug(branch))
+      let path = worktreeDir(forBranch: branch)
       if branchExists {
         // 既存ブランチから worktree 追加（-b を外す）＝ git worktree add <path> issue/<n>。
         repo.addWorktree(path: path, base: branch, newBranch: nil, track: false) {
@@ -241,7 +247,7 @@ final class DispatchDataProvider {
         completion(.failed(localization.format(.dispatchErrForkPR, number)))
         return
       }
-      let path = worktreeDir(forSlug: slug(headRef))
+      let path = worktreeDir(forBranch: headRef)
       repo.addWorktree(path: path, base: "origin/\(headRef)", newBranch: headRef, track: true) {
         completion($0 == nil ? .ready(path) : .failed($0!))
       }
@@ -268,17 +274,11 @@ final class DispatchDataProvider {
 
   // MARK: - パス導出
 
-  /// `<リポジトリ親>/<repo名>-worktrees/<slug>`（main worktree の basename と親から導く）。
-  private func worktreeDir(forSlug slug: String) -> String {
-    let base = mainWorktree ?? repo?.root ?? cwd
-    let repoName = (base as NSString).lastPathComponent
-    let parent = (base as NSString).deletingLastPathComponent
-    let container = (parent as NSString).appendingPathComponent("\(repoName)-worktrees")
-    return (container as NSString).appendingPathComponent(slug)
-  }
-
-  private func slug(_ name: String) -> String {
-    name.replacingOccurrences(of: "/", with: "-")
+  /// 実効テンプレートをブランチ名で展開した worktree 作成先（絶対パス）。相対はリポジトリルート
+  /// （`mainWorktree ?? repo.root`）基準で解決する。slug サニタイズは展開器が担う（唯一の真実を共有）。
+  private func worktreeDir(forBranch branch: String) -> String {
+    let repoRoot = mainWorktree ?? repo?.root ?? cwd
+    return WorktreePathTemplate.expand(worktreePathTemplate, repoRoot: repoRoot, branch: branch)
   }
 
   private func localName(fromRemote name: String) -> String {

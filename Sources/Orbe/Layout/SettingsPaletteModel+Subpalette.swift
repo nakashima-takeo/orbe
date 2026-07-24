@@ -196,6 +196,42 @@ extension SettingsPaletteModel {
     }
   }
 
+  /// worktreePath: 編集面（絞り込みでなく本物のテキスト編集）。ヘッダの入力欄でテンプレを打鍵編集し、
+  /// 妥当ならライブ展開プレビュー行（サンプルブランチで展開した絶対パス）を、不正ならインラインエラー
+  /// （赤・フッター）を出す。検証点は `SettingChange` の domain と同じ `WorktreePathTemplate.validate`。
+  func rebuildWorktreePath() {
+    render.fieldVisible = true
+    render.fieldIsFilter = false  // editor＝← はカーソル移動・戻るは Esc
+    render.breadcrumb = localization.string(.settingsWorktreePathBreadcrumb)
+    render.placeholder = localization.string(.settingsWorktreePathPlaceholder)
+    render.hint = localization.string(.settingsWorktreePathHint)
+    currentRowIndex = nil
+
+    let template = render.query
+    if let invalid = WorktreePathTemplate.validate(template) {
+      render.errorText = worktreePathErrorText(invalid)
+      render.rows = []  // 不正テンプレはプレビューを出さない（確定も防がれる）
+      return
+    }
+    render.errorText = nil
+    let preview = WorktreePathTemplate.expand(
+      template, repoRoot: worktreePreviewRoot, branch: Self.worktreePreviewBranch)
+    render.rows = [
+      PaletteModel.RowItem(
+        label: localization.format(.settingsWorktreePathPreview, preview), enabled: false)
+    ]
+  }
+
+  /// 検証失敗理由 → 現在言語のインラインエラー文言。
+  private func worktreePathErrorText(_ invalid: WorktreePathTemplate.Invalid) -> String {
+    switch invalid {
+    case .empty: return localization.string(.settingsWorktreePathErrEmpty)
+    case .missingSlug: return localization.string(.settingsWorktreePathErrMissingSlug)
+    case .unknownToken(let token):
+      return localization.format(.settingsWorktreePathErrUnknownToken, token)
+    }
+  }
+
   /// 現在値マーカーのプレフィクス。`currentRowIndex` だけを読む（値と直接比較する箇所を作らない＝
   /// ● とハイライトが食い違わない）。非現在値は同じ幅の 2 スペースで列を揃える。
   private func marker(_ row: Int) -> String { row == currentRowIndex ? "● " : "  " }

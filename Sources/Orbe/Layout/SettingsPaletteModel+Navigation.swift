@@ -12,8 +12,9 @@ extension SettingsPaletteModel {
     case .theme: return .theme
     case .defaultAgent: return .agent
     case .agentStateIcons: return .agentStates
+    case .worktreePath: return .worktreePath
     case .fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .devFeaturesEnabled:
-      return .root  // toggle であって drillIn でない
+      return .root  // stepper/toggle であって潜らない
     }
   }
 

@@ -40,8 +40,8 @@ extension SettingsPaletteModel {
           ? localization.string(.settingsInheritedNote)
           : values.workspaceOverrideNote(d, localization)
         return PaletteModel.RowItem(
-          label: localization.string(d.labelKey) + "  " + rootValueDisplay(d), chevron: d.isDrillIn,
-          inherited: inherited, detail: note)
+          label: localization.string(d.labelKey) + "  " + rootValueDisplay(d),
+          chevron: d.opensSubpalette, inherited: inherited, detail: note)
       case .language:
         return PaletteModel.RowItem(
           label: localization.string(.settingsLanguageLabel) + "  "

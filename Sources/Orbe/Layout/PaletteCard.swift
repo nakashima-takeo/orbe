@@ -55,6 +55,16 @@ struct PaletteCard: View {
           }
         }
 
+        // 検証エラー（worktree パステンプレ編集面）は hint の前に赤で出す（DiffPanel と同じ danger 語彙）。
+        if let error = model.errorText, !error.isEmpty {
+          divider
+          Text(error)
+            .font(Font.theme.meta)
+            .foregroundStyle(Color.theme.danger)
+            .padding(.horizontal, Theme.Space.bar)
+            .padding(.vertical, Theme.Space.step + Theme.Space.hair)
+        }
+
         if !model.hint.isEmpty {
           divider
           Text(model.hint)

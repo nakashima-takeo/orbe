@@ -82,14 +82,14 @@ final class SettingsPaletteTests: XCTestCase {
     XCTAssertTrue(p.render.rows[6].label.contains("（未設定）"))
   }
 
-  /// root 行の chevron は descriptor.isDrillIn を反映（先頭のスコープ行と stepper/toggle 行は無し、
-  /// drillIn 行は有り）。
+  /// root 行の chevron は descriptor.opensSubpalette（drillIn＋textInput）を反映（先頭のスコープ行と
+  /// stepper/toggle 行は無し、drillIn 各行と worktree 作成先＝textInput・言語行は有り）。
   func testRootRowChevronsReflectDrillIn() {
     let p = model()
     XCTAssertEqual(
       p.render.rows.map(\.chevron),
-      [false, false, false, false, false, true, true, true, true, true, true, false, true],
-      "スコープ/フォントサイズ/不透明度/ブラー/点滅/開発中機能行は chevron 無し、テーマ/エージェント/フォント/タブタイトルのフォント/絵文字フォント/アイコン/言語行は drillIn で chevron 有り"
+      [false, false, false, false, false, true, true, true, true, true, true, false, true, true],
+      "スコープ/stepper/toggle 行は chevron 無し、drillIn 各行と worktree 作成先（textInput）・言語行は有り"
     )
   }
 
