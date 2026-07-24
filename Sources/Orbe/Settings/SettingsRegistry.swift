@@ -12,6 +12,8 @@ enum SettingDomain {
   case enumeration(values: () -> [String])
   /// agentStateIcons（状態名→SF Symbol 名）。allowedKeys は提示用（値域として縛らない）。
   case stringMap(allowedKeys: () -> [String])
+  /// worktreeDir（作成先テンプレート）。値域は列挙でなく構文（`WorktreePathTemplate.validate`）で縛る。
+  case pathTemplate
 
   /// control config_list の type 提示。
   var typeName: String {
@@ -20,6 +22,7 @@ enum SettingDomain {
     case .toggle: return "bool"
     case .enumeration: return "enum"
     case .stringMap: return "map"
+    case .pathTemplate: return "string"
     }
   }
 
@@ -44,6 +47,13 @@ enum SettingDomain {
       // マップの key を状態名・値を SF Symbol 文字列として受ける（curated 外の symbol も許す）。
       guard let m = jsonValue as? [String: String] else { return nil }
       return .stringMap(m)
+    case .pathTemplate:
+      // 構文検証（未知トークン・{slug} 欠落・相対解決）はテンプレートエンジンに一本化。
+      // パレット・orb config・control の全経路がここを通る。
+      guard let s = jsonValue as? String, WorktreePathTemplate.validate(s) == nil else {
+        return nil
+      }
+      return .string(s)
     }
   }
 
@@ -54,7 +64,7 @@ enum SettingDomain {
     switch self {
     case .intRange: return .int(try c.decode(Int.self, forKey: key))
     case .toggle: return .bool(try c.decode(Bool.self, forKey: key))
-    case .enumeration: return .string(try c.decode(String.self, forKey: key))
+    case .enumeration, .pathTemplate: return .string(try c.decode(String.self, forKey: key))
     case .stringMap: return .stringMap(try c.decode([String: String].self, forKey: key))
     }
   }
@@ -112,7 +122,7 @@ enum SettingsRegistry {
 
   /// 格納/gui.conf 生成の正準順（font-size → font-family → tab-title-font-family〔gui.conf 非経由〕→
   /// emoji-font → theme → agent → background-opacity → background-blur → cursor-style-blink →
-  /// agent-state-icons〔gui.conf 非経由〕→ dev-features〔同〕）。
+  /// agent-state-icons〔gui.conf 非経由〕→ dev-features〔同〕→ worktree-dir〔同〕）。
   /// `rootOrder`（表示順）とは別物——混同すると gui.conf のバイト順が崩れる。
   static let all: [SettingDescriptor] = [
     SettingDescriptor(
@@ -236,16 +246,23 @@ enum SettingsRegistry {
       domain: .toggle,
       guiConf: nil,  // gui.conf 非経由（右バーの UI gate 専用）
       display: boolLabel, unsetPlaceholderKey: nil),
+    SettingDescriptor(
+      id: .worktreeDir, key: "worktree-dir", labelKey: .settingsWorktreeDir, activation: .drillIn,
+      defaultValue: { .string(WorktreePathTemplate.defaultTemplate) },
+      domain: .pathTemplate,
+      guiConf: nil,  // gui.conf 非経由（Dispatch の worktree 作成時に実効値を pull する）
+      display: { v, _ in if case .string(let s) = v { return s } else { return "" } },
+      unsetPlaceholderKey: nil),
   ]
 
   /// パレット root の表示順（fontSize → backgroundOpacity → backgroundBlur → cursorStyleBlink →
   /// theme → agent → fontFamily → tabTitleFontFamily → emojiFont → agentStateIcons →
-  /// devFeaturesEnabled）。背景関連・フォント関連をそれぞれ隣接させる。
+  /// devFeaturesEnabled → worktreeDir）。背景関連・フォント関連をそれぞれ隣接させる。
   static let rootOrder: [SettingDescriptor] =
     [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
       .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
-      .devFeaturesEnabled,
+      .devFeaturesEnabled, .worktreeDir,
     ].map { id in all.first { $0.id == id }! }
 
   static func descriptor(_ id: SettingID) -> SettingDescriptor { all.first { $0.id == id }! }

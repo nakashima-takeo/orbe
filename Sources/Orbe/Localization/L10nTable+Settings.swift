@@ -31,6 +31,20 @@ extension L10n {
     .settingsAgentIconsBreadcrumb: ("‹ エージェントアイコン", "‹ Agent icons"),
     .settingsSubHintOpen: ("↵/→ 開く   ←/esc 戻る", "↵/→ Open   ←/esc Back"),
     .settingsGlassDefault: ("Glass（既定）", "Glass (default)"),
+    .settingsWorktreeDirBreadcrumb: ("‹ worktree の作成場所", "‹ Worktree Location"),
+    .settingsWorktreeDirPlaceholder: (
+      "テンプレート（空のまま確定で解除）", "Template (confirm empty to reset)"
+    ),
+    .settingsWorktreeDirHint: ("↵ 確定（空で解除）   esc 戻る", "↵ Apply (empty resets)   esc Back"),
+    .settingsWorktreeDirInfo: (
+      "{parent}（リポジトリ親）・{repo}（リポジトリ名）・{slug}（branch）が使えます",
+      "Use {parent} (repo's parent dir), {repo} (repo name), and {slug} (branch)"
+    ),
+    .settingsWorktreeDirErrUnknownToken: ("不正なプレースホルダ: %@", "Invalid placeholder: %@"),
+    .settingsWorktreeDirErrMissingSlug: ("{slug} を含めてください", "Template must include {slug}"),
+    .settingsWorktreeDirErrNotAbsolute: (
+      "絶対パスに解決される形にしてください（先頭 ~ 可）", "Must resolve to an absolute path (leading ~ allowed)"
+    ),
 
     // MARK: Settings registry
     .settingsFontSize: ("フォントサイズ", "Font Size"),
@@ -47,6 +61,7 @@ extension L10n {
     .settingsCursorBlink: ("カーソルの点滅", "Cursor Blink"),
     .settingsAgentIcons: ("エージェントアイコン", "Agent Icons"),
     .settingsDevFeatures: ("開発中の機能を有効化", "Enable In-Development Features"),
+    .settingsWorktreeDir: ("worktree の作成場所", "Worktree Location"),
     .settingsUnset: ("（未設定）", "(unset)"),
     .settingsToggleOn: ("オン", "On"),
     .settingsToggleOff: ("オフ", "Off"),

@@ -183,6 +183,22 @@ extension SettingsPaletteModel {
     render.rows = rows
   }
 
+  /// worktreeDir: テンプレート文字列の editor 入力（`fieldIsFilter = false`＝← はカーソル移動に残す）。
+  /// 入力欄には drillIn がそのスコープの実効テンプレートをプリフィルする。行は選択不可の情報行 1 行のみ:
+  /// 通常時はプレースホルダ語彙の説明、不正確定後は検証エラー理由（`worktreeDirError`）に差し替える。
+  func rebuildWorktreeDirInput() {
+    render.fieldVisible = true
+    render.fieldIsFilter = false
+    render.breadcrumb = localization.string(.settingsWorktreeDirBreadcrumb)
+    render.placeholder = localization.string(.settingsWorktreeDirPlaceholder)
+    render.hint = localization.string(.settingsWorktreeDirHint)
+    currentRowIndex = nil
+    render.rows = [
+      PaletteModel.RowItem(
+        label: worktreeDirError ?? localization.string(.settingsWorktreeDirInfo), enabled: false)
+    ]
+  }
+
   /// language: ja / en の固定2行（絞り込み欄なし）。現在値は実効 UI 言語。↵ で確定し提示元へ通知する。
   func rebuildLanguage() {
     render.fieldVisible = false

@@ -12,17 +12,22 @@ extension SettingsPaletteModel {
     case .theme: return .theme
     case .defaultAgent: return .agent
     case .agentStateIcons: return .agentStates
+    case .worktreeDir: return .worktreeDir
     case .fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .devFeaturesEnabled:
       return .root  // toggle であって drillIn でない
     }
   }
 
-  /// root 設定行から font/theme/agent/状態一覧サブパレットへ潜る。戻り時に選択を復元するため、潜った設定の
-  /// 全行 rootRows 上の index（＝scope 行の分 +1）を覚える。絞り込み中の `render.selected` は
+  /// root 設定行から font/theme/agent/状態一覧/worktreeDir サブパレットへ潜る。戻り時に選択を復元するため、
+  /// 潜った設定の全行 rootRows 上の index（＝scope 行の分 +1）を覚える。絞り込み中の `render.selected` は
   /// visibleRootRows の部分集合を指すため、それでなく行の同一性（SettingID）から全行 index を引く。
   func drillIn(_ id: SettingID) {
     rootRowBeforeDrill = rootOrder.firstIndex { $0.id == id }.map { $0 + 1 } ?? rootRowBeforeDrill
+    if id == .worktreeDir { worktreeDirError = nil }  // 前回の不正理由を持ち越さない
     setMode(drillMode(for: id))
+    // setMode が query を空にするため、そのスコープの実効テンプレートを後入れでプリフィルする
+    // （`PaletteCard.queryBinding` は setter からしか onQueryChange を呼ばないため跳ね返らない）。
+    if id == .worktreeDir { render.query = values.effWorktreeDir }
   }
 
   /// サブパレットから root へ戻る（`←`・`Esc`・確定のいずれでも）。潜った行へ選択を復元する。

@@ -53,6 +53,7 @@ struct ScopedSettingsValues {
   var effEmojiFont: EmojiFontMode { effective[SettingKeys.emojiFont] }
   var effTheme: ThemeMode { effective[SettingKeys.theme] }
   var effDefaultAgent: String? { effective[SettingKeys.defaultAgent] }
+  var effWorktreeDir: String { effective[SettingKeys.worktreeDir] }
 
   /// 実効の状態アイコンマップ（whole-map・A案）。
   var effAgentStateIcons: [AgentStateIcon.Kind: String] {

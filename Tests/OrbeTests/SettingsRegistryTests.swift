@@ -22,7 +22,7 @@ final class SettingsRegistryTests: XCTestCase {
       [
         .fontSize, .fontFamily, .tabTitleFontFamily, .emojiFont, .theme, .defaultAgent,
         .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .agentStateIcons,
-        .devFeaturesEnabled,
+        .devFeaturesEnabled, .worktreeDir,
       ])
   }
 
@@ -33,7 +33,7 @@ final class SettingsRegistryTests: XCTestCase {
       [
         .fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
         .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
-        .devFeaturesEnabled,
+        .devFeaturesEnabled, .worktreeDir,
       ])
   }
 
@@ -59,6 +59,7 @@ final class SettingsRegistryTests: XCTestCase {
     XCTAssertEqual(SettingsRegistry.descriptor(.emojiFont).key, "emoji-font")
     XCTAssertEqual(SettingsRegistry.descriptor(.agentStateIcons).key, "agent-state-icons")
     XCTAssertEqual(SettingsRegistry.descriptor(.devFeaturesEnabled).key, "dev-features")
+    XCTAssertEqual(SettingsRegistry.descriptor(.worktreeDir).key, "worktree-dir")
     XCTAssertEqual(SettingsRegistry.confKey(.fontSize), "font-size", "confKey は descriptor.key を引く")
     let keys = SettingsRegistry.all.map(\.key)
     XCTAssertEqual(Set(keys).count, SettingsRegistry.all.count, "key は全項目で一意")
@@ -78,7 +79,7 @@ final class SettingsRegistryTests: XCTestCase {
   func testDefaultValuePresenceMatchesKeyKind() {
     for id in [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
-      .emojiFont, .agentStateIcons, .devFeaturesEnabled,
+      .emojiFont, .agentStateIcons, .devFeaturesEnabled, .worktreeDir,
     ] {
       XCTAssertNotNil(SettingsRegistry.descriptor(id).defaultValue(), "\(id) は既定を持つ")
     }
@@ -102,6 +103,9 @@ final class SettingsRegistryTests: XCTestCase {
     XCTAssertEqual(
       SettingsRegistry.descriptor(.devFeaturesEnabled).defaultValue(), .bool(isDevBuild),
       "既定はチャネル由来（dev=on / release=off）。リテラルで固定すると出荷構成 -DORBE_RELEASE で落ちる")
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.worktreeDir).defaultValue(),
+      .string("{parent}/{repo}-worktrees/{slug}"), "既定は従来のハードコード規則と同一パスに解決するテンプレート")
   }
 
   // MARK: - guiConf 橋渡し（実効設定の raw を読む・未設定は行を出さない）
@@ -154,6 +158,12 @@ final class SettingsRegistryTests: XCTestCase {
   func testDevFeaturesEnabledHasNoGuiConf() {
     XCTAssertNil(
       SettingsRegistry.descriptor(.devFeaturesEnabled).guiConf, "dev-features は gui.conf に出さない")
+  }
+
+  func testWorktreeDirHasNoGuiConf() {
+    XCTAssertNil(
+      SettingsRegistry.descriptor(.worktreeDir).guiConf,
+      "worktree-dir は gui.conf に出さない（Dispatch が実効値を pull する）")
   }
 
   func testBackgroundOpacityGuiConfEmitsLineOrNil() {
@@ -212,6 +222,7 @@ final class SettingsRegistryTests: XCTestCase {
     XCTAssertEqual(SettingsRegistry.descriptor(.backgroundBlur).domain.typeName, "bool")
     XCTAssertEqual(SettingsRegistry.descriptor(.theme).domain.typeName, "enum")
     XCTAssertEqual(SettingsRegistry.descriptor(.agentStateIcons).domain.typeName, "map")
+    XCTAssertEqual(SettingsRegistry.descriptor(.worktreeDir).domain.typeName, "string")
   }
 
   // MARK: - isDrillIn（stepper/toggle は潜らない・drillIn は潜る）
@@ -225,15 +236,15 @@ final class SettingsRegistryTests: XCTestCase {
     }
     for id in [
       SettingID.fontFamily, .tabTitleFontFamily, .emojiFont, .theme, .defaultAgent,
-      .agentStateIcons,
+      .agentStateIcons, .worktreeDir,
     ] {
       XCTAssertTrue(SettingsRegistry.descriptor(id).isDrillIn, "\(id) は drillIn")
     }
   }
 
   /// activation と domain の整合を `all` 走査で固定する（項目追加時の誤宣言を test 時に捕捉する不変条件）。
-  /// stepper→intRange / toggle→toggle / drillIn→enumeration|stringMap。ここが緑でないと runtime で
-  /// stepperDomain の preconditionFailure・toggle の bool 変換失敗を招く。
+  /// stepper→intRange / toggle→toggle / drillIn→enumeration|stringMap|pathTemplate。ここが緑でないと
+  /// runtime で stepperDomain の preconditionFailure・toggle の bool 変換失敗を招く。
   func testActivationAndDomainAgreeForEverySetting() {
     for d in SettingsRegistry.all {
       switch d.activation {
@@ -247,9 +258,10 @@ final class SettingsRegistryTests: XCTestCase {
         }
       case .drillIn:
         switch d.domain {
-        case .enumeration, .stringMap: break
+        case .enumeration, .stringMap, .pathTemplate: break
         default:
-          return XCTFail("\(d.id): activation=drillIn は domain=enumeration|stringMap 必須")
+          return XCTFail(
+            "\(d.id): activation=drillIn は domain=enumeration|stringMap|pathTemplate 必須")
         }
       }
     }

@@ -26,7 +26,7 @@ import SwiftUI
   // ドリル遷移（drillIn/returnTo*）を `SettingsPaletteModel+Navigation` へ分離するため internal。
   enum Mode {
     case root, font, tabTitleFont, emojiFont, theme, agent, agentStates,
-      agentIcon(AgentStateIcon.Kind), language, update
+      agentIcon(AgentStateIcon.Kind), worktreeDir, language, update
   }
 
   /// root 行。先頭のスコープ切替行と、レジストリ表示順の各設定行。
@@ -58,6 +58,10 @@ import SwiftUI
 
   /// 現在値の行 index（サブモードの表示行に対する。root と、現在値が表示行に無いときは nil）。
   var currentRowIndex: Int?
+
+  /// worktreeDir 入力の直前の不正確定理由（情報行の語彙説明と差し替えて出す）。
+  /// 編集（queryChanged）と入場（drillIn）でクリアし、エラーは確定時にだけ評価する。
+  var worktreeDirError: String?
 
   /// 設定値の解決モデル（global 層・workspace 上書き層・現在スコープ・表示の語彙）。
   var values: ScopedSettingsValues
@@ -155,6 +159,8 @@ import SwiftUI
       let symbol = render.selected == 0 ? nil : symbols[render.selected - 1]
       assign(values.agentStateIconChange(kind: kind, symbol: symbol))
       returnToStates()
+    case .worktreeDir:
+      confirmWorktreeDir()
     case .language:
       guard Language.allCases.indices.contains(render.selected) else { return }
       onSelectLanguage(Language.allCases[render.selected])  // ストア更新はここで反映される
@@ -196,6 +202,35 @@ import SwiftUI
     returnToRoot()
   }
 
+  /// worktreeDir 入力（editor）の ↵ 確定。trim → 空なら解除（global は既定へ・workspace は継承へ。
+  /// プリフィルで常に現在値から始まるため、全消し＋↵ は意図的な解除操作として成立する）→
+  /// 不正なら情報行へ理由を出して入力モードに留まる → 妥当なら保存して root へ戻る。
+  private func confirmWorktreeDir() {
+    let text = render.query.trimmingCharacters(in: .whitespaces)
+    if text.isEmpty {
+      assign(SettingChange(SettingKeys.worktreeDir, nil))
+      returnToRoot()
+      return
+    }
+    if let error = WorktreePathTemplate.validate(text) {
+      worktreeDirError = worktreeDirErrorText(error)
+      rebuild()
+      return
+    }
+    assign(SettingChange(SettingKeys.worktreeDir, text))
+    returnToRoot()
+  }
+
+  /// 検証エラーを現在言語の表示文言へ写す（純関数の理由 → UI 語彙はここだけが持つ）。
+  private func worktreeDirErrorText(_ error: WorktreePathTemplate.ValidationError) -> String {
+    switch error {
+    case .unknownToken(let token):
+      return localization.format(.settingsWorktreeDirErrUnknownToken, token)
+    case .missingSlug: return localization.string(.settingsWorktreeDirErrMissingSlug)
+    case .notAbsolute: return localization.string(.settingsWorktreeDirErrNotAbsolute)
+    }
+  }
+
   /// ← ＝戻る/減算/反転。root のスコープ行/toggle 行は反転、stepper 行は減算、サブモードでは root へ戻る。
   private func leftArrow() {
     switch mode {
@@ -213,6 +248,7 @@ import SwiftUI
       }
     case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .language, .update:
       returnToRoot()
+    case .worktreeDir: break  // editor 入力欄の ← はカーソル移動（ここへは届かない）。戻るは esc
     case .agentIcon: returnToStates()  // 1 段ずつ浅く（アイコン候補→状態一覧）
     }
   }
@@ -259,11 +295,12 @@ import SwiftUI
     rebuild()
   }
 
-  /// Esc。root では閉じ、サブモードでは root へ戻る（1 段ずつ浅くなる）。
+  /// Esc。root では閉じ、サブモードでは root へ戻る（1 段ずつ浅くなる）。worktreeDir は保存せず戻る。
   private func escape() {
     switch mode {
     case .root: onDismiss()
-    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .language, .update:
+    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .worktreeDir, .language,
+      .update:
       returnToRoot()
     case .agentIcon: returnToStates()  // 1 段ずつ浅く
     }
@@ -272,6 +309,13 @@ import SwiftUI
   private func queryChanged() {
     switch mode {
     case .root, .font, .tabTitleFont: break  // フィルタ入力を持つモードのみ再構築
+    case .worktreeDir:
+      // 編集は不正確定のエラー表示を語彙説明へ戻すだけ（エラーは確定時にだけ評価する）。
+      if worktreeDirError != nil {
+        worktreeDirError = nil
+        rebuild()
+      }
+      return
     default: return
     }
     render.selected = 0  // 行集合が入れ替わるため選択は先頭へ戻す
@@ -321,6 +365,7 @@ import SwiftUI
     case .agent: rebuildAgent()
     case .agentStates: rebuildAgentStates()
     case .agentIcon(let kind): rebuildAgentIcon(kind: kind)
+    case .worktreeDir: rebuildWorktreeDirInput()
     case .language: rebuildLanguage()
     case .update: rebuildUpdate()
     }

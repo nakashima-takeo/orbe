@@ -1,0 +1,98 @@
+import XCTest
+
+@testable import Orbe
+
+/// worktree 作成先テンプレート（`WorktreePathTemplate`）の検証・解決と、
+/// 設定基盤への合流（`SettingDomain.validate` 経由＝パレット・orb config・control の唯一の検証点）の検証。
+final class WorktreePathTemplateTests: XCTestCase {
+
+  // MARK: - resolve（置換・~ 展開・standardize）
+
+  func testResolveReplacesAllPlaceholders() {
+    XCTAssertEqual(
+      WorktreePathTemplate.resolve(
+        template: "{parent}/wt/{repo}/{slug}", parent: "/Users/x/github", repo: "orbe",
+        slug: "feat-x"),
+      "/Users/x/github/wt/orbe/feat-x")
+  }
+
+  func testResolveExpandsLeadingTilde() {
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    XCTAssertEqual(
+      WorktreePathTemplate.resolve(
+        template: "~/wt/{repo}/{slug}", parent: "/p", repo: "orbe", slug: "feat-x"),
+      "\(home)/wt/orbe/feat-x")
+  }
+
+  func testResolveStandardizesPath() {
+    XCTAssertEqual(
+      WorktreePathTemplate.resolve(
+        template: "{parent}//wt/./{slug}", parent: "/p", repo: "r", slug: "s"),
+      "/p/wt/s", "重複スラッシュ・`.` は standardize で畳む")
+  }
+
+  /// 既定テンプレートは従来のハードコード規則 `<親>/<repo名>-worktrees/<slug>` と同一パスに解決する
+  /// （未設定時の byte 単位互換の要）。
+  func testDefaultTemplateMatchesLegacyRule() {
+    XCTAssertEqual(
+      WorktreePathTemplate.resolve(
+        template: WorktreePathTemplate.defaultTemplate,
+        parent: "/Users/x/github", repo: "orbe", slug: "issue-42"),
+      "/Users/x/github/orbe-worktrees/issue-42")
+  }
+
+  // MARK: - validate
+
+  func testValidateAcceptsDefaultTemplate() {
+    XCTAssertNil(WorktreePathTemplate.validate(WorktreePathTemplate.defaultTemplate))
+  }
+
+  func testValidateAcceptsTildeTemplate() {
+    XCTAssertNil(WorktreePathTemplate.validate("~/wt/{repo}/{slug}"))
+  }
+
+  /// repo 内配置は `{parent}/{repo}/...` のように明示的に書ける（絶対パスに解決されるため妥当）。
+  func testValidateAcceptsInRepoTemplate() {
+    XCTAssertNil(WorktreePathTemplate.validate("{parent}/{repo}/.worktrees/{slug}"))
+  }
+
+  func testValidateRejectsUnknownToken() {
+    XCTAssertEqual(
+      WorktreePathTemplate.validate("/wt/{branch}/{slug}"), .unknownToken("{branch}"))
+  }
+
+  func testValidateRejectsUnclosedBrace() {
+    XCTAssertEqual(WorktreePathTemplate.validate("/wt/{slug}/{repo"), .unknownToken("{repo"))
+  }
+
+  /// `{slug}` を含まないテンプレートは全 branch が同一パスへ落ちるため拒否する。
+  func testValidateRejectsMissingSlug() {
+    XCTAssertEqual(WorktreePathTemplate.validate("/wt/{repo}"), .missingSlug)
+  }
+
+  /// 相対解決の曖昧さは持ち込まない（`{parent}`/`~` 始まり以外で相対に落ちる形は拒否）。
+  func testValidateRejectsRelativePath() {
+    XCTAssertEqual(WorktreePathTemplate.validate("wt/{slug}"), .notAbsolute)
+    XCTAssertEqual(WorktreePathTemplate.validate("{slug}/wt"), .notAbsolute)
+  }
+
+  /// 空文字は値として不正（解除は unset／パレットの空確定が担う）。
+  func testValidateRejectsEmpty() {
+    XCTAssertNotNil(WorktreePathTemplate.validate(""))
+  }
+
+  // MARK: - 設定基盤への合流（control/CLI と同じ 1 経路）
+
+  /// `SettingChange(key:jsonValue:)`（config_set・orb config set の検証点）がテンプレート検証を通す。
+  func testSettingChangeValidatesTemplate() {
+    XCTAssertNotNil(
+      SettingChange(key: "worktree-dir", jsonValue: "~/wt/{repo}/{slug}"), "妥当なテンプレートは受理")
+    XCTAssertNil(
+      SettingChange(key: "worktree-dir", jsonValue: "~/wt/{repo}"), "{slug} 欠落は拒否")
+    XCTAssertNil(SettingChange(key: "worktree-dir", jsonValue: "wt/{slug}"), "相対解決は拒否")
+    XCTAssertNil(SettingChange(key: "worktree-dir", jsonValue: ""), "空文字は拒否")
+    XCTAssertNil(SettingChange(key: "worktree-dir", jsonValue: 42), "型不一致は拒否")
+    XCTAssertNotNil(
+      SettingChange(key: "worktree-dir", jsonValue: NSNull()), "null は解除（継承へ）として受理")
+  }
+}
