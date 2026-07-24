@@ -261,7 +261,7 @@ enum SettingsRegistry {
 
   /// パレット root の表示順（fontSize → backgroundOpacity → backgroundBlur → cursorStyleBlink →
   /// theme → agent → fontFamily → tabTitleFontFamily → emojiFont → agentStateIcons →
-  /// devFeaturesEnabled）。背景関連・フォント関連をそれぞれ隣接させる。
+  /// devFeaturesEnabled → worktreePath）。背景関連・フォント関連をそれぞれ隣接させる。
   static let rootOrder: [SettingDescriptor] =
     [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
