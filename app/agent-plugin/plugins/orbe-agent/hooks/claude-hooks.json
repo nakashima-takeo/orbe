@@ -7,7 +7,7 @@
       { "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude working" }] }
     ],
     "Notification": [
-      { "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude waiting" }] }
+      { "matcher": "permission_prompt|worker_permission_prompt", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude waiting" }] }
     ],
     "PreToolUse": [
       { "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude waiting" }] }
