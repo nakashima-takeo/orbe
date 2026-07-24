@@ -59,6 +59,8 @@ import SwiftUI
   var query = ""
   /// 絞り込み入力欄の placeholder。
   var placeholder = ""
+  /// 編集面（worktree パステンプレ）の検証エラー文言。非 nil のときフッターに赤で出す（nil で出さない）。
+  var errorText: String?
   /// focus トリガ。提示元（パレットモデル）がインクリメントし、SwiftUI が監視して `@FocusState` を立てる。
   var focusToken = 0
 

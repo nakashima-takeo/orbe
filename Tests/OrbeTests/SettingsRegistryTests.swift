@@ -22,7 +22,7 @@ final class SettingsRegistryTests: XCTestCase {
       [
         .fontSize, .fontFamily, .tabTitleFontFamily, .emojiFont, .theme, .defaultAgent,
         .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .agentStateIcons,
-        .devFeaturesEnabled,
+        .devFeaturesEnabled, .worktreePath,
       ])
   }
 
@@ -33,7 +33,7 @@ final class SettingsRegistryTests: XCTestCase {
       [
         .fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
         .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
-        .devFeaturesEnabled,
+        .devFeaturesEnabled, .worktreePath,
       ])
   }
 
@@ -59,6 +59,7 @@ final class SettingsRegistryTests: XCTestCase {
     XCTAssertEqual(SettingsRegistry.descriptor(.emojiFont).key, "emoji-font")
     XCTAssertEqual(SettingsRegistry.descriptor(.agentStateIcons).key, "agent-state-icons")
     XCTAssertEqual(SettingsRegistry.descriptor(.devFeaturesEnabled).key, "dev-features")
+    XCTAssertEqual(SettingsRegistry.descriptor(.worktreePath).key, "worktree-path")
     XCTAssertEqual(SettingsRegistry.confKey(.fontSize), "font-size", "confKey は descriptor.key を引く")
     let keys = SettingsRegistry.all.map(\.key)
     XCTAssertEqual(Set(keys).count, SettingsRegistry.all.count, "key は全項目で一意")
@@ -102,6 +103,21 @@ final class SettingsRegistryTests: XCTestCase {
     XCTAssertEqual(
       SettingsRegistry.descriptor(.devFeaturesEnabled).defaultValue(), .bool(isDevBuild),
       "既定はチャネル由来（dev=on / release=off）。リテラルで固定すると出荷構成 -DORBE_RELEASE で落ちる")
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.worktreePath).defaultValue(),
+      .string(WorktreePathTemplate.defaultTemplate),
+      "worktree-path の既定は現状再現テンプレ（後方互換の SSOT）")
+  }
+
+  /// worktree-path は textInput＋pathTemplate＋gui.conf 非経由。domain typeName は control 上 string。
+  func testWorktreePathDescriptor() {
+    let d = SettingsRegistry.descriptor(.worktreePath)
+    XCTAssertEqual(d.activation, .textInput)
+    XCTAssertFalse(d.isDrillIn, "textInput は厳密には drillIn でない")
+    XCTAssertTrue(d.opensSubpalette, "が、↵/→ で編集面へ潜る（chevron を出す）")
+    XCTAssertNil(d.guiConf, "gui.conf 非経由（アプリ内部の worktree 作成先）")
+    XCTAssertEqual(d.domain.typeName, "string")
+    guard case .pathTemplate = d.domain else { return XCTFail("domain は pathTemplate") }
   }
 
   // MARK: - guiConf 橋渡し（実効設定の raw を読む・未設定は行を出さない）
@@ -250,6 +266,10 @@ final class SettingsRegistryTests: XCTestCase {
         case .enumeration, .stringMap: break
         default:
           return XCTFail("\(d.id): activation=drillIn は domain=enumeration|stringMap 必須")
+        }
+      case .textInput:
+        guard case .pathTemplate = d.domain else {
+          return XCTFail("\(d.id): activation=textInput は domain=pathTemplate 必須（実際: \(d.domain))")
         }
       }
     }

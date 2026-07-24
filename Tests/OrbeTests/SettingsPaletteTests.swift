@@ -88,8 +88,8 @@ final class SettingsPaletteTests: XCTestCase {
     let p = model()
     XCTAssertEqual(
       p.render.rows.map(\.chevron),
-      [false, false, false, false, false, true, true, true, true, true, true, false, true],
-      "スコープ/フォントサイズ/不透明度/ブラー/点滅/開発中機能行は chevron 無し、テーマ/エージェント/フォント/タブタイトルのフォント/絵文字フォント/アイコン/言語行は drillIn で chevron 有り"
+      [false, false, false, false, false, true, true, true, true, true, true, false, true, true],
+      "スコープ/stepper/toggle 行は chevron 無し、drillIn 各行と worktree 作成先（textInput）・言語行は有り"
     )
   }
 

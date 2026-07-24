@@ -215,6 +215,13 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsAgentIconsBreadcrumb
   case settingsSubHintOpen
   case settingsGlassDefault
+  case settingsWorktreePathBreadcrumb
+  case settingsWorktreePathPlaceholder
+  case settingsWorktreePathHint
+  case settingsWorktreePathPreview
+  case settingsWorktreePathErrEmpty
+  case settingsWorktreePathErrMissingSlug
+  case settingsWorktreePathErrUnknownToken
 
   // MARK: - Search バー
   case searchPlaceholder
@@ -241,6 +248,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsCursorBlink
   case settingsAgentIcons
   case settingsDevFeatures
+  case settingsWorktreePath
   case settingsUnset
   case settingsToggleOn
   case settingsToggleOff

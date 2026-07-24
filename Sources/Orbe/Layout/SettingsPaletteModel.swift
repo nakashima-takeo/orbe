@@ -26,7 +26,7 @@ import SwiftUI
   // ドリル遷移（drillIn/returnTo*）を `SettingsPaletteModel+Navigation` へ分離するため internal。
   enum Mode {
     case root, font, tabTitleFont, emojiFont, theme, agent, agentStates,
-      agentIcon(AgentStateIcon.Kind), language, update
+      agentIcon(AgentStateIcon.Kind), language, update, worktreePath
   }
 
   /// root 行。先頭のスコープ切替行と、レジストリ表示順の各設定行。
@@ -67,6 +67,11 @@ import SwiftUI
   /// 全 family（等幅制限なし）。タブタイトルフォントサブパレットの列挙が使う。
   let allFontNames: [String]
   let agents: [String]  // 検出済み agent コマンド（起動パレットと同じ検出結果）
+  /// worktree パステンプレ編集面のライブプレビュー基準（現 WS ルート）。実際の作成はリポジトリルート基準だが、
+  /// 設定パレットは repo を持たないため現 WS ルートで「どこに作られるか」を honest に近似する。
+  let worktreePreviewRoot: String
+  /// プレビューのサンプルブランチ（固定例）。`{slug}` は `issue-44` に展開される。
+  static let worktreePreviewBranch = "issue/44"
   /// theme サブパレットの固定3択（見本 Settings 画面の Seg 順）。選択 index → ThemeMode の対応。
   static let themeModes: [ThemeMode] = [.auto, .dark, .light]
   /// emoji フォントサブパレットの固定2択（既定 Noto を先頭）。選択 index → EmojiFontMode の対応。
@@ -84,7 +89,8 @@ import SwiftUI
 
   init(
     values: ScopedSettingsValues, fontNames: [String], allFontNames: [String] = [],
-    agents: [String], localization: LocalizationStore, update: UpdateState? = nil
+    agents: [String], localization: LocalizationStore, update: UpdateState? = nil,
+    worktreePreviewRoot: String = "~/repo"
   ) {
     self.values = values
     self.update = update
@@ -92,6 +98,7 @@ import SwiftUI
     self.allFontNames = allFontNames
     self.agents = agents
     self.localization = localization
+    self.worktreePreviewRoot = worktreePreviewRoot
     render.onScrimTap = { [weak self] in self?.onDismiss() }
     render.onTapRow = { [weak self] i in
       self?.render.selected = i
@@ -161,7 +168,18 @@ import SwiftUI
       returnToRoot()  // 新言語で root を組み直す
     case .update:
       activateUpdateRow()
+    case .worktreePath:
+      confirmWorktreePath()
     }
+  }
+
+  /// worktree パステンプレ編集面の ↵ 確定。妥当なら単一代入して root へ戻る。不正はエラー表示のまま留まる
+  /// （確定を防ぐ）。検証点は `SettingChange` の domain と同じ `WorktreePathTemplate.validate`。
+  private func confirmWorktreePath() {
+    let template = render.query
+    guard WorktreePathTemplate.validate(template) == nil else { return }
+    assign(SettingChange(SettingKeys.worktreePath, template))
+    returnToRoot()
   }
 
   /// root 行の ↵。スコープ行は反転、toggle 行は反転、drillIn 行は潜る、stepper 行は no-op。
@@ -173,7 +191,7 @@ import SwiftUI
       switch d.activation {
       case .stepper: break  // stepper 行の Enter は no-op（現状維持）
       case .toggle: toggleValue(d)
-      case .drillIn: drillIn(d.id)
+      case .drillIn, .textInput: drillIn(d.id)
       }
     case .language: drillIntoLanguage()
     case .update: drillIntoUpdate()
@@ -207,11 +225,12 @@ import SwiftUI
         switch d.activation {
         case .stepper: adjustStepper(d, -1)
         case .toggle: toggleValue(d)
-        case .drillIn: break
+        case .drillIn, .textInput: break
         }
       case .language, .update: break  // drillIn 行と同じく ← は無反応
       }
-    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .language, .update:
+    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .language, .update,
+      .worktreePath:
       returnToRoot()
     case .agentIcon: returnToStates()  // 1 段ずつ浅く（アイコン候補→状態一覧）
     }
@@ -234,7 +253,7 @@ import SwiftUI
       switch d.activation {
       case .stepper: adjustStepper(d, 1)
       case .toggle: toggleValue(d)
-      case .drillIn: drillIn(d.id)
+      case .drillIn, .textInput: drillIn(d.id)
       }
     case .language: drillIntoLanguage()
     case .update: drillIntoUpdate()
@@ -263,7 +282,8 @@ import SwiftUI
   private func escape() {
     switch mode {
     case .root: onDismiss()
-    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .language, .update:
+    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .language, .update,
+      .worktreePath:
       returnToRoot()
     case .agentIcon: returnToStates()  // 1 段ずつ浅く
     }
@@ -271,7 +291,7 @@ import SwiftUI
 
   private func queryChanged() {
     switch mode {
-    case .root, .font, .tabTitleFont: break  // フィルタ入力を持つモードのみ再構築
+    case .root, .font, .tabTitleFont, .worktreePath: break  // 入力欄を持つモードのみ再構築
     default: return
     }
     render.selected = 0  // 行集合が入れ替わるため選択は先頭へ戻す
@@ -303,7 +323,13 @@ import SwiftUI
   /// mode を切り替えて行を組み直し、選択を決める（ドリル遷移は `SettingsPaletteModel+Navigation`）。
   func setMode(_ m: Mode, select: Int? = nil) {
     mode = m
-    render.query = ""
+    // テキスト編集面（worktree パステンプレ）はフィルタでなく編集バッファ。潜った瞬間は現在の実効
+    // テンプレでプリフィルする（他モードは空＝フィルタ/入力欄なし）。
+    if case .worktreePath = m {
+      render.query = values.effWorktreePath
+    } else {
+      render.query = ""
+    }
     rebuild()  // ここで currentRowIndex が確定する
     render.selected = select ?? currentRowIndex ?? 0
     render.clampSelection()
@@ -312,6 +338,7 @@ import SwiftUI
 
   private func rebuild() {
     currentRowIndex = nil
+    render.errorText = nil  // worktreePath 以外は常に nil。rebuildWorktreePath だけが後で立てる。
     switch mode {
     case .root: rebuildRoot()
     case .font: rebuildFont()
@@ -323,6 +350,7 @@ import SwiftUI
     case .agentIcon(let kind): rebuildAgentIcon(kind: kind)
     case .language: rebuildLanguage()
     case .update: rebuildUpdate()
+    case .worktreePath: rebuildWorktreePath()
     }
     render.clampSelection()
   }
