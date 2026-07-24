@@ -118,7 +118,10 @@ private struct TapUnless: ViewModifier {
 
 /// 中ボタンクリックだけを受ける透明ビュー。左クリック系のイベント配送では `hitTest` が nil を返して
 /// 不可視になり、既存の tap（選択）・drag（並び替え）・改名 TextField を一切妨げない。
-private struct MiddleClickCatcher: NSViewRepresentable {
+///
+/// module 内可視なのは、AppKit のイベント配送経路（hitTest ゲート・buttonNumber 絞り込み）を
+/// テストが `CatcherView` を型で掴んで検証するため。
+struct MiddleClickCatcher: NSViewRepresentable {
   let onMiddleClick: () -> Void
 
   func makeNSView(context: Context) -> CatcherView { CatcherView(onMiddleClick: onMiddleClick) }
