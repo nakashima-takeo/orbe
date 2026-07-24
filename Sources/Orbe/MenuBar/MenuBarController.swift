@@ -5,7 +5,8 @@ import SwiftUI
 /// メニューバー投影（NSStatusItem）の所有者。AppDelegate が起動時に生成し、
 /// `AttentionStore`（単一情報源）を SwiftUI（`MenuBarStatusView`）へ橋渡しする。
 ///
-/// 4 態: ①要対応 0＝減光 ◐ ②状態変化の瞬間（0〜6 秒・`store.transient`）＝滲み出しピル
+/// 4 態: ①要対応 0＝減光 ◐ ②状態変化の瞬間（0〜`AttentionStore.transientDuration` 秒・
+/// `store.transient`）＝滲み出しピル
 /// ③収縮後＝◐＋件数（waiting+done のみ） ④クリック＝ドロップダウン（`MenuBarDropdown`）。
 /// ②の間のクリックだけは該当ペインへ直行する（前面化＋focus）。main スレッド規律
 /// （AppKit・AttentionStore と同じ）で、monitor / timer / target-action はすべて main で届く。
