@@ -40,13 +40,21 @@ final class MenuBarStatusViewTests: XCTestCase {
   }
 
   /// ② 滲み出しピル（WS 名＋文言）: 高さ 22 以下・文言は maxWidth cap で無限に伸びない。
-  func testTransientPillFitsMenuBar() {
+  /// 静的状態（①③）より確実に広い＝transient 出現で幅が伸びる契約（実機で伸びなかった回帰の再発防止）。
+  func testTransientPillFitsMenuBarAndExpands() {
     let store = AttentionStore()
     let long = String(repeating: "とても長い文言 ", count: 40)
+    store.rows = [row(state: "waiting"), row(state: "done")]
     store.noteTransient(row(state: "waiting", message: long))
     let size = fittingSize(store: store)
-    XCTAssertGreaterThan(size.width, 0)
     XCTAssertLessThanOrEqual(size.height, 22)
     XCTAssertLessThanOrEqual(size.width, 300, "文言は maxWidth 150 で cap され幅が暴れない")
+
+    let quietWidth = fittingSize(store: AttentionStore()).width
+    let countStore = AttentionStore()
+    countStore.rows = [row(state: "waiting"), row(state: "done")]
+    let countWidth = fittingSize(store: countStore).width
+    XCTAssertGreaterThan(size.width, countWidth, "transient は収縮ピル（③）より広く滲み出る")
+    XCTAssertGreaterThan(size.width, quietWidth, "transient は静的グリフ（①）より広く滲み出る")
   }
 }

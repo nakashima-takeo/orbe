@@ -133,16 +133,24 @@ final class MenuBarController: NSObject {
     dropdown?.close()  // onClose 経由で dropdown = nil / ui.dropdownOpen = false に落ちる
   }
 
-  // MARK: - 一過性表示（②）の期限管理
+  // MARK: - 一過性表示（②）の期限管理と幅同期
 
-  /// `store.transient` の変化を観測して期限タイマーを張り直す（Observation の標準ループ）。
+  /// store の変化（transient の出現/消滅・件数）を観測し、期限タイマーを張り直し
+  /// **アイテム幅を即時同期**する（Observation の標準ループ）。幅は SwiftUI の再レイアウトを
+  /// 待ってから読む（layoutSubtreeIfNeeded → syncItemSize）。invalidateIntrinsicContentSize
+  /// フックはこの経路の取りこぼし（フォント読み込み等の遅延サイズ確定）を拾う保険として残す。
   private func observeTransient() {
     withObservationTracking {
       _ = store.transient?.expiresAt
+      _ = store.rows.count
     } onChange: { [weak self] in
       DispatchQueue.main.async {
         guard let self else { return }
         self.scheduleTransientExpiry()
+        self.host.layoutSubtreeIfNeeded()  // 新しい content の intrinsic を確定させてから幅を読む
+        self.syncItemSize()
+        // SwiftUI の更新適用が次 tick にずれる場合の取りこぼしを塞ぐ（幅同期は冪等）。
+        DispatchQueue.main.async { self.syncItemSize() }
         self.observeTransient()
       }
     }

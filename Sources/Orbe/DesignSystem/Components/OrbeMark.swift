@@ -1,16 +1,22 @@
 import SwiftUI
 
 /// ◐ ブランドグリフの Path 描画（app icon / design の OrbeGlyph SVG と同じシンボル・
-/// 外半径:内半径 = 15:11.777、viewBox 32 座標を size へ等倍）。塗りはテーマ非依存の
-/// ブランドグラデ（`Color.theme.glyphGradient`）。
+/// 外半径:内半径 = 15:11.777、viewBox 32 座標を size へ等倍）。塗りは既定でテーマ非依存の
+/// ブランドグラデ（`Color.theme.glyphGradient`）、`color` 指定で単色（メニューバーの
+/// template image 相当＝前景モノクロ描画に使う）。
 /// フォント任せの字形（`Text("◐")`）と違い、フォールバック解決に依らず小サイズでも形が保たれる
 /// （メニューバーアイテムが使う。パレットヘッダの既存 Text 描画は変えない）。
 struct OrbeMarkGlyph: View {
   var size: CGFloat
+  /// 単色塗り（nil＝ブランドグラデ）。
+  var color: Color?
 
   var body: some View {
     OrbeMarkShape()
-      .fill(Color.theme.glyphGradient, style: FillStyle(eoFill: true))
+      .fill(
+        color.map(AnyShapeStyle.init) ?? AnyShapeStyle(Color.theme.glyphGradient),
+        style: FillStyle(eoFill: true)
+      )
       .frame(width: size, height: size)
   }
 }

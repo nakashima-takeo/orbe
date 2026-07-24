@@ -25,27 +25,24 @@ struct MenuBarStatusView: View {
         quietGlyph
       }
     }
-    .animation(reduceMotion ? nil : .easeOut(duration: Theme.Motion.slow), value: store.count)
+    // 幅アニメはしない（状態切替は即時拡張/即時収縮）。NSStatusItem.length はアニメの中間値を
+    // 受け取れず、implicit animation は intrinsic 幅の確定を遅らせて滲み出しが伸びない実害が出た。
     .padding(.horizontal, Theme.Space.hair)
     // 高さは固定しない。メニューバー厚は 22/24 の 2 系があり、固定 24 は 22 の bar で
     // content が縦に潰れる。ピル（22）以下の content を bar 高の中で SwiftUI が縦センターする。
   }
 
-  /// ◐ ブランドグリフ（app icon と同比率の Path 描画）。フォント任せの字形（Text "◐"）は
-  /// メニューバーの小サイズでフォールバック字形に化けうるため、形は自前で持つ。
-  private func glyph(size: CGFloat) -> some View {
-    OrbeMarkGlyph(size: size)
-  }
-
-  // ① 静か（要対応 0）。
+  // ① 静か（要対応 0）。前景モノクロ（.primary＝メニューバー外観追従: ダーク=白 / ライト=黒）を
+  // 減光。他の常駐メニューバーアイコンと同じ template 相当の見え（ブランドグラデは地の付く
+  // ②ピル内とアプリ内のみ——素のメニューバー上では視認性が悪い）。
   private var quietGlyph: some View {
-    glyph(size: 15).opacity(0.45)
+    OrbeMarkGlyph(size: 15, color: .primary).opacity(0.45)
   }
 
   // ②状態変化の瞬間。WS 名＋文言の先頭が滲み出る（文言なしはタブタイトル）。
   private func transientPill(_ row: AttentionRow) -> some View {
     HStack(spacing: Theme.Space.note) {
-      glyph(size: 15)
+      OrbeMarkGlyph(size: 15)  // accent 地の上ではブランドグラデを保つ
       if let kind = AgentStateIcon.kind(state: row.state) {
         StatusGlyphView(kind: kind, size: 11)
       }
@@ -71,12 +68,13 @@ struct MenuBarStatusView: View {
   }
 
   // ③④ 収縮ピル（◐＋件数）。④（ドロップダウン表示中）は accent tint。
+  // グリフ・数字とも前景モノクロ（①と同じ template 相当の見え）。
   private var countPill: some View {
     HStack(spacing: 5) {
-      glyph(size: 15)
+      OrbeMarkGlyph(size: 15, color: .primary)
       Text("\(store.count)")
         .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
-        .foregroundStyle(Color.theme.textPrimary)
+        .foregroundStyle(.primary)
     }
     .padding(.horizontal, 7)
     .frame(height: 22)
