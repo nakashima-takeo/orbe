@@ -185,6 +185,36 @@ final class ChromeStatusRowTests: XCTestCase {
     XCTAssertEqual(wc.presentedOverlay, .workspacePalette, "呼ぶと出る")
   }
 
+  // MARK: - 中クリックでタブを閉じる
+
+  /// 非選択タブの中クリック（`onCloseTab`）は、選択切替を挟まずそのタブだけをタブごと閉じる。
+  func testMiddleClickClosesTabWithoutSwitchingSelection() {
+    let wc = WindowController()
+    wc.newTab()
+    wc.newTab()
+    XCTAssertEqual(wc.current.tabs.count, 3, "前提: タブ 3 枚で末尾がアクティブ")
+    let active = wc.current.tabs[wc.current.active]
+    let survivor = wc.current.tabs[1]
+
+    wc.statusModel.onCloseTab(0)  // 非選択の先頭タブを中クリック
+
+    XCTAssertEqual(wc.current.tabs.count, 2, "中クリックしたタブだけが閉じる")
+    XCTAssertTrue(wc.current.tabs[wc.current.active] === active, "アクティブタブは切り替わらない")
+    XCTAssertTrue(wc.current.tabs.first === survivor, "閉じたタブ以外は残る")
+  }
+
+  /// 範囲外 index で呼んでも落ちず、タブ集合も変えない（`onSelect` と同じ防御水準）。
+  func testMiddleClickIgnoresOutOfRangeIndex() {
+    let wc = WindowController()
+    wc.newTab()
+    let before = wc.current.tabs.count
+
+    wc.statusModel.onCloseTab(before)
+    wc.statusModel.onCloseTab(-1)
+
+    XCTAssertEqual(wc.current.tabs.count, before, "範囲外はタブ集合を変えない")
+  }
+
   // MARK: - タブ shrink-to-fit（純関数）
 
   private let gap = Chrome.tabGap

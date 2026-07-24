@@ -136,6 +136,11 @@ final class WindowController: NSObject, NSWindowDelegate {
   /// chrome（StatusRow・SwiftUI ルート）からの操作コールバック配線。
   private func wireChromeCallbacks() {
     statusModel.onSelect = { [weak self] i in self?.select(i) }
+    // 中クリック＝タブごと閉じる。切替を挟まず唯一の閉鎖集約点へ渡す（範囲外 index は onSelect 同様に無視）。
+    statusModel.onCloseTab = { [weak self] i in
+      guard let self, self.current.tabs.indices.contains(i) else { return }
+      self.closeTab(self.current.tabs[i])
+    }
     statusModel.onNewTab = { [weak self] in self?.newTab() }
     // pane 非依存 chrome コマンドの window レベル配信（surface が居ない0タブでも届く）。
     hostingView.onWindowCommand = { [weak self] command in
