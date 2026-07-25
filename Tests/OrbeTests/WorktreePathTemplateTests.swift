@@ -48,6 +48,16 @@ final class WorktreePathTemplateTests: XCTestCase {
       "\(home)/wt/orbe/feat-x")
   }
 
+  /// 語彙の正（`placeholders`）に語を足したら `resolve` の置換も足さないと落ちる。追随を忘れると
+  /// `validate` は通るのに未置換の `{owner}` がパスに残り、その名前のディレクトリが実際に作られる。
+  func testResolveSubstitutesEveryPlaceholder() {
+    for token in WorktreePathTemplate.placeholders {
+      let resolved = WorktreePathTemplate.resolve(
+        template: "/wt/\(token)/{slug}", repoPath: "/parent/repo", slug: "s")
+      XCTAssertFalse(resolved.contains(token), "\(token) が未置換のまま残った: \(resolved)")
+    }
+  }
+
   func testResolveStandardizesPath() {
     XCTAssertEqual(
       WorktreePathTemplate.resolve(template: "{parent}//wt/./{slug}", repoPath: "/p/r", slug: "s"),
@@ -127,6 +137,9 @@ final class WorktreePathTemplateTests: XCTestCase {
     XCTAssertTrue(WorktreePathTemplate.distinguishesRepository("{parent}/{repo}-worktrees/{slug}"))
     XCTAssertTrue(WorktreePathTemplate.distinguishesRepository("{repo_path}/.worktrees/{slug}"))
     XCTAssertFalse(WorktreePathTemplate.distinguishesRepository("~/wt/{slug}"))
+    XCTAssertFalse(
+      WorktreePathTemplate.distinguishesRepository("{parent}/{slug}"),
+      "{parent} は repo 由来だが repo を区別しない（同じ親に並ぶ repo 同士で衝突する）")
   }
 
   func testValidateRejectsUnknownToken() {

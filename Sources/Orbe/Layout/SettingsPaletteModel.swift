@@ -59,7 +59,7 @@ import SwiftUI
   /// 現在値の行 index（サブモードの表示行に対する。root と、現在値が表示行に無いときは nil）。
   var currentRowIndex: Int?
 
-  /// worktreeDir 入力の直前の不正確定理由（情報行の語彙説明と差し替えて出す）。
+  /// worktreeDir 入力の直前の不正確定理由（語彙の説明行の先頭に差し込んで出す）。
   /// 編集（queryChanged）と入場（drillIn）でクリアし、エラーは確定時にだけ評価する。
   var worktreeDirError: String?
 
@@ -333,8 +333,8 @@ import SwiftUI
     switch mode {
     case .root, .font, .tabTitleFont: break  // フィルタ入力を持つモードのみ再構築
     case .worktreeDirCustom:
-      // 編集は不正確定のエラー表示を下げ（エラーは確定時にだけ評価する）、情報行の {repo} 欠落警告を
-      // 入力へ追従させる。行は情報行 1 行のみなので選択は動かさない。
+      // 編集は不正確定のエラー表示を下げ（エラーは確定時にだけ評価する）、repo を区別しない旨の警告を
+      // 入力へ追従させる。行はすべて選択不可の情報行なので選択は動かさない。
       worktreeDirError = nil
       rebuild()
       return

@@ -27,7 +27,7 @@ enum WorktreePathTemplate {
 
   /// 不正理由（表示文言への写像は提示側が持つ）。
   enum ValidationError: Equatable {
-    /// `{...}` が 3 語以外、または `{` の閉じ忘れ（associated value は問題の断片）。
+    /// `{...}` が `placeholders` 以外、または `{` の閉じ忘れ（associated value は問題の断片）。
     case unknownToken(String)
     /// `{slug}` を含まない（全 branch が同一パスへ落ちて必ず衝突する）。
     case missingSlug

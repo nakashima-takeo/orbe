@@ -227,8 +227,8 @@ extension SettingsPaletteModel {
     render.placeholder = localization.string(.settingsWorktreeDirPlaceholder)
     render.hint = localization.string(.settingsWorktreeDirHint)
     currentRowIndex = nil
-    let rows = worktreeDirNotice.map { [$0] } ?? []
-    render.rows = (rows + Self.worktreeDirVocabulary.map { localization.string($0) })
+    let notice = worktreeDirNotice.map { [$0] } ?? []
+    render.rows = (notice + Self.worktreeDirVocabulary.map { localization.string($0) })
       .map { PaletteModel.RowItem(label: $0, enabled: false) }
   }
 

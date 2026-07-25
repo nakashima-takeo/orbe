@@ -27,8 +27,8 @@ extension SettingsPaletteModel {
   }
 
   /// worktreeDir のプリセット一覧から「カスタム…」でテキスト入力へ潜る（テキスト入力は最終手段）。
-  /// そのスコープの実効テンプレートをプリフィルとして渡す——情報行は query から `{repo}` 欠落警告を
-  /// 導くため、入場直後の行がプリフィル値を見ていないと最も警告が要る現在値でだけ黙る。
+  /// そのスコープの実効テンプレートをプリフィルとして渡す——注意行は query から repo を区別する語の
+  /// 有無を導くため、入場直後の行がプリフィル値を見ていないと最も警告が要る現在値でだけ黙る。
   func drillIntoWorktreeDirCustom() {
     worktreeDirError = nil  // 前回の不正理由を持ち越さない
     setMode(.worktreeDirCustom, prefill: values.effWorktreeDir)

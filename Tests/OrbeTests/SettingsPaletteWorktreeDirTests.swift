@@ -175,6 +175,18 @@ extension SettingsPaletteTests {
       ], "各行はトークンとその意味")
   }
 
+  /// 語彙の正（`WorktreePathTemplate.placeholders`）に語を足したら説明行も足さないと落ちる。上の完全一致は
+  /// 逆向き（説明行を足して期待値を忘れる）しか止めないため、ユーザーが存在を知れない語が生まれる側を縛る。
+  /// `~` はトークンでなく提示側だけの概念なので、正の側からの片方向だけを見る。
+  func testWorktreeDirCustomDescribesEveryPlaceholder() {
+    let p = model()
+    drillIntoCustom(p)
+    for token in WorktreePathTemplate.placeholders {
+      XCTAssertTrue(
+        p.render.rows.contains { $0.label.hasPrefix(token) }, "\(token) の説明行が無い")
+    }
+  }
+
   /// 設定済みならその値がプリフィルされる（現在値からの編集で始まる）。
   func testWorktreeDirCustomPrefillsConfiguredValue() {
     let p = model(worktreeDir: "~/wt/{repo}/{slug}")
