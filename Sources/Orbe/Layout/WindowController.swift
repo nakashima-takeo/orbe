@@ -171,7 +171,13 @@ final class WindowController: NSObject, NSWindowDelegate {
   func wire(_ tc: TerminalController) -> TerminalController {
     tc.onEmpty = { [weak self, weak tc] in self?.closeTab(tc) }
     tc.onActiveTitleChange = { [weak self] in self?.refreshChrome() }
-    tc.onLayoutChange = { [weak self] in self?.scheduleSave() }
+    tc.onLayoutChange = { [weak self] in
+      // ペイン集合が変われば chrome（タブの集約グリフ・横断ロールアップ・Attention 一覧・
+      // アクティブペイン cwd）はすべて変わる。closeTab / closeWorkspace と同じ
+      // 「集合が変わったら再投影＋保存」に揃える。
+      self?.refreshChrome()
+      self?.scheduleSave()
+    }
     tc.onPwdChange = { [weak self] in self?.paneDidReportPwd() }
     tc.onAgentStateChange = { [weak self] in
       self?.consumeVisibleTabDone()

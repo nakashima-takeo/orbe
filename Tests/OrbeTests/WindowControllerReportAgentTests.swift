@@ -230,4 +230,106 @@ final class WindowControllerReportAgentTests: XCTestCase {
     wc.flushChrome()
     XCTAssertTrue(wc.attentionStore.rows.isEmpty)
   }
+
+  // MARK: - ②ピルの取り下げ（一覧の投影であることの配達経路）
+
+  /// coalesce された行の再計算を同期で回す。**`refreshChrome` は呼ばない**——それは再投影を要求
+  /// する側（本番の通知ハンドラ）の仕事で、テストが肩代わりすると「要求が届いたか」を測れなく
+  /// なる。`flushChrome` は dirty が立っていなければ何もしないので、直前の操作が本番経路で
+  /// `refreshChrome` を鳴らしていなければ取り下げは起きず、テストが落ちる。
+  private func flushDelivered(_ wc: WindowController) {
+    wc.flushChrome()
+  }
+
+  /// 同じペインが `working` へ戻ったらピルを取り下げる（`working` は一覧に載らない）。
+  func testTransientWithdrawnWhenPaneReturnsToWorking() throws {
+    let (wc, pane) = try makeControllerAndPane()
+    wc.controlReportAgent(
+      pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: "q")
+    flushDelivered(wc)
+    XCTAssertNotNil(wc.attentionStore.transient, "waiting のままなら取り下げない")
+
+    wc.controlReportAgent(
+      pane: pane, agent: "claude", state: "working", sessionId: nil, message: nil)
+    flushDelivered(wc)
+    XCTAssertNil(wc.attentionStore.transient)
+  }
+
+  /// done のフォーカス消費（done→idle）で行が消えたらピルを取り下げる。
+  /// 消費そのものは通知を持たない（本番でも `wire` の onAgentStateChange が続けて
+  /// `refreshChrome` を鳴らす）ので、その 1 手だけテスト側が同じ順で再現する。
+  func testTransientWithdrawnWhenDoneConsumedToIdle() throws {
+    let (wc, pane) = try makeControllerAndPane()
+    wc.controlReportAgent(pane: pane, agent: "claude", state: "done", sessionId: nil, message: "d")
+    flushDelivered(wc)
+    XCTAssertNotNil(wc.attentionStore.transient)
+
+    wc.current.tabs[0].consumeDoneState()
+    wc.refreshChrome()
+    flushDelivered(wc)
+    XCTAssertNil(wc.attentionStore.transient)
+  }
+
+  /// ピルが指すペインのタブを閉じたら取り下げる。
+  func testTransientWithdrawnWhenTabClosed() throws {
+    let (wc, panes) = try makeControllerAndTwoTabs()
+    wc.controlReportAgent(
+      pane: panes[1], agent: "claude", state: "waiting", sessionId: nil, message: "q")
+    flushDelivered(wc)
+    XCTAssertEqual(wc.attentionStore.transient?.row.paneId, panes[1].id)
+
+    wc.closeTab(wc.current.tabs[1])
+    flushDelivered(wc)
+    XCTAssertNil(wc.attentionStore.transient)
+  }
+
+  /// split の 1 枚だけを閉じても取り下げる。`close(_:)` → `onLayoutChange` → `refreshChrome`
+  /// という配線が通っていなければ dirty が立たず `flushChrome` が空振りして落ちる。
+  func testTransientWithdrawnWhenSplitPaneClosed() throws {
+    let (wc, pane) = try makeControllerAndPane()
+    let tab = wc.current.tabs[0]
+    let sibling = try XCTUnwrap(tab.split(.horizontal, from: pane))
+
+    wc.controlReportAgent(
+      pane: sibling, agent: "claude", state: "waiting", sessionId: nil, message: "q")
+    flushDelivered(wc)
+    XCTAssertEqual(wc.attentionStore.transient?.row.paneId, sibling.id)
+
+    tab.close(sibling)
+    flushDelivered(wc)
+    XCTAssertNil(wc.attentionStore.transient)
+  }
+
+  /// 関係ない別ペインの状態変化では取り下げない（②を立て直さない変化だけで見る）。
+  func testTransientSurvivesUnrelatedPaneChange() throws {
+    let (wc, panes) = try makeControllerAndTwoTabs()
+    wc.controlReportAgent(
+      pane: panes[1], agent: "claude", state: "waiting", sessionId: nil, message: "q")
+    flushDelivered(wc)
+    XCTAssertEqual(wc.attentionStore.transient?.row.paneId, panes[1].id)
+
+    wc.controlReportAgent(
+      pane: panes[0], agent: "claude", state: "working", sessionId: nil, message: nil)
+    flushDelivered(wc)
+    XCTAssertEqual(wc.attentionStore.transient?.row.paneId, panes[1].id)
+
+    wc.controlReportAgent(
+      pane: panes[0], agent: "claude", state: "clear", sessionId: nil, message: nil)
+    flushDelivered(wc)
+    XCTAssertEqual(wc.attentionStore.transient?.row.paneId, panes[1].id)
+  }
+
+  /// 同一ペインの waiting→done の差し替えは従来どおり働く（差し替え直後の flush で消えない）。
+  func testTransientReplacementFromWaitingToDoneSurvivesFlush() throws {
+    let (wc, pane) = try makeControllerAndPane()
+    wc.controlReportAgent(
+      pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: "q")
+    flushDelivered(wc)
+    XCTAssertEqual(wc.attentionStore.transient?.row.state, "waiting")
+
+    wc.controlReportAgent(pane: pane, agent: "claude", state: "done", sessionId: nil, message: "d")
+    XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
+    flushDelivered(wc)
+    XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
+  }
 }
