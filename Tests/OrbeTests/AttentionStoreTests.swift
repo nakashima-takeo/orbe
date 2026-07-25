@@ -7,19 +7,21 @@ import XCTest
 @MainActor
 final class AttentionStoreTests: XCTestCase {
 
-  private func row(paneId: Int, state: String) -> AttentionRow {
+  private func row(paneId: Int, state: String, message: String? = nil) -> AttentionRow {
     AttentionRow(
-      paneId: paneId, workspaceName: "ws", tabTitle: "tab", state: state, message: nil,
+      paneId: paneId, workspaceName: "ws", tabTitle: "tab", state: state, message: message,
       stateChangedAt: Date())
   }
 
-  /// 同じ paneId・同じ状態で一覧に居る限りピルは残る。
+  /// 同じ paneId・同じ状態で一覧に居る限りピルは残り、行の中身が変わっても差し替えない
+  /// （立て直すのは report 経路の仕事）。
   func testTransientSurvivesWhileProjected() {
     let store = AttentionStore()
-    store.apply(rows: [row(paneId: 1, state: "waiting")])
-    store.noteTransient(row(paneId: 1, state: "waiting"))
-    store.apply(rows: [row(paneId: 1, state: "waiting")])
+    store.apply(rows: [row(paneId: 1, state: "waiting", message: "q")])
+    store.noteTransient(row(paneId: 1, state: "waiting", message: "q"))
+    store.apply(rows: [row(paneId: 1, state: "waiting", message: "別の文言")])
     XCTAssertEqual(store.transient?.row.paneId, 1)
+    XCTAssertEqual(store.transient?.row.message, "q", "行が残っている間の中身は更新しない")
   }
 
   /// 同じペインでも状態が変われば取り下げる（判定は paneId だけでなく state も見る）。
