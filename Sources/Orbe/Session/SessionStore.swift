@@ -123,7 +123,7 @@ final class SessionStore {
   /// アクティブ workspace の `index`（有効範囲 0…count へクランプ）へタブを挿し、実挿入 index を返す。
   /// 挿入位置が現 active 以前なら active を 1 つ繰り下げ、挿入前と同じタブを指し続けさせる
   /// （呼び出し側が直後に select する前提に寄りかからず、store 単体で不変条件を保つ）。
-  @discardableResult func insertTabIntoActive(_ tc: TerminalController, at index: Int) -> Int {
+  func insertTabIntoActive(_ tc: TerminalController, at index: Int) -> Int {
     let ws = current
     let dest = min(max(0, index), ws.tabs.count)
     ws.tabs.insert(tc, at: dest)
