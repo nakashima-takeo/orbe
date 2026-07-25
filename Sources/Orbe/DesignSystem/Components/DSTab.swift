@@ -147,7 +147,9 @@ struct MiddleClickCatcher: NSViewRepresentable {
       return super.hitTest(point)
     }
 
-    /// サイドボタン（buttonNumber 3+）も `otherMouseDown` で届くため、中ボタンだけに絞る。
+    /// 通常配送では hitTest ゲートが中ボタン以外を弾くので、ここへは中ボタンしか来ない。
+    /// ただしゲートが見る `NSApp.currentEvent` は配送中のイベントと一致する保証がなく、古い中ボタン
+    /// 押下が残っていればサイドボタンでもゲートを通りうる。閉じるのは取り消せないので実イベントで絞り直す。
     override func otherMouseDown(with event: NSEvent) {
       guard event.buttonNumber == 2 else { return super.otherMouseDown(with: event) }
       onMiddleClick()
