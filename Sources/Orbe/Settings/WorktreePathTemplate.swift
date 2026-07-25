@@ -63,12 +63,15 @@ enum WorktreePathTemplate {
 
   /// プレースホルダ置換 → 先頭 `~` 展開 → 正規化で作成先パスを確定する。
   /// 語彙は repo 本体の場所（main worktree の絶対パス）1 つから導く——`{repo_path}` と `{parent}/{repo}` が
-  /// 定義上つねに同値であることを、呼び手の渡し方に頼らずここで担保する。
+  /// 定義上つねに同値であることを、呼び手の渡し方に頼らずここで担保する。そのため置換の前に場所自体を
+  /// 正規化する: 末尾スラッシュ付き（`/a/repo/`）のまま置換すると `{repo_path}-wt` が `/a/repo/-wt`、
+  /// `{parent}/{repo}-wt` が `/a/repo-wt` へ割れ、同値の担保が呼び手の書き方に逆戻りする。
   static func resolve(template: String, repoPath: String, slug: String) -> String {
-    let path = repoPath as NSString
+    let base = lexicallyStandardized(repoPath)
+    let path = base as NSString
     let replaced =
       template
-      .replacingOccurrences(of: "{repo_path}", with: repoPath)
+      .replacingOccurrences(of: "{repo_path}", with: base)
       .replacingOccurrences(of: "{parent}", with: path.deletingLastPathComponent)
       .replacingOccurrences(of: "{repo}", with: path.lastPathComponent)
       .replacingOccurrences(of: "{slug}", with: slug)

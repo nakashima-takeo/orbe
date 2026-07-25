@@ -28,6 +28,18 @@ final class WorktreePathTemplateTests: XCTestCase {
         template: "{parent}/{repo}/.worktrees/{slug}", repoPath: "/Users/x/github/orbe", slug: "s"))
   }
 
+  /// 同値は場所の書き方に依存しない。`{repo_path}` の直後が `/` でないテンプレートは、末尾スラッシュ付きの
+  /// 場所を素通しすると `/a/repo/-wt` と `/a/repo-wt` へ割れる——`resolve` が場所を先に正規化して防ぐ。
+  func testResolveRepoPathEquivalenceSurvivesTrailingSlash() {
+    for base in ["/a/repo", "/a/repo/", "/a/repo//", "/repo/"] {
+      XCTAssertEqual(
+        WorktreePathTemplate.resolve(template: "{repo_path}-wt/{slug}", repoPath: base, slug: "s"),
+        WorktreePathTemplate.resolve(
+          template: "{parent}/{repo}-wt/{slug}", repoPath: base, slug: "s"),
+        "場所が \(base) でも 2 つの書き方は同値")
+    }
+  }
+
   func testResolveExpandsLeadingTilde() {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
     XCTAssertEqual(
