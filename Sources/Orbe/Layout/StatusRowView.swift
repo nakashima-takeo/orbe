@@ -36,6 +36,8 @@ enum Chrome {
   let buildId: String?
 
   var onSelect: (Int) -> Void = { _ in }
+  /// タブ `i` をタブごと閉じる（中クリック）。選択切替を挟まない。
+  var onCloseTab: (Int) -> Void = { _ in }
   var onNewTab: () -> Void = {}
   /// タブを `from` から挿入先 index `to`（0…count）へ並び替える（同一 workspace 内・commit-on-drop）。
   var onReorder: (Int, Int) -> Void = { _, _ in }
@@ -241,6 +243,7 @@ struct StatusRowView: View {
                 title: displayTitle(i), active: i == model.active, stateGlyph: stateGlyph(i),
                 stateSymbol: stateGlyph(i).flatMap { iconResolver.symbol(for: $0) },
                 action: { model.onSelect(i) },
+                onMiddleClick: { model.onCloseTab(i) },
                 editing: isEditing,
                 editingText: $model.editingText,
                 editFocusToken: model.editFocusToken,

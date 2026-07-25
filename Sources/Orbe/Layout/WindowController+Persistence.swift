@@ -1,7 +1,38 @@
 import AppKit
 
-/// 構成変化のデバウンス保存と終了時 flush。WindowController 本体から保存系を分離する。
+/// 構成変化のデバウンス保存・終了時 flush と、保存ファイルからの復元。
+/// WindowController 本体から永続化の読み書き両面を分離する。
 extension WindowController {
+  /// 保存ファイルから workspaces/タブ木/ウィンドウサイズを起こす（起動時に init から 1 回）。
+  func restore(from file: WorkspacesFile) {
+    restoreWindowSize(file.windowSize)
+    let resume: TerminalController.ResumeSpawn = { [agentLauncher] in
+      agentLauncher.resumeSpawn(for: $0)
+    }
+    var restored: [Workspace] = []
+    for state in file.workspaces {
+      let ws = Workspace(name: state.name, rootPath: state.rootPath)
+      ws.lastUsedAt = state.lastUsedAt  // MRU 並べ替えキーを読み戻す（旧データは nil）
+      ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
+      for tab in state.tabs {
+        let tc = TerminalController(restoring: tab.tree, resumeSpawn: resume)
+        tc.explicitTitle = tab.explicitTitle
+        tc.editorUI.paneOpen = tab.editor.open
+        tc.editorUI.tool = EditorTool(persistKey: tab.editor.tool)
+        ws.tabs.append(wire(tc))
+      }
+      // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）は空表示
+      // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。
+      ws.active = ws.tabs.isEmpty ? 0 : min(max(0, state.activeTab), ws.tabs.count - 1)
+      restored.append(ws)
+    }
+    // workspaces 非空は load() が保証する（空 workspaces のファイルは load が nil を返す）。
+    store.load(
+      workspaces: restored,
+      activeWorkspace: min(max(0, file.activeWorkspace), restored.count - 1))
+    activateCurrent()  // 復元アクティブが0タブ（休眠保存）なら空表示（シェルは起こさない）
+  }
+
   // ユーザーのリサイズ確定で意図サイズを記憶し、保存を予約する（高頻度なドラッグはデバウンスでまとまる）。
   // 復元時の programmatic な setFrame による発火はフラグで弾く（クランプ縮小値を拾わない）。
   func windowDidResize(_ notification: Notification) {

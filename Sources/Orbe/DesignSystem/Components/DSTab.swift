@@ -15,6 +15,8 @@ struct DSTab: View {
   /// 状態グリフを上書きする SF Symbol 名（nil＝Glass 既定）。DS 層は env を読まず、解決は app 層が担う。
   var stateSymbol: String?
   var action: () -> Void = {}
+  /// 中ボタンクリック（押し下げで即発火）。app 層がタブごと閉じる操作に配線する。
+  var onMiddleClick: () -> Void = {}
 
   /// インライン改名の編集バリアント（app 層が駆動）。true でタイトルを `TextField` へ差し替える。
   var editing: Bool = false
@@ -71,6 +73,8 @@ struct DSTab: View {
     .contentShape(Rectangle())
     // 編集中は tap を付けない（app 層も drag を付けない＝ジェスチャ排他が構造的に成立する）。
     .modifier(TapUnless(disabled: editing, action: action))
+    // SwiftUI のジェスチャは中ボタンを拾えないため、中クリックだけ AppKit 層で受ける。
+    .overlay(MiddleClickCatcher(onMiddleClick: onMiddleClick))
   }
 
   /// 選択面に載せる裸の改名 field（§5 Tab 選択面・挿入点は accentPrimary）。
@@ -109,6 +113,47 @@ private struct TapUnless: ViewModifier {
   let action: () -> Void
   func body(content: Content) -> some View {
     if disabled { content } else { content.onTapGesture(perform: action) }
+  }
+}
+
+/// 中ボタンクリックだけを受ける透明ビュー。左クリック系のイベント配送では `hitTest` が nil を返して
+/// 不可視になり、既存の tap（選択）・drag（並び替え）・改名 TextField を一切妨げない。
+///
+/// module 内可視なのは、AppKit のイベント配送経路（hitTest ゲート・buttonNumber 絞り込み）を
+/// テストが `CatcherView` を型で掴んで検証するため。
+struct MiddleClickCatcher: NSViewRepresentable {
+  let onMiddleClick: () -> Void
+
+  func makeNSView(context: Context) -> CatcherView { CatcherView(onMiddleClick: onMiddleClick) }
+
+  func updateNSView(_ nsView: CatcherView, context: Context) {
+    nsView.onMiddleClick = onMiddleClick
+  }
+
+  final class CatcherView: NSView {
+    var onMiddleClick: () -> Void
+
+    init(onMiddleClick: @escaping () -> Void) {
+      self.onMiddleClick = onMiddleClick
+      super.init(frame: .zero)
+    }
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    /// 配送中のイベントが中ボタンのときだけ自分を返す。それ以外（左クリック・hover 判定等）は nil で
+    /// 素通しし、下の SwiftUI へ渡す。
+    override func hitTest(_ point: NSPoint) -> NSView? {
+      guard let event = NSApp.currentEvent, event.type == .otherMouseDown, event.buttonNumber == 2
+      else { return nil }
+      return super.hitTest(point)
+    }
+
+    /// 通常配送では hitTest ゲートが中ボタン以外を弾くので、ここへは中ボタンしか来ない。
+    /// ただしゲートが見る `NSApp.currentEvent` は配送中のイベントと一致する保証がなく、古い中ボタン
+    /// 押下が残っていればサイドボタンでもゲートを通りうる。閉じるのは取り消せないので実イベントで絞り直す。
+    override func otherMouseDown(with event: NSEvent) {
+      guard event.buttonNumber == 2 else { return super.otherMouseDown(with: event) }
+      onMiddleClick()
+    }
   }
 }
 

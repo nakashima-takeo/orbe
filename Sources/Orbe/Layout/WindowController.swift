@@ -136,6 +136,11 @@ final class WindowController: NSObject, NSWindowDelegate {
   /// chrome（StatusRow・SwiftUI ルート）からの操作コールバック配線。
   private func wireChromeCallbacks() {
     statusModel.onSelect = { [weak self] i in self?.select(i) }
+    // 中クリック＝タブごと閉じる。切替を挟まず唯一の閉鎖集約点へ渡す（範囲外 index は onSelect 同様に無視）。
+    statusModel.onCloseTab = { [weak self] i in
+      guard let self, self.current.tabs.indices.contains(i) else { return }
+      self.closeTab(self.current.tabs[i])
+    }
     statusModel.onNewTab = { [weak self] in self?.newTab() }
     // pane 非依存 chrome コマンドの window レベル配信（surface が居ない0タブでも届く）。
     hostingView.onWindowCommand = { [weak self] command in
@@ -357,37 +362,6 @@ final class WindowController: NSObject, NSWindowDelegate {
     store.appendTabToActive(wire(tc))
     select(current.tabs.count - 1)
     scheduleSave()
-  }
-
-  // MARK: - 復元（保存系は WindowController+Persistence）
-
-  private func restore(from file: WorkspacesFile) {
-    restoreWindowSize(file.windowSize)
-    let resume: TerminalController.ResumeSpawn = { [agentLauncher] in
-      agentLauncher.resumeSpawn(for: $0)
-    }
-    var restored: [Workspace] = []
-    for state in file.workspaces {
-      let ws = Workspace(name: state.name, rootPath: state.rootPath)
-      ws.lastUsedAt = state.lastUsedAt  // MRU 並べ替えキーを読み戻す（旧データは nil）
-      ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
-      for tab in state.tabs {
-        let tc = TerminalController(restoring: tab.tree, resumeSpawn: resume)
-        tc.explicitTitle = tab.explicitTitle
-        tc.editorUI.paneOpen = tab.editor.open
-        tc.editorUI.tool = EditorTool(persistKey: tab.editor.tool)
-        ws.tabs.append(wire(tc))
-      }
-      // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）は空表示
-      // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。
-      ws.active = ws.tabs.isEmpty ? 0 : min(max(0, state.activeTab), ws.tabs.count - 1)
-      restored.append(ws)
-    }
-    // workspaces 非空は load() が保証する（空 workspaces のファイルは load が nil を返す）。
-    store.load(
-      workspaces: restored,
-      activeWorkspace: min(max(0, file.activeWorkspace), restored.count - 1))
-    activateCurrent()  // 復元アクティブが0タブ（休眠保存）なら空表示（シェルは起こさない）
   }
 
   // アプリ前面復帰：背面で届いていたアクティブ表示タブの done を消費する。
