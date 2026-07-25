@@ -27,17 +27,17 @@ extension SettingsPaletteModel {
   }
 
   /// worktreeDir のプリセット一覧から「カスタム…」でテキスト入力へ潜る（テキスト入力は最終手段）。
-  /// `setMode` が query を空にするため、そのスコープの実効テンプレートを後入れでプリフィルする
-  /// （`PaletteCard.queryBinding` は setter からしか onQueryChange を呼ばないため跳ね返らない）。
+  /// そのスコープの実効テンプレートをプリフィルとして渡す——情報行は query から `{repo}` 欠落警告を
+  /// 導くため、入場直後の行がプリフィル値を見ていないと最も警告が要る現在値でだけ黙る。
   func drillIntoWorktreeDirCustom() {
     worktreeDirError = nil  // 前回の不正理由を持ち越さない
-    setMode(.worktreeDirCustom)
-    render.query = values.effWorktreeDir
+    setMode(.worktreeDirCustom, prefill: values.effWorktreeDir)
   }
 
-  /// カスタム入力からプリセット一覧へ戻る（`←`・`Esc`）。潜った「カスタム…」行（末尾）へ選択を復元する。
+  /// カスタム入力からプリセット一覧へ戻る（`Esc`。入力欄の `←` はカーソル移動でここへ届かない）。
+  /// 潜った「カスタム…」行（末尾）へ選択を復元する。
   func returnToWorktreeDirPresets() {
-    setMode(.worktreeDirPresets, select: WorktreePathTemplate.presets.count)
+    setMode(.worktreeDirPresets, select: worktreeDirCustomRow)
   }
 
   /// サブパレットから root へ戻る（`←`・`Esc`・確定のいずれでも）。潜った行へ選択を復元する。

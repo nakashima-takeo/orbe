@@ -183,6 +183,10 @@ extension SettingsPaletteModel {
     render.rows = rows
   }
 
+  /// 「カスタム…」行の index（プリセットの次＝末尾）。●・↵・→・戻りの選択復元が同じ 1 箇所を読む
+  /// ——行の並びを変えたときに、それぞれが別々にズレないため。
+  var worktreeDirCustomRow: Int { WorktreePathTemplate.presets.count }
+
   /// worktreeDir: 作成場所のプリセット一覧（絞り込み欄なし）＋末尾の「カスタム…」行。
   /// 現在値（●・初期ハイライト）は一致するプリセット行、どれとも一致しなければ「カスタム…」行に置き、
   /// その行の補足に現在値を出す（一致しない値の在処が一覧から読める）。
@@ -195,14 +199,14 @@ extension SettingsPaletteModel {
     let presets = WorktreePathTemplate.presets
     let current = values.effWorktreeDir
     let matched = presets.firstIndex { $0.template == current }
-    currentRowIndex = matched ?? presets.count
+    currentRowIndex = matched ?? worktreeDirCustomRow
     var rows = presets.indices.map { i in
       PaletteModel.RowItem(
         label: marker(i) + localization.string(presets[i].labelKey), detail: presets[i].template)
     }
     rows.append(
       PaletteModel.RowItem(
-        label: marker(presets.count) + localization.string(.settingsWorktreeDirCustom),
+        label: marker(worktreeDirCustomRow) + localization.string(.settingsWorktreeDirCustom),
         chevron: true, detail: matched == nil ? current : nil))
     render.rows = rows
   }

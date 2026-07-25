@@ -4,8 +4,8 @@ import XCTest
 
 /// 設定パレットの「worktree の作成場所」（root index 12）の検証。
 /// 潜るとまずプリセット一覧（現在値に ●・最終行「カスタム…」）が出て、テキスト入力は「カスタム…」から
-/// 1 段深く潜ったときだけ現れる。カスタム入力は workspace rename と同じ「setMode 後にプリフィル後入れ」の型で、
-/// ↵ 確定（空＝解除・不正＝情報行へ理由を出して留まる・妥当＝保存して root へ）、Esc は保存せず一覧へ戻る。
+/// 1 段深く潜ったときだけ現れる。カスタム入力は実効テンプレートをプリフィルして入場し（情報行はその値から
+/// 組む）、↵ 確定（空＝解除・不正＝情報行へ理由を出して留まる・妥当＝保存して root へ）、Esc は保存せず一覧へ戻る。
 /// `SettingsPaletteTests` の拡張として helper（`model`/`captureApply`）を共有する。
 @MainActor
 extension SettingsPaletteTests {
@@ -55,7 +55,7 @@ extension SettingsPaletteTests {
   }
 
   /// 現在値と一致するプリセット行に ● が付き、初期選択もその行に置かれる（未設定＝既定＝先頭行）。
-  func testPresetMarkerOnMatchingRow() {
+  func testWorktreeDirPresetMarkerOnMatchingRow() {
     let p = model()
     drillIntoWorktreeDir(p)
     XCTAssertEqual(p.render.selected, 0, "既定と一致する行を初期選択")
@@ -64,7 +64,7 @@ extension SettingsPaletteTests {
   }
 
   /// 既定以外のプリセットを設定していれば、その行に ● と初期選択が乗る。
-  func testPresetMarkerOnConfiguredPreset() {
+  func testWorktreeDirPresetMarkerOnConfiguredPreset() {
     let p = model(worktreeDir: WorktreePathTemplate.presets[2].template)
     drillIntoWorktreeDir(p)
     XCTAssertEqual(p.render.selected, 2)
@@ -72,7 +72,7 @@ extension SettingsPaletteTests {
   }
 
   /// どのプリセットとも一致しない値は「カスタム…」行に ● が付き、その行の補足に現在値が出る。
-  func testCustomRowMarkedWhenNoPresetMatches() {
+  func testWorktreeDirCustomRowMarkedWhenNoPresetMatches() {
     let p = model(worktreeDir: "~/wt/{repo}/{slug}")
     drillIntoWorktreeDir(p)
     XCTAssertEqual(p.render.selected, customRow)
@@ -81,14 +81,14 @@ extension SettingsPaletteTests {
   }
 
   /// 一致するプリセットがあるときの「カスタム…」行は補足を持たない（現在値の在処が二重に出ない）。
-  func testCustomRowHasNoDetailWhenPresetMatches() {
+  func testWorktreeDirCustomRowHasNoDetailWhenPresetMatches() {
     let p = model()
     drillIntoWorktreeDir(p)
     XCTAssertNil(p.render.rows[customRow].detail)
   }
 
   /// プリセット行の ↵ はそのテンプレートを保存して root へ戻る（1 打で決まる）。
-  func testPresetConfirmAppliesAndReturnsToRoot() {
+  func testWorktreeDirPresetConfirmAppliesAndReturnsToRoot() {
     let p = model()
     drillIntoWorktreeDir(p)
     let applied = captureApply(p)
@@ -100,8 +100,8 @@ extension SettingsPaletteTests {
     XCTAssertEqual(p.render.selected, 12, "潜った行へ選択を復元")
   }
 
-  /// 一覧の Esc/← は保存せず root へ戻る。
-  func testPresetEscapeReturnsToRoot() {
+  /// 一覧の Esc は保存せず root へ戻る。
+  func testWorktreeDirPresetEscapeReturnsToRoot() {
     let p = model()
     drillIntoWorktreeDir(p)
     let applied = captureApply(p)
@@ -111,12 +111,23 @@ extension SettingsPaletteTests {
     XCTAssertEqual(p.render.selected, 12)
   }
 
-  /// → は「カスタム…」行だけで潜る（プリセット行の → は消費せず何もしない）。
-  func testRightArrowDrillsInOnlyFromCustomRow() {
+  /// 一覧は入力欄を持たないので ← も Esc と同じく root へ戻る（保存しない）。
+  func testWorktreeDirPresetLeftReturnsToRoot() {
+    let p = model()
+    drillIntoWorktreeDir(p)
+    let applied = captureApply(p)
+    p.render.onLeft()
+    XCTAssertNil(applied(), "← でも保存しない")
+    XCTAssertNil(p.render.breadcrumb, "root へ戻る")
+    XCTAssertEqual(p.render.selected, 12, "潜った行へ選択を復元")
+  }
+
+  /// → は「カスタム…」行だけで潜る（プリセット行の → は潜らない）。
+  func testWorktreeDirRightArrowDrillsInOnlyFromCustomRow() {
     let p = model()
     drillIntoWorktreeDir(p)
     p.render.selected = 0
-    XCTAssertFalse(p.render.onRight(), "プリセット行の → はキーを消費しない")
+    XCTAssertFalse(p.render.onRight(), "プリセット行の → は潜らない")
     XCTAssertEqual(p.render.breadcrumb, "‹ worktree の作成場所", "一覧に留まる")
     p.render.selected = customRow
     XCTAssertTrue(p.render.onRight())
@@ -237,8 +248,19 @@ extension SettingsPaletteTests {
 
   // MARK: - カスタム入力: {repo} 欠落の警告（保存は通す）
 
+  /// 現在値が `{repo}` 抜きなら、打鍵を待たず入場した時点の情報行から警告が出る
+  /// （どのプリセットにも一致しない値＝「カスタム…」行に ● が乗る値なので、↵ 一発でここに着く）。
+  func testWorktreeDirMissingRepoWarnsOnEntry() {
+    let p = model(worktreeDir: "~/wt/{slug}")
+    drillIntoCustom(p)
+    XCTAssertEqual(p.render.query, "~/wt/{slug}", "実効テンプレートがプリフィルされる")
+    XCTAssertEqual(
+      p.render.rows[0].label, "{repo} が無いため別リポジトリの同名ブランチと衝突します",
+      "プリフィルした現在値に対して入場時点で警告する")
+  }
+
   /// `{repo}` を含まない妥当なテンプレートは情報行で警告するだけ——確定は通り root へ戻る。
-  func testMissingRepoWarnsButSaves() {
+  func testWorktreeDirMissingRepoWarnsButSaves() {
     let p = model()
     drillIntoCustom(p)
     let applied = captureApply(p)
@@ -252,7 +274,7 @@ extension SettingsPaletteTests {
   }
 
   /// 警告は妥当なテンプレートにだけ出す（打鍵途中の不完全な入力では語彙説明のまま）。
-  func testMissingRepoWarningOnlyForValidTemplate() {
+  func testWorktreeDirMissingRepoWarningOnlyForValidTemplate() {
     let p = model()
     drillIntoCustom(p)
     p.render.query = "~/wt/{sl"

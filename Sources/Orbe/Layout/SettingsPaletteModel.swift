@@ -208,7 +208,7 @@ import SwiftUI
   /// テキスト入力へ 1 段深く潜る（値が決まったら root へ戻る、が一覧・入力に共通の着地規則）。
   private func activateWorktreeDirPresetRow() {
     let presets = WorktreePathTemplate.presets
-    if render.selected == presets.count {
+    if render.selected == worktreeDirCustomRow {
       drillIntoWorktreeDirCustom()
       return
     }
@@ -281,7 +281,7 @@ import SwiftUI
     }
     if case .worktreeDirPresets = mode {
       // → は「潜る」意味だけを持つ。1 段深いのは chevron のある「カスタム…」行だけ。
-      guard render.selected == WorktreePathTemplate.presets.count else { return false }
+      guard render.selected == worktreeDirCustomRow else { return false }
       drillIntoWorktreeDirCustom()
       return true
     }
@@ -367,9 +367,11 @@ import SwiftUI
   // MARK: - モード遷移・描画
 
   /// mode を切り替えて行を組み直し、選択を決める（ドリル遷移は `SettingsPaletteModel+Navigation`）。
-  func setMode(_ m: Mode, select: Int? = nil) {
+  /// `prefill` は入力欄を持つモードの初期クエリ。行の組み立てが query を読むモードがあるため、
+  /// 空へ戻すのでなくここで確定させてから `rebuild()` に渡す。
+  func setMode(_ m: Mode, select: Int? = nil, prefill: String = "") {
     mode = m
-    render.query = ""
+    render.query = prefill
     rebuild()  // ここで currentRowIndex が確定する
     render.selected = select ?? currentRowIndex ?? 0
     render.clampSelection()
