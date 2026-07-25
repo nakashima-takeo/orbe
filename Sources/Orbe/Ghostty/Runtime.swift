@@ -69,7 +69,7 @@ final class Ghostty {
     rt.close_surface_cb = { userdata, _ in
       guard let userdata else { return }
       let view = SurfaceView.from(userdata)
-      DispatchQueue.main.async { view.controller?.close(view) }
+      DispatchQueue.main.async { view.controller?.close(view, origin: .process) }
     }
 
     guard let a = ghostty_app_new(&rt, config) else { fatalError("ghostty_app_new failed") }

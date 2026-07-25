@@ -35,8 +35,9 @@ final class TerminalController {
   let rootContainer = NSView()
   private(set) weak var focusedPane: SurfaceView?
 
-  /// 最後のペインが閉じられた（このタブを閉じるべき）通知。
-  var onEmpty: (() -> Void)?
+  /// 最後のペインが閉じられた（このタブを閉じるべき）通知。閉鎖の発火源を添えて渡す
+  /// （復元スタックへ積むかの判定に要る）。
+  var onEmpty: ((TabCloseOrigin) -> Void)?
   /// アクティブペインのタイトルが変わった通知（タブラベル更新用。再算出は呼び出し側が全タブで行う）。
   var onActiveTitleChange: (() -> Void)?
   /// 分割/クローズでレイアウトが変わった通知（永続の保存スケジュール用）。
@@ -293,13 +294,14 @@ final class TerminalController {
   }
 
   /// ペインを閉じる。残り 1 つになった分割は畳んで親へ昇格。最後の 1 枚ならタブを閉じる。
+  /// `origin` は判断せずそのまま上位（closeTab → removeTab）へ素通しする。
   /// フォーカス復元は preferredFocusPane の規則に従う（フォーカス外ペインの close —
   /// shell の exit 等 — で入力中のペインから奪わない）。
-  func close(_ pane: SurfaceView) {
+  func close(_ pane: SurfaceView, origin: TabCloseOrigin) {
     guard let leaf = leaf(of: pane), let parent = leaf.superview else { return }
     guard let parentSplit = parent as? NSSplitView else {
       // ルート唯一のペイン → このタブを閉じる（保存は WindowController 側の closeTab で）。
-      DispatchQueue.main.async { [weak self] in self?.onEmpty?() }
+      DispatchQueue.main.async { [weak self] in self?.onEmpty?(origin) }
       return
     }
 

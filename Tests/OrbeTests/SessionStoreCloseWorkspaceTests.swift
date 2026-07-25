@@ -107,7 +107,7 @@ final class SessionStoreCloseWorkspaceTests: XCTestCase {
     let beta = ws("Beta", t2)
     let store = SessionStore(workspaces: [active, alpha, beta], activeWorkspace: 0)
 
-    guard case .emptiedActive = store.removeTab(tab) else {
+    guard case .emptiedActive = store.removeTab(tab, origin: .gesture) else {
       return XCTFail("アクティブ workspace の 0タブ化はその場で空維持（.emptiedActive）")
     }
     XCTAssertTrue(store.current === active, "退避せず同一 workspace がアクティブのまま")

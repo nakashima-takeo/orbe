@@ -63,7 +63,7 @@ final class TerminalControllerTests: XCTestCase {
     let a = pane(split.arrangedSubviews[0])
     let b = pane(split.arrangedSubviews[1])
 
-    tc.close(b)  // 残り 1 枚 → split を畳んで a を rootContainer 直下へ昇格
+    tc.close(b, origin: .gesture)  // 残り 1 枚 → split を畳んで a を rootContainer 直下へ昇格
 
     XCTAssertEqual(tc.rootContainer.subviews.count, 1)
     XCTAssertTrue(pane(tc.rootContainer.subviews.first!) === a)
@@ -72,8 +72,8 @@ final class TerminalControllerTests: XCTestCase {
   func testCloseLastPaneFiresOnEmpty() {
     let tc = TerminalController()
     let exp = expectation(description: "onEmpty fires")
-    tc.onEmpty = { exp.fulfill() }
-    tc.close(tc.focusedPane!)  // ルート唯一のペイン → このタブを閉じる通知（main へ async）
+    tc.onEmpty = { _ in exp.fulfill() }
+    tc.close(tc.focusedPane!, origin: .gesture)  // ルート唯一のペイン → このタブを閉じる通知（main へ async）
     wait(for: [exp], timeout: 1.0)
   }
 
