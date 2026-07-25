@@ -33,7 +33,7 @@ final class MenuBarStatusViewTests: XCTestCase {
   /// ③ 収縮ピル（◐＋件数）: 高さ 22 以下・グリフ単体より幅が広い。
   func testCountPillFitsMenuBar() {
     let store = AttentionStore()
-    store.rows = [row(state: "waiting"), row(state: "done")]
+    store.apply(rows: [row(state: "waiting"), row(state: "done")])
     let size = fittingSize(store: store)
     XCTAssertGreaterThan(size.width, fittingSize(store: AttentionStore()).width)
     XCTAssertLessThanOrEqual(size.height, 22)
@@ -62,14 +62,14 @@ final class MenuBarStatusViewTests: XCTestCase {
   func testTransientPillFitsMenuBarAndExpands() {
     let store = AttentionStore()
     let long = String(repeating: "とても長い文言 ", count: 40)
-    store.rows = [row(state: "waiting"), row(state: "done")]
+    store.apply(rows: [row(state: "waiting"), row(state: "done")])
     store.noteTransient(row(state: "waiting", message: long))
     let size = fittingSize(store: store)
     XCTAssertLessThanOrEqual(size.height, 22)
 
     let quietWidth = fittingSize(store: AttentionStore()).width
     let countStore = AttentionStore()
-    countStore.rows = [row(state: "waiting"), row(state: "done")]
+    countStore.apply(rows: [row(state: "waiting"), row(state: "done")])
     let countWidth = fittingSize(store: countStore).width
     XCTAssertGreaterThan(size.width, countWidth, "transient は収縮ピル（③）より広く滲み出る")
     XCTAssertGreaterThan(size.width, quietWidth, "transient は静的グリフ（①）より広く滲み出る")

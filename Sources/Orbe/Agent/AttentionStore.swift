@@ -4,8 +4,8 @@ import Observation
 /// Attention 一覧の単一情報源（@Observable・main のみ）。WindowController が既存の chrome
 /// coalesce（`flushChrome`）と同じ契機で snapshot を流し込み、パレットとメニューバーが同じ値を読む。
 @Observable final class AttentionStore {
-  /// 全対象行（waiting/done/working・stateChangedAt 降順）。`flushChrome` が代入する。
-  var rows: [AttentionRow] = []
+  /// 全対象行（waiting/done/working・stateChangedAt 降順）。`apply(rows:)` だけが差し替える。
+  private(set) var rows: [AttentionRow] = []
 
   /// メニューバーの一覧行（waiting/done のみ）。
   var listRows: [AttentionRow] { AttentionSnapshot.listRows(rows) }
@@ -29,5 +29,21 @@ import Observation
   /// 一過性イベントを立てる（表示期間 `transientDuration`。ホバー延長は MenuBarController）。
   func noteTransient(_ row: AttentionRow, now: Date = Date()) {
     transient = Transient(row: row, expiresAt: now.addingTimeInterval(Self.transientDuration))
+  }
+
+  /// 行 snapshot を差し替え、②が指す行が一覧（`listRows`）に**同じ状態で**居なければ取り下げる。
+  /// ②は一覧の投影なので、投影元が消えた（`idle` へ落ちた・`clear` された・閉じられた）／別の
+  /// 状態になった（`working` へ戻った）ピルは残さない。行が残っている間の中身は更新しない
+  /// （差し替えは report 経路が新しい行で立て直す）。
+  ///
+  /// 不変条件が成立するのは「行を差し替えた時点」であって常時ではない——`noteTransient` は
+  /// まだ行に反映されていない変化を先に立てられる。
+  func apply(rows newRows: [AttentionRow]) {
+    rows = newRows
+    guard let transient else { return }
+    let projected = listRows.contains {
+      $0.paneId == transient.row.paneId && $0.state == transient.row.state
+    }
+    if !projected { self.transient = nil }
   }
 }

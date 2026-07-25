@@ -61,7 +61,7 @@ extension DesignGallerySnapshotTests {
         return store
       }
     let countStore = AttentionStore()
-    countStore.rows = rows
+    countStore.apply(rows: rows)
     let openUI = MenuBarUIState()
     openUI.dropdownOpen = true
     return VStack(alignment: .trailing, spacing: Theme.Space.beat) {
@@ -106,7 +106,7 @@ extension DesignGallerySnapshotTests {
 
     // ドロップダウン（第11シーン④・幅 420・working 集約・フッター・権限ヒントなし/あり）。
     let store = AttentionStore()
-    store.rows = rows
+    store.apply(rows: rows)
     for (name, granted) in [("menubar_dropdown.png", true), ("menubar_dropdown_hint.png", false)] {
       try writePNG(
         MenuBarDropdownView(
