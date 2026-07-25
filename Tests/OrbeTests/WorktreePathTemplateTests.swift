@@ -41,12 +41,29 @@ final class WorktreePathTemplateTests: XCTestCase {
       "/Users/x/github/orbe-worktrees/issue-42")
   }
 
-  /// 正規化は字句だけ（symlink を解決しない）。実在する root と、これから作る（実在しない）
-  /// worktree パスで畳み方が食い違わないことが repo 内判定の前提。
-  func testStandardizedIsPurelyLexical() {
-    XCTAssertEqual(WorktreePathTemplate.standardized("/private/tmp/r/wt/"), "/private/tmp/r/wt")
-    XCTAssertEqual(WorktreePathTemplate.standardized("/a//b/./c"), "/a/b/c")
-    XCTAssertEqual(WorktreePathTemplate.standardized("/a/b/../c"), "/a/c")
+  /// 正規化は字句だけ（`.`・`..`・重複/末尾スラッシュを畳む）。
+  func testLexicallyStandardizedFoldsPathSyntax() {
+    XCTAssertEqual(
+      WorktreePathTemplate.lexicallyStandardized("/private/tmp/r/wt/"), "/private/tmp/r/wt")
+    XCTAssertEqual(WorktreePathTemplate.lexicallyStandardized("/a//b/./c"), "/a/b/c")
+    XCTAssertEqual(WorktreePathTemplate.lexicallyStandardized("/a/b/../c"), "/a/c")
+    XCTAssertEqual(WorktreePathTemplate.lexicallyStandardized("/a/../../b"), "/b", "絶対の /.. は /")
+  }
+
+  /// 相対の先頭 `..` は畳めない——落とすと repo の外を指すテンプレートが中を指すものに反転する。
+  func testLexicallyStandardizedKeepsLeadingParentRefs() {
+    XCTAssertEqual(WorktreePathTemplate.lexicallyStandardized("../a/b"), "../a/b")
+    XCTAssertEqual(WorktreePathTemplate.lexicallyStandardized("a/../../b"), "../b")
+  }
+
+  /// **実在する**パスでも symlink を解決せず `/private` を畳まない（Foundation の `standardizingPath`
+  /// はここで畳む）。実在する repo root と、これから作る worktree パスを同じ土俵で比べる前提。
+  func testLexicallyStandardizedKeepsPrivatePrefixOnExistingPath() throws {
+    let dir = URL(fileURLWithPath: "/private/tmp/orbe-std-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    XCTAssertEqual((dir.path as NSString).standardizingPath, "/tmp" + dir.path.dropFirst(12))
+    XCTAssertEqual(WorktreePathTemplate.lexicallyStandardized(dir.path), dir.path)
   }
 
   // MARK: - プリセット

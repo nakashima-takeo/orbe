@@ -62,24 +62,30 @@ enum WorktreePathTemplate {
       .replacingOccurrences(of: "{parent}", with: parent)
       .replacingOccurrences(of: "{repo}", with: repo)
       .replacingOccurrences(of: "{slug}", with: slug)
-    return standardized((replaced as NSString).expandingTildeInPath)
+    return lexicallyStandardized((replaced as NSString).expandingTildeInPath)
   }
 
-  /// 字句だけの正規化（`.`・`..`・重複/末尾スラッシュを畳む）。symlink は解決しない。
-  /// Foundation の `standardizingPath` は**実在するパスだけ**リンクを解決し `/private` を畳むため、
-  /// これから作る（＝実在しない）worktree パスと実在する repo root で結果が食い違う。作成先の解決
-  /// （`resolve`）と repo 内判定（`GitWorktreeExclude`）は同じ土俵で比べる必要があるので、
-  /// 両者はこの純字句の正規化 1 本を共有する。
-  static func standardized(_ path: String) -> String {
+  /// 字句だけの正規化（`.`・`..`・重複/末尾スラッシュを畳む）。**symlink は解決しない**——名前で
+  /// Foundation の `standardizingPath` と取り違えないこと。あちらは**実在するパスだけ**リンクを解決し
+  /// `/private` を畳むため、これから作る（＝実在しない）worktree パスと実在する repo root で結果が
+  /// 食い違う。作成先の解決（`resolve`）と repo 内判定（`GitWorktreeExclude`）は同じ土俵で比べる
+  /// 必要があるので、両者はこの純字句の正規化 1 本を共有する。
+  static func lexicallyStandardized(_ path: String) -> String {
+    let isAbsolute = path.hasPrefix("/")
     var components: [String] = []
     for component in path.split(separator: "/") where component != "." {
       if component == ".." {
-        if !components.isEmpty { components.removeLast() }
+        // 絶対パスの `/..` は `/`（POSIX）＝捨てる。相対パスの先頭 `..` は畳めない——落とすと
+        // repo の外を指すテンプレートが中を指すものに反転する。
+        if let last = components.last, last != ".." {
+          components.removeLast()
+        } else if !isAbsolute {
+          components.append("..")
+        }
       } else {
         components.append(String(component))
       }
     }
-    let joined = components.joined(separator: "/")
-    return path.hasPrefix("/") ? "/" + joined : joined
+    return (isAbsolute ? "/" : "") + components.joined(separator: "/")
   }
 }

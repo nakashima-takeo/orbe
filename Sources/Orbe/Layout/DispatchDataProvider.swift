@@ -249,8 +249,8 @@ final class DispatchDataProvider {
     }
   }
 
-  /// 解決済みパスへ worktree を作る。作成先が作業ツリー内に落ちるときだけ、その手前で共有 exclude へ
-  /// 除外を冪等に入れる（プリセット由来かカスタム由来かを問わず、解決済みパスだけで判定する）。
+  /// 解決済みパスへ worktree を作る。作成先が作業ツリー内に落ちるときだけ、**作成できた後で**共有
+  /// exclude へ除外を冪等に入れる（プリセット由来かカスタム由来かを問わず、解決済みパスだけで判定する）。
   /// 除外の成否は作成に影響しない。
   private func createWorktree(
     at path: String, base: String, newBranch: String?, track: Bool,
@@ -260,10 +260,21 @@ final class DispatchDataProvider {
       completion(.failed(localization.string(.dispatchErrNotGitRepo)))
       return
     }
-    repo.excludeWorktreeIfInside(path: path, worktreeRoot: worktreeBase) {
-      repo.addWorktree(path: path, base: base, newBranch: newBranch, track: track) {
-        completion($0 == nil ? .ready(path) : .failed($0!))
+    // 除外の対象は作成の**前**に決める——作成後は親が実在してしまい、その親を容れ物として Orbe が
+    // 作ったのか、ユーザーの既存ディレクトリなのかを判別できなくなる。
+    let root = worktreeBase
+    let entry = GitWorktreeExclude.entry(
+      worktreePath: path, worktreeRoot: root,
+      parentIsNew: !FileManager.default.fileExists(
+        atPath: (path as NSString).deletingLastPathComponent))
+    repo.addWorktree(path: path, base: base, newBranch: newBranch, track: track) { error in
+      guard error == nil else {
+        completion(.failed(error!))
+        return
       }
+      // 書くのは作成できたときだけ（失敗した作成の除外を残さない）。この時点では対象が実在するので
+      // `check-ignore` の「既にユーザーが塞いでいるか」判定も正しく効く。
+      repo.applyWorktreeExclude(entry, worktreeRoot: root) { completion(.ready(path)) }
     }
   }
 
