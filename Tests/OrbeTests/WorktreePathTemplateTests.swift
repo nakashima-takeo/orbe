@@ -11,23 +11,34 @@ final class WorktreePathTemplateTests: XCTestCase {
   func testResolveReplacesAllPlaceholders() {
     XCTAssertEqual(
       WorktreePathTemplate.resolve(
-        template: "{parent}/wt/{repo}/{slug}", parent: "/Users/x/github", repo: "orbe",
-        slug: "feat-x"),
+        template: "{parent}/wt/{repo}/{slug}", repoPath: "/Users/x/github/orbe", slug: "feat-x"),
       "/Users/x/github/wt/orbe/feat-x")
+  }
+
+  /// `{repo_path}` は repo 本体の場所＝`{parent}/{repo}` と同値に解決する（往復せず一息で書ける）。
+  func testResolveRepoPathEqualsParentSlashRepo() {
+    XCTAssertEqual(
+      WorktreePathTemplate.resolve(
+        template: "{repo_path}/.worktrees/{slug}", repoPath: "/Users/x/github/orbe", slug: "feat-x"),
+      "/Users/x/github/orbe/.worktrees/feat-x")
+    XCTAssertEqual(
+      WorktreePathTemplate.resolve(
+        template: "{repo_path}/.worktrees/{slug}", repoPath: "/Users/x/github/orbe", slug: "s"),
+      WorktreePathTemplate.resolve(
+        template: "{parent}/{repo}/.worktrees/{slug}", repoPath: "/Users/x/github/orbe", slug: "s"))
   }
 
   func testResolveExpandsLeadingTilde() {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
     XCTAssertEqual(
       WorktreePathTemplate.resolve(
-        template: "~/wt/{repo}/{slug}", parent: "/p", repo: "orbe", slug: "feat-x"),
+        template: "~/wt/{repo}/{slug}", repoPath: "/p/orbe", slug: "feat-x"),
       "\(home)/wt/orbe/feat-x")
   }
 
   func testResolveStandardizesPath() {
     XCTAssertEqual(
-      WorktreePathTemplate.resolve(
-        template: "{parent}//wt/./{slug}", parent: "/p", repo: "r", slug: "s"),
+      WorktreePathTemplate.resolve(template: "{parent}//wt/./{slug}", repoPath: "/p/r", slug: "s"),
       "/p/wt/s", "重複スラッシュ・`.` は standardize で畳む")
   }
 
@@ -36,8 +47,8 @@ final class WorktreePathTemplateTests: XCTestCase {
   func testDefaultTemplateMatchesLegacyRule() {
     XCTAssertEqual(
       WorktreePathTemplate.resolve(
-        template: WorktreePathTemplate.defaultTemplate,
-        parent: "/Users/x/github", repo: "orbe", slug: "issue-42"),
+        template: WorktreePathTemplate.defaultTemplate, repoPath: "/Users/x/github/orbe",
+        slug: "issue-42"),
       "/Users/x/github/orbe-worktrees/issue-42")
   }
 
@@ -72,6 +83,9 @@ final class WorktreePathTemplateTests: XCTestCase {
   func testPresetsAreValidAndLedByDefault() {
     XCTAssertEqual(
       WorktreePathTemplate.presets.first?.template, WorktreePathTemplate.defaultTemplate)
+    XCTAssertEqual(
+      WorktreePathTemplate.presets[2].template, "{repo_path}/.worktrees/{slug}",
+      "repo 内配置は親へ上がって名前で降り直さず `{repo_path}` で一息に書く")
     for preset in WorktreePathTemplate.presets {
       XCTAssertNil(WorktreePathTemplate.validate(preset.template), preset.template)
     }
@@ -90,9 +104,17 @@ final class WorktreePathTemplateTests: XCTestCase {
     XCTAssertNil(WorktreePathTemplate.validate("~/wt/{repo}/{slug}"))
   }
 
-  /// repo 内配置は `{parent}/{repo}/...` のように明示的に書ける（絶対パスに解決されるため妥当）。
+  /// repo 内配置は `{repo_path}/...`（`{parent}/{repo}/...` でも同義）と明示的に書ける。
   func testValidateAcceptsInRepoTemplate() {
+    XCTAssertNil(WorktreePathTemplate.validate("{repo_path}/.worktrees/{slug}"))
     XCTAssertNil(WorktreePathTemplate.validate("{parent}/{repo}/.worktrees/{slug}"))
+  }
+
+  /// repo を区別する語の判定（提示側の警告が読む）。`{repo_path}` も repo 固有なので衝突しない。
+  func testDistinguishesRepository() {
+    XCTAssertTrue(WorktreePathTemplate.distinguishesRepository("{parent}/{repo}-worktrees/{slug}"))
+    XCTAssertTrue(WorktreePathTemplate.distinguishesRepository("{repo_path}/.worktrees/{slug}"))
+    XCTAssertFalse(WorktreePathTemplate.distinguishesRepository("~/wt/{slug}"))
   }
 
   func testValidateRejectsUnknownToken() {
@@ -126,6 +148,9 @@ final class WorktreePathTemplateTests: XCTestCase {
   func testSettingChangeValidatesTemplate() {
     XCTAssertNotNil(
       SettingChange(key: "worktree-dir", jsonValue: "~/wt/{repo}/{slug}"), "妥当なテンプレートは受理")
+    XCTAssertNotNil(
+      SettingChange(key: "worktree-dir", jsonValue: "{repo_path}/.worktrees/{slug}"),
+      "{repo_path} も既知の語として受理")
     XCTAssertNil(
       SettingChange(key: "worktree-dir", jsonValue: "~/wt/{repo}"), "{slug} 欠落は拒否")
     XCTAssertNil(SettingChange(key: "worktree-dir", jsonValue: "wt/{slug}"), "相対解決は拒否")

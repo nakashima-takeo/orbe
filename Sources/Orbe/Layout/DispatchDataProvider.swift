@@ -298,19 +298,14 @@ final class DispatchDataProvider {
 
   // MARK: - パス導出
 
-  /// テンプレート解決の base。`{parent}`/`{repo}` の導出元であり、repo 内解決の判定
+  /// テンプレート解決の base。`{repo_path}`/`{parent}`/`{repo}` の導出元であり、repo 内解決の判定
   /// （除外の自動化）が使う作業ツリー root でもある。
   private var worktreeBase: String { mainWorktree ?? repo?.root ?? cwd }
 
   /// 実効テンプレート（設定 `worktree-dir`）から作成先を解決する。置換・`~` 展開・standardize は
   /// `WorktreePathTemplate` に一本化する。
   private func worktreeDir(forSlug slug: String) -> String {
-    let base = worktreeBase
-    return WorktreePathTemplate.resolve(
-      template: worktreeTemplate,
-      parent: (base as NSString).deletingLastPathComponent,
-      repo: (base as NSString).lastPathComponent,
-      slug: slug)
+    WorktreePathTemplate.resolve(template: worktreeTemplate, repoPath: worktreeBase, slug: slug)
   }
 
   private func slug(_ name: String) -> String {

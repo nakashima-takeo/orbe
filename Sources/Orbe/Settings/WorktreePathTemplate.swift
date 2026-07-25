@@ -1,12 +1,12 @@
 import Foundation
 
 /// 設定 `worktree-dir`（Dispatch の worktree 作成先テンプレート）の検証と解決の純関数。
-/// 語彙は `{parent}`（main worktree の親）・`{repo}`（main worktree の basename）・
-/// `{slug}`（branch 名の `/`→`-`）の 3 語＋先頭 `~` のみ。書込の全経路
+/// 語彙は `{repo_path}`（main worktree の絶対パス）・`{parent}`（その親）・`{repo}`（その basename）・
+/// `{slug}`（branch 名の `/`→`-`）の 4 語＋先頭 `~` のみ。書込の全経路
 /// （設定パレット・orb config・control config_set）は `SettingDomain.validate` 経由で
 /// `validate(_:)` を通り、読出（DispatchDataProvider）は `resolve` で作成先を確定する。
 enum WorktreePathTemplate {
-  static let placeholders = ["{parent}", "{repo}", "{slug}"]
+  static let placeholders = ["{repo_path}", "{parent}", "{repo}", "{slug}"]
   /// 未設定時の既定（従来のハードコード規則 `<親>/<repo名>-worktrees/<slug>` と同一パスに解決する）。
   static let defaultTemplate = "{parent}/{repo}-worktrees/{slug}"
 
@@ -21,8 +21,7 @@ enum WorktreePathTemplate {
   static let presets: [Preset] = [
     Preset(template: defaultTemplate, labelKey: .settingsWorktreeDirPresetSibling),
     Preset(template: "~/worktrees/{repo}/{slug}", labelKey: .settingsWorktreeDirPresetHome),
-    Preset(
-      template: "{parent}/{repo}/.worktrees/{slug}", labelKey: .settingsWorktreeDirPresetInside),
+    Preset(template: "{repo_path}/.worktrees/{slug}", labelKey: .settingsWorktreeDirPresetInside),
     Preset(template: "{parent}/{repo}-{slug}", labelKey: .settingsWorktreeDirPresetFlat),
   ]
 
@@ -50,17 +49,28 @@ enum WorktreePathTemplate {
       rest = fromOpen[fromOpen.index(after: close)...]
     }
     guard template.contains("{slug}") else { return .missingSlug }
-    guard resolve(template: template, parent: "/parent", repo: "repo", slug: "slug").hasPrefix("/")
+    guard resolve(template: template, repoPath: "/parent/repo", slug: "slug").hasPrefix("/")
     else { return .notAbsolute }
     return nil
   }
 
+  /// リポジトリを区別する語を含むか（含まないテンプレートは別リポジトリの同名ブランチが同一パスへ落ちる）。
+  /// 保存は拒否しない——1 リポジトリ専用の置き場を workspace 上書きで指定する使い方があるため、
+  /// 提示側が警告に使う。
+  static func distinguishesRepository(_ template: String) -> Bool {
+    template.contains("{repo}") || template.contains("{repo_path}")
+  }
+
   /// プレースホルダ置換 → 先頭 `~` 展開 → 正規化で作成先パスを確定する。
-  static func resolve(template: String, parent: String, repo: String, slug: String) -> String {
+  /// 語彙は repo 本体の場所（main worktree の絶対パス）1 つから導く——`{repo_path}` と `{parent}/{repo}` が
+  /// 定義上つねに同値であることを、呼び手の渡し方に頼らずここで担保する。
+  static func resolve(template: String, repoPath: String, slug: String) -> String {
+    let path = repoPath as NSString
     let replaced =
       template
-      .replacingOccurrences(of: "{parent}", with: parent)
-      .replacingOccurrences(of: "{repo}", with: repo)
+      .replacingOccurrences(of: "{repo_path}", with: repoPath)
+      .replacingOccurrences(of: "{parent}", with: path.deletingLastPathComponent)
+      .replacingOccurrences(of: "{repo}", with: path.lastPathComponent)
       .replacingOccurrences(of: "{slug}", with: slug)
     return lexicallyStandardized((replaced as NSString).expandingTildeInPath)
   }
