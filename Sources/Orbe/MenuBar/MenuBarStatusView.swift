@@ -131,7 +131,7 @@ extension View {
 ///
 /// 提案幅は見ない（`sizeThatFits` は予算と理想幅だけで決める）＝内容ハグ。メニューバー
 /// アイテムの幅は `MenuBarController` が intrinsic から `statusItem.length` へ明示反映する。
-private struct PillRow: Layout {
+struct PillRow: Layout {
   let spacing: CGFloat
   /// 水平 padding を除いた内側予算。
   let budget: CGFloat

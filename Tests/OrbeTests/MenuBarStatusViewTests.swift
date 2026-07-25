@@ -146,6 +146,60 @@ final class MenuBarStatusViewTests: XCTestCase {
         "ws=\(ws): 短い本文では残り予算を吸わずピルが縮む")
     }
   }
+
+  /// `PillRow` は**申告どおりに配置する**——`sizeThatFits` が返す幅と `placeSubviews` が実際に
+  /// 使い切る幅（最終スロットの右端）が一致する。ずれた差分はそのままピル右端の死んだ空白に
+  /// なる（gap を 1 個多く数えれば全②ピルが内容より spacing ぶん太る＝今回直した不具合の縮小版）。
+  ///
+  /// これは総幅の上界では捕まらない。上界は `transientMaxWidth` からの導出値で、そこまでの
+  /// 遊びに数 pt の膨らみが埋もれるため。レイアウトの自己整合性としてここで直接固定する
+  /// （上界を実測値へ寄せて代用すると、fixture の文言を変えるたびに落ちる脆いテストになる）。
+  ///
+  /// 予算に余る場合（切り詰めなし）と足りない場合（切り詰めあり）の両方で見る。
+  func testPillRowPlacesExactlyWhatItDeclares() {
+    for (budget, label) in [(CGFloat(400), "予算に余る"), (CGFloat(120), "予算が足りない")] {
+      let placed = PlacementBox()
+      let host = NSHostingView(
+        rootView: PillRow(spacing: 6, budget: budget) {
+          slotProbe(ideal: 40)
+          slotProbe(ideal: 60)
+          PlacementProbe(box: placed) { slotProbe(ideal: 200) }
+        })
+      let declared = host.fittingSize
+      host.frame = NSRect(origin: .zero, size: declared)
+      host.layoutSubtreeIfNeeded()
+      XCTAssertEqual(
+        placed.maxX, declared.width, accuracy: 0.5,
+        "\(label): 申告した幅と最終スロットの右端が一致する（右端に空白を作らない）")
+    }
+  }
+}
+
+/// 提案幅 w に対して常に min(w, ideal) を取るスロット代用。文字送りに依存せず
+/// 「切り詰めなし／あり」を厳密な数値で作れる（Text だと glyph 境界の端数が混ざる）。
+private func slotProbe(ideal: CGFloat) -> some View {
+  Color.clear.frame(
+    minWidth: 0, idealWidth: ideal, maxWidth: ideal,
+    minHeight: 0, idealHeight: 10, maxHeight: 10)
+}
+
+private final class PlacementBox: @unchecked Sendable { var maxX: CGFloat = -1 }
+
+/// 自分が配置された bounds を記録するだけの Layout。計装はテスト側に閉じており、
+/// プロダクション（`PillRow`）は無改造のまま実配置を外から観測できる。
+private struct PlacementProbe: Layout {
+  let box: PlacementBox
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    subviews.first?.sizeThatFits(proposal) ?? .zero
+  }
+
+  func placeSubviews(
+    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+  ) {
+    box.maxX = bounds.maxX
+    subviews.first?.place(at: bounds.origin, anchor: .topLeading, proposal: proposal)
+  }
 }
 
 private let shortWS = "orbe"
