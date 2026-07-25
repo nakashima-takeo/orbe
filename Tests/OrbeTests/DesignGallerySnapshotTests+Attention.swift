@@ -65,23 +65,32 @@ extension DesignGallerySnapshotTests {
     let quietStore = AttentionStore()
     let transientStore = AttentionStore()
     transientStore.rows = rows
-    transientStore.noteTransient(rows[3])  // "Bash の許可が必要です…" の waiting
+    transientStore.noteTransient(rows[3])  // 短い WS 名 "orbe-core" ＋長い本文
+    // 長い WS 名（上限 120 を超え切り詰めが見える）の②態。WS 名の実幅で本文の予算が変わるため、
+    // 短い WS 名の行と両端で撮って幅配分を静止確認できるようにする。
+    let longNameStore = AttentionStore()
+    longNameStore.noteTransient(
+      AttentionRow(
+        paneId: 9007, workspaceName: "very-long-workspace-name-here-xxx",
+        tabTitle: "emit API 移行", state: "waiting",
+        message: "Bash の許可が必要です — bin/rails db:migrate（スキーマに 2 テーブル追加）",
+        stateChangedAt: Date()))
     let countStore = AttentionStore()
     countStore.rows = rows
     let openUI = MenuBarUIState()
     openUI.dropdownOpen = true
     // .fixedSize() で実メニューバーと同じ ideal サイズ（intrinsicContentSize）で撮る。
-    // 固定幅の提案を流すと Text の flexible frame（cap）が cap まで膨張し、実機に無い余白が写る。
     let strip = VStack(alignment: .trailing, spacing: Theme.Space.beat) {
       MenuBarStatusView(store: quietStore, ui: MenuBarUIState()).fixedSize()
       MenuBarStatusView(store: transientStore, ui: MenuBarUIState()).fixedSize()
+      MenuBarStatusView(store: longNameStore, ui: MenuBarUIState()).fixedSize()
       MenuBarStatusView(store: countStore, ui: MenuBarUIState()).fixedSize()
       MenuBarStatusView(store: countStore, ui: openUI).fixedSize()
     }
     .padding(Theme.Space.bar)
     .background(Color.theme.bgBase)
     try writePNG(
-      strip, size: NSSize(width: 420, height: 180), name: "menubar_states.png", dir: dir)
+      strip, size: NSSize(width: 420, height: 210), name: "menubar_states.png", dir: dir)
 
     // ドロップダウン（第11シーン④・幅 420・working 集約・フッター・権限ヒントなし/あり）。
     let store = AttentionStore()
