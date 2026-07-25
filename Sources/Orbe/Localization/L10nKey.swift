@@ -337,6 +337,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutSwitchWorkspace
   case helpShortcutNewWorkspace
   case helpShortcutNewTab
+  case helpShortcutReopenClosedAgentTab
   case helpShortcutRenameTab
   case helpShortcutNextTab
   case helpShortcutPrevTab

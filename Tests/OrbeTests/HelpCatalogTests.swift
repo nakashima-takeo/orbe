@@ -53,10 +53,10 @@ final class HelpCatalogTests: XCTestCase {
     XCTAssertEqual(ids.count, Set(ids).count, "KB 配列の id が重複している")
   }
 
-  /// 棚卸しの総数（29）と「すべて」件数の導出が一致する。
+  /// 棚卸しの総数（30）と「すべて」件数の導出が一致する。
   func testTotalCount() {
-    XCTAssertEqual(HelpCatalog.totalCount, 29)
-    XCTAssertEqual(HelpCatalog.all.map(\.rows.count), [3, 8, 7, 3, 8])
+    XCTAssertEqual(HelpCatalog.totalCount, 30)
+    XCTAssertEqual(HelpCatalog.all.map(\.rows.count), [3, 9, 7, 3, 8])
   }
 
   /// usedKeys は combo の全網羅（キーボードの明暗・クリック可否の SSOT）。

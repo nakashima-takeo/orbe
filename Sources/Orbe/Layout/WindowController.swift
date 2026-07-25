@@ -139,7 +139,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     // 中クリック＝タブごと閉じる。切替を挟まず唯一の閉鎖集約点へ渡す（範囲外 index は onSelect 同様に無視）。
     statusModel.onCloseTab = { [weak self] i in
       guard let self, self.current.tabs.indices.contains(i) else { return }
-      self.closeTab(self.current.tabs[i])
+      self.closeTab(self.current.tabs[i], origin: .gesture)
     }
     statusModel.onNewTab = { [weak self] in self?.newTab() }
     // pane 非依存 chrome コマンドの window レベル配信（surface が居ない0タブでも届く）。
@@ -171,7 +171,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   /// タブ（TerminalController）に上位への通知クロージャを配線する。生成は呼び出し側。
   /// 制御チャネル（WindowController+Control）も使うため internal。
   func wire(_ tc: TerminalController) -> TerminalController {
-    tc.onEmpty = { [weak self, weak tc] in self?.closeTab(tc) }
+    tc.onEmpty = { [weak self, weak tc] origin in self?.closeTab(tc, origin: origin) }
     tc.onActiveTitleChange = { [weak self] in self?.refreshChrome() }
     tc.onLayoutChange = { [weak self] in self?.scheduleSave() }
     tc.onPwdChange = { [weak self] in self?.paneDidReportPwd() }
@@ -265,12 +265,13 @@ final class WindowController: NSObject, NSWindowDelegate {
   /// （close_surface_cb → onEmpty）が背景タブ・背景 workspace からも届くため、
   /// アクティブ文脈を前提にせず所属 workspace を特定して処理する。
   /// 制御 API（`close_tab`）も id 解決の上でここへ委譲する（WindowController+Control）ため internal。
-  func closeTab(_ tc: TerminalController?) {
+  /// `origin` は判断せず store へ素通しする（復元スタックへ積むかは removeTab が決める）。
+  func closeTab(_ tc: TerminalController?, origin: TabCloseOrigin) {
     guard let tc else { return }
     // タブ集合が変わると editingIndex（位置 index）が別タブを指しうる。編集中なら畳む
     // （前方の背景タブが shell exit する等、フォーカスを保ったまま集合が変わる経路を決定的に解除）。
     if statusModel.editingIndex != nil { endTabRename() }
-    switch store.removeTab(tc) {
+    switch store.removeTab(tc, origin: origin) {
     case .notFound:
       return
     case .emptiedActive:

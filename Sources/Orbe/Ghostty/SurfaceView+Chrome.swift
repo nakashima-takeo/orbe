@@ -17,7 +17,7 @@ extension SurfaceView {
     case .resetFontSize: surfaceBinding("reset_font_size")
     case .splitRight: controller?.split(.horizontal)
     case .splitDown: controller?.split(.vertical)
-    case .closePane: controller?.close(self)
+    case .closePane: controller?.close(self, origin: .gesture)
     case .find: showSearch()
     case .scrollToTop: surfaceBinding("scroll_to_top")
     case .scrollToBottom: surfaceBinding("scroll_to_bottom")

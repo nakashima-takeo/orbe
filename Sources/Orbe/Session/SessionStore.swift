@@ -1,5 +1,34 @@
 import Foundation
 
+/// タブ閉鎖の発火源。閉鎖経路（surface・libghostty ランタイム・制御 API）から
+/// `TerminalController.close` → `onEmpty` → `WindowController.closeTab` → `SessionStore.removeTab`
+/// まで素通しで届き、開き直しスタック（⇧⌘T）へ積むかの判定に入る。
+/// デフォルト値を持たせない＝全呼び出し元が発火源を明示することをコンパイラが強制する。
+enum TabCloseOrigin {
+  /// 人のジェスチャ（タブ行の中クリック・⌘W）。
+  case gesture
+  /// シェル exit・エージェント終了（libghostty の close_surface_cb）。
+  case process
+  /// 制御 API（close_tab・close_pane のカスケード）。経路を問わず一律。
+  case controlAPI
+
+  /// 人が自分の意思でタブを畳んだ閉鎖か（外から落ちた閉鎖と分ける）。
+  /// 網羅 switch（default 無し）＝閉鎖経路が増えたとき分類漏れをコンパイルエラーで検出する。
+  var isHumanGesture: Bool {
+    switch self {
+    case .gesture: return true
+    case .process, .controlAPI: return false
+    }
+  }
+}
+
+/// 閉じたエージェントタブ 1 枚の開き直しエントリ。`index` は閉じた時点のタブ位置。
+/// `state` はタブ丸ごと（同居していた素のシェルペインも分割ツリーごと）。
+struct ClosedAgentTab {
+  let index: Int
+  let state: TabState
+}
+
 /// ドメイン/セッション状態（`workspaces` と `activeWorkspace`）の唯一の所有者。
 /// 配列の CRUD・active index 補正・MRU 退避先選定・workspace の index 演算といった純ドメイン
 /// ロジックだけを持ち、ビューの mount/reparent や chrome 投影は WindowController に残す。
@@ -9,6 +38,10 @@ final class SessionStore {
   private(set) var workspaces: [Workspace]
   private(set) var activeWorkspace: Int
   var current: Workspace { workspaces[activeWorkspace] }
+
+  /// 開き直しスタックの上限（workspace ごと）。数件戻せれば足りる用途で、閉じたタブの
+  /// スナップショットを無制限に抱え込まないための上限。
+  private static let closedAgentTabLimit = 10
 
   init(workspaces: [Workspace] = [], activeWorkspace: Int = 0) {
     self.workspaces = workspaces
@@ -88,6 +121,21 @@ final class SessionStore {
     current.tabs.append(tc)
   }
 
+  /// アクティブ workspace の `index`（有効範囲 0…count へクランプ）へタブを挿し、実挿入 index を返す。
+  /// 挿入位置が現 active 以前なら active を 1 つ繰り下げ、挿入前と同じタブを指し続けさせる
+  /// （呼び出し側が直後に select する前提に寄りかからず、store 単体で不変条件を保つ）。
+  func insertTabIntoActive(_ tc: TerminalController, at index: Int) -> Int {
+    let ws = current
+    let dest = min(max(0, index), ws.tabs.count)
+    ws.tabs.insert(tc, at: dest)
+    if dest <= ws.active { ws.active += 1 }
+    ws.active = min(ws.active, ws.tabs.count - 1)  // 0タブへの挿入（active=0・count=1）を吸収
+    return dest
+  }
+
+  /// アクティブ workspace の開き直しスタックから直近の 1 件を取り出す（LIFO）。空なら nil＝呼び出し側は無反応。
+  func popClosedAgentTab() -> ClosedAgentTab? { current.closedAgentTabs.popLast() }
+
   /// アクティブ workspace 内でタブを `from` から `to`（挿入先 index・0…count）へ移動する。範囲外・
   /// 実移動なし（同位置）は false。アクティブだった `TerminalController` の参照を控え、並べ替え後の
   /// index を引き直して `active` を補正する（from/to の前後で場合分けするより堅牢）。ビュー副作用は
@@ -128,12 +176,24 @@ final class SessionStore {
   /// タブを配列から外し active を補正して分岐を返す。アクティブ workspace が空（0タブ）化したときは
   /// エントリをその場に残したまま `.emptiedActive` を返す（退避せず空でアクティブ維持）。空化時の
   /// `ws.active` は `max(0, min(0, -1)) = 0` に補正され、再アクティブ化で index 0 を選べる状態になる。
-  func removeTab(_ tc: TerminalController) -> CloseTabOutcome {
+  /// 人のジェスチャで閉じたエージェントタブなら、配列から外す前に復元単位と位置を開き直しスタックへ
+  /// 積む——分割比は実フレームから、cwd/セッションは生きた surface から取るため、ビューが外れる前で
+  /// なければ正しく取れない。積む単位はタブ丸ごと（同居する素のシェルペインも分割ツリーごと）。
+  func removeTab(_ tc: TerminalController, origin: TabCloseOrigin) -> CloseTabOutcome {
     guard
       let wsIndex = workspaces.firstIndex(where: { ws in ws.tabs.contains { $0 === tc } })
     else { return .notFound }
     let ws = workspaces[wsIndex]
     guard let idx = ws.tabs.firstIndex(where: { $0 === tc }) else { return .notFound }
+
+    if origin.isHumanGesture {
+      let state = tc.tabState()
+      // エージェントペインを 1 枚でも含むタブだけ積む（agent 付き葉の数で判定）。
+      if state.tree.agentLeafCount > 0 {
+        ws.closedAgentTabs.append(ClosedAgentTab(index: idx, state: state))
+        if ws.closedAgentTabs.count > Self.closedAgentTabLimit { ws.closedAgentTabs.removeFirst() }
+      }
+    }
 
     ws.tabs.remove(at: idx)
     if idx < ws.active { ws.active -= 1 }

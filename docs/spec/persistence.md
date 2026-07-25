@@ -1,7 +1,7 @@
 ---
 title: workspace 永続（現状）
 description: 構成（workspace・タブ・明示タイトル・分割ツリー・cwd・エージェントセッション・最終使用時刻）の JSON 保存と起動時復元・エージェント resume・デバウンス保存
-updated: 2026-07-23
+updated: 2026-07-25
 ---
 
 保存先は `~/Library/Application Support/<bundle-id>/` 直下。`<bundle-id>` はビルドチャネルごとに異なるため（[channel](channel.md)）、dev（Orbe Dev）と release は state を共有しない。環境変数 `ORBE_STATE_DIR`（非空）を設定するとその dir 直下へ移る——検証用の隔離インスタンス用途で、settings.json・gui.conf・[control-api](control-api.md) の control.sock も同じ dir に同居する。テスト用にファイル位置を差し替える seam を持つ。
@@ -18,6 +18,7 @@ updated: 2026-07-23
 - エージェントセッションは hook 由来の (CLI 名, session_id)（[agent-notify](agent-notify.md)）を葉に持ち、復元時に CLI 別の resume コマンド（claude `--resume <id>`／agy `--conversation <id>`／codex `resume <id>`）＋ログインシェル PATH で起こす。CLI 名が未対応・session_id が安全文字集合外なら素のシェルへ fallback する（生成コマンドへの注入を防ぐため）。
 - resume が注入するログインシェル PATH は `app-state.json` のキャッシュ値から**同期で**読む——起動復元を PATH 検出 subprocess（ログインシェル起動・数秒〜十数秒かかりうる）にブロックさせないため（[agent-launch](agent-launch.md)）。
 - 分割比は保存値を一度だけ適用し、以後は実フレームから算出する。
+- タブ 1 枚分の復元単位は `Cmd+Shift+T`（閉じたエージェントタブを開き直す → [layout](layout.md)）と共有する——同じ経路を通るので戻るもの／戻らないものが一致する。閉じたタブの控えはこのファイルに持たずプロセス内にのみ保つ。
 - ウィンドウサイズは画面 `visibleFrame` へクランプして復元し、位置は保存せず毎回中央表示。記憶するのはユーザー意図サイズ（クランプ前）で、小画面での表示クランプは記憶値を破壊しない。
 - `NSWindow.isRestorable = false` で OS 標準の復元は使わない。
 

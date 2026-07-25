@@ -7,6 +7,7 @@ extension WindowController {
   func handleWindowCommand(_ command: TerminalController.WindowCommand) {
     switch command {
     case .newTab: newTab()
+    case .reopenClosedAgentTab: reopenClosedAgentTab()
     case .nextTab: nextTab()
     case .prevTab: prevTab()
     case .prevTool: navigateEditorTool(-1)
