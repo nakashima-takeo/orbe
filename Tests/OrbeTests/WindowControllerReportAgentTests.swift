@@ -12,6 +12,8 @@ import XCTest
 final class WindowControllerReportAgentTests: XCTestCase {
 
   private var tempStore: URL!
+  /// `makeKey` で前面化した窓。次のテスト（背面前提）へ key を持ち越さないため tearDown で下ろす。
+  private var openedWindows: [NSWindow] = []
   override func setUp() {
     super.setUp()
     tempStore = FileManager.default.temporaryDirectory
@@ -21,6 +23,8 @@ final class WindowControllerReportAgentTests: XCTestCase {
     AppStatePersistence.fileURLOverride = tempStore.appendingPathExtension("appstate")
   }
   override func tearDown() {
+    openedWindows.forEach { $0.orderOut(nil) }
+    openedWindows.removeAll()
     WorkspacePersistence.fileURLOverride = nil
     SettingsPersistence.fileURLOverride = nil
     AppStatePersistence.fileURLOverride = nil
@@ -41,6 +45,45 @@ final class WindowControllerReportAgentTests: XCTestCase {
     let wc = WindowController()
     let pane = try XCTUnwrap(wc.current.tabs.first?.controlAllPanes().first)
     return (wc, pane)
+  }
+
+  /// 1 workspace 2 タブ（アクティブはタブ0＝見ているタブ）で起動し、
+  /// タブ順に並べた各タブの先頭ペイン（`panes[i]` がタブ i）を返す。
+  private func makeControllerAndTwoTabs() throws -> (WindowController, [SurfaceView]) {
+    let tab = TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)
+    let file = WorkspacesFile(
+      version: WorkspacePersistence.version, activeWorkspace: 0,
+      workspaces: [
+        WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [tab, tab])
+      ])
+    try JSONEncoder().encode(file).write(to: tempStore)
+    let wc = WindowController()
+    XCTAssertEqual(wc.current.tabs.count, 2)
+    let panes = try wc.current.tabs.map { try XCTUnwrap($0.controlAllPanes().first) }
+    return (wc, panes)
+  }
+
+  /// AppKit のイベントを実際に取り出して配送する。活性化（`activate` → key 化）は WindowServer から
+  /// 届くイベントを NSApp が捌いて初めて成立するため、素の `RunLoop.run` では key にならない。
+  private func pumpApp(_ seconds: TimeInterval) {
+    let end = Date().addingTimeInterval(seconds)
+    while Date() < end {
+      guard
+        let event = NSApp.nextEvent(
+          matching: .any, until: Date().addingTimeInterval(0.01), inMode: .default, dequeue: true)
+      else { continue }
+      NSApp.sendEvent(event)
+    }
+  }
+
+  /// ウィンドウを実際に key（前面）にする。`isKeyWindow` を要求する契約を実経路で測るため。
+  private func makeKey(_ wc: WindowController) {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    wc.window.makeKeyAndOrderFront(nil)
+    NSApplication.shared.activate(ignoringOtherApps: true)
+    openedWindows.append(wc.window)
+    pumpApp(0.4)
+    XCTAssertTrue(wc.window.isKeyWindow, "前提: ウィンドウが key にならない環境ではこの契約を測れない")
   }
 
   func testStateChangedAtMovesOnlyOnActualChange() throws {
@@ -85,6 +128,7 @@ final class WindowControllerReportAgentTests: XCTestCase {
   /// waiting / done への実変化だけが一過性イベント（メニューバー②）を立てる。
   func testTransientFiresOnlyOnWaitingOrDoneChange() throws {
     let (wc, pane) = try makeControllerAndPane()
+    XCTAssertFalse(wc.window.isKeyWindow, "前提: 背面（非 key）なので見ているタブの抑制は効かない")
 
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "working", sessionId: nil, message: nil)
@@ -104,6 +148,48 @@ final class WindowControllerReportAgentTests: XCTestCase {
 
     wc.controlReportAgent(pane: pane, agent: "claude", state: "done", sessionId: nil, message: "d")
     XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
+  }
+
+  /// 見ているタブ（前面ウィンドウのアクティブ表示タブ）のペインでは②を立てない。
+  /// 抑制されるのはピルだけで、一覧（rows）と done のフォーカス消費は従来どおり効く。
+  func testTransientSuppressedOnVisibleTab() throws {
+    let (wc, pane) = try makeControllerAndPane()
+    makeKey(wc)
+
+    wc.controlReportAgent(
+      pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: "q")
+    XCTAssertNil(wc.attentionStore.transient, "見ているタブの waiting ではピルを立てない")
+    wc.flushChrome()
+    XCTAssertEqual(wc.attentionStore.rows.map(\.paneId), [pane.id], "抑制するのはピルだけ（一覧は従来どおり）")
+
+    wc.controlReportAgent(pane: pane, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    wc.controlReportAgent(pane: pane, agent: "claude", state: "done", sessionId: nil, message: "d")
+    XCTAssertNil(wc.attentionStore.transient, "見ているタブの done でもピルを立てない")
+    XCTAssertEqual(pane.agentState, "idle", "done のフォーカス消費は従来どおり効く")
+  }
+
+  /// 前面のままでも、見ていない別タブのペインなら②は立つ。
+  func testTransientFiresForBackgroundTabWhileKey() throws {
+    let (wc, panes) = try makeControllerAndTwoTabs()
+    makeKey(wc)
+
+    wc.controlReportAgent(
+      pane: panes[1], agent: "claude", state: "waiting", sessionId: nil, message: "q")
+    XCTAssertEqual(wc.attentionStore.transient?.row.paneId, panes[1].id)
+  }
+
+  /// 抑制は「立てない」だけ。別の場所で起きた変化の既存ピルには触らない。
+  func testSuppressionKeepsExistingTransient() throws {
+    let (wc, panes) = try makeControllerAndTwoTabs()
+    makeKey(wc)
+
+    wc.controlReportAgent(
+      pane: panes[1], agent: "claude", state: "waiting", sessionId: nil, message: "bg")
+    XCTAssertEqual(wc.attentionStore.transient?.row.paneId, panes[1].id)
+
+    wc.controlReportAgent(
+      pane: panes[0], agent: "claude", state: "waiting", sessionId: nil, message: "fg")
+    XCTAssertEqual(wc.attentionStore.transient?.row.paneId, panes[1].id, "抑制は既存のピルを消さない")
   }
 
   /// done のフォーカス消費（done→idle）は stateChangedAt / message を触らない。
