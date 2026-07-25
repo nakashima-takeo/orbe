@@ -49,31 +49,11 @@ final class MenuBarStatusViewTests: XCTestCase {
     return store
   }
 
-  /// 提案幅 `proposedWidth` を与えて実際に描画させ、view が取った幅を測る。
-  /// `fittingSize` は理想値の総和で、レイアウトが提案幅にどう反応するかを写さない
-  /// ——短い内容で膨らむ破れはここでしか捕まらない。
+  /// 提案幅 `proposedWidth` を与えたときにレイアウトが取る幅。`fittingSize` は理想値の総和で、
+  /// レイアウトが提案幅にどう反応するかを写さない——短い内容で膨らむ破れはここでしか捕まらない。
   private func renderedWidth(store: AttentionStore, proposedWidth: CGFloat) -> CGFloat {
-    let box = WidthBox()
-    let root = MenuBarStatusView(store: store, ui: MenuBarUIState())
-      .background(
-        GeometryReader { geo in
-          Color.clear
-            .onAppear { box.value = geo.size.width }
-            .onChange(of: geo.size.width) { _, new in box.value = new }
-        })
-    let frame = NSRect(x: 0, y: 0, width: proposedWidth, height: 40)
-    let host = NSHostingView(rootView: root)
-    host.frame = frame
-    let window = NSWindow(
-      contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
-    window.contentView = NSView(frame: frame)
-    window.contentView?.addSubview(host)
-    window.orderFront(nil)
-    window.displayIfNeeded()
-    host.layoutSubtreeIfNeeded()
-    RunLoop.current.run(until: Date().addingTimeInterval(0.2))  // SwiftUI の描画コミット待ち
-    window.orderOut(nil)
-    return box.value
+    NSHostingController(rootView: MenuBarStatusView(store: store, ui: MenuBarUIState()))
+      .sizeThatFits(in: NSSize(width: proposedWidth, height: 40)).width
   }
 
   /// ② 滲み出しピル（WS 名＋文言）: 高さ 22 以下。静的状態（①③）より確実に広い
@@ -136,9 +116,6 @@ final class MenuBarStatusViewTests: XCTestCase {
       accuracy: 2, "長い本文では WS 名の長短によらず予算を使い切る")
   }
 }
-
-/// 実描画幅の受け皿（GeometryReader からテストへ値を返すだけ）。
-@MainActor private final class WidthBox { var value: CGFloat = -1 }
 
 private let shortWS = "orbe"
 private let longWS = "very-long-workspace-name-here-xxx"
