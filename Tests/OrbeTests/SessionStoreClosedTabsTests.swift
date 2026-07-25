@@ -11,14 +11,17 @@ import XCTest
 /// （`tabState().explicitTitle` に載る）。
 final class SessionStoreClosedTabsTests: XCTestCase {
 
+  /// 明示タイトルで区別できるタブを 1 枚作る。
+  private func tab(_ title: String) -> TerminalController {
+    let tc = TerminalController()
+    tc.explicitTitle = title
+    return tc
+  }
+
   /// 明示タイトルで区別できるタブを持つ workspace を組む。
   private func makeWorkspace(_ name: String, titles: [String]) -> Workspace {
     let ws = Workspace(name: name, rootPath: "/tmp")
-    ws.tabs = titles.map { title in
-      let tc = TerminalController()
-      tc.explicitTitle = title
-      return tc
-    }
+    ws.tabs = titles.map(tab)
     return ws
   }
 
@@ -119,14 +122,28 @@ final class SessionStoreClosedTabsTests: XCTestCase {
 
   // MARK: - 挿入位置のクランプ
 
-  /// 有効範囲外の index は 0…count へクランプし、戻り値は実挿入 index。
+  /// 指定した index にタブが挿さり、後続が 1 つ後ろへ押し出される。
+  /// 中間を叩くのが要点——先頭・末尾だけだと `insert(at: 0)` や `append` の決め打ちと区別できず、
+  /// 戻り値が合っているだけで「閉じた位置へ戻す」が壊れていても気づけない。
+  func testInsertLandsAtGivenIndexAndShiftsFollowers() {
+    let ws = makeWorkspace("ws", titles: ["a", "b", "c"])
+    let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
+
+    XCTAssertEqual(store.insertTabIntoActive(tab("mid"), at: 1), 1, "戻り値は実挿入 index")
+
+    XCTAssertEqual(
+      ws.tabs.map(\.explicitTitle), ["a", "mid", "b", "c"], "指定 index へ挿さり後続が押し出される")
+  }
+
+  /// 有効範囲外の index は 0…count へクランプし、戻り値は実挿入 index。クランプ先へ実際に挿さる。
   func testInsertClampsToValidRangeAndReturnsActualIndex() {
     let ws = makeWorkspace("ws", titles: ["a", "b"])
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
 
-    XCTAssertEqual(store.insertTabIntoActive(TerminalController(), at: -3), 0, "負値は先頭へクランプ")
-    XCTAssertEqual(store.insertTabIntoActive(TerminalController(), at: 99), 3, "count 超は末尾へクランプ")
-    XCTAssertEqual(ws.tabs.count, 4, "どちらも実際に挿さる")
+    XCTAssertEqual(store.insertTabIntoActive(tab("head"), at: -3), 0, "負値は先頭へクランプ")
+    XCTAssertEqual(store.insertTabIntoActive(tab("tail"), at: 99), 3, "count 超は末尾へクランプ")
+    XCTAssertEqual(
+      ws.tabs.map(\.explicitTitle), ["head", "a", "b", "tail"], "クランプ先の位置へ実際に挿さる")
   }
 
   /// 0タブ（休眠）workspace への挿入は index 0 に着地し、active がそのタブを指す。
@@ -134,17 +151,30 @@ final class SessionStoreClosedTabsTests: XCTestCase {
     let ws = makeWorkspace("ws", titles: [])
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
 
-    XCTAssertEqual(store.insertTabIntoActive(TerminalController(), at: 5), 0, "0タブでは index 0 へ")
+    XCTAssertEqual(store.insertTabIntoActive(tab("only"), at: 5), 0, "0タブでは index 0 へ")
     XCTAssertEqual(ws.active, 0, "active は唯一のタブを指す（範囲外に飛ばない）")
   }
 
-  /// 挿入位置が現 active 以前なら、active は挿入前と同じタブを指し続ける。
+  /// 挿入位置が現 active より前なら、active は挿入前と同じタブを指し続ける。
   func testInsertBeforeActiveKeepsActiveOnSameTab() {
     let ws = makeWorkspace("ws", titles: ["a", "b"])
     ws.active = 1
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
 
-    XCTAssertEqual(store.insertTabIntoActive(TerminalController(), at: 0), 0)
+    XCTAssertEqual(store.insertTabIntoActive(tab("head"), at: 0), 0)
+    XCTAssertEqual(ws.tabs[ws.active].explicitTitle, "b", "active は挿入前と同じタブを指す")
+  }
+
+  /// 挿入位置が現 active と同値のときも同じタブを指し続ける（`dest <= active` の境界）。
+  /// ここを `<` に緩めると、復元したタブが割り込んだ分だけ選択が 1 つ手前へずれる。
+  func testInsertAtActiveIndexKeepsActiveOnSameTab() {
+    let ws = makeWorkspace("ws", titles: ["a", "b"])
+    ws.active = 1
+    let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
+
+    XCTAssertEqual(store.insertTabIntoActive(tab("mid"), at: 1), 1)
+
+    XCTAssertEqual(ws.tabs.map(\.explicitTitle), ["a", "mid", "b"])
     XCTAssertEqual(ws.tabs[ws.active].explicitTitle, "b", "active は挿入前と同じタブを指す")
   }
 }

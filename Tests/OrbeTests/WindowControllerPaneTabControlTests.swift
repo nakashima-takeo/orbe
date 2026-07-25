@@ -167,6 +167,8 @@ final class WindowControllerPaneTabControlTests: XCTestCase {
     }
     XCTAssertFalse(
       wc.controlListPanes().contains { $0["tabId"] as? Int == victim }, "閉じたタブのペインは消える")
+    XCTAssertTrue(
+      wc.current.closedTabs.isEmpty, "制御 API の閉鎖は復元スタックへ積まない（⇧⌘T の対象は人のジェスチャだけ）")
   }
 
   /// close_tab は未知 tabId を -32004 で弾く。
