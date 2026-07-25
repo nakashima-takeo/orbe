@@ -183,20 +183,52 @@ extension SettingsPaletteModel {
     render.rows = rows
   }
 
-  /// worktreeDir: テンプレート文字列の editor 入力（`fieldIsFilter = false`＝← はカーソル移動に残す）。
-  /// 入力欄には drillIn がそのスコープの実効テンプレートをプリフィルする。行は選択不可の情報行 1 行のみ:
-  /// 通常時はプレースホルダ語彙の説明、不正確定後は検証エラー理由（`worktreeDirError`）に差し替える。
-  func rebuildWorktreeDirInput() {
-    render.fieldVisible = true
+  /// worktreeDir: 作成場所のプリセット一覧（絞り込み欄なし）＋末尾の「カスタム…」行。
+  /// 現在値（●・初期ハイライト）は一致するプリセット行、どれとも一致しなければ「カスタム…」行に置き、
+  /// その行の補足に現在値を出す（一致しない値の在処が一覧から読める）。
+  func rebuildWorktreeDirPresets() {
+    render.fieldVisible = false
     render.fieldIsFilter = false
     render.breadcrumb = localization.string(.settingsWorktreeDirBreadcrumb)
+    render.placeholder = ""
+    render.hint = localization.string(.settingsSubHintApply)
+    let presets = WorktreePathTemplate.presets
+    let current = values.effWorktreeDir
+    let matched = presets.firstIndex { $0.template == current }
+    currentRowIndex = matched ?? presets.count
+    var rows = presets.indices.map { i in
+      PaletteModel.RowItem(
+        label: marker(i) + localization.string(presets[i].labelKey), detail: presets[i].template)
+    }
+    rows.append(
+      PaletteModel.RowItem(
+        label: marker(presets.count) + localization.string(.settingsWorktreeDirCustom),
+        chevron: true, detail: matched == nil ? current : nil))
+    render.rows = rows
+  }
+
+  /// worktreeDir カスタム: テンプレート文字列の editor 入力（`fieldIsFilter = false`＝← はカーソル移動に
+  /// 残す）。入場時にそのスコープの実効テンプレートがプリフィルされる。行は選択不可の情報行 1 行のみ。
+  func rebuildWorktreeDirCustom() {
+    render.fieldVisible = true
+    render.fieldIsFilter = false
+    render.breadcrumb = "‹ " + localization.string(.settingsWorktreeDirCustom)
     render.placeholder = localization.string(.settingsWorktreeDirPlaceholder)
     render.hint = localization.string(.settingsWorktreeDirHint)
     currentRowIndex = nil
-    render.rows = [
-      PaletteModel.RowItem(
-        label: worktreeDirError ?? localization.string(.settingsWorktreeDirInfo), enabled: false)
-    ]
+    render.rows = [PaletteModel.RowItem(label: worktreeDirInfoLabel, enabled: false)]
+  }
+
+  /// カスタム入力の情報行。不正確定の理由（`worktreeDirError`）＞ `{repo}` 欠落の警告＞語彙説明の順。
+  /// 警告は**妥当なテンプレートにだけ**出す（打鍵途中の不完全な入力で鳴らさない）。保存は拒否しない——
+  /// 1 リポジトリ専用の置き場を workspace 上書きで指定する使い方を潰さないため、検証の合否は変えない。
+  private var worktreeDirInfoLabel: String {
+    if let worktreeDirError { return worktreeDirError }
+    let text = render.query.trimmingCharacters(in: .whitespaces)
+    if WorktreePathTemplate.validate(text) == nil, !text.contains("{repo}") {
+      return localization.string(.settingsWorktreeDirWarnMissingRepo)
+    }
+    return localization.string(.settingsWorktreeDirInfo)
   }
 
   /// language: ja / en の固定2行（絞り込み欄なし）。現在値は実効 UI 言語。↵ で確定し提示元へ通知する。

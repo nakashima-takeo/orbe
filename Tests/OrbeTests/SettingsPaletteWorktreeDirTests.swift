@@ -2,17 +2,28 @@ import XCTest
 
 @testable import Orbe
 
-/// 設定パレットの「worktree の作成場所」テキスト入力サブパレット（root index 12・editor 型）の検証。
+/// 設定パレットの「worktree の作成場所」（root index 12）の検証。
+/// 潜るとまずプリセット一覧（現在値に ●・最終行「カスタム…」）が出て、テキスト入力は「カスタム…」から
+/// 1 段深く潜ったときだけ現れる。カスタム入力は workspace rename と同じ「setMode 後にプリフィル後入れ」の型で、
+/// ↵ 確定（空＝解除・不正＝情報行へ理由を出して留まる・妥当＝保存して root へ）、Esc は保存せず一覧へ戻る。
 /// `SettingsPaletteTests` の拡張として helper（`model`/`captureApply`）を共有する。
-/// workspace rename と同じ「setMode 後にプリフィル後入れ」の型で、確定は ↵（空＝解除・不正＝情報行へ
-/// エラー理由を出して留まる・妥当＝保存して root 復帰）、Esc は保存せず root へ戻る。
 @MainActor
 extension SettingsPaletteTests {
-  /// worktreeDir 行（全行 index 12）へ潜る。
+  /// worktreeDir 行（全行 index 12）からプリセット一覧へ潜る。
   private func drillIntoWorktreeDir(_ p: SettingsPaletteModel) {
     p.render.selected = 12
     p.render.onActivate()
   }
+
+  /// プリセット一覧の最終行「カスタム…」からテキスト入力へ潜る。
+  private func drillIntoCustom(_ p: SettingsPaletteModel) {
+    drillIntoWorktreeDir(p)
+    p.render.selected = customRow
+    p.render.onActivate()
+  }
+
+  /// 「カスタム…」行の index（プリセットの次）。
+  private var customRow: Int { WorktreePathTemplate.presets.count }
 
   private var infoText: String {
     LocalizationStore(language: .ja).string(.settingsWorktreeDirInfo)
@@ -28,14 +39,98 @@ extension SettingsPaletteTests {
     XCTAssertTrue(p.render.rows[12].chevron, "drillIn 行は chevron 有り")
   }
 
-  // MARK: - drillIn: editor 入力欄とプリフィル
+  // MARK: - プリセット一覧
 
-  /// 潜ると editor 入力欄（← はカーソル移動）が出て、実効テンプレートがプリフィルされ、
-  /// 行は語彙説明の情報行 1 行のみ（選択・実行の対象にしない）。
-  func testWorktreeDirDrillInPrefillsEffectiveTemplate() {
+  /// 潜るとプリセット＋「カスタム…」の一覧が出る（入力欄なし）。各行はラベル＋テンプレートの補足。
+  func testWorktreeDirDrillInShowsPresetList() {
     let p = model()
     drillIntoWorktreeDir(p)
     XCTAssertEqual(p.render.breadcrumb, "‹ worktree の作成場所")
+    XCTAssertFalse(p.render.fieldVisible, "一覧は絞り込み欄なし")
+    XCTAssertEqual(p.render.rows.count, WorktreePathTemplate.presets.count + 1)
+    XCTAssertTrue(p.render.rows[0].label.contains("リポジトリの隣（既定）"))
+    XCTAssertEqual(p.render.rows[0].detail, WorktreePathTemplate.defaultTemplate, "補足はテンプレート文字列")
+    XCTAssertTrue(p.render.rows[customRow].label.contains("カスタム…"))
+    XCTAssertTrue(p.render.rows[customRow].chevron, "カスタム…だけが 1 段深い")
+  }
+
+  /// 現在値と一致するプリセット行に ● が付き、初期選択もその行に置かれる（未設定＝既定＝先頭行）。
+  func testPresetMarkerOnMatchingRow() {
+    let p = model()
+    drillIntoWorktreeDir(p)
+    XCTAssertEqual(p.render.selected, 0, "既定と一致する行を初期選択")
+    XCTAssertTrue(p.render.rows[0].label.hasPrefix("● "))
+    XCTAssertFalse(p.render.rows[customRow].label.hasPrefix("● "))
+  }
+
+  /// 既定以外のプリセットを設定していれば、その行に ● と初期選択が乗る。
+  func testPresetMarkerOnConfiguredPreset() {
+    let p = model(worktreeDir: WorktreePathTemplate.presets[2].template)
+    drillIntoWorktreeDir(p)
+    XCTAssertEqual(p.render.selected, 2)
+    XCTAssertTrue(p.render.rows[2].label.hasPrefix("● "))
+  }
+
+  /// どのプリセットとも一致しない値は「カスタム…」行に ● が付き、その行の補足に現在値が出る。
+  func testCustomRowMarkedWhenNoPresetMatches() {
+    let p = model(worktreeDir: "~/wt/{repo}/{slug}")
+    drillIntoWorktreeDir(p)
+    XCTAssertEqual(p.render.selected, customRow)
+    XCTAssertTrue(p.render.rows[customRow].label.hasPrefix("● "))
+    XCTAssertEqual(p.render.rows[customRow].detail, "~/wt/{repo}/{slug}", "一致しない現在値を補足に出す")
+  }
+
+  /// 一致するプリセットがあるときの「カスタム…」行は補足を持たない（現在値の在処が二重に出ない）。
+  func testCustomRowHasNoDetailWhenPresetMatches() {
+    let p = model()
+    drillIntoWorktreeDir(p)
+    XCTAssertNil(p.render.rows[customRow].detail)
+  }
+
+  /// プリセット行の ↵ はそのテンプレートを保存して root へ戻る（1 打で決まる）。
+  func testPresetConfirmAppliesAndReturnsToRoot() {
+    let p = model()
+    drillIntoWorktreeDir(p)
+    let applied = captureApply(p)
+    p.render.selected = 1
+    p.render.onActivate()
+    XCTAssertEqual(
+      applied()?[SettingKeys.worktreeDir], WorktreePathTemplate.presets[1].template)
+    XCTAssertNil(p.render.breadcrumb, "root へ戻る")
+    XCTAssertEqual(p.render.selected, 12, "潜った行へ選択を復元")
+  }
+
+  /// 一覧の Esc/← は保存せず root へ戻る。
+  func testPresetEscapeReturnsToRoot() {
+    let p = model()
+    drillIntoWorktreeDir(p)
+    let applied = captureApply(p)
+    p.render.onEscape()
+    XCTAssertNil(applied())
+    XCTAssertNil(p.render.breadcrumb)
+    XCTAssertEqual(p.render.selected, 12)
+  }
+
+  /// → は「カスタム…」行だけで潜る（プリセット行の → は消費せず何もしない）。
+  func testRightArrowDrillsInOnlyFromCustomRow() {
+    let p = model()
+    drillIntoWorktreeDir(p)
+    p.render.selected = 0
+    XCTAssertFalse(p.render.onRight(), "プリセット行の → はキーを消費しない")
+    XCTAssertEqual(p.render.breadcrumb, "‹ worktree の作成場所", "一覧に留まる")
+    p.render.selected = customRow
+    XCTAssertTrue(p.render.onRight())
+    XCTAssertEqual(p.render.breadcrumb, "‹ カスタム…", "カスタム入力へ潜る")
+  }
+
+  // MARK: - カスタム入力: editor 入力欄とプリフィル
+
+  /// 「カスタム…」で潜ると editor 入力欄（← はカーソル移動）が出て、実効テンプレートがプリフィルされ、
+  /// 行は語彙説明の情報行 1 行のみ（選択・実行の対象にしない）。
+  func testWorktreeDirCustomPrefillsEffectiveTemplate() {
+    let p = model()
+    drillIntoCustom(p)
+    XCTAssertEqual(p.render.breadcrumb, "‹ カスタム…")
     XCTAssertTrue(p.render.fieldVisible, "editor 入力欄が出る")
     XCTAssertFalse(p.render.fieldIsFilter, "editor＝← をカーソル移動に残す")
     XCTAssertEqual(p.render.query, WorktreePathTemplate.defaultTemplate, "未設定は既定テンプレートをプリフィル")
@@ -45,25 +140,25 @@ extension SettingsPaletteTests {
   }
 
   /// 設定済みならその値がプリフィルされる（現在値からの編集で始まる）。
-  func testWorktreeDirDrillInPrefillsConfiguredValue() {
+  func testWorktreeDirCustomPrefillsConfiguredValue() {
     let p = model(worktreeDir: "~/wt/{repo}/{slug}")
-    drillIntoWorktreeDir(p)
+    drillIntoCustom(p)
     XCTAssertEqual(p.render.query, "~/wt/{repo}/{slug}")
   }
 
   /// workspace スコープのプリフィルはそのスコープの実効値＝global 値を継承する。
   func testWorktreeDirWorkspacePrefillInheritsGlobal() {
     let p = model(worktreeDir: "~/wt/{repo}/{slug}", scope: .workspace)
-    drillIntoWorktreeDir(p)
+    drillIntoCustom(p)
     XCTAssertEqual(p.render.query, "~/wt/{repo}/{slug}", "上書き無しの workspace は global 値を継承")
   }
 
-  // MARK: - ↵ 確定
+  // MARK: - カスタム入力: ↵ 確定
 
   /// 妥当なテンプレートの ↵ は保存して root へ戻り、行表示が追従する。
   func testWorktreeDirValidConfirmAppliesAndReturnsToRoot() {
     let p = model()
-    drillIntoWorktreeDir(p)
+    drillIntoCustom(p)
     let applied = captureApply(p)
     p.render.query = "~/wt/{repo}/{slug}"
     p.render.onQueryChange()
@@ -77,7 +172,7 @@ extension SettingsPaletteTests {
   /// 全消し＋↵＝意図的な解除（nil 代入）。global は既定へ戻り root 表示も既定テンプレートになる。
   func testWorktreeDirEmptyConfirmClearsSetting() {
     let p = model(worktreeDir: "~/wt/{repo}/{slug}")
-    drillIntoWorktreeDir(p)
+    drillIntoCustom(p)
     var appliedValue: String? = "SENTINEL"
     p.onApply = { change, _ in
       var layer = SettingsLayer()
@@ -96,7 +191,7 @@ extension SettingsPaletteTests {
   /// workspace スコープの解除は .workspace の単一代入で届く（継承へ戻る）。
   func testWorktreeDirEmptyConfirmInWorkspaceScope() {
     let p = model(worktreeDir: "~/wt/{repo}/{slug}", scope: .workspace)
-    drillIntoWorktreeDir(p)
+    drillIntoCustom(p)
     var last: (SettingChange, SettingsScope)?
     p.onApply = { last = ($0, $1) }
     p.render.query = ""
@@ -109,20 +204,20 @@ extension SettingsPaletteTests {
   /// 不正テンプレートの ↵ は適用せず入力モードに留まり、情報行が検証エラー理由に差し替わる。
   func testWorktreeDirInvalidConfirmShowsErrorAndStays() {
     let p = model()
-    drillIntoWorktreeDir(p)
+    drillIntoCustom(p)
     let applied = captureApply(p)
     p.render.query = "~/wt/{repo}"
     p.render.onQueryChange()
     p.render.onActivate()
     XCTAssertNil(applied(), "不正は適用しない")
-    XCTAssertEqual(p.render.breadcrumb, "‹ worktree の作成場所", "入力モードに留まる")
+    XCTAssertEqual(p.render.breadcrumb, "‹ カスタム…", "入力モードに留まる")
     XCTAssertEqual(p.render.rows[0].label, "{slug} を含めてください", "情報行がエラー理由に差し替わる")
   }
 
   /// 不正確定後に編集すると、エラー表示は語彙説明へ戻る（エラーは確定時にだけ評価する）。
   func testWorktreeDirErrorClearsOnEdit() {
     let p = model()
-    drillIntoWorktreeDir(p)
+    drillIntoCustom(p)
     p.render.query = "~/wt/{repo}"
     p.render.onActivate()  // 不正確定 → エラー表示
     XCTAssertNotEqual(p.render.rows[0].label, infoText)
@@ -134,24 +229,54 @@ extension SettingsPaletteTests {
   /// 未知プレースホルダはその断片つきでエラー理由が読める。
   func testWorktreeDirUnknownTokenErrorNamesToken() {
     let p = model()
-    drillIntoWorktreeDir(p)
+    drillIntoCustom(p)
     p.render.query = "/wt/{branch}/{slug}"
     p.render.onActivate()
     XCTAssertEqual(p.render.rows[0].label, "不正なプレースホルダ: {branch}")
   }
 
-  // MARK: - Esc
+  // MARK: - カスタム入力: {repo} 欠落の警告（保存は通す）
 
-  /// Esc は保存せず root へ戻る（編集途中の値は捨てる）。
-  func testWorktreeDirEscReturnsWithoutApply() {
+  /// `{repo}` を含まない妥当なテンプレートは情報行で警告するだけ——確定は通り root へ戻る。
+  func testMissingRepoWarnsButSaves() {
     let p = model()
-    drillIntoWorktreeDir(p)
+    drillIntoCustom(p)
+    let applied = captureApply(p)
+    p.render.query = "~/wt/{slug}"
+    p.render.onQueryChange()
+    XCTAssertEqual(
+      p.render.rows[0].label, "{repo} が無いため別リポジトリの同名ブランチと衝突します", "入力に追従して警告が出る")
+    p.render.onActivate()
+    XCTAssertEqual(applied()?[SettingKeys.worktreeDir], "~/wt/{slug}", "警告しても保存は拒否しない")
+    XCTAssertNil(p.render.breadcrumb, "root へ戻る")
+  }
+
+  /// 警告は妥当なテンプレートにだけ出す（打鍵途中の不完全な入力では語彙説明のまま）。
+  func testMissingRepoWarningOnlyForValidTemplate() {
+    let p = model()
+    drillIntoCustom(p)
+    p.render.query = "~/wt/{sl"
+    p.render.onQueryChange()
+    XCTAssertEqual(p.render.rows[0].label, infoText)
+    p.render.query = ""
+    p.render.onQueryChange()
+    XCTAssertEqual(p.render.rows[0].label, infoText, "空（＝解除）は警告しない")
+  }
+
+  // MARK: - カスタム入力: Esc
+
+  /// Esc は保存せずプリセット一覧へ 1 段戻る（潜った「カスタム…」行に選択が復元される）。
+  func testWorktreeDirEscReturnsToPresetsWithoutApply() {
+    let p = model()
+    drillIntoCustom(p)
     let applied = captureApply(p)
     p.render.query = "~/wt/{repo}/{slug}"
     p.render.onEscape()
     XCTAssertNil(applied(), "Esc は保存しない")
-    XCTAssertNil(p.render.breadcrumb, "root へ戻る")
-    XCTAssertEqual(p.render.selected, 12, "潜った行へ選択を復元")
+    XCTAssertEqual(p.render.breadcrumb, "‹ worktree の作成場所", "プリセット一覧へ戻る")
+    XCTAssertEqual(p.render.selected, customRow, "潜った「カスタム…」行へ選択を復元")
+    p.render.onEscape()
+    XCTAssertNil(p.render.breadcrumb, "もう 1 段で root")
     XCTAssertTrue(
       p.render.rows[12].label.contains(WorktreePathTemplate.defaultTemplate), "表示は元の実効値のまま")
   }

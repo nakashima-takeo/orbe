@@ -26,7 +26,7 @@ import SwiftUI
   // ドリル遷移（drillIn/returnTo*）を `SettingsPaletteModel+Navigation` へ分離するため internal。
   enum Mode {
     case root, font, tabTitleFont, emojiFont, theme, agent, agentStates,
-      agentIcon(AgentStateIcon.Kind), worktreeDir, language, update
+      agentIcon(AgentStateIcon.Kind), worktreeDirPresets, worktreeDirCustom, language, update
   }
 
   /// root 行。先頭のスコープ切替行と、レジストリ表示順の各設定行。
@@ -159,7 +159,9 @@ import SwiftUI
       let symbol = render.selected == 0 ? nil : symbols[render.selected - 1]
       assign(values.agentStateIconChange(kind: kind, symbol: symbol))
       returnToStates()
-    case .worktreeDir:
+    case .worktreeDirPresets:
+      activateWorktreeDirPresetRow()
+    case .worktreeDirCustom:
       confirmWorktreeDir()
     case .language:
       guard Language.allCases.indices.contains(render.selected) else { return }
@@ -199,6 +201,19 @@ import SwiftUI
     let i = render.selected - (defaultRowVisible ? 1 : 0)
     guard rows.indices.contains(i) else { return }  // 空状態の情報行では何もしない
     assign(change(rows[i]))
+    returnToRoot()
+  }
+
+  /// プリセット一覧の ↵。プリセット行はそのテンプレートを確定して root へ戻り、最終行「カスタム…」だけが
+  /// テキスト入力へ 1 段深く潜る（値が決まったら root へ戻る、が一覧・入力に共通の着地規則）。
+  private func activateWorktreeDirPresetRow() {
+    let presets = WorktreePathTemplate.presets
+    if render.selected == presets.count {
+      drillIntoWorktreeDirCustom()
+      return
+    }
+    guard presets.indices.contains(render.selected) else { return }
+    assign(SettingChange(SettingKeys.worktreeDir, presets[render.selected].template))
     returnToRoot()
   }
 
@@ -246,9 +261,10 @@ import SwiftUI
         }
       case .language, .update: break  // drillIn 行と同じく ← は無反応
       }
-    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .language, .update:
+    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .worktreeDirPresets,
+      .language, .update:
       returnToRoot()
-    case .worktreeDir: break  // editor 入力欄の ← はカーソル移動（ここへは届かない）。戻るは esc
+    case .worktreeDirCustom: break  // editor 入力欄の ← はカーソル移動（ここへは届かない）。戻るは esc
     case .agentIcon: returnToStates()  // 1 段ずつ浅く（アイコン候補→状態一覧）
     }
   }
@@ -261,6 +277,12 @@ import SwiftUI
     }
     if case .update = mode {
       rightArrowUpdateRow()  // トグル行は反転、他は no-op（↵ と同じ意味の部分集合）
+      return true
+    }
+    if case .worktreeDirPresets = mode {
+      // → は「潜る」意味だけを持つ。1 段深いのは chevron のある「カスタム…」行だけ。
+      guard render.selected == WorktreePathTemplate.presets.count else { return false }
+      drillIntoWorktreeDirCustom()
       return true
     }
     guard case .root = mode, visibleRootRows.indices.contains(render.selected) else { return false }
@@ -295,26 +317,26 @@ import SwiftUI
     rebuild()
   }
 
-  /// Esc。root では閉じ、サブモードでは root へ戻る（1 段ずつ浅くなる）。worktreeDir は保存せず戻る。
+  /// Esc。root では閉じ、サブモードでは 1 段ずつ浅くなる。worktreeDir のカスタム入力は保存せず一覧へ戻る。
   private func escape() {
     switch mode {
     case .root: onDismiss()
-    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .worktreeDir, .language,
-      .update:
+    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .worktreeDirPresets,
+      .language, .update:
       returnToRoot()
     case .agentIcon: returnToStates()  // 1 段ずつ浅く
+    case .worktreeDirCustom: returnToWorktreeDirPresets()  // 同上（カスタム入力→プリセット一覧）
     }
   }
 
   private func queryChanged() {
     switch mode {
     case .root, .font, .tabTitleFont: break  // フィルタ入力を持つモードのみ再構築
-    case .worktreeDir:
-      // 編集は不正確定のエラー表示を語彙説明へ戻すだけ（エラーは確定時にだけ評価する）。
-      if worktreeDirError != nil {
-        worktreeDirError = nil
-        rebuild()
-      }
+    case .worktreeDirCustom:
+      // 編集は不正確定のエラー表示を下げ（エラーは確定時にだけ評価する）、情報行の {repo} 欠落警告を
+      // 入力へ追従させる。行は情報行 1 行のみなので選択は動かさない。
+      worktreeDirError = nil
+      rebuild()
       return
     default: return
     }
@@ -365,7 +387,8 @@ import SwiftUI
     case .agent: rebuildAgent()
     case .agentStates: rebuildAgentStates()
     case .agentIcon(let kind): rebuildAgentIcon(kind: kind)
-    case .worktreeDir: rebuildWorktreeDirInput()
+    case .worktreeDirPresets: rebuildWorktreeDirPresets()
+    case .worktreeDirCustom: rebuildWorktreeDirCustom()
     case .language: rebuildLanguage()
     case .update: rebuildUpdate()
     }

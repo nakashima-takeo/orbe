@@ -10,6 +10,22 @@ enum WorktreePathTemplate {
   /// 未設定時の既定（従来のハードコード規則 `<親>/<repo名>-worktrees/<slug>` と同一パスに解決する）。
   static let defaultTemplate = "{parent}/{repo}-worktrees/{slug}"
 
+  /// 設定パレットが一覧で出す作成場所の候補。テキスト入力は最終手段なので、よくある配置は
+  /// 名前つきの行から 1 打で選べるようにする（一覧の最終行「カスタム…」は提示側が足す）。
+  struct Preset {
+    let template: String
+    let labelKey: L10nKey
+  }
+
+  /// 先頭は `defaultTemplate` 自身＝未設定と同じ場所を明示的に選び直せる。
+  static let presets: [Preset] = [
+    Preset(template: defaultTemplate, labelKey: .settingsWorktreeDirPresetSibling),
+    Preset(template: "~/worktrees/{repo}/{slug}", labelKey: .settingsWorktreeDirPresetHome),
+    Preset(
+      template: "{parent}/{repo}/.worktrees/{slug}", labelKey: .settingsWorktreeDirPresetInside),
+    Preset(template: "{parent}/{repo}-{slug}", labelKey: .settingsWorktreeDirPresetFlat),
+  ]
+
   /// 不正理由（表示文言への写像は提示側が持つ）。
   enum ValidationError: Equatable {
     /// `{...}` が 3 語以外、または `{` の閉じ忘れ（associated value は問題の断片）。

@@ -5,7 +5,11 @@ import Foundation
 ///
 /// 複数形は `xxxOne`/`xxxOther` の 2 キーで持ち、`LocalizationStore.plural(_:one:other:)` が件数で選ぶ。
 /// 位置引数付きテンプレート（`%@`/`%lld`）は `format(_:_:)` で埋める。
+///
+/// 行数上限は適用外（下記 disable）——ここは「文言を 1 つ増やせば 1 行増える」台帳で、長さは複雑さでなく
+/// 製品の文言数そのもの。分割もできない（enum の case は extension に置けない）。
 enum L10nKey: String, CaseIterable, Sendable {
+  // swiftlint:disable:previous type_body_length
   // MARK: - Menu（AppKit メインメニュー）
   case menuHide
   case menuHideOthers
@@ -222,6 +226,12 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsWorktreeDirErrUnknownToken
   case settingsWorktreeDirErrMissingSlug
   case settingsWorktreeDirErrNotAbsolute
+  case settingsWorktreeDirWarnMissingRepo
+  case settingsWorktreeDirPresetSibling
+  case settingsWorktreeDirPresetHome
+  case settingsWorktreeDirPresetInside
+  case settingsWorktreeDirPresetFlat
+  case settingsWorktreeDirCustom
 
   // MARK: - Search バー
   case searchPlaceholder

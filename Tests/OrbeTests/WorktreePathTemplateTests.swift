@@ -41,6 +41,20 @@ final class WorktreePathTemplateTests: XCTestCase {
       "/Users/x/github/orbe-worktrees/issue-42")
   }
 
+  // MARK: - プリセット
+
+  /// 一覧から選んだ値が保存を拒否されないこと、先頭が既定テンプレート自身であること。
+  func testPresetsAreValidAndLedByDefault() {
+    XCTAssertEqual(
+      WorktreePathTemplate.presets.first?.template, WorktreePathTemplate.defaultTemplate)
+    for preset in WorktreePathTemplate.presets {
+      XCTAssertNil(WorktreePathTemplate.validate(preset.template), preset.template)
+    }
+    XCTAssertEqual(
+      Set(WorktreePathTemplate.presets.map(\.template)).count, WorktreePathTemplate.presets.count,
+      "同じテンプレートの行を二重に出さない")
+  }
+
   // MARK: - validate
 
   func testValidateAcceptsDefaultTemplate() {

@@ -45,6 +45,15 @@ extension L10n {
     .settingsWorktreeDirErrNotAbsolute: (
       "絶対パスに解決される形にしてください（先頭 ~ 可）", "Must resolve to an absolute path (leading ~ allowed)"
     ),
+    .settingsWorktreeDirWarnMissingRepo: (
+      "{repo} が無いため別リポジトリの同名ブランチと衝突します",
+      "Without {repo}, same-named branches of other repositories collide"
+    ),
+    .settingsWorktreeDirPresetSibling: ("リポジトリの隣（既定）", "Next to the repository (default)"),
+    .settingsWorktreeDirPresetHome: ("ホームにまとめる", "Collect under home"),
+    .settingsWorktreeDirPresetInside: ("リポジトリの中", "Inside the repository"),
+    .settingsWorktreeDirPresetFlat: ("隣にフラット", "Flat beside the repository"),
+    .settingsWorktreeDirCustom: ("カスタム…", "Custom…"),
 
     // MARK: Settings registry
     .settingsFontSize: ("フォントサイズ", "Font Size"),
