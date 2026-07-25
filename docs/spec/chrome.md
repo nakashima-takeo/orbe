@@ -24,4 +24,4 @@ updated: 2026-07-22
 
 **アップデートのトースト（右下・非モーダル）**: アプリ内アップデートが「再起動待ち」になった瞬間に一度だけ、ウィンドウ右下にトーストを重ねる（モーダル overlay とは独立の層。パレット類が開いていればそちらが前）。文言・挙動・出現条件は [update](update.md) が持つ。常駐 chrome にアップデート表示は無く、この一過性のトーストと設定パレットのアップデートセクションだけが面を持つ。
 
-行の余白ドラッグでウィンドウ移動、余白ダブルクリックでシステム設定準拠の zoom/minimize（[layout](layout.md) に機構）。更新はイベント駆動: ペインのタイトル変更・フォーカス変更・タブ/workspace 切替・cwd 到着・いずれかのペインのエージェント状態変化。重い StatusRow snapshot（全 workspace×全タブ×全ペイン走査）は runloop tick 単位に coalesce され、同一 tick 内の複数要求は tick 末尾の 1 回へ畳まれる（trailing-edge・中間状態は落ちるが最終状態は必ず反映＝取りこぼしゼロ）。`window.title`（アクティブ workspace 名・Mission Control 等の外部観測用・画面には出ない）は O(1) なので coalesce せず即時反映する。
+行の余白ドラッグでウィンドウ移動、余白ダブルクリックでシステム設定準拠の zoom/minimize（[layout](layout.md) に機構）。更新はイベント駆動: ペインのタイトル変更・フォーカス変更・タブ/workspace 切替・cwd 到着・いずれかのペインのエージェント状態変化・タブ内のペイン集合の変化（分割・ペインを閉じる）。重い StatusRow snapshot（全 workspace×全タブ×全ペイン走査）は runloop tick 単位に coalesce され、同一 tick 内の複数要求は tick 末尾の 1 回へ畳まれる（trailing-edge・中間状態は落ちるが最終状態は必ず反映＝取りこぼしゼロ）。`window.title`（アクティブ workspace 名・Mission Control 等の外部観測用・画面には出ない）は O(1) なので coalesce せず即時反映する。
