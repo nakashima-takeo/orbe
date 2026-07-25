@@ -3,7 +3,7 @@ import SwiftUI
 /// メニューバーアイテム本体（①②③④の描画・デザイン第11シーンの数値をトークン経由で移植）。
 /// ① 要対応 0（working だけの間も含む）: ◐ 15pt・opacity 0.45・数字なし。
 /// ② `store.transient` が生きている間: ピル（高さ 22・radius 5・地 accent 35%）に
-///    ◐＋状態グリフ 11＋WS 名 11（上限 120・省略）＋文言先頭 11 muted（残り予算まで・省略）が
+///    ◐＋状態グリフ 11＋WS 名 11（上限で省略）＋文言先頭 11 muted（残り予算まで・省略）が
 ///    滲み出る。波紋 1 回。
 /// ③ 収縮後: ◐＋件数（waiting+done のみ）。地 surfaceInk 16%。
 /// ④ ドロップダウン表示中はピル地を accent 35% に。
@@ -40,11 +40,14 @@ struct MenuBarStatusView: View {
     OrbeMarkGlyph(size: 15, color: .primary).opacity(0.45)
   }
 
-  /// ②ピル全体の幅上限（メニューバーの他アイテムを圧迫しない）。**幅配分の唯一の入力**で、
-  /// ここから内側予算（`transientMaxWidth` − 水平 padding×2）が決まり、`PillRow` がそれを
-  /// 固定部（グリフ・状態アイコン・spacing）と WS 名（上限 120）へ配って残りを文言に渡す。
+  /// ②ピル全体の幅上限（メニューバーの他アイテムを圧迫しない）。ここから内側予算
+  /// （`transientMaxWidth` − 水平 padding×2）が決まり、`PillRow` がそれを固定部（グリフ・
+  /// 状態アイコン・spacing）と WS 名（`transientWorkspaceCap`）へ配って残りを文言に渡す。
   /// テストがサイズ契約として固定する。
   static let transientMaxWidth: CGFloat = 330
+
+  /// ②ピルの WS 名スロット上限。超えた分は省略し、余った分は文言が吸う。
+  private static let transientWorkspaceCap: CGFloat = 120
 
   // ②状態変化の瞬間。WS 名＋文言の先頭が滲み出る（文言なしはタブタイトル）。
   //
@@ -58,7 +61,8 @@ struct MenuBarStatusView: View {
       if let kind = AgentStateIcon.kind(state: row.state) {
         StatusGlyphView(kind: kind, size: 11)
       }
-      pillSlot(row.workspaceName, color: Color.theme.textPrimary).pillSlotCap(120)
+      pillSlot(row.workspaceName, color: Color.theme.textPrimary)
+        .pillSlotCap(Self.transientWorkspaceCap)
       // muted は暗地で沈む——読める階調へ上げる。上限を宣言せず残り予算を吸う。
       pillSlot(row.message ?? row.tabTitle, color: Color.theme.statusText)
     }
@@ -155,9 +159,8 @@ private struct PillRow: Layout {
         ideal.width <= allowance
         ? ideal.width
         : subview.sizeThatFits(ProposedViewSize(width: allowance, height: nil)).width
-      let clamped = max(0, width)
-      widths.append(clamped)
-      remaining -= clamped
+      widths.append(width)
+      remaining -= width
       height = max(height, ideal.height)
     }
     return Cache(widths: widths, height: height)

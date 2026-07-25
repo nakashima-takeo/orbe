@@ -66,7 +66,7 @@ extension DesignGallerySnapshotTests {
     let transientStore = AttentionStore()
     transientStore.rows = rows
     transientStore.noteTransient(rows[3])  // 短い WS 名 "orbe-core" ＋長い本文
-    // 長い WS 名（上限 120 を超え切り詰めが見える）の②態。WS 名の実幅で本文の予算が変わるため、
+    // 長い WS 名（上限を超え切り詰めが見える）の②態。WS 名の実幅で本文の予算が変わるため、
     // 短い WS 名の行と両端で撮って幅配分を静止確認できるようにする。
     let longNameStore = AttentionStore()
     longNameStore.noteTransient(
