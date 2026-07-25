@@ -1,7 +1,7 @@
 ---
 title: Dispatch パレット（現状）
 description: Cmd+Shift+X で開くコマンドパレット — worktree/ブランチ/Issue/PR を git・gh 実データで列挙し、フィルタ・⇥ で起動先（検出 agent／素の shell）切替・Enter で選択行の対象ディレクトリに起動先を新タブ起動・⌘↵ で issue/PR および open PR に紐づく worktree/ブランチ行をブラウザで開く
-updated: 2026-07-22
+updated: 2026-07-25
 ---
 
 Cmd+Shift+X で開く Dispatch パレット。worktree/ブランチ/Issue/PR から作業を開始するコマンドパレット（Cmd+X は奪わない）。他パレット（[settings-palette](settings-palette.md)・[workspace](workspace.md)）と同じ提示経路だが、描画は共有パレット基盤を使わず専用の View／モデル／非同期データプロバイダが持つ（行の解剖と実データ供給が共有基盤の 1 行リスト前提に載らないため）。
@@ -26,7 +26,9 @@ Cmd+Shift+X で開く Dispatch パレット。worktree/ブランチ/Issue/PR か
 - **⇥**: 起動先を巡回切替。起動先は検出済み agent（表示は raw command）に素の shell を加えた列で、shell は default agent の直後に常在する。初期選択は default agent（agent 未検出時は shell）。agent 未検出でも shell を選べるため袋小路は無い。
 - **Enter（実行）**: 選択行の種別に応じて対象ディレクトリを解決し、選択中の起動先を**現 workspace の新しいタブ**でその cwd に起動する（agent は initialCommand で起動、shell は Cmd+T と同じ既定シェル）。起動後は次 runloop tick で新タブ surface にフォーカスを再確定する。
   - Worktree 行＝既存パスをそのまま使用（非破壊）。Local branch＝既存 worktree があれば再利用、無ければ `git worktree add`。Remote branch＝ローカル追跡ブランチを作って add。Issue＝他行種別と対称で、`issue/<番号>` を既存 worktree／ローカルブランチと突合し 3 分岐（既存 worktree あれば再利用／同名ブランチだけ既存ならそこから追加／どちらも無ければデフォルトブランチから `-b issue/<番号>` で追加）。行末ノート／フッターも実解決に一致（既存worktree／checkout → worktree／新規worktree）。PR（same-repo）＝head ブランチの worktree を作成/再利用。
-  - worktree 作成場所は `<リポジトリ親>/<repo名>-worktrees/<branch slug>`。`git worktree add` は隔離ディレクトリを追加するだけで現在の作業ツリーに触れない。失敗（パス衝突・checkout 済・ネット不通）時は palette を閉じずフッターに失敗理由を赤で表示し agent を起動しない。失敗理由は git stderr から実質行（`fatal:`／`error:` 行・無ければ最終非空行）を抜く——成功時にも出る進捗風メッセージで本当の理由を覆い隠さないため（この整形は git ラッパー層に閉じる）。
+  - worktree 作成場所は実効設定 `worktree-dir`（[settings-palette](settings-palette.md)・[config](config.md)）のテンプレートから解決する。語彙は `{parent}`（main worktree の親）・`{repo}`（main worktree の basename）・`{slug}`（branch 名の `/`→`-`）の 3 語＋先頭 `~` のみで、既定は `{parent}/{repo}-worktrees/{slug}`（従来のハードコード規則と同一パスに解決する）。置換 →`~` 展開 → **純字句の**正規化（`.`・`..`・重複スラッシュを畳む。symlink は解決しない——実在する repo root と、これから作る作成先を同じ土俵で比べるため）で確定する。
+  - `git worktree add` は隔離ディレクトリを追加するだけで現在の作業ツリーのファイルには触れない。ただし**作成先が作業ツリー内に落ちる場合だけ**、作成に成功した後で共有 exclude（`$GIT_COMMON_DIR/info/exclude`。git は `info/exclude` を常に common dir から読むので全チェックアウトに効く）へ除外を冪等に追記する——repo 内配置を設定で選べる以上、`git status` が worktree ぶんだけ汚れる（`git add .` が gitlink 化する）のを注意書きでなく自動化で塞ぐ。契約は「**Orbe が作ったものだけを除外する**」: 対象は worktree の親ディレクトリ、ただし親が root 自身か**作成前から実在していた**なら worktree 自身（既存ディレクトリを丸ごと除外して、そこへ後から置かれたユーザーの新規ファイルまで `git status` から消さない）。既に無視されている（ユーザーの `.gitignore` 由来を含む）なら触らず、`.gitignore` は書き換えない。判定は解決済みパスだけで行い、UI の行（プリセット／カスタム）には紐付けない。除外は補助なので、失敗しても worktree 作成は続行する。
+  - 失敗（パス衝突・checkout 済・ネット不通）時は palette を閉じずフッターに失敗理由を赤で表示し agent を起動しない。作成が失敗したときは除外も書かない（何も起きなかった操作がユーザーの repo を書き換えない）。失敗理由は git stderr から実質行（`fatal:`／`error:` 行・無ければ最終非空行）を抜く——成功時にも出る進捗風メッセージで本当の理由を覆い隠さないため（この整形は git ラッパー層に閉じる）。
   - **作成中の進捗表示・入力ロック**: 非同期作成の完了を待つ間 `isPreparing` を立て、フッターにスピナ＋「作成中…」を出す。この間は入力を受け付けない（Enter 再実行＝`git worktree add` 二重起動を弾く／↑↓・⇥・検索入力・Esc/scrim 閉じを握り潰す）。既存 worktree 再利用など同期に済むケースは同一 tick で palette が閉じるため進捗は描画されない。
   - fork（cross-repo）PR は worktree 化せず、⌘↵ でのブラウザ表示へ誘導する。
 - **⌘↵ / 開くボタン**: issue/PR 行と、open PR に紐づく（番号チップが付く）worktree/branch 行で `gh issue|pr view --web` により対象をブラウザで開く。worktree/branch 行は番号チップと同一番号のルックアップから紐づく PR を開く（一致を保証）。紐づかない行には出さない。
