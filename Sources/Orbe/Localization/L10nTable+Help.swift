@@ -34,6 +34,7 @@ extension L10n {
     .helpShortcutSwitchWorkspace: ("ワークスペース切替", "Switch workspace"),
     .helpShortcutNewWorkspace: ("新規ワークスペース", "New workspace"),
     .helpShortcutNewTab: ("新しいタブ", "New tab"),
+    .helpShortcutRestoreClosedTab: ("閉じたタブを戻す", "Reopen closed tab"),
     .helpShortcutRenameTab: ("タブをリネーム", "Rename tab"),
     .helpShortcutNextTab: ("次のタブへ", "Next tab"),
     .helpShortcutPrevTab: ("前のタブへ", "Previous tab"),
@@ -60,6 +61,5 @@ extension L10n {
     .helpShortcutFontLarger: ("文字を大きく", "Increase font size"),
     .helpShortcutFontSmaller: ("文字を小さく", "Decrease font size"),
     .helpShortcutFontReset: ("文字サイズをリセット", "Reset font size"),
-    .helpShortcutRestoreClosedTab: ("閉じたタブを戻す", "Reopen closed tab"),
   ]
 }
