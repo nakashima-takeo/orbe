@@ -4,6 +4,7 @@ import Foundation
 /// 掲載内容の真実の出所は Keybindings.swift / MainMenu.swift / libghostty 既定（手動棚卸し）。
 /// 表示キー表記・ラベル・カテゴリ・combo はプレゼンテーション情報でコードから導出できないため
 /// 静的に持ち、内部整合（combo⊆KB・厳選⊆カテゴリ行・表示キー一意）は HelpCatalogTests が機械保証する。
+/// 掲載内容で機械保証があるのはタブ左右移動の「矢印が主・括弧が従」だけ（提示の意思決定のため）。
 enum HelpCatalog {
   /// 一覧の 1 行（1 バインド。同義コマンドの別キーも独立行）。
   /// `combo` はキーボード可視化で点灯する物理キー id 列（`keyboard` の id 語彙）。
