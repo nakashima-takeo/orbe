@@ -174,7 +174,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     tc.onLayoutChange = { [weak self] in self?.scheduleSave() }
     tc.onPwdChange = { [weak self] in self?.paneDidReportPwd() }
     tc.onAgentStateChange = { [weak self] in
-      self?.consumeActiveTabDoneIfFocused()
+      self?.consumeVisibleTabDone()
       self?.refreshChrome()
     }
     tc.onWindowCommand = { [weak self] command in self?.handleWindowCommand(command) }
@@ -221,7 +221,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     }
     // overlay 表示中は入力を奪わない（フォーカス復帰は dismiss 側が担う）。
     if model.overlay == .none { focusActivePane() }
-    consumeActiveTabDoneIfFocused()
+    consumeVisibleTabDone()
     refreshChrome()
     scheduleHiddenMounts(for: ws)
   }
@@ -251,13 +251,17 @@ final class WindowController: NSObject, NSWindowDelegate {
     }
   }
 
-  /// 完了通知の消費：ウィンドウがキー（前面）の時だけ、アクティブ表示タブの
-  /// 全 done ペインを消費して集約 done バッジを消す。背面・背景タブの done は残す。
-  /// 3 トリガ（タブ活性化・done 到着・前面復帰）が共有する。
-  private func consumeActiveTabDoneIfFocused() {
-    guard window.isKeyWindow, current.tabs.indices.contains(current.active) else { return }
-    current.tabs[current.active].consumeDoneState()
+  /// 「見ているタブ」＝ウィンドウがキー（前面）のときの、アクティブ workspace のアクティブ表示タブ。
+  /// 背面・0タブなら nil。粒度がタブなので、split で隣に見えているペインもこのタブに含まれる。
+  /// done のフォーカス消費とメニューバー②の抑制が、この 1 つの判定を共有する。
+  var visibleTab: TerminalController? {
+    guard window.isKeyWindow, current.tabs.indices.contains(current.active) else { return nil }
+    return current.tabs[current.active]
   }
+
+  /// 完了通知の消費：見ているタブの全 done ペインを消費して集約 done バッジを消す。
+  /// 背面・背景タブの done は残す。3 トリガ（タブ活性化・done 到着・前面復帰）が共有する。
+  private func consumeVisibleTabDone() { visibleTab?.consumeDoneState() }
 
   /// タブを閉じる。発火源はユーザー操作（Cmd+W）に限らず、shell の exit
   /// （close_surface_cb → onEmpty）が背景タブ・背景 workspace からも届くため、
@@ -365,7 +369,7 @@ final class WindowController: NSObject, NSWindowDelegate {
 
   // アプリ前面復帰：背面で届いていたアクティブ表示タブの done を消費する。
   func windowDidBecomeKey(_ notification: Notification) {
-    consumeActiveTabDoneIfFocused()
+    consumeVisibleTabDone()
     refreshChrome()
     syncWindowBlur()  // 可視後の初回適用（起動時 init は windowNumber 未確定で CGS ブラーが効かない）
   }

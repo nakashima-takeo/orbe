@@ -61,7 +61,7 @@ extension WindowController: ControlTarget {
   /// Attention 用の保持: stateChangedAt は **state の値が実際に変わったときだけ** now に更新する
   /// （working→working の連続報告で一覧の並びが暴れない）。message は clear 以外の報告で常に
   /// 上書きする（省略時は nil＝stale な質問文を残さない）。waiting / done への実変化は
-  /// メニューバーの一過性表示（AttentionStore.noteTransient）へも流す。
+  /// メニューバーの一過性表示へ流す（見ているタブのペインなら立てない ＝ noteAttentionTransient が判断する）。
   func controlReportAgent(
     pane: SurfaceView, agent: String, state: String, sessionId: String?, message: String?
   ) {
@@ -80,8 +80,8 @@ extension WindowController: ControlTarget {
       if let sessionId {
         pane.agentSessionId = sessionId
       }
-      if changed, state == "waiting" || state == "done", let row = attentionRow(for: pane) {
-        attentionStore.noteTransient(row)
+      if changed, state == "waiting" || state == "done" {
+        noteAttentionTransient(for: pane)
       }
     }
     pane.controller?.paneAgentStateChanged()
