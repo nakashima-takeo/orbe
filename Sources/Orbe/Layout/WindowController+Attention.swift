@@ -51,9 +51,20 @@ extension WindowController {
     _ = controlFocusPane(paneId: paneId)
   }
 
+  /// メニューバー②（一過性の滲み出しピル）を立てる。ただし発信元ペインが**見ているタブ**に
+  /// あるときは立てない——端末にその結果もプロンプトも出ている面で、注意だけを二重に奪わないため。
+  /// 抑制は「立てない」だけで、既に出ているピル（別の場所で起きた変化の通知）には触らない。
+  func noteAttentionTransient(for pane: SurfaceView) {
+    // 抑制するのは「見ているタブが実在し、かつペインがそのタブに属する」ときだけ。visibleTab が
+    // nil＝背面なら誰も見ていないので必ず立てる（controller は weak。nil 同士を一致と読ませない）。
+    if let visibleTab, pane.controller === visibleTab { return }
+    guard let row = attentionRow(for: pane) else { return }
+    attentionStore.noteTransient(row)
+  }
+
   /// 一過性表示（メニューバー②）用の 1 行 snapshot。発信元ペインの所属 WS・タブから組む。
   /// 休眠 WS のペインは report が届かないため実質常に解決するが、見つからなければ nil。
-  func attentionRow(for pane: SurfaceView) -> AttentionRow? {
+  private func attentionRow(for pane: SurfaceView) -> AttentionRow? {
     for ws in workspaces {
       for tab in ws.tabs where tab.controlAllPanes().contains(where: { $0 === pane }) {
         guard let state = pane.agentState else { return nil }
