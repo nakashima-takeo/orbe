@@ -1,6 +1,6 @@
 import AppKit
 
-/// 構成変化のデバウンス保存・終了時 flush と、保存ファイルからの復元。
+/// 構成変化のデバウンス保存・終了時 flush と、保存ファイル／閉じたタブスタックからの復元。
 /// WindowController 本体から永続化の読み書き両面を分離する。
 extension WindowController {
   /// 保存ファイルから workspaces/タブ木/ウィンドウサイズを起こす（起動時に init から 1 回）。
@@ -35,6 +35,16 @@ extension WindowController {
     tc.editorUI.paneOpen = state.editor.open
     tc.editorUI.tool = EditorTool(persistKey: state.editor.tool)
     return wire(tc)
+  }
+
+  /// ⇧⌘T。アクティブ workspace の復元スタックから直近の 1 枚を、閉じた時の index（有効範囲へ
+  /// クランプ）に起こしてそのタブへ切り替える。スタックが空なら何もしない（音もダイアログも出さない）。
+  /// 復元されるもの・されないものは起動時復元と同一（makeTab を共有する）。
+  func restoreClosedTab() {
+    guard let closed = store.popClosedTab() else { return }
+    let index = store.insertTabIntoActive(makeTab(from: closed.state), at: closed.index)
+    select(index)  // 0タブ workspace への復活も含め、既存のタブ生成系と同じく起こしたタブを見せる
+    scheduleSave()
   }
 
   // ユーザーのリサイズ確定で意図サイズを記憶し、保存を予約する（高頻度なドラッグはデバウンスでまとまる）。

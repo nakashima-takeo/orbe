@@ -358,4 +358,5 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutFontLarger
   case helpShortcutFontSmaller
   case helpShortcutFontReset
+  case helpShortcutRestoreClosedTab
 }

@@ -24,7 +24,7 @@ extension DesignGallerySnapshotTests {
     // トップビュー（基本操作＋凡例）。
     try write("help_top.png", HelpModel())
 
-    // 一覧ビュー（すべて・29 行）。
+    // 一覧ビュー（すべて・30 行）。
     let all = HelpModel()
     all.category = .all
     try write("help_list.png", all)

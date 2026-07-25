@@ -34,6 +34,7 @@ enum HelpCatalog {
         Row(key: "⌘⇧S", label: .helpShortcutSwitchWorkspace, combo: ["cmd", "shift", "s"]),
         Row(key: "⌘N", label: .helpShortcutNewWorkspace, combo: ["cmd", "n"]),
         Row(key: "⌘T", label: .helpShortcutNewTab, combo: ["cmd", "t"]),
+        Row(key: "⌘⇧T", label: .helpShortcutRestoreClosedTab, combo: ["cmd", "shift", "t"]),
         Row(key: "⌘R", label: .helpShortcutRenameTab, combo: ["cmd", "r"]),
         Row(key: "⌘⇧]", label: .helpShortcutNextTab, combo: ["cmd", "shift", "]"]),
         Row(key: "⌘⇧[", label: .helpShortcutPrevTab, combo: ["cmd", "shift", "["]),

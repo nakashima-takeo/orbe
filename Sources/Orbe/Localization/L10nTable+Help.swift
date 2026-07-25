@@ -60,5 +60,6 @@ extension L10n {
     .helpShortcutFontLarger: ("文字を大きく", "Increase font size"),
     .helpShortcutFontSmaller: ("文字を小さく", "Decrease font size"),
     .helpShortcutFontReset: ("文字サイズをリセット", "Reset font size"),
+    .helpShortcutRestoreClosedTab: ("閉じたタブを戻す", "Reopen closed tab"),
   ]
 }
