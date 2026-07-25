@@ -232,6 +232,26 @@ final class WorkspacePersistenceTests: XCTestCase {
     XCTAssertEqual(second, .leaf(cwd: nil, agent: nil))
   }
 
+  // MARK: - 復元単位（TabState）の組み立て
+
+  /// 復元単位（tabState）は tree だけでなく明示タイトルと EditorPane 状態も載せる——起動時復元と
+  /// ⇧⌘T が共有する契約なので、どれか 1 つ落ちると片方だけ静かに壊れる。
+  func testTabStateCarriesTreeTitleAndEditor() {
+    let node: PaneNode = .split(
+      vertical: true, ratio: 0.4,
+      first: .leaf(cwd: "/work/api", agent: nil), second: .leaf(cwd: "/work/web", agent: nil))
+    let tc = TerminalController(restoring: node, resumeSpawn: noResume)
+    tc.explicitTitle = "api"
+    tc.editorUI.paneOpen = true
+    tc.editorUI.tool = .git
+    XCTAssertEqual(
+      tc.tabState(),
+      TabState(
+        tree: node, explicitTitle: "api",
+        editor: EditorPaneTabState(open: true, tool: "git")),
+      "tabState は分割ツリー・明示タイトル・EditorPane の開閉/ツールを一括で載せる")
+  }
+
   // MARK: - 復元の往復（PaneNode → 再構築 → 再 snapshot）
 
   func testRestoreRoundTripPreservesTreeCwdAndRatio() {

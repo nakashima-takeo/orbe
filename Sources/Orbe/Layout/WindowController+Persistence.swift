@@ -6,21 +6,12 @@ extension WindowController {
   /// 保存ファイルから workspaces/タブ木/ウィンドウサイズを起こす（起動時に init から 1 回）。
   func restore(from file: WorkspacesFile) {
     restoreWindowSize(file.windowSize)
-    let resume: TerminalController.ResumeSpawn = { [agentLauncher] in
-      agentLauncher.resumeSpawn(for: $0)
-    }
     var restored: [Workspace] = []
     for state in file.workspaces {
       let ws = Workspace(name: state.name, rootPath: state.rootPath)
       ws.lastUsedAt = state.lastUsedAt  // MRU 並べ替えキーを読み戻す（旧データは nil）
       ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
-      for tab in state.tabs {
-        let tc = TerminalController(restoring: tab.tree, resumeSpawn: resume)
-        tc.explicitTitle = tab.explicitTitle
-        tc.editorUI.paneOpen = tab.editor.open
-        tc.editorUI.tool = EditorTool(persistKey: tab.editor.tool)
-        ws.tabs.append(wire(tc))
-      }
+      for tab in state.tabs { ws.tabs.append(makeTab(from: tab)) }
       // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）は空表示
       // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。
       ws.active = ws.tabs.isEmpty ? 0 : min(max(0, state.activeTab), ws.tabs.count - 1)
@@ -31,6 +22,19 @@ extension WindowController {
       workspaces: restored,
       activeWorkspace: min(max(0, file.activeWorkspace), restored.count - 1))
     activateCurrent()  // 復元アクティブが0タブ（休眠保存）なら空表示（シェルは起こさない）
+  }
+
+  /// TabState 1 枚からタブを起こして配線する。起動時復元（restore）と ⇧⌘T（restoreClosedTab）の
+  /// 共通経路——agent 付きの葉は resume コマンドへ解決し、解決できなければ素のシェルで cwd だけ戻す。
+  private func makeTab(from state: TabState) -> TerminalController {
+    let resume: TerminalController.ResumeSpawn = { [agentLauncher] in
+      agentLauncher.resumeSpawn(for: $0)
+    }
+    let tc = TerminalController(restoring: state.tree, resumeSpawn: resume)
+    tc.explicitTitle = state.explicitTitle
+    tc.editorUI.paneOpen = state.editor.open
+    tc.editorUI.tool = EditorTool(persistKey: state.editor.tool)
+    return wire(tc)
   }
 
   // ユーザーのリサイズ確定で意図サイズを記憶し、保存を予約する（高頻度なドラッグはデバウンスでまとまる）。
@@ -85,12 +89,7 @@ extension WindowController {
       workspaces: workspaces.map { ws in
         WorkspaceState(
           name: ws.name, rootPath: ws.rootPath, activeTab: ws.active,
-          tabs: ws.tabs.map {
-            TabState(
-              tree: $0.snapshot(), explicitTitle: $0.explicitTitle,
-              editor: EditorPaneTabState(
-                open: $0.editorUI.paneOpen, tool: $0.editorUI.tool.persistKey))
-          },
+          tabs: ws.tabs.map { $0.tabState() },
           lastUsedAt: ws.lastUsedAt, settingsOverride: ws.settingsOverride)
       },
       windowSize: rememberedWindowSize)
