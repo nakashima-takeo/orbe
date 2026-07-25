@@ -63,11 +63,12 @@ final class WindowControllerReportAgentTests: XCTestCase {
     return (wc, panes)
   }
 
-  /// AppKit のイベントを実際に取り出して配送する。活性化（`activate` → key 化）は WindowServer から
-  /// 届くイベントを NSApp が捌いて初めて成立するため、素の `RunLoop.run` では key にならない。
-  private func pumpApp(_ seconds: TimeInterval) {
+  /// AppKit のイベントを実際に取り出して配送し、`done` が真になるまで回す。活性化（`activate` → key 化）は
+  /// WindowServer から届くイベントを NSApp が捌いて初めて成立するため、素の `RunLoop.run` では key にならない。
+  /// `seconds` は上限。速い機械では待たず、詰まった共有ランナーでも取りこぼさない。
+  private func pumpApp(upTo seconds: TimeInterval, until done: () -> Bool) {
     let end = Date().addingTimeInterval(seconds)
-    while Date() < end {
+    while Date() < end, !done() {
       guard
         let event = NSApp.nextEvent(
           matching: .any, until: Date().addingTimeInterval(0.01), inMode: .default, dequeue: true)
@@ -82,7 +83,7 @@ final class WindowControllerReportAgentTests: XCTestCase {
     wc.window.makeKeyAndOrderFront(nil)
     NSApplication.shared.activate(ignoringOtherApps: true)
     openedWindows.append(wc.window)
-    pumpApp(0.4)
+    pumpApp(upTo: 2, until: { wc.window.isKeyWindow })
     XCTAssertTrue(wc.window.isKeyWindow, "前提: ウィンドウが key にならない環境ではこの契約を測れない")
   }
 
@@ -166,6 +167,19 @@ final class WindowControllerReportAgentTests: XCTestCase {
     wc.controlReportAgent(pane: pane, agent: "claude", state: "done", sessionId: nil, message: "d")
     XCTAssertNil(wc.attentionStore.transient, "見ているタブの done でもピルを立てない")
     XCTAssertEqual(pane.agentState, "idle", "done のフォーカス消費は従来どおり効く")
+  }
+
+  /// 抑制の粒度はタブ。見ているタブの中なら、フォーカスしていない split の隣ペインでも②は立てない。
+  func testTransientSuppressedOnSplitSiblingInVisibleTab() throws {
+    let (wc, pane) = try makeControllerAndPane()
+    makeKey(wc)
+    let tab = wc.current.tabs[0]
+    let sibling = try XCTUnwrap(tab.split(.horizontal, from: pane))
+    XCTAssertFalse(sibling === tab.focusedPane, "前提: 隣ペインは非フォーカス（でなければタブ粒度を測れない）")
+
+    wc.controlReportAgent(
+      pane: sibling, agent: "claude", state: "waiting", sessionId: nil, message: "q")
+    XCTAssertNil(wc.attentionStore.transient, "見ているタブなら非フォーカスの隣ペインでもピルを立てない")
   }
 
   /// 前面のままでも、見ていない別タブのペインなら②は立つ。
