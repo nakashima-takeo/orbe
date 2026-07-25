@@ -162,13 +162,19 @@ final class WindowControllerPaneTabControlTests: XCTestCase {
     let tabIds = Set(wc.controlListPanes().compactMap { $0["tabId"] as? Int })
     XCTAssertEqual(tabIds.count, 2, "前提: 2 タブ")
     let victim = try XCTUnwrap(tabIds.first)
+    // エージェント hook のセッション報告（report_agent）と同じくエージェントを載せてから閉じる＝
+    // エージェント判定では通る状態にして、発火源の判定だけが効いていることを固定する。
+    let victimPane = try XCTUnwrap(wc.current.tabs.first { $0.id == victim }?.focusedPane)
+    victimPane.agentCommand = "claude"
+    victimPane.agentSessionId = "live-1"
     guard case .success = wc.controlCloseTab(tabId: victim) else {
       return XCTFail("close_tab は success")
     }
     XCTAssertFalse(
       wc.controlListPanes().contains { $0["tabId"] as? Int == victim }, "閉じたタブのペインは消える")
     XCTAssertTrue(
-      wc.current.closedTabs.isEmpty, "制御 API の閉鎖は復元スタックへ積まない（⇧⌘T の対象は人のジェスチャだけ）")
+      wc.current.closedAgentTabs.isEmpty,
+      "制御 API の閉鎖は開き直しスタックへ積まない（⇧⌘T の対象は人のジェスチャだけ）")
   }
 
   /// close_tab は未知 tabId を -32004 で弾く。

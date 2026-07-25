@@ -14,7 +14,7 @@ final class TerminalController {
   /// ペインから届く、ウィンドウレベルの chrome 操作（タブ・workspace）。
   enum WindowCommand {
     case newTab
-    case restoreClosedTab
+    case reopenClosedAgentTab
     case nextTab
     case prevTab
     case prevTool

@@ -1,6 +1,6 @@
 import AppKit
 
-/// 構成変化のデバウンス保存・終了時 flush と、保存ファイル／閉じたタブスタックからの復元。
+/// 構成変化のデバウンス保存・終了時 flush と、保存ファイル／閉じたエージェントタブのスタックからの復元。
 /// WindowController 本体から永続化の読み書き両面を分離する。
 extension WindowController {
   /// 保存ファイルから workspaces/タブ木/ウィンドウサイズを起こす（起動時に init から 1 回）。
@@ -24,7 +24,7 @@ extension WindowController {
     activateCurrent()  // 復元アクティブが0タブ（休眠保存）なら空表示（シェルは起こさない）
   }
 
-  /// TabState 1 枚からタブを起こして配線する。起動時復元（restore）と ⇧⌘T（restoreClosedTab）の
+  /// TabState 1 枚からタブを起こして配線する。起動時復元（restore）と ⇧⌘T（reopenClosedAgentTab）の
   /// 共通経路——agent 付きの葉は resume コマンドへ解決し、解決できなければ素のシェルで cwd だけ戻す。
   private func makeTab(from state: TabState) -> TerminalController {
     let resume: TerminalController.ResumeSpawn = { [agentLauncher] in
@@ -37,11 +37,11 @@ extension WindowController {
     return wire(tc)
   }
 
-  /// ⇧⌘T。アクティブ workspace の復元スタックから直近の 1 枚を、閉じた時の index（有効範囲へ
+  /// ⇧⌘T。アクティブ workspace の開き直しスタックから直近の 1 枚を、閉じた時の index（有効範囲へ
   /// クランプ）に起こしてそのタブへ切り替える。スタックが空なら何もしない（音もダイアログも出さない）。
   /// 復元されるもの・されないものは起動時復元と同一（makeTab を共有する）。
-  func restoreClosedTab() {
-    guard let closed = store.popClosedTab() else { return }
+  func reopenClosedAgentTab() {
+    guard let closed = store.popClosedAgentTab() else { return }
     let index = store.insertTabIntoActive(makeTab(from: closed.state), at: closed.index)
     select(index)  // 0タブ workspace への復活も含め、既存のタブ生成系と同じく起こしたタブを見せる
     scheduleSave()

@@ -34,9 +34,9 @@ final class KeybindingsTests: XCTestCase {
 
   func testTabsAndFind() {
     XCTAssertEqual(Keybindings.chromeAction(for: key("t")), .newTab)
-    // ⇧⌘T は直近に閉じたタブを戻す。
+    // ⇧⌘T は最後に閉じたエージェントタブを開き直す。
     XCTAssertEqual(
-      Keybindings.chromeAction(for: key("T", [.command, .shift])), .restoreClosedTab)
+      Keybindings.chromeAction(for: key("T", [.command, .shift])), .reopenClosedAgentTab)
     XCTAssertEqual(Keybindings.chromeAction(for: key("}", [.command, .shift])), .nextTab)
     XCTAssertEqual(Keybindings.chromeAction(for: key("{", [.command, .shift])), .prevTab)
     // 矢印は別名として次/前タブに割当（Cmd+Shift+→ / Cmd+Shift+←）。
@@ -133,7 +133,7 @@ final class KeybindingsTests: XCTestCase {
   func testWindowCommandMappingIsExhaustive() {
     let mapped: [(ChromeAction, TerminalController.WindowCommand)] = [
       (.newTab, .newTab),
-      (.restoreClosedTab, .restoreClosedTab),
+      (.reopenClosedAgentTab, .reopenClosedAgentTab),
       (.nextTab, .nextTab),
       (.prevTab, .prevTab),
       (.prevTool, .prevTool),
@@ -168,7 +168,7 @@ final class KeybindingsTests: XCTestCase {
   /// 0タブで効くべきキーが死ぬ／効くべきでない content 依存キーが暴発する。
   func testAvailableWithoutTabsClassification() {
     let available: [TerminalController.WindowCommand] = [
-      .newTab, .restoreClosedTab, .newWorkspace, .switchWorkspace,
+      .newTab, .reopenClosedAgentTab, .newWorkspace, .switchWorkspace,
       .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings, .toggleHelp,
     ]
     for command in available {

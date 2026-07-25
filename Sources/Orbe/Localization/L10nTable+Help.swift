@@ -34,7 +34,9 @@ extension L10n {
     .helpShortcutSwitchWorkspace: ("ワークスペース切替", "Switch workspace"),
     .helpShortcutNewWorkspace: ("新規ワークスペース", "New workspace"),
     .helpShortcutNewTab: ("新しいタブ", "New tab"),
-    .helpShortcutRestoreClosedTab: ("閉じたタブを開き直す", "Reopen closed tab"),
+    .helpShortcutReopenClosedAgentTab: (
+      "最後に閉じたエージェントタブを開き直す", "Reopen last closed agent tab"
+    ),
     .helpShortcutRenameTab: ("タブをリネーム", "Rename tab"),
     .helpShortcutNextTab: ("次のタブへ", "Next tab"),
     .helpShortcutPrevTab: ("前のタブへ", "Previous tab"),
