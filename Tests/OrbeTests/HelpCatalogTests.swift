@@ -5,6 +5,7 @@ import XCTest
 /// ⌘H ヘルプの静的カタログの内部整合を機械保証する（掲載内容そのものは手動棚卸しが正）。
 /// combo が物理配列に実在し、トップ厳選がカテゴリ行の部分集合で、表示キーが全体で一意である
 /// ことを固定する（どれかが崩れるとキーボード点灯・絞り込み・行 identity が静かに壊れる）。
+/// 例外として、タブ左右移動の「矢印が主・括弧が従」だけは提示の意思決定そのものなので具体キーで固定する。
 final class HelpCatalogTests: XCTestCase {
   private var keyboardIDs: Set<String> {
     Set(HelpCatalog.keyboard.flatMap { $0.map(\.id) })
@@ -39,6 +40,21 @@ final class HelpCatalogTests: XCTestCase {
     let derived = HelpCatalog.topGroups.reduce(0) { $0 + $1.rows.count }
     let picked = HelpCatalog.topPicks.values.reduce(0) { $0 + $1.count }
     XCTAssertEqual(derived, picked, "topGroups の行数が厳選数と一致しない")
+  }
+
+  /// タブ左右移動は矢印が主・括弧が従。トップ厳選には矢印だけを載せ、一覧でも矢印 2 行を括弧 2 行より先に置く。
+  func testTabTraversalPrefersArrowsOverBrackets() {
+    let picks = HelpCatalog.topPicks[.helpCatWorkspaceTabs] ?? []
+    XCTAssertTrue(picks.contains("⌘⇧→"), "トップ厳選のタブ移動が矢印 ⌘⇧→ でない")
+    XCTAssertFalse(picks.contains("⌘⇧]"), "トップ厳選に括弧 ⌘⇧] が載っている")
+
+    guard let group = HelpCatalog.all.first(where: { $0.title == .helpCatWorkspaceTabs }) else {
+      return XCTFail("カテゴリ helpCatWorkspaceTabs が all に無い")
+    }
+    let traversal = ["⌘⇧→", "⌘⇧←", "⌘⇧]", "⌘⇧["]
+    XCTAssertEqual(
+      group.rows.map(\.key).filter(traversal.contains), traversal,
+      "一覧のタブ移動 4 行が 矢印 → 括弧 の順に並んでいない")
   }
 
   /// 表示キーは全カテゴリ横断で一意（行 identity・キー絞り込みの衝突防止）。
