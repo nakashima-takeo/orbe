@@ -90,10 +90,13 @@ final class MenuBarStatusViewTests: XCTestCase {
     XCTAssertLessThanOrEqual(size.height, 22)
   }
 
-  /// ② 滲み出しピルは**提案幅に依存せず内容幅へハグする**。intrinsic より十分広い提案を
-  /// 与えても実描画幅が intrinsic のままなら、各スロットは内容幅（上限は自分の cap か残り予算）で
-  /// 確定しており、内容と無関係にスロットが広がる（＝タイトルと本文の間に空白が出る／本文の右に
-  /// 空白が出る）ことはない。本文が短いときピルが縮む契約もここで担保される。
+  /// ② 滲み出しピルは**提案幅に依存しない**。intrinsic より十分広い提案を与えても取る幅が
+  /// intrinsic のままなら、幅は内容だけで決まっており、提案幅を子へ流して膨らませるコンテナ
+  /// （＝修正前の HStack ＋ flexible frame）が再導入されていない。
+  ///
+  /// これは提案幅非依存だけを見る——両辺とも同じ `sizeThatFits` に由来するので、
+  /// **スロットが内容へハグするか**は別に固定する必要がある（`…WorkspaceSlotHugsName` /
+  /// `…ShrinksForShortMessage`）。
   func testTransientPillHugsContentRegardlessOfProposedWidth() {
     for (ws, message) in [
       (shortWS, longMessage), (shortWS, shortMessage),
@@ -114,6 +117,34 @@ final class MenuBarStatusViewTests: XCTestCase {
       fittingSize(store: transientStore(workspace: shortWS, message: longMessage)).width,
       fittingSize(store: transientStore(workspace: longWS, message: longMessage)).width,
       accuracy: 2, "長い本文では WS 名の長短によらず予算を使い切る")
+  }
+
+  /// WS 名スロットは上限の範囲で**内容へハグする**。同じ本文なら、WS 名が短いピルは長い
+  /// ピルより総幅が小さい。スロットが内容と無関係に上限いっぱいを取る実装（＝WS 名の右に
+  /// 空白が出る、報告された不具合そのもの）だと両者が同じ総幅になるので、この不等号で落ちる。
+  ///
+  /// 本文は短い方を使う——長文だと双方が予算を使い切って総幅が並び、WS 名スロットの差が
+  /// 総幅に現れない。
+  func testTransientPillWorkspaceSlotHugsName() {
+    XCTAssertLessThan(
+      fittingSize(store: transientStore(workspace: shortWS, message: shortMessage)).width,
+      fittingSize(store: transientStore(workspace: longWS, message: shortMessage)).width,
+      "WS 名が短ければピルはそのぶん狭い（スロットが上限いっぱいを取らない）")
+  }
+
+  /// 本文スロットも**内容へハグする**＝短い本文で残り予算を吸い切らない。
+  ///
+  /// 上界 250 の根拠: 本文が内容で止まる限り、ピルは「固定部（◐ 15＋状態グリフ 11＋spacing
+  /// 6×3＋padding 8×2＋外側 hair 2×2＝64）＋上限で頭打ちの WS 名スロット（≤120）＋短い本文」
+  /// までしか伸びない＝約 200（実測 201）。250 はそこへ文言差・サブピクセル分の余裕を足した値で、
+  /// 一方「本文が残り予算を吸い切る」破れは WS 名の長短によらず必ず上限 334
+  /// （`transientMaxWidth` ＋ hair×2）へ張り付くため、その間で確実に切り分けられる。
+  func testTransientPillShrinksForShortMessage() {
+    for ws in [shortWS, longWS] {
+      XCTAssertLessThan(
+        fittingSize(store: transientStore(workspace: ws, message: shortMessage)).width, 250,
+        "ws=\(ws): 短い本文では残り予算を吸わずピルが縮む")
+    }
   }
 }
 
