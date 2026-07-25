@@ -71,7 +71,7 @@ final class TerminalController {
   var onEmpty: (() -> Void)?
   /// アクティブペインのタイトルが変わった通知（タブラベル更新用。再算出は呼び出し側が全タブで行う）。
   var onActiveTitleChange: (() -> Void)?
-  /// 分割/クローズでレイアウトが変わった通知（永続の保存スケジュール用）。
+  /// 分割/クローズでペイン集合が変わった通知（chrome の再投影・永続保存用）。
   var onLayoutChange: (() -> Void)?
   /// ウィンドウレベルの chrome 操作を上位へ届ける通知。
   var onWindowCommand: ((WindowCommand) -> Void)?

@@ -6,7 +6,7 @@ extension WindowController {
   /// `flushChrome` から呼ぶ snapshot 更新（既存 coalesce に相乗り。新たな走査タイミングは作らない）。
   /// パレット表示中は開いたまま行を追従させる（`reloadPalette` と同じ流儀）。
   func refreshAttentionSnapshot() {
-    attentionStore.rows = AttentionSnapshot.rows(of: workspaces)
+    attentionStore.apply(rows: AttentionSnapshot.rows(of: workspaces))
     if model.overlay == .attentionPalette {
       model.attentionPalette?.setRows(attentionStore.rows)
     }
@@ -63,9 +63,10 @@ extension WindowController {
   }
 
   /// 一過性表示（メニューバー②）用の 1 行 snapshot。発信元ペインの所属 WS・タブから組む。
-  /// 休眠 WS のペインは report が届かないため実質常に解決するが、見つからなければ nil。
+  /// 対象は一覧（`AttentionSnapshot.rows`）と同じ **activate 済み workspace のライブペインのみ**
+  /// ——②は一覧の投影なので、立てる側と取り下げる側が同じ集合を見る。見つからなければ nil。
   private func attentionRow(for pane: SurfaceView) -> AttentionRow? {
-    for ws in workspaces {
+    for ws in workspaces where ws.activated {
       for tab in ws.tabs where tab.controlAllPanes().contains(where: { $0 === pane }) {
         guard let state = pane.agentState else { return nil }
         return AttentionRow(
