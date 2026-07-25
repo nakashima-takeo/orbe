@@ -124,7 +124,9 @@ extension WindowController {
     p.onDismiss = { [weak self] in self?.dismissPalette() }
 
     let cwd = store.activePaneCwd() ?? FileManager.default.homeDirectoryForCurrentUser.path
-    let provider = DispatchDataProvider(cwd: cwd, model: p, localization: localization)
+    let provider = DispatchDataProvider(
+      cwd: cwd, model: p, localization: localization,
+      worktreeTemplate: activeEffectiveSettings()[SettingKeys.worktreeDir])
 
     // クロージャは兄弟パレット同様 [weak self] のみとし、p/provider は self.model 経由で辿る
     // （p が onExecute を保持するため、p を強参照すると開くたびに自己循環でリークする）。

@@ -237,6 +237,8 @@ extension WindowController: ControlTarget {
       let symbols = Dictionary(
         uniqueKeysWithValues: AgentStateIcon.curatedSymbols.map { ($0.key.state, $0.value) })
       return ["symbols": symbols]
+    case .pathTemplate:
+      return ["placeholders": WorktreePathTemplate.placeholders]
     }
   }
 

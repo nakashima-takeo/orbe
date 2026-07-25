@@ -183,6 +183,70 @@ extension SettingsPaletteModel {
     render.rows = rows
   }
 
+  /// 「カスタム…」行の index（プリセットの次＝末尾）。●・↵・→・戻りの選択復元が同じ 1 箇所を読む
+  /// ——行の並びを変えたときに、それぞれが別々にズレないため。
+  var worktreeDirCustomRow: Int { WorktreePathTemplate.presets.count }
+
+  /// worktreeDir: 作成場所のプリセット一覧（絞り込み欄なし）＋末尾の「カスタム…」行。
+  /// 現在値（●・初期ハイライト）は一致するプリセット行、どれとも一致しなければ「カスタム…」行に置き、
+  /// その行の補足に現在値を出す（一致しない値の在処が一覧から読める）。
+  func rebuildWorktreeDirPresets() {
+    render.fieldVisible = false
+    render.fieldIsFilter = false
+    render.breadcrumb = localization.string(.settingsWorktreeDirBreadcrumb)
+    render.placeholder = ""
+    render.hint = localization.string(.settingsSubHintApply)
+    let presets = WorktreePathTemplate.presets
+    let current = values.effWorktreeDir
+    let matched = presets.firstIndex { $0.template == current }
+    currentRowIndex = matched ?? worktreeDirCustomRow
+    var rows = presets.indices.map { i in
+      PaletteModel.RowItem(
+        label: marker(i) + localization.string(presets[i].labelKey), detail: presets[i].template)
+    }
+    rows.append(
+      PaletteModel.RowItem(
+        label: marker(worktreeDirCustomRow) + localization.string(.settingsWorktreeDirCustom),
+        chevron: true, detail: matched == nil ? current : nil))
+    render.rows = rows
+  }
+
+  /// 語彙の説明行（語ごとに 1 行）。カスタム入力の段にだけ置く——プリセットを 1 打で選ぶ人には要らない。
+  private static let worktreeDirVocabulary: [L10nKey] = [
+    .settingsWorktreeDirDescParent, .settingsWorktreeDirDescRepo, .settingsWorktreeDirDescRepoPath,
+    .settingsWorktreeDirDescSlug, .settingsWorktreeDirDescTilde,
+  ]
+
+  /// worktreeDir カスタム: テンプレート文字列の editor 入力（`fieldIsFilter = false`＝← はカーソル移動に
+  /// 残す）。入場時にそのスコープの実効テンプレートがプリフィルされる。行はすべて選択不可の情報行で、
+  /// 語彙の説明が語ごとに 1 行並び、注意（下記）があればその先頭に 1 行差し込まれる。
+  func rebuildWorktreeDirCustom() {
+    render.fieldVisible = true
+    render.fieldIsFilter = false
+    render.breadcrumb = "‹ " + localization.string(.settingsWorktreeDirCustom)
+    render.placeholder = localization.string(.settingsWorktreeDirPlaceholder)
+    render.hint = localization.string(.settingsWorktreeDirHint)
+    currentRowIndex = nil
+    let notice = worktreeDirNotice.map { [$0] } ?? []
+    render.rows = (notice + Self.worktreeDirVocabulary.map { localization.string($0) })
+      .map { PaletteModel.RowItem(label: $0, enabled: false) }
+  }
+
+  /// 説明行の先頭に差し込む注意（不正確定の理由（`worktreeDirError`）＞ repo を区別しない警告＞なし）。
+  /// 説明行は消さない——語彙は注意が出ている間こそ読みたい。警告は**妥当なテンプレートにだけ**出す
+  /// （打鍵途中の不完全な入力で鳴らさない）。保存は拒否しない——1 リポジトリ専用の置き場を workspace
+  /// 上書きで指定する使い方を潰さないため、検証の合否は変えない。
+  private var worktreeDirNotice: String? {
+    if let worktreeDirError { return worktreeDirError }
+    let text = render.query.trimmingCharacters(in: .whitespaces)
+    if WorktreePathTemplate.validate(text) == nil,
+      !WorktreePathTemplate.distinguishesRepository(text)
+    {
+      return localization.string(.settingsWorktreeDirWarnMissingRepo)
+    }
+    return nil
+  }
+
   /// language: ja / en の固定2行（絞り込み欄なし）。現在値は実効 UI 言語。↵ で確定し提示元へ通知する。
   func rebuildLanguage() {
     render.fieldVisible = false

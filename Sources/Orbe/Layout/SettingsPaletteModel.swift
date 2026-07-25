@@ -26,7 +26,7 @@ import SwiftUI
   // ドリル遷移（drillIn/returnTo*）を `SettingsPaletteModel+Navigation` へ分離するため internal。
   enum Mode {
     case root, font, tabTitleFont, emojiFont, theme, agent, agentStates,
-      agentIcon(AgentStateIcon.Kind), language, update
+      agentIcon(AgentStateIcon.Kind), worktreeDirPresets, worktreeDirCustom, language, update
   }
 
   /// root 行。先頭のスコープ切替行と、レジストリ表示順の各設定行。
@@ -58,6 +58,10 @@ import SwiftUI
 
   /// 現在値の行 index（サブモードの表示行に対する。root と、現在値が表示行に無いときは nil）。
   var currentRowIndex: Int?
+
+  /// worktreeDir 入力の直前の不正確定理由（語彙の説明行の先頭に差し込んで出す）。
+  /// 編集（queryChanged）と入場（drillIn）でクリアし、エラーは確定時にだけ評価する。
+  var worktreeDirError: String?
 
   /// 設定値の解決モデル（global 層・workspace 上書き層・現在スコープ・表示の語彙）。
   var values: ScopedSettingsValues
@@ -155,6 +159,10 @@ import SwiftUI
       let symbol = render.selected == 0 ? nil : symbols[render.selected - 1]
       assign(values.agentStateIconChange(kind: kind, symbol: symbol))
       returnToStates()
+    case .worktreeDirPresets:
+      activateWorktreeDirPresetRow()
+    case .worktreeDirCustom:
+      confirmWorktreeDir()
     case .language:
       guard Language.allCases.indices.contains(render.selected) else { return }
       onSelectLanguage(Language.allCases[render.selected])  // ストア更新はここで反映される
@@ -196,6 +204,48 @@ import SwiftUI
     returnToRoot()
   }
 
+  /// プリセット一覧の ↵。プリセット行はそのテンプレートを確定して root へ戻り、最終行「カスタム…」だけが
+  /// テキスト入力へ 1 段深く潜る（値が決まったら root へ戻る、が一覧・入力に共通の着地規則）。
+  private func activateWorktreeDirPresetRow() {
+    let presets = WorktreePathTemplate.presets
+    if render.selected == worktreeDirCustomRow {
+      drillIntoWorktreeDirCustom()
+      return
+    }
+    guard presets.indices.contains(render.selected) else { return }
+    assign(SettingChange(SettingKeys.worktreeDir, presets[render.selected].template))
+    returnToRoot()
+  }
+
+  /// worktreeDir 入力（editor）の ↵ 確定。trim → 空なら解除（global は既定へ・workspace は継承へ。
+  /// プリフィルで常に現在値から始まるため、全消し＋↵ は意図的な解除操作として成立する）→
+  /// 不正なら情報行へ理由を出して入力モードに留まる → 妥当なら保存して root へ戻る。
+  private func confirmWorktreeDir() {
+    let text = render.query.trimmingCharacters(in: .whitespaces)
+    if text.isEmpty {
+      assign(SettingChange(SettingKeys.worktreeDir, nil))
+      returnToRoot()
+      return
+    }
+    if let error = WorktreePathTemplate.validate(text) {
+      worktreeDirError = worktreeDirErrorText(error)
+      rebuild()
+      return
+    }
+    assign(SettingChange(SettingKeys.worktreeDir, text))
+    returnToRoot()
+  }
+
+  /// 検証エラーを現在言語の表示文言へ写す（純関数の理由 → UI 語彙はここだけが持つ）。
+  private func worktreeDirErrorText(_ error: WorktreePathTemplate.ValidationError) -> String {
+    switch error {
+    case .unknownToken(let token):
+      return localization.format(.settingsWorktreeDirErrUnknownToken, token)
+    case .missingSlug: return localization.string(.settingsWorktreeDirErrMissingSlug)
+    case .notAbsolute: return localization.string(.settingsWorktreeDirErrNotAbsolute)
+    }
+  }
+
   /// ← ＝戻る/減算/反転。root のスコープ行/toggle 行は反転、stepper 行は減算、サブモードでは root へ戻る。
   private func leftArrow() {
     switch mode {
@@ -211,8 +261,10 @@ import SwiftUI
         }
       case .language, .update: break  // drillIn 行と同じく ← は無反応
       }
-    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .language, .update:
+    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .worktreeDirPresets,
+      .language, .update:
       returnToRoot()
+    case .worktreeDirCustom: break  // editor 入力欄の ← はカーソル移動（ここへは届かない）。戻るは esc
     case .agentIcon: returnToStates()  // 1 段ずつ浅く（アイコン候補→状態一覧）
     }
   }
@@ -225,6 +277,12 @@ import SwiftUI
     }
     if case .update = mode {
       rightArrowUpdateRow()  // トグル行は反転、他は no-op（↵ と同じ意味の部分集合）
+      return true
+    }
+    if case .worktreeDirPresets = mode {
+      // → は「潜る」意味だけを持つ。1 段深いのは chevron のある「カスタム…」行だけ。
+      guard render.selected == worktreeDirCustomRow else { return false }
+      drillIntoWorktreeDirCustom()
       return true
     }
     guard case .root = mode, visibleRootRows.indices.contains(render.selected) else { return false }
@@ -259,19 +317,27 @@ import SwiftUI
     rebuild()
   }
 
-  /// Esc。root では閉じ、サブモードでは root へ戻る（1 段ずつ浅くなる）。
+  /// Esc。root では閉じ、サブモードでは 1 段ずつ浅くなる。worktreeDir のカスタム入力は保存せず一覧へ戻る。
   private func escape() {
     switch mode {
     case .root: onDismiss()
-    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .language, .update:
+    case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .worktreeDirPresets,
+      .language, .update:
       returnToRoot()
     case .agentIcon: returnToStates()  // 1 段ずつ浅く
+    case .worktreeDirCustom: returnToWorktreeDirPresets()  // 同上（カスタム入力→プリセット一覧）
     }
   }
 
   private func queryChanged() {
     switch mode {
     case .root, .font, .tabTitleFont: break  // フィルタ入力を持つモードのみ再構築
+    case .worktreeDirCustom:
+      // 編集は不正確定のエラー表示を下げ（エラーは確定時にだけ評価する）、repo を区別しない旨の警告を
+      // 入力へ追従させる。行はすべて選択不可の情報行なので選択は動かさない。
+      worktreeDirError = nil
+      rebuild()
+      return
     default: return
     }
     render.selected = 0  // 行集合が入れ替わるため選択は先頭へ戻す
@@ -301,9 +367,11 @@ import SwiftUI
   // MARK: - モード遷移・描画
 
   /// mode を切り替えて行を組み直し、選択を決める（ドリル遷移は `SettingsPaletteModel+Navigation`）。
-  func setMode(_ m: Mode, select: Int? = nil) {
+  /// `prefill` は入力欄を持つモードの初期クエリ。行の組み立てが query を読むモードがあるため、
+  /// 空へ戻すのでなくここで確定させてから `rebuild()` に渡す。
+  func setMode(_ m: Mode, select: Int? = nil, prefill: String = "") {
     mode = m
-    render.query = ""
+    render.query = prefill
     rebuild()  // ここで currentRowIndex が確定する
     render.selected = select ?? currentRowIndex ?? 0
     render.clampSelection()
@@ -321,6 +389,8 @@ import SwiftUI
     case .agent: rebuildAgent()
     case .agentStates: rebuildAgentStates()
     case .agentIcon(let kind): rebuildAgentIcon(kind: kind)
+    case .worktreeDirPresets: rebuildWorktreeDirPresets()
+    case .worktreeDirCustom: rebuildWorktreeDirCustom()
     case .language: rebuildLanguage()
     case .update: rebuildUpdate()
     }
