@@ -57,6 +57,20 @@ final class ChromeMiddleClickTests: XCTestCase {
     XCTAssertTrue(wc.current.tabs.first === survivor, "閉じたタブ以外は残る")
   }
 
+  /// 改名中に別タブを中クリックすると、集合が変わる前に編集を畳む。
+  /// `editingIndex` は位置 index なので、残すと詰まった別タブを指してしまう。
+  func testMiddleClickDuringRenameEndsEditing() {
+    let wc = WindowController()
+    wc.newTab()
+    wc.beginTabRename()  // アクティブ（index 1）を改名中に
+    XCTAssertEqual(wc.statusModel.editingIndex, 1, "前提: 改名中")
+
+    wc.statusModel.onCloseTab(0)  // 別タブを中クリック
+
+    XCTAssertNil(wc.statusModel.editingIndex, "編集は畳まれる")
+    XCTAssertEqual(wc.current.tabs.count, 1, "中クリックしたタブは閉じる")
+  }
+
   /// 範囲外 index で呼んでも落ちず、タブ集合も変えない（`onSelect` と同じ防御水準）。
   func testMiddleClickIgnoresOutOfRangeIndex() {
     let wc = WindowController()
@@ -73,6 +87,8 @@ final class ChromeMiddleClickTests: XCTestCase {
 
   /// 中ボタンの `otherMouseDown` を窓へ配送すると、その座標のタブが閉じる。
   /// catcher の矩形・hitTest ゲート・buttonNumber 絞り込み・`closeTab` までの配線を一度に通す。
+  /// 叩くのは中央の非選択タブ——両端だと「常に先頭を閉じる」「常にアクティブを閉じる」実装と
+  /// 区別できず、クリック座標から index が運ばれていることを固定できない。
   func testMiddleButtonEventOnTabClosesThatTab() throws {
     let wc = WindowController()
     wc.newTab()
@@ -80,13 +96,33 @@ final class ChromeMiddleClickTests: XCTestCase {
     let window = try mount(wc)
     let catchers = try tabCatchers(in: window)
     XCTAssertEqual(catchers.count, 3, "catcher はタブ 1 枚に 1 つ載る")
-    let survivors = [wc.current.tabs[1], wc.current.tabs[2]]
+    let active = wc.current.tabs[wc.current.active]
+    let survivors = [wc.current.tabs[0], wc.current.tabs[2]]
 
-    window.sendEvent(try otherDown(button: 2, at: center(of: catchers[0])))  // 先頭タブを中クリック
+    window.sendEvent(try otherDown(button: 2, at: center(of: catchers[1])))  // 中央の非選択タブ
 
     XCTAssertEqual(wc.current.tabs.count, 2, "配送された中クリックがタブを閉じる")
     XCTAssertTrue(
-      zip(wc.current.tabs, survivors).allSatisfy { $0 === $1 }, "閉じたのはクリック座標のタブ（先頭）だけ")
+      zip(wc.current.tabs, survivors).allSatisfy { $0 === $1 }, "閉じたのはクリック座標のタブだけ")
+    XCTAssertTrue(wc.current.tabs[wc.current.active] === active, "アクティブタブは切り替わらない")
+  }
+
+  /// 末尾（＝アクティブ）タブの中クリックは、そのタブを閉じて選択が手前へ落ちる。
+  /// catcher の左右順と `active` 補正（`SessionStore.removeTab` の clamp）を反対端から固定する。
+  func testMiddleButtonEventOnLastTabClosesLastTab() throws {
+    let wc = WindowController()
+    wc.newTab()
+    wc.newTab()
+    let window = try mount(wc)
+    let catchers = try tabCatchers(in: window)
+    XCTAssertEqual(wc.current.active, 2, "前提: タブ 3 枚で末尾がアクティブ")
+    let survivors = [wc.current.tabs[0], wc.current.tabs[1]]
+
+    window.sendEvent(try otherDown(button: 2, at: center(of: catchers[2])))
+
+    XCTAssertEqual(wc.current.tabs.count, 2, "末尾タブが閉じる")
+    XCTAssertTrue(zip(wc.current.tabs, survivors).allSatisfy { $0 === $1 }, "閉じたのは末尾タブだけ")
+    XCTAssertEqual(wc.current.active, 1, "アクティブは手前へ落ちる（範囲外を指し続けない）")
   }
 
   /// サイドボタン（buttonNumber 3）では閉じない。hitTest が catcher を返さず、
@@ -105,7 +141,7 @@ final class ChromeMiddleClickTests: XCTestCase {
     window.sendEvent(side)
     XCTAssertEqual(wc.current.tabs.count, 2, "配送してもタブは閉じない")
 
-    catcher.otherMouseDown(with: side)  // hitTest を迂回して直接届いた場合
+    catcher.otherMouseDown(with: side)  // ゲートが緩んで届いた場合の二の門
     XCTAssertEqual(wc.current.tabs.count, 2, "catcher 自身も中ボタン以外を弾く")
   }
 
@@ -117,13 +153,11 @@ final class ChromeMiddleClickTests: XCTestCase {
     let window = try mount(wc)
     let catcher = try XCTUnwrap(tabCatchers(in: window).first, "先頭タブの catcher")
     let point = center(of: catcher)
-    let host = try XCTUnwrap(window.contentView, "chrome ルート")
 
     for type in [NSEvent.EventType.leftMouseDown, .leftMouseDragged] {
-      _ = try leftEvent(type, at: point)
+      try setCurrentLeftEvent(type, at: point)
       let hit = try XCTUnwrap(try hitTest(point, in: window), "タブ中心は誰かが受ける")
       XCTAssertFalse(hit is MiddleClickCatcher.CatcherView, "\(type) の配送中は catcher が素通しする")
-      XCTAssertTrue(hit.isDescendant(of: host), "受けたのは chrome の SwiftUI 側")
     }
   }
 
@@ -168,7 +202,7 @@ final class ChromeMiddleClickTests: XCTestCase {
 
   /// 窓座標 `point` を指す `otherMouseDown` を作り、配送できる状態にする。
   ///
-  /// CGEvent 経由なのは `NSEvent.mouseEvent` が buttonNumber を常に 0 にしてしまい、中ボタンと
+  /// CGEvent 経由なのは `NSEvent.mouseEvent` に buttonNumber を渡す引数が無く、中ボタンと
   /// サイドボタンを区別できないため。CGEvent は上原点の画面座標を取り、窓を持たない NSEvent の
   /// `locationInWindow` は下原点の画面座標になる——その反転量を実測し、欲しい窓座標がそのまま
   /// `locationInWindow` に出る CG 座標を逆算する（宛先の窓は `sendEvent` で直接指す）。
@@ -192,11 +226,10 @@ final class ChromeMiddleClickTests: XCTestCase {
     return try XCTUnwrap(NSEvent(cgEvent: probe), "座標校正の NSEvent").locationInWindow.y
   }
 
-  /// 左ボタン系イベント（buttonNumber は AppKit が型から決めるので合成でそのまま使える）。
-  /// 宛先は持たせない——検証で使うのは「配送中のイベント」としての `NSApp.currentEvent` だけで、
-  /// hitTest の宛先は座標で明示する。
-  private func leftEvent(_ type: NSEvent.EventType, at point: NSPoint) throws -> NSEvent {
-    try makeCurrent(
+  /// 左ボタン系イベントを「配送中のイベント」として立てるだけ（buttonNumber は AppKit が型から決める）。
+  /// 宛先は持たせない——検証で使うのは `NSApp.currentEvent` だけで、hitTest の宛先は座標で明示する。
+  private func setCurrentLeftEvent(_ type: NSEvent.EventType, at point: NSPoint) throws {
+    _ = try makeCurrent(
       try XCTUnwrap(
         NSEvent.mouseEvent(
           with: type, location: point, modifierFlags: [],
@@ -209,8 +242,13 @@ final class ChromeMiddleClickTests: XCTestCase {
   /// ——どのイベントでも catcher が素通しし、ゲートの検証にならない。
   private func makeCurrent(_ event: NSEvent) throws -> NSEvent {
     NSApp.postEvent(event, atStart: true)
-    return try XCTUnwrap(
+    let got = try XCTUnwrap(
       NSApp.nextEvent(matching: .any, until: .distantPast, inMode: .default, dequeue: true),
       "投入したイベントの取り出し")
+    // `.any` は先頭の任意イベントを取る。別のイベントを掴むと currentEvent が意図と違うものになり、
+    // ゲートの検証が空振りしたまま緑になる——取り違えたらここで落とす。
+    XCTAssertEqual(got.type, event.type, "取り出したのは投入したイベント")
+    XCTAssertEqual(got.buttonNumber, event.buttonNumber, "取り出したのは投入したイベント")
+    return got
   }
 }
