@@ -1,4 +1,5 @@
 import AppKit
+import GhosttyKit
 import XCTest
 
 @testable import Orbe
@@ -162,18 +163,22 @@ final class WindowControllerReopenAgentTabTests: XCTestCase {
     XCTAssertEqual(wc.current.active, 0, "選択も動かない")
   }
 
-  /// シェル exit・エージェント終了（`.process`）で落ちたエージェントタブは戻せない。
-  /// 実経路（`close` → main へ async → `onEmpty` → `closeTab` → `removeTab`）を丸ごと通す——
-  /// `wire` が origin を素通しせず決め打ちすると、この非同期ホップの先でだけ嘘になる。
+  /// シェル exit・エージェント終了で落ちたエージェントタブは戻せない。
+  /// libghostty の継ぎ目（`close_surface_cb`）から実経路を丸ごと通す——`ghostty_surface_request_close`
+  /// は shell の exit と同じ入口で、Orbe が登録した callback をその場で呼ぶ。callback が渡す発火源が
+  /// `.gesture` に化ければ「`exit` したタブが ⇧⌘T で復活する」が起きるが、`close` を直接叩くテストでは
+  /// callback 自身を踏まないため気づけない。この先の
+  /// `close` → main へ async → `onEmpty` → `closeTab` → `removeTab` も同時に通る。
   /// エージェントを載せた生きたペインで叩く＝エージェント判定では通る＝発火源の判定だけが効く。
   func testProcessClosedAgentTabIsNotReopenable() throws {
     let wc = try restoreThreeTabs()
     let victim = wc.current.tabs[0]  // 単一ペインの葉タブ（close がそのままタブ閉鎖へカスケードする）
     try markAsAgent(victim)
 
-    // close_surface_cb（シェル exit）と同じ呼び方。
-    victim.close(try XCTUnwrap(victim.focusedPane), origin: .process)
-    drainMainQueue()
+    let surface = try XCTUnwrap(victim.focusedPane?.surfacePtr, "前提: surface 生成済みのペイン")
+    ghostty_surface_request_close(surface)
+    drainMainQueue()  // close_surface_cb → close
+    drainMainQueue()  // close → onEmpty → closeTab
 
     XCTAssertEqual(titles(wc), ["api", "c"], "前提: 先頭タブが落ちている")
     XCTAssertTrue(wc.current.closedAgentTabs.isEmpty, "プロセス終了で落ちたタブは積まない")

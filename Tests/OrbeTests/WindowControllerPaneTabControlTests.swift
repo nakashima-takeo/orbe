@@ -67,6 +67,14 @@ final class WindowControllerPaneTabControlTests: XCTestCase {
     wc.controlListWorkspaces().first { $0["name"] as? String == name }
   }
 
+  /// main キューに積まれた非同期ブロック（`TerminalController.close` の `onEmpty` ホップ）を捌く。
+  /// FIFO なので、close の後に積んだこのブロックが走った時点で `onEmpty` は処理済み。
+  private func drainMainQueue() {
+    let exp = expectation(description: "main queue drained")
+    DispatchQueue.main.async { exp.fulfill() }
+    wait(for: [exp], timeout: 1.0)
+  }
+
   // MARK: - createWorkspace の初回シェル cwd
 
   /// 新規作成した workspace の初回シェルは rootPath（`~` 展開済み）で開く（ホームに落ちない）。
@@ -123,6 +131,28 @@ final class WindowControllerPaneTabControlTests: XCTestCase {
     }
     XCTAssertFalse(
       wc.controlListPanes().contains { $0["paneId"] as? Int == victim }, "閉じたペインは消える")
+  }
+
+  /// close_pane が最後の 1 枚を閉じてタブごと落ちる（カスケード）ときも、開き直しスタックへ積まない。
+  /// close_tab と違いここは `onEmpty` の main ホップを跨ぐ経路で、発火源が `.gesture` に化けると
+  /// 「制御 API で畳んだタブが ⇧⌘T で復活する」が静かに起きる。
+  func testClosePaneCascadingToTabDoesNotStackForReopen() throws {
+    let wc = try restore(activeWorkspace: 0, [twoTabbed("main")])
+    let victim = try XCTUnwrap(wc.current.tabs.first)
+    // close_tab 側と同じくエージェントを載せてから閉じる＝エージェント判定では通る状態にして、
+    // 発火源の判定だけが効いていることを固定する。
+    let pane = try XCTUnwrap(victim.focusedPane)
+    pane.agentCommand = "claude"
+    pane.agentSessionId = "live-1"
+    guard case .success = wc.controlClosePane(paneId: pane.id) else {
+      return XCTFail("close_pane は success")
+    }
+    drainMainQueue()  // close → onEmpty → closeTab
+
+    XCTAssertEqual(wc.current.tabs.count, 1, "前提: 最後の 1 枚を閉じてタブごと落ちている")
+    XCTAssertTrue(
+      wc.current.closedAgentTabs.isEmpty,
+      "制御 API の閉鎖は開き直しスタックへ積まない（⇧⌘T の対象は人のジェスチャだけ）")
   }
 
   /// close_pane は未知ペインを -32004 で弾く。
