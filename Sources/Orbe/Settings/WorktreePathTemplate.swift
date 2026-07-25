@@ -55,13 +55,31 @@ enum WorktreePathTemplate {
     return nil
   }
 
-  /// プレースホルダ置換 → 先頭 `~` 展開 → standardize で作成先パスを確定する。
+  /// プレースホルダ置換 → 先頭 `~` 展開 → 正規化で作成先パスを確定する。
   static func resolve(template: String, parent: String, repo: String, slug: String) -> String {
     let replaced =
       template
       .replacingOccurrences(of: "{parent}", with: parent)
       .replacingOccurrences(of: "{repo}", with: repo)
       .replacingOccurrences(of: "{slug}", with: slug)
-    return ((replaced as NSString).expandingTildeInPath as NSString).standardizingPath
+    return standardized((replaced as NSString).expandingTildeInPath)
+  }
+
+  /// 字句だけの正規化（`.`・`..`・重複/末尾スラッシュを畳む）。symlink は解決しない。
+  /// Foundation の `standardizingPath` は**実在するパスだけ**リンクを解決し `/private` を畳むため、
+  /// これから作る（＝実在しない）worktree パスと実在する repo root で結果が食い違う。作成先の解決
+  /// （`resolve`）と repo 内判定（`GitWorktreeExclude`）は同じ土俵で比べる必要があるので、
+  /// 両者はこの純字句の正規化 1 本を共有する。
+  static func standardized(_ path: String) -> String {
+    var components: [String] = []
+    for component in path.split(separator: "/") where component != "." {
+      if component == ".." {
+        if !components.isEmpty { components.removeLast() }
+      } else {
+        components.append(String(component))
+      }
+    }
+    let joined = components.joined(separator: "/")
+    return path.hasPrefix("/") ? "/" + joined : joined
   }
 }

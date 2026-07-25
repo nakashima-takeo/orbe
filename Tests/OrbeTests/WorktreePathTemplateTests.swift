@@ -41,6 +41,14 @@ final class WorktreePathTemplateTests: XCTestCase {
       "/Users/x/github/orbe-worktrees/issue-42")
   }
 
+  /// 正規化は字句だけ（symlink を解決しない）。実在する root と、これから作る（実在しない）
+  /// worktree パスで畳み方が食い違わないことが repo 内判定の前提。
+  func testStandardizedIsPurelyLexical() {
+    XCTAssertEqual(WorktreePathTemplate.standardized("/private/tmp/r/wt/"), "/private/tmp/r/wt")
+    XCTAssertEqual(WorktreePathTemplate.standardized("/a//b/./c"), "/a/b/c")
+    XCTAssertEqual(WorktreePathTemplate.standardized("/a/b/../c"), "/a/c")
+  }
+
   // MARK: - プリセット
 
   /// 一覧から選んだ値が保存を拒否されないこと、先頭が既定テンプレート自身であること。
