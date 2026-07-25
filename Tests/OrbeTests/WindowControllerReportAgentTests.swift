@@ -63,6 +63,23 @@ final class WindowControllerReportAgentTests: XCTestCase {
     return (wc, panes)
   }
 
+  /// アクティブ workspace ＋ 休眠（このセッションで一度も activate していない）workspace で
+  /// 起動し、休眠側の先頭ペインを返す。
+  private func makeControllerAndDormantPane() throws -> (WindowController, SurfaceView) {
+    let tab = TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)
+    let file = WorkspacesFile(
+      version: WorkspacePersistence.version, activeWorkspace: 0,
+      workspaces: [
+        WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [tab]),
+        WorkspaceState(name: "dormant", rootPath: "/tmp", activeTab: 0, tabs: [tab]),
+      ])
+    try JSONEncoder().encode(file).write(to: tempStore)
+    let wc = WindowController()
+    let dormant = try XCTUnwrap(wc.workspaces.last)
+    XCTAssertFalse(dormant.activated, "前提: 復元直後の未切替 workspace は休眠")
+    return (wc, try XCTUnwrap(dormant.tabs.first?.controlAllPanes().first))
+  }
+
   /// AppKit のイベントを実際に取り出して配送し、`done` が真になるまで回す。活性化（`activate` → key 化）は
   /// WindowServer から届くイベントを NSApp が捌いて初めて成立するため、素の `RunLoop.run` では key にならない。
   /// `seconds` は上限。速い機械では待たず、詰まった共有ランナーでも取りこぼさない。
@@ -331,5 +348,39 @@ final class WindowControllerReportAgentTests: XCTestCase {
     XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
     flushDelivered(wc)
     XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
+  }
+
+  /// 休眠（未 activate）workspace のペインでは②を立てない——立てる側（`attentionRow(for:)`）は
+  /// 一覧（`AttentionSnapshot.rows`）と同じ activate 済み workspace のみを見る。立ててしまうと、
+  /// その行は一覧に出ないので次の flush で即取り下げられる幽霊ピルになる。
+  ///
+  /// 到達性は低いが 0 ではない: 制御 API のペイン解決は休眠 workspace も走査するので、
+  /// `report_agent` を直接撃てばここへ届く（hook 経由は休眠側に pty が無いので届かない）。
+  func testTransientNotFiredForDormantWorkspacePane() throws {
+    let (wc, dormantPane) = try makeControllerAndDormantPane()
+    XCTAssertFalse(wc.window.isKeyWindow, "前提: 背面（非 key）なので見ているタブの抑制は効かない")
+
+    wc.controlReportAgent(
+      pane: dormantPane, agent: "claude", state: "waiting", sessionId: nil, message: "q")
+    XCTAssertNil(wc.attentionStore.transient, "休眠 workspace のペインでは②を立てない")
+
+    flushDelivered(wc)
+    XCTAssertTrue(wc.attentionStore.rows.isEmpty, "一覧にも出ない（立てる側と同じ集合）")
+  }
+
+  // MARK: - ペイン集合が増える側（split）の再投影
+
+  /// split でも chrome 再投影を鳴らす。新ペインは状態を持たず単体では chrome 差分を作らないので、
+  /// split の**後**に状態だけを直接立てて（通知は鳴らさない）一覧が追随するかで測る。
+  /// `split()` の `onLayoutChange?()` が無ければ dirty が立たず `flushChrome` が空振りして落ちる。
+  func testSplitReprojectsChrome() throws {
+    let (wc, pane) = try makeControllerAndPane()
+    wc.flushChrome()  // 起動時に積まれた再投影を消化し、dirty が立っていない地点から測る
+    XCTAssertTrue(wc.attentionStore.rows.isEmpty)
+
+    let sibling = try XCTUnwrap(wc.current.tabs[0].split(.horizontal, from: pane))
+    sibling.agentState = "waiting"  // report 経路は通さない＝再投影を要求するのは split だけ
+    flushDelivered(wc)
+    XCTAssertEqual(wc.attentionStore.rows.map(\.paneId), [sibling.id])
   }
 }
