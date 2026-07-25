@@ -4,8 +4,9 @@ import XCTest
 
 /// 設定パレットの「worktree の作成場所」（root index 12）の検証。
 /// 潜るとまずプリセット一覧（現在値に ●・最終行「カスタム…」）が出て、テキスト入力は「カスタム…」から
-/// 1 段深く潜ったときだけ現れる。カスタム入力は実効テンプレートをプリフィルして入場し（情報行はその値から
-/// 組む）、↵ 確定（空＝解除・不正＝情報行へ理由を出して留まる・妥当＝保存して root へ）、Esc は保存せず一覧へ戻る。
+/// 1 段深く潜ったときだけ現れる。カスタム入力は実効テンプレートをプリフィルして入場し（注意行はその値から
+/// 組む）、↵ 確定（空＝解除・不正＝先頭の注意行へ理由を出して留まる・妥当＝保存して root へ）、
+/// Esc は保存せず一覧へ戻る。
 /// `SettingsPaletteTests` の拡張として helper（`model`/`captureApply`）を共有する。
 @MainActor
 extension SettingsPaletteTests {
@@ -25,8 +26,27 @@ extension SettingsPaletteTests {
   /// 「カスタム…」行の index（プリセットの次）。
   private var customRow: Int { WorktreePathTemplate.presets.count }
 
-  private var infoText: String {
-    LocalizationStore(language: .ja).string(.settingsWorktreeDirInfo)
+  /// 語彙の説明行（語ごとに 1 行）。注意の有無によらず常に出たままであること。
+  private var vocabularyLabels: [String] {
+    let l = LocalizationStore(language: .ja)
+    return [
+      l.string(.settingsWorktreeDirDescParent), l.string(.settingsWorktreeDirDescRepo),
+      l.string(.settingsWorktreeDirDescRepoPath), l.string(.settingsWorktreeDirDescSlug),
+      l.string(.settingsWorktreeDirDescTilde),
+    ]
+  }
+
+  /// 説明行の先頭に差し込まれた注意（エラー理由 or 警告。無ければ nil）。
+  private func notice(_ p: SettingsPaletteModel) -> String? {
+    p.render.rows.count == vocabularyLabels.count ? nil : p.render.rows[0].label
+  }
+
+  /// 注意の有無にかかわらず説明行が末尾に揃っていること。
+  private func assertVocabularyShown(_ p: SettingsPaletteModel, line: UInt = #line) {
+    XCTAssertEqual(
+      p.render.rows.suffix(vocabularyLabels.count).map(\.label), vocabularyLabels,
+      "語彙の説明行は消さない", line: line)
+    XCTAssertTrue(p.render.rows.allSatisfy { !$0.enabled }, "情報行は選択・実行の対象にしない", line: line)
   }
 
   // MARK: - root 行
@@ -137,7 +157,7 @@ extension SettingsPaletteTests {
   // MARK: - カスタム入力: editor 入力欄とプリフィル
 
   /// 「カスタム…」で潜ると editor 入力欄（← はカーソル移動）が出て、実効テンプレートがプリフィルされ、
-  /// 行は語彙説明の情報行 1 行のみ（選択・実行の対象にしない）。
+  /// 行は語ごとに 1 行の説明（選択・実行の対象にしない）だけが並ぶ。
   func testWorktreeDirCustomPrefillsEffectiveTemplate() {
     let p = model()
     drillIntoCustom(p)
@@ -145,9 +165,14 @@ extension SettingsPaletteTests {
     XCTAssertTrue(p.render.fieldVisible, "editor 入力欄が出る")
     XCTAssertFalse(p.render.fieldIsFilter, "editor＝← をカーソル移動に残す")
     XCTAssertEqual(p.render.query, WorktreePathTemplate.defaultTemplate, "未設定は既定テンプレートをプリフィル")
-    XCTAssertEqual(p.render.rows.count, 1)
-    XCTAssertFalse(p.render.rows[0].enabled, "情報行は選択・実行の対象にしない")
-    XCTAssertEqual(p.render.rows[0].label, infoText, "通常時はプレースホルダ語彙の説明")
+    XCTAssertNil(notice(p), "妥当な現在値では注意を出さない")
+    assertVocabularyShown(p)
+    XCTAssertEqual(
+      p.render.rows.map(\.label),
+      [
+        "{parent} — リポジトリの親ディレクトリ", "{repo} — リポジトリ名", "{repo_path} — リポジトリの場所",
+        "{slug} — ブランチ名（/ は - にする）", "先頭の ~ — ホームディレクトリ",
+      ], "各行はトークンとその意味")
   }
 
   /// 設定済みならその値がプリフィルされる（現在値からの編集で始まる）。
@@ -212,7 +237,7 @@ extension SettingsPaletteTests {
     XCTAssertEqual(last?.1, .workspace)
   }
 
-  /// 不正テンプレートの ↵ は適用せず入力モードに留まり、情報行が検証エラー理由に差し替わる。
+  /// 不正テンプレートの ↵ は適用せず入力モードに留まり、説明行の先頭に検証エラー理由が差し込まれる。
   func testWorktreeDirInvalidConfirmShowsErrorAndStays() {
     let p = model()
     drillIntoCustom(p)
@@ -222,19 +247,21 @@ extension SettingsPaletteTests {
     p.render.onActivate()
     XCTAssertNil(applied(), "不正は適用しない")
     XCTAssertEqual(p.render.breadcrumb, "‹ カスタム…", "入力モードに留まる")
-    XCTAssertEqual(p.render.rows[0].label, "{slug} を含めてください", "情報行がエラー理由に差し替わる")
+    XCTAssertEqual(notice(p), "{slug} を含めてください", "先頭にエラー理由が入る")
+    assertVocabularyShown(p)
   }
 
-  /// 不正確定後に編集すると、エラー表示は語彙説明へ戻る（エラーは確定時にだけ評価する）。
+  /// 不正確定後に編集すると、エラー行は消えて説明行だけに戻る（エラーは確定時にだけ評価する）。
   func testWorktreeDirErrorClearsOnEdit() {
     let p = model()
     drillIntoCustom(p)
     p.render.query = "~/wt/{repo}"
     p.render.onActivate()  // 不正確定 → エラー表示
-    XCTAssertNotEqual(p.render.rows[0].label, infoText)
+    XCTAssertNotNil(notice(p))
     p.render.query = "~/wt/{repo}/{slug}"
     p.render.onQueryChange()  // 編集 → エラーを下げる
-    XCTAssertEqual(p.render.rows[0].label, infoText)
+    XCTAssertNil(notice(p))
+    assertVocabularyShown(p)
   }
 
   /// 未知プレースホルダはその断片つきでエラー理由が読める。
@@ -243,23 +270,24 @@ extension SettingsPaletteTests {
     drillIntoCustom(p)
     p.render.query = "/wt/{branch}/{slug}"
     p.render.onActivate()
-    XCTAssertEqual(p.render.rows[0].label, "不正なプレースホルダ: {branch}")
+    XCTAssertEqual(notice(p), "不正なプレースホルダ: {branch}")
   }
 
-  // MARK: - カスタム入力: {repo} 欠落の警告（保存は通す）
+  // MARK: - カスタム入力: repo を区別しないテンプレートの警告（保存は通す）
 
-  /// 現在値が `{repo}` 抜きなら、打鍵を待たず入場した時点の情報行から警告が出る
+  /// 現在値が repo を区別しないなら、打鍵を待たず入場した時点で警告が出る
   /// （どのプリセットにも一致しない値＝「カスタム…」行に ● が乗る値なので、↵ 一発でここに着く）。
   func testWorktreeDirMissingRepoWarnsOnEntry() {
     let p = model(worktreeDir: "~/wt/{slug}")
     drillIntoCustom(p)
     XCTAssertEqual(p.render.query, "~/wt/{slug}", "実効テンプレートがプリフィルされる")
     XCTAssertEqual(
-      p.render.rows[0].label, "{repo} が無いため別リポジトリの同名ブランチと衝突します",
+      notice(p), "{repo} も {repo_path} も無いため別リポジトリの同名ブランチと衝突します",
       "プリフィルした現在値に対して入場時点で警告する")
+    assertVocabularyShown(p)
   }
 
-  /// `{repo}` を含まない妥当なテンプレートは情報行で警告するだけ——確定は通り root へ戻る。
+  /// repo を区別しない妥当なテンプレートは警告するだけ——確定は通り root へ戻る。
   func testWorktreeDirMissingRepoWarnsButSaves() {
     let p = model()
     drillIntoCustom(p)
@@ -267,22 +295,30 @@ extension SettingsPaletteTests {
     p.render.query = "~/wt/{slug}"
     p.render.onQueryChange()
     XCTAssertEqual(
-      p.render.rows[0].label, "{repo} が無いため別リポジトリの同名ブランチと衝突します", "入力に追従して警告が出る")
+      notice(p), "{repo} も {repo_path} も無いため別リポジトリの同名ブランチと衝突します", "入力に追従して警告が出る")
     p.render.onActivate()
     XCTAssertEqual(applied()?[SettingKeys.worktreeDir], "~/wt/{slug}", "警告しても保存は拒否しない")
     XCTAssertNil(p.render.breadcrumb, "root へ戻る")
   }
 
-  /// 警告は妥当なテンプレートにだけ出す（打鍵途中の不完全な入力では語彙説明のまま）。
+  /// `{repo_path}` は repo 固有の場所なので警告しない（repo 内配置プリセットがこの形）。
+  func testWorktreeDirRepoPathDoesNotWarn() {
+    let p = model(worktreeDir: "{repo_path}/.worktrees/{slug}")
+    drillIntoCustom(p)
+    XCTAssertNil(notice(p))
+  }
+
+  /// 警告は妥当なテンプレートにだけ出す（打鍵途中の不完全な入力では説明行のみ）。
   func testWorktreeDirMissingRepoWarningOnlyForValidTemplate() {
     let p = model()
     drillIntoCustom(p)
     p.render.query = "~/wt/{sl"
     p.render.onQueryChange()
-    XCTAssertEqual(p.render.rows[0].label, infoText)
+    XCTAssertNil(notice(p))
     p.render.query = ""
     p.render.onQueryChange()
-    XCTAssertEqual(p.render.rows[0].label, infoText, "空（＝解除）は警告しない")
+    XCTAssertNil(notice(p), "空（＝解除）は警告しない")
+    assertVocabularyShown(p)
   }
 
   // MARK: - カスタム入力: Esc

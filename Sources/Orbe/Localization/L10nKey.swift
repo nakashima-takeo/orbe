@@ -222,7 +222,11 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsWorktreeDirBreadcrumb
   case settingsWorktreeDirPlaceholder
   case settingsWorktreeDirHint
-  case settingsWorktreeDirInfo
+  case settingsWorktreeDirDescParent
+  case settingsWorktreeDirDescRepo
+  case settingsWorktreeDirDescRepoPath
+  case settingsWorktreeDirDescSlug
+  case settingsWorktreeDirDescTilde
   case settingsWorktreeDirErrUnknownToken
   case settingsWorktreeDirErrMissingSlug
   case settingsWorktreeDirErrNotAbsolute

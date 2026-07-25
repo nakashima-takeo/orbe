@@ -36,18 +36,25 @@ extension L10n {
       "テンプレート（空のまま確定で解除）", "Template (confirm empty to reset)"
     ),
     .settingsWorktreeDirHint: ("↵ 確定（空で解除）   esc 戻る", "↵ Apply (empty resets)   esc Back"),
-    .settingsWorktreeDirInfo: (
-      "{parent}（リポジトリ親）・{repo}（リポジトリ名）・{slug}（branch）が使えます",
-      "Use {parent} (repo's parent dir), {repo} (repo name), and {slug} (branch)"
+    .settingsWorktreeDirDescParent: (
+      "{parent} — リポジトリの親ディレクトリ", "{parent} — the repository's parent directory"
     ),
+    .settingsWorktreeDirDescRepo: ("{repo} — リポジトリ名", "{repo} — the repository name"),
+    .settingsWorktreeDirDescRepoPath: (
+      "{repo_path} — リポジトリの場所", "{repo_path} — the repository's location"
+    ),
+    .settingsWorktreeDirDescSlug: (
+      "{slug} — ブランチ名（/ は - にする）", "{slug} — the branch name (/ becomes -)"
+    ),
+    .settingsWorktreeDirDescTilde: ("先頭の ~ — ホームディレクトリ", "Leading ~ — your home directory"),
     .settingsWorktreeDirErrUnknownToken: ("不正なプレースホルダ: %@", "Invalid placeholder: %@"),
     .settingsWorktreeDirErrMissingSlug: ("{slug} を含めてください", "Template must include {slug}"),
     .settingsWorktreeDirErrNotAbsolute: (
       "絶対パスに解決される形にしてください（先頭 ~ 可）", "Must resolve to an absolute path (leading ~ allowed)"
     ),
     .settingsWorktreeDirWarnMissingRepo: (
-      "{repo} が無いため別リポジトリの同名ブランチと衝突します",
-      "Without {repo}, same-named branches of other repositories collide"
+      "{repo} も {repo_path} も無いため別リポジトリの同名ブランチと衝突します",
+      "Without {repo} or {repo_path}, same-named branches of other repositories collide"
     ),
     .settingsWorktreeDirPresetSibling: ("リポジトリの隣（既定）", "Next to the repository (default)"),
     .settingsWorktreeDirPresetHome: ("ホームにまとめる", "Collect under home"),
