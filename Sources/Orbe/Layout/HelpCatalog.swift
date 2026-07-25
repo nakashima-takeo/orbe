@@ -36,10 +36,10 @@ enum HelpCatalog {
         Row(key: "⌘T", label: .helpShortcutNewTab, combo: ["cmd", "t"]),
         Row(key: "⌘⇧T", label: .helpShortcutReopenClosedAgentTab, combo: ["cmd", "shift", "t"]),
         Row(key: "⌘R", label: .helpShortcutRenameTab, combo: ["cmd", "r"]),
-        Row(key: "⌘⇧]", label: .helpShortcutNextTab, combo: ["cmd", "shift", "]"]),
-        Row(key: "⌘⇧[", label: .helpShortcutPrevTab, combo: ["cmd", "shift", "["]),
         Row(key: "⌘⇧→", label: .helpShortcutNextTab, combo: ["cmd", "shift", "right"]),
         Row(key: "⌘⇧←", label: .helpShortcutPrevTab, combo: ["cmd", "shift", "left"]),
+        Row(key: "⌘⇧]", label: .helpShortcutNextTab, combo: ["cmd", "shift", "]"]),
+        Row(key: "⌘⇧[", label: .helpShortcutPrevTab, combo: ["cmd", "shift", "["]),
       ]),
     Group(
       title: .helpCatPanesEditor,
@@ -76,7 +76,7 @@ enum HelpCatalog {
   /// トップビュー（基本操作）に出す厳選セット（カテゴリ → 表示キー列）。
   static let topPicks: [L10nKey: [String]] = [
     .helpCatGeneral: ["⌘H", "⌘,", "⌘Q"],
-    .helpCatWorkspaceTabs: ["⌘⇧S", "⌘N", "⌘T", "⌘⇧]"],
+    .helpCatWorkspaceTabs: ["⌘⇧S", "⌘N", "⌘T", "⌘⇧→"],
     .helpCatAgents: ["⌘⇧C", "⌘⇧A", "⌘⇧X"],
   ]
 
