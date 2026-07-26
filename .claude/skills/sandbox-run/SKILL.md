@@ -13,16 +13,16 @@ Orbe の新ビルドを、本物の Orbe（常用の workspaces・control.sock�
 
 ## 常時効くレンズ（全モード共通）
 
-- **本物に絶対触れない ― ① state 隔離。** 起動は必ず `ORBE_STATE_DIR="$(mktemp -d)"` を付ける（workspaces・control.sock がそのディレクトリ直下へ隔離される）。付け忘れると常用環境を汚す。
-- **本物に絶対触れない ― ② 環境隔離。** 継承した親 Orbe の ghostty **リソースポインタ系**（`GHOSTTY_RESOURCES_DIR`・`TERMINFO`・`GHOSTTY_BIN_DIR` ほか。非網羅の代表）を起動時に断つ。**`ORBE_STATE_DIR` は Orbe の state しか隔離せず、プロセス環境は素通りする**——sandbox-run は多くが Orbe の端末内から起動され、その子が親の env を継ぐと新ビルドの ghostty が**旧 `/Applications` バンドルの資産を名前解決**する（chrome は新色・端末だけ旧色という偽描画になり、実機確認が phantom バグに化ける）。断てば新ビルドは自バンドルを解決する。何が継がれているかは `env | grep -i GHOSTTY` で確かめて落とす。`ORBE_SOCK`/`ORBE_PANE` 等の継承は無害（sandbox のペインには GUI が自分の値を注入して上書きし、`orb`/`orbe-mcp` は `ORBE_STATE_DIR` 併用時に `ORBE_SOCK` を見ない）。
-- **`open` は使わない。** `open` は起動中のインスタンスを前面化するだけで新ビルドに入れ替わらない。バイナリを直接叩く（`./build/Orbe.app/Contents/MacOS/Orbe`）。
-- **使い捨ては必ず片付ける。** 承認・NG・失敗のいずれで終わっても、起こした隔離インスタンスを kill し、その state dir を消す。`kill しない`のは本物の Orbe だけ。
+- **本物に絶対触れない ― ① state 隔離。** 起動は必ず `ORBE_STATE_DIR="$(mktemp -d)"` を付ける（workspaces・control.sock がそのディレクトリ直下へ隔離される）。付け忘れると常用環境を汚す。**`mktemp -d` より深い場所を選ばない**——control.sock は AF_UNIX の `sun_path` 104 バイト上限を超えると**警告も出さずに無効化される**（socket が作られないだけ）。症状は「補完が出ない」「制御 API に繋がらない」という遠い場所に出て、アプリのバグに見える。
+- **本物に絶対触れない ― ② 環境隔離。** 継承した親 Orbe の ghostty **リソースポインタ系**（`GHOSTTY_RESOURCES_DIR`・`TERMINFO`・`GHOSTTY_BIN_DIR` ほか。非網羅の代表）を起動時に断つ。**`ORBE_STATE_DIR` は Orbe の state しか隔離せず、プロセス環境は素通りする**——sandbox-run は多くが Orbe の端末内から起動され、その子が親の env を継ぐと新ビルドの ghostty が**旧 `/Applications` バンドルの資産を名前解決**する（chrome は新色・端末だけ旧色という偽描画になり、実機確認が phantom バグに化ける）。断てば新ビルドは自バンドルを解決する。何が継がれているかは `env | grep -i GHOSTTY` で確かめて落とす。
+- **`open` は使わない。** `open` は起動中のインスタンスを前面化するだけで新ビルドに入れ替わらない。バイナリを直接叩く（`<app>/Contents/MacOS/Orbe`）。**DMG から起こすときはマウント先を指定する**（`hdiutil attach <dmg> -mountpoint <dir> -nobrowse`）——自動命名は同名ボリュームが既にあると `/Volumes/Orbe 1` へ逃げるので、古い DMG が張りっぱなしのとき別バージョンを起こす。
+- **使い捨ては必ず片付ける。** 承認・NG・失敗のいずれで終わっても、手順2 で控えた PID を kill し、その state dir を消す。
 
 ## 手順
 
 ```mermaid
 flowchart TD
-    A[1. build-app.sh でビルド] --> B[2. ORBE_STATE_DIR で隔離起動]
+    A[1. 起こす対象を決める] --> B[2. ORBE_STATE_DIR で隔離起動]
     B --> M{モード}
     M -->|承認 既定| C[3a. 触りどころ・build-id を提示<br/>AskUserQuestion で承認]
     M -->|無人| D[3b. control.sock を渡し制御 API で駆動]
@@ -30,12 +30,12 @@ flowchart TD
     D --> E
 ```
 
-1. **ビルドする。** `./scripts/build-app.sh`。前提不足（フル Xcode 未導入・zig 失敗など）での失敗は出力メッセージ（`docs/BUILD.md` 参照）に従う。
+1. **起こす対象を決める。** 既定は `./scripts/build-app.sh` でビルドした `./build/Orbe.app`（前提不足＝フル Xcode 未導入・zig 失敗などでの失敗は出力メッセージ〔`docs/BUILD.md` 参照〕に従う）。呼び出し元が別のバンドルを渡したときはそれを使う（公証済み DMG 内の `Orbe.app` など）。**対象の build-id を控える**（`/usr/libexec/PlistBuddy -c "Print :OrbeBuildID" <app>/Contents/Info.plist`）。
 2. **隔離起動する。** 継承した ghostty のリソースポインタ系 env を断って起こす（レンズ②）:
-   `env -u GHOSTTY_RESOURCES_DIR -u GHOSTTY_BIN_DIR -u TERMINFO ORBE_STATE_DIR="$(mktemp -d)" ./build/Orbe.app/Contents/MacOS/Orbe &`
+   `env -u GHOSTTY_RESOURCES_DIR -u GHOSTTY_BIN_DIR -u TERMINFO ORBE_STATE_DIR="$(mktemp -d)" <app>/Contents/MacOS/Orbe &`
    `env | grep -i GHOSTTY` で他のリソースポインタ系が残っていればそれも `-u` で足す。この state dir と PID を控える（片付けに使う）。隔離インスタンスは自前の control.sock（`$ORBE_STATE_DIR/control.sock`）を持つ。
 3. モードで分岐:
-   - **承認モード（既定）**: 今回の変更が**どこに現れ・何を触って見るか**と、画面 chrome の **build-id が今ビルドした値か**を短く提示する（人間目視が必須の条件があればここで渡す）。`AskUserQuestion` で承認を問う。**この承認が後続（確定・マージ等）の許可**。NG・指摘があれば呼び出し側へ差し戻す。
+   - **承認モード（既定）**: 今回の変更が**どこに現れ・何を触って見るか**と、画面 chrome の **build-id が手順1 で控えた値か**を短く提示する（人間目視が必須の条件があればここで渡す）。`AskUserQuestion` で承認を問う。**この承認が後続（確定・マージ等）の許可**。NG・指摘があれば呼び出し側へ差し戻す。
    - **無人モード**: `$ORBE_STATE_DIR/control.sock` を呼び出し側へ渡し、制御 API で駆動して確かめる。
 4. **片付ける。** 隔離インスタンスを kill し、state dir を消す。承認・NG・失敗のいずれでも必ず行う。
 
@@ -43,6 +43,6 @@ flowchart TD
 
 - **`ORBE_STATE_DIR`**: 非空ならその直下へ workspaces・control.sock を隔離する（`StateDir` / `OrbePaths`）。全実行体（GUI・`orb` CLI・MCP）が同一解決を共有し、`orb`/`orbe-mcp` は `ORBE_STATE_DIR` 併用時に継承 `ORBE_SOCK` を無視する（隔離インスタンス操作が実 Orbe へ逸れない）。
 - **`./scripts/build-app.sh`**: `./build/Orbe.app` を生成し、末尾に build-id を出す。
-- **build-id 表示**: chrome（`StatusRowView`）に build-id が出る。新ビルドへ入れ替わったかの確認手段。
+- **build-id**: `build-app.sh` が git 短縮 SHA を `Info.plist` の `OrbeBuildID` に刻み、chrome（`StatusRowView`）が表示する。**バンドルの同一性を名乗る唯一の値**——バージョン文字列も bundle ID も、版が違っても同じ値を取りうる。
 - **`GHOSTTY_RESOURCES_DIR`（継承 env）**: ghostty が theme・shell-integration・terminfo を名前解決する起点。**Orbe が子プロセスへ export する**ため、Orbe 端末内から起こした sandbox は放置すると親（＝旧 `/Applications`）バンドルを解決する。unset すれば ghostty は実行体（＝新バンドル）から自己解決する。
 - **control.sock**: `$ORBE_STATE_DIR/control.sock`。隔離インスタンスを制御 API で駆動する口。
