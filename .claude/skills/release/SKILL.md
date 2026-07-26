@@ -17,6 +17,12 @@ description: Orbe を公開リリースする。バージョンを決め、署�
 
 リポジトリが private のときは手順1で止める。非公開リポの Releases は誰にも届かず、ソースを世に出すかは人間だけが下す別の決断——**このスキルはリポジトリの可視性を切り替えない。**
 
+## 対象は build-id で名指す
+
+全工程が運ぶのは「あるコミットから焼いた 1 つのバンドル」。それを一意に名乗る値が `OrbeBuildID`（`build-app.sh` が刻む git 短縮 SHA。chrome にも出る）。
+
+**バージョン文字列も bundle ID も取り違えを検出できない**——`dev.orbe.app` は全リリース共通で、`0.3.0` は焼き直せば何度でも作れる。DMG を 1 つ取り違えれば旧版を新版として検証し、そのまま公開へ進む。build-id だけがそれを止める。**DMG をマウントするたび、インスタンスを起こすたび、この値を見る。**
+
 ## フロー図
 
 ```mermaid
@@ -29,6 +35,7 @@ flowchart TD
     E -->|不合格| S2[公開せず原因を報告]
     E -->|配布物だけでよい| Z[dmg のパスを報告して終了]
     E --> F[6. 公開する 👤]
+    F --> G[7. 公開後に確かめる 👤]
 ```
 
 ## 手順
@@ -47,22 +54,38 @@ semver で次を**理由とともに**提案する（「機能追加が3件・�
 ### 3. ノートを起案する
 コミットログは材料であって、そのまま並べるものではない。**使う人が何を得るかへ翻訳する。**
 
-- `ship: タブのスピナー停止を修正` → 「エージェント実行中にタブの表示が止まる問題を修正しました」
+- `feat(help): ⌘H ヘルプオーバーレイの入口と骨格を配線する` → `⌘H でヘルプを表示`
 - 内部リファクタ・CI・テストなど、使う人の体験が変わらないものは落とす
 - **末尾に対応ソースを明記する**: `ソース: https://github.com/nakashima-takeo/orbe/tree/vX.Y.Z`（GPL §6）
 
+このノートはアプリ内アップデートの「変更内容」シートにも出る（見出し＝分類・箇条書き＝項目として描く）。見出しは `### 新機能` / `### 改善` / `### 修正`。
+
+**1 項目は 1 行**——箇条書き 1 行に説明を畳み込むと読めない。機能を名指して止め、動作の解説や利点は書かない。補足が要るなら短い括弧 1 つまで。
+
+見本:
+
+```markdown
+### 新機能
+- `⌘H` でヘルプを表示
+- `⇧⌘T` で閉じたエージェントタブを開き直す
+- タブを中クリックで閉じる
+- worktree の作成場所を設定 `worktree-dir` で変更可能に
+
+### 改善
+- コマンド補完が `~/.zshrc` を書き換えない方式に（旧版が追記した行は起動時に削除）
+
+ソース: https://github.com/nakashima-takeo/orbe/tree/v0.3.0
+```
+
 **ユーザーに見せて直してもらう。**
 
-このノートはアプリ内アップデートの「変更内容」シートにも出る。Markdown で
-**見出し（`### 新機能` / `### 改善` / `### 修正`）＋箇条書き**の 3 分類・1リリース5項目までに整える
-（シートは見出し＝分類・箇条書き＝項目として描く）。
-
 ### 4. 配布物を作る
-`app/Info.plist` を新バージョンへ更新してコミットし、push する。手順6のタグはこのコミットに打つので、短縮 SHA を控える（`git rev-parse --short HEAD`）。
+`app/Info.plist` を新バージョンへ更新する。
 
 - `CFBundleShortVersionString` = 新 semver
-- **`CFBundleVersion` = 整数 +1**（次リリースは 2）。Sparkle が新旧比較に使う値で、
-  semver 文字列に変えると既存の "1" より小さく比較され自動更新が壊れる。**整数 +1 以外に変えない。**
+- **`CFBundleVersion` = 前リリースの整数 +1**。Sparkle が新旧比較に使う値で、semver 文字列に変えると既存の整数より小さく比較され自動更新が壊れる。**整数 +1 以外に変えない。**
+
+**main は直 push できない**（PR 必須・必須チェック 2 件）。バージョン更新は PR で入れ、CI が通ったらマージし、`git pull` で main を進める。**ビルドはその後**——build-id はビルド時の HEAD の SHA なので、マージ前にビルドすると build-id が PR 側のコミットを指し、タグを打つマージコミットとズレる。タグを打つコミットの短縮 SHA を控える（`git rev-parse --short HEAD`）。
 
 続けて、手順3のノートを md ファイルに保存し（例: `/tmp/orbe-notes.md`）、
 `ORBE_RELEASE_NOTES=/tmp/orbe-notes.md ./scripts/release-app.sh` を実行する
@@ -76,10 +99,12 @@ semver で次を**理由とともに**提案する（「機能追加が3件・�
 ### 5. 関門を通す
 以下がすべて満たされて初めて公開に進める。
 
-1. **署名・公証** — 受領者を再現する。**DMG に `xattr -w -r com.apple.quarantine "0081;$(printf %x $(date +%s));Safari;$(uuidgen)" <dmg>` でダウンロード状態を付与 → `hdiutil attach <dmg>` でマウント → マウント内の `Orbe.app` を** `codesign --verify --deep --strict --verbose=2 <app>` と `spctl -a -vv -t exec <app>` で検証 **→ 終わったら `hdiutil detach <mount>`**。**codesign が pass し、spctl が `accepted` かつ `source=Notarized Developer ID` でなければ公開しない。** zip 展開ツール差で出る "a sealed resource is missing or invalid" が DMG では出ないことの実証がこの関門。quarantine を付けずに判定しても、受け取った人の状況を再現したことにならない。
-2. **バージョン整合** — Info.plist の値とこれから切るタグが一致し、既存タグと重複しない。`CFBundleVersion` が前リリースの整数 +1 になっている（Sparkle の新旧比較値）。
+1. **署名・公証** — 受領者を再現する。**DMG に `xattr -w -r com.apple.quarantine "0081;$(printf %x $(date +%s));Safari;$(uuidgen)" <dmg>` でダウンロード状態を付与 → `hdiutil attach <dmg> -mountpoint <dir> -nobrowse` でマウント → マウント内の `Orbe.app` を** `codesign --verify --deep --strict --verbose=2 <app>` と `spctl -a -vv -t exec <app>` で検証する。**codesign が pass し、spctl が `accepted` かつ `source=Notarized Developer ID` でなければ公開しない。** quarantine を付けずに判定しても、受け取った人の状況を再現したことにならない。**マウント先は必ず指定する**——自動命名は同名ボリュームが既にあると `/Volumes/Orbe 1` へ逃げるので、古い DMG が張りっぱなしのとき別バージョンを検証してしまう。このマウントは関門4 でも使うので張ったままにする。
+2. **同一性** — マウント内 `Orbe.app` の `OrbeBuildID`（`/usr/libexec/PlistBuddy -c "Print :OrbeBuildID" <app>/Contents/Info.plist`）が手順4 で控えた SHA と一致する。`CFBundleShortVersionString` がこれから切るタグと一致し、既存タグと重複しない。`CFBundleVersion` が前リリースの整数 +1（Sparkle の新旧比較値）。
 3. **main がクリーン** — 手順1 の状態が保たれている。
-4. **起動確認** — ユーザーに DMG をマウントして Orbe.app を /Applications にドラッグ・起動してもらい、**補完（タブキー）まで試してもらう**。GUI アプリが本当に動くかは人間にしか確かめられず、JavaScriptCore の JIT は補完を使った瞬間に初めて走る。**起動したのが本番であること**を `codesign -dv /Applications/Orbe.app 2>&1 | grep Identifier` で確かめる（`dev.orbe.app` であること）——`/Applications` には開発版の **Orbe Dev**（`dev.orbe.app.dev`）が同居しうるので、そちらを起動して OK を出すと公証済みバンドルを一度も起動しないまま公開に進んでしまう。**OK が出るまで公開しない。**
+4. **起動確認** — **`/Applications` には入れない。** `sandbox-run` を呼び、関門1 でマウントした `Orbe.app` を対象に隔離インスタンスとして起こす。ユーザーに触ってもらい、**補完（タブキー）まで**試してもらう。GUI アプリが本当に動くかは人間にしか確かめられず、JavaScriptCore の JIT は補完を使った瞬間に初めて走る。**OK が出るまで公開しない。** 終わったら sandbox-run の片付けに続けて `hdiutil detach <dir>` でアンマウントする。
+
+   `/Applications/Orbe.app` の旧版は**そのまま残す**。手順7 の更新経路検証はこれを材料にする——旧版が手元にあるのはリリース直前だけで、上書きすると二度と作れない。
 
 **配布物だけでよい場合は、ここで dmg のパスを報告して終わる**（タグも Releases も作らない）。
 
@@ -87,10 +112,16 @@ semver で次を**理由とともに**提案する（「機能追加が3件・�
 公開の承認を**一度**取ってから、順に実行する。
 
 1. **タグを打つ** — `git tag vX.Y.Z <手順4のコミット> && git push origin vX.Y.Z`。この瞬間に対応ソースが確定する。
-2. **Releases に出す** — `gh release create vX.Y.Z build/release/orbe-X.Y.Z-macos.dmg build/release/appcast.xml --verify-tag --title <title> --notes <ノート>`。`--verify-tag` でタグ未存在時に gh が勝手にタグを作る事故を封じる。
+2. **Releases に出す** — `gh release create vX.Y.Z build/release/orbe-X.Y.Z-macos.dmg build/release/appcast.xml --verify-tag --title <title> --notes-file <手順4のノート>`。`--verify-tag` でタグ未存在時に gh が勝手にタグを作る事故を封じる。
    **`appcast.xml` は必ず dmg と並べてアセットに含める**——アプリ内アップデートの `SUFeedURL` は
    `releases/latest/download/appcast.xml`（最新リリースのアセット）を指すため、載せ忘れたリリースを
    1 つ出しただけで全ユーザーの更新確認が 404 になる。これは公開の関門と同格の必須条件。
+
+### 7. 公開後に確かめる
+公開して初めて確かめられるものが 2 つある。**ここまでが 1 回のリリース。**
+
+1. **feed が引ける** — `curl -sL https://github.com/nakashima-takeo/orbe/releases/latest/download/appcast.xml` が 200 を返し、`sparkle:shortVersionString` が今出した版であること。`SUFeedURL` はこの URL 固定なので、appcast.xml の載せ忘れも latest の付き方の誤りも、ここでしか露見しない。
+2. **旧版から更新できる** — 関門4 で温存した `/Applications/Orbe.app` を起動し、「更新を確認」から検出 → ダウンロード → 再起動適用まで**ユーザーに通してもらう**。変更内容シートに手順3 のノートが出る。EdDSA 署名と Sparkle の経路が本当に繋がっているかは、通すまで誰も知らない。
 
 URL を報告する。
 
