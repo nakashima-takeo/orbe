@@ -93,6 +93,44 @@ final class ReportLogicTests: XCTestCase {
     XCTAssertNil(sessionId(from: nil))
   }
 
+  // MARK: isSubagentReport
+
+  /// サブエージェントの PostToolBatch（親と同じ session_id・agent_id を持つ）は報告しない。
+  func testSubagentBatchIsFiltered() {
+    let obj: [String: Any] = [
+      "session_id": "s1",
+      "hook_event_name": "PostToolBatch",
+      "agent_id": "a1",
+      "agent_type": "general-purpose",
+      "tool_calls": [["tool_name": "Bash", "tool_use_id": "toolu_1"]],
+    ]
+    XCTAssertTrue(isSubagentReport(obj))
+  }
+
+  /// メインエージェントの payload は agent_id を持たない。
+  func testMainAgentReportIsNotFiltered() {
+    let obj: [String: Any] = [
+      "session_id": "s1",
+      "hook_event_name": "PostToolBatch",
+      "tool_calls": [["tool_name": "Bash", "tool_use_id": "toolu_1"]],
+    ]
+    XCTAssertFalse(isSubagentReport(obj))
+  }
+
+  /// 空文字・型不一致・nil obj は偽（誤って報告を落とさない）。
+  func testSubagentReportMalformedIsFalse() {
+    XCTAssertFalse(isSubagentReport(["agent_id": ""]))
+    XCTAssertFalse(isSubagentReport(["agent_id": 1]))
+    XCTAssertFalse(isSubagentReport([:]))
+    XCTAssertFalse(isSubagentReport(nil))
+  }
+
+  /// codex / agy の payload 形では常に偽（両 CLI の報告経路を素通しする）。
+  func testSubagentReportIsFalseForOtherCLIs() {
+    XCTAssertFalse(isSubagentReport(["session_id": "s1", "hook_event_name": "PermissionRequest"]))
+    XCTAssertFalse(isSubagentReport(["conversationId": "c1"]))
+  }
+
   // MARK: parseHookJSON
 
   /// JSON オブジェクトはパースし、空・非 JSON は nil。

@@ -17,6 +17,13 @@ func sessionId(from obj: [String: Any]?) -> String? {
   return nil
 }
 
+/// サブエージェント実行中の hook payload か（`agent_id` はサブエージェントのときだけ入る）。
+/// サブエージェントの活動はペインのセッション状態ではないので報告しない。
+func isSubagentReport(_ obj: [String: Any]?) -> Bool {
+  guard let id = obj?["agent_id"] as? String else { return false }
+  return !id.isEmpty
+}
+
 /// state == "done" かつ background_tasks に status == "running" が 1 つでもあれば "working"。
 /// それ以外（欠落・空配列・キャスト失敗を含む）は state をそのまま返す（誤 working には倒れない）。
 func effectiveState(_ state: String, stdin obj: [String: Any]?) -> String {
