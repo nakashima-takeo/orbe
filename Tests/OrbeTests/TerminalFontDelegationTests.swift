@@ -3,17 +3,25 @@ import XCTest
 
 @testable import Orbe
 
-/// 層1 の `font-codepoint-map` と、同梱フォントのビルド・帰属の整合ゲート。
-/// 同じ事実が `orbe-defaults.conf` の委譲先名・システムに実在するファミリ名・`TerminalFonts` の登録・
-/// `build-app.sh` のコピー・`NOTICE` の帰属という独立した箇所に埋まっており、どれか 1 つがずれても
-/// **実行時には何も起きない**。libghostty は委譲先の名前解決に失敗すると警告を 1 行ログへ吐いて委譲を捨て、
-/// 解決できても委譲先にグリフが無ければ `hasCodepoint` が false でログすら無く捨てる
+/// 独立した 2 本の整合ゲート。どちらもずれても **実行時には何も起きない**ので、ここが唯一の番人になる。
+///
+/// ⓪①②④ 層1 の `font-codepoint-map`: 委譲レンジと委譲先ファミリ名が、libghostty の解決規則
+/// （isSymbol にだけ掛かる `.fit` 制約・presentation 判定より先に確定する override）と噛み合っていること。
+/// 委譲先はシステムフォントなので同梱物とは無関係。libghostty は名前解決に失敗すると警告を 1 行ログへ吐いて
+/// 委譲を捨て、解決できてもグリフが無ければ `hasCodepoint` が false でログすら無く捨てる
 /// （vendor/ghostty `src/font/CodepointResolver.zig` の `getIndexCodepointOverride`）。
-/// 画面には「囲み文字が元の小さい欧文字形に戻る」としか現れず、誰も気づけない。ここがその唯一の番人。
+/// 画面には「囲み文字が元の小さい欧文字形に戻る」としか現れない。
+///
+/// ③ 同梱 TTF: `TerminalFonts` の登録・`build-app.sh` のコピー・`NOTICE` の帰属が一致していること。
+/// こちらは本文等幅チェーンと絵文字の話で、上の委譲とは別の鎖。
 final class TerminalFontDelegationTests: XCTestCase {
 
   /// ① — 記号委譲を導入した動機そのもので、記号委譲行を引くときの錨に使う。
   private let circledOne: UInt32 = 0x2460
+
+  /// あ — 日本語固定行を見分ける錨。この行だけは対象が EAW=Wide で最初から 2 セル枠に収まるため、
+  /// isSymbol の外を含んでよい。残りの行は全て記号委譲行として `.fit` 制約を必要とする。
+  private let hiraganaA: UInt32 = 0x3042
 
   /// 計測の基準サイズ。`orbe-defaults.conf` の `font-size = 12` に合わせる。
   private let referenceSize: CGFloat = 12
@@ -34,6 +42,20 @@ final class TerminalFontDelegationTests: XCTestCase {
     0x100000...0x10FFFD,  // Supplementary Private Use Area-B
   ]
 
+  // MARK: - ⓪ conf 解析の健全性
+
+  /// `font-codepoint-map` 行がすべてパースできていることを検証する。
+  /// 下流の検証は「パースできた行」だけを見るので、キー表記の変更や 1 行の記法崩れで対象が静かに
+  /// 減ると、レンジの退行を何も見ないまま緑になる。ここで対象の件数そのものを固定する。
+  func testEveryCodepointMapLineIsParsed() {
+    let declared = text("app/orbe-defaults.conf").split(separator: "\n")
+      .filter { $0.hasPrefix("font-codepoint-map") }
+    XCTAssertFalse(declared.isEmpty, "app/orbe-defaults.conf に font-codepoint-map 行が無い")
+    XCTAssertEqual(
+      codepointMapLines().count, declared.count,
+      "font-codepoint-map 行にパースできない表記がある（下流の検証が静かに空振りする）")
+  }
+
   // MARK: - ① 記号委譲レンジの必要条件
 
   /// 記号委譲行のレンジが `isSymbol` ブロックの中だけに収まっていることを検証する。
@@ -41,14 +63,20 @@ final class TerminalFontDelegationTests: XCTestCase {
   /// 非 isSymbol の点を足すと、インク幅 9.5〜12.2pt の字形が 7.2pt のセルから隣へはみ出す
   /// （`※`(U+203B)・`●■▲◆`(U+25A0-25FF)・`⌘`(U+2318) がこれに当たる）。
   /// 制約の有無はレンダラ内部の分岐でしかなく、画面にしか現れない無言の破綻になる。
+  /// 日本語固定行を除く**全ての**委譲行を見る。1 行だけを見ると、行を増やす形の退行がすり抜ける。
   func testSymbolDelegationStaysWithinSymbolBlocks() throws {
-    let line = try symbolDelegationLine()
-    let offenders = line.ranges.flatMap { Array($0) }
-      .filter { codepoint in !symbolBlocks.contains { $0.contains(codepoint) } }
+    _ = try symbolDelegationLine()
+    let symbolLines = codepointMapLines().filter { !$0.covers(hiraganaA) }
+    XCTAssertFalse(symbolLines.isEmpty, "記号委譲行が 1 本も無い")
+    let offenders = symbolLines.flatMap { line in
+      line.ranges.flatMap { Array($0) }
+        .filter { codepoint in !symbolBlocks.contains { $0.contains(codepoint) } }
+        .map { "\(describe($0)) → \(line.family)" }
+    }
     XCTAssertTrue(
       offenders.isEmpty,
-      "isSymbol ブロックの外を `\(line.family)` へ委譲している"
-        + "（.fit が働かず全角字形が隣セルへはみ出す）: \(offenders.map(describe))")
+      "isSymbol ブロックの外へ委譲している"
+        + "（.fit が働かず全角字形が隣セルへはみ出す）: \(offenders)")
   }
 
   // MARK: - ② 委譲先の名前解決
@@ -94,7 +122,9 @@ final class TerminalFontDelegationTests: XCTestCase {
   /// 同梱する各 TTF が `NOTICE` に帰属されていることを検証する。
   /// 帰属漏れは動作に一切現れないが、OFL-1.1 の要求を満たさないまま出荷することになる。
   func testBundledFontsAreAttributedInNotice() {
-    let missing = fontsCopiedIntoBundle().subtracting(attributedFontFileNames()).sorted()
+    let copied = fontsCopiedIntoBundle()
+    XCTAssertFalse(copied.isEmpty, "scripts/build-app.sh から同梱 TTF を 1 つも取れていない")
+    let missing = copied.subtracting(attributedFontFileNames()).sorted()
     XCTAssertTrue(missing.isEmpty, "NOTICE に帰属の無い同梱フォント: \(missing)")
   }
 
