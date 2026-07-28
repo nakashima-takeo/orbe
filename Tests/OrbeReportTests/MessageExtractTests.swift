@@ -6,6 +6,7 @@ import XCTest
 /// フィールド形は実 payload 採取（2026-07・claude / codex 実機）に基づく:
 /// - claude Notification: `{"message": "Claude needs your permission", "notification_type": ...}`
 /// - claude PreToolUse(AskUserQuestion): `{"tool_input": {"questions": [{"question": ..., ...}]}}`
+/// - claude PreToolUse(ExitPlanMode): `{"tool_input": {"plan": "..."}}`（questions を持たない）
 /// - claude / codex Stop: `{"last_assistant_message": "...", "stop_hook_active": false, ...}`
 final class MessageExtractTests: XCTestCase {
   // MARK: waiting
@@ -33,6 +34,16 @@ final class MessageExtractTests: XCTestCase {
       ],
     ]
     XCTAssertEqual(agentMessage(state: "waiting", stdin: obj), "AとBどちらにしますか？")
+  }
+
+  /// ExitPlanMode の待ちは質問文を持たないので文言なし（計画本文は載せない）。
+  func testWaitingForExitPlanModeHasNoMessage() {
+    let obj: [String: Any] = [
+      "hook_event_name": "PreToolUse",
+      "tool_name": "ExitPlanMode",
+      "tool_input": ["plan": "1. まず調べる\n2. 次に直す"],
+    ]
+    XCTAssertNil(agentMessage(state: "waiting", stdin: obj))
   }
 
   /// message（空でない）が質問文より優先される。
