@@ -98,7 +98,7 @@ final class TerminalFontDelegationTests: XCTestCase {
     let line = try symbolDelegationLine()
     let font = try delegateFont(family: line.family)
     let representatives: [UInt32] = [
-      0x2460, 0x2473, 0x24B6, 0x24D0, 0x24EA, 0x2605, 0x2606, 0x266A, 0x266B,
+      0x2460, 0x2473, 0x24B6, 0x24D0, 0x24EA, 0x2605, 0x2606, 0x266A, 0x266B, 0x2776,
     ]
     let dropped = representatives.filter { codepoint in
       !line.covers(codepoint) || glyph(for: codepoint, in: font) == nil
