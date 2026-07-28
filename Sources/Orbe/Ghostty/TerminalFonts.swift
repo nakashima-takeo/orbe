@@ -9,7 +9,13 @@ enum TerminalFonts {
   /// ghostty はスタイルごとに font-family を CoreText discovery し、bold/italic の実 face が
   /// 無いと faux 合成へ倒れる（埋め込み variable の実 bold/italic は fallback 挿入順で負ける）。
   /// 4スタイルを登録することで bold/italic が設計字形で決定論的に解決する（システム導入に非依存）。
-  /// JuliaMono は広カバレッジ fallback（JetBrains に無い記号を discovery より前で確定）。
+  /// JuliaMono は `font-family` チェーンには入れず、**discovery の候補**として登録する。
+  /// `font-family` 行の face は fallback=false で挿さり presentation を無視して奪うため、チェーンに
+  /// 置くと絵文字を白黒字形で取り、記号の解決先も全角字形のフォントから欧文の半角字形へすり替わる
+  /// （理由の詳細と実測値は `app/orbe-defaults.conf`）。
+  /// 登録だけ残せば JuliaMono は macOS のシステムフォールバックから見えるようになり、JetBrains に無い
+  /// 記号（数学記号・多言語など）の受け皿として discovery で引かれる。実測ではこの登録が 2490 点の
+  /// 解決先を JuliaMono へ変え、うち 1960 点は登録が無ければ豆腐（.LastResort）だった。
   /// Noto Color Emoji（CBDT→sbix 変換・family 名は「Noto Color Emoji」のまま）は端末セルの絵文字を
   /// gui.conf の font-codepoint-map（emoji-font 設定）で名指し解決させるために登録する。
   /// この集合は `scripts/build-app.sh` が `.app` へコピーする TTF 集合と一致する（片方だけ足しても無警告で効かない）。
