@@ -156,40 +156,12 @@ Fonts (Contents/Resources/*.ttf)
   https://github.com/googlefonts/noto-emoji
   License: licenses/OFL-1.1.txt
 
-* PlemolJP35 Console — Copyright (c) 2021, Yuko Otawara (Reserved Font Name "PlemolJP") — OFL-1.1
-  Bundled as PlemolJP35Console-Regular.ttf (from PlemolJP_v3.0.0.zip, upstream
-  release v3.0.0, copied byte-for-byte). Used only through font-codepoint-map for
-  a small set of enclosed-alphanumeric and symbol codepoints. Its name table
-  carries four copyright blocks, which upstream bakes into every build alike. The
-  outlines this non-NF face actually contains are IBM Plex and Hack — its private
-  use area holds exactly Hack's seven Powerline glyphs and no Nerd Fonts icons:
-  - IBM Plex — Copyright (c) 2017 IBM Corp. (Reserved Font Name "Plex")
-    https://github.com/IBM/plex
-  - Hack — Copyright 2018 Source Foundry Authors — MIT License. Its Bitstream
-    Vera Sans Mono ancestry is Copyright 2003 Bitstream Inc. under the Bitstream
-    Vera License (Reserved Font Names "Bitstream" and "Vera"); the DejaVu work it
-    draws on is public domain. MIT and the Bitstream Vera License both require
-    their permission notices to travel with every copy, so the upstream text
-    covering all three is bundled at licenses/Hack-LICENSE.txt.
-    https://github.com/source-foundry/Hack
-  - Nerd Fonts — Copyright (c) 2014, Ryan L McIntyre — present in the shared name
-    table block only; upstream merges its glyphs into the NF builds, not this one.
-    https://ryanlmcintyre.com
-  The upstream release archive ships no license file; the OFL-1.1 text bundled at
-  licenses/OFL-1.1.txt is the one the font's name table points to, and the
-  Reserved Font Names are declared in the upstream repository LICENSE
-  (yuru7/PlemolJP) and in IBM/plex LICENSE.txt.
-  https://github.com/yuru7/PlemolJP
-  License: licenses/OFL-1.1.txt, licenses/Hack-LICENSE.txt
-
   OFL-1.1 requires the full license text to be distributed with the fonts;
-  licenses/OFL-1.1.txt satisfies this. JetBrains Mono NF, JuliaMono and
-  PlemolJP35 Console are copied byte-for-byte; Noto Color Emoji is repacked
-  (container format only) as described above. Of these, JuliaMono and PlemolJP35
-  Console declare Reserved Font Names: "JuliaMono" for the former, "PlemolJP" and
-  "Plex" for the latter, plus "Bitstream" and "Vera" through its Hack component.
-  Every one is bundled unmodified under its own name, so no renaming obligation
-  arises — OFL-1.1 clause 3 constrains Modified Versions only.
+  licenses/OFL-1.1.txt satisfies this. JetBrains Mono NF and JuliaMono are copied
+  byte-for-byte; Noto Color Emoji is repacked (container format only) as
+  described above. Of these, only JuliaMono declares a Reserved Font Name
+  ("JuliaMono"). It is bundled unmodified under its own name, so no renaming
+  obligation arises — OFL-1.1 clause 3 constrains Modified Versions only.
 
 --------------------------------------------------------------------------------
 Command completion engine (Contents/Resources/completion-engine.js)

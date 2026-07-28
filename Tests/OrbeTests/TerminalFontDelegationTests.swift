@@ -3,38 +3,84 @@ import XCTest
 
 @testable import Orbe
 
-/// 同梱フォントと、それを名指す設定・ビルド・帰属の整合ゲート。
-/// 同じ事実が `app/*.ttf` の name table・`orbe-defaults.conf` の委譲先名・`TerminalFonts` の登録・
-/// `build-app.sh` のコピー・`NOTICE` の帰属という独立した 5 箇所に埋まっており、どれか 1 つがずれても
+/// 層1 の `font-codepoint-map` と、同梱フォントのビルド・帰属の整合ゲート。
+/// 同じ事実が `orbe-defaults.conf` の委譲先名・システムに実在するファミリ名・`TerminalFonts` の登録・
+/// `build-app.sh` のコピー・`NOTICE` の帰属という独立した箇所に埋まっており、どれか 1 つがずれても
 /// **実行時には何も起きない**。libghostty は委譲先の名前解決に失敗すると警告を 1 行ログへ吐いて委譲を捨て、
 /// 解決できても委譲先にグリフが無ければ `hasCodepoint` が false でログすら無く捨てる
 /// （vendor/ghostty `src/font/CodepointResolver.zig` の `getIndexCodepointOverride`）。
-/// 画面には「囲み文字が元の小さい字形に戻る」としか現れず、誰も気づけない。ここがその唯一の番人。
+/// 画面には「囲み文字が元の小さい欧文字形に戻る」としか現れず、誰も気づけない。ここがその唯一の番人。
 final class TerminalFontDelegationTests: XCTestCase {
 
-  /// ① — 委譲を導入した動機そのもので、委譲行を引くときの錨に使う。
+  /// ① — 記号委譲を導入した動機そのもので、記号委譲行を引くときの錨に使う。
   private let circledOne: UInt32 = 0x2460
 
-  /// 計測の基準サイズ。`orbe-defaults.conf` の `font-size = 12` に合わせる（比較は同一フォント内なので
-  /// 値自体には依存しない）。
+  /// 計測の基準サイズ。`orbe-defaults.conf` の `font-size = 12` に合わせる。
   private let referenceSize: CGFloat = 12
 
-  // MARK: - ① 委譲先の名前解決
+  /// libghostty が「記号らしい」と見なし `.fit` 制約でセル枠に収めるブロック
+  /// （vendor/ghostty `src/build/uucode_config.zig` の `computeIsSymbol` を写したもの）。
+  private let symbolBlocks: [ClosedRange<UInt32>] = [
+    0x2190...0x21FF,  // Arrows
+    0x2460...0x24FF,  // Enclosed Alphanumerics
+    0x2600...0x26FF,  // Miscellaneous Symbols
+    0x2700...0x27BF,  // Dingbats
+    0xE000...0xF8FF,  // Private Use Area（general_category == other_private_use）
+    0x1F100...0x1F1FF,  // Enclosed Alphanumeric Supplement
+    0x1F300...0x1F5FF,  // Miscellaneous Symbols and Pictographs
+    0x1F600...0x1F64F,  // Emoticons
+    0x1F680...0x1F6FF,  // Transport and Map Symbols
+    0xF0000...0xFFFFD,  // Supplementary Private Use Area-A
+    0x100000...0x10FFFD,  // Supplementary Private Use Area-B
+  ]
 
-  /// conf が名指す委譲先フォント名が、同梱 TTF のファミリ名に解決することを検証する。
-  /// conf の文字列と TTF の name table は独立に埋まるため、どちらかを改名すると discovery が
-  /// 名前を引けず委譲が丸ごと無効化する（画面上は元の小さい字形に戻るだけ）。
-  func testDelegationTargetResolvesToBundledFontFamily() throws {
-    let target = try XCTUnwrap(
-      delegationTarget(for: circledOne),
-      "app/orbe-defaults.conf に \(describe(circledOne)) を委譲する font-codepoint-map 行が無い")
-    let bundled = bundledFontFamilies()
-    XCTAssertNotNil(
-      bundled[target],
-      "委譲先 `\(target)` に一致するファミリ名の TTF が app/ に無い（同梱: \(bundled.keys.sorted())）")
+  // MARK: - ① 記号委譲レンジの必要条件
+
+  /// 記号委譲行のレンジが `isSymbol` ブロックの中だけに収まっていることを検証する。
+  /// 委譲先の Hiragino Sans W3 は全角字形しか持たないので、`.fit` 制約が掛からない
+  /// 非 isSymbol の点を足すと、インク幅 9.5〜12.2pt の字形が 7.2pt のセルから隣へはみ出す
+  /// （`※`(U+203B)・`●■▲◆`(U+25A0-25FF)・`⌘`(U+2318) がこれに当たる）。
+  /// 制約の有無はレンダラ内部の分岐でしかなく、画面にしか現れない無言の破綻になる。
+  func testSymbolDelegationStaysWithinSymbolBlocks() throws {
+    let line = try symbolDelegationLine()
+    let offenders = line.ranges.flatMap { Array($0) }
+      .filter { codepoint in !symbolBlocks.contains { $0.contains(codepoint) } }
+    XCTAssertTrue(
+      offenders.isEmpty,
+      "isSymbol ブロックの外を `\(line.family)` へ委譲している"
+        + "（.fit が働かず全角字形が隣セルへはみ出す）: \(offenders.map(describe))")
   }
 
-  // MARK: - ② 登録 × 同梱 × 帰属
+  // MARK: - ② 委譲先の名前解決
+
+  /// conf が名指す委譲先フォント名が、実際にインストール済みのフォントへ解決することを検証する。
+  /// libghostty の discovery と同じ経路（family 名だけの descriptor でコレクションを引く）を踏む。
+  /// `Hiragino Sans W3` の綴りを崩すと候補が 0 件になり、委譲が丸ごと無効化する。
+  func testSymbolDelegationTargetResolvesToAnInstalledFont() throws {
+    let family = try symbolDelegationLine().family
+    XCTAssertFalse(
+      matchingDescriptors(family: family).isEmpty,
+      "委譲先 `\(family)` に一致するフォントがシステムに無い（discovery が 0 件を返す）")
+  }
+
+  /// 委譲を導入する動機になった字形が、レンジに残っていて委譲先にグリフもあることを検証する。
+  /// レンジを**狭めた**側と、委譲先が字形を落とした側は、どちらも見た目が元に戻るだけで無症状。
+  /// 代表点を押さえるのがその唯一の検出手段になる。
+  func testDelegationCoversTheGlyphsItWasIntroducedFor() throws {
+    let line = try symbolDelegationLine()
+    let font = try delegateFont(family: line.family)
+    let representatives: [UInt32] = [
+      0x2460, 0x2473, 0x24B6, 0x24D0, 0x24EA, 0x2605, 0x2606, 0x266A, 0x266B,
+    ]
+    let dropped = representatives.filter { codepoint in
+      !line.covers(codepoint) || glyph(for: codepoint, in: font) == nil
+    }
+    XCTAssertTrue(
+      dropped.isEmpty,
+      "委譲レンジから外れているか `\(line.family)` にグリフが無い: \(dropped.map(describe))")
+  }
+
+  // MARK: - ③ 登録 × 同梱 × 帰属
 
   /// 起動時に `.process` 登録するフォント集合と、`.app` へ同梱するフォント集合が一致することを検証する。
   /// 登録だけ足すとファイルが無く、同梱だけ足すと名前解決の対象にならない。どちらも無警告で効かない。
@@ -52,59 +98,13 @@ final class TerminalFontDelegationTests: XCTestCase {
     XCTAssertTrue(missing.isEmpty, "NOTICE に帰属の無い同梱フォント: \(missing)")
   }
 
-  // MARK: - ③ 委譲レンジ
-
-  /// 委譲する全 codepoint が委譲先フォントにグリフを持つことを検証する。
-  /// 持たない codepoint は libghostty の `hasCodepoint` 検証で落ち、ログも無く委譲が外れる。
-  func testDelegatedCodepointsHaveGlyphsInDelegateFont() throws {
-    let delegate = try delegateFont()
-    let missing = delegatedCodepoints(to: delegate.family)
-      .filter { glyph(for: $0, in: delegate.font) == nil }
-    XCTAssertTrue(
-      missing.isEmpty,
-      "\(delegate.family) にグリフが無い codepoint を委譲している: \(missing.map(describe))")
-  }
-
-  /// 委譲する全 codepoint が半角 advance で存在することを検証する。
-  /// これは委譲レンジの必要条件——全角字形を 1 セル幅で委譲すると、libghostty の
-  /// `.fit` 制約がセル幅に潰すか、制約が掛からず隣セルへはみ出すかの二択になり必ず壊れる。
-  /// レンジを ⒑（U+2491・全角）や CJK 側へ広げる書き間違いはここで落ちる。
-  func testDelegatedCodepointsAreHalfWidthInDelegateFont() throws {
-    let delegate = try delegateFont()
-    let halfWidth = try XCTUnwrap(
-      glyph(for: 0x41, in: delegate.font).map { advance(of: $0, in: delegate.font) },
-      "\(delegate.family) に半角の基準となる `A` が無い")
-    let offenders = delegatedCodepoints(to: delegate.family).compactMap { codepoint -> String? in
-      // グリフ欠落は testDelegatedCodepointsHaveGlyphsInDelegateFont の担当なのでここでは見ない。
-      guard let glyph = glyph(for: codepoint, in: delegate.font) else { return nil }
-      let width = advance(of: glyph, in: delegate.font)
-      // 浮動小数の等値比較を避ける下駄。0.01pt は 12pt/1000upem で 0.83 units 相当＝1 unit 差でも落ちる。
-      guard abs(width - halfWidth) > 0.01 else { return nil }
-      return "\(describe(codepoint)) advance=\(width)"
-    }
-    XCTAssertTrue(
-      offenders.isEmpty,
-      "半角 advance(\(halfWidth)) でない字形を委譲している: \(offenders)")
-  }
-
-  /// 委譲を導入する動機になった字形が、委譲対象に残っていることを検証する。
-  /// グリフ有無と半角 advance の 2 本はレンジを**広げた**ときしか落ちない。狭めた側は見た目が元に戻る
-  /// だけで無症状なので、代表点を対で押さえる（`※` `①` `⑳` `⑴` `⒇` `⒈` `⒐` `⒜` `⒵` `★` `☆`）。
-  func testDelegationCoversTheGlyphsItWasIntroducedFor() throws {
-    let delegate = try delegateFont()
-    let delegated = Set(delegatedCodepoints(to: delegate.family))
-    let representatives: [UInt32] = [
-      0x203B, 0x2460, 0x2473, 0x2474, 0x2487, 0x2488, 0x2490, 0x249C, 0x24B5, 0x2605, 0x2606,
-    ]
-    let dropped = representatives.filter { !delegated.contains($0) }
-    XCTAssertTrue(
-      dropped.isEmpty, "委譲レンジから外れている: \(dropped.map(describe))")
-  }
+  // MARK: - ④ 絵文字ベースの切り欠き
 
   /// 層1 の `font-codepoint-map` が絵文字ベースの codepoint を捕まえていないことを検証する。
   /// libghostty の override は presentation より先に効き（`getIndexCodepointOverride`）検証も `.any` なので、
   /// Emoji=Yes の codepoint をレンジに含めるとモノクロのテキストフォントで確定してしまい、VS16 付き
-  /// （`㊗️` 等）は後段の emoji 検証で候補が全滅して置換文字に落ちる。画面に出るまで誰も気づけない。
+  /// （`Ⓜ️` `⚠️` `㊗️` 等）は後段の emoji 検証で候補が全滅して置換文字に落ちる。画面に出るまで誰も気づけない。
+  /// レンジに開いている穴はすべてこの切り欠きなので、埋めようとするとここで落ちる。
   func testLayerOneCodepointMapsExcludeEmojiBases() {
     let offenders = codepointMapLines().flatMap { line in
       line.ranges.flatMap { Array($0) }
@@ -151,48 +151,28 @@ final class TerminalFontDelegationTests: XCTestCase {
     return low...high
   }
 
-  /// ghostty の `CodepointMap.get`（逆走査＝後勝ち）と同じ順序で委譲先を引く。
-  private func delegationTarget(for codepoint: UInt32) -> String? {
-    codepointMapLines().last { $0.covers(codepoint) }?.family
-  }
-
-  /// 同じフォントへ委譲している全行の codepoint（行を分割しても同じ集合になる）。
-  private func delegatedCodepoints(to family: String) -> [UInt32] {
-    codepointMapLines().filter { $0.family == family }
-      .flatMap(\.ranges).flatMap { Array($0) }.sorted()
-  }
-
-  // MARK: - フォントの実測
-
-  /// conf が名指した名前から同梱 TTF を解決してロードする。
-  private func delegateFont() throws -> (font: CTFont, family: String) {
-    let family = try XCTUnwrap(
-      delegationTarget(for: circledOne),
+  /// ghostty の `CodepointMap.get`（逆走査＝後勝ち）と同じ順序で ① を覆う行を引く。
+  private func symbolDelegationLine() throws -> CodepointMapLine {
+    try XCTUnwrap(
+      codepointMapLines().last { $0.covers(circledOne) },
       "app/orbe-defaults.conf に \(describe(circledOne)) を委譲する font-codepoint-map 行が無い")
-    let url = try XCTUnwrap(
-      bundledFontFamilies()[family], "委譲先 `\(family)` に一致する TTF が app/ に無い")
-    let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor]
-    let descriptor = try XCTUnwrap(descriptors?.first, "\(url.lastPathComponent) を読めない")
-    return (CTFontCreateWithFontDescriptor(descriptor, referenceSize, nil), family)
   }
 
-  /// `app/*.ttf` のファミリ名（name table 由来）→ ファイル URL。
-  private func bundledFontFamilies() -> [String: URL] {
-    let appDir = repoRoot().appendingPathComponent("app")
-    let urls =
-      (try? FileManager.default.contentsOfDirectory(at: appDir, includingPropertiesForKeys: nil))
-      ?? []
-    var families: [String: URL] = [:]
-    for url in urls where url.pathExtension == "ttf" {
-      let descriptors =
-        CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor]
-      guard let descriptor = descriptors?.first,
-        let family = CTFontDescriptorCopyAttribute(descriptor, kCTFontFamilyNameAttribute)
-          as? String
-      else { continue }
-      families[family] = url
-    }
-    return families
+  // MARK: - フォントの解決と実測
+
+  /// libghostty の CoreText discovery（`Descriptor.toCoreTextDescriptor` → FontCollection）と同じ引き方。
+  private func matchingDescriptors(family: String) -> [CTFontDescriptor] {
+    let descriptor = CTFontDescriptorCreateWithAttributes(
+      [kCTFontFamilyNameAttribute: family] as CFDictionary)
+    let collection = CTFontCollectionCreateWithFontDescriptors([descriptor] as CFArray, nil)
+    return CTFontCollectionCreateMatchingFontDescriptors(collection) as? [CTFontDescriptor] ?? []
+  }
+
+  private func delegateFont(family: String) throws -> CTFont {
+    let descriptor = try XCTUnwrap(
+      matchingDescriptors(family: family).first,
+      "委譲先 `\(family)` に一致するフォントがシステムに無い")
+    return CTFontCreateWithFontDescriptor(descriptor, referenceSize, nil)
   }
 
   private func glyph(for codepoint: UInt32, in font: CTFont) -> CGGlyph? {
@@ -203,13 +183,6 @@ final class TerminalFontDelegationTests: XCTestCase {
     _ = CTFontGetGlyphsForCharacters(font, &utf16, &glyphs, utf16.count)
     guard let first = glyphs.first, first != 0 else { return nil }
     return first
-  }
-
-  private func advance(of glyph: CGGlyph, in font: CTFont) -> CGFloat {
-    var glyphs = [glyph]
-    var advances = [CGSize.zero]
-    _ = CTFontGetAdvancesForGlyphs(font, .horizontal, &glyphs, &advances, 1)
-    return advances[0].width
   }
 
   // MARK: - リポジトリ実ファイルの読み
