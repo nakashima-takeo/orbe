@@ -12,6 +12,8 @@ enum TerminalFonts {
   /// JuliaMono は広カバレッジ fallback（JetBrains に無い記号を discovery より前で確定）。
   /// Noto Color Emoji（CBDT→sbix 変換・family 名は「Noto Color Emoji」のまま）は端末セルの絵文字を
   /// gui.conf の font-codepoint-map（emoji-font 設定）で名指し解決させるために登録する。
+  /// PlemolJP35 Console は囲み英数字・`★☆`・`※` を半角字形で描くために、同じく
+  /// orbe-defaults.conf の font-codepoint-map から family 名で名指しする（登録しないと名前解決に失敗し委譲が黙って無効化される）。
   private static let bundledResources = [
     "JetBrainsMonoNerdFont-Regular",
     "JetBrainsMonoNerdFont-Bold",
@@ -19,6 +21,7 @@ enum TerminalFonts {
     "JetBrainsMonoNerdFont-BoldItalic",
     "JuliaMono-Regular",
     "NotoColorEmoji-sbix",
+    "PlemolJP35Console-Regular",
   ]
 
   /// `.app` 同梱 TTF を `.process` スコープで登録する。バンドル無しでは何もしない。

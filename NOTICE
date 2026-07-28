@@ -155,10 +155,28 @@ Fonts (Contents/Resources/*.ttf)
   https://github.com/googlefonts/noto-emoji
   License: licenses/OFL-1.1.txt
 
+* PlemolJP35 Console — Copyright (c) 2021, Yuko Otawara (Reserved Font Name "PlemolJP") — OFL-1.1
+  Bundled as PlemolJP35Console-Regular.ttf (upstream release v3.0.0, copied
+  byte-for-byte). Used only through font-codepoint-map for a small set of
+  enclosed-alphanumeric and symbol codepoints. Its name table carries the
+  copyrights of the upstream faces it is built from:
+  - IBM Plex — Copyright (c) 2017 IBM Corp. (Reserved Font Name "Plex")
+    https://github.com/IBM/plex
+  - Hack — Copyright 2018 Source Foundry Authors
+    https://github.com/source-foundry/Hack
+  - Nerd Fonts — Copyright (c) 2014, Ryan L McIntyre
+    https://ryanlmcintyre.com
+  The upstream release archive ships no license file; the OFL-1.1 text bundled
+  at licenses/OFL-1.1.txt is the one the font's name table points to.
+  https://github.com/yuru7/PlemolJP
+  License: licenses/OFL-1.1.txt
+
   OFL-1.1 requires the full license text to be distributed with the fonts;
-  licenses/OFL-1.1.txt satisfies this. None of these fonts declares a Reserved
-  Font Name. JetBrains Mono NF and JuliaMono are copied byte-for-byte; Noto
-  Color Emoji is repacked (container format only) as described above.
+  licenses/OFL-1.1.txt satisfies this. JetBrains Mono NF, JuliaMono and
+  PlemolJP35 Console are copied byte-for-byte; Noto Color Emoji is repacked
+  (container format only) as described above. Of these, only PlemolJP declares
+  Reserved Font Names ("PlemolJP" and "Plex"); bundling it unmodified under its
+  own name triggers no renaming obligation.
 
 --------------------------------------------------------------------------------
 Command completion engine (Contents/Resources/completion-engine.js)

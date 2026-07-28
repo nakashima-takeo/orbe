@@ -154,6 +154,7 @@ cp "$ROOT/vendor/ghostty/src/font/res/JetBrainsMonoNerdFont-Italic.ttf" "$APP/Co
 cp "$ROOT/vendor/ghostty/src/font/res/JetBrainsMonoNerdFont-BoldItalic.ttf" "$APP/Contents/Resources/JetBrainsMonoNerdFont-BoldItalic.ttf"
 cp "$ROOT/vendor/ghostty/src/font/res/JuliaMono-Regular.ttf" "$APP/Contents/Resources/JuliaMono-Regular.ttf"  # 記号の広カバレッジ fallback（discovery より前で決定論化・起動時 .process 登録）
 cp "$ROOT/app/NotoColorEmoji-sbix.ttf" "$APP/Contents/Resources/NotoColorEmoji-sbix.ttf"  # タブタイトルのカラー絵文字（CBDT→sbix 変換済み・scripts/convert-noto-emoji-sbix.py で生成・TitleGlyphs がファイル直ロード）
+cp "$ROOT/app/PlemolJP35Console-Regular.ttf" "$APP/Contents/Resources/PlemolJP35Console-Regular.ttf"  # 囲み文字・記号の一部を委譲する半角字形フォント（font-codepoint-map で名指し・起動時 .process 登録）
 
 echo "==> 自己署名 (ad-hoc)"
 codesign --force --deep --sign - "$APP"
