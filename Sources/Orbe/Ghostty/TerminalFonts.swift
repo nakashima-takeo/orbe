@@ -15,6 +15,7 @@ enum TerminalFonts {
   /// PlemolJP35 Console は囲み英数字・`★☆`・`※` を半角字形で描くために、同じく
   /// orbe-defaults.conf の font-codepoint-map から family 名で名指しする（登録しないと名前解決に失敗し委譲が黙って無効化される）。
   /// この集合は `scripts/build-app.sh` が `.app` へコピーする TTF 集合と一致する（片方だけ足しても無警告で効かない）。
+  /// module 内可視なのは、この一致を `Tests/OrbeTests/TerminalFontDelegationTests` が照合するため。
   static let bundledResources = [
     "JetBrainsMonoNerdFont-Regular",
     "JetBrainsMonoNerdFont-Bold",
