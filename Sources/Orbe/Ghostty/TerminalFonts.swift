@@ -12,7 +12,9 @@ enum TerminalFonts {
   /// JuliaMono は広カバレッジ fallback（JetBrains に無い記号を discovery より前で確定）。
   /// Noto Color Emoji（CBDT→sbix 変換・family 名は「Noto Color Emoji」のまま）は端末セルの絵文字を
   /// gui.conf の font-codepoint-map（emoji-font 設定）で名指し解決させるために登録する。
-  private static let bundledResources = [
+  /// この集合は `scripts/build-app.sh` が `.app` へコピーする TTF 集合と一致する（片方だけ足しても無警告で効かない）。
+  /// module 内可視なのは、この一致を `Tests/OrbeTests/TerminalFontDelegationTests` が照合するため。
+  static let bundledResources = [
     "JetBrainsMonoNerdFont-Regular",
     "JetBrainsMonoNerdFont-Bold",
     "JetBrainsMonoNerdFont-Italic",
