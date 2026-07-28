@@ -66,7 +66,7 @@ final class TerminalFontDelegationTests: XCTestCase {
   }
 
   /// 委譲する全 codepoint が半角 advance で存在することを検証する。
-  /// これが委譲レンジを決めている唯一の基準——全角字形を 1 セル幅で委譲すると、libghostty の
+  /// これは委譲レンジの必要条件——全角字形を 1 セル幅で委譲すると、libghostty の
   /// `.fit` 制約がセル幅に潰すか、制約が掛からず隣セルへはみ出すかの二択になり必ず壊れる。
   /// レンジを ⒑（U+2491・全角）や CJK 側へ広げる書き間違いはここで落ちる。
   func testDelegatedCodepointsAreHalfWidthInDelegateFont() throws {
@@ -78,6 +78,7 @@ final class TerminalFontDelegationTests: XCTestCase {
       // グリフ欠落は testDelegatedCodepointsHaveGlyphsInDelegateFont の担当なのでここでは見ない。
       guard let glyph = glyph(for: codepoint, in: delegate.font) else { return nil }
       let width = advance(of: glyph, in: delegate.font)
+      // 浮動小数の等値比較を避ける下駄。0.01pt は 12pt/1000upem で 0.83 units 相当＝1 unit 差でも落ちる。
       guard abs(width - halfWidth) > 0.01 else { return nil }
       return "\(describe(codepoint)) advance=\(width)"
     }
@@ -87,8 +88,8 @@ final class TerminalFontDelegationTests: XCTestCase {
   }
 
   /// 委譲を導入する動機になった字形が、委譲対象に残っていることを検証する。
-  /// 上 2 本はレンジを**広げた**ときしか落ちない。狭めた側は見た目が元に戻るだけで無症状なので、
-  /// 代表点を対で押さえる（`※` `①` `⑳` `⑴` `⒇` `⒈` `⒐` `⒜` `⒵` `★` `☆`）。
+  /// グリフ有無と半角 advance の 2 本はレンジを**広げた**ときしか落ちない。狭めた側は見た目が元に戻る
+  /// だけで無症状なので、代表点を対で押さえる（`※` `①` `⑳` `⑴` `⒇` `⒈` `⒐` `⒜` `⒵` `★` `☆`）。
   func testDelegationCoversTheGlyphsItWasIntroducedFor() throws {
     let delegate = try delegateFont()
     let delegated = Set(delegatedCodepoints(to: delegate.family))
@@ -98,6 +99,22 @@ final class TerminalFontDelegationTests: XCTestCase {
     let dropped = representatives.filter { !delegated.contains($0) }
     XCTAssertTrue(
       dropped.isEmpty, "委譲レンジから外れている: \(dropped.map(describe))")
+  }
+
+  /// 層1 の `font-codepoint-map` が絵文字ベースの codepoint を捕まえていないことを検証する。
+  /// libghostty の override は presentation より先に効き（`getIndexCodepointOverride`）検証も `.any` なので、
+  /// Emoji=Yes の codepoint をレンジに含めるとモノクロのテキストフォントで確定してしまい、VS16 付き
+  /// （`㊗️` 等）は後段の emoji 検証で候補が全滅して置換文字に落ちる。画面に出るまで誰も気づけない。
+  func testLayerOneCodepointMapsExcludeEmojiBases() {
+    let offenders = codepointMapLines().flatMap { line in
+      line.ranges.flatMap { Array($0) }
+        .filter { UnicodeScalar($0)?.properties.isEmoji == true }
+        .map { "\(describe($0)) → \(line.family)" }
+    }
+    XCTAssertTrue(
+      offenders.isEmpty,
+      "絵文字ベースの codepoint を層1 の font-codepoint-map が捕まえている"
+        + "（VS16 付きが置換文字になる）: \(offenders)")
   }
 
   // MARK: - conf の解析
