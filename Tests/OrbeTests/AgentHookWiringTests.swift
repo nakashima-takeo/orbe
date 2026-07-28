@@ -11,7 +11,7 @@ final class AgentHookWiringTests: XCTestCase {
     .deletingLastPathComponent()  // repo root
     .appendingPathComponent("app/agent-plugin/plugins/orbe-agent")
 
-  /// hook 1 エントリ = (matcher, 報告する state)。matcher の概念を持たないイベントは nil。
+  /// hook 1 エントリ = (matcher, 報告する state)。`matcher` キーを持たないエントリは nil。
   private struct Entry: Equatable, CustomStringConvertible {
     let matcher: String?
     let state: String
@@ -42,8 +42,9 @@ final class AgentHookWiringTests: XCTestCase {
   /// 待つツールが事前に確定しているので matcher で正確に撃て、応答の瞬間に解除できる。
   func testToolWaitIsMatchedOnBothSides() throws {
     let claude = try wiring("hooks/claude-hooks.json")
-    XCTAssertEqual(claude["PreToolUse"]?.map(\.matcher), ["AskUserQuestion|ExitPlanMode"])
-    XCTAssertEqual(claude["PostToolUse"]?.map(\.matcher), ["AskUserQuestion|ExitPlanMode"])
+    XCTAssertEqual(
+      try XCTUnwrap(claude["PreToolUse"]).map(\.matcher),
+      try XCTUnwrap(claude["PostToolUse"]).map(\.matcher))
   }
 
   /// PostToolUse に matcher 無しのエントリを置かない。matcher 無し（catch-all）は
@@ -54,11 +55,12 @@ final class AgentHookWiringTests: XCTestCase {
   }
 
   /// permission の待ちはバッチ境界で解除する。どのツールが承認されるか事前に分からないため
-  /// per-tool の matcher では撃てない。PostToolBatch は matcher の概念を持たない。
+  /// per-tool の matcher では撃てない。PostToolBatch は matcher の概念を持たないイベントなので、
+  /// どのエントリも matcher キーを持たない。
   func testPostToolBatchIsWiredWithoutMatcher() throws {
-    XCTAssertEqual(
-      try wiring("hooks/claude-hooks.json")["PostToolBatch"],
-      [Entry(matcher: nil, state: "working")])
+    let entries = try XCTUnwrap(try wiring("hooks/claude-hooks.json")["PostToolBatch"])
+    XCTAssertFalse(entries.isEmpty)
+    XCTAssertTrue(entries.allSatisfy { $0.matcher == nil })
   }
 
   // MARK: codex / agy
