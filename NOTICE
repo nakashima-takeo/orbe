@@ -142,7 +142,8 @@ Fonts (Contents/Resources/*.ttf)
   License: licenses/OFL-1.1.txt
 
 * JuliaMono — Copyright 2020 - 2024 The JuliaMono Project Authors (https://github.com/cormullion/juliamono) — OFL-1.1
-  Bundled as JuliaMono-Regular.ttf. The copyright follows the TTF name table.
+  Bundled as JuliaMono-Regular.ttf. The copyright follows the TTF name table;
+  the Reserved Font Name "JuliaMono" is declared in the upstream LICENSE.
   https://github.com/cormullion/juliamono
   License: licenses/OFL-1.1.txt
 
@@ -184,10 +185,11 @@ Fonts (Contents/Resources/*.ttf)
   OFL-1.1 requires the full license text to be distributed with the fonts;
   licenses/OFL-1.1.txt satisfies this. JetBrains Mono NF, JuliaMono and
   PlemolJP35 Console are copied byte-for-byte; Noto Color Emoji is repacked
-  (container format only) as described above. Of these, only PlemolJP declares
-  Reserved Font Names ("PlemolJP" and "Plex", plus "Bitstream" and "Vera" through
-  its Hack component); bundling it unmodified under its own name triggers no
-  renaming obligation.
+  (container format only) as described above. Of these, JuliaMono and PlemolJP35
+  Console declare Reserved Font Names: "JuliaMono" for the former, "PlemolJP" and
+  "Plex" for the latter, plus "Bitstream" and "Vera" through its Hack component.
+  Every one is bundled unmodified under its own name, so no renaming obligation
+  arises — OFL-1.1 clause 3 constrains Modified Versions only.
 
 --------------------------------------------------------------------------------
 Command completion engine (Contents/Resources/completion-engine.js)
