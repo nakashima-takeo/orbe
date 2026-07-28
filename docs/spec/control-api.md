@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe・現状）
 description: Unix socket 上の JSON-RPC でペイン/タブ/workspace を操作する out-of-band 制御チャネルと MCP ブリッジ・ツール群・libghostty 経路・mount 境界
-updated: 2026-07-23
+updated: 2026-07-29
 ---
 
 外部やエージェントが Orbe 全体を操作する out-of-band 制御チャネル。エージェント状態報告（[agent-notify](agent-notify.md) の `report_agent`）もこのチャネルに集約する。
@@ -33,7 +33,7 @@ workspace / tab / pane にプロセス内単調増加 ID。型をまたいで一
 - `close_pane {paneId}` … カスケードは GUI（Cmd+W）と同一——最後の pane→tab のカスケードで、アクティブ workspace の最後のタブを閉じても0タブの空状態でアクティブに残る（ウィンドウは閉じない）。teardown は main 遅延で走るため応答を先に返す（自己 close も安全）。未知 pane は `-32004`。socket 専用。
 - `focus_pane {paneId}` … 別 workspace のペインなら activate を伴う（手元 Mac のアクティブ workspace も切り替わる）。冪等。未知 pane は `-32004`。socket 専用。
 - `close_tab {tabId}` … close_pane と同じカスケード規律。未知 tab は `-32004`。socket 専用。
-- `report_agent {paneId, agent, state, sessionId?}` … エージェント hook の状態報告を発信元ペインへ適用する（[agent-notify](agent-notify.md)）。`state=="clear"` で状態/コマンド/セッション ID を nil、それ以外は state/command を立て sessionId があれば更新。
+- `report_agent {paneId, agent, state, sessionId?, message?}` … エージェント hook の状態報告を発信元ペインへ適用する（[agent-notify](agent-notify.md)）。`state=="clear"` で状態/コマンド/セッション ID/文言を nil、それ以外は state/command/message を立て sessionId があれば更新。
 - `wait_for_event {paneId?, kinds?, timeoutMs?}` … 状態変化を長ポーリングで待つ。kind ∈ {agent_state, pane_title, pwd, pane_closed}。`event.value` は kind 固有。フィルタ一致で {event}、timeout 超過で {timedOut:true}。1 接続あたり待機 1 件（2 件目は `-32005` で即拒否）。
 - `completion_update` / `completion_end` / `completion_accept` … コマンド補完用（[completion](completion.md)）。前 2 つは**無応答**。`completion_` 系は宛先解決ガードより前で分岐し、無応答メソッドは宛先不在でも応答を出さない（accept fd の framing を保つ）。socket 専用。
 
