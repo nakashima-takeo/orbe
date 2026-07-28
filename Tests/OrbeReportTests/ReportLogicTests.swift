@@ -117,6 +117,12 @@ final class ReportLogicTests: XCTestCase {
     XCTAssertFalse(isSubagentReport(obj))
   }
 
+  /// `agent_type` 単独では偽。`--agent` 起動の本体スレッドが `agent_id` 無しでこれを持つため、
+  /// `agent_type` で判定するとそのセッションの報告が丸ごと落ちる。
+  func testAgentTypeAloneIsNotSubagent() {
+    XCTAssertFalse(isSubagentReport(["session_id": "s1", "agent_type": "general-purpose"]))
+  }
+
   /// 空文字・型不一致・nil obj は偽（誤って報告を落とさない）。
   func testSubagentReportMalformedIsFalse() {
     XCTAssertFalse(isSubagentReport(["agent_id": ""]))
