@@ -1,7 +1,7 @@
 ---
 title: 設定（現状）
 description: キュレート既定 → user 設定 → GUI 生成 conf の後勝ち3層読み込みと、テーマ（Auto/Dark/Light 外観スイッチ）によるライト/ダーク決定
-updated: 2026-07-23
+updated: 2026-07-28
 ---
 
 ## 3 層読み込み
@@ -11,8 +11,9 @@ updated: 2026-07-23
 層1（キュレート既定）が持つのは端末テーマ・フォントチェーン・背景不透明度/ブラー・パディング・カーソル・シェル統合の既定。うち意図が値に宿るもの:
 
 - `theme = light:OrbeLight,dark:OrbeDark` … 自前 named theme 2 枚。`app/themes/` の実体は識別色 SSOT（`DesignSystem/OrbePalette.swift`）から生成・コミットされ、`swift test` が ANSI ink スロットの WCAG AA と SSOT 再生成の drift を検証し、さらに層1と gui.conf の `theme =` 行からテーマ名をパースして `app/themes/<name>` の実在を照合する——テーマ名は層1・gui.conf・テーマファイル名・`build-app.sh` の4箇所に独立して埋まり、解決に失敗しても ghostty は診断を積むだけで既定色のまま起動してしまうため。
-- 本文等幅チェーンは JetBrainsMono Nerd Font（プライマリ・4スタイル同梱で bold/italic も設計字形）→ JuliaMono（広カバレッジ fallback）。JuliaMono を明示段に置くのは、JetBrains に無い記号を ghostty 解決順の最終段（discovery＝起動文脈・LANG 依存で不安定）より前で決定論的に確定するため。これら同梱 TTF（絵文字用含む）は起動時（フォント解決より前）にプロセス登録する（非バンドル起動では no-op）。
-- 日本語コードポイント範囲を `Hiragino Sans W3` へ固定する `font-codepoint-map` … CJK フォールバックが起動文脈の優先言語に依存して中華字形になるのを防ぐ。解決順の最上位で名前解決するためプライマリ等幅に不干渉。ウェイトを W3 と明示するのはファミリ名だけだと極細の W0 まで全マッチするため。UI 言語切替はプロセスのロケールに触れない（[localization](localization.md)）ので、この固定は日英どちらでも不変。
+- 本文等幅チェーンは JetBrainsMono Nerd Font（プライマリ・4スタイル同梱で bold/italic も設計字形）→ JuliaMono（広カバレッジ fallback）。JuliaMono を明示段に置くのは、JetBrains に無い記号を ghostty 解決順の最終段（discovery＝起動文脈・LANG 依存で不安定）より前で決定論的に確定するため。これら同梱 TTF（絵文字用・記号委譲用を含む）は起動時（フォント解決より前）にプロセス登録する（非バンドル起動では no-op）——登録しないと後述の `font-codepoint-map` がファミリ名を解決できず、委譲が無言で外れて見た目だけが元へ戻る。
+- 日本語コードポイント範囲を `Hiragino Sans W3` へ固定する `font-codepoint-map` … CJK フォールバックが起動文脈の優先言語に依存して中華字形になるのを防ぐ。解決順の最上位で名前解決するためプライマリ等幅に不干渉。ウェイトを W3 と明示するのはファミリ名だけだと極細の W0 まで全マッチするため。UI 言語切替はプロセスのロケールに触れない（[localization](localization.md)）ので、この固定は日英どちらでも不変。部首補助・囲み CJK・CJK 互換も同じ行に入れるのはサイズでなく決定論化のため——同梱チェーンがほぼ持たず、discovery か「先に画面へ出た方の map face」に落ちて実行ごとに書体が変わりうる（効くのは Hiragino が実際に持つ範囲だけで、持たない分は従来の解決順へ落ちる）。ただし **VS16 付きの絵文字表現を持つ点（`〰〽㊗㊙`）は範囲から切り欠く**——map の override は presentation 判定より先に確定し、検証も presentation を問わないため、モノクロ face で固定されて絵文字表現が置換文字に落ちるため。
+- 囲み英数字・`★☆`・`※` を同梱の `PlemolJP35 Console` へ委譲する `font-codepoint-map` … これらは East Asian Width が Ambiguous/Neutral で 1 セル幅に落ち、欧文等幅の小さい字形が出て周囲の日本語に対し極端に小さく見える。**委譲先が半角 advance で持つ字形だけ**を対象にするのが必要条件で、これがブロック内のレンジ端を切っている——全角字形を 1 セル幅に入れると、libghostty のグリフ制約が潰して文脈でサイズが揺れるか（制約対象ブロック）、制約が掛からず隣セルへはみ出すか（対象外ブロック）の二択になり必ず壊れる。半角でも現状の解決先で足りている記号（`●■▲` 等）は触らない。
 - 背景不透明度は既定でわずかに透ける（設定パレットの既定と対称。GUI 未介入でも初期から透過）、`background-blur` も既定 ON。
 - `shell-integration-features = no-cursor,no-title` … cursor はプロンプトでの bar 上書きを止めブロックを効かせ、title は自動タイトル送出を止めてタブ名を chrome の precedence へ委ねる（→ [chrome](chrome.md)）。
 - 絵文字の `font-codepoint-map` は層1に置かず gui.conf（層3）が**常時出力**する（単一出所・後述）。
