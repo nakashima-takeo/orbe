@@ -111,15 +111,6 @@ enum SettingsRegistry {
     return ""
   }
 
-  /// 現行 `~/.config/ghostty` 相当の emoji 60 点集合（emoji-presentation かつ JuliaMono が
-  /// 白黒字形で横取りする点）。Apple 選択時の map 先に使う（JuliaMono 横取り防止は Apple でも必須）。
-  static let appleEmojiConfValue =
-    "U+231A-U+231B,U+23E9-U+23EC,U+23F0,U+23F3,U+26AA-U+26AB,U+26BD-U+26BE,U+26C4-U+26C5,"
-    + "U+26CE,U+26D4,U+26EA,U+26F2-U+26F3,U+26F5,U+26FA,U+26FD,U+2705,U+270A-U+270B,U+2728,"
-    + "U+274C,U+274E,U+2753-U+2755,U+2757,U+2795-U+2797,U+27B0,U+27BF,U+2B1B-U+2B1C,U+2B50,"
-    + "U+2B55,U+1F004,U+1F0CF,U+1F18E,U+1F191-U+1F19A,U+1F201,U+1F4AC,U+1F5E8,U+1F6DC,"
-    + "U+1F7F0,U+1FA9D"
-
   /// 格納/gui.conf 生成の正準順（font-size → font-family → tab-title-font-family〔gui.conf 非経由〕→
   /// emoji-font → theme → agent → background-opacity → background-blur → cursor-style-blink →
   /// agent-state-icons〔gui.conf 非経由〕→ dev-features〔同〕→ worktree-dir〔同〕）。
@@ -135,11 +126,13 @@ enum SettingsRegistry {
       id: .fontFamily, key: "font-family", labelKey: .settingsFontFamily, activation: .drillIn,
       defaultValue: { nil }, domain: .enumeration(values: { FontCatalog.names() }),
       // gui.conf は解決順の最後（層3）で append される。層1の既定チェーンへ単純追記すると選択フォントが
-      // 末尾に回り無視されるため、`font-family = ""` でチェーンを reset し選択をプライマリ・JuliaMono を
-      // 末尾 fallback に据え直す3行を吐く。
+      // 末尾に回り無視されるため、`font-family = ""` でチェーンを reset して選択をプライマリに据え直す
+      // 2行を吐く。層1 と同じくチェーンは 1 本に保つ（font-family の face は presentation を無視して奪う
+      // ため、広カバレッジを足すと絵文字が白黒になり記号の解決先も半角字形へすり替わる。
+      // 理由の詳細と実測値は `app/orbe-defaults.conf`）。
       guiConf: {
         $0.layer[SettingKeys.fontFamily].map {
-          "font-family = \"\"\nfont-family = \($0)\nfont-family = JuliaMono"
+          "font-family = \"\"\nfont-family = \($0)"
         }
       },
       display: { v, _ in if case .string(let s) = v { return s } else { return "" } },
@@ -158,19 +151,19 @@ enum SettingsRegistry {
       id: .emojiFont, key: "emoji-font", labelKey: .settingsEmojiFont, activation: .drillIn,
       defaultValue: { .string(EmojiFontMode.noto.rawValue) },
       domain: .enumeration(values: { EmojiFontMode.allCases.map(\.rawValue) }),
-      // font-codepoint-map 行を常時 emit（theme の定数行前例・実効値で map 先だけが変わる）。
-      // 非 fallback の font-family（JuliaMono 等）は presentation を無視してグリフ有無だけで選ばれるため、
-      // map 無しでは emoji が白黒字形で横取りされる。codepoint-map は解決順の最上位で名前解決し色描画を
-      // 決定論化する。noto は emoji-presentation 全域を同梱 Noto（sbix・.process 登録済み）へ、apple は
-      // JuliaMono が横取りする 60 点だけを Apple Color Emoji へ充てる（それ以外はハードコード fallback の
-      // Apple が既に描く）。map 先未保有 codepoint は libghostty が hasCodepoint 検証で通常解決へ落とすため
-      // tofu にならない（vendor CodepointResolver.getIndexCodepointOverride）。
+      // noto は「同梱 Noto のフラット字形で描く」という機能そのもの。emoji-presentation 全域を
+      // 同梱 Noto（sbix・.process 登録済み）へ map する。codepoint-map は解決順の最上位で名前解決し、
+      // map 先未保有 codepoint は libghostty が hasCodepoint 検証で通常解決へ落とすため tofu にならない
+      // （vendor CodepointResolver.getIndexCodepointOverride）。
+      // apple は map を出さない。libghostty が macOS で Apple Color Emoji を必ず fallback へ挿すため
+      // （vendor SharedGridSet.zig）、放っておけばそれが色付きで描く。奪う側の font-family を
+      // JetBrains 1 本に絞ってあるので、横取りを打ち消すための map はもう要らない。
       guiConf: { settings in
         switch settings[SettingKeys.emojiFont] {
         case .noto:
           return "font-codepoint-map = \(EmojiPresentationRanges.confValue)=Noto Color Emoji"
         case .apple:
-          return "font-codepoint-map = \(appleEmojiConfValue)=Apple Color Emoji"
+          return nil
         }
       },
       display: { v, store in
