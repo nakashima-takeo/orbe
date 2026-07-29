@@ -94,22 +94,25 @@ codesign --force --timestamp --options runtime \
 codesign --verify --deep --strict --verbose=2 "$APP"
 
 # 2c. 提出前アサーション。notarytool へ上げる前に、Sparkle.framework 内の全 nested code と
-#     アプリ本体が「Developer ID 署名・hardened runtime・secure timestamp」を満たすか機械検査する。
+#     アプリ本体が「$SIGN_ID の署名・hardened runtime・secure timestamp」を満たすか機械検査する。
 #     1つでも欠けたらその場で非ゼロ exit（1回数分〜数時間の公証を無駄撃ちしないため。
 #     v0.2.0 は Autoupdate の取りこぼしを提出まで気付けず Invalid を食らった）。
+#     照合先は $SIGN_ID（＝実際に署名に使った identity）。既定は Developer ID Application で、
+#     ここを固定文字列にすると ORBE_SIGN_ID を渡したときだけ「署名した identity と検査する
+#     identity が食い違う」という嘘の検査になる。
 assert_signed() {
   local target="$1" out rel="${1#"$APP/"}"
   out="$(codesign -dvv "$target" 2>&1)" \
     || { echo "NG 署名検査に失敗: $rel" >&2; exit 1; }
-  printf '%s\n' "$out" | grep -q '^Authority=Developer ID Application' \
-    || { echo "NG Developer ID 署名なし: $rel" >&2; exit 1; }
+  printf '%s\n' "$out" | grep -q "^Authority=$SIGN_ID" \
+    || { echo "NG '$SIGN_ID' の署名なし: $rel" >&2; exit 1; }
   printf '%s\n' "$out" | grep -q 'flags=[^ ]*runtime' \
     || { echo "NG hardened runtime なし: $rel" >&2; exit 1; }
   printf '%s\n' "$out" | grep -q '^Timestamp=' \
     || { echo "NG secure timestamp なし: $rel" >&2; exit 1; }
   echo "    OK: $rel"
 }
-echo "==> 提出前アサーション (Developer ID + runtime + timestamp)"
+echo "==> 提出前アサーション ($SIGN_ID + runtime + timestamp)"
 assert_signed "$APP"
 while IFS= read -r t; do assert_signed "$t"; done < <(
   find "$APP/Contents/Frameworks" \( -name "*.framework" -o -name "*.app" -o -name "*.xpc" \) -type d
