@@ -14,7 +14,8 @@ import Observation
   /// working の減光集約ラベル（0 件は nil）。
   var workingLabel: String? { AttentionSnapshot.workingLabel(rows) }
 
-  /// メニューバー②（状態変化の瞬間の滲み出し）の**滞留**時間（秒・唯一の定数）。ユーザー確定値。
+  /// メニューバー②（状態変化の瞬間の滲み出し）の**滞留**時間（秒）。ユーザー確定値。
+  /// ②の尺のうちここが持つのは滞留だけで、展開・艶・収縮は `MenuBarArrival`。
   /// 滞留の後に 600ms の収縮が続くので、②の総寿命は 22.6 秒。
   static let transientDwell: TimeInterval = 22
 
