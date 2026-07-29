@@ -72,17 +72,19 @@ final class UpdaterService: NSObject {
     state.onCheckNow = { [weak self] in self?.checkForUpdates() }
     state.onRestartNow = { [weak self] in self?.installAndRelaunch() }
 
-    // 「今すぐ確認」の実行可否をライブに写し、セッションが空いた瞬間に保留中の「今すぐ再起動」を
-    // 消化する。通知値ではなく main で読み直した現在値を使う（起動前後の通知が入れ違っても
-    // 古い値で固まらない）。
     canCheckObservation = updater.observe(
       \.canCheckForUpdates, options: [.initial, .new]
     ) { [weak self] _, _ in
-      DispatchQueue.main.async {
-        self?.syncCanCheckNow()
-        self?.drainPendingRestart()
-      }
+      DispatchQueue.main.async { self?.updaterAvailabilityDidChange() }
     }
+  }
+
+  /// `canCheckForUpdates` の変化の受け口（KVO から main で呼ばれる）。実行可否をライブに写し、
+  /// セッションが空いた瞬間に預かっていた「今すぐ再起動」を消化する。
+  /// 通知値ではなく現在値を読み直す（起動前後の通知が入れ違っても古い値で固まらない）。
+  func updaterAvailabilityDidChange() {
+    syncCanCheckNow()
+    drainPendingRestart()
   }
 
   /// Sparkle が今コマンドを受け付けられるか。UI への写像も「今すぐ再起動」の着地判定も

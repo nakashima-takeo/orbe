@@ -182,6 +182,49 @@ final class UpdateDriverTests: XCTestCase {
     XCTAssertFalse(service.driver.installRequested, "セッションを越えて残る要求を立てない")
   }
 
+  /// 預かった押下の主経路: 確認できるようになった瞬間（`canCheckForUpdates` の KVO）に
+  /// 自分で撃ち直して着地させる。着地の観測点には終了要求の再送を使う——可否に依らず
+  /// 最優先で選ばれるので、消化が起きたことだけを決定論的に見られる。
+  func testAvailabilityChangeDrainsHeldRestartPress() {
+    let service = UpdaterService()
+    var retried = 0
+    service.driver.showInstallingUpdate(
+      withApplicationTerminated: false, retryTerminatingApplication: { retried += 1 })
+    service.pendingRestart = true
+
+    XCTAssertEqual(retried, 0, "可否が変わるまでは撃たない")
+
+    service.updaterAvailabilityDidChange()
+
+    XCTAssertEqual(retried, 1, "預かった押下は可否の変化で消化されて着地する")
+    XCTAssertFalse(service.pendingRestart, "消化した押下は残さない")
+  }
+
+  /// 押下を預かっていないときは、確認できるようになっただけでは何も起きない
+  /// （頼んでいないタイミングでアプリを終了させない）。
+  func testAvailabilityChangeDoesNotRestartWithoutPress() {
+    let service = UpdaterService()
+    service.driver.showInstallingUpdate(
+      withApplicationTerminated: false,
+      retryTerminatingApplication: { XCTFail("押していないのに終了要求を送ってはならない") })
+
+    service.updaterAvailabilityDidChange()
+
+    XCTAssertFalse(service.pendingRestart)
+  }
+
+  /// 同じ受け口が可否の写像も行う。ここが写さないと UI が古い可否のまま固まる
+  /// （＝実行できない状態を名乗り続ける）。
+  func testAvailabilityChangeMirrorsAvailabilityToState() {
+    let service = UpdaterService()
+    service.state.setCheckAvailability(.available)  // 古い値で固まっている状況を作る
+
+    service.updaterAvailabilityDidChange()
+
+    XCTAssertEqual(
+      service.state.checkAvailability, .unavailable, "起動ゲートを通っていない現在値を写す")
+  }
+
   /// 押下を預かっていないときは、サイレント staged が届いても勝手に再起動しない
   /// （頼んでいないタイミングでアプリを終了させない）。
   func testWillInstallUpdateOnQuitDoesNotRestartWithoutPress() {
