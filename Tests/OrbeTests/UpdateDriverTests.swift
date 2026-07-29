@@ -59,24 +59,28 @@ final class UpdateDriverTests: XCTestCase {
     driver.showReady { choices.append($0) }
     XCTAssertEqual(choices, [], "オフのときは reply を保留する（再起動ボタンからのみ）")
 
-    XCTAssertTrue(driver.consumePendingInstallReply())
+    XCTAssertTrue(driver.hasPendingInstallReply)
+    driver.consumePendingInstallReply()
     XCTAssertEqual(choices, [.install])
+    XCTAssertFalse(driver.hasPendingInstallReply, "消費したら残さない")
   }
 
   /// 終了確認をキャンセルした（アプリが終了要求に応じなかった）セッションの再送ハンドラは、
   /// 呼んだ後も保持され何度でも送り直せる——「今すぐ再起動」を押し直せば終了確認が再び出る。
   func testRetryTerminationResendsRepeatedly() {
     let driver = UpdateUserDriver(state: makeState())
-    XCTAssertFalse(driver.retryTermination(), "終了要求を待つセッションが無ければ再送しない")
+    XCTAssertFalse(driver.hasRetryTermination, "終了要求を待つセッションが無ければ再送先も無い")
 
     var retried = 0
     driver.showInstallingUpdate(
       withApplicationTerminated: false, retryTerminatingApplication: { retried += 1 })
 
-    XCTAssertTrue(driver.retryTermination())
+    XCTAssertTrue(driver.hasRetryTermination)
+    driver.retryTermination()
     XCTAssertEqual(retried, 1)
-    XCTAssertTrue(driver.retryTermination(), "呼んでも破棄しない（SPUUserDriver.h: 複数回呼んでよい）")
-    XCTAssertEqual(retried, 2)
+    driver.retryTermination()
+    XCTAssertEqual(retried, 2, "呼んでも破棄しない（SPUUserDriver.h: 複数回呼んでよい）")
+    XCTAssertTrue(driver.hasRetryTermination)
   }
 
   /// アプリが既に終了しているときの再送ハンドラは呼んではならないため保持しない。
@@ -85,7 +89,8 @@ final class UpdateDriverTests: XCTestCase {
     driver.showInstallingUpdate(
       withApplicationTerminated: true, retryTerminatingApplication: { XCTFail("呼んではならない") })
 
-    XCTAssertFalse(driver.retryTermination())
+    XCTAssertFalse(driver.hasRetryTermination)
+    driver.retryTermination()
   }
 
   /// 再送ハンドラはセッション限り。セッション終了後は死んだハンドラを呼ばない。
@@ -95,7 +100,8 @@ final class UpdateDriverTests: XCTestCase {
       withApplicationTerminated: false, retryTerminatingApplication: { XCTFail("セッション終了後に呼ばない") })
 
     driver.dismissUpdateInstallation()
-    XCTAssertFalse(driver.retryTermination())
+    XCTAssertFalse(driver.hasRetryTermination)
+    driver.retryTermination()
   }
 
   /// 「今すぐ再起動」は終了要求の再送を即時適用ハンドラより優先する——再送ハンドラが立つのは
@@ -118,13 +124,52 @@ final class UpdateDriverTests: XCTestCase {
     XCTAssertEqual(installed, 0, "即時適用ハンドラは呼ばない（二重要求を出さない）")
   }
 
-  /// サイレント経路は user driver を通らない＝dismissUpdateInstallation が来ないため、
-  /// willInstallUpdateOnQuit が「今すぐ再起動」要求の終端になる。要求は消費されて即時適用へ繋がる。
-  func testWillInstallUpdateOnQuitConsumesPendingInstallRequest() {
-    let service = UpdaterService()
-    service.driver.installRequested = true
+  /// 「今すぐ再起動」の着地先。押下がどこにも着地しない組み合わせが無いこと、とくに
+  /// **セッション進行中は `resumeCheck` へ行かず `hold` する**ことを固定する——ここで
+  /// `installRequested` 相当の要求を立てて放置すると、そのセッションが更新を提示せず終わった場合に
+  /// 要求が残り、次の定期確認（数時間後）で頼んでいない再起動を引き起こす。
+  func testRestartLandingHoldsInsteadOfLeavingRequestBehind() {
+    typealias Landing = UpdaterService.RestartLanding
 
-    let installed = expectation(description: "預かった直後の即時適用")
+    // 進行中で手元に経路が無ければ預かる（新しいセッションは起こせない）。
+    XCTAssertEqual(
+      Landing.resolve(
+        hasRetryTermination: false, hasImmediateInstall: false, hasPendingInstallReply: false,
+        availability: .busy), .hold)
+    // 空いていれば自分でセッションを起こす。
+    XCTAssertEqual(
+      Landing.resolve(
+        hasRetryTermination: false, hasImmediateInstall: false, hasPendingInstallReply: false,
+        availability: .available), .resumeCheck)
+    // 保留 reply は進行中でもその場で着地する。
+    XCTAssertEqual(
+      Landing.resolve(
+        hasRetryTermination: false, hasImmediateInstall: false, hasPendingInstallReply: true,
+        availability: .busy), .pendingInstallReply)
+    // 終了要求の再送が最優先（可否にも他経路にも依らない）。
+    XCTAssertEqual(
+      Landing.resolve(
+        hasRetryTermination: true, hasImmediateInstall: true, hasPendingInstallReply: true,
+        availability: .busy), .retryTermination)
+    // 次いで即時適用ハンドラ。
+    XCTAssertEqual(
+      Landing.resolve(
+        hasRetryTermination: false, hasImmediateInstall: true, hasPendingInstallReply: true,
+        availability: .unavailable), .immediateInstall)
+    // updater が動いていなければ何もしない（この状態では再起動ボタンが出ない）。
+    XCTAssertEqual(
+      Landing.resolve(
+        hasRetryTermination: false, hasImmediateInstall: false, hasPendingInstallReply: false,
+        availability: .unavailable), .inactive)
+  }
+
+  /// サイレント経路は YES を返すとセッションが生きたまま残る＝`canCheckForUpdates` が真へ戻らないため、
+  /// KVO 側の消化が来ない。預かっていた「今すぐ再起動」はこの瞬間に消化される。
+  func testWillInstallUpdateOnQuitDrainsHeldRestartPress() {
+    let service = UpdaterService()
+    service.pendingRestart = true
+
+    let installed = expectation(description: "預かった押下が即時適用へ着地する")
     _ = service.updater(
       SPUUpdater(
         hostBundle: .main, applicationBundle: .main,
@@ -132,7 +177,39 @@ final class UpdateDriverTests: XCTestCase {
       willInstallUpdateOnQuit: SUAppcastItem.empty(),
       immediateInstallationBlock: { installed.fulfill() })
 
-    XCTAssertFalse(service.driver.installRequested, "要求は消費して残さない")
     wait(for: [installed], timeout: 1)
+    XCTAssertFalse(service.pendingRestart, "消化した押下は残さない")
+    XCTAssertFalse(service.driver.installRequested, "セッションを越えて残る要求を立てない")
+  }
+
+  /// 押下を預かっていないときは、サイレント staged が届いても勝手に再起動しない
+  /// （頼んでいないタイミングでアプリを終了させない）。
+  func testWillInstallUpdateOnQuitDoesNotRestartWithoutPress() {
+    let service = UpdaterService()
+    _ = service.updater(
+      SPUUpdater(
+        hostBundle: .main, applicationBundle: .main,
+        userDriver: UpdateUserDriver(state: makeState()), delegate: nil),
+      willInstallUpdateOnQuit: SUAppcastItem.empty(),
+      immediateInstallationBlock: { XCTFail("押していないのに再起動してはならない") })
+
+    let settled = expectation(description: "drain の async turn を通す")
+    DispatchQueue.main.async { settled.fulfill() }
+    wait(for: [settled], timeout: 1)
+  }
+
+  /// updater が起動していないビルド（`SUFeedURL` の無いテスト/dev バイナリ）は「進行中」ではなく
+  /// 「不活性」を名乗る。両者を同じ false へ潰すと、確認が走っていないのに UI が
+  /// 「アップデートを確認中…」と嘘をつく。
+  func testUnstartedServiceReportsUnavailableNotBusy() {
+    let service = UpdaterService()
+    service.startIfPermitted()  // テストバンドルには SUFeedURL が無くゲートで弾かれる
+
+    XCTAssertFalse(service.started, "テストバンドルには SUFeedURL が無く起動ゲートを通らない")
+    XCTAssertEqual(service.state.checkAvailability, .unavailable)
+    XCTAssertFalse(service.state.canCheckNow)
+    XCTAssertEqual(
+      UpdateCheckNowAppearance.resolve(service.state), .dimmed,
+      "確認は走っていないので「確認中…」を名乗らない")
   }
 }

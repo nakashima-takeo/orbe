@@ -30,6 +30,8 @@ final class UpdateUserDriver: NSObject, SPUUserDriver {
   private var pendingInstallReply: ((SPUUserUpdateChoice) -> Void)?
   /// 「今すぐ再起動」要求済みフラグ。dismiss 済みセッションを `checkForUpdates` で resume した際、
   /// 次の found/ready 応答を `.install` にする（Sparkle の resume 定石）。
+  /// `UpdaterService` が resume を起こす直前にだけ立てるため、有効なのは自分で起こしたその
+  /// セッションの中だけ——消費されるか `dismissUpdateInstallation` で破棄されるかで必ず決着する。
   var installRequested = false
   /// DL 済み・staging 前の表示情報（ready 遷移時に `UpdateState.ready` へ確定する）。
   private var pendingReadyInfo: UpdateState.ReadyInfo?
@@ -41,20 +43,22 @@ final class UpdateUserDriver: NSObject, SPUUserDriver {
     self.state = state
   }
 
-  /// 「今すぐ再起動」。保留中の reply があればその場で `.install` を返す（true）。
-  /// 無ければ false（呼び出し側が resume 経路＝`installRequested`＋再チェックへ回す）。
-  func consumePendingInstallReply() -> Bool {
-    guard let reply = pendingInstallReply else { return false }
+  /// 保留中の ready reply があるか（`consumePendingInstallReply` の可否を副作用なしで問う）。
+  var hasPendingInstallReply: Bool { pendingInstallReply != nil }
+
+  /// 終了要求を待っているセッションがあるか（`retryTermination` の可否を副作用なしで問う）。
+  var hasRetryTermination: Bool { retryTerminationHandler != nil }
+
+  /// 保留中の ready reply へ `.install` を返す（終了時自動適用オフの手動経路）。
+  func consumePendingInstallReply() {
+    guard let reply = pendingInstallReply else { return }
     pendingInstallReply = nil
     reply(.install)
-    return true
   }
 
-  /// 「今すぐ再起動」。終了要求を待っているセッションがあれば再送する（送れたら true）。
-  func retryTermination() -> Bool {
-    guard let handler = retryTerminationHandler else { return false }
-    handler()
-    return true
+  /// 終了要求を待っているセッションへ終了要求を送り直す。
+  func retryTermination() {
+    retryTerminationHandler?()
   }
 
   // MARK: - SPUUserDriver
