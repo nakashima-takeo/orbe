@@ -6,11 +6,17 @@
     "UserPromptSubmit": [
       { "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude working" }] }
     ],
+    "Notification": [
+      { "matcher": "permission_prompt|worker_permission_prompt", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude waiting" }] }
+    ],
     "PreToolUse": [
-      { "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude waiting" }] }
+      { "matcher": "AskUserQuestion|ExitPlanMode", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude waiting" }] }
     ],
     "PostToolUse": [
-      { "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude working" }] }
+      { "matcher": "AskUserQuestion|ExitPlanMode", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude working" }] }
+    ],
+    "PostToolBatch": [
+      { "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude working" }] }
     ],
     "Stop": [
       { "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude done" }] }

@@ -256,22 +256,28 @@ struct MarkdownTableView: View {
 
 /// インライン markup（強調・コードスパン・リンク・取り消し線）を `AttributedString` へ畳む。
 enum MarkdownInline {
-  /// インラインコンテナ（段落・見出し・表セル）の中身を `Text` で描く。
-  static func text(of container: Markup, style: MarkdownStyle = MarkdownStyle()) -> SwiftUI.Text {
+  /// インラインコンテナ（段落・見出し・表セル）の中身を `AttributedString` へ畳む。
+  static func attributed(of container: Markup, style: MarkdownStyle = MarkdownStyle())
+    -> AttributedString
+  {
     var result = AttributedString()
     for child in container.children { result += render(child, style: style) }
-    return SwiftUI.Text(result)
+    return result
+  }
+
+  /// インラインコンテナの中身を `Text` で描く。
+  static func text(of container: Markup, style: MarkdownStyle = MarkdownStyle()) -> SwiftUI.Text {
+    SwiftUI.Text(attributed(of: container, style: style))
   }
 
   /// GFM タスクリスト項目のラベル（先頭段落のインライン）を返す。
   static func taskLabel(
     of item: ListItem, style: MarkdownStyle = MarkdownStyle()
   ) -> AttributedString {
-    var attributed = AttributedString()
-    if let para = item.blockChildren.first(where: { $0 is Paragraph }) {
-      for child in para.children { attributed += render(child, style: style) }
+    guard let para = item.blockChildren.first(where: { $0 is Paragraph }) else {
+      return AttributedString()
     }
-    return attributed
+    return attributed(of: para, style: style)
   }
 
   // MARK: - 再帰
@@ -286,15 +292,15 @@ enum MarkdownInline {
       s.backgroundColor = style.inlineCodeBackground
       return s
     case let emphasis as Emphasis:
-      return apply(children(of: emphasis, style: style), intent: .emphasized)
+      return apply(attributed(of: emphasis, style: style), intent: .emphasized)
     case let strong as Strong:
-      return apply(children(of: strong, style: style), intent: .stronglyEmphasized)
+      return apply(attributed(of: strong, style: style), intent: .stronglyEmphasized)
     case let strike as Strikethrough:
-      var s = children(of: strike, style: style)
+      var s = attributed(of: strike, style: style)
       for run in s.runs { s[run.range].strikethroughStyle = .single }
       return s
     case let link as Markdown.Link:
-      var s = children(of: link, style: style)
+      var s = attributed(of: link, style: style)
       for run in s.runs {
         s[run.range].foregroundColor = Color.theme.accentPrimary
         s[run.range].underlineStyle = .single
@@ -308,12 +314,6 @@ enum MarkdownInline {
       // Image / InlineHTML 等は素の plainText で落とさず描く。
       return AttributedString((markup as? InlineMarkup)?.plainText ?? markup.format())
     }
-  }
-
-  private static func children(of markup: Markup, style: MarkdownStyle) -> AttributedString {
-    var result = AttributedString()
-    for child in markup.children { result += render(child, style: style) }
-    return result
   }
 
   /// 子の attributed に強調 intent を重ねる（ネストした強調を潰さず union する）。

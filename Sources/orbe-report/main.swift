@@ -23,6 +23,9 @@ guard !agent.isEmpty, !state.isEmpty else { exit(0) }
 // session_id 抽出と background_tasks 判定（ReportLogic.swift）の両方に使う。
 let hookObj = parseHookJSON(FileHandle.standardInput.readDataToEndOfFile())
 
+// サブエージェントのフックは親と同じ session_id で届くが、ペインの状態ではないので報告しない。
+if isSubagentReport(hookObj) { exit(0) }
+
 func connectControl() -> Int32? {
   let fd = socket(AF_UNIX, SOCK_STREAM, 0)
   guard fd >= 0 else { return nil }
@@ -67,10 +70,15 @@ func writeAll(_ fd: Int32, _ data: Data) {
 let resumeId =
   sessionId(from: hookObj)
   ?? env["ANTIGRAVITY_CONVERSATION_ID"].flatMap { $0.isEmpty ? nil : $0 }
+let reportedState = effectiveState(state, stdin: hookObj)
 var params: [String: Any] = [
-  "paneId": paneId, "agent": agent, "state": effectiveState(state, stdin: hookObj),
+  "paneId": paneId, "agent": agent, "state": reportedState,
 ]
 if let resumeId { params["sessionId"] = resumeId }
+// waiting/done の文言（Notification message・質問文・最終応答）。無ければ載せない。
+if let message = agentMessage(state: reportedState, stdin: hookObj) {
+  params["message"] = message
+}
 
 // Orbe が動いていなければ接続できない＝no-op（exit 0）。
 guard let fd = connectControl() else { exit(0) }

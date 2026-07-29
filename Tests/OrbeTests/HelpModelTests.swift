@@ -12,11 +12,13 @@ final class HelpModelTests: XCTestCase {
   private func model() -> HelpModel { HelpModel() }
 
   /// 完全一致だけがハイライトする（修飾のみ・部分一致は対象外）。
+  /// 修飾のみを外すのは ⌘⌘（combo が ⌘ 単独）が載って以降も同じ——許すと他のショートカットを
+  /// 試し押しする途中の ⌘ 押下で毎回ハイライトと自動スクロールが走る（点灯は従来どおり効く）。
   func testExactMatchOnly() {
     let m = model()
     m.pressed = ["cmd"]
     m.syncPressedMatch(l10n)
-    XCTAssertTrue(m.pressedRowIDs.isEmpty)
+    XCTAssertTrue(m.pressedRowIDs.isEmpty, "⌘ 単独は ⌘⌘ 行にも一致させない")
     XCTAssertNil(m.revealRowID)
 
     m.pressed = ["cmd", "shift"]
