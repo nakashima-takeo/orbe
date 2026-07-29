@@ -14,21 +14,33 @@ import Observation
   /// working の減光集約ラベル（0 件は nil）。
   var workingLabel: String? { AttentionSnapshot.workingLabel(rows) }
 
-  /// メニューバー②（状態変化の瞬間の滲み出し）の表示時間（秒・唯一の定数）。ユーザー確定値。
-  static let transientDuration: TimeInterval = 22
+  /// メニューバー②（状態変化の瞬間の滲み出し）の**滞留**時間（秒）。ユーザー確定値。
+  /// ②の尺のうちここが持つのは滞留だけで、展開・艶・収縮は `MenuBarArrival`。
+  /// 滞留の後に 600ms の収縮が続くので、②の総寿命は 22.6 秒。
+  static let transientDwell: TimeInterval = 22
 
-  /// メニューバー②（状態変化の瞬間・0〜`transientDuration` 秒の滲み出し）の一過性イベント。
+  /// メニューバー②（状態変化の瞬間の滲み出し）の一過性イベント。
   /// waiting / done への実変化のときだけ report 経路（controlReportAgent）が立てる。
   /// 期限管理（ホバー延長・収縮）は MenuBarController が担う。
   struct Transient {
     let row: AttentionRow
+    /// 到来時刻。ホバー延長では変わらない——MenuBarController が「新しい到来か」を見分ける印
+    /// （同じ paneId の積み替えも新しい到来なので `paneId` の比較では見分けられない）。
+    let arrivedAt: Date
+    /// 到来した瞬間の件数。開いている間の②はこれを見せる——`count` は報告の coalesce で
+    /// 展開の途中に増えるので、実件数を見せると 0→1 の到来で数字が展開中に閃く（原典は
+    /// 「閉じながら生まれる」）。到来ごとに一度だけ確定し、その到来が終わるまで動かない。
+    let arrivedCount: Int
+    /// 収縮の開始時刻（＝滞留の満了）。
     var expiresAt: Date
   }
   var transient: Transient?
 
-  /// 一過性イベントを立てる（表示期間 `transientDuration`。ホバー延長は MenuBarController）。
+  /// 一過性イベントを立てる（滞留 `transientDwell`。ホバー延長は MenuBarController）。
   func noteTransient(_ row: AttentionRow, now: Date = Date()) {
-    transient = Transient(row: row, expiresAt: now.addingTimeInterval(Self.transientDuration))
+    transient = Transient(
+      row: row, arrivedAt: now, arrivedCount: count,
+      expiresAt: now.addingTimeInterval(Self.transientDwell))
   }
 
   /// 行 snapshot を差し替え、②が指す行が一覧（`listRows`）に**同じ状態で**居なければ取り下げる。

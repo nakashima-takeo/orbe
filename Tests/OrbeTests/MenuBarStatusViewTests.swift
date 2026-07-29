@@ -11,21 +11,23 @@ import XCTest
 @MainActor
 final class MenuBarStatusViewTests: XCTestCase {
 
-  private func fittingSize(store: AttentionStore, ui: MenuBarUIState = MenuBarUIState()) -> NSSize {
-    let host = NSHostingView(rootView: MenuBarStatusView(store: store, ui: ui))
+  private func fittingSize(
+    store: AttentionStore, phase: MenuBarArrival.Phase, ui: MenuBarUIState = MenuBarUIState()
+  ) -> NSSize {
+    let host = NSHostingView(rootView: MenuBarStatusView(store: store, ui: ui, phase: phase))
     host.layoutSubtreeIfNeeded()
     return host.fittingSize
   }
 
-  private func row(state: String, message: String? = nil) -> AttentionRow {
+  private func row(paneId: Int = 1, state: String, message: String? = nil) -> AttentionRow {
     AttentionRow(
-      paneId: 1, workspaceName: "ws", tabTitle: "tab", state: state, message: message,
+      paneId: paneId, workspaceName: "ws", tabTitle: "tab", state: state, message: message,
       stateChangedAt: Date())
   }
 
   /// ① 静か（要対応 0）: グリフのみでも幅正・高さ 22 以下。
   func testQuietStateFitsMenuBar() {
-    let size = fittingSize(store: AttentionStore())
+    let size = fittingSize(store: AttentionStore(), phase: .closed)
     XCTAssertGreaterThan(size.width, 0)
     XCTAssertLessThanOrEqual(size.height, 22)
   }
@@ -34,26 +36,31 @@ final class MenuBarStatusViewTests: XCTestCase {
   func testCountPillFitsMenuBar() {
     let store = AttentionStore()
     store.apply(rows: [row(state: "waiting"), row(state: "done")])
-    let size = fittingSize(store: store)
-    XCTAssertGreaterThan(size.width, fittingSize(store: AttentionStore()).width)
+    let size = fittingSize(store: store, phase: .closed)
+    XCTAssertGreaterThan(size.width, fittingSize(store: AttentionStore(), phase: .closed).width)
     XCTAssertLessThanOrEqual(size.height, 22)
   }
 
-  /// transient を 1 件だけ載せた store。
+  /// transient を 1 件載せた store。②が指す行は**一覧にも居る**——`apply(rows:)` がその行を
+  /// 見失えば②はその場で取り下げられるので、②生存中の `count` は必ず 1 以上になる。
+  /// 件数 0 の②は本番で起こり得ず、固定しても何も守らない（幅の契約が実物より狭く出る）。
   private func transientStore(workspace: String, message: String) -> AttentionStore {
     let store = AttentionStore()
-    store.noteTransient(
-      AttentionRow(
-        paneId: 1, workspaceName: workspace, tabTitle: "tab", state: "waiting", message: message,
-        stateChangedAt: Date()))
+    let row = AttentionRow(
+      paneId: 1, workspaceName: workspace, tabTitle: "tab", state: "waiting", message: message,
+      stateChangedAt: Date())
+    store.apply(rows: [row])
+    store.noteTransient(row)
     return store
   }
 
   /// 提案幅 `proposedWidth` を与えたときにレイアウトが取る幅。`fittingSize` は理想値の総和で、
   /// レイアウトが提案幅にどう反応するかを写さない——短い内容で膨らむ破れはここでしか捕まらない。
   private func renderedWidth(store: AttentionStore, proposedWidth: CGFloat) -> CGFloat {
-    NSHostingController(rootView: MenuBarStatusView(store: store, ui: MenuBarUIState()))
-      .sizeThatFits(in: NSSize(width: proposedWidth, height: 40)).width
+    NSHostingController(
+      rootView: MenuBarStatusView(store: store, ui: MenuBarUIState(), phase: .open)
+    )
+    .sizeThatFits(in: NSSize(width: proposedWidth, height: 40)).width
   }
 
   /// ② 滲み出しピル（WS 名＋文言）: 高さ 22 以下。静的状態（①③）より確実に広い
@@ -64,13 +71,13 @@ final class MenuBarStatusViewTests: XCTestCase {
     let long = String(repeating: "とても長い文言 ", count: 40)
     store.apply(rows: [row(state: "waiting"), row(state: "done")])
     store.noteTransient(row(state: "waiting", message: long))
-    let size = fittingSize(store: store)
+    let size = fittingSize(store: store, phase: .open)
     XCTAssertLessThanOrEqual(size.height, 22)
 
-    let quietWidth = fittingSize(store: AttentionStore()).width
+    let quietWidth = fittingSize(store: AttentionStore(), phase: .closed).width
     let countStore = AttentionStore()
     countStore.apply(rows: [row(state: "waiting"), row(state: "done")])
-    let countWidth = fittingSize(store: countStore).width
+    let countWidth = fittingSize(store: countStore, phase: .closed).width
     XCTAssertGreaterThan(size.width, countWidth, "transient は収縮ピル（③）より広く滲み出る")
     XCTAssertGreaterThan(size.width, quietWidth, "transient は静的グリフ（①）より広く滲み出る")
   }
@@ -83,7 +90,7 @@ final class MenuBarStatusViewTests: XCTestCase {
       tabTitle: "tab", state: "waiting",
       message: String(repeating: "とても長い文言 ", count: 40), stateChangedAt: Date())
     store.noteTransient(longRow)
-    let size = fittingSize(store: store)
+    let size = fittingSize(store: store, phase: .open)
     // 上限＝ピル cap ＋ 外側の水平 padding（hair×2）。
     XCTAssertLessThanOrEqual(
       size.width, MenuBarStatusView.transientMaxWidth + Theme.Space.hair * 2)
@@ -104,7 +111,8 @@ final class MenuBarStatusViewTests: XCTestCase {
     ] {
       let store = transientStore(workspace: ws, message: message)
       XCTAssertEqual(
-        renderedWidth(store: store, proposedWidth: 500), fittingSize(store: store).width,
+        renderedWidth(store: store, proposedWidth: 500),
+        fittingSize(store: store, phase: .open).width,
         accuracy: 2, "ws=\(ws) message=\(message): 広い提案でも内容幅へハグする")
     }
   }
@@ -112,11 +120,17 @@ final class MenuBarStatusViewTests: XCTestCase {
   /// WS 名が短いぶんの幅は本文が吸う。本文が長ければ、WS 名の長短にかかわらずピルは
   /// 予算を使い切る＝同じ幅になる（WS 名が短いときだけピルが痩せる＝文言を出し切れて
   /// いない、ということが起きない）。
+  ///
+  /// 許容は本文フォント 1 文字ぶん。本文は与えられた予算ちょうどでは切れず**字形の境界まで**
+  /// しか伸びないので、WS 名の長短で余る端数が変わる。破れ（本文が slack を吸わない）は WS 名
+  /// 2 つの差＝100pt 超で出るため、1 文字の緩みでも取り逃さない。
   func testTransientPillGivesSpareWidthToMessage() {
     XCTAssertEqual(
-      fittingSize(store: transientStore(workspace: shortWS, message: longMessage)).width,
-      fittingSize(store: transientStore(workspace: longWS, message: longMessage)).width,
-      accuracy: 2, "長い本文では WS 名の長短によらず予算を使い切る")
+      fittingSize(store: transientStore(workspace: shortWS, message: longMessage), phase: .open)
+        .width,
+      fittingSize(store: transientStore(workspace: longWS, message: longMessage), phase: .open)
+        .width,
+      accuracy: 12, "長い本文では WS 名の長短によらず予算を使い切る")
   }
 
   /// WS 名スロットは上限の範囲で**内容へハグする**。同じ本文なら、WS 名が短いピルは長い
@@ -127,22 +141,25 @@ final class MenuBarStatusViewTests: XCTestCase {
   /// 総幅に現れない。
   func testTransientPillWorkspaceSlotHugsName() {
     XCTAssertLessThan(
-      fittingSize(store: transientStore(workspace: shortWS, message: shortMessage)).width,
-      fittingSize(store: transientStore(workspace: longWS, message: shortMessage)).width,
+      fittingSize(store: transientStore(workspace: shortWS, message: shortMessage), phase: .open)
+        .width,
+      fittingSize(store: transientStore(workspace: longWS, message: shortMessage), phase: .open)
+        .width,
       "WS 名が短ければピルはそのぶん狭い（スロットが上限いっぱいを取らない）")
   }
 
   /// 本文スロットも**内容へハグする**＝短い本文で残り予算を吸い切らない。
   ///
   /// 上界 250 の根拠: 本文が内容で止まる限り、ピルは「固定部（◐ 15＋状態グリフ 11＋spacing
-  /// 6×3＋padding 8×2＋外側 hair 2×2＝64）＋上限で頭打ちの WS 名スロット（≤120）＋短い本文」
-  /// までしか伸びない＝約 200（実測 201）。250 はそこへ文言差・サブピクセル分の余裕を足した値で、
+  /// 6×3＋padding 7×2＋外側 hair 2×2＝62）＋上限で頭打ちの WS 名スロット（≤120）＋短い本文」
+  /// までしか伸びない＝約 200。250 はそこへ文言差・サブピクセル分の余裕を足した値で、
   /// 一方「本文が残り予算を吸い切る」破れは WS 名の長短によらず必ず上限 334
   /// （`transientMaxWidth` ＋ hair×2）へ張り付くため、その間で確実に切り分けられる。
   func testTransientPillShrinksForShortMessage() {
     for ws in [shortWS, longWS] {
       XCTAssertLessThan(
-        fittingSize(store: transientStore(workspace: ws, message: shortMessage)).width, 250,
+        fittingSize(store: transientStore(workspace: ws, message: shortMessage), phase: .open)
+          .width, 250,
         "ws=\(ws): 短い本文では残り予算を吸わずピルが縮む")
     }
   }
@@ -157,12 +174,17 @@ final class MenuBarStatusViewTests: XCTestCase {
   ///
   /// 予算に余る場合（切り詰めなし）と足りない場合（切り詰めあり）の両方で見る。
   func testPillRowPlacesExactlyWhatItDeclares() {
-    for (budget, label) in [(CGFloat(400), "予算に余る"), (CGFloat(120), "予算が足りない")] {
+    for (budget, fold, label) in [
+      (CGFloat(400), 1.0, "予算に余る"), (CGFloat(120), 1.0, "予算が足りない"),
+      (CGFloat(400), 0.5, "中間スロットが畳まれかけ"), (CGFloat(400), 0.0, "中間スロットが畳み切り"),
+    ] {
       let placed = PlacementBox()
       let host = NSHostingView(
         rootView: PillRow(spacing: 6, budget: budget) {
+          // 畳むのは**先頭以外**のスロット。先頭は `measure` が gap を 0 に固定するので、
+          // ここに置くと「間隔ごと畳む」（`gaps[index] * fold`）を一度も踏めない。
           slotProbe(ideal: 40)
-          slotProbe(ideal: 60)
+          slotProbe(ideal: 60).pillSlot(gap: 6, fold: fold)
           PlacementProbe(box: placed) { slotProbe(ideal: 200) }
         })
       let declared = host.fittingSize
@@ -172,6 +194,100 @@ final class MenuBarStatusViewTests: XCTestCase {
         placed.maxX, declared.width, accuracy: 0.5,
         "\(label): 申告した幅と最終スロットの右端が一致する（右端に空白を作らない）")
     }
+  }
+
+  /// 幅は位相の**連続かつ狭義単調増加**な関数である＝①③↔②の境界で幅が飛ばない。
+  /// 高さはどの位相でも 22 以下。
+  /// 展開（`closing: false`）と収縮（`closing: true`）は別の曲線を描くので、両方で見る。
+  func testWidthGrowsStrictlyWithOpenness() {
+    let store = AttentionStore()
+    store.apply(rows: [row(state: "waiting"), row(paneId: 2, state: "done")])
+    store.noteTransient(row(state: "waiting", message: longMessage))
+    for closing in [false, true] {
+      var previous: CGFloat = 0
+      for openness in [0.0, 0.25, 0.5, 0.75, 1.0] {
+        let phase = MenuBarArrival.Phase(openness: openness, gloss: nil, closing: closing)
+        let size = fittingSize(store: store, phase: phase)
+        XCTAssertGreaterThan(
+          size.width, previous, "closing=\(closing) openness=\(openness): 幅は開くほど広い")
+        XCTAssertLessThanOrEqual(size.height, 22, "closing=\(closing) openness=\(openness)")
+        previous = size.width
+      }
+    }
+  }
+
+  /// **文言表示中は件数を出さない**（開き切りでは件数が幅に一切効かない）。
+  /// **閉じた姿は実件数を示す**（閉じ切りでは件数の桁が幅に出る）。
+  ///
+  /// 文言の長短を問わず成立する。`PillRow` の予約は上限（`countCap`）ぶんの固定量なので、
+  /// 桁が変わっても前の文言スロットの取り分が動かない——**切り詰めが起きる長文でこそ効く**
+  /// （自然幅で予約していた頃は、ここで桁差がそのまま総幅に出ていた）。
+  func testCountLeavesWidthUntouchedWhileOpen() {
+    func width(phase: MenuBarArrival.Phase, count: Int, message: String) -> CGFloat {
+      let store = AttentionStore()
+      let rows = (1...count).map { row(paneId: $0, state: "waiting") }
+      store.apply(rows: rows)
+      store.noteTransient(row(state: "waiting", message: message))
+      return fittingSize(store: store, phase: phase).width
+    }
+    for (label, message) in [("短文", shortMessage), ("長文（切り詰めあり）", longMessage)] {
+      XCTAssertEqual(
+        width(phase: .open, count: 2, message: message),
+        width(phase: .open, count: 99, message: message), accuracy: 0.5,
+        "\(label): 開き切りでは件数の桁が幅に出ない")
+      XCTAssertLessThan(
+        width(phase: .closed, count: 2, message: message),
+        width(phase: .closed, count: 99, message: message),
+        "\(label): 閉じ切りでは件数の桁がそのまま幅になる")
+    }
+  }
+
+  /// 件数が変わるのは**収縮と同時**。開いている間は到来した瞬間の件数を保つので、報告の
+  /// coalesce が展開の途中で一覧を増やしても姿は動かない（0 件からの到来で数字が閃かない）。
+  /// 収縮に入った向きでは実件数を描く＝原典の「閉じながら『1』が生まれる」。
+  func testOpeningHoldsArrivalCountAndCollapseShowsLiveCount() {
+    let arriving = row(state: "waiting", message: shortMessage)
+    /// 一覧が到来に追いついた store と、まだ追いついていない store。
+    let live = AttentionStore()
+    live.noteTransient(arriving)
+    live.apply(rows: [arriving])
+    let pending = AttentionStore()
+    pending.noteTransient(arriving)
+
+    XCTAssertEqual(live.count, 1)
+    XCTAssertEqual(pending.count, 0)
+    XCTAssertEqual(
+      fittingSize(store: live, phase: .open).width,
+      fittingSize(store: pending, phase: .open).width, accuracy: 0.5,
+      "展開中は一覧が増えても姿が動かない（数字が閃かない）")
+
+    let collapsing = MenuBarArrival.Phase(openness: 0.02, gloss: nil, closing: true)
+    XCTAssertGreaterThan(
+      fittingSize(store: live, phase: collapsing).width,
+      fittingSize(store: pending, phase: collapsing).width,
+      "収縮側では実件数が現れる")
+  }
+
+  /// 閉じ切った②は③と**同じ幅**——畳まれたスロットは自分の直前の間隔ごと消えるので、
+  /// 文言 3 スロットの gap が残らない。これが「①③↔②の境界で幅が飛ばない」の実体で、
+  /// 単調性テストは相対比較なので固定オフセットを見逃す（ここは厳密な等式で押さえる）。
+  func testClosedTransientHasSameWidthAsCountPill() {
+    let rows = [row(state: "waiting"), row(paneId: 2, state: "done")]
+    let bare = AttentionStore()
+    bare.apply(rows: rows)
+    let withTransient = AttentionStore()
+    withTransient.apply(rows: rows)
+    withTransient.noteTransient(row(state: "waiting", message: longMessage))
+    XCTAssertEqual(
+      fittingSize(store: withTransient, phase: .closed).width,
+      fittingSize(store: bare, phase: .closed).width, accuracy: 0.5)
+  }
+
+  /// ①は地も水平余白も持たない（メニューバーの常態で 14pt を占有しない）＝◐ と hair だけ。
+  func testQuietStateHasNoGroundPadding() {
+    XCTAssertEqual(
+      fittingSize(store: AttentionStore(), phase: .closed).width, 15 + Theme.Space.hair * 2,
+      accuracy: 0.5)
   }
 }
 
