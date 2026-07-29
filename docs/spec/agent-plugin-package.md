@@ -1,7 +1,7 @@
 ---
 title: エージェント状態追跡プラグイン（配布物・現状）
 description: claude / codex / agy 兼用プラグインパッケージ app/agent-plugin/ の構造・各 CLI の導入契約・.app 同梱と初回自動導入
-updated: 2026-07-23
+updated: 2026-07-29
 ---
 
 `app/agent-plugin/` は claude / codex / agy を 1 ディレクトリで兼ねる状態追跡プラグインパッケージ。各 CLI の hook が Orbe の状態報告シムを呼び、[agent-notify](agent-notify.md) の制御ソケット経路に乗せる。プラグインには binary を入れず純テキストのまま保つ（シムが `.app` 同梱の `orbe-report` を env パスで指す）。プラグイン本体は `plugins/orbe-agent/` に 1 箇所だけ置き（スクリプト重複なし）、claude/codex の marketplace 定義をルートからそこへ向ける。パッケージルートには各 CLI の marketplace 定義と、各 CLI へ冪等導入する `install.sh` を置く。
@@ -14,7 +14,7 @@ updated: 2026-07-23
 hook からシムを呼ぶ経路も CLI ごとに違う: claude / codex はそれぞれのプラグインルート env 変数を展開して絶対パスで呼ぶ。agy は変数置換が効かないため相対パスで呼ぶ（cwd がステージ済みプラグインルートである契約に依存）。
 
 event→state 対応:
-- claude: SessionStart→idle / UserPromptSubmit→working / PreToolUse(AskUserQuestion)→waiting / PostToolUse(AskUserQuestion)→working / Stop→done / SessionEnd→clear
+- claude: SessionStart→idle / UserPromptSubmit→working / Notification(permission_prompt|worker_permission_prompt)→waiting / PreToolUse(AskUserQuestion|ExitPlanMode)→waiting / PostToolUse(AskUserQuestion|ExitPlanMode)→working / PostToolBatch→working / Stop→done / SessionEnd→clear。Notification は matcher で permission 待ちの notification_type に絞る——絞らないと idle（無操作）等でも発火し waiting を誤認するため（matcher に外れた通知はフックコマンド自体が走らない）。待ちの解除は種類ごとに経路が分かれる——ツールの待ち（AskUserQuestion / ExitPlanMode）は待つツールが事前に確定するので同じ matcher の PostToolUse が応答の瞬間に解除し（matcher 無しにすると並列に走る無関係なツールの完了でも撃たれ waiting が潰れる）、permission の待ちはどのツールが承認されるか事前に分からないのでバッチ解決（PostToolBatch・matcher の概念を持たないイベント）で解除する。
 - codex: UserPromptSubmit→working / PermissionRequest→waiting / Stop→done
 - agy: PreInvocation→working / Stop→done（agy のフックに SessionStart/Notification/PermissionRequest 相当が無く idle/waiting/clear は取得不可）
 

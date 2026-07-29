@@ -56,6 +56,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   let agentLauncher = AgentLauncher()
   // アップデート面。状態（UI 唯一の情報源）は updaterService が生成・所有し、提示配線は WindowController+Update。
   let updaterService = UpdaterService()
+  // Attention 一覧の単一情報源。flushChrome が snapshot を流し込み、パレットとメニューバーが読む。
+  let attentionStore = AttentionStore()
 
   // 読みは store へ転送する（制御チャネル・chrome・パレット・永続・テストが多数の箇所で読むため、
   // 従来の可視性（internal）を保って読み site を無改変にする）。所有と全ミューテーションは store。
@@ -142,6 +144,7 @@ final class WindowController: NSObject, NSWindowDelegate {
       self.closeTab(self.current.tabs[i], origin: .gesture)
     }
     statusModel.onNewTab = { [weak self] in self?.newTab() }
+    statusModel.onAttentionTap = { [weak self] in self?.showAttentionPalette() }
     // pane 非依存 chrome コマンドの window レベル配信（surface が居ない0タブでも届く）。
     hostingView.onWindowCommand = { [weak self] command in
       self?.handleWindowKeyCommand(command) ?? false
@@ -173,10 +176,16 @@ final class WindowController: NSObject, NSWindowDelegate {
   func wire(_ tc: TerminalController) -> TerminalController {
     tc.onEmpty = { [weak self, weak tc] origin in self?.closeTab(tc, origin: origin) }
     tc.onActiveTitleChange = { [weak self] in self?.refreshChrome() }
-    tc.onLayoutChange = { [weak self] in self?.scheduleSave() }
+    tc.onLayoutChange = { [weak self] in
+      // ペイン集合が変われば chrome（タブの集約グリフ・横断ロールアップ・Attention 一覧・
+      // アクティブペイン cwd）はすべて変わる。closeTab / closeWorkspace と同じ
+      // 「集合が変わったら再投影＋保存」に揃える。
+      self?.refreshChrome()
+      self?.scheduleSave()
+    }
     tc.onPwdChange = { [weak self] in self?.paneDidReportPwd() }
     tc.onAgentStateChange = { [weak self] in
-      self?.consumeActiveTabDoneIfFocused()
+      self?.consumeVisibleTabDone()
       self?.refreshChrome()
     }
     tc.onWindowCommand = { [weak self] command in self?.handleWindowCommand(command) }
@@ -223,7 +232,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     }
     // overlay 表示中は入力を奪わない（フォーカス復帰は dismiss 側が担う）。
     if model.overlay == .none { focusActivePane() }
-    consumeActiveTabDoneIfFocused()
+    consumeVisibleTabDone()
     refreshChrome()
     scheduleHiddenMounts(for: ws)
   }
@@ -253,13 +262,17 @@ final class WindowController: NSObject, NSWindowDelegate {
     }
   }
 
-  /// 完了通知の消費：ウィンドウがキー（前面）の時だけ、アクティブ表示タブの
-  /// 全 done ペインを消費して集約 done バッジを消す。背面・背景タブの done は残す。
-  /// 3 トリガ（タブ活性化・done 到着・前面復帰）が共有する。
-  private func consumeActiveTabDoneIfFocused() {
-    guard window.isKeyWindow, current.tabs.indices.contains(current.active) else { return }
-    current.tabs[current.active].consumeDoneState()
+  /// 「見ているタブ」＝ウィンドウがキー（前面）のときの、アクティブ workspace のアクティブ表示タブ。
+  /// 背面・0タブなら nil。粒度がタブなので、split で隣に見えているペインもこのタブに含まれる。
+  /// done のフォーカス消費とメニューバー②の抑制が、この 1 つの判定を共有する。
+  var visibleTab: TerminalController? {
+    guard window.isKeyWindow, current.tabs.indices.contains(current.active) else { return nil }
+    return current.tabs[current.active]
   }
+
+  /// 完了通知の消費：見ているタブの全 done ペインを消費して集約 done バッジを消す。
+  /// 背面・背景タブの done は残す。3 トリガ（タブ活性化・done 到着・前面復帰）が共有する。
+  private func consumeVisibleTabDone() { visibleTab?.consumeDoneState() }
 
   /// タブを閉じる。発火源はユーザー操作（Cmd+W）に限らず、shell の exit
   /// （close_surface_cb → onEmpty）が背景タブ・背景 workspace からも届くため、
@@ -315,6 +328,7 @@ final class WindowController: NSObject, NSWindowDelegate {
         cwd: store.activePaneCwd(),
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
     editorPane.retarget(cwd: store.activePaneCwd(), ui: store.activeEditorUI())
+    refreshAttentionSnapshot()  // Attention 一覧も同じ coalesce 契機で追従（WindowController+Attention）
   }
 
   // MARK: - エディタペイン
@@ -367,7 +381,7 @@ final class WindowController: NSObject, NSWindowDelegate {
 
   // アプリ前面復帰：背面で届いていたアクティブ表示タブの done を消費する。
   func windowDidBecomeKey(_ notification: Notification) {
-    consumeActiveTabDoneIfFocused()
+    consumeVisibleTabDone()
     refreshChrome()
     syncWindowBlur()  // 可視後の初回適用（起動時 init は windowNumber 未確定で CGS ブラーが効かない）
   }

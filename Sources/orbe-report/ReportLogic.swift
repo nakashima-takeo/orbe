@@ -17,6 +17,15 @@ func sessionId(from obj: [String: Any]?) -> String? {
   return nil
 }
 
+/// サブエージェント実行中の hook payload か（`agent_id` はサブエージェントのときだけ入る）。
+/// サブエージェントの活動はペインのセッション状態ではないので報告しない。
+/// 見るのは `agent_id` だけ——`agent_type` は `--agent` で起動した本体スレッドにも入るため、
+/// そちらで判定すると本体の報告まで丸ごと落ちる。
+func isSubagentReport(_ obj: [String: Any]?) -> Bool {
+  guard let id = obj?["agent_id"] as? String else { return false }
+  return !id.isEmpty
+}
+
 /// state == "done" かつ background_tasks に status == "running" が 1 つでもあれば "working"。
 /// それ以外（欠落・空配列・キャスト失敗を含む）は state をそのまま返す（誤 working には倒れない）。
 func effectiveState(_ state: String, stdin obj: [String: Any]?) -> String {
@@ -25,4 +34,34 @@ func effectiveState(_ state: String, stdin obj: [String: Any]?) -> String {
     tasks.contains(where: { ($0["status"] as? String) == "running" })
   else { return state }
   return "working"
+}
+
+/// hook payload からユーザーへ見せる文言を抽出する（無ければ nil）。state は effectiveState 適用後
+/// （done→working 読み替え後は文言なし＝working は文言を持たない）。フィールド形は実 payload 準拠:
+/// - waiting: claude Notification の `message`、無ければ PreToolUse(AskUserQuestion) の
+///   `tool_input.questions[0].question`（先頭の質問文）。
+/// - done: Stop payload の `last_assistant_message`（claude / codex とも同名フィールドを持つ。
+///   持たない CLI（agy 等）は自然に nil ＝文言なし）。
+func agentMessage(state: String, stdin obj: [String: Any]?) -> String? {
+  guard let obj else { return nil }
+  switch state {
+  case "waiting":
+    if let message = truncateMessage(obj["message"] as? String) { return message }
+    guard let input = obj["tool_input"] as? [String: Any],
+      let questions = input["questions"] as? [[String: Any]]
+    else { return nil }
+    return truncateMessage(questions.first?["question"] as? String)
+  case "done":
+    return truncateMessage(obj["last_assistant_message"] as? String)
+  default:
+    return nil
+  }
+}
+
+/// 文言の整形。trim して空なら nil、1000 文字で切る（表示は 3 行 clamp。制御ソケットの
+/// 1 行上限〔ControlLineFramer 1MiB〕に対する防御でもあり、十分下回る）。
+func truncateMessage(_ s: String?) -> String? {
+  guard let trimmed = s?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty
+  else { return nil }
+  return String(trimmed.prefix(1000))
 }

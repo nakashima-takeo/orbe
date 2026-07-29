@@ -2,10 +2,14 @@ import Foundation
 
 /// UI 文言の辞書（`L10nKey` → 日英）と言語別のルックアップ。`LocalizationStore` と AppKit `MainMenu` の
 /// 両方がここを通す（`language == .ja` 分岐を 1 箇所へ集約）。全 `L10nKey` の網羅は `L10nCompletenessTests`。
-/// 辞書はドメイン分冊（本体＋`L10nTable+Settings.swift`＋`L10nTable+Help.swift`）を `table` が結合する。
+/// 辞書はドメイン分冊（本体＋`L10nTable+Settings.swift`＋`L10nTable+Help.swift`＋
+/// `L10nTable+Attention.swift`）を `table` が結合する。
 enum L10n {
   static let table: [L10nKey: (ja: String, en: String)] =
-    baseTable.merging(settingsTable) { a, _ in a }.merging(helpTable) { a, _ in a }
+    baseTable
+    .merging(settingsTable) { a, _ in a }
+    .merging(helpTable) { a, _ in a }
+    .merging(attentionTable) { a, _ in a }
 
   private static let baseTable: [L10nKey: (ja: String, en: String)] = [
     // MARK: Menu

@@ -16,7 +16,8 @@ protocol ControlTarget: AnyObject {
   /// activeWorkspaceId と当該 workspace のペイン ID 群。未知 id は nil（spawn と違いフォールバックしない）。
   func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, paneIds: [Int])?
   /// エージェント hook の状態報告を発信元ペインへ適用する（report_agent）。
-  func controlReportAgent(pane: SurfaceView, agent: String, state: String, sessionId: String?)
+  func controlReportAgent(
+    pane: SurfaceView, agent: String, state: String, sessionId: String?, message: String?)
   /// 指定ペインを分割し新ペイン ID を返す（split_pane）。direction は "right"=左右 / "down"=上下。
   /// 所有 TerminalController の split(from:command:) へ委譲する。未解決ペインは -32004。
   func controlSplitPane(paneId: Int, direction: String, command: String?)
@@ -249,7 +250,8 @@ final class ControlServer {
         return .failure(ControlError(code: -32602, message: "missing agent/state"))
       }
       target.controlReportAgent(
-        pane: p, agent: agent, state: state, sessionId: params["sessionId"] as? String)
+        pane: p, agent: agent, state: state, sessionId: params["sessionId"] as? String,
+        message: params["message"] as? String)
       return .success(["ok": true])
     default:
       // ペイン/タブ操作・config / workspace CRUD は拡張の dispatch（ControlServer+Dispatch）へ。

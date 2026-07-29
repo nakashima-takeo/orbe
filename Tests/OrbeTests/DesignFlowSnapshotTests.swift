@@ -227,4 +227,5 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
         ("select_last", { workspace.render.selected = items.count - 1 }),  // 末尾選択は視界外へ
       ])
   }
+
 }

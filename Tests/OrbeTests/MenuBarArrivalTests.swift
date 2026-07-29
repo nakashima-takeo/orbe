@@ -1,0 +1,217 @@
+import XCTest
+
+@testable import Orbe
+
+/// ②到来アニメーションの**尺と時間挙動**を固定する。driver は時刻注入の状態機械なので、
+/// 実時間を待たずに任意のフレームを再現できる（ここが本設計の検証可能性の土台）。
+@MainActor
+final class MenuBarArrivalTests: XCTestCase {
+
+  /// 基準時刻は 0——注入する秒数がそのまま経過秒になり、境界（1.2s / 2.3s / 22.6s）の判定に
+  /// 丸め誤差が混ざらない。
+  private let t0 = Date(timeIntervalSinceReferenceDate: 0)
+
+  private func at(_ offset: TimeInterval) -> Date { t0.addingTimeInterval(offset) }
+
+  /// 尺は design 原典のタイムライン表どおり。滞留 22 秒と速い収縮 180ms が Orbe の意図的な逸脱。
+  func testDurationsMatchDesign() {
+    XCTAssertEqual(MenuBarArrival.expand, 0.84)
+    XCTAssertEqual(MenuBarArrival.glossDelay, 1.2)
+    XCTAssertEqual(MenuBarArrival.glossDuration, 1.1)
+    XCTAssertEqual(MenuBarArrival.collapse, 0.6)
+    XCTAssertEqual(MenuBarArrival.collapseQuick, 0.18)
+    XCTAssertLessThan(MenuBarArrival.collapseQuick, MenuBarArrival.collapse, "速い収縮は通常より短い")
+    XCTAssertEqual(AttentionStore.transientDwell, 22)
+  }
+
+  /// 展開は 840ms で開き切り、滞留の間は開いたまま。
+  func testExpandReachesOpenAndHolds() {
+    let driver = MenuBarArrivalDriver()
+    driver.arrived(at: t0)
+    XCTAssertEqual(driver.phase.openness, 0, accuracy: 0.001)
+    driver.tick(now: at(0.42))
+    XCTAssertEqual(driver.phase.openness, 0.5, accuracy: 0.001)
+    driver.tick(now: at(0.84))
+    XCTAssertEqual(driver.phase.openness, 1, accuracy: 0.001)
+    driver.tick(now: at(21.9))
+    XCTAssertEqual(driver.phase.openness, 1, accuracy: 0.001)
+  }
+
+  /// 収縮は滞留満了から 600ms。完了（＝②を落とす合図）を返すのは撃ち終えた tick だけ。
+  func testCollapseTakesSixHundredMillisecondsAndReportsOnce() {
+    let driver = MenuBarArrivalDriver()
+    driver.arrived(at: t0)
+    driver.tick(now: at(1))
+    driver.expired(at: at(22))
+    XCTAssertEqual(driver.phase.openness, 1, accuracy: 0.001)
+    XCTAssertFalse(driver.tick(now: at(22.3)))
+    XCTAssertEqual(driver.phase.openness, 0.5, accuracy: 0.001)
+    XCTAssertTrue(driver.phase.closing, "収縮の途中は向きを持つ（easing が展開の逆再生にならない）")
+    XCTAssertFalse(driver.tick(now: at(22.59)), "撃ち終える前は完了を返さない")
+    XCTAssertTrue(driver.tick(now: at(22.6)))
+    XCTAssertEqual(driver.phase.openness, 0, accuracy: 0.001)
+    XCTAssertEqual(driver.phase, .closed, "閉じ切りは向きを持たない（両向きの見た目が一致する）")
+    XCTAssertFalse(driver.tick(now: at(22.7)), "完了は 1 度だけ")
+  }
+
+  /// 艶は 1 到来につき 1 回だけ、到来 1.2s 後から 1.1s かけて左端の外から右端の外へ抜ける。
+  func testGlossSweepsOncePerArrival() throws {
+    let driver = MenuBarArrivalDriver()
+    driver.arrived(at: t0)
+    driver.tick(now: at(0.5))
+    XCTAssertNil(driver.phase.gloss, "1.2s 前は走らない")
+    driver.tick(now: at(1.2))
+    XCTAssertEqual(try XCTUnwrap(driver.phase.gloss), 0, accuracy: 0.001)
+    driver.tick(now: at(1.75))
+    XCTAssertEqual(try XCTUnwrap(driver.phase.gloss), 0.5, accuracy: 0.001)
+    driver.tick(now: at(2.3))
+    XCTAssertEqual(try XCTUnwrap(driver.phase.gloss), 1, accuracy: 0.001, "走り切りの端は 1")
+    driver.tick(now: at(2.31))
+    XCTAssertNil(driver.phase.gloss)
+    for offset in [3.0, 5.0, 12.0, 22.0] {
+      driver.tick(now: at(offset))
+      XCTAssertNil(driver.phase.gloss, "t0+\(offset): 1 到来につき艶は 1 回だけ")
+    }
+  }
+
+  /// 滞留中の積み替えは艶をもう 1 回走らせるが、既に開いているので開き直さない。
+  func testRestackReplaysGlossWithoutReopening() throws {
+    let driver = MenuBarArrivalDriver()
+    driver.arrived(at: t0)
+    driver.tick(now: at(3))
+    driver.arrived(at: at(5))
+    XCTAssertEqual(driver.phase.openness, 1, accuracy: 0.001, "再展開しない")
+    driver.tick(now: at(5.5))
+    XCTAssertNil(driver.phase.gloss)
+    driver.tick(now: at(6.2))
+    XCTAssertEqual(try XCTUnwrap(driver.phase.gloss), 0, accuracy: 0.001)
+    driver.tick(now: at(6.75))
+    XCTAssertEqual(try XCTUnwrap(driver.phase.gloss), 0.5, accuracy: 0.001)
+    XCTAssertEqual(driver.phase.openness, 1, accuracy: 0.001)
+  }
+
+  /// 収縮の途中に届いた到来は、その開き具合から続けて開き直す（位相は飛ばず、閉じ切らない）。
+  /// 展開 840ms・収縮 600ms の窓に次の変化が入るのは実経路——ここだけが `openingSince` の
+  /// 逆算と、収縮の取り消し（②を落とす合図を立てないこと）が同時に効く分岐。
+  func testArrivalDuringCollapseResumesFromCurrentOpenness() {
+    let driver = MenuBarArrivalDriver()
+    driver.arrived(at: t0)
+    driver.tick(now: at(1))
+    driver.expired(at: at(22))
+    driver.tick(now: at(22.3))
+    XCTAssertEqual(driver.phase.openness, 0.5, accuracy: 0.001)
+    XCTAssertTrue(driver.phase.closing)
+    driver.arrived(at: at(22.3))
+    XCTAssertEqual(driver.phase.openness, 0.5, accuracy: 0.001, "その場から開き直す")
+    XCTAssertFalse(driver.phase.closing, "向きは展開側へ戻る")
+    driver.tick(now: at(22.72))  // 残り 0.5 × 840ms
+    XCTAssertEqual(driver.phase.openness, 1, accuracy: 0.001)
+    XCTAssertFalse(driver.tick(now: at(23)), "収縮は取り消された——②を落とさない")
+  }
+
+  /// 艶の走査中に Reduce Motion が入って到来が来たら、艶はその場の値で固まらず消える
+  /// ——基点が無い＝艶は無い。ticker も回らないので、残ると 22 秒間帯が張り付く。
+  func testReduceMotionClearsGlossOnArrival() {
+    let driver = MenuBarArrivalDriver()
+    driver.arrived(at: t0)
+    driver.tick(now: at(1.75))
+    XCTAssertNotNil(driver.phase.gloss)
+    driver.reduceMotion = true
+    driver.arrived(at: at(1.8))
+    XCTAssertNil(driver.phase.gloss)
+    XCTAssertFalse(driver.isAnimating)
+  }
+
+  /// 取り下げ・②中のクリックも**収縮を通る**（閉じ方は 1 つで、尺だけが速い）。
+  /// 即時に閉じ切らないこと自体が契約——1 フレームで幅が飛ぶと、`statusItem.length` の反映が
+  /// 追いつかないフレームで content が中央寄せに描かれ「中央へ萎む」ように見える。
+  func testDismissCollapsesQuicklyInsteadOfClosingImmediately() {
+    let driver = MenuBarArrivalDriver()
+    driver.arrived(at: t0)
+    driver.tick(now: at(1))
+    driver.dismissed(at: at(1.5))
+    XCTAssertEqual(driver.phase.openness, 1, accuracy: 0.001, "撃った瞬間はまだ開いている")
+    XCTAssertTrue(driver.isAnimating, "収縮の tween が回る")
+    XCTAssertFalse(driver.tick(now: at(1.59)))
+    XCTAssertEqual(driver.phase.openness, 0.5, accuracy: 0.001, "180ms の半ばで半分閉じる")
+    XCTAssertTrue(driver.phase.closing, "向きは収縮と同じ（同じ動きの尺違い）")
+    XCTAssertTrue(driver.tick(now: at(1.7)), "撃ち終えたら②を落とす合図を返す")
+    XCTAssertEqual(driver.phase, .closed)
+    XCTAssertFalse(driver.isAnimating)
+  }
+
+  /// 速い収縮の途中に到来が来たら、その開き具合から開き直す（通常の収縮と同じ扱い）。
+  func testArrivalDuringQuickCollapseResumes() {
+    let driver = MenuBarArrivalDriver()
+    driver.arrived(at: t0)
+    driver.tick(now: at(1))
+    driver.dismissed(at: at(1.5))
+    driver.tick(now: at(1.59))
+    XCTAssertEqual(driver.phase.openness, 0.5, accuracy: 0.001)
+    driver.arrived(at: at(1.59))
+    XCTAssertEqual(driver.phase.openness, 0.5, accuracy: 0.001, "その場から開き直す")
+    XCTAssertFalse(driver.phase.closing)
+    XCTAssertFalse(driver.tick(now: at(2.1)), "収縮は取り消された——②を落とさない")
+  }
+
+  /// Reduce Motion では速い収縮も尺 0＝その場で閉じ切って件数が現れる（動きを持たない）。
+  func testReduceMotionDismissesWithoutTween() {
+    let driver = MenuBarArrivalDriver()
+    driver.reduceMotion = true
+    driver.arrived(at: t0)
+    XCTAssertEqual(driver.phase, .open)
+    driver.dismissed(at: at(1))
+    XCTAssertEqual(driver.phase, .closed)
+    XCTAssertFalse(driver.isAnimating)
+    XCTAssertTrue(driver.tick(now: at(1)), "収縮を待たずその場で②を落とす")
+  }
+
+  /// 描く材料そのものが外から消えた場合だけ、tween を捨ててその場で閉じ切る。
+  func testClosedOutDropsTweenImmediately() {
+    let driver = MenuBarArrivalDriver()
+    driver.arrived(at: t0)
+    driver.tick(now: at(1.5))
+    driver.closedOut()
+    XCTAssertEqual(driver.phase, .closed)
+    XCTAssertFalse(driver.isAnimating)
+  }
+
+  /// Reduce Motion では位相が 0 と 1 しか取らず、艶は 1 度も走らず、ticker も回らない。
+  /// 情報は落ちない——②は開いた姿で滞留し、閉じた瞬間に件数が現れる。
+  func testReduceMotionSkipsEveryTween() {
+    let driver = MenuBarArrivalDriver()
+    driver.reduceMotion = true
+    driver.arrived(at: t0)
+    XCTAssertEqual(driver.phase, .open)
+    XCTAssertFalse(driver.isAnimating)
+    for offset in [0.42, 1.75, 5.0, 22.0] {
+      driver.tick(now: at(offset))
+      XCTAssertEqual(driver.phase, .open, "t0+\(offset)")
+      XCTAssertFalse(driver.isAnimating, "t0+\(offset)")
+    }
+    driver.expired(at: at(22))
+    XCTAssertEqual(driver.phase, .closed)
+    XCTAssertFalse(driver.isAnimating)
+    XCTAssertTrue(driver.tick(now: at(22)), "収縮を待たずその場で②を落とす")
+  }
+
+  /// ticker が回るのは展開＋艶（最大 2.3s）と収縮（0.6s）の間だけ。滞留 22 秒は止まる
+  /// ——60Hz の `statusItem.length` 書き込みはメニューバー他アイテムの再配置を誘発する。
+  func testTickerIdlesDuringDwell() {
+    let driver = MenuBarArrivalDriver()
+    driver.arrived(at: t0)
+    XCTAssertTrue(driver.isAnimating)
+    driver.tick(now: at(2.3))
+    XCTAssertTrue(driver.isAnimating, "艶が走り切るまでは回る")
+    driver.tick(now: at(2.31))
+    XCTAssertFalse(driver.isAnimating)
+    for offset in [5.0, 15.0] {
+      driver.tick(now: at(offset))
+      XCTAssertFalse(driver.isAnimating, "t0+\(offset): 滞留中は止まる")
+    }
+    driver.expired(at: at(22))
+    XCTAssertTrue(driver.isAnimating)
+    driver.tick(now: at(22.6))
+    XCTAssertFalse(driver.isAnimating)
+  }
+}

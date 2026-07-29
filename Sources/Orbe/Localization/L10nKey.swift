@@ -310,6 +310,20 @@ enum L10nKey: String, CaseIterable, Sendable {
   case updateAutoInstallSub
   case updateCheckNow
 
+  // MARK: - Attention（パレット・メニューバー投影・グローバル ⌘⌘ の権限）
+  case attentionHintJump
+  case attentionHintSelect
+  case attentionHintClose
+  case attentionEmpty
+  case menubarWorkingSummary
+  case menubarClickToPane
+  case menubarOpenOrbe
+  case menubarPermissionHint
+  case settingsGlobalCmdTapLabel
+  case settingsGlobalCmdTapGranted
+  case settingsGlobalCmdTapDenied
+  case settingsGlobalCmdTapRestartNote
+
   // MARK: - Help（⌘H チートシート）
   case helpSearchPlaceholder
   case helpHitCountOne
@@ -351,6 +365,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutLaunchDefaultAgent
   case helpShortcutAgentPalette
   case helpShortcutDispatchPalette
+  case helpShortcutAttentionPalette
   case helpShortcutFind
   case helpShortcutScrollTop
   case helpShortcutScrollBottom

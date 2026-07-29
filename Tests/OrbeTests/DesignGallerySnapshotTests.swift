@@ -69,6 +69,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     try renderStatusRowSnapshots(dir: dir)
     try renderWorkspaceCreateSnapshots(dir: dir)
     try renderUpdateSnapshots(dir: dir)
+    try renderAttentionSnapshots(dir: dir)
     try renderHelpSnapshots(dir: dir)
   }
 

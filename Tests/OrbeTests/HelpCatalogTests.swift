@@ -69,10 +69,25 @@ final class HelpCatalogTests: XCTestCase {
     XCTAssertEqual(ids.count, Set(ids).count, "KB 配列の id が重複している")
   }
 
-  /// 棚卸しの総数（30）と「すべて」件数の導出が一致する。
+  /// 棚卸しの総数（31）と「すべて」件数の導出が一致する。
   func testTotalCount() {
-    XCTAssertEqual(HelpCatalog.totalCount, 30)
-    XCTAssertEqual(HelpCatalog.all.map(\.rows.count), [3, 9, 7, 3, 8])
+    XCTAssertEqual(HelpCatalog.totalCount, 31)
+    XCTAssertEqual(HelpCatalog.all.map(\.rows.count), [3, 9, 7, 4, 8])
+  }
+
+  /// ⌘⌘（Attention パレット）は画面のどこにも書けない発見不能なジェスチャなので、
+  /// 一覧とトップ厳選の両方に必ず載せる（可視の入口はヘルプだけ＝提示の意思決定）。
+  func testAttentionGestureIsListedAndTopPicked() {
+    guard let agents = HelpCatalog.all.first(where: { $0.title == .helpCatAgents }) else {
+      return XCTFail("カテゴリ helpCatAgents が all に無い")
+    }
+    guard let row = agents.rows.first(where: { $0.key == "⌘⌘" }) else {
+      return XCTFail("⌘⌘ の行が エージェント カテゴリに無い")
+    }
+    XCTAssertEqual(row.combo, ["cmd"], "⌘⌘ の点灯は ⌘ キーそのもの")
+    XCTAssertTrue(
+      HelpCatalog.topPicks[.helpCatAgents]?.contains("⌘⌘") == true,
+      "発見不能な ⌘⌘ がトップ厳選に載っていない")
   }
 
   /// usedKeys は combo の全網羅（キーボードの明暗・クリック可否の SSOT）。
@@ -80,13 +95,11 @@ final class HelpCatalogTests: XCTestCase {
     XCTAssertTrue(HelpCatalog.usedKeys.contains("cmd"))
     XCTAssertTrue(HelpCatalog.usedKeys.contains("shift"))
     XCTAssertTrue(HelpCatalog.usedKeys.isSubset(of: keyboardIDs), "usedKeys に KB 外の id がある")
-    // 修飾のみの組合せは存在しない＝どの行も非修飾キーを 1 つ以上含む。
-    for group in HelpCatalog.all {
-      for row in group.rows {
-        XCTAssertFalse(
-          Set(row.combo).isSubset(of: HelpCatalog.modifierKeys),
-          "\(row.key) が修飾キーのみの combo")
-      }
-    }
+    // 修飾のみの combo は ⌘⌘（⌘ の素タップ×2）だけ——修飾は単独では実行キーになりえず、
+    // 例外はこのジェスチャに限る（増えたら実バインドの棚卸し漏れを疑う）。
+    let modifierOnly = HelpCatalog.all.flatMap { $0.rows }
+      .filter { Set($0.combo).isSubset(of: HelpCatalog.modifierKeys) }
+      .map(\.key)
+    XCTAssertEqual(modifierOnly, ["⌘⌘"], "修飾キーのみの combo は ⌘⌘ 以外に存在しない")
   }
 }

@@ -55,6 +55,10 @@ extension L10n {
       "Dispatch パレット（worktree/branch/issue/PR から起動）",
       "Dispatch palette (launch from worktree/branch/issue/PR)"
     ),
+    // 「⌘ を 2 回」はキー表記 ⌘⌘ が語るのでラベルからは落とす（トップ厳選の 1 行に収める）。
+    .helpShortcutAttentionPalette: (
+      "Attention パレット（要対応のペイン）", "Attention palette (panes needing you)"
+    ),
     .helpShortcutFind: ("スクロールバック検索", "Search scrollback"),
     .helpShortcutScrollTop: ("スクロールバック先頭へ", "Jump to scrollback top"),
     .helpShortcutScrollBottom: ("スクロールバック末尾へ", "Jump to scrollback bottom"),
