@@ -209,7 +209,8 @@ struct UpdateToggleRow: View {
 
 /// 「今すぐ確認」行（枠だけのセカンダリボタン意匠・行全幅）。3 態:
 /// 確認中（自分の確認、または状態カードが理由を語らない背景確認）はスピナーへ替わり、
-/// 実行できない残り（DL中・適用待ち。理由は隣の状態カードが持つ）は減光し、それ以外は通常表示（見本 2d 注記）。
+/// 実行できない残り（DL中・適用待ち。理由は隣の状態カードが持つ）は行ごと減光し、
+/// それ以外は通常表示（見本 2d 注記）。
 struct UpdateCheckNowRow: View {
   let state: UpdateState
   @Environment(\.localization) private var l10n
@@ -224,6 +225,10 @@ struct UpdateCheckNowRow: View {
     }
   }
 
+  /// 「確認中…」を名乗らない実行不可（DL中・適用待ち）が操作不可の減光。
+  /// 部分的な色替えではなく行ごと `Opacity.disabled` へ落とす（§5 ボタン disabled と同じ register）。
+  private var dimmed: Bool { !showsChecking && !state.canCheckNow }
+
   var body: some View {
     HStack(spacing: Theme.Space.step) {
       if showsChecking {
@@ -234,17 +239,16 @@ struct UpdateCheckNowRow: View {
       } else {
         Text(l10n.string(.updateCheckNow))
           .font(Font.theme.caption)
-          .foregroundStyle(state.canCheckNow ? Color.theme.textSecondary : Color.theme.textMuted)
+          .foregroundStyle(Color.theme.textSecondary)
       }
     }
     .frame(maxWidth: .infinity)
     .padding(.vertical, Theme.Space.step - 1)
     .overlay(
       RoundedRectangle(cornerRadius: Theme.Radius.row)
-        .strokeBorder(
-          state.canCheckNow ? Color.theme.surface2 : Color.theme.surface2.opacity(0.5),
-          lineWidth: Theme.Stroke.hairline)
+        .strokeBorder(Color.theme.surface2, lineWidth: Theme.Stroke.hairline)
     )
+    .opacity(dimmed ? Theme.Opacity.disabled : 1)
     .padding(.vertical, Theme.Space.tick)
   }
 }
