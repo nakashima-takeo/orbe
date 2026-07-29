@@ -227,4 +227,74 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
         ("select_last", { workspace.render.selected = items.count - 1 }),  // 末尾選択は視界外へ
       ])
   }
+
+  /// メニューバー②の到来: 本物の `arrived` / `tick` / `expired` で駆動し（時刻は注入するので
+  /// 実時間を待たない）、展開・艶の走査・滞留・収縮の各フレームを撮る。
+  /// 01 と 08 が同形で数字だけ違えば「閉じた姿は常に実件数を示す」、02〜07 に数字が無ければ
+  /// 「文言表示中は件数を出さない」が画で確かめられる。
+  func testMenubarArrival() throws {
+    let t0 = Date()
+    let store = AttentionStore()
+    let driver = MenuBarArrivalDriver()
+    let seeded = [
+      AttentionRow(
+        paneId: 9001, workspaceName: "orbe-remote-ios", tabTitle: "CI 修復", state: "done",
+        message: "build OK — 変更なし", stateChangedAt: t0.addingTimeInterval(-480)),
+      AttentionRow(
+        paneId: 9002, workspaceName: "api-gateway", tabTitle: "deploy スクリプト整理",
+        state: "waiting", message: "ビルド成果物の掃除方法を選んでください。",
+        stateChangedAt: t0.addingTimeInterval(-45)),
+    ]
+    let arriving = AttentionRow(
+      paneId: 9003, workspaceName: "orbe-core", tabTitle: "emit API 移行", state: "waiting",
+      message: "Bash の許可が必要です — bin/rails db:migrate", stateChangedAt: t0)
+    try flow(
+      "menubar_arrival", size: NSSize(width: 420, height: 64),
+      render: { menuBarSnapshot(store: store, phase: driver.phase) },
+      steps: [
+        ("quiet", {}),  // ① 減光 ◐・地なし・数字なし
+        ("seeded", { store.apply(rows: seeded) }),  // ③ ◐＋件数 2
+        (
+          "arrive",
+          {
+            store.noteTransient(arriving, now: t0)
+            driver.arrived(at: t0)
+          }
+        ),
+        (
+          "expand_half",
+          {
+            // 一覧は report 経路の次の coalesce で 3 件へ（②は件数を投影しないので画は変わらない）。
+            store.apply(rows: seeded + [arriving])
+            driver.tick(now: t0.addingTimeInterval(0.42))
+          }
+        ),
+        ("open", { driver.tick(now: t0.addingTimeInterval(0.84)) }),
+        ("gloss_mid", { driver.tick(now: t0.addingTimeInterval(1.75)) }),
+        ("dwell", { driver.tick(now: t0.addingTimeInterval(5)) }),
+        (
+          "collapse_half",
+          {
+            driver.expired(at: t0.addingTimeInterval(22))
+            driver.tick(now: t0.addingTimeInterval(22.3))
+          }
+        ),
+        (
+          "closed",
+          {
+            if driver.tick(now: t0.addingTimeInterval(22.6)) { store.transient = nil }
+          }
+        ),
+      ])
+  }
+}
+
+/// メニューバーアイテムを bar 相当の地へ右寄せで置いたスナップショット用ビュー。
+/// 実メニューバーと同じ ideal サイズで撮るため、幅は content に決めさせる。
+private func menuBarSnapshot(store: AttentionStore, phase: MenuBarArrival.Phase) -> some View {
+  MenuBarStatusView(store: store, ui: MenuBarUIState(), phase: phase)
+    .fixedSize()
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+    .padding(.horizontal, Theme.Space.phrase)
+    .background(Color.theme.bgBase)
 }
