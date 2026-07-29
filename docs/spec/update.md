@@ -1,7 +1,7 @@
 ---
 title: アプリ内アップデート（現状）
 description: Sparkle 2 によるアプリ内アップデート — サイレント確認 → 自動DL＋署名検証 → 再起動待ちトースト（一度だけ）→ 終了時 or 即時適用。UI は自前 3 面（トースト・変更内容シート・設定›アップデート）で標準 Sparkle UI は不使用。appcast は GitHub Releases 最新リリースのアセット
-updated: 2026-07-29
+updated: 2026-07-30
 ---
 
 Sparkle 2 を SPM 依存として組み込み、`Sparkle.framework` を `.app` の `Contents/Frameworks` に同梱する。UI は Sparkle 標準のものを使わず、自前のユーザードライバが状態モデル（UI の唯一の情報源）へ写像し、3 面（トースト・変更内容シート・設定パレットの「アップデート」セクション）がそれだけを読む。
