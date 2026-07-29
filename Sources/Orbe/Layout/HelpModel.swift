@@ -48,7 +48,12 @@ import SwiftUI
   /// キー解放ではビューを戻さない（押した答えを見続けられる）。
   func syncPressedMatch(_ l10n: LocalizationStore) {
     let combo = Set(pressed.map(Self.normalizedComboID))
-    guard HelpCatalog.all.contains(where: { $0.rows.contains { Set($0.combo) == combo } }) else {
+    // 修飾のみの押下は一致に使わない。⌘⌘（combo は ⌘ 単独）が載って以降これを許すと、
+    // 他のショートカットを試し押しする途中の ⌘ 押下でも毎回ハイライトと自動スクロールが走る。
+    // キーボードの点灯は従来どおり（点灯は pressed をそのまま読む別経路）。
+    guard !combo.isSubset(of: HelpCatalog.modifierKeys),
+      HelpCatalog.all.contains(where: { $0.rows.contains { Set($0.combo) == combo } })
+    else {
       pressedRowIDs = []
       revealRowID = nil
       return

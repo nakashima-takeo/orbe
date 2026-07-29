@@ -77,6 +77,24 @@ final class WindowControllerWindowCommandTests: XCTestCase {
     XCTAssertEqual(wc.current.tabs.count, before, "newTab は dispatch されない（暴発防止）")
   }
 
+  /// ⌘⌘（Attention パレット）はヘルプ表示中だけ no-op。ヘルプは押下を点灯・行ハイライトにしか
+  /// 使わない場で、そこに ⌘⌘ が載る以上必ず試し押しされる——効いてしまうとヘルプ自体が消える。
+  /// 他パレット表示中は従来どおり差し替える（パレット同士の遷移規約）。
+  func testAttentionToggleInertOnlyWhileHelpShowing() throws {
+    let wc = try restoreSingleTab()
+    wc.showHelp()
+    XCTAssertEqual(wc.presentedOverlay, .help, "前提: ヘルプ表示中")
+    wc.toggleAttentionPalette()
+    XCTAssertEqual(wc.presentedOverlay, .help, "ヘルプ表示中の ⌘⌘ は no-op（ヘルプが残る）")
+
+    wc.dismissHelp()
+    wc.showWorkspacePalette()
+    wc.toggleAttentionPalette()
+    XCTAssertEqual(wc.presentedOverlay, .attentionPalette, "他パレット表示中は差し替わる")
+    wc.toggleAttentionPalette()
+    XCTAssertEqual(wc.presentedOverlay, .none, "再打鍵で閉じる（トグル）")
+  }
+
   /// `beginTabRename` が編集状態を立てる: editingIndex＝active・editingText＝現在の表示名・focusToken 前進。
   func testBeginTabRenameSeedsEditingState() throws {
     let wc = try restoreSingleTab()

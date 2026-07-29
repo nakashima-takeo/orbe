@@ -14,14 +14,17 @@ extension WindowController {
 
   /// ⌘⌘（前面時）のトグル。開いていれば閉じ、他パレット表示中は差し替える（既存パレット同士の
   /// 遷移規約）。languageSelect / onboarding / updateChanges の真のモーダル中は no-op。
+  /// ヘルプ（⌘H）表示中も no-op——ヘルプはショートカットを試し押しして確かめる場で、押下は
+  /// キーボード点灯と行ハイライトにのみ使う（実動作するのは ⌘H と esc だけ）。ヘルプに載る
+  /// ⌘⌘ はそこで必ず試されるため、この規律から外すと試し押しでヘルプ自体が消える。
   func toggleAttentionPalette() {
     switch model.overlay {
     case .attentionPalette:
       dismissPalette()
-    case .languageSelect, .onboarding, .updateChanges:
+    case .languageSelect, .onboarding, .updateChanges, .help:
       return
     case .none, .workspacePalette, .workspaceCreate, .agentPalette, .dispatchPalette,
-      .settingsPalette, .help:
+      .settingsPalette:
       showAttentionPalette()
     }
   }

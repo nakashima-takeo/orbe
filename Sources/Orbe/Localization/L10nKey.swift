@@ -364,6 +364,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutLaunchDefaultAgent
   case helpShortcutAgentPalette
   case helpShortcutDispatchPalette
+  case helpShortcutAttentionPalette
   case helpShortcutFind
   case helpShortcutScrollTop
   case helpShortcutScrollBottom
