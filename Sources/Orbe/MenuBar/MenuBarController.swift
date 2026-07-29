@@ -105,6 +105,7 @@ final class MenuBarController: NSObject {
     // ②の間のクリック＝該当ペインへ直行（前面化＋focus）。ドロップダウンは開かない。
     if let transient = store.transient {
       store.transient = nil
+      syncTransient()  // 位相も同じフレームで閉じ切る（store と phase を揃えて進める）
       NSApp.activate(ignoringOtherApps: true)
       windowController.window.makeKeyAndOrderFront(nil)
       windowController.focusAttentionPane(paneId: transient.row.paneId)
@@ -185,16 +186,17 @@ final class MenuBarController: NSObject {
     let arrivedAt = store.transient?.arrivedAt
     if arrivedAt != lastArrivedAt {
       lastArrivedAt = arrivedAt
-      if arrivedAt != nil {
-        driver.arrived(at: Date())  // 積み替えも新しい到来（艶が走り直す）
+      if let arrivedAt {
+        // 積み替えも新しい到来（艶が走り直す）。基点は打刻された到来時刻——収縮の満了
+        // （`expiresAt`）と同じ時計に揃え、観測の main ホップぶんずれた展開にしない。
+        driver.arrived(at: arrivedAt)
       } else {
         driver.dismissed()  // 取り下げ・②中のクリック・収縮の撃ち終わり＝アニメなしで閉じ切り
-        stopTicker()
       }
     }
     scheduleTransientExpiry()
     render()
-    if driver.isAnimating { startTicker() }
+    syncTicker()
   }
 
   /// 現在の位相を content へ流し、intrinsic を確定させてから `statusItem.length` へ反映する。
@@ -219,17 +221,26 @@ final class MenuBarController: NSObject {
     ticker = nil
   }
 
+  /// ticker の生死は driver の tween 状態そのもの。位相を触ったら必ずこれを撃つ。
+  private func syncTicker() {
+    if driver.isAnimating { startTicker() } else { stopTicker() }
+  }
+
   private func advance() {
     let collapsed = driver.tick(now: Date())
     render()
-    if !driver.isAnimating { stopTicker() }
-    if collapsed { store.transient = nil }
+    syncTicker()
+    // 落とすのは driver が閉じ切った当の到来だけ。収縮の最終フレームに割り込んだ新しい到来を
+    // 巻き添えにしない（その到来は observeTransient 経由で driver.arrived へ届く）。
+    if collapsed, store.transient?.arrivedAt == lastArrivedAt { store.transient = nil }
   }
 
   private func scheduleTransientExpiry() {
     transientTimer?.invalidate()
     transientTimer = nil
-    guard let transient = store.transient else { return }
+    // 収縮中は張らない——一度閉じ始めたら閉じ切る（満了はもう過ぎており、張れば 0.1s 床で
+    // `transientExpired` に再入して収縮の基点を引き直し、ホバーなら延長すらしてしまう）。
+    guard let transient = store.transient, !driver.isCollapsing else { return }
     let interval = max(0.1, transient.expiresAt.timeIntervalSinceNow)
     let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
       self?.transientExpired()  // main runloop の timer＝main で届く
@@ -249,7 +260,6 @@ final class MenuBarController: NSObject {
     }
     driver.expired(at: Date())
     advance()
-    if driver.isAnimating { startTicker() }
   }
 }
 

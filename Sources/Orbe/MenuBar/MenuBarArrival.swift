@@ -3,6 +3,7 @@ import SwiftUI
 
 /// メニューバー②（到来ピル）の尺と easing。design 原典（Menubar_Notification_Animation）の
 /// タイムライン表を尺の原典、keyframe を順序と easing の原典として移植する。
+/// 持つのは展開・艶・収縮まで——両者に挟まれる滞留は `AttentionStore.transientDwell`。
 enum MenuBarArrival {
   /// 展開（地・件数・文言・◐ を束ねる単一の窓）。
   static let expand: TimeInterval = 0.84
@@ -67,6 +68,9 @@ final class MenuBarArrivalDriver {
   /// tween が進行中か。controller はこれが true の間だけ tick を回す（滞留中は止める）。
   var isAnimating: Bool { openingSince != nil || closingSince != nil || glossSince != nil }
 
+  /// 収縮の最中か。controller はこの間だけ期限タイマーを張らない（一度閉じ始めたら閉じ切る）。
+  var isCollapsing: Bool { closingSince != nil }
+
   private var expandDuration: TimeInterval { reduceMotion ? 0 : MenuBarArrival.expand }
   private var collapseDuration: TimeInterval { reduceMotion ? 0 : MenuBarArrival.collapse }
 
@@ -111,7 +115,7 @@ final class MenuBarArrivalDriver {
     if let since = closingSince {
       let p = progress(since: since, now: now, over: collapseDuration)
       phase.openness = 1 - p
-      phase.closing = p < 1
+      phase.closing = p > 0 && p < 1
       if p >= 1 {
         closingSince = nil
         collapseCompleted = true
@@ -122,7 +126,10 @@ final class MenuBarArrivalDriver {
       phase.closing = false
       if p >= 1 { openingSince = nil }
     }
-    guard let since = glossSince else { return }
+    guard let since = glossSince else {
+      phase.gloss = nil  // 基点が無い＝走っていない。Reduce Motion 下の到来もここへ落ちる
+      return
+    }
     let elapsed = now.timeIntervalSince(since)
     if elapsed > MenuBarArrival.glossDelay + MenuBarArrival.glossDuration {
       phase.gloss = nil
