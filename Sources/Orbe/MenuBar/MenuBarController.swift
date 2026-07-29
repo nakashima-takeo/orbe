@@ -253,7 +253,7 @@ final class MenuBarController: NSObject {
   /// ——収縮中に期限タイマーは張られない）。
   private func transientExpired() {
     guard store.transient != nil else { return }
-    if ui.transientHovered {
+    if ui.itemHovered {
       // ホバー中は収縮しない（延長）。ホバーが外れた後の余韻ぶんだけ先送りする。
       store.transient?.expiresAt = Date().addingTimeInterval(2)
       return
@@ -267,8 +267,10 @@ final class MenuBarController: NSObject {
 @Observable final class MenuBarUIState {
   /// ドロップダウン表示中（④）＝ピル地を accent tint に。
   var dropdownOpen = false
-  /// ②のピルをホバー中（収縮の延長判定に使う）。view が書き controller が読む。
-  var transientHovered = false
+  /// メニューバーアイテムをホバー中（収縮の延長判定に使う）。view が書き controller が読む。
+  /// ピルは全態で常設なので、述語は「②のホバー」ではなく「アイテムのホバー」——②が生きて
+  /// いるかは読み手（`transientExpired`）が見る。載せたまま②が到来しても延長が効く。
+  var itemHovered = false
 }
 
 /// メニューバーアイテム用の hosting view。クリックを NSStatusBarButton（背後の target/action）へ

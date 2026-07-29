@@ -32,15 +32,35 @@ struct MenuBarStatusView: View {
   /// 地を持つときの水平余白。
   private static let pillPadding: CGFloat = 7
 
+  /// ピル高。メニューバー厚は 22/24 の 2 系があり、24 に固定すると 22 の bar で content が
+  /// 縦に潰れる。22 以下の content は bar 高の中で SwiftUI が縦センターする。
+  private static let pillHeight: CGFloat = 22
+
+  /// ピルの形。地の 2 層・hairline・艶のクリップが同じ形を指すことを、この 1 つが保証する。
+  private static let pillShape = RoundedRectangle(cornerRadius: 5)
+
+  /// 件数スロットの直前の間隔（原典の数字スロット `padding-left: 5px`）。他のスロットは 6。
+  private static let countGap: CGFloat = 5
+
   /// 水平 padding を除いた内側予算。
   private static let pillBudget = transientMaxWidth - pillPadding * 2
 
   /// 艶の帯幅（原典 `width: 80`）。
   private static let glossWidth: CGFloat = 80
 
+  /// 艶の帯がピル上下へはみ出す量（原典 `top:-6 bottom:-6`）。
+  private static let glossBleed: CGFloat = 6
+
+  /// 艶の帯の高さ。ピル高の上下へ `glossBleed` ずつ。
+  private static let glossHeight = Self.pillHeight + Self.glossBleed * 2
+
   /// 艶の斜め（原典 `skewX(-18deg)`）。
   private static let glossSkew = CGAffineTransform(
     a: 1, b: 0, c: CGFloat(tan(-18 * Double.pi / 180)), d: 1, tx: 0, ty: 0)
+
+  /// skew が帯の下端を左へ張り出させる量。走り切りでピル右端に楔を残さないよう、
+  /// 走行距離へこのぶんを足す（原典の入退場 opacity を持たない代わりの「通り抜け切る距離」）。
+  private static let glossOverhang = Self.glossHeight * abs(Self.glossSkew.c)
 
   /// 曲線を「いま起きている動きの進捗」に当てて 0（閉じ切り側）〜1（開き切り側）へ直す。
   /// 開くときは `openness` そのもの、閉じるときは収縮の進捗——原典の easing はどちらの動きも
@@ -77,16 +97,16 @@ struct MenuBarStatusView: View {
         Text("\(store.count)")
           .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
           .foregroundStyle(.primary)  // ③④の数字はシステム外観に追従する（dark ピンを当てない）
-          .pillSlot(gap: 5, fold: countFold, cap: Self.countCap)
+          .pillSlot(gap: Self.countGap, fold: countFold, cap: Self.countCap)
       }
     }
     .padding(.horizontal, store.count > 0 ? Self.pillPadding : Self.pillPadding * groundLift)
-    // ピル高（22）に揃える。メニューバー厚は 22/24 の 2 系があり、24 に固定すると 22 の bar で
-    // content が縦に潰れる。22 以下の content は bar 高の中で SwiftUI が縦センターする。
-    .frame(height: 22)
+    .frame(height: Self.pillHeight)
     .background(pillGround)
     .overlay { if let gloss = phase.gloss { glossSweep(gloss) } }
-    .onHover { ui.transientHovered = $0 && store.transient != nil }
+    // 生の出入りだけを写す。`store.transient != nil` で絞ると、③に載せたまま②が到来した
+    // ときに onHover が再発火せず false が焼き付き、延長が最も要る場面で効かなくなる。
+    .onHover { ui.itemHovered = $0 }
     .padding(.horizontal, Theme.Space.hair)
   }
 
@@ -120,17 +140,17 @@ struct MenuBarStatusView: View {
   /// 固定して解決する（ライトメニューバー上でも文字・状態グリフが地に対して読める）。
   private var pillGround: some View {
     ZStack {
-      RoundedRectangle(cornerRadius: 5)
+      Self.pillShape
         .fill(
           ui.dropdownOpen
             ? Color.theme.accentPrimary.opacity(0.35) : Color.theme.surfaceInk.opacity(0.16)
         )
         .opacity(store.count > 0 ? 1 : 0)
-      RoundedRectangle(cornerRadius: 5)
+      Self.pillShape
         .fill(Color.theme.bgBase)  // 不透明の暗地（メニューバー実背景に依存しない）
-        .overlay(RoundedRectangle(cornerRadius: 5).fill(Color.theme.accentPrimary.opacity(0.35)))
+        .overlay(Self.pillShape.fill(Color.theme.accentPrimary.opacity(0.35)))
         .overlay(
-          RoundedRectangle(cornerRadius: 5)
+          Self.pillShape
             .strokeBorder(Color.theme.accentPrimary.opacity(0.6), lineWidth: Theme.Stroke.hairline)
         )
         .environment(\.colorScheme, .dark)
@@ -150,31 +170,32 @@ struct MenuBarStatusView: View {
         ],
         startPoint: .leading, endPoint: .trailing
       )
-      .frame(width: Self.glossWidth, height: 34)  // ピル 22 の上下へ 6 ずつはみ出す
+      .frame(width: Self.glossWidth, height: Self.glossHeight)
       .transformEffect(Self.glossSkew)
       .offset(
         x: -Self.glossWidth
-          + (geo.size.width + Self.glossWidth) * MenuBarArrival.Curve.gloss.value(at: progress),
-        y: -6)
+          + (geo.size.width + Self.glossWidth + Self.glossOverhang)
+            * MenuBarArrival.Curve.gloss.value(at: progress),
+        y: -Self.glossBleed)
     }
-    .clipShape(RoundedRectangle(cornerRadius: 5))
+    .clipShape(Self.pillShape)
     .environment(\.colorScheme, .dark)
     .allowsHitTesting(false)
   }
 }
 
 /// スロット幅の上限。宣言しないサブビューは残り予算のすべてを上限にできる。
-struct PillSlotCap: LayoutValueKey {
+private struct PillSlotCap: LayoutValueKey {
   static let defaultValue: CGFloat = .infinity
 }
 
 /// スロットの直前の間隔（nil＝`PillRow.spacing`）。
-struct PillSlotGap: LayoutValueKey {
+private struct PillSlotGap: LayoutValueKey {
   static let defaultValue: CGFloat? = nil
 }
 
 /// スロットの畳み具合。0＝畳み切り、1＝自然幅。
-struct PillSlotFold: LayoutValueKey {
+private struct PillSlotFold: LayoutValueKey {
   static let defaultValue: Double = 1
 }
 
