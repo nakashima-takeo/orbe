@@ -142,17 +142,40 @@ final class UpdateStateTests: XCTestCase {
     XCTAssertFalse(state.toastVisible, "同一プロセス内の再 ready はトーストを再表示しない")
   }
 
-  /// 「今すぐ確認」の実行可否。既定 true で fixture は全状態を注入でき、UpdaterService が Sparkle の
-  /// canCheckForUpdates を写す。
-  func testCanCheckNowDefaultsTrueAndMirrors() {
+  /// 「今すぐ確認」の実行可否は既定 `.available`（fixture は全状態を注入できる）。
+  /// 実行してよいのは `.available` のときだけで、`busy` と `unavailable` は同じ「押せない」でも
+  /// 別の状態として保たれる（UI の名乗りが変わるため潰してはならない）。
+  func testCheckAvailabilityDefaultsAvailableAndGatesCheckNow() {
     let state = makeState()
+    XCTAssertEqual(state.checkAvailability, .available)
     XCTAssertTrue(state.canCheckNow)
 
-    state.setCanCheckNow(false)
+    state.setCheckAvailability(.busy)
     XCTAssertFalse(state.canCheckNow)
 
-    state.setCanCheckNow(true)
+    state.setCheckAvailability(.unavailable)
+    XCTAssertFalse(state.canCheckNow)
+    XCTAssertNotEqual(state.checkAvailability, .busy, "未起動と進行中を同じ値へ潰さない")
+
+    state.setCheckAvailability(.available)
     XCTAssertTrue(state.canCheckNow)
+  }
+
+  /// 可否の決め方（`UpdaterService` が写す規則そのもの）。「updater が起動していない」と
+  /// 「セッションが進行中」は別の値に解決する——両方を false へ潰すと、確認が走っていない
+  /// dev ビルドで UI が「確認中…」を名乗ってしまう。
+  func testCheckAvailabilityResolvesUnstartedApartFromBusy() {
+    XCTAssertEqual(
+      UpdateState.CheckAvailability.resolve(started: true, updaterCanCheck: true), .available)
+    XCTAssertEqual(
+      UpdateState.CheckAvailability.resolve(started: true, updaterCanCheck: false), .busy,
+      "起動済みで受け付けない＝セッション進行中")
+    XCTAssertEqual(
+      UpdateState.CheckAvailability.resolve(started: false, updaterCanCheck: false), .unavailable,
+      "未起動は進行中ではない")
+    XCTAssertEqual(
+      UpdateState.CheckAvailability.resolve(started: false, updaterCanCheck: true), .unavailable,
+      "未起動なら Sparkle 側の可否に依らず不活性")
   }
 
   func testSeedLastCheckDoesNotOverwrite() {

@@ -62,7 +62,7 @@ final class SettingsPaletteUpdateTests: XCTestCase {
     let update = UpdateState(currentVersion: "0.1.0")
     var checked = 0
     update.onCheckNow = { checked += 1 }
-    update.setCanCheckNow(false)
+    update.setCheckAvailability(.busy)
     let palette = makePalette(update: update)
     palette.drillIntoUpdate()
 
@@ -70,9 +70,64 @@ final class SettingsPaletteUpdateTests: XCTestCase {
     palette.activate()
     XCTAssertEqual(checked, 0)
 
-    update.setCanCheckNow(true)
+    update.setCheckAvailability(.unavailable)
+    palette.activate()
+    XCTAssertEqual(checked, 0, "updater が動いていないときも走らない")
+
+    update.setCheckAvailability(.available)
     palette.activate()
     XCTAssertEqual(checked, 1, "受け付けられるようになれば走る")
+  }
+
+  /// 失敗カードの「再試行」は「今すぐ確認」と同じ導線＝同じ可否に従う。
+  /// 受け付けられない間に ↵ しても走らない（ボタンも disabled で減光する）。
+  func testFailedCardRetryFollowsCheckAvailability() {
+    let update = UpdateState(currentVersion: "0.1.0")
+    var checked = 0
+    update.onCheckNow = { checked += 1 }
+    update.fail(message: "offline")
+    let palette = makePalette(update: update)
+    palette.drillIntoUpdate()
+    palette.render.selected = 0  // 状態カード
+
+    update.setCheckAvailability(.busy)
+    palette.activate()
+    XCTAssertEqual(checked, 0, "セッション進行中は再試行も走らない")
+
+    update.setCheckAvailability(.unavailable)
+    palette.activate()
+    XCTAssertEqual(checked, 0, "updater が動いていないときも走らない")
+
+    update.setCheckAvailability(.available)
+    palette.activate()
+    XCTAssertEqual(checked, 1)
+  }
+
+  /// 「今すぐ確認」行の 3 態。**updater が動いていないとき（`.unavailable`）に「確認中…」を
+  /// 名乗らない**ことが要点——確認は走っていないので、名乗れば嘘になる。
+  func testCheckNowRowAppearanceNeverClaimsCheckingWhenUnavailable() {
+    let update = UpdateState(currentVersion: "0.1.0")
+    XCTAssertEqual(UpdateCheckNowAppearance.resolve(update), .actionable)
+
+    update.setCheckAvailability(.unavailable)
+    XCTAssertEqual(
+      UpdateCheckNowAppearance.resolve(update), .dimmed, "未起動は減光のみ（確認中を名乗らない）")
+
+    // 背景の定期確認中は phase が idle のまま。状態カードが理由を語らない唯一のケースで、
+    // ここだけ行が「確認中…」を名乗る（事実そのとおり走っている）。
+    update.setCheckAvailability(.busy)
+    XCTAssertEqual(UpdateCheckNowAppearance.resolve(update), .checking)
+
+    // 状態カードが理由を語る間は減光に留める。
+    update.beginDownload(version: "0.2.0")
+    XCTAssertEqual(UpdateCheckNowAppearance.resolve(update), .dimmed)
+    update.markReady(UpdateState.ReadyInfo(version: "0.2.0", notes: nil, date: nil, size: 0))
+    XCTAssertEqual(UpdateCheckNowAppearance.resolve(update), .dimmed)
+
+    // 自分の確認が走っている間は可否に依らずスピナー（fixture が .checking を注入しても同じ）。
+    update.beginCheck()
+    update.setCheckAvailability(.available)
+    XCTAssertEqual(UpdateCheckNowAppearance.resolve(update), .checking)
   }
 
   func testStatusRowPrimaryActionByPhase() {

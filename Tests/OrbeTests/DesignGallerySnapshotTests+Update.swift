@@ -81,6 +81,11 @@ extension DesignGallerySnapshotTests {
         "background_checking",
         DesignSceneFixtures.updateSettingsModel(DesignSceneFixtures.updateBackgroundCheckingState())
       ),
+      // updater が動いていないビルド。減光だけで「確認中…」を名乗らない（背景確認中との差）。
+      (
+        "unavailable",
+        DesignSceneFixtures.updateSettingsModel(DesignSceneFixtures.updateUnavailableState())
+      ),
     ]
     for (name, model) in cases {
       try writePNG(

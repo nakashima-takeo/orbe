@@ -244,14 +244,14 @@ enum DesignSceneFixtures {
     state.beginDownload(version: "0.2.0")  // 実フローと同順（found→DL 開始、ready はまだ立たない）
     state.setExpectedLength(13_000_000)
     state.receiveData(length: 8_300_000)
-    state.setCanCheckNow(false)
+    state.setCheckAvailability(.busy)
     return state
   }
 
   /// 適用待ち＋確認不可（staged 済みに再確認は無意味）。「今すぐ確認」行の減光を見る。
   static func updateReadyBusyState() -> UpdateState {
     let state = updateReadyState()
-    state.setCanCheckNow(false)
+    state.setCheckAvailability(.busy)
     return state
   }
 
@@ -259,7 +259,15 @@ enum DesignSceneFixtures {
   /// 唯一のケースで、「今すぐ確認」行だけがスピナー＋「確認中…」を名乗る。
   static func updateBackgroundCheckingState() -> UpdateState {
     let state = baseUpdateState()
-    state.setCanCheckNow(false)
+    state.setCheckAvailability(.busy)
+    return state
+  }
+
+  /// updater が動いていないビルド（起動ゲートを通らない dev ビルド）。確認は走らないので
+  /// 「確認中…」を名乗らず減光だけになる——`updateBackgroundCheckingState` との差がここで出る。
+  static func updateUnavailableState() -> UpdateState {
+    let state = baseUpdateState()
+    state.setCheckAvailability(.unavailable)
     return state
   }
 

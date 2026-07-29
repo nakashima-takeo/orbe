@@ -45,7 +45,8 @@ extension SettingsPaletteModel {
     case .status:
       switch update.phase {
       case .readyToRestart: update.onRestartNow()
-      case .failed: update.onCheckNow()
+      // 再試行は「今すぐ確認」と同じ導線＝同じ可否に従う（カードの再試行ボタンも disabled で減光）。
+      case .failed: if update.canCheckNow { update.onCheckNow() }
       case .idle, .checking, .downloading, .upToDate: break
       }
     case .version:
