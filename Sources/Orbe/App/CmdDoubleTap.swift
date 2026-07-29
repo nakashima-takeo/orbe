@@ -63,14 +63,10 @@ struct CmdDoubleTapDetector {
     return false
   }
 
-  /// keyDown の観測。押下↔解放・タップ間のどこに挟まっても不成立（リセット）。
-  /// ⌘ が押下中（修飾が残っている）なら全解放待ちへ。
-  mutating func keyDown() { interrupt() }
-
-  /// mouseDown の観測。keyDown と同じ扱い。
-  mutating func mouseDown() { interrupt() }
-
-  private mutating func interrupt() {
+  /// 割り込みの観測（keyDown・各種 mouseDown）。押下↔解放・タップ間のどこに挟まっても不成立
+  /// （リセット）。⌘ が押下中（修飾が残っている）なら全解放待ちへ。どの種類が挟まったかは
+  /// 判定に効かない——「⌘ 以外の入力があった」だけが素タップを壊す条件なので、入力語彙も 1 つ。
+  mutating func interrupt() {
     switch phase {
     case .firstDown, .secondDown:
       phase = .poisoned  // ⌘ 押下中の割り込み（⌘C 等）。⌘ 解放を新たな開始にしない
@@ -127,7 +123,7 @@ final class CmdDoubleTapMonitor {
       if let m = NSEvent.addLocalMonitorForEvents(
         matching: interruptMask,
         handler: { [weak self] in
-          self?.detector.keyDown()
+          self?.detector.interrupt()
           return $0
         })
       {
@@ -145,7 +141,7 @@ final class CmdDoubleTapMonitor {
       if let m = NSEvent.addGlobalMonitorForEvents(
         matching: interruptMask,
         handler: { [weak self] _ in
-          self?.detector.keyDown()
+          self?.detector.interrupt()
         })
       {
         monitors.append(m)

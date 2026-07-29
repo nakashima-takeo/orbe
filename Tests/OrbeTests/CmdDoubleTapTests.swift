@@ -51,10 +51,11 @@ final class CmdDoubleTapTests: XCTestCase {
 
   // MARK: 不成立
 
-  /// 押下中の keyDown（⌘C 等）はそのタップも次の解放も無効（⌘ 解放を開始点にしない）。
-  func testKeyDownDuringPressInvalidates() {
+  /// 押下中の割り込み（⌘C の keyDown・クリックの mouseDown。detector から見れば同じ入力）は
+  /// そのタップも次の解放も無効（⌘ 解放を開始点にしない）。
+  func testInterruptDuringPressInvalidates() {
     _ = detector.flagsChanged(.commandOnly, at: 0.0)
-    detector.keyDown()  // ⌘C
+    detector.interrupt()  // ⌘C
     XCTAssertFalse(detector.flagsChanged(.none, at: 0.1))
     XCTAssertFalse(tap(down: 0.2, up: 0.3), "汚れたタップは 1 回目に数えない")
     XCTAssertTrue(tap(down: 0.4, up: 0.5), "クリーンな 2 タップ目で成立する")
@@ -63,26 +64,18 @@ final class CmdDoubleTapTests: XCTestCase {
   /// ⌘C→⌘V の速い連打で発火しない。
   func testFastCmdCVDoesNotFire() {
     _ = detector.flagsChanged(.commandOnly, at: 0.0)
-    detector.keyDown()  // C
+    detector.interrupt()  // C
     XCTAssertFalse(detector.flagsChanged(.none, at: 0.05))
     _ = detector.flagsChanged(.commandOnly, at: 0.10)
-    detector.keyDown()  // V
+    detector.interrupt()  // V
     XCTAssertFalse(detector.flagsChanged(.none, at: 0.15))
   }
 
-  /// タップ間（解放後）の keyDown も不成立に落とす。
-  func testKeyDownBetweenTapsInvalidates() {
+  /// タップ間（解放後）の割り込みも不成立に落とす。
+  func testInterruptBetweenTapsInvalidates() {
     tap(down: 0.0, up: 0.05)
-    detector.keyDown()
+    detector.interrupt()
     XCTAssertFalse(tap(down: 0.1, up: 0.2))
-  }
-
-  /// mouseDown も keyDown と同じ扱い。
-  func testMouseDownDuringPressInvalidates() {
-    _ = detector.flagsChanged(.commandOnly, at: 0.0)
-    detector.mouseDown()
-    XCTAssertFalse(detector.flagsChanged(.none, at: 0.1))
-    XCTAssertFalse(tap(down: 0.15, up: 0.2))
   }
 
   /// 他修飾が挟まる（⌘⇧ 等）と不成立。修飾の全解放までは新しいタップを始めない。
@@ -98,7 +91,7 @@ final class CmdDoubleTapTests: XCTestCase {
   /// ⌘Tab 相当（⌘押下→keyDown→他アプリへ）でも、以後のクリーンな 2 タップだけで発火する。
   func testCmdTabThenCleanTapsFires() {
     _ = detector.flagsChanged(.commandOnly, at: 0.0)
-    detector.keyDown()  // Tab
+    detector.interrupt()  // Tab
     XCTAssertFalse(detector.flagsChanged(.none, at: 0.3))
     XCTAssertFalse(tap(down: 0.4, up: 0.45))
     XCTAssertTrue(tap(down: 0.5, up: 0.55))
