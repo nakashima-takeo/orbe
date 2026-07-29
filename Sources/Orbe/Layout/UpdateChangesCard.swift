@@ -8,40 +8,22 @@ struct UpdateChangesCard: View {
   /// カード全体の高さ上限（窓に収める。UpdateChangesOverlay が窓高から算出して渡す）。
   let maxHeight: CGFloat
   @Environment(\.localization) private var l10n
-  /// ノート内容の実測高（ハグ用）と、ノート以外＝見出し・検証済み行・ボタン・脚注の実測高。
+  /// ノート内容の実測高（ノート部をこれで頭打ちにして内容にハグさせる）。
   @State private var notesContentHeight: CGFloat = 0
-  @State private var chromeHeight: CGFloat = 0
-
-  /// カード内容の上下パディング（chrome 高に含まれないので上限から別途差し引く）。
-  private static let verticalPadding = Theme.Space.bar + 2
-
-  /// ノート部の実効高。内容にハグしつつ「上限 − ノート以外」で頭打ち（超過分は内部スクロールへ）。
-  private var notesHeight: CGFloat {
-    let available = max(0, maxHeight - chromeHeight - Self.verticalPadding * 2)
-    return min(notesContentHeight, available)
-  }
 
   var body: some View {
     GlassPanel(level: .settings, cornerRadius: 14) {
       VStack(alignment: .leading, spacing: 0) {
-        header.background(chromeProbe)
+        header
         if let notes = state.ready?.notes { notesScroll(notes) }
-        footer.background(chromeProbe)
+        footer
       }
-      .padding(.vertical, Self.verticalPadding)
+      .padding(.vertical, Theme.Space.bar + 2)
       .padding(.horizontal, Theme.Space.span)
       .frame(width: 450, alignment: .leading)
     }
-    // 実測が届くまでの 1 フレームも窓を超えないよう、器そのものにも上限を効かせる。
+    // 窓に収める上限はここだけが持つ。中の配分は VStack に任せる。
     .frame(maxHeight: maxHeight)
-    .onPreferenceChange(UpdateChromeHeightKey.self) { chromeHeight = $0 }
-  }
-
-  /// 見出し・検証済み行・ボタン・脚注の実測高を合算して chrome 高に集約する probe。
-  private var chromeProbe: some View {
-    GeometryReader { geo in
-      Color.clear.preference(key: UpdateChromeHeightKey.self, value: geo.size.height)
-    }
   }
 
   /// ノート部。長いノートはここだけがスクロールし、見出し・検証済み行・ボタンは常に見える。
@@ -56,8 +38,9 @@ struct UpdateChangesCard: View {
             Color.clear.preference(key: UpdateNotesHeightKey.self, value: geo.size.height)
           })
     }
-    // 定高を与える（fixedSize だと内容高へ伸び切り、カードが窓外へはみ出してボタンに届かなくなる）。
-    .frame(height: notesHeight)
+    // 内容高までしか伸びない可変高。剛体の見出し・検証済み行・ボタンが先に高さを取り、
+    // 残った分だけがここへ来る——収まれば内容ぴったり、溢れればカードの上限で頭打ちになる。
+    .frame(maxHeight: notesContentHeight)
     .scrollIndicators(.automatic)
     .onPreferenceChange(UpdateNotesHeightKey.self) { notesContentHeight = $0 }
   }
@@ -140,14 +123,8 @@ struct UpdateChangesCard: View {
   }
 }
 
-/// ノート以外（見出し・検証済み行・ボタン・脚注）の合算高。ノート部の上限から差し引く。
-struct UpdateChromeHeightKey: PreferenceKey {
-  static let defaultValue: CGFloat = 0
-  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value += nextValue() }
-}
-
 /// ノート内容の実測高（内容ハグ用）。
-struct UpdateNotesHeightKey: PreferenceKey {
+private struct UpdateNotesHeightKey: PreferenceKey {
   static let defaultValue: CGFloat = 0
   static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
     value = max(value, nextValue())
