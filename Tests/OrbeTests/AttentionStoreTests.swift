@@ -13,6 +13,16 @@ final class AttentionStoreTests: XCTestCase {
       stateChangedAt: Date())
   }
 
+  /// 到来時刻と滞留の満了時刻。`expiresAt` は収縮の開始時刻で、②の総寿命はここから 600ms 先。
+  /// `arrivedAt` は「新しい到来か」を MenuBarController が見分ける印なので、到来時刻そのもの。
+  func testNoteTransientStampsArrivalAndDwell() {
+    let store = AttentionStore()
+    let now = Date(timeIntervalSinceReferenceDate: 1_000_000)
+    store.noteTransient(row(paneId: 1, state: "waiting"), now: now)
+    XCTAssertEqual(store.transient?.arrivedAt, now)
+    XCTAssertEqual(store.transient?.expiresAt, now.addingTimeInterval(22))
+  }
+
   /// 同じ paneId・同じ状態で一覧に居る限りピルは残り、行の中身が変わっても差し替えない
   /// （立て直すのは report 経路の仕事）。
   func testTransientSurvivesWhileProjected() {
