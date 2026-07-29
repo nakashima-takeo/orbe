@@ -132,19 +132,25 @@ struct MenuBarStatusView: View {
       }
       textSlot(row.workspaceName, color: Color.theme.textPrimary)
         .pillSlotCap(Self.transientWorkspaceCap)
-      // muted は暗地で沈む——読める階調へ上げる。上限を宣言せず残り予算を吸う。
-      textSlot(row.message ?? row.tabTitle, color: Color.theme.statusText)
+      // 上限を宣言せず残り予算を吸う。インクは WS 名より一段沈めて「名前 → 中身」の順を作る
+      // （見本の副次インク #a49bb4 は②の地に対し 4.3:1 で、design-system §3 の本文 4.5:1 を
+      // 満たさない。`textSecondary` は #b8afc4＝5.4:1 で、条件を満たすうちの最も近い階調）。
+      textSlot(row.message ?? row.tabTitle, color: Color.theme.textSecondary)
     }
   }
 
-  /// ◐。閉じ切りの①では減光した前景モノクロ（.primary＝メニューバー外観追従）で、他の常駐
-  /// アイコンと同じ template 相当の見え。②の暗地が立つぶんだけブランドグラデへクロスフェードする。
+  /// ◐。①③④は前景モノクロ（.primary＝メニューバー外観追従）で、他の常駐アイコンと同じ
+  /// template 相当の見え——見本がバー全体へ与える `chromeText` は、バーを持たない実装では
+  /// システムの前景にあたる（①はさらに減光する）。②の暗地が立つぶんだけ、見本どおりの
+  /// `textPrimary` を dark で解決した単色へクロスフェードする（地が固定の暗色なので dark ピン）。
   private var brandGlyph: some View {
     let lift = eased(MenuBarArrival.Curve.glyph)
     return ZStack {
       OrbeMarkGlyph(size: Self.glyphSize, color: .primary)
         .opacity(slotCount > 0 ? 1 : 0.45 + 0.55 * lift)
-      OrbeMarkGlyph(size: Self.glyphSize).opacity(groundLift)
+      OrbeMarkGlyph(size: Self.glyphSize, color: Color.theme.textPrimary)
+        .environment(\.colorScheme, .dark)
+        .opacity(groundLift)
     }
   }
 
