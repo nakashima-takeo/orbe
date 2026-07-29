@@ -171,7 +171,7 @@ struct UpdateNotesView: View {
             Text(title)
               .font(Font.theme.meta.weight(.bold))
               .foregroundStyle(Color.theme.textPrimary)
-              .tracking(Theme.Typography.trackingStatus * 2)
+              .tracking(Theme.Typography.trackingLabel)
           }
           ForEach(Array(section.elements.enumerated()), id: \.offset) { _, element in
             switch element.kind {
@@ -191,14 +191,21 @@ struct UpdateNotesView: View {
     }
   }
 
+  /// 本文の行送りは design-system §2.3 の `line.body` 1.6。12.5pt 本文の素の行高 15 との差。
+  private static let bodyLineSpacing: CGFloat = 12.5 * Theme.Typography.lineBody - 15
+
   /// tint も渡すのは、素の URL が自動でリンク化されるため——リンクは foregroundStyle ではなく
   /// tint で色が付き、既定のままだと出典行だけがパレット外の青で浮く。
+  /// 上下の余白は行送りの半分——lineSpacing は行と行の間しか広げないので、これを足して初めて
+  /// 1 行の要素も複数行の要素も同じ行ボックスを持ち、要素間の余白（spacing）が素の値のまま効く。
   private func noteText(_ text: AttributedString, color: Color) -> some View {
     Text(text)
       .font(Font.theme.body)
+      .lineSpacing(Self.bodyLineSpacing)
       .foregroundStyle(color)
       .tint(color)
       .fixedSize(horizontal: false, vertical: true)
+      .padding(.vertical, Self.bodyLineSpacing / 2)
   }
 }
 
