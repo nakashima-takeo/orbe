@@ -11,8 +11,8 @@ import Observation
   var listRows: [AttentionRow] { AttentionSnapshot.listRows(rows) }
   /// メニューバーの件数 = waiting+done のみ（working は数えない）。
   var count: Int { listRows.count }
-  /// working の減光集約ラベル（0 件は nil）。
-  var workingLabel: String? { AttentionSnapshot.workingLabel(rows) }
+  /// working の減光集約 1 行の素材（件数と WS 名。0 件は nil）。書式は描画側が L10n で組む。
+  var workingSummary: (count: Int, names: [String])? { AttentionSnapshot.workingSummary(rows) }
 
   /// メニューバー②（状態変化の瞬間の滲み出し）の**滞留**時間（秒）。ユーザー確定値。
   /// ②の尺のうちここが持つのは滞留だけで、展開・艶・収縮は `MenuBarArrival`。

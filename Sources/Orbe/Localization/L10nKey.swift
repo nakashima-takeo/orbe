@@ -315,6 +315,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case attentionHintSelect
   case attentionHintClose
   case attentionEmpty
+  case menubarWorkingSummary
   case menubarClickToPane
   case menubarOpenOrbe
   case menubarPermissionHint

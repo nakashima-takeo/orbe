@@ -18,6 +18,10 @@ final class MenuBarController: NSObject {
   private unowned let windowController: WindowController
   private let localization: LocalizationStore
   private let statusItem: NSStatusItem
+  /// chrome と同じ実ホルダー（別 NSHostingView root なので Environment は継承されない）。
+  /// ピルの状態グリフとドロップダウンの行が、パレットと同じ上書き・フォントで描かれる。
+  private let iconResolver: AgentIconResolver
+  private let fontResolver: ChromeFontResolver
   private let host: MenuBarItemHostingView
   private let ui = MenuBarUIState()
   private let driver = MenuBarArrivalDriver()
@@ -31,9 +35,12 @@ final class MenuBarController: NSObject {
     self.store = store
     self.windowController = windowController
     self.localization = localization
+    iconResolver = windowController.agentIconResolver
+    fontResolver = windowController.fontResolver
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     host = MenuBarItemHostingView(
-      rootView: MenuBarStatusView(store: store, ui: ui, phase: .closed))
+      rootView: MenuBarStatusView(
+        store: store, ui: ui, phase: .closed, iconResolver: windowController.agentIconResolver))
     super.init()
 
     // button に SwiftUI を貼る（静的 NSImage では②の滲み出しが表現できない）。
@@ -117,14 +124,20 @@ final class MenuBarController: NSObject {
 
   // MARK: - ドロップダウン
 
+  /// ドロップダウンが開いているか。⌘⌘ の宛先分岐（`AppDelegate`）が読む。
+  var isDropdownOpen: Bool { dropdown != nil }
+
   /// ドロップダウンを開く（アイテムクリック・権限ありの global ⌘⌘）。
-  /// メニューバー非表示（フルスクリーン等）で statusItem の窓が無ければ no-op。
+  /// アイテムが隠れている（ユーザーがメニューバーから外した・溢れた）ときは、錨が画面に無いので
+  /// no-op。`button.window` は隠れていても非 nil のまま古い frame を返すので、可視判定は
+  /// `isVisible` が持つ（窓の nil 判定はそれ自体では錨の不在を意味しない補助のガード）。
   func showDropdown() {
-    guard dropdown == nil else { return }
+    guard dropdown == nil, statusItem.isVisible else { return }
     guard let buttonWindow = statusItem.button?.window else { return }
     let d = MenuBarDropdown(
       store: store, localization: localization,
-      permissionGranted: CmdDoubleTapMonitor.globalMonitoringPermitted)
+      permissionGranted: CmdDoubleTapMonitor.globalMonitoringPermitted,
+      iconResolver: iconResolver, fontResolver: fontResolver)
     d.onSelectRow = { [weak self] row in
       guard let self else { return }
       self.closeDropdown()
@@ -201,7 +214,8 @@ final class MenuBarController: NSObject {
 
   /// 現在の位相を content へ流し、intrinsic を確定させてから `statusItem.length` へ反映する。
   private func render() {
-    host.rootView = MenuBarStatusView(store: store, ui: ui, phase: driver.phase)
+    host.rootView = MenuBarStatusView(
+      store: store, ui: ui, phase: driver.phase, iconResolver: iconResolver)
     host.layoutSubtreeIfNeeded()  // 新しい content の intrinsic を確定させてから幅を読む
     syncItemSize()
   }

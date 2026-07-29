@@ -15,6 +15,9 @@ struct MenuBarStatusView: View {
   let ui: MenuBarUIState
   /// 開閉と艶の位相。呼び出し側が必ず明示する（既定値は置かない）。
   let phase: MenuBarArrival.Phase
+  /// 状態アイコン上書き（別 NSHostingView root のため chrome と同じ実ホルダーを注入する。
+  /// 既定は素の割り当て＝gallery / preview は既定グリフ）。
+  var iconResolver = AgentIconResolver()
 
   /// ②ピル全体の幅上限（メニューバーの他アイテムを圧迫しない）。ここから内側予算
   /// （`transientMaxWidth` − 水平 padding×2）が決まり、`PillRow` がそれを固定部（グリフ・
@@ -127,7 +130,7 @@ struct MenuBarStatusView: View {
   private func transientGroup(_ row: AttentionRow) -> some View {
     PillRow(spacing: Theme.Space.note, budget: Self.textBudget) {
       if let kind = AgentStateIcon.kind(state: row.state) {
-        StatusGlyphView(kind: kind, size: 11)
+        StatusGlyphView(kind: kind, size: 11, symbol: iconResolver.symbol(for: kind))
           .environment(\.colorScheme, .dark)
       }
       textSlot(row.workspaceName, color: Color.theme.textPrimary)

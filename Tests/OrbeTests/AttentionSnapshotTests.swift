@@ -99,25 +99,29 @@ final class AttentionSnapshotTests: XCTestCase {
     XCTAssertEqual(AttentionSnapshot.listRows(rows).count, 2)
   }
 
-  /// working 集約ラベルは件数＋WS 名（重複排除・出現順）。working 0 件は nil。
-  func testWorkingLabelDeduplicatesWorkspaces() {
+  /// working 集約の素材は件数（ペイン数）＋WS 名（重複排除・**出現順**）。working 0 件は nil。
+  /// 名は辞書順と出現順が食い違う組（zeta が先・alpha が後）で採る——`ws1, ws2` のように
+  /// 両者が一致する組だと、実装が誤って sort しても通ってしまう。
+  func testWorkingSummaryDeduplicatesWorkspacesInAppearanceOrder() {
     let base = Date()
-    let a = Workspace(name: "ws1", rootPath: "/tmp/ws1")
+    let a = Workspace(name: "zeta", rootPath: "/tmp/zeta")
     a.activated = true
-    a.tabs.append(TerminalController(initialCwd: "/tmp/ws1"))
-    a.tabs.append(TerminalController(initialCwd: "/tmp/ws1"))
+    a.tabs.append(TerminalController(initialCwd: "/tmp/zeta"))
+    a.tabs.append(TerminalController(initialCwd: "/tmp/zeta"))
     a.tabs[0].controlAllPanes()[0].agentState = "working"
     a.tabs[0].controlAllPanes()[0].agentStateChangedAt = base
     a.tabs[1].controlAllPanes()[0].agentState = "working"
     a.tabs[1].controlAllPanes()[0].agentStateChangedAt = base.addingTimeInterval(-1)
-    let b = workspace(name: "ws2")
+    let b = workspace(name: "alpha")
     setState(b, state: "working", at: base.addingTimeInterval(-2))
     let rows = AttentionSnapshot.rows(of: [a, b])
-    XCTAssertEqual(AttentionSnapshot.workingLabel(rows), "3 working — ws1, ws2")
+    let summary = AttentionSnapshot.workingSummary(rows)
+    XCTAssertEqual(summary?.count, 3, "件数は WS 数ではなく working ペイン数")
+    XCTAssertEqual(summary?.names, ["zeta", "alpha"], "重複排除して出現順（辞書順に直さない）")
 
     let waitingOnly = workspace(name: "w")
     setState(waitingOnly, state: "waiting", at: base)
-    XCTAssertNil(AttentionSnapshot.workingLabel(AttentionSnapshot.rows(of: [waitingOnly])))
+    XCTAssertNil(AttentionSnapshot.workingSummary(AttentionSnapshot.rows(of: [waitingOnly])))
   }
 
   // MARK: elapsedLabel

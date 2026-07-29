@@ -8,6 +8,8 @@ extension L10n {
     .attentionHintSelect: ("選択", "Select"),
     .attentionHintClose: ("閉じる", "Close"),
     .attentionEmpty: ("対応するものはありません", "Nothing needs your attention"),
+    // ④の working 減光集約 1 行。%lld＝件数・%@＝ワークスペース名の列挙（重複排除・出現順）。
+    .menubarWorkingSummary: ("%lld 実行中 — %@", "%lld working — %@"),
     .menubarClickToPane: ("クリックでそのペインへ", "Click to jump to the pane"),
     .menubarOpenOrbe: ("orbe を開く", "Open orbe"),
     .menubarPermissionHint: (
@@ -17,7 +19,7 @@ extension L10n {
     .settingsGlobalCmdTapLabel: ("グローバル ⌘⌘（メニューバー）", "Global ⌘⌘ (menu bar)"),
     .settingsGlobalCmdTapGranted: ("有効", "Enabled"),
     .settingsGlobalCmdTapDenied: (
-      "未許可 — ↵ で System Settings を開く", "Not granted — ↵ opens System Settings"
+      "未許可 — ↵ でシステム設定を開く", "Not granted — ↵ opens System Settings"
     ),
     .settingsGlobalCmdTapRestartNote: (
       "付与後に反映されない場合は Orbe を再起動", "Restart Orbe if it doesn't take effect after granting"

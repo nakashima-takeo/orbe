@@ -51,13 +51,15 @@ enum AttentionSnapshot {
     rows.filter { $0.state != "working" }
   }
 
-  /// working の減光集約ラベル（`2 working — ws1, ws2`）。WS 名は重複排除・出現順。0 件は nil。
-  static func workingLabel(_ rows: [AttentionRow]) -> String? {
+  /// working の減光集約 1 行の**素材**（件数と WS 名。名は重複排除・出現順）。0 件は nil。
+  /// 書式は持たない——語順が言語で変わるので、組み立ては L10n テンプレート
+  /// （`.menubarWorkingSummary`）を通す描画側の仕事。
+  static func workingSummary(_ rows: [AttentionRow]) -> (count: Int, names: [String])? {
     let working = rows.filter { $0.state == "working" }
     guard !working.isEmpty else { return nil }
     var seen = Set<String>()
     let names = working.map(\.workspaceName).filter { seen.insert($0).inserted }
-    return "\(working.count) working — \(names.joined(separator: ", "))"
+    return (working.count, names)
   }
 
   /// 経過時間の表示（`45s` / `8m` / `2h` / `3d`）。負は 0s に丸める。

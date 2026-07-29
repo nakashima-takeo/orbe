@@ -22,7 +22,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       localization: windowController.localization)
     // 前面時の ⌘⌘ → Attention パレットのトグル（local monitor は自アプリのイベントのみ・権限不要）。
     localCmdTap = CmdDoubleTapMonitor(scope: .local) { [weak self] in
-      self?.windowController.toggleAttentionPalette()
+      guard let self else { return }
+      // ドロップダウンは `.nonactivatingPanel` が key を取るので、開いている間の ⌘⌘ は
+      // 「他アプリのイベント」ではなくなり global ではなく **local** へ届く。ここで宛先を
+      // 分けないと、背面のメイン窓で Attention パレットが無言で開く（開いた覚えのない
+      // パレットが次の前面化で出る）。開けたものと同じジェスチャで閉じ切る。
+      if let menuBar = self.menuBarController, menuBar.isDropdownOpen {
+        menuBar.closeDropdown()
+        return
+      }
+      self.windowController.toggleAttentionPalette()
     }
     syncGlobalCmdTapMonitor()
   }

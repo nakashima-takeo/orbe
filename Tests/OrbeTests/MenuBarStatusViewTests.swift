@@ -42,8 +42,11 @@ final class MenuBarStatusViewTests: XCTestCase {
   }
 
   /// transient を 1 件載せた store。②が指す行は**一覧にも居る**——`apply(rows:)` がその行を
-  /// 見失えば②はその場で取り下げられるので、②生存中の `count` は必ず 1 以上になる。
-  /// 件数 0 の②は本番で起こり得ず、固定しても何も守らない（幅の契約が実物より狭く出る）。
+  /// 見失えば②はその場で取り下げられるので、行を入れた後の `count` は必ず 1 以上になる。
+  /// （`noteTransient` は report 経路が即座に立て、一覧が追いつくのは次の chrome coalesce なので、
+  /// その間だけは「②生存・件数 0」が実際に起きる。それは事故ではなく `arrivedCount` を見せる
+  /// 理由そのもので、画は `menubar_arrival_first` が持つ。ここで測りたいのは追いついた後の姿。）
+  /// 件数を欠いた構成で測ると幅の契約が実物より狭く出るので、必ず一覧を先に入れる。
   private func transientStore(workspace: String, message: String) -> AttentionStore {
     let store = AttentionStore()
     let row = AttentionRow(
@@ -83,12 +86,16 @@ final class MenuBarStatusViewTests: XCTestCase {
   }
 
   /// 長い WS 名＋長文でもピル全体が幅上限を超えない（メニューバーの他アイテムを圧迫しない）。
+  /// 件数スロットを**立てた**構成で測る——一覧を先に入れて `arrivedCount` を 1 以上に焼く。
+  /// 件数が無い②は本番で起こり得ないうえ、そのぶん（間隔＋スロット上限）狭いところで頭打ちに
+  /// なるので、`textBudget` の導出がずれても上限に触れず素通りしてしまう。
   func testTransientPillCapsOverallWidth() {
     let store = AttentionStore()
     let longRow = AttentionRow(
       paneId: 1, workspaceName: String(repeating: "workspace-name-", count: 10),
       tabTitle: "tab", state: "waiting",
       message: String(repeating: "とても長い文言 ", count: 40), stateChangedAt: Date())
+    store.apply(rows: [longRow])
     store.noteTransient(longRow)
     let size = fittingSize(store: store, phase: .open)
     // 上限＝ピル cap ＋ 外側の水平 padding（hair×2）。

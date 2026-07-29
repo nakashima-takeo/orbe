@@ -15,7 +15,10 @@ final class MenuBarDropdown {
   private var mouseMonitor: Any?
   private var closed = false
 
-  init(store: AttentionStore, localization: LocalizationStore, permissionGranted: Bool) {
+  init(
+    store: AttentionStore, localization: LocalizationStore, permissionGranted: Bool,
+    iconResolver: AgentIconResolver, fontResolver: ChromeFontResolver
+  ) {
     panel = DropdownPanel(
       contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
       backing: .buffered, defer: false)
@@ -29,6 +32,7 @@ final class MenuBarDropdown {
 
     let view = MenuBarDropdownView(
       store: store, localization: localization, permissionGranted: permissionGranted,
+      iconResolver: iconResolver, fontResolver: fontResolver,
       onSelectRow: { [weak self] row in self?.onSelectRow(row) },
       onOpenOrbe: { [weak self] in self?.onOpenOrbe() },
       onPermissionHint: { [weak self] in self?.onPermissionHint() })
@@ -106,6 +110,10 @@ struct MenuBarDropdownView: View {
   let store: AttentionStore
   let localization: LocalizationStore
   let permissionGranted: Bool
+  /// 状態アイコン上書き・フォント割り当て（別 NSHostingView root のため chrome と同じ実ホルダーを
+  /// 注入する。行の形をパレットと共用する以上、見えも同じでなければならない）。既定は素の割り当て。
+  var iconResolver = AgentIconResolver()
+  var fontResolver = ChromeFontResolver()
   var onSelectRow: (AttentionRow) -> Void
   var onOpenOrbe: () -> Void
   var onPermissionHint: () -> Void
@@ -146,18 +154,21 @@ struct MenuBarDropdownView: View {
               .onHover { if $0 { hoveredPaneId = row.paneId } }
           }
         }
-        if let workingLabel = store.workingLabel {
+        if let working = store.workingSummary {
           Rectangle()
             .fill(Color.theme.borderInk.opacity(0.08))
             .frame(height: Theme.Stroke.hairline)
             .padding(.vertical, 5)
             .padding(.horizontal, Theme.Space.step)
           HStack(spacing: Theme.Space.step) {
-            StatusGlyphView(kind: .working, size: 12)
-            Text(workingLabel)
-              .font(Font.theme.chrome)
-              .foregroundStyle(Color.theme.textMuted)
-              .lineLimit(1)
+            StatusGlyphView(kind: .working, size: 12, symbol: iconResolver.symbol(for: .working))
+            Text(
+              localization.format(
+                .menubarWorkingSummary, working.count, working.names.joined(separator: ", "))
+            )
+            .font(Font.theme.chrome)
+            .foregroundStyle(Color.theme.textMuted)
+            .lineLimit(1)
           }
           .padding(.vertical, Theme.Space.note)
           .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
@@ -201,5 +212,7 @@ struct MenuBarDropdownView: View {
         .strokeBorder(Color.theme.borderInk.opacity(0.08), lineWidth: Theme.Stroke.hairline)
     )
     .environment(\.localization, localization)
+    .environment(\.agentIconResolver, iconResolver)
+    .environment(\.chromeFontResolver, fontResolver)
   }
 }
