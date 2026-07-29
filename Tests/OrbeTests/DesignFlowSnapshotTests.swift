@@ -234,6 +234,7 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
   /// 無ければ「文言表示中は件数を出さない」が画で確かめられる。02 が 01 と同形なのは、到来の
   /// 瞬間に幅も姿も飛ばないこと（1 つのピルに統合した理由そのもの）の証拠。畳まれかけの
   /// 03・07 は件数が途中の濃度で残る——`countFold` は開き具合の関数で、0 になるのは開き切り。
+  /// 数字が 2 から 3 へ変わるのは 07（収縮）から。開いていく側はずっと到来時の 2 を見せる。
   func testMenubarArrival() throws {
     let t0 = Date()
     let store = AttentionStore()
@@ -266,8 +267,8 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
         (
           "expand_half",
           {
-            // 一覧は report 経路の次の coalesce で 3 件へ。この位相では件数が畳まれかけ
-            // （`countFold` ≒ 0.2）なので、2→3 の差は画にほとんど出ない。
+            // 一覧は report 経路の次の coalesce で 3 件へ。開いていく間の②が見せるのは到来した
+            // 瞬間の 2 なので、ここで 3 になっても画は動かない（3 が出るのは収縮の 07 から）。
             store.apply(rows: seeded + [arriving])
             driver.tick(now: t0.addingTimeInterval(0.42))
           }
@@ -280,6 +281,53 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
           {
             driver.expired(at: t0.addingTimeInterval(22))
             driver.tick(now: t0.addingTimeInterval(22.3))
+          }
+        ),
+        (
+          "closed",
+          {
+            if driver.tick(now: t0.addingTimeInterval(22.6)) { store.transient = nil }
+          }
+        ),
+      ])
+  }
+
+  /// 原典ケース①（待ち 0 件 → 新着 1 件）。②が生きている間ずっと `store.count` は 1 なのに、
+  /// 00〜03 のどのコマにも数字が無く、04 で初めて「1」が現れる——これが「開くとき仕舞い、
+  /// 閉じながら生まれる」の実体で、②が見せるのが**到来した瞬間の件数**である証拠。
+  /// 一覧は展開の途中（02）で 1 件へ追いつくが、画は動かない。
+  func testMenubarArrivalFirst() throws {
+    let t0 = Date()
+    let store = AttentionStore()
+    let driver = MenuBarArrivalDriver()
+    let arriving = AttentionRow(
+      paneId: 9101, workspaceName: "orbe-core", tabTitle: "emit API 移行", state: "waiting",
+      message: "Bash の許可が必要です", stateChangedAt: t0)
+    try flow(
+      "menubar_arrival_first", size: NSSize(width: 420, height: 64),
+      render: { menuBarSnapshot(store: store, phase: driver.phase) },
+      steps: [
+        ("quiet", {}),  // ① 減光 ◐・地なし・数字なし
+        (
+          "arrive",
+          {
+            store.noteTransient(arriving, now: t0)  // 到来時の件数は 0
+            driver.arrived(at: t0)
+          }
+        ),
+        (
+          "expand_half",
+          {
+            store.apply(rows: [arriving])  // 一覧が 1 件へ追いつく。画は動かない
+            driver.tick(now: t0.addingTimeInterval(0.42))
+          }
+        ),
+        ("open", { driver.tick(now: t0.addingTimeInterval(0.84)) }),
+        (
+          "collapse_half",
+          {
+            driver.expired(at: t0.addingTimeInterval(22))
+            driver.tick(now: t0.addingTimeInterval(22.3))  // ここで初めて「1」が生まれる
           }
         ),
         (

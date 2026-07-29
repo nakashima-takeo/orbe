@@ -41,13 +41,16 @@ final class MenuBarStatusViewTests: XCTestCase {
     XCTAssertLessThanOrEqual(size.height, 22)
   }
 
-  /// transient を 1 件だけ載せた store。
+  /// transient を 1 件載せた store。②が指す行は**一覧にも居る**——`apply(rows:)` がその行を
+  /// 見失えば②はその場で取り下げられるので、②生存中の `count` は必ず 1 以上になる。
+  /// 件数 0 の②は本番で起こり得ず、固定しても何も守らない（幅の契約が実物より狭く出る）。
   private func transientStore(workspace: String, message: String) -> AttentionStore {
     let store = AttentionStore()
-    store.noteTransient(
-      AttentionRow(
-        paneId: 1, workspaceName: workspace, tabTitle: "tab", state: "waiting", message: message,
-        stateChangedAt: Date()))
+    let row = AttentionRow(
+      paneId: 1, workspaceName: workspace, tabTitle: "tab", state: "waiting", message: message,
+      stateChangedAt: Date())
+    store.apply(rows: [row])
+    store.noteTransient(row)
     return store
   }
 
@@ -117,13 +120,17 @@ final class MenuBarStatusViewTests: XCTestCase {
   /// WS 名が短いぶんの幅は本文が吸う。本文が長ければ、WS 名の長短にかかわらずピルは
   /// 予算を使い切る＝同じ幅になる（WS 名が短いときだけピルが痩せる＝文言を出し切れて
   /// いない、ということが起きない）。
+  ///
+  /// 許容は本文フォント 1 文字ぶん。本文は与えられた予算ちょうどでは切れず**字形の境界まで**
+  /// しか伸びないので、WS 名の長短で余る端数が変わる。破れ（本文が slack を吸わない）は WS 名
+  /// 2 つの差＝100pt 超で出るため、1 文字の緩みでも取り逃さない。
   func testTransientPillGivesSpareWidthToMessage() {
     XCTAssertEqual(
       fittingSize(store: transientStore(workspace: shortWS, message: longMessage), phase: .open)
         .width,
       fittingSize(store: transientStore(workspace: longWS, message: longMessage), phase: .open)
         .width,
-      accuracy: 2, "長い本文では WS 名の長短によらず予算を使い切る")
+      accuracy: 12, "長い本文では WS 名の長短によらず予算を使い切る")
   }
 
   /// WS 名スロットは上限の範囲で**内容へハグする**。同じ本文なら、WS 名が短いピルは長い
@@ -212,23 +219,53 @@ final class MenuBarStatusViewTests: XCTestCase {
   /// **文言表示中は件数を出さない**（開き切りでは件数が幅に一切効かない）。
   /// **閉じた姿は実件数を示す**（閉じ切りでは件数の桁が幅に出る）。
   ///
-  /// 短い文言を使う——`PillRow.measure` は畳み具合を見ないので、件数スロットは開き切りでも
-  /// 自分の取り分（`gap + min(自然幅, countCap)`）を予算に確保する。文言が切り詰まるほど長いと
-  /// その取り分の桁差ぶんだけ文言の allowance が動き、総幅に出てしまう。ここで固定するのは
-  /// 「切り詰めが起きない範囲では件数の桁が幅に効かない」まで。
+  /// 文言の長短を問わず成立する。`PillRow` の予約は上限（`countCap`）ぶんの固定量なので、
+  /// 桁が変わっても前の文言スロットの取り分が動かない——**切り詰めが起きる長文でこそ効く**
+  /// （自然幅で予約していた頃は、ここで桁差がそのまま総幅に出ていた）。
   func testCountLeavesWidthUntouchedWhileOpen() {
-    func width(phase: MenuBarArrival.Phase, count: Int) -> CGFloat {
+    func width(phase: MenuBarArrival.Phase, count: Int, message: String) -> CGFloat {
       let store = AttentionStore()
-      store.apply(rows: (1...count).map { row(paneId: $0, state: "waiting") })
-      store.noteTransient(row(state: "waiting", message: shortMessage))
+      let rows = (1...count).map { row(paneId: $0, state: "waiting") }
+      store.apply(rows: rows)
+      store.noteTransient(row(state: "waiting", message: message))
       return fittingSize(store: store, phase: phase).width
     }
+    for (label, message) in [("短文", shortMessage), ("長文（切り詰めあり）", longMessage)] {
+      XCTAssertEqual(
+        width(phase: .open, count: 2, message: message),
+        width(phase: .open, count: 99, message: message), accuracy: 0.5,
+        "\(label): 開き切りでは件数の桁が幅に出ない")
+      XCTAssertLessThan(
+        width(phase: .closed, count: 2, message: message),
+        width(phase: .closed, count: 99, message: message),
+        "\(label): 閉じ切りでは件数の桁がそのまま幅になる")
+    }
+  }
+
+  /// 件数が変わるのは**収縮と同時**。開いている間は到来した瞬間の件数を保つので、報告の
+  /// coalesce が展開の途中で一覧を増やしても姿は動かない（0 件からの到来で数字が閃かない）。
+  /// 収縮に入った向きでは実件数を描く＝原典の「閉じながら『1』が生まれる」。
+  func testOpeningHoldsArrivalCountAndCollapseShowsLiveCount() {
+    let arriving = row(state: "waiting", message: shortMessage)
+    /// 一覧が到来に追いついた store と、まだ追いついていない store。
+    let live = AttentionStore()
+    live.noteTransient(arriving)
+    live.apply(rows: [arriving])
+    let pending = AttentionStore()
+    pending.noteTransient(arriving)
+
+    XCTAssertEqual(live.count, 1)
+    XCTAssertEqual(pending.count, 0)
     XCTAssertEqual(
-      width(phase: .open, count: 2), width(phase: .open, count: 99), accuracy: 0.5,
-      "開き切りでは件数の桁が幅に出ない")
-    XCTAssertLessThan(
-      width(phase: .closed, count: 2), width(phase: .closed, count: 99),
-      "閉じ切りでは件数の桁がそのまま幅になる")
+      fittingSize(store: live, phase: .open).width,
+      fittingSize(store: pending, phase: .open).width, accuracy: 0.5,
+      "展開中は一覧が増えても姿が動かない（数字が閃かない）")
+
+    let collapsing = MenuBarArrival.Phase(openness: 0.02, gloss: nil, closing: true)
+    XCTAssertGreaterThan(
+      fittingSize(store: live, phase: collapsing).width,
+      fittingSize(store: pending, phase: collapsing).width,
+      "収縮側では実件数が現れる")
   }
 
   /// 閉じ切った②は③と**同じ幅**——畳まれたスロットは自分の直前の間隔ごと消えるので、

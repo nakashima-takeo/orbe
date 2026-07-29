@@ -54,10 +54,12 @@ extension DesignGallerySnapshotTests {
       .enumerated()
       .map { index, pair -> AttentionStore in
         let store = AttentionStore()
-        store.noteTransient(
-          AttentionRow(
-            paneId: 9101 + index, workspaceName: pair.0, tabTitle: "emit API 移行",
-            state: "waiting", message: pair.1, stateChangedAt: Date()))
+        // ②が指す行は一覧にも居る（居なければ `apply(rows:)` が②を取り下げる）＝件数は 1 以上。
+        let row = AttentionRow(
+          paneId: 9101 + index, workspaceName: pair.0, tabTitle: "emit API 移行",
+          state: "waiting", message: pair.1, stateChangedAt: Date())
+        store.apply(rows: [row])
+        store.noteTransient(row)
         return store
       }
     let countStore = AttentionStore()
