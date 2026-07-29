@@ -53,7 +53,8 @@ final class MenuBarController: NSObject {
     if let button = statusItem.button {
       button.target = self
       button.action = #selector(statusItemClicked)
-      host.autoresizingMask = [.width, .height]
+      // autoresizing は付けない——button 追随で frame が content より広がると中央寄せになる
+      // （幅は `syncItemSize` が intrinsic から組む唯一の経路）。
       button.addSubview(host)
       host.onIntrinsicSizeChange = { [weak self] in
         DispatchQueue.main.async { self?.syncItemSize() }
@@ -81,12 +82,19 @@ final class MenuBarController: NSObject {
     ticker?.invalidate()  // 繰り返しなので、放置すると main runloop に空撃ちが残る
   }
 
-  /// hosting view の intrinsic 幅を statusItem.length へ反映し、frame を button に合わせる。
+  /// hosting view の intrinsic 幅を statusItem.length へ反映し、**同じ幅で** host の frame を組む。
+  ///
+  /// frame を `button.bounds` から取ってはいけない——`statusItem.length` の代入が button の
+  /// bounds へ届くのは次のレイアウトパスで、幅が縮んだフレームでは古い（広い）bounds が返る。
+  /// `NSHostingView` は content より広い frame では content を**中央**に置くため（実測: 46pt の
+  /// content を 200pt の host に置くと x=79 から描かれる）、その 1 パスだけピルが中央へ寄り、
+  /// 続けて縮むので「中央へ萎んで消える」ように見える。frame を intrinsic に固定すれば、
+  /// content と器の幅が常に一致してこのずれ自体が起きない。
   private func syncItemSize() {
-    statusItem.length = max(host.intrinsicContentSize.width, 1)
-    if let button = statusItem.button {
-      host.frame = button.bounds
-    }
+    let width = max(host.intrinsicContentSize.width, 1)
+    statusItem.length = width
+    let height = statusItem.button?.bounds.height ?? NSStatusBar.system.thickness
+    host.frame = NSRect(x: 0, y: 0, width: width, height: max(height, 1))
   }
 
   @objc private func systemAppearanceChanged() {
@@ -110,9 +118,11 @@ final class MenuBarController: NSObject {
 
   @objc private func statusItemClicked() {
     // ②の間のクリック＝該当ペインへ直行（前面化＋focus）。ドロップダウンは開かない。
-    if let transient = store.transient {
-      store.transient = nil
-      syncTransient()  // 位相も同じフレームで閉じ切る（store と phase を揃えて進める）
+    // 閉じ方は滞留満了と同じ収縮で、尺だけが速い（②を落とすのは閉じ切った `advance`）。
+    // 取り下げ済み（閉じかけ）のピルは②としてもう生きていないので、通常のクリックへ落とす。
+    if let transient = store.transient, !transient.retracted {
+      driver.dismissed(at: Date())
+      advance()
       NSApp.activate(ignoringOtherApps: true)
       windowController.window.makeKeyAndOrderFront(nil)
       windowController.focusAttentionPane(paneId: transient.row.paneId)
@@ -182,6 +192,7 @@ final class MenuBarController: NSObject {
     withObservationTracking {
       _ = store.transient?.arrivedAt
       _ = store.transient?.expiresAt
+      _ = store.transient?.retracted
       _ = store.rows.count
     } onChange: { [weak self] in
       DispatchQueue.main.async {
@@ -204,8 +215,11 @@ final class MenuBarController: NSObject {
         // （`expiresAt`）と同じ時計に揃え、観測の main ホップぶんずれた展開にしない。
         driver.arrived(at: arrivedAt)
       } else {
-        driver.dismissed()  // 取り下げ・②中のクリック・収縮の撃ち終わり＝アニメなしで閉じ切り
+        driver.closedOut()  // 収縮を撃ち終えて②が落ちた（描く材料が無い）
       }
+    } else if store.transient?.retracted == true, !driver.isCollapsing {
+      // 取り下げが決まった＝ここから速い収縮で閉じる（滞留満了と同じ動きの尺違い）。
+      driver.dismissed(at: Date())
     }
     scheduleTransientExpiry()
     render()
@@ -254,9 +268,10 @@ final class MenuBarController: NSObject {
   private func scheduleTransientExpiry() {
     transientTimer?.invalidate()
     transientTimer = nil
-    // 収縮中は張らない——一度閉じ始めたら閉じ切る（満了はもう過ぎており、張れば 0.1s 床で
-    // `transientExpired` に再入して収縮の基点を引き直し、ホバーなら延長すらしてしまう）。
-    guard let transient = store.transient, !driver.isCollapsing else { return }
+    // 収縮中・取り下げ済みは張らない——一度閉じ始めたら閉じ切る（満了はもう過ぎており、
+    // 張れば 0.1s 床で `transientExpired` に再入して収縮の基点を引き直し、ホバーなら延長すらする）。
+    guard let transient = store.transient, !transient.retracted, !driver.isCollapsing
+    else { return }
     let interval = max(0.1, transient.expiresAt.timeIntervalSinceNow)
     let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
       self?.transientExpired()  // main runloop の timer＝main で届く
@@ -266,9 +281,9 @@ final class MenuBarController: NSObject {
   }
 
   /// 滞留の満了。ホバー中は収縮を先送りし、そうでなければ収縮を撃つ（一度閉じ始めたら閉じ切る
-  /// ——収縮中に期限タイマーは張られない）。
+  /// ——収縮中に期限タイマーは張られない）。取り下げ済みは既に閉じかけなので触らない。
   private func transientExpired() {
-    guard store.transient != nil else { return }
+    guard let transient = store.transient, !transient.retracted else { return }
     if ui.itemHovered {
       // ホバー中は収縮しない（延長）。ホバーが外れた後の余韻ぶんだけ先送りする。
       store.transient?.expiresAt = Date().addingTimeInterval(2)

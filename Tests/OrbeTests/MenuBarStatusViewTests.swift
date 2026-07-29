@@ -296,6 +296,7 @@ final class MenuBarStatusViewTests: XCTestCase {
       fittingSize(store: AttentionStore(), phase: .closed).width, 15 + Theme.Space.hair * 2,
       accuracy: 0.5)
   }
+
 }
 
 /// 提案幅 w に対して常に min(w, ideal) を取るスロット代用。文字送りに依存せず

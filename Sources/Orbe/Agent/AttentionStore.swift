@@ -33,6 +33,9 @@ import Observation
     let arrivedCount: Int
     /// 収縮の開始時刻（＝滞留の満了）。
     var expiresAt: Date
+    /// 投影元が消えて取り下げが決まった。ここから閉じるだけで、②としてはもう生きていない
+    /// （中身は収縮を描き切るために残す——落とすのは閉じ切った `MenuBarController`）。
+    var retracted = false
   }
   var transient: Transient?
 
@@ -48,14 +51,17 @@ import Observation
   /// 状態になった（`working` へ戻った）ピルは残さない。行が残っている間の中身は更新しない
   /// （差し替えは report 経路が新しい行で立て直す）。
   ///
+  /// 取り下げは `retracted` を立てるだけで、`transient` はここでは落とさない——落とすのは
+  /// 収縮を描き切った `MenuBarController`。②が消える見え方を「収縮 1 つ」に保つ。
+  ///
   /// 不変条件が成立するのは「行を差し替えた時点」であって常時ではない——`noteTransient` は
   /// まだ行に反映されていない変化を先に立てられる。
   func apply(rows newRows: [AttentionRow]) {
     rows = newRows
-    guard let transient else { return }
+    guard let transient, !transient.retracted else { return }
     let projected = listRows.contains {
       $0.paneId == transient.row.paneId && $0.state == transient.row.state
     }
-    if !projected { self.transient = nil }
+    if !projected { self.transient?.retracted = true }
   }
 }

@@ -13,12 +13,14 @@ final class MenuBarArrivalTests: XCTestCase {
 
   private func at(_ offset: TimeInterval) -> Date { t0.addingTimeInterval(offset) }
 
-  /// 尺は design 原典のタイムライン表どおり。滞留 22 秒だけが Orbe の意図的な逸脱。
+  /// 尺は design 原典のタイムライン表どおり。滞留 22 秒と速い収縮 180ms が Orbe の意図的な逸脱。
   func testDurationsMatchDesign() {
     XCTAssertEqual(MenuBarArrival.expand, 0.84)
     XCTAssertEqual(MenuBarArrival.glossDelay, 1.2)
     XCTAssertEqual(MenuBarArrival.glossDuration, 1.1)
     XCTAssertEqual(MenuBarArrival.collapse, 0.6)
+    XCTAssertEqual(MenuBarArrival.collapseQuick, 0.18)
+    XCTAssertLessThan(MenuBarArrival.collapseQuick, MenuBarArrival.collapse, "速い収縮は通常より短い")
     XCTAssertEqual(AttentionStore.transientDwell, 22)
   }
 
@@ -120,12 +122,56 @@ final class MenuBarArrivalTests: XCTestCase {
     XCTAssertFalse(driver.isAnimating)
   }
 
-  /// 取り下げ・②中のクリックは即時。tick を待たずに閉じ切り、tween も残さない。
-  func testDismissClosesImmediately() {
+  /// 取り下げ・②中のクリックも**収縮を通る**（閉じ方は 1 つで、尺だけが速い）。
+  /// 即時に閉じ切らないこと自体が契約——1 フレームで幅が飛ぶと、`statusItem.length` の反映が
+  /// 追いつかないフレームで content が中央寄せに描かれ「中央へ萎む」ように見える。
+  func testDismissCollapsesQuicklyInsteadOfClosingImmediately() {
+    let driver = MenuBarArrivalDriver()
+    driver.arrived(at: t0)
+    driver.tick(now: at(1))
+    driver.dismissed(at: at(1.5))
+    XCTAssertEqual(driver.phase.openness, 1, accuracy: 0.001, "撃った瞬間はまだ開いている")
+    XCTAssertTrue(driver.isAnimating, "収縮の tween が回る")
+    XCTAssertFalse(driver.tick(now: at(1.59)))
+    XCTAssertEqual(driver.phase.openness, 0.5, accuracy: 0.001, "180ms の半ばで半分閉じる")
+    XCTAssertTrue(driver.phase.closing, "向きは収縮と同じ（同じ動きの尺違い）")
+    XCTAssertTrue(driver.tick(now: at(1.7)), "撃ち終えたら②を落とす合図を返す")
+    XCTAssertEqual(driver.phase, .closed)
+    XCTAssertFalse(driver.isAnimating)
+  }
+
+  /// 速い収縮の途中に到来が来たら、その開き具合から開き直す（通常の収縮と同じ扱い）。
+  func testArrivalDuringQuickCollapseResumes() {
+    let driver = MenuBarArrivalDriver()
+    driver.arrived(at: t0)
+    driver.tick(now: at(1))
+    driver.dismissed(at: at(1.5))
+    driver.tick(now: at(1.59))
+    XCTAssertEqual(driver.phase.openness, 0.5, accuracy: 0.001)
+    driver.arrived(at: at(1.59))
+    XCTAssertEqual(driver.phase.openness, 0.5, accuracy: 0.001, "その場から開き直す")
+    XCTAssertFalse(driver.phase.closing)
+    XCTAssertFalse(driver.tick(now: at(2.1)), "収縮は取り消された——②を落とさない")
+  }
+
+  /// Reduce Motion では速い収縮も尺 0＝その場で閉じ切って件数が現れる（動きを持たない）。
+  func testReduceMotionDismissesWithoutTween() {
+    let driver = MenuBarArrivalDriver()
+    driver.reduceMotion = true
+    driver.arrived(at: t0)
+    XCTAssertEqual(driver.phase, .open)
+    driver.dismissed(at: at(1))
+    XCTAssertEqual(driver.phase, .closed)
+    XCTAssertFalse(driver.isAnimating)
+    XCTAssertTrue(driver.tick(now: at(1)), "収縮を待たずその場で②を落とす")
+  }
+
+  /// 描く材料そのものが外から消えた場合だけ、tween を捨ててその場で閉じ切る。
+  func testClosedOutDropsTweenImmediately() {
     let driver = MenuBarArrivalDriver()
     driver.arrived(at: t0)
     driver.tick(now: at(1.5))
-    driver.dismissed()
+    driver.closedOut()
     XCTAssertEqual(driver.phase, .closed)
     XCTAssertFalse(driver.isAnimating)
   }

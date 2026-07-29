@@ -251,6 +251,10 @@ final class WindowControllerReportAgentTests: XCTestCase {
   }
 
   // MARK: - ②ピルの取り下げ（一覧の投影であることの配達経路）
+  //
+  // 取り下げの印は `retracted`——ピル自体は収縮を描き切るまで残り、落とすのは閉じ切った
+  // `MenuBarController`（②が消える見え方を収縮 1 つに保つ）。ここで測るのは「配達が届いて
+  // 取り下げが決まるか」なので、見るのは印であって nil 化ではない。
 
   /// coalesce された行の再計算を同期で回す。**`refreshChrome` は呼ばない**——それは再投影を要求
   /// する側（本番の通知ハンドラ）の仕事で、テストが肩代わりすると「要求が届いたか」を測れなく
@@ -271,7 +275,7 @@ final class WindowControllerReportAgentTests: XCTestCase {
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "working", sessionId: nil, message: nil)
     flushDelivered(wc)
-    XCTAssertNil(wc.attentionStore.transient)
+    XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
   }
 
   /// done のフォーカス消費（done→idle）で行が消えたらピルを取り下げる。
@@ -286,7 +290,7 @@ final class WindowControllerReportAgentTests: XCTestCase {
     wc.current.tabs[0].consumeDoneState()
     wc.refreshChrome()
     flushDelivered(wc)
-    XCTAssertNil(wc.attentionStore.transient)
+    XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
   }
 
   /// ピルが指すペインのタブを閉じたら取り下げる。
@@ -299,7 +303,7 @@ final class WindowControllerReportAgentTests: XCTestCase {
 
     wc.closeTab(wc.current.tabs[1], origin: .gesture)
     flushDelivered(wc)
-    XCTAssertNil(wc.attentionStore.transient)
+    XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
   }
 
   /// split の 1 枚だけを閉じても取り下げる。`close(_:)` → `onLayoutChange` → `refreshChrome`
@@ -316,7 +320,7 @@ final class WindowControllerReportAgentTests: XCTestCase {
 
     tab.close(sibling, origin: .gesture)
     flushDelivered(wc)
-    XCTAssertNil(wc.attentionStore.transient)
+    XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
   }
 
   /// 関係ない別ペインの状態変化では取り下げない（②を立て直さない変化だけで見る）。

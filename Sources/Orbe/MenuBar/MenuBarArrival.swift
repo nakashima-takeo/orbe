@@ -11,8 +11,11 @@ enum MenuBarArrival {
   static let glossDelay: TimeInterval = 1.2
   /// 艶が左端の外から右端の外へ通り抜ける尺。
   static let glossDuration: TimeInterval = 1.1
-  /// 収縮（文言を畳み、件数を出し、地を③へ戻す）。
+  /// 収縮（文言を畳み、件数を出し、地を③へ戻す）。滞留を満了したときの尺。
   static let collapse: TimeInterval = 0.6
+  /// 同じ収縮の速い尺。取り下げ・②中のクリックはこちらで閉じる——閉じ方は 1 つ（同じ動きの
+  /// 尺違い）で、②が消える見え方が経路によって変わらない。
+  static let collapseQuick: TimeInterval = 0.18
 
   /// 要素ごとの easing（原典 keyframe から逐語）。位相は線形なので曲線はここだけが持つ。
   enum Curve {
@@ -72,7 +75,8 @@ final class MenuBarArrivalDriver {
   var isCollapsing: Bool { closingSince != nil }
 
   private var expandDuration: TimeInterval { reduceMotion ? 0 : MenuBarArrival.expand }
-  private var collapseDuration: TimeInterval { reduceMotion ? 0 : MenuBarArrival.collapse }
+  /// 進行中の収縮の尺（`expired` は通常・`dismissed` は速い尺で立てる）。Reduce Motion は 0。
+  private var collapseDuration: TimeInterval = MenuBarArrival.collapse
 
   /// 到来（初回・積み替えの両方）。開き切っていれば開き直さず、艶だけを立て直す。
   /// 開きかけ／閉じかけからの到来は現在の開き具合から続けて開く（位相は飛ばない）。
@@ -89,18 +93,34 @@ final class MenuBarArrivalDriver {
 
   /// 滞留満了。ここから 600ms かけて閉じる（Reduce Motion では尺 0 ＝その場で閉じ切る）。
   func expired(at now: Date) {
-    openingSince = nil
-    closingSince = now.addingTimeInterval(-(1 - phase.openness) * collapseDuration)
-    advance(to: now)
+    beginCollapse(at: now, over: MenuBarArrival.collapse)
   }
 
-  /// 途中終了（取り下げ・②中のクリック）。位相をその場で閉じ切りにする。
-  func dismissed() {
+  /// 途中終了（取り下げ・②中のクリック）。**同じ収縮を速い尺で**撃つ——閉じ方を 1 つに保ち、
+  /// 幅が 1 フレームで飛ばない（飛ばすと content と `statusItem.length` の反映がずれ、
+  /// 広いままのアイテムの中で content が中央寄せに描かれて「中央へ萎む」ように見える）。
+  func dismissed(at now: Date) {
+    beginCollapse(at: now, over: MenuBarArrival.collapseQuick)
+  }
+
+  /// もう描く材料が無い（②の行そのものが外から消えた）。tween を捨ててその場で閉じ切る。
+  func closedOut() {
     openingSince = nil
     closingSince = nil
     glossSince = nil
     collapseCompleted = false
     phase = .closed
+  }
+
+  /// 現在の開き具合から、指定の尺で閉じ始める（既に閉じかけなら尺だけ差し替えて続きから閉じる）。
+  /// 閉じ始めたら艶は止める——祝いは開いている間のもので、速い収縮（180ms）は艶（到来 1.2s 後
+  /// から 1.1s）の最中に撃たれうる。残すと閉じ切った後も基点が生きて ticker が回り続ける。
+  private func beginCollapse(at now: Date, over duration: TimeInterval) {
+    openingSince = nil
+    glossSince = nil
+    collapseDuration = reduceMotion ? 0 : duration
+    closingSince = now.addingTimeInterval(-(1 - phase.openness) * collapseDuration)
+    advance(to: now)
   }
 
   /// 位相を now まで進める。収縮を撃ち終えたときだけ true を返す。
