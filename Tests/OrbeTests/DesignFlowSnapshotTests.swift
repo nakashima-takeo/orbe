@@ -277,7 +277,9 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
           }
         ),
         ("open", { driver.tick(now: t0.addingTimeInterval(0.84)) }),
-        ("gloss_mid", { driver.tick(now: t0.addingTimeInterval(1.75)) }),
+        // 艶が**ピルの中ほど**に来る時刻。艶の easing は前のめり（`mbGloss`）なので、走査区間の
+        // 時間軸の中点は空間の中点ではない——帯がピル幅の 50% に載るのは進捗 0.33 のあたり。
+        ("gloss_mid", { driver.tick(now: t0.addingTimeInterval(1.57)) }),
         ("dwell", { driver.tick(now: t0.addingTimeInterval(5)) }),
         (
           "collapse_half",
