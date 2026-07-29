@@ -237,12 +237,37 @@ enum DesignSceneFixtures {
     return state
   }
 
-  /// DL中 64%（見本 2d の `8.3 MB / 13 MB` mono 表記）。
+  /// DL中 64%（見本 2d の `8.3 MB / 13 MB` mono 表記）。DL 中は Sparkle が確認を受け付けないため
+  /// 確認不可も張る（「今すぐ確認」行の減光と、理由を語るカードが同時に読めるか見る）。
   static func updateDownloadingState() -> UpdateState {
     let state = baseUpdateState()
     state.beginDownload(version: "0.2.0")  // 実フローと同順（found→DL 開始、ready はまだ立たない）
     state.setExpectedLength(13_000_000)
     state.receiveData(length: 8_300_000)
+    state.setCheckAvailability(.busy)
+    return state
+  }
+
+  /// 適用待ち＋確認不可（staged 済みに再確認は無意味）。「今すぐ確認」行の減光を見る。
+  static func updateReadyBusyState() -> UpdateState {
+    let state = updateReadyState()
+    state.setCheckAvailability(.busy)
+    return state
+  }
+
+  /// 背景の定期確認が走っている最中（phase は idle のまま確認不可）。状態カードが理由を語らない
+  /// 唯一のケースで、「今すぐ確認」行だけがスピナー＋「確認中…」を名乗る。
+  static func updateBackgroundCheckingState() -> UpdateState {
+    let state = baseUpdateState()
+    state.setCheckAvailability(.busy)
+    return state
+  }
+
+  /// updater が動いていないビルド（起動ゲートを通らない dev ビルド）。確認は走らないので
+  /// 「確認中…」を名乗らず減光だけになる——`updateBackgroundCheckingState` との差がここで出る。
+  static func updateUnavailableState() -> UpdateState {
+    let state = baseUpdateState()
+    state.setCheckAvailability(.unavailable)
     return state
   }
 
@@ -259,12 +284,17 @@ enum DesignSceneFixtures {
   }
 
   /// 設定パレットをアップデートセクションへ潜らせたモデル（2c/2d。gallery/flow が状態カードを撮る）。
-  static func updateSettingsModel(_ state: UpdateState) -> SettingsPaletteModel {
+  /// - Parameter selectCheckNow: 末尾の「今すぐ確認」行を選択する。行が器の高さ上限を超える状態
+  ///   （適用待ち）で、その行が見えているスクロール位置＝押そうとしている状況を撮るために使う。
+  static func updateSettingsModel(_ state: UpdateState, selectCheckNow: Bool = false)
+    -> SettingsPaletteModel
+  {
     let model = SettingsPaletteModel(
       values: ScopedSettingsValues(global: SettingsLayer(), override: SettingsLayer()),
       fontNames: [], agents: ["claude"], localization: LocalizationStore(language: .ja),
       update: state)
     model.drillIntoUpdate()
+    if selectCheckNow { model.render.selected = model.render.rows.count - 1 }
     return model
   }
 }

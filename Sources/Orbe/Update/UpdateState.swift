@@ -17,6 +17,25 @@ import Observation
     case readyToRestart
   }
 
+  /// 「今すぐ確認」の実行可否と、実行できないときの理由。可否だけの Bool では
+  /// 「updater が動いていない」と「セッションが進行中」が同じ false に潰れ、UI が
+  /// 走ってもいない確認を名乗ってしまうため、理由まで持つ。
+  enum CheckAvailability: Equatable {
+    /// 今すぐ確認を走らせられる。
+    case available
+    /// Sparkle のセッションが進行中（自分の確認・DL・背景の定期確認・staged の resume）。
+    /// 待てば `available` へ戻る。
+    case busy
+    /// updater が動いていない（起動ゲートを通らなかったビルド）。確認は走らないままになる。
+    case unavailable
+
+    /// updater の起動状態と Sparkle の受付可否から決める（Sparkle 型を持ち込まない Bool 2 つ）。
+    static func resolve(started: Bool, updaterCanCheck: Bool) -> CheckAvailability {
+      guard started else { return .unavailable }
+      return updaterCanCheck ? .available : .busy
+    }
+  }
+
   /// 適用待ちの更新の表示情報（変更内容シート・トースト・状態カードが読む）。
   struct ReadyInfo: Equatable {
     var version: String  // 表示バージョン（"0.2.0"。"v" 前置は表示側）
@@ -34,6 +53,11 @@ import Observation
   /// トースト可視。readyToRestart への遷移時に **1 バージョンにつき一度だけ** 立つ（見本 2a の設計注記）。
   private(set) var toastVisible = false
   private var toastShownVersion: String?
+  /// 「今すぐ確認」の実行可否（`UpdaterService` が写す）。fixture は既定 `.available` のまま
+  /// 全状態を注入できる。
+  private(set) var checkAvailability: CheckAvailability = .available
+  /// 「今すぐ確認」を実行してよいか（導線のゲート）。理由まで要る表示側は `checkAvailability` を読む。
+  var canCheckNow: Bool { checkAvailability == .available }
 
   /// 現在のバージョン（`CFBundleShortVersionString`。fixture は任意注入）。
   let currentVersion: String
@@ -74,6 +98,10 @@ import Observation
   // MARK: - 遷移（UpdateUserDriver のコールバックが駆動する）
 
   func beginCheck() { phase = .checking }
+
+  func setCheckAvailability(_ availability: CheckAvailability) {
+    checkAvailability = availability
+  }
 
   func beginDownload(version: String? = nil) {
     downloadVersion = version

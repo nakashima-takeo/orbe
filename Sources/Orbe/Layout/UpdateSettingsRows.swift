@@ -80,8 +80,11 @@ struct UpdateStatusCardRow: View {
               .foregroundStyle(Color.theme.textMuted)
           }
           Spacer(minLength: 0)
+          // 再試行は「今すぐ確認」と同じ導線＝同じ可否に従う。押せない間は disabled の減光で示す
+          // （行の「今すぐ確認」と同じ register）。
           Button(l10n.string(.updateRetry)) { state.onCheckNow() }
             .buttonStyle(DSSecondaryButtonStyle())
+            .disabled(!state.canCheckNow)
         }
       }
     case .readyToRestart:
@@ -207,14 +210,47 @@ struct UpdateToggleRow: View {
   }
 }
 
-/// 「今すぐ確認」行（枠だけのセカンダリボタン意匠・行全幅）。確認中はスピナーへ替わる（見本 2d 注記）。
+/// 「今すぐ確認」行の見え方。可否と phase から決まる単一の規則で、行ビューもテストもここを読む。
+enum UpdateCheckNowAppearance: Equatable {
+  /// 通常表示（押せる）。
+  case actionable
+  /// スピナー＋「アップデートを確認中…」。実際に確認が走っているときだけ名乗る。
+  case checking
+  /// 減光（押しても走らない）。理由は隣の状態カードが持つか、updater が動いていない。
+  case dimmed
+
+  static func resolve(_ state: UpdateState) -> UpdateCheckNowAppearance {
+    if case .checking = state.phase { return .checking }
+    switch state.checkAvailability {
+    case .available:
+      return .actionable
+    case .busy:
+      // セッション進行中。状態カードが理由を語らない（idle/最新/失敗のまま背景の定期確認が
+      // 走っている）ときだけ行が「確認中…」を名乗る——事実そのとおり確認中のため。
+      switch state.phase {
+      case .downloading, .readyToRestart: return .dimmed
+      case .idle, .checking, .upToDate, .failed: return .checking
+      }
+    case .unavailable:
+      // updater が動いていない＝確認は走っていない。「確認中…」を名乗らせない。
+      return .dimmed
+    }
+  }
+}
+
+/// 「今すぐ確認」行（枠だけのセカンダリボタン意匠・行全幅）。3 態は `UpdateCheckNowAppearance`。
 struct UpdateCheckNowRow: View {
   let state: UpdateState
   @Environment(\.localization) private var l10n
 
+  private var appearance: UpdateCheckNowAppearance { .resolve(state) }
+
+  /// 部分的な色替えではなく行ごと `Opacity.disabled` へ落とす（§5 ボタン disabled と同じ register）。
+  private var dimmed: Bool { appearance == .dimmed }
+
   var body: some View {
     HStack(spacing: Theme.Space.step) {
-      if case .checking = state.phase {
+      if appearance == .checking {
         StatusGlyphView(kind: .working, size: 10)
         Text(l10n.string(.updateStateChecking))
           .font(Font.theme.caption)
@@ -231,6 +267,7 @@ struct UpdateCheckNowRow: View {
       RoundedRectangle(cornerRadius: Theme.Radius.row)
         .strokeBorder(Color.theme.surface2, lineWidth: Theme.Stroke.hairline)
     )
+    .opacity(dimmed ? Theme.Opacity.disabled : 1)
     .padding(.vertical, Theme.Space.tick)
   }
 }

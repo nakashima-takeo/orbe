@@ -21,12 +21,19 @@ import Sparkle
 /// SPUUpdater の API は main thread 前提で、呼び出し元（WindowController/AppDelegate）は常に main。
 final class UpdaterService: NSObject {
   let state: UpdateState
-  private let driver: UpdateUserDriver
+  let driver: UpdateUserDriver
   private var updater: SPUUpdater!  // delegate=self のため super.init 後に生成（以降 不変）
   private(set) var started = false
   /// サイレント staged 更新の即時適用ハンドラ（willInstallUpdateOnQuit で預かる）。
   /// 終了確認でユーザーが終了を取りやめた場合に再実行できるよう、呼んだ後も保持する（Sparkle 2.3+）。
   private var immediateInstallHandler: (() -> Void)?
+  /// `canCheckForUpdates` を `UpdateState.checkAvailability` へ写す KVO（生存期間はこの service）。
+  private var canCheckObservation: NSKeyValueObservation?
+  /// 押された「今すぐ再起動」のうち、その瞬間はどの経路も取れなかったもの。着地できる状態に
+  /// なった瞬間（＝セッションが空いた / サイレント staged の即時適用ハンドラが届いた）に
+  /// `drainPendingRestart` が自分で撃ち直す——フラグを置いて誰かが拾うのを待たない。
+  /// 触るのは `installAndRelaunch` と `drainPendingRestart` だけ。
+  var pendingRestart = false
 
   /// Orbe 側トグルの永続キー（Sparkle が持たない「終了時自動適用」と、実効値と分離した「自動DL」の生値）。
   private static let autoInstallOnQuitKey = "OrbeUpdateAutoInstallOnQuit"
@@ -64,6 +71,40 @@ final class UpdaterService: NSObject {
     }
     state.onCheckNow = { [weak self] in self?.checkForUpdates() }
     state.onRestartNow = { [weak self] in self?.installAndRelaunch() }
+
+    canCheckObservation = updater.observe(
+      \.canCheckForUpdates, options: [.initial, .new]
+    ) { [weak self] _, _ in
+      DispatchQueue.main.async { self?.updaterAvailabilityDidChange() }
+    }
+  }
+
+  /// `canCheckForUpdates` の変化の受け口（KVO から main で呼ばれる）。実行可否をライブに写し、
+  /// セッションが空いた瞬間に預かっていた「今すぐ再起動」を消化する。
+  /// 通知値ではなく現在値を読み直す（起動前後の通知が入れ違っても古い値で固まらない）。
+  func updaterAvailabilityDidChange() {
+    syncCanCheckNow()
+    drainPendingRestart()
+  }
+
+  /// Sparkle が今コマンドを受け付けられるか。UI への写像も「今すぐ再起動」の着地判定も
+  /// この 1 つの規則を読む（都度読み直すので mirror の遅れに引きずられない）。
+  private var currentAvailability: UpdateState.CheckAvailability {
+    .resolve(started: started, updaterCanCheck: updater.canCheckForUpdates)
+  }
+
+  /// 実行可否を状態モデルへ写す。「updater が動いていない」と「セッション進行中」は別物として
+  /// 写す——前者は待っても確認が走らないので、UI に「確認中」を名乗らせない。
+  private func syncCanCheckNow() {
+    state.setCheckAvailability(currentAvailability)
+  }
+
+  /// 保留していた「今すぐ再起動」を撃ち直す。`installAndRelaunch` が優先順を再評価するので、
+  /// まだ着地できなければそのまま再び保留に戻る（次の機会に再入する）。
+  private func drainPendingRestart() {
+    guard pendingRestart else { return }
+    pendingRestart = false
+    installAndRelaunch()
   }
 
   /// Sparkle の自動DLは「DL＋staging（＝終了時に必ず適用）」まで一体。終了時自動適用オフのときは
@@ -73,7 +114,9 @@ final class UpdaterService: NSObject {
   }
 
   /// 起動ゲートを通れば update サイクルを開始する（ゲート仕様は型コメント）。
+  /// ゲートを通らなかった場合も可否を写す——不活性なビルドが「確認できる」ように見えたままにしない。
   func startIfPermitted() {
+    defer { syncCanCheckNow() }
     guard Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil else { return }
     #if !ORBE_RELEASE
       guard UserDefaults.standard.string(forKey: "SUFeedURL") != nil else { return }
@@ -86,25 +129,76 @@ final class UpdaterService: NSObject {
     }
   }
 
-  /// 「今すぐ確認」（設定・メニュー・再試行の単一導線）。
+  /// 「今すぐ確認」（設定・メニュー・再試行の単一導線）。UI が読む可否と同じ規則で弾く。
   func checkForUpdates() {
-    guard started, updater.canCheckForUpdates else { return }
+    guard currentAvailability == .available else { return }
     updater.checkForUpdates()
   }
 
-  /// 「今すぐ再起動」。優先順: ① サイレント staged の即時適用ハンドラ（UI 対話なしで再起動）
-  /// ② 保留中の ready reply へ `.install`（終了時自動適用オフの手動経路）
-  /// ③ dismiss 済みセッションの resume（再チェックで stage `.installing` に入り直し driver が `.install`）。
+  /// 「今すぐ再起動」。着地先を `RestartLanding` が一意に決め、押下は必ずそのどれかに着地する。
+  ///
+  /// `resumeCheck` の `installRequested` は `checkForUpdates()` の直前に立てて同じ turn でセッションを
+  /// 起こす。そのセッションは user-initiated＝abort が必ず `dismissUpdateInstallation` を通る
+  /// （`SPUUserInitiatedUpdateDriver` は `showErrorToUser:YES` で abort する）ため、消費されるか
+  /// 破棄されるかのどちらかで必ずセッション内に決着する＝要求がセッション境界を越えて残らない。
   func installAndRelaunch() {
-    if let immediateInstallHandler {
-      immediateInstallHandler()
-      return
+    let landing = RestartLanding.resolve(
+      hasRetryTermination: driver.hasRetryTermination,
+      hasImmediateInstall: immediateInstallHandler != nil,
+      hasPendingInstallReply: driver.hasPendingInstallReply,
+      availability: currentAvailability)
+    switch landing {
+    case .retryTermination:
+      driver.retryTermination()
+    case .immediateInstall:
+      immediateInstallHandler?()
+    case .pendingInstallReply:
+      driver.consumePendingInstallReply()
+    case .resumeCheck:
+      driver.installRequested = true
+      updater.checkForUpdates()
+    case .hold:
+      pendingRestart = true
+    case .inactive:
+      break  // updater 不活性なら phase が readyToRestart にならず到達しない
     }
-    guard started else { return }
-    if driver.consumePendingInstallReply() { return }
-    guard updater.canCheckForUpdates else { return }  // 進行中は no-op（installRequested を立てず残留を防ぐ）
-    driver.installRequested = true
-    updater.checkForUpdates()
+  }
+}
+
+extension UpdaterService {
+  /// 「今すぐ再起動」の着地先。押下時点で取れる経路を優先順に 1 つ選ぶ——押下が落ちる先を
+  /// 網羅列挙することで「どこにも着地しない」経路が存在しないことを型で示す。
+  ///
+  /// 再送ハンドラを最優先にするのは、それが立つのは生きたセッションが我々の終了を待つ間だけで、
+  /// そこで他へ回すと同じ更新へ二重の適用要求を出すため。
+  enum RestartLanding: Equatable {
+    /// 終了確認をキャンセルしたセッションへ終了要求を送り直す。
+    case retryTermination
+    /// サイレント staged の即時適用ハンドラを呼ぶ（UI 対話なしで再起動）。
+    case immediateInstall
+    /// 保留中の ready reply へ `.install` を返す（終了時自動適用オフの手動経路）。
+    case pendingInstallReply
+    /// dismiss 済みセッションを resume して適用させる（自分でセッションを起こす）。
+    case resumeCheck
+    /// セッション進行中でどれも取れない。押下を預かり、空いた瞬間に自分で撃ち直す。
+    case hold
+    /// updater が動いていない（この状態では再起動ボタン自体が出ない）。
+    case inactive
+
+    static func resolve(
+      hasRetryTermination: Bool, hasImmediateInstall: Bool, hasPendingInstallReply: Bool,
+      availability: UpdateState.CheckAvailability
+    ) -> RestartLanding {
+      if hasRetryTermination { return .retryTermination }
+      if hasImmediateInstall { return .immediateInstall }
+      switch availability {
+      case .unavailable: return .inactive
+      case .available: return hasPendingInstallReply ? .pendingInstallReply : .resumeCheck
+      // 進行中は新しいセッションを起こせない。保留 reply があればそこへ、無ければ預かる——
+      // 「セッションが staged 更新へ行き着いたら誰かが拾う」式のフラグを残さない。
+      case .busy: return hasPendingInstallReply ? .pendingInstallReply : .hold
+      }
+    }
   }
 }
 
@@ -113,12 +207,17 @@ extension UpdaterService: SPUUpdaterDelegate {
   /// readyToRestart＋トーストへ写像し、YES で即時適用ハンドラを預かる。YES はこの更新が pending の間
   /// 後続の update サイクルも止める（staged 済みに対する無意味な再チェックを塞ぐ）。
   /// 終了時の自動適用は返値に依らず Sparkle が行う。
+  ///
+  /// YES を返すとサイレント経路のセッションは生きたまま残る（Sparkle はここで abort しない）ため、
+  /// `canCheckForUpdates` は真へ戻らない＝ KVO 側の消化が来ない。保留していた「今すぐ再起動」が
+  /// 着地できるのはこの瞬間だけなので、ここでも消化する（ハンドラはデリゲートの戻り後に呼ぶ）。
   func updater(
     _ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem,
     immediateInstallationBlock immediateInstallHandler: @escaping () -> Void
   ) -> Bool {
     state.markReady(UpdateState.ReadyInfo(item))
     self.immediateInstallHandler = immediateInstallHandler
+    DispatchQueue.main.async { [weak self] in self?.drainPendingRestart() }
     return true
   }
 }
