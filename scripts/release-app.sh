@@ -16,6 +16,7 @@
 #
 # 使い方: scripts/release-app.sh
 #   環境変数で上書き可: ORBE_SIGN_ID / ORBE_NOTARY_PROFILE
+#   ORBE_SIGN_ONLY=1 で署名と提出前検査までで止める（公証を伴わない実機検証用）
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -115,6 +116,12 @@ while IFS= read -r t; do assert_signed "$t"; done < <(
   find "$APP/Contents" -type f -perm +111 \
     -exec sh -c 'file -b "$1" | grep -q "Mach-O"' _ {} \; -print
 )
+
+# 署名と提出前検査までで止める（公証を伴わない実機検証用）。既定のリリース経路には影響しない。
+if [ -n "${ORBE_SIGN_ONLY:-}" ]; then
+  echo "==> ORBE_SIGN_ONLY: 署名まで完了。公証・DMG・appcast は行わない: $APP"
+  exit 0
+fi
 
 # 公証はどちらの成果物でも同じ手順（submit → status 厳格ポーリング → staple）。
 # --wait は接続が切れると死ぬ。初回公証は数時間かかることがあり、その間のスリープ・ネットワーク
