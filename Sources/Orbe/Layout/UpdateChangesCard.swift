@@ -2,42 +2,71 @@ import Markdown
 import SwiftUI
 
 /// 変更内容シート（見本 2b）。トーストの「変更内容」と設定の「変更内容」が同じここへ着地する。
-/// ノートは appcast description の Markdown（見出し＝分類・箇条書き＝項目）を 3 分類の意匠で描く。
+/// ノートは appcast description の Markdown を、その構造（見出し・箇条書き・段落）のまま描く。
 struct UpdateChangesCard: View {
   let state: UpdateState
+  /// カード全体の高さ上限（窓に収める。UpdateChangesOverlay が窓高から算出して渡す）。
+  let maxHeight: CGFloat
   @Environment(\.localization) private var l10n
+  /// ノート内容の実測高（ノート部をこれで頭打ちにして内容にハグさせる）。
+  @State private var notesContentHeight: CGFloat = 0
 
   var body: some View {
-    GlassPanel(level: .settings, cornerRadius: 14) {
+    GlassPanel(level: .settings) {
       VStack(alignment: .leading, spacing: 0) {
         header
-        if let notes = state.ready?.notes {
-          UpdateNotesView(markdown: notes)
-            .padding(.top, Theme.Space.bar - 2)
-        }
-        verifiedLine
-          .padding(.top, Theme.Space.bar)
-        HStack(spacing: Theme.Space.step) {
-          Button {
-            state.onRestartNow()
-          } label: {
-            Text(l10n.string(.updateRestartAndUpdate))
-              .frame(maxWidth: .infinity)
-          }
-          .buttonStyle(DSPrimaryButtonStyle())
-          Button(l10n.string(.updateCloseButton)) { state.onCloseChanges() }
-            .buttonStyle(DSSecondaryButtonStyle())
-        }
-        .padding(.top, Theme.Space.beat)
-        Text(l10n.string(.updateSheetFootnote))
-          .font(Font.theme.meta)
-          .foregroundStyle(Color.theme.textMuted)
-          .frame(maxWidth: .infinity)
-          .padding(.top, Theme.Space.step)
+        if let notes = state.ready?.notes { notesScroll(notes) }
+        footer
       }
       .padding(.vertical, Theme.Space.bar + 2)
       .padding(.horizontal, Theme.Space.span)
       .frame(width: 450, alignment: .leading)
+    }
+    // 窓に収める上限はここだけが持つ。中の配分は VStack に任せる。
+    .frame(maxHeight: maxHeight)
+  }
+
+  /// ノート部。長いノートはここだけがスクロールし、見出し・検証済み行・ボタンは常に見える。
+  /// 上の余白はスクロール内容側に持たせ、実測高＝ノート部の占有高に一致させる。
+  private func notesScroll(_ markdown: String) -> some View {
+    ScrollView {
+      UpdateNotesView(markdown: markdown)
+        .padding(.top, Theme.Space.bar - 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+          GeometryReader { geo in
+            Color.clear.preference(key: UpdateNotesHeightKey.self, value: geo.size.height)
+          })
+    }
+    // 内容高までしか伸びない可変高。剛体の見出し・検証済み行・ボタンが先に高さを取り、
+    // 残った分だけがここへ来る——収まれば内容ぴったり、溢れればカードの上限で頭打ちになる。
+    .frame(maxHeight: notesContentHeight)
+    .scrollIndicators(.automatic)
+    .onPreferenceChange(UpdateNotesHeightKey.self) { notesContentHeight = $0 }
+  }
+
+  /// 検証済み行＋ボタン行＋脚注。スクロール領域の外に置き、ノートの長さによらず常に見える。
+  private var footer: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      verifiedLine
+        .padding(.top, Theme.Space.bar)
+      HStack(spacing: Theme.Space.step) {
+        Button {
+          state.onRestartNow()
+        } label: {
+          Text(l10n.string(.updateRestartAndUpdate))
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(DSPrimaryButtonStyle())
+        Button(l10n.string(.updateCloseButton)) { state.onCloseChanges() }
+          .buttonStyle(DSSecondaryButtonStyle())
+      }
+      .padding(.top, Theme.Space.beat)
+      Text(l10n.string(.updateSheetFootnote))
+        .font(Font.theme.meta)
+        .foregroundStyle(Color.theme.textMuted)
+        .frame(maxWidth: .infinity)
+        .padding(.top, Theme.Space.step)
     }
   }
 
@@ -45,7 +74,7 @@ struct UpdateChangesCard: View {
     HStack(alignment: .top) {
       VStack(alignment: .leading, spacing: Theme.Space.hair + 1) {
         Text(l10n.format(.updateSheetTitle, "v\(state.ready?.version ?? "")"))
-          .font(Font.theme.title.weight(.bold))
+          .font(Font.theme.title)
           .foregroundStyle(Color.theme.textPrimary)
         Text(metaLine)
           .font(Font.theme.meta)
@@ -94,76 +123,180 @@ struct UpdateChangesCard: View {
   }
 }
 
-/// appcast description（Markdown）の 3 分類描画。見出し（任意レベル）＝分類、箇条書き＝項目。
-/// 分類色は見本 2b の順（新機能=working / 改善=waiting / 修正=muted）を出現順で循環する。
-struct UpdateNotesView: View {
-  private struct NoteSection: Identifiable {
-    let id: Int
-    let title: String?
-    let items: [AttributedString]
+/// ノート内容の実測高（内容ハグ用）。
+private struct UpdateNotesHeightKey: PreferenceKey {
+  static let defaultValue: CGFloat = 0
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+    value = max(value, nextValue())
   }
-  private let sections: [NoteSection]
+}
+
+/// appcast description（Markdown）を変更内容シートの描画要素へ写した値型。
+/// Markdown が持つ区別——見出し＝セクション、箇条書き＝項目、それ以外＝段落——だけを保ち、
+/// 意味は入力の内容（見出しの語）からだけ決める（出現順からは何も作らない）。
+/// 描画と分けてあるのは変換結果をテストで見るため。
+struct UpdateNotes: Equatable {
+  /// 要素の由来。Markdown の箇条書き項目か、それ以外の段落か——表示側はこれ以上を足さない。
+  enum ElementKind: Equatable {
+    case item
+    case paragraph
+  }
+
+  /// セクションの分類。見出しの語だけで決まり、並び順・個数には依存しない。
+  /// 語彙の出所は release スキルが固定するリリースノートの見出し 3 種（`### 新機能` / `### 改善` / `### 修正`）。
+  /// 規約外の見出し・見出し無しは `.neutral` へ落ちる。意匠（色・マーカー）はここではなく View が持つ。
+  enum Category: Equatable {
+    case feature
+    case improvement
+    case fix
+    case neutral
+
+    /// 見出し語 → 分類の対応表。表示側がこの語彙を知る唯一の点。
+    init(title: String?) {
+      switch title?.trimmingCharacters(in: .whitespaces) {
+      case "新機能": self = .feature
+      case "改善": self = .improvement
+      case "修正": self = .fix
+      default: self = .neutral
+      }
+    }
+  }
+
+  /// セクション配下の 1 要素。由来と、インライン Markdown を解釈した本文を持つ。
+  struct Element: Equatable {
+    let kind: ElementKind
+    let text: AttributedString
+  }
+
+  /// 見出し 1 つとその配下の要素列。見出しより前の要素は title なしのセクションに入る。
+  struct Section: Equatable {
+    let title: String?
+    let category: Category
+    let elements: [Element]
+  }
+
+  let sections: [Section]
+
+  /// インラインの見た目。コードスパンは背景を敷かず、本文と同じ地の上に等幅で置く。
+  private static let inlineStyle = MarkdownStyle(inlineCodeBackground: .clear)
 
   init(markdown: String) {
-    // 見出しで区切り、リスト項目/段落を項目として拾う。インライン（`code` 等）は AttributedString の
-    // Markdown 解釈に委ねる（コードは等幅で描かれる）。
-    var built: [(title: String?, items: [AttributedString])] = []
-    func appendItem(_ inline: String) {
-      let attributed =
-        (try? AttributedString(
-          markdown: inline, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-        ?? AttributedString(inline)
-      if built.isEmpty { built.append((title: nil, items: [])) }
-      built[built.count - 1].items.append(attributed)
+    var built: [(title: String?, elements: [Element])] = []
+    func append(_ kind: ElementKind, _ text: AttributedString) {
+      // 中身のない要素は積まない（マーカーだけの行は項目ではない）。
+      guard !String(text.characters).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        return
+      }
+      if built.isEmpty { built.append((title: nil, elements: [])) }
+      built[built.count - 1].elements.append(Element(kind: kind, text: text))
+    }
+    /// 箇条書きを項目へ。入れ子は同じ並びの項目として続ける——階層は持たないが、落としもしない。
+    func appendItems(_ list: UnorderedList) {
+      for item in list.listItems {
+        var text = AttributedString()
+        for paragraph in item.blockChildren.compactMap({ $0 as? Paragraph }) {
+          if !text.characters.isEmpty { text += AttributedString(" ") }
+          text += MarkdownInline.attributed(of: paragraph, style: Self.inlineStyle)
+        }
+        append(.item, text)
+        for nested in item.blockChildren.compactMap({ $0 as? UnorderedList }) {
+          appendItems(nested)
+        }
+      }
     }
     for block in Document(parsing: markdown).children {
       switch block {
       case let heading as Heading:
-        built.append((title: heading.plainText, items: []))
+        built.append((title: heading.plainText, elements: []))
       case let list as UnorderedList:
-        for item in list.listItems {
-          appendItem(
-            item.children.compactMap { ($0 as? Paragraph)?.format() }.joined(separator: " "))
-        }
+        appendItems(list)
       case let paragraph as Paragraph:
-        appendItem(paragraph.format())
+        append(.paragraph, MarkdownInline.attributed(of: paragraph, style: Self.inlineStyle))
       default:
         break
       }
     }
-    sections = built.enumerated().map { NoteSection(id: $0, title: $1.title, items: $1.items) }
+    sections = built.map {
+      Section(title: $0.title, category: Category(title: $0.title), elements: $0.elements)
+    }
+  }
+}
+
+/// リリースノートの描画。分類が持つ色とマーカーを見出しと項目マーカーが共有し、本文は常に textSecondary。
+/// 分類は見出しの語から決まるので、「修正」しか無いノートでも修正は修正の意匠で描かれる。
+struct UpdateNotesView: View {
+  private let notes: UpdateNotes
+
+  init(markdown: String) {
+    notes = UpdateNotes(markdown: markdown)
   }
 
-  /// 分類見出しの色（出現順）: working → waiting → muted（見本 2b の 新機能/改善/修正）。
-  private func sectionColor(_ index: Int) -> Color {
-    let cycle: [Color] = [.theme.stateWorking, .theme.stateWaiting, .theme.textMuted]
-    return cycle[index % cycle.count]
+  /// 分類の色（見出しとマーカーが共有する）。新機能=working(青) / 改善=waiting(黄) / 修正=muted、
+  /// 規約外は中立の textPrimary——色数を増やさず「知らない見出し」を素の見出しとして描く。
+  private static func accent(_ category: UpdateNotes.Category) -> Color {
+    switch category {
+    case .feature: Color.theme.stateWorking
+    case .improvement: Color.theme.stateWaiting
+    case .fix: Color.theme.textMuted
+    case .neutral: Color.theme.textPrimary
+    }
+  }
+
+  /// 分類のマーカー。増えるもの（新機能・改善）は `＋`、直したもの（修正）は `✓`、中立は `•`。
+  private static func marker(_ category: UpdateNotes.Category) -> String {
+    switch category {
+    case .feature, .improvement: "＋"
+    case .fix: "✓"
+    case .neutral: "•"
+    }
   }
 
   var body: some View {
     VStack(alignment: .leading, spacing: Theme.Space.beat) {
-      ForEach(sections) { section in
+      ForEach(Array(notes.sections.enumerated()), id: \.offset) { _, section in
+        let accent = Self.accent(section.category)
         VStack(alignment: .leading, spacing: Theme.Space.note) {
           if let title = section.title {
             Text(title)
               .font(Font.theme.meta.weight(.bold))
-              .foregroundStyle(sectionColor(section.id))
-              .tracking(Theme.Typography.trackingStatus * 2)
+              .foregroundStyle(accent)
+              .tracking(Theme.Typography.trackingLabel)
           }
-          ForEach(Array(section.items.enumerated()), id: \.offset) { _, item in
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Space.note + 1) {
-              Text(section.id % 3 < 2 ? "＋" : "✓")  // 色（index % 3）と同じ循環で揃える
-                .font(Font.theme.body)
-                .foregroundStyle(Color.theme.stateDone)
-              Text(item)
-                .font(Font.theme.body)
-                .foregroundStyle(Color.theme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+          ForEach(Array(section.elements.enumerated()), id: \.offset) { _, element in
+            switch element.kind {
+            case .item:
+              HStack(alignment: .firstTextBaseline, spacing: Theme.Space.step) {
+                Text(Self.marker(section.category))
+                  .font(Font.theme.body)
+                  .foregroundStyle(accent)
+                  // マーカー列は固定幅。`＋`（全角）・`✓`・`•` は字幅が 5pt 以上違うので、
+                  // 素で並べると分類ごとに本文の左端が動く。列を beat で固定して中央に置き、
+                  // 本文の左端をどの分類でも内容左＋span に揃える。
+                  .frame(width: Theme.Space.beat)
+                noteText(element.text)
+              }
+            case .paragraph:
+              noteText(element.text)
             }
           }
         }
       }
     }
+  }
+
+  /// 本文の行送りは design-system §2.3 の `line.body` 1.6。本文フォントの素の行高 15 との差。
+  private static let bodyLineSpacing: CGFloat =
+    Theme.Typography.body.pointSize * Theme.Typography.lineBody - 15
+
+  /// 上下の余白は行送りの半分——lineSpacing は行と行の間しか広げないので、これを足して初めて
+  /// 1 行の要素も複数行の要素も同じ行ボックスを持ち、要素間の余白（spacing）が素の値のまま効く。
+  private func noteText(_ text: AttributedString) -> some View {
+    Text(text)
+      .font(Font.theme.body)
+      .lineSpacing(Self.bodyLineSpacing)
+      .foregroundStyle(Color.theme.textSecondary)
+      .fixedSize(horizontal: false, vertical: true)
+      .padding(.vertical, Self.bodyLineSpacing / 2)
   }
 }
 
@@ -182,11 +315,17 @@ struct UpdateChangesOverlay: View {
   @FocusState private var focused: Bool
 
   var body: some View {
-    ZStack {
-      Scrim(strength: .strong)
-        .contentShape(Rectangle())
-        .onTapGesture { model.onCloseChanges() }
-      UpdateChangesCard(state: model)
+    // 窓高からカードの高さ上限を作る（上下に span の余白を残す）。項目の多いノートはカード内で
+    // スクロールへ回り、シートが窓外へはみ出さない。
+    GeometryReader { geo in
+      ZStack {
+        Scrim(strength: .strong)
+          .contentShape(Rectangle())
+          .onTapGesture { model.onCloseChanges() }
+        UpdateChangesCard(
+          state: model, maxHeight: max(0, geo.size.height - Theme.Space.span * 2))
+      }
+      .frame(width: geo.size.width, height: geo.size.height)
     }
     .ignoresSafeArea()
     .focusable()
