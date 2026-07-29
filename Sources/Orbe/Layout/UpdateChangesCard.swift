@@ -5,39 +5,85 @@ import SwiftUI
 /// ノートは appcast description の Markdown を、その構造（見出し・箇条書き・段落）のまま描く。
 struct UpdateChangesCard: View {
   let state: UpdateState
+  /// カード全体の高さ上限（窓に収める。UpdateChangesOverlay が窓高から算出して渡す）。
+  let maxHeight: CGFloat
   @Environment(\.localization) private var l10n
+  /// ノート内容の実測高（ハグ用）と、ノート以外＝見出し・検証済み行・ボタン・脚注の実測高。
+  @State private var notesContentHeight: CGFloat = 0
+  @State private var chromeHeight: CGFloat = 0
+
+  /// カード内容の上下パディング（chrome 高に含まれないので上限から別途差し引く）。
+  private static let verticalPadding = Theme.Space.bar + 2
+
+  /// ノート部の実効高。内容にハグしつつ「上限 − ノート以外」で頭打ち（超過分は内部スクロールへ）。
+  private var notesHeight: CGFloat {
+    let available = max(0, maxHeight - chromeHeight - Self.verticalPadding * 2)
+    return min(notesContentHeight, available)
+  }
 
   var body: some View {
     GlassPanel(level: .settings, cornerRadius: 14) {
       VStack(alignment: .leading, spacing: 0) {
-        header
-        if let notes = state.ready?.notes {
-          UpdateNotesView(markdown: notes)
-            .padding(.top, Theme.Space.bar - 2)
-        }
-        verifiedLine
-          .padding(.top, Theme.Space.bar)
-        HStack(spacing: Theme.Space.step) {
-          Button {
-            state.onRestartNow()
-          } label: {
-            Text(l10n.string(.updateRestartAndUpdate))
-              .frame(maxWidth: .infinity)
-          }
-          .buttonStyle(DSPrimaryButtonStyle())
-          Button(l10n.string(.updateCloseButton)) { state.onCloseChanges() }
-            .buttonStyle(DSSecondaryButtonStyle())
-        }
-        .padding(.top, Theme.Space.beat)
-        Text(l10n.string(.updateSheetFootnote))
-          .font(Font.theme.meta)
-          .foregroundStyle(Color.theme.textMuted)
-          .frame(maxWidth: .infinity)
-          .padding(.top, Theme.Space.step)
+        header.background(chromeProbe)
+        if let notes = state.ready?.notes { notesScroll(notes) }
+        footer.background(chromeProbe)
       }
-      .padding(.vertical, Theme.Space.bar + 2)
+      .padding(.vertical, Self.verticalPadding)
       .padding(.horizontal, Theme.Space.span)
       .frame(width: 450, alignment: .leading)
+    }
+    // 実測が届くまでの 1 フレームも窓を超えないよう、器そのものにも上限を効かせる。
+    .frame(maxHeight: maxHeight)
+    .onPreferenceChange(UpdateChromeHeightKey.self) { chromeHeight = $0 }
+  }
+
+  /// 見出し・検証済み行・ボタン・脚注の実測高を合算して chrome 高に集約する probe。
+  private var chromeProbe: some View {
+    GeometryReader { geo in
+      Color.clear.preference(key: UpdateChromeHeightKey.self, value: geo.size.height)
+    }
+  }
+
+  /// ノート部。長いノートはここだけがスクロールし、見出し・検証済み行・ボタンは常に見える。
+  /// 上の余白はスクロール内容側に持たせ、実測高＝ノート部の占有高に一致させる。
+  private func notesScroll(_ markdown: String) -> some View {
+    ScrollView {
+      UpdateNotesView(markdown: markdown)
+        .padding(.top, Theme.Space.bar - 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+          GeometryReader { geo in
+            Color.clear.preference(key: UpdateNotesHeightKey.self, value: geo.size.height)
+          })
+    }
+    // 定高を与える（fixedSize だと内容高へ伸び切り、カードが窓外へはみ出してボタンに届かなくなる）。
+    .frame(height: notesHeight)
+    .scrollIndicators(.automatic)
+    .onPreferenceChange(UpdateNotesHeightKey.self) { notesContentHeight = $0 }
+  }
+
+  /// 検証済み行＋ボタン行＋脚注。スクロール領域の外に置き、ノートの長さによらず常に見える。
+  private var footer: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      verifiedLine
+        .padding(.top, Theme.Space.bar)
+      HStack(spacing: Theme.Space.step) {
+        Button {
+          state.onRestartNow()
+        } label: {
+          Text(l10n.string(.updateRestartAndUpdate))
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(DSPrimaryButtonStyle())
+        Button(l10n.string(.updateCloseButton)) { state.onCloseChanges() }
+          .buttonStyle(DSSecondaryButtonStyle())
+      }
+      .padding(.top, Theme.Space.beat)
+      Text(l10n.string(.updateSheetFootnote))
+        .font(Font.theme.meta)
+        .foregroundStyle(Color.theme.textMuted)
+        .frame(maxWidth: .infinity)
+        .padding(.top, Theme.Space.step)
     }
   }
 
@@ -91,6 +137,20 @@ struct UpdateChangesCard: View {
     .overlay(alignment: .top) {
       Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
     }
+  }
+}
+
+/// ノート以外（見出し・検証済み行・ボタン・脚注）の合算高。ノート部の上限から差し引く。
+struct UpdateChromeHeightKey: PreferenceKey {
+  static let defaultValue: CGFloat = 0
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value += nextValue() }
+}
+
+/// ノート内容の実測高（内容ハグ用）。
+struct UpdateNotesHeightKey: PreferenceKey {
+  static let defaultValue: CGFloat = 0
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+    value = max(value, nextValue())
   }
 }
 
@@ -269,11 +329,17 @@ struct UpdateChangesOverlay: View {
   @FocusState private var focused: Bool
 
   var body: some View {
-    ZStack {
-      Scrim(strength: .strong)
-        .contentShape(Rectangle())
-        .onTapGesture { model.onCloseChanges() }
-      UpdateChangesCard(state: model)
+    // 窓高からカードの高さ上限を作る（上下に span の余白を残す）。項目の多いノートはカード内で
+    // スクロールへ回り、シートが窓外へはみ出さない。
+    GeometryReader { geo in
+      ZStack {
+        Scrim(strength: .strong)
+          .contentShape(Rectangle())
+          .onTapGesture { model.onCloseChanges() }
+        UpdateChangesCard(
+          state: model, maxHeight: max(0, geo.size.height - Theme.Space.span * 2))
+      }
+      .frame(width: geo.size.width, height: geo.size.height)
     }
     .ignoresSafeArea()
     .focusable()
