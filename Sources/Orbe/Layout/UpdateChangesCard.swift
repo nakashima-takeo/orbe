@@ -269,6 +269,10 @@ struct UpdateNotesView: View {
                 Text(Self.marker(section.category))
                   .font(Font.theme.body)
                   .foregroundStyle(accent)
+                  // マーカー列は固定幅。`＋`（全角）・`✓`・`•` は字幅が 5pt 以上違うので、
+                  // 素で並べると分類ごとに本文の左端が動く。列を beat で固定して中央に置き、
+                  // 本文の左端をどの分類でも内容左＋span に揃える。
+                  .frame(width: Theme.Space.beat)
                 noteText(element.text)
               }
             case .paragraph:

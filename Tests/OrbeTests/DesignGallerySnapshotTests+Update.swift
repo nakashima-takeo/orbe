@@ -32,11 +32,12 @@ extension DesignGallerySnapshotTests {
       .environment(\.localization, l10n),
       size: stage, name: "update_changes.png", dir: dir)
 
-    // 2b 変更内容シート・項目の多いノート（窓に収まりボタンが見える／溢れは内部スクロール）と
-    // 「修正」だけのノート（分類が見出しの語で決まる）。
+    // 2b 変更内容シート・項目の多いノート（窓に収まりボタンが見える／溢れは内部スクロール）、
+    // 「修正」だけのノート（分類が見出しの語で決まる）、規約外の見出しと見出し無し（中立の `•`）。
     let noteCases: [(String, String)] = [
       ("update_changes_long.png", DesignSceneFixtures.updateLongSampleNotes),
       ("update_changes_fix_only.png", DesignSceneFixtures.updateFixOnlyNotes),
+      ("update_changes_neutral.png", DesignSceneFixtures.updateNeutralNotes),
     ]
     for (name, notes) in noteCases {
       try writePNG(

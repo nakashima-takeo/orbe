@@ -202,6 +202,16 @@ enum DesignSceneFixtures {
     - 設定を閉じたあとフォーカスが戻らない問題を修正しました
     """
 
+  /// 規約外の見出しと見出し無しを含むノート。中立の `•` が最も細いマーカーなので、
+  /// 分類が変わっても項目本文の左端が動かないこと（マーカー列が固定幅であること）をここで見る。
+  static let updateNeutralNotes = """
+    - 見出しより前の項目
+    ### 既知の問題
+    - 全画面の切り替え中にタブ行が一瞬ちらつきます
+    ### 修正
+    - エージェント実行中にタブ表示が止まる問題を修正しました
+    """
+
   private static func baseUpdateState() -> UpdateState {
     let state = UpdateState(currentVersion: "0.1.0")
     state.seedLastCheck(Date(timeIntervalSinceNow: -300))
