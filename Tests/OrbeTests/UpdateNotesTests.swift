@@ -3,8 +3,8 @@ import XCTest
 @testable import Orbe
 
 /// リリースノート（appcast description の Markdown）→ 描画要素の変換規則。
-/// 「Markdown が持っていない意味を表示側が作らない」——段落は項目にならず、
-/// 中身のない要素は積まれず、セクションは出現順から属性を得ない、を固定する。
+/// 「意味は入力の内容からだけ決まる」——分類は見出しの語から決まり出現順には依らず、
+/// 段落は項目にならず、中身のない要素は積まれない、を固定する。
 final class UpdateNotesTests: XCTestCase {
 
   private func plain(_ element: UpdateNotes.Element) -> String { String(element.text.characters) }
@@ -57,6 +57,26 @@ final class UpdateNotesTests: XCTestCase {
     XCTAssertEqual(reversed.sections.map(\.title), ["修正", "新機能"])
     XCTAssertEqual(ordered.sections[0], reversed.sections[1])
     XCTAssertEqual(ordered.sections[1], reversed.sections[0])
+  }
+
+  /// 分類は見出しの語で決まる（release スキルが固定する 3 種）。
+  func testCategoryComesFromHeadingWord() {
+    let notes = UpdateNotes(markdown: "### 新機能\n- A\n\n### 改善\n- B\n\n### 修正\n- C")
+
+    XCTAssertEqual(notes.sections.map(\.category), [.feature, .improvement, .fix])
+  }
+
+  /// 「修正」だけのノートでも修正は修正の分類になる（＝先頭にあるかどうかで変わらない）。
+  func testFixOnlyNoteStaysFix() {
+    XCTAssertEqual(UpdateNotes(markdown: "### 修正\n- 直した").sections.map(\.category), [.fix])
+  }
+
+  /// 規約外の見出し・見出し無しは中立へ落ちる（未知の語でも壊れない）。
+  func testUnknownAndMissingHeadingsFallBackToNeutral() {
+    let notes = UpdateNotes(markdown: "前置きの段落\n\n### 既知の問題\n- まだ直っていない")
+
+    XCTAssertEqual(notes.sections.map(\.title), [nil, "既知の問題"])
+    XCTAssertEqual(notes.sections.map(\.category), [.neutral, .neutral])
   }
 
   /// 現状描かないブロック種（順序付きリスト・コードブロック）は落とす。

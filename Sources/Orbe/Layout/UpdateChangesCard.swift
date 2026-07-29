@@ -96,12 +96,33 @@ struct UpdateChangesCard: View {
 
 /// appcast description（Markdown）を変更内容シートの描画要素へ写した値型。
 /// Markdown が持つ区別——見出し＝セクション、箇条書き＝項目、それ以外＝段落——だけを保ち、
-/// 出現順から意味（色・マーカー）を作らない。描画と分けてあるのは変換結果をテストで見るため。
+/// 意味は入力の内容（見出しの語）からだけ決める（出現順からは何も作らない）。
+/// 描画と分けてあるのは変換結果をテストで見るため。
 struct UpdateNotes: Equatable {
   /// 要素の由来。Markdown の箇条書き項目か、それ以外の段落か——表示側はこれ以上を足さない。
   enum ElementKind: Equatable {
     case item
     case paragraph
+  }
+
+  /// セクションの分類。見出しの語だけで決まり、並び順・個数には依存しない。
+  /// 語彙の出所は release スキルが固定するリリースノートの見出し 3 種（`### 新機能` / `### 改善` / `### 修正`）。
+  /// 規約外の見出し・見出し無しは `.neutral` へ落ちる。意匠（色・マーカー）はここではなく View が持つ。
+  enum Category: Equatable {
+    case feature
+    case improvement
+    case fix
+    case neutral
+
+    /// 見出し語 → 分類の対応表。表示側がこの語彙を知る唯一の点。
+    init(title: String?) {
+      switch title?.trimmingCharacters(in: .whitespaces) {
+      case "新機能": self = .feature
+      case "改善": self = .improvement
+      case "修正": self = .fix
+      default: self = .neutral
+      }
+    }
   }
 
   /// セクション配下の 1 要素。由来と、インライン Markdown を解釈した本文を持つ。
@@ -113,6 +134,7 @@ struct UpdateNotes: Equatable {
   /// 見出し 1 つとその配下の要素列。見出しより前の要素は title なしのセクションに入る。
   struct Section: Equatable {
     let title: String?
+    let category: Category
     let elements: [Element]
   }
 
@@ -143,7 +165,9 @@ struct UpdateNotes: Equatable {
         break
       }
     }
-    sections = built.map { Section(title: $0.title, elements: $0.elements) }
+    sections = built.map {
+      Section(title: $0.title, category: Category(title: $0.title), elements: $0.elements)
+    }
   }
 
   /// インライン（`code`・強調等）は AttributedString の Markdown 解釈に委ねる（コードは等幅で描かれる）。
@@ -154,8 +178,8 @@ struct UpdateNotes: Equatable {
   }
 }
 
-/// リリースノートの描画。色の階層は 見出し=textPrimary / 本文=textSecondary / マーカー=textMuted。
-/// マーカーは常に `•`——`＋ / −` は diff の語彙（design-system §3）で、ノートには流用しない。
+/// リリースノートの描画。分類が持つ色とマーカーを見出しと項目マーカーが共有し、本文は常に textSecondary。
+/// 分類は見出しの語から決まるので、「修正」しか無いノートでも修正は修正の意匠で描かれる。
 struct UpdateNotesView: View {
   private let notes: UpdateNotes
 
@@ -163,23 +187,44 @@ struct UpdateNotesView: View {
     notes = UpdateNotes(markdown: markdown)
   }
 
+  /// 分類の色（見出しとマーカーが共有する）。新機能=working(青) / 改善=waiting(黄) / 修正=muted、
+  /// 規約外は中立の textPrimary——色数を増やさず「知らない見出し」を素の見出しとして描く。
+  private static func accent(_ category: UpdateNotes.Category) -> Color {
+    switch category {
+    case .feature: Color.theme.stateWorking
+    case .improvement: Color.theme.stateWaiting
+    case .fix: Color.theme.textMuted
+    case .neutral: Color.theme.textPrimary
+    }
+  }
+
+  /// 分類のマーカー。増えるもの（新機能・改善）は `＋`、直したもの（修正）は `✓`、中立は `•`。
+  private static func marker(_ category: UpdateNotes.Category) -> String {
+    switch category {
+    case .feature, .improvement: "＋"
+    case .fix: "✓"
+    case .neutral: "•"
+    }
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: Theme.Space.beat) {
       ForEach(Array(notes.sections.enumerated()), id: \.offset) { _, section in
+        let accent = Self.accent(section.category)
         VStack(alignment: .leading, spacing: Theme.Space.note) {
           if let title = section.title {
             Text(title)
               .font(Font.theme.meta.weight(.bold))
-              .foregroundStyle(Color.theme.textPrimary)
+              .foregroundStyle(accent)
               .tracking(Theme.Typography.trackingLabel)
           }
           ForEach(Array(section.elements.enumerated()), id: \.offset) { _, element in
             switch element.kind {
             case .item:
               HStack(alignment: .firstTextBaseline, spacing: Theme.Space.step) {
-                Text("•")
+                Text(Self.marker(section.category))
                   .font(Font.theme.body)
-                  .foregroundStyle(Color.theme.textMuted)
+                  .foregroundStyle(accent)
                 noteText(element.text, color: Color.theme.textSecondary)
               }
             case .paragraph:
