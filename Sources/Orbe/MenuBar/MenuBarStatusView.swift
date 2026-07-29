@@ -6,8 +6,8 @@ import SwiftUI
 /// 静止画とテストで確かめられる。
 ///
 /// ① 要対応 0・閉じ切り: 減光した ◐ だけ（地なし・数字なし・水平余白も持たない）。
-/// ② `store.transient` が生きている間: 状態グリフ 11＋WS 名（上限で省略）＋文言（残り予算まで）が
-///    滲み出て、件数は仕舞われる。祝いは艶の走査 1 本が担う。
+/// ② `store.transient` が生きている間: 状態グリフ 11＋WS 名（上限で省略）＋文言（残り予算まで）を
+///    **1 つの箱**として滲み出し、件数は仕舞われる。祝いは艶の走査 1 本が担う。
 /// ③ 閉じ切りで要対応あり: ◐＋件数（waiting+done のみ）。地 surfaceInk 16%。
 /// ④ ドロップダウン表示中はピル地を accent 35% に。
 struct MenuBarStatusView: View {
@@ -42,8 +42,18 @@ struct MenuBarStatusView: View {
   /// 件数スロットの直前の間隔（原典の数字スロット `padding-left: 5px`）。他のスロットは 6。
   private static let countGap: CGFloat = 5
 
+  /// ◐ の辺長（原典 `width: 15`）。予算の割り付けもこの値を数える。
+  private static let glyphSize: CGFloat = 15
+
   /// 水平 padding を除いた内側予算。
   private static let pillBudget = transientMaxWidth - pillPadding * 2
+
+  /// ②の文言グループ（状態グリフ＋WS 名＋文言）の予算。外側 `PillRow` がこのグループへ配る
+  /// 取り分——内側予算から ◐・グループ直前の間隔・件数スロットの取り分（上限固定）を引いた残り
+  /// ——と同じ量である必要がある。グループが自分の取り分を超えて申告すると、外側は再提案しても
+  /// 同じ幅を返され（`PillRow` は提案幅を見ない＝内容ハグ）、ピルが上限を超えて太る。
+  private static let textBudget =
+    pillBudget - glyphSize - Theme.Space.note - (countGap + countCap)
 
   /// 艶の帯幅（原典 `width: 80`）。
   private static let glossWidth: CGFloat = 80
@@ -91,16 +101,7 @@ struct MenuBarStatusView: View {
     PillRow(spacing: Theme.Space.note, budget: Self.pillBudget) {
       brandGlyph.pillSlot(gap: 0, fold: 1)
       if let row = store.transient?.row {
-        if let kind = AgentStateIcon.kind(state: row.state) {
-          StatusGlyphView(kind: kind, size: 11)
-            .environment(\.colorScheme, .dark)
-            .pillSlot(gap: Theme.Space.note, fold: textFold)
-        }
-        textSlot(row.workspaceName, color: Color.theme.textPrimary)
-          .pillSlot(gap: Theme.Space.note, fold: textFold, cap: Self.transientWorkspaceCap)
-        // muted は暗地で沈む——読める階調へ上げる。上限を宣言せず残り予算を吸う。
-        textSlot(row.message ?? row.tabTitle, color: Color.theme.statusText)
-          .pillSlot(gap: Theme.Space.note, fold: textFold)
+        transientGroup(row).pillSlot(gap: Theme.Space.note, fold: textFold)
       }
       if slotCount > 0 {
         Text("\(slotCount)")
@@ -119,14 +120,31 @@ struct MenuBarStatusView: View {
     .padding(.horizontal, Theme.Space.hair)
   }
 
+  /// ②の中身（状態グリフ・WS 名・文言）。**これで 1 つのスロット**——原典は 3 つを 1 枚の
+  /// `max-width` の箱に入れて畳むので、滲み出しは左から途切れず一続きに現れ、収縮では右から
+  /// 一続きに消える。3 つを個別に畳むと、同じ瞬間に WS 名も文言も字の途中で切れた断片が並ぶ。
+  /// 内側の予算配分（WS 名は上限までハグ・文言が残りを吸う）はここが担う。
+  private func transientGroup(_ row: AttentionRow) -> some View {
+    PillRow(spacing: Theme.Space.note, budget: Self.textBudget) {
+      if let kind = AgentStateIcon.kind(state: row.state) {
+        StatusGlyphView(kind: kind, size: 11)
+          .environment(\.colorScheme, .dark)
+      }
+      textSlot(row.workspaceName, color: Color.theme.textPrimary)
+        .pillSlotCap(Self.transientWorkspaceCap)
+      // muted は暗地で沈む——読める階調へ上げる。上限を宣言せず残り予算を吸う。
+      textSlot(row.message ?? row.tabTitle, color: Color.theme.statusText)
+    }
+  }
+
   /// ◐。閉じ切りの①では減光した前景モノクロ（.primary＝メニューバー外観追従）で、他の常駐
   /// アイコンと同じ template 相当の見え。②の暗地が立つぶんだけブランドグラデへクロスフェードする。
   private var brandGlyph: some View {
     let lift = eased(MenuBarArrival.Curve.glyph)
     return ZStack {
-      OrbeMarkGlyph(size: 15, color: .primary)
+      OrbeMarkGlyph(size: Self.glyphSize, color: .primary)
         .opacity(slotCount > 0 ? 1 : 0.45 + 0.55 * lift)
-      OrbeMarkGlyph(size: 15).opacity(groundLift)
+      OrbeMarkGlyph(size: Self.glyphSize).opacity(groundLift)
     }
   }
 
@@ -220,6 +238,11 @@ extension View {
       .layoutValue(key: PillSlotGap.self, value: gap)
       .layoutValue(key: PillSlotFold.self, value: fold)
       .layoutValue(key: PillSlotCap.self, value: cap)
+  }
+
+  /// 幅の上限だけを宣言する（自分では畳まないスロット用）。
+  func pillSlotCap(_ cap: CGFloat) -> some View {
+    layoutValue(key: PillSlotCap.self, value: cap)
   }
 }
 
