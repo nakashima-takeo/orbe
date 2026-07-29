@@ -155,7 +155,8 @@ enum DesignSceneFixtures {
 
   // MARK: - Update（見本 UpdateCheckDoc 2a–2d 同データ。Sparkle 実体なしで各状態を注入する）
 
-  /// 見本のリリースノート（2b の 3 分類・ユーザー語）。appcast description と同じ Markdown 形。
+  /// 見本のリリースノート（2b の 3 分類・ユーザー語）。appcast description と同じ Markdown 形
+  /// （末尾の出典段落＝GPL §6 表記まで含む。箇条書きでない段落の描かれ方をここで見る）。
   static let updateSampleNotes = """
     ### 新機能
     - ペインからそのまま使える `orbe` コマンドを同梱しました
@@ -163,6 +164,8 @@ enum DesignSceneFixtures {
     - タブ補完の候補表示が速くなりました
     ### 修正
     - エージェント実行中にタブ表示が止まる問題を修正しました
+
+    ソース: https://github.com/nakashima-takeo/orbe/tree/v0.2.0
     """
 
   private static func baseUpdateState() -> UpdateState {
