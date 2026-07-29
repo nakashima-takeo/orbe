@@ -1,7 +1,7 @@
 ---
 title: 設定（現状）
 description: キュレート既定 → user 設定 → GUI 生成 conf の後勝ち3層読み込みと、テーマ（Auto/Dark/Light 外観スイッチ）によるライト/ダーク決定
-updated: 2026-07-28
+updated: 2026-07-29
 ---
 
 ## 3 層読み込み
@@ -11,9 +11,9 @@ updated: 2026-07-28
 層1（キュレート既定）が持つのは端末テーマ・フォントチェーン・背景不透明度/ブラー・パディング・カーソル・シェル統合の既定。うち意図が値に宿るもの:
 
 - `theme = light:OrbeLight,dark:OrbeDark` … 自前 named theme 2 枚。`app/themes/` の実体は識別色 SSOT（`DesignSystem/OrbePalette.swift`）から生成・コミットされ、`swift test` が ANSI ink スロットの WCAG AA と SSOT 再生成の drift を検証し、さらに層1と gui.conf の `theme =` 行からテーマ名をパースして `app/themes/<name>` の実在を照合する——テーマ名は層1・gui.conf・テーマファイル名・`build-app.sh` の4箇所に独立して埋まり、解決に失敗しても ghostty は診断を積むだけで既定色のまま起動してしまうため。
-- 本文等幅チェーンは JetBrainsMono Nerd Font（プライマリ・4スタイル同梱で bold/italic も設計字形）→ JuliaMono（広カバレッジ fallback）。JuliaMono を明示段に置くのは、JetBrains に無い記号を ghostty 解決順の最終段（discovery＝起動文脈・LANG 依存で不安定）より前で決定論的に確定するため。これら同梱 TTF（絵文字用含む）は起動時（フォント解決より前）にプロセス登録する（非バンドル起動では no-op）——登録しないと `font-codepoint-map` がファミリ名を解決できず、委譲が無言で外れて見た目だけが元へ戻る。
+- 本文等幅チェーンは JetBrainsMono Nerd Font（プライマリ・4スタイル同梱で bold/italic も設計字形）の **1 本だけ**。`font-family` 行の face は fallback=false で挿さり presentation を無視してグリフ有無だけで奪うため、広カバレッジのフォントを足すと絵文字を白黒字形で取り、記号の解決先も全角字形のフォントから欧文の半角字形へすり替わる。広カバレッジの JuliaMono（v0.63.2）は `font-family` に入れず、**起動時の `.process` 登録だけで discovery の候補**として効かせる——JetBrains に無い記号（数学記号・多言語等）の受け皿。discovery で引けるのは SVG テーブルを持たない版だけ（カラーフォント判定は text 用途で拒否され、登録が無言で無効化する）で、`swift test` が同梱 TTF の非カラー判定を固定する。これら同梱 TTF（絵文字用含む）は起動時（フォント解決より前）にプロセス登録する（非バンドル起動では no-op）——登録しないと `font-codepoint-map` がファミリ名を解決できず、委譲が無言で外れて見た目だけが元へ戻る。
 - 日本語コードポイント範囲を `Hiragino Sans W3` へ固定する `font-codepoint-map` … CJK フォールバックが起動文脈の優先言語に依存して中華字形になるのを防ぐ。解決順の最上位で名前解決するためプライマリ等幅に不干渉。ウェイトを W3 と明示するのはファミリ名だけだと極細の W0 まで全マッチするため。UI 言語切替はプロセスのロケールに触れない（[localization](localization.md)）ので、この固定は日英どちらでも不変。部首補助・囲み CJK・CJK 互換も同じ行に入れるのはサイズでなく決定論化のため——同梱チェーンがほぼ持たず、discovery か「先に画面へ出た方の map face」に落ちて実行ごとに書体が変わりうる（効くのは Hiragino が実際に持つ範囲だけで、持たない分は従来の解決順へ落ちる）。ただし **VS16 付きの絵文字表現を持つ点（`〰〽㊗㊙`）は範囲から切り欠く**——map の override は presentation 判定より先に確定し、検証も presentation を問わないため、モノクロ face で固定されて絵文字表現が置換文字に落ちるため。
-- 囲み英数字と記号の一部を `Hiragino Sans W3` へ委譲する `font-codepoint-map`（日本語固定とは別行・同一ファミリ）… これらは East Asian Width が Ambiguous/Neutral で 1 セル幅に落ち、欧文等幅の小さい字形が出て周囲の日本語に対し極端に小さく見える。日本語フォントで描けば正円・同書体で揃う。対象は **libghostty がシンボルと見なすブロックに限る**——そこだけがグリフ制約でセル内に収まり、外（`※`・`●■▲`・`⌘`）は制約が掛からず全角字形が隣セルへはみ出す。**VS16 でカラー絵文字になる点（`Ⓜ⚠☁` 等）も外す**——理由は上の切り欠きと同じで、モノクロ固定により絵文字表現が置換文字に落ちる。この 2 条件でレンジが飛び地に割れており、絵文字由来の穴を埋めると無言で壊れるので `swift test` が両方を検証する。全角字形を 1 セル幅で描くため、前後のセルの中身によって制約枠が 1↔2 セルに変わり描画サイズが動く。
+- 囲み英数字と記号の一部を `Hiragino Sans W3` へ委譲する `font-codepoint-map`（日本語固定とは別行・同一ファミリ）… これらは East Asian Width が Ambiguous/Neutral で 1 セル幅に落ち、欧文等幅の小さい字形が出て周囲の日本語に対し極端に小さく見える。日本語フォントで描けば正円・同書体で揃う。委譲しないと discovery が解き、monospace 優先の Score で登録済み JuliaMono（半角字形）が勝ちやすく環境依存にもなるため、map で環境非依存に固定する意味もある。対象は **libghostty がシンボルと見なすブロックに限る**——そこだけがグリフ制約でセル内に収まり、外（`※`・`●■▲`・`⌘`）は制約が掛からず全角字形が隣セルへはみ出す。**VS16 でカラー絵文字になる点（`Ⓜ⚠☁` 等）も外す**——理由は上の切り欠きと同じで、モノクロ固定により絵文字表現が置換文字に落ちる。この 2 条件でレンジが飛び地に割れており、絵文字由来の穴を埋めると無言で壊れるので `swift test` が両方を検証する。全角字形を 1 セル幅で描くため、前後のセルの中身によって制約枠が 1↔2 セルに変わり描画サイズが動く。
 - 背景不透明度は既定でわずかに透ける（設定パレットの既定と対称。GUI 未介入でも初期から透過）、`background-blur` も既定 ON。
 - `shell-integration-features = no-cursor,no-title` … cursor はプロンプトでの bar 上書きを止めブロックを効かせ、title は自動タイトル送出を止めてタブ名を chrome の precedence へ委ねる（→ [chrome](chrome.md)）。
 - 絵文字の `font-codepoint-map` は層1に置かず gui.conf（層3）が**常時出力**する（単一出所・後述）。
@@ -23,9 +23,9 @@ updated: 2026-07-28
 設定パレット（[settings-palette](settings-palette.md)）が実効設定から再生成する層。実効設定の raw 値（明示されたキーだけ・既定へは解決しない）を sparse に書く。例外は 2 つの**常時行**:
 
 - `theme = light:OrbeLight,dark:OrbeDark` を設定値に関わらず常時書く（全 nil でも空ファイルにはならない）——user の `~/.config/ghostty` の `theme =` を層3の後勝ちで恒久無効化し、ターミナル配色を Orbe の 2 枚に固定するため（`palette =` 等の個別色キー直書きは容認スコープ外）。ライト/ダークのどちらに見せるかはこの行でなくテーマ設定（外観スイッチ）が決める。
-- 絵文字の `font-codepoint-map` を絵文字フォント設定から分岐して常時書く: noto は emoji-presentation 全域（Unicode プロパティを実行時走査して範囲圧縮。chrome 側と同一の判定源＝端末とタブの対象集合が定義上一致）を同梱 Noto Color Emoji（sbix 変換版）へ、apple は JuliaMono の横取りを防ぐ固定集合だけを Apple Color Emoji へ向ける。text-presentation の記号はどちらの map にも含めず presentation で出し分ける。text 既定＋VS16 の文字（❤️ 等）は map 対象外＝端末セルでは Apple のまま（codepoint-map は VS 条件を表現できない）。map は font-family でないため後述の reset 非対象で、user 層の同名 map には後着の層3が勝つ。
+- 絵文字の `font-codepoint-map` は絵文字フォント設定から分岐する: noto は emoji-presentation 全域（Unicode プロパティを実行時走査して範囲圧縮。chrome 側と同一の判定源＝端末とタブの対象集合が定義上一致）を同梱 Noto Color Emoji（sbix 変換版）へ map する行を常時書く。apple は行を出さない——libghostty が macOS で Apple Color Emoji を必ず fallback に挿すため放っておけば色付きで描け、奪う側の `font-family` を JetBrains 1 本に絞ってあるので横取りを打ち消す map は要らない。text-presentation の記号は map に含めず presentation で出し分ける。text 既定＋VS16 の文字（❤️ 等）は map 対象外＝端末セルでは Apple のまま（codepoint-map は VS 条件を表現できない）。map は font-family でないため後述の reset 非対象で、user 層の同名 map には後着の層3が勝つ。
 
-`font-family` は gui.conf が解決順の最後で append されるため、既定チェーンへ単純追記すると選択が末尾に回って無視される——**空値でチェーンを reset → 選択をプライマリに据え直し → 末尾 fallback を再付与**の3行を吐く。絵文字の color 固定は上記の常時 codepoint-map が担い reset の影響を受けない。背景不透明度は percent Int を整数演算で 2 桁固定の小数へ変換して書く（浮動小数の誤差を避ける）。ブラー・カーソル点滅は Bool をそのまま書き、nil なら行を出さず層1の既定に委ねる。カーソル色はテーマ側 `cursor-color`（accent トークン）固定で GUI から変更できない。出力行と順序は設定レジストリ（各項目の宣言を 1 箇所に集約）を走査して組む。
+`font-family` は gui.conf が解決順の最後で append されるため、既定チェーンへ単純追記すると選択が末尾に回って無視される——**空値でチェーンを reset → 選択をプライマリに据え直す**の2行を吐く（チェーンは層1と同じく 1 本に保つ）。絵文字の color 固定は上記の常時 codepoint-map が担い reset の影響を受けない。背景不透明度は percent Int を整数演算で 2 桁固定の小数へ変換して書く（浮動小数の誤差を避ける）。ブラー・カーソル点滅は Bool をそのまま書き、nil なら行を出さず層1の既定に委ねる。カーソル色はテーマ側 `cursor-color`（accent トークン）固定で GUI から変更できない。出力行と順序は設定レジストリ（各項目の宣言を 1 箇所に集約）を走査して組む。
 
 ## 実効設定と反映
 
