@@ -154,7 +154,7 @@ struct UpdateNotes: Equatable {
   }
 }
 
-/// リリースノートの描画。色の階層は 見出し=textPrimary / 項目=textSecondary / マーカーと段落=textMuted。
+/// リリースノートの描画。色の階層は 見出し=textPrimary / 本文=textSecondary / マーカー=textMuted。
 /// マーカーは常に `•`——`＋ / −` は diff の語彙（design-system §3）で、ノートには流用しない。
 struct UpdateNotesView: View {
   private let notes: UpdateNotes
@@ -183,7 +183,7 @@ struct UpdateNotesView: View {
                 noteText(element.text, color: Color.theme.textSecondary)
               }
             case .paragraph:
-              noteText(element.text, color: Color.theme.textMuted)
+              noteText(element.text, color: Color.theme.textSecondary)
             }
           }
         }
