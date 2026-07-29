@@ -12,7 +12,7 @@ struct UpdateChangesCard: View {
   @State private var notesContentHeight: CGFloat = 0
 
   var body: some View {
-    GlassPanel(level: .settings, cornerRadius: 14) {
+    GlassPanel(level: .settings) {
       VStack(alignment: .leading, spacing: 0) {
         header
         if let notes = state.ready?.notes { notesScroll(notes) }
@@ -74,7 +74,7 @@ struct UpdateChangesCard: View {
     HStack(alignment: .top) {
       VStack(alignment: .leading, spacing: Theme.Space.hair + 1) {
         Text(l10n.format(.updateSheetTitle, "v\(state.ready?.version ?? "")"))
-          .font(Font.theme.title.weight(.bold))
+          .font(Font.theme.title)
           .foregroundStyle(Color.theme.textPrimary)
         Text(metaLine)
           .font(Font.theme.meta)
