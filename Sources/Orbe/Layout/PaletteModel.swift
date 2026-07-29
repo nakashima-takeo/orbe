@@ -43,6 +43,10 @@ import SwiftUI
 
   /// ホバー開始による選択追従（`.pointer` のときだけ効く）。
   func hoverSelect(_ i: Int) { selection.hoverSelect(i) }
+  /// 裏の再取得で行がずれたときの選択の追い直し。ユーザの意図ではないのでモダリティを奪わない
+  /// （→ `ModalSelection.restore`）。`selected` の setter で代入すると `.keyboard` へ戻り、
+  /// ポインタ操作中の追従が切れる。
+  func restoreSelection(_ i: Int) { selection.restore(i) }
   /// ヘッダ左のテキスト（サブメニューの「‹ 親」等）。nil で非表示。入力欄も無ければヘッダ行ごと描かれない。
   var breadcrumb: String?
   /// ヘッダ右端の表示専用バッジ（Attention の `⌘⌘` 等）。nil で出さない（既存パレットは無影響）。

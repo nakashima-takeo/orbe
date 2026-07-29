@@ -24,7 +24,7 @@ import SwiftUI
     render.surface = .popup  // デザイン第10シーン rgba(panel, 0.9)＝popup 級の面（枠・幾何は panel 級）
     render.scrimStrength = .normal  // 頻繁に開く軽いパレット（workspace 切替と同じ通常暗幕）
     render.hintKeys = [
-      ("↩", localization.string(.attentionHintJump)),
+      ("↵", localization.string(.attentionHintJump)),
       ("↑↓", localization.string(.attentionHintSelect)),
       ("esc", localization.string(.attentionHintClose)),
     ]
@@ -46,9 +46,20 @@ import SwiftUI
   func focus() { render.focusToken &+= 1 }
 
   /// snapshot を反映して再描画する（開いたまま届く report の追従にも使う）。
+  ///
+  /// 並びは stateChangedAt 降順なので、開いている間に別ペインが waiting / done へ変われば行が
+  /// 先頭に挿し込まれ、以降の index が 1 つずつずれる。index を据え置くと ↵ が**選んだ覚えの
+  /// ない別ペイン**へ飛ぶので、選択は paneId を錨に追い直す（→ `ModalSelection.restore`。
+  /// 裏の更新はユーザの意図ではないのでモダリティは奪わない）。錨が消えたときだけ範囲へ丸める。
   func setRows(_ rows: [AttentionRow]) {
+    let anchor =
+      self.rows.indices.contains(render.selected) ? self.rows[render.selected].paneId : nil
     self.rows = rows
     rebuild()
+    if let anchor, let i = rows.firstIndex(where: { $0.paneId == anchor }) {
+      render.restoreSelection(i)
+      return
+    }
     render.clampSelection()
   }
 
