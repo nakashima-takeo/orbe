@@ -9,6 +9,9 @@ final class DispatchDataProvider {
   private weak var model: DispatchPaletteModel?
   /// 実行失敗メッセージ（palette 表示）を現在言語で出すためのストア（提示元＝WindowController が渡す）。
   private let localization: LocalizationStore
+  /// worktree 新規作成先のテンプレート（実効設定 `worktree-dir`）。パレットは開くたびに生成されるため、
+  /// 提示元が開く時点の実効値を注入する＝常に最新値で解決する。
+  private let worktreeTemplate: String
 
   private(set) var repo: GitRepo?
   private var mainWorktree: String?
@@ -26,10 +29,14 @@ final class DispatchDataProvider {
   /// gh 取得の上限件数。
   private let ghLimit = 30
 
-  init(cwd: String, model: DispatchPaletteModel, localization: LocalizationStore) {
+  init(
+    cwd: String, model: DispatchPaletteModel, localization: LocalizationStore,
+    worktreeTemplate: String
+  ) {
     self.cwd = cwd
     self.model = model
     self.localization = localization
+    self.worktreeTemplate = worktreeTemplate
   }
 
   // MARK: - ロード
@@ -179,13 +186,11 @@ final class DispatchDataProvider {
 
   /// 行種別に応じて対象ディレクトリを解決する（必要なら worktree を新規作成する）。
   /// 作成は追加のみ（現在の作業ツリーは不可侵）。失敗時は stderr をそのまま返す。
+  /// 既存ディレクトリを返すだけの経路はリポジトリを要さない——非 git（`repo == nil`）を畳むのは
+  /// リポジトリが要る作成経路（`createWorktree`）の責務。
   func prepareDirectory(
     for action: DispatchAction, completion: @escaping (DirectoryResolution) -> Void
   ) {
-    guard let repo else {
-      completion(.failed(localization.string(.dispatchErrNotGitRepo)))
-      return
-    }
     switch action {
     case .worktree(let path):
       completion(.ready(path))
@@ -195,10 +200,9 @@ final class DispatchDataProvider {
         completion(.ready(existing))
         return
       }
-      let path = worktreeDir(forSlug: slug(name))
-      repo.addWorktree(path: path, base: name, newBranch: nil, track: false) {
-        completion($0 == nil ? .ready(path) : .failed($0!))
-      }
+      createWorktree(
+        at: worktreeDir(forSlug: slug(name)), base: name, newBranch: nil, track: false,
+        completion: completion)
 
     case .remoteBranch(let name, let existing):
       if let existing {
@@ -206,10 +210,9 @@ final class DispatchDataProvider {
         return
       }
       let local = localName(fromRemote: name)
-      let path = worktreeDir(forSlug: slug(local))
-      repo.addWorktree(path: path, base: name, newBranch: local, track: true) {
-        completion($0 == nil ? .ready(path) : .failed($0!))
-      }
+      createWorktree(
+        at: worktreeDir(forSlug: slug(local)), base: name, newBranch: local, track: true,
+        completion: completion)
 
     case .issue(let number, let existing, let branchExists):
       if let existing {
@@ -220,14 +223,13 @@ final class DispatchDataProvider {
       let path = worktreeDir(forSlug: slug(branch))
       if branchExists {
         // 既存ブランチから worktree 追加（-b を外す）＝ git worktree add <path> issue/<n>。
-        repo.addWorktree(path: path, base: branch, newBranch: nil, track: false) {
-          completion($0 == nil ? .ready(path) : .failed($0!))
-        }
+        createWorktree(
+          at: path, base: branch, newBranch: nil, track: false, completion: completion)
       } else {
         // 新規: git worktree add -b issue/<n> <path> <default>。
-        repo.addWorktree(path: path, base: defaultBranchName, newBranch: branch, track: false) {
-          completion($0 == nil ? .ready(path) : .failed($0!))
-        }
+        createWorktree(
+          at: path, base: defaultBranchName, newBranch: branch, track: false,
+          completion: completion)
       }
 
     case .pullRequest(let number, let headRef, let isCrossRepo, let existing):
@@ -241,10 +243,38 @@ final class DispatchDataProvider {
         completion(.failed(localization.format(.dispatchErrForkPR, number)))
         return
       }
-      let path = worktreeDir(forSlug: slug(headRef))
-      repo.addWorktree(path: path, base: "origin/\(headRef)", newBranch: headRef, track: true) {
-        completion($0 == nil ? .ready(path) : .failed($0!))
+      createWorktree(
+        at: worktreeDir(forSlug: slug(headRef)), base: "origin/\(headRef)",
+        newBranch: headRef, track: true, completion: completion)
+    }
+  }
+
+  /// 解決済みパスへ worktree を作る。作成先が作業ツリー内に落ちるときだけ、**作成できた後で**共有
+  /// exclude へ除外を冪等に入れる（プリセット由来かカスタム由来かを問わず、解決済みパスだけで判定する）。
+  /// 除外の成否は作成に影響しない。
+  private func createWorktree(
+    at path: String, base: String, newBranch: String?, track: Bool,
+    completion: @escaping (DirectoryResolution) -> Void
+  ) {
+    guard let repo else {
+      completion(.failed(localization.string(.dispatchErrNotGitRepo)))
+      return
+    }
+    // 除外の対象は作成の**前**に決める——作成後は親が実在してしまい、その親を容れ物として Orbe が
+    // 作ったのか、ユーザーの既存ディレクトリなのかを判別できなくなる。
+    let root = worktreeBase
+    let entry = GitWorktreeExclude.entry(
+      worktreePath: path, worktreeRoot: root,
+      parentIsNew: !FileManager.default.fileExists(
+        atPath: (path as NSString).deletingLastPathComponent))
+    repo.addWorktree(path: path, base: base, newBranch: newBranch, track: track) { error in
+      guard error == nil else {
+        completion(.failed(error!))
+        return
       }
+      // 書くのは作成できたときだけ（失敗した作成の除外を残さない）。この時点では対象が実在するので
+      // `check-ignore` の「既にユーザーが塞いでいるか」判定も正しく効く。
+      repo.applyWorktreeExclude(entry, worktreeRoot: root) { completion(.ready(path)) }
     }
   }
 
@@ -268,13 +298,14 @@ final class DispatchDataProvider {
 
   // MARK: - パス導出
 
-  /// `<リポジトリ親>/<repo名>-worktrees/<slug>`（main worktree の basename と親から導く）。
+  /// テンプレート解決の base。`{repo_path}`/`{parent}`/`{repo}` の導出元であり、repo 内解決の判定
+  /// （除外の自動化）が使う作業ツリー root でもある。
+  private var worktreeBase: String { mainWorktree ?? repo?.root ?? cwd }
+
+  /// 実効テンプレート（設定 `worktree-dir`）から作成先を解決する。置換・`~` 展開・standardize は
+  /// `WorktreePathTemplate` に一本化する。
   private func worktreeDir(forSlug slug: String) -> String {
-    let base = mainWorktree ?? repo?.root ?? cwd
-    let repoName = (base as NSString).lastPathComponent
-    let parent = (base as NSString).deletingLastPathComponent
-    let container = (parent as NSString).appendingPathComponent("\(repoName)-worktrees")
-    return (container as NSString).appendingPathComponent(slug)
+    WorktreePathTemplate.resolve(template: worktreeTemplate, repoPath: worktreeBase, slug: slug)
   }
 
   private func slug(_ name: String) -> String {

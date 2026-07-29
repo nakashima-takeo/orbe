@@ -295,7 +295,7 @@ final class WindowControllerReportAgentTests: XCTestCase {
     flushDelivered(wc)
     XCTAssertEqual(wc.attentionStore.transient?.row.paneId, panes[1].id)
 
-    wc.closeTab(wc.current.tabs[1])
+    wc.closeTab(wc.current.tabs[1], origin: .gesture)
     flushDelivered(wc)
     XCTAssertNil(wc.attentionStore.transient)
   }
@@ -312,7 +312,7 @@ final class WindowControllerReportAgentTests: XCTestCase {
     flushDelivered(wc)
     XCTAssertEqual(wc.attentionStore.transient?.row.paneId, sibling.id)
 
-    tab.close(sibling)
+    tab.close(sibling, origin: .gesture)
     flushDelivered(wc)
     XCTAssertNil(wc.attentionStore.transient)
   }

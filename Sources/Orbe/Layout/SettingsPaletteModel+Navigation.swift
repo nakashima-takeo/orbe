@@ -12,17 +12,32 @@ extension SettingsPaletteModel {
     case .theme: return .theme
     case .defaultAgent: return .agent
     case .agentStateIcons: return .agentStates
+    case .worktreeDir: return .worktreeDirPresets
     case .fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .devFeaturesEnabled:
       return .root  // toggle であって drillIn でない
     }
   }
 
-  /// root 設定行から font/theme/agent/状態一覧サブパレットへ潜る。戻り時に選択を復元するため、潜った設定の
-  /// 全行 rootRows 上の index（＝scope 行の分 +1）を覚える。絞り込み中の `render.selected` は
+  /// root 設定行から font/theme/agent/状態一覧/worktreeDir サブパレットへ潜る。戻り時に選択を復元するため、
+  /// 潜った設定の全行 rootRows 上の index（＝scope 行の分 +1）を覚える。絞り込み中の `render.selected` は
   /// visibleRootRows の部分集合を指すため、それでなく行の同一性（SettingID）から全行 index を引く。
   func drillIn(_ id: SettingID) {
     rootRowBeforeDrill = rootOrder.firstIndex { $0.id == id }.map { $0 + 1 } ?? rootRowBeforeDrill
     setMode(drillMode(for: id))
+  }
+
+  /// worktreeDir のプリセット一覧から「カスタム…」でテキスト入力へ潜る（テキスト入力は最終手段）。
+  /// そのスコープの実効テンプレートをプリフィルとして渡す——注意行は query から repo を区別する語の
+  /// 有無を導くため、入場直後の行がプリフィル値を見ていないと最も警告が要る現在値でだけ黙る。
+  func drillIntoWorktreeDirCustom() {
+    worktreeDirError = nil  // 前回の不正理由を持ち越さない
+    setMode(.worktreeDirCustom, prefill: values.effWorktreeDir)
+  }
+
+  /// カスタム入力からプリセット一覧へ戻る（`Esc`。入力欄の `←` はカーソル移動でここへ届かない）。
+  /// 潜った「カスタム…」行（末尾）へ選択を復元する。
+  func returnToWorktreeDirPresets() {
+    setMode(.worktreeDirPresets, select: worktreeDirCustomRow)
   }
 
   /// サブパレットから root へ戻る（`←`・`Esc`・確定のいずれでも）。潜った行へ選択を復元する。

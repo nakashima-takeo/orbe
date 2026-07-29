@@ -26,6 +26,7 @@ struct ThemeColors {
   // アクセント
   let accentPrimary = Color(nsColor: Theme.Color.accentPrimary)
   let accentFocus = Color(nsColor: Theme.Color.accentFocus)
+  let accentBright = Color(nsColor: Theme.Color.accentBright)
   let onAccent = Color(nsColor: Theme.Color.onAccent)
   // ブランドグリフ ◐ の紫グラデ（テーマ非依存・objectBoundingBox start (0,0) → end (0.6,1)）
   let glyphGradient = LinearGradient(
@@ -53,6 +54,9 @@ struct ThemeColors {
   // ステータスストリップ・done グリフ
   let statusText = Color(nsColor: Theme.Color.statusText)
   let checkStroke = Color(nsColor: Theme.Color.checkStroke)
+  // ヘルプのキーボード可視化（使用キー / 未使用キーの文字色）
+  let kbKeyText = Color(nsColor: Theme.Color.kbKeyText)
+  let kbKeyMutedText = Color(nsColor: Theme.Color.kbKeyMutedText)
   // セグメント形タブバー
   let tabRowBg = Color(nsColor: Theme.Color.tabRowBg)
   let tabSegBg = Color(nsColor: Theme.Color.tabSegBg)
@@ -111,6 +115,16 @@ struct ThemeFonts {
   let paneFootnote = Font(Theme.Typography.paneFootnote as CTFont)
   let paneBadge = Font(Theme.Typography.paneBadge as CTFont)
   let paneTag = Font(Theme.Typography.paneTag as CTFont)
+  // Help（⌘H チートシート）
+  let helpTitle = Font(Theme.Typography.helpTitle as CTFont)
+  let helpRow = Font(Theme.Typography.helpRow as CTFont)
+  let helpSidebarItem = Font(Theme.Typography.helpSidebarItem as CTFont)
+  let helpKeyList = Font(Theme.Typography.helpKeyList as CTFont)
+  let helpCount = Font(Theme.Typography.helpCount as CTFont)
+  let helpSection = Font(Theme.Typography.helpSection as CTFont)
+  let helpCaption = Font(Theme.Typography.helpCaption as CTFont)
+  let helpKeyFn = Font(Theme.Typography.helpKeyFn as CTFont)
+  let helpKeyArrow = Font(Theme.Typography.helpKeyArrow as CTFont)
   let proseBody = Font(Theme.Typography.proseBody as CTFont)
   let proseHeading = Font(Theme.Typography.proseHeading as CTFont)
   let proseTitle = Font(Theme.Typography.proseTitle as CTFont)

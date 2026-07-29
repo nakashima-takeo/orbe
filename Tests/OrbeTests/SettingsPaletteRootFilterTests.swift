@@ -8,12 +8,12 @@ import XCTest
 @MainActor
 extension SettingsPaletteTests {
 
-  /// root は絞り込み入力欄あり（filter）。クエリ空なら全 13 行（スコープ＋11 設定＋言語）を出す。
+  /// root は絞り込み入力欄あり（filter）。クエリ空なら全 14 行（スコープ＋12 設定＋言語）を出す。
   func testRootHasFilterFieldAndShowsAllRowsWhenEmpty() {
     let p = model()
     XCTAssertTrue(p.render.fieldVisible, "root に絞り込み入力欄が出る")
     XCTAssertTrue(p.render.fieldIsFilter, "filter 入力欄＝← を onLeft（行操作）へ回す")
-    XCTAssertEqual(p.render.rows.count, 13, "クエリ空なら全行（スコープ＋11 設定＋言語）")
+    XCTAssertEqual(p.render.rows.count, 14, "クエリ空なら全行（スコープ＋12 設定＋言語）")
   }
 
   /// 打鍵で設定行ラベルを増分絞り込み（大小無視・部分一致）。「背景」で背景系 2 行だけ残る。
@@ -33,7 +33,7 @@ extension SettingsPaletteTests {
     XCTAssertEqual(p.render.rows.count, 2)
     p.render.query = ""
     p.render.onQueryChange()
-    XCTAssertEqual(p.render.rows.count, 13, "クエリを消すと全行へ戻る")
+    XCTAssertEqual(p.render.rows.count, 14, "クエリを消すと全行へ戻る")
   }
 
   /// 絞り込み後、onRight は「絞り込み後の選択行」の stepper へ効く（全行 index 0＝スコープ反転を叩かない）。
@@ -77,7 +77,7 @@ extension SettingsPaletteTests {
     p.render.onActivate()  // テーマサブへ潜る
     p.render.onLeft()  // ← で root へ戻る
     XCTAssertEqual(p.render.query, "", "戻ると絞り込みは消える")
-    XCTAssertEqual(p.render.rows.count, 13, "全行へ戻る")
+    XCTAssertEqual(p.render.rows.count, 14, "全行へ戻る")
     XCTAssertEqual(p.render.selected, 5, "潜ったテーマ行（全行 index 5）へ選択を復元（スコープ行 0 でない）")
     XCTAssertTrue(p.render.rows[5].label.contains("テーマ"))
   }

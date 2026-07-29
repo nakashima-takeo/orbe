@@ -70,6 +70,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     try renderWorkspaceCreateSnapshots(dir: dir)
     try renderUpdateSnapshots(dir: dir)
     try renderAttentionSnapshots(dir: dir)
+    try renderHelpSnapshots(dir: dir)
   }
 
   /// Dispatch パレット（実データ形の決定的サンプル・overlay ごと・突合用）。

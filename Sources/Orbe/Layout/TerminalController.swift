@@ -1,39 +1,6 @@
 import AppKit
 import GhosttyKit
 
-/// 分割比を保持する NSSplitView。復元時に保存比率を一度だけ divider に適用する。
-/// 現在比 `ratio` は実フレームから算出するため、ユーザーのドラッグ結果も保存値に反映される
-/// （未レイアウトの非アクティブ workspace では復元値をそのまま返す）。
-final class WorkspaceSplitView: NSSplitView {
-  private var restored: Double = 0.5
-  private var pending = false
-
-  func restore(ratio: Double) {
-    restored = ratio
-    pending = true
-    needsLayout = true
-  }
-
-  var ratio: Double {
-    guard arrangedSubviews.count == 2 else { return restored }
-    let total = isVertical ? bounds.width : bounds.height
-    guard total > 0 else { return restored }
-    let first = arrangedSubviews[0].frame
-    return Double((isVertical ? first.width : first.height) / total)
-  }
-
-  override func layout() {
-    super.layout()
-    guard pending, arrangedSubviews.count == 2 else { return }
-    let total = isVertical ? bounds.width : bounds.height
-    guard total > 0 else { return }
-    // setPosition は同期的に layout() を再入させる。先に pending を倒さないと
-    // 復元比が 0.5 以外（= 実際に divider が動く）のとき無限再帰でスタックを溢れさせる。
-    pending = false
-    setPosition(total * CGFloat(restored), ofDividerAt: 0)
-  }
-}
-
 /// 1 ウィンドウ内のペイン分割ツリーを所有する（host 所有のレイアウト）。
 /// libghostty はジオメトリを管理しないため、NSSplitView ツリーは Orbe が構築する。
 ///
@@ -47,6 +14,7 @@ final class TerminalController {
   /// ペインから届く、ウィンドウレベルの chrome 操作（タブ・workspace）。
   enum WindowCommand {
     case newTab
+    case reopenClosedAgentTab
     case nextTab
     case prevTab
     case prevTool
@@ -60,6 +28,7 @@ final class TerminalController {
     case openEditor
     case renameTab
     case showSettings
+    case toggleHelp
   }
 
   /// 制御チャネルの宛先 ID（外部からこのタブを一意に指す）。
@@ -67,8 +36,9 @@ final class TerminalController {
   let rootContainer = NSView()
   private(set) weak var focusedPane: SurfaceView?
 
-  /// 最後のペインが閉じられた（このタブを閉じるべき）通知。
-  var onEmpty: (() -> Void)?
+  /// 最後のペインが閉じられた（このタブを閉じるべき）通知。閉鎖の発火源を添えて渡す
+  /// （復元スタックへ積むかの判定に要る）。
+  var onEmpty: ((TabCloseOrigin) -> Void)?
   /// アクティブペインのタイトルが変わった通知（タブラベル更新用。再算出は呼び出し側が全タブで行う）。
   var onActiveTitleChange: (() -> Void)?
   /// 分割/クローズでペイン集合が変わった通知（chrome の再投影・永続保存用）。
@@ -325,13 +295,14 @@ final class TerminalController {
   }
 
   /// ペインを閉じる。残り 1 つになった分割は畳んで親へ昇格。最後の 1 枚ならタブを閉じる。
+  /// `origin` は判断せずそのまま上位（closeTab → removeTab）へ素通しする。
   /// フォーカス復元は preferredFocusPane の規則に従う（フォーカス外ペインの close —
   /// shell の exit 等 — で入力中のペインから奪わない）。
-  func close(_ pane: SurfaceView) {
+  func close(_ pane: SurfaceView, origin: TabCloseOrigin) {
     guard let leaf = leaf(of: pane), let parent = leaf.superview else { return }
     guard let parentSplit = parent as? NSSplitView else {
       // ルート唯一のペイン → このタブを閉じる（保存は WindowController 側の closeTab で）。
-      DispatchQueue.main.async { [weak self] in self?.onEmpty?() }
+      DispatchQueue.main.async { [weak self] in self?.onEmpty?(origin) }
       return
     }
 
@@ -368,6 +339,15 @@ final class TerminalController {
       if let found = firstPane(in: sub) { return found }
     }
     return nil
+  }
+
+  /// このタブの復元単位（分割ツリー・明示タイトル・EditorPane の開閉とツール）。
+  /// 起動時の一括保存（WorkspacePersistence）と、閉じたタブの復元（⇧⌘T）が共有する——
+  /// 両者の契約が同一であることを、同じコードを通ることで保証する。
+  func tabState() -> TabState {
+    TabState(
+      tree: snapshot(), explicitTitle: explicitTitle,
+      editor: EditorPaneTabState(open: editorUI.paneOpen, tool: editorUI.tool.persistKey))
   }
 
   /// 現在の分割ツリーを永続スナップショット（PaneNode）に落とす。

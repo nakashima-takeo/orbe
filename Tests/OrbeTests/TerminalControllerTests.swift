@@ -63,18 +63,43 @@ final class TerminalControllerTests: XCTestCase {
     let a = pane(split.arrangedSubviews[0])
     let b = pane(split.arrangedSubviews[1])
 
-    tc.close(b)  // 残り 1 枚 → split を畳んで a を rootContainer 直下へ昇格
+    tc.close(b, origin: .gesture)  // 残り 1 枚 → split を畳んで a を rootContainer 直下へ昇格
 
     XCTAssertEqual(tc.rootContainer.subviews.count, 1)
     XCTAssertTrue(pane(tc.rootContainer.subviews.first!) === a)
   }
 
-  func testCloseLastPaneFiresOnEmpty() {
+  /// 最後の 1 枚を閉じたら onEmpty が発火し、**発火源を判断せずそのまま素通しする**。
+  /// 全ケースを回すのは、素通しがどれか 1 つへの決め打ちに化けるのを止めるため——化けても
+  /// コンパイルは通り、「⌘W で閉じたタブが戻らない」か「shell exit まで積む」が静かに起きる。
+  func testCloseLastPaneFiresOnEmptyCarryingOrigin() {
+    for origin in [TabCloseOrigin.gesture, .process, .controlAPI] {
+      let tc = TerminalController()
+      let exp = expectation(description: "onEmpty fires for \(origin)")
+      var received: TabCloseOrigin?
+      tc.onEmpty = {
+        received = $0
+        exp.fulfill()
+      }
+      tc.close(tc.focusedPane!, origin: origin)  // ルート唯一のペイン → このタブを閉じる通知（main へ async）
+      wait(for: [exp], timeout: 1.0)
+      XCTAssertEqual(received, origin, "close の発火源をそのまま上位へ渡す")
+    }
+  }
+
+  /// ⌘W（`.closePane`）は人のジェスチャとして届く。キーから close までの唯一の分岐点で、
+  /// ここが `.process` に化けると ⇧⌘T が主用途（⌘W で閉じた直後）で無反応になる。
+  func testClosePaneChromeActionReportsGestureOrigin() {
     let tc = TerminalController()
     let exp = expectation(description: "onEmpty fires")
-    tc.onEmpty = { exp.fulfill() }
-    tc.close(tc.focusedPane!)  // ルート唯一のペイン → このタブを閉じる通知（main へ async）
+    var received: TabCloseOrigin?
+    tc.onEmpty = {
+      received = $0
+      exp.fulfill()
+    }
+    tc.focusedPane!.perform(.closePane)  // ⌘W の届き先（Keybindings → SurfaceView.perform）
     wait(for: [exp], timeout: 1.0)
+    XCTAssertEqual(received, .gesture, "⌘W は人のジェスチャとして届く")
   }
 
   func testPreferredFocusPaneFollowsLastFocus() {

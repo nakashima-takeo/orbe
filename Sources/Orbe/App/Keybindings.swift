@@ -10,6 +10,7 @@ enum ChromeAction {
   case splitDown  // 横線で上下に分割
   case closePane
   case newTab
+  case reopenClosedAgentTab  // 最後に閉じたエージェントタブを開き直す
   case nextTab
   case prevTab
   case prevTool  // Cmd+Shift+↑（上のツールへ）
@@ -26,6 +27,7 @@ enum ChromeAction {
   case showSettings  // 設定パレットを開く
   case scrollToTop  // スクロールバック先頭へジャンプ
   case scrollToBottom  // スクロールバック末尾へジャンプ
+  case toggleHelp  // ヘルプオーバーレイ（ショートカットチートシート）をトグル開閉
 }
 
 extension ChromeAction {
@@ -35,6 +37,7 @@ extension ChromeAction {
   var windowCommand: TerminalController.WindowCommand? {
     switch self {
     case .newTab: return .newTab
+    case .reopenClosedAgentTab: return .reopenClosedAgentTab
     case .nextTab: return .nextTab
     case .prevTab: return .prevTab
     case .prevTool: return .prevTool
@@ -48,6 +51,7 @@ extension ChromeAction {
     case .openEditor: return .openEditor
     case .rename: return .renameTab
     case .showSettings: return .showSettings
+    case .toggleHelp: return .toggleHelp
     case .increaseFontSize, .decreaseFontSize, .resetFontSize,
       .splitRight, .splitDown, .closePane, .find,
       .scrollToTop, .scrollToBottom:
@@ -62,8 +66,8 @@ extension TerminalController.WindowCommand {
   /// 網羅 switch（default 無し）＝新ケース追加時に分類漏れをコンパイルエラーで検出する。
   var availableWithoutTabs: Bool {
     switch self {
-    case .newTab, .newWorkspace, .switchWorkspace,
-      .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings:
+    case .newTab, .reopenClosedAgentTab, .newWorkspace, .switchWorkspace,
+      .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings, .toggleHelp:
       return true
     case .nextTab, .prevTab, .prevTool, .nextTool,
       .toggleEditorPane, .openEditor, .renameTab:
@@ -108,6 +112,7 @@ enum Keybindings {
     case "D": return .splitDown  // Cmd+Shift+D
     case "w": return .closePane  // Cmd+W
     case "t": return .newTab  // Cmd+T
+    case "T": return .reopenClosedAgentTab  // Cmd+Shift+T
     case "}": return .nextTab  // Cmd+Shift+]
     case "{": return .prevTab  // Cmd+Shift+[
     case "S": return .switchWorkspace  // Cmd+Shift+S
@@ -115,6 +120,7 @@ enum Keybindings {
     case "X": return .showDispatchPalette  // Cmd+Shift+X
     case "C": return .launchDefaultAgent  // Cmd+Shift+C
     case "E": return .openEditor  // Cmd+Shift+E
+    case "h": return .toggleHelp  // Cmd+H（macOS Hide から奪取。メニューの Hide は無割当で残す）
     default: return nil
     }
   }

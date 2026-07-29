@@ -18,6 +18,10 @@ final class Workspace {
   var lastUsedAt: Date?
   /// この workspace の設定上書き層（全設定を上書き可）。nil＝上書き無し（global 継承）。永続化する。
   var settingsOverride: SettingsLayer?
+  /// 人のジェスチャで閉じたエージェントタブの開き直しスタック（⇧⌘T）。末尾が直近＝LIFO。永続化しない
+  /// （`WorkspaceState` に対応フィールドを持たない＝アプリ終了で忘れる）。workspace ごとに
+  /// 独立し、この workspace が消えればスタックも一緒に消える。変異は SessionStore 経由。
+  var closedAgentTabs: [ClosedAgentTab] = []
 
   init(name: String, rootPath: String) {
     self.name = name

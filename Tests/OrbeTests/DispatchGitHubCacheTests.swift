@@ -9,7 +9,8 @@ final class DispatchGitHubCacheTests: XCTestCase {
 
   private func makeProvider(_ model: DispatchPaletteModel) -> DispatchDataProvider {
     DispatchDataProvider(
-      cwd: "/tmp", model: model, localization: LocalizationStore(language: .ja))
+      cwd: "/tmp", model: model, localization: LocalizationStore(language: .ja),
+      worktreeTemplate: WorktreePathTemplate.defaultTemplate)
   }
 
   private func issue(_ number: Int) -> GitHubIssue {

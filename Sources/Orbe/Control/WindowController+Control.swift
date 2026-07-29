@@ -143,7 +143,7 @@ extension WindowController: ControlTarget {
     guard let pane = controlResolvePane(paneId), let tc = pane.controller else {
       return .failure(ControlError(code: -32004, message: "pane not found"))
     }
-    tc.close(pane)
+    tc.close(pane, origin: .controlAPI)
     return .success(["ok": true])
   }
 
@@ -170,7 +170,7 @@ extension WindowController: ControlTarget {
     guard let tc = controlResolveTab(tabId) else {
       return .failure(ControlError(code: -32004, message: "tab not found"))
     }
-    closeTab(tc)
+    closeTab(tc, origin: .controlAPI)
     return .success(["ok": true])
   }
 
@@ -252,6 +252,8 @@ extension WindowController: ControlTarget {
       let symbols = Dictionary(
         uniqueKeysWithValues: AgentStateIcon.curatedSymbols.map { ($0.key.state, $0.value) })
       return ["symbols": symbols]
+    case .pathTemplate:
+      return ["placeholders": WorktreePathTemplate.placeholders]
     }
   }
 
