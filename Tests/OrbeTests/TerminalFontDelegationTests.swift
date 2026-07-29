@@ -14,6 +14,9 @@ import XCTest
 ///
 /// ③ 同梱 TTF: `TerminalFonts` の登録・`build-app.sh` のコピー・`NOTICE` の帰属が一致していること。
 /// こちらは本文等幅チェーンと絵文字の話で、上の委譲とは別の鎖。
+///
+/// ⑤ 同梱 JuliaMono: font-family に入れず discovery の候補として引かれる前提
+/// （カラーフォント判定されないこと）が保たれていること。
 final class TerminalFontDelegationTests: XCTestCase {
 
   /// ① — 記号委譲を導入した動機そのもので、記号委譲行を引くときの錨に使う。
@@ -145,6 +148,30 @@ final class TerminalFontDelegationTests: XCTestCase {
       offenders.isEmpty,
       "絵文字ベースの codepoint を層1 の font-codepoint-map が捕まえている"
         + "（VS16 付きが置換文字になる）: \(offenders)")
+  }
+
+  // MARK: - ⑤ 同梱 JuliaMono の discovery 受理条件
+
+  /// 同梱 JuliaMono がカラーフォント判定されないことを検証する。
+  /// JuliaMono は font-family チェーンに入れず `.process` 登録だけで discovery の候補として効かせるが、
+  /// discovery の presentation 検証（vendor/ghostty `src/font/DeferredFace.zig` の `hasCodepoint`）は
+  /// カラーフォントを emoji 用と見なし text 用途で拒否する。SVG テーブルを持つ版（0.055 等）へ戻すと
+  /// 登録されていても一切引かれず、JuliaMono しか字形を持たない約 1500 点（チェス記号・矢印C・
+  /// 音楽記号等）が置換文字に落ちる。実行時は無警告で、画面に □ が出るまで誰も気づけない。
+  func testBundledJuliaMonoIsNotAColorFont() throws {
+    let url = repoRoot().appendingPathComponent("app/JuliaMono-Regular.ttf")
+    let descriptors = try XCTUnwrap(
+      CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
+      "app/JuliaMono-Regular.ttf を読めない")
+    let descriptor = try XCTUnwrap(descriptors.first, "app/JuliaMono-Regular.ttf に face が無い")
+    let font = CTFontCreateWithFontDescriptor(descriptor, referenceSize, nil)
+    XCTAssertEqual(
+      CTFontCopyFamilyName(font) as String, "JuliaMono",
+      "同梱 TTF のファミリ名が JuliaMono でない（discovery の受け皿として機能しない）")
+    XCTAssertFalse(
+      CTFontGetSymbolicTraits(font).contains(.traitColorGlyphs),
+      "同梱 JuliaMono がカラーフォント判定される"
+        + "（SVG テーブル入りの版。discovery が text 用途で拒否し、登録が無言で無効化する）")
   }
 
   // MARK: - conf の解析
