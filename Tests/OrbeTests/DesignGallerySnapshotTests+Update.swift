@@ -5,7 +5,7 @@ import XCTest
 
 /// アップデート UI の gallery（見本 UpdateCheckDoc 2a–2d 突合用）。Sparkle 実体なしで UpdateState を
 /// 注入し、トースト（右下・340px）・変更内容シート（中央 450px）・設定›アップデートの状態カード
-/// 5 状態を撮る（+WorkspaceCreate と同じくファイル分割の拡張）。
+/// 5 状態と「今すぐ確認」行の実行不可 2 態を撮る（+WorkspaceCreate と同じくファイル分割の拡張）。
 extension DesignGallerySnapshotTests {
   func renderUpdateSnapshots(dir: URL) throws {
     let stage = NSSize(width: 640, height: 520)
@@ -32,13 +32,16 @@ extension DesignGallerySnapshotTests {
       .environment(\.localization, l10n),
       size: stage, name: "update_changes.png", dir: dir)
 
-    // 2c/2d 設定›アップデート（状態カード 5 状態）。
+    // 2c/2d 設定›アップデート（状態カード 5 状態＋「今すぐ確認」行の実行不可 2 態）。
     let cases: [(String, UpdateState)] = [
       ("ready", DesignSceneFixtures.updateReadyState()),
       ("checking", DesignSceneFixtures.updateCheckingState()),
       ("downloading", DesignSceneFixtures.updateDownloadingState()),
       ("uptodate", DesignSceneFixtures.updateUpToDateState()),
       ("failed", DesignSceneFixtures.updateFailedState()),
+      // 「今すぐ確認」行の実行不可 2 態（減光 / 背景確認中のスピナー）。
+      ("ready_busy", DesignSceneFixtures.updateReadyBusyState()),
+      ("background_checking", DesignSceneFixtures.updateBackgroundCheckingState()),
     ]
     for (name, state) in cases {
       let model = DesignSceneFixtures.updateSettingsModel(state)

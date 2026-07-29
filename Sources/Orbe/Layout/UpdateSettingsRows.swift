@@ -207,14 +207,26 @@ struct UpdateToggleRow: View {
   }
 }
 
-/// 「今すぐ確認」行（枠だけのセカンダリボタン意匠・行全幅）。確認中はスピナーへ替わる（見本 2d 注記）。
+/// 「今すぐ確認」行（枠だけのセカンダリボタン意匠・行全幅）。3 態:
+/// 確認中（自分の確認、または状態カードが理由を語らない背景確認）はスピナーへ替わり、
+/// 実行できない残り（DL中・適用待ち。理由は隣の状態カードが持つ）は減光し、それ以外は通常表示（見本 2d 注記）。
 struct UpdateCheckNowRow: View {
   let state: UpdateState
   @Environment(\.localization) private var l10n
 
+  /// 状態カードが実行できない理由を語らないのは背景確認中だけ。そこだけ行が「確認中…」を名乗る。
+  private var showsChecking: Bool {
+    if case .checking = state.phase { return true }
+    guard !state.canCheckNow else { return false }
+    switch state.phase {
+    case .downloading, .readyToRestart: return false
+    case .idle, .checking, .upToDate, .failed: return true
+    }
+  }
+
   var body: some View {
     HStack(spacing: Theme.Space.step) {
-      if case .checking = state.phase {
+      if showsChecking {
         StatusGlyphView(kind: .working, size: 10)
         Text(l10n.string(.updateStateChecking))
           .font(Font.theme.caption)
@@ -222,14 +234,16 @@ struct UpdateCheckNowRow: View {
       } else {
         Text(l10n.string(.updateCheckNow))
           .font(Font.theme.caption)
-          .foregroundStyle(Color.theme.textSecondary)
+          .foregroundStyle(state.canCheckNow ? Color.theme.textSecondary : Color.theme.textMuted)
       }
     }
     .frame(maxWidth: .infinity)
     .padding(.vertical, Theme.Space.step - 1)
     .overlay(
       RoundedRectangle(cornerRadius: Theme.Radius.row)
-        .strokeBorder(Color.theme.surface2, lineWidth: Theme.Stroke.hairline)
+        .strokeBorder(
+          state.canCheckNow ? Color.theme.surface2 : Color.theme.surface2.opacity(0.5),
+          lineWidth: Theme.Stroke.hairline)
     )
     .padding(.vertical, Theme.Space.tick)
   }

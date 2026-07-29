@@ -56,6 +56,25 @@ final class SettingsPaletteUpdateTests: XCTestCase {
     XCTAssertEqual(checked, 1)
   }
 
+  /// 確認を受け付けられない間（セッション進行中）は「今すぐ確認」の ↵ が走らない。
+  /// 行は「確認中…」か減光で表示され、押しても走らないことは画面から読める。
+  func testCheckNowDoesNotFireWhileCheckUnavailable() {
+    let update = UpdateState(currentVersion: "0.1.0")
+    var checked = 0
+    update.onCheckNow = { checked += 1 }
+    update.setCanCheckNow(false)
+    let palette = makePalette(update: update)
+    palette.drillIntoUpdate()
+
+    palette.render.selected = 5  // 今すぐ確認
+    palette.activate()
+    XCTAssertEqual(checked, 0)
+
+    update.setCanCheckNow(true)
+    palette.activate()
+    XCTAssertEqual(checked, 1, "受け付けられるようになれば走る")
+  }
+
   func testStatusRowPrimaryActionByPhase() {
     let update = UpdateState(currentVersion: "0.1.0")
     var restarted = 0

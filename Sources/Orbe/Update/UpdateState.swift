@@ -34,6 +34,9 @@ import Observation
   /// トースト可視。readyToRestart への遷移時に **1 バージョンにつき一度だけ** 立つ（見本 2a の設計注記）。
   private(set) var toastVisible = false
   private var toastShownVersion: String?
+  /// 「今すぐ確認」を今実行できるか。`UpdaterService` が Sparkle の `canCheckForUpdates` を写す
+  /// （セッション進行中・updater 不活性で false）。fixture は既定 true のまま全状態を注入できる。
+  private(set) var canCheckNow = true
 
   /// 現在のバージョン（`CFBundleShortVersionString`。fixture は任意注入）。
   let currentVersion: String
@@ -74,6 +77,8 @@ import Observation
   // MARK: - 遷移（UpdateUserDriver のコールバックが駆動する）
 
   func beginCheck() { phase = .checking }
+
+  func setCanCheckNow(_ on: Bool) { canCheckNow = on }
 
   func beginDownload(version: String? = nil) {
     downloadVersion = version

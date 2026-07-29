@@ -199,6 +199,21 @@ enum DesignSceneFixtures {
     return state
   }
 
+  /// 適用待ち＋確認不可（staged 済みに再確認は無意味）。「今すぐ確認」行の減光を見る。
+  static func updateReadyBusyState() -> UpdateState {
+    let state = updateReadyState()
+    state.setCanCheckNow(false)
+    return state
+  }
+
+  /// 背景の定期確認が走っている最中（phase は idle のまま確認不可）。状態カードが理由を語らない
+  /// 唯一のケースで、「今すぐ確認」行だけがスピナー＋「確認中…」を名乗る。
+  static func updateBackgroundCheckingState() -> UpdateState {
+    let state = baseUpdateState()
+    state.setCanCheckNow(false)
+    return state
+  }
+
   static func updateUpToDateState() -> UpdateState {
     let state = baseUpdateState()
     state.markUpToDate()

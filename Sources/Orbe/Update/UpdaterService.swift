@@ -27,6 +27,8 @@ final class UpdaterService: NSObject {
   /// サイレント staged 更新の即時適用ハンドラ（willInstallUpdateOnQuit で預かる）。
   /// 終了確認でユーザーが終了を取りやめた場合に再実行できるよう、呼んだ後も保持する（Sparkle 2.3+）。
   private var immediateInstallHandler: (() -> Void)?
+  /// `canCheckForUpdates` を `UpdateState.canCheckNow` へ写す KVO（生存期間はこの service）。
+  private var canCheckObservation: NSKeyValueObservation?
 
   /// Orbe 側トグルの永続キー（Sparkle が持たない「終了時自動適用」と、実効値と分離した「自動DL」の生値）。
   private static let autoInstallOnQuitKey = "OrbeUpdateAutoInstallOnQuit"
@@ -64,6 +66,19 @@ final class UpdaterService: NSObject {
     }
     state.onCheckNow = { [weak self] in self?.checkForUpdates() }
     state.onRestartNow = { [weak self] in self?.installAndRelaunch() }
+
+    // 「今すぐ確認」の実行可否をライブに写す（セッション進行中は false）。
+    // 通知値ではなく main で読み直した現在値を写す（起動前後の通知が入れ違っても古い値で固まらない）。
+    canCheckObservation = updater.observe(
+      \.canCheckForUpdates, options: [.initial, .new]
+    ) { [weak self] _, _ in
+      DispatchQueue.main.async { self?.syncCanCheckNow() }
+    }
+  }
+
+  /// updater が動いていなければ確認できるように見せない（起動ゲートで不活性なビルド）。
+  private func syncCanCheckNow() {
+    state.setCanCheckNow(started && updater.canCheckForUpdates)
   }
 
   /// Sparkle の自動DLは「DL＋staging（＝終了時に必ず適用）」まで一体。終了時自動適用オフのときは
@@ -81,6 +96,7 @@ final class UpdaterService: NSObject {
     do {
       try updater.start()
       started = true
+      syncCanCheckNow()
     } catch {
       state.fail(message: error.localizedDescription)
     }

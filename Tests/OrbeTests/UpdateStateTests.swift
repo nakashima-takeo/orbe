@@ -142,6 +142,19 @@ final class UpdateStateTests: XCTestCase {
     XCTAssertFalse(state.toastVisible, "同一プロセス内の再 ready はトーストを再表示しない")
   }
 
+  /// 「今すぐ確認」の実行可否。既定 true で fixture は全状態を注入でき、UpdaterService が Sparkle の
+  /// canCheckForUpdates を写す。
+  func testCanCheckNowDefaultsTrueAndMirrors() {
+    let state = makeState()
+    XCTAssertTrue(state.canCheckNow)
+
+    state.setCanCheckNow(false)
+    XCTAssertFalse(state.canCheckNow)
+
+    state.setCanCheckNow(true)
+    XCTAssertTrue(state.canCheckNow)
+  }
+
   func testSeedLastCheckDoesNotOverwrite() {
     let state = makeState()
     let seeded = Date(timeIntervalSince1970: 1000)

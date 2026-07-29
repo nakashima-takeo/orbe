@@ -60,6 +60,8 @@ extension SettingsPaletteModel {
       update.autoInstallOnQuit.toggle()
       setMode(.update, select: render.selected)
     case .checkNow:
+      // 実行できない間は行が「確認中…」か減光で表示されており、走らないことは画面から読める。
+      guard update.canCheckNow else { return }
       update.onCheckNow()
     }
   }
