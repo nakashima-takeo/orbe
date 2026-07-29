@@ -62,11 +62,16 @@ struct PaletteCard: View {
 
         if !model.hint.isEmpty || !model.hintKeys.isEmpty {
           divider
-          // フッターヒント（デザイン第10シーン: padding 9×20・セグメント間隔 14・キー副色/ラベル muted）。
+          // 余白はスロットごと。素文字列 hint は従来の 16×10 を保ち（既存パレットの見た目を
+          // 変えない）、キー付きセグメントだけがデザイン第10シーンの 9×20 を取る。
           Group {
             if model.hintKeys.isEmpty {
-              Text(model.hint).foregroundStyle(Color.theme.textMuted)
+              Text(model.hint)
+                .foregroundStyle(Color.theme.textMuted)
+                .padding(.horizontal, Theme.Space.bar)
+                .padding(.vertical, Theme.Space.step + Theme.Space.hair)
             } else {
+              // セグメント間隔 14・キー副色/ラベル muted。
               HStack(spacing: Theme.Space.beat + Theme.Space.hair) {
                 ForEach(model.hintKeys.indices, id: \.self) { i in
                   HStack(spacing: Theme.Space.tick) {
@@ -75,11 +80,11 @@ struct PaletteCard: View {
                   }
                 }
               }
+              .padding(.horizontal, Theme.Space.span)
+              .padding(.vertical, 9)
             }
           }
           .font(Font.theme.meta)
-          .padding(.horizontal, Theme.Space.span)
-          .padding(.vertical, 9)
         }
       }
     }
