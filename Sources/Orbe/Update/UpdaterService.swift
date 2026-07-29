@@ -21,7 +21,7 @@ import Sparkle
 /// SPUUpdater の API は main thread 前提で、呼び出し元（WindowController/AppDelegate）は常に main。
 final class UpdaterService: NSObject {
   let state: UpdateState
-  private let driver: UpdateUserDriver
+  let driver: UpdateUserDriver
   private var updater: SPUUpdater!  // delegate=self のため super.init 後に生成（以降 不変）
   private(set) var started = false
   /// サイレント staged 更新の即時適用ハンドラ（willInstallUpdateOnQuit で預かる）。
@@ -92,19 +92,25 @@ final class UpdaterService: NSObject {
     updater.checkForUpdates()
   }
 
-  /// 「今すぐ再起動」。優先順: ① サイレント staged の即時適用ハンドラ（UI 対話なしで再起動）
-  /// ② 保留中の ready reply へ `.install`（終了時自動適用オフの手動経路）
-  /// ③ dismiss 済みセッションの resume（再チェックで stage `.installing` に入り直し driver が `.install`）。
+  /// 「今すぐ再起動」。押下は必ずどれかに着地する。優先順:
+  /// ① 終了要求の再送（終了確認をキャンセルしたセッションが我々の終了を待っている）
+  /// ② サイレント staged の即時適用ハンドラ（UI 対話なしで再起動）
+  /// ③ 保留中の ready reply へ `.install`（終了時自動適用オフの手動経路）
+  /// ④ 適用要求を立てる。確認できるなら dismiss 済みセッションを resume し、できないなら進行中の
+  ///    セッションが staged 更新へ行き着いた時点で driver / delegate が `.install` を返す。
+  ///
+  /// ① が最優先なのは、再送ハンドラが立つのは生きたセッションが終了を待つ間だけで、そこで ②③④ に
+  /// 回すと同じ更新へ二重の適用要求を出すため。
   func installAndRelaunch() {
+    if driver.retryTermination() { return }
     if let immediateInstallHandler {
       immediateInstallHandler()
       return
     }
-    guard started else { return }
+    guard started else { return }  // updater 不活性なら phase が readyToRestart にならず到達しない
     if driver.consumePendingInstallReply() { return }
-    guard updater.canCheckForUpdates else { return }  // 進行中は no-op（installRequested を立てず残留を防ぐ）
     driver.installRequested = true
-    updater.checkForUpdates()
+    if updater.canCheckForUpdates { updater.checkForUpdates() }
   }
 }
 
@@ -113,12 +119,20 @@ extension UpdaterService: SPUUpdaterDelegate {
   /// readyToRestart＋トーストへ写像し、YES で即時適用ハンドラを預かる。YES はこの更新が pending の間
   /// 後続の update サイクルも止める（staged 済みに対する無意味な再チェックを塞ぐ）。
   /// 終了時の自動適用は返値に依らず Sparkle が行う。
+  ///
+  /// サイレント経路は user driver を通らない＝`dismissUpdateInstallation` が来ないため、ここが
+  /// `installRequested`（適用要求）の終端になる。立っていれば要求を消費して即時適用へ繋ぐ
+  /// （ハンドラはデリゲートの戻り後に呼ぶ）。
   func updater(
     _ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem,
     immediateInstallationBlock immediateInstallHandler: @escaping () -> Void
   ) -> Bool {
     state.markReady(UpdateState.ReadyInfo(item))
     self.immediateInstallHandler = immediateInstallHandler
+    if driver.installRequested {
+      driver.installRequested = false
+      DispatchQueue.main.async { immediateInstallHandler() }
+    }
     return true
   }
 }

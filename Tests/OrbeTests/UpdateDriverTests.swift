@@ -62,4 +62,77 @@ final class UpdateDriverTests: XCTestCase {
     XCTAssertTrue(driver.consumePendingInstallReply())
     XCTAssertEqual(choices, [.install])
   }
+
+  /// 終了確認をキャンセルした（アプリが終了要求に応じなかった）セッションの再送ハンドラは、
+  /// 呼んだ後も保持され何度でも送り直せる——「今すぐ再起動」を押し直せば終了確認が再び出る。
+  func testRetryTerminationResendsRepeatedly() {
+    let driver = UpdateUserDriver(state: makeState())
+    XCTAssertFalse(driver.retryTermination(), "終了要求を待つセッションが無ければ再送しない")
+
+    var retried = 0
+    driver.showInstallingUpdate(
+      withApplicationTerminated: false, retryTerminatingApplication: { retried += 1 })
+
+    XCTAssertTrue(driver.retryTermination())
+    XCTAssertEqual(retried, 1)
+    XCTAssertTrue(driver.retryTermination(), "呼んでも破棄しない（SPUUserDriver.h: 複数回呼んでよい）")
+    XCTAssertEqual(retried, 2)
+  }
+
+  /// アプリが既に終了しているときの再送ハンドラは呼んではならないため保持しない。
+  func testRetryTerminationNotHeldWhenApplicationTerminated() {
+    let driver = UpdateUserDriver(state: makeState())
+    driver.showInstallingUpdate(
+      withApplicationTerminated: true, retryTerminatingApplication: { XCTFail("呼んではならない") })
+
+    XCTAssertFalse(driver.retryTermination())
+  }
+
+  /// 再送ハンドラはセッション限り。セッション終了後は死んだハンドラを呼ばない。
+  func testRetryTerminationDroppedOnSessionTeardown() {
+    let driver = UpdateUserDriver(state: makeState())
+    driver.showInstallingUpdate(
+      withApplicationTerminated: false, retryTerminatingApplication: { XCTFail("セッション終了後に呼ばない") })
+
+    driver.dismissUpdateInstallation()
+    XCTAssertFalse(driver.retryTermination())
+  }
+
+  /// 「今すぐ再起動」は終了要求の再送を即時適用ハンドラより優先する——再送ハンドラが立つのは
+  /// 生きたセッションが終了を待つ間だけで、そこで即時適用へ回すと同じ更新へ二重の要求を出す。
+  func testInstallAndRelaunchPrefersRetryTerminationOverImmediateInstall() {
+    let service = UpdaterService()
+    var installed = 0
+    var retried = 0
+    _ = service.updater(
+      SPUUpdater(
+        hostBundle: .main, applicationBundle: .main,
+        userDriver: UpdateUserDriver(state: makeState()), delegate: nil),
+      willInstallUpdateOnQuit: SUAppcastItem.empty(),
+      immediateInstallationBlock: { installed += 1 })
+    service.driver.showInstallingUpdate(
+      withApplicationTerminated: false, retryTerminatingApplication: { retried += 1 })
+
+    service.installAndRelaunch()
+    XCTAssertEqual(retried, 1, "終了要求の再送が最優先")
+    XCTAssertEqual(installed, 0, "即時適用ハンドラは呼ばない（二重要求を出さない）")
+  }
+
+  /// サイレント経路は user driver を通らない＝dismissUpdateInstallation が来ないため、
+  /// willInstallUpdateOnQuit が「今すぐ再起動」要求の終端になる。要求は消費されて即時適用へ繋がる。
+  func testWillInstallUpdateOnQuitConsumesPendingInstallRequest() {
+    let service = UpdaterService()
+    service.driver.installRequested = true
+
+    let installed = expectation(description: "預かった直後の即時適用")
+    _ = service.updater(
+      SPUUpdater(
+        hostBundle: .main, applicationBundle: .main,
+        userDriver: UpdateUserDriver(state: makeState()), delegate: nil),
+      willInstallUpdateOnQuit: SUAppcastItem.empty(),
+      immediateInstallationBlock: { installed.fulfill() })
+
+    XCTAssertFalse(service.driver.installRequested, "要求は消費して残さない")
+    wait(for: [installed], timeout: 1)
+  }
 }

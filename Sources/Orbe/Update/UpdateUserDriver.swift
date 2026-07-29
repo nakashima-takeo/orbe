@@ -33,6 +33,9 @@ final class UpdateUserDriver: NSObject, SPUUserDriver {
   var installRequested = false
   /// DL 済み・staging 前の表示情報（ready 遷移時に `UpdateState.ready` へ確定する）。
   private var pendingReadyInfo: UpdateState.ReadyInfo?
+  /// アプリが終了要求に応じなかったとき Sparkle が渡す再送ハンドラ。何度でも呼べる（SPUUserDriver.h）
+  /// ので呼んだ後も保持し、セッション終了（`dismissUpdateInstallation`）でだけ破棄する。
+  private var retryTerminationHandler: (() -> Void)?
 
   init(state: UpdateState) {
     self.state = state
@@ -44,6 +47,13 @@ final class UpdateUserDriver: NSObject, SPUUserDriver {
     guard let reply = pendingInstallReply else { return false }
     pendingInstallReply = nil
     reply(.install)
+    return true
+  }
+
+  /// 「今すぐ再起動」。終了要求を待っているセッションがあれば再送する（送れたら true）。
+  func retryTermination() -> Bool {
+    guard let handler = retryTerminationHandler else { return false }
+    handler()
     return true
   }
 
@@ -132,10 +142,15 @@ final class UpdateUserDriver: NSObject, SPUUserDriver {
     }
   }
 
+  /// インストーラが終了要求を出した。アプリが未終了（＝終了確認をキャンセルした）なら再送ハンドラを
+  /// 預かり、「今すぐ再起動」の押し直しで終了要求を送り直せるようにする。
+  /// 既に終了済み（`applicationTerminated == true`）のときは呼んではならない（SPUUserDriver.h）ため保持しない。
   func showInstallingUpdate(
     withApplicationTerminated applicationTerminated: Bool,
     retryTerminatingApplication: @escaping () -> Void
-  ) {}
+  ) {
+    retryTerminationHandler = applicationTerminated ? nil : retryTerminatingApplication
+  }
 
   func showUpdateInstalledAndRelaunched(_ relaunched: Bool, acknowledgement: @escaping () -> Void) {
     acknowledgement()
@@ -143,6 +158,7 @@ final class UpdateUserDriver: NSObject, SPUUserDriver {
 
   func dismissUpdateInstallation() {
     pendingInstallReply = nil  // セッション破棄で無効化（呼ばずに捨てる）
+    retryTerminationHandler = nil  // 終了要求の再送先もこのセッション限り
     installRequested = false  // resume 要求もセッション終了で破棄（消費されず残ると次サイクルを無操作 install させる）
     state.settleTransientPhase()
   }
