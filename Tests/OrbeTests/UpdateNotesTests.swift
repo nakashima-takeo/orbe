@@ -79,6 +79,23 @@ final class UpdateNotesTests: XCTestCase {
     XCTAssertEqual(notes.sections.map(\.category), [.neutral, .neutral])
   }
 
+  /// ソース側で折り返された項目は 1 行に畳む（ソフト改行が本文のハード改行にならない）。
+  func testSoftBreakFoldsIntoOneLine() {
+    let notes = UpdateNotes(markdown: "### 修正\n- とても長い項目がここで\n  折り返されている場合")
+
+    XCTAssertEqual(notes.sections[0].elements.count, 1)
+    XCTAssertEqual(
+      plain(notes.sections[0].elements[0]), "とても長い項目がここで 折り返されている場合")
+  }
+
+  /// 入れ子の箇条書きは落とさず、同じ並びの項目として続ける（階層は持たない）。
+  func testNestedItemsAreKeptAsItems() {
+    let notes = UpdateNotes(markdown: "### 修正\n- 親項目\n  - 子項目A\n  - 子項目B")
+
+    XCTAssertEqual(notes.sections[0].elements.map(\.kind), [.item, .item, .item])
+    XCTAssertEqual(notes.sections[0].elements.map(plain), ["親項目", "子項目A", "子項目B"])
+  }
+
   /// 現状描かないブロック種（順序付きリスト・コードブロック）は落とす。
   func testUnsupportedBlocksAreIgnored() {
     let notes = UpdateNotes(markdown: "### 修正\n- 直した\n\n1. 一つ目\n\n```\ncode\n```")

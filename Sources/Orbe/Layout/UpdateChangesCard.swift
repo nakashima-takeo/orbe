@@ -177,27 +177,41 @@ struct UpdateNotes: Equatable {
 
   let sections: [Section]
 
+  /// インラインの見た目。コードスパンは背景を敷かず、本文と同じ地の上に等幅で置く。
+  private static let inlineStyle = MarkdownStyle(inlineCodeBackground: .clear)
+
   init(markdown: String) {
     var built: [(title: String?, elements: [Element])] = []
-    func append(_ kind: ElementKind, _ inline: String) {
-      // format() はブロックの区切り（前後の改行・リストのインデント）ごと返すので端を落とす。
-      // 落とした結果が空なら要素にしない（中身のない項目は項目ではなく、マーカーだけの行になる）。
-      let body = inline.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !body.isEmpty else { return }
+    func append(_ kind: ElementKind, _ text: AttributedString) {
+      // 中身のない要素は積まない（マーカーだけの行は項目ではない）。
+      guard !String(text.characters).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        return
+      }
       if built.isEmpty { built.append((title: nil, elements: [])) }
-      built[built.count - 1].elements.append(Element(kind: kind, text: Self.attributed(body)))
+      built[built.count - 1].elements.append(Element(kind: kind, text: text))
+    }
+    /// 箇条書きを項目へ。入れ子は同じ並びの項目として続ける——階層は持たないが、落としもしない。
+    func appendItems(_ list: UnorderedList) {
+      for item in list.listItems {
+        var text = AttributedString()
+        for paragraph in item.blockChildren.compactMap({ $0 as? Paragraph }) {
+          if !text.characters.isEmpty { text += AttributedString(" ") }
+          text += MarkdownInline.attributed(of: paragraph, style: Self.inlineStyle)
+        }
+        append(.item, text)
+        for nested in item.blockChildren.compactMap({ $0 as? UnorderedList }) {
+          appendItems(nested)
+        }
+      }
     }
     for block in Document(parsing: markdown).children {
       switch block {
       case let heading as Heading:
         built.append((title: heading.plainText, elements: []))
       case let list as UnorderedList:
-        for item in list.listItems {
-          append(
-            .item, item.children.compactMap { ($0 as? Paragraph)?.format() }.joined(separator: " "))
-        }
+        appendItems(list)
       case let paragraph as Paragraph:
-        append(.paragraph, paragraph.format())
+        append(.paragraph, MarkdownInline.attributed(of: paragraph, style: Self.inlineStyle))
       default:
         break
       }
@@ -205,13 +219,6 @@ struct UpdateNotes: Equatable {
     sections = built.map {
       Section(title: $0.title, category: Category(title: $0.title), elements: $0.elements)
     }
-  }
-
-  /// インライン（`code`・強調等）は AttributedString の Markdown 解釈に委ねる（コードは等幅で描かれる）。
-  private static func attributed(_ inline: String) -> AttributedString {
-    (try? AttributedString(
-      markdown: inline, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-      ?? AttributedString(inline)
   }
 }
 
@@ -262,10 +269,10 @@ struct UpdateNotesView: View {
                 Text(Self.marker(section.category))
                   .font(Font.theme.body)
                   .foregroundStyle(accent)
-                noteText(element.text, color: Color.theme.textSecondary)
+                noteText(element.text)
               }
             case .paragraph:
-              noteText(element.text, color: Color.theme.textSecondary)
+              noteText(element.text)
             }
           }
         }
@@ -273,19 +280,17 @@ struct UpdateNotesView: View {
     }
   }
 
-  /// 本文の行送りは design-system §2.3 の `line.body` 1.6。12.5pt 本文の素の行高 15 との差。
-  private static let bodyLineSpacing: CGFloat = 12.5 * Theme.Typography.lineBody - 15
+  /// 本文の行送りは design-system §2.3 の `line.body` 1.6。本文フォントの素の行高 15 との差。
+  private static let bodyLineSpacing: CGFloat =
+    Theme.Typography.body.pointSize * Theme.Typography.lineBody - 15
 
-  /// tint も渡すのは、素の URL が自動でリンク化されるため——リンクは foregroundStyle ではなく
-  /// tint で色が付き、既定のままだと出典行だけがパレット外の青で浮く。
   /// 上下の余白は行送りの半分——lineSpacing は行と行の間しか広げないので、これを足して初めて
   /// 1 行の要素も複数行の要素も同じ行ボックスを持ち、要素間の余白（spacing）が素の値のまま効く。
-  private func noteText(_ text: AttributedString, color: Color) -> some View {
+  private func noteText(_ text: AttributedString) -> some View {
     Text(text)
       .font(Font.theme.body)
       .lineSpacing(Self.bodyLineSpacing)
-      .foregroundStyle(color)
-      .tint(color)
+      .foregroundStyle(Color.theme.textSecondary)
       .fixedSize(horizontal: false, vertical: true)
       .padding(.vertical, Self.bodyLineSpacing / 2)
   }
