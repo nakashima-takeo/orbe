@@ -13,7 +13,7 @@ final class MenuBarArrivalTests: XCTestCase {
 
   private func at(_ offset: TimeInterval) -> Date { t0.addingTimeInterval(offset) }
 
-  /// C1: 尺は design 原典のタイムライン表どおり。滞留 22 秒だけが Orbe の意図的な逸脱。
+  /// 尺は design 原典のタイムライン表どおり。滞留 22 秒だけが Orbe の意図的な逸脱。
   func testDurationsMatchDesign() {
     XCTAssertEqual(MenuBarArrival.expand, 0.84)
     XCTAssertEqual(MenuBarArrival.glossDelay, 1.2)
@@ -52,7 +52,7 @@ final class MenuBarArrivalTests: XCTestCase {
     XCTAssertFalse(driver.tick(now: at(22.7)), "完了は 1 度だけ")
   }
 
-  /// C5: 艶は 1 到来につき 1 回だけ、到来 1.2s 後から 1.1s かけて左端の外から右端の外へ抜ける。
+  /// 艶は 1 到来につき 1 回だけ、到来 1.2s 後から 1.1s かけて左端の外から右端の外へ抜ける。
   func testGlossSweepsOncePerArrival() throws {
     let driver = MenuBarArrivalDriver()
     driver.arrived(at: t0)
@@ -61,9 +61,9 @@ final class MenuBarArrivalTests: XCTestCase {
     driver.tick(now: at(1.2))
     XCTAssertEqual(try XCTUnwrap(driver.phase.gloss), 0, accuracy: 0.001)
     driver.tick(now: at(1.75))
-    XCTAssertEqual(try XCTUnwrap(driver.phase.gloss), 0.5, accuracy: 0.01)
-    driver.tick(now: at(2.29))
-    XCTAssertEqual(try XCTUnwrap(driver.phase.gloss), 1, accuracy: 0.01)
+    XCTAssertEqual(try XCTUnwrap(driver.phase.gloss), 0.5, accuracy: 0.001)
+    driver.tick(now: at(2.3))
+    XCTAssertEqual(try XCTUnwrap(driver.phase.gloss), 1, accuracy: 0.001, "走り切りの端は 1")
     driver.tick(now: at(2.31))
     XCTAssertNil(driver.phase.gloss)
     for offset in [3.0, 5.0, 12.0, 22.0] {
@@ -72,7 +72,7 @@ final class MenuBarArrivalTests: XCTestCase {
     }
   }
 
-  /// C5: 滞留中の積み替えは艶をもう 1 回走らせるが、既に開いているので開き直さない。
+  /// 滞留中の積み替えは艶をもう 1 回走らせるが、既に開いているので開き直さない。
   func testRestackReplaysGlossWithoutReopening() throws {
     let driver = MenuBarArrivalDriver()
     driver.arrived(at: t0)
@@ -84,11 +84,43 @@ final class MenuBarArrivalTests: XCTestCase {
     driver.tick(now: at(6.2))
     XCTAssertEqual(try XCTUnwrap(driver.phase.gloss), 0, accuracy: 0.001)
     driver.tick(now: at(6.75))
-    XCTAssertEqual(try XCTUnwrap(driver.phase.gloss), 0.5, accuracy: 0.01)
+    XCTAssertEqual(try XCTUnwrap(driver.phase.gloss), 0.5, accuracy: 0.001)
     XCTAssertEqual(driver.phase.openness, 1, accuracy: 0.001)
   }
 
-  /// C7: 取り下げ・②中のクリックは即時。tick を待たずに閉じ切り、tween も残さない。
+  /// 収縮の途中に届いた到来は、その開き具合から続けて開き直す（位相は飛ばず、閉じ切らない）。
+  /// 展開 840ms・収縮 600ms の窓に次の変化が入るのは実経路——ここだけが `openingSince` の
+  /// 逆算と、収縮の取り消し（②を落とす合図を立てないこと）が同時に効く分岐。
+  func testArrivalDuringCollapseResumesFromCurrentOpenness() {
+    let driver = MenuBarArrivalDriver()
+    driver.arrived(at: t0)
+    driver.tick(now: at(1))
+    driver.expired(at: at(22))
+    driver.tick(now: at(22.3))
+    XCTAssertEqual(driver.phase.openness, 0.5, accuracy: 0.001)
+    XCTAssertTrue(driver.phase.closing)
+    driver.arrived(at: at(22.3))
+    XCTAssertEqual(driver.phase.openness, 0.5, accuracy: 0.001, "その場から開き直す")
+    XCTAssertFalse(driver.phase.closing, "向きは展開側へ戻る")
+    driver.tick(now: at(22.72))  // 残り 0.5 × 840ms
+    XCTAssertEqual(driver.phase.openness, 1, accuracy: 0.001)
+    XCTAssertFalse(driver.tick(now: at(23)), "収縮は取り消された——②を落とさない")
+  }
+
+  /// 艶の走査中に Reduce Motion が入って到来が来たら、艶はその場の値で固まらず消える
+  /// ——基点が無い＝艶は無い。ticker も回らないので、残ると 22 秒間帯が張り付く。
+  func testReduceMotionClearsGlossOnArrival() {
+    let driver = MenuBarArrivalDriver()
+    driver.arrived(at: t0)
+    driver.tick(now: at(1.75))
+    XCTAssertNotNil(driver.phase.gloss)
+    driver.reduceMotion = true
+    driver.arrived(at: at(1.8))
+    XCTAssertNil(driver.phase.gloss)
+    XCTAssertFalse(driver.isAnimating)
+  }
+
+  /// 取り下げ・②中のクリックは即時。tick を待たずに閉じ切り、tween も残さない。
   func testDismissClosesImmediately() {
     let driver = MenuBarArrivalDriver()
     driver.arrived(at: t0)
@@ -98,7 +130,7 @@ final class MenuBarArrivalTests: XCTestCase {
     XCTAssertFalse(driver.isAnimating)
   }
 
-  /// C8: Reduce Motion では位相が 0 と 1 しか取らず、艶は 1 度も走らず、ticker も回らない。
+  /// Reduce Motion では位相が 0 と 1 しか取らず、艶は 1 度も走らず、ticker も回らない。
   /// 情報は落ちない——②は開いた姿で滞留し、閉じた瞬間に件数が現れる。
   func testReduceMotionSkipsEveryTween() {
     let driver = MenuBarArrivalDriver()
@@ -117,7 +149,7 @@ final class MenuBarArrivalTests: XCTestCase {
     XCTAssertTrue(driver.tick(now: at(22)), "収縮を待たずその場で②を落とす")
   }
 
-  /// C9: ticker が回るのは展開＋艶（最大 2.3s）と収縮（0.6s）の間だけ。滞留 22 秒は止まる
+  /// ticker が回るのは展開＋艶（最大 2.3s）と収縮（0.6s）の間だけ。滞留 22 秒は止まる
   /// ——60Hz の `statusItem.length` 書き込みはメニューバー他アイテムの再配置を誘発する。
   func testTickerIdlesDuringDwell() {
     let driver = MenuBarArrivalDriver()
