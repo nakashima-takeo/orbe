@@ -227,7 +227,9 @@ final class WindowControllerReportAgentTests: XCTestCase {
   func testConsumeDoneKeepsAttentionTimestamps() throws {
     let (wc, pane) = try makeControllerAndPane()
     wc.controlReportAgent(pane: pane, agent: "claude", state: "done", sessionId: nil, message: "d")
-    let at = pane.agentStateChangedAt
+    // 非 nil で拾う——Optional のまま比べると、report が打刻しなくなった退行が nil == nil で
+    // 素通りして、このテストが名乗る契約が黙って検証されなくなる。
+    let at = try XCTUnwrap(pane.agentStateChangedAt)
     wc.current.tabs[0].consumeDoneState()
     XCTAssertEqual(pane.agentState, "idle")
     XCTAssertEqual(pane.agentStateChangedAt, at)

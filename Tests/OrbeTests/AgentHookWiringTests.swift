@@ -88,6 +88,30 @@ final class AgentHookWiringTests: XCTestCase {
       ])
   }
 
+  /// 各定義は**自分の CLI 名**をシムへ渡す。3 ファイルはほぼ同形で、エントリの追加は既存行の
+  /// コピペで進むため、`codex-hooks.json` に `claude` が紛れ込む類の取り違えが起きうる。
+  /// 渡した名は `report_agent {agent}` → `pane.agentCommand` に入り resume コマンドの構築に
+  /// 使われるので、取り違えると resume が別 CLI で立ち上がる。
+  func testEachDefinitionPassesItsOwnAgentName() throws {
+    for (path, expected) in [
+      ("hooks/claude-hooks.json", "claude"), ("hooks/codex-hooks.json", "codex"),
+    ] {
+      let hooks = try XCTUnwrap(try json(path)["hooks"] as? [String: [[String: Any]]])
+      for (event, groups) in hooks {
+        for group in groups {
+          let command = (group["hooks"] as? [[String: Any]])?.first?["command"]
+          XCTAssertEqual(agent(ofCommand: command), expected, "\(path) の \(event)")
+        }
+      }
+    }
+    let agy = try XCTUnwrap(try json("hooks.json")["orbe-agent"] as? [String: [[String: Any]]])
+    for (event, groups) in agy {
+      for group in groups {
+        XCTAssertEqual(agent(ofCommand: group["command"]), "agy", "hooks.json の \(event)")
+      }
+    }
+  }
+
   // MARK: 読み取り
 
   /// claude / codex 形式（`{"hooks": {event: [{matcher?, hooks: [{command}]}]}}`）を読む。
@@ -110,5 +134,11 @@ final class AgentHookWiringTests: XCTestCase {
   /// シム呼び出し（`... orbe-agent-status.sh <agent> <state>`）の末尾トークンが報告する state。
   private func state(ofCommand command: Any?) -> String {
     String((command as? String)?.split(separator: " ").last ?? "")
+  }
+
+  /// 同じシム呼び出しの末尾から 2 番目のトークン＝報告元の CLI 名（`<agent>`）。
+  private func agent(ofCommand command: Any?) -> String {
+    let tokens = (command as? String)?.split(separator: " ") ?? []
+    return tokens.count >= 2 ? String(tokens[tokens.count - 2]) : ""
   }
 }
