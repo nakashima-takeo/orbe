@@ -23,6 +23,9 @@ guard !agent.isEmpty, !state.isEmpty else { exit(0) }
 // session_id 抽出と background_tasks 判定（ReportLogic.swift）の両方に使う。
 let hookObj = parseHookJSON(FileHandle.standardInput.readDataToEndOfFile())
 
+// サブエージェントのフックは親と同じ session_id で届くが、ペインの状態ではないので報告しない。
+if isSubagentReport(hookObj) { exit(0) }
+
 func connectControl() -> Int32? {
   let fd = socket(AF_UNIX, SOCK_STREAM, 0)
   guard fd >= 0 else { return nil }
