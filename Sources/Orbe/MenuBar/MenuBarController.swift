@@ -5,11 +5,14 @@ import SwiftUI
 /// メニューバー投影（NSStatusItem）の所有者。AppDelegate が起動時に生成し、
 /// `AttentionStore`（単一情報源）を SwiftUI（`MenuBarStatusView`）へ橋渡しする。
 ///
-/// 4 態: ①要対応 0＝減光 ◐ ②状態変化の瞬間（0〜`AttentionStore.transientDuration` 秒・
-/// `store.transient`）＝滲み出しピル
+/// 4 態: ①要対応 0＝減光 ◐ ②状態変化の瞬間（`store.transient` が生きている間）＝滲み出しピル
 /// ③収縮後＝◐＋件数（waiting+done のみ） ④クリック＝ドロップダウン（`MenuBarDropdown`）。
 /// ②の間のクリックだけは該当ペインへ直行する（前面化＋focus）。main スレッド規律
 /// （AppKit・AttentionStore と同じ）で、monitor / timer / target-action はすべて main で届く。
+///
+/// ②の開閉は `MenuBarArrivalDriver` が位相として持ち、controller が tween 中だけ 1/60s の
+/// ticker を回して「位相を進める → intrinsic を確定させる → `statusItem.length` へ反映」を
+/// 同期で撃つ。滞留中は ticker を止める（回るのは最大 2.3 秒＋0.6 秒）。
 final class MenuBarController: NSObject {
   private let store: AttentionStore
   private unowned let windowController: WindowController
@@ -17,18 +20,23 @@ final class MenuBarController: NSObject {
   private let statusItem: NSStatusItem
   private let host: MenuBarItemHostingView
   private let ui = MenuBarUIState()
+  private let driver = MenuBarArrivalDriver()
   private var dropdown: MenuBarDropdown?
   private var transientTimer: Timer?
+  private var ticker: Timer?
+  /// 直近に driver へ渡した到来時刻。同じペインの積み替えも「新しい到来」なのでここで見分ける。
+  private var lastArrivedAt: Date?
 
   init(store: AttentionStore, windowController: WindowController, localization: LocalizationStore) {
     self.store = store
     self.windowController = windowController
     self.localization = localization
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    host = MenuBarItemHostingView(rootView: MenuBarStatusView(store: store, ui: ui))
+    host = MenuBarItemHostingView(
+      rootView: MenuBarStatusView(store: store, ui: ui, phase: .closed))
     super.init()
 
-    // button に SwiftUI を貼る（静的 NSImage では②の滲み出し・波紋が表現できない）。
+    // button に SwiftUI を貼る（静的 NSImage では②の滲み出しが表現できない）。
     // クリックは button の target/action で受けるため、hosting view はヒットテストを素通しする。
     //
     // サイズは制約でなく statusItem.length へ明示反映する——variableLength の status bar は
@@ -52,11 +60,18 @@ final class MenuBarController: NSObject {
     DistributedNotificationCenter.default().addObserver(
       self, selector: #selector(systemAppearanceChanged),
       name: NSNotification.Name("AppleInterfaceThemeChangedNotification"), object: nil)
+    syncReduceMotion()
+    NSWorkspace.shared.notificationCenter.addObserver(
+      self, selector: #selector(reduceMotionChanged),
+      name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
     observeTransient()
   }
 
   deinit {
     DistributedNotificationCenter.default().removeObserver(self)
+    NSWorkspace.shared.notificationCenter.removeObserver(self)
+    transientTimer?.invalidate()
+    ticker?.invalidate()  // 繰り返しなので、放置すると main runloop に空撃ちが残る
   }
 
   /// hosting view の intrinsic 幅を statusItem.length へ反映し、frame を button に合わせる。
@@ -74,6 +89,14 @@ final class MenuBarController: NSObject {
   private func syncSystemAppearance() {
     let dark = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
     host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+  }
+
+  @objc private func reduceMotionChanged() {
+    DispatchQueue.main.async { [weak self] in self?.syncReduceMotion() }
+  }
+
+  private func syncReduceMotion() {
+    driver.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
   }
 
   // MARK: - クリック分岐
@@ -134,28 +157,73 @@ final class MenuBarController: NSObject {
     dropdown?.close()  // onClose 経由で dropdown = nil / ui.dropdownOpen = false に落ちる
   }
 
-  // MARK: - 一過性表示（②）の期限管理と幅同期
+  // MARK: - 一過性表示（②）の到来・滞留・収縮と幅同期
 
-  /// store の変化（transient の出現/消滅・件数）を観測し、期限タイマーを張り直し
-  /// **アイテム幅を即時同期**する（Observation の標準ループ）。幅は SwiftUI の再レイアウトを
-  /// 待ってから読む（layoutSubtreeIfNeeded → syncItemSize）。invalidateIntrinsicContentSize
-  /// フックはこの経路の取りこぼし（フォント読み込み等の遅延サイズ確定）を拾う保険として残す。
+  /// store の変化（transient の到来/消滅・件数）を観測し、driver へ到来と取り下げを伝え、
+  /// 期限タイマーを張り直して**アイテム幅を即時同期**する（Observation の標準ループ）。
+  /// 幅は SwiftUI の再レイアウトを待ってから読む（layoutSubtreeIfNeeded → syncItemSize）。
+  /// invalidateIntrinsicContentSize フックはこの経路の取りこぼし（フォント読み込み等の遅延
+  /// サイズ確定）を拾う保険として残す。
   private func observeTransient() {
     withObservationTracking {
+      _ = store.transient?.arrivedAt
       _ = store.transient?.expiresAt
       _ = store.rows.count
     } onChange: { [weak self] in
       DispatchQueue.main.async {
         guard let self else { return }
-        self.scheduleTransientExpiry()
-        self.host.layoutSubtreeIfNeeded()  // 新しい content の intrinsic を確定させてから幅を読む
-        self.syncItemSize()
+        self.syncTransient()
         // SwiftUI の更新適用が次 tick にずれる場合の取りこぼしを塞ぐ（幅同期は冪等）。
         DispatchQueue.main.async { self.syncItemSize() }
         self.observeTransient()
       }
     }
     scheduleTransientExpiry()
+  }
+
+  private func syncTransient() {
+    let arrivedAt = store.transient?.arrivedAt
+    if arrivedAt != lastArrivedAt {
+      lastArrivedAt = arrivedAt
+      if arrivedAt != nil {
+        driver.arrived(at: Date())  // 積み替えも新しい到来（艶が走り直す）
+      } else {
+        driver.dismissed()  // 取り下げ・②中のクリック・収縮の撃ち終わり＝アニメなしで閉じ切り
+        stopTicker()
+      }
+    }
+    scheduleTransientExpiry()
+    render()
+    if driver.isAnimating { startTicker() }
+  }
+
+  /// 現在の位相を content へ流し、intrinsic を確定させてから `statusItem.length` へ反映する。
+  private func render() {
+    host.rootView = MenuBarStatusView(store: store, ui: ui, phase: driver.phase)
+    host.layoutSubtreeIfNeeded()  // 新しい content の intrinsic を確定させてから幅を読む
+    syncItemSize()
+  }
+
+  /// tween 中だけ回る 1/60s の ticker。位相を進めて幅を追随させ、収縮を撃ち終えたら②を落とす。
+  private func startTicker() {
+    guard ticker == nil else { return }
+    let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
+      self?.advance()  // main runloop の timer＝main で届く
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    ticker = timer
+  }
+
+  private func stopTicker() {
+    ticker?.invalidate()
+    ticker = nil
+  }
+
+  private func advance() {
+    let collapsed = driver.tick(now: Date())
+    render()
+    if !driver.isAnimating { stopTicker() }
+    if collapsed { store.transient = nil }
   }
 
   private func scheduleTransientExpiry() {
@@ -170,14 +238,18 @@ final class MenuBarController: NSObject {
     transientTimer = timer
   }
 
+  /// 滞留の満了。ホバー中は収縮を先送りし、そうでなければ収縮を撃つ（一度閉じ始めたら閉じ切る
+  /// ——収縮中に期限タイマーは張られない）。
   private func transientExpired() {
     guard store.transient != nil else { return }
     if ui.transientHovered {
       // ホバー中は収縮しない（延長）。ホバーが外れた後の余韻ぶんだけ先送りする。
       store.transient?.expiresAt = Date().addingTimeInterval(2)
-    } else {
-      store.transient = nil
+      return
     }
+    driver.expired(at: Date())
+    advance()
+    if driver.isAnimating { startTicker() }
   }
 }
 

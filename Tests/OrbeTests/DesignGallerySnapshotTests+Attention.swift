@@ -65,12 +65,12 @@ extension DesignGallerySnapshotTests {
     let openUI = MenuBarUIState()
     openUI.dropdownOpen = true
     return VStack(alignment: .trailing, spacing: Theme.Space.beat) {
-      MenuBarStatusView(store: AttentionStore(), ui: MenuBarUIState()).fixedSize()
+      MenuBarStatusView(store: AttentionStore(), ui: MenuBarUIState(), phase: .closed).fixedSize()
       ForEach(Array(transientStores.enumerated()), id: \.offset) { _, store in
-        MenuBarStatusView(store: store, ui: MenuBarUIState()).fixedSize()
+        MenuBarStatusView(store: store, ui: MenuBarUIState(), phase: .open).fixedSize()
       }
-      MenuBarStatusView(store: countStore, ui: MenuBarUIState()).fixedSize()
-      MenuBarStatusView(store: countStore, ui: openUI).fixedSize()
+      MenuBarStatusView(store: countStore, ui: MenuBarUIState(), phase: .closed).fixedSize()
+      MenuBarStatusView(store: countStore, ui: openUI, phase: .closed).fixedSize()
     }
     .padding(Theme.Space.bar)
     .background(Color.theme.bgBase)
