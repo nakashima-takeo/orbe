@@ -190,12 +190,14 @@ enum DesignSceneFixtures {
     return state
   }
 
-  /// DL中 64%（見本 2d の `8.3 MB / 13 MB` mono 表記）。
+  /// DL中 64%（見本 2d の `8.3 MB / 13 MB` mono 表記）。DL 中は Sparkle が確認を受け付けないため
+  /// 確認不可も張る（「今すぐ確認」行の減光と、理由を語るカードが同時に読めるか見る）。
   static func updateDownloadingState() -> UpdateState {
     let state = baseUpdateState()
     state.beginDownload(version: "0.2.0")  // 実フローと同順（found→DL 開始、ready はまだ立たない）
     state.setExpectedLength(13_000_000)
     state.receiveData(length: 8_300_000)
+    state.setCanCheckNow(false)
     return state
   }
 
@@ -227,12 +229,17 @@ enum DesignSceneFixtures {
   }
 
   /// 設定パレットをアップデートセクションへ潜らせたモデル（2c/2d。gallery/flow が状態カードを撮る）。
-  static func updateSettingsModel(_ state: UpdateState) -> SettingsPaletteModel {
+  /// - Parameter selectCheckNow: 末尾の「今すぐ確認」行を選択する。行が器の高さ上限を超える状態
+  ///   （適用待ち）で、その行が見えているスクロール位置＝押そうとしている状況を撮るために使う。
+  static func updateSettingsModel(_ state: UpdateState, selectCheckNow: Bool = false)
+    -> SettingsPaletteModel
+  {
     let model = SettingsPaletteModel(
       values: ScopedSettingsValues(global: SettingsLayer(), override: SettingsLayer()),
       fontNames: [], agents: ["claude"], localization: LocalizationStore(language: .ja),
       update: state)
     model.drillIntoUpdate()
+    if selectCheckNow { model.render.selected = model.render.rows.count - 1 }
     return model
   }
 }

@@ -33,18 +33,35 @@ extension DesignGallerySnapshotTests {
       size: stage, name: "update_changes.png", dir: dir)
 
     // 2c/2d 設定›アップデート（状態カード 5 状態＋「今すぐ確認」行の実行不可 2 態）。
-    let cases: [(String, UpdateState)] = [
-      ("ready", DesignSceneFixtures.updateReadyState()),
-      ("checking", DesignSceneFixtures.updateCheckingState()),
-      ("downloading", DesignSceneFixtures.updateDownloadingState()),
-      ("uptodate", DesignSceneFixtures.updateUpToDateState()),
-      ("failed", DesignSceneFixtures.updateFailedState()),
+    // 適用待ちは行が器の高さ上限を超えるため、「今すぐ確認」行を選択した状態＝その行が見えている
+    // スクロール位置で撮る（減光を見るには行が見えている必要がある）。
+    let cases: [(String, SettingsPaletteModel)] = [
+      ("ready", DesignSceneFixtures.updateSettingsModel(DesignSceneFixtures.updateReadyState())),
+      (
+        "checking",
+        DesignSceneFixtures.updateSettingsModel(DesignSceneFixtures.updateCheckingState())
+      ),
+      (
+        "downloading",
+        DesignSceneFixtures.updateSettingsModel(DesignSceneFixtures.updateDownloadingState())
+      ),
+      (
+        "uptodate",
+        DesignSceneFixtures.updateSettingsModel(DesignSceneFixtures.updateUpToDateState())
+      ),
+      ("failed", DesignSceneFixtures.updateSettingsModel(DesignSceneFixtures.updateFailedState())),
       // 「今すぐ確認」行の実行不可 2 態（減光 / 背景確認中のスピナー）。
-      ("ready_busy", DesignSceneFixtures.updateReadyBusyState()),
-      ("background_checking", DesignSceneFixtures.updateBackgroundCheckingState()),
+      (
+        "ready_busy",
+        DesignSceneFixtures.updateSettingsModel(
+          DesignSceneFixtures.updateReadyBusyState(), selectCheckNow: true)
+      ),
+      (
+        "background_checking",
+        DesignSceneFixtures.updateSettingsModel(DesignSceneFixtures.updateBackgroundCheckingState())
+      ),
     ]
-    for (name, state) in cases {
-      let model = DesignSceneFixtures.updateSettingsModel(state)
+    for (name, model) in cases {
       try writePNG(
         paletteSnapshot(model.render).environment(\.localization, l10n),
         size: NSSize(width: 500, height: 520), name: "update_settings_\(name).png", dir: dir)
