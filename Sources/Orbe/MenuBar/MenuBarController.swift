@@ -228,11 +228,13 @@ final class MenuBarController: NSObject {
 
   private func advance() {
     let collapsed = driver.tick(now: Date())
-    render()
-    syncTicker()
     // 落とすのは driver が閉じ切った当の到来だけ。収縮の最終フレームに割り込んだ新しい到来を
     // 巻き添えにしない（その到来は observeTransient 経由で driver.arrived へ届く）。
+    // 描く前に落とす——閉じ切りの位相は向きを持たないので、②を載せたまま描くと最終フレーム
+    // だけ到来時の件数へ戻って見える。
     if collapsed, store.transient?.arrivedAt == lastArrivedAt { store.transient = nil }
+    render()
+    syncTicker()
   }
 
   private func scheduleTransientExpiry() {

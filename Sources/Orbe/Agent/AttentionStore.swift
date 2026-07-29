@@ -27,6 +27,10 @@ import Observation
     /// 到来時刻。ホバー延長では変わらない——MenuBarController が「新しい到来か」を見分ける印
     /// （同じ paneId の積み替えも新しい到来なので `paneId` の比較では見分けられない）。
     let arrivedAt: Date
+    /// 到来した瞬間の件数。開いている間の②はこれを見せる——`count` は報告の coalesce で
+    /// 展開の途中に増えるので、実件数を見せると 0→1 の到来で数字が展開中に閃く（原典は
+    /// 「閉じながら生まれる」）。到来ごとに一度だけ確定し、その到来が終わるまで動かない。
+    let arrivedCount: Int
     /// 収縮の開始時刻（＝滞留の満了）。
     var expiresAt: Date
   }
@@ -35,7 +39,8 @@ import Observation
   /// 一過性イベントを立てる（滞留 `transientDwell`。ホバー延長は MenuBarController）。
   func noteTransient(_ row: AttentionRow, now: Date = Date()) {
     transient = Transient(
-      row: row, arrivedAt: now, expiresAt: now.addingTimeInterval(Self.transientDwell))
+      row: row, arrivedAt: now, arrivedCount: count,
+      expiresAt: now.addingTimeInterval(Self.transientDwell))
   }
 
   /// 行 snapshot を差し替え、②が指す行が一覧（`listRows`）に**同じ状態で**居なければ取り下げる。

@@ -78,6 +78,15 @@ struct MenuBarStatusView: View {
   /// 件数スロットの畳み具合（開くほど畳まれる＝文言表示中は件数を出さない）。
   private var countFold: Double { 1 - eased(MenuBarArrival.Curve.count) }
 
+  /// 件数スロットが描く値。開いていく間は**到来した瞬間の件数**、収縮中は実件数。
+  /// 一覧は報告の coalesce で展開の途中に増えるので、開き側で実件数を見せると 0 件からの
+  /// 到来で数字が展開中に閃く。原典は「開くとき仕舞い、閉じながら（＋1 された）件数が現れる」で、
+  /// 数字が変わるのは必ず収縮と同時——境目は畳み具合ではなく**向き**にある。
+  private var slotCount: Int {
+    guard let transient = store.transient, !phase.closing else { return store.count }
+    return transient.arrivedCount
+  }
+
   var body: some View {
     PillRow(spacing: Theme.Space.note, budget: Self.pillBudget) {
       brandGlyph.pillSlot(gap: 0, fold: 1)
@@ -93,14 +102,14 @@ struct MenuBarStatusView: View {
         textSlot(row.message ?? row.tabTitle, color: Color.theme.statusText)
           .pillSlot(gap: Theme.Space.note, fold: textFold)
       }
-      if store.count > 0 {
-        Text("\(store.count)")
+      if slotCount > 0 {
+        Text("\(slotCount)")
           .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
           .foregroundStyle(.primary)  // ③④の数字はシステム外観に追従する（dark ピンを当てない）
           .pillSlot(gap: Self.countGap, fold: countFold, cap: Self.countCap)
       }
     }
-    .padding(.horizontal, store.count > 0 ? Self.pillPadding : Self.pillPadding * groundLift)
+    .padding(.horizontal, slotCount > 0 ? Self.pillPadding : Self.pillPadding * groundLift)
     .frame(height: Self.pillHeight)
     .background(pillGround)
     .overlay { if let gloss = phase.gloss { glossSweep(gloss) } }
@@ -116,7 +125,7 @@ struct MenuBarStatusView: View {
     let lift = eased(MenuBarArrival.Curve.glyph)
     return ZStack {
       OrbeMarkGlyph(size: 15, color: .primary)
-        .opacity(store.count > 0 ? 1 : 0.45 + 0.55 * lift)
+        .opacity(slotCount > 0 ? 1 : 0.45 + 0.55 * lift)
       OrbeMarkGlyph(size: 15).opacity(groundLift)
     }
   }
@@ -145,7 +154,7 @@ struct MenuBarStatusView: View {
           ui.dropdownOpen
             ? Color.theme.accentPrimary.opacity(0.35) : Color.theme.surfaceInk.opacity(0.16)
         )
-        .opacity(store.count > 0 ? 1 : 0)
+        .opacity(slotCount > 0 ? 1 : 0)
       Self.pillShape
         .fill(Color.theme.bgBase)  // 不透明の暗地（メニューバー実背景に依存しない）
         .overlay(Self.pillShape.fill(Color.theme.accentPrimary.opacity(0.35)))
@@ -247,11 +256,14 @@ struct PillRow: Layout {
     let gaps = subviews.enumerated().map { index, subview in
       index == 0 ? 0 : (subview[PillSlotGap.self] ?? spacing)
     }
-    // 上限を宣言したスロットが後続に確保する取り分（自然幅と上限の小さい方＋直前の間隔）。
+    // 上限を宣言したスロットが確保する取り分は**上限そのもの**（＋直前の間隔）。自然幅で
+    // 予約すると、予約量が中身に依存する——件数スロットは②の最中に桁が変わる（0→1・2→3）ので、
+    // その差だけ前の文言スロットの取り分が動いて切り詰め位置がずれ、文字が跳ねる。予算配分が
+    // 畳み具合を見ないのと同じ理由で、予約も②の間ずっと不変な量から組む。
     let ideals = subviews.map { $0.sizeThatFits(.unspecified) }
     let claims = subviews.enumerated().map { index, subview -> CGFloat in
       let cap = subview[PillSlotCap.self]
-      return cap.isFinite ? gaps[index] + min(ideals[index].width, cap) : 0
+      return cap.isFinite ? gaps[index] + cap : 0
     }
     var reserved = claims.reduce(0, +)
 
