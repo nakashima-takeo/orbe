@@ -169,13 +169,15 @@ final class MenuBarStatusViewTests: XCTestCase {
   func testPillRowPlacesExactlyWhatItDeclares() {
     for (budget, fold, label) in [
       (CGFloat(400), 1.0, "予算に余る"), (CGFloat(120), 1.0, "予算が足りない"),
-      (CGFloat(400), 0.5, "先頭スロットが畳まれかけ"), (CGFloat(400), 0.0, "先頭スロットが畳み切り"),
+      (CGFloat(400), 0.5, "中間スロットが畳まれかけ"), (CGFloat(400), 0.0, "中間スロットが畳み切り"),
     ] {
       let placed = PlacementBox()
       let host = NSHostingView(
         rootView: PillRow(spacing: 6, budget: budget) {
-          slotProbe(ideal: 40).pillSlot(gap: 6, fold: fold)
-          slotProbe(ideal: 60)
+          // 畳むのは**先頭以外**のスロット。先頭は `measure` が gap を 0 に固定するので、
+          // ここに置くと「間隔ごと畳む」（`gaps[index] * fold`）を一度も踏めない。
+          slotProbe(ideal: 40)
+          slotProbe(ideal: 60).pillSlot(gap: 6, fold: fold)
           PlacementProbe(box: placed) { slotProbe(ideal: 200) }
         })
       let declared = host.fittingSize
@@ -187,8 +189,8 @@ final class MenuBarStatusViewTests: XCTestCase {
     }
   }
 
-  /// 幅は位相の**連続かつ狭義単調増加**な関数である＝①③↔②の境界で幅が飛ばない
-  /// （3 態を差し替えていた頃は境界で不連続だった）。高さはどの位相でも 22 以下。
+  /// 幅は位相の**連続かつ狭義単調増加**な関数である＝①③↔②の境界で幅が飛ばない。
+  /// 高さはどの位相でも 22 以下。
   /// 展開（`closing: false`）と収縮（`closing: true`）は別の曲線を描くので、両方で見る。
   func testWidthGrowsStrictlyWithOpenness() {
     let store = AttentionStore()
@@ -210,8 +212,10 @@ final class MenuBarStatusViewTests: XCTestCase {
   /// **文言表示中は件数を出さない**（開き切りでは件数が幅に一切効かない）。
   /// **閉じた姿は実件数を示す**（閉じ切りでは件数の桁が幅に出る）。
   ///
-  /// 短い文言を使う——長文だと予算を使い切って両者が上限へ並び、件数スロットの
-  /// 有無が総幅に現れない（上限側の契約は `testTransientPillCapsOverallWidth` が持つ）。
+  /// 短い文言を使う——`PillRow.measure` は畳み具合を見ないので、件数スロットは開き切りでも
+  /// 自分の取り分（`gap + min(自然幅, countCap)`）を予算に確保する。文言が切り詰まるほど長いと
+  /// その取り分の桁差ぶんだけ文言の allowance が動き、総幅に出てしまう。ここで固定するのは
+  /// 「切り詰めが起きない範囲では件数の桁が幅に効かない」まで。
   func testCountLeavesWidthUntouchedWhileOpen() {
     func width(phase: MenuBarArrival.Phase, count: Int) -> CGFloat {
       let store = AttentionStore()
@@ -225,6 +229,28 @@ final class MenuBarStatusViewTests: XCTestCase {
     XCTAssertLessThan(
       width(phase: .closed, count: 2), width(phase: .closed, count: 99),
       "閉じ切りでは件数の桁がそのまま幅になる")
+  }
+
+  /// 閉じ切った②は③と**同じ幅**——畳まれたスロットは自分の直前の間隔ごと消えるので、
+  /// 文言 3 スロットの gap が残らない。これが「①③↔②の境界で幅が飛ばない」の実体で、
+  /// 単調性テストは相対比較なので固定オフセットを見逃す（ここは厳密な等式で押さえる）。
+  func testClosedTransientHasSameWidthAsCountPill() {
+    let rows = [row(state: "waiting"), row(paneId: 2, state: "done")]
+    let bare = AttentionStore()
+    bare.apply(rows: rows)
+    let withTransient = AttentionStore()
+    withTransient.apply(rows: rows)
+    withTransient.noteTransient(row(state: "waiting", message: longMessage))
+    XCTAssertEqual(
+      fittingSize(store: withTransient, phase: .closed).width,
+      fittingSize(store: bare, phase: .closed).width, accuracy: 0.5)
+  }
+
+  /// ①は地も水平余白も持たない（メニューバーの常態で 14pt を占有しない）＝◐ と hair だけ。
+  func testQuietStateHasNoGroundPadding() {
+    XCTAssertEqual(
+      fittingSize(store: AttentionStore(), phase: .closed).width, 15 + Theme.Space.hair * 2,
+      accuracy: 0.5)
   }
 }
 

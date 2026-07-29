@@ -230,8 +230,10 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
 
   /// メニューバー②の到来: 本物の `arrived` / `tick` / `expired` で駆動し（時刻は注入するので
   /// 実時間を待たない）、展開・艶の走査・滞留・収縮の各フレームを撮る。
-  /// 01 と 08 が同形で数字だけ違えば「閉じた姿は常に実件数を示す」、02〜07 に数字が無ければ
-  /// 「文言表示中は件数を出さない」が画で確かめられる。
+  /// 01 と 08 が同形で数字だけ違えば「閉じた姿は常に実件数を示す」、開き切りの 04〜06 に数字が
+  /// 無ければ「文言表示中は件数を出さない」が画で確かめられる。02 が 01 と同形なのは、到来の
+  /// 瞬間に幅も姿も飛ばないこと（1 つのピルに統合した理由そのもの）の証拠。畳まれかけの
+  /// 03・07 は件数が途中の濃度で残る——`countFold` は開き具合の関数で、0 になるのは開き切り。
   func testMenubarArrival() throws {
     let t0 = Date()
     let store = AttentionStore()
@@ -264,7 +266,8 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
         (
           "expand_half",
           {
-            // 一覧は report 経路の次の coalesce で 3 件へ（②は件数を投影しないので画は変わらない）。
+            // 一覧は report 経路の次の coalesce で 3 件へ。この位相では件数が畳まれかけ
+            // （`countFold` ≒ 0.2）なので、2→3 の差は画にほとんど出ない。
             store.apply(rows: seeded + [arriving])
             driver.tick(now: t0.addingTimeInterval(0.42))
           }
