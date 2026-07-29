@@ -50,11 +50,12 @@ final class GuiConfigTests: XCTestCase {
     "font-codepoint-map = \(EmojiPresentationRanges.confValue)=Noto Color Emoji\n"
     + "theme = light:OrbeLight,dark:OrbeDark\n"
 
-  /// fontFamily 選択時に吐く font-family ブロック（reset＋選択）。
+  /// fontFamily 選択時に吐く font-family ブロック（reset＋選択＋JuliaMono）。
   private func fontBlock(_ family: String) -> String {
     [
       "font-family = \"\"",
       "font-family = \(family)",
+      "font-family = JuliaMono",
     ].map { $0 + "\n" }.joined()
   }
 
@@ -73,27 +74,29 @@ final class GuiConfigTests: XCTestCase {
     XCTAssertEqual(content(), constLines, "auto 明示でも同一の定数行")
   }
 
-  /// fontFamily 選択時は 2 行（reset＋選択）を吐く。空白入り family もクォート無し literal で 2 行目に載る。
+  /// fontFamily 選択時は 3 行（reset＋選択＋JuliaMono）を吐く。空白入り family もクォート無し literal で 2 行目に載る。
   func testFontFamilyOnly() {
     GuiConfig.regenerate(from: eff(fontFamily: "SF Mono"))
     XCTAssertEqual(content(), fontBlock("SF Mono") + constLines)
   }
 
-  /// font-family ブロック（2 行）は font-size の次・emoji-font/theme 定数行の前に並ぶ（正準順）。
+  /// font-family ブロック（3 行）は font-size の次・emoji-font/theme 定数行の前に並ぶ（正準順）。
   func testCanonicalOrderFontSizeFamilyTheme() {
     GuiConfig.regenerate(from: eff(fontSize: 14, theme: .dark, fontFamily: "Menlo"))
     XCTAssertEqual(content(), "font-size = 14\n" + fontBlock("Menlo") + constLines)
   }
 
-  /// emoji-font=apple では map 行そのものが消える（libghostty が macOS で必ず fallback へ挿す
-  /// Apple Color Emoji がそのまま描くため、行を足す必要が無い）。theme 定数行だけが残る。
-  func testEmojiFontAppleOmitsMapLine() {
+  /// emoji-font=apple では map 先が Apple Color Emoji（60 点集合）の行へ入れ替わる（位置は同じ）。
+  func testEmojiFontAppleSwapsMapLine() {
     GuiConfig.regenerate(from: eff(fontSize: 14, emojiFont: .apple))
     XCTAssertEqual(
-      content(), "font-size = 14\ntheme = light:OrbeLight,dark:OrbeDark\n")
+      content(),
+      "font-size = 14\n"
+        + "font-codepoint-map = \(SettingsRegistry.appleEmojiConfValue)=Apple Color Emoji\n"
+        + "theme = light:OrbeLight,dark:OrbeDark\n")
   }
 
-  /// fontFamily=nil（（既定に戻す））で再生成すると font-family 2 行が消え、他キーは残る。
+  /// fontFamily=nil（（既定に戻す））で再生成すると font-family 3 行が消え、他キーは残る。
   func testFontFamilyResetRemovesLineKeepsOthers() {
     GuiConfig.regenerate(from: eff(fontSize: 14, fontFamily: "Menlo"))
     XCTAssertEqual(content(), "font-size = 14\n" + fontBlock("Menlo") + constLines)

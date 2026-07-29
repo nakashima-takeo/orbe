@@ -120,7 +120,7 @@ final class SettingsRegistryTests: XCTestCase {
     let d = SettingsRegistry.descriptor(.fontFamily)
     XCTAssertEqual(
       d.guiConf?(eff { $0[SettingKeys.fontFamily] = "Menlo" }),
-      "font-family = \"\"\nfont-family = Menlo")
+      "font-family = \"\"\nfont-family = Menlo\nfont-family = JuliaMono")
     XCTAssertNil(d.guiConf?(eff()), "fontFamily 未設定は行を出さない")
   }
 
@@ -132,18 +132,17 @@ final class SettingsRegistryTests: XCTestCase {
     XCTAssertEqual(d.guiConf?(eff { $0[SettingKeys.theme] = .light }), line, "値非依存")
   }
 
-  /// emoji-font=noto は未設定（実効既定）でも同梱 Noto への map 行を emit する
-  /// ——「同梱 Noto のフラット字形で描く」という機能そのものなので、gui.conf 不在時に消えては困る。
-  /// apple は行を出さない。libghostty が macOS で Apple Color Emoji を必ず fallback へ挿すので、
-  /// 奪う側の font-family を 1 本に絞った今、打ち消しの map は不要（出すと VS16 の扱いを狂わせるだけ）。
-  func testEmojiFontGuiConfEmitsNotoMapAndOmitsAppleMap() {
+  /// emoji-font は theme 同様、未設定でも実効既定（noto）の font-codepoint-map 行を常時 emit する
+  /// （単一出所化。JuliaMono 横取り防止が gui.conf 不在時に消えないため）。
+  func testEmojiFontGuiConfEmitsMapLineAlways() {
     let d = SettingsRegistry.descriptor(.emojiFont)
     let notoLine = "font-codepoint-map = \(EmojiPresentationRanges.confValue)=Noto Color Emoji"
     XCTAssertEqual(d.guiConf?(eff()), notoLine, "未設定でも実効既定 noto の行を emit")
     XCTAssertEqual(d.guiConf?(eff { $0[SettingKeys.emojiFont] = .noto }), notoLine)
-    XCTAssertNil(
+    XCTAssertEqual(
       d.guiConf?(eff { $0[SettingKeys.emojiFont] = .apple }),
-      "apple は font-codepoint-map 行を出さない（ハードコード fallback の Apple が描く）")
+      "font-codepoint-map = \(SettingsRegistry.appleEmojiConfValue)=Apple Color Emoji",
+      "apple は JuliaMono 横取り 60 点集合を Apple Color Emoji へ map（維持必須）")
   }
 
   func testDefaultAgentHasNoGuiConf() {
