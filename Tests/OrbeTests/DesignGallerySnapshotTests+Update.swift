@@ -32,6 +32,23 @@ extension DesignGallerySnapshotTests {
       .environment(\.localization, l10n),
       size: stage, name: "update_changes.png", dir: dir)
 
+    // 2b 変更内容シート・項目の多いノート（窓に収まりボタンが見える／溢れは内部スクロール）と
+    // 「修正」だけのノート（分類が見出しの語で決まる）。
+    let noteCases: [(String, String)] = [
+      ("update_changes_long.png", DesignSceneFixtures.updateLongSampleNotes),
+      ("update_changes_fix_only.png", DesignSceneFixtures.updateFixOnlyNotes),
+    ]
+    for (name, notes) in noteCases {
+      try writePNG(
+        ZStack {
+          BackgroundGlow()
+          UpdateChangesOverlay(model: DesignSceneFixtures.updateReadyState(notes: notes))
+        }
+        .frame(width: stage.width, height: stage.height)
+        .environment(\.localization, l10n),
+        size: stage, name: name, dir: dir)
+    }
+
     // 2c/2d 設定›アップデート（状態カード 5 状態）。
     let cases: [(String, UpdateState)] = [
       ("ready", DesignSceneFixtures.updateReadyState()),

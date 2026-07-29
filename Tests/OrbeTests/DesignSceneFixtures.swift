@@ -174,6 +174,34 @@ enum DesignSceneFixtures {
     ソース: https://github.com/nakashima-takeo/orbe/tree/v0.2.0
     """
 
+  /// 項目の多いノート（3 分類・11 項目）。シートが窓に収まりボタンが見えること、
+  /// 溢れた分がノート部の内部スクロールへ回ることをここで見る。
+  static let updateLongSampleNotes = """
+    ### 新機能
+    - ペインからそのまま使える `orbe` コマンドを同梱しました
+    - ワークスペースを跨いでタブを検索できるようになりました
+    - エージェントの状態をステータス行にまとめて出すようにしました
+    - 差分パネルからコミットの詳細を開けるようになりました
+    ### 改善
+    - タブ補完の候補表示が速くなりました
+    - ワークスペースの切り替えでエージェントのタブ順が保たれるようになり、復帰したときに前と同じ並びで再開できます
+    - パレットの絞り込みが日本語入力中でも追従するようになりました
+    - 起動直後のフォント読み込みを速くしました
+    ### 修正
+    - エージェント実行中にタブ表示が止まる問題を修正しました
+    - ワークツリーの削除に失敗したときに孤児が残る問題を修正しました
+    - 設定を閉じたあとフォーカスが戻らない問題を修正しました
+
+    ソース: https://github.com/nakashima-takeo/orbe/tree/v0.2.0
+    """
+
+  /// 「修正」だけのノート。分類が並び順ではなく見出しの語で決まること（先頭でも青＋`＋`にならない）を見る。
+  static let updateFixOnlyNotes = """
+    ### 修正
+    - エージェント実行中にタブ表示が止まる問題を修正しました
+    - 設定を閉じたあとフォーカスが戻らない問題を修正しました
+    """
+
   private static func baseUpdateState() -> UpdateState {
     let state = UpdateState(currentVersion: "0.1.0")
     state.seedLastCheck(Date(timeIntervalSinceNow: -300))
@@ -181,11 +209,11 @@ enum DesignSceneFixtures {
   }
 
   /// 適用待ち（2a トースト・2b シート・2c 状態カードの正）。v0.2.0 / 2026-07-13 / 13 MB。
-  static func updateReadyState() -> UpdateState {
+  static func updateReadyState(notes: String = updateSampleNotes) -> UpdateState {
     let state = baseUpdateState()
     state.markReady(
       UpdateState.ReadyInfo(
-        version: "0.2.0", notes: updateSampleNotes,
+        version: "0.2.0", notes: notes,
         date: DateComponents(
           calendar: .init(identifier: .gregorian), year: 2026, month: 7, day: 13
         ).date,
