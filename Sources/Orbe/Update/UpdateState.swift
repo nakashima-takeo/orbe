@@ -6,8 +6,9 @@ import Observation
 /// Sparkle との接続は `UpdaterService`/`UpdateUserDriver` が担い、コールバック（`on*`）で双方向に橋渡す。
 /// Sparkle 非依存のため、テスト・gallery/flow fixture は実 updater なしで全状態を注入できる。
 @Observable final class UpdateState {
-  /// 状態カードの 5 状態＋idle。idle は「このセッションでまだ何も起きていない」で、表示は upToDate と
-  /// 同型（現在バージョン＋最終確認時刻）に縮退する。
+  /// Sparkle のセッションで何が起きたか。状態カードはこの 6 ケースを 7 通りに見せる——
+  /// idle は「このセッションでまだ何も起きていない」で、確認の可否（`CheckAvailability`）によって
+  /// 「まだ確認していない」と「このビルドでは確認しない」の 2 通りに分かれる。
   enum Phase: Equatable {
     case idle
     case checking
