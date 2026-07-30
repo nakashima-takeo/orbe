@@ -129,8 +129,8 @@ final class WindowController: NSObject, NSWindowDelegate {
       self?.focusActivePane()
       self?.reconfirmFocusNextTick()
     }
-    // 言語選択ゲートより前に置く: 同梱プラグインの実体化はオンボーディングとも言語選択とも独立に
-    // 毎起動走る必要がある（ライブ参照される安定パスへ同梱の更新を届ける唯一の経路）。
+    // 同梱プラグインの実体化はオンボーディングとも言語選択とも独立に、どちらのゲートにも入れず
+    // 毎起動無条件に走らせる（実体化した安定パスはオンボーディングの導入もそのまま使う）。
     agentLauncher.syncAgentPluginOnLaunch()
     showFirstRunFlow()  // 初回言語選択（preferredLanguage 未設定時）→ 既存 Onboarding（各 CLI へ導入）
     cleanupLegacyCompletionIfNeeded()  // 旧方式が zshrc へ書いた managed block を一度だけ除去

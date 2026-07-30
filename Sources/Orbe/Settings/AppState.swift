@@ -3,7 +3,8 @@ import Foundation
 /// ユーザー設定でない内部簿記（アプリ状態）の永続表現。settings.json から分離した `app-state.json` の中身。
 /// 全 field Optional の家風（欠落・後方互換を壊さず読む）。
 struct AppStateFile: Codable, Equatable {
-  /// オンボーディング overlay を出したか。true なら次回起動で出さない。
+  /// 状態追跡プラグインを 1 つ以上の CLI へ失敗なく導入できたか。true ならオンボーディングを
+  /// 出さず、以後の登録は起動時の無音同期が担う。
   var agentPluginsInstalled: Bool?
   /// 各 CLI へ最後に登録できた状態追跡プラグインの名前。現在のチャネルの名前と違えば起動時に
   /// 無音で登録し直す（名前はチャネルごとに変わる）。
