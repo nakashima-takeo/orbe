@@ -1,12 +1,13 @@
 #!/bin/sh
 # Orbe エージェント状態追跡プラグインを検出された各 CLI へ冪等に導入する。
-# Orbe が起動時に同梱パスを引数にバックグラウンドで呼ぶ。
+# Orbe が実体化先のパスとプラグイン名を引数にバックグラウンドで呼ぶ。
 #
-# 使い方: install.sh <plugin_dir>
+# 使い方: install.sh <plugin_dir> <plugin_name>
+# プラグイン名はチャネルごとに違う（dev / release が別枠で共存する）ので焼き付けず引数で受ける。
 # 各 CLI ごとに status を 1 行出力: installed / unchanged / skip-no-cli / error
 # 個々の CLI のハングを tmo で打ち切る。
 DIR="${1:?plugin_dir required}"
-NAME="orbe-agent"
+NAME="${2:?plugin_name required}"
 
 # macOS に timeout が無いため perl の alarm で代替（exit 124 で打ち切り）。
 tmo() { perl -e 'alarm shift; exec @ARGV' "$@" </dev/null >/dev/null 2>&1; }
@@ -15,7 +16,9 @@ tmo() { perl -e 'alarm shift; exec @ARGV' "$@" </dev/null >/dev/null 2>&1; }
 echo "start claude"
 if command -v claude >/dev/null 2>&1; then
   tmo 30 claude plugin marketplace add "$DIR"
-  if claude plugin list 2>/dev/null | grep -q "$NAME"; then
+  # list は "<name>@<marketplace>" の行を持つ。別チャネルの枠（名前の先頭が同じ）を自分のものと
+  # 誤認して plugin install を永久に飛ばさないよう、完全一致で判定する。
+  if claude plugin list 2>/dev/null | grep -qF "${NAME}@${NAME}"; then
     echo "unchanged claude"
   elif tmo 60 claude plugin install "${NAME}@${NAME}"; then
     echo "installed claude"
@@ -47,9 +50,10 @@ fi
 echo "start agy"
 if command -v agy >/dev/null 2>&1; then
   # agy はローカルパス導入＝プラグイン本体の subdir（plugin.json のあるルート）を指す。
-  if agy plugin list 2>/dev/null | grep -q "$NAME"; then
+  # list は JSON（`"name": "<name>"`）なので引用符込みの完全一致で判定する（claude と同じ理由）。
+  if agy plugin list 2>/dev/null | grep -qF "\"${NAME}\""; then
     echo "unchanged agy"
-  elif tmo 60 agy plugin install "$DIR/plugins/orbe-agent"; then
+  elif tmo 60 agy plugin install "$DIR/plugins/$NAME"; then
     echo "installed agy"
   else
     echo "error agy"
