@@ -191,8 +191,12 @@ struct UpdateStatusCardRow: View {
     case .notChecked:
       dot(Color.theme.stateIdle)
     case .checkDisabled:
+      // カード族のグリフは実寸＝スロット幅（`StatusGlyphView` と同じ契約）。SF Symbol の素の
+      // advance は側方ベアリングを含んで dot より広く、ラベルの左端が notChecked とずれるため、
+      // dot と同じ 8pt スロットへ固定して円環の直径も dot の直径に揃える。
       Image(systemName: "minus.circle")
-        .font(.system(size: 10))
+        .font(.system(size: 8))
+        .frame(width: 8, height: 8)
         .foregroundStyle(Color.theme.textMuted)
     }
   }
