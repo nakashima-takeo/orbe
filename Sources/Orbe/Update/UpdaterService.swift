@@ -5,11 +5,13 @@ import Sparkle
 /// 「今すぐ確認/今すぐ再起動」の導線を束ねる。UI（Layout 層）は `UpdateState` だけを読む——
 /// Sparkle 型はこのディレクトリの外へ出さない。
 ///
-/// **サイレント自動DL経路の UI 通知は SPUUpdaterDelegate が担う**: Sparkle のバックグラウンド自動DLは
-/// user driver を一切呼ばず（SPUAutomaticUpdateDriver は UI 無しで staging まで完了する）、staged に
-/// なった瞬間 `updater(_:willInstallUpdateOnQuit:immediateInstallationBlock:)` だけが通知される。
-/// ここで readyToRestart＋トーストへ写像し、YES を返して即時適用ハンドラを預かる（「今すぐ再起動」が
-/// UI 対話なしで即インストール＆再起動できる。終了時の自動適用はどのみち Sparkle が保証する）。
+/// **サイレント経路（背景の定期確認・自動DL）の UI 通知は SPUUpdaterDelegate が担う**: この経路は
+/// user driver を一切呼ばないため（更新が無ければ Sparkle は not-found を UI に見せず、
+/// SPUAutomaticUpdateDriver は UI 無しで staging まで完了する）、通知を受けるのは delegate だけ——
+/// 更新が無かったときは `updaterDidNotFindUpdate(_:error:)` が upToDate＋最終確認時刻へ、staged に
+/// なったときは `updater(_:willInstallUpdateOnQuit:immediateInstallationBlock:)` が readyToRestart＋
+/// トーストへ写像する。後者は YES を返して即時適用ハンドラを預かる（「今すぐ再起動」が UI 対話なしで
+/// 即インストール＆再起動できる。終了時の自動適用はどのみち Sparkle が保証する）。
 ///
 /// 起動ゲート:
 /// - `.app` 以外（テスト・素の `swift build` バイナリ）は Info.plist に `SUFeedURL` が無く常に不活性。
@@ -203,7 +205,21 @@ extension UpdaterService {
 }
 
 extension UpdaterService: SPUUpdaterDelegate {
-  /// バックグラウンド自動DLが staging を終えた（サイレント経路で UI に通知が来る唯一の瞬間）。
+  /// 確認が終わり、適用できる更新が無かった。upToDate＋最終確認時刻へ写像する。
+  ///
+  /// Sparkle は全ドライバ（背景の定期確認・自動DL・ユーザー主導・probing）の not-found をここへ通知する
+  /// ので、この 1 本でサイレント経路の「確認した」が状態モデルへ届く。ユーザー主導の「今すぐ確認」では
+  /// user driver の `showUpdateNotFoundWithError`（確認したことを acknowledge する側）も同じ写像を行う
+  /// が、`markUpToDate` は冪等（phase と最終確認時刻の再代入）なので二重に走って構わない。
+  ///
+  /// 2 版あるうち `error:` 付きを実装するのは、Sparkle が両方実装されていればこちらを優先して呼ぶため
+  /// （引数なし版はこれを実装しないクライアント向けのフォールバック）。理由（`SPUNoUpdateFoundReasonKey`）
+  /// は読まない——状態カードは「確認した／更新は無かった」の 1 通りしか表さない。
+  func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: Error) {
+    state.markUpToDate()
+  }
+
+  /// バックグラウンド自動DLが staging を終えた（サイレント経路で更新が見つかったときの通知）。
   /// readyToRestart＋トーストへ写像し、YES で即時適用ハンドラを預かる。YES はこの更新が pending の間
   /// 後続の update サイクルも止める（staged 済みに対する無意味な再チェックを塞ぐ）。
   /// 終了時の自動適用は返値に依らず Sparkle が行う。
