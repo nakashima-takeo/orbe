@@ -4,25 +4,52 @@ import XCTest
 @testable import Orbe
 
 /// Sparkle 実体（driver / delegate）と UpdateState の接続規則。
-/// バックグラウンド自動DL経路は user driver を通らず delegate（willInstallUpdateOnQuit）だけが
-/// 通知を受ける——その写像と、driver の応答ポリシー・セッション終了時の状態維持を固定する。
+/// サイレント経路（背景の定期確認・自動DL）は user driver を通らず delegate だけが通知を受ける
+/// （更新なし＝updaterDidNotFindUpdate / staged＝willInstallUpdateOnQuit）——その 2 本の写像と、
+/// driver の応答ポリシー・セッション終了時の状態維持を固定する。
 @MainActor
 final class UpdateDriverTests: XCTestCase {
 
   private func makeState() -> UpdateState { UpdateState(currentVersion: "0.1.0") }
+
+  /// delegate 実装は第1引数の updater を参照せず self.state だけを触るため、SPUUpdater は
+  /// 必須引数を満たすためのダミー（渡す driver / state は結果に影響しない）。
+  private func dummyUpdater() -> SPUUpdater {
+    SPUUpdater(
+      hostBundle: .main, applicationBundle: .main,
+      userDriver: UpdateUserDriver(state: makeState()), delegate: nil)
+  }
+
+  /// 確認して更新が無かったことが upToDate＋最終確認時刻へ写る。サイレント経路はこの delegate 通知だけが
+  /// 「確認した」を状態モデルへ届けるため、ここが写さないと確認済みなのに idle
+  /// （＝このセッションでまだ何も起きていない）のまま残る。
+  func testDidNotFindUpdateMapsToUpToDate() {
+    // SPUUpdaterDelegate の全メソッドは optional で、Sparkle は respondsToSelector: で引く——
+    // 綴りがずれても素通りでコンパイルされ、写像が黙って無効になるため選択子ごと固定する。
+    XCTAssertTrue(UpdaterService.instancesRespond(to: Selector("updaterDidNotFindUpdate:error:")))
+
+    let service = UpdaterService()
+    XCTAssertEqual(service.state.phase, .idle, "確認前は idle")
+
+    let before = Date()
+    service.updaterDidNotFindUpdate(
+      dummyUpdater(),
+      error: NSError(
+        domain: SUSparkleErrorDomain, code: Int(SUError.noUpdateError.rawValue), userInfo: nil))
+
+    XCTAssertEqual(service.state.phase, .upToDate)
+    XCTAssertGreaterThanOrEqual(
+      service.state.lastCheck ?? .distantPast, before,
+      "確認した時刻へ更新される（起動時 seed 値のまま残らない）")
+  }
 
   /// サイレント staged の delegate 通知が readyToRestart＋トーストに写像され、YES（即時適用ハンドラを
   /// 預かる）を返す。「今すぐ再起動」は預かったハンドラを呼ぶ（re-check の遠回りをしない）。
   func testWillInstallUpdateOnQuitMapsToReadyAndKeepsImmediateHandler() {
     let service = UpdaterService()
     var installed = 0
-    // delegate 実装は第1引数の updater を参照せず self.state だけを触るため、SPUUpdater は
-    // 必須引数を満たすためのダミー（渡す driver / state は結果に影響しない）。
     let handled = service.updater(
-      SPUUpdater(
-        hostBundle: .main, applicationBundle: .main,
-        userDriver: UpdateUserDriver(state: makeState()), delegate: nil),
-      willInstallUpdateOnQuit: SUAppcastItem.empty(),
+      dummyUpdater(), willInstallUpdateOnQuit: SUAppcastItem.empty(),
       immediateInstallationBlock: { installed += 1 })
 
     XCTAssertTrue(handled, "YES＝即時適用ハンドラを預かり、pending 中の再チェックも止める")
@@ -111,10 +138,7 @@ final class UpdateDriverTests: XCTestCase {
     var installed = 0
     var retried = 0
     _ = service.updater(
-      SPUUpdater(
-        hostBundle: .main, applicationBundle: .main,
-        userDriver: UpdateUserDriver(state: makeState()), delegate: nil),
-      willInstallUpdateOnQuit: SUAppcastItem.empty(),
+      dummyUpdater(), willInstallUpdateOnQuit: SUAppcastItem.empty(),
       immediateInstallationBlock: { installed += 1 })
     service.driver.showInstallingUpdate(
       withApplicationTerminated: false, retryTerminatingApplication: { retried += 1 })
@@ -171,10 +195,7 @@ final class UpdateDriverTests: XCTestCase {
 
     let installed = expectation(description: "預かった押下が即時適用へ着地する")
     _ = service.updater(
-      SPUUpdater(
-        hostBundle: .main, applicationBundle: .main,
-        userDriver: UpdateUserDriver(state: makeState()), delegate: nil),
-      willInstallUpdateOnQuit: SUAppcastItem.empty(),
+      dummyUpdater(), willInstallUpdateOnQuit: SUAppcastItem.empty(),
       immediateInstallationBlock: { installed.fulfill() })
 
     wait(for: [installed], timeout: 1)
@@ -230,10 +251,7 @@ final class UpdateDriverTests: XCTestCase {
   func testWillInstallUpdateOnQuitDoesNotRestartWithoutPress() {
     let service = UpdaterService()
     _ = service.updater(
-      SPUUpdater(
-        hostBundle: .main, applicationBundle: .main,
-        userDriver: UpdateUserDriver(state: makeState()), delegate: nil),
-      willInstallUpdateOnQuit: SUAppcastItem.empty(),
+      dummyUpdater(), willInstallUpdateOnQuit: SUAppcastItem.empty(),
       immediateInstallationBlock: { XCTFail("押していないのに再起動してはならない") })
 
     let settled = expectation(description: "drain の async turn を通す")

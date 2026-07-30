@@ -4,8 +4,9 @@ import XCTest
 @testable import Orbe
 
 /// アップデート UI の gallery（見本 UpdateCheckDoc 2a–2d 突合用）。Sparkle 実体なしで UpdateState を
-/// 注入し、トースト（右下・340px）・変更内容シート（中央 450px）・設定›アップデートの状態カード
-/// 5 状態と「今すぐ確認」行の実行不可 2 態を撮る（+WorkspaceCreate と同じくファイル分割の拡張）。
+/// 注入し、トースト（右下・340px）・変更内容シート（中央 450px）・設定›アップデートの 9 ケース
+/// （状態カードの 7 通りの見えと「今すぐ確認」行の 3 態）を撮る（+WorkspaceCreate と同じく
+/// ファイル分割の拡張）。
 extension DesignGallerySnapshotTests {
   private var updateStage: NSSize { NSSize(width: 640, height: 520) }
 
@@ -51,7 +52,7 @@ extension DesignGallerySnapshotTests {
     }
   }
 
-  /// 2c/2d 設定›アップデート（状態カード 5 状態＋「今すぐ確認」行の実行不可 2 態）。
+  /// 2c/2d 設定›アップデート（9 ケース。状態カードの 7 通りの見えと「今すぐ確認」行の 3 態）。
   /// 適用待ちは行が器の高さ上限を超えるため、「今すぐ確認」行を選択した状態＝その行が見えている
   /// スクロール位置で撮る（減光を見るには行が見えている必要がある）。
   private func renderUpdateSettingsSnapshots(dir: URL) throws {
@@ -85,6 +86,11 @@ extension DesignGallerySnapshotTests {
       (
         "unavailable",
         DesignSceneFixtures.updateSettingsModel(DesignSceneFixtures.updateUnavailableState())
+      ),
+      // 一度も確認していない（最終確認が「—」の版。時刻がある版は background_checking）。
+      (
+        "never_checked",
+        DesignSceneFixtures.updateSettingsModel(DesignSceneFixtures.updateNeverCheckedState())
       ),
     ]
     for (name, model) in cases {

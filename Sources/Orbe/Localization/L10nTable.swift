@@ -266,6 +266,10 @@ enum L10n {
     .updateRestartAndUpdate: ("再起動して更新", "Restart & Update"),
     .updateCloseButton: ("閉じる", "Close"),
     .updateSheetFootnote: ("閉じても終了時に自動で適用されます", "Closing still applies the update on quit"),
+    .updateStateNotChecked: ("まだ確認していません", "Not checked yet"),
+    .updateStateCheckDisabled: (
+      "このビルドでは更新を確認しません", "This build doesn’t check for updates"
+    ),
     .updateStateChecking: ("アップデートを確認中…", "Checking for updates…"),
     .updateStateDownloading: ("%@ をダウンロード中", "Downloading %@"),
     .updateStateUpToDate: ("最新です", "Up to date"),

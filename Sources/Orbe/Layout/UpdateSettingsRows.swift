@@ -20,7 +20,38 @@ enum UpdateLastCheckText {
   }
 }
 
-/// 最上段の状態カード。5 状態（確認中 / DL中 / 最新 / 失敗 / 適用待ち）＋ idle（最新表示へ縮退）。
+/// `.idle`（このセッションでまだ何も起きていない）の見え 2 通り。カードもテストもここを読む。
+/// updater が動いていないビルドは確認そのものが走らないため「確認しない」と言い、それ以外は
+/// 「まだ確認していない」と言う——どちらも「最新です」ではない。
+enum UpdateIdleAppearance: Equatable {
+  /// まだ確認していない（最終確認時刻を添える）。
+  case notChecked
+  /// このビルドでは確認しない（起動ゲートを通らなかった）。
+  case checkDisabled
+
+  static func resolve(_ availability: UpdateState.CheckAvailability) -> UpdateIdleAppearance {
+    availability == .unavailable ? .checkDisabled : .notChecked
+  }
+
+  var label: L10nKey {
+    switch self {
+    case .notChecked: return .updateStateNotChecked
+    case .checkDisabled: return .updateStateCheckDisabled
+    }
+  }
+
+  /// 中立の状態点（notChecked）はカード族の書式「状態色 × 0.24」、更新の経路そのものが無い
+  /// （checkDisabled）は状態色を持たない中立ヘアライン。
+  var border: Color {
+    switch self {
+    case .notChecked: return Color.theme.stateIdle.opacity(0.24)
+    case .checkDisabled: return Color.theme.surface1
+    }
+  }
+}
+
+/// 最上段の状態カード。7 通りの見え（まだ確認していない / 確認しない / 確認中 / DL中 / 最新 / 失敗 /
+/// 適用待ち）。`.idle` は確認の可否で 2 つに分かれる（`UpdateIdleAppearance`）。
 /// トーストに出るのは「適用待ち」だけで、他の状態はここにしか現れない（見本 2d）。
 struct UpdateStatusCardRow: View {
   let state: UpdateState
@@ -117,7 +148,24 @@ struct UpdateStatusCardRow: View {
           .font(Font.theme.meta)
         }
       }
-    case .idle, .upToDate:
+    case .idle:
+      shell(border: idleAppearance.border) {
+        HStack(spacing: Theme.Space.step + 1) {
+          idleGlyph(idleAppearance)
+          Text(l10n.string(idleAppearance.label))
+            .font(Font.theme.label)
+            .foregroundStyle(Color.theme.textPrimary)
+          Spacer(minLength: 0)
+          // 確認しないビルドは右端に何も出さない。バージョンと最終確認時刻は直下の情報行が持つ。
+          if idleAppearance == .notChecked {
+            (Text("v\(state.currentVersion)").foregroundStyle(Color.theme.textSecondary)
+              + Text(" · " + UpdateLastCheckText.string(state.lastCheck, l10n))
+              .foregroundStyle(Color.theme.textMuted))
+              .font(Font.theme.meta)
+          }
+        }
+      }
+    case .upToDate:
       shell(border: Color.theme.stateDone.opacity(0.24)) {
         HStack(spacing: Theme.Space.step + 1) {
           Text("✓")
@@ -133,6 +181,23 @@ struct UpdateStatusCardRow: View {
             .font(Font.theme.meta)
         }
       }
+    }
+  }
+
+  private var idleAppearance: UpdateIdleAppearance { .resolve(state.checkAvailability) }
+
+  @ViewBuilder private func idleGlyph(_ appearance: UpdateIdleAppearance) -> some View {
+    switch appearance {
+    case .notChecked:
+      dot(Color.theme.stateIdle)
+    case .checkDisabled:
+      // カード族のグリフは実寸＝スロット幅（`StatusGlyphView` と同じ契約）。SF Symbol の素の
+      // advance は側方ベアリングを含んで dot より広く、ラベルの左端が notChecked とずれるため、
+      // dot と同じ 8pt スロットへ固定して円環の直径も dot の直径に揃える。
+      Image(systemName: "minus.circle")
+        .font(.system(size: 8))
+        .frame(width: 8, height: 8)
+        .foregroundStyle(Color.theme.textMuted)
     }
   }
 
@@ -225,8 +290,9 @@ enum UpdateCheckNowAppearance: Equatable {
     case .available:
       return .actionable
     case .busy:
-      // セッション進行中。状態カードが理由を語らない（idle/最新/失敗のまま背景の定期確認が
-      // 走っている）ときだけ行が「確認中…」を名乗る——事実そのとおり確認中のため。
+      // セッション進行中。状態カードが進行中の確認を語らない（まだ確認していない/最新/失敗＝
+      // いま走っている確認については何も言わない）ときだけ行が「確認中…」を名乗る——事実そのとおり
+      // 確認中のため。
       switch state.phase {
       case .downloading, .readyToRestart: return .dimmed
       case .idle, .checking, .upToDate, .failed: return .checking
