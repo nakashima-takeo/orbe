@@ -255,8 +255,8 @@ enum DesignSceneFixtures {
     return state
   }
 
-  /// 背景の定期確認が走っている最中（phase は idle のまま確認不可）。状態カードが理由を語らない
-  /// 唯一のケースで、「今すぐ確認」行だけがスピナー＋「確認中…」を名乗る。
+  /// 背景の定期確認が走っている最中（phase は idle のまま確認不可）。状態カードは「まだ確認して
+  /// いません」に留まり、進行中の確認は「今すぐ確認」行のスピナー＋「確認中…」だけが語る。
   static func updateBackgroundCheckingState() -> UpdateState {
     let state = baseUpdateState()
     state.setCheckAvailability(.busy)
@@ -281,6 +281,12 @@ enum DesignSceneFixtures {
     let state = baseUpdateState()
     state.fail(message: "接続に失敗しました")
     return state
+  }
+
+  /// 起動直後（確認は走れるが、まだ一度も結果を得ていない）。
+  /// 「まだ確認していません」＋「最終確認: —」を見る。
+  static func updateNeverCheckedState() -> UpdateState {
+    UpdateState(currentVersion: "0.1.0")
   }
 
   /// 設定パレットをアップデートセクションへ潜らせたモデル（2c/2d。gallery/flow が状態カードを撮る）。

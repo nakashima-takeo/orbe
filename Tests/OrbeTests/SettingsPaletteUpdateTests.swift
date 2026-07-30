@@ -113,8 +113,8 @@ final class SettingsPaletteUpdateTests: XCTestCase {
     XCTAssertEqual(
       UpdateCheckNowAppearance.resolve(update), .dimmed, "未起動は減光のみ（確認中を名乗らない）")
 
-    // 背景の定期確認中は phase が idle のまま。状態カードが理由を語らない唯一のケースで、
-    // ここだけ行が「確認中…」を名乗る（事実そのとおり走っている）。
+    // 背景の定期確認中は phase が idle のまま。カードは「まだ確認していません」に留まり、
+    // 進行中の確認を語るのはここだけ（事実そのとおり走っている）。
     update.setCheckAvailability(.busy)
     XCTAssertEqual(UpdateCheckNowAppearance.resolve(update), .checking)
 
@@ -128,6 +128,16 @@ final class SettingsPaletteUpdateTests: XCTestCase {
     update.beginCheck()
     update.setCheckAvailability(.available)
     XCTAssertEqual(UpdateCheckNowAppearance.resolve(update), .checking)
+  }
+
+  /// 一度も確認していない状態を「最新です」と名乗らせない。updater が動いていないビルドは
+  /// 確認そのものが走らないので、さらに「確認しない」と言い分ける。
+  func testIdleCardNeverClaimsUpToDate() {
+    XCTAssertEqual(UpdateIdleAppearance.resolve(.available), .notChecked)
+    XCTAssertEqual(UpdateIdleAppearance.resolve(.busy), .notChecked)
+    XCTAssertEqual(UpdateIdleAppearance.resolve(.unavailable), .checkDisabled)
+    XCTAssertNotEqual(UpdateIdleAppearance.notChecked.label, .updateStateUpToDate)
+    XCTAssertNotEqual(UpdateIdleAppearance.checkDisabled.label, .updateStateUpToDate)
   }
 
   func testStatusRowPrimaryActionByPhase() {
