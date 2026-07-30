@@ -52,6 +52,9 @@ final class AgentShimChannelGateTests: XCTestCase {
   }
 
   /// シムを実 `/bin/sh` で起こす。`relative` は agy 形式（cwd＝プラグインルートからの相対呼び）。
+  /// 絶対パス呼び（claude / codex）の cwd はプラグインルートではなくユーザーのプロジェクト
+  /// ディレクトリなので、そちらは別ディレクトリから起こす——両者を同じ cwd で起こすと、シムが
+  /// channel を `$0` 相対で引いていること（cwd 相対ではないこと）を誰も検証しなくなる。
   /// env は明示辞書のみ（継承しない）。stdin には hook JSON を流す。
   private func runShim(
     bundleId: String?, withReportBin: Bool = true, relative: Bool = false
@@ -63,7 +66,7 @@ final class AgentShimChannelGateTests: XCTestCase {
       ? "./hooks/orbe-agent-status.sh"
       : pluginRoot.appendingPathComponent("hooks/orbe-agent-status.sh").path
     process.arguments = [shim, "claude", "working"]
-    process.currentDirectoryURL = pluginRoot
+    process.currentDirectoryURL = relative ? pluginRoot : work
     var env = ["PATH": "/usr/bin:/bin"]
     if withReportBin { env["ORBE_REPORT_BIN"] = reportBin.path }
     if let bundleId { env["ORBE_BUNDLE_ID"] = bundleId }
@@ -72,8 +75,11 @@ final class AgentShimChannelGateTests: XCTestCase {
     process.standardInput = stdin
     process.standardOutput = FileHandle.nullDevice
     process.standardError = FileHandle.nullDevice
-    try process.run()
+    // hook JSON は起動前に書く（21 バイトはパイプバッファに収まる）。ゲートで落とすケースの
+    // シムは stdin を読まずに即 exit するので、起動後に書くと読み手の消えたパイプへの write＝
+    // SIGPIPE になり、テスト 1 本の失敗ではなく xctest プロセスごと落ちる。
     stdin.fileHandleForWriting.write(Data(#"{"session_id":"s1"}"#.utf8))
+    try process.run()
     try stdin.fileHandleForWriting.close()
     process.waitUntilExit()
     return Result(

@@ -55,6 +55,14 @@ final class AgentPluginInstallerTests: XCTestCase {
     XCTAssertNil(AgentPluginInstaller.pluginName(in: pkg))
   }
 
+  /// 隠しファイルは数に入れない。`build-app.sh` はワーキングツリーをそのままコピーするので、
+  /// Finder が置いた `.DS_Store` がパッケージに載りうる。数えると名前が引けなくなり導入が丸ごと死ぬ。
+  func testHiddenFilesAreIgnored() throws {
+    try makePluginsDir(subdirectories: ["orbe-agent-dev"])
+    try Data().write(to: pkg.appendingPathComponent("plugins/.DS_Store"))
+    XCTAssertEqual(AgentPluginInstaller.pluginName(in: pkg), "orbe-agent-dev")
+  }
+
   // MARK: - run の完了順序
 
   /// `pkg` を install.sh の置き場にして `run` を回し、届いた Event と完了を届いた順に記録する。
@@ -85,8 +93,8 @@ final class AgentPluginInstallerTests: XCTestCase {
 
   /// stdout に出した行が 1 つ残らず `onEvent` に届いてから `onComplete` が来る。
   /// 呼び出し側は完了時点で失敗の有無を判定するので、最後の行（＝最後の CLI の成否）を
-  /// 落とすと失敗を見逃す。パイプのバッファを超える量を一気に吐いて即終了させ、読み取りの
-  /// チャンク境界（行の途中で切れる）と終了の競合を跨いで 1 行も欠けないことを見る。
+  /// 落とすと失敗を見逃す。パイプのバッファを超える量を一気に吐かせ、読み取りのチャンク境界
+  /// （行の途中で切れる）を跨いで 1 行も欠けないことを見る。
   func testAllLinesArriveBeforeCompletion() throws {
     let count = 5000
     let log = try runInstaller(
