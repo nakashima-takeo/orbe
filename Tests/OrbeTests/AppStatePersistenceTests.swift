@@ -44,6 +44,22 @@ final class AppStatePersistenceTests: XCTestCase {
     XCTAssertEqual(loaded?.cachedShellPath, "/bin/zsh", "他 field は保持")
   }
 
+  /// 最後に登録できたエージェントプラグイン名も round-trip する（現在のチャネルの名前との比較材料）。
+  func testRegisteredAgentPluginNameRoundTrips() {
+    AppStatePersistence.save(AppStateFile(registeredAgentPluginName: "orbe-agent-dev"))
+    XCTAssertEqual(AppStatePersistence.load()?.registeredAgentPluginName, "orbe-agent-dev")
+  }
+
+  /// 無音での登録し直しは名前だけを書き替え、オンボーディング提示済みフラグを保つ。
+  func testUpdateChangesOnlyRegisteredAgentPluginName() {
+    AppStatePersistence.save(
+      AppStateFile(agentPluginsInstalled: true, registeredAgentPluginName: "orbe-agent"))
+    AppStatePersistence.update { $0.registeredAgentPluginName = "orbe-agent-dev" }
+    let loaded = AppStatePersistence.load()
+    XCTAssertEqual(loaded?.registeredAgentPluginName, "orbe-agent-dev")
+    XCTAssertEqual(loaded?.agentPluginsInstalled, true, "他 field は保持")
+  }
+
   /// preferredLanguage を持たない旧 JSON もデコード成功（throw せず）し nil を返す＝後方互換。
   func testDecodesLegacyJsonWithoutPreferredLanguage() throws {
     let legacy = #"{"completionInstalled":true}"#

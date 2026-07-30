@@ -11,4 +11,7 @@ enum StateDir {
   /// Apple 規定の `~/Library/Application Support/<bundle-id>/`。`ORBE_STATE_DIR` を一切見ない
   /// （全インスタンス共有の固定パスが要る用途向け）。存在しなければ作成する。
   static func appSupport() -> URL? { OrbePaths.appSupportDir() }
+
+  /// このインスタンスの bundle ID（チャネル identity）。ペインへ注入し、実体化コピーへも刻む。
+  static var bundleId: String { OrbePaths.bundleId }
 }

@@ -26,9 +26,25 @@ enum AgentPluginInstaller {
     StateDir.appSupport()?.appendingPathComponent("agent-plugin", isDirectory: true)
   }
 
+  /// パッケージのプラグイン名（＝marketplace 名＝`plugins/` 直下の唯一のサブディレクトリ名）。
+  /// 名前はビルド時にチャネルから導出されるため Swift には焼かず、パッケージ自身から読む。
+  /// サブディレクトリが 1 つでなければ nil（壊れたパッケージで誤った名前を登録しない）。
+  static func pluginName(in packageDir: URL) -> String? {
+    let fm = FileManager.default
+    guard
+      let entries = try? fm.contentsOfDirectory(
+        at: packageDir.appendingPathComponent("plugins", isDirectory: true),
+        includingPropertiesForKeys: [.isDirectoryKey], options: .skipsHiddenFiles),
+      entries.count == 1,
+      (try? entries[0].resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    else { return nil }
+    return entries[0].lastPathComponent
+  }
+
   /// 同梱プラグインを安定パスへ実体化（コピー）し、その安定パスを返す。失敗時は nil。
-  /// 一時ディレクトリへコピーしてから原子的に差し替える: コピー途中で失敗しても既存の
-  /// 安定コピー（marketplace 登録先）を消さないため、止血時の再実行で dangling を作らない。
+  /// 各 CLI は登録した安定パスをライブ参照するため、これが `.app` 同梱の更新を届ける唯一の経路
+  /// （起動ごとに呼ぶ）。一時ディレクトリへコピーしてから原子的に差し替える: コピー途中で失敗しても
+  /// 既存の安定コピー（marketplace 登録先）を消さないため、止血時の再実行で dangling を作らない。
   /// 冪等で古いファイルの残置も無い。`copyItem`/`replaceItemAt` は POSIX permission を
   /// 保持するため install.sh / hooks の +x も残る。
   static func materializeStablePlugin() -> URL? {
@@ -38,6 +54,15 @@ enum AgentPluginInstaller {
       .appendingPathComponent("agent-plugin.tmp-\(UUID().uuidString)", isDirectory: true)
     do {
       try fm.copyItem(at: src, to: tmp)
+      // 自分のチャネル（bundle ID）をシムの隣へ刻む。シムがこれとペインの ORBE_BUNDLE_ID を
+      // 突き合わせ、他チャネルの Orbe から来た呼び出しを落とす。差し替えの前に書くので、
+      // 実体化先が channel を持たない瞬間は生じない。
+      guard let name = pluginName(in: tmp) else {
+        try? fm.removeItem(at: tmp)
+        return nil
+      }
+      try Data("\(StateDir.bundleId)\n".utf8).write(
+        to: tmp.appendingPathComponent("plugins/\(name)/hooks/channel"))
       if fm.fileExists(atPath: dst.path) {
         _ = try fm.replaceItemAt(dst, withItemAt: tmp)
       } else {
@@ -50,17 +75,19 @@ enum AgentPluginInstaller {
     }
   }
 
-  /// 同梱 `install.sh <pluginDir>` をバックグラウンド実行し、stdout の各行を Event として
+  /// 同梱 `install.sh <pluginDir> <pluginName>` をバックグラウンド実行し、stdout の各行を Event として
   /// メインスレッドで `onEvent` に、終了を `onComplete` に流す。子プロセスは呼び出し側が
   /// 戻り値で保持する（実行中の Process 寿命を UI に紐付ける）。
   @discardableResult
   static func run(
-    pluginDir: URL, shellPATH: String?,
+    pluginDir: URL, pluginName: String, shellPATH: String?,
     onEvent: @escaping (Event) -> Void, onComplete: @escaping () -> Void
   ) -> Process {
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/bin/sh")
-    proc.arguments = [pluginDir.appendingPathComponent("install.sh").path, pluginDir.path]
+    proc.arguments = [
+      pluginDir.appendingPathComponent("install.sh").path, pluginDir.path, pluginName,
+    ]
     var env = ProcessInfo.processInfo.environment
     if let shellPATH { env["PATH"] = shellPATH }
     proc.environment = env

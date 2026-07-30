@@ -20,6 +20,7 @@ final class AgentLauncher {
 
   private let catalog = AgentCatalog()
   private var installProc: Process?  // 導入中の install.sh を寿命つなぎで保持
+  private var stablePluginDir: URL?  // 起動時に実体化した安定パス（オンボーディングの導入もここを使う）
 
   init() {
     catalog.onChange = { [weak self] in self?.reloadPalette() }
@@ -101,9 +102,35 @@ final class AgentLauncher {
     onLaunch?(agent, catalog.shellPATH.map { ["PATH": $0] } ?? [:])
   }
 
+  /// 起動時のプラグイン同期。`.app` 同梱があれば毎回安定パスへ実体化し（同梱の更新をライブ参照へ
+  /// 届ける唯一の経路）、オンボーディングを出さない経路では、登録できた名前が現在のチャネルの
+  /// プラグイン名と違うときだけ `install.sh` を無音で走らせる（名前はチャネルごとに変わる）。
+  /// 同梱が無い（`swift run` 等）なら実体化が nil を返すのでそこで止まる。
+  func syncAgentPluginOnLaunch() {
+    guard let dir = AgentPluginInstaller.materializeStablePlugin() else { return }
+    stablePluginDir = dir
+    // オンボーディングを出す経路では登録もオンボーディングが担う（install.sh の二重実行を防ぐ）。
+    let state = AppStatePersistence.load()
+    guard state?.agentPluginsInstalled == true,
+      let name = AgentPluginInstaller.pluginName(in: dir),
+      state?.registeredAgentPluginName != name
+    else { return }
+    var failed = false  // 1 つでも失敗したら名前を記録しない（次回起動で再試行させる）
+    installProc = AgentPluginInstaller.run(
+      pluginDir: dir, pluginName: name, shellPATH: catalog.ensureShellPATH(),
+      onEvent: { event in
+        if case .done(_, let ok) = event, !ok { failed = true }
+      },
+      onComplete: { [weak self] in
+        self?.installProc = nil
+        guard !failed else { return }
+        AppStatePersistence.update { $0.registeredAgentPluginName = name }
+      })
+  }
+
   /// 初回起動オンボーディングを出す。検出 CLI を見せてデフォルトを選ばせ、状態追跡
   /// プラグインを per-CLI 進捗付きで導入する。`.app` 同梱が無い（`swift run` 等）か
-  /// 導入済み（フラグ）なら何もしない。
+  /// 既に出したことがある（フラグ）なら何もしない。
   func showOnboardingIfNeeded() {
     guard let appModel,
       AppStatePersistence.load()?.agentPluginsInstalled != true,
@@ -130,15 +157,17 @@ final class AgentLauncher {
       dismissOnboarding()
       return
     }
-    // ephemeral バンドルではなく ORBE_STATE_DIR 非依存の安定パスへ実体化し、それを登録する。
-    guard let stableDir = AgentPluginInstaller.materializeStablePlugin() else {
+    // 登録するのは ephemeral バンドルではなく起動時に実体化した ORBE_STATE_DIR 非依存の安定パス。
+    guard let stableDir = stablePluginDir,
+      let name = AgentPluginInstaller.pluginName(in: stableDir)
+    else {
       dismissOnboarding()
       return
     }
     setDefault(agent.command)  // 書込は global スコープの設定変更として store 経由に一本化
     model.beginInstalling()
     installProc = AgentPluginInstaller.run(
-      pluginDir: stableDir, shellPATH: catalog.ensureShellPATH(),
+      pluginDir: stableDir, pluginName: name, shellPATH: catalog.ensureShellPATH(),
       onEvent: { [weak self] event in
         switch event {
         case .start(let cli): self?.appModel?.onboarding?.setStatus(cli, .installing)
@@ -150,11 +179,15 @@ final class AgentLauncher {
       onComplete: { [weak self] in self?.completeOnboarding() })
   }
 
-  /// 導入完了。失敗 CLI が無ければフラグを立て（再導入防止）、進捗を見せてから閉じる。
-  /// 失敗があればフラグを立てず、次回起動で再表示＝自動リトライさせる（install.sh は冪等）。
+  /// 導入完了。失敗 CLI が無ければ提示済みフラグと登録できた名前を書き（再提示・再登録の防止）、
+  /// 進捗を見せてから閉じる。失敗があれば書かず、次回起動で再表示＝自動リトライさせる（install.sh は冪等）。
   private func completeOnboarding() {
     if appModel?.onboarding?.hasFailures != true {
-      AppStatePersistence.update { $0.agentPluginsInstalled = true }
+      let name = stablePluginDir.flatMap { AgentPluginInstaller.pluginName(in: $0) }
+      AppStatePersistence.update {
+        $0.agentPluginsInstalled = true
+        $0.registeredAgentPluginName = name
+      }
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.dismissOnboarding()
     }
