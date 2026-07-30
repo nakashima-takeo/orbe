@@ -76,8 +76,12 @@ enum AgentPluginInstaller {
   }
 
   /// 同梱 `install.sh <pluginDir> <pluginName>` をバックグラウンド実行し、stdout の各行を Event として
-  /// メインスレッドで `onEvent` に、終了を `onComplete` に流す。子プロセスは呼び出し側が
+  /// メインスレッドで `onEvent` に、読み切りを `onComplete` に流す。子プロセスは呼び出し側が
   /// 戻り値で保持する（実行中の Process 寿命を UI に紐付ける）。
+  ///
+  /// 完了は stdout の EOF で発火する: 全行を読み切ってから同じ読み取りキューで `onComplete` を
+  /// main へ投入するので、`onComplete` は必ず最後の `onEvent` の後に届く。呼び出し側はこの順序に
+  /// 依って完了時点で失敗の有無を判定する（`AgentLauncher` は 1 つでも失敗すれば名前を記録しない）。
   @discardableResult
   static func run(
     pluginDir: URL, pluginName: String, shellPATH: String?,
@@ -96,23 +100,31 @@ enum AgentPluginInstaller {
     let pipe = Pipe()
     proc.standardOutput = pipe
 
+    let emit: (Data) -> Void = { lineData in
+      guard let line = String(bytes: lineData, encoding: .utf8), let event = parse(line) else {
+        return
+      }
+      DispatchQueue.main.async { onEvent(event) }
+    }
     var buffer = Data()
     pipe.fileHandleForReading.readabilityHandler = { handle in
-      buffer.append(handle.availableData)
+      let chunk = handle.availableData
+      guard !chunk.isEmpty else {  // EOF: 書き手が全て閉じた＝これ以上 1 行も来ない
+        handle.readabilityHandler = nil
+        emit(buffer)  // 改行で終わらない最後の 1 行
+        DispatchQueue.main.async { onComplete() }
+        return
+      }
+      buffer.append(chunk)
       while let nl = buffer.firstIndex(of: 0x0a) {
-        let lineData = buffer[buffer.startIndex..<nl]
+        emit(buffer[buffer.startIndex..<nl])
         buffer.removeSubrange(buffer.startIndex...nl)
-        if let line = String(bytes: lineData, encoding: .utf8), let event = parse(line) {
-          DispatchQueue.main.async { onEvent(event) }
-        }
       }
     }
-    proc.terminationHandler = { proc in
-      pipe.fileHandleForReading.readabilityHandler = nil
-      proc.terminationHandler = nil
+    do { try proc.run() } catch {
+      pipe.fileHandleForReading.readabilityHandler = nil  // 起動できなければ EOF も来ない
       DispatchQueue.main.async { onComplete() }
     }
-    do { try proc.run() } catch { DispatchQueue.main.async { onComplete() } }
     return proc
   }
 
