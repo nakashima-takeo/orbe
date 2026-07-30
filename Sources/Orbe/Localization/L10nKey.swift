@@ -290,6 +290,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case updateRestartAndUpdate
   case updateCloseButton
   case updateSheetFootnote
+  case updateStateNotChecked
+  case updateStateCheckDisabled
   case updateStateChecking
   case updateStateDownloading
   case updateStateUpToDate
