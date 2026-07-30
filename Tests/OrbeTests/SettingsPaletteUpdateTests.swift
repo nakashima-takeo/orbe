@@ -136,8 +136,12 @@ final class SettingsPaletteUpdateTests: XCTestCase {
     XCTAssertEqual(UpdateIdleAppearance.resolve(.available), .notChecked)
     XCTAssertEqual(UpdateIdleAppearance.resolve(.busy), .notChecked)
     XCTAssertEqual(UpdateIdleAppearance.resolve(.unavailable), .checkDisabled)
-    XCTAssertNotEqual(UpdateIdleAppearance.notChecked.label, .updateStateUpToDate)
-    XCTAssertNotEqual(UpdateIdleAppearance.checkDisabled.label, .updateStateUpToDate)
+    XCTAssertEqual(
+      UpdateIdleAppearance.notChecked.label, .updateStateNotChecked,
+      "未確認は「最新です」ではなく「まだ確認していません」を名乗る")
+    XCTAssertEqual(
+      UpdateIdleAppearance.checkDisabled.label, .updateStateCheckDisabled,
+      "確認しないビルドも「最新です」を名乗らない")
   }
 
   func testStatusRowPrimaryActionByPhase() {
