@@ -156,7 +156,7 @@ struct UpdateStatusCardRow: View {
             .font(Font.theme.label)
             .foregroundStyle(Color.theme.textPrimary)
           Spacer(minLength: 0)
-          // 確認しないビルドでは最終確認時刻が常に無く、バージョンは直下の情報行が持つ。
+          // 確認しないビルドは右端に何も出さない。バージョンと最終確認時刻は直下の情報行が持つ。
           if idleAppearance == .notChecked {
             (Text("v\(state.currentVersion)").foregroundStyle(Color.theme.textSecondary)
               + Text(" · " + UpdateLastCheckText.string(state.lastCheck, l10n))
