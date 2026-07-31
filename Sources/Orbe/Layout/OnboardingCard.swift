@@ -79,6 +79,11 @@ import SwiftUI
   var hasFailures: Bool {
     agentCommands.contains { statuses[$0] == .failed }
   }
+  /// 1 つでも導入できたか。検出済み CLI が全て skip に落ちた完了（install.sh 側で `command -v` が
+  /// 外れた等）を「導入済み」と記録しないための判定。
+  var hasInstalls: Bool {
+    agentCommands.contains { statuses[$0] == .done }
+  }
 }
 
 /// オンボーディングのカード（§5.9）。中身だけ。全面 scrim・中央寄せは host 側が担う。

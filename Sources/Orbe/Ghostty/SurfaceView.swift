@@ -191,18 +191,7 @@ final class SurfaceView: NSView {
     // command は継承の有無に依らず適用する（split の command 指定でも指定コマンドで起こす。
     // 継承 cwd は inherited_config が運び、その上でこのコマンドが動く）。
     if let command = initialCommand { sc.command = retain(command) }
-    // 同梱 CLI（bare `orb`）を全ペイン（root＋split）の PATH 先頭へ前置する。split は libghostty の
-    // inherited_config が bin/ 入り PATH を運ばないため、ここで明示しないと split 内で `orb` が
-    // not found になる。衝突は改名で解消済みゆえ、bin/ が PATH に在れば順序非依存で解決する。
-    Self.prependBundledBin(to: &env)
-    // pane identity を全ペインへ注入する。split は親プロセスの env を継承するので、
-    // 自分の id で ORBE_PANE を上書きしないと親ペイン id で誤報告する。エージェント hook
-    // （シム → orbe-report）はこれらが無ければ no-op。ORBE_REPORT_BIN は同梱 binary の
-    // 絶対パス（swift run では未解決→未設定＝no-op）。ORBE_SOCK はこのインスタンスの socket。
-    env["ORBE_PANE"] = String(id)
-    if let bin = Self.reportBinaryPath { env["ORBE_REPORT_BIN"] = bin }
-    let sock = ControlServer.shared.socketPath
-    if !sock.isEmpty { env["ORBE_SOCK"] = sock }
+    injectRuntimeEnv(to: &env)  // 同梱 CLI の PATH・pane identity・状態報告の宛先（全ペイン）
     var envs = env.map { ghostty_env_var_s(key: retain($0.key), value: retain($0.value)) }
     let surf: ghostty_surface_t? = envs.withUnsafeMutableBufferPointer { buf in
       if let base = buf.baseAddress, buf.count > 0 {

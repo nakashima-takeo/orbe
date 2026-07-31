@@ -6,16 +6,20 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/build/Orbe.app"
 SHARE="$ROOT/vendor/ghostty/zig-out/share"
 
-# --- チャネル: 唯一の入力を一度だけ解決し、identity・Swift 定義・アイコンを全てここから導出する ---
+# --- チャネル: 唯一の入力を一度だけ解決し、identity・Swift 定義・アイコン・エージェントプラグイン名を
+# 全てここから導出する ---
 # 既定は dev（build-app.sh 直叩き・素の swift build）。release-app.sh だけが ORBE_CHANNEL=release を立てる。
 # dev は本番と別 identity の「Orbe Dev」として共存し、bundle id 由来の state dir・control.sock・
 # UserDefaults が自動で分かれる。成果物パスは build/Orbe.app 固定（見分けはインストール先の
 # ファイル名と CFBundleName が担うため、ここを改名しても寄与しない）。
-# release の identity は app/Info.plist がそのまま持つ（＝SSOT）。ここで導出するのは dev の分だけ。
+# release の値は app/Info.plist（identity）と app/agent-plugin（プラグイン名）がそのまま持つ（＝SSOT）。
+# ここで導出するのは dev の分だけ。
+SRC_PLUGIN_NAME="orbe-agent"  # app/agent-plugin が名乗る名前（＝release の値）
 CHANNEL="${ORBE_CHANNEL:-dev}"
 if [ "$CHANNEL" != "release" ]; then
   BUNDLE_ID="dev.orbe.app.dev"
   APP_NAME="Orbe Dev"
+  PLUGIN_NAME="${SRC_PLUGIN_NAME}-dev"
 fi
 
 # --- worktree ガード: submodule 未取得なら main worktree の vendor/ghostty へ symlink ---
@@ -147,6 +151,55 @@ cp "$ROOT/app/themes/OrbeDark"  "$APP/Contents/Resources/ghostty/themes/OrbeDark
 cp "$ROOT/app/themes/OrbeLight" "$APP/Contents/Resources/ghostty/themes/OrbeLight"  # Orbe 自前 named theme（light）
 cp -R "$SHARE/terminfo" "$APP/Contents/Resources/terminfo"
 cp -R "$ROOT/app/agent-plugin" "$APP/Contents/Resources/agent-plugin"  # エージェント状態追跡プラグイン（各 CLI へ自動導入する配布物）
+# プラグイン名（marketplace 名＝plugin 名＝plugins/<name>/ のディレクトリ名）を dev チャネルだけ焼き直す。
+# claude / codex / agy はどれも名前で 1 枠を取るため、名前を分けないと dev と release が枠を奪い合う
+# （agy は marketplace を持たず plugin.json の name だけで枠とステージ先が決まる）。1 つの名前を
+# パッケージの全出現箇所へ通し、3 CLI が同一の規則で分かれるようにする。
+if [ "$CHANNEL" != "release" ]; then
+  PKG="$APP/Contents/Resources/agent-plugin"
+  python3 - "$PKG" "$SRC_PLUGIN_NAME" "$PLUGIN_NAME" <<'PY'
+import json, os, sys
+pkg, old, name = sys.argv[1], sys.argv[2], sys.argv[3]
+os.rename(f"{pkg}/plugins/{old}", f"{pkg}/plugins/{name}")
+
+
+def edit(rel, fn):
+    p = os.path.join(pkg, rel)
+    with open(p) as f:
+        d = json.load(f)
+    with open(p, "w") as f:
+        json.dump(fn(d), f, indent=2, ensure_ascii=False)
+
+
+def claude_marketplace(d):
+    d["name"] = name
+    d["plugins"][0]["name"] = name
+    d["plugins"][0]["source"] = f"./plugins/{name}"
+    return d
+
+
+def codex_marketplace(d):
+    d["name"] = name
+    d["plugins"][0]["name"] = name
+    d["plugins"][0]["source"]["path"] = f"./plugins/{name}"
+    return d
+
+
+edit(".claude-plugin/marketplace.json", claude_marketplace)
+edit(".agents/plugins/marketplace.json", codex_marketplace)
+for rel in ("plugin.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
+    edit(f"plugins/{name}/{rel}", lambda d: {**d, "name": name})
+edit(f"plugins/{name}/hooks.json", lambda d: {name: d[old]})
+PY
+  # 焼き漏れガード: 旧名トークンが 1 つでも残っていたら build を落とす。名前を持つ field を後から
+  # 足したとき、dev パッケージが静かに release の枠へ混ざるのを防ぐ（`orbe-agent-` で始まる出現
+  # ＝新名とシムのファイル名は除外する）。
+  if grep -rqE "${SRC_PLUGIN_NAME}([^-]|\$)" "$PKG"; then
+    echo "エラー: dev パッケージに旧プラグイン名が残っている" >&2
+    grep -rnE "${SRC_PLUGIN_NAME}([^-]|\$)" "$PKG" >&2
+    exit 1
+  fi
+fi
 # 本文プライマリの JetBrains Mono を4スタイル同梱（bold/italic を設計字形で決定論解決）。Regular はタブの状態アイコンにも使う。
 cp "$ROOT/vendor/ghostty/src/font/res/JetBrainsMonoNerdFont-Regular.ttf" "$APP/Contents/Resources/JetBrainsMonoNerdFont-Regular.ttf"
 cp "$ROOT/vendor/ghostty/src/font/res/JetBrainsMonoNerdFont-Bold.ttf" "$APP/Contents/Resources/JetBrainsMonoNerdFont-Bold.ttf"

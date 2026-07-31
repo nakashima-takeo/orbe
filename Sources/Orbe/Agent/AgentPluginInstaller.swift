@@ -26,9 +26,27 @@ enum AgentPluginInstaller {
     StateDir.appSupport()?.appendingPathComponent("agent-plugin", isDirectory: true)
   }
 
+  /// パッケージのプラグイン名（＝marketplace 名＝`plugins/` 直下の唯一のサブディレクトリ名）。
+  /// 名前はビルド時にチャネルから導出されるため Swift には焼かず、パッケージ自身から読む。
+  /// サブディレクトリが 1 つでなければ nil（壊れたパッケージで誤った名前を登録しない）。
+  static func pluginName(in packageDir: URL) -> String? {
+    let fm = FileManager.default
+    guard
+      let entries = try? fm.contentsOfDirectory(
+        at: packageDir.appendingPathComponent("plugins", isDirectory: true),
+        includingPropertiesForKeys: [.isDirectoryKey], options: .skipsHiddenFiles),
+      entries.count == 1,
+      (try? entries[0].resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    else { return nil }
+    return entries[0].lastPathComponent
+  }
+
   /// 同梱プラグインを安定パスへ実体化（コピー）し、その安定パスを返す。失敗時は nil。
-  /// 一時ディレクトリへコピーしてから原子的に差し替える: コピー途中で失敗しても既存の
-  /// 安定コピー（marketplace 登録先）を消さないため、止血時の再実行で dangling を作らない。
+  /// claude は登録した安定パスをライブ参照するため、これが `.app` 同梱の更新を届ける経路になる
+  /// （起動ごとに呼ぶ）。codex / agy は導入時にコピーを取るので、更新が届くのは次に登録し直した
+  /// ときで、そのときのコピー元が最新であることをこの実体化が保証する。
+  /// 一時ディレクトリへコピーしてから原子的に差し替える: コピー途中で失敗しても
+  /// 既存の安定コピー（marketplace 登録先）を消さないため、止血時の再実行で dangling を作らない。
   /// 冪等で古いファイルの残置も無い。`copyItem`/`replaceItemAt` は POSIX permission を
   /// 保持するため install.sh / hooks の +x も残る。
   static func materializeStablePlugin() -> URL? {
@@ -38,6 +56,15 @@ enum AgentPluginInstaller {
       .appendingPathComponent("agent-plugin.tmp-\(UUID().uuidString)", isDirectory: true)
     do {
       try fm.copyItem(at: src, to: tmp)
+      // 自分のチャネル（bundle ID）をシムの隣へ刻む。シムがこれとペインの ORBE_BUNDLE_ID を
+      // 突き合わせ、他チャネルの Orbe から来た呼び出しを落とす。差し替えの前に書くので、
+      // 実体化先が channel を持たない瞬間は生じない。
+      guard let name = pluginName(in: tmp) else {
+        try? fm.removeItem(at: tmp)
+        return nil
+      }
+      try Data("\(StateDir.bundleId)\n".utf8).write(
+        to: tmp.appendingPathComponent("plugins/\(name)/hooks/channel"))
       if fm.fileExists(atPath: dst.path) {
         _ = try fm.replaceItemAt(dst, withItemAt: tmp)
       } else {
@@ -50,17 +77,23 @@ enum AgentPluginInstaller {
     }
   }
 
-  /// 同梱 `install.sh <pluginDir>` をバックグラウンド実行し、stdout の各行を Event として
-  /// メインスレッドで `onEvent` に、終了を `onComplete` に流す。子プロセスは呼び出し側が
+  /// 同梱 `install.sh <pluginDir> <pluginName>` をバックグラウンド実行し、stdout の各行を Event として
+  /// メインスレッドで `onEvent` に、読み切りを `onComplete` に流す。子プロセスは呼び出し側が
   /// 戻り値で保持する（実行中の Process 寿命を UI に紐付ける）。
+  ///
+  /// 完了は stdout の EOF で発火する: 全行を読み切ってから同じ読み取りキューで `onComplete` を
+  /// main へ投入するので、`onComplete` は必ず最後の `onEvent` の後に届く。呼び出し側はこの順序に
+  /// 依って完了時点で失敗の有無を判定する（`AgentLauncher` は 1 つでも失敗すれば名前を記録しない）。
   @discardableResult
   static func run(
-    pluginDir: URL, shellPATH: String?,
+    pluginDir: URL, pluginName: String, shellPATH: String?,
     onEvent: @escaping (Event) -> Void, onComplete: @escaping () -> Void
   ) -> Process {
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/bin/sh")
-    proc.arguments = [pluginDir.appendingPathComponent("install.sh").path, pluginDir.path]
+    proc.arguments = [
+      pluginDir.appendingPathComponent("install.sh").path, pluginDir.path, pluginName,
+    ]
     var env = ProcessInfo.processInfo.environment
     if let shellPATH { env["PATH"] = shellPATH }
     proc.environment = env
@@ -69,23 +102,31 @@ enum AgentPluginInstaller {
     let pipe = Pipe()
     proc.standardOutput = pipe
 
+    let emit: (Data) -> Void = { lineData in
+      guard let line = String(bytes: lineData, encoding: .utf8), let event = parse(line) else {
+        return
+      }
+      DispatchQueue.main.async { onEvent(event) }
+    }
     var buffer = Data()
     pipe.fileHandleForReading.readabilityHandler = { handle in
-      buffer.append(handle.availableData)
+      let chunk = handle.availableData
+      guard !chunk.isEmpty else {  // EOF: 書き手が全て閉じた＝これ以上 1 行も来ない
+        handle.readabilityHandler = nil
+        emit(buffer)  // 改行で終わらない最後の 1 行
+        DispatchQueue.main.async { onComplete() }
+        return
+      }
+      buffer.append(chunk)
       while let nl = buffer.firstIndex(of: 0x0a) {
-        let lineData = buffer[buffer.startIndex..<nl]
+        emit(buffer[buffer.startIndex..<nl])
         buffer.removeSubrange(buffer.startIndex...nl)
-        if let line = String(bytes: lineData, encoding: .utf8), let event = parse(line) {
-          DispatchQueue.main.async { onEvent(event) }
-        }
       }
     }
-    proc.terminationHandler = { proc in
-      pipe.fileHandleForReading.readabilityHandler = nil
-      proc.terminationHandler = nil
+    do { try proc.run() } catch {
+      pipe.fileHandleForReading.readabilityHandler = nil  // 起動できなければ EOF も来ない
       DispatchQueue.main.async { onComplete() }
     }
-    do { try proc.run() } catch { DispatchQueue.main.async { onComplete() } }
     return proc
   }
 

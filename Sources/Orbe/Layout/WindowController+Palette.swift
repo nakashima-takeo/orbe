@@ -19,7 +19,7 @@ extension WindowController {
   }
 
   /// 起動時の初回フロー。preferredLanguage 未設定なら言語選択を Onboarding の前段に出し、確定後に
-  /// 既存 Onboarding へ進む。言語ゲートは Onboarding ゲート（agentPluginsInstalled ＋ 同梱プラグイン有無）とは独立。
+  /// 既存 Onboarding へ進む。言語ゲートは Onboarding ゲート（導入済みフラグ ＋ 同梱プラグイン有無）とは独立。
   func showFirstRunFlow() {
     if AppStatePersistence.load()?.preferredLanguage == nil {
       showLanguageSelect { [weak self] in self?.agentLauncher.showOnboardingIfNeeded() }

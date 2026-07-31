@@ -1,7 +1,7 @@
 ---
 title: エージェント通知の配管（現状）
 description: エージェント CLI の hook が状態とセッション ID を .app 同梱 CLI 経由で制御ソケットへ報告し、発信元ペインに保持する配管
-updated: 2026-07-29
+updated: 2026-07-31
 ---
 
 エージェント CLI の hook が現在の状態とセッション ID を**制御ソケットへ報告**し（[control-api](control-api.md) の `report_agent`）、発信元ペインの in-memory 状態に保持する。送信は `.app` 同梱 CLI `orbe-report` が担う。配布物（claude/codex/agy 兼用プラグイン）の構造と導入は [agent-plugin-package](agent-plugin-package.md)。
@@ -12,6 +12,7 @@ pane identity は env で運ぶ（tty 経路を要さない）。Orbe は**全�
 - `ORBE_PANE`（このペインの id）。split は親プロセス env を継承するため、自分の id で上書きしないと親ペイン id で誤報告する。
 - `ORBE_SOCK`（このインスタンスの socket パス・隔離インスタンスは `ORBE_STATE_DIR` 解決ぶん）。
 - `ORBE_REPORT_BIN`（`.app` 内 `orbe-report` の絶対パス）。`swift run`（バンドル無し）では未解決→未注入で hook は no-op。binary は走っている `.app` 自身のものを指すためプロトコル skew が起きない。
+- `ORBE_BUNDLE_ID`（このインスタンスのチャネル identity）。dev / release のプラグインは別枠として両方 enabled になるため、シムが自チャネル以外の呼び出しを落とすのに使う（[agent-plugin-package](agent-plugin-package.md)）。
 
 `orbe-report <agent> <state>` の契約:
 - `ORBE_PANE`・`ORBE_SOCK` のどちらかが無ければ即 no-op（Orbe 外）。Orbe が動いておらず socket 接続に失敗しても no-op。

@@ -36,6 +36,24 @@ extension SurfaceView {
     env["PATH"] = base.isEmpty ? binDir : "\(binDir):\(base)"
   }
 
+  /// Orbe runtime 契約の env を全ペイン（root＋split）へ注入する。split は親プロセスの env を継承する
+  /// ので、自分の id で ORBE_PANE を上書きしないと親ペイン id で誤報告する。エージェント hook
+  /// （シム → orbe-report）はこれらが無ければ no-op。
+  /// - ORBE_PANE: 報告元のペイン。
+  /// - ORBE_BUNDLE_ID: このインスタンスのチャネル identity。シムが他チャネルの plugin から来た
+  ///   呼び出しを落とすのに使う（`.app` でなくても常に名乗る。同梱 binary が無ければシムが先に no-op）。
+  /// - ORBE_REPORT_BIN: 同梱 binary の絶対パス（`swift run` では未解決→未設定＝no-op）。
+  /// - ORBE_SOCK: このインスタンスの制御 socket。
+  /// - PATH: 同梱 CLI（bare `orb`）の bin/ を前置。衝突は改名で解消済みゆえ順序非依存で解決する。
+  func injectRuntimeEnv(to env: inout [String: String]) {
+    Self.prependBundledBin(to: &env)
+    env["ORBE_PANE"] = String(id)
+    env["ORBE_BUNDLE_ID"] = StateDir.bundleId
+    if let bin = Self.reportBinaryPath { env["ORBE_REPORT_BIN"] = bin }
+    let sock = ControlServer.shared.socketPath
+    if !sock.isEmpty { env["ORBE_SOCK"] = sock }
+  }
+
   /// 画面テキストを平文で読む。`scrollback` 真ならスクロールバック全体、偽なら可視範囲のみ。
   func controlReadText(scrollback: Bool) -> String? {
     guard let surface = surfacePtr else { return nil }

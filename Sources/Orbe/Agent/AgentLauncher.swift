@@ -20,6 +20,9 @@ final class AgentLauncher {
 
   private let catalog = AgentCatalog()
   private var installProc: Process?  // 導入中の install.sh を寿命つなぎで保持
+  // 起動時に実体化できた安定パス（オンボーディングの導入もここを使う）。実体化に失敗すれば nil の
+  // ままなので、常に算出できる `AgentPluginInstaller.stablePluginDir`（置き場）とは別物。
+  private var materializedPluginDir: URL?
 
   init() {
     catalog.onChange = { [weak self] in self?.reloadPalette() }
@@ -101,9 +104,39 @@ final class AgentLauncher {
     onLaunch?(agent, catalog.shellPATH.map { ["PATH": $0] } ?? [:])
   }
 
+  /// 起動時のプラグイン同期。`.app` 同梱があれば毎回安定パスへ実体化し（claude はここをライブ参照
+  /// するので同梱の更新がそのまま届く。codex / agy は導入時にコピーを取るため、届くのは次に
+  /// 登録し直したときになる）、オンボーディングを出さない経路では、登録できた名前が現在のチャネルの
+  /// プラグイン名と違うときだけ `install.sh` を無音で走らせる（名前はチャネルごとに変わる）。
+  /// 同梱が無い（`swift run` 等）なら実体化が nil を返すのでそこで止まる。
+  func syncAgentPluginOnLaunch() {
+    guard let dir = AgentPluginInstaller.materializeStablePlugin() else { return }
+    materializedPluginDir = dir
+    // オンボーディングを出す経路では登録もオンボーディングが担う（install.sh の二重実行を防ぐ）。
+    let state = AppStatePersistence.load()
+    guard state?.agentPluginsInstalled == true,
+      let name = AgentPluginInstaller.pluginName(in: dir),
+      state?.registeredAgentPluginName != name
+    else { return }
+    // 記録するのは「1 つ以上登録できて、1 つも失敗しなかった」ときだけ。名前が一致する限り
+    // 二度と走らないので、1 件も登録できていない完了を記録すると恒久的に無効化される。
+    var registered = false
+    var failed = false
+    installProc = AgentPluginInstaller.run(
+      pluginDir: dir, pluginName: name, shellPATH: catalog.ensureShellPATH(),
+      onEvent: { event in
+        if case .done(_, let ok) = event { if ok { registered = true } else { failed = true } }
+      },
+      onComplete: { [weak self] in
+        self?.installProc = nil
+        guard registered, !failed else { return }
+        AppStatePersistence.update { $0.registeredAgentPluginName = name }
+      })
+  }
+
   /// 初回起動オンボーディングを出す。検出 CLI を見せてデフォルトを選ばせ、状態追跡
   /// プラグインを per-CLI 進捗付きで導入する。`.app` 同梱が無い（`swift run` 等）か
-  /// 導入済み（フラグ）なら何もしない。
+  /// 既に導入し切っている（フラグ）なら何もしない。
   func showOnboardingIfNeeded() {
     guard let appModel,
       AppStatePersistence.load()?.agentPluginsInstalled != true,
@@ -130,15 +163,17 @@ final class AgentLauncher {
       dismissOnboarding()
       return
     }
-    // ephemeral バンドルではなく ORBE_STATE_DIR 非依存の安定パスへ実体化し、それを登録する。
-    guard let stableDir = AgentPluginInstaller.materializeStablePlugin() else {
+    // 登録するのは ephemeral バンドルではなく起動時に実体化した ORBE_STATE_DIR 非依存の安定パス。
+    guard let stableDir = materializedPluginDir,
+      let name = AgentPluginInstaller.pluginName(in: stableDir)
+    else {
       dismissOnboarding()
       return
     }
     setDefault(agent.command)  // 書込は global スコープの設定変更として store 経由に一本化
     model.beginInstalling()
     installProc = AgentPluginInstaller.run(
-      pluginDir: stableDir, shellPATH: catalog.ensureShellPATH(),
+      pluginDir: stableDir, pluginName: name, shellPATH: catalog.ensureShellPATH(),
       onEvent: { [weak self] event in
         switch event {
         case .start(let cli): self?.appModel?.onboarding?.setStatus(cli, .installing)
@@ -147,14 +182,18 @@ final class AgentLauncher {
         case .skip(let cli): self?.appModel?.onboarding?.setStatus(cli, .skipped)
         }
       },
-      onComplete: { [weak self] in self?.completeOnboarding() })
+      onComplete: { [weak self] in self?.completeOnboarding(pluginName: name) })
   }
 
-  /// 導入完了。失敗 CLI が無ければフラグを立て（再導入防止）、進捗を見せてから閉じる。
-  /// 失敗があればフラグを立てず、次回起動で再表示＝自動リトライさせる（install.sh は冪等）。
-  private func completeOnboarding() {
-    if appModel?.onboarding?.hasFailures != true {
-      AppStatePersistence.update { $0.agentPluginsInstalled = true }
+  /// 導入完了。1 つ以上導入できて失敗 CLI が無ければ導入済みフラグと登録できた名前を書き
+  /// （再提示・再登録の防止）、進捗を見せてから閉じる。1 件も導入できなかった／失敗があれば
+  /// 書かず、次回起動で再表示＝自動リトライさせる（install.sh は冪等）。
+  private func completeOnboarding(pluginName: String) {
+    if let model = appModel?.onboarding, model.hasInstalls, !model.hasFailures {
+      AppStatePersistence.update {
+        $0.agentPluginsInstalled = true
+        $0.registeredAgentPluginName = pluginName
+      }
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.dismissOnboarding()
     }

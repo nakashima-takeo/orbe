@@ -22,6 +22,10 @@ public enum OrbePaths {
     #endif
   }()
 
+  /// このプロセスの bundle ID（＝チャネル identity）。バンドルを持たない実行体では焼き込み値へ落ちる。
+  /// state の置き場（`appSupportDir()`）とペインへ注入する identity が同じ解決を通ることを構造で保証する。
+  public static var bundleId: String { Bundle.main.bundleIdentifier ?? fallbackBundleId }
+
   /// runtime 契約の環境変数名（GUI がペインへ注入し、CLI/report/補完が読む）。
   public static let stateDirEnvVar = "ORBE_STATE_DIR"
   public static let sockEnvVar = "ORBE_SOCK"
@@ -31,12 +35,11 @@ public enum OrbePaths {
   /// Apple 規定の `~/Library/Application Support/<bundle-id>/`。`ORBE_STATE_DIR` を一切見ない
   /// （全インスタンス共有の固定パスが要る用途向け）。存在しなければ作成する。解決不能なら nil。
   public static func appSupportDir() -> URL? {
-    let id = Bundle.main.bundleIdentifier ?? fallbackBundleId
     guard
       let support = try? fileManager.url(
         for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
     else { return nil }
-    let dir = support.appendingPathComponent(id, isDirectory: true)
+    let dir = support.appendingPathComponent(bundleId, isDirectory: true)
     try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
     return dir
   }
