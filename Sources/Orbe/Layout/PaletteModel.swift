@@ -74,9 +74,9 @@ import SwiftUI
   /// focus トリガ。`focus()` だけが進め、SwiftUI が監視して `@FocusState` を立てる。
   private(set) var focusToken = 0
 
-  /// focus の宛先を現在のモードへ確定させる。提示・モード遷移・**カード内のクリック**が共にここを通る。
-  /// クリックは first responder を宛先から落とすが（行は `Button` でなく `onTapGesture` で focus 宛先に
-  /// ならない）、器がクリックを受けた地点でここを呼ぶため、クリックのアクションが何であれ宛先が残る。
+  /// focus の宛先を現在のモードへ確定させる `focusToken` の唯一の書き手。提示・モード遷移・
+  /// **カード内のクリック**が共にここを通る（クリックが焦点を落とす機序は `PaletteCard` の
+  /// `simultaneousGesture` 参照）。
   func focus() { focusToken &+= 1 }
 
   /// 行タップ（index）。パレットモデルが選択＋実行に結ぶ。

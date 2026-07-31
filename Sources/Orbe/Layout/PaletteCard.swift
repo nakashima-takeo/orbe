@@ -11,8 +11,7 @@ private enum PaletteFocus { case field, card }
 /// （`.focusable()`）の間で移動するだけ。**両方の宛先を常設**するのがこの器の不変条件で
 /// （入力欄の常設は `header` 参照）、モード切替が「既存ビュー間の focus 移動」に閉じ、
 /// first responder の所在が常に一意になる。focus 確定は model の focusToken で駆動し、
-/// **カード内のクリックもここを通る**——クリックのアクションが決定でも直接アクションでもモード遷移でも、
-/// 器が受けた地点で宛先を確定し直すため、マウスとキーボードを混ぜて使える。
+/// **カード内のクリックもここを通る**（→ `simultaneousGesture`）ため、マウスとキーボードを混ぜて使える。
 struct PaletteCard: View {
   @Bindable var model: PaletteModel
   @FocusState private var focus: PaletteFocus?
@@ -93,8 +92,8 @@ struct PaletteCard: View {
     // カード器（.focusable()）を常設し、入力欄ありモードでカーソルに委ねるべきキーだけ器側で
     // .ignored を返す。宛先常設でモード切替が「既存ビュー間の focus 移動」になる。
     .modifier(CardKeyCapture(model: model, focus: $focus))
-    // カード内のクリックは first responder を宛先から落とす（行は `Button` でなく `SelectableRow` の
-    // `onTapGesture` で、SwiftUI の focus 宛先にならない）。受けた地点で宛先を確定し直すことで、
+    // カード内のクリックは first responder を宛先から落とす（行を描く `SelectableRow` の
+    // `onTapGesture` は、それ自体が focus の宛先にならない）。受けた地点で宛先を確定し直すことで、
     // クリックのアクションが決定でも直接アクションでもモード遷移でも、キー操作がそのまま続く。
     // `simultaneousGesture` は子のジェスチャと競合せず同時に成立するため、行のタップ挙動は変わらない。
     .simultaneousGesture(TapGesture().onEnded { model.focus() })
