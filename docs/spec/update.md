@@ -1,7 +1,7 @@
 ---
 title: アプリ内アップデート（現状）
 description: Sparkle 2 によるアプリ内アップデート — サイレント確認 → 自動DL＋署名検証 → 再起動待ちトースト（一度だけ）→ 終了時 or 即時適用。UI は自前 3 面（トースト・変更内容シート・設定›アップデート）で標準 Sparkle UI は不使用。appcast は GitHub Releases 最新リリースのアセット
-updated: 2026-07-31
+updated: 2026-08-01
 ---
 
 Sparkle 2 を SPM 依存として組み込み、`Sparkle.framework` を `.app` の `Contents/Frameworks` に同梱する。UI は Sparkle 標準のものを使わず、自前のユーザードライバが状態モデル（UI の唯一の情報源）へ写像し、3 面（トースト・変更内容シート・設定パレットの「アップデート」セクション）がそれだけを読む。
@@ -43,5 +43,7 @@ App メニューに「更新を確認…」があり、設定の「今すぐ確�
 - release ビルド: 常に update サイクルを開始する。
 - dev ビルド（`ORBE_RELEASE` 未定義）: defaults / 起動引数の `SUFeedURL` 上書きがあるときだけ開始する（dev・sandbox インスタンスが GitHub へ確認に行かない。localhost の appcast でテスト可能——ATS は loopback 許可済み）。defaults で上書きする際のドメインは dev の bundle id `dev.orbe.app.dev`。
 - `.app` 以外（テスト・素の `swift build` バイナリ）: 常に不活性。
+
+update サイクルを開始したときだけ、Sparkle の永続値から最終確認時刻を引き継ぐ。開始しなかったビルドは最終確認時刻を持たず、情報行の表示は「—」になる。
 
 Sparkle の帰属は `NOTICE`＋`licenses/sparkle-LICENSE.txt`（[licensing](licensing.md)）。

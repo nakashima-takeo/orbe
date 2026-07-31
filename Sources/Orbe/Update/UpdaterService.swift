@@ -57,7 +57,6 @@ final class UpdaterService: NSObject {
     state.autoCheck = updater.automaticallyChecksForUpdates
     state.autoDownload = defaults.object(forKey: Self.autoDownloadKey) as? Bool ?? true
     state.autoInstallOnQuit = defaults.object(forKey: Self.autoInstallOnQuitKey) as? Bool ?? true
-    state.seedLastCheck(updater.lastUpdateCheckDate)
     syncAutomaticDownloads()
 
     state.onAutoCheckChange = { [weak self] on in
@@ -116,6 +115,8 @@ final class UpdaterService: NSObject {
   }
 
   /// 起動ゲートを通れば update サイクルを開始する（ゲート仕様は型コメント）。
+  /// 開始できたときだけ Sparkle の永続値から最終確認時刻を引き継ぐ——確認が走らないビルドが
+  /// 走ってもいない確認の記録を持たないようにする。
   /// ゲートを通らなかった場合も可否を写す——不活性なビルドが「確認できる」ように見えたままにしない。
   func startIfPermitted() {
     defer { syncCanCheckNow() }
@@ -126,6 +127,7 @@ final class UpdaterService: NSObject {
     do {
       try updater.start()
       started = true
+      state.seedLastCheck(updater.lastUpdateCheckDate)
     } catch {
       state.fail(message: error.localizedDescription)
     }
