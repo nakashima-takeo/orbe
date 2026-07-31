@@ -80,6 +80,9 @@ struct DispatchCard: View {
     }
     .frame(maxHeight: maxHeight, alignment: .top)
     .onPreferenceChange(DispatchChromeHeightKey.self) { chromeHeight = $0 }
+    // カード内のクリックで焦点を確定し直す（汎用 PaletteCard と同じ契約。Dispatch は入力欄 1 つが
+    // 宛先で、行タップ・行内の「開く」ボタンのどちらでも first responder が抜ける）。
+    .simultaneousGesture(TapGesture().onEnded { model.focus() })
     .onChange(of: model.focusToken, initial: true) { fieldFocused = true }
   }
 
