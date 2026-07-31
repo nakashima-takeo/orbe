@@ -266,8 +266,9 @@ enum DesignSceneFixtures {
   /// updater が動いていないビルド（起動ゲートを通らない dev ビルド）。状態カードは「このビルドでは
   /// 更新を確認しません」（右端は空）で、確認は走らないので「今すぐ確認」行は「確認中…」を名乗らず
   /// 減光だけになる——`updateBackgroundCheckingState` との差がここで出る。
+  /// 確認が走らない＝最終確認時刻を持たないため、情報行は「最終確認: —」になる。
   static func updateUnavailableState() -> UpdateState {
-    let state = baseUpdateState()
+    let state = UpdateState(currentVersion: "0.1.0")
     state.setCheckAvailability(.unavailable)
     return state
   }

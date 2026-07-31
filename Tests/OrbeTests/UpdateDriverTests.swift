@@ -273,4 +273,27 @@ final class UpdateDriverTests: XCTestCase {
       UpdateCheckNowAppearance.resolve(service.state), .dimmed,
       "確認は走っていないので「確認中…」を名乗らない")
   }
+
+  /// 起動ゲートを通らないビルドは最終確認時刻を持たない。テストバンドルは Info.plist に
+  /// `SUFeedURL` を持たないため常に不活性で、Sparkle 側に永続値があってもモデルへは入らない——
+  /// 状態カードが「このビルドでは更新を確認しません」と言う真下で、情報行が時刻を出さない根拠。
+  func testLastCheckStaysEmptyWhenUpdaterDoesNotStart() {
+    // Sparkle は hostBundle == main bundle のとき standardUserDefaults を読む（SUHost）。
+    let defaults = UserDefaults.standard
+    let saved = defaults.object(forKey: "SULastCheckTime")
+    defaults.set(Date(timeIntervalSince1970: 1000), forKey: "SULastCheckTime")
+    defer {
+      if let saved {
+        defaults.set(saved, forKey: "SULastCheckTime")
+      } else {
+        defaults.removeObject(forKey: "SULastCheckTime")
+      }
+    }
+
+    let service = UpdaterService()
+    service.startIfPermitted()
+
+    XCTAssertEqual(service.state.checkAvailability, .unavailable)
+    XCTAssertNil(service.state.lastCheck, "走っていない確認の記録をモデルが持たない")
+  }
 }
