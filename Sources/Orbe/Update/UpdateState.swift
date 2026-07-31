@@ -159,8 +159,8 @@ import Observation
     }
   }
 
-  /// 初期表示用。update サイクルを開始したときだけ Sparkle の永続値から入れる
-  /// （確認が走るビルドだけが最終確認時刻を持つ）。
+  /// 初期表示用。まだ最終確認時刻を持っていないときだけ入れる
+  /// ——確認結果として入った時刻を seed で上書きしない。
   func seedLastCheck(_ date: Date?) {
     if lastCheck == nil { lastCheck = date }
   }
