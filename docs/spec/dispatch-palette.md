@@ -1,7 +1,7 @@
 ---
 title: Dispatch パレット（現状）
 description: Cmd+Shift+X で開くコマンドパレット — worktree/ブランチ/Issue/PR を git・gh 実データで列挙し、フィルタ・⇥ で起動先（検出 agent／素の shell）切替・Enter で選択行の対象ディレクトリに起動先を新タブ起動・⌘↵ で issue/PR および open PR に紐づく worktree/ブランチ行をブラウザで開く
-updated: 2026-07-25
+updated: 2026-07-31
 ---
 
 Cmd+Shift+X で開く Dispatch パレット。worktree/ブランチ/Issue/PR から作業を開始するコマンドパレット（Cmd+X は奪わない）。他パレット（[settings-palette](settings-palette.md)・[workspace](workspace.md)）と同じ提示経路だが、描画は共有パレット基盤を使わず専用の View／モデル／非同期データプロバイダが持つ（行の解剖と実データ供給が共有基盤の 1 行リスト前提に載らないため）。
@@ -22,7 +22,7 @@ Cmd+Shift+X で開く Dispatch パレット。worktree/ブランチ/Issue/PR か
 
 **操作**:
 - **フィルタ**: 打鍵で名前・番号・補足を大小無視部分一致で全セクション横断絞り込み。空になったセクションは消え、選択は可視行へクランプ。
-- **↑↓ / ⌘↑↓**: ↑↓ は可視の全行を平坦 index で巡回（wrap・見出しはスキップ）・選択行へスクロール追従。⌘↑↓ は選択を最初/最後の対話行へジャンプ（見出し・ローディング・gh 誘導の非対話行は飛ばす・対話行ゼロなら no-op）。**行タップは決定**（↵ と同じ funnel を通り、非対話行・作成中・範囲外では不発。行内の「開く」ボタンは行の決定を巻き込まない）。**マウスホバーで選択がその行へ追従する**（着色行は常に 1 つ・非対話行へは追従しない・ホバーで決定は走らない）。追従の門は共有の入力モダリティ（[workspace](workspace.md)）で、実ポインタ移動で pointer・キー移動や絞り込みで keyboard へ戻り、keyboard の間はスクロールで行がカーソル下へ来ても選択を奪われない。
+- **↑↓ / ⌘↑↓**: ↑↓ は可視の全行を平坦 index で巡回（wrap・見出しはスキップ）・選択行へスクロール追従。⌘↑↓ は選択を最初/最後の対話行へジャンプ（見出し・ローディング・gh 誘導の非対話行は飛ばす・対話行ゼロなら no-op）。**行タップは決定**（↵ と同じ funnel を通り、非対話行・作成中・範囲外では不発。行内の「開く」ボタンは行の決定を巻き込まない）。**マウスホバーで選択がその行へ追従する**（着色行は常に 1 つ・非対話行へは追従しない・ホバーで決定は走らない）。追従の門は共有の入力モダリティ（[workspace](workspace.md)）で、実ポインタ移動で pointer・キー移動や絞り込みで keyboard へ戻り、keyboard の間はスクロールで行がカーソル下へ来ても選択を奪われない。**カード内のクリックは焦点の宛先を確定させる**（共有 `PaletteCard` と同じ契約 → [workspace](workspace.md)）——行タップ・行内の「開く」ボタン・行以外の余白のいずれの後も ↑↓ と絞り込みの打鍵がそのまま効く。
 - **⇥**: 起動先を巡回切替。起動先は検出済み agent（表示は raw command）に素の shell を加えた列で、shell は default agent の直後に常在する。初期選択は default agent（agent 未検出時は shell）。agent 未検出でも shell を選べるため袋小路は無い。
 - **Enter（実行）**: 選択行の種別に応じて対象ディレクトリを解決し、選択中の起動先を**現 workspace の新しいタブ**でその cwd に起動する（agent は initialCommand で起動、shell は Cmd+T と同じ既定シェル）。起動後は次 runloop tick で新タブ surface にフォーカスを再確定する。
   - Worktree 行＝既存パスをそのまま使用（非破壊）。Local branch＝既存 worktree があれば再利用、無ければ `git worktree add`。Remote branch＝ローカル追跡ブランチを作って add。Issue＝他行種別と対称で、`issue/<番号>` を既存 worktree／ローカルブランチと突合し 3 分岐（既存 worktree あれば再利用／同名ブランチだけ既存ならそこから追加／どちらも無ければデフォルトブランチから `-b issue/<番号>` で追加）。行末ノート／フッターも実解決に一致（既存worktree／checkout → worktree／新規worktree）。PR（same-repo）＝head ブランチの worktree を作成/再利用。
