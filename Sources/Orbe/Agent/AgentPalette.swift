@@ -48,7 +48,7 @@ import SwiftUI
   }
 
   /// キー操作を受けるため focusToken を進めて first responder を確定させる。
-  func focus() { render.focusToken &+= 1 }
+  func focus() { render.focus() }
 
   /// 検出結果とデフォルト（Cmd+Shift+C の起動対象）を反映して再描画する
   /// （開いたまま裏の再検出が届いたときの再読込にも使う）。

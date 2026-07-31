@@ -75,7 +75,7 @@ import SwiftUI
   }
 
   /// first responder を現在のモードへ移す（focusToken を進め、SwiftUI が描画後に focus を確定する）。
-  func focus() { render.focusToken &+= 1 }
+  func focus() { render.focus() }
 
   /// workspace 一覧を反映して再描画する（操作後の再読込にも使う）。
   func setItems(_ items: [Item]) {
