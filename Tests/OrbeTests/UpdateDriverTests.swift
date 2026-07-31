@@ -12,8 +12,9 @@ final class UpdateDriverTests: XCTestCase {
 
   private func makeState() -> UpdateState { UpdateState(currentVersion: "0.1.0") }
 
-  /// delegate 実装は第1引数の updater を参照せず self.state だけを触るため、SPUUpdater は
-  /// 必須引数を満たすためのダミー（渡す driver / state は結果に影響しない）。
+  /// 使い捨ての SPUUpdater（host は `UpdaterService` と同じ main bundle＝同じ defaults を読む）。
+  /// delegate 実装は第1引数の updater を参照せず self.state だけを触るため、
+  /// 渡す driver / state は結果に影響しない。
   private func dummyUpdater() -> SPUUpdater {
     SPUUpdater(
       hostBundle: .main, applicationBundle: .main,
@@ -40,7 +41,7 @@ final class UpdateDriverTests: XCTestCase {
     XCTAssertEqual(service.state.phase, .upToDate)
     XCTAssertGreaterThanOrEqual(
       service.state.lastCheck ?? .distantPast, before,
-      "確認した時刻へ更新される（起動時 seed 値のまま残らない）")
+      "確認した時刻へ更新される")
   }
 
   /// サイレント staged の delegate 通知が readyToRestart＋トーストに写像され、YES（即時適用ハンドラを
@@ -289,6 +290,10 @@ final class UpdateDriverTests: XCTestCase {
         defaults.removeObject(forKey: "SULastCheckTime")
       }
     }
+
+    // 仕込んだ値が Sparkle の読み取り経路に乗っていることを先に固定する——ここが nil に化けると、
+    // seed が `init()` へ戻っても lastCheck は nil のままで、このテストは何も検出せず通る。
+    XCTAssertNotNil(dummyUpdater().lastUpdateCheckDate, "Sparkle はこの永続値を最終確認時刻として読む")
 
     let service = UpdaterService()
     service.startIfPermitted()
