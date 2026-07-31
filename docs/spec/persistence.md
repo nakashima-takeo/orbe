@@ -29,7 +29,7 @@ updated: 2026-07-31
 ## settings.json / app-state.json
 
 - **`settings.json`** … ユーザー設定（global 層）。in-memory SSOT が保持し、変更は即 save する。未知 key（将来の項目・撤去済みの項目）は無視して読む。
-- **`app-state.json`** … ユーザー設定でない内部簿記（オンボーディング overlay を出したか・最後に登録できたエージェントプラグイン名〔[agent-plugin-package](agent-plugin-package.md)〕・補完のインストール済みフラグ・ログインシェル PATH のキャッシュ・UI 言語）。全項目 optional。
+- **`app-state.json`** … ユーザー設定でない内部簿記（エージェントプラグインを導入できたか・最後に登録できたエージェントプラグイン名〔[agent-plugin-package](agent-plugin-package.md)〕・補完のインストール済みフラグ・ログインシェル PATH のキャッシュ・UI 言語）。全項目 optional。
 
 2 ファイルに分けているのは「ユーザーが決めた値」と「アプリが勝手に覚えた値」を混ぜないため。旧形式（両者が同居した 1 枚）は起動時に無損失で分割移行する（旧ファイル全体が読めたときだけ変換する all-or-nothing。読めなければ既定へ fallback）。
 

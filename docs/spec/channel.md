@@ -1,6 +1,6 @@
 ---
 title: ビルドチャネル（現状）
-description: dev / release の 2 チャネル。ORBE_CHANNEL を唯一の入力に identity（bundle ID・表示名・アイコン）と Swift 定義を全導出し、dev は「Orbe Dev」として本番と併存する
+description: dev / release の 2 チャネル。ORBE_CHANNEL を唯一の入力に identity（bundle ID・表示名・アイコン・エージェントプラグイン名）と Swift 定義を全導出し、dev は「Orbe Dev」として本番と併存する
 updated: 2026-07-31
 ---
 

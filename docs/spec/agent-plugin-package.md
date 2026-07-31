@@ -9,9 +9,9 @@ updated: 2026-07-31
 **プラグイン名（＝marketplace 名＝`plugins/` 直下のディレクトリ名）はチャネルごとに別**で、1 つの名前がパッケージの全出現箇所（両 marketplace 定義の name と source・3 つの plugin 定義の name・agy hooks のトップキー・ディレクトリ名）を通る（[channel](channel.md)）。**agy は marketplace を持たず plugin 名だけで枠が分かれる**ため、marketplace 名だけ分けても 3 CLI が揃って分かれない。
 
 各 CLI の marketplace/導入契約（実機で確定。「marketplace add 成功」≠「plugin install 成功」）:
-- **claude**: ルートの `.claude-plugin/marketplace.json` を読む。`plugin marketplace add <dir>` ＋ `plugin install`。
-- **codex**: ルートの `.agents/plugins/marketplace.json` を読み、プラグインは `plugins/<name>/` サブディレクトリに置く規約（`source.path` がルート自身だと取り込まれない）。`plugin marketplace add <dir>` ＋ `plugin add`。
-- **agy**: marketplace 不要。本体 subdir を直接指す `plugin install`。導入はステージ先へコピーされ、フック実行 cwd はこのステージ済みプラグインルートになる。**ステージ済みコピーを読むため、実体化先を更新しても再導入まで新しい定義は届かない**（claude / codex は登録先をライブ参照する）。
+- **claude**: ルートの `.claude-plugin/marketplace.json` を読む。`plugin marketplace add <dir>` ＋ `plugin install`。**登録先をライブ参照する**ので、登録後に中身を書き換えれば次のセッションから新しい定義が走る。
+- **codex**: ルートの `.agents/plugins/marketplace.json` を読み、プラグインは `plugins/<name>/` サブディレクトリに置く規約（`source.path` がルート自身だと取り込まれない）。`plugin marketplace add <dir>` ＋ `plugin add`。**導入時のキャッシュコピーを読む**ので、登録先を書き換えても再導入まで新しい定義は届かない（`plugin list` の PATH 列は登録先を表示するため見分けにくい）。
+- **agy**: marketplace 不要。本体 subdir を直接指す `plugin install`。導入はステージ先へコピーされ、フック実行 cwd はこのステージ済みプラグインルートになる。**ステージ済みコピーを読む**ので、codex と同じく再導入まで新しい定義は届かない。
 
 `install.sh` はプラグインディレクトリとプラグイン名を引数で受ける。登録済み判定は名前の**完全一致**で見る——前方一致だと別チャネルの枠を自分のものと誤認し、そのチャネルが永久に自分の枠を登録できない（claude / codex は `<name>@<name>`、agy は JSON 出力中の引用符込みの名前）。
 
@@ -24,8 +24,8 @@ event→state 対応:
 - codex: UserPromptSubmit→working / PermissionRequest→waiting / Stop→done
 - agy: PreInvocation→working / Stop→done（agy のフックに SessionStart/Notification/PermissionRequest 相当が無く idle/waiting/clear は取得不可）
 
-`.app` 同梱と実体化: `build-app.sh` が `app/agent-plugin/` と状態報告 CLI `orbe-report` をバンドルへ同梱する（実行ビット保持・binary は app 署名対象）。シムはこの binary を env 越しに `exec` する。Orbe は**起動ごとに**同梱パッケージを **`ORBE_STATE_DIR` 非依存の安定パス**（Application Support 配下・override を見ない。bundle id 由来なのでチャネルごとに別——[channel](channel.md)）へ実体化する（tmp へコピー→原子的差し替え＝冪等・途中失敗でも既存を壊さない・実行ビット保持）。毎起動やり直すのは、claude / codex が登録先ディレクトリをライブ参照するため——同梱が更新されても実体化が走らなければ古い定義が読まれ続ける。安定パスを使うのは `marketplace add` が記録する登録先が消えて dangling しないため（隔離インスタンス起動でも同一パスを登録し、`.app` を消しても manifest は読める）。実体化のとき自分の bundle ID を `hooks/channel` へ刻む。
+`.app` 同梱と実体化: `build-app.sh` が `app/agent-plugin/` と状態報告 CLI `orbe-report` をバンドルへ同梱する（実行ビット保持・binary は app 署名対象）。シムはこの binary を env 越しに `exec` する。Orbe は**起動ごとに**同梱パッケージを **`ORBE_STATE_DIR` 非依存の安定パス**（Application Support 配下・override を見ない。bundle id 由来なのでチャネルごとに別——[channel](channel.md)）へ実体化する（tmp へコピー→原子的差し替え＝冪等・途中失敗でも既存を壊さない・実行ビット保持）。毎起動やり直すのは、claude が登録先ディレクトリをライブ参照するため——同梱が更新されても実体化が走らなければ古い定義が読まれ続ける。安定パスを使うのは `marketplace add` が記録する登録先が消えて dangling しないため（隔離インスタンス起動でも同一パスを登録し、`.app` を消しても manifest は読める）。同一チャネルの隔離インスタンスは安定パスを共有するので、**中身は最後に起動したビルドのものになる**。実体化のとき自分の bundle ID を `hooks/channel` へ刻む。
 
-登録は**名前が変わったときだけ**やり直す: 最後に登録できたプラグイン名を覚え、現在のチャネルの名前と違えば `install.sh` を無音でバックグラウンド実行する（[persistence](persistence.md)）。1 つでも CLI が失敗したら名前を記録せず、次回起動で再試行する。登録先パスは変わらないので、内容の更新だけなら登録し直す必要はない。
+登録は**名前が変わったときだけ**やり直す: 最後に登録できたプラグイン名を覚え、現在のチャネルの名前と違えば `install.sh` を無音でバックグラウンド実行する（[persistence](persistence.md)）。1 つでも CLI が失敗したら名前を記録せず、次回起動で再試行する。登録先パスは変わらないので、claude は内容の更新だけなら登録し直す必要がない（codex / agy は自分のコピーを読むため、内容が変わっても再導入するまで届かない）。
 
-初回オンボーディング: Orbe は初回起動時にオンボーディング overlay を出す（scrim クリックでは閉じない）。検出未完了の間はスピナーを見せて確定を止め、完了で検出 CLI を見せてデフォルトエージェントを選ばせ（↑↓選択・⌘↑↓ で先頭/末尾へジャンプ・行はホバーで選択が追従し行タップは「始める」と同じ確定〔検出中は不発〕）、「始める」で**起動時に実体化済みの安定パス**を引数に `install.sh` をログインシェル PATH 付きでバックグラウンド実行する。per-CLI のライブ進捗（待機/導入中/完了/失敗/スキップ〔未検出 CLI〕）を表示。失敗 CLI が無ければ overlay を出した記録と登録できた名前を残して閉じ、失敗があれば残さず閉じて次回起動で再表示する。検出ゼロでの「始める」は導入を走らせず何も記録せずに閉じる。`install.sh` は各 CLI を検出し開始時・完了時に 1 行ずつ状態を出力（Orbe が行ストリームで読む・出力は全行が届いてから完了を報せる）、冪等導入し、ハングはタイムアウトで打ち切る。`.app` 同梱が無い（`swift run`）か既に overlay を出していればオンボーディングは出ない。
+初回オンボーディング: Orbe は初回起動時にオンボーディング overlay を出す（scrim クリックでは閉じない）。検出未完了の間はスピナーを見せて確定を止め、完了で検出 CLI を見せてデフォルトエージェントを選ばせ（↑↓選択・⌘↑↓ で先頭/末尾へジャンプ・行はホバーで選択が追従し行タップは「始める」と同じ確定〔検出中は不発〕）、「始める」で**起動時に実体化済みの安定パス**を引数に `install.sh` をログインシェル PATH 付きでバックグラウンド実行する。per-CLI のライブ進捗（待機/導入中/完了/失敗/スキップ〔未検出 CLI〕）を表示。**1 つ以上導入できて 1 つも失敗しなければ**導入済みの記録と登録できた名前を残して閉じ、そうでなければ何も残さず閉じて次回起動で再表示する——検出 CLI が全てスキップに落ちた完了も「導入できていない」側に置く（記録すると名前が一致するので二度と再試行されず、状態追跡が無音のまま止まる）。検出ゼロでの「始める」は導入を走らせず何も記録せずに閉じる。`install.sh` は各 CLI を検出し開始時・完了時に 1 行ずつ状態を出力（Orbe が行ストリームで読む・出力は全行が届いてから完了を報せる）、冪等導入し、ハングはタイムアウトで打ち切る。`.app` 同梱が無い（`swift run`）か既に導入できていればオンボーディングは出ない。
