@@ -73,7 +73,7 @@ final class PaletteCardFocusTests: XCTestCase {
     model.fieldIsFilter = fieldVisible
     model.breadcrumb = breadcrumb
     model.rows = (0..<rows).map { .init(label: "row\($0)") }
-    model.focusToken &+= 1
+    model.focus()
     pump(0.5)
   }
 
@@ -90,7 +90,7 @@ final class PaletteCardFocusTests: XCTestCase {
     }
     setMode(model, fieldVisible: true, breadcrumb: nil, rows: 5)
     let window = mount(model)
-    model.focusToken &+= 1  // 提示元が次 tick で focus を再確定する経路（パレットを開く定石）
+    model.focus()  // 提示元が次 tick で focus を再確定する経路（パレットを開く定石）
     pump(0.4)
 
     log = []
@@ -121,7 +121,7 @@ final class PaletteCardFocusTests: XCTestCase {
     let model = PaletteModel()
     setMode(model, fieldVisible: true, breadcrumb: nil, rows: 5)
     let window = mount(model)
-    model.focusToken &+= 1
+    model.focus()
     pump(0.4)
 
     setMode(model, fieldVisible: false, breadcrumb: "‹ parent", rows: 3)

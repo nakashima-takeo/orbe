@@ -71,8 +71,13 @@ import SwiftUI
   var query = ""
   /// 絞り込み入力欄の placeholder。
   var placeholder = ""
-  /// focus トリガ。提示元（パレットモデル）がインクリメントし、SwiftUI が監視して `@FocusState` を立てる。
-  var focusToken = 0
+  /// focus トリガ。`focus()` だけが進め、SwiftUI が監視して `@FocusState` を立てる。
+  private(set) var focusToken = 0
+
+  /// focus の宛先を現在のモードへ確定させる `focusToken` の唯一の書き手。提示・モード遷移・
+  /// **カード内のクリック**が共にここを通る（クリックが焦点を落とす機序は `PaletteCard` の
+  /// `simultaneousGesture` 参照）。
+  func focus() { focusToken &+= 1 }
 
   /// 行タップ（index）。パレットモデルが選択＋実行に結ぶ。
   var onTapRow: (Int) -> Void = { _ in }

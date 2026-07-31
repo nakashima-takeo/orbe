@@ -92,6 +92,10 @@ struct HelpCard: View {
         footer
       }
     }
+    // カード内のクリックで焦点を確定し直す（汎用 PaletteCard と同じ契約。Help の焦点の宛先は
+    // ヘッダの検索欄 1 つで、タイプ検索も esc 閉じもそこに乗る。サイドバーのカテゴリ行・絞り込み
+    // チップの ×・画面内キーボードのキーはどれもカードを開いたまま残すため、この契約に乗る）。
+    .simultaneousGesture(TapGesture().onEnded { model.focus() })
     .onChange(of: model.focusToken, initial: true) { fieldFocused = true }
     .onChange(of: model.pressed) { model.syncPressedMatch(l10n) }
   }

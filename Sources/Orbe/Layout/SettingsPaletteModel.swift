@@ -125,7 +125,7 @@ import SwiftUI
   }
 
   /// first responder を現在のモードへ移す（focusToken を進め、SwiftUI が描画後に focus を確定する）。
-  func focus() { render.focusToken &+= 1 }
+  func focus() { render.focus() }
 
   /// 単一代入を values へ反映し、提示元へ通知する（面ごとの確定処理も必ずこの漏斗を通す）。
   func assign(_ change: SettingChange) {

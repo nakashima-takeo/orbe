@@ -171,8 +171,8 @@ struct DispatchSection: Identifiable {
     guard its.indices.contains(index), its[index].isInteractive else { return }
     selection.hoverSelect(index)
   }
-  /// focus トリガ。提示元がインクリメントし、SwiftUI が監視して `@FocusState` を立てる。
-  var focusToken = 0
+  /// focus トリガ。`focus()` だけが進め、SwiftUI が監視して `@FocusState` を立てる。
+  private(set) var focusToken = 0
 
   /// ヘッダ ❯ の絞り込み入力（全セクション横断で行を絞る SSOT）。
   var query = ""

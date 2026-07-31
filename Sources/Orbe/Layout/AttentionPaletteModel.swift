@@ -43,7 +43,7 @@ import SwiftUI
   }
 
   /// キー操作を受けるため focusToken を進めて first responder を確定させる。
-  func focus() { render.focusToken &+= 1 }
+  func focus() { render.focus() }
 
   /// snapshot を反映して再描画する（開いたまま届く report の追従にも使う）。
   ///
