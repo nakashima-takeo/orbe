@@ -211,8 +211,8 @@ Icons
   License: licenses/catppuccin-vscode-icons-LICENSE.txt
 
 * GitHub octicons — Copyright (c) 2026 GitHub Inc. — MIT License
-  octicon path data is ported into SwiftUI (Sources/Orbe/Agent/GitGlyph.swift,
-  Sources/Orbe/EditorPane/EditorPaneHeaders.swift) and is compiled into
+  octicon path data is ported into SwiftUI (Sources/Orbe/Features/Dispatch/GitGlyph.swift,
+  Sources/Orbe/Features/EditorPane/EditorPaneHeaders.swift) and is compiled into
   Contents/MacOS/Orbe.
   https://github.com/primer/octicons
   License: licenses/octicons-LICENSE.txt

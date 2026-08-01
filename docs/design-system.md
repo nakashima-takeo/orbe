@@ -153,7 +153,7 @@ diff 行の地色は α .10（tint とは別・`DiffBodyView` が直値で持つ
 ## 4. エージェント状態の言語
 
 確定配色の温度分け——自分の出番=電紫 accent、waiting=黄、done=green、idle/dormant=無彩グレー。working=青（accent と別色相に分離）。
-グリフは自作アイコン（形状の正は `Sources/Orbe/Agent/StatusGlyph.swift`）。ここでは色・形・意味を規定する。
+グリフは自作アイコン（形状の正は `Sources/Orbe/DesignSystem/StatusGlyph.swift`）。ここでは色・形・意味を規定する。
 
 | 状態 | 色 | 形 | 意味 / 出方 |
 |---|---|---|---|
