@@ -77,7 +77,7 @@ extension WindowController {
           workspaceName: ws.name,
           tabTitle: tab.displayTitle(workspaceRoot: ws.rootPath),
           state: state,
-          message: state == "working" ? nil : pane.agentMessage,
+          message: state == "working" ? nil : pane.agentMessage?.text,
           stateChangedAt: pane.agentStateChangedAt ?? Date())
       }
     }

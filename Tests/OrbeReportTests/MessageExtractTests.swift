@@ -3,6 +3,9 @@ import XCTest
 @testable import orbe_report
 
 /// hook payload からの文言抽出（`agentMessage` / `truncateMessage`）の契約を固定する。
+/// 出所（`source`）は**どのフィールドから取ったか**そのもので、Orbe 側の上書き可否
+/// （ツール由来を通知由来から守る）が依る唯一の軸。語（`"tool"` / `"notification"`）は
+/// モジュールを跨ぐ文字列契約なので、ここと Orbe 側の両方で固定する。
 /// フィールド形は実 payload 採取（2026-07・claude / codex 実機）に基づく:
 /// - claude Notification: `{"message": "Claude needs your permission", "notification_type": ...}`
 /// - claude PreToolUse(AskUserQuestion): `{"tool_input": {"questions": [{"question": ..., ...}]}}`
@@ -11,17 +14,18 @@ import XCTest
 final class MessageExtractTests: XCTestCase {
   // MARK: waiting
 
-  /// Notification の message を waiting の文言に使う。
+  /// Notification の message を waiting の文言に使う（出所は通知）。
   func testWaitingUsesNotificationMessage() {
     let obj: [String: Any] = [
       "hook_event_name": "Notification",
       "message": "Claude needs your permission",
       "notification_type": "permission_prompt",
     ]
-    XCTAssertEqual(agentMessage(state: "waiting", stdin: obj), "Claude needs your permission")
+    XCTAssertEqual(agentMessage(state: "waiting", stdin: obj)?.text, "Claude needs your permission")
+    XCTAssertEqual(agentMessage(state: "waiting", stdin: obj)?.source, "notification")
   }
 
-  /// message が無ければ AskUserQuestion の先頭の質問文へフォールバックする。
+  /// message が無ければ AskUserQuestion の先頭の質問文へフォールバックする（出所はツール）。
   func testWaitingFallsBackToFirstQuestion() {
     let obj: [String: Any] = [
       "hook_event_name": "PreToolUse",
@@ -33,7 +37,8 @@ final class MessageExtractTests: XCTestCase {
         ]
       ],
     ]
-    XCTAssertEqual(agentMessage(state: "waiting", stdin: obj), "AとBどちらにしますか？")
+    XCTAssertEqual(agentMessage(state: "waiting", stdin: obj)?.text, "AとBどちらにしますか？")
+    XCTAssertEqual(agentMessage(state: "waiting", stdin: obj)?.source, "tool")
   }
 
   /// ExitPlanMode の待ちは質問文を持たないので文言なし（計画本文は載せない）。
@@ -46,13 +51,14 @@ final class MessageExtractTests: XCTestCase {
     XCTAssertNil(agentMessage(state: "waiting", stdin: obj))
   }
 
-  /// message（空でない）が質問文より優先される。
+  /// message（空でない）が質問文より優先され、出所も通知になる。
   func testWaitingPrefersMessageOverQuestions() {
     let obj: [String: Any] = [
       "message": "notify",
       "tool_input": ["questions": [["question": "q"]]],
     ]
-    XCTAssertEqual(agentMessage(state: "waiting", stdin: obj), "notify")
+    XCTAssertEqual(agentMessage(state: "waiting", stdin: obj)?.text, "notify")
+    XCTAssertEqual(agentMessage(state: "waiting", stdin: obj)?.source, "notification")
   }
 
   /// どちらも無い waiting（codex PermissionRequest 等）は nil＝文言なし。
@@ -70,7 +76,8 @@ final class MessageExtractTests: XCTestCase {
 
   // MARK: done
 
-  /// Stop payload の last_assistant_message を done の文言に使う（claude / codex 共通のフィールド名）。
+  /// Stop payload の last_assistant_message を done の文言に使う（claude / codex 共通のフィールド名。
+  /// エージェント自身が語った応答なので出所はツール）。
   func testDoneUsesLastAssistantMessage() {
     let obj: [String: Any] = [
       "hook_event_name": "Stop",
@@ -78,7 +85,8 @@ final class MessageExtractTests: XCTestCase {
       "last_assistant_message": "PR #142 を作成しました",
       "background_tasks": [[String: Any]](),
     ]
-    XCTAssertEqual(agentMessage(state: "done", stdin: obj), "PR #142 を作成しました")
+    XCTAssertEqual(agentMessage(state: "done", stdin: obj)?.text, "PR #142 を作成しました")
+    XCTAssertEqual(agentMessage(state: "done", stdin: obj)?.source, "tool")
   }
 
   /// last_assistant_message を持たない Stop（agy 等）は nil＝文言なしで乱れない。
@@ -119,11 +127,13 @@ final class MessageExtractTests: XCTestCase {
   }
 
   /// waiting/done 経路でも truncate が効く（空 message は質問文へフォールバック）。
+  /// 出所はフォールバック先に従ってツール——文言と出所がずれない。
   func testExtractionAppliesTruncation() {
     let obj: [String: Any] = [
       "message": "   ",
       "tool_input": ["questions": [["question": "  q  "]]],
     ]
-    XCTAssertEqual(agentMessage(state: "waiting", stdin: obj), "q")
+    XCTAssertEqual(agentMessage(state: "waiting", stdin: obj)?.text, "q")
+    XCTAssertEqual(agentMessage(state: "waiting", stdin: obj)?.source, "tool")
   }
 }

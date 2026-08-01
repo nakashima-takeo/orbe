@@ -75,9 +75,10 @@ var params: [String: Any] = [
   "paneId": paneId, "agent": agent, "state": reportedState,
 ]
 if let resumeId { params["sessionId"] = resumeId }
-// waiting/done の文言（Notification message・質問文・最終応答）。無ければ載せない。
+// waiting/done の文言（Notification message・質問文・最終応答）と、その出所。無ければ載せない。
 if let message = agentMessage(state: reportedState, stdin: hookObj) {
-  params["message"] = message
+  params["message"] = message.text
+  params["messageSource"] = message.source
 }
 
 // Orbe が動いていなければ接続できない＝no-op（exit 0）。

@@ -34,7 +34,7 @@ enum AttentionSnapshot {
               workspaceName: ws.name,
               tabTitle: tab.displayTitle(workspaceRoot: ws.rootPath),
               state: state,
-              message: state == "working" ? nil : pane.agentMessage,
+              message: state == "working" ? nil : pane.agentMessage?.text,
               // 理論上 nil にならない（stateChangedAt は report が必ず立てる）が、防御で最古扱い。
               stateChangedAt: pane.agentStateChangedAt ?? .distantPast))
         }

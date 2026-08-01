@@ -70,9 +70,10 @@ final class SurfaceView: NSView {
   var agentSessionId: String?
   /// エージェント hook が報告した CLI 名（claude/codex/agy）。resume コマンドの構築に使う。
   var agentCommand: String?
-  /// エージェント hook が報告した文言（waiting の質問文・done の最終応答）。Attention 一覧が読む。
-  /// clear 以外の報告でも毎回上書きする（省略時は nil＝stale な文言を残さない）。永続しない。
-  var agentMessage: String?
+  /// エージェント hook が報告した文言と出所（waiting の質問文・done の最終応答）。
+  /// Attention 一覧が読むのは文言だけ。state の遷移で確定し直し、同じ state のあいだは
+  /// ツール由来をそれ以外の報告（通知由来・文言なし）から守る（`controlReportAgent`）。永続しない。
+  var agentMessage: AgentMessage?
   /// agentState の値が実際に変わった時刻（Attention 一覧の並び・経過時間表示）。
   /// 同値の連続報告・done のフォーカス消費（done→idle）では動かさない。永続しない。
   var agentStateChangedAt: Date?
