@@ -23,6 +23,10 @@ extension WindowControllerReportAgentTests {
       pane: pane, agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "Claude needs your permission", source: "notification"))
     XCTAssertEqual(pane.agentMessage?.text, "赤と青どちらが好きですか")
+    // 文言を載せない報告もツール由来を落とせない（守る相手は通知由来に限らない）。
+    wc.controlReportAgent(
+      pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+    XCTAssertEqual(pane.agentMessage?.text, "赤と青どちらが好きですか", "文言なしの報告でもツール由来は残る")
   }
 
   /// 完了条件4: ツール由来の文言を持たない待ちは、同 state の通知由来の報告が埋める
@@ -40,6 +44,10 @@ extension WindowControllerReportAgentTests {
       message: AgentMessage(
         text: "Claude Code needs your approval for the plan", source: "notification"))
     XCTAssertEqual(pane.agentMessage?.text, "Claude Code needs your approval for the plan")
+    // 埋めた文言は通知由来なので、同 state の文言なしの報告で落ちる（stale にならない）。
+    wc.controlReportAgent(
+      pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+    XCTAssertNil(pane.agentMessage, "通知由来は文言なしの報告で落ちる")
   }
 
   /// 完了条件2・3: state の遷移は文言を確定し直す。前の待ちの文言は working への遷移で消え、

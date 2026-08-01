@@ -60,8 +60,8 @@ extension WindowController: ControlTarget {
   ///
   /// Attention 用の保持: stateChangedAt は **state の値が実際に変わったときだけ** now に更新する
   /// （working→working の連続報告で一覧の並びが暴れない）。message は state の遷移で確定し直し、
-  /// 同じ state が続くあいだは **ツール由来（`source == "tool"`）の文言を通知由来の報告で
-  /// 上書きしない**。1 つの待ちを複数の hook が順に報告する CLI があるため（claude は
+  /// 同じ state が続くあいだは **ツール由来（`source == "tool"`）の文言を、ツール由来でない報告
+  /// （通知由来・文言なし）で上書きしない**。1 つの待ちを複数の hook が順に報告する CLI があるため（claude は
   /// AskUserQuestion のダイアログを開く時点で質問文を、その約 6 秒後に汎用の定型文を撃つ）、
   /// 出所で守らないと具体的な文言が定型文に潰れる。逆に通知由来どうしは上書きし合う——待ちの主体が
   /// この pane のエージェントとは限らず（teammate の worker が出す承認要求はリーダーの pane へ
