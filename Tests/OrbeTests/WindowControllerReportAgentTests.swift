@@ -3,9 +3,9 @@ import XCTest
 
 @testable import Orbe
 
-/// `report_agent` の Attention 保持（message / stateChangedAt / 一過性イベント）の契約を固定する。
-/// stateChangedAt は **state の値が実際に変わったときだけ** 動き、message は clear 以外の報告で
-/// 常に上書きされる（省略＝nil に落とす）。waiting/done への実変化だけが transient を立てる。
+/// `report_agent` の Attention 保持（stateChangedAt / 一過性イベント）の契約を固定する。
+/// stateChangedAt は **state の値が実際に変わったときだけ** 動き、waiting/done への実変化だけが
+/// transient を立てる。message の契約は分割した拡張ファイル（+Message）が持つ。
 ///
 /// 重要: WindowControllerControlTests と同様、実 NSWindow に SurfaceView を接続するため
 /// libghostty ランタイムを起動する（ヘッドレスな純ロジック検証ではない）。
@@ -33,7 +33,8 @@ final class WindowControllerReportAgentTests: XCTestCase {
   }
 
   /// 1 workspace 1 タブで起動し、その先頭ペインを返す。
-  private func makeControllerAndPane() throws -> (WindowController, SurfaceView) {
+  /// 分割した拡張ファイル（+Message）からも使うため internal。
+  func makeControllerAndPane() throws -> (WindowController, SurfaceView) {
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -111,23 +112,19 @@ final class WindowControllerReportAgentTests: XCTestCase {
       pane: pane, agent: "claude", state: "working", sessionId: nil, message: nil)
     let first = try XCTUnwrap(pane.agentStateChangedAt)
 
-    // 同値の連続報告（working→working）では動かない。message は上書きされる。
+    // 同値の連続報告（working→working）では動かない。
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "working", sessionId: nil, message: "m")
     XCTAssertEqual(pane.agentStateChangedAt, first, "同値報告で stateChangedAt は動かない")
-    XCTAssertEqual(pane.agentMessage, "m")
 
     // 実変化（working→waiting）で動く。
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: "q")
     let second = try XCTUnwrap(pane.agentStateChangedAt)
     XCTAssertNotEqual(second, first, "実変化で stateChangedAt が更新される")
-    XCTAssertEqual(pane.agentMessage, "q")
 
-    // message 省略の報告は nil に落とす（stale な質問文を残さない）。
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: nil)
-    XCTAssertNil(pane.agentMessage)
     XCTAssertEqual(pane.agentStateChangedAt, second, "同値報告で stateChangedAt は動かない")
   }
 
