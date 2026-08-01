@@ -1,6 +1,6 @@
 ---
 title: レイアウト（現状）
-description: window の SwiftUI ホスト構成・workspace / タブ / ペイン分割ツリーの構造・一方向参照・フォーカス管理・ショートカット・オーバーレイ提示機構・透過プラミング・外部エディタ起動
+description: window の SwiftUI ホスト構成・workspace / タブ / ペイン分割ツリーの構造・一方向参照・フォーカス管理・ショートカット・オーバーレイ提示機構・背景透過の配管・GUI エディタ起動
 updated: 2026-08-01
 ---
 
