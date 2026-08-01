@@ -59,9 +59,12 @@ extension WindowController: ControlTarget {
   /// emit し、paneAgentStateChanged がタブ・横断ロールアップを更新する。
   ///
   /// Attention 用の保持: stateChangedAt は **state の値が実際に変わったときだけ** now に更新する
-  /// （working→working の連続報告で一覧の並びが暴れない）。message は clear 以外の報告で常に
-  /// 上書きする（省略時は nil＝stale な質問文を残さない）。waiting / done への実変化は
-  /// メニューバーの一過性表示へ流す（見ているタブのペインなら立てない ＝ noteAttentionTransient が判断する）。
+  /// （working→working の連続報告で一覧の並びが暴れない）。message も state の遷移に属し、
+  /// **遷移で確定し、未確定〔nil〕なら同 state の後続報告が埋める**＝1 つの state が続く区間では
+  /// 最初に得た文言を保つ。1 つの待ちを複数の hook が順に報告する CLI があるため（claude は
+  /// AskUserQuestion のダイアログを開く時点で質問文つきの waiting を、その約 6 秒後に定型文つきの
+  /// waiting を撃つ）、こうして具体的な文言が汎用の定型文に潰されないようにする。waiting / done への
+  /// 実変化はメニューバーの一過性表示へ流す（見ているタブのペインなら立てない ＝ noteAttentionTransient が判断する）。
   func controlReportAgent(
     pane: SurfaceView, agent: String, state: String, sessionId: String?, message: String?
   ) {
@@ -76,7 +79,7 @@ extension WindowController: ControlTarget {
       if changed { pane.agentStateChangedAt = Date() }
       pane.agentState = state
       pane.agentCommand = agent
-      pane.agentMessage = message
+      if changed || pane.agentMessage == nil { pane.agentMessage = message }
       if let sessionId {
         pane.agentSessionId = sessionId
       }
