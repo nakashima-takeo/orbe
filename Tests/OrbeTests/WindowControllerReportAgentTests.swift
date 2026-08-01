@@ -5,7 +5,8 @@ import XCTest
 
 /// `report_agent` の Attention 保持（stateChangedAt / 一過性イベント）の契約を固定する。
 /// stateChangedAt は **state の値が実際に変わったときだけ** 動き、waiting/done への実変化だけが
-/// transient を立てる。message の契約は分割した拡張ファイル（+Message）が持つ。
+/// transient を立てる。文言が報告列のどこで確定するかは分割した拡張ファイル（+Message）が持ち、
+/// clear での消去・done のフォーカス消費での保持・transient への載りはこのファイルが持つ。
 ///
 /// 重要: WindowControllerControlTests と同様、実 NSWindow に SurfaceView を接続するため
 /// libghostty ランタイムを起動する（ヘッドレスな純ロジック検証ではない）。
@@ -123,9 +124,10 @@ final class WindowControllerReportAgentTests: XCTestCase {
     let second = try XCTUnwrap(pane.agentStateChangedAt)
     XCTAssertNotEqual(second, first, "実変化で stateChangedAt が更新される")
 
+    // 実変化を挟んだ後の同値報告（waiting→waiting）でも動かない＝打刻が drift しない。
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: nil)
-    XCTAssertEqual(pane.agentStateChangedAt, second, "同値報告で stateChangedAt は動かない")
+    XCTAssertEqual(pane.agentStateChangedAt, second, "実変化後の同値報告でも stateChangedAt は動かない")
   }
 
   func testClearResetsAllAttentionFields() throws {
