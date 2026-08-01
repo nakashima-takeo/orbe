@@ -72,4 +72,4 @@ FSEvents（worktree root＋gitDir＋commonDir 監視）で外部変更が手動�
 `/usr/bin/git` を背景キューで起動し completion をメインへ返す。`GIT_TERMINAL_PROMPT=0`（対話でハングさせない）。status は `--no-optional-locks`。diff/diff-tree は `--no-color --no-ext-diff --no-textconv --find-renames -U3`＋`core.quotepath=false`（信頼できないリポジトリの外部 diff driver / textconv を実行しない）。write 系（index/ref を変更する操作）は barrier で排他直列化し、read 系は並行で走らせる（index.lock 衝突の回避）。未追跡ファイルの diff は index に触れず合成する（先頭バイトに NUL・過大サイズ・非 UTF-8 はバイナリ扱いで全行展開を避ける）。
 
 ## 実装の境界
-git のロジック・実行層（`Sources/Orbe/Git/`）は AppKit 非依存で、UI（`Sources/Orbe/EditorPane/`）から分離する。本体の開閉とツールは `workspaces.json` に永続化する（[persistence](persistence.md)）。localhost(http) 読み込みは `Info.plist` の `NSAllowsLocalNetworking`。ファイル種別アイコンは Catppuccin/vscode-icons（MIT・NOTICE 帰属）。
+git のロジック・実行層（`Sources/Orbe/Core/Git/`）は AppKit 非依存で、UI（`Sources/Orbe/Features/EditorPane/`）から分離する。本体の開閉とツールは `workspaces.json` に永続化する（[persistence](persistence.md)）。localhost(http) 読み込みは `Info.plist` の `NSAllowsLocalNetworking`。ファイル種別アイコンは Catppuccin/vscode-icons（MIT・NOTICE 帰属）。

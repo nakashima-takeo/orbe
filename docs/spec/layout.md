@@ -1,7 +1,7 @@
 ---
 title: レイアウト（現状）
-description: window / workspace / タブ / ペイン分割ツリーの構造・一方向参照・フォーカス管理・ショートカット
-updated: 2026-07-29
+description: window の SwiftUI ホスト構成・workspace / タブ / ペイン分割ツリーの構造・一方向参照・フォーカス管理・ショートカット・オーバーレイ提示機構・背景透過の配管・GUI エディタ起動
+updated: 2026-08-01
 ---
 
 host 所有。`window.contentView` は SwiftUI ルート `ChromeHostingView`。ルートビュー `AppShell` は最背面に装飾層 `BackgroundGlow`（accent＋working のラジアル・非対話）を敷き、その上に上段 chrome ＋下段 content、表示中は右に sidePanel（EditorPane）を置く。

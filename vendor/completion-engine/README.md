@@ -1,7 +1,7 @@
 # Orbe completion engine
 
 `app/completion-engine.js`（commit する prebuilt バンドル）の生成元。Orbe の補完候補は
-JavaScriptCore に埋め込んだこのバンドルが算出する（`Sources/Orbe/Completion/CompletionEngine.swift`）。
+JavaScriptCore に埋め込んだこのバンドルが算出する（`Sources/Orbe/Features/Completion/CompletionEngine.swift`）。
 
 ## 構成
 
