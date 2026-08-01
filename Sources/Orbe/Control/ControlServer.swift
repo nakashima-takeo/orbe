@@ -17,7 +17,7 @@ protocol ControlTarget: AnyObject {
   func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, paneIds: [Int])?
   /// エージェント hook の状態報告を発信元ペインへ適用する（report_agent）。
   func controlReportAgent(
-    pane: SurfaceView, agent: String, state: String, sessionId: String?, message: String?)
+    pane: SurfaceView, agent: String, state: String, sessionId: String?, message: AgentMessage?)
   /// 指定ペインを分割し新ペイン ID を返す（split_pane）。direction は "right"=左右 / "down"=上下。
   /// 所有 TerminalController の split(from:command:) へ委譲する。未解決ペインは -32004。
   func controlSplitPane(paneId: Int, direction: String, command: String?)
@@ -251,7 +251,9 @@ final class ControlServer {
       }
       target.controlReportAgent(
         pane: p, agent: agent, state: state, sessionId: params["sessionId"] as? String,
-        message: params["message"] as? String)
+        message: (params["message"] as? String).map {
+          AgentMessage(text: $0, source: params["messageSource"] as? String)
+        })
       return .success(["ok": true])
     default:
       // ペイン/タブ操作・config / workspace CRUD は拡張の dispatch（ControlServer+Dispatch）へ。

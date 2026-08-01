@@ -21,7 +21,7 @@ final class AttentionSnapshotTests: XCTestCase {
   ) {
     let pane = ws.tabs[tab].controlAllPanes()[0]
     pane.agentState = state
-    pane.agentMessage = message
+    pane.agentMessage = message.map { AgentMessage(text: $0) }
     pane.agentStateChangedAt = at
   }
 
