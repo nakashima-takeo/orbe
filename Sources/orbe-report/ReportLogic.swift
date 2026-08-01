@@ -36,23 +36,27 @@ func effectiveState(_ state: String, stdin obj: [String: Any]?) -> String {
   return "working"
 }
 
-/// hook payload からユーザーへ見せる文言を抽出する（無ければ nil）。state は effectiveState 適用後
-/// （done→working 読み替え後は文言なし＝working は文言を持たない）。フィールド形は実 payload 準拠:
-/// - waiting: claude Notification の `message`、無ければ PreToolUse(AskUserQuestion) の
-///   `tool_input.questions[0].question`（先頭の質問文）。
-/// - done: Stop payload の `last_assistant_message`（claude / codex とも同名フィールドを持つ。
-///   持たない CLI（agy 等）は自然に nil ＝文言なし）。
-func agentMessage(state: String, stdin obj: [String: Any]?) -> String? {
+/// hook payload からユーザーへ見せる文言と、その出所を取り出す（無ければ nil）。state は
+/// effectiveState 適用後（done→working 読み替え後は文言なし＝working は文言を持たない）。
+/// 出所は**どのフィールドから取ったか**そのもの。フィールド形は実 payload 準拠:
+/// - waiting: claude Notification の `message`（出所 `notification`）、無ければ
+///   PreToolUse(AskUserQuestion) の `tool_input.questions[0].question`（先頭の質問文・出所 `tool`）。
+/// - done: Stop payload の `last_assistant_message`（出所 `tool`。claude / codex とも同名フィールドを
+///   持つ。持たない CLI（agy 等）は自然に nil ＝文言なし）。
+func agentMessage(state: String, stdin obj: [String: Any]?) -> (text: String, source: String)? {
   guard let obj else { return nil }
   switch state {
   case "waiting":
-    if let message = truncateMessage(obj["message"] as? String) { return message }
+    if let message = truncateMessage(obj["message"] as? String) {
+      return (message, "notification")
+    }
     guard let input = obj["tool_input"] as? [String: Any],
-      let questions = input["questions"] as? [[String: Any]]
+      let questions = input["questions"] as? [[String: Any]],
+      let question = truncateMessage(questions.first?["question"] as? String)
     else { return nil }
-    return truncateMessage(questions.first?["question"] as? String)
+    return (question, "tool")
   case "done":
-    return truncateMessage(obj["last_assistant_message"] as? String)
+    return truncateMessage(obj["last_assistant_message"] as? String).map { ($0, "tool") }
   default:
     return nil
   }
