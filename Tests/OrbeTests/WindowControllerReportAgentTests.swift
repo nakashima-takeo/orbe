@@ -5,9 +5,9 @@ import XCTest
 
 /// `report_agent` の Attention 保持（stateChangedAt / 一過性イベント）の契約を固定する。
 /// stateChangedAt は **state の値が実際に変わったときだけ** 動き、waiting/done への実変化だけが
-/// transient を立てる。文言が報告列のどこで確定するかは分割した拡張ファイル（+Message）が、
-/// 再投影の配達（②ピルの取り下げ・split での追随）は +Reprojection が持ち、clear での消去・
-/// done のフォーカス消費での保持・transient を立てる側の判断はこのファイルが持つ。
+/// transient を立てる。ここで測るのは打刻・clear での消去・done のフォーカス消費での保持・
+/// ②を立てるかどうかの判断・一覧への投影。文言がどの報告で確定するかは分割した拡張ファイル
+/// +Message が、再投影が配達されるか（②の取り下げ・split での追随）は +Reprojection が測る。
 ///
 /// 重要: WindowControllerControlTests と同様、実 NSWindow に SurfaceView を接続するため
 /// libghostty ランタイムを起動する（ヘッドレスな純ロジック検証ではない）。
@@ -35,7 +35,7 @@ final class WindowControllerReportAgentTests: XCTestCase {
   }
 
   /// 1 workspace 1 タブで起動し、その先頭ペインを返す。
-  /// 分割した拡張ファイル（+Message）からも使うため internal。
+  /// 分割した拡張ファイルからも使うため internal。
   func makeControllerAndPane() throws -> (WindowController, SurfaceView) {
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
@@ -52,7 +52,7 @@ final class WindowControllerReportAgentTests: XCTestCase {
 
   /// 1 workspace 2 タブ（アクティブはタブ0＝見ているタブ）で起動し、
   /// タブ順に並べた各タブの先頭ペイン（`panes[i]` がタブ i）を返す。
-  /// 分割した拡張ファイル（+Reprojection）からも使うため internal。
+  /// 分割した拡張ファイルからも使うため internal。
   func makeControllerAndTwoTabs() throws -> (WindowController, [SurfaceView]) {
     let tab = TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)
     let file = WorkspacesFile(
@@ -69,7 +69,7 @@ final class WindowControllerReportAgentTests: XCTestCase {
 
   /// アクティブ workspace ＋ 休眠（このセッションで一度も activate していない）workspace で
   /// 起動し、休眠側の先頭ペインを返す。
-  /// 分割した拡張ファイル（+Reprojection）からも使うため internal。
+  /// 分割した拡張ファイルからも使うため internal。
   func makeControllerAndDormantPane() throws -> (WindowController, SurfaceView) {
     let tab = TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)
     let file = WorkspacesFile(
