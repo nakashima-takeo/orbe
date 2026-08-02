@@ -18,7 +18,8 @@ custom_rules:
     excluded: ".*/BundledResources\\.swift"
     # 同梱物の所在を取る API を全て挙げる。Info.plist 系（object(forInfoDictionaryKey:)・
     # infoDictionary・bundleIdentifier）は同梱物の解決ではないので対象外。
-    regex: "Bundle\\.main\\.(resource(URL|Path)|bundle(URL|Path)|(url|urls|path|paths)\\(forResource)"
+    # `(` の後の `\s*` は swift format の折返し（100 桁超は `(` 直後で改行する）を捕まえるため。
+    regex: "Bundle\\.main\\.(resource(URL|Path)|bundle(URL|Path)|(url|urls|path|paths)\\(\\s*forResource)"
     message: "同梱リソースの解決は BundledResources.root を通す（唯一の注入点）"
     severity: error
 
