@@ -16,7 +16,9 @@ custom_rules:
     name: "同梱リソースは BundledResources 経由"
     included: ".*/Sources/.*\\.swift"
     excluded: ".*/BundledResources\\.swift"
-    regex: "Bundle\\.main\\.(resourceURL|url\\(forResource)"
+    # 同梱物の所在を取る API を全て挙げる。Info.plist 系（object(forInfoDictionaryKey:)・
+    # infoDictionary・bundleIdentifier）は同梱物の解決ではないので対象外。
+    regex: "Bundle\\.main\\.(resource(URL|Path)|bundle(URL|Path)|(url|urls|path|paths)\\(forResource)"
     message: "同梱リソースの解決は BundledResources.root を通す（唯一の注入点）"
     severity: error
 
