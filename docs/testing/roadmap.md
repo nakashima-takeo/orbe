@@ -33,7 +33,7 @@ updated: 2026-08-03
 
 | # | スライス | 内容 | 依存 | 状態 | テスト仕様書 |
 |---|---|---|---|---|---|
-| 0 | 基盤足場 | 単一ハーネス（90 バイト以下の state dir・全 override・ghostty 設定探索先の隔離）。`ControlServer.socketPath` の seam。`Bundle.main` 直参照 3 箇所を `BundledResources` へ集約。`OrbeMcpTests` 新設 | — | 未着手 | — |
+| 0 | 基盤足場 | 単一ハーネス（90 バイト以下の state dir・全 override・ghostty 設定探索先の隔離）。`ControlServer.socketPath` の seam。`Bundle.main` 直参照 3 箇所を `BundledResources` へ集約。ビルド済み CLI 実行体がテストバンドルの隣にある前提と、その解決規則の固定 | — | 未着手 | — |
 | 1 | wire 契約 | 制御プロトコルの語を socketpair 上の実 `Connection` で固める。method 名・params キー・エラーコード・`wait_for_event`・framing・不正 JSON。#50 #62 | 0 | 未着手 | — |
 | 2 | プロセス境界 | 実 `orbe-cli` / `orbe-mcp` / `orbe-report` を subprocess で駆動。引数解釈・終了コード・stdout・hook 実経路・bare `orb` の PATH 解決。`dev-verify.sh` を置換して廃止。#63 #64 #74 | 0, 1 | 未着手 | — |
 | 3 | 復元と移行 | 保存 → 復元 → 再保存のラウンドトリップ。`TabState` decode の非対称（`editor` だけ必須で、無いと全 workspace 消失）・範囲外クランプ・デバウンス。#56 #68 #54 | 0 | 未着手 | — |
