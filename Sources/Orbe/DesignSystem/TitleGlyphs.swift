@@ -16,7 +16,7 @@ enum TitleGlyphs {
   /// .process 登録＋gui.conf の font-codepoint-map で解決する）。ここはファイルから直接ロードする。
   /// バンドル無し（`swift run` 等）では nil → Apple Color Emoji へ退避。
   static let notoEmoji: NSFont? = {
-    guard let url = Bundle.main.url(forResource: "NotoColorEmoji-sbix", withExtension: "ttf"),
+    guard let url = BundledResources.root?.appendingPathComponent("NotoColorEmoji-sbix.ttf"),
       let descs = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
       let desc = descs.first
     else { return nil }
