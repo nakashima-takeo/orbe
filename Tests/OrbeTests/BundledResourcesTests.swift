@@ -175,10 +175,13 @@ final class BundledResourcesTests: XCTestCase {
     try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: url.path)
   }
 
-  // MARK: - 全利用側の一括検査
+  // MARK: - パスを返す利用側の一括検査
 
-  /// 同梱物を解決する全利用側の現在値。1 本のテストで束ねて見ることで、
+  /// 所在をパスで返す利用側の現在値。1 本のテストで束ねて見ることで、
   /// 「1 つだけ追随しない」形の退行を取りこぼさない。
+  /// `Config.load()` と `TerminalFonts.registerBundled()` は戻り値から所在を観測できず、
+  /// `TitleGlyphs.notoEmoji` は `static let` で root の差し替えに追随しないため、ここには入らない。
+  /// この 3 つの相対パスは `scripts/build-app.sh` との照合（スライス 9）が受け持つ。
   private func resolved() -> [(name: String, path: String?)] {
     [
       ("AgentPluginInstaller.bundledPluginDir", AgentPluginInstaller.bundledPluginDir?.path),
