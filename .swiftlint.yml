@@ -11,6 +11,15 @@ disabled_rules:
   - trailing_comma # swift format は複数行コレクションに trailing comma を付ける
   - opening_brace # swift format は複数行宣言・条件の { を独立行に置く
 
+custom_rules:
+  bundled_resource_seam:
+    name: "同梱リソースは BundledResources 経由"
+    included: ".*/Sources/.*\\.swift"
+    excluded: ".*/BundledResources\\.swift"
+    regex: "Bundle\\.main\\.(resourceURL|url\\(forResource)"
+    message: "同梱リソースの解決は BundledResources.root を通す（唯一の注入点）"
+    severity: error
+
 identifier_name:
   min_length: 1 # 座標 (x, y, w, h)・ループ変数等の短い局所名は本リポジトリのイディオム
 
