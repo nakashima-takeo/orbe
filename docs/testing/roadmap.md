@@ -53,7 +53,6 @@ updated: 2026-08-03
 | 対象 | 理由 | 必要なスライス |
 |---|---|---|
 | `ControlServer.socketPath` の seam | 無いとテストが "Orbe not running" と区別できず緑に化ける | 0 |
-| `Bundle.main` 直参照 3 箇所の集約 | hook 実経路と bare `orb` の PATH 解決が測れない | 0 |
 | `CompletionLearning.shared` のリセット可能化 | override が無く、テストが開発者の実 state dir を書き換える | 0 |
 | `WindowController.init` の分解（#75） | 結合層の観測面が `window.title` 止まりの根本原因。70 行で永続 3 種ロード・libghostty 起動・login shell subprocess 起動・プラグイン実体化を全部やる | 6 |
 | `MenuBarController` の判断部切り出し（#78） | 295 行の時間ロジックが未検証。`MenuBarArrivalDriver` と同じ時刻注入の形へ | 7 |
