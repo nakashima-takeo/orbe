@@ -42,7 +42,7 @@ updated: 2026-08-03
 | 6 | アプリ結合 | 設定適用の配線（scope 別の保存先・ライブ反映）・workspace の keep-alive と全タブ mount。`WindowController.init` の分解が前提。#75 #61 | 0, 3 | 未着手 | — |
 | 7 | コンポーネント | 状態 → 表示の対応とレイアウト数値。`MenuBarDropdown`・`StatusRowView` の並び替え計算・`CompletionList` の可視範囲 | 0 | 未着手 | — |
 | 8 | 見た目の足場 | 描画完了の確定的待機・1x 固定・1 枚 1 テストへの分解・ゴールデン比較の導入。まず 1 画面で成立を確認してから広げる | 0, 4 | 未着手 | — |
-| 9 | 生成物 | `.app` の静的検査（署名・同梱物・`Info.plist`）・agent-plugin パッケージ構成・tokens の全単射 drift ゲート。#72 #77 | — | 未着手 | — |
+| 9 | 生成物 | `.app` の静的検査（署名・同梱物・`Info.plist`）・agent-plugin パッケージ構成・tokens の全単射 drift ゲート。Swift 側が期待する同梱物の相対パス（`bin/orbe-report`・`agent-plugin/install.sh`・`completion-engine.js`・`zsh/.zshrc`・`orbe-defaults.conf`）と `scripts/build-app.sh` の配置の照合——ずれると全機能が無警告で no-op に倒れる。フォントに対しては `TerminalFontDelegationTests` が同じ論法で番人になっている。#72 #77 | — | 未着手 | — |
 | 10 | 外部プロセス異常系 | git の失敗・タイムアウト・部分障害。`GitRunner` への注入点（直参照 25 箇所）が前提。`gh` の 3 分岐フォールバック・`AgentCatalog` の 10 秒タイムアウト。#70 #13 | — | 未着手 | — |
 | 11 | カバレッジ可視化 | `swift test --enable-code-coverage` → lcov → PR コメント。閾値ゲートにはしない | — | 未着手 | — |
 
@@ -53,7 +53,6 @@ updated: 2026-08-03
 | 対象 | 理由 | 必要なスライス |
 |---|---|---|
 | `ControlServer.socketPath` の seam | 無いとテストが "Orbe not running" と区別できず緑に化ける | 0 |
-| `Bundle.main` 直参照 3 箇所の集約 | hook 実経路と bare `orb` の PATH 解決が測れない | 0 |
 | `CompletionLearning.shared` のリセット可能化 | override が無く、テストが開発者の実 state dir を書き換える | 0 |
 | `WindowController.init` の分解（#75） | 結合層の観測面が `window.title` 止まりの根本原因。70 行で永続 3 種ロード・libghostty 起動・login shell subprocess 起動・プラグイン実体化を全部やる | 6 |
 | `MenuBarController` の判断部切り出し（#78） | 295 行の時間ロジックが未検証。`MenuBarArrivalDriver` と同じ時刻注入の形へ | 7 |

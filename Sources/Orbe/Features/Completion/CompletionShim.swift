@@ -6,7 +6,7 @@ import Foundation
 enum CompletionShim {
   /// 同梱 shim dir（`<bundle>/Contents/Resources/zsh`）。`swift run`（バンドル無し）では nil。
   static var directoryPath: String? {
-    guard let resources = Bundle.main.resourceURL else { return nil }
+    guard let resources = BundledResources.root else { return nil }
     let dir = resources.appendingPathComponent("zsh")
     return FileManager.default.isReadableFile(atPath: dir.appendingPathComponent(".zshrc").path)
       ? dir.path : nil

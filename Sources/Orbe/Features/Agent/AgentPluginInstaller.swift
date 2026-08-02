@@ -14,7 +14,7 @@ enum AgentPluginInstaller {
   /// 同梱プラグインのディレクトリ（`<bundle>/Contents/Resources/agent-plugin`）。
   /// `swift run`（バンドル無し）では nil。同梱が在るかのゲート判定に使う。
   static var bundledPluginDir: URL? {
-    guard let resources = Bundle.main.resourceURL else { return nil }
+    guard let resources = BundledResources.root else { return nil }
     let dir = resources.appendingPathComponent("agent-plugin", isDirectory: true)
     let script = dir.appendingPathComponent("install.sh")
     return FileManager.default.isExecutableFile(atPath: script.path) ? dir : nil

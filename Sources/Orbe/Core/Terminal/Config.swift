@@ -8,8 +8,10 @@ enum Config {
   static func load() -> ghostty_config_t {
     guard let cfg = ghostty_config_new() else { fatalError("ghostty_config_new failed") }
     // 1. Orbe 既定（バンドル Resources にのみ存在。dev 実行＝バンドル無しでは不在 → user 設定のみ）。
-    if let path = Bundle.main.url(forResource: "orbe-defaults", withExtension: "conf")?.path {
-      ghostty_config_load_file(cfg, path)
+    if let url = BundledResources.root?.appendingPathComponent("orbe-defaults.conf"),
+      FileManager.default.fileExists(atPath: url.path)
+    {
+      ghostty_config_load_file(cfg, url.path)
     }
     // 2. user の ~/.config/ghostty（後勝ちで上書き）。
     ghostty_config_load_default_files(cfg)

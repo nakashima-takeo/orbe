@@ -30,7 +30,7 @@ updated: 2026-08-03
 
 **ランナーは XCTest 一本。** Swift 6.3 では swift-testing との相互運用が `none` で、両者でアサーションヘルパを共有すると失敗が黙殺される。Swift 6.4 で相互運用が既定 `limited` になった時点で再検討する。
 
-**隔離は単一ハーネスが立てる。** state dir・全 `fileURLOverride`・ghostty の設定探索先を 1 箇所で立て、テストごとの申告制にしない。申告制は必ず破れる（`GuiConfig` の override を張っているテストは 1 本しかなく、`Config.load()` が前回実行の設定を読み戻す結合が実在する）。
+**隔離は単一ハーネスが立てる。** state dir・全 override・ghostty の設定探索先を 1 箇所で立て、テストごとの申告制にしない。申告制は必ず破れる（`GuiConfig` の override を張っているテストは 1 本しかなく、`Config.load()` が前回実行の設定を読み戻す結合が実在する）。
 
 **state dir は 90 バイト以下。** AF_UNIX の `sun_path` は 104 バイト上限で、超えると `ControlServer` が制御 API を無言で無効化する。`$TMPDIR` + UUID は 108 バイトに達するため使わない。
 
