@@ -233,6 +233,15 @@ final class CompletionLearningTests: OrbeTestCase {
 
   // MARK: - 永続（round-trip）
 
+  /// 学習ストアはハーネスが per-test にできない唯一の永続（`shared` が初回タッチで焼くため
+  /// プロセス級に固定される）。ここで書いたものは後始末しないと実行の最後まで残るので、
+  /// プロセス級を触るのはこのクラスだけ、という事実をここで閉じる。
+  override func tearDownWithError() throws {
+    let url = try XCTUnwrap(CompletionLearning.fileURL)
+    try? FileManager.default.removeItem(at: url)
+    try super.tearDownWithError()
+  }
+
   func testPersistenceRoundTrip() {
     var store = LearningStore.empty
     store.entries[key("commit")] = LearningEntry(count: 3, lastUsed: now)
@@ -241,7 +250,8 @@ final class CompletionLearningTests: OrbeTestCase {
   }
 
   func testLoadMissingFileReturnsEmpty() throws {
-    try? FileManager.default.removeItem(at: XCTUnwrap(CompletionLearning.fileURL))
+    let url = try XCTUnwrap(CompletionLearning.fileURL)
+    try? FileManager.default.removeItem(at: url)
     XCTAssertEqual(CompletionLearning.load(), .empty, "欠落は空ストア（新規ユーザ回帰なし）")
   }
 

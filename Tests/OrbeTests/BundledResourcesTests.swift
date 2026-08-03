@@ -12,19 +12,13 @@ import XCTest
 /// 静かに嘘をつき始める（同じファイル群の `TitleGlyphs.notoEmoji` が既に焼き付く形をしており、
 /// 模倣される現実的な退行）。
 final class BundledResourcesTests: OrbeTestCase {
-  private var saved: URL?
   private var tmp: URL!
 
   override func setUpWithError() throws {
-    saved = BundledResources.root
-    tmp = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("BundledResourcesTests-\(UUID().uuidString)")
+    try super.setUpWithError()
+    // `BundledResources.root` はハーネスが毎テスト張り直すので、ここで退避・復元はしない。
+    tmp = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("bundles", isDirectory: true)
     try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
-  }
-
-  override func tearDownWithError() throws {
-    BundledResources.root = saved
-    try? FileManager.default.removeItem(at: tmp)
   }
 
   // MARK: - 仕様1: root は解決の唯一の根で、差し替えが即座に伝わる

@@ -38,6 +38,7 @@ final class TestIsolationTests: OrbeTestCase {
   }
 
   /// 永続 4 種はテスト 1 件ごとの専用ディレクトリを指す（テスト間で状態が漏れない）。
+  /// テストが自分で書き換えても `beginCase` が毎回張り直すので、戻し忘れが次へ漏れない。
   func testPerCaseOverridesPointIntoCaseDir() throws {
     let dir = try XCTUnwrap(TestIsolation.caseDir)
     XCTAssertEqual(dir.deletingLastPathComponent().path, TestIsolation.root.path)
@@ -57,20 +58,25 @@ final class TestIsolationTests: OrbeTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "user 層は不在＝読まれない")
   }
 
-  /// テスト 1 件ごとに空の作業ディレクトリが配られる（前のテストが書いたものは見えない）。
+  /// テスト 1 件ごとに別の作業ディレクトリが配られ、前のテストのものは消えている。
   ///
   /// `testPerCaseOverridesPointIntoCaseDir` は override の向き先しか見ないので、全テストが
-  /// 同じディレクトリを共有していても通ってしまう。実際に漏れないことはここでしか測れない。
-  /// このテストに至るまでに何十本ものテストが `workspaces.json` を書いているので、
-  /// 空であること自体が「配り直しと後始末が効いている」証拠になる。
+  /// 同じディレクトリを共有していても通ってしまう。配り直し（別パス）と後始末（前のパスが不在）は
+  /// ここでしか測れない。両方が崩れると、前のテストが書いた永続を次のテストが読む。
   func testCaseDirIsFreshForEachTest() throws {
     let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let previous = try XCTUnwrap(TestIsolation.previousCaseDir, "直前のテストへ配った記録が無い")
+    XCTAssertNotEqual(dir.path, previous.path, "前のテストと同じディレクトリを使い回している")
+    XCTAssertFalse(
+      FileManager.default.fileExists(atPath: previous.path),
+      "前のテストのディレクトリが残っている＝後始末が効いていない")
     XCTAssertEqual(
       try FileManager.default.contentsOfDirectory(atPath: dir.path), [],
-      "前のテストの永続が残っている＝テスト間で状態が漏れる")
+      "配られた直後のディレクトリは空")
   }
 
   /// 補完の学習ストアは root 直下に固定する（`shared` が初回タッチで焼くため per-test にできない）。
+  /// ＝この 1 種だけは学習状態がテスト間で持ち越される。
   func testCompletionLearningIsProcessWide() throws {
     let url = try XCTUnwrap(CompletionLearning.fileURLOverride)
     XCTAssertEqual(

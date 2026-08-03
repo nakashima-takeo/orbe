@@ -14,8 +14,6 @@ import XCTest
 /// 画面へ反映されない（あるいは逆に user 設定を無視する）。どちらも診断に出ず値だけが違う。
 final class ConfigLoadTests: OrbeTestCase {
 
-  private var savedBundledRoot: URL?
-  private var savedUserOverride: URL?
   private var savedXdgConfigHome: String?
   private var dir: URL!
 
@@ -23,15 +21,13 @@ final class ConfigLoadTests: OrbeTestCase {
     try super.setUpWithError()
     // ghostty_config_new は ghostty_init 前に呼ぶと SIGSEGV する。ランタイムを先に起こす。
     _ = Ghostty.shared
-    savedBundledRoot = BundledResources.root
-    savedUserOverride = Config.userFileURLOverride
+    // 層1・層2 の override はハーネスが毎テスト張り直すので、ここで退避する必要はない。
+    // `XDG_CONFIG_HOME` はプロセス env なのでハーネスの管轄外＝自分で戻す。
     savedXdgConfigHome = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"]
     dir = try XCTUnwrap(TestIsolation.caseDir)
   }
 
   override func tearDownWithError() throws {
-    BundledResources.root = savedBundledRoot
-    Config.userFileURLOverride = savedUserOverride
     if let savedXdgConfigHome {
       setenv("XDG_CONFIG_HOME", savedXdgConfigHome, 1)
     } else {
@@ -123,9 +119,11 @@ final class ConfigLoadTests: OrbeTestCase {
   func testLayerPrecedenceIsGuiOverUserOverDefaults() throws {
     try setDefaultsLayer("font-size = 11\n")
 
+    // 17 は libghostty の既定（13）と衝突しない値。既定と同値だと「どの層も読まれなかった」
+    // 場合にもこの assert が通ってしまう。
     try setUserLayer("font-size = 12\n")
-    try setGuiLayer("font-size = 13\n")
-    XCTAssertEqual(try loadedFontSize(), 13, "層3 が全てに勝つ")
+    try setGuiLayer("font-size = 17\n")
+    XCTAssertEqual(try loadedFontSize(), 17, "層3 が全てに勝つ")
 
     try setGuiLayer(nil)
     XCTAssertEqual(try loadedFontSize(), 12, "層3 が無ければ層2 が層1 に勝つ")
