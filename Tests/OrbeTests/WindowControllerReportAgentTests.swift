@@ -11,7 +11,7 @@ import XCTest
 ///
 /// 重要: WindowControllerControlTests と同様、実 NSWindow に SurfaceView を接続するため
 /// libghostty ランタイムを起動する（ヘッドレスな純ロジック検証ではない）。
-final class WindowControllerReportAgentTests: XCTestCase {
+final class WindowControllerReportAgentTests: OrbeTestCase {
 
   private var tempStore: URL!
   /// `makeKey` で前面化した窓。次のテスト（背面前提）へ key を持ち越さないため tearDown で下ろす。

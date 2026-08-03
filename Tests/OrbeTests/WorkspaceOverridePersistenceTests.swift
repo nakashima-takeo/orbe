@@ -4,7 +4,7 @@ import XCTest
 
 /// workspace 設定上書き層（`settingsOverride`）の永続検証（libghostty 非依存）。
 /// 新形式（canonical key）の往復・欠落時の後方互換（nil）を固定する。旧 camelCase 移行は `SettingsMigrationTests`。
-final class WorkspaceOverridePersistenceTests: XCTestCase {
+final class WorkspaceOverridePersistenceTests: OrbeTestCase {
 
   private func layer(_ mutate: (inout SettingsLayer) -> Void) -> SettingsLayer {
     var l = SettingsLayer()

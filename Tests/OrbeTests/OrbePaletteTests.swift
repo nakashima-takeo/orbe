@@ -8,7 +8,7 @@ import XCTest
 /// ③ 名前解決: conf が書く named theme 名が `app/themes/` の実ファイルに解決する。
 /// これらが Level 0 級（低コントラスト・転写ドリフト・テーマ名の片側改名）の再発を構造的に
 /// コミット不能にする。
-final class OrbePaletteTests: XCTestCase {
+final class OrbePaletteTests: OrbeTestCase {
 
   // MARK: - ① コントラストゲート
 

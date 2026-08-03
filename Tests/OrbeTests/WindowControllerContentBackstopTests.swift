@@ -9,7 +9,7 @@ import XCTest
 /// その要否ゲートが `contentIsEmpty` で、0タブ化で立ち・タブが載ると下がる（二重 veil 回避・冪等）。
 ///
 /// 重要: WindowController の構築は libghostty ランタイムを起動する（GhosttyKit 必須）。
-final class WindowControllerContentBackstopTests: XCTestCase {
+final class WindowControllerContentBackstopTests: OrbeTestCase {
 
   private var tempStore: URL!
   override func setUp() {

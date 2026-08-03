@@ -4,7 +4,7 @@ import XCTest
 
 /// `app-state.json` の永続 round-trip を、`preferredLanguage`（初回言語ゲート・起動言語の土台）を
 /// 軸に固定する。全 field Optional の家風（欠落を壊さず読む・部分更新で他 field を保つ）を突く。
-final class AppStatePersistenceTests: XCTestCase {
+final class AppStatePersistenceTests: OrbeTestCase {
   private var tempURL: URL!
 
   override func setUp() {

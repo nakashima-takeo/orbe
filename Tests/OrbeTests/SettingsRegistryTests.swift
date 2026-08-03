@@ -5,7 +5,7 @@ import XCTest
 /// 設定レジストリ（SSOT）の宣言的契約と不変条件の検証。App 層・純ロジック。
 /// `all`（gui.conf 正準順）と `rootOrder`（表示順）の 2 順序・key 一意・domain と activation の整合・
 /// guiConf 橋渡し・DefaultedSettingKey の既定を固定する。
-final class SettingsRegistryTests: XCTestCase {
+final class SettingsRegistryTests: OrbeTestCase {
 
   private func eff(_ mutate: (inout SettingsLayer) -> Void = { _ in }) -> EffectiveSettings {
     var l = SettingsLayer()

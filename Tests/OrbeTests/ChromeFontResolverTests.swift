@@ -6,7 +6,7 @@ import XCTest
 /// chrome フォント割り当て機構（TitleGlyphs 一般化・ChromeFontResolver・FontCatalog.resolve）の検証。
 /// バンドル無し（swift test）では同梱 TTF が解決できないため、割り当ての有無と退避だけを固定し、
 /// 実フォントの字形は実機確認が担う。
-final class ChromeFontResolverTests: XCTestCase {
+final class ChromeFontResolverTests: OrbeTestCase {
 
   private let base = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
 

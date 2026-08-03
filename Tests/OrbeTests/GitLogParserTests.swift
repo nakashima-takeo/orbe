@@ -3,7 +3,7 @@ import XCTest
 @testable import Orbe
 
 /// LogParser（%H%x1f%h%x1f%an%x1f%at%x1f%P%x1f%D%x1f%s%x1e）のフィクスチャテスト。
-final class GitLogParserTests: XCTestCase {
+final class GitLogParserTests: OrbeTestCase {
   private let fs = "\u{1f}"
   private let rs = "\u{1e}"
   private let oidA = "8d9c35ea1b04f9a2c6d3e7f8091a2b3c4d5e6f70"

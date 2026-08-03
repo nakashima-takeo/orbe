@@ -11,7 +11,7 @@ import XCTest
 /// メモ化へ「最適化」すると差し替えが効かなくなり、root を注入点として使う上位層のテストが
 /// 静かに嘘をつき始める（同じファイル群の `TitleGlyphs.notoEmoji` が既に焼き付く形をしており、
 /// 模倣される現実的な退行）。
-final class BundledResourcesTests: XCTestCase {
+final class BundledResourcesTests: OrbeTestCase {
   private var saved: URL?
   private var tmp: URL!
 

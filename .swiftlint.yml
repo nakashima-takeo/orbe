@@ -23,6 +23,15 @@ custom_rules:
     message: "同梱リソースの解決は BundledResources.root を通す（唯一の注入点）"
     severity: error
 
+  test_isolation_harness:
+    name: "テストの基底は OrbeTestCase"
+    included: ".*/Tests/OrbeTests/.*\\.swift"
+    excluded: ".*/TestIsolation\\.swift"
+    # `:` の後の `\s*` は改行にも当たる（swift format が 100 桁超を `:` の後で折り返す形を捕まえる）。
+    regex: ":\\s*XCTestCase\\b"
+    message: "テストクラスは OrbeTestCase を継承する（隔離ハーネスの点火点）"
+    severity: error
+
 identifier_name:
   min_length: 1 # 座標 (x, y, w, h)・ループ変数等の短い局所名は本リポジトリのイディオム
 

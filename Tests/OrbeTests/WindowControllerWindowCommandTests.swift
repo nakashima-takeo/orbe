@@ -8,7 +8,7 @@ import XCTest
 /// パレット/フォーム表示中・改名編集中には暴発しない（＝入力を横取りしない）契約。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
-final class WindowControllerWindowCommandTests: XCTestCase {
+final class WindowControllerWindowCommandTests: OrbeTestCase {
 
   // 永続を実 Application Support から隔離する（テストごとに未作成の一時ファイルを指す）。
   private var tempStore: URL!

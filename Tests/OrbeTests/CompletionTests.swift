@@ -7,7 +7,7 @@ import XCTest
 /// （block 外不可侵・除去）とトークン置換の契約を担保する。
 /// shim（ZDOTDIR interposition）の契約は CompletionShimTests が持つ。
 /// エンジン（prebuilt JS バンドル）の契約は CompletionEngineTests が持つ。
-final class CompletionTests: XCTestCase {
+final class CompletionTests: OrbeTestCase {
   private var dir: URL!
   private var zshrc: URL!
 

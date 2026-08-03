@@ -7,7 +7,7 @@ import XCTest
 /// （最後にフォーカスしていたペインへ戻る = preferredFocusPane）と、
 /// ペイン → WindowController のウィンドウレベル chrome 経路を固定する。
 /// WindowControllerWorkspaceTests と同様、実 NSWindow + libghostty ランタイムを使う。
-final class WindowControllerFocusRestoreTests: XCTestCase {
+final class WindowControllerFocusRestoreTests: OrbeTestCase {
   private var tempStore: URL!
   override func setUp() {
     super.setUp()

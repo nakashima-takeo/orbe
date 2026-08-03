@@ -5,7 +5,7 @@ import XCTest
 /// Attention snapshot builder（`AttentionSnapshot`）の契約を固定する。
 /// 対象はライブペインのみ（activated な WS）・waiting/done/working のみ・stateChangedAt 降順。
 @MainActor
-final class AttentionSnapshotTests: XCTestCase {
+final class AttentionSnapshotTests: OrbeTestCase {
 
   /// 1 タブ 1 ペインの workspace を組む（活性は引数）。
   private func workspace(name: String, activated: Bool = true) -> Workspace {

@@ -5,7 +5,7 @@ import XCTest
 /// emoji-presentation 全域集合の実行時導出（`EmojiPresentationRanges`）の検証。
 /// 判定源は chrome（TitleGlyphs）と同じ `isEmojiPresentation` なので、ここで固定する含有/非含有が
 /// 端末セル（font-codepoint-map）とタブの出し分けの両方を規定する。
-final class EmojiFontTests: XCTestCase {
+final class EmojiFontTests: OrbeTestCase {
 
   /// 既知の emoji-presentation 点を含む（😀 顔・✅ 記号・⌚ BMP・👍 手・肌色修飾子）。
   func testRangesContainKnownEmojiPresentationCodepoints() {

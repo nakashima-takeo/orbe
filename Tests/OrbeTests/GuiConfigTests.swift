@@ -4,7 +4,7 @@ import XCTest
 
 /// 生成 conf（GUI が触ったキーだけ sparse に書く。theme 行のみ定数で常時）の検証。
 /// 入力型が `EffectiveSettings` へ替わっても、同一設定値に対する**出力バイトは現行と完全一致**する。
-final class GuiConfigTests: XCTestCase {
+final class GuiConfigTests: OrbeTestCase {
   override func setUp() {
     super.setUp()
     GuiConfig.fileURLOverride = URL(fileURLWithPath: NSTemporaryDirectory())

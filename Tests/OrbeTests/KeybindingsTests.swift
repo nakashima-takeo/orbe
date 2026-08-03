@@ -5,7 +5,7 @@ import XCTest
 
 /// chrome キーマップ（Orbe が先取りし surface へ転送しない操作）の単一ソースを守る。
 /// libghostty 非依存。NSEvent をモックして全分岐を固定する。
-final class KeybindingsTests: XCTestCase {
+final class KeybindingsTests: OrbeTestCase {
   private func key(_ chars: String, _ flags: NSEvent.ModifierFlags = .command) -> NSEvent {
     NSEvent.keyEvent(
       with: .keyDown, location: .zero, modifierFlags: flags,

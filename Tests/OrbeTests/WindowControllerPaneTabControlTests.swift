@@ -10,7 +10,7 @@ import XCTest
 /// 重要: WindowControllerControlTests と同様、実 NSWindow に SurfaceView を接続するため
 /// **libghostty ランタイムを起動する**（GhosttyKit 必須）。workspace の id は IdGen 採番で予測不能なため
 /// 直書きせず `controlListWorkspaces()` / `controlListPanes()` の戻りから読む。
-final class WindowControllerPaneTabControlTests: XCTestCase {
+final class WindowControllerPaneTabControlTests: OrbeTestCase {
 
   // 永続を実 Application Support から隔離する（テストごとに未作成の一時ファイルを指す）。
   private var tempStore: URL!

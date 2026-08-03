@@ -6,7 +6,7 @@ import XCTest
 /// 初回言語ゲートの振る舞いを、実 NSWindow + libghostty ランタイムで結合検証する
 /// （WindowControllerFocusRestoreTests と同型）。ゲートは init の showFirstRunFlow で走るため、
 /// app-state を組んでから WindowController を構築し、`model.languageSelect` の有無で観測する。
-final class LanguageGateTests: XCTestCase {
+final class LanguageGateTests: OrbeTestCase {
   private var tempStore: URL!
 
   override func setUp() {

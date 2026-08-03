@@ -3,7 +3,7 @@ import XCTest
 @testable import Orbe
 
 /// settings.json（新形式 v1）と app-state.json の読み書き検証。旧形式移行は `SettingsMigrationTests`。
-final class SettingsPersistenceTests: XCTestCase {
+final class SettingsPersistenceTests: OrbeTestCase {
   private var settingsURL: URL!
   private var appStateURL: URL!
 

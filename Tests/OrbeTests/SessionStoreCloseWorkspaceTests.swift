@@ -9,7 +9,7 @@ import XCTest
 /// ③最後の1つは削除しない（`.invalid`・配列不変）。併せて、アクティブ workspace の最後のタブを閉じても
 /// `removeTab` は退避せずその場で空を維持する（`.emptiedActive`）ことを固定する。
 /// Workspace は参照型のため、アクティブの同一性は index ではなくオブジェクト参照で照合する。
-final class SessionStoreCloseWorkspaceTests: XCTestCase {
+final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
 
   /// 名前と lastUsedAt を与えて workspace を組む（closeWorkspace は tabs を触らないので空でよい）。
   private func ws(_ name: String, _ lastUsedAt: Date?) -> Workspace {

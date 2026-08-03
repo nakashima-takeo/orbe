@@ -3,7 +3,7 @@ import XCTest
 @testable import Orbe
 
 /// DispatchSectionBuilder（純粋関数）の相関・重複排除・フォールバック・action ペイロード検証。
-final class DispatchSectionBuilderTests: XCTestCase {
+final class DispatchSectionBuilderTests: OrbeTestCase {
 
   private func section(_ sections: [DispatchSection], _ title: String) -> DispatchSection? {
     sections.first { $0.title == title }

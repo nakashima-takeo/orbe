@@ -12,7 +12,7 @@ import XCTest
 ///
 /// 描画は SwiftUI なので、行レベルの状態は `WindowController.statusModel`（SSOT）で検証する。
 /// タブの shrink-to-fit は純関数 `StatusTabLayout.widths` を単体検査する。
-final class ChromeStatusRowTests: XCTestCase {
+final class ChromeStatusRowTests: OrbeTestCase {
 
   private var tempStore: URL!
   override func setUp() {

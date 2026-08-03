@@ -18,7 +18,7 @@ import XCTest
 /// 仕込む——全部既定値だと `makeTab` を素の `TerminalController()` に退化させても緑のままになる。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
-final class WindowControllerReopenAgentTabTests: XCTestCase {
+final class WindowControllerReopenAgentTabTests: OrbeTestCase {
 
   // 永続を実 Application Support から隔離する（テストごとに未作成の一時ファイルを指す）。
   private var tempStore: URL!

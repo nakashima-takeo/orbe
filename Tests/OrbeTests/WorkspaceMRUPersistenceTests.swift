@@ -4,7 +4,7 @@ import XCTest
 
 /// MRU 並べ替え用 `lastUsedAt` の永続検証（libghostty 非依存）。
 /// 往復で保たれること・旧 JSON（フィールド欠落）でも後方互換で load 成功し nil になることを固定する。
-final class WorkspaceMRUPersistenceTests: XCTestCase {
+final class WorkspaceMRUPersistenceTests: OrbeTestCase {
 
   /// lastUsedAt（あり/nil 混在）がディスク往復で保たれる。
   func testLastUsedAtRoundTripThroughFile() throws {

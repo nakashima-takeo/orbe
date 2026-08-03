@@ -5,7 +5,7 @@ import XCTest
 /// 旧形式（camelCase・アプリ状態同居の settings.json / camelCase の workspaces.json settingsOverride）から
 /// 新形式への**無損失自動移行**を固定する。移行は all-or-nothing（旧ファイル全体の decode 成功時のみ変換）で、
 /// 既存ユーザーの設定・WS 上書きを 1 つも失わないことを実 JSON fixture で担保する。
-final class SettingsMigrationTests: XCTestCase {
+final class SettingsMigrationTests: OrbeTestCase {
   private var settingsURL: URL!
   private var appStateURL: URL!
   private var workspacesURL: URL!

@@ -7,7 +7,7 @@ import XCTest
 /// キー意図（move/activate/drillIn/goBack）と絞り込み（queryChanged）の意味メソッドを駆動し、
 /// 公開面（setItems / 意味メソッド）とコールバックで振る舞いを固定する（描画は AppShell の .overlay）。
 @MainActor
-final class WorkspacePaletteTests: XCTestCase {
+final class WorkspacePaletteTests: OrbeTestCase {
 
   // MARK: - ヘルパ
 

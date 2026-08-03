@@ -5,7 +5,7 @@ import XCTest
 /// repo 内に解決される worktree の除外（`GitWorktreeExclude`）の検証。
 /// 契約は「Orbe が作ったものだけを除外する」——判定は解決済みパスのみ（プリセット由来かカスタム由来かに
 /// 依らない）で、対象は worktree の親ディレクトリ、ただし親が root 自身か**既存**なら worktree 自身。
-final class GitWorktreeExcludeTests: XCTestCase {
+final class GitWorktreeExcludeTests: OrbeTestCase {
 
   // MARK: - entry（包含判定と対象の決め方）
 
@@ -141,7 +141,7 @@ final class GitWorktreeExcludeTests: XCTestCase {
 /// 実 git 層: 一時リポジトリで作成〜除外を production と同じ順序（作成成功後に除外）で走らせ、
 /// 「repo 内に作っても `git status` が汚れない」「二度目で重複しない」「repo 外では触らない」
 /// 「ユーザーが既に塞いでいるなら足さない」「失敗した作成の除外を残さない」を確かめる。
-final class GitWorktreeExcludeIntegrationTests: XCTestCase {
+final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
   private var dir: URL!
   private var repo: GitRepo!
 

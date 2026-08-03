@@ -6,7 +6,7 @@ import XCTest
 /// `setRows` で流し込む）ときの選択の扱いを固定する。並びは stateChangedAt 降順なので、
 /// 表示中に別ペインが waiting / done へ変われば行は先頭へ挿し込まれ、index は総ずれする。
 @MainActor
-final class AttentionPaletteTests: XCTestCase {
+final class AttentionPaletteTests: OrbeTestCase {
 
   private func row(_ paneId: Int, at offset: TimeInterval) -> AttentionRow {
     AttentionRow(

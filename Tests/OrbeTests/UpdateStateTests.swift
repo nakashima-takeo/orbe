@@ -5,7 +5,7 @@ import XCTest
 
 /// アップデート状態モデルの遷移規則。とくに「トーストは readyToRestart 遷移時に
 /// 1 バージョンにつき一度だけ」（見本 2a の設計注記）を固定する。
-final class UpdateStateTests: XCTestCase {
+final class UpdateStateTests: OrbeTestCase {
 
   private func makeState() -> UpdateState { UpdateState(currentVersion: "0.1.0") }
 

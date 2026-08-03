@@ -6,7 +6,7 @@ import XCTest
 /// workspace 永続のロジック検証（libghostty 非依存）。
 /// 分割ツリーの直列化/復元は TerminalController を window 未接続で操作すれば
 /// surface を起こさずトポロジー＋cwd＋比率だけ検証できる。
-final class WorkspacePersistenceTests: XCTestCase {
+final class WorkspacePersistenceTests: OrbeTestCase {
 
   /// テストの復元では resume を起こさない（agent 付き葉のトポロジー検証のみ）。
   private let noResume: TerminalController.ResumeSpawn = { _ in nil }

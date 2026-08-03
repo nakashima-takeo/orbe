@@ -6,7 +6,7 @@ import XCTest
 /// engine も popup も不要でユニット完結する（`rank`・`record`・`score`・`scopes` が純関数）。
 /// 頻度・recency・完全一致不可侵・ゼロ回帰の 4 点と、二層スコープ（門番なし・静的スコープ維持・
 /// 除外・完全一致不可侵の動的版）を機械検証する。
-final class CompletionLearningTests: XCTestCase {
+final class CompletionLearningTests: OrbeTestCase {
   private let now: Double = 1_000_000
   /// 静的・動的が同値の最小スコープ（root コマンド 1 語のみのバッファ相当）。
   private let scopes = CompletionLearning.LearningScopes(staticScope: "git", dynamicScope: "git")

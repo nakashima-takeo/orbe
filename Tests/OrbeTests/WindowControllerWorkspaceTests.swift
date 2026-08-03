@@ -12,7 +12,7 @@ import XCTest
 /// 制約: workspaces / activeWorkspace / tabs はすべて private。外部からの観測は
 /// window.title（= 現アクティブ workspace 名）と公開メソッドの戻りに限られる。
 /// よって「タブ/プロセス/画面内容のオブジェクト保持」そのものは本テストでは観測できない。
-final class WindowControllerWorkspaceTests: XCTestCase {
+final class WindowControllerWorkspaceTests: OrbeTestCase {
 
   // 永続を実 Application Support から隔離する（テストごとに未作成の一時ファイルを指す
   // → load は nil＝既定 workspace から開始、save は一時ファイルへ）。

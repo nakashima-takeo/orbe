@@ -5,7 +5,7 @@ import XCTest
 /// gh 着地の規則（`DispatchDataProvider.applyFetched*`）と、その保存先（`DispatchGitHubCache`）の検証。
 /// gh は叩かず、取得結果に相当する値を直接着地させて sections の再描画有無で判定する。
 @MainActor
-final class DispatchGitHubCacheTests: XCTestCase {
+final class DispatchGitHubCacheTests: OrbeTestCase {
 
   private func makeProvider(_ model: DispatchPaletteModel) -> DispatchDataProvider {
     DispatchDataProvider(

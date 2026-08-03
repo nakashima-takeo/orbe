@@ -12,7 +12,7 @@ import XCTest
 ///
 /// workspace の id はプロセス全域の IdGen で採番され予測不能なため、決して直書きせず
 /// `controlListWorkspaces()` の戻りから読む（配列インデックスでなく id で指す契約でもある）。
-final class WindowControllerControlTests: XCTestCase {
+final class WindowControllerControlTests: OrbeTestCase {
 
   // 永続を実 Application Support から隔離する（テストごとに未作成の一時ファイルを指す）。
   private var tempStore: URL!

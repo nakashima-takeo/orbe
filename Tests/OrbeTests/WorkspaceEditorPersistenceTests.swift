@@ -4,7 +4,7 @@ import XCTest
 
 /// タブ単位の EditorPane 画面状態（TabState.editor）の永続往復。
 /// MRU・override と同様、粗粒度フィールドの save→load 往復を個別に固定する。
-final class WorkspaceEditorPersistenceTests: XCTestCase {
+final class WorkspaceEditorPersistenceTests: OrbeTestCase {
 
   /// editor の開閉・ツール（非既定値）がディスク往復で保たれる。
   func testEditorTabStateRoundTripThroughFile() throws {

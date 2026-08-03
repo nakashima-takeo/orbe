@@ -22,7 +22,7 @@ private func changeRefs(
 
 /// ユニット層: 手組みの FileDiff から build() の出力文字列を厳密検証する。
 /// 実 git に通す層は GitPatchBuilderTestsRoundtrip。
-final class GitPatchBuilderTests: XCTestCase {
+final class GitPatchBuilderTests: OrbeTestCase {
 
   private func fileDiff(
     oldPath: String? = "f.txt", newPath: String? = "f.txt",
@@ -214,7 +214,7 @@ final class GitPatchBuilderTests: XCTestCase {
 
 /// ラウンドトリップ層: 一時リポジトリで実 git に diff 生成と apply をさせ、
 /// index の中身が期待通りかを文字列比較で検証する。
-final class GitPatchBuilderTestsRoundtrip: XCTestCase {
+final class GitPatchBuilderTestsRoundtrip: OrbeTestCase {
 
   private var repo: URL!
 

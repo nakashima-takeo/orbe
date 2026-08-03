@@ -11,7 +11,7 @@ import XCTest
 /// buttonNumber 絞り込み——を合成イベントで通す。SwiftUI のジェスチャは中ボタンを拾えず
 /// この catcher だけが受け口なので、ここが崩れると機能ごと消えるか、逆に catcher がタブ全面を
 /// 覆って選択・並び替え・改名を殺す。
-final class ChromeMiddleClickTests: XCTestCase {
+final class ChromeMiddleClickTests: OrbeTestCase {
 
   private var tempStore: URL!
   private var windows: [NSWindow] = []

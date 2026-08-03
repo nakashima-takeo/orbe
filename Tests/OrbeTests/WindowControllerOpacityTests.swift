@@ -8,7 +8,7 @@ import XCTest
 /// 純粋な透過判定（`shouldBeTranslucent`）は値/フルスクリーン別に固定する。
 /// 実 window への適用（`syncWindowOpacity` → `window.isOpaque`）は WindowController の構築を要し、
 /// **libghostty ランタイムを起動する**（GhosttyKit 必須）。設定は in-memory SSOT（`settingsStore`）を通す。
-final class WindowControllerOpacityTests: XCTestCase {
+final class WindowControllerOpacityTests: OrbeTestCase {
 
   private var tempSettings: URL!
   private var tempAppState: URL!

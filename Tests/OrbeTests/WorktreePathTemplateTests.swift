@@ -4,7 +4,7 @@ import XCTest
 
 /// worktree 作成先テンプレート（`WorktreePathTemplate`）の検証・解決と、
 /// 設定基盤への合流（`SettingDomain.validate` 経由＝パレット・orb config・control の唯一の検証点）の検証。
-final class WorktreePathTemplateTests: XCTestCase {
+final class WorktreePathTemplateTests: OrbeTestCase {
 
   // MARK: - resolve（置換・~ 展開・standardize）
 
