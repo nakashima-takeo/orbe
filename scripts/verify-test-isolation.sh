@@ -7,6 +7,10 @@
 # user 設定の読み取りは `Config.userFileURLOverride` が
 # `ghostty_config_load_default_files` を構造的に呼ばせないことで担保する。
 #
+# 測っていないもの: `UserDefaults`。standard domain は cfprefsd がユーザーレコードで解決するので
+# HOME 差し替えでは曲がらず、テスト実行体の bundle id（xctest ツール）の plist が実ホームへ残る。
+# ハーネスも隔離していない（roadmap の前倒しリファクタ表を参照）。
+#
 # 前提: Orbe 本体を終了しておく（起動中のインスタンスが state dir を書くと差分が出る）。
 set -euo pipefail
 
@@ -35,6 +39,8 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 FAKE_HOME="$WORK/home"
 mkdir -p "$FAKE_HOME"
+# swift test が落ちたときに読むログの退避先（$WORK は EXIT で消える）。
+KEPT_LOG="$ROOT/.build/verify-test-isolation.log"
 
 echo "==> 実ホームの監視対象をスナップショット"
 snapshot >"$WORK/before"
@@ -49,8 +55,14 @@ env HOME="$FAKE_HOME" XDG_CONFIG_HOME="$FAKE_HOME/.config" \
   swift test --package-path "$ROOT" --skip-build >"$WORK/test.log" 2>&1
 TEST_STATUS=$?
 set -e
-[ "$TEST_STATUS" -eq 0 ] || echo "NOTE: swift test は失敗した (exit $TEST_STATUS)。汚染判定は続行する。詳細: $WORK/test.log"
+if [ "$TEST_STATUS" -ne 0 ]; then
+  cp "$WORK/test.log" "$KEPT_LOG"
+  echo "NOTE: swift test は失敗した (exit $TEST_STATUS)。汚染判定は続行する。詳細: $KEPT_LOG"
+fi
 
+# HOME を honor する書き手（shell shim・libghostty 等）だけがここに現れる。Foundation 経由は
+# 現れない——`applicationSupportDirectory` は cfprefsd 同様ユーザーレコードで解決し HOME を見ない。
+# Foundation 経由の汚染を捕まえるのは下の実ホーム差分の方で、こちらはその補助。
 echo "==> 偽ホーム配下の新規作成を確認"
 FAKE_DIRT=0
 for sub in ".config/ghostty" "Library/Application Support"; do
@@ -71,9 +83,20 @@ else
   REAL_DIRT=1
 fi
 
-if [ "$FAKE_DIRT" = 0 ] && [ "$REAL_DIRT" = 0 ]; then
-  echo "PASS: swift test はユーザーのホームと ghostty 設定を書き換えなかった"
-else
+if [ "$FAKE_DIRT" != 0 ] || [ "$REAL_DIRT" != 0 ]; then
   echo "FAIL: swift test が実環境へ書き込んでいる"
   exit 1
 fi
+
+# テストが 1 本も走らずに落ちた場合（installOnce の precondition / fatalError 発火が典型）も
+# 「どこも汚れていない」になる。走っていない実行を PASS と呼ぶと、隔離が完全に壊れた状態を
+# 「検証済み」と読ませてしまうので、実行本数を判定に入れる。
+EXECUTED="$(sed -n 's/.*Executed \([0-9][0-9]*\) tests.*/\1/p' "$WORK/test.log" | sort -rn | head -1)"
+if [ -z "$EXECUTED" ] || [ "$EXECUTED" -eq 0 ]; then
+  cp "$WORK/test.log" "$KEPT_LOG"
+  echo "FAIL: テストが 1 本も走っていない（隔離の点火が落ちた可能性）。詳細: $KEPT_LOG"
+  exit 1
+fi
+
+echo "PASS: swift test（$EXECUTED 本）は ghostty の user 設定と Orbe の state dir を書き換えなかった"
+[ "$TEST_STATUS" -eq 0 ] || echo "（ただし swift test 自体は exit ${TEST_STATUS}。汚染判定とは独立）"
