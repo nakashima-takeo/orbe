@@ -57,6 +57,19 @@ final class TestIsolationTests: OrbeTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "user 層は不在＝読まれない")
   }
 
+  /// テスト 1 件ごとに空の作業ディレクトリが配られる（前のテストが書いたものは見えない）。
+  ///
+  /// `testPerCaseOverridesPointIntoCaseDir` は override の向き先しか見ないので、全テストが
+  /// 同じディレクトリを共有していても通ってしまう。実際に漏れないことはここでしか測れない。
+  /// このテストに至るまでに何十本ものテストが `workspaces.json` を書いているので、
+  /// 空であること自体が「配り直しと後始末が効いている」証拠になる。
+  func testCaseDirIsFreshForEachTest() throws {
+    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    XCTAssertEqual(
+      try FileManager.default.contentsOfDirectory(atPath: dir.path), [],
+      "前のテストの永続が残っている＝テスト間で状態が漏れる")
+  }
+
   /// 補完の学習ストアは root 直下に固定する（`shared` が初回タッチで焼くため per-test にできない）。
   func testCompletionLearningIsProcessWide() throws {
     let url = try XCTUnwrap(CompletionLearning.fileURLOverride)
