@@ -9,7 +9,7 @@ import XCTest
 /// content の intrinsic が「幅正・高さ ≤ bar 厚の最小 22pt」であることをここで守る
 /// （高さ超過は 22pt bar で縦潰れ＝実機で空白/崩れに見えた回帰の再発防止）。
 @MainActor
-final class MenuBarStatusViewTests: XCTestCase {
+final class MenuBarStatusViewTests: OrbeTestCase {
 
   private func fittingSize(
     store: AttentionStore, phase: MenuBarArrival.Phase, ui: MenuBarUIState = MenuBarUIState()

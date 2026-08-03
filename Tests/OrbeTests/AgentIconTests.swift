@@ -5,7 +5,7 @@ import XCTest
 
 /// 状態アイコン差し替え機能の検証。curated SF Symbols の実在・whole-map（A案）の実効合成と
 /// snapshot-on-edit・設定パレットの 2 段ドリル遷移を固定する。libghostty 非依存（純ロジック＋@Observable）。
-final class AgentIconTests: XCTestCase {
+final class AgentIconTests: OrbeTestCase {
 
   // MARK: - curated SF Symbols 実在検証
 

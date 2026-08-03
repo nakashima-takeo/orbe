@@ -5,7 +5,7 @@ import XCTest
 
 /// 設定パレットのアップデートセクション（root 行・ドリルイン・トグル・今すぐ確認の配線）。
 @MainActor
-final class SettingsPaletteUpdateTests: XCTestCase {
+final class SettingsPaletteUpdateTests: OrbeTestCase {
 
   private func makePalette(update: UpdateState?) -> SettingsPaletteModel {
     SettingsPaletteModel(

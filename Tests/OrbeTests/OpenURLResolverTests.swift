@@ -4,7 +4,7 @@ import XCTest
 
 /// `OpenURL.resolve` の分岐を固定する。scheme を持つ URL はそのまま、
 /// scheme 無しはファイルパスとみなし `~` を展開する（ghostty-org/ghostty#8763）。
-final class OpenURLResolverTests: XCTestCase {
+final class OpenURLResolverTests: OrbeTestCase {
   func testSchemeURLPassesThrough() {
     let https = OpenURL.resolve("https://example.com/a?b=1")
     XCTAssertEqual(https.scheme, "https")

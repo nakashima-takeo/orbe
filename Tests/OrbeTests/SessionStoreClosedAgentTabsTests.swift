@@ -10,7 +10,7 @@ import XCTest
 /// TerminalController は window 未接続なら libghostty surface を生成しないため、ここでは純ロジックとして
 /// 検証できる（GhosttyKit ランタイムは起動しない）。スタックのエントリは明示タイトルで区別する
 /// （`tabState().explicitTitle` に載る）。
-final class SessionStoreClosedAgentTabsTests: XCTestCase {
+final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
 
   /// resume を必ず解決する（復元後の葉に agent が残り、snapshot に agent が載る）。
   private let resume: TerminalController.ResumeSpawn = { session in

@@ -11,20 +11,14 @@ import XCTest
 /// メモ化へ「最適化」すると差し替えが効かなくなり、root を注入点として使う上位層のテストが
 /// 静かに嘘をつき始める（同じファイル群の `TitleGlyphs.notoEmoji` が既に焼き付く形をしており、
 /// 模倣される現実的な退行）。
-final class BundledResourcesTests: XCTestCase {
-  private var saved: URL?
+final class BundledResourcesTests: OrbeTestCase {
   private var tmp: URL!
 
   override func setUpWithError() throws {
-    saved = BundledResources.root
-    tmp = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("BundledResourcesTests-\(UUID().uuidString)")
+    try super.setUpWithError()
+    // `BundledResources.root` はハーネスが毎テスト張り直すので、ここで退避・復元はしない。
+    tmp = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("bundles", isDirectory: true)
     try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
-  }
-
-  override func tearDownWithError() throws {
-    BundledResources.root = saved
-    try? FileManager.default.removeItem(at: tmp)
   }
 
   // MARK: - 仕様1: root は解決の唯一の根で、差し替えが即座に伝わる

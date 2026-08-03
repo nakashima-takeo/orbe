@@ -4,21 +4,7 @@ import XCTest
 
 /// `app-state.json` の永続 round-trip を、`preferredLanguage`（初回言語ゲート・起動言語の土台）を
 /// 軸に固定する。全 field Optional の家風（欠落を壊さず読む・部分更新で他 field を保つ）を突く。
-final class AppStatePersistenceTests: XCTestCase {
-  private var tempURL: URL!
-
-  override func setUp() {
-    super.setUp()
-    tempURL = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-appstate-test-\(UUID().uuidString).json")
-    AppStatePersistence.fileURLOverride = tempURL
-  }
-
-  override func tearDown() {
-    AppStatePersistence.fileURLOverride = nil
-    try? FileManager.default.removeItem(at: tempURL)
-    super.tearDown()
-  }
+final class AppStatePersistenceTests: OrbeTestCase {
 
   func testPreferredLanguageRoundTrips() {
     AppStatePersistence.save(AppStateFile(preferredLanguage: "en"))
@@ -63,14 +49,14 @@ final class AppStatePersistenceTests: XCTestCase {
   /// preferredLanguage を持たない旧 JSON もデコード成功（throw せず）し nil を返す＝後方互換。
   func testDecodesLegacyJsonWithoutPreferredLanguage() throws {
     let legacy = #"{"completionInstalled":true}"#
-    try legacy.data(using: .utf8)!.write(to: tempURL)
+    try legacy.data(using: .utf8)!.write(to: appStateFile())
     let loaded = AppStatePersistence.load()
     XCTAssertEqual(loaded?.completionInstalled, true)
     XCTAssertNil(loaded?.preferredLanguage, "欠落キーは nil（デコード失敗にしない）")
   }
 
   func testMissingFileLoadsNil() {
-    // setUp で override 済みだが未 save＝ファイル不在。
+    // ハーネスが配る隔離先へはまだ何も save していない＝ファイル不在。
     XCTAssertNil(AppStatePersistence.load(), "ファイル不在は nil（呼び出し側が既定 fallback）")
   }
 }

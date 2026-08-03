@@ -4,7 +4,7 @@ import XCTest
 
 /// workspace 設定上書き層（`settingsOverride`）の永続検証（libghostty 非依存）。
 /// 新形式（canonical key）の往復・欠落時の後方互換（nil）を固定する。旧 camelCase 移行は `SettingsMigrationTests`。
-final class WorkspaceOverridePersistenceTests: XCTestCase {
+final class WorkspaceOverridePersistenceTests: OrbeTestCase {
 
   private func layer(_ mutate: (inout SettingsLayer) -> Void) -> SettingsLayer {
     var l = SettingsLayer()
@@ -13,15 +13,7 @@ final class WorkspaceOverridePersistenceTests: XCTestCase {
   }
 
   /// settingsOverride（あり/nil 混在）がディスク往復で保たれる。
-  func testOverrideRoundTripThroughFile() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-ov-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+  func testOverrideRoundTripThroughFile() {
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -45,14 +37,7 @@ final class WorkspaceOverridePersistenceTests: XCTestCase {
 
   /// settingsOverride キーを欠いた旧 JSON（version:3）も load 成功し、settingsOverride は nil（上書き無し）。
   func testLegacyJSONWithoutOverrideLoads() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-no-ov-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     let legacy = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,"tabs":[{"tree":{"leaf":{}},"editor":{"open":false,"tool":"tree"}}]}]}
@@ -66,13 +51,7 @@ final class WorkspaceOverridePersistenceTests: XCTestCase {
 
   /// 空 override（全項目除去）は保存で nil へ畳まれる（decode 側の isEmpty 畳み込み）。
   func testEmptyOverrideFoldsToNil() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-empty-ov-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     let file = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,\

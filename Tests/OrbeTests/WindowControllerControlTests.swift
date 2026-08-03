@@ -12,25 +12,7 @@ import XCTest
 ///
 /// workspace の id はプロセス全域の IdGen で採番され予測不能なため、決して直書きせず
 /// `controlListWorkspaces()` の戻りから読む（配列インデックスでなく id で指す契約でもある）。
-final class WindowControllerControlTests: XCTestCase {
-
-  // 永続を実 Application Support から隔離する（テストごとに未作成の一時ファイルを指す）。
-  private var tempStore: URL!
-  override func setUp() {
-    super.setUp()
-    tempStore = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-test-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tempStore
-    SettingsPersistence.fileURLOverride = tempStore.appendingPathExtension("settings")
-    AppStatePersistence.fileURLOverride = tempStore.appendingPathExtension("appstate")
-  }
-  override func tearDown() {
-    WorkspacePersistence.fileURLOverride = nil
-    SettingsPersistence.fileURLOverride = nil
-    AppStatePersistence.fileURLOverride = nil
-    try? FileManager.default.removeItem(at: tempStore)
-    super.tearDown()
-  }
+final class WindowControllerControlTests: OrbeTestCase {
 
   // MARK: - fixtures / helpers
 
@@ -55,7 +37,7 @@ final class WindowControllerControlTests: XCTestCase {
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: activeWorkspace,
       workspaces: workspaces)
-    try JSONEncoder().encode(file).write(to: tempStore)
+    try JSONEncoder().encode(file).write(to: workspacesFile())
     return WindowController()
   }
 

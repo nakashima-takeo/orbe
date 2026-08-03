@@ -3,7 +3,7 @@ import XCTest
 /// 配布物の hook 定義（`app/agent-plugin/`）の event→(matcher, state) 配線を契約として固定する。
 /// テストは同梱物でなくリポジトリ実体の JSON を直接読む（`CompletionShimTests` と同じ形）。
 /// 状態は各 CLI が持つフックの粒度で決まるため、期待表は CLI ごとに別に持つ。
-final class AgentHookWiringTests: XCTestCase {
+final class AgentHookWiringTests: OrbeTestCase {
   /// このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
   private static let pluginRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()  // OrbeTests

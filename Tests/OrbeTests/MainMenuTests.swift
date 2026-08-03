@@ -6,7 +6,7 @@ import XCTest
 /// メインメニューの構造検証。標準 Edit メニューが無いと ⌘V/⌘C/⌘X/⌘A がオーバーレイ入力欄へ届かない
 /// （key equivalent が responder chain へ `paste:` 等を配る仕組みに依存する）ため、その配線契約を固定する。
 /// target=nil（responder chain 配送）と autoenablesItems（first responder に応じた有効化）が肝。
-final class MainMenuTests: XCTestCase {
+final class MainMenuTests: OrbeTestCase {
 
   private func editMenu() -> NSMenu {
     let main = MainMenu.build(appName: "orbe", language: .en)

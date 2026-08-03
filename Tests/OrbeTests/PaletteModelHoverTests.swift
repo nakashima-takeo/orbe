@@ -5,7 +5,7 @@ import XCTest
 /// ホバー選択追従と入力モダリティ・ガードの検証。ガードは「選択を置いた側が意図を持っている間は
 /// 実マウス移動があるまでホバーに奪わせない」で、`selected` への代入経路が増えても効き続ける必要がある。
 @MainActor
-final class PaletteModelHoverTests: XCTestCase {
+final class PaletteModelHoverTests: OrbeTestCase {
   private func model() -> PaletteModel {
     let m = PaletteModel()
     m.rows = (0..<5).map { PaletteModel.RowItem(label: "row\($0)") }

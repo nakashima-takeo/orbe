@@ -17,7 +17,7 @@ import XCTest
 ///
 /// ⑤ 同梱 JuliaMono: font-family に入れず discovery の候補として引かれる前提
 /// （カラーフォント判定されないこと）が保たれていること。
-final class TerminalFontDelegationTests: XCTestCase {
+final class TerminalFontDelegationTests: OrbeTestCase {
 
   /// ① — 記号委譲を導入した動機そのもので、記号委譲行を引くときの錨に使う。
   private let circledOne: UInt32 = 0x2460

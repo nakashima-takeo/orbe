@@ -6,7 +6,7 @@ import XCTest
 /// engine も popup も不要でユニット完結する（`rank`・`record`・`score`・`scopes` が純関数）。
 /// 頻度・recency・完全一致不可侵・ゼロ回帰の 4 点と、二層スコープ（門番なし・静的スコープ維持・
 /// 除外・完全一致不可侵の動的版）を機械検証する。
-final class CompletionLearningTests: XCTestCase {
+final class CompletionLearningTests: OrbeTestCase {
   private let now: Double = 1_000_000
   /// 静的・動的が同値の最小スコープ（root コマンド 1 語のみのバッファ相当）。
   private let scopes = CompletionLearning.LearningScopes(staticScope: "git", dynamicScope: "git")
@@ -231,26 +231,27 @@ final class CompletionLearningTests: XCTestCase {
     XCTAssertNotNil(next.entries[key("fresh")], "新規は残る")
   }
 
-  // MARK: - 永続（round-trip・fileURLOverride）
+  // MARK: - 永続（round-trip）
+
+  /// 学習ストアはハーネスが per-test にできない唯一の永続（`shared` が初回タッチで焼くため
+  /// プロセス級に固定される）。ここで書いたものは後始末しないと実行の最後まで残るので、
+  /// プロセス級を触るのはこのクラスだけ、という事実をここで閉じる。
+  override func tearDownWithError() throws {
+    let url = try XCTUnwrap(CompletionLearning.fileURL)
+    try? FileManager.default.removeItem(at: url)
+    try super.tearDownWithError()
+  }
 
   func testPersistenceRoundTrip() {
-    let url = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("CompletionLearningTests-\(UUID().uuidString).json")
-    CompletionLearning.fileURLOverride = url
-    defer {
-      try? FileManager.default.removeItem(at: url)
-      CompletionLearning.fileURLOverride = nil
-    }
     var store = LearningStore.empty
     store.entries[key("commit")] = LearningEntry(count: 3, lastUsed: now)
     CompletionLearning.save(store)
     XCTAssertEqual(CompletionLearning.load(), store, "保存→読込で一致")
   }
 
-  func testLoadMissingFileReturnsEmpty() {
-    CompletionLearning.fileURLOverride = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("CompletionLearningTests-missing-\(UUID().uuidString).json")
-    defer { CompletionLearning.fileURLOverride = nil }
+  func testLoadMissingFileReturnsEmpty() throws {
+    let url = try XCTUnwrap(CompletionLearning.fileURL)
+    try? FileManager.default.removeItem(at: url)
     XCTAssertEqual(CompletionLearning.load(), .empty, "欠落は空ストア（新規ユーザ回帰なし）")
   }
 

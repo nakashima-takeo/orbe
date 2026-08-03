@@ -7,7 +7,7 @@ import XCTest
 /// newSurfaceCwd は新規タブ/エージェント起動の初期 cwd を必ず確定させる：アクティブペインの cwd
 /// （currentPwd ?? initialCwd）を継ぎ、ペイン不在（0タブ）は workspace の rootPath へ落とす。
 /// nil を surface へ渡すと ghostty がホームへ解決してしまうため、非 Optional であること自体が契約。
-final class SessionStoreNewSurfaceCwdTests: XCTestCase {
+final class SessionStoreNewSurfaceCwdTests: OrbeTestCase {
 
   private func makeStore(rootPath: String, tabs: [TerminalController]) -> SessionStore {
     let ws = Workspace(name: "ws", rootPath: rootPath)

@@ -6,7 +6,7 @@ import XCTest
 /// 均一レイヤの `overlaid`/`apply`/`isEmpty`・`EffectiveSettings` の既定解決・`SettingChange(key:jsonValue:)`
 /// の受理/拒否（registry domain 駆動・null 解除）を固定する。担体が均一な層になったため scopable 集合の
 /// 一致テストは消える（構造上ズレ得ない）。
-final class SettingsResolutionTests: XCTestCase {
+final class SettingsResolutionTests: OrbeTestCase {
 
   // MARK: - SettingsLayer: overlaid（override が非 nil 項目で勝つ）
 

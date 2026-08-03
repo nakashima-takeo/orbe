@@ -5,7 +5,7 @@ import XCTest
 
 /// `ControlKey.parse` の全分岐を固定する。send_key が修飾を黙殺して素の文字を注入しない契約を守る。
 /// libghostty 非依存（keycode/mods 定数の値だけを参照）。
-final class ControlKeyParseTests: XCTestCase {
+final class ControlKeyParseTests: OrbeTestCase {
   /// .text の中身を取り出す（一致しなければ nil）。ControlKey は Equatable を持たないためのヘルパー。
   private func text(_ key: ControlKey?) -> String? {
     if case .text(let s) = key { return s }

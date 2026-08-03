@@ -4,7 +4,7 @@ import XCTest
 
 /// `FolderSuggestions`（純関数のディレクトリ補完）の検証。tmp dir に実 FS を組んで
 /// 前方一致・ディレクトリ限定・git 判定・隠し扱い・不在の各契約を固定する。
-final class FolderSuggestionsTests: XCTestCase {
+final class FolderSuggestionsTests: OrbeTestCase {
   private var root: URL!
   private let fm = FileManager.default
 

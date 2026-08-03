@@ -5,7 +5,7 @@ import XCTest
 /// `LocalizationStore` の複数形分岐と書式差し込みを固定する。網羅（全キーが非空）は
 /// `L10nCompletenessTests` が別途保証するため、ここは「件数で one/other を選ぶ」「引数を
 /// 各言語テンプレートの位置へ埋める」という振る舞いだけを突く。
-final class LocalizationStoreTests: XCTestCase {
+final class LocalizationStoreTests: OrbeTestCase {
 
   private func store(_ language: Language) -> LocalizationStore {
     LocalizationStore(language: language)

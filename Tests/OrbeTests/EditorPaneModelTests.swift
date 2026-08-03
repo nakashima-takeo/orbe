@@ -25,7 +25,7 @@ private final class ActionsSpy: EditorPaneActions {
 }
 
 /// EditorPaneModel の派生純粋ロジック（相対日時・StageBox 3状態・hunk 統合順・履歴レール）のテスト。
-final class EditorPaneModelTests: XCTestCase {
+final class EditorPaneModelTests: OrbeTestCase {
 
   // MARK: - 相対日時
 

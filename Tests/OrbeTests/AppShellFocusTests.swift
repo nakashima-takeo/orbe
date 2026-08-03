@@ -7,7 +7,7 @@ import XCTest
 /// 現在の overlay のモデルへ focus（focusToken を進める）を配ることを固定する。去りゆくカードの field editor
 /// teardown に奪われた first responder を、次 tick でこの bump が取り戻す（WindowController が async で呼ぶ）。
 @MainActor
-final class AppShellFocusTests: XCTestCase {
+final class AppShellFocusTests: OrbeTestCase {
 
   private func makeModel() -> AppShellModel {
     AppShellModel(statusModel: StatusRowModel(), content: NSView())

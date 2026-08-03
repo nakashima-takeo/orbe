@@ -6,25 +6,7 @@ import XCTest
 /// 初回言語ゲートの振る舞いを、実 NSWindow + libghostty ランタイムで結合検証する
 /// （WindowControllerFocusRestoreTests と同型）。ゲートは init の showFirstRunFlow で走るため、
 /// app-state を組んでから WindowController を構築し、`model.languageSelect` の有無で観測する。
-final class LanguageGateTests: XCTestCase {
-  private var tempStore: URL!
-
-  override func setUp() {
-    super.setUp()
-    tempStore = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-langgate-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tempStore
-    SettingsPersistence.fileURLOverride = tempStore.appendingPathExtension("settings")
-    AppStatePersistence.fileURLOverride = tempStore.appendingPathExtension("appstate")
-  }
-
-  override func tearDown() {
-    WorkspacePersistence.fileURLOverride = nil
-    SettingsPersistence.fileURLOverride = nil
-    AppStatePersistence.fileURLOverride = nil
-    try? FileManager.default.removeItem(at: tempStore)
-    super.tearDown()
-  }
+final class LanguageGateTests: OrbeTestCase {
 
   /// preferredLanguage 未選択（app-state 不在）なら、初回起動で言語選択画面を出す。
   func testNewUserShowsLanguageSelect() {

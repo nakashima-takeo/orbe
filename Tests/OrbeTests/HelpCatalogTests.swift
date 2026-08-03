@@ -6,7 +6,7 @@ import XCTest
 /// combo が物理配列に実在し、トップ厳選がカテゴリ行の部分集合で、表示キーが全体で一意である
 /// ことを固定する（どれかが崩れるとキーボード点灯・絞り込み・行 identity が静かに壊れる）。
 /// 例外として、タブ左右移動の「矢印が主・括弧が従」だけは提示の意思決定そのものなので具体キーで固定する。
-final class HelpCatalogTests: XCTestCase {
+final class HelpCatalogTests: OrbeTestCase {
   private var keyboardIDs: Set<String> {
     Set(HelpCatalog.keyboard.flatMap { $0.map(\.id) })
   }

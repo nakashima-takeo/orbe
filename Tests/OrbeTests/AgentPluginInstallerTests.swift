@@ -6,7 +6,7 @@ import XCTest
 /// 名前はビルド時にチャネルから導出されるため Swift には焼けず、`plugins/` 直下の唯一の
 /// サブディレクトリ名として読む。この 1 つの名前を marketplace 登録・登録済みの記録・
 /// channel の置き場所が共有するので、曖昧なパッケージでは nil を返す（誤った名前で登録しない）。
-final class AgentPluginInstallerTests: XCTestCase {
+final class AgentPluginInstallerTests: OrbeTestCase {
   private var pkg: URL!
 
   override func setUpWithError() throws {

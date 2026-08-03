@@ -6,7 +6,7 @@ import XCTest
 
 /// chrome 各面へ配る背景透過/ブラー値の導出（`ChromeTranslucency.resolve`）の検証。
 /// 窓透過判定（`shouldBeTranslucent`）と同じ材料から effectiveOpacity/translucent/blur を畳む純関数。
-final class ChromeTranslucencyTests: XCTestCase {
+final class ChromeTranslucencyTests: OrbeTestCase {
 
   /// 透過時（percent<100・非フルスクリーン）は effectiveOpacity=percent/100・translucent=true。
   func testTranslucentScalesOpacityByPercent() {

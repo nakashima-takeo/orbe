@@ -8,25 +8,7 @@ import XCTest
 /// パレット/フォーム表示中・改名編集中には暴発しない（＝入力を横取りしない）契約。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
-final class WindowControllerWindowCommandTests: XCTestCase {
-
-  // 永続を実 Application Support から隔離する（テストごとに未作成の一時ファイルを指す）。
-  private var tempStore: URL!
-  override func setUp() {
-    super.setUp()
-    tempStore = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-test-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tempStore
-    SettingsPersistence.fileURLOverride = tempStore.appendingPathExtension("settings")
-    AppStatePersistence.fileURLOverride = tempStore.appendingPathExtension("appstate")
-  }
-  override func tearDown() {
-    WorkspacePersistence.fileURLOverride = nil
-    SettingsPersistence.fileURLOverride = nil
-    AppStatePersistence.fileURLOverride = nil
-    try? FileManager.default.removeItem(at: tempStore)
-    super.tearDown()
-  }
+final class WindowControllerWindowCommandTests: OrbeTestCase {
 
   /// 単一 leaf タブを持つ workspace をディスクへ書いてから復元済み WindowController を返す。
   private func restoreSingleTab() throws -> WindowController {
@@ -37,7 +19,7 @@ final class WindowControllerWindowCommandTests: XCTestCase {
           name: "main", rootPath: "/tmp", activeTab: 0,
           tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)])
       ])
-    try JSONEncoder().encode(file).write(to: tempStore)
+    try JSONEncoder().encode(file).write(to: workspacesFile())
     // preferredLanguage を確定させ、初回言語選択 overlay（languageSelect）で overlay==.none の前提が
     // 崩れないようにする（returning user 化）。
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))

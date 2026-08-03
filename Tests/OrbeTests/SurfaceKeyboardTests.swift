@@ -9,7 +9,7 @@ import XCTest
 ///   ここがずれると Option+Enter 等の翻訳が静かに壊れる（人のレビューなしで漏れる契約）。
 /// - `textCarriesToKey`: 制御文字を `key.text` に載せない 0x20 ガード。Alt+Enter が素の Enter に
 ///   潰れないための要。
-final class SurfaceKeyboardTests: XCTestCase {
+final class SurfaceKeyboardTests: OrbeTestCase {
 
   // MARK: - eventModifierFlags（ghostty mods → NSEvent フラグ逆変換）
 

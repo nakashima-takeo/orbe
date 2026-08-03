@@ -10,7 +10,7 @@ import XCTest
 /// 各ペインは SurfaceScrollView（ネイティブスクロールバー付き）でラップされてツリーに置かれる。
 /// よって分割の arrangedSubview / rootContainer 直下の葉は SurfaceScrollView で、
 /// その中の SurfaceView は `.surfaceView` で取り出す。
-final class TerminalControllerTests: XCTestCase {
+final class TerminalControllerTests: OrbeTestCase {
   private func rootSplit(_ tc: TerminalController) -> NSSplitView? {
     tc.rootContainer.subviews.first as? NSSplitView
   }

@@ -10,7 +10,7 @@ import XCTest
 /// `orbe-mcp` は何のエラーも出さずバイナリだけが消える。L4 のテストは「バイナリが無い」ことを
 /// 「Orbe が動いていない」ことと区別できないため、原因の見えない失敗になるか、存在チェックで握り潰して
 /// いれば黙って緑に化ける。ここが先に落ちればその切り分けが要らない。
-final class BuiltExecutablesTests: XCTestCase {
+final class BuiltExecutablesTests: OrbeTestCase {
   /// L4 が使うバイナリ位置の解決規則: xctest バンドルの親ディレクトリ。
   private var builtProductsDirectory: URL {
     Bundle(for: BuiltExecutablesTests.self).bundleURL.deletingLastPathComponent()

@@ -4,7 +4,7 @@ import XCTest
 
 /// `LineFramer` の行分割・持ち越し・空行スキップ・受信上限を固定する。
 /// 非ブロッキング read のドレインで分割到着しても framing が壊れない契約を守る。
-final class ControlLineFramerTests: XCTestCase {
+final class ControlLineFramerTests: OrbeTestCase {
   /// Outcome.lines を [String] へ。overflow なら nil。
   private func lines(_ outcome: LineFramer.Outcome) -> [String]? {
     guard case .lines(let data) = outcome else { return nil }

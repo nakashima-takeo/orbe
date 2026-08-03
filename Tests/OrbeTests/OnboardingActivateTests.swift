@@ -5,7 +5,7 @@ import XCTest
 /// オンボーディング系カード（言語選択・CLI 選択）の決定経路。行タップは選択移動で終わらず、
 /// ↵ と同じ funnel（`activate()`）を通ってその場で確定する。
 @MainActor
-final class OnboardingActivateTests: XCTestCase {
+final class OnboardingActivateTests: OrbeTestCase {
 
   // MARK: - CLI 選択（OnboardingModel）
 

@@ -5,7 +5,7 @@ import XCTest
 /// リリースノート（appcast description の Markdown）→ 描画要素の変換規則。
 /// 「意味は入力の内容からだけ決まる」——分類は見出しの語から決まり出現順には依らず、
 /// 段落は項目にならず、中身のない要素は積まれない、を固定する。
-final class UpdateNotesTests: XCTestCase {
+final class UpdateNotesTests: OrbeTestCase {
 
   private func plain(_ element: UpdateNotes.Element) -> String { String(element.text.characters) }
 
