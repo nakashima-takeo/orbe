@@ -73,12 +73,12 @@ updated: 2026-08-03
 
 ### L3 wire 契約
 
-- **担保する**: 制御プロトコルの語。method 名・params キー・エラーコード（`-32601` / `-32602` / `-32004` / `-32000` / `-32005`）・`wait_for_event` のフィルタとタイムアウト・行 framing・不正 JSON の扱い
-- **担保しない**: ドメインの振る舞い（L2）・実バイナリの引数解釈（L4）
-- **起動と差し替え**: **socketpair 上の実 `Connection`**。テストが socketpair の片端を `Connection` に渡し、もう片端から行を書いて応答を読む。`ControlTarget` は Fake。path を持たないので `sun_path` 制約を受けず、`ControlServer.shared` にも触らないため L4 と競合しない
-- **データ**: Fake target が返す値をテストが決める
+- **担保する**: 制御プロトコルの語。method 名・params キー・エラーコード（`-32700` / `-32600` / `-32601` / `-32602` / `-32004` / `-32005` / `-32000`）・`wait_for_event` のフィルタとタイムアウト・行 framing・不正入力の扱い
+- **担保しない**: ドメインの振る舞い（L2）・実バイナリの引数解釈（L4）。値が libghostty surface へ吸い込まれて観測面を持たない params（`scrollback`・`advance`・`buffer`/`cursor`）も L3 の外で、受け皿は [roadmap.md](roadmap.md) が持つ
+- **起動と差し替え**: **socketpair 上の実 `Connection`**。テストが socketpair の片端を `ControlServer.shared.adopt(fd:)` へ載せ、もう片端から行を書いて応答を読む。`ControlTarget` は Fake。listener は張らない（`start()` を呼ばない）ので、実 socket に bind する L4 と待ち受けを奪い合わず、path も持たないため `sun_path` 制約を受けない。`ControlServer.init()` は private なのでインスタンスは `.shared` を使う
+- **データ**: Fake target が返す値をテストが決める。宛先解決に使う `SurfaceView` は window に載せない裸のビューで、libghostty surface は生まれない
 - **実行**: CI 全量
-- **ツール**: XCTest ＋ swift-snapshot-testing の `.json` 戦略（応答ペイロードのゴールデン）
+- **ツール**: XCTest
 
 ### L4 プロセス境界・制御チャネル導通
 
