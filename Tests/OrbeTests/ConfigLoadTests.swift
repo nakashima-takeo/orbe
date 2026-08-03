@@ -16,6 +16,7 @@ final class ConfigLoadTests: OrbeTestCase {
 
   private var savedBundledRoot: URL?
   private var savedUserOverride: URL?
+  private var savedXdgConfigHome: String?
   private var dir: URL!
 
   override func setUpWithError() throws {
@@ -24,12 +25,18 @@ final class ConfigLoadTests: OrbeTestCase {
     _ = Ghostty.shared
     savedBundledRoot = BundledResources.root
     savedUserOverride = Config.userFileURLOverride
+    savedXdgConfigHome = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"]
     dir = try XCTUnwrap(TestIsolation.caseDir)
   }
 
   override func tearDownWithError() throws {
     BundledResources.root = savedBundledRoot
     Config.userFileURLOverride = savedUserOverride
+    if let savedXdgConfigHome {
+      setenv("XDG_CONFIG_HOME", savedXdgConfigHome, 1)
+    } else {
+      unsetenv("XDG_CONFIG_HOME")
+    }
     try super.tearDownWithError()
   }
 
@@ -72,6 +79,24 @@ final class ConfigLoadTests: OrbeTestCase {
     }
   }
 
+  /// ghostty の既定探索（`ghostty_config_load_default_files`）が走ったら必ず値が入る罠を
+  /// XDG 脚へ仕掛ける。走らなければ値は入らない——罠の有無で「呼ばれたか」を観測できる。
+  ///
+  /// 実ホームには触らない。`XDG_CONFIG_HOME` は libghostty が libc の `getenv` で毎回引き直すので
+  /// プロセス内から曲げられる。もう一方の脚（Application Support）は `NSFileManager` 由来で
+  /// `HOME` を書き換えても曲がらないため、罠は XDG 側にのみ置ける。
+  private func plantDefaultDiscoveryTrap(fontSize: Int) throws {
+    let xdg = dir.appendingPathComponent("xdg", isDirectory: true)
+    let ghostty = xdg.appendingPathComponent("ghostty", isDirectory: true)
+    try FileManager.default.createDirectory(at: ghostty, withIntermediateDirectories: true)
+    // 現行の探索名と 1.3.0 以前の名前の両方に置く（どちらが読まれても罠が発火する）。
+    for name in ["config.ghostty", "config"] {
+      try "font-size = \(fontSize)\n".write(
+        to: ghostty.appendingPathComponent(name), atomically: true, encoding: .utf8)
+    }
+    setenv("XDG_CONFIG_HOME", xdg.path, 1)
+  }
+
   private func loadedFontSize() throws -> Float {
     let cfg = Config.load()
     defer { ghostty_config_free(cfg) }
@@ -107,5 +132,32 @@ final class ConfigLoadTests: OrbeTestCase {
 
     try setUserLayer(nil)
     XCTAssertEqual(try loadedFontSize(), 11, "層2 も無ければ層1 が残る")
+  }
+
+  // MARK: - 既定探索の遮断
+
+  /// `userFileURLOverride` が非 nil なら、層2 はその 1 ファイルに限定され、ghostty 自身の
+  /// 既定探索（`~/.config/ghostty` と Application Support）は走らない。
+  ///
+  /// 隔離ハーネスの ghostty 遮断はこの一点に全乗りしている。ここが崩れると `swift test` が
+  /// 開発者の実 ghostty 設定を読み始め、テストは「手元のマシンの状態」を測るものへ変質する。
+  /// 既存の後勝ちテストでは検出できない——層2 を不在にしたときに値が入らないことは
+  /// 「既定探索が走らなかった」ことを意味せず、罠を置いて初めて区別がつく。
+  func testUserOverrideBlocksGhosttyDefaultDiscovery() throws {
+    let trapFontSize: Float = 37
+    try plantDefaultDiscoveryTrap(fontSize: Int(trapFontSize))
+    try setDefaultsLayer(nil)
+    try setGuiLayer(nil)
+
+    // override が実ファイルを指すとき: 層2 はそのファイルだけ。罠は入らない。
+    try setUserLayer("font-size = 12\n")
+    XCTAssertEqual(try loadedFontSize(), 12, "override が指す 1 ファイルが層2 になる")
+
+    // override が不在ファイルを指すとき（ハーネスが張るのはこの形）: 層2 は空のまま。
+    // 既定探索へフォールバックしないので、罠の値も入らない。
+    try setUserLayer(nil)
+    XCTAssertNotEqual(
+      try loadedFontSize(), trapFontSize,
+      "override が不在ファイルでも既定探索へ落ちない（落ちれば実 user 設定が漏れる）")
   }
 }
