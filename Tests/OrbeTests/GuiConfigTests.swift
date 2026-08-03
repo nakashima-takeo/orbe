@@ -6,7 +6,10 @@ import XCTest
 /// 入力型が `EffectiveSettings` へ替わっても、同一設定値に対する**出力バイトは現行と完全一致**する。
 final class GuiConfigTests: OrbeTestCase {
   private func content() -> String {
-    guard let url = GuiConfig.fileURL else { return "<no-url>" }
+    guard let url = GuiConfig.fileURL else {
+      XCTFail("ハーネスが gui.conf の隔離先を配っていない")
+      return ""
+    }
     return (try? String(contentsOf: url, encoding: .utf8)) ?? "<no-file>"
   }
 

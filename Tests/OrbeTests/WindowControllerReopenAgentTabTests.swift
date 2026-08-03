@@ -20,9 +20,6 @@ import XCTest
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerReopenAgentTabTests: OrbeTestCase {
 
-  /// ハーネスが配る隔離済み workspaces.json。復元経路の arrange が実ファイルを置く先。
-  private func storeURL() throws -> URL { try XCTUnwrap(WorkspacePersistence.fileURL) }
-
   override func setUp() {
     super.setUp()
     // 言語確定済み（returning user）として起動し、初回言語選択 overlay で window コマンドが
@@ -56,7 +53,7 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
       workspaces: [
         WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: tabs)
       ])
-    try JSONEncoder().encode(file).write(to: storeURL())
+    try JSONEncoder().encode(file).write(to: workspacesFile())
     return WindowController()
   }
 

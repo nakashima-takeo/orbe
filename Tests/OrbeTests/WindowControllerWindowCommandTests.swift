@@ -10,9 +10,6 @@ import XCTest
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerWindowCommandTests: OrbeTestCase {
 
-  /// ハーネスが配る隔離済み workspaces.json。復元経路の arrange が実ファイルを置く先。
-  private func storeURL() throws -> URL { try XCTUnwrap(WorkspacePersistence.fileURL) }
-
   /// 単一 leaf タブを持つ workspace をディスクへ書いてから復元済み WindowController を返す。
   private func restoreSingleTab() throws -> WindowController {
     let file = WorkspacesFile(
@@ -22,7 +19,7 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
           name: "main", rootPath: "/tmp", activeTab: 0,
           tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)])
       ])
-    try JSONEncoder().encode(file).write(to: storeURL())
+    try JSONEncoder().encode(file).write(to: workspacesFile())
     // preferredLanguage を確定させ、初回言語選択 overlay（languageSelect）で overlay==.none の前提が
     // 崩れないようにする（returning user 化）。
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))

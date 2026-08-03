@@ -4,8 +4,6 @@ import XCTest
 
 /// settings.json（新形式 v1）と app-state.json の読み書き検証。旧形式移行は `SettingsMigrationTests`。
 final class SettingsPersistenceTests: OrbeTestCase {
-  /// ハーネスが配る隔離済み settings.json（生バイトを直に読み書きする検証で使う）。
-  private func settingsFile() throws -> URL { try XCTUnwrap(SettingsPersistence.fileURL) }
 
   /// 新形式レイヤの round-trip（全型が保たれる）。
   func testLayerRoundTrip() {

@@ -12,9 +12,6 @@ import XCTest
 /// 直書きせず `controlListWorkspaces()` / `controlListPanes()` の戻りから読む。
 final class WindowControllerPaneTabControlTests: OrbeTestCase {
 
-  /// ハーネスが配る隔離済み workspaces.json。復元経路の arrange が実ファイルを置く先。
-  private func storeURL() throws -> URL { try XCTUnwrap(WorkspacePersistence.fileURL) }
-
   // MARK: - fixtures / helpers
 
   /// 単一 leaf タブを持つ workspace 状態。
@@ -43,7 +40,7 @@ final class WindowControllerPaneTabControlTests: OrbeTestCase {
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: activeWorkspace,
       workspaces: workspaces)
-    try JSONEncoder().encode(file).write(to: storeURL())
+    try JSONEncoder().encode(file).write(to: workspacesFile())
     return WindowController()
   }
 

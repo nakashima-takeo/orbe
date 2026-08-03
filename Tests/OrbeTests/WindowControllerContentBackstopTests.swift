@@ -11,9 +11,6 @@ import XCTest
 /// 重要: WindowController の構築は libghostty ランタイムを起動する（GhosttyKit 必須）。
 final class WindowControllerContentBackstopTests: OrbeTestCase {
 
-  /// ハーネスが配る隔離済み workspaces.json。復元経路の arrange が実ファイルを置く先。
-  private func storeURL() throws -> URL { try XCTUnwrap(WorkspacePersistence.fileURL) }
-
   /// 通常起動（タブあり）では backstop を出さない（surface が地を塗る＝二重 veil 回避）。
   func testTabbedWorkspaceHasNoBackstop() {
     let wc = WindowController()
@@ -30,7 +27,7 @@ final class WindowControllerContentBackstopTests: OrbeTestCase {
           tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)]),
         WorkspaceState(name: "empty", rootPath: "/tmp", activeTab: 0, tabs: []),  // 0タブ（休眠）
       ])
-    try JSONEncoder().encode(file).write(to: storeURL())
+    try JSONEncoder().encode(file).write(to: workspacesFile())
 
     let wc = WindowController()
     XCTAssertFalse(wc.model.contentIsEmpty, "復元アクティブ（タブあり）は backstop なし")

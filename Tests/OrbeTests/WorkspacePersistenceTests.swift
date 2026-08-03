@@ -68,8 +68,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   }
 
   /// windowSize がディスク往復で保たれる。
-  func testWindowSizeRoundTripThroughFile() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+  func testWindowSizeRoundTripThroughFile() {
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -139,8 +138,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   }
 
   /// エージェントセッション（command + sessionId）がディスク往復で保たれる。
-  func testAgentSessionRoundTripThroughFile() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+  func testAgentSessionRoundTripThroughFile() {
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -245,8 +243,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   // MARK: - ① 明示タイトル（TabState）の永続
 
   /// explicitTitle がディスク往復で保たれる。
-  func testExplicitTitleRoundTripThroughFile() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+  func testExplicitTitleRoundTripThroughFile() {
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [

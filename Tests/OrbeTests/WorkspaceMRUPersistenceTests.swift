@@ -7,8 +7,7 @@ import XCTest
 final class WorkspaceMRUPersistenceTests: OrbeTestCase {
 
   /// lastUsedAt（あり/nil 混在）がディスク往復で保たれる。
-  func testLastUsedAtRoundTripThroughFile() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+  func testLastUsedAtRoundTripThroughFile() {
     let stamp = Date(timeIntervalSinceReferenceDate: 800_000_000)
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,

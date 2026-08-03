@@ -7,8 +7,7 @@ import XCTest
 final class WorkspaceEditorPersistenceTests: OrbeTestCase {
 
   /// editor の開閉・ツール（非既定値）がディスク往復で保たれる。
-  func testEditorTabStateRoundTripThroughFile() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+  func testEditorTabStateRoundTripThroughFile() {
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [

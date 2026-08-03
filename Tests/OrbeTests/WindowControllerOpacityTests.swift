@@ -203,7 +203,10 @@ final class WindowControllerOpacityTests: OrbeTestCase {
   }
 
   private func guiConfContent() -> String {
-    guard let url = GuiConfig.fileURL else { return "<no-url>" }
+    guard let url = GuiConfig.fileURL else {
+      XCTFail("ハーネスが gui.conf の隔離先を配っていない")
+      return ""
+    }
     return (try? String(contentsOf: url, encoding: .utf8)) ?? "<no-file>"
   }
 }

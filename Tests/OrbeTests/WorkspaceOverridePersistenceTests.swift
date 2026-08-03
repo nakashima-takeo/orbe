@@ -13,8 +13,7 @@ final class WorkspaceOverridePersistenceTests: OrbeTestCase {
   }
 
   /// settingsOverride（あり/nil 混在）がディスク往復で保たれる。
-  func testOverrideRoundTripThroughFile() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+  func testOverrideRoundTripThroughFile() {
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [

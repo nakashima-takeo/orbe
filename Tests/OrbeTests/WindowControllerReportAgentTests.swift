@@ -13,9 +13,6 @@ import XCTest
 /// libghostty ランタイムを起動する（ヘッドレスな純ロジック検証ではない）。
 final class WindowControllerReportAgentTests: OrbeTestCase {
 
-  /// ハーネスが配る隔離済み workspaces.json。復元経路の arrange が実ファイルを置く先。
-  private func storeURL() throws -> URL { try XCTUnwrap(WorkspacePersistence.fileURL) }
-
   /// `makeKey` で前面化した窓。次のテスト（背面前提）へ key を持ち越さないため tearDown で下ろす。
   private var openedWindows: [NSWindow] = []
   override func tearDown() {
@@ -34,7 +31,7 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
           name: "main", rootPath: "/tmp", activeTab: 0,
           tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)])
       ])
-    try JSONEncoder().encode(file).write(to: storeURL())
+    try JSONEncoder().encode(file).write(to: workspacesFile())
     let wc = WindowController()
     let pane = try XCTUnwrap(wc.current.tabs.first?.controlAllPanes().first)
     return (wc, pane)
@@ -50,7 +47,7 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
       workspaces: [
         WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [tab, tab])
       ])
-    try JSONEncoder().encode(file).write(to: storeURL())
+    try JSONEncoder().encode(file).write(to: workspacesFile())
     let wc = WindowController()
     XCTAssertEqual(wc.current.tabs.count, 2)
     let panes = try wc.current.tabs.map { try XCTUnwrap($0.controlAllPanes().first) }
@@ -68,7 +65,7 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
         WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [tab]),
         WorkspaceState(name: "dormant", rootPath: "/tmp", activeTab: 0, tabs: [tab]),
       ])
-    try JSONEncoder().encode(file).write(to: storeURL())
+    try JSONEncoder().encode(file).write(to: workspacesFile())
     let wc = WindowController()
     let dormant = try XCTUnwrap(wc.workspaces.last)
     XCTAssertFalse(dormant.activated, "前提: 復元直後の未切替 workspace は休眠")

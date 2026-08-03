@@ -6,9 +6,6 @@ import XCTest
 /// 新形式への**無損失自動移行**を固定する。移行は all-or-nothing（旧ファイル全体の decode 成功時のみ変換）で、
 /// 既存ユーザーの設定・WS 上書きを 1 つも失わないことを実 JSON fixture で担保する。
 final class SettingsMigrationTests: OrbeTestCase {
-  /// ハーネスが配る隔離済みファイル（旧形式 fixture を直に置き、移行後の生バイトを読む）。
-  private func settingsFile() throws -> URL { try XCTUnwrap(SettingsPersistence.fileURL) }
-  private func workspacesFile() throws -> URL { try XCTUnwrap(WorkspacePersistence.fileURL) }
 
   // MARK: - settings.json 旧形式 → 新形式（設定 9 項目＋アプリ状態 3 項目）
 

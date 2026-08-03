@@ -14,9 +14,6 @@ import XCTest
 /// `controlListWorkspaces()` の戻りから読む（配列インデックスでなく id で指す契約でもある）。
 final class WindowControllerControlTests: OrbeTestCase {
 
-  /// ハーネスが配る隔離済み workspaces.json。復元経路の arrange が実ファイルを置く先。
-  private func storeURL() throws -> URL { try XCTUnwrap(WorkspacePersistence.fileURL) }
-
   // MARK: - fixtures / helpers
 
   /// resume 未対応 agent を載せた leaf（復元時は素シェル化するが restoredAgentCount には数える）。
@@ -40,7 +37,7 @@ final class WindowControllerControlTests: OrbeTestCase {
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: activeWorkspace,
       workspaces: workspaces)
-    try JSONEncoder().encode(file).write(to: storeURL())
+    try JSONEncoder().encode(file).write(to: workspacesFile())
     return WindowController()
   }
 
