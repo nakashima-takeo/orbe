@@ -27,9 +27,19 @@ custom_rules:
     name: "テストの基底は OrbeTestCase"
     included: ".*/Tests/OrbeTests/.*\\.swift"
     excluded: ".*/TestIsolation\\.swift"
-    # `:` の後の `\s*` は改行にも当たる（swift format が 100 桁超を `:` の後で折り返す形を捕まえる）。
-    regex: ":\\s*XCTestCase\\b"
+    # 継承節に限定する。`XCTestCase` を引数型に取るヘルパやコメント中の言及は対象外。
+    # `\s*` は改行にも当たる（swift format が 100 桁超を `:` の後で折り返す形を捕まえる）。
+    regex: "class\\s+\\w+\\s*:\\s*XCTestCase\\b"
     message: "テストクラスは OrbeTestCase を継承する（隔離ハーネスの点火点）"
+    severity: error
+
+  xctest_only_runner:
+    name: "ランナーは XCTest 一本"
+    included: ".*/Tests/.*\\.swift"
+    # swift-testing は XCTest とは別プロセスで走るため `OrbeTestCase` の点火が届かず、
+    # 隔離ゼロで開発者の実 state dir・実 ghostty 設定を読み書きする。
+    regex: "^import Testing$"
+    message: "swift-testing は使わない（隔離ハーネスを通らない）。XCTest ＋ OrbeTestCase を使う"
     severity: error
 
 identifier_name:
