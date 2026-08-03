@@ -176,10 +176,22 @@ final class ControlServer {
   // MARK: - ルーティング（queue 上で 1 行受信ごとに）
 
   func handle(line: Data, from conn: Connection) {
-    guard
-      let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-      let method = obj["method"] as? String
-    else { return }
+    // 読めない行を黙って捨てない。クライアント（`orb` / MCP ブリッジ）は 1 行応答を待って
+    // 読むので、無応答で return するとそのままハングになる。JSON-RPC 2.0 どおり 2 コードへ割る
+    // ——「JSON テキストとして読めない」と「JSON だがリクエストオブジェクトでない」は別の失敗で、
+    // 配列を送ったことを parse error と呼ぶのは嘘になる。
+    guard let value = try? JSONSerialization.jsonObject(with: line) else {
+      conn.respond(id: nil, result: .failure(ControlError(code: -32700, message: "parse error")))
+      return
+    }
+    guard let obj = value as? [String: Any], let method = obj["method"] as? String else {
+      // id は取れれば返す（配列や最上位スカラには無い）。obj を先に束ねると
+      // 「method 欠落」と「非オブジェクト」を分けられなくなる。
+      conn.respond(
+        id: (value as? [String: Any])?["id"],
+        result: .failure(ControlError(code: -32600, message: "invalid request")))
+      return
+    }
     let id = obj["id"]
     let params = obj["params"] as? [String: Any] ?? [:]
 
