@@ -33,7 +33,7 @@ updated: 2026-08-03
 
 | # | スライス | 内容 | 依存 | 状態 | テスト仕様書 |
 |---|---|---|---|---|---|
-| 0 | 基盤足場 | 単一ハーネス（`OrbeTestCase` が点火し `XCTestObservation` が毎テスト隔離。state dir は `ORBE_STATE_DIR` を 90 バイト以下の temp へ向けて隔離し、`control.sock` も自動で追従。永続 4 種と ghostty 設定探索先の override）。`Bundle.main` 直参照 3 箇所を `BundledResources` へ集約。ビルド済み CLI 実行体がテストバンドルの隣にある前提と、その解決規則の固定 | — | 完了 | — |
+| 0 | 基盤足場 | 単一ハーネス（`OrbeTestCase` が点火し `XCTestObservation` が毎テスト隔離。state dir は `ORBE_STATE_DIR` を 90 バイト以下の temp へ向けて隔離し、`control.sock` も自動で追従。永続・同梱リソース根・ghostty 設定探索先の override を毎テスト張り直す。補完の学習ストアだけはプロセス級固定で、学習状態はテスト間で持ち越される）。`Bundle.main` 直参照 3 箇所を `BundledResources` へ集約。ビルド済み CLI 実行体がテストバンドルの隣にある前提と、その解決規則の固定 | — | 完了 | — |
 | 1 | wire 契約 | 制御プロトコルの語を socketpair 上の実 `Connection` で固める。method 名・params キー・エラーコード・`wait_for_event`・framing・不正 JSON。#50 #62 | 0 | 未着手 | — |
 | 2 | プロセス境界 | 実 `orbe-cli` / `orbe-mcp` / `orbe-report` を subprocess で駆動。引数解釈・終了コード・stdout・hook 実経路・bare `orb` の PATH 解決。`dev-verify.sh` を置換して廃止。#63 #64 #74 | 0, 1 | 未着手 | — |
 | 3 | 復元と移行 | 保存 → 復元 → 再保存のラウンドトリップ。`TabState` decode の非対称（`editor` だけ必須で、無いと全 workspace 消失）・範囲外クランプ・デバウンス。#56 #68 #54 | 0 | 未着手 | — |
@@ -55,4 +55,6 @@ updated: 2026-08-03
 | `WindowController.init` の分解（#75） | 結合層の観測面が `window.title` 止まりの根本原因。70 行で永続 3 種ロード・libghostty 起動・login shell subprocess 起動・プラグイン実体化を全部やる | 6 |
 | `MenuBarController` の判断部切り出し（#78） | 295 行の時間ロジックが未検証。`MenuBarArrivalDriver` と同じ時刻注入の形へ | 7 |
 | `GitRepo` への runner 注入点 | `GitRunner.shared` 直参照 25 箇所。git の異常系を駆動できない | 10 |
+| `UpdaterService` への `UserDefaults` 注入点 | standard domain は cfprefsd がユーザーレコードで解決するため HOME 差し替えでは曲がらず、ハーネスの隔離が届かない。`swift test` が実ホームの `com.apple.dt.xctest.tool.plist` を書き、逆に開発者マシンのシステム設定（`AppleInterfaceStyle`・`AppleActionOnDoubleClick`）がテストへ入り込む | 6 |
+| `CompletionLearning.shared` のリセット可能化 | `private init` が初回タッチで in-memory ストアを焼くためテスト間でリセットできない。ハーネスはプロセス級固定で回避しており、per-test の学習状態が要るスライスで必要になる | 7 |
 | `DevServerProbe` / `CompletionList` / `StatusRowView+Reorder` の純ロジック切り出し | 数値契約が `private` や `body` 内ローカルに埋まり、PNG を見る以外に検証手段が無い | 7 |
