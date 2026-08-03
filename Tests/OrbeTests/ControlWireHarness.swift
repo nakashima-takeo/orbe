@@ -81,6 +81,20 @@ final class ControlWire {
     sendRaw(data + Data([0x0A]), file: file, line: line)
   }
 
+  /// 要求を 1 件送り、その応答を読む。応答の id が送った id と違えば失敗させる——表駆動で
+  /// 何十件も往復するとき、1 件の取りこぼしが以降すべてを 1 つずれた応答で緑にしてしまう。
+  func request(
+    id: Int, method: String, params: [String: Any] = [:],
+    file: StaticString = #filePath, line: UInt = #line
+  ) -> [String: Any]? {
+    send(["jsonrpc": "2.0", "id": id, "method": method, "params": params], file: file, line: line)
+    let response = nextResponse(file: file, line: line)
+    XCTAssertEqual(
+      response?["id"] as? Int, id,
+      "\(method) の応答 id がずれた（行と応答の対応が崩れている）", file: file, line: line)
+    return response
+  }
+
   /// バイト列をそのまま送る（不正 JSON・不正 UTF-8・行の分割送信用）。改行は付けない。
   func sendRaw(_ bytes: Data, file: StaticString = #filePath, line: UInt = #line) {
     let deadline = Date().addingTimeInterval(Self.deadlineSeconds)
