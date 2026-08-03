@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe・現状）
 description: Unix socket 上の JSON-RPC でペイン/タブ/workspace を操作する out-of-band 制御チャネルと MCP ブリッジ・ツール群・libghostty 経路・mount 境界
-updated: 2026-08-01
+updated: 2026-08-03
 ---
 
 外部やエージェントが Orbe 全体を操作する out-of-band 制御チャネル。エージェント状態報告（[agent-notify](agent-notify.md) の `report_agent`）もこのチャネルに集約する。
@@ -10,6 +10,19 @@ updated: 2026-08-01
 Unix domain socket `control.sock`（workspaces.json と並置・パーミッション 0600）。置き場は `StateDir` が一元解決し、`ORBE_STATE_DIR`（非空）設定時はその dir 直下（検証用の隔離インスタンス。[persistence](persistence.md) と同じ解決）。改行区切り JSON-RPC 2.0。プロセスに 1 つ、起動は `applicationDidFinishLaunching`・終了で socket を unlink。accept/受信/行分割/応答/イベント配信/timeout は専用シリアルキュー 1 本上で直列実行、domain 操作は main へ hop（libghostty surface API と AppKit は main 規律）。AF_UNIX の sun_path 長上限を超えるパスでは無効化。
 
 接続 fd は accept 後に非ブロッキング化し、I/O がキューをブロックしない（詰まった 1 接続が accept・他接続・event 配信・timeout を巻き添えにしない）。送信は per-connection 出力バッファ経由で、書込不可は書込可能まで待機・EINTR はリトライ・EPIPE 等は切断。出力滞留が上限を超えた接続は切断する。受信は改行が来ないまま 1 行が上限を超えた接続を切断する（メモリ枯渇防止）。
+
+## エラー
+失敗は `error.code` で伝える。この語彙は `ControlWireTests` 群が socketpair 上の実 `Connection` で 1 対 1 に固定する。
+
+- `-32700` 行が JSON テキストとして読めない（壊れた JSON・不正 UTF-8・最上位スカラ）。`id` は null。
+- `-32600` JSON だがリクエストオブジェクトでない（配列・`method` 欠落）。`id` は取れれば返す。
+- `-32601` 未知の method。
+- `-32602` params の欠落・型不一致・値域外。
+- `-32004` 宛先（pane / tab / workspace）が見つからない。
+- `-32005` 1 接続に 2 件目の `wait_for_event`。
+- `-32000` 実行できない（ウィンドウ未接続・spawn 失敗・最後の workspace 削除・分割不可）。
+
+無応答契約を持つのは `completion_update` / `completion_end` の 2 つだけで、他は必ず 1 行応答を返す（読めない行にも返す＝クライアントが応答待ちでハングしない）。
 
 ## 宛先 ID
 workspace / tab / pane にプロセス内単調増加 ID。型をまたいで一意。セッション内のみ有効（永続しない・再起動で振り直し）。配列インデックスでなく ID で指す。
