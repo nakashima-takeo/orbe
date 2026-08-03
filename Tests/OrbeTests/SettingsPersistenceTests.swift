@@ -4,25 +4,8 @@ import XCTest
 
 /// settings.json（新形式 v1）と app-state.json の読み書き検証。旧形式移行は `SettingsMigrationTests`。
 final class SettingsPersistenceTests: OrbeTestCase {
-  private var settingsURL: URL!
-  private var appStateURL: URL!
-
-  override func setUp() {
-    super.setUp()
-    let dir = FileManager.default.temporaryDirectory
-    settingsURL = dir.appendingPathComponent("SettingsPersistenceTests-\(UUID().uuidString).json")
-    appStateURL = dir.appendingPathComponent("AppStateTests-\(UUID().uuidString).json")
-    SettingsPersistence.fileURLOverride = settingsURL
-    AppStatePersistence.fileURLOverride = appStateURL
-  }
-
-  override func tearDown() {
-    SettingsPersistence.fileURLOverride = nil
-    AppStatePersistence.fileURLOverride = nil
-    try? FileManager.default.removeItem(at: settingsURL)
-    try? FileManager.default.removeItem(at: appStateURL)
-    super.tearDown()
-  }
+  /// ハーネスが配る隔離済み settings.json（生バイトを直に読み書きする検証で使う）。
+  private func settingsFile() throws -> URL { try XCTUnwrap(SettingsPersistence.fileURL) }
 
   /// 新形式レイヤの round-trip（全型が保たれる）。
   func testLayerRoundTrip() {
@@ -46,7 +29,7 @@ final class SettingsPersistenceTests: OrbeTestCase {
     layer[SettingKeys.fontSize] = 16
     layer[SettingKeys.theme] = .dark
     SettingsPersistence.saveGlobal(layer)
-    let raw = try String(contentsOf: settingsURL, encoding: .utf8)
+    let raw = try String(contentsOf: settingsFile(), encoding: .utf8)
     XCTAssertTrue(raw.contains("\"version\" : 1"))
     XCTAssertTrue(raw.contains("\"font-size\" : 16"))
     XCTAssertTrue(raw.contains("\"theme\" : \"dark\""), "theme は小文字 rawValue")
@@ -59,7 +42,7 @@ final class SettingsPersistenceTests: OrbeTestCase {
   /// 未知 key（将来の項目・撤去済み項目）は無視して読む（前方/後方互換）。
   func testUnknownKeysIgnored() throws {
     try Data(#"{"version":1,"values":{"font-size":14,"no-such-key":"x"}}"#.utf8)
-      .write(to: settingsURL)
+      .write(to: settingsFile())
     let layer = SettingsPersistence.loadGlobal()
     XCTAssertEqual(layer[SettingKeys.fontSize], 14, "既知 key は読める")
   }

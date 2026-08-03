@@ -10,34 +10,8 @@ import XCTest
 /// **libghostty ランタイムを起動する**（GhosttyKit 必須）。設定は in-memory SSOT（`settingsStore`）を通す。
 final class WindowControllerOpacityTests: OrbeTestCase {
 
-  private var tempSettings: URL!
-  private var tempAppState: URL!
-  private var tempWorkspaces: URL!
-  private var tempGuiConf: URL!
-
-  override func setUp() {
-    super.setUp()
-    let dir = FileManager.default.temporaryDirectory
-    tempSettings = dir.appendingPathComponent("orbe-opacity-settings-\(UUID().uuidString).json")
-    tempAppState = dir.appendingPathComponent("orbe-opacity-appstate-\(UUID().uuidString).json")
-    tempWorkspaces = dir.appendingPathComponent("orbe-opacity-ws-\(UUID().uuidString).json")
-    tempGuiConf = dir.appendingPathComponent("orbe-opacity-gui-\(UUID().uuidString).conf")
-    SettingsPersistence.fileURLOverride = tempSettings
-    AppStatePersistence.fileURLOverride = tempAppState
-    WorkspacePersistence.fileURLOverride = tempWorkspaces
-    GuiConfig.fileURLOverride = tempGuiConf
-  }
-
   override func tearDown() {
     NSApp.appearance = nil  // theme テストの外観強制をプロセスグローバルへ残さない
-    SettingsPersistence.fileURLOverride = nil
-    AppStatePersistence.fileURLOverride = nil
-    WorkspacePersistence.fileURLOverride = nil
-    GuiConfig.fileURLOverride = nil
-    try? FileManager.default.removeItem(at: tempSettings)
-    try? FileManager.default.removeItem(at: tempAppState)
-    try? FileManager.default.removeItem(at: tempWorkspaces)
-    try? FileManager.default.removeItem(at: tempGuiConf)
     super.tearDown()
   }
 
@@ -229,7 +203,7 @@ final class WindowControllerOpacityTests: OrbeTestCase {
   }
 
   private func guiConfContent() -> String {
-    guard let url = GuiConfig.fileURLOverride else { return "<no-url>" }
+    guard let url = GuiConfig.fileURL else { return "<no-url>" }
     return (try? String(contentsOf: url, encoding: .utf8)) ?? "<no-file>"
   }
 }

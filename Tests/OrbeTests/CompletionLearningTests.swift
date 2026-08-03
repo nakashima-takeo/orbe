@@ -231,26 +231,17 @@ final class CompletionLearningTests: OrbeTestCase {
     XCTAssertNotNil(next.entries[key("fresh")], "新規は残る")
   }
 
-  // MARK: - 永続（round-trip・fileURLOverride）
+  // MARK: - 永続（round-trip）
 
   func testPersistenceRoundTrip() {
-    let url = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("CompletionLearningTests-\(UUID().uuidString).json")
-    CompletionLearning.fileURLOverride = url
-    defer {
-      try? FileManager.default.removeItem(at: url)
-      CompletionLearning.fileURLOverride = nil
-    }
     var store = LearningStore.empty
     store.entries[key("commit")] = LearningEntry(count: 3, lastUsed: now)
     CompletionLearning.save(store)
     XCTAssertEqual(CompletionLearning.load(), store, "保存→読込で一致")
   }
 
-  func testLoadMissingFileReturnsEmpty() {
-    CompletionLearning.fileURLOverride = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("CompletionLearningTests-missing-\(UUID().uuidString).json")
-    defer { CompletionLearning.fileURLOverride = nil }
+  func testLoadMissingFileReturnsEmpty() throws {
+    try? FileManager.default.removeItem(at: XCTUnwrap(CompletionLearning.fileURL))
     XCTAssertEqual(CompletionLearning.load(), .empty, "欠落は空ストア（新規ユーザ回帰なし）")
   }
 

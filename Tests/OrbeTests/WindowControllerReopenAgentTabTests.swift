@@ -20,25 +20,14 @@ import XCTest
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerReopenAgentTabTests: OrbeTestCase {
 
-  // 永続を実 Application Support から隔離する（テストごとに未作成の一時ファイルを指す）。
-  private var tempStore: URL!
+  /// ハーネスが配る隔離済み workspaces.json。復元経路の arrange が実ファイルを置く先。
+  private func storeURL() throws -> URL { try XCTUnwrap(WorkspacePersistence.fileURL) }
+
   override func setUp() {
     super.setUp()
-    tempStore = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-test-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tempStore
-    SettingsPersistence.fileURLOverride = tempStore.appendingPathExtension("settings")
-    AppStatePersistence.fileURLOverride = tempStore.appendingPathExtension("appstate")
     // 言語確定済み（returning user）として起動し、初回言語選択 overlay で window コマンドが
     // 不活性化されないようにする（handleWindowKeyCommand の overlay ガード）。
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
-  }
-  override func tearDown() {
-    WorkspacePersistence.fileURLOverride = nil
-    SettingsPersistence.fileURLOverride = nil
-    AppStatePersistence.fileURLOverride = nil
-    try? FileManager.default.removeItem(at: tempStore)
-    super.tearDown()
   }
 
   /// 3 タブ: [0] 素のシェル "a"（アクティブ）/ [1] エージェント＋素のシェルの分割 "api" /
@@ -67,7 +56,7 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
       workspaces: [
         WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: tabs)
       ])
-    try JSONEncoder().encode(file).write(to: tempStore)
+    try JSONEncoder().encode(file).write(to: storeURL())
     return WindowController()
   }
 

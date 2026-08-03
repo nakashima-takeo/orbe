@@ -40,14 +40,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   }
 
   func testVersionMismatchIsRejectedOnLoad() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-ver-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     let future = WorkspacesFile(
       version: 999, activeWorkspace: 0,
       workspaces: [
@@ -63,14 +56,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
 
   /// windowSize フィールドが欠落した旧 JSON も load 成功し、windowSize は nil（既定 800×500 へ）。
   func testLegacyJSONWithoutWindowSizeLoads() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-legacy-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     let legacy = """
       {"version":2,"activeWorkspace":0,"workspaces":[\
       {"name":"default","rootPath":"/","activeTab":0,"tabs":[{"leaf":{}}]}]}
@@ -83,14 +69,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
 
   /// windowSize がディスク往復で保たれる。
   func testWindowSizeRoundTripThroughFile() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-size-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -107,42 +86,21 @@ final class WorkspacePersistenceTests: OrbeTestCase {
 
   /// 不正な JSON バイト列を置いても decode 失敗で nil（クラッシュしない）。
   func testCorruptJSONIsRejectedOnLoad() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-corrupt-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     try Data("{ this is not valid json ]".utf8).write(to: tmp)
     XCTAssertNil(WorkspacePersistence.load(), "壊れた JSON は load で nil（呼び出し側が既定 fallback）")
   }
 
   /// 構造は JSON として妥当だがスキーマ不一致（必須キー欠落）でも nil。
   func testSchemaMismatchIsRejectedOnLoad() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-schema-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     try Data(#"{"foo": 1, "bar": [1,2,3]}"#.utf8).write(to: tmp)
     XCTAssertNil(WorkspacePersistence.load(), "スキーマ不一致は load で nil")
   }
 
   /// workspaces が空配列の妥当 JSON も nil（既定 1 workspace へ fallback させる）。
   func testEmptyWorkspacesIsRejectedOnLoad() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-empty-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     let empty = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0, workspaces: [])
     try JSONEncoder().encode(empty).write(to: tmp)
@@ -152,14 +110,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   // MARK: - 実ファイルへの save → load 往復（条件1+3: ディスク経由で全項目が保たれる）
 
   func testSaveThenLoadFileRoundTrip() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-rt-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 1,
       workspaces: [
@@ -189,14 +140,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
 
   /// エージェントセッション（command + sessionId）がディスク往復で保たれる。
   func testAgentSessionRoundTripThroughFile() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-agent-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -302,14 +246,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
 
   /// explicitTitle がディスク往復で保たれる。
   func testExplicitTitleRoundTripThroughFile() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-title-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -329,14 +266,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   /// 旧 v2 JSON（version:2・タブ＝素の PaneNode）も load() が受理し（version ゲート緩和）、
   /// 既存タブ構成を失わず explicitTitle=nil で読む。次回 save で v3 へ自動移行する。
   func testLegacyV2FileLoadsAndMigratesToV3() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-v2-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     let v2 = """
       {"version":2,"activeWorkspace":0,"workspaces":[\
       {"name":"default","rootPath":"/r","activeTab":0,"tabs":[{"leaf":{"cwd":"/r/a"}}]}]}

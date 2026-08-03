@@ -14,23 +14,10 @@ import XCTest
 /// タブの shrink-to-fit は純関数 `StatusTabLayout.widths` を単体検査する。
 final class ChromeStatusRowTests: OrbeTestCase {
 
-  private var tempStore: URL!
   override func setUp() {
     super.setUp()
-    tempStore = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-test-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tempStore
-    SettingsPersistence.fileURLOverride = tempStore.appendingPathExtension("settings")
-    AppStatePersistence.fileURLOverride = tempStore.appendingPathExtension("appstate")
     // 言語確定済み（returning user）として起動し、初回言語選択 overlay を出さない。
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
-  }
-  override func tearDown() {
-    WorkspacePersistence.fileURLOverride = nil
-    SettingsPersistence.fileURLOverride = nil
-    AppStatePersistence.fileURLOverride = nil
-    try? FileManager.default.removeItem(at: tempStore)
-    super.tearDown()
   }
 
   // MARK: - 検査ヘルパ

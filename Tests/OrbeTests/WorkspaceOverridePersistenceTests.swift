@@ -14,14 +14,7 @@ final class WorkspaceOverridePersistenceTests: OrbeTestCase {
 
   /// settingsOverride（あり/nil 混在）がディスク往復で保たれる。
   func testOverrideRoundTripThroughFile() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-ov-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -45,14 +38,7 @@ final class WorkspaceOverridePersistenceTests: OrbeTestCase {
 
   /// settingsOverride キーを欠いた旧 JSON（version:3）も load 成功し、settingsOverride は nil（上書き無し）。
   func testLegacyJSONWithoutOverrideLoads() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-no-ov-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     let legacy = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,"tabs":[{"tree":{"leaf":{}},"editor":{"open":false,"tool":"tree"}}]}]}
@@ -66,13 +52,7 @@ final class WorkspaceOverridePersistenceTests: OrbeTestCase {
 
   /// 空 override（全項目除去）は保存で nil へ畳まれる（decode 側の isEmpty 畳み込み）。
   func testEmptyOverrideFoldsToNil() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-empty-ov-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     let file = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,\

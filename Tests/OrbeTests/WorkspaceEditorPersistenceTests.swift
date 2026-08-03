@@ -8,14 +8,7 @@ final class WorkspaceEditorPersistenceTests: OrbeTestCase {
 
   /// editor の開閉・ツール（非既定値）がディスク往復で保たれる。
   func testEditorTabStateRoundTripThroughFile() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-editor-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
