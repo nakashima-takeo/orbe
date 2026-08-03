@@ -142,14 +142,29 @@ final class ControlServer {
   private func acceptOne() {
     let cfd = accept(listenFD, nil, nil)
     guard cfd >= 0 else { return }
+    attach(fd: cfd)  // 既に queue 上なので直に呼ぶ（adopt は自 queue への sync になり詰まる）
+  }
+
+  /// 既に接続済みの fd を制御プレーンへ載せる（queue 外からの入口）。戻った時点で
+  /// 受信が始まっているため、呼び出し側は直後に書いた最初の行を取りこぼさない。
+  /// **queue 上から呼んではいけない**（自 queue への sync で即 deadlock する）。
+  func adopt(fd: Int32) {
+    queue.sync { attach(fd: fd) }
+  }
+
+  /// 非ブロッキング化・Connection 生成・登録・受信開始（queue 上）。
+  /// Connection は必ずこの queue で作る——`handle` が respond をこの queue へ hop するため、
+  /// 別 queue で作ると受信と送信が Connection の内部状態（出力バッファ・fd・writeSource）を
+  /// 跨いで触ることになる。
+  private func attach(fd: Int32) {
     // 非ブロッキング化。詰まった 1 接続の write/read を全体から隔離し head-of-line blocking を断つ。
     // 失敗した fd はブロッキングのままなので制御プレーンへ入れず捨てる（詰まると共有 queue を凍結させる）。
-    let flags = fcntl(cfd, F_GETFL)
-    guard flags >= 0, fcntl(cfd, F_SETFL, flags | O_NONBLOCK) >= 0 else {
-      Darwin.close(cfd)
+    let flags = fcntl(fd, F_GETFL)
+    guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0 else {
+      Darwin.close(fd)
       return
     }
-    let conn = Connection(fd: cfd, server: self, queue: queue)
+    let conn = Connection(fd: fd, server: self, queue: queue)
     connections.insert(conn)
     conn.resume()
   }
