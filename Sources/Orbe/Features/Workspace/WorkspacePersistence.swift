@@ -98,7 +98,8 @@ struct WorkspaceState: Codable, Equatable {
       settingsOverride = nil
       return
     }
-    // どちらも寛容に読む——未知 key・型不一致の 1 項目で層ごと失わない（global 層と同じ家風）。
+    // 新形式は 1 キー単位で寛容に読む——未知 key・型不一致の 1 項目で層ごと失わない（global 層と
+    // 同じ家風）。旧 camelCase struct の decode は all-or-nothing（`loadGlobal` の旧形式移行と同じ）。
     // 現行の key 空間である新形式を上に重ねる（旧 camelCase は新形式が言わない項目だけを埋める）。
     // 読めた項目が 1 つも無ければ nil（上書き無し＝global 継承）。次回 save で新形式へ揃う。
     let new = (try? c.decode(SettingsLayer.self, forKey: .settingsOverride)) ?? SettingsLayer()
@@ -142,8 +143,7 @@ struct TabState: Codable, Equatable {
       // throw すると tab → workspace → ファイル全体へ decode 失敗が連鎖し、load() が nil を返して
       // 全 workspace を失う。EditorPaneTabState に非 optional の項目を 1 つ足すだけで、既存の
       // 全ファイルが後者に落ちる。
-      editor =
-        (try? c.decodeIfPresent(EditorPaneTabState.self, forKey: .editor)) ?? Self.defaultEditor
+      editor = (try? c.decode(EditorPaneTabState.self, forKey: .editor)) ?? Self.defaultEditor
     } else {
       // 旧形式: タブ＝素の PaneNode（explicitTitle 無し → nil）。
       tree = try PaneNode(from: decoder)
