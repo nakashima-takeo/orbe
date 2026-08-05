@@ -220,6 +220,17 @@ final class FakeControlTarget: ControlTarget {
   var activateResult: (activeWorkspaceId: Int, paneIds: [Int])? = (
     activeWorkspaceId: 1, paneIds: []
   )
+  /// 立てると `Result` を返す全メソッド（ペイン/タブ操作・config・workspace CRUD）が
+  /// これを `.failure` で返す。ドメインが決めるコード（tab 未発見の `-32004`・最後の
+  /// workspace 削除の `-32000` 等）は `ControlServer` が生まず target から素通しするため、
+  /// wire 側でその素通しを見るにはここを差し替えるしかない。
+  var domainFailure: ControlError?
+
+  /// 記録は常に行い、`domainFailure` が立っていればそれを、無ければ success を返す。
+  private func outcome(_ value: Any) -> Result<Any, ControlError> {
+    if let failure = domainFailure { return .failure(failure) }
+    return .success(value)
+  }
 
   // MARK: - 記録
 
@@ -315,53 +326,53 @@ final class FakeControlTarget: ControlTarget {
     -> Result<Any, ControlError>
   {
     splits.append(Split(paneId: paneId, direction: direction, command: command))
-    return .success(["paneId": 5151])
+    return outcome(["paneId": 5151])
   }
 
   func controlClosePane(paneId: Int) -> Result<Any, ControlError> {
     closedPaneIds.append(paneId)
-    return .success(["ok": true])
+    return outcome(["ok": true])
   }
 
   func controlFocusPane(paneId: Int) -> Result<Any, ControlError> {
     focusedPaneIds.append(paneId)
-    return .success(["ok": true])
+    return outcome(["ok": true])
   }
 
   func controlCloseTab(tabId: Int) -> Result<Any, ControlError> {
     closedTabIds.append(tabId)
-    return .success(["ok": true])
+    return outcome(["ok": true])
   }
 
   func controlConfigList(workspaceId: Int?) -> Result<Any, ControlError> {
     configLists.append(workspaceId)
-    return .success(["settings": []])
+    return outcome(["settings": []])
   }
 
   func controlConfigSet(key: String, value: Any, scope: String, workspaceId: Int?)
     -> Result<Any, ControlError>
   {
     configSets.append(ConfigSet(key: key, value: value, scope: scope, workspaceId: workspaceId))
-    return .success(["ok": true, "key": key, "value": value, "scope": scope])
+    return outcome(["ok": true, "key": key, "value": value, "scope": scope])
   }
 
   func controlCreateWorkspace(name: String, rootPath: String?) -> Result<Any, ControlError> {
     createdWorkspaces.append(CreatedWorkspace(name: name, rootPath: rootPath))
-    return .success(["workspaceId": 7, "name": name, "rootPath": rootPath ?? "/tmp"])
+    return outcome(["workspaceId": 7, "name": name, "rootPath": rootPath ?? "/tmp"])
   }
 
   func controlRenameWorkspace(workspaceId: Int, name: String) -> Result<Any, ControlError> {
     renamedWorkspaces.append(RenamedWorkspace(workspaceId: workspaceId, name: name))
-    return .success(["ok": true])
+    return outcome(["ok": true])
   }
 
   func controlSetWorkspaceRoot(workspaceId: Int, rootPath: String) -> Result<Any, ControlError> {
     workspaceRoots.append(WorkspaceRoot(workspaceId: workspaceId, rootPath: rootPath))
-    return .success(["ok": true])
+    return outcome(["ok": true])
   }
 
   func controlRemoveWorkspace(workspaceId: Int) -> Result<Any, ControlError> {
     removedWorkspaceIds.append(workspaceId)
-    return .success(["ok": true])
+    return outcome(["ok": true])
   }
 }

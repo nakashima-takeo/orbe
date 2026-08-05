@@ -61,6 +61,11 @@ extension ControlWireTests {
     ]
   }
 
+  /// `validRequests` を method 引きにしたもの。
+  private func fixtures(_ fake: FakeControlTarget) -> [String: [String: Any]] {
+    Dictionary(uniqueKeysWithValues: validRequests(fake).map { ($0.method, $0.params) })
+  }
+
   /// 必須 param 1 件の契約。`method` から `key` を落とすと `code` になる。
   struct RequiredParam {
     let method: String
@@ -106,8 +111,7 @@ extension ControlWireTests {
   func testRequiredParamNamesAreFixed() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
-    let fixtures = Dictionary(
-      uniqueKeysWithValues: validRequests(fake).map { ($0.method, $0.params) })
+    let fixtures = fixtures(fake)
     var id = 0
 
     for spec in requiredParams {
@@ -128,6 +132,78 @@ extension ControlWireTests {
       XCTAssertEqual(
         errorCode(wire.request(id: id, method: spec.method, params: dropped)), spec.code,
         "\(spec.method) から \(spec.key) を落とすと \(spec.code)")
+    }
+  }
+
+  /// 型の違う値は「キーを落とした」のと同じ帰結になる。`as? Int` / `as? String` の
+  /// キャストが唯一の型ガードなので、落とす側と同じ表で押さえられる。
+  ///
+  /// これが無いと、キャストを緩める改変——例えば CLI が全部文字列で送ってくるのに合わせて
+  /// `paneId` に `Int(文字列)` を許す——が 1 本も落とさずに通る。spec の `-32602` は
+  /// 「欠落・型不一致・値域外」の 3 つを名指しており、型不一致だけが無検証だった。
+  func testWronglyTypedParamsAreRejectedLikeMissingOnes() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+    // Int にも String にもならない値。1 つで表の全キーに効かせる。
+    let wrongType = ["not-a-scalar"]
+    var id = 0
+
+    for spec in requiredParams {
+      // `config_set` の `value` だけは型を問わない（存在チェックのみ）。値の検証は設定
+      // レジストリの domain が唯一の検証点という契約なので、ここで型を縛ると spec と食い違う。
+      if spec.method == "config_set" && spec.key == "value" { continue }
+      guard let full = fixtures(fake)[spec.method] else { continue }
+
+      id += 1
+      var mistyped = full
+      mistyped[spec.key] = wrongType
+      XCTAssertEqual(
+        errorCode(wire.request(id: id, method: spec.method, params: mistyped)), spec.code,
+        "\(spec.method) の \(spec.key) に型違いを渡すと \(spec.code)（欠落と同じ帰結）")
+    }
+  }
+
+  // MARK: - ドメインが返したエラーの素通し
+
+  /// `Result` を返すメソッド群では、エラーコードを決めるのは `ControlServer` ではなく target。
+  /// その `.failure` が書き換えも握り潰しもされず wire に出ることを固定する。
+  ///
+  /// これが spec の `-32004`（宛先 tab が見つからない）と `-32000`（最後の workspace 削除・
+  /// 分割不可）を wire 上で成立させている唯一の経路。どの条件でドメインがそのコードを選ぶかは
+  /// `WindowController` 側（L2）の担保で、ここが見るのは「選ばれたコードが素通しされるか」だけ。
+  ///
+  /// 壊れると、ドメインの拒否が `{"ok":true}` に化けて `orb` が成功と誤読する。Fake が全メソッド
+  /// success 固定だった間は、この経路を通る 10 メソッドすべてが無検証だった。
+  func testDomainFailureReachesWireUnchanged() {
+    let fake = FakeControlTarget()
+    // 既存のどのコードとも重ならない番号にする——`ControlServer` が自前で生んだコードと
+    // 取り違えたまま緑になるのを防ぐ（素通ししたことだけが通過の理由になる）。
+    fake.domainFailure = ControlError(code: -31999, message: "domain refused")
+    let wire = startWire(target: fake)
+    var id = 0
+
+    let resultReturning = [
+      "split_pane", "close_pane", "focus_pane", "close_tab",
+      "config_list", "config_set", "create_workspace", "rename_workspace",
+      "set_workspace_root", "remove_workspace",
+    ]
+    let fixtures = fixtures(fake)
+
+    for method in resultReturning {
+      guard let params = fixtures[method] else {
+        XCTFail("\(method) の正しい params 一式が表に無い")
+        continue
+      }
+      id += 1
+      let response = wire.request(id: id, method: method, params: params)
+
+      XCTAssertEqual(
+        errorCode(response), -31999,
+        "\(method) は target が返した code をそのまま出す（自前のコードへ書き換えない）")
+      XCTAssertEqual(
+        (response?["error"] as? [String: Any])?["message"] as? String, "domain refused",
+        "\(method) は message も素通しする（クライアントが理由を読む唯一の手掛かり）")
+      XCTAssertNil(response?["result"], "\(method) の失敗に result を同居させない")
     }
   }
 
