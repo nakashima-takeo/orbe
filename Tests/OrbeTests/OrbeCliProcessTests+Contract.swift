@@ -145,6 +145,32 @@ extension OrbeCliProcessTests {
         as? Int, 22, "別 WS の上書きは巻き添えにならない")
   }
 
+  /// config の bare `--workspace` は位置引数の**前**に置いても bare のまま——直後のトークンは
+  /// `<key>` であって「解決できない `<id>`」ではない。この判別はフラグを外した残余が位置引数の数を
+  /// 超えるかで行うので、境界が 1 つずれると `orb config set --workspace <key> <value>` が丸ごと
+  /// usage エラーに化ける（bare を後置形だけで測っていると、この化け方は緑のまま素通りする）。
+  ///
+  /// `--workspace current` も同じ関数の解決経路で、こちらは `<id>` として消費される。
+  func testBareWorkspaceFlagKeepsItsMeaningBeforeThePositionals() throws {
+    let control = try startControlProcess()
+
+    XCTAssertEqual(
+      control.orb(["config", "set", "--workspace", "font-size", "23"]).status, 0,
+      "前置の bare --workspace でも <key> <value> が位置引数として残る")
+    XCTAssertEqual(
+      control.orbJSON(["config", "get", "--workspace", "font-size"])["value"] as? Int, 23,
+      "前置の bare --workspace の get が <key> を食い違えない")
+    XCTAssertEqual(
+      control.orbJSON(["config", "get", "font-size", "--workspace", "current"])["value"] as? Int,
+      23, "--workspace current はアクティブ WS の <id> へ解決する（bare と同じ層を指す）")
+    XCTAssertEqual(
+      control.orb(["config", "unset", "--workspace", "font-size"]).status, 0,
+      "前置の bare --workspace でも unset の <key> が残る")
+    XCTAssertNotEqual(
+      control.orbJSON(["config", "get", "font-size"])["value"] as? Int, 23,
+      "その unset はアクティブ WS の上書きを実際に外す")
+  }
+
   /// pane/tab の `--workspace` は `<id>` 必須（「どれに絞るか・どこに開くか」で bare に割り当てる
   /// 意味が無い）。値が解決できないトークンは、フラグの前後どちらに位置引数が来ても同じ usage
   /// エラーにする——順序で「key に落ちて弾かれる」と「黙って無視してアクティブ WS へ書く」に
@@ -158,6 +184,9 @@ extension OrbeCliProcessTests {
     failure(
       control.orb(["tab", "new", "--workspace"]), code: 2,
       message: "--workspace requires an <id>", "tab new の bare --workspace")
+    failure(
+      control.orb(["pane", "list", "--workspace", "nosuch"]), code: 2,
+      message: "invalid workspace id: nosuch", "pane list の非解決トークン")
     failure(
       control.orb(["config", "set", "font-size", "14", "--workspace", "nosuch"]), code: 2,
       message: "invalid workspace id: nosuch", "値が後置された非解決トークン")
@@ -174,6 +203,28 @@ extension OrbeCliProcessTests {
     XCTAssertFalse(panes.isEmpty, "--workspace <id> の絞り込みで結果が消えない")
     XCTAssertTrue(
       panes.allSatisfy { $0["workspaceId"] as? Int == activeId }, "指定した WS のペインだけが残る")
+    XCTAssertEqual(
+      (control.orbJSON(["pane", "list", "--workspace", "current"])["panes"] as? [[String: Any]])?
+        .count, panes.count, "`current` も `<id>` として解決する（数値だけの受け付けに退行しない）")
+  }
+
+  /// `tab new --workspace <id>` は**その** workspace にタブを開く。値が黙って捨てられると、
+  /// exit 0 のまま指定と無関係なアクティブ WS にタブが生える——「開けたのに見当たらない」という
+  /// 形で現れるので、終了コードでも stdout でも気づけない。
+  func testTabNewOpensInTheNamedWorkspace() throws {
+    let control = try startControlProcess()
+    let rows = try XCTUnwrap(control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
+    let backgroundId = try XCTUnwrap(
+      rows.first(where: { $0["active"] as? Bool == false })?["id"] as? Int, "背景 WS が無い")
+
+    let paneId = try XCTUnwrap(
+      control.orbJSON(["tab", "new", "--workspace", "\(backgroundId)"])["paneId"] as? Int,
+      "tab new が paneId を返さない")
+
+    let panes = try XCTUnwrap(control.orbJSON(["pane", "list"])["panes"] as? [[String: Any]])
+    XCTAssertEqual(
+      panes.first { $0["paneId"] as? Int == paneId }?["workspaceId"] as? Int, backgroundId,
+      "開いたタブは指定した workspace に属する")
   }
 
   // MARK: - 文脈解決
