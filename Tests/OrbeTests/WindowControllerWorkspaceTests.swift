@@ -10,8 +10,8 @@ import XCTest
 /// ヘッドレスな純ロジック検証ではない。GhosttyKit が同梱された本環境でのみ走る。
 ///
 /// 観測は主に window.title（= 現アクティブ workspace 名）で行う——切替・作成・改名・削除の結果として
-/// 「どれがアクティブか」が、このライフサイクルの契約そのものだから。title で表せない集合・index は
-/// モデル（workspaces / activeWorkspace / current）を直接読む。
+/// 「どれがアクティブか」が、このライフサイクルの契約そのものだから。title で表せないもの
+/// （MRU 並び・休眠 rollup）はパレットの render を、ディスクへ届いたかは workspaces.json を読む。
 final class WindowControllerWorkspaceTests: OrbeTestCase {
 
   /// 起動直後に既定 workspace "default" が1つ存在する（条件1 の一部）。

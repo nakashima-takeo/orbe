@@ -75,6 +75,10 @@ final class WindowControllerRestoreTests: OrbeTestCase {
   /// アクティブが 0 タブ（休眠）なら surface が 1 つも起きず、`WorkspacesFile` が**完全に等値**で戻る。
   /// 分割比・cwd・エージェントセッション・明示タイトル・EditorPane・上書き設定・最終使用時刻・
   /// ウィンドウサイズを 1 本で通す——どれか 1 つを復元が落とせばここで落ちる。
+  ///
+  /// 等値がアクティブ側の `lastUsedAt` にも及ぶのは、刻印がタブ選択に紐づくため（0 タブは
+  /// アクティブ化しても進まない）。刻印が進む側の契約は
+  /// `testRoundTripWithMountedTabOnlyAdvancesActiveLastUsedAt` が持つ。
   func testRoundTripKeepsEveryFieldWhenActiveWorkspaceIsDormant() throws {
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
@@ -105,8 +109,11 @@ final class WindowControllerRestoreTests: OrbeTestCase {
     let wc = WindowController()
     wc.flushSave()
 
+    let saved = try XCTUnwrap(WorkspacePersistence.load())
     XCTAssertEqual(
-      WorkspacePersistence.load(), original, "保存 → 復元 → 再保存で 1 フィールドも欠けない")
+      saved.workspaces[0].lastUsedAt, stampBackground,
+      "0 タブ workspace はアクティブ化しても刻印が進まない（タブを選ばないため）")
+    XCTAssertEqual(saved, original, "保存 → 復元 → 再保存で 1 フィールドも欠けない")
   }
 
   /// タブを mount する通常形でも、動くのはアクティブ workspace の `lastUsedAt` だけ。
@@ -146,6 +153,26 @@ final class WindowControllerRestoreTests: OrbeTestCase {
     XCTAssertEqual(saved, expected, "進むのは lastUsedAt だけ——mount してもモデルは他に 1 つも動かない")
   }
 
+  /// 旧バージョン（v2＝タブが素の `PaneNode`）のファイルからの起動は、タブ構成を失わずに
+  /// 現行バージョンで書き直す。壊れると v3 導入後に一度も起動していないユーザーが、起動 1 回で
+  /// 全タブを失う（次の保存が空の姿でディスクを上書きする）。
+  func testLaunchFromLegacyV2FileRewritesToCurrentVersion() throws {
+    try Data(
+      """
+      {"version":2,"activeWorkspace":0,"workspaces":[\
+      {"name":"default","rootPath":"/","activeTab":0,"tabs":[{"leaf":{"cwd":"/r/a"}}]}]}
+      """.utf8
+    ).write(to: try workspacesFile())
+
+    let wc = WindowController()
+    wc.flushSave()
+
+    let saved = try XCTUnwrap(WorkspacePersistence.load())
+    XCTAssertEqual(saved.version, WorkspacePersistence.version, "起動 1 回で現行バージョンへ書き直す")
+    XCTAssertEqual(
+      saved.workspaces[0].tabs[0].tree, .leaf(cwd: "/r/a", agent: nil), "v2 のタブ構成を失わない")
+  }
+
   /// 保存分割比は mount 後の**実レイアウト**へ適用される。上の 2 本は非 mount 側なので、
   /// `WorkspaceSplitView.ratio` が bounds 0 で保存値をそのまま返す fallback しか通らない
   /// ——`layout()` の `setPosition` が消えても等値は保たれてしまう。ここが唯一その適用を見る。
@@ -167,6 +194,13 @@ final class WindowControllerRestoreTests: OrbeTestCase {
       ],
       windowSize: WindowSize(width: 700, height: 400))
     wc.window.layoutIfNeeded()
+
+    // 実レイアウトを通ったことを先に確定させる——bounds 0 なら ratio は保存値をそのまま返し、
+    // 下の assert が恒真になって唯一の適用検証が無言で死ぬ。
+    let split = try XCTUnwrap(
+      wc.current.tabs[wc.current.active].rootContainer.subviews.first as? WorkspaceSplitView,
+      "復元したタブの root は分割ビュー")
+    XCTAssertGreaterThan(split.bounds.width, 0, "分割ビューが実フレームを持つ（0 なら下の検証は恒真）")
 
     guard case .split(_, let ratio, _, _) = wc.current.tabs[wc.current.active].snapshot() else {
       return XCTFail("復元したタブは分割木のまま")
