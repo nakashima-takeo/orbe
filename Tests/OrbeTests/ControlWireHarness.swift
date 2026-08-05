@@ -110,11 +110,15 @@ final class ControlWire {
       }
       if n < 0 && errno == EINTR { continue }
       if n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK) {
-        guard Date() < deadline else {
+        let remaining = deadline.timeIntervalSinceNow
+        guard remaining > 0 else {
           XCTFail("送信バッファが空かない（サーバが読み進めていない）", file: file, line: line)
           return
         }
-        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(Self.stepSeconds))
+        // 書き込み可能になった瞬間に再開する。runloop を一定刻みで回す形にすると、socket の
+        // 送信バッファ（8 KiB）を空けるたびに刻みぶん止まり、1 MiB の送出だけで締切の大半を食う。
+        var pfd = pollfd(fd: clientFD, events: Int16(POLLOUT), revents: 0)
+        _ = poll(&pfd, 1, Int32(min(remaining, Self.stepSeconds) * 1000))
         continue
       }
       // EPIPE 等。上限超過で切られたケース（overflow）はこれが正常な帰結なので黙って抜ける。
