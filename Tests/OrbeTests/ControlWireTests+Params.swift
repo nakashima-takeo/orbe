@@ -10,17 +10,23 @@ import XCTest
 /// 黙って nil になる。エージェントの状態報告が全て無言で落ちるのに、テストは 1 本も落ちない
 /// ——これが #50 に記録された対照実験そのもの。ここが語を押さえる唯一の場所になる。
 ///
-/// 3 つの方式で押さえる。
+/// 4 つの方式で押さえる。
 /// 1. `-32602` / `-32004` ガードのある必須 param は、正しい名前一式で成功し 1 つ落とすと
 ///    そのコードになる（改名は「落とす」と等価なので成功側が落ちる）
 /// 2. ガードの無い optional param は、Fake が受領値を記録して送った値と突き合わせる。
 ///    `messageSource` はここでしか固定できない（欠落しても目に見えず `-32602` にもならない）
 /// 3. method 名は全数を回して `-32601` を返さないことを見る
+/// 4. 成功したときの応答キーと、宛先 ID が届いたドメイン動詞を突き合わせる
 ///
-/// **担保外**: `get_pane_text` の `scrollback` / `completion_accept` の `advance` /
-/// `completion_update` の `buffer`・`cursor`。いずれも値が `SurfaceView` の libghostty 経路へ
-/// 吸い込まれ、surface 無しでは真偽の差が観測できない。受け皿は `docs/testing/roadmap.md`
-/// のスライス 2（L4）とスライス 5（L2）。
+/// **新しい method を足すとき**: `validRequests` に 1 行（必須）、必須 param があれば
+/// `requiredParams` に 1 行、`Result` を返すなら `testDomainFailureReachesWireUnchanged` の
+/// `resultReturning` に 1 行、宛先 ID を取るなら `testDestinationIdsReachTheirOwnDomainVerb` に
+/// 1 行。`wait_for_event` と `completion_*` は `testMethodNamesAreFixed` が個別に扱う。
+///
+/// **担保外**: `get_pane_text` の `scrollback`（値が `SurfaceView` の libghostty 経路へ吸い込まれ、
+/// surface 無しでは真偽の差が観測できない）と、`completion_accept` の `advance` /
+/// `completion_update` の `buffer`・`cursor`（popup が生まれないと適用結果が出ず、無応答契約で
+/// wire 側の観測面がゼロ）。受け皿は `docs/testing/roadmap.md` のスライス 2（L4）とスライス 5（L2）。
 extension ControlWireTests {
 
   // MARK: - 表
@@ -138,28 +144,30 @@ extension ControlWireTests {
   /// 型の違う値は「キーを落とした」のと同じ帰結になる。`as? Int` / `as? String` の
   /// キャストが唯一の型ガードなので、落とす側と同じ表で押さえられる。
   ///
-  /// これが無いと、キャストを緩める改変——例えば CLI が全部文字列で送ってくるのに合わせて
-  /// `paneId` に `Int(文字列)` を許す——が 1 本も落とさずに通る。spec の `-32602` は
-  /// 「欠落・型不一致・値域外」の 3 つを名指しており、型不一致だけが無検証だった。
+  /// 型違いには**正しい値を隣の型へ移した値**を渡す（Int 期待なら数字文字列、String 期待なら
+  /// 数値）。配列のような「どの型にもならない値」だけだと、キャストを片側へ緩める改変——例えば
+  /// CLI が全部文字列で送ってくるのに合わせて `paneId` に `Int(文字列)` を許す——が 1 本も
+  /// 落とさずに通る。spec の `-32602` は「欠落・型不一致・値域外」の 3 つを名指しており、
+  /// ここが型不一致を受け持つ。
   func testWronglyTypedParamsAreRejectedLikeMissingOnes() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
-    // Int にも String にもならない値。1 つで表の全キーに効かせる。
-    let wrongType = ["not-a-scalar"]
+    let fixtures = fixtures(fake)
     var id = 0
 
     for spec in requiredParams {
       // `config_set` の `value` だけは型を問わない（存在チェックのみ）。値の検証は設定
       // レジストリの domain が唯一の検証点という契約なので、ここで型を縛ると spec と食い違う。
       if spec.method == "config_set" && spec.key == "value" { continue }
-      guard let full = fixtures(fake)[spec.method] else { continue }
+      guard let full = fixtures[spec.method], let correct = full[spec.key] else { continue }
 
       id += 1
       var mistyped = full
-      mistyped[spec.key] = wrongType
+      let moved: Any = correct is Int ? String(describing: correct) : 42
+      mistyped[spec.key] = moved
       XCTAssertEqual(
         errorCode(wire.request(id: id, method: spec.method, params: mistyped)), spec.code,
-        "\(spec.method) の \(spec.key) に型違いを渡すと \(spec.code)（欠落と同じ帰結）")
+        "\(spec.method) の \(spec.key) に型違い \(moved) を渡すと \(spec.code)（欠落と同じ帰結）")
     }
   }
 
@@ -172,8 +180,7 @@ extension ControlWireTests {
   /// 分割不可）を wire 上で成立させている唯一の経路。どの条件でドメインがそのコードを選ぶかは
   /// `WindowController` 側（L2）の担保で、ここが見るのは「選ばれたコードが素通しされるか」だけ。
   ///
-  /// 壊れると、ドメインの拒否が `{"ok":true}` に化けて `orb` が成功と誤読する。Fake が全メソッド
-  /// success 固定だった間は、この経路を通る 10 メソッドすべてが無検証だった。
+  /// 壊れると、ドメインの拒否が `{"ok":true}` に化けて `orb` が成功と誤読する。
   func testDomainFailureReachesWireUnchanged() {
     let fake = FakeControlTarget()
     // 既存のどのコードとも重ならない番号にする——`ControlServer` が自前で生んだコードと
@@ -229,6 +236,39 @@ extension ControlWireTests {
             id: id, method: "split_pane", params: ["paneId": fake.paneId, "direction": direction])),
         -32602, "direction \(direction) は値域外で -32602")
     }
+  }
+
+  /// `send_key` は文字列でも `ControlKey.parse` が解けない指定を値域外として弾く。
+  /// 黙って無視して `{"ok":true}` を返すようになると、エージェントが送った enter が
+  /// 実行されないまま成功と読まれる（`ControlKey.parse` 自体の語彙は L1 が持つ）。
+  func testUnparsableKeySpecIsRejected() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+    var id = 0
+
+    // 未知のキー名 / 端末バイト表現を持たない cmd 付き単一文字 / 解けない綴り / 空。
+    for spec in ["nosuchkey", "cmd+a", "ctrl+", ""] {
+      id += 1
+      XCTAssertEqual(
+        errorCode(
+          wire.request(id: id, method: "send_key", params: ["paneId": fake.paneId, "key": spec])),
+        -32602, "解けないキー指定 \(spec) は -32602（無視して ok を返さない）")
+    }
+  }
+
+  /// `config_set` の `value: null` は「解除（継承へ戻す）」として受理する——欠落とは別物。
+  /// `params["value"]` の存在チェックを「null も欠落扱い」へ締めると `orb config unset`
+  /// （`NSNull()` を送る）が `-32602` になるが、値の意味論を見る L2 は通り続ける。
+  func testConfigSetAcceptsNullValueAsUnset() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+
+    let response = wire.request(
+      id: 1, method: "config_set",
+      params: ["key": "font-size", "value": NSNull(), "scope": "global"])
+
+    XCTAssertNil(response?["error"], "value: null は解除として受理する（欠落扱いにしない）")
+    XCTAssertTrue(fake.configSets.last?.value is NSNull, "null は NSNull のまま target へ届く")
   }
 
   // MARK: - 方式 2: ガードの無い optional param
@@ -391,5 +431,104 @@ extension ControlWireTests {
       "jsonrpc": "2.0", "id": 901, "method": "completion_end", "params": ["paneId": fake.paneId],
     ])
     wire.barrier()
+  }
+
+  // MARK: - 方式 4: 成功側（応答キーと宛先への配線）
+
+  /// `list_*` は要素配列を自分の名前のキーで包む。3 つを違う長さにしてあるので、包みキーの
+  /// 改名も別の list への誤配線もここで落ちる。押さえないと、サーバ側だけ `panes` を改名した
+  /// とき `orb list panes` が `result.panes` を `?? []` で読んでエラーも出さず空表示になる
+  /// ——#50 が名指しした失敗の応答側。
+  func testListMethodsWrapResultsUnderTheirOwnKey() {
+    let fake = FakeControlTarget()
+    fake.workspaces = [["id": 1]]
+    fake.panes = [["paneId": 1], ["paneId": 2]]
+    fake.agents = [["command": "a"], ["command": "b"], ["command": "c"]]
+    let wire = startWire(target: fake)
+
+    let wrapped: [(method: String, key: String, count: Int)] = [
+      ("list_workspaces", "workspaces", 1),
+      ("list_panes", "panes", 2),
+      ("list_agents", "agents", 3),
+    ]
+    var id = 0
+
+    for entry in wrapped {
+      id += 1
+      let result = wire.request(id: id, method: entry.method)?["result"] as? [String: Any]
+      XCTAssertEqual(
+        (result?[entry.key] as? [[String: Any]])?.count, entry.count,
+        "\(entry.method) は \(entry.key) で包み、自分のドメイン動詞の戻りを返す")
+    }
+  }
+
+  /// ペイン宛メソッドの成功ペイロードのキー。`ok` / `text` / `buffer` はクライアントが
+  /// 成否と結果を読む唯一の場所で、キーの改名も真偽の反転もここでしか捕まらない。
+  func testPaneTargetedSuccessPayloadKeysAreFixed() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+    let pane = fake.paneId
+    func result(_ id: Int, _ method: String, _ params: [String: Any]) -> [String: Any]? {
+      wire.request(id: id, method: method, params: params)?["result"] as? [String: Any]
+    }
+
+    XCTAssertEqual(
+      result(1, "get_pane_text", ["paneId": pane])?["text"] as? String, "",
+      "get_pane_text は text で返す（surface 不在は空文字であってエラーではない）")
+    XCTAssertEqual(
+      result(2, "send_text", ["paneId": pane, "text": "hi"])?["ok"] as? Bool, true,
+      "send_text の成功は ok: true")
+    XCTAssertEqual(
+      result(3, "send_key", ["paneId": pane, "key": "enter"])?["ok"] as? Bool, true,
+      "send_key の成功は ok: true")
+    XCTAssertTrue(
+      result(4, "completion_accept", ["paneId": pane])?["buffer"] is NSNull,
+      "popup が無ければ completion_accept は buffer: null（zsh はこの非 null で分岐する）")
+  }
+
+  /// `activate_workspace` の成功形。`paneIds` を読む現存の assert は `scripts/dev-verify.sh`
+  /// だけで、スライス 2 でそれが廃止されると担保はここだけになる。
+  func testActivateWorkspaceReturnsActiveIdAndPaneIds() {
+    let fake = FakeControlTarget()
+    fake.activateResult = (activeWorkspaceId: 3, paneIds: [11, 12])
+    let wire = startWire(target: fake)
+
+    let result =
+      wire.request(id: 1, method: "activate_workspace", params: ["workspaceId": 3])?["result"]
+      as? [String: Any]
+
+    XCTAssertEqual(
+      result?["activeWorkspaceId"] as? Int, 3, "前面化した workspace を activeWorkspaceId で返す")
+    XCTAssertEqual(result?["paneIds"] as? [Int], [11, 12], "mount したペイン一式を paneIds で返す")
+  }
+
+  /// 宛先 ID がその method 専用のドメイン動詞へ、値ごと届く。ID を互いに違う値にしてあるので、
+  /// `close_pane` と `focus_pane` を取り違える copy-paste 由来の誤配線も、受け取った ID を
+  /// 定数へ潰す実装ミスも、どちらもここで落ちる。
+  func testDestinationIdsReachTheirOwnDomainVerb() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+
+    _ = wire.request(id: 1, method: "close_pane", params: ["paneId": 81])
+    _ = wire.request(id: 2, method: "focus_pane", params: ["paneId": 82])
+    _ = wire.request(id: 3, method: "close_tab", params: ["tabId": 83])
+    _ = wire.request(id: 4, method: "rename_workspace", params: ["workspaceId": 84, "name": "r"])
+    _ = wire.request(
+      id: 5, method: "set_workspace_root", params: ["workspaceId": 85, "rootPath": "/tmp/r"])
+    _ = wire.request(id: 6, method: "remove_workspace", params: ["workspaceId": 86])
+    _ = wire.request(id: 7, method: "activate_workspace", params: ["workspaceId": 87])
+
+    XCTAssertEqual(fake.closedPaneIds, [81], "close_pane は controlClosePane へ paneId を渡す")
+    XCTAssertEqual(fake.focusedPaneIds, [82], "focus_pane は controlFocusPane へ paneId を渡す")
+    XCTAssertEqual(fake.closedTabIds, [83], "close_tab は controlCloseTab へ tabId を渡す")
+    XCTAssertEqual(
+      fake.renamedWorkspaces.last?.workspaceId, 84, "rename_workspace は workspaceId を渡す")
+    XCTAssertEqual(fake.renamedWorkspaces.last?.name, "r", "rename_workspace は name を渡す")
+    XCTAssertEqual(
+      fake.workspaceRoots.last?.workspaceId, 85, "set_workspace_root は workspaceId を渡す")
+    XCTAssertEqual(
+      fake.workspaceRoots.last?.rootPath, "/tmp/r", "set_workspace_root は rootPath を渡す")
+    XCTAssertEqual(fake.removedWorkspaceIds, [86], "remove_workspace は workspaceId を渡す")
+    XCTAssertEqual(fake.activatedWorkspaceIds, [87], "activate_workspace は workspaceId を渡す")
   }
 }
