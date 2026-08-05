@@ -185,7 +185,7 @@ final class SettingsMigrationTests: OrbeTestCase {
     XCTAssertEqual(override[SettingKeys.agentStateIcons], ["working": "gearshape"])
   }
 
-  /// 新形式（canonical key）の settingsOverride はそのまま読める（strict decode で受理）。
+  /// 新形式（canonical key）の settingsOverride はそのまま読める。
   func testNewFormatWorkspaceOverrideLoads() throws {
     let new = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
