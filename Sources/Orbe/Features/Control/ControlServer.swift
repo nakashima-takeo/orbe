@@ -142,14 +142,36 @@ final class ControlServer {
   private func acceptOne() {
     let cfd = accept(listenFD, nil, nil)
     guard cfd >= 0 else { return }
+    attach(fd: cfd)  // 既に queue 上なので直に呼ぶ（adopt は自 queue への sync になり詰まる）
+  }
+
+  /// 既に接続済みの fd を制御プレーンへ載せる（queue 外からの入口）。生の fd を受け取るので
+  /// 所有権の移譲はこの呼びで確定させる——`async` にすると「戻ったが所有権はまだ移っていない」
+  /// 窓が開き、そこで呼び出し側が閉じると再利用された fd 番号が制御プレーンに載る。
+  func adopt(fd: Int32) {
+    // queue 上から呼ぶと自 queue への sync で即 deadlock する。この規律は規約に頼らず
+    // ここで落とす——deadlock は「固まった」としか見えず、制御プレーン全体（accept・
+    // 他接続・event 配信・timeout）が同時に止まるので原因に辿り着けない。trap なら
+    // 違反した呼び出し元がその場でスタックに出る。
+    dispatchPrecondition(condition: .notOnQueue(queue))
+    queue.sync { attach(fd: fd) }
+  }
+
+  /// 非ブロッキング化・Connection 生成・登録・受信開始。
+  /// Connection は必ずこの queue で作る——`handle` が respond をこの queue へ hop するため、
+  /// 別 queue で作ると受信と送信が Connection の内部状態（出力バッファ・fd・writeSource）を
+  /// 跨いで触ることになる。その規律を次行で強制する（`acceptOne` は queue 上なので直に、
+  /// queue 外からは `adopt` 経由で入る、という非対称の受け側）。
+  private func attach(fd: Int32) {
+    dispatchPrecondition(condition: .onQueue(queue))
     // 非ブロッキング化。詰まった 1 接続の write/read を全体から隔離し head-of-line blocking を断つ。
     // 失敗した fd はブロッキングのままなので制御プレーンへ入れず捨てる（詰まると共有 queue を凍結させる）。
-    let flags = fcntl(cfd, F_GETFL)
-    guard flags >= 0, fcntl(cfd, F_SETFL, flags | O_NONBLOCK) >= 0 else {
-      Darwin.close(cfd)
+    let flags = fcntl(fd, F_GETFL)
+    guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0 else {
+      Darwin.close(fd)
       return
     }
-    let conn = Connection(fd: cfd, server: self, queue: queue)
+    let conn = Connection(fd: fd, server: self, queue: queue)
     connections.insert(conn)
     conn.resume()
   }
@@ -161,10 +183,22 @@ final class ControlServer {
   // MARK: - ルーティング（queue 上で 1 行受信ごとに）
 
   func handle(line: Data, from conn: Connection) {
-    guard
-      let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-      let method = obj["method"] as? String
-    else { return }
+    // 読めない行を黙って捨てない。クライアント（`orb` / MCP ブリッジ）は 1 行応答を待って
+    // 読むので、無応答で return するとそのままハングになる。JSON-RPC 2.0 どおり 2 コードへ割る
+    // ——「JSON テキストとして読めない」と「JSON だがリクエストオブジェクトでない」は別の失敗で、
+    // 配列を送ったことを parse error と呼ぶのは嘘になる。
+    guard let value = try? JSONSerialization.jsonObject(with: line) else {
+      conn.respond(id: nil, result: .failure(ControlError(code: -32700, message: "parse error")))
+      return
+    }
+    guard let obj = value as? [String: Any], let method = obj["method"] as? String else {
+      // id は取れれば返す（配列には無い。最上位スカラは前段の -32700 に落ちてここへ来ない）。
+      // guard で束ねた obj は else 節から見えないので、id を拾うのにここで再キャストする。
+      conn.respond(
+        id: (value as? [String: Any])?["id"],
+        result: .failure(ControlError(code: -32600, message: "invalid request")))
+      return
+    }
     let id = obj["id"]
     let params = obj["params"] as? [String: Any] ?? [:]
 

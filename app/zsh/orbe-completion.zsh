@@ -119,14 +119,20 @@ _orbe_line_finish() {
 # completion_accept を id 付きで送り 1 行応答を読む。advance=true は次トークンへ進む確定（Tab）、
 # false は挿入のみの確定（Enter）。result.buffer が非 null なら zle の $BUFFER/$CURSOR を直書換し 0、
 # popup 非表示/候補なし/失敗/タイムアウトは何もせず 1（呼び元が各々のフォールバックへ）。
-# completion_update が無応答契約なので、この fd から読める行は accept 応答だけ。
+# この fd は無応答の update と id 付きの accept を 1 本に多重化するので、応答は位置ではなく
+# id で選ぶ。読めない行（不正 UTF-8 の buffer 等）には host が id:null のエラー行を返すため、
+# 1 行目を自分の応答とみなすと、それが 1 本混ざっただけで以後ずっと 1 つ前の応答を
+# コマンドラインへ適用し続ける（Enter も効かなくなる）。
 _orbe_try_accept() {
   local advance=$1
   _orbe_connect \
     && _orbe_send "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"completion_accept\",\"params\":{\"paneId\":$ORBE_PANE,\"advance\":$advance}}" \
     || return 1
   local line
-  IFS= read -r -t 1 -u$_ORBE_FD line || return 1
+  while IFS= read -r -t 1 -u$_ORBE_FD line; do
+    [[ $line == *'"id":1'* ]] && break  # 自分の accept 応答
+    line=
+  done
   [[ -n $line && $line != *'"buffer":null'* ]] || return 1
   [[ $line =~ '"buffer":"((\\.|[^"\\])*)"' ]] || return 1
   local raw=$match[1]
