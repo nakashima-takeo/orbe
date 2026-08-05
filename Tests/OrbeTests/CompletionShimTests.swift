@@ -141,7 +141,8 @@ final class CompletionShimTests: OrbeTestCase {
   }
 
   func testDirectoryPathIsNilWithoutBundle() {
-    // swift test（バンドル無し）では shim dir が解決されない＝ activate() は no-op。
+    // 同梱物が無い状態（ハーネスが BundledResources.root を管理下の空ディレクトリへ向けている）では
+    // shim dir が解決されない＝ activate() は no-op。
     XCTAssertNil(CompletionShim.directoryPath)
   }
 }

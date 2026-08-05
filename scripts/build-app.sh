@@ -63,7 +63,7 @@ echo "    初回・submodule 更新時は数分かかる（以降は Zig キャ�
 
 echo "==> swift build -c release"
 # release チャネルだけが -DORBE_RELEASE を焼く（`isDevBuild` と `OrbePaths.fallbackBundleId` の SSOT）。
-# release 側をオプトインにするのは、素の `swift build`（scripts/orbe-mcp.sh・dev-verify.sh が叩く）が
+# release 側をオプトインにするのは、素の `swift build`（scripts/orbe-mcp.sh が叩く）が
 # フラグ差分で再コンパイルしても dev のままになるようにするため。dev をオプトインにすると、そこで
 # .build/release のバイナリが静かに本番 identity へ落ちる。
 REL_DEFINE=()

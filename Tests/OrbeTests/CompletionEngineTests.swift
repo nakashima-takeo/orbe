@@ -315,8 +315,9 @@ final class CompletionEngineTests: OrbeTestCase {
   }
 
   func testEngineBundleAbsentDegradesGracefully() {
-    // `swift test` は .app バンドル無し → engine 未ロード。候補ゼロで返りクラッシュしない。
-    XCTAssertNil(CompletionEngine.bundlePath, "テスト実行体にはバンドルが無い")
+    // 同梱物が無い状態（ハーネスが BundledResources.root を管理下の空ディレクトリへ向けている）では
+    // engine が未ロードになる。候補ゼロで返りクラッシュしないことを確かめる。
+    XCTAssertNil(CompletionEngine.bundlePath, "同梱物の探索根に completion-engine.js が無い")
     let exp = expectation(description: "suggestions returns")
     CompletionEngine.shared.suggestions(buffer: "git ", cursor: 4, cwd: "/tmp") { result in
       XCTAssertTrue(result.choices.isEmpty)

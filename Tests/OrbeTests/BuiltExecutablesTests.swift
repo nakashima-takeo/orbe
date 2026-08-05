@@ -11,14 +11,11 @@ import XCTest
 /// 「Orbe が動いていない」ことと区別できないため、原因の見えない失敗になるか、存在チェックで握り潰して
 /// いれば黙って緑に化ける。ここが先に落ちればその切り分けが要らない。
 final class BuiltExecutablesTests: OrbeTestCase {
-  /// L4 が使うバイナリ位置の解決規則: xctest バンドルの親ディレクトリ。
-  private var builtProductsDirectory: URL {
-    Bundle(for: BuiltExecutablesTests.self).bundleURL.deletingLastPathComponent()
-  }
-
   /// 制御チャネルを喋る 3 実行体が、テストバンドルの隣に実行可能な状態で存在する。
+  /// 解決規則そのものは L4 の駆動台（`ControlProcess.builtProductsDirectory`）が持ち、ここはその
+  /// 規則が指す先を検査する——両者が別の式を持つと、片方だけ直したときに黙ってすれ違う。
   func testControlChannelExecutablesExistNextToTestBundle() {
-    let directory = builtProductsDirectory
+    let directory = ControlProcess.builtProductsDirectory
     for name in ["orbe-cli", "orbe-mcp", "orbe-report"] {
       let url = directory.appendingPathComponent(name, isDirectory: false)
       XCTAssertTrue(
