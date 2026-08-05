@@ -48,7 +48,7 @@ workspace / tab / pane にプロセス内単調増加 ID。型をまたいで一
 - `close_tab {tabId}` … close_pane と同じカスケード規律。未知 tab は `-32004`。socket 専用。
 - `report_agent {paneId, agent, state, sessionId?, message?, messageSource?}` … エージェント hook の状態報告を発信元ペインへ適用する（[agent-notify](agent-notify.md)）。`messageSource` は文言の出所で、ツール由来かどうかだけが上書き可否を決める（表示には出ない）。`state=="clear"` で状態/コマンド/セッション ID/文言/状態変化時刻を nil、それ以外は state/command を立て sessionId があれば更新し、文言は state の遷移と出所で上書き可否が決まる（状態変化時刻は state が実際に変わったときだけ進む）。
 - `wait_for_event {paneId?, kinds?, timeoutMs?}` … 状態変化を長ポーリングで待つ。kind ∈ {agent_state, pane_title, pwd, pane_closed}。`event.value` は kind 固有。フィルタ一致で {event}、timeout 超過で {timedOut:true}。1 接続あたり待機 1 件（2 件目は `-32005` で即拒否）。
-- `completion_update` / `completion_end` / `completion_accept` … コマンド補完用（[completion](completion.md)）。前 2 つは**無応答**。`completion_` 系は宛先解決ガードより前で分岐し、無応答メソッドは宛先不在でも応答を出さない（accept fd の framing を保つ）。socket 専用。
+- `completion_update` / `completion_end` / `completion_accept` … コマンド補完用（[completion](completion.md)）。前 2 つは**無応答**。`completion_` 系は宛先解決ガードより前で分岐し、無応答メソッドは宛先不在でも応答を出さない（打鍵ごとの update が accept fd に行を積まない）。読めない行にはこの分岐より前でエラー行を返すため、accept fd から読める行が accept 応答だけとは限らない——クライアントは `id` で自分の応答を選ぶ（[completion](completion.md)）。socket 専用。
 
 ## 境界
 - get_pane_text / send_text / send_key は **mount 済み（surface 生存）ペインにのみ作用**する。永続復元直後はアクティブ workspace の**全タブ**が mount される。背景 workspace のタブは ID を持つが surface 未生成（[workspace](workspace.md) の workspace 単位 keep-alive 遅延 mount）。未 mount ペインは get_pane_text が空・send 系は no-op。`activate_workspace` で前面化すれば読めるようになる。

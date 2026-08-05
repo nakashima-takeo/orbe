@@ -9,7 +9,7 @@ import XCTest
 /// 壊れると、`orb` / MCP ブリッジ / `orbe-report` が読む応答の形が黙って変わる。とくに
 /// **不正入力への応答が消えると、1 行応答を待って読むクライアントはそのままハングする**
 /// （#62）。応答を出さない契約を持つのは `completion_update` / `completion_end` の 2 つだけで、
-/// これが崩れると accept fd に stray 行が混ざり zsh 補完の framing が壊れる。
+/// これが崩れると打鍵ごとに zsh 補完の fd へ行が積み、accept 応答が締切内に読めなくなる。
 ///
 /// エラーコードの語彙は `docs/spec/control-api.md` の「エラー」節と 1 対 1 に対応する。
 /// 片方だけ変えたらここが落ちる。
@@ -144,7 +144,7 @@ final class ControlWireTests: OrbeTestCase {
   }
 
   /// target 不在でも `completion_update` / `completion_end` は無応答のまま。応答を書くと
-  /// accept fd に stray 行が残り、zsh 補完の「読める行は accept 応答だけ」という framing が壊れる。
+  /// 打鍵ごとに zsh 補完の fd へ行が積み、accept 応答が 1 秒の締切内に読めなくなる。
   func testCompletionSilentMethodsStaySilentWithoutTarget() {
     let wire = startWireWithoutTarget()
 
