@@ -145,8 +145,9 @@ final class ControlServer {
     attach(fd: cfd)  // 既に queue 上なので直に呼ぶ（adopt は自 queue への sync になり詰まる）
   }
 
-  /// 既に接続済みの fd を制御プレーンへ載せる（queue 外からの入口）。戻った時点で
-  /// 受信が始まっているため、呼び出し側は直後に書いた最初の行を取りこぼさない。
+  /// 既に接続済みの fd を制御プレーンへ載せる（queue 外からの入口）。生の fd を受け取るので
+  /// 所有権の移譲はこの呼びで確定させる——`async` にすると「戻ったが所有権はまだ移っていない」
+  /// 窓が開き、そこで呼び出し側が閉じると再利用された fd 番号が制御プレーンに載る。
   func adopt(fd: Int32) {
     // queue 上から呼ぶと自 queue への sync で即 deadlock する。この規律は規約に頼らず
     // ここで落とす——deadlock は「固まった」としか見えず、制御プレーン全体（accept・
@@ -191,8 +192,8 @@ final class ControlServer {
       return
     }
     guard let obj = value as? [String: Any], let method = obj["method"] as? String else {
-      // id は取れれば返す（配列や最上位スカラには無い）。obj を先に束ねると
-      // 「method 欠落」と「非オブジェクト」を分けられなくなる。
+      // id は取れれば返す（配列には無い。最上位スカラは前段の -32700 に落ちてここへ来ない）。
+      // guard で束ねた obj は else 節から見えないので、id を拾うのにここで再キャストする。
       conn.respond(
         id: (value as? [String: Any])?["id"],
         result: .failure(ControlError(code: -32600, message: "invalid request")))

@@ -12,9 +12,13 @@ import XCTest
 /// 共有していても待ち受けを奪い合わず、bind 完了を待つポーリングも要らない。
 ///
 /// `teardown` は client fd を閉じて target を外すだけで、サーバ側の EOF 処理（`connections` からの
-/// 自己除去）が control queue 上で非同期に終わるのは待たない。待たなくてよいのは
-/// `Connection.deliver` が待機中（`waitId != nil`）でなければ即 false を返すためで、前テストの
-/// 残骸が後続テストの `emit` に割り込んで応答を横取りすることはない。
+/// 自己除去）が control queue 上で非同期に終わるのは待たない。待たなくてよいのは `emit` が
+/// `connections` 全件へ配るファンアウトだからで、待機を張ったまま終えたテスト（フィルタの素通りを
+/// 見る 2 本）の残骸が起きても、後続テストが張った待機は消費されない。
+///
+/// 応答を読まない行を残したまま終えるのは別で、`handle` の main hop は実行時に
+/// `ControlServer.shared.target` を読むため後続テストの Fake を汚す。各テストは送った行を
+/// `nextResponse` か `barrier` で締めることでこれを断つ。
 ///
 /// これが壊れると、制御プロトコルの語（method 名・params キー・エラーコード）を測る唯一の
 /// 経路が消える。`WindowController` を直接叩く既存テストは `ControlServer` の検証層を丸ごと
@@ -51,7 +55,7 @@ final class ControlWire {
     let flags = fcntl(clientFD, F_GETFL)
     precondition(flags >= 0 && fcntl(clientFD, F_SETFL, flags | O_NONBLOCK) >= 0, "O_NONBLOCK 失敗")
 
-    // adopt は queue.sync なので、戻った時点で受信が始まっている＝直後に書く最初の行を落とさない。
+    // 生の fd の所有権はこの呼びで制御プレーンへ移る（以後この fd は Connection が閉じる）。
     ControlServer.shared.adopt(fd: fds[1])
   }
 
@@ -130,7 +134,13 @@ final class ControlWire {
 
   /// 次の 1 行応答を JSON オブジェクトとして読む。読めなければ失敗させて nil。
   func nextResponse(file: StaticString = #filePath, line: UInt = #line) -> [String: Any]? {
-    guard let raw = nextLine() else {
+    let raw: Data
+    switch nextLine() {
+    case .line(let data): raw = data
+    case .eof:
+      XCTFail("応答の前にサーバが接続を畳んだ", file: file, line: line)
+      return nil
+    case .timedOut:
       XCTFail("応答が 1 行も返らない（無応答のままハングする契約違反）", file: file, line: line)
       return nil
     }
@@ -179,26 +189,35 @@ final class ControlWire {
     }
   }
 
+  /// `nextLine` の帰結。EOF と締切超過を分ける——どちらも「応答が読めない」に見えるが、原因の
+  /// 向きが逆で、前者は接続が畳まれた（overflow 判定や write エラー経路の回帰）、後者は応答が
+  /// そもそも書かれていない。同じ文言で報告すると調査が反対側へ誘導される。
+  private enum LineOutcome {
+    case line(Data)
+    case eof
+    case timedOut
+  }
+
   /// 改行までを 1 行として取り出す。EAGAIN のあいだは runloop を回し、control queue と
   /// `handle` の main hop の両方を進ませる（テスト本体は main に留まる）。
-  private func nextLine() -> Data? {
+  private func nextLine() -> LineOutcome {
     let deadline = Date().addingTimeInterval(Self.deadlineSeconds)
     var buf = [UInt8](repeating: 0, count: 4096)
     while true {
       if let nl = pending.firstIndex(of: 0x0A) {
         let line = Data(pending[pending.startIndex..<nl])
         pending.removeSubrange(pending.startIndex...nl)
-        return line
+        return .line(line)
       }
       let n = read(clientFD, &buf, buf.count)
       if n > 0 {
         pending.append(contentsOf: buf[0..<n])
         continue
       }
-      if n == 0 { return nil }  // EOF
+      if n == 0 { return .eof }
       if errno == EINTR { continue }
-      guard errno == EAGAIN || errno == EWOULDBLOCK else { return nil }
-      guard Date() < deadline else { return nil }
+      guard errno == EAGAIN || errno == EWOULDBLOCK else { return .eof }  // 相手が落ちた扱い
+      guard Date() < deadline else { return .timedOut }
       RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(Self.stepSeconds))
     }
   }
