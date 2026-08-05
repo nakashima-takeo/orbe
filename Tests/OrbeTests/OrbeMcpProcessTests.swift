@@ -34,21 +34,33 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       ?? ""
   }
 
-  /// `send_text` ＋ `send_key enter` でペインのシェルが実際にコマンドを**実行**する。
-  /// トークンは入力エコーと実行結果で 2 回以上現れる（1 回なら送っただけで実行されていない）。
+  /// 「シェルが実際に実行した」ことの証拠になるコマンドと目印。目印はコマンド行の中では 2 つの
+  /// 文字列リテラルに割れているため、**連結された形はシェルが評価した出力にしか現れない**。
+  ///
+  /// 出現回数（入力エコー＋出力で 2 回以上）では測らない。ペーストの反映とプロンプト再描画で
+  /// 入力側だけで 2 回になりうるため、実行されていなくても緑になる。
+  private func executionProbe() -> (command: String, marker: String) {
+    let id = String(format: "%08x", UInt32.random(in: 0...UInt32.max))
+    return ("echo L4D\"\"ONE_\(id)", "L4DONE_\(id)")
+  }
+
+  /// 実行済みになるまで待つ。可視範囲は長い出力で流れるため scrollback 側で見る。
+  private func waitForExecution(_ control: ControlProcess, pane: Int, marker: String) -> Bool {
+    waitUntil(15) { paneText(control, pane: pane, scrollback: true).contains(marker) }
+  }
+
+  /// `send_text` ＋ `send_key enter` でペインのシェルが実際にコマンドを**実行**する
+  /// （`send_text` はペースト相当なので、enter を別送しなければプロンプトに留まったままになる）。
   func testSendTextAndEnterExecutesInPane() throws {
     let control = try startControlProcess()
     let pane = try livePaneId(control)
-    let token = "ORBE_L4_\(UInt32.random(in: 0...UInt32.max))"
+    let probe = executionProbe()
 
-    runInPane(control, pane: pane, command: "echo \(token)")
+    runInPane(control, pane: pane, command: probe.command)
 
-    var count = 0
-    let executed = waitUntil(15) {
-      count = paneText(control, pane: pane).components(separatedBy: token).count - 1
-      return count >= 2
-    }
-    XCTAssertTrue(executed, "enter を送ってもコマンドが実行されていない（トークン出現 \(count) 回）")
+    XCTAssertTrue(
+      waitForExecution(control, pane: pane, marker: probe.marker),
+      "enter を送ってもコマンドが実行されていない: \(paneText(control, pane: pane, scrollback: true))")
   }
 
   /// `list_workspaces` の全行に `dormantAgentCount` が出る（休眠可視化の源）。
@@ -99,12 +111,10 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     let control = try startControlProcess()
     let pane = try livePaneId(control)
 
-    let token = "ORBE_L4_\(UInt32.random(in: 0...UInt32.max))"
-    runInPane(control, pane: pane, command: "seq 1 200; echo \(token)")
+    let probe = executionProbe()
+    runInPane(control, pane: pane, command: "seq 1 200; \(probe.command)")
     XCTAssertTrue(
-      waitUntil(15) {
-        paneText(control, pane: pane).components(separatedBy: token).count - 1 >= 2
-      }, "seq の出力が出切らない")
+      waitForExecution(control, pane: pane, marker: probe.marker), "seq の出力が出切らない")
 
     let visible = paneText(control, pane: pane)
     let full = paneText(control, pane: pane, scrollback: true)
