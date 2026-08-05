@@ -261,8 +261,9 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   }
 
   /// 旧 v2 JSON（version:2・タブ＝素の PaneNode）も load() が受理し（version ゲート緩和）、
-  /// 既存タブ構成を失わず explicitTitle=nil で読む。次回 save で v3 へ自動移行する。
-  func testLegacyV2FileLoadsAndMigratesToV3() throws {
+  /// 既存タブ構成を失わず explicitTitle=nil で読む。起動を通した現行バージョンへの書き直しは
+  /// `WindowControllerRestoreTests.testLaunchFromLegacyV2FileRewritesToCurrentVersion` が持つ。
+  func testLegacyV2FileLoads() throws {
     let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
     let v2 = """
       {"version":2,"activeWorkspace":0,"workspaces":[\
@@ -275,12 +276,6 @@ final class WorkspacePersistenceTests: OrbeTestCase {
     let tab = loaded.workspaces[0].tabs[0]
     XCTAssertNil(tab.explicitTitle, "旧 v2 タブは explicitTitle=nil")
     XCTAssertEqual(tab.tree, .leaf(cwd: "/r/a", agent: nil), "既存タブ構成（cwd）を失わない")
-
-    // 次回 save 相当（version: 3 で書き直す）で v3 へ移行し、再 load できる。
-    var migrated = loaded
-    migrated.version = WorkspacePersistence.version
-    WorkspacePersistence.save(migrated)
-    XCTAssertEqual(WorkspacePersistence.load()?.version, 3, "次回 save で v3 へ自動移行")
   }
 
   /// 旧形式 JSON（tabs が素の PaneNode＝explicitTitle キー無し）も decode でき、

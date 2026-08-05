@@ -57,12 +57,16 @@ final class SettingsMigrationTests: OrbeTestCase {
     XCTAssertEqual(second[SettingKeys.agentStateIcons], ["done": "checkmark.seal"])
   }
 
-  /// 旧テーマ名（"Dracula" 等）は移行時に .auto へ丸めて読む（寛容 decode で全設定を失わない）。
-  func testLegacyThemeNameRoundsToAutoWithoutLosingOtherSettings() throws {
+  /// 値域外の `theme` を含む旧ファイルも、他設定を巻き込まず移行する。`theme` は移行 struct で
+  /// `ThemeMode` として型付けして読むため、値域外は既定（Auto）として層に載る。
+  ///
+  /// workspace 上書きの移行は同じ値を生の文字列のまま層へ載せる（解決時に既定へ落ちるので実効値は
+  /// 一致する）。両者で差の出る値は書き込み経路の値域検証を通れないので、意味を揃えてはいない。
+  func testOutOfRangeThemeMigratesWithoutLosingOtherSettings() throws {
     try Data(#"{"defaultAgent":"claude","fontSize":16,"theme":"Dracula"}"#.utf8)
       .write(to: settingsFile())
     let layer = SettingsPersistence.loadGlobal()
-    XCTAssertEqual(layer[SettingKeys.theme], .auto, "旧テーマ名は Auto へ丸める")
+    XCTAssertEqual(layer[SettingKeys.theme], .auto, "値域外の theme は既定として載る")
     XCTAssertEqual(layer[SettingKeys.fontSize], 16, "他設定は失わない")
     XCTAssertEqual(layer[SettingKeys.defaultAgent], "claude")
   }
@@ -74,6 +78,54 @@ final class SettingsMigrationTests: OrbeTestCase {
     let layer = SettingsPersistence.loadGlobal()
     XCTAssertEqual(layer[SettingKeys.defaultAgent], "claude")
     XCTAssertEqual(layer[SettingKeys.fontSize], 16)
+  }
+
+  /// 移行は app-state.json の既存項目を潰さない。旧 settings.json は `preferredLanguage` も
+  /// `registeredAgentPluginName` も持たないので、全体上書きするとこの 2 つが消える
+  /// ——言語が未選択に戻って初回言語選択画面が再び出る／プラグインが毎起動登録し直される。
+  func testMigrationMergesIntoExistingAppState() throws {
+    AppStatePersistence.save(
+      AppStateFile(registeredAgentPluginName: "orbe-notify-v2", preferredLanguage: "ja"))
+    let legacy = """
+      {"agentPluginsInstalled":true,"completionInstalled":true,\
+      "cachedShellPath":"/usr/local/bin:/usr/bin","fontSize":16}
+      """
+    try Data(legacy.utf8).write(to: settingsFile())
+
+    _ = SettingsPersistence.loadGlobal()
+
+    let app = try XCTUnwrap(AppStatePersistence.load())
+    XCTAssertEqual(app.preferredLanguage, "ja", "旧形式が持たない項目は移行で消えない")
+    XCTAssertEqual(app.registeredAgentPluginName, "orbe-notify-v2", "旧形式が持たない項目は移行で消えない")
+    XCTAssertEqual(app.agentPluginsInstalled, true, "旧形式の項目は入る")
+    XCTAssertEqual(app.completionInstalled, true, "旧形式の項目は入る")
+    XCTAssertEqual(app.cachedShellPath, "/usr/local/bin:/usr/bin", "旧形式の項目は入る")
+  }
+
+  /// 移行が中断（app-state を書いた後・settings.json 置換の前でクラッシュ）した後の再移行は、
+  /// その間に書かれた app-state を巻き戻さない。マージなら再移行は同じ値を上書きするだけで無害になる。
+  ///
+  /// 巻き戻し対象は「旧形式が語彙として持たない項目」（preferredLanguage）だけではない。旧形式が
+  /// 語彙としては持つが**この 1 ファイルには書かれていない**項目（ここでは completionInstalled）も、
+  /// nil をそのまま代入すれば消える——だから移行後に立った値を混ぜて、欠落を nil 上書きに変える
+  /// 実装をここで落とす（消えると補完が毎起動入れ直しになる）。
+  func testReMigrationDoesNotUndoInterveningAppStateWrites() throws {
+    let legacy = #"{"agentPluginsInstalled":true,"cachedShellPath":"/usr/bin","fontSize":16}"#
+    try Data(legacy.utf8).write(to: settingsFile())
+    _ = SettingsPersistence.loadGlobal()  // 1 回目の移行
+
+    // 移行後にユーザーが言語を選び、補完も入れる（後者は旧ファイルに無い項目）。
+    AppStatePersistence.update {
+      $0.preferredLanguage = "ja"
+      $0.completionInstalled = true
+    }
+    let before = try Data(contentsOf: appStateFile())
+
+    try Data(legacy.utf8).write(to: settingsFile())  // 中断クラッシュ相当（旧形式のまま残っている）
+    _ = SettingsPersistence.loadGlobal()  // 再移行
+
+    XCTAssertEqual(
+      try Data(contentsOf: appStateFile()), before, "再移行は app-state を 1 バイトも変えない")
   }
 
   // MARK: - degenerate（空・欠落・壊れ）は既定へ fallback
@@ -137,7 +189,7 @@ final class SettingsMigrationTests: OrbeTestCase {
     XCTAssertEqual(override[SettingKeys.agentStateIcons], ["working": "gearshape"])
   }
 
-  /// 新形式（canonical key）の settingsOverride はそのまま読める（strict decode で受理）。
+  /// 新形式（canonical key）の settingsOverride はそのまま読める。
   func testNewFormatWorkspaceOverrideLoads() throws {
     let new = """
       {"version":3,"activeWorkspace":0,"workspaces":[\

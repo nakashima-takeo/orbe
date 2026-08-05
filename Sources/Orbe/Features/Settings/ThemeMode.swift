@@ -8,9 +8,9 @@ import AppKit
 enum ThemeMode: String, Codable, Equatable {
   case auto, dark, light
 
-  /// 寛容デコード: 旧 settings.json / workspaces.json に残る任意テーマ名（"Dracula" 等）は `.auto` へ
-  /// 丸める。ここで throw すると load がファイル全体を nil にし全設定を失うため必須。
-  /// 次回保存で丸めた rawValue が書かれ、旧値は自然に消える。
+  /// 寛容デコード: 値域外の rawValue は `.auto` として読む。この型を field に持つのは旧形式の移行
+  /// struct（`LegacySettingsFile`・`LegacyWorkspaceSettingsOverride`）だけで、そこで throw すると
+  /// struct ごと decode が落ちる——`theme` 1 項目の異常で移行元の設定を全部失わないため。
   init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = ThemeMode(rawValue: raw) ?? .auto
