@@ -31,7 +31,7 @@ private func configList(_ rest: [String]) -> Never {
     exit(0)
   }
   var args = rest
-  let target = takeWorkspaceTarget(&args)
+  let target = takeWorkspaceTarget(&args, positionals: 0)
   var params: [String: Any] = [:]
   if case .id(let n) = target { params["workspaceId"] = n }
   let result = callOrExit("config_list", params)
@@ -55,7 +55,7 @@ private func configGet(_ rest: [String]) -> Never {
     exit(0)
   }
   var args = rest
-  let target = takeWorkspaceTarget(&args)
+  let target = takeWorkspaceTarget(&args, positionals: 1)
   guard let key = args.first, !key.hasPrefix("-") else { usageDie("config get requires <key>") }
   var params: [String: Any] = [:]
   if case .id(let n) = target { params["workspaceId"] = n }
@@ -74,7 +74,7 @@ private func configSet(_ args: [String]) -> Never {
     exit(0)
   }
   var rest = args
-  let target = takeWorkspaceTarget(&rest)
+  let target = takeWorkspaceTarget(&rest, positionals: 2)
   guard rest.count >= 2 else { usageDie("config set requires <key> <value>") }
   let key = rest[0]
   // key の妥当性・値型は control の config_list を SSOT に引く（CLI 側で二重管理しない）。
@@ -111,8 +111,14 @@ private func configUnset(_ args: [String]) -> Never {
     exit(0)
   }
   var rest = args
-  let target = takeWorkspaceTarget(&rest)
+  let target = takeWorkspaceTarget(&rest, positionals: 1)
   guard let key = rest.first, !key.hasPrefix("-") else { usageDie("config unset requires <key>") }
+  // key の妥当性は set と同じく control の config_list を SSOT に引く。片方だけ弾くと、打ち間違えた
+  // unset が「解除できた」と表示されて上書きが残ったままになる。
+  let settings = (callOrExit("config_list", [:]) as? [String: Any])?["settings"] as? [[String: Any]]
+  guard settings?.contains(where: { $0["key"] as? String == key }) == true else {
+    usageDie("unknown config key: \(key)")
+  }
   var params: [String: Any] = ["key": key, "value": NSNull()]
   let scope: String
   switch target {
@@ -263,10 +269,10 @@ private func paneList(_ rest: [String]) -> Never {
     exit(0)
   }
   var args = rest
-  let target = takeWorkspaceTarget(&args)
+  let workspaceId = takeWorkspaceId(&args)
   let result = callOrExit("list_panes", [:])
   var panes = (result as? [String: Any])?["panes"] as? [[String: Any]] ?? []
-  if case .id(let n) = target { panes = panes.filter { $0["workspaceId"] as? Int == n } }
+  if let workspaceId { panes = panes.filter { $0["workspaceId"] as? Int == workspaceId } }
   if wantJSON {
     printJSON(["panes": panes])
   } else {
@@ -356,9 +362,9 @@ private func tabNew(_ rest: [String]) -> Never {
   if dir == nil, args.contains("--dir") { usageDie("--dir requires a <path> value") }
   let cmd = takeOption(&args, "--cmd")
   if cmd == nil, args.contains("--cmd") { usageDie("--cmd requires a value") }
-  let target = takeWorkspaceTarget(&args)
+  let workspaceId = takeWorkspaceId(&args)
   var params: [String: Any] = [:]
-  if case .id(let n) = target { params["workspaceId"] = n }
+  if let workspaceId { params["workspaceId"] = workspaceId }
   if let dir { params["cwd"] = dir }
   if let cmd { params["command"] = cmd }
   let result = callOrExit("spawn", params)

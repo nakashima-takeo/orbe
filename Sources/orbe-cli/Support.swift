@@ -27,6 +27,18 @@ func usageDie(_ message: String) -> Never {
   exit(2)
 }
 
+/// 接続・文脈解決の失敗（終了コード 1）。`--json` では RPC エラーと同じ `{"error":{code,message}}`
+/// を stdout へ載せる——書式が経路によって割れると、機械可読を謳いながら一部の失敗だけ
+/// パースできない出力になる。
+func transportDie(_ message: String) -> Never {
+  if wantJSON {
+    printJSON(["error": ["code": -1, "message": message]])
+  } else {
+    stderrLine(message)
+  }
+  exit(1)
+}
+
 /// JSON 値を人間可読な 1 語へ整形する（Bool は NSNumber と衝突するため CFBoolean で判定）。
 func display(_ value: Any) -> String {
   if let n = value as? NSNumber {
@@ -51,12 +63,7 @@ func callOrExit(_ method: String, _ params: [String: Any]) -> Any {
     }
     exit(1)
   case .transport(let message):
-    if wantJSON {
-      printJSON(["error": ["code": -1, "message": message]])
-    } else {
-      stderrLine(message)
-    }
-    exit(1)
+    transportDie(message)
   }
 }
 
@@ -98,24 +105,46 @@ func paneSplitDirection(_ args: inout [String]) -> String {
   return wantH ? "down" : "right"
 }
 
-/// config / tab の `--workspace [<id>]`（optional-value）の解決結果。
+/// config の `--workspace [<id>]`（optional-value）の解決結果。書き込み先が 3 つ実在するので 3 態を持つ。
+/// pane / tab は「どれに絞るか・どこに開くか」で選択肢が 2 つしかなく bare に割り当てる意味が無いため、
+/// そちらは `takeWorkspaceId` が `<id>` 必須で扱う（この非対称は spec の表記どおり）。
 enum WorkspaceTarget {
   case none  // --workspace 未指定
   case active  // --workspace のみ（値なし）
   case id(Int)  // --workspace <id>（<id> は数値か current）
 }
 
-/// `--workspace [<id>]` を抜き取る。直後トークンが `-` 始まりでなく数値か `current` に解決できるなら
-/// 値として消費して `.id`、無ければ `.active`、フラグ自体が無ければ `.none`。
-func takeWorkspaceTarget(_ args: inout [String]) -> WorkspaceTarget {
+/// config の `--workspace [<id>]` を抜き取る。直後トークンが `-` 始まりでなく数値か `current` に
+/// 解決できるなら値として消費して `.id`、無ければ `.active`、フラグ自体が無ければ `.none`。
+///
+/// `positionals` はそのサブコマンドが取る位置引数の数。bare と判定した後に残余がこれを超えるなら、
+/// フラグ直後のトークンは値の意図だったので usage エラーにする。この判定が無いと順序で挙動が割れ、
+/// 後置（`config set <key> <value> --workspace nosuch`）では解決できない指定が黙って捨てられ、
+/// **指定したのと違う（アクティブな）workspace が書き換わる**。
+func takeWorkspaceTarget(_ args: inout [String], positionals: Int) -> WorkspaceTarget {
   guard let i = args.firstIndex(of: "--workspace") else { return .none }
-  if i + 1 < args.count, !args[i + 1].hasPrefix("-"), let id = workspaceIdIfResolvable(args[i + 1])
-  {
+  let candidate = (i + 1 < args.count && !args[i + 1].hasPrefix("-")) ? args[i + 1] : nil
+  if let candidate, let id = workspaceIdIfResolvable(candidate) {
     args.removeSubrange(i...(i + 1))
     return .id(id)
   }
   args.remove(at: i)
+  if let candidate, args.count > positionals { usageDie("invalid workspace id: \(candidate)") }
   return .active
+}
+
+/// pane / tab の `--workspace <id>`（値必須）を抜き取る。フラグ自体が無ければ nil。
+/// bare（値なし）も解決できない値も usage エラー——bare を黙ってアクティブ扱いにすると、
+/// 絞り込みも開く先も指定と無関係に決まる。
+func takeWorkspaceId(_ args: inout [String]) -> Int? {
+  guard let i = args.firstIndex(of: "--workspace") else { return nil }
+  guard i + 1 < args.count, !args[i + 1].hasPrefix("-") else {
+    usageDie("--workspace requires an <id>")
+  }
+  let token = args[i + 1]
+  guard let id = workspaceIdIfResolvable(token) else { usageDie("invalid workspace id: \(token)") }
+  args.removeSubrange(i...(i + 1))
+  return id
 }
 
 /// `<token>` が数値 workspace id か `current` なら解決した id を返す（それ以外 nil＝値として消費しない）。
@@ -162,8 +191,7 @@ func resolveWorkspaceId(_ arg: String) -> Int {
     let active = list.first(where: { $0["active"] as? Bool == true }),
     let id = active["id"] as? Int
   else {
-    stderrLine("no active workspace")
-    exit(1)
+    transportDie("no active workspace")
   }
   return id
 }
@@ -195,12 +223,14 @@ let topUsage = """
     orb pane split [<pane>] [-v | -h]
     orb pane close [<pane>]
     orb pane focus <pane>
-    orb tab new [--workspace [<id>]] [--dir <path>] [--cmd "…"]
+    orb tab new [--workspace <id>] [--dir <path>] [--cmd "…"]
     orb tab close [<tab>]
 
   COMMON FLAGS:
     --json              machine-readable JSON output (read commands / errors)
-    --workspace [<id>]  target a workspace (<id> or current; bare = active)
+    --workspace [<id>]  target a workspace (<id> or current). bare --workspace
+                        means the active one and is config-only; pane / tab
+                        require an explicit <id>
     --dir <path>        root/working directory (ws new / tab new)
     --cmd "…"           command to run in the new tab (tab new)
 
@@ -236,7 +266,7 @@ let tabUsage = """
   orb tab — open and close tabs in the running instance
 
   USAGE:
-    orb tab new [--workspace [<id>]] [--dir <path>] [--cmd "…"]
+    orb tab new [--workspace <id>] [--dir <path>] [--cmd "…"]
     orb tab close [<tab>]
 
   tab new opens in the active workspace unless --workspace <id> is given.

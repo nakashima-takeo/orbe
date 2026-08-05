@@ -100,8 +100,9 @@ func controlRequest(method: String, params: [String: Any]) -> RPCResult {
 // MARK: - ディスパッチ
 
 var args = Array(CommandLine.arguments.dropFirst())
-// --json はどこに現れてもよい共通フラグ。先頭で抜き取り、残りを位置引数として扱う。
-if let i = args.firstIndex(of: "--json") {
+// --json はどこに何度現れてもよい共通フラグ。全て抜き取り、残りを位置引数として扱う
+// （1 個だけ抜くと、`orb --json` を包んだラッパ越しの再指定が位置引数に落ちてコマンド名になる）。
+while let i = args.firstIndex(of: "--json") {
   wantJSON = true
   args.remove(at: i)
 }
