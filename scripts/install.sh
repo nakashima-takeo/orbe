@@ -2,7 +2,8 @@
 # Orbe Dev.app をビルドして /Applications に据える（自分の Mac で開発版を常用するため）。
 # 開発バージョンアップのたびに、これ1本で Orbe Dev を最新ビルドに入れ替えて再起動する。
 # 本番の /Applications/Orbe.app には触れない（dev は別 identity のアプリとして共存する）。
-# 実機検証用の隔離インスタンス（scripts/dev-verify.sh）と違い、こちらは常用の実体を入れ替える。
+# 実機検証は隔離した使い捨てインスタンス（.claude/skills/sandbox-run）が担う。こちらは常用の実体を
+# 入れ替えるので、走らせている間は常用の Orbe Dev が落ちて入れ替わる。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

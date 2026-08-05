@@ -1,7 +1,7 @@
 ---
 title: テスト実装ロードマップ
 description: テストアーキテクチャへ到達するためのスライスと進捗
-updated: 2026-08-03
+updated: 2026-08-06
 ---
 
 # テスト実装ロードマップ
@@ -18,7 +18,7 @@ updated: 2026-08-03
 | L1 ユニット | 主戦場。Git パーサ群・`SessionStore`・`SettingsLayer`・`AttentionSnapshot`・`MenuBarArrivalDriver` などが厚い | 穴を埋める。とくに `GitRepo` のメソッド群・`untrackedFileDiff` の境界値 |
 | L2 結合 | 観測面が `window.title` 止まり。永続は保存側が厚く**復元側がゼロ**。IME / スクロール / キー翻訳は**テスト 0** | 復元ラウンドトリップ・設定適用の配線・keep-alive・ターミナル入力表面 |
 | L3 wire 契約 | **0**。既存の control テストは `WindowController` を直接叩き、検証層を迂回している | socketpair 上の実 `Connection` でプロトコルの語を固める |
-| L4 プロセス境界 | **0**。`orbe-cli` は 21 サブコマンド中 0、`orbe-mcp` はテストターゲット自体が無い。唯一の導通確認は `dev-verify.sh`（CI 外・実アプリ起動） | 実バイナリ × in-process `ControlServer`。`dev-verify.sh` を置換 |
+| L4 プロセス境界 | **0**。`orbe-cli` は 16 サブコマンド中 0、`orbe-mcp` はテストターゲット自体が無い。唯一の導通確認は手動の開発ループスクリプト（CI 外・実アプリ起動） | 実バイナリ × in-process `ControlServer` |
 | L5 コンポーネント | `MenuBarStatusViewTests` と `ChromeStatusRowTests` のみ | 状態 → 表示とレイアウト数値 |
 | L6 見た目 | **0**。`Design*SnapshotTests` は `XCTAssert` 0 件・ゴールデン 0 枚・CI ではスキップされる PNG 生成器 | 1x 固定のゴールデン比較 |
 | L7 生成物 | `L10nCompletenessTests` と `OrbePalette` の drift ゲートのみ | `.app` 静的検査・agent-plugin 構成・tokens drift |
@@ -35,7 +35,7 @@ updated: 2026-08-03
 |---|---|---|---|---|---|
 | 0 | 基盤足場 | 単一ハーネス（`OrbeTestCase` が点火し `XCTestObservation` が毎テスト隔離。state dir は `ORBE_STATE_DIR` を 90 バイト以下の temp へ向けて隔離し、`control.sock` も自動で追従。永続・同梱リソース根・ghostty 設定探索先の override を毎テスト張り直す。補完の学習ストアだけはプロセス級固定で、学習状態はテスト間で持ち越される）。`Bundle.main` 直参照 3 箇所を `BundledResources` へ集約。ビルド済み CLI 実行体がテストバンドルの隣にある前提と、その解決規則の固定 | — | 完了 | — |
 | 1 | wire 契約 | 制御プロトコルの語を socketpair 上の実 `Connection` で固める（`ControlWireTests` 群）。method 名・params キー・エラーコード・成功時の応答キーと宛先への配線・`wait_for_event`・framing・不正入力。前提として `ControlServer` に `adopt(fd:)` を切り出し、不正入力へ `-32700` / `-32600` を返すよう直した。エラーコードの語彙は `docs/spec/control-api.md` の「エラー」節と 1 対 1。#50 #62 | 0 | 完了 | — |
-| 2 | プロセス境界 | 実 `orbe-cli` / `orbe-mcp` / `orbe-report` を subprocess で駆動。引数解釈・終了コード・stdout・hook 実経路・bare `orb` の PATH 解決。`dev-verify.sh` を置換して廃止。**スライス 1 からの持ち越し**——`get_pane_text` の `scrollback`（Fake target では `SurfaceView.controlReadText` が surface 無しで nil を返し真偽の差が観測できない。実 `WindowController` ＋ 実 surface に対し `orb` の `--scrollback` 有無で出力が変わることを見る）と、`orbe-report` 側の語（Orbe とモジュールを共有せず wire の語をリテラルで持つため、`orbe-report` だけを改名しても L3 では検出できない）。#63 #64 #74 | 0, 1 | 未着手 | — |
+| 2 | プロセス境界 | 実 `orbe-cli` / `orbe-mcp` / `orbe-report` を subprocess で駆動し、テストプロセス内の実 `WindowController` ＋ `ControlServer` へ繋ぐ（`ControlProcessHarness`。子の待機は runloop を回して行い、env は明示辞書のみで親から継承しない）。全 16 サブコマンドのライフサイクル・終了コード・`--json` の出力先・`ORBE_PANE` / `current` の文脈解決・`--workspace` の意味論・hook 実経路・bare `orb` の PATH 解決・`orbe-report` が書く生 1 行の語。**スライス 1 からの持ち越し**だった `get_pane_text` の `scrollback` も実 surface で固定した。`.app` 起動経路と `AppDelegate` 配線は範囲外で、その煙探知は `sandbox-run` が持つ。#63 #64 #74 | 0, 1 | 完了 | — |
 | 3 | 復元と移行 | 保存 → 復元 → 再保存のラウンドトリップ。`TabState` decode の非対称（`editor` だけ必須で、無いと全 workspace 消失）・範囲外クランプ・デバウンス。#56 #68 #54 | 0 | 未着手 | — |
 | 4 | 既存テストの整理 | assert 0 件の PNG 生成器を「テスト」から出す。自分のクロージャを自分で呼ぶ配線テスト・production を再実装したテスト・13 ファイルに浸透した行 index ハードコード・ヘッドレスで fail する 4 本・条件付きアサートを直す | — | 未着手 | — |
 | 5 | ターミナル入力表面 | IME の preedit 同期と Backspace 貫通防止・キー翻訳・スクロールの蓄積と合体 flush。実 `SurfaceView` を直接駆動する。**スライス 1 からの持ち越し**——`completion_accept` の `advance` と `completion_update` の `buffer`/`cursor`。前者は popup（`CompletionController`）が生まれないと `completionAccept` が結果を返さず、後者は無応答契約で観測面がゼロ（値の到達は `CompletionController` の内部状態にしか現れない）。補完経路を実際に駆動するときに `CompletionLearning.shared` のリセット可能化も同じ地点で要る | 0 | 未着手 | — |

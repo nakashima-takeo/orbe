@@ -36,7 +36,7 @@ flowchart TD
    `env | grep -i GHOSTTY` で他のリソースポインタ系が残っていればそれも `-u` で足す。この state dir と PID を控える（片付けに使う）。隔離インスタンスは自前の control.sock（`$ORBE_STATE_DIR/control.sock`）を持つ。
 3. モードで分岐:
    - **承認モード（既定）**: 今回の変更が**どこに現れ・何を触って見るか**と、画面 chrome の **build-id が手順1 で控えた値か**を短く提示する（人間目視が必須の条件があればここで渡す）。`AskUserQuestion` で承認を問う。**この承認が後続（確定・マージ等）の許可**。NG・指摘があれば呼び出し側へ差し戻す。
-   - **無人モード**: `$ORBE_STATE_DIR/control.sock` を呼び出し側へ渡し、制御 API で駆動して確かめる。
+   - **無人モード**: まず**煙探知を 1 本通してから** `$ORBE_STATE_DIR/control.sock` を呼び出し側へ渡し、制御 API で駆動して確かめる。煙探知は「`list_panes` でペインを取り、`send_text "echo <token>"` ＋ `send_key enter` を送り、`get_pane_text` に token が **2 回以上**現れるまでポーリング（1 回は入力エコーだけ＝実行されていない）」。これが通らないなら、起こしたバンドルは制御 API から駆動できていないので、駆動を始めず失敗として呼び出し側へ返す。`.app` の起動経路と `AppDelegate` の配線は `swift test` の守備範囲外なので、機械的に確かめる場所はここしかない。
 4. **片付ける。** 隔離インスタンスを kill し、state dir を消す。承認・NG・失敗のいずれでも必ず行う。
 
 ## Orbe の契約（このスキルが依存するもの）

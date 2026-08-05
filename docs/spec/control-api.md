@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe・現状）
 description: Unix socket 上の JSON-RPC でペイン/タブ/workspace を操作する out-of-band 制御チャネルと MCP ブリッジ・ツール群・libghostty 経路・mount 境界
-updated: 2026-08-03
+updated: 2026-08-06
 ---
 
 外部やエージェントが Orbe 全体を操作する out-of-band 制御チャネル。エージェント状態報告（[agent-notify](agent-notify.md) の `report_agent`）もこのチャネルに集約する。
@@ -61,6 +61,6 @@ workspace / tab / pane にプロセス内単調増加 ID。型をまたいで一
 `orbe-mcp` 実行ターゲット（GhosttyKit/AppKit 非依存）。MCP stdio を喋りツール定義を保持し、tools/call を control.sock へ転送する薄い層（ツール反復に Orbe 本体の再ビルド/再起動が不要）。`.mcp.json` の `Orbe` サーバは起動スクリプトが毎回 `swift build` を通してから exec する（stale バイナリが別チャネルの socket を掴まないため・[channel](channel.md)）。接続先 control.sock は app と同じ規則で `ORBE_STATE_DIR` を honor するため、隔離インスタンスと bridge を同じ `ORBE_STATE_DIR` で起こせばその隔離インスタンスを MCP で駆動できる。
 
 ## 開発検証
-`scripts/dev-verify.sh` が .app 再ビルド→再起動→ソケット待ち→send_text＋send_key enter→get_pane_text の出現数ポーリングで「実際に実行された」ことを assert。再起動の orchestration は制御 API の外側（socket はアプリと心中するため自己再起動は循環になる）。
+制御 API の導通は `swift test` の L4（プロセス境界）が担う。テストプロセス内に実 `WindowController` を target とした `ControlServer` を立て、外部プロセスの `orbe-mcp` / `orb` / `orbe-report` から駆動して assert する（send_text＋send_key enter → get_pane_text の出現数ポーリングで「実際に実行された」ことを見る形を含む）。`.app` の起動経路と `AppDelegate` の配線はその外側で、隔離した使い捨てインスタンスを起こす `sandbox-run`（`.claude/skills/`）が同じ煙探知を通す。再起動の orchestration も制御 API の外側に置く（socket はアプリと心中するため自己再起動は循環になる）。
 
 CLI は `orbe-mcp`（MCP ブリッジ）・`orbe-report`（状態報告）・`orb`（ユーザー/AI 向け操作 CLI・[orbe-cli](orbe-cli.md)）。`.app` に同梱されるのは `orbe-report` と `orb` で、`orbe-mcp` は同梱せず `.mcp.json` の起動スクリプトがビルドして exec する。

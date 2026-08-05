@@ -139,8 +139,8 @@ extension ControlWireTests {
       "popup が無ければ completion_accept は buffer: null（zsh はこの非 null で分岐する）")
   }
 
-  /// `activate_workspace` の成功形。`paneIds` を読む現存の assert は `scripts/dev-verify.sh`
-  /// だけで、スライス 2 でそれが廃止されると担保はここだけになる。
+  /// `activate_workspace` の成功形。ここが固定するのは wire の語（応答キー）で、返った `paneIds` が
+  /// 実際に読めるペインを指すことは L4（`OrbeMcpProcessTests`）が実 `WindowController` で見る。
   func testActivateWorkspaceReturnsActiveIdAndPaneIds() {
     let fake = FakeControlTarget()
     fake.activateResult = (activeWorkspaceId: 3, paneIds: [11, 12])
