@@ -57,12 +57,16 @@ final class SettingsMigrationTests: OrbeTestCase {
     XCTAssertEqual(second[SettingKeys.agentStateIcons], ["done": "checkmark.seal"])
   }
 
-  /// 旧テーマ名（"Dracula" 等）は移行時に .auto へ丸めて読む（寛容 decode で全設定を失わない）。
-  func testLegacyThemeNameRoundsToAutoWithoutLosingOtherSettings() throws {
+  /// 値域外の `theme` を含む旧ファイルも、他設定を巻き込まず移行する。`theme` は移行 struct で
+  /// `ThemeMode` として型付けして読むため、値域外は既定（Auto）として層に載る。
+  ///
+  /// workspace 上書きの移行は同じ値を生の文字列のまま層へ載せる（解決時に既定へ落ちるので実効値は
+  /// 一致する）。両者で差の出る値は書き込み経路の値域検証を通れないので、意味を揃えてはいない。
+  func testOutOfRangeThemeMigratesWithoutLosingOtherSettings() throws {
     try Data(#"{"defaultAgent":"claude","fontSize":16,"theme":"Dracula"}"#.utf8)
       .write(to: settingsFile())
     let layer = SettingsPersistence.loadGlobal()
-    XCTAssertEqual(layer[SettingKeys.theme], .auto, "旧テーマ名は Auto へ丸める")
+    XCTAssertEqual(layer[SettingKeys.theme], .auto, "値域外の theme は既定として載る")
     XCTAssertEqual(layer[SettingKeys.fontSize], 16, "他設定は失わない")
     XCTAssertEqual(layer[SettingKeys.defaultAgent], "claude")
   }

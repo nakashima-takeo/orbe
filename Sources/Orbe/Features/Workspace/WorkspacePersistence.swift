@@ -81,8 +81,11 @@ struct WorkspaceState: Codable, Equatable {
   }
 
   /// settingsOverride は新形式（canonical key・kebab）と旧 camelCase struct の**両方で読めるだけ読み、
-  /// 重ねる**。2 つの key 空間は `theme` を除いて重ならず、その `theme` も両形式で表現が同じなので、
-  /// 形式を先に判定する必要がない。field 局所の寛容 decode（`TabState` と同じ家風）で全体を throw させない。
+  /// 現行の key 空間である新形式を上に重ねる**。camelCase は kebab と綴りが重ならないので、旧が埋める
+  /// のは新が言わない項目だけ——唯一重なる `theme` は新形式の読みが勝つ。形式を先に判定しないのは、
+  /// 判定の手掛かりになる「新形式として読めるか」がその `theme` の重なりで崩れ、旧形式ファイルを
+  /// 新形式と誤認して残りの項目を全部落とすため。
+  /// field 局所の寛容 decode（`TabState` と同じ家風）で全体を throw させない。
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     name = try c.decode(String.self, forKey: .name)
