@@ -32,6 +32,7 @@ private func configList(_ rest: [String]) -> Never {
   }
   var args = rest
   let target = takeWorkspaceTarget(&args, positionals: 0)
+  rejectLeftoverFlags(args, positionals: 0)
   var params: [String: Any] = [:]
   if case .id(let n) = target { params["workspaceId"] = n }
   let result = callOrExit("config_list", params)
@@ -56,14 +57,11 @@ private func configGet(_ rest: [String]) -> Never {
   }
   var args = rest
   let target = takeWorkspaceTarget(&args, positionals: 1)
+  rejectLeftoverFlags(args, positionals: 1)
   guard let key = args.first, !key.hasPrefix("-") else { usageDie("config get requires <key>") }
   var params: [String: Any] = [:]
   if case .id(let n) = target { params["workspaceId"] = n }
-  let result = callOrExit("config_list", params)
-  let settings = (result as? [String: Any])?["settings"] as? [[String: Any]] ?? []
-  guard let row = settings.first(where: { $0["key"] as? String == key }) else {
-    usageDie("unknown config key: \(key)")
-  }
+  let row = configRowOrDie(key, params)
   if wantJSON { printJSON(row) } else { print(display(row["value"] ?? NSNull())) }
   exit(0)
 }
@@ -75,13 +73,11 @@ private func configSet(_ args: [String]) -> Never {
   }
   var rest = args
   let target = takeWorkspaceTarget(&rest, positionals: 2)
+  rejectLeftoverFlags(rest, positionals: 2)
   guard rest.count >= 2 else { usageDie("config set requires <key> <value>") }
   let key = rest[0]
   // key の妥当性・値型は control の config_list を SSOT に引く（CLI 側で二重管理しない）。
-  let settings = (callOrExit("config_list", [:]) as? [String: Any])?["settings"] as? [[String: Any]]
-  guard let row = settings?.first(where: { $0["key"] as? String == key }) else {
-    usageDie("unknown config key: \(key)")
-  }
+  let row = configRowOrDie(key)
   let value = typedConfigValue(type: row["type"] as? String, key: key, raw: rest[1])
   // .none→global；.active/.id→workspace（.id は対象 WS も送る）。
   var params: [String: Any] = ["key": key, "value": value]
@@ -112,13 +108,10 @@ private func configUnset(_ args: [String]) -> Never {
   }
   var rest = args
   let target = takeWorkspaceTarget(&rest, positionals: 1)
+  rejectLeftoverFlags(rest, positionals: 1)
   guard let key = rest.first, !key.hasPrefix("-") else { usageDie("config unset requires <key>") }
-  // key の妥当性は set と同じく control の config_list を SSOT に引く。片方だけ弾くと、打ち間違えた
-  // unset が「解除できた」と表示されて上書きが残ったままになる。
-  let settings = (callOrExit("config_list", [:]) as? [String: Any])?["settings"] as? [[String: Any]]
-  guard settings?.contains(where: { $0["key"] as? String == key }) == true else {
-    usageDie("unknown config key: \(key)")
-  }
+  // key の妥当性は get / set と同じ口で引き、打ち間違いを同じ usage エラー（2）で弾く。
+  _ = configRowOrDie(key)
   var params: [String: Any] = ["key": key, "value": NSNull()]
   let scope: String
   switch target {
@@ -270,6 +263,7 @@ private func paneList(_ rest: [String]) -> Never {
   }
   var args = rest
   let workspaceId = takeWorkspaceId(&args)
+  rejectLeftoverFlags(args, positionals: 0)
   let result = callOrExit("list_panes", [:])
   var panes = (result as? [String: Any])?["panes"] as? [[String: Any]] ?? []
   if let workspaceId { panes = panes.filter { $0["workspaceId"] as? Int == workspaceId } }
@@ -363,6 +357,7 @@ private func tabNew(_ rest: [String]) -> Never {
   let cmd = takeOption(&args, "--cmd")
   if cmd == nil, args.contains("--cmd") { usageDie("--cmd requires a value") }
   let workspaceId = takeWorkspaceId(&args)
+  rejectLeftoverFlags(args, positionals: 0)
   var params: [String: Any] = [:]
   if let workspaceId { params["workspaceId"] = workspaceId }
   if let dir { params["cwd"] = dir }

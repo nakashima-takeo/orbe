@@ -67,6 +67,19 @@ func callOrExit(_ method: String, _ params: [String: Any]) -> Any {
   }
 }
 
+/// config key の行を control の `config_list` から引く（未知 key は usage エラー）。
+/// get / set / unset が同じ SSOT・同じ文言・同じ終了コードで弾くための唯一の口。
+/// `params` は読む層の指定で、`get` だけが `--workspace` の解決結果を渡す（set / unset は存在確認
+/// だけなので層に依らない）。
+func configRowOrDie(_ key: String, _ params: [String: Any] = [:]) -> [String: Any] {
+  let settings =
+    (callOrExit("config_list", params) as? [String: Any])?["settings"] as? [[String: Any]] ?? []
+  guard let row = settings.first(where: { $0["key"] as? String == key }) else {
+    usageDie("unknown config key: \(key)")
+  }
+  return row
+}
+
 // MARK: - 引数ヘルパ
 
 /// `true/false/on/off/1/0` を Bool へ。それ以外は nil。
@@ -105,9 +118,9 @@ func paneSplitDirection(_ args: inout [String]) -> String {
   return wantH ? "down" : "right"
 }
 
-/// config の `--workspace [<id>]`（optional-value）の解決結果。書き込み先が 3 つ実在するので 3 態を持つ。
-/// pane / tab は「どれに絞るか・どこに開くか」で選択肢が 2 つしかなく bare に割り当てる意味が無いため、
-/// そちらは `takeWorkspaceId` が `<id>` 必須で扱う（この非対称は spec の表記どおり）。
+/// config の `--workspace [<id|current>]`（optional-value）の解決結果。書き込み先が 3 つ実在するので
+/// 3 態を持つ。pane / tab は `takeWorkspaceId` が `<id|current>` 必須で扱う——この非対称は spec の
+/// 表記（`docs/spec/orbe-cli.md` で config 系だけが値を省ける形に書かれている）に揃えたもの。
 enum WorkspaceTarget {
   case none  // --workspace 未指定
   case active  // --workspace のみ（値なし）
@@ -145,6 +158,19 @@ func takeWorkspaceId(_ args: inout [String]) -> Int? {
   guard let id = workspaceIdIfResolvable(token) else { usageDie("invalid workspace id: \(token)") }
   args.removeSubrange(i...(i + 1))
   return id
+}
+
+/// フラグと位置引数を取り切った後の残余に `-` 始まりが居れば usage エラー。
+///
+/// `--workspace` の抜き取りは綴りが**完全一致**した 1 個目しか見ないので、`--workspace=3`（= 区切り）・
+/// 綴り誤り・2 個目の指定は残余に落ちる。どのサブコマンドも残余を検査しないと、それらは黙って
+/// 捨てられて exit 0 のまま**指定と違う workspace** を触る——`tab new` はアクティブ WS にタブが生え、
+/// `pane list` は絞り込みが効かず全 WS のペインが出る。終了コードにも stdout にも現れない。
+///
+/// `positionals` より前は位置引数の席なので見ない（`config set font-size -1` の `-1` は値）。
+func rejectLeftoverFlags(_ args: [String], positionals: Int) {
+  guard let flag = args.dropFirst(positionals).first(where: { $0.hasPrefix("-") }) else { return }
+  usageDie("unknown option: \(flag)")
 }
 
 /// `<token>` が数値 workspace id か `current` なら解決した id を返す（それ以外 nil＝値として消費しない）。
@@ -198,9 +224,13 @@ func resolveWorkspaceId(_ arg: String) -> Int {
 
 // MARK: - config key 一覧（usage テキスト表示用。key の妥当性・値型は control の config_list を SSOT に引く）
 
+/// `SettingsRegistry.all` の全 key。usage は socket 不達でも出す必要があるため config_list からは
+/// 引けず、ここに写す。registry に key を足したらこの一覧と `configSetUsage` の型内訳も足すこと
+/// ——漏れると「打てば通るが help には無い」key ができる。
 let allConfigKeys = [
   "font-size", "background-opacity", "background-blur", "cursor-style-blink", "theme",
-  "font-family", "default-agent", "agent-state-icons", "dev-features",
+  "font-family", "tab-title-font-family", "emoji-font", "default-agent", "agent-state-icons",
+  "dev-features", "worktree-dir",
 ]
 
 // MARK: - usage テキスト
@@ -294,10 +324,12 @@ let configSetUsage = """
 
   KEYS: \(allConfigKeys.joined(separator: ", "))
     font-size, background-opacity   integer
-    background-blur, cursor-style-blink   true/false/on/off/1/0
-    theme (auto/light/dark), font-family, default-agent   string
+    background-blur, cursor-style-blink, dev-features   true/false/on/off/1/0
+    theme (auto/light/dark), font-family, tab-title-font-family, emoji-font,
+    default-agent, worktree-dir   string
+    agent-state-icons   map (set it from the settings palette)
   --workspace <id> writes that workspace's override, bare --workspace the active
-  one (default without the flag: global). default-agent is global-only.
+  one (default without the flag: global).
   """
 
 let wsUsage = """
