@@ -9,9 +9,9 @@ import XCTest
 /// SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 /// ヘッドレスな純ロジック検証ではない。GhosttyKit が同梱された本環境でのみ走る。
 ///
-/// 制約: workspaces / activeWorkspace / tabs はすべて private。外部からの観測は
-/// window.title（= 現アクティブ workspace 名）と公開メソッドの戻りに限られる。
-/// よって「タブ/プロセス/画面内容のオブジェクト保持」そのものは本テストでは観測できない。
+/// 観測は主に window.title（= 現アクティブ workspace 名）で行う——切替・作成・改名・削除の結果として
+/// 「どれがアクティブか」が、このライフサイクルの契約そのものだから。title で表せないもの
+/// （MRU 並び・休眠 rollup）はパレットの render を、ディスクへ届いたかは workspaces.json を読む。
 final class WindowControllerWorkspaceTests: OrbeTestCase {
 
   /// 起動直後に既定 workspace "default" が1つ存在する（条件1 の一部）。
@@ -38,7 +38,6 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
 
   /// 切替で往復しても workspace 集合は失われない（条件7 の観測可能な側面）。
   /// 戻った先の名前が保たれていることは、その workspace が削除/再生成されていない証左。
-  /// ※ タブ/プロセス/画面内容のオブジェクト保持そのものは private のため本テストでは観測不可。
   func testRoundTripSwitchPreservesWorkspaces() {
     let wc = WindowController()
     wc.createWorkspace(name: "alpha")  // index 1
@@ -199,7 +198,8 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
   }
 
   /// 既存 workspace 間の切替（switchWorkspace 経由）でアクティブに lastUsedAt が刻まれ、flushSave 後に
-  /// ディスクへ残る（MRU 並べ替えキー）。workspaces は private のためディスク経由で観測する。
+  /// ディスクへ残る（MRU 並べ替えキー）。刻印がディスクまで届いて初めて次回起動の並びが決まるので、
+  /// 観測はモデルではなくディスク経由で行う。
   func testSwitchStampsLastUsedAtOnDisk() throws {
     let wc = WindowController()
     wc.createWorkspace(name: "infra")  // index 1, active

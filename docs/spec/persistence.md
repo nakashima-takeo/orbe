@@ -1,7 +1,7 @@
 ---
 title: workspace 永続（現状）
 description: 構成（workspace・タブ・明示タイトル・分割ツリー・cwd・エージェントセッション・最終使用時刻）の JSON 保存と起動時復元・エージェント resume・デバウンス保存
-updated: 2026-07-31
+updated: 2026-08-05
 ---
 
 保存先は `~/Library/Application Support/<bundle-id>/` 直下。`<bundle-id>` はビルドチャネルごとに異なるため（[channel](channel.md)）、dev（Orbe Dev）と release は state を共有しない。環境変数 `ORBE_STATE_DIR`（非空）を設定するとその dir 直下へ移る——検証用の隔離インスタンス用途で、settings.json・gui.conf・[control-api](control-api.md) の control.sock も同じ dir に同居する。テスト用にファイル位置を差し替える seam を持つ。
@@ -24,7 +24,7 @@ updated: 2026-07-31
 
 保存は構成変化のたびデバウンスし、終了時に flush する。
 
-互換: 旧スキーマは無損失で読み、次回保存で現行形式へ置き換わる（タブ構成・cwd・エージェントを失わない）。後から足したフィールドは欠落を許容する。値域を持つ項目（`theme` 等）は範囲外の値を既定へ丸めて読む——1 項目の異常でファイル全体を落とさないため。壊れている・非互換バージョン・空 JSON は既定の単一 workspace で fallback。
+互換: 旧スキーマは無損失で読み、次回保存で現行形式へ置き換わる（タブ構成・cwd・エージェントを失わない）。後から足したフィールドは欠落を許容し、`editor` は「あるが読めない」も既定へ落とす——このフィールドの異常でタブを失わないため。設定層（global・workspace 上書きとも）は読めない 1 キーだけを落として残りを活かす——1 項目の異常で層ごと消さないため。値域を持つ項目は範囲外の値もそのまま層へ載せる（値域を守るのは書き込み経路）。例外は旧 camelCase からの global 移行で、そこでは範囲外の `theme` が既定値として層に載る。タブ本体（`tree`・エージェントセッション）・workspace の名前や index が読めなければファイル全体の fallback へ落ちる。壊れている・非互換バージョン・空 JSON は既定の単一 workspace で fallback。
 
 ## settings.json / app-state.json
 
