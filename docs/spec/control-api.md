@@ -61,6 +61,6 @@ workspace / tab / pane にプロセス内単調増加 ID。型をまたいで一
 `orbe-mcp` 実行ターゲット（GhosttyKit/AppKit 非依存）。MCP stdio を喋りツール定義を保持し、tools/call を control.sock へ転送する薄い層（ツール反復に Orbe 本体の再ビルド/再起動が不要）。`.mcp.json` の `Orbe` サーバは起動スクリプトが毎回 `swift build` を通してから exec する（stale バイナリが別チャネルの socket を掴まないため・[channel](channel.md)）。接続先 control.sock は app と同じ規則で `ORBE_STATE_DIR` を honor するため、隔離インスタンスと bridge を同じ `ORBE_STATE_DIR` で起こせばその隔離インスタンスを MCP で駆動できる。
 
 ## 開発検証
-制御 API の導通は `swift test` の L4（プロセス境界）が担う。テストプロセス内に実 `WindowController` を target とした `ControlServer` を立て、外部プロセスの `orbe-mcp` / `orb` / `orbe-report` から駆動して assert する（send_text＋send_key enter → get_pane_text の出現数ポーリングで「実際に実行された」ことを見る形を含む）。`.app` の起動経路と `AppDelegate` の配線はその外側で、隔離した使い捨てインスタンスを起こす `sandbox-run`（`.claude/skills/`）が同じ煙探知を通す。再起動の orchestration も制御 API の外側に置く（socket はアプリと心中するため自己再起動は循環になる）。
+制御 API の導通は `swift test` の L4（プロセス境界）が担う。テストプロセス内に実 `WindowController` を target とした `ControlServer` を立て、外部プロセスの `orbe-mcp` / `orb` / `orbe-report` から駆動して assert する。「ペインで実際に実行された」ことは、コマンド行の中で 2 つのリテラルに割った目印（`echo L4D""ONE_<id>`）を送り、連結された `L4DONE_<id>` が `get_pane_text` に現れるまでポーリングして見る——連結形はシェルが引用符除去を評価した出力にしか現れないので、プロンプトの描画挙動に依らない。`.app` の起動経路と `AppDelegate` の配線はその外側で、隔離した使い捨てインスタンスを起こす `sandbox-run`（`.claude/skills/`）が同じ形の煙探知を通す。再起動の orchestration も制御 API の外側に置く（socket はアプリと心中するため自己再起動は循環になる）。
 
 CLI は `orbe-mcp`（MCP ブリッジ）・`orbe-report`（状態報告）・`orb`（ユーザー/AI 向け操作 CLI・[orbe-cli](orbe-cli.md)）。`.app` に同梱されるのは `orbe-report` と `orb` で、`orbe-mcp` は同梱せず `.mcp.json` の起動スクリプトがビルドして exec する。
