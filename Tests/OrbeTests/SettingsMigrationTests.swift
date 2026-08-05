@@ -100,12 +100,21 @@ final class SettingsMigrationTests: OrbeTestCase {
 
   /// 移行が中断（app-state を書いた後・settings.json 置換の前でクラッシュ）した後の再移行は、
   /// その間に書かれた app-state を巻き戻さない。マージなら再移行は同じ値を上書きするだけで無害になる。
+  ///
+  /// 巻き戻し対象は「旧形式が語彙として持たない項目」（preferredLanguage）だけではない。旧形式が
+  /// 語彙としては持つが**この 1 ファイルには書かれていない**項目（ここでは completionInstalled）も、
+  /// nil をそのまま代入すれば消える——だから移行後に立った値を混ぜて、欠落を nil 上書きに変える
+  /// 実装をここで落とす（消えると補完が毎起動入れ直しになる）。
   func testReMigrationDoesNotUndoInterveningAppStateWrites() throws {
     let legacy = #"{"agentPluginsInstalled":true,"cachedShellPath":"/usr/bin","fontSize":16}"#
     try Data(legacy.utf8).write(to: settingsFile())
     _ = SettingsPersistence.loadGlobal()  // 1 回目の移行
 
-    AppStatePersistence.update { $0.preferredLanguage = "ja" }  // 移行後にユーザーが言語を選ぶ
+    // 移行後にユーザーが言語を選び、補完も入れる（後者は旧ファイルに無い項目）。
+    AppStatePersistence.update {
+      $0.preferredLanguage = "ja"
+      $0.completionInstalled = true
+    }
     let before = try Data(contentsOf: appStateFile())
 
     try Data(legacy.utf8).write(to: settingsFile())  // 中断クラッシュ相当（旧形式のまま残っている）
