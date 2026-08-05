@@ -46,11 +46,15 @@ private struct LegacySettingsFile: Codable {
     return layer
   }
 
-  /// アプリ状態 3 項目を app-state.json の形へ。
-  func toAppState() -> AppStateFile {
-    AppStateFile(
-      agentPluginsInstalled: agentPluginsInstalled, completionInstalled: completionInstalled,
-      cachedShellPath: cachedShellPath)
+  /// アプリ状態 3 項目を app-state.json へマージする。旧形式が持たない項目
+  /// （preferredLanguage・registeredAgentPluginName）には触らない——全体上書きすると、
+  /// 移行が中断したファイルからの再移行がそれらを巻き戻す。マージなら再移行は冪等になる。
+  func mergeIntoAppState() {
+    AppStatePersistence.update {
+      $0.agentPluginsInstalled = agentPluginsInstalled ?? $0.agentPluginsInstalled
+      $0.completionInstalled = completionInstalled ?? $0.completionInstalled
+      $0.cachedShellPath = cachedShellPath ?? $0.cachedShellPath
+    }
   }
 }
 
@@ -79,7 +83,7 @@ enum SettingsPersistence {
       return SettingsLayer()
     }
     let layer = legacy.toLayer()
-    AppStatePersistence.save(legacy.toAppState())  // 先に分離先へ退避（喪失窓を作らない）
+    legacy.mergeIntoAppState()  // 先に分離先へ退避（喪失窓を作らない）
     saveGlobal(layer)  // settings.json を新形式へ置き換え（アプリ状態 field は落ちる）
     return layer
   }

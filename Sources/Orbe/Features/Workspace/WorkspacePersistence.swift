@@ -80,8 +80,9 @@ struct WorkspaceState: Codable, Equatable {
     self.settingsOverride = settingsOverride
   }
 
-  /// settingsOverride は新形式（canonical key）を strict decode で試し、未知 key で throw したら旧 camelCase
-  /// struct で読んで変換する。field 局所の寛容 decode（`TabState` と同じ家風）で全体を throw させない。
+  /// settingsOverride は新形式（canonical key・kebab）と旧 camelCase struct の**両方で読めるだけ読み、
+  /// 重ねる**。2 つの key 空間は `theme` を除いて重ならず、その `theme` も両形式で表現が同じなので、
+  /// 形式を先に判定する必要がない。field 局所の寛容 decode（`TabState` と同じ家風）で全体を throw させない。
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     name = try c.decode(String.self, forKey: .name)
@@ -94,19 +95,14 @@ struct WorkspaceState: Codable, Equatable {
       settingsOverride = nil
       return
     }
-    let layer: SettingsLayer?
-    if let sub = try? c.superDecoder(forKey: .settingsOverride),
-      let strict = try? SettingsLayer.decode(from: sub, strictUnknownKeys: true)
-    {
-      layer = strict  // 新形式
-    } else if let legacy = try? c.decode(
-      LegacyWorkspaceSettingsOverride.self, forKey: .settingsOverride)
-    {
-      layer = legacy.toLayer()  // 旧 camelCase → 変換（次回 save で新形式へ）
-    } else {
-      layer = nil
-    }
-    settingsOverride = (layer?.isEmpty ?? true) ? nil : layer
+    // どちらも寛容に読む——未知 key・型不一致の 1 項目で層ごと失わない（global 層と同じ家風）。
+    // 現行の key 空間である新形式を上に重ねる（旧 camelCase は新形式が言わない項目だけを埋める）。
+    // 読めた項目が 1 つも無ければ nil（上書き無し＝global 継承）。次回 save で新形式へ揃う。
+    let new = (try? c.decode(SettingsLayer.self, forKey: .settingsOverride)) ?? SettingsLayer()
+    let old = try? c.decode(LegacyWorkspaceSettingsOverride.self, forKey: .settingsOverride)
+    let legacy = old?.toLayer() ?? SettingsLayer()
+    let merged = legacy.overlaid(with: new)
+    settingsOverride = merged.isEmpty ? nil : merged
   }
 }
 
@@ -139,7 +135,9 @@ struct TabState: Codable, Equatable {
     if let c = try? decoder.container(keyedBy: CodingKeys.self), c.contains(.tree) {
       tree = try c.decode(PaneNode.self, forKey: .tree)
       explicitTitle = try c.decodeIfPresent(String.self, forKey: .explicitTitle)
-      editor = try c.decode(EditorPaneTabState.self, forKey: .editor)
+      // editor は後から足したフィールド。欠落を許容しないと tab → workspace → ファイル全体へ
+      // decode 失敗が連鎖し、load() が nil を返して全 workspace を失う。
+      editor = try c.decodeIfPresent(EditorPaneTabState.self, forKey: .editor) ?? Self.defaultEditor
     } else {
       // 旧形式: タブ＝素の PaneNode（explicitTitle 無し → nil）。
       tree = try PaneNode(from: decoder)
