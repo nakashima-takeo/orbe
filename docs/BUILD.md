@@ -36,6 +36,8 @@ git submodule update --init --recursive
 open build/Orbe.app
 ```
 
+`build/Orbe.app` と `/Applications/Orbe Dev.app` は同じ bundle id なので、state も control.sock も共有する。`open` は既存インスタンスを前面化するだけでソケットの持ち主は入れ替わらないため、常用の Orbe Dev を起動したまま新ビルドを起こしても古い方が応答し続ける（症状は「新ビルドにしたのに直っていない」という遠い形で出る）。入れ替えるには先に常用を quit するか、本物に触らず確かめるなら `ORBE_STATE_DIR` で隔離する（`.claude/skills/sandbox-run`）。
+
 `build-app.sh` がエンジン(libghostty)を ReleaseFast で焼き（`zig build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast`）、xcframework と share リソースを生成してから Orbe.app をバンドルする。初回・submodule 更新時は数分かかるが、以降は Zig のキャッシュで実質一瞬。
 
 ### ビルドチャネル（ORBE_CHANNEL）
