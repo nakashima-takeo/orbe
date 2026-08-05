@@ -76,6 +76,45 @@ final class SettingsMigrationTests: OrbeTestCase {
     XCTAssertEqual(layer[SettingKeys.fontSize], 16)
   }
 
+  /// 移行は app-state.json の既存項目を潰さない。旧 settings.json は `preferredLanguage` も
+  /// `registeredAgentPluginName` も持たないので、全体上書きするとこの 2 つが消える
+  /// ——言語が未選択に戻って初回言語選択画面が再び出る／プラグインが毎起動登録し直される。
+  func testMigrationMergesIntoExistingAppState() throws {
+    AppStatePersistence.save(
+      AppStateFile(registeredAgentPluginName: "orbe-notify-v2", preferredLanguage: "ja"))
+    let legacy = """
+      {"agentPluginsInstalled":true,"completionInstalled":true,\
+      "cachedShellPath":"/usr/local/bin:/usr/bin","fontSize":16}
+      """
+    try Data(legacy.utf8).write(to: settingsFile())
+
+    _ = SettingsPersistence.loadGlobal()
+
+    let app = try XCTUnwrap(AppStatePersistence.load())
+    XCTAssertEqual(app.preferredLanguage, "ja", "旧形式が持たない項目は移行で消えない")
+    XCTAssertEqual(app.registeredAgentPluginName, "orbe-notify-v2", "旧形式が持たない項目は移行で消えない")
+    XCTAssertEqual(app.agentPluginsInstalled, true, "旧形式の項目は入る")
+    XCTAssertEqual(app.completionInstalled, true, "旧形式の項目は入る")
+    XCTAssertEqual(app.cachedShellPath, "/usr/local/bin:/usr/bin", "旧形式の項目は入る")
+  }
+
+  /// 移行が中断（app-state を書いた後・settings.json 置換の前でクラッシュ）した後の再移行は、
+  /// その間に書かれた app-state を巻き戻さない。マージなら再移行は同じ値を上書きするだけで無害になる。
+  func testReMigrationDoesNotUndoInterveningAppStateWrites() throws {
+    let legacy = #"{"agentPluginsInstalled":true,"cachedShellPath":"/usr/bin","fontSize":16}"#
+    try Data(legacy.utf8).write(to: settingsFile())
+    _ = SettingsPersistence.loadGlobal()  // 1 回目の移行
+
+    AppStatePersistence.update { $0.preferredLanguage = "ja" }  // 移行後にユーザーが言語を選ぶ
+    let before = try Data(contentsOf: appStateFile())
+
+    try Data(legacy.utf8).write(to: settingsFile())  // 中断クラッシュ相当（旧形式のまま残っている）
+    _ = SettingsPersistence.loadGlobal()  // 再移行
+
+    XCTAssertEqual(
+      try Data(contentsOf: appStateFile()), before, "再移行は app-state を 1 バイトも変えない")
+  }
+
   // MARK: - degenerate（空・欠落・壊れ）は既定へ fallback
 
   func testMissingSettingsFileYieldsEmptyLayer() {
