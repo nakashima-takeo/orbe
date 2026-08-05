@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe・現状）
 description: Unix socket 上の JSON-RPC でペイン/タブ/workspace を操作する out-of-band 制御チャネルと MCP ブリッジ・ツール群・libghostty 経路・mount 境界
-updated: 2026-08-01
+updated: 2026-08-03
 ---
 
 外部やエージェントが Orbe 全体を操作する out-of-band 制御チャネル。エージェント状態報告（[agent-notify](agent-notify.md) の `report_agent`）もこのチャネルに集約する。
@@ -11,14 +11,27 @@ Unix domain socket `control.sock`（workspaces.json と並置・パーミッシ�
 
 接続 fd は accept 後に非ブロッキング化し、I/O がキューをブロックしない（詰まった 1 接続が accept・他接続・event 配信・timeout を巻き添えにしない）。送信は per-connection 出力バッファ経由で、書込不可は書込可能まで待機・EINTR はリトライ・EPIPE 等は切断。出力滞留が上限を超えた接続は切断する。受信は改行が来ないまま 1 行が上限を超えた接続を切断する（メモリ枯渇防止）。
 
+## エラー
+失敗は `error.code` で伝える。この語彙は `swift test` が実 `Connection` 上で 1 対 1 に固定する。
+
+- `-32700` 行が JSON テキストとして読めない（壊れた JSON・不正 UTF-8・最上位スカラ）。`id` は null。
+- `-32600` JSON だがリクエストオブジェクトでない（配列・`method` 欠落）。`id` は取れれば返す。
+- `-32601` 未知の method。
+- `-32602` params の欠落・型不一致・値域外。
+- `-32004` 宛先（pane / tab / workspace）が見つからない。宛先 ID を解決へ直に渡すメソッド（`get_pane_text` / `send_text` / `send_key` / `report_agent` / `completion_accept`）は `paneId` の欠落・型不一致もここに落ちる（解決の前に検証を挟むメソッドは `-32602`）。
+- `-32005` 1 接続に 2 件目の `wait_for_event`。
+- `-32000` 実行できない（ウィンドウ未接続・spawn 失敗・最後の workspace 削除・分割不可）。
+
+無応答契約を持つのは `completion_update` / `completion_end` の 2 つだけで、他は必ず 1 行応答を返す（読めない行にも返す＝クライアントが応答待ちでハングしない）。
+
 ## 宛先 ID
 workspace / tab / pane にプロセス内単調増加 ID。型をまたいで一意。セッション内のみ有効（永続しない・再起動で振り直し）。配列インデックスでなく ID で指す。
 
 ## ツール（JSON-RPC メソッド = MCP ツール名、1:1。ただし `report_agent`・`config_*`・workspace CRUD・`split_pane`/`close_pane`/`focus_pane`/`close_tab`・`completion_*` は socket 専用で MCP ブリッジには出さない〔[orbe-cli](orbe-cli.md) が直に叩く〕）
-- `list_workspaces` … id・name・rootPath・active・tabCount・activated・dormantAgentCount（休眠 agent 数＝永続復元した agent 付き leaf 数。休眠 workspace は `list_panes` に出ないため別途この永続カウントで露出する。活性 workspace は live 側で数えるため常に 0）。
-- `list_panes` … paneId・workspaceId・tabId・workspaceName・title・cwd・agentState・agentSessionId（resume 用・未設定なら null）・focused（全 workspace 横断・ツリー順）。
-- `list_agents` … 検出済みエージェント CLI の command と解決済み絶対 path を列挙する（読み取り専用）。アプリ保持の検出結果をそのまま返し、新規検出（login shell 起動）は起こさない。検出未完了でもエラーにせず**空配列を返す**。
-- `get_pane_text {paneId, scrollback?}` … 画面テキスト平文。scrollback 真で履歴全体、偽で可視範囲。
+- `list_workspaces` → `{workspaces:[…]}` … id・name・rootPath・active・tabCount・activated・dormantAgentCount（休眠 agent 数＝永続復元した agent 付き leaf 数。休眠 workspace は `list_panes` に出ないため別途この永続カウントで露出する。活性 workspace は live 側で数えるため常に 0）。
+- `list_panes` → `{panes:[…]}` … paneId・workspaceId・tabId・workspaceName・title・cwd・agentState・agentSessionId（resume 用・未設定なら null）・focused（全 workspace 横断・ツリー順）。
+- `list_agents` → `{agents:[…]}` … 検出済みエージェント CLI の command と解決済み絶対 path を列挙する（読み取り専用）。アプリ保持の検出結果をそのまま返し、新規検出（login shell 起動）は起こさない。検出未完了でもエラーにせず**空配列を返す**。
+- `get_pane_text {paneId, scrollback?}` → `{text}` … 画面テキスト平文。scrollback 真で履歴全体、偽で可視範囲。
 - `send_text {paneId, text}` … ペースト相当で PTY へ書く。bracketed paste 下では改行を含めても**自己実行せず**プロンプトに留まる。コマンド実行は別途 `send_key` の enter。
 - `send_key {paneId, key}` … 名前付きキー（case-insensitive）。特殊キー（enter/tab/escape/space/backspace/delete/上下左右/home/end/pageup/pagedown）は仮想 keycode で press+release を送り libghostty にモード対応エンコードさせる（application cursor mode 等に追従。修飾も渡すため `ctrl+enter`・`shift+tab` 等が有効）。単一文字の修飾はモード非依存バイトに畳む——`ctrl+<char>` は C0 制御（レンジ外は拒否）、`alt`/`meta`/`option+<char>` は ESC プレフィックス。端末バイト表現を持たない `cmd`/`super` 付き単一文字と未知修飾は `-32602` で拒否する（修飾を黙殺して素の文字を注入しない。ただし単一文字の `shift` は畳む先が無くビットが落ちる＝`shift+a` は `a`）。
 - `spawn {workspaceId?, cwd?, command?}` … 新タブを開く。command 省略はシェル・指定はそれを直接起動。cwd 省略は GUI の新規タブと同じフォールバック（対象 workspace のペイン cwd → その workspace の rootPath）。戻り値は新ペイン ID。アクティブ workspace 指定時は即 mount、背景 workspace は keep-alive で遅延。workspaceId が未知ならエラーにせずアクティブ workspace へフォールバック。
@@ -35,7 +48,7 @@ workspace / tab / pane にプロセス内単調増加 ID。型をまたいで一
 - `close_tab {tabId}` … close_pane と同じカスケード規律。未知 tab は `-32004`。socket 専用。
 - `report_agent {paneId, agent, state, sessionId?, message?, messageSource?}` … エージェント hook の状態報告を発信元ペインへ適用する（[agent-notify](agent-notify.md)）。`messageSource` は文言の出所で、ツール由来かどうかだけが上書き可否を決める（表示には出ない）。`state=="clear"` で状態/コマンド/セッション ID/文言/状態変化時刻を nil、それ以外は state/command を立て sessionId があれば更新し、文言は state の遷移と出所で上書き可否が決まる（状態変化時刻は state が実際に変わったときだけ進む）。
 - `wait_for_event {paneId?, kinds?, timeoutMs?}` … 状態変化を長ポーリングで待つ。kind ∈ {agent_state, pane_title, pwd, pane_closed}。`event.value` は kind 固有。フィルタ一致で {event}、timeout 超過で {timedOut:true}。1 接続あたり待機 1 件（2 件目は `-32005` で即拒否）。
-- `completion_update` / `completion_end` / `completion_accept` … コマンド補完用（[completion](completion.md)）。前 2 つは**無応答**。`completion_` 系は宛先解決ガードより前で分岐し、無応答メソッドは宛先不在でも応答を出さない（accept fd の framing を保つ）。socket 専用。
+- `completion_update` / `completion_end` / `completion_accept` … コマンド補完用（[completion](completion.md)）。前 2 つは**無応答**。`completion_` 系は宛先解決ガードより前で分岐し、無応答メソッドは宛先不在でも応答を出さない（打鍵ごとの update が accept fd に行を積まない）。読めない行にはこの分岐より前でエラー行を返すため、accept fd から読める行が accept 応答だけとは限らない——クライアントは `id` で自分の応答を選ぶ（[completion](completion.md)）。socket 専用。
 
 ## 境界
 - get_pane_text / send_text / send_key は **mount 済み（surface 生存）ペインにのみ作用**する。永続復元直後はアクティブ workspace の**全タブ**が mount される。背景 workspace のタブは ID を持つが surface 未生成（[workspace](workspace.md) の workspace 単位 keep-alive 遅延 mount）。未 mount ペインは get_pane_text が空・send 系は no-op。`activate_workspace` で前面化すれば読めるようになる。
