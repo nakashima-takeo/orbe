@@ -5,8 +5,9 @@ import XCTest
 /// 実 `orb`（`orbe-cli`）を子プロセスで起こし、全 16 サブコマンドが実 `WindowController` を
 /// 1 本のライフサイクルとして動かせることを固定する。
 ///
-/// 16 本に割らず 1 本に束ねているのは、実 `WindowController` の立ち上げが 1 回 0.5 秒前後かかり、
-/// 割って得られるのは「どこで落ちたか」の解像度だけだから。その解像度は assert メッセージに
+/// 16 本に割らず 1 本に束ねているのは、`ws new → rename → dir → switch → rm` のように後段が前段の
+/// 状態を前提にする連鎖だから。割ると各テストが同じ fixture を組み直すことになり、測っている
+/// ライフサイクルの形が崩れる。割って得られるはずの「どこで落ちたか」の解像度は assert メッセージに
 /// サブコマンド名を載せることで代替する（連鎖の途中で落ちると以降が見えないので、メッセージだけで
 /// どの段かが分かる必要がある）。
 ///
@@ -32,11 +33,20 @@ final class OrbeCliProcessTests: OrbeTestCase {
     return outcome.stdout
   }
 
-  private func workspaceRows(_ control: ControlProcess) throws -> [[String: Any]] {
+  /// `private` を付けない——同じ型の extension でも別ファイル（`+Contract`）からは見えなくなり、
+  /// 同じ問い合わせがそちらへ複製される。L3 の `ControlWireTests` の `startWire` / `errorCode` と同じ形。
+  func workspaceRows(_ control: ControlProcess) throws -> [[String: Any]] {
     try XCTUnwrap(control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
   }
 
-  private func configValue(_ control: ControlProcess, _ key: String, args: [String] = []) -> Any? {
+  /// `ws list` から `active` が一致する行の id を引く（id は `IdGen` 採番で予測不能なので必ず出力から読む）。
+  func workspaceId(_ control: ControlProcess, active: Bool) throws -> Int {
+    try XCTUnwrap(
+      workspaceRows(control).first(where: { $0["active"] as? Bool == active })?["id"] as? Int,
+      active ? "アクティブ WS が無い" : "背景 WS が無い")
+  }
+
+  func configValue(_ control: ControlProcess, _ key: String, args: [String] = []) -> Any? {
     control.orbJSON(["config", "get", key] + args)["value"]
   }
 
@@ -108,23 +118,46 @@ final class OrbeCliProcessTests: OrbeTestCase {
       "ws rm: 削除した WS が一覧から消える")
   }
 
-  /// ペインのシェルで bare `orb` が同梱 CLI へ解決する。ペインへ前置された `PATH`・注入された
-  /// `ORBE_PANE`・継承された `ORBE_STATE_DIR` の 3 つが同時に効いていないと成立しない。
+  /// ペインのシェルで bare `orb` が**同梱** CLI へ解決し、走った先がこのインスタンスの自ペインになる。
   ///
-  /// 観測はペインのテキストではなくレイアウトの実変化で取る——`pane split` は位置引数を省くと
-  /// `ORBE_PANE` を宛先にするので、ペインが 2 枚になったこと自体が「bare `orb` が走り・この
-  /// インスタンスの socket に届き・自ペインを宛先にした」の 3 つを同時に示す。
+  /// 2 つを別々に測る。前半は `PATH` 前置そのもの——ペインの実 env で `command -v orb` を引き、
+  /// 同梱 `bin/orb` に解決することを見る。ペイン内の効果だけでは前置は測れない: 開発機の PATH には
+  /// 別インスタンスの `orb` が居ることがあり、しかもペインは `ORBE_STATE_DIR` を継承するので、
+  /// **どの** `orb` が走ってもこのインスタンスの socket へ届いて後半が通ってしまう。
+  ///
+  /// 後半は注入された `ORBE_PANE` と socket 到達——`pane split` は位置引数を省くと `ORBE_PANE` を
+  /// 宛先にするので、ペインが 2 枚になったこと自体がその 2 つを同時に示す。観測をレイアウトの実変化で
+  /// 取るのは、ペインのテキストがプロンプトのテーマや rc に依るため。
   func testBareOrbResolvesToBundledCliInsidePane() throws {
     let control = try startControlProcess(workspaces: ["main"])
     let tab = try XCTUnwrap(control.target.current.tabs.first, "タブが無い")
     let pane = try XCTUnwrap(tab.controlAllPanes().first, "ペインが無い")
     XCTAssertEqual(tab.controlAllPanes().count, 1, "前提: 分割前は 1 ペイン")
 
+    // PATH 前置の解決先そのもの。`PATH` に種を置くのは、前置が空なら親プロセスの PATH を読むため。
+    var env = ["PATH": "/usr/bin:/bin"]
+    pane.injectRuntimeEnv(to: &env)
+    let resolved = ControlProcess.run(
+      URL(fileURLWithPath: "/bin/sh"), ["-c", "command -v orb"], env: env)
+    let bundled = try XCTUnwrap(BundledResources.root, "同梱物がステージされていない")
+      .appendingPathComponent("bin/orb").path
+    XCTAssertEqual(
+      resolved.stdout.trimmingCharacters(in: .whitespacesAndNewlines), bundled,
+      "ペインの PATH 先頭が同梱 orb へ解決しない（前置が外れると別インスタンスの orb に落ちる）")
+
+    // シェルが rc を読み終える前に送ると tty の type-ahead に賭けることになり、失われた入力は
+    // `controlSendText` の無言 no-op として誰も報告しない。プロンプトが描かれてから送る。
+    XCTAssertTrue(
+      waitUntil(ControlProcess.paneSettleTimeout) {
+        !(pane.controlReadText(scrollback: false) ?? "")
+          .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      }, "シェルのプロンプトが描かれない（この後の入力は捨てられうる）")
+
     pane.controlSendText("orb pane split")
     pane.controlSendKey(try XCTUnwrap(ControlKey.parse("enter")))
 
     XCTAssertTrue(
-      waitUntil(15) { tab.controlAllPanes().count == 2 },
+      waitUntil(ControlProcess.paneSettleTimeout) { tab.controlAllPanes().count == 2 },
       "bare `orb` がペイン内で解決していない: \(pane.controlReadText(scrollback: true) ?? "")")
   }
 }

@@ -103,6 +103,9 @@ final class AgentHookPathTests: OrbeTestCase {
       var partial = env
       partial.removeValue(forKey: dropped)
       runShim(shim, env: partial, state: "working", stdin: "{}")
+      // `runShim` は同期で、シムは `exec` で `orbe-report` に置き換わるため、返った時点で報告する
+      // 経路なら socket への書き込みは済んでいる。残るのはサーバの受信と main hop だけなので、
+      // 短い猶予で足りる（成功側の 5 秒は同じ区間に置いた余裕で、ここより長い必然は無い）。
       XCTAssertFalse(
         waitUntil(0.5) { pane.agentState != nil },
         "\(dropped) が無い呼び出しでペイン状態が動いた（agentState=\(pane.agentState ?? "nil")）")

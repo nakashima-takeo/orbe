@@ -35,7 +35,10 @@ final class OrbeReportWireTests: OrbeTestCase {
     let bytes = socketPath.utf8CString
     withUnsafeMutablePointer(to: &addr.sun_path) { raw in
       raw.withMemoryRebound(to: CChar.self, capacity: 104) { dst in
-        bytes.withUnsafeBufferPointer { src in dst.update(from: src.baseAddress!, count: src.count)
+        // 上限で切る。`XCTAssert` は記録するだけで実行を止めないため、境界を持たないと上限超過が
+        // そのままスタック上の `sun_path` を壊す（本番の `ControlServer.openSocket` と同じ形）。
+        bytes.withUnsafeBufferPointer { src in
+          dst.update(from: src.baseAddress!, count: min(src.count, 104))
         }
       }
     }

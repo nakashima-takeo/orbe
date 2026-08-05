@@ -29,6 +29,17 @@ extension OrbeCliProcessTests {
       "\(label) の stderr に \"\(message)\" が無い: \(outcome.stderr)", file: file, line: line)
   }
 
+  /// arrange の書き込みを叩き、失敗したら stderr ごと理由を出す（素の status 比較だと
+  /// `("0") is not equal to ("1")` しか出ず、どの層への書き込みが落ちたのか分からない）。
+  private func write(
+    _ control: ControlProcess, _ args: [String], _ label: String,
+    file: StaticString = #filePath, line: UInt = #line
+  ) {
+    let outcome = control.orb(args, file: file, line: line)
+    XCTAssertEqual(
+      outcome.status, 0, "\(label) への書き込みが失敗した: \(outcome.stderr)", file: file, line: line)
+  }
+
   private func json(_ text: String, file: StaticString = #filePath, line: UInt = #line) throws
     -> [String: Any]
   {
@@ -119,24 +130,22 @@ extension OrbeCliProcessTests {
   /// 書き込み先が 3 つ実在するので、3 つとも別の層へ落ちることを読み戻して確かめる。
   func testWorkspaceFlagHasThreeStatesForConfig() throws {
     let control = try startControlProcess()
-    let rows = try XCTUnwrap(control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
-    let backgroundId = try XCTUnwrap(
-      rows.first(where: { $0["active"] as? Bool == false })?["id"] as? Int, "背景 WS が無い")
+    let backgroundId = try workspaceId(control, active: false)
 
-    XCTAssertEqual(control.orb(["config", "set", "font-size", "20"]).status, 0)
-    XCTAssertEqual(control.orb(["config", "set", "font-size", "21", "--workspace"]).status, 0)
-    XCTAssertEqual(
-      control.orb(["config", "set", "font-size", "22", "--workspace", "\(backgroundId)"]).status, 0)
+    write(control, ["config", "set", "font-size", "20"], "global 層")
+    write(control, ["config", "set", "font-size", "21", "--workspace"], "bare＝アクティブ WS 層")
+    write(
+      control, ["config", "set", "font-size", "22", "--workspace", "\(backgroundId)"], "背景 WS 層")
 
     let active = control.orbJSON(["config", "get", "font-size"])
     XCTAssertEqual(active["value"] as? Int, 21, "bare --workspace はアクティブ WS の上書きへ書く")
-    XCTAssertEqual(active["scope"] as? String, "workspace")
+    XCTAssertEqual(active["scope"] as? String, "workspace", "bare で書いた値の層は workspace")
     let background = control.orbJSON(
       ["config", "get", "font-size", "--workspace", "\(backgroundId)"])
     XCTAssertEqual(background["value"] as? Int, 22, "--workspace <id> は非アクティブ WS へも書ける")
 
     // bare --workspace の unset でアクティブ側の上書きだけが外れ、global 明示値が現れる。
-    XCTAssertEqual(control.orb(["config", "unset", "font-size", "--workspace"]).status, 0)
+    write(control, ["config", "unset", "font-size", "--workspace"], "アクティブ WS 層の解除")
     let unwound = control.orbJSON(["config", "get", "font-size"])
     XCTAssertEqual(unwound["value"] as? Int, 20, "フラグ無しの set は global 層へ書かれていた")
     XCTAssertEqual(unwound["scope"] as? String, "global")
@@ -154,18 +163,18 @@ extension OrbeCliProcessTests {
   func testBareWorkspaceFlagKeepsItsMeaningBeforeThePositionals() throws {
     let control = try startControlProcess()
 
-    XCTAssertEqual(
-      control.orb(["config", "set", "--workspace", "font-size", "23"]).status, 0,
-      "前置の bare --workspace でも <key> <value> が位置引数として残る")
+    write(
+      control, ["config", "set", "--workspace", "font-size", "23"],
+      "前置の bare --workspace（<key> <value> が位置引数として残る）")
     XCTAssertEqual(
       control.orbJSON(["config", "get", "--workspace", "font-size"])["value"] as? Int, 23,
       "前置の bare --workspace の get が <key> を食い違えない")
     XCTAssertEqual(
       control.orbJSON(["config", "get", "font-size", "--workspace", "current"])["value"] as? Int,
       23, "--workspace current はアクティブ WS の <id> へ解決する（bare と同じ層を指す）")
-    XCTAssertEqual(
-      control.orb(["config", "unset", "--workspace", "font-size"]).status, 0,
-      "前置の bare --workspace でも unset の <key> が残る")
+    write(
+      control, ["config", "unset", "--workspace", "font-size"],
+      "前置の bare --workspace の unset（<key> が残る）")
     XCTAssertNotEqual(
       control.orbJSON(["config", "get", "font-size"])["value"] as? Int, 23,
       "その unset はアクティブ WS の上書きを実際に外す")
@@ -195,9 +204,7 @@ extension OrbeCliProcessTests {
       message: "invalid workspace id: nosuch", "値が前置された非解決トークン")
 
     // 正しい `<id>` 指定は通り、その workspace のペインだけに絞られる。
-    let rows = try XCTUnwrap(control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
-    let activeId = try XCTUnwrap(
-      rows.first(where: { $0["active"] as? Bool == true })?["id"] as? Int)
+    let activeId = try workspaceId(control, active: true)
     let panes = try XCTUnwrap(
       control.orbJSON(["pane", "list", "--workspace", "\(activeId)"])["panes"] as? [[String: Any]])
     XCTAssertFalse(panes.isEmpty, "--workspace <id> の絞り込みで結果が消えない")
@@ -208,14 +215,42 @@ extension OrbeCliProcessTests {
         .count, panes.count, "`current` も `<id>` として解決する（数値だけの受け付けに退行しない）")
   }
 
+  /// `--workspace` の抜き取りは綴りが**完全一致**した 1 個目しか見ないので、`--workspace=3`（= 区切り）・
+  /// 綴り誤り・2 個目の指定は残余トークンに落ちる。残余を検査しないとそれらは黙って捨てられ、
+  /// exit 0 のまま**指定と違う workspace** を触る——`tab new` はアクティブ WS にタブが生え、
+  /// `pane list` は絞り込みが効かず全 WS のペインが出る。終了コードにも stdout にも現れない。
+  ///
+  /// `-` 始まりでも**位置引数の席**なら値なので通す（`config set font-size -1` の `-1`）。この境界を
+  /// 「残余に `-` があれば一律エラー」に広げると、負の値がすべて usage エラーに化ける。
+  func testUnconsumedFlagLikeTokensAreRejectedInsteadOfSilentlyDropped() throws {
+    let control = try startControlProcess()
+
+    for args in [
+      ["tab", "new", "--workspace=3"],
+      ["pane", "list", "--workspace=3"],
+      ["pane", "list", "--workspce", "3"],
+      ["config", "set", "theme", "dark", "--workspace", "-1"],
+      ["config", "set", "font-size", "14", "--workspace", "current", "--workspace", "nosuch"],
+    ] {
+      failure(
+        control.orb(args), code: 2, message: "unknown option:",
+        "解釈されなかった `\(args.joined(separator: " "))`")
+    }
+
+    // 位置引数の席に来た `-` 始まりは値として解析を通る（弾きすぎの防止）。値域を見るのはサーバなので、
+    // ここで確かめるのは「未知フラグとして前段で落とされない」ことだけ。
+    let negative = control.orb(["config", "set", "font-size", "-1"])
+    XCTAssertFalse(
+      negative.stderr.contains("unknown option"),
+      "位置引数の席の `-1` を未知フラグとして弾いている: \(negative.stderr)")
+  }
+
   /// `tab new --workspace <id>` は**その** workspace にタブを開く。値が黙って捨てられると、
   /// exit 0 のまま指定と無関係なアクティブ WS にタブが生える——「開けたのに見当たらない」という
   /// 形で現れるので、終了コードでも stdout でも気づけない。
   func testTabNewOpensInTheNamedWorkspace() throws {
     let control = try startControlProcess()
-    let rows = try XCTUnwrap(control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
-    let backgroundId = try XCTUnwrap(
-      rows.first(where: { $0["active"] as? Bool == false })?["id"] as? Int, "背景 WS が無い")
+    let backgroundId = try workspaceId(control, active: false)
 
     let paneId = try XCTUnwrap(
       control.orbJSON(["tab", "new", "--workspace", "\(backgroundId)"])["paneId"] as? Int,
@@ -239,10 +274,9 @@ extension OrbeCliProcessTests {
     XCTAssertEqual(split.status, 0, "ORBE_PANE があれば位置引数なしで split できる: \(split.stderr)")
     XCTAssertEqual(tab.controlAllPanes().count, 2, "分割の宛先は ORBE_PANE のペイン")
 
-    XCTAssertEqual(control.orb(["ws", "rename", "current", "l4-current"]).status, 0)
-    let rows = try XCTUnwrap(control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
+    write(control, ["ws", "rename", "current", "l4-current"], "current 宛ての ws rename")
     XCTAssertEqual(
-      rows.first(where: { $0["active"] as? Bool == true })?["name"] as? String, "l4-current",
-      "current はアクティブ WS へ解決する")
+      try workspaceRows(control).first(where: { $0["active"] as? Bool == true })?["name"]
+        as? String, "l4-current", "current はアクティブ WS へ解決する")
   }
 }

@@ -3,12 +3,11 @@ import XCTest
 @testable import Orbe
 
 /// 実 `orbe-mcp` を子プロセスで起こし、MCP の `tools/call` → control.sock → 実 `WindowController`
-/// までの導通を測る。ここは開発ループ用スクリプトが手動で見ていた 4 つの assert を機械検証へ
-/// 移した受け皿で、加えて L3 が固定できなかった `get_pane_text` の `scrollback` を押さえる。
+/// までの導通と、L3 が固定できなかった `get_pane_text` の `scrollback` を測る。
 ///
 /// 壊れると何が起きるか: MCP ブリッジがツール名を control のメソッドへ載せ替えられなくなっても、
 /// `isError` の畳み込みが消えても、実ペインへの注入・読み取りが no-op に倒れても、どのテストも
-/// 落ちなくなる。AI から Orbe を駆動する唯一の口が黙って死に、気づくのは人が手で触ったときになる。
+/// 落ちなくなる。AI から Orbe を駆動する MCP の口が黙って死に、気づくのは人が手で触ったときになる。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続し、実ペインでシェルを走らせる（GhosttyKit 必須）。
 /// ヘッドレスな純ロジック検証ではない。
@@ -35,13 +34,9 @@ final class OrbeMcpProcessTests: OrbeTestCase {
   }
 
   /// 「シェルが実際に実行した」ことの証拠になるコマンドと目印。目印はコマンド行の中では 2 つの
-  /// 文字列リテラルに割れているため、**連結された形はシェルが評価した出力にしか現れない**。
-  ///
-  /// 出現回数（入力エコー＋出力で 2 回以上）では測らない。あれが数えているのは**入力行が何回
-  /// 描画されたか**で、それはプロンプトのテーマや rc 次第——入力行をその場で描き直すテーマなら、
-  /// 実行されていなくても入力側だけで 2 回に届きうる。素のシェルなら 1 回に収まるので、同じ
-  /// 判定が環境によって効いたり効かなかったりする。目印方式が見るのは連結が評価されたことだけで、
-  /// 描画挙動に依らない。
+  /// 文字列リテラルに割れているため、**連結された形はシェルが引用符除去を評価した出力にしか
+  /// 現れない**。入力行がそのまま描き返されても目印にはならないので、判定はプロンプトのテーマや
+  /// rc の描画挙動に依らない。
   private func executionProbe() -> (command: String, marker: String) {
     let id = String(format: "%08x", UInt32.random(in: 0...UInt32.max))
     return ("echo L4D\"\"ONE_\(id)", "L4DONE_\(id)")
@@ -49,7 +44,9 @@ final class OrbeMcpProcessTests: OrbeTestCase {
 
   /// 実行済みになるまで待つ。可視範囲は長い出力で流れるため scrollback 側で見る。
   private func waitForExecution(_ control: ControlProcess, pane: Int, marker: String) -> Bool {
-    waitUntil(15) { paneText(control, pane: pane, scrollback: true).contains(marker) }
+    waitUntil(ControlProcess.paneSettleTimeout) {
+      paneText(control, pane: pane, scrollback: true).contains(marker)
+    }
   }
 
   /// `send_text` ＋ `send_key enter` でペインのシェルが実際にコマンドを**実行**する
@@ -92,7 +89,7 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     let pane = try XCTUnwrap(paneIds.first, "activate 後も paneIds が空（タブが mount されていない）")
 
     XCTAssertTrue(
-      waitUntil(15) {
+      waitUntil(ControlProcess.paneSettleTimeout) {
         !paneText(control, pane: pane).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       },
       "activate したペイン \(pane) の画面が空のまま（surface が生成されていない）")

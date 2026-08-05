@@ -24,6 +24,9 @@ import XCTest
 final class ControlProcess {
   /// 子プロセスの終了を待つ上限。**実時間の検証ではない**——進まなくなったら諦めるための上限。
   static let processTimeout: TimeInterval = 20
+  /// 実ペインへ送った入力が画面へ反映されるまでの上限。ペインの spawn ＋ ログインシェルの起動 ＋
+  /// 描画までを含むので `processTimeout` と別に持つ。これも実時間の検証ではない。
+  static let paneSettleTimeout: TimeInterval = 15
   /// runloop を 1 回まわす刻み。control queue と main hop の両方をここで進ませる。
   private static let stepSeconds: TimeInterval = 0.01
 
@@ -158,11 +161,14 @@ final class ControlProcess {
           + "（main を塞ぐ待ち方をすると制御サーバの main hop が捌かれず相互デッドロックする）",
         file: file, line: line)
       process.terminate()
-      _ = waitUntil(3) { exited }
+      // `readsDone` まで待つ。`outData` / `errData` は背景の 2 スレッドが書いている最中なので、
+      // `exited` だけで先へ進むと診断に載せる stdout / stderr を競合したまま読むことになる。
+      _ = waitUntil(3) { exited && readsDone }
     }
     return Outcome(
       status: exited ? process.terminationStatus : -1,
-      stdout: Self.text(outData), stderr: Self.text(errData))
+      stdout: readsDone ? Self.text(outData) : "<読み取り未完>",
+      stderr: readsDone ? Self.text(errData) : "<読み取り未完>")
   }
 
   /// 出力を文字列へ。非 UTF-8 は握り潰さず、そうと分かる形で残す（空文字と区別できるようにする）。
