@@ -147,16 +147,22 @@ final class ControlServer {
 
   /// 既に接続済みの fd を制御プレーンへ載せる（queue 外からの入口）。戻った時点で
   /// 受信が始まっているため、呼び出し側は直後に書いた最初の行を取りこぼさない。
-  /// **queue 上から呼んではいけない**（自 queue への sync で即 deadlock する）。
   func adopt(fd: Int32) {
+    // queue 上から呼ぶと自 queue への sync で即 deadlock する。この規律は規約に頼らず
+    // ここで落とす——deadlock は「固まった」としか見えず、制御プレーン全体（accept・
+    // 他接続・event 配信・timeout）が同時に止まるので原因に辿り着けない。trap なら
+    // 違反した呼び出し元がその場でスタックに出る。
+    dispatchPrecondition(condition: .notOnQueue(queue))
     queue.sync { attach(fd: fd) }
   }
 
-  /// 非ブロッキング化・Connection 生成・登録・受信開始（queue 上）。
+  /// 非ブロッキング化・Connection 生成・登録・受信開始。
   /// Connection は必ずこの queue で作る——`handle` が respond をこの queue へ hop するため、
   /// 別 queue で作ると受信と送信が Connection の内部状態（出力バッファ・fd・writeSource）を
-  /// 跨いで触ることになる。
+  /// 跨いで触ることになる。その規律を次行で強制する（`acceptOne` は queue 上なので直に、
+  /// queue 外からは `adopt` 経由で入る、という非対称の受け側）。
   private func attach(fd: Int32) {
+    dispatchPrecondition(condition: .onQueue(queue))
     // 非ブロッキング化。詰まった 1 接続の write/read を全体から隔離し head-of-line blocking を断つ。
     // 失敗した fd はブロッキングのままなので制御プレーンへ入れず捨てる（詰まると共有 queue を凍結させる）。
     let flags = fcntl(fd, F_GETFL)
