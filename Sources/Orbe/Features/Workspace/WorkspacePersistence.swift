@@ -135,9 +135,12 @@ struct TabState: Codable, Equatable {
     if let c = try? decoder.container(keyedBy: CodingKeys.self), c.contains(.tree) {
       tree = try c.decode(PaneNode.self, forKey: .tree)
       explicitTitle = try c.decodeIfPresent(String.self, forKey: .explicitTitle)
-      // editor は後から足したフィールド。欠落を許容しないと tab → workspace → ファイル全体へ
-      // decode 失敗が連鎖し、load() が nil を返して全 workspace を失う。
-      editor = try c.decodeIfPresent(EditorPaneTabState.self, forKey: .editor) ?? Self.defaultEditor
+      // editor は後から足したフィールド。欠落も「あるが読めない」も既定へ落として読む——ここで
+      // throw すると tab → workspace → ファイル全体へ decode 失敗が連鎖し、load() が nil を返して
+      // 全 workspace を失う。EditorPaneTabState に非 optional の項目を 1 つ足すだけで、既存の
+      // 全ファイルが後者に落ちる。
+      editor =
+        (try? c.decodeIfPresent(EditorPaneTabState.self, forKey: .editor)) ?? Self.defaultEditor
     } else {
       // 旧形式: タブ＝素の PaneNode（explicitTitle 無し → nil）。
       tree = try PaneNode(from: decoder)
