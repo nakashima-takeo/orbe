@@ -36,7 +36,7 @@ updated: 2026-08-03
 | 0 | 基盤足場 | 単一ハーネス（`OrbeTestCase` が点火し `XCTestObservation` が毎テスト隔離。state dir は `ORBE_STATE_DIR` を 90 バイト以下の temp へ向けて隔離し、`control.sock` も自動で追従。永続・同梱リソース根・ghostty 設定探索先の override を毎テスト張り直す。補完の学習ストアだけはプロセス級固定で、学習状態はテスト間で持ち越される）。`Bundle.main` 直参照 3 箇所を `BundledResources` へ集約。ビルド済み CLI 実行体がテストバンドルの隣にある前提と、その解決規則の固定 | — | 完了 | — |
 | 1 | wire 契約 | 制御プロトコルの語を socketpair 上の実 `Connection` で固める。method 名・params キー・エラーコード・`wait_for_event`・framing・不正 JSON。#50 #62 | 0 | 未着手 | — |
 | 2 | プロセス境界 | 実 `orbe-cli` / `orbe-mcp` / `orbe-report` を subprocess で駆動。引数解釈・終了コード・stdout・hook 実経路・bare `orb` の PATH 解決。`dev-verify.sh` を置換して廃止。#63 #64 #74 | 0, 1 | 未着手 | — |
-| 3 | 復元と移行 | 保存 → 復元 → 再保存のラウンドトリップ。`TabState` decode の非対称（`editor` だけ必須で、無いと全 workspace 消失）・範囲外クランプ・デバウンス。#56 #68 #54 | 0 | 未着手 | — |
+| 3 | 復元と移行 | 保存 → 復元 → 再保存のラウンドトリップ。`TabState`・設定層の寛容 decode の境界・範囲外クランプ・デバウンス・旧バージョンファイルからの起動移行。#56 #68 #54 | 0 | 実装中 | — |
 | 4 | 既存テストの整理 | assert 0 件の PNG 生成器を「テスト」から出す。自分のクロージャを自分で呼ぶ配線テスト・production を再実装したテスト・13 ファイルに浸透した行 index ハードコード・ヘッドレスで fail する 4 本・条件付きアサートを直す | — | 未着手 | — |
 | 5 | ターミナル入力表面 | IME の preedit 同期と Backspace 貫通防止・キー翻訳・スクロールの蓄積と合体 flush。実 `SurfaceView` を直接駆動する | 0 | 未着手 | — |
 | 6 | アプリ結合 | 設定適用の配線（scope 別の保存先・ライブ反映）・workspace の keep-alive と全タブ mount。`WindowController.init` の分解が前提。#75 #61 | 0, 3 | 未着手 | — |
