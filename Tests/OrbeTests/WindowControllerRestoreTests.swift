@@ -146,6 +146,34 @@ final class WindowControllerRestoreTests: OrbeTestCase {
     XCTAssertEqual(saved, expected, "進むのは lastUsedAt だけ——mount してもモデルは他に 1 つも動かない")
   }
 
+  /// 保存分割比は mount 後の**実レイアウト**へ適用される。上の 2 本は非 mount 側なので、
+  /// `WorkspaceSplitView.ratio` が bounds 0 で保存値をそのまま返す fallback しか通らない
+  /// ——`layout()` の `setPosition` が消えても等値は保たれてしまう。ここが唯一その適用を見る。
+  /// 壊れると復元した分割が全部 50/50 で開く（保存値は往復するので気づけない）。
+  func testRestoredSplitRatioIsAppliedToMountedLayout() throws {
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    let wc = launch(
+      activeWorkspace: 0,
+      [
+        WorkspaceState(
+          name: "front", rootPath: home, activeTab: 0,
+          tabs: [
+            TabState(
+              tree: .split(
+                vertical: true, ratio: 0.3,
+                first: .leaf(cwd: home, agent: nil), second: .leaf(cwd: home, agent: nil)),
+              explicitTitle: nil)
+          ])
+      ],
+      windowSize: WindowSize(width: 700, height: 400))
+    wc.window.layoutIfNeeded()
+
+    guard case .split(_, let ratio, _, _) = wc.current.tabs[wc.current.active].snapshot() else {
+      return XCTFail("復元したタブは分割木のまま")
+    }
+    XCTAssertEqual(ratio, 0.3, accuracy: 0.02, "保存分割比が実フレームへ適用される（未適用なら 0.5 になる）")
+  }
+
   // MARK: - index のクランプ（範囲外の保存値で起動しても配列を踏み外さない）
 
   /// 保存 activeWorkspace が workspace 数を超えていたら最終 index へ丸める。
