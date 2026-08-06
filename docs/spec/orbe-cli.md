@@ -27,7 +27,7 @@ pane/tab（レイアウト操作。ペイン内は `ORBE_PANE` を現ペイン�
   - `--workspace` を取るのは `pane list` と `tab new` だけ（値必須。bare は usage エラー）。他の pane/tab コマンドは取らない。
   - フラグを取り切った残余が位置引数の席に収まらなければ usage エラー（exit 2）。pane/tab の id は常に正なので、config 系と違い**位置引数の席にも例外を設けない**（先頭から検査する）。黙って捨てると `ORBE_PANE` 既定へ落ち、`pane close`/`tab close` では指定と無関係な現ペイン・現タブが exit 0 のまま消える。`tab new <path>`（`--dir` の書き忘れ）はアクティブ WS の既定 cwd にタブを開く。
 
-各サブコマンドは対応する [control-api](control-api.md) メソッドへそのまま乗る。`--json` は全サブコマンドで効き、control の result をそのまま出す——write が採番した id（`ws new` の workspaceId・`tab new` / `pane split` の paneId）はこの出力からしか読めない。`--help` は全階層で効き、固有 usage を持つのは `config set` と `pane split`、他はドメインの usage を出す（`pane split` の `-h` は上下分割フラグであって help ではない。help は `--help` のみ）。`<id|current>` の `current` はアクティブ WS。
+各サブコマンドは対応する [control-api](control-api.md) メソッドへそのまま乗る。`--json` は全サブコマンドで効き、control の result をそのまま出す（例外は 2 つ——`config get` は `config_list` から抽出した 1 行、`pane list` は `--workspace` で絞った後の `{"panes":[…]}`）。write が採番した id（`ws new` の workspaceId・`tab new` / `pane split` の paneId）は人間向け出力にも載るが、書式が割れずに読めるのは `--json` だけ。`--help` は全階層で効き、固有 usage を持つのは `config set` と `pane split`、他はドメインの usage を出す（`pane split` の `-h` は上下分割フラグであって help ではない。help は `--help` のみ）。`<id|current>` の `current` はアクティブ WS。
 
 値必須フラグ（`--workspace <id>` / `--dir <path>` / `--cmd "…"`）の値は `-` 始まりも空文字も取らない（usage エラー、exit 2）。`orb tab new --dir "$DIR" --cmd "$CMD"` の `$DIR` が空になる形が両方ここで落ちる——引用符が無ければトークンごと消えて `--cmd` が cwd に化け、引用符があれば空文字が cwd として通る。パスは絶対パスで渡す（`-` 始まりのディレクトリは `./-foo` の形）——相対パスは CLI も control も解決せずそのまま格納するので、利用者のシェルの cwd 基準にはならない。`~` 始まりを展開するのは workspace のパス（`ws new --dir` / `ws dir`）だけで、`tab new --dir` は展開せずそのまま cwd にする。
 

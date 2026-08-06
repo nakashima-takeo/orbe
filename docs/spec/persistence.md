@@ -24,12 +24,12 @@ updated: 2026-08-06
 
 保存は構成変化のたびデバウンスし、終了時に flush する。
 
-互換: 旧スキーマは無損失で読み、次回保存で現行形式へ置き換わる（タブ構成・cwd・エージェントを失わない）。後から足したフィールドは**欠落**を許容する。`editor` だけは「あるが読めない」も既定へ落とす——このフィールドの異常でタブを失わないため。設定層（global・workspace 上書きとも）は現行形式なら読めない 1 キーだけを落として残りを活かす——1 項目の異常で層ごと消さないため。旧 camelCase の読みは global 移行・workspace 上書きとも all-or-nothing で、そこでは範囲外の `theme` が既定値として層に載る。値域を持つ項目は範囲外の値もそのまま層へ載せる（値域を守るのは書き込み経路）。タブ本体（`tree`・エージェントセッション）・`explicitTitle`・`lastUsedAt`・workspace の名前や index が「あるが読めない」ならファイル全体の fallback へ落ちる。壊れている・非互換バージョン・空 JSON は既定の単一 workspace で fallback。
+互換: 旧スキーマは無損失で読み、次回保存で現行形式へ置き換わる（タブ構成・cwd・エージェントを失わない）。後から足したフィールドは**欠落**を許容する。「あるが読めない」を既定へ落とすのは `editor` と設定層（`settingsOverride`）の 2 つだけで、そのほか——タブ本体（`tree`・エージェントセッション）・`explicitTitle`・`lastUsedAt`・`windowSize`・workspace の名前や index——はファイル全体の fallback へ落ちて**全 workspace を失う**。optional で後から足したフィールドも、既定へ落とす decode を自分で書かない限りこちら側になる。設定層（global・workspace 上書きとも）は現行形式なら読めない 1 キーだけを落として残りを活かし、値ごと読めなければ上書き無し（global 継承）へ落ちる——1 項目の異常で層ごと消さないため。旧 camelCase の読みは global 移行・workspace 上書きとも all-or-nothing で、そこでは範囲外の `theme` が既定値として層に載る。値域を持つ項目は範囲外の値もそのまま層へ載せる（値域を守るのは書き込み経路）。壊れている・非互換バージョン・空 JSON は既定の単一 workspace で fallback。
 
 ## settings.json / app-state.json
 
 - **`settings.json`** … ユーザー設定（global 層）。in-memory SSOT が保持し、変更は即 save する。未知 key（将来の項目・撤去済みの項目）は無視して読む。
-- **`app-state.json`** … ユーザー設定でない内部簿記（エージェントプラグインを導入できたか・最後に登録できたエージェントプラグイン名〔[agent-plugin-package](agent-plugin-package.md)〕・補完のインストール済みフラグ・ログインシェル PATH のキャッシュ・UI 言語）。全項目 optional。
+- **`app-state.json`** … ユーザー設定でない内部簿記（エージェントプラグインを導入できたか・最後に登録できたエージェントプラグイン名〔[agent-plugin-package](agent-plugin-package.md)〕・旧補完方式〔managed block〕の導入済みフラグ・ログインシェル PATH のキャッシュ・UI 言語）。全項目 optional。
 
 2 ファイルに分けているのは「ユーザーが決めた値」と「アプリが勝手に覚えた値」を混ぜないため。旧形式（両者が同居した 1 枚）は起動時に無損失で分割移行する（旧ファイル全体が読めたときだけ変換する all-or-nothing。読めなければ既定へ fallback）。app-state.json へは全体上書きでなく**マージ**で書く——旧形式が語彙として持たない項目（UI 言語・登録できたエージェントプラグイン名）も、旧形式が語彙としては持つがその 1 ファイルには書かれていない項目（ログインシェル PATH のキャッシュ等）も移行が巻き戻さず、中断した移行からの再移行が冪等になる。
 
