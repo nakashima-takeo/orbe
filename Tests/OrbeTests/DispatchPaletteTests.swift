@@ -5,7 +5,7 @@ import XCTest
 /// Dispatch パレット（DispatchPaletteModel）のロジック検証。libghostty 非依存（@Observable モデルのみ）。
 /// live git/gh は叩かず `DispatchSectionBuilder` に mock 入力を通してセクションを組む。
 @MainActor
-final class DispatchPaletteTests: XCTestCase {
+final class DispatchPaletteTests: OrbeTestCase {
 
   private func makeModel(
     _ input: DispatchSectionBuilder.Input = .designSample,

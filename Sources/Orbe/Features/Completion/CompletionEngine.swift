@@ -44,7 +44,7 @@ final class CompletionEngine {
 
   /// バンドル無し（`swift run`）では nil。存在時のみ engine をロードできる。
   static var bundlePath: String? {
-    guard let resources = Bundle.main.resourceURL else { return nil }
+    guard let resources = BundledResources.root else { return nil }
     let path = resources.appendingPathComponent("completion-engine.js").path
     return FileManager.default.isReadableFile(atPath: path) ? path : nil
   }

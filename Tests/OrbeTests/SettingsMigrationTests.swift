@@ -5,31 +5,7 @@ import XCTest
 /// 旧形式（camelCase・アプリ状態同居の settings.json / camelCase の workspaces.json settingsOverride）から
 /// 新形式への**無損失自動移行**を固定する。移行は all-or-nothing（旧ファイル全体の decode 成功時のみ変換）で、
 /// 既存ユーザーの設定・WS 上書きを 1 つも失わないことを実 JSON fixture で担保する。
-final class SettingsMigrationTests: XCTestCase {
-  private var settingsURL: URL!
-  private var appStateURL: URL!
-  private var workspacesURL: URL!
-
-  override func setUp() {
-    super.setUp()
-    let dir = FileManager.default.temporaryDirectory
-    settingsURL = dir.appendingPathComponent("mig-settings-\(UUID().uuidString).json")
-    appStateURL = dir.appendingPathComponent("mig-appstate-\(UUID().uuidString).json")
-    workspacesURL = dir.appendingPathComponent("mig-ws-\(UUID().uuidString).json")
-    SettingsPersistence.fileURLOverride = settingsURL
-    AppStatePersistence.fileURLOverride = appStateURL
-    WorkspacePersistence.fileURLOverride = workspacesURL
-  }
-
-  override func tearDown() {
-    SettingsPersistence.fileURLOverride = nil
-    AppStatePersistence.fileURLOverride = nil
-    WorkspacePersistence.fileURLOverride = nil
-    for url in [settingsURL, appStateURL, workspacesURL] {
-      if let url { try? FileManager.default.removeItem(at: url) }
-    }
-    super.tearDown()
-  }
+final class SettingsMigrationTests: OrbeTestCase {
 
   // MARK: - settings.json 旧形式 → 新形式（設定 9 項目＋アプリ状態 3 項目）
 
@@ -42,7 +18,7 @@ final class SettingsMigrationTests: XCTestCase {
       "cursorStyleBlink":false,"agentStateIcons":{"working":"gearshape"},\
       "devFeaturesEnabled":true}
       """
-    try Data(legacy.utf8).write(to: settingsURL)
+    try Data(legacy.utf8).write(to: settingsFile())
 
     let layer = SettingsPersistence.loadGlobal()
     XCTAssertEqual(layer[SettingKeys.fontSize], 16)
@@ -62,7 +38,7 @@ final class SettingsMigrationTests: XCTestCase {
     XCTAssertEqual(app.cachedShellPath, "/usr/local/bin:/usr/bin")
 
     // settings.json は新形式（version＋values）へ書き換わり、アプリ状態 field は消える。
-    let raw = try String(contentsOf: settingsURL, encoding: .utf8)
+    let raw = try String(contentsOf: settingsFile(), encoding: .utf8)
     XCTAssertTrue(raw.contains("\"version\" : 1"), "新形式 version マーカー")
     XCTAssertTrue(raw.contains("\"font-size\" : 16"), "canonical key（kebab）で書く")
     XCTAssertFalse(raw.contains("agentPluginsInstalled"), "アプリ状態は settings.json から消える")
@@ -72,7 +48,7 @@ final class SettingsMigrationTests: XCTestCase {
   /// 移行後にもう一度 loadGlobal しても再移行せず（既に新形式）、値は同一で round-trip する。
   func testMigratedSettingsRoundTripInNewFormat() throws {
     let legacy = #"{"fontSize":13,"theme":"light","agentStateIcons":{"done":"checkmark.seal"}}"#
-    try Data(legacy.utf8).write(to: settingsURL)
+    try Data(legacy.utf8).write(to: settingsFile())
     let first = SettingsPersistence.loadGlobal()
     let second = SettingsPersistence.loadGlobal()
     XCTAssertEqual(first, second, "再 load は再移行せず同値")
@@ -81,12 +57,16 @@ final class SettingsMigrationTests: XCTestCase {
     XCTAssertEqual(second[SettingKeys.agentStateIcons], ["done": "checkmark.seal"])
   }
 
-  /// 旧テーマ名（"Dracula" 等）は移行時に .auto へ丸めて読む（寛容 decode で全設定を失わない）。
-  func testLegacyThemeNameRoundsToAutoWithoutLosingOtherSettings() throws {
+  /// 値域外の `theme` を含む旧ファイルも、他設定を巻き込まず移行する。`theme` は移行 struct で
+  /// `ThemeMode` として型付けして読むため、値域外は既定（Auto）として層に載る。
+  ///
+  /// workspace 上書きの移行は同じ値を生の文字列のまま層へ載せる（解決時に既定へ落ちるので実効値は
+  /// 一致する）。両者で差の出る値は書き込み経路の値域検証を通れないので、意味を揃えてはいない。
+  func testOutOfRangeThemeMigratesWithoutLosingOtherSettings() throws {
     try Data(#"{"defaultAgent":"claude","fontSize":16,"theme":"Dracula"}"#.utf8)
-      .write(to: settingsURL)
+      .write(to: settingsFile())
     let layer = SettingsPersistence.loadGlobal()
-    XCTAssertEqual(layer[SettingKeys.theme], .auto, "旧テーマ名は Auto へ丸める")
+    XCTAssertEqual(layer[SettingKeys.theme], .auto, "値域外の theme は既定として載る")
     XCTAssertEqual(layer[SettingKeys.fontSize], 16, "他設定は失わない")
     XCTAssertEqual(layer[SettingKeys.defaultAgent], "claude")
   }
@@ -94,10 +74,58 @@ final class SettingsMigrationTests: XCTestCase {
   /// 撤去済みキー（cursorColor 等）を含む旧ファイルも他設定を壊さず移行する。
   func testLegacyFileWithRemovedKeyMigrates() throws {
     try Data(##"{"defaultAgent":"claude","cursorColor":"#89B4FA","fontSize":16}"##.utf8)
-      .write(to: settingsURL)
+      .write(to: settingsFile())
     let layer = SettingsPersistence.loadGlobal()
     XCTAssertEqual(layer[SettingKeys.defaultAgent], "claude")
     XCTAssertEqual(layer[SettingKeys.fontSize], 16)
+  }
+
+  /// 移行は app-state.json の既存項目を潰さない。旧 settings.json は `preferredLanguage` も
+  /// `registeredAgentPluginName` も持たないので、全体上書きするとこの 2 つが消える
+  /// ——言語が未選択に戻って初回言語選択画面が再び出る／プラグインが毎起動登録し直される。
+  func testMigrationMergesIntoExistingAppState() throws {
+    AppStatePersistence.save(
+      AppStateFile(registeredAgentPluginName: "orbe-notify-v2", preferredLanguage: "ja"))
+    let legacy = """
+      {"agentPluginsInstalled":true,"completionInstalled":true,\
+      "cachedShellPath":"/usr/local/bin:/usr/bin","fontSize":16}
+      """
+    try Data(legacy.utf8).write(to: settingsFile())
+
+    _ = SettingsPersistence.loadGlobal()
+
+    let app = try XCTUnwrap(AppStatePersistence.load())
+    XCTAssertEqual(app.preferredLanguage, "ja", "旧形式が持たない項目は移行で消えない")
+    XCTAssertEqual(app.registeredAgentPluginName, "orbe-notify-v2", "旧形式が持たない項目は移行で消えない")
+    XCTAssertEqual(app.agentPluginsInstalled, true, "旧形式の項目は入る")
+    XCTAssertEqual(app.completionInstalled, true, "旧形式の項目は入る")
+    XCTAssertEqual(app.cachedShellPath, "/usr/local/bin:/usr/bin", "旧形式の項目は入る")
+  }
+
+  /// 移行が中断（app-state を書いた後・settings.json 置換の前でクラッシュ）した後の再移行は、
+  /// その間に書かれた app-state を巻き戻さない。マージなら再移行は同じ値を上書きするだけで無害になる。
+  ///
+  /// 巻き戻し対象は「旧形式が語彙として持たない項目」（preferredLanguage）だけではない。旧形式が
+  /// 語彙としては持つが**この 1 ファイルには書かれていない**項目（ここでは cachedShellPath）も、
+  /// nil をそのまま代入すれば消える——だから移行後に立った値を混ぜて、欠落を nil 上書きに変える
+  /// 実装をここで落とす（消えると起動復元の resume が login shell の起動を待つことになる）。
+  func testReMigrationDoesNotUndoInterveningAppStateWrites() throws {
+    let legacy = #"{"agentPluginsInstalled":true,"fontSize":16}"#
+    try Data(legacy.utf8).write(to: settingsFile())
+    _ = SettingsPersistence.loadGlobal()  // 1 回目の移行
+
+    // 移行後にユーザーが言語を選び、PATH 検出も走る（後者は旧ファイルに無い項目）。
+    AppStatePersistence.update {
+      $0.preferredLanguage = "ja"
+      $0.cachedShellPath = "/usr/local/bin:/usr/bin"
+    }
+    let before = try Data(contentsOf: appStateFile())
+
+    try Data(legacy.utf8).write(to: settingsFile())  // 中断クラッシュ相当（旧形式のまま残っている）
+    _ = SettingsPersistence.loadGlobal()  // 再移行
+
+    XCTAssertEqual(
+      try Data(contentsOf: appStateFile()), before, "再移行は app-state を 1 バイトも変えない")
   }
 
   // MARK: - degenerate（空・欠落・壊れ）は既定へ fallback
@@ -107,7 +135,7 @@ final class SettingsMigrationTests: XCTestCase {
   }
 
   func testBrokenSettingsFileYieldsEmptyLayer() throws {
-    try Data("{".utf8).write(to: settingsURL)
+    try Data("{".utf8).write(to: settingsFile())
     XCTAssertTrue(SettingsPersistence.loadGlobal().isEmpty, "壊れは空層（既定へ fallback）")
   }
 
@@ -116,12 +144,12 @@ final class SettingsMigrationTests: XCTestCase {
   /// 既存キーの型が変わっても既存ユーザー設定を失わない）。F1 の回帰ガード。
   func testV1FileWithOneTypeMismatchKeepsOtherSettingsAndDoesNotRewrite() throws {
     let raw = #"{"version":1,"values":{"font-size":"oops","theme":"dark","default-agent":"codex"}}"#
-    try Data(raw.utf8).write(to: settingsURL)
+    try Data(raw.utf8).write(to: settingsFile())
     let layer = SettingsPersistence.loadGlobal()
     XCTAssertNil(layer[SettingKeys.fontSize], "型不一致の font-size は落ちる")
     XCTAssertEqual(layer[SettingKeys.theme], .dark, "健全な他項目は生存する")
     XCTAssertEqual(layer[SettingKeys.defaultAgent], "codex")
-    let after = try String(contentsOf: settingsURL, encoding: .utf8)
+    let after = try String(contentsOf: settingsFile(), encoding: .utf8)
     XCTAssertEqual(after, raw, "load では settings.json を書き換えない（原資産を保持）")
   }
 
@@ -129,9 +157,9 @@ final class SettingsMigrationTests: XCTestCase {
   /// 空層で fallback しファイルを上書きしない（version 判別で legacy 空移行を封じる・F1 案C）。
   func testCorruptV1ValuesDoesNotWipeFile() throws {
     let raw = #"{"version":1,"values":123}"#
-    try Data(raw.utf8).write(to: settingsURL)
+    try Data(raw.utf8).write(to: settingsFile())
     XCTAssertTrue(SettingsPersistence.loadGlobal().isEmpty, "構造破損 v1 は空層 fallback")
-    let after = try String(contentsOf: settingsURL, encoding: .utf8)
+    let after = try String(contentsOf: settingsFile(), encoding: .utf8)
     XCTAssertEqual(after, raw, "破損 v1 でも load でファイルを書き換えない")
   }
 
@@ -149,7 +177,7 @@ final class SettingsMigrationTests: XCTestCase {
       "theme":"dark","fontFamily":"Hack","cursorStyleBlink":false,\
       "agentStateIcons":{"working":"gearshape"}}}]}
       """
-    try Data(legacy.utf8).write(to: workspacesURL)
+    try Data(legacy.utf8).write(to: workspacesFile())
     let file = try XCTUnwrap(WorkspacePersistence.load(), "旧 override 入りでも load 成功")
     let override = try XCTUnwrap(file.workspaces[0].settingsOverride, "上書き層へ変換される")
     XCTAssertEqual(override[SettingKeys.fontSize], 16)
@@ -161,7 +189,7 @@ final class SettingsMigrationTests: XCTestCase {
     XCTAssertEqual(override[SettingKeys.agentStateIcons], ["working": "gearshape"])
   }
 
-  /// 新形式（canonical key）の settingsOverride はそのまま読める（strict decode で受理）。
+  /// 新形式（canonical key）の settingsOverride はそのまま読める。
   func testNewFormatWorkspaceOverrideLoads() throws {
     let new = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
@@ -169,7 +197,7 @@ final class SettingsMigrationTests: XCTestCase {
       "tabs":[{"tree":{"leaf":{}},"editor":{"open":false,"tool":"tree"}}],\
       "settingsOverride":{"font-size":18,"default-agent":"codex"}}]}
       """
-    try Data(new.utf8).write(to: workspacesURL)
+    try Data(new.utf8).write(to: workspacesFile())
     let file = try XCTUnwrap(WorkspacePersistence.load())
     let override = try XCTUnwrap(file.workspaces[0].settingsOverride)
     XCTAssertEqual(override[SettingKeys.fontSize], 18)

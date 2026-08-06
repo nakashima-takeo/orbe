@@ -7,7 +7,7 @@ extension SurfaceView {
   /// `.app` 同梱の状態報告 binary（`<bundle>/Contents/Resources/bin/orbe-report`）の絶対パス。
   /// `swift run`（バンドル無し）では nil → env 未注入で hook が no-op。
   static var reportBinaryPath: String? {
-    guard let resources = Bundle.main.resourceURL else { return nil }
+    guard let resources = BundledResources.root else { return nil }
     let path = resources.appendingPathComponent("bin/orbe-report").path
     return FileManager.default.isExecutableFile(atPath: path) ? path : nil
   }
@@ -16,7 +16,7 @@ extension SurfaceView {
   /// root ペインの PATH 先頭へ前置してペイン内から bare `orb` を解決させる。`swift run`（バンドル無し）
   /// では nil → PATH 注入なし。
   static var bundledBinDir: String? {
-    guard let resources = Bundle.main.resourceURL else { return nil }
+    guard let resources = BundledResources.root else { return nil }
     let path = resources.appendingPathComponent("bin").path
     var isDir: ObjCBool = false
     guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else {

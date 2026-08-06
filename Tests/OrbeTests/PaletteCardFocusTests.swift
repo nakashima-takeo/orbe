@@ -11,7 +11,7 @@ import XCTest
 /// を返すため、**↑↓ だけ効いて ↵（決定）と →（ドリルイン）が誰にも届かない**状態になる
 /// ——ドリルイン→Esc 復帰でパレットが半死にした退行がこれ。実キーイベントを画面外の窓へ流して固定する。
 @MainActor
-final class PaletteCardFocusTests: XCTestCase {
+final class PaletteCardFocusTests: OrbeTestCase {
   private var windows: [NSWindow] = []
 
   /// 窓は ordered-in の間 AppKit が保持するため、参照を捨てるだけでは解放されず居座る。

@@ -5,7 +5,7 @@ import XCTest
 /// ⌘ 素タップ×2 判定（`CmdDoubleTapDetector`）の仕様を固定する。
 /// 素タップ = 修飾なし→⌘のみ→修飾なしで、押下↔解放の間に keyDown/mouseDown/他修飾が挟まらないこと。
 /// 発火 = 1 回目の解放→2 回目の解放が 350ms 以内で、2 回目の解放の瞬間。
-final class CmdDoubleTapTests: XCTestCase {
+final class CmdDoubleTapTests: OrbeTestCase {
   private var detector = CmdDoubleTapDetector()
 
   /// ⌘ を押して離す素タップ 1 回ぶんを流す。戻り値は解放時の発火判定。

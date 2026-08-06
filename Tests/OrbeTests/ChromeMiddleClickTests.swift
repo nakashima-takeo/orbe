@@ -11,18 +11,12 @@ import XCTest
 /// buttonNumber 絞り込み——を合成イベントで通す。SwiftUI のジェスチャは中ボタンを拾えず
 /// この catcher だけが受け口なので、ここが崩れると機能ごと消えるか、逆に catcher がタブ全面を
 /// 覆って選択・並び替え・改名を殺す。
-final class ChromeMiddleClickTests: XCTestCase {
+final class ChromeMiddleClickTests: OrbeTestCase {
 
-  private var tempStore: URL!
   private var windows: [NSWindow] = []
 
   override func setUp() {
     super.setUp()
-    tempStore = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-test-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tempStore
-    SettingsPersistence.fileURLOverride = tempStore.appendingPathExtension("settings")
-    AppStatePersistence.fileURLOverride = tempStore.appendingPathExtension("appstate")
     // 言語確定済み（returning user）として起動し、初回言語選択 overlay を出さない。
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
   }
@@ -32,10 +26,6 @@ final class ChromeMiddleClickTests: XCTestCase {
   override func tearDown() {
     windows.forEach { $0.orderOut(nil) }
     windows.removeAll()
-    WorkspacePersistence.fileURLOverride = nil
-    SettingsPersistence.fileURLOverride = nil
-    AppStatePersistence.fileURLOverride = nil
-    try? FileManager.default.removeItem(at: tempStore)
     super.tearDown()
   }
 

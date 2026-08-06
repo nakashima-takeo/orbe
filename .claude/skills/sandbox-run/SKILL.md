@@ -23,10 +23,11 @@ Orbe の新ビルドを、本物の Orbe（常用の workspaces・control.sock�
 ```mermaid
 flowchart TD
     A[1. 起こす対象を決める] --> B[2. ORBE_STATE_DIR で隔離起動]
-    B --> M{モード}
-    M -->|承認 既定| C[3a. 触りどころ・build-id を提示<br/>AskUserQuestion で承認]
-    M -->|無人| D[3b. control.sock を渡し制御 API で駆動]
-    C --> E[4. 片付け]
+    B --> S[3. 煙探知を 1 本通す]
+    S --> M{モード}
+    M -->|承認 既定| C[4a. 触りどころ・build-id を提示<br/>AskUserQuestion で承認]
+    M -->|無人| D[4b. control.sock を渡し制御 API で駆動]
+    C --> E[5. 片付け]
     D --> E
 ```
 
@@ -34,10 +35,17 @@ flowchart TD
 2. **隔離起動する。** 継承した ghostty のリソースポインタ系 env を断って起こす（レンズ②）:
    `env -u GHOSTTY_RESOURCES_DIR -u GHOSTTY_BIN_DIR -u TERMINFO ORBE_STATE_DIR="$(mktemp -d)" <app>/Contents/MacOS/Orbe &`
    `env | grep -i GHOSTTY` で他のリソースポインタ系が残っていればそれも `-u` で足す。この state dir と PID を控える（片付けに使う）。隔離インスタンスは自前の control.sock（`$ORBE_STATE_DIR/control.sock`）を持つ。
-3. モードで分岐:
+3. **煙探知を 1 本通す（両モード共通）。** `.app` の起動経路と `AppDelegate` の配線は `swift test` の守備範囲外なので、機械的に確かめる場所はここしかない。人間に見せる前に死んだバンドルを弾く意味もあるので、承認モードでも飛ばさない。
+   - **必ず手順2 で控えた state dir の sock へ直接投げる。** 手元の Orbe MCP ツール（`mcp__orbe__*`）は `ORBE_STATE_DIR` を持たず**常用インスタンス**に繋がる。使うと利用者の実ペインに目印が打ち込まれたうえ、起こしたバンドルについて何も測らないまま緑になる。素の JSON-RPC で足りる:
+     `printf '{"jsonrpc":"2.0","id":1,"method":"list_panes","params":{}}\n' | nc -U "$ORBE_STATE_DIR/control.sock"`
+   - まず `$ORBE_STATE_DIR/control.sock` が現れるまで待つ（最大 10 秒）。GUI の起動から `ControlServer` が bind するまでには実時間があるので、待たずに叩くと健全なバンドルを不合格にする。最後まで現れなければ起動経路が `ControlServer` を張っていないということなので失敗。
+   - `list_panes` でペインを取り、`send_text` に `echo L4D""ONE_<id>` を送る（`<id>` は毎回ランダム。目印の途中に**空のダブルクォート 2 つ**を挟む）。続けて `send_key enter` を送り、`get_pane_text` に連結形 `L4DONE_<id>` が現れるまで**最大 15 秒**ポーリングする。
+   - 目印をコマンド行の中で 2 つのリテラルに割るのが要点で、連結形はシェルが引用符除去を**評価した**出力にしか現れない。入力行がそのまま描き返されても目印にはならないので、実 `.app` ＝利用者の rc とテーマが走る環境でも判定が揺れない。
+   - 15 秒で出なければ、起こしたバンドルは制御 API から駆動できていない。駆動も承認も始めず、失敗として呼び出し側へ返す。
+4. モードで分岐:
    - **承認モード（既定）**: 今回の変更が**どこに現れ・何を触って見るか**と、画面 chrome の **build-id が手順1 で控えた値か**を短く提示する（人間目視が必須の条件があればここで渡す）。`AskUserQuestion` で承認を問う。**この承認が後続（確定・マージ等）の許可**。NG・指摘があれば呼び出し側へ差し戻す。
    - **無人モード**: `$ORBE_STATE_DIR/control.sock` を呼び出し側へ渡し、制御 API で駆動して確かめる。
-4. **片付ける。** 隔離インスタンスを kill し、state dir を消す。承認・NG・失敗のいずれでも必ず行う。
+5. **片付ける。** 隔離インスタンスを kill し、state dir を消す。承認・NG・失敗のいずれでも必ず行う。
 
 ## Orbe の契約（このスキルが依存するもの）
 

@@ -1,7 +1,7 @@
 ---
 title: エージェント状態追跡プラグイン（配布物・現状）
 description: claude / codex / agy 兼用プラグインパッケージ app/agent-plugin/ の構造・各 CLI の導入契約・チャネル別のプラグイン名・.app 同梱と毎起動の実体化
-updated: 2026-07-31
+updated: 2026-08-06
 ---
 
 `app/agent-plugin/` は claude / codex / agy を 1 ディレクトリで兼ねる状態追跡プラグインパッケージ。各 CLI の hook が Orbe の状態報告シムを呼び、[agent-notify](agent-notify.md) の制御ソケット経路に乗せる。プラグインには binary を入れず純テキストのまま保つ（シムが `.app` 同梱の `orbe-report` を env パスで指す）。プラグイン本体は `plugins/<プラグイン名>/` に 1 箇所だけ置き（スクリプト重複なし）、claude/codex の marketplace 定義をルートからそこへ向ける。パッケージルートには各 CLI の marketplace 定義と、各 CLI へ冪等導入する `install.sh` を置く。
@@ -24,7 +24,7 @@ event→state 対応:
 - codex: UserPromptSubmit→working / PermissionRequest→waiting / Stop→done
 - agy: PreInvocation→working / Stop→done（agy のフックに SessionStart/Notification/PermissionRequest 相当が無く idle/waiting/clear は取得不可）
 
-`.app` 同梱と実体化: `build-app.sh` が `app/agent-plugin/` と状態報告 CLI `orbe-report` をバンドルへ同梱する（実行ビット保持・binary は app 署名対象）。シムはこの binary を env 越しに `exec` する。Orbe は**起動ごとに**同梱パッケージを **`ORBE_STATE_DIR` 非依存の安定パス**（Application Support 配下・override を見ない。bundle id 由来なのでチャネルごとに別——[channel](channel.md)）へ実体化する（tmp へコピー→原子的差し替え＝冪等・途中失敗でも既存を壊さない・実行ビット保持）。毎起動やり直すのは、claude が登録先ディレクトリをライブ参照するため——同梱が更新されても実体化が走らなければ古い定義が読まれ続ける。安定パスを使うのは `marketplace add` が記録する登録先が消えて dangling しないため（隔離インスタンス起動でも同一パスを登録し、`.app` を消しても manifest は読める）。同一チャネルの隔離インスタンスは安定パスを共有するので、**中身は最後に起動したビルドのものになる**。実体化のとき自分の bundle ID を `hooks/channel` へ刻む。
+`.app` 同梱と実体化: `build-app.sh` が `app/agent-plugin/` と状態報告 CLI `orbe-report` をバンドルへ同梱する（実行ビット保持・binary は app 署名対象）。シムはこの binary を env 越しに `exec` する。Orbe は**起動ごとに**同梱パッケージを **`ORBE_STATE_DIR` 非依存の安定パス**（Application Support 配下。bundle id 由来なのでチャネルごとに別——[channel](channel.md)。テスト用に実体化先を差し替える seam を持つ）へ実体化する（tmp へコピー→原子的差し替え＝冪等・途中失敗でも既存を壊さない・実行ビット保持）。毎起動やり直すのは、claude が登録先ディレクトリをライブ参照するため——同梱が更新されても実体化が走らなければ古い定義が読まれ続ける。安定パスを使うのは `marketplace add` が記録する登録先が消えて dangling しないため（隔離インスタンス起動でも同一パスを登録し、`.app` を消しても manifest は読める）。同一チャネルの隔離インスタンスは安定パスを共有するので、**中身は最後に起動したビルドのものになる**。実体化のとき自分の bundle ID を `hooks/channel` へ刻む。
 
 登録は**名前が変わったときだけ**やり直す: 最後に登録できたプラグイン名を覚え、現在のチャネルの名前と違えば `install.sh` を無音でバックグラウンド実行する（[persistence](persistence.md)）。1 つでも CLI が失敗したら名前を記録せず、次回起動で再試行する。登録先パスは変わらないので、claude は内容の更新だけなら登録し直す必要がない（codex / agy は自分のコピーを読むため、内容が変わっても再導入するまで届かない）。
 

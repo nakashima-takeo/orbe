@@ -8,36 +8,10 @@ import XCTest
 /// 純粋な透過判定（`shouldBeTranslucent`）は値/フルスクリーン別に固定する。
 /// 実 window への適用（`syncWindowOpacity` → `window.isOpaque`）は WindowController の構築を要し、
 /// **libghostty ランタイムを起動する**（GhosttyKit 必須）。設定は in-memory SSOT（`settingsStore`）を通す。
-final class WindowControllerOpacityTests: XCTestCase {
-
-  private var tempSettings: URL!
-  private var tempAppState: URL!
-  private var tempWorkspaces: URL!
-  private var tempGuiConf: URL!
-
-  override func setUp() {
-    super.setUp()
-    let dir = FileManager.default.temporaryDirectory
-    tempSettings = dir.appendingPathComponent("orbe-opacity-settings-\(UUID().uuidString).json")
-    tempAppState = dir.appendingPathComponent("orbe-opacity-appstate-\(UUID().uuidString).json")
-    tempWorkspaces = dir.appendingPathComponent("orbe-opacity-ws-\(UUID().uuidString).json")
-    tempGuiConf = dir.appendingPathComponent("orbe-opacity-gui-\(UUID().uuidString).conf")
-    SettingsPersistence.fileURLOverride = tempSettings
-    AppStatePersistence.fileURLOverride = tempAppState
-    WorkspacePersistence.fileURLOverride = tempWorkspaces
-    GuiConfig.fileURLOverride = tempGuiConf
-  }
+final class WindowControllerOpacityTests: OrbeTestCase {
 
   override func tearDown() {
     NSApp.appearance = nil  // theme テストの外観強制をプロセスグローバルへ残さない
-    SettingsPersistence.fileURLOverride = nil
-    AppStatePersistence.fileURLOverride = nil
-    WorkspacePersistence.fileURLOverride = nil
-    GuiConfig.fileURLOverride = nil
-    try? FileManager.default.removeItem(at: tempSettings)
-    try? FileManager.default.removeItem(at: tempAppState)
-    try? FileManager.default.removeItem(at: tempWorkspaces)
-    try? FileManager.default.removeItem(at: tempGuiConf)
     super.tearDown()
   }
 
@@ -229,7 +203,10 @@ final class WindowControllerOpacityTests: XCTestCase {
   }
 
   private func guiConfContent() -> String {
-    guard let url = GuiConfig.fileURLOverride else { return "<no-url>" }
+    guard let url = GuiConfig.fileURL else {
+      XCTFail("ハーネスが gui.conf の隔離先を配っていない")
+      return ""
+    }
     return (try? String(contentsOf: url, encoding: .utf8)) ?? "<no-file>"
   }
 }

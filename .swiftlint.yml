@@ -11,6 +11,41 @@ disabled_rules:
   - trailing_comma # swift format は複数行コレクションに trailing comma を付ける
   - opening_brace # swift format は複数行宣言・条件の { を独立行に置く
 
+custom_rules:
+  bundled_resource_seam:
+    name: "同梱リソースは BundledResources 経由"
+    included: ".*/Sources/.*\\.swift"
+    excluded: ".*/BundledResources\\.swift"
+    # 通してよい方を挙げる。`Bundle.main` から `.app` の同梱物へ辿る口は `resourceURL` だけでなく
+    # `bundleURL` / `executableURL` / `sharedSupportURL` 等いくつもあり、塞ぐ側を列挙すると
+    # 挙げ忘れた口がそのまま穴になる。通ってよいのは Info.plist を引く 3 つだけ。
+    # SPM のリソースバンドル（`Bundle.module`）は別機構で、実行体の隣に決定論的に解決するため
+    # テスト実行体でも同じ場所を指す＝隔離の穴にならない（対象外。同梱物を足す人は、`.app` 同梱なら
+    # BundledResources、SPM ターゲットの資源なら `Bundle.module` を選ぶ）。
+    # `object` の後の `\s*` は swift format の折返し（100 桁超は `(` 直後で改行する）を許すため。
+    regex: "Bundle\\.main\\.(?!bundleIdentifier\\b|infoDictionary\\b|object\\s*\\()"
+    message: "同梱リソースの解決は BundledResources.root を通す（唯一の注入点）"
+    severity: error
+
+  test_isolation_harness:
+    name: "テストの基底は OrbeTestCase"
+    included: ".*/Tests/OrbeTests/.*\\.swift"
+    excluded: ".*/TestIsolation\\.swift"
+    # 継承節に限定する。`XCTestCase` を引数型に取るヘルパやコメント中の言及は対象外。
+    # `\s*` は改行にも当たる（swift format が 100 桁超を `:` の後で折り返す形を捕まえる）。
+    regex: "class\\s+\\w+\\s*:\\s*XCTestCase\\b"
+    message: "テストクラスは OrbeTestCase を継承する（隔離ハーネスの点火点）"
+    severity: error
+
+  xctest_only_runner:
+    name: "ランナーは XCTest 一本"
+    included: ".*/Tests/.*\\.swift"
+    # swift-testing は XCTest とは別プロセスで走るため `OrbeTestCase` の点火が届かず、
+    # 隔離ゼロで開発者の実 state dir・実 ghostty 設定を読み書きする。
+    regex: "^[ \\t]*import Testing[ \\t]*$"
+    message: "swift-testing は使わない（隔離ハーネスを通らない）。XCTest ＋ OrbeTestCase を使う"
+    severity: error
+
 identifier_name:
   min_length: 1 # 座標 (x, y, w, h)・ループ変数等の短い局所名は本リポジトリのイディオム
 

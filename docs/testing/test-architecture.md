@@ -1,7 +1,7 @@
 ---
 title: テストアーキテクチャ
 description: Orbe のテストが従う層構成・横断方針・各層の責務
-updated: 2026-08-03
+updated: 2026-08-06
 ---
 
 # テストアーキテクチャ
@@ -30,7 +30,9 @@ updated: 2026-08-03
 
 **ランナーは XCTest 一本。** Swift 6.3 では swift-testing との相互運用が `none` で、両者でアサーションヘルパを共有すると失敗が黙殺される。Swift 6.4 で相互運用が既定 `limited` になった時点で再検討する。
 
-**隔離は単一ハーネスが立てる。** state dir・全 `fileURLOverride`・ghostty の設定探索先を 1 箇所で立て、テストごとの申告制にしない。申告制は必ず破れる（`GuiConfig` の override を張っているテストは 1 本しかなく、`Config.load()` が前回実行の設定を読み戻す結合が実在する）。
+**隔離は単一ハーネスが立てる。** state dir・全 override・ghostty の設定探索先を 1 箇所で立て、テストごとの申告制にしない（対象は `Tests/OrbeTests`。他 3 ターゲットは実行体のモジュール内部を測るだけで、隔離の要る対象を持たない）。申告制は張り忘れが 1 本でも残れば破れる（`GuiConfig` の override を張らないテストが 1 本あれば、`Config.load()` が前回実行の設定を読み戻す）。書き込まれうる先は全て per-test ディレクトリの下に置き、配り直しの削除に乗せる（向き先だけ張り直しても中身は消えない）。唯一 `CompletionLearning` だけは `shared` が初回タッチで in-memory へ焼くため per-test にできず、プロセス級固定＝学習状態がテスト間で持ち越されるので、書いたテストが自分で消す。実環境を汚さないことは `scripts/verify-test-isolation.sh`（手動・CI 非搭載）で実証する。
+
+**テストクラスの doc は「壊れると何が起きるか」を書く。** 何を測るかはテスト名が言う。doc が言うのは、その assert が落ちたとき利用者に何が起きるか——それが無いと、後から読む人はテストを弱めてよいか判断できず、直すより消す方へ倒れる。
 
 **state dir は 90 バイト以下。** AF_UNIX の `sun_path` は 104 バイト上限で、超えると `ControlServer` が制御 API を無言で無効化する。`$TMPDIR` + UUID は 108 バイトに達するため使わない。
 
@@ -60,31 +62,31 @@ updated: 2026-08-03
 - **起動と差し替え**: Foundation のみ。依存は引数で受ける
 - **データ**: 不要（値を直接組む）
 - **実行**: CI 全量
-- **配置**: `Tests/OrbeTests/<型名>Tests.swift`。大きい対象は `<型名>Tests+<話題>.swift` に分割
+- **配置**: `Tests/OrbeTests/<型名>Tests.swift`。大きい対象は `<型名>Tests+<話題>.swift` に分割。実行体のモジュール内部シンボルを測るものだけは当該ターゲット（`Tests/OrbeCliTests` / `OrbePathsTests` / `OrbeReportTests`）に置く——`OrbeTestCase` は `OrbeTests` の中にあり他ターゲットからは継承できないので、隔離が要る対象をそちらへ置かない
 
 ### L2 プロセス内結合
 
 - **担保する**: アプリの組み立て。永続の復元（保存→復元→再保存のラウンドトリップ）・設定適用の配線・workspace の keep-alive・`SessionStore` と `WindowController` の結合・**ターミナル入力表面**（IME の preedit 同期・キー翻訳・スクロールの蓄積と合体 flush）
 - **担保しない**: プロセス境界を越える契約（L3/L4）・見た目（L6）
 - **起動と差し替え**: 実 `WindowController`（実 NSWindow ＋ 実 libghostty ＋ 実シェル spawn）。`NSApp.activationPolicy()` は `.prohibited` で画面には出ず、フォーカスも奪わない。IME・キー・スクロールは実 `SurfaceView` を直接駆動する
-- **データ**: 単一ハーネスが temp の state dir を立て、全 override と ghostty 設定探索先を隔離する。各テストは自分の `WindowController` を作り、`defer` で後始末する
+- **データ**: 単一ハーネスが temp の state dir を立て、全 override と ghostty 設定探索先を隔離する。各テストは自分の `WindowController` を作る。**永続の後始末**はハーネスの per-test ディレクトリ配り直しと ARC が担い、テスト側は書かない。**ハーネスが触れないプロセスグローバル**（`NSApp.appearance`・key window・ordered-in の窓）だけはテスト側の `tearDown` が戻す
 - **実行**: CI 全量
 - **ツール**: XCTest
 
 ### L3 wire 契約
 
-- **担保する**: 制御プロトコルの語。method 名・params キー・エラーコード（`-32601` / `-32602` / `-32004` / `-32000` / `-32005`）・`wait_for_event` のフィルタとタイムアウト・行 framing・不正 JSON の扱い
-- **担保しない**: ドメインの振る舞い（L2）・実バイナリの引数解釈（L4）
-- **起動と差し替え**: **socketpair 上の実 `Connection`**。テストが socketpair の片端を `Connection` に渡し、もう片端から行を書いて応答を読む。`ControlTarget` は Fake。path を持たないので `sun_path` 制約を受けず、`ControlServer.shared` にも触らないため L4 と競合しない
-- **データ**: Fake target が返す値をテストが決める
+- **担保する**: 制御プロトコルの語。method 名・params キー・エラーコード（`-32700` / `-32600` / `-32601` / `-32602` / `-32004` / `-32005` / `-32000`）・`wait_for_event` のフィルタとタイムアウト・行 framing・不正入力の扱い
+- **担保しない**: ドメインの振る舞い（L2）・実バイナリの引数解釈（L4）。観測面を持たない params も L3 の外で、受け皿は [roadmap.md](roadmap.md) が持つ——`get_pane_text` の `scrollback`（値が libghostty surface へ吸い込まれる）と、`completion_accept` の `advance` / `completion_update` の `buffer`・`cursor`（popup が生まれないと適用結果が出ず、無応答契約で wire 側に観測点が無い）
+- **起動と差し替え**: **socketpair 上の実 `Connection`**。テストが socketpair の片端を `ControlServer.shared.adopt(fd:)` へ載せ、もう片端から行を書いて応答を読む。`ControlTarget` は Fake。listener は張らない（`start()` を呼ばない）ので、実 socket に bind する L4 と待ち受けを奪い合わず、path も持たないため `sun_path` 制約を受けない。`ControlServer.init()` は private なのでインスタンスは `.shared` を使う
+- **データ**: Fake target が返す値をテストが決める。宛先解決に使う `SurfaceView` は window に載せない裸のビューで、libghostty surface は生まれない
 - **実行**: CI 全量
-- **ツール**: XCTest ＋ swift-snapshot-testing の `.json` 戦略（応答ペイロードのゴールデン）
+- **ツール**: XCTest
 
 ### L4 プロセス境界・制御チャネル導通
 
 - **担保する**: 実行体をまたいだ導通。実 `orbe-cli` / `orbe-mcp` / `orbe-report` の引数解釈・終了コード・stdout・組み立てる JSON-RPC。ペインへの env 注入から `orbe-report` が `report_agent` を届けるまでの hook 実経路。bare `orb` の PATH 解決
 - **担保しない**: `.app` の起動経路と `AppDelegate` の配線
-- **起動と差し替え**: テストプロセス内で `ControlServer.shared.start(target:)` に実 `WindowController` を与え、外部プロセスとして `.build/.../debug/` のビルド済みバイナリを起動する。バイナリ位置は `Bundle(for:).bundleURL` の親から解決する。同梱物の位置は `BundledResources.root` を差し替えて実バイナリを指す
+- **起動と差し替え**: テストプロセス内で `ControlServer.shared.start(target:)` に実 `WindowController` を与え、外部プロセスとして `.build/.../debug/` のビルド済みバイナリを起動する。バイナリ位置は `Bundle(for:).bundleURL` の親から解決する。同梱物はハーネスが配る `BundledResources.root`（caseDir 配下）の下へ `.app` と同じレイアウトで置く（`bin/orb`・`bin/orbe-report`）
 - **データ**: 単一ハーネス（L2 と同じ）。サーバの `socketPath` と子プロセスの `ORBE_STATE_DIR` は同じ値を指す。テスト冒頭で `socketPath` の実値を assert する（空や別値だと `start` が no-op になり、クライアント側は "Orbe not running" と区別できず緑に化ける）
 - **実行**: CI 全量
 - **ツール**: XCTest ＋ `Process`。子プロセスの env は明示辞書のみで親から継承しない

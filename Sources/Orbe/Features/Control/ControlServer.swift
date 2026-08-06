@@ -91,7 +91,8 @@ final class ControlServer {
       acceptSource = nil
       connections.forEach { $0.close() }
       connections.removeAll()
-      if listenFD >= 0 { Darwin.close(listenFD) }
+      // listener fd を閉じるのは source の cancel handler 1 箇所だけ（`Connection` と同じ規律）。
+      // fd ベースの source は cancel handler での close が libdispatch の要求。
       listenFD = -1
       if !socketPath.isEmpty { unlink(socketPath) }
     }
@@ -135,6 +136,7 @@ final class ControlServer {
 
     let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
     source.setEventHandler { [weak self] in self?.acceptOne() }
+    source.setCancelHandler { Darwin.close(fd) }
     acceptSource = source
     source.resume()
   }
@@ -142,14 +144,37 @@ final class ControlServer {
   private func acceptOne() {
     let cfd = accept(listenFD, nil, nil)
     guard cfd >= 0 else { return }
+    attach(fd: cfd)  // 既に queue 上なので直に呼ぶ（adopt は自 queue への sync になり詰まる）
+  }
+
+  /// 既に接続済みの fd を制御プレーンへ載せる（queue 外からの入口）。本番は listener の accept が
+  /// queue 上で `attach` を直に呼ぶので、この口を使うのは socketpair を繋ぐテストだけ。生の fd を受け取るので
+  /// 所有権の移譲はこの呼びで確定させる——`async` にすると「戻ったが所有権はまだ移っていない」
+  /// 窓が開き、そこで呼び出し側が閉じると再利用された fd 番号が制御プレーンに載る。
+  func adopt(fd: Int32) {
+    // queue 上から呼ぶと自 queue への sync で即 deadlock する。この規律は規約に頼らず
+    // ここで落とす——deadlock は「固まった」としか見えず、制御プレーン全体（accept・
+    // 他接続・event 配信・timeout）が同時に止まるので原因に辿り着けない。trap なら
+    // 違反した呼び出し元がその場でスタックに出る。
+    dispatchPrecondition(condition: .notOnQueue(queue))
+    queue.sync { attach(fd: fd) }
+  }
+
+  /// 非ブロッキング化・Connection 生成・登録・受信開始。
+  /// Connection は必ずこの queue で作る——`handle` が respond をこの queue へ hop するため、
+  /// 別 queue で作ると受信と送信が Connection の内部状態（出力バッファ・fd・writeSource）を
+  /// 跨いで触ることになる。その規律を次行で強制する（`acceptOne` は queue 上なので直に、
+  /// queue 外からは `adopt` 経由で入る、という非対称の受け側）。
+  private func attach(fd: Int32) {
+    dispatchPrecondition(condition: .onQueue(queue))
     // 非ブロッキング化。詰まった 1 接続の write/read を全体から隔離し head-of-line blocking を断つ。
     // 失敗した fd はブロッキングのままなので制御プレーンへ入れず捨てる（詰まると共有 queue を凍結させる）。
-    let flags = fcntl(cfd, F_GETFL)
-    guard flags >= 0, fcntl(cfd, F_SETFL, flags | O_NONBLOCK) >= 0 else {
-      Darwin.close(cfd)
+    let flags = fcntl(fd, F_GETFL)
+    guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0 else {
+      Darwin.close(fd)
       return
     }
-    let conn = Connection(fd: cfd, server: self, queue: queue)
+    let conn = Connection(fd: fd, server: self, queue: queue)
     connections.insert(conn)
     conn.resume()
   }
@@ -161,10 +186,22 @@ final class ControlServer {
   // MARK: - ルーティング（queue 上で 1 行受信ごとに）
 
   func handle(line: Data, from conn: Connection) {
-    guard
-      let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-      let method = obj["method"] as? String
-    else { return }
+    // 読めない行を黙って捨てない。クライアント（`orb` / MCP ブリッジ）は 1 行応答を待って
+    // 読むので、無応答で return するとそのままハングになる。JSON-RPC 2.0 どおり 2 コードへ割る
+    // ——「JSON テキストとして読めない」と「JSON だがリクエストオブジェクトでない」は別の失敗で、
+    // 配列を送ったことを parse error と呼ぶのは嘘になる。
+    guard let value = try? JSONSerialization.jsonObject(with: line) else {
+      conn.respond(id: nil, result: .failure(ControlError(code: -32700, message: "parse error")))
+      return
+    }
+    guard let obj = value as? [String: Any], let method = obj["method"] as? String else {
+      // id は取れれば返す（配列には無い。最上位スカラは前段の -32700 に落ちてここへ来ない）。
+      // guard で束ねた obj は else 節から見えないので、id を拾うのにここで再キャストする。
+      conn.respond(
+        id: (value as? [String: Any])?["id"],
+        result: .failure(ControlError(code: -32600, message: "invalid request")))
+      return
+    }
     let id = obj["id"]
     let params = obj["params"] as? [String: Any] ?? [:]
 
@@ -174,8 +211,8 @@ final class ControlServer {
     }
 
     DispatchQueue.main.async {
-      // nil は「無応答契約」のメソッド（completion_update / completion_end）。
-      // 応答を書かないことで、accept fd から読める行を accept 応答だけに保つ（framing 健全性）。
+      // nil は「無応答契約」のメソッド（completion_update / completion_end）。打鍵ごとに応答を
+      // 書くと、補完クライアントが accept 応答を読む前に fd へ行が積み、締切内に読めなくなる。
       guard let result = self.runOnMain(method: method, params: params) else { return }
       self.queue.async { conn.respond(id: id, result: result) }
     }
@@ -184,7 +221,7 @@ final class ControlServer {
   /// main スレッドで domain 操作を実行する。nil を返すメソッドは応答を書かない（無応答契約）。
   private func runOnMain(method: String, params: [String: Any]) -> Result<Any, ControlError>? {
     // 補完系は無応答契約（update/end は nil）を含むため、target 有無に依らず最優先で分離する
-    // （target==nil 時に update/end が "no window" 応答を書くと accept fd に stray 行が残り framing が壊れる）。
+    // （target==nil 時に update/end が "no window" 応答を書くと、打鍵ぶんの行が accept 応答の前に積む）。
     if method.hasPrefix("completion_") {
       let pane = (params["paneId"] as? Int).flatMap { target?.controlResolvePane($0) }
       return runCompletion(method: method, pane: pane, params: params)

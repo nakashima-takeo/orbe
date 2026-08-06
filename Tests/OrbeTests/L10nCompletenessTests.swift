@@ -4,7 +4,7 @@ import XCTest
 
 /// 辞書がキーとともに腐らないことを機械検出する関門。`L10nKey`（`CaseIterable`）の全 case が
 /// `L10n.table` に載り、日英とも非空であることを保証する（欠落キー・空訳を CI で弾く）。
-final class L10nCompletenessTests: XCTestCase {
+final class L10nCompletenessTests: OrbeTestCase {
   func testEveryKeyHasNonEmptyJapaneseAndEnglish() {
     for key in L10nKey.allCases {
       guard let entry = L10n.table[key] else {

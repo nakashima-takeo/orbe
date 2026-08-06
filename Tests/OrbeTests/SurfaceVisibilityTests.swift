@@ -6,7 +6,7 @@ import XCTest
 /// libghostty の可視性契約（不可視で描画停止・可視復帰で 1 フレーム保証）へ送る合成値
 /// 「inWindow AND !hiddenAncestor AND windowVisible」と、同値スキップ・初回必送の
 /// ゲート規律を C API 呼び出しから分離して検証する。
-final class SurfaceVisibilityTests: XCTestCase {
+final class SurfaceVisibilityTests: OrbeTestCase {
   // MARK: - 可視性の導出（合成）
 
   /// 全条件成立でのみ可視。

@@ -9,7 +9,7 @@ private func fixture(_ lines: String...) -> String {
 
 /// hunk 機構の検証: 行種・行番号・noNewline・見出し・複数ファイル。
 /// ファイルヘッダ系（rename・mode・バイナリ等）は GitDiffParserTestsFileHeaders。
-final class GitDiffParserTests: XCTestCase {
+final class GitDiffParserTests: OrbeTestCase {
 
   func testEmptyInput() {
     XCTAssertEqual(DiffParser.parse(""), [])
@@ -147,7 +147,7 @@ final class GitDiffParserTests: XCTestCase {
 }
 
 /// ファイルヘッダ系の検証: 新規・削除・rename・copy・mode 変更・バイナリ・パス復元。
-final class GitDiffParserTestsFileHeaders: XCTestCase {
+final class GitDiffParserTestsFileHeaders: OrbeTestCase {
 
   func testNewFile() {
     let diffs = DiffParser.parse(

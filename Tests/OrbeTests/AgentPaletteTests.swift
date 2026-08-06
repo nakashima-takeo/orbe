@@ -6,7 +6,7 @@ import XCTest
 /// libghostty 非依存（@Observable モデルのみ・surface を生成しない）。
 /// 入力欄を持たず常にカードがキーを捕捉する＝keyCode→意味メソッドの写像でモデルを駆動する。
 @MainActor
-final class AgentPaletteTests: XCTestCase {
+final class AgentPaletteTests: OrbeTestCase {
   private let claude = AgentCLI(command: "claude", path: "/opt/homebrew/bin/claude")
   private let codex = AgentCLI(command: "codex", path: "/opt/homebrew/bin/codex")
 

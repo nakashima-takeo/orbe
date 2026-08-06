@@ -12,25 +12,7 @@ import XCTest
 ///
 /// workspace の id はプロセス全域の IdGen で採番され予測不能なため、決して直書きせず
 /// `controlListWorkspaces()` の戻りから読む（配列インデックスでなく id で指す契約でもある）。
-final class WindowControllerControlTests: XCTestCase {
-
-  // 永続を実 Application Support から隔離する（テストごとに未作成の一時ファイルを指す）。
-  private var tempStore: URL!
-  override func setUp() {
-    super.setUp()
-    tempStore = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-test-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tempStore
-    SettingsPersistence.fileURLOverride = tempStore.appendingPathExtension("settings")
-    AppStatePersistence.fileURLOverride = tempStore.appendingPathExtension("appstate")
-  }
-  override func tearDown() {
-    WorkspacePersistence.fileURLOverride = nil
-    SettingsPersistence.fileURLOverride = nil
-    AppStatePersistence.fileURLOverride = nil
-    try? FileManager.default.removeItem(at: tempStore)
-    super.tearDown()
-  }
+final class WindowControllerControlTests: OrbeTestCase {
 
   // MARK: - fixtures / helpers
 
@@ -55,7 +37,7 @@ final class WindowControllerControlTests: XCTestCase {
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: activeWorkspace,
       workspaces: workspaces)
-    try JSONEncoder().encode(file).write(to: tempStore)
+    try JSONEncoder().encode(file).write(to: workspacesFile())
     return WindowController()
   }
 
@@ -301,6 +283,20 @@ final class WindowControllerControlTests: XCTestCase {
     else { return XCTFail("空 rootPath は failure") }
     XCTAssertEqual(err.code, -32602, "workspace rootPath is empty")
     XCTAssertEqual(row(wc, name: "main")?["rootPath"] as? String, "/tmp", "rootPath は据え置き")
+  }
+
+  /// create_workspace も、渡された rootPath が trim 後空なら -32602 で弾き workspace を作らない。
+  ///
+  /// 壊れると何が起きるか: rootPath が空白だけの workspace ができる。rootPath はその WS の全タブの
+  /// cwd と worktree の基点なので、以後そこで開くタブもエージェントも意図と違う場所で走る。
+  /// `set_workspace_root` が同じ値を -32602 で弾くのに `create_workspace` だけ通す割れ方になる。
+  func testCreateWorkspaceEmptyRootPathIsRejected() throws {
+    let wc = try restore(activeWorkspace: 0, [tabbed("main")])
+    let before = wc.workspaces.count
+    guard case .failure(let err) = wc.controlCreateWorkspace(name: "proj", rootPath: "   ")
+    else { return XCTFail("空 rootPath での作成は failure") }
+    XCTAssertEqual(err.code, -32602, "workspace rootPath is empty")
+    XCTAssertEqual(wc.workspaces.count, before, "弾いた作成で workspace が増えない")
   }
 
   // MARK: - controlSpawn の cwd フォールバック（spawn）

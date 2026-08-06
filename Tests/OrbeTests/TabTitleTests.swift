@@ -3,7 +3,7 @@ import XCTest
 @testable import Orbe
 
 /// ③派生（タブ名）の純粋ロジック検証。
-final class TabTitleTests: XCTestCase {
+final class TabTitleTests: OrbeTestCase {
 
   // MARK: - compactPath（fish prompt_pwd 純正）
 

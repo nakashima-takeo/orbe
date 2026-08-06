@@ -9,7 +9,7 @@ import XCTest
 /// 「active が指す TerminalController（index ではなく参照が追従するか）」の3つ。
 /// TerminalController は window 未接続なら libghostty surface を生成しないため、ここでは純ロジックとして
 /// トポロジーだけ検証できる（GhosttyKit ランタイムは起動しない）。
-final class SessionStoreMoveTabTests: XCTestCase {
+final class SessionStoreMoveTabTests: OrbeTestCase {
 
   /// n 本のタブを持つアクティブ workspace 1つだけの SessionStore を組む。
   /// 返す配列は各タブの参照（同一性で並びと参照追従を照合するため）。

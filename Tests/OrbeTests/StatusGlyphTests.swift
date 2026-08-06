@@ -6,7 +6,7 @@ import XCTest
 
 /// ステータスグリフの幾何ロジック検証（design 正典 `StatusIcons.tsx` 座標移植の配線を固定）。
 /// グリフの見た目・形状一致は 視覚突合の領域でありここでは扱わない（純幾何のみ）。
-final class StatusGlyphTests: XCTestCase {
+final class StatusGlyphTests: OrbeTestCase {
   private let eps = 1e-6
 
   // MARK: - done: 角丸四角＋check 線

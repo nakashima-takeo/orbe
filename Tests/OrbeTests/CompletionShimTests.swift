@@ -6,7 +6,7 @@ import XCTest
 /// ユーザー rc の source 順・widget bind の最終勝ち・ZDOTDIR のユーザー値復元・
 /// ORBE_USER_ZDOTDIR の掃除、という「ブリッジの往復」を fake HOME で決定論的に確かめる。
 /// env は明示辞書のみ（継承しない）・`NO_GLOBAL_RCS` で global rc を断つ（開発機 dotfiles で flake させない）。
-final class CompletionShimTests: XCTestCase {
+final class CompletionShimTests: OrbeTestCase {
   /// リポジトリ実体の shim dir（`app/zsh`）。テストは同梱物でなくソースを直接検証する。
   private static let shimDir = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()  // OrbeTests
@@ -141,7 +141,8 @@ final class CompletionShimTests: XCTestCase {
   }
 
   func testDirectoryPathIsNilWithoutBundle() {
-    // swift test（バンドル無し）では shim dir が解決されない＝ activate() は no-op。
+    // 同梱物が無い状態（ハーネスが BundledResources.root を管理下の空ディレクトリへ向けている）では
+    // shim dir が解決されない＝ activate() は no-op。
     XCTAssertNil(CompletionShim.directoryPath)
   }
 }

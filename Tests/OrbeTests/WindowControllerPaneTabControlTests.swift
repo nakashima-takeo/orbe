@@ -10,25 +10,7 @@ import XCTest
 /// 重要: WindowControllerControlTests と同様、実 NSWindow に SurfaceView を接続するため
 /// **libghostty ランタイムを起動する**（GhosttyKit 必須）。workspace の id は IdGen 採番で予測不能なため
 /// 直書きせず `controlListWorkspaces()` / `controlListPanes()` の戻りから読む。
-final class WindowControllerPaneTabControlTests: XCTestCase {
-
-  // 永続を実 Application Support から隔離する（テストごとに未作成の一時ファイルを指す）。
-  private var tempStore: URL!
-  override func setUp() {
-    super.setUp()
-    tempStore = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-test-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tempStore
-    SettingsPersistence.fileURLOverride = tempStore.appendingPathExtension("settings")
-    AppStatePersistence.fileURLOverride = tempStore.appendingPathExtension("appstate")
-  }
-  override func tearDown() {
-    WorkspacePersistence.fileURLOverride = nil
-    SettingsPersistence.fileURLOverride = nil
-    AppStatePersistence.fileURLOverride = nil
-    try? FileManager.default.removeItem(at: tempStore)
-    super.tearDown()
-  }
+final class WindowControllerPaneTabControlTests: OrbeTestCase {
 
   // MARK: - fixtures / helpers
 
@@ -58,7 +40,7 @@ final class WindowControllerPaneTabControlTests: XCTestCase {
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: activeWorkspace,
       workspaces: workspaces)
-    try JSONEncoder().encode(file).write(to: tempStore)
+    try JSONEncoder().encode(file).write(to: workspacesFile())
     return WindowController()
   }
 

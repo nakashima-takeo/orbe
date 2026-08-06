@@ -5,7 +5,7 @@ import XCTest
 /// ②到来アニメーションの**尺と時間挙動**を固定する。driver は時刻注入の状態機械なので、
 /// 実時間を待たずに任意のフレームを再現できる（ここが本設計の検証可能性の土台）。
 @MainActor
-final class MenuBarArrivalTests: XCTestCase {
+final class MenuBarArrivalTests: OrbeTestCase {
 
   /// 基準時刻は 0——注入する秒数がそのまま経過秒になり、境界（1.2s / 2.3s / 22.6s）の判定に
   /// 丸め誤差が混ざらない。

@@ -9,24 +9,7 @@ import XCTest
 /// その要否ゲートが `contentIsEmpty` で、0タブ化で立ち・タブが載ると下がる（二重 veil 回避・冪等）。
 ///
 /// 重要: WindowController の構築は libghostty ランタイムを起動する（GhosttyKit 必須）。
-final class WindowControllerContentBackstopTests: XCTestCase {
-
-  private var tempStore: URL!
-  override func setUp() {
-    super.setUp()
-    tempStore = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-backstop-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tempStore
-    SettingsPersistence.fileURLOverride = tempStore.appendingPathExtension("settings")
-    AppStatePersistence.fileURLOverride = tempStore.appendingPathExtension("appstate")
-  }
-  override func tearDown() {
-    WorkspacePersistence.fileURLOverride = nil
-    SettingsPersistence.fileURLOverride = nil
-    AppStatePersistence.fileURLOverride = nil
-    try? FileManager.default.removeItem(at: tempStore)
-    super.tearDown()
-  }
+final class WindowControllerContentBackstopTests: OrbeTestCase {
 
   /// 通常起動（タブあり）では backstop を出さない（surface が地を塗る＝二重 veil 回避）。
   func testTabbedWorkspaceHasNoBackstop() {
@@ -44,7 +27,7 @@ final class WindowControllerContentBackstopTests: XCTestCase {
           tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)]),
         WorkspaceState(name: "empty", rootPath: "/tmp", activeTab: 0, tabs: []),  // 0タブ（休眠）
       ])
-    try JSONEncoder().encode(file).write(to: tempStore)
+    try JSONEncoder().encode(file).write(to: workspacesFile())
 
     let wc = WindowController()
     XCTAssertFalse(wc.model.contentIsEmpty, "復元アクティブ（タブあり）は backstop なし")

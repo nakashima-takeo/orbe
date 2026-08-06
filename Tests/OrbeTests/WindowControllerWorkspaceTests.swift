@@ -9,29 +9,10 @@ import XCTest
 /// SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 /// ヘッドレスな純ロジック検証ではない。GhosttyKit が同梱された本環境でのみ走る。
 ///
-/// 制約: workspaces / activeWorkspace / tabs はすべて private。外部からの観測は
-/// window.title（= 現アクティブ workspace 名）と公開メソッドの戻りに限られる。
-/// よって「タブ/プロセス/画面内容のオブジェクト保持」そのものは本テストでは観測できない。
-final class WindowControllerWorkspaceTests: XCTestCase {
-
-  // 永続を実 Application Support から隔離する（テストごとに未作成の一時ファイルを指す
-  // → load は nil＝既定 workspace から開始、save は一時ファイルへ）。
-  private var tempStore: URL!
-  override func setUp() {
-    super.setUp()
-    tempStore = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-test-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tempStore
-    SettingsPersistence.fileURLOverride = tempStore.appendingPathExtension("settings")
-    AppStatePersistence.fileURLOverride = tempStore.appendingPathExtension("appstate")
-  }
-  override func tearDown() {
-    WorkspacePersistence.fileURLOverride = nil
-    SettingsPersistence.fileURLOverride = nil
-    AppStatePersistence.fileURLOverride = nil
-    try? FileManager.default.removeItem(at: tempStore)
-    super.tearDown()
-  }
+/// 観測は主に window.title（= 現アクティブ workspace 名）で行う——切替・作成・改名・削除の結果として
+/// 「どれがアクティブか」が、このライフサイクルの契約そのものだから。title で表せないもの
+/// （MRU 並び・休眠 rollup）はパレットの render を、ディスクへ届いたかは workspaces.json を読む。
+final class WindowControllerWorkspaceTests: OrbeTestCase {
 
   /// 起動直後に既定 workspace "default" が1つ存在する（条件1 の一部）。
   func testStartsWithDefaultWorkspace() {
@@ -57,7 +38,6 @@ final class WindowControllerWorkspaceTests: XCTestCase {
 
   /// 切替で往復しても workspace 集合は失われない（条件7 の観測可能な側面）。
   /// 戻った先の名前が保たれていることは、その workspace が削除/再生成されていない証左。
-  /// ※ タブ/プロセス/画面内容のオブジェクト保持そのものは private のため本テストでは観測不可。
   func testRoundTripSwitchPreservesWorkspaces() {
     let wc = WindowController()
     wc.createWorkspace(name: "alpha")  // index 1
@@ -147,7 +127,7 @@ final class WindowControllerWorkspaceTests: XCTestCase {
           tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)]),
         WorkspaceState(name: "empty", rootPath: "/tmp", activeTab: 0, tabs: []),  // 0タブ（休眠）
       ])
-    try JSONEncoder().encode(file).write(to: tempStore)
+    try JSONEncoder().encode(file).write(to: workspacesFile())
 
     let wc = WindowController()
     XCTAssertEqual(
@@ -164,7 +144,7 @@ final class WindowControllerWorkspaceTests: XCTestCase {
           tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)]),
         WorkspaceState(name: "dormant", rootPath: "/tmp", activeTab: 0, tabs: []),  // 0タブ（休眠）
       ])
-    try JSONEncoder().encode(file).write(to: tempStore)
+    try JSONEncoder().encode(file).write(to: workspacesFile())
 
     let wc = WindowController()
     XCTAssertEqual(wc.window.title, "main")
@@ -197,7 +177,7 @@ final class WindowControllerWorkspaceTests: XCTestCase {
               explicitTitle: nil)
           ]),
       ])
-    try JSONEncoder().encode(file).write(to: tempStore)
+    try JSONEncoder().encode(file).write(to: workspacesFile())
 
     let wc = WindowController()
     XCTAssertEqual(
@@ -210,7 +190,7 @@ final class WindowControllerWorkspaceTests: XCTestCase {
 
   /// 壊れた JSON を置いて起動するとクラッシュせず既定の単一 workspace(default) で開く（条件4・host 側）。
   func testCorruptDiskFallsBackToDefaultOnLaunch() throws {
-    try Data("{ broken json ]".utf8).write(to: tempStore)
+    try Data("{ broken json ]".utf8).write(to: workspacesFile())
     let wc = WindowController()
     XCTAssertEqual(
       wc.window.title, "default",
@@ -218,7 +198,8 @@ final class WindowControllerWorkspaceTests: XCTestCase {
   }
 
   /// 既存 workspace 間の切替（switchWorkspace 経由）でアクティブに lastUsedAt が刻まれ、flushSave 後に
-  /// ディスクへ残る（MRU 並べ替えキー）。workspaces は private のためディスク経由で観測する。
+  /// ディスクへ残る（MRU 並べ替えキー）。刻印がディスクまで届いて初めて次回起動の並びが決まるので、
+  /// 観測はモデルではなくディスク経由で行う。
   func testSwitchStampsLastUsedAtOnDisk() throws {
     let wc = WindowController()
     wc.createWorkspace(name: "infra")  // index 1, active
@@ -369,7 +350,7 @@ final class WindowControllerWorkspaceTests: XCTestCase {
           name: "quiet", rootPath: "/tmp", activeTab: 0,
           tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)]),
       ])
-    try JSONEncoder().encode(file).write(to: tempStore)
+    try JSONEncoder().encode(file).write(to: workspacesFile())
 
     let wc = WindowController()
     wc.showWorkspacePalette()
@@ -387,12 +368,14 @@ final class WindowControllerWorkspaceTests: XCTestCase {
   }
 
   /// 構成を変えて flushSave すると実際にディスクへ書かれ、再起動相当の新 WindowController で復元される。
-  func testFlushSaveThenReloadRestoresAcrossInstances() {
+  func testFlushSaveThenReloadRestoresAcrossInstances() throws {
     let wc1 = WindowController()
     wc1.createWorkspace(name: "persisted")  // index 1, active
     wc1.flushSave()  // デバウンス待たず確定保存
 
-    XCTAssertTrue(FileManager.default.fileExists(atPath: tempStore.path), "flushSave で実ファイルが書かれる")
+    let saved = try workspacesFile()
+    XCTAssertTrue(
+      FileManager.default.fileExists(atPath: saved.path), "flushSave で実ファイルが書かれる")
 
     let wc2 = WindowController()  // 再起動相当（同じ override path から load）
     XCTAssertEqual(wc2.window.title, "persisted", "新インスタンスがディスクから persisted をアクティブ復元")

@@ -6,7 +6,7 @@ import XCTest
 /// 一致は正規化済み押下集合と combo の完全一致（同 combo の複数行は全行対象）。
 /// 現在のビューに該当行が無ければ「すべて」一覧へ自動遷移し、検索・キー絞り込みが
 /// 隠すときだけクリアして必ず見せる。キー解放でハイライトは消えるがビューは戻さない。
-final class HelpModelTests: XCTestCase {
+final class HelpModelTests: OrbeTestCase {
   private let l10n = LocalizationStore(language: .ja)
 
   private func model() -> HelpModel { HelpModel() }

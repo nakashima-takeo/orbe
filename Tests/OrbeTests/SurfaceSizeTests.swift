@@ -6,7 +6,7 @@ import XCTest
 /// `SurfaceView.surfacePixels` の境界値検証。
 /// libghostty の size 事前条件（非負・非ゼロ面積・確定 scale）を C API 直前で強制する要（かなめ）で、
 /// レイアウト途中の不正中間フレーム（負・NaN・∞・ゼロ）を弾き、正常フレームは期待ピクセルを返す。
-final class SurfaceSizeTests: XCTestCase {
+final class SurfaceSizeTests: OrbeTestCase {
   // MARK: - 正常値
 
   /// 確定した非負フレームは bounds × scale の切り捨てピクセルを返す（見た目の回帰なし）。

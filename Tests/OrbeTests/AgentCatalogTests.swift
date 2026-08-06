@@ -4,7 +4,7 @@ import XCTest
 
 /// AgentCatalog.resolve（PATH 文字列からの実行ファイル解決・検出の純粋部分）の検証。
 /// ログインシェル起動（loginShellPATH）は環境依存のため対象外。
-final class AgentCatalogTests: XCTestCase {
+final class AgentCatalogTests: OrbeTestCase {
   private var base: URL!
   private var dirA: URL!
   private var dirB: URL!

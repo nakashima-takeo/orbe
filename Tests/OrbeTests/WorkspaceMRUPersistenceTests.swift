@@ -4,18 +4,10 @@ import XCTest
 
 /// MRU 並べ替え用 `lastUsedAt` の永続検証（libghostty 非依存）。
 /// 往復で保たれること・旧 JSON（フィールド欠落）でも後方互換で load 成功し nil になることを固定する。
-final class WorkspaceMRUPersistenceTests: XCTestCase {
+final class WorkspaceMRUPersistenceTests: OrbeTestCase {
 
   /// lastUsedAt（あり/nil 混在）がディスク往復で保たれる。
-  func testLastUsedAtRoundTripThroughFile() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-mru-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+  func testLastUsedAtRoundTripThroughFile() {
     let stamp = Date(timeIntervalSinceReferenceDate: 800_000_000)
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
@@ -38,14 +30,7 @@ final class WorkspaceMRUPersistenceTests: XCTestCase {
   /// lastUsedAt キーを欠いた旧 JSON（version:3）も load 成功し、lastUsedAt は nil（最古扱い）。
   /// optional でなければ decode 失敗 → load nil → 全 workspace 喪失するため、後方互換の生命線。
   func testLegacyJSONWithoutLastUsedAtLoads() throws {
-    let tmp = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-no-mru-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tmp
-    defer {
-      WorkspacePersistence.fileURLOverride = nil
-      try? FileManager.default.removeItem(at: tmp)
-    }
-
+    let tmp = try workspacesFile()
     let legacy = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,"tabs":[{"tree":{"leaf":{}},"editor":{"open":false,"tool":"tree"}}]},\

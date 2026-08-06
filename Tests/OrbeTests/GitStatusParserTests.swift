@@ -3,7 +3,7 @@ import XCTest
 @testable import Orbe
 
 /// StatusParser（porcelain v2 --branch -z）のフィクスチャテスト。NUL 区切りを \u{00} で再現する。
-final class GitStatusParserTests: XCTestCase {
+final class GitStatusParserTests: OrbeTestCase {
   private let headOid = "3a5572b8f0e5b1c2d3e4f5a6b7c8d9e0f1a2b3c4"
   private let blob = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
   private let zero = "0000000000000000000000000000000000000000"

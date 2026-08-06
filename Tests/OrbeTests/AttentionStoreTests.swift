@@ -7,7 +7,7 @@ import XCTest
 /// 取り下げは `retracted` を立てるだけで `transient` は残す——収縮を描き切るための中身で、
 /// 落とすのは閉じ切った `MenuBarController`（②が消える見え方を収縮 1 つに保つ）。
 @MainActor
-final class AttentionStoreTests: XCTestCase {
+final class AttentionStoreTests: OrbeTestCase {
 
   private func row(paneId: Int, state: String, message: String? = nil) -> AttentionRow {
     AttentionRow(

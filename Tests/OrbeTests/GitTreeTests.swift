@@ -3,7 +3,7 @@ import XCTest
 @testable import Orbe
 
 /// FileTree（`ls-files` のパス列 → ツリー構築）のテスト。
-final class GitTreeTests: XCTestCase {
+final class GitTreeTests: OrbeTestCase {
 
   func testFoldersFirstThenNameOrder() {
     let nodes = FileTree.build(paths: [

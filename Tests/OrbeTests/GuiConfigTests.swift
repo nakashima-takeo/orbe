@@ -4,23 +4,12 @@ import XCTest
 
 /// 生成 conf（GUI が触ったキーだけ sparse に書く。theme 行のみ定数で常時）の検証。
 /// 入力型が `EffectiveSettings` へ替わっても、同一設定値に対する**出力バイトは現行と完全一致**する。
-final class GuiConfigTests: XCTestCase {
-  override func setUp() {
-    super.setUp()
-    GuiConfig.fileURLOverride = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("GuiConfigTests-\(UUID().uuidString).conf")
-  }
-
-  override func tearDown() {
-    if let url = GuiConfig.fileURLOverride {
-      try? FileManager.default.removeItem(at: url)
-    }
-    GuiConfig.fileURLOverride = nil
-    super.tearDown()
-  }
-
+final class GuiConfigTests: OrbeTestCase {
   private func content() -> String {
-    guard let url = GuiConfig.fileURLOverride else { return "<no-url>" }
+    guard let url = GuiConfig.fileURL else {
+      XCTFail("ハーネスが gui.conf の隔離先を配っていない")
+      return ""
+    }
     return (try? String(contentsOf: url, encoding: .utf8)) ?? "<no-file>"
   }
 

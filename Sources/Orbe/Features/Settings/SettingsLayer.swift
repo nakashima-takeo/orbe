@@ -62,32 +62,18 @@ extension SettingsLayer: Codable {
     }
   }
 
+  /// canonical key マップから読む。値の型は registry の domain を SSOT に決める。
+  /// 読めない 1 キーだけを落として残りを活かす——1 項目の異常で層全体を失い、上書きが丸ごと
+  /// 消える（あるいは破壊的な空 save に落ちる）のを防ぐ。global 層も workspace 上書き層も同じ寛容さ。
   init(from decoder: Decoder) throws {
-    self = try Self.decode(from: decoder, strictUnknownKeys: false)
-  }
-
-  /// canonical key マップから読む。`strictUnknownKeys` が true なら未知 key で throw（旧形式判定に使う）、
-  /// false なら未知 key を無視する。値の型は registry の domain を SSOT に決める。
-  static func decode(from decoder: Decoder, strictUnknownKeys: Bool) throws -> SettingsLayer {
     let c = try decoder.container(keyedBy: DynamicKey.self)
     var out: [SettingID: SettingValue] = [:]
     for key in c.allKeys {
       guard let descriptor = SettingsRegistry.all.first(where: { $0.key == key.stringValue })
-      else {
-        if strictUnknownKeys {
-          throw DecodingError.dataCorruptedError(
-            forKey: key, in: c, debugDescription: "unknown setting key: \(key.stringValue)")
-        }
-        continue
-      }
-      if strictUnknownKeys {
-        out[descriptor.id] = try descriptor.domain.decodeValue(from: c, forKey: key)
-      } else if let v = try? descriptor.domain.decodeValue(from: c, forKey: key) {
-        // 非 strict（settings.json v1）: 読めない既知キー（型不一致）は未知キー同様 skip し他項目を活かす。
-        // 1 項目の型不一致で層全体を失って legacy 空移行の破壊 save に落ちるのを防ぐ。
-        out[descriptor.id] = v
-      }
+      else { continue }  // 未知キー（将来の項目・撤去済みの項目）は無視する
+      // 読めない既知キー（型不一致）も同様に skip する。
+      if let v = try? descriptor.domain.decodeValue(from: c, forKey: key) { out[descriptor.id] = v }
     }
-    return SettingsLayer(out)
+    self.init(out)
   }
 }

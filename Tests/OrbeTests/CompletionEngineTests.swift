@@ -6,7 +6,7 @@ import XCTest
 /// 補完エンジン（prebuilt JS バンドル）の契約を検証する。JSC 同期橋渡し
 /// （__orbe_exec 同期化 → microtask drain で __orbe_result 確定）・engine 由来候補・
 /// engine→host 学習の結線（実バンドルの type/候補で record・rank が発火する）を担保する。
-final class CompletionEngineTests: XCTestCase {
+final class CompletionEngineTests: OrbeTestCase {
   /// commit 済み `app/completion-engine.js` を JSContext に読み、stub の native 関数を注入する。
   /// CompletionEngine.swift の `installNativeBridge` と同じ顔ぶれ（__orbe_exec / __orbe_access /
   /// __orbe_readdir / __orbe_home）を揃え、同じ駆動契約（__orbe_buffer/__orbe_cwd → __orbe_run()
@@ -315,8 +315,9 @@ final class CompletionEngineTests: XCTestCase {
   }
 
   func testEngineBundleAbsentDegradesGracefully() {
-    // `swift test` は .app バンドル無し → engine 未ロード。候補ゼロで返りクラッシュしない。
-    XCTAssertNil(CompletionEngine.bundlePath, "テスト実行体にはバンドルが無い")
+    // 同梱物が無い状態（ハーネスが BundledResources.root を管理下の空ディレクトリへ向けている）では
+    // engine が未ロードになる。候補ゼロで返りクラッシュしないことを確かめる。
+    XCTAssertNil(CompletionEngine.bundlePath, "同梱物の探索根に completion-engine.js が無い")
     let exp = expectation(description: "suggestions returns")
     CompletionEngine.shared.suggestions(buffer: "git ", cursor: 4, cwd: "/tmp") { result in
       XCTAssertTrue(result.choices.isEmpty)

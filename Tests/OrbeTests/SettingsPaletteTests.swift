@@ -6,7 +6,7 @@ import XCTest
 /// libghostty 非依存（@Observable モデルのみ）。キー意図（move/activate/leftArrow/rightArrow/escape）と
 /// 絞り込み（queryChange）の写像でモデルを駆動し、行・選択・コールバックで振る舞いを固定する。
 @MainActor
-final class SettingsPaletteTests: XCTestCase {
+final class SettingsPaletteTests: OrbeTestCase {
   // model / captureApply は font 拡張（SettingsPaletteFontTests.swift）も使うため非 private。
   func model(
     fontSize: Int = 12, backgroundOpacity: Int = 90, backgroundBlur: Bool = false,

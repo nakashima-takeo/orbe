@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// 状態→グリフ種別のマッピング検証。AppKit のみ・libghostty 非依存。
-final class AgentStateIconTests: XCTestCase {
+final class AgentStateIconTests: OrbeTestCase {
   func testKindNilForNilState() {
     XCTAssertNil(AgentStateIcon.kind(state: nil), "状態なしはグリフ無し")
   }

@@ -7,24 +7,11 @@ import XCTest
 /// （最後にフォーカスしていたペインへ戻る = preferredFocusPane）と、
 /// ペイン → WindowController のウィンドウレベル chrome 経路を固定する。
 /// WindowControllerWorkspaceTests と同様、実 NSWindow + libghostty ランタイムを使う。
-final class WindowControllerFocusRestoreTests: XCTestCase {
-  private var tempStore: URL!
+final class WindowControllerFocusRestoreTests: OrbeTestCase {
   override func setUp() {
     super.setUp()
-    tempStore = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-test-\(UUID().uuidString).json")
-    WorkspacePersistence.fileURLOverride = tempStore
-    SettingsPersistence.fileURLOverride = tempStore.appendingPathExtension("settings")
-    AppStatePersistence.fileURLOverride = tempStore.appendingPathExtension("appstate")
     // 言語確定済み（returning user）として起動し、初回言語選択 overlay を出さない。
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
-  }
-  override func tearDown() {
-    WorkspacePersistence.fileURLOverride = nil
-    SettingsPersistence.fileURLOverride = nil
-    AppStatePersistence.fileURLOverride = nil
-    try? FileManager.default.removeItem(at: tempStore)
-    super.tearDown()
   }
 
   /// アクティブタブを分割し、2 枚目のペインへフォーカスを移した状態を作る。

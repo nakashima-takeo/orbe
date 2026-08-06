@@ -7,7 +7,7 @@ import OrbePaths
 // OrbePaths.controlSocketPath()（ORBE_STATE_DIR 直下・最優先 → ORBE_SOCK → Apple 規定の既定パス）に
 // 一本化し、GUI 本体・mcp と同一実装を共有する。
 // .app 同梱時は Contents/Resources/bin/orb へ改名され、ペイン PATH で bare `orb` に解決する。
-// 引数パース・出力・サブコマンドは Support.swift / Commands.swift（Foundation + OrbePaths のみ・手書き）。
+// 引数パース・出力・サブコマンドは Support.swift / `Commands+<ドメイン>.swift`（Foundation + OrbePaths のみ・手書き）。
 
 // MARK: - socket 解決（OrbePaths に委譲）
 
@@ -100,8 +100,9 @@ func controlRequest(method: String, params: [String: Any]) -> RPCResult {
 // MARK: - ディスパッチ
 
 var args = Array(CommandLine.arguments.dropFirst())
-// --json はどこに現れてもよい共通フラグ。先頭で抜き取り、残りを位置引数として扱う。
-if let i = args.firstIndex(of: "--json") {
+// --json はどこに何度現れてもよい共通フラグ。全て抜き取り、残りを位置引数として扱う
+// （1 個だけ抜くと、`orb --json` を包んだラッパ越しの再指定が位置引数に落ちてコマンド名になる）。
+while let i = args.firstIndex(of: "--json") {
   wantJSON = true
   args.remove(at: i)
 }

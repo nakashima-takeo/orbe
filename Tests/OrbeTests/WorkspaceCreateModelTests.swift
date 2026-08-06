@@ -5,7 +5,7 @@ import XCTest
 /// `WorkspaceCreateModel`（作成フォームの状態機械）の検証。libghostty 非依存（@Observable モデルのみ）。
 /// 追従／リンク解除／再リンク・導出名・作成可否・補完確定の意味メソッドを駆動して振る舞いを固定する。
 @MainActor
-final class WorkspaceCreateModelTests: XCTestCase {
+final class WorkspaceCreateModelTests: OrbeTestCase {
 
   // MARK: - 名前の追従 / リンク解除 / 再リンク
 

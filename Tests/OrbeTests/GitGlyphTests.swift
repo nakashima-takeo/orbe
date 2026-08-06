@@ -6,7 +6,7 @@ import XCTest
 
 /// octicon グリフ（GitGlyph / OcticonPath）の幾何ロジック検証（design 正典 `StatusIcons.tsx` 移植の配線を固定）。
 /// グリフの見た目・形状一致は 視覚突合の領域でありここでは扱わない（純幾何のみ）。
-final class GitGlyphTests: XCTestCase {
+final class GitGlyphTests: OrbeTestCase {
   private let eps = 1e-6
 
   // MARK: - issue: 同心円 3 枚（even-odd）

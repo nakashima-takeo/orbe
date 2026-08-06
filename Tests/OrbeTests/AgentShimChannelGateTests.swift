@@ -5,7 +5,7 @@ import XCTest
 /// 実体化コピーに刻まれた bundle ID とペインが名乗る `ORBE_BUNDLE_ID` が一致する呼び出しにだけ応える。
 /// テストは同梱物でなくリポジトリ実体のプラグインを temp へ複製して走らせる（`CompletionShimTests` と同じ形）。
 /// 呼び方は claude / codex の絶対パス呼びと agy の相対呼び（cwd＝プラグインルート）の両方を突く。
-final class AgentShimChannelGateTests: XCTestCase {
+final class AgentShimChannelGateTests: OrbeTestCase {
   /// リポジトリ実体のプラグインルート。このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
   private static let sourcePluginRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()  // OrbeTests

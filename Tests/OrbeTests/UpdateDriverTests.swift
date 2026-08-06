@@ -8,7 +8,7 @@ import XCTest
 /// （更新なし＝updaterDidNotFindUpdate / staged＝willInstallUpdateOnQuit）——その 2 本の写像と、
 /// driver の応答ポリシー・セッション終了時の状態維持を固定する。
 @MainActor
-final class UpdateDriverTests: XCTestCase {
+final class UpdateDriverTests: OrbeTestCase {
 
   private func makeState() -> UpdateState { UpdateState(currentVersion: "0.1.0") }
 

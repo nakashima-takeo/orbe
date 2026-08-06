@@ -3,7 +3,7 @@ import XCTest
 @testable import Orbe
 
 /// WorktreeParser（porcelain）と BranchParser（for-each-ref）のフィクスチャテスト。
-final class GitWorktreeParserTests: XCTestCase {
+final class GitWorktreeParserTests: OrbeTestCase {
 
   func testWorktreePorcelain() {
     let input =

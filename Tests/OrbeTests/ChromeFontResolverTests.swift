@@ -6,7 +6,7 @@ import XCTest
 /// chrome フォント割り当て機構（TitleGlyphs 一般化・ChromeFontResolver・FontCatalog.resolve）の検証。
 /// バンドル無し（swift test）では同梱 TTF が解決できないため、割り当ての有無と退避だけを固定し、
 /// 実フォントの字形は実機確認が担う。
-final class ChromeFontResolverTests: XCTestCase {
+final class ChromeFontResolverTests: OrbeTestCase {
 
   private let base = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
 
@@ -91,63 +91,37 @@ final class ChromeFontResolverTests: XCTestCase {
 
   // MARK: - WindowController 結線（applyActiveWorkspaceConfig → resolver）
 
-  private func withIsolatedState(_ body: () -> Void) {
-    let dir = FileManager.default.temporaryDirectory
-    let uuid = UUID().uuidString
-    SettingsPersistence.fileURLOverride = dir.appendingPathComponent("cfr-settings-\(uuid).json")
-    AppStatePersistence.fileURLOverride = dir.appendingPathComponent("cfr-appstate-\(uuid).json")
-    WorkspacePersistence.fileURLOverride = dir.appendingPathComponent("cfr-ws-\(uuid).json")
-    GuiConfig.fileURLOverride = dir.appendingPathComponent("cfr-gui-\(uuid).conf")
-    defer {
-      for url in [
-        SettingsPersistence.fileURLOverride, AppStatePersistence.fileURLOverride,
-        WorkspacePersistence.fileURLOverride, GuiConfig.fileURLOverride,
-      ] {
-        if let url { try? FileManager.default.removeItem(at: url) }
-      }
-      SettingsPersistence.fileURLOverride = nil
-      AppStatePersistence.fileURLOverride = nil
-      WorkspacePersistence.fileURLOverride = nil
-      GuiConfig.fileURLOverride = nil
-    }
-    body()
-  }
-
   /// tab-title-font-family の設定・解決不能名・解除が resolver のタブタイトルフォントを駆動する。
   @MainActor
   func testTabTitleFontSettingDrivesResolver() {
-    withIsolatedState {
-      let wc = WindowController()
-      wc.settingsStore.applyGlobal(SettingChange(SettingKeys.tabTitleFontFamily, "Menlo"))
-      wc.applyActiveWorkspaceConfig()
-      XCTAssertEqual(wc.fontResolver.tabTitleFont.familyName, "Menlo")
-      XCTAssertEqual(wc.fontResolver.tabTitleFont.pointSize, 11, "タブタイトルは 11pt 固定")
+    let wc = WindowController()
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.tabTitleFontFamily, "Menlo"))
+    wc.applyActiveWorkspaceConfig()
+    XCTAssertEqual(wc.fontResolver.tabTitleFont.familyName, "Menlo")
+    XCTAssertEqual(wc.fontResolver.tabTitleFont.pointSize, 11, "タブタイトルは 11pt 固定")
 
-      wc.settingsStore.applyGlobal(SettingChange(SettingKeys.tabTitleFontFamily, "存在しない名前"))
-      wc.applyActiveWorkspaceConfig()
-      XCTAssertEqual(
-        wc.fontResolver.tabTitleFont, Theme.Typography.chrome, "解決不能名は既定へ退避（クラッシュしない）")
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.tabTitleFontFamily, "存在しない名前"))
+    wc.applyActiveWorkspaceConfig()
+    XCTAssertEqual(
+      wc.fontResolver.tabTitleFont, Theme.Typography.chrome, "解決不能名は既定へ退避（クラッシュしない）")
 
-      wc.settingsStore.applyGlobal(SettingChange(id: .tabTitleFontFamily, value: nil))
-      wc.applyActiveWorkspaceConfig()
-      XCTAssertEqual(wc.fontResolver.tabTitleFont, Theme.Typography.chrome, "解除＝既定へ")
-    }
+    wc.settingsStore.applyGlobal(SettingChange(id: .tabTitleFontFamily, value: nil))
+    wc.applyActiveWorkspaceConfig()
+    XCTAssertEqual(wc.fontResolver.tabTitleFont, Theme.Typography.chrome, "解除＝既定へ")
   }
 
   /// emoji-font の noto/apple 切替が resolver の絵文字フォント（Noto / nil＝Apple 委譲）を駆動する。
   @MainActor
   func testEmojiFontSettingDrivesResolver() {
-    withIsolatedState {
-      let wc = WindowController()
-      XCTAssertEqual(wc.fontResolver.emojiFont, TitleGlyphs.notoEmoji, "実効既定 noto")
+    let wc = WindowController()
+    XCTAssertEqual(wc.fontResolver.emojiFont, TitleGlyphs.notoEmoji, "実効既定 noto")
 
-      wc.settingsStore.applyGlobal(SettingChange(SettingKeys.emojiFont, EmojiFontMode.apple))
-      wc.applyActiveWorkspaceConfig()
-      XCTAssertNil(wc.fontResolver.emojiFont, "apple＝割り当てなし（Apple Color Emoji へ委譲）")
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.emojiFont, EmojiFontMode.apple))
+    wc.applyActiveWorkspaceConfig()
+    XCTAssertNil(wc.fontResolver.emojiFont, "apple＝割り当てなし（Apple Color Emoji へ委譲）")
 
-      wc.settingsStore.applyGlobal(SettingChange(SettingKeys.emojiFont, EmojiFontMode.noto))
-      wc.applyActiveWorkspaceConfig()
-      XCTAssertEqual(wc.fontResolver.emojiFont, TitleGlyphs.notoEmoji, "noto へ復帰")
-    }
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.emojiFont, EmojiFontMode.noto))
+    wc.applyActiveWorkspaceConfig()
+    XCTAssertEqual(wc.fontResolver.emojiFont, TitleGlyphs.notoEmoji, "noto へ復帰")
   }
 }

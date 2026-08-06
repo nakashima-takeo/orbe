@@ -5,7 +5,7 @@ import XCTest
 
 /// ヘルプのキーボード可視化のイベント解決（NSEvent → キー id / 修飾同期）を固定する。
 /// 特に「⌘ 解放で非修飾キーの残留を全クリア」（macOS は ⌘ 押下中の他キー keyUp を配らない）が要。
-final class HelpKeyMonitorTests: XCTestCase {
+final class HelpKeyMonitorTests: OrbeTestCase {
   private func key(
     _ chars: String, type: NSEvent.EventType = .keyDown,
     modifierFlags: NSEvent.ModifierFlags = []

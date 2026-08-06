@@ -32,7 +32,9 @@ enum TerminalFonts {
   /// `.app` 同梱 TTF を `.process` スコープで登録する。バンドル無しでは何もしない。
   static func registerBundled() {
     for resource in bundledResources {
-      guard let url = Bundle.main.url(forResource: resource, withExtension: "ttf") else { continue }
+      guard let url = BundledResources.root?.appendingPathComponent("\(resource).ttf"),
+        FileManager.default.fileExists(atPath: url.path)
+      else { continue }
       CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
     }
   }

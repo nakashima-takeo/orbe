@@ -7,7 +7,7 @@ import XCTest
 /// オフスクリーン描画（`NSHostingView`＋`cacheDisplay`）・出力先解決・カードを地に置く view ビルダを持つ。
 /// アサートはしない（AI/人間が見る）。両テストクラスがこれを継承して使う（重複を作らない）。
 @MainActor
-class SnapshotTestCase: XCTestCase {
+class SnapshotTestCase: OrbeTestCase {
 
   // MARK: - 描画
 

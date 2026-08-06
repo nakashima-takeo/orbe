@@ -5,7 +5,7 @@ import XCTest
 /// SurfaceView.escapeShellPath（ファイル/フォルダ D&D で挿入するパスのシェルエスケープ）の検証。
 /// 実 Finder ドラッグの受理（draggingEntered/performDragOperation）は実機確認が要るため対象外。
 /// ここではパス組み立ての pure function のみ検証する。
-final class DragDropPathEscapeTests: XCTestCase {
+final class DragDropPathEscapeTests: OrbeTestCase {
 
   func testNoSpecialCharactersUnchanged() {
     XCTAssertEqual(
