@@ -16,8 +16,9 @@ custom_rules:
     name: "同梱リソースは BundledResources 経由"
     included: ".*/Sources/.*\\.swift"
     excluded: ".*/BundledResources\\.swift"
-    # 同梱物の所在を取る API を全て挙げる。Info.plist 系（object(forInfoDictionaryKey:)・
-    # infoDictionary・bundleIdentifier）は同梱物の解決ではないので対象外。
+    # `.app` の同梱物の所在を取る API を全て挙げる。Info.plist 系（object(forInfoDictionaryKey:)・
+    # infoDictionary・bundleIdentifier）は同梱物の解決ではないので対象外。SPM のリソースバンドル
+    # （`Bundle.module`）も対象外——テスト実行体でも同じように解決するので隔離の穴にならない。
     # `(` の後の `\s*` は swift format の折返し（100 桁超は `(` 直後で改行する）を捕まえるため。
     regex: "Bundle\\.main\\.(resource(URL|Path)|bundle(URL|Path)|(url|urls|path|paths)\\(\\s*forResource)"
     message: "同梱リソースの解決は BundledResources.root を通す（唯一の注入点）"
@@ -38,7 +39,7 @@ custom_rules:
     included: ".*/Tests/.*\\.swift"
     # swift-testing は XCTest とは別プロセスで走るため `OrbeTestCase` の点火が届かず、
     # 隔離ゼロで開発者の実 state dir・実 ghostty 設定を読み書きする。
-    regex: "^import Testing$"
+    regex: "^[ \\t]*import Testing[ \\t]*$"
     message: "swift-testing は使わない（隔離ハーネスを通らない）。XCTest ＋ OrbeTestCase を使う"
     severity: error
 

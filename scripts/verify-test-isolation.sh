@@ -23,6 +23,10 @@ WATCH=(
   # 隔離なしの `swift test` が state dir を作る先。application support は bundle id で分岐し、
   # テスト実行体の bundle id は xctest ツールのものになる。
   "$HOME/Library/Application Support/com.apple.dt.xctest.tool"
+  # 補完の legacy 掃除（`CompletionLegacyCleanup`）が書き換える先。ここだけは override を通らず
+  # ZDOTDIR/HOME から実体を解く経路なので、ハーネスの隔離ではなくデータ条件で止まっている。
+  "$HOME/.zshrc"
+  "${ZDOTDIR:-$HOME}/.zshrc"
 )
 
 snapshot() {  # -> stdout（パス・サイズ・mtime。不在ディレクトリは 1 行の印で表す）
