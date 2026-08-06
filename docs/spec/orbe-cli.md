@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（Orbe 自身を操作する CLI・現状）
 description: ペイン内・外から Orbe 自身の設定/ワークスペース/pane/tab を操作する `orb` CLI（config/ws/pane/tab サブコマンド・明示ターゲット・全ペイン PATH 注入配布・socket 文脈解決・終了コード契約）
-updated: 2026-07-23
+updated: 2026-08-06
 ---
 
 ユーザー/AI がペイン内・外から Orbe 自身を構成・操作する CLI。[control-api](control-api.md) の control.sock を直に叩く薄い socket クライアント（GhosttyKit/AppKit 非依存・Foundation のみ）。**PATH 上のコマンド名は `orb`**（`.app` の GUI 実行体 `Orbe` と別名。`Orbe` と打つと GUI 本体が起動してしまうため名前を分けている）。設定変更は GUI 設定パレット（[settings-palette](settings-palette.md)）と同一の適用経路を control 越しに使う。
@@ -23,6 +23,8 @@ pane/tab（レイアウト操作。ペイン内は `ORBE_PANE` を現ペイン�
 - `orb pane close [<pane>]` … GUI の Cmd+W と同一カスケード（最後の pane→tab→アクティブ WS の最後のタブは 0 タブ空状態で残す）。
 - `orb pane focus <pane>` … 別 WS なら activate 込み。位置引数必須。
 - `orb tab new [--workspace <id|current>] [--cmd "…"] [--dir <path>]` / `orb tab close [<tab>]`
+  - `--workspace` を取るのは `pane list` と `tab new` だけ（値必須。bare は usage エラー）。他の pane/tab コマンドは取らない。
+  - フラグと位置引数を取り切った残余に `-` 始まりが残れば usage エラー（exit 2）。pane/tab の id は常に正なので、config 系と違い**位置引数の席にも例外を設けない**（先頭から検査する）。黙って捨てると `ORBE_PANE` 既定へ落ち、`pane close`/`tab close` では指定と無関係な現ペイン・現タブが exit 0 のまま消える。
 
 各サブコマンドは対応する [control-api](control-api.md) メソッドへそのまま乗る。`--json` は全 read、`--help` は全階層で固有 usage（`pane split` の `-h` は上下分割フラグであって help ではない。help は `--help` のみ）。`<id|current>` の `current` はアクティブ WS。
 

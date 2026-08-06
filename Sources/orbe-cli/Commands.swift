@@ -292,6 +292,7 @@ private func paneSplit(_ rest: [String]) -> Never {
   }
   var args = rest
   let direction = paneSplitDirection(&args)  // -h=上下(down) / -v・既定=左右(right)
+  rejectLeftoverFlags(args, positionals: 0)
   guard let pane = resolvePaneArg(args) else { paneContextDie() }
   let result = callOrExit("split_pane", ["paneId": pane, "direction": direction])
   if wantJSON {
@@ -307,6 +308,7 @@ private func paneClose(_ rest: [String]) -> Never {
     print(paneUsage)
     exit(0)
   }
+  rejectLeftoverFlags(rest, positionals: 0)
   guard let pane = resolvePaneArg(rest) else { paneContextDie() }
   let result = callOrExit("close_pane", ["paneId": pane])
   if wantJSON { printJSON(result) } else { print("closed pane \(pane)") }
@@ -318,8 +320,9 @@ private func paneFocus(_ rest: [String]) -> Never {
     print(paneUsage)
     exit(0)
   }
+  rejectLeftoverFlags(rest, positionals: 0)
   // focus は自己指定が無意味なため位置引数必須（現ペイン既定を取らない）。
-  guard let arg = rest.first, !arg.hasPrefix("-"), let pane = Int(arg) else {
+  guard let arg = rest.first, let pane = Int(arg) else {
     usageDie("pane focus requires a <pane> id")
   }
   let result = callOrExit("focus_pane", ["paneId": pane])
@@ -376,8 +379,9 @@ private func tabClose(_ rest: [String]) -> Never {
     print(tabUsage)
     exit(0)
   }
+  rejectLeftoverFlags(rest, positionals: 0)
   let tabId: Int
-  if let first = rest.first, !first.hasPrefix("-") {
+  if let first = rest.first {
     guard let id = Int(first) else { usageDie("invalid tab id: \(first)") }
     tabId = id
   } else {

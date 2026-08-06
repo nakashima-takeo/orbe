@@ -164,10 +164,12 @@ func takeWorkspaceId(_ args: inout [String]) -> Int? {
 ///
 /// `--workspace` の抜き取りは綴りが**完全一致**した 1 個目しか見ないので、`--workspace=3`（= 区切り）・
 /// 綴り誤り・2 個目の指定は残余に落ちる。どのサブコマンドも残余を検査しないと、それらは黙って
-/// 捨てられて exit 0 のまま**指定と違う workspace** を触る——`tab new` はアクティブ WS にタブが生え、
-/// `pane list` は絞り込みが効かず全 WS のペインが出る。終了コードにも stdout にも現れない。
+/// 捨てられて exit 0 のまま**指定と違う対象**を触る——`tab new` はアクティブ WS にタブが生え、
+/// `pane list` は絞り込みが効かず全 WS のペインが出る。破壊的な `pane close` / `tab close` では
+/// 指定と無関係な現ペイン・現タブが消える。終了コードにも stdout にも現れない。
 ///
 /// `positionals` より前は位置引数の席なので見ない（`config set font-size -1` の `-1` は値）。
+/// pane / tab の id は常に正なので、そちらは `positionals: 0`——位置引数の席にも例外を設けない。
 func rejectLeftoverFlags(_ args: [String], positionals: Int) {
   guard let flag = args.dropFirst(positionals).first(where: { $0.hasPrefix("-") }) else { return }
   usageDie("unknown option: \(flag)")
@@ -185,10 +187,13 @@ func resolveCurrentPane() -> Int? {
   ProcessInfo.processInfo.environment["ORBE_PANE"].flatMap(Int.init)
 }
 
-/// pane 位置引数（省略時 ORBE_PANE）を解決する。位置引数が非フラグなら数値化（不正は usage エラー）、
+/// pane 位置引数（省略時 ORBE_PANE）を解決する。位置引数があれば数値化（不正は usage エラー）、
 /// 無ければ現ペイン。どちらも無ければ nil（呼び出し側が `orb pane list` を促す誘導エラーへ）。
+///
+/// `-` 始まりのトークンは呼び出し側の `rejectLeftoverFlags(_:positionals: 0)` が先に落とすので
+/// ここには来ない——pane id は常に正なので、位置引数の席に `-` 始まりが立つことは無い。
 func resolvePaneArg(_ args: [String]) -> Int? {
-  if let first = args.first, !first.hasPrefix("-") {
+  if let first = args.first {
     guard let id = Int(first) else { usageDie("invalid pane id: \(first)") }
     return id
   }
@@ -259,8 +264,9 @@ let topUsage = """
   COMMON FLAGS:
     --json              machine-readable JSON output (read commands / errors)
     --workspace [<id>]  target a workspace (<id> or current). bare --workspace
-                        means the active one and is config-only; pane / tab
-                        require an explicit <id>
+                        means the active one and is config-only; pane list /
+                        tab new require an explicit <id>. no other pane / tab
+                        command takes it
     --dir <path>        root/working directory (ws new / tab new)
     --cmd "…"           command to run in the new tab (tab new)
 

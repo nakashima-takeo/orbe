@@ -245,6 +245,55 @@ extension OrbeCliProcessTests {
       "位置引数の席の `-1` を未知フラグとして弾いている: \(negative.stderr)")
   }
 
+  /// 破壊的な pane / tab コマンドこそ残余を検査する。これらは `--workspace` を取らないので、
+  /// 渡された `-` 始まりは必ず誤り——黙って捨てると `ORBE_PANE` 既定へ落ち、**指定と無関係な
+  /// 現ペイン・現タブ**が消えて exit 0 と `closed pane N` が出る。`tab close` なら同タブの
+  /// 全ペイン（走行中のエージェント・シェルセッション）が一括で失われ、終了コードにも stdout にも
+  /// stderr にも現れないので人間も自動化も気づけない。
+  ///
+  /// pane / tab の id は `IdGen` が 1 から採番するので常に正。よって位置引数の席にも例外を設けず、
+  /// `config` 系（`config set font-size -1` の `-1` は値）と違って残余は先頭から検査する。
+  /// socket に触れる前に落ちることを `orbWithoutServer` で固定する——ORBE_PANE が居ても
+  /// 解決へ進まないのが要点で、サーバを立てて確かめると「消えなかった」ことしか見えない。
+  func testDestructivePaneAndTabCommandsRejectFlagLikeTokens() {
+    for args in [
+      ["pane", "close", "--workspace", "3"],
+      ["pane", "close", "--bogus"],
+      ["pane", "split", "--workspace=3"],
+      ["pane", "focus", "--workspace", "3"],
+      ["tab", "close", "--workspace", "3"],
+      ["pane", "close", "5", "--workspce", "3"],  // 位置引数の後ろに落ちた綴り誤り
+    ] {
+      failure(
+        ControlProcess.orbWithoutServer(args, env: ["ORBE_PANE": "1"]), code: 2,
+        message: "unknown option:",
+        "ORBE_PANE 既定へ落ちた `\(args.joined(separator: " "))`")
+    }
+  }
+
+  /// `orb config --help` の `KEYS:` は `SettingsRegistry.all` と同じ集合。
+  ///
+  /// usage は socket 不達でも出す必要があるため `config_list` からは引けず、CLI 側に key を写している。
+  /// その写しはこれまで散文の申し送りだけで守られており、実際にドリフトして 3 key（`tab-title-font-family`
+  /// `emoji-font` `worktree-dir`）が欠けたまま出荷された。
+  ///
+  /// 壊れると何が起きるか: registry に足した設定が「打てば通るが help には無い」key になる。
+  /// `config set` は `config_list` を SSOT に検証するので通ってしまい、CLI からも help を読む
+  /// 自動化からも発見できない。help はサーバ不要で出るので、ここもサーバを立てずに測る。
+  func testConfigHelpListsEveryRegistryKey() throws {
+    let outcome = ControlProcess.orbWithoutServer(["config", "--help"])
+    XCTAssertEqual(outcome.status, 0, "config --help は socket 不達でも exit 0: \(outcome.stderr)")
+    let line = try XCTUnwrap(
+      outcome.stdout.split(separator: "\n").first { $0.hasPrefix("KEYS: ") },
+      "config --help に KEYS: 行が無い: \(outcome.stdout)")
+    let listed = line.dropFirst("KEYS: ".count).split(separator: ",").map {
+      $0.trimmingCharacters(in: .whitespaces)
+    }
+    XCTAssertEqual(
+      Set(listed), Set(SettingsRegistry.all.map(\.key)),
+      "config --help の KEYS が SettingsRegistry と食い違っている")
+  }
+
   /// `tab new --workspace <id>` は**その** workspace にタブを開く。値が黙って捨てられると、
   /// exit 0 のまま指定と無関係なアクティブ WS にタブが生える——「開けたのに見当たらない」という
   /// 形で現れるので、終了コードでも stdout でも気づけない。
