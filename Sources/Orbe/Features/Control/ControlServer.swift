@@ -147,7 +147,8 @@ final class ControlServer {
     attach(fd: cfd)  // 既に queue 上なので直に呼ぶ（adopt は自 queue への sync になり詰まる）
   }
 
-  /// 既に接続済みの fd を制御プレーンへ載せる（queue 外からの入口）。生の fd を受け取るので
+  /// 既に接続済みの fd を制御プレーンへ載せる（queue 外からの入口）。本番は listener の accept が
+  /// queue 上で `attach` を直に呼ぶので、この口を使うのは socketpair を繋ぐテストだけ。生の fd を受け取るので
   /// 所有権の移譲はこの呼びで確定させる——`async` にすると「戻ったが所有権はまだ移っていない」
   /// 窓が開き、そこで呼び出し側が閉じると再利用された fd 番号が制御プレーンに載る。
   func adopt(fd: Int32) {
@@ -210,8 +211,8 @@ final class ControlServer {
     }
 
     DispatchQueue.main.async {
-      // nil は「無応答契約」のメソッド（completion_update / completion_end）。
-      // 応答を書かないことで、accept fd から読める行を accept 応答だけに保つ（framing 健全性）。
+      // nil は「無応答契約」のメソッド（completion_update / completion_end）。打鍵ごとに応答を
+      // 書くと、補完クライアントが accept 応答を読む前に fd へ行が積み、締切内に読めなくなる。
       guard let result = self.runOnMain(method: method, params: params) else { return }
       self.queue.async { conn.respond(id: id, result: result) }
     }
@@ -220,7 +221,7 @@ final class ControlServer {
   /// main スレッドで domain 操作を実行する。nil を返すメソッドは応答を書かない（無応答契約）。
   private func runOnMain(method: String, params: [String: Any]) -> Result<Any, ControlError>? {
     // 補完系は無応答契約（update/end は nil）を含むため、target 有無に依らず最優先で分離する
-    // （target==nil 時に update/end が "no window" 応答を書くと accept fd に stray 行が残り framing が壊れる）。
+    // （target==nil 時に update/end が "no window" 応答を書くと、打鍵ぶんの行が accept 応答の前に積む）。
     if method.hasPrefix("completion_") {
       let pane = (params["paneId"] as? Int).flatMap { target?.controlResolvePane($0) }
       return runCompletion(method: method, pane: pane, params: params)

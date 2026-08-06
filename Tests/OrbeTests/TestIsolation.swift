@@ -66,7 +66,9 @@ enum TestIsolation {
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     root = dir
 
-    // 2. state dir（workspaces.json・control.sock・gui.conf の親）。本番と同じ ORBE_STATE_DIR 経路。
+    // 2. state dir（本番と同じ ORBE_STATE_DIR 経路）。永続ファイルは下の `beginCase` が caseDir へ
+    //    張り直すので、実際にこの根の直下に出るのは `control.sock` と補完の学習ストアだけ。
+    //    子プロセス（`ControlProcess.childEnv`）へ渡すのもこの根で、in-process 側の caseDir とは違う。
     setenv(OrbePaths.stateDirEnvVar, dir.path, 1)
 
     // 3. 補完の学習ストア。`CompletionLearning.shared` は初回タッチ時の `fileURL` で in-memory

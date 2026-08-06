@@ -106,18 +106,18 @@ final class SettingsMigrationTests: OrbeTestCase {
   /// その間に書かれた app-state を巻き戻さない。マージなら再移行は同じ値を上書きするだけで無害になる。
   ///
   /// 巻き戻し対象は「旧形式が語彙として持たない項目」（preferredLanguage）だけではない。旧形式が
-  /// 語彙としては持つが**この 1 ファイルには書かれていない**項目（ここでは completionInstalled）も、
+  /// 語彙としては持つが**この 1 ファイルには書かれていない**項目（ここでは cachedShellPath）も、
   /// nil をそのまま代入すれば消える——だから移行後に立った値を混ぜて、欠落を nil 上書きに変える
-  /// 実装をここで落とす（消えると補完が毎起動入れ直しになる）。
+  /// 実装をここで落とす（消えると起動復元の resume が login shell の起動を待つことになる）。
   func testReMigrationDoesNotUndoInterveningAppStateWrites() throws {
-    let legacy = #"{"agentPluginsInstalled":true,"cachedShellPath":"/usr/bin","fontSize":16}"#
+    let legacy = #"{"agentPluginsInstalled":true,"fontSize":16}"#
     try Data(legacy.utf8).write(to: settingsFile())
     _ = SettingsPersistence.loadGlobal()  // 1 回目の移行
 
-    // 移行後にユーザーが言語を選び、補完も入れる（後者は旧ファイルに無い項目）。
+    // 移行後にユーザーが言語を選び、PATH 検出も走る（後者は旧ファイルに無い項目）。
     AppStatePersistence.update {
       $0.preferredLanguage = "ja"
-      $0.completionInstalled = true
+      $0.cachedShellPath = "/usr/local/bin:/usr/bin"
     }
     let before = try Data(contentsOf: appStateFile())
 
