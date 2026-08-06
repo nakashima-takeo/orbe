@@ -37,7 +37,7 @@ final class WorkspaceOverridePersistenceTests: OrbeTestCase {
 
   /// settingsOverride キーを欠いた旧 JSON（version:3）も load 成功し、settingsOverride は nil（上書き無し）。
   func testLegacyJSONWithoutOverrideLoads() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+    let tmp = try workspacesFile()
     let legacy = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,"tabs":[{"tree":{"leaf":{}},"editor":{"open":false,"tool":"tree"}}]}]}
@@ -84,7 +84,7 @@ final class WorkspaceOverridePersistenceTests: OrbeTestCase {
 
   /// 空 override（全項目除去）は保存で nil へ畳まれる（decode 側の isEmpty 畳み込み）。
   func testEmptyOverrideFoldsToNil() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+    let tmp = try workspacesFile()
     let file = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,\

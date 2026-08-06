@@ -30,7 +30,7 @@ final class WorkspaceMRUPersistenceTests: OrbeTestCase {
   /// lastUsedAt キーを欠いた旧 JSON（version:3）も load 成功し、lastUsedAt は nil（最古扱い）。
   /// optional でなければ decode 失敗 → load nil → 全 workspace 喪失するため、後方互換の生命線。
   func testLegacyJSONWithoutLastUsedAtLoads() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+    let tmp = try workspacesFile()
     let legacy = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,"tabs":[{"tree":{"leaf":{}},"editor":{"open":false,"tool":"tree"}}]},\

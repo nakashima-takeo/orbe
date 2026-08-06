@@ -40,7 +40,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   }
 
   func testVersionMismatchIsRejectedOnLoad() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+    let tmp = try workspacesFile()
     let future = WorkspacesFile(
       version: 999, activeWorkspace: 0,
       workspaces: [
@@ -56,7 +56,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
 
   /// windowSize フィールドが欠落した旧 JSON も load 成功し、windowSize は nil（既定 800×500 へ）。
   func testLegacyJSONWithoutWindowSizeLoads() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+    let tmp = try workspacesFile()
     let legacy = """
       {"version":2,"activeWorkspace":0,"workspaces":[\
       {"name":"default","rootPath":"/","activeTab":0,"tabs":[{"leaf":{}}]}]}
@@ -85,21 +85,21 @@ final class WorkspacePersistenceTests: OrbeTestCase {
 
   /// 不正な JSON バイト列を置いても decode 失敗で nil（クラッシュしない）。
   func testCorruptJSONIsRejectedOnLoad() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+    let tmp = try workspacesFile()
     try Data("{ this is not valid json ]".utf8).write(to: tmp)
     XCTAssertNil(WorkspacePersistence.load(), "壊れた JSON は load で nil（呼び出し側が既定 fallback）")
   }
 
   /// 構造は JSON として妥当だがスキーマ不一致（必須キー欠落）でも nil。
   func testSchemaMismatchIsRejectedOnLoad() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+    let tmp = try workspacesFile()
     try Data(#"{"foo": 1, "bar": [1,2,3]}"#.utf8).write(to: tmp)
     XCTAssertNil(WorkspacePersistence.load(), "スキーマ不一致は load で nil")
   }
 
   /// workspaces が空配列の妥当 JSON も nil（既定 1 workspace へ fallback させる）。
   func testEmptyWorkspacesIsRejectedOnLoad() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+    let tmp = try workspacesFile()
     let empty = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0, workspaces: [])
     try JSONEncoder().encode(empty).write(to: tmp)
@@ -109,7 +109,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   // MARK: - 実ファイルへの save → load 往復（条件1+3: ディスク経由で全項目が保たれる）
 
   func testSaveThenLoadFileRoundTrip() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+    let tmp = try workspacesFile()
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 1,
       workspaces: [
@@ -264,7 +264,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   /// 既存タブ構成を失わず explicitTitle=nil で読む。起動を通した現行バージョンへの書き直しは
   /// `WindowControllerRestoreTests.testLaunchFromLegacyV2FileRewritesToCurrentVersion` が持つ。
   func testLegacyV2FileLoads() throws {
-    let tmp = try XCTUnwrap(WorkspacePersistence.fileURL)
+    let tmp = try workspacesFile()
     let v2 = """
       {"version":2,"activeWorkspace":0,"workspaces":[\
       {"name":"default","rootPath":"/r","activeTab":0,"tabs":[{"leaf":{"cwd":"/r/a"}}]}]}

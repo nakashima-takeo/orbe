@@ -67,7 +67,7 @@ final class ConfigLoadTests: OrbeTestCase {
 
   /// 層3（gui.conf）を実ファイルへ向ける（nil で削除＝不在）。
   private func setGuiLayer(_ contents: String?) throws {
-    let url = try XCTUnwrap(GuiConfig.fileURL)
+    let url = try guiConfFile()
     if let contents {
       try contents.write(to: url, atomically: true, encoding: .utf8)
     } else {
