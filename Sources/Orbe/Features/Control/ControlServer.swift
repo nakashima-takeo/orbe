@@ -91,7 +91,8 @@ final class ControlServer {
       acceptSource = nil
       connections.forEach { $0.close() }
       connections.removeAll()
-      if listenFD >= 0 { Darwin.close(listenFD) }
+      // listener fd を閉じるのは source の cancel handler 1 箇所だけ（`Connection` と同じ規律）。
+      // fd ベースの source は cancel handler での close が libdispatch の要求。
       listenFD = -1
       if !socketPath.isEmpty { unlink(socketPath) }
     }
@@ -135,6 +136,7 @@ final class ControlServer {
 
     let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
     source.setEventHandler { [weak self] in self?.acceptOne() }
+    source.setCancelHandler { Darwin.close(fd) }
     acceptSource = source
     source.resume()
   }
