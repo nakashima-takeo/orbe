@@ -18,7 +18,7 @@ updated: 2026-08-06
 | L1 ユニット | 主戦場。Git パーサ群・`SessionStore`・`SettingsLayer`・`AttentionSnapshot`・`MenuBarArrivalDriver` などが厚い | 穴を埋める。とくに `GitRepo` のメソッド群・`untrackedFileDiff` の境界値 |
 | L2 結合 | 観測面が `window.title` 止まり。永続は保存側が厚く**復元側がゼロ**。IME / スクロール / キー翻訳は**テスト 0** | 復元ラウンドトリップ・設定適用の配線・keep-alive・ターミナル入力表面 |
 | L3 wire 契約 | **0**。既存の control テストは `WindowController` を直接叩き、検証層を迂回している | socketpair 上の実 `Connection` でプロトコルの語を固める |
-| L4 プロセス境界 | **0**。`orbe-cli` は 16 サブコマンド中 0、`orbe-mcp` はテストターゲット自体が無い。唯一の導通確認は手動の開発ループスクリプト（CI 外・実アプリ起動） | 実バイナリ × in-process `ControlServer` |
+| L4 プロセス境界 | **0**。`orbe-cli` は 16 サブコマンド中 0、`orbe-mcp` はテストターゲット自体が無い。唯一の導通確認は CI 外の手動確認だけ | 実バイナリ × in-process `ControlServer` |
 | L5 コンポーネント | `MenuBarStatusViewTests` と `ChromeStatusRowTests` のみ | 状態 → 表示とレイアウト数値 |
 | L6 見た目 | **0**。`Design*SnapshotTests` は `XCTAssert` 0 件・ゴールデン 0 枚・CI ではスキップされる PNG 生成器 | 1x 固定のゴールデン比較 |
 | L7 生成物 | `L10nCompletenessTests` と `OrbePalette` の drift ゲートのみ | `.app` 静的検査・agent-plugin 構成・tokens drift |
@@ -33,7 +33,7 @@ updated: 2026-08-06
 
 | # | スライス | 内容 | 依存 | 状態 | テスト仕様書 |
 |---|---|---|---|---|---|
-| 0 | 基盤足場 | 単一ハーネス（`OrbeTestCase` が点火し `XCTestObservation` が毎テスト隔離。state dir は `ORBE_STATE_DIR` を 90 バイト以下の temp へ向けて隔離し、`control.sock` も自動で追従。永続・同梱リソース根・ghostty 設定探索先の override を毎テスト張り直す。補完の学習ストアだけはプロセス級固定で、学習状態はテスト間で持ち越される）。`Bundle.main` 直参照 3 箇所を `BundledResources` へ集約。ビルド済み CLI 実行体がテストバンドルの隣にある前提と、その解決規則の固定 | — | 完了 | — |
+| 0 | 基盤足場 | 単一ハーネス（`OrbeTestCase` が点火し `XCTestObservation` が毎テスト隔離。state dir は `ORBE_STATE_DIR` を 90 バイト以下の temp へ向けて隔離し、`control.sock` も自動で追従。永続・同梱リソース根・ghostty 設定探索先の override を毎テスト張り直す。補完の学習ストアだけはプロセス級固定で、学習状態はテスト間で持ち越される）。`Bundle.main` 直参照 8 箇所（7 ファイル）を `BundledResources` へ集約し、`.swiftlint.yml` の custom rule で直参照を error に落とす。ビルド済み CLI 実行体がテストバンドルの隣にある前提と、その解決規則の固定 | — | 完了 | — |
 | 1 | wire 契約 | 制御プロトコルの語を socketpair 上の実 `Connection` で固める（`ControlWireTests` 群）。method 名・params キー・エラーコード・成功時の応答キーと宛先への配線・`wait_for_event`・framing・不正入力。前提として `ControlServer` に `adopt(fd:)` を切り出し、不正入力へ `-32700` / `-32600` を返すよう直した。エラーコードの語彙は `docs/spec/control-api.md` の「エラー」節と 1 対 1。#50 #62 | 0 | 完了 | — |
 | 2 | プロセス境界 | 実 `orbe-cli` / `orbe-mcp` / `orbe-report` を subprocess で駆動し、テストプロセス内の実 `WindowController` ＋ `ControlServer` へ繋ぐ（`ControlProcessHarness`。子の待機は runloop を回して行い、env は明示辞書のみで親から継承しない）。全 16 サブコマンドのライフサイクル・終了コード・`--json` の出力先・`ORBE_PANE` / `current` の文脈解決・`--workspace` の意味論・hook 実経路・bare `orb` の PATH 解決・`orbe-report` が書く生 1 行の語。**スライス 1 からの持ち越し**だった `get_pane_text` の `scrollback` も実 surface で固定した。`.app` 起動経路と `AppDelegate` 配線は範囲外で、その煙探知は `sandbox-run` が持つ。#63 #64 #74 | 0, 1 | 完了 | — |
 | 3 | 復元と移行 | 保存 → 復元 → 再保存のラウンドトリップ。`TabState`・設定層の寛容 decode の境界・範囲外クランプ・デバウンス・旧バージョンファイルからの起動移行。#56 #68 #54 | 0 | 完了 | — |

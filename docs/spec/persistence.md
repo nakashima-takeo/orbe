@@ -1,7 +1,7 @@
 ---
 title: workspace 永続（現状）
 description: 構成（workspace・タブ・明示タイトル・分割ツリー・cwd・エージェントセッション・最終使用時刻）の JSON 保存と起動時復元・エージェント resume・デバウンス保存
-updated: 2026-08-05
+updated: 2026-08-06
 ---
 
 保存先は `~/Library/Application Support/<bundle-id>/` 直下。`<bundle-id>` はビルドチャネルごとに異なるため（[channel](channel.md)）、dev（Orbe Dev）と release は state を共有しない。環境変数 `ORBE_STATE_DIR`（非空）を設定するとその dir 直下へ移る——検証用の隔離インスタンス用途で、settings.json・gui.conf・[control-api](control-api.md) の control.sock も同じ dir に同居する。テスト用にファイル位置を差し替える seam を持つ。
@@ -31,6 +31,6 @@ updated: 2026-08-05
 - **`settings.json`** … ユーザー設定（global 層）。in-memory SSOT が保持し、変更は即 save する。未知 key（将来の項目・撤去済みの項目）は無視して読む。
 - **`app-state.json`** … ユーザー設定でない内部簿記（エージェントプラグインを導入できたか・最後に登録できたエージェントプラグイン名〔[agent-plugin-package](agent-plugin-package.md)〕・補完のインストール済みフラグ・ログインシェル PATH のキャッシュ・UI 言語）。全項目 optional。
 
-2 ファイルに分けているのは「ユーザーが決めた値」と「アプリが勝手に覚えた値」を混ぜないため。旧形式（両者が同居した 1 枚）は起動時に無損失で分割移行する（旧ファイル全体が読めたときだけ変換する all-or-nothing。読めなければ既定へ fallback）。
+2 ファイルに分けているのは「ユーザーが決めた値」と「アプリが勝手に覚えた値」を混ぜないため。旧形式（両者が同居した 1 枚）は起動時に無損失で分割移行する（旧ファイル全体が読めたときだけ変換する all-or-nothing。読めなければ既定へ fallback）。app-state.json へは全体上書きでなく**マージ**で書く——旧形式が語彙として持たない項目（UI 言語・登録できたエージェントプラグイン名）を移行が巻き戻さず、中断した移行からの再移行が冪等になる。
 
 UI 言語 `preferredLanguage` は **nil＝未選択**（初回言語選択画面を出す・描画は OS 言語追従）、非 nil＝確定（[localization](localization.md)）。グローバル専用で workspace 上書きできない。

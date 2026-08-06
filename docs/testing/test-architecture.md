@@ -1,7 +1,7 @@
 ---
 title: テストアーキテクチャ
 description: Orbe のテストが従う層構成・横断方針・各層の責務
-updated: 2026-08-03
+updated: 2026-08-06
 ---
 
 # テストアーキテクチャ
@@ -67,7 +67,7 @@ updated: 2026-08-03
 - **担保する**: アプリの組み立て。永続の復元（保存→復元→再保存のラウンドトリップ）・設定適用の配線・workspace の keep-alive・`SessionStore` と `WindowController` の結合・**ターミナル入力表面**（IME の preedit 同期・キー翻訳・スクロールの蓄積と合体 flush）
 - **担保しない**: プロセス境界を越える契約（L3/L4）・見た目（L6）
 - **起動と差し替え**: 実 `WindowController`（実 NSWindow ＋ 実 libghostty ＋ 実シェル spawn）。`NSApp.activationPolicy()` は `.prohibited` で画面には出ず、フォーカスも奪わない。IME・キー・スクロールは実 `SurfaceView` を直接駆動する
-- **データ**: 単一ハーネスが temp の state dir を立て、全 override と ghostty 設定探索先を隔離する。各テストは自分の `WindowController` を作る。後始末はハーネスの per-test ディレクトリ配り直しと ARC が担い、テスト側に明示的な teardown は持たない
+- **データ**: 単一ハーネスが temp の state dir を立て、全 override と ghostty 設定探索先を隔離する。各テストは自分の `WindowController` を作る。**永続の後始末**はハーネスの per-test ディレクトリ配り直しと ARC が担い、テスト側は書かない。**ハーネスが触れないプロセスグローバル**（`NSApp.appearance`・key window・ordered-in の窓）だけはテスト側の `tearDown` が戻す
 - **実行**: CI 全量
 - **ツール**: XCTest
 

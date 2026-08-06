@@ -1,7 +1,7 @@
 ---
 title: コマンド補完（ドロップダウン・現状）
 description: zsh の zle フックが control.sock 経由で編集バッファを host へ送り、JavaScriptCore 埋め込みの spec エンジン（cwd 連動 generator 込み）が算出した候補をカーソル位置のドロップダウンに出し Tab/Enter で zle の $BUFFER を直書換するコマンド補完
-updated: 2026-07-23
+updated: 2026-08-06
 ---
 
 入力中のコマンドラインに対し、カーソル位置へ候補（値＋説明）のドロップダウンを出し、選んで挿入する補完。対応は **zsh のみ**。tmux/ssh 先・bash・fish では後述の env が届かず popup が出ない（劣化なしの無効）。
