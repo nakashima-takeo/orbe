@@ -99,7 +99,7 @@ func hasHelp(_ args: [String]) -> Bool { args.contains("--help") || args.contain
 /// **値の席は空けられない。**`orb tab new --dir "$DIR" --cmd "$CMD"` の `$DIR` が空になる形が両方入る:
 /// 引用符が無ければトークンごと消えて次のフラグが値に化け（`--dir --cmd claude` は cwd が `--cmd` で
 /// `claude` が捨てられる）、引用符があれば空文字がそのまま cwd として通る。どちらも飲まれた側は
-/// 残余に落ちないので `rejectLeftoverFlags` では捕まらず、終了コードにも stdout にも stderr にも
+/// 残余に落ちないので `rejectLeftovers` では捕まらず、終了コードにも stdout にも stderr にも
 /// 現れないまま、指定と違う cwd のタブ・rootPath が空の workspace ができる。
 func takeOption(_ args: inout [String], _ name: String, requires label: String) -> String? {
   guard let i = args.firstIndex(of: name) else { return nil }
@@ -172,22 +172,29 @@ func takeWorkspaceId(_ args: inout [String]) -> Int? {
   return id
 }
 
-/// フラグと位置引数を取り切った後の残余に `-` 始まりが居れば usage エラー。
+/// フラグを取り切った後の残余を検査する。**全サブコマンドがこの関数を通る。**
 ///
-/// フラグの抜き取り（`takeWorkspaceTarget` / `takeWorkspaceId` / `takeOption`）は綴りが**完全一致**した
-/// 1 個目しか見ないので、`--workspace=3`・`--dir=/x`（= 区切り）・綴り誤り・2 個目の指定は残余に落ちる。
-/// 残余を検査しないと、それらは黙って捨てられて exit 0 のまま**指定と違う対象**を触る——`tab new` は
-/// アクティブ WS にタブが生え、`ws new` は既定 root の workspace ができ、`pane list` は絞り込みが
-/// 効かず全 WS のペインが出る。`pane close` / `tab close` では指定と無関係な現ペイン・現タブが
-/// 消える。いずれも終了コードにも stdout にも現れない。**全サブコマンドがこの関数を通る。**
+/// `positionals` はそのサブコマンドが持つ位置引数の席の数。これを超えて残ったトークンは
+/// どの席にも座れなかった＝解釈されなかったので usage エラー。`dashOK` は先頭から何席まで
+/// `-` 始まりを値として通すかで、該当するのは `config set <key> <value>` の `<value>` だけ
+/// （`config set font-size -1`。`<key>` の席は呼び出し側が別途弾く）。ws / pane / tab は id も
+/// 名前もパスも `-` 始まりを取らないので `dashOK: 0`＝先頭から検査する。
 ///
-/// `positionals` より前は位置引数の席なので見ない。`-` 始まりを値として通す席は
-/// `config set <key> <value>` の `<value>` だけで（`config set font-size -1`）、`<key>` の席は
-/// 呼び出し側が別途弾く。ws / pane / tab は id も名前もパスも `-` 始まりを取らないので
-/// `positionals: 0`＝先頭から検査する。
-func rejectLeftoverFlags(_ args: [String], positionals: Int) {
-  guard let flag = args.dropFirst(positionals).first(where: { $0.hasPrefix("-") }) else { return }
-  usageDie("unknown option: \(flag)")
+/// 残余に落ちる形は 2 通りある。フラグの抜き取り（`takeWorkspaceTarget` / `takeWorkspaceId` /
+/// `takeOption`）は綴りが**完全一致**した 1 個目しか見ないので `--workspace=3`・`--dir=/x`
+/// （= 区切り）・綴り誤り・2 個目の指定が落ち、フラグ名を書き忘れた値（`orb tab new /repo`）や
+/// 席から溢れた位置引数（`orb pane close 5 6`）も落ちる。検査しないとどちらも黙って捨てられ、
+/// exit 0 のまま**指定と違う対象**を触る——`tab new` はアクティブ WS の既定 cwd にタブが生え、
+/// `ws new` は既定 root の workspace ができ、`pane list` は絞り込みが効かず全 WS のペインが出る。
+/// `pane close` / `tab close` では指定と無関係な現ペイン・現タブが消える。いずれも終了コードにも
+/// stdout にも stderr にも現れない。
+func rejectLeftovers(_ args: [String], positionals: Int, dashOK: Int = 0) {
+  if let flag = args.dropFirst(dashOK).first(where: { $0.hasPrefix("-") }) {
+    usageDie("unknown option: \(flag)")
+  }
+  if args.count > positionals {
+    usageDie("unexpected argument: \(args[positionals])")
+  }
 }
 
 /// `<token>` が数値 workspace id か `current` なら解決した id を返す（それ以外 nil＝値として消費しない）。
@@ -207,7 +214,7 @@ func resolveCurrentPane() -> Int? {
 ///
 /// 位置引数が居るなら数値化に失敗した時点で usage エラー——`-h` のような非数値が黙って現ペイン
 /// 既定へ逸れることは無い。ただし `-1` は `Int()` を通るので、`-` 始まりを弾くのは呼び出し側の
-/// `rejectLeftoverFlags(_:positionals: 0)` の役割。
+/// `rejectLeftovers(_:positionals:dashOK:)` の役割。
 func resolvePaneArg(_ args: [String]) -> Int? {
   if let first = args.first {
     guard let id = Int(first) else { usageDie("invalid pane id: \(first)") }

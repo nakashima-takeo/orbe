@@ -14,9 +14,9 @@ updated: 2026-08-06
 - `orb config set <key> <value> [--workspace [<id|current>]]` … 設定適用。`key` は設定パレットと同じ安定 kebab key。値型は key ごと（数値／真偽〔`true/false/on/off/1/0`〕／文字列）。全設定が `--workspace` で上書き可。
 - `orb config unset <key> [--workspace [<id|current>]]` … 上書きを解除して継承へ戻す。`--workspace` 省略は global 明示値の除去、指定はその WS 上書きの解除。
   - `--workspace` の値: フラグのみ＝アクティブ WS、`<id|current>` 指定＝**その WS**（非アクティブ可）。無指定は `set`/`unset` が global を書き、`list`/`get` はアクティブ WS の上書きを重ねた実効値を読む。
-  - フラグと位置引数を取り切った残余に `-` 始まりが残れば usage エラー（exit 2）。`--workspace=<id>`（= 区切り）・綴り誤り・2 個目の `--workspace` はここで落ちる——黙って捨てると exit 0 のまま指定と違う WS を触ることになる。`-` 始まりを値として通す席は `config set <key> <value>` の `<value>` だけで（`config set font-size -1`）、`<key>` の席は通さない。
+  - フラグを取り切った残余が位置引数の席に収まらなければ usage エラー（exit 2）。`--workspace=<id>`（= 区切り）・綴り誤り・2 個目の `--workspace`・席から溢れたトークン（`config set <key> <value> <余り>`）はここで落ちる——黙って捨てると exit 0 のまま指定と違う WS を触ることになる。`-` 始まりを値として通す席は `config set <key> <value>` の `<value>` だけで（`config set font-size -1`）、`<key>` の席は通さない。
 - `orb ws list [--json]` / `ws new <name> [--dir <path>]` / `ws rename <id|current> <name>` / `ws dir <id|current> <path>` / `ws switch <id>` / `ws rm <id|current>`
-  - `--workspace` は取らない（対象は位置引数の `<id|current>`）。フラグと位置引数を取り切った残余に `-` 始まりが残れば usage エラー（exit 2）。位置引数（`<name>`・`<id|current>`・`<path>`）はいずれも `-` 始まりを取らないので、pane/tab と同じく**位置引数の席にも例外を設けない**。黙って捨てると `ws new <name> --dir=<path>` が既定 root の workspace を exit 0 で作る。
+  - `--workspace` は取らない（対象は位置引数の `<id|current>`）。フラグを取り切った残余が位置引数の席に収まらなければ usage エラー（exit 2）。位置引数（`<name>`・`<id|current>`・`<path>`）はいずれも `-` 始まりを取らないので、pane/tab と同じく**位置引数の席にも例外を設けない**。黙って捨てると `ws new <name> --dir=<path>` も `ws new <name> <path>`（`--dir` の書き忘れ）も、既定 root の workspace を exit 0 で作る。
 
 pane/tab（レイアウト操作。ペイン内は `ORBE_PANE` を現ペイン既定に、外部は明示ターゲット必須）:
 - `orb pane list [--workspace <id|current>] [--json]` … pane 一覧（paneId/workspaceId/tabId/title/cwd/agentState/focused）。
@@ -25,7 +25,7 @@ pane/tab（レイアウト操作。ペイン内は `ORBE_PANE` を現ペイン�
 - `orb pane focus <pane>` … 別 WS なら activate 込み。位置引数必須。
 - `orb tab new [--workspace <id|current>] [--cmd "…"] [--dir <path>]` / `orb tab close [<tab>]`
   - `--workspace` を取るのは `pane list` と `tab new` だけ（値必須。bare は usage エラー）。他の pane/tab コマンドは取らない。
-  - フラグと位置引数を取り切った残余に `-` 始まりが残れば usage エラー（exit 2）。pane/tab の id は常に正なので、config 系と違い**位置引数の席にも例外を設けない**（先頭から検査する）。黙って捨てると `ORBE_PANE` 既定へ落ち、`pane close`/`tab close` では指定と無関係な現ペイン・現タブが exit 0 のまま消える。
+  - フラグを取り切った残余が位置引数の席に収まらなければ usage エラー（exit 2）。pane/tab の id は常に正なので、config 系と違い**位置引数の席にも例外を設けない**（先頭から検査する）。黙って捨てると `ORBE_PANE` 既定へ落ち、`pane close`/`tab close` では指定と無関係な現ペイン・現タブが exit 0 のまま消える。`tab new <path>`（`--dir` の書き忘れ）はアクティブ WS の既定 cwd にタブを開く。
 
 各サブコマンドは対応する [control-api](control-api.md) メソッドへそのまま乗る。`--json` は全サブコマンドで効き、control の result をそのまま出す——write が採番した id（`ws new` の workspaceId・`tab new` / `pane split` の paneId）はこの出力からしか読めない。`--help` は全階層で効き、固有 usage を持つのは `config set` と `pane split`、他はドメインの usage を出す（`pane split` の `-h` は上下分割フラグであって help ではない。help は `--help` のみ）。`<id|current>` の `current` はアクティブ WS。
 

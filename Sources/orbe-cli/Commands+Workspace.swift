@@ -21,7 +21,7 @@ func runWorkspace(_ args: [String]) -> Never {
 }
 
 private func wsList(_ rest: [String]) -> Never {
-  rejectLeftoverFlags(rest, positionals: 0)
+  rejectLeftovers(rest, positionals: 0)
   let result = callOrExit("list_workspaces", [:])
   if wantJSON {
     printJSON(result)
@@ -41,7 +41,7 @@ private func wsList(_ rest: [String]) -> Never {
 private func wsNew(_ args: [String]) -> Never {
   var rest = args
   let dir = takeOption(&rest, "--dir", requires: "a <path> value")
-  rejectLeftoverFlags(rest, positionals: 0)
+  rejectLeftovers(rest, positionals: 1)
   guard let name = rest.first else { usageDie("ws new requires <name>") }
   var params: [String: Any] = ["name": name]
   if let dir { params["rootPath"] = dir }
@@ -56,7 +56,7 @@ private func wsNew(_ args: [String]) -> Never {
 }
 
 private func wsRename(_ rest: [String]) -> Never {
-  rejectLeftoverFlags(rest, positionals: 0)
+  rejectLeftovers(rest, positionals: 2)
   guard rest.count >= 2 else { usageDie("ws rename requires <id|current> <name>") }
   let id = resolveWorkspaceId(rest[0])
   let name = rest[1]
@@ -66,7 +66,7 @@ private func wsRename(_ rest: [String]) -> Never {
 }
 
 private func wsDir(_ rest: [String]) -> Never {
-  rejectLeftoverFlags(rest, positionals: 0)
+  rejectLeftovers(rest, positionals: 2)
   guard rest.count >= 2 else { usageDie("ws dir requires <id|current> <path>") }
   let id = resolveWorkspaceId(rest[0])
   let path = rest[1]
@@ -76,7 +76,7 @@ private func wsDir(_ rest: [String]) -> Never {
 }
 
 private func wsSwitch(_ rest: [String]) -> Never {
-  rejectLeftoverFlags(rest, positionals: 0)
+  rejectLeftovers(rest, positionals: 1)
   guard let arg = rest.first, let id = Int(arg) else {
     usageDie("ws switch requires a numeric <id>")
   }
@@ -86,7 +86,7 @@ private func wsSwitch(_ rest: [String]) -> Never {
 }
 
 private func wsRemove(_ rest: [String]) -> Never {
-  rejectLeftoverFlags(rest, positionals: 0)
+  rejectLeftovers(rest, positionals: 1)
   guard let arg = rest.first else { usageDie("ws rm requires <id|current>") }
   let id = resolveWorkspaceId(arg)
   let result = callOrExit("remove_workspace", ["workspaceId": id])

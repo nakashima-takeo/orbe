@@ -6,6 +6,8 @@ import XCTest
 /// `orb` が**解釈できなかったトークン**を捨てずに落とすことを、全 16 サブコマンドで固定する。
 /// 契約そのもの（終了コード・`--workspace` の意味論）は `OrbeCliProcessTests+Contract` が持ち、
 /// こちらは「取り切った後に残ったトークン」と「値の席に来た形」の 2 経路だけを見る。
+/// 残余は `-` 始まりだけでなく**席から溢れた位置引数**も見る——`--dir` を書き忘れた `orb tab new /repo`
+/// は `-` を持たないので、席の数を見なければ同じ被害へ別の入口から入る。
 ///
 /// 壊れると何が起きるか: どちらの経路も、捨てられたトークンは exit 0 にも stdout にも stderr にも
 /// 現れないまま**指定と違う対象**を触る。`tab new` はアクティブ WS にタブが生え、`ws new` は既定
@@ -109,6 +111,44 @@ extension OrbeCliProcessTests {
       failure(
         ControlProcess.orbWithoutServer(args), code: 2, message: "unknown option:",
         "解釈されなかったフラグを捨てた `\(args.joined(separator: " "))`")
+    }
+  }
+
+  /// 位置引数の席から溢れたトークンも残余なので落とす。`-` を持たないので `unknown option:` の
+  /// 検査は素通りし、席の数を見なければ黙って捨てられる——`--dir=/repo` は exit 2 で落ちるのに
+  /// `--dir` ごと書き忘れた `/repo` は exit 0 で通る、という割れ方になる。
+  ///
+  /// 壊れると何が起きるか: `orb tab new /repo` が**アクティブ WS の既定 cwd**にタブを開き、
+  /// `orb ws new proj /repo` が**既定 root** の workspace を作る（rootPath はその WS の全タブの cwd と
+  /// worktree の基点なので、以後そこで開くタブもエージェントも指定と違うディレクトリで走る）。
+  /// `orb pane list 2` は絞り込みが効かず全 WS のペインが出て、`orb pane close 5 6` は 6 に触れない。
+  /// いずれも exit 0 で、終了コードにも stdout にも stderr にも現れない。
+  ///
+  /// 16 サブコマンドを全て並べるのは、席の数が各コマンドの申告制だから——1 つ書き忘れても他が緑なら
+  /// 気づけない。`ORBE_PANE` を置くのは、pane/tab が既定へ逸れる前に落ちることを見るため。
+  func testExcessPositionalsAreRejectedInsteadOfSilentlyDropped() {
+    for args in [
+      ["config", "list", "3"],
+      ["config", "get", "font-size", "extra"],
+      ["config", "set", "font-size", "14", "extra"],
+      ["config", "unset", "font-size", "extra"],
+      ["ws", "list", "3"],
+      ["ws", "new", "proj", "/tmp/orbe-l4"],  // --dir の書き忘れ
+      ["ws", "rename", "3", "renamed", "extra"],
+      ["ws", "dir", "3", "/tmp/orbe-l4", "extra"],
+      ["ws", "switch", "3", "4"],
+      ["ws", "rm", "3", "4"],
+      ["pane", "list", "2"],
+      ["pane", "split", "5", "6"],
+      ["pane", "close", "5", "6"],
+      ["pane", "focus", "5", "6"],
+      ["tab", "new", "/tmp/orbe-l4"],  // --dir の書き忘れ
+      ["tab", "close", "1", "2"],
+    ] {
+      failure(
+        ControlProcess.orbWithoutServer(args, env: ["ORBE_PANE": "1"]), code: 2,
+        message: "unexpected argument:",
+        "席から溢れた `\(args.joined(separator: " "))`")
     }
   }
 

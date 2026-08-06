@@ -29,7 +29,7 @@ private func tabNew(_ rest: [String]) -> Never {
   let dir = takeOption(&args, "--dir", requires: "a <path> value")
   let cmd = takeOption(&args, "--cmd", requires: "a value")
   let workspaceId = takeWorkspaceId(&args)
-  rejectLeftoverFlags(args, positionals: 0)
+  rejectLeftovers(args, positionals: 0)
   var params: [String: Any] = [:]
   if let workspaceId { params["workspaceId"] = workspaceId }
   if let dir { params["cwd"] = dir }
@@ -48,7 +48,7 @@ private func tabClose(_ rest: [String]) -> Never {
     print(tabUsage)
     exit(0)
   }
-  rejectLeftoverFlags(rest, positionals: 0)
+  rejectLeftovers(rest, positionals: 1)
   let tabId: Int
   if let first = rest.first {
     guard let id = Int(first) else { usageDie("invalid tab id: \(first)") }

@@ -30,7 +30,7 @@ private func configList(_ rest: [String]) -> Never {
   }
   var args = rest
   let target = takeWorkspaceTarget(&args, positionals: 0)
-  rejectLeftoverFlags(args, positionals: 0)
+  rejectLeftovers(args, positionals: 0)
   var params: [String: Any] = [:]
   if case .id(let n) = target { params["workspaceId"] = n }
   let result = callOrExit("config_list", params)
@@ -55,7 +55,7 @@ private func configGet(_ rest: [String]) -> Never {
   }
   var args = rest
   let target = takeWorkspaceTarget(&args, positionals: 1)
-  rejectLeftoverFlags(args, positionals: 1)
+  rejectLeftovers(args, positionals: 1, dashOK: 1)
   guard let key = args.first, !key.hasPrefix("-") else { usageDie("config get requires <key>") }
   var params: [String: Any] = [:]
   if case .id(let n) = target { params["workspaceId"] = n }
@@ -71,7 +71,7 @@ private func configSet(_ args: [String]) -> Never {
   }
   var rest = args
   let target = takeWorkspaceTarget(&rest, positionals: 2)
-  rejectLeftoverFlags(rest, positionals: 2)
+  rejectLeftovers(rest, positionals: 2, dashOK: 2)
   guard rest.count >= 2, !rest[0].hasPrefix("-") else {
     usageDie("config set requires <key> <value>")
   }
@@ -108,7 +108,7 @@ private func configUnset(_ args: [String]) -> Never {
   }
   var rest = args
   let target = takeWorkspaceTarget(&rest, positionals: 1)
-  rejectLeftoverFlags(rest, positionals: 1)
+  rejectLeftovers(rest, positionals: 1, dashOK: 1)
   guard let key = rest.first, !key.hasPrefix("-") else { usageDie("config unset requires <key>") }
   // key の妥当性は get / set と同じ口で引き、打ち間違いを同じ usage エラー（2）で弾く。
   _ = configRowOrDie(key)

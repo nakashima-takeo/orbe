@@ -29,7 +29,7 @@ private func paneList(_ rest: [String]) -> Never {
   }
   var args = rest
   let workspaceId = takeWorkspaceId(&args)
-  rejectLeftoverFlags(args, positionals: 0)
+  rejectLeftovers(args, positionals: 0)
   let result = callOrExit("list_panes", [:])
   var panes = (result as? [String: Any])?["panes"] as? [[String: Any]] ?? []
   if let workspaceId { panes = panes.filter { $0["workspaceId"] as? Int == workspaceId } }
@@ -58,7 +58,7 @@ private func paneSplit(_ rest: [String]) -> Never {
   }
   var args = rest
   let direction = paneSplitDirection(&args)  // -h=上下(down) / -v・既定=左右(right)
-  rejectLeftoverFlags(args, positionals: 0)
+  rejectLeftovers(args, positionals: 1)
   guard let pane = resolvePaneArg(args) else { paneContextDie() }
   let result = callOrExit("split_pane", ["paneId": pane, "direction": direction])
   if wantJSON {
@@ -74,7 +74,7 @@ private func paneClose(_ rest: [String]) -> Never {
     print(paneUsage)
     exit(0)
   }
-  rejectLeftoverFlags(rest, positionals: 0)
+  rejectLeftovers(rest, positionals: 1)
   guard let pane = resolvePaneArg(rest) else { paneContextDie() }
   let result = callOrExit("close_pane", ["paneId": pane])
   if wantJSON { printJSON(result) } else { print("closed pane \(pane)") }
@@ -86,7 +86,7 @@ private func paneFocus(_ rest: [String]) -> Never {
     print(paneUsage)
     exit(0)
   }
-  rejectLeftoverFlags(rest, positionals: 0)
+  rejectLeftovers(rest, positionals: 1)
   // focus は自己指定が無意味なため位置引数必須（現ペイン既定を取らない）。
   guard let arg = rest.first, let pane = Int(arg) else {
     usageDie("pane focus requires a <pane> id")
