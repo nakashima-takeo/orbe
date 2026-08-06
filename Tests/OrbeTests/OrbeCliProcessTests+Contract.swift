@@ -124,6 +124,29 @@ extension OrbeCliProcessTests {
       message: "unknown config key: nosuch", "config unset の未知 key")
   }
 
+  /// `orb config --help` の `KEYS:` は `SettingsRegistry.all` と同じ集合。
+  ///
+  /// usage は socket 不達でも出す必要があるため `config_list` からは引けず、CLI 側に key を写している。
+  /// その写しはこれまで散文の申し送りだけで守られており、実際にドリフトして 3 key（`tab-title-font-family`
+  /// `emoji-font` `worktree-dir`）が欠けたまま出荷された。
+  ///
+  /// 壊れると何が起きるか: registry に足した設定が「打てば通るが help には無い」key になる。
+  /// `config set` は `config_list` を SSOT に検証するので通ってしまい、CLI からも help を読む
+  /// 自動化からも発見できない。help はサーバ不要で出るので、ここもサーバを立てずに測る。
+  func testConfigHelpListsEveryRegistryKey() throws {
+    let outcome = ControlProcess.orbWithoutServer(["config", "--help"])
+    XCTAssertEqual(outcome.status, 0, "config --help は socket 不達でも exit 0: \(outcome.stderr)")
+    let line = try XCTUnwrap(
+      outcome.stdout.split(separator: "\n").first { $0.hasPrefix("KEYS: ") },
+      "config --help に KEYS: 行が無い: \(outcome.stdout)")
+    let listed = line.dropFirst("KEYS: ".count).split(separator: ",").map {
+      $0.trimmingCharacters(in: .whitespaces)
+    }
+    XCTAssertEqual(
+      Set(listed), Set(SettingsRegistry.all.map(\.key)),
+      "config --help の KEYS が SettingsRegistry と食い違っている")
+  }
+
   // MARK: - --workspace
 
   /// config 系の `--workspace` は 3 態: 無指定＝global、bare＝アクティブ WS、`<id>`＝その WS。
@@ -245,17 +268,19 @@ extension OrbeCliProcessTests {
       "位置引数の席の `-1` を未知フラグとして弾いている: \(negative.stderr)")
   }
 
-  /// 破壊的な pane / tab コマンドこそ残余を検査する。これらは `--workspace` を取らないので、
-  /// 渡された `-` 始まりは必ず誤り——黙って捨てると `ORBE_PANE` 既定へ落ち、**指定と無関係な
-  /// 現ペイン・現タブ**が消えて exit 0 と `closed pane N` が出る。`tab close` なら同タブの
-  /// 全ペイン（走行中のエージェント・シェルセッション）が一括で失われ、終了コードにも stdout にも
-  /// stderr にも現れないので人間も自動化も気づけない。
+  /// pane / tab コマンドは `--workspace` を取らないので、渡された `-` 始まりは必ず誤り。
+  /// 黙って捨てたときの現れ方はコマンドで違う。`pane close` / `tab close` は `ORBE_PANE` 既定へ
+  /// 落ち、**指定と無関係な現ペイン・現タブ**が exit 0 と `closed pane N` を出しながら消える
+  /// （`tab close` なら同タブの全ペイン——走行中のエージェントやシェルセッション——が一括で失われ、
+  /// 終了コードにも stdout にも stderr にも現れないので人間も自動化も気づけない）。`pane split` は
+  /// 指定と違うペインを分割する。`pane focus` は既定へ落ちないので破壊はしないが、「id が無い」と
+  /// いう**誤りの所在を取り違えさせる**文言で落ちる。全部を `unknown option:` へ揃える。
   ///
   /// pane / tab の id は `IdGen` が 1 から採番するので常に正。よって位置引数の席にも例外を設けず、
   /// `config` 系（`config set font-size -1` の `-1` は値）と違って残余は先頭から検査する。
   /// socket に触れる前に落ちることを `orbWithoutServer` で固定する——ORBE_PANE が居ても
   /// 解決へ進まないのが要点で、サーバを立てて確かめると「消えなかった」ことしか見えない。
-  func testDestructivePaneAndTabCommandsRejectFlagLikeTokens() {
+  func testPaneAndTabCommandsRejectFlagLikeTokens() {
     for args in [
       ["pane", "close", "--workspace", "3"],
       ["pane", "close", "--bogus"],
@@ -267,31 +292,34 @@ extension OrbeCliProcessTests {
       failure(
         ControlProcess.orbWithoutServer(args, env: ["ORBE_PANE": "1"]), code: 2,
         message: "unknown option:",
-        "ORBE_PANE 既定へ落ちた `\(args.joined(separator: " "))`")
+        "解釈されなかったフラグを捨てた `\(args.joined(separator: " "))`")
     }
   }
 
-  /// `orb config --help` の `KEYS:` は `SettingsRegistry.all` と同じ集合。
+  /// `ws` コマンドも残余を検査する。`ws new` は `tab new` と同じ `takeOption` で `--dir <path>` を
+  /// 取るが、綴りが完全一致した 1 個目しか見ないので `--dir=/repo`（= 区切り）も綴り誤りも残余に落ちる。
   ///
-  /// usage は socket 不達でも出す必要があるため `config_list` からは引けず、CLI 側に key を写している。
-  /// その写しはこれまで散文の申し送りだけで守られており、実際にドリフトして 3 key（`tab-title-font-family`
-  /// `emoji-font` `worktree-dir`）が欠けたまま出荷された。
+  /// 壊れると何が起きるか: `orb ws new proj --dir=/repo` が既定 root の workspace を作って exit 0 と
+  /// `created workspace N: proj` を出す。rootPath はその WS の全タブの cwd と worktree の基点なので、
+  /// 以後そこで開くタブもエージェントも指定と違うディレクトリで走る。終了コードにも stdout にも
+  /// 現れないうえ、同じ綴り誤りを `tab new` に渡すと exit 2 で弾かれる——同一フラグ・同一ヘルパで
+  /// コマンドによって挙動が割れると、どちらが正しいのか利用者にも自動化にも決められない。
   ///
-  /// 壊れると何が起きるか: registry に足した設定が「打てば通るが help には無い」key になる。
-  /// `config set` は `config_list` を SSOT に検証するので通ってしまい、CLI からも help を読む
-  /// 自動化からも発見できない。help はサーバ不要で出るので、ここもサーバを立てずに測る。
-  func testConfigHelpListsEveryRegistryKey() throws {
-    let outcome = ControlProcess.orbWithoutServer(["config", "--help"])
-    XCTAssertEqual(outcome.status, 0, "config --help は socket 不達でも exit 0: \(outcome.stderr)")
-    let line = try XCTUnwrap(
-      outcome.stdout.split(separator: "\n").first { $0.hasPrefix("KEYS: ") },
-      "config --help に KEYS: 行が無い: \(outcome.stdout)")
-    let listed = line.dropFirst("KEYS: ".count).split(separator: ",").map {
-      $0.trimmingCharacters(in: .whitespaces)
+  /// workspace 名も `<id|current>` も `-` 始まりを取らないので、pane/tab と同じく先頭から検査する。
+  func testWorkspaceCommandsRejectFlagLikeTokens() {
+    for args in [
+      ["ws", "list", "--workspace", "3"],
+      ["ws", "new", "proj", "--dir=/tmp/orbe-l4"],
+      ["ws", "new", "proj", "--dirr", "/tmp/orbe-l4"],  // 綴り誤り
+      ["ws", "rename", "3", "renamed", "--bogus"],
+      ["ws", "dir", "3", "/tmp/orbe-l4", "--bogus"],
+      ["ws", "switch", "3", "--bogus"],
+      ["ws", "rm", "3", "--bogus"],
+    ] {
+      failure(
+        ControlProcess.orbWithoutServer(args), code: 2, message: "unknown option:",
+        "解釈されなかったフラグを捨てた `\(args.joined(separator: " "))`")
     }
-    XCTAssertEqual(
-      Set(listed), Set(SettingsRegistry.all.map(\.key)),
-      "config --help の KEYS が SettingsRegistry と食い違っている")
   }
 
   /// `tab new --workspace <id>` は**その** workspace にタブを開く。値が黙って捨てられると、

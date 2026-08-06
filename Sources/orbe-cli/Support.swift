@@ -1,7 +1,7 @@
 import Foundation
 
 // orbe-cli の出力・終了・引数ヘルパと usage テキスト。main.swift（socket クライアント）・
-// Commands.swift（サブコマンド）が共用する。終了コードは 0 成功 / 2 usage エラー / 1 RPC・接続エラー。
+// `Commands+*.swift`（サブコマンド）が共用する。終了コードは 0 成功 / 2 usage エラー / 1 RPC・接続エラー。
 
 // MARK: - 出力・終了
 
@@ -162,14 +162,16 @@ func takeWorkspaceId(_ args: inout [String]) -> Int? {
 
 /// フラグと位置引数を取り切った後の残余に `-` 始まりが居れば usage エラー。
 ///
-/// `--workspace` の抜き取りは綴りが**完全一致**した 1 個目しか見ないので、`--workspace=3`（= 区切り）・
-/// 綴り誤り・2 個目の指定は残余に落ちる。どのサブコマンドも残余を検査しないと、それらは黙って
-/// 捨てられて exit 0 のまま**指定と違う対象**を触る——`tab new` はアクティブ WS にタブが生え、
-/// `pane list` は絞り込みが効かず全 WS のペインが出る。破壊的な `pane close` / `tab close` では
-/// 指定と無関係な現ペイン・現タブが消える。終了コードにも stdout にも現れない。
+/// フラグの抜き取り（`takeWorkspaceTarget` / `takeWorkspaceId` / `takeOption`）は綴りが**完全一致**した
+/// 1 個目しか見ないので、`--workspace=3`・`--dir=/x`（= 区切り）・綴り誤り・2 個目の指定は残余に落ちる。
+/// 残余を検査しないと、それらは黙って捨てられて exit 0 のまま**指定と違う対象**を触る——`tab new` は
+/// アクティブ WS にタブが生え、`ws new` は既定 root の workspace ができ、`pane list` は絞り込みが
+/// 効かず全 WS のペインが出る。`pane close` / `tab close` では指定と無関係な現ペイン・現タブが
+/// 消える。いずれも終了コードにも stdout にも現れない。**全サブコマンドがこの関数を通る。**
 ///
-/// `positionals` より前は位置引数の席なので見ない（`config set font-size -1` の `-1` は値）。
-/// pane / tab の id は常に正なので、そちらは `positionals: 0`——位置引数の席にも例外を設けない。
+/// `positionals` より前は位置引数の席なので見ない。席に例外を設けるのは `config` 系だけで
+/// （`config set font-size -1` の `-1` は値）、ws / pane / tab は id も名前も `-` 始まりを取らないので
+/// `positionals: 0`＝先頭から検査する。
 func rejectLeftoverFlags(_ args: [String], positionals: Int) {
   guard let flag = args.dropFirst(positionals).first(where: { $0.hasPrefix("-") }) else { return }
   usageDie("unknown option: \(flag)")
@@ -190,8 +192,9 @@ func resolveCurrentPane() -> Int? {
 /// pane 位置引数（省略時 ORBE_PANE）を解決する。位置引数があれば数値化（不正は usage エラー）、
 /// 無ければ現ペイン。どちらも無ければ nil（呼び出し側が `orb pane list` を促す誘導エラーへ）。
 ///
-/// `-` 始まりのトークンは呼び出し側の `rejectLeftoverFlags(_:positionals: 0)` が先に落とすので
-/// ここには来ない——pane id は常に正なので、位置引数の席に `-` 始まりが立つことは無い。
+/// `-` 始まりは数値化に失敗して usage エラーになる（黙って現ペイン既定へ落ちない）。実際には
+/// 呼び出し側の `rejectLeftoverFlags(_:positionals: 0)` が先に落とすが、ここが単体でも既定へ
+/// 逸れないことが要点——門番は後置フラグを捕まえる別の層で、この関数の安全性はそれに依らない。
 func resolvePaneArg(_ args: [String]) -> Int? {
   if let first = args.first {
     guard let id = Int(first) else { usageDie("invalid pane id: \(first)") }
@@ -230,8 +233,9 @@ func resolveWorkspaceId(_ arg: String) -> Int {
 // MARK: - config key 一覧（usage テキスト表示用。key の妥当性・値型は control の config_list を SSOT に引く）
 
 /// `SettingsRegistry.all` の全 key。usage は socket 不達でも出す必要があるため config_list からは
-/// 引けず、ここに写す。registry に key を足したらこの一覧と `configSetUsage` の型内訳も足すこと
-/// ——漏れると「打てば通るが help には無い」key ができる。
+/// 引けず、ここに写す。この一覧のドリフトは `testConfigHelpListsEveryRegistryKey` が
+/// `config --help` の `KEYS:` 行と registry を突き合わせて落とす。`configSetUsage` の型内訳だけは
+/// 手書きのままなので、registry に key を足したらそちらも足すこと。
 let allConfigKeys = [
   "font-size", "background-opacity", "background-blur", "cursor-style-blink", "theme",
   "font-family", "tab-title-font-family", "emoji-font", "default-agent", "agent-state-icons",

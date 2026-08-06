@@ -16,6 +16,7 @@ updated: 2026-08-06
   - `--workspace` の値: 無指定＝global、フラグのみ＝アクティブ WS 上書き、`<id|current>` 指定＝**その WS**（非アクティブ可）の上書き。
   - フラグと位置引数を取り切った残余に `-` 始まりが残れば usage エラー（exit 2）。`--workspace=<id>`（= 区切り）・綴り誤り・2 個目の `--workspace` はここで落ちる——黙って捨てると exit 0 のまま指定と違う WS を触ることになる。位置引数の席の `-` 始まりは値として通る。
 - `orb ws list [--json]` / `ws new <name> [--dir <path>]` / `ws rename <id|current> <name>` / `ws dir <id|current> <path>` / `ws switch <id>` / `ws rm <id|current>`
+  - `--workspace` は取らない（対象は位置引数の `<id|current>`）。フラグと位置引数を取り切った残余に `-` 始まりが残れば usage エラー（exit 2）。workspace 名も `<id|current>` も `-` 始まりを取らないので、pane/tab と同じく**位置引数の席にも例外を設けない**。黙って捨てると `ws new <name> --dir=<path>` が既定 root の workspace を exit 0 で作る。
 
 pane/tab（レイアウト操作。ペイン内は `ORBE_PANE` を現ペイン既定に、外部は明示ターゲット必須）:
 - `orb pane list [--workspace <id|current>] [--json]` … pane 一覧（paneId/workspaceId/tabId/title/cwd/agentState/focused）。
