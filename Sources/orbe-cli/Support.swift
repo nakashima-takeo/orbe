@@ -119,7 +119,8 @@ func paneSplitDirection(_ args: inout [String]) -> String {
 }
 
 /// config の `--workspace [<id|current>]`（optional-value）の解決結果。書き込み先が 3 つ実在するので
-/// 3 態を持つ。pane / tab は `takeWorkspaceId` が `<id|current>` 必須で扱う——この非対称は spec の
+/// 3 態を持つ。`--workspace` を取る pane / tab は `pane list` と `tab new` の 2 つだけで、そちらは
+/// `takeWorkspaceId` が `<id|current>` 必須で扱う——この非対称は spec の
 /// 表記（`docs/spec/orbe-cli.md` で config 系だけが値を省ける形に書かれている）に揃えたもの。
 enum WorkspaceTarget {
   case none  // --workspace 未指定
@@ -146,7 +147,8 @@ func takeWorkspaceTarget(_ args: inout [String], positionals: Int) -> WorkspaceT
   return .active
 }
 
-/// pane / tab の `--workspace <id>`（値必須）を抜き取る。フラグ自体が無ければ nil。
+/// `pane list` / `tab new` の `--workspace <id>`（値必須）を抜き取る。フラグ自体が無ければ nil。
+/// この 2 つが `--workspace` を取る唯一の pane / tab コマンドで、他は残余として usage エラーになる。
 /// bare（値なし）も解決できない値も usage エラー——bare を黙ってアクティブ扱いにすると、
 /// 絞り込みも開く先も指定と無関係に決まる。
 func takeWorkspaceId(_ args: inout [String]) -> Int? {
