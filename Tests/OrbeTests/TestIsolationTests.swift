@@ -60,10 +60,12 @@ final class TestIsolationTests: OrbeTestCase {
     }
   }
 
-  /// ghostty の user 層は不在ファイルへ向く＝実 user 設定は読まれない。
+  /// ghostty の user 層は caseDir 配下の不在ファイルへ向く＝実 user 設定は読まれない。
+  /// テストが層を立てるならここへ書くので、書いた中身が `endCase` の削除に乗る位置に居る必要がある。
   func testGhosttyUserLayerIsAbsent() throws {
+    let dir = try XCTUnwrap(TestIsolation.caseDir)
     let url = try XCTUnwrap(Config.userFileURLOverride)
-    XCTAssertEqual(url.path, TestIsolation.root.appendingPathComponent("ghostty-user.conf").path)
+    XCTAssertEqual(url.path, dir.appendingPathComponent("ghostty-user.conf").path)
     XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "user 層は不在＝読まれない")
   }
 
@@ -80,7 +82,7 @@ final class TestIsolationTests: OrbeTestCase {
       FileManager.default.fileExists(atPath: previous.path),
       "前のテストのディレクトリが残っている＝後始末が効いていない")
     XCTAssertEqual(
-      try FileManager.default.contentsOfDirectory(atPath: dir.path), ["resources"],
+      Set(try FileManager.default.contentsOfDirectory(atPath: dir.path)), ["resources"],
       "配られた直後のディレクトリは、ハーネスが用意する空の同梱リソース根だけを持つ")
   }
 

@@ -123,8 +123,9 @@ enum TestIsolation {
     AgentPluginInstaller.stablePluginDirOverride =
       dir.appendingPathComponent("agent-plugin", isDirectory: true)
 
-    // ファイルは作らない＝不在なので ghostty の user 層は読まれない。
-    Config.userFileURLOverride = root.appendingPathComponent("ghostty-user.conf")
+    // ghostty の user 層。ファイルは作らない＝不在なので読まれない。テストが層を立てるときは
+    // ここへ書くので、他と同じく caseDir の下に置く（書いた中身が `endCase` の削除に乗る）。
+    Config.userFileURLOverride = dir.appendingPathComponent("ghostty-user.conf")
   }
 
   static func endCase() {
