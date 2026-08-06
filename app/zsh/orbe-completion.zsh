@@ -10,6 +10,7 @@ typeset -g _ORBE_COMPLETION_LOADED=1
 
 typeset -g _ORBE_FD=
 typeset -g _ORBE_LAST=
+typeset -gi _ORBE_ACCEPT_ID=0
 # 既存の Tab バインドをフォールバックとして退避（自分自身は除外して再 source での自己ループを防ぐ）。
 typeset -g _ORBE_TAB_FALLBACK=expand-or-complete
 if [[ ${${(z)$(bindkey '^I')}[2]} != _orbe_complete ]]; then
@@ -119,18 +120,22 @@ _orbe_line_finish() {
 # completion_accept を id 付きで送り 1 行応答を読む。advance=true は次トークンへ進む確定（Tab）、
 # false は挿入のみの確定（Enter）。result.buffer が非 null なら zle の $BUFFER/$CURSOR を直書換し 0、
 # popup 非表示/候補なし/失敗/タイムアウトは何もせず 1（呼び元が各々のフォールバックへ）。
-# この fd は無応答の update と id 付きの accept を 1 本に多重化するので、応答は位置ではなく
-# id で選ぶ。読めない行（不正 UTF-8 の buffer 等）には host が id:null のエラー行を返すため、
-# 1 行目を自分の応答とみなすと、それが 1 本混ざっただけで以後ずっと 1 つ前の応答を
-# コマンドラインへ適用し続ける（Enter も効かなくなる）。
+# この fd は無応答の update と id 付きの accept を 1 本に多重化するうえ持続するので、応答は位置でも
+# 定数 id でもなく **accept ごとに進む id** で選ぶ。1 行目を自分の応答とみなすと、host が返す
+# id:null のエラー行（不正 UTF-8 の buffer 等）が 1 本混ざっただけで以後ずっと 1 つ前の応答を
+# コマンドラインへ適用し続ける。id を固定にすると、read が締切内に読めず遅れて届いた前回の応答が
+# fd に残り、次の確定がそれを拾って同じ 1 つずれに入る（どちらも Enter も効かなくなる）。
 _orbe_try_accept() {
   local advance=$1
+  local -i id=$(( ++_ORBE_ACCEPT_ID ))
   _orbe_connect \
-    && _orbe_send "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"completion_accept\",\"params\":{\"paneId\":$ORBE_PANE,\"advance\":$advance}}" \
+    && _orbe_send "{\"jsonrpc\":\"2.0\",\"id\":$id,\"method\":\"completion_accept\",\"params\":{\"paneId\":$ORBE_PANE,\"advance\":$advance}}" \
     || return 1
   local line
+  # 応答のキー順は保証が無いので、id の直後が値の終端（`,` か `}`）であることまで見る
+  # （`"id":1` は `"id":10` の前方一致でもある）。
   while IFS= read -r -t 1 -u$_ORBE_FD line; do
-    [[ $line == *'"id":1'* ]] && break  # 自分の accept 応答
+    [[ $line == *'"id":'${id}[,}]* ]] && break  # 自分の accept 応答
     line=
   done
   [[ -n $line && $line != *'"buffer":null'* ]] || return 1
