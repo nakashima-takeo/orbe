@@ -94,15 +94,16 @@ func parseBool(_ s: String) -> Bool? {
 func hasHelp(_ args: [String]) -> Bool { args.contains("--help") || args.contains("-h") }
 
 /// 値必須オプション（`--dir <path>` / `--cmd "…"`）を抜き取る（残りを inout で縮める）。
-/// フラグ自体が無ければ nil。値が無い・`-` 始まりなら usage エラー（`label` が期待する値の形）。
+/// フラグ自体が無ければ nil。値が無い・`-` 始まり・空文字なら usage エラー（`label` が期待する値の形）。
 ///
-/// `-` 始まりを値として飲むと**次のフラグが値に化けて消える**。`orb tab new --dir --workspace 2`
-/// なら cwd が `--workspace` のタブがアクティブ WS に生えて exit 0——飲まれた `--workspace` は
-/// 残余に落ちないので `rejectLeftoverFlags` では捕まらない。`--dir $DIR --cmd $CMD` の `$DIR` が
-/// 空でトークンごと消えるのが実際の経路。`takeWorkspaceId` と同じ値の形を課して塞ぐ。
+/// **値の席は空けられない。**`orb tab new --dir "$DIR" --cmd "$CMD"` の `$DIR` が空になる形が両方入る:
+/// 引用符が無ければトークンごと消えて次のフラグが値に化け（`--dir --cmd claude` は cwd が `--cmd` で
+/// `claude` が捨てられる）、引用符があれば空文字がそのまま cwd として通る。どちらも飲まれた側は
+/// 残余に落ちないので `rejectLeftoverFlags` では捕まらず、終了コードにも stdout にも stderr にも
+/// 現れないまま、指定と違う cwd のタブ・rootPath が空の workspace ができる。
 func takeOption(_ args: inout [String], _ name: String, requires label: String) -> String? {
   guard let i = args.firstIndex(of: name) else { return nil }
-  guard i + 1 < args.count, !args[i + 1].hasPrefix("-") else {
+  guard i + 1 < args.count, !args[i + 1].hasPrefix("-"), !args[i + 1].isEmpty else {
     usageDie("\(name) requires \(label)")
   }
   let value = args[i + 1]
@@ -180,9 +181,10 @@ func takeWorkspaceId(_ args: inout [String]) -> Int? {
 /// 効かず全 WS のペインが出る。`pane close` / `tab close` では指定と無関係な現ペイン・現タブが
 /// 消える。いずれも終了コードにも stdout にも現れない。**全サブコマンドがこの関数を通る。**
 ///
-/// `positionals` より前は位置引数の席なので見ない。席に例外を設けるのは `config` 系だけで
-/// （`config set font-size -1` の `-1` は値）、ws / pane / tab は id も名前もパスも `-` 始まりを
-/// 取らないので `positionals: 0`＝先頭から検査する。
+/// `positionals` より前は位置引数の席なので見ない。`-` 始まりを値として通す席は
+/// `config set <key> <value>` の `<value>` だけで（`config set font-size -1`）、`<key>` の席は
+/// 呼び出し側が別途弾く。ws / pane / tab は id も名前もパスも `-` 始まりを取らないので
+/// `positionals: 0`＝先頭から検査する。
 func rejectLeftoverFlags(_ args: [String], positionals: Int) {
   guard let flag = args.dropFirst(positionals).first(where: { $0.hasPrefix("-") }) else { return }
   usageDie("unknown option: \(flag)")
@@ -296,7 +298,7 @@ let paneUsage = """
   orb pane — inspect and manipulate panes in the running instance
 
   USAGE:
-    orb pane list [--workspace <id>] [--json]
+    orb pane list [--workspace <id|current>] [--json]
     orb pane split [<pane>] [-v | -h]
     orb pane close [<pane>]
     orb pane focus <pane>

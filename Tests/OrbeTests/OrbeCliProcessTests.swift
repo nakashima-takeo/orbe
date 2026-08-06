@@ -33,8 +33,22 @@ final class OrbeCliProcessTests: OrbeTestCase {
     return outcome.stdout
   }
 
-  /// `private` を付けない——同じ型の extension でも別ファイル（`+Contract`）からは見えなくなり、
-  /// 同じ問い合わせがそちらへ複製される。L3 の `ControlWireTests` の `startWire` / `errorCode` と同じ形。
+  /// 落ちた 1 段の終了コードと stderr を一緒に見る。`private` を付けない——同じ型の extension でも
+  /// 別ファイル（`+Contract` / `+Rejection`）からは見えなくなり、同じ判定がそちらへ複製される。
+  func failure(
+    _ outcome: ControlProcess.Outcome, code: Int32, message: String, _ label: String,
+    file: StaticString = #filePath, line: UInt = #line
+  ) {
+    XCTAssertEqual(
+      outcome.status, code,
+      "\(label) は exit \(code): stdout=\(outcome.stdout) stderr=\(outcome.stderr)",
+      file: file, line: line)
+    XCTAssertTrue(
+      outcome.stderr.contains(message),
+      "\(label) の stderr に \"\(message)\" が無い: \(outcome.stderr)", file: file, line: line)
+  }
+
+  /// L3 の `ControlWireTests` の `startWire` / `errorCode` と同じ形で、問い合わせも共有する。
   func workspaceRows(_ control: ControlProcess) throws -> [[String: Any]] {
     try XCTUnwrap(control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
   }

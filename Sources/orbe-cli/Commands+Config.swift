@@ -72,7 +72,9 @@ private func configSet(_ args: [String]) -> Never {
   var rest = args
   let target = takeWorkspaceTarget(&rest, positionals: 2)
   rejectLeftoverFlags(rest, positionals: 2)
-  guard rest.count >= 2 else { usageDie("config set requires <key> <value>") }
+  guard rest.count >= 2, !rest[0].hasPrefix("-") else {
+    usageDie("config set requires <key> <value>")
+  }
   let key = rest[0]
   // key の妥当性・値型は control の config_list を SSOT に引く（CLI 側で二重管理しない）。
   let row = configRowOrDie(key)

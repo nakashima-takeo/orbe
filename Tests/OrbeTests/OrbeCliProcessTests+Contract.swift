@@ -16,19 +16,6 @@ import XCTest
 /// `--workspace` の意味論は config 系（3 態）と pane/tab（`<id>` 必須）で異なり、
 /// `docs/spec/orbe-cli.md` はこれを書き分けている。表面的な一貫性のために潰さない。
 extension OrbeCliProcessTests {
-  private func failure(
-    _ outcome: ControlProcess.Outcome, code: Int32, message: String, _ label: String,
-    file: StaticString = #filePath, line: UInt = #line
-  ) {
-    XCTAssertEqual(
-      outcome.status, code,
-      "\(label) は exit \(code): stdout=\(outcome.stdout) stderr=\(outcome.stderr)",
-      file: file, line: line)
-    XCTAssertTrue(
-      outcome.stderr.contains(message),
-      "\(label) の stderr に \"\(message)\" が無い: \(outcome.stderr)", file: file, line: line)
-  }
-
   /// arrange の書き込みを叩き、失敗したら stderr ごと理由を出す（素の status 比較だと
   /// `("0") is not equal to ("1")` しか出ず、どの層への書き込みが落ちたのか分からない）。
   private func write(
@@ -225,6 +212,17 @@ extension OrbeCliProcessTests {
     failure(
       control.orb(["config", "set", "--workspace", "nosuch", "font-size", "14"]), code: 2,
       message: "invalid workspace id: nosuch", "値が前置された非解決トークン")
+    // config の read / unset も同じ厳しさで揃える。黙ってアクティブ WS へ落ちると、`list` / `get` は
+    // 指定と違う層を読み、`unset` は**指定と違う workspace の上書きを実際に外す**。
+    failure(
+      control.orb(["config", "list", "--workspace", "nosuch"]), code: 2,
+      message: "invalid workspace id: nosuch", "config list の非解決トークン")
+    failure(
+      control.orb(["config", "get", "font-size", "--workspace", "nosuch"]), code: 2,
+      message: "invalid workspace id: nosuch", "config get の非解決トークン")
+    failure(
+      control.orb(["config", "unset", "font-size", "--workspace", "nosuch"]), code: 2,
+      message: "invalid workspace id: nosuch", "config unset の非解決トークン")
 
     // 正しい `<id>` 指定は通り、その workspace のペインだけに絞られる。
     let activeId = try workspaceId(control, active: true)
@@ -236,121 +234,6 @@ extension OrbeCliProcessTests {
     XCTAssertEqual(
       (control.orbJSON(["pane", "list", "--workspace", "current"])["panes"] as? [[String: Any]])?
         .count, panes.count, "`current` も `<id>` として解決する（数値だけの受け付けに退行しない）")
-  }
-
-  /// `--workspace` の抜き取りは綴りが**完全一致**した 1 個目しか見ないので、`--workspace=3`（= 区切り）・
-  /// 綴り誤り・2 個目の指定は残余トークンに落ちる。残余を検査しないとそれらは黙って捨てられ、
-  /// exit 0 のまま**指定と違う workspace** を触る——`tab new` はアクティブ WS にタブが生え、
-  /// `pane list` は絞り込みが効かず全 WS のペインが出る。終了コードにも stdout にも現れない。
-  ///
-  /// `-` 始まりでも**位置引数の席**なら値なので通す（`config set font-size -1` の `-1`）。この境界を
-  /// 「残余に `-` があれば一律エラー」に広げると、負の値がすべて usage エラーに化ける。
-  func testUnconsumedFlagLikeTokensAreRejectedInsteadOfSilentlyDropped() throws {
-    let control = try startControlProcess()
-
-    for args in [
-      ["tab", "new", "--workspace=3"],
-      ["pane", "list", "--workspace=3"],
-      ["pane", "list", "--workspce", "3"],
-      ["config", "list", "--workspace=3"],
-      ["config", "get", "font-size", "--workspace=3"],
-      // 黙って捨てると `--workspace` 自体が消えて scope が global に落ち、指定 WS の上書きでは
-      // なく**global の明示値**が外れる（全 workspace の実効値が変わる）。
-      ["config", "unset", "font-size", "--workspace=3"],
-      ["config", "set", "theme", "dark", "--workspace", "-1"],
-      ["config", "set", "font-size", "14", "--workspace", "current", "--workspace", "nosuch"],
-    ] {
-      failure(
-        control.orb(args), code: 2, message: "unknown option:",
-        "解釈されなかった `\(args.joined(separator: " "))`")
-    }
-
-    // 位置引数の席に来た `-` 始まりは値として解析を通る（弾きすぎの防止）。値域を見るのはサーバなので、
-    // ここで確かめるのは「未知フラグとして前段で落とされない」ことだけ。
-    let negative = control.orb(["config", "set", "font-size", "-1"])
-    XCTAssertFalse(
-      negative.stderr.contains("unknown option"),
-      "位置引数の席の `-1` を未知フラグとして弾いている: \(negative.stderr)")
-  }
-
-  /// pane / tab コマンドは `--workspace` を取らないので、渡された `-` 始まりは必ず誤り。
-  /// 黙って捨てたときの現れ方はコマンドで違う。`pane close` / `tab close` は `ORBE_PANE` 既定へ
-  /// 落ち、**指定と無関係な現ペイン・現タブ**が exit 0 と `closed pane N` を出しながら消える
-  /// （`tab close` なら同タブの全ペイン——走行中のエージェントやシェルセッション——が一括で失われ、
-  /// 終了コードにも stdout にも stderr にも現れないので人間も自動化も気づけない）。`pane split` は
-  /// 指定と違うペインを分割する。`pane focus` は既定へ落ちないので破壊はしないが、「id が無い」と
-  /// いう**誤りの所在を取り違えさせる**文言で落ちる。全部を `unknown option:` へ揃える。
-  ///
-  /// pane / tab の id は `IdGen` が 1 から採番するので常に正。よって位置引数の席にも例外を設けず、
-  /// `config` 系（`config set font-size -1` の `-1` は値）と違って残余は先頭から検査する。
-  /// socket に触れる前に落ちることを `orbWithoutServer` で固定する——ORBE_PANE が居ても
-  /// 解決へ進まないのが要点で、サーバを立てて確かめると「消えなかった」ことしか見えない。
-  func testPaneAndTabCommandsRejectFlagLikeTokens() {
-    for args in [
-      ["pane", "close", "--workspace", "3"],
-      ["pane", "close", "--bogus"],
-      ["pane", "split", "--workspace=3"],
-      ["pane", "focus", "--workspace", "3"],
-      ["tab", "close", "--workspace", "3"],
-      ["pane", "close", "5", "--workspce", "3"],  // 位置引数の後ろに落ちた綴り誤り
-    ] {
-      failure(
-        ControlProcess.orbWithoutServer(args, env: ["ORBE_PANE": "1"]), code: 2,
-        message: "unknown option:",
-        "解釈されなかったフラグを捨てた `\(args.joined(separator: " "))`")
-    }
-  }
-
-  /// `ws` コマンドも残余を検査する。`ws new` は `tab new` と同じ `takeOption` で `--dir <path>` を
-  /// 取るが、綴りが完全一致した 1 個目しか見ないので `--dir=/repo`（= 区切り）も綴り誤りも残余に落ちる。
-  ///
-  /// 壊れると何が起きるか: `orb ws new proj --dir=/repo` が既定 root の workspace を作って exit 0 と
-  /// `created workspace N: proj` を出す。rootPath はその WS の全タブの cwd と worktree の基点なので、
-  /// 以後そこで開くタブもエージェントも指定と違うディレクトリで走る。終了コードにも stdout にも
-  /// 現れないうえ、同じ綴り誤りを `tab new` に渡すと exit 2 で弾かれる——同一フラグ・同一ヘルパで
-  /// コマンドによって挙動が割れると、どちらが正しいのか利用者にも自動化にも決められない。
-  ///
-  /// workspace 名も `<id|current>` もパスも `-` 始まりを取らないので、pane/tab と同じく先頭から検査する。
-  func testWorkspaceCommandsRejectFlagLikeTokens() {
-    for args in [
-      ["ws", "list", "--workspace", "3"],
-      ["ws", "new", "proj", "--dir=/tmp/orbe-l4"],
-      ["ws", "new", "proj", "--dirr", "/tmp/orbe-l4"],  // 綴り誤り
-      ["ws", "rename", "3", "renamed", "--bogus"],
-      ["ws", "dir", "3", "/tmp/orbe-l4", "--bogus"],
-      ["ws", "switch", "3", "--bogus"],
-      ["ws", "rm", "3", "--bogus"],
-    ] {
-      failure(
-        ControlProcess.orbWithoutServer(args), code: 2, message: "unknown option:",
-        "解釈されなかったフラグを捨てた `\(args.joined(separator: " "))`")
-    }
-  }
-
-  /// 値必須フラグ（`--dir` / `--cmd`）は次のトークンが `-` 始まりなら値として飲まず usage エラー。
-  ///
-  /// 飲むと**飲まれたフラグは残余に落ちない**ので `rejectLeftoverFlags` では捕まらない——門番を
-  /// 全サブコマンドへ通しても塞がらない、値の席から入る別経路になる。
-  ///
-  /// 壊れると何が起きるか: `orb tab new --dir --workspace 2` が cwd `--workspace` のタブを
-  /// **アクティブ WS** に開いて exit 0（`--workspace 2` は消える）。`orb ws new --dir --bogus proj`
-  /// は rootPath が `--bogus` の workspace を作る。踏むのは誤植だけでなく
-  /// `orb tab new --dir "$DIR" --cmd "$CMD"` の `$DIR` が空でトークンごと消える経路で、
-  /// 終了コードにも stdout にも stderr にも現れない。
-  func testValueTakingFlagsRejectFlagLikeValues() {
-    for (args, message) in [
-      (["tab", "new", "--dir", "--workspace", "2"], "--dir requires a <path> value"),
-      (["tab", "new", "--dir", "--cmd", "claude"], "--dir requires a <path> value"),
-      (["tab", "new", "--cmd", "--dir", "/tmp/orbe-l4"], "--cmd requires a value"),
-      (["ws", "new", "--dir", "--bogus", "proj"], "--dir requires a <path> value"),
-      // 値が無いまま終端した従来の形も同じ文言で落ちる（ヘルパへ寄せても文言は変わらない）。
-      (["tab", "new", "--dir"], "--dir requires a <path> value"),
-      (["tab", "new", "--cmd"], "--cmd requires a value"),
-    ] {
-      failure(
-        ControlProcess.orbWithoutServer(args), code: 2, message: message,
-        "`-` 始まりを値として飲んだ `\(args.joined(separator: " "))`")
-    }
   }
 
   /// `tab new --workspace <id>` は**その** workspace にタブを開く。値が黙って捨てられると、
