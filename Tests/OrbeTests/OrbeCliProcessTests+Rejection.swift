@@ -20,9 +20,10 @@ extension OrbeCliProcessTests {
   /// `pane list` は絞り込みが効かず全 WS のペインが出る。終了コードにも stdout にも現れない。
   ///
   /// `-` 始まりを値として通す席は `config set <key> <value>` の `<value>` だけ（`config set font-size -1`）。
-  /// この境界を「残余に `-` があれば一律エラー」に広げると負の値がすべて usage エラーに化け、逆に
-  /// `<key>` の席まで広げると綴り誤ったフラグが key として control へ送られ、誤りの所在が
-  /// 「引数を直せ（2）」ではなく「Orbe が拒否した（1）」に化ける。
+  /// この境界を「残余に `-` があれば一律エラー」に広げると負の値がすべて usage エラーに化ける。
+  /// 反対側の境界（`<key>` の席）は `testConfigKeySlotRejectsFlagLikeTokensBeforeTouchingTheSocket` が持つ。
+  ///
+  /// `--workspace current` を含むケースが解決のため control を要るので、この 1 本だけサーバを立てる。
   func testUnconsumedFlagLikeTokensAreRejectedInsteadOfSilentlyDropped() throws {
     let control = try startControlProcess()
 
@@ -49,13 +50,24 @@ extension OrbeCliProcessTests {
     XCTAssertFalse(
       negative.stderr.contains("unknown option"),
       "`<value>` の席の `-1` を未知フラグとして弾いている: \(negative.stderr)")
+  }
 
-    // `<key>` の席は通さない。通すと綴り誤ったフラグが key として control へ渡り、`get` / `unset`
-    // が同じ入力を exit 2 で弾くのに `set` だけ exit 1（RPC エラー）に化ける。
-    for args in [["config", "set", "-x", "5"], ["config", "set", "--workspce", "3"]] {
+  /// `config` の `<key>` の席は `-` 始まりを通さない。残余検査は先頭 n 席をまるごと外すので、
+  /// この席は各サブコマンドの guard が打ち消す。
+  ///
+  /// 壊れると何が起きるか: `orb config set --workspce 3 font-size 14` の綴り誤りが key として
+  /// control へ渡り、`get` / `unset` が同じ入力を exit 2 で弾くのに `set` だけ exit 1（RPC エラー）
+  /// に化ける。誤りの所在が「引数を直せ」ではなく「Orbe が拒否した」に見える。
+  ///
+  /// **サーバを立てない**のがこのテストの要点——立てると壊れた実装でも control が
+  /// `unknown config key` を返して exit 2 に化け、終了コードの assert が判別力を失う。
+  func testConfigKeySlotRejectsFlagLikeTokensBeforeTouchingTheSocket() {
+    for args in [
+      ["config", "set", "-x", "5"], ["config", "set", "--workspce", "3"],
+      ["config", "get", "-x"], ["config", "unset", "-x"],
+    ] {
       failure(
-        ControlProcess.orbWithoutServer(args), code: 2,
-        message: "config set requires <key> <value>",
+        ControlProcess.orbWithoutServer(args), code: 2, message: "requires <key>",
         "`<key>` の席の `-` 始まり `\(args.joined(separator: " "))`")
     }
   }

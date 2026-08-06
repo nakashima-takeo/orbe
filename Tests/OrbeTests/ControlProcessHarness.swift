@@ -188,11 +188,22 @@ final class ControlProcess {
 
   /// サーバを張らずに `orb` を起こす。socket に触れる前に弾かれる usage エラーと、socket 不達の
   /// 経路はこちらで測る（実 `WindowController` を立てる必要が無い）。
+  ///
+  /// 渡す `ORBE_STATE_DIR` は `orb` を持つ側と同じ隔離根なので、**同じテストが先に
+  /// `startControlProcess()` を呼んでいると socket は生きている**。その状態で呼ぶと「socket に
+  /// 触れる前に落ちた」ではなく「触れて弾かれた」を測ることになり、terminal な usage エラーは
+  /// どちらでも exit 2 なので終了コードの assert が判別力を失う（＝門番を外しても緑のまま通る）。
+  /// 名前が嘘になる呼び方をここで落とす。
   static func orbWithoutServer(
     _ args: [String], env extra: [String: String] = [:],
     file: StaticString = #filePath, line: UInt = #line
   ) -> Outcome {
-    run(executable("orbe-cli"), args, env: childEnv(extra), file: file, line: line)
+    XCTAssertFalse(
+      FileManager.default.fileExists(
+        atPath: TestIsolation.root.appendingPathComponent("control.sock").path),
+      "サーバが生きている状態で orbWithoutServer を呼んでいる（socket 前に落ちたことを測れない）",
+      file: file, line: line)
+    return run(executable("orbe-cli"), args, env: childEnv(extra), file: file, line: line)
   }
 
   /// 同梱名の `orb`（実体は `orbe-cli`）を隔離インスタンスへ向けて起こす。
