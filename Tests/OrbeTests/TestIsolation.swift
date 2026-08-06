@@ -69,20 +69,13 @@ enum TestIsolation {
     // 2. state dir（workspaces.json・control.sock・gui.conf の親）。本番と同じ ORBE_STATE_DIR 経路。
     setenv(OrbePaths.stateDirEnvVar, dir.path, 1)
 
-    // 3. 同梱リソースの探索根が指す先。既定は Xcode の bin を指しており空でも中立でもないため、
-    //    管理下の空ディレクトリを用意する（層1 の `orbe-defaults.conf` は不在になる）。
-    //    実際の代入は `beginCase` が毎テスト行う（張り忘れ・戻し忘れを作らない）。
-    try? FileManager.default.createDirectory(
-      at: dir.appendingPathComponent("resources", isDirectory: true),
-      withIntermediateDirectories: true)
-
-    // 4. 補完の学習ストア。`CompletionLearning.shared` は初回タッチ時の `fileURL` で in-memory
+    // 3. 補完の学習ストア。`CompletionLearning.shared` は初回タッチ時の `fileURL` で in-memory
     //    ストアを焼くため、まだ誰も書いていないこの時点で固定して即タッチする。
     //    ＝この 1 種だけは per-test にできず、学習状態はテスト間で持ち越される。
     CompletionLearning.fileURLOverride = dir.appendingPathComponent("completion-learning.json")
     _ = CompletionLearning.shared
 
-    // 5. `ControlServer.shared` が 2 より前に構築されていたら実 state dir の socket を掴んでいる。
+    // 4. `ControlServer.shared` が 2 より前に構築されていたら実 state dir の socket を掴んでいる。
     //    プロセス級の不変条件が壊れた状態で続けても以降の全テストが無意味なので落とす。
     let expected = dir.appendingPathComponent("control.sock").path
     let actual = ControlServer.shared.socketPath
@@ -92,7 +85,7 @@ enum TestIsolation {
           + "テスト本体より前に ORBE_STATE_DIR を張れていない")
     }
 
-    // 6. 毎テストの隔離を担うオブザーバ。以降の全テストへ効く。
+    // 5. 毎テストの隔離を担うオブザーバ。以降の全テストへ効く。
     let obs = TestIsolationObserver()
     observer = obs
     XCTestObservationCenter.shared.addTestObserver(obs)
@@ -100,10 +93,13 @@ enum TestIsolation {
 
   /// テスト 1 件へ専用ディレクトリを配り、隔離の seam をそこへ向け直す。
   ///
-  /// 値が per-test（永続 4 種）かプロセス級（同梱リソース根・ghostty user 層）かに関わらず
+  /// 値の素性（永続 4 種・同梱リソース根・プラグイン実体化先・ghostty user 層）に関わらず
   /// **毎テスト無条件に張り直す**。テストが自分で書き換えても次のテストへ漏れず、戻し忘れが
   /// 起きえない——申告制を残さないため。`CompletionLearning` だけは `shared` が in-memory へ
   /// 焼き付ける都合で per-test にできず、`installOnce` の固定のままにする。
+  ///
+  /// **書き込まれうる先は必ず caseDir の下へ置く。** root 直下に置くと `endCase` の削除に乗らず、
+  /// テストが書いた中身が以降の全テストへ残る（向き先だけ張り直しても中身は消えない）。
   static func beginCase(sequence: Int) {
     // 連番は UUID より短く、`sun_path` 上限へ効く root 直下のパス長を抑える。
     let dir = root.appendingPathComponent("c\(sequence)", isDirectory: true)
@@ -115,8 +111,18 @@ enum TestIsolation {
     AppStatePersistence.fileURLOverride = dir.appendingPathComponent("app-state.json")
     GuiConfig.fileURLOverride = dir.appendingPathComponent("gui.conf")
 
-    // プロセス級の 2 種。root 直下の同じ値を毎回置き直す冪等操作。
-    BundledResources.root = root.appendingPathComponent("resources", isDirectory: true)
+    // 同梱リソースの探索根。既定は Xcode の bin を指しており空でも中立でもないため、管理下の
+    // 空ディレクトリを用意する（層1 の `orbe-defaults.conf` は不在になる）。テストが同梱物を
+    // 組む先でもあるので caseDir の下に置く。
+    let resources = dir.appendingPathComponent("resources", isDirectory: true)
+    try? FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+    BundledResources.root = resources
+
+    // プラグインの実体化先。本番は `ORBE_STATE_DIR` 非依存の application support 直下を指すので、
+    // 張らないと `WindowController()` の起動同期が実ホームを書き換える。
+    AgentPluginInstaller.stablePluginDirOverride =
+      dir.appendingPathComponent("agent-plugin", isDirectory: true)
+
     // ファイルは作らない＝不在なので ghostty の user 層は読まれない。
     Config.userFileURLOverride = root.appendingPathComponent("ghostty-user.conf")
   }

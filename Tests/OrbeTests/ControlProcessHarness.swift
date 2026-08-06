@@ -45,23 +45,20 @@ final class ControlProcess {
 
   // MARK: - 同梱物のステージング
 
-  /// `.app` 同梱物のレイアウトを `caseDir/resources/` に組み、`BundledResources.root` をそこへ向ける。
+  /// `.app` 同梱物のレイアウトを `BundledResources.root`（＝ハーネスが配る `caseDir/resources/`）へ組む。
   ///
   /// **`WindowController()` より前に呼ぶ**——`injectRuntimeEnv` はペイン生成の時点で
-  /// `reportBinaryPath` / `bundledBinDir` を読むため、後から張ってもペインに注入済みの env には効かない。
+  /// `reportBinaryPath` / `bundledBinDir` を読むため、後から置いてもペインに注入済みの env には効かない。
   /// 置くのは `bin/` だけで、`completion-engine.js` も `zsh/` も置かない（不在時の graceful degradation を
-  /// 測る既存テストの前提を壊さない）。ハーネスが `beginCase` で毎テスト `root` を張り直すので、
-  /// 次のテストへは漏れない。
+  /// 測る既存テストの前提を壊さない）。root は caseDir 配下なので、組んだ中身は `endCase` の削除に乗る。
   @discardableResult
   static func stageBundle() throws -> URL {
-    let caseDir = try XCTUnwrap(TestIsolation.caseDir, "テスト専用ディレクトリが配られていない")
-    let resources = caseDir.appendingPathComponent("resources", isDirectory: true)
+    let resources = try XCTUnwrap(BundledResources.root, "同梱リソースの探索根が張られていない")
     let bin = resources.appendingPathComponent("bin", isDirectory: true)
     try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
     // `.app` 同梱時の改名（orbe-cli → orb）をここでも再現する。bare `orb` の PATH 解決はこの名前に依る。
     try stage(executable("orbe-cli"), as: bin.appendingPathComponent("orb"))
     try stage(executable("orbe-report"), as: bin.appendingPathComponent("orbe-report"))
-    BundledResources.root = resources
     return resources
   }
 

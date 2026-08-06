@@ -7,6 +7,9 @@ import Foundation
 /// 解決するため、各利用側の存在確認が nil を返す。
 /// 存在確認と nil の意味（hook が no-op・PATH 注入なし等）は利用側が持つ。
 enum BundledResources {
-  /// 同梱物の探索根。
+  /// 同梱物の探索根。テスト用の注入点でもあり、ハーネス（`TestIsolation.beginCase`）が毎テスト
+  /// 張り直す。本番は誰も書かず `Bundle.main.resourceURL` のまま。
+  /// 他の seam のような `…Override` の 2 段構えを取らないのは、nil＝「同梱物を持たない実行体」を
+  /// 値として表現する必要があるため（2 段構えでは nil が本番値へのフォールバックになる）。
   static var root: URL? = Bundle.main.resourceURL
 }

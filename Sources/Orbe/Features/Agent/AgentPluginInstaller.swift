@@ -20,10 +20,16 @@ enum AgentPluginInstaller {
     return FileManager.default.isExecutableFile(atPath: script.path) ? dir : nil
   }
 
+  /// テスト用に実体化先を差し替える（設定時はこちらを使う）。本番は nil。
+  /// `stablePluginDir` は `ORBE_STATE_DIR` を見ない固定登録先なので、これが無いとテストの
+  /// `WindowController()` が起動同期で実ホームの application support を書き換える。
+  static var stablePluginDirOverride: URL?
+
   /// marketplace へ登録する安定パス（`ORBE_STATE_DIR` 非依存の application support 直下）。
   /// ビルド固有 ephemeral パスを焼き付けないための固定登録先。
   static var stablePluginDir: URL? {
-    StateDir.appSupport()?.appendingPathComponent("agent-plugin", isDirectory: true)
+    if let stablePluginDirOverride { return stablePluginDirOverride }
+    return StateDir.appSupport()?.appendingPathComponent("agent-plugin", isDirectory: true)
   }
 
   /// パッケージのプラグイン名（＝marketplace 名＝`plugins/` 直下の唯一のサブディレクトリ名）。

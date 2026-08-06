@@ -30,21 +30,30 @@ final class TestIsolationTests: OrbeTestCase {
   }
 
   /// 同梱リソースの探索根は管理下の空ディレクトリ（既定の Xcode bin ではない）。
+  ///
+  /// caseDir の下であることが要点——root 直下だと、テストが同梱物を組んだ中身が `endCase` の
+  /// 削除に乗らず以降の全テストへ残る（向き先だけ張り直しても中身は消えない）。
   func testBundledResourcesRootIsManaged() throws {
+    let dir = try XCTUnwrap(TestIsolation.caseDir)
     let root = try XCTUnwrap(BundledResources.root)
-    XCTAssertEqual(root.path, TestIsolation.root.appendingPathComponent("resources").path)
+    XCTAssertEqual(root.path, dir.appendingPathComponent("resources").path)
     XCTAssertEqual(
       try FileManager.default.contentsOfDirectory(atPath: root.path), [], "層1 の既定 conf も不在")
   }
 
-  /// 永続 4 種はテスト 1 件ごとの専用ディレクトリを指す（テスト間で状態が漏れない）。
+  /// テスト 1 件ごとの専用ディレクトリを指す override 群（テスト間で状態が漏れない）。
   /// テストが自分で書き換えても `beginCase` が毎回張り直すので、戻し忘れが次へ漏れない。
+  ///
+  /// `stablePluginDirOverride` が外れると、`WindowController()` の起動同期
+  /// （`materializeStablePlugin`）が `ORBE_STATE_DIR` を見ずに実ホームの application support を
+  /// 書き換える——テストは緑のまま開発機と CI のホームが汚れる。
   func testPerCaseOverridesPointIntoCaseDir() throws {
     let dir = try XCTUnwrap(TestIsolation.caseDir)
     XCTAssertEqual(dir.deletingLastPathComponent().path, TestIsolation.root.path)
     for url in [
       WorkspacePersistence.fileURLOverride, SettingsPersistence.fileURLOverride,
       AppStatePersistence.fileURLOverride, GuiConfig.fileURLOverride,
+      AgentPluginInstaller.stablePluginDirOverride, BundledResources.root,
     ] {
       let url = try XCTUnwrap(url, "per-test の override が張られていない")
       XCTAssertEqual(url.deletingLastPathComponent().path, dir.path)
@@ -71,8 +80,8 @@ final class TestIsolationTests: OrbeTestCase {
       FileManager.default.fileExists(atPath: previous.path),
       "前のテストのディレクトリが残っている＝後始末が効いていない")
     XCTAssertEqual(
-      try FileManager.default.contentsOfDirectory(atPath: dir.path), [],
-      "配られた直後のディレクトリは空")
+      try FileManager.default.contentsOfDirectory(atPath: dir.path), ["resources"],
+      "配られた直後のディレクトリは、ハーネスが用意する空の同梱リソース根だけを持つ")
   }
 
   /// 補完の学習ストアは root 直下に固定する（`shared` が初回タッチで焼くため per-test にできない）。

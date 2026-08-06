@@ -14,10 +14,6 @@ import XCTest
 ///
 /// 壊れると何が起きるか: エージェントの状態がペインに一切出なくなる。しかもどの実行体も
 /// エラーを出さない——シムは env が欠ければ黙って exit 0、`orbe-report` は接続できなくても exit 0。
-///
-/// `materializeStablePlugin()` は**呼ばない**。実体化先（`stablePluginDir`）は `ORBE_STATE_DIR` を
-/// 見ず実ホームの Application Support を触るため、ハーネスの隔離が届かない。原子的差し替えは
-/// `AgentPluginInstallerTests` の担当で、ここは同梱シム → `orbe-report` → server の継ぎ目に絞る。
 final class AgentHookPathTests: OrbeTestCase {
   /// リポジトリ実体のプラグインパッケージ。このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
   private static let sourcePackage = URL(fileURLWithPath: #filePath)
