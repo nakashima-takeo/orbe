@@ -1,7 +1,7 @@
 import Foundation
 
-// `orb <ドメイン> <サブコマンド>` の実装。ファイルはドメインごとに分け、各ドメインの `run*` が
-// argv[2] を手書きでディスパッチする。各サブコマンドは -> Never で終端し、exit で終了コードを返す。
+// `orb ws <サブコマンド>` の実装。`runWorkspace` が argv[2] を手書きでディスパッチし、
+// 各サブコマンドは -> Never で終端して exit で終了コードを返す。
 
 func runWorkspace(_ args: [String]) -> Never {
   if args.isEmpty || hasHelp(args) {
@@ -40,8 +40,7 @@ private func wsList(_ rest: [String]) -> Never {
 
 private func wsNew(_ args: [String]) -> Never {
   var rest = args
-  let dir = takeOption(&rest, "--dir")
-  if dir == nil, rest.contains("--dir") { usageDie("--dir requires a <path> value") }
+  let dir = takeOption(&rest, "--dir", requires: "a <path> value")
   rejectLeftoverFlags(rest, positionals: 0)
   guard let name = rest.first else { usageDie("ws new requires <name>") }
   var params: [String: Any] = ["name": name]

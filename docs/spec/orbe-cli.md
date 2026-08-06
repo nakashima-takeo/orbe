@@ -16,7 +16,7 @@ updated: 2026-08-06
   - `--workspace` の値: 無指定＝global、フラグのみ＝アクティブ WS 上書き、`<id|current>` 指定＝**その WS**（非アクティブ可）の上書き。
   - フラグと位置引数を取り切った残余に `-` 始まりが残れば usage エラー（exit 2）。`--workspace=<id>`（= 区切り）・綴り誤り・2 個目の `--workspace` はここで落ちる——黙って捨てると exit 0 のまま指定と違う WS を触ることになる。位置引数の席の `-` 始まりは値として通る。
 - `orb ws list [--json]` / `ws new <name> [--dir <path>]` / `ws rename <id|current> <name>` / `ws dir <id|current> <path>` / `ws switch <id>` / `ws rm <id|current>`
-  - `--workspace` は取らない（対象は位置引数の `<id|current>`）。フラグと位置引数を取り切った残余に `-` 始まりが残れば usage エラー（exit 2）。位置引数（`<name>`・`<id|current>`・`<path>`）はいずれも `-` 始まりを取らないので、pane/tab と同じく**位置引数の席にも例外を設けない**（`-` で始まるパスは `./` を付けて渡す）。黙って捨てると `ws new <name> --dir=<path>` が既定 root の workspace を exit 0 で作る。
+  - `--workspace` は取らない（対象は位置引数の `<id|current>`）。フラグと位置引数を取り切った残余に `-` 始まりが残れば usage エラー（exit 2）。位置引数（`<name>`・`<id|current>`・`<path>`）はいずれも `-` 始まりを取らないので、pane/tab と同じく**位置引数の席にも例外を設けない**。黙って捨てると `ws new <name> --dir=<path>` が既定 root の workspace を exit 0 で作る。
 
 pane/tab（レイアウト操作。ペイン内は `ORBE_PANE` を現ペイン既定に、外部は明示ターゲット必須）:
 - `orb pane list [--workspace <id|current>] [--json]` … pane 一覧（paneId/workspaceId/tabId/title/cwd/agentState/focused）。
@@ -28,6 +28,8 @@ pane/tab（レイアウト操作。ペイン内は `ORBE_PANE` を現ペイン�
   - フラグと位置引数を取り切った残余に `-` 始まりが残れば usage エラー（exit 2）。pane/tab の id は常に正なので、config 系と違い**位置引数の席にも例外を設けない**（先頭から検査する）。黙って捨てると `ORBE_PANE` 既定へ落ち、`pane close`/`tab close` では指定と無関係な現ペイン・現タブが exit 0 のまま消える。
 
 各サブコマンドは対応する [control-api](control-api.md) メソッドへそのまま乗る。`--json` は全 read、`--help` は全階層で固有 usage（`pane split` の `-h` は上下分割フラグであって help ではない。help は `--help` のみ）。`<id|current>` の `current` はアクティブ WS。
+
+値必須フラグ（`--workspace <id>` / `--dir <path>` / `--cmd "…"`）の値も `-` 始まりを取らない（usage エラー、exit 2）。飲むと次のフラグが値に化けて残余に落ちず、`orb tab new --dir <path> --cmd "…"` の `<path>` が空のとき `--cmd` が cwd になって指定が黙って消える。パスは絶対パスか `~` 始まり（Orbe 側でホーム展開する）で渡す——それ以外の相対パスは CLI も control も解決せずそのまま格納するので、利用者のシェルの cwd 基準にはならない。
 
 ## 文脈解決
 

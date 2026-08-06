@@ -1,7 +1,7 @@
 import Foundation
 
-// `orb <ドメイン> <サブコマンド>` の実装。ファイルはドメインごとに分け、各ドメインの `run*` が
-// argv[2] を手書きでディスパッチする。各サブコマンドは -> Never で終端し、exit で終了コードを返す。
+// `orb config <サブコマンド>` の実装。`runConfig` が argv[2] を手書きでディスパッチし、
+// 各サブコマンドは -> Never で終端して exit で終了コードを返す。
 
 func runConfig(_ args: [String]) -> Never {
   // --help はサブコマンドが自分の usage を出す（config set --help → configSetUsage）。ここで握らない。

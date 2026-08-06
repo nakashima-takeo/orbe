@@ -61,9 +61,14 @@ final class OrbeCliProcessTests: OrbeTestCase {
       before.first(where: { $0["active"] as? Bool == true })?["id"] as? Int, "ws list: アクティブ WS が無い"
     )
 
-    let created = control.orbJSON(["ws", "new", "scratch"])
+    // `--dir` を通す正常系。これが無いと、門番を `--dir` の抜き取りより前へ動かして
+    // `--dir` を丸ごと使えなくする変更が、拒否ケースだけのテストをすり抜ける。
+    // 実在ディレクトリを渡す——`createWorkspace` は rootPath を initialCwd に実シェルを起こす。
+    let created = control.orbJSON(["ws", "new", "scratch", "--dir", "/tmp"])
     let scratchId = try XCTUnwrap(created["workspaceId"] as? Int, "ws new: workspaceId を返さない")
     XCTAssertEqual(created["name"] as? String, "scratch", "ws new: 指定した名前で作られる")
+    XCTAssertEqual(
+      created["rootPath"] as? String, "/tmp", "ws new: --dir <path> が rootPath として効く")
 
     step(control, ["ws", "rename", "\(scratchId)", "renamed"], expect: "renamed workspace")
     step(control, ["ws", "dir", "\(scratchId)", "/tmp/l4-root"], expect: "set workspace")

@@ -1,7 +1,7 @@
 import Foundation
 
-// `orb <ドメイン> <サブコマンド>` の実装。ファイルはドメインごとに分け、各ドメインの `run*` が
-// argv[2] を手書きでディスパッチする。各サブコマンドは -> Never で終端し、exit で終了コードを返す。
+// `orb pane <サブコマンド>` の実装。`runPane` が argv[2] を手書きでディスパッチし、
+// 各サブコマンドは -> Never で終端して exit で終了コードを返す。
 
 func runPane(_ args: [String]) -> Never {
   let rest = Array(args.dropFirst())

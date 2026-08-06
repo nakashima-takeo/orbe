@@ -1,7 +1,7 @@
 import Foundation
 
 // orbe-cli の出力・終了・引数ヘルパと usage テキスト。main.swift（socket クライアント）・
-// `Commands+*.swift`（サブコマンド）が共用する。終了コードは 0 成功 / 2 usage エラー / 1 RPC・接続エラー。
+// `Commands+<ドメイン>.swift`（サブコマンド）が共用する。終了コードは 0 成功 / 2 usage エラー / 1 RPC・接続エラー。
 
 // MARK: - 出力・終了
 
@@ -93,9 +93,18 @@ func parseBool(_ s: String) -> Bool? {
 
 func hasHelp(_ args: [String]) -> Bool { args.contains("--help") || args.contains("-h") }
 
-/// `--dir <path>` を抜き取る（残りを inout で縮める）。
-func takeOption(_ args: inout [String], _ name: String) -> String? {
-  guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
+/// 値必須オプション（`--dir <path>` / `--cmd "…"`）を抜き取る（残りを inout で縮める）。
+/// フラグ自体が無ければ nil。値が無い・`-` 始まりなら usage エラー（`label` が期待する値の形）。
+///
+/// `-` 始まりを値として飲むと**次のフラグが値に化けて消える**。`orb tab new --dir --workspace 2`
+/// なら cwd が `--workspace` のタブがアクティブ WS に生えて exit 0——飲まれた `--workspace` は
+/// 残余に落ちないので `rejectLeftoverFlags` では捕まらない。`--dir $DIR --cmd $CMD` の `$DIR` が
+/// 空でトークンごと消えるのが実際の経路。`takeWorkspaceId` と同じ値の形を課して塞ぐ。
+func takeOption(_ args: inout [String], _ name: String, requires label: String) -> String? {
+  guard let i = args.firstIndex(of: name) else { return nil }
+  guard i + 1 < args.count, !args[i + 1].hasPrefix("-") else {
+    usageDie("\(name) requires \(label)")
+  }
   let value = args[i + 1]
   args.removeSubrange(i...(i + 1))
   return value
@@ -172,8 +181,8 @@ func takeWorkspaceId(_ args: inout [String]) -> Int? {
 /// 消える。いずれも終了コードにも stdout にも現れない。**全サブコマンドがこの関数を通る。**
 ///
 /// `positionals` より前は位置引数の席なので見ない。席に例外を設けるのは `config` 系だけで
-/// （`config set font-size -1` の `-1` は値）、ws / pane / tab は id も名前も `-` 始まりを取らないので
-/// `positionals: 0`＝先頭から検査する。
+/// （`config set font-size -1` の `-1` は値）、ws / pane / tab は id も名前もパスも `-` 始まりを
+/// 取らないので `positionals: 0`＝先頭から検査する。
 func rejectLeftoverFlags(_ args: [String], positionals: Int) {
   guard let flag = args.dropFirst(positionals).first(where: { $0.hasPrefix("-") }) else { return }
   usageDie("unknown option: \(flag)")
@@ -194,9 +203,9 @@ func resolveCurrentPane() -> Int? {
 /// pane 位置引数（省略時 ORBE_PANE）を解決する。位置引数があれば数値化（不正は usage エラー）、
 /// 無ければ現ペイン。どちらも無ければ nil（呼び出し側が `orb pane list` を促す誘導エラーへ）。
 ///
-/// `-` 始まりは数値化に失敗して usage エラーになる（黙って現ペイン既定へ落ちない）。実際には
-/// 呼び出し側の `rejectLeftoverFlags(_:positionals: 0)` が先に落とすが、ここが単体でも既定へ
-/// 逸れないことが要点——門番は後置フラグを捕まえる別の層で、この関数の安全性はそれに依らない。
+/// 位置引数が居るなら数値化に失敗した時点で usage エラー——`-h` のような非数値が黙って現ペイン
+/// 既定へ逸れることは無い。ただし `-1` は `Int()` を通るので、`-` 始まりを弾くのは呼び出し側の
+/// `rejectLeftoverFlags(_:positionals: 0)` の役割。
 func resolvePaneArg(_ args: [String]) -> Int? {
   if let first = args.first {
     guard let id = Int(first) else { usageDie("invalid pane id: \(first)") }

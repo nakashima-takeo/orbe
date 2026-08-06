@@ -252,6 +252,11 @@ extension OrbeCliProcessTests {
       ["tab", "new", "--workspace=3"],
       ["pane", "list", "--workspace=3"],
       ["pane", "list", "--workspce", "3"],
+      ["config", "list", "--workspace=3"],
+      ["config", "get", "font-size", "--workspace=3"],
+      // 黙って捨てると `--workspace` 自体が消えて scope が global に落ち、指定 WS の上書きでは
+      // なく**global の明示値**が外れる（全 workspace の実効値が変わる）。
+      ["config", "unset", "font-size", "--workspace=3"],
       ["config", "set", "theme", "dark", "--workspace", "-1"],
       ["config", "set", "font-size", "14", "--workspace", "current", "--workspace", "nosuch"],
     ] {
@@ -305,7 +310,7 @@ extension OrbeCliProcessTests {
   /// 現れないうえ、同じ綴り誤りを `tab new` に渡すと exit 2 で弾かれる——同一フラグ・同一ヘルパで
   /// コマンドによって挙動が割れると、どちらが正しいのか利用者にも自動化にも決められない。
   ///
-  /// workspace 名も `<id|current>` も `-` 始まりを取らないので、pane/tab と同じく先頭から検査する。
+  /// workspace 名も `<id|current>` もパスも `-` 始まりを取らないので、pane/tab と同じく先頭から検査する。
   func testWorkspaceCommandsRejectFlagLikeTokens() {
     for args in [
       ["ws", "list", "--workspace", "3"],
@@ -319,6 +324,32 @@ extension OrbeCliProcessTests {
       failure(
         ControlProcess.orbWithoutServer(args), code: 2, message: "unknown option:",
         "解釈されなかったフラグを捨てた `\(args.joined(separator: " "))`")
+    }
+  }
+
+  /// 値必須フラグ（`--dir` / `--cmd`）は次のトークンが `-` 始まりなら値として飲まず usage エラー。
+  ///
+  /// 飲むと**飲まれたフラグは残余に落ちない**ので `rejectLeftoverFlags` では捕まらない——門番を
+  /// 全サブコマンドへ通しても塞がらない、値の席から入る別経路になる。
+  ///
+  /// 壊れると何が起きるか: `orb tab new --dir --workspace 2` が cwd `--workspace` のタブを
+  /// **アクティブ WS** に開いて exit 0（`--workspace 2` は消える）。`orb ws new --dir --bogus proj`
+  /// は rootPath が `--bogus` の workspace を作る。踏むのは誤植だけでなく
+  /// `orb tab new --dir "$DIR" --cmd "$CMD"` の `$DIR` が空でトークンごと消える経路で、
+  /// 終了コードにも stdout にも stderr にも現れない。
+  func testValueTakingFlagsRejectFlagLikeValues() {
+    for (args, message) in [
+      (["tab", "new", "--dir", "--workspace", "2"], "--dir requires a <path> value"),
+      (["tab", "new", "--dir", "--cmd", "claude"], "--dir requires a <path> value"),
+      (["tab", "new", "--cmd", "--dir", "/tmp/orbe-l4"], "--cmd requires a value"),
+      (["ws", "new", "--dir", "--bogus", "proj"], "--dir requires a <path> value"),
+      // 値が無いまま終端した従来の形も同じ文言で落ちる（ヘルパへ寄せても文言は変わらない）。
+      (["tab", "new", "--dir"], "--dir requires a <path> value"),
+      (["tab", "new", "--cmd"], "--cmd requires a value"),
+    ] {
+      failure(
+        ControlProcess.orbWithoutServer(args), code: 2, message: message,
+        "`-` 始まりを値として飲んだ `\(args.joined(separator: " "))`")
     }
   }
 

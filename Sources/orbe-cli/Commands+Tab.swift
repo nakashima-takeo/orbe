@@ -1,7 +1,7 @@
 import Foundation
 
-// `orb <ドメイン> <サブコマンド>` の実装。ファイルはドメインごとに分け、各ドメインの `run*` が
-// argv[2] を手書きでディスパッチする。各サブコマンドは -> Never で終端し、exit で終了コードを返す。
+// `orb tab <サブコマンド>` の実装。`runTab` が argv[2] を手書きでディスパッチし、
+// 各サブコマンドは -> Never で終端して exit で終了コードを返す。
 
 func runTab(_ args: [String]) -> Never {
   let rest = Array(args.dropFirst())
@@ -26,10 +26,8 @@ private func tabNew(_ rest: [String]) -> Never {
     exit(0)
   }
   var args = rest
-  let dir = takeOption(&args, "--dir")
-  if dir == nil, args.contains("--dir") { usageDie("--dir requires a <path> value") }
-  let cmd = takeOption(&args, "--cmd")
-  if cmd == nil, args.contains("--cmd") { usageDie("--cmd requires a value") }
+  let dir = takeOption(&args, "--dir", requires: "a <path> value")
+  let cmd = takeOption(&args, "--cmd", requires: "a value")
   let workspaceId = takeWorkspaceId(&args)
   rejectLeftoverFlags(args, positionals: 0)
   var params: [String: Any] = [:]
