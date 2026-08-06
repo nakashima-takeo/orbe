@@ -30,7 +30,7 @@ updated: 2026-08-06
 
 **ランナーは XCTest 一本。** Swift 6.3 では swift-testing との相互運用が `none` で、両者でアサーションヘルパを共有すると失敗が黙殺される。Swift 6.4 で相互運用が既定 `limited` になった時点で再検討する。
 
-**隔離は単一ハーネスが立てる。** state dir・全 override・ghostty の設定探索先を 1 箇所で立て、テストごとの申告制にしない。申告制は必ず破れる（ハーネス導入前は `GuiConfig` の override を張っているテストが一部に留まり、`Config.load()` が前回実行の設定を読み戻す結合が実在した）。実環境を汚さないことは `scripts/verify-test-isolation.sh`（手動・CI 非搭載）で実証する。
+**隔離は単一ハーネスが立てる。** state dir・全 override・ghostty の設定探索先を 1 箇所で立て、テストごとの申告制にしない。申告制は必ず破れる（ハーネス導入前は `GuiConfig` の override を張っているテストが一部に留まり、`Config.load()` が前回実行の設定を読み戻す結合が実在した）。書き込まれうる先は全て per-test ディレクトリの下に置き、配り直しの削除に乗せる（向き先だけ張り直しても中身は消えない）。唯一 `CompletionLearning` だけは `shared` が初回タッチで in-memory へ焼くため per-test にできず、プロセス級固定＝学習状態がテスト間で持ち越されるので、書いたテストが自分で消す。実環境を汚さないことは `scripts/verify-test-isolation.sh`（手動・CI 非搭載）で実証する。
 
 **state dir は 90 バイト以下。** AF_UNIX の `sun_path` は 104 バイト上限で、超えると `ControlServer` が制御 API を無言で無効化する。`$TMPDIR` + UUID は 108 バイトに達するため使わない。
 
@@ -84,7 +84,7 @@ updated: 2026-08-06
 
 - **担保する**: 実行体をまたいだ導通。実 `orbe-cli` / `orbe-mcp` / `orbe-report` の引数解釈・終了コード・stdout・組み立てる JSON-RPC。ペインへの env 注入から `orbe-report` が `report_agent` を届けるまでの hook 実経路。bare `orb` の PATH 解決
 - **担保しない**: `.app` の起動経路と `AppDelegate` の配線
-- **起動と差し替え**: テストプロセス内で `ControlServer.shared.start(target:)` に実 `WindowController` を与え、外部プロセスとして `.build/.../debug/` のビルド済みバイナリを起動する。バイナリ位置は `Bundle(for:).bundleURL` の親から解決する。同梱物の位置は `BundledResources.root` を差し替えて実バイナリを指す
+- **起動と差し替え**: テストプロセス内で `ControlServer.shared.start(target:)` に実 `WindowController` を与え、外部プロセスとして `.build/.../debug/` のビルド済みバイナリを起動する。バイナリ位置は `Bundle(for:).bundleURL` の親から解決する。同梱物はハーネスが配る `BundledResources.root`（caseDir 配下）の下へ `.app` と同じレイアウトで置く（`bin/orb`・`bin/orbe-report`）
 - **データ**: 単一ハーネス（L2 と同じ）。サーバの `socketPath` と子プロセスの `ORBE_STATE_DIR` は同じ値を指す。テスト冒頭で `socketPath` の実値を assert する（空や別値だと `start` が no-op になり、クライアント側は "Orbe not running" と区別できず緑に化ける）
 - **実行**: CI 全量
 - **ツール**: XCTest ＋ `Process`。子プロセスの env は明示辞書のみで親から継承しない
