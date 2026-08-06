@@ -67,7 +67,9 @@ enum TestIsolation {
     root = dir
 
     // 2. state dir（本番と同じ ORBE_STATE_DIR 経路）。永続ファイルは下の `beginCase` が caseDir へ
-    //    張り直すので、実際にこの根の直下に出るのは `control.sock` と補完の学習ストアだけ。
+    //    張り直すので、この根の直下に出るのは `c<連番>` の caseDir 群と、パス長のために直下へ
+    //    置かざるを得ない AF_UNIX socket（`control.sock` / `OrbeReportWireTests` の `r.sock`）と
+    //    補完の学習ストアだけ。
     //    子プロセス（`ControlProcess.childEnv`）へ渡すのもこの根で、in-process 側の caseDir とは違う。
     setenv(OrbePaths.stateDirEnvVar, dir.path, 1)
 
@@ -100,8 +102,11 @@ enum TestIsolation {
   /// 起きえない——申告制を残さないため。`CompletionLearning` だけは `shared` が in-memory へ
   /// 焼き付ける都合で per-test にできず、`installOnce` の固定のままにする。
   ///
-  /// **書き込まれうる先は必ず caseDir の下へ置く。** root 直下に置くと `endCase` の削除に乗らず、
+  /// **書き込まれうる先は caseDir の下へ置く。** root 直下に置くと `endCase` の削除に乗らず、
   /// テストが書いた中身が以降の全テストへ残る（向き先だけ張り直しても中身は消えない）。
+  /// 例外は AF_UNIX の listener——`sun_path` の 104 バイト上限に対し caseDir は `c<連番>` ぶん深く、
+  /// 連番が伸びると bind が黙って落ちる。root 直下へ置き、自分で `unlink` して後始末する
+  /// （`OrbeReportWireTests` がその形）。
   static func beginCase(sequence: Int) {
     // 連番は UUID より短く、`sun_path` 上限へ効く root 直下のパス長を抑える。
     let dir = root.appendingPathComponent("c\(sequence)", isDirectory: true)

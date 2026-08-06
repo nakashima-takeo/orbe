@@ -16,11 +16,14 @@ custom_rules:
     name: "同梱リソースは BundledResources 経由"
     included: ".*/Sources/.*\\.swift"
     excluded: ".*/BundledResources\\.swift"
-    # `.app` の同梱物の所在を取る API を全て挙げる。Info.plist 系（object(forInfoDictionaryKey:)・
-    # infoDictionary・bundleIdentifier）は同梱物の解決ではないので対象外。SPM のリソースバンドル
-    # （`Bundle.module`）も対象外——テスト実行体でも同じように解決するので隔離の穴にならない。
-    # `(` の後の `\s*` は swift format の折返し（100 桁超は `(` 直後で改行する）を捕まえるため。
-    regex: "Bundle\\.main\\.(resource(URL|Path)|bundle(URL|Path)|(url|urls|path|paths)\\(\\s*forResource)"
+    # 通してよい方を挙げる。`Bundle.main` から `.app` の同梱物へ辿る口は `resourceURL` だけでなく
+    # `bundleURL` / `executableURL` / `sharedSupportURL` 等いくつもあり、塞ぐ側を列挙すると
+    # 挙げ忘れた口がそのまま穴になる。通ってよいのは Info.plist を引く 3 つだけ。
+    # SPM のリソースバンドル（`Bundle.module`）は別機構で、実行体の隣に決定論的に解決するため
+    # テスト実行体でも同じ場所を指す＝隔離の穴にならない（対象外。同梱物を足す人は、`.app` 同梱なら
+    # BundledResources、SPM ターゲットの資源なら `Bundle.module` を選ぶ）。
+    # `object` の後の `\s*` は swift format の折返し（100 桁超は `(` 直後で改行する）を許すため。
+    regex: "Bundle\\.main\\.(?!bundleIdentifier\\b|infoDictionary\\b|object\\s*\\()"
     message: "同梱リソースの解決は BundledResources.root を通す（唯一の注入点）"
     severity: error
 

@@ -24,9 +24,12 @@ WATCH=(
   # テスト実行体の bundle id は xctest ツールのものになる。
   "$HOME/Library/Application Support/com.apple.dt.xctest.tool"
   # 補完の legacy 掃除（`CompletionLegacyCleanup`）が書き換える先。ここだけは override を通らず
-  # ZDOTDIR/HOME から実体を解く経路なので、ハーネスの隔離ではなくデータ条件で止まっている。
-  "$HOME/.zshrc"
+  # 実体を解く経路なので、ハーネスの隔離ではなくデータ条件で止まっている。解決順は
+  # ORBE_USER_ZDOTDIR → ZDOTDIR → ホームの 3 段で、どれが立っているかは実行環境次第なので全部張る
+  # （Orbe のペインから `swift test` を走らせると、shim が立てた ZDOTDIR / ORBE_USER_ZDOTDIR を継ぐ）。
+  "${ORBE_USER_ZDOTDIR:-$HOME}/.zshrc"
   "${ZDOTDIR:-$HOME}/.zshrc"
+  "$HOME/.zshrc"
 )
 
 snapshot() {  # -> stdout（パス・サイズ・mtime。不在ディレクトリは 1 行の印で表す）
