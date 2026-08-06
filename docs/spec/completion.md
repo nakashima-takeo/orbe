@@ -16,7 +16,7 @@ updated: 2026-08-06
 - `completion_accept {paneId, advance}`（id 付き要求応答）… 選択中候補を現在トークンに適用した結果 `{buffer, cursor}` を返す。候補が無い/popup 非表示なら `{buffer:null}`。応答後 popup を消す。`advance=true`（Tab）は素の候補に末尾空白を補い次トークンへ進める。`advance=false`（Enter）は末尾のパス区切り `/` を1つ落として（Tab は保つ）空白なしで確定し、以後の同一 `completion_update` による再表示を抑える。省略時は `true`。
 - `completion_end {paneId}` … **無応答**。コマンド確定/中断で popup を消す。
 
-`completion_update`/`completion_end` は host が応答を書かない（ルータが `completion_` 分岐を宛先解決ガードより前に置き、無応答メソッドは宛先不在でも応答を出さない）——打鍵ごとの update が accept 用 fd に行を積まない。ただし読めない行には host が分岐より前で `id:null` のエラー行を返すため、この fd に accept 応答以外が混じることはある。zsh 側は自分が送った `id` に一致する行を選んで読む。
+`completion_update`/`completion_end` は host が応答を書かない（ルータが `completion_` 分岐を宛先解決ガードより前に置き、無応答メソッドは宛先不在でも応答を出さない）——打鍵ごとの update が accept 用 fd に行を積まない。ただし読めない行には host が分岐より前で `id:null` のエラー行を返すため、この fd に accept 応答以外が混じることはある。zsh 側は accept ごとに進める `id` を送り、`"id":<n>` が値の終端まで一致する行だけを選んで読む——接続は持続するので、締切内に読めなかった応答は fd に残る。id が進まなければ次の確定がそれを拾い、以後ずっと 1 つ前の応答をコマンドラインへ適用し続ける。
 
 ## zsh 側（`orbe-completion.zsh`）
 `ORBE_SOCK`/`ORBE_PANE` 未設定なら widget を一切定義せず no-op。設定時は `zsocket` で `control.sock` へ接続を 1 本張りペイン寿命中保持する（失敗は静かに無効化・次の行頭で再接続）。

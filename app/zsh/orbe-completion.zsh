@@ -131,20 +131,21 @@ _orbe_try_accept() {
   _orbe_connect \
     && _orbe_send "{\"jsonrpc\":\"2.0\",\"id\":$id,\"method\":\"completion_accept\",\"params\":{\"paneId\":$ORBE_PANE,\"advance\":$advance}}" \
     || return 1
-  local line
+  local line resp=
   # 応答のキー順は保証が無いので、id の直後が値の終端（`,` か `}`）であることまで見る
-  # （`"id":1` は `"id":10` の前方一致でもある）。
+  # （`"id":1` は `"id":10` の前方一致でもある）。一致した行だけを `resp` へ移すのは、`read` が
+  # 改行の来ない末尾（host が接続を畳んだ途中書き）で **非ゼロを返しつつ変数へは代入する**ため。
+  # ループの失敗側の出口で `line` を見ると、id 検査を通っていない他人の応答をそのまま適用する。
   while IFS= read -r -t 1 -u$_ORBE_FD line; do
-    [[ $line == *'"id":'${id}[,}]* ]] && break  # 自分の accept 応答
-    line=
+    [[ $line == *'"id":'${id}[,}]* ]] && { resp=$line; break }  # 自分の accept 応答
   done
-  [[ -n $line && $line != *'"buffer":null'* ]] || return 1
-  [[ $line =~ '"buffer":"((\\.|[^"\\])*)"' ]] || return 1
+  [[ -n $resp && $resp != *'"buffer":null'* ]] || return 1
+  [[ $resp =~ '"buffer":"((\\.|[^"\\])*)"' ]] || return 1
   local raw=$match[1]
   local REPLY
   _orbe_json_unescape "$raw"
   BUFFER=$REPLY
-  if [[ $line =~ '"cursor":([0-9]+)' ]]; then
+  if [[ $resp =~ '"cursor":([0-9]+)' ]]; then
     CURSOR=$match[1]
   fi
   return 0
