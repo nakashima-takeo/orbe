@@ -94,7 +94,8 @@ func parseBool(_ s: String) -> Bool? {
 func hasHelp(_ args: [String]) -> Bool { args.contains("--help") || args.contains("-h") }
 
 /// 値必須オプション（`--dir <path>` / `--cmd "…"`）を抜き取る（残りを inout で縮める）。
-/// フラグ自体が無ければ nil。値が無い・`-` 始まり・空文字なら usage エラー（`label` が期待する値の形）。
+/// フラグ自体が無ければ nil。値が無い・`-` 始まり・空（空白だけを含む）なら usage エラー
+/// （`label` が期待する値の形）。
 ///
 /// **値の席は空けられない。**`orb tab new --dir "$DIR" --cmd "$CMD"` の `$DIR` が空になる形が両方入る:
 /// 引用符が無ければトークンごと消えて次のフラグが値に化け（`--dir --cmd claude` は cwd が `--cmd` で
@@ -103,7 +104,9 @@ func hasHelp(_ args: [String]) -> Bool { args.contains("--help") || args.contain
 /// 現れないまま、指定と違う cwd のタブ・rootPath が空の workspace ができる。
 func takeOption(_ args: inout [String], _ name: String, requires label: String) -> String? {
   guard let i = args.firstIndex(of: name) else { return nil }
-  guard i + 1 < args.count, !args[i + 1].hasPrefix("-"), !args[i + 1].isEmpty else {
+  guard i + 1 < args.count, !args[i + 1].hasPrefix("-"),
+    !args[i + 1].trimmingCharacters(in: .whitespaces).isEmpty
+  else {
     usageDie("\(name) requires \(label)")
   }
   let value = args[i + 1]

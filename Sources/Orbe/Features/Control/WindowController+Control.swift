@@ -292,6 +292,12 @@ extension WindowController: ControlTarget {
 
   /// workspace を新規作成しアクティブ化する（config CLI `ws new`）。name 空は -32602。
   func controlCreateWorkspace(name: String, rootPath: String?) -> Result<Any, ControlError> {
+    // rootPath を渡すなら中身が要る。省略（nil）は既定導出だが、空白だけの文字列は非 nil として
+    // 採られ、その WS の全タブの cwd と worktree の基点が空のまま作られてしまう。
+    // `set_workspace_root` / `rename_workspace` と同じ形で弾く。
+    if let rootPath, rootPath.trimmingCharacters(in: .whitespaces).isEmpty {
+      return .failure(ControlError(code: -32602, message: "workspace rootPath is empty"))
+    }
     guard let id = createWorkspace(name: name, rootPath: rootPath) else {
       return .failure(ControlError(code: -32602, message: "workspace name is empty"))
     }

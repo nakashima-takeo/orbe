@@ -183,10 +183,14 @@ extension OrbeCliProcessTests {
       // 値が無いまま終端した形も同じ文言で落ちる。
       (["tab", "new", "--dir"], "--dir requires a <path> value"),
       (["tab", "new", "--cmd"], "--cmd requires a value"),
-      // 引用符付きで空になった形（トークンは消えず空文字として残る）。
+      // 引用符付きで空になった形（トークンは消えず空文字として残る）。空白だけの形も同じ——
+      // 受け手はどちらも非 nil の値として採る。
       (["tab", "new", "--dir", "", "--cmd", "claude"], "--dir requires a <path> value"),
       (["tab", "new", "--cmd", ""], "--cmd requires a value"),
       (["ws", "new", "proj", "--dir", ""], "--dir requires a <path> value"),
+      (["tab", "new", "--dir", "   ", "--cmd", "claude"], "--dir requires a <path> value"),
+      (["tab", "new", "--cmd", "  "], "--cmd requires a value"),
+      (["ws", "new", "proj", "--dir", " "], "--dir requires a <path> value"),
     ] {
       failure(
         ControlProcess.orbWithoutServer(args), code: 2, message: message,
