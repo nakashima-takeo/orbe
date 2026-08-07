@@ -114,6 +114,8 @@ enum TestIsolation {
     caseDir = dir
 
     WorkspacePersistence.fileURLOverride = dir.appendingPathComponent("workspaces.json")
+    // 退避ガードはプロセス全体で 1 つ。前テストが立てたまま持ち越すと以降の save が黙って no-op になる。
+    WorkspacePersistence.quarantineFailed = false
     SettingsPersistence.fileURLOverride = dir.appendingPathComponent("settings.json")
     AppStatePersistence.fileURLOverride = dir.appendingPathComponent("app-state.json")
     GuiConfig.fileURLOverride = dir.appendingPathComponent("gui.conf")
