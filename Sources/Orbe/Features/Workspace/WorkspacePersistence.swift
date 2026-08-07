@@ -180,10 +180,11 @@ enum WorkspacePersistence {
   /// テスト用に保存先を差し替える（設定時はこちらを使う）。本番は nil。
   static var fileURLOverride: URL?
 
-  /// 退避に失敗した原本が `workspaces.json` に残っているか。true の間 `save()` は書かない
+  /// 退避に失敗して原位置に残っている原本の場所。この URL への `save()` は書かない
   /// ——保全できていない原本を既定 workspace で潰すのは、`.atomic` write で書き込み途中の
   /// 破損を防いでいるのと同じ「原本を壊さない」責務の裏側。`load()` が毎回更新する。
-  static var quarantineFailed = false
+  /// 場所で持つので、保存先が変われば古い判断を引きずらない。
+  private(set) static var unsalvagedOriginal: URL?
 
   static var fileURL: URL? {
     if let override = fileURLOverride { return override }
@@ -198,7 +199,7 @@ enum WorkspacePersistence {
   /// `.atomic` write で原本を完全に潰すため、ここで残さないと復元手段が消える。
   /// 不在（初回起動）と空 workspaces は失う構成が無いので退避しない（毎起動のゴミを作らない）。
   static func load() -> WorkspacesFile? {
-    quarantineFailed = false
+    unsalvagedOriginal = nil
     guard let url = fileURL else { return nil }  // 保存先が決まらない。save も同じ guard で書かない
     guard FileManager.default.fileExists(atPath: url.path) else { return nil }  // 初回起動
     guard let data = try? Data(contentsOf: url),
@@ -216,7 +217,7 @@ enum WorkspacePersistence {
   /// 先に古い退避物を消してから move するので、退避先の名前は常に空いている
   /// ——秒精度のタイムスタンプが同一秒で衝突する問題を構造的に持たない。
   /// 消えるのは常に「より古い、より価値の低い」控えで、今回の原本は必ず残る
-  /// （prune の失敗はゴミが 1 件残るだけなので `quarantineFailed` を立てない）。
+  /// （prune の失敗はゴミが 1 件残るだけなので退避ガードを立てない）。
   private static func quarantine(_ url: URL) {
     let fm = FileManager.default
     let dir = url.deletingLastPathComponent()
@@ -229,7 +230,10 @@ enum WorkspacePersistence {
     do {
       try fm.moveItem(at: url, to: dest)
     } catch {
-      quarantineFailed = true
+      // 原本が実際に残っているときだけガードを立てる。原本ごと消えていたら守る対象が無く、
+      // ここで立てるとそのセッションの構成が無言で一切保存されなくなる。
+      guard fm.fileExists(atPath: url.path) else { return }
+      unsalvagedOriginal = url
     }
   }
 
@@ -241,7 +245,7 @@ enum WorkspacePersistence {
   }
 
   static func save(_ file: WorkspacesFile) {
-    guard let url = fileURL, !quarantineFailed else { return }
+    guard let url = fileURL, url != unsalvagedOriginal else { return }
     let enc = JSONEncoder()
     enc.outputFormatting = [.prettyPrinted, .sortedKeys]
     guard let data = try? enc.encode(file) else { return }

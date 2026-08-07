@@ -172,10 +172,10 @@ final class WorkspaceQuarantineTests: OrbeTestCase {
 
   /// 一度退避に失敗して立ったガードは、次の `load()` が退避に成功した時点で解ける。
   ///
-  /// ガードの**解除条件**を測る唯一のテスト。ここを 1 テスト内で `load()` を 2 回通して見るのは、
-  /// ハーネス（`TestIsolation.beginCase`）が毎テスト同じ静的状態を倒すため、テストを分けると
-  /// 本番側（`load()` 冒頭のリセット）が常にハーネスに隠れて測れなくなるから。
-  /// このリセットが消えると、一度退避に失敗したプロセスは以後の退避成功後も永久に保存しなくなる。
+  /// ガードの**解除条件**を測る唯一のテスト。1 テスト内で `load()` を 2 回通すのは、解除を見るには
+  /// 先にガードが立った状態が要るのに、保存先はテストごとに変わる（＝ガードはテストを跨げない）から。
+  /// `load()` 冒頭のリセットが消えると、一度退避に失敗したプロセスは以後の退避成功後も永久に
+  /// 保存しなくなる。
   func testGuardClearsWhenTheNextLoadQuarantinesSuccessfully() throws {
     let url = try workspacesFile()
     let dir = url.deletingLastPathComponent()
