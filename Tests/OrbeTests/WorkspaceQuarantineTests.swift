@@ -9,10 +9,11 @@ import XCTest
 /// `scheduleSave()` の `.atomic` write が約 1 秒後に原本を完全に潰す。ユーザーは workspace 構成
 /// （タブ・分割ツリー・cwd・エージェントセッション・上書き設定）を、気づく機会が一度も無いまま
 /// 復元不能に失う。退避に失敗したときに保存を止める assert が落ちれば、保全できていない原本を
-/// 既定構成で潰す＝この Issue が直した破壊がそのまま戻る。不在時に退避しない assert が落ちれば、
+/// 既定構成で潰す＝#85 が直した破壊がそのまま戻る。不在時に退避しない assert が落ちれば、
 /// 初回起動のたびに意味のない退避物が積み上がる。
 ///
-/// persistence 層（層 A）と実 `WindowController` 起動（層 B）の 2 層で固定する。
+/// `WorkspacePersistence` 単体で固定し、実害は host でも出るので最後の 1 本だけ実
+/// `WindowController` を起こす（L2）。
 final class WorkspaceQuarantineTests: OrbeTestCase {
 
   /// ユーザー構成が入った、壊れた v3 JSON（末尾で切れている）。
@@ -48,7 +49,7 @@ final class WorkspaceQuarantineTests: OrbeTestCase {
       ])
   }
 
-  // MARK: - 層 A: persistence 層
+  // MARK: - persistence 単体（実ファイル）
 
   /// 構造破損の原本は、退避物としてバイト単位でそのまま残る（原位置からは消える）。
   func testCorruptFileIsQuarantinedWithOriginalBytes() throws {
@@ -189,7 +190,9 @@ final class WorkspaceQuarantineTests: OrbeTestCase {
     let probe = dir.appendingPathComponent("probe")
     if (try? Data().write(to: probe)) != nil {
       try? fm.removeItem(at: probe)
-      throw XCTSkip("ディレクトリ権限が効かない環境（root 等）では退避失敗を作れない")
+      throw XCTSkip(
+        "ディレクトリ権限が効かない環境（root 等）では退避失敗を作れない"
+          + "（退避成功後の保存は testSaveResumesAfterSuccessfulQuarantine が無条件に見る）")
     }
     XCTAssertNil(WorkspacePersistence.load(), "1 回目: 退避に失敗しても load は nil")
 
@@ -221,7 +224,7 @@ final class WorkspaceQuarantineTests: OrbeTestCase {
       WorkspacePersistence.load(), healthy, "退避成功後の保存は通常どおりディスクへ届く")
   }
 
-  // MARK: - 層 B: 実 WindowController 起動
+  // MARK: - 実 WindowController 起動（L2）
 
   /// 壊れた原本で起動すると、原本は退避物として残り、`workspaces.json` は既定構成で書き直される。
   /// これが #85 の実害そのもの——`flushSave()` で 1 秒のデバウンスを待たずに起動直後の保存を再現する。
