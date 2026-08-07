@@ -229,11 +229,13 @@ enum WorkspacePersistence {
     let dest = dir.appendingPathComponent("workspaces-broken-\(stamp.string(from: Date())).json")
     do {
       try fm.moveItem(at: url, to: dest)
+      NSLog("[workspace] quarantined unreadable workspaces.json to \(dest.path)")
     } catch {
       // 原本が実際に残っているときだけガードを立てる。原本ごと消えていたら守る対象が無く、
       // ここで立てるとそのセッションの構成が無言で一切保存されなくなる。
       guard fm.fileExists(atPath: url.path) else { return }
       unsalvagedOriginal = url
+      NSLog("[workspace] quarantine failed, save disabled: \(url.path)")
     }
   }
 
