@@ -170,6 +170,45 @@ final class WorkspaceQuarantineTests: OrbeTestCase {
       "退避できなかった原本は既定構成で潰さない（保全に失敗したら書かない）")
   }
 
+  /// 一度退避に失敗して立ったガードは、次の `load()` が退避に成功した時点で解ける。
+  ///
+  /// ガードの**解除条件**を測る唯一のテスト。ここを 1 テスト内で `load()` を 2 回通して見るのは、
+  /// ハーネス（`TestIsolation.beginCase`）が毎テスト同じ静的状態を倒すため、テストを分けると
+  /// 本番側（`load()` 冒頭のリセット）が常にハーネスに隠れて測れなくなるから。
+  /// このリセットが消えると、一度退避に失敗したプロセスは以後の退避成功後も永久に保存しなくなる。
+  func testGuardClearsWhenTheNextLoadQuarantinesSuccessfully() throws {
+    let url = try workspacesFile()
+    let dir = url.deletingLastPathComponent()
+    try Data(corruptJSON.utf8).write(to: url)
+
+    // 1 回目: 退避（＝ディレクトリへの新しいエントリ作成）だけを失敗させ、ガードを立てる。
+    let fm = FileManager.default
+    try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path)
+    // 0555 のままだと endCase() の removeItem が失敗して caseDir が残る。
+    defer { try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
+    let probe = dir.appendingPathComponent("probe")
+    if (try? Data().write(to: probe)) != nil {
+      try? fm.removeItem(at: probe)
+      throw XCTSkip("ディレクトリ権限が効かない環境（root 等）では退避失敗を作れない")
+    }
+    XCTAssertNil(WorkspacePersistence.load(), "1 回目: 退避に失敗しても load は nil")
+
+    // 2 回目: 権限を戻すと退避できる。原本は move に失敗して原位置に残っているので置き直さない
+    // ——残っていること自体が「退避に失敗したら原本を守る」の証拠なので、前提として測る。
+    try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path)
+    XCTAssertEqual(
+      try Data(contentsOf: url), Data(corruptJSON.utf8), "前提: 退避に失敗した原本は原位置に残る")
+    XCTAssertNil(WorkspacePersistence.load(), "2 回目: 退避が成功しても load は nil")
+    XCTAssertEqual(try quarantineFiles().count, 1, "2 回目で原本が退避されている")
+
+    let healthy = healthyFile()
+    WorkspacePersistence.save(healthy)
+
+    XCTAssertEqual(
+      WorkspacePersistence.load(), healthy,
+      "退避に成功した load がガードを解く（一度失敗したプロセスが永久に保存しなくならない）")
+  }
+
   /// 退避に成功したら通常どおり保存する（ガードが立ちっぱなしにならない）。
   func testSaveResumesAfterSuccessfulQuarantine() throws {
     try Data(corruptJSON.utf8).write(to: workspacesFile())
