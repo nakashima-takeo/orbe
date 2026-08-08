@@ -180,6 +180,12 @@ enum WorkspacePersistence {
   /// テスト用に保存先を差し替える（設定時はこちらを使う）。本番は nil。
   static var fileURLOverride: URL?
 
+  /// 退避に失敗して原位置に残っている原本の場所。この URL への `save()` は書かない
+  /// ——保全できていない原本を既定 workspace で潰すのは、`.atomic` write で書き込み途中の
+  /// 破損を防いでいるのと同じ「原本を壊さない」責務の裏側。`load()` が毎回更新する。
+  /// 場所で持つので、保存先が変われば古い判断を引きずらない。
+  private(set) static var unsalvagedOriginal: URL?
+
   static var fileURL: URL? {
     if let override = fileURLOverride { return override }
     return StateDir.base()?.appendingPathComponent("workspaces.json")
@@ -188,16 +194,61 @@ enum WorkspacePersistence {
   /// 読み込み。欠落・壊れ・非互換 version は nil（呼び出し側が既定で fallback）。
   /// 旧 v2（タブ＝素の PaneNode）も TabState のカスタム Decodable で読める。
   /// 受理後、次回 save で snapshotFile が version:3 で書き直す＝自動移行。
+  ///
+  /// 原本が「在るのに使えない」ときは nil を返す前に退避する。直後の既定起動が打つ save が
+  /// `.atomic` write で原本を完全に潰すため、ここで残さないと復元手段が消える。
+  /// 不在（初回起動）と空 workspaces は失う構成が無いので退避しない（毎起動のゴミを作らない）。
   static func load() -> WorkspacesFile? {
-    guard let url = fileURL, let data = try? Data(contentsOf: url),
+    unsalvagedOriginal = nil
+    guard let url = fileURL else { return nil }  // 保存先が決まらない。save も同じ guard で書かない
+    guard FileManager.default.fileExists(atPath: url.path) else { return nil }  // 初回起動
+    guard let data = try? Data(contentsOf: url),
       let file = try? JSONDecoder().decode(WorkspacesFile.self, from: data),
-      file.version == 2 || file.version == version, !file.workspaces.isEmpty
-    else { return nil }
+      file.version == 2 || file.version == version
+    else {
+      quarantine(url)  // 読めない・構造破損・非互換 version＝ユーザー構成が入っている原本
+      return nil
+    }
+    guard !file.workspaces.isEmpty else { return nil }  // 中身が無い＝失う構成が無い
     return file
   }
 
+  /// 使えなかった原本を隣へ退避する（最新 1 件だけ残す）。
+  /// 先に古い退避物を消してから move するので、退避先の名前は常に空いている
+  /// ——秒精度のタイムスタンプが同一秒で衝突する問題を構造的に持たない。
+  /// 消えるのは常により古い控え。退避が 2 回起きる系列では 1 件目（＝ユーザーの構成）が消えて
+  /// 2 件目（＝1 回目の後に書かれた既定構成）だけが残るが、毎起動のゴミを積まない方を採る
+  /// （prune の失敗はゴミが 1 件残るだけなので退避ガードを立てない）。
+  private static func quarantine(_ url: URL) {
+    let fm = FileManager.default
+    let dir = url.deletingLastPathComponent()
+    for old in existingQuarantines(in: dir) { try? fm.removeItem(at: old) }
+
+    let stamp = DateFormatter()
+    stamp.locale = Locale(identifier: "en_US_POSIX")
+    stamp.dateFormat = "yyyyMMdd-HHmmss"
+    let dest = dir.appendingPathComponent("workspaces-broken-\(stamp.string(from: Date())).json")
+    do {
+      try fm.moveItem(at: url, to: dest)
+      NSLog("[workspace] quarantined unreadable workspaces.json to \(dest.path)")
+    } catch {
+      // 原本が実際に残っているときだけガードを立てる。原本ごと消えていたら守る対象が無く、
+      // ここで立てるとそのセッションの構成が無言で一切保存されなくなる。
+      guard fm.fileExists(atPath: url.path) else { return }
+      unsalvagedOriginal = url
+      NSLog("[workspace] quarantine failed, save disabled: \(url.path)")
+    }
+  }
+
+  /// 同じディレクトリに残っている退避物。
+  private static func existingQuarantines(in dir: URL) -> [URL] {
+    let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+    let broken = names.filter { $0.hasPrefix("workspaces-broken-") && $0.hasSuffix(".json") }
+    return broken.map { dir.appendingPathComponent($0) }
+  }
+
   static func save(_ file: WorkspacesFile) {
-    guard let url = fileURL else { return }
+    guard let url = fileURL, url != unsalvagedOriginal else { return }
     let enc = JSONEncoder()
     enc.outputFormatting = [.prettyPrinted, .sortedKeys]
     guard let data = try? enc.encode(file) else { return }
