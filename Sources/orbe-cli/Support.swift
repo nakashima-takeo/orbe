@@ -134,7 +134,7 @@ func paneSplitDirection(_ args: inout [String]) -> String {
 /// config の `--workspace [<id|current>]`（optional-value）の解決結果。書き込み先が 3 つ実在するので
 /// 3 態を持つ。`--workspace` を取る pane / tab は `pane list` と `tab new` の 2 つだけで、そちらは
 /// `takeWorkspaceId` が `<id|current>` 必須で扱う——この非対称は spec の
-/// 表記（`docs/spec/orbe-cli.md` で config 系だけが値を省ける形に書かれている）に揃えたもの。
+/// 表記（`docs/spec/control/cli.md` で config 系だけが値を省ける形に書かれている）に揃えたもの。
 enum WorkspaceTarget {
   case none  // --workspace 未指定
   case active  // --workspace のみ（値なし）

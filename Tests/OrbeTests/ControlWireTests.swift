@@ -11,7 +11,7 @@ import XCTest
 /// （#62）。応答を出さない契約を持つのは `completion_update` / `completion_end` の 2 つだけで、
 /// これが崩れると打鍵ごとに zsh 補完の fd へ行が積み、accept 応答が締切内に読めなくなる。
 ///
-/// エラーコードの語彙は `docs/spec/control-api.md` の「エラー」節と 1 対 1 に対応する。
+/// エラーコードの語彙は `docs/spec/control/api.md` の「エラー」節と 1 対 1 に対応する。
 /// 片方だけ変えたらここが落ちる。
 final class ControlWireTests: OrbeTestCase {
   /// 駆動台。後始末は `tearDown` が持つ（各テストの `defer` に散らさない）。

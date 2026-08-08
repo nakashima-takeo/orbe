@@ -14,7 +14,7 @@ import XCTest
 /// 黙って捨てれば、指定したのと**違う** workspace の設定が書き換わる（非破壊な誤りではない）。
 ///
 /// `--workspace` の意味論は config 系（3 態）と pane/tab（`<id>` 必須）で異なり、
-/// `docs/spec/orbe-cli.md` はこれを書き分けている。表面的な一貫性のために潰さない。
+/// `docs/spec/control/cli.md` はこれを書き分けている。表面的な一貫性のために潰さない。
 extension OrbeCliProcessTests {
   /// arrange の書き込みを叩き、失敗したら stderr ごと理由を出す（素の status 比較だと
   /// `("0") is not equal to ("1")` しか出ず、どの層への書き込みが落ちたのか分からない）。

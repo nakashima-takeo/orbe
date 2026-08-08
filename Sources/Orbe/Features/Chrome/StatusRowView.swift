@@ -99,7 +99,7 @@ enum Chrome {
 /// shrink-to-fit の幅計算（純関数・単体テスト可能）。自然幅を maxWidth で cap し、収まればそのまま、
 /// 溢れれば CSS flex shrink と同じく**自然幅に比例して縮め、minWidth の床に達したタブは凍結して
 /// 残りへ再配分**する（min-width 0 まで潰さず床 40 を設けている。可読性のための設計判断・
-/// `docs/design-system.md` §9）。
+/// `docs/design/design-system.md` §9）。
 /// 全タブが床でも溢れる時だけ合計が available を超え横スクロールへ。
 enum StatusTabLayout {
   /// 各タブへ与える幅（寸法は `Chrome` の定数を使う）。`naturals` と同じ要素数。

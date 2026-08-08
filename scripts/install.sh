@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # 祖先を辿り、dev チャネルの Orbe の中から実行されているか調べる（居ればその pid を掴む）。
 # 中から入れ替えると quit した瞬間に置換作業ごと自滅するため、後段で swap を切り離す。
 # 判定範囲は _swap.sh が quit する範囲（bundle id dev.orbe.app.dev）に一致させる: 据えた
-# /Applications/Orbe Dev.app と、build/Orbe.app の直起動（docs/BUILD.md の open・sandbox-run）の両方。
+# /Applications/Orbe Dev.app と、build/Orbe.app の直起動（docs/guides/build.md の open・sandbox-run）の両方。
 # 本番 Orbe は別 identity で quit の射程外なので、マッチしない＝前景で完了するのが正しい。
 orbe_pid=""
 guard_pid=$$
