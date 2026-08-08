@@ -32,7 +32,7 @@ extension ControlWireTests {
 
   // MARK: - 表
 
-  /// spec（`docs/spec/control-api.md` のツール節）に載る socket メソッドと、それぞれが受理する
+  /// spec（`docs/spec/control/api.md` のツール節）に載る socket メソッドと、それぞれが受理する
   /// 正しい params 一式。観測できない担保外のキーは意図的に載せない。
   func validRequests(_ fake: FakeControlTarget)
     -> [(method: String, params: [String: Any])]

@@ -1,7 +1,7 @@
 import AppKit
 
 /// Orbe デザインシステムのトークン（値の唯一の正＝SSOT）。
-/// 思想と使い方は `docs/design-system.md`。コンポーネントはここの semantic 名だけを参照し、
+/// 思想と使い方は `docs/design/design-system.md`。コンポーネントはここの semantic 名だけを参照し、
 /// 生 hex・`NSColor.systemXxx`・直書き `ofSize:` を使わない。
 /// 外観は dark=温かい炭＋フロストガラス / light=藤紙。色は状態（確定配色の温度分け）と
 /// 自分の出番（電紫 accent）のためだけ。ガラス質感・elevation・glow は `DesignTokens+Glass.swift` に委任。

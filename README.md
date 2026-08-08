@@ -100,7 +100,7 @@ PATH 上のエージェント CLI（claude / codex / agy）を自動検出。`�
 
 ## ソースからビルド
 
-フル Xcode と Zig 0.15.2 が必要。詳細は **[docs/BUILD.md](docs/BUILD.md)**。
+フル Xcode と Zig 0.15.2 が必要。詳細は **[docs/guides/build.md](docs/guides/build.md)**。
 
 ```bash
 git submodule update --init --recursive

@@ -15,4 +15,4 @@ description: Orbe をビルドして自分の Mac の /Applications/Orbe Dev.app
 1. `./scripts/install.sh` を実行し、最後に出る build-id を短く報告する。
    - **Orbe Dev（または `build/Orbe.app`）の中から実行したとき**: 入れ替え（終了→置換→再起動）は本体の生死から切り離して走り、直後に Orbe Dev がこの実行元セッションごと再起動する（ワークスペース構成は復元される）。install.sh が返す build-id と再起動予告を伝えて終える——再起動後の報告はこのセッションからはできない。
    - **本番 Orbe や別ターミナルから実行したとき**: 入れ替えは前景で完了し、再起動も起きない（本番には触れないため切り離しが要らない）。
-   - 前提不足（フル Xcode 未導入・zig 失敗など）での失敗は、出力されたメッセージ（`docs/BUILD.md` 参照）に従う。
+   - 前提不足（フル Xcode 未導入・zig 失敗など）での失敗は、出力されたメッセージ（`docs/guides/build.md` 参照）に従う。

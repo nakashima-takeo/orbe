@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Orbe の glass / elevation / glow トークン（`DesignTokens.swift` とは独立した自己完結ファイル）。
 /// 色値の正典は 確定配色（`OrbePalette` / `StateHue`）。
-/// geometry（blur 半径・elevation・radial 位置/サイズ）の正典はこのファイル（`docs/design-system.md` は再定義しない）。
+/// geometry（blur 半径・elevation・radial 位置/サイズ）の正典はこのファイル（`docs/design/design-system.md` は再定義しない）。
 /// 面色・枠・glow は動的 NSColor（dark/light）で持ち、SwiftUI 側で `Color(nsColor:)` 橋渡し。
 /// elevation は dark/light で geometry（radius/y）自体が異なるため `@Environment(\.colorScheme)` を読む ViewModifier。
 extension Theme {

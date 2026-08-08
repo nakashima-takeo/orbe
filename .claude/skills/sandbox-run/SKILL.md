@@ -31,7 +31,7 @@ flowchart TD
     D --> E
 ```
 
-1. **起こす対象を決める。** 既定は `./scripts/build-app.sh` でビルドした `./build/Orbe.app`（前提不足＝フル Xcode 未導入・zig 失敗などでの失敗は出力メッセージ〔`docs/BUILD.md` 参照〕に従う）。呼び出し元が別のバンドルを渡したときはそれを使う（公証済み DMG 内の `Orbe.app` など）。**対象の build-id を控える**（`/usr/libexec/PlistBuddy -c "Print :OrbeBuildID" <app>/Contents/Info.plist`）。
+1. **起こす対象を決める。** 既定は `./scripts/build-app.sh` でビルドした `./build/Orbe.app`（前提不足＝フル Xcode 未導入・zig 失敗などでの失敗は出力メッセージ〔`docs/guides/build.md` 参照〕に従う）。呼び出し元が別のバンドルを渡したときはそれを使う（公証済み DMG 内の `Orbe.app` など）。**対象の build-id を控える**（`/usr/libexec/PlistBuddy -c "Print :OrbeBuildID" <app>/Contents/Info.plist`）。
 2. **隔離起動する。** 継承した ghostty のリソースポインタ系 env を断って起こす（レンズ②）:
    `env -u GHOSTTY_RESOURCES_DIR -u GHOSTTY_BIN_DIR -u TERMINFO ORBE_STATE_DIR="$(mktemp -d)" <app>/Contents/MacOS/Orbe &`
    `env | grep -i GHOSTTY` で他のリソースポインタ系が残っていればそれも `-u` で足す。この state dir と PID を控える（片付けに使う）。隔離インスタンスは自前の control.sock（`$ORBE_STATE_DIR/control.sock`）を持つ。

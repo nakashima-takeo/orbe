@@ -5,9 +5,9 @@ description: Orbe の chrome（DiffPanel・パレット・Onboarding 等の Swif
 
 # visual-check — chrome を design 見本とピクセル突合する
 
-> 前提: 見本の正典「Claude Design プロジェクト（Design MCP）」はメンテナ私有で、このリポジトリには同梱しない。見本に到達できない環境では `docs/design-system.md` §2 トークン・§5 準拠で判断する（後述の fallback）。
+> 前提: 見本の正典「Claude Design プロジェクト（Design MCP）」はメンテナ私有で、このリポジトリには同梱しない。見本に到達できない環境では `docs/design/design-system.md` §2 トークン・§5 準拠で判断する（後述の fallback）。
 
-Orbe の chrome（DiffPanel・パレット・Onboarding 等の SwiftUI 部分）の**見た目**を、本物の中身で preview に描き、Claude Design の見本とピクセル単位で突き合わせ、一致するまで直す自走ループ。値・色・型・状態の正は `docs/design-system.md`（§2 トークン〜§5 コンポーネント全状態、§3 アクセシビリティ契約）。着手時に関係する節を Read で開く。
+Orbe の chrome（DiffPanel・パレット・Onboarding 等の SwiftUI 部分）の**見た目**を、本物の中身で preview に描き、Claude Design の見本とピクセル単位で突き合わせ、一致するまで直す自走ループ。値・色・型・状態の正は `docs/design/design-system.md`（§2 トークン〜§5 コンポーネント全状態、§3 アクセシビリティ契約）。着手時に関係する節を Read で開く。
 
 **範囲**: 見た目だけ。focus 越境・IME・Cmd+G 等のランタイム挙動は対象外。
 
@@ -40,4 +40,4 @@ flowchart TD
 - **preview の足場（静止 fixture）**: `scripts/preview-gallery.sh`（出力は `.preview/gallery/`・gitignore 済）。fixture は `Sources/Orbe/.../*Fixtures.swift`（`#if DEBUG`・本物のデータを本物のビューに流す）。
 - **flow の足場（preview で出せない状態用）**: `scripts/preview-flows.sh <flow名>`（出力は `.preview/flows/`・gitignore 済）。本物のアクションを順に呼んで初めて現れる画面（drillIn 後のサブメニュー・query 絞り込み・導入の進行・scroll 追従・overflow 等）を撮る。引数なしで全画面、`<flow名>` でその1画面だけ。flow 定義は `Tests/OrbeTests/DesignFlowSnapshotTests.swift`。
 - **見本**: Claude Design プロジェクト（Design MCP）。「diff パネル 完成版」等の実 HTML が正。
-- **正の値**: `docs/design-system.md`（§2 トークン / §3 色規律 / §5 状態表）・`docs/tokens.json`（機械可読ミラー）。
+- **正の値**: `docs/design/design-system.md`（§2 トークン / §3 色規律 / §5 状態表）・`docs/design/tokens.json`（機械可読ミラー）。
