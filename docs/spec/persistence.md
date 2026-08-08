@@ -1,7 +1,7 @@
 ---
 title: workspace 永続（現状）
 description: 構成（workspace・タブ・明示タイトル・分割ツリー・cwd・エージェントセッション・最終使用時刻）の JSON 保存と起動時復元・エージェント resume・デバウンス保存
-updated: 2026-08-06
+updated: 2026-08-08
 ---
 
 保存先は `~/Library/Application Support/<bundle-id>/` 直下。`<bundle-id>` はビルドチャネルごとに異なるため（[channel](channel.md)）、dev（Orbe Dev）と release は state を共有しない。環境変数 `ORBE_STATE_DIR`（非空）を設定するとその dir 直下へ移る——検証用の隔離インスタンス用途で、settings.json・gui.conf・[control-api](control-api.md) の control.sock も同じ dir に同居する。テスト用にファイル位置を差し替える seam を持つ。
@@ -24,7 +24,7 @@ updated: 2026-08-06
 
 保存は構成変化のたびデバウンスし、終了時に flush する。
 
-互換: 旧スキーマは無損失で読み、次回保存で現行形式へ置き換わる（タブ構成・cwd・エージェントを失わない）。後から足したフィールドは**欠落**を許容する。「あるが読めない」を既定へ落とすのは `editor` と設定層（`settingsOverride`）の 2 つだけで、そのほか——タブ本体（`tree`・エージェントセッション）・`explicitTitle`・`lastUsedAt`・`windowSize`・workspace の名前や index——はファイル全体の fallback へ落ちて**全 workspace を失う**。optional で後から足したフィールドも、既定へ落とす decode を自分で書かない限りこちら側になる。設定層（global・workspace 上書きとも）は現行形式なら読めない 1 キーだけを落として残りを活かし、値ごと読めなければ上書き無し（global 継承）へ落ちる——1 項目の異常で層ごと消さないため。旧 camelCase の読みは global 移行・workspace 上書きとも all-or-nothing で、そこでは範囲外の `theme` が既定値として層に載る。値域を持つ項目は範囲外の値もそのまま層へ載せる（値域を守るのは書き込み経路）。壊れている・非互換バージョン・空 JSON は既定の単一 workspace で fallback。
+互換: 旧スキーマは無損失で読み、次回保存で現行形式へ置き換わる（タブ構成・cwd・エージェントを失わない）。後から足したフィールドは**欠落**を許容する。「あるが読めない」を既定へ落とすのは `editor` と設定層（`settingsOverride`）の 2 つだけで、そのほか——タブ本体（`tree`・エージェントセッション）・`explicitTitle`・`lastUsedAt`・`windowSize`・workspace の名前や index——はファイル全体の fallback へ落ちて**全 workspace を失う**。optional で後から足したフィールドも、既定へ落とす decode を自分で書かない限りこちら側になる。設定層（global・workspace 上書きとも）は現行形式なら読めない 1 キーだけを落として残りを活かし、値ごと読めなければ上書き無し（global 継承）へ落ちる——1 項目の異常で層ごと消さないため。旧 camelCase の読みは global 移行・workspace 上書きとも all-or-nothing で、そこでは範囲外の `theme` が既定値として層に載る。値域を持つ項目は範囲外の値もそのまま層へ載せる（値域を守るのは書き込み経路）。壊れている・非互換バージョン・空 JSON は既定の単一 workspace で fallback する。このとき**原本が在るのに使えなかった**場合（読めない・構造破損・非互換バージョン）は、fallback する前に原本を同じディレクトリの `workspaces-broken-<日時>.json` へ退避する——直後の既定起動が打つ保存が原本を潰すため。退避物は最新 1 件だけ残す。退避できなかった原本が原位置に残っている間は、そのセッションはその場所へ書かない（保全できていない原本を潰さないため）。ファイル不在（初回起動）と空 JSON は失う構成が無いので退避しない。
 
 ## settings.json / app-state.json
 
