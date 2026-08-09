@@ -263,8 +263,15 @@ final class TerminalController {
       let target = leaf(of: focused),
       let parent = target.superview
     else { return nil }
-    // cwd は inherited_config が継承。command 指定時は新ペインをそのコマンドで起こす。
-    let newPane = wrap(makePane(inheritFrom: focused, initialCommand: command))
+    // cwd は inherited_config が継承する（`initialCwd` は `inheritFrom` があるとき起動には使われない）。
+    // それでも起点の cwd を渡すのは、**Orbe 側に cwd の記録を残す**ため——OSC 7 を送らないシェルや
+    // コマンドペインでは `currentPwd` が永久に nil で、記録が無いと「このペインがどこを開いているか」が
+    // 分からなくなる。worktree の占有判定はそれを「占有していない」と読むので、使用中の worktree を
+    // 消しうる。セッション保存の cwd とタイトルの導出も同じ値に乗る。
+    let newPane = wrap(
+      makePane(
+        inheritFrom: focused, initialCwd: focused.currentPwd ?? focused.initialCwd,
+        initialCommand: command))
 
     let split = WorkspaceSplitView()
     split.isVertical = (orientation == .horizontal)
