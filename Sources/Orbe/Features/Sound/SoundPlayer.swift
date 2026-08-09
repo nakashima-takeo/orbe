@@ -29,7 +29,6 @@ final class SoundPlayer: AgentSoundPlaying {
     let family: NotificationSound
     let event: AgentSoundEvent
     let volume: Int
-    let sampleRate: Double
   }
 
   /// 最後の再生からこの秒数だけ鳴らなければエンジンを止める（最長の音でも約 2.2 秒で鳴り終わる）。
@@ -38,7 +37,11 @@ final class SoundPlayer: AgentSoundPlaying {
   private let queue = DispatchQueue(label: "dev.orbe.sound", qos: .userInitiated)
   private var engine: AVAudioEngine?
   private var player: AVAudioPlayerNode?
-  private var sampleRate: Double = 0
+  /// プレイヤーノードを繋いだフォーマット。バッファはこれと**同じインスタンス**で組む
+  /// （同じ式で 2 度作ると、片方だけ触ったときに `scheduleBuffer` が不一致で落ちる）。
+  private var format: AVAudioFormat?
+  /// 合成済みバッファ。試聴サブパレットは 12 案 × 2 イベントを全部通すので、上限が無いと
+  /// 1 日中起動しているプロセスに二度と使われない波形が溜まり続ける（→ `store`）。
   private var cache: [CacheKey: AVAudioPCMBuffer] = [:]
   private var idleStop: DispatchWorkItem?
   private var configurationObserver: NSObjectProtocol?
@@ -96,18 +99,18 @@ final class SoundPlayer: AgentSoundPlaying {
     }
     self.engine = engine
     self.player = player
-    sampleRate = rate
+    self.format = format
   }
 
   private func buffer(family: NotificationSound, event: AgentSoundEvent, volume: Int)
     -> AVAudioPCMBuffer?
   {
-    let key = CacheKey(family: family, event: event, volume: volume, sampleRate: sampleRate)
+    let key = CacheKey(family: family, event: event, volume: volume)
     if let cached = cache[key] { return cached }
+    guard let format else { return nil }
     let samples = SoundRenderer.render(
-      family: family, event: event, volume: volume, sampleRate: sampleRate)
+      family: family, event: event, volume: volume, sampleRate: format.sampleRate)
     guard !samples.isEmpty,
-      let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2),
       let buffer = AVAudioPCMBuffer(
         pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)),
       let channels = buffer.floatChannelData
@@ -120,8 +123,15 @@ final class SoundPlayer: AgentSoundPlaying {
         channels[channel].update(from: base, count: source.count)
       }
     }
-    cache[key] = buffer
+    store(buffer, for: key)
     return buffer
+  }
+
+  /// キャッシュへ載せる。同時に使う音量は常に 1 つ（実効値、または試聴中の実効値）なので、
+  /// 別音量のぶんは載せた瞬間に捨てる——これで上限は 12 案 × 2 イベントに固定される。
+  private func store(_ buffer: AVAudioPCMBuffer, for key: CacheKey) {
+    cache = cache.filter { $0.key.volume == key.volume }
+    cache[key] = buffer
   }
 
   private func scheduleIdleStop() {
@@ -147,7 +157,7 @@ final class SoundPlayer: AgentSoundPlaying {
     }
     engine = nil
     player = nil
-    sampleRate = 0
+    format = nil
     cache.removeAll()
   }
 }
