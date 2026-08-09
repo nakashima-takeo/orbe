@@ -49,8 +49,8 @@ final class AgentSoundDecisionTests: OrbeTestCase {
   /// 設定した案と音量がそのまま計画に載る。
   func testPlanCarriesConfiguredFamilyAndVolume() {
     let plan = AgentSoundDecision.plan(
-      state: "waiting", settings: settings(sound: .hagane, volume: 35, enabled: true))
-    XCTAssertEqual(plan, AgentSoundDecision.Plan(family: .hagane, event: .waiting, volume: 35))
+      state: "waiting", settings: settings(sound: .steel, volume: 35, enabled: true))
+    XCTAssertEqual(plan, AgentSoundDecision.Plan(family: .steel, event: .waiting, volume: 35))
   }
 
   /// 全案 × 全イベント × オンオフ × 音量 0 / 非 0 の総当たり。

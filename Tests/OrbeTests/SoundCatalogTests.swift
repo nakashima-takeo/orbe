@@ -79,7 +79,7 @@ final class SoundCatalogTests: OrbeTestCase {
 
   /// 同じ入力からは常に同じ波形（ノイズを含む案も固定シードで再現する）。
   func testRenderIsDeterministic() {
-    for family in [NotificationSound.wood, .air, .youkin] {  // ノイズを含む 3 案
+    for family in [NotificationSound.wood, .air, .piano] {  // ノイズを含む 3 案
       let first = SoundRenderer.render(
         family: family, event: .waiting, volume: 70, sampleRate: sampleRate)
       let second = SoundRenderer.render(

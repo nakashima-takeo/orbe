@@ -101,12 +101,12 @@ extension L10n {
     .soundWood: ("木肌", "Wood"),
     .soundAir: ("気配", "Air"),
     .soundEmblem: ("紋章", "Emblem"),
-    .soundHenji: ("返事", "Reply"),
-    .soundHazumi: ("弾み", "Bounce"),
-    .soundYuugi: ("遊技", "Arcade"),
-    .soundHagane: ("鋼", "Steel"),
-    .soundYoukin: ("洋琴", "Piano"),
-    .soundKuchibue: ("口笛", "Whistle"),
+    .soundReply: ("返事", "Reply"),
+    .soundBounce: ("弾み", "Bounce"),
+    .soundArcade: ("遊技", "Arcade"),
+    .soundSteel: ("鋼", "Steel"),
+    .soundPiano: ("洋琴", "Piano"),
+    .soundWhistle: ("口笛", "Whistle"),
     .soundDeep: ("深層", "Deep"),
   ]
 }

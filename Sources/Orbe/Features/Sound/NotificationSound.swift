@@ -3,7 +3,7 @@ import Foundation
 /// エージェントの状態変化で鳴らす通知音の音案（12 案）。並びはそのまま設定サブパレットの行順。
 /// 実際の合成定義は `SoundCatalog`、鳴らすかどうかの判断は `AgentSoundDecision`。
 enum NotificationSound: String, CaseIterable {
-  case glass, pulse, wood, air, emblem, henji, hazumi, yuugi, hagane, youkin, kuchibue, deep
+  case glass, pulse, wood, air, emblem, reply, bounce, arcade, steel, piano, whistle, deep
 
   /// 未設定時に鳴る音案。**リテラルを 2 箇所に書かない**——実機で 12 案を聴き比べて決め直すとき、
   /// 差し替えがこの 1 行で済むようにしてある（descriptor の既定値もここを参照する）。
@@ -18,12 +18,12 @@ enum NotificationSound: String, CaseIterable {
     case .wood: return .soundWood
     case .air: return .soundAir
     case .emblem: return .soundEmblem
-    case .henji: return .soundHenji
-    case .hazumi: return .soundHazumi
-    case .yuugi: return .soundYuugi
-    case .hagane: return .soundHagane
-    case .youkin: return .soundYoukin
-    case .kuchibue: return .soundKuchibue
+    case .reply: return .soundReply
+    case .bounce: return .soundBounce
+    case .arcade: return .soundArcade
+    case .steel: return .soundSteel
+    case .piano: return .soundPiano
+    case .whistle: return .soundWhistle
     case .deep: return .soundDeep
     }
   }

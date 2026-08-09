@@ -68,7 +68,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
 
   /// オフのときの通知音行は保持している案名でなく「なし」を出す（鳴らない設定が鳴りそうに読めない）。
   func testRootShowsNoneWhenDisabled() {
-    let p = model(sound: .hagane, enabled: false)
+    let p = model(sound: .steel, enabled: false)
     XCTAssertTrue(p.render.rows[soundRow].label.contains("なし"))
     XCTAssertFalse(p.render.rows[soundRow].label.contains("鋼"), "保持している案名は出さない")
   }
@@ -253,7 +253,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
 
   /// 行 0「なし」の ↵ はオフにするだけで、**音案の値は触らない**（再度オンにしたら戻る）。
   func testApplyOffKeepsFamily() {
-    let p = model(sound: .hagane)
+    let p = model(sound: .steel)
     drillIn(p)
     let changes = captureChanges(p)
     p.render.selected = 0

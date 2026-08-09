@@ -284,12 +284,12 @@ enum L10nKey: String, CaseIterable, Sendable {
   case soundWood
   case soundAir
   case soundEmblem
-  case soundHenji
-  case soundHazumi
-  case soundYuugi
-  case soundHagane
-  case soundYoukin
-  case soundKuchibue
+  case soundReply
+  case soundBounce
+  case soundArcade
+  case soundSteel
+  case soundPiano
+  case soundWhistle
   case soundDeep
 
   // MARK: - Agent palette

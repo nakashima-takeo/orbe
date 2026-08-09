@@ -82,7 +82,7 @@ extension WindowControllerReportAgentTests {
     let sound = try recorder(wc)
     wc.settingsStore.applyGlobal(SettingChange(SettingKeys.notificationSound, .glass))
     var originOverride = SettingsLayer()
-    originOverride[SettingKeys.notificationSound] = NotificationSound.hagane
+    originOverride[SettingKeys.notificationSound] = NotificationSound.steel
     originOverride[SettingKeys.notificationSoundVolume] = 30
     wc.workspaces[0].settingsOverride = originOverride
     var activeOverride = SettingsLayer()
@@ -94,7 +94,7 @@ extension WindowControllerReportAgentTests {
     wc.controlReportAgent(
       pane: panes[0], agent: "claude", state: "done", sessionId: nil, message: nil)
     XCTAssertEqual(
-      sound.played, [SoundPlayerFake.Played(family: .hagane, event: .done, volume: 30)],
+      sound.played, [SoundPlayerFake.Played(family: .steel, event: .done, volume: 30)],
       "アクティブ側でなく発信元 workspace の上書きで鳴る")
   }
 

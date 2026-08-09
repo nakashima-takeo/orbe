@@ -12,12 +12,12 @@ enum SoundCatalog {
     case .wood: return wood(event)
     case .air: return air(event)
     case .emblem: return emblem(event)
-    case .henji: return henji(event)
-    case .hazumi: return hazumi(event)
-    case .yuugi: return yuugi(event)
-    case .hagane: return hagane(event)
-    case .youkin: return youkin(event)
-    case .kuchibue: return kuchibue(event)
+    case .reply: return reply(event)
+    case .bounce: return bounce(event)
+    case .arcade: return arcade(event)
+    case .steel: return steel(event)
+    case .piano: return piano(event)
+    case .whistle: return whistle(event)
     case .deep: return deep(event)
     }
   }
@@ -131,7 +131,7 @@ enum SoundCatalog {
   }
 
   /// 声のような抑揚。完了は弾んで上がる「できた！」、入力待ちは語尾が上がる「ん〜？」。
-  private static func henji(_ event: AgentSoundEvent) -> [SoundComponent] {
+  private static func reply(_ event: AgentSoundEvent) -> [SoundComponent] {
     switch event {
     case .done:
       return [
@@ -152,7 +152,7 @@ enum SoundCatalog {
   }
 
   /// ゴムまりの跳ね。完了はぐっと沈んでから跳び上がり、入力待ちは小さく二度はずむ。
-  private static func hazumi(_ event: AgentSoundEvent) -> [SoundComponent] {
+  private static func bounce(_ event: AgentSoundEvent) -> [SoundComponent] {
     switch event {
     case .done:
       return [
@@ -174,7 +174,7 @@ enum SoundCatalog {
   }
 
   /// レトロゲームの矩形波。完了は駆け上がるコイン音、入力待ちは高めの二連ブリップ ×2 回。
-  private static func yuugi(_ event: AgentSoundEvent) -> [SoundComponent] {
+  private static func arcade(_ event: AgentSoundEvent) -> [SoundComponent] {
     func blip(_ f: Double, _ t: Double, _ d: Double, _ g: Double, _ lowpass: Double)
       -> SoundComponent
     {
@@ -200,7 +200,7 @@ enum SoundCatalog {
   // MARK: - 鋼 / 洋琴 / 口笛 / 深層
 
   /// FM 合成の金属打音。完了は金属の二打が響き合い、入力待ちはまろやかな鉄琴を二度。
-  private static func hagane(_ event: AgentSoundEvent) -> [SoundComponent] {
+  private static func steel(_ event: AgentSoundEvent) -> [SoundComponent] {
     switch event {
     case .done:
       return [
@@ -218,7 +218,7 @@ enum SoundCatalog {
   }
 
   /// ピアノの打鍵。完了は長三和音を駆け上がる三音、入力待ちは同じ鍵を静かに二度。
-  private static func youkin(_ event: AgentSoundEvent) -> [SoundComponent] {
+  private static func piano(_ event: AgentSoundEvent) -> [SoundComponent] {
     switch event {
     case .done:
       return piano(523.25, at: 0, duration: 1.2, gain: 0.10)
@@ -231,7 +231,7 @@ enum SoundCatalog {
   }
 
   /// 人の口笛。完了は「ピュイ・ピュウ」の二声、入力待ちは語尾が上がる呼びかけ。
-  private static func kuchibue(_ event: AgentSoundEvent) -> [SoundComponent] {
+  private static func whistle(_ event: AgentSoundEvent) -> [SoundComponent] {
     switch event {
     case .done:
       return [
