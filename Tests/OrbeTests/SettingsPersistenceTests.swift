@@ -45,6 +45,17 @@ final class SettingsPersistenceTests: OrbeTestCase {
     XCTAssertEqual(layer[SettingKeys.fontSize], 14, "既知 key は読める")
   }
 
+  /// 人が手で書いた値域外の int は、読んだ時点で domain の端へ丸まる。
+  /// 素通しすると値域は「設定パレット経由でだけ守られる約束」に痩せ、下流が値域を前提にできない。
+  func testOutOfRangeIntClampedOnLoad() throws {
+    try Data(
+      #"{"version":1,"values":{"font-size":500,"background-opacity":0}}"#.utf8
+    ).write(to: settingsFile())
+    let layer = SettingsPersistence.loadGlobal()
+    XCTAssertEqual(layer[SettingKeys.fontSize], 72, "上限超えは上限へ")
+    XCTAssertEqual(layer[SettingKeys.backgroundOpacity], 20, "下限未満は下限へ")
+  }
+
   // MARK: - app-state.json
 
   func testAppStateRoundTrip() {

@@ -58,11 +58,17 @@ enum SettingDomain {
   }
 
   /// 永続 decode: canonical key の JSON 値を domain の型で読む（`SettingsLayer` の codec が使う）。
+  /// 値域の担保もここが持つ——ディスクは人が手で書ける入力なので、読んだ値がそのまま実効値に
+  /// なると値域は「設定パレット経由でだけ守られる約束」に痩せる。`validate`（control config_set）は
+  /// 呼び出し元に拒否を返せるが読出には返す先が無いため、最寄りの端へ丸めて受ける
+  /// （既定へ落とすと「大きくしたい／小さくしたい」という書き手の意図まで捨ててしまう）。
   func decodeValue<K: CodingKey>(from c: KeyedDecodingContainer<K>, forKey key: K) throws
     -> SettingValue
   {
     switch self {
-    case .intRange: return .int(try c.decode(Int.self, forKey: key))
+    case .intRange(let range, _, _):
+      let v = try c.decode(Int.self, forKey: key)
+      return .int(min(range.upperBound, max(range.lowerBound, v)))
     case .toggle: return .bool(try c.decode(Bool.self, forKey: key))
     case .enumeration, .pathTemplate: return .string(try c.decode(String.self, forKey: key))
     case .stringMap: return .stringMap(try c.decode([String: String].self, forKey: key))
