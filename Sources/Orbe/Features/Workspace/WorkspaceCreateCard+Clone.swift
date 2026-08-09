@@ -43,7 +43,7 @@ extension WorkspaceCreateCard {
     .disabled(model.isCloning)  // clone 待機中はソース切替も止める
   }
 
-  /// clone 失敗時の git stderr を inline 表示（フッター直上・DispatchCard と同じ danger）。
+  /// clone 失敗理由を inline 表示（フッター直上・DispatchCard と同じ danger）。
   @ViewBuilder var cloneErrorBanner: some View {
     if let error = model.cloneError {
       Text(error)
@@ -299,7 +299,7 @@ struct WorkspaceNameLinkStatus: View {
     model.setSource(.clone)
     model.setCloneURL("https://github.com/you/repo.git")
     model.onClone = { _, _, done in
-      done("fatal: repository 'https://github.com/you/repo.git' not found")
+      done(.reason("fatal: repository 'https://github.com/you/repo.git' not found"))
     }
     model.submit()
     return ZStack {

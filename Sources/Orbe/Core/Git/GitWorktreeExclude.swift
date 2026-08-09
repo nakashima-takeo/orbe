@@ -106,7 +106,7 @@ extension GitRepo {
       return
     }
     // exit 0＝既に無視。exit 1（未無視）と判定不能はどちらも追記を試みる（追記自体が冪等）。
-    GitRunner.shared.run(
+    runner.run(
       ["check-ignore", "-q", "--", entry.checkPath], cwd: worktreeRoot
     ) { [commonDir] output in
       if !output.isSuccess {

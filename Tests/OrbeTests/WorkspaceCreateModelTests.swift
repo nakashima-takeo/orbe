@@ -259,11 +259,27 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
     m.setCloneURL("https://github.com/no/such.git")
     var created = false
     m.onCreate = { _, _ in created = true }
-    m.onClone = { _, _, done in done("fatal: repository not found") }
+    m.onClone = { _, _, done in done(.reason("fatal: repository not found")) }
     m.submit()
     XCTAssertFalse(created, "失敗で onCreate は発火しない")
-    XCTAssertEqual(m.cloneError, "fatal: repository not found", "stderr を inline 表示へ")
+    XCTAssertEqual(m.cloneError, "fatal: repository not found", "git の理由をそのまま inline 表示へ")
     XCTAssertFalse(m.isCloning, "失敗で running を抜ける")
+  }
+
+  /// 打ち切りは git が何も言い残さないので、モデルが専用文言を当てる（Git 層は UI 言語を持たない）。
+  /// 当てそこねると、待たされた末に空のエラーバナーが出て何が起きたのか誰にも分からなくなる。
+  func testCloneTimeoutShowsDedicatedMessage() {
+    // CI は英語なので、`.en` だと注入が外れて既定ストア（`.systemDefault`）へ落ちても緑になる。
+    let localization = LocalizationStore(language: .ja)
+    let m = WorkspaceCreateModel(path: NSTemporaryDirectory(), localization: localization)
+    m.setSource(.clone)
+    m.setCloneURL("https://github.com/you/repo.git")
+    m.onClone = { _, _, done in done(.timedOut) }
+
+    m.submit()
+
+    XCTAssertEqual(m.cloneError, localization.string(.gitTimedOut))
+    XCTAssertFalse(m.isCloning, "待機表示を解いてフォームを操作可能に戻す")
   }
 
   func testCloneIgnoresReentrantSubmit() {

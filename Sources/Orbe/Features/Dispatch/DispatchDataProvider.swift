@@ -14,6 +14,7 @@ final class DispatchDataProvider {
   private let worktreeTemplate: String
   /// 開いた時点のペイン占有スナップショット（`SessionStore` を Dispatch から見せないための値型）。
   private let paneOccupancies: [PaneOccupancy]
+  private let runner: GitRunner
 
   private(set) var repo: GitRepo?
   private var mainWorktree: String?
@@ -36,19 +37,20 @@ final class DispatchDataProvider {
 
   init(
     cwd: String, model: DispatchPaletteModel, localization: LocalizationStore,
-    worktreeTemplate: String, paneOccupancies: [PaneOccupancy] = []
+    worktreeTemplate: String, paneOccupancies: [PaneOccupancy] = [], runner: GitRunner = .shared
   ) {
     self.cwd = cwd
     self.model = model
     self.localization = localization
     self.worktreeTemplate = worktreeTemplate
     self.paneOccupancies = paneOccupancies
+    self.runner = runner
   }
 
   // MARK: - ロード
 
   func load() {
-    GitRepo.open(cwd: cwd) { [weak self] repo in
+    GitRepo.open(cwd: cwd, runner: runner) { [weak self] repo in
       guard let self else { return }
       guard let repo else {
         // 非 git: 全セクション空（Issues/PR も出さない）。
@@ -231,7 +233,7 @@ final class DispatchDataProvider {
   }
 
   /// 行種別に応じて対象ディレクトリを解決する（必要なら worktree を新規作成する）。
-  /// 作成は追加のみ（現在の作業ツリーは不可侵）。失敗時は stderr をそのまま返す。
+  /// 作成は追加のみ（現在の作業ツリーは不可侵）。失敗は Git 層の `GitFailure` を UI 言語へ写して返す。
   /// 既存ディレクトリを返すだけの経路はリポジトリを要さない——非 git（`repo == nil`）を畳むのは
   /// リポジトリが要る作成経路（`createWorktree`）の責務。
   func prepareDirectory(
@@ -318,9 +320,13 @@ final class DispatchDataProvider {
       worktreePath: path, worktreeRoot: root,
       parentIsNew: !FileManager.default.fileExists(
         atPath: (path as NSString).deletingLastPathComponent))
-    repo.addWorktree(path: path, base: base, newBranch: newBranch, track: track) { error in
-      guard error == nil else {
-        completion(.failed(error!))
+    let localization = self.localization
+    repo.addWorktree(path: path, base: base, newBranch: newBranch, track: track) { failure in
+      if let failure {
+        switch failure {
+        case .timedOut: completion(.failed(localization.string(.gitTimedOut)))
+        case .reason(let reason): completion(.failed(reason))
+        }
         return
       }
       // 書くのは作成できたときだけ（失敗した作成の除外を残さない）。この時点では対象が実在するので

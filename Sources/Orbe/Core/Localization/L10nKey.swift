@@ -42,6 +42,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case commonLoading
   case commonCancel
 
+  // MARK: - Git（実行層の共通失敗）
+  case gitTimedOut
+
   // MARK: - EditorPane / FileViewer
   case editorSelectFile
   case editorSearchFiles

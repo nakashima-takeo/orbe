@@ -5,14 +5,14 @@ import Foundation
 extension GitRepo {
   /// リンク worktree を含む全チェックアウト（`git worktree list --porcelain`）。
   func worktrees(completion: @escaping ([GitWorktree]) -> Void) {
-    GitRunner.shared.run(["worktree", "list", "--porcelain"], cwd: root) { output in
+    runner.run(["worktree", "list", "--porcelain"], cwd: root) { output in
       completion(output.isSuccess ? WorktreeParser.parse(output.stdoutText) : [])
     }
   }
 
   /// ローカルブランチ（新しい順）。`worktreepath` 付きは既存 worktree 再利用の手がかりになる。
   func localBranches(completion: @escaping ([GitBranch]) -> Void) {
-    GitRunner.shared.run(
+    runner.run(
       [
         "for-each-ref", "refs/heads", "--sort=-committerdate",
         "--format=%(refname:short)|%(committerdate:relative)|%(worktreepath)|%(upstream:short)"
@@ -25,7 +25,7 @@ extension GitRepo {
 
   /// リモート追跡ブランチ（新しい順・`origin/HEAD` ノイズは parser が除外）。
   func remoteBranches(completion: @escaping ([GitBranch]) -> Void) {
-    GitRunner.shared.run(
+    runner.run(
       [
         "for-each-ref", "refs/remotes", "--sort=-committerdate",
         "--format=%(refname:short)|%(committerdate:relative)|%(authorname)",
@@ -36,21 +36,26 @@ extension GitRepo {
   }
 
   /// origin から fetch し、削除された remote 追跡ブランチを prune する（`refs/remotes/origin/*` のみ更新）。
-  /// 独立レーン（`isolated: true`）で走らせる: 数秒かかりうる fetch を GitRunner 共有 queue の barrier
-  /// チェーンから切り離し、直後に Enter で来る `addWorktree`(barrier) が in-flight fetch を待たないようにする
-  /// （GCD barrier は submit 済み全ブロックの完了を待つため、共有 queue で走らせると write:false でも Enter が
-  /// 数秒ブロックされる）。並行安全: fetch が触るのは `refs/remotes/origin/*`、`addWorktree` が触るのは
-  /// worktrees・HEAD・`refs/heads` で領域は概ね disjoint、git 自身の ref/index ロックで並行安全なため共有
-  /// read-write lock の外で走らせてよい。`GIT_TERMINAL_PROMPT=0`（GitRunner 既定）で認証プロンプトはハングせず失敗に落ちる。
+  /// 独立レーン（`.independent`）で走らせる: 数秒かかりうる fetch を GitRunner 共有 queue の barrier
+  /// チェーンから切り離し、後続の `.exclusive`（EditorPane の stage・commit）が in-flight fetch を
+  /// 待たないようにする（GCD barrier は submit 済み全ブロックの完了を待つため、共有 queue で走らせると
+  /// `.read` でも後続の書き込みが数秒ブロックされる）。並行安全: fetch が触るのは `refs/remotes/origin/*`
+  /// だけで、`.exclusive` が守る index・作業ツリーとは領域が交わらない。
+  /// `GIT_TERMINAL_PROMPT=0`（GitRunner 既定）で認証プロンプトはハングせず失敗に落ちる。
+  ///
+  /// `--progress`: clone と同じ理由。非 tty の `git fetch` は転送中 1 バイトも書かないため、
+  /// 明示しないと転送に時間のかかる健全な fetch が「無出力＝ハング」と読まれて打ち切られる。
+  /// 戻り値は `Bool` なので進捗 stderr はそのまま捨てられる。
   func fetchPrune(completion: @escaping (Bool) -> Void) {
-    GitRunner.shared.run(["fetch", "--prune", "origin"], cwd: root, isolated: true) { output in
+    let args = ["fetch", "--progress", "--prune", "origin"]
+    runner.run(args, cwd: root, lane: .independent) { output in
       completion(output.isSuccess)
     }
   }
 
   /// 既定ブランチ（issue の新規 worktree の base）。解決不能なら `main` へフォールバック。
   func defaultBranch(completion: @escaping (String) -> Void) {
-    GitRunner.shared.run(
+    runner.run(
       ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], cwd: root
     ) { output in
       let name = output.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -60,43 +65,97 @@ extension GitRepo {
 
   /// origin の URL が github.com を指すか（gh 不在でも判定できる cheap チェック）。
   func originIsGitHub(completion: @escaping (Bool) -> Void) {
-    GitRunner.shared.run(["remote", "get-url", "origin"], cwd: root) { output in
+    runner.run(["remote", "get-url", "origin"], cwd: root) { output in
       completion(output.isSuccess && output.stdoutText.contains("github.com"))
     }
   }
 
   /// URL からリポジトリを clone する。clone 前はリポジトリが無いため（`root` を持てず）static で持つ。
-  /// `git clone -- <url> <dest>`（cwd は dest の親）。成功なら nil、失敗なら stderr（`addWorktree` と同契約）。
+  /// `git clone --progress -- <url> <dest>`（cwd は dest の親）。成功なら nil、失敗なら理由。
   /// URL は正規化せず素通し（git が https / ssh / scp-like を native 解釈。`GIT_TERMINAL_PROMPT=0` で
   /// 資格情報プロンプトはハングせず stderr へ落ちる）。`--` は本ファイル他所と同じくオプション
   /// 終端の明示で、`-` 始まりの URL がフラグとして解釈される事故を塞ぐ。
-  static func clone(url: String, dest: String, completion: @escaping (String?) -> Void) {
+  ///
+  /// `--progress`: GUI から起動した git は stderr が tty でないため既定で進捗を出さない。進捗が
+  /// 出ないと「無出力＝ハング」と読まれて正常な大規模 clone が打ち切られるので、明示的に出させる。
+  ///
+  /// 独立レーン: 新規ディレクトリを作るだけで既存リポジトリの index・作業ツリー・ref に一切
+  /// 触れない（共有状態はゼロ）。所要時間はネットワークとリポジトリ規模しだいで分単位になり得るので、
+  /// barrier に置くと無関係な操作まで巻き添えにする。
+  static func clone(
+    url: String, dest: String, runner: GitRunner = .shared,
+    completion: @escaping (GitFailure?) -> Void
+  ) {
     let parent = (dest as NSString).deletingLastPathComponent
-    GitRunner.shared.run(["clone", "--", url, dest], cwd: parent, write: true) { output in
-      completion(output.isSuccess ? nil : output.stderrText)
+    let args = ["clone", "--progress", "--", url, dest]
+    runner.run(args, cwd: parent, lane: .independent) { output in
+      guard !output.isSuccess else {
+        completion(nil)
+        return
+      }
+      completion(failure(from: output))
     }
   }
 
   /// worktree を追加する（現在の作業ツリーは一切変更しない・隔離された新規ディレクトリを作る）。
-  /// `git worktree add [-b <newBranch>] [--track] <path> <base>`。成功なら nil、失敗なら実質的な失敗理由。
+  /// `git worktree add [-b <newBranch>] [--track] <path> <base>`。成功なら nil、失敗なら理由。
+  ///
+  /// 独立レーン: 触るのは新規ディレクトリ・`$GIT_COMMON_DIR/worktrees/<名前>`・`-b` 指定時の
+  /// `refs/heads/<新ブランチ>`・`--track` 指定時の `.git/config`（`branch.<新ブランチ>.remote/merge`）で、
+  /// **呼び出し元チェックアウトの index には触らない**。barrier が守っていた不変条件（同一チェックアウトの
+  /// `.git/index.lock` を奪い合わない）は壊れない。ref は git 自身が `<ref>.lock`、config は `config.lock`
+  /// で守る（どちらもリトライせず即失敗し、`-b` 指定なら作成済みブランチが残る）。Orbe で `.git/config` を
+  /// 書く git 呼び出しはこれだけなので、競合相手は同時実行の `addWorktree` に限られる。
+  /// post-checkout hook はユーザーのコードで所要時間に上限が無いため、barrier に置くと 1 本のハングが
+  /// 以後の全 git 操作を止める。
   func addWorktree(
     path: String, base: String, newBranch: String?, track: Bool,
-    completion: @escaping (String?) -> Void
+    completion: @escaping (GitFailure?) -> Void
   ) {
     var args = ["worktree", "add"]
     if let newBranch { args += ["-b", newBranch] }
     if track { args.append("--track") }
     args += [path, base]
-    GitRunner.shared.run(args, cwd: root, write: true) { output in
-      completion(output.isSuccess ? nil : GitRepo.essentialFailureReason(output.stderrText))
+    runner.run(args, cwd: root, lane: .independent) { output in
+      guard !output.isSuccess else {
+        completion(nil)
+        return
+      }
+      // post-checkout hook は worktree が出来上がった**後**に走る。hook が返らず打ち切った場合、
+      // worktree 自体は完成している。失敗として返すと、実在する worktree を指したまま再実行が
+      // `fatal: a branch named 'x' already exists` で詰む——直した数より多く壊す。実体があるなら成功。
+      //
+      // ただし実体の有無が「checkout 完走」を意味するのは **git が終了した後**だけ。git は `.git` を
+      // checkout の前に書き、打ち切られると作りかけを自分で消す。猶予内に終了を観測できなかった場合の
+      // `.git` は「まだ checkout 中」か「今まさに消している最中」でありうるので、読み替えてはいけない。
+      if output.timedOut, output.exited, GitRepo.worktreeIsPresent(at: path) {
+        completion(nil)
+        return
+      }
+      completion(GitRepo.failure(from: output))
     }
   }
 
-  /// git の stderr から実質的な失敗理由を取り出す。成功・失敗どちらでも先頭に出る進捗風
-  /// `Preparing worktree (new branch 'issue/44')` を落とし、`fatal:`／`error:` 行（複数あれば全て・改行結合）
-  /// を返す。無ければ最終非空行、それも無ければ stderr 全文。git stderr の癖はこの git ラッパー層に閉じる。
+  /// リンク worktree の実体（`<path>/.git` はリンク先を書いたファイル）。
+  private static func worktreeIsPresent(at path: String) -> Bool {
+    FileManager.default.fileExists(atPath: (path as NSString).appendingPathComponent(".git"))
+  }
+
+  /// 失敗した実行を理由へ写す。打ち切りは git が何も言い残していないので、stderr でなく `.timedOut`。
+  private static func failure(from output: GitRunner.Output) -> GitFailure {
+    output.timedOut ? .timedOut : .reason(essentialFailureReason(output.stderrText))
+  }
+
+  /// git の stderr から実質的な失敗理由を取り出す。成功・失敗どちらでも出る進捗風の行
+  /// （`Preparing worktree (new branch 'issue/44')`・`--progress` の `Receiving objects: 42%`）を落とし、
+  /// `fatal:`／`error:` 行（複数あれば全て・改行結合）を返す。無ければ最終非空行、それも無ければ stderr 全文。
+  /// **`\r` でも行を割る**——`--progress` の進捗は `\r` 区切りで流れるので、`\n` だけで割ると進捗と
+  /// `fatal:` が 1 行に融合して巨大な失敗理由になる。git stderr の癖はこの git ラッパー層に閉じる
+  /// （`BranchParser` 等と同じく、git の出力を読む規則としてここに置く）。
   static func essentialFailureReason(_ stderr: String) -> String {
-    let lines = stderr.split(separator: "\n", omittingEmptySubsequences: false)
+    let lines =
+      stderr
+      .split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r" })
       .map { $0.trimmingCharacters(in: .whitespaces) }
       .filter { !$0.isEmpty }
     let reasons = lines.filter { $0.contains("fatal:") || $0.contains("error:") }

@@ -1,7 +1,7 @@
 ---
 title: エディタペイン
 description: ⌘/ の Git ワークベンチペイン。cwd 追従・右 ToolRail（ツリー/git/ブラウザ）＋左本体（ファイル/diff/md/CommitDetail）＋CommitBar
-updated: 2026-08-08
+updated: 2026-08-10
 ---
 
 # エディタペイン（⌘/）
@@ -90,7 +90,11 @@ FSEvents（worktree root＋gitDir＋commonDir 監視）で外部変更が手動�
 
 ## git 実行の契約
 
-`/usr/bin/git` を背景キューで起動し、completion をメインへ返す。`GIT_TERMINAL_PROMPT=0`（対話でハングさせない）。status は `--no-optional-locks`。diff/diff-tree は `--no-color --no-ext-diff --no-textconv --find-renames -U3`＋`core.quotepath=false`——信頼できないリポジトリの外部 diff driver / textconv を実行しないため。write 系（index/ref を変更する操作）は barrier で排他直列化し、read 系は並行で走らせる（index.lock 衝突の回避）。未追跡ファイルの diff は index に触れず合成する（先頭バイトに NUL・過大サイズ・非 UTF-8 はバイナリ扱いで全行展開を避ける）。
+`/usr/bin/git` を背景キューで起動し、completion をメインへ返す。`GIT_TERMINAL_PROMPT=0`（対話でハングさせない）。status は `--no-optional-locks`。diff/diff-tree は `--no-color --no-ext-diff --no-textconv --find-renames -U3`＋`core.quotepath=false`——信頼できないリポジトリの外部 diff driver / textconv を実行しないため。未追跡ファイルの diff は index に触れず合成する（先頭バイトに NUL・過大サイズ・非 UTF-8 はバイナリ扱いで全行展開を避ける）。
+
+**実行レーンは 3 種**で、「何と競合するか」で選ぶ。read は並行で走る。同一チェックアウトの index・作業ツリーを書く操作は barrier で単独直列化する（index.lock 衝突の回避）。共有チェックアウトと領域が交わらない操作——clone・worktree 作成・fetch——は独立レーンで走らせ、barrier チェーンに載せない。barrier はプロセス単位なので、時間の上限が無い操作をそこへ置くと無関係な操作まで巻き添えにするため。
+
+**無出力が 120 秒続いた実行は SIGTERM で打ち切る。** 経過時間ではなく無出力時間で測るのは、巨大リポジトリの clone のような正当な長時間実行を切らないため——出力が流れている間は延命し、何も起きていないときだけ切る（そのため clone・fetch には `--progress` を渡す。GUI 起動では stderr が tty でなく、既定では進捗が出ないので無音と区別できない）。打ち切りは `.git/index.lock` も作りかけの clone 先も残さない（git 自身が SIGTERM で掃除する。SIGKILL では残る）。打ち切った後は pipe の EOF を無期限に待たない——git が終了しても、その出力を継いだ孫プロセスが残っていれば EOF は来ないため。
 
 ## 実装の境界
 
