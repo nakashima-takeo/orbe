@@ -18,6 +18,9 @@ struct DispatchCardKeyCapture: ViewModifier {
         switch press.key {
         case .upArrow: model.clean.move(-1)
         case .downArrow: model.clean.move(1)
+        // clean に ⇥ の意味は無いが、握らないと焦点がカード器から抜けて以下のキーが全部死ぬ
+        // （list 側の入力欄が同じ理由で ⇥ を握っているのと同じ手当て）。
+        case .tab: break
         default: return .ignored
         }
         return .handled

@@ -7,7 +7,7 @@ import XCTest
 @MainActor
 final class DispatchPaletteTests: OrbeTestCase {
 
-  private func makeModel(
+  func makeModel(
     _ input: DispatchSectionBuilder.Input = .designSample,
     agents: [AgentCLI] = [
       AgentCLI(command: "claude", path: "/bin/claude"),
