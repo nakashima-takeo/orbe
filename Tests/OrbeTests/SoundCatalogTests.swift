@@ -30,7 +30,7 @@ final class SoundCatalogTests: OrbeTestCase {
   }
 
   /// 音の全長は 0.05〜2.2 秒に収まり、長い方の 2 案は design どおりの長さになる
-  /// （最後の部品の発音終了＋コンプレッサの尾 0.1）。
+  /// （最後の部品の発音が終わる時刻）。
   func testDurations() {
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
@@ -39,11 +39,24 @@ final class SoundCatalogTests: OrbeTestCase {
         XCTAssertLessThanOrEqual(duration, 2.2, "\(family)/\(event)")
       }
     }
-    XCTAssertEqual(SoundCatalog.duration(.deep, .done), 2.05 + 0.1, accuracy: 1e-9)
-    XCTAssertEqual(SoundCatalog.duration(.emblem, .done), 2.07 + 0.1, accuracy: 1e-9, "最長")
+    XCTAssertEqual(SoundCatalog.duration(.deep, .done), 2.05, accuracy: 1e-9)
+    XCTAssertEqual(SoundCatalog.duration(.emblem, .done), 2.07, accuracy: 1e-9, "最長")
+  }
+
+  /// 12 案 × 2 イベントが**互いに違う音**になる（`components` の手書き switch は誤配線しても
+  /// コンパイラが黙るので、配線の同一性をここで機械検証する。レンダリングは要らない）。
+  func testEveryFamilyAndEventProducesADistinctSound() {
+    var signatures: Set<[SoundComponent]> = []
+    for family in NotificationSound.allCases {
+      for event in AgentSoundEvent.allCases {
+        signatures.insert(SoundCatalog.components(family, event))
+      }
+    }
+    XCTAssertEqual(signatures.count, 24, "案 × イベントの配線が重複している")
   }
 
   /// 合成結果は有限・非空・非クリップで、長さは全長 × サンプルレート。
+  /// assert は音ごとに 1 回だけ——サンプル単位で撃つと、退行時に百万件の failure 記録で CI が止まる。
   func testRenderedWaveformsAreFiniteAndUnclipped() {
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
@@ -52,10 +65,12 @@ final class SoundCatalogTests: OrbeTestCase {
         let expected = Int((SoundCatalog.duration(family, event) * sampleRate).rounded(.up))
         XCTAssertEqual(samples.count, expected, "\(family)/\(event) の長さ")
         var peak: Float = 0
+        var finite = true
         for sample in samples {
-          XCTAssertTrue(sample.isFinite, "\(family)/\(event) に NaN / Inf")
+          if !sample.isFinite { finite = false }
           peak = max(peak, abs(sample))
         }
+        XCTAssertTrue(finite, "\(family)/\(event) に NaN / Inf")
         XCTAssertGreaterThan(peak, 0.001, "\(family)/\(event) が無音")
         XCTAssertLessThanOrEqual(peak, 1, "\(family)/\(event) がクリップ")
       }
@@ -73,15 +88,19 @@ final class SoundCatalogTests: OrbeTestCase {
     }
   }
 
-  /// 音量は合成の入力（コンプレッサの手前）。小さくすれば必ず小さくなる。
-  func testVolumeScalesDownTheResult() {
+  /// 音量は合成の入力（コンプレッサの**手前**）。小さくすれば必ず小さくなり、かつ縮み方は線形でない
+  /// ——音量を再生側ボリュームや事前生成音源へ移すと厳密に 0.2 倍になるので、そこで落ちる。
+  func testVolumeIsAppliedBeforeTheCompressor() {
     let loud = SoundRenderer.render(
       family: .glass, event: .done, volume: 100, sampleRate: sampleRate)
     let quiet = SoundRenderer.render(
       family: .glass, event: .done, volume: 20, sampleRate: sampleRate)
     XCTAssertEqual(loud.count, quiet.count)
-    XCTAssertLessThan(
-      quiet.map { abs($0) }.max() ?? 0, loud.map { abs($0) }.max() ?? 0)
+    let loudPeak = loud.map { abs($0) }.max() ?? 0
+    let quietPeak = quiet.map { abs($0) }.max() ?? 0
+    XCTAssertLessThan(quietPeak, loudPeak)
+    XCTAssertGreaterThan(
+      quietPeak, loudPeak * 0.2 * 1.02, "コンプレッサの後段なら厳密に 0.2 倍になる")
   }
 
   /// サンプルレートが変わっても同じ長さの音になる（biquad 係数もレートへ追従する）。

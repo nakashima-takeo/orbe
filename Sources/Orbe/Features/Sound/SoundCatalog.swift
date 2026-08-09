@@ -4,9 +4,6 @@ import Foundation
 /// ここは「何をどう鳴らすか」の宣言だけで、波形の作り方は `SoundComponent` の展開と `SoundSynth`、
 /// 実際の合成は `SoundRenderer` が担う。
 enum SoundCatalog {
-  /// コンプレッサのリリースが戻りきるまでの尾（最後の部品が鳴り終わってから足す長さ）。
-  static let releaseTail = 0.1
-
   static func components(_ family: NotificationSound, _ event: AgentSoundEvent) -> [SoundComponent]
   {
     switch family {
@@ -25,9 +22,10 @@ enum SoundCatalog {
     }
   }
 
-  /// 音の全長（最後の部品の発音終了＋コンプレッサの尾）。
+  /// 音の全長（最後の部品の発音が終わる時刻）。コンプレッサは乗算だけで尾を持たないので、
+  /// 全部品が鳴り終わればそれ以降は厳密に無音になる＝足すべき余白は無い。
   static func duration(_ family: NotificationSound, _ event: AgentSoundEvent) -> Double {
-    (components(family, event).map(\.end).max() ?? 0) + releaseTail
+    components(family, event).map(\.end).max() ?? 0
   }
 
   // MARK: - 硝子 / 電紫 / 木肌 / 気配

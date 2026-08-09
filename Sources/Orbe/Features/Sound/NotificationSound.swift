@@ -40,14 +40,9 @@ extension NotificationSound: SettingConvertible {
 }
 
 /// 音を鳴らすエージェント状態。design の `error` は Orbe に対応する状態が無いので持たない。
+/// rawValue は `report_agent` の state 文字列そのもの——これ以外の状態は鳴らさない（＝`init?(rawValue:)` が nil）。
 enum AgentSoundEvent: String, CaseIterable {
   case done, waiting
-
-  /// エージェント状態の報告文字列（`report_agent` の state）からの写像。他の状態は鳴らさない＝nil。
-  init?(state: String) {
-    guard let event = AgentSoundEvent(rawValue: state) else { return nil }
-    self = event
-  }
 
   /// 試聴対象のセグメント表示に使うラベル（状態名の語彙をそのまま共有する）。
   var labelKey: L10nKey {

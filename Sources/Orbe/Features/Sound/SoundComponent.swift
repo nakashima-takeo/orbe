@@ -2,7 +2,7 @@ import Foundation
 
 /// 音 1 つを構成する最小部品（design のプリミティブを展開した後の低レベル部品）。
 /// `SoundCatalog` が案ごとにこの配列を組み、`SoundRenderer` が 1 本のモノラル波形へ加算する。
-enum SoundComponent {
+enum SoundComponent: Hashable {
   case tone(ToneSpec)
   case glide(GlideSpec)
   case fm(FMSpec)
@@ -18,6 +18,7 @@ enum SoundComponent {
     }
   }
 
+  /// 発音が始まる時刻（音の先頭からの秒）。`end` と対で部品の整形式性を語る。
   var start: Double {
     switch self {
     case .tone(let s): return s.start
@@ -29,12 +30,12 @@ enum SoundComponent {
 }
 
 /// 単一周波数の音。`lowpass` を指定するとゲインの後段に lowpass biquad（Q は Web Audio 既定の 1 dB）が入る。
-struct ToneSpec {
+struct ToneSpec: Hashable {
   var frequency: Double
   var start: Double
   var duration: Double
   var waveform: Waveform = .sine
-  var gain: Double = 0.15
+  var gain: Double
   var attack: Double = 0.004
   var lowpass: Double?
 
@@ -43,13 +44,13 @@ struct ToneSpec {
 
 /// 音程が滑る音。`overshoot` 指定時は t+0.6d で `to * overshoot` を経由してから `to` へ落ち着く
 /// （弾みの跳ね上がり）。`vibrato`（Hz 幅）が非 0 なら sine の LFO を周波数へ加算する。
-struct GlideSpec {
+struct GlideSpec: Hashable {
   var from: Double
   var to: Double
   var start: Double
   var duration: Double
   var waveform: Waveform = .sine
-  var gain: Double = 0.12
+  var gain: Double
   var overshoot: Double?
   var vibrato: Double = 0
   var vibratoRate: Double = 6
@@ -61,26 +62,27 @@ struct GlideSpec {
 
 /// FM 合成の金属打音。キャリア `frequency`・モジュレータ `frequency * ratio`、
 /// 周波数偏移は `frequency * index` から `frequency * 0.02` へ指数減衰する。
-struct FMSpec {
+struct FMSpec: Hashable {
   var frequency: Double
   var start: Double
   var duration: Double
-  var ratio: Double = 2
-  var index: Double = 3
-  var gain: Double = 0.12
+  var ratio: Double
+  var index: Double
+  var gain: Double
   var modulatorDecay: Double = 0.5
 
   var end: Double { start + duration + 0.05 }
 }
 
 /// 帯域を通した白色雑音。`frequencyEnd` 指定時はフィルタ周波数が duration をかけて指数で移る。
-struct NoiseSpec {
+struct NoiseSpec: Hashable {
   var start: Double
   var duration: Double
-  var gain: Double = 0.1
-  var kind: Biquad.Kind = .bandpass
-  var frequency: Double = 1000
+  var gain: Double
+  var kind: Biquad.Kind
+  var frequency: Double
   var frequencyEnd: Double?
+  /// 単位は `kind` で変わる——lowpass / highpass は dB、bandpass は線形（→ `Biquad`）。
   var q: Double = 0.8
   var attack: Double = 0.01
 
