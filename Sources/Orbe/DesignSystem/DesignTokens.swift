@@ -99,7 +99,8 @@ enum Theme {
       dark: OrbePalette.Chrome.accentDark, darkA: 0.10)
     static let smallPillFill = dynA(light: 0x3a3151, lightA: 0.06, dark: 0xffffff, darkA: 0.04)
     // 事実だけを述べる無色のチップ地（clean の `[gone]` / `prunable`）。surfaceInk 基調で
-    // light .08 / dark .06——smallPillFill とは明暗の当て方が逆で値も違うため別トークンで持つ。
+    // light .08 / dark .06——smallPillFill と同軸で濃さだけ 1 段上（事実チップは小ピルより地を
+    // 強く出す）。値が違うので別トークンで持つ。
     static let plainPillFill = dynA(light: 0x3a3151, lightA: 0.08, dark: 0xffffff, darkA: 0.06)
 
     // 状態別 tint（バッジ等の淡塗り。各テーマの状態色の 12–14%。design-system §2 のミラー）
