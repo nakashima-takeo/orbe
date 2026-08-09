@@ -84,16 +84,17 @@ final class DispatchDataProvider {
     if let cached = entry.closedPullRequests { closedPullRequests = cached }
   }
 
-  /// 裏で fetch --prune し、成功したら Remote branches だけ最新化して差し替える（gh 追従と同じプログレッシブ表示）。
-  /// 失敗時（remote 無し・ネットワーク不通・認証拒否等）は何もせず現状キャッシュ据え置き＝劣化なし。
+  /// 裏で fetch --prune し、成功したら git レーンを丸ごと引き直す（gh 追従と同じプログレッシブ表示）。
+  /// 失敗時は何もせず現状据え置き＝劣化なし。
+  ///
+  /// **分類まで取り直すのが要点**——取り込み済み判定は `origin/<default>` に `git cherry` を打つので、
+  /// fetch 前の分類は「GitHub でマージした直後」に必ず未取り込みと出る（この機能の主用途がそのまま
+  /// 外れる）。`[gone]` の出どころである `localBranches` も prune で初めて確定する。clean 画面は
+  /// `enter(rows:)` で凍結済みなので、カーソルの下でリストが組み替わることはない。
   private func loadRemotePrune(_ repo: GitRepo) {
     repo.fetchPrune { [weak self] success in
       guard let self, success else { return }
-      repo.remoteBranches { [weak self] branches in
-        guard let self else { return }
-        self.remoteBranches = branches
-        self.rebuild()
-      }
+      self.loadGit(repo)
     }
   }
 
@@ -123,13 +124,18 @@ final class DispatchDataProvider {
     // 分類（レーン D）は worktree 一覧と既定ブランチが揃ってはじめて叩けるのでここから起動する。
     group.notify(queue: .main) {
       self.rebuild()
-      DispatchCleanProber(repo: repo, defaultBranch: self.defaultBranchName)
-        .probe(worktrees: self.worktrees, panes: self.paneOccupancies) { [weak self] probes in
-          guard let self else { return }
-          self.cleanProbes = probes
-          self.rebuild()
-        }
+      self.startCleanProbe(repo)
     }
+  }
+
+  /// 分類レーンを起動する。fetch 着地後にも同じ入口から取り直す（結果が同じなら rebuild しない）。
+  private func startCleanProbe(_ repo: GitRepo) {
+    DispatchCleanProber(repo: repo, defaultBranch: defaultBranchName)
+      .probe(worktrees: worktrees, panes: paneOccupancies) { [weak self] probes in
+        guard let self, self.cleanProbes != probes else { return }
+        self.cleanProbes = probes
+        self.rebuild()
+      }
   }
 
   private func loadGitHub(_ repo: GitRepo) {
@@ -171,7 +177,7 @@ final class DispatchDataProvider {
   }
 
   /// 取得失敗（nil）は差し替えず据え置く。等値なら rebuild もしない（ちらつかない）。
-  /// gh 着地の規則はこの 2 メソッドが持つ（テストが直接叩く唯一の入口）。
+  /// gh 着地の規則は以下の 3 メソッドが持つ（テストが直接叩く唯一の入口）。
   /// needsRebuild を代入より先に評価するのが要点——キャッシュ未ヒット時は loading==true なので
   /// 失敗でも必ず rebuild してローディング行を畳む。
   func applyFetchedIssues(_ fetched: [GitHubIssue]?) {
@@ -324,6 +330,11 @@ final class DispatchDataProvider {
   }
 
   /// 選択された worktree を削除する（実行と結果の集約は `DispatchWorktreeCleaner` が担う）。
+  ///
+  /// 完了の前に git レーンを引き直す。**1 件でも失敗したら画面に留まる**のがこの機能の設計で、
+  /// そのとき唯一の真実が削除前のままだと、list へ戻った先に消えた worktree の行が残り、clean へ
+  /// 入り直すとそれが「安全に削除できます」へチェック済みで復活する。差分を手で畳まず取り直すのは、
+  /// 削除が worktree・ブランチ・分類の複数レーンを動かすため（同じ状態へ 2 通りの道を作らない）。
   func deleteWorktrees(
     _ requests: [CleanDeleteRequest], completion: @escaping (CleanDeleteResult) -> Void
   ) {
@@ -336,7 +347,10 @@ final class DispatchDataProvider {
     DispatchWorktreeCleaner(
       repo: repo, localization: localization,
       prunablePaths: Set(worktrees.filter(\.isPrunable).map(\.path))
-    ).run(requests, completion: completion)
+    ).run(requests) { [weak self] result in
+      self?.loadGit(repo)
+      completion(result)
+    }
   }
 
   /// issue/PR／PR に紐づく worktree・branch をブラウザで開く（fire-and-forget）。
