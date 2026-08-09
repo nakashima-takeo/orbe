@@ -66,7 +66,8 @@ extension DesignGallerySnapshotTests {
 
     // (g) clone 失敗の inline エラー: onClone が stderr を返す＝danger バナー表示。
     let cloneError = cloneModel()
-    cloneError.onClone = { _, _, done in done("fatal: repository '\(repoURL)' not found") }
+    cloneError.onClone = { _, _, done in done(.message("fatal: repository '\(repoURL)' not found"))
+    }
     cloneError.submit()
     try write("workspacecreate_clone_error.png", cloneError)
   }

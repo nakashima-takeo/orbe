@@ -299,7 +299,7 @@ struct WorkspaceNameLinkStatus: View {
     model.setSource(.clone)
     model.setCloneURL("https://github.com/you/repo.git")
     model.onClone = { _, _, done in
-      done("fatal: repository 'https://github.com/you/repo.git' not found")
+      done(.message("fatal: repository 'https://github.com/you/repo.git' not found"))
     }
     model.submit()
     return ZStack {

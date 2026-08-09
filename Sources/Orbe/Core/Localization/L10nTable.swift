@@ -42,6 +42,9 @@ enum L10n {
     .commonLoading: ("読み込み中…", "Loading…"),
     .commonCancel: ("キャンセル", "Cancel"),
 
+    // MARK: Git
+    .gitTimedOut: ("git から応答が無いため中断しました", "Stopped: no response from git"),
+
     // MARK: EditorPane / FileViewer
     .editorSelectFile: ("ファイルを選択", "Select a file"),
     .editorSearchFiles: ("ファイルを検索", "Search files"),

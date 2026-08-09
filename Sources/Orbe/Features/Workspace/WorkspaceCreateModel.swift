@@ -7,11 +7,11 @@ import Foundation
 @Observable final class WorkspaceCreateModel {
   /// 作成ソース。folder＝既存フォルダのパス / clone＝URL からリポジトリを clone。
   enum Source { case folder, clone }
-  /// clone 実行の状態。running＝待機（キャンセル不可）／failed＝git stderr を inline 表示。
+  /// clone 実行の状態。running＝待機（キャンセル不可）／failed＝失敗理由を inline 表示。
   enum CloneState { case idle, running, failed(String) }
-  /// clone runner の型（url, 展開済み絶対 dest, completion）。completion(nil)＝成功 / completion(stderr)＝失敗
-  /// （`GitRepo.addWorktree` と同契約・completion は main で呼ぶ）。closure 注入で実 git を単体テストから切る。
-  typealias CloneRunner = (String, String, @escaping (String?) -> Void) -> Void
+  /// clone runner の型（url, 展開済み絶対 dest, completion）。completion(nil)＝成功 / 非 nil＝失敗理由
+  /// （`GitRepo.clone` と同契約・completion は main で呼ぶ）。closure 注入で実 git を単体テストから切る。
+  typealias CloneRunner = (String, String, @escaping (GitFailure?) -> Void) -> Void
 
   /// アクティブなソース。切替で本文フォームが差し替わる。
   private(set) var source: Source = .folder
@@ -39,9 +39,14 @@ import Foundation
   /// キャンセル / esc / scrim タップ（＝切替画面へ戻す）。
   var onDismiss: () -> Void = {}
 
-  init(path: String) {
+  /// 失敗理由を現在言語の文言へ写すためのストア（提示元＝WindowController が渡す）。
+  private let localization: LocalizationStore
+
+  init(path: String, localization: LocalizationStore = LocalizationStore(language: .systemDefault))
+  {
     self.path = path
     self.cloneDir = path  // clone 先の親も folder と同じ初期値（cwd 短縮 or `~`）
+    self.localization = localization
   }
 
   // MARK: - 派生
@@ -84,7 +89,7 @@ import Foundation
     if case .running = cloneState { return true }
     return false
   }
-  /// clone 失敗時の git stderr（inline 表示）。
+  /// clone 失敗時の理由（inline 表示・文言は写し済み）。
   var cloneError: String? {
     if case .failed(let message) = cloneState { return message }
     return nil
@@ -191,7 +196,7 @@ import Foundation
   }
 
   /// ↵ 作成。folder＝そのまま onCreate。clone＝headless に clone を回し、成功で onCreate（clone 先）・
-  /// 失敗で stderr を inline 表示。実行中は二重実行を防ぐ（`guard !isCloning`）。
+  /// 失敗で理由を inline 表示。実行中は二重実行を防ぐ（`guard !isCloning`）。
   func submit() {
     guard canCreate else { return }
     switch source {
@@ -203,10 +208,14 @@ import Foundation
       let finalDest = cloneFinalDest  // `~` 保持（onCreate へ・store が展開）
       let createdName = curName
       let expandedDest = (finalDest as NSString).expandingTildeInPath  // git へは展開済み絶対パス
-      onClone(cloneURL.trimmingCharacters(in: .whitespaces), expandedDest) { [weak self] stderr in
+      onClone(cloneURL.trimmingCharacters(in: .whitespaces), expandedDest) { [weak self] failure in
         guard let self else { return }
-        if let stderr {
-          self.cloneState = .failed(stderr)
+        if let failure {
+          // 文言はここで当てる（Git 層は UI 言語を持たない）。
+          switch failure {
+          case .timedOut: self.cloneState = .failed(self.localization.string(.gitTimedOut))
+          case .message(let reason): self.cloneState = .failed(reason)
+          }
         } else {
           self.cloneState = .idle
           self.onCreate(finalDest, createdName)

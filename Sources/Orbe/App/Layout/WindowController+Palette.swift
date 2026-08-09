@@ -94,7 +94,7 @@ extension WindowController {
     // パス初期値＝アクティブペインの cwd（`~` 短縮）、無ければ `~`。clone 先の親も同じ初期値（model init）。
     let initialPath =
       store.activePaneCwd().map { ($0 as NSString).abbreviatingWithTildeInPath } ?? "~"
-    let m = WorkspaceCreateModel(path: initialPath)
+    let m = WorkspaceCreateModel(path: initialPath, localization: localization)
     m.onCreate = { [weak self] path, name in
       guard let self else { return }
       self.createWorkspace(name: name, rootPath: path)

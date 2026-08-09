@@ -66,40 +66,84 @@ extension GitRepo {
   }
 
   /// URL からリポジトリを clone する。clone 前はリポジトリが無いため（`root` を持てず）static で持つ。
-  /// `git clone -- <url> <dest>`（cwd は dest の親）。成功なら nil、失敗なら stderr（`addWorktree` と同契約）。
+  /// `git clone --progress -- <url> <dest>`（cwd は dest の親）。成功なら nil、失敗なら理由。
   /// URL は正規化せず素通し（git が https / ssh / scp-like を native 解釈。`GIT_TERMINAL_PROMPT=0` で
   /// 資格情報プロンプトはハングせず stderr へ落ちる）。`--` は本ファイル他所と同じくオプション
   /// 終端の明示で、`-` 始まりの URL がフラグとして解釈される事故を塞ぐ。
+  ///
+  /// `--progress`: GUI から起動した git は stderr が tty でないため既定で進捗を出さない。進捗が
+  /// 出ないと「無出力＝ハング」と読まれて正常な大規模 clone が打ち切られるので、明示的に出させる。
+  ///
+  /// 独立レーン: 新規ディレクトリを作るだけで既存リポジトリの index・作業ツリー・ref に一切
+  /// 触れない（共有状態はゼロ）。所要時間はネットワークとリポジトリ規模しだいで分単位になり得るので、
+  /// barrier に置くと無関係な操作まで巻き添えにする。
   static func clone(
     url: String, dest: String, runner: GitRunner = .shared,
-    completion: @escaping (String?) -> Void
+    completion: @escaping (GitFailure?) -> Void
   ) {
     let parent = (dest as NSString).deletingLastPathComponent
-    runner.run(["clone", "--", url, dest], cwd: parent, lane: .exclusive) { output in
-      completion(output.isSuccess ? nil : output.stderrText)
+    let args = ["clone", "--progress", "--", url, dest]
+    runner.run(args, cwd: parent, lane: .independent) { output in
+      guard !output.isSuccess else {
+        completion(nil)
+        return
+      }
+      completion(failure(from: output))
     }
   }
 
   /// worktree を追加する（現在の作業ツリーは一切変更しない・隔離された新規ディレクトリを作る）。
-  /// `git worktree add [-b <newBranch>] [--track] <path> <base>`。成功なら nil、失敗なら実質的な失敗理由。
+  /// `git worktree add [-b <newBranch>] [--track] <path> <base>`。成功なら nil、失敗なら理由。
+  ///
+  /// 独立レーン: 触るのは新規ディレクトリ・`$GIT_COMMON_DIR/worktrees/<名前>`・`-b` 指定時の
+  /// `refs/heads/<新ブランチ>` だけで、**呼び出し元チェックアウトの index には触らない**。barrier が
+  /// 守っていた不変条件（同一チェックアウトの `.git/index.lock` を奪い合わない）は壊れない。ref は
+  /// git 自身が `<ref>.lock` で守る。post-checkout hook はユーザーのコードで所要時間に上限が無いため、
+  /// barrier に置くと 1 本のハングが以後の全 git 操作を止める。
   func addWorktree(
     path: String, base: String, newBranch: String?, track: Bool,
-    completion: @escaping (String?) -> Void
+    completion: @escaping (GitFailure?) -> Void
   ) {
     var args = ["worktree", "add"]
     if let newBranch { args += ["-b", newBranch] }
     if track { args.append("--track") }
     args += [path, base]
-    runner.run(args, cwd: root, lane: .exclusive) { output in
-      completion(output.isSuccess ? nil : GitRepo.essentialFailureReason(output.stderrText))
+    runner.run(args, cwd: root, lane: .independent) { output in
+      guard !output.isSuccess else {
+        completion(nil)
+        return
+      }
+      // post-checkout hook は worktree が出来上がった**後**に走る。hook が返らず打ち切った場合、
+      // worktree 自体は完成している。失敗として返すと、実在する worktree を指したまま再実行が
+      // `fatal: a branch named 'x' already exists` で詰む——直した数より多く壊す。実体があるなら成功。
+      if output.timedOut, GitRepo.worktreeIsPresent(at: path) {
+        completion(nil)
+        return
+      }
+      completion(GitRepo.failure(from: output))
     }
   }
 
-  /// git の stderr から実質的な失敗理由を取り出す。成功・失敗どちらでも先頭に出る進捗風
-  /// `Preparing worktree (new branch 'issue/44')` を落とし、`fatal:`／`error:` 行（複数あれば全て・改行結合）
-  /// を返す。無ければ最終非空行、それも無ければ stderr 全文。git stderr の癖はこの git ラッパー層に閉じる。
+  /// リンク worktree の実体（`<path>/.git` はリンク先を書いたファイル）。
+  private static func worktreeIsPresent(at path: String) -> Bool {
+    FileManager.default.fileExists(atPath: (path as NSString).appendingPathComponent(".git"))
+  }
+
+  /// 失敗した実行を理由へ写す。打ち切りは git が何も言い残していないので、stderr でなく `.timedOut`。
+  private static func failure(from output: GitRunner.Output) -> GitFailure {
+    output.timedOut ? .timedOut : .message(essentialFailureReason(output.stderrText))
+  }
+
+  /// git の stderr から実質的な失敗理由を取り出す。成功・失敗どちらでも出る進捗風の行
+  /// （`Preparing worktree (new branch 'issue/44')`・`--progress` の `Receiving objects: 42%`）を落とし、
+  /// `fatal:`／`error:` 行（複数あれば全て・改行結合）を返す。無ければ最終非空行、それも無ければ stderr 全文。
+  /// **`\r` でも行を割る**——`--progress` の進捗は `\r` 区切りで流れるので、`\n` だけで割ると進捗と
+  /// `fatal:` が 1 行に融合して巨大な失敗理由になる。git stderr の癖はこの git ラッパー層に閉じる
+  /// （`BranchParser` 等と同じく、git の出力を読む規則としてここに置く）。
   static func essentialFailureReason(_ stderr: String) -> String {
-    let lines = stderr.split(separator: "\n", omittingEmptySubsequences: false)
+    let lines =
+      stderr
+      .split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r" })
       .map { $0.trimmingCharacters(in: .whitespaces) }
       .filter { !$0.isEmpty }
     let reasons = lines.filter { $0.contains("fatal:") || $0.contains("error:") }

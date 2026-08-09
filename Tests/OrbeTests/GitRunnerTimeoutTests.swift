@@ -8,8 +8,8 @@ import XCTest
 ///
 /// ここが壊れると、返らない git を待つ UI が永久に固まる（打ち切りが効かない）か、
 /// 進捗が流れているだけの正常な clone を途中で殺す（アイドル判定が壊れる）。
-/// 打ち切った後に EOF を待ってしまう実装も同じく致命で、孫プロセス（hook・`git remote-ext`）が
-/// pipe の書き込み端を握ったままなので、**切ったのに返らない**という同じハングを作り直す。
+/// 打ち切った後に EOF を待ってしまう実装も同じく致命で、セッションごと抜けた孫（daemon 化した
+/// hook の子）が pipe の書き込み端を握ったままなので、**切ったのに返らない**を作り直す。
 final class GitRunnerTimeoutTests: OrbeTestCase {
   /// 本番の 120 秒は待てないので、短いアイドル上限を持つ専用インスタンスで駆動する
   /// （`shared` のキューを一切汚さない）。
@@ -49,9 +49,8 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
     XCTAssertTrue(fixture.git(["add", "-A"]).isSuccess)
   }
 
-  /// 返らない `ext::` transport を相手にした clone（clone は hook を持たないので、
-  /// 止める手段はこれだけ。git は `git remote-ext` → `sh` と孫を作るので、
-  /// 「孫が pipe を握ったまま」も同時に再現できる）。
+  /// 返らない `ext::` transport を相手にした clone。clone は hook を持たないので、止める手段は
+  /// これだけ（`protocol.ext.allow` は既定で拒否なので、テストが明示的に開ける）。
   private func cloneFromHangingRemote() throws -> (output: GitRunner.Output, dest: String) {
     let helper = try fixture.installScript("hang-remote.sh", script: fixture.waitingScript)
     let dest = fixture.dir.appendingPathComponent("clone-dst").path
@@ -127,6 +126,95 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
         atPath: (fixture.root as NSString).appendingPathComponent(".git/index.lock")),
       "lock が残ると、以後この repo への書き込みが全部 fatal になる")
     XCTAssertTrue(try runSync(["status", "--porcelain"]).isSuccess, "後続の git 操作が通る")
+  }
+
+  // MARK: - 打ち切り後の読み替えと巻き添えの不在
+
+  /// post-checkout hook は worktree が出来上がった**後**に走る。hook が返らず打ち切っても
+  /// worktree は完成しているので、**成功として返す**。失敗にすると、実在する worktree を指したまま
+  /// 再実行が `fatal: a branch named 'x' already exists` で詰む——直した数より多く壊す。
+  func testStoppedWorktreeAddSucceedsWhenTheWorktreeExists() throws {
+    try fixture.installHook("post-checkout", script: fixture.waitingScript)
+    var repo: GitRepo?
+    let opened = expectation(description: "GitRepo.open")
+    GitRepo.open(cwd: fixture.root, runner: runner) {
+      repo = $0
+      opened.fulfill()
+    }
+    wait(for: [opened], timeout: 10)
+
+    var failure: GitFailure??
+    let done = expectation(description: "addWorktree")
+    try XCTUnwrap(repo).addWorktree(
+      path: fixture.worktreePath, base: "main", newBranch: "hang", track: false
+    ) {
+      failure = $0
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 20)
+
+    XCTAssertEqual(failure, .some(nil), "実体があるなら成功として返す")
+    XCTAssertTrue(
+      FileManager.default.fileExists(
+        atPath: (fixture.worktreePath as NSString).appendingPathComponent(".git")),
+      "前提: hook が返らなくても worktree は出来上がっている")
+    XCTAssertTrue(
+      GitRunner.shared.runSync(["status", "--porcelain"], cwd: fixture.worktreePath).isSuccess,
+      "出来上がった worktree はそのまま使える")
+  }
+
+  /// 独立レーンでハングしている実行は、barrier を取る書き込みを巻き添えにしない。
+  /// これが効かないと、1 本の worktree 作成や clone が以後の全 git 操作を止める。
+  func testHangingIndependentLaneDoesNotBlockExclusiveWrites() throws {
+    try fixture.installHook("pre-commit", script: fixture.waitingScript)
+    try stageChange()
+    // 打ち切られるまで返らない実行を独立レーンへ流し込む。
+    runner.run(["commit", "-m", "blocked"], cwd: fixture.root, lane: .independent) { _ in }
+    XCTAssertTrue(fixture.waitUntilHung(), "前提: 独立レーンの実行がハングしていること")
+
+    let done = expectation(description: "exclusive write")
+    runner.run(["config", "orbe.probe", "1"], cwd: fixture.root, lane: .exclusive) { _ in
+      done.fulfill()
+    }
+
+    wait(for: [done], timeout: 5)
+  }
+
+  /// `--progress` の進捗は `\r` 区切りで流れる（実測: 200 ファイルの clone で stderr 8.7KB・CR 204 個）。
+  /// `\n` だけで行を割ると進捗と `fatal:` が 1 行に融合し、進捗の断片まみれの巨大な失敗理由が出る。
+  func testFailureReasonSplitsProgressOnCarriageReturns() {
+    let stderr = """
+      Cloning into 'repo'...\n\
+      remote: Enumerating objects: 202, done.\n\
+      Receiving objects:  50% (101/202)\r\
+      Receiving objects: 100% (202/202), 12.00 KiB | 12.00 MiB/s, done.\r\
+      fatal: could not create work tree dir 'repo': Permission denied\n
+      """
+
+    let reason = GitRepo.essentialFailureReason(stderr)
+
+    XCTAssertEqual(reason, "fatal: could not create work tree dir 'repo': Permission denied")
+  }
+
+  /// 実際の失敗経路でも、理由は `fatal:` 1 行だけで返る。
+  func testCloneFailureDropsProgressLines() throws {
+    let missing = fixture.dir.appendingPathComponent("no-such-repo").path
+    var failure: GitFailure??
+    let done = expectation(description: "clone")
+    GitRepo.clone(
+      url: missing, dest: fixture.dir.appendingPathComponent("dst").path, runner: runner
+    ) {
+      failure = $0
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 20)
+
+    guard case .message(let reason) = try XCTUnwrap(failure ?? nil) else {
+      return XCTFail("git が理由を言っている失敗なので .message で返る")
+    }
+    XCTAssertTrue(reason.contains("fatal:"), "実質的な理由は残す: \(reason)")
+    XCTAssertFalse(reason.contains("\r"), "進捗の区切りが理由に混ざらない: \(reason)")
+    XCTAssertEqual(reason.split(separator: "\n").count, 1, "1 行の理由になる: \(reason)")
   }
 
   // MARK: - 正常経路（打ち切りの仕掛けが出力を取りこぼさないこと）

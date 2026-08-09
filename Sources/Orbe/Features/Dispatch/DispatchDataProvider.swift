@@ -318,9 +318,14 @@ final class DispatchDataProvider {
       worktreePath: path, worktreeRoot: root,
       parentIsNew: !FileManager.default.fileExists(
         atPath: (path as NSString).deletingLastPathComponent))
-    repo.addWorktree(path: path, base: base, newBranch: newBranch, track: track) { error in
-      guard error == nil else {
-        completion(.failed(error!))
+    let localization = self.localization
+    repo.addWorktree(path: path, base: base, newBranch: newBranch, track: track) { failure in
+      if let failure {
+        // 文言はここで当てる（Git 層は UI 言語を持たない。他の失敗と同じ扱いに揃える）。
+        switch failure {
+        case .timedOut: completion(.failed(localization.string(.gitTimedOut)))
+        case .message(let reason): completion(.failed(reason))
+        }
         return
       }
       // 書くのは作成できたときだけ（失敗した作成の除外を残さない）。この時点では対象が実在するので
