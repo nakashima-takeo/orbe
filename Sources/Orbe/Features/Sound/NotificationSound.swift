@@ -7,7 +7,7 @@ enum NotificationSound: String, CaseIterable {
 
   /// 未設定時に鳴る音案。**リテラルを 2 箇所に書かない**——実機で 12 案を聴き比べて決め直すとき、
   /// 差し替えがこの 1 行で済むようにしてある（descriptor の既定値もここを参照する）。
-  static let `default`: NotificationSound = .glass
+  static let `default`: NotificationSound = .emblem
 
   /// 設定パレット行・descriptor display の表示ラベル（`EmojiFontMode.labelKey` 前例＝案自身が名乗る）。
   /// 並行配列で位置結合するとラベル取り違えが黙って通るため、写像はここ 1 箇所に持つ。

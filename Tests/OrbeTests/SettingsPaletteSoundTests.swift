@@ -162,8 +162,10 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
   }
 
   /// ホバーでも鳴る（ポインタ操作でも聴き比べられる）。
+  /// 現在値を明示して入場行を固定する——既定を差し替えたときに入場行とホバー先が重なると、
+  /// 「選択が動いていないので鳴らない」が正しい挙動のまま落ちる。
   func testHoverPreviews() {
-    let p = model()
+    let p = model(sound: .glass)
     let previews = capturePreviews(p)
     drillIn(p)
     p.render.inputModality = .pointer
