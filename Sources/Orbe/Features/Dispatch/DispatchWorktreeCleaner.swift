@@ -22,7 +22,8 @@ struct DispatchWorktreeCleaner {
   /// 状態は残り、ユーザーが頼んだ残りを止める理由がない。
   /// 削除の直前に status をもう一度叩くのは、分類時の値が最大で数十秒前のものだから
   /// （`git worktree remove --force` の前提「作業ツリーが clean」を Orbe が自分で確かめる）。
-  /// git を触る順は `worktree remove` → `branch -D`（逆順では checkout 済みのブランチを消せない）。
+  /// ブランチ側の凍結は `repo.deleteBranch` が `expectedOid` の compare-and-delete で受け持つ。
+  /// git を触る順は `worktree remove` → ブランチ削除（逆順では checkout 済みのブランチを消せない）。
   func run(
     _ requests: [CleanDeleteRequest], completion: @escaping (CleanDeleteResult) -> Void
   ) {
@@ -59,7 +60,7 @@ struct DispatchWorktreeCleaner {
             step(index + 1)
             return
           }
-          repo.deleteBranch(name: branch) { branchError in
+          repo.deleteBranch(name: branch, expectedOid: request.head) { branchError in
             if let branchError { failures.append("\(name): \(branchError)") }
             step(index + 1)
           }

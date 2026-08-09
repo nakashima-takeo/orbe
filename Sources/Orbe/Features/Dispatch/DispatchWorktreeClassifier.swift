@@ -54,6 +54,9 @@ struct CleanRow: Identifiable, Equatable {
   /// `<~省略パス> · <branch>`。
   let meta: String
   let branch: String?
+  /// 分類した時点の HEAD の oid。ブランチ削除を「この先端のときだけ」に絞るために運ぶ
+  /// （凍結した判定のままコミットを消さない）。
+  let head: String
   let group: CleanGroup
   /// 行末チップ列（群ごとの語彙）。
   let chips: [CleanChip]
@@ -77,6 +80,8 @@ struct DispatchCleanPR: Equatable {
 struct DispatchCleanFacts: Equatable {
   let path: String
   let branch: String?
+  /// HEAD の oid（ブランチ削除の compare-and-delete に運ぶ）。
+  let head: String
   let isMain: Bool
   /// ディスク上の実体が失われている。
   let isPrunable: Bool
@@ -93,13 +98,17 @@ struct DispatchCleanFacts: Equatable {
   /// このパスを開いているペイン（複数あれば状態を 1 つに畳んだもの）。
   let occupancy: PaneOccupancy?
 
+  /// 既定値は**すべて安全側**に置く。とりわけ `unmergedCommits` は「判定できなかった」を意味する nil で、
+  /// 省略しただけの事実が「取り込み済み＝消してよい」と名乗ることはない（既定値を第 2 の判断点にしない）。
   init(
-    path: String, branch: String? = nil, isMain: Bool = false, isPrunable: Bool = false,
-    lockReason: String? = nil, isGone: Bool = false, closedPR: DispatchCleanPR? = nil,
-    isDirty: Bool = false, unmergedCommits: Int? = 0, occupancy: PaneOccupancy? = nil
+    path: String, branch: String? = nil, head: String = "", isMain: Bool = false,
+    isPrunable: Bool = false, lockReason: String? = nil, isGone: Bool = false,
+    closedPR: DispatchCleanPR? = nil, isDirty: Bool = false, unmergedCommits: Int? = nil,
+    occupancy: PaneOccupancy? = nil
   ) {
     self.path = path
     self.branch = branch
+    self.head = head
     self.isMain = isMain
     self.isPrunable = isPrunable
     self.lockReason = lockReason
@@ -141,7 +150,8 @@ enum DispatchWorktreeClassifier {
         let probe = probes[worktree.path]
         let pr = worktree.branch.flatMap { prByHead[$0] }
         return DispatchCleanFacts(
-          path: worktree.path, branch: worktree.branch, isMain: worktree.isMain,
+          path: worktree.path, branch: worktree.branch, head: worktree.head,
+          isMain: worktree.isMain,
           isPrunable: worktree.isPrunable, lockReason: worktree.lockReason,
           isGone: worktree.branch.flatMap { trackByBranch[$0] ?? nil } == "[gone]",
           closedPR: pr.map { DispatchCleanPR(number: $0.number, isMerged: $0.state == "MERGED") },
@@ -191,7 +201,7 @@ enum DispatchWorktreeClassifier {
     if let branch = f.branch { meta += " · \(branch)" }
     return CleanRow(
       id: f.path, name: (f.path as NSString).lastPathComponent, meta: meta, branch: f.branch,
-      group: group, chips: chips(f, group))
+      head: f.head, group: group, chips: chips(f, group))
   }
 
   /// 行末チップをデータから導く（リテラルの並びを持たない）。

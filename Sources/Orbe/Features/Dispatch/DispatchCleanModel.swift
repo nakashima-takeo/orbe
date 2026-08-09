@@ -11,6 +11,8 @@ enum CleanSelection: Equatable {
 struct CleanDeleteRequest: Equatable {
   let path: String
   let branch: String?
+  /// 分類した時点の HEAD の oid。ブランチ削除はこの先端のときだけ通す。
+  let head: String
   let deleteBranch: Bool
 }
 
@@ -108,7 +110,8 @@ struct CleanDeleteRequest: Equatable {
   /// 実行の依頼一覧（選択された行だけ・スナップショットの並び順）。
   func requests() -> [CleanDeleteRequest] {
     rows.filter { state(of: $0) != .none }.map {
-      CleanDeleteRequest(path: $0.id, branch: $0.branch, deleteBranch: deletesBranch($0))
+      CleanDeleteRequest(
+        path: $0.id, branch: $0.branch, head: $0.head, deleteBranch: deletesBranch($0))
     }
   }
 

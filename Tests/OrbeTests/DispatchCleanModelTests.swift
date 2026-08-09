@@ -11,10 +11,13 @@ final class DispatchCleanModelTests: OrbeTestCase {
     let model = DispatchCleanModel()
     model.enter(
       rows: DispatchWorktreeClassifier.classify([
-        DispatchCleanFacts(path: "/wt/safe-a", branch: "feat/a", isGone: true, unmergedCommits: 0),
-        DispatchCleanFacts(path: "/wt/safe-b", branch: "feat/b", isPrunable: true),
-        DispatchCleanFacts(path: "/wt/caution", branch: "feat/c", isGone: true, unmergedCommits: 6),
-        DispatchCleanFacts(path: "/repo", branch: "main", isMain: true),
+        DispatchCleanFacts(
+          path: "/wt/safe-a", branch: "feat/a", head: "aaa", isGone: true, unmergedCommits: 0),
+        DispatchCleanFacts(
+          path: "/wt/safe-b", branch: "feat/b", head: "bbb", isPrunable: true, unmergedCommits: 0),
+        DispatchCleanFacts(
+          path: "/wt/caution", branch: "feat/c", head: "ccc", isGone: true, unmergedCommits: 6),
+        DispatchCleanFacts(path: "/repo", branch: "main", head: "ddd", isMain: true),
       ]))
     return model
   }
@@ -131,9 +134,9 @@ final class DispatchCleanModelTests: OrbeTestCase {
     XCTAssertEqual(
       m.requests(),
       [
-        CleanDeleteRequest(path: "/wt/safe-a", branch: "feat/a", deleteBranch: false),
-        CleanDeleteRequest(path: "/wt/safe-b", branch: "feat/b", deleteBranch: false),
-        CleanDeleteRequest(path: "/wt/caution", branch: "feat/c", deleteBranch: true),
+        CleanDeleteRequest(path: "/wt/safe-a", branch: "feat/a", head: "aaa", deleteBranch: false),
+        CleanDeleteRequest(path: "/wt/safe-b", branch: "feat/b", head: "bbb", deleteBranch: false),
+        CleanDeleteRequest(path: "/wt/caution", branch: "feat/c", head: "ccc", deleteBranch: true),
       ])
   }
 

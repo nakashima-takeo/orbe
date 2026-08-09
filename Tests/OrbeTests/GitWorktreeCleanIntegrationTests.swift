@@ -89,6 +89,31 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
     XCTAssertFalse(try isClean(path), "未コミット変更があれば clean ではない")
   }
 
+  /// **ユーザー設定で clean 判定を無力化できない**。`status.showUntrackedFiles=no` は巨大リポジトリの
+  /// 高速化として広く使われるが、これが効くと未追跡ファイルだけの worktree が空出力＝clean に見え、
+  /// `--force` 削除でそのファイルが復旧不能に消える。引数で明示して事実を固定していることを固定する。
+  func testWorktreeIsCleanIgnoresShowUntrackedFilesSetting() throws {
+    let path = dir.appendingPathComponent("wt").path
+    XCTAssertTrue(git(["worktree", "add", "-q", path, "-b", "feat/wt"]).isSuccess)
+    XCTAssertTrue(
+      GitRunner.shared.runSync(["config", "status.showUntrackedFiles", "no"], cwd: path).isSuccess)
+    try "note".write(
+      toFile: (path as NSString).appendingPathComponent("memo.txt"), atomically: true,
+      encoding: .utf8)
+
+    XCTAssertTrue(
+      GitRunner.shared.runSync(["status", "--porcelain"], cwd: path).stdoutText.isEmpty,
+      "前提: 設定どおりなら素の status は未追跡ファイルを出さない")
+    XCTAssertFalse(try isClean(path), "設定に関わらず未追跡ファイルは dirty と出る")
+  }
+
+  /// **git が失敗したら「確認できなかった」＝clean でない側に倒す**（0 と nil、true と false を混ぜない）。
+  func testUnknownStateFallsToUnsafeSide() throws {
+    XCTAssertFalse(
+      try isClean(dir.appendingPathComponent("nowhere").path), "存在しないパスは clean と名乗らない")
+    XCTAssertNil(try unmerged("no-such-branch"), "判定できなければ nil（取り込み済みの 0 とは別）")
+  }
+
   // MARK: - 削除
 
   func testRemoveWorktreeDropsAdministrativeDirectory() throws {
@@ -128,16 +153,30 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
     XCTAssertTrue(git(["add", "-A"]).isSuccess)
     XCTAssertTrue(git(["commit", "-qm", "c1"]).isSuccess)
     XCTAssertTrue(git(["checkout", "-q", "main"]).isSuccess)
+    let tip = git(["rev-parse", "feat/gone"]).stdoutText.trimmingCharacters(
+      in: .whitespacesAndNewlines)
 
-    var error: String?
-    let done = expectation(description: "deleteBranch")
-    repo.deleteBranch(name: "feat/gone") {
-      error = $0
-      done.fulfill()
-    }
-    wait(for: [done], timeout: 20)
-    XCTAssertNil(error)
-    XCTAssertFalse(git(["branch"]).stdoutText.contains("feat/gone"), "未取り込みでも -D で消える")
+    XCTAssertNil(try deleteBranch("feat/gone", expecting: tip))
+    XCTAssertFalse(git(["branch"]).stdoutText.contains("feat/gone"), "未取り込みでも到達性を問わず消える")
+  }
+
+  /// **凍結した判定でコミットを消さない**。分類してから削除するまでにブランチが進んだら、
+  /// 先端が一致しないので削除は拒否される（worktree 側の dirty 再確認に対応する、ブランチ側の関門）。
+  func testDeleteBranchRefusesWhenBranchMovedSinceProbe() throws {
+    XCTAssertTrue(git(["checkout", "-q", "-b", "feat/moved"]).isSuccess)
+    try write("b.txt", "1")
+    XCTAssertTrue(git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(git(["commit", "-qm", "c1"]).isSuccess)
+    let probed = git(["rev-parse", "HEAD"]).stdoutText.trimmingCharacters(
+      in: .whitespacesAndNewlines)
+    // 分類の後にコミットが載る（別のペイン・別のツールから）。
+    try write("c.txt", "1")
+    XCTAssertTrue(git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(git(["commit", "-qm", "c2"]).isSuccess)
+    XCTAssertTrue(git(["checkout", "-q", "main"]).isSuccess)
+
+    XCTAssertNotNil(try deleteBranch("feat/moved", expecting: probed), "先端が動いていたら消さない")
+    XCTAssertTrue(git(["branch"]).stdoutText.contains("feat/moved"), "ブランチは残る")
   }
 
   // MARK: - ヘルパ
@@ -197,6 +236,17 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
         "-c", "protocol.file.allow=always", "submodule", "add", "-q", sub.path, "sub",
       ]).isSuccess)
     XCTAssertTrue(git(["commit", "-qm", "add submodule"]).isSuccess)
+  }
+
+  private func deleteBranch(_ name: String, expecting oid: String) throws -> String? {
+    var error: String?
+    let done = expectation(description: "deleteBranch")
+    repo.deleteBranch(name: name, expectedOid: oid) {
+      error = $0
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 20)
+    return error
   }
 
   private func unmerged(_ branch: String) throws -> Int? {

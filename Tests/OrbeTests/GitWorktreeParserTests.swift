@@ -77,7 +77,7 @@ final class GitWorktreeParserTests: OrbeTestCase {
     XCTAssertEqual(branches[3].track, "[ahead 1]")
   }
 
-  /// 5 列目が無い旧フォーマットの行でも壊れない（インデックス読みのガード）。
+  /// 列が欠けた行でも落ちない（インデックス読みのガード）。
   func testLocalBranchWithoutTrackColumn() {
     let branches = BranchParser.parseLocal("main|1d前||origin/main\n")
     XCTAssertEqual(branches.count, 1)
