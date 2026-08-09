@@ -147,33 +147,43 @@ final class SoundSynthTests: OrbeTestCase {
   // MARK: - コンプレッサの静特性（ニーの内外 3 領域）
 
   func testCompressorStaticCurveRegions() {
-    // ニーの下（threshold - knee/2 = -39 未満）は素通し。
+    // threshold（-24）までは素通し——ニーを threshold の中央に置くと -39 dB から潰れ始める。
     XCTAssertEqual(DynamicsCompressor.curve(inputDB: -60), -60, accuracy: 1e-12)
-    // ニーの中（-39 〜 -9）は二次で滑らかに折れる。
-    XCTAssertEqual(DynamicsCompressor.curve(inputDB: -24), -27.4375, accuracy: 1e-9)
-    // ニーの上（-9 超）は比 12:1。
-    XCTAssertEqual(DynamicsCompressor.curve(inputDB: 0), -22, accuracy: 1e-12)
+    XCTAssertEqual(DynamicsCompressor.curve(inputDB: -24), -24, accuracy: 1e-12)
+    // ニーの中（-24 〜 +6）は二次で滑らかに折れる。
+    XCTAssertEqual(DynamicsCompressor.curve(inputDB: -9), -12.4375, accuracy: 1e-9)
+    // ニーの上（+6 超）は比 12:1。
+    XCTAssertEqual(DynamicsCompressor.curve(inputDB: 18), -6.75, accuracy: 1e-9)
   }
 
-  /// ニーの両端で連続（折れ目に段差が出ない）。
+  /// ニーの両端で値も傾きも連続（折れ目に段差が出ない・上端で傾きが 1/ratio になる）。
   func testCompressorCurveIsContinuousAtKneeEdges() {
-    let lower = DynamicsCompressor.threshold - DynamicsCompressor.knee / 2
-    let upper = DynamicsCompressor.threshold + DynamicsCompressor.knee / 2
+    let lower = DynamicsCompressor.threshold
+    let upper = DynamicsCompressor.kneeEnd
     XCTAssertEqual(DynamicsCompressor.curve(inputDB: lower), lower, accuracy: 1e-9)
+    let d = 1e-6
     XCTAssertEqual(
-      DynamicsCompressor.curve(inputDB: upper),
-      DynamicsCompressor.threshold
-        + (upper - DynamicsCompressor.threshold) / DynamicsCompressor.ratio, accuracy: 1e-9)
+      (DynamicsCompressor.curve(inputDB: upper + d) - DynamicsCompressor.curve(inputDB: upper - d))
+        / (2 * d), 1 / DynamicsCompressor.ratio, accuracy: 1e-6, "ニー上端で傾きが比へ繋がる")
   }
 
-  /// 閾値以下の信号は減衰させず、大きな信号は押さえ込む。
-  func testCompressorLeavesQuietSignalAndTamesLoudOne() {
-    var quiet = [Double](repeating: 0.01, count: 4800)  // -40 dB
+  /// メイクアップゲインは静特性から導く（仕様の "Computing the makeup gain"）。定数を焼かない。
+  func testMakeupGainIsDerivedFromTheCurve() {
+    XCTAssertEqual(
+      DynamicsCompressor.makeupGain,
+      pow(pow(10, DynamicsCompressor.curve(inputDB: 0) / 20), -0.6), accuracy: 1e-12)
+    XCTAssertGreaterThan(DynamicsCompressor.makeupGain, 1, "圧縮で落ちた分を持ち上げる")
+  }
+
+  /// 閾値以下の信号はメイクアップぶんだけ持ち上がり（圧縮はされない）、大きな信号は押さえ込む。
+  func testCompressorLiftsQuietSignalAndTamesLoudOne() {
+    var quiet = [Double](repeating: 0.01, count: 4800)  // -40 dB＝threshold 以下
     DynamicsCompressor.apply(to: &quiet, sampleRate: 48000)
-    XCTAssertEqual(quiet.last!, 0.01, accuracy: 1e-6)
+    XCTAssertEqual(quiet.last!, 0.01 * DynamicsCompressor.makeupGain, accuracy: 1e-6)
     var loud = [Double](repeating: 0.9, count: 4800)
     DynamicsCompressor.apply(to: &loud, sampleRate: 48000)
-    XCTAssertLessThan(loud.last!, 0.2, "-24dB 閾値・12:1 で大きく押さえ込む")
+    XCTAssertLessThan(
+      loud.last! / quiet.last!, 45, "入力の 90 倍差が半分以下へ詰まる＝実際に圧縮している")
   }
 
   /// 期待値は `[b0, b1, b2, a1, a2]`（a0 で正規化済み）。

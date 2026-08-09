@@ -61,7 +61,7 @@ struct AudioParam {
 
 /// オシレータの波形。Web Audio と同じく**帯域制限した理想波形**（Nyquist を超える倍音を足さない）。
 /// 素朴な生成だとエイリアスが乗り、矩形波の案（遊技）と三角波の案（電紫・弾み）がジャリつく。
-enum Waveform {
+enum Waveform: Hashable {
   case sine, square, triangle
 
   /// 位相 φ（rad）と瞬時周波数から 1 サンプル。倍音は `k * frequency < Nyquist` の範囲だけ加算する。
@@ -100,7 +100,7 @@ enum Waveform {
 /// **Q の解釈が種別で違う**: lowpass / highpass はデシベル（Web Audio 仕様の規定）、bandpass は線形。
 /// 取り違えると遊技のこもり具合・気配や洋琴のノイズの色が変わる。
 struct Biquad {
-  enum Kind { case lowpass, highpass, bandpass }
+  enum Kind: Hashable { case lowpass, highpass, bandpass }
 
   /// a0 で正規化済みの係数。
   struct Coefficients: Equatable {
@@ -179,8 +179,9 @@ struct WhiteNoise {
 }
 
 /// Web Audio `DynamicsCompressorNode` を**全パラメータ既定値**で使う master のコンプレッサ。
-/// 仕様が規定するのはソフトニーの静特性だけで、Chrome 実装固有の細部（約 6ms の先読みディレイ・
-/// 多段リリースカーブ）は非公開。ここは静特性＋1 次追従で「圧縮の量と時定数」を合わせる
+/// 仕様が規定するのは静特性の折れ位置（threshold・knee 幅・比）とメイクアップゲインの導き方だけで、
+/// ニーの曲線形と Chrome 実装固有の細部（約 6ms の先読みディレイ・多段リリースカーブ）は委ねられている。
+/// ここは静特性＋メイクアップ＋1 次追従で「圧縮の量と時定数」を合わせる
 /// ——これがブラウザと Orbe の音が完全一致しない唯一の要因になる。
 enum DynamicsCompressor {
   static let threshold = -24.0  // dB
@@ -189,17 +190,27 @@ enum DynamicsCompressor {
   static let attack = 0.003  // s
   static let release = 0.25  // s
 
-  /// 静特性（入力 dB → 出力 dB）。ニーの下は素通し、ニーの中は二次で滑らかに、上は比で圧縮。
+  /// ニーが終わる入力レベル。仕様は `knee` を「threshold の**上**へ伸びる幅」と規定する
+  /// （knee end threshold = threshold + knee）ので、圧縮域は [-24, +6] dB。ニーを threshold の
+  /// 中央に置くと -39 dB から圧縮が始まり、仕様が素通しを要求する領域まで潰す。
+  static let kneeEnd = threshold + knee
+
+  /// 静特性（入力 dB → 出力 dB）。threshold までは素通し、ニーの中は二次で滑らかに、上は比で圧縮。
+  /// ニーの曲線形は仕様が実装に委ねる部分なので、連続かつ微分連続な二次で置く。
   static func curve(inputDB x: Double) -> Double {
-    if x < threshold - knee / 2 { return x }
-    if x <= threshold + knee / 2 {
-      let over = x - threshold + knee / 2
+    if x < threshold { return x }
+    if x <= kneeEnd {
+      let over = x - threshold
       return x + (1 / ratio - 1) * over * over / (2 * knee)
     }
-    return threshold + (x - threshold) / ratio
+    return curve(inputDB: kneeEnd) + (x - kneeEnd) / ratio
   }
 
-  /// ピーク検出＋1 次追従で全サンプルへ掛ける（in-place）。makeup gain は無し（design と同じ既定）。
+  /// メイクアップゲイン（線形）。仕様の "Computing the makeup gain"——静特性を線形 1.0（＝0 dB）へ
+  /// 当てた値の逆数の 0.6 乗。**静特性から導く**ので、ニーを動かせば自動で追従する（定数を焼かない）。
+  static let makeupGain = pow(pow(10, curve(inputDB: 0) / 20), -0.6)
+
+  /// ピーク検出＋1 次追従で全サンプルへ掛ける（in-place）。最後にメイクアップゲインを乗せる。
   static func apply(to samples: inout [Double], sampleRate: Double) {
     let coefAttack = exp(-1 / (attack * sampleRate))
     let coefRelease = exp(-1 / (release * sampleRate))
@@ -210,7 +221,7 @@ enum DynamicsCompressor {
       // 深くなる方向が attack、戻る方向が release。
       let coef = target < state ? coefAttack : coefRelease
       state = target + (state - target) * coef
-      samples[i] *= pow(10, state / 20)
+      samples[i] *= pow(10, state / 20) * makeupGain
     }
   }
 }
