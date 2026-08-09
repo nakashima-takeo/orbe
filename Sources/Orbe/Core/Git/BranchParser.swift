@@ -2,7 +2,7 @@ import Foundation
 
 /// `git for-each-ref` の `|` 区切り行を `GitBranch` へ落とすパーサ（local / remote）。
 enum BranchParser {
-  /// local: `%(refname:short)|%(committerdate:relative)|%(worktreepath)|%(upstream:short)`。
+  /// local: `%(refname:short)|%(committerdate:relative)|%(worktreepath)|%(upstream:short)|%(upstream:track)`。
   static func parseLocal(_ text: String) -> [GitBranch] {
     text.split(separator: "\n").compactMap { line in
       let f = String(line).components(separatedBy: "|")
@@ -11,7 +11,8 @@ enum BranchParser {
         name: f[0],
         relativeDate: f[1],
         worktreePath: f.count > 2 && !f[2].isEmpty ? f[2] : nil,
-        upstream: f.count > 3 && !f[3].isEmpty ? f[3] : nil)
+        upstream: f.count > 3 && !f[3].isEmpty ? f[3] : nil,
+        track: f.count > 4 && !f[4].isEmpty ? f[4] : nil)
     }
   }
 
