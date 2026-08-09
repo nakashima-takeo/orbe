@@ -111,11 +111,14 @@ struct DispatchCleanRow: View {
   var body: some View {
     HStack(spacing: Theme.Space.step) {
       checkbox
+      // 縮む順は パス → 名前 → チップ列（優先度 0 < 1 < 2）。どれも 1 行で末尾省略し、
+      // 折り返さない。行の最小幅を提案幅より小さく保てないと、器のカードが窓を超えて広がる。
       fontResolver.text(row.name, base: Theme.Typography.workspaceName)
         .font(Font.theme.workspaceName)
         .foregroundStyle(cursor ? Color.theme.textPrimary : Color.theme.textSecondary)
         .lineLimit(1)
-        .fixedSize()
+        .truncationMode(.tail)
+        .layoutPriority(1)
       fontResolver.text(row.meta, base: Theme.Typography.meta)
         .font(Font.theme.meta)
         .foregroundStyle(Color.theme.textMuted)
@@ -131,7 +134,7 @@ struct DispatchCleanRow: View {
             .lineLimit(1)
         }
       }
-      .fixedSize()
+      .layoutPriority(2)
     }
     .padding(.horizontal, 10)
     .padding(.vertical, 5)
@@ -264,11 +267,14 @@ struct DispatchCleanFooter: View {
         } else {
           Spacer(minLength: Theme.Space.step)
         }
+        // 狭窓で最初に譲るのはキーヒント（トグルと実行ボタンは効く操作なので削らない）。
+        // 失敗理由より先には縮まない（優先度 1）。
         Text(l10n.string(.dispatchCleanKeyHint))
           .font(Font.theme.meta)
           .foregroundStyle(Color.theme.textMuted)
           .lineLimit(1)
-          .fixedSize()
+          .truncationMode(.tail)
+          .layoutPriority(1)
         executeButton
       }
     }
