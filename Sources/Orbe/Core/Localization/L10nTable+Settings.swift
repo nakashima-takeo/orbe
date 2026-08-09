@@ -61,6 +61,12 @@ extension L10n {
     .settingsWorktreeDirPresetInside: ("リポジトリの中", "Inside the repository"),
     .settingsWorktreeDirPresetFlat: ("隣にフラット", "Flat beside the repository"),
     .settingsWorktreeDirCustom: ("カスタム…", "Custom…"),
+    .settingsNotificationSoundBreadcrumb: ("‹ 通知音", "‹ Notification Sound"),
+    .settingsNotificationSoundHint: (
+      "↵ 適用   ⇥ 完了⇄入力待ち   ←/esc 戻る", "↵ Apply   ⇥ Done⇄Waiting   ←/esc Back"
+    ),
+    .settingsNotificationSoundNone: ("なし", "None"),
+    .settingsNotificationSoundOffRow: ("なし（オフ）", "None (off)"),
 
     // MARK: Settings registry
     .settingsFontSize: ("フォントサイズ", "Font Size"),
@@ -78,6 +84,9 @@ extension L10n {
     .settingsAgentIcons: ("エージェントアイコン", "Agent Icons"),
     .settingsDevFeatures: ("開発中の機能を有効化", "Enable In-Development Features"),
     .settingsWorktreeDir: ("worktree の作成場所", "Worktree Location"),
+    .settingsNotificationSound: ("通知音", "Notification Sound"),
+    .settingsNotificationSoundVolume: ("音量", "Volume"),
+    .settingsNotificationSoundEnabled: ("通知音のオン/オフ", "Notification Sound On/Off"),
     .settingsUnset: ("（未設定）", "(unset)"),
     .settingsToggleOn: ("オン", "On"),
     .settingsToggleOff: ("オフ", "Off"),
@@ -85,5 +94,19 @@ extension L10n {
     .settingsIconsCustomOne: ("%lld 状態カスタム", "%lld state customized"),
     .settingsIconsCustomOther: ("%lld 状態カスタム", "%lld states customized"),
     .settingsDefaultFont: ("既定（%@）", "Default (%@)"),
+
+    // MARK: Notification sound（12 案の名前。日本語 UI にカナは併記しない）
+    .soundGlass: ("硝子", "Glass"),
+    .soundPulse: ("電紫", "Pulse"),
+    .soundWood: ("木肌", "Wood"),
+    .soundAir: ("気配", "Air"),
+    .soundEmblem: ("紋章", "Emblem"),
+    .soundHenji: ("返事", "Reply"),
+    .soundHazumi: ("弾み", "Bounce"),
+    .soundYuugi: ("遊技", "Arcade"),
+    .soundHagane: ("鋼", "Steel"),
+    .soundYoukin: ("洋琴", "Piano"),
+    .soundKuchibue: ("口笛", "Whistle"),
+    .soundDeep: ("深層", "Deep"),
   ]
 }
