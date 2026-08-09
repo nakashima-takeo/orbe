@@ -1,5 +1,7 @@
 import Foundation
 
+// swiftlint:disable file_length
+
 /// UI 文言の型付きキー。フラット enum・`CaseIterable`（辞書欠落を `L10nCompletenessTests` が機械検出できる）。
 /// 命名はドメイン接頭辞つき（衝突と重複を避ける）。粒度は「1 つの UI 文言 = 1 キー」。値は `L10n.table`。
 ///
@@ -142,7 +144,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchErrNotGitRepo
   case dispatchErrForkPR
   case dispatchCleanSubtitle
-  case dispatchCleanCandidates
+  case dispatchCleanCandidatesOne
+  case dispatchCleanCandidatesOther
   case dispatchCleanListNote
   case dispatchCleanSelected
   case dispatchCleanBack
@@ -157,8 +160,10 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchCleanDeleting
   case dispatchCleanPrunable
   case dispatchCleanDirty
-  case dispatchCleanUnmergedClosed
-  case dispatchCleanOwnCommits
+  case dispatchCleanUnmergedClosedOne
+  case dispatchCleanUnmergedClosedOther
+  case dispatchCleanOwnCommitsOne
+  case dispatchCleanOwnCommitsOther
   case dispatchCleanPaneBusy
   case dispatchCleanPaneOpen
   case dispatchCleanFailure

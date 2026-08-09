@@ -200,9 +200,12 @@ struct DispatchCleanChip: View {
     case .dirty:
       caution(l10n.string(.dispatchCleanDirty))
     case .unmergedClosed(let count):
-      caution(l10n.format(.dispatchCleanUnmergedClosed, count))
+      caution(
+        l10n.plural(
+          count, one: .dispatchCleanUnmergedClosedOne, other: .dispatchCleanUnmergedClosedOther))
     case .ownCommits(let count):
-      caution(l10n.format(.dispatchCleanOwnCommits, count))
+      caution(
+        l10n.plural(count, one: .dispatchCleanOwnCommitsOne, other: .dispatchCleanOwnCommitsOther))
     case .locked:
       caution("locked")
     case .cleanNote:

@@ -173,7 +173,8 @@ enum L10n {
     .dispatchCleanSubtitle: (
       "要らなくなった worktree を掃除", "Clean up worktrees you no longer need"
     ),
-    .dispatchCleanCandidates: ("候補 %lld 件", "%lld candidates"),
+    .dispatchCleanCandidatesOne: ("候補 %lld 件", "%lld candidate"),
+    .dispatchCleanCandidatesOther: ("候補 %lld 件", "%lld candidates"),
     .dispatchCleanListNote: (
       "rm / prune / 掃除 の入力もエイリアスでヒット · 候補 0 件でも行は残る（バッジだけ消える）",
       "rm / prune / 掃除 also match as aliases · the row stays at 0 candidates (only the badge goes)"
@@ -193,13 +194,19 @@ enum L10n {
     .dispatchCleanDeleting: ("削除中…", "Deleting…"),
     .dispatchCleanPrunable: ("prunable · 実体なし", "prunable · no directory"),
     .dispatchCleanDirty: ("未コミット変更あり", "Uncommitted changes"),
-    .dispatchCleanUnmergedClosed: (
+    .dispatchCleanUnmergedClosedOne: (
+      "未マージclose · 独自コミット%lld件", "Closed unmerged · %lld own commit"
+    ),
+    .dispatchCleanUnmergedClosedOther: (
       "未マージclose · 独自コミット%lld件", "Closed unmerged · %lld own commits"
     ),
-    .dispatchCleanOwnCommits: ("独自コミット%lld件", "%lld own commits"),
+    .dispatchCleanOwnCommitsOne: ("独自コミット%lld件", "%lld own commit"),
+    .dispatchCleanOwnCommitsOther: ("独自コミット%lld件", "%lld own commits"),
     .dispatchCleanPaneBusy: ("ペイン表示中 · agent 作業中", "Open in a pane · agent working"),
     .dispatchCleanPaneOpen: ("ペイン表示中", "Open in a pane"),
-    .dispatchCleanFailure: ("%lld 件中 %lld 件失敗 — %@", "%lld of %lld failed — %@"),
+    .dispatchCleanFailure: (
+      "%lld 件中 %lld 件失敗 — %@", "%2$lld of %1$lld failed — %3$@"
+    ),
 
     // MARK: Onboarding
     .onboardingBegin: ("始める", "Get started"),

@@ -223,14 +223,17 @@ struct DispatchRow: View {
     HStack(spacing: Theme.Space.tick) {
       if let count = item.candidateCount {
         if count > 0 {
-          Text(l10n.format(.dispatchCleanCandidates, count))
-            .font(Font.theme.sectionLabel)
-            .foregroundStyle(Color.theme.accentPrimary)
-            .lineLimit(1)
-            .fixedSize()
-            .padding(.horizontal, 7)
-            .padding(.vertical, 1)
-            .background(Capsule().fill(Color.theme.tintAccent))
+          Text(
+            l10n.plural(
+              count, one: .dispatchCleanCandidatesOne, other: .dispatchCleanCandidatesOther)
+          )
+          .font(Font.theme.sectionLabel)
+          .foregroundStyle(Color.theme.accentPrimary)
+          .lineLimit(1)
+          .fixedSize()
+          .padding(.horizontal, 7)
+          .padding(.vertical, 1)
+          .background(Capsule().fill(Color.theme.tintAccent))
         }
         Text("⏎")
           .font(Font.theme.sectionLabel)
