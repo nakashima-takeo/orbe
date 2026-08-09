@@ -141,6 +141,27 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchHintClose
   case dispatchErrNotGitRepo
   case dispatchErrForkPR
+  case dispatchCleanSubtitle
+  case dispatchCleanCandidates
+  case dispatchCleanListNote
+  case dispatchCleanSelected
+  case dispatchCleanBack
+  case dispatchCleanSectionSafe
+  case dispatchCleanSectionCaution
+  case dispatchCleanSectionInUse
+  case dispatchCleanDeleteBranch
+  case dispatchCleanWorktreeOnly
+  case dispatchCleanWorktreeAndBranch
+  case dispatchCleanKeyHint
+  case dispatchCleanExecute
+  case dispatchCleanDeleting
+  case dispatchCleanPrunable
+  case dispatchCleanDirty
+  case dispatchCleanUnmergedClosed
+  case dispatchCleanOwnCommits
+  case dispatchCleanPaneBusy
+  case dispatchCleanPaneOpen
+  case dispatchCleanFailure
 
   // MARK: - Onboarding
   case onboardingBegin

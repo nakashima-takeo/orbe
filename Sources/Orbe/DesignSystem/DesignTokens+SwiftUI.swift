@@ -66,6 +66,7 @@ struct ThemeColors {
   let diffSelectionFill = Color(nsColor: Theme.Color.diffSelectionFill)
   let hoverFill = Color(nsColor: Theme.Color.hoverFill)
   let smallPillFill = Color(nsColor: Theme.Color.smallPillFill)
+  let plainPillFill = Color(nsColor: Theme.Color.plainPillFill)
   // 状態別 tint
   let tintWorking = Color(nsColor: Theme.Color.tintWorking)
   let tintWaiting = Color(nsColor: Theme.Color.tintWaiting)

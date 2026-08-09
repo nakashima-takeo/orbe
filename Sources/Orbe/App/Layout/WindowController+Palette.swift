@@ -126,7 +126,8 @@ extension WindowController {
     let cwd = store.activePaneCwd() ?? FileManager.default.homeDirectoryForCurrentUser.path
     let provider = DispatchDataProvider(
       cwd: cwd, model: p, localization: localization,
-      worktreeTemplate: activeEffectiveSettings()[SettingKeys.worktreeDir])
+      worktreeTemplate: activeEffectiveSettings()[SettingKeys.worktreeDir],
+      paneOccupancies: paneOccupancies())
 
     // クロージャは兄弟パレット同様 [weak self] のみとし、p/provider は self.model 経由で辿る
     // （p が onExecute を保持するため、p を強参照すると開くたびに自己循環でリークする）。
@@ -167,6 +168,7 @@ extension WindowController {
       guard let self, let provider = self.model.dispatchProvider else { return }
       provider.openWeb(for: item)
     }
+    wireDispatchClean(p)
 
     model.dispatchPalette = p
     model.dispatchProvider = provider
@@ -174,6 +176,32 @@ extension WindowController {
     provider.load()
     p.focus()
     reconfirmFocusNextTick()  // 別 overlay からの遷移で去りゆくカードの teardown に勝つ
+  }
+
+  /// clean の ⌘⏎ を配線する。全件成功ならパレットを閉じ、1 件でも失敗したら閉じずに clean へ留まって
+  /// 成功行を取り除き、フッターへ赤で理由を出す（ユーザーは選び直して再実行できる）。
+  private func wireDispatchClean(_ p: DispatchPaletteModel) {
+    p.onCleanExecute = { [weak self] requests in
+      guard let self, let provider = self.model.dispatchProvider else { return }
+      provider.deleteWorktrees(requests) { [weak self] result in
+        guard let self, let p = self.model.dispatchPalette else { return }
+        guard let message = result.failureMessage else {
+          p.clean.isDeleting = false
+          self.dismissPalette()
+          return
+        }
+        p.clean.applyPartialFailure(succeededPaths: result.succeededPaths, message: message)
+      }
+    }
+  }
+
+  /// 全 workspace × 全タブ × 全葉のペインが開いているディレクトリ（休眠 workspace も含む）。
+  /// 「そのパスをペインが開いている worktree は消せない」の判定材料。
+  private func paneOccupancies() -> [PaneOccupancy] {
+    store.allPanes().compactMap { ref in
+      guard let cwd = ref.pane.currentPwd ?? ref.pane.initialCwd else { return nil }
+      return PaneOccupancy(cwd: cwd, agentState: ref.pane.agentState)
+    }
   }
 
   /// Dispatch の shell 選択で、解決した worktree dir に素シェル（agent を走らせない）の新タブを開く。
