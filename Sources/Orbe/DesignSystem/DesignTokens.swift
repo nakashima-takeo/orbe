@@ -73,6 +73,9 @@ enum Theme {
     // ステータスストリップ（件数の文字）と done グリフ check 線色
     static let statusText = dyn(light: 0x4d4368, dark: 0xcdc7e2)
     static let checkStroke = dyn(light: 0xf3f0fa, dark: 0x0a0a0a)
+    // accent 塗り面上の ✓（clean のチェックボックス）。done グリフの checkStroke は緑の上に載るので
+    // dark で最暗インクだが、accent（紫）の上では沈む。accent 面は dark で純白を当てる。
+    static let accentCheckStroke = dyn(light: 0xf3f0fa, dark: 0xffffff)
 
     // ヘルプ（⌘H）キーボード可視化のキー文字色。使用キー＝secondary と muted の中点（藤系色相維持）、
     // 未使用キー＝dark は muted より沈め / light は紙面へ近づけて薄める（明暗はキー背景でも冗長化）。
@@ -95,6 +98,10 @@ enum Theme {
       light: OrbePalette.Chrome.accentLight, lightA: 0.10,
       dark: OrbePalette.Chrome.accentDark, darkA: 0.10)
     static let smallPillFill = dynA(light: 0x3a3151, lightA: 0.06, dark: 0xffffff, darkA: 0.04)
+    // 事実だけを述べる無色のチップ地（clean の `[gone]` / `prunable`）。surfaceInk 基調で
+    // light .08 / dark .06——smallPillFill と同軸で濃さだけ 1 段上（事実チップは小ピルより地を
+    // 強く出す）。値が違うので別トークンで持つ。
+    static let plainPillFill = dynA(light: 0x3a3151, lightA: 0.08, dark: 0xffffff, darkA: 0.06)
 
     // 状態別 tint（バッジ等の淡塗り。各テーマの状態色の 12–14%。design-system §2 のミラー）
     static let tintWorking = dynA(
@@ -103,6 +110,11 @@ enum Theme {
       light: StateHue.waitingLight, lightA: 0.12, dark: StateHue.waitingDark, darkA: 0.12)
     static let tintDone = dynA(
       light: StateHue.doneLight, lightA: 0.12, dark: StateHue.doneDark, darkA: 0.12)
+    // git の緑チップ地（merged PR・issue/PR バッジ）。文字が diffAdded なので地も diffAdded 軸から取る
+    // （state.done とは dark で別値。この 2 軸は混ぜない）。
+    static let tintDiffAdded = dynA(
+      light: OrbePalette.Chrome.greenLight, lightA: 0.12,
+      dark: OrbePalette.Chrome.greenDark, darkA: 0.12)
     static let tintRed = dynA(
       light: OrbePalette.Chrome.redLight, lightA: 0.14,
       dark: OrbePalette.Chrome.redDark, darkA: 0.14)

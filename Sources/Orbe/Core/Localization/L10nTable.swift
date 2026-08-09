@@ -42,6 +42,9 @@ enum L10n {
     .commonLoading: ("読み込み中…", "Loading…"),
     .commonCancel: ("キャンセル", "Cancel"),
 
+    // MARK: Git
+    .gitTimedOut: ("git から応答が無いため中断しました", "Stopped: no response from git"),
+
     // MARK: EditorPane / FileViewer
     .editorSelectFile: ("ファイルを選択", "Select a file"),
     .editorSearchFiles: ("ファイルを検索", "Search files"),
@@ -169,6 +172,43 @@ enum L10n {
     .dispatchErrForkPR: (
       "fork の PR #%lld は worktree 化に未対応です（⌘↵ でブラウザを開けます）",
       "Fork PR #%lld can't be made into a worktree (⌘↵ to open in browser)"
+    ),
+    .dispatchCleanSubtitle: (
+      "要らなくなった worktree を掃除", "Clean up worktrees you no longer need"
+    ),
+    .dispatchCleanCandidatesOne: ("候補 %lld 件", "%lld candidate"),
+    .dispatchCleanCandidatesOther: ("候補 %lld 件", "%lld candidates"),
+    .dispatchCleanListNote: (
+      "rm / prune / 掃除 の入力もエイリアスでヒット · 候補 0 件でも行は残る（バッジだけ消える）",
+      "rm / prune / 掃除 also match as aliases · the row stays at 0 candidates (only the badge goes)"
+    ),
+    .dispatchCleanSelected: ("%lld 件選択中", "%lld selected"),
+    .dispatchCleanBack: ("esc 戻る", "esc Back"),
+    .dispatchCleanSectionSafe: ("削除候補 — 安全に削除できます", "Candidates — safe to delete"),
+    .dispatchCleanSectionCaution: ("注意 — 理由を確認してから", "Caution — check the reason first"),
+    .dispatchCleanSectionInUse: ("使用中 — 削除できません", "In use — can't be deleted"),
+    .dispatchCleanDeleteBranch: ("ローカルブランチも削除", "Delete local branch too"),
+    .dispatchCleanWorktreeOnly: ("worktree のみ", "Worktree only"),
+    .dispatchCleanWorktreeAndBranch: ("worktree + ブランチ", "Worktree + branch"),
+    .dispatchCleanKeyHint: (
+      "space / ⏎ 選択 · a 安全を全選択", "space / ⏎ Select · a Select all safe"
+    ),
+    .dispatchCleanExecute: ("⌘⏎ %lld 件を削除", "⌘⏎ Delete %lld"),
+    .dispatchCleanDeleting: ("削除中…", "Deleting…"),
+    .dispatchCleanPrunable: ("prunable · 実体なし", "prunable · no directory"),
+    .dispatchCleanDirty: ("未コミット変更あり", "Uncommitted changes"),
+    .dispatchCleanUnmergedClosedOne: (
+      "未マージclose · 独自コミット%lld件", "Closed unmerged · %lld own commit"
+    ),
+    .dispatchCleanUnmergedClosedOther: (
+      "未マージclose · 独自コミット%lld件", "Closed unmerged · %lld own commits"
+    ),
+    .dispatchCleanOwnCommitsOne: ("独自コミット%lld件", "%lld own commit"),
+    .dispatchCleanOwnCommitsOther: ("独自コミット%lld件", "%lld own commits"),
+    .dispatchCleanPaneBusy: ("ペイン表示中 · agent 作業中", "Open in a pane · agent working"),
+    .dispatchCleanPaneOpen: ("ペイン表示中", "Open in a pane"),
+    .dispatchCleanFailure: (
+      "%lld 件中 %lld 件失敗 — %@", "%2$lld of %1$lld failed — %3$@"
     ),
 
     // MARK: Onboarding

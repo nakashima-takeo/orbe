@@ -54,6 +54,7 @@ struct ThemeColors {
   // ステータスストリップ・done グリフ
   let statusText = Color(nsColor: Theme.Color.statusText)
   let checkStroke = Color(nsColor: Theme.Color.checkStroke)
+  let accentCheckStroke = Color(nsColor: Theme.Color.accentCheckStroke)
   // ヘルプのキーボード可視化（使用キー / 未使用キーの文字色）
   let kbKeyText = Color(nsColor: Theme.Color.kbKeyText)
   let kbKeyMutedText = Color(nsColor: Theme.Color.kbKeyMutedText)
@@ -66,10 +67,12 @@ struct ThemeColors {
   let diffSelectionFill = Color(nsColor: Theme.Color.diffSelectionFill)
   let hoverFill = Color(nsColor: Theme.Color.hoverFill)
   let smallPillFill = Color(nsColor: Theme.Color.smallPillFill)
+  let plainPillFill = Color(nsColor: Theme.Color.plainPillFill)
   // 状態別 tint
   let tintWorking = Color(nsColor: Theme.Color.tintWorking)
   let tintWaiting = Color(nsColor: Theme.Color.tintWaiting)
   let tintDone = Color(nsColor: Theme.Color.tintDone)
+  let tintDiffAdded = Color(nsColor: Theme.Color.tintDiffAdded)
   let tintRed = Color(nsColor: Theme.Color.tintRed)
   // オーバーレイ暗幕
   let scrim = Color(nsColor: Theme.Color.scrim)

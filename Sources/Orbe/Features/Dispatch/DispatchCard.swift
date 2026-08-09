@@ -1,52 +1,22 @@
 import SwiftUI
 
-/// フルウィンドウ overlay。strong scrim（暗幕＋blur）＋上端 54px アンカーの Dispatch カード。
-/// カード幅= min(640, 窓幅−32)。scrim タップで閉じる。
-struct DispatchOverlay: View {
-  @Bindable var model: DispatchPaletteModel
-
-  /// カード上端の窓上端からの距離・カードの基準幅（Dispatch 専用。汎用 PaletteOverlay の 66/560 とは別値）。
-  private let topAnchor: CGFloat = 54
-  private let cardWidth: CGFloat = 640
-
-  var body: some View {
-    GeometryReader { geo in
-      ZStack(alignment: .top) {
-        Scrim(strength: .strong)
-          .contentShape(Rectangle())
-          // 作成中は scrim タップも握り潰す（キーの Esc 閉じと同様。ここが抜けると作成中にカード外を
-          // クリックで palette が閉じ、completion が palette 消失で取りこぼされ worktree が孤児化する）。
-          .onTapGesture { if !model.isPreparing { model.onDismiss() } }
-        // カードは窓に収める（高さ上限＝窓高 − 70 相当）。上端アンカー＋下端に bar 分の
-        // 余白を残した高さを上限に渡し、内部でリスト部が縮んで内部スクロールへ回る。
-        DispatchCard(
-          model: model,
-          maxHeight: max(0, geo.size.height - topAnchor - Theme.Space.bar)
-        )
-        .frame(width: min(cardWidth, geo.size.width - Theme.Space.bar * 2))
-        .padding(.top, topAnchor)
-        .frame(maxWidth: .infinity, alignment: .top)
-      }
-    }
-    .ignoresSafeArea()
-    // 実マウス移動（NSEvent .mouseMoved）だけを拾ってモダリティを .pointer に落とす透明レイヤ
-    // （汎用 PaletteOverlay と同じ機構）。スクロールで行がカーソル下を横切る SwiftUI onHover と違い、
-    // mouseMoved は物理移動でのみ出るため、キー操作中の選択奪取が起きない。
-    .overlay(MouseMovedDetector { model.inputModality = .pointer })
-  }
+/// Dispatch カードの焦点の宛先。list は入力欄、clean は TextField を持たないのでカード器が受ける。
+enum DispatchFocus: Hashable {
+  case field, card
 }
 
 /// Dispatch のカード本体。ヘッダ（❯＋絞り込み入力欄＋起動 agent チップ）＋
 /// リスト部（可変セクション・maxHeight 380・内部スクロール）＋フッター（選択連動の実行説明/エラー＋キーヒント）。
-/// 外郭は `GlassPanel(.popup, radius 14)`。ヘッダの `TextField` にキーを集約し、↑↓/⇥/esc/↵/⌘↵ を横取りして
-/// フォーカス逸脱を防ぐ（`PaletteCard`/`SearchField` の field モードと同パターン）。
+/// 器はそのままに、中身だけ list / clean の 2 モードで切り替わる。
+/// 外郭は `GlassPanel(.popup, radius 14)`。list ではヘッダの `TextField` にキーを集約し、↑↓/⇥/esc/↵/⌘↵ を
+/// 横取りしてフォーカス逸脱を防ぐ（`PaletteCard`/`SearchField` の field モードと同パターン）。
 struct DispatchCard: View {
   @Bindable var model: DispatchPaletteModel
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
   /// カード全体の高さ上限（窓に収める。DispatchOverlay が窓高から算出して渡す）。
   let maxHeight: CGFloat
-  @FocusState private var fieldFocused: Bool
+  @FocusState private var focus: DispatchFocus?
   /// リスト内容の実測高（ハグ用）。初期は cap にして初回の 0 collapse フラッシュを避ける。
   @State private var contentHeight: CGFloat = 380
   /// ヘッダ＋フッターの実測高（リスト cap から差し引き、カードが窓を超えないようにする）。
@@ -73,17 +43,30 @@ struct DispatchCard: View {
       VStack(spacing: 0) {
         header
         divider
-        list
+        if model.mode == .clean {
+          DispatchCleanList(model: model.clean).frame(height: listHeight)
+        } else {
+          list
+        }
         divider
-        footer
+        if model.mode == .clean {
+          DispatchCleanFooter(model: model.clean, onExecute: { model.executeClean() })
+            .background(chromeProbe)
+        } else {
+          footer
+        }
       }
     }
     .frame(maxHeight: maxHeight, alignment: .top)
     .onPreferenceChange(DispatchChromeHeightKey.self) { chromeHeight = $0 }
-    // カード内のクリックで焦点を確定し直す（汎用 PaletteCard と同じ契約。Dispatch の焦点の宛先は
-    // ヘッダの入力欄 1 つで、行タップも行内の「開く」ボタンもこの契約に乗る）。
+    .onPreferenceChange(DispatchContentHeightKey.self) { contentHeight = $0 }
+    .modifier(DispatchCardKeyCapture(model: model, focus: $focus))
+    // カード内のクリックで焦点を確定し直す（汎用 PaletteCard と同じ契約。行タップも行内の「開く」
+    // ボタンもこの契約に乗る）。宛先はモードが決める。
     .simultaneousGesture(TapGesture().onEnded { model.focus() })
-    .onChange(of: model.focusToken, initial: true) { fieldFocused = true }
+    .onChange(of: model.focusToken, initial: true) {
+      focus = model.mode == .list ? .field : .card
+    }
   }
 
   /// ヘッダ／フッターの実測高を合算して chrome 高に集約する probe。
@@ -99,14 +82,25 @@ struct DispatchCard: View {
 
   // MARK: - ヘッダ（絞り込み入力欄）
 
+  /// 枠と ❯ は両モード共通。中身だけ切り替える。
+  /// **入力欄は clean でも mount したまま**幅 0・opacity 0 で隠す（`PaletteCard` が記録している罠と同じ——
+  /// 焦点の宛先が同じ更新 pass で新規 mount されると SwiftUI は `@FocusState` を取りこぼし、
+  /// first responder がカード器に残ってキーが死ぬ）。
   private var header: some View {
     HStack(spacing: Theme.Space.step + Theme.Space.hair) {
       Text("❯")
         .font(Font.theme.title)
         .foregroundStyle(Color.theme.accentPrimary)
       queryField
-      Spacer(minLength: Theme.Space.step)
-      targetChip
+        .frame(maxWidth: model.mode == .list ? .infinity : 0)
+        .opacity(model.mode == .list ? 1 : 0)
+        .allowsHitTesting(model.mode == .list)
+      if model.mode == .clean {
+        DispatchCleanHeader(model: model.clean)
+      } else {
+        Spacer(minLength: Theme.Space.step)
+        targetChip
+      }
     }
     .padding(.horizontal, Theme.Space.bar)
     .padding(.vertical, Theme.Space.beat)
@@ -125,14 +119,13 @@ struct DispatchCard: View {
     // キャレット/選択色を accent に固定（ヘッダ ❯ プロンプトと同じ affordance。
     // 既定のシステムアクセント任せだと Orbe の配色から浮くため明示する）。
     .tint(Color.theme.accentPrimary)
-    .focused($fieldFocused)
+    .focused($focus, equals: .field)
     // 純正 placeholder は色を握れず IME 変換中も消えないため、共通モディファイアで muted 描画しつつ
     // marked text がある間は抑制する。
     .imePlaceholder(
       l10n.string(.dispatchQueryPlaceholder), showWhenEmpty: model.query.isEmpty,
-      focused: fieldFocused, font: Font.theme.title, color: Color.theme.textMuted
+      focused: focus == .field, font: Font.theme.title, color: Color.theme.textMuted
     )
-    .frame(maxWidth: .infinity)
     .onChange(of: model.query) { model.onQueryChanged() }
     // 実行＝onSubmit（IME 変換確定の Enter では発火しない＝誤爆しない）。行タップと同じ決定 funnel。
     .onSubmit { model.activate() }
@@ -235,7 +228,6 @@ struct DispatchCard: View {
       // カードが窓外へはみ出して末尾に届かなくなる）。
       .frame(height: listHeight)
       .scrollIndicators(.automatic)
-      .onPreferenceChange(DispatchContentHeightKey.self) { contentHeight = $0 }
       .onChange(of: model.selected) { scrollToSelection(proxy) }
       .onChange(of: listHeight) { scrollToSelection(proxy) }
       .onAppear { scrollToSelection(proxy) }
@@ -282,7 +274,8 @@ struct DispatchCard: View {
         .truncationMode(.tail)
       Spacer(minLength: Theme.Space.step)
       // 作成中は操作が無効なのでキーヒントも出さない（効かない案内を残さない＝UI が嘘をつかない）。
-      if !model.isPreparing {
+      // 注記だけの行（clean 行）でも出さない——実行説明が無い行に実行のキー案内を並べない。
+      if !model.isPreparing, !showsNoteOnly {
         keyHints
           .layoutPriority(1)  // 狭幅ではキーヒントを残し説明側を truncate
       }
@@ -290,6 +283,12 @@ struct DispatchCard: View {
     .padding(.horizontal, Theme.Space.bar)
     .padding(.vertical, Theme.Space.step + Theme.Space.hair)
     .background(chromeProbe)
+  }
+
+  /// 選択行のフッターが注記のみか（キーヒントを出すかの判断）。
+  private var showsNoteOnly: Bool {
+    guard model.errorMessage == nil, case .note = model.selectedItem?.footer else { return false }
+    return true
   }
 
   @ViewBuilder private var description: some View {
@@ -301,14 +300,21 @@ struct DispatchCard: View {
       }
     } else if let error = model.errorMessage {
       Text(error).foregroundStyle(Color.theme.danger)
-    } else if let item = model.selectedItem, let footer = item.footer {
-      Text("↵ ").foregroundStyle(Color.theme.textMuted)
-        + fontResolver.text(footer.target, base: Theme.Typography.meta)
-        .foregroundStyle(Color.theme.textPrimary)
-        + Text(" " + l10n.string(footer.kind.prepositionKey) + " ")
-        .foregroundStyle(Color.theme.textMuted)
-        + Text(model.selectedTargetName).foregroundStyle(Color.theme.accentPrimary)
-        + Text(" " + l10n.string(.dispatchLaunchSuffix)).foregroundStyle(Color.theme.textMuted)
+    } else {
+      switch model.selectedItem?.footer {
+      case .launch(let target, let kind):
+        Text("↵ ").foregroundStyle(Color.theme.textMuted)
+          + fontResolver.text(target, base: Theme.Typography.meta)
+          .foregroundStyle(Color.theme.textPrimary)
+          + Text(" " + l10n.string(kind.prepositionKey) + " ")
+          .foregroundStyle(Color.theme.textMuted)
+          + Text(model.selectedTargetName).foregroundStyle(Color.theme.accentPrimary)
+          + Text(" " + l10n.string(.dispatchLaunchSuffix)).foregroundStyle(Color.theme.textMuted)
+      case .note(let key):
+        Text(l10n.string(key)).foregroundStyle(Color.theme.textMuted)
+      case nil:
+        EmptyView()
+      }
     }
   }
 

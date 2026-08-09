@@ -1,5 +1,7 @@
 import Foundation
 
+// swiftlint:disable file_length
+
 /// UI 文言の型付きキー。フラット enum・`CaseIterable`（辞書欠落を `L10nCompletenessTests` が機械検出できる）。
 /// 命名はドメイン接頭辞つき（衝突と重複を避ける）。粒度は「1 つの UI 文言 = 1 キー」。値は `L10n.table`。
 ///
@@ -39,6 +41,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   // MARK: - Common（複数ドメインで共有）
   case commonLoading
   case commonCancel
+
+  // MARK: - Git（実行層の共通失敗）
+  case gitTimedOut
 
   // MARK: - EditorPane / FileViewer
   case editorSelectFile
@@ -141,6 +146,30 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchHintClose
   case dispatchErrNotGitRepo
   case dispatchErrForkPR
+  case dispatchCleanSubtitle
+  case dispatchCleanCandidatesOne
+  case dispatchCleanCandidatesOther
+  case dispatchCleanListNote
+  case dispatchCleanSelected
+  case dispatchCleanBack
+  case dispatchCleanSectionSafe
+  case dispatchCleanSectionCaution
+  case dispatchCleanSectionInUse
+  case dispatchCleanDeleteBranch
+  case dispatchCleanWorktreeOnly
+  case dispatchCleanWorktreeAndBranch
+  case dispatchCleanKeyHint
+  case dispatchCleanExecute
+  case dispatchCleanDeleting
+  case dispatchCleanPrunable
+  case dispatchCleanDirty
+  case dispatchCleanUnmergedClosedOne
+  case dispatchCleanUnmergedClosedOther
+  case dispatchCleanOwnCommitsOne
+  case dispatchCleanOwnCommitsOther
+  case dispatchCleanPaneBusy
+  case dispatchCleanPaneOpen
+  case dispatchCleanFailure
 
   // MARK: - Onboarding
   case onboardingBegin

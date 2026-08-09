@@ -62,6 +62,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `statusText` | ステータスストリップの件数 | `#cad3f5` | `#4d4368` |
 | `stripDivider` | ストリップの区切り線 | `rgba(255,255,255,.12)` | `rgba(58,49,81,.16)` |
 | `checkStroke` | done グリフの check 線 | `#0a0a0a` | `#f3f0fa` |
+| `accentCheckStroke` | accent 塗り面上の ✓（clean のチェックボックス） | `#ffffff` | `#f3f0fa` |
 | `tab.rowBg` | タブ行全幅の地 | `rgba(0,0,0,.28)` | `rgba(58,49,81,.08)` |
 | `tab.segBg` | 非選択セグメントの地 | `rgba(255,255,255,.10)` | `rgba(58,49,81,.06)` |
 | `tab.activeText` | 選択セグメント（反転面）の文字 | `#1a1721` | `#f3f0fa` |
@@ -85,8 +86,10 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `tint.working` | `rgba(133,173,255,.12)` | `rgba(31,102,201,.12)` | working 件数ピル |
 | `tint.waiting` | `rgba(238,194,90,.12)` | `rgba(177,123,0,.12)` | waiting |
 | `tint.done` | `rgba(130,216,148,.12)` | `rgba(39,154,77,.12)` | done |
+| `tint.diffAdded` | `rgba(129,184,139,.12)` | `rgba(39,154,77,.12)` | git の緑チップ地（merged PR・番号バッジ。文字が `diff.added` なので地も同軸） |
 | `tint.red` | `rgba(209,105,105,.14)` | `rgba(224,45,51,.14)` | エラー・削除件数 |
 | `smallPillFill` | `rgba(255,255,255,.04)` | `rgba(58,49,81,.06)` | ⌘⇧S 等のキーバッジ地 |
+| `plainPillFill` | `rgba(255,255,255,.06)` | `rgba(58,49,81,.08)` | 事実だけを述べる無色チップ地（clean の `[gone]` / `prunable`） |
 | `scrim` | `rgba(10,8,14,.35)` | `rgba(58,49,81,.18)` | Workspace 等の通常暗幕 |
 | `scrimStrong` | `rgba(10,8,14,.40)` | `rgba(58,49,81,.22)` | 設定等の強い暗幕 |
 
