@@ -32,8 +32,17 @@ import SwiftUI
   /// 選択行。ホバー追従以外の代入はモダリティを `.keyboard` へ戻す（→ `ModalSelection`）。
   var selected: Int {
     get { selection.index }
-    set { selection.index = newValue }
+    set {
+      let previous = selection.index
+      selection.index = newValue
+      if newValue != previous { onSelectionChanged?(newValue) }
+    }
   }
+
+  /// 選択行が**ユーザの操作で実際に動いた**ときの通知（設定パレットの通知音プレビューが購読する）。
+  /// キー移動・タップ・ホバー追従だけが通り、`place` と `restoreSelection` は通らない
+  /// ——面の組み立てや裏の再取得での追い直しはユーザの意図ではないため。
+  var onSelectionChanged: ((Int) -> Void)?
 
   /// 実マウス移動（`MouseMovedDetector`）が `.pointer` へ落とす。
   var inputModality: InputModality {
@@ -42,15 +51,25 @@ import SwiftUI
   }
 
   /// ホバー開始による選択追従（`.pointer` のときだけ効く）。
-  func hoverSelect(_ i: Int) { selection.hoverSelect(i) }
+  func hoverSelect(_ i: Int) {
+    let previous = selection.index
+    selection.hoverSelect(i)
+    if selection.index != previous { onSelectionChanged?(selection.index) }
+  }
+  /// 面の組み立てによる選択の配置（モード遷移の初期選択・行差し替え後の収め直し）。
+  /// 開いた直後の初期選択を hover に奪われないようモダリティは `.keyboard` へ戻すが、ユーザが
+  /// 選んだのではないので `onSelectionChanged` は通さない（→ `restoreSelection` と同じ理由）。
+  func place(_ i: Int) { selection.index = i }
   /// 裏の再取得で行がずれたときの選択の追い直し。ユーザの意図ではないのでモダリティを奪わない
   /// （→ `ModalSelection.restore`）。`selected` の setter で代入すると `.keyboard` へ戻り、
   /// ポインタ操作中の追従が切れる。
   func restoreSelection(_ i: Int) { selection.restore(i) }
   /// ヘッダ左のテキスト（サブメニューの「‹ 親」等）。nil で非表示。入力欄も無ければヘッダ行ごと描かれない。
   var breadcrumb: String?
-  /// ヘッダ右端の表示専用バッジ（Attention の `⌘⌘` 等）。nil で出さない（既存パレットは無影響）。
-  var headerBadge: String?
+  /// ヘッダ右端の表示専用ピル。1 つなら素のバッジ（Attention の `⌘⌘`）、複数なら現在位置を
+  /// `active` で示すセグメント（通知音サブパレットの試聴対象「完了 | 入力待ち」）。
+  /// 空で出さない＝opt-in（`hintKeys` と同じ規律）。
+  var headerPills: [(label: String, active: Bool)] = []
   var hint = ""
   /// フッターヒントのキー付きセグメント（key=副色・label=muted・デザイン第10シーン）。
   /// 空なら `hint` の素文字列を muted 一色で描く（既存パレットは無影響）。
@@ -100,6 +119,9 @@ import SwiftUI
   var onEscape: () -> Void = {}
   /// delete＝設定パレット root で workspace 上書きを解除（global 継承へ戻す）。入力欄なしモードのみ届く。
   var onDelete: () -> Void = {}
+  /// ⇥ の意味。true を返すとキーを消費（通知音サブパレットの試聴対象の反転）。既定は非消費＝
+  /// 他パレットは従来どおり ⇥ に反応しない。
+  var onTab: () -> Bool = { false }
 
   /// enabled な行だけを巡る選択移動（情報行は飛ばす）。
   func move(_ d: Int) {
@@ -116,8 +138,8 @@ import SwiftUI
     selected = i
   }
 
-  /// rows 差し替え後に選択を範囲内へ収める。
+  /// rows 差し替え後に選択を範囲内へ収める（ユーザ操作ではないので `place` 経由）。
   func clampSelection() {
-    if selected >= rows.count { selected = max(0, rows.count - 1) }
+    if selected >= rows.count { place(max(0, rows.count - 1)) }
   }
 }

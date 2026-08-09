@@ -265,6 +265,10 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsWorktreeDirPresetInside
   case settingsWorktreeDirPresetFlat
   case settingsWorktreeDirCustom
+  case settingsNotificationSoundBreadcrumb
+  case settingsNotificationSoundHint
+  case settingsNotificationSoundNone
+  case settingsNotificationSoundOffRow
 
   // MARK: - Search バー
   case searchPlaceholder
@@ -292,6 +296,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsAgentIcons
   case settingsDevFeatures
   case settingsWorktreeDir
+  case settingsNotificationSound
+  case settingsNotificationSoundVolume
+  case settingsNotificationSoundEnabled
   case settingsUnset
   case settingsToggleOn
   case settingsToggleOff
@@ -299,6 +306,20 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsIconsCustomOne
   case settingsIconsCustomOther
   case settingsDefaultFont
+
+  // MARK: - Notification sound（12 案の名前）
+  case soundGlass
+  case soundPulse
+  case soundWood
+  case soundAir
+  case soundEmblem
+  case soundReply
+  case soundBounce
+  case soundArcade
+  case soundSteel
+  case soundPiano
+  case soundWhistle
+  case soundDeep
 
   // MARK: - Agent palette
   case agentPaletteSetDefault

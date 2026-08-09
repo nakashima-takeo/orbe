@@ -12,7 +12,8 @@ import XCTest
 /// ことだけを担保すればよく、隔離そのものは基底に依存しない。
 ///
 /// これが外れると、`swift test` が開発者の実 `workspaces.json`・ghostty の user 設定・
-/// 実 state dir を読み書きし始める。テストが手元の環境に依存して緑になり、CI で落ちる。
+/// 実 state dir を読み書きし始め、実スピーカーを鳴らす。テストが手元の環境に依存して緑になり、
+/// CI で落ちる。
 class OrbeTestCase: XCTestCase {
   /// `static`（＝上書き不可）にするのは、サブクラスが `super` 抜きで上書きすると点火が外れるため。
   /// 上書きしようとした時点でコンパイルが落ちる＝実行時に無言で外れる経路が残らない。
@@ -97,7 +98,7 @@ enum TestIsolation {
 
   /// テスト 1 件へ専用ディレクトリを配り、隔離の seam をそこへ向け直す。
   ///
-  /// 値の素性（永続 4 種・同梱リソース根・プラグイン実体化先・ghostty user 層）に関わらず
+  /// 値の素性（永続 4 種・同梱リソース根・プラグイン実体化先・ghostty user 層・通知音の再生層）に関わらず
   /// **毎テスト無条件に張り直す**。テストが自分で書き換えても次のテストへ漏れず、戻し忘れが
   /// 起きえない——申告制を残さないため。`CompletionLearning` だけは `shared` が in-memory へ
   /// 焼き付ける都合で per-test にできず、`installOnce` の固定のままにする。
@@ -133,6 +134,10 @@ enum TestIsolation {
     // ghostty の user 層。ファイルは作らない＝不在なので読まれない。テストが層を立てるときは
     // ここへ書くので、他と同じく caseDir の下に置く（書いた中身が `endCase` の削除に乗る）。
     Config.userFileURLOverride = dir.appendingPathComponent("ghostty-user.conf")
+
+    // 通知音の再生層。スピーカーは実 state dir と同じく管理外の実環境なので、記録だけするフェイクへ
+    // 向ける（`WindowController` を立てるテストは軒並み agent の状態報告を流すため、張らないと鳴る）。
+    AgentSoundOutput.makeOverride = { SoundPlayerFake() }
   }
 
   static func endCase() {

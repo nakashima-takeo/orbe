@@ -45,6 +45,34 @@ extension SettingsPaletteModel {
     }
   }
 
+  /// notificationSound: 行 0 が「なし（オフ）」、続いて 12 案（絞り込み欄なし）。
+  /// **行の移動はその案を鳴らすだけで値を書かない**（書くのは ↵ の確定のみ）ので、流し聴きして
+  /// ← / esc で戻れば設定は元のまま。ヘッダ右端のセグメントが今どちらのイベントを聴く面かを示し、
+  /// ⇥ がそれを反転する（フッターの hint が操作を語る）。
+  /// 現在値（●・初期ハイライト）はオフなら行 0、オンなら現在の案の行。
+  func rebuildNotificationSound() {
+    render.fieldVisible = false
+    render.fieldIsFilter = false
+    render.breadcrumb = localization.string(.settingsNotificationSoundBreadcrumb)
+    render.headerPills = AgentSoundEvent.allCases.map {
+      (localization.string($0.labelKey), $0 == previewEvent)
+    }
+    render.placeholder = ""
+    render.hint = localization.string(.settingsNotificationSoundHint)
+    let sounds = NotificationSound.allCases
+    currentRowIndex =
+      values.effNotificationSoundEnabled
+      ? sounds.firstIndex(of: values.effNotificationSound).map { $0 + 1 } : 0
+    render.rows =
+      [
+        PaletteModel.RowItem(
+          label: marker(0) + localization.string(.settingsNotificationSoundOffRow))
+      ]
+      + sounds.indices.map {
+        PaletteModel.RowItem(label: marker($0 + 1) + localization.string(sounds[$0].labelKey))
+      }
+  }
+
   /// agent: 検出済み CLI の行（絞り込み欄なし・検出ゼロは情報行 1 つ）。
   /// 現在値は解決済みデフォルト＝実際に起動される agent（起動パレットの ● と同じキー）。
   func rebuildAgent() {

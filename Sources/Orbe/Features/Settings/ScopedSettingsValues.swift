@@ -54,6 +54,9 @@ struct ScopedSettingsValues {
   var effTheme: ThemeMode { effective[SettingKeys.theme] }
   var effDefaultAgent: String? { effective[SettingKeys.defaultAgent] }
   var effWorktreeDir: String { effective[SettingKeys.worktreeDir] }
+  var effNotificationSound: NotificationSound { effective[SettingKeys.notificationSound] }
+  var effNotificationSoundEnabled: Bool { effective[SettingKeys.notificationSoundEnabled] }
+  var effNotificationSoundVolume: Int { effective[SettingKeys.notificationSoundVolume] }
 
   /// 実効の状態アイコンマップ（whole-map・A案）。
   var effAgentStateIcons: [AgentStateIcon.Kind: String] {

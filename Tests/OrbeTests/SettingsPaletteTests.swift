@@ -90,9 +90,13 @@ final class SettingsPaletteTests: OrbeTestCase {
     let p = model()
     XCTAssertEqual(
       p.render.rows.map(\.chevron),
-      [false, false, false, false, false, true, true, true, true, true, true, false, true, true],
-      "スコープ/フォントサイズ/不透明度/ブラー/点滅/開発中機能行は chevron 無し、"
-        + "テーマ/エージェント/フォント/タブタイトルのフォント/絵文字フォント/アイコン/worktree の作成場所/言語行は drillIn で chevron 有り"
+      [
+        false, false, false, false, false, true, true, true, true, true, true, false, true, true,
+        false, false, true,
+      ],
+      "スコープ/フォントサイズ/不透明度/ブラー/点滅/開発中機能/通知音の音量/通知音のオン・オフ行は chevron 無し、"
+        + "テーマ/エージェント/フォント/タブタイトルのフォント/絵文字フォント/アイコン/worktree の作成場所/"
+        + "通知音/言語行は drillIn で chevron 有り"
     )
   }
 

@@ -80,6 +80,11 @@ extension SettingsPaletteModel {
   /// フォント未設定は既定の実フォント名。検出ゼロで解決不能のときだけ「（未設定）」へ縮退する。
   private func rootValueDisplay(_ d: SettingDescriptor) -> String {
     if case .defaultAgent = d.id { return resolvedAgent ?? unsetText(d) }
+    // 通知音の行は「今どう鳴るか」を出す。オフのときは案名でなく「なし」——保持している案を出すと、
+    // 鳴らない設定なのに鳴りそうに読める。
+    if case .notificationSound = d.id, !values.effNotificationSoundEnabled {
+      return localization.string(.settingsNotificationSoundNone)
+    }
     return values.effectiveDisplay(d, localization) ?? unsetText(d)
   }
 

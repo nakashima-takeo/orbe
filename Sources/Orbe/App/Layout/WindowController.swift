@@ -58,6 +58,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   let updaterService = UpdaterService()
   // Attention 一覧の単一情報源。flushChrome が snapshot を流し込み、パレットとメニューバーが読む。
   let attentionStore = AttentionStore()
+  // 通知音の再生層。見ていないペインの状態変化（WindowController+Sound）と設定パレットの試聴が使う。
+  let soundPlayer: AgentSoundPlaying = AgentSoundOutput.make()
 
   // 読みは store へ転送する（制御チャネル・chrome・パレット・永続・テストが多数の箇所で読むため、
   // 従来の可視性（internal）を保って読み site を無改変にする）。所有と全ミューテーションは store。
@@ -267,7 +269,7 @@ final class WindowController: NSObject, NSWindowDelegate {
 
   /// 「見ているタブ」＝ウィンドウがキー（前面）のときの、アクティブ workspace のアクティブ表示タブ。
   /// 背面・0タブなら nil。粒度がタブなので、split で隣に見えているペインもこのタブに含まれる。
-  /// done のフォーカス消費とメニューバー②の抑制が、この 1 つの判定を共有する。
+  /// done のフォーカス消費・メニューバー②の抑制・通知音の抑制が、この 1 つの判定を共有する。
   var visibleTab: TerminalController? {
     guard window.isKeyWindow, current.tabs.indices.contains(current.active) else { return nil }
     return current.tabs[current.active]

@@ -138,15 +138,22 @@ struct PaletteCard: View {
         .frame(maxWidth: model.fieldVisible ? .infinity : 0)
         .opacity(model.fieldVisible ? 1 : 0)
         .allowsHitTesting(model.fieldVisible)
-      // ヘッダ右端の表示専用バッジ（Attention の ⌘⌘）。opt-in（nil の既存パレットは従来どおり）。
-      if let badge = model.headerBadge {
-        Text(badge)
-          .font(Font.theme.meta)
-          .foregroundStyle(Color.theme.textMuted)
-          .padding(.horizontal, Theme.Space.step)
-          .padding(.vertical, Theme.Space.hair)
-          .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.sm).fill(Color.theme.smallPillFill))
+      // ヘッダ右端の表示専用ピル。opt-in（空の既存パレットは従来どおりヘッダ行だけ）。
+      // 状態を語るのはヘッダ、操作を語るのはフッター（hint）という分担なので、ここは
+      // 「今どちらの面か」だけを出す（キーの案内は載せない）。
+      if !model.headerPills.isEmpty {
+        HStack(spacing: Theme.Space.step) {
+          ForEach(model.headerPills.indices, id: \.self) { i in
+            Text(model.headerPills[i].label)
+              .foregroundStyle(
+                model.headerPills[i].active ? Color.theme.textPrimary : Color.theme.textMuted)
+          }
+        }
+        .font(Font.theme.meta)
+        .padding(.horizontal, Theme.Space.step)
+        .padding(.vertical, Theme.Space.hair)
+        .background(
+          RoundedRectangle(cornerRadius: Theme.Radius.sm).fill(Color.theme.smallPillFill))
       }
     }
     .padding(.horizontal, Theme.Space.span)
@@ -282,6 +289,9 @@ private struct CardKeyCapture: ViewModifier {
         guard !model.fieldVisible else { return .ignored }
         model.onDelete(); return .handled
       }
+      // ⇥ は受け手のあるモード（通知音サブパレットの試聴対象）だけが消費し、それ以外は
+      // .ignored で AppKit の focus 移動へ返す（既存パレットの挙動を変えない）。
+      .onKeyPress(.tab) { model.onTab() ? .handled : .ignored }
       .onKeyPress(.escape) {
         model.onEscape(); return .handled
       }
