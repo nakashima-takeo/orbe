@@ -18,17 +18,28 @@ final class GitRunner {
     var isSuccess: Bool { status == 0 }
   }
 
+  /// git 実行の並行レーン。「何と競合するか」で選ぶ。
+  enum Lane {
+    /// 読み取り。共有 queue で並行に走る。
+    case read
+    /// 同一チェックアウトの index・作業ツリーを書く操作。共有 queue の barrier で単独直列化する
+    /// （`.git/index.lock` は待たずに即 fatal するため、順番はアプリ側で作る）。
+    case exclusive
+    /// 共有チェックアウトと領域が交わらない操作。独立レーンで走らせ、barrier チェーンに載せない。
+    case independent
+  }
+
   static let shared = GitRunner()
 
   /// 読み取り系の同時実行を許す。書き込み系は barrier で排他直列化する
   /// （concurrent キュー上の read-write lock）。env 解決だけ envLock で直列に守る。
   private let queue = DispatchQueue(
     label: "dev.orbe.git", qos: .userInitiated, attributes: .concurrent)
-  /// 共有 `queue` の read-write lock から切り離した独立レーン（`isolated: true`）。
-  /// 数秒かかりうる fetch をここで走らせ、共有 queue の barrier チェーンに載せない。
-  /// GCD barrier は「submit 済みの全ブロックの完了」を待つため、共有 queue で fetch を
-  /// 走らせると（write:false でも）後続の `addWorktree`(barrier) が in-flight fetch を待つ。
-  /// 独立 queue に逃がすことで、Enter(addWorktree) の barrier が fetch を待たなくなる。
+  /// 共有 `queue` の read-write lock から切り離した独立レーン（`.independent`）。
+  /// 所要時間が不定の操作をここで走らせ、共有 queue の barrier チェーンに載せない。
+  /// GCD barrier は「submit 済みの全ブロックの完了」を待つため、共有 queue で長い操作を
+  /// 走らせると（`.read` でも）後続の `.exclusive` がその完了を待つ。
+  /// 独立 queue に逃がすことで、barrier が長い操作を待たなくなる。
   private let isolatedQueue = DispatchQueue(
     label: "dev.orbe.git.isolated", qos: .userInitiated, attributes: .concurrent)
   /// 環境変数はプロセスの事実（ログインシェルの PATH）でありインスタンスの事実ではない。
@@ -36,25 +47,19 @@ final class GitRunner {
   private static let envLock = DispatchQueue(label: "dev.orbe.git.env")
   private nonisolated(unsafe) static var cachedEnvironment: [String: String]?
 
-  /// git を背景で実行し、結果をメインキューへ返す。
-  /// write:true（index/ref/worktree を変更する操作）は barrier で他の全タスクを
-  /// 排他し単独直列で走らせる。write:false は従来どおり並行。
-  /// isolated:true は共有 queue（barrier チェーン）から切り離した独立レーンで走らせ、
-  /// write の排他対象にも barrier の待ち対象にもならない（長い fetch を Enter から隔離する用途）。
+  /// git を背景で実行し、結果をメインキューへ返す。レーンの意味は `Lane` を見る。
   func run(
-    _ args: [String], cwd: String, stdin: Data? = nil, write: Bool = false,
-    isolated: Bool = false, completion: @escaping (Output) -> Void
+    _ args: [String], cwd: String, stdin: Data? = nil, lane: Lane = .read,
+    completion: @escaping (Output) -> Void
   ) {
     let work = {
       let output = self.runSync(args, cwd: cwd, stdin: stdin)
       DispatchQueue.main.async { completion(output) }
     }
-    if isolated {
-      isolatedQueue.async(execute: work)
-    } else if write {
-      queue.async(flags: .barrier, execute: work)
-    } else {
-      queue.async(execute: work)
+    switch lane {
+    case .read: queue.async(execute: work)
+    case .exclusive: queue.async(flags: .barrier, execute: work)
+    case .independent: isolatedQueue.async(execute: work)
     }
   }
 

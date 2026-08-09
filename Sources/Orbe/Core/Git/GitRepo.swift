@@ -126,13 +126,13 @@ final class GitRepo {
     var args = ["apply", "--cached", "--whitespace=nowarn"]
     if reverse { args.append("--reverse") }
     args.append("-")
-    runner.run(args, cwd: root, stdin: Data(patch.utf8), write: true) { output in
+    runner.run(args, cwd: root, stdin: Data(patch.utf8), lane: .exclusive) { output in
       completion(output.isSuccess ? nil : output.stderrText)
     }
   }
 
   func stageFiles(_ paths: [String], completion: @escaping (String?) -> Void) {
-    runner.run(["add", "--"] + paths, cwd: root, write: true) { output in
+    runner.run(["add", "--"] + paths, cwd: root, lane: .exclusive) { output in
       completion(output.isSuccess ? nil : output.stderrText)
     }
   }
@@ -141,14 +141,14 @@ final class GitRepo {
   /// 部分 stage の前段で、パッチを適用できる土台を作る。
   func intentToAdd(_ paths: [String], completion: @escaping (String?) -> Void) {
     runner.run(
-      ["add", "--intent-to-add", "--"] + paths, cwd: root, write: true
+      ["add", "--intent-to-add", "--"] + paths, cwd: root, lane: .exclusive
     ) { output in
       completion(output.isSuccess ? nil : output.stderrText)
     }
   }
 
   func unstageFiles(_ paths: [String], completion: @escaping (String?) -> Void) {
-    runner.run(["reset", "-q", "--"] + paths, cwd: root, write: true) { [self] output in
+    runner.run(["reset", "-q", "--"] + paths, cwd: root, lane: .exclusive) { [self] output in
       if output.isSuccess {
         completion(nil)
         return
@@ -156,7 +156,8 @@ final class GitRepo {
       // unborn HEAD（初回コミット前）では reset が HEAD を解決できない。
       // この場合のみ index からの除去で代替する（worktree のファイルは残る）。
       runner.run(
-        ["rm", "--cached", "-q", "-r", "--ignore-unmatch", "--"] + paths, cwd: root, write: true
+        ["rm", "--cached", "-q", "-r", "--ignore-unmatch", "--"] + paths, cwd: root,
+        lane: .exclusive
       ) { fallback in
         completion(fallback.isSuccess ? nil : fallback.stderrText)
       }
@@ -169,7 +170,7 @@ final class GitRepo {
   func discardPatch(_ patch: String, completion: @escaping (String?) -> Void) {
     runner.run(
       ["apply", "--reverse", "--whitespace=nowarn", "-"], cwd: root, stdin: Data(patch.utf8),
-      write: true
+      lane: .exclusive
     ) { output in
       completion(output.isSuccess ? nil : output.stderrText)
     }
@@ -195,7 +196,7 @@ final class GitRepo {
       finish(nil)
       return
     }
-    runner.run(["checkout", "-q", "--"] + tracked, cwd: root, write: true) { output in
+    runner.run(["checkout", "-q", "--"] + tracked, cwd: root, lane: .exclusive) { output in
       finish(output.isSuccess ? nil : output.stderrText)
     }
   }
@@ -206,7 +207,7 @@ final class GitRepo {
   /// 戻り値は (成功か, hooks 等の出力全文)。
   func commit(message: String, completion: @escaping (Bool, String) -> Void) {
     runner.run(
-      ["commit", "-F", "-"], cwd: root, stdin: Data(message.utf8), write: true
+      ["commit", "-F", "-"], cwd: root, stdin: Data(message.utf8), lane: .exclusive
     ) { output in
       let combined = [output.stdoutText, output.stderrText]
         .filter { !$0.isEmpty }.joined(separator: "\n")

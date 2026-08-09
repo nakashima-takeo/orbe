@@ -36,14 +36,14 @@ extension GitRepo {
   }
 
   /// origin から fetch し、削除された remote 追跡ブランチを prune する（`refs/remotes/origin/*` のみ更新）。
-  /// 独立レーン（`isolated: true`）で走らせる: 数秒かかりうる fetch を GitRunner 共有 queue の barrier
-  /// チェーンから切り離し、直後に Enter で来る `addWorktree`(barrier) が in-flight fetch を待たないようにする
-  /// （GCD barrier は submit 済み全ブロックの完了を待つため、共有 queue で走らせると write:false でも Enter が
+  /// 独立レーン（`.independent`）で走らせる: 数秒かかりうる fetch を GitRunner 共有 queue の barrier
+  /// チェーンから切り離し、直後に Enter で来る書き込み（barrier）が in-flight fetch を待たないようにする
+  /// （GCD barrier は submit 済み全ブロックの完了を待つため、共有 queue で走らせると `.read` でも Enter が
   /// 数秒ブロックされる）。並行安全: fetch が触るのは `refs/remotes/origin/*`、`addWorktree` が触るのは
   /// worktrees・HEAD・`refs/heads` で領域は概ね disjoint、git 自身の ref/index ロックで並行安全なため共有
   /// read-write lock の外で走らせてよい。`GIT_TERMINAL_PROMPT=0`（GitRunner 既定）で認証プロンプトはハングせず失敗に落ちる。
   func fetchPrune(completion: @escaping (Bool) -> Void) {
-    runner.run(["fetch", "--prune", "origin"], cwd: root, isolated: true) { output in
+    runner.run(["fetch", "--prune", "origin"], cwd: root, lane: .independent) { output in
       completion(output.isSuccess)
     }
   }
@@ -75,7 +75,7 @@ extension GitRepo {
     completion: @escaping (String?) -> Void
   ) {
     let parent = (dest as NSString).deletingLastPathComponent
-    runner.run(["clone", "--", url, dest], cwd: parent, write: true) { output in
+    runner.run(["clone", "--", url, dest], cwd: parent, lane: .exclusive) { output in
       completion(output.isSuccess ? nil : output.stderrText)
     }
   }
@@ -90,7 +90,7 @@ extension GitRepo {
     if let newBranch { args += ["-b", newBranch] }
     if track { args.append("--track") }
     args += [path, base]
-    runner.run(args, cwd: root, write: true) { output in
+    runner.run(args, cwd: root, lane: .exclusive) { output in
       completion(output.isSuccess ? nil : GitRepo.essentialFailureReason(output.stderrText))
     }
   }
