@@ -4,11 +4,11 @@ import Foundation
 
 /// 「返らない git」をネットワーク無し・本番コードへのテスト専用フック無しで作る一時リポジトリ。
 ///
-/// 手口は 1 つだけ: sentinel ファイルが現れるまで返らない sh を、hook（`pre-commit` は `commit` を、
-/// `post-checkout` は `worktree add` を止める）か `ext::` transport（clone は hook を持たないので
-/// 止める手段がこれしかない）として git に踏ませる。テストが `release()` を呼べば即座に解けるので、
-/// tearDown が確実に片付く。スクリプト側にも 60 秒の上限を持たせてあり、`release()` を呼び損ねても
-/// テストプロセスに居座らない。
+/// 手口は 1 つだけ: sentinel ファイルが現れるまで返らない sh を、git が起動する実行体として踏ませる
+/// ——hook（`pre-commit` は `commit` を、`post-checkout` は `worktree add` を止める）・`ext::` transport
+/// （clone は hook を持たないので止める手段がこれしかない）・clean フィルタなど。待ちは `release()` でも
+/// `cleanup()`（fixture ディレクトリごと消す）でも解けるので、tearDown が確実に片付く。スクリプト側にも
+/// 60 秒の上限を持たせてあり、どちらも呼び損ねてもテストプロセスに居座らない。
 ///
 /// レイアウト（すべて 1 つの一時ディレクトリの下＝`cleanup()` の 1 回で消える）:
 /// ```
@@ -43,14 +43,29 @@ final class GitHangFixture {
 
   // MARK: - ハングする sh
 
-  /// sentinel が現れるまで返らない sh。`release()` で即座に解ける。暴走保険として 60 秒で自ら終わる
-  /// ——解放し損ねた 1 本がテストプロセス全体を道連れにしないため。
+  /// 待ちの本体（シバンを除く）。`pipeHoldingScript` は孫を残したうえで同じ待ちへ入るので、
+  /// 両方をここから組み立てる。
+  ///
+  /// 解ける条件は 2 つ: sentinel が現れる（`release()`）か、fixture ディレクトリが消える
+  /// （`cleanup()`）。後者が無いと、`cleanup()` は sentinel を作った直後にそれごと削除するため
+  /// 待ちが解けず、上限まで回る sh が pipe を握ったまま残る。
+  /// 暴走保険の 60 秒は**壁時計**で測る——`sleep 0.05` の反復回数で数えると fork/exec のコストが
+  /// 乗ってマシンごとに実時間がずれ、ここに書いた秒数が嘘になる。
+  private var waitingBody: String {
+    """
+    : > "\(started)"
+    end=$(( $(date +%s) + 60 ))
+    while [ ! -f "\(sentinel)" ] && [ -d "\(dir.path)" ] && [ "$(date +%s)" -lt "$end" ]; do
+      sleep 0.05
+    done
+    """
+  }
+
+  /// sentinel が現れるまで返らない sh。
   var waitingScript: String {
     """
     #!/bin/sh
-    : > "\(started)"
-    i=0
-    while [ ! -f "\(sentinel)" ] && [ $i -lt 1200 ]; do sleep 0.05; i=$((i+1)); done
+    \(waitingBody)
     """
   }
 
@@ -65,9 +80,21 @@ final class GitHangFixture {
     """
     #!/bin/sh
     /usr/bin/perl -e 'use POSIX; POSIX::setsid(); exec "sleep", "10";' &
-    \(waitingScript.split(separator: "\n").dropFirst().joined(separator: "\n"))
+    \(waitingBody)
     """
   }
+
+  /// **セッションごと抜けた孫**を残したうえで、すぐ成功で終わる sh。
+  ///
+  /// git 自身は正常終了するのに孫が stdout/stderr を継いだままなので、EOF は二度と来ない。
+  /// 「切ったのに返らない」（`pipeHoldingScript`）の対になる「**終わったのに返らない**」を作る。
+  /// hook が `npm run dev &` のように背景へ 1 本投げるだけで起きる形で、setsid は不要だが、
+  /// テストを孫の寿命に依存させないためここでは明示的にセッションを抜けさせる。
+  static let daemonizingScript = """
+    #!/bin/sh
+    /usr/bin/perl -e 'use POSIX; POSIX::setsid(); exec "sleep", "10";' &
+    exit 0
+    """
 
   /// 0.2 秒ごとに 5 回（合計 1.0 秒）出力し続ける sh。「無出力の時間」で測っていることの検証に使う。
   static let streamingScript = """
@@ -82,7 +109,8 @@ final class GitHangFixture {
     try write(script, to: (hooks as NSString).appendingPathComponent(name))
   }
 
-  /// 実行可能スクリプトを fixture 直下へ置き、パスを返す（`ext::` の相手に渡す）。
+  /// 実行可能スクリプトを fixture 直下へ置き、パスを返す（`ext::` の相手・clean フィルタなど、
+  /// git に踏ませる実行体を置く）。
   @discardableResult
   func installScript(_ name: String, script: String) throws -> String {
     let path = dir.appendingPathComponent(name).path
@@ -112,9 +140,9 @@ final class GitHangFixture {
     FileManager.default.createFile(atPath: sentinel, contents: Data())
   }
 
-  /// 後始末。孫プロセスが残っていても最終的に自ら終わるので、ここでは削除だけ行う。
+  /// 後始末。ディレクトリを消すこと自体が待ちを解く（`waitingBody` の継続条件）ので、
+  /// 待ち手は次のポーリングで抜ける。孫プロセスが残っていても最終的に自ら終わる。
   func cleanup() {
-    release()
     try? FileManager.default.removeItem(at: dir)
   }
 

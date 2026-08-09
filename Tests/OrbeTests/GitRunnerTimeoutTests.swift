@@ -13,6 +13,10 @@ import XCTest
 final class GitRunnerTimeoutTests: OrbeTestCase {
   /// 本番の 120 秒は待てないので、短いアイドル上限を持つ専用インスタンスで駆動する
   /// （`shared` のキューを一切汚さない）。
+  ///
+  /// 逆に、**arrange と後続確認は本番既定の `shared` で回す**——そこで測るのは取りこぼしや
+  /// 後始末の有無であって上限ではないので、0.6 秒を当てると CI 負荷でその隙が生まれ、
+  /// 打ち切りたくないものが打ち切られる。
   private let runner = GitRunner(idleTimeout: 0.6)
   private var fixture: GitHangFixture!
 
@@ -234,6 +238,27 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
     wait(for: [hangFinished], timeout: 60)
   }
 
+  /// git が**自力で正常終了**したら、孫が pipe を握っていてもアイドル上限を待たずに返る。
+  ///
+  /// 待ちを EOF に賭けると、hook が背景へ投げたプロセス（`npm run dev &`・gpg-agent・言語サーバ）が
+  /// 生きている限り EOF が来ないので、成功した実行が本番の 120 秒を丸ごと待ち、`.exclusive` なら
+  /// その間ずっと barrier を占有する——打ち切り機構が解こうとした詰まりを、成功した実行で作り直す。
+  /// 実行の完了を決めるのは**子の終了**であって EOF ではない、という契約をここで固定する。
+  func testSuccessfulRunReturnsWhileGrandchildHoldsThePipes() throws {
+    try fixture.installHook("pre-commit", script: GitHangFixture.daemonizingScript)
+    try stageChange()
+
+    let started = Date()
+    let output = try runSync(["commit", "-m", "daemonizing hook"])
+    let elapsed = Date().timeIntervalSince(started)
+
+    XCTAssertTrue(output.isSuccess, "前提: hook は成功で返るので commit も成功する")
+    XCTAssertFalse(output.timedOut, "打ち切っていない——終了後に EOF を諦めただけ")
+    XCTAssertLessThan(elapsed, 5, "孫（10 秒生きる）の寿命に待ちを縛られない")
+  }
+
+  // MARK: - 失敗理由の整形（`--progress` を足したぶん）
+
   /// `--progress` の進捗は `\r` 区切りで流れる（実測: 200 ファイルの clone で stderr 8.7KB・CR 204 個）。
   /// `\n` だけで行を割ると進捗と `fatal:` が 1 行に融合し、進捗の断片まみれの巨大な失敗理由が出る。
   func testFailureReasonSplitsProgressOnCarriageReturns() {
@@ -264,7 +289,7 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
     }
     wait(for: [done], timeout: 20)
 
-    guard case .message(let reason) = try XCTUnwrap(failure ?? nil) else {
+    guard case .reason(let reason) = try XCTUnwrap(failure ?? nil) else {
       return XCTFail("git が理由を言っている失敗なので .message で返る")
     }
     XCTAssertTrue(reason.contains("fatal:"), "実質的な理由は残す: \(reason)")

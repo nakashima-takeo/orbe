@@ -82,7 +82,12 @@ final class GitRunnerLaneTests: OrbeTestCase {
     startHangingWorktreeAdd()
 
     let done = expectation(description: "stageFiles")
-    repo.stageFiles(["b.txt"]) { _ in done.fulfill() }
+    repo.stageFiles(["b.txt"]) { error in
+      // 巻き添えを免れるだけでなく、stage 自体が通ること。独立レーンの根拠（呼び出し元の index に
+      // 触らない）が崩れると `git add` は index.lock で即 fatal し、待たずに返るのでここだけが気づく。
+      XCTAssertNil(error, "ハング中でも stage は成功する")
+      done.fulfill()
+    }
     wait(for: [done], timeout: 5)
   }
 
@@ -92,7 +97,10 @@ final class GitRunnerLaneTests: OrbeTestCase {
     startHangingWorktreeAdd()
 
     let done = expectation(description: "snapshot")
-    repo.snapshot { _ in done.fulfill() }
+    repo.snapshot { snapshot in
+      XCTAssertNotNil(snapshot, "ハング中でも読み取りは成功する")
+      done.fulfill()
+    }
     wait(for: [done], timeout: 5)
   }
 
@@ -106,7 +114,10 @@ final class GitRunnerLaneTests: OrbeTestCase {
     startHangingWorktreeAdd()
 
     let done = expectation(description: "other repository stageFiles")
-    otherRepo.stageFiles(["b.txt"]) { _ in done.fulfill() }
+    otherRepo.stageFiles(["b.txt"]) { error in
+      XCTAssertNil(error, "別リポジトリの stage は成功する")
+      done.fulfill()
+    }
     wait(for: [done], timeout: 5)
   }
 }

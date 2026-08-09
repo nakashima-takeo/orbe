@@ -259,7 +259,7 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
     m.setCloneURL("https://github.com/no/such.git")
     var created = false
     m.onCreate = { _, _ in created = true }
-    m.onClone = { _, _, done in done(.message("fatal: repository not found")) }
+    m.onClone = { _, _, done in done(.reason("fatal: repository not found")) }
     m.submit()
     XCTAssertFalse(created, "失敗で onCreate は発火しない")
     XCTAssertEqual(m.cloneError, "fatal: repository not found", "git の理由をそのまま inline 表示へ")
@@ -269,7 +269,8 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
   /// 打ち切りは git が何も言い残さないので、モデルが専用文言を当てる（Git 層は UI 言語を持たない）。
   /// 当てそこねると、待たされた末に空のエラーバナーが出て何が起きたのか誰にも分からなくなる。
   func testCloneTimeoutShowsDedicatedMessage() {
-    let localization = LocalizationStore(language: .en)
+    // CI は英語なので、`.en` だと注入が外れて既定ストア（`.systemDefault`）へ落ちても緑になる。
+    let localization = LocalizationStore(language: .ja)
     let m = WorkspaceCreateModel(path: NSTemporaryDirectory(), localization: localization)
     m.setSource(.clone)
     m.setCloneURL("https://github.com/you/repo.git")

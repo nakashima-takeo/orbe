@@ -18,7 +18,8 @@ final class DispatchWorktreeTimeoutTests: OrbeTestCase {
     addTeardownBlock { fixture.cleanup() }
     try fixture.installHook("reference-transaction", script: fixture.waitingScript)
 
-    let localization = LocalizationStore(language: .en)
+    // CI は英語なので、`.en` だと既定ストアと文言が一致して写しの経路が測れない。
+    let localization = LocalizationStore(language: .ja)
     let provider = DispatchDataProvider(
       cwd: fixture.root, model: DispatchPaletteModel(), localization: localization,
       // 作成先を fixture の中へ落とす（後始末に乗せる）。
