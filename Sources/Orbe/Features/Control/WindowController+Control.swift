@@ -66,7 +66,8 @@ extension WindowController: ControlTarget {
   /// 出所で守らないと具体的な文言が定型文に潰れる。逆に通知由来どうしは上書きし合う——待ちの主体が
   /// この pane のエージェントとは限らず（teammate の worker が出す承認要求はリーダーの pane へ
   /// 即時に届き、要求ごとに文言が違う）、保持すると別の待ちの文言が居残るため。waiting / done への
-  /// 実変化はメニューバーの一過性表示へ流す（見ているタブのペインなら立てない ＝ noteAttentionTransient が判断する）。
+  /// 実変化はメニューバーの一過性表示と通知音へ流す（見ているタブのペインなら立てず鳴らさない
+  /// ＝ noteAttentionTransient / noteAgentSound が同じ判定で決める）。
   func controlReportAgent(
     pane: SurfaceView, agent: String, state: String, sessionId: String?, message: AgentMessage?
   ) {
@@ -89,6 +90,7 @@ extension WindowController: ControlTarget {
       }
       if changed, state == "waiting" || state == "done" {
         noteAttentionTransient(for: pane)
+        noteAgentSound(for: pane, state: state)
       }
     }
     pane.controller?.paneAgentStateChanged()

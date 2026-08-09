@@ -87,7 +87,8 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
   }
 
   /// ウィンドウを実際に key（前面）にする。`isKeyWindow` を要求する契約を実経路で測るため。
-  private func makeKey(_ wc: WindowController) {
+  /// 分割した拡張ファイル（+Sound）からも使うため internal。
+  func makeKey(_ wc: WindowController) {
     NSApplication.shared.setActivationPolicy(.accessory)
     wc.window.makeKeyAndOrderFront(nil)
     NSApplication.shared.activate(ignoringOtherApps: true)

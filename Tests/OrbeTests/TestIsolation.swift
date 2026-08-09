@@ -133,6 +133,10 @@ enum TestIsolation {
     // ghostty の user 層。ファイルは作らない＝不在なので読まれない。テストが層を立てるときは
     // ここへ書くので、他と同じく caseDir の下に置く（書いた中身が `endCase` の削除に乗る）。
     Config.userFileURLOverride = dir.appendingPathComponent("ghostty-user.conf")
+
+    // 通知音の再生層。スピーカーは実 state dir と同じく管理外の実環境なので、記録だけするフェイクへ
+    // 向ける（`WindowController` を立てるテストは軒並み agent の状態報告を流すため、張らないと鳴る）。
+    AgentSoundOutput.makeOverride = { SoundPlayerFake() }
   }
 
   static func endCase() {

@@ -253,6 +253,15 @@ extension WindowController {
       self.onLanguageChanged?()
       AppStatePersistence.update { $0.preferredLanguage = language.rawValue }
     }
+    // 通知音サブパレットの試聴。行 0（なし）は鳴っている音を止めるだけ。
+    // 音量は現在の実効値に従い、「通知音のオン/オフ」が off でも鳴らす——off のまま選び直せないと詰む。
+    p.onPreviewSound = { [weak self] sound, event in
+      guard let self else { return }
+      guard let sound else { return self.soundPlayer.stopPreview() }
+      self.soundPlayer.play(
+        sound, event: event,
+        volume: self.activeEffectiveSettings()[SettingKeys.notificationSoundVolume])
+    }
     p.onDismiss = { [weak self] in self?.dismissPalette() }
     model.settingsPalette = p
     model.overlay = .settingsPalette
