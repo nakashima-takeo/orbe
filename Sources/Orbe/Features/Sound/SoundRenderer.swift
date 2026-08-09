@@ -6,8 +6,7 @@ import Foundation
 /// **音量がコンプレッサの手前**にあるのが要点で、音量を上げるほど圧縮が深くなる（＝音量は再生側の
 /// ボリュームではなく合成の入力）。事前生成した音声ファイルを同梱するとこの順が崩れる。
 enum SoundRenderer {
-  /// 音量は 0〜100（%）で、0 は全ゼロ波形になる。通知は `AgentSoundDecision` が 0 を手前で弾くが、
-  /// 試聴（設定パレット）は判断を通らないので、音量 0 の設定はそのまま無音として聞こえる。
+  /// 音量は % をそのまま線形の係数として受ける（設定が渡すのは 5〜100）。
   static func render(
     family: NotificationSound, event: AgentSoundEvent, volume: Int, sampleRate: Double
   ) -> [Float] {

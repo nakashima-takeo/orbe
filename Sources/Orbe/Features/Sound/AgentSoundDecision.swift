@@ -11,12 +11,13 @@ enum AgentSoundDecision {
     let volume: Int
   }
 
-  /// waiting / done 以外の状態・通知音オフ・音量 0 は鳴らさない（nil）。
+  /// waiting / done 以外の状態・通知音オフは鳴らさない（nil）。
+  /// 「鳴らない」の担体はオン/オフただ 1 つ——音量は 5% を下限に持ち、無音になる値を取らない。
   static func plan(state: String, settings: EffectiveSettings) -> Plan? {
     guard let event = AgentSoundEvent(rawValue: state) else { return nil }
     guard settings[SettingKeys.notificationSoundEnabled] else { return nil }
-    let volume = settings[SettingKeys.notificationSoundVolume]
-    guard volume > 0 else { return nil }
-    return Plan(family: settings[SettingKeys.notificationSound], event: event, volume: volume)
+    return Plan(
+      family: settings[SettingKeys.notificationSound], event: event,
+      volume: settings[SettingKeys.notificationSoundVolume])
   }
 }

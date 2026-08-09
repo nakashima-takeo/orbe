@@ -85,6 +85,18 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
     XCTAssertEqual(changes().last?.value, .int(65))
   }
 
+  /// ← は 5% で止まる。0% まで下げられると試聴まで無音になり、聴きながら選べなくなる
+  /// ——黙らせたい人にはオン/オフ行があり、音量が「鳴らない」をもう 1 つ持つ必要は無い。
+  func testVolumeClampsAtFivePercent() {
+    let p = model(volume: 10)
+    let changes = captureChanges(p)
+    p.render.selected = soundRow + 1
+    p.render.onLeft()
+    XCTAssertEqual(changes().last?.value, .int(5))
+    p.render.onLeft()
+    XCTAssertEqual(changes().last?.value, .int(5), "下限では値が動かない")
+  }
+
   // MARK: - サブパレットの構成
 
   /// 行 0 が「なし（オフ）」、続いて 12 案。現在値（●・初期ハイライト）はオンなら案の行。

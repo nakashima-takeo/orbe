@@ -227,7 +227,7 @@ final class SettingsRegistryTests: OrbeTestCase {
     XCTAssertEqual(bo.range, 20...100)
     XCTAssertEqual(bo.unit, "%")
     let volume = SettingsRegistry.stepperDomain(.notificationSoundVolume)
-    XCTAssertEqual(volume.range, 0...100)
+    XCTAssertEqual(volume.range, 5...100, "下限 5%——無音は音量でなくオン/オフが担う")
     XCTAssertEqual(volume.step, 5)
     XCTAssertEqual(volume.unit, "%")
     for id in [SettingID.fontSize, .backgroundOpacity, .notificationSoundVolume] {

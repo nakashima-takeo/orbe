@@ -38,12 +38,12 @@ final class AgentSoundDecisionTests: OrbeTestCase {
     }
   }
 
-  /// 音量 0 は鳴らさない（無音の波形を作って再生する意味が無い）。
-  func testZeroVolumeNeverSounds() {
-    for state in ["done", "waiting"] {
-      XCTAssertNil(AgentSoundDecision.plan(state: state, settings: settings(volume: 0)), state)
+  /// 音量は「鳴らすか」を左右しない——下限 5% でも鳴り、黙らせるのはオン/オフだけ。
+  func testVolumeNeverSuppressesSound() {
+    for volume in [5, 100] {
+      XCTAssertEqual(
+        AgentSoundDecision.plan(state: "done", settings: settings(volume: volume))?.volume, volume)
     }
-    XCTAssertNotNil(AgentSoundDecision.plan(state: "done", settings: settings(volume: 5)))
   }
 
   /// 設定した案と音量がそのまま計画に載る。
@@ -53,16 +53,16 @@ final class AgentSoundDecisionTests: OrbeTestCase {
     XCTAssertEqual(plan, AgentSoundDecision.Plan(family: .steel, event: .waiting, volume: 35))
   }
 
-  /// 全案 × 全イベント × オンオフ × 音量 0 / 非 0 の総当たり。
+  /// 全案 × 全イベント × オンオフ × 音量（下限/既定/上限）の総当たり。
   func testExhaustiveMatrix() {
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
         for enabled in [true, false] {
-          for volume in [0, 70] {
+          for volume in [5, 70, 100] {
             let plan = AgentSoundDecision.plan(
               state: event.rawValue,
               settings: settings(sound: family, volume: volume, enabled: enabled))
-            if enabled && volume > 0 {
+            if enabled {
               XCTAssertEqual(
                 plan, AgentSoundDecision.Plan(family: family, event: event, volume: volume))
             } else {

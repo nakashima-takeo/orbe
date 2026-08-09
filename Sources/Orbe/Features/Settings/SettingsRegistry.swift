@@ -271,7 +271,9 @@ enum SettingsRegistry {
     SettingDescriptor(
       id: .notificationSoundVolume, key: "notification-sound-volume",
       labelKey: .settingsNotificationSoundVolume, activation: .stepper,
-      defaultValue: { .int(70) }, domain: .intRange(0...100, step: 5, unit: "%"),
+      // 下限は 0 でなく 5——「鳴らない状態」の担体はオン/オフ 1 つに閉じる。0 を許すと
+      // サブパレットの試聴まで無音になり、聴きながら選ぶという面の目的が立たなくなる。
+      defaultValue: { .int(70) }, domain: .intRange(5...100, step: 5, unit: "%"),
       guiConf: nil,  // gui.conf 非経由（合成の入力＝コンプレッサの手前に掛かる）
       display: { v, _ in percentLabel(v) }, unsetPlaceholderKey: nil),
     SettingDescriptor(
