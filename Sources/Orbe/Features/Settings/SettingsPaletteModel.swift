@@ -24,7 +24,9 @@ import SwiftUI
   var onOpenAccessibilitySettings: () -> Void = {}
   /// 通知音サブパレットの試聴（nil＝鳴らさず止めるだけ＝「なし」行）。提示元が再生層へ繋ぐ。
   /// **設定は書かない**——聴くことと決めることを分けてある（書くのは ↵ の確定だけ）。
-  var onPreviewSound: ((NotificationSound?, AgentSoundEvent) -> Void)?
+  /// 音量まで渡すのは、耳に届く値が root 行の表示と食い違わないため——値の解決はこのスコープの
+  /// 実効値（`ScopedSettingsValues`）だけが持つ規約で、提示元は別の解決を持ち込まない。
+  var onPreviewSound: ((NotificationSound?, AgentSoundEvent, Int) -> Void)?
 
   /// 現在の UI 言語ホルダー。言語行のマーカー・root 行の現在値表示・自身の文言（breadcrumb/hint）が読む。
   let localization: LocalizationStore
@@ -58,9 +60,6 @@ import SwiftUI
 
   let render = PaletteModel()
   private var mode: Mode = .root
-  /// 面の組み立て中（`setMode`/`rebuild`）の選択代入で試聴が鳴るのを止める。入場では鳴らさない。
-  /// 試聴の実装（`SettingsPaletteModel+Sound`）が読むため internal。
-  var suppressPreview = false
   /// 潜る前にいた root 行の「全行 rootRows での index」（既定は先頭設定行）。
   var rootRowBeforeDrill = 1
   /// 状態一覧からアイコン候補へ潜る前にいた状態行の index（agentIcon から agentStates へ戻る復元用）。
@@ -132,10 +131,10 @@ import SwiftUI
     render.onEscape = { [weak self] in self?.escape() }
     render.onDelete = { [weak self] in self?.deleteKey() }
     render.onQueryChange = { [weak self] in self?.queryChanged() }
-    render.onSelectionChanged = { [weak self] _ in self?.selectionChanged() }
+    render.onSelectionChanged = { [weak self] _ in self?.previewSelectedRow() }
     render.onTab = { [weak self] in self?.togglePreviewEvent() ?? false }
     rebuild()
-    render.selected = 1  // スコープ行（index 0）でなく先頭の設定行（フォントサイズ）を初期選択にする
+    render.place(1)  // スコープ行（index 0）でなく先頭の設定行（フォントサイズ）を初期選択にする
   }
 
   /// 通知音サブパレットにいるか（試聴の分離ファイルが `mode` を直に見ないための問い）。
@@ -331,7 +330,7 @@ import SwiftUI
       return
     default: return
     }
-    render.selected = 0  // 行集合が入れ替わるため選択は先頭へ戻す
+    render.place(0)  // 行集合が入れ替わるため選択は先頭へ戻す
     rebuild()
   }
 
@@ -363,37 +362,33 @@ import SwiftUI
   func setMode(_ m: Mode, select: Int? = nil, prefill: String = "") {
     // 通知音の面へ入るたび試聴対象を「完了」へ戻す（前回の対象を持ち越さない）。
     if case .notificationSound = m { previewEvent = .done }
-    withoutPreview {
-      mode = m
-      render.query = prefill
-      rebuild()  // ここで currentRowIndex が確定する
-      render.selected = select ?? currentRowIndex ?? 0
-      render.clampSelection()
-    }
+    mode = m
+    render.query = prefill
+    rebuild()  // ここで currentRowIndex が確定する
+    render.place(select ?? currentRowIndex ?? 0)  // 面の組み立てによる配置＝入場では鳴らさない
+    render.clampSelection()
     focus()  // 入力欄なしモードは CardKeyCapture、入力欄ありモードは TextField が focusToken で focus を取る
   }
 
   /// 現在の mode の行を組み直す（mode はそのまま。入力途中の再描画に使う）。
   func rebuild() {
     currentRowIndex = nil
-    render.headerSegments = []  // 面ごとのヘッダ装飾は組み直すたび白紙から（通知音の面だけが立てる）
-    withoutPreview {
-      switch mode {
-      case .root: rebuildRoot()
-      case .font: rebuildFont()
-      case .tabTitleFont: rebuildTabTitleFont()
-      case .emojiFont: rebuildEmojiFont()
-      case .theme: rebuildTheme()
-      case .agent: rebuildAgent()
-      case .agentStates: rebuildAgentStates()
-      case .agentIcon(let kind): rebuildAgentIcon(kind: kind)
-      case .worktreeDirPresets: rebuildWorktreeDirPresets()
-      case .worktreeDirCustom: rebuildWorktreeDirCustom()
-      case .language: rebuildLanguage()
-      case .update: rebuildUpdate()
-      case .notificationSound: rebuildNotificationSound()
-      }
-      render.clampSelection()
+    render.headerPills = []  // 面ごとのヘッダ装飾は組み直すたび白紙から（通知音の面だけが立てる）
+    switch mode {
+    case .root: rebuildRoot()
+    case .font: rebuildFont()
+    case .tabTitleFont: rebuildTabTitleFont()
+    case .emojiFont: rebuildEmojiFont()
+    case .theme: rebuildTheme()
+    case .agent: rebuildAgent()
+    case .agentStates: rebuildAgentStates()
+    case .agentIcon(let kind): rebuildAgentIcon(kind: kind)
+    case .worktreeDirPresets: rebuildWorktreeDirPresets()
+    case .worktreeDirCustom: rebuildWorktreeDirCustom()
+    case .language: rebuildLanguage()
+    case .update: rebuildUpdate()
+    case .notificationSound: rebuildNotificationSound()
     }
+    render.clampSelection()
   }
 }

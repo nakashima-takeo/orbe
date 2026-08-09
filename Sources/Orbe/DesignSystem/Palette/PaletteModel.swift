@@ -39,9 +39,9 @@ import SwiftUI
     }
   }
 
-  /// 選択行が**実際に動いた**ときの通知（設定パレットの通知音プレビューが購読する）。
-  /// 代入経路（キー移動・タップ・clamp）とホバー追従の両方が通り、`restoreSelection` は通らない
-  /// ——裏の再取得での追い直しはユーザの意図ではないため。
+  /// 選択行が**ユーザの操作で実際に動いた**ときの通知（設定パレットの通知音プレビューが購読する）。
+  /// キー移動・タップ・ホバー追従だけが通り、`place` と `restoreSelection` は通らない
+  /// ——面の組み立てや裏の再取得での追い直しはユーザの意図ではないため。
   var onSelectionChanged: ((Int) -> Void)?
 
   /// 実マウス移動（`MouseMovedDetector`）が `.pointer` へ落とす。
@@ -56,17 +56,20 @@ import SwiftUI
     selection.hoverSelect(i)
     if selection.index != previous { onSelectionChanged?(selection.index) }
   }
+  /// 面の組み立てによる選択の配置（モード遷移の初期選択・行差し替え後の収め直し）。
+  /// 開いた直後の初期選択を hover に奪われないようモダリティは `.keyboard` へ戻すが、ユーザが
+  /// 選んだのではないので `onSelectionChanged` は通さない（→ `restoreSelection` と同じ理由）。
+  func place(_ i: Int) { selection.index = i }
   /// 裏の再取得で行がずれたときの選択の追い直し。ユーザの意図ではないのでモダリティを奪わない
   /// （→ `ModalSelection.restore`）。`selected` の setter で代入すると `.keyboard` へ戻り、
   /// ポインタ操作中の追従が切れる。
   func restoreSelection(_ i: Int) { selection.restore(i) }
   /// ヘッダ左のテキスト（サブメニューの「‹ 親」等）。nil で非表示。入力欄も無ければヘッダ行ごと描かれない。
   var breadcrumb: String?
-  /// ヘッダ右端の表示専用バッジ（Attention の `⌘⌘` 等）。nil で出さない（既存パレットは無影響）。
-  var headerBadge: String?
-  /// ヘッダ右端のセグメント表示（通知音サブパレットの試聴対象「完了 | 入力待ち」）。
-  /// 非空ならバッジの代わりにこれを描く（`hintKeys` と同じ opt-in の richer 版）。
-  var headerSegments: [(label: String, active: Bool)] = []
+  /// ヘッダ右端の表示専用ピル。1 つなら素のバッジ（Attention の `⌘⌘`）、複数なら現在位置を
+  /// `active` で示すセグメント（通知音サブパレットの試聴対象「完了 | 入力待ち」）。
+  /// 空で出さない＝opt-in（`hintKeys` と同じ規律）。
+  var headerPills: [(label: String, active: Bool)] = []
   var hint = ""
   /// フッターヒントのキー付きセグメント（key=副色・label=muted・デザイン第10シーン）。
   /// 空なら `hint` の素文字列を muted 一色で描く（既存パレットは無影響）。
@@ -135,8 +138,8 @@ import SwiftUI
     selected = i
   }
 
-  /// rows 差し替え後に選択を範囲内へ収める。
+  /// rows 差し替え後に選択を範囲内へ収める（ユーザ操作ではないので `place` 経由）。
   func clampSelection() {
-    if selected >= rows.count { selected = max(0, rows.count - 1) }
+    if selected >= rows.count { place(max(0, rows.count - 1)) }
   }
 }

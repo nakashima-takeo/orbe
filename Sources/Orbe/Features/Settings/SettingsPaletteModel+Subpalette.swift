@@ -54,7 +54,7 @@ extension SettingsPaletteModel {
     render.fieldVisible = false
     render.fieldIsFilter = false
     render.breadcrumb = localization.string(.settingsNotificationSoundBreadcrumb)
-    render.headerSegments = AgentSoundEvent.allCases.map {
+    render.headerPills = AgentSoundEvent.allCases.map {
       (localization.string($0.labelKey), $0 == previewEvent)
     }
     render.placeholder = ""

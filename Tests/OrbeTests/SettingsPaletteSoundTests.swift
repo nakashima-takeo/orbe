@@ -28,11 +28,18 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
     return { changes }
   }
 
-  private func capturePreviews(_ p: SettingsPaletteModel)
-    -> () -> [(sound: NotificationSound?, event: AgentSoundEvent)]
-  {
-    var previews: [(sound: NotificationSound?, event: AgentSoundEvent)] = []
-    p.onPreviewSound = { sound, event in previews.append((sound, event)) }
+  /// 試聴の呼び出し 1 件。
+  private struct Preview: Equatable {
+    let sound: NotificationSound?
+    let event: AgentSoundEvent
+    let volume: Int
+  }
+
+  private func capturePreviews(_ p: SettingsPaletteModel) -> () -> [Preview] {
+    var previews: [Preview] = []
+    p.onPreviewSound = { sound, event, volume in
+      previews.append(Preview(sound: sound, event: event, volume: volume))
+    }
     return { previews }
   }
 
@@ -106,8 +113,8 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
   func testHeaderShowsPreviewTargetAndHintShowsTab() {
     let p = model()
     drillIn(p)
-    XCTAssertEqual(p.render.headerSegments.map(\.label), ["完了", "入力待ち"])
-    XCTAssertEqual(p.render.headerSegments.map(\.active), [true, false])
+    XCTAssertEqual(p.render.headerPills.map(\.label), ["完了", "入力待ち"])
+    XCTAssertEqual(p.render.headerPills.map(\.active), [true, false])
     XCTAssertTrue(p.render.hint.contains("⇥"))
   }
 
@@ -116,7 +123,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
     let p = model()
     drillIn(p)
     p.render.onLeft()
-    XCTAssertTrue(p.render.headerSegments.isEmpty)
+    XCTAssertTrue(p.render.headerPills.isEmpty)
   }
 
   // MARK: - 試聴（聴くだけ。設定は書かない）
@@ -142,6 +149,16 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
     XCTAssertEqual(p.render.selected, 0)
     XCTAssertEqual(previews().count, 1)
     XCTAssertNil(previews().last?.sound ?? nil, "鳴らさず止めるだけ")
+  }
+
+  /// 試聴の音量は**このパレットが見せているスコープの実効値**（root の音量行が出している値と同じ）。
+  /// 提示元が別の解決（アクティブ workspace の実効値）を持ち込むと、表示と耳が食い違う。
+  func testPreviewCarriesTheScopedVolume() {
+    let p = model(volume: 40)
+    let previews = capturePreviews(p)
+    drillIn(p)
+    p.render.onDown()
+    XCTAssertEqual(previews().last?.volume, 40)
   }
 
   /// ホバーでも鳴る（ポインタ操作でも聴き比べられる）。
@@ -175,7 +192,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
     let changes = captureChanges(p)
     drillIn(p)
     XCTAssertTrue(p.render.onTab())
-    XCTAssertEqual(p.render.headerSegments.map(\.active), [false, true])
+    XCTAssertEqual(p.render.headerPills.map(\.active), [false, true])
     XCTAssertEqual(previews().count, 1)
     XCTAssertEqual(previews().last?.sound, .wood, "今いる行を鳴らし直す")
     XCTAssertEqual(previews().last?.event, .waiting)
@@ -196,7 +213,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
     p.render.onEscape()  // root へ
     drillIn(p)
     XCTAssertEqual(p.previewEvent, .done)
-    XCTAssertEqual(p.render.headerSegments.map(\.active), [true, false])
+    XCTAssertEqual(p.render.headerPills.map(\.active), [true, false])
   }
 
   /// root や他の面では ⇥ は消費しない（AppKit の focus 移動へ返す）。

@@ -138,15 +138,15 @@ struct PaletteCard: View {
         .frame(maxWidth: model.fieldVisible ? .infinity : 0)
         .opacity(model.fieldVisible ? 1 : 0)
         .allowsHitTesting(model.fieldVisible)
-      // ヘッダ右端の表示専用スロット。opt-in（どちらも空の既存パレットは従来どおり）。
-      // 状態を語るのはヘッダ、操作を語るのはフッター（hint）という分担なので、セグメントは
+      // ヘッダ右端の表示専用ピル。opt-in（空の既存パレットは従来どおりヘッダ行だけ）。
+      // 状態を語るのはヘッダ、操作を語るのはフッター（hint）という分担なので、ここは
       // 「今どちらの面か」だけを出す（キーの案内は載せない）。
-      if !model.headerSegments.isEmpty {
+      if !model.headerPills.isEmpty {
         HStack(spacing: Theme.Space.step) {
-          ForEach(model.headerSegments.indices, id: \.self) { i in
-            Text(model.headerSegments[i].label)
+          ForEach(model.headerPills.indices, id: \.self) { i in
+            Text(model.headerPills[i].label)
               .foregroundStyle(
-                model.headerSegments[i].active ? Color.theme.textPrimary : Color.theme.textMuted)
+                model.headerPills[i].active ? Color.theme.textPrimary : Color.theme.textMuted)
           }
         }
         .font(Font.theme.meta)
@@ -154,14 +154,6 @@ struct PaletteCard: View {
         .padding(.vertical, Theme.Space.hair)
         .background(
           RoundedRectangle(cornerRadius: Theme.Radius.sm).fill(Color.theme.smallPillFill))
-      } else if let badge = model.headerBadge {
-        Text(badge)
-          .font(Font.theme.meta)
-          .foregroundStyle(Color.theme.textMuted)
-          .padding(.horizontal, Theme.Space.step)
-          .padding(.vertical, Theme.Space.hair)
-          .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.sm).fill(Color.theme.smallPillFill))
       }
     }
     .padding(.horizontal, Theme.Space.span)

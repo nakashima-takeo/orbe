@@ -106,11 +106,11 @@ extension WindowControllerReportAgentTests {
     wc.showSettingsPalette()
     let palette = try XCTUnwrap(wc.model.settingsPalette)
 
-    palette.onPreviewSound?(.wood, .waiting)
+    palette.onPreviewSound?(.wood, .waiting, 70)
     XCTAssertEqual(sound.played.last, .init(family: .wood, event: .waiting, volume: 70))
     XCTAssertEqual(sound.stopCount, 0)
 
-    palette.onPreviewSound?(nil, .waiting)
+    palette.onPreviewSound?(nil, .waiting, 70)
     XCTAssertEqual(sound.stopCount, 1, "「なし」行は鳴らさず止めるだけ")
     XCTAssertEqual(sound.played.count, 1)
   }

@@ -6,21 +6,6 @@ import Foundation
 /// 設定を一切書かず（`assign` を通らず）、書くのは ↵ の確定だけ。だから 12 案を流し聴きしてから
 /// ← / esc で戻れば、設定は開いたときのままになる。
 extension SettingsPaletteModel {
-  /// 面の組み立て中（`setMode` / `rebuild`）は試聴を止める。行が入れ替わって選択が動くのは
-  /// ユーザの意図ではない——素朴に選択の setter へ繋ぐと、サブパレットに入った瞬間に鳴ってしまう。
-  func withoutPreview(_ body: () -> Void) {
-    let previous = suppressPreview
-    suppressPreview = true
-    body()
-    suppressPreview = previous
-  }
-
-  /// 選択行が動いた。通知音サブパレットにいるときだけ、その行の音を現在の試聴対象で鳴らす。
-  func selectionChanged() {
-    guard !suppressPreview, isNotificationSoundMode else { return }
-    previewSelectedRow()
-  }
-
   /// ⇥ で試聴対象（完了 ⇄ 入力待ち）を反転し、今いる行を新しい対象で鳴らし直す
   /// ——切り替えた結果が耳で分かるため。ヘッダのセグメントが今どちらの面かを語る。
   func togglePreviewEvent() -> Bool {
@@ -31,11 +16,16 @@ extension SettingsPaletteModel {
     return true
   }
 
-  /// 現在行の試聴。行 0（なし）は鳴らさず、鳴っている音を止めるだけ。
-  private func previewSelectedRow() {
+  /// 現在行の試聴。通知音サブパレットにいるときだけ効き、行 0（なし）は鳴らさず止めるだけ。
+  /// 選択が**ユーザ操作で**動いた通知（`onSelectionChanged`）と ⇥ の鳴らし直しがここへ来る
+  /// ——面の組み立てによる配置（`PaletteModel.place`）は通知を出さないので、入場では鳴らない。
+  func previewSelectedRow() {
+    guard isNotificationSoundMode else { return }
     let sounds = NotificationSound.allCases
     let index = render.selected - 1  // 行 0 は「なし（オフ）」
-    onPreviewSound?(sounds.indices.contains(index) ? sounds[index] : nil, previewEvent)
+    onPreviewSound?(
+      sounds.indices.contains(index) ? sounds[index] : nil, previewEvent,
+      values.effNotificationSoundVolume)
   }
 
   /// 通知音サブの ↵。行 0（なし）はオフにするだけで**音案の値は触らない**（再度オンにしたら戻る）。
