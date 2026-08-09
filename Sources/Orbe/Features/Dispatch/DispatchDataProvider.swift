@@ -14,6 +14,8 @@ final class DispatchDataProvider {
   private let worktreeTemplate: String
   /// 開いた時点のペイン占有スナップショット（`SessionStore` を Dispatch から見せないための値型）。
   private let paneOccupancies: [PaneOccupancy]
+  /// この provider が解決する `GitRepo` の実行基盤。本番は既定の `.shared`（`GitRepo.open` と同じ形）。
+  private let runner: GitRunner
 
   private(set) var repo: GitRepo?
   private var mainWorktree: String?
@@ -36,19 +38,22 @@ final class DispatchDataProvider {
 
   init(
     cwd: String, model: DispatchPaletteModel, localization: LocalizationStore,
-    worktreeTemplate: String, paneOccupancies: [PaneOccupancy] = []
+    worktreeTemplate: String, paneOccupancies: [PaneOccupancy] = [],
+    worktreeTemplate: String, paneOccupancies: [PaneOccupancy] = [],
+    runner: GitRunner = .shared
   ) {
     self.cwd = cwd
     self.model = model
     self.localization = localization
     self.worktreeTemplate = worktreeTemplate
     self.paneOccupancies = paneOccupancies
+    self.runner = runner
   }
 
   // MARK: - ロード
 
   func load() {
-    GitRepo.open(cwd: cwd) { [weak self] repo in
+    GitRepo.open(cwd: cwd, runner: runner) { [weak self] repo in
       guard let self else { return }
       guard let repo else {
         // 非 git: 全セクション空（Issues/PR も出さない）。
