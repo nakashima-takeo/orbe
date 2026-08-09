@@ -8,8 +8,11 @@ extension WindowController {
   func noteAgentSound(for pane: SurfaceView, state: String) {
     if let visibleTab, pane.controller === visibleTab { return }
     // 設定は**発信元ペインが属する workspace の実効値**を読む。workspace 上書き（「この workspace の
-    // エージェントはこの音」）が意味を持つのはこの読み方だけ。所属が引けなければ global で鳴らす。
-    let settings = settingsStore.effective(override: workspace(of: pane)?.settingsOverride)
+    // エージェントはこの音」）が意味を持つのはこの読み方だけ。
+    // 所属が引けない＝休眠 workspace のペイン。②が「幽霊ピルになる」として立てないのと同じ集合を
+    // 見る——一覧にもピルにも出ない音だけが鳴ると、ユーザは出所を辿れない。
+    guard let ws = workspace(of: pane) else { return }
+    let settings = settingsStore.effective(override: ws.settingsOverride)
     guard let plan = AgentSoundDecision.plan(state: state, settings: settings) else { return }
     soundPlayer.play(plan.family, event: plan.event, volume: plan.volume)
   }

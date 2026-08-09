@@ -269,7 +269,7 @@ final class WindowController: NSObject, NSWindowDelegate {
 
   /// 「見ているタブ」＝ウィンドウがキー（前面）のときの、アクティブ workspace のアクティブ表示タブ。
   /// 背面・0タブなら nil。粒度がタブなので、split で隣に見えているペインもこのタブに含まれる。
-  /// done のフォーカス消費とメニューバー②の抑制が、この 1 つの判定を共有する。
+  /// done のフォーカス消費・メニューバー②の抑制・通知音の抑制が、この 1 つの判定を共有する。
   var visibleTab: TerminalController? {
     guard window.isKeyWindow, current.tabs.indices.contains(current.active) else { return nil }
     return current.tabs[current.active]

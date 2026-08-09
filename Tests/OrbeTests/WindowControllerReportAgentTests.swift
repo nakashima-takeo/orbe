@@ -54,6 +54,28 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     return (wc, panes)
   }
 
+  /// **両方とも activate 済み**の workspace 2 つで起動し、アクティブを 2 つ目へ移してから、
+  /// workspace 順に並べた各先頭ペイン（`panes[i]` が workspace i）を返す。「発信元 workspace の
+  /// 設定で鳴る」のように、発信元とアクティブが別であって初めて測れる契約のための足場。
+  /// 分割した拡張ファイルからも使うため internal。
+  func makeControllerAndTwoActivatedWorkspaces() throws -> (WindowController, [SurfaceView]) {
+    let tab = TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)
+    let file = WorkspacesFile(
+      version: WorkspacePersistence.version, activeWorkspace: 0,
+      workspaces: [
+        WorkspaceState(name: "origin", rootPath: "/tmp", activeTab: 0, tabs: [tab]),
+        WorkspaceState(name: "active", rootPath: "/tmp", activeTab: 0, tabs: [tab]),
+      ])
+    try JSONEncoder().encode(file).write(to: workspacesFile())
+    let wc = WindowController()
+    _ = wc.controlActivateWorkspace(workspaceId: try XCTUnwrap(wc.workspaces.last).id)
+    XCTAssertTrue(wc.workspaces.allSatisfy(\.activated), "前提: どちらも activate 済み")
+    let panes = try wc.workspaces.map {
+      try XCTUnwrap($0.tabs.first?.controlAllPanes().first)
+    }
+    return (wc, panes)
+  }
+
   /// アクティブ workspace ＋ 休眠（このセッションで一度も activate していない）workspace で
   /// 起動し、休眠側の先頭ペインを返す。
   /// 分割した拡張ファイルからも使うため internal。
