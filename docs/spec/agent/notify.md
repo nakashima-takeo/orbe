@@ -1,7 +1,7 @@
 ---
 title: エージェント通知の配管
 description: エージェント CLI の hook が状態とセッション ID を .app 同梱 CLI 経由で制御ソケットへ報告し、発信元ペインに保持する配管
-updated: 2026-08-08
+updated: 2026-08-10
 ---
 
 # エージェント通知の配管
@@ -38,7 +38,7 @@ pane identity は env で運ぶ（tty 経路を要さない）。Orbe は**全�
 
 文言は **state の遷移で確定し直し、同じ state が続くあいだツール由来の文言はツール由来でない報告で上書きされない**（それ以外の組み合わせは上書きする）。1 つの待ちを複数の hook が順に報告する CLI があり（claude は AskUserQuestion のダイアログを開く時点で質問文を、その約 6 秒後に汎用の定型文を撃つ）、出所で守らないと具体的な文言が定型文に潰れるため。逆にツール由来でない報告どうしが上書きし合うのは、待ちの主体がこのペインのエージェントとは限らず（teammate の worker が出す承認要求はリーダーのペインへ届き、要求ごとに文言が違う）、保持すると別の待ちの文言が居残るため。
 
-状態変化時刻は **state の値が実際に変わったときだけ** now に進める（同値の連続報告で Attention 一覧の並びが暴れない）。ペイン消滅で保持値も消える（本配管はファイルに置かない。永続は snapshot 側 → [persistence](../platform/persistence.md)）。hook 外の書き込みは復元時の再設定（[persistence](../platform/persistence.md)）と done のフォーカス消費（[chrome](../chrome/chrome.md)）のみ。状態変化は `agent_state` イベントを emit し、chrome 更新へ流れる。
+状態変化時刻は **state の値が実際に変わったときだけ** now に進める（同値の連続報告で Attention 一覧の並びが暴れない）。ペイン消滅で保持値も消える（本配管はファイルに置かない。永続は snapshot 側 → [persistence](../platform/persistence.md)）。hook 外の書き込みは復元時の再設定（[persistence](../platform/persistence.md)）と done のフォーカス消費（[chrome](../chrome/chrome.md)）のみ。状態変化は `agent_state` イベントを emit し、chrome 更新へ流れる。`waiting` / `done` への実変化は通知音へも流れる（→ [sound](sound.md)）。
 
 ## 対象 CLI
 
