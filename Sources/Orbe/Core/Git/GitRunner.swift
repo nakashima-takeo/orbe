@@ -3,6 +3,10 @@ import Foundation
 /// git CLI の実行基盤。GUI アプリの貧弱な環境変数でも hooks・署名がユーザーの
 /// シェル環境と同等に動くよう、ログインシェルの PATH を一度だけ解決して
 /// 全呼び出しへ引き継ぐ。
+///
+/// 排他は**インスタンス内で閉じる**（キューがインスタンスの持ち物のため）。同じリポジトリを
+/// 別インスタンスから書くと直列化が効かないので、**本番は必ず `shared` を通す**——`GitRepo` は
+/// runner を既定引数 `.shared` で受けており、明示的に別インスタンスを渡すのはテストだけ。
 final class GitRunner {
   struct Output {
     let status: Int32
@@ -27,8 +31,10 @@ final class GitRunner {
   /// 独立 queue に逃がすことで、Enter(addWorktree) の barrier が fetch を待たなくなる。
   private let isolatedQueue = DispatchQueue(
     label: "dev.orbe.git.isolated", qos: .userInitiated, attributes: .concurrent)
-  private let envLock = DispatchQueue(label: "dev.orbe.git.env")
-  private var cachedEnvironment: [String: String]?
+  /// 環境変数はプロセスの事実（ログインシェルの PATH）でありインスタンスの事実ではない。
+  /// インスタンスごとに持つと、`GitRunner()` を作るたびにログインシェルを起動して待つことになる。
+  private static let envLock = DispatchQueue(label: "dev.orbe.git.env")
+  private nonisolated(unsafe) static var cachedEnvironment: [String: String]?
 
   /// git を背景で実行し、結果をメインキューへ返す。
   /// write:true（index/ref/worktree を変更する操作）は barrier で他の全タスクを
@@ -58,7 +64,7 @@ final class GitRunner {
     process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
     process.arguments = args
     process.currentDirectoryURL = URL(fileURLWithPath: cwd, isDirectory: true)
-    process.environment = environment()
+    process.environment = Self.environment()
 
     let out = Pipe()
     let err = Pipe()
@@ -92,8 +98,8 @@ final class GitRunner {
     return Output(status: process.terminationStatus, stdout: outData, stderr: errData)
   }
 
-  /// 呼び出し共通の環境変数（初回に一度だけ構築）。
-  private func environment() -> [String: String] {
+  /// 呼び出し共通の環境変数（プロセス内で初回に一度だけ構築）。
+  private static func environment() -> [String: String] {
     envLock.sync {
       if let cached = cachedEnvironment { return cached }
       var env = ProcessInfo.processInfo.environment

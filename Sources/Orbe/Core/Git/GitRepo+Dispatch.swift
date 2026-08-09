@@ -5,14 +5,14 @@ import Foundation
 extension GitRepo {
   /// リンク worktree を含む全チェックアウト（`git worktree list --porcelain`）。
   func worktrees(completion: @escaping ([GitWorktree]) -> Void) {
-    GitRunner.shared.run(["worktree", "list", "--porcelain"], cwd: root) { output in
+    runner.run(["worktree", "list", "--porcelain"], cwd: root) { output in
       completion(output.isSuccess ? WorktreeParser.parse(output.stdoutText) : [])
     }
   }
 
   /// ローカルブランチ（新しい順）。`worktreepath` 付きは既存 worktree 再利用の手がかりになる。
   func localBranches(completion: @escaping ([GitBranch]) -> Void) {
-    GitRunner.shared.run(
+    runner.run(
       [
         "for-each-ref", "refs/heads", "--sort=-committerdate",
         "--format=%(refname:short)|%(committerdate:relative)|%(worktreepath)|%(upstream:short)"
@@ -25,7 +25,7 @@ extension GitRepo {
 
   /// リモート追跡ブランチ（新しい順・`origin/HEAD` ノイズは parser が除外）。
   func remoteBranches(completion: @escaping ([GitBranch]) -> Void) {
-    GitRunner.shared.run(
+    runner.run(
       [
         "for-each-ref", "refs/remotes", "--sort=-committerdate",
         "--format=%(refname:short)|%(committerdate:relative)|%(authorname)",
@@ -43,14 +43,14 @@ extension GitRepo {
   /// worktrees・HEAD・`refs/heads` で領域は概ね disjoint、git 自身の ref/index ロックで並行安全なため共有
   /// read-write lock の外で走らせてよい。`GIT_TERMINAL_PROMPT=0`（GitRunner 既定）で認証プロンプトはハングせず失敗に落ちる。
   func fetchPrune(completion: @escaping (Bool) -> Void) {
-    GitRunner.shared.run(["fetch", "--prune", "origin"], cwd: root, isolated: true) { output in
+    runner.run(["fetch", "--prune", "origin"], cwd: root, isolated: true) { output in
       completion(output.isSuccess)
     }
   }
 
   /// 既定ブランチ（issue の新規 worktree の base）。解決不能なら `main` へフォールバック。
   func defaultBranch(completion: @escaping (String) -> Void) {
-    GitRunner.shared.run(
+    runner.run(
       ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], cwd: root
     ) { output in
       let name = output.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -60,7 +60,7 @@ extension GitRepo {
 
   /// origin の URL が github.com を指すか（gh 不在でも判定できる cheap チェック）。
   func originIsGitHub(completion: @escaping (Bool) -> Void) {
-    GitRunner.shared.run(["remote", "get-url", "origin"], cwd: root) { output in
+    runner.run(["remote", "get-url", "origin"], cwd: root) { output in
       completion(output.isSuccess && output.stdoutText.contains("github.com"))
     }
   }
@@ -70,9 +70,12 @@ extension GitRepo {
   /// URL は正規化せず素通し（git が https / ssh / scp-like を native 解釈。`GIT_TERMINAL_PROMPT=0` で
   /// 資格情報プロンプトはハングせず stderr へ落ちる）。`--` は本ファイル他所と同じくオプション
   /// 終端の明示で、`-` 始まりの URL がフラグとして解釈される事故を塞ぐ。
-  static func clone(url: String, dest: String, completion: @escaping (String?) -> Void) {
+  static func clone(
+    url: String, dest: String, runner: GitRunner = .shared,
+    completion: @escaping (String?) -> Void
+  ) {
     let parent = (dest as NSString).deletingLastPathComponent
-    GitRunner.shared.run(["clone", "--", url, dest], cwd: parent, write: true) { output in
+    runner.run(["clone", "--", url, dest], cwd: parent, write: true) { output in
       completion(output.isSuccess ? nil : output.stderrText)
     }
   }
@@ -87,7 +90,7 @@ extension GitRepo {
     if let newBranch { args += ["-b", newBranch] }
     if track { args.append("--track") }
     args += [path, base]
-    GitRunner.shared.run(args, cwd: root, write: true) { output in
+    runner.run(args, cwd: root, write: true) { output in
       completion(output.isSuccess ? nil : GitRepo.essentialFailureReason(output.stderrText))
     }
   }

@@ -11,16 +11,22 @@ final class GitRepo {
   let gitDir: String
   /// 共有 git dir（refs・objects の在処）。通常リポジトリでは gitDir と同じ。
   let commonDir: String
+  /// この repo の全操作を通す git 実行基盤。本番は常に `.shared`（排他はインスタンス内で
+  /// 閉じるため、同じリポジトリを書く者は全員同じインスタンスを通る必要がある）。
+  let runner: GitRunner
 
-  private init(root: String, gitDir: String, commonDir: String) {
+  private init(root: String, gitDir: String, commonDir: String, runner: GitRunner) {
     self.root = root
     self.gitDir = gitDir
     self.commonDir = commonDir
+    self.runner = runner
   }
 
   /// cwd からチェックアウトを解決する。git リポジトリ外なら nil。
-  static func open(cwd: String, completion: @escaping (GitRepo?) -> Void) {
-    GitRunner.shared.run(
+  static func open(
+    cwd: String, runner: GitRunner = .shared, completion: @escaping (GitRepo?) -> Void
+  ) {
+    runner.run(
       ["rev-parse", "--show-toplevel", "--absolute-git-dir", "--git-common-dir"], cwd: cwd
     ) { output in
       guard output.isSuccess else {
@@ -40,7 +46,7 @@ final class GitRepo {
       completion(
         GitRepo(
           root: lines[0], gitDir: lines[1],
-          commonDir: (common as NSString).standardizingPath))
+          commonDir: (common as NSString).standardizingPath, runner: runner))
     }
   }
 
@@ -72,7 +78,7 @@ final class GitRepo {
     var failed = false
 
     group.enter()
-    GitRunner.shared.run(
+    runner.run(
       [
         "--no-optional-locks", "-c", "core.quotepath=false", "status", "--porcelain=v2",
         "--branch", "-z",
@@ -84,13 +90,13 @@ final class GitRepo {
     }
 
     group.enter()
-    GitRunner.shared.run(["-c", "core.quotepath=false"] + Self.diffArgs, cwd: root) { output in
+    runner.run(["-c", "core.quotepath=false"] + Self.diffArgs, cwd: root) { output in
       if output.isSuccess { unstaged = DiffParser.parse(output.stdoutText) } else { failed = true }
       group.leave()
     }
 
     group.enter()
-    GitRunner.shared.run(
+    runner.run(
       ["-c", "core.quotepath=false"] + Self.diffArgs + ["--cached"], cwd: root
     ) { output in
       if output.isSuccess { staged = DiffParser.parse(output.stdoutText) } else { failed = true }
@@ -120,13 +126,13 @@ final class GitRepo {
     var args = ["apply", "--cached", "--whitespace=nowarn"]
     if reverse { args.append("--reverse") }
     args.append("-")
-    GitRunner.shared.run(args, cwd: root, stdin: Data(patch.utf8), write: true) { output in
+    runner.run(args, cwd: root, stdin: Data(patch.utf8), write: true) { output in
       completion(output.isSuccess ? nil : output.stderrText)
     }
   }
 
   func stageFiles(_ paths: [String], completion: @escaping (String?) -> Void) {
-    GitRunner.shared.run(["add", "--"] + paths, cwd: root, write: true) { output in
+    runner.run(["add", "--"] + paths, cwd: root, write: true) { output in
       completion(output.isSuccess ? nil : output.stderrText)
     }
   }
@@ -134,7 +140,7 @@ final class GitRepo {
   /// 未追跡ファイルを intent-to-add で index に載せる（内容は載せない）。
   /// 部分 stage の前段で、パッチを適用できる土台を作る。
   func intentToAdd(_ paths: [String], completion: @escaping (String?) -> Void) {
-    GitRunner.shared.run(
+    runner.run(
       ["add", "--intent-to-add", "--"] + paths, cwd: root, write: true
     ) { output in
       completion(output.isSuccess ? nil : output.stderrText)
@@ -142,14 +148,14 @@ final class GitRepo {
   }
 
   func unstageFiles(_ paths: [String], completion: @escaping (String?) -> Void) {
-    GitRunner.shared.run(["reset", "-q", "--"] + paths, cwd: root, write: true) { [self] output in
+    runner.run(["reset", "-q", "--"] + paths, cwd: root, write: true) { [self] output in
       if output.isSuccess {
         completion(nil)
         return
       }
       // unborn HEAD（初回コミット前）では reset が HEAD を解決できない。
       // この場合のみ index からの除去で代替する（worktree のファイルは残る）。
-      GitRunner.shared.run(
+      runner.run(
         ["rm", "--cached", "-q", "-r", "--ignore-unmatch", "--"] + paths, cwd: root, write: true
       ) { fallback in
         completion(fallback.isSuccess ? nil : fallback.stderrText)
@@ -161,7 +167,7 @@ final class GitRepo {
 
   /// 選択行の worktree 変更を破棄する（unstaged diff からの再構成パッチを逆適用）。
   func discardPatch(_ patch: String, completion: @escaping (String?) -> Void) {
-    GitRunner.shared.run(
+    runner.run(
       ["apply", "--reverse", "--whitespace=nowarn", "-"], cwd: root, stdin: Data(patch.utf8),
       write: true
     ) { output in
@@ -189,7 +195,7 @@ final class GitRepo {
       finish(nil)
       return
     }
-    GitRunner.shared.run(["checkout", "-q", "--"] + tracked, cwd: root, write: true) { output in
+    runner.run(["checkout", "-q", "--"] + tracked, cwd: root, write: true) { output in
       finish(output.isSuccess ? nil : output.stderrText)
     }
   }
@@ -199,7 +205,7 @@ final class GitRepo {
   /// コミットする。hooks・署名は通常の git commit と同様に効く。
   /// 戻り値は (成功か, hooks 等の出力全文)。
   func commit(message: String, completion: @escaping (Bool, String) -> Void) {
-    GitRunner.shared.run(
+    runner.run(
       ["commit", "-F", "-"], cwd: root, stdin: Data(message.utf8), write: true
     ) { output in
       let combined = [output.stdoutText, output.stderrText]
@@ -213,7 +219,7 @@ final class GitRepo {
   private static let logFormat = "--format=%H%x1f%h%x1f%an%x1f%at%x1f%P%x1f%D%x1f%s%x1e"
 
   func log(limit: Int, skip: Int = 0, completion: @escaping ([Commit]) -> Void) {
-    GitRunner.shared.run(
+    runner.run(
       ["log", Self.logFormat, "-n", String(limit), "--skip", String(skip)], cwd: root
     ) { output in
       completion(output.isSuccess ? LogParser.parse(output.stdoutText) : [])
@@ -223,7 +229,7 @@ final class GitRepo {
   /// upstream に未 push のコミット oid 集合（`rev-list @{upstream}..HEAD`）。
   /// upstream 不在・unborn なら空集合。
   func unpushedOids(completion: @escaping (Set<String>) -> Void) {
-    GitRunner.shared.run(["rev-list", "@{upstream}..HEAD"], cwd: root) { output in
+    runner.run(["rev-list", "@{upstream}..HEAD"], cwd: root) { output in
       guard output.isSuccess else {
         completion([])
         return
@@ -236,7 +242,7 @@ final class GitRepo {
 
   /// worktree の全ファイル（追跡＋未追跡・ignore 除外）。失敗なら nil。
   func lsFiles(completion: @escaping ([String]?) -> Void) {
-    GitRunner.shared.run(
+    runner.run(
       [
         "-c", "core.quotepath=false", "ls-files", "-z", "--cached", "--others",
         "--exclude-standard",
@@ -258,7 +264,7 @@ final class GitRepo {
       ["-c", "core.quotepath=false", "diff-tree", "--no-commit-id", "--patch", "--root"]
       + Self.renderFlags + [oid]
     if let path { args += ["--", path] }
-    GitRunner.shared.run(args, cwd: root) { output in
+    runner.run(args, cwd: root) { output in
       completion(output.isSuccess ? DiffParser.parse(output.stdoutText) : [])
     }
   }
