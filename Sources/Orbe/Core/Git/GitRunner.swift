@@ -12,6 +12,8 @@ final class GitRunner {
     let status: Int32
     let stdout: Data
     let stderr: Data
+    /// 無出力が続いて打ち切ったか。`status` の値で見分けさせない（`-1` は起動失敗にも使う）。
+    let timedOut: Bool
 
     var stdoutText: String { String(bytes: stdout, encoding: .utf8) ?? "" }
     var stderrText: String { String(bytes: stderr, encoding: .utf8) ?? "" }
@@ -47,6 +49,21 @@ final class GitRunner {
   private static let envLock = DispatchQueue(label: "dev.orbe.git.env")
   private nonisolated(unsafe) static var cachedEnvironment: [String: String]?
 
+  /// 「1 バイトも出力が無いまま」この時間が過ぎたら打ち切る上限。経過時間ではなく無出力時間で
+  /// 測るのは、巨大リポジトリの clone のような正当な長時間実行を切らないため——出力が流れている
+  /// 間は延命し、何も起きていないときだけ切る。
+  private let idleTimeout: TimeInterval
+
+  /// 打ち切り（SIGTERM）の後、EOF を待つ猶予。孫プロセス（hook・`git remote-ext`・gpg）は
+  /// SIGTERM の宛先にできず pipe の書き込み端を握り続けるため、EOF は来ないことがある。
+  /// **無期限に待ってはいけない**——それは今直しているハングの作り直しになる。
+  private static let terminationGrace: TimeInterval = 2
+
+  /// テストだけが短い `idleTimeout` を渡す（本番の 120 秒を待つテストは書けないため）。
+  init(idleTimeout: TimeInterval = 120) {
+    self.idleTimeout = idleTimeout
+  }
+
   /// git を背景で実行し、結果をメインキューへ返す。レーンの意味は `Lane` を見る。
   func run(
     _ args: [String], cwd: String, stdin: Data? = nil, lane: Lane = .read,
@@ -64,6 +81,7 @@ final class GitRunner {
   }
 
   /// 同期実行。呼び出し元スレッドでブロックする（背景キュー・テスト用）。
+  /// 1 バイトも出力が無いまま `idleTimeout` が過ぎたら SIGTERM で打ち切り、`timedOut` を立てて返る。
   func runSync(_ args: [String], cwd: String, stdin: Data? = nil) -> Output {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
@@ -78,29 +96,123 @@ final class GitRunner {
     let input: Pipe? = stdin != nil ? Pipe() : nil
     if let input { process.standardInput = input }
 
+    let state = RunState()
+    collect(out, into: state, isStdout: true)
+    collect(err, into: state, isStdout: false)
+    process.terminationHandler = { _ in state.noteExit() }
+
     do {
       try process.run()
     } catch {
+      detach(out, err)
       return Output(
-        status: -1, stdout: Data(), stderr: Data("\(error.localizedDescription)\n".utf8))
+        status: -1, stdout: Data(), stderr: Data("\(error.localizedDescription)\n".utf8),
+        timedOut: false)
     }
+    // stdin は背景で書く。呼び出しスレッドで書くと、子が読まないまま pipe バッファ（64KB）を
+    // 超えたときに**待ちへ入る前に**固まり、打ち切りが一切効かなくなる。
     if let input, let stdin {
-      input.fileHandleForWriting.write(stdin)
-      input.fileHandleForWriting.closeFile()
+      DispatchQueue.global(qos: .userInitiated).async {
+        try? input.fileHandleForWriting.write(contentsOf: stdin)
+        try? input.fileHandleForWriting.close()
+      }
     }
 
-    // stderr は別スレッドで吸い出す（両 pipe が埋まる相互デッドロックの防止）。
-    var errData = Data()
-    let group = DispatchGroup()
-    group.enter()
-    DispatchQueue.global(qos: .userInitiated).async {
-      errData = (try? err.fileHandleForReading.readToEnd()) ?? Data()
-      group.leave()
+    let timedOut = awaitCompletion(of: process, state: state)
+    detach(out, err)
+    let collected = state.collected()
+    // 打ち切りで子がまだ生きている場合、`terminationStatus` は読めない（例外になる）。
+    return Output(
+      status: state.hasExited ? process.terminationStatus : -1,
+      stdout: collected.stdout, stderr: collected.stderr, timedOut: timedOut)
+  }
+
+  /// プロセスの終了と両 pipe の EOF を待つ。無出力が `idleTimeout` 続いたら打ち切る（戻り値＝打ち切ったか）。
+  ///
+  /// 待ちは semaphore で行い、ポーリングしない——`status` / `diff` は常時走るので、
+  /// 数十 ms のポーリング遅延を全 git 呼び出しへ載せるのは退行になる。
+  private func awaitCompletion(of process: Process, state: RunState) -> Bool {
+    while true {
+      let progress = state.progress()
+      if progress.finished { return false }
+      let deadline = progress.lastActivity.addingTimeInterval(idleTimeout)
+      guard Date() < deadline else { break }
+      state.wait(until: deadline)  // 出力が来れば期限が延びるので、目覚めたら測り直す
     }
-    let outData = (try? out.fileHandleForReading.readToEnd()) ?? Data()
-    group.wait()
-    process.waitUntilExit()
-    return Output(status: process.terminationStatus, stdout: outData, stderr: errData)
+    // SIGTERM で切る。SIGKILL だと git が `.git/index.lock` と作りかけの clone 先を掃除できない。
+    // `Process` は子へ新しいプロセスグループを与えるため、この 1 発は git の子孫（hook・
+    // transport helper）にも届く。届かないのはセッションごと抜けた孫（daemon 化した hook の子・
+    // gpg-agent 等）だけで、そいつらは pipe を握ったまま残る。だから下の猶予が要る。
+    process.terminate()
+    // 握られたままなら EOF は二度と来ない。猶予だけ与え、来なければ集めた分を持って返る。
+    let grace = Date().addingTimeInterval(Self.terminationGrace)
+    while !state.progress().finished, Date() < grace { state.wait(until: grace) }
+    return true
+  }
+
+  /// pipe の到着を `state` へ流し込む（EOF で読み手を外す）。
+  private func collect(_ pipe: Pipe, into state: RunState, isStdout: Bool) {
+    pipe.fileHandleForReading.readabilityHandler = { handle in
+      let data = handle.availableData
+      if data.isEmpty {
+        handle.readabilityHandler = nil
+        state.noteEOF()
+      } else {
+        state.append(data, isStdout: isStdout)
+      }
+    }
+  }
+
+  /// 読み手を外す。打ち切り後は EOF が来ないことがあるので、返る前に必ず通す。
+  private func detach(_ pipes: Pipe...) {
+    for pipe in pipes { pipe.fileHandleForReading.readabilityHandler = nil }
+  }
+
+  /// `runSync` 1 回ぶんの共有状態。読み手 2 本（GCD のグローバルキューで発火）・
+  /// `terminationHandler`・待ち手が同時に触るので、1 本のロックで束ねる。
+  ///
+  /// 起こすのは**状態が変わったとき（EOF・プロセス終了）だけ**。出力の到着は期限を延ばすだけで
+  /// signal しない——待ち手は期限まで眠っていればよく、起こす必要が無い。
+  private final class RunState {
+    private let lock = NSLock()
+    private let changed = DispatchSemaphore(value: 0)
+    private var stdout = Data()
+    private var stderr = Data()
+    private var openPipes = 2
+    private var exited = false
+    private var lastActivity = Date()
+
+    /// プロセスが終了済みか（`terminationStatus` を読んでよいか）。
+    var hasExited: Bool { lock.withLock { exited } }
+
+    func append(_ data: Data, isStdout: Bool) {
+      lock.withLock {
+        if isStdout { stdout += data } else { stderr += data }
+        lastActivity = Date()
+      }
+    }
+
+    func noteEOF() {
+      lock.withLock { openPipes -= 1 }
+      changed.signal()
+    }
+
+    func noteExit() {
+      lock.withLock { exited = true }
+      changed.signal()
+    }
+
+    /// (終了かつ両 pipe が EOF か, 最後に出力があった時刻)。
+    func progress() -> (finished: Bool, lastActivity: Date) {
+      lock.withLock { (exited && openPipes == 0, lastActivity) }
+    }
+
+    /// 状態が変わるか期限が来るまで眠る。
+    func wait(until deadline: Date) {
+      _ = changed.wait(timeout: .now() + max(0, deadline.timeIntervalSinceNow))
+    }
+
+    func collected() -> (stdout: Data, stderr: Data) { lock.withLock { (stdout, stderr) } }
   }
 
   /// 呼び出し共通の環境変数（プロセス内で初回に一度だけ構築）。
