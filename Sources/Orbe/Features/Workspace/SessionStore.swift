@@ -22,6 +22,15 @@ enum TabCloseOrigin {
   }
 }
 
+/// 走査で得た 1 ペインと、その居場所（workspace / タブの index と所有タブ）。
+/// `SessionStore.allPanes()` の要素で、制御 API の列挙と Dispatch の cwd 突合が共有する。
+struct PaneRef {
+  let workspaceIndex: Int
+  let tabIndex: Int
+  let tab: TerminalController
+  let pane: SurfaceView
+}
+
 /// 閉じたエージェントタブ 1 枚の開き直しエントリ。`index` は閉じた時点のタブ位置。
 /// `state` はタブ丸ごと（同居していた素のシェルペインも分割ツリーごと）。
 struct ClosedAgentTab {
@@ -68,6 +77,19 @@ final class SessionStore {
 
   /// アクティブペインの実効 cwd。
   func activePaneCwd() -> String? { paneCwd(inWorkspaceAt: activeWorkspace) }
+
+  /// 全 workspace × 全タブ × 分割ツリー全葉のペイン（**休眠 workspace も含む**）。
+  /// 休眠ペインは `currentPwd` を持たないが `initialCwd`（復元値）は持つので、cwd の話には必ず含める。
+  /// 葉の列挙は `TerminalController.controlAllPanes()`（深さ優先）に委ねる。
+  func allPanes() -> [PaneRef] {
+    workspaces.enumerated().flatMap { wi, ws in
+      ws.tabs.enumerated().flatMap { ti, tab in
+        tab.controlAllPanes().map {
+          PaneRef(workspaceIndex: wi, tabIndex: ti, tab: tab, pane: $0)
+        }
+      }
+    }
+  }
 
   /// 新規タブ/エージェント起動の初期 cwd（アクティブ workspace）。
   func newSurfaceCwd() -> String { newSurfaceCwd(inWorkspaceAt: activeWorkspace) }

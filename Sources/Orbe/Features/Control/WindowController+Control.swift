@@ -14,23 +14,20 @@ extension WindowController: ControlTarget {
   }
 
   func controlListPanes() -> [[String: Any]] {
-    var out: [[String: Any]] = []
-    for (wi, ws) in workspaces.enumerated() {
-      for (ti, tc) in ws.tabs.enumerated() {
-        for pane in tc.controlAllPanes() {
-          out.append([
-            "paneId": pane.id, "workspaceId": ws.id, "tabId": tc.id,
-            "workspaceName": ws.name,
-            "title": pane.paneTitle,
-            "cwd": (pane.currentPwd ?? pane.initialCwd).map { $0 as Any } ?? NSNull(),
-            "agentState": pane.agentState.map { $0 as Any } ?? NSNull(),
-            "agentSessionId": pane.agentSessionId.map { $0 as Any } ?? NSNull(),
-            "focused": wi == activeWorkspace && ti == ws.active && tc.focusedPane === pane,
-          ])
-        }
-      }
+    store.allPanes().map { ref in
+      let ws = workspaces[ref.workspaceIndex]
+      let pane = ref.pane
+      return [
+        "paneId": pane.id, "workspaceId": ws.id, "tabId": ref.tab.id,
+        "workspaceName": ws.name,
+        "title": pane.paneTitle,
+        "cwd": (pane.currentPwd ?? pane.initialCwd).map { $0 as Any } ?? NSNull(),
+        "agentState": pane.agentState.map { $0 as Any } ?? NSNull(),
+        "agentSessionId": pane.agentSessionId.map { $0 as Any } ?? NSNull(),
+        "focused": ref.workspaceIndex == activeWorkspace && ref.tabIndex == ws.active
+          && ref.tab.focusedPane === pane,
+      ]
     }
-    return out
   }
 
   /// 検出済みエージェント CLI を列挙する（制御 API の list_agents）。source は
