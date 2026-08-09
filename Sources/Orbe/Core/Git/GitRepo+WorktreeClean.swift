@@ -22,7 +22,7 @@ extension GitRepo {
       [
         "--no-optional-locks", "-C", path, "status", "--porcelain",
         "--untracked-files=normal", "--ignore-submodules=none",
-      ], cwd: root, isolated: isolated
+      ], cwd: root, lane: isolated ? .independent : .read
     ) { output in
       completion(
         output.isSuccess
@@ -51,7 +51,7 @@ extension GitRepo {
     completion: @escaping (Int?) -> Void
   ) {
     let args = ["cherry", defaultBranch, branchOrCommit]
-    GitRunner.shared.run(args, cwd: root, isolated: isolated) { output in
+    GitRunner.shared.run(args, cwd: root, lane: isolated ? .independent : .read) { output in
       guard output.isSuccess else {
         completion(nil)
         return
@@ -74,7 +74,8 @@ extension GitRepo {
     completion: @escaping (Bool?) -> Void
   ) {
     GitRunner.shared.run(
-      ["merge-base", defaultBranch, branchOrCommit], cwd: root, isolated: isolated
+      ["merge-base", defaultBranch, branchOrCommit], cwd: root,
+      lane: isolated ? .independent : .read
     ) { base in
       guard base.isSuccess else {
         completion(nil)
@@ -82,7 +83,8 @@ extension GitRepo {
       }
       let mergeBase = base.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
       GitRunner.shared.run(
-        ["rev-parse", "\(branchOrCommit)^{tree}"], cwd: self.root, isolated: isolated
+        ["rev-parse", "\(branchOrCommit)^{tree}"], cwd: self.root,
+        lane: isolated ? .independent : .read
       ) { tree in
         guard tree.isSuccess else {
           completion(nil)
@@ -93,7 +95,7 @@ extension GitRepo {
           [
             "-c", "user.name=orbe", "-c", "user.email=orbe@localhost",
             "commit-tree", treeOid, "-p", mergeBase, "-m", "_",
-          ], cwd: self.root, isolated: isolated
+          ], cwd: self.root, lane: isolated ? .independent : .read
         ) { synthesized in
           guard synthesized.isSuccess else {
             completion(nil)
@@ -101,7 +103,7 @@ extension GitRepo {
           }
           let oid = synthesized.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
           GitRunner.shared.run(
-            ["cherry", defaultBranch, oid], cwd: self.root, isolated: isolated
+            ["cherry", defaultBranch, oid], cwd: self.root, lane: isolated ? .independent : .read
           ) { cherry in
             guard cherry.isSuccess else {
               completion(nil)
@@ -128,7 +130,7 @@ extension GitRepo {
   /// locked は `-f` 1 個では外れないため、locked な worktree はそもそも安全確認を通さない。
   func removeWorktree(path: String, completion: @escaping (String?) -> Void) {
     GitRunner.shared.run(
-      ["worktree", "remove", "--force", path], cwd: root, write: true
+      ["worktree", "remove", "--force", path], cwd: root, lane: .exclusive
     ) { output in
       completion(output.isSuccess ? nil : GitRepo.essentialFailureReason(output.stderrText))
     }
@@ -151,7 +153,7 @@ extension GitRepo {
   /// 呼ばれる場合は、ユーザーが行ごとに `worktree + ブランチ` を選ぶ行為が安全確認の上書きになっている。
   func deleteBranch(name: String, expectedOid: String, completion: @escaping (String?) -> Void) {
     GitRunner.shared.run(
-      ["update-ref", "-d", "refs/heads/\(name)", expectedOid], cwd: root, write: true
+      ["update-ref", "-d", "refs/heads/\(name)", expectedOid], cwd: root, lane: .exclusive
     ) { output in
       completion(output.isSuccess ? nil : GitRepo.essentialFailureReason(output.stderrText))
     }

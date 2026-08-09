@@ -14,7 +14,6 @@ final class DispatchDataProvider {
   private let worktreeTemplate: String
   /// 開いた時点のペイン占有スナップショット（`SessionStore` を Dispatch から見せないための値型）。
   private let paneOccupancies: [PaneOccupancy]
-  /// この provider が解決する `GitRepo` の実行基盤。本番は既定の `.shared`（`GitRepo.open` と同じ形）。
   private let runner: GitRunner
 
   private(set) var repo: GitRepo?
@@ -38,9 +37,7 @@ final class DispatchDataProvider {
 
   init(
     cwd: String, model: DispatchPaletteModel, localization: LocalizationStore,
-    worktreeTemplate: String, paneOccupancies: [PaneOccupancy] = [],
-    worktreeTemplate: String, paneOccupancies: [PaneOccupancy] = [],
-    runner: GitRunner = .shared
+    worktreeTemplate: String, paneOccupancies: [PaneOccupancy] = [], runner: GitRunner = .shared
   ) {
     self.cwd = cwd
     self.model = model
@@ -236,8 +233,7 @@ final class DispatchDataProvider {
   }
 
   /// 行種別に応じて対象ディレクトリを解決する（必要なら worktree を新規作成する）。
-  /// 作成は追加のみ（現在の作業ツリーは不可侵）。失敗時は表示用の失敗理由を返す
-  /// （Git 層の `GitFailure` をここで現在の UI 言語へ写す）。
+  /// 作成は追加のみ（現在の作業ツリーは不可侵）。失敗は Git 層の `GitFailure` を UI 言語へ写して返す。
   /// 既存ディレクトリを返すだけの経路はリポジトリを要さない——非 git（`repo == nil`）を畳むのは
   /// リポジトリが要る作成経路（`createWorktree`）の責務。
   func prepareDirectory(
@@ -327,7 +323,6 @@ final class DispatchDataProvider {
     let localization = self.localization
     repo.addWorktree(path: path, base: base, newBranch: newBranch, track: track) { failure in
       if let failure {
-        // 文言はここで当てる（Git 層は UI 言語を持たない。他の失敗と同じ扱いに揃える）。
         switch failure {
         case .timedOut: completion(.failed(localization.string(.gitTimedOut)))
         case .reason(let reason): completion(.failed(reason))
