@@ -102,7 +102,8 @@ enum SettingsRegistry {
   /// `font-family = JetBrainsMono Nerd Font` と対応）。
   static let defaultFontFamily = "JetBrainsMono Nerd Font"
 
-  private static func opacityLabel(_ v: SettingValue) -> String {
+  /// 百分率の値表示（背景の不透明度・通知音の音量が共有する）。
+  private static func percentLabel(_ v: SettingValue) -> String {
     if case .int(let n) = v { return "\(n)%" }
     return ""
   }
@@ -113,7 +114,8 @@ enum SettingsRegistry {
 
   /// 格納/gui.conf 生成の正準順（font-size → font-family → tab-title-font-family〔gui.conf 非経由〕→
   /// emoji-font → theme → agent → background-opacity → background-blur → cursor-style-blink →
-  /// agent-state-icons〔gui.conf 非経由〕→ dev-features〔同〕→ worktree-dir〔同〕）。
+  /// agent-state-icons〔gui.conf 非経由〕→ dev-features〔同〕→ worktree-dir〔同〕→
+  /// notification-sound〔同〕→ notification-sound-volume〔同〕→ notification-sound-enabled〔同〕）。
   /// `rootOrder`（表示順）とは別物——混同すると gui.conf のバイト順が崩れる。
   static let all: [SettingDescriptor] = [
     SettingDescriptor(
@@ -202,7 +204,7 @@ enum SettingsRegistry {
           String(format: "background-opacity = %.2f", Double($0) / 100)
         }
       },
-      display: { v, _ in opacityLabel(v) }, unsetPlaceholderKey: nil),
+      display: { v, _ in percentLabel(v) }, unsetPlaceholderKey: nil),
     SettingDescriptor(
       id: .backgroundBlur, key: "background-blur", labelKey: .settingsBackgroundBlur,
       activation: .toggle,
@@ -246,16 +248,44 @@ enum SettingsRegistry {
       guiConf: nil,  // gui.conf 非経由（Dispatch の worktree 作成時に実効値を pull する）
       display: { v, _ in if case .string(let s) = v { return s } else { return "" } },
       unsetPlaceholderKey: nil),
+    SettingDescriptor(
+      id: .notificationSound, key: "notification-sound", labelKey: .settingsNotificationSound,
+      activation: .drillIn,
+      // 既定の案は `NotificationSound.default` が SSOT（実機で聴き比べて決め直すときの唯一の差し替え点）。
+      defaultValue: { NotificationSound.default.settingValue },
+      domain: .enumeration(values: { NotificationSound.allCases.map(\.rawValue) }),
+      guiConf: nil,  // gui.conf 非経由（libghostty 設定ではない）
+      display: { v, store in
+        guard case .string(let raw) = v, let sound = NotificationSound(rawValue: raw) else {
+          return ""
+        }
+        return store.string(sound.labelKey)
+      },
+      unsetPlaceholderKey: nil),
+    SettingDescriptor(
+      id: .notificationSoundVolume, key: "notification-sound-volume",
+      labelKey: .settingsNotificationSoundVolume, activation: .stepper,
+      defaultValue: { .int(70) }, domain: .intRange(0...100, step: 5, unit: "%"),
+      guiConf: nil,  // gui.conf 非経由（合成の入力＝コンプレッサの手前に掛かる）
+      display: { v, _ in percentLabel(v) }, unsetPlaceholderKey: nil),
+    SettingDescriptor(
+      id: .notificationSoundEnabled, key: "notification-sound-enabled",
+      labelKey: .settingsNotificationSoundEnabled, activation: .toggle,
+      defaultValue: { .bool(true) }, domain: .toggle,
+      guiConf: nil,  // gui.conf 非経由
+      display: boolLabel, unsetPlaceholderKey: nil),
   ]
 
   /// パレット root の表示順（fontSize → backgroundOpacity → backgroundBlur → cursorStyleBlink →
   /// theme → agent → fontFamily → tabTitleFontFamily → emojiFont → agentStateIcons →
-  /// devFeaturesEnabled → worktreeDir）。背景関連・フォント関連をそれぞれ隣接させる。
+  /// devFeaturesEnabled → worktreeDir → notificationSound → 音量 → オン/オフ）。
+  /// 背景関連・フォント関連・通知音関連をそれぞれ隣接させる。
   static let rootOrder: [SettingDescriptor] =
     [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
       .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
-      .devFeaturesEnabled, .worktreeDir,
+      .devFeaturesEnabled, .worktreeDir, .notificationSound, .notificationSoundVolume,
+      .notificationSoundEnabled,
     ].map { id in all.first { $0.id == id }! }
 
   static func descriptor(_ id: SettingID) -> SettingDescriptor { all.first { $0.id == id }! }

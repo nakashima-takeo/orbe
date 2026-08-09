@@ -2,12 +2,13 @@ import SwiftUI
 
 /// Cmd+, で開く設定パレットの状態機械（ドリルイン式）。
 ///
-/// - root（絞り込み入力欄あり）: 先頭に「スコープ」行（グローバル ⇄ この workspace）、続いて 11 設定行を
+/// - root（絞り込み入力欄あり）: 先頭に「スコープ」行（グローバル ⇄ この workspace）、続いてレジストリの設定行を
 ///   現在値つきで出す。↑↓ で行選択、スコープ行は ←/→/↵ で反転、stepper 行は ←→ で増減、toggle 行は
 ///   ←/→/↵ で反転、drillIn 行は ↵/→ で潜る、Esc で閉じる。workspace スコープでは行を delete で上書き解除
 ///   （global 継承へ戻す）——絞り込み欄フォーカス中はクエリ空のときだけ delete が継承解除・非空なら文字削除。
-/// - font/tabTitleFont/emojiFont/theme/agent/agentStates/agentIcon: サブパレット
-///   （`SettingsPaletteModel+Subpalette`）。
+/// - font/tabTitleFont/emojiFont/theme/agent/agentStates/agentIcon/notificationSound: サブパレット
+///   （`SettingsPaletteModel+Subpalette`）。通知音だけは行の移動がその場の試聴を伴う
+///   （`SettingsPaletteModel+Sound`）。
 ///
 /// 全設定は同じ `onApply`（単一代入 `SettingChange`＋スコープ）で global（settings.json）か workspace 上書きへ
 /// 反映し、生成 conf 再生成・ライブ反映は提示元（WindowController）が担う（defaultAgent/devFeatures も同経路）。
@@ -21,6 +22,9 @@ import SwiftUI
   var onSelectLanguage: (Language) -> Void = { _ in }
   /// グローバル ⌘⌘ 権限行の ↵/→ で System Settings（Accessibility）を開く（提示元が配線）。
   var onOpenAccessibilitySettings: () -> Void = {}
+  /// 通知音サブパレットの試聴（nil＝鳴らさず止めるだけ＝「なし」行）。提示元が再生層へ繋ぐ。
+  /// **設定は書かない**——聴くことと決めることを分けてある（書くのは ↵ の確定だけ）。
+  var onPreviewSound: ((NotificationSound?, AgentSoundEvent) -> Void)?
 
   /// 現在の UI 言語ホルダー。言語行のマーカー・root 行の現在値表示・自身の文言（breadcrumb/hint）が読む。
   let localization: LocalizationStore
@@ -28,7 +32,8 @@ import SwiftUI
   // ドリル遷移（drillIn/returnTo*）を `SettingsPaletteModel+Navigation` へ分離するため internal。
   enum Mode {
     case root, font, tabTitleFont, emojiFont, theme, agent, agentStates,
-      agentIcon(AgentStateIcon.Kind), worktreeDirPresets, worktreeDirCustom, language, update
+      agentIcon(AgentStateIcon.Kind), worktreeDirPresets, worktreeDirCustom, language, update,
+      notificationSound
   }
 
   /// root 行。先頭のスコープ切替行と、レジストリ表示順の各設定行。
@@ -53,6 +58,9 @@ import SwiftUI
 
   let render = PaletteModel()
   private var mode: Mode = .root
+  /// 面の組み立て中（`setMode`/`rebuild`）の選択代入で試聴が鳴るのを止める。入場では鳴らさない。
+  /// 試聴の実装（`SettingsPaletteModel+Sound`）が読むため internal。
+  var suppressPreview = false
   /// 潜る前にいた root 行の「全行 rootRows での index」（既定は先頭設定行）。
   var rootRowBeforeDrill = 1
   /// 状態一覧からアイコン候補へ潜る前にいた状態行の index（agentIcon から agentStates へ戻る復元用）。
@@ -62,6 +70,10 @@ import SwiftUI
 
   /// 現在値の行 index（サブモードの表示行に対する。root と、現在値が表示行に無いときは nil）。
   var currentRowIndex: Int?
+
+  /// 通知音サブパレットの試聴対象（完了 / 入力待ち）。⇥ で反転する**面の状態**で、設定には書かない。
+  /// 入場のたび `.done` へ戻す（前回を持ち越すと、開いた瞬間に何が鳴るか予測できないため）。
+  var previewEvent: AgentSoundEvent = .done
 
   /// worktreeDir 入力の直前の不正確定理由（語彙の説明行の先頭に差し込んで出す）。
   /// 編集（queryChanged）と入場（drillIn）でクリアし、エラーは確定時にだけ評価する。
@@ -120,8 +132,16 @@ import SwiftUI
     render.onEscape = { [weak self] in self?.escape() }
     render.onDelete = { [weak self] in self?.deleteKey() }
     render.onQueryChange = { [weak self] in self?.queryChanged() }
+    render.onSelectionChanged = { [weak self] _ in self?.selectionChanged() }
+    render.onTab = { [weak self] in self?.togglePreviewEvent() ?? false }
     rebuild()
     render.selected = 1  // スコープ行（index 0）でなく先頭の設定行（フォントサイズ）を初期選択にする
+  }
+
+  /// 通知音サブパレットにいるか（試聴の分離ファイルが `mode` を直に見ないための問い）。
+  var isNotificationSoundMode: Bool {
+    if case .notificationSound = mode { return true }
+    return false
   }
 
   /// first responder を現在のモードへ移す（focusToken を進め、SwiftUI が描画後に focus を確定する）。
@@ -178,6 +198,8 @@ import SwiftUI
       returnToRoot()  // 新言語で root を組み直す
     case .update:
       activateUpdateRow()
+    case .notificationSound:
+      activateNotificationSoundRow()
     }
   }
 
@@ -230,7 +252,7 @@ import SwiftUI
       case .language, .update, .cmdTapPermission: break  // drillIn 行と同じく ← は無反応
       }
     case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .worktreeDirPresets,
-      .language, .update:
+      .language, .update, .notificationSound:
       returnToRoot()
     case .worktreeDirCustom: break  // editor 入力欄の ← はカーソル移動（ここへは届かない）。戻るは esc
     case .agentIcon: returnToStates()  // 1 段ずつ浅く（アイコン候補→状態一覧）
@@ -291,7 +313,7 @@ import SwiftUI
     switch mode {
     case .root: onDismiss()
     case .font, .tabTitleFont, .emojiFont, .theme, .agent, .agentStates, .worktreeDirPresets,
-      .language, .update:
+      .language, .update, .notificationSound:
       returnToRoot()
     case .agentIcon: returnToStates()  // 1 段ずつ浅く
     case .worktreeDirCustom: returnToWorktreeDirPresets()  // 同上（カスタム入力→プリセット一覧）
@@ -339,32 +361,39 @@ import SwiftUI
   /// `prefill` は入力欄を持つモードの初期クエリ。行の組み立てが query を読むモードがあるため、
   /// 空へ戻すのでなくここで確定させてから `rebuild()` に渡す。
   func setMode(_ m: Mode, select: Int? = nil, prefill: String = "") {
-    mode = m
-    render.query = prefill
-    rebuild()  // ここで currentRowIndex が確定する
-    render.selected = select ?? currentRowIndex ?? 0
-    render.clampSelection()
+    // 通知音の面へ入るたび試聴対象を「完了」へ戻す（前回の対象を持ち越さない）。
+    if case .notificationSound = m { previewEvent = .done }
+    withoutPreview {
+      mode = m
+      render.query = prefill
+      rebuild()  // ここで currentRowIndex が確定する
+      render.selected = select ?? currentRowIndex ?? 0
+      render.clampSelection()
+    }
     focus()  // 入力欄なしモードは CardKeyCapture、入力欄ありモードは TextField が focusToken で focus を取る
   }
 
   /// 現在の mode の行を組み直す（mode はそのまま。入力途中の再描画に使う）。
   func rebuild() {
     currentRowIndex = nil
-    switch mode {
-    case .root: rebuildRoot()
-    case .font: rebuildFont()
-    case .tabTitleFont: rebuildTabTitleFont()
-    case .emojiFont: rebuildEmojiFont()
-    case .theme: rebuildTheme()
-    case .agent: rebuildAgent()
-    case .agentStates: rebuildAgentStates()
-    case .agentIcon(let kind): rebuildAgentIcon(kind: kind)
-    case .worktreeDirPresets: rebuildWorktreeDirPresets()
-    case .worktreeDirCustom: rebuildWorktreeDirCustom()
-    case .language: rebuildLanguage()
-    case .update: rebuildUpdate()
+    render.headerSegments = []  // 面ごとのヘッダ装飾は組み直すたび白紙から（通知音の面だけが立てる）
+    withoutPreview {
+      switch mode {
+      case .root: rebuildRoot()
+      case .font: rebuildFont()
+      case .tabTitleFont: rebuildTabTitleFont()
+      case .emojiFont: rebuildEmojiFont()
+      case .theme: rebuildTheme()
+      case .agent: rebuildAgent()
+      case .agentStates: rebuildAgentStates()
+      case .agentIcon(let kind): rebuildAgentIcon(kind: kind)
+      case .worktreeDirPresets: rebuildWorktreeDirPresets()
+      case .worktreeDirCustom: rebuildWorktreeDirCustom()
+      case .language: rebuildLanguage()
+      case .update: rebuildUpdate()
+      case .notificationSound: rebuildNotificationSound()
+      }
+      render.clampSelection()
     }
-    render.clampSelection()
   }
-
 }

@@ -32,8 +32,17 @@ import SwiftUI
   /// 選択行。ホバー追従以外の代入はモダリティを `.keyboard` へ戻す（→ `ModalSelection`）。
   var selected: Int {
     get { selection.index }
-    set { selection.index = newValue }
+    set {
+      let previous = selection.index
+      selection.index = newValue
+      if newValue != previous { onSelectionChanged?(newValue) }
+    }
   }
+
+  /// 選択行が**実際に動いた**ときの通知（設定パレットの通知音プレビューが購読する）。
+  /// 代入経路（キー移動・タップ・clamp）とホバー追従の両方が通り、`restoreSelection` は通らない
+  /// ——裏の再取得での追い直しはユーザの意図ではないため。
+  var onSelectionChanged: ((Int) -> Void)?
 
   /// 実マウス移動（`MouseMovedDetector`）が `.pointer` へ落とす。
   var inputModality: InputModality {
@@ -42,7 +51,11 @@ import SwiftUI
   }
 
   /// ホバー開始による選択追従（`.pointer` のときだけ効く）。
-  func hoverSelect(_ i: Int) { selection.hoverSelect(i) }
+  func hoverSelect(_ i: Int) {
+    let previous = selection.index
+    selection.hoverSelect(i)
+    if selection.index != previous { onSelectionChanged?(selection.index) }
+  }
   /// 裏の再取得で行がずれたときの選択の追い直し。ユーザの意図ではないのでモダリティを奪わない
   /// （→ `ModalSelection.restore`）。`selected` の setter で代入すると `.keyboard` へ戻り、
   /// ポインタ操作中の追従が切れる。
@@ -51,6 +64,9 @@ import SwiftUI
   var breadcrumb: String?
   /// ヘッダ右端の表示専用バッジ（Attention の `⌘⌘` 等）。nil で出さない（既存パレットは無影響）。
   var headerBadge: String?
+  /// ヘッダ右端のセグメント表示（通知音サブパレットの試聴対象「完了 | 入力待ち」）。
+  /// 非空ならバッジの代わりにこれを描く（`hintKeys` と同じ opt-in の richer 版）。
+  var headerSegments: [(label: String, active: Bool)] = []
   var hint = ""
   /// フッターヒントのキー付きセグメント（key=副色・label=muted・デザイン第10シーン）。
   /// 空なら `hint` の素文字列を muted 一色で描く（既存パレットは無影響）。
@@ -100,6 +116,9 @@ import SwiftUI
   var onEscape: () -> Void = {}
   /// delete＝設定パレット root で workspace 上書きを解除（global 継承へ戻す）。入力欄なしモードのみ届く。
   var onDelete: () -> Void = {}
+  /// ⇥ の意味。true を返すとキーを消費（通知音サブパレットの試聴対象の反転）。既定は非消費＝
+  /// 他パレットは従来どおり ⇥ に反応しない。
+  var onTab: () -> Bool = { false }
 
   /// enabled な行だけを巡る選択移動（情報行は飛ばす）。
   func move(_ d: Int) {

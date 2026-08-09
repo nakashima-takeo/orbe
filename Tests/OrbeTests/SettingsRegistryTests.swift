@@ -22,7 +22,8 @@ final class SettingsRegistryTests: OrbeTestCase {
       [
         .fontSize, .fontFamily, .tabTitleFontFamily, .emojiFont, .theme, .defaultAgent,
         .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .agentStateIcons,
-        .devFeaturesEnabled, .worktreeDir,
+        .devFeaturesEnabled, .worktreeDir, .notificationSound, .notificationSoundVolume,
+        .notificationSoundEnabled,
       ])
   }
 
@@ -33,7 +34,8 @@ final class SettingsRegistryTests: OrbeTestCase {
       [
         .fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
         .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
-        .devFeaturesEnabled, .worktreeDir,
+        .devFeaturesEnabled, .worktreeDir, .notificationSound, .notificationSoundVolume,
+        .notificationSoundEnabled,
       ])
   }
 
@@ -60,6 +62,11 @@ final class SettingsRegistryTests: OrbeTestCase {
     XCTAssertEqual(SettingsRegistry.descriptor(.agentStateIcons).key, "agent-state-icons")
     XCTAssertEqual(SettingsRegistry.descriptor(.devFeaturesEnabled).key, "dev-features")
     XCTAssertEqual(SettingsRegistry.descriptor(.worktreeDir).key, "worktree-dir")
+    XCTAssertEqual(SettingsRegistry.descriptor(.notificationSound).key, "notification-sound")
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.notificationSoundVolume).key, "notification-sound-volume")
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.notificationSoundEnabled).key, "notification-sound-enabled")
     XCTAssertEqual(SettingsRegistry.confKey(.fontSize), "font-size", "confKey は descriptor.key を引く")
     let keys = SettingsRegistry.all.map(\.key)
     XCTAssertEqual(Set(keys).count, SettingsRegistry.all.count, "key は全項目で一意")
@@ -79,7 +86,8 @@ final class SettingsRegistryTests: OrbeTestCase {
   func testDefaultValuePresenceMatchesKeyKind() {
     for id in [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
-      .emojiFont, .agentStateIcons, .devFeaturesEnabled, .worktreeDir,
+      .emojiFont, .agentStateIcons, .devFeaturesEnabled, .worktreeDir, .notificationSound,
+      .notificationSoundVolume, .notificationSoundEnabled,
     ] {
       XCTAssertNotNil(SettingsRegistry.descriptor(id).defaultValue(), "\(id) は既定を持つ")
     }
@@ -106,6 +114,22 @@ final class SettingsRegistryTests: OrbeTestCase {
     XCTAssertEqual(
       SettingsRegistry.descriptor(.worktreeDir).defaultValue(),
       .string("{parent}/{repo}-worktrees/{slug}"), "既定は従来のハードコード規則と同一パスに解決するテンプレート")
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.notificationSound).defaultValue(),
+      NotificationSound.default.settingValue,
+      "既定の案は NotificationSound.default が SSOT（リテラルを 2 箇所に置かない）")
+    XCTAssertEqual(SettingsRegistry.descriptor(.notificationSoundVolume).defaultValue(), .int(70))
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.notificationSoundEnabled).defaultValue(), .bool(true))
+  }
+
+  /// 通知音の 3 件はどれも gui.conf に出さない（libghostty 設定ではない）。
+  func testNotificationSoundHasNoGuiConf() {
+    for id in [
+      SettingID.notificationSound, .notificationSoundVolume, .notificationSoundEnabled,
+    ] {
+      XCTAssertNil(SettingsRegistry.descriptor(id).guiConf, "\(id) は gui.conf に出さない")
+    }
   }
 
   // MARK: - guiConf 橋渡し（実効設定の raw を読む・未設定は行を出さない）
@@ -202,14 +226,20 @@ final class SettingsRegistryTests: OrbeTestCase {
     let bo = SettingsRegistry.stepperDomain(.backgroundOpacity)
     XCTAssertEqual(bo.range, 20...100)
     XCTAssertEqual(bo.unit, "%")
-    for id in [SettingID.fontSize, .backgroundOpacity] {
+    let volume = SettingsRegistry.stepperDomain(.notificationSoundVolume)
+    XCTAssertEqual(volume.range, 0...100)
+    XCTAssertEqual(volume.step, 5)
+    XCTAssertEqual(volume.unit, "%")
+    for id in [SettingID.fontSize, .backgroundOpacity, .notificationSoundVolume] {
       XCTAssertEqual(SettingsRegistry.descriptor(id).activation, .stepper)
     }
   }
 
   /// toggle 項目は activation=toggle かつ domain=toggle。
   func testToggleItemsHaveToggleDomainAndActivation() {
-    for id in [SettingID.backgroundBlur, .cursorStyleBlink, .devFeaturesEnabled] {
+    for id in [
+      SettingID.backgroundBlur, .cursorStyleBlink, .devFeaturesEnabled, .notificationSoundEnabled,
+    ] {
       XCTAssertEqual(SettingsRegistry.descriptor(id).activation, .toggle)
       guard case .toggle = SettingsRegistry.descriptor(id).domain else {
         return XCTFail("\(id) の domain は toggle")
@@ -231,13 +261,13 @@ final class SettingsRegistryTests: OrbeTestCase {
   func testIsDrillInFlags() {
     for id in [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink,
-      .devFeaturesEnabled,
+      .devFeaturesEnabled, .notificationSoundVolume, .notificationSoundEnabled,
     ] {
       XCTAssertFalse(SettingsRegistry.descriptor(id).isDrillIn, "stepper/toggle（\(id)）は潜らない")
     }
     for id in [
       SettingID.fontFamily, .tabTitleFontFamily, .emojiFont, .theme, .defaultAgent,
-      .agentStateIcons, .worktreeDir,
+      .agentStateIcons, .worktreeDir, .notificationSound,
     ] {
       XCTAssertTrue(SettingsRegistry.descriptor(id).isDrillIn, "\(id) は drillIn")
     }

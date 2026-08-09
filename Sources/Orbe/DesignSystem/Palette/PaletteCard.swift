@@ -138,8 +138,23 @@ struct PaletteCard: View {
         .frame(maxWidth: model.fieldVisible ? .infinity : 0)
         .opacity(model.fieldVisible ? 1 : 0)
         .allowsHitTesting(model.fieldVisible)
-      // ヘッダ右端の表示専用バッジ（Attention の ⌘⌘）。opt-in（nil の既存パレットは従来どおり）。
-      if let badge = model.headerBadge {
+      // ヘッダ右端の表示専用スロット。opt-in（どちらも空の既存パレットは従来どおり）。
+      // 状態を語るのはヘッダ、操作を語るのはフッター（hint）という分担なので、セグメントは
+      // 「今どちらの面か」だけを出す（キーの案内は載せない）。
+      if !model.headerSegments.isEmpty {
+        HStack(spacing: Theme.Space.step) {
+          ForEach(model.headerSegments.indices, id: \.self) { i in
+            Text(model.headerSegments[i].label)
+              .foregroundStyle(
+                model.headerSegments[i].active ? Color.theme.textPrimary : Color.theme.textMuted)
+          }
+        }
+        .font(Font.theme.meta)
+        .padding(.horizontal, Theme.Space.step)
+        .padding(.vertical, Theme.Space.hair)
+        .background(
+          RoundedRectangle(cornerRadius: Theme.Radius.sm).fill(Color.theme.smallPillFill))
+      } else if let badge = model.headerBadge {
         Text(badge)
           .font(Font.theme.meta)
           .foregroundStyle(Color.theme.textMuted)
@@ -282,6 +297,9 @@ private struct CardKeyCapture: ViewModifier {
         guard !model.fieldVisible else { return .ignored }
         model.onDelete(); return .handled
       }
+      // ⇥ は受け手のあるモード（通知音サブパレットの試聴対象）だけが消費し、それ以外は
+      // .ignored で AppKit の focus 移動へ返す（既存パレットの挙動を変えない）。
+      .onKeyPress(.tab) { model.onTab() ? .handled : .ignored }
       .onKeyPress(.escape) {
         model.onEscape(); return .handled
       }

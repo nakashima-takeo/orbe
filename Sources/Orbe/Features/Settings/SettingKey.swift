@@ -17,7 +17,7 @@ let isDevBuild: Bool = {
 enum SettingID: CaseIterable {
   case fontSize, backgroundOpacity, backgroundBlur, cursorStyleBlink, theme,
     defaultAgent, fontFamily, tabTitleFontFamily, emojiFont, agentStateIcons, devFeaturesEnabled,
-    worktreeDir
+    worktreeDir, notificationSound, notificationSoundVolume, notificationSoundEnabled
 }
 
 /// unset が固有の意味を持つ項目（fontFamily＝既定チェーン・defaultAgent＝検出先頭）の phantom-typed key。
@@ -45,6 +45,9 @@ enum SettingKeys {
   static let agentStateIcons = DefaultedSettingKey<[String: String]>(.agentStateIcons)
   static let devFeaturesEnabled = DefaultedSettingKey<Bool>(.devFeaturesEnabled)
   static let worktreeDir = DefaultedSettingKey<String>(.worktreeDir)
+  static let notificationSound = DefaultedSettingKey<NotificationSound>(.notificationSound)
+  static let notificationSoundVolume = DefaultedSettingKey<Int>(.notificationSoundVolume)
+  static let notificationSoundEnabled = DefaultedSettingKey<Bool>(.notificationSoundEnabled)
   static let fontFamily = SettingKey<String>(.fontFamily)  // nil＝既定チェーンへ解決
   static let tabTitleFontFamily = SettingKey<String>(.tabTitleFontFamily)  // nil＝システム等幅 11pt
   static let defaultAgent = SettingKey<String>(.defaultAgent)  // nil＝検出先頭へ fallback
