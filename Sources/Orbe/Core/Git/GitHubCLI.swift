@@ -79,6 +79,19 @@ final class GitHubCLI {
       ], completion: completion)
   }
 
+  /// 閉じた PR 一覧（`closed` は MERGED も含み `state` で区別できる）。worktree の掃除で
+  /// 「マージ済みか／未マージのまま閉じられたか」を見る。`nil` = 取得失敗／`[]` = 0 件。
+  func closedPullRequests(
+    cwd: String, limit: Int, completion: @escaping ([GitHubClosedPR]?) -> Void
+  ) {
+    fetch(
+      cwd: cwd,
+      args: [
+        "pr", "list", "--state", "closed", "--limit", String(limit), "--json",
+        "number,headRefName,state",
+      ], completion: completion)
+  }
+
   /// 取得の共通口。失敗は `nil`（空配列に潰さない——空で潰すと呼び出し側のキャッシュを消してしまう）。
   private func fetch<T: Decodable>(
     cwd: String, args: [String], completion: @escaping ([T]?) -> Void

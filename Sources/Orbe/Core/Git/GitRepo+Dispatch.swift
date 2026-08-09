@@ -15,7 +15,8 @@ extension GitRepo {
     GitRunner.shared.run(
       [
         "for-each-ref", "refs/heads", "--sort=-committerdate",
-        "--format=%(refname:short)|%(committerdate:relative)|%(worktreepath)|%(upstream:short)",
+        "--format=%(refname:short)|%(committerdate:relative)|%(worktreepath)|%(upstream:short)"
+          + "|%(upstream:track)",
       ], cwd: root
     ) { output in
       completion(output.isSuccess ? BranchParser.parseLocal(output.stdoutText) : [])
@@ -91,10 +92,10 @@ extension GitRepo {
     }
   }
 
-  /// `git worktree add` の stderr から実質的な失敗理由を取り出す。成功・失敗どちらでも先頭に出る進捗風
+  /// git の stderr から実質的な失敗理由を取り出す。成功・失敗どちらでも先頭に出る進捗風
   /// `Preparing worktree (new branch 'issue/44')` を落とし、`fatal:`／`error:` 行（複数あれば全て・改行結合）
   /// を返す。無ければ最終非空行、それも無ければ stderr 全文。git stderr の癖はこの git ラッパー層に閉じる。
-  private static func essentialFailureReason(_ stderr: String) -> String {
+  static func essentialFailureReason(_ stderr: String) -> String {
     let lines = stderr.split(separator: "\n", omittingEmptySubsequences: false)
       .map { $0.trimmingCharacters(in: .whitespaces) }
       .filter { !$0.isEmpty }

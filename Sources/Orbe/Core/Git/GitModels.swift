@@ -151,6 +151,10 @@ struct GitWorktree: Equatable {
   let head: String
   /// 本体（main）worktree か。worktree 作成先の親ディレクトリ導出に使う。
   let isMain: Bool
+  /// porcelain の `prunable <reason>` 行。ディスク上の実体が失われている（掃除の推定材料）。
+  var isPrunable = false
+  /// porcelain の `locked [reason]` 行の理由（理由が無ければ空文字）。locked でなければ nil。
+  var lockReason: String?
 }
 
 /// `git for-each-ref` の 1 ブランチ（local / remote 兼用）。
@@ -163,6 +167,8 @@ struct GitBranch: Equatable {
   let worktreePath: String?
   /// upstream の短縮名（`origin/x`）。無ければ nil。
   let upstream: String?
+  /// `%(upstream:track)`（`[gone]` / `[ahead 1]` 等）。空なら nil。
+  var track: String?
 }
 
 // MARK: - GitHub（gh CLI）
@@ -171,6 +177,16 @@ struct GitBranch: Equatable {
 struct GitHubIssue: Decodable, Equatable {
   let number: Int
   let title: String
+}
+
+/// `gh pr list --state closed --json number,headRefName,state` の 1 PR。
+/// worktree の掃除で「マージ済みか／未マージのまま閉じられたか」を見るためだけの小さな形で、
+/// `GitHubPullRequest`（title・isCrossRepository 必須）ではこの JSON をデコードできない。
+struct GitHubClosedPR: Decodable, Equatable {
+  let number: Int
+  let headRefName: String
+  /// `MERGED` / `CLOSED`。
+  let state: String
 }
 
 /// `gh pr list --json number,title,headRefName,reviewDecision,isCrossRepository` の 1 PR。

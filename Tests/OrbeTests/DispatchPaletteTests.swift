@@ -7,7 +7,7 @@ import XCTest
 @MainActor
 final class DispatchPaletteTests: OrbeTestCase {
 
-  private func makeModel(
+  func makeModel(
     _ input: DispatchSectionBuilder.Input = .designSample,
     agents: [AgentCLI] = [
       AgentCLI(command: "claude", path: "/bin/claude"),
@@ -25,7 +25,7 @@ final class DispatchPaletteTests: OrbeTestCase {
   func testSampleShape() {
     let p = makeModel()
     XCTAssertEqual(p.sections.count, 5, "Worktrees/Local/Remote/Issues/PR の 5 セクション")
-    XCTAssertEqual(p.items.count, 8, "対話行は全 8 行（セクション横断の平坦数）")
+    XCTAssertEqual(p.items.count, 9, "対話行は全 9 行（worktree 2 ＋ clean 行 ＋ branch 3 ＋ issue 2 ＋ PR）")
     XCTAssertEqual(p.selected, 0)
     XCTAssertEqual(p.selectedItem?.name, "agent-hooks", "初期選択は先頭 worktree")
     XCTAssertTrue(p.selectedItem?.isPrimary ?? false, "先頭 worktree はアクティブ（強調）")
@@ -34,7 +34,7 @@ final class DispatchPaletteTests: OrbeTestCase {
   func testMoveWrapsAcrossSections() {
     let p = makeModel()
     p.move(-1)
-    XCTAssertEqual(p.selected, 7, "先頭で上 → 末尾へ wrap")
+    XCTAssertEqual(p.selected, 8, "先頭で上 → 末尾へ wrap")
     XCTAssertEqual(p.selectedItem?.name, "feat: session restore", "末尾は PR 行")
     p.move(1)
     XCTAssertEqual(p.selected, 0, "末尾から下 → 先頭へ wrap")
@@ -66,10 +66,10 @@ final class DispatchPaletteTests: OrbeTestCase {
     input.pullRequests = []
     input.githubState = .ghMissing
     let p = makeModel(input)
-    // 対話行 5（worktree2＋local2＋remote1）＋Issues 誘導情報行 1。
-    XCTAssertEqual(p.items.count, 6)
+    // 対話行 6（worktree2＋clean＋local2＋remote1）＋Issues 誘導情報行 1。
+    XCTAssertEqual(p.items.count, 7)
     XCTAssertFalse(p.items.last?.isInteractive ?? true, "末尾は非対話の誘導情報行")
-    p.selected = 4  // 末尾の対話行（remote）
+    p.selected = 5  // 末尾の対話行（remote）
     p.move(1)
     XCTAssertEqual(p.selected, 0, "情報行を飛ばして先頭へ wrap")
     XCTAssertTrue(p.selectedItem?.isInteractive ?? false)
@@ -81,10 +81,10 @@ final class DispatchPaletteTests: OrbeTestCase {
     input.pullRequests = []
     input.githubState = .ghMissing
     let p = makeModel(input)
-    XCTAssertEqual(p.items.count, 6)
+    XCTAssertEqual(p.items.count, 7)
     XCTAssertFalse(p.items.last?.isInteractive ?? true, "末尾は非対話の誘導情報行")
     p.jump(1)
-    XCTAssertEqual(p.selected, 4, "⌘↓＝情報行を飛ばして末尾の対話行へ")
+    XCTAssertEqual(p.selected, 5, "⌘↓＝情報行を飛ばして末尾の対話行へ")
     XCTAssertTrue(p.selectedItem?.isInteractive ?? false)
     p.jump(-1)
     XCTAssertEqual(p.selected, 0, "⌘↑＝先頭の対話行へ")
@@ -160,7 +160,7 @@ final class DispatchPaletteTests: OrbeTestCase {
     var opened: DispatchItem?
     p.onExecute = { executed = $0 }
     p.onOpenWeb = { opened = $0 }
-    p.selected = 5  // issue #151
+    p.selected = 6  // issue #151
     p.activate()  // ↵ の決定経路
     p.onOpenWeb(p.selectedItem!)
     XCTAssertEqual(executed?.name, "Status detection doesn't work inside tmux")
@@ -172,8 +172,8 @@ final class DispatchPaletteTests: OrbeTestCase {
     let p = makeModel()
     var executed: [String] = []
     p.onExecute = { executed.append($0.name) }
-    p.activate(at: 5)  // issue #151 の行をタップ
-    XCTAssertEqual(p.selected, 5, "タップで選択もその行へ移る")
+    p.activate(at: 6)  // issue #151 の行をタップ
+    XCTAssertEqual(p.selected, 6, "タップで選択もその行へ移る")
     XCTAssertEqual(executed, ["Status detection doesn't work inside tmux"])
 
     // ↵（選択行の決定）と同一の結果になる＝クリック用の別経路を持たない。
@@ -281,13 +281,13 @@ final class DispatchPaletteTests: OrbeTestCase {
   /// Issues が増えて index がずれても、選択は同じ issue 行に追従する。
   func testRestoreSelectionFollowsRowAcrossIndexShift() {
     let p = makeModel()
-    p.selected = 6
+    p.selected = 7
     XCTAssertEqual(p.selectedItem?.name, "Tab drag order isn't persisted")
     p.inputModality = .pointer
     var input = DispatchSectionBuilder.Input.designSample
     input.issues.insert(GitHubIssue(number: 160, title: "New issue"), at: 0)
     rebuild(p, with: input)
-    XCTAssertEqual(p.selected, 7, "行が 1 本増えた分だけ index がずれても同じ行を指す")
+    XCTAssertEqual(p.selected, 8, "行が 1 本増えた分だけ index がずれても同じ行を指す")
     XCTAssertEqual(p.selectedItem?.name, "Tab drag order isn't persisted")
     XCTAssertEqual(p.inputModality, .pointer, "index がずれても裏の更新はモダリティを奪わない")
   }
@@ -295,12 +295,12 @@ final class DispatchPaletteTests: OrbeTestCase {
   /// 選択していた行が差し替えで消えたら clamp（範囲内の対話行）に落ちる。
   func testRestoreSelectionClampsWhenRowDisappears() {
     let p = makeModel()
-    p.selected = 7
+    p.selected = 8
     XCTAssertEqual(p.selectedItem?.name, "feat: session restore", "末尾の PR 行")
     var input = DispatchSectionBuilder.Input.designSample
     input.pullRequests = []
     rebuild(p, with: input)
-    XCTAssertEqual(p.selected, 6, "消えた行の代わりに範囲内の末尾へ clamp")
+    XCTAssertEqual(p.selected, 7, "消えた行の代わりに範囲内の末尾へ clamp")
     XCTAssertTrue(p.selectedItem?.isInteractive ?? false)
   }
 
@@ -311,7 +311,7 @@ final class DispatchPaletteTests: OrbeTestCase {
     input.pullRequests = []
     input.githubState = .ghMissing
     let p = makeModel(input)
-    p.selected = 5
+    p.selected = 6
     XCTAssertNil(p.selectedItem?.action, "誘導情報行は action を持たない")
     rebuild(p, with: input)
     XCTAssertEqual(p.selected, 0, "非対話行のままにせず先頭の対話行へ clamp")

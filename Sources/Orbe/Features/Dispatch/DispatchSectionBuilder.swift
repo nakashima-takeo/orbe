@@ -16,6 +16,8 @@ enum DispatchSectionBuilder {
     var pullRequestsLoading = false
     /// 現在のチェックアウト（repo.root）。一致する worktree を primary（強調）にする。
     var currentWorktree: String?
+    /// clean 行の候補件数（safe 群の件数）。nil は分類レーンが未着地＝バッジを出さない。
+    var cleanCandidates: Int?
   }
 
   static func build(_ input: Input) -> [DispatchSection] {
@@ -46,8 +48,10 @@ enum DispatchSectionBuilder {
   // MARK: - セクションごとの item 組み立て
 
   /// Worktrees（main 含む全チェックアウト）。現在のチェックアウトは primary で強調する。
+  /// 末尾に clean 画面への入口を 1 行置く（**候補 0 件でも行は残り、バッジだけ消える**）。
   private static func worktreeItems(_ input: Input, _ prByHead: [String: Int]) -> [DispatchItem] {
-    input.worktrees.map { worktree in
+    guard !input.worktrees.isEmpty else { return [] }
+    return input.worktrees.map { worktree in
       let name = (worktree.path as NSString).lastPathComponent
       var detail = abbreviate(worktree.path)
       if let branch = worktree.branch { detail += " · \(branch)" }
@@ -58,8 +62,16 @@ enum DispatchSectionBuilder {
         badges: badge(pr), linkedPRNumber: pr,
         showsWorkingIndicator: isPrimary, isPrimary: isPrimary,
         action: .worktree(path: worktree.path),
-        footer: DispatchFooter(target: name, kind: .existing))
-    }
+        footer: .launch(target: name, kind: .existing))
+    } + [cleanItem(input)]
+  }
+
+  /// Worktrees セクション末尾の `clean` 行。`clean` は技術語で日英同一（`shell` と同じ扱い）。
+  private static func cleanItem(_ input: Input) -> DispatchItem {
+    DispatchItem(
+      glyph: .clean, name: "clean", detailKey: .dispatchCleanSubtitle,
+      aliases: ["rm", "prune", "掃除"], candidateCount: input.cleanCandidates,
+      action: .clean, footer: .note(.dispatchCleanListNote))
   }
 
   /// Local branches（既に worktree があるものは Worktrees に出るので重複排除）。
@@ -73,7 +85,7 @@ enum DispatchSectionBuilder {
           glyph: .localBranch, name: branch.name, detail: branch.relativeDate,
           badges: badge(pr), linkedPRNumber: pr,
           action: .localBranch(name: branch.name, existingWorktree: branch.worktreePath),
-          footer: DispatchFooter(target: branch.name, kind: .checkout))
+          footer: .launch(target: branch.name, kind: .checkout))
       }
   }
 
@@ -90,7 +102,7 @@ enum DispatchSectionBuilder {
         badges: badge(pr), linkedPRNumber: pr,
         action: .remoteBranch(
           name: branch.name, existingWorktree: input.worktrees.first { $0.branch == local }?.path),
-        footer: DispatchFooter(target: branch.name, kind: .checkout))
+        footer: .launch(target: branch.name, kind: .checkout))
     }
   }
 
@@ -107,7 +119,7 @@ enum DispatchSectionBuilder {
         worktreeNote: kind,
         action: .issue(
           number: issue.number, existingWorktree: existingWorktree, existingBranch: existingBranch),
-        footer: DispatchFooter(target: "#\(issue.number)", kind: kind))
+        footer: .launch(target: "#\(issue.number)", kind: kind))
     }
   }
 
@@ -129,7 +141,7 @@ enum DispatchSectionBuilder {
         action: .pullRequest(
           number: pr.number, headRef: pr.headRefName, isCrossRepo: pr.isCrossRepository,
           existingWorktree: input.worktrees.first { $0.branch == pr.headRefName }?.path),
-        footer: DispatchFooter(target: "#\(pr.number)", kind: .checkout))
+        footer: .launch(target: "#\(pr.number)", kind: .checkout))
     }
   }
 
@@ -240,7 +252,9 @@ enum DispatchSectionBuilder {
             reviewDecision: "REVIEW_REQUIRED", isCrossRepository: false)
         ],
         githubState: .ready, issuesLoading: false, pullRequestsLoading: false,
-        currentWorktree: "\(home)/wt/agent-hooks")
+        currentWorktree: "\(home)/wt/agent-hooks",
+        // clean 行の候補バッジ（design 正典の clean シーンの safe 群と同数）。
+        cleanCandidates: 3)
     }
   }
 #endif

@@ -10,6 +10,13 @@ enum DispatchAction: Equatable {
   /// existingBranch は `issue/<n>` ブランチだけ（worktree 無しで）既存か（他 case は git ref に紐づくため不要）。
   case issue(number: Int, existingWorktree: String?, existingBranch: Bool)
   case pullRequest(number: Int, headRef: String, isCrossRepo: Bool, existingWorktree: String?)
+  /// Worktrees セクション末尾の `clean` 行。決定でパレット内の clean 画面へ入る（ディレクトリを解決しない）。
+  case clean
+}
+
+/// Dispatch パレットの中身。器（カード枠・焦点契約・高さ契約）は共通で、中身だけ切り替わる。
+enum DispatchMode: Equatable {
+  case list, clean
 }
 
 /// ⇥ 巡回で選ぶ起動先。解決した worktree で agent を走らせるか、素の shell を開くか。
@@ -72,7 +79,7 @@ enum DispatchInfoKind: Equatable {
 /// 色や強調は種別＋`isPrimary` から View が導く。
 struct DispatchItem: Identifiable {
   /// 先頭グリフ列の種別（見た目とグリフ色を決める）。
-  enum Glyph { case worktree, localBranch, remoteBranch, issue, pullRequest }
+  enum Glyph { case worktree, localBranch, remoteBranch, issue, pullRequest, clean }
 
   let id = UUID()
   /// 先頭グリフ（情報/ローディング行は nil で空欄）。
@@ -82,6 +89,12 @@ struct DispatchItem: Identifiable {
   let name: String
   /// 名前の後に muted で出す補足（worktree の `~/wt/… · branch`・branch の `1d前` 等）。nil で出さない。
   var detail: String?
+  /// `detail` を言語別に引くキー（実データ由来でない固定文言の行）。View が引き、`detail` に優先する。
+  var detailKey: L10nKey?
+  /// 名前・ID・補足のほかに絞り込みへ効かせる別名（`clean` 行の `rm` / `prune` / `掃除`）。
+  var aliases: [String] = []
+  /// clean 行の候補件数（safe 群の件数）。nil で行末バッジを出さない（0 件でも行そのものは残る）。
+  var candidateCount: Int?
   /// PR のレビュー状態ノート（名前直後・muted・小）。nil で出さない。View が言語別に引く。
   var reviewNote: DispatchReviewNote?
   /// 行末チップ（`#142` 等・branch グリフ付き）。
@@ -123,13 +136,13 @@ struct DispatchBadge: Identifiable {
   var id: String { text }
 }
 
-/// フッターの実行説明。`target <前置> <agent> を新しいタブで起動` の骨。前置句は worktree 解決種別から、
-/// agent 名は選択中 agent（動的）を、後置句は共通キーを View が言語別に挿す（Japanese 断片の連結を排す）。
-struct DispatchFooter: Equatable {
-  /// 対象名（chromeText）。
-  let target: String
-  /// worktree 解決種別（前置句キーの由来）。
-  let kind: DispatchWorktreeKind
+/// 選択行に連動するフッターの中身。
+enum DispatchFooter: Equatable {
+  /// 実行説明。`↵ <target> <前置> <agent> を新しいタブで起動` の骨。前置句は worktree 解決種別から、
+  /// agent 名は選択中 agent（動的）を、後置句は共通キーを View が言語別に挿す（Japanese 断片の連結を排す）。
+  case launch(target: String, kind: DispatchWorktreeKind)
+  /// 注記のみ（実行説明もキーヒントも出さない行）。
+  case note(L10nKey)
 }
 
 /// 見出し（選択対象外）と行の束。
@@ -145,6 +158,12 @@ struct DispatchSection: Identifiable {
 @Observable final class DispatchPaletteModel {
   /// 実データセクション（provider が rebuild で差し替える）。
   var sections: [DispatchSection] = []
+  /// 表示中の画面。器は共通で中身だけ切り替わる。
+  private(set) var mode: DispatchMode = .list
+  /// 最新の分類結果（provider が rebuild ごとに更新）。nil は分類レーンが未着地。
+  var classification: [CleanRow]?
+  /// clean 画面の状態（入った瞬間に分類結果を凍結する）。
+  let clean = DispatchCleanModel()
   /// 初回ロード完了フラグ。provider の初回 rebuild で立つ。false の間はスケルトン行を出す。
   var hasLoadedOnce = false
   /// 選択とホバー追従ガード（汎用パレットと共有する `ModalSelection`）。
@@ -193,8 +212,38 @@ struct DispatchSection: Identifiable {
   var onExecute: (DispatchItem) -> Void = { _ in }
   /// ⌘↵/「開く」（セカンダリ）。issue/PR／PR に紐づく worktree・branch をブラウザで開く。
   var onOpenWeb: (DispatchItem) -> Void = { _ in }
+  /// clean 画面の ⌘⏎。選択された行の削除依頼を実行側へ渡す。
+  var onCleanExecute: ([CleanDeleteRequest]) -> Void = { _ in }
 
   init() {}
+
+  /// 入力を受け付けない状態（worktree 作成中／clean の削除実行中）。
+  var isBusy: Bool { isPreparing || clean.isDeleting }
+
+  /// clean 画面へ入る。分類が未着地（`classification == nil`）なら黙って握り潰す
+  /// （`isPreparing` 中の決定と同じ扱い。新しい表示は足さない）。
+  func enterClean() {
+    guard let rows = classification else { return }
+    clean.enter(rows: rows)
+    mode = .clean
+    focus()
+  }
+
+  /// list へ戻る（パレットは閉じない）。行数が変わっていてもカーソルは `clean` 行を指す。
+  func exitClean() {
+    guard !clean.isDeleting else { return }
+    mode = .list
+    if let index = items.firstIndex(where: { $0.action == .clean }) { selected = index }
+    focus()
+  }
+
+  /// clean の ⌘⏎ の唯一の funnel（キーと実行ボタンが共に通る）。0 件・実行中は無反応。
+  func executeClean() {
+    guard clean.canExecute else { return }
+    clean.errorMessage = nil
+    clean.isDeleting = true
+    onCleanExecute(clean.requests())
+  }
 
   /// キー操作を受けるため focusToken を進めて first responder を確定させる。
   func focus() { focusToken &+= 1 }
@@ -221,11 +270,17 @@ struct DispatchSection: Identifiable {
 
   /// 決定の唯一の funnel（↵ と行タップが共に通る）。作成中・範囲外・非対話行では実行しない。
   /// 選択を対象行へ確定してから、同じ行の item をそのまま実行へ渡す（選択更新と実行の対象がずれない）。
+  /// `clean` 行だけはパレット内の画面遷移なので外へ出さない——外（`onExecute`）はディレクトリを解決して
+  /// 起動する仕事だけを持ち、`DispatchAction.clean` が `prepareDirectory` へ届かないことが構造で決まる。
   func activate(at index: Int) {
     guard !isPreparing else { return }
     let its = items
     guard its.indices.contains(index), its[index].isInteractive else { return }
     selected = index
+    if its[index].action == .clean {
+      enterClean()
+      return
+    }
     onExecute(its[index])
   }
 
@@ -309,7 +364,7 @@ struct DispatchSection: Identifiable {
 
   private func matches(_ item: DispatchItem) -> Bool {
     guard item.isInteractive else { return false }
-    let fields = [item.name, item.idText, item.detail].compactMap { $0 }
+    let fields = [item.name, item.idText, item.detail].compactMap { $0 } + item.aliases
     return fields.contains { $0.localizedCaseInsensitiveContains(query) }
   }
 }

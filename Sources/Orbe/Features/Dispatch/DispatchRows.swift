@@ -113,7 +113,7 @@ struct DispatchSkeletonRow: View {
   }
 }
 
-/// 行末チップ（`#142` 等）。先頭に branch グリフ・地は tint(diffAdd, .12)＝`tintDone`・文字 diffAdd。
+/// 行末チップ（`#142` 等）。先頭に branch グリフ・地は `tintDiffAdded`（＝diffAdd .12）・文字 diffAdd。
 struct DispatchBadgeView: View {
   let badge: DispatchBadge
 
@@ -126,7 +126,7 @@ struct DispatchBadgeView: View {
     .foregroundStyle(Color.theme.diffAdded)
     .padding(.horizontal, 7)
     .padding(.vertical, 1)
-    .background(Capsule().fill(Color.theme.tintDone))
+    .background(Capsule().fill(Color.theme.tintDiffAdded))
     .fixedSize()
   }
 }
@@ -163,7 +163,7 @@ struct DispatchRow: View {
         .lineLimit(1)
         .truncationMode(.tail)
         .layoutPriority(1)
-      if let detail = item.detail {
+      if let detail = item.detailKey.map({ l10n.string($0) }) ?? item.detail {
         fontResolver.text(detail, base: Theme.Typography.meta)
           .font(Font.theme.meta)
           .foregroundStyle(Color.theme.textMuted)
@@ -208,6 +208,8 @@ struct DispatchRow: View {
         GitGlyphView(kind: .issue, size: 12, color: Color.theme.diffAdded)
       case .pullRequest:
         GitGlyphView(kind: .branch, size: 12, color: Color.theme.diffAdded)
+      case .clean:
+        Text("❯").font(Font.theme.chrome).foregroundStyle(Color.theme.accentPrimary)
       case .none:
         Color.clear
       }
@@ -216,9 +218,28 @@ struct DispatchRow: View {
   }
 
   /// 右端: worktree/branch はチップ（＋working リング）、issue/PR は muted ノート。issue/PR は末尾に「開く」。
+  /// clean 行は候補件数バッジ＋`⏎`（**0 件ならバッジだけ消え、行そのものは残る**）。
   private var trailing: some View {
     HStack(spacing: Theme.Space.tick) {
-      if !item.badges.isEmpty || item.showsWorkingIndicator {
+      if let count = item.candidateCount {
+        if count > 0 {
+          Text(
+            l10n.plural(
+              count, one: .dispatchCleanCandidatesOne, other: .dispatchCleanCandidatesOther)
+          )
+          .font(Font.theme.sectionLabel)
+          .foregroundStyle(Color.theme.accentPrimary)
+          .lineLimit(1)
+          .fixedSize()
+          .padding(.horizontal, 7)
+          .padding(.vertical, 1)
+          .background(Capsule().fill(Color.theme.tintAccent))
+        }
+        Text("⏎")
+          .font(Font.theme.sectionLabel)
+          .foregroundStyle(Color.theme.textMuted)
+          .fixedSize()
+      } else if !item.badges.isEmpty || item.showsWorkingIndicator {
         ForEach(item.badges) { badge in DispatchBadgeView(badge: badge) }
         if item.showsWorkingIndicator {
           StatusGlyphView(kind: .working, size: 10)

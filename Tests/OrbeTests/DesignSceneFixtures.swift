@@ -120,6 +120,84 @@ enum DesignSceneFixtures {
     return model
   }
 
+  /// list モードで `clean` 行を選んだ状態（フッターが注記だけになり、キーヒントが消える）。
+  static func dispatchCleanRowModel() -> DispatchPaletteModel {
+    let model = dispatchModel(from: .designSample)
+    if let index = model.items.firstIndex(where: { $0.action == .clean }) { model.selected = index }
+    return model
+  }
+
+  /// clean 画面（design 正典 の clean シーンと同データ）。safe 群が全チェック済みで開いた既定状態。
+  static func dispatchCleanModel() -> DispatchPaletteModel {
+    let model = dispatchModel(from: .designSample)
+    model.classification = cleanRows
+    model.enterClean()
+    return model
+  }
+
+  /// 選択 0 件（実行ボタンが 0.45 減光・ヘッダーが `0 件選択中`）。
+  static func dispatchCleanEmptyModel() -> DispatchPaletteModel {
+    let model = dispatchCleanModel()
+    for row in model.clean.rows where model.clean.state(of: row) != .none {
+      model.clean.advance(at: row.id)
+    }
+    return model
+  }
+
+  /// caution 行を 2 回選んだ状態（行末が警告色の `worktree + ブランチ` になる）。
+  static func dispatchCleanCautionModel() -> DispatchPaletteModel {
+    let model = dispatchCleanModel()
+    guard let caution = model.clean.rows.first(where: { $0.group == .caution }) else {
+      return model
+    }
+    model.clean.advance(at: caution.id)
+    model.clean.advance()
+    return model
+  }
+
+  /// 削除実行中（フッターはスピナ＋「削除中…」だけ）。
+  static func dispatchCleanDeletingModel() -> DispatchPaletteModel {
+    let model = dispatchCleanModel()
+    model.clean.isDeleting = true
+    return model
+  }
+
+  /// 一部失敗（成功行が消え、選択は全解除、フッターに赤で集約した理由）。
+  static func dispatchCleanFailureModel() -> DispatchPaletteModel {
+    let model = dispatchCleanModel()
+    let succeeded = model.clean.rows.filter { $0.group == .safe }.dropLast().map(\.id)
+    model.clean.applyPartialFailure(
+      succeededPaths: Array(succeeded),
+      message: "3 件中 1 件失敗 — render-batching: fatal: 'render-batching' is not a working tree")
+    return model
+  }
+
+  /// clean シーンの worktree 群（design 正典 の `rows` と同じ 7 本）。分類は純粋関数に通して導く。
+  private static var cleanRows: [CleanRow] {
+    let home = NSHomeDirectory()
+    func path(_ name: String) -> String { "\(home)/dev/storefront-worktrees/\(name)" }
+    return DispatchWorktreeClassifier.classify([
+      DispatchCleanFacts(
+        path: path("agent-hooks"), branch: "feature/agent-hooks", isGone: true,
+        occupancy: PaneOccupancy(cwd: path("agent-hooks"), agentState: "working")),
+      DispatchCleanFacts(
+        path: path("dispatch-delete"), branch: "feat/dispatch-delete",
+        closedPR: DispatchCleanPR(number: 142, isMerged: true), unmergedCommits: 0),
+      DispatchCleanFacts(
+        path: path("wt-path-template"), branch: "ship/…", isGone: true,
+        closedPR: DispatchCleanPR(number: 118, isMerged: false), unmergedCommits: 6),
+      DispatchCleanFacts(
+        path: path("diff-panel"), branch: "fix/diff-panel", isDirty: true, unmergedCommits: 0),
+      DispatchCleanFacts(
+        path: path("pane-focus"), branch: "fix/pane-focus",
+        closedPR: DispatchCleanPR(number: 131, isMerged: true), unmergedCommits: 0),
+      DispatchCleanFacts(
+        path: path("render-batching"), branch: "perf/render-batching", isPrunable: true,
+        unmergedCommits: 0),
+      DispatchCleanFacts(path: "\(home)/dev/storefront", branch: "main", isMain: true),
+    ])
+  }
+
   private static func dispatchModel(from input: DispatchSectionBuilder.Input)
     -> DispatchPaletteModel
   {

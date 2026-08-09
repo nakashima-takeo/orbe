@@ -73,28 +73,6 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     try renderHelpSnapshots(dir: dir)
   }
 
-  /// Dispatch パレット（実データ形の決定的サンプル・overlay ごと・突合用）。
-  /// 多件数は通常/低い窓（360）で cap＋内部スクロール、狭幅（360）で truncate を検証する。
-  private func renderDispatchSnapshots(dir: URL) throws {
-    func write(_ name: String, _ model: DispatchPaletteModel, _ w: CGFloat, _ h: CGFloat) throws {
-      try writePNG(
-        ZStack {
-          BackgroundGlow()
-          DispatchOverlay(model: model)
-        }.frame(width: w, height: h),
-        size: NSSize(width: w, height: h), name: name, dir: dir)
-    }
-    try write("dispatch_design.png", DesignSceneFixtures.dispatchModel(), 640, 520)
-    try write("dispatch_preparing.png", DesignSceneFixtures.dispatchPreparingModel(), 640, 520)
-    try write("dispatch_skeleton.png", DesignSceneFixtures.dispatchSkeletonModel(), 640, 520)
-    try write("dispatch_loading.png", DesignSceneFixtures.dispatchLoadingModel(), 640, 520)
-    try write("dispatch_gh_missing.png", DesignSceneFixtures.dispatchGhMissingModel(), 640, 520)
-    try write("dispatch_filtered.png", DesignSceneFixtures.dispatchFilteredModel(), 640, 520)
-    try write("dispatch_many.png", DesignSceneFixtures.dispatchManyModel(), 640, 520)
-    try write("dispatch_many_short.png", DesignSceneFixtures.dispatchManyModel(), 640, 360)
-    try write("dispatch_narrow.png", DesignSceneFixtures.dispatchManyModel(), 360, 520)
-  }
-
   /// StatusRow（最上段 chrome）の状態。gallery は borderless 窓なので信号機は無く、
   /// タブ・色・shrink・overflow・ストリップを検証する（信号機整列は実窓ハーネスで詰める）。
   /// 実アプリ同様に、design 正典 ステージ同寸（640×520）の BackgroundGlow の上へ重ねて撮る

@@ -144,7 +144,7 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
       it?.action, .issue(number: 44, existingWorktree: nil, existingBranch: false),
       "既存 worktree もブランチも無ければ新規作成パスを焼く")
     XCTAssertEqual(it?.worktreeNote, .new)
-    XCTAssertEqual(it?.footer?.kind, .new)
+    XCTAssertEqual(it?.footer, .launch(target: "#44", kind: .new))
   }
 
   func testIssueReusesExistingWorktree() {
@@ -161,7 +161,7 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
       .issue(number: 44, existingWorktree: "/tmp/wt/issue-44", existingBranch: true),
       "既存 worktree があれば再利用パスを焼く（既存ブランチより優先）")
     XCTAssertEqual(it?.worktreeNote, .existing)
-    XCTAssertEqual(it?.footer?.kind, .existing)
+    XCTAssertEqual(it?.footer, .launch(target: "#44", kind: .existing))
   }
 
   func testIssueUsesExistingBranchWhenNoWorktree() {
@@ -174,7 +174,7 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
       it?.action, .issue(number: 44, existingWorktree: nil, existingBranch: true),
       "worktree は無いがブランチだけ既存 → -b 無しで既存ブランチから追加")
     XCTAssertEqual(it?.worktreeNote, .checkout)
-    XCTAssertEqual(it?.footer?.kind, .checkout)
+    XCTAssertEqual(it?.footer, .launch(target: "#44", kind: .checkout))
   }
 
   // MARK: - フォールバック（GitHub 3 分岐）

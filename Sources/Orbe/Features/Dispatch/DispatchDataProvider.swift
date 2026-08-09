@@ -12,6 +12,8 @@ final class DispatchDataProvider {
   /// worktree 新規作成先のテンプレート（実効設定 `worktree-dir`）。パレットは開くたびに生成されるため、
   /// 提示元が開く時点の実効値を注入する＝常に最新値で解決する。
   private let worktreeTemplate: String
+  /// 開いた時点のペイン占有スナップショット（`SessionStore` を Dispatch から見せないための値型）。
+  private let paneOccupancies: [PaneOccupancy]
 
   private(set) var repo: GitRepo?
   private var mainWorktree: String?
@@ -22,21 +24,25 @@ final class DispatchDataProvider {
   private var remoteBranches: [GitBranch] = []
   private var issues: [GitHubIssue] = []
   private var pullRequests: [GitHubPullRequest] = []
+  private var closedPullRequests: [GitHubClosedPR] = []
   private var githubState: GitHubAvailability = .ready
   private var issuesLoading = true
   private var pullRequestsLoading = true
+  /// 分類レーンの実測結果（path → 実測）。nil の間は分類そのものが未着地。
+  private var cleanProbes: [String: DispatchCleanProbe]?
 
   /// gh 取得の上限件数。
   private let ghLimit = 30
 
   init(
     cwd: String, model: DispatchPaletteModel, localization: LocalizationStore,
-    worktreeTemplate: String
+    worktreeTemplate: String, paneOccupancies: [PaneOccupancy] = []
   ) {
     self.cwd = cwd
     self.model = model
     self.localization = localization
     self.worktreeTemplate = worktreeTemplate
+    self.paneOccupancies = paneOccupancies
   }
 
   // MARK: - ロード
@@ -74,18 +80,21 @@ final class DispatchDataProvider {
       pullRequests = cached
       pullRequestsLoading = false
     }
+    // 掃除の推定（PR が MERGED か）は行の出し分けに関わらないので loading の概念を持たない。
+    if let cached = entry.closedPullRequests { closedPullRequests = cached }
   }
 
-  /// 裏で fetch --prune し、成功したら Remote branches だけ最新化して差し替える（gh 追従と同じプログレッシブ表示）。
-  /// 失敗時（remote 無し・ネットワーク不通・認証拒否等）は何もせず現状キャッシュ据え置き＝劣化なし。
+  /// 裏で fetch --prune し、成功したら git レーンを丸ごと引き直す（gh 追従と同じプログレッシブ表示）。
+  /// 失敗時は何もせず現状据え置き＝劣化なし。
+  ///
+  /// **分類まで取り直すのが要点**——取り込み済み判定は `origin/<default>` に `git cherry` を打つので、
+  /// fetch 前の分類は「GitHub でマージした直後」に必ず未取り込みと出る（この機能の主用途がそのまま
+  /// 外れる）。`[gone]` の出どころである `localBranches` も prune で初めて確定する。clean 画面は
+  /// `enter(rows:)` で凍結済みなので、カーソルの下でリストが組み替わることはない。
   private func loadRemotePrune(_ repo: GitRepo) {
     repo.fetchPrune { [weak self] success in
       guard let self, success else { return }
-      repo.remoteBranches { [weak self] branches in
-        guard let self else { return }
-        self.remoteBranches = branches
-        self.rebuild()
-      }
+      self.loadGit(repo)
     }
   }
 
@@ -112,7 +121,21 @@ final class DispatchDataProvider {
       self.defaultBranchName = $0
       group.leave()
     }
-    group.notify(queue: .main) { self.rebuild() }
+    // 分類（レーン D）は worktree 一覧と既定ブランチが揃ってはじめて叩けるのでここから起動する。
+    group.notify(queue: .main) {
+      self.rebuild()
+      self.startCleanProbe(repo)
+    }
+  }
+
+  /// 分類レーンを起動する。fetch 着地後にも同じ入口から取り直す（結果が同じなら rebuild しない）。
+  private func startCleanProbe(_ repo: GitRepo) {
+    DispatchCleanProber(repo: repo, defaultBranch: defaultBranchName)
+      .probe(worktrees: worktrees, panes: paneOccupancies) { [weak self] probes in
+        guard let self, self.cleanProbes != probes else { return }
+        self.cleanProbes = probes
+        self.rebuild()
+      }
   }
 
   private func loadGitHub(_ repo: GitRepo) {
@@ -140,12 +163,21 @@ final class DispatchDataProvider {
           }
           self?.applyFetchedPullRequests(fetched)
         }
+        // 閉じた PR（`closed` は MERGED も含む）。掃除の推定にだけ使う。
+        GitHubCLI.shared.closedPullRequests(
+          cwd: repo.root, limit: self.ghLimit
+        ) { [weak self] fetched in
+          if let fetched {
+            DispatchGitHubCache.shared.setClosedPullRequests(fetched, for: repo.commonDir)
+          }
+          self?.applyFetchedClosedPullRequests(fetched)
+        }
       }
     }
   }
 
   /// 取得失敗（nil）は差し替えず据え置く。等値なら rebuild もしない（ちらつかない）。
-  /// gh 着地の規則はこの 2 メソッドが持つ（テストが直接叩く唯一の入口）。
+  /// gh 着地の規則は以下の 3 メソッドが持つ（テストが直接叩く唯一の入口）。
   /// needsRebuild を代入より先に評価するのが要点——キャッシュ未ヒット時は loading==true なので
   /// 失敗でも必ず rebuild してローディング行を畳む。
   func applyFetchedIssues(_ fetched: [GitHubIssue]?) {
@@ -163,16 +195,30 @@ final class DispatchDataProvider {
     if needsRebuild { rebuild() }
   }
 
+  /// 取得失敗（nil）は差し替えず据え置く。等値なら rebuild もしない（他 2 レーンと同じ規則）。
+  func applyFetchedClosedPullRequests(_ fetched: [GitHubClosedPR]?) {
+    guard let fetched, fetched != closedPullRequests else { return }
+    closedPullRequests = fetched
+    rebuild()
+  }
+
   private func rebuild() {
     guard let model else { return }
     let selectedAction = model.selectedItem?.action
+    let rows = cleanProbes.map {
+      DispatchWorktreeClassifier.rows(
+        worktrees: worktrees, localBranches: localBranches,
+        closedPullRequests: closedPullRequests, probes: $0, panes: paneOccupancies)
+    }
+    model.classification = rows
     model.hasLoadedOnce = true
     model.sections = DispatchSectionBuilder.build(
       DispatchSectionBuilder.Input(
         worktrees: worktrees, localBranches: localBranches, remoteBranches: remoteBranches,
         issues: issues, pullRequests: pullRequests, githubState: githubState,
         issuesLoading: issuesLoading, pullRequestsLoading: pullRequestsLoading,
-        currentWorktree: repo?.root))
+        currentWorktree: repo?.root,
+        cleanCandidates: rows.map(DispatchWorktreeClassifier.candidateCount)))
     model.restoreSelection(matching: selectedAction)
   }
 
@@ -246,6 +292,11 @@ final class DispatchDataProvider {
       createWorktree(
         at: worktreeDir(forSlug: slug(headRef)), base: "origin/\(headRef)",
         newBranch: headRef, track: true, completion: completion)
+
+    case .clean:
+      // clean 行はディレクトリを持たない。決定は `DispatchPaletteModel.activate` がパレット内で畳むため
+      // ここへは届かない——網羅 switch は、行種別が増えたときの分類漏れを検出する役だけを果たす。
+      assertionFailure("clean 行は prepareDirectory を通らない")
     }
   }
 
@@ -275,6 +326,30 @@ final class DispatchDataProvider {
       // 書くのは作成できたときだけ（失敗した作成の除外を残さない）。この時点では対象が実在するので
       // `check-ignore` の「既にユーザーが塞いでいるか」判定も正しく効く。
       repo.applyWorktreeExclude(entry, worktreeRoot: root) { completion(.ready(path)) }
+    }
+  }
+
+  /// 選択された worktree を削除する（実行と結果の集約は `DispatchWorktreeCleaner` が担う）。
+  ///
+  /// 完了の前に git レーンを引き直す。**1 件でも失敗したら画面に留まる**のがこの機能の設計で、
+  /// そのとき唯一の真実が削除前のままだと、list へ戻った先に消えた worktree の行が残り、clean へ
+  /// 入り直すとそれが「安全に削除できます」へチェック済みで復活する。差分を手で畳まず取り直すのは、
+  /// 削除が worktree・ブランチ・分類の複数レーンを動かすため（同じ状態へ 2 通りの道を作らない）。
+  func deleteWorktrees(
+    _ requests: [CleanDeleteRequest], completion: @escaping (CleanDeleteResult) -> Void
+  ) {
+    guard let repo else {
+      completion(
+        CleanDeleteResult(
+          succeededPaths: [], failureMessage: localization.string(.dispatchErrNotGitRepo)))
+      return
+    }
+    DispatchWorktreeCleaner(
+      repo: repo, localization: localization,
+      prunablePaths: Set(worktrees.filter(\.isPrunable).map(\.path))
+    ).run(requests) { [weak self] result in
+      self?.loadGit(repo)
+      completion(result)
     }
   }
 

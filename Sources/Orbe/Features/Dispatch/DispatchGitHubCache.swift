@@ -9,22 +9,27 @@ import Foundation
 final class DispatchGitHubCache {
   static let shared = DispatchGitHubCache()
 
-  /// どちらも `nil` = 未取得（`[]` は 0 件）。GitHubCLI の境界と同じ区別をここでも保つ。
+  /// いずれも `nil` = 未取得（`[]` は 0 件）。GitHubCLI の境界と同じ区別をここでも保つ。
   struct Entry {
     var issues: [GitHubIssue]?
     var pullRequests: [GitHubPullRequest]?
+    var closedPullRequests: [GitHubClosedPR]?
   }
 
   private var entries: [String: Entry] = [:]
 
   func entry(for key: String) -> Entry? { entries[key] }
 
-  /// issues と PR は独立に到着し独立に失敗しうるので setter を分ける（片方の失敗が他方を巻き込まない）。
+  /// 各レーンは独立に到着し独立に失敗しうるので setter を分ける（片方の失敗が他方を巻き込まない）。
   func setIssues(_ issues: [GitHubIssue], for key: String) {
     entries[key, default: Entry()].issues = issues
   }
 
   func setPullRequests(_ pullRequests: [GitHubPullRequest], for key: String) {
     entries[key, default: Entry()].pullRequests = pullRequests
+  }
+
+  func setClosedPullRequests(_ pullRequests: [GitHubClosedPR], for key: String) {
+    entries[key, default: Entry()].closedPullRequests = pullRequests
   }
 }
