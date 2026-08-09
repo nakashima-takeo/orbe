@@ -1,7 +1,7 @@
 ---
 title: テスト実装ロードマップ
 description: テストアーキテクチャへ到達するためのスライスと進捗
-updated: 2026-08-06
+updated: 2026-08-10
 ---
 
 # テスト実装ロードマップ
@@ -43,7 +43,7 @@ updated: 2026-08-06
 | 7 | コンポーネント | 状態 → 表示の対応とレイアウト数値。`MenuBarDropdown`・`StatusRowView` の並び替え計算・`CompletionList` の可視範囲 | 0 | 未着手 | — |
 | 8 | 見た目の足場 | 描画完了の確定的待機・1x 固定・1 枚 1 テストへの分解・ゴールデン比較の導入。まず 1 画面で成立を確認してから広げる | 0, 4 | 未着手 | — |
 | 9 | 生成物 | `.app` の静的検査（署名・同梱物・`Info.plist`）・agent-plugin パッケージ構成・tokens の全単射 drift ゲート。Swift 側が期待する同梱物の相対パス（`bin/orbe-report`・`agent-plugin/install.sh`・`completion-engine.js`・`zsh/.zshrc`・`orbe-defaults.conf`）と `scripts/build-app.sh` の配置の照合——ずれると全機能が無警告で no-op に倒れる。フォントに対しては `TerminalFontDelegationTests` が同じ論法で番人になっている。#72 #77 | — | 未着手 | — |
-| 10 | 外部プロセス異常系 | git の失敗・タイムアウト・部分障害。`GitRunner` への注入点（直参照 25 箇所）が前提。`gh` の 3 分岐フォールバック・`AgentCatalog` の 10 秒タイムアウト。#70 #13 | — | 未着手 | — |
+| 10 | 外部プロセス異常系 | `gh` の 3 分岐フォールバック・`GitHubCLI` の打ち切り後の待ち・`AgentCatalog` の 10 秒タイムアウト。#13 #95 | — | 未着手 | — |
 | 11 | カバレッジ可視化 | `swift test --enable-code-coverage` → lcov → PR コメント。閾値ゲートにはしない | — | 未着手 | — |
 
 ## 前倒しリファクタ
@@ -54,7 +54,6 @@ updated: 2026-08-06
 |---|---|---|
 | `WindowController.init` の分解（#75） | 結合層の観測面が `window.title` 止まりの根本原因。70 行で永続 3 種ロード・libghostty 起動・login shell subprocess 起動・プラグイン実体化を全部やる | 6 |
 | `MenuBarController` の判断部切り出し（#78） | 319 行の時間ロジックが未検証。`MenuBarArrivalDriver` と同じ時刻注入の形へ | 7 |
-| `GitRepo` への runner 注入点 | `GitRunner.shared` 直参照 25 箇所。git の異常系を駆動できない | 10 |
 | `UpdaterService` への `UserDefaults` 注入点 | standard domain は cfprefsd がユーザーレコードで解決するため HOME 差し替えでは曲がらず、ハーネスの隔離が届かない。`swift test` が実ホームの `com.apple.dt.xctest.tool.plist` を書き、逆に開発者マシンのシステム設定（`AppleInterfaceStyle`・`AppleActionOnDoubleClick`）がテストへ入り込む | 6 |
 | `CompletionLearning.shared` のリセット可能化 | `private init` が初回タッチで in-memory ストアを焼くためテスト間でリセットできない。ハーネスはプロセス級固定で回避しており、per-test の学習状態が要るスライスで必要になる | 5 |
 | `DevServerProbe` / `CompletionList` / `StatusRowView+Reorder` の純ロジック切り出し | 数値契約が `private` や `body` 内ローカルに埋まり、PNG を見る以外に検証手段が無い | 7 |

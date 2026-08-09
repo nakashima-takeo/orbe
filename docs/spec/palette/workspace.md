@@ -1,7 +1,7 @@
 ---
 title: workspace パレット
 description: ⌘⇧S の切替パレットと ⌘N の専用作成フォーム。共有 PaletteCard の焦点・入力モダリティ規律もここが持つ
-updated: 2026-08-08
+updated: 2026-08-10
 ---
 
 # workspace パレット（⌘⇧S）
@@ -63,5 +63,6 @@ workspace を一覧から選んで切り替え、その場で作成・改名・�
 - **clone 先欄（mono 入力・親ディレクトリ）**: 初期値は folder のパスと同じ導出。補完ドロップダウンは無し。欄の末尾に `/{名前}`（編集可）を並べ、実際の clone 先 `clone先/名前` を示す。下に注記「フォルダは作成時に作られます」。
 - **名前の追従/手入力**: 名前は URL 末尾セグメントから `.git` を除いて自動導出する（`repo.git`→`repo`、`git@github.com:you/repo.git`→`repo`、空なら `workspace`）。手入力でリンク解除（folder と同じ。追従の導出元は URL）。
 - **作成可否の契約**: 「作成して開く」/↵ は URL 非空（trim 後）＋clone 先の親が実在ディレクトリ＋名前非空で有効。clone 先の既存衝突は事前チェックせず、実行して git の stderr に委ねる。
-- **clone 実行（待機・キャンセル不可）**: headless で `git clone <url> <dest>` を実行する（git 知識は Git 層に閉じ、フォームは clone runner を closure で受ける）。実行中は本文をスピナーの待機表示へ差し替え、両ボタンを無効化し esc / scrim タップも無視する——**中断ハンドルが無いため完了まで待つしかない**（二重実行は submit 側の guard で防止）。成功すると clone 先を rootPath として workspace を作り、その場で開く。失敗は git の stderr をフォーム内に inline 表示（danger）し、フォームを操作可能に戻して再実行できる。
+- **clone 実行（待機・キャンセル不可）**: headless で `git clone <url> <dest>` を実行する（git 知識は Git 層に閉じ、フォームは clone runner を closure で受ける）。実行中は本文をスピナーの待機表示へ差し替え、両ボタンを無効化し esc / scrim タップも無視する——**ユーザーが中断する手立ては持たない**（二重実行は submit 側の guard で防止）。成功すると clone 先を rootPath として workspace を作り、その場で開く。失敗は理由をフォーム内に inline 表示（danger）し、フォームを操作可能に戻して再実行できる。
+- **無応答の打ち切り**: 待機は無限には続かない。無出力が続けば clone は打ち切られ（→ [editor-pane](../platform/editor-pane.md)）、専用の文言（応答が無いため中断した旨）を出してフォームが操作可能に戻る。git が自分で理由を言えた場合——接続不能など git 自身がタイムアウトを持つ経路——はその stderr の実質行をそのまま出す。打ち切られた clone は作りかけの clone 先を残さない。
 - **戻り／非破壊**: 「キャンセル」/`esc`/scrim タップで切替パレットへ戻る（clone 待機中を除く）。既存のクイック作成（一致しない名前＋Enter）はそのまま並置で残る。
