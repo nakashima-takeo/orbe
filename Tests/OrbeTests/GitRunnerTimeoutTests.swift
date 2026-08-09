@@ -49,6 +49,33 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
     XCTAssertTrue(fixture.git(["add", "-A"]).isSuccess)
   }
 
+  private var indexLockPath: String {
+    (fixture.root as NSString).appendingPathComponent(".git/index.lock")
+  }
+
+  /// index を書いている最中に止まる形を作る。`git add` は clean フィルタの出力を待つ間、
+  /// index の lock を握ったままになる。
+  private func installHangingCleanFilter() throws {
+    let filter = try fixture.installScript("hang-filter.sh", script: fixture.waitingScript)
+    XCTAssertTrue(fixture.git(["config", "filter.hang.clean", filter]).isSuccess)
+    try "*.big filter=hang\n".write(
+      toFile: (fixture.root as NSString).appendingPathComponent(".gitattributes"),
+      atomically: true, encoding: .utf8)
+    try "payload\n".write(
+      toFile: (fixture.root as NSString).appendingPathComponent("big.big"), atomically: true,
+      encoding: .utf8)
+  }
+
+  /// lock が現れるまで待つ（フィルタ起動と lock 取得の順序に依存しないため）。
+  private func waitForIndexLock(timeout: TimeInterval = 5) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      if FileManager.default.fileExists(atPath: indexLockPath) { return true }
+      usleep(10_000)
+    }
+    return false
+  }
+
   /// 返らない `ext::` transport を相手にした clone。clone は hook を持たないので、止める手段は
   /// これだけ（`protocol.ext.allow` は既定で拒否なので、テストが明示的に開ける）。
   private func cloneFromHangingRemote() throws -> (output: GitRunner.Output, dest: String) {
@@ -114,17 +141,34 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
       FileManager.default.fileExists(atPath: result.dest), "作りかけの clone 先を残さない")
   }
 
-  /// 打ち切った commit は `.git/index.lock` を残さず、後続の git 操作がそのまま通る。
-  func testStoppedCommitLeavesNoIndexLock() throws {
-    try fixture.installHook("pre-commit", script: fixture.waitingScript)
-    try stageChange()
+  /// 打ち切りは `.git/index.lock` を残さず、後続の git 操作がそのまま通る。
+  ///
+  /// **lock を実際に握っている形で測ること。** `pre-commit` hook のハングでは git はまだ lock を
+  /// 取っていないので、SIGKILL に変えても lock は残らない＝何も測らないテストになる（実測）。
+  /// index を書いている最中に止まる形として、clean フィルタ（git-lfs と同じ仕組み）が返らない
+  /// `git add` を使う。この形なら、ハング中 lock あり → SIGTERM 後は無し → SIGKILL なら残る、と
+  /// 三者が分かれる。
+  func testStoppedIndexWriteLeavesNoIndexLock() throws {
+    try installHangingCleanFilter()
 
-    XCTAssertTrue(try runSync(["commit", "-m", "blocked"]).timedOut)
+    var result: GitRunner.Output?
+    let done = expectation(description: "add")
+    DispatchQueue.global(qos: .userInitiated).async { [runner, root = fixture.root] in
+      let output = runner.runSync(["add", "--", "big.big"], cwd: root)
+      DispatchQueue.main.async {
+        result = output
+        done.fulfill()
+      }
+    }
+    XCTAssertTrue(fixture.waitUntilHung(), "前提: clean フィルタがハングしている")
+    XCTAssertTrue(
+      waitForIndexLock(), "前提: このとき index.lock が握られている（偽ならこのテストは何も測らない）")
+    wait(for: [done], timeout: 20)
 
+    XCTAssertTrue(try XCTUnwrap(result).timedOut)
     XCTAssertFalse(
-      FileManager.default.fileExists(
-        atPath: (fixture.root as NSString).appendingPathComponent(".git/index.lock")),
-      "lock が残ると、以後この repo への書き込みが全部 fatal になる")
+      FileManager.default.fileExists(atPath: indexLockPath),
+      "SIGTERM を受けた git が lock を掃除する。残ると以後この repo への書き込みが全部 fatal になる")
     XCTAssertTrue(try runSync(["status", "--porcelain"]).isSuccess, "後続の git 操作が通る")
   }
 
@@ -165,19 +209,29 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
 
   /// 独立レーンでハングしている実行は、barrier を取る書き込みを巻き添えにしない。
   /// これが効かないと、1 本の worktree 作成や clone が以後の全 git 操作を止める。
+  ///
+  /// **打ち切りに助けられない形で測る。** アイドル上限が短い runner だと、ハングが自然に打ち切られた
+  /// 後で書き込みが走って通ってしまい、レーン分離が効いていなくても緑になる。ハング側の上限は
+  /// 十分長く（60 秒）取り、書き込みの期限をそれよりはるかに短く（3 秒）取る——排他はインスタンス内で
+  /// 閉じるので、両方を同じ runner に通す必要がある。
   func testHangingIndependentLaneDoesNotBlockExclusiveWrites() throws {
+    let runner = GitRunner(idleTimeout: 60)
     try fixture.installHook("pre-commit", script: fixture.waitingScript)
     try stageChange()
-    // 打ち切られるまで返らない実行を独立レーンへ流し込む。
-    runner.run(["commit", "-m", "blocked"], cwd: fixture.root, lane: .independent) { _ in }
+    let hangFinished = expectation(description: "hanging independent run")
+    runner.run(["commit", "-m", "blocked"], cwd: fixture.root, lane: .independent) { _ in
+      hangFinished.fulfill()
+    }
     XCTAssertTrue(fixture.waitUntilHung(), "前提: 独立レーンの実行がハングしていること")
 
     let done = expectation(description: "exclusive write")
     runner.run(["config", "orbe.probe", "1"], cwd: fixture.root, lane: .exclusive) { _ in
       done.fulfill()
     }
+    wait(for: [done], timeout: 3)
 
-    wait(for: [done], timeout: 5)
+    fixture.release()  // ハングを解いて後片付け（解放し損ねると 60 秒居座る）
+    wait(for: [hangFinished], timeout: 60)
   }
 
   /// `--progress` の進捗は `\r` 区切りで流れる（実測: 200 ファイルの clone で stderr 8.7KB・CR 204 個）。
@@ -196,14 +250,15 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
     XCTAssertEqual(reason, "fatal: could not create work tree dir 'repo': Permission denied")
   }
 
-  /// 実際の失敗経路でも、理由は `fatal:` 1 行だけで返る。
-  func testCloneFailureDropsProgressLines() throws {
-    let missing = fixture.dir.appendingPathComponent("no-such-repo").path
+  /// 実際の clone 失敗も同じ整形を通り、git の前口上を落として理由だけを返す。
+  /// clone の stderr は成功・失敗どちらでも `Cloning into '<dest>'...` で始まるので、生の stderr を
+  /// そのまま見せると、バナーが宛先パスまみれになって肝心の理由が埋もれる。
+  func testCloneFailureReturnsOnlyTheEssentialReason() throws {
+    // `ext::` は git が既定で拒否する。前口上を出した後に fatal を出す、ネットワーク不要の失敗。
+    let url = "ext::\(try fixture.installScript("unused.sh", script: fixture.waitingScript))"
     var failure: GitFailure??
     let done = expectation(description: "clone")
-    GitRepo.clone(
-      url: missing, dest: fixture.dir.appendingPathComponent("dst").path, runner: runner
-    ) {
+    GitRepo.clone(url: url, dest: fixture.dir.appendingPathComponent("dst").path, runner: runner) {
       failure = $0
       done.fulfill()
     }
@@ -213,7 +268,7 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
       return XCTFail("git が理由を言っている失敗なので .message で返る")
     }
     XCTAssertTrue(reason.contains("fatal:"), "実質的な理由は残す: \(reason)")
-    XCTAssertFalse(reason.contains("\r"), "進捗の区切りが理由に混ざらない: \(reason)")
+    XCTAssertFalse(reason.contains("Cloning into"), "git の前口上は落とす: \(reason)")
     XCTAssertEqual(reason.split(separator: "\n").count, 1, "1 行の理由になる: \(reason)")
   }
 
