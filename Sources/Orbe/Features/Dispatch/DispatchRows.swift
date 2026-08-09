@@ -113,7 +113,7 @@ struct DispatchSkeletonRow: View {
   }
 }
 
-/// 行末チップ（`#142` 等）。先頭に branch グリフ・地は tint(diffAdd, .12)＝`tintDone`・文字 diffAdd。
+/// 行末チップ（`#142` 等）。先頭に branch グリフ・地は `tintDiffAdded`（＝diffAdd .12）・文字 diffAdd。
 struct DispatchBadgeView: View {
   let badge: DispatchBadge
 
@@ -126,7 +126,7 @@ struct DispatchBadgeView: View {
     .foregroundStyle(Color.theme.diffAdded)
     .padding(.horizontal, 7)
     .padding(.vertical, 1)
-    .background(Capsule().fill(Color.theme.tintDone))
+    .background(Capsule().fill(Color.theme.tintDiffAdded))
     .fixedSize()
   }
 }

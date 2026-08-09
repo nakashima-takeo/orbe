@@ -163,7 +163,7 @@ struct DispatchCleanRow: View {
         .overlay(
           Text("✓")
             .font(Font.theme.paneSegment)
-            .foregroundStyle(Color.theme.checkStroke))
+            .foregroundStyle(Color.theme.accentCheckStroke))
     }
   }
 
@@ -189,7 +189,7 @@ struct DispatchCleanChip: View {
   var body: some View {
     switch chip {
     case .mergedPR(let number):
-      filled("PR #\(number) merged", Color.theme.tintDone, .theme.diffAdded)
+      filled("PR #\(number) merged", Color.theme.tintDiffAdded, .theme.diffAdded)
     case .gone:
       filled("[gone]", Color.theme.plainPillFill, .theme.textMuted)
     case .prunable:
