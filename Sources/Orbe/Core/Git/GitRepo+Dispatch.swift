@@ -37,13 +37,18 @@ extension GitRepo {
 
   /// origin から fetch し、削除された remote 追跡ブランチを prune する（`refs/remotes/origin/*` のみ更新）。
   /// 独立レーン（`.independent`）で走らせる: 数秒かかりうる fetch を GitRunner 共有 queue の barrier
-  /// チェーンから切り離し、直後に Enter で来る書き込み（barrier）が in-flight fetch を待たないようにする
-  /// （GCD barrier は submit 済み全ブロックの完了を待つため、共有 queue で走らせると `.read` でも Enter が
-  /// 数秒ブロックされる）。並行安全: fetch が触るのは `refs/remotes/origin/*`、`addWorktree` が触るのは
-  /// worktrees・HEAD・`refs/heads` で領域は概ね disjoint、git 自身の ref/index ロックで並行安全なため共有
-  /// read-write lock の外で走らせてよい。`GIT_TERMINAL_PROMPT=0`（GitRunner 既定）で認証プロンプトはハングせず失敗に落ちる。
+  /// チェーンから切り離し、後続の `.exclusive`（EditorPane の stage・commit）が in-flight fetch を
+  /// 待たないようにする（GCD barrier は submit 済み全ブロックの完了を待つため、共有 queue で走らせると
+  /// `.read` でも後続の書き込みが数秒ブロックされる）。並行安全: fetch が触るのは `refs/remotes/origin/*`
+  /// だけで、`.exclusive` が守る index・作業ツリーとは領域が交わらない。
+  /// `GIT_TERMINAL_PROMPT=0`（GitRunner 既定）で認証プロンプトはハングせず失敗に落ちる。
+  ///
+  /// `--progress`: clone と同じ理由。非 tty の `git fetch` は転送中 1 バイトも書かないため、
+  /// 明示しないと転送に時間のかかる健全な fetch が「無出力＝ハング」と読まれて打ち切られる。
+  /// 戻り値は `Bool` なので進捗 stderr はそのまま捨てられる。
   func fetchPrune(completion: @escaping (Bool) -> Void) {
-    runner.run(["fetch", "--prune", "origin"], cwd: root, lane: .independent) { output in
+    let args = ["fetch", "--progress", "--prune", "origin"]
+    runner.run(args, cwd: root, lane: .independent) { output in
       completion(output.isSuccess)
     }
   }
@@ -96,10 +101,13 @@ extension GitRepo {
   /// `git worktree add [-b <newBranch>] [--track] <path> <base>`。成功なら nil、失敗なら理由。
   ///
   /// 独立レーン: 触るのは新規ディレクトリ・`$GIT_COMMON_DIR/worktrees/<名前>`・`-b` 指定時の
-  /// `refs/heads/<新ブランチ>` だけで、**呼び出し元チェックアウトの index には触らない**。barrier が
-  /// 守っていた不変条件（同一チェックアウトの `.git/index.lock` を奪い合わない）は壊れない。ref は
-  /// git 自身が `<ref>.lock` で守る。post-checkout hook はユーザーのコードで所要時間に上限が無いため、
-  /// barrier に置くと 1 本のハングが以後の全 git 操作を止める。
+  /// `refs/heads/<新ブランチ>`・`--track` 指定時の `.git/config`（`branch.<新ブランチ>.remote/merge`）で、
+  /// **呼び出し元チェックアウトの index には触らない**。barrier が守っていた不変条件（同一チェックアウトの
+  /// `.git/index.lock` を奪い合わない）は壊れない。ref は git 自身が `<ref>.lock`、config は `config.lock`
+  /// で守る（どちらもリトライせず即失敗し、`-b` 指定なら作成済みブランチが残る）。Orbe で `.git/config` を
+  /// 書く git 呼び出しはこれだけなので、競合相手は同時実行の `addWorktree` に限られる。
+  /// post-checkout hook はユーザーのコードで所要時間に上限が無いため、barrier に置くと 1 本のハングが
+  /// 以後の全 git 操作を止める。
   func addWorktree(
     path: String, base: String, newBranch: String?, track: Bool,
     completion: @escaping (GitFailure?) -> Void
@@ -116,7 +124,11 @@ extension GitRepo {
       // post-checkout hook は worktree が出来上がった**後**に走る。hook が返らず打ち切った場合、
       // worktree 自体は完成している。失敗として返すと、実在する worktree を指したまま再実行が
       // `fatal: a branch named 'x' already exists` で詰む——直した数より多く壊す。実体があるなら成功。
-      if output.timedOut, GitRepo.worktreeIsPresent(at: path) {
+      //
+      // ただし実体の有無が「checkout 完走」を意味するのは **git が終了した後**だけ。git は `.git` を
+      // checkout の前に書き、打ち切られると作りかけを自分で消す。猶予内に終了を観測できなかった場合の
+      // `.git` は「まだ checkout 中」か「今まさに消している最中」でありうるので、読み替えてはいけない。
+      if output.timedOut, output.exited, GitRepo.worktreeIsPresent(at: path) {
         completion(nil)
         return
       }
@@ -131,7 +143,7 @@ extension GitRepo {
 
   /// 失敗した実行を理由へ写す。打ち切りは git が何も言い残していないので、stderr でなく `.timedOut`。
   private static func failure(from output: GitRunner.Output) -> GitFailure {
-    output.timedOut ? .timedOut : .message(essentialFailureReason(output.stderrText))
+    output.timedOut ? .timedOut : .reason(essentialFailureReason(output.stderrText))
   }
 
   /// git の stderr から実質的な失敗理由を取り出す。成功・失敗どちらでも出る進捗風の行

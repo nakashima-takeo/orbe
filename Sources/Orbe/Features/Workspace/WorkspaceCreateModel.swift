@@ -214,7 +214,7 @@ import Foundation
           // 文言はここで当てる（Git 層は UI 言語を持たない）。
           switch failure {
           case .timedOut: self.cloneState = .failed(self.localization.string(.gitTimedOut))
-          case .message(let reason): self.cloneState = .failed(reason)
+          case .reason(let reason): self.cloneState = .failed(reason)
           }
         } else {
           self.cloneState = .idle

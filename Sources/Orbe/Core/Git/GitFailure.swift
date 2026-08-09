@@ -6,5 +6,5 @@ enum GitFailure: Equatable {
   /// 無出力が続いて打ち切った。git は何も言い残していないので、chrome が文言を用意する。
   case timedOut
   /// git の stderr から取り出した実質的な理由。そのまま見せる。
-  case message(String)
+  case reason(String)
 }

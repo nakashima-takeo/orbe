@@ -14,6 +14,9 @@ final class GitRunner {
     let stderr: Data
     /// 無出力が続いて打ち切ったか。`status` の値で見分けさせない（`-1` は起動失敗にも使う）。
     let timedOut: Bool
+    /// git の終了を観測できたか。打ち切った後に「作りかけの成果物が残っているか」で成否を
+    /// 読み替える呼び出し側は、その判定が意味を持つ前提としてこれを見る。
+    let exited: Bool
 
     var stdoutText: String { String(bytes: stdout, encoding: .utf8) ?? "" }
     var stderrText: String { String(bytes: stderr, encoding: .utf8) ?? "" }
@@ -42,8 +45,8 @@ final class GitRunner {
   /// GCD barrier は「submit 済みの全ブロックの完了」を待つため、共有 queue で長い操作を
   /// 走らせると（`.read` でも）後続の `.exclusive` がその完了を待つ。
   /// 独立 queue に逃がすことで、barrier が長い操作を待たなくなる。
-  private let isolatedQueue = DispatchQueue(
-    label: "dev.orbe.git.isolated", qos: .userInitiated, attributes: .concurrent)
+  private let independentQueue = DispatchQueue(
+    label: "dev.orbe.git.independent", qos: .userInitiated, attributes: .concurrent)
   /// 環境変数はプロセスの事実（ログインシェルの PATH）でありインスタンスの事実ではない。
   /// インスタンスごとに持つと、`GitRunner()` を作るたびにログインシェルを起動して待つことになる。
   private static let envLock = DispatchQueue(label: "dev.orbe.git.env")
@@ -54,9 +57,11 @@ final class GitRunner {
   /// 間は延命し、何も起きていないときだけ切る。
   private let idleTimeout: TimeInterval
 
-  /// 打ち切り（SIGTERM）の後、EOF を待つ猶予。孫プロセス（hook・`git remote-ext`・gpg）は
-  /// SIGTERM の宛先にできず pipe の書き込み端を握り続けるため、EOF は来ないことがある。
-  /// **無期限に待ってはいけない**——それは今直しているハングの作り直しになる。
+  /// EOF を待つ猶予。孫プロセス（hook が背景に残した子・`git remote-ext`・gpg）は pipe の
+  /// 書き込み端を握ったまま git より長生きするため、EOF が来ないことがある。打ち切った後と、
+  /// git が自力で終わった後の両方でこの猶予を使う。**無期限に待つと、待ちそのものが新しい
+  /// ハングになる**（切ったのに返らない／終わったのに返らない）。EOF が来ればそこで抜けるので、
+  /// 孫を残さない実行がこの猶予を消費することはない。
   private static let terminationGrace: TimeInterval = 2
 
   /// テストだけが短い `idleTimeout` を渡す（本番の 120 秒を待つテストは書けないため）。
@@ -76,7 +81,7 @@ final class GitRunner {
     switch lane {
     case .read: queue.async(execute: work)
     case .exclusive: queue.async(flags: .barrier, execute: work)
-    case .independent: isolatedQueue.async(execute: work)
+    case .independent: independentQueue.async(execute: work)
     }
   }
 
@@ -107,7 +112,7 @@ final class GitRunner {
       detach(out, err)
       return Output(
         status: -1, stdout: Data(), stderr: Data("\(error.localizedDescription)\n".utf8),
-        timedOut: false)
+        timedOut: false, exited: false)
     }
     // stdin は背景で書く。呼び出しスレッドで書くと、子が読まないまま pipe バッファ（64KB）を
     // 超えたときに**待ちへ入る前に**固まり、打ち切りが一切効かなくなる。
@@ -121,13 +126,16 @@ final class GitRunner {
     let timedOut = awaitCompletion(of: process, state: state)
     detach(out, err)
     let collected = state.collected()
+    let exited = state.hasExited
     // 打ち切りで子がまだ生きている場合、`terminationStatus` は読めない（例外になる）。
     return Output(
-      status: state.hasExited ? process.terminationStatus : -1,
-      stdout: collected.stdout, stderr: collected.stderr, timedOut: timedOut)
+      status: exited ? process.terminationStatus : -1,
+      stdout: collected.stdout, stderr: collected.stderr, timedOut: timedOut, exited: exited)
   }
 
-  /// プロセスの終了と両 pipe の EOF を待つ。無出力が `idleTimeout` 続いたら打ち切る（戻り値＝打ち切ったか）。
+  /// プロセスの終了を待ち、残った出力を汲み出して返る（戻り値＝打ち切ったか）。
+  /// 無出力が `idleTimeout` 続いたら打ち切る。EOF 待ちは終了の前後どちらでも `terminationGrace`
+  /// で有界にし、pipe を握る孫がいても待ち続けない。
   ///
   /// 待ちは semaphore で行い、ポーリングしない——`status` / `diff` は常時走るので、
   /// 数十 ms のポーリング遅延を全 git 呼び出しへ載せるのは退行になる。
@@ -135,6 +143,16 @@ final class GitRunner {
     while true {
       let progress = state.progress()
       if progress.finished { return false }
+      // 実行が終わったことを決めるのは**子の終了**であって EOF ではない。EOF が来るかは pipe の
+      // 書き込み端を握る第三者（hook が背景に残したプロセス）次第で、待ち続けると git ではなく
+      // 他人の寿命に縛られる。終了後に残るのはバッファの汲み出しだけなので猶予で有界にする。
+      // ここは打ち切りではないので `terminate()` を通さず、集めた分を持って返る。
+      if let exitedAt = progress.exitedAt {
+        let drain = exitedAt.addingTimeInterval(Self.terminationGrace)
+        guard Date() < drain else { return false }
+        state.wait(until: drain)
+        continue
+      }
       let deadline = progress.lastActivity.addingTimeInterval(idleTimeout)
       guard Date() < deadline else { break }
       state.wait(until: deadline)  // 出力が来れば期限が延びるので、目覚めたら測り直す
@@ -168,6 +186,17 @@ final class GitRunner {
     for pipe in pipes { pipe.fileHandleForReading.readabilityHandler = nil }
   }
 
+  /// 待ち手が 1 回の観測で見る状態。ばらばらに読むと組み合わせが食い違うので、
+  /// 1 度のロックで一貫した組として取り出す。
+  private struct RunProgress {
+    /// 終了かつ両 pipe が EOF。
+    let finished: Bool
+    /// 最後に出力があった時刻（アイドル期限の起点）。
+    let lastActivity: Date
+    /// 終了を観測した時刻。未終了なら nil。
+    let exitedAt: Date?
+  }
+
   /// `runSync` 1 回ぶんの共有状態。読み手 2 本（GCD のグローバルキューで発火）・
   /// `terminationHandler`・待ち手が同時に触るので、1 本のロックで束ねる。
   ///
@@ -179,11 +208,11 @@ final class GitRunner {
     private var stdout = Data()
     private var stderr = Data()
     private var openPipes = 2
-    private var exited = false
+    private var exitedAt: Date?
     private var lastActivity = Date()
 
     /// プロセスが終了済みか（`terminationStatus` を読んでよいか）。
-    var hasExited: Bool { lock.withLock { exited } }
+    var hasExited: Bool { lock.withLock { exitedAt != nil } }
 
     func append(_ data: Data, isStdout: Bool) {
       lock.withLock {
@@ -198,13 +227,16 @@ final class GitRunner {
     }
 
     func noteExit() {
-      lock.withLock { exited = true }
+      lock.withLock { if exitedAt == nil { exitedAt = Date() } }
       changed.signal()
     }
 
-    /// (終了かつ両 pipe が EOF か, 最後に出力があった時刻)。
-    func progress() -> (finished: Bool, lastActivity: Date) {
-      lock.withLock { (exited && openPipes == 0, lastActivity) }
+    func progress() -> RunProgress {
+      lock.withLock {
+        RunProgress(
+          finished: exitedAt != nil && openPipes == 0, lastActivity: lastActivity,
+          exitedAt: exitedAt)
+      }
     }
 
     /// 状態が変わるか期限が来るまで眠る。

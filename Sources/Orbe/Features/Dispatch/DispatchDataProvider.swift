@@ -236,7 +236,8 @@ final class DispatchDataProvider {
   }
 
   /// 行種別に応じて対象ディレクトリを解決する（必要なら worktree を新規作成する）。
-  /// 作成は追加のみ（現在の作業ツリーは不可侵）。失敗時は stderr をそのまま返す。
+  /// 作成は追加のみ（現在の作業ツリーは不可侵）。失敗時は表示用の失敗理由を返す
+  /// （Git 層の `GitFailure` をここで現在の UI 言語へ写す）。
   /// 既存ディレクトリを返すだけの経路はリポジトリを要さない——非 git（`repo == nil`）を畳むのは
   /// リポジトリが要る作成経路（`createWorktree`）の責務。
   func prepareDirectory(
@@ -329,7 +330,7 @@ final class DispatchDataProvider {
         // 文言はここで当てる（Git 層は UI 言語を持たない。他の失敗と同じ扱いに揃える）。
         switch failure {
         case .timedOut: completion(.failed(localization.string(.gitTimedOut)))
-        case .message(let reason): completion(.failed(reason))
+        case .reason(let reason): completion(.failed(reason))
         }
         return
       }
