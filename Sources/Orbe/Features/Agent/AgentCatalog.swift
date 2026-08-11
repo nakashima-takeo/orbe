@@ -23,13 +23,17 @@ final class AgentCatalog {
   private var refreshing = false
 
   /// 裏で再検出する。実行中なら何もしない（パレット開閉の連打で走査を積み上げない）。
-  /// 走査するのはファイルシステムだけ——PATH はプロセスの事実なので取り直さない
-  /// （`brew install` で変わるのは PATH ではなく、その PATH 上に現れるファイル）。
+  /// 走査するのはファイルシステムだけで、PATH は `ShellPATH` がプロセスで一度捉えた値を読む。
+  /// 既に PATH にあるディレクトリへ入る導入（`brew install` 等）はここで見つかり、rc に新しい
+  /// ディレクトリを足すインストーラで入れたものは次の Orbe 起動から見える。
+  ///
+  /// 待ちは `.settled`——ここは背景で走っており、probe の着地を待って困る者がいない。**打ち切って
+  /// floor で答えると、検出ゼロがこのセッションの確定結果になる**（オンボーディングは 1 度しか出ない）。
   func refresh() {
     guard !refreshing else { return }
     refreshing = true
     DispatchQueue.global(qos: .utility).async { [weak self] in
-      let found = Self.resolve(in: ShellPATH.shared.value())
+      let found = Self.resolve(in: ShellPATH.shared.value(wait: .settled))
       DispatchQueue.main.async {
         guard let self else { return }
         self.refreshing = false

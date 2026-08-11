@@ -19,7 +19,7 @@ final class ShellPATHTests: OrbeTestCase {
     try? FileManager.default.removeItem(at: stubDir)
   }
 
-  /// 引数（`-l -i -c /usr/bin/env`）を無視して、模したい出力だけを出す実行可能スクリプト。
+  /// 模したい出力を出す実行可能スクリプト（`#!/bin/sh`。受け取った引数は `$@` で見られる）。
   private func stubShell(_ body: String) throws -> String {
     let url = stubDir.appendingPathComponent("shell-\(UUID().uuidString)")
     try Data("#!/bin/sh\n\(body)\n".utf8).write(to: url)
@@ -141,6 +141,52 @@ final class ShellPATHTests: OrbeTestCase {
       waitForCachedShellPath { $0 == "/opt/custom/bin:/usr/bin" }, "既知パスは焼き込まれない")
   }
 
+  /// probe の失敗でディスクキャッシュを壊さない。前回セッションが得た PATH は、次の起動が
+  /// 既知パスだけから始まらないための安全網として残す。
+  func testFailedProbeKeepsDiskCache() {
+    drainMain()  // 他テストが残した main 上の書き込みを流し切ってから測る
+    AppStatePersistence.update { $0.cachedShellPath = "/opt/custom/bin:/usr/bin" }
+    let sut = ShellPATH(probe: { nil })
+    sut.start()
+    _ = sut.value()
+    drainMain()
+    XCTAssertEqual(AppStatePersistence.load()?.cachedShellPath, "/opt/custom/bin:/usr/bin")
+  }
+
+  /// 同期待ちの天井はプロセス全体で 1 つ。起動復元は agent ペインの数だけ `value()` を呼ぶので、
+  /// 呼び出しごとに配り直すとメインスレッドが止まる合計時間が掛け算になる。
+  func testSyncWaitBudgetIsSharedAcrossCalls() {
+    let blocked = DispatchSemaphore(value: 0)
+    let sut = ShellPATH(probe: {
+      blocked.wait()  // 着地しない probe（テスト終了時に解く）
+      return nil
+    })
+    sut.start()
+    let started = Date()
+    let floor = ShellPATH.knownPaths.joined(separator: ":")
+    for _ in 0..<3 { XCTAssertEqual(sut.value(), floor) }
+    let elapsed = Date().timeIntervalSince(started)
+    blocked.signal()
+    XCTAssertGreaterThan(elapsed, ShellPATH.syncWaitBudget / 2, "最初の呼びは天井まで待つ")
+    XCTAssertLessThan(elapsed, ShellPATH.syncWaitBudget * 2, "予算は呼び出しごとに配り直さない")
+  }
+
+  /// 背景の検出は着地を待てる。打ち切って floor で答えると、その結果がセッションに焼き付く。
+  func testSettledWaitReturnsProbeResult() {
+    let released = DispatchSemaphore(value: 0)
+    let sut = ShellPATH(probe: {
+      released.wait()
+      return "/opt/custom/bin:/usr/bin"
+    })
+    sut.start()
+    DispatchQueue.global().asyncAfter(deadline: .now() + ShellPATH.syncWaitBudget + 0.5) {
+      released.signal()
+    }
+    XCTAssertTrue(
+      sut.value(wait: .settled).hasPrefix("/opt/custom/bin:/usr/bin:"),
+      "同期待ちの天井を越えても probe の着地を待つ")
+  }
+
   func testUnchangedValueIsNotRewritten() throws {
     drainMain()  // 他テストが残した main 上の書き込みを流し切ってから測る
     AppStatePersistence.update { $0.cachedShellPath = "/opt/custom/bin:/usr/bin" }
@@ -175,6 +221,26 @@ final class ShellPATHTests: OrbeTestCase {
   func testProbeAcceptsNonZeroExit() throws {
     let shell = try stubShell("echo PATH=/usr/bin:/bin\nexit 1")
     XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell, timeout: 5), "/usr/bin:/bin")
+  }
+
+  /// login + interactive で起こす。`-i` を落とすと `.zshrc` を読まず、mise/asdf/nvm の shim を
+  /// 丸ごと取りこぼす——「起動には成功したが PATH が不完全」という検出できない degrade になる。
+  func testProbeStartsShellAsLoginInteractive() throws {
+    let argsFile = stubDir.appendingPathComponent("args")
+    let shell = try stubShell(
+      "printf '%s\\n' \"$@\" > \"\(argsFile.path)\"\necho PATH=/usr/bin:/bin")
+    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell, timeout: 5), "/usr/bin:/bin")
+    XCTAssertEqual(
+      try String(contentsOf: argsFile, encoding: .utf8), "-l\n-i\n-c\n/usr/bin/env\n")
+  }
+
+  /// rc が背景に残した孫プロセスが stdout を握ると EOF は二度と来ない。終わりを決めるのは
+  /// **シェルの終了**なので、正しく出ている PATH を捨てて上限まで張り付くことはない。
+  func testProbeSucceedsWhenGrandchildHoldsStdout() throws {
+    let shell = try stubShell("sleep 30 &\necho PATH=/usr/bin:/bin")
+    let started = Date()
+    XCTAssertEqual(ShellPATH.probeLoginShell(shell: shell, timeout: 10), "/usr/bin:/bin")
+    XCTAssertLessThan(Date().timeIntervalSince(started), 5, "EOF を待ち続けない")
   }
 
   /// 固まった rc は上限で打ち切る。上限を超えて待たない＝呼び出し元が張り付かない。

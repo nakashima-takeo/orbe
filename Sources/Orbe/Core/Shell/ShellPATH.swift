@@ -26,10 +26,26 @@ final class ShellPATH {
   /// 落ちる＝解こうとしている degrade に戻るので、寛容側へ倒す。
   static let probeTimeout: TimeInterval = 10
 
-  /// キャッシュが皆無のとき、`value()` が実行中の probe を待つ上限。メインスレッドから呼ばれうる
-  /// 経路（エディタ起動・resume 復元・agent 起動）を probe の上限いっぱい止めないための天井。
+  /// シェルの終了を観測してから、pipe に残った出力を汲み出すのに与える猶予。rc が起こした孫プロセスが
+  /// 書き込み端を握ったままだと EOF は来ないので、汲み出しはここで有界にする。env の出力（十数 KB）は
+  /// pipe バッファに収まり、シェルが終わる時点で読み手へ届き終えているため、この猶予が覆うのは
+  /// 「読み手が最後の塊を配る」までの遅延だけ。孫を残さない実行がここを消費することはない。
+  private static let drainGrace: TimeInterval = 0.5
+
+  /// キャッシュが皆無のとき、`value(wait: .bounded)` が実行中の probe を待つ**プロセス全体の**予算。
+  /// メインスレッドから呼ばれうる経路（エディタ起動・resume 復元・agent 起動）を止める合計時間の天井で、
+  /// 呼び出しごとには配り直さない——起動復元は agent ペインの数だけ `value()` を呼ぶ。
   /// 超えても probe は走り続け、着地すれば以後の呼び出しが正しい値を得る（同一セッションで自己修復する）。
   static let syncWaitBudget: TimeInterval = 2
+
+  /// probe の着地を待つ流儀。上限は `ShellPATH` の性質ではなく呼び出し側のレイテンシ要求なので、
+  /// 呼び出し側が選ぶ。
+  enum Wait {
+    /// メインスレッドから呼ばれうる経路。`syncWaitBudget` を使い切ったら待たずに floor で答える。
+    case bounded
+    /// 既に背景で走っていて、待っても誰も困らない経路。probe の着地まで待つ。
+    case settled
+  }
 
   private let probe: () -> String?
   private let condition = NSCondition()
@@ -39,6 +55,8 @@ final class ShellPATH {
   private var probing = false
   private var probeSettled = false
   private var diskChecked = false
+  /// `.bounded` の待ちが残している予算。待った分だけ減る。
+  private var syncWaitRemaining = ShellPATH.syncWaitBudget
 
   init(probe: @escaping () -> String? = { ShellPATH.probeLoginShell() }) {
     self.probe = probe
@@ -55,14 +73,14 @@ final class ShellPATH {
   }
 
   /// 子プロセスへ渡す PATH。常に使える値を返す（既知パスだけになることはあっても空にはならない）。
-  func value() -> String {
+  func value(wait: Wait = .bounded) -> String {
     start()  // 誰も start() を呼んでいなくても probe は 1 回起きる（`main.swift` の呼びは頭出し）
-    return Self.compose(login: resolvedLogin())
+    return Self.compose(login: resolvedLogin(wait: wait))
   }
 
   /// メモリ → ディスクキャッシュ → 実行中 probe の順に、検査済み login PATH を探す。
   /// どれも得られなければ nil（呼び出し側が既知パスだけの floor へ落ちる）。
-  private func resolvedLogin() -> String? {
+  private func resolvedLogin(wait: Wait) -> String? {
     condition.lock()
     defer { condition.unlock() }
     if let loginPATH { return loginPATH }
@@ -73,8 +91,19 @@ final class ShellPATH {
         return cached
       }
     }
-    let deadline = Date().addingTimeInterval(Self.syncWaitBudget)
-    while probing, Date() < deadline { condition.wait(until: deadline) }
+    guard probing else { return loginPATH }
+    switch wait {
+    case .bounded:
+      let started = Date()
+      let deadline = started.addingTimeInterval(syncWaitRemaining)
+      while probing, Date() < deadline { condition.wait(until: deadline) }
+      syncWaitRemaining = max(0, syncWaitRemaining - Date().timeIntervalSince(started))
+    case .settled:
+      // probe 自身が `probeTimeout` で打ち切るので、着地待ちは有界。同じ上限をここにも置いて、
+      // probe が戻らない実装事故に待ち手が巻き込まれないようにする。
+      let deadline = Date().addingTimeInterval(Self.probeTimeout)
+      while probing, Date() < deadline { condition.wait(until: deadline) }
+    }
     return loginPATH
   }
 
@@ -117,7 +146,7 @@ final class ShellPATH {
     let fromShell = login.map { $0.split(separator: ":").map(String.init) } ?? []
     var seen = Set<String>()
     var dirs: [String] = []
-    for dir in fromShell + knownPaths where !dir.isEmpty {
+    for dir in fromShell + knownPaths {
       guard seen.insert(dir).inserted else { continue }
       dirs.append(dir)
     }
@@ -140,30 +169,88 @@ final class ShellPATH {
     proc.standardOutput = pipe
     proc.standardInput = FileHandle.nullDevice  // rc の入力待ちで固まらせない
     proc.standardError = FileHandle.nullDevice  // rc のノイズは捨てる
-    do { try proc.run() } catch { return nil }
 
-    // 読みは別レーンへ逃がす。rc が起こした孫プロセスが stdout を握ったまま残ると EOF が来ないので、
-    // 読み切りを待つ形にすると上限が上限として働かない。
-    let box = OutputBox()
-    let done = DispatchSemaphore(value: 0)
-    DispatchQueue.global(qos: .userInitiated).async {
-      box.store((try? pipe.fileHandleForReading.readToEnd()) ?? Data())
-      done.signal()
+    let state = ProbeState()
+    pipe.fileHandleForReading.readabilityHandler = { handle in
+      let data = handle.availableData
+      if data.isEmpty {
+        handle.readabilityHandler = nil
+        state.noteEOF()
+      } else {
+        state.append(data)
+      }
     }
-    if done.wait(timeout: .now() + timeout) == .timedOut {
-      proc.terminate()
+    proc.terminationHandler = { _ in state.noteExit() }
+    do { try proc.run() } catch {
+      pipe.fileHandleForReading.readabilityHandler = nil
       return nil
     }
-    guard let data = box.take(), let out = String(data: data, encoding: .utf8) else { return nil }
+    // 打ち切った後は EOF が来ないことがあるので、返る前に必ず読み手を外す（レーンも fd も残さない）。
+    defer { pipe.fileHandleForReading.readabilityHandler = nil }
+
+    awaitProbe(proc, state: state, timeout: timeout)
+    // 不正バイトは U+FFFD へ落として読み進める。PATH と無関係な環境変数の 1 バイトで probe 全体を
+    // 捨てると、失敗として検出できないまま floor に固定される。
+    let out = String(decoding: state.collected(), as: UTF8.self)
     let line = out.split(separator: "\n").last { $0.hasPrefix("PATH=") }
     return line.map { String($0.dropFirst("PATH=".count)) }
   }
 
-  /// 読み取りレーンと呼び出し元の間で stdout を受け渡す箱。
-  private final class OutputBox: @unchecked Sendable {
+  /// シェルの終了と出力の汲み出しを待つ。**終わったことを決めるのはシェルの終了**であって EOF ではない
+  /// ——EOF が来るかは pipe の書き込み端を握る第三者（rc が背景に残したプロセス）次第で、読み切りを
+  /// 待つ形にすると、正しく取れた PATH を捨てて上限まで張り付く。終了後に残るのはバッファの汲み出し
+  /// だけなので `drainGrace` で有界にする。`timeout` は「シェルが終わらない」ケース専用の硬い上限。
+  private static func awaitProbe(_ proc: Process, state: ProbeState, timeout: TimeInterval) {
+    let deadline = Date().addingTimeInterval(timeout)
+    while true {
+      let progress = state.progress()
+      if progress.finished { return }
+      if let exitedAt = progress.exitedAt {
+        let drain = min(exitedAt.addingTimeInterval(drainGrace), deadline)
+        guard Date() < drain else { return }
+        state.wait(until: drain)
+        continue
+      }
+      guard Date() < deadline else { break }
+      state.wait(until: deadline)
+    }
+    // 上限に達した＝シェルが終わらない。SIGTERM で切り、集まった分を持って返る
+    // （PATH を出した後で固まった rc なら、その出力は読み手が既に届けている）。
+    proc.terminate()
+  }
+
+  /// probe 1 回ぶんの共有状態。読み取りレーン・`terminationHandler`・待ち手が同時に触るので、
+  /// 1 本のロックで束ねる。起こすのは状態が変わったとき（EOF・シェルの終了）だけで、出力の到着では
+  /// 起こさない——待ち手は期限まで眠っていればよい。
+  private final class ProbeState: @unchecked Sendable {
     private let lock = NSLock()
-    private var data: Data?
-    func store(_ value: Data) { lock.withLock { data = value } }
-    func take() -> Data? { lock.withLock { data } }
+    private let changed = DispatchSemaphore(value: 0)
+    private var output = Data()
+    private var eof = false
+    private var exitedAt: Date?
+
+    func append(_ data: Data) { lock.withLock { output += data } }
+
+    func noteEOF() {
+      lock.withLock { eof = true }
+      changed.signal()
+    }
+
+    func noteExit() {
+      lock.withLock { if exitedAt == nil { exitedAt = Date() } }
+      changed.signal()
+    }
+
+    /// 待ち手が 1 回の観測で見る状態。ばらばらに読むと組み合わせが食い違う。
+    func progress() -> (finished: Bool, exitedAt: Date?) {
+      lock.withLock { (eof && exitedAt != nil, exitedAt) }
+    }
+
+    /// 状態が変わるか期限が来るまで眠る。
+    func wait(until deadline: Date) {
+      _ = changed.wait(timeout: .now() + max(0, deadline.timeIntervalSinceNow))
+    }
+
+    func collected() -> Data { lock.withLock { output } }
   }
 }
