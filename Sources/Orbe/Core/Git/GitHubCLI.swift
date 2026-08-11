@@ -13,14 +13,15 @@ enum GitHubAvailability: Equatable {
 }
 
 /// gh のサブプロセス口。`GitRunner` は `/usr/bin/git` 固定契約なので gh 用に別口を設ける。
-/// PATH は `GitRunner.loginShellPATH()`（GUI の貧弱 PATH 対策の既存資産）を再利用して解決する。
+/// gh の探索も子プロセスの PATH も `ShellPATH` の値 1 つで賄う（git と同じ PATH で動く）。
 final class GitHubCLI {
   static let shared = GitHubCLI()
 
   private let queue = DispatchQueue(label: "dev.orbe.gh", qos: .userInitiated)
   private let lock = DispatchQueue(label: "dev.orbe.gh.state")
-  private var cachedEnv: [String: String]?
-  private var cachedGh: String??  // 外: 解決済みか / 内: 見つかったか
+  /// 見つかった gh の絶対パス。**見つからなかったことは覚えない**——起動直後のまだ痩せた PATH で
+  /// 一度外した結果を焼くと、PATH が整った後も gh が永久に「未導入」のままになる。
+  private var cachedGh: String?
 
   /// gh 呼び出しの時間上限（ネット待ちのハングを引きずらない）。
   private let timeout: TimeInterval = 15
@@ -167,26 +168,22 @@ final class GitHubCLI {
   }
 
   private func environment() -> [String: String] {
-    lock.sync {
-      if let cached = cachedEnv { return cached }
-      var env = ProcessInfo.processInfo.environment
-      if let path = GitRunner.loginShellPATH() { env["PATH"] = path }
-      env["GIT_TERMINAL_PROMPT"] = "0"
-      env["NO_COLOR"] = "1"
-      cachedEnv = env
-      return env
-    }
+    var env = ProcessInfo.processInfo.environment
+    env["PATH"] = ShellPATH.shared.value()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["NO_COLOR"] = "1"
+    return env
   }
 
-  /// gh の絶対パスを解決（解決済み PATH 上を走査）。一度だけ解決してキャッシュする。
+  /// gh の絶対パスを解決（子プロセスへ渡すのと同じ PATH 上を走査）。
+  /// 見つかったときだけ覚え、見つからない間は毎回走査し直す（数回の `isExecutableFile`）。
   private func resolveGh() -> String? {
     lock.sync {
       if let cached = cachedGh { return cached }
-      let path = GitRunner.loginShellPATH() ?? ProcessInfo.processInfo.environment["PATH"] ?? ""
-      let found = path.split(separator: ":").map(String.init)
+      let found = ShellPATH.shared.value().split(separator: ":").map(String.init)
         .map { ($0 as NSString).appendingPathComponent("gh") }
         .first { FileManager.default.isExecutableFile(atPath: $0) }
-      cachedGh = .some(found)
+      cachedGh = found
       return found
     }
   }

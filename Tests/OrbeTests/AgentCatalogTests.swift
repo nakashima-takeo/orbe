@@ -3,7 +3,7 @@ import XCTest
 @testable import Orbe
 
 /// AgentCatalog.resolve（PATH 文字列からの実行ファイル解決・検出の純粋部分）の検証。
-/// ログインシェル起動（loginShellPATH）は環境依存のため対象外。
+/// 走査する PATH をどう得るかは `ShellPATH` の関心で、`ShellPATHTests` が持つ。
 final class AgentCatalogTests: OrbeTestCase {
   private var base: URL!
   private var dirA: URL!

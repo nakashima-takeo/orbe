@@ -39,9 +39,6 @@ final class CompletionEngine {
   private let execTTL: TimeInterval = 3
   private let execTimeout: TimeInterval = 2
 
-  /// login シェルの PATH（GUI の貧弱な PATH では brew 導入ツールが見えないため・一度だけ解決）。
-  private lazy var loginPATH: String? = GitRunner.loginShellPATH()
-
   /// バンドル無し（`swift run`）では nil。存在時のみ engine をロードできる。
   static var bundlePath: String? {
     guard let resources = BundledResources.root else { return nil }
@@ -193,7 +190,8 @@ final class CompletionEngine {
     posix_spawnattr_setpgroup(&attr, 0)  // 0 = 子の pid を pgid に（グループのリーダー化）
 
     var env = ProcessInfo.processInfo.environment
-    if let loginPATH { env["PATH"] = loginPATH }
+    // GUI の貧弱な PATH では generator が呼ぶ brew 導入ツールが見えない。
+    env["PATH"] = ShellPATH.shared.value()
     let cArgs = ["/bin/zsh", "-c", command].map { $0.withCString(strdup) } + [nil]
     let cEnv = env.map { "\($0.key)=\($0.value)".withCString(strdup) } + [nil]
 
