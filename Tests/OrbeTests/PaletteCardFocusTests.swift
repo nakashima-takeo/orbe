@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUI
 import XCTest
 
 @testable import Orbe

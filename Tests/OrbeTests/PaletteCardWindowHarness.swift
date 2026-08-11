@@ -49,9 +49,10 @@ class PaletteCardWindowTestCase: OrbeTestCase {
     pump(0.15)
   }
 
-  /// 保留中の SwiftUI 更新を**実際のレイアウトまで**流し切る。モデルを書き換えただけでは子ビューは
-  /// 作られも壊されもせず、`NSHostingView.layout()` がその更新パスを回して初めて起きる
-  /// ——描画パスでしか出ない欠陥は、これを挟まないと修正前でも再現しない。
+  /// 保留中の SwiftUI 更新を 1 パス流し切る。モデルを書き換えただけでは子ビューは作られも壊されもせず、
+  /// RunLoop（SwiftUI が仕込む observer）か強制レイアウトのどちらかが更新パスを回して初めて起きる。
+  /// キーを送らずに状態だけ変える段（サブパレットへ潜る等）では回す機会が他に無いため、ここを挟まないと
+  /// 描画パスでしか出ない欠陥は修正前でも再現しない。
   func flush(_ window: NSWindow) {
     window.contentView?.layoutSubtreeIfNeeded()
     pump(0.3)
