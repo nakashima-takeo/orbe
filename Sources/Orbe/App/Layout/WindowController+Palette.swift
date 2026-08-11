@@ -147,17 +147,7 @@ extension WindowController {
         case .ready(let dir):
           // 同期 .ready（既存 worktree 等）では true→dismiss が 1 tick で走り palette が破棄され無描画。
           p.isPreparing = false
-          self.dismissPalette()
-          switch target {
-          case .agent(let agent):
-            self.openAgentTab(agent, env: self.agentLauncher.launchEnvironment, cwd: dir)
-          case .shell:
-            self.openShellTab(cwd: dir)
-          }
-          // DispatchOverlay（focus を握る TextField 入り）の SwiftUI teardown は非同期で、
-          // openAgentTab の同期フォーカス確定の後に first responder を奪いうる。teardown 後の
-          // 次 runloop tick で新タブ surface へフォーカスを再確定し、即打鍵できる状態にする。
-          DispatchQueue.main.async { [weak self] in self?.focusActivePane() }
+          self.openResolvedDirectory(dir, target: target)
         case .failed(let message):
           p.isPreparing = false  // 進捗表示 OFF。エラー表示にスピナが被らないよう必ず下ろす。
           p.errorMessage = message
@@ -178,20 +168,43 @@ extension WindowController {
     reconfirmFocusNextTick()  // 別 overlay からの遷移で去りゆくカードの teardown に勝つ
   }
 
-  /// clean の ⌘⏎ を配線する。全件成功ならパレットを閉じ、1 件でも失敗したら閉じずに clean へ留まって
-  /// 成功行を取り除き、フッターへ赤で理由を出す（ユーザーは選び直して再実行できる）。
+  /// 解決済みディレクトリで新タブを起こす唯一の 1 本（Enter の実行と clean の `o タブで開く` が共に通る）。
+  /// `dismissPalette()` ＋次 tick の `focusActivePane()` の 2 点セットは、DispatchOverlay
+  /// （focus を握る TextField 入り）の SwiftUI teardown が非同期で、同期のフォーカス確定の後に
+  /// first responder を奪いうるという既知の事情への手当てなので、2 箇所に複製しない。
+  private func openResolvedDirectory(_ dir: String, target: DispatchTarget) {
+    dismissPalette()
+    switch target {
+    case .agent(let agent):
+      openAgentTab(agent, env: agentLauncher.launchEnvironment, cwd: dir)
+    case .shell:
+      openShellTab(cwd: dir)
+    }
+    DispatchQueue.main.async { [weak self] in self?.focusActivePane() }
+  }
+
+  /// clean の削除の駆動を配線する。1 件ごとの進捗をモデルへ流し、駆動が終わったら終端
+  /// （失敗が無ければ一覧へ戻り、あれば一部失敗画面に留まる）はモデルが決める。
   private func wireDispatchClean(_ p: DispatchPaletteModel) {
-    p.onCleanExecute = { [weak self] requests in
+    p.onCleanExecute = { [weak self] requests, token in
       guard let self, let provider = self.model.dispatchProvider else { return }
-      provider.deleteWorktrees(requests) { [weak self] result in
-        guard let self, let p = self.model.dispatchPalette else { return }
-        guard let message = result.failureMessage else {
-          p.clean.isDeleting = false
-          self.dismissPalette()
-          return
+      provider.deleteWorktrees(requests, token: token) { [weak self] progress in
+        guard let clean = self?.model.dispatchPalette?.clean else { return }
+        switch progress {
+        case .started(let path): clean.markRunning(path: path)
+        case .finished(let path, let outcome): clean.markFinished(path: path, outcome: outcome)
         }
-        p.clean.applyPartialFailure(succeededPaths: result.succeededPaths, message: message)
+      } completion: { [weak self] in
+        self?.model.dispatchPalette?.settleCleanRun()
       }
+    }
+    // 失敗した worktree は解決済みのパスなので `prepareDirectory` を通さない
+    // （`DispatchAction.clean` が解決経路へ届かない構造を崩さない）。
+    p.onOpenWorktree = { [weak self] path in
+      guard let self, let p = self.model.dispatchPalette, let target = p.selectedTarget else {
+        return
+      }
+      self.openResolvedDirectory(path, target: target)
     }
   }
 

@@ -212,13 +212,15 @@ struct DispatchSection: Identifiable {
   var onExecute: (DispatchItem) -> Void = { _ in }
   /// ⌘↵/「開く」（セカンダリ）。issue/PR／PR に紐づく worktree・branch をブラウザで開く。
   var onOpenWeb: (DispatchItem) -> Void = { _ in }
-  /// clean 画面の ⌘⏎。選択された行の削除依頼を実行側へ渡す。
-  var onCleanExecute: ([CleanDeleteRequest]) -> Void = { _ in }
+  /// clean の削除を撃つ（⌘⏎ と失敗分の再試行が共に通る）。中断の札も一緒に渡す。
+  var onCleanExecute: ([CleanDeleteRequest], CleanRunToken) -> Void = { _, _ in }
+  /// clean の失敗行をタブで開く。パスは解決済み（既存 worktree）なので `prepareDirectory` を通らない。
+  var onOpenWorktree: (String) -> Void = { _ in }
 
   init() {}
 
   /// 入力を受け付けない状態（worktree 作成中／clean の削除実行中）。
-  var isBusy: Bool { isPreparing || clean.isDeleting }
+  var isBusy: Bool { isPreparing || clean.phase == .deleting }
 
   /// clean 画面へ入る。分類が未着地（`classification == nil`）なら黙って握り潰す
   /// （`isPreparing` 中の決定と同じ扱い。新しい表示は足さない）。
@@ -231,18 +233,10 @@ struct DispatchSection: Identifiable {
 
   /// list へ戻る（パレットは閉じない）。行数が変わっていてもカーソルは `clean` 行を指す。
   func exitClean() {
-    guard !clean.isDeleting else { return }
+    guard clean.phase == .selecting else { return }
     mode = .list
     if let index = items.firstIndex(where: { $0.action == .clean }) { selected = index }
     focus()
-  }
-
-  /// clean の ⌘⏎ の唯一の funnel（キーと実行ボタンが共に通る）。0 件・実行中は無反応。
-  func executeClean() {
-    guard clean.canExecute else { return }
-    clean.errorMessage = nil
-    clean.isDeleting = true
-    onCleanExecute(clean.requests())
   }
 
   /// キー操作を受けるため focusToken を進めて first responder を確定させる。

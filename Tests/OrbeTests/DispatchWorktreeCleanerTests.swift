@@ -36,37 +36,37 @@ final class DispatchWorktreeCleanerTests: OrbeTestCase {
     try FileManager.default.removeItem(
       atPath: (dirty.path as NSString).appendingPathComponent("a.txt"))
 
-    let result = try run([dirty.request(deleteBranch: false), clean.request(deleteBranch: false)])
+    let outcomes = try run([dirty.request(deleteBranch: false), clean.request(deleteBranch: false)])
 
-    XCTAssertEqual(result.succeededPaths, [clean.path], "clean な方だけ消える")
+    XCTAssertEqual(outcomes[dirty.path], .failed(CleanFailure(step: .dirty, log: "")))
+    XCTAssertEqual(outcomes[clean.path], .succeeded(branch: nil, pruned: false))
     XCTAssertTrue(FileManager.default.fileExists(atPath: dirty.path), "dirty な方は残る")
     XCTAssertFalse(FileManager.default.fileExists(atPath: clean.path))
-    XCTAssertNotNil(result.failureMessage, "失敗は握り潰さず集約する")
   }
 
   /// `deleteBranch` が false ならブランチは残る（判断は呼び出し側が持ち、実行体は従うだけ）。
   func testBranchSurvivesWhenNotRequested() throws {
     let wt = try addWorktree("wt", branch: "feat/keep")
 
-    let result = try run([wt.request(deleteBranch: false)])
+    let outcomes = try run([wt.request(deleteBranch: false)])
 
-    XCTAssertEqual(result.succeededPaths, [wt.path])
-    XCTAssertNil(result.failureMessage)
+    XCTAssertEqual(outcomes[wt.path], .succeeded(branch: nil, pruned: false))
     XCTAssertTrue(git(["branch"]).stdoutText.contains("feat/keep"), "頼まれていないブランチは消さない")
   }
 
   func testBranchIsDeletedWhenRequested() throws {
     let wt = try addWorktree("wt", branch: "feat/drop")
 
-    let result = try run([wt.request(deleteBranch: true)])
+    let outcomes = try run([wt.request(deleteBranch: true)])
 
-    XCTAssertEqual(result.succeededPaths, [wt.path])
-    XCTAssertNil(result.failureMessage)
+    XCTAssertEqual(
+      outcomes[wt.path], .succeeded(branch: "feat/drop", pruned: false),
+      "成功はブランチ名まで名乗る（行のメッセージがそこから出る）")
     XCTAssertFalse(git(["branch"]).stdoutText.contains("feat/drop"))
   }
 
   /// 分類してから実行するまでにブランチが進んだら、worktree は消えてもブランチは残る
-  /// （凍結した判定でコミットを消さない）。
+  /// （凍結した判定でコミットを消さない）。失敗は per-row で返り、**生ログが載る**。
   func testBranchSurvivesWhenItMovedSinceClassification() throws {
     let wt = try addWorktree("wt", branch: "feat/moved")
     // 分類の後に別の経路からコミットが載る。
@@ -74,11 +74,41 @@ final class DispatchWorktreeCleanerTests: OrbeTestCase {
     XCTAssertTrue(gitIn(wt.path, ["add", "-A"]).isSuccess)
     XCTAssertTrue(gitIn(wt.path, ["commit", "-qm", "later"]).isSuccess)
 
-    let result = try run([wt.request(deleteBranch: true)])
+    let outcomes = try run([wt.request(deleteBranch: true)])
 
-    XCTAssertEqual(result.succeededPaths, [wt.path], "worktree（作業コピー）は消える")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: wt.path), "worktree（作業コピー）は消える")
     XCTAssertTrue(git(["branch"]).stdoutText.contains("feat/moved"), "コミットごと消えない")
-    XCTAssertNotNil(result.failureMessage)
+    guard case .failed(let failure) = try XCTUnwrap(outcomes[wt.path]) else {
+      return XCTFail("失敗として返るべき")
+    }
+    XCTAssertEqual(failure.step, .branch)
+    XCTAssertFalse(failure.log.isEmpty, "サブラインへ出す git の生ログが載る")
+    XCTAssertFalse(failure.log.contains("\n"), "1 行に畳んである")
+  }
+
+  /// **中断は「まだ撃っていない残り」だけを止める。** 1 件目の実行中に札を立てたら 2 件目は撃たれない。
+  func testCancelStopsTheRemainingRequests() throws {
+    let first = try addWorktree("wt-1", branch: "feat/1")
+    let second = try addWorktree("wt-2", branch: "feat/2")
+    let token = CleanRunToken()
+
+    var outcomes: [String: CleanOutcome] = [:]
+    let done = expectation(description: "cleaner.run")
+    cleaner.run(
+      [first.request(deleteBranch: false), second.request(deleteBranch: false)], token: token
+    ) { progress in
+      switch progress {
+      case .started: token.cancel()  // 1 件目が走り出した時点で中断する
+      case .finished(let path, let outcome): outcomes[path] = outcome
+      }
+    } completion: {
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 30)
+
+    XCTAssertEqual(outcomes[first.path], .succeeded(branch: nil, pruned: false), "撃った 1 件は完走する")
+    XCTAssertNil(outcomes[second.path], "以降は撃たない")
+    XCTAssertTrue(FileManager.default.fileExists(atPath: second.path))
   }
 
   // MARK: - ヘルパ
@@ -100,15 +130,17 @@ final class DispatchWorktreeCleanerTests: OrbeTestCase {
     return Worktree(path: path, branch: branch, head: head)
   }
 
-  private func run(_ requests: [CleanDeleteRequest]) throws -> CleanDeleteResult {
-    var value: CleanDeleteResult?
+  /// 1 件ごとの結果をパスで集める（実行体は per-row の結果しか返さない）。
+  private func run(_ requests: [CleanDeleteRequest]) throws -> [String: CleanOutcome] {
+    var outcomes: [String: CleanOutcome] = [:]
     let done = expectation(description: "cleaner.run")
-    cleaner.run(requests) {
-      value = $0
+    cleaner.run(requests, token: CleanRunToken()) { progress in
+      if case .finished(let path, let outcome) = progress { outcomes[path] = outcome }
+    } completion: {
       done.fulfill()
     }
     wait(for: [done], timeout: 30)
-    return try XCTUnwrap(value)
+    return outcomes
   }
 
   @discardableResult
