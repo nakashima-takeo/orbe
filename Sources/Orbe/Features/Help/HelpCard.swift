@@ -283,7 +283,8 @@ private struct HelpSidebarRow: View {
       Text(name)
         .font(Font.theme.helpSidebarItem)
         .foregroundStyle(selected ? Color.theme.textPrimary : Color.theme.textMuted)
-        .lineLimit(1)
+        // 幅 168 に収まらないカテゴリ名は折り返して全文見せる（切ると何の分類か読めない）。
+        .lineLimit(2)
         .frame(maxWidth: .infinity, alignment: .leading)
       Text(count)
         .font(Font.theme.helpCount)
