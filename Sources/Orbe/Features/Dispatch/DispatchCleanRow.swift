@@ -89,15 +89,19 @@ struct DispatchCleanRow: View {
     .onTapGesture { if !inUse { model.toggle(at: row.id) } }
   }
 
-  /// ブランチの扱いを文字で選ぶサブライン。**チェックした確認行**にだけ開く。
+  /// **この行の詳細**。チェックした確認行にだけ開く。ブランチの扱いを選ぶセグメントは中身の 1 つで、
+  /// detached（ブランチが無い）行では損失の内訳だけが並ぶ——rebase 停止中の worktree は必ず
+  /// detached なので、ここを閉じると失う untracked / 未コミットが画面から落ちる。
   /// 右クラスタの 2 枚に載らなかったピルもここへ回る（見た目は右クラスタと同じまま）。
   private var subline: some View {
     HStack(spacing: Theme.Space.step) {
-      Text(l10n.format(.dispatchCleanBranchLabel, row.branch ?? ""))
-        .lineLimit(1)
-        .truncationMode(.tail)
-      segment(.dispatchCleanBranchKeep, choice: .keep)
-      segment(.dispatchCleanBranchDelete, choice: .delete)
+      if let branch = row.branch {
+        Text(l10n.format(.dispatchCleanBranchLabel, branch))
+          .lineLimit(1)
+          .truncationMode(.tail)
+        segment(.dispatchCleanBranchKeep, choice: .keep)
+        segment(.dispatchCleanBranchDelete, choice: .delete)
+      }
       if !row.lossNotes.isEmpty {
         Text(l10n.format(.dispatchCleanLossNote, lossNote))
           .foregroundStyle(Color.theme.stateWaiting)

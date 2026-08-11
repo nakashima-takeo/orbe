@@ -126,10 +126,16 @@ final class CleanRunToken {
   /// この行のブランチの扱い（辞書に無ければ既定の `.keep`）。
   func branchChoice(of row: CleanRow) -> CleanBranchChoice { branchChoice[row.id] ?? .keep }
 
-  /// サブラインが開いているか。**確認行をチェックした瞬間**に開き、ブランチを持たない行
-  /// （detached）には開くものが無い。
+  /// サブライン（この行の詳細）が開いているか。**確認行をチェックした瞬間**に開く。
+  /// 開ける条件は行自身が持つ（`canExpandSubline`）——受け皿に積んだ語が画面へ出る唯一の経路なので、
+  /// 「積める行」と「開ける行」を 1 つの述語に揃える。
   func isExpanded(_ row: CleanRow) -> Bool {
-    row.group == .caution && isChecked(row) && row.branch != nil
+    row.canExpandSubline && isChecked(row)
+  }
+
+  /// ブランチの扱いを選べるか（詳細の中身の 1 つ。detached には選ぶものが無い）。
+  func canChooseBranch(_ row: CleanRow) -> Bool {
+    isExpanded(row) && row.branch != nil
   }
 
   /// カーソル行（範囲外なら nil）。
@@ -172,7 +178,7 @@ final class CleanRunToken {
   /// カーソル行のブランチの扱いを決める。**サブラインが開いている行だけで効く**
   /// （開いていない行に不可視の状態を持たせない）。
   func chooseBranch(_ choice: CleanBranchChoice) {
-    guard phase == .selecting, let row = cursorRow, isExpanded(row) else { return }
+    guard phase == .selecting, let row = cursorRow, canChooseBranch(row) else { return }
     branchChoice[row.id] = choice
   }
 
@@ -181,7 +187,7 @@ final class CleanRunToken {
     guard phase == .selecting, let index = selectableRows.firstIndex(where: { $0.id == rowID })
     else { return }
     cursor = index
-    guard isExpanded(selectableRows[index]) else { return }
+    guard canChooseBranch(selectableRows[index]) else { return }
     branchChoice[rowID] = choice
   }
 

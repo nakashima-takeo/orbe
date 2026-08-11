@@ -265,6 +265,41 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
       r.overflowNotes, [.locked, .gone], "上限に載らなかった候補は溢れの受け皿へ回る")
   }
 
+  /// **detached の確認行もサブラインを開ける。** rebase 停止中の worktree は必ず detached で、
+  /// 衝突中は未コミットも untracked も在るので軸A が 3 語競合する——ブランチが無いことを理由に
+  /// 閉じると、取り消せない削除の直前に失うものが画面から落ちる。
+  func testDetachedCautionRowCanStillOpenItsDetail() {
+    let r = row(
+      DispatchCleanFacts(
+        path: "/wt/x", status: GitWorktreeStatusCounts(modified: 2, untracked: 3),
+        operation: .inProgress(.rebase)))
+    XCTAssertEqual(r.group, .caution)
+    XCTAssertNil(r.branch)
+    XCTAssertEqual(r.chips, [.inProgress(.rebase), .uncommitted(2)])
+    XCTAssertEqual(
+      r.lossNotes, [.inProgress(.rebase), .uncommitted(2), .untracked(3)],
+      "ピルから溢れた untracked も内訳に出る")
+    XCTAssertTrue(r.canExpandSubline, "ブランチが無くても書くことがあるなら開く")
+  }
+
+  /// 開くものが何も無い確認行は開かない（空のサブラインを作らない）。
+  func testCautionRowWithNothingToSayDoesNotExpand() {
+    let r = row(DispatchCleanFacts(path: "/wt/x", status: clean, unmergedCommits: nil))
+    XCTAssertEqual(r.group, .caution)
+    XCTAssertTrue(r.vocabulary.isEmpty)
+    XCTAssertFalse(r.canExpandSubline)
+  }
+
+  /// open PR の行は安全群に入れない。安全群はブランチ削除が無条件になる群だが、
+  /// レビュー中のブランチの既定は「残す」——初期チェック済みで並べると確認の機会が無い。
+  func testOpenPullRequestKeepsTheRowInCaution() {
+    let r = row(
+      DispatchCleanFacts(
+        path: "/wt/x", branch: "feat/x", isPrunable: true, openPR: 139, unmergedCommits: 0))
+    XCTAssertEqual(r.group, .caution)
+    XCTAssertFalse(r.deletesBranchImplicitly, "レビュー中のブランチを黙って消さない")
+  }
+
   /// 上限に載らなかったピル候補は、**損失でなくても**サブラインへ回る。
   /// 受け皿を損失の内訳と兼ねると、`locked` はピルからも内訳からも落ちて画面から消える——
   /// その行が安全群に入れない理由そのものなので、読めなくなると確認群にいる理由が説明されない。

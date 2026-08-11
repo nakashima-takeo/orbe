@@ -74,8 +74,13 @@ enum DispatchWorktreeClassifier {
   /// 消えて困るものが無いことの直接確認。**すべて**通ってはじめて safe。
   /// 実体が無い（prunable）ときは「ディスク上に失うものが無い」ので、作業ツリー側の 2 項目
   /// （status と停止中の操作）は自動的に満たす。
+  ///
+  /// **open PR のある行は safe に入れない。** 安全群はブランチ削除が無条件になる群だが、
+  /// レビュー中のブランチの既定は「残す」——初期チェック済みで並べると、確認の機会が無いまま
+  /// レビュー中のブランチが消える。ここを開けておくと「安全の根拠を隠したまま黄の警告だけを出す
+  /// 安全行」も作れてしまう（安全群に loss の語が 1 つも立たないことが、この 1 行で決まる）。
   private static func passesSafety(_ f: DispatchCleanFacts) -> Bool {
-    guard !f.isMain, f.occupancy == nil, f.lockReason == nil else { return false }
+    guard !f.isMain, f.occupancy == nil, f.lockReason == nil, f.openPR == nil else { return false }
     guard f.isPrunable || f.status?.isClean == true else { return false }
     // **status が clean でも rebase 途中の worktree は safe に入れない。** コンフリクトの無い停止点では
     // status が空になりうるので、status だけを見ていると初期チェック済みのまま消える。

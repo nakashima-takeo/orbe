@@ -3,64 +3,108 @@ import XCTest
 @testable import Orbe
 
 /// 分類器の出力が満たす**不変条件**（個別ケースではなく直積の総当たりで主張する）。
-/// 語彙は 3 軸の直積なので、ケースを 1 つずつ並べる書き方では組み合わせの穴が残る——
-/// 「立った事実が画面から消えていない」「安全行が損失を隠していない」の 2 つは、
-/// 入力の形を総当たりして毎回確かめる。
+///
+/// 主張の面は「モデルの配列に入っているか」ではなく **「ユーザーが到達できるか」**。
+/// `lossNotes` / `overflowNotes` はサブラインが開く行でしか描かれないので、配列へ積んだだけの語は
+/// 画面から消えているのと同じ——配列の上で不変条件を書くと、受け皿を広げても「開かない行」から
+/// 別の語が落ち続ける。到達可能性の上に立てれば、その一群がまとめて落ちる。
 extension DispatchWorktreeClassifierTests {
 
-  /// **立った事実は 1 つも画面から消えない。** 12 軸の直積を回し、行が名乗った語
-  /// （`vocabulary`）がすべて 右クラスタ・損失の内訳・溢れの受け皿のどれかに出ることを主張する。
-  /// 受け皿の入口が「軸の先頭だけ」に狭まると、軸の中で押し出された語がここで落ちる。
-  func testNoRaisedFactEverDisappears() {
+  /// **立った事実は、その行の状態で必ず画面から到達できる。**
+  /// 右クラスタは常に描かれ、内訳と溢れは「サブラインを開ける行」でだけ描かれる。
+  /// 開けない行に語を積んだら、それは不到達（＝消えている）。
+  func testEveryRaisedFactIsReachable() {
+    var violations: [String] = []
     forEachShape { facts, shape in
       let r = row(facts)
-      let visible = r.chips + r.lossNotes + r.overflowNotes
-      for chip in r.vocabulary {
-        XCTAssertTrue(
-          visible.contains(chip),
-          "\(chip.id) がどこにも出ない（\(shape)）")
+      // 安全行だけは 2 枚に載らなかった語が出ない（サブラインを開かないため。台帳 逸脱 18）。
+      // **記録済みの唯一の不到達**で、その中身が安全な範囲に留まることは下の 2 本が別に固定する
+      // ——loss は 1 つも立たない・安全の根拠は必ず右クラスタに載る。
+      guard r.group != .safe else { return }
+      let reachable = r.chips + (r.canExpandSubline ? r.lossNotes + r.overflowNotes : [])
+      for chip in r.vocabulary where !reachable.contains(chip) {
+        violations.append("\(chip.id) が不到達 — \(shape)")
       }
-      XCTAssertTrue(
-        r.overflowNotes.allSatisfy { !r.chips.contains($0) },
-        "溢れの受け皿は右クラスタと重ならない（\(shape)）")
-      XCTAssertTrue(
-        r.lossNotes.allSatisfy { !r.overflowNotes.contains($0) },
-        "損失の内訳と溢れの受け皿は重ならない（\(shape)）")
     }
+    XCTAssertEqual(
+      violations.count, 0,
+      "立った語に画面へ出る経路が無い（先頭 3 件）: \(violations.prefix(3).joined(separator: " / "))")
   }
 
-  /// **安全群の行が、安全の根拠を隠したまま損失の警告を出さない。**
-  /// 安全行はサブラインを開かないので、溢れた語は画面に出ない——だから安全行の溢れは
-  /// safe / neutral に限られていなければならず、loss の語は必ずピルに載る必要がある。
-  func testSafeRowsNeverHideALossBehindTheCap() {
+  /// **安全群の行は損失を 1 つも名乗らない。** 安全確認を全部通った行に黄の語が立つのは、
+  /// 語の意味が行の事実と食い違っているということ——安全行はサブラインを開かないので、
+  /// 立った時点で「安全の根拠を隠したまま警告だけ出す行」が作れてしまう。
+  func testSafeRowsRaiseNoLoss() {
+    var violations: [String] = []
     forEachShape { facts, shape in
       let r = row(facts)
       guard r.group == .safe else { return }
-      XCTAssertTrue(
-        r.overflowNotes.allSatisfy { $0.tone != .loss },
-        "安全行が loss の語を画面から落とした（\(shape)）")
-      XCTAssertTrue(
-        r.lossNotes.isEmpty, "安全行は失うものを持たない（\(shape)）")
-      // 安全行が名乗ってよい loss の語は `PR #N open`（レビュー中の警告）だけ。それ以外が出るなら、
-      // 語の意味が行の事実と食い違っている——安全行は「消えて困るものが無い」ことを通った行なので、
-      // 完全喪失を主張する語（`未 push · ローカルのみ` / `remote +N`）は成り立たない。
       for chip in r.vocabulary where chip.tone == .loss {
-        guard case .openPR = chip else {
-          return XCTFail("安全行が損失を主張する語を名乗った: \(chip.id)（\(shape)）")
+        violations.append("\(chip.id) — \(shape)")
+      }
+    }
+    XCTAssertEqual(
+      violations.count, 0,
+      "安全行が損失を主張した（先頭 3 件）: \(violations.prefix(3).joined(separator: " / "))")
+  }
+
+  /// **安全群の行は安全の根拠を必ず右クラスタに出す。** 出ない語（安全行はサブラインを開かない）は
+  /// 根拠を言い換えた safe / neutral の重複に限られる、というのが台帳 逸脱 18 の約束。
+  func testSafeRowsAlwaysShowTheirEvidence() {
+    var violations: [String] = []
+    forEachShape { facts, shape in
+      let r = row(facts)
+      guard r.group == .safe else { return }
+      let evidence = r.vocabulary.filter { $0.tone == .safe }
+      if !evidence.isEmpty, !evidence.contains(where: { r.chips.contains($0) }) {
+        violations.append("根拠が右クラスタに無い — \(shape)")
+      }
+      for chip in r.overflowNotes where chip.tone == .loss {
+        violations.append("不到達の溢れが損失を含む: \(chip.id) — \(shape)")
+      }
+    }
+    XCTAssertEqual(
+      violations.count, 0,
+      "安全行が根拠を隠した（先頭 3 件）: \(violations.prefix(3).joined(separator: " / "))")
+  }
+
+  /// 2 つの受け皿は重ならない（同じ語をサブラインに 2 度書かない）。
+  func testTheTwoReceptaclesNeverOverlap() {
+    var violations: [String] = []
+    forEachShape { facts, shape in
+      let r = row(facts)
+      for chip in r.overflowNotes where r.chips.contains(chip) || r.lossNotes.contains(chip) {
+        violations.append("\(chip.id) — \(shape)")
+      }
+    }
+    XCTAssertEqual(
+      violations.count, 0,
+      "溢れが他の受け皿と重なった（先頭 3 件）: \(violations.prefix(3).joined(separator: " / "))")
+  }
+
+  /// 分類の入力になりうる形を総当たりする。
+  /// **群を決めるフィールド（`isPrunable` / `isMain` / `occupancy` / `branch`）も振る**——
+  /// 振らないと、不到達が最も起きやすい「安全行」「detached 行」「使用中行」が総当たりの外に残る。
+  private func forEachShape(_ body: (DispatchCleanFacts, String) -> Void) {
+    let occupancies: [PaneOccupancy?] = [nil, PaneOccupancy(cwd: "/wt/x", agentState: "waiting")]
+    for branch in [nil, "feat/x"] as [String?] {
+      for isPrunable in [false, true] {
+        for isMain in [false, true] {
+          for occupancy in occupancies {
+            forEachDetail(branch, isPrunable, isMain, occupancy, body)
+          }
         }
       }
-      let safeEvidence: [CleanChip] = r.vocabulary.filter { $0.tone == .safe }
-      XCTAssertTrue(
-        safeEvidence.isEmpty || safeEvidence.contains(where: { r.chips.contains($0) }),
-        "安全の根拠が 1 つも右クラスタに出ていない（\(shape)）")
     }
   }
 
-  /// 分類の入力になりうる形を総当たりする（12 軸・ピルが競合する組み合わせを網羅する）。
-  private func forEachShape(_ body: (DispatchCleanFacts, String) -> Void) {
+  /// 群が決まった 1 つの形の下で、語彙を決めるフィールドを振る。
+  private func forEachDetail(
+    _ branch: String?, _ isPrunable: Bool, _ isMain: Bool, _ occupancy: PaneOccupancy?,
+    _ body: (DispatchCleanFacts, String) -> Void
+  ) {
     let statuses: [GitWorktreeStatusCounts?] = [
-      nil, clean, GitWorktreeStatusCounts(modified: 2, untracked: 0),
-      GitWorktreeStatusCounts(modified: 2, untracked: 3),
+      nil, clean, GitWorktreeStatusCounts(modified: 2, untracked: 3),
     ]
     let operations: [GitWorktreeOperationState] = [.none, .unknown, .inProgress(.rebase)]
     for status in statuses {
@@ -72,20 +116,12 @@ extension DispatchWorktreeClassifierTests {
                 for openPR in [nil, 139] as [Int?] {
                   for merged in [nil, true, false] as [Bool?] {
                     let facts = DispatchCleanFacts(
-                      path: "/wt/x", branch: "feat/x", lockReason: lockReason, upstream: upstream,
-                      track: track,
+                      path: "/wt/x", branch: branch, isMain: isMain, isPrunable: isPrunable,
+                      lockReason: lockReason, upstream: upstream, track: track,
                       closedPR: merged.map { DispatchCleanPR(number: 142, isMerged: $0) },
                       openPR: openPR, status: status, unmergedCommits: unmergedCommits,
-                      operation: operation)
-                    let shape = """
-                      status=\(String(describing: status)) op=\(operation) \
-                      lock=\(lockReason != nil) up=\(String(describing: upstream)) \
-                      track=\(String(describing: track)) \
-                      unmerged=\(String(describing: unmergedCommits)) \
-                      openPR=\(String(describing: openPR)) \
-                      closedPR=\(String(describing: merged))
-                      """
-                    body(facts, shape)
+                      operation: operation, occupancy: occupancy)
+                    body(facts, describe(facts))
                   }
                 }
               }
@@ -94,5 +130,15 @@ extension DispatchWorktreeClassifierTests {
         }
       }
     }
+  }
+
+  private func describe(_ f: DispatchCleanFacts) -> String {
+    """
+    branch=\(f.branch ?? "nil") prunable=\(f.isPrunable) main=\(f.isMain) \
+    pane=\(f.occupancy != nil) status=\(String(describing: f.status)) op=\(f.operation) \
+    lock=\(f.lockReason != nil) up=\(f.upstream ?? "nil") track=\(f.track ?? "nil") \
+    unmerged=\(String(describing: f.unmergedCommits)) openPR=\(String(describing: f.openPR)) \
+    closedPR=\(String(describing: f.closedPR))
+    """
   }
 }

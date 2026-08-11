@@ -151,6 +151,16 @@ struct CleanRow: Identifiable, Equatable {
   let overflowNotes: [CleanChip]
   /// チェックするとブランチも一緒に消える行（safe 群のうち、実体があってブランチを持つ行）。
   let deletesBranchImplicitly: Bool
+
+  /// 展開サブライン（＝**この行の詳細**）を開けるか。開けない行に `lossNotes` / `overflowNotes` を
+  /// 積んでも、それは画面に出ない語になる。
+  ///
+  /// 確認群だけが開く（安全行は選ぶものが無く、使用中行はチェックできない）。**ブランチの扱いの
+  /// セグメントは詳細の中身の 1 つに過ぎない**ので、detached（`branch == nil`）でも書くことが
+  /// あれば開く——rebase 停止中の worktree は必ず detached で、そこは損失の内訳が最も要る行。
+  var canExpandSubline: Bool {
+    group == .caution && (branch != nil || !lossNotes.isEmpty || !overflowNotes.isEmpty)
+  }
 }
 
 /// ペインが開いているディレクトリのスナップショット（`SessionStore` を Dispatch から見せないための値型）。
