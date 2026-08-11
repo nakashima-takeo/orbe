@@ -9,8 +9,7 @@ extension L10n {
     .helpCatBasics: ("基本操作", "Basics"),
     .helpCatAllShortcuts: ("すべて", "All"),
     .helpCatGeneral: ("全般", "General"),
-    .helpCatWorkspaceTabs: ("ワークスペースとタブ", "Workspaces & Tabs"),
-    .helpCatPanesEditor: ("ペインとエディタ", "Panes & Editor"),
+    .helpCatWorkspaceTabsPanes: ("ワークスペース・タブ・ペイン", "Workspaces, Tabs & Panes"),
     .helpCatAgents: ("エージェント", "Agents"),
     .helpCatTerminal: ("ターミナル", "Terminal"),
     .helpTopSubtitle: (
@@ -30,6 +29,7 @@ extension L10n {
     .helpFooterEscClose: ("閉じる", "close"),
     .helpShortcutHelp: ("ヘルプ / チートシート", "Help / cheat sheet"),
     .helpShortcutSettings: ("設定を開く", "Open settings"),
+    .helpShortcutOpenEditor: ("cwd を GUI エディタで開く", "Open cwd in GUI editor"),
     .helpShortcutQuit: ("Orbe を終了", "Quit Orbe"),
     .helpShortcutSwitchWorkspace: ("ワークスペース切替", "Switch workspace"),
     .helpShortcutNewWorkspace: ("新規ワークスペース", "New workspace"),
@@ -43,12 +43,6 @@ extension L10n {
     .helpShortcutSplitRight: ("ペインを左右に分割", "Split pane left/right"),
     .helpShortcutSplitDown: ("ペインを上下に分割", "Split pane top/bottom"),
     .helpShortcutClosePane: ("ペインを閉じる", "Close pane"),
-    .helpShortcutToggleEditorPane: (
-      "エディタペイン（Git ワークベンチ）開閉", "Toggle editor pane (Git workbench)"
-    ),
-    .helpShortcutOpenEditor: ("cwd を GUI エディタで開く", "Open cwd in GUI editor"),
-    .helpShortcutPrevTool: ("上のツールへ", "Tool above"),
-    .helpShortcutNextTool: ("下のツールへ", "Tool below"),
     .helpShortcutLaunchDefaultAgent: ("デフォルトエージェントを起動", "Launch default agent"),
     .helpShortcutAgentPalette: ("エージェント起動パレット", "Agent launch palette"),
     .helpShortcutDispatchPalette: (

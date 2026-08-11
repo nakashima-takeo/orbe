@@ -20,17 +20,19 @@ enum HelpCatalog {
     let rows: [Row]
   }
 
-  /// 全ショートカット。並びはトップビュー厳選の導出順（全般 → ワークスペースとタブ → … → ターミナル）を兼ねる。
+  /// 全ショートカット。並びはトップビュー厳選の導出順（全般 → ワークスペース・タブ・ペイン → … → ターミナル）を兼ねる。
+  /// 掲載は「押せば必ず効く」ものに限る（設定で gate された開発中の機能は載せない）。
   static let all: [Group] = [
     Group(
       title: .helpCatGeneral,
       rows: [
         Row(key: "⌘H", label: .helpShortcutHelp, combo: ["cmd", "h"]),
         Row(key: "⌘,", label: .helpShortcutSettings, combo: ["cmd", ","]),
+        Row(key: "⌘⇧E", label: .helpShortcutOpenEditor, combo: ["cmd", "shift", "e"]),
         Row(key: "⌘Q", label: .helpShortcutQuit, combo: ["cmd", "q"]),
       ]),
     Group(
-      title: .helpCatWorkspaceTabs,
+      title: .helpCatWorkspaceTabsPanes,
       rows: [
         Row(key: "⌘⇧S", label: .helpShortcutSwitchWorkspace, combo: ["cmd", "shift", "s"]),
         Row(key: "⌘N", label: .helpShortcutNewWorkspace, combo: ["cmd", "n"]),
@@ -41,17 +43,9 @@ enum HelpCatalog {
         Row(key: "⌘⇧←", label: .helpShortcutPrevTab, combo: ["cmd", "shift", "left"]),
         Row(key: "⌘⇧]", label: .helpShortcutNextTab, combo: ["cmd", "shift", "]"]),
         Row(key: "⌘⇧[", label: .helpShortcutPrevTab, combo: ["cmd", "shift", "["]),
-      ]),
-    Group(
-      title: .helpCatPanesEditor,
-      rows: [
         Row(key: "⌘D", label: .helpShortcutSplitRight, combo: ["cmd", "d"]),
         Row(key: "⌘⇧D", label: .helpShortcutSplitDown, combo: ["cmd", "shift", "d"]),
         Row(key: "⌘W", label: .helpShortcutClosePane, combo: ["cmd", "w"]),
-        Row(key: "⌘/", label: .helpShortcutToggleEditorPane, combo: ["cmd", "/"]),
-        Row(key: "⌘⇧E", label: .helpShortcutOpenEditor, combo: ["cmd", "shift", "e"]),
-        Row(key: "⌘⇧↑", label: .helpShortcutPrevTool, combo: ["cmd", "shift", "ud"]),
-        Row(key: "⌘⇧↓", label: .helpShortcutNextTool, combo: ["cmd", "shift", "ud"]),
       ]),
     Group(
       title: .helpCatAgents,
@@ -79,8 +73,8 @@ enum HelpCatalog {
 
   /// トップビュー（基本操作）に出す厳選セット（カテゴリ → 表示キー列）。
   static let topPicks: [L10nKey: [String]] = [
-    .helpCatGeneral: ["⌘H", "⌘,", "⌘Q"],
-    .helpCatWorkspaceTabs: ["⌘⇧S", "⌘N", "⌘T", "⌘⇧→"],
+    .helpCatGeneral: ["⌘H", "⌘,", "⌘⇧E", "⌘Q"],
+    .helpCatWorkspaceTabsPanes: ["⌘⇧S", "⌘N", "⌘T", "⌘⇧→"],
     .helpCatAgents: ["⌘⇧C", "⌘⇧A", "⌘⇧X", "⌘⌘"],
   ]
 
