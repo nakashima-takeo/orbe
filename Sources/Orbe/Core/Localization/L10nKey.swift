@@ -169,6 +169,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchCleanRowRemoved
   case dispatchCleanRowRemovedWithBranch
   case dispatchCleanRowPruned
+  case dispatchCleanRowPrunedWithBranch
   case dispatchCleanRowRunning
   case dispatchCleanRowPending
   case dispatchCleanRowPendingWithBranch

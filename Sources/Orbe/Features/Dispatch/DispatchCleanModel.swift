@@ -290,6 +290,22 @@ final class CleanRunToken {
 
   var failedCount: Int { failedIndices.count }
 
+  /// 決着した件数（削除中の進捗ピルの分子）。**失敗も進んだうちに数える**——分母が総数なので、
+  /// 成功だけを数えると ✓/✕ の付いた行数と食い違い、進捗が止まったように読める。
+  var settledCount: Int { doneCount + failedCount }
+
+  /// 可視域へ追従させる行 id。**画面ごとに追う対象が違う**ので、分岐は View でなくここが持つ
+  /// （選択＝カーソル行 / 削除中＝実行中の行 / 一部失敗＝`⏎`・`o` の対象）。
+  var scrollTargetID: String? {
+    switch phase {
+    case .selecting: return cursorRow?.id
+    case .deleting:
+      guard let run, let index = run.states.firstIndex(of: .running) else { return nil }
+      return run.requests[index].path
+    case .failed: return failureTargetPath
+    }
+  }
+
   /// 失敗行の index（`run.requests` を数えた並び順）。
   var failedIndices: [Int] {
     guard let run else { return [] }

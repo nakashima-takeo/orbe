@@ -29,13 +29,14 @@ struct DispatchCleanHeader: View {
           .lineLimit(1)
           .fixedSize()
       case .deleting:
+        // 分子は決着した件数（成功＋失敗）。分母が総数なので、成功だけだと ✓/✕ の付いた行と食い違う。
         pill(
-          l10n.format(.dispatchCleanProgress, model.doneCount, model.totalCount),
+          l10n.format(.dispatchCleanProgress, model.settledCount, model.totalCount),
           Color.theme.tintAccent, .theme.accentPrimary)
       case .failed:
         pill(
           l10n.format(.dispatchCleanTally, model.doneCount, model.failedCount),
-          Color.theme.tintRed, .theme.danger)
+          CleanTone.danger.fill, CleanTone.danger.foreground)
       }
     }
   }
@@ -99,8 +100,10 @@ struct DispatchCleanList: View {
         )
       }
       .scrollIndicators(.automatic)
-      .onChange(of: model.cursor, initial: true) { scrollToCursor(proxy) }
-      .onChange(of: model.failureCursor) { scrollToCursor(proxy) }
+      .onChange(of: model.scrollTargetID, initial: true) {
+        guard let id = model.scrollTargetID else { return }
+        proxy.scrollTo(id)
+      }
     }
   }
 
@@ -123,16 +126,10 @@ struct DispatchCleanList: View {
       ForEach(Array(run.requests.enumerated()), id: \.element.path) { index, request in
         DispatchCleanRunRow(
           request: request, state: run.states[index],
-          cursor: model.phase == .failed && model.failureTargetPath == request.path)
+          cursor: model.phase == .failed && model.failureTargetPath == request.path,
+          showsActions: model.phase == .failed)
       }
     }
-  }
-
-  /// カーソル行を可視域へ追従させる（list 側の `scrollToSelection` と同じ作法。宛先は行 id＝絶対パス）。
-  private func scrollToCursor(_ proxy: ScrollViewProxy) {
-    let id = model.phase == .failed ? model.failureTargetPath : model.cursorRow?.id
-    guard let id else { return }
-    proxy.scrollTo(id)
   }
 
   /// 群見出し（選択対象外・大文字・極小・letterSpacing 1）。caution だけ警告色。

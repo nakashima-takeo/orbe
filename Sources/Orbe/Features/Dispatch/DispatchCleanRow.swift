@@ -3,6 +3,32 @@ import SwiftUI
 // clean の 1 行。**3 画面は同じ行の別の時点**なので、行頭のグリフと meta 列だけが入れ替わり、
 // 器（padding 5×10・radius 8・gap 8・13px の行頭・末尾省略の meta）は共通の契約として保つ。
 
+/// トーン → 色の唯一の写像。**語彙のピルも失敗行の赤もここだけを通る**——同じ意味の色に到達する経路を
+/// 2 本持つと、写像を直した日に片方が取り残される。
+extension CleanTone {
+  /// 文字色。塗りのない素文字はこれだけを使う。
+  var foreground: Color {
+    switch self {
+    case .loss: return Color.theme.stateWaiting
+    case .safe: return Color.theme.diffAdded
+    case .neutral: return Color.theme.textMuted
+    case .danger: return Color.theme.danger
+    case .status: return Color.theme.stateWorking
+    }
+  }
+
+  /// 塗り（ピルの地・失敗行の帯）。
+  var fill: Color {
+    switch self {
+    case .loss: return Color.theme.tintWaiting
+    case .safe: return Color.theme.tintDiffAdded
+    case .neutral: return Color.theme.plainPillFill
+    case .danger: return Color.theme.tintRed
+    case .status: return .clear
+    }
+  }
+}
+
 /// 選択画面の 1 行（＋チェックすると開くサブライン）。
 /// **背景ハイライトはカーソル行だけ**——チェック状態は ✓ ボックスの塗りだけが示す（背景で二重に示さない）。
 struct DispatchCleanRow: View {
@@ -91,23 +117,9 @@ struct DispatchCleanRow: View {
     row.lossNotes.map { DispatchCleanChip.text($0, l10n) }.joined(separator: " · ")
   }
 
-  /// `残す` / `削除` の 2 値。**非選択だけが線を持つが、枠の分だけ高さが動かないよう選択側にも
-  /// 透明の線を敷く。** タップは行クリックと同じくカーソルもその行へ移す。
+  /// `残す` / `削除` の 2 値。タップは行クリックと同じくカーソルもその行へ移す。
   private func segment(_ key: L10nKey, choice: CleanBranchChoice) -> some View {
-    let active = model.branchChoice(of: row) == choice
-    return Text(l10n.string(key))
-      .foregroundStyle(active ? Color.theme.accentBright : Color.theme.textMuted)
-      .lineLimit(1)
-      .fixedSize()
-      .padding(.horizontal, 10)
-      .padding(.vertical, Theme.Space.hair)
-      .background(
-        Capsule().fill(active ? Color.theme.accentPrimary.opacity(0.16) : .clear)
-      )
-      .overlay(
-        Capsule().strokeBorder(
-          active ? .clear : Color.theme.borderInk.opacity(0.2), lineWidth: Theme.Stroke.hairline)
-      )
+    CleanCapsule(text: l10n.string(key), active: model.branchChoice(of: row) == choice)
       .contentShape(Capsule())
       .onTapGesture { model.chooseBranch(choice, at: row.id) }
   }
@@ -119,6 +131,9 @@ struct DispatchCleanRunRow: View {
   let state: CleanRunState
   /// 一部失敗画面で `o` / `⏎` の対象になっている失敗行か。
   let cursor: Bool
+  /// 対処の案内（`⏎ 再試行` / `o タブで開く`）を出すか。**削除中は出さない**——駆動中は ⏎ も `o` も
+  /// 効かないので、効かない案内を残さない。
+  let showsActions: Bool
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -152,7 +167,7 @@ struct DispatchCleanRunRow: View {
       // meta 列が進捗のメッセージになる（選択画面のブランチ名と同じ位置・同じ字）。
       Text(message)
         .font(Font.theme.meta)
-        .foregroundStyle(failure != nil ? Color.theme.danger : Color.theme.textMuted)
+        .foregroundStyle(failure != nil ? CleanTone.danger.foreground : Color.theme.textMuted)
         .lineLimit(1)
         .truncationMode(.tail)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -168,13 +183,13 @@ struct DispatchCleanRunRow: View {
   private var isSpent: Bool { state == .pending || state == .skipped }
 
   private var rowFill: Color {
-    if failure != nil { return Color.theme.tintRed }
+    if failure != nil { return CleanTone.danger.fill }
     return isRunning ? Color.theme.selectionFill : .clear
   }
 
   /// 生ログと対処（同じ赤帯を下へ続ける）。
   private var subline: some View {
-    HStack(spacing: Theme.Space.beat) {
+    HStack(spacing: Theme.Space.step + Theme.Space.hair) {
       if let log = failure?.log, !log.isEmpty {
         Text(log)
           .foregroundStyle(Color.theme.textMuted)
@@ -182,9 +197,11 @@ struct DispatchCleanRunRow: View {
           .truncationMode(.tail)
       }
       Spacer(minLength: 0)
-      chip(.dispatchCleanRetry, filled: true)
-      // worktree がもう無い行（ブランチ削除だけが落ちた）には開く先が無い。
-      if failure?.step != .branch { chip(.dispatchCleanOpenTab, filled: false) }
+      if showsActions {
+        chip(.dispatchCleanRetry, filled: true)
+        // worktree がもう無い行（ブランチ削除だけが落ちた）には開く先が無い。
+        if failure?.step != .branch { chip(.dispatchCleanOpenTab, filled: false) }
+      }
     }
     .font(Font.theme.meta)
     .padding(.top, Theme.Space.hair)
@@ -192,21 +209,11 @@ struct DispatchCleanRunRow: View {
     .padding(.trailing, 10)
     .padding(.bottom, 7)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(CleanRowShape(bottomOnly: true).fill(Color.theme.tintRed))
+    .background(CleanRowShape(bottomOnly: true).fill(CleanTone.danger.fill))
   }
 
   private func chip(_ key: L10nKey, filled: Bool) -> some View {
-    Text(l10n.string(key))
-      .foregroundStyle(filled ? Color.theme.accentBright : Color.theme.textMuted)
-      .lineLimit(1)
-      .fixedSize()
-      .padding(.horizontal, 10)
-      .padding(.vertical, Theme.Space.hair)
-      .background(Capsule().fill(filled ? Color.theme.accentPrimary.opacity(0.16) : .clear))
-      .overlay(
-        Capsule().strokeBorder(
-          filled ? .clear : Color.theme.borderInk.opacity(0.2), lineWidth: Theme.Stroke.hairline)
-      )
+    CleanCapsule(text: l10n.string(key), active: filled)
       .opacity(cursor ? 1 : Theme.Opacity.disabled)
   }
 
@@ -221,7 +228,7 @@ struct DispatchCleanRunRow: View {
     case .failed:
       Text("✕")
         .font(Font.theme.chrome)
-        .foregroundStyle(Color.theme.danger)
+        .foregroundStyle(CleanTone.danger.foreground)
         .frame(width: 13)
     case .running:
       StatusGlyphView(kind: .working, size: 10).frame(width: 13)
@@ -241,9 +248,12 @@ struct DispatchCleanRunRow: View {
     case .running:
       return l10n.string(.dispatchCleanRowRunning)
     case .done(let branch, let pruned):
-      if pruned { return l10n.string(.dispatchCleanRowPruned) }
-      guard let branch else { return l10n.string(.dispatchCleanRowRemoved) }
-      return l10n.format(.dispatchCleanRowRemovedWithBranch, branch)
+      guard let branch else {
+        return l10n.string(pruned ? .dispatchCleanRowPruned : .dispatchCleanRowRemoved)
+      }
+      // ブランチも消したときは必ずその名前を出す。実体が無かった行でも、消したものを記録から落とさない。
+      return l10n.format(
+        pruned ? .dispatchCleanRowPrunedWithBranch : .dispatchCleanRowRemovedWithBranch, branch)
     case .failed(let failure):
       switch failure.step {
       case .dirty: return l10n.string(.dispatchCleanFailedDirty)
@@ -252,6 +262,27 @@ struct DispatchCleanRunRow: View {
       case .branch: return l10n.string(.dispatchCleanFailedBranch)
       }
     }
+  }
+}
+
+/// サブラインのカプセル。**`残す` / `削除` のセグメントと失敗行の対処チップが共有する装飾**で、
+/// 強調側は塗り・非強調側は線。枠の分で高さが動かないよう、塗り側にも透明の線を敷く。
+struct CleanCapsule: View {
+  let text: String
+  let active: Bool
+
+  var body: some View {
+    Text(text)
+      .foregroundStyle(active ? Color.theme.accentBright : Color.theme.textMuted)
+      .lineLimit(1)
+      .fixedSize()
+      .padding(.horizontal, 10)
+      .padding(.vertical, Theme.Space.hair)
+      .background(Capsule().fill(active ? Color.theme.accentPrimary.opacity(0.16) : .clear))
+      .overlay(
+        Capsule().strokeBorder(
+          active ? .clear : Color.theme.borderInk.opacity(0.2), lineWidth: Theme.Stroke.hairline)
+      )
   }
 }
 
@@ -304,38 +335,16 @@ struct DispatchCleanChip: View {
     if chip.isPill {
       Text(Self.text(chip, l10n))
         .font(Font.theme.sectionLabel)
-        .foregroundStyle(Self.color(chip.tone))
+        .foregroundStyle(chip.tone.foreground)
         .lineLimit(1)
         .padding(.horizontal, 7)
         .padding(.vertical, 1)
-        .background(Capsule().fill(Self.fill(chip.tone)))
+        .background(Capsule().fill(chip.tone.fill))
     } else {
       Text(Self.text(chip, l10n))
         .font(Font.theme.sectionLabel)
-        .foregroundStyle(Self.color(chip.tone))
+        .foregroundStyle(chip.tone.foreground)
         .lineLimit(1)
-    }
-  }
-
-  /// トーン → 文字色。塗りのない素文字はこれだけを使う。
-  static func color(_ tone: CleanTone) -> Color {
-    switch tone {
-    case .loss: return Color.theme.stateWaiting
-    case .safe: return Color.theme.diffAdded
-    case .neutral: return Color.theme.textMuted
-    case .danger: return Color.theme.danger
-    case .status: return Color.theme.stateWorking
-    }
-  }
-
-  /// トーン → ピルの地。
-  static func fill(_ tone: CleanTone) -> Color {
-    switch tone {
-    case .loss: return Color.theme.tintWaiting
-    case .safe: return Color.theme.tintDiffAdded
-    case .neutral: return Color.theme.plainPillFill
-    case .danger: return Color.theme.tintRed
-    case .status: return .clear
     }
   }
 

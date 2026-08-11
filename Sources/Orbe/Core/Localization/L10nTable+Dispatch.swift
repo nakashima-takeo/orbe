@@ -76,6 +76,9 @@ extension L10n {
       "worktree と %@ を削除しました", "Removed the worktree and %@"
     ),
     .dispatchCleanRowPruned: ("prune しました(実体なし)", "Pruned (no directory)"),
+    .dispatchCleanRowPrunedWithBranch: (
+      "prune と %@ を削除しました(実体なし)", "Pruned (no directory) and removed %@"
+    ),
     .dispatchCleanRowRunning: ("worktree rm 実行中…", "Running worktree rm…"),
     .dispatchCleanRowPending: ("待機中 — worktree を削除", "Waiting — delete the worktree"),
     .dispatchCleanRowPendingWithBranch: (
