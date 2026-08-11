@@ -22,8 +22,6 @@ enum CleanTone: Equatable {
 /// **文言は View が言語別に引き**、ここは意味と数値だけを持つ。
 enum CleanChip: Equatable, Identifiable {
   // MARK: 軸A — worktree の中身
-  /// 何も失わない（実体があり status も取り込み判定も通った safe 行だけ）。
-  case cleanNote
   /// tracked の未コミット変更（staged 含む）。
   case uncommitted(Int)
   case untracked(Int)
@@ -59,7 +57,6 @@ enum CleanChip: Equatable, Identifiable {
 
   var id: String {
     switch self {
-    case .cleanNote: return "cleanNote"
     case .uncommitted(let n): return "uncommitted:\(n)"
     case .untracked(let n): return "untracked:\(n)"
     case .inProgress(let op): return "inProgress:\(op.name)"
@@ -83,7 +80,7 @@ enum CleanChip: Equatable, Identifiable {
 
   var tone: CleanTone {
     switch self {
-    case .cleanNote, .mergedPR, .mergedIntoDefault: return .safe
+    case .mergedPR, .mergedIntoDefault: return .safe
     case .uncommitted, .untracked, .inProgress, .remoteAhead, .unpushed, .openPR, .ownCommits,
       .locked, .agentWaiting:
       return .loss
@@ -110,7 +107,7 @@ enum CleanChip: Equatable, Identifiable {
   /// 使用状況は「ピルを増やす」のではなく群の移動そのものが表す。
   var isPill: Bool {
     switch self {
-    case .cleanNote, .agentWorking, .agentWaiting, .paneOpen, .mainWorktree, .branchAlsoDeleted:
+    case .agentWorking, .agentWaiting, .paneOpen, .mainWorktree, .branchAlsoDeleted:
       return false
     default:
       return true

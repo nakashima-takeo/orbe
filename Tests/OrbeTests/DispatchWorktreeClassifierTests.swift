@@ -33,7 +33,8 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     XCTAssertEqual(r.lossNotes, [.ownCommits(6)], "黄ピルの行は展開サブラインに損失の内訳を書く")
   }
 
-  /// PR が MERGED で安全確認を全部通れば safe。実体のあるディレクトリなので `clean · +0` を出す。
+  /// PR が MERGED で安全確認を全部通れば safe。失うものが無いので軸A は何も名乗らず、
+  /// 右クラスタは軸B のピルと行内注記の 2 つになる。
   func testMergedPRPassingEveryCheckIsSafe() {
     let r = row(
       DispatchCleanFacts(
@@ -41,7 +42,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
         closedPR: DispatchCleanPR(number: 142, isMerged: true), status: clean,
         unmergedCommits: 0, operation: .none))
     XCTAssertEqual(r.group, .safe)
-    XCTAssertEqual(r.chips, [.mergedPR(142), .cleanNote, .branchAlsoDeleted])
+    XCTAssertEqual(r.chips, [.mergedPR(142), .branchAlsoDeleted])
     XCTAssertTrue(r.deletesBranchImplicitly)
   }
 
@@ -91,19 +92,18 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     XCTAssertEqual(r.group, .caution)
   }
 
-  /// status を採れなかった行も safe に入らない。**確認できていない作業ツリーに `clean · +0` を
-  /// 名乗らせない**（実体はあるのに status だけが nil、は分類レーンの実測が落ちれば起きる）。
+  /// status を採れなかった行も safe に入らない（実体はあるのに status だけが nil、は分類レーンの
+  /// 実測が落ちれば起きる）。**確認できていない作業ツリーを安全群へ入れない**。
   func testUnknownStatusFallsToCaution() {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", track: "[gone]", status: nil, unmergedCommits: 0,
         operation: .none))
     XCTAssertEqual(r.group, .caution)
-    XCTAssertFalse(r.chips.contains(.cleanNote))
   }
 
   /// 実体が無い（prunable）なら「ディスク上に失うものが無い」ので、作業ツリー側の確認
-  /// （status・停止中の操作）は自動的に満たす。clean を名乗る作業ツリーが無いので `clean · +0` も出ない。
+  /// （status・停止中の操作）は自動的に満たす。
   func testPrunableIsSafeWithoutProbingTheWorkingTree() {
     let r = row(
       DispatchCleanFacts(
@@ -111,8 +111,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
         upstream: "origin/perf/render-batching", track: "[gone]", unmergedCommits: 0))
     XCTAssertEqual(r.group, .safe)
     XCTAssertEqual(
-      r.chips, [.prunable, .mergedIntoDefault("main")],
-      "軸A + 軸B（clean を名乗る作業ツリーが無いので `clean · +0` は出ない）")
+      r.chips, [.prunable, .mergedIntoDefault("main")], "軸A + 軸B のピル 1 枚ずつ")
     XCTAssertFalse(r.deletesBranchImplicitly, "消えるのは登録だけ。ブランチには触らない")
   }
 

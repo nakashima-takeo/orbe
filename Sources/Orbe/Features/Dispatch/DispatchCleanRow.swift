@@ -57,14 +57,16 @@ struct DispatchCleanRow: View {
       } else {
         CleanCheckbox(isOn: model.isChecked(row))
       }
-      // 縮む順は meta → 名前 → 右クラスタ（優先度 0 < 1 < 2）。どれも 1 行で末尾省略し、
-      // 折り返さない。行の最小幅を提案幅より小さく保てないと、器のカードが窓を超えて広がる。
+      // 縮む順は meta → 右クラスタ → 名前（優先度 0 < 1 < 2）。**名前は行の識別子なので最後まで
+      // 読める幅を保つ**——名前が潰れた行は、どの worktree の話なのかが読めず用をなさない。
+      // どれも 1 行で末尾省略し、折り返さない。行の最小幅を提案幅より小さく保てないと、
+      // 器のカードが窓を超えて広がる。
       fontResolver.text(row.name, base: Theme.Typography.workspaceName)
         .font(Font.theme.workspaceName)
         .foregroundStyle(cursor ? Color.theme.textPrimary : Color.theme.textSecondary)
         .lineLimit(1)
         .truncationMode(.tail)
-        .layoutPriority(1)
+        .layoutPriority(2)
       // meta 列はブランチ名だけ（パスは list モードが見せる）。
       fontResolver.text(row.meta, base: Theme.Typography.meta)
         .font(Font.theme.meta)
@@ -75,7 +77,7 @@ struct DispatchCleanRow: View {
       HStack(spacing: 5) {
         ForEach(row.chips) { DispatchCleanChip(chip: $0) }
       }
-      .layoutPriority(2)
+      .layoutPriority(1)
     }
     .padding(.horizontal, 10)
     .padding(.vertical, 5)
@@ -326,7 +328,7 @@ struct CleanRowShape: Shape {
 /// clean 行の語彙 1 つ。**色はトーンからの写像 1 本だけを通る**——語彙が増えても色の付け方が分岐せず、
 /// 塗りのあるピルと塗らない素文字の別も語彙自身（`isPill`）が持つ。
 /// **git / gh の語（`[gone]` / `locked` / `PR #N merged` / `merged → <既定>` / `remote +N` /
-/// `main worktree` / `clean · +0`）は L10n しない**——訳すと出力と対応が取れなくなる技術語。
+/// `main worktree`）は L10n しない**——訳すと出力と対応が取れなくなる技術語。
 struct DispatchCleanChip: View {
   let chip: CleanChip
   @Environment(\.localization) private var l10n
@@ -350,7 +352,6 @@ struct DispatchCleanChip: View {
 
   static func text(_ chip: CleanChip, _ l10n: LocalizationStore) -> String {
     switch chip {
-    case .cleanNote: return "clean · +0"
     case .uncommitted(let n):
       return l10n.plural(
         n, one: .dispatchCleanUncommittedOne, other: .dispatchCleanUncommittedOther)

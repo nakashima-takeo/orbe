@@ -105,7 +105,7 @@ enum DispatchWorktreeClassifier {
 
   /// 右クラスタ。**ピルは軸A + 軸B から 1 枚ずつの最大 2 枚**（`locked` は軸C の例外として並ぶ）で、
   /// 3 枚以上になったら loss を優先し残りは展開サブラインの損失内訳へ回す。
-  /// 素文字（軸A の `clean · +0`・軸C の使用状況・safe 行の注記）はピルの後に続く。
+  /// 素文字（軸C の使用状況・safe 行の注記）はピルの後に続く。
   private static func chips(
     _ f: DispatchCleanFacts, _ group: CleanGroup, axisA: [CleanChip], axisB: [CleanChip],
     axisC: [CleanChip]
@@ -121,7 +121,8 @@ enum DispatchWorktreeClassifier {
   }
 
   /// 軸A（消すと何を失うか）。優先順位は `進行中 > 未コミット > untracked > prunable`。
-  /// `clean · +0` は実体があり status と取り込み済み判定の両方を通った safe 行だけが名乗る。
+  /// **失うものが無い行は何も名乗らない**——安全群の見出しと行内の `merged ブランチも削除` が
+  /// 既に同じことを言っており、群の中では冗長になる。
   private static func axisA(_ f: DispatchCleanFacts, _ group: CleanGroup) -> [CleanChip] {
     guard group != .inUse else { return [] }
     var out: [CleanChip] = []
@@ -133,7 +134,6 @@ enum DispatchWorktreeClassifier {
       if status.untracked > 0 { out.append(.untracked(status.untracked)) }
     }
     if f.isPrunable { out.append(.prunable) }
-    if out.isEmpty, group == .safe, !f.isPrunable { out.append(.cleanNote) }
     return out
   }
 
