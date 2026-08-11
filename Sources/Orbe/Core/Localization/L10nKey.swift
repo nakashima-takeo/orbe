@@ -383,8 +383,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpCatBasics
   case helpCatAllShortcuts
   case helpCatGeneral
-  case helpCatWorkspaceTabs
-  case helpCatPanesEditor
+  case helpCatWorkspaceTabsPanes
   case helpCatAgents
   case helpCatTerminal
   case helpTopSubtitle
@@ -399,6 +398,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpFooterEscClose
   case helpShortcutHelp
   case helpShortcutSettings
+  case helpShortcutOpenEditor
   case helpShortcutQuit
   case helpShortcutSwitchWorkspace
   case helpShortcutNewWorkspace
@@ -410,10 +410,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutSplitRight
   case helpShortcutSplitDown
   case helpShortcutClosePane
-  case helpShortcutToggleEditorPane
-  case helpShortcutOpenEditor
-  case helpShortcutPrevTool
-  case helpShortcutNextTool
   case helpShortcutLaunchDefaultAgent
   case helpShortcutAgentPalette
   case helpShortcutDispatchPalette
