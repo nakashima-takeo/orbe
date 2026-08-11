@@ -95,34 +95,44 @@ enum DispatchWorktreeClassifier {
     let axisA = self.axisA(f, group)
     let axisB = group == .inUse ? [] : self.axisB(f, defaultBranchLabel: defaultBranchLabel)
     let axisC = self.axisC(f)
+    let vocabulary = axisA + axisB + axisC
+    let lossNotes = vocabulary.filter(\.isLoss)
     let cluster = self.cluster(f, group, axisA: axisA, axisB: axisB, axisC: axisC)
     return CleanRow(
       id: f.path, name: (f.path as NSString).lastPathComponent,
       meta: f.branch ?? abbreviate(f.path), branch: f.branch, head: f.head, group: group,
-      chips: cluster.chips, lossNotes: (axisA + axisB).filter(\.isLoss),
-      overflowNotes: cluster.overflow,
+      vocabulary: vocabulary, chips: cluster.chips, lossNotes: lossNotes,
+      overflowNotes: cluster.overflow.filter { !lossNotes.contains($0) },
       deletesBranchImplicitly: group == .safe && !f.isPrunable && f.branch != nil)
   }
 
   /// 右クラスタと、そこへ載らなかったピル候補。
   ///
-  /// **ピルの候補は軸A + 軸B から 1 枚ずつ ＋ 軸C の `locked`** で、3 枚になったら loss を優先して
-  /// 2 枚へ切り詰める。**切り詰めた候補は捨てずに返す**——受け皿を損失の内訳と兼ねると、
-  /// `locked` のように損失ではない語がどこにも出なくなる。素文字（軸C の使用状況・safe 行の注記）は
-  /// 上限の外なのでピルの後にそのまま続く。
+  /// **上限の 2 枚はまず各軸の 1 枚目に配る**（軸をまたぐ事実を片方に潰させない）。3 軸が競合したら
+  /// loss を優先して 2 枚へ切り詰め、**逆に黙っている軸があって枠が余ったら、残りの語で埋める**——
+  /// 「最大 2 枚」は「軸ごとに 1 枚まで」ではないので、軸A が何も名乗らない行では軸B が 2 枚出る。
+  /// 枠を空けたまま候補を捨てると、安全行が安全の根拠を 1 つしか出さないまま黙る。
+  ///
+  /// **切り詰めた候補は捨てずに返す**——受け皿を損失の内訳と兼ねると、`locked` のように損失では
+  /// ない語がどこにも出なくなる。素文字（軸C の使用状況・safe 行の注記）は上限の外なのでピルの後に
+  /// そのまま続く。
   private static func cluster(
     _ f: DispatchCleanFacts, _ group: CleanGroup, axisA: [CleanChip], axisB: [CleanChip],
     axisC: [CleanChip]
   ) -> (chips: [CleanChip], overflow: [CleanChip]) {
-    let candidates = ([axisA.first, axisB.first].compactMap { $0 } + axisC).filter(\.isPill)
-    var pills = candidates
+    let axes = [axisA, axisB, axisC].map { $0.filter(\.isPill) }
+    let heads = axes.compactMap(\.first)
+    let rest = axes.flatMap { $0.dropFirst() }
+    var pills = heads
     if pills.count > 2 {
       pills = Array(
         (pills.filter { $0.tone == .loss } + pills.filter { $0.tone != .loss }).prefix(2))
+    } else if pills.count < 2 {
+      pills += rest.prefix(2 - pills.count)
     }
     var plains = axisA.filter { !$0.isPill } + axisC.filter { !$0.isPill }
     if group == .safe, f.branch != nil, !f.isPrunable { plains.append(.branchAlsoDeleted) }
-    return (pills + plains, candidates.filter { !pills.contains($0) })
+    return (pills + plains, (heads + rest).filter { !pills.contains($0) })
   }
 
   /// 軸A（消すと何を失うか）。優先順位は `進行中 > 未コミット > untracked > prunable`。
@@ -144,15 +154,21 @@ enum DispatchWorktreeClassifier {
 
   /// 軸B（消すと世界に残るか）。優先順位は**損失を隠さない順**。
   /// detached（`branch == nil`）は行き先そのものが無いので何も名乗らない。
+  ///
+  /// `未 push · ローカルのみ` と `remote +N` は**「そのコミットがどこにも残らない」という主張**なので、
+  /// 既定ブランチへ取り込み済み（`unmergedCommits == 0`）の行では言わない——remote に無くても
+  /// 内容は既定ブランチに patch 等価で在り、失うものが無い。取り込み判定ができなかった行
+  /// （`nil`）では取り込み済みと言い切れないので、従来どおり損失として名乗る。
   private static func axisB(_ f: DispatchCleanFacts, defaultBranchLabel: String) -> [CleanChip] {
     guard f.branch != nil else { return [] }
+    let mergedIntoDefault = f.unmergedCommits == 0
     var out: [CleanChip] = []
     if let unmerged = f.unmergedCommits, unmerged > 0 { out.append(.ownCommits(unmerged)) }
     if let number = f.openPR { out.append(.openPR(number)) }
-    if f.upstream == nil { out.append(.unpushed) }
-    if let ahead = ahead(f.track), ahead > 0 { out.append(.remoteAhead(ahead)) }
+    if f.upstream == nil, !mergedIntoDefault { out.append(.unpushed) }
+    if let ahead = ahead(f.track), ahead > 0, !mergedIntoDefault { out.append(.remoteAhead(ahead)) }
     if let pr = f.closedPR, pr.isMerged { out.append(.mergedPR(pr.number)) }
-    if f.unmergedCommits == 0 { out.append(.mergedIntoDefault(defaultBranchLabel)) }
+    if mergedIntoDefault { out.append(.mergedIntoDefault(defaultBranchLabel)) }
     if f.upstream != nil, f.track == nil { out.append(.remoteSynced) }
     if f.isGone { out.append(.gone) }
     return out

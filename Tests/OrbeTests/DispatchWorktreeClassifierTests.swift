@@ -7,20 +7,21 @@ import XCTest
 final class DispatchWorktreeClassifierTests: OrbeTestCase {
 
   /// 作業ツリーが clean（安全確認を通る側）。
-  private let clean = GitWorktreeStatusCounts(modified: 0, untracked: 0)
+  let clean = GitWorktreeStatusCounts(modified: 0, untracked: 0)
 
   private func classify(_ facts: DispatchCleanFacts...) -> [CleanRow] {
     DispatchWorktreeClassifier.classify(facts, defaultBranchLabel: "main")
   }
 
-  private func row(_ facts: DispatchCleanFacts) -> CleanRow {
+  func row(_ facts: DispatchCleanFacts) -> CleanRow {
     DispatchWorktreeClassifier.classify([facts], defaultBranchLabel: "main")[0]
   }
 
   // MARK: - 群の振り分け
 
   /// Issue #84 の実測ケース: upstream は消えているが独自コミットが残る → **caution**（初期選択に入らない）。
-  /// 軸B は損失を隠さない順に選ぶので、灰の `[gone]` ではなく `独自コミット 6 件` がピルに出る。
+  /// 軸B は損失を隠さない順に選ぶので `独自コミット 6 件` が先。軸A が黙っていて枠が余るので、
+  /// 灰の `[gone]` は潰されず 2 枚目に出る。
   func testGoneWithOwnCommitsStaysCaution() {
     let r = row(
       DispatchCleanFacts(
@@ -29,12 +30,12 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
         closedPR: DispatchCleanPR(number: 120, isMerged: false), status: clean,
         unmergedCommits: 6, operation: .none))
     XCTAssertEqual(r.group, .caution)
-    XCTAssertEqual(r.chips, [.ownCommits(6)])
+    XCTAssertEqual(r.chips, [.ownCommits(6), .gone])
     XCTAssertEqual(r.lossNotes, [.ownCommits(6)], "黄ピルの行は展開サブラインに損失の内訳を書く")
   }
 
   /// PR が MERGED で安全確認を全部通れば safe。失うものが無いので軸A は何も名乗らず、
-  /// 右クラスタは軸B のピルと行内注記の 2 つになる。
+  /// **空いた枠は軸B の 2 枚目で埋まる**——安全の根拠を 1 つだけ出して黙らない。
   func testMergedPRPassingEveryCheckIsSafe() {
     let r = row(
       DispatchCleanFacts(
@@ -42,7 +43,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
         closedPR: DispatchCleanPR(number: 142, isMerged: true), status: clean,
         unmergedCommits: 0, operation: .none))
     XCTAssertEqual(r.group, .safe)
-    XCTAssertEqual(r.chips, [.mergedPR(142), .branchAlsoDeleted])
+    XCTAssertEqual(r.chips, [.mergedPR(142), .mergedIntoDefault("main"), .branchAlsoDeleted])
     XCTAssertTrue(r.deletesBranchImplicitly)
   }
 
@@ -164,7 +165,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
         path: "/wt/plain", branch: "feat/plain", upstream: "origin/plain", status: clean,
         unmergedCommits: 0, operation: .none))
     XCTAssertEqual(r.group, .caution)
-    XCTAssertEqual(r.chips, [.mergedIntoDefault("main")])
+    XCTAssertEqual(r.chips, [.mergedIntoDefault("main"), .remoteSynced])
   }
 
   // MARK: - 軸B の語彙と優先順位
@@ -172,12 +173,12 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   /// upstream が無ければ `未 push · ローカルのみ`。open PR があればそちらが先に立つ。
   func testAxisBPrefersTheLoudestLoss() {
     let unpushed = row(
-      DispatchCleanFacts(path: "/wt/x", branch: "feat/x", status: clean, unmergedCommits: 0))
+      DispatchCleanFacts(path: "/wt/x", branch: "feat/x", status: clean, unmergedCommits: nil))
     XCTAssertEqual(unpushed.chips.first, .unpushed)
 
     let openPR = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", openPR: 139, status: clean, unmergedCommits: 0))
+        path: "/wt/x", branch: "feat/x", openPR: 139, status: clean, unmergedCommits: nil))
     XCTAssertEqual(openPR.chips.first, .openPR(139), "レビュー中の PR は未 push より先に名乗る")
 
     let ownCommits = row(
@@ -186,18 +187,48 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     XCTAssertEqual(ownCommits.chips.first, .ownCommits(3), "失うコミットが最優先")
   }
 
+  /// `未 push · ローカルのみ` は「そのコミットがどこにも残らない」という主張なので、
+  /// **既定ブランチへ取り込み済みの行では言わない**——remote に無くても内容は残る。
+  /// 取り込み判定ができなかった行では言い切れないので、従来どおり損失として名乗る。
+  func testUnpushedIsNotClaimedWhenTheContentIsAlreadyInDefault() {
+    let merged = row(
+      DispatchCleanFacts(
+        path: "/wt/x", branch: "feat/x", closedPR: DispatchCleanPR(number: 142, isMerged: true),
+        status: clean, unmergedCommits: 0, operation: .none))
+    XCTAssertEqual(merged.group, .safe)
+    XCTAssertFalse(
+      merged.vocabulary.contains(.unpushed), "失うものが無い行に完全喪失の警告を出さない")
+    XCTAssertEqual(
+      merged.chips, [.mergedPR(142), .mergedIntoDefault("main"), .branchAlsoDeleted],
+      "軸A が空なら軸B から 2 枚出て、安全の根拠がどちらも見える")
+
+    let unknown = row(
+      DispatchCleanFacts(path: "/wt/x", branch: "feat/x", status: clean, unmergedCommits: nil))
+    XCTAssertTrue(unknown.vocabulary.contains(.unpushed), "判定できていない行では名乗る")
+  }
+
+  /// `remote +N` も同じ主張なので、取り込み済みの行では言わない。
+  func testRemoteAheadIsNotClaimedWhenTheContentIsAlreadyInDefault() {
+    let r = row(
+      DispatchCleanFacts(
+        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: "[ahead 3]",
+        closedPR: DispatchCleanPR(number: 142, isMerged: true), status: clean, unmergedCommits: 0,
+        operation: .none))
+    XCTAssertFalse(r.vocabulary.contains(.remoteAhead(3)))
+  }
+
   /// `%(upstream:track)` から先行件数を読む（`[ahead N, behind M]` も拾う）。
   func testRemoteAheadReadsTheTrackField() {
     let ahead = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: "[ahead 3]",
-        status: clean, unmergedCommits: 0))
+        status: clean, unmergedCommits: nil))
     XCTAssertEqual(ahead.chips.first, .remoteAhead(3))
 
     let diverged = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: "[ahead 1, behind 2]",
-        status: clean, unmergedCommits: 0))
+        status: clean, unmergedCommits: nil))
     XCTAssertEqual(diverged.chips.first, .remoteAhead(1))
   }
 
@@ -230,7 +261,8 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     XCTAssertEqual(
       r.lossNotes, [.uncommitted(1), .ownCommits(4)],
       "内訳は消える対象を名指す語だけ（`locked` は琥珀でも失うものではない）")
-    XCTAssertEqual(r.overflowNotes, [.locked], "上限に載らなかった候補は溢れの受け皿へ回る")
+    XCTAssertEqual(
+      r.overflowNotes, [.locked, .gone], "上限に載らなかった候補は溢れの受け皿へ回る")
   }
 
   /// 上限に載らなかったピル候補は、**損失でなくても**サブラインへ回る。
@@ -241,9 +273,9 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
       DispatchCleanFacts(
         path: "/wt/session-restore", branch: "feat/session-restore", lockReason: "USB",
         status: clean, unmergedCommits: 0, operation: .inProgress(.rebase)))
-    XCTAssertEqual(r.chips, [.inProgress(.rebase), .unpushed], "右クラスタは loss を優先した 2 枚")
+    XCTAssertEqual(r.chips, [.inProgress(.rebase), .locked], "右クラスタは loss を優先した 2 枚")
     XCTAssertEqual(r.lossNotes, [.inProgress(.rebase)])
-    XCTAssertEqual(r.overflowNotes, [.locked])
+    XCTAssertEqual(r.overflowNotes, [.mergedIntoDefault("main")])
     XCTAssertFalse(
       r.lossNotes.contains(.locked), "locked は消えないので `〜も消えます` には入れない")
   }
@@ -255,54 +287,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
         path: "/wt/x", branch: "feat/x", lockReason: "USB", upstream: "origin/feat/x",
         status: clean, unmergedCommits: 0, operation: .inProgress(.merge)))
     XCTAssertEqual(r.chips, [.inProgress(.merge), .locked], "loss の 2 枚が残る")
-    XCTAssertEqual(r.overflowNotes, [.mergedIntoDefault("main")])
-  }
-
-  /// **ピル候補は 1 つも画面から消えない。** 3 軸が競合しうる組み合わせを総当たりし、
-  /// 候補として立った語が右クラスタ・損失の内訳・溢れの受け皿のどれかに必ず出ることを主張する。
-  func testNoPillCandidateEverDisappears() {
-    for lockReason in [nil, "USB"] as [String?] {
-      for operation in [GitWorktreeOperationState.none, .inProgress(.rebase)] {
-        for upstream in [nil, "origin/feat/x"] as [String?] {
-          for unmergedCommits in [0, 4] {
-            let r = row(
-              DispatchCleanFacts(
-                path: "/wt/x", branch: "feat/x", lockReason: lockReason, upstream: upstream,
-                status: clean, unmergedCommits: unmergedCommits, operation: operation))
-            let visible = r.chips + r.lossNotes + r.overflowNotes
-            let shape = "lock=\(lockReason != nil) op=\(operation) up=\(upstream != nil)"
-            XCTAssertTrue(
-              r.overflowNotes.allSatisfy { !r.chips.contains($0) },
-              "溢れの受け皿は右クラスタと重ならない（\(shape)）")
-            if lockReason != nil {
-              XCTAssertTrue(visible.contains(.locked), "locked がどこにも出ない（\(shape)）")
-            }
-            if case .inProgress(let name) = operation {
-              XCTAssertTrue(
-                visible.contains(.inProgress(name)), "進行中の操作が消えた（\(shape)）")
-            }
-            if unmergedCommits > 0 {
-              XCTAssertTrue(
-                visible.contains(.ownCommits(unmergedCommits)), "独自コミットが消えた（\(shape)）")
-            }
-          }
-        }
-      }
-    }
-  }
-
-  /// 損失の内訳はトーンではなく「何が失われるか」で決まる。**琥珀の語でも消えないものは書かない**——
-  /// 破壊操作の直前に `PR #N open も消えます` という事実と違う一文を出さないため。
-  func testLossNotesExcludeVocabularyThatIsNotLost() {
-    let r = row(
-      DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", lockReason: "USB", openPR: 139,
-        status: GitWorktreeStatusCounts(modified: 12, untracked: 3), unmergedCommits: 0,
-        operation: .none))
-    XCTAssertEqual(r.lossNotes, [.uncommitted(12), .untracked(3)])
-    XCTAssertFalse(r.lossNotes.contains(.openPR(139)), "PR は worktree を消しても残る")
-    XCTAssertFalse(r.lossNotes.contains(.locked), "locked は削除を止める状態であって損失ではない")
-    XCTAssertFalse(r.lossNotes.contains(.unpushed), "失われるコミットは独自コミットの語が名指す")
+    XCTAssertEqual(r.overflowNotes, [.mergedIntoDefault("main"), .remoteSynced])
   }
 
   // MARK: - 並びと件数
