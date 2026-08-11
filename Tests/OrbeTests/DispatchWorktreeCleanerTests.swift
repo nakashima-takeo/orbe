@@ -86,6 +86,54 @@ final class DispatchWorktreeCleanerTests: OrbeTestCase {
     XCTAssertFalse(failure.log.contains("\n"), "1 行に畳んである")
   }
 
+  /// **停止中の git 操作も削除の直前に確かめる。** status は空でも rebase 途中の worktree は消さない
+  /// （分類が safe に入れる条件と、撃つ直前に確かめる条件を食い違わせない）。
+  func testWorktreeWithAStoppedRebaseIsNotDeleted() throws {
+    let wt = try addWorktree("wt-rebase", branch: "feat/rebase")
+    // gitdir 直下に停止中 rebase の管理ディレクトリだけを置く（status は空のまま）。
+    let gitDir = try XCTUnwrap(GitWorktreeOperationProbe.gitDir(worktreeAt: wt.path))
+    try FileManager.default.createDirectory(
+      atPath: (gitDir as NSString).appendingPathComponent("rebase-merge"),
+      withIntermediateDirectories: true)
+    XCTAssertTrue(gitIn(wt.path, ["status", "--porcelain"]).stdoutText.isEmpty, "status は clean")
+
+    let outcomes = try run([wt.request(deleteBranch: true)])
+
+    XCTAssertEqual(
+      outcomes[wt.path], .failed(CleanFailure(step: .operationInProgress, log: "")),
+      "撃つ前に止めるので git の生ログは無い")
+    XCTAssertTrue(FileManager.default.fileExists(atPath: wt.path))
+    XCTAssertTrue(git(["branch"]).stdoutText.contains("feat/rebase"), "ブランチにも触らない")
+  }
+
+  /// 実体の消えた worktree（prunable）は status のゲートを省いて登録だけを掃除する。
+  /// **省かないと必ず失敗する**——実体の無いパスへの status は起動できず「clean でない」に倒れる。
+  func testPrunableWorktreeSkipsTheStatusGate() throws {
+    let wt = try addWorktree("wt-gone", branch: "feat/gone")
+    try FileManager.default.removeItem(atPath: wt.path)
+    cleaner = DispatchWorktreeCleaner(
+      repo: repo, localization: LocalizationStore(language: .ja), prunablePaths: [wt.path])
+
+    let outcomes = try run([wt.request(deleteBranch: false)])
+
+    XCTAssertEqual(outcomes[wt.path], .succeeded(branch: nil, pruned: true))
+    XCTAssertFalse(git(["worktree", "list"]).stdoutText.contains(wt.path), "登録が残らない")
+  }
+
+  /// ブランチ削除だけが落ちた行の再試行は、**worktree のステップを飛ばしてブランチ削除から撃つ**。
+  /// 飛ばさないと、実体の無いパスへの status で必ず落ち「未コミットの変更がある」と逆の理由が出る。
+  func testRetryOfABranchFailureDeletesTheBranchAlone() throws {
+    let wt = try addWorktree("wt", branch: "feat/retry")
+    XCTAssertTrue(git(["worktree", "remove", "--force", wt.path]).isSuccess)
+    var request = wt.request(deleteBranch: true)
+    request.worktreeAlreadyRemoved = true
+
+    let outcomes = try run([request])
+
+    XCTAssertEqual(outcomes[wt.path], .succeeded(branch: "feat/retry", pruned: false))
+    XCTAssertFalse(git(["branch"]).stdoutText.contains("feat/retry"), "残っていたブランチが消える")
+  }
+
   /// **中断は「まだ撃っていない残り」だけを止める。** 1 件目の実行中に札を立てたら 2 件目は撃たれない。
   func testCancelStopsTheRemainingRequests() throws {
     let first = try addWorktree("wt-1", branch: "feat/1")

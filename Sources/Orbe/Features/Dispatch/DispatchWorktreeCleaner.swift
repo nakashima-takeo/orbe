@@ -28,8 +28,10 @@ struct DispatchWorktreeCleaner {
   /// 1 件ずつ撃ち、**各件の頭で中断の札を見る**。撃った 1 件は完走させる（途中で殺すと管理ディレクトリが
   /// 半端に残る）ので、中断が止めるのはまだ撃っていない残りだけ。
   ///
-  /// 削除の直前に status をもう一度叩くのは、分類時の値が最大で数十秒前のものだから
-  /// （`git worktree remove --force` の前提「作業ツリーが clean」を Orbe が自分で確かめる）。
+  /// 削除の直前に status と停止中の git 操作をもう一度確かめるのは、分類時の値が最大で数十秒前のもの
+  /// だから。**確かめる述語は `DispatchWorktreeClassifier.passesSafety` の作業ツリー側と同じ 2 つ**——
+  /// 「初期チェックに入る条件」と「撃つ直前に確かめる条件」を食い違わせない
+  /// （status が空でも rebase 途中の worktree は消さない）。
   /// ブランチ側の凍結は `repo.deleteBranch` が `expectedOid` の compare-and-delete で受け持つ。
   /// git を触る順は `worktree remove` → ブランチ削除（逆順では checkout 済みのブランチを消せない）。
   func run(
@@ -42,52 +44,67 @@ struct DispatchWorktreeCleaner {
         return
       }
       let request = requests[index]
-      let pruned = prunablePaths.contains(request.path)
       progress(.started(path: request.path))
-
-      func finish(_ outcome: CleanOutcome) {
+      delete(request) { outcome in
         progress(.finished(path: request.path, outcome: outcome))
         step(index + 1)
       }
-      func fail(_ step: CleanFailureStep, _ failure: GitWorktreeCleanFailure) {
-        // 打ち切りでは stderr が空になりうる。サブラインが空欄で開かないよう文言を代わりに載せる。
-        let log =
-          failure.timedOut && failure.log.isEmpty
-          ? localization.string(.gitTimedOut) : failure.log
-        finish(.failed(CleanFailure(step: step, log: log)))
-      }
-      let remove = {
-        repo.removeWorktree(path: request.path) { failure in
-          if let failure {
-            fail(.worktree, failure)
-            return
-          }
-          guard let branch = request.branch, request.deleteBranch else {
-            finish(.succeeded(branch: nil, pruned: pruned))
-            return
-          }
-          repo.deleteBranch(name: branch, expectedOid: request.head) { branchFailure in
-            if let branchFailure {
-              fail(.branch, branchFailure)
-              return
-            }
-            finish(.succeeded(branch: branch, pruned: pruned))
-          }
-        }
-      }
-      guard !pruned else {
-        remove()
-        return
-      }
-      repo.worktreeIsClean(at: request.path) { isClean in
-        guard isClean else {
-          // 撃つ前に止めたので git の生ログが無い（行の理由だけが残る）。
-          finish(.failed(CleanFailure(step: .dirty, log: "")))
-          return
-        }
-        remove()
-      }
     }
     step(0)
+  }
+
+  /// 1 件を撃つ。関門 → `worktree remove` → ブランチ削除の順で、途中で落ちたらそこで結果を返す。
+  private func delete(_ request: CleanDeleteRequest, finish: @escaping (CleanOutcome) -> Void) {
+    let pruned = prunablePaths.contains(request.path)
+    func fail(_ failureStep: CleanFailureStep, _ failure: GitWorktreeCleanFailure) {
+      // 打ち切りでは stderr が空になりうる。サブラインが空欄で開かないよう文言を代わりに載せる。
+      let log =
+        failure.timedOut && failure.log.isEmpty ? localization.string(.gitTimedOut) : failure.log
+      finish(.failed(CleanFailure(step: failureStep, log: log)))
+    }
+    let deleteBranch = {
+      guard let branch = request.branch, request.deleteBranch else {
+        finish(.succeeded(branch: nil, pruned: pruned))
+        return
+      }
+      repo.deleteBranch(name: branch, expectedOid: request.head) { branchFailure in
+        if let branchFailure {
+          fail(.branch, branchFailure)
+          return
+        }
+        finish(.succeeded(branch: branch, pruned: pruned))
+      }
+    }
+    let remove = {
+      repo.removeWorktree(path: request.path) { failure in
+        if let failure {
+          fail(.worktree, failure)
+          return
+        }
+        deleteBranch()
+      }
+    }
+    // 前の試行で worktree が消えた行の再試行は、残りのブランチ削除だけを撃つ。実体の無いパスへ
+    // status を撃てば必ず失敗し、「未コミットの変更がある」という事実と逆の理由が出る。
+    guard !request.worktreeAlreadyRemoved else {
+      deleteBranch()
+      return
+    }
+    guard !pruned else {
+      remove()
+      return
+    }
+    // 関門で止めた行は git を撃っていないので生ログを持たない（行の理由だけが残る）。
+    repo.worktreeIsClean(at: request.path) { isClean in
+      guard isClean else {
+        finish(.failed(CleanFailure(step: .dirty, log: "")))
+        return
+      }
+      guard GitWorktreeOperationProbe.detect(worktreeAt: request.path) == .none else {
+        finish(.failed(CleanFailure(step: .operationInProgress, log: "")))
+        return
+      }
+      remove()
+    }
   }
 }

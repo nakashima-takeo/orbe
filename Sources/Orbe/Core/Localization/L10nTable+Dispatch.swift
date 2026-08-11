@@ -81,6 +81,7 @@ extension L10n {
     .dispatchCleanRowPendingWithBranch: (
       "待機中 — worktree + ブランチを削除", "Waiting — delete the worktree + branch"
     ),
+    .dispatchCleanRowSkipped: ("中断のため未実行", "Not run (stopped)"),
     .dispatchCleanDoneTitle: ("完了(%lld 件失敗)", "Done (%lld failed)"),
     .dispatchCleanTally: ("%lld 成功 · %lld 失敗", "%lld succeeded · %lld failed"),
     .dispatchCleanRetryAll: ("⏎ 失敗分を再試行", "⏎ Retry the failures"),
@@ -89,6 +90,9 @@ extension L10n {
     .dispatchCleanOpenTab: ("o タブで開く", "o Open in a tab"),
     .dispatchCleanFailedDirty: (
       "未コミットの変更があるため中止しました", "Stopped: there are uncommitted changes"
+    ),
+    .dispatchCleanFailedOperation: (
+      "git 操作が進行中のため中止しました", "Stopped: a git operation is in progress"
     ),
     .dispatchCleanFailedWorktree: (
       "削除できませんでした — ペインで使用中の可能性", "Couldn't delete — may be in use by a pane"

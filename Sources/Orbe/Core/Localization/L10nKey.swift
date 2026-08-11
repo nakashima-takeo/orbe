@@ -172,6 +172,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchCleanRowRunning
   case dispatchCleanRowPending
   case dispatchCleanRowPendingWithBranch
+  case dispatchCleanRowSkipped
   case dispatchCleanDoneTitle
   case dispatchCleanTally
   case dispatchCleanRetryAll
@@ -179,6 +180,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchCleanRetry
   case dispatchCleanOpenTab
   case dispatchCleanFailedDirty
+  case dispatchCleanFailedOperation
   case dispatchCleanFailedWorktree
   case dispatchCleanFailedBranch
   case dispatchCleanPrunable

@@ -14,11 +14,17 @@ struct CleanDeleteRequest: Equatable {
   /// 分類した時点の HEAD の oid。ブランチ削除はこの先端のときだけ通す。
   let head: String
   let deleteBranch: Bool
+  /// worktree は前の試行で消えている（`.branch` で落ちた行の再試行）。**残りはブランチ削除だけ**なので、
+  /// 実体の無いパスへ status を撃って「未コミットの変更がある」と嘘の理由で落ちるのを防ぐ。
+  var worktreeAlreadyRemoved = false
 }
 
 /// 削除 1 行の状態。**行頭のチェックがそのままこれになる**（待機はチェック済みボックスのまま減光）。
 enum CleanRunState: Equatable {
   case pending
+  /// 中断で撃たれないまま終わった。**待機と違い二度と撃たれない**——中断は不可逆なので、
+  /// 「まだ撃つものが残っている」と読まれないよう待機とは別の終端状態で持つ。
+  case skipped
   case running
   /// 削除できた。`branch` はブランチも消したときだけ名前を持ち、`pruned` は実体の無い登録の掃除。
   case done(branch: String?, pruned: Bool)
@@ -29,6 +35,8 @@ enum CleanRunState: Equatable {
 enum CleanFailureStep: Equatable {
   /// 削除の直前に叩いた status が clean でなく、撃つ前に中止した。
   case dirty
+  /// 削除の直前に見た gitdir に停止中の git 操作が残っており、撃つ前に中止した。
+  case operationInProgress
   /// `git worktree remove` が拒否された。
   case worktree
   /// worktree は消えたが、ブランチ削除が拒否された（先端が動いた等）。
@@ -46,17 +54,14 @@ struct CleanFailure: Equatable {
 /// 削除中と一部失敗は同じ行集合の別の時点なので、件数はすべてここからの filter で出す
 /// （リテラルの件数も、保存したフェーズも持たない）。
 struct CleanRun: Equatable {
-  /// 実行順（＝選択画面の行順）。
-  let requests: [CleanDeleteRequest]
+  /// 実行順（＝選択画面の行順）。再試行で「worktree は消えている」が判れば依頼が更新される。
+  var requests: [CleanDeleteRequest]
   /// `requests` と同 index の状態。
   var states: [CleanRunState]
-  var isCancelled = false
 
-  /// 据わった（撃つべきものが残っていない）。中断後は未実行の待機が残っていても据わり。
-  var isSettled: Bool {
-    guard !states.contains(.running) else { return false }
-    return isCancelled || !states.contains(.pending)
-  }
+  /// 据わった（撃つべきものが残っていない）。中断は待機を `.skipped` へ落とすので、
+  /// **据わりの判定はこの 1 本だけ**——「中断したか」を別に覚えて条件を分岐させない。
+  var isSettled: Bool { !states.contains(.running) && !states.contains(.pending) }
 }
 
 /// clean の画面。**保存しない**——見本の「削除中と一部失敗は同じ行集合の別の時点」という構造を
@@ -234,10 +239,16 @@ final class CleanRunToken {
 
   /// 中断する。**実行中の 1 件は完走し、以降を撃たない**——途中で殺すと管理ディレクトリが半端に残り、
   /// 「消えかけの worktree」という新しい状態が生まれる。中断の価値はまだ撃っていない残りを止めること。
+  ///
+  /// 撃たれないと決まった待機はその場で `.skipped` へ落とす。中断は不可逆なので、
+  /// 「まだ撃つものが残っている」と読める状態を残さない。
   func cancelRun() {
-    guard phase == .deleting else { return }
+    guard phase == .deleting, var run else { return }
     runToken?.cancel()
-    run?.isCancelled = true
+    for index in run.states.indices where run.states[index] == .pending {
+      run.states[index] = .skipped
+    }
+    self.run = run
   }
 
   /// 削除を畳んで選択画面へ戻す（失敗が 1 件も無かったときの終端）。
@@ -246,18 +257,22 @@ final class CleanRunToken {
     runToken = nil
   }
 
-  /// 失敗行だけを待機へ戻して再実行の依頼を返す。**凍結した分類・凍結した依頼のまま**で、
-  /// 成功行は `.done` のまま残る。中断の札も張り直す（中断後の再試行が即座に打ち切られない）。
+  /// 失敗行だけの再実行の依頼を返す。**凍結した分類・凍結した依頼のまま**で、成功行は `.done` のまま
+  /// 残る。中断の札も張り直す（中断後の再試行が即座に打ち切られない）。
+  ///
+  /// **失敗行はここでは待機へ戻さない**——実際に撃たれた行だけを `markRunning` が動かすので、
+  /// 再試行の途中で中断しても、まだ撃っていない行は失敗のまま（理由と生ログごと）残る。
+  ///
+  /// ブランチ削除だけが落ちた行は worktree が既に消えているので、その事実を依頼へ書き戻す。
   func retryRequests() -> [CleanDeleteRequest] {
     guard phase == .failed, var run else { return [] }
     var out: [CleanDeleteRequest] = []
     for index in run.states.indices {
-      guard case .failed = run.states[index] else { continue }
-      run.states[index] = .pending
+      guard case .failed(let failure) = run.states[index] else { continue }
+      if failure.step == .branch { run.requests[index].worktreeAlreadyRemoved = true }
       out.append(run.requests[index])
     }
     guard !out.isEmpty else { return [] }
-    run.isCancelled = false
     self.run = run
     runToken = CleanRunToken()
     failureCursor = 0
@@ -284,11 +299,21 @@ final class CleanRunToken {
     }
   }
 
-  /// `o タブで開く` の対象（一部失敗画面のカーソルが指す失敗行）。
+  /// 一部失敗画面のカーソルが指す失敗行（ハイライトと `⏎` / `o` の対象）。
   var failureTargetPath: String? {
     let indices = failedIndices
     guard indices.indices.contains(failureCursor), let run else { return nil }
     return run.requests[indices[failureCursor]].path
+  }
+
+  /// `o タブで開く` で開ける失敗行。**ブランチ削除だけが落ちた行は worktree がもう無い**ので、
+  /// 開く先が存在しない（案内も出さない）。
+  var openableFailurePath: String? {
+    guard let path = failureTargetPath, let run,
+      let index = run.requests.firstIndex(where: { $0.path == path }),
+      case .failed(let failure) = run.states[index], failure.step != .branch
+    else { return nil }
+    return path
   }
 
   // MARK: - 内部

@@ -35,9 +35,10 @@ extension DispatchPaletteModel {
     }
   }
 
-  /// clean の `o`。一部失敗画面のカーソルが指す失敗行の worktree をタブで開く。
+  /// clean の `o`。一部失敗画面のカーソルが指す失敗行の worktree をタブで開く
+  /// （worktree がもう無い行には開く先が無い）。
   func openCleanFailure() {
-    guard clean.phase == .failed, let path = clean.failureTargetPath else { return }
+    guard clean.phase == .failed, let path = clean.openableFailurePath else { return }
     onOpenWorktree(path)
   }
 

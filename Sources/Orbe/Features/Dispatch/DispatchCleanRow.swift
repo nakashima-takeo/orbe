@@ -161,8 +161,11 @@ struct DispatchCleanRunRow: View {
     .padding(.vertical, 5)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(CleanRowShape(topOnly: failure != nil).fill(rowFill))
-    .opacity(state == .pending ? 0.5 : 1)
+    .opacity(isSpent ? 0.5 : 1)
   }
+
+  /// まだ撃たれていない行（待機・中断で未実行）は減光する。
+  private var isSpent: Bool { state == .pending || state == .skipped }
 
   private var rowFill: Color {
     if failure != nil { return Color.theme.tintRed }
@@ -180,7 +183,8 @@ struct DispatchCleanRunRow: View {
       }
       Spacer(minLength: 0)
       chip(.dispatchCleanRetry, filled: true)
-      chip(.dispatchCleanOpenTab, filled: false)
+      // worktree がもう無い行（ブランチ削除だけが落ちた）には開く先が無い。
+      if failure?.step != .branch { chip(.dispatchCleanOpenTab, filled: false) }
     }
     .font(Font.theme.meta)
     .padding(.top, Theme.Space.hair)
@@ -221,7 +225,7 @@ struct DispatchCleanRunRow: View {
         .frame(width: 13)
     case .running:
       StatusGlyphView(kind: .working, size: 10).frame(width: 13)
-    case .pending:
+    case .pending, .skipped:
       CleanCheckbox(isOn: true)
     }
   }
@@ -232,6 +236,8 @@ struct DispatchCleanRunRow: View {
       return l10n.string(
         request.deleteBranch && request.branch != nil
           ? .dispatchCleanRowPendingWithBranch : .dispatchCleanRowPending)
+    case .skipped:
+      return l10n.string(.dispatchCleanRowSkipped)
     case .running:
       return l10n.string(.dispatchCleanRowRunning)
     case .done(let branch, let pruned):
@@ -241,6 +247,7 @@ struct DispatchCleanRunRow: View {
     case .failed(let failure):
       switch failure.step {
       case .dirty: return l10n.string(.dispatchCleanFailedDirty)
+      case .operationInProgress: return l10n.string(.dispatchCleanFailedOperation)
       case .worktree: return l10n.string(.dispatchCleanFailedWorktree)
       case .branch: return l10n.string(.dispatchCleanFailedBranch)
       }
