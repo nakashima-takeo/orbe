@@ -1,7 +1,7 @@
 ---
 title: コマンド補完
 description: zsh の zle フックが control.sock 経由で編集バッファを送り、JavaScriptCore 埋め込みの spec エンジンが候補を算出、カーソル位置のドロップダウンから $BUFFER を直接書き換える
-updated: 2026-08-08
+updated: 2026-08-12
 ---
 
 # コマンド補完
@@ -62,7 +62,7 @@ engine(JS) は純関数のまま、host が種別グループ化の直前に**�
 
 候補ソースは **JavaScriptCore 埋め込みの spec エンジン**。fig の補完 spec エコシステム（withfig/autocomplete）の宣言的 spec を、inshellisense 由来の parser/suggestion ロジックで解釈する。エンジンは prebuilt の単一 JS バンドルを `JSContext` に load して駆動する（spec の `postProcess` 等が JS 関数のため JS ランタイムが要る）。同梱 spec は主要コマンドの curated subset（一覧は `vendor/completion-engine/README.md`）。うち `claude`・`codex` は上流に無い**自家最小 spec**（実 CLI の `--help` 実測由来・純静的）。
 
-- **責務分界**: JS は parse・spec 走査・postProcess（純変換）だけを担い、シェルは叩かない。spec の generator（動的候補）が要求するシェル実行は、Swift が `JSContext` へ注入した native 関数経由で `posix_spawn` が行う——当該ペインの cwd（OSC 7、未報告時は initialCwd→ホーム）で `zsh -c`・login PATH・stdin 無し・stdout のみ・**数秒のハードタイムアウト**・失敗/タイムアウトは空（静的候補は保つ）。子は自分の**プロセスグループのリーダー**として起こし、タイムアウト時はグループごと kill する——孫が pipe を握り続けると書き手が残って EOF が起きず、drain が永久ハングして補完 queue が恒久停止するため。出力は別 queue で drain する。これにより `git checkout <Tab>` が実ブランチ名、`ls <Tab>` がカレント dir の実ファイルを出す。
+- **責務分界**: JS は parse・spec 走査・postProcess（純変換）だけを担い、シェルは叩かない。spec の generator（動的候補）が要求するシェル実行は、Swift が `JSContext` へ注入した native 関数経由で `posix_spawn` が行う——当該ペインの cwd（OSC 7、未報告時は initialCwd→ホーム）で `zsh -c`・子プロセス PATH（[shell-path](../platform/shell-path.md)）・stdin 無し・stdout のみ・**数秒のハードタイムアウト**・失敗/タイムアウトは空（静的候補は保つ）。子は自分の**プロセスグループのリーダー**として起こし、タイムアウト時はグループごと kill する——孫が pipe を握り続けると書き手が残って EOF が起きず、drain が永久ハングして補完 queue が恒久停止するため。出力は別 queue で drain する。これにより `git checkout <Tab>` が実ブランチ名、`ls <Tab>` がカレント dir の実ファイルを出す。
 - **スレッド規律**: `JSContext` とシェル実行は専用 serial queue（main 非依存）、popup 表示は main へ hop。候補取得は**非同期**で `completion_update` から駆動し、連続更新は debounce で coalesce、generator 結果は短 TTL キャッシュ。ペインごとの単調増加 token で**古い結果を破棄**する（stale ガード）。
 - **accept**: `completion_accept` はキャッシュした置換範囲＋選択候補の挿入値から適用結果を **main・同期**で組む（JS round trip 無し＝zsh 側の短い read タイムアウト内に収める）。Tab のとき、素の候補は挿入直後に空白を 1 つ補い次トークンへ進める（後続が既に空白なら足さない）。明示挿入値を持つ候補（`--flag=`・パス末尾 `/` 等）は verbatim 挿入で空白を足さない（inshellisense 忠実）。Enter は末尾のパス区切り `/` を 1 つ落として空白を足さず確定し（ディレクトリを `src` の形で確定）、以後の再表示を抑える。候補取得が追いつく前の accept は退避し、従来 Tab へフォールバックする。
 - **出力スキーマ**: バンドルの出力候補は名前・説明・任意の挿入値・任意の `type`（fig の suggestion type）。host は `type` を保持して UI の種別グルーピング・グリフ導出に使う（generator 出力など type 無しは nil）。スキーマを変えたら `vendor/completion-engine/` でバンドルを再生成しコミットする。

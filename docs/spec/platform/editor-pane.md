@@ -1,7 +1,7 @@
 ---
 title: エディタペイン
 description: ⌘/ の Git ワークベンチペイン。cwd 追従・右 ToolRail（ツリー/git/ブラウザ）＋左本体（ファイル/diff/md/CommitDetail）＋CommitBar
-updated: 2026-08-10
+updated: 2026-08-12
 ---
 
 # エディタペイン（⌘/）
@@ -81,7 +81,7 @@ GitHeader 直下に Segmented「変更 N」/「履歴」（変更サブタブの
 - **StageBox（フォルダ）**: 全 staged→配下一括 unstage、それ以外→配下一括 stage（`git add`／`git reset` に複数パスを渡す・rename は oldPath も対象）。
 - **hunk stage/解除**: 対象 hunk の全変更行を選択した再構成パッチを `git apply --cached`（解除は `--reverse`）で index のみへ適用する。未追跡の hunk stage は `add --intent-to-add` を前置する。
 - **変更破棄（discard）**: 右クリック→確認ダイアログ→破棄で worktree を確定変更する。tracked は `git checkout -q -- <paths>`（index の内容へ戻す）、untracked は物理削除。ファイル単位・フォルダ単位とも同経路。
-- **コミット**: `git commit -F -`。hooks・署名は通常の git commit と同様に効く（ログインシェルの PATH を一度解決して全 git 呼び出しへ引き継ぐ）。成功で下書きクリア、失敗/成功とも CommitBar 近傍の最小バナーに出力を出す。
+- **コミット**: `git commit -F -`。hooks・署名は通常の git commit と同様に効く（全 git 呼び出しが同じ子プロセス PATH を共有する → [shell-path](shell-path.md)）。成功で下書きクリア、失敗/成功とも CommitBar 近傍の最小バナーに出力を出す。
 - conflict ファイルは stage・discard の対象外（C バッジで見えるが、解決 UI は持たない）。
 
 ## 更新
