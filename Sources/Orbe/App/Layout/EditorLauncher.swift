@@ -14,35 +14,29 @@ enum EditorLauncher {
       NSSound.beep()
       return
     }
-    guard let resolved = resolve() else {
+    guard let editor = resolve() else {
       let alert = NSAlert()
       alert.messageText = localization.string(.editorNotFoundTitle)
       alert.informativeText = localization.string(.editorNotFoundMessage)
       alert.runModal()
       return
     }
-    open(directory: cwd, editor: resolved.editor, path: resolved.path)
+    open(directory: cwd, editor: editor)
   }
 
-  /// 解決済みエディタと、解決に使った PATH。子プロセス起動にも同じ PATH を使う。
-  private struct Resolved {
-    let editor: String
-    let path: String
-  }
-
-  /// 見つかったエディタ。**見つからなかったことは覚えない**——起動直後のまだ痩せた PATH で
+  /// 見つかったエディタの絶対パス。**見つからなかったことは覚えない**——起動直後のまだ痩せた PATH で
   /// 一度外した結果を焼くと、PATH が整った後も「エディタ未検出」のままになる。
-  private static var cached: Resolved?
+  private static var cached: String?
 
   /// 起動すべきエディタを解決する。見つからなければ nil。
-  private static func resolve() -> Resolved? {
+  private static func resolve() -> String? {
     if let cached { return cached }
     let result = resolveUncached()
     cached = result
     return result
   }
 
-  private static func resolveUncached() -> Resolved? {
+  private static func resolveUncached() -> String? {
     let path = ShellPATH.shared.value()
     let env = ProcessInfo.processInfo.environment
 
@@ -53,12 +47,12 @@ enum EditorLauncher {
       let command = raw.split(separator: " ").first.map(String.init) ?? raw
       let name = (command as NSString).lastPathComponent
       guard guiEditors.contains(name) else { continue }
-      if let resolved = locate(command, in: path) { return Resolved(editor: resolved, path: path) }
+      if let resolved = locate(command, in: path) { return resolved }
     }
 
     // PATH 検索で GUI エディタの先頭ヒット。
     for name in guiEditors {
-      if let resolved = locate(name, in: path) { return Resolved(editor: resolved, path: path) }
+      if let resolved = locate(name, in: path) { return resolved }
     }
     return nil
   }
@@ -77,13 +71,14 @@ enum EditorLauncher {
   }
 
   /// `editor <directory>` をバックグラウンド起動する（Orbe をブロックしない）。
-  /// PATH は解決に使ったものをそのまま渡す（エディタ検出と子プロセスの見える世界を揃える）。
-  private static func open(directory: String, editor: String, path: String) {
+  /// PATH は起動のたび `ShellPATH` から取る（解決時点の値を焼くと、まだ痩せていた PATH を
+  /// そのセッションの全エディタ起動へ引き継いでしまう）。
+  private static func open(directory: String, editor: String) {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: editor)
     process.arguments = [directory]
     var environment = ProcessInfo.processInfo.environment
-    environment["PATH"] = path
+    environment["PATH"] = ShellPATH.shared.value()
     process.environment = environment
     try? process.run()
   }
