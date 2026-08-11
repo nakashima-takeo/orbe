@@ -31,6 +31,18 @@ final class DispatchCleanRowRenderTests: SnapshotTestCase {
       message: "溢れた語が描かれていない")
   }
 
+  /// 右クラスタ（`chips`）が描かれている。
+  ///
+  /// 到達可能性の不変条件は「`chips` は行の状態によらず常に描かれる」を土台に、そこへ載らなかった
+  /// 語だけをサブラインの有無で数える。**土台が抜けると不変条件そのものが空論になる**のに、
+  /// ここだけテストが支えていなかった。
+  func testRowDrawsTheChips() throws {
+    try assertSublineDraws(
+      pick: { !$0.chips.isEmpty },
+      strip: { $0.with(chips: []) },
+      message: "右クラスタが描かれていない")
+  }
+
   /// 「その語を持つ行の画」と「その語だけ抜いた行の画」が違うことを見る。
   private func assertSublineDraws(
     pick: (CleanRow) -> Bool, strip: (CleanRow) -> CleanRow, message: String
@@ -63,13 +75,13 @@ final class DispatchCleanRowRenderTests: SnapshotTestCase {
 }
 
 extension CleanRow {
-  /// 受け皿の 1 つだけを差し替えた行（描画の突合用）。
-  fileprivate func with(lossNotes: [CleanChip]? = nil, overflowNotes: [CleanChip]? = nil)
-    -> CleanRow
-  {
+  /// 語の置き場の 1 つだけを差し替えた行（描画の突合用）。
+  fileprivate func with(
+    chips: [CleanChip]? = nil, lossNotes: [CleanChip]? = nil, overflowNotes: [CleanChip]? = nil
+  ) -> CleanRow {
     CleanRow(
       id: id, name: name, meta: meta, branch: branch, head: head, group: group,
-      vocabulary: vocabulary, chips: chips, lossNotes: lossNotes ?? self.lossNotes,
+      vocabulary: vocabulary, chips: chips ?? self.chips, lossNotes: lossNotes ?? self.lossNotes,
       overflowNotes: overflowNotes ?? self.overflowNotes,
       deletesBranchImplicitly: deletesBranchImplicitly)
   }

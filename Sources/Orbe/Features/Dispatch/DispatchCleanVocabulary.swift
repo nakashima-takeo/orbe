@@ -146,8 +146,10 @@ struct CleanRow: Identifiable, Equatable {
   /// `locked` はその行が安全群に入れない理由そのものなので、消えると確認群にいる理由が読めない。
   ///
   /// サブラインは確認群のチェック済み行にしか開かないので、**安全行の溢れは画面に出ない**。
-  /// 安全行が持ちうる loss の語は `PR #N open` の 1 つだけで、それは loss 優先の並びで必ずピルに
-  /// 載るため、出ないのは安全の根拠を補強する safe / neutral の語に限られる（台帳 逸脱 17）。
+  /// それが許されるのは、安全行に loss の語が 1 つも立たないから——レビュー中の PR を持つ行は
+  /// 安全確認で落ち、取り込み済みの行は `未 push` / `remote +N` を名乗らない。残るのは
+  /// 既定ブランチへ取り込み済みという同じ根拠の言い換え（safe / neutral）だけで、それが 1 枚は
+  /// 必ずピルに載る（台帳 逸脱 18 / 20。`testSafeRowsRaiseNoLoss` が固定する）。
   let overflowNotes: [CleanChip]
   /// チェックするとブランチも一緒に消える行（safe 群のうち、実体があってブランチを持つ行）。
   let deletesBranchImplicitly: Bool
