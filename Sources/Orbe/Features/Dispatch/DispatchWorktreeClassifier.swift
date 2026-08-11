@@ -1,168 +1,56 @@
 import Foundation
 
-/// clean 画面の 3 群。inUse=物理的に消せない / safe=推定が立ち安全確認を全部通った / caution=残り全部。
-enum CleanGroup: Equatable {
-  case safe, caution, inUse
-}
-
-/// clean 行末のチップ。**文言は View が言語別に引き**、ここは意味と数値だけを持つ
-/// （`DispatchInfoKind` / `DispatchWorktreeKind` と同じ流儀）。
-enum CleanChip: Equatable, Identifiable {
-  /// PR が MERGED（緑）。
-  case mergedPR(Int)
-  /// upstream が消えている（灰・git の生の語なので L10n しない）。
-  case gone
-  /// ディスク上に実体が無い（灰）。
-  case prunable
-  /// 未コミット変更あり（琥珀）。
-  case dirty
-  /// 未マージのまま閉じた PR ＋独自コミット k 件（琥珀）。
-  case unmergedClosed(Int)
-  /// 独自コミット k 件（琥珀）。
-  case ownCommits(Int)
-  /// worktree が locked（琥珀）。
-  case locked
-  /// `clean · +0`（地なし・緑の注記）。
-  case cleanNote
-  /// main worktree（地なし・muted）。
-  case mainWorktree
-  /// ペインが開いている（地なし・muted）。agent 作業中なら working グリフを前置する。
-  case paneOpen(working: Bool)
-
-  var id: String {
-    switch self {
-    case .mergedPR(let n): return "merged:\(n)"
-    case .gone: return "gone"
-    case .prunable: return "prunable"
-    case .dirty: return "dirty"
-    case .unmergedClosed(let k): return "unmergedClosed:\(k)"
-    case .ownCommits(let k): return "ownCommits:\(k)"
-    case .locked: return "locked"
-    case .cleanNote: return "cleanNote"
-    case .mainWorktree: return "mainWorktree"
-    case .paneOpen(let working): return "paneOpen:\(working)"
-    }
-  }
-}
-
-/// clean 画面の 1 行（分類の出力。画面に入った瞬間に凍結されるスナップショットの要素）。
-struct CleanRow: Identifiable, Equatable {
-  /// worktree の絶対パス（一意）。
-  let id: String
-  /// パスの末尾要素。
-  let name: String
-  /// `<~省略パス> · <branch>`。
-  let meta: String
-  let branch: String?
-  /// 分類した時点の HEAD の oid。ブランチ削除を「この先端のときだけ」に絞るために運ぶ
-  /// （凍結した判定のままコミットを消さない）。
-  let head: String
-  let group: CleanGroup
-  /// 行末チップ列（群ごとの語彙）。
-  let chips: [CleanChip]
-}
-
-/// ペインが開いているディレクトリのスナップショット（`SessionStore` を Dispatch から見せないための値型）。
-struct PaneOccupancy: Equatable {
-  /// ペインの実効 cwd。
-  let cwd: String
-  /// agent の状態（`working` / `waiting` / `done` / `idle`）。素のシェルなら nil。
-  let agentState: String?
-}
-
-/// 紐づく closed PR（掃除の推定と caution の理由に使う）。
-struct DispatchCleanPR: Equatable {
-  let number: Int
-  let isMerged: Bool
-}
-
-/// 分類の入力 1 件。git / gh / ペイン走査から採った素の事実だけを持ち、subprocess には依存しない。
-struct DispatchCleanFacts: Equatable {
-  let path: String
-  let branch: String?
-  /// HEAD の oid（ブランチ削除の compare-and-delete に運ぶ）。
-  let head: String
-  let isMain: Bool
-  /// ディスク上の実体が失われている。
-  let isPrunable: Bool
-  /// locked の理由（locked でなければ nil）。
-  let lockReason: String?
-  /// upstream が `[gone]`。
-  let isGone: Bool
-  /// ブランチに紐づく closed PR。
-  let closedPR: DispatchCleanPR?
-  /// 作業ツリーに未コミット変更がある。
-  let isDirty: Bool
-  /// 既定ブランチに取り込まれていない独自コミット数。0 で取り込み済み、nil で判定できなかった。
-  let unmergedCommits: Int?
-  /// このパスを開いているペイン（複数あれば状態を 1 つに畳んだもの）。
-  let occupancy: PaneOccupancy?
-
-  /// 既定値は**すべて安全側**に置く。とりわけ `unmergedCommits` は「判定できなかった」を意味する nil で、
-  /// 省略しただけの事実が「取り込み済み＝消してよい」と名乗ることはない（既定値を第 2 の判断点にしない）。
-  init(
-    path: String, branch: String? = nil, head: String = "", isMain: Bool = false,
-    isPrunable: Bool = false, lockReason: String? = nil, isGone: Bool = false,
-    closedPR: DispatchCleanPR? = nil, isDirty: Bool = false, unmergedCommits: Int? = nil,
-    occupancy: PaneOccupancy? = nil
-  ) {
-    self.path = path
-    self.branch = branch
-    self.head = head
-    self.isMain = isMain
-    self.isPrunable = isPrunable
-    self.lockReason = lockReason
-    self.isGone = isGone
-    self.closedPR = closedPR
-    self.isDirty = isDirty
-    self.unmergedCommits = unmergedCommits
-    self.occupancy = occupancy
-  }
-}
-
-/// 分類レーンが 1 worktree について実測した事実。
-struct DispatchCleanProbe: Equatable {
-  var isDirty = false
-  /// 取り込み済みなら 0、未取り込みなら独自コミット件数、判定できなければ nil。
-  var unmergedCommits: Int?
-}
-
 /// worktree を「安全に消せる／理由を確認してから／消せない」の 3 群へ振り分ける純粋関数。
 ///
 /// **「要らないの推定」と「消して安全か」は別のレイヤ**として別々に評価する。推定はどれか 1 つ立てば
 /// 足り、安全確認は 1 つでも落ちれば safe に入らない——初期チェックに入る行は必ず全確認を通っている。
 enum DispatchWorktreeClassifier {
 
+  /// 分類の入力（各レーンが別々に着地するので、揃った順に埋めて渡す。`DispatchSectionBuilder.Input`
+  /// と同じ流儀）。
+  struct Input {
+    var worktrees: [GitWorktree] = []
+    var localBranches: [GitBranch] = []
+    var closedPullRequests: [GitHubClosedPR] = []
+    var openPullRequests: [GitHubPullRequest] = []
+    /// path → 分類レーンの実測。無い worktree は「判定できなかった」として扱う。
+    var probes: [String: DispatchCleanProbe] = [:]
+    var panes: [PaneOccupancy] = []
+    var defaultBranch = "main"
+  }
+
   /// 各レーンから届いた事実を 1 worktree ぶんずつ突き合わせて行に落とす（レーンをまたぐ組み立ての SSOT）。
-  /// 実測が無い worktree（inUse と判ってプローブを省いた行）は「判定できなかった」として扱う。
-  static func rows(
-    worktrees: [GitWorktree], localBranches: [GitBranch],
-    closedPullRequests: [GitHubClosedPR], probes: [String: DispatchCleanProbe],
-    panes: [PaneOccupancy]
-  ) -> [CleanRow] {
-    let occupancy = occupancies(worktreePaths: worktrees.map(\.path), panes: panes)
-    let trackByBranch = Dictionary(
-      localBranches.map { ($0.name, $0.track) }, uniquingKeysWith: { first, _ in first })
-    let prByHead = Dictionary(
-      closedPullRequests.map { ($0.headRefName, $0) }, uniquingKeysWith: { first, _ in first })
+  static func rows(_ input: Input) -> [CleanRow] {
+    let occupancy = occupancies(worktreePaths: input.worktrees.map(\.path), panes: input.panes)
+    let branchByName = Dictionary(
+      input.localBranches.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+    let closedByHead = Dictionary(
+      input.closedPullRequests.map { ($0.headRefName, $0) }, uniquingKeysWith: { first, _ in first }
+    )
+    let openByHead = Dictionary(
+      input.openPullRequests.map { ($0.headRefName, $0) }, uniquingKeysWith: { first, _ in first })
     return classify(
-      worktrees.map { worktree in
-        let probe = probes[worktree.path]
-        let pr = worktree.branch.flatMap { prByHead[$0] }
+      input.worktrees.map { worktree in
+        let probe = input.probes[worktree.path]
+        let local = worktree.branch.flatMap { branchByName[$0] }
+        let closed = worktree.branch.flatMap { closedByHead[$0] }
         return DispatchCleanFacts(
           path: worktree.path, branch: worktree.branch, head: worktree.head,
-          isMain: worktree.isMain,
-          isPrunable: worktree.isPrunable, lockReason: worktree.lockReason,
-          isGone: worktree.branch.flatMap { trackByBranch[$0] ?? nil } == "[gone]",
-          closedPR: pr.map { DispatchCleanPR(number: $0.number, isMerged: $0.state == "MERGED") },
-          isDirty: probe?.isDirty ?? false, unmergedCommits: probe?.unmergedCommits,
-          occupancy: occupancy[worktree.path])
-      })
+          isMain: worktree.isMain, isPrunable: worktree.isPrunable,
+          lockReason: worktree.lockReason, upstream: local?.upstream, track: local?.track,
+          closedPR: closed.map {
+            DispatchCleanPR(number: $0.number, isMerged: $0.state == "MERGED")
+          },
+          openPR: worktree.branch.flatMap { openByHead[$0]?.number },
+          status: probe?.status, unmergedCommits: probe?.unmergedCommits,
+          operation: probe?.operation ?? .unknown, occupancy: occupancy[worktree.path])
+      }, defaultBranch: input.defaultBranch)
   }
 
   /// 群順（safe → caution → inUse）に並べた行を返す。群内は入力順。
-  static func classify(_ facts: [DispatchCleanFacts]) -> [CleanRow] {
-    let rows = facts.map(row)
+  static func classify(_ facts: [DispatchCleanFacts], defaultBranch: String = "main") -> [CleanRow]
+  {
+    let rows = facts.map { row($0, defaultBranch: defaultBranch) }
     return [CleanGroup.safe, .caution, .inUse].flatMap { group in
       rows.filter { $0.group == group }
     }
@@ -181,10 +69,14 @@ enum DispatchWorktreeClassifier {
   }
 
   /// 消えて困るものが無いことの直接確認。**すべて**通ってはじめて safe。
-  /// 実体が無い（prunable）ときは「ディスク上に失うものが無い」ので dirty の項目は自動的に満たす。
+  /// 実体が無い（prunable）ときは「ディスク上に失うものが無い」ので、作業ツリー側の 2 項目
+  /// （status と停止中の操作）は自動的に満たす。
   private static func passesSafety(_ f: DispatchCleanFacts) -> Bool {
     guard !f.isMain, f.occupancy == nil, f.lockReason == nil else { return false }
-    guard f.isPrunable || !f.isDirty else { return false }
+    guard f.isPrunable || f.status?.isClean == true else { return false }
+    // **status が clean でも rebase 途中の worktree は safe に入れない。** コンフリクトの無い停止点では
+    // status が空になりうるので、status だけを見ていると初期チェック済みのまま消える。
+    guard f.isPrunable || f.operation == .none else { return false }
     return f.unmergedCommits == 0
   }
 
@@ -195,36 +87,89 @@ enum DispatchWorktreeClassifier {
 
   // MARK: - 行の組み立て
 
-  private static func row(_ f: DispatchCleanFacts) -> CleanRow {
+  private static func row(_ f: DispatchCleanFacts, defaultBranch: String) -> CleanRow {
     let group = group(f)
-    var meta = abbreviate(f.path)
-    if let branch = f.branch { meta += " · \(branch)" }
+    let axisA = self.axisA(f, group)
+    let axisB = group == .inUse ? [] : self.axisB(f, defaultBranch: defaultBranch)
+    let axisC = self.axisC(f)
+    let candidates = axisA + axisB + axisC
     return CleanRow(
-      id: f.path, name: (f.path as NSString).lastPathComponent, meta: meta, branch: f.branch,
-      head: f.head, group: group, chips: chips(f, group))
+      id: f.path, name: (f.path as NSString).lastPathComponent,
+      meta: f.branch ?? abbreviate(f.path), branch: f.branch, head: f.head, group: group,
+      chips: chips(f, group, axisA: axisA, axisB: axisB, axisC: axisC),
+      lossNotes: candidates.filter { $0.tone == .loss },
+      deletesBranchImplicitly: group == .safe && !f.isPrunable && f.branch != nil)
   }
 
-  /// 行末チップをデータから導く（リテラルの並びを持たない）。
-  /// inUse は「なぜ消せないか」だけ、それ以外は推定チップ→落ちた安全確認の理由→注記の順。
-  private static func chips(_ f: DispatchCleanFacts, _ group: CleanGroup) -> [CleanChip] {
-    if group == .inUse {
-      if f.isMain { return [.mainWorktree] }
-      return [.paneOpen(working: f.occupancy?.agentState == "working")]
+  /// 右クラスタ。**ピルは軸A + 軸B から 1 枚ずつの最大 2 枚**（`locked` は軸C の例外として並ぶ）で、
+  /// 3 枚以上になったら loss を優先し残りは展開サブラインの損失内訳へ回す。
+  /// 素文字（軸A の `clean · +0`・軸C の使用状況・safe 行の注記）はピルの後に続く。
+  private static func chips(
+    _ f: DispatchCleanFacts, _ group: CleanGroup, axisA: [CleanChip], axisB: [CleanChip],
+    axisC: [CleanChip]
+  ) -> [CleanChip] {
+    var pills = ([axisA.first, axisB.first].compactMap { $0 } + axisC).filter(\.isPill)
+    if pills.count > 2 {
+      pills = Array(
+        (pills.filter { $0.tone == .loss } + pills.filter { $0.tone != .loss }).prefix(2))
     }
+    var plains = axisA.filter { !$0.isPill } + axisC.filter { !$0.isPill }
+    if group == .safe, f.branch != nil, !f.isPrunable { plains.append(.branchAlsoDeleted) }
+    return pills + plains
+  }
+
+  /// 軸A（消すと何を失うか）。優先順位は `進行中 > 未コミット > untracked > prunable`。
+  /// `clean · +0` は実体があり status と取り込み済み判定の両方を通った safe 行だけが名乗る。
+  private static func axisA(_ f: DispatchCleanFacts, _ group: CleanGroup) -> [CleanChip] {
+    guard group != .inUse else { return [] }
     var out: [CleanChip] = []
-    if let pr = f.closedPR, pr.isMerged { out.append(.mergedPR(pr.number)) }
-    if f.isGone { out.append(.gone) }
-    if f.isPrunable { out.append(.prunable) }
-    if !f.isPrunable, f.isDirty { out.append(.dirty) }
-    if let unmerged = f.unmergedCommits, unmerged > 0 {
-      out.append(
-        f.closedPR?.isMerged == false ? .unmergedClosed(unmerged) : .ownCommits(unmerged))
+    if !f.isPrunable, case .inProgress(let operation) = f.operation {
+      out.append(.inProgress(operation))
     }
-    if f.lockReason != nil { out.append(.locked) }
-    // `clean · +0` は実体のあるディレクトリで status と取り込み済み判定の両方が通った safe 行だけ。
-    // prunable 行は「clean」を名乗る作業ツリーが無いので出さない。
-    if group == .safe, !f.isPrunable { out.append(.cleanNote) }
+    if !f.isPrunable, let status = f.status {
+      if status.modified > 0 { out.append(.uncommitted(status.modified)) }
+      if status.untracked > 0 { out.append(.untracked(status.untracked)) }
+    }
+    if f.isPrunable { out.append(.prunable) }
+    if out.isEmpty, group == .safe, !f.isPrunable { out.append(.cleanNote) }
     return out
+  }
+
+  /// 軸B（消すと世界に残るか）。優先順位は**損失を隠さない順**。
+  /// detached（`branch == nil`）は行き先そのものが無いので何も名乗らない。
+  private static func axisB(_ f: DispatchCleanFacts, defaultBranch: String) -> [CleanChip] {
+    guard f.branch != nil else { return [] }
+    var out: [CleanChip] = []
+    if let unmerged = f.unmergedCommits, unmerged > 0 { out.append(.ownCommits(unmerged)) }
+    if let number = f.openPR { out.append(.openPR(number)) }
+    if f.upstream == nil { out.append(.unpushed) }
+    if let ahead = ahead(f.track), ahead > 0 { out.append(.remoteAhead(ahead)) }
+    if let pr = f.closedPR, pr.isMerged { out.append(.mergedPR(pr.number)) }
+    if f.unmergedCommits == 0 { out.append(.mergedIntoDefault(defaultBranch)) }
+    if f.upstream != nil, f.track == nil { out.append(.remoteSynced) }
+    if f.isGone { out.append(.gone) }
+    return out
+  }
+
+  /// 軸C（使用状況）。`locked` を除いて素文字で、群の移動そのものが「使用中」を表す。
+  private static func axisC(_ f: DispatchCleanFacts) -> [CleanChip] {
+    var out: [CleanChip] = []
+    if f.lockReason != nil { out.append(.locked) }
+    // main worktree は常に削除不可という 1 つの事実で言い切る（ペインの有無を重ねて言わない）。
+    if f.isMain { return out + [.mainWorktree] }
+    guard let occupancy = f.occupancy else { return out }
+    switch occupancy.agentState {
+    case "working": out.append(.agentWorking)
+    case "waiting": out.append(.agentWaiting)
+    default: out.append(.paneOpen)
+    }
+    return out
+  }
+
+  /// `%(upstream:track)` の `[ahead N]`（`[ahead 1, behind 2]` も拾う）。
+  private static func ahead(_ track: String?) -> Int? {
+    guard let track, let range = track.range(of: "ahead ") else { return nil }
+    return Int(track[range.upperBound...].prefix { $0.isNumber })
   }
 
   private static func abbreviate(_ path: String) -> String {

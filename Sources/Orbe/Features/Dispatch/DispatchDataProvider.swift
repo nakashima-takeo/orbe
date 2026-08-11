@@ -8,7 +8,8 @@ final class DispatchDataProvider {
   private let cwd: String
   private weak var model: DispatchPaletteModel?
   /// 実行失敗メッセージ（palette 表示）を現在言語で出すためのストア（提示元＝WindowController が渡す）。
-  private let localization: LocalizationStore
+  /// 分冊（`DispatchDataProvider+Clean.swift`）も読む。
+  let localization: LocalizationStore
   /// worktree 新規作成先のテンプレート（実効設定 `worktree-dir`）。パレットは開くたびに生成されるため、
   /// 提示元が開く時点の実効値を注入する＝常に最新値で解決する。
   private let worktreeTemplate: String
@@ -20,7 +21,8 @@ final class DispatchDataProvider {
   private var mainWorktree: String?
   private var defaultBranchName = "main"
 
-  private var worktrees: [GitWorktree] = []
+  /// 分冊（`DispatchDataProvider+Clean.swift`）も読む。
+  private(set) var worktrees: [GitWorktree] = []
   private var localBranches: [GitBranch] = []
   private var remoteBranches: [GitBranch] = []
   private var issues: [GitHubIssue] = []
@@ -100,7 +102,8 @@ final class DispatchDataProvider {
     }
   }
 
-  private func loadGit(_ repo: GitRepo) {
+  /// git レーンを引き直す。分冊（`DispatchDataProvider+Clean.swift`）が削除の完了時にも撃つ。
+  func loadGit(_ repo: GitRepo) {
     let group = DispatchGroup()
     group.enter()
     repo.worktrees {
@@ -209,8 +212,10 @@ final class DispatchDataProvider {
     let selectedAction = model.selectedItem?.action
     let rows = cleanProbes.map {
       DispatchWorktreeClassifier.rows(
-        worktrees: worktrees, localBranches: localBranches,
-        closedPullRequests: closedPullRequests, probes: $0, panes: paneOccupancies)
+        DispatchWorktreeClassifier.Input(
+          worktrees: worktrees, localBranches: localBranches,
+          closedPullRequests: closedPullRequests, openPullRequests: pullRequests, probes: $0,
+          panes: paneOccupancies, defaultBranch: defaultBranchName))
     }
     model.classification = rows
     model.hasLoadedOnce = true
@@ -332,30 +337,6 @@ final class DispatchDataProvider {
       // 書くのは作成できたときだけ（失敗した作成の除外を残さない）。この時点では対象が実在するので
       // `check-ignore` の「既にユーザーが塞いでいるか」判定も正しく効く。
       repo.applyWorktreeExclude(entry, worktreeRoot: root) { completion(.ready(path)) }
-    }
-  }
-
-  /// 選択された worktree を削除する（実行と結果の集約は `DispatchWorktreeCleaner` が担う）。
-  ///
-  /// 完了の前に git レーンを引き直す。**1 件でも失敗したら画面に留まる**のがこの機能の設計で、
-  /// そのとき唯一の真実が削除前のままだと、list へ戻った先に消えた worktree の行が残り、clean へ
-  /// 入り直すとそれが「安全に削除できます」へチェック済みで復活する。差分を手で畳まず取り直すのは、
-  /// 削除が worktree・ブランチ・分類の複数レーンを動かすため（同じ状態へ 2 通りの道を作らない）。
-  func deleteWorktrees(
-    _ requests: [CleanDeleteRequest], completion: @escaping (CleanDeleteResult) -> Void
-  ) {
-    guard let repo else {
-      completion(
-        CleanDeleteResult(
-          succeededPaths: [], failureMessage: localization.string(.dispatchErrNotGitRepo)))
-      return
-    }
-    DispatchWorktreeCleaner(
-      repo: repo, localization: localization,
-      prunablePaths: Set(worktrees.filter(\.isPrunable).map(\.path))
-    ).run(requests) { [weak self] result in
-      self?.loadGit(repo)
-      completion(result)
     }
   }
 
