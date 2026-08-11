@@ -238,15 +238,17 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
     XCTAssertTrue(git(["commit", "-qm", "add submodule"]).isSuccess)
   }
 
-  private func deleteBranch(_ name: String, expecting oid: String) throws -> String? {
-    var error: String?
+  private func deleteBranch(_ name: String, expecting oid: String) throws
+    -> GitWorktreeCleanFailure?
+  {
+    var failure: GitWorktreeCleanFailure?
     let done = expectation(description: "deleteBranch")
     repo.deleteBranch(name: name, expectedOid: oid) {
-      error = $0
+      failure = $0
       done.fulfill()
     }
     wait(for: [done], timeout: 20)
-    return error
+    return failure
   }
 
   private func unmerged(_ branch: String) throws -> Int? {
@@ -271,14 +273,15 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
     return value
   }
 
-  private func remove(_ path: String) throws -> String? {
-    var error: String?
+  private func remove(_ path: String) throws -> GitWorktreeCleanFailure? {
+    var failure: GitWorktreeCleanFailure?
     let done = expectation(description: "removeWorktree")
     repo.removeWorktree(path: path) {
-      error = $0
+      failure = $0
       done.fulfill()
     }
     wait(for: [done], timeout: 20)
-    return error
+    return failure
   }
+
 }
