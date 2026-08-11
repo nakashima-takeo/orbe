@@ -28,7 +28,7 @@ final class DispatchCleanModelTests: OrbeTestCase {
           status: GitWorktreeStatusCounts(modified: 0, untracked: 0), unmergedCommits: 6,
           operation: .none),
         DispatchCleanFacts(path: "/repo", branch: "main", head: "ddd", isMain: true),
-      ], defaultBranch: "main")
+      ], defaultBranchLabel: "main")
   }
 
   func testInitialState() {
@@ -81,7 +81,7 @@ final class DispatchCleanModelTests: OrbeTestCase {
     let m = DispatchCleanModel()
     m.enter(
       rows: DispatchWorktreeClassifier.classify(
-        [DispatchCleanFacts(path: "/wt/detached", head: "eee")], defaultBranch: "main"))
+        [DispatchCleanFacts(path: "/wt/detached", head: "eee")], defaultBranchLabel: "main"))
     m.toggleAtCursor()
     XCTAssertTrue(m.isChecked(m.rows[0]))
     XCTAssertFalse(m.isExpanded(m.rows[0]))

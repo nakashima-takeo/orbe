@@ -93,6 +93,19 @@ enum CleanChip: Equatable, Identifiable {
     }
   }
 
+  /// 削除で**実際に失われる対象**を名指す語か（展開サブラインの損失内訳に出す）。
+  ///
+  /// **トーンとは別の軸**として持つ。`PR #N open` や `locked` は琥珀（`loss`）で描くが、消えるのは PR でも
+  /// lock でもない——トーンを損失の判定に流用すると、破壊操作の直前に `locked も消えます` という
+  /// 事実と違う一文が出る。`未 push · ローカルのみ` は失われるコミットを `独自コミット N 件` が既に
+  /// 名指しているので重ねない。
+  var isLoss: Bool {
+    switch self {
+    case .uncommitted, .untracked, .inProgress, .ownCommits, .remoteAhead: return true
+    default: return false
+    }
+  }
+
   /// 塗りのあるピルか（false は塗らない素文字）。軸C は `locked` を除いて素文字で、
   /// 使用状況は「ピルを増やす」のではなく群の移動そのものが表す。
   var isPill: Bool {
@@ -120,7 +133,7 @@ struct CleanRow: Identifiable, Equatable {
   let group: CleanGroup
   /// 右クラスタ（ピルは軸A + 軸B の最大 2 枚、その後に素文字と注記）。
   let chips: [CleanChip]
-  /// 展開サブラインへ書く損失の内訳（loss トーンの語彙すべて。ピルへ出たものも含む）。
+  /// 展開サブラインへ書く損失の内訳（`isLoss` の語彙すべて。ピルへ出たものも含む）。
   let lossNotes: [CleanChip]
   /// チェックするとブランチも一緒に消える行（safe 群のうち、実体があってブランチを持つ行）。
   let deletesBranchImplicitly: Bool

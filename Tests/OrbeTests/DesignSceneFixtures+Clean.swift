@@ -122,7 +122,7 @@ extension DesignSceneFixtures {
           unmergedCommits: 0, operation: .none),
         // 軸C: main worktree
         DispatchCleanFacts(path: "\(home)/dev/storefront", branch: "main", isMain: true),
-      ], defaultBranch: "main")
+      ], defaultBranchLabel: "main")
   }
 
   private static let cleanStatus = GitWorktreeStatusCounts(modified: 0, untracked: 0)

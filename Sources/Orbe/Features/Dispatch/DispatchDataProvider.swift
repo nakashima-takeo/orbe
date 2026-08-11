@@ -19,7 +19,18 @@ final class DispatchDataProvider {
 
   private(set) var repo: GitRepo?
   private var mainWorktree: String?
+  /// 既定ブランチの ref。`git symbolic-ref --short refs/remotes/origin/HEAD` の出力なので
+  /// `origin/main` という remote 追跡名で、取り込み判定の比較対象と新規 worktree の base に使う。
   private var defaultBranchName = "main"
+
+  /// 画面に出す既定ブランチ名。ref の側はリモート名付きなので、そのまま出すと行が
+  /// `merged → origin/main` と名乗る。**問い合わせ自体が `refs/remotes/origin/HEAD` 固定**なので、
+  /// 先頭の `origin/` を落とせばローカル名がそのまま残る。
+  private var defaultBranchLabel: String {
+    let prefix = "origin/"
+    guard defaultBranchName.hasPrefix(prefix) else { return defaultBranchName }
+    return String(defaultBranchName.dropFirst(prefix.count))
+  }
 
   /// 分冊（`DispatchDataProvider+Clean.swift`）も読む。
   private(set) var worktrees: [GitWorktree] = []
@@ -215,7 +226,7 @@ final class DispatchDataProvider {
         DispatchWorktreeClassifier.Input(
           worktrees: worktrees, localBranches: localBranches,
           closedPullRequests: closedPullRequests, openPullRequests: pullRequests, probes: $0,
-          panes: paneOccupancies, defaultBranch: defaultBranchName))
+          panes: paneOccupancies, defaultBranchLabel: defaultBranchLabel))
     }
     model.classification = rows
     model.hasLoadedOnce = true

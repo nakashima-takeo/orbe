@@ -10,11 +10,11 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   private let clean = GitWorktreeStatusCounts(modified: 0, untracked: 0)
 
   private func classify(_ facts: DispatchCleanFacts...) -> [CleanRow] {
-    DispatchWorktreeClassifier.classify(facts, defaultBranch: "main")
+    DispatchWorktreeClassifier.classify(facts, defaultBranchLabel: "main")
   }
 
   private func row(_ facts: DispatchCleanFacts) -> CleanRow {
-    DispatchWorktreeClassifier.classify([facts], defaultBranch: "main")[0]
+    DispatchWorktreeClassifier.classify([facts], defaultBranchLabel: "main")[0]
   }
 
   // MARK: - 群の振り分け
@@ -89,6 +89,17 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
         path: "/wt/x", branch: "feat/x", track: "[gone]", status: clean, unmergedCommits: 0,
         operation: .unknown))
     XCTAssertEqual(r.group, .caution)
+  }
+
+  /// status を採れなかった行も safe に入らない。**確認できていない作業ツリーに `clean · +0` を
+  /// 名乗らせない**（実体はあるのに status だけが nil、は分類レーンの実測が落ちれば起きる）。
+  func testUnknownStatusFallsToCaution() {
+    let r = row(
+      DispatchCleanFacts(
+        path: "/wt/x", branch: "feat/x", track: "[gone]", status: nil, unmergedCommits: 0,
+        operation: .none))
+    XCTAssertEqual(r.group, .caution)
+    XCTAssertFalse(r.chips.contains(.cleanNote))
   }
 
   /// 実体が無い（prunable）なら「ディスク上に失うものが無い」ので、作業ツリー側の確認
@@ -217,7 +228,23 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
         operation: .none))
     XCTAssertEqual(r.chips.filter(\.isPill).count, 2)
     XCTAssertEqual(r.chips, [.uncommitted(1), .ownCommits(4)])
-    XCTAssertEqual(r.lossNotes, [.uncommitted(1), .ownCommits(4), .locked])
+    XCTAssertEqual(
+      r.lossNotes, [.uncommitted(1), .ownCommits(4)],
+      "内訳は消える対象を名指す語だけ（`locked` は琥珀でも失うものではない）")
+  }
+
+  /// 損失の内訳はトーンではなく「何が失われるか」で決まる。**琥珀の語でも消えないものは書かない**——
+  /// 破壊操作の直前に `PR #N open も消えます` という事実と違う一文を出さないため。
+  func testLossNotesExcludeVocabularyThatIsNotLost() {
+    let r = row(
+      DispatchCleanFacts(
+        path: "/wt/x", branch: "feat/x", lockReason: "USB", openPR: 139,
+        status: GitWorktreeStatusCounts(modified: 12, untracked: 3), unmergedCommits: 0,
+        operation: .none))
+    XCTAssertEqual(r.lossNotes, [.uncommitted(12), .untracked(3)])
+    XCTAssertFalse(r.lossNotes.contains(.openPR(139)), "PR は worktree を消しても残る")
+    XCTAssertFalse(r.lossNotes.contains(.locked), "locked は削除を止める状態であって損失ではない")
+    XCTAssertFalse(r.lossNotes.contains(.unpushed), "失われるコミットは独自コミットの語が名指す")
   }
 
   // MARK: - 並びと件数

@@ -16,7 +16,9 @@ enum DispatchWorktreeClassifier {
     /// path → 分類レーンの実測。無い worktree は「判定できなかった」として扱う。
     var probes: [String: DispatchCleanProbe] = [:]
     var panes: [PaneOccupancy] = []
-    var defaultBranch = "main"
+    /// 行に出す既定ブランチ名。**表示専用**——取り込み判定の比較対象（`origin/main` のような remote
+    /// 追跡 ref）は分類レーンが持っており、ここへは同じ値をそのまま流さない。
+    var defaultBranchLabel = "main"
   }
 
   /// 各レーンから届いた事実を 1 worktree ぶんずつ突き合わせて行に落とす（レーンをまたぐ組み立ての SSOT）。
@@ -44,13 +46,14 @@ enum DispatchWorktreeClassifier {
           openPR: worktree.branch.flatMap { openByHead[$0]?.number },
           status: probe?.status, unmergedCommits: probe?.unmergedCommits,
           operation: probe?.operation ?? .unknown, occupancy: occupancy[worktree.path])
-      }, defaultBranch: input.defaultBranch)
+      }, defaultBranchLabel: input.defaultBranchLabel)
   }
 
   /// 群順（safe → caution → inUse）に並べた行を返す。群内は入力順。
-  static func classify(_ facts: [DispatchCleanFacts], defaultBranch: String = "main") -> [CleanRow]
+  static func classify(_ facts: [DispatchCleanFacts], defaultBranchLabel: String = "main")
+    -> [CleanRow]
   {
-    let rows = facts.map { row($0, defaultBranch: defaultBranch) }
+    let rows = facts.map { row($0, defaultBranchLabel: defaultBranchLabel) }
     return [CleanGroup.safe, .caution, .inUse].flatMap { group in
       rows.filter { $0.group == group }
     }
@@ -87,17 +90,16 @@ enum DispatchWorktreeClassifier {
 
   // MARK: - 行の組み立て
 
-  private static func row(_ f: DispatchCleanFacts, defaultBranch: String) -> CleanRow {
+  private static func row(_ f: DispatchCleanFacts, defaultBranchLabel: String) -> CleanRow {
     let group = group(f)
     let axisA = self.axisA(f, group)
-    let axisB = group == .inUse ? [] : self.axisB(f, defaultBranch: defaultBranch)
+    let axisB = group == .inUse ? [] : self.axisB(f, defaultBranchLabel: defaultBranchLabel)
     let axisC = self.axisC(f)
-    let candidates = axisA + axisB + axisC
     return CleanRow(
       id: f.path, name: (f.path as NSString).lastPathComponent,
       meta: f.branch ?? abbreviate(f.path), branch: f.branch, head: f.head, group: group,
       chips: chips(f, group, axisA: axisA, axisB: axisB, axisC: axisC),
-      lossNotes: candidates.filter { $0.tone == .loss },
+      lossNotes: (axisA + axisB).filter(\.isLoss),
       deletesBranchImplicitly: group == .safe && !f.isPrunable && f.branch != nil)
   }
 
@@ -137,7 +139,7 @@ enum DispatchWorktreeClassifier {
 
   /// 軸B（消すと世界に残るか）。優先順位は**損失を隠さない順**。
   /// detached（`branch == nil`）は行き先そのものが無いので何も名乗らない。
-  private static func axisB(_ f: DispatchCleanFacts, defaultBranch: String) -> [CleanChip] {
+  private static func axisB(_ f: DispatchCleanFacts, defaultBranchLabel: String) -> [CleanChip] {
     guard f.branch != nil else { return [] }
     var out: [CleanChip] = []
     if let unmerged = f.unmergedCommits, unmerged > 0 { out.append(.ownCommits(unmerged)) }
@@ -145,7 +147,7 @@ enum DispatchWorktreeClassifier {
     if f.upstream == nil { out.append(.unpushed) }
     if let ahead = ahead(f.track), ahead > 0 { out.append(.remoteAhead(ahead)) }
     if let pr = f.closedPR, pr.isMerged { out.append(.mergedPR(pr.number)) }
-    if f.unmergedCommits == 0 { out.append(.mergedIntoDefault(defaultBranch)) }
+    if f.unmergedCommits == 0 { out.append(.mergedIntoDefault(defaultBranchLabel)) }
     if f.upstream != nil, f.track == nil { out.append(.remoteSynced) }
     if f.isGone { out.append(.gone) }
     return out

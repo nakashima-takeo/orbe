@@ -164,6 +164,6 @@ extension DispatchPaletteTests {
           path: "/wt/a", branch: "feat/a", head: "aaa", upstream: "origin/feat/a",
           track: "[gone]", status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
           unmergedCommits: 0, operation: .none)
-      ], defaultBranch: "main")
+      ], defaultBranchLabel: "main")
   }
 }
