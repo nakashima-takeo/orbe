@@ -190,7 +190,9 @@ final class ShellPATH {
 
     awaitProbe(proc, state: state, timeout: timeout)
     // 不正バイトは U+FFFD へ落として読み進める。PATH と無関係な環境変数の 1 バイトで probe 全体を
-    // 捨てると、失敗として検出できないまま floor に固定される。
+    // 捨てると、失敗として検出できないまま floor に固定される。lint は「デコードの失敗を握り潰すな」と
+    // 失敗しうる initializer を求めるが、ここで欲しいのは全か無かの成否ではなく、読めた分の PATH 行。
+    // swiftlint:disable:next optional_data_string_conversion
     let out = String(decoding: state.collected(), as: UTF8.self)
     let line = out.split(separator: "\n").last { $0.hasPrefix("PATH=") }
     return line.map { String($0.dropFirst("PATH=".count)) }
