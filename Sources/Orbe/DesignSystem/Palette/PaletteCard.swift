@@ -74,10 +74,10 @@ struct PaletteCard: View {
             } else {
               // セグメント間隔 14・キー副色/ラベル muted。
               HStack(spacing: Theme.Space.beat + Theme.Space.hair) {
-                ForEach(model.hintKeys.indices, id: \.self) { i in
+                ForEach(model.hintKeys) { hintKey in
                   HStack(spacing: Theme.Space.tick) {
-                    Text(model.hintKeys[i].key).foregroundStyle(Color.theme.textSecondary)
-                    Text(model.hintKeys[i].label).foregroundStyle(Color.theme.textMuted)
+                    Text(hintKey.key).foregroundStyle(Color.theme.textSecondary)
+                    Text(hintKey.label).foregroundStyle(Color.theme.textMuted)
                   }
                 }
               }
@@ -143,10 +143,9 @@ struct PaletteCard: View {
       // 「今どちらの面か」だけを出す（キーの案内は載せない）。
       if !model.headerPills.isEmpty {
         HStack(spacing: Theme.Space.step) {
-          ForEach(model.headerPills.indices, id: \.self) { i in
-            Text(model.headerPills[i].label)
-              .foregroundStyle(
-                model.headerPills[i].active ? Color.theme.textPrimary : Color.theme.textMuted)
+          ForEach(model.headerPills) { pill in
+            Text(pill.label)
+              .foregroundStyle(pill.active ? Color.theme.textPrimary : Color.theme.textMuted)
           }
         }
         .font(Font.theme.meta)

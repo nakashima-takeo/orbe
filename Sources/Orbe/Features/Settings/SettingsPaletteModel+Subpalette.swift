@@ -55,7 +55,7 @@ extension SettingsPaletteModel {
     render.fieldIsFilter = false
     render.breadcrumb = localization.string(.settingsNotificationSoundBreadcrumb)
     render.headerPills = AgentSoundEvent.allCases.map {
-      (localization.string($0.labelKey), $0 == previewEvent)
+      PaletteModel.HeaderPill(label: localization.string($0.labelKey), active: $0 == previewEvent)
     }
     render.placeholder = ""
     render.hint = localization.string(.settingsNotificationSoundHint)
