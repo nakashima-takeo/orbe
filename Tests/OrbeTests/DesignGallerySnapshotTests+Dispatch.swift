@@ -31,6 +31,9 @@ extension DesignGallerySnapshotTests {
     try write("dispatch_clean_empty.png", DesignSceneFixtures.dispatchCleanEmptyModel(), 640, 520)
     try write(
       "dispatch_clean_subline.png", DesignSceneFixtures.dispatchCleanSublineModel(), 640, 520)
+    // ピルが 3 枚競合して溢れた語がサブラインへ回る行（`locked` が消えていないことの証拠）。
+    try write(
+      "dispatch_clean_overflow.png", DesignSceneFixtures.dispatchCleanOverflowModel(), 640, 520)
     try write(
       "dispatch_clean_deleting.png", DesignSceneFixtures.dispatchCleanDeletingModel(), 640, 520)
     try write(

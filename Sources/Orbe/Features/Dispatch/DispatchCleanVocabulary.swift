@@ -132,6 +132,13 @@ struct CleanRow: Identifiable, Equatable {
   let chips: [CleanChip]
   /// 展開サブラインへ書く損失の内訳（`isLoss` の語彙すべて。ピルへ出たものも含む）。
   let lossNotes: [CleanChip]
+  /// 2 枚の上限に載らなかったピル候補。展開サブラインへそのままの見た目で回る。
+  ///
+  /// **損失の内訳とは別の関心**として持つ。溢れの受け皿を `lossNotes` と兼ねると、
+  /// `locked` のように「消えないが読ませたい事実」が右クラスタからも内訳からも落ちる——
+  /// `locked` はその行が安全群に入れない理由そのものなので、消えると確認群にいる理由が読めない。
+  /// 溢れるのは常に `isLoss` でない語なので、内訳と重なることはない。
+  let overflowNotes: [CleanChip]
   /// チェックするとブランチも一緒に消える行（safe 群のうち、実体があってブランチを持つ行）。
   let deletesBranchImplicitly: Bool
 }

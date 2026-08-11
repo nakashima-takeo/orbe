@@ -90,6 +90,7 @@ struct DispatchCleanRow: View {
   }
 
   /// ブランチの扱いを文字で選ぶサブライン。**チェックした確認行**にだけ開く。
+  /// 右クラスタの 2 枚に載らなかったピルもここへ回る（見た目は右クラスタと同じまま）。
   private var subline: some View {
     HStack(spacing: Theme.Space.step) {
       Text(l10n.format(.dispatchCleanBranchLabel, row.branch ?? ""))
@@ -103,6 +104,8 @@ struct DispatchCleanRow: View {
           .lineLimit(1)
           .truncationMode(.tail)
       }
+      // 溢れたピルは事実のまま出す。損失の内訳と混ぜて `〜も消えます` に飲み込ませない。
+      ForEach(row.overflowNotes) { DispatchCleanChip(chip: $0) }
       Spacer(minLength: 0)
     }
     .font(Font.theme.meta)

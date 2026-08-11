@@ -95,29 +95,34 @@ enum DispatchWorktreeClassifier {
     let axisA = self.axisA(f, group)
     let axisB = group == .inUse ? [] : self.axisB(f, defaultBranchLabel: defaultBranchLabel)
     let axisC = self.axisC(f)
+    let cluster = self.cluster(f, group, axisA: axisA, axisB: axisB, axisC: axisC)
     return CleanRow(
       id: f.path, name: (f.path as NSString).lastPathComponent,
       meta: f.branch ?? abbreviate(f.path), branch: f.branch, head: f.head, group: group,
-      chips: chips(f, group, axisA: axisA, axisB: axisB, axisC: axisC),
-      lossNotes: (axisA + axisB).filter(\.isLoss),
+      chips: cluster.chips, lossNotes: (axisA + axisB).filter(\.isLoss),
+      overflowNotes: cluster.overflow,
       deletesBranchImplicitly: group == .safe && !f.isPrunable && f.branch != nil)
   }
 
-  /// 右クラスタ。**ピルは軸A + 軸B から 1 枚ずつの最大 2 枚**（`locked` は軸C の例外として並ぶ）で、
-  /// 3 枚以上になったら loss を優先し残りは展開サブラインの損失内訳へ回す。
-  /// 素文字（軸C の使用状況・safe 行の注記）はピルの後に続く。
-  private static func chips(
+  /// 右クラスタと、そこへ載らなかったピル候補。
+  ///
+  /// **ピルの候補は軸A + 軸B から 1 枚ずつ ＋ 軸C の `locked`** で、3 枚になったら loss を優先して
+  /// 2 枚へ切り詰める。**切り詰めた候補は捨てずに返す**——受け皿を損失の内訳と兼ねると、
+  /// `locked` のように損失ではない語がどこにも出なくなる。素文字（軸C の使用状況・safe 行の注記）は
+  /// 上限の外なのでピルの後にそのまま続く。
+  private static func cluster(
     _ f: DispatchCleanFacts, _ group: CleanGroup, axisA: [CleanChip], axisB: [CleanChip],
     axisC: [CleanChip]
-  ) -> [CleanChip] {
-    var pills = ([axisA.first, axisB.first].compactMap { $0 } + axisC).filter(\.isPill)
+  ) -> (chips: [CleanChip], overflow: [CleanChip]) {
+    let candidates = ([axisA.first, axisB.first].compactMap { $0 } + axisC).filter(\.isPill)
+    var pills = candidates
     if pills.count > 2 {
       pills = Array(
         (pills.filter { $0.tone == .loss } + pills.filter { $0.tone != .loss }).prefix(2))
     }
     var plains = axisA.filter { !$0.isPill } + axisC.filter { !$0.isPill }
     if group == .safe, f.branch != nil, !f.isPrunable { plains.append(.branchAlsoDeleted) }
-    return pills + plains
+    return (pills + plains, candidates.filter { !pills.contains($0) })
   }
 
   /// 軸A（消すと何を失うか）。優先順位は `進行中 > 未コミット > untracked > prunable`。

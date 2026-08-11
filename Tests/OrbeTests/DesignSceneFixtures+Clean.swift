@@ -43,6 +43,21 @@ extension DesignSceneFixtures {
     return model
   }
 
+  /// ピルが 3 枚競合する行（`rebase 進行中` × `未 push` × `locked`）を開いた姿。
+  /// 上限の 2 枚に載らなかった `locked` がサブラインへ回っていることを画像で残す
+  /// ——受け皿を損失の内訳と兼ねると、ここから静かに消える。
+  ///
+  /// 行は**溢れの有無ではなく名前で選ぶ**。溢れが壊れた日にこのシーンが「開いていない行」へ
+  /// 逃げてしまうと、画像の差分が「何かが減った」ではなく「別の画面」になって読めない。
+  static func dispatchCleanOverflowModel() -> DispatchPaletteModel {
+    let model = dispatchCleanModel()
+    guard let locked = model.clean.rows.first(where: { $0.name == "session-restore" }) else {
+      return model
+    }
+    model.clean.toggle(at: locked.id)
+    return model
+  }
+
   /// clean 画面 2（削除中）。✓ 2 件・スピナ 1 件・待機 1 件。件数は実行順の配列から導く。
   static func dispatchCleanDeletingModel() -> DispatchPaletteModel {
     let model = dispatchCleanRunModel()

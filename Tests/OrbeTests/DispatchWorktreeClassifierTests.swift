@@ -230,6 +230,65 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     XCTAssertEqual(
       r.lossNotes, [.uncommitted(1), .ownCommits(4)],
       "内訳は消える対象を名指す語だけ（`locked` は琥珀でも失うものではない）")
+    XCTAssertEqual(r.overflowNotes, [.locked], "上限に載らなかった候補は溢れの受け皿へ回る")
+  }
+
+  /// 上限に載らなかったピル候補は、**損失でなくても**サブラインへ回る。
+  /// 受け皿を損失の内訳と兼ねると、`locked` はピルからも内訳からも落ちて画面から消える——
+  /// その行が安全群に入れない理由そのものなので、読めなくなると確認群にいる理由が説明されない。
+  func testCappedPillsSurviveAsOverflow() {
+    let r = row(
+      DispatchCleanFacts(
+        path: "/wt/session-restore", branch: "feat/session-restore", lockReason: "USB",
+        status: clean, unmergedCommits: 0, operation: .inProgress(.rebase)))
+    XCTAssertEqual(r.chips, [.inProgress(.rebase), .unpushed], "右クラスタは loss を優先した 2 枚")
+    XCTAssertEqual(r.lossNotes, [.inProgress(.rebase)])
+    XCTAssertEqual(r.overflowNotes, [.locked])
+    XCTAssertFalse(
+      r.lossNotes.contains(.locked), "locked は消えないので `〜も消えます` には入れない")
+  }
+
+  /// 溢れるのは軸C の `locked` とは限らない。loss でない軸B の語が押し出されたときも受け皿へ回る。
+  func testOverflowCarriesTheDroppedBranchVocabulary() {
+    let r = row(
+      DispatchCleanFacts(
+        path: "/wt/x", branch: "feat/x", lockReason: "USB", upstream: "origin/feat/x",
+        status: clean, unmergedCommits: 0, operation: .inProgress(.merge)))
+    XCTAssertEqual(r.chips, [.inProgress(.merge), .locked], "loss の 2 枚が残る")
+    XCTAssertEqual(r.overflowNotes, [.mergedIntoDefault("main")])
+  }
+
+  /// **ピル候補は 1 つも画面から消えない。** 3 軸が競合しうる組み合わせを総当たりし、
+  /// 候補として立った語が右クラスタ・損失の内訳・溢れの受け皿のどれかに必ず出ることを主張する。
+  func testNoPillCandidateEverDisappears() {
+    for lockReason in [nil, "USB"] as [String?] {
+      for operation in [GitWorktreeOperationState.none, .inProgress(.rebase)] {
+        for upstream in [nil, "origin/feat/x"] as [String?] {
+          for unmergedCommits in [0, 4] {
+            let r = row(
+              DispatchCleanFacts(
+                path: "/wt/x", branch: "feat/x", lockReason: lockReason, upstream: upstream,
+                status: clean, unmergedCommits: unmergedCommits, operation: operation))
+            let visible = r.chips + r.lossNotes + r.overflowNotes
+            let shape = "lock=\(lockReason != nil) op=\(operation) up=\(upstream != nil)"
+            XCTAssertTrue(
+              r.overflowNotes.allSatisfy { !r.chips.contains($0) },
+              "溢れの受け皿は右クラスタと重ならない（\(shape)）")
+            if lockReason != nil {
+              XCTAssertTrue(visible.contains(.locked), "locked がどこにも出ない（\(shape)）")
+            }
+            if case .inProgress(let name) = operation {
+              XCTAssertTrue(
+                visible.contains(.inProgress(name)), "進行中の操作が消えた（\(shape)）")
+            }
+            if unmergedCommits > 0 {
+              XCTAssertTrue(
+                visible.contains(.ownCommits(unmergedCommits)), "独自コミットが消えた（\(shape)）")
+            }
+          }
+        }
+      }
+    }
   }
 
   /// 損失の内訳はトーンではなく「何が失われるか」で決まる。**琥珀の語でも消えないものは書かない**——
