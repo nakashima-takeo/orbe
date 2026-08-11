@@ -79,8 +79,10 @@ extension DesignSceneFixtures {
     model.clean.run?.requests.map(\.path) ?? []
   }
 
-  /// clean シーンの worktree 群（design 正典 の `rows` と同じ 8 本）。3 軸の語彙が全部出るよう、
+  /// clean シーンの worktree 群（design 正典 の `rows` と同じ 8 本）。3 軸それぞれの語彙が出るよう、
   /// 生の facts を分類の純粋関数へ通して導く（分類結果を手で置かない）。
+  /// **語彙の網羅は `DispatchWorktreeClassifierTests` が持つ**——8 本の行にピル 2 枚上限がかかるので、
+  /// gallery は「見本と同じ行が見本どおりに描けるか」だけを見る。
   private static var cleanRows: [CleanRow] {
     let home = NSHomeDirectory()
     func path(_ name: String) -> String { "\(home)/dev/storefront-worktrees/\(name)" }

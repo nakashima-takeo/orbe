@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// Dispatch パレットの gallery（list の各状態と clean の 2 画面目。ファイル分割の拡張）。
+/// Dispatch パレットの gallery（list の各状態と clean の 3 画面。ファイル分割の拡張）。
 extension DesignGallerySnapshotTests {
   /// Dispatch パレット（実データ形の決定的サンプル・overlay ごと・突合用）。
   /// 多件数は通常/低い窓（360）で cap＋内部スクロール、狭幅（360）で truncate を検証する。

@@ -6,9 +6,9 @@ extension DispatchDataProvider {
 
   /// 選択された worktree を削除する（実行と 1 件ごとの報告は `DispatchWorktreeCleaner` が担う）。
   ///
-  /// 完了の前に git レーンを引き直す。削除は worktree・ブランチ・分類の複数レーンを動かすので、
-  /// 唯一の真実を削除前のままにしない——一覧へ戻った先で消えた worktree の行が残っていたり、
-  /// clean へ入り直したときにそれが「安全」へチェック済みで復活したりしないため。
+  /// 完了と同時に git レーンを引き直す。削除は worktree・ブランチ・分類の複数レーンを動かすので、
+  /// 唯一の真実を削除前のまま置かない——引き直しが着地すると、一覧の Worktrees セクションと
+  /// `候補 N 件` バッジから消えた worktree が落ちる。
   func deleteWorktrees(
     _ requests: [CleanDeleteRequest], token: CleanRunToken,
     progress: @escaping (CleanProgress) -> Void, completion: @escaping () -> Void

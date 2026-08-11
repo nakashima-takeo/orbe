@@ -205,7 +205,8 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
   }
 
   /// clean のサブライン: 確認行をチェックするとブランチの扱いが開き、←→ で選び直せる過程を撮る。
-  /// **サブラインは静止 fixture では作れない**（チェックというアクションでしか開かない）ので flow が要る。
+  /// **flow が撮るのは遷移**（開く → `削除` を選ぶ → 外して畳む）で、開いた瞬間の静止画は
+  /// gallery の `dispatch_clean_subline` が持つ。
   func testCleanSubline() throws {
     let palette = DesignSceneFixtures.dispatchCleanModel()
     let clean = palette.clean
