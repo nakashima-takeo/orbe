@@ -66,14 +66,33 @@ import SwiftUI
   func restoreSelection(_ i: Int) { selection.restore(i) }
   /// ヘッダ左のテキスト（サブメニューの「‹ 親」等）。nil で非表示。入力欄も無ければヘッダ行ごと描かれない。
   var breadcrumb: String?
+  /// ヘッダ右端の表示専用ピル 1 件。**`ForEach` へ値で渡すために `Identifiable`** にしてある
+  /// ——view からこの配列へ添字で読み返すと、配列が空へ縮む更新パスで SwiftUI が古い添字のまま
+  /// 消えゆく子を評価し、範囲外アクセスでプロセスごと落ちる。`id` を `label` に置くのは、
+  /// `active` が反転しても identity が変わらず `Text` が再マウントされないため
+  /// （同一セット内で `label` が一意であることがこの型の前提）。
+  struct HeaderPill: Identifiable {
+    var label: String
+    var active: Bool
+    var id: String { label }
+  }
+
   /// ヘッダ右端の表示専用ピル。1 つなら素のバッジ（Attention の `⌘⌘`）、複数なら現在位置を
   /// `active` で示すセグメント（通知音サブパレットの試聴対象「完了 | 入力待ち」）。
   /// 空で出さない＝opt-in（`hintKeys` と同じ規律）。
-  var headerPills: [(label: String, active: Bool)] = []
+  var headerPills: [HeaderPill] = []
   var hint = ""
+
+  /// フッターヒントのキー付きセグメント 1 件（`HeaderPill` と同じ理由で `Identifiable`・`id` は `key`）。
+  struct HintKey: Identifiable {
+    var key: String
+    var label: String
+    var id: String { key }
+  }
+
   /// フッターヒントのキー付きセグメント（key=副色・label=muted・デザイン第10シーン）。
   /// 空なら `hint` の素文字列を muted 一色で描く（既存パレットは無影響）。
-  var hintKeys: [(key: String, label: String)] = []
+  var hintKeys: [HintKey] = []
   /// カード面の濃度（GlassLevel）。既定は panel（α.72）。Attention は popup（α.90＝デザイン第10シーン
   /// rgba(panel, 0.9)）。幾何（radius 16）・blur（24）・枠（.08/.12）・影は面によらず panel 級で固定。
   var surface: Theme.GlassLevel = .panel
