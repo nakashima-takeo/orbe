@@ -79,8 +79,8 @@ final class AgentLauncher {
   /// 検出未完了なら空配列。
   var detectedAgents: [AgentCLI] { catalog.agents }
 
-  /// エージェントタブへ引き継ぐ環境（検出に使ったログインシェルの PATH）。launch と同じ解決を保証する。
-  var launchEnvironment: [String: String] { catalog.shellPATH.map { ["PATH": $0] } ?? [:] }
+  /// エージェントタブへ引き継ぐ環境（検出に使ったのと同じ PATH）。launch と同じ解決を保証する。
+  var launchEnvironment: [String: String] { ["PATH": ShellPATH.shared.value()] }
 
   /// デフォルト解決の規則（SSOT）: 設定値が検出済みならそれ、無ければ検出順（claude>codex>agy）の先頭。
   /// 実起動（launchDefault）・起動パレットの ●・設定パレットの ●/ハイライトが同じこの 1 規則を読む
@@ -99,9 +99,9 @@ final class AgentLauncher {
     catalog.agents.first { $0.command == resolvedDefaultCommand }
   }
 
-  /// 環境にはログインシェルの PATH を渡す（エージェントの子プロセスにも検出時と同じ解決を保証）。
+  /// 環境には解決済みの PATH を渡す（エージェントの子プロセスにも検出時と同じ解決を保証）。
   private func launch(_ agent: AgentCLI) {
-    onLaunch?(agent, catalog.shellPATH.map { ["PATH": $0] } ?? [:])
+    onLaunch?(agent, launchEnvironment)
   }
 
   /// 起動時のプラグイン同期。`.app` 同梱があれば毎回安定パスへ実体化し（claude はここをライブ参照
@@ -123,7 +123,7 @@ final class AgentLauncher {
     var registered = false
     var failed = false
     installProc = AgentPluginInstaller.run(
-      pluginDir: dir, pluginName: name, shellPATH: catalog.ensureShellPATH(),
+      pluginDir: dir, pluginName: name, shellPATH: ShellPATH.shared.value(),
       onEvent: { event in
         if case .done(_, let ok) = event { if ok { registered = true } else { failed = true } }
       },
@@ -173,7 +173,7 @@ final class AgentLauncher {
     setDefault(agent.command)  // 書込は global スコープの設定変更として store 経由に一本化
     model.beginInstalling()
     installProc = AgentPluginInstaller.run(
-      pluginDir: stableDir, pluginName: name, shellPATH: catalog.ensureShellPATH(),
+      pluginDir: stableDir, pluginName: name, shellPATH: ShellPATH.shared.value(),
       onEvent: { [weak self] event in
         switch event {
         case .start(let cli): self?.appModel?.onboarding?.setStatus(cli, .installing)
@@ -211,13 +211,13 @@ final class AgentLauncher {
   }
 
   /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する。
-  /// 起動と同じくログインシェルの PATH を渡す。未対応 agent は nil（呼び出し側は素のシェルで復元）。
+  /// 起動と同じ PATH を渡す。未対応 agent は nil（呼び出し側は素のシェルで復元）。
   func resumeSpawn(for session: AgentSession) -> (command: String, env: [String: String])? {
     guard
       let command = AgentCatalog.resumeCommand(
         forAgent: session.command, sessionId: session.sessionId)
     else { return nil }
-    return (command, catalog.ensureShellPATH().map { ["PATH": $0] } ?? [:])
+    return (command, launchEnvironment)
   }
 
   /// 検出完了の単一窓口。提示中の onboarding／palette 双方の detecting を解いて結果へ差し替える。

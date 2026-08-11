@@ -75,7 +75,7 @@ final class AgentPluginInstallerTests: OrbeTestCase {
     var log: [String] = []
     let done = expectation(description: "install.sh complete")
     AgentPluginInstaller.run(
-      pluginDir: pkg, pluginName: "orbe-agent", shellPATH: nil,
+      pluginDir: pkg, pluginName: "orbe-agent", shellPATH: "/usr/bin:/bin",
       onEvent: { event in
         switch event {
         case .start(let cli): log.append("start \(cli)")

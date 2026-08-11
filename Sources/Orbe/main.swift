@@ -27,6 +27,10 @@ for key in inheritedSessionMarkers {
 // プロセス env そのものなので、Ghostty 初期化（下の Ghostty.shared）より前に一度だけ行う。
 CompletionShim.activate()
 
+// 子プロセスへ渡す PATH の解決を背景で仕掛ける。ログインシェルは重い rc を持ちうるので、
+// libghostty 初期化とウィンドウ復元の裏を頭出しに使い、誰かが PATH を要るまでに着地させる。
+ShellPATH.shared.start()
+
 // エントリポイント。AppKit ライフサイクルで起動する。
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)

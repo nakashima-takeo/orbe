@@ -92,7 +92,7 @@ enum AgentPluginInstaller {
   /// 依って完了時点で失敗の有無を判定する（`AgentLauncher` は 1 つでも失敗すれば名前を記録しない）。
   @discardableResult
   static func run(
-    pluginDir: URL, pluginName: String, shellPATH: String?,
+    pluginDir: URL, pluginName: String, shellPATH: String,
     onEvent: @escaping (Event) -> Void, onComplete: @escaping () -> Void
   ) -> Process {
     let proc = Process()
@@ -101,7 +101,7 @@ enum AgentPluginInstaller {
       pluginDir.appendingPathComponent("install.sh").path, pluginDir.path, pluginName,
     ]
     var env = ProcessInfo.processInfo.environment
-    if let shellPATH { env["PATH"] = shellPATH }
+    env["PATH"] = shellPATH
     proc.environment = env
     proc.standardInput = FileHandle.nullDevice
     proc.standardError = FileHandle.nullDevice

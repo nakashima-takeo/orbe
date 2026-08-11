@@ -1,7 +1,7 @@
 ---
 title: Dispatch パレット
 description: ⌘⇧X で開くコマンドパレット。worktree/ブランチ/Issue/PR を実データで列挙し、選んで Enter で「エージェントが起動した状態のタブ」を開く
-updated: 2026-08-10
+updated: 2026-08-12
 ---
 
 # Dispatch パレット（⌘⇧X）
@@ -24,7 +24,7 @@ scrim ＋ ガラスパネル。上端アンカー・窓幅に追随する上限�
 
 ## データ供給（プログレッシブ）
 
-パレット提示と同時にデータロードが走る。git（worktree/branch 列挙・数十 ms）は即描画。初回ロードまでは候補行の形をしたスケルトン行を出し、開いた瞬間の空フレームを埋める。gh（issue/PR 取得・ネット）は前回結果を先に描いて裏で取り直す。git・gh ともログインシェル PATH でサブプロセス実行し、completion をメインで受ける。
+パレット提示と同時にデータロードが走る。git（worktree/branch 列挙・数十 ms）は即描画。初回ロードまでは候補行の形をしたスケルトン行を出し、開いた瞬間の空フレームを埋める。gh（issue/PR 取得・ネット）は前回結果を先に描いて裏で取り直す。git・gh とも子プロセス PATH（[shell-path](../platform/shell-path.md)）でサブプロセス実行し、completion をメインで受ける。
 
 - **git 列挙**: worktree 一覧・local/remote branch 一覧（`refs/remotes/origin/HEAD` 等のノイズ除外。local branch は既存 worktree パスも取得して再利用判定に使う）・デフォルトブランチ。remote branch は即時読みに加え、裏で `git fetch --prune origin` を**独立レーン**で走らせ、成功時に読み直して当該セクションだけ差し替える（失敗時はキャッシュ据え置きで UI 非破壊）。独立レーンにするのは、共有 queue の barrier チェーンに載せると直後に Enter で来る worktree 作成がこの数秒の fetch を待たされるため。
 - **GitHub 取得**: 可用性を `notGitHub`／`ghMissing`／`ghUnauthed`／`ready` に分類（origin URL が github.com か → ローカルの認証情報の有無）してから `gh issue list`／`gh pr list --json` で取得する。可用性の判定は**ネットに触らない**——疎通不能を「未認証」と誤分類すると、通信できないだけの状態で誘導情報行が出て前回結果が消えるため。ネット待ちはタイムアウトつき（stdout/stderr を並行排出しデッドロックを避ける）。

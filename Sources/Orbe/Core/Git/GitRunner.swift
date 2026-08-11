@@ -1,8 +1,7 @@
 import Foundation
 
 /// git CLI の実行基盤。GUI アプリの貧弱な環境変数でも hooks・署名がユーザーの
-/// シェル環境と同等に動くよう、ログインシェルの PATH を一度だけ解決して
-/// 全呼び出しへ引き継ぐ。
+/// シェル環境と同等に動くよう、`ShellPATH` の PATH を全呼び出しへ引き継ぐ。
 ///
 /// 排他は**インスタンス内で閉じる**（キューがインスタンスの持ち物のため）。同じリポジトリを
 /// 別インスタンスから書くと直列化が効かないので、**本番は必ず `shared` を通す**——`GitRepo` は
@@ -37,7 +36,7 @@ final class GitRunner {
   static let shared = GitRunner()
 
   /// 読み取り系の同時実行を許す。書き込み系は barrier で排他直列化する
-  /// （concurrent キュー上の read-write lock）。env 解決だけ envLock で直列に守る。
+  /// （concurrent キュー上の read-write lock）。
   private let queue = DispatchQueue(
     label: "dev.orbe.git", qos: .userInitiated, attributes: .concurrent)
   /// 共有 `queue` の read-write lock から切り離した独立レーン（`.independent`）。
@@ -47,11 +46,6 @@ final class GitRunner {
   /// 独立 queue に逃がすことで、barrier が長い操作を待たなくなる。
   private let independentQueue = DispatchQueue(
     label: "dev.orbe.git.independent", qos: .userInitiated, attributes: .concurrent)
-  /// 環境変数はプロセスの事実（ログインシェルの PATH）でありインスタンスの事実ではない。
-  /// インスタンスごとに持つと、`GitRunner()` を作るたびにログインシェルを起動して待つことになる。
-  private static let envLock = DispatchQueue(label: "dev.orbe.git.env")
-  private nonisolated(unsafe) static var cachedEnvironment: [String: String]?
-
   /// 「1 バイトも出力が無いまま」この時間が過ぎたら打ち切る上限。経過時間ではなく無出力時間で
   /// 測るのは、巨大リポジトリの clone のような正当な長時間実行を切らないため——出力が流れている
   /// 間は延命し、何も起きていないときだけ切る。
@@ -247,48 +241,11 @@ final class GitRunner {
     func collected() -> (stdout: Data, stderr: Data) { lock.withLock { (stdout, stderr) } }
   }
 
-  /// 呼び出し共通の環境変数（プロセス内で初回に一度だけ構築）。
+  /// 呼び出し共通の環境変数。PATH は毎回 `ShellPATH` から取る（プロセスの事実を焼き付けない）。
   private static func environment() -> [String: String] {
-    envLock.sync {
-      if let cached = cachedEnvironment { return cached }
-      var env = ProcessInfo.processInfo.environment
-      env["PATH"] = Self.loginShellPATH() ?? Self.fallbackPATH(env["PATH"])
-      env["GIT_TERMINAL_PROMPT"] = "0"  // 資格情報等の対話でハングさせない
-      cachedEnvironment = env
-      return env
-    }
-  }
-
-  private static func fallbackPATH(_ current: String?) -> String {
-    let base = current ?? "/usr/bin:/bin:/usr/sbin:/sbin"
-    let parts = base.split(separator: ":").map(String.init)
-    let extra = ["/opt/homebrew/bin", "/usr/local/bin"].filter { !parts.contains($0) }
-    return (extra + parts).joined(separator: ":")
-  }
-
-  /// ログインシェルから PATH を取る（hooks が brew 導入ツールへ届くように）。
-  /// GUI アプリの貧弱な PATH ではユーザー導入ツールが見えないため、エディタ検出等も再利用する。
-  static func loginShellPATH() -> String? {
-    let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: shell)
-    process.arguments = ["-l", "-c", "printf %s \"$PATH\""]
-    let out = Pipe()
-    process.standardOutput = out
-    process.standardError = Pipe()
-    do { try process.run() } catch { return nil }
-    // 壊れた rc ファイル等でハングしたら諦める（fallback が引き受ける）。
-    let deadline = Date().addingTimeInterval(2)
-    while process.isRunning, Date() < deadline { usleep(20_000) }
-    if process.isRunning {
-      process.terminate()
-      return nil
-    }
-    guard process.terminationStatus == 0,
-      let data = try? out.fileHandleForReading.readToEnd(),
-      let raw = String(bytes: data, encoding: .utf8)
-    else { return nil }
-    let path = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    return path.isEmpty ? nil : path
+    var env = ProcessInfo.processInfo.environment
+    env["PATH"] = ShellPATH.shared.value()
+    env["GIT_TERMINAL_PROMPT"] = "0"  // 資格情報等の対話でハングさせない
+    return env
   }
 }

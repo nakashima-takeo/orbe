@@ -1,7 +1,7 @@
 ---
 title: workspace 永続
 description: 構成（workspace・タブ・分割ツリー・cwd・エージェントセッション）の JSON 保存と起動時復元・エージェント resume・デバウンス保存
-updated: 2026-08-10
+updated: 2026-08-12
 ---
 
 # workspace 永続
@@ -20,7 +20,7 @@ updated: 2026-08-10
 - タブ 0 個（休眠）の workspace もエントリごと保存・復元する（エントリは消えない）。復元時アクティブが 0 タブでも空状態を表示し、背景の 0 タブもそのまま keep する（いずれもシェルは自動起動しない）。
 - cwd は OSC 7（`GHOSTTY_ACTION_PWD`）で報告された値を surface が保持したもの。復元は surface 生成時の working_directory 指定で起こす。
 - エージェントセッションは hook 由来の (CLI 名, session_id)（[agent/notify](../agent/notify.md)）を葉に持ち、復元時に CLI 別の resume コマンド（claude `--resume <id>`／agy `--conversation <id>`／codex `resume <id>`）＋ログインシェル PATH で起こす。CLI 名が未対応・session_id が安全文字集合外なら素のシェルへ fallback する——生成コマンドへの注入を防ぐため。
-- resume が注入するログインシェル PATH は `app-state.json` のキャッシュ値から**同期で**読む——起動復元を PATH 検出 subprocess（ログインシェル起動・数秒〜十数秒かかりうる）にブロックさせないため（[agent/launch](../agent/launch.md)）。
+- resume が注入する PATH は `app-state.json` のキャッシュ値から**同期で**読む——起動復元をシェル起動の subprocess にブロックさせないため。キャッシュが無い初回は上限つきで待ち、尽きれば既知パスだけで起こす（[shell-path](shell-path.md)）。
 - 分割比は保存値を一度だけ適用し、以後は実フレームから算出する。
 - タブ 1 枚分の復元単位は `Cmd+Shift+T`（閉じたエージェントタブを開き直す → [layout](../chrome/layout.md)）と共有する——同じ経路を通るので、戻るもの／戻らないものが一致する。閉じたタブの控えはこのファイルに持たず、プロセス内にのみ保つ。
 - ウィンドウサイズは画面 `visibleFrame` へクランプして復元し、位置は保存せず毎回中央表示。記憶するのはユーザー意図サイズ（クランプ前）で、小画面での表示クランプは記憶値を破壊しない。
@@ -37,7 +37,7 @@ updated: 2026-08-10
 ## settings.json / app-state.json
 
 - **`settings.json`** … ユーザー設定（global 層）。in-memory SSOT が保持し、変更は即 save する。未知 key（将来の項目・撤去済みの項目）は無視して読む。
-- **`app-state.json`** … ユーザー設定でない内部簿記（エージェントプラグインを導入できたか・最後に登録できたエージェントプラグイン名〔[agent/plugin-package](../agent/plugin-package.md)〕・旧補完方式〔managed block〕の導入済みフラグ・ログインシェル PATH のキャッシュ・UI 言語）。全項目 optional。
+- **`app-state.json`** … ユーザー設定でない内部簿記（エージェントプラグインを導入できたか・最後に登録できたエージェントプラグイン名〔[agent/plugin-package](../agent/plugin-package.md)〕・旧補完方式〔managed block〕の導入済みフラグ・ログインシェル由来の PATH のキャッシュ〔[shell-path](shell-path.md)〕・UI 言語）。全項目 optional。
 
 2 ファイルに分けているのは「ユーザーが決めた値」と「アプリが勝手に覚えた値」を混ぜないため。旧形式（両者が同居した 1 枚）は起動時に無損失で分割移行する（旧ファイル全体が読めたときだけ変換する all-or-nothing。読めなければ既定へ fallback）。app-state.json へは全体上書きでなく**マージ**で書く——旧形式が語彙として持たない項目（UI 言語・登録できたエージェントプラグイン名）も、旧形式が語彙としては持つがその 1 ファイルには書かれていない項目（ログインシェル PATH のキャッシュ等）も移行が巻き戻さず、中断した移行からの再移行が冪等になる。
 

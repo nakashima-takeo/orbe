@@ -1,7 +1,7 @@
 ---
 title: レイアウト
 description: window の SwiftUI ホスト構成・workspace / タブ / ペイン分割ツリーの構造・一方向参照・フォーカス管理・ショートカット・オーバーレイ提示機構
-updated: 2026-08-08
+updated: 2026-08-12
 ---
 
 # レイアウト
@@ -51,4 +51,4 @@ chrome キー（`WindowCommand`）は「タブ／ペインが無くても効く�
 
 ## GUI エディタ起動（Cmd+Shift+E）
 
-アクティブペインの cwd（OSC 7 報告値、無ければ初期 cwd）を GUI エディタでフォルダとして開く。エディタは `$VISUAL` → `$EDITOR`（GUI エディタのときのみ採用）→ PATH 検索（`code`/`cursor`/`windsurf`/`zed`/`subl` の先頭ヒット）で決定し、解決・起動はログインシェルの PATH で行う——GUI アプリの限定 PATH を回避するため。解決結果はプロセス内で初回 1 回キャッシュする。未検出は `NSAlert`、cwd 不明はビープ。
+アクティブペインの cwd（OSC 7 報告値、無ければ初期 cwd）を GUI エディタでフォルダとして開く。エディタは `$VISUAL` → `$EDITOR`（GUI エディタのときのみ採用）→ PATH 検索（`code`/`cursor`/`windsurf`/`zed`/`subl` の先頭ヒット）で決定し、解決・起動は子プロセス PATH（[shell-path](../platform/shell-path.md)）で行う——GUI アプリの限定 PATH を回避するため。解決できたときだけプロセス内に覚える。未検出は `NSAlert`、cwd 不明はビープ。

@@ -138,6 +138,10 @@ enum TestIsolation {
     // 通知音の再生層。スピーカーは実 state dir と同じく管理外の実環境なので、記録だけするフェイクへ
     // 向ける（`WindowController` を立てるテストは軒並み agent の状態報告を流すため、張らないと鳴る）。
     AgentSoundOutput.makeOverride = { SoundPlayerFake() }
+
+    // 子プロセス PATH の probe。張らないと `WindowController` を立てる多数のテストが開発者の
+    // 実ログインシェルを起こし、手元の dotfiles で結果が変わる（CI と手元で違う PATH を見る）。
+    ShellPATH.shared = ShellPATH(probe: { "/usr/bin:/bin" })
   }
 
   static func endCase() {

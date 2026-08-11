@@ -12,7 +12,8 @@ struct AppStateFile: Codable, Equatable {
   /// 旧 managed block 方式の導入済み flag。読み取りは legacy 掃除（除去して nil へ戻す）のみで、
   /// 新規に true を書く者はいない。
   var completionInstalled: Bool?
-  /// ログインシェル PATH のディスクキャッシュ。起動復元の resume が同期で読む（subprocess を避ける）。
+  /// ログインシェル PATH のディスクキャッシュ。`ShellPATH` が probe の着地前に同期呼び出しへ
+  /// 答える第 2 段で、次回起動を既知パスだけの PATH から始めさせない。
   var cachedShellPath: String?
   /// UI 言語（"ja"/"en"）。**nil = 未選択**（初回言語選択画面を出す・描画は OS 言語に追従）、
   /// 非 nil = 確定（その言語で起動し言語画面はスキップ）。設定パレットの言語行が書き替える。
