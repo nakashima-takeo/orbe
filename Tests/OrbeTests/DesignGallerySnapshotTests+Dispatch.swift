@@ -25,16 +25,17 @@ extension DesignGallerySnapshotTests {
     try write("dispatch_many.png", DesignSceneFixtures.dispatchManyModel(), 640, 520)
     try write("dispatch_many_short.png", DesignSceneFixtures.dispatchManyModel(), 640, 360)
     try write("dispatch_narrow.png", DesignSceneFixtures.dispatchManyModel(), 360, 520)
-    // clean（2 画面目）: 入口の行を選んだ list ＋ 既定 / 0 件 / caution 2 回選択 / 実行中 / 失敗。
+    // clean の 3 画面: 入口の行を選んだ list ＋ 選択（既定 / 0 件 / サブライン）/ 削除中 / 一部失敗。
     try write("dispatch_clean_row.png", DesignSceneFixtures.dispatchCleanRowModel(), 640, 520)
     try write("dispatch_clean.png", DesignSceneFixtures.dispatchCleanModel(), 640, 520)
     try write("dispatch_clean_empty.png", DesignSceneFixtures.dispatchCleanEmptyModel(), 640, 520)
     try write(
-      "dispatch_clean_caution.png", DesignSceneFixtures.dispatchCleanCautionModel(), 640, 520)
+      "dispatch_clean_subline.png", DesignSceneFixtures.dispatchCleanSublineModel(), 640, 520)
     try write(
       "dispatch_clean_deleting.png", DesignSceneFixtures.dispatchCleanDeletingModel(), 640, 520)
     try write(
       "dispatch_clean_failure.png", DesignSceneFixtures.dispatchCleanFailureModel(), 640, 520)
+    // 右クラスタが 2 枚のピル＋注記になって最も詰まる画面なので、狭窓の証拠を残す。
     try write("dispatch_clean_narrow.png", DesignSceneFixtures.dispatchCleanModel(), 360, 520)
   }
 }

@@ -204,6 +204,31 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
       ])
   }
 
+  /// clean のサブライン: 確認行をチェックするとブランチの扱いが開き、←→ で選び直せる過程を撮る。
+  /// **サブラインは静止 fixture では作れない**（チェックというアクションでしか開かない）ので flow が要る。
+  func testCleanSubline() throws {
+    let palette = DesignSceneFixtures.dispatchCleanModel()
+    let clean = palette.clean
+    // 最初の確認行（ブランチを持つ＝開くものがある行）へ本物の move() で降りる。
+    let target = clean.selectableRows.firstIndex { $0.group == .caution && $0.branch != nil } ?? 0
+    try flow(
+      "clean_subline", size: NSSize(width: 640, height: 520),
+      render: {
+        ZStack {
+          BackgroundGlow()
+          DispatchOverlay(model: palette)
+        }
+      },
+      steps: [
+        ("start", {}),
+        ("cursor", { for _ in 0..<target { clean.move(1) } }),
+        ("check", { clean.toggleAtCursor() }),  // チェックした瞬間にサブラインが開く
+        ("delete", { clean.chooseBranch(.delete) }),
+        ("keep", { clean.chooseBranch(.keep) }),
+        ("uncheck", { clean.toggleAtCursor() }),  // 外すとサブラインごと畳む
+      ])
+  }
+
   /// Workspace 項目過多: setItems(多数) でカードがどう振る舞うか。PaletteCard の行リストは
   /// ScrollView も高さ cap も持たない（completion の capHeight に相当するものが無い）ため、
   /// 項目が増えるとカードが青天井に伸び、ビューポートを超えた行・hint・末尾選択がスクロール不能で

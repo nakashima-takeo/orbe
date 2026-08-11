@@ -1,8 +1,11 @@
 import SwiftUI
 
 /// Dispatch カードの clean モードの中身（ヘッダ中身・リスト部・フッター）。器は `DispatchCard` が持つ。
+///
+/// 3 画面（選択 / 削除中 / 一部失敗）は**同じ器の中身が入れ替わるだけ**で、枠・`❯`・高さの契約は共通。
+/// 画面の別は `DispatchCleanModel.phase` が状態から導き、View は保存フラグを持たない。
 
-/// clean のヘッダ中身（見出し＋選択数チップ＋`esc 戻る`）。`❯` と枠は両モード共通なので器の側にある。
+/// clean のヘッダ中身（見出し＋右のピル）。`❯` と枠は両モード共通なので器の側にある。
 struct DispatchCleanHeader: View {
   @Bindable var model: DispatchCleanModel
   @Environment(\.localization) private var l10n
@@ -10,30 +13,56 @@ struct DispatchCleanHeader: View {
   var body: some View {
     HStack(spacing: Theme.Space.step + Theme.Space.hair) {
       (Text("clean").foregroundStyle(Color.theme.textPrimary)
-        + Text(" — " + l10n.string(.dispatchCleanSubtitle))
-        .foregroundStyle(Color.theme.textMuted))
+        + Text(" — " + subtitle).foregroundStyle(Color.theme.textMuted))
         .font(Font.theme.title)
         .lineLimit(1)
         .truncationMode(.tail)
       Spacer(minLength: Theme.Space.step)
-      Text(l10n.format(.dispatchCleanSelected, model.selectedCount))
-        .font(Font.theme.meta)
-        .foregroundStyle(Color.theme.accentPrimary)
-        .lineLimit(1)
-        .fixedSize()
-        .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
-        .padding(.vertical, Theme.Space.hair + 1)
-        .background(Capsule().fill(Color.theme.tintAccent))
-      Text(l10n.string(.dispatchCleanBack))
-        .font(Font.theme.meta)
-        .foregroundStyle(Color.theme.textMuted)
-        .lineLimit(1)
-        .fixedSize()
+      switch model.phase {
+      case .selecting:
+        pill(
+          l10n.format(.dispatchCleanSelected, model.selectedCount), Color.theme.tintAccent,
+          .theme.accentPrimary)
+        Text(l10n.string(.dispatchCleanBack))
+          .font(Font.theme.meta)
+          .foregroundStyle(Color.theme.textMuted)
+          .lineLimit(1)
+          .fixedSize()
+      case .deleting:
+        pill(
+          l10n.format(.dispatchCleanProgress, model.doneCount, model.totalCount),
+          Color.theme.tintAccent, .theme.accentPrimary)
+      case .failed:
+        pill(
+          l10n.format(.dispatchCleanTally, model.doneCount, model.failedCount),
+          Color.theme.tintRed, .theme.danger)
+      }
     }
+  }
+
+  /// 見出しの後半。件数はすべて実行順の配列から導く（リテラルの件数を持たない）。
+  private var subtitle: String {
+    switch model.phase {
+    case .selecting: return l10n.string(.dispatchCleanSubtitle)
+    case .deleting: return l10n.string(.dispatchCleanDeletingTitle)
+    case .failed: return l10n.format(.dispatchCleanDoneTitle, model.failedCount)
+    }
+  }
+
+  private func pill(_ text: String, _ background: Color, _ foreground: Color) -> some View {
+    Text(text)
+      .font(Font.theme.meta)
+      .foregroundStyle(foreground)
+      .lineLimit(1)
+      .fixedSize()
+      .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
+      .padding(.vertical, Theme.Space.hair + 1)
+      .background(Capsule().fill(background))
   }
 }
 
-/// clean のリスト部（3 セクション・群順固定）。**全 worktree を出す。危険なものも一覧から消さない。**
+/// clean のリスト部。選択画面は群見出し付きの全 worktree、削除中と一部失敗は**選んだ行だけ**が
+/// 実行順に並ぶ（未選択は畳んで非表示・群見出しは出さない）。
 struct DispatchCleanList: View {
   @Bindable var model: DispatchCleanModel
   @Environment(\.localization) private var l10n
@@ -56,14 +85,10 @@ struct DispatchCleanList: View {
     ScrollViewReader { proxy in
       ScrollView {
         VStack(alignment: .leading, spacing: 3) {
-          ForEach(Array(Self.sections.enumerated()), id: \.element.group) { index, section in
-            sectionLabel(section.key, warn: section.warn, first: index == 0)
-            ForEach(model.rows.filter { $0.group == section.group }) { row in
-              DispatchCleanRow(
-                row: row, selection: model.state(of: row),
-                cursor: model.cursorRow?.id == row.id,
-                onTap: { model.advance(at: row.id) })
-            }
+          if model.phase == .selecting {
+            selection
+          } else {
+            run
           }
         }
         .padding(Theme.Space.note)
@@ -75,12 +100,38 @@ struct DispatchCleanList: View {
       }
       .scrollIndicators(.automatic)
       .onChange(of: model.cursor, initial: true) { scrollToCursor(proxy) }
+      .onChange(of: model.failureCursor) { scrollToCursor(proxy) }
+    }
+  }
+
+  /// 選択画面。**空の群は見出しごと出さない**（list モードの規約と同じ）。
+  @ViewBuilder private var selection: some View {
+    let visible = Self.sections.filter { section in
+      model.rows.contains { $0.group == section.group }
+    }
+    ForEach(Array(visible.enumerated()), id: \.element.group) { index, section in
+      sectionLabel(section.key, warn: section.warn, first: index == 0)
+      ForEach(model.rows.filter { $0.group == section.group }) { row in
+        DispatchCleanRow(model: model, row: row)
+      }
+    }
+  }
+
+  /// 削除中・一部失敗。行も件数も実行順の配列だけから出る。
+  @ViewBuilder private var run: some View {
+    if let run = model.run {
+      ForEach(Array(run.requests.enumerated()), id: \.element.path) { index, request in
+        DispatchCleanRunRow(
+          request: request, state: run.states[index],
+          cursor: model.phase == .failed && model.failureTargetPath == request.path)
+      }
     }
   }
 
   /// カーソル行を可視域へ追従させる（list 側の `scrollToSelection` と同じ作法。宛先は行 id＝絶対パス）。
   private func scrollToCursor(_ proxy: ScrollViewProxy) {
-    guard let id = model.cursorRow?.id else { return }
+    let id = model.phase == .failed ? model.failureTargetPath : model.cursorRow?.id
+    guard let id else { return }
     proxy.scrollTo(id)
   }
 
@@ -96,222 +147,53 @@ struct DispatchCleanList: View {
   }
 }
 
-/// clean の 1 行。チェック・名前・パス・群ごとのチップ列。
-/// **背景ハイライトはカーソル行だけ**——チェック状態は ✓ ボックスの塗りだけで示す（背景で二重に示さない）。
-struct DispatchCleanRow: View {
-  let row: CleanRow
-  let selection: CleanSelection
-  let cursor: Bool
-  let onTap: () -> Void
-  @Environment(\.localization) private var l10n
-  @Environment(\.chromeFontResolver) private var fontResolver
-
-  private var inUse: Bool { row.group == .inUse }
-
-  var body: some View {
-    HStack(spacing: Theme.Space.step) {
-      checkbox
-      // 縮む順は パス → 名前 → チップ列（優先度 0 < 1 < 2）。どれも 1 行で末尾省略し、
-      // 折り返さない。行の最小幅を提案幅より小さく保てないと、器のカードが窓を超えて広がる。
-      fontResolver.text(row.name, base: Theme.Typography.workspaceName)
-        .font(Font.theme.workspaceName)
-        .foregroundStyle(cursor ? Color.theme.textPrimary : Color.theme.textSecondary)
-        .lineLimit(1)
-        .truncationMode(.tail)
-        .layoutPriority(1)
-      fontResolver.text(row.meta, base: Theme.Typography.meta)
-        .font(Font.theme.meta)
-        .foregroundStyle(Color.theme.textMuted)
-        .lineLimit(1)
-        .truncationMode(.tail)
-        .frame(maxWidth: .infinity, alignment: .leading)
-      HStack(spacing: 5) {
-        ForEach(row.chips) { DispatchCleanChip(chip: $0) }
-        if let word = selectionWord {
-          Text(l10n.string(word.key))
-            .font(Font.theme.sectionLabel)
-            .foregroundStyle(word.color)
-            .lineLimit(1)
-        }
-      }
-      .layoutPriority(2)
-    }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 5)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(
-      RoundedRectangle(cornerRadius: Theme.Radius.row)
-        .fill(cursor ? Color.theme.selectionFill : .clear)
-    )
-    .opacity(inUse ? 0.6 : 1)
-    .contentShape(Rectangle())
-    .onTapGesture { if !inUse { onTap() } }
-    .id(row.id)
-  }
-
-  /// 13×13 のチェックボックス。**3 状態をボックスで描き分けない**（13px では判別できない）——
-  /// `worktree のみ` と `worktree + ブランチ` の別は行末の語が読ませる。
-  @ViewBuilder private var checkbox: some View {
-    if inUse {
-      // inUse 行はボックス自体を描かず、同幅の空スペーサで名前の頭を揃える。
-      Color.clear.frame(width: 13, height: 13)
-    } else if selection == .none {
-      RoundedRectangle(cornerRadius: 3.5)
-        .strokeBorder(Color.theme.borderInk.opacity(0.35), lineWidth: Theme.Stroke.hairline)
-        .frame(width: 13, height: 13)
-    } else {
-      RoundedRectangle(cornerRadius: 3.5)
-        .fill(Color.theme.accentPrimary)
-        .frame(width: 13, height: 13)
-        .overlay(
-          Text("✓")
-            .font(Font.theme.paneSegment)
-            .foregroundStyle(Color.theme.accentCheckStroke))
-    }
-  }
-
-  /// caution 行だけが出す選択状態の語（safe 行はフッタのトグルが全行へ一律に示すので重ねて言わない）。
-  private var selectionWord: (key: L10nKey, color: Color)? {
-    guard row.group == .caution else { return nil }
-    switch selection {
-    case .none: return nil
-    case .worktreeOnly: return (.dispatchCleanWorktreeOnly, Color.theme.textMuted)
-    case .worktreeAndBranch:
-      return (.dispatchCleanWorktreeAndBranch, Color.theme.stateWaiting)
-    }
-  }
-}
-
-/// clean の行末チップ。地ありの 3 種（merged=緑 / plain=灰 / caution=琥珀）と、地なしの注記。
-/// **git の語彙（`[gone]` / `merged` / `locked` / `clean · +0` / `main worktree`）は L10n しない**——
-/// 訳すと git の出力と対応が取れなくなる技術語なので、`origin/…` と同じくそのまま出す。
-struct DispatchCleanChip: View {
-  let chip: CleanChip
-  @Environment(\.localization) private var l10n
-
-  var body: some View {
-    switch chip {
-    case .mergedPR(let number):
-      filled("PR #\(number) merged", Color.theme.tintDiffAdded, .theme.diffAdded)
-    case .gone:
-      filled("[gone]", Color.theme.plainPillFill, .theme.textMuted)
-    case .prunable:
-      filled(l10n.string(.dispatchCleanPrunable), Color.theme.plainPillFill, .theme.textMuted)
-    case .dirty:
-      caution(l10n.string(.dispatchCleanDirty))
-    case .unmergedClosed(let count):
-      caution(
-        l10n.plural(
-          count, one: .dispatchCleanUnmergedClosedOne, other: .dispatchCleanUnmergedClosedOther))
-    case .ownCommits(let count):
-      caution(
-        l10n.plural(count, one: .dispatchCleanOwnCommitsOne, other: .dispatchCleanOwnCommitsOther))
-    case .locked:
-      caution("locked")
-    case .cleanNote:
-      note("clean · +0", .theme.diffAdded)
-    case .mainWorktree:
-      note("main worktree", .theme.textMuted)
-    case .paneOpen(let working):
-      HStack(spacing: 5) {
-        if working { StatusGlyphView(kind: .working, size: 11) }
-        note(
-          l10n.string(working ? .dispatchCleanPaneBusy : .dispatchCleanPaneOpen),
-          .theme.textMuted)
-      }
-    }
-  }
-
-  private func filled(_ text: String, _ background: Color, _ foreground: Color) -> some View {
-    Text(text)
-      .font(Font.theme.sectionLabel)
-      .foregroundStyle(foreground)
-      .lineLimit(1)
-      .padding(.horizontal, 7)
-      .padding(.vertical, 1)
-      .background(Capsule().fill(background))
-  }
-
-  private func caution(_ text: String) -> some View {
-    filled(text, Color.theme.tintWaiting, .theme.stateWaiting)
-  }
-
-  private func note(_ text: String, _ color: Color) -> some View {
-    Text(text).font(Font.theme.sectionLabel).foregroundStyle(color).lineLimit(1)
-  }
-}
-
-/// clean のフッター。ブランチ削除トグル・キーヒント・実行ボタン。
-/// 実行中は既存 Dispatch の「作成中」と同語彙でスピナ＋ラベルだけにし、効かない案内を残さない。
+/// clean のフッター。画面ごとに案内が入れ替わる（効かない操作の案内を残さない）。
 struct DispatchCleanFooter: View {
   @Bindable var model: DispatchCleanModel
   let onExecute: () -> Void
+  let onClose: () -> Void
   @Environment(\.localization) private var l10n
 
   var body: some View {
     HStack(spacing: Theme.Space.beat) {
-      if model.isDeleting {
-        HStack(spacing: Theme.Space.note) {
-          StatusGlyphView(kind: .working, size: 10)
-          Text(l10n.string(.dispatchCleanDeleting))
-            .font(Font.theme.paneRow)
-            .foregroundStyle(Color.theme.textMuted)
+      switch model.phase {
+      case .selecting:
+        Spacer(minLength: Theme.Space.step)
+        hint(l10n.string(.dispatchCleanKeyHint))
+        button(l10n.format(.dispatchCleanExecute, model.selectedCount), enabled: model.canExecute) {
+          onExecute()
         }
-        Spacer(minLength: 0)
-      } else {
-        branchToggle
-        if let error = model.errorMessage {
-          Text(error)
-            .font(Font.theme.meta)
-            .foregroundStyle(Color.theme.danger)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-          Spacer(minLength: Theme.Space.step)
-        }
-        // 狭窓で最初に譲るのはキーヒント（トグルと実行ボタンは効く操作なので削らない）。
-        // 失敗理由より先には縮まない（優先度 1）。
-        Text(l10n.string(.dispatchCleanKeyHint))
+      case .deleting:
+        // 終端はここで言い切る（未選択の行は畳んだまま実行が終わる）。
+        Text(l10n.string(.dispatchCleanCollapsedNote))
           .font(Font.theme.meta)
           .foregroundStyle(Color.theme.textMuted)
           .lineLimit(1)
           .truncationMode(.tail)
-          .layoutPriority(1)
-        executeButton
+          .frame(maxWidth: .infinity, alignment: .leading)
+        hint(l10n.string(.dispatchCleanCancelHint))
+      case .failed:
+        Spacer(minLength: Theme.Space.step)
+        hint(l10n.string(.dispatchCleanRetryAll))
+        button(l10n.string(.dispatchCleanClose), enabled: true) { onClose() }
       }
     }
     .padding(.horizontal, Theme.Space.bar)
     .padding(.vertical, Theme.Space.step + Theme.Space.hair)
   }
 
-  /// `ローカルブランチも削除`（既定 ON）。**効くのは safe 行だけ**（caution 行は行ごとの状態が決める）。
-  private var branchToggle: some View {
-    HStack(spacing: 7) {
-      ZStack(alignment: model.deleteBranch ? .trailing : .leading) {
-        Capsule()
-          .fill(
-            model.deleteBranch
-              ? Color.theme.accentPrimary.opacity(0.35) : Color.theme.surfaceInk.opacity(0.1)
-          )
-          .frame(width: 22, height: 12)
-        Circle()
-          .fill(model.deleteBranch ? Color.theme.accentPrimary : Color.theme.textMuted)
-          .frame(width: 8, height: 8)
-          .padding(.horizontal, Theme.Space.hair)
-      }
-      Text(l10n.string(.dispatchCleanDeleteBranch))
-        .font(Font.theme.meta)
-        .foregroundStyle(Color.theme.textMuted)
-        .lineLimit(1)
-        .fixedSize()
-    }
-    .contentShape(Rectangle())
-    .onTapGesture { model.deleteBranch.toggle() }
+  /// 狭窓で最初に譲るのはキーヒント（実行ボタンは効く操作なので削らない）。
+  private func hint(_ text: String) -> some View {
+    Text(text)
+      .font(Font.theme.meta)
+      .foregroundStyle(Color.theme.textMuted)
+      .lineLimit(1)
+      .truncationMode(.tail)
+      .layoutPriority(1)
   }
 
-  private var executeButton: some View {
-    Text(l10n.format(.dispatchCleanExecute, model.selectedCount))
+  private func button(_ text: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+    Text(text)
       .font(Font.theme.paneRow)
       .foregroundStyle(Color.theme.accentBright)
       .lineLimit(1)
@@ -319,8 +201,8 @@ struct DispatchCleanFooter: View {
       .padding(.horizontal, Theme.Space.beat)
       .padding(.vertical, 3)
       .background(Capsule().fill(Color.theme.accentPrimary.opacity(0.16)))
-      .opacity(model.canExecute ? 1 : Theme.Opacity.disabled)
+      .opacity(enabled ? 1 : Theme.Opacity.disabled)
       .contentShape(Capsule())
-      .onTapGesture { if model.canExecute { onExecute() } }
+      .onTapGesture { if enabled { action() } }
   }
 }

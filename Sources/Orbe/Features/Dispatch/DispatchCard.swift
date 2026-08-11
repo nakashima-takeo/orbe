@@ -50,8 +50,11 @@ struct DispatchCard: View {
         }
         divider
         if model.mode == .clean {
-          DispatchCleanFooter(model: model.clean, onExecute: { model.executeClean() })
-            .background(chromeProbe)
+          DispatchCleanFooter(
+            model: model.clean, onExecute: { model.executeClean() },
+            onClose: { model.exitOrCancelClean() }
+          )
+          .background(chromeProbe)
         } else {
           footer
         }
