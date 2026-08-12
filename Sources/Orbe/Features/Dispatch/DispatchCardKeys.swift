@@ -18,6 +18,9 @@ struct DispatchCardKeyCapture: ViewModifier {
         switch press.key {
         case .upArrow: model.clean.move(-1)
         case .downArrow: model.clean.move(1)
+        // ←→ はブランチの扱い。効くのはサブラインが開いている行だけ（畳みはモデルが持つ）。
+        case .leftArrow: model.clean.chooseBranch(.keep)
+        case .rightArrow: model.clean.chooseBranch(.delete)
         // clean に ⇥ の意味は無いが、握らないと焦点がカード器から抜けて以下のキーが全部死ぬ
         // （list 側の入力欄が同じ理由で ⇥ を握っているのと同じ手当て）。
         case .tab: break
@@ -25,19 +28,19 @@ struct DispatchCardKeyCapture: ViewModifier {
         }
         return .handled
       }
-      // ⏎ は選択を 1 つ進める・⌘⏎ は実行（`onSubmit` を持たないので修飾の有無で分ける）。
+      // ⏎ は画面ごとの決定・⌘⏎ は実行（`onSubmit` を持たないので修飾の有無で分ける）。
       .onKeyPress { press in
         guard model.mode == .clean, press.key == .return else { return .ignored }
         if press.modifiers.contains(.command) {
           model.executeClean()
         } else {
-          model.clean.advance()
+          model.confirmClean()
         }
         return .handled
       }
       .onKeyPress(.space) {
         guard model.mode == .clean else { return .ignored }
-        model.clean.advance()
+        model.clean.toggleAtCursor()
         return .handled
       }
       .onKeyPress(KeyEquivalent("a")) {
@@ -45,9 +48,14 @@ struct DispatchCardKeyCapture: ViewModifier {
         model.clean.selectAllSafe()
         return .handled
       }
+      .onKeyPress(KeyEquivalent("o")) {
+        guard model.mode == .clean else { return .ignored }
+        model.openCleanFailure()
+        return .handled
+      }
       .onKeyPress(.escape) {
         guard model.mode == .clean else { return .ignored }
-        model.exitClean()
+        model.exitOrCancelClean()
         return .handled
       }
   }

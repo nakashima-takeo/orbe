@@ -3,13 +3,14 @@ import Foundation
 /// UI 文言の辞書（`L10nKey` → 日英）と言語別のルックアップ。`LocalizationStore` と AppKit `MainMenu` の
 /// 両方がここを通す（`language == .ja` 分岐を 1 箇所へ集約）。全 `L10nKey` の網羅は `L10nCompletenessTests`。
 /// 辞書はドメイン分冊（本体＋`L10nTable+Settings.swift`＋`L10nTable+Help.swift`＋
-/// `L10nTable+Attention.swift`）を `table` が結合する。
+/// `L10nTable+Attention.swift`＋`L10nTable+Dispatch.swift`）を `table` が結合する。
 enum L10n {
   static let table: [L10nKey: (ja: String, en: String)] =
     baseTable
     .merging(settingsTable) { a, _ in a }
     .merging(helpTable) { a, _ in a }
     .merging(attentionTable) { a, _ in a }
+    .merging(dispatchTable) { a, _ in a }
 
   private static let baseTable: [L10nKey: (ja: String, en: String)] = [
     // MARK: Menu
@@ -137,79 +138,6 @@ enum L10n {
     .agentStateDone: ("完了", "Done"),
     .agentStateIdle: ("アイドル", "Idle"),
     .agentStateDormant: ("休眠", "Dormant"),
-
-    // MARK: Dispatch
-    .dispatchWorktreeExisting: ("既存worktree", "existing worktree"),
-    .dispatchWorktreeCheckout: ("checkout → worktree", "checkout → worktree"),
-    .dispatchWorktreeNew: ("新規worktree", "new worktree"),
-    .dispatchPrepExisting: ("の既存worktreeで", "· existing worktree ·"),
-    .dispatchPrepCheckout: ("をcheckoutしたworktreeで", "· checkout worktree ·"),
-    .dispatchPrepNew: ("の新規worktreeで", "· new worktree ·"),
-    .dispatchLaunchSuffix: ("を新しいタブで起動", "· new tab"),
-    .dispatchReviewRequired: ("review待ち", "review pending"),
-    .dispatchChangesRequested: ("要修正", "changes requested"),
-    .dispatchApproved: ("承認済み", "approved"),
-    .dispatchGhMissing: (
-      "gh CLI 未導入（brew install gh で issue/PR を表示）",
-      "gh CLI not installed (brew install gh to show issues/PRs)"
-    ),
-    .dispatchGhUnauthed: (
-      "gh 未認証（gh auth login で issue/PR を表示）",
-      "gh not authenticated (gh auth login to show issues/PRs)"
-    ),
-    .dispatchAgentOpen: ("%@で開く", "open with %@"),
-    .dispatchQueryPlaceholder: (
-      "worktree / branch / issue を絞り込み", "Filter worktree / branch / issue"
-    ),
-    .dispatchPreparing: ("作成中…", "Preparing…"),
-    .dispatchHintSelect: ("選択", "Select"),
-    .dispatchHintAgent: ("agent変更", "Change agent"),
-    .dispatchHintOpen: ("開く", "Open"),
-    .dispatchHintClose: ("閉じる", "Close"),
-    .dispatchErrNotGitRepo: (
-      "git リポジトリを解決できませんでした", "Couldn't resolve a git repository"
-    ),
-    .dispatchErrForkPR: (
-      "fork の PR #%lld は worktree 化に未対応です（⌘↵ でブラウザを開けます）",
-      "Fork PR #%lld can't be made into a worktree (⌘↵ to open in browser)"
-    ),
-    .dispatchCleanSubtitle: (
-      "要らなくなった worktree を掃除", "Clean up worktrees you no longer need"
-    ),
-    .dispatchCleanCandidatesOne: ("候補 %lld 件", "%lld candidate"),
-    .dispatchCleanCandidatesOther: ("候補 %lld 件", "%lld candidates"),
-    .dispatchCleanListNote: (
-      "rm / prune / 掃除 の入力もエイリアスでヒット · 候補 0 件でも行は残る（バッジだけ消える）",
-      "rm / prune / 掃除 also match as aliases · the row stays at 0 candidates (only the badge goes)"
-    ),
-    .dispatchCleanSelected: ("%lld 件選択中", "%lld selected"),
-    .dispatchCleanBack: ("esc 戻る", "esc Back"),
-    .dispatchCleanSectionSafe: ("削除候補 — 安全に削除できます", "Candidates — safe to delete"),
-    .dispatchCleanSectionCaution: ("注意 — 理由を確認してから", "Caution — check the reason first"),
-    .dispatchCleanSectionInUse: ("使用中 — 削除できません", "In use — can't be deleted"),
-    .dispatchCleanDeleteBranch: ("ローカルブランチも削除", "Delete local branch too"),
-    .dispatchCleanWorktreeOnly: ("worktree のみ", "Worktree only"),
-    .dispatchCleanWorktreeAndBranch: ("worktree + ブランチ", "Worktree + branch"),
-    .dispatchCleanKeyHint: (
-      "space / ⏎ 選択 · a 安全を全選択", "space / ⏎ Select · a Select all safe"
-    ),
-    .dispatchCleanExecute: ("⌘⏎ %lld 件を削除", "⌘⏎ Delete %lld"),
-    .dispatchCleanDeleting: ("削除中…", "Deleting…"),
-    .dispatchCleanPrunable: ("prunable · 実体なし", "prunable · no directory"),
-    .dispatchCleanDirty: ("未コミット変更あり", "Uncommitted changes"),
-    .dispatchCleanUnmergedClosedOne: (
-      "未マージclose · 独自コミット%lld件", "Closed unmerged · %lld own commit"
-    ),
-    .dispatchCleanUnmergedClosedOther: (
-      "未マージclose · 独自コミット%lld件", "Closed unmerged · %lld own commits"
-    ),
-    .dispatchCleanOwnCommitsOne: ("独自コミット%lld件", "%lld own commit"),
-    .dispatchCleanOwnCommitsOther: ("独自コミット%lld件", "%lld own commits"),
-    .dispatchCleanPaneBusy: ("ペイン表示中 · agent 作業中", "Open in a pane · agent working"),
-    .dispatchCleanPaneOpen: ("ペイン表示中", "Open in a pane"),
-    .dispatchCleanFailure: (
-      "%lld 件中 %lld 件失敗 — %@", "%2$lld of %1$lld failed — %3$@"
-    ),
 
     // MARK: Onboarding
     .onboardingBegin: ("始める", "Get started"),

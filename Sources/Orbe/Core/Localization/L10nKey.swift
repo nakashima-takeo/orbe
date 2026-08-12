@@ -155,21 +155,48 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchCleanSectionSafe
   case dispatchCleanSectionCaution
   case dispatchCleanSectionInUse
-  case dispatchCleanDeleteBranch
-  case dispatchCleanWorktreeOnly
-  case dispatchCleanWorktreeAndBranch
   case dispatchCleanKeyHint
   case dispatchCleanExecute
-  case dispatchCleanDeleting
+  case dispatchCleanBranchLabel
+  case dispatchCleanBranchKeep
+  case dispatchCleanBranchDelete
+  case dispatchCleanBranchAlsoDeleted
+  case dispatchCleanLossNote
+  case dispatchCleanDeletingTitle
+  case dispatchCleanProgress
+  case dispatchCleanCollapsedNote
+  case dispatchCleanCancelHint
+  case dispatchCleanRowRemoved
+  case dispatchCleanRowRemovedWithBranch
+  case dispatchCleanRowPruned
+  case dispatchCleanRowPrunedWithBranch
+  case dispatchCleanRowRunning
+  case dispatchCleanRowPending
+  case dispatchCleanRowPendingWithBranch
+  case dispatchCleanRowSkipped
+  case dispatchCleanDoneTitle
+  case dispatchCleanTally
+  case dispatchCleanRetryAll
+  case dispatchCleanClose
+  case dispatchCleanRetry
+  case dispatchCleanOpenTab
+  case dispatchCleanFailedDirty
+  case dispatchCleanFailedOperation
+  case dispatchCleanFailedWorktree
+  case dispatchCleanFailedBranch
   case dispatchCleanPrunable
-  case dispatchCleanDirty
-  case dispatchCleanUnmergedClosedOne
-  case dispatchCleanUnmergedClosedOther
+  case dispatchCleanUncommittedOne
+  case dispatchCleanUncommittedOther
+  case dispatchCleanUntrackedOne
+  case dispatchCleanUntrackedOther
+  case dispatchCleanInProgress
+  case dispatchCleanRemoteSynced
+  case dispatchCleanUnpushed
   case dispatchCleanOwnCommitsOne
   case dispatchCleanOwnCommitsOther
-  case dispatchCleanPaneBusy
+  case dispatchCleanAgentWorking
+  case dispatchCleanAgentWaiting
   case dispatchCleanPaneOpen
-  case dispatchCleanFailure
 
   // MARK: - Onboarding
   case onboardingBegin
