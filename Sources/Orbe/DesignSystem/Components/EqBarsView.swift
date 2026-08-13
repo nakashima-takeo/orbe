@@ -14,7 +14,7 @@ struct EqBarsView: View {
   private let gap: CGFloat = 2
   private let low: CGFloat = 3
   private let high: CGFloat = 10
-  private var delays: [Double] { [0, Theme.Motion.eqStagger, Theme.Motion.eqStagger * 2] }
+  private let delays: [Double] = [0, Theme.Motion.eqStagger, Theme.Motion.eqStagger * 2]
 
   var body: some View {
     if reduceMotion {
@@ -29,7 +29,7 @@ struct EqBarsView: View {
 
   private func bars(at t: Double) -> some View {
     HStack(alignment: .bottom, spacing: gap) {
-      ForEach(Array(delays.enumerated()), id: \.offset) { _, delay in
+      ForEach(delays, id: \.self) { delay in
         Rectangle().fill(color).frame(width: barWidth, height: height(t, delay))
       }
     }
