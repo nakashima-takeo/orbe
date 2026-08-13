@@ -114,6 +114,37 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
+  /// Settings パレット通知音: root → 潜る（入場は無音＝EQ 無し）→ ↓ で試聴（EQ 点灯）→ ⇥ で対象反転
+  /// （セグメントの塗りが移り EQ が琥珀へ）→ セグメントのクリックで完了へ戻る。
+  /// アクションで初めて現れる状態（EQ の点灯・対象の反転）を撮るのがここの役目。
+  func testSettingsPaletteSound() throws {
+    var global = SettingsLayer()
+    global[SettingKeys.fontSize] = 14
+    global[SettingKeys.defaultAgent] = "claude"
+    global[SettingKeys.notificationSound] = NotificationSound.glass
+    let settings = SettingsPaletteModel(
+      values: ScopedSettingsValues(global: global),
+      fontNames: ["Menlo", "Monaco", "SF Mono"],
+      agents: ["claude", "codex", "agy"],
+      localization: LocalizationStore(language: .ja))
+    try flow(
+      "settings_palette_sound", size: NSSize(width: 500, height: 460),
+      render: { paletteSnapshot(settings.render) },
+      steps: [
+        ("root", {}),
+        (
+          "sound",
+          {  // 通知音行（index 13）で潜る（入場では鳴らない＝EQ は出ない・セグメントは「完了」）
+            settings.render.selected = 13
+            settings.render.onActivate()
+          }
+        ),
+        ("preview", { settings.render.onDown() }),  // 試聴 → その行の右端に EQ（完了＝緑）
+        ("waiting", { _ = settings.render.onTab() }),  // 対象を反転 → 塗りが移り EQ が琥珀へ
+        ("tab_click", { settings.render.onTapSegment(0) }),  // クリックで完了へ戻す
+      ])
+  }
+
   /// Settings パレット agent 空状態: agent 検出ゼロでサブリストへ潜り、情報行（選択不可・text.muted）が
   /// 起動パレットの CLI 検出ゼロと同じ様式で出るかを撮る。テーマ行と違い ● も実行対象も無い。
   func testSettingsPaletteAgentEmpty() throws {

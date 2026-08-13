@@ -267,8 +267,12 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       paletteSnapshot(manyRowPalette(fieldVisible: false)), size: tall,
       name: "palette_cap_nofield.png", dir: dir)
 
-    // 設定パレット（Cmd+,）root / テーマサブパレット。本物の SettingsPaletteModel が render へ
-    // 立て下げた状態を Light/Dark で撮る（遷移過程は flow の settings_palette が担う）。
+    try renderSettingsPaletteSnapshots(dir: dir, cardSize: cardSize)
+  }
+
+  /// 設定パレット（Cmd+,）root / テーマ / 通知音サブパレット。本物の SettingsPaletteModel が render へ
+  /// 立て下げた状態を Light/Dark で撮る（遷移過程は flow の settings_palette 系が担う）。
+  private func renderSettingsPaletteSnapshots(dir: URL, cardSize: NSSize) throws {
     // root は WS 上書きありで撮る＝「（この WS では …）」注記（muted 補足）が主値より弱く読めるか、
     // 選択行の tint 塗りの上でも読めるかを両 appearance で見る。
     let settingsRoot = settingsPaletteModel(overrideFontSize: 16, overrideTheme: .dark)
@@ -282,6 +286,18 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     try writePNG(
       paletteSnapshot(settingsTheme.render), size: cardSize,
       name: "palette_settings_theme.png", dir: dir)
+
+    // 通知音: リスト直上のセグメント（試聴対象）・鳴る条件の一文・試聴中の行の EQ。
+    // EQ を画に出すため、潜った後に選択を動かして試聴を起こす（入場では鳴らない＝EQ も出ない）。
+    // EQ の位相は撮影時刻で決まるが、3 本の位相差が 0/0.15/0.3 あるのでどの瞬間でも高い棒が混じり、
+    // 形と色は読める（working スピナーと同じ扱い＝止めない）。
+    let settingsSound = settingsPaletteModel()
+    settingsSound.render.selected = 13  // 通知音行
+    settingsSound.render.onActivate()  // 潜る
+    settingsSound.render.onDown()  // 試聴 → その行に EQ が点く
+    try writePNG(
+      paletteSnapshot(settingsSound.render), size: NSSize(width: 500, height: 460),
+      name: "palette_settings_sound.png", dir: dir)
   }
 
   /// 設定パレット gallery 用の実モデル（flow の testSettingsPalette と同じ初期値）。
