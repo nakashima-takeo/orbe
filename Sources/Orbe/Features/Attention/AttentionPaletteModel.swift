@@ -20,7 +20,7 @@ import SwiftUI
   init(localization: LocalizationStore = LocalizationStore(language: .systemDefault)) {
     self.localization = localization
     render.breadcrumb = "attention"
-    render.headerPills = [PaletteModel.HeaderPill(label: "⌘⌘", active: false)]
+    render.headerPills = [PaletteModel.HeaderPill(label: "⌘⌘")]
     render.surface = .popup  // デザイン第10シーン rgba(panel, 0.9)＝popup 級の面（枠・幾何は panel 級）
     render.scrimStrength = .normal  // 頻繁に開く軽いパレット（workspace 切替と同じ通常暗幕）
     render.hintKeys = [

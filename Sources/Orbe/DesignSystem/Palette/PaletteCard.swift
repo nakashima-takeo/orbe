@@ -194,14 +194,12 @@ struct PaletteCard: View {
         .frame(maxWidth: model.fieldVisible ? .infinity : 0)
         .opacity(model.fieldVisible ? 1 : 0)
         .allowsHitTesting(model.fieldVisible)
-      // ヘッダ右端の表示専用ピル。opt-in（空の既存パレットは従来どおりヘッダ行だけ）。
-      // 状態を語るのはヘッダ、操作を語るのはフッター（hint）という分担なので、ここは
-      // 「今どちらの面か」だけを出す（キーの案内は載せない）。
+      // ヘッダ右端の表示専用ピル（Attention の `⌘⌘`）。opt-in（空の既存パレットは従来どおり
+      // ヘッダ行だけ）。開くキーのような面の素性だけを出し、操作の案内はフッター（hint）が持つ。
       if !model.headerPills.isEmpty {
         HStack(spacing: Theme.Space.step) {
           ForEach(model.headerPills) { pill in
-            Text(pill.label)
-              .foregroundStyle(pill.active ? Color.theme.textPrimary : Color.theme.textMuted)
+            Text(pill.label).foregroundStyle(Color.theme.textMuted)
           }
         }
         .font(Font.theme.meta)

@@ -16,7 +16,7 @@ import SwiftUI
     var leading: AnyView?
     /// ラベルの後に muted で出す補足（workspace 行のディレクトリ等）。nil で出さない。
     var detail: String?
-    /// 行末に出す表示専用バッジ（作成導線の `⌘N` 等）。nil で出さない。
+    /// 行末に出す表示専用バッジ（作成導線の `⌘N` 等）。`createStyle` の行でだけ描かれる。nil で出さない。
     var trailingBadge: String?
     /// 作成導線の行スタイル（accent 文字＋破線罫線＋右端バッジ）。表示専用（キー挙動は載せない）。
     var createStyle = false
@@ -35,6 +35,8 @@ import SwiftUI
   }
 
   /// 付属ビューを出す 1 行。nil で出さない＝opt-in（`headerPills` / `hintKeys` と同じ規律）。
+  /// `normal` / `dormant` の行でだけ描かれる（`customContent` の行には乗らない）。
+  /// `row` は `rows` の添字なので、行を組み直す側が畳む。
   var rowAccessory: RowAccessory?
 
   /// 選択とホバー追従ガード（`ModalSelection` が代入経路のガードを一手に握る）。
@@ -79,24 +81,19 @@ import SwiftUI
   var breadcrumb: String?
   /// ヘッダ右端の表示専用ピル 1 件。**`ForEach` へ値で渡すために `Identifiable`** にしてある
   /// ——view からこの配列へ添字で読み返すと、配列が空へ縮む更新パスで SwiftUI が古い添字のまま
-  /// 消えゆく子を評価し、範囲外アクセスでプロセスごと落ちる。`id` を `label` に置くのは、
-  /// `active` が反転しても identity が変わらず `Text` が再マウントされないため
+  /// 消えゆく子を評価し、範囲外アクセスでプロセスごと落ちる。`id` は `label`
   /// （同一セット内で `label` が一意であることがこの型の前提）。
   struct HeaderPill: Identifiable {
     var label: String
-    var active: Bool
     var id: String { label }
   }
 
-  /// ヘッダ右端の表示専用ピル（Attention の `⌘⌘` バッジ）。`active` が主色/muted を分ける。
-  /// 空で出さない＝opt-in（`hintKeys` と同じ規律）。
+  /// ヘッダ右端の表示専用ピル（Attention の `⌘⌘` バッジ）。空で出さない＝opt-in（`hintKeys` と同じ規律）。
   var headerPills: [HeaderPill] = []
 
   /// リスト直上の全幅セグメント 1 枚（通知音サブパレットの試聴対象「完了 | 入力待ち」）。
-  /// **`ForEach` へ値で渡すために `Identifiable`** にしてある——view からこの配列へ添字で読み返すと、
-  /// 配列が空へ縮む更新パスで SwiftUI が古い添字のまま消えゆく子を評価し、範囲外アクセスで
-  /// プロセスごと落ちる。`id` を `label` に置くのは、`active` が反転しても identity が変わらず
-  /// `Text` が再マウントされないため（同一セット内で `label` が一意であることがこの型の前提）。
+  /// `HeaderPill` と同じ理由で `Identifiable`・`id` は `label`（`active` が反転しても identity が
+  /// 変わらず `Text` が再マウントされない）。
   /// `glyph` を view でなくデータで持つのは、寸法と状態色の解決を DS 側に残すため。
   struct Segment: Identifiable {
     var label: String
@@ -110,7 +107,7 @@ import SwiftUI
   /// セグメントのクリック（index）。パレットモデルが切替に結ぶ。
   var onTapSegment: (Int) -> Void = { _ in }
 
-  /// セグメントとリストの間に置く一文（面の前提を言い切る補足）。空で出さない＝opt-in。
+  /// リスト直上の一文（`segments` があればその下）。面の前提を言い切る補足。空で出さない＝opt-in。
   var caption = ""
   var hint = ""
 

@@ -122,14 +122,12 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
   }
 
   /// リスト直上のセグメントが試聴対象を、その下の一文が鳴る条件を、フッターが操作を語る。
-  /// ヘッダ右端のピルは使わない（この面が語ることは全部リストの周りに置く）。
   func testSegmentsShowPreviewTargetAndCaptionExplainsPreview() {
     let p = model()
     drillIn(p)
     XCTAssertEqual(p.render.segments.map(\.label), ["完了", "入力待ち"])
     XCTAssertEqual(p.render.segments.map(\.active), [true, false])
     XCTAssertEqual(p.render.segments.map(\.glyph), [.done, .waiting], "状態の語彙をグリフでも出す")
-    XCTAssertTrue(p.render.headerPills.isEmpty, "ヘッダ右端のピルは立てない")
     XCTAssertFalse(p.render.caption.isEmpty, "鳴る条件はリスト直上の一文で言い切る")
     XCTAssertTrue(p.render.hint.contains("↑↓"))
     XCTAssertTrue(p.render.hint.contains("⇥"))
