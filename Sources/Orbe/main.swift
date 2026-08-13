@@ -20,6 +20,10 @@ if LaunchGate.decide(
   // 打とうとして外した場合が主で、黙って落とすと制御 API の `Orbe not running` と同じく
   // 「Orbe が動いていないのでは」という原因から最も遠い方向へ誘導してしまう。
   // 文体は `orb` の usage（英語・小文字基調）に揃える。
+  // アプリ名は Info.plist（＝ビルド時のチャネルが導出した値）から取る。実行体名は両チャネル共通で
+  // 関門は dev でも発火するので、固定にすると Orbe Dev で落ちた人へ release の Orbe を名指しする。
+  // 引用符ごと出すのは表示名に空白が入りうるため（`open -a Orbe Dev` は探す名前が変わる）。
+  let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Orbe"
   FileHandle.standardError.write(
     Data(
       """
@@ -29,7 +33,7 @@ if LaunchGate.decide(
           orb ws list
           orb --help
 
-        To launch the app, open it from Finder or run `open -a Orbe`.
+        To launch the app, open it from Finder or run `open -a "\(appName)"`.
 
       """.utf8))
   exit(1)
