@@ -16,7 +16,22 @@ if LaunchGate.decide(
   launchSource: launchSource,
   stateDir: ProcessInfo.processInfo.environment[OrbePaths.stateDirEnvVar]
 ) == .reject {
-  FileHandle.standardError.write(Data(LaunchGate.rejectionMessage.utf8))
+  // 「起動しませんでした」で終えず、次に打つべきコマンドを名指しする。ここを踏むのは `orb` を
+  // 打とうとして外した場合が主で、黙って落とすと制御 API の `Orbe not running` と同じく
+  // 「Orbe が動いていないのでは」という原因から最も遠い方向へ誘導してしまう。
+  // 文体は `orb` の usage（英語・小文字基調）に揃える。
+  FileHandle.standardError.write(
+    Data(
+      """
+      orbe: this is the Orbe application binary, not a command-line tool. It takes no arguments.
+
+        To control the running Orbe instance, use `orb`:
+          orb ws list
+          orb --help
+
+        To launch the app, open it from Finder or run `open -a Orbe`.
+
+      """.utf8))
   exit(1)
 }
 

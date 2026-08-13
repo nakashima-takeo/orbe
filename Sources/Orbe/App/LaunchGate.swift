@@ -28,7 +28,7 @@ enum LaunchGate {
   enum Decision: Equatable {
     /// 通常の GUI 起動へ進む。
     case proceed
-    /// コマンドとして叩かれた。`rejectionMessage` を stderr へ出して非 0 で終える。
+    /// コマンドとして叩かれた。呼び出し側が案内を出して非 0 で終える。
     case reject
   }
 
@@ -65,20 +65,4 @@ enum LaunchGate {
     if let stateDir, !stateDir.isEmpty { return .proceed }
     return .reject
   }
-
-  /// `reject` 時に stderr へ出す文言。`orb` の usage と同じ英語・小文字基調に揃える。
-  ///
-  /// 「起動しませんでした」で終えず**次に打つべきコマンドを名指しする**。この関門を踏むのは
-  /// `orb` を打とうとして外した場合が主で、黙って落とすと制御 API の `Orbe not running` と同じく
-  /// 原因から最も遠い方向——「Orbe が動いていないのでは」——へ誘導してしまう。
-  static let rejectionMessage = """
-    orbe: this is the Orbe application binary, not a command-line tool. It takes no arguments.
-
-      To control the running Orbe instance, use `orb`:
-        orb ws list
-        orb --help
-
-      To launch the app, open it from Finder or run `open -a Orbe`.
-
-    """
 }
