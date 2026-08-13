@@ -51,4 +51,12 @@ enum AgentSoundEvent: String, CaseIterable {
     case .waiting: return .agentStateWaiting
     }
   }
+
+  /// 状態の語彙への橋（セグメントのグリフと試聴 EQ の色が共有する 1 経路。状態色を二重定義しない）。
+  var glyphKind: AgentStateIcon.Kind {
+    switch self {
+    case .done: return .done
+    case .waiting: return .waiting
+    }
+  }
 }

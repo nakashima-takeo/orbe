@@ -283,6 +283,8 @@ enum Theme {
     static let float: Double = 2.6  // waiting 浮遊（ease-in-out infinite）
     static let floatOffset: CGFloat = -1  // waiting translateY
     static let blink: Double = 1.1  // 点滅（0–55% 表示 / 56–100% 非表示）
+    static let eq: Double = 0.5  // 試聴 EQ の 1 往復（ease-in-out infinite）
+    static let eqStagger: Double = 0.15  // EQ 3 本の位相ずらし
   }
 }
 

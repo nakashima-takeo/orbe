@@ -63,7 +63,12 @@ extension L10n {
     .settingsWorktreeDirCustom: ("カスタム…", "Custom…"),
     .settingsNotificationSoundBreadcrumb: ("‹ 通知音", "‹ Notification Sound"),
     .settingsNotificationSoundHint: (
-      "↵ 適用   ⇥ 完了⇄入力待ち   ←/esc 戻る", "↵ Apply   ⇥ Done⇄Waiting   ←/esc Back"
+      "↑↓ 選ぶと鳴る   ⇥ 完了⇄入力待ち   ↵ 適用   ←/esc 戻る",
+      "↑↓ Preview   ⇥ Done⇄Waiting   ↵ Apply   ←/esc Back"
+    ),
+    .settingsNotificationSoundCaption: (
+      "↑↓ で音を、⇥ で対象を切り替えると、その場ですぐ鳴る",
+      "↑↓ picks the sound, ⇥ the event — either one plays instantly"
     ),
     .settingsNotificationSoundNone: ("なし", "None"),
     .settingsNotificationSoundOffRow: ("なし（オフ）", "None (off)"),

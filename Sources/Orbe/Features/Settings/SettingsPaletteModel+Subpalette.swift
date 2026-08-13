@@ -47,16 +47,19 @@ extension SettingsPaletteModel {
 
   /// notificationSound: 行 0 が「なし（オフ）」、続いて 12 案（絞り込み欄なし）。
   /// **行の移動はその案を鳴らすだけで値を書かない**（書くのは ↵ の確定のみ）ので、流し聴きして
-  /// ← / esc で戻れば設定は元のまま。ヘッダ右端のセグメントが今どちらのイベントを聴く面かを示し、
-  /// ⇥ がそれを反転する（フッターの hint が操作を語る）。
+  /// ← / esc で戻れば設定は元のまま。リスト直上のセグメントが今どちらのイベントを聴く面かを示し、
+  /// ⇥ とそのクリックが反転する。鳴る条件はキー割当ではなくこの面の前提なので、フッターの hint とは別に
+  /// リスト直上の一文（caption）で言い切る。
   /// 現在値（●・初期ハイライト）はオフなら行 0、オンなら現在の案の行。
   func rebuildNotificationSound() {
     render.fieldVisible = false
     render.fieldIsFilter = false
     render.breadcrumb = localization.string(.settingsNotificationSoundBreadcrumb)
-    render.headerPills = AgentSoundEvent.allCases.map {
-      PaletteModel.HeaderPill(label: localization.string($0.labelKey), active: $0 == previewEvent)
+    render.segments = AgentSoundEvent.allCases.map {
+      PaletteModel.Segment(
+        label: localization.string($0.labelKey), glyph: $0.glyphKind, active: $0 == previewEvent)
     }
+    render.caption = localization.string(.settingsNotificationSoundCaption)
     render.placeholder = ""
     render.hint = localization.string(.settingsNotificationSoundHint)
     let sounds = NotificationSound.allCases

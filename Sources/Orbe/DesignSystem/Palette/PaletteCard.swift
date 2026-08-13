@@ -20,6 +20,11 @@ struct PaletteCard: View {
   /// （CompletionList.capHeight と同流儀。グローバルトークンは足さない）。
   private let capHeight: CGFloat = 320
 
+  /// セグメント外枠 9 / セグメント 6。`Theme.Radius` の格子（3/4/8/10/12/16）に無い見本の実寸なので
+  /// `capHeight` と同じくコンポーネント局所の定数にする（グローバルトークンは足さない）。
+  private let segmentRowRadius: CGFloat = 9
+  private let segmentRadius: CGFloat = 6
+
   var body: some View {
     // 面の濃度だけ model.surface（panel .72 / attention は popup .90）で変え、
     // 幾何（radius 16）・blur（hudWindow≒24）・枠（panel .08/.12）・影（panel）は panel 級に固定する。
@@ -35,6 +40,15 @@ struct PaletteCard: View {
         if model.fieldVisible || model.breadcrumb != nil {
           header
           divider
+        }
+
+        // リスト直上のスロット（セグメント・一文）。どちらも空で出さない＝他パレットは無影響。
+        // 罫線はヘッダ側に付いたままで、こことリストの間には入れない。
+        if !model.segments.isEmpty {
+          segmentBar
+        }
+        if !model.caption.isEmpty {
+          captionLine
         }
 
         // 行ゼロ（入力欄だけのプロンプト＝改名・ディレクトリ・タブ改名）では行リストごと描かない。
@@ -106,6 +120,48 @@ struct PaletteCard: View {
     Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
   }
 
+  /// リスト直上の全幅セグメント。地は 2 段目タブ行と同じ `tabRowBg`、選択は他のパレット行と同じ選択塗り。
+  /// `ForEach` へは値で渡す（`headerPills` と同じ理由——配列が空へ縮む更新パスで添字読みは範囲外になる）。
+  /// index はクロージャへ値で閉じ込め、評価時に配列へ添字で戻らない。
+  private var segmentBar: some View {
+    HStack(spacing: Theme.Space.tick) {
+      ForEach(Array(model.segments.enumerated()), id: \.element.id) { index, segment in
+        HStack(spacing: Theme.Space.note) {
+          if let glyph = segment.glyph {
+            StatusGlyphView(kind: glyph, size: 12)
+          }
+          Text(segment.label)
+        }
+        .font(Font.theme.chrome)
+        .foregroundStyle(segment.active ? Color.theme.textPrimary : Color.theme.textMuted)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 5)
+        .background(
+          RoundedRectangle(cornerRadius: segmentRadius)
+            .fill(segment.active ? Color.theme.selectionFill : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { model.onTapSegment(index) }
+      }
+    }
+    .padding(Theme.Space.tick)
+    .background(RoundedRectangle(cornerRadius: segmentRowRadius).fill(Color.theme.tabRowBg))
+    .padding(.horizontal, Theme.Space.step)
+    .padding(.top, Theme.Space.step)
+    .padding(.bottom, Theme.Space.hair)
+  }
+
+  /// リスト直上の一文。キー割当ではなくこの面の前提を言い切るので、フッターのヒントとは別に置く。
+  /// 字は補足の小字の語彙（`meta`）をフッターヒントと共有する。
+  private var captionLine: some View {
+    Text(model.caption)
+      .font(Font.theme.meta)
+      .foregroundStyle(Color.theme.textMuted)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, Theme.Space.bar)
+      .padding(.top, Theme.Space.tick)
+  }
+
   /// ヘッダ行: ◐（glyphGradient）＋クエリ入力欄 or breadcrumb（‹ 親）。両スロット空のとき
   /// body 側が行ごと描かないため、ここへは少なくとも一方が埋まった状態で来る。
   ///
@@ -138,14 +194,12 @@ struct PaletteCard: View {
         .frame(maxWidth: model.fieldVisible ? .infinity : 0)
         .opacity(model.fieldVisible ? 1 : 0)
         .allowsHitTesting(model.fieldVisible)
-      // ヘッダ右端の表示専用ピル。opt-in（空の既存パレットは従来どおりヘッダ行だけ）。
-      // 状態を語るのはヘッダ、操作を語るのはフッター（hint）という分担なので、ここは
-      // 「今どちらの面か」だけを出す（キーの案内は載せない）。
+      // ヘッダ右端の表示専用ピル（Attention の `⌘⌘`）。opt-in（空の既存パレットは従来どおり
+      // ヘッダ行だけ）。開くキーのような面の素性だけを出し、操作の案内はフッター（hint）が持つ。
       if !model.headerPills.isEmpty {
         HStack(spacing: Theme.Space.step) {
           ForEach(model.headerPills) { pill in
-            Text(pill.label)
-              .foregroundStyle(pill.active ? Color.theme.textPrimary : Color.theme.textMuted)
+            Text(pill.label).foregroundStyle(Color.theme.textMuted)
           }
         }
         .font(Font.theme.meta)
@@ -235,7 +289,9 @@ struct PaletteCard: View {
       PaletteRow(
         title: row.label, selected: selected, showsChevron: row.chevron, kind: rowKind(row),
         inherited: row.inherited, leading: row.leading, detail: row.detail,
-        trailingBadge: row.trailingBadge, action: tap, onHoverEnter: hoverEnter)
+        trailingBadge: row.trailingBadge,
+        trailing: model.rowAccessory.flatMap { $0.row == i ? $0.view : nil },
+        action: tap, onHoverEnter: hoverEnter)
     }
   }
 
@@ -294,34 +350,6 @@ private struct CardKeyCapture: ViewModifier {
       .onKeyPress(.escape) {
         model.onEscape(); return .handled
       }
-  }
-}
-
-/// フルウィンドウ overlay。Scrim（暗幕＋blur）＋上端 66px アンカーのカード。
-/// カード幅= min(560, 窓幅−32)。scrim タップで閉じる。
-struct PaletteOverlay: View {
-  @Bindable var model: PaletteModel
-
-  /// カード上端の窓上端からの距離・カードの基準幅（WorkspaceSwitcher）。
-  private let topAnchor: CGFloat = 66
-  private let cardWidth: CGFloat = 560
-
-  var body: some View {
-    GeometryReader { geo in
-      ZStack(alignment: .top) {
-        Scrim(strength: model.scrimStrength)
-          .contentShape(Rectangle())
-          .onTapGesture { model.onScrimTap() }
-        PaletteCard(model: model)
-          .frame(width: min(cardWidth, geo.size.width - Theme.Space.bar * 2))
-          .padding(.top, topAnchor)
-          .frame(maxWidth: .infinity, alignment: .top)
-      }
-    }
-    .ignoresSafeArea()
-    // 実マウス移動（NSEvent .mouseMoved）だけを拾ってモダリティを .pointer に落とす透明レイヤ。
-    // スクロールで行がカーソル下を横切る SwiftUI onHover と違い、mouseMoved は物理移動でのみ出る。
-    .overlay(MouseMovedDetector { model.inputModality = .pointer })
   }
 }
 

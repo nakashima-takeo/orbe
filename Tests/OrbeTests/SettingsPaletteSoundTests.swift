@@ -121,21 +121,25 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
     XCTAssertEqual(p.render.selected, 0)
   }
 
-  /// ヘッダは試聴対象を、フッターは ⇥ の操作を語る。
-  func testHeaderShowsPreviewTargetAndHintShowsTab() {
+  /// リスト直上のセグメントが試聴対象を、その下の一文が鳴る条件を、フッターが操作を語る。
+  func testSegmentsShowPreviewTargetAndCaptionExplainsPreview() {
     let p = model()
     drillIn(p)
-    XCTAssertEqual(p.render.headerPills.map(\.label), ["完了", "入力待ち"])
-    XCTAssertEqual(p.render.headerPills.map(\.active), [true, false])
+    XCTAssertEqual(p.render.segments.map(\.label), ["完了", "入力待ち"])
+    XCTAssertEqual(p.render.segments.map(\.active), [true, false])
+    XCTAssertEqual(p.render.segments.map(\.glyph), [.done, .waiting], "状態の語彙をグリフでも出す")
+    XCTAssertFalse(p.render.caption.isEmpty, "鳴る条件はリスト直上の一文で言い切る")
+    XCTAssertTrue(p.render.hint.contains("↑↓"))
     XCTAssertTrue(p.render.hint.contains("⇥"))
   }
 
-  /// root へ戻るとヘッダのセグメントは消える（他の面へ持ち越さない）。
-  func testHeaderSegmentsClearedOnReturn() {
+  /// root へ戻るとセグメントと一文は消える（他の面へ持ち越さない）。
+  func testSegmentsClearedOnReturn() {
     let p = model()
     drillIn(p)
     p.render.onLeft()
-    XCTAssertTrue(p.render.headerPills.isEmpty)
+    XCTAssertTrue(p.render.segments.isEmpty)
+    XCTAssertTrue(p.render.caption.isEmpty)
   }
 
   // MARK: - 試聴（聴くだけ。設定は書かない）
@@ -197,16 +201,16 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
     XCTAssertEqual(p.render.selected, soundRow, "潜った行へ選択を復元")
   }
 
-  // MARK: - ⇥ による試聴対象の反転
+  // MARK: - ⇥ とセグメントのクリックによる試聴対象の反転
 
-  /// ⇥ でヘッダが反転し、今いる行を新しい対象で鳴らし直す。設定は書かない。
+  /// ⇥ でセグメントが反転し、今いる行を新しい対象で鳴らし直す。設定は書かない。
   func testTabFlipsPreviewTargetAndReplaysCurrentRow() {
     let p = model(sound: .wood)
     let previews = capturePreviews(p)
     let changes = captureChanges(p)
     drillIn(p)
     XCTAssertTrue(p.render.onTab())
-    XCTAssertEqual(p.render.headerPills.map(\.active), [false, true])
+    XCTAssertEqual(p.render.segments.map(\.active), [false, true])
     XCTAssertEqual(previews().count, 1)
     XCTAssertEqual(previews().last?.sound, .wood, "今いる行を鳴らし直す")
     XCTAssertEqual(previews().last?.event, .waiting)
@@ -227,13 +231,112 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
     p.render.onEscape()  // root へ
     drillIn(p)
     XCTAssertEqual(p.previewEvent, .done)
-    XCTAssertEqual(p.render.headerPills.map(\.active), [true, false])
+    XCTAssertEqual(p.render.segments.map(\.active), [true, false])
   }
 
   /// root や他の面では ⇥ は消費しない（AppKit の focus 移動へ返す）。
   func testTabIsNotConsumedOutsideNotificationSound() {
     let p = model()
     XCTAssertFalse(p.render.onTab())
+  }
+
+  /// セグメントのクリックは ⇥ と同じ帰結（対象が変わり、今いる行が新しい対象で鳴る）。
+  func testSegmentTapFlipsPreviewTargetLikeTab() {
+    let p = model(sound: .wood)
+    let previews = capturePreviews(p)
+    let changes = captureChanges(p)
+    drillIn(p)
+    p.render.onTapSegment(1)  // 入力待ち
+    XCTAssertEqual(p.previewEvent, .waiting)
+    XCTAssertEqual(p.render.segments.map(\.active), [false, true])
+    XCTAssertEqual(previews().last?.sound, .wood, "今いる行を鳴らし直す")
+    XCTAssertEqual(previews().last?.event, .waiting)
+    XCTAssertTrue(changes().isEmpty, "クリックは設定を書かない")
+  }
+
+  /// 同じセグメントのクリックでも鳴らし直す（クリックは「鳴らせ」という明示の操作）。
+  func testSegmentTapOnActiveTargetReplays() {
+    let p = model(sound: .wood)
+    let previews = capturePreviews(p)
+    drillIn(p)
+    p.render.onTapSegment(0)  // 完了（すでに選択中）
+    p.render.onTapSegment(0)
+    XCTAssertEqual(previews().count, 2)
+    XCTAssertEqual(previews().last?.event, .done)
+  }
+
+  /// 範囲外の index は何もしない（セグメントが空へ縮む更新パスでも壊れない）。
+  func testSegmentTapOutOfRangeIsIgnored() {
+    let p = model()
+    let previews = capturePreviews(p)
+    drillIn(p)
+    p.render.onTapSegment(2)
+    XCTAssertTrue(previews().isEmpty)
+  }
+
+  // MARK: - 試聴中の EQ（鳴っている行だけに出る）
+
+  /// 鳴り終わりの予約を溜め、手で発火させる（合成長ぶん実時間を待たずに消灯を見る）。
+  private func captureScheduledEnds(_ p: SettingsPaletteModel) -> () -> [() -> Void] {
+    var ends: [() -> Void] = []
+    p.schedulePreviewEnd = { _, fire in ends.append(fire) }
+    return { ends }
+  }
+
+  /// 入場では EQ が出ず、試聴すると今いる行に出る。
+  func testPreviewLightsIndicatorOnCurrentRow() {
+    let p = model(sound: .glass)
+    _ = captureScheduledEnds(p)
+    drillIn(p)
+    XCTAssertNil(p.render.rowAccessory, "入場では鳴らないので EQ も出ない")
+    p.render.onDown()
+    XCTAssertEqual(p.render.rowAccessory?.row, p.render.selected)
+  }
+
+  /// 解除行では鳴らないので EQ も出ない（鳴っていた EQ も畳む）。
+  func testOffRowShowsNoIndicator() {
+    let p = model(sound: .glass)
+    _ = captureScheduledEnds(p)
+    drillIn(p)
+    p.render.onDown()
+    XCTAssertNotNil(p.render.rowAccessory)
+    p.render.selected = 0  // なし（オフ）
+    XCTAssertNil(p.render.rowAccessory, "解除行では EQ を出さない")
+  }
+
+  /// 鳴り終わると EQ が消える。
+  func testIndicatorClearsWhenSoundEnds() {
+    let p = model(sound: .glass)
+    let ends = captureScheduledEnds(p)
+    drillIn(p)
+    p.render.onDown()
+    XCTAssertEqual(ends().count, 1)
+    ends()[0]()
+    XCTAssertNil(p.render.rowAccessory, "鳴り終わりで畳む")
+  }
+
+  /// 先行する消灯予約は後の試聴を消さない（↑↓ 連打で EQ が食い違わない）。
+  func testStaleEndDoesNotClearLaterPreview() {
+    let p = model(sound: .glass)
+    let ends = captureScheduledEnds(p)
+    drillIn(p)
+    p.render.onDown()
+    p.render.onDown()
+    XCTAssertEqual(ends().count, 2)
+    ends()[0]()  // 1 回目の予約が後から届く
+    XCTAssertEqual(p.render.rowAccessory?.row, p.render.selected, "最後の試聴の EQ は残る")
+  }
+
+  /// 面を離れると EQ は畳まれ、予約中の消灯も無効化される。
+  func testIndicatorClearsOnLeavingTheMode() {
+    let p = model(sound: .glass)
+    let ends = captureScheduledEnds(p)
+    drillIn(p)
+    p.render.onDown()
+    p.render.onEscape()  // root へ
+    XCTAssertNil(p.render.rowAccessory)
+    ends()[0]()  // 予約が後から届いても何も起きない
+    XCTAssertNil(p.render.rowAccessory)
   }
 
   // MARK: - 確定（↵ だけが値を書く）

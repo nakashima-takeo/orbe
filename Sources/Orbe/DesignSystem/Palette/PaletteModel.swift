@@ -16,7 +16,7 @@ import SwiftUI
     var leading: AnyView?
     /// ラベルの後に muted で出す補足（workspace 行のディレクトリ等）。nil で出さない。
     var detail: String?
-    /// 行末に出す表示専用バッジ（作成導線の `⌘N` 等）。nil で出さない。
+    /// 行末に出す表示専用バッジ（作成導線の `⌘N` 等）。`createStyle` の行でだけ描かれる。nil で出さない。
     var trailingBadge: String?
     /// 作成導線の行スタイル（accent 文字＋破線罫線＋右端バッジ）。表示専用（キー挙動は載せない）。
     var createStyle = false
@@ -25,6 +25,19 @@ import SwiftUI
   }
 
   var rows: [RowItem] = []
+
+  /// 「今この 1 行で起きている一時的なこと」を描く付属ビュー（通知音サブパレットの試聴 EQ）。
+  /// 行の意味（ラベル・`●`・継承）は `RowItem` が持ち、こちらは行の再構築なしで点いて消える
+  /// ——↑↓ とホバーのたびに 13 行を組み直さずに装飾だけを動かすため。1 行だけであることは型が保証する。
+  struct RowAccessory {
+    var row: Int
+    var view: AnyView
+  }
+
+  /// 付属ビューを出す 1 行。nil で出さない＝opt-in（`headerPills` / `hintKeys` と同じ規律）。
+  /// `normal` / `dormant` の行でだけ描かれる（`customContent` の行には乗らない）。
+  /// `row` は `rows` の添字なので、行を組み直す側が畳む。
+  var rowAccessory: RowAccessory?
 
   /// 選択とホバー追従ガード（`ModalSelection` が代入経路のガードを一手に握る）。
   private var selection = ModalSelection()
@@ -68,19 +81,34 @@ import SwiftUI
   var breadcrumb: String?
   /// ヘッダ右端の表示専用ピル 1 件。**`ForEach` へ値で渡すために `Identifiable`** にしてある
   /// ——view からこの配列へ添字で読み返すと、配列が空へ縮む更新パスで SwiftUI が古い添字のまま
-  /// 消えゆく子を評価し、範囲外アクセスでプロセスごと落ちる。`id` を `label` に置くのは、
-  /// `active` が反転しても identity が変わらず `Text` が再マウントされないため
+  /// 消えゆく子を評価し、範囲外アクセスでプロセスごと落ちる。`id` は `label`
   /// （同一セット内で `label` が一意であることがこの型の前提）。
   struct HeaderPill: Identifiable {
     var label: String
+    var id: String { label }
+  }
+
+  /// ヘッダ右端の表示専用ピル（Attention の `⌘⌘` バッジ）。空で出さない＝opt-in（`hintKeys` と同じ規律）。
+  var headerPills: [HeaderPill] = []
+
+  /// リスト直上の全幅セグメント 1 枚（通知音サブパレットの試聴対象「完了 | 入力待ち」）。
+  /// `HeaderPill` と同じ理由で `Identifiable`・`id` は `label`（`active` が反転しても identity が
+  /// 変わらず `Text` が再マウントされない）。
+  /// `glyph` を view でなくデータで持つのは、寸法と状態色の解決を DS 側に残すため。
+  struct Segment: Identifiable {
+    var label: String
+    var glyph: AgentStateIcon.Kind?
     var active: Bool
     var id: String { label }
   }
 
-  /// ヘッダ右端の表示専用ピル。1 つなら素のバッジ（Attention の `⌘⌘`）、複数なら現在位置を
-  /// `active` で示すセグメント（通知音サブパレットの試聴対象「完了 | 入力待ち」）。
-  /// 空で出さない＝opt-in（`hintKeys` と同じ規律）。
-  var headerPills: [HeaderPill] = []
+  /// リスト直上の全幅セグメント。空で出さない＝opt-in（`headerPills` と同じ規律）。
+  var segments: [Segment] = []
+  /// セグメントのクリック（index）。パレットモデルが切替に結ぶ。
+  var onTapSegment: (Int) -> Void = { _ in }
+
+  /// リスト直上の一文（`segments` があればその下）。面の前提を言い切る補足。空で出さない＝opt-in。
+  var caption = ""
   var hint = ""
 
   /// フッターヒントのキー付きセグメント 1 件（`HeaderPill` と同じ理由で `Identifiable`・`id` は `key`）。
