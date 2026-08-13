@@ -60,7 +60,7 @@ import SwiftUI
 
   let render = PaletteModel()
   /// 現在の面。遷移は `setMode` だけが行い、キー意図の分岐（`+Keys`）と行組み立てが読む。
-  var mode: Mode = .root
+  private(set) var mode: Mode = .root
   /// 潜る前にいた root 行の「全行 rootRows での index」（既定は先頭設定行）。
   var rootRowBeforeDrill = 1
   /// 状態一覧からアイコン候補へ潜る前にいた状態行の index（agentIcon から agentStates へ戻る復元用）。
@@ -187,12 +187,11 @@ import SwiftUI
 
   /// 現在の mode の行を組み直す（mode はそのまま。入力途中の再描画に使う）。
   func rebuild() {
-    // 面ごとの装飾は組み直すたび白紙から（立てるのは各 rebuild だけ）。
+    // 面ごとの装飾は組み直すたび白紙から（立てるのは各 rebuild だけ）。試聴 EQ（`rowAccessory`）は
+    // 行の再構築と独立に点いて消える一時状態なので、ここでは触らず `+Sound` が単独で握る。
     currentRowIndex = nil
-    render.headerPills = []
     render.segments = []
     render.caption = ""
-    render.rowAccessory = nil
     switch mode {
     case .root: rebuildRoot()
     case .font: rebuildFont()

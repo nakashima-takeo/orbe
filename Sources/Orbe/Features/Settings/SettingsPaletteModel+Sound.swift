@@ -63,7 +63,7 @@ extension SettingsPaletteModel {
   func cancelPreviewIndicator() {
     previewGeneration &+= 1
     previewingRow = nil
-    render.rowAccessory = nil
+    syncPreviewAccessory()
   }
 
   /// 試聴中の行を `render.rowAccessory` へ写す。EQ の色は試聴対象の状態色（`glyphKind`）で解決する
