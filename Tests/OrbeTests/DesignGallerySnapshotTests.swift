@@ -290,8 +290,10 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     // 通知音: リスト直上のセグメント（試聴対象）・鳴る条件の一文・試聴中の行の EQ。
     // EQ を画に出すため、潜った後に選択を動かして試聴を起こす（入場では鳴らない＝EQ も出ない）。
     // EQ の位相は撮影時刻で決まるが、3 本の位相差が 0/0.15/0.3 あるのでどの瞬間でも高い棒が混じり、
-    // 形と色は読める（working スピナーと同じ扱い＝止めない）。
-    let settingsSound = settingsPaletteModel()
+    // 形と色は読める（working スピナーと同じ扱い＝止めない）。一方**消灯**は撮影中に起きると EQ が
+    // 画から消えるので予約を止め、点く行も音案を張って `NotificationSound.default` から独立させる。
+    let settingsSound = settingsPaletteModel(notificationSound: .glass)
+    settingsSound.schedulePreviewEnd = { _, _ in }
     settingsSound.render.selected = 13  // 通知音行
     settingsSound.render.onActivate()  // 潜る
     settingsSound.render.onDown()  // 試聴 → その行に EQ が点く
@@ -302,7 +304,8 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
 
   /// 設定パレット gallery 用の実モデル（flow の testSettingsPalette と同じ初期値）。
   private func settingsPaletteModel(
-    overrideFontSize: Int? = nil, overrideTheme: ThemeMode? = nil
+    overrideFontSize: Int? = nil, overrideTheme: ThemeMode? = nil,
+    notificationSound: NotificationSound? = nil
   ) -> SettingsPaletteModel {
     var global = SettingsLayer()
     global[SettingKeys.fontSize] = 14
@@ -311,6 +314,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     global[SettingKeys.cursorStyleBlink] = false
     global[SettingKeys.defaultAgent] = "claude"
     global[SettingKeys.devFeaturesEnabled] = true
+    global[SettingKeys.notificationSound] = notificationSound
     var override = SettingsLayer()
     override[SettingKeys.fontSize] = overrideFontSize
     override[SettingKeys.theme] = overrideTheme

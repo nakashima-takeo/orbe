@@ -127,6 +127,9 @@ extension DesignFlowSnapshotTests {
       fontNames: ["Menlo", "Monaco", "SF Mono"],
       agents: ["claude", "codex", "agy"],
       localization: LocalizationStore(language: .ja))
+    // 撮影中に鳴り終わりで EQ が消えないよう消灯予約を止める（`pulse` は 0.26 秒で、
+    // `renderPNG` が回す RunLoop 0.2 秒との差は 60ms しかない）。
+    settings.schedulePreviewEnd = { _, _ in }
     try flow(
       "settings_palette_sound", size: NSSize(width: 500, height: 460),
       render: { paletteSnapshot(settings.render) },
