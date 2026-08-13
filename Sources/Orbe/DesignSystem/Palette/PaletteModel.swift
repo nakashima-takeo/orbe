@@ -26,6 +26,17 @@ import SwiftUI
 
   var rows: [RowItem] = []
 
+  /// 「今この 1 行で起きている一時的なこと」を描く付属ビュー（通知音サブパレットの試聴 EQ）。
+  /// 行の意味（ラベル・`●`・継承）は `RowItem` が持ち、こちらは行の再構築なしで点いて消える
+  /// ——↑↓ とホバーのたびに 13 行を組み直さずに装飾だけを動かすため。1 行だけであることは型が保証する。
+  struct RowAccessory {
+    var row: Int
+    var view: AnyView
+  }
+
+  /// 付属ビューを出す 1 行。nil で出さない＝opt-in（`headerPills` / `hintKeys` と同じ規律）。
+  var rowAccessory: RowAccessory?
+
   /// 選択とホバー追従ガード（`ModalSelection` が代入経路のガードを一手に握る）。
   private var selection = ModalSelection()
 
@@ -77,10 +88,30 @@ import SwiftUI
     var id: String { label }
   }
 
-  /// ヘッダ右端の表示専用ピル。1 つなら素のバッジ（Attention の `⌘⌘`）、複数なら現在位置を
-  /// `active` で示すセグメント（通知音サブパレットの試聴対象「完了 | 入力待ち」）。
+  /// ヘッダ右端の表示専用ピル（Attention の `⌘⌘` バッジ）。`active` が主色/muted を分ける。
   /// 空で出さない＝opt-in（`hintKeys` と同じ規律）。
   var headerPills: [HeaderPill] = []
+
+  /// リスト直上の全幅セグメント 1 枚（通知音サブパレットの試聴対象「完了 | 入力待ち」）。
+  /// **`ForEach` へ値で渡すために `Identifiable`** にしてある——view からこの配列へ添字で読み返すと、
+  /// 配列が空へ縮む更新パスで SwiftUI が古い添字のまま消えゆく子を評価し、範囲外アクセスで
+  /// プロセスごと落ちる。`id` を `label` に置くのは、`active` が反転しても identity が変わらず
+  /// `Text` が再マウントされないため（同一セット内で `label` が一意であることがこの型の前提）。
+  /// `glyph` を view でなくデータで持つのは、寸法と状態色の解決を DS 側に残すため。
+  struct Segment: Identifiable {
+    var label: String
+    var glyph: AgentStateIcon.Kind?
+    var active: Bool
+    var id: String { label }
+  }
+
+  /// リスト直上の全幅セグメント。空で出さない＝opt-in（`headerPills` と同じ規律）。
+  var segments: [Segment] = []
+  /// セグメントのクリック（index）。パレットモデルが切替に結ぶ。
+  var onTapSegment: (Int) -> Void = { _ in }
+
+  /// セグメントとリストの間に置く一文（面の前提を言い切る補足）。空で出さない＝opt-in。
+  var caption = ""
   var hint = ""
 
   /// フッターヒントのキー付きセグメント 1 件（`HeaderPill` と同じ理由で `Identifiable`・`id` は `key`）。

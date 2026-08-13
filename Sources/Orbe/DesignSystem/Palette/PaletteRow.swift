@@ -19,8 +19,11 @@ struct PaletteRow: View {
   var leading: AnyView?
   /// ラベル後に muted で出す補足（workspace 行のディレクトリ等）。
   var detail: String?
-  /// 行末に出す表示専用バッジ（作成導線の `⌘N` 等）。nil で出さない。
+  /// 行末に出す表示専用バッジ（作成導線の `⌘N` 等）。`createAction` の行でだけ描かれる。nil で出さない。
   var trailingBadge: String?
+  /// 行末（chevron の位置）に置く付属ビュー（試聴 EQ 等）。`normal` / `dormant` の行でだけ描かれる。
+  /// nil で出さない。
+  var trailing: AnyView?
   var action: () -> Void = {}
   /// ホバー開始（enter）通知。`SelectableRow` へ透過し、呼び出し側が選択追従に結ぶ。
   var onHoverEnter: () -> Void = {}
@@ -59,6 +62,9 @@ struct PaletteRow: View {
               .truncationMode(.tail)
           }
           Spacer(minLength: 0)
+          if let trailing {
+            trailing
+          }
           if showsChevron {
             Text("›")
               .font(Font.theme.workspaceName)
