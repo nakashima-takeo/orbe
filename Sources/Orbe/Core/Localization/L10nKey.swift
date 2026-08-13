@@ -294,6 +294,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsWorktreeDirCustom
   case settingsNotificationSoundBreadcrumb
   case settingsNotificationSoundHint
+  case settingsNotificationSoundCaption
   case settingsNotificationSoundNone
   case settingsNotificationSoundOffRow
 
