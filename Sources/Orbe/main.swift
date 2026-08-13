@@ -6,23 +6,16 @@ import OrbePaths
 // IPC サーバを内包するプロセスの定石として SIGPIPE を無視し、write は戻り値で扱う。
 signal(SIGPIPE, SIG_IGN)
 
-// 起動経路の関門。`.app` の実行体をコマンドとして直接叩かれた起動をここで落とし、`orb` へ誘導する
-// （素通りさせると二重起動＝control.sock 奪取に化ける。理由は `LaunchGate`）。
-// 印の消費（読み取り＋掃除）は env をいじる誰よりも先に済ませる——ペイン spawn の base env は
-// プロセス env そのものなので、印を残したまま先へ進めるとペインが継承してしまう。
+// 起動経路の関門。`.app` をコマンドとして直接叩かれた起動を落とし、`orb` へ誘導する。
+// consumeLaunchSource は env を触る誰よりも先に置く（ペイン spawn の base env はプロセス env そのもの）。
 let launchSource = LaunchGate.consumeLaunchSource()
 if LaunchGate.decide(
   isBundled: Bundle.main.bundleIdentifier != nil,
   launchSource: launchSource,
   stateDir: ProcessInfo.processInfo.environment[OrbePaths.stateDirEnvVar]
 ) == .reject {
-  // 「起動しませんでした」で終えず、次に打つべきコマンドを名指しする。ここを踏むのは `orb` を
-  // 打とうとして外した場合が主で、黙って落とすと制御 API の `Orbe not running` と同じく
-  // 「Orbe が動いていないのでは」という原因から最も遠い方向へ誘導してしまう。
-  // 文体は `orb` の usage（英語・小文字基調）に揃える。
-  // アプリ名は Info.plist（＝ビルド時のチャネルが導出した値）から取る。実行体名は両チャネル共通で
-  // 関門は dev でも発火するので、固定にすると Orbe Dev で落ちた人へ release の Orbe を名指しする。
-  // 引用符ごと出すのは表示名に空白が入りうるため（`open -a Orbe Dev` は探す名前が変わる）。
+  // 次に打つべきコマンドを名指しする（黙って落とすと `orb` へ辿り着けない）。
+  // 表示名は空白を含みうる（`Orbe Dev`）ので引用符ごと出す。
   let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Orbe"
   FileHandle.standardError.write(
     Data(

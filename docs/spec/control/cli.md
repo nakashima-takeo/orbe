@@ -53,6 +53,4 @@ control.sock の解決順は `ORBE_STATE_DIR`（非空の明示指定・最優�
 
 ビルド成果物を `build-app.sh` が `.app/Contents/Resources/bin/orb` へ同梱し、ad-hoc 署名に含める。`SurfaceView` が**全ペイン（root・split とも）**の生成時にこの bin dir をペイン `PATH` の先頭へ前置する（`ORBE_SOCK`/`ORBE_PANE`/`ORBE_REPORT_BIN` 注入と同じ機構）。ペインの PATH には `.app` の GUI 実行体 dir（`Contents/MacOS`）も載る——ghostty の shell integration の `path` 機能（既定 ON）がシェル起動時に足すため。CLI は別名 `orb` なので **PATH 順序に依存せず必ず同梱 CLI に解決する**。これにより Orbe が生成した任意ペイン（リポジトリ外 cwd・分割で生じたペイン含む）で `orb` が当該インスタンスの socket に届く。global install や symlink は行わない。
 
-その GUI 実行体は macOS の既定 FS が大小文字を区別しないため `orbe` と打つと当たるが、コマンドとして直接叩いても Orbe は起動しない——[起動経路](../platform/launch.md)の関門が落として `orb` へ誘導する。
-
 実体は `Sources/orbe-cli/`。設定適用の共有経路は設定パレットと共用する（[settings](../palette/settings.md)）。
