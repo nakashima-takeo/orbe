@@ -87,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let alert = NSAlert()
     alert.messageText = L10n.string(.quitConfirmTitle, language)
     alert.informativeText = L10n.string(.quitConfirmMessage, language)
-    alert.addButton(withTitle: L10n.string(.quitConfirmClose, language))
+    alert.addButton(withTitle: L10n.string(.quitConfirmQuit, language))
     alert.addButton(withTitle: L10n.string(.quitConfirmCancel, language))
     return alert.runModal() == .alertFirstButtonReturn
   }
