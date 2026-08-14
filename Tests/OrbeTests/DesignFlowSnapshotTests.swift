@@ -235,7 +235,7 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
 
   /// 低い窓での収まり: 器が窓高からカードの上限を逆算し、**縮むのは行リストだけ**という契約を撮る。
   /// overlay ごと撮るのは、上端アンカーが 66:16 の比を保って譲る様子がここでしか出ないため。
-  /// few（4 件・内容にハグ）→ many（18 件・窓に合わせてリストが縮む）→ select_last（末尾選択に
+  /// few（3 件・内容にハグ）→ many（18 件・窓に合わせてリストが縮む）→ select_last（末尾選択に
   /// 内部スクロールが追従）→ shrink（更に低いステージでも選択行とヒントが残る）。
   func testPaletteLowWindow() throws {
     let names = [
@@ -249,16 +249,18 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
     let workspace = WorkspacePaletteModel(localization: LocalizationStore(language: .ja))
     // shrink の段だけ窓を下げる。`flow` は 1 本の size で撮るので、キャンバスは 300 のまま
     // 窓のステージだけ縮めて上詰めで置く——余った下帯が「窓が縮んだ」ことをそのまま見せる。
-    var stage = NSSize(width: 500, height: 300)
+    let canvas = NSSize(width: 500, height: 300)
+    var stage = canvas
     try flow(
-      "palette_low_window", size: NSSize(width: 500, height: 300),
+      "palette_low_window", size: canvas,
       render: {
         paletteOverlaySnapshot(workspace.render, canvas: stage)
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-          .background(Color.theme.bgSunken)
+          .background(Color.theme.bgBase)
       },
       steps: [
-        ("few", { workspace.setItems(Array(items.prefix(4))) }),
+        // 3 件＋作成導線ならこのステージのリスト上限に収まる＝カードが内容にハグする段。
+        ("few", { workspace.setItems(Array(items.prefix(3))) }),
         ("many", { workspace.setItems(items) }),  // 18 件 → リストが窓の残りまで縮む
         ("select_last", { workspace.render.selected = items.count - 1 }),  // 末尾へ（スクロール追従）
         ("shrink", { stage = NSSize(width: 500, height: 240) }),  // 更に低い窓でも選択行とヒントが残る
