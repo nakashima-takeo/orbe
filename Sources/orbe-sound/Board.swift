@@ -19,7 +19,7 @@ func runBoard(_ rawArgs: [String]) {
   let out = takeOption(&args, "--out", requires: "a directory path")
   let rate = takeRate(&args)
   let volume = takeVolume(&args)
-  rejectLeftovers(args, positionals: 0)
+  rejectLeftovers(args)
 
   // --out 省略時は毎回同じ既定ディレクトリへ上書きする——ブラウザはリロードだけで最新になる。
   let dir =
@@ -27,7 +27,7 @@ func runBoard(_ rawArgs: [String]) {
     ?? FileManager.default.temporaryDirectory.appendingPathComponent(
       "orbe-sound-board", isDirectory: true)
   do {
-    let index = try generateBoard(to: dir, rate: rate ?? 48000, volume: volume ?? 70)
+    let index = try generateBoard(to: dir, rate: rate, volume: volume)
     print(index.path)
   } catch {
     die("cannot write board: \(error.localizedDescription)")

@@ -25,8 +25,9 @@ let usage = """
   制作ループ: Sources/orbe-sound/Scratch.swift を編集 →
     swift build --product orbe-sound && .build/debug/orbe-sound board
   を回し、開きっぱなしのブラウザをリロードして聴く（1 音だけ耳で確かめるなら play でもよい）。
-  ビルドは manifest 解決に GhosttyKit（vendor/ghostty）の実在が要る。worktree で未解決なら
-  先に ./scripts/build-app.sh を一度回す（main checkout では常に解決済み）。
+  ビルドは manifest 解決に GhosttyKit（vendor/ghostty）の実在が要る。worktree の vendor は
+  build-app.sh がビルド中だけ main worktree へ symlink し、終了時に空へ戻す（symlink を残すと
+  git status が壊れるため。→ docs/guides/build.md）。制作ループは main checkout で回すこと。
 
   Exit codes: 0 success, 2 usage error, 1 実行エラー（書き込み・再生失敗等）。
   """
@@ -37,9 +38,11 @@ func stderrLine(_ message: String) {
   FileHandle.standardError.write(Data((message + "\n").utf8))
 }
 
-/// usage エラー（引数不正）。終了コード 2。
+/// usage エラー（引数不正）。終了コード 2。戻り道を必ず添える——サブコマンド別の help は
+/// 無いので、これが無いと `render --help` が「何が書けるのか」を出さずに死ぬ。
 func usageDie(_ message: String) -> Never {
   stderrLine("error: \(message)")
+  stderrLine("run: orbe-sound --help")
   exit(2)
 }
 
@@ -50,9 +53,13 @@ func die(_ message: String) -> Never {
 }
 
 /// 値必須オプションを抜き取る（残りを inout で縮める）。フラグ自体が無ければ nil。
+/// 空文字・空白だけの値は席を空けたのと同じ——通すと `--out ""` がカレントディレクトリに化け、
+/// board が指定と違う場所へ 28 ファイル撒いて成功終了する。
 func takeOption(_ args: inout [String], _ name: String, requires label: String) -> String? {
   guard let i = args.firstIndex(of: name) else { return nil }
-  guard i + 1 < args.count, !args[i + 1].hasPrefix("-") else {
+  guard i + 1 < args.count, !args[i + 1].hasPrefix("-"),
+    !args[i + 1].trimmingCharacters(in: .whitespaces).isEmpty
+  else {
     usageDie("\(name) requires \(label)")
   }
   let value = args[i + 1]
@@ -61,36 +68,38 @@ func takeOption(_ args: inout [String], _ name: String, requires label: String) 
 }
 
 /// `--rate` を抜き取って検証する。render/play/analyze 単体・analyze --all・board の 3 経路が
-/// **必ずこれを通る**（検証を経路ごとに写すと写し忘れで割れる）。下限 8000 は可聴品質の底、
+/// **必ずこれを通る**（検証も既定値も経路ごとに写すと写し忘れで割れる）。下限 8000 は可聴品質の底、
 /// 上限 768000（8×96 kHz）は Double→Int 変換の域外の値（inf・1e300 等）を合成層へ届かせて
 /// シグナル死させないための入口の守り。
-func takeRate(_ args: inout [String]) -> Double? {
-  takeOption(&args, "--rate", requires: "a sample rate in hz").map { token -> Double in
-    guard let value = Double(token), (8000...768000).contains(value) else {
-      usageDie("invalid rate: \(token)")
-    }
-    return value
+func takeRate(_ args: inout [String]) -> Double {
+  guard let token = takeOption(&args, "--rate", requires: "a sample rate in hz") else {
+    return 48000
   }
+  guard let value = Double(token), (8000...768000).contains(value) else {
+    usageDie("invalid rate: \(token)")
+  }
+  return value
 }
 
 /// `--volume` を抜き取って検証する（5-100。takeRate と同じく全経路共通）。
-func takeVolume(_ args: inout [String]) -> Int? {
-  takeOption(&args, "--volume", requires: "a volume (5-100)").map { token -> Int in
-    guard let value = Int(token), (5...100).contains(value) else {
-      usageDie("invalid volume: \(token)")
-    }
-    return value
+/// 既定 70 はアプリの既定音量（`SettingsRegistry` の `sound.volume`）に合わせてある。
+func takeVolume(_ args: inout [String]) -> Int {
+  guard let token = takeOption(&args, "--volume", requires: "a volume (5-100)") else { return 70 }
+  guard let value = Int(token), (5...100).contains(value) else {
+    usageDie("invalid volume: \(token)")
   }
+  return value
 }
 
 /// フラグを取り切った後の残余を検査する。席に座れなかったトークンは usage エラー
-/// ——黙って捨てると、指定と違う音を聴いて判断を誤る。
-func rejectLeftovers(_ args: [String], positionals: Int) {
-  if let flag = args.dropFirst(positionals).first(where: { $0.hasPrefix("-") && $0 != "-" }) {
+/// ——黙って捨てると、指定と違う音を聴いて判断を誤る。位置引数は `parseTarget` が先に食うので、
+/// ここへ来る時点で席は残っていない。
+func rejectLeftovers(_ args: [String]) {
+  if let flag = args.first(where: { $0.hasPrefix("-") && $0 != "-" }) {
     usageDie("unknown option: \(flag)")
   }
-  if args.count > positionals {
-    usageDie("unexpected argument: \(args[positionals])")
+  if let first = args.first {
+    usageDie("unexpected argument: \(first)")
   }
 }
 
@@ -138,13 +147,13 @@ func parseTarget(_ args: inout [String]) -> Target {
   guard args.count >= 2 else { usageDie("expected <name> <done|waiting|->") }
   let sound = resolve(name: args[0], eventToken: args[1])
   args.removeSubrange(0...1)
-  return Target(sound: sound, rate: rate ?? 48000, volume: volume ?? 70)
+  return Target(sound: sound, rate: rate, volume: volume)
 }
 
 // MARK: - サブコマンド
 
 func runList(_ args: [String]) {
-  rejectLeftovers(args, positionals: 0)
+  rejectLeftovers(args)
   print("catalog (<name> done|waiting):")
   for family in NotificationSound.allCases { print("  \(family.rawValue)") }
   print("scratch (<name> -):")
@@ -171,7 +180,7 @@ func runRender(_ rawArgs: [String]) {
   var args = rawArgs
   let out = takeOption(&args, "--out", requires: "a file path")
   let target = parseTarget(&args)
-  rejectLeftovers(args, positionals: 0)
+  rejectLeftovers(args)
   let url = renderWAV(target.sound, rate: target.rate, volume: target.volume, out: out)
   print(
     "\(target.sound.name)  \(String(format: "%.2f", target.sound.program.duration))s  \(url.path)")
@@ -180,7 +189,7 @@ func runRender(_ rawArgs: [String]) {
 func runPlay(_ rawArgs: [String]) {
   var args = rawArgs
   let target = parseTarget(&args)
-  rejectLeftovers(args, positionals: 0)
+  rejectLeftovers(args)
   let url = renderWAV(target.sound, rate: target.rate, volume: target.volume, out: nil)
   let afplay = Process()
   afplay.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
@@ -208,9 +217,9 @@ func runAnalyze(_ rawArgs: [String]) {
   var args = rawArgs
   if let allIndex = args.firstIndex(of: "--all") {
     args.remove(at: allIndex)
-    let rate = takeRate(&args) ?? 48000
-    let volume = takeVolume(&args) ?? 70
-    rejectLeftovers(args, positionals: 0)
+    let rate = takeRate(&args)
+    let volume = takeVolume(&args)
+    rejectLeftovers(args)
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
         let samples = SoundRenderer.render(
@@ -228,7 +237,7 @@ func runAnalyze(_ rawArgs: [String]) {
   }
 
   let target = parseTarget(&args)
-  rejectLeftovers(args, positionals: 0)
+  rejectLeftovers(args)
   let samples = SoundRenderer.render(
     program: target.sound.program, volume: target.volume, sampleRate: target.rate,
     seedKey: target.sound.seedKey)

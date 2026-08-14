@@ -103,6 +103,18 @@ final class OrbeSoundProcessTests: XCTestCase {
     XCTAssertTrue(FileManager.default.fileExists(atPath: scratchOut.path))
   }
 
+  /// `--out` 省略時は一時ディレクトリの既定名へ書く。カタログ名の `/` はファイル名にできないので
+  /// `-` へ畳む——この置換が外れると、最短形の `render glass done` だけが exit 1 で落ちる。
+  func testRenderWithoutOutUsesATemporaryPathWithAFlattenedName() throws {
+    let result = try run(["render", "glass", "done", "--rate", "8000"])
+    XCTAssertEqual(result.status, 0, result.stderr)
+    let path = String(result.stdout.split(separator: " ").last ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    defer { try? FileManager.default.removeItem(atPath: path) }
+    XCTAssertTrue(path.hasSuffix("orbe-sound-glass-done.wav"), path)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: path), path)
+  }
+
   /// analyze はメトリクス行とスペクトルピークを出す。
   func testAnalyzePrintsTheMetricsRow() throws {
     let result = try run(["analyze", "glass", "done", "--rate", "8000"])
@@ -153,6 +165,7 @@ final class OrbeSoundProcessTests: XCTestCase {
   func testLeftoverTokensAreRejected() throws {
     for args in [
       ["render", "glass", "done", "extra"],
+      ["play", "glass", "done", "extra"],
       ["list", "--verbose"],
       ["analyze", "glass", "done", "--nope", "1"],
       ["board", "extra"],
@@ -171,11 +184,25 @@ final class OrbeSoundProcessTests: XCTestCase {
       ["analyze", "glass", "done", "--rate", "4000"],
       ["analyze", "glass", "done", "--volume", "0"],
       ["render", "glass", "done", "--volume", "101"],
+      ["play", "glass", "done", "--rate", "4000"],
       ["board", "--rate", "4000"],
     ] {
       let result = try run(args)
       XCTAssertEqual(result.status, 2, "\(args)")
       XCTAssertTrue(result.stderr.contains("invalid"), "\(args): \(result.stderr)")
+    }
+  }
+
+  /// 空・空白だけの値は「席が埋まった」と数えない。通すと `--out ""` がカレントディレクトリへ
+  /// 解決し、board がリポジトリ直下へ 28 ファイル撒いて exit 0 で終わる。
+  func testEmptyOptionValuesAreUsageErrors() throws {
+    for args in [
+      ["board", "--out", ""],
+      ["render", "glass", "done", "--out", "   "],
+    ] {
+      let result = try run(args)
+      XCTAssertEqual(result.status, 2, "\(args)")
+      XCTAssertTrue(result.stderr.contains("--out requires"), "\(args): \(result.stderr)")
     }
   }
 
