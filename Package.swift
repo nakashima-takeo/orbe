@@ -76,6 +76,13 @@ let package = Package(
       name: "orbe-report",
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
+    // 通知音の制作ループ用 dev CLI（list / render / play / analyze）。app には同梱しない。
+    // GhosttyKit/AppKit/control.sock に依存しない独立実行体（Foundation + OrbeSound のみ）。
+    .executableTarget(
+      name: "orbe-sound",
+      dependencies: ["OrbeSound"],
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
     .testTarget(
       name: "OrbeSoundTests",
       dependencies: ["OrbeSound"],
