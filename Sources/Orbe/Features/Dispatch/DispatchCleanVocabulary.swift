@@ -31,9 +31,13 @@ enum CleanChip: Equatable, Identifiable {
   case prunable
 
   // MARK: 軸B — ブランチの行き先
-  case mergedPR(Int)
+  /// マージ済み PR（`base` はマージ先ブランチ）。gh の主張なので**表示専用**——安全判定には使わない。
+  case mergedPR(Int, base: String)
   /// 既定ブランチへ取り込み済み（引数は既定ブランチ名）。
   case mergedIntoDefault(String)
+  /// 全コミットが remote に残る（到達性の証明。マージされたとまでは主張しない——
+  /// 単に完全 push 済みで未マージでも立つため、「merged」を名乗ると偽になり得る）。
+  case savedOnRemote
   case remoteSynced
   /// upstream より k コミット先行している。
   case remoteAhead(Int)
@@ -61,8 +65,9 @@ enum CleanChip: Equatable, Identifiable {
     case .untracked(let n): return "untracked:\(n)"
     case .inProgress(let op): return "inProgress:\(op.name)"
     case .prunable: return "prunable"
-    case .mergedPR(let n): return "mergedPR:\(n)"
+    case .mergedPR(let n, let base): return "mergedPR:\(n):\(base)"
     case .mergedIntoDefault(let branch): return "mergedIntoDefault:\(branch)"
+    case .savedOnRemote: return "savedOnRemote"
     case .remoteSynced: return "remoteSynced"
     case .remoteAhead(let n): return "remoteAhead:\(n)"
     case .unpushed: return "unpushed"
@@ -80,7 +85,7 @@ enum CleanChip: Equatable, Identifiable {
 
   var tone: CleanTone {
     switch self {
-    case .mergedPR, .mergedIntoDefault: return .safe
+    case .mergedPR, .mergedIntoDefault, .savedOnRemote: return .safe
     case .uncommitted, .untracked, .inProgress, .remoteAhead, .unpushed, .openPR, .ownCommits,
       .locked, .agentWaiting:
       return .loss
@@ -147,8 +152,8 @@ struct CleanRow: Identifiable, Equatable {
   ///
   /// サブラインは確認群のチェック済み行にしか開かないので、**安全行の溢れは画面に出ない**。
   /// それが許されるのは、安全行に loss の語が 1 つも立たないから——レビュー中の PR を持つ行は
-  /// 安全確認で落ち、取り込み済みの行は `未 push` / `remote +N` を名乗らない。残るのは
-  /// 既定ブランチへ取り込み済みという同じ根拠の言い換え（safe / neutral）だけで、それが 1 枚は
+  /// 安全確認で落ち、コミットが世界に残ると確認済みの行は `未 push` / `remote +N` を名乗らない。
+  /// 残るのは「コミットが世界に残る」という同じ根拠の言い換え（safe / neutral）だけで、それが 1 枚は
   /// 必ずピルに載る（台帳 逸脱 18 / 20。`testSafeRowsRaiseNoLoss` が固定する）。
   let overflowNotes: [CleanChip]
   /// チェックするとブランチも一緒に消える行（safe 群のうち、実体があってブランチを持つ行）。
@@ -177,6 +182,8 @@ struct PaneOccupancy: Equatable {
 struct DispatchCleanPR: Equatable {
   let number: Int
   let isMerged: Bool
+  /// マージ先ブランチ（`GitHubClosedPR.baseRefName`）。`.mergedPR` チップの表示にだけ使う。
+  let base: String
 }
 
 /// 分類の入力 1 件。git / gh / ペイン走査から採った素の事実だけを持ち、subprocess には依存しない。
@@ -200,21 +207,21 @@ struct DispatchCleanFacts: Equatable {
   let openPR: Int?
   /// `status --porcelain` の件数。nil で判定できなかった。
   let status: GitWorktreeStatusCounts?
-  /// 既定ブランチに取り込まれていない独自コミット数。0 で取り込み済み、nil で判定できなかった。
-  let unmergedCommits: Int?
+  /// 消してコミットが世界に残るかの判定結果。nil で判定できなかった。
+  let containment: GitBranchContainment?
   /// 停止している git 操作。
   let operation: GitWorktreeOperationState
   /// このパスを開いているペイン（複数あれば状態を 1 つに畳んだもの）。
   let occupancy: PaneOccupancy?
 
-  /// 既定値は**すべて安全側**に置く。とりわけ `unmergedCommits`（nil）と `operation`（`.unknown`）は
+  /// 既定値は**すべて安全側**に置く。とりわけ `containment`（nil）と `operation`（`.unknown`）は
   /// 「判定できなかった」を意味し、省略しただけの事実が「消してよい」と名乗ることはない
   /// （既定値を第 2 の判断点にしない）。
   init(
     path: String, branch: String? = nil, head: String = "", isMain: Bool = false,
     isPrunable: Bool = false, lockReason: String? = nil, upstream: String? = nil,
     track: String? = nil, closedPR: DispatchCleanPR? = nil, openPR: Int? = nil,
-    status: GitWorktreeStatusCounts? = nil, unmergedCommits: Int? = nil,
+    status: GitWorktreeStatusCounts? = nil, containment: GitBranchContainment? = nil,
     operation: GitWorktreeOperationState = .unknown, occupancy: PaneOccupancy? = nil
   ) {
     self.path = path
@@ -228,7 +235,7 @@ struct DispatchCleanFacts: Equatable {
     self.closedPR = closedPR
     self.openPR = openPR
     self.status = status
-    self.unmergedCommits = unmergedCommits
+    self.containment = containment
     self.operation = operation
     self.occupancy = occupancy
   }
@@ -241,8 +248,8 @@ struct DispatchCleanFacts: Equatable {
 struct DispatchCleanProbe: Equatable {
   /// `status --porcelain` の件数。nil で判定できなかった（clean を名乗らせない）。
   var status: GitWorktreeStatusCounts?
-  /// 取り込み済みなら 0、未取り込みなら独自コミット件数、判定できなければ nil。
-  var unmergedCommits: Int?
+  /// 消してコミットが世界に残るかの判定結果。判定できなければ nil（safe を名乗らせない）。
+  var containment: GitBranchContainment?
   /// 停止している git 操作。prunable 行は検知そのものを省くので `.unknown` のまま残る。
   var operation: GitWorktreeOperationState = .unknown
 }

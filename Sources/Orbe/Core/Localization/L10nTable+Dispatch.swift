@@ -109,6 +109,7 @@ extension L10n {
     .dispatchCleanUntrackedOne: ("untracked %lld ファイル", "%lld untracked file"),
     .dispatchCleanUntrackedOther: ("untracked %lld ファイル", "%lld untracked files"),
     .dispatchCleanInProgress: ("%@ 進行中", "%@ in progress"),
+    .dispatchCleanSavedOnRemote: ("remote に保存済み", "Saved on remote"),
     .dispatchCleanRemoteSynced: ("remote に同期済み", "In sync with remote"),
     .dispatchCleanUnpushed: ("未 push · ローカルのみ", "Unpushed · local only"),
     .dispatchCleanOwnCommitsOne: ("独自コミット %lld 件", "%lld own commit"),

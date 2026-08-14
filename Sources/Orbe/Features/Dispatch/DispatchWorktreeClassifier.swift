@@ -41,10 +41,10 @@ enum DispatchWorktreeClassifier {
           isMain: worktree.isMain, isPrunable: worktree.isPrunable,
           lockReason: worktree.lockReason, upstream: local?.upstream, track: local?.track,
           closedPR: closed.map {
-            DispatchCleanPR(number: $0.number, isMerged: $0.state == "MERGED")
+            DispatchCleanPR(number: $0.number, isMerged: $0.state == "MERGED", base: $0.baseRefName)
           },
           openPR: worktree.branch.flatMap { openByHead[$0]?.number },
-          status: probe?.status, unmergedCommits: probe?.unmergedCommits,
+          status: probe?.status, containment: probe?.containment,
           operation: probe?.operation ?? .unknown, occupancy: occupancy[worktree.path])
       }, defaultBranchLabel: input.defaultBranchLabel)
   }
@@ -85,7 +85,16 @@ enum DispatchWorktreeClassifier {
     // **status が clean でも rebase 途中の worktree は safe に入れない。** コンフリクトの無い停止点では
     // status が空になりうるので、status だけを見ていると初期チェック済みのまま消える。
     guard f.isPrunable || f.operation == .none else { return false }
-    return f.unmergedCommits == 0
+    return isContained(f.containment)
+  }
+
+  /// コミットが世界に残ることの証明が立っているか（到達性または既定ブランチへの patch 等価）。
+  /// nil（判定できなかった）と `.unmerged` はどちらも false——分からないものを安全と読まない。
+  private static func isContained(_ containment: GitBranchContainment?) -> Bool {
+    switch containment {
+    case .reachable, .patchEquivalent: return true
+    case .unmerged, nil: return false
+    }
   }
 
   private static func group(_ f: DispatchCleanFacts) -> CleanGroup {
@@ -161,19 +170,31 @@ enum DispatchWorktreeClassifier {
   /// detached（`branch == nil`）は行き先そのものが無いので何も名乗らない。
   ///
   /// `未 push · ローカルのみ` と `remote +N` は**「そのコミットがどこにも残らない」という主張**なので、
-  /// 既定ブランチへ取り込み済み（`unmergedCommits == 0`）の行では言わない——remote に無くても
-  /// 内容は既定ブランチに patch 等価で在り、失うものが無い。取り込み判定ができなかった行
-  /// （`nil`）では取り込み済みと言い切れないので、従来どおり損失として名乗る。
+  /// コミットが世界に残ると確認済み（`isContained`）の行では言わない——remote-tracking ref から
+  /// 到達可能か、既定ブランチに patch 等価で在り、失うものが無い。判定ができなかった行
+  /// （`nil`）では言い切れないので、従来どおり損失として名乗る。
+  ///
+  /// 取り込みの語は証明の種類で出し分ける: `.patchEquivalent` と `.reachable(mergedIntoDefault: true)`
+  /// は「merged → \<default\>」が真の主張なので名乗る。`.reachable(mergedIntoDefault: false)` は
+  /// 単に完全 push 済みで未マージでも立つため「merged」を名乗らせず、到達性だけを主張する
+  /// `.savedOnRemote` を出す（語が主張として偽になるなら、色を弱めるのではなく言わない）。
   private static func axisB(_ f: DispatchCleanFacts, defaultBranchLabel: String) -> [CleanChip] {
     guard f.branch != nil else { return [] }
-    let mergedIntoDefault = f.unmergedCommits == 0
+    let contained = isContained(f.containment)
     var out: [CleanChip] = []
-    if let unmerged = f.unmergedCommits, unmerged > 0 { out.append(.ownCommits(unmerged)) }
+    if case .unmerged(let count) = f.containment { out.append(.ownCommits(count)) }
     if let number = f.openPR { out.append(.openPR(number)) }
-    if f.upstream == nil, !mergedIntoDefault { out.append(.unpushed) }
-    if let ahead = ahead(f.track), ahead > 0, !mergedIntoDefault { out.append(.remoteAhead(ahead)) }
-    if let pr = f.closedPR, pr.isMerged { out.append(.mergedPR(pr.number)) }
-    if mergedIntoDefault { out.append(.mergedIntoDefault(defaultBranchLabel)) }
+    if f.upstream == nil, !contained { out.append(.unpushed) }
+    if let ahead = ahead(f.track), ahead > 0, !contained { out.append(.remoteAhead(ahead)) }
+    if let pr = f.closedPR, pr.isMerged { out.append(.mergedPR(pr.number, base: pr.base)) }
+    switch f.containment {
+    case .patchEquivalent, .reachable(mergedIntoDefault: true):
+      out.append(.mergedIntoDefault(defaultBranchLabel))
+    case .reachable(mergedIntoDefault: false):
+      out.append(.savedOnRemote)
+    case .unmerged, nil:
+      break
+    }
     if f.upstream != nil, f.track == nil { out.append(.remoteSynced) }
     if f.isGone { out.append(.gone) }
     return out

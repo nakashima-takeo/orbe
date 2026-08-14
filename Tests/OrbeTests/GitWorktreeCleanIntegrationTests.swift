@@ -2,10 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 実 git 層: 一時リポジトリで「取り込み済み判定」「作業ツリーの clean 判定」「worktree の削除」を確かめる。
+/// 実 git 層: 一時リポジトリで「取り込み判定（3 段構え）」「作業ツリーの clean 判定」
+/// 「worktree の削除」を確かめる。
 ///
-/// 中心は **素の `git cherry` では multi-commit squash を検出できない**という実測で、
-/// 2 段構え（素の cherry → 累積差分のダングリングコミット → 再度 cherry）が要ることを固定する。
+/// 取り込み判定の中心は 2 つの実測——**到達性（第0段）だけが統合先の知識なしに
+/// 非既定ブランチ統合（git-flow）を拾える**こと、**素の `git cherry` では multi-commit squash を
+/// 検出できない**（第1段→第2段の 2 段構えが要る）こと——を固定する。
 final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
   private var dir: URL!
   private var repo: GitRepo!
@@ -29,9 +31,10 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
 
   // MARK: - 取り込み済み判定
 
-  /// **完了条件の直接の証拠**。2 コミットを squash マージしたブランチについて、
+  /// **squash 検出の直接の証拠**。2 コミットを squash マージしたブランチについて、
   /// `git branch --merged` は返さず・`rev-list --count` は 2・**素の `git cherry` も `+` を 2 本**返すのに、
-  /// 2 段構えの判定は「取り込み済み」を返す。
+  /// 2 段構え（第1段→第2段）の判定は `.patchEquivalent` を返す。
+  /// remote が無いので第0段（到達不能数＝全履歴）は素通りし、従来経路が生きていることの固定でもある。
   func testSquashMergedBranchIsDetectedAsMerged() throws {
     try makeSquashMergedBranch()
 
@@ -47,7 +50,7 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
         .filter { $0.hasPrefix("+") }.count, 2,
       "前提: 素の cherry は畳んだ patch-id を照合できず 2 本とも未取り込みと誤判定する")
 
-    XCTAssertEqual(try unmerged("feat/squash"), 0, "2 段構えなら取り込み済みと判定できる")
+    XCTAssertEqual(try containment("feat/squash"), .patchEquivalent, "2 段構えなら取り込み済みと判定できる")
   }
 
   /// 本当に未マージのブランチは独自コミット件数を返す（safe 群に入れない）。
@@ -62,19 +65,89 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
     XCTAssertTrue(git(["commit", "-qm", "u2"]).isSuccess)
     XCTAssertTrue(git(["checkout", "-q", "main"]).isSuccess)
 
-    XCTAssertEqual(try unmerged("feat/live"), 2)
+    XCTAssertEqual(try containment("feat/live"), .unmerged(count: 2))
   }
 
   /// 既定ブランチの厳密な祖先（＝完全に取り込み済み）で偽陽性を出さない。
   /// 累積差分のレシピ**単独**では空パッチのダングリングコミットになり `+` を返してしまうため、
-  /// 素の cherry を先に置く順序がここで効いている。
+  /// 素の cherry を先に置く順序がここで効いている。remote が無いのでラベルは `.patchEquivalent`。
   func testAncestorBranchIsMerged() throws {
     let initial = git(["rev-parse", "HEAD"]).stdoutText
       .trimmingCharacters(in: .whitespacesAndNewlines)
     try makeSquashMergedBranch()
     XCTAssertTrue(git(["branch", "feat/ancestor", initial]).isSuccess)
 
-    XCTAssertEqual(try unmerged("feat/ancestor"), 0)
+    XCTAssertEqual(try containment("feat/ancestor"), .patchEquivalent)
+  }
+
+  /// **完了条件の中核（git-flow 再現）**。統合先が既定ブランチでない（develop へマージコミットで統合し
+  /// remote ブランチは撤去済み）ブランチは、`origin/main` との cherry では「独自コミット N 件」に
+  /// 見えるのに、第0段の到達性が「消してもコミットは remote に残る」を証明する。
+  /// 既定ブランチは tip を含まないので「merged → main」は名乗れない（`mergedIntoDefault: false`）。
+  func testGitFlowMergeIntoDevelopIsReachableWithoutClaimingMerged() throws {
+    XCTAssertTrue(git(["branch", "develop"]).isSuccess)
+    XCTAssertTrue(git(["checkout", "-q", "-b", "feat/flow", "develop"]).isSuccess)
+    try write("f.txt", "1")
+    XCTAssertTrue(git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(git(["commit", "-qm", "f1"]).isSuccess)
+    try write("f.txt", "12")
+    XCTAssertTrue(git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(git(["commit", "-qm", "f2"]).isSuccess)
+    XCTAssertTrue(git(["checkout", "-q", "develop"]).isSuccess)
+    XCTAssertTrue(git(["merge", "-q", "--no-ff", "-m", "merge feat/flow", "feat/flow"]).isSuccess)
+    XCTAssertTrue(git(["checkout", "-q", "main"]).isSuccess)
+    // feature ブランチ自体は push しない＝remote 側で撤去済み（[gone]）の形。
+    try addOrigin(pushing: ["main", "develop"])
+
+    XCTAssertEqual(
+      git(["cherry", "main", "feat/flow"]).stdoutText.split(separator: "\n")
+        .filter { $0.hasPrefix("+") }.count, 2,
+      "前提: 既定ブランチとの cherry では 2 コミット未取り込みに見える（従来の誤表示の形）")
+
+    XCTAssertEqual(
+      try containment("feat/flow"), .reachable(mergedIntoDefault: false),
+      "統合先がどこであれ、全コミットが remote-tracking ref から到達可能なら安全")
+  }
+
+  /// 既定ブランチが tip を含む（厳密な祖先）行は、到達性に加えて「merged → main」を名乗れる。
+  func testAncestorOfPushedDefaultIsReachableAndNamesMerged() throws {
+    let initial = git(["rev-parse", "HEAD"]).stdoutText
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    try write("m.txt", "1")
+    XCTAssertTrue(git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(git(["commit", "-qm", "m1"]).isSuccess)
+    XCTAssertTrue(git(["branch", "feat/old", initial]).isSuccess)
+    try addOrigin(pushing: ["main"])
+
+    XCTAssertEqual(try containment("feat/old"), .reachable(mergedIntoDefault: true))
+  }
+
+  /// **`unmerged` の count は min（到達不能数, patch 非等価数）**。既定ブランチが統合ブランチより
+  /// 遅れたリポジトリでは cherry の `+` が「統合ブランチの先行分」まで膨らむ（+106 型の巨大数）が、
+  /// remote に無いのは自分の 2 コミットだけ——真に失われうる数の、より良い過大評価を返す。
+  func testUnmergedCountIsTheMinOfUnreachableAndPatchDistance() throws {
+    XCTAssertTrue(git(["checkout", "-q", "-b", "develop"]).isSuccess)
+    for i in 1...3 {
+      try write("d.txt", String(repeating: "d", count: i))
+      XCTAssertTrue(git(["add", "-A"]).isSuccess)
+      XCTAssertTrue(git(["commit", "-qm", "d\(i)"]).isSuccess)
+    }
+    try addOrigin(pushing: ["main", "develop"])
+    XCTAssertTrue(git(["checkout", "-q", "-b", "feat/min", "develop"]).isSuccess)
+    for i in 1...2 {
+      try write("u.txt", String(repeating: "u", count: i))
+      XCTAssertTrue(git(["add", "-A"]).isSuccess)
+      XCTAssertTrue(git(["commit", "-qm", "u\(i)"]).isSuccess)
+    }
+    XCTAssertTrue(git(["checkout", "-q", "main"]).isSuccess)
+
+    XCTAssertEqual(
+      git(["cherry", "main", "feat/min"]).stdoutText.split(separator: "\n")
+        .filter { $0.hasPrefix("+") }.count, 5,
+      "前提: 既定ブランチとの cherry は develop の先行 3 件まで数えて 5 と出る")
+
+    XCTAssertEqual(
+      try containment("feat/min"), .unmerged(count: 2), "remote に無い 2 コミットだけを名乗る")
   }
 
   // MARK: - 作業ツリーの clean 判定
@@ -111,7 +184,7 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
   func testUnknownStateFallsToUnsafeSide() throws {
     XCTAssertFalse(
       try isClean(dir.appendingPathComponent("nowhere").path), "存在しないパスは clean と名乗らない")
-    XCTAssertNil(try unmerged("no-such-branch"), "判定できなければ nil（取り込み済みの 0 とは別）")
+    XCTAssertNil(try containment("no-such-branch"), "判定できなければ nil（取り込み済みの証明とは別）")
   }
 
   // MARK: - 削除
@@ -217,6 +290,17 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
     XCTAssertTrue(git(["commit", "-qm", "squash"]).isSuccess)
   }
 
+  /// bare の origin を据えて指定ブランチを push し、`refs/remotes/origin/*` を作る
+  /// （push は remote-tracking ref も更新するが、fetch で明示的に確定させる）。
+  private func addOrigin(pushing branches: [String]) throws {
+    let origin = dir.appendingPathComponent("origin.git")
+    XCTAssertTrue(
+      GitRunner.shared.runSync(["init", "-q", "--bare", origin.path], cwd: dir.path).isSuccess)
+    XCTAssertTrue(git(["remote", "add", "origin", origin.path]).isSuccess)
+    XCTAssertTrue(git(["push", "-q", "origin"] + branches).isSuccess)
+    XCTAssertTrue(git(["fetch", "-q", "origin"]).isSuccess)
+  }
+
   /// ローカルの別リポジトリを submodule として取り込む（`file://` は既定で禁止なので明示的に許す）。
   private func addSubmodule() throws {
     let sub = dir.appendingPathComponent("subrepo")
@@ -251,10 +335,10 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
     return failure
   }
 
-  private func unmerged(_ branch: String) throws -> Int? {
-    var value: Int?
-    let done = expectation(description: "unmergedCommitCount")
-    repo.unmergedCommitCount(branchOrCommit: branch, default: "main") {
+  private func containment(_ branch: String) throws -> GitBranchContainment? {
+    var value: GitBranchContainment?
+    let done = expectation(description: "branchContainment")
+    repo.branchContainment(branchOrCommit: branch, default: "main") {
       value = $0
       done.fulfill()
     }

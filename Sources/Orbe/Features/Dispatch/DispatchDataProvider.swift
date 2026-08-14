@@ -102,9 +102,10 @@ final class DispatchDataProvider {
   /// 裏で fetch --prune し、成功したら git レーンを丸ごと引き直す（gh 追従と同じプログレッシブ表示）。
   /// 失敗時は何もせず現状据え置き＝劣化なし。
   ///
-  /// **分類まで取り直すのが要点**——取り込み済み判定は `origin/<default>` に `git cherry` を打つので、
-  /// fetch 前の分類は「GitHub でマージした直後」に必ず未取り込みと出る（この機能の主用途がそのまま
-  /// 外れる）。`[gone]` の出どころである `localBranches` も prune で初めて確定する。clean 画面は
+  /// **分類まで取り直すのが要点**——取り込み判定は到達性（`rev-list --not --remotes`）も cherry も
+  /// `refs/remotes/*` の鮮度に依存するので、fetch 前の分類は「GitHub でマージした直後」に必ず
+  /// 未取り込みと出る（この機能の主用途がそのまま外れる）。`[gone]` の出どころである
+  /// `localBranches` も prune で初めて確定する。clean 画面は
   /// `enter(rows:)` で凍結済みなので、カーソルの下でリストが組み替わることはない。
   private func loadRemotePrune(_ repo: GitRepo) {
     repo.fetchPrune { [weak self] success in

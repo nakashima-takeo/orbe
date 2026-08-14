@@ -334,7 +334,7 @@ struct CleanRowShape: Shape {
 
 /// clean 行の語彙 1 つ。**色はトーンからの写像 1 本だけを通る**——語彙が増えても色の付け方が分岐せず、
 /// 塗りのあるピルと塗らない素文字の別も語彙自身（`isPill`）が持つ。
-/// **git / gh の語（`[gone]` / `locked` / `PR #N merged` / `merged → <既定>` / `remote +N` /
+/// **git / gh の語（`[gone]` / `locked` / `PR #N merged → <base>` / `merged → <既定>` / `remote +N` /
 /// `main worktree`）は L10n しない**——訳すと出力と対応が取れなくなる技術語。
 struct DispatchCleanChip: View {
   let chip: CleanChip
@@ -367,8 +367,9 @@ struct DispatchCleanChip: View {
     case .inProgress(let operation):
       return l10n.format(.dispatchCleanInProgress, operation.name)
     case .prunable: return l10n.string(.dispatchCleanPrunable)
-    case .mergedPR(let number): return "PR #\(number) merged"
+    case .mergedPR(let number, let base): return "PR #\(number) merged → \(base)"
     case .mergedIntoDefault(let branch): return "merged → \(branch)"
+    case .savedOnRemote: return l10n.string(.dispatchCleanSavedOnRemote)
     case .remoteSynced: return l10n.string(.dispatchCleanRemoteSynced)
     case .remoteAhead(let n): return "remote +\(n)"
     case .unpushed: return l10n.string(.dispatchCleanUnpushed)
