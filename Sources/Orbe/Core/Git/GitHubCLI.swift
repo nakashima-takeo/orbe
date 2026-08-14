@@ -80,17 +80,42 @@ final class GitHubCLI {
       ], completion: completion)
   }
 
-  /// 閉じた PR 一覧（`closed` は MERGED も含み `state` で区別できる）。worktree の掃除で
-  /// 「マージ済みか／未マージのまま閉じられたか」を見る。`nil` = 取得失敗／`[]` = 0 件。
+  /// ブランチ名指しの閉じた PR 取得引数（1 ブランチ＝最新 1 件。`closed` は MERGED も含み
+  /// `state` で区別できる）。**直近 N 件の一覧窓は使わない**——古くにマージされた PR が窓から
+  /// 溢れると「PR でマージしたブランチに merged チップが出ない」という取りこぼしになる。
+  /// `--head` は remote 側でブランチが削除済み（`[gone]`）でも headRefName で PR を返す。
+  static func closedPRArguments(head: String) -> [String] {
+    [
+      "pr", "list", "--state", "closed", "--head", head, "--limit", "1", "--json",
+      "number,headRefName,state,baseRefName",
+    ]
+  }
+
+  /// 指定ブランチ群に紐づく閉じた PR（ブランチごとに最新 1 件）。worktree の掃除で
+  /// 「マージ済みか／未マージのまま閉じられたか」を見る。`nil` = 取得失敗／`[]` = 該当なし。
+  /// 1 本でも取得に失敗したら全体を失敗にする——部分結果で差し替えると、失敗したブランチの
+  /// 前回結果だけが静かに消える（据え置き契約は配列まるごとの置換が前提）。
   func closedPullRequests(
-    cwd: String, limit: Int, completion: @escaping ([GitHubClosedPR]?) -> Void
+    cwd: String, heads: [String], completion: @escaping ([GitHubClosedPR]?) -> Void
   ) {
-    fetch(
-      cwd: cwd,
-      args: [
-        "pr", "list", "--state", "closed", "--limit", String(limit), "--json",
-        "number,headRefName,state,baseRefName",
-      ], completion: completion)
+    queue.async {
+      guard let gh = self.resolveGh() else {
+        DispatchQueue.main.async { completion(nil) }
+        return
+      }
+      var results: [GitHubClosedPR] = []
+      for head in heads {
+        let out = self.runSync(gh, Self.closedPRArguments(head: head), cwd: cwd)
+        guard out.status == 0,
+          let decoded = try? JSONDecoder().decode([GitHubClosedPR].self, from: out.stdout)
+        else {
+          DispatchQueue.main.async { completion(nil) }
+          return
+        }
+        results.append(contentsOf: decoded)
+      }
+      DispatchQueue.main.async { completion(results) }
+    }
   }
 
   /// 取得の共通口。失敗は `nil`（空配列に潰さない——空で潰すと呼び出し側のキャッシュを消してしまう）。

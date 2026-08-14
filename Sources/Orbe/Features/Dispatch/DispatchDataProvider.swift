@@ -6,7 +6,8 @@ import Foundation
 /// 全メソッドはメインスレッドで呼ばれ、`GitRepo`/`GitHubCLI` の completion もメインで返る（`GitRunner` 契約）。
 final class DispatchDataProvider {
   private let cwd: String
-  private weak var model: DispatchPaletteModel?
+  /// 分冊（`DispatchDataProvider+GitHub.swift`）も読む（gh 状態の反映）。
+  private(set) weak var model: DispatchPaletteModel?
   /// 実行失敗メッセージ（palette 表示）を現在言語で出すためのストア（提示元＝WindowController が渡す）。
   /// 分冊（`DispatchDataProvider+Clean.swift`）も読む。
   let localization: LocalizationStore
@@ -32,21 +33,27 @@ final class DispatchDataProvider {
     return String(defaultBranchName.dropFirst(prefix.count))
   }
 
-  /// 分冊（`DispatchDataProvider+Clean.swift`）も読む。
+  /// 分冊（`DispatchDataProvider+Clean.swift` / `+GitHub.swift`）も読む。
   private(set) var worktrees: [GitWorktree] = []
   private var localBranches: [GitBranch] = []
   private var remoteBranches: [GitBranch] = []
-  private var issues: [GitHubIssue] = []
-  private var pullRequests: [GitHubPullRequest] = []
-  private var closedPullRequests: [GitHubClosedPR] = []
-  private var githubState: GitHubAvailability = .ready
-  private var issuesLoading = true
-  private var pullRequestsLoading = true
+  // gh レーンの状態。書き手は分冊（`DispatchDataProvider+GitHub.swift`）、読み手は `rebuild`。
+  var issues: [GitHubIssue] = []
+  var pullRequests: [GitHubPullRequest] = []
+  var closedPullRequests: [GitHubClosedPR] = []
+  var githubState: GitHubAvailability = .ready
+  /// gh probe が完了して実データ取得可と判った後 true。`githubState` の初期値（`.ready`）を
+  /// 「確認済み」と読まないための旗——閉じた PR の取得は git レーン（worktree 一覧）と
+  /// gh レーン（認証確認）の両方が要り、probe 前に発火すると gh 不在の環境で毎回
+  /// worktree 本数ぶんの失敗プロセスを撒く。
+  var githubReady = false
+  var issuesLoading = true
+  var pullRequestsLoading = true
   /// 分類レーンの実測結果（path → 実測）。nil の間は分類そのものが未着地。
   private var cleanProbes: [String: DispatchCleanProbe]?
 
-  /// gh 取得の上限件数。
-  private let ghLimit = 30
+  /// gh 取得の上限件数（issues / open PR の一覧。分冊も読む）。
+  let ghLimit = 30
 
   init(
     cwd: String, model: DispatchPaletteModel, localization: LocalizationStore,
@@ -79,24 +86,6 @@ final class DispatchDataProvider {
       self.loadGitHub(repo)
       self.loadRemotePrune(repo)
     }
-  }
-
-  /// 前回取得した gh 結果をリポジトリ（commonDir）単位で先に積む。最初の rebuild（git 着地時）に
-  /// 既に issue/PR 行が載るので、2 回目以降はローディング行を経由せず前回の行が即出る。
-  /// ここで rebuild は打たない（git 未着の中途半端なリストが一瞬描かれ、かえってちらつく）。
-  /// 取得済みの側だけ載せる——片方が前回失敗していれば、そちらは loading のまま今回の取得を待つ。
-  private func applyCachedGitHub(_ repo: GitRepo) {
-    guard let entry = DispatchGitHubCache.shared.entry(for: repo.commonDir) else { return }
-    if let cached = entry.issues {
-      issues = cached
-      issuesLoading = false
-    }
-    if let cached = entry.pullRequests {
-      pullRequests = cached
-      pullRequestsLoading = false
-    }
-    // 掃除の推定（PR が MERGED か）は行の出し分けに関わらないので loading の概念を持たない。
-    if let cached = entry.closedPullRequests { closedPullRequests = cached }
   }
 
   /// 裏で fetch --prune し、成功したら git レーンを丸ごと引き直す（gh 追従と同じプログレッシブ表示）。
@@ -139,9 +128,12 @@ final class DispatchDataProvider {
       group.leave()
     }
     // 分類（レーン D）は worktree 一覧と既定ブランチが揃ってはじめて叩けるのでここから起動する。
+    // 閉じた PR も worktree 一覧が要る（ブランチ名指しの取得）ので同じ着地点から引き直す
+    // ——prune や削除で worktree の顔ぶれが変わったら対象も変わる。
     group.notify(queue: .main) {
       self.rebuild()
       self.startCleanProbe(repo)
+      self.loadClosedPullRequests(repo)
     }
   }
 
@@ -155,71 +147,9 @@ final class DispatchDataProvider {
       }
   }
 
-  private func loadGitHub(_ repo: GitRepo) {
-    repo.originIsGitHub { [weak self] isGitHub in
-      guard let self else { return }
-      GitHubCLI.shared.probe(cwd: repo.root, isGitHub: isGitHub) { [weak self] state in
-        guard let self else { return }
-        self.githubState = state
-        self.model?.githubState = state
-        guard state == .ready else {
-          self.issuesLoading = false
-          self.pullRequestsLoading = false
-          self.rebuild()
-          return
-        }
-        // キャッシュ書き込みは `self` の生存判定より前——provider はパレットと同じ寿命で、gh の応答前に
-        // 閉じられるのが常用経路。self が消えたら捨てる作りだと次回の先描きが永遠に温まらない。
-        GitHubCLI.shared.issues(cwd: repo.root, limit: self.ghLimit) { [weak self] fetched in
-          if let fetched { DispatchGitHubCache.shared.setIssues(fetched, for: repo.commonDir) }
-          self?.applyFetchedIssues(fetched)
-        }
-        GitHubCLI.shared.pullRequests(cwd: repo.root, limit: self.ghLimit) { [weak self] fetched in
-          if let fetched {
-            DispatchGitHubCache.shared.setPullRequests(fetched, for: repo.commonDir)
-          }
-          self?.applyFetchedPullRequests(fetched)
-        }
-        // 閉じた PR（`closed` は MERGED も含む）。掃除の推定にだけ使う。
-        GitHubCLI.shared.closedPullRequests(
-          cwd: repo.root, limit: self.ghLimit
-        ) { [weak self] fetched in
-          if let fetched {
-            DispatchGitHubCache.shared.setClosedPullRequests(fetched, for: repo.commonDir)
-          }
-          self?.applyFetchedClosedPullRequests(fetched)
-        }
-      }
-    }
-  }
-
-  /// 取得失敗（nil）は差し替えず据え置く。等値なら rebuild もしない（ちらつかない）。
-  /// gh 着地の規則は以下の 3 メソッドが持つ（テストが直接叩く唯一の入口）。
-  /// needsRebuild を代入より先に評価するのが要点——キャッシュ未ヒット時は loading==true なので
-  /// 失敗でも必ず rebuild してローディング行を畳む。
-  func applyFetchedIssues(_ fetched: [GitHubIssue]?) {
-    let needsRebuild = issuesLoading || (fetched != nil && fetched != issues)
-    issuesLoading = false
-    if let fetched { issues = fetched }
-    if needsRebuild { rebuild() }
-  }
-
-  /// issues 側（`applyFetchedIssues`）と同じ規則。片方の失敗が他方を巻き込まないよう別々に到着させる。
-  func applyFetchedPullRequests(_ fetched: [GitHubPullRequest]?) {
-    let needsRebuild = pullRequestsLoading || (fetched != nil && fetched != pullRequests)
-    pullRequestsLoading = false
-    if let fetched { pullRequests = fetched }
-    if needsRebuild { rebuild() }
-  }
-
-  /// 取得失敗（nil）は差し替えず据え置く。等値なら rebuild もしない（他 2 レーンと同じ規則）。
-  func applyFetchedClosedPullRequests(_ fetched: [GitHubClosedPR]?) {
-    guard let fetched, fetched != closedPullRequests else { return }
-    closedPullRequests = fetched
-    rebuild()
-  }
-
-  private func rebuild() {
+  /// 手元の状態から model を組み直す（描画の唯一の出口）。gh 着地（分冊
+  /// `DispatchDataProvider+GitHub.swift`）も同じ出口を通る。
+  func rebuild() {
     guard let model else { return }
     let selectedAction = model.selectedItem?.action
     let rows = cleanProbes.map {

@@ -94,6 +94,31 @@ final class DispatchGitHubCacheTests: OrbeTestCase {
     XCTAssertEqual(cache.entry(for: key)?.issues, [issue(1)], "PR の保存が issues を壊さない")
   }
 
+  // MARK: - 閉じた PR の取得
+
+  /// 閉じた PR は一覧の窓ではなく **worktree にあるブランチの名指し**で引く。直近 N 件の窓では、
+  /// 古くにマージされた PR が窓から溢れ、PR でマージしたブランチに merged チップが出なくなる。
+  /// `--limit 1` は一覧先頭（最新）だけを使う突き合わせの意味論をそのまま運ぶ。
+  func testClosedPRFetchNamesTheBranchInsteadOfAWindow() {
+    XCTAssertEqual(
+      GitHubCLI.closedPRArguments(head: "refactor/phase2-2b"),
+      [
+        "pr", "list", "--state", "closed", "--head", "refactor/phase2-2b", "--limit", "1",
+        "--json", "number,headRefName,state,baseRefName",
+      ])
+  }
+
+  /// 対象は worktree にあるブランチだけ（main worktree は掃除の対象外・detached は PR の head に
+  /// なり得ない）。ここが広がると worktree 本数で抑えているプロセス数の前提が崩れる。
+  func testClosedPRHeadsTargetNonMainWorktreeBranchesOnly() {
+    let heads = DispatchDataProvider.closedPRHeads(of: [
+      GitWorktree(path: "/repo", branch: "main", head: "a", isMain: true),
+      GitWorktree(path: "/wt/x", branch: "refactor/phase2-2b", head: "b", isMain: false),
+      GitWorktree(path: "/wt/detached", branch: nil, head: "c", isMain: false),
+    ])
+    XCTAssertEqual(heads, ["refactor/phase2-2b"])
+  }
+
   // MARK: - probe
 
   /// 認証判定はネットに触らない `gh auth token` で行う。`gh auth status` はトークン検証で API を
