@@ -7,7 +7,8 @@ import SwiftUI
 /// 鳴らすだけで設定を一切書かず（`assign` を通らず）、書くのは ↵ の確定だけ。だから 12 案を流し聴き
 /// してから ← / esc で戻れば、設定は開いたときのままになる。
 ///
-/// 鳴らす動作そのもの（`playPreview`）は面に依らない 1 経路で、「いつ・何を鳴らすか」は呼び出し側が持つ。
+/// 鳴らす動作そのもの（`playPreview`）は面に依らない 1 経路で、「いつ・何を鳴らすか」は呼び出し側が
+/// 持つ——サブパレットは「選択行の案を `previewEvent` で」、root の音量行は「実効案を `done` で」。
 extension SettingsPaletteModel {
   /// 試聴対象の切替（⇥ とセグメントのクリックが共有する）。反転した時点で今いる行を新しい対象で
   /// 鳴らし直す——切り替えた結果が耳で分かるため。
@@ -39,6 +40,14 @@ extension SettingsPaletteModel {
     let index = render.selected - 1  // 行 0 は「なし（オフ）」
     let sound = sounds.indices.contains(index) ? sounds[index] : nil
     playPreview(sound, event: previewEvent, row: render.selected)
+  }
+
+  /// 音量 stepper が値を実際に動かしたときの試聴。新しい実効音量で、現在の実効案の `done` を鳴らす
+  /// ——音量は数字でなく耳で決めるものだから。オン/オフが off でも鳴る（サブパレットの試聴と同じ扱いで、
+  /// 案の設定値は off のままでも保持されている）。音量以外の stepper は素通しする。
+  func previewVolumeChange(_ d: SettingDescriptor) {
+    guard d.id == .notificationSoundVolume else { return }
+    playPreview(values.effNotificationSound, event: .done, row: render.selected)
   }
 
   /// 試聴の 1 経路。音を 1 つ鳴らし、その行に EQ を立てて音の長さぶんで畳む。

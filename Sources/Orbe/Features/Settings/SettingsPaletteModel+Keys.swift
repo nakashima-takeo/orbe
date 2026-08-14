@@ -181,6 +181,9 @@ extension SettingsPaletteModel {
       return
     default: return
     }
+    // 絞り込みで行集合が入れ替わると行 index の意味が変わるので EQ は畳む（EQ は行に紐づく）。
+    // 鳴っている音は止めない——音は行に紐づいていない。
+    cancelPreviewIndicator()
     render.place(0)  // 行集合が入れ替わるため選択は先頭へ戻す
     rebuild()
   }
@@ -194,6 +197,7 @@ extension SettingsPaletteModel {
     guard clamped != current else { return }  // 範囲端ではクランプして適用しない
     assign(SettingChange(id: d.id, value: .int(clamped)))
     rebuild()
+    previewVolumeChange(d)  // 値が動いたときだけ鳴らす（音量行以外は素通し）
   }
 
   /// toggle 行の値を反転して適用する。←/→/↵ すべてこれを呼び、毎回反転を適用する（端クランプは無い）。

@@ -6,11 +6,15 @@ import XCTest
 /// 設定パレットの通知音まわり（root の 3 行・サブパレットの試聴と確定）。
 /// 中核は「**聴くことと決めることを分けてある**」——行の移動と ⇥ は鳴らすだけで設定を書かず、
 /// 書くのは ↵ の確定だけ。通知音行は root index 13（worktree の作成場所の次）。
+///
+/// 試聴インジケータ（EQ）と root 音量行の試聴は `SettingsPaletteSoundTests+Indicator.swift` が持ち、
+/// そちらもここの駆動台（`model` / `capture*` / `drillIn`）を使う。
 @MainActor
 final class SettingsPaletteSoundTests: OrbeTestCase {
-  private let soundRow = 13
+  let soundRow = 13
+  let volumeRow = 14  // `rootOrder` で通知音行の次
 
-  private func model(sound: NotificationSound? = nil, volume: Int? = nil, enabled: Bool? = nil)
+  func model(sound: NotificationSound? = nil, volume: Int? = nil, enabled: Bool? = nil)
     -> SettingsPaletteModel
   {
     var global = SettingsLayer()
@@ -23,20 +27,20 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
   }
 
   /// 適用された単一代入を順に記録する（1 操作で 2 件届く経路があるため最後の 1 件では足りない）。
-  private func captureChanges(_ p: SettingsPaletteModel) -> () -> [SettingChange] {
+  func captureChanges(_ p: SettingsPaletteModel) -> () -> [SettingChange] {
     var changes: [SettingChange] = []
     p.onApply = { change, _ in changes.append(change) }
     return { changes }
   }
 
   /// 試聴の呼び出し 1 件。
-  private struct Preview: Equatable {
+  struct Preview: Equatable {
     let sound: NotificationSound?
     let event: AgentSoundEvent
     let volume: Int
   }
 
-  private func capturePreviews(_ p: SettingsPaletteModel) -> () -> [Preview] {
+  func capturePreviews(_ p: SettingsPaletteModel) -> () -> [Preview] {
     var previews: [Preview] = []
     p.onPreviewSound = { sound, event, volume in
       previews.append(Preview(sound: sound, event: event, volume: volume))
@@ -44,7 +48,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
     return { previews }
   }
 
-  private func drillIn(_ p: SettingsPaletteModel) {
+  func drillIn(_ p: SettingsPaletteModel) {
     p.render.selected = soundRow
     p.render.onActivate()
   }
@@ -78,7 +82,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
   func testVolumeStepsByFive() {
     let p = model(volume: 70)
     let changes = captureChanges(p)
-    p.render.selected = soundRow + 1
+    p.render.selected = volumeRow
     _ = p.render.onRight()
     XCTAssertEqual(changes().last?.value, .int(75))
     p.render.onLeft()
@@ -91,7 +95,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
   func testVolumeClampsAtFivePercent() {
     let p = model(volume: 10)
     let changes = captureChanges(p)
-    p.render.selected = soundRow + 1
+    p.render.selected = volumeRow
     p.render.onLeft()
     XCTAssertEqual(changes().last?.value, .int(5))
     p.render.onLeft()
@@ -273,71 +277,6 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
     drillIn(p)
     p.render.onTapSegment(2)
     XCTAssertTrue(previews().isEmpty)
-  }
-
-  // MARK: - 試聴中の EQ（鳴っている行だけに出る）
-
-  /// 鳴り終わりの予約を溜め、手で発火させる（合成長ぶん実時間を待たずに消灯を見る）。
-  private func captureScheduledEnds(_ p: SettingsPaletteModel) -> () -> [() -> Void] {
-    var ends: [() -> Void] = []
-    p.schedulePreviewEnd = { _, fire in ends.append(fire) }
-    return { ends }
-  }
-
-  /// 入場では EQ が出ず、試聴すると今いる行に出る。
-  func testPreviewLightsIndicatorOnCurrentRow() {
-    let p = model(sound: .glass)
-    _ = captureScheduledEnds(p)
-    drillIn(p)
-    XCTAssertNil(p.render.rowAccessory, "入場では鳴らないので EQ も出ない")
-    p.render.onDown()
-    XCTAssertEqual(p.render.rowAccessory?.row, p.render.selected)
-  }
-
-  /// 解除行では鳴らないので EQ も出ない（鳴っていた EQ も畳む）。
-  func testOffRowShowsNoIndicator() {
-    let p = model(sound: .glass)
-    _ = captureScheduledEnds(p)
-    drillIn(p)
-    p.render.onDown()
-    XCTAssertNotNil(p.render.rowAccessory)
-    p.render.selected = 0  // なし（オフ）
-    XCTAssertNil(p.render.rowAccessory, "解除行では EQ を出さない")
-  }
-
-  /// 鳴り終わると EQ が消える。
-  func testIndicatorClearsWhenSoundEnds() {
-    let p = model(sound: .glass)
-    let ends = captureScheduledEnds(p)
-    drillIn(p)
-    p.render.onDown()
-    XCTAssertEqual(ends().count, 1)
-    ends()[0]()
-    XCTAssertNil(p.render.rowAccessory, "鳴り終わりで畳む")
-  }
-
-  /// 先行する消灯予約は後の試聴を消さない（↑↓ 連打で EQ が食い違わない）。
-  func testStaleEndDoesNotClearLaterPreview() {
-    let p = model(sound: .glass)
-    let ends = captureScheduledEnds(p)
-    drillIn(p)
-    p.render.onDown()
-    p.render.onDown()
-    XCTAssertEqual(ends().count, 2)
-    ends()[0]()  // 1 回目の予約が後から届く
-    XCTAssertEqual(p.render.rowAccessory?.row, p.render.selected, "最後の試聴の EQ は残る")
-  }
-
-  /// 面を離れると EQ は畳まれ、予約中の消灯も無効化される。
-  func testIndicatorClearsOnLeavingTheMode() {
-    let p = model(sound: .glass)
-    let ends = captureScheduledEnds(p)
-    drillIn(p)
-    p.render.onDown()
-    p.render.onEscape()  // root へ
-    XCTAssertNil(p.render.rowAccessory)
-    ends()[0]()  // 予約が後から届いても何も起きない
-    XCTAssertNil(p.render.rowAccessory)
   }
 
   // MARK: - 確定（↵ だけが値を書く）
