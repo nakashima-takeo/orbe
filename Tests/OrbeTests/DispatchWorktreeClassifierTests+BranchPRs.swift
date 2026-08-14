@@ -47,20 +47,54 @@ extension DispatchWorktreeClassifierTests {
     XCTAssertTrue(r.vocabulary.contains(.mergedPR(200, base: "develop")), "closed 側は最新の非 OPEN")
   }
 
+  /// **cross-repo の足切りは落とす方向にしか誤らない。** `isCrossRepository` は「head が gh の
+  /// 解決した base リポジトリと別か」でしかなく、fork を clone して `upstream` を張った形では
+  /// 自分の PR も真になる。そのとき失うのは推定（とチップ）だけで、行は確認群へ落ちる——
+  /// 消して困るものが残る側なので、番号を騙って安全群へ押し上げることは起きない。
+  func testAllCrossRepoPRsLoseTheHintInsteadOfPassingSafety() {
+    let r = branchPRRow([pr(120, "MERGED", cross: true)], track: nil)
+    XCTAssertEqual(r.group, .caution, "推定が 1 つも立たない行は安全群に入らない")
+    XCTAssertFalse(r.vocabulary.contains(.mergedPR(120, base: "main")), "cross-repo の PR は事実にしない")
+  }
+
+  /// **head をまたいだ混線を防ぐのは grouping の 1 点だけ。** 取得は heads ごとに 1 往復するが、
+  /// 結果は 1 本の配列へ平坦化されて届く（`GitHubCLI.fetch(argsList:)` が連結する）ので、
+  /// どの PR がどのブランチの事実かは `headRefName` でしか復元できない。
+  func testEachRowTakesOnlyItsOwnHeadFromTheFlattenedFetch() {
+    let rows = DispatchWorktreeClassifier.rows(
+      DispatchWorktreeClassifier.Input(
+        worktrees: [
+          GitWorktree(path: "/wt/x", branch: "feat/x", head: "aaa", isMain: false),
+          GitWorktree(path: "/wt/y", branch: "feat/y", head: "bbb", isMain: false),
+        ],
+        branchPullRequests: [
+          pr(10, "OPEN"), pr(20, "MERGED", base: "develop", head: "feat/y"),
+        ]))
+    let x = rows.first { $0.name == "x" }!
+    let y = rows.first { $0.name == "y" }!
+    XCTAssertEqual(x.chips.first, .openPR(10), "feat/x は自分の open PR だけを拾う")
+    XCTAssertFalse(x.vocabulary.contains(.mergedPR(20, base: "develop")), "隣の head の PR は拾わない")
+    XCTAssertTrue(y.vocabulary.contains(.mergedPR(20, base: "develop")), "feat/y は自分の PR を拾う")
+    XCTAssertFalse(y.vocabulary.contains(.openPR(10)), "隣の head の PR は拾わない")
+  }
+
   // MARK: - ヘルパ
 
   private func pr(
-    _ number: Int, _ state: String, base: String = "main", cross: Bool = false
+    _ number: Int, _ state: String, base: String = "main", cross: Bool = false,
+    head: String = "feat/x"
   ) -> GitHubBranchPR {
     GitHubBranchPR(
-      number: number, headRefName: "feat/x", state: state, baseRefName: base,
+      number: number, headRefName: head, state: state, baseRefName: base,
       isCrossRepository: cross)
   }
 
   /// `feat/x` の worktree 1 本を、名指し取得の着地とともに `rows` へ通した行。
   /// PR 以外の事実は安全確認を全部通る形（clean・操作なし・`[gone]`・取り込み済み）に固定する。
+  /// `track` を nil にすると `[gone]` の推定が消え、**推定が PR だけになる**行を作れる。
   private func branchPRRow(
-    _ prs: [GitHubBranchPR], containment: GitBranchContainment? = .patchEquivalent
+    _ prs: [GitHubBranchPR], containment: GitBranchContainment? = .patchEquivalent,
+    track: String? = "[gone]"
   ) -> CleanRow {
     let rows = DispatchWorktreeClassifier.rows(
       DispatchWorktreeClassifier.Input(
@@ -71,7 +105,7 @@ extension DispatchWorktreeClassifierTests {
         localBranches: [
           GitBranch(
             name: "feat/x", relativeDate: "1d", worktreePath: "/wt/x",
-            upstream: "origin/feat/x", track: "[gone]")
+            upstream: "origin/feat/x", track: track)
         ],
         branchPullRequests: prs,
         probes: [

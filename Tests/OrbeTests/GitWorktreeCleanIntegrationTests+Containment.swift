@@ -6,6 +6,9 @@ import XCTest
 /// **到達性（第0段）だけが統合先の知識なしに非既定ブランチ統合（git-flow）を拾える**こと、
 /// **その到達性が信頼してよいのは Orbe が prune する origin だけ**であること、
 /// **素の `git cherry` では multi-commit squash を検出できない**（第1段→第2段が要る）こと。
+///
+/// 判定へ渡す名前の曖昧さ（同名タグ）だけは `DispatchCleanProber` を通した本番経路でも固定する
+/// ——名前を組み立てるのはプローブ側なので、git 層だけを直接叩くと本番の入口を素通りする。
 extension GitWorktreeCleanIntegrationTests {
 
   /// **squash 検出の直接の証拠**。2 コミットを squash マージしたブランチについて、
@@ -163,9 +166,6 @@ extension GitWorktreeCleanIntegrationTests {
     try write("m.txt", "1")
     XCTAssertTrue(git(["add", "-A"]).isSuccess)
     XCTAssertTrue(git(["commit", "-qm", "m1"]).isSuccess)
-    // ブランチ v1.0 は main の祖先（取り込み済み）。worktree としてチェックアウトしておく。
-    let wt = dir.appendingPathComponent("wt-v1").path
-    XCTAssertTrue(git(["worktree", "add", "-q", "-b", "v1.0", wt, initial]).isSuccess)
     // 同名タグは未マージのコミット（feat/stray の先端）を指す。
     XCTAssertTrue(git(["checkout", "-q", "-b", "feat/stray", "main"]).isSuccess)
     try write("s.txt", "s")
@@ -174,6 +174,11 @@ extension GitWorktreeCleanIntegrationTests {
     XCTAssertTrue(git(["checkout", "-q", "main"]).isSuccess)
     XCTAssertTrue(git(["tag", "v1.0", "feat/stray"]).isSuccess)
     try addOrigin(pushing: ["main"])
+    // ブランチ v1.0 は main の祖先（取り込み済み）。worktree としてチェックアウトしておく。
+    // **作るのは `add -A` を全部済ませた後**——`dir` の下に生えるので、先に作ると作業ツリーを
+    // 舐めるコミットが worktree ごと gitlink で飲み込む（bare remote を外に置くのと同じ理由）。
+    let wt = dir.appendingPathComponent("wt-v1").path
+    XCTAssertTrue(git(["worktree", "add", "-q", "-b", "v1.0", wt, initial]).isSuccess)
 
     XCTAssertEqual(
       git(["rev-parse", "--verify", "v1.0"]).stdoutText.trimmingCharacters(
