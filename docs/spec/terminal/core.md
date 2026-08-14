@@ -1,7 +1,7 @@
 ---
 title: ターミナル基盤
 description: libghostty の surface API を NSView に埋め込む土台 — 描画・入力・クリップボード・ライフサイクル・ビルド構成の契約
-updated: 2026-08-08
+updated: 2026-08-14
 ---
 
 # ターミナル基盤
@@ -58,9 +58,13 @@ surface の可視性はホストが `ghostty_surface_set_occlusion` へ同期す
 
 ## ライフサイクル
 
-ウィンドウを閉じるとき、実行中プロセスがあれば確認ダイアログを出す（`ghostty_app_needs_confirm_quit`）。最後のウィンドウを閉じるとアプリ自体が終了し、終了時に永続のデバウンス待ち保存を flush する（[persistence](../platform/persistence.md)）。shell exit 時は該当ペインを閉じる。
+アプリを終了するとき、実行中プロセスがあれば確認ダイアログを出す（`ghostty_app_needs_confirm_quit`）。確認を持つのは終了の関門ひとつだけで、ウィンドウの ✕・⌘Q / App メニュー・アップデートの再起動・ログアウトのどの経路から終了しても**同じ確認が 1 回だけ**出る。この関門はシステム側から始まる終了も通るので、ここに置かないと確認を素通りする経路ができる。確認の最中も端末の描画と制御 API は動き続ける——実行中プロセスの是非を問う画面で、判断材料である当のプロセスの出力が凍らないため。
 
-標準メニューバー（App＋Edit）を据える。Edit の標準編集コマンドは target=nil で responder chain へ配送され、overlay（chrome）のテキスト入力欄が ⌘V/⌘C/⌘X/⌘A を受ける。端末 surface はコピー&ペーストを自前実装しており、`paste:`/`copy:`/`selectAll:` を responder として実装しない。このためこれらのメニュー項目は surface フォーカス時に自動無効化され、key equivalent が消費されずに keyDown → libghostty へ通る（端末側の ⌘V 等を壊さない）。App メニューの ⌘Q は実行中プロセスの確認を経て終了する。
+ウィンドウは 1 枚で、それを閉じることはアプリを終了することと同義。よって ✕ は窓を閉じず終了を要求し、窓が閉じるのは終了が確定した後になる。確認をキャンセルすればウィンドウもメニューバー常駐もそのまま残る——窓を先に閉じると、キャンセルしたときにメニューバーの常駐だけが残り、開き直す先を失う。
+
+終了時に永続のデバウンス待ち保存を flush する（[persistence](../platform/persistence.md)）。shell exit 時は該当ペインを閉じる。
+
+標準メニューバー（App＋Edit）を据える。Edit の標準編集コマンドは target=nil で responder chain へ配送され、overlay（chrome）のテキスト入力欄が ⌘V/⌘C/⌘X/⌘A を受ける。端末 surface はコピー&ペーストを自前実装しており、`paste:`/`copy:`/`selectAll:` を responder として実装しない。このためこれらのメニュー項目は surface フォーカス時に自動無効化され、key equivalent が消費されずに keyDown → libghostty へ通る（端末側の ⌘V 等を壊さない）。
 
 ## ビルド構成
 
