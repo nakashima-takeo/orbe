@@ -15,14 +15,28 @@ struct BoardEntry {
   let wavePoints: String  // 波形見取り図（SVG polygon の点列）
 }
 
+/// 波形見取り図の座標系。bucket 数の上限・SVG の viewBox・中心線・CSS の寸法はすべてここから出る。
+/// **1 単位 = 1px に固定する**のが要点——`.wave` をカード幅に追従させると 1 単位の物理幅が
+/// セクションごとに変わり、時間軸が board 全体で共通という性質がレンダリング時点で崩れる。
+private enum WaveBox {
+  /// 最長の音がちょうどこの幅になる（= bucket 数の上限）。
+  static let width = 160
+  static let height = 32
+  /// 中心線。ポリゴンはここを軸に上下対称。
+  static let mid = Double(height) / 2
+  /// 中心線からの最大振幅——上下に 1 だけ余白を残す。
+  static let amp = mid - 1
+}
+
 /// 波形の見取り図。|サンプル| を `buckets` 区間の最大値に間引き、中心線対称のポリゴン点列にする。
-/// 時間軸は board 全体で共通——最長の音を全幅 160 とし、各音は実時間比の幅だけ描く
+/// 時間軸は board 全体で共通——最長の音を全幅とし、各音は実時間比の幅だけ描く
 /// （短い音が引き伸ばされて長く見えると、長さの比較がピンとこない）。
 /// 高さは各音自身のピークで正規化する——図の仕事は音量でなく「形」（立ち上がり・リズム・余韻）を
 /// 見せること。音量の比較は loud の数値が担う。
+/// テストが直接叩くので internal（`generateBoard` と同じ扱い）。
 func wavePoints(_ samples: [Float], buckets: Int) -> String {
-  let mid = 16.0
-  let amp = 15.0
+  let mid = WaveBox.mid
+  let amp = WaveBox.amp
   guard !samples.isEmpty, buckets > 0 else { return "" }
   var peaks = [Double](repeating: 0, count: buckets)
   for bucket in 0..<buckets {
@@ -30,7 +44,8 @@ func wavePoints(_ samples: [Float], buckets: Int) -> String {
     let hi = max(lo + 1, (bucket + 1) * samples.count / buckets)
     for i in lo..<hi { peaks[bucket] = max(peaks[bucket], Double(abs(samples[i]))) }
   }
-  let scale = (peaks.max() ?? 0) > 0 ? amp / peaks.max()! : 0
+  let peak = peaks.max() ?? 0
+  let scale = peak > 0 ? amp / peak : 0
   let top = peaks.enumerated()
     .map { String(format: "%d,%.1f", $0.offset, mid - $0.element * scale) }
   let bottom = peaks.enumerated().reversed()
@@ -95,7 +110,8 @@ func generateBoard(to dir: URL, rate: Double, volume: Int) throws -> URL {
       section: item.section, name: item.name, file: item.file,
       duration: Double(item.samples.count) / rate,
       loudDB: SoundAnalysis.maxShortTermRMSDB(item.samples, sampleRate: rate),
-      wavePoints: wavePoints(item.samples, buckets: max(2, 160 * item.samples.count / maxCount)))
+      wavePoints: wavePoints(
+        item.samples, buckets: max(2, WaveBox.width * item.samples.count / maxCount)))
   }
 
   let index = dir.appendingPathComponent("index.html")
@@ -109,8 +125,8 @@ private func cardHTML(_ entry: BoardEntry, showName: Bool = true) -> String {
   let name = showName ? "\n          <div class=\"name\">\(entry.name)</div>" : ""
   return """
         <div class="card" tabindex="0" data-src="\(entry.file)" data-name="\(entry.name)">\(name)
-          <svg class="wave" viewBox="0 0 160 32" preserveAspectRatio="none">
-            <line x1="0" y1="16" x2="160" y2="16"/>
+          <svg class="wave" viewBox="0 0 \(WaveBox.width) \(WaveBox.height)">
+            <line x1="0" y1="\(WaveBox.mid)" x2="\(WaveBox.width)" y2="\(WaveBox.mid)"/>
             <polygon points="\(entry.wavePoints)"/></svg>
           <div class="stats">\(stats)</div>
           <div class="ab"><button data-slot="a">A</button><button data-slot="b">B</button></div>
@@ -191,7 +207,8 @@ private func boardHTML(entries: [BoardEntry], rate: Double, volume: Int) -> Stri
       .card.slot-a::before { content: "A"; right: 34px; background: #9ece6a; }
       .card.slot-b::after { content: "B"; right: 8px; background: #e0af68; }
       .name { color: #e8e8f2; font-weight: 600; }
-      .wave { display: block; width: 100%; height: 32px; margin-top: 6px; }
+      .wave { display: block; width: \(WaveBox.width)px; height: \(WaveBox.height)px;
+              margin-top: 6px; }
       .wave line { stroke: #2c2c40; vector-effect: non-scaling-stroke; }
       .wave polygon { fill: #3f3f5e; }
       .card.playing .wave polygon { fill: #7aa2f7; }
