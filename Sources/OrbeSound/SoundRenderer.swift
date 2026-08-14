@@ -2,7 +2,7 @@ import Foundation
 
 /// `SoundProgram`（部品列 + エフェクト列 + 全長）から決定論的にモノラル PCM を組む。
 ///
-/// マスタチェーンは 全部品を加算 → エフェクト列 → × 音量 → コンプレッサ の順。
+/// マスタチェーンは 全部品を加算 → × トリム → エフェクト列 → × 音量 → コンプレッサ の順。
 /// **音量がコンプレッサの手前**にあるのが要点で、音量を上げるほど圧縮が深くなる（＝音量は再生側の
 /// ボリュームではなく合成の入力）。事前生成した音声ファイルを同梱するとこの順が崩れる。
 public enum SoundRenderer {
@@ -35,6 +35,10 @@ public enum SoundRenderer {
       }
     }
 
+    if program.trimDB != 0 {
+      let trim = pow(10, program.trimDB / 20)
+      for i in buffer.indices { buffer[i] *= trim }
+    }
     for effect in program.effects { effect.apply(to: &buffer, sampleRate: sampleRate) }
 
     let level = Double(volume) / 100

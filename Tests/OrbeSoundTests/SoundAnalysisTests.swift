@@ -31,6 +31,29 @@ final class SoundAnalysisTests: XCTestCase {
     XCTAssertTrue(SoundAnalysis.spectralPeaks(silence, sampleRate: sampleRate, count: 5).isEmpty)
   }
 
+  /// 最大短時間 RMS は「一番鳴っている瞬間」を測る——300 ms 窓が全長 RMS との差を生み、
+  /// 窓より短い音では全長 RMS に縮退する。ラウドネス整合のトリムはこの物差しの上で測った値なので、
+  /// 窓長が動くとトリム表の意味ごと変わる。
+  func testMaxShortTermRMSMeasuresTheLoudestWindow() {
+    // 1 秒のうち先頭 0.2 秒だけ振幅 0.5。300 ms 窓には無音が 100 ms ぶん必ず混じるので
+    // -6.02 dB から 1.76 dB 下がる（窓が 150 ms なら -6.02、500 ms なら -10.00 になる）。
+    var burst = [Float](repeating: 0.5, count: 9600)
+    burst += [Float](repeating: 0, count: 38400)
+    XCTAssertEqual(
+      SoundAnalysis.maxShortTermRMSDB(burst, sampleRate: sampleRate), -7.7815, accuracy: 1e-3)
+    XCTAssertEqual(SoundAnalysis.rmsDB(burst), -13.0103, accuracy: 1e-3, "全長 RMS は無音に薄まる")
+
+    // 窓より短い音は全長 RMS に一致する。
+    let short = [Float](repeating: 0.5, count: 4800)
+    XCTAssertEqual(
+      SoundAnalysis.maxShortTermRMSDB(short, sampleRate: sampleRate), -6.0206, accuracy: 1e-3)
+
+    // 窓より長い無音も -inf（log の発散で落ちない）。
+    XCTAssertEqual(
+      SoundAnalysis.maxShortTermRMSDB([Float](repeating: 0, count: 48000), sampleRate: sampleRate),
+      -.infinity)
+  }
+
   /// 純音のスペクトル最大ピークは DFT の分解能内でその周波数に一致する。
   func testSpectralPeakFindsThePureToneFrequency() {
     let frequency = 440.0

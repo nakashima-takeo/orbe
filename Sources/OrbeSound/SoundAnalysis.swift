@@ -1,6 +1,6 @@
 import Foundation
 
-/// 合成結果の数値解析。ラウドネス整合（全案の RMS を帯域内に保つ）の判定材料と、
+/// 合成結果の数値解析。ラウドネス整合（全案の最大短時間 RMS を目標値へ揃える）の判定材料と、
 /// 制作ループでの音の観察（orbe-sound analyze）をテストと CLI で共用する。
 /// 外部依存なし・決定論——同じ波形からは常に同じ数値が出る。
 public enum SoundAnalysis {
@@ -15,8 +15,10 @@ public enum SoundAnalysis {
     public let duration: Double
     /// 最大振幅（dBFS。1.0 = 0 dB）。
     public let peakDB: Double
-    /// 全長の実効値（dBFS）。ラウドネス整合はこの値を帯域で縛る。
+    /// 全長の実効値（dBFS）。長い余韻を持つ音ほど実際の聴感より小さく出る。
     public let rmsDB: Double
+    /// 最大短時間実効値（dBFS）。「一番鳴っている瞬間の強さ」で、ラウドネス整合はこれを基準に取る。
+    public let maxShortTermRMSDB: Double
     /// ピークと RMS の差（dB）。打撃的な音ほど大きい。
     public let crestDB: Double
   }
@@ -30,6 +32,7 @@ public enum SoundAnalysis {
       duration: Double(samples.count) / sampleRate,
       peakDB: peak,
       rmsDB: rms,
+      maxShortTermRMSDB: maxShortTermRMSDB(samples, sampleRate: sampleRate),
       crestDB: peak - rms)
   }
 
@@ -44,6 +47,27 @@ public enum SoundAnalysis {
     guard !samples.isEmpty else { return -.infinity }
     let sum = samples.reduce(0.0) { $0 + Double($1) * Double($1) }
     return 10 * log10(sum / Double(samples.count))
+  }
+
+  /// 最大短時間実効値（dBFS）。300 ms 窓を 50 ms 刻みで滑らせた RMS の最大値。
+  /// 全長 RMS と違い長さや余韻に左右されないので、音同士の音量を比べる基準はこちら。
+  /// 窓より短い音は全長 RMS に一致する。無音は -Double.infinity。
+  public static func maxShortTermRMSDB(_ samples: [Float], sampleRate: Double) -> Double {
+    guard !samples.isEmpty else { return -.infinity }
+    let window = Int(sampleRate * 0.3)
+    guard window > 0, samples.count > window else { return rmsDB(samples) }
+    var prefix = [Double](repeating: 0, count: samples.count + 1)
+    for (i, sample) in samples.enumerated() {
+      prefix[i + 1] = prefix[i] + Double(sample) * Double(sample)
+    }
+    let hop = max(1, Int(sampleRate * 0.05))
+    var best = 0.0
+    var start = 0
+    while start + window <= samples.count {
+      best = max(best, (prefix[start + window] - prefix[start]) / Double(window))
+      start += hop
+    }
+    return 10 * log10(best)
   }
 
   /// スペクトルの上位ピーク。最大振幅サンプルを含む窓（Hann・最長 4096）を素朴な DFT に掛け、

@@ -18,7 +18,7 @@ let usage = """
   <name> はカタログ 12 案の名前か scratch のエントリ名（list で確認）。カタログは
   <done|waiting> を、scratch はイベント区別が無いので "-" を渡す。
   既定: --rate 48000 / --volume 70。render は --out 省略時、一時ディレクトリへ書く。
-  analyze --all はカタログ全 24 音 + scratch の peak / RMS 一覧（ラウドネス整合の目視用）。
+  analyze --all はカタログ全 24 音 + scratch の peak / RMS / loud 一覧（ラウドネス整合の目視は loud）。
   board は全音の WAV + 自己完結の index.html を書き、そのパスを出す（人間の聴き比べ用。
   クリック再生と A/B 比較。--out 省略時は毎回同じ場所に上書き＝ブラウザのリロードで最新）。
 
@@ -209,8 +209,8 @@ private func analysisRow(name: String, samples: [Float], rate: Double) -> String
   let padded = name + String(repeating: " ", count: max(0, 16 - name.count))
   return padded
     + String(
-      format: " %6.2fs  peak %7.2f dB  rms %7.2f dB  crest %6.2f dB",
-      result.duration, result.peakDB, result.rmsDB, result.crestDB)
+      format: " %6.2fs  peak %7.2f dB  rms %7.2f dB  loud %7.2f dB  crest %6.2f dB",
+      result.duration, result.peakDB, result.rmsDB, result.maxShortTermRMSDB, result.crestDB)
 }
 
 func runAnalyze(_ rawArgs: [String]) {

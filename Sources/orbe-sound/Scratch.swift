@@ -5,6 +5,8 @@ import OrbeSound
 /// `orbe-sound board` 再生成 → ブラウザをリロード、が制作ループの本体**（人間側の聴き比べは
 /// board が担う。1 音だけなら `orbe-sound play <name> -` でも聴ける）。
 /// エントリは (名前, SoundProgram)。名前はカタログ 12 案と重ならないこと（resolve はカタログ名を優先する）。
+/// `trimDB` は board で並べたときの音量整合（カタログと同じ基準）——音を変えたら board の
+/// `loud` 表示が他と揃うよう測り直す。揃っていないと、聴き比べの判断が音の性格でなく音量差で決まる。
 enum Scratch {
   static let entries: [(name: String, program: SoundProgram)] = [
     demoSignal, demoBloom, demoAfterglow,
@@ -36,7 +38,7 @@ enum Scratch {
             gain: 0.10, lowpass: 4200)),
       ],
       effects: [.delay(time: 0.17, feedback: 0.45, damping: 3200, mix: 0.5)],
-      duration: 1.5)
+      duration: 1.5, trimDB: 4.7)
   )
 
   /// デモ 2「灯り」: ADSR + lowpass の柔らかい和音（sawtooth をローパスで暖める）。
@@ -51,7 +53,7 @@ enum Scratch {
             waveform: .sawtooth, gain: 0.05,
             envelope: .adsr(attack: 0.05, decay: 0.35, sustain: 0.45, release: 0.45),
             lowpass: 1800))
-      })
+      }, trimDB: 1.9)
   )
 
   /// デモ 3「残光」: FM インデックスのエンベロープで開いて閉じる鐘 + トレモロの余韻 + ディレイ。
@@ -72,6 +74,6 @@ enum Scratch {
             envelope: .percussive(attack: 0.03))),
       ],
       effects: [.delay(time: 0.28, feedback: 0.35, damping: 2400, mix: 0.3)],
-      duration: 2.1)
+      duration: 2.1, trimDB: 0.6)
   )
 }

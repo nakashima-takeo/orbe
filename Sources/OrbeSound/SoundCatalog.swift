@@ -3,8 +3,37 @@ import Foundation
 /// 12 案 × 2 イベント（完了 / 入力待ち）の合成定義。ここは「何をどう鳴らすか」の宣言だけで、
 /// 部品の語彙は `SoundComponent`、波形の作り方は `SoundSynth`、実際の合成は `SoundRenderer` が担う。
 public enum SoundCatalog {
-  /// 案 × イベントの完全な定義（部品列 + エフェクト列 + 全長）。
+  /// 案 × イベントの完全な定義（部品列 + エフェクト列 + 全長 + ラウドネストリム）。
   public static func program(_ family: NotificationSound, _ event: AgentSoundEvent) -> SoundProgram
+  {
+    var program = definition(family, event)
+    if let trim = trims[family] {
+      program.trimDB += event == .done ? trim.done : trim.waiting
+    }
+    return program
+  }
+
+  /// ラウドネス整合の実測トリム（dB）。基準は最大短時間 RMS（300 ms 窓・音量 70・48 kHz。
+  /// 300 ms に満たない音は全長で測るので、長さを変えると読みが動く）で、全 24 音を
+  /// カタログ中央値 -24.3 dBFS へ合わせた値。音の定義を変えたらその音だけ測り直す
+  /// （`orbe-sound board` で WAV を出し、300 ms 窓の最大 RMS と目標の差分を足し引きする）。
+  private static let trims: [NotificationSound: (done: Double, waiting: Double)] = [
+    .glass: (done: -1.7, waiting: 1.6),
+    .pulse: (done: 7.8, waiting: 9.0),
+    .wood: (done: 0.2, waiting: 1.5),
+    .air: (done: 0.3, waiting: 6.4),
+    .emblem: (done: -1.5, waiting: 5.0),
+    .reply: (done: -5.9, waiting: -5.0),
+    .bounce: (done: -3.3, waiting: 1.8),
+    .arcade: (done: 8.7, waiting: 10.5),
+    .steel: (done: -1.4, waiting: -1.1),
+    .piano: (done: -0.7, waiting: 3.3),
+    .whistle: (done: -0.7, waiting: -2.6),
+    .deep: (done: -0.5, waiting: -0.2),
+  ]
+
+  private static func definition(_ family: NotificationSound, _ event: AgentSoundEvent)
+    -> SoundProgram
   {
     switch family {
     case .glass: return glass(event)

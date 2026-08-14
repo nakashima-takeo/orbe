@@ -10,11 +10,18 @@ public struct SoundProgram: Hashable {
   /// 省略時は最後の部品の発音が終わる時刻——エフェクトが無ければ以降は厳密に無音なので、
   /// 足すべき余白は無い。ディレイを掛けるならテールが収まる長さを明示する。
   public var duration: Double
+  /// ラウドネス整合のトリム（dB）。部品ミックス全体へエフェクトの前に掛かる——全部品の
+  /// gain を一律に増減するのと等価で、音の内部バランスと音色の手書き値を崩さずに音量だけ動かす。
+  public var trimDB: Double
 
-  public init(components: [SoundComponent], effects: [SoundEffect] = [], duration: Double? = nil) {
+  public init(
+    components: [SoundComponent], effects: [SoundEffect] = [], duration: Double? = nil,
+    trimDB: Double = 0
+  ) {
     self.components = components
     self.effects = effects
     self.duration = duration ?? components.map(\.end).max() ?? 0
+    self.trimDB = trimDB
   }
 }
 
