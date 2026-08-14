@@ -12,7 +12,7 @@ final class SoundCatalogTests: XCTestCase {
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
         XCTAssertFalse(
-          SoundCatalog.components(family, event).isEmpty, "\(family) の \(event) が未定義")
+          SoundCatalog.program(family, event).components.isEmpty, "\(family) の \(event) が未定義")
       }
     }
   }
@@ -21,7 +21,7 @@ final class SoundCatalogTests: XCTestCase {
   func testComponentsAreWellFormed() {
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
-        for component in SoundCatalog.components(family, event) {
+        for component in SoundCatalog.program(family, event).components {
           XCTAssertGreaterThanOrEqual(component.start, 0, "\(family)/\(event)")
           XCTAssertGreaterThan(component.end, component.start, "\(family)/\(event)")
         }
@@ -29,8 +29,8 @@ final class SoundCatalogTests: XCTestCase {
     }
   }
 
-  /// 音の全長は 0.05〜2.2 秒に収まり、長い方の 2 案は design どおりの長さになる
-  /// （最後の部品の発音が終わる時刻）。
+  /// 音の全長は 0.05〜2.2 秒に収まり、長い方の 2 案は定義から導かれる長さに固定する
+  /// （エフェクト無しの案では、最後の部品の発音が終わる時刻）。
   func testDurations() {
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
@@ -43,13 +43,13 @@ final class SoundCatalogTests: XCTestCase {
     XCTAssertEqual(SoundCatalog.duration(.emblem, .done), 2.07, accuracy: 1e-9, "最長")
   }
 
-  /// 12 案 × 2 イベントが**互いに違う音**になる（`components` の手書き switch は誤配線しても
+  /// 12 案 × 2 イベントが**互いに違う音**になる（`program` の手書き switch は誤配線しても
   /// コンパイラが黙るので、配線の同一性をここで機械検証する。レンダリングは要らない）。
   func testEveryFamilyAndEventProducesADistinctSound() {
-    var signatures: Set<[SoundComponent]> = []
+    var signatures: Set<SoundProgram> = []
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
-        signatures.insert(SoundCatalog.components(family, event))
+        signatures.insert(SoundCatalog.program(family, event))
       }
     }
     XCTAssertEqual(signatures.count, 24, "案 × イベントの配線が重複している")

@@ -5,18 +5,18 @@ import Foundation
 ///
 /// 同じ入力から常に同じ波形が出る（乱数も固定シード）。だから波形そのものをテストで機械検証できる。
 
-/// Web Audio の `AudioParam`（時刻 → 値のオートメーション）。design が使うのは `setValueAtTime` と
-/// `exponentialRampToValueAtTime` の 2 つだけなので、その 2 種のイベント列として持つ。
+/// 時刻 → 値のオートメーション。値の保持（step）・線形ランプ・指数ランプのイベント列として持ち、
+/// エンベロープや周波数スイープはすべてこの上に展開される（→ `Envelope.automation`）。
 ///
-/// 指数ランプの起点は**直前のイベントの (時刻, 値)** であって「その区間の始まり」ではない。
+/// ランプの起点は**直前のイベントの (時刻, 値)** であって「その区間の始まり」ではない。
 /// tone のエンベロープ（setValue → ramp(a) → ramp(d)）で減衰が進むのは `d` でなく `d - a` の長さ
 /// ——ここを取り違えると全案が一様に長く聞こえる。
 struct AudioParam {
-  /// 指数ランプは 0 を扱えない（v0・v1 は同符号かつ非ゼロ）。design はこの値を「ゼロ代わり」に使う。
-  /// 0 へ丸めると立ち上がりと減衰のカーブが変わるので、そのまま持つ。
+  /// 指数ランプは 0 を扱えない（v0・v1 は同符号かつ非ゼロ）ため、無音は 0 でなくこの可聴下限
+  /// （-80 dB）で表す。0 へ丸めると立ち上がりと減衰のカーブが変わるので、そのまま持つ。
   static let zero = 0.0001
 
-  private enum Ramp { case step, exponential }
+  private enum Ramp { case step, exponential, linear }
   private struct Event {
     let time: Double
     let value: Double
@@ -24,22 +24,27 @@ struct AudioParam {
   }
   private var events: [Event]
 
-  /// 先頭の `setValueAtTime`。イベント列は必ず 1 つ以上を持つ（値が定まらない時刻を作らない）。
+  /// 先頭の値。イベント列は必ず 1 つ以上を持つ（値が定まらない時刻を作らない）。
   init(_ value: Double, at time: Double) {
     events = [Event(time: time, value: value, ramp: .step)]
   }
 
-  /// `setValueAtTime(v, t)`: 時刻 t 以降、次のイベントまで値は v。
+  /// 時刻 t 以降、次のイベントまで値は v（保持）。
   mutating func setValue(_ value: Double, at time: Double) {
     events.append(Event(time: time, value: value, ramp: .step))
   }
 
-  /// `exponentialRampToValueAtTime(v, t)`: 直前のイベントを起点に t まで指数で結ぶ。
+  /// 直前のイベントを起点に t まで指数（等比）で結ぶ。減衰・立ち上がりの自然な形。
   mutating func rampExponentially(to value: Double, at time: Double) {
     events.append(Event(time: time, value: value, ramp: .exponential))
   }
 
-  /// 任意時刻の値。イベント列は追加順＝時刻昇順で積まれている前提（design のどの音もそう組む）。
+  /// 直前のイベントを起点に t まで直線で結ぶ。指数と違い 0 へ正確に到達できる。
+  mutating func rampLinearly(to value: Double, at time: Double) {
+    events.append(Event(time: time, value: value, ramp: .linear))
+  }
+
+  /// 任意時刻の値。イベント列は追加順＝時刻昇順で積まれている前提。
   func value(at time: Double) -> Double {
     let first = events[0]
     if time <= first.time { return first.value }
@@ -47,26 +52,28 @@ struct AudioParam {
     while i + 1 < events.count, events[i + 1].time <= time { i += 1 }
     guard i + 1 < events.count else { return events[i].value }
     let next = events[i + 1]
+    let t0 = events[i].time
+    let v0 = events[i].value
     switch next.ramp {
     case .step:
-      return events[i].value  // 次のイベントが撃たれるまで直前の値を保持する
+      return v0  // 次のイベントが撃たれるまで直前の値を保持する
     case .exponential:
-      let t0 = events[i].time
-      let v0 = events[i].value
       guard next.time > t0, v0 > 0, next.value > 0 else { return next.value }
       return v0 * pow(next.value / v0, (time - t0) / (next.time - t0))
+    case .linear:
+      guard next.time > t0 else { return next.value }
+      return v0 + (next.value - v0) * (time - t0) / (next.time - t0)
     }
   }
 }
 
-/// オシレータの波形。Web Audio と同じく**帯域制限した理想波形**（Nyquist を超える倍音を足さない）。
+/// オシレータの波形。**帯域制限した理想波形**（Nyquist を超える倍音を足さない加算級数）で生成する。
 /// 素朴な生成だとエイリアスが乗り、矩形波の案（遊技）と三角波の案（電紫・弾み）がジャリつく。
-enum Waveform: Hashable {
-  case sine, square, triangle
+public enum Waveform: Hashable {
+  case sine, square, triangle, sawtooth
 
   /// 位相 φ（rad）と瞬時周波数から 1 サンプル。倍音は `k * frequency < Nyquist` の範囲だけ加算する。
-  /// Web Audio は倍音テーブルをピーク 1 へ正規化するため素の級数（ピーク約 1.09）と数 % のレベル差が
-  /// 出るが、聴感上は無視できる差なので級数のまま使う。
+  /// 級数は正規化しない（ピークは波形により 1 を僅かに超えるが、部品の gain 側で吸収できる差）。
   func sample(phase: Double, frequency: Double, sampleRate: Double) -> Double {
     switch self {
     case .sine:
@@ -91,6 +98,16 @@ enum Waveform: Hashable {
         k += 2
       }
       return sum * (8 / (Double.pi * Double.pi))
+    case .sawtooth:
+      // 全倍音を 1/k で足す（奇数次のみの square / triangle と違い、偶数次も持つ明るい波形）。
+      var sum = 0.0
+      var k = 1.0
+      let nyquist = sampleRate / 2
+      while k * frequency < nyquist {
+        sum += sin(k * phase) / k
+        k += 1
+      }
+      return sum * (2 / Double.pi)
     }
   }
 }
@@ -99,8 +116,8 @@ enum Waveform: Hashable {
 ///
 /// **Q の解釈が種別で違う**: lowpass / highpass はデシベル（Web Audio 仕様の規定）、bandpass は線形。
 /// 取り違えると遊技のこもり具合・気配や洋琴のノイズの色が変わる。
-struct Biquad {
-  enum Kind: Hashable { case lowpass, highpass, bandpass }
+public struct Biquad {
+  public enum Kind: Hashable { case lowpass, highpass, bandpass }
 
   /// a0 で正規化済みの係数。
   struct Coefficients: Equatable {
