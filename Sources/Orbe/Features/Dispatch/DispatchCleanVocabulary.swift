@@ -45,7 +45,8 @@ enum CleanChip: Equatable, Identifiable {
   case openPR(Int)
   /// upstream が消えている。
   case gone
-  /// 既定ブランチに取り込まれていない独自コミット k 件。
+  /// 消すと失われうる独自コミット k 件（`GitBranchContainment.unmerged` の `count`。到達不能数と
+  /// patch 非等価数の min なので、「既定ブランチに取り込まれていない件数」より小さくなりうる）。
   case ownCommits(Int)
 
   // MARK: 軸C — 使用状況
@@ -56,7 +57,8 @@ enum CleanChip: Equatable, Identifiable {
   case mainWorktree
 
   // MARK: 行内注記
-  /// safe 行の `merged ブランチも削除`（チェックすればブランチごと消えることの明示）。
+  /// safe 行の `ブランチも削除`（チェックすればブランチごと消えることの明示）。**マージ状況は名乗らない**
+  /// ——到達性だけで安全が立った行は既定ブランチにマージされていないので、`merged` は偽になる。
   case branchAlsoDeleted
 
   var id: String {

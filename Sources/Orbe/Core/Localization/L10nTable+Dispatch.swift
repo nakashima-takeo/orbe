@@ -63,7 +63,7 @@ extension L10n {
     .dispatchCleanBranchLabel: ("ブランチ %@:", "Branch %@:"),
     .dispatchCleanBranchKeep: ("残す", "Keep"),
     .dispatchCleanBranchDelete: ("削除", "Delete"),
-    .dispatchCleanBranchAlsoDeleted: ("merged ブランチも削除", "merged branch deleted too"),
+    .dispatchCleanBranchAlsoDeleted: ("ブランチも削除", "branch deleted too"),
     .dispatchCleanLossNote: ("%@ も消えます", "%@ will be lost too"),
     .dispatchCleanDeletingTitle: ("削除中", "Deleting"),
     .dispatchCleanProgress: ("%lld / %lld 件", "%lld / %lld"),

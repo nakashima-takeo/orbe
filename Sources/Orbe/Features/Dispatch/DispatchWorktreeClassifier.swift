@@ -150,7 +150,7 @@ enum DispatchWorktreeClassifier {
   }
 
   /// 軸A（消すと何を失うか）。優先順位は `進行中 > 未コミット > untracked > prunable`。
-  /// **失うものが無い行は何も名乗らない**——安全群の見出しと行内の `merged ブランチも削除` が
+  /// **失うものが無い行は何も名乗らない**——安全群の見出しと行内の `ブランチも削除` が
   /// 既に同じことを言っており、群の中では冗長になる。
   private static func axisA(_ f: DispatchCleanFacts, _ group: CleanGroup) -> [CleanChip] {
     guard group != .inUse else { return [] }
