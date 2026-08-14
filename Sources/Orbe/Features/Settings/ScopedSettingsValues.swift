@@ -1,4 +1,5 @@
 import Foundation
+import OrbeSound
 
 /// 設定パレットが表示・編集する設定値の解決モデル（generic）。
 /// global 層・アクティブ workspace の上書き層・現在スコープを束ね、実効値／継承・上書き判定／単一代入の適用を

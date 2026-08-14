@@ -1,9 +1,9 @@
 import XCTest
 
-@testable import Orbe
+@testable import OrbeSound
 
 /// 12 案 × 2 イベントの定義と合成結果の健全性。L1 純ロジック・決定論（音は出さない）。
-final class SoundCatalogTests: OrbeTestCase {
+final class SoundCatalogTests: XCTestCase {
   private let sampleRate = 48000.0
 
   /// 全案・全イベントが定義されている（案を足して定義を忘れたら落ちる）。
@@ -12,7 +12,7 @@ final class SoundCatalogTests: OrbeTestCase {
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
         XCTAssertFalse(
-          SoundCatalog.components(family, event).isEmpty, "\(family) の \(event) が未定義")
+          SoundCatalog.program(family, event).components.isEmpty, "\(family) の \(event) が未定義")
       }
     }
   }
@@ -21,7 +21,7 @@ final class SoundCatalogTests: OrbeTestCase {
   func testComponentsAreWellFormed() {
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
-        for component in SoundCatalog.components(family, event) {
+        for component in SoundCatalog.program(family, event).components {
           XCTAssertGreaterThanOrEqual(component.start, 0, "\(family)/\(event)")
           XCTAssertGreaterThan(component.end, component.start, "\(family)/\(event)")
         }
@@ -29,8 +29,10 @@ final class SoundCatalogTests: OrbeTestCase {
     }
   }
 
-  /// 音の全長は 0.05〜2.2 秒に収まり、長い方の 2 案は design どおりの長さになる
-  /// （最後の部品の発音が終わる時刻）。
+  /// 音の全長は 0.05〜2.2 秒に収まり、部品型ごとに 1 案を定義から導かれる長さに固定する
+  /// （エフェクト無しの案では、最後の部品の発音が終わる時刻）。全長は試聴 EQ の消灯タイミング
+  /// でもあるので、エンベロープの既定を動かして黙って伸び縮みさせない——tone 系（deep / emblem）に
+  /// 加えて glide 系（reply）も釘を打つ。glide の既定 `.gate` は release ぶん duration より伸びる。
   func testDurations() {
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
@@ -39,17 +41,19 @@ final class SoundCatalogTests: OrbeTestCase {
         XCTAssertLessThanOrEqual(duration, 2.2, "\(family)/\(event)")
       }
     }
-    XCTAssertEqual(SoundCatalog.duration(.deep, .done), 2.05, accuracy: 1e-9)
-    XCTAssertEqual(SoundCatalog.duration(.emblem, .done), 2.07, accuracy: 1e-9, "最長")
+    XCTAssertEqual(SoundCatalog.duration(.deep, .done), 2.00, accuracy: 1e-9)
+    XCTAssertEqual(SoundCatalog.duration(.emblem, .done), 2.02, accuracy: 1e-9, "最長")
+    XCTAssertEqual(
+      SoundCatalog.duration(.reply, .done), 0.73, accuracy: 1e-9, "glide は release ぶん伸びる")
   }
 
-  /// 12 案 × 2 イベントが**互いに違う音**になる（`components` の手書き switch は誤配線しても
+  /// 12 案 × 2 イベントが**互いに違う音**になる（`program` の手書き switch は誤配線しても
   /// コンパイラが黙るので、配線の同一性をここで機械検証する。レンダリングは要らない）。
   func testEveryFamilyAndEventProducesADistinctSound() {
-    var signatures: Set<[SoundComponent]> = []
+    var signatures: Set<SoundProgram> = []
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
-        signatures.insert(SoundCatalog.components(family, event))
+        signatures.insert(SoundCatalog.program(family, event))
       }
     }
     XCTAssertEqual(signatures.count, 24, "案 × イベントの配線が重複している")
@@ -101,6 +105,22 @@ final class SoundCatalogTests: OrbeTestCase {
     XCTAssertLessThan(quietPeak, loudPeak)
     XCTAssertGreaterThan(
       quietPeak, loudPeak * 0.2 * 1.02, "コンプレッサの後段なら厳密に 0.2 倍になる")
+  }
+
+  /// ラウドネス整合: 全 24 音の RMS(dBFS) が帯域内に収まる（音量 70・48 kHz。帯域は実測分布
+  /// -36.4〜-21.3 dB に前後の余白を足した -39〜-19 dB）。案を作り直すときはこの帯域が
+  /// 「他の案と並べて音量の違和感が出ない」ことの客観的な物差しになる——外れたら音の gain を
+  /// 調整するか、分布ごと動かす意図があるならこの帯域を引き直す。
+  func testLoudnessOfEverySoundStaysWithinTheBand() {
+    for family in NotificationSound.allCases {
+      for event in AgentSoundEvent.allCases {
+        let samples = SoundRenderer.render(
+          family: family, event: event, volume: 70, sampleRate: sampleRate)
+        let rms = SoundAnalysis.rmsDB(samples)
+        XCTAssertGreaterThan(rms, -39, "\(family)/\(event) が静かすぎる (\(rms) dBFS)")
+        XCTAssertLessThan(rms, -19, "\(family)/\(event) が大きすぎる (\(rms) dBFS)")
+      }
+    }
   }
 
   /// サンプルレートが変わっても同じ長さの音になる（biquad 係数もレートへ追従する）。

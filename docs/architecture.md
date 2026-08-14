@@ -1,12 +1,12 @@
 ---
 title: 全体構成
-description: 4 実行体と制御チャネル・state dir・Sources/ モジュール構成の一望図
-updated: 2026-08-08
+description: 実行体と制御チャネル・state dir・Sources/ モジュール構成の一望図
+updated: 2026-08-14
 ---
 
 # 全体構成
 
-Orbe は GUI 本体 1 つと CLI 3 つの計 4 実行体からなる。すべて 1 つの SwiftPM パッケージ（`Package.swift`）でビルドされ、Xcode プロジェクトは持たない。個々の仕様は [spec/](spec/README.md)、ビルド手順は [guides/build.md](guides/build.md) が持つ。
+Orbe は GUI 本体 1 つと CLI 3 つの計 4 実行体からなる（ほかに配布しない dev CLI が 1 つ）。すべて 1 つの SwiftPM パッケージ（`Package.swift`）でビルドされ、Xcode プロジェクトは持たない。個々の仕様は [spec/](spec/README.md)、ビルド手順は [guides/build.md](guides/build.md) が持つ。
 
 ## 実行体と接続
 
@@ -30,8 +30,9 @@ flowchart LR
 | `orb` | Orbe 自身を操作する CLI（config / ws / pane / tab） | Foundation のみ | [control/cli](spec/control/cli.md) |
 | `orbe-report` | エージェント CLI の hook から状態を報告 | Foundation のみ | [agent/notify](spec/agent/notify.md) |
 | `orbe-mcp` | MCP（stdio）を制御チャネルへ転送するブリッジ | Foundation のみ | [control/api](spec/control/api.md) |
+| `orbe-sound` | 通知音の制作ループ CLI（dev 専用・`.app` 非同梱・制御チャネルに繋がない） | Foundation・OrbeSound | [agent/sound](spec/agent/sound.md) |
 
-4 実行体は `OrbePaths`（`Sources/OrbePaths/`）を共有する。state dir と control.sock の解決規則を 1 箇所に閉じ、同じチャネルでビルドされた GUI と CLI が必ず同じ socket を見ることを構造で保証する薄い土台。
+制御チャネルに繋がる 4 実行体は `OrbePaths`（`Sources/OrbePaths/`）を共有する。state dir と control.sock の解決規則を 1 箇所に閉じ、同じチャネルでビルドされた GUI と CLI が必ず同じ socket を見ることを構造で保証する薄い土台。同じく GUI 本体と `orbe-sound` は `OrbeSound`（`Sources/OrbeSound/`）を共有し、通知音は両者で同じ合成定義から鳴る。
 
 **制御チャネル**が外部→Orbe の唯一の操作面で、Unix socket 上の改行区切り JSON-RPC 2.0（[control/api](spec/control/api.md)）。エージェント状態報告・`orb` の全サブコマンド・MCP ツール・コマンド補完（[palette/completion](spec/palette/completion.md)）がすべてここに集約される。
 
@@ -63,9 +64,11 @@ Sources/
     DesignSystem/        トークン・パレット・共有コンポーネント（正は design/）
     Resources/           同梱リソース（アイコン等）
   OrbePaths/             state dir / control.sock 解決の共有土台（Foundation のみ）
+  OrbeSound/             通知音の純 DSP 層（合成語彙・カタログ・レンダラ・解析。Foundation のみ）
   orbe-cli/              orb 実行ターゲット
   orbe-mcp/              MCP ブリッジ実行ターゲット
   orbe-report/           状態報告実行ターゲット
+  orbe-sound/            通知音の制作ループ CLI（dev 専用・非同梱）
 ```
 
 spec の領域フォルダ（[spec/README.md](spec/README.md)）は概ね `Features/` 配下の単位に対応する。`app/` にはバンドル素材（Info.plist・既定 conf・テーマ・エージェントプラグイン・zsh shim・補完エンジン）が置かれ、`scripts/build-app.sh` が `.app` へ焼き込む。

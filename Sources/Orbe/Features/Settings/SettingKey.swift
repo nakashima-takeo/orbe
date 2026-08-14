@@ -1,4 +1,5 @@
 import Foundation
+import OrbeSound
 
 /// 開発ビルドか（未設定時の「開発中の機能を有効化」default を決める SSOT）。公開リリース
 /// （`release-app.sh` が ORBE_CHANNEL=release で焼く `-DORBE_RELEASE`）で false、それ以外で true。

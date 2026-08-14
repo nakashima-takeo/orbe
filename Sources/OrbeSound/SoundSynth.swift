@@ -1,22 +1,22 @@
 import Foundation
 
-/// 通知音の合成プリミティブ。design（Web Audio のノードグラフ）の意味論を Swift の純関数へ写したもので、
-/// 音を出す手段は一切持たない（再生は `SoundPlayer`、音の定義は `SoundCatalog`、組み立ては `SoundRenderer`）。
+/// 通知音の合成プリミティブ（オートメーション・波形・フィルタ・雑音・コンプレッサ）。すべて純関数で、
+/// 音を出す手段は一切持たない（再生は Orbe 側の `SoundPlayer`、音の定義は `SoundCatalog`、組み立ては `SoundRenderer`）。
 ///
 /// 同じ入力から常に同じ波形が出る（乱数も固定シード）。だから波形そのものをテストで機械検証できる。
 
-/// Web Audio の `AudioParam`（時刻 → 値のオートメーション）。design が使うのは `setValueAtTime` と
-/// `exponentialRampToValueAtTime` の 2 つだけなので、その 2 種のイベント列として持つ。
+/// 時刻 → 値のオートメーション。値の保持（step）・線形ランプ・指数ランプのイベント列として持ち、
+/// エンベロープや周波数スイープはすべてこの上に展開される（→ `Envelope.automation`）。
 ///
-/// 指数ランプの起点は**直前のイベントの (時刻, 値)** であって「その区間の始まり」ではない。
+/// ランプの起点は**直前のイベントの (時刻, 値)** であって「その区間の始まり」ではない。
 /// tone のエンベロープ（setValue → ramp(a) → ramp(d)）で減衰が進むのは `d` でなく `d - a` の長さ
 /// ——ここを取り違えると全案が一様に長く聞こえる。
 struct AudioParam {
-  /// 指数ランプは 0 を扱えない（v0・v1 は同符号かつ非ゼロ）。design はこの値を「ゼロ代わり」に使う。
-  /// 0 へ丸めると立ち上がりと減衰のカーブが変わるので、そのまま持つ。
+  /// 指数ランプは 0 を扱えない（v0・v1 は同符号かつ非ゼロ）ため、無音は 0 でなくこの可聴下限
+  /// （-80 dB）で表す。0 へ丸めると立ち上がりと減衰のカーブが変わるので、そのまま持つ。
   static let zero = 0.0001
 
-  private enum Ramp { case step, exponential }
+  private enum Ramp { case step, exponential, linear }
   private struct Event {
     let time: Double
     let value: Double
@@ -24,22 +24,27 @@ struct AudioParam {
   }
   private var events: [Event]
 
-  /// 先頭の `setValueAtTime`。イベント列は必ず 1 つ以上を持つ（値が定まらない時刻を作らない）。
+  /// 先頭の値。イベント列は必ず 1 つ以上を持つ（値が定まらない時刻を作らない）。
   init(_ value: Double, at time: Double) {
     events = [Event(time: time, value: value, ramp: .step)]
   }
 
-  /// `setValueAtTime(v, t)`: 時刻 t 以降、次のイベントまで値は v。
+  /// 時刻 t 以降、次のイベントまで値は v（保持）。
   mutating func setValue(_ value: Double, at time: Double) {
     events.append(Event(time: time, value: value, ramp: .step))
   }
 
-  /// `exponentialRampToValueAtTime(v, t)`: 直前のイベントを起点に t まで指数で結ぶ。
+  /// 直前のイベントを起点に t まで指数（等比）で結ぶ。減衰・立ち上がりの自然な形。
   mutating func rampExponentially(to value: Double, at time: Double) {
     events.append(Event(time: time, value: value, ramp: .exponential))
   }
 
-  /// 任意時刻の値。イベント列は追加順＝時刻昇順で積まれている前提（design のどの音もそう組む）。
+  /// 直前のイベントを起点に t まで直線で結ぶ。指数と違い 0 へ正確に到達できる。
+  mutating func rampLinearly(to value: Double, at time: Double) {
+    events.append(Event(time: time, value: value, ramp: .linear))
+  }
+
+  /// 任意時刻の値。イベント列は追加順＝時刻昇順で積まれている前提。
   func value(at time: Double) -> Double {
     let first = events[0]
     if time <= first.time { return first.value }
@@ -47,26 +52,28 @@ struct AudioParam {
     while i + 1 < events.count, events[i + 1].time <= time { i += 1 }
     guard i + 1 < events.count else { return events[i].value }
     let next = events[i + 1]
+    let t0 = events[i].time
+    let v0 = events[i].value
     switch next.ramp {
     case .step:
-      return events[i].value  // 次のイベントが撃たれるまで直前の値を保持する
+      return v0  // 次のイベントが撃たれるまで直前の値を保持する
     case .exponential:
-      let t0 = events[i].time
-      let v0 = events[i].value
       guard next.time > t0, v0 > 0, next.value > 0 else { return next.value }
       return v0 * pow(next.value / v0, (time - t0) / (next.time - t0))
+    case .linear:
+      guard next.time > t0 else { return next.value }
+      return v0 + (next.value - v0) * (time - t0) / (next.time - t0)
     }
   }
 }
 
-/// オシレータの波形。Web Audio と同じく**帯域制限した理想波形**（Nyquist を超える倍音を足さない）。
+/// オシレータの波形。**帯域制限した理想波形**（Nyquist を超える倍音を足さない加算級数）で生成する。
 /// 素朴な生成だとエイリアスが乗り、矩形波の案（遊技）と三角波の案（電紫・弾み）がジャリつく。
-enum Waveform: Hashable {
-  case sine, square, triangle
+public enum Waveform: Hashable {
+  case sine, square, triangle, sawtooth
 
   /// 位相 φ（rad）と瞬時周波数から 1 サンプル。倍音は `k * frequency < Nyquist` の範囲だけ加算する。
-  /// Web Audio は倍音テーブルをピーク 1 へ正規化するため素の級数（ピーク約 1.09）と数 % のレベル差が
-  /// 出るが、聴感上は無視できる差なので級数のまま使う。
+  /// 級数は正規化しない（ピークは波形により 1 を僅かに超えるが、部品の gain 側で吸収できる差）。
   func sample(phase: Double, frequency: Double, sampleRate: Double) -> Double {
     switch self {
     case .sine:
@@ -91,24 +98,35 @@ enum Waveform: Hashable {
         k += 2
       }
       return sum * (8 / (Double.pi * Double.pi))
+    case .sawtooth:
+      // 全倍音を 1/k で足す（奇数次のみの square / triangle と違い、偶数次も持つ明るい波形）。
+      var sum = 0.0
+      var k = 1.0
+      let nyquist = sampleRate / 2
+      while k * frequency < nyquist {
+        sum += sin(k * phase) / k
+        k += 1
+      }
+      return sum * (2 / Double.pi)
     }
   }
 }
 
-/// Web Audio `BiquadFilterNode`（＝RBJ Audio EQ Cookbook）の係数と Direct Form I の適用。
+/// フィルタの種別（`NoiseSpec.kind` が選ぶ宣言語彙。実装は `Biquad` が持つ）。
 ///
-/// **Q の解釈が種別で違う**: lowpass / highpass はデシベル（Web Audio 仕様の規定）、bandpass は線形。
+/// **Q の解釈が種別で違うのはこのエンジンの規約**: lowpass / highpass はデシベル、bandpass は線形。
 /// 取り違えると遊技のこもり具合・気配や洋琴のノイズの色が変わる。
-struct Biquad {
-  enum Kind: Hashable { case lowpass, highpass, bandpass }
+public enum FilterKind: Hashable { case lowpass, highpass, bandpass }
 
+/// 2 次 IIR フィルタ（RBJ Audio EQ Cookbook の係数・Direct Form I の適用）。
+struct Biquad {
   /// a0 で正規化済みの係数。
   struct Coefficients: Equatable {
     let b0, b1, b2, a1, a2: Double
   }
 
   static func coefficients(
-    kind: Kind, frequency: Double, q: Double, sampleRate: Double
+    kind: FilterKind, frequency: Double, q: Double, sampleRate: Double
   ) -> Coefficients {
     let nyquist = sampleRate / 2
     let f0 = min(max(frequency, 1), nyquist * 0.999)
@@ -160,8 +178,8 @@ struct Biquad {
   }
 }
 
-/// 白色雑音（一様分布 [-1, 1)）。design の `Math.random() * 2 - 1` と同じ分布を、固定シードの
-/// SplitMix64 で決定論的に出す（毎回同じ波形＝テストが再現する。白色なので聴感上の性格は同じ）。
+/// 白色雑音（一様分布 [-1, 1)）。固定シードの SplitMix64 で決定論的に出す
+/// （毎回同じ波形＝テストが再現する。白色なので聴感上の性格はシードに依らない）。
 struct WhiteNoise {
   private var state: UInt64
 
@@ -178,11 +196,9 @@ struct WhiteNoise {
   }
 }
 
-/// Web Audio `DynamicsCompressorNode` を**全パラメータ既定値**で使う master のコンプレッサ。
-/// 仕様が規定するのは静特性の折れ位置（threshold・knee 幅・比）とメイクアップゲインの導き方だけで、
-/// ニーの曲線形と Chrome 実装固有の細部（約 6ms の先読みディレイ・多段リリースカーブ）は委ねられている。
-/// ここは静特性＋メイクアップ＋1 次追従で「圧縮の量と時定数」を合わせる
-/// ——これがブラウザと Orbe の音が完全一致しない唯一の要因になる。
+/// マスタチェーン末段のコンプレッサ。静特性（threshold / knee / ratio）＋メイクアップゲイン＋
+/// 1 次追従（attack / release）で「圧縮の量と時定数」を決める。音量はこの手前に掛かるため、
+/// 音量を上げるほど圧縮が深くなる——「大きくしても割れない」はこの段の保証。
 enum DynamicsCompressor {
   static let threshold = -24.0  // dB
   static let knee = 30.0  // dB
@@ -190,13 +206,13 @@ enum DynamicsCompressor {
   static let attack = 0.003  // s
   static let release = 0.25  // s
 
-  /// ニーが終わる入力レベル。仕様は `knee` を「threshold の**上**へ伸びる幅」と規定する
-  /// （knee end threshold = threshold + knee）ので、圧縮域は [-24, +6] dB。ニーを threshold の
-  /// 中央に置くと -39 dB から圧縮が始まり、仕様が素通しを要求する領域まで潰す。
+  /// ニーが終わる入力レベル。`knee` は「threshold の**上**へ伸びる幅」（kneeEnd = threshold + knee）
+  /// なので、圧縮域は [-24, +6] dB。ニーを threshold の中央に置くと -39 dB から圧縮が始まり、
+  /// 素通しであるべき小信号まで潰す。
   static let kneeEnd = threshold + knee
 
   /// 静特性（入力 dB → 出力 dB）。threshold までは素通し、ニーの中は二次で滑らかに、上は比で圧縮。
-  /// ニーの曲線形は仕様が実装に委ねる部分なので、連続かつ微分連続な二次で置く。
+  /// ニーは連続かつ微分連続な二次に置く——折れ目の段差は圧縮の掛かり始めで音色の急変として聴こえる。
   static func curve(inputDB x: Double) -> Double {
     if x < threshold { return x }
     if x <= kneeEnd {
@@ -206,8 +222,8 @@ enum DynamicsCompressor {
     return curve(inputDB: kneeEnd) + (x - kneeEnd) / ratio
   }
 
-  /// メイクアップゲイン（線形）。仕様の "Computing the makeup gain"——静特性を線形 1.0（＝0 dB）へ
-  /// 当てた値の逆数の 0.6 乗。**静特性から導く**ので、ニーを動かせば自動で追従する（定数を焼かない）。
+  /// メイクアップゲイン（線形）。静特性を 0 dB 入力へ当てた値の逆数の 0.6 乗で、圧縮で失う
+  /// 全体レベルを取り戻す。**静特性から導く**ので、ニーを動かせば自動で追従する（定数を焼かない）。
   static let makeupGain = pow(pow(10, curve(inputDB: 0) / 20), -0.6)
 
   /// ピーク検出＋1 次追従で全サンプルへ掛ける（in-place）。最後にメイクアップゲインを乗せる。

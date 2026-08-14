@@ -1,7 +1,7 @@
 ---
 title: テストアーキテクチャ
 description: Orbe のテストが従う層構成・横断方針・各層の責務
-updated: 2026-08-06
+updated: 2026-08-14
 ---
 
 # テストアーキテクチャ
@@ -10,7 +10,7 @@ updated: 2026-08-06
 
 ## 1. 対象
 
-**形**: macOS ネイティブのターミナルマルチプレクサ（GUI 本体）＋ 3 つの CLI 実行体。表面は 7 つ。
+**形**: macOS ネイティブのターミナルマルチプレクサ（GUI 本体）＋ 3 つの CLI 実行体（ほかに配布しない dev CLI が 1 つ）。表面は 7 つ。
 
 | 表面 | 実体 |
 |---|---|
@@ -30,7 +30,7 @@ updated: 2026-08-06
 
 **ランナーは XCTest 一本。** Swift 6.3 では swift-testing との相互運用が `none` で、両者でアサーションヘルパを共有すると失敗が黙殺される。Swift 6.4 で相互運用が既定 `limited` になった時点で再検討する。
 
-**隔離は単一ハーネスが立てる。** state dir・全 override・ghostty の設定探索先を 1 箇所で立て、テストごとの申告制にしない（対象は `Tests/OrbeTests`。他 3 ターゲットは実行体のモジュール内部を測るだけで、隔離の要る対象を持たない）。申告制は張り忘れが 1 本でも残れば破れる（`GuiConfig` の override を張らないテストが 1 本あれば、`Config.load()` が前回実行の設定を読み戻す）。書き込まれうる先は全て per-test ディレクトリの下に置き、配り直しの削除に乗せる（向き先だけ張り直しても中身は消えない）。唯一 `CompletionLearning` だけは `shared` が初回タッチで in-memory へ焼くため per-test にできず、プロセス級固定＝学習状態がテスト間で持ち越されるので、書いたテストが自分で消す。実環境を汚さないことは `scripts/verify-test-isolation.sh`（手動・CI 非搭載）で実証する。
+**隔離は単一ハーネスが立てる。** state dir・全 override・ghostty の設定探索先を 1 箇所で立て、テストごとの申告制にしない（対象は `Tests/OrbeTests`。他 5 ターゲットは `Orbe` 以外のモジュール内部を測るだけで、隔離の要る対象を持たない）。申告制は張り忘れが 1 本でも残れば破れる（`GuiConfig` の override を張らないテストが 1 本あれば、`Config.load()` が前回実行の設定を読み戻す）。書き込まれうる先は全て per-test ディレクトリの下に置き、配り直しの削除に乗せる（向き先だけ張り直しても中身は消えない）。唯一 `CompletionLearning` だけは `shared` が初回タッチで in-memory へ焼くため per-test にできず、プロセス級固定＝学習状態がテスト間で持ち越されるので、書いたテストが自分で消す。実環境を汚さないことは `scripts/verify-test-isolation.sh`（手動・CI 非搭載）で実証する。
 
 **テストクラスの doc は「壊れると何が起きるか」を書く。** 何を測るかはテスト名が言う。doc が言うのは、その assert が落ちたとき利用者に何が起きるか——それが無いと、後から読む人はテストを弱めてよいか判断できず、直すより消す方へ倒れる。
 
@@ -62,7 +62,7 @@ updated: 2026-08-06
 - **起動と差し替え**: Foundation のみ。依存は引数で受ける
 - **データ**: 不要（値を直接組む）
 - **実行**: CI 全量
-- **配置**: `Tests/OrbeTests/<型名>Tests.swift`。大きい対象は `<型名>Tests+<話題>.swift` に分割。実行体のモジュール内部シンボルを測るものだけは当該ターゲット（`Tests/OrbeCliTests` / `OrbePathsTests` / `OrbeReportTests`）に置く——`OrbeTestCase` は `OrbeTests` の中にあり他ターゲットからは継承できないので、隔離が要る対象をそちらへ置かない
+- **配置**: `Tests/OrbeTests/<型名>Tests.swift`。大きい対象は `<型名>Tests+<話題>.swift` に分割。`Orbe` 以外のターゲットのモジュール内部シンボルを測るものだけは当該ターゲット（`Tests/OrbeCliTests` / `OrbePathsTests` / `OrbeReportTests` / `OrbeSoundTests` / `OrbeSoundCliTests`）に置く——`OrbeTestCase` は `OrbeTests` の中にあり他ターゲットからは継承できないので、隔離が要る対象をそちらへ置かない
 
 ### L2 プロセス内結合
 
