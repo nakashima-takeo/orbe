@@ -22,6 +22,8 @@ case "play":
   runPlay(Array(args.dropFirst()))
 case "analyze":
   runAnalyze(Array(args.dropFirst()))
+case "board":
+  runBoard(Array(args.dropFirst()))
 default:
   usageDie("unknown command: \(args[0])")
 }

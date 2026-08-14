@@ -13,14 +13,18 @@ let usage = """
     orbe-sound play <name> <done|waiting|-> [--rate <hz>] [--volume <5-100>]
     orbe-sound analyze <name> <done|waiting|-> [--rate <hz>] [--volume <5-100>]
     orbe-sound analyze --all [--rate <hz>] [--volume <5-100>]
+    orbe-sound board [--out <dir>] [--rate <hz>] [--volume <5-100>]
 
   <name> はカタログ 12 案の名前か scratch のエントリ名（list で確認）。カタログは
   <done|waiting> を、scratch はイベント区別が無いので "-" を渡す。
   既定: --rate 48000 / --volume 70。render は --out 省略時、一時ディレクトリへ書く。
   analyze --all はカタログ全 24 音 + scratch の peak / RMS 一覧（ラウドネス整合の目視用）。
+  board は全音の WAV + 自己完結の index.html を書き、そのパスを出す（人間の聴き比べ用。
+  クリック再生と A/B 比較。--out 省略時は毎回同じ場所に上書き＝ブラウザのリロードで最新）。
 
   制作ループ: Sources/orbe-sound/Scratch.swift を編集 →
-    swift build --product orbe-sound && .build/debug/orbe-sound play <name> -
+    swift build --product orbe-sound && .build/debug/orbe-sound board
+  を回し、開きっぱなしのブラウザをリロードして聴く（1 音だけ耳で確かめるなら play でもよい）。
   ビルドは manifest 解決に GhosttyKit（vendor/ghostty）の実在が要る。worktree で未解決なら
   先に ./scripts/build-app.sh を一度回す（main checkout では常に解決済み）。
 

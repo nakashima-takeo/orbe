@@ -2,8 +2,9 @@ import Foundation
 import OrbeSound
 
 /// ad-hoc 音・デモ音の置き場。**ここを 1 行編集 → `swift build --product orbe-sound` →
-/// `orbe-sound play <name> -` が制作ループの本体**。エントリは (名前, SoundProgram)。
-/// 名前はカタログ 12 案と重ならないこと（resolve はカタログ名を優先する）。
+/// `orbe-sound board` 再生成 → ブラウザをリロード、が制作ループの本体**（人間側の聴き比べは
+/// board が担う。1 音だけなら `orbe-sound play <name> -` でも聴ける）。
+/// エントリは (名前, SoundProgram)。名前はカタログ 12 案と重ならないこと（resolve はカタログ名を優先する）。
 enum Scratch {
   static let entries: [(name: String, program: SoundProgram)] = [
     demoSignal, demoBloom, demoAfterglow,

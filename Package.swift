@@ -89,6 +89,11 @@ let package = Package(
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
+      name: "OrbeSoundCliTests",
+      dependencies: ["orbe-sound"],
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .testTarget(
       name: "OrbePathsTests",
       dependencies: ["OrbePaths"],
       swiftSettings: [.swiftLanguageMode(.v5)]
