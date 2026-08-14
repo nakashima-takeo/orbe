@@ -53,7 +53,8 @@ public enum SoundAnalysis {
   public static func spectralPeaks(_ samples: [Float], sampleRate: Double, count: Int)
     -> [SpectralPeak]
   {
-    guard samples.count >= 16 else { return [] }
+    // count 0 は「ピーク不要」（analyze --all の一覧など）。DFT は O(n²) なので回さず返す。
+    guard count > 0, samples.count >= 16 else { return [] }
     let window = min(4096, samples.count)
     // 窓は最大振幅サンプルから始める（減衰音の tonal な本体を捉える）。端では収まる位置へ寄せる。
     var start = 0
