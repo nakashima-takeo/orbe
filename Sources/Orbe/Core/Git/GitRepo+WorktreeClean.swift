@@ -164,6 +164,11 @@ extension GitRepo {
   /// 同名のブランチ（`docs` 等）では `ambiguous argument` で落ちる。cwd は main worktree の `root`
   /// なので、終端しないとその worktree だけ第0段が常に失敗し、黙って旧経路へ退行する。
   ///
+  /// **`branchOrCommit` は曖昧さの無い名前で渡す**——ブランチは `refs/heads/<branch>` の完全 ref、
+  /// detached は oid。短縮名は refs/tags が refs/heads より**先に**解決されるため、同名タグが
+  /// あるとタグの指すコミットを判定してしまう（全経路——第0段 rev-list・cherry・
+  /// `rev-parse ^{tree}`・merge-base——が同じ名前を受けるので、入口の 1 点で塞ぐ）。
+  ///
   /// **素の `git cherry` 単独では multi-commit squash を検出できない。** cherry はコミット 1 個ずつの
   /// patch-id を比べるので、複数コミットを 1 個に畳んだ squash マージでは畳んだ側の patch-id が元のどの
   /// コミットとも一致せず「未取り込み」と誤判定する。そこでブランチの累積差分を 1 個のダングリング

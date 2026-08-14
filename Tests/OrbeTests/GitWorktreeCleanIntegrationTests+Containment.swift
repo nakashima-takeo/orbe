@@ -153,6 +153,62 @@ extension GitWorktreeCleanIntegrationTests {
       "origin に無いコミットは、他 remote に在っても安全と読まない")
   }
 
+  /// **同名タグに判定を奪われない。** git の短縮名解決は refs/tags が refs/heads より**先**なので、
+  /// ブランチと同名のタグ（`v1.0` をタグとブランチの両方に切る運用等）があると、短縮名の判定は
+  /// タグの指すコミットを見る——取り込み済みのブランチが、タグの指す未マージコミットの顔で
+  /// 「独自コミット N 件」を名乗る。プローブは完全 ref（`refs/heads/<branch>`）を渡すので奪われない。
+  func testBranchShadowedByASameNameTagIsJudgedByItsOwnRef() throws {
+    let initial = git(["rev-parse", "HEAD"]).stdoutText
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    try write("m.txt", "1")
+    XCTAssertTrue(git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(git(["commit", "-qm", "m1"]).isSuccess)
+    // ブランチ v1.0 は main の祖先（取り込み済み）。worktree としてチェックアウトしておく。
+    let wt = dir.appendingPathComponent("wt-v1").path
+    XCTAssertTrue(git(["worktree", "add", "-q", "-b", "v1.0", wt, initial]).isSuccess)
+    // 同名タグは未マージのコミット（feat/stray の先端）を指す。
+    XCTAssertTrue(git(["checkout", "-q", "-b", "feat/stray", "main"]).isSuccess)
+    try write("s.txt", "s")
+    XCTAssertTrue(git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(git(["commit", "-qm", "s1"]).isSuccess)
+    XCTAssertTrue(git(["checkout", "-q", "main"]).isSuccess)
+    XCTAssertTrue(git(["tag", "v1.0", "feat/stray"]).isSuccess)
+    try addOrigin(pushing: ["main"])
+
+    XCTAssertEqual(
+      git(["rev-parse", "--verify", "v1.0"]).stdoutText.trimmingCharacters(
+        in: .whitespacesAndNewlines),
+      git(["rev-parse", "--verify", "feat/stray"]).stdoutText.trimmingCharacters(
+        in: .whitespacesAndNewlines),
+      "前提: 短縮名 v1.0 はブランチではなくタグ（未マージコミット）に解決される")
+    XCTAssertEqual(
+      try containment("v1.0"), .unmerged(count: 1),
+      "前提: 短縮名で判定すると、タグの指す未マージコミットの顔になる（曖昧さの実証）")
+
+    XCTAssertEqual(
+      try containment("refs/heads/v1.0"), .reachable(mergedIntoDefault: true),
+      "完全 ref ならブランチ自身が判定される")
+    XCTAssertEqual(
+      try proberContainment(ofWorktreeNamed: "wt-v1"), .reachable(mergedIntoDefault: true),
+      "プローブ経由（本番経路）でも同名タグに奪われない")
+  }
+
+  /// プローブ（`DispatchCleanProber`）を本物の worktree 一覧で回し、対象 worktree の判定を返す。
+  /// パスの突き合わせは末尾名で行う（macOS の /var → /private/var 正規化で完全一致が揺れる）。
+  private func proberContainment(ofWorktreeNamed name: String) throws -> GitBranchContainment? {
+    var probes: [String: DispatchCleanProbe] = [:]
+    let done = expectation(description: "probe")
+    repo.worktrees { worktrees in
+      DispatchCleanProber(repo: self.repo, defaultBranch: "main")
+        .probe(worktrees: worktrees, panes: []) {
+          probes = $0
+          done.fulfill()
+        }
+    }
+    wait(for: [done], timeout: 20)
+    return probes.first { ($0.key as NSString).lastPathComponent == name }?.value.containment
+  }
+
   /// **`rev-list` は pathspec も取る**ので、リポジトリ直下のエントリと同名のブランチ（`docs` 等）は
   /// オプションを終端しないと `ambiguous argument` で落ちる。cwd は main worktree なので、
   /// 終端が無いとその worktree だけ到達性の判定が黙って失敗し、旧経路へ退行する。

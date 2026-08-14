@@ -7,7 +7,8 @@ import XCTest
 final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
   var dir: URL!
   private var remoteRoots: [URL] = []
-  private var repo: GitRepo!
+  /// 分冊（`+Containment`）も読む。
+  var repo: GitRepo!
 
   override func setUpWithError() throws {
     dir = FileManager.default.temporaryDirectory

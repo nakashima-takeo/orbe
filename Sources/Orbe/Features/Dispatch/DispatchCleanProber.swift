@@ -38,8 +38,12 @@ struct DispatchCleanProber {
         }
       }
       group.enter()
+      // ブランチは完全 ref で渡す。短縮名は refs/tags が refs/heads より先に解決されるため、
+      // 同名タグ（`v1.0` をタグとブランチの両方に切る運用等）があるとタグの指すコミットを
+      // 判定してしまう。detached は oid のままで曖昧さが無い。
       repo.branchContainment(
-        branchOrCommit: worktree.branch ?? worktree.head, default: defaultBranch, isolated: true
+        branchOrCommit: worktree.branch.map { "refs/heads/\($0)" } ?? worktree.head,
+        default: defaultBranch, isolated: true
       ) { containment in
         probes[worktree.path]?.containment = containment
         group.leave()
