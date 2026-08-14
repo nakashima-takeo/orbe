@@ -28,9 +28,11 @@ enum DispatchWorktreeClassifier {
     let occupancy = occupancies(worktreePaths: input.worktrees.map(\.path), panes: input.panes)
     let branchByName = Dictionary(
       input.localBranches.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
-    // fork（cross-repo）の PR は他人の同名ブランチの事実なので、突き合わせの**前に**除外する
-    // （`--head` はブランチ名でしか絞れない）。gh の並びは作成日時の降順で、grouping は
-    // 要素順を保つ——head ごとの先頭一致＝最新の PR を採る、という意味論がここで決まる。
+    // cross-repo の PR は他人の同名ブランチの事実として突き合わせの**前に**除外する
+    // （`--head` はブランチ名でしか絞れない）。この足切りは落とす方向にしか誤らない——外し損ねた
+    // 他人の PR で番号を騙るより、自分の PR を落として推定が 1 つ減る方を選ぶ（`isCrossRepository`
+    // が「他人の fork か」と一致しない形は `GitHubBranchPR` を見る）。gh の並びは作成日時の降順で、
+    // grouping は要素順を保つ——head ごとの先頭一致＝最新の PR を採る、という意味論がここで決まる。
     let prsByHead = Dictionary(
       grouping: input.branchPullRequests.filter { !$0.isCrossRepository }, by: \.headRefName)
     return classify(

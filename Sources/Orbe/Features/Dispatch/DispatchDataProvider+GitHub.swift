@@ -18,7 +18,10 @@ extension DispatchDataProvider {
       pullRequests = cached
       pullRequestsLoading = false
     }
-    // 掃除の突き合わせ（PR が OPEN / MERGED か）は行の出し分けに関わらないので loading の概念を持たない。
+    // 掃除の突き合わせ（PR が OPEN / MERGED か）は loading の概念を持たない——未着地は「PR を
+    // 知らない」として扱えばよく、その状態で安全群へ入るには gh に依らない推定（`[gone]`・
+    // prunable）が別に要る。`[gone]` は head を消した結果なので open PR とは両立せず、prunable は
+    // ブランチを消さない行なので、知らないまま失うものが無い。
     if let cached = entry.branchPullRequests { branchPullRequests = cached }
   }
 

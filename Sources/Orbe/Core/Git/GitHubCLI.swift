@@ -88,20 +88,24 @@ final class GitHubCLI {
       ], completion: completion)
   }
 
-  /// ブランチ名指しの PR 取得引数（open/closed を `--state all` の 1 往復で。作成日時の降順に
-  /// 最新 5 件）。**直近 N 件の一覧窓は使わない**——古くにマージされた PR も、古くから開いたままの
-  /// PR も、窓から溢れると「merged チップが出ない」「レビュー中なのに安全確認を素通りする」という
+  /// ブランチ名指しの PR 取得引数（open/closed を `--state all` の 1 往復で。作成日時の降順）。
+  /// **直近 N 件の一覧窓は使わない**——古くにマージされた PR も、古くから開いたままの PR も、
+  /// 窓から溢れると「merged チップが出ない」「レビュー中なのに安全確認を素通りする」という
   /// 取りこぼしになる。`--head` は remote 側でブランチが削除済み（`[gone]`）でも headRefName で
-  /// PR を返す。`--limit 5` は fork（cross-repo）の同名ブランチの PR を呼び出し側が除外した後も、
-  /// 自リポジトリの最新の PR が残るための余白。
+  /// PR を返す。
+  ///
+  /// `--limit 100` は gh が 1 往復で取れる上限。**往復コストは limit に依らない**（実測で 5／30／100
+  /// が同じ）ので、ここを絞る動機が無い一方、絞ると `--head` に混ざる fork の同名ブランチの PR
+  /// （呼び出し側が落とす）で埋まって自リポジトリの PR が窓落ちしうる。上限まで取れば、この
+  /// ブランチの PR が 100 件を超えない限り窓落ちは起きない。
   static func branchPRArguments(head: String) -> [String] {
     [
-      "pr", "list", "--state", "all", "--head", head, "--limit", "5", "--json",
+      "pr", "list", "--state", "all", "--head", head, "--limit", "100", "--json",
       "number,headRefName,state,baseRefName,isCrossRepository",
     ]
   }
 
-  /// 指定ブランチ群に紐づく PR（ブランチごとに最新 5 件・open/closed 両方）。worktree の掃除で
+  /// 指定ブランチ群に紐づく PR（ブランチごとに open/closed 両方）。worktree の掃除で
   /// 「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見る。`nil` = 取得失敗／`[]` = 該当なし。
   func branchPullRequests(
     cwd: String, heads: [String], completion: @escaping ([GitHubBranchPR]?) -> Void

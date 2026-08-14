@@ -189,8 +189,13 @@ struct GitHubBranchPR: Decodable, Equatable {
   let state: String
   /// マージ先ブランチ。**表示専用**（安全判定はローカル git の事実だけで閉じる）。
   let baseRefName: String
-  /// fork（cross-repo）由来か。`--head` はブランチ名でしか絞れないため、他人の fork の同名
-  /// ブランチに立った PR も返る——このリポジトリのブランチの事実として読めるのは自リポジトリの PR だけ。
+  /// head 側のリポジトリが、gh の解決した base リポジトリと別か。`--head` はブランチ名でしか
+  /// 絞れず他人の fork の同名ブランチに立った PR も返るので、突き合わせの足切りに使う。
+  ///
+  /// **「他人の fork か」と厳密には一致しない。** gh は非対話時、base リポジトリを remote 名の
+  /// 優先順（`upstream` > `github` > `origin`）で選ぶ。fork を clone して `upstream` を張った形では
+  /// base が upstream になり、**自分の fork に立てた自分の PR も真になる**——その形では merged
+  /// チップとマージ済みの推定が出なくなる（安全確認は落ちる方向なので、消えて困るものは残る）。
   let isCrossRepository: Bool
 }
 

@@ -99,13 +99,13 @@ final class DispatchGitHubCacheTests: OrbeTestCase {
   /// ブランチの PR は一覧の窓ではなく **worktree にあるブランチの名指し**で、`--state all` の
   /// 1 往復で open / closed の両方を引く。直近 N 件の窓では、窓落ちした PR のぶんだけ
   /// 「マージ済みなのに merged チップが出ない」「レビュー中なのに安全確認を素通りする」が起きる。
-  /// `--limit 5` は fork（cross-repo）の同名ブランチの PR を除外した後も自リポジトリの最新の
-  /// PR が残るための余白。
+  /// `--limit` は gh が 1 往復で取れる上限（100）。往復コストは件数に依らないので、絞ると
+  /// fork（cross-repo）の同名ブランチの PR で埋まって自リポジトリの PR が窓落ちする側にしか働かない。
   func testBranchPRFetchNamesTheBranchInsteadOfAWindow() {
     XCTAssertEqual(
       GitHubCLI.branchPRArguments(head: "refactor/phase2-2b"),
       [
-        "pr", "list", "--state", "all", "--head", "refactor/phase2-2b", "--limit", "5",
+        "pr", "list", "--state", "all", "--head", "refactor/phase2-2b", "--limit", "100",
         "--json", "number,headRefName,state,baseRefName,isCrossRepository",
       ])
   }
