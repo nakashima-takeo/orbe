@@ -61,7 +61,7 @@ struct DispatchCard: View {
       }
     }
     .frame(maxHeight: maxHeight, alignment: .top)
-    .onPreferenceChange(DispatchChromeHeightKey.self) { chromeHeight = $0 }
+    .onPreferenceChange(ChromeHeightKey.self) { chromeHeight = $0 }
     .onPreferenceChange(DispatchContentHeightKey.self) { contentHeight = $0 }
     .modifier(DispatchCardKeyCapture(model: model, focus: $focus))
     // カード内のクリックで焦点を確定し直す（汎用 PaletteCard と同じ契約。行タップも行内の「開く」
@@ -75,7 +75,7 @@ struct DispatchCard: View {
   /// ヘッダ／フッターの実測高を合算して chrome 高に集約する probe。
   private var chromeProbe: some View {
     GeometryReader { proxy in
-      Color.clear.preference(key: DispatchChromeHeightKey.self, value: proxy.size.height)
+      Color.clear.preference(key: ChromeHeightKey.self, value: proxy.size.height)
     }
   }
 
