@@ -79,16 +79,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   /// 実行中プロセスがあれば終了前に 1 回だけ確認する（無警告で殺さない）。窓の ✕・⌘Q／メニュー・
-  /// アップデートの再起動・ログアウトまで、あらゆる終了がこの 1 箇所を通る。文言は現在言語ホルダーから引く。
+  /// アップデートの再起動・ログアウトまで、あらゆる終了がこの 1 箇所を通る。文言は現在言語で引く
+  /// （言語ホルダーが立つ前に終了要求が届いたときは OS 追従。文言を引けないことは確認を省く理由にならない）。
   private func confirmQuitIfNeeded() -> Bool {
-    guard ghostty_app_needs_confirm_quit(Ghostty.shared.app),
-      let localization = windowController?.localization
-    else { return true }
+    guard ghostty_app_needs_confirm_quit(Ghostty.shared.app) else { return true }
+    let language = windowController?.localization.language ?? .systemDefault
     let alert = NSAlert()
-    alert.messageText = localization.string(.quitConfirmTitle)
-    alert.informativeText = localization.string(.quitConfirmMessage)
-    alert.addButton(withTitle: localization.string(.quitConfirmClose))
-    alert.addButton(withTitle: localization.string(.quitConfirmCancel))
+    alert.messageText = L10n.string(.quitConfirmTitle, language)
+    alert.informativeText = L10n.string(.quitConfirmMessage, language)
+    alert.addButton(withTitle: L10n.string(.quitConfirmClose, language))
+    alert.addButton(withTitle: L10n.string(.quitConfirmCancel, language))
     return alert.runModal() == .alertFirstButtonReturn
   }
 
