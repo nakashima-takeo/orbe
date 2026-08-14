@@ -80,9 +80,11 @@ enum GitWorktreeOperationProbe {
 /// ブランチ削除の安全判定の結論。「消して世界に残るか」を、証明の種類ごとに別のケースで語る
 /// （0 という数値に「取り込み済み」を兼務させない——到達性の証明と patch 等価の証明はラベルが違う）。
 enum GitBranchContainment: Equatable {
-  /// 全コミットがいずれかの remote-tracking ref から到達可能（消してもコミットは `refs/remotes/*` と
-  /// remote 側の両方に残る）。`mergedIntoDefault` は既定ブランチが tip を含むか
-  /// （ラベル「merged → \<default\>」を名乗れるか）で、安全事実そのものには関わらない。
+  /// 全コミットが `refs/remotes/origin/*` から到達可能（消してもコミットはそこに残る）。
+  /// **origin に限るのは鮮度の保証範囲と揃えるため**——Orbe が prune するのは origin だけなので、
+  /// 他 remote の tracking ref は remote 側で消えた後もローカルに残り続け、「世界に残る」の根拠にできない。
+  /// `mergedIntoDefault` は既定ブランチが tip を含むか（ラベル「merged → \<default\>」を名乗れるか）で、
+  /// 安全事実そのものには関わらない。
   case reachable(mergedIntoDefault: Bool)
   /// 既定ブランチに patch 等価で存在（cherry 2 段）。ラベルは「merged → \<default\>」。
   case patchEquivalent
@@ -144,12 +146,23 @@ extension GitRepo {
 
   /// ブランチを消して「コミットが世界に残るか」の判定。判定できなければ nil（安全と読まない）。
   ///
-  /// **3 段構え**。第0段は到達性——`rev-list --count <tip> --not --remotes` が 0 なら、全コミットが
-  /// いずれかの remote-tracking ref から到達可能で、worktree とローカルブランチを消してもコミットは
-  /// `refs/remotes/*` と remote 側の両方に残る。比較先の推測なしに安全群の意味論（消して世界に残るか）を
-  /// 直接問えるので、統合先が既定ブランチでないリポジトリ（git-flow の develop 統合等）でも成立する。
+  /// **3 段構え**。第0段は到達性——`rev-list --count <tip> --not --remotes=origin --` が 0 なら、
+  /// 全コミットが `refs/remotes/origin/*` から到達可能で、worktree とローカルブランチを消しても
+  /// コミットはそこに残る。比較先の推測なしに安全群の意味論（消して世界に残るか）を直接問えるので、
+  /// 統合先が既定ブランチでないリポジトリ（git-flow の develop 統合等）でも成立する。
   /// squash/rebase マージは SHA が変わって到達性で見えないため、第1段（素の `git cherry`）・
   /// 第2段（累積差分のダングリングコミットで再 cherry）が既定ブランチとの patch 等価で拾う。
+  ///
+  /// **`--remotes` ではなく `--remotes=origin`。** 信頼する ref の集合は、Orbe が鮮度を保証する集合と
+  /// 一致していなければならない。prune するのは `fetchPrune` の origin だけなので、fork や upstream の
+  /// tracking ref は remote 側で消えた後も残り続ける。それを根拠にすると、`[gone]` で安全群に入った行が
+  /// stale な ref だけを頼りにブランチごと消え、ユーザーが後で全 remote を prune した時点でコミットが
+  /// 到達不能になる。origin に限れば「`[gone]` を作る prune」と「信頼する ref を掃除する prune」が
+  /// 同一操作になり、その組み合わせが構造的に消える。
+  ///
+  /// **`--` でオプションを終端する。** `rev-list` は pathspec も取るので、リポジトリ直下のエントリと
+  /// 同名のブランチ（`docs` 等）では `ambiguous argument` で落ちる。cwd は main worktree の `root`
+  /// なので、終端しないとその worktree だけ第0段が常に失敗し、黙って旧経路へ退行する。
   ///
   /// **素の `git cherry` 単独では multi-commit squash を検出できない。** cherry はコミット 1 個ずつの
   /// patch-id を比べるので、複数コミットを 1 個に畳んだ squash マージでは畳んだ側の patch-id が元のどの
@@ -171,13 +184,14 @@ extension GitRepo {
   ) {
     let lane: GitRunner.Lane = isolated ? .independent : .read
     GitRunner.shared.run(
-      ["rev-list", "--count", branchOrCommit, "--not", "--remotes"], cwd: root, lane: lane
+      ["rev-list", "--count", branchOrCommit, "--not", "--remotes=origin", "--"], cwd: root,
+      lane: lane
     ) { output in
       // 第0段の失敗は nil に直結させない（到達性を諦めて従来の cherry 経路へ倒す）。
       let reachCount =
         output.isSuccess
         ? Int(output.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)) : nil
-      guard reachCount != 0 else {
+      if reachCount == 0 {
         // 安全事実（reachable）は証明済み。is-ancestor は「merged → <default>」を名乗れるかの
         // ラベルだけを決めるので、exit 1（非祖先）と異常失敗を区別せず汎用ラベル側へ倒してよい。
         GitRunner.shared.run(
@@ -211,11 +225,10 @@ extension GitRepo {
         completion(.patchEquivalent)
         return
       }
+      // 失われうる数は到達不能数と patch 非等価数の min（どちらも過大評価なので、より良い過大評価）。
+      let count = reachCount.map { min($0, plus) } ?? plus
       self.squashMergedCheck(branchOrCommit, default: defaultBranch, isolated: isolated) { merged in
-        completion(
-          merged.map {
-            $0 ? .patchEquivalent : .unmerged(count: reachCount.map { min($0, plus) } ?? plus)
-          })
+        completion(merged.map { $0 ? .patchEquivalent : .unmerged(count: count) })
       }
     }
   }
@@ -284,7 +297,7 @@ extension GitRepo {
   /// status で検証済み。submodule は作業コピーと**その worktree 固有の submodule gitdir
   /// （`<common>/worktrees/<id>/modules/…`。common dir 直下ではなく、alternates も持たない独立の
   /// オブジェクトストア）ごと消える**——safe 行は super のブランチのコミットが世界に残ること
-  /// （remote-tracking ref からの到達性、または既定ブランチへの patch 等価）を通っており、
+  /// （`refs/remotes/origin/*` からの到達性、または既定ブランチへの patch 等価）を通っており、
   /// その前提のもとで submodule 側にだけ未 push が残る状態は成立しない。
   /// locked は `-f` 1 個では外れないため、locked な worktree はそもそも安全確認を通さない。
   func removeWorktree(path: String, completion: @escaping (GitWorktreeCleanFailure?) -> Void) {
@@ -306,8 +319,8 @@ extension GitRepo {
   /// 読み直して比べる 2 段と違い窓が無い。分類後に外部からコミットが載ったブランチは
   /// `cannot lock ref … but expected …` で拒否され、失敗行として集約される。
   ///
-  /// `branch -d` に頼らない点は変わらない: safe 行は `branchContainment` の証明（全 remote-tracking
-  /// ref からの到達性、または既定ブランチへの patch 等価）を通っており、これは `-d`（upstream か
+  /// `branch -d` に頼らない点は変わらない: safe 行は `branchContainment` の証明
+  /// （`refs/remotes/origin/*` からの到達性、または既定ブランチへの patch 等価）を通っており、これは `-d`（upstream か
   /// HEAD への到達性のみ）より厳密に強い——`-d` は squash も rebase も統合先が既定ブランチでない
   /// マージも取りこぼすので、先に試しても safe 行ですら通らない。caution 行から
   /// 呼ばれる場合は、ユーザーが行ごとに `worktree + ブランチ` を選ぶ行為が安全確認の上書きになっている。
