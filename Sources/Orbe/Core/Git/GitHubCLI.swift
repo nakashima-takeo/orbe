@@ -30,6 +30,10 @@ final class GitHubCLI {
   /// gh 呼び出しの時間上限（ネット待ちのハングを引きずらない）。
   private let timeout: TimeInterval = 15
 
+  /// 打ち切り後に EOF を待つ猶予。pipe の書き込み端を握る子孫がいると EOF は来ないことがあり、
+  /// **無期限に待つと、待ちそのものが新しいハングになる**（`GitRunner.terminationGrace` と同じ規範）。
+  private static let terminationGrace: TimeInterval = 2
+
   // MARK: - probe
 
   /// 認証情報の有無で判定する引数。`gh auth token` は keyring/config/`GH_TOKEN` を読むだけで
@@ -185,10 +189,12 @@ final class GitHubCLI {
       _ = try? err.fileHandleForReading.readToEnd()
       group.leave()
     }
-    // ネット待ちのハングは時間上限で打ち切る（terminate で pipe が EOF に達し読みも解ける）。
+    // ネット待ちのハングは時間上限で打ち切る（通常は terminate で pipe が EOF に達し読みも解ける）。
+    // EOF が来るかは書き込み端を握る子孫次第なので、打ち切り後の読み終わり待ちも猶予で有界にする
+    // ——ここを無期限にすると、打ち切ったのに返らないという新しいハングになる。
     if group.wait(timeout: .now() + timeout) == .timedOut {
       process.terminate()
-      group.wait()
+      _ = group.wait(timeout: .now() + Self.terminationGrace)
       return Output(status: -1, stdout: Data())
     }
     process.waitUntilExit()
