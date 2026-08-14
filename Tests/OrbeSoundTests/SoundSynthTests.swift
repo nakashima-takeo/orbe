@@ -1,11 +1,11 @@
 import XCTest
 
-@testable import Orbe
+@testable import OrbeSound
 
 /// 通知音の合成プリミティブ（`SoundSynth`）の数値検証。L1 純ロジック・決定論。
-/// design と音がズレたときに疑う 4 箇所——指数エンベロープの減衰区間長・帯域制限・biquad の Q 解釈・
+/// 音がおかしいときに疑う 4 箇所——エンベロープの減衰区間長・帯域制限・biquad の Q 解釈・
 /// コンプレッサの静特性——を、ここで数値として固定する。
-final class SoundSynthTests: OrbeTestCase {
+final class SoundSynthTests: XCTestCase {
 
   // MARK: - AudioParam（指数ランプの起点は「直前のイベント」）
 
@@ -42,7 +42,7 @@ final class SoundSynthTests: OrbeTestCase {
       param.value(at: 0.002), (0.15 * AudioParam.zero).squareRoot(), accuracy: 1e-9)
   }
 
-  /// `setValueAtTime` は次のイベントが撃たれるまで平坦（glide の 4 イベントのゲインがこの形）。
+  /// `setValue` は次のイベントが撃たれるまで平坦（glide のゲート形ゲインがこの形に展開される）。
   func testSetValueHoldsUntilNextEvent() {
     let gain = 0.12
     let duration = 0.4
@@ -58,6 +58,19 @@ final class SoundSynthTests: OrbeTestCase {
     let middle = (duration * 0.7 + duration + 0.15) / 2
     XCTAssertEqual(
       param.value(at: middle), (gain * AudioParam.zero).squareRoot(), accuracy: 1e-9)
+  }
+
+  /// 線形ランプは端点に正確に到達し、中点は算術平均（指数の幾何平均と区別する）。
+  func testLinearRampInterpolatesArithmetically() {
+    var param = AudioParam(0.2, at: 0)
+    param.rampLinearly(to: 1.0, at: 0.1)
+    param.rampLinearly(to: 0, at: 0.3)
+    XCTAssertEqual(param.value(at: 0), 0.2, accuracy: 1e-12)
+    XCTAssertEqual(param.value(at: 0.05), 0.6, accuracy: 1e-12, "中点は算術平均")
+    XCTAssertEqual(param.value(at: 0.1), 1.0, accuracy: 1e-12)
+    XCTAssertEqual(param.value(at: 0.2), 0.5, accuracy: 1e-12)
+    XCTAssertEqual(param.value(at: 0.3), 0, accuracy: 1e-12, "指数と違い 0 へ正確に到達する")
+    XCTAssertEqual(param.value(at: 1), 0, accuracy: 1e-12, "以降は保持")
   }
 
   // MARK: - 帯域制限（Nyquist 超の倍音を足さない）
@@ -81,6 +94,19 @@ final class SoundSynthTests: OrbeTestCase {
     XCTAssertEqual(
       Waveform.square.sample(phase: phase, frequency: 7000, sampleRate: 48000),
       4 / Double.pi * (sin(phase) + sin(3 * phase) / 3), accuracy: 1e-12, "3f < Nyquist は足す")
+  }
+
+  /// sawtooth は全倍音（偶数次も）を 1/k で持ち、やはり Nyquist で打ち切る。
+  func testSawtoothHasAllHarmonicsBelowNyquist() {
+    let phase = 0.9
+    // f=9000: 2 倍音（18000）までが Nyquist（24000）未満。
+    XCTAssertEqual(
+      Waveform.sawtooth.sample(phase: phase, frequency: 9000, sampleRate: 48000),
+      2 / Double.pi * (sin(phase) + sin(2 * phase) / 2), accuracy: 1e-12, "偶数次も足す")
+    // f=13000: 基音のみ。
+    XCTAssertEqual(
+      Waveform.sawtooth.sample(phase: phase, frequency: 13000, sampleRate: 48000),
+      2 / Double.pi * sin(phase), accuracy: 1e-12)
   }
 
   /// sine は倍音を持たない（帯域制限の分岐に巻き込まれない）。
@@ -184,6 +210,37 @@ final class SoundSynthTests: OrbeTestCase {
     DynamicsCompressor.apply(to: &loud, sampleRate: 48000)
     XCTAssertLessThan(
       loud.last! / quiet.last!, 45, "入力の 90 倍差が半分以下へ詰まる＝実際に圧縮している")
+  }
+
+  // MARK: - コンプレッサの動特性（attack で徐々に潰し・release で徐々に戻す）
+  // 入力は一定振幅の DC で与える——レベル検出は瞬時値 |sample| なので、正弦だと検出レベルが
+  // 波形の内側で往復して包絡が単調にならない（既存の静特性テストと同じ流儀）。
+
+  /// 一定の大信号は attack の時定数で徐々に潰れ、定常値へ落ち着く（トランジェントを残す契約。
+  /// この段は「ピーク ≤ 1」を保証しない——attack より速い立ち上がりは通り抜ける）。
+  func testCompressorAttackDeepensGainReductionGradually() {
+    var samples = [Double](repeating: 0.9, count: 4800)
+    DynamicsCompressor.apply(to: &samples, sampleRate: 48000)
+    XCTAssertGreaterThan(samples[0], 1.5, "先頭はまだ圧縮が効いていない（通り抜ける）")
+    let rises = (1..<1440).contains { samples[$0] > samples[$0 - 1] + 1e-12 }
+    XCTAssertFalse(rises, "attack 中は単調に沈む")
+    XCTAssertEqual(samples[1440], samples.last!, accuracy: 1e-3, "30 ms（10τ）で定常")
+    XCTAssertEqual(samples.last!, 0.647, accuracy: 5e-3, "定常値 = 静特性 × メイクアップ")
+  }
+
+  /// 大→小の遷移後、残ったゲインリダクションは release の時定数（250 ms で 1/e）で戻り、
+  /// やがて小信号の素通し値（0.01 × makeup）へ収束していく。
+  func testCompressorReleaseRecoversWithItsTimeConstant() {
+    let loudCount = 9600  // 0.2 s = attack 時定数の 66 倍。遷移前に定常へ達している。
+    var samples =
+      [Double](repeating: 0.9, count: loudCount) + [Double](repeating: 0.01, count: 24000)
+    DynamicsCompressor.apply(to: &samples, sampleRate: 48000)
+    let quiet = Array(samples[loudCount...])
+    let recovered = 0.01 * DynamicsCompressor.makeupGain
+    XCTAssertLessThan(quiet.first!, recovered * 0.7, "遷移直後は残った圧縮で沈む")
+    XCTAssertEqual(quiet[12000], 0.01301, accuracy: 5e-4, "250 ms 後の残りは遷移時の 1/e（dB）")
+    let falls = (1..<quiet.count).contains { quiet[$0] < quiet[$0 - 1] - 1e-12 }
+    XCTAssertFalse(falls, "release 中は単調に戻る")
   }
 
   /// 期待値は `[b0, b1, b2, a1, a2]`（a0 で正規化済み）。

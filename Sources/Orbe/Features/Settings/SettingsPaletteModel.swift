@@ -1,3 +1,4 @@
+import OrbeSound
 import SwiftUI
 
 /// Cmd+, で開く設定パレットの状態機械（ドリルイン式）。

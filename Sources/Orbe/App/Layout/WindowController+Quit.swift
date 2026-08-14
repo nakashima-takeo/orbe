@@ -1,20 +1,18 @@
 import AppKit
-import GhosttyKit
 
-/// 実行中プロセスの終了確認。ウィンドウ閉じ（`windowShouldClose`）と ⌘Q 終了
-/// （`AppDelegate.applicationShouldTerminate`）が共用する。文言は現在言語ホルダーから引く。
+/// 窓の ✕ をアプリ終了の要求へ橋渡しする。終了してよいかの判断（実行中プロセスの確認）は
+/// 唯一の関門である `AppDelegate.applicationShouldTerminate` が持つ。
 extension WindowController {
-  // 実行中プロセスがあれば閉じる前に 1 回だけ確認（無警告で殺さない）。
-  func windowShouldClose(_ sender: NSWindow) -> Bool { confirmCloseIfNeeded() }
-
-  /// 実行中プロセスがあれば 1 回だけ確認（無ければ true）。
-  func confirmCloseIfNeeded() -> Bool {
-    guard ghostty_app_needs_confirm_quit(Ghostty.shared.app) else { return true }
-    let alert = NSAlert()
-    alert.messageText = localization.string(.quitConfirmTitle)
-    alert.informativeText = localization.string(.quitConfirmMessage)
-    alert.addButton(withTitle: localization.string(.quitConfirmClose))
-    alert.addButton(withTitle: localization.string(.quitConfirmCancel))
-    return alert.runModal() == .alertFirstButtonReturn
+  /// Orbe は単一ウィンドウなので、この窓を閉じることはアプリを終了することと同義。本当の問いは
+  /// 「閉じてよいか」ではなく「終了してよいか」なので、可否は終了の関門へ委ね、ここでは窓を閉じずに
+  /// 終了を要求するだけにする。先に窓を閉じてしまうと、確認をキャンセルしたときに
+  /// メニューバーの常駐アイテムだけが残るゾンビ状態になる。窓が閉じるのは終了が確定した後。
+  func windowShouldClose(_ sender: NSWindow) -> Bool {
+    // 「閉じてよいか」を即答する契約に従い、確認モーダルと終了シーケンスは次のランループへ送る。
+    // main キューではなくランループへ積む。キューのブロック実行中にモーダルへ入ると、その入れ子の
+    // 間 main キューは次を捌けず、端末描画（`Ghostty` の wakeup → tick）も制御 API も答えを待つ間
+    // 止まってしまう——実行中プロセスの是非を問う画面で、当のプロセスの出力が凍る。
+    RunLoop.main.perform { NSApp.terminate(nil) }
+    return false
   }
 }

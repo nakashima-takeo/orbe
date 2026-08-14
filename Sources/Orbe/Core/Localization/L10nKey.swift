@@ -28,7 +28,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   // MARK: - Quit confirm（実行中プロセスの終了確認）
   case quitConfirmTitle
   case quitConfirmMessage
-  case quitConfirmClose
+  case quitConfirmQuit
   case quitConfirmCancel
 
   // MARK: - Language select（初回言語選択カード・設定の言語ドリルイン）

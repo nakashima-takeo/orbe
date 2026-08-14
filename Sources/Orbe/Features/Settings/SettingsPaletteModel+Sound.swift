@@ -1,3 +1,4 @@
+import OrbeSound
 import SwiftUI
 
 /// 通知音サブパレットの試聴と確定。本体（状態機械）から分離する。

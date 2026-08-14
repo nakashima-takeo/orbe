@@ -1,4 +1,5 @@
 import Foundation
+import OrbeSound
 
 /// 「鳴らすか・何を鳴らすか」の判断（純関数）。設定だけを見るのでテストで全組み合わせを機械検証できる。
 ///

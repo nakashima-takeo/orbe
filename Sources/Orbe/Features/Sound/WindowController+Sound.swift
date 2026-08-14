@@ -1,4 +1,5 @@
 import AppKit
+import OrbeSound
 
 /// エージェント状態の変化を通知音へ流す。`noteAttentionTransient`（メニューバー②）と同じ発火点・
 /// 同じ抑制条件で並ぶ 3 番目の利用者。

@@ -28,8 +28,8 @@ enum L10n {
 
     // MARK: Quit confirm
     .quitConfirmTitle: ("実行中のプロセスがあります", "A process is still running"),
-    .quitConfirmMessage: ("閉じるとプロセスは中断されます。", "Closing will interrupt the process."),
-    .quitConfirmClose: ("閉じる", "Close"),
+    .quitConfirmMessage: ("終了するとプロセスは中断されます。", "Quitting will interrupt the process."),
+    .quitConfirmQuit: ("終了", "Quit"),
     .quitConfirmCancel: ("キャンセル", "Cancel"),
 
     // MARK: Language select
