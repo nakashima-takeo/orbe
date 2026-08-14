@@ -1,4 +1,5 @@
 import AppKit
+import GhosttyKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private var windowController: WindowController!
@@ -73,9 +74,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
-  // ⌘Q（メニュー）による終了も、ウィンドウ閉じと同じく実行中プロセスを無警告で殺さない（1 回だけ確認）。
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-    (windowController?.confirmCloseIfNeeded() ?? true) ? .terminateNow : .terminateCancel
+    confirmQuitIfNeeded() ? .terminateNow : .terminateCancel
+  }
+
+  /// 実行中プロセスがあれば終了前に 1 回だけ確認する（無警告で殺さない）。窓の ✕・⌘Q／メニュー・
+  /// アップデートの再起動・ログアウトまで、あらゆる終了がこの 1 箇所を通る。文言は現在言語ホルダーから引く。
+  private func confirmQuitIfNeeded() -> Bool {
+    guard ghostty_app_needs_confirm_quit(Ghostty.shared.app),
+      let localization = windowController?.localization
+    else { return true }
+    let alert = NSAlert()
+    alert.messageText = localization.string(.quitConfirmTitle)
+    alert.informativeText = localization.string(.quitConfirmMessage)
+    alert.addButton(withTitle: localization.string(.quitConfirmClose))
+    alert.addButton(withTitle: localization.string(.quitConfirmCancel))
+    return alert.runModal() == .alertFirstButtonReturn
   }
 
   // 終了時にデバウンス待ちの構成変更を取りこぼさず確定保存する。
