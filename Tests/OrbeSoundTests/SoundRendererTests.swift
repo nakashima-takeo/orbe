@@ -83,6 +83,222 @@ final class SoundRendererTests: XCTestCase {
       "エフェクト無しの全長は部品の発音終了まで")
   }
 
+  // MARK: - 観測ヘルパ（時変周波数はゼロ交差から推定する。量子化誤差 ±1/(2W)・振幅と波形に非依存）
+
+  private func zeroCrossings(_ samples: [Float], in range: Range<Int>) -> Int {
+    var count = 0
+    for i in range.dropFirst() where (samples[i - 1] < 0) != (samples[i] < 0) { count += 1 }
+    return count
+  }
+
+  private func estimatedFrequency(of samples: [Float], from: Double, to: Double) -> Double {
+    let range = Int(from * sampleRate)..<min(samples.count, Int(to * sampleRate))
+    return Double(zeroCrossings(samples, in: range)) / (2 * (to - from))
+  }
+
+  private func peaks(of samples: ArraySlice<Float>, count: Int = 8) -> [SoundAnalysis.SpectralPeak]
+  {
+    SoundAnalysis.spectralPeaks(Array(samples), sampleRate: sampleRate, count: count)
+  }
+
+  // MARK: - glide（周波数軌道）
+
+  private func glide(from: Double, to: Double, detuneCents: Double = 0, overshoot: Double? = nil)
+    -> SoundProgram
+  {
+    SoundProgram(components: [
+      .glide(
+        GlideSpec(
+          from: from, to: to, detuneCents: detuneCents, start: 0, duration: 0.4, gain: 0.2,
+          overshoot: overshoot))
+    ])
+  }
+
+  /// glide は from の音程で始まり、duration で to へ到達する。
+  func testGlideMovesFromStartFrequencyToTarget() {
+    let samples = render(glide(from: 300, to: 900))
+    XCTAssertEqual(estimatedFrequency(of: samples, from: 0, to: 0.02), 300, accuracy: 30)
+    XCTAssertEqual(estimatedFrequency(of: samples, from: 0.40, to: 0.45), 900, accuracy: 15)
+  }
+
+  /// overshoot は 0.6d の経由点で to を超えてから to へ落ち着く（弾みの跳ね上がり）。
+  func testGlideOvershootRisesAboveTheTargetBeforeSettling() {
+    let samples = render(glide(from: 300, to: 900, overshoot: 1.5))
+    XCTAssertGreaterThan(
+      estimatedFrequency(of: samples, from: 0.22, to: 0.26), 1000, "経由点で to を超える")
+    XCTAssertEqual(
+      estimatedFrequency(of: samples, from: 0.40, to: 0.45), 900, accuracy: 15, "最後は to へ落ち着く")
+  }
+
+  /// detuneCents は軌道全体（from も to も）へ周波数比として掛かる。
+  func testGlideDetuneScalesTheWholeTrajectory() {
+    let base = render(glide(from: 300, to: 900))
+    let detuned = render(glide(from: 300, to: 900, detuneCents: 200))
+    let ratio =
+      Double(zeroCrossings(detuned, in: detuned.indices))
+      / Double(zeroCrossings(base, in: base.indices))
+    XCTAssertEqual(ratio, pow(2, 200.0 / 1200), accuracy: 0.01)
+  }
+
+  // MARK: - FM（側波帯は f ± n·f·ratio。負の位置は 0 Hz で折り返す）
+
+  private func fm(index: Envelope, duration: Double = 0.5) -> SoundProgram {
+    SoundProgram(components: [
+      .fm(FMSpec(frequency: 440, start: 0, duration: duration, ratio: 2, index: index, gain: 0.2))
+    ])
+  }
+
+  /// 実効変調指数 β = index/ratio ≈ 0 の FM はキャリア純音（側波帯が立たない）。
+  func testFMWithNearZeroIndexIsAPureCarrier() {
+    let found = SoundAnalysis.spectralPeaks(
+      render(fm(index: .constant(0))), sampleRate: sampleRate, count: 5)
+    XCTAssertFalse(found.isEmpty)
+    for peak in found {
+      XCTAssertEqual(peak.frequency, 440, accuracy: 50, "キャリア以外のピーク: \(found)")
+    }
+  }
+
+  /// index を上げると上側波帯 f + f·ratio が立つ（金属質の倍音の正体）。
+  func testFMIndexRaisesTheUpperSideband() {
+    let found = SoundAnalysis.spectralPeaks(
+      render(fm(index: .constant(2))), sampleRate: sampleRate, count: 5)
+    let resolution = sampleRate / 4096
+    XCTAssertTrue(
+      found.contains { abs($0.frequency - 1320) < resolution + 5 && $0.levelDB > -10 },
+      "上側波帯 1320 Hz が立たない: \(found)")
+  }
+
+  /// index 減衰形では立ち上がりだけ側波帯が濃く、終端はキャリアのみへ収束する
+  /// （steel の「立ち上がりだけ倍音が濃い金属打音」の根拠）。
+  func testFMIndexEnvelopeFadesTheSidebandsOverTime() {
+    let samples = render(fm(index: .sweep(from: 5, to: 0.02, endFraction: 0.35), duration: 1.0))
+    let window = 4096
+    func sidebandLevel(_ peaks: [SoundAnalysis.SpectralPeak]) -> Double {
+      peaks.filter { abs($0.frequency - 1320) < 30 }.map(\.levelDB).max() ?? -60
+    }
+    let head = sidebandLevel(peaks(of: samples[0..<window]))
+    let tailStart = Int(1.0 * sampleRate) - window
+    let tail = sidebandLevel(peaks(of: samples[tailStart..<(tailStart + window)]))
+    XCTAssertGreaterThan(head, -20, "前半窓に側波帯が立たない")
+    XCTAssertLessThan(tail, -40, "終端窓で側波帯が消えない")
+  }
+
+  // MARK: - tone lowpass / noise cutoff
+
+  /// tone の lowpass はカットオフ超の倍音を減衰させる（arcade・demo の角の丸めが頼る配線）。
+  func testToneLowpassAttenuatesHarmonicsAboveTheCutoff() {
+    func harmonicLevel(lowpass: Double?) -> Double {
+      let program = SoundProgram(components: [
+        .tone(
+          ToneSpec(
+            frequency: 500, start: 0, duration: 0.4, waveform: .sawtooth, gain: 0.2,
+            envelope: .gate(attack: 0.01, sustainFraction: 0.9, release: 0.05), lowpass: lowpass))
+      ])
+      let samples = render(program)
+      return peaks(of: samples[...]).filter { abs($0.frequency - 2000) < 30 }
+        .map(\.levelDB).max() ?? -60
+    }
+    let open = harmonicLevel(lowpass: nil)
+    XCTAssertGreaterThan(open, -16, "フィルタ無しでは第 4 倍音が立つ")
+    XCTAssertLessThan(harmonicLevel(lowpass: 1000), open - 8, "lowpass で大きく落ちる")
+  }
+
+  /// bandpass + cutoff sweep は帯域中心を時間で上へ動かす（ゼロ交差率の順序で観測する
+  /// ——支配的スペクトルピークは雑音 1 実現の当たり外れで逆転し得るため、値は主張しない）。
+  func testNoiseCutoffSweepRaisesTheBandOverTime() {
+    let program = SoundProgram(components: [
+      .noise(
+        NoiseSpec(
+          start: 0, duration: 0.6, gain: 0.3, kind: .bandpass,
+          cutoff: .sweep(from: 500, to: 4000), q: 2,
+          envelope: .gate(attack: 0.01, sustainFraction: 0.95, release: 0.05)))
+    ])
+    let samples = render(program)
+    let head = zeroCrossings(samples, in: 0..<Int(0.1 * sampleRate))
+    let tail = zeroCrossings(samples, in: Int(0.5 * sampleRate)..<Int(0.6 * sampleRate))
+    XCTAssertGreaterThan(tail, head, "後半窓のゼロ交差率が上がらない")
+  }
+
+  /// 値が動かない cutoff は、固定係数経路でも毎サンプル係数を組む経路でも同じ音になる
+  /// （constantValue 最適化が音を変えないこと。全点同値の列も固定経路に入るため、
+  /// 可変経路は「聴感上同値だが値が異なる」sweep で踏む）。
+  func testConstantCutoffMatchesThePerSampleCoefficientPath() {
+    func rendered(cutoff: Envelope) -> [Float] {
+      SoundRenderer.render(
+        program: SoundProgram(components: [
+          .noise(NoiseSpec(start: 0, duration: 0.3, gain: 0.3, kind: .bandpass, cutoff: cutoff))
+        ]), volume: 70, sampleRate: sampleRate, seedKey: "same")
+    }
+    let fixed = rendered(cutoff: .constant(1200))
+    let variable = rendered(cutoff: .sweep(from: 1200, to: 1200 * (1 + 1e-10)))
+    XCTAssertEqual(fixed.count, variable.count)
+    let maxDiff = zip(fixed, variable).map { abs(Double($0) - Double($1)) }.max() ?? .infinity
+    XCTAssertLessThan(maxDiff, 1e-6)
+  }
+
+  /// 同一仕様の noise 部品どうしは別々の雑音列になる（部品インデックスがシードに混ざる）。
+  /// 無相関なら 2 本の重なりは +3 dB、同一列に退行すると +6 dB になり質感も変わる。
+  func testIdenticalNoiseComponentsGetIndependentNoise() {
+    func rms(componentCount: Int) -> Double {
+      let spec = NoiseSpec(
+        start: 0, duration: 0.3, gain: 0.1, kind: .bandpass, cutoff: .constant(1200))
+      let program = SoundProgram(
+        components: Array(repeating: SoundComponent.noise(spec), count: componentCount))
+      // コンプレッサの非線形が加算則を歪めないよう、threshold の遥か下の小音量で測る。
+      return SoundAnalysis.rmsDB(
+        SoundRenderer.render(program: program, volume: 5, sampleRate: sampleRate, seedKey: "mix"))
+    }
+    XCTAssertEqual(rms(componentCount: 2) - rms(componentCount: 1), 3.01, accuracy: 1.0)
+  }
+
+  // MARK: - pitchLFO
+
+  /// pitchLFO は瞬時周波数を depth（Hz）幅で山谷に揺らす（reply / whistle のビブラート）。
+  /// LFO 位相は 0 起点なので山 = 1/(4·rate)、谷 = 3/(4·rate)。
+  func testPitchLFOSwingsTheInstantFrequencyByDepth() {
+    func program(lfo: LFO?) -> SoundProgram {
+      SoundProgram(components: [
+        .tone(
+          ToneSpec(
+            frequency: 1000, start: 0, duration: 0.4, gain: 0.2,
+            envelope: .gate(attack: 0.01, sustainFraction: 0.9, release: 0.05), pitchLFO: lfo))
+      ])
+    }
+    let still = render(program(lfo: nil))
+    XCTAssertEqual(estimatedFrequency(of: still, from: 0.04, to: 0.06), 1000, accuracy: 30)
+    XCTAssertEqual(estimatedFrequency(of: still, from: 0.14, to: 0.16), 1000, accuracy: 30)
+    let vibrato = render(program(lfo: LFO(rate: 5, depth: 100)))
+    XCTAssertGreaterThan(estimatedFrequency(of: vibrato, from: 0.04, to: 0.06), 1050, "山窓")
+    XCTAssertLessThan(estimatedFrequency(of: vibrato, from: 0.14, to: 0.16), 950, "谷窓")
+  }
+
+  // MARK: - 境界（duration は打ち切りの契約）
+
+  /// duration が部品より短ければその長さで打ち切られ、duration 以降に始まる部品は書かれない。
+  func testProgramDurationTruncatesAndExcludesOutOfRangeComponents() {
+    let truncated = render(
+      SoundProgram(
+        components: [.tone(ToneSpec(frequency: 700, start: 0, duration: 0.5, gain: 0.2))],
+        duration: 0.1))
+    XCTAssertEqual(truncated.count, Int((0.1 * sampleRate).rounded(.up)))
+    XCTAssertGreaterThan(truncated.map(abs).max() ?? 0, 0, "打ち切りまでは鳴る")
+    let silent = render(
+      SoundProgram(
+        components: [.tone(ToneSpec(frequency: 700, start: 0.5, duration: 0.2, gain: 0.2))],
+        duration: 0.5))
+    XCTAssertEqual(silent.map(abs).max(), 0, "範囲外の部品は 1 サンプルも書かない")
+  }
+
+  /// duration 0 は部品の有無を問わず 1 フレームの無音（frameCount の下限）。
+  func testZeroDurationYieldsASingleSilentFrame() {
+    XCTAssertEqual(render(SoundProgram(components: [])), [0])
+    XCTAssertEqual(
+      render(
+        SoundProgram(
+          components: [.tone(ToneSpec(frequency: 700, start: 0, duration: 0.2, gain: 0.2))],
+          duration: 0)), [0])
+  }
+
   /// program のレンダリングも決定論（ノイズ部品は seedKey で固定される）。
   func testProgramRenderIsDeterministic() {
     let program = SoundProgram(

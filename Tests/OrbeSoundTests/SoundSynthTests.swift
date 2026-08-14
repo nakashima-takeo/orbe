@@ -212,6 +212,37 @@ final class SoundSynthTests: XCTestCase {
       loud.last! / quiet.last!, 45, "入力の 90 倍差が半分以下へ詰まる＝実際に圧縮している")
   }
 
+  // MARK: - コンプレッサの動特性（attack で徐々に潰し・release で徐々に戻す）
+  // 入力は一定振幅の DC で与える——レベル検出は瞬時値 |sample| なので、正弦だと検出レベルが
+  // 波形の内側で往復して包絡が単調にならない（既存の静特性テストと同じ流儀）。
+
+  /// 一定の大信号は attack の時定数で徐々に潰れ、定常値へ落ち着く（トランジェントを残す契約。
+  /// この段は「ピーク ≤ 1」を保証しない——attack より速い立ち上がりは通り抜ける）。
+  func testCompressorAttackDeepensGainReductionGradually() {
+    var samples = [Double](repeating: 0.9, count: 4800)
+    DynamicsCompressor.apply(to: &samples, sampleRate: 48000)
+    XCTAssertGreaterThan(samples[0], 1.5, "先頭はまだ圧縮が効いていない（通り抜ける）")
+    let rises = (1..<1440).contains { samples[$0] > samples[$0 - 1] + 1e-12 }
+    XCTAssertFalse(rises, "attack 中は単調に沈む")
+    XCTAssertEqual(samples[1440], samples.last!, accuracy: 1e-3, "30 ms（10τ）で定常")
+    XCTAssertEqual(samples.last!, 0.647, accuracy: 5e-3, "定常値 = 静特性 × メイクアップ")
+  }
+
+  /// 大→小の遷移後、残ったゲインリダクションは release の時定数（250 ms で 1/e）で戻り、
+  /// やがて小信号の素通し値（0.01 × makeup）へ収束していく。
+  func testCompressorReleaseRecoversWithItsTimeConstant() {
+    let loudCount = 9600  // 0.2 s = attack 時定数の 66 倍。遷移前に定常へ達している。
+    var samples =
+      [Double](repeating: 0.9, count: loudCount) + [Double](repeating: 0.01, count: 24000)
+    DynamicsCompressor.apply(to: &samples, sampleRate: 48000)
+    let quiet = Array(samples[loudCount...])
+    let recovered = 0.01 * DynamicsCompressor.makeupGain
+    XCTAssertLessThan(quiet.first!, recovered * 0.7, "遷移直後は残った圧縮で沈む")
+    XCTAssertEqual(quiet[12000], 0.01301, accuracy: 5e-4, "250 ms 後の残りは遷移時の 1/e（dB）")
+    let falls = (1..<quiet.count).contains { quiet[$0] < quiet[$0 - 1] - 1e-12 }
+    XCTAssertFalse(falls, "release 中は単調に戻る")
+  }
+
   /// 期待値は `[b0, b1, b2, a1, a2]`（a0 で正規化済み）。
   private func assertCoefficients(
     _ c: Biquad.Coefficients, _ expected: [Double],
