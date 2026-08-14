@@ -1,7 +1,7 @@
 import Foundation
 
-/// 通知音の合成プリミティブ。design（Web Audio のノードグラフ）の意味論を Swift の純関数へ写したもので、
-/// 音を出す手段は一切持たない（再生は `SoundPlayer`、音の定義は `SoundCatalog`、組み立ては `SoundRenderer`）。
+/// 通知音の合成プリミティブ（オートメーション・波形・フィルタ・雑音・コンプレッサ）。すべて純関数で、
+/// 音を出す手段は一切持たない（再生は Orbe 側の `SoundPlayer`、音の定義は `SoundCatalog`、組み立ては `SoundRenderer`）。
 ///
 /// 同じ入力から常に同じ波形が出る（乱数も固定シード）。だから波形そのものをテストで機械検証できる。
 
@@ -112,9 +112,9 @@ public enum Waveform: Hashable {
   }
 }
 
-/// Web Audio `BiquadFilterNode`（＝RBJ Audio EQ Cookbook）の係数と Direct Form I の適用。
+/// 2 次 IIR フィルタ（RBJ Audio EQ Cookbook の係数・Direct Form I の適用）。
 ///
-/// **Q の解釈が種別で違う**: lowpass / highpass はデシベル（Web Audio 仕様の規定）、bandpass は線形。
+/// **Q の解釈が種別で違うのはこのエンジンの規約**: lowpass / highpass はデシベル、bandpass は線形。
 /// 取り違えると遊技のこもり具合・気配や洋琴のノイズの色が変わる。
 public struct Biquad {
   public enum Kind: Hashable { case lowpass, highpass, bandpass }
@@ -177,8 +177,8 @@ public struct Biquad {
   }
 }
 
-/// 白色雑音（一様分布 [-1, 1)）。design の `Math.random() * 2 - 1` と同じ分布を、固定シードの
-/// SplitMix64 で決定論的に出す（毎回同じ波形＝テストが再現する。白色なので聴感上の性格は同じ）。
+/// 白色雑音（一様分布 [-1, 1)）。固定シードの SplitMix64 で決定論的に出す
+/// （毎回同じ波形＝テストが再現する。白色なので聴感上の性格はシードに依らない）。
 struct WhiteNoise {
   private var state: UInt64
 
@@ -195,11 +195,9 @@ struct WhiteNoise {
   }
 }
 
-/// Web Audio `DynamicsCompressorNode` を**全パラメータ既定値**で使う master のコンプレッサ。
-/// 仕様が規定するのは静特性の折れ位置（threshold・knee 幅・比）とメイクアップゲインの導き方だけで、
-/// ニーの曲線形と Chrome 実装固有の細部（約 6ms の先読みディレイ・多段リリースカーブ）は委ねられている。
-/// ここは静特性＋メイクアップ＋1 次追従で「圧縮の量と時定数」を合わせる
-/// ——これがブラウザと Orbe の音が完全一致しない唯一の要因になる。
+/// マスタチェーン末段のコンプレッサ。静特性（threshold / knee / ratio）＋メイクアップゲイン＋
+/// 1 次追従（attack / release）で「圧縮の量と時定数」を決める。音量はこの手前に掛かるため、
+/// 音量を上げるほど圧縮が深くなる——「大きくしても割れない」はこの段の保証。
 enum DynamicsCompressor {
   static let threshold = -24.0  // dB
   static let knee = 30.0  // dB
@@ -207,13 +205,13 @@ enum DynamicsCompressor {
   static let attack = 0.003  // s
   static let release = 0.25  // s
 
-  /// ニーが終わる入力レベル。仕様は `knee` を「threshold の**上**へ伸びる幅」と規定する
-  /// （knee end threshold = threshold + knee）ので、圧縮域は [-24, +6] dB。ニーを threshold の
-  /// 中央に置くと -39 dB から圧縮が始まり、仕様が素通しを要求する領域まで潰す。
+  /// ニーが終わる入力レベル。`knee` は「threshold の**上**へ伸びる幅」（kneeEnd = threshold + knee）
+  /// なので、圧縮域は [-24, +6] dB。ニーを threshold の中央に置くと -39 dB から圧縮が始まり、
+  /// 素通しであるべき小信号まで潰す。
   static let kneeEnd = threshold + knee
 
   /// 静特性（入力 dB → 出力 dB）。threshold までは素通し、ニーの中は二次で滑らかに、上は比で圧縮。
-  /// ニーの曲線形は仕様が実装に委ねる部分なので、連続かつ微分連続な二次で置く。
+  /// ニーは連続かつ微分連続な二次に置く——折れ目の段差は圧縮の掛かり始めで音色の急変として聴こえる。
   static func curve(inputDB x: Double) -> Double {
     if x < threshold { return x }
     if x <= kneeEnd {
@@ -223,8 +221,8 @@ enum DynamicsCompressor {
     return curve(inputDB: kneeEnd) + (x - kneeEnd) / ratio
   }
 
-  /// メイクアップゲイン（線形）。仕様の "Computing the makeup gain"——静特性を線形 1.0（＝0 dB）へ
-  /// 当てた値の逆数の 0.6 乗。**静特性から導く**ので、ニーを動かせば自動で追従する（定数を焼かない）。
+  /// メイクアップゲイン（線形）。静特性を 0 dB 入力へ当てた値の逆数の 0.6 乗で、圧縮で失う
+  /// 全体レベルを取り戻す。**静特性から導く**ので、ニーを動かせば自動で追従する（定数を焼かない）。
   static let makeupGain = pow(pow(10, curve(inputDB: 0) / 20), -0.6)
 
   /// ピーク検出＋1 次追従で全サンプルへ掛ける（in-place）。最後にメイクアップゲインを乗せる。

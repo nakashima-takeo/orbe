@@ -3,7 +3,7 @@ import XCTest
 @testable import OrbeSound
 
 /// 通知音の合成プリミティブ（`SoundSynth`）の数値検証。L1 純ロジック・決定論。
-/// design と音がズレたときに疑う 4 箇所——指数エンベロープの減衰区間長・帯域制限・biquad の Q 解釈・
+/// 音がおかしいときに疑う 4 箇所——エンベロープの減衰区間長・帯域制限・biquad の Q 解釈・
 /// コンプレッサの静特性——を、ここで数値として固定する。
 final class SoundSynthTests: XCTestCase {
 
@@ -42,7 +42,7 @@ final class SoundSynthTests: XCTestCase {
       param.value(at: 0.002), (0.15 * AudioParam.zero).squareRoot(), accuracy: 1e-9)
   }
 
-  /// `setValueAtTime` は次のイベントが撃たれるまで平坦（glide の 4 イベントのゲインがこの形）。
+  /// `setValue` は次のイベントが撃たれるまで平坦（glide のゲート形ゲインがこの形に展開される）。
   func testSetValueHoldsUntilNextEvent() {
     let gain = 0.12
     let duration = 0.4
