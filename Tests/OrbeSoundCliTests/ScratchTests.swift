@@ -8,8 +8,7 @@ import XCTest
 /// Scratch は頻繁に編集する前提のファイルなので、規約はエントリを足すたびここが自動で守る。
 final class ScratchTests: XCTestCase {
 
-  /// カタログ名と衝突しない（resolve はカタログを優先するので、衝突した scratch には一生届かない。
-  /// `sound-cli-contract` が優先順そのものを固定しない根拠もこの不変条件）。
+  /// カタログ名と衝突しない（resolve はカタログを優先するので、衝突した scratch には一生届かない）。
   func testEntryNamesDoNotShadowCatalogNames() {
     let catalog = Set(NotificationSound.allCases.map(\.rawValue))
     for entry in Scratch.entries {
