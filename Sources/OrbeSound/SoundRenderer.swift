@@ -67,7 +67,8 @@ public enum SoundRenderer {
 
   private static func renderTone(_ s: ToneSpec, into buffer: inout [Double], sampleRate: Double) {
     let gain = s.envelope.automation(start: s.start, duration: s.duration, scale: s.gain)
-    let frequency = s.frequency * detuneRatio(s.detuneCents)
+    // 瞬時周波数は 1 Hz 以上（0 以下だと帯域制限の倍音ループが終わらない）。glide と同じ不変条件。
+    let frequency = max(s.frequency * detuneRatio(s.detuneCents), 1)
     let coefficients = s.lowpass.map {
       Biquad.coefficients(kind: .lowpass, frequency: $0, q: 1, sampleRate: sampleRate)
     }
