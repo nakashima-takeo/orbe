@@ -15,14 +15,15 @@ struct BoardEntry {
   let wavePoints: String  // 波形見取り図（SVG polygon の点列）
 }
 
-/// 波形の見取り図。|サンプル| を 160 区間の最大値に間引き、中心線対称のポリゴン点列にする。
+/// 波形の見取り図。|サンプル| を `buckets` 区間の最大値に間引き、中心線対称のポリゴン点列にする。
+/// 時間軸は board 全体で共通——最長の音を全幅 160 とし、各音は実時間比の幅だけ描く
+/// （短い音が引き伸ばされて長く見えると、長さの比較がピンとこない）。
 /// 高さは各音自身のピークで正規化する——図の仕事は音量でなく「形」（立ち上がり・リズム・余韻）を
 /// 見せること。音量の比較は loud の数値が担う。
-func wavePoints(_ samples: [Float]) -> String {
-  let buckets = 160
+func wavePoints(_ samples: [Float], buckets: Int) -> String {
   let mid = 16.0
   let amp = 15.0
-  guard !samples.isEmpty else { return "" }
+  guard !samples.isEmpty, buckets > 0 else { return "" }
   var peaks = [Double](repeating: 0, count: buckets)
   for bucket in 0..<buckets {
     let lo = bucket * samples.count / buckets
@@ -61,19 +62,24 @@ func runBoard(_ rawArgs: [String]) {
 func generateBoard(to dir: URL, rate: Double, volume: Int) throws -> URL {
   try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
-  var entries: [BoardEntry] = []
+  // 波形の時間軸を全音で揃えるため、まず全音を描画して最長サンプル数を知ってから entry を組む。
+  struct Rendered {
+    let section: String
+    let name: String
+    let file: String
+    let samples: [Float]
+  }
+  var rendered: [Rendered] = []
   for family in NotificationSound.allCases {
     for event in AgentSoundEvent.allCases {
       let samples = SoundRenderer.render(
         family: family, event: event, volume: volume, sampleRate: rate)
       let file = "\(family.rawValue)-\(event.rawValue).wav"
       try WAVWriter.write(samples: samples, sampleRate: rate, to: dir.appendingPathComponent(file))
-      entries.append(
-        BoardEntry(
+      rendered.append(
+        Rendered(
           section: "catalog", name: "\(family.rawValue)/\(event.rawValue)", file: file,
-          duration: Double(samples.count) / rate,
-          loudDB: SoundAnalysis.maxShortTermRMSDB(samples, sampleRate: rate),
-          wavePoints: wavePoints(samples)))
+          samples: samples))
     }
   }
   for entry in Scratch.entries {
@@ -81,12 +87,15 @@ func generateBoard(to dir: URL, rate: Double, volume: Int) throws -> URL {
       program: entry.program, volume: volume, sampleRate: rate, seedKey: entry.name)
     let file = "\(entry.name).wav"
     try WAVWriter.write(samples: samples, sampleRate: rate, to: dir.appendingPathComponent(file))
-    entries.append(
-      BoardEntry(
-        section: "scratch", name: entry.name, file: file,
-        duration: Double(samples.count) / rate,
-        loudDB: SoundAnalysis.maxShortTermRMSDB(samples, sampleRate: rate),
-        wavePoints: wavePoints(samples)))
+    rendered.append(Rendered(section: "scratch", name: entry.name, file: file, samples: samples))
+  }
+  let maxCount = rendered.map(\.samples.count).max() ?? 1
+  let entries = rendered.map { item in
+    BoardEntry(
+      section: item.section, name: item.name, file: item.file,
+      duration: Double(item.samples.count) / rate,
+      loudDB: SoundAnalysis.maxShortTermRMSDB(item.samples, sampleRate: rate),
+      wavePoints: wavePoints(item.samples, buckets: max(2, 160 * item.samples.count / maxCount)))
   }
 
   let index = dir.appendingPathComponent("index.html")
@@ -101,6 +110,7 @@ private func cardHTML(_ entry: BoardEntry, showName: Bool = true) -> String {
   return """
         <div class="card" tabindex="0" data-src="\(entry.file)" data-name="\(entry.name)">\(name)
           <svg class="wave" viewBox="0 0 160 32" preserveAspectRatio="none">
+            <line x1="0" y1="16" x2="160" y2="16"/>
             <polygon points="\(entry.wavePoints)"/></svg>
           <div class="stats">\(stats)</div>
           <div class="ab"><button data-slot="a">A</button><button data-slot="b">B</button></div>
@@ -182,6 +192,7 @@ private func boardHTML(entries: [BoardEntry], rate: Double, volume: Int) -> Stri
       .card.slot-b::after { content: "B"; right: 8px; background: #e0af68; }
       .name { color: #e8e8f2; font-weight: 600; }
       .wave { display: block; width: 100%; height: 32px; margin-top: 6px; }
+      .wave line { stroke: #2c2c40; vector-effect: non-scaling-stroke; }
       .wave polygon { fill: #3f3f5e; }
       .card.playing .wave polygon { fill: #7aa2f7; }
       .stats { color: #6a6a80; font-size: 12px; margin-top: 2px; }
