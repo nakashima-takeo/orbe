@@ -93,10 +93,11 @@ extension DesignGallerySnapshotTests {
         DesignSceneFixtures.updateSettingsModel(DesignSceneFixtures.updateNeverCheckedState())
       ),
     ]
+    let stage = NSSize(width: 500, height: 520)
     for (name, model) in cases {
       try writePNG(
-        paletteSnapshot(model.render).environment(\.localization, l10n),
-        size: NSSize(width: 500, height: 520), name: "update_settings_\(name).png", dir: dir)
+        paletteSnapshot(model.render, canvas: stage).environment(\.localization, l10n),
+        size: stage, name: "update_settings_\(name).png", dir: dir)
     }
   }
 }

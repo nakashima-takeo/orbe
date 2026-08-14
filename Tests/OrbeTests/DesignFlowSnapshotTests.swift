@@ -53,7 +53,7 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
       .init(label: "  agy", chevron: true),
     ]
     try flow(
-      "palette_nav", size: cardSize, render: { paletteSnapshot(nav) },
+      "palette_nav", size: cardSize, render: { paletteSnapshot(nav, canvas: cardSize) },
       steps: [
         ("start", {}),
         ("down", { nav.move(1) }),  // claude → codex
@@ -73,7 +73,8 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
     ]
     let palette = AgentPaletteModel()
     try flow(
-      "palette_drill", size: cardSize, render: { paletteSnapshot(palette.render) },
+      "palette_drill", size: cardSize,
+      render: { paletteSnapshot(palette.render, canvas: cardSize) },
       steps: [
         ("list", { palette.setAgents(agents, defaultCommand: "claude") }),
         ("drill", { palette.drillIn() }),  // 選択中(claude)の詳細メニューへ潜る
@@ -156,7 +157,8 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
         index: 2, name: "archive", isActive: false, dormant: true, agentRollup: [], dir: "/"),
     ]
     try flow(
-      "workspace_filter", size: cardSize, render: { paletteSnapshot(workspace.render) },
+      "workspace_filter", size: cardSize,
+      render: { paletteSnapshot(workspace.render, canvas: cardSize) },
       steps: [
         ("list", { workspace.setItems(items) }),
         (
@@ -195,7 +197,8 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
         dir: "/Users/me/code/infra"),
     ]
     try flow(
-      "workspace_rename", size: cardSize, render: { paletteSnapshot(workspace.render) },
+      "workspace_rename", size: cardSize,
+      render: { paletteSnapshot(workspace.render, canvas: cardSize) },
       steps: [
         ("list", { workspace.setItems(items) }),
         ("select", { workspace.render.selected = 1 }),  // infra-experiments 行へ
@@ -230,11 +233,11 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
       ])
   }
 
-  /// Workspace 項目過多: setItems(多数) でカードがどう振る舞うか。PaletteCard の行リストは
-  /// ScrollView も高さ cap も持たない（completion の capHeight に相当するものが無い）ため、
-  /// 項目が増えるとカードが青天井に伸び、ビューポートを超えた行・hint・末尾選択がスクロール不能で
-  /// 視界から消える。その overflow を連番で撮る（few → many → 末尾選択が視界外）。
-  func testWorkspaceOverflow() throws {
+  /// 低い窓での収まり: 器が窓高からカードの上限を逆算し、**縮むのは行リストだけ**という契約を撮る。
+  /// overlay ごと撮るのは、上端アンカーが 66:16 の比を保って譲る様子がここでしか出ないため。
+  /// few（4 件・内容にハグ）→ many（18 件・窓に合わせてリストが縮む）→ select_last（末尾選択に
+  /// 内部スクロールが追従）→ shrink（更に低いステージでも選択行とヒントが残る）。
+  func testPaletteLowWindow() throws {
     let names = [
       "main", "infra", "archive", "staging", "prod", "hotfix", "experiment", "docs",
       "sandbox", "review", "release", "backup", "analytics", "mobile", "api", "web", "data", "ml",
@@ -244,13 +247,21 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
         index: i, name: n, isActive: i == 0, dormant: false, agentRollup: [], dir: "/")
     }
     let workspace = WorkspacePaletteModel(localization: LocalizationStore(language: .ja))
+    // shrink の段だけ窓を下げる。`flow` は 1 本の size で撮るので、キャンバスは 300 のまま
+    // 窓のステージだけ縮めて上詰めで置く——余った下帯が「窓が縮んだ」ことをそのまま見せる。
+    var stage = NSSize(width: 500, height: 300)
     try flow(
-      "workspace_overflow", size: NSSize(width: 500, height: 440),
-      render: { paletteSnapshot(workspace.render) },
+      "palette_low_window", size: NSSize(width: 500, height: 300),
+      render: {
+        paletteOverlaySnapshot(workspace.render, canvas: stage)
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+          .background(Color.theme.bgSunken)
+      },
       steps: [
         ("few", { workspace.setItems(Array(items.prefix(4))) }),
-        ("many", { workspace.setItems(items) }),  // 18 件 → カードが枠を超える
-        ("select_last", { workspace.render.selected = items.count - 1 }),  // 末尾選択は視界外へ
+        ("many", { workspace.setItems(items) }),  // 18 件 → リストが窓の残りまで縮む
+        ("select_last", { workspace.render.selected = items.count - 1 }),  // 末尾へ（スクロール追従）
+        ("shrink", { stage = NSSize(width: 500, height: 240) }),  // 更に低い窓でも選択行とヒントが残る
       ])
   }
 

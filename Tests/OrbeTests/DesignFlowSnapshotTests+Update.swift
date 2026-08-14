@@ -14,7 +14,7 @@ extension DesignFlowSnapshotTests {
     let l10n = LocalizationStore(language: .ja)
     try flow(
       "update_states", size: size,
-      render: { paletteSnapshot(settings.render).environment(\.localization, l10n) },
+      render: { paletteSnapshot(settings.render, canvas: size).environment(\.localization, l10n) },
       steps: [
         ("uptodate", {}),
         ("checking", { state.beginCheck() }),

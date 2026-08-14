@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// パレット内の focus 先。ちょうど 1 つに定まる（field＝入力欄 / card＝カード器）。
-private enum PaletteFocus { case field, card }
-
 /// パレットのカード本体（WorkspaceSwitcher の器）。ヘッダ行（◐＋クエリ/breadcrumb・
 /// 下罫線。入力欄も breadcrumb も無ければ描かない）＋行リスト（padding 6・PaletteRow）＋
 /// フッターヒント（上罫線）。
@@ -14,11 +11,31 @@ private enum PaletteFocus { case field, card }
 /// **カード内のクリックもここを通る**（→ `simultaneousGesture`）ため、マウスとキーボードを混ぜて使える。
 struct PaletteCard: View {
   @Bindable var model: PaletteModel
+  /// カード全体の高さ上限（窓に収める。`PaletteOverlay` が窓高から算出して渡す）。
+  /// **既定値は持たせない**——`.infinity` の逃げ道を作ると「窓を見ない呼び出し」が残る。
+  let maxHeight: CGFloat
   @FocusState private var focus: PaletteFocus?
+  /// chrome（ヘッダ・セグメント・一文・ヒント）の実測高。リスト上限から差し引く。
+  @State private var chromeHeight: CGFloat = 0
 
-  /// 行リストの高さ上限（px）。これを超える行は内部スクロールへ。コンポーネント局所の定数
+  /// 行リストの見た目の高さ上限（px）。これを超える行は内部スクロールへ。コンポーネント局所の定数
   /// （CompletionList.capHeight と同流儀。グローバルトークンは足さない）。
-  private let capHeight: CGFloat = 320
+  static let capHeight: CGFloat = 320
+
+  /// 行リスト帯の内側余白。**帯の高さ＝スクロール域＋この 2 倍**なので、窓の残りから同じ分を引かないと
+  /// カードが上限を 12pt 超えて下端（ヒント）が切れる。引く側と敷く側で 1 つの値を共有する。
+  static let listPadding: CGFloat = Theme.Space.note
+
+  /// スクロール域の実効上限。**見た目の上限（320）と窓の残りの小さい方**。前者は「長い一覧が縦を
+  /// 占有しない」という見た目の判断、後者は「窓を突き抜けない」という器の契約で、別軸なので
+  /// 別々の min として掛ける。ビューの外から呼べる形にしてあるのは、この逆算そのものを検証するため。
+  static func listMaxHeight(maxHeight: CGFloat, chromeHeight: CGFloat) -> CGFloat {
+    min(capHeight, max(0, maxHeight - chromeHeight - listPadding * 2))
+  }
+
+  private var listMaxHeight: CGFloat {
+    Self.listMaxHeight(maxHeight: maxHeight, chromeHeight: chromeHeight)
+  }
 
   /// セグメント外枠 9 / セグメント 6。`Theme.Radius` の格子（3/4/8/10/12/16）に無い見本の実寸なので
   /// `capHeight` と同じくコンポーネント局所の定数にする（グローバルトークンは足さない）。
@@ -38,22 +55,28 @@ struct PaletteCard: View {
         // 成り立つため、入力欄を出しうるパレットはヘッダを持ち続ける——`fieldVisible` が立つモードは
         // この条件を必ず満たし、入力欄なしモードも breadcrumb（‹ 親）を出すため、往復でヘッダは消えない。
         if model.fieldVisible || model.breadcrumb != nil {
-          header
-          divider
+          // 罫線ごと 1 枚のプローブで測る（`spacing: 0` の入れ子なのでレイアウトは変わらない）。
+          // 罫線を測り漏らすとその分だけ chrome を過小評価し、カードが窓をわずかに超える。
+          VStack(alignment: .leading, spacing: 0) {
+            header
+            divider
+          }
+          .background(chromeProbe)
         }
 
         // リスト直上のスロット（セグメント・一文）。どちらも空で出さない＝他パレットは無影響。
         // 罫線はヘッダ側に付いたままで、こことリストの間には入れない。
         if !model.segments.isEmpty {
-          segmentBar
+          segmentBar.background(chromeProbe)
         }
         if !model.caption.isEmpty {
-          captionLine
+          captionLine.background(chromeProbe)
         }
 
         // 行ゼロ（入力欄だけのプロンプト＝改名・ディレクトリ・タブ改名）では行リストごと描かない。
         // 描くと 6pt パディングの空帯がヘッダ罫線と hint 罫線に挟まれ、中身ゼロの帯に見える。
-        if !model.rows.isEmpty {
+        // 窓が低すぎてリストの取り分が 0 になったときも同じ理由で帯ごと畳む。
+        if !model.rows.isEmpty, listMaxHeight > 0 {
           ScrollViewReader { proxy in
             ScrollView {
               VStack(spacing: 0) {
@@ -63,49 +86,58 @@ struct PaletteCard: View {
                 }
               }
             }
-            .frame(maxHeight: capHeight)
+            .frame(maxHeight: listMaxHeight)
             // ScrollView は走査軸に greedy で、上位（PaletteOverlay の全画面提案）から高さを目一杯
-            // 取り cap まで伸びる。content 高でハグさせ cap 未満では余白を作らないため、垂直方向だけ
-            // 内容サイズに固定する（cap 超過時は maxHeight が頭打ちし内部スクロールに入る）。
+            // 取り上限まで伸びる。content 高でハグさせ上限未満では余白を作らないため、垂直方向だけ
+            // 内容サイズに固定する（超過時は maxHeight が頭打ちし内部スクロールに入る）。
             .fixedSize(horizontal: false, vertical: true)
             .scrollIndicators(.automatic)
             .onChange(of: model.selected) { proxy.scrollTo(model.selected) }
+            // 窓を縮めてリストが縮んだ瞬間も選択行を可視域へ引き戻す。
+            .onChange(of: listMaxHeight) { proxy.scrollTo(model.selected) }
             .onAppear { proxy.scrollTo(model.selected) }
-            .padding(Theme.Space.note)
+            .padding(Self.listPadding)
           }
         }
 
         if !model.hint.isEmpty || !model.hintKeys.isEmpty {
-          divider
-          // 余白はスロットごと。素文字列 hint は従来の 16×10 を保ち（既存パレットの見た目を
-          // 変えない）、キー付きセグメントだけがデザイン第10シーンの 9×20 を取る。
-          Group {
-            if model.hintKeys.isEmpty {
-              Text(model.hint)
-                .foregroundStyle(Color.theme.textMuted)
-                .padding(.horizontal, Theme.Space.bar)
-                .padding(.vertical, Theme.Space.step + Theme.Space.hair)
-            } else {
-              // セグメント間隔 14・キー副色/ラベル muted。
-              HStack(spacing: Theme.Space.beat + Theme.Space.hair) {
-                ForEach(model.hintKeys) { hintKey in
-                  HStack(spacing: Theme.Space.tick) {
-                    Text(hintKey.key).foregroundStyle(Color.theme.textSecondary)
-                    Text(hintKey.label).foregroundStyle(Color.theme.textMuted)
+          VStack(alignment: .leading, spacing: 0) {
+            divider
+            // 余白はスロットごと。素文字列 hint は従来の 16×10 を保ち（既存パレットの見た目を
+            // 変えない）、キー付きセグメントだけがデザイン第10シーンの 9×20 を取る。
+            Group {
+              if model.hintKeys.isEmpty {
+                Text(model.hint)
+                  .foregroundStyle(Color.theme.textMuted)
+                  .padding(.horizontal, Theme.Space.bar)
+                  .padding(.vertical, Theme.Space.step + Theme.Space.hair)
+              } else {
+                // セグメント間隔 14・キー副色/ラベル muted。
+                HStack(spacing: Theme.Space.beat + Theme.Space.hair) {
+                  ForEach(model.hintKeys) { hintKey in
+                    HStack(spacing: Theme.Space.tick) {
+                      Text(hintKey.key).foregroundStyle(Color.theme.textSecondary)
+                      Text(hintKey.label).foregroundStyle(Color.theme.textMuted)
+                    }
                   }
                 }
+                .padding(.horizontal, Theme.Space.span)
+                .padding(.vertical, 9)
               }
-              .padding(.horizontal, Theme.Space.span)
-              .padding(.vertical, 9)
             }
+            .font(Font.theme.meta)
           }
-          .font(Font.theme.meta)
+          .background(chromeProbe)
         }
       }
     }
+    // 窓が許した高さで頭打ちにする（上限は overlay が窓高から逆算して渡す）。上詰めで、
+    // 余った縦は下に残す＝カードが窓いっぱいに間延びしない。
+    .frame(maxHeight: maxHeight, alignment: .top)
+    .onPreferenceChange(ChromeHeightKey.self) { chromeHeight = $0 }
     // カード器（.focusable()）を常設し、入力欄ありモードでカーソルに委ねるべきキーだけ器側で
     // .ignored を返す。宛先常設でモード切替が「既存ビュー間の focus 移動」になる。
-    .modifier(CardKeyCapture(model: model, focus: $focus))
+    .modifier(PaletteCardKeyCapture(model: model, focus: $focus))
     // カード内のクリックは first responder を宛先から落とす（行を描く `SelectableRow` の
     // `onTapGesture` は、それ自体が focus の宛先にならない）。受けた地点で宛先を確定し直すことで、
     // クリックのアクションが決定でも直接アクションでもモード遷移でも、キー操作がそのまま続く。
@@ -113,6 +145,14 @@ struct PaletteCard: View {
     .simultaneousGesture(TapGesture().onEnded { model.focus() })
     .onChange(of: model.focusToken, initial: true) {
       focus = model.fieldVisible ? .field : .card
+    }
+  }
+
+  /// chrome スロットの実測高を合算して器へ遡上させる probe。chrome の高さは `maxHeight` に
+  /// 依存しない（＝この遡上は循環せず 1 パスで収束する）。
+  private var chromeProbe: some View {
+    GeometryReader { proxy in
+      Color.clear.preference(key: ChromeHeightKey.self, value: proxy.size.height)
     }
   }
 
@@ -302,57 +342,6 @@ struct PaletteCard: View {
   }
 }
 
-/// カード器を常設の first responder 候補にして ↑↓←→/↵/esc を捕捉する祖先 modifier。
-/// 入力欄ありモードでは focus=.field のため子の TextField がキーを消費し、器へは
-/// 子が消費しなかったキーだけ伝播する。入力欄に委ねるべき ←→（カーソル移動）と
-/// ↵（IME 安全な onSubmit 確定）は fieldVisible のとき `.ignored` を返し、入力欄へ渡す。
-private struct CardKeyCapture: ViewModifier {
-  @Bindable var model: PaletteModel
-  let focus: FocusState<PaletteFocus?>.Binding
-
-  func body(content: Content) -> some View {
-    content
-      .focusable()
-      .focusEffectDisabled()
-      .focused(focus, equals: .card)
-      // 矢印は単一の catch-all に集約し ⌘ 有無で先頭/末尾ジャンプと 1 行移動を分岐する。
-      .onKeyPress { press in
-        switch press.key {
-        case .upArrow:
-          if press.modifiers.contains(.command) { model.onJumpTop() } else { model.onUp() }
-          return .handled
-        case .downArrow:
-          if press.modifiers.contains(.command) { model.onJumpBottom() } else { model.onDown() }
-          return .handled
-        default:
-          return .ignored
-        }
-      }
-      .onKeyPress(.leftArrow) {
-        guard !model.fieldVisible else { return .ignored }
-        model.onLeft(); return .handled
-      }
-      .onKeyPress(.rightArrow) {
-        guard !model.fieldVisible else { return .ignored }
-        _ = model.onRight(); return .handled
-      }
-      .onKeyPress(.return) {
-        guard !model.fieldVisible else { return .ignored }
-        model.onActivate(); return .handled
-      }
-      .onKeyPress(.delete) {
-        guard !model.fieldVisible else { return .ignored }
-        model.onDelete(); return .handled
-      }
-      // ⇥ は受け手のあるモード（通知音サブパレットの試聴対象）だけが消費し、それ以外は
-      // .ignored で AppKit の focus 移動へ返す（既存パレットの挙動を変えない）。
-      .onKeyPress(.tab) { model.onTab() ? .handled : .ignored }
-      .onKeyPress(.escape) {
-        model.onEscape(); return .handled
-      }
-  }
-}
-
 #if DEBUG
   /// cap＋内部スクロール＋行を狭めた見た目の検証用。18 行・チップ付き・選択は下方（onAppear の scrollTo 追従）。
   private func capPreviewModel(fieldVisible: Bool) -> PaletteModel {
@@ -377,9 +366,10 @@ private struct CardKeyCapture: ViewModifier {
   }
 
   #Preview("PaletteCard — cap / scroll / slim") {
+    // ステージ 560 − 上下 padding 24×2 ＝ カードが使える高さ（呼び出し側が窓を見る契約）。
     HStack(alignment: .top, spacing: Theme.Space.phrase) {
-      PaletteCard(model: capPreviewModel(fieldVisible: true))
-      PaletteCard(model: capPreviewModel(fieldVisible: false))
+      PaletteCard(model: capPreviewModel(fieldVisible: true), maxHeight: 512)
+      PaletteCard(model: capPreviewModel(fieldVisible: false), maxHeight: 512)
     }
     .padding(Theme.Space.phrase)
     .frame(width: 820, height: 560)
