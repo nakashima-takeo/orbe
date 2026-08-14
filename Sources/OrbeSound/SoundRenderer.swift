@@ -5,9 +5,9 @@ import Foundation
 /// マスタチェーンは design の順そのまま: 全部品を加算 → × 音量 → コンプレッサ。
 /// **音量がコンプレッサの手前**にあるのが要点で、音量を上げるほど圧縮が深くなる（＝音量は再生側の
 /// ボリュームではなく合成の入力）。事前生成した音声ファイルを同梱するとこの順が崩れる。
-enum SoundRenderer {
+public enum SoundRenderer {
   /// 音量は % をそのまま線形の係数として受ける（設定が渡すのは 5〜100）。
-  static func render(
+  public static func render(
     family: NotificationSound, event: AgentSoundEvent, volume: Int, sampleRate: Double
   ) -> [Float] {
     let components = SoundCatalog.components(family, event)

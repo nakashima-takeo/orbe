@@ -2,7 +2,7 @@ import Foundation
 
 /// 音 1 つを構成する最小部品（design のプリミティブを展開した後の低レベル部品）。
 /// `SoundCatalog` が案ごとにこの配列を組み、`SoundRenderer` が 1 本のモノラル波形へ加算する。
-enum SoundComponent: Hashable {
+public enum SoundComponent: Hashable {
   case tone(ToneSpec)
   case glide(GlideSpec)
   case fm(FMSpec)
@@ -30,7 +30,7 @@ enum SoundComponent: Hashable {
 }
 
 /// 単一周波数の音。`lowpass` を指定するとゲインの後段に lowpass biquad（Q は Web Audio 既定の 1 dB）が入る。
-struct ToneSpec: Hashable {
+public struct ToneSpec: Hashable {
   var frequency: Double
   var start: Double
   var duration: Double
@@ -44,7 +44,7 @@ struct ToneSpec: Hashable {
 
 /// 音程が滑る音。`overshoot` 指定時は t+0.6d で `to * overshoot` を経由してから `to` へ落ち着く
 /// （弾みの跳ね上がり）。`vibrato`（Hz 幅）が非 0 なら sine の LFO を周波数へ加算する。
-struct GlideSpec: Hashable {
+public struct GlideSpec: Hashable {
   var from: Double
   var to: Double
   var start: Double
@@ -62,7 +62,7 @@ struct GlideSpec: Hashable {
 
 /// FM 合成の金属打音。キャリア `frequency`・モジュレータ `frequency * ratio`、
 /// 周波数偏移は `frequency * index` から `frequency * 0.02` へ指数減衰する。
-struct FMSpec: Hashable {
+public struct FMSpec: Hashable {
   var frequency: Double
   var start: Double
   var duration: Double
@@ -75,7 +75,7 @@ struct FMSpec: Hashable {
 }
 
 /// 帯域を通した白色雑音。`frequencyEnd` 指定時はフィルタ周波数が duration をかけて指数で移る。
-struct NoiseSpec: Hashable {
+public struct NoiseSpec: Hashable {
   var start: Double
   var duration: Double
   var gain: Double

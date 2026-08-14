@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import OrbeSound
 
 /// 通知音を実際に鳴らす層。合成（決定論・純関数）と切り離してあり、テストはここをフェイクへ差し替える。
 protocol AgentSoundPlaying: AnyObject {

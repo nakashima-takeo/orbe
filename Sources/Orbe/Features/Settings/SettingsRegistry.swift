@@ -1,4 +1,5 @@
 import Foundation
+import OrbeSound
 
 /// root でのキー操作の意味。stepper は ←→ で増減（fontSize）、toggle は ←/→/↵ で反転（cursor-style-blink）、
 /// drillIn は ↵/→ でサブパレットへ潜る。値域・既定は `domain`/`defaultValue` が持つ（activation は操作種別のみ）。

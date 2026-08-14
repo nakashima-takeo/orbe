@@ -1,11 +1,11 @@
 import XCTest
 
-@testable import Orbe
+@testable import OrbeSound
 
 /// 通知音の合成プリミティブ（`SoundSynth`）の数値検証。L1 純ロジック・決定論。
 /// design と音がズレたときに疑う 4 箇所——指数エンベロープの減衰区間長・帯域制限・biquad の Q 解釈・
 /// コンプレッサの静特性——を、ここで数値として固定する。
-final class SoundSynthTests: OrbeTestCase {
+final class SoundSynthTests: XCTestCase {
 
   // MARK: - AudioParam（指数ランプの起点は「直前のイベント」）
 

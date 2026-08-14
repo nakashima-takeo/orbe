@@ -1,3 +1,4 @@
+import OrbeSound
 import SwiftUI
 
 /// 状態一覧に出す状態の表示ラベル（アイコン設定の文脈での状態名）。文言は現在言語で引く。
