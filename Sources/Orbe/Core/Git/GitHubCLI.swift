@@ -18,6 +18,10 @@ final class GitHubCLI {
   static let shared = GitHubCLI()
 
   private let queue = DispatchQueue(label: "dev.orbe.gh", qos: .userInitiated)
+  /// ブラウザで開く操作の口。取得（`queue`）とは分ける——結果を待たない即時操作なので取得と
+  /// 直列化する理由が無く、同じ列に載せると閉じた PR の取得（worktree 本数ぶんの往復）が
+  /// 捌けるまでブラウザが開かない。決定は Enter 一発という前提がそこで崩れる。
+  private let webQueue = DispatchQueue(label: "dev.orbe.gh.web", qos: .userInitiated)
   private let lock = DispatchQueue(label: "dev.orbe.gh.state")
   /// 見つかった gh の絶対パス。**見つからなかったことは覚えない**——起動直後のまだ痩せた PATH で
   /// 一度外した結果を焼くと、PATH が整った後も gh が永久に「未導入」のままになる。
@@ -93,21 +97,36 @@ final class GitHubCLI {
 
   /// 指定ブランチ群に紐づく閉じた PR（ブランチごとに最新 1 件）。worktree の掃除で
   /// 「マージ済みか／未マージのまま閉じられたか」を見る。`nil` = 取得失敗／`[]` = 該当なし。
-  /// 1 本でも取得に失敗したら全体を失敗にする——部分結果で差し替えると、失敗したブランチの
-  /// 前回結果だけが静かに消える（据え置き契約は配列まるごとの置換が前提）。
   func closedPullRequests(
     cwd: String, heads: [String], completion: @escaping ([GitHubClosedPR]?) -> Void
+  ) {
+    fetch(cwd: cwd, argsList: heads.map(Self.closedPRArguments(head:)), completion: completion)
+  }
+
+  /// 取得の共通口（1 コマンド）。
+  private func fetch<T: Decodable>(
+    cwd: String, args: [String], completion: @escaping ([T]?) -> Void
+  ) {
+    fetch(cwd: cwd, argsList: [args], completion: completion)
+  }
+
+  /// 取得の共通口（複数コマンドを直列に叩いて連結する）。失敗は `nil`（空配列に潰さない——
+  /// 空で潰すと呼び出し側のキャッシュを消してしまう）。**1 本でも失敗したら全体を `nil`** に
+  /// するのが要点で、部分結果で差し替えると失敗したぶんの前回結果だけが静かに消える
+  /// （据え置き契約は配列まるごとの置換が前提）。
+  private func fetch<T: Decodable>(
+    cwd: String, argsList: [[String]], completion: @escaping ([T]?) -> Void
   ) {
     queue.async {
       guard let gh = self.resolveGh() else {
         DispatchQueue.main.async { completion(nil) }
         return
       }
-      var results: [GitHubClosedPR] = []
-      for head in heads {
-        let out = self.runSync(gh, Self.closedPRArguments(head: head), cwd: cwd)
+      var results: [T] = []
+      for args in argsList {
+        let out = self.runSync(gh, args, cwd: cwd)
         guard out.status == 0,
-          let decoded = try? JSONDecoder().decode([GitHubClosedPR].self, from: out.stdout)
+          let decoded = try? JSONDecoder().decode([T].self, from: out.stdout)
         else {
           DispatchQueue.main.async { completion(nil) }
           return
@@ -118,29 +137,13 @@ final class GitHubCLI {
     }
   }
 
-  /// 取得の共通口。失敗は `nil`（空配列に潰さない——空で潰すと呼び出し側のキャッシュを消してしまう）。
-  private func fetch<T: Decodable>(
-    cwd: String, args: [String], completion: @escaping ([T]?) -> Void
-  ) {
-    queue.async {
-      guard let gh = self.resolveGh() else {
-        DispatchQueue.main.async { completion(nil) }
-        return
-      }
-      let out = self.runSync(gh, args, cwd: cwd)
-      let decoded: [T]? =
-        out.status == 0 ? try? JSONDecoder().decode([T].self, from: out.stdout) : nil
-      DispatchQueue.main.async { completion(decoded) }
-    }
-  }
-
   // MARK: - ブラウザで開く（fire-and-forget）
 
   func openIssueWeb(number: Int, cwd: String) { openWeb("issue", number: number, cwd: cwd) }
   func openPRWeb(number: Int, cwd: String) { openWeb("pr", number: number, cwd: cwd) }
 
   private func openWeb(_ kind: String, number: Int, cwd: String) {
-    queue.async {
+    webQueue.async {
       guard let gh = self.resolveGh() else { return }
       _ = self.runSync(gh, [kind, "view", String(number), "--web"], cwd: cwd)
     }
