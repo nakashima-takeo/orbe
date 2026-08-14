@@ -23,7 +23,7 @@ final class WAVWriterTests: XCTestCase {
   }
 
   private func tag(_ data: Data, at offset: Int) -> String {
-    String(decoding: data[offset..<(offset + 4)], as: UTF8.self)
+    String(bytes: data[offset..<(offset + 4)], encoding: .utf8) ?? ""
   }
 
   /// ヘッダの全フィールドが 16bit PCM・モノラルを宣言し、サイズ・レートが整合する。

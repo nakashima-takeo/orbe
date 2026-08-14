@@ -34,8 +34,8 @@ final class OrbeSoundProcessTests: XCTestCase {
     process.waitUntilExit()
     return Output(
       status: process.terminationStatus,
-      stdout: String(decoding: stdoutData, as: UTF8.self),
-      stderr: String(decoding: stderrData, as: UTF8.self))
+      stdout: String(bytes: stdoutData, encoding: .utf8) ?? "",
+      stderr: String(bytes: stderrData, encoding: .utf8) ?? "")
   }
 
   private func tempPath(_ suffix: String) -> URL {
@@ -89,7 +89,7 @@ final class OrbeSoundProcessTests: XCTestCase {
     XCTAssertEqual(catalog.status, 0)
     XCTAssertTrue(catalog.stdout.contains(catalogOut.path))
     XCTAssertEqual(
-      String(decoding: try Data(contentsOf: catalogOut).prefix(4), as: UTF8.self), "RIFF")
+      String(bytes: try Data(contentsOf: catalogOut).prefix(4), encoding: .utf8), "RIFF")
 
     guard let scratchName = Scratch.entries.first?.name else {
       throw XCTSkip("scratch が空")
