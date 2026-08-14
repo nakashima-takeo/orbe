@@ -1,12 +1,12 @@
 ---
 title: Orbe CLI（orb）
 description: ペイン内・外から Orbe 自身の設定/ワークスペース/pane/tab を操作する `orb` CLI。config/ws/pane/tab サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-08-08
+updated: 2026-08-13
 ---
 
 # Orbe CLI（`orb`）
 
-ユーザー/AI がペイン内・外から Orbe 自身を構成・操作する CLI。[制御 API](api.md) の control.sock を直に叩く薄い socket クライアント（GhosttyKit/AppKit 非依存・Foundation のみ）。**PATH 上のコマンド名は `orb`**——`.app` の GUI 実行体 `Orbe` と別名にしてあるのは、`Orbe` と打つと GUI 本体が起動してしまうため。設定変更は GUI 設定パレット（[settings](../palette/settings.md)）と同一の適用経路を control 越しに使う。
+ユーザー/AI がペイン内・外から Orbe 自身を構成・操作する CLI。[制御 API](api.md) の control.sock を直に叩く薄い socket クライアント（GhosttyKit/AppKit 非依存・Foundation のみ）。**PATH 上のコマンド名は `orb`**——`.app` の GUI 実行体 `Orbe` とは別名（理由は[配布・PATH](#配布path)）。設定変更は GUI 設定パレット（[settings](../palette/settings.md)）と同一の適用経路を control 越しに使う。
 
 ## サーフェス
 
@@ -51,6 +51,6 @@ control.sock の解決順は `ORBE_STATE_DIR`（非空の明示指定・最優�
 
 ## 配布・PATH
 
-ビルド成果物を `build-app.sh` が `.app/Contents/Resources/bin/orb` へ同梱し、ad-hoc 署名に含める。`SurfaceView` が**全ペイン（root・split とも）**の生成時にこの bin dir をペイン `PATH` の先頭へ前置する（`ORBE_SOCK`/`ORBE_PANE`/`ORBE_REPORT_BIN` 注入と同じ機構）。libghostty は各ペインの PATH に `.app` の実行体 dir を無条件で append するが、CLI は別名 `orb` なので **PATH 順序に依存せず必ず同梱 CLI に解決する**。これにより Orbe が生成した任意ペイン（リポジトリ外 cwd・分割で生じたペイン含む）で `orb` が当該インスタンスの socket に届く。global install や symlink は行わない。
+ビルド成果物を `build-app.sh` が `.app/Contents/Resources/bin/orb` へ同梱し、ad-hoc 署名に含める。`SurfaceView` が**全ペイン（root・split とも）**の生成時にこの bin dir をペイン `PATH` の先頭へ前置する（`ORBE_SOCK`/`ORBE_PANE`/`ORBE_REPORT_BIN` 注入と同じ機構）。ペインの PATH には `.app` の GUI 実行体 dir（`Contents/MacOS`）も載る——ghostty の shell integration の `path` 機能（既定 ON）がシェル起動時に足すため。CLI は別名 `orb` なので **PATH 順序に依存せず必ず同梱 CLI に解決する**。これにより Orbe が生成した任意ペイン（リポジトリ外 cwd・分割で生じたペイン含む）で `orb` が当該インスタンスの socket に届く。global install や symlink は行わない。
 
 実体は `Sources/orbe-cli/`。設定適用の共有経路は設定パレットと共用する（[settings](../palette/settings.md)）。

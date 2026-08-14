@@ -22,6 +22,11 @@
 	<string>6</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
+	<key>LSEnvironment</key>
+	<dict>
+		<key>ORBE_LAUNCH_SOURCE</key>
+		<string>app</string>
+	</dict>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>NSAppTransportSecurity</key>

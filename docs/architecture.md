@@ -90,6 +90,12 @@ Orbe が**読む**もの（利用者・スクリプトが立てる）:
 | `ORBE_CHANNEL` | ビルド時のチャネル選択（`build-app.sh` の入力） | [platform/channel](spec/platform/channel.md) |
 | `GHOSTTY_RESOURCES_DIR` | 非バンドル起動時のみ ghostty リソースの所在 | [guides/build.md](guides/build.md) |
 
+Orbe が**自分自身へ注入する**もの（`app/Info.plist` の `LSEnvironment`。利用者は立てない）:
+
+| 変数 | 意味 | spec |
+|---|---|---|
+| `ORBE_LAUNCH_SOURCE` | 起動経路の印（LaunchServices 経由の起動にだけ載る。読んだ時点で落とすためペインへは渡らない） | [platform/launch](spec/platform/launch.md) |
+
 ## 外部依存
 
 - **libghostty** — `vendor/ghostty` submodule を固定 SHA に pin し、自前ビルドした xcframework を `binaryTarget` で取り込む。外部契約は [terminal/libghostty](spec/terminal/libghostty.md)。
