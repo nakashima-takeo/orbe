@@ -79,9 +79,16 @@ import SwiftUI
   // 試聴インジケータ（EQ）の状態。格納プロパティなのでここに置き、読み書きは `+Sound` だけが行う
   // （extension には格納プロパティを置けない）。
 
-  /// 試聴中の行（EQ を出す行）。鳴り終わり（`SoundCatalog.duration`）で自動的に nil へ戻る**面の状態**で、
+  /// 試聴インジケータ（EQ）の点灯状態。行と、その行で鳴らした音の対象を 1 つで持つ
+  /// ——EQ の色は「今どの面にいるか」でなく「何を鳴らしたか」で決まるため。
+  struct PreviewIndicator {
+    var row: Int
+    var event: AgentSoundEvent
+  }
+
+  /// 試聴中の行と対象（EQ を出す行）。鳴り終わり（`SoundCatalog.duration`）で自動的に nil へ戻る**面の状態**で、
   /// 設定にも `PaletteModel.rows` にも書かない。
-  var previewingRow: Int?
+  var previewIndicator: PreviewIndicator?
   /// 先行する消灯予約を無効化する世代（↑↓ 連打で消灯が食い違わない）。
   var previewGeneration = 0
   /// 鳴り終わりの予約。既定は main queue。テストは手動スケジューラへ差し替えて 2 秒待たずに消灯を見る
