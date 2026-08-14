@@ -53,6 +53,9 @@ final class DispatchCleanRowRenderTests: SnapshotTestCase {
     )
     let main = try XCTUnwrap(
       renderPNG(DispatchCleanChip(chip: .mergedPR(123, base: "main")), size: chipSize, dark: true))
+    let mainAgain = try XCTUnwrap(
+      renderPNG(DispatchCleanChip(chip: .mergedPR(123, base: "main")), size: chipSize, dark: true))
+    XCTAssertEqual(main, mainAgain, "前提: 同じチップの描画は決定的（違えば以下の比較が無意味になる）")
     XCTAssertNotEqual(develop, main, "マージ先が画に出ていない")
   }
 
