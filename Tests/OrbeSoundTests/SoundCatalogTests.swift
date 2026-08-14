@@ -29,8 +29,10 @@ final class SoundCatalogTests: XCTestCase {
     }
   }
 
-  /// 音の全長は 0.05〜2.2 秒に収まり、長い方の 2 案は定義から導かれる長さに固定する
-  /// （エフェクト無しの案では、最後の部品の発音が終わる時刻）。
+  /// 音の全長は 0.05〜2.2 秒に収まり、部品型ごとに 1 案を定義から導かれる長さに固定する
+  /// （エフェクト無しの案では、最後の部品の発音が終わる時刻）。全長は試聴 EQ の消灯タイミング
+  /// でもあるので、エンベロープの既定を動かして黙って伸び縮みさせない——tone 系（deep / emblem）に
+  /// 加えて glide 系（reply）も釘を打つ。glide の既定 `.gate` は release ぶん duration より伸びる。
   func testDurations() {
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
@@ -39,8 +41,10 @@ final class SoundCatalogTests: XCTestCase {
         XCTAssertLessThanOrEqual(duration, 2.2, "\(family)/\(event)")
       }
     }
-    XCTAssertEqual(SoundCatalog.duration(.deep, .done), 2.05, accuracy: 1e-9)
-    XCTAssertEqual(SoundCatalog.duration(.emblem, .done), 2.07, accuracy: 1e-9, "最長")
+    XCTAssertEqual(SoundCatalog.duration(.deep, .done), 2.00, accuracy: 1e-9)
+    XCTAssertEqual(SoundCatalog.duration(.emblem, .done), 2.02, accuracy: 1e-9, "最長")
+    XCTAssertEqual(
+      SoundCatalog.duration(.reply, .done), 0.73, accuracy: 1e-9, "glide は release ぶん伸びる")
   }
 
   /// 12 案 × 2 イベントが**互いに違う音**になる（`program` の手書き switch は誤配線しても

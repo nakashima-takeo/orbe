@@ -102,7 +102,7 @@ public struct ToneSpec: Hashable {
     self.gainLFO = gainLFO
   }
 
-  var end: Double { start + envelope.end(duration: duration) + 0.05 }
+  var end: Double { start + envelope.end(duration: duration) }
 }
 
 /// 音程が滑る音。`overshoot` 指定時は t+0.6d で `to * overshoot` を経由してから `to` へ落ち着く
@@ -141,7 +141,7 @@ public struct GlideSpec: Hashable {
     self.gainLFO = gainLFO
   }
 
-  var end: Double { start + envelope.end(duration: duration) + 0.05 }
+  var end: Double { start + envelope.end(duration: duration) }
 }
 
 /// 2 オペレータ FM。キャリア `frequency`・モジュレータ `frequency * ratio`、
@@ -176,7 +176,7 @@ public struct FMSpec: Hashable {
     self.gainLFO = gainLFO
   }
 
-  var end: Double { start + envelope.end(duration: duration) + 0.05 }
+  var end: Double { start + envelope.end(duration: duration) }
 }
 
 /// 帯域を通した白色雑音。`cutoff` がフィルタのカットオフ / 中心周波数（Hz）の時間形状を持つ。
@@ -205,7 +205,7 @@ public struct NoiseSpec: Hashable {
     self.envelope = envelope
   }
 
-  var end: Double { start + envelope.end(duration: duration) + 0.05 }
+  var end: Double { start + envelope.end(duration: duration) }
 }
 
 /// 複数部品へ展開される音色ヘルパ（鐘・打音・打鍵）。案の定義（`SoundCatalog`）から素の周波数表を
