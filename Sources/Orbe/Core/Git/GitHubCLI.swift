@@ -89,7 +89,7 @@ final class GitHubCLI {
       cwd: cwd,
       args: [
         "pr", "list", "--state", "closed", "--limit", String(limit), "--json",
-        "number,headRefName,state",
+        "number,headRefName,state,baseRefName",
       ], completion: completion)
   }
 

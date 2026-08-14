@@ -179,7 +179,7 @@ struct GitHubIssue: Decodable, Equatable {
   let title: String
 }
 
-/// `gh pr list --state closed --json number,headRefName,state` の 1 PR。
+/// `gh pr list --state closed --json number,headRefName,state,baseRefName` の 1 PR。
 /// worktree の掃除で「マージ済みか／未マージのまま閉じられたか」を見るためだけの小さな形で、
 /// `GitHubPullRequest`（title・isCrossRepository 必須）ではこの JSON をデコードできない。
 struct GitHubClosedPR: Decodable, Equatable {
@@ -187,6 +187,8 @@ struct GitHubClosedPR: Decodable, Equatable {
   let headRefName: String
   /// `MERGED` / `CLOSED`。
   let state: String
+  /// マージ先ブランチ。**表示専用**（安全判定はローカル git の事実だけで閉じる）。
+  let baseRefName: String
 }
 
 /// `gh pr list --json number,title,headRefName,reviewDecision,isCrossRepository` の 1 PR。
