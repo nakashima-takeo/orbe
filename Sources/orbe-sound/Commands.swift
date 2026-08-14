@@ -60,6 +60,29 @@ func takeOption(_ args: inout [String], _ name: String, requires label: String) 
   return value
 }
 
+/// `--rate` を抜き取って検証する。render/play/analyze 単体・analyze --all・board の 3 経路が
+/// **必ずこれを通る**（検証を経路ごとに写すと写し忘れで割れる）。下限 8000 は可聴品質の底、
+/// 上限 768000（8×96 kHz）は Double→Int 変換の域外の値（inf・1e300 等）を合成層へ届かせて
+/// シグナル死させないための入口の守り。
+func takeRate(_ args: inout [String]) -> Double? {
+  takeOption(&args, "--rate", requires: "a sample rate in hz").map { token -> Double in
+    guard let value = Double(token), (8000...768000).contains(value) else {
+      usageDie("invalid rate: \(token)")
+    }
+    return value
+  }
+}
+
+/// `--volume` を抜き取って検証する（5-100。takeRate と同じく全経路共通）。
+func takeVolume(_ args: inout [String]) -> Int? {
+  takeOption(&args, "--volume", requires: "a volume (5-100)").map { token -> Int in
+    guard let value = Int(token), (5...100).contains(value) else {
+      usageDie("invalid volume: \(token)")
+    }
+    return value
+  }
+}
+
 /// フラグを取り切った後の残余を検査する。席に座れなかったトークンは usage エラー
 /// ——黙って捨てると、指定と違う音を聴いて判断を誤る。
 func rejectLeftovers(_ args: [String], positionals: Int) {
@@ -110,16 +133,8 @@ struct Target {
 
 /// render / play / analyze が共有する位置引数 + 共通フラグの取り出し。
 func parseTarget(_ args: inout [String]) -> Target {
-  let rate = takeOption(&args, "--rate", requires: "a sample rate in hz").map { token -> Double in
-    guard let value = Double(token), value >= 8000 else { usageDie("invalid rate: \(token)") }
-    return value
-  }
-  let volume = takeOption(&args, "--volume", requires: "a volume (5-100)").map { token -> Int in
-    guard let value = Int(token), (5...100).contains(value) else {
-      usageDie("invalid volume: \(token)")
-    }
-    return value
-  }
+  let rate = takeRate(&args)
+  let volume = takeVolume(&args)
   guard args.count >= 2 else { usageDie("expected <name> <done|waiting|->") }
   let sound = resolve(name: args[0], eventToken: args[1])
   args.removeSubrange(0...1)
@@ -191,11 +206,8 @@ func runAnalyze(_ rawArgs: [String]) {
   var args = rawArgs
   if let allIndex = args.firstIndex(of: "--all") {
     args.remove(at: allIndex)
-    let rate =
-      takeOption(&args, "--rate", requires: "a sample rate in hz").map { Double($0) ?? 48000 }
-      ?? 48000
-    let volume =
-      takeOption(&args, "--volume", requires: "a volume (5-100)").map { Int($0) ?? 70 } ?? 70
+    let rate = takeRate(&args) ?? 48000
+    let volume = takeVolume(&args) ?? 70
     rejectLeftovers(args, positionals: 0)
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {

@@ -179,6 +179,36 @@ final class OrbeSoundProcessTests: XCTestCase {
     }
   }
 
+  /// `analyze --all` も単体経路と同じ検証を通る——読めない値も範囲外の値も exit 2。
+  /// 検証が抜けると、指定と違うレートの表やクリップした音量の表が exit 0 の顔で出て、
+  /// ラウドネス整合の判断材料そのものが壊れる。
+  func testAnalyzeAllValidatesRateAndVolume() throws {
+    for args in [
+      ["analyze", "--all", "--rate", "abc"],
+      ["analyze", "--all", "--rate", "4000"],
+      ["analyze", "--all", "--volume", "999"],
+    ] {
+      let result = try run(args)
+      XCTAssertEqual(result.status, 2, "\(args)")
+      XCTAssertTrue(result.stderr.contains("invalid"), "\(args): \(result.stderr)")
+    }
+  }
+
+  /// 非有限・変換域外のレートは usage エラーで弾く——0/1/2 の契約の外（シグナル死）へ落とさない。
+  /// 上限 768000（8×96 kHz）は「Double→Int 変換の域外の値が合成層へ届かない」ことの入口の守り。
+  func testAbsurdRatesAreUsageErrorsNotCrashes() throws {
+    for args in [
+      ["analyze", "glass", "done", "--rate", "inf"],
+      ["render", "glass", "done", "--rate", "1e300"],
+      ["board", "--rate", "inf"],
+      ["analyze", "--all", "--rate", "1e300"],
+    ] {
+      let result = try run(args)
+      XCTAssertEqual(result.status, 2, "\(args): 契約外の出口へ落ちている")
+      XCTAssertTrue(result.stderr.contains("invalid rate"), "\(args): \(result.stderr)")
+    }
+  }
+
   // MARK: - 実行エラー（exit 1）
 
   /// 書けない出力先は usage でなく実行エラー（exit 1）に落ちる。

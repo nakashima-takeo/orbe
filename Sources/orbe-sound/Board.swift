@@ -17,16 +17,8 @@ struct BoardEntry {
 func runBoard(_ rawArgs: [String]) {
   var args = rawArgs
   let out = takeOption(&args, "--out", requires: "a directory path")
-  let rate = takeOption(&args, "--rate", requires: "a sample rate in hz").map { token -> Double in
-    guard let value = Double(token), value >= 8000 else { usageDie("invalid rate: \(token)") }
-    return value
-  }
-  let volume = takeOption(&args, "--volume", requires: "a volume (5-100)").map { token -> Int in
-    guard let value = Int(token), (5...100).contains(value) else {
-      usageDie("invalid volume: \(token)")
-    }
-    return value
-  }
+  let rate = takeRate(&args)
+  let volume = takeVolume(&args)
   rejectLeftovers(args, positionals: 0)
 
   // --out 省略時は毎回同じ既定ディレクトリへ上書きする——ブラウザはリロードだけで最新になる。
