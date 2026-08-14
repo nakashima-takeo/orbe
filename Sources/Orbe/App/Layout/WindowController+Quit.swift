@@ -9,7 +9,10 @@ extension WindowController {
   /// メニューバーの常駐アイテムだけが残るゾンビ状態になる。窓が閉じるのは終了が確定した後。
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     // 「閉じてよいか」を即答する契約に従い、確認モーダルと終了シーケンスは次のランループへ送る。
-    DispatchQueue.main.async { NSApp.terminate(nil) }
+    // main キューではなくランループへ積む。キューのブロック実行中にモーダルへ入ると、その入れ子の
+    // 間 main キューは次を捌けず、端末描画（`Ghostty` の wakeup → tick）も制御 API も答えを待つ間
+    // 止まってしまう——実行中プロセスの是非を問う画面で、当のプロセスの出力が凍る。
+    RunLoop.main.perform { NSApp.terminate(nil) }
     return false
   }
 }
