@@ -209,8 +209,8 @@ private func analysisRow(name: String, samples: [Float], rate: Double) -> String
   let padded = name + String(repeating: " ", count: max(0, 16 - name.count))
   return padded
     + String(
-      format: " %6.2fs  peak %7.2f dB  rms %7.2f dB  crest %6.2f dB",
-      result.duration, result.peakDB, result.rmsDB, result.crestDB)
+      format: " %6.2fs  peak %7.2f dB  rms %7.2f dB  loud %7.2f dB  crest %6.2f dB",
+      result.duration, result.peakDB, result.rmsDB, result.maxShortTermRMSDB, result.crestDB)
 }
 
 func runAnalyze(_ rawArgs: [String]) {

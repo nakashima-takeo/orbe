@@ -35,6 +35,10 @@ public enum SoundRenderer {
       }
     }
 
+    if program.trimDB != 0 {
+      let trim = pow(10, program.trimDB / 20)
+      for i in buffer.indices { buffer[i] *= trim }
+    }
     for effect in program.effects { effect.apply(to: &buffer, sampleRate: sampleRate) }
 
     let level = Double(volume) / 100
