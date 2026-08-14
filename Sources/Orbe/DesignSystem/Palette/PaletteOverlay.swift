@@ -12,7 +12,9 @@ struct PaletteOverlay: View {
   private static let topAnchor: CGFloat = 66
   private let cardWidth: CGFloat = 560
 
-  /// 窓が与えるカードの置き場所。上下の余白と、カードに許す高さ。
+  /// 窓が与えるカードの置き場所。`top` だけがアンカーの padding として敷かれ、`bottom` は
+  /// padding を持たず `maxHeight` に畳み込まれている（下端は窓が押さえるので敷く必要がない）。
+  /// `bottom` を残すのは 66:16 の比が保たれること——片側だけ潰れないこと——を語れる形にするため。
   struct CardLayout {
     let top: CGFloat
     let bottom: CGFloat
