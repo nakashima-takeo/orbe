@@ -11,7 +11,30 @@ struct BoardEntry {
   let name: String  // 表示名（glass/done, demo-signal）
   let file: String  // WAV ファイル名
   let duration: Double
-  let rmsDB: Double
+  let loudDB: Double  // 最大短時間 RMS（dBFS）。ラウドネス整合の基準値
+  let wavePoints: String  // 波形見取り図（SVG polygon の点列）
+}
+
+/// 波形の見取り図。|サンプル| を 160 区間の最大値に間引き、中心線対称のポリゴン点列にする。
+/// 高さは各音自身のピークで正規化する——図の仕事は音量でなく「形」（立ち上がり・リズム・余韻）を
+/// 見せること。音量の比較は loud の数値が担う。
+func wavePoints(_ samples: [Float]) -> String {
+  let buckets = 160
+  let mid = 16.0
+  let amp = 15.0
+  guard !samples.isEmpty else { return "" }
+  var peaks = [Double](repeating: 0, count: buckets)
+  for bucket in 0..<buckets {
+    let lo = bucket * samples.count / buckets
+    let hi = max(lo + 1, (bucket + 1) * samples.count / buckets)
+    for i in lo..<hi { peaks[bucket] = max(peaks[bucket], Double(abs(samples[i]))) }
+  }
+  let scale = (peaks.max() ?? 0) > 0 ? amp / peaks.max()! : 0
+  let top = peaks.enumerated()
+    .map { String(format: "%d,%.1f", $0.offset, mid - $0.element * scale) }
+  let bottom = peaks.enumerated().reversed()
+    .map { String(format: "%d,%.1f", $0.offset, mid + $0.element * scale) }
+  return (top + bottom).joined(separator: " ")
 }
 
 func runBoard(_ rawArgs: [String]) {
@@ -48,7 +71,9 @@ func generateBoard(to dir: URL, rate: Double, volume: Int) throws -> URL {
       entries.append(
         BoardEntry(
           section: "catalog", name: "\(family.rawValue)/\(event.rawValue)", file: file,
-          duration: Double(samples.count) / rate, rmsDB: SoundAnalysis.rmsDB(samples)))
+          duration: Double(samples.count) / rate,
+          loudDB: SoundAnalysis.maxShortTermRMSDB(samples, sampleRate: rate),
+          wavePoints: wavePoints(samples)))
     }
   }
   for entry in Scratch.entries {
@@ -59,7 +84,9 @@ func generateBoard(to dir: URL, rate: Double, volume: Int) throws -> URL {
     entries.append(
       BoardEntry(
         section: "scratch", name: entry.name, file: file,
-        duration: Double(samples.count) / rate, rmsDB: SoundAnalysis.rmsDB(samples)))
+        duration: Double(samples.count) / rate,
+        loudDB: SoundAnalysis.maxShortTermRMSDB(samples, sampleRate: rate),
+        wavePoints: wavePoints(samples)))
   }
 
   let index = dir.appendingPathComponent("index.html")
@@ -68,14 +95,40 @@ func generateBoard(to dir: URL, rate: Double, volume: Int) throws -> URL {
   return index
 }
 
-private func cardHTML(_ entry: BoardEntry) -> String {
-  let stats = String(format: "%.2f s · RMS %.1f dB", entry.duration, entry.rmsDB)
+private func cardHTML(_ entry: BoardEntry, showName: Bool = true) -> String {
+  let stats = String(format: "%.2f s · loud %.1f dB", entry.duration, entry.loudDB)
+  let name = showName ? "\n          <div class=\"name\">\(entry.name)</div>" : ""
   return """
-        <div class="card" tabindex="0" data-src="\(entry.file)" data-name="\(entry.name)">
-          <div class="name">\(entry.name)</div>
+        <div class="card" tabindex="0" data-src="\(entry.file)" data-name="\(entry.name)">\(name)
+          <svg class="wave" viewBox="0 0 160 32" preserveAspectRatio="none">
+            <polygon points="\(entry.wavePoints)"/></svg>
           <div class="stats">\(stats)</div>
           <div class="ab"><button data-slot="a">A</button><button data-slot="b">B</button></div>
         </div>
+    """
+}
+
+/// カタログの面。1 行 = 1 案で、done / waiting を左右に並べる——縦の視線が案同士の比較、
+/// 横の視線がその案のペア（同じ音色の 2 つの音形）になる。
+private func pairedSectionHTML(_ title: String, _ entries: [BoardEntry]) -> String {
+  var rows: [String] = []
+  for pair in stride(from: 0, to: entries.count - 1, by: 2) {
+    let family = entries[pair].name.split(separator: "/").first.map(String.init) ?? ""
+    rows.append(
+      """
+          <div class="fname">\(family)</div>
+      \(cardHTML(entries[pair], showName: false))
+      \(cardHTML(entries[pair + 1], showName: false))
+      """)
+  }
+  return """
+      <section>
+        <h2>\(title)</h2>
+        <div class="pairs">
+          <div></div><div class="colhead">done</div><div class="colhead">waiting</div>
+      \(rows.joined(separator: "\n"))
+        </div>
+      </section>
     """
 }
 
@@ -84,7 +137,7 @@ private func sectionHTML(_ title: String, _ entries: [BoardEntry]) -> String {
     <section>
       <h2>\(title)</h2>
       <div class="grid">
-    \(entries.map(cardHTML).joined(separator: "\n"))
+    \(entries.map { cardHTML($0) }.joined(separator: "\n"))
       </div>
     </section>
   """
@@ -109,8 +162,15 @@ private func boardHTML(entries: [BoardEntry], rate: Double, volume: Int) -> Stri
       .meta { color: #6a6a80; font-size: 12px; margin: 0 0 2px; }
       .help { color: #8a8aa0; font-size: 12px; margin: 0; }
       .help kbd { background: #24243a; border-radius: 4px; padding: 0 5px; color: #c8c8d8; }
+      section { max-width: 760px; }
       .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
               gap: 8px; }
+      .pairs { display: grid; grid-template-columns: 76px 1fr 1fr; gap: 8px;
+               align-items: stretch; }
+      .colhead { color: #6a6a80; font-size: 12px; text-transform: uppercase;
+                 letter-spacing: 0.08em; }
+      .fname { color: #e8e8f2; font-weight: 600; align-self: center; text-align: right;
+               padding-right: 4px; }
       .card { background: #1e1e2c; border: 1px solid #2c2c40; border-radius: 8px;
               padding: 10px 12px; cursor: pointer; position: relative; user-select: none; }
       .card:hover { border-color: #46466a; }
@@ -121,6 +181,9 @@ private func boardHTML(entries: [BoardEntry], rate: Double, volume: Int) -> Stri
       .card.slot-a::before { content: "A"; right: 34px; background: #9ece6a; }
       .card.slot-b::after { content: "B"; right: 8px; background: #e0af68; }
       .name { color: #e8e8f2; font-weight: 600; }
+      .wave { display: block; width: 100%; height: 32px; margin-top: 6px; }
+      .wave polygon { fill: #3f3f5e; }
+      .card.playing .wave polygon { fill: #7aa2f7; }
       .stats { color: #6a6a80; font-size: 12px; margin-top: 2px; }
       .ab { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 4px;
             opacity: 0; transition: opacity 0.1s; }
@@ -141,7 +204,7 @@ private func boardHTML(entries: [BoardEntry], rate: Double, volume: Int) -> Stri
         <kbd>a</kbd> <kbd>b</kbd> で即再生、<kbd>space</kbd> で交互（A/B 比較）。</p>
       <div id="slots">A: <b id="slot-a">—</b> &nbsp; B: <b id="slot-b">—</b></div>
     </header>
-    \(sectionHTML("catalog", catalog))
+    \(pairedSectionHTML("catalog", catalog))
     \(sectionHTML("scratch", scratch))
     <script>
     "use strict";
