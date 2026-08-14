@@ -22,15 +22,6 @@ final class EnvelopeTests: XCTestCase {
     }
   }
 
-  /// `decay` を明示した `.percussive` は attack + decay の時点で消える（duration に縛られない）。
-  func testPercussiveWithExplicitDecay() {
-    let param = Envelope.percussive(attack: 0.01, decay: 0.2)
-      .automation(start: 0, duration: 1.0, scale: 1)
-    XCTAssertEqual(param.value(at: 0.01), 1, accuracy: 1e-12)
-    XCTAssertEqual(param.value(at: 0.21), AudioParam.zero, accuracy: 1e-12)
-    XCTAssertEqual(param.value(at: 0.5), AudioParam.zero, accuracy: 1e-12, "以降は保持")
-  }
-
   /// ADSR: 各ブレークポイントに到達し、サステインは発音終了まで保持され、リリースで 0 へ落ちる。
   func testADSRReachesEveryBreakpointAndHoldsSustain() {
     let sustain = 0.6
@@ -85,7 +76,7 @@ final class EnvelopeTests: XCTestCase {
   }
 
   /// `end` は最後の点まで（リリースぶん伸びる）。ただし duration を下回らない
-  /// ——最後の点の後も値は保持されて鳴り続けるため。
+  /// ——部品の長さは指定した duration を保つため。
   func testEndCoversTheTailButNeverUndercutsDuration() {
     XCTAssertEqual(Envelope.percussive(attack: 0.004).end(duration: 0.5), 0.5, accuracy: 1e-12)
     XCTAssertEqual(

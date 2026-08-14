@@ -112,20 +112,21 @@ public enum Waveform: Hashable {
   }
 }
 
-/// 2 次 IIR フィルタ（RBJ Audio EQ Cookbook の係数・Direct Form I の適用）。
+/// フィルタの種別（`NoiseSpec.kind` が選ぶ宣言語彙。実装は `Biquad` が持つ）。
 ///
 /// **Q の解釈が種別で違うのはこのエンジンの規約**: lowpass / highpass はデシベル、bandpass は線形。
 /// 取り違えると遊技のこもり具合・気配や洋琴のノイズの色が変わる。
-public struct Biquad {
-  public enum Kind: Hashable { case lowpass, highpass, bandpass }
+public enum FilterKind: Hashable { case lowpass, highpass, bandpass }
 
+/// 2 次 IIR フィルタ（RBJ Audio EQ Cookbook の係数・Direct Form I の適用）。
+struct Biquad {
   /// a0 で正規化済みの係数。
   struct Coefficients: Equatable {
     let b0, b1, b2, a1, a2: Double
   }
 
   static func coefficients(
-    kind: Kind, frequency: Double, q: Double, sampleRate: Double
+    kind: FilterKind, frequency: Double, q: Double, sampleRate: Double
   ) -> Coefficients {
     let nyquist = sampleRate / 2
     let f0 = min(max(frequency, 1), nyquist * 0.999)

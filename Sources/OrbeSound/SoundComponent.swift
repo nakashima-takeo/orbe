@@ -21,34 +21,19 @@ public struct SoundProgram: Hashable {
 /// 低周波オシレータ。部品の `pitchLFO`（ビブラート: Hz 幅で瞬時周波数へ加算）と
 /// `gainLFO`（トレモロ: 公称ゲインを 1 − depth…1 の間で揺らす）の 2 用途を 1 つの語彙で持つ。
 public struct LFO: Hashable {
-  public enum Shape: Hashable { case sine, triangle }
-
   /// 揺れの速さ（Hz）。
   public var rate: Double
   /// 揺れの幅。ビブラートでは Hz、トレモロでは 0…1 の変調深さ。
   public var depth: Double
-  public var shape: Shape
 
-  public init(rate: Double, depth: Double, shape: Shape = .sine) {
+  public init(rate: Double, depth: Double) {
     self.rate = rate
     self.depth = depth
-    self.shape = shape
   }
 
-  /// 発音開始からの経過秒 t における揺れ（-1…1）。sine・triangle とも 0 から立ち上がる
+  /// 発音開始からの経過秒 t における揺れ（-1…1）。0 から立ち上がる
   /// （鳴り始めに揺れの段差を作らない）。
-  func value(at t: Double) -> Double {
-    let phase = rate * t
-    switch shape {
-    case .sine:
-      return sin(2 * Double.pi * phase)
-    case .triangle:
-      let p = phase - floor(phase)
-      if p < 0.25 { return 4 * p }
-      if p < 0.75 { return 2 - 4 * p }
-      return 4 * p - 4
-    }
-  }
+  func value(at t: Double) -> Double { sin(2 * Double.pi * rate * t) }
 
   /// トレモロの振幅係数（1 − depth…1）。上限を公称ゲインに固定し、揺らしてもクリップ余地を
   /// 作らない（1 ± depth にすると depth ぶんピークが上がる）。
@@ -199,16 +184,16 @@ public struct NoiseSpec: Hashable {
   public var start: Double
   public var duration: Double
   public var gain: Double
-  public var kind: Biquad.Kind
+  public var kind: FilterKind
   /// フィルタ周波数（Hz）のエンベロープ。`.constant` なら係数を 1 度だけ組む。
   public var cutoff: Envelope
-  /// 単位は `kind` で変わる——lowpass / highpass は dB、bandpass は線形（→ `Biquad`）。
+  /// 単位は `kind` で変わる——lowpass / highpass は dB、bandpass は線形（→ `FilterKind`）。
   public var q: Double
   /// ゲインの時間形状（値 1 = `gain`）。
   public var envelope: Envelope
 
   public init(
-    start: Double, duration: Double, gain: Double, kind: Biquad.Kind, cutoff: Envelope,
+    start: Double, duration: Double, gain: Double, kind: FilterKind, cutoff: Envelope,
     q: Double = 0.8, envelope: Envelope = .percussive(attack: 0.01)
   ) {
     self.start = start

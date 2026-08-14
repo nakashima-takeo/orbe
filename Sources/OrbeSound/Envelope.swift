@@ -12,7 +12,7 @@ public struct Envelope: Hashable {
   public enum Curve: Hashable {
     /// 直前の値を保持し、この点の時刻で新しい値へ跳ぶ。
     case step
-    /// 直線で結ぶ。指数と違い 0 へ正確に到達できる。
+    /// 直線で結ぶ。指数が幾何平均で補間するのに対し、こちらは算術平均で補間する。
     case linear
     /// 指数（等比）で結ぶ。減衰・立ち上がりの自然な形。指数は 0 を扱えないため、
     /// 値 0 は可聴下限の `AudioParam.zero` に読み替えて展開する。
@@ -48,16 +48,13 @@ public struct Envelope: Hashable {
   /// 任意のブレークポイント列。
   public static func breakpoints(_ points: [Point]) -> Envelope { Envelope(points: points) }
 
-  /// 打楽器的な形: `attack` 秒で公称レベルへ指数で立ち上がり、指数で消える。
-  /// `decay` は減衰の長さ（秒）で、省略時は発音終了（`duration`）ちょうどで消える。
-  public static func percussive(attack: Double, decay: Double? = nil) -> Envelope {
-    let fall =
-      decay.map { Point(offset: attack + $0, value: 0, curve: .exponential) }
-      ?? Point(fraction: 1, value: 0, curve: .exponential)
-    return breakpoints([
+  /// 打楽器的な形: `attack` 秒で公称レベルへ指数で立ち上がり、発音終了（`duration`）まで
+  /// 指数で消える。
+  public static func percussive(attack: Double) -> Envelope {
+    breakpoints([
       Point(value: 0, curve: .step),
       Point(offset: attack, value: 1, curve: .exponential),
-      fall,
+      Point(fraction: 1, value: 0, curve: .exponential),
     ])
   }
 
@@ -123,8 +120,8 @@ public struct Envelope: Hashable {
     return param
   }
 
-  /// 発音が終わる時刻（部品の `end` 計算に使う）。最後の点が `duration` より手前にあっても
-  /// 値はそこから保持されて鳴り続けるので、`duration` を下回らない。
+  /// 発音が終わる時刻（部品の `end` 計算に使う）。最後の点は `duration` より手前にも置けるが、
+  /// 部品の長さは指定した `duration` を下回らせない。
   func end(duration: Double) -> Double {
     max(duration, points.map { $0.time(duration: duration) }.max() ?? duration)
   }
