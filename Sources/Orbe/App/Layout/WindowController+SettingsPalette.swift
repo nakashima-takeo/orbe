@@ -37,9 +37,10 @@ extension WindowController {
       self.onLanguageChanged?()
       AppStatePersistence.update { $0.preferredLanguage = language.rawValue }
     }
-    // 通知音サブパレットの試聴。行 0（なし）は鳴っている音を止めるだけ。案・音量ともパレットが
-    // 見せているスコープの実効値で届くので、ここは再生層へ渡すだけ（別の解決を持ち込まない）。
-    // 「通知音のオン/オフ」が off でも鳴らす——off のまま選び直せないと詰む。
+    // 通知音の試聴（サブパレットの行移動と root の音量行が共有する 1 経路）。nil は「なし」行だけで、
+    // 鳴っている音を止めるだけ。案・音量ともパレットが見せているスコープの実効値で届くので、
+    // ここは再生層へ渡すだけ（別の解決を持ち込まない）。
+    // 「通知音のオン/オフ」が off でも鳴らす——off のまま案も音量も決め直せないと詰む。
     p.onPreviewSound = { [weak self] sound, event, volume in
       guard let self else { return }
       guard let sound else {
