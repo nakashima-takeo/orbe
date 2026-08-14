@@ -19,19 +19,18 @@ public enum SoundAnalysis {
     public let rmsDB: Double
     /// ピークと RMS の差（dB）。打撃的な音ほど大きい。
     public let crestDB: Double
-    /// スペクトルの上位ピーク（相対レベル降順）。
-    public let spectralPeaks: [SpectralPeak]
   }
 
-  public static func analyze(
-    _ samples: [Float], sampleRate: Double, peakCount: Int = 5
-  ) -> Result {
-    Result(
+  /// スカラ指標の一括算出。スペクトルのピークは要る場面だけ `spectralPeaks` を直接呼ぶ
+  /// ——O(n²) の DFT を、一覧表示のような要らない場面へ抱き合わせない。
+  public static func analyze(_ samples: [Float], sampleRate: Double) -> Result {
+    let peak = peakDB(samples)
+    let rms = rmsDB(samples)
+    return Result(
       duration: Double(samples.count) / sampleRate,
-      peakDB: peakDB(samples),
-      rmsDB: rmsDB(samples),
-      crestDB: peakDB(samples) - rmsDB(samples),
-      spectralPeaks: spectralPeaks(samples, sampleRate: sampleRate, count: peakCount))
+      peakDB: peak,
+      rmsDB: rms,
+      crestDB: peak - rms)
   }
 
   /// 最大振幅（dBFS）。無音は -Double.infinity。
@@ -53,8 +52,7 @@ public enum SoundAnalysis {
   public static func spectralPeaks(_ samples: [Float], sampleRate: Double, count: Int)
     -> [SpectralPeak]
   {
-    // count 0 は「ピーク不要」（analyze --all の一覧など）。DFT は O(n²) なので回さず返す。
-    guard count > 0, samples.count >= 16 else { return [] }
+    guard samples.count >= 16 else { return [] }
     let window = min(4096, samples.count)
     // 窓は最大振幅サンプルから始める（減衰音の tonal な本体を捉える）。端では収まる位置へ寄せる。
     var start = 0
@@ -91,10 +89,11 @@ public enum SoundAnalysis {
       magnitudes[k] = (real * real + imaginary * imaginary).squareRoot()
     }
 
-    // 局所極大 → 相対レベル降順 → 上位 count 件。
+    // 局所極大 → 相対レベル降順 → 上位 count 件。DC（bin 0）は算出していないので、
+    // それを左隣として見る bin 1 は判定に入れない（未計算の 0 を実測値として比べてしまう）。
     guard let strongest = magnitudes.max(), strongest > 0 else { return [] }
     var found: [SpectralPeak] = []
-    for k in 1..<(bins - 1)
+    for k in 2..<(bins - 1)
     where magnitudes[k] > magnitudes[k - 1] && magnitudes[k] >= magnitudes[k + 1] {
       let level = 20 * log10(magnitudes[k] / strongest)
       guard level > -60 else { continue }

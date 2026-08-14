@@ -10,7 +10,7 @@ final class SoundAnalysisTests: XCTestCase {
   /// 一定振幅 0.5 は peak = rms = -6.02 dBFS、クレスト 0（dB 換算の検算）。
   func testPeakAndRMSOfConstantSignal() {
     let samples = [Float](repeating: 0.5, count: 4800)
-    let result = SoundAnalysis.analyze(samples, sampleRate: sampleRate, peakCount: 0)
+    let result = SoundAnalysis.analyze(samples, sampleRate: sampleRate)
     XCTAssertEqual(result.peakDB, -6.0206, accuracy: 1e-3)
     XCTAssertEqual(result.rmsDB, -6.0206, accuracy: 1e-3)
     XCTAssertEqual(result.crestDB, 0, accuracy: 1e-6)

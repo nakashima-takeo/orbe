@@ -196,10 +196,12 @@ func runPlay(_ rawArgs: [String]) {
 
 /// 一覧の 1 行（--all とカタログ単体で共用）。
 private func analysisRow(name: String, samples: [Float], rate: Double) -> String {
-  let result = SoundAnalysis.analyze(samples, sampleRate: rate, peakCount: 0)
-  return String(
-    format: "%-16s %6.2fs  peak %7.2f dB  rms %7.2f dB  crest %6.2f dB",
-    (name as NSString).utf8String!, result.duration, result.peakDB, result.rmsDB, result.crestDB)
+  let result = SoundAnalysis.analyze(samples, sampleRate: rate)
+  let padded = name + String(repeating: " ", count: max(0, 16 - name.count))
+  return padded
+    + String(
+      format: " %6.2fs  peak %7.2f dB  rms %7.2f dB  crest %6.2f dB",
+      result.duration, result.peakDB, result.rmsDB, result.crestDB)
 }
 
 func runAnalyze(_ rawArgs: [String]) {
