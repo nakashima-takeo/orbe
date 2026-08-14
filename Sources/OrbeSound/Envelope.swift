@@ -123,9 +123,10 @@ public struct Envelope: Hashable {
     return param
   }
 
-  /// 最後の点の時刻（発音が終わる時刻。部品の `end` 計算に使う）。
+  /// 発音が終わる時刻（部品の `end` 計算に使う）。最後の点が `duration` より手前にあっても
+  /// 値はそこから保持されて鳴り続けるので、`duration` を下回らない。
   func end(duration: Double) -> Double {
-    points.map { $0.time(duration: duration) }.max() ?? duration
+    max(duration, points.map { $0.time(duration: duration) }.max() ?? duration)
   }
 
   /// 全点が同じ値ならその値。カットオフが動かない noise でフィルタ係数を 1 度だけ組む判定に使う。

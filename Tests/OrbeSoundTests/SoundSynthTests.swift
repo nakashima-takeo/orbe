@@ -60,6 +60,19 @@ final class SoundSynthTests: XCTestCase {
       param.value(at: middle), (gain * AudioParam.zero).squareRoot(), accuracy: 1e-9)
   }
 
+  /// 線形ランプは端点に正確に到達し、中点は算術平均（指数の幾何平均と区別する）。
+  func testLinearRampInterpolatesArithmetically() {
+    var param = AudioParam(0.2, at: 0)
+    param.rampLinearly(to: 1.0, at: 0.1)
+    param.rampLinearly(to: 0, at: 0.3)
+    XCTAssertEqual(param.value(at: 0), 0.2, accuracy: 1e-12)
+    XCTAssertEqual(param.value(at: 0.05), 0.6, accuracy: 1e-12, "中点は算術平均")
+    XCTAssertEqual(param.value(at: 0.1), 1.0, accuracy: 1e-12)
+    XCTAssertEqual(param.value(at: 0.2), 0.5, accuracy: 1e-12)
+    XCTAssertEqual(param.value(at: 0.3), 0, accuracy: 1e-12, "指数と違い 0 へ正確に到達する")
+    XCTAssertEqual(param.value(at: 1), 0, accuracy: 1e-12, "以降は保持")
+  }
+
   // MARK: - 帯域制限（Nyquist 超の倍音を足さない）
 
   /// 3 倍音が Nyquist を超える高い音では基音だけになる（＝素の級数のエイリアスが乗らない）。
@@ -81,6 +94,19 @@ final class SoundSynthTests: XCTestCase {
     XCTAssertEqual(
       Waveform.square.sample(phase: phase, frequency: 7000, sampleRate: 48000),
       4 / Double.pi * (sin(phase) + sin(3 * phase) / 3), accuracy: 1e-12, "3f < Nyquist は足す")
+  }
+
+  /// sawtooth は全倍音（偶数次も）を 1/k で持ち、やはり Nyquist で打ち切る。
+  func testSawtoothHasAllHarmonicsBelowNyquist() {
+    let phase = 0.9
+    // f=9000: 2 倍音（18000）までが Nyquist（24000）未満。
+    XCTAssertEqual(
+      Waveform.sawtooth.sample(phase: phase, frequency: 9000, sampleRate: 48000),
+      2 / Double.pi * (sin(phase) + sin(2 * phase) / 2), accuracy: 1e-12, "偶数次も足す")
+    // f=13000: 基音のみ。
+    XCTAssertEqual(
+      Waveform.sawtooth.sample(phase: phase, frequency: 13000, sampleRate: 48000),
+      2 / Double.pi * sin(phase), accuracy: 1e-12)
   }
 
   /// sine は倍音を持たない（帯域制限の分岐に巻き込まれない）。

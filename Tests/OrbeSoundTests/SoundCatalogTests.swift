@@ -103,6 +103,22 @@ final class SoundCatalogTests: XCTestCase {
       quietPeak, loudPeak * 0.2 * 1.02, "コンプレッサの後段なら厳密に 0.2 倍になる")
   }
 
+  /// ラウドネス整合: 全 24 音の RMS(dBFS) が帯域内に収まる（音量 70・48 kHz。帯域は実測分布
+  /// -36.4〜-21.3 dB に前後の余白を足した -39〜-19 dB）。案を作り直すときはこの帯域が
+  /// 「他の案と並べて音量の違和感が出ない」ことの客観的な物差しになる——外れたら音の gain を
+  /// 調整するか、分布ごと動かす意図があるならこの帯域を引き直す。
+  func testLoudnessOfEverySoundStaysWithinTheBand() {
+    for family in NotificationSound.allCases {
+      for event in AgentSoundEvent.allCases {
+        let samples = SoundRenderer.render(
+          family: family, event: event, volume: 70, sampleRate: sampleRate)
+        let rms = SoundAnalysis.rmsDB(samples)
+        XCTAssertGreaterThan(rms, -39, "\(family)/\(event) が静かすぎる (\(rms) dBFS)")
+        XCTAssertLessThan(rms, -19, "\(family)/\(event) が大きすぎる (\(rms) dBFS)")
+      }
+    }
+  }
+
   /// サンプルレートが変わっても同じ長さの音になる（biquad 係数もレートへ追従する）。
   func testRenderFollowsSampleRate() {
     let at44k = SoundRenderer.render(family: .pulse, event: .done, volume: 70, sampleRate: 44100)
