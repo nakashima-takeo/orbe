@@ -49,11 +49,15 @@ final class SoundCatalogTests: XCTestCase {
 
   /// 12 案 × 2 イベントが**互いに違う音**になる（`program` の手書き switch は誤配線しても
   /// コンパイラが黙るので、配線の同一性をここで機械検証する。レンダリングは要らない）。
+  /// 署名からトリムは外す——トリムは「どう鳴るか」であって「どの音か」ではなく、音ごとに違う値が
+  /// 署名を必ず散らすので、含めると誤配線が丸ごと隠れる。
   func testEveryFamilyAndEventProducesADistinctSound() {
     var signatures: Set<SoundProgram> = []
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
-        signatures.insert(SoundCatalog.program(family, event))
+        var signature = SoundCatalog.program(family, event)
+        signature.trimDB = 0
+        signatures.insert(signature)
       }
     }
     XCTAssertEqual(signatures.count, 24, "案 × イベントの配線が重複している")
