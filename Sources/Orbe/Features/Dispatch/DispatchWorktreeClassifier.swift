@@ -11,8 +11,10 @@ enum DispatchWorktreeClassifier {
   struct Input {
     var worktrees: [GitWorktree] = []
     var localBranches: [GitBranch] = []
-    var closedPullRequests: [GitHubClosedPR] = []
-    var openPullRequests: [GitHubPullRequest] = []
+    /// ブランチ名指しの PR 取得（`--state all --head <branch>`）の着地。open / closed の両方の
+    /// 事実がここから決まる——一覧の窓（直近 N 件）に頼ると、窓落ちした PR のぶんだけ
+    /// 「merged チップが出ない」「レビュー中なのに安全確認を素通りする」が起きる。
+    var branchPullRequests: [GitHubBranchPR] = []
     /// path → 分類レーンの実測。無い worktree は「判定できなかった」として扱う。
     var probes: [String: DispatchCleanProbe] = [:]
     var panes: [PaneOccupancy] = []
@@ -26,24 +28,24 @@ enum DispatchWorktreeClassifier {
     let occupancy = occupancies(worktreePaths: input.worktrees.map(\.path), panes: input.panes)
     let branchByName = Dictionary(
       input.localBranches.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
-    let closedByHead = Dictionary(
-      input.closedPullRequests.map { ($0.headRefName, $0) }, uniquingKeysWith: { first, _ in first }
-    )
-    let openByHead = Dictionary(
-      input.openPullRequests.map { ($0.headRefName, $0) }, uniquingKeysWith: { first, _ in first })
+    // fork（cross-repo）の PR は他人の同名ブランチの事実なので、突き合わせの**前に**除外する
+    // （`--head` はブランチ名でしか絞れない）。gh の並びは作成日時の降順で、grouping は
+    // 要素順を保つ——head ごとの先頭一致＝最新の PR を採る、という意味論がここで決まる。
+    let prsByHead = Dictionary(
+      grouping: input.branchPullRequests.filter { !$0.isCrossRepository }, by: \.headRefName)
     return classify(
       input.worktrees.map { worktree in
         let probe = input.probes[worktree.path]
         let local = worktree.branch.flatMap { branchByName[$0] }
-        let closed = worktree.branch.flatMap { closedByHead[$0] }
+        let prs = worktree.branch.flatMap { prsByHead[$0] } ?? []
         return DispatchCleanFacts(
           path: worktree.path, branch: worktree.branch, head: worktree.head,
           isMain: worktree.isMain, isPrunable: worktree.isPrunable,
           lockReason: worktree.lockReason, upstream: local?.upstream, track: local?.track,
-          closedPR: closed.map {
+          closedPR: prs.first { $0.state != "OPEN" }.map {
             DispatchCleanPR(number: $0.number, isMerged: $0.state == "MERGED", base: $0.baseRefName)
           },
-          openPR: worktree.branch.flatMap { openByHead[$0]?.number },
+          openPR: prs.first { $0.state == "OPEN" }?.number,
           status: probe?.status, containment: probe?.containment,
           operation: probe?.operation ?? .unknown, occupancy: occupancy[worktree.path])
       }, defaultBranchLabel: input.defaultBranchLabel)

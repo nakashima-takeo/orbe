@@ -88,23 +88,25 @@ final class GitHubCLI {
       ], completion: completion)
   }
 
-  /// ブランチ名指しの閉じた PR 取得引数（1 ブランチ＝最新 1 件。`closed` は MERGED も含み
-  /// `state` で区別できる）。**直近 N 件の一覧窓は使わない**——古くにマージされた PR が窓から
-  /// 溢れると「PR でマージしたブランチに merged チップが出ない」という取りこぼしになる。
-  /// `--head` は remote 側でブランチが削除済み（`[gone]`）でも headRefName で PR を返す。
-  static func closedPRArguments(head: String) -> [String] {
+  /// ブランチ名指しの PR 取得引数（open/closed を `--state all` の 1 往復で。作成日時の降順に
+  /// 最新 5 件）。**直近 N 件の一覧窓は使わない**——古くにマージされた PR も、古くから開いたままの
+  /// PR も、窓から溢れると「merged チップが出ない」「レビュー中なのに安全確認を素通りする」という
+  /// 取りこぼしになる。`--head` は remote 側でブランチが削除済み（`[gone]`）でも headRefName で
+  /// PR を返す。`--limit 5` は fork（cross-repo）の同名ブランチの PR を呼び出し側が除外した後も、
+  /// 自リポジトリの最新の PR が残るための余白。
+  static func branchPRArguments(head: String) -> [String] {
     [
-      "pr", "list", "--state", "closed", "--head", head, "--limit", "1", "--json",
-      "number,headRefName,state,baseRefName",
+      "pr", "list", "--state", "all", "--head", head, "--limit", "5", "--json",
+      "number,headRefName,state,baseRefName,isCrossRepository",
     ]
   }
 
-  /// 指定ブランチ群に紐づく閉じた PR（ブランチごとに最新 1 件）。worktree の掃除で
-  /// 「マージ済みか／未マージのまま閉じられたか」を見る。`nil` = 取得失敗／`[]` = 該当なし。
-  func closedPullRequests(
-    cwd: String, heads: [String], completion: @escaping ([GitHubClosedPR]?) -> Void
+  /// 指定ブランチ群に紐づく PR（ブランチごとに最新 5 件・open/closed 両方）。worktree の掃除で
+  /// 「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見る。`nil` = 取得失敗／`[]` = 該当なし。
+  func branchPullRequests(
+    cwd: String, heads: [String], completion: @escaping ([GitHubBranchPR]?) -> Void
   ) {
-    fetch(cwd: cwd, argsList: heads.map(Self.closedPRArguments(head:)), completion: completion)
+    fetch(cwd: cwd, argsList: heads.map(Self.branchPRArguments(head:)), completion: completion)
   }
 
   /// 取得の共通口（1 コマンド）。

@@ -179,16 +179,19 @@ struct GitHubIssue: Decodable, Equatable {
   let title: String
 }
 
-/// `gh pr list --state closed --head <branch> --json number,headRefName,state,baseRefName` の 1 PR。
-/// worktree の掃除で「マージ済みか／未マージのまま閉じられたか」を見るためだけの小さな形で、
-/// `GitHubPullRequest`（title・isCrossRepository 必須）ではこの JSON をデコードできない。
-struct GitHubClosedPR: Decodable, Equatable {
+/// `gh pr list --state all --head <branch> --json number,headRefName,state,baseRefName,isCrossRepository`
+/// の 1 PR。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見るための
+/// 小さな形で、`GitHubPullRequest`（title 必須）ではこの JSON をデコードできない。
+struct GitHubBranchPR: Decodable, Equatable {
   let number: Int
   let headRefName: String
-  /// `MERGED` / `CLOSED`。
+  /// `OPEN` / `MERGED` / `CLOSED`。
   let state: String
   /// マージ先ブランチ。**表示専用**（安全判定はローカル git の事実だけで閉じる）。
   let baseRefName: String
+  /// fork（cross-repo）由来か。`--head` はブランチ名でしか絞れないため、他人の fork の同名
+  /// ブランチに立った PR も返る——このリポジトリのブランチの事実として読めるのは自リポジトリの PR だけ。
+  let isCrossRepository: Bool
 }
 
 /// `gh pr list --json number,title,headRefName,reviewDecision,isCrossRepository` の 1 PR。

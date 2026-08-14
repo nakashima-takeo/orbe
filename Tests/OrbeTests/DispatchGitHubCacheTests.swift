@@ -94,24 +94,26 @@ final class DispatchGitHubCacheTests: OrbeTestCase {
     XCTAssertEqual(cache.entry(for: key)?.issues, [issue(1)], "PR の保存が issues を壊さない")
   }
 
-  // MARK: - 閉じた PR の取得
+  // MARK: - ブランチの PR の取得
 
-  /// 閉じた PR は一覧の窓ではなく **worktree にあるブランチの名指し**で引く。直近 N 件の窓では、
-  /// 古くにマージされた PR が窓から溢れ、PR でマージしたブランチに merged チップが出なくなる。
-  /// `--limit 1` は一覧先頭（最新）だけを使う突き合わせの意味論をそのまま運ぶ。
-  func testClosedPRFetchNamesTheBranchInsteadOfAWindow() {
+  /// ブランチの PR は一覧の窓ではなく **worktree にあるブランチの名指し**で、`--state all` の
+  /// 1 往復で open / closed の両方を引く。直近 N 件の窓では、窓落ちした PR のぶんだけ
+  /// 「マージ済みなのに merged チップが出ない」「レビュー中なのに安全確認を素通りする」が起きる。
+  /// `--limit 5` は fork（cross-repo）の同名ブランチの PR を除外した後も自リポジトリの最新の
+  /// PR が残るための余白。
+  func testBranchPRFetchNamesTheBranchInsteadOfAWindow() {
     XCTAssertEqual(
-      GitHubCLI.closedPRArguments(head: "refactor/phase2-2b"),
+      GitHubCLI.branchPRArguments(head: "refactor/phase2-2b"),
       [
-        "pr", "list", "--state", "closed", "--head", "refactor/phase2-2b", "--limit", "1",
-        "--json", "number,headRefName,state,baseRefName",
+        "pr", "list", "--state", "all", "--head", "refactor/phase2-2b", "--limit", "5",
+        "--json", "number,headRefName,state,baseRefName,isCrossRepository",
       ])
   }
 
   /// 対象は worktree にあるブランチだけ（main worktree は掃除の対象外・detached は PR の head に
   /// なり得ない）。ここが広がると worktree 本数で抑えているプロセス数の前提が崩れる。
-  func testClosedPRHeadsTargetNonMainWorktreeBranchesOnly() {
-    let heads = DispatchDataProvider.closedPRHeads(of: [
+  func testBranchPRHeadsTargetNonMainWorktreeBranchesOnly() {
+    let heads = DispatchDataProvider.branchPRHeads(of: [
       GitWorktree(path: "/repo", branch: "main", head: "a", isMain: true),
       GitWorktree(path: "/wt/x", branch: "refactor/phase2-2b", head: "b", isMain: false),
       GitWorktree(path: "/wt/detached", branch: nil, head: "c", isMain: false),

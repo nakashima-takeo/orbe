@@ -1,7 +1,7 @@
 import Foundation
 
-/// gh レーンの取得と着地。probe（可否判定）→ 取得（issues / open PR / 閉じた PR）→ 着地の規則
-/// （失敗は据え置き・等値は再描画しない）までを持ち、描画は本体の `rebuild()` へ流す。
+/// gh レーンの取得と着地。probe（可否判定）→ 取得（issues / open PR 一覧 / ブランチの PR）→
+/// 着地の規則（失敗は据え置き・等値は再描画しない）までを持ち、描画は本体の `rebuild()` へ流す。
 extension DispatchDataProvider {
 
   /// 前回取得した gh 結果をリポジトリ（commonDir）単位で先に積む。最初の rebuild（git 着地時）に
@@ -18,8 +18,8 @@ extension DispatchDataProvider {
       pullRequests = cached
       pullRequestsLoading = false
     }
-    // 掃除の推定（PR が MERGED か）は行の出し分けに関わらないので loading の概念を持たない。
-    if let cached = entry.closedPullRequests { closedPullRequests = cached }
+    // 掃除の突き合わせ（PR が OPEN / MERGED か）は行の出し分けに関わらないので loading の概念を持たない。
+    if let cached = entry.branchPullRequests { branchPullRequests = cached }
   }
 
   func loadGitHub(_ repo: GitRepo) {
@@ -47,15 +47,16 @@ extension DispatchDataProvider {
           }
           self?.applyFetchedPullRequests(fetched)
         }
-        self.loadClosedPullRequests(repo)
+        self.loadBranchPullRequests(repo)
       }
     }
   }
 
-  /// 閉じた PR（`closed` は MERGED も含む。掃除の推定と merged チップにだけ使う）を、
-  /// **worktree にあるブランチの名指し**で引く。直近 N 件の一覧窓では、古くにマージされた PR が
-  /// 窓から溢れて「PR でマージしたブランチに merged チップが出ない」取りこぼしになる——
+  /// ブランチの PR（`--state all` で open / closed の両方。掃除の安全確認・推定・チップにだけ使う）を、
+  /// **worktree にあるブランチの名指し**で引く。直近 N 件の一覧窓では、窓落ちした PR のぶんだけ
+  /// 「マージ済みなのに merged チップが出ない」「レビュー中なのに安全確認を素通りする」が起きる——
   /// 対象を worktree のブランチに絞れば件数は worktree 本数で抑えられ、窓の概念そのものが消える。
+  /// パレットの PR 一覧 UI は別（bulk の open 一覧。一覧表示は窓で正当）。
   ///
   /// git レーン（worktree 一覧）と gh レーン（認証確認）の両方が揃ってはじめて引けるので、
   /// **両側の着地点から同じこの入口を叩き、先に来た側は素通りする**（worktree 未着なら対象が
@@ -69,25 +70,25 @@ extension DispatchDataProvider {
   /// 記録は**発行の時点**で置く——取得は往復 N 本ぶんの秒数がかかるので、着地を待って記録すると
   /// その間に来たもう一方の着地点が同じ顔ぶれを二重に引いてしまう。取得できなかったら記録を戻し、
   /// 次の着地点が引き直せるようにする。
-  func loadClosedPullRequests(_ repo: GitRepo) {
+  func loadBranchPullRequests(_ repo: GitRepo) {
     guard githubReady else { return }
-    let heads = Self.closedPRHeads(of: worktrees)
-    guard !heads.isEmpty, heads != requestedClosedPRHeads else { return }
-    requestedClosedPRHeads = heads
-    GitHubCLI.shared.closedPullRequests(cwd: repo.root, heads: heads) { [weak self] fetched in
+    let heads = Self.branchPRHeads(of: worktrees)
+    guard !heads.isEmpty, heads != requestedBranchPRHeads else { return }
+    requestedBranchPRHeads = heads
+    GitHubCLI.shared.branchPullRequests(cwd: repo.root, heads: heads) { [weak self] fetched in
       // キャッシュ書き込みは `self` の生存判定より前（issues/PR と同じ理由）。
       if let fetched {
-        DispatchGitHubCache.shared.setClosedPullRequests(fetched, for: repo.commonDir)
+        DispatchGitHubCache.shared.setBranchPullRequests(fetched, for: repo.commonDir)
       } else {
-        self?.requestedClosedPRHeads = nil
+        self?.requestedBranchPRHeads = nil
       }
-      self?.applyFetchedClosedPullRequests(fetched)
+      self?.applyFetchedBranchPullRequests(fetched)
     }
   }
 
-  /// 閉じた PR 取得の対象ブランチ。worktree にあるブランチだけ——main worktree は掃除の対象外、
+  /// ブランチの PR 取得の対象。worktree にあるブランチだけ——main worktree は掃除の対象外、
   /// detached（`branch == nil`）は PR の head になり得ない。
-  static func closedPRHeads(of worktrees: [GitWorktree]) -> [String] {
+  static func branchPRHeads(of worktrees: [GitWorktree]) -> [String] {
     worktrees.filter { !$0.isMain }.compactMap(\.branch)
   }
 
@@ -111,9 +112,9 @@ extension DispatchDataProvider {
   }
 
   /// 取得失敗（nil）は差し替えず据え置く。等値なら rebuild もしない（他 2 レーンと同じ規則）。
-  func applyFetchedClosedPullRequests(_ fetched: [GitHubClosedPR]?) {
-    guard let fetched, fetched != closedPullRequests else { return }
-    closedPullRequests = fetched
+  func applyFetchedBranchPullRequests(_ fetched: [GitHubBranchPR]?) {
+    guard let fetched, fetched != branchPullRequests else { return }
+    branchPullRequests = fetched
     rebuild()
   }
 }

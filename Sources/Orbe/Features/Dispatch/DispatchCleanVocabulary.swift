@@ -184,7 +184,7 @@ struct PaneOccupancy: Equatable {
 struct DispatchCleanPR: Equatable {
   let number: Int
   let isMerged: Bool
-  /// マージ先ブランチ（`GitHubClosedPR.baseRefName`）。`.mergedPR` チップの表示にだけ使う。
+  /// マージ先ブランチ（`GitHubBranchPR.baseRefName`）。`.mergedPR` チップの表示にだけ使う。
   let base: String
 }
 

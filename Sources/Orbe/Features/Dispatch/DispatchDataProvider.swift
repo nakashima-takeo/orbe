@@ -40,20 +40,20 @@ final class DispatchDataProvider {
   // gh レーンの状態。書き手は分冊（`DispatchDataProvider+GitHub.swift`）、読み手は `rebuild`。
   var issues: [GitHubIssue] = []
   var pullRequests: [GitHubPullRequest] = []
-  var closedPullRequests: [GitHubClosedPR] = []
+  var branchPullRequests: [GitHubBranchPR] = []
   /// probe の結果。`nil` = probe 未完。可用性を Optional で持つことで「まだ確かめていない」と
   /// 「確かめて取得可」を 1 つの値で区別する（両者を潰すと、確認前の状態が「gh 確認済み」を
   /// 名乗ってしまう）。
   var probedGitHubState: GitHubAvailability?
   /// 画面に出す可用性。probe 未完の間は `.ready` として振る舞う（確定前にセクションを畳まない）。
   var githubState: GitHubAvailability { probedGitHubState ?? .ready }
-  /// 閉じた PR を実際に引ける状態か。取得は git レーン（worktree 一覧）と gh レーン（認証確認）の
+  /// ブランチの PR を実際に引ける状態か。取得は git レーン（worktree 一覧）と gh レーン（認証確認）の
   /// 両方が要り、probe 前に発火すると gh 不在の環境で worktree 本数ぶんの失敗プロセスを撒く。
   var githubReady: Bool { probedGitHubState == .ready }
-  /// 閉じた PR を既に gh へ問うた対象ブランチ。同じ顔ぶれなら引き直さない——取得の入口は
+  /// ブランチの PR を既に gh へ問うた対象ブランチ。同じ顔ぶれなら引き直さない——取得の入口は
   /// 複数の着地点から叩かれるので、ここが無いと 1 回開くたびに worktree 本数ぶんの往復が
   /// まるごと重複する。
-  var requestedClosedPRHeads: [String]?
+  var requestedBranchPRHeads: [String]?
   var issuesLoading = true
   var pullRequestsLoading = true
   /// 分類レーンの実測結果（path → 実測）。nil の間は分類そのものが未着地。
@@ -135,12 +135,12 @@ final class DispatchDataProvider {
       group.leave()
     }
     // 分類（レーン D）は worktree 一覧と既定ブランチが揃ってはじめて叩けるのでここから起動する。
-    // 閉じた PR も worktree 一覧が要る（ブランチ名指しの取得）ので同じ着地点から叩く——削除で
+    // ブランチの PR も worktree 一覧が要る（名指しの取得）ので同じ着地点から叩く——削除で
     // worktree の顔ぶれが変われば対象も変わる。顔ぶれが同じ回は入口が畳むので、何度叩いても安い。
     group.notify(queue: .main) {
       self.rebuild()
       self.startCleanProbe(repo)
-      self.loadClosedPullRequests(repo)
+      self.loadBranchPullRequests(repo)
     }
   }
 
@@ -163,7 +163,7 @@ final class DispatchDataProvider {
       DispatchWorktreeClassifier.rows(
         DispatchWorktreeClassifier.Input(
           worktrees: worktrees, localBranches: localBranches,
-          closedPullRequests: closedPullRequests, openPullRequests: pullRequests, probes: $0,
+          branchPullRequests: branchPullRequests, probes: $0,
           panes: paneOccupancies, defaultBranchLabel: defaultBranchLabel))
     }
     model.classification = rows
