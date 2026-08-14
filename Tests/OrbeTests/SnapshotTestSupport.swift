@@ -39,12 +39,24 @@ class SnapshotTestCase: OrbeTestCase {
 
   // MARK: - カードを地に置く view ビルダ（gallery / flow 共通）
 
-  /// パレットカードを scrim 地に置いたスナップショット用ビュー。
-  func paletteSnapshot(_ model: PaletteModel) -> some View {
-    PaletteCard(model: model)
+  /// パレットカードを scrim 地に置いたスナップショット用ビュー。カードの高さ上限は**このヘルパが
+  /// 敷くキャンバスそのもの**（`canvas` − 上下 padding）で、呼び出し側が `writePNG(size:)` へ
+  /// 渡す寸法と一致させる。既定値は持たせない——どの画も自分のキャンバスに対して正直になる。
+  func paletteSnapshot(_ model: PaletteModel, canvas: NSSize) -> some View {
+    PaletteCard(model: model, maxHeight: max(0, canvas.height - Theme.Space.phrase * 2))
       .padding(Theme.Space.phrase)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .background(Color.theme.bgSunken)
+  }
+
+  /// パレットを overlay ごと（地の glow ＋ scrim ＋ 上端アンカー）撮るビュー。
+  /// **上端アンカーが低窓で譲る様子は overlay を通さないと出ない**ので、収まりの検証はこちらを使う。
+  func paletteOverlaySnapshot(_ model: PaletteModel, canvas: NSSize) -> some View {
+    ZStack {
+      BackgroundGlow()
+      PaletteOverlay(model: model)
+    }
+    .frame(width: canvas.width, height: canvas.height)
   }
 
   /// 補完 popup を端末地（bg.base＝ターミナル Mocha base）に重ねたスナップショット用ビュー。

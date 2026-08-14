@@ -19,12 +19,6 @@ enum DispatchListRow: Identifiable {
   static func itemID(_ index: Int) -> String { "item:\(index)" }
 }
 
-/// ヘッダ＋フッター（chrome）の合算高。リスト cap から差し引き、カードが窓を超えないようにする。
-struct DispatchChromeHeightKey: PreferenceKey {
-  static let defaultValue: CGFloat = 0
-  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value += nextValue() }
-}
-
 /// リスト内容の実測高（内容ハグ用）。
 struct DispatchContentHeightKey: PreferenceKey {
   static let defaultValue: CGFloat = 0

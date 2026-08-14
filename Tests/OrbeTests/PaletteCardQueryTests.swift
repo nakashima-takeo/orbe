@@ -48,7 +48,7 @@ final class PaletteCardQueryTests: SnapshotTestCase {
       values: ScopedSettingsValues(global: global),
       fontNames: ["Menlo", "Monaco"], agents: [],
       localization: LocalizationStore(language: .ja))
-    let host = mount(PaletteCard(model: p.render))
+    let host = mount(PaletteCard(model: p.render, maxHeight: 320))  // host の frame 高と揃える
 
     p.render.query = "フォント"  // root で絞り込む（ユーザーの打鍵と同じ）
     p.render.onQueryChange()

@@ -86,19 +86,13 @@ extension DesignGallerySnapshotTests {
     palette.setRows(attentionFixtureRows())
     palette.render.selected = 0
     try writePNG(
-      ZStack {
-        BackgroundGlow()
-        PaletteOverlay(model: palette.render)
-      }.frame(width: stage.width, height: stage.height),
+      paletteOverlaySnapshot(palette.render, canvas: stage),
       size: stage, name: "attention_palette.png", dir: dir)
 
     // 空状態（情報行 1 本）。
     let empty = AttentionPaletteModel(localization: LocalizationStore(language: .ja))
     try writePNG(
-      ZStack {
-        BackgroundGlow()
-        PaletteOverlay(model: empty.render)
-      }.frame(width: stage.width, height: stage.height),
+      paletteOverlaySnapshot(empty.render, canvas: stage),
       size: stage, name: "attention_palette_empty.png", dir: dir)
 
     let rows = attentionFixtureRows()

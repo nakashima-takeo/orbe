@@ -27,7 +27,8 @@ extension DesignFlowSnapshotTests {
       agents: ["claude", "codex", "agy"],
       localization: LocalizationStore(language: .ja))
     try flow(
-      "settings_palette", size: settingsFlowCardSize, render: { paletteSnapshot(settings.render) },
+      "settings_palette", size: settingsFlowCardSize,
+      render: { paletteSnapshot(settings.render, canvas: settingsFlowCardSize) },
       steps: [
         // スコープ / フォントサイズ / 背景の不透明度 / 背景のブラー / カーソルの点滅 / テーマ / エージェント / フォント / 開発中の機能を有効化 の 9 行
         ("root", {}),
@@ -93,9 +94,10 @@ extension DesignFlowSnapshotTests {
       ],
       agents: ["claude", "codex", "agy"],
       localization: LocalizationStore(language: .ja))
+    let overrideStage = NSSize(width: 500, height: 360)
     try flow(
-      "settings_palette_override", size: NSSize(width: 500, height: 360),
-      render: { paletteSnapshot(settings.render) },
+      "settings_palette_override", size: overrideStage,
+      render: { paletteSnapshot(settings.render, canvas: overrideStage) },
       steps: [
         ("global", {}),  // 上書き中の 4 行に「（この WS では …）」注記が付く
         (
@@ -131,9 +133,10 @@ extension DesignFlowSnapshotTests {
     // 撮影中に鳴り終わりで EQ が消えないよう消灯予約を止める（`pulse` は 0.26 秒で、
     // `renderPNG` が回す RunLoop 0.2 秒との差は 60ms しかない）。
     settings.schedulePreviewEnd = { _, _ in }
+    let soundStage = NSSize(width: 500, height: 460)
     try flow(
-      "settings_palette_sound", size: NSSize(width: 500, height: 460),
-      render: { paletteSnapshot(settings.render) },
+      "settings_palette_sound", size: soundStage,
+      render: { paletteSnapshot(settings.render, canvas: soundStage) },
       steps: [
         ("root", {}),
         (
@@ -163,7 +166,7 @@ extension DesignFlowSnapshotTests {
       localization: LocalizationStore(language: .ja))
     try flow(
       "settings_palette_agent_empty", size: settingsFlowCardSize,
-      render: { paletteSnapshot(settings.render) },
+      render: { paletteSnapshot(settings.render, canvas: settingsFlowCardSize) },
       steps: [
         ("root", {}),
         (

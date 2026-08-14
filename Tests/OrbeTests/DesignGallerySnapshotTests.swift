@@ -216,14 +216,17 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       .init(label: "  codex", chevron: true),
       .init(label: "  agy", chevron: true),
     ]
-    try writePNG(paletteSnapshot(listModel), size: cardSize, name: "palette_list.png", dir: dir)
+    try writePNG(
+      paletteSnapshot(listModel, canvas: cardSize), size: cardSize, name: "palette_list.png",
+      dir: dir)
 
     let submenuModel = PaletteModel()
     submenuModel.breadcrumb = "‹ claude"
     submenuModel.hint = "↵ 実行   ← 戻る   esc 閉じる"
     submenuModel.rows = [.init(label: "デフォルトに設定")]
     try writePNG(
-      paletteSnapshot(submenuModel), size: cardSize, name: "palette_submenu.png", dir: dir)
+      paletteSnapshot(submenuModel, canvas: cardSize), size: cardSize, name: "palette_submenu.png",
+      dir: dir)
 
     // WorkspacePalette 一覧（フィルタ欄＋WS切替行：名前＋インラインチップ＋パス）。
     let wsModel = PaletteModel()
@@ -236,15 +239,13 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       wsRow("archive", [], "~/archive", dimmed: true),
     ]
     try writePNG(
-      paletteSnapshot(wsModel), size: cardSize, name: "palette_workspace.png", dir: dir)
+      paletteSnapshot(wsModel, canvas: cardSize), size: cardSize, name: "palette_workspace.png",
+      dir: dir)
 
     // design 正典 WorkspaceSwitcher 同データ（ステージ 640×520・overlay ごと・突合用）。
     let stage = NSSize(width: 640, height: 520)
     try writePNG(
-      ZStack {
-        BackgroundGlow()
-        PaletteOverlay(model: DesignSceneFixtures.workspaceModel())
-      }.frame(width: stage.width, height: stage.height),
+      paletteOverlaySnapshot(DesignSceneFixtures.workspaceModel(), canvas: stage),
       size: stage, name: "palette_workspace_design.png", dir: dir)
 
     // 少数行（cap 未満）: 行リストが内容高でハグし、余白・スクロール余地が出ないことを見る（fieldVisible=false）。
@@ -256,74 +257,21 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       wsRow("agy", [], "~/dev/agy"),
       wsRow("gemini（休眠）", [], "~/dev/gemini", dimmed: true),
     ]
-    try writePNG(paletteSnapshot(hugModel), size: cardSize, name: "palette_hug_few.png", dir: dir)
+    try writePNG(
+      paletteSnapshot(hugModel, canvas: cardSize), size: cardSize, name: "palette_hug_few.png",
+      dir: dir)
 
     // 多数行（cap 超過）: 行リスト高が capHeight で頭打ち＋内部スクロール＋選択追従を見る。
     // field あり/なし両方。tall キャンバスでカード全体（field＋リスト＋hint）が収まることも確認する。
     let tall = NSSize(width: 500, height: 600)
     try writePNG(
-      paletteSnapshot(manyRowPalette(fieldVisible: true)), size: tall,
+      paletteSnapshot(manyRowPalette(fieldVisible: true), canvas: tall), size: tall,
       name: "palette_cap_field.png", dir: dir)
     try writePNG(
-      paletteSnapshot(manyRowPalette(fieldVisible: false)), size: tall,
+      paletteSnapshot(manyRowPalette(fieldVisible: false), canvas: tall), size: tall,
       name: "palette_cap_nofield.png", dir: dir)
 
     try renderSettingsPaletteSnapshots(dir: dir, cardSize: cardSize)
-  }
-
-  /// 設定パレット（Cmd+,）root / テーマ / 通知音サブパレット。本物の SettingsPaletteModel が render へ
-  /// 立て下げた状態を Light/Dark で撮る（遷移過程は flow の settings_palette 系が担う）。
-  private func renderSettingsPaletteSnapshots(dir: URL, cardSize: NSSize) throws {
-    // root は WS 上書きありで撮る＝「（この WS では …）」注記（muted 補足）が主値より弱く読めるか、
-    // 選択行の tint 塗りの上でも読めるかを両 appearance で見る。
-    let settingsRoot = settingsPaletteModel(overrideFontSize: 16, overrideTheme: .dark)
-    try writePNG(
-      paletteSnapshot(settingsRoot.render), size: NSSize(width: 500, height: 520),
-      name: "palette_settings_root.png", dir: dir)
-
-    let settingsTheme = settingsPaletteModel()
-    settingsTheme.render.selected = 5  // テーマ行
-    settingsTheme.render.onActivate()  // 潜る → Auto/Dark/Light の固定3択・● が実効値 Auto
-    try writePNG(
-      paletteSnapshot(settingsTheme.render), size: cardSize,
-      name: "palette_settings_theme.png", dir: dir)
-
-    // 通知音: リスト直上のセグメント（試聴対象）・鳴る条件の一文・試聴中の行の EQ。
-    // EQ を画に出すため、潜った後に選択を動かして試聴を起こす（入場では鳴らない＝EQ も出ない）。
-    // EQ の位相は撮影時刻で決まるが、3 本の位相差が 0/0.15/0.3 あるのでどの瞬間でも高い棒が混じり、
-    // 形と色は読める（working スピナーと同じ扱い＝止めない）。一方**消灯**は撮影中に起きると EQ が
-    // 画から消えるので予約を止め、点く行も音案を張って `NotificationSound.default` から独立させる。
-    let settingsSound = settingsPaletteModel(notificationSound: .glass)
-    settingsSound.schedulePreviewEnd = { _, _ in }
-    settingsSound.render.selected = 13  // 通知音行
-    settingsSound.render.onActivate()  // 潜る
-    settingsSound.render.onDown()  // 試聴 → その行に EQ が点く
-    try writePNG(
-      paletteSnapshot(settingsSound.render), size: NSSize(width: 500, height: 460),
-      name: "palette_settings_sound.png", dir: dir)
-  }
-
-  /// 設定パレット gallery 用の実モデル（flow の testSettingsPalette と同じ初期値）。
-  private func settingsPaletteModel(
-    overrideFontSize: Int? = nil, overrideTheme: ThemeMode? = nil,
-    notificationSound: NotificationSound? = nil
-  ) -> SettingsPaletteModel {
-    var global = SettingsLayer()
-    global[SettingKeys.fontSize] = 14
-    global[SettingKeys.backgroundOpacity] = 90
-    global[SettingKeys.backgroundBlur] = false
-    global[SettingKeys.cursorStyleBlink] = false
-    global[SettingKeys.defaultAgent] = "claude"
-    global[SettingKeys.devFeaturesEnabled] = true
-    global[SettingKeys.notificationSound] = notificationSound
-    var override = SettingsLayer()
-    override[SettingKeys.fontSize] = overrideFontSize
-    override[SettingKeys.theme] = overrideTheme
-    return SettingsPaletteModel(
-      values: ScopedSettingsValues(global: global, override: override),
-      fontNames: ["Menlo", "Monaco", "SF Mono"],
-      agents: ["claude", "codex", "agy"],
-      localization: LocalizationStore(language: .ja))
   }
 
   /// cap 検証用の 18 行パレット（rollup 散らし・選択は下方で追従スクロールが要る位置）。

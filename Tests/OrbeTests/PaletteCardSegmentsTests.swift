@@ -1,4 +1,5 @@
 import AppKit
+import OrbeSound
 import XCTest
 
 @testable import Orbe

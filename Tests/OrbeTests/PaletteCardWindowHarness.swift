@@ -62,12 +62,16 @@ class PaletteCardWindowTestCase: OrbeTestCase {
   /// カードを載せた窓を**物理画面の外**に出す。`NSApp.sendEvent` は `windowNumber` で直接配送するため、
   /// 窓が見えていなくてもキーは届く——テストがユーザーの画面とフォーカスを触らずに済む。
   /// 枠のある窓は macOS が画面内へ押し戻す（`constrainFrameRect`）ので borderless で作る。
+  /// カードには窓高をそのまま上限として渡す＝窓いっぱいまで使える状態（ここに来るのはキー配送を
+  /// 見るテストだけで、高さの取り合いには関心がない。収まりは `PaletteFitTests` が別に見る）。
   func mount(_ model: PaletteModel) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
+    let windowHeight: CGFloat = 500
     let window = KeyDeliveryWindow(
-      contentRect: NSRect(x: -20000, y: -20000, width: 600, height: 500),
+      contentRect: NSRect(x: -20000, y: -20000, width: 600, height: windowHeight),
       styleMask: [.borderless], backing: .buffered, defer: false)
-    window.contentView = NSHostingView(rootView: PaletteCard(model: model).frame(width: 560))
+    window.contentView = NSHostingView(
+      rootView: PaletteCard(model: model, maxHeight: windowHeight).frame(width: 560))
     window.makeKeyAndOrderFront(nil)
     windows.append(window)
     pump(0.4)
