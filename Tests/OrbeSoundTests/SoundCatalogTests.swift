@@ -110,7 +110,7 @@ final class SoundCatalogTests: XCTestCase {
   /// ラウドネス整合: 全 24 音の最大短時間 RMS（300 ms 窓・音量 70・48 kHz）が整合目標
   /// -24.3 dBFS へ揃う（実測残差 ±0.3 dB に余白を足して ±0.8 dB）。これが「他の案と並べて
   /// 音量の違和感が出ない」ことの客観的な物差し——音の定義を変えて外れたら、`SoundCatalog` の
-  /// トリム表をその音だけ測り直して帯域へ戻す。
+  /// トリム表をその音だけ測り直して目標へ戻す。
   func testLoudnessOfEverySoundStaysAligned() {
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {

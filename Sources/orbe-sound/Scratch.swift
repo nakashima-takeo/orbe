@@ -5,6 +5,8 @@ import OrbeSound
 /// `orbe-sound board` 再生成 → ブラウザをリロード、が制作ループの本体**（人間側の聴き比べは
 /// board が担う。1 音だけなら `orbe-sound play <name> -` でも聴ける）。
 /// エントリは (名前, SoundProgram)。名前はカタログ 12 案と重ならないこと（resolve はカタログ名を優先する）。
+/// `trimDB` は board で並べたときの音量整合（カタログと同じ基準）——音を変えたら board の
+/// `loud` 表示が他と揃うよう測り直す。揃っていないと、聴き比べの判断が音の性格でなく音量差で決まる。
 enum Scratch {
   static let entries: [(name: String, program: SoundProgram)] = [
     demoSignal, demoBloom, demoAfterglow,

@@ -13,8 +13,9 @@ public enum SoundCatalog {
     return program
   }
 
-  /// ラウドネス整合の実測トリム（dB）。基準は最大短時間 RMS（300 ms 窓・音量 70・48 kHz）で、
-  /// 全 24 音をカタログ中央値 -24.3 dBFS へ合わせた値。音の定義を変えたらその音だけ測り直す
+  /// ラウドネス整合の実測トリム（dB）。基準は最大短時間 RMS（300 ms 窓・音量 70・48 kHz。
+  /// 300 ms に満たない音は全長で測るので、長さを変えると読みが動く）で、全 24 音を
+  /// カタログ中央値 -24.3 dBFS へ合わせた値。音の定義を変えたらその音だけ測り直す
   /// （`orbe-sound board` で WAV を出し、300 ms 窓の最大 RMS と目標の差分を足し引きする）。
   private static let trims: [NotificationSound: (done: Double, waiting: Double)] = [
     .glass: (done: -1.7, waiting: 1.6),
