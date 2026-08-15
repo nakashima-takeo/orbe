@@ -115,7 +115,7 @@ enum DispatchWorktreeClassifier {
     return isContained(f.containment)
   }
 
-  /// コミットが世界に残ることの証明が立っているか（到達性または既定ブランチへの patch 等価）。
+  /// コミットが世界に残ることの証明が立っているか（到達性または比較先への patch 等価）。
   /// nil（判定できなかった）と `.unmerged` はどちらも false——分からないものを安全と読まない。
   private static func isContained(_ containment: GitBranchContainment?) -> Bool {
     switch containment {
@@ -169,9 +169,14 @@ enum DispatchWorktreeClassifier {
   private static func cluster(
     _ f: DispatchCleanFacts, _ group: CleanGroup, _ axes: AxisSet
   ) -> (chips: [CleanChip], overflow: [CleanChip]) {
-    // merged PR チップが立つ行では、証明由来の安全根拠ピル（.mergedInto / .savedOnRemote）は
-    // ピル枠を争わずサブライン（overflow）へ降りる——同じ「merged」を 2 枚並べない。
-    // 空いた枠は次の事実（[gone] 等）が rest から埋める。
+    // merged PR チップが立つ行では `.mergedInto` はピル枠を争わずサブライン（overflow）へ降りる
+    // ——「PR #N merged → base」と同じ「merged」を 2 枚並べない。空いた枠は次の事実（[gone] 等）
+    // が rest から埋める。
+    //
+    // **降ろすのは重複する `.mergedInto` だけ。** `.savedOnRemote` は「到達性は立つがマージとまでは
+    // 主張しない」という別の（かつローカルに証明された）主張なので PR チップと重複せず、しかも
+    // overflow は `canExpandSubline` が確認群限定なので safe 行では描かれない——降ろせば消える。
+    // 降ろすと safe 行に残る安全根拠が gh 由来の主張だけになり、「証明はローカルに閉じる」と逆を向く。
     let hasMergedPR = axes.b.contains {
       if case .mergedPR = $0 { return true }
       return false
@@ -180,7 +185,7 @@ enum DispatchWorktreeClassifier {
       hasMergedPR
       ? axes.b.filter {
         if case .mergedInto = $0 { return true }
-        return $0 == .savedOnRemote
+        return false
       } : []
     let candidates = [axes.a, axes.b.filter { !demoted.contains($0) }, axes.c, axes.unverified]
       .map { $0.filter(\.isPill) }
@@ -220,7 +225,7 @@ enum DispatchWorktreeClassifier {
   ///
   /// `未 push · ローカルのみ` と `remote +N` は**「そのコミットがどこにも残らない」という主張**なので、
   /// コミットが世界に残ると確認済み（`isContained`）の行では言わない——remote-tracking ref から
-  /// 到達可能か、既定ブランチに patch 等価で在り、失うものが無い。判定ができなかった行
+  /// 到達可能か、比較先に patch 等価で在り、失うものが無い。判定ができなかった行
   /// （`nil`）では言い切れないので、従来どおり損失として名乗る。
   ///
   /// 取り込みの語は証明の種類で出し分ける: `.patchEquivalent` と tip を含む比較先のある
@@ -230,6 +235,9 @@ enum DispatchWorktreeClassifier {
   private static func axisB(_ f: DispatchCleanFacts) -> [CleanChip] {
     guard f.branch != nil else { return [] }
     let contained = isContained(f.containment)
+    // `remote に同期済み` が立つ条件。`remote に保存済み` の抑制条件と同一なので 1 箇所で持つ
+    // （2 つのコピーに割ると、片方だけ動いたとき「両方出る／両方出ない」に静かに壊れる）。
+    let isRemoteSynced = f.upstream != nil && f.track == nil
     var out: [CleanChip] = []
     if case .unmerged(let count) = f.containment { out.append(.ownCommits(count)) }
     if let number = f.openPR { out.append(.openPR(number)) }
@@ -242,11 +250,11 @@ enum DispatchWorktreeClassifier {
     case .reachable(mergedInto: nil):
       // 「remote に同期済み」が立つ行では「remote に保存済み」を名乗らない——同期済みが保存済みを
       // 含意し、強い方の主張が同じ事実を含んで立っている（隠される情報は無い）。
-      if !(f.upstream != nil && f.track == nil) { out.append(.savedOnRemote) }
+      if !isRemoteSynced { out.append(.savedOnRemote) }
     case .unmerged, nil:
       break
     }
-    if f.upstream != nil, f.track == nil { out.append(.remoteSynced) }
+    if isRemoteSynced { out.append(.remoteSynced) }
     if f.isGone { out.append(.gone) }
     return out
   }
@@ -264,7 +272,9 @@ enum DispatchWorktreeClassifier {
     return [.unverified]
   }
 
-  /// 比較先の表示名（先頭の `origin/` を落とす。verdict は渡された名前そのままを運ぶ）。
+  /// remote 追跡名からローカル名を取る（先頭の `origin/` を落とす。verdict は渡された名前そのままを
+  /// 運ぶ）。**表示にも既定名の突き合わせにも使う**——gh の `baseRefName` は常に prefix 無しなので、
+  /// 比較先候補が既定と同じかを見るときも同じ正規化を通す。
   private static func label(_ target: String) -> String {
     let prefix = "origin/"
     guard target.hasPrefix(prefix) else { return target }

@@ -47,7 +47,9 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     XCTAssertEqual(r.group, .safe)
     XCTAssertEqual(
       r.chips, [.mergedPR(142, base: "main"), .remoteSynced, .branchAlsoDeleted])
-    XCTAssertEqual(r.overflowNotes, [.mergedInto("main")], "降りた証明ピルは受け皿に残る")
+    XCTAssertEqual(
+      r.overflowNotes, [.mergedInto("main")],
+      "降りた語は台帳に残る（safe 行では描かれないが、同じ主張を PR チップが可視で引き受ける）")
     XCTAssertTrue(r.deletesBranchImplicitly)
   }
 
@@ -200,8 +202,8 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   }
 
   /// `未 push · ローカルのみ` は「そのコミットがどこにも残らない」という主張なので、
-  /// **既定ブランチへ取り込み済みの行では言わない**——remote に無くても内容は残る。
-  /// 取り込み判定ができなかった行では言い切れないので、従来どおり損失として名乗る。
+  /// **比較先へ取り込み済みの行では言わない**——remote に無くても内容は残る。
+  /// 取り込み判定ができなかった行では言い切れないので、損失として名乗る。
   func testUnpushedIsNotClaimedWhenTheContentIsAlreadyInDefault() {
     let merged = row(
       DispatchCleanFacts(

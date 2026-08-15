@@ -52,12 +52,15 @@ extension DispatchWorktreeClassifierTests {
   /// 言い換えに限る、というのが台帳 逸脱 18 の約束——merged PR チップも安全根拠の表示として数える
   /// （判定には使わない・表示上の根拠としては真の主張）。証明由来のピルが merged PR チップの行で
   /// overflow へ降りても、その行の右クラスタには merged PR チップが必ず立つ。
+  ///
+  /// `remote と同期済み` も根拠として数える——これが立つ行は `remote に保存済み` を抑制するので
+  /// （強い方の主張が同じ事実を含む）、数えないと抑制した行だけが「根拠ゼロ」でこの検査を素通りする。
   func testSafeRowsAlwaysShowTheirEvidence() {
     var violations: [String] = []
     forEachShape { facts, shape in
       let r = row(facts)
       guard r.group == .safe else { return }
-      let evidence = r.vocabulary.filter { $0.tone == .safe }
+      let evidence = r.vocabulary.filter { $0.tone == .safe || $0 == .remoteSynced }
       if !evidence.isEmpty, !evidence.contains(where: { r.chips.contains($0) }) {
         violations.append("根拠が右クラスタに無い — \(shape)")
       }

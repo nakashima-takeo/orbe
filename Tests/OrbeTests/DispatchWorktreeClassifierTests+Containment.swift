@@ -37,8 +37,10 @@ extension DispatchWorktreeClassifierTests {
 
   /// merged PR チップはマージ先（gh の `baseRefName`）を運ぶ。**表示専用**で、safe の証明は
   /// `containment`（ローカル git の事実）だけが立てる——gh が届かなくても安全群入りは変わらない。
-  /// 証明由来の安全根拠ピル（ここでは `remote に保存済み`）は merged PR チップの行では
-  /// ピル枠を争わずサブラインへ降り、空いた枠は次の事実（`[gone]`）が埋める。
+  ///
+  /// `remote に保存済み` は merged PR チップの行でも降ろさない——マージまでは主張しない別の根拠で
+  /// PR チップと重複せず、safe 行のサブラインは開かない（`canExpandSubline` は確認群限定）ので
+  /// 降ろせば消えてしまう。ローカルに証明した根拠を残し、溢れるのは `[gone]` の側。
   func testMergedPRCarriesItsBaseBranch() {
     let r = row(
       DispatchCleanFacts(
@@ -46,8 +48,23 @@ extension DispatchWorktreeClassifierTests {
         closedPR: DispatchCleanPR(number: 123, isMerged: true, base: "develop"),
         status: clean, containment: .reachable(mergedInto: nil), operation: .none))
     XCTAssertEqual(r.group, .safe)
+    XCTAssertEqual(r.chips, [.mergedPR(123, base: "develop"), .savedOnRemote, .branchAlsoDeleted])
+    XCTAssertEqual(r.overflowNotes, [.gone])
+  }
+
+  /// 降ろすのは重複する `merged → <X>` だけ——`PR #N merged → base` と同じ「merged」を 2 枚
+  /// 並べない。空いた枠は次の事実（`[gone]`）が埋める。safe 行のサブラインは開かないので降りた語は
+  /// 台帳に残るだけだが、同じ主張を PR チップが可視のまま引き受けるので読める根拠は減らない。
+  func testMergedPRDemotesOnlyTheDuplicateMergedInto() {
+    let r = row(
+      DispatchCleanFacts(
+        path: "/wt/x", branch: "big/x", upstream: "origin/big/x", track: "[gone]",
+        closedPR: DispatchCleanPR(number: 123, isMerged: true, base: "develop"),
+        status: clean, containment: .patchEquivalent(target: "origin/develop"),
+        operation: .none))
+    XCTAssertEqual(r.group, .safe)
     XCTAssertEqual(r.chips, [.mergedPR(123, base: "develop"), .gone, .branchAlsoDeleted])
-    XCTAssertEqual(r.overflowNotes, [.savedOnRemote], "降りた証明ピルは受け皿に残る")
+    XCTAssertEqual(r.overflowNotes, [.mergedInto("develop")], "降りた証明ピルは受け皿に残る")
   }
 
   /// `merged → <X>` は verdict が運ぶ実マージ先を名乗り、表示では先頭の `origin/` を剥がす
