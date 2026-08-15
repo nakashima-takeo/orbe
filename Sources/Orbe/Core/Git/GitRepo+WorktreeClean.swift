@@ -77,21 +77,6 @@ enum GitWorktreeOperationProbe {
   }
 }
 
-/// ブランチ削除の安全判定の結論。「消して世界に残るか」を、証明の種類ごとに別のケースで語る
-/// （0 という数値に「取り込み済み」を兼務させない——到達性の証明と patch 等価の証明はラベルが違う）。
-enum GitBranchContainment: Equatable {
-  /// 全コミットが `refs/remotes/origin/*` から到達可能（消してもコミットはそこに残る）。
-  /// **origin に限るのは鮮度の保証範囲と揃えるため**——Orbe が prune するのは origin だけなので、
-  /// 他 remote の tracking ref は remote 側で消えた後もローカルに残り続け、「世界に残る」の根拠にできない。
-  /// `mergedIntoDefault` は既定ブランチが tip を含むか（ラベル「merged → \<default\>」を名乗れるか）で、
-  /// 安全事実そのものには関わらない。
-  case reachable(mergedIntoDefault: Bool)
-  /// 既定ブランチに patch 等価で存在（cherry 2 段）。ラベルは「merged → \<default\>」。
-  case patchEquivalent
-  /// 未取り込み。`count` は失われうるコミット数（到達不能数と patch 非等価数の min）。
-  case unmerged(count: Int)
-}
-
 /// 削除が拒否された事実。`log` は行のサブラインに出す git の生 stderr を 1 行へ畳んだもの
 /// （打ち切りでは空になりうるので `timedOut` を添え、文言の差し替えは UI 言語を持つ側が決める）。
 struct GitWorktreeCleanFailure: Equatable {
@@ -144,154 +129,6 @@ extension GitRepo {
     }
   }
 
-  /// ブランチを消して「コミットが世界に残るか」の判定。判定できなければ nil（安全と読まない）。
-  ///
-  /// **3 段構え**。第0段は到達性——`rev-list --count <tip> --not --remotes=origin --` が 0 なら、
-  /// 全コミットが `refs/remotes/origin/*` から到達可能で、worktree とローカルブランチを消しても
-  /// コミットはそこに残る。比較先の推測なしに安全群の意味論（消して世界に残るか）を直接問えるので、
-  /// 統合先が既定ブランチでないリポジトリ（git-flow の develop 統合等）でも成立する。
-  /// squash/rebase マージは SHA が変わって到達性で見えないため、第1段（素の `git cherry`）・
-  /// 第2段（累積差分のダングリングコミットで再 cherry）が既定ブランチとの patch 等価で拾う。
-  ///
-  /// **`--remotes` ではなく `--remotes=origin`。** 信頼する ref の集合は、Orbe が鮮度を保証する集合と
-  /// 一致していなければならない。prune するのは `fetchPrune` の origin だけなので、fork や upstream の
-  /// tracking ref は remote 側で消えた後も残り続ける。それを根拠にすると、`[gone]` で安全群に入った行が
-  /// stale な ref だけを頼りにブランチごと消え、ユーザーが後で全 remote を prune した時点でコミットが
-  /// 到達不能になる。origin に限れば「`[gone]` を作る prune」と「信頼する ref を掃除する prune」が
-  /// 同一操作になり、その組み合わせが構造的に消える。
-  ///
-  /// **`--` でオプションを終端する。** `rev-list` は pathspec も取るので、リポジトリ直下のエントリと
-  /// 同名のブランチ（`docs` 等）では `ambiguous argument` で落ちる。cwd は main worktree の `root`
-  /// なので、終端しないとその worktree だけ第0段が常に失敗し、黙って旧経路へ退行する。
-  ///
-  /// **`branchOrCommit` は曖昧さの無い名前で渡す**——ブランチは `refs/heads/<branch>` の完全 ref、
-  /// detached は oid。短縮名は refs/tags が refs/heads より**先に**解決されるため、同名タグが
-  /// あるとタグの指すコミットを判定してしまう（全経路——第0段 rev-list・cherry・
-  /// `rev-parse ^{tree}`・merge-base——が同じ名前を受けるので、入口の 1 点で塞ぐ）。
-  ///
-  /// **素の `git cherry` 単独では multi-commit squash を検出できない。** cherry はコミット 1 個ずつの
-  /// patch-id を比べるので、複数コミットを 1 個に畳んだ squash マージでは畳んだ側の patch-id が元のどの
-  /// コミットとも一致せず「未取り込み」と誤判定する。そこでブランチの累積差分を 1 個のダングリング
-  /// コミットへ合成してから再度 cherry にかける。**2 段構えが要る**——レシピ単独では、既定ブランチの
-  /// 厳密な祖先であるブランチ（＝完全に取り込み済み）に対して空パッチのダングリングコミットができ、
-  /// 偽陽性で `+` を返す。
-  ///
-  /// `unmerged` の `count` は到達不能数と patch 非等価数の **min**——どちらも「真に失われる数」の
-  /// 過大評価なので、min は厳密により良い過大評価（統合先が既定ブランチでないリポジトリで
-  /// 「独自コミット +106」型の巨大数が実数へ縮む）。
-  ///
-  /// `isolated` は呼び出し側が決める（`worktreeIsClean` と同じ理由）。この判定は worktree 1 本あたり
-  /// 最大 6 本の git を撒く（到達性 1 本＋merged 経路は is-ancestor 1 本／unmerged 経路は cherry 系
-  /// 最大 5 本）ので、共有 read レーンに置くと直後の `addWorktree`(barrier) が全部の完了を待つ。
-  func branchContainment(
-    branchOrCommit: String, default defaultBranch: String, isolated: Bool = false,
-    completion: @escaping (GitBranchContainment?) -> Void
-  ) {
-    let lane: GitRunner.Lane = isolated ? .independent : .read
-    GitRunner.shared.run(
-      ["rev-list", "--count", branchOrCommit, "--not", "--remotes=origin", "--"], cwd: root,
-      lane: lane
-    ) { output in
-      // 第0段の失敗は nil に直結させない（到達性を諦めて従来の cherry 経路へ倒す）。
-      let reachCount =
-        output.isSuccess
-        ? Int(output.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)) : nil
-      if reachCount == 0 {
-        // 安全事実（reachable）は証明済み。is-ancestor は「merged → <default>」を名乗れるかの
-        // ラベルだけを決めるので、exit 1（非祖先）と異常失敗を区別せず汎用ラベル側へ倒してよい。
-        GitRunner.shared.run(
-          ["merge-base", "--is-ancestor", branchOrCommit, defaultBranch], cwd: self.root, lane: lane
-        ) { ancestor in
-          completion(.reachable(mergedIntoDefault: ancestor.isSuccess))
-        }
-        return
-      }
-      self.patchEquivalenceCheck(
-        branchOrCommit, default: defaultBranch, reachCount: reachCount, isolated: isolated,
-        completion: completion)
-    }
-  }
-
-  /// 第1段（素の cherry）と第2段（squash 検出）。remote が 1 つも無いリポジトリ
-  /// （到達不能数＝全履歴）でも、ローカル既定ブランチとの比較で従来どおり判定できる経路。
-  private func patchEquivalenceCheck(
-    _ branchOrCommit: String, default defaultBranch: String, reachCount: Int?, isolated: Bool,
-    completion: @escaping (GitBranchContainment?) -> Void
-  ) {
-    GitRunner.shared.run(
-      ["cherry", defaultBranch, branchOrCommit], cwd: root, lane: isolated ? .independent : .read
-    ) { output in
-      guard output.isSuccess else {
-        completion(nil)
-        return
-      }
-      let plus = output.stdoutText.split(separator: "\n").filter { $0.hasPrefix("+") }.count
-      guard plus > 0 else {
-        completion(.patchEquivalent)
-        return
-      }
-      // 失われうる数は到達不能数と patch 非等価数の min（どちらも過大評価なので、より良い過大評価）。
-      let count = reachCount.map { min($0, plus) } ?? plus
-      self.squashMergedCheck(branchOrCommit, default: defaultBranch, isolated: isolated) { merged in
-        completion(merged.map { $0 ? .patchEquivalent : .unmerged(count: count) })
-      }
-    }
-  }
-
-  /// ブランチの累積差分を合成したダングリングコミットで squash 取り込み済みかを見る。
-  /// 判定できなければ nil。
-  ///
-  /// `commit-tree` は到達不可能なコミットオブジェクトを 1 個書くだけ（ref は触らず、いずれ gc で消える）。
-  /// オブジェクトストアへの書き込みは git 自身が並行安全なので barrier に載せない。
-  /// `-c user.name` / `-c user.email` は identity 自動推定が失敗する環境で `commit-tree` が落ちるのを
-  /// 塞ぐためで、patch-id は内容だけから決まるため判定には影響しない。
-  private func squashMergedCheck(
-    _ branchOrCommit: String, default defaultBranch: String, isolated: Bool,
-    completion: @escaping (Bool?) -> Void
-  ) {
-    GitRunner.shared.run(
-      ["merge-base", defaultBranch, branchOrCommit], cwd: root,
-      lane: isolated ? .independent : .read
-    ) { base in
-      guard base.isSuccess else {
-        completion(nil)
-        return
-      }
-      let mergeBase = base.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
-      GitRunner.shared.run(
-        ["rev-parse", "\(branchOrCommit)^{tree}"], cwd: self.root,
-        lane: isolated ? .independent : .read
-      ) { tree in
-        guard tree.isSuccess else {
-          completion(nil)
-          return
-        }
-        let treeOid = tree.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
-        GitRunner.shared.run(
-          [
-            "-c", "user.name=orbe", "-c", "user.email=orbe@localhost",
-            "commit-tree", treeOid, "-p", mergeBase, "-m", "_",
-          ], cwd: self.root, lane: isolated ? .independent : .read
-        ) { synthesized in
-          guard synthesized.isSuccess else {
-            completion(nil)
-            return
-          }
-          let oid = synthesized.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
-          GitRunner.shared.run(
-            ["cherry", defaultBranch, oid], cwd: self.root, lane: isolated ? .independent : .read
-          ) { cherry in
-            guard cherry.isSuccess else {
-              completion(nil)
-              return
-            }
-            completion(cherry.stdoutText.hasPrefix("-"))
-          }
-        }
-      }
-    }
-  }
-
   /// worktree を削除する。成功なら nil、失敗なら実質的な失敗理由。
   ///
   /// **`--force` は検証済みの前提のもとでの唯一正しい呼び方であって、未知の拒否を握り潰す逃げではない。**
@@ -302,7 +139,7 @@ extension GitRepo {
   /// status で検証済み。submodule は作業コピーと**その worktree 固有の submodule gitdir
   /// （`<common>/worktrees/<id>/modules/…`。common dir 直下ではなく、alternates も持たない独立の
   /// オブジェクトストア）ごと消える**——safe 行は super のブランチのコミットが世界に残ること
-  /// （`refs/remotes/origin/*` からの到達性、または既定ブランチへの patch 等価）を通っており、
+  /// （`refs/remotes/origin/*` からの到達性、または比較先への patch 等価）を通っており、
   /// その前提のもとで submodule 側にだけ未 push が残る状態は成立しない。
   /// locked は `-f` 1 個では外れないため、locked な worktree はそもそも安全確認を通さない。
   func removeWorktree(path: String, completion: @escaping (GitWorktreeCleanFailure?) -> Void) {
@@ -325,7 +162,7 @@ extension GitRepo {
   /// `cannot lock ref … but expected …` で拒否され、失敗行として集約される。
   ///
   /// `branch -d` に頼らない点は変わらない: safe 行は `branchContainment` の証明
-  /// （`refs/remotes/origin/*` からの到達性、または既定ブランチへの patch 等価）を通っており、これは `-d`（upstream か
+  /// （`refs/remotes/origin/*` からの到達性、または比較先への patch 等価）を通っており、これは `-d`（upstream か
   /// HEAD への到達性のみ）より厳密に強い——`-d` は squash も rebase も統合先が既定ブランチでない
   /// マージも取りこぼすので、先に試しても safe 行ですら通らない。caution 行から
   /// 呼ばれる場合は、ユーザーが行ごとに `worktree + ブランチ` を選ぶ行為が安全確認の上書きになっている。

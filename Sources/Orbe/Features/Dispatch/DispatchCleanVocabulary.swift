@@ -33,8 +33,8 @@ enum CleanChip: Equatable, Identifiable {
   // MARK: 軸B — ブランチの行き先
   /// マージ済み PR（`base` はマージ先ブランチ）。gh の主張なので**表示専用**——安全判定には使わない。
   case mergedPR(Int, base: String)
-  /// 既定ブランチへ取り込み済み（引数は既定ブランチ名）。
-  case mergedIntoDefault(String)
+  /// 比較先へ取り込み済み（引数は verdict 由来の実マージ先。「merged → \<target\>」）。
+  case mergedInto(String)
   /// 全コミットが remote に残る（到達性の証明。マージされたとまでは主張しない——
   /// 単に完全 push 済みで未マージでも立つため、「merged」を名乗ると偽になり得る）。
   case savedOnRemote
@@ -48,6 +48,9 @@ enum CleanChip: Equatable, Identifiable {
   /// 消すと失われうる独自コミット k 件（`GitBranchContainment.unmerged` の `count`。到達不能数と
   /// patch 非等価数の min なので、「既定ブランチに取り込まれていない件数」より小さくなりうる）。
   case ownCommits(Int)
+  /// 安全確認に使う事実を確かめられなかった（確認群に落ちている理由の可視化。分類は変えない——
+  /// 判定不能を安全と読まない契約は既に分類側が持つ）。フラグは何を取得できなかったか。
+  case unverified(status: Bool, operation: Bool, containment: Bool)
 
   // MARK: 軸C — 使用状況
   case agentWorking
@@ -68,7 +71,7 @@ enum CleanChip: Equatable, Identifiable {
     case .inProgress(let op): return "inProgress:\(op.name)"
     case .prunable: return "prunable"
     case .mergedPR(let n, let base): return "mergedPR:\(n):\(base)"
-    case .mergedIntoDefault(let branch): return "mergedIntoDefault:\(branch)"
+    case .mergedInto(let branch): return "mergedInto:\(branch)"
     case .savedOnRemote: return "savedOnRemote"
     case .remoteSynced: return "remoteSynced"
     case .remoteAhead(let n): return "remoteAhead:\(n)"
@@ -76,6 +79,8 @@ enum CleanChip: Equatable, Identifiable {
     case .openPR(let n): return "openPR:\(n)"
     case .gone: return "gone"
     case .ownCommits(let n): return "ownCommits:\(n)"
+    case .unverified(let status, let operation, let containment):
+      return "unverified:s\(status)o\(operation)c\(containment)"
     case .agentWorking: return "agentWorking"
     case .agentWaiting: return "agentWaiting"
     case .paneOpen: return "paneOpen"
@@ -87,9 +92,9 @@ enum CleanChip: Equatable, Identifiable {
 
   var tone: CleanTone {
     switch self {
-    case .mergedPR, .mergedIntoDefault, .savedOnRemote: return .safe
+    case .mergedPR, .mergedInto, .savedOnRemote: return .safe
     case .uncommitted, .untracked, .inProgress, .remoteAhead, .unpushed, .openPR, .ownCommits,
-      .locked, .agentWaiting:
+      .locked, .agentWaiting, .unverified:
       return .loss
     case .prunable, .remoteSynced, .gone, .paneOpen, .mainWorktree, .branchAlsoDeleted:
       return .neutral
@@ -155,8 +160,10 @@ struct CleanRow: Identifiable, Equatable {
   /// サブラインは確認群のチェック済み行にしか開かないので、**安全行の溢れは画面に出ない**。
   /// それが許されるのは、安全行に loss の語が 1 つも立たないから——レビュー中の PR を持つ行は
   /// 安全確認で落ち、コミットが世界に残ると確認済みの行は `未 push` / `remote +N` を名乗らない。
-  /// 残るのは「コミットが世界に残る」という同じ根拠の言い換え（safe / neutral）だけで、それが 1 枚は
-  /// 必ずピルに載る（台帳 逸脱 18 / 20。`testSafeRowsRaiseNoLoss` が固定する）。
+  /// 残るのは「コミットが世界に残る」という同じ根拠の言い換え（safe / neutral）に限る——merged PR
+  /// チップが立つ行では証明由来の安全根拠ピル（`merged → X` / `remote に保存済み`）がここへ降りるが、
+  /// merged PR チップ自体が安全根拠の表示として必ずピルに載る（判定には使わない・表示上の根拠と
+  /// しては真の主張。台帳 逸脱 18 / 20。`testSafeRowsRaiseNoLoss` が固定する）。
   let overflowNotes: [CleanChip]
   /// チェックするとブランチも一緒に消える行（safe 群のうち、実体があってブランチを持つ行）。
   let deletesBranchImplicitly: Bool
@@ -167,8 +174,19 @@ struct CleanRow: Identifiable, Equatable {
   /// 確認群だけが開く（安全行は選ぶものが無く、使用中行はチェックできない）。**ブランチの扱いの
   /// セグメントは詳細の中身の 1 つに過ぎない**ので、detached（`branch == nil`）でも書くことが
   /// あれば開く——rebase 停止中の worktree は必ず detached で、そこは損失の内訳が最も要る行。
+  /// 判定不能チップの詳細（何を取得できなかったか）もここでしか読めないため、detached ×
+  /// 判定不能の行も開く。
   var canExpandSubline: Bool {
-    group == .caution && (branch != nil || !lossNotes.isEmpty || !overflowNotes.isEmpty)
+    group == .caution
+      && (branch != nil || !lossNotes.isEmpty || !overflowNotes.isEmpty || hasUnverified)
+  }
+
+  /// 判定不能チップが立っているか（サブラインの詳細 1 行の有無と開閉条件が読む）。
+  var hasUnverified: Bool {
+    vocabulary.contains {
+      if case .unverified = $0 { return true }
+      return false
+    }
   }
 }
 

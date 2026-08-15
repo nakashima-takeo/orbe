@@ -48,8 +48,10 @@ extension DispatchWorktreeClassifierTests {
       "安全行が損失を主張した（先頭 3 件）: \(violations.prefix(3).joined(separator: " / "))")
   }
 
-  /// **安全群の行は安全の根拠を必ず右クラスタに出す。** 出ない語（安全行はサブラインを開かない）は
-  /// 根拠を言い換えた safe / neutral の重複に限られる、というのが台帳 逸脱 18 の約束。
+  /// **安全群の行は安全の根拠を必ず右クラスタに出す。** 安全行の不可視 overflow に残るのは根拠の
+  /// 言い換えに限る、というのが台帳 逸脱 18 の約束——merged PR チップも安全根拠の表示として数える
+  /// （判定には使わない・表示上の根拠としては真の主張）。証明由来のピルが merged PR チップの行で
+  /// overflow へ降りても、その行の右クラスタには merged PR チップが必ず立つ。
   func testSafeRowsAlwaysShowTheirEvidence() {
     var violations: [String] = []
     forEachShape { facts, shape in
@@ -108,8 +110,8 @@ extension DispatchWorktreeClassifierTests {
     ]
     let operations: [GitWorktreeOperationState] = [.none, .unknown, .inProgress(.rebase)]
     let containments: [GitBranchContainment?] = [
-      nil, .patchEquivalent, .reachable(mergedIntoDefault: true),
-      .reachable(mergedIntoDefault: false), .unmerged(count: 4),
+      nil, .patchEquivalent(target: "main"), .reachable(mergedInto: "main"),
+      .reachable(mergedInto: nil), .unmerged(count: 4),
     ]
     for status in statuses {
       for operation in operations {

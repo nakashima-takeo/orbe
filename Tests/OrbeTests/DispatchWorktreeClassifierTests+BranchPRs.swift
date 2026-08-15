@@ -16,7 +16,8 @@ extension DispatchWorktreeClassifierTests {
 
   /// merged PR は名指し結果からチップ（マージ先つき）と推定に写る。
   func testMergedPRFromNamedFetchRaisesChipWithItsBase() {
-    let r = branchPRRow([pr(113, "MERGED", base: "develop")], containment: .patchEquivalent)
+    let r = branchPRRow(
+      [pr(113, "MERGED", base: "develop")], containment: .patchEquivalent(target: "main"))
     XCTAssertEqual(r.group, .safe)
     XCTAssertTrue(r.chips.contains(.mergedPR(113, base: "develop")))
   }
@@ -24,7 +25,8 @@ extension DispatchWorktreeClassifierTests {
   /// **fork（cross-repo）の PR はこのブランチの事実ではない。** `--head` はブランチ名でしか
   /// 絞れないため他人の fork の同名ブランチの PR も返るが、レビュー中でも行を塞がない。
   func testCrossRepoOpenPRDoesNotBlockSafety() {
-    let r = branchPRRow([pr(999, "OPEN", cross: true)], containment: .patchEquivalent)
+    let r = branchPRRow(
+      [pr(999, "OPEN", cross: true)], containment: .patchEquivalent(target: "main"))
     XCTAssertEqual(r.group, .safe, "他人の fork のレビューはこのブランチの安全確認と無関係")
     XCTAssertFalse(r.vocabulary.contains(.openPR(999)))
   }
@@ -33,7 +35,7 @@ extension DispatchWorktreeClassifierTests {
   func testCrossRepoPRsAreExcludedBeforePickingTheLatest() {
     let r = branchPRRow(
       [pr(999, "MERGED", cross: true), pr(100, "MERGED", base: "develop")],
-      containment: .patchEquivalent)
+      containment: .patchEquivalent(target: "main"))
     XCTAssertTrue(r.chips.contains(.mergedPR(100, base: "develop")), "自リポジトリの PR が採られる")
     XCTAssertFalse(r.vocabulary.contains(.mergedPR(999, base: "main")), "fork の PR は事実にしない")
   }
@@ -78,6 +80,65 @@ extension DispatchWorktreeClassifierTests {
     XCTAssertFalse(y.vocabulary.contains(.openPR(10)), "隣の head の PR は拾わない")
   }
 
+  // MARK: - 追加比較先（gh ヒント → 取り込み判定の入力）
+
+  /// merged PR の base が「`origin/<base>` がローカルに実在し既定と異なる」ときだけ比較先になる。
+  /// PR の選択は `rows()` と同一規約（cross-repo 除外 → head ごとの最新の非 OPEN → MERGED のみ）。
+  func testExtraContainmentTargetsFollowTheSamePRSelectionAsRows() {
+    let worktrees = [
+      GitWorktree(path: "/repo", branch: "main", head: "m", isMain: true),
+      GitWorktree(path: "/wt/x", branch: "feat/x", head: "a", isMain: false),
+      GitWorktree(path: "/wt/y", branch: "feat/y", head: "b", isMain: false),
+      GitWorktree(path: "/wt/d", branch: nil, head: "c", isMain: false),
+    ]
+    let remotes: Set<String> = ["origin/main", "origin/develop"]
+
+    XCTAssertEqual(
+      DispatchWorktreeClassifier.extraContainmentTargets(
+        worktrees: worktrees,
+        branchPullRequests: [pr(1, "MERGED", base: "develop")],
+        remoteBranchNames: remotes, defaultBranch: "origin/main"),
+      ["/wt/x": ["origin/develop"]], "MERGED × 実在 × 非既定の base だけが比較先になる")
+
+    XCTAssertEqual(
+      DispatchWorktreeClassifier.extraContainmentTargets(
+        worktrees: worktrees,
+        branchPullRequests: [pr(2, "MERGED", base: "develop", cross: true)],
+        remoteBranchNames: remotes, defaultBranch: "origin/main"),
+      [:], "cross-repo の PR はこのブランチの事実ではない（rows() と同じ足切り）")
+
+    XCTAssertEqual(
+      DispatchWorktreeClassifier.extraContainmentTargets(
+        worktrees: worktrees,
+        branchPullRequests: [pr(3, "CLOSED", base: "develop"), pr(2, "MERGED", base: "develop")],
+        remoteBranchNames: remotes, defaultBranch: "origin/main"),
+      [:], "最新の非 OPEN が CLOSED なら base を信じない（rows() の closedPR 選択と同一）")
+
+    XCTAssertEqual(
+      DispatchWorktreeClassifier.extraContainmentTargets(
+        worktrees: worktrees,
+        branchPullRequests: [pr(4, "MERGED", base: "main")],
+        remoteBranchNames: remotes, defaultBranch: "origin/main"),
+      [:], "既定と同名の base は足さない（既定が既にリストにいる）")
+
+    XCTAssertEqual(
+      DispatchWorktreeClassifier.extraContainmentTargets(
+        worktrees: worktrees,
+        branchPullRequests: [pr(5, "MERGED", base: "release/1.0")],
+        remoteBranchNames: remotes, defaultBranch: "origin/main"),
+      [:], "origin/<base> がローカルに実在しなければ入口で落とす（証明はローカル）")
+
+    XCTAssertEqual(
+      DispatchWorktreeClassifier.extraContainmentTargets(
+        worktrees: worktrees,
+        branchPullRequests: [
+          pr(6, "MERGED", base: "develop", head: "main"),
+          pr(7, "MERGED", base: "develop", head: "feat/y"),
+        ],
+        remoteBranchNames: remotes, defaultBranch: "origin/main"),
+      ["/wt/y": ["origin/develop"]], "main worktree と detached は対象外")
+  }
+
   // MARK: - ヘルパ
 
   private func pr(
@@ -93,7 +154,7 @@ extension DispatchWorktreeClassifierTests {
   /// PR 以外の事実は安全確認を全部通る形（clean・操作なし・`[gone]`・取り込み済み）に固定する。
   /// `track` を nil にすると `[gone]` の推定が消え、**推定が PR だけになる**行を作れる。
   private func branchPRRow(
-    _ prs: [GitHubBranchPR], containment: GitBranchContainment? = .patchEquivalent,
+    _ prs: [GitHubBranchPR], containment: GitBranchContainment? = .patchEquivalent(target: "main"),
     track: String? = "[gone]"
   ) -> CleanRow {
     let rows = DispatchWorktreeClassifier.rows(
@@ -112,8 +173,7 @@ extension DispatchWorktreeClassifierTests {
           "/wt/x": DispatchCleanProbe(
             status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
             containment: containment, operation: .none)
-        ],
-        defaultBranchLabel: "main"))
+        ]))
     return rows.first { $0.name == "x" }!
   }
 }

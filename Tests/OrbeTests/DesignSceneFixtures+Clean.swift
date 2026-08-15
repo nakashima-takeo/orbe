@@ -113,7 +113,7 @@ extension DesignSceneFixtures {
           path: path("dispatch-delete"), branch: "feat/dispatch-delete",
           upstream: "origin/feat/dispatch-delete",
           closedPR: DispatchCleanPR(number: 142, isMerged: true, base: "main"), status: cleanStatus,
-          containment: .patchEquivalent, operation: .none),
+          containment: .patchEquivalent(target: "main"), operation: .none),
         // 軸B: 独自コミット（`[gone]` に潰されずに損失を名乗る）
         DispatchCleanFacts(
           path: path("wt-path-template"), branch: "ship/…", upstream: "origin/ship/…",
@@ -123,23 +123,25 @@ extension DesignSceneFixtures {
         DispatchCleanFacts(
           path: path("diff-panel"), branch: "fix/diff-panel", upstream: "origin/fix/diff-panel",
           openPR: 139, status: GitWorktreeStatusCounts(modified: 12, untracked: 3),
-          containment: .patchEquivalent, operation: .none),
+          containment: .patchEquivalent(target: "main"), operation: .none),
         // 軸A: rebase 進行中（status が clean でも安全群に入らない）／軸B: 未 push
         DispatchCleanFacts(
           path: path("session-restore"), branch: "feat/session-restore", lockReason: "USB",
-          status: cleanStatus, containment: .patchEquivalent, operation: .inProgress(.rebase)),
+          status: cleanStatus, containment: .patchEquivalent(target: "main"),
+          operation: .inProgress(.rebase)),
         // 軸A: prunable（実体が無く、ブランチには触らない）
         DispatchCleanFacts(
           path: path("render-batching"), branch: "perf/render-batching", isPrunable: true,
-          upstream: "origin/perf/render-batching", track: "[gone]", containment: .patchEquivalent),
+          upstream: "origin/perf/render-batching", track: "[gone]",
+          containment: .patchEquivalent(target: "main")),
         // 軸B: PR merged（2 本目の安全行）
         DispatchCleanFacts(
           path: path("pane-focus"), branch: "fix/pane-focus", upstream: "origin/fix/pane-focus",
           closedPR: DispatchCleanPR(number: 131, isMerged: true, base: "main"), status: cleanStatus,
-          containment: .patchEquivalent, operation: .none),
+          containment: .patchEquivalent(target: "main"), operation: .none),
         // 軸C: main worktree
         DispatchCleanFacts(path: "\(home)/dev/storefront", branch: "main", isMain: true),
-      ], defaultBranchLabel: "main")
+      ])
   }
 
   private static let cleanStatus = GitWorktreeStatusCounts(modified: 0, untracked: 0)

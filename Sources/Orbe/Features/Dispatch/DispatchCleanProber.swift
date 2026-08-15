@@ -8,13 +8,16 @@ import Foundation
 /// プロセスを割かない）。実体が無い（prunable）行は status も停止中の操作も問わない——失うものが
 /// 無いので、作業ツリー側の安全確認は自動的に満たす。
 ///
-/// git は独立レーン（`isolated: true`）で走らせる。worktree 1 本あたり最大 6 本を撒くので、共有の
+/// git は独立レーン（`isolated: true`）で走らせる。worktree 1 本あたり最大 `1 + T×5` 本
+/// （T は比較先の本数。比較先 2 本の unmerged 行で最大 11 本）を撒くので、共有の
 /// read-write lock に載せると直後に Enter で来る `addWorktree`(barrier) が全部の完了を待つ
 /// （GCD barrier は submit 済み全ブロックを待つ）。パレットを閉じてもプローブは走り切るため、
 /// 共有レーンのままだと DiffPanel の add/commit/checkout まで巻き込む。`fetchPrune` と同じ判断。
 struct DispatchCleanProber {
   let repo: GitRepo
   let defaultBranch: String
+  /// gh ヒント由来の追加比較先（path → `["origin/<base>"]`）。判定へは `[defaultBranch] + これ` を渡す。
+  var extraContainmentTargets: [String: [String]] = [:]
 
   /// 実測を集めて path → 実測の辞書で返す。completion はメインで返る（`GitRunner` 契約）。
   func probe(
@@ -43,7 +46,7 @@ struct DispatchCleanProber {
       // 判定してしまう。detached は oid のままで曖昧さが無い。
       repo.branchContainment(
         branchOrCommit: worktree.branch.map { "refs/heads/\($0)" } ?? worktree.head,
-        default: defaultBranch, isolated: true
+        targets: [defaultBranch] + (extraContainmentTargets[worktree.path] ?? []), isolated: true
       ) { containment in
         probes[worktree.path]?.containment = containment
         group.leave()

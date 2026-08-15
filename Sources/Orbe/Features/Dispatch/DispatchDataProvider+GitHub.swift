@@ -115,9 +115,12 @@ extension DispatchDataProvider {
   }
 
   /// 取得失敗（nil）は差し替えず据え置く。等値なら rebuild もしない（他 2 レーンと同じ規則）。
+  /// gh 着地で merged PR の base が判明したら、**取り込み判定の比較先の顔ぶれが変わった行だけ**
+  /// 引き直す（`startCleanProbe` の発行時台帳が差分を判定する）——本再判定の入口はここ 1 点。
   func applyFetchedBranchPullRequests(_ fetched: [GitHubBranchPR]?) {
     guard let fetched, fetched != branchPullRequests else { return }
     branchPullRequests = fetched
     rebuild()
+    if let repo { startCleanProbe(repo, invalidateAll: false) }
   }
 }

@@ -163,7 +163,7 @@ extension DispatchPaletteTests {
         DispatchCleanFacts(
           path: "/wt/a", branch: "feat/a", head: "aaa", upstream: "origin/feat/a",
           track: "[gone]", status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
-          containment: .patchEquivalent, operation: .none)
-      ], defaultBranchLabel: "main")
+          containment: .patchEquivalent(target: "main"), operation: .none)
+      ])
   }
 }

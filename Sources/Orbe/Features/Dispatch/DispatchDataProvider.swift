@@ -22,16 +22,8 @@ final class DispatchDataProvider {
   private var mainWorktree: String?
   /// 既定ブランチの ref。`git symbolic-ref --short refs/remotes/origin/HEAD` の出力なので
   /// `origin/main` という remote 追跡名で、取り込み判定の比較対象と新規 worktree の base に使う。
+  /// 表示名（`origin/` 剥がし）は verdict を受けた分類器が導く。
   private var defaultBranchName = "main"
-
-  /// 画面に出す既定ブランチ名。ref の側はリモート名付きなので、そのまま出すと行が
-  /// `merged → origin/main` と名乗る。**問い合わせ自体が `refs/remotes/origin/HEAD` 固定**なので、
-  /// 先頭の `origin/` を落とせばローカル名がそのまま残る。
-  private var defaultBranchLabel: String {
-    let prefix = "origin/"
-    guard defaultBranchName.hasPrefix(prefix) else { return defaultBranchName }
-    return String(defaultBranchName.dropFirst(prefix.count))
-  }
 
   /// 分冊（`DispatchDataProvider+Clean.swift` / `+GitHub.swift`）も読む。
   private(set) var worktrees: [GitWorktree] = []
@@ -58,6 +50,11 @@ final class DispatchDataProvider {
   var pullRequestsLoading = true
   /// 分類レーンの実測結果（path → 実測）。nil の間は分類そのものが未着地。
   private var cleanProbes: [String: DispatchCleanProbe]?
+  /// path → **発行時点**の取り込み判定の比較先リスト。`requestedBranchPRHeads` と同型の
+  /// 「発行時点で記録する顔ぶれ dedup」——比較先が同じ行を引き直さず、gh 着地で base が判明した
+  /// 行だけを引き直すための台帳。着地の照合（発行時の比較先 == 現台帳）にも使い、独立レーンの
+  /// 順序不定で古い発行の遅着が新しい結果を上書きする窓を塞ぐ。
+  private var issuedProbeTargets: [String: [String]]?
 
   /// gh 取得の上限件数（issues / open PR の一覧。分冊も読む）。
   let ghLimit = 30
@@ -139,19 +136,56 @@ final class DispatchDataProvider {
     // worktree の顔ぶれが変われば対象も変わる。顔ぶれが同じ回は入口が畳むので、何度叩いても安い。
     group.notify(queue: .main) {
       self.rebuild()
-      self.startCleanProbe(repo)
+      // git の事実（ref の中身）が動いた着地なので全行引き直す。
+      self.startCleanProbe(repo, invalidateAll: true)
       self.loadBranchPullRequests(repo)
     }
   }
 
   /// 分類レーンを起動する。fetch 着地後にも同じ入口から取り直す（結果が同じなら rebuild しない）。
-  private func startCleanProbe(_ repo: GitRepo) {
-    DispatchCleanProber(repo: repo, defaultBranch: defaultBranchName)
-      .probe(worktrees: worktrees, panes: paneOccupancies) { [weak self] probes in
-        guard let self, self.cleanProbes != probes else { return }
-        self.cleanProbes = probes
-        self.rebuild()
+  ///
+  /// `invalidateAll` が false のとき（gh 着地）は、**比較先の顔ぶれが変わった行だけ**を引き直す
+  /// （merged PR の base が判明して `origin/<base>` が比較先に加わった行がこれに当たる）。
+  /// 台帳（`issuedProbeTargets`)は**発行の時点で**更新する——着地を待って記録すると、その間に来た
+  /// もう一方の着地点が同じ顔ぶれを二重に引く（`loadBranchPullRequests` と同じ理由）。
+  ///
+  /// 着地は path ごとに「発行時の比較先 == 現台帳」のときだけ `cleanProbes` へマージする。
+  /// probe は独立レーン（concurrent）で順序保証が無く、全量発行と差分発行の遅着が交錯しうる——
+  /// この照合が古い発行の遅着による上書きの窓を塞ぐ。台帳に無い path のエントリは落とす
+  /// （削除済み worktree の残骸を持たない）。
+  func startCleanProbe(_ repo: GitRepo, invalidateAll: Bool) {
+    let extra = DispatchWorktreeClassifier.extraContainmentTargets(
+      worktrees: worktrees, branchPullRequests: branchPullRequests,
+      remoteBranchNames: Set(remoteBranches.map(\.name)), defaultBranch: defaultBranchName)
+    let inputs = Dictionary(
+      uniqueKeysWithValues: worktrees.map {
+        ($0.path, [defaultBranchName] + (extra[$0.path] ?? []))
+      })
+    let stale =
+      invalidateAll
+      ? worktrees : worktrees.filter { inputs[$0.path] != issuedProbeTargets?[$0.path] }
+    guard !stale.isEmpty else { return }
+    if invalidateAll {
+      issuedProbeTargets = inputs
+    } else {
+      var ledger = issuedProbeTargets ?? [:]
+      for worktree in stale { ledger[worktree.path] = inputs[worktree.path] }
+      issuedProbeTargets = ledger
+    }
+    let issued = inputs
+    DispatchCleanProber(
+      repo: repo, defaultBranch: defaultBranchName, extraContainmentTargets: extra
+    )
+    .probe(worktrees: stale, panes: paneOccupancies) { [weak self] probes in
+      guard let self else { return }
+      var merged = (self.cleanProbes ?? [:]).filter { self.issuedProbeTargets?[$0.key] != nil }
+      for (path, probe) in probes where issued[path] == self.issuedProbeTargets?[path] {
+        merged[path] = probe
       }
+      guard self.cleanProbes != merged else { return }
+      self.cleanProbes = merged
+      self.rebuild()
+    }
   }
 
   /// 手元の状態から model を組み直す（描画の唯一の出口）。gh 着地（分冊
@@ -164,7 +198,7 @@ final class DispatchDataProvider {
         DispatchWorktreeClassifier.Input(
           worktrees: worktrees, localBranches: localBranches,
           branchPullRequests: branchPullRequests, probes: $0,
-          panes: paneOccupancies, defaultBranchLabel: defaultBranchLabel))
+          panes: paneOccupancies))
     }
     model.classification = rows
     model.hasLoadedOnce = true

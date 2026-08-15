@@ -198,6 +198,11 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchCleanAgentWorking
   case dispatchCleanAgentWaiting
   case dispatchCleanPaneOpen
+  case dispatchCleanUnverified
+  case dispatchCleanUnverifiedNote
+  case dispatchCleanUnverifiedItemStatus
+  case dispatchCleanUnverifiedItemOperation
+  case dispatchCleanUnverifiedItemContainment
 
   // MARK: - Onboarding
   case onboardingBegin
