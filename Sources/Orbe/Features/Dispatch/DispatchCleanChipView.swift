@@ -51,7 +51,6 @@ struct DispatchCleanChip: View {
     case .paneOpen: return l10n.string(.dispatchCleanPaneOpen)
     case .locked: return "locked"
     case .mainWorktree: return "main worktree"
-    case .branchAlsoDeleted: return l10n.string(.dispatchCleanBranchAlsoDeleted)
     }
   }
 }

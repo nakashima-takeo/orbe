@@ -157,9 +157,7 @@ struct DispatchCleanFooter: View {
       case .selecting:
         Spacer(minLength: Theme.Space.step)
         hint(l10n.string(.dispatchCleanKeyHint))
-        button(l10n.format(.dispatchCleanExecute, model.selectedCount), enabled: model.canExecute) {
-          onExecute()
-        }
+        button(executeLabel, enabled: model.canExecute) { onExecute() }
       case .deleting:
         // 終端はここで言い切る（未選択の行は畳んだまま実行が終わる）。
         Text(l10n.string(.dispatchCleanCollapsedNote))
@@ -177,6 +175,15 @@ struct DispatchCleanFooter: View {
     }
     .padding(.horizontal, Theme.Space.bar)
     .padding(.vertical, Theme.Space.step + Theme.Space.hair)
+  }
+
+  /// 実行ボタンの文言（＝実行の総量）。ブランチも消える行が選ばれているときだけ内訳を付ける
+  /// ——0 件の内訳はノイズなので、無いときは worktree 数だけを言う。
+  private var executeLabel: String {
+    model.branchDeleteCount > 0
+      ? l10n.format(
+        .dispatchCleanExecuteWithBranches, model.selectedCount, model.branchDeleteCount)
+      : l10n.format(.dispatchCleanExecute, model.selectedCount)
   }
 
   /// 狭窓で最初に譲るのはキーヒント（実行ボタンは効く操作なので削らない）。

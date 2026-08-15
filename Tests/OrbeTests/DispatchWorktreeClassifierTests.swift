@@ -45,8 +45,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
         closedPR: DispatchCleanPR(number: 142, isMerged: true, base: "main"), status: clean,
         containment: .patchEquivalent(target: "main"), operation: .none))
     XCTAssertEqual(r.group, .safe)
-    XCTAssertEqual(
-      r.chips, [.mergedPR(142, base: "main"), .remoteSynced, .branchAlsoDeleted])
+    XCTAssertEqual(r.chips, [.mergedPR(142, base: "main"), .remoteSynced])
     XCTAssertEqual(
       r.overflowNotes, [.mergedInto("main")],
       "降りた語は台帳に残る（safe 行では描かれないが、同じ主張を PR チップが可視で引き受ける）")
@@ -214,7 +213,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     XCTAssertFalse(
       merged.vocabulary.contains(.unpushed), "失うものが無い行に完全喪失の警告を出さない")
     XCTAssertEqual(
-      merged.chips, [.mergedPR(142, base: "main"), .branchAlsoDeleted],
+      merged.chips, [.mergedPR(142, base: "main")],
       "merged PR チップが安全根拠として立ち、証明ピルはサブラインへ降りる")
     XCTAssertEqual(merged.overflowNotes, [.mergedInto("main")])
 

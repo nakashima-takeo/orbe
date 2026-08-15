@@ -61,11 +61,6 @@ enum CleanChip: Equatable, Identifiable {
   case locked
   case mainWorktree
 
-  // MARK: 行内注記
-  /// safe 行の `ブランチも削除`（チェックすればブランチごと消えることの明示）。**マージ状況は名乗らない**
-  /// ——到達性だけで安全が立った行はどの比較先にもマージされていないので、`merged` は偽になる。
-  case branchAlsoDeleted
-
   var id: String {
     switch self {
     case .uncommitted(let n): return "uncommitted:\(n)"
@@ -87,7 +82,6 @@ enum CleanChip: Equatable, Identifiable {
     case .paneOpen: return "paneOpen"
     case .locked: return "locked"
     case .mainWorktree: return "mainWorktree"
-    case .branchAlsoDeleted: return "branchAlsoDeleted"
     }
   }
 
@@ -97,7 +91,7 @@ enum CleanChip: Equatable, Identifiable {
     case .uncommitted, .untracked, .inProgress, .remoteAhead, .unpushed, .openPR, .ownCommits,
       .locked, .agentWaiting, .unverified:
       return .loss
-    case .prunable, .remoteSynced, .gone, .paneOpen, .mainWorktree, .branchAlsoDeleted:
+    case .prunable, .remoteSynced, .gone, .paneOpen, .mainWorktree:
       return .neutral
     case .agentWorking: return .status
     }
@@ -120,7 +114,7 @@ enum CleanChip: Equatable, Identifiable {
   /// 使用状況は「ピルを増やす」のではなく群の移動そのものが表す。
   var isPill: Bool {
     switch self {
-    case .agentWorking, .agentWaiting, .paneOpen, .mainWorktree, .branchAlsoDeleted:
+    case .agentWorking, .agentWaiting, .paneOpen, .mainWorktree:
       return false
     default:
       return true
@@ -147,7 +141,8 @@ struct CleanRow: Identifiable, Equatable {
   /// どれにも入らない語を作らない。「立った事実が画面から消えていない」をテストが分類器の出力だけで
   /// 主張できるようにするための、行が自分で持つ台帳。
   let vocabulary: [CleanChip]
-  /// 右クラスタ（ピルは最大 2 枚、その後に素文字と注記）。
+  /// 右クラスタ（ピルは最大 2 枚、その後に素文字）。**状態（3 軸の事実）だけを語る**——
+  /// 動作の予告は安全群の見出しとフッタの実行ボタンが持つ。
   let chips: [CleanChip]
   /// 展開サブラインへ書く損失の内訳（`isLoss` の語彙すべて。ピルへ出たものも含む）。
   let lossNotes: [CleanChip]
