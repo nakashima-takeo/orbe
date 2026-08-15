@@ -96,8 +96,9 @@ final class SoundCatalogTests: XCTestCase {
     }
   }
 
-  /// 音量は合成の入力（コンプレッサの**手前**）。小さくすれば必ず小さくなり、かつ縮み方は線形でない
-  /// ——音量を再生側ボリュームや事前生成音源へ移すと厳密に 0.2 倍になるので、そこで落ちる。
+  /// 音量は合成の入力（コンプレッサの**手前**）。小さくすれば必ず小さくなり、かつ縮み方は
+  /// マッピングの比そのものにならない——音量を再生側ボリュームや事前生成音源へ移すと
+  /// 厳密に `level(forVolume: 20)` 倍になるので、そこで落ちる。
   func testVolumeIsAppliedBeforeTheCompressor() {
     let loud = SoundRenderer.render(
       family: .glass, event: .done, volume: 100, sampleRate: sampleRate)
@@ -106,23 +107,25 @@ final class SoundCatalogTests: XCTestCase {
     XCTAssertEqual(loud.count, quiet.count)
     let loudPeak = loud.map { abs($0) }.max() ?? 0
     let quietPeak = quiet.map { abs($0) }.max() ?? 0
+    let ratio = Float(SoundRenderer.level(forVolume: 20))
     XCTAssertLessThan(quietPeak, loudPeak)
     XCTAssertGreaterThan(
-      quietPeak, loudPeak * 0.2 * 1.02, "コンプレッサの後段なら厳密に 0.2 倍になる")
+      quietPeak, loudPeak * ratio * 1.02, "コンプレッサの後段なら厳密にこの比になる")
   }
 
-  /// ラウドネス整合: 全 24 音の最大短時間 RMS（300 ms 窓・音量 70・48 kHz）が整合目標
-  /// -24.3 dBFS へ揃う（実測残差 ±0.3 dB に余白を足して ±0.8 dB）。これが「他の案と並べて
+  /// ラウドネス整合: 全 24 音の最大短時間 RMS（300 ms 窓・既定音量 90・48 kHz）が整合目標
+  /// -24.0 dBFS へ揃う（実測残差 ±0.3 dB に余白を足して ±0.8 dB）。これが「他の案と並べて
   /// 音量の違和感が出ない」ことの客観的な物差し——音の定義を変えて外れたら、`SoundCatalog` の
   /// トリム表をその音だけ測り直して目標へ戻す。
   func testLoudnessOfEverySoundStaysAligned() {
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
         let samples = SoundRenderer.render(
-          family: family, event: event, volume: 70, sampleRate: sampleRate)
+          family: family, event: event, volume: SoundRenderer.defaultVolume,
+          sampleRate: sampleRate)
         let loud = SoundAnalysis.maxShortTermRMSDB(samples, sampleRate: sampleRate)
         XCTAssertEqual(
-          loud, -24.3, accuracy: 0.8, "\(family)/\(event) の音量が揃っていない (\(loud) dBFS)")
+          loud, -24.0, accuracy: 0.8, "\(family)/\(event) の音量が揃っていない (\(loud) dBFS)")
       }
     }
   }

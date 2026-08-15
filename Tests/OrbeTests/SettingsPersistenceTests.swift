@@ -15,7 +15,6 @@ final class SettingsPersistenceTests: OrbeTestCase {
     layer[SettingKeys.backgroundBlur] = true
     layer[SettingKeys.cursorStyleBlink] = false
     layer[SettingKeys.defaultAgent] = "codex"
-    layer[SettingKeys.devFeaturesEnabled] = true
     layer[SettingKeys.agentStateIcons] = ["working": "gearshape"]
     SettingsPersistence.saveGlobal(layer)
     XCTAssertEqual(SettingsPersistence.loadGlobal(), layer)

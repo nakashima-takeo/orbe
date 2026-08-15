@@ -7,16 +7,15 @@ import XCTest
 /// 既存ユーザーの設定・WS 上書きを 1 つも失わないことを実 JSON fixture で担保する。
 final class SettingsMigrationTests: OrbeTestCase {
 
-  // MARK: - settings.json 旧形式 → 新形式（設定 9 項目＋アプリ状態 3 項目）
+  // MARK: - settings.json 旧形式 → 新形式（設定 8 項目＋アプリ状態 3 項目）
 
-  /// 全 9 設定＋アプリ状態 3 項目入りの旧 settings.json を無損失で移行する。
+  /// 全 8 設定＋アプリ状態 3 項目入りの旧 settings.json を無損失で移行する。
   func testLegacySettingsMigrateWithoutLoss() throws {
     let legacy = """
       {"defaultAgent":"codex","agentPluginsInstalled":true,"completionInstalled":true,\
       "cachedShellPath":"/usr/local/bin:/usr/bin","fontSize":16,"theme":"dark",\
       "fontFamily":"Hack","backgroundOpacity":80,"backgroundBlur":true,\
-      "cursorStyleBlink":false,"agentStateIcons":{"working":"gearshape"},\
-      "devFeaturesEnabled":true}
+      "cursorStyleBlink":false,"agentStateIcons":{"working":"gearshape"}}
       """
     try Data(legacy.utf8).write(to: settingsFile())
 
@@ -28,7 +27,6 @@ final class SettingsMigrationTests: OrbeTestCase {
     XCTAssertEqual(layer[SettingKeys.theme], .dark)
     XCTAssertEqual(layer[SettingKeys.fontFamily], "Hack")
     XCTAssertEqual(layer[SettingKeys.defaultAgent], "codex")
-    XCTAssertEqual(layer[SettingKeys.devFeaturesEnabled], true)
     XCTAssertEqual(layer[SettingKeys.agentStateIcons], ["working": "gearshape"])
 
     // アプリ状態 3 項目は app-state.json へ分離退避される。
@@ -172,7 +170,7 @@ final class SettingsMigrationTests: OrbeTestCase {
     let legacy = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,\
-      "tabs":[{"tree":{"leaf":{}},"editor":{"open":false,"tool":"tree"}}],\
+      "tabs":[{"tree":{"leaf":{}}}],\
       "settingsOverride":{"fontSize":16,"backgroundOpacity":70,"backgroundBlur":true,\
       "theme":"dark","fontFamily":"Hack","cursorStyleBlink":false,\
       "agentStateIcons":{"working":"gearshape"}}}]}
@@ -194,7 +192,7 @@ final class SettingsMigrationTests: OrbeTestCase {
     let new = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,\
-      "tabs":[{"tree":{"leaf":{}},"editor":{"open":false,"tool":"tree"}}],\
+      "tabs":[{"tree":{"leaf":{}}}],\
       "settingsOverride":{"font-size":18,"default-agent":"codex"}}]}
       """
     try Data(new.utf8).write(to: workspacesFile())

@@ -1,23 +1,12 @@
 import Foundation
 import OrbeSound
 
-/// 開発ビルドか（未設定時の「開発中の機能を有効化」default を決める SSOT）。公開リリース
-/// （`release-app.sh` が ORBE_CHANNEL=release で焼く `-DORBE_RELEASE`）で false、それ以外で true。
-/// `#if DEBUG` は両ビルドとも -c release で焼くため使えない。
-let isDevBuild: Bool = {
-  #if ORBE_RELEASE
-    return false
-  #else
-    return true
-  #endif
-}()
-
 /// 設定項目の識別子。値の担体はスコープ非依存の `SettingsLayer`（SettingID→型付き値のマップ）で、
 /// 解決・検証・永続・control 列挙は `SettingsRegistry` の descriptor 走査で駆動する。
 /// 項目追加は descriptor を 1 件・typed key 定数を 1 行書くだけ（鏡像コードは無い）。
 enum SettingID: CaseIterable {
   case fontSize, backgroundOpacity, backgroundBlur, cursorStyleBlink, theme,
-    defaultAgent, fontFamily, tabTitleFontFamily, emojiFont, agentStateIcons, devFeaturesEnabled,
+    defaultAgent, fontFamily, tabTitleFontFamily, emojiFont, agentStateIcons,
     worktreeDir, notificationSound, notificationSoundVolume, notificationSoundEnabled
 }
 
@@ -44,7 +33,6 @@ enum SettingKeys {
   static let theme = DefaultedSettingKey<ThemeMode>(.theme)
   static let emojiFont = DefaultedSettingKey<EmojiFontMode>(.emojiFont)
   static let agentStateIcons = DefaultedSettingKey<[String: String]>(.agentStateIcons)
-  static let devFeaturesEnabled = DefaultedSettingKey<Bool>(.devFeaturesEnabled)
   static let worktreeDir = DefaultedSettingKey<String>(.worktreeDir)
   static let notificationSound = DefaultedSettingKey<NotificationSound>(.notificationSound)
   static let notificationSoundVolume = DefaultedSettingKey<Int>(.notificationSoundVolume)

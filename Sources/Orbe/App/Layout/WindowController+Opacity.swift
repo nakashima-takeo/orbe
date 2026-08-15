@@ -24,7 +24,7 @@ extension WindowController {
     // 完全透明でないためヒットテスト等が壊れない）。不透明時は system 動的色へ戻す。
     window.backgroundColor =
       translucent ? .white.withAlphaComponent(0.001) : .windowBackgroundColor
-    // chrome 各面（StatusRow・パレット・EditorPane）を端末面と同じ材料で透過させる。
+    // chrome 各面（StatusRow・パレットのカード・端末上に浮く検索バー／補完 popup）を端末面と同じ材料で透過させる。
     // 端末面 veil は libghostty が、chrome veil は各面が effectiveOpacity で塗る（二重 veil 回避）。
     chromeTranslucency.update(
       percent: percent, isFullScreen: isFullScreen, blur: settings[SettingKeys.backgroundBlur])

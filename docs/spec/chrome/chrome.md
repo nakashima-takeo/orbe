@@ -1,7 +1,7 @@
 ---
 title: chrome
 description: 常駐 StatusRow 2 段 — 上段に現在地と横断エージェント件数、下段に全幅セグメント形タブ行。イベント駆動で更新する
-updated: 2026-08-08
+updated: 2026-08-15
 ---
 
 # chrome
@@ -40,13 +40,13 @@ updated: 2026-08-08
 
 `Cmd+R` はフォーカス中タブをタブ行内でその場編集する（中央パレットは出さない）。現在の表示名をプリフィルし全選択して開き（打てば置換）、空確定で解除・Esc で取消・他所クリックで取消。編集中は window レベルの chrome コマンドを不活性化する。シェル統合の自動タイトル送出は既定 conf で止めてあり、タブ名はこの precedence だけが決める（[config](../platform/config.md)）。
 
-**描画とフォント**: タイトルの描画は基底フォント（既定は等幅システム・設定 `tab-title-font-family` で差し替え可・未設定/解決不能名は既定へ退避・[settings](../palette/settings.md)）に、Nerd アイコン・点字・絵文字の各領域を run 単位で同梱フォントへ明示割り当てる（絵文字は設定 `emoji-font` の実効値。apple 選択時は割り当てず OS フォールバック）——ghostty 側と違い chrome は自前でフォント解決するため。text 既定の emoji 可能記号（Claude Code の ✳ 等）は VS16 を足してカラー表示へ昇格する。タブ自然幅の計測も同じ変換・同じ基底フォントで測る（フォント未解決のバンドル無し起動では割り当てなし＝素の chrome 描画）。この run 割り当てはタブ以外の chrome テキスト——TopBar の workspace 名/cwd・パレット行・EditorPane のファイル名/パス・FileViewer の本文行——にも適用される（本文行は絵文字等を含まない文字列を走査の早期打ち切りで素の Text のまま描く）。
+**描画とフォント**: タイトルの描画は基底フォント（既定は等幅システム・設定 `tab-title-font-family` で差し替え可・未設定/解決不能名は既定へ退避・[settings](../palette/settings.md)）に、Nerd アイコン・点字・絵文字の各領域を run 単位で同梱フォントへ明示割り当てる（絵文字は設定 `emoji-font` の実効値。apple 選択時は割り当てず OS フォールバック）——ghostty 側と違い chrome は自前でフォント解決するため。text 既定の emoji 可能記号（Claude Code の ✳ 等）は VS16 を足してカラー表示へ昇格する。タブ自然幅の計測も同じ変換・同じ基底フォントで測る（フォント未解決のバンドル無し起動では割り当てなし＝素の chrome 描画）。この run 割り当てはタブ以外の chrome テキスト——TopBar の workspace 名/cwd・パレット行——にも適用される。
 
 ## タブのエージェント状態インジケータ
 
 各タブはタイトルの前に、タブ内全ペインの `agentState` を `waiting > working > done` の優先順位で 1 つに畳んだ状態グリフを出す（working=円弧スピナー・waiting=吹き出し浮遊・done=チェック・静止）。Reduce Motion 環境ではアニメーションを止め静的な形で残す。`idle`・無し（nil）は出さない。状態の詳細（種別グリフ＋件数）は上段右端の横断ストリップが持つ。
 
-各状態のグリフは既定で自前字形だが、設定パレットの「エージェントアイコン」で状態ごとに SF Symbol へ差し替えられる（[settings](../palette/settings.md)）。差し替えても状態のモーション・Reduce Motion 時の静止・選択タブの対テーマ色は維持する。装飾用途の固定グリフ（EditorPane のコミット✓・dispatch の作成中スピナー等）は差し替え対象外。
+各状態のグリフは既定で自前字形だが、設定パレットの「エージェントアイコン」で状態ごとに SF Symbol へ差し替えられる（[settings](../palette/settings.md)）。差し替えても状態のモーション・Reduce Motion 時の静止・選択タブの対テーマ色は維持する。装飾用途の固定グリフ（dispatch の作成中スピナー等）は差し替え対象外。
 
 ## done のフォーカス消費
 

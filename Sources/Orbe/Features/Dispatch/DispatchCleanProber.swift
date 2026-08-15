@@ -10,9 +10,10 @@ import Foundation
 ///
 /// git は独立レーン（`isolated: true`）で走らせる。worktree 1 本あたり最大 `1 + T×5` 本
 /// （T は比較先の本数。比較先 2 本の unmerged 行で最大 11 本）を撒くので、共有の
-/// read-write lock に載せると直後に Enter で来る `addWorktree`(barrier) が全部の完了を待つ
-/// （GCD barrier は submit 済み全ブロックを待つ）。パレットを閉じてもプローブは走り切るため、
-/// 共有レーンのままだと DiffPanel の add/commit/checkout まで巻き込む。`fetchPrune` と同じ判断。
+/// read-write lock に載せると、直後に来る掃除の実行（`worktree remove`・`update-ref -d` の
+/// `.exclusive`）が撒いた全プローブの完了を待つ（GCD barrier は submit 済み全ブロックを待つ）。
+/// パレットを閉じてもプローブは走り切るため、共有レーンのままだと閉じた後の掃除まで巻き込む。
+/// `fetchPrune` と同じ判断。
 struct DispatchCleanProber {
   let repo: GitRepo
   let defaultBranch: String

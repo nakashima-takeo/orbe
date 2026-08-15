@@ -5,14 +5,14 @@ import XCTest
 
 /// 設定パレットの通知音まわり（root の 3 行・サブパレットの試聴と確定）。
 /// 中核は「**聴くことと決めることを分けてある**」——行の移動と ⇥ は鳴らすだけで設定を書かず、
-/// 書くのは ↵ の確定だけ。通知音行は root index 13（worktree の作成場所の次）。
+/// 書くのは ↵ の確定だけ。通知音行は root index 12（worktree の作成場所の次）。
 ///
 /// 試聴インジケータ（EQ）と root 音量行の試聴は `SettingsPaletteSoundTests+Indicator.swift` が持ち、
 /// そちらもここの駆動台（`model` / `capture*` / `drillIn`）を使う。
 @MainActor
 final class SettingsPaletteSoundTests: OrbeTestCase {
-  let soundRow = 13
-  let volumeRow = 14  // `rootOrder` で通知音行の次
+  let soundRow = 12
+  let volumeRow = 13  // `rootOrder` で通知音行の次
 
   func model(sound: NotificationSound? = nil, volume: Int? = nil, enabled: Bool? = nil)
     -> SettingsPaletteModel
@@ -55,7 +55,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
 
   // MARK: - root の 3 行
 
-  /// 未設定は既定（案＝`NotificationSound.default`・音量 70%・オン）を出し、通知音行だけが潜れる。
+  /// 未設定は既定（案＝`NotificationSound.default`・音量 90%・オン）を出し、通知音行だけが潜れる。
   func testRootShowsThreeRowsWithDefaults() {
     let p = model()
     XCTAssertTrue(p.render.rows[soundRow].label.contains("通知音"))
@@ -64,7 +64,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
         LocalizationStore(language: .ja).string(NotificationSound.default.labelKey)))
     XCTAssertTrue(p.render.rows[soundRow].chevron, "drillIn 行")
     XCTAssertTrue(p.render.rows[soundRow + 1].label.contains("音量"))
-    XCTAssertTrue(p.render.rows[soundRow + 1].label.contains("70%"))
+    XCTAssertTrue(p.render.rows[soundRow + 1].label.contains("90%"))
     XCTAssertFalse(p.render.rows[soundRow + 1].chevron, "stepper 行")
     XCTAssertTrue(p.render.rows[soundRow + 2].label.contains("通知音のオン/オフ"))
     XCTAssertTrue(p.render.rows[soundRow + 2].label.contains("オン"))

@@ -123,7 +123,7 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
       CompletionChoice(
         value: "checkout", description: "ブランチ切替・ファイル復元", insertValue: nil, type: "subcommand"),
       CompletionChoice(value: "main", description: "", insertValue: nil, type: nil),
-      CompletionChoice(value: "feature/editor-pane", description: "", insertValue: nil, type: nil),
+      CompletionChoice(value: "feature/tab-rename", description: "", insertValue: nil, type: nil),
       CompletionChoice(value: "fix/tab-overflow", description: "", insertValue: nil, type: nil),
       CompletionChoice(value: "release/0.2.0", description: "", insertValue: nil, type: nil),
       CompletionChoice(value: "README.md", description: "", insertValue: nil, type: "file"),

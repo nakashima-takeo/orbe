@@ -153,7 +153,7 @@ extension SurfaceView {
   /// popup 表示中のみ ↑/↓/⌘↑/⌘↓/Esc を横取りする（↑/↓=選択移動・⌘↑/⌘↓=先頭/末尾へジャンプ・Esc=dismiss）。
   /// 横取りしたら true。非表示時、および IME 変換中（preedit）は false を返し、surface（IME）へ素通しさせる
   /// ——変換中の矢印は候補移動、Esc は変換取消で IME のものなので奪わない。
-  /// ⌘⇧↑↓（prevTool/nextTool）は shift 付きなので chrome へ譲る（`.shift` 等検出で false）。
+  /// ⌘ に他修飾が付いたもの（⌘⇧↑↓ 等）は横取りせず surface へ通す（`.shift` 等検出で false）。
   func completionHandleKey(_ event: NSEvent) -> Bool {
     guard completion != nil, markedText.length == 0 else { return false }
     let flags = event.modifierFlags
@@ -161,12 +161,12 @@ extension SurfaceView {
     switch event.keyCode {
     case 126:  // ↑
       if cmd {
-        // ⌘⇧↑=prevTool 等の他修飾つきは chrome へ譲る（純粋な ⌘↑ だけジャンプ）。
+        // ⌘⇧↑ 等の他修飾つきは横取りしない（純粋な ⌘↑ だけジャンプ）。
         guard flags.isDisjoint(with: [.shift, .option, .control]) else { return false }
         completion?.jumpSelection(-1)
       } else {
         // 素の ↑ も shift/opt/ctrl つきも候補移動に畳む（surface へ流すとベル＋無意味な
-        // エスケープ列になるだけなので握り取る）。chrome へ譲るのは ⌘⇧↑↓ のみ（上記 cmd 枝）。
+        // エスケープ列になるだけなので握り取る）。通すのは他修飾つきの ⌘↑↓ のみ（上記 cmd 枝）。
         completion?.moveSelection(-1)
       }
       refreshCompletionCard()

@@ -102,13 +102,6 @@ final class SessionStore {
     paneCwd(inWorkspaceAt: i) ?? workspaces[i].rootPath
   }
 
-  /// アクティブタブが所有する EditorPane UI 状態（EditorPaneController へ注入する単一真実）。
-  /// タブ不在は nil。
-  func activeEditorUI() -> EditorPaneUIState? {
-    guard current.tabs.indices.contains(current.active) else { return nil }
-    return current.tabs[current.active].editorUI
-  }
-
   // MARK: - select のブックキーピング（ビューは触らない）
 
   /// タブ選択のドメイン記録。index ガード → `activated`→`lastUsedAt`→`active` の順で立て、成否を返す。

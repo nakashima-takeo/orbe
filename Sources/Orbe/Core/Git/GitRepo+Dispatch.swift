@@ -37,10 +37,10 @@ extension GitRepo {
 
   /// origin から fetch し、削除された remote 追跡ブランチを prune する（`refs/remotes/origin/*` のみ更新）。
   /// 独立レーン（`.independent`）で走らせる: 数秒かかりうる fetch を GitRunner 共有 queue の barrier
-  /// チェーンから切り離し、後続の `.exclusive`（EditorPane の stage・commit）が in-flight fetch を
+  /// チェーンから切り離し、後続の `.exclusive`（worktree 削除・ブランチ削除）が in-flight fetch を
   /// 待たないようにする（GCD barrier は submit 済み全ブロックの完了を待つため、共有 queue で走らせると
   /// `.read` でも後続の書き込みが数秒ブロックされる）。並行安全: fetch が触るのは `refs/remotes/origin/*`
-  /// だけで、`.exclusive` が守る index・作業ツリーとは領域が交わらない。
+  /// だけで、`.exclusive` が守る ref・作業ツリーとは領域が交わらない。
   /// `GIT_TERMINAL_PROMPT=0`（GitRunner 既定）で認証プロンプトはハングせず失敗に落ちる。
   ///
   /// `--progress`: clone と同じ理由。非 tty の `git fetch` は転送中 1 バイトも書かないため、
@@ -102,8 +102,9 @@ extension GitRepo {
   ///
   /// 独立レーン: 触るのは新規ディレクトリ・`$GIT_COMMON_DIR/worktrees/<名前>`・`-b` 指定時の
   /// `refs/heads/<新ブランチ>`・`--track` 指定時の `.git/config`（`branch.<新ブランチ>.remote/merge`）で、
-  /// **呼び出し元チェックアウトの index には触らない**。barrier が守っていた不変条件（同一チェックアウトの
-  /// `.git/index.lock` を奪い合わない）は壊れない。ref は git 自身が `<ref>.lock`、config は `config.lock`
+  /// **呼び出し元チェックアウトの作業ツリーにも既存 ref にも触らない**（作るのは新規 ref だけ）。barrier が
+  /// 守る不変条件（`.exclusive` の ref・作業ツリー書き込みと領域を奪い合わない）は壊れない。ref は git 自身が
+  /// `<ref>.lock`、config は `config.lock`
   /// で守る（どちらもリトライせず即失敗し、`-b` 指定なら作成済みブランチが残る）。Orbe で `.git/config` を
   /// 書く git 呼び出しはこれだけなので、競合相手は同時実行の `addWorktree` に限られる。
   /// post-checkout hook はユーザーのコードで所要時間に上限が無いため、barrier に置くと 1 本のハングが

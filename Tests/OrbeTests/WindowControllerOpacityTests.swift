@@ -125,25 +125,6 @@ final class WindowControllerOpacityTests: OrbeTestCase {
       wc.activeEffectiveSettings()[SettingKeys.backgroundOpacity], 80, "切替で元 WS の上書きへ追従")
   }
 
-  /// devFeaturesEnabled の WS 上書きが右バー gate（`wc.devFeaturesEnabled`）を実効値へ駆動し、
-  /// WS 切替で追従する（headline 挙動変更②）。この結線が切れると applyActiveWorkspaceConfig の
-  /// gate 再評価が死んでも他テストは緑のままになるため、切替の両向きを固定する。
-  func testDevFeaturesGateTracksActiveWorkspaceOverride() {
-    saveGlobal { $0[SettingKeys.devFeaturesEnabled] = false }  // global＝gate off
-    let wc = WindowController()
-    XCTAssertFalse(wc.devFeaturesEnabled, "global false → gate off")
-
-    wc.current.settingsOverride = override { $0[SettingKeys.devFeaturesEnabled] = true }
-    wc.applyActiveWorkspaceConfig()
-    XCTAssertTrue(wc.devFeaturesEnabled, "WS 上書き true が右バー gate を on にする")
-
-    wc.createWorkspace(name: "other")  // 上書き無しの新 WS がアクティブ
-    XCTAssertFalse(wc.devFeaturesEnabled, "上書き無し WS は global（off）へ戻る")
-
-    wc.switchWorkspace(to: 0)  // 元 WS へ戻す
-    XCTAssertTrue(wc.devFeaturesEnabled, "切替で元 WS の上書き（on）へ追従")
-  }
-
   /// ディスクに保存された settingsOverride が起動復元で実効設定へ結線される。
   func testRestoresWorkspaceOverrideFromDiskOnLaunch() {
     saveGlobal { $0[SettingKeys.backgroundOpacity] = 100 }  // global＝不透明
@@ -200,6 +181,13 @@ final class WindowControllerOpacityTests: OrbeTestCase {
     XCTAssertEqual(
       guiConfContent(), "font-size = 12\n" + constLines,
       "新 WS は global 継承——生成 conf が 12 へ再生成される（前 WS の 30 を持ち越さない）")
+
+    // 切替（activateCurrent）でも実効設定を再適用する。ここが切れると WS ごとのテーマ・フォント・
+    // gui.conf が切替に追従しなくなるが、実効値を都度算出する assert では気づけない（生成物で見る）。
+    wc.switchWorkspace(to: 0)
+    XCTAssertEqual(
+      guiConfContent(), "font-size = 30\n" + constLines,
+      "切替でも再適用——上書きを持つ元 WS の 30 へ生成 conf が戻る")
   }
 
   private func guiConfContent() -> String {

@@ -1,7 +1,5 @@
 import Foundation
 
-// swiftlint:disable file_length
-
 /// UI 文言の型付きキー。フラット enum・`CaseIterable`（辞書欠落を `L10nCompletenessTests` が機械検出できる）。
 /// 命名はドメイン接頭辞つき（衝突と重複を避ける）。粒度は「1 つの UI 文言 = 1 キー」。値は `L10n.table`。
 ///
@@ -45,76 +43,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   // MARK: - Git（実行層の共通失敗）
   case gitTimedOut
 
-  // MARK: - EditorPane / FileViewer
-  case editorSelectFile
-  case editorSearchFiles
-  case editorSegSource
-  case editorSegPreview
-  case editorSegFile
-  case editorChangesHintLead
-  case editorGitToolWord
-  case editorChangesHintTail
-  case editorPreviewOverlayTitle
-  case editorPreviewLegend
-  case editorStageHintLead
-  case editorStageHintTail
-  case editorNoteCannotShow
-  case editorNoteConflict
-  case editorNoteBinary
-  case editorNoteRenameOnly
-  case editorNoteEmptyFile
-  case editorNoteModeOnly
-  case editorEmptyNoCwd
-  case editorEmptyNotGit
-  case editorEmptyStatusFailed
-
-  // MARK: - Commit
-  case commitMessagePlaceholder
-  case commitInProgress
-  case commitButton
-  case commitSucceeded
-  case commitFailed
-
-  // MARK: - Git workbench（変更・履歴レール / CommitDetail）
-  case gitNoCommits
-  case gitUncommitted
-  case gitUncommittedChanges
-  case gitMoreFilesOne
-  case gitMoreFilesOther
-  case gitNoChanges
-  case gitUnstageAction
-  case gitDiscard
-  case gitDiscardChanges
-  case gitDiscardTitle
-  case gitDiscardConfirmOne
-  case gitDiscardConfirmOther
-  case gitChangesCount
-  case gitChangesTab
-  case gitHistory
-  case gitSortNewest
-  case gitUnpushed
-  case gitAheadOfUpstream
-
-  // MARK: - Browser tool
-  case browserDevServerOff
-  case browserDevServerHint
-  case browserDevServerRunning
-  case browserDevServerStopped
-  case browserOpenExternal
-
-  // MARK: - Relative date（履歴レール・CommitDetail）
+  // MARK: - Relative date
   case relativeJustNow
-  case relativeYesterday
-  case relativeMinutesAgoOne
-  case relativeMinutesAgoOther
-  case relativeHoursAgoOne
-  case relativeHoursAgoOther
-  case relativeDaysAgoOne
-  case relativeDaysAgoOther
-  case relativeMonthsAgoOne
-  case relativeMonthsAgoOther
-  case relativeYearsAgoOne
-  case relativeYearsAgoOther
 
   // MARK: - Agent（共有: 状態名・検出無し）
   case agentNotFoundCLI
@@ -324,7 +254,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsBackgroundBlur
   case settingsCursorBlink
   case settingsAgentIcons
-  case settingsDevFeatures
   case settingsWorktreeDir
   case settingsNotificationSound
   case settingsNotificationSoundVolume

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// chrome（StatusRow・パレット・EditorPane 等の SwiftUI 面）へ「背景の不透明度／ブラー」を届ける観測可能ホルダー。
+/// chrome（StatusRow・パレット・overlay 等の SwiftUI 面）へ「背景の不透明度／ブラー」を届ける観測可能ホルダー。
 /// chrome は複数の独立した `NSHostingView` に跨るため、モデル毎の糸通しでなく単一の Environment で配る。
 /// 値の材料は `WindowController.syncWindowOpacity` と同一（実効設定の backgroundOpacity/backgroundBlur）で、
 /// `update` を同一 tick で呼んで揃える。所有は `WindowController`。
@@ -46,7 +46,7 @@ import SwiftUI
   }
 
   /// 既存の不透明 bgBase backstop を置換する塗り（不透明時=不透明 bgBase・透過時=effectiveOpacity でスケール）。
-  /// EditorPane 等、元々 bgBase の不透明地に載っていた面が使う。
+  /// 0タブの content 地など、元々 bgBase の不透明地に載っていた面が使う。
   var baseFill: Color { Color.theme.bgBase.opacity(effectiveOpacity) }
 
   /// 透過時のみ足す追加 base（不透明時は clear＝現行の透明を維持し glow を透かす）。

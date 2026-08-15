@@ -15,7 +15,7 @@ import XCTest
 @MainActor
 final class PaletteCardSegmentsTests: PaletteCardWindowTestCase {
   /// 設定パレット root での通知音行（worktree の作成場所の次）。
-  private let soundRow = 13
+  private let soundRow = 12
 
   private func model() -> SettingsPaletteModel {
     SettingsPaletteModel(

@@ -262,7 +262,7 @@ func resolveWorkspaceId(_ arg: String) -> Int {
 let allConfigKeys = [
   "font-size", "background-opacity", "background-blur", "cursor-style-blink", "theme",
   "font-family", "tab-title-font-family", "emoji-font", "default-agent", "agent-state-icons",
-  "dev-features", "worktree-dir", "notification-sound", "notification-sound-volume",
+  "worktree-dir", "notification-sound", "notification-sound-volume",
   "notification-sound-enabled",
 ]
 
@@ -358,8 +358,7 @@ let configSetUsage = """
 
   KEYS: \(allConfigKeys.joined(separator: ", "))
     font-size, background-opacity, notification-sound-volume   integer
-    background-blur, cursor-style-blink, dev-features,
-    notification-sound-enabled   true/false/on/off/1/0
+    background-blur, cursor-style-blink, notification-sound-enabled   true/false/on/off/1/0
     theme (auto/light/dark), font-family, tab-title-font-family, emoji-font,
     default-agent, worktree-dir, notification-sound   string
     agent-state-icons   map (set it from the settings palette)

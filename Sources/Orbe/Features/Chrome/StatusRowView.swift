@@ -7,7 +7,6 @@ enum Chrome {
   static let headerHeight: CGFloat = 28
   static let tabRowHeight: CGFloat = 28  // 下段（セグメント形タブ行）
   static let barHeight: CGFloat = headerHeight + tabRowHeight
-  static let railWidth: CGFloat = 32  // EditorPane 常駐レール（本体を閉じたときの facade 幅）
   static let leftColumn: CGFloat = 80  // 信号機ボタンを避ける左の柱
   static let edgePad: CGFloat = 16  // TopBar の左右余白
   static let tabRowPad: CGFloat = 3  // タブ行の内側余白（上下左右）

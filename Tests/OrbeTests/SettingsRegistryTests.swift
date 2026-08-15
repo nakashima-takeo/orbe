@@ -23,7 +23,7 @@ final class SettingsRegistryTests: OrbeTestCase {
       [
         .fontSize, .fontFamily, .tabTitleFontFamily, .emojiFont, .theme, .defaultAgent,
         .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .agentStateIcons,
-        .devFeaturesEnabled, .worktreeDir, .notificationSound, .notificationSoundVolume,
+        .worktreeDir, .notificationSound, .notificationSoundVolume,
         .notificationSoundEnabled,
       ])
   }
@@ -35,7 +35,7 @@ final class SettingsRegistryTests: OrbeTestCase {
       [
         .fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
         .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
-        .devFeaturesEnabled, .worktreeDir, .notificationSound, .notificationSoundVolume,
+        .worktreeDir, .notificationSound, .notificationSoundVolume,
         .notificationSoundEnabled,
       ])
   }
@@ -61,7 +61,6 @@ final class SettingsRegistryTests: OrbeTestCase {
     XCTAssertEqual(SettingsRegistry.descriptor(.tabTitleFontFamily).key, "tab-title-font-family")
     XCTAssertEqual(SettingsRegistry.descriptor(.emojiFont).key, "emoji-font")
     XCTAssertEqual(SettingsRegistry.descriptor(.agentStateIcons).key, "agent-state-icons")
-    XCTAssertEqual(SettingsRegistry.descriptor(.devFeaturesEnabled).key, "dev-features")
     XCTAssertEqual(SettingsRegistry.descriptor(.worktreeDir).key, "worktree-dir")
     XCTAssertEqual(SettingsRegistry.descriptor(.notificationSound).key, "notification-sound")
     XCTAssertEqual(
@@ -87,7 +86,7 @@ final class SettingsRegistryTests: OrbeTestCase {
   func testDefaultValuePresenceMatchesKeyKind() {
     for id in [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
-      .emojiFont, .agentStateIcons, .devFeaturesEnabled, .worktreeDir, .notificationSound,
+      .emojiFont, .agentStateIcons, .worktreeDir, .notificationSound,
       .notificationSoundVolume, .notificationSoundEnabled,
     ] {
       XCTAssertNotNil(SettingsRegistry.descriptor(id).defaultValue(), "\(id) は既定を持つ")
@@ -99,8 +98,7 @@ final class SettingsRegistryTests: OrbeTestCase {
       "tabTitleFontFamily は既定なし（未設定＝システム等幅 11pt）")
   }
 
-  /// 既定値は現行の値（fontSize 12・opacity 95・blur true・blink true・theme auto・icons 空・
-  /// devFeatures はチャネル由来 = dev で on・release で off）。
+  /// 既定値は現行の値（fontSize 12・opacity 95・blur true・blink true・theme auto・icons 空）。
   func testDefaultValues() {
     XCTAssertEqual(SettingsRegistry.descriptor(.fontSize).defaultValue(), .int(12))
     XCTAssertEqual(SettingsRegistry.descriptor(.backgroundOpacity).defaultValue(), .int(95))
@@ -110,16 +108,15 @@ final class SettingsRegistryTests: OrbeTestCase {
     XCTAssertEqual(SettingsRegistry.descriptor(.emojiFont).defaultValue(), .string("noto"))
     XCTAssertEqual(SettingsRegistry.descriptor(.agentStateIcons).defaultValue(), .stringMap([:]))
     XCTAssertEqual(
-      SettingsRegistry.descriptor(.devFeaturesEnabled).defaultValue(), .bool(isDevBuild),
-      "既定はチャネル由来（dev=on / release=off）。リテラルで固定すると出荷構成 -DORBE_RELEASE で落ちる")
-    XCTAssertEqual(
       SettingsRegistry.descriptor(.worktreeDir).defaultValue(),
       .string("{parent}/{repo}-worktrees/{slug}"), "既定は従来のハードコード規則と同一パスに解決するテンプレート")
     XCTAssertEqual(
       SettingsRegistry.descriptor(.notificationSound).defaultValue(),
       NotificationSound.default.settingValue,
       "既定の案は NotificationSound.default が SSOT（リテラルを 2 箇所に置かない）")
-    XCTAssertEqual(SettingsRegistry.descriptor(.notificationSoundVolume).defaultValue(), .int(70))
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.notificationSoundVolume).defaultValue(), .int(90),
+      "既定の音量は SoundRenderer.defaultVolume が SSOT——dev CLI の --volume 既定も同じ 1 つを見る")
     XCTAssertEqual(
       SettingsRegistry.descriptor(.notificationSoundEnabled).defaultValue(), .bool(true))
   }
@@ -181,11 +178,6 @@ final class SettingsRegistryTests: OrbeTestCase {
       "tab-title-font-family は gui.conf に出さない（chrome 専用・resolver 直配信）")
   }
 
-  func testDevFeaturesEnabledHasNoGuiConf() {
-    XCTAssertNil(
-      SettingsRegistry.descriptor(.devFeaturesEnabled).guiConf, "dev-features は gui.conf に出さない")
-  }
-
   func testWorktreeDirHasNoGuiConf() {
     XCTAssertNil(
       SettingsRegistry.descriptor(.worktreeDir).guiConf,
@@ -231,6 +223,17 @@ final class SettingsRegistryTests: OrbeTestCase {
     XCTAssertEqual(volume.range, 5...100, "下限 5%——無音は音量でなくオン/オフが担う")
     XCTAssertEqual(volume.step, 5)
     XCTAssertEqual(volume.unit, "%")
+    // 音量の値域は `SoundRenderer` の dB 等間隔マッピングの錨でもある（別モジュールなので型では繋がらない）。
+    // 下限を動かすと最小音量の実効ゲインが、刻みを動かすと 1 押しの効きが、どちらも黙って変わる。
+    XCTAssertEqual(
+      SoundRenderer.level(forVolume: volume.range.lowerBound), 0.05, accuracy: 1e-12,
+      "値域の下限で合成ゲインが 0.05（-26.02 dB）に落ちる")
+    XCTAssertEqual(
+      20
+        * log10(
+          SoundRenderer.level(forVolume: volume.range.lowerBound + volume.step)
+            / SoundRenderer.level(forVolume: volume.range.lowerBound)),
+      1.3695, accuracy: 1e-4, "1 押しの効きは全域 1.3695 dB")
     for id in [SettingID.fontSize, .backgroundOpacity, .notificationSoundVolume] {
       XCTAssertEqual(SettingsRegistry.descriptor(id).activation, .stepper)
     }
@@ -239,7 +242,7 @@ final class SettingsRegistryTests: OrbeTestCase {
   /// toggle 項目は activation=toggle かつ domain=toggle。
   func testToggleItemsHaveToggleDomainAndActivation() {
     for id in [
-      SettingID.backgroundBlur, .cursorStyleBlink, .devFeaturesEnabled, .notificationSoundEnabled,
+      SettingID.backgroundBlur, .cursorStyleBlink, .notificationSoundEnabled,
     ] {
       XCTAssertEqual(SettingsRegistry.descriptor(id).activation, .toggle)
       guard case .toggle = SettingsRegistry.descriptor(id).domain else {
@@ -262,7 +265,7 @@ final class SettingsRegistryTests: OrbeTestCase {
   func testIsDrillInFlags() {
     for id in [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink,
-      .devFeaturesEnabled, .notificationSoundVolume, .notificationSoundEnabled,
+      .notificationSoundVolume, .notificationSoundEnabled,
     ] {
       XCTAssertFalse(SettingsRegistry.descriptor(id).isDrillIn, "stepper/toggle（\(id)）は潜らない")
     }

@@ -13,12 +13,9 @@ enum ChromeAction {
   case reopenClosedAgentTab  // 最後に閉じたエージェントタブを開き直す
   case nextTab
   case prevTab
-  case prevTool  // Cmd+Shift+↑（上のツールへ）
-  case nextTool  // Cmd+Shift+↓（下のツールへ）
   case find  // スクロールバック検索バーを開く
   case switchWorkspace  // workspace コマンドパレットを開く
   case newWorkspace  // ワークスペース作成フォームを開く
-  case toggleEditorPane  // エディタペイン（Git ワークベンチ）の表示切替
   case launchDefaultAgent  // デフォルトエージェントを新タブで起動
   case showAgentPalette  // エージェント起動パレットを開く
   case showDispatchPalette  // Dispatch パレット（worktree/branch/issue/PR から起動）を開く
@@ -40,11 +37,8 @@ extension ChromeAction {
     case .reopenClosedAgentTab: return .reopenClosedAgentTab
     case .nextTab: return .nextTab
     case .prevTab: return .prevTab
-    case .prevTool: return .prevTool
-    case .nextTool: return .nextTool
     case .switchWorkspace: return .switchWorkspace
     case .newWorkspace: return .newWorkspace
-    case .toggleEditorPane: return .toggleEditorPane
     case .launchDefaultAgent: return .launchDefaultAgent
     case .showAgentPalette: return .showAgentPalette
     case .showDispatchPalette: return .showDispatchPalette
@@ -69,8 +63,7 @@ extension TerminalController.WindowCommand {
     case .newTab, .reopenClosedAgentTab, .newWorkspace, .switchWorkspace,
       .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings, .toggleHelp:
       return true
-    case .nextTab, .prevTab, .prevTool, .nextTool,
-      .toggleEditorPane, .openEditor, .renameTab:
+    case .nextTab, .prevTab, .openEditor, .renameTab:
       return false
     }
   }
@@ -88,8 +81,6 @@ enum Keybindings {
       switch event.specialKey {
       case .rightArrow: return .nextTab  // Cmd+Shift+→
       case .leftArrow: return .prevTab  // Cmd+Shift+←
-      case .upArrow: return .prevTool  // Cmd+Shift+↑
-      case .downArrow: return .nextTool  // Cmd+Shift+↓
       default: break
       }
     } else {
@@ -107,7 +98,6 @@ enum Keybindings {
     case "f": return .find  // Cmd+F
     case "r": return .rename  // Cmd+R
     case "n": return .newWorkspace  // Cmd+N
-    case "/": return .toggleEditorPane  // Cmd+/
     case "d": return .splitRight  // Cmd+D
     case "D": return .splitDown  // Cmd+Shift+D
     case "w": return .closePane  // Cmd+W

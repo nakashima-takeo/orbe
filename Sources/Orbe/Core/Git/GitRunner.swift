@@ -26,8 +26,8 @@ final class GitRunner {
   enum Lane {
     /// 読み取り。共有 queue で並行に走る。
     case read
-    /// 同一チェックアウトの index・作業ツリーを書く操作。共有 queue の barrier で単独直列化する
-    /// （`.git/index.lock` は待たずに即 fatal するため、順番はアプリ側で作る）。
+    /// 同一リポジトリの ref・作業ツリーを書く操作。共有 queue の barrier で単独直列化する
+    /// （git のロックは待たずに即 fatal するため、順番はアプリ側で作る）。
     case exclusive
     /// 共有チェックアウトと領域が交わらない操作。独立レーンで走らせ、barrier チェーンに載せない。
     case independent
@@ -131,7 +131,7 @@ final class GitRunner {
   /// 無出力が `idleTimeout` 続いたら打ち切る。EOF 待ちは終了の前後どちらでも `terminationGrace`
   /// で有界にし、pipe を握る孫がいても待ち続けない。
   ///
-  /// 待ちは semaphore で行い、ポーリングしない——`status` / `diff` は常時走るので、
+  /// 待ちは semaphore で行い、ポーリングしない——`status` は worktree ごとに撒くので、
   /// 数十 ms のポーリング遅延を全 git 呼び出しへ載せるのは退行になる。
   private func awaitCompletion(of process: Process, state: RunState) -> Bool {
     while true {

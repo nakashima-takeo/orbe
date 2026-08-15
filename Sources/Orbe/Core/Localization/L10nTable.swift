@@ -46,87 +46,8 @@ enum L10n {
     // MARK: Git
     .gitTimedOut: ("git から応答が無いため中断しました", "Stopped: no response from git"),
 
-    // MARK: EditorPane / FileViewer
-    .editorSelectFile: ("ファイルを選択", "Select a file"),
-    .editorSearchFiles: ("ファイルを検索", "Search files"),
-    .editorSegSource: ("ソース", "Source"),
-    .editorSegPreview: ("プレビュー", "Preview"),
-    .editorSegFile: ("ファイル", "File"),
-    .editorChangesHintLead: ("変更は ", "Changes go through "),
-    .editorGitToolWord: ("git ツール", "the Git tool"),
-    .editorChangesHintTail: (" で", "."),
-    .editorPreviewOverlayTitle: ("プレビューに変更を重ねて表示", "Changes overlaid on preview"),
-    .editorPreviewLegend: ("追加＝緑 / 削除＝打ち消し", "Added = green / Removed = strikethrough"),
-    .editorStageHintLead: ("stage は ", "Stage from the "),
-    .editorStageHintTail: (" 表示で", " view."),
-    .editorNoteCannotShow: (
-      "内容を表示できません（ファイル単位で操作）", "Can't display contents (operate per file)"
-    ),
-    .editorNoteConflict: ("競合 — ターミナルで解決", "Conflict — resolve in terminal"),
-    .editorNoteBinary: ("バイナリファイル（ファイル単位で操作）", "Binary file (operate per file)"),
-    .editorNoteRenameOnly: ("rename のみ（内容の変更なし）", "Rename only (no content change)"),
-    .editorNoteEmptyFile: ("空のファイル", "Empty file"),
-    .editorNoteModeOnly: ("mode 変更のみ", "Mode change only"),
-    .editorEmptyNoCwd: ("ペインの作業ディレクトリが不明です", "Pane working directory is unknown"),
-    .editorEmptyNotGit: ("git リポジトリではありません\n%@", "Not a git repository\n%@"),
-    .editorEmptyStatusFailed: ("git の状態を取得できませんでした", "Couldn't get git status"),
-
-    // MARK: Commit
-    .commitMessagePlaceholder: ("コミットメッセージ", "Commit message"),
-    .commitInProgress: ("コミット中…", "Committing…"),
-    .commitButton: ("コミット ⌘⏎", "Commit ⌘⏎"),
-    .commitSucceeded: ("コミットしました", "Committed"),
-    .commitFailed: ("コミットに失敗しました", "Commit failed"),
-
-    // MARK: Git workbench
-    .gitNoCommits: ("コミットがありません", "No commits"),
-    .gitUncommitted: ("未コミット", "Uncommitted"),
-    .gitUncommittedChanges: ("未コミットの変更", "Uncommitted changes"),
-    .gitMoreFilesOne: ("… 他 %lld files", "… %lld more file"),
-    .gitMoreFilesOther: ("… 他 %lld files", "… %lld more files"),
-    .gitNoChanges: ("変更はありません", "No changes"),
-    .gitUnstageAction: ("解除 s", "Unstage s"),
-    .gitDiscard: ("破棄", "Discard"),
-    .gitDiscardChanges: ("変更を破棄", "Discard changes"),
-    .gitDiscardTitle: ("「%@」の変更を破棄", "Discard changes in “%@”"),
-    .gitDiscardConfirmOne: (
-      "%lld 個のファイルの変更を破棄します（元に戻せません）。",
-      "Discard changes to %lld file? This can't be undone."
-    ),
-    .gitDiscardConfirmOther: (
-      "%lld 個のファイルの変更を破棄します（元に戻せません）。",
-      "Discard changes to %lld files? This can't be undone."
-    ),
-    .gitChangesCount: ("変更 %lld ·", "Changed %lld ·"),
-    .gitChangesTab: ("変更 %lld", "Changes %lld"),
-    .gitHistory: ("履歴", "History"),
-    .gitSortNewest: ("新しい順 ▾", "Newest ▾"),
-    .gitUnpushed: ("未push", "Unpushed"),
-    .gitAheadOfUpstream: ("%@ から ", "%@ · "),
-
-    // MARK: Browser tool
-    .browserDevServerOff: ("dev サーバー未起動", "Dev server not running"),
-    .browserDevServerHint: (
-      "このプロジェクトで dev サーバーを起動すると、ここにプレビューが表示されます",
-      "Start a dev server for this project to preview it here"
-    ),
-    .browserDevServerRunning: ("dev サーバー稼働中", "Dev server running"),
-    .browserDevServerStopped: ("dev サーバー停止中", "Dev server stopped"),
-    .browserOpenExternal: ("外部ブラウザで開く ↗", "Open in browser ↗"),
-
     // MARK: Relative date
     .relativeJustNow: ("たった今", "just now"),
-    .relativeYesterday: ("昨日", "yesterday"),
-    .relativeMinutesAgoOne: ("%lld分前", "%lld minute ago"),
-    .relativeMinutesAgoOther: ("%lld分前", "%lld minutes ago"),
-    .relativeHoursAgoOne: ("%lld時間前", "%lld hour ago"),
-    .relativeHoursAgoOther: ("%lld時間前", "%lld hours ago"),
-    .relativeDaysAgoOne: ("%lld日前", "%lld day ago"),
-    .relativeDaysAgoOther: ("%lld日前", "%lld days ago"),
-    .relativeMonthsAgoOne: ("%lldヶ月前", "%lld month ago"),
-    .relativeMonthsAgoOther: ("%lldヶ月前", "%lld months ago"),
-    .relativeYearsAgoOne: ("%lld年前", "%lld year ago"),
-    .relativeYearsAgoOther: ("%lld年前", "%lld years ago"),
 
     // MARK: Agent（共有）
     .agentNotFoundCLI: (

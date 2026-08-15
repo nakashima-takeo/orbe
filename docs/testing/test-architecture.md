@@ -14,7 +14,7 @@ updated: 2026-08-14
 
 | 表面 | 実体 |
 |---|---|
-| GUI chrome | SwiftUI のパレット・オーバーレイ・MenuBar・Settings・EditorPane |
+| GUI chrome | SwiftUI のパレット・オーバーレイ・MenuBar・Settings |
 | ターミナル表面 | libghostty（キー翻訳・IME・スクロール・マウス） |
 | 制御 API | `control.sock` 上の JSON-RPC（外部契約） |
 | CLI | `orbe-cli` / `orbe-report` |
@@ -57,7 +57,7 @@ updated: 2026-08-14
 
 ### L1 ユニット（純ロジック）
 
-- **担保する**: 入出力の規則。パーサ・状態機械・解決規則・境界値。コードに書かれた制約（未追跡ファイルの 5MB 上限、先頭 8000 バイトの NUL 判定など）もここで固める
+- **担保する**: 入出力の規則。パーサ・状態機械・解決規則・境界値。コードに書かれた制約（設定の解決チェーン、`status --porcelain` の計数規則など）もここで固める
 - **担保しない**: 配線・組み立て
 - **起動と差し替え**: Foundation のみ。依存は引数で受ける
 - **データ**: 不要（値を直接組む）

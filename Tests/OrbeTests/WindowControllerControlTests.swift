@@ -211,16 +211,6 @@ final class WindowControllerControlTests: OrbeTestCase {
       wc.current.settingsOverride?[SettingKeys.defaultAgent], "claude", "WS 上書き層へ書かれる")
   }
 
-  /// 完了条件7-③: config_set は dev-features を受理する（旧 read-only 拒否は撤廃）。
-  func testConfigSetAcceptsDevFeatures() throws {
-    let wc = try restore(activeWorkspace: 0, [tabbed("main")])
-    let result = wc.controlConfigSet(
-      key: SettingsRegistry.confKey(.devFeaturesEnabled), value: true, scope: "workspace",
-      workspaceId: nil)
-    guard case .success = result else { return XCTFail("dev-features は受理される") }
-    XCTAssertEqual(wc.current.settingsOverride?[SettingKeys.devFeaturesEnabled], true)
-  }
-
   /// config_set は未知 scope を -32602 で弾く（global/workspace 以外は受け付けない）。
   func testConfigSetRejectsInvalidScope() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main")])

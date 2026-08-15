@@ -63,7 +63,6 @@ Orbe は AI エージェントとの開発を前提に設計した macOS ネイ�
 - [update](spec/platform/update.md) — アプリ内アップデート（Sparkle）
 - [localization](spec/platform/localization.md) — UI 言語（日英）
 - [licensing](spec/platform/licensing.md) — ライセンスと第三者帰属
-- [editor-pane](spec/platform/editor-pane.md) — Git ワークベンチペイン（⌘/）
 
 ## 用語集
 

@@ -25,11 +25,11 @@ final class AgentSoundDecisionTests: OrbeTestCase {
     }
   }
 
-  /// 未設定は既定（案は `NotificationSound.default`・音量 70・オン）で鳴る。
+  /// 未設定は既定（案は `NotificationSound.default`・音量 90・オン）で鳴る。
   func testDefaultsSound() {
     let plan = AgentSoundDecision.plan(state: "done", settings: settings())
     XCTAssertEqual(
-      plan, AgentSoundDecision.Plan(family: NotificationSound.default, event: .done, volume: 70))
+      plan, AgentSoundDecision.Plan(family: NotificationSound.default, event: .done, volume: 90))
   }
 
   /// 通知音オフは、状態にかかわらず鳴らさない。

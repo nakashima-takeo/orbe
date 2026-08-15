@@ -178,7 +178,7 @@ struct UpdateNotes: Equatable {
   let sections: [Section]
 
   /// インラインの見た目。コードスパンは背景を敷かず、本文と同じ地の上に等幅で置く。
-  private static let inlineStyle = MarkdownStyle(inlineCodeBackground: .clear)
+  private static let inlineStyle = MarkdownInlineStyle(inlineCodeBackground: .clear)
 
   init(markdown: String) {
     var built: [(title: String?, elements: [Element])] = []

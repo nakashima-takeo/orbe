@@ -2,7 +2,7 @@ import AppKit
 
 /// エージェント起動の一式（検出カタログ・起動パレット・デフォルト設定）を束ねる。
 /// WindowController からは「起動依頼をどう叶えるか」だけを受け取り、overlay の提示は注入された
-/// `AppShellModel` の overlay 状態を立て下げて行う（エディタペインの EditorPaneController と同じ関心分離）。
+/// `AppShellModel` の overlay 状態を立て下げて行う（「何を起こすか」と「どう見せるか」を分ける）。
 final class AgentLauncher {
   /// SwiftUI ルートの overlay 状態（提示先）。WindowController が注入する。
   weak var appModel: AppShellModel?

@@ -33,8 +33,8 @@ final class WorkspaceMRUPersistenceTests: OrbeTestCase {
     let tmp = try workspacesFile()
     let legacy = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
-      {"name":"a","rootPath":"/","activeTab":0,"tabs":[{"tree":{"leaf":{}},"editor":{"open":false,"tool":"tree"}}]},\
-      {"name":"b","rootPath":"/","activeTab":0,"tabs":[{"tree":{"leaf":{}},"editor":{"open":false,"tool":"tree"}}]}]}
+      {"name":"a","rootPath":"/","activeTab":0,"tabs":[{"tree":{"leaf":{}}}]},\
+      {"name":"b","rootPath":"/","activeTab":0,"tabs":[{"tree":{"leaf":{}}}]}]}
       """
     try Data(legacy.utf8).write(to: tmp)
     let loaded = try XCTUnwrap(
