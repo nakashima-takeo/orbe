@@ -121,7 +121,8 @@ final class SoundCatalogTests: XCTestCase {
     for family in NotificationSound.allCases {
       for event in AgentSoundEvent.allCases {
         let samples = SoundRenderer.render(
-          family: family, event: event, volume: 90, sampleRate: sampleRate)
+          family: family, event: event, volume: SoundRenderer.defaultVolume,
+          sampleRate: sampleRate)
         let loud = SoundAnalysis.maxShortTermRMSDB(samples, sampleRate: sampleRate)
         XCTAssertEqual(
           loud, -24.0, accuracy: 0.8, "\(family)/\(event) の音量が揃っていない (\(loud) dBFS)")

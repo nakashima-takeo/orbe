@@ -114,7 +114,9 @@ final class SettingsRegistryTests: OrbeTestCase {
       SettingsRegistry.descriptor(.notificationSound).defaultValue(),
       NotificationSound.default.settingValue,
       "既定の案は NotificationSound.default が SSOT（リテラルを 2 箇所に置かない）")
-    XCTAssertEqual(SettingsRegistry.descriptor(.notificationSoundVolume).defaultValue(), .int(90))
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.notificationSoundVolume).defaultValue(), .int(90),
+      "既定の音量は SoundRenderer.defaultVolume が SSOT——dev CLI の --volume 既定も同じ 1 つを見る")
     XCTAssertEqual(
       SettingsRegistry.descriptor(.notificationSoundEnabled).defaultValue(), .bool(true))
   }
@@ -221,6 +223,17 @@ final class SettingsRegistryTests: OrbeTestCase {
     XCTAssertEqual(volume.range, 5...100, "下限 5%——無音は音量でなくオン/オフが担う")
     XCTAssertEqual(volume.step, 5)
     XCTAssertEqual(volume.unit, "%")
+    // 音量の値域は `SoundRenderer` の dB 等間隔マッピングの錨でもある（別モジュールなので型では繋がらない）。
+    // 下限を動かすと最小音量の実効ゲインが、刻みを動かすと 1 押しの効きが、どちらも黙って変わる。
+    XCTAssertEqual(
+      SoundRenderer.level(forVolume: volume.range.lowerBound), 0.05, accuracy: 1e-12,
+      "値域の下限で合成ゲインが 0.05（-26.02 dB）に落ちる")
+    XCTAssertEqual(
+      20
+        * log10(
+          SoundRenderer.level(forVolume: volume.range.lowerBound + volume.step)
+            / SoundRenderer.level(forVolume: volume.range.lowerBound)),
+      1.3695, accuracy: 1e-4, "1 押しの効きは全域 1.3695 dB")
     for id in [SettingID.fontSize, .backgroundOpacity, .notificationSoundVolume] {
       XCTAssertEqual(SettingsRegistry.descriptor(id).activation, .stepper)
     }

@@ -17,7 +17,7 @@ let usage = """
 
   <name> はカタログ 12 案の名前か scratch のエントリ名（list で確認）。カタログは
   <done|waiting> を、scratch はイベント区別が無いので "-" を渡す。
-  既定: --rate 48000 / --volume 90。render は --out 省略時、一時ディレクトリへ書く。
+  既定: --rate 48000 / --volume \(SoundRenderer.defaultVolume)。render は --out 省略時、一時ディレクトリへ書く。
   analyze --all はカタログ全 24 音 + scratch の peak / RMS / loud 一覧（ラウドネス整合の目視は loud）。
   board は全音の WAV + 自己完結の index.html を書き、そのパスを出す（人間の聴き比べ用。
   クリック再生と A/B 比較。--out 省略時は毎回同じ場所に上書き＝ブラウザのリロードで最新）。
@@ -82,9 +82,12 @@ func takeRate(_ args: inout [String]) -> Double {
 }
 
 /// `--volume` を抜き取って検証する（5-100。takeRate と同じく全経路共通）。
-/// 既定 90 はアプリの既定音量（`SettingsRegistry` の `sound.volume`）に合わせてある。
+/// 既定はアプリの既定音量そのもの（`SoundRenderer.defaultVolume`）——ここで測った読みを
+/// `SoundCatalog` のトリムへ持ち帰るので、両者がずれるとトリムが狂う。
 func takeVolume(_ args: inout [String]) -> Int {
-  guard let token = takeOption(&args, "--volume", requires: "a volume (5-100)") else { return 90 }
+  guard let token = takeOption(&args, "--volume", requires: "a volume (5-100)") else {
+    return SoundRenderer.defaultVolume
+  }
   guard let value = Int(token), (5...100).contains(value) else {
     usageDie("invalid volume: \(token)")
   }
