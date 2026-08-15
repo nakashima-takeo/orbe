@@ -46,7 +46,8 @@ enum CleanChip: Equatable, Identifiable {
   /// upstream が消えている。
   case gone
   /// 消すと失われうる独自コミット k 件（`GitBranchContainment.unmerged` の `count`。到達不能数と
-  /// patch 非等価数の min なので、「既定ブランチに取り込まれていない件数」より小さくなりうる）。
+  /// 各比較先の patch 非等価数の min なので、「既定ブランチに取り込まれていない件数」より
+  /// 小さくなりうる）。
   case ownCommits(Int)
   /// 安全確認に使う事実（status／停止中の git 操作／取り込み判定）のどれかを確かめられなかった
   /// （確認群に落ちている理由の可視化。分類は変えない——判定不能を安全と読まない契約は既に
@@ -62,7 +63,7 @@ enum CleanChip: Equatable, Identifiable {
 
   // MARK: 行内注記
   /// safe 行の `ブランチも削除`（チェックすればブランチごと消えることの明示）。**マージ状況は名乗らない**
-  /// ——到達性だけで安全が立った行は既定ブランチにマージされていないので、`merged` は偽になる。
+  /// ——到達性だけで安全が立った行はどの比較先にもマージされていないので、`merged` は偽になる。
   case branchAlsoDeleted
 
   var id: String {

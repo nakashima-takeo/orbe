@@ -2,7 +2,7 @@ import SwiftUI
 
 /// clean 行の語彙 1 つ。**色はトーンからの写像 1 本だけを通る**——語彙が増えても色の付け方が分岐せず、
 /// 塗りのあるピルと塗らない素文字の別も語彙自身（`isPill`）が持つ。
-/// **git / gh の語（`[gone]` / `locked` / `PR #N merged → <base>` / `merged → <既定>` / `remote +N` /
+/// **git / gh の語（`[gone]` / `locked` / `PR #N merged → <base>` / `merged → <実マージ先>` / `remote +N` /
 /// `main worktree`）は L10n しない**——訳すと出力と対応が取れなくなる技術語。
 struct DispatchCleanChip: View {
   let chip: CleanChip

@@ -2,7 +2,7 @@ import Foundation
 
 /// Dispatch パレット（⌘⇧X）の文言。一覧・clean の 3 画面・3 軸の状態語彙をまとめて持つ。
 ///
-/// **git / gh の語は訳さない**（`[gone]` / `locked` / `PR #N merged` / `merged → <既定>` /
+/// **git / gh の語は訳さない**（`[gone]` / `locked` / `PR #N merged` / `merged → <実マージ先>` /
 /// `remote +N` / `main worktree`）——訳すと出力と対応が取れなくなる技術語なので、
 /// `origin/…` と同じくそのまま出す。ここに無い語はその判断の結果であって、抜けではない。
 extension L10n {

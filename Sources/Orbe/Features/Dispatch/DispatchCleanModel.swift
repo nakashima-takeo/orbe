@@ -203,7 +203,7 @@ final class CleanRunToken {
 
   /// この行でローカルブランチも消すか。
   /// safe 行は**行内注記が出る行だけ**が無条件に消す——safe 群は「消してもコミットが世界に残る」
-  /// （`refs/remotes/origin/*` からの到達性、または既定ブランチへの patch 等価）を必ず通っており、
+  /// （`refs/remotes/origin/*` からの到達性、または比較先への patch 等価）を必ず通っており、
   /// 消して失うものが無いことが確認済みだから。実体の無い prunable 行は消えるのが
   /// 登録だけなのでブランチに触らない。確認行はサブラインで選んだ 2 値がそのまま決める。
   func deletesBranch(_ row: CleanRow) -> Bool {
