@@ -164,8 +164,7 @@ enum DispatchWorktreeClassifier {
   /// 枠を空けたまま候補を捨てると、安全行が安全の根拠を 1 つしか出さないまま黙る。
   ///
   /// **切り詰めた候補は捨てずに返す**——受け皿を損失の内訳と兼ねると、`locked` のように損失では
-  /// ない語がどこにも出なくなる。素文字（軸C の使用状況・safe 行の注記）は上限の外なのでピルの後に
-  /// そのまま続く。
+  /// ない語がどこにも出なくなる。素文字（軸C の使用状況）は上限の外なのでピルの後にそのまま続く。
   private static func cluster(
     _ f: DispatchCleanFacts, _ group: CleanGroup, _ axes: AxisSet
   ) -> (chips: [CleanChip], overflow: [CleanChip]) {

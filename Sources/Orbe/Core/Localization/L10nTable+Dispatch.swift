@@ -54,7 +54,7 @@ extension L10n {
     .dispatchCleanBack: ("esc 戻る", "esc Back"),
     .dispatchCleanSectionSafe: (
       "安全 — worktree を削除（対象によってはローカルブランチも削除）",
-      "Safe — deletes the worktree (and its branch, if any)"
+      "Safe — deletes the worktree (and, for some, its local branch)"
     ),
     .dispatchCleanSectionCaution: ("確認 — 消えるものがあります", "Check — something will be lost"),
     .dispatchCleanSectionInUse: ("使用中 — 削除できません", "In use — can't be deleted"),
@@ -62,10 +62,12 @@ extension L10n {
       "space 選択 · ←→ ブランチの扱い · a 安全を全選択",
       "space Select · ←→ Branch · a Select all safe"
     ),
-    .dispatchCleanExecute: ("⌘⏎ worktree %lld 件を削除", "⌘⏎ Delete %lld"),
-    .dispatchCleanExecuteWithBranches: (
-      "⌘⏎ worktree %lld 件とローカルブランチ %lld 件を削除", "⌘⏎ Delete %lld (+%lld branches)"
-    ),
+    .dispatchCleanExecute: ("⌘⏎ %@を削除", "⌘⏎ Delete %@"),
+    .dispatchCleanExecuteWithBranches: ("⌘⏎ %@と%@を削除", "⌘⏎ Delete %@ (+%@)"),
+    .dispatchCleanExecuteWorktreesOne: ("worktree %lld 件", "%lld worktree"),
+    .dispatchCleanExecuteWorktreesOther: ("worktree %lld 件", "%lld worktrees"),
+    .dispatchCleanExecuteBranchesOne: ("ローカルブランチ %lld 件", "%lld branch"),
+    .dispatchCleanExecuteBranchesOther: ("ローカルブランチ %lld 件", "%lld branches"),
     .dispatchCleanBranchLabel: ("ブランチ %@:", "Branch %@:"),
     .dispatchCleanBranchKeep: ("残す", "Keep"),
     .dispatchCleanBranchDelete: ("削除", "Delete"),

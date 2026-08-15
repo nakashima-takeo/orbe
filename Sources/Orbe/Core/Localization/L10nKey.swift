@@ -88,6 +88,10 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchCleanKeyHint
   case dispatchCleanExecute
   case dispatchCleanExecuteWithBranches
+  case dispatchCleanExecuteWorktreesOne
+  case dispatchCleanExecuteWorktreesOther
+  case dispatchCleanExecuteBranchesOne
+  case dispatchCleanExecuteBranchesOther
   case dispatchCleanBranchLabel
   case dispatchCleanBranchKeep
   case dispatchCleanBranchDelete

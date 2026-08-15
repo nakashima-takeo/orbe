@@ -38,7 +38,7 @@ extension DesignGallerySnapshotTests {
       "dispatch_clean_deleting.png", DesignSceneFixtures.dispatchCleanDeletingModel(), 640, 520)
     try write(
       "dispatch_clean_failure.png", DesignSceneFixtures.dispatchCleanFailureModel(), 640, 520)
-    // 右クラスタが 2 枚のピル＋注記になって最も詰まる画面なので、狭窓の証拠を残す。
+    // 右クラスタが 2 枚のピルで最も詰まる画面なので、狭窓の証拠を残す。
     try write("dispatch_clean_narrow.png", DesignSceneFixtures.dispatchCleanModel(), 360, 520)
   }
 }

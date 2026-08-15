@@ -179,11 +179,20 @@ struct DispatchCleanFooter: View {
 
   /// 実行ボタンの文言（＝実行の総量）。ブランチも消える行が選ばれているときだけ内訳を付ける
   /// ——0 件の内訳はノイズなので、無いときは worktree 数だけを言う。
+  ///
+  /// 件数付きの名詞は**断片として `plural` で組んでから**テンプレートへ差す（`%@` は損失の内訳と
+  /// 同じ組み方）。2 つの数がそれぞれ単複を持つので、テンプレート側に数を渡すとキーが組合せで増える。
   private var executeLabel: String {
-    model.branchDeleteCount > 0
-      ? l10n.format(
-        .dispatchCleanExecuteWithBranches, model.selectedCount, model.branchDeleteCount)
-      : l10n.format(.dispatchCleanExecute, model.selectedCount)
+    let worktrees = l10n.plural(
+      model.selectedCount, one: .dispatchCleanExecuteWorktreesOne,
+      other: .dispatchCleanExecuteWorktreesOther)
+    guard model.branchDeleteCount > 0 else {
+      return l10n.format(.dispatchCleanExecute, worktrees)
+    }
+    let branches = l10n.plural(
+      model.branchDeleteCount, one: .dispatchCleanExecuteBranchesOne,
+      other: .dispatchCleanExecuteBranchesOther)
+    return l10n.format(.dispatchCleanExecuteWithBranches, worktrees, branches)
   }
 
   /// 狭窓で最初に譲るのはキーヒント（実行ボタンは効く操作なので削らない）。
