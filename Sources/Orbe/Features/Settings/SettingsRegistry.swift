@@ -88,7 +88,6 @@ struct SettingDescriptor {
   /// root でのキー操作種別（stepper/toggle/drillIn）。
   let activation: RootActivation
   /// 解決チェーン最下層の既定（未設定時の値）。nil＝既定なし（fontFamily/defaultAgent の「未設定」）。
-  /// devFeatures はビルド種別依存なので closure。
   let defaultValue: () -> SettingValue?
   /// 検証と control の domain 提示の SSOT。
   let domain: SettingDomain
@@ -121,7 +120,7 @@ enum SettingsRegistry {
 
   /// 格納/gui.conf 生成の正準順（font-size → font-family → tab-title-font-family〔gui.conf 非経由〕→
   /// emoji-font → theme → agent → background-opacity → background-blur → cursor-style-blink →
-  /// agent-state-icons〔gui.conf 非経由〕→ dev-features〔同〕→ worktree-dir〔同〕→
+  /// agent-state-icons〔gui.conf 非経由〕→ worktree-dir〔同〕→
   /// notification-sound〔同〕→ notification-sound-volume〔同〕→ notification-sound-enabled〔同〕）。
   /// `rootOrder`（表示順）とは別物——混同すると gui.conf のバイト順が崩れる。
   static let all: [SettingDescriptor] = [
@@ -242,13 +241,6 @@ enum SettingsRegistry {
       },
       unsetPlaceholderKey: nil),
     SettingDescriptor(
-      id: .devFeaturesEnabled, key: "dev-features", labelKey: .settingsDevFeatures,
-      activation: .toggle,
-      defaultValue: { .bool(isDevBuild) },  // 未設定 default はビルド種別（dev=on/release=off）
-      domain: .toggle,
-      guiConf: nil,  // gui.conf 非経由（右バーの UI gate 専用）
-      display: boolLabel, unsetPlaceholderKey: nil),
-    SettingDescriptor(
       id: .worktreeDir, key: "worktree-dir", labelKey: .settingsWorktreeDir, activation: .drillIn,
       defaultValue: { .string(WorktreePathTemplate.defaultTemplate) },
       domain: .pathTemplate,
@@ -287,13 +279,13 @@ enum SettingsRegistry {
 
   /// パレット root の表示順（fontSize → backgroundOpacity → backgroundBlur → cursorStyleBlink →
   /// theme → agent → fontFamily → tabTitleFontFamily → emojiFont → agentStateIcons →
-  /// devFeaturesEnabled → worktreeDir → notificationSound → 音量 → オン/オフ）。
+  /// worktreeDir → notificationSound → 音量 → オン/オフ）。
   /// 背景関連・フォント関連・通知音関連をそれぞれ隣接させる。
   static let rootOrder: [SettingDescriptor] =
     [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
       .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
-      .devFeaturesEnabled, .worktreeDir, .notificationSound, .notificationSoundVolume,
+      .worktreeDir, .notificationSound, .notificationSoundVolume,
       .notificationSoundEnabled,
     ].map { id in all.first { $0.id == id }! }
 

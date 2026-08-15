@@ -116,7 +116,7 @@ extension GitRepo {
   /// `--ignore-submodules=none` は `diff.ignoreSubmodules` を、`--untracked-files=normal` は
   /// `status.showUntrackedFiles`（巨大リポの高速化として広く使われ、`no` だと未追跡ファイルだけの
   /// worktree が空出力＝clean に見える）を封じる。`--no-optional-locks` は観測でユーザーが作業中の
-  /// worktree の index を書き換えないため（`GitRepo.snapshot` と同じ作法）。
+  /// worktree の index を書き換えないため。
   ///
   /// `isolated` は呼び出し側が決める: 分類のプローブは共有 read-write lock の外へ逃がして直後の
   /// Enter(barrier) を待たせないが、削除直前のゲートは lock の中に置き実行と同じレーンで直列させる。

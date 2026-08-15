@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 設定パレットの「worktree の作成場所」（root index 12）の検証。
+/// 設定パレットの「worktree の作成場所」（root index 11）の検証。
 /// 潜るとまずプリセット一覧（現在値に ●・最終行「カスタム…」）が出て、テキスト入力は「カスタム…」から
 /// 1 段深く潜ったときだけ現れる。カスタム入力は実効テンプレートをプリフィルして入場し（注意行はその値から
 /// 組む）、↵ 確定（空＝解除・不正＝先頭の注意行へ理由を出して留まる・妥当＝保存して root へ）、
@@ -10,9 +10,9 @@ import XCTest
 /// `SettingsPaletteTests` の拡張として helper（`model`/`captureApply`）を共有する。
 @MainActor
 extension SettingsPaletteTests {
-  /// worktreeDir 行（全行 index 12）からプリセット一覧へ潜る。
+  /// worktreeDir 行（全行 index 11）からプリセット一覧へ潜る。
   private func drillIntoWorktreeDir(_ p: SettingsPaletteModel) {
-    p.render.selected = 12
+    p.render.selected = 11
     p.render.onActivate()
   }
 
@@ -54,9 +54,9 @@ extension SettingsPaletteTests {
   /// root 行は未設定でも実効値（既定テンプレート）を出し、drillIn の chevron を持つ。
   func testRootShowsWorktreeDirTemplate() {
     let p = model()
-    XCTAssertTrue(p.render.rows[12].label.contains("worktree の作成場所"))
-    XCTAssertTrue(p.render.rows[12].label.contains(WorktreePathTemplate.defaultTemplate))
-    XCTAssertTrue(p.render.rows[12].chevron, "drillIn 行は chevron 有り")
+    XCTAssertTrue(p.render.rows[11].label.contains("worktree の作成場所"))
+    XCTAssertTrue(p.render.rows[11].label.contains(WorktreePathTemplate.defaultTemplate))
+    XCTAssertTrue(p.render.rows[11].chevron, "drillIn 行は chevron 有り")
   }
 
   // MARK: - プリセット一覧
@@ -117,7 +117,7 @@ extension SettingsPaletteTests {
     XCTAssertEqual(
       applied()?[SettingKeys.worktreeDir], WorktreePathTemplate.presets[1].template)
     XCTAssertNil(p.render.breadcrumb, "root へ戻る")
-    XCTAssertEqual(p.render.selected, 12, "潜った行へ選択を復元")
+    XCTAssertEqual(p.render.selected, 11, "潜った行へ選択を復元")
   }
 
   /// 一覧の Esc は保存せず root へ戻る。
@@ -128,7 +128,7 @@ extension SettingsPaletteTests {
     p.render.onEscape()
     XCTAssertNil(applied())
     XCTAssertNil(p.render.breadcrumb)
-    XCTAssertEqual(p.render.selected, 12)
+    XCTAssertEqual(p.render.selected, 11)
   }
 
   /// 一覧は入力欄を持たないので ← も Esc と同じく root へ戻る（保存しない）。
@@ -139,7 +139,7 @@ extension SettingsPaletteTests {
     p.render.onLeft()
     XCTAssertNil(applied(), "← でも保存しない")
     XCTAssertNil(p.render.breadcrumb, "root へ戻る")
-    XCTAssertEqual(p.render.selected, 12, "潜った行へ選択を復元")
+    XCTAssertEqual(p.render.selected, 11, "潜った行へ選択を復元")
   }
 
   /// → は「カスタム…」行だけで潜る（プリセット行の → は潜らない）。
@@ -213,8 +213,8 @@ extension SettingsPaletteTests {
     p.render.onActivate()
     XCTAssertEqual(applied()?[SettingKeys.worktreeDir], "~/wt/{repo}/{slug}")
     XCTAssertNil(p.render.breadcrumb, "root へ戻る")
-    XCTAssertEqual(p.render.selected, 12, "潜った行へ選択を復元")
-    XCTAssertTrue(p.render.rows[12].label.contains("~/wt/{repo}/{slug}"), "行表示が更新される")
+    XCTAssertEqual(p.render.selected, 11, "潜った行へ選択を復元")
+    XCTAssertTrue(p.render.rows[11].label.contains("~/wt/{repo}/{slug}"), "行表示が更新される")
   }
 
   /// 全消し＋↵＝意図的な解除（nil 代入）。global は既定へ戻り root 表示も既定テンプレートになる。
@@ -233,7 +233,7 @@ extension SettingsPaletteTests {
     p.render.onActivate()
     XCTAssertNil(appliedValue, "worktreeDir=nil（解除）を適用")
     XCTAssertNil(p.render.breadcrumb, "root へ戻る")
-    XCTAssertTrue(p.render.rows[12].label.contains(WorktreePathTemplate.defaultTemplate), "既定へ戻る")
+    XCTAssertTrue(p.render.rows[11].label.contains(WorktreePathTemplate.defaultTemplate), "既定へ戻る")
   }
 
   /// workspace スコープの解除は .workspace の単一代入で届く（継承へ戻る）。
@@ -348,6 +348,6 @@ extension SettingsPaletteTests {
     p.render.onEscape()
     XCTAssertNil(p.render.breadcrumb, "もう 1 段で root")
     XCTAssertTrue(
-      p.render.rows[12].label.contains(WorktreePathTemplate.defaultTemplate), "表示は元の実効値のまま")
+      p.render.rows[11].label.contains(WorktreePathTemplate.defaultTemplate), "表示は元の実効値のまま")
   }
 }

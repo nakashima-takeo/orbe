@@ -5,14 +5,14 @@ import XCTest
 
 /// 設定パレットの通知音まわり（root の 3 行・サブパレットの試聴と確定）。
 /// 中核は「**聴くことと決めることを分けてある**」——行の移動と ⇥ は鳴らすだけで設定を書かず、
-/// 書くのは ↵ の確定だけ。通知音行は root index 13（worktree の作成場所の次）。
+/// 書くのは ↵ の確定だけ。通知音行は root index 12（worktree の作成場所の次）。
 ///
 /// 試聴インジケータ（EQ）と root 音量行の試聴は `SettingsPaletteSoundTests+Indicator.swift` が持ち、
 /// そちらもここの駆動台（`model` / `capture*` / `drillIn`）を使う。
 @MainActor
 final class SettingsPaletteSoundTests: OrbeTestCase {
-  let soundRow = 13
-  let volumeRow = 14  // `rootOrder` で通知音行の次
+  let soundRow = 12
+  let volumeRow = 13  // `rootOrder` で通知音行の次
 
   func model(sound: NotificationSound? = nil, volume: Int? = nil, enabled: Bool? = nil)
     -> SettingsPaletteModel

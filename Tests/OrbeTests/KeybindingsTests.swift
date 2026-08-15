@@ -34,6 +34,9 @@ final class KeybindingsTests: OrbeTestCase {
 
   func testTabsAndFind() {
     XCTAssertEqual(Keybindings.chromeAction(for: key("t")), .newTab)
+    // ⌘R はタブリネーム。content 依存の window コマンドとして
+    // `testChromeHostingViewInterceptsPaneIndependentCommandsOnly` の素通し脚が乗るので、割当も固定する。
+    XCTAssertEqual(Keybindings.chromeAction(for: key("r")), .rename)
     // ⇧⌘T は最後に閉じたエージェントタブを開き直す。
     XCTAssertEqual(
       Keybindings.chromeAction(for: key("T", [.command, .shift])), .reopenClosedAgentTab)
@@ -52,9 +55,9 @@ final class KeybindingsTests: OrbeTestCase {
     // Shift なしの Cmd+↑ / Cmd+↓ でスクロールバックの先頭・末尾へジャンプ。
     XCTAssertEqual(Keybindings.chromeAction(for: arrow(.upArrow)), .scrollToTop)
     XCTAssertEqual(Keybindings.chromeAction(for: arrow(.downArrow)), .scrollToBottom)
-    // Cmd+Shift+↑/↓ は ToolRail の上下切替（prevTool/nextTool）に割当。
-    XCTAssertEqual(Keybindings.chromeAction(for: arrow(.upArrow, [.command, .shift])), .prevTool)
-    XCTAssertEqual(Keybindings.chromeAction(for: arrow(.downArrow, [.command, .shift])), .nextTool)
+    // Cmd+Shift+↑/↓ は未割当（chrome が先取りせず surface へ通す）。
+    XCTAssertNil(Keybindings.chromeAction(for: arrow(.upArrow, [.command, .shift])))
+    XCTAssertNil(Keybindings.chromeAction(for: arrow(.downArrow, [.command, .shift])))
   }
 
   func testWorkspacePalette() {
@@ -63,11 +66,6 @@ final class KeybindingsTests: OrbeTestCase {
     XCTAssertEqual(Keybindings.chromeAction(for: key("n")), .newWorkspace)
     // Opt/Ctrl 併用は奪わない。
     XCTAssertNil(Keybindings.chromeAction(for: key("n", [.command, .option])))
-  }
-
-  func testEditorPaneToggle() {
-    XCTAssertEqual(Keybindings.chromeAction(for: key("/")), .toggleEditorPane)  // Cmd+/
-    XCTAssertNil(Keybindings.chromeAction(for: key("/", [.command, .option])))
   }
 
   func testShowSettings() {
@@ -101,7 +99,7 @@ final class KeybindingsTests: OrbeTestCase {
   }
 
   /// ChromeHostingView は window レベルで pane 非依存 window コマンド（availableWithoutTabs）だけを
-  /// 横取りし、surface 操作系（⌘W closePane）や content 依存コマンド（⌘/ toggleEditorPane）は
+  /// 横取りし、surface 操作系（⌘W closePane）や content 依存コマンド（⌘R renameTab）は
   /// 素通しする（0タブでも pane 非依存キーが届き、他は surface 経由 no-op のまま、の切り分けの機構部分）。
   /// libghostty 非依存（surface を作らず AppShell の SwiftUI ルートだけ構築する）。
   func testChromeHostingViewInterceptsPaneIndependentCommandsOnly() {
@@ -122,13 +120,13 @@ final class KeybindingsTests: OrbeTestCase {
     _ = view.performKeyEquivalent(with: key("w"))
     XCTAssertEqual(handled, [.newTab], "⌘W（closePane・surface 操作系）は横取りせずハンドラを呼ばない")
 
-    _ = view.performKeyEquivalent(with: key("/"))
+    _ = view.performKeyEquivalent(with: key("r"))
     XCTAssertEqual(
-      handled, [.newTab], "⌘/（toggleEditorPane・content 依存）は横取りせず EditorPane/subtree へ流す")
+      handled, [.newTab], "⌘R（renameTab・content 依存）は横取りせず subtree へ流す")
   }
 
   /// `ChromeAction.windowCommand`（surface 経路・window レベル経路が共有する単一ソース mapping）を網羅固定する。
-  /// window 系16アクションは対応する WindowCommand へ、surface ローカル9アクションは nil へ写す。
+  /// window 系13アクションは対応する WindowCommand へ、surface ローカル9アクションは nil へ写す。
   /// この分類が回帰すると 0タブ配信の可否（availableWithoutTabs）とキー振り分け全体がズレる。
   func testWindowCommandMappingIsExhaustive() {
     let mapped: [(ChromeAction, TerminalController.WindowCommand)] = [
@@ -136,11 +134,8 @@ final class KeybindingsTests: OrbeTestCase {
       (.reopenClosedAgentTab, .reopenClosedAgentTab),
       (.nextTab, .nextTab),
       (.prevTab, .prevTab),
-      (.prevTool, .prevTool),
-      (.nextTool, .nextTool),
       (.switchWorkspace, .switchWorkspace),
       (.newWorkspace, .newWorkspace),
-      (.toggleEditorPane, .toggleEditorPane),
       (.launchDefaultAgent, .launchDefaultAgent),
       (.showAgentPalette, .showAgentPalette),
       (.showDispatchPalette, .showDispatchPalette),
@@ -164,7 +159,7 @@ final class KeybindingsTests: OrbeTestCase {
   }
 
   /// `WindowCommand.availableWithoutTabs`（0タブでも window レベルで配信してよいか）の分類を網羅固定する。
-  /// pane 非依存9コマンドのみ true、content/エディタ依存7コマンドは false。この分類が回帰すると
+  /// pane 非依存9コマンドのみ true、content 依存4コマンドは false。この分類が回帰すると
   /// 0タブで効くべきキーが死ぬ／効くべきでない content 依存キーが暴発する。
   func testAvailableWithoutTabsClassification() {
     let available: [TerminalController.WindowCommand] = [
@@ -175,12 +170,11 @@ final class KeybindingsTests: OrbeTestCase {
       XCTAssertTrue(command.availableWithoutTabs, "\(command) は pane 非依存ゆえ 0タブでも配信する")
     }
     let requiresTabs: [TerminalController.WindowCommand] = [
-      .nextTab, .prevTab, .prevTool, .nextTool,
-      .toggleEditorPane, .openEditor, .renameTab,
+      .nextTab, .prevTab, .openEditor, .renameTab,
     ]
     for command in requiresTabs {
       XCTAssertFalse(
-        command.availableWithoutTabs, "\(command) は content/エディタ依存ゆえ 0タブでは配信しない")
+        command.availableWithoutTabs, "\(command) は content 依存ゆえ 0タブでは配信しない")
     }
   }
 

@@ -14,7 +14,7 @@ import XCTest
 ///
 /// 叩くのは 3 枚のうち**中間**のタブ——両端だと「常に先頭へ挿す」「常に末尾へ挿す」実装と区別できず、
 /// 閉じた位置が運ばれていることを固定できない（`ChromeMiddleClickTests` が中央タブを叩くのと同じ作法）。
-/// 復元単位も既定値と区別できる値（エージェント＋素のシェルの分割・明示タイトル・EditorPane 開＋git）で
+/// 復元単位も既定値と区別できる値（エージェント＋素のシェルの分割・明示タイトル）で
 /// 仕込む——全部既定値だと `makeTab` を素の `TerminalController()` に退化させても緑のままになる。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
@@ -39,7 +39,7 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
           first: .leaf(
             cwd: "/work/api", agent: AgentSession(command: "claude", sessionId: "api-1")),
           second: .leaf(cwd: "/work/web", agent: nil)),
-        explicitTitle: "api", editor: EditorPaneTabState(open: true, tool: "git")),
+        explicitTitle: "api"),
       TabState(
         tree: .leaf(cwd: nil, agent: AgentSession(command: "claude", sessionId: "c-1")),
         explicitTitle: "c"),
@@ -102,8 +102,6 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
       agent, AgentSession(command: "claude", sessionId: "api-1"), "エージェントはセッションごと戻る")
     XCTAssertEqual(
       second, .leaf(cwd: "/work/web", agent: nil), "同居していた素のシェルペインも cwd ごと戻る")
-    XCTAssertTrue(restored.editorUI.paneOpen, "EditorPane の開閉も戻る")
-    XCTAssertEqual(restored.editorUI.tool, .git, "開いていたツールも戻る")
     XCTAssertEqual(wc.current.active, 1, "戻したタブへ切り替わる（既存のタブ生成系と同じく見せる）")
   }
 

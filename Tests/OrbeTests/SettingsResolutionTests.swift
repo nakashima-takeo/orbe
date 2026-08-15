@@ -44,7 +44,6 @@ final class SettingsResolutionTests: OrbeTestCase {
     global[SettingKeys.theme] = .light
     global[SettingKeys.fontFamily] = "Menlo"
     global[SettingKeys.defaultAgent] = "claude"
-    global[SettingKeys.devFeaturesEnabled] = false
     global[SettingKeys.agentStateIcons] = ["working": "gearshape"]
 
     var override = SettingsLayer()
@@ -55,7 +54,6 @@ final class SettingsResolutionTests: OrbeTestCase {
     override[SettingKeys.theme] = .dark
     override[SettingKeys.fontFamily] = "Hack"
     override[SettingKeys.defaultAgent] = "codex"
-    override[SettingKeys.devFeaturesEnabled] = true
     override[SettingKeys.agentStateIcons] = ["waiting": "hourglass"]
 
     let eff = EffectiveSettings(global.overlaid(with: override))
@@ -66,7 +64,6 @@ final class SettingsResolutionTests: OrbeTestCase {
     XCTAssertEqual(eff[SettingKeys.theme], .dark)
     XCTAssertEqual(eff[SettingKeys.fontFamily], "Hack")
     XCTAssertEqual(eff[SettingKeys.defaultAgent], "codex")
-    XCTAssertEqual(eff[SettingKeys.devFeaturesEnabled], true)
     XCTAssertEqual(eff[SettingKeys.agentStateIcons], ["waiting": "hourglass"])
   }
 
@@ -142,10 +139,7 @@ final class SettingsResolutionTests: OrbeTestCase {
         SettingChange(SettingKeys.fontFamily, font))
     }
 
-    // 完了条件7-③: dev-features / agent-state-icons が受理側に移る。
-    XCTAssertEqual(
-      SettingChange(key: "dev-features", jsonValue: true),
-      SettingChange(SettingKeys.devFeaturesEnabled, true))
+    // 完了条件7-③: agent-state-icons が受理側に移る。
     XCTAssertEqual(
       SettingChange(key: "agent-state-icons", jsonValue: ["working": "gearshape"]),
       SettingChange(SettingKeys.agentStateIcons, ["working": "gearshape"]))

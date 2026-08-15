@@ -12,7 +12,7 @@ import SwiftUI
 ///   （`SettingsPaletteModel+Sound`）。
 ///
 /// 全設定は同じ `onApply`（単一代入 `SettingChange`＋スコープ）で global（settings.json）か workspace 上書きへ
-/// 反映し、生成 conf 再生成・ライブ反映は提示元（WindowController）が担う（defaultAgent/devFeatures も同経路）。
+/// 反映し、生成 conf 再生成・ライブ反映は提示元（WindowController）が担う（defaultAgent も同経路）。
 /// 値の解決と表示は `ScopedSettingsValues` に閉じる。
 @Observable final class SettingsPaletteModel {
   /// 設定変更を適用する。単一代入とスコープを渡し、対象への保存・生成 conf 再生成・ライブ反映は提示元が行う。

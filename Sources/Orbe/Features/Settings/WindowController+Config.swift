@@ -12,7 +12,7 @@ extension WindowController {
     return settingsStore.effective(override: current.settingsOverride)
   }
 
-  /// アクティブ workspace の実効設定で外観（テーマ）・状態アイコン・gui.conf・右バー gate を反映し、
+  /// アクティブ workspace の実効設定で外観（テーマ）・状態アイコン・gui.conf を反映し、
   /// ライブ反映（reloadConfig + 窓透過）を予約する。画面に載るのは常にアクティブ 1 workspace のみなので
   /// 全 surface 一律適用で常に正しい。
   func applyActiveWorkspaceConfig() {
@@ -30,9 +30,6 @@ extension WindowController {
       ?? Theme.Typography.chrome
     // テーマ（外観スイッチ）。chrome は動的トークンが、ターミナルは既存配線が追従する。
     NSApp.appearance = settings[SettingKeys.theme].appearance
-    // 開発中の機能 gate を実効値へ再評価（WS 切替で右バーが WS 毎に追従する）。
-    devFeaturesEnabled = settings[SettingKeys.devFeaturesEnabled]
-    projectEditorDisplayState()
     GuiConfig.regenerate(from: settings)
     scheduleConfigReload()
   }

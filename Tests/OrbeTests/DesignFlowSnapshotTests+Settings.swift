@@ -20,7 +20,6 @@ extension DesignFlowSnapshotTests {
     global[SettingKeys.backgroundBlur] = false
     global[SettingKeys.cursorStyleBlink] = false
     global[SettingKeys.defaultAgent] = "claude"
-    global[SettingKeys.devFeaturesEnabled] = true
     let settings = SettingsPaletteModel(
       values: ScopedSettingsValues(global: global),
       fontNames: ["Menlo", "Monaco", "SF Mono"],
@@ -30,7 +29,7 @@ extension DesignFlowSnapshotTests {
       "settings_palette", size: settingsFlowCardSize,
       render: { paletteSnapshot(settings.render, canvas: settingsFlowCardSize) },
       steps: [
-        // スコープ / フォントサイズ / 背景の不透明度 / 背景のブラー / カーソルの点滅 / テーマ / エージェント / フォント / 開発中の機能を有効化 の 9 行
+        // スコープ / フォントサイズ / 背景の不透明度 / 背景のブラー / カーソルの点滅 / テーマ / エージェント / フォント / タブタイトルのフォント の 9 行
         ("root", {}),
         (
           "theme",
@@ -81,7 +80,6 @@ extension DesignFlowSnapshotTests {
     global[SettingKeys.backgroundBlur] = false
     global[SettingKeys.cursorStyleBlink] = true
     global[SettingKeys.defaultAgent] = "claude"
-    global[SettingKeys.devFeaturesEnabled] = true
     var override = SettingsLayer()
     override[SettingKeys.fontSize] = 16
     override[SettingKeys.backgroundOpacity] = 75
@@ -142,8 +140,8 @@ extension DesignFlowSnapshotTests {
         ("root", {}),
         (
           "sound",
-          {  // 通知音行（index 13）で潜る（入場では鳴らない＝EQ は出ない・セグメントは「完了」）
-            settings.render.selected = 13
+          {  // 通知音行（index 12）で潜る（入場では鳴らない＝EQ は出ない・セグメントは「完了」）
+            settings.render.selected = 12
             settings.render.onActivate()
           }
         ),
@@ -152,9 +150,9 @@ extension DesignFlowSnapshotTests {
         ("tab_click", { settings.render.onTapSegment(0) }),  // クリックで完了へ戻す
         (
           "root_volume",
-          {  // root へ戻り音量行（index 14）で `→`。値が動いて完了音が鳴り、EQ が root の行にも出る
+          {  // root へ戻り音量行（index 13）で `→`。値が動いて完了音が鳴り、EQ が root の行にも出る
             settings.render.onEscape()  // 通知音サブ → root
-            settings.render.selected = 14
+            settings.render.selected = 13
             _ = settings.render.onRight()
           }
         ),
@@ -169,7 +167,6 @@ extension DesignFlowSnapshotTests {
     global[SettingKeys.backgroundOpacity] = 90
     global[SettingKeys.backgroundBlur] = false
     global[SettingKeys.cursorStyleBlink] = false
-    global[SettingKeys.devFeaturesEnabled] = true
     let settings = SettingsPaletteModel(
       values: ScopedSettingsValues(global: global), fontNames: [], agents: [],
       localization: LocalizationStore(language: .ja))

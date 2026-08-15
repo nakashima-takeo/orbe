@@ -48,7 +48,6 @@ struct ScopedSettingsValues {
   var effBackgroundOpacity: Int { effective[SettingKeys.backgroundOpacity] }
   var effBackgroundBlur: Bool { effective[SettingKeys.backgroundBlur] }
   var effCursorStyleBlink: Bool { effective[SettingKeys.cursorStyleBlink] }
-  var effDevFeatures: Bool { effective[SettingKeys.devFeaturesEnabled] }
   var effFontFamily: String? { effective[SettingKeys.fontFamily] }
   var effTabTitleFontFamily: String? { effective[SettingKeys.tabTitleFontFamily] }
   var effEmojiFont: EmojiFontMode { effective[SettingKeys.emojiFont] }

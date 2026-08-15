@@ -32,8 +32,6 @@ extension WindowController {
     }
     let tc = TerminalController(restoring: state.tree, resumeSpawn: resume)
     tc.explicitTitle = state.explicitTitle
-    tc.editorUI.paneOpen = state.editor.open
-    tc.editorUI.tool = EditorTool(persistKey: state.editor.tool)
     return wire(tc)
   }
 

@@ -14,7 +14,7 @@ extension SettingsPaletteModel {
     case .agentStateIcons: return .agentStates
     case .worktreeDir: return .worktreeDirPresets
     case .notificationSound: return .notificationSound
-    case .fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .devFeaturesEnabled,
+    case .fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink,
       .notificationSoundVolume, .notificationSoundEnabled:
       return .root  // stepper/toggle であって drillIn でない
     }

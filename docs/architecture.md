@@ -59,10 +59,9 @@ Sources/
       Git/               git 実行層（AppKit 非依存）
       Localization/      日英 2 言語 i18n コア
     Features/            機能単位（Agent / Attention / Chrome / Completion /
-                         Control / Dispatch / EditorPane / Help / MenuBar /
-                         Search / Settings / Update / Workspace）
+                         Control / Dispatch / Help / MenuBar /
+                         Search / Settings / Sound / Update / Workspace）
     DesignSystem/        トークン・パレット・共有コンポーネント（正は design/）
-    Resources/           同梱リソース（アイコン等）
   OrbePaths/             state dir / control.sock 解決の共有土台（Foundation のみ）
   OrbeSound/             通知音の純 DSP 層（合成語彙・カタログ・レンダラ・解析。Foundation のみ）
   orbe-cli/              orb 実行ターゲット
@@ -96,7 +95,7 @@ Orbe が**読む**もの（利用者・スクリプトが立てる）:
 ## 外部依存
 
 - **libghostty** — `vendor/ghostty` submodule を固定 SHA に pin し、自前ビルドした xcframework を `binaryTarget` で取り込む。外部契約は [terminal/libghostty](spec/terminal/libghostty.md)。
-- **swift-markdown**（Apache-2.0） — EditorPane の markdown プレビュー。
+- **swift-markdown**（Apache-2.0） — リリースノート（appcast description）の markdown 描画。
 - **Sparkle**（MIT） — アプリ内アップデート（[platform/update](spec/platform/update.md)）。
 - **git / gh** — サブプロセスとして実行。gh は無くても劣化動作（[palette/dispatch](spec/palette/dispatch.md)）。
 - **補完エンジン** — `vendor/completion-engine/` の prebuilt JS バンドル（[palette/completion](spec/palette/completion.md)）。

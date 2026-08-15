@@ -40,7 +40,7 @@ final class WorkspaceOverridePersistenceTests: OrbeTestCase {
     let tmp = try workspacesFile()
     let legacy = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
-      {"name":"a","rootPath":"/","activeTab":0,"tabs":[{"tree":{"leaf":{}},"editor":{"open":false,"tool":"tree"}}]}]}
+      {"name":"a","rootPath":"/","activeTab":0,"tabs":[{"tree":{"leaf":{}}}]}]}
       """
     try Data(legacy.utf8).write(to: tmp)
     let loaded = try XCTUnwrap(
@@ -54,7 +54,7 @@ final class WorkspaceOverridePersistenceTests: OrbeTestCase {
     let file = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,\
-      "tabs":[{"tree":{"leaf":{}},"editor":{"open":false,"tool":"tree"}}],\
+      "tabs":[{"tree":{"leaf":{}}}],\
       "settingsOverride":\(override)}]}
       """
     try Data(file.utf8).write(to: workspacesFile())
@@ -88,7 +88,7 @@ final class WorkspaceOverridePersistenceTests: OrbeTestCase {
     let file = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,\
-      "tabs":[{"tree":{"leaf":{}},"editor":{"open":false,"tool":"tree"}}],"settingsOverride":{}}]}
+      "tabs":[{"tree":{"leaf":{}}}],"settingsOverride":{}}]}
       """
     try Data(file.utf8).write(to: tmp)
     let loaded = try XCTUnwrap(WorkspacePersistence.load())

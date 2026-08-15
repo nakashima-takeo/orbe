@@ -39,7 +39,7 @@ struct HelpOverlay: View {
 }
 
 /// デザイン見本の rgba 面/罫線（surfaceRgb / borderRgb の α 合成）を基色トークン＋view 側 α で再現する
-/// ヘルパ。light では border +0.04 / surface +0.02 シフト（EditorPane と同じ「基色＋view 側 α」方式）。
+/// ヘルパ。light では border +0.04 / surface +0.02 シフト。
 struct HelpInk {
   let dark: Bool
 

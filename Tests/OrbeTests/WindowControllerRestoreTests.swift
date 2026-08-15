@@ -7,7 +7,7 @@ import XCTest
 /// デバウンス保存の契約を、実 `WindowController` で固定する。
 ///
 /// 壊れると何が起きるか。復元が 1 フィールドでも落とすと、次の保存がその欠けた姿でディスクを
-/// 上書きする——分割比・cwd・エージェントセッション・明示タイトル・EditorPane の開閉・workspace
+/// 上書きする——分割比・cwd・エージェントセッション・明示タイトル・workspace
 /// 上書き設定・最終使用時刻のどれかが、再起動 1 回で永久に消える。index のクランプが外れれば
 /// 範囲外 index で配列を引いて起動時に crash する。ウィンドウサイズの記憶に表示クランプ値が
 /// 回り込めば、小さい画面で一度開いただけで大画面用のサイズが失われ二度と戻らない。デバウンスが
@@ -73,7 +73,7 @@ final class WindowControllerRestoreTests: OrbeTestCase {
   // MARK: - 保存 → 復元 → 再保存のラウンドトリップ
 
   /// アクティブが 0 タブ（休眠）なら surface が 1 つも起きず、`WorkspacesFile` が**完全に等値**で戻る。
-  /// 分割比・cwd・エージェントセッション・明示タイトル・EditorPane・上書き設定・最終使用時刻・
+  /// 分割比・cwd・エージェントセッション・明示タイトル・上書き設定・最終使用時刻・
   /// ウィンドウサイズを 1 本で通す——どれか 1 つを復元が落とせばここで落ちる。
   ///
   /// 等値がアクティブ側の `lastUsedAt` にも及ぶのは、刻印がタブ選択に紐づくため（0 タブは
@@ -98,7 +98,7 @@ final class WindowControllerRestoreTests: OrbeTestCase {
                   // resume 対応 CLI ＋ 安全文字集合の sessionId。解決できないと素のシェルへ
                   // 落ちて agent が消える（＝ここが等値にならない）。
                   agent: AgentSession(command: "claude", sessionId: "web-1"))),
-              explicitTitle: "api", editor: EditorPaneTabState(open: true, tool: "git")),
+              explicitTitle: "api"),
             TabState(tree: .leaf(cwd: "/work/docs", agent: nil), explicitTitle: nil),
           ],
           lastUsedAt: stampFront, settingsOverride: overrideLayer()),
@@ -131,9 +131,7 @@ final class WindowControllerRestoreTests: OrbeTestCase {
         WorkspaceState(
           name: "front", rootPath: home, activeTab: 0,
           tabs: [
-            TabState(
-              tree: .leaf(cwd: home, agent: nil), explicitTitle: "front",
-              editor: EditorPaneTabState(open: true, tool: "git"))
+            TabState(tree: .leaf(cwd: home, agent: nil), explicitTitle: "front")
           ],
           lastUsedAt: stampFront, settingsOverride: overrideLayer()),
       ],

@@ -242,7 +242,6 @@ final class PaletteFitTests: OrbeTestCase {
     global[SettingKeys.backgroundBlur] = false
     global[SettingKeys.cursorStyleBlink] = false
     global[SettingKeys.defaultAgent] = "claude"
-    global[SettingKeys.devFeaturesEnabled] = true
     global[SettingKeys.notificationSound] = NotificationSound.glass
     let settings = SettingsPaletteModel(
       values: ScopedSettingsValues(global: global),

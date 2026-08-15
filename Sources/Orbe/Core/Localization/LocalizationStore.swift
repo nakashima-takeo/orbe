@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// chrome（StatusRow・パレット・EditorPane・Onboarding 等の SwiftUI 面）へ「現在の UI 言語」を届ける
+/// chrome（StatusRow・パレット・Onboarding 等の SwiftUI 面）へ「現在の UI 言語」を届ける
 /// 観測可能ホルダー。chrome は複数の独立した `NSHostingView` に跨るため、モデル毎の糸通しでなく単一の
 /// Environment で配る（`ChromeTranslucency`・`AgentIconResolver` と同型）。`language` を書き替えると
 /// `@Observable` が全 root を再描画し、UI 全体が即時に切り替わる（再起動不要）。所有は `WindowController`。

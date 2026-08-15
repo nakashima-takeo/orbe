@@ -33,7 +33,7 @@ extension DesignGallerySnapshotTests {
     // 画から消えるので予約を止め、点く行も音案を張って `NotificationSound.default` から独立させる。
     let settingsSound = settingsPaletteModel(notificationSound: .glass)
     settingsSound.schedulePreviewEnd = { _, _ in }
-    settingsSound.render.selected = 13  // 通知音行
+    settingsSound.render.selected = 12  // 通知音行
     settingsSound.render.onActivate()  // 潜る
     settingsSound.render.onDown()  // 試聴 → その行に EQ が点く
     let soundStage = NSSize(width: 500, height: 460)
@@ -60,7 +60,7 @@ extension DesignGallerySnapshotTests {
     for (name, stage) in stages {
       let sound = settingsPaletteModel(notificationSound: .glass)
       sound.schedulePreviewEnd = { _, _ in }
-      sound.render.selected = 13  // 通知音行
+      sound.render.selected = 12  // 通知音行
       sound.render.onActivate()  // 潜る
       try writePNG(
         paletteOverlaySnapshot(sound.render, canvas: stage), size: stage, name: "\(name).png",
@@ -79,7 +79,6 @@ extension DesignGallerySnapshotTests {
     global[SettingKeys.backgroundBlur] = false
     global[SettingKeys.cursorStyleBlink] = false
     global[SettingKeys.defaultAgent] = "claude"
-    global[SettingKeys.devFeaturesEnabled] = true
     global[SettingKeys.notificationSound] = notificationSound
     var override = SettingsLayer()
     override[SettingKeys.fontSize] = overrideFontSize

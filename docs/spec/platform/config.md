@@ -1,7 +1,7 @@
 ---
 title: 設定
 description: キュレート既定 → user 設定 → GUI 生成 conf の後勝ち 3 層読み込みと、テーマ（Auto/Dark/Light 外観スイッチ）によるライト/ダーク決定
-updated: 2026-08-08
+updated: 2026-08-15
 ---
 
 # 設定
@@ -41,7 +41,7 @@ ghostty の conf をどう読み、GUI の設定変更をどう端末へ届け�
 
 ## 実効設定と反映
 
-`regenerate` に渡すのは global 層にアクティブ workspace の上書き層を重ねた**実効設定**（[workspace](workspace.md)）。値の担体はスコープ非依存の均一レイヤで、**全設定が workspace 上書き可**。gui.conf に出るのはフォント/テーマ/背景/カーソル/絵文字系のみで、`default-agent`（AgentLauncher 直行）・`agent-state-icons`／`tab-title-font-family`（chrome へ直配信・[chrome](../chrome/chrome.md)）・`dev-features`（右バーの UI gate）は gui.conf を経由しない。
+`regenerate` に渡すのは global 層にアクティブ workspace の上書き層を重ねた**実効設定**（[workspace](workspace.md)）。値の担体はスコープ非依存の均一レイヤで、**全設定が workspace 上書き可**。gui.conf に出るのはフォント/テーマ/背景/カーソル/絵文字系のみで、`default-agent`（AgentLauncher 直行）・`agent-state-icons`／`tab-title-font-family`（chrome へ直配信・[chrome](../chrome/chrome.md)）は gui.conf を経由しない。
 
 反映は集約点 `WindowController.applyActiveWorkspaceConfig()`（外観同期→gui.conf 再生成→config reload）に一本化し、**workspace 切替・起動復元・空 workspace アクティブ化の共有経路・初回起動・新規 workspace 作成（上書き無し＝global 実効へ切り替え、前 workspace の上書きを持ち越さない）・設定パレット適用**が呼ぶ。画面に載るのは常にアクティブ 1 workspace のみなので、全 surface へ一律伝播する reload で常に正しい。font-size のライブ反映は trailing デバウンスでキーリピートの連射を畳む。
 
@@ -49,7 +49,7 @@ ghostty の conf をどう読み、GUI の設定変更をどう端末へ届け�
 
 背景不透明度は surface アルファ（libghostty）だけでは背景が合成されず透けないため、host NSWindow 側の透過を対で適用する（本家 ghostty 踏襲）: 透過かつ非フルスクリーンのとき窓を非不透明・ほぼ透明な背景色にし、それ以外は不透明へ戻す。適用は起動時・config reload 後（surface アルファ更新と同一 tick）・フルスクリーン遷移の 3 経路。判定に読む値はアクティブ workspace の実効設定（未構築の init 初回は global にフォールバック）。
 
-同一 tick で chrome 各面へも透過を配る: 実効の不透明度/ブラーから `ChromeTranslucency`（実効 opacity・透過フラグ・ブラーフラグ）を更新し、Environment 注入された chrome 面（StatusRow・GlassPanel・EditorPane・端末上に浮く検索バー／補完 popup）が自分の地を薄めて端末面と veil 濃度を揃える。浮遊 popup は別ホストビューなので窓 delegate 経由でホルダーを解決し、hosting layer を非不透明にして素通し半透明を端末面まで通す。背景グローは透過時に不透明地を敷かない（二重 veil 回避）。GlassPanel はブラー ON で VisualEffectView を残し、OFF で外して素通し半透明にする（→ [layout](../chrome/layout.md)・[settings](../palette/settings.md)）。
+同一 tick で chrome 各面へも透過を配る: 実効の不透明度/ブラーから `ChromeTranslucency`（実効 opacity・透過フラグ・ブラーフラグ）を更新し、Environment 注入された chrome 面（StatusRow・GlassPanel・端末上に浮く検索バー／補完 popup）が自分の地を薄めて端末面と veil 濃度を揃える。浮遊 popup は別ホストビューなので窓 delegate 経由でホルダーを解決し、hosting layer を非不透明にして素通し半透明を端末面まで通す。背景グローは透過時に不透明地を敷かない（二重 veil 回避）。GlassPanel はブラー ON で VisualEffectView を残し、OFF で外して素通し半透明にする（→ [layout](../chrome/layout.md)・[settings](../palette/settings.md)）。
 
 `background-blur` は gui.conf 再生成＋reload だけでは効かない——macOS の背後ブラーは private CGS API 経由で、host が自分の NSWindow を渡して能動的に呼ぶ配線が必須。半径と「不透明なら適用しない」ゲートは libghostty(Zig) 側が config を読んで判定するため、Swift で再実装しない。フルスクリーンだけは Swift 側で除外する——フルスクリーン中は config の不透明度が据え置きで Zig 側は早期 return せず、opaque 窓の背後に blur を敷いても不可視で無駄なため。呼び出しは gui.conf 更新後の 3 経路: reload 後・**ウィンドウが key になった時**（起動時 init は窓が可視前で windowNumber 未確定＝CGS が効かないため、初回適用をここで担保する）・フルスクリーン遷移。
 
