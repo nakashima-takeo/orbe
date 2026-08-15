@@ -112,31 +112,31 @@ extension DesignSceneFixtures {
         DispatchCleanFacts(
           path: path("dispatch-delete"), branch: "feat/dispatch-delete",
           upstream: "origin/feat/dispatch-delete",
-          closedPR: DispatchCleanPR(number: 142, isMerged: true), status: cleanStatus,
-          unmergedCommits: 0, operation: .none),
+          closedPR: DispatchCleanPR(number: 142, isMerged: true, base: "main"), status: cleanStatus,
+          containment: .patchEquivalent, operation: .none),
         // 軸B: 独自コミット（`[gone]` に潰されずに損失を名乗る）
         DispatchCleanFacts(
           path: path("wt-path-template"), branch: "ship/…", upstream: "origin/ship/…",
-          track: "[gone]", closedPR: DispatchCleanPR(number: 118, isMerged: false),
-          status: cleanStatus, unmergedCommits: 6, operation: .none),
+          track: "[gone]", closedPR: DispatchCleanPR(number: 118, isMerged: false, base: "main"),
+          status: cleanStatus, containment: .unmerged(count: 6), operation: .none),
         // 軸A: 未コミット＋untracked（溢れた分はサブラインの損失内訳へ）／軸B: open PR
         DispatchCleanFacts(
           path: path("diff-panel"), branch: "fix/diff-panel", upstream: "origin/fix/diff-panel",
           openPR: 139, status: GitWorktreeStatusCounts(modified: 12, untracked: 3),
-          unmergedCommits: 0, operation: .none),
+          containment: .patchEquivalent, operation: .none),
         // 軸A: rebase 進行中（status が clean でも安全群に入らない）／軸B: 未 push
         DispatchCleanFacts(
           path: path("session-restore"), branch: "feat/session-restore", lockReason: "USB",
-          status: cleanStatus, unmergedCommits: 0, operation: .inProgress(.rebase)),
+          status: cleanStatus, containment: .patchEquivalent, operation: .inProgress(.rebase)),
         // 軸A: prunable（実体が無く、ブランチには触らない）
         DispatchCleanFacts(
           path: path("render-batching"), branch: "perf/render-batching", isPrunable: true,
-          upstream: "origin/perf/render-batching", track: "[gone]", unmergedCommits: 0),
+          upstream: "origin/perf/render-batching", track: "[gone]", containment: .patchEquivalent),
         // 軸B: PR merged（2 本目の安全行）
         DispatchCleanFacts(
           path: path("pane-focus"), branch: "fix/pane-focus", upstream: "origin/fix/pane-focus",
-          closedPR: DispatchCleanPR(number: 131, isMerged: true), status: cleanStatus,
-          unmergedCommits: 0, operation: .none),
+          closedPR: DispatchCleanPR(number: 131, isMerged: true, base: "main"), status: cleanStatus,
+          containment: .patchEquivalent, operation: .none),
         // 軸C: main worktree
         DispatchCleanFacts(path: "\(home)/dev/storefront", branch: "main", isMain: true),
       ], defaultBranchLabel: "main")

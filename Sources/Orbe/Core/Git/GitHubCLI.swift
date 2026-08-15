@@ -18,6 +18,10 @@ final class GitHubCLI {
   static let shared = GitHubCLI()
 
   private let queue = DispatchQueue(label: "dev.orbe.gh", qos: .userInitiated)
+  /// ブラウザで開く操作の口。取得（`queue`）とは分ける——結果を待たない即時操作なので取得と
+  /// 直列化する理由が無く、同じ列に載せると閉じた PR の取得（worktree 本数ぶんの往復）が
+  /// 捌けるまでブラウザが開かない。決定は Enter 一発という前提がそこで崩れる。
+  private let webQueue = DispatchQueue(label: "dev.orbe.gh.web", qos: .userInitiated)
   private let lock = DispatchQueue(label: "dev.orbe.gh.state")
   /// 見つかった gh の絶対パス。**見つからなかったことは覚えない**——起動直後のまだ痩せた PATH で
   /// 一度外した結果を焼くと、PATH が整った後も gh が永久に「未導入」のままになる。
@@ -25,6 +29,10 @@ final class GitHubCLI {
 
   /// gh 呼び出しの時間上限（ネット待ちのハングを引きずらない）。
   private let timeout: TimeInterval = 15
+
+  /// 打ち切り後に EOF を待つ猶予。pipe の書き込み端を握る子孫がいると EOF は来ないことがあり、
+  /// **無期限に待つと、待ちそのものが新しいハングになる**（`GitRunner.terminationGrace` と同じ規範）。
+  private static let terminationGrace: TimeInterval = 2
 
   // MARK: - probe
 
@@ -80,32 +88,62 @@ final class GitHubCLI {
       ], completion: completion)
   }
 
-  /// 閉じた PR 一覧（`closed` は MERGED も含み `state` で区別できる）。worktree の掃除で
-  /// 「マージ済みか／未マージのまま閉じられたか」を見る。`nil` = 取得失敗／`[]` = 0 件。
-  func closedPullRequests(
-    cwd: String, limit: Int, completion: @escaping ([GitHubClosedPR]?) -> Void
-  ) {
-    fetch(
-      cwd: cwd,
-      args: [
-        "pr", "list", "--state", "closed", "--limit", String(limit), "--json",
-        "number,headRefName,state",
-      ], completion: completion)
+  /// ブランチ名指しの PR 取得引数（open/closed を `--state all` の 1 往復で。作成日時の降順）。
+  /// **直近 N 件の一覧窓は使わない**——古くにマージされた PR も、古くから開いたままの PR も、
+  /// 窓から溢れると「merged チップが出ない」「レビュー中なのに安全確認を素通りする」という
+  /// 取りこぼしになる。`--head` は remote 側でブランチが削除済み（`[gone]`）でも headRefName で
+  /// PR を返す。
+  ///
+  /// `--limit 100` は gh が 1 往復で取れる上限。**往復コストは limit に依らない**（実測で 5／30／100
+  /// が同じ）ので、ここを絞る動機が無い一方、絞ると `--head` に混ざる fork の同名ブランチの PR
+  /// （呼び出し側が落とす）で埋まって自リポジトリの PR が窓落ちしうる。上限まで取れば、この
+  /// ブランチの PR が 100 件を超えない限り窓落ちは起きない。
+  static func branchPRArguments(head: String) -> [String] {
+    [
+      "pr", "list", "--state", "all", "--head", head, "--limit", "100", "--json",
+      "number,headRefName,state,baseRefName,isCrossRepository",
+    ]
   }
 
-  /// 取得の共通口。失敗は `nil`（空配列に潰さない——空で潰すと呼び出し側のキャッシュを消してしまう）。
+  /// 指定ブランチ群に紐づく PR（ブランチごとに open/closed 両方）。worktree の掃除で
+  /// 「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見る。`nil` = 取得失敗／`[]` = 該当なし。
+  func branchPullRequests(
+    cwd: String, heads: [String], completion: @escaping ([GitHubBranchPR]?) -> Void
+  ) {
+    fetch(cwd: cwd, argsList: heads.map(Self.branchPRArguments(head:)), completion: completion)
+  }
+
+  /// 取得の共通口（1 コマンド）。
   private func fetch<T: Decodable>(
     cwd: String, args: [String], completion: @escaping ([T]?) -> Void
+  ) {
+    fetch(cwd: cwd, argsList: [args], completion: completion)
+  }
+
+  /// 取得の共通口（複数コマンドを直列に叩いて連結する）。失敗は `nil`（空配列に潰さない——
+  /// 空で潰すと呼び出し側のキャッシュを消してしまう）。**1 本でも失敗したら全体を `nil`** に
+  /// するのが要点で、部分結果で差し替えると失敗したぶんの前回結果だけが静かに消える
+  /// （据え置き契約は配列まるごとの置換が前提）。
+  private func fetch<T: Decodable>(
+    cwd: String, argsList: [[String]], completion: @escaping ([T]?) -> Void
   ) {
     queue.async {
       guard let gh = self.resolveGh() else {
         DispatchQueue.main.async { completion(nil) }
         return
       }
-      let out = self.runSync(gh, args, cwd: cwd)
-      let decoded: [T]? =
-        out.status == 0 ? try? JSONDecoder().decode([T].self, from: out.stdout) : nil
-      DispatchQueue.main.async { completion(decoded) }
+      var results: [T] = []
+      for args in argsList {
+        let out = self.runSync(gh, args, cwd: cwd)
+        guard out.status == 0,
+          let decoded = try? JSONDecoder().decode([T].self, from: out.stdout)
+        else {
+          DispatchQueue.main.async { completion(nil) }
+          return
+        }
+        results.append(contentsOf: decoded)
+      }
+      DispatchQueue.main.async { completion(results) }
     }
   }
 
@@ -115,7 +153,7 @@ final class GitHubCLI {
   func openPRWeb(number: Int, cwd: String) { openWeb("pr", number: number, cwd: cwd) }
 
   private func openWeb(_ kind: String, number: Int, cwd: String) {
-    queue.async {
+    webQueue.async {
       guard let gh = self.resolveGh() else { return }
       _ = self.runSync(gh, [kind, "view", String(number), "--web"], cwd: cwd)
     }
@@ -157,10 +195,12 @@ final class GitHubCLI {
       _ = try? err.fileHandleForReading.readToEnd()
       group.leave()
     }
-    // ネット待ちのハングは時間上限で打ち切る（terminate で pipe が EOF に達し読みも解ける）。
+    // ネット待ちのハングは時間上限で打ち切る（通常は terminate で pipe が EOF に達し読みも解ける）。
+    // EOF が来るかは書き込み端を握る子孫次第なので、打ち切り後の読み終わり待ちも猶予で有界にする
+    // ——ここを無期限にすると、打ち切ったのに返らないという新しいハングになる。
     if group.wait(timeout: .now() + timeout) == .timedOut {
       process.terminate()
-      group.wait()
+      _ = group.wait(timeout: .now() + Self.terminationGrace)
       return Output(status: -1, stdout: Data())
     }
     process.waitUntilExit()

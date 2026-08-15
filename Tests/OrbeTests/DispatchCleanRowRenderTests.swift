@@ -43,6 +43,22 @@ final class DispatchCleanRowRenderTests: SnapshotTestCase {
       message: "右クラスタが描かれていない")
   }
 
+  /// merged PR チップがマージ先（base）まで描いている。base だけが違う 2 枚の画を比べる——
+  /// 番号しか描かなくなった日に、この 2 枚は同じ画になって落ちる。
+  func testMergedPRChipDrawsTheBaseBranch() throws {
+    let chipSize = NSSize(width: 220, height: 24)
+    let develop = try XCTUnwrap(
+      renderPNG(
+        DispatchCleanChip(chip: .mergedPR(123, base: "develop")), size: chipSize, dark: true)
+    )
+    let main = try XCTUnwrap(
+      renderPNG(DispatchCleanChip(chip: .mergedPR(123, base: "main")), size: chipSize, dark: true))
+    let mainAgain = try XCTUnwrap(
+      renderPNG(DispatchCleanChip(chip: .mergedPR(123, base: "main")), size: chipSize, dark: true))
+    XCTAssertEqual(main, mainAgain, "前提: 同じチップの描画は決定的（違えば以下の比較が無意味になる）")
+    XCTAssertNotEqual(develop, main, "マージ先が画に出ていない")
+  }
+
   /// 「その語を持つ行の画」と「その語だけ抜いた行の画」が違うことを見る。
   private func assertSublineDraws(
     pick: (CleanRow) -> Bool, strip: (CleanRow) -> CleanRow, message: String

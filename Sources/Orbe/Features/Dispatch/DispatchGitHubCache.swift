@@ -13,7 +13,7 @@ final class DispatchGitHubCache {
   struct Entry {
     var issues: [GitHubIssue]?
     var pullRequests: [GitHubPullRequest]?
-    var closedPullRequests: [GitHubClosedPR]?
+    var branchPullRequests: [GitHubBranchPR]?
   }
 
   private var entries: [String: Entry] = [:]
@@ -29,7 +29,7 @@ final class DispatchGitHubCache {
     entries[key, default: Entry()].pullRequests = pullRequests
   }
 
-  func setClosedPullRequests(_ pullRequests: [GitHubClosedPR], for key: String) {
-    entries[key, default: Entry()].closedPullRequests = pullRequests
+  func setBranchPullRequests(_ pullRequests: [GitHubBranchPR], for key: String) {
+    entries[key, default: Entry()].branchPullRequests = pullRequests
   }
 }

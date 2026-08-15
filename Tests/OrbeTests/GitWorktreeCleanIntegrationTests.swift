@@ -2,13 +2,13 @@ import XCTest
 
 @testable import Orbe
 
-/// 実 git 層: 一時リポジトリで「取り込み済み判定」「作業ツリーの clean 判定」「worktree の削除」を確かめる。
-///
-/// 中心は **素の `git cherry` では multi-commit squash を検出できない**という実測で、
-/// 2 段構え（素の cherry → 累積差分のダングリングコミット → 再度 cherry）が要ることを固定する。
+/// 実 git 層: 一時リポジトリで「作業ツリーの clean 判定」「worktree の削除」を確かめる。
+/// 取り込み判定（3 段構え）は `+Containment` が持つ。
 final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
-  private var dir: URL!
-  private var repo: GitRepo!
+  var dir: URL!
+  private var remoteRoots: [URL] = []
+  /// 分冊（`+Containment`）も読む。
+  var repo: GitRepo!
 
   override func setUpWithError() throws {
     dir = FileManager.default.temporaryDirectory
@@ -25,56 +25,8 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
 
   override func tearDownWithError() throws {
     try? FileManager.default.removeItem(at: dir)
-  }
-
-  // MARK: - 取り込み済み判定
-
-  /// **完了条件の直接の証拠**。2 コミットを squash マージしたブランチについて、
-  /// `git branch --merged` は返さず・`rev-list --count` は 2・**素の `git cherry` も `+` を 2 本**返すのに、
-  /// 2 段構えの判定は「取り込み済み」を返す。
-  func testSquashMergedBranchIsDetectedAsMerged() throws {
-    try makeSquashMergedBranch()
-
-    XCTAssertFalse(
-      git(["branch", "--merged", "main"]).stdoutText.contains("feat/squash"),
-      "前提: 到達性では取り込み済みに見えない")
-    XCTAssertEqual(
-      git(["rev-list", "--count", "main..feat/squash"]).stdoutText
-        .trimmingCharacters(in: .whitespacesAndNewlines), "2",
-      "前提: main から見て 2 コミット未取り込みに見える")
-    XCTAssertEqual(
-      git(["cherry", "main", "feat/squash"]).stdoutText.split(separator: "\n")
-        .filter { $0.hasPrefix("+") }.count, 2,
-      "前提: 素の cherry は畳んだ patch-id を照合できず 2 本とも未取り込みと誤判定する")
-
-    XCTAssertEqual(try unmerged("feat/squash"), 0, "2 段構えなら取り込み済みと判定できる")
-  }
-
-  /// 本当に未マージのブランチは独自コミット件数を返す（safe 群に入れない）。
-  func testUnmergedBranchReportsOwnCommitCount() throws {
-    try makeSquashMergedBranch()
-    XCTAssertTrue(git(["checkout", "-q", "-b", "feat/live", "main"]).isSuccess)
-    try write("d.txt", "1")
-    XCTAssertTrue(git(["add", "-A"]).isSuccess)
-    XCTAssertTrue(git(["commit", "-qm", "u1"]).isSuccess)
-    try write("d.txt", "12")
-    XCTAssertTrue(git(["add", "-A"]).isSuccess)
-    XCTAssertTrue(git(["commit", "-qm", "u2"]).isSuccess)
-    XCTAssertTrue(git(["checkout", "-q", "main"]).isSuccess)
-
-    XCTAssertEqual(try unmerged("feat/live"), 2)
-  }
-
-  /// 既定ブランチの厳密な祖先（＝完全に取り込み済み）で偽陽性を出さない。
-  /// 累積差分のレシピ**単独**では空パッチのダングリングコミットになり `+` を返してしまうため、
-  /// 素の cherry を先に置く順序がここで効いている。
-  func testAncestorBranchIsMerged() throws {
-    let initial = git(["rev-parse", "HEAD"]).stdoutText
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    try makeSquashMergedBranch()
-    XCTAssertTrue(git(["branch", "feat/ancestor", initial]).isSuccess)
-
-    XCTAssertEqual(try unmerged("feat/ancestor"), 0)
+    for root in remoteRoots { try? FileManager.default.removeItem(at: root) }
+    remoteRoots = []
   }
 
   // MARK: - 作業ツリーの clean 判定
@@ -111,7 +63,7 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
   func testUnknownStateFallsToUnsafeSide() throws {
     XCTAssertFalse(
       try isClean(dir.appendingPathComponent("nowhere").path), "存在しないパスは clean と名乗らない")
-    XCTAssertNil(try unmerged("no-such-branch"), "判定できなければ nil（取り込み済みの 0 とは別）")
+    XCTAssertNil(try containment("no-such-branch"), "判定できなければ nil（取り込み済みの証明とは別）")
   }
 
   // MARK: - 削除
@@ -182,11 +134,11 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
   // MARK: - ヘルパ
 
   @discardableResult
-  private func git(_ args: [String]) -> GitRunner.Output {
+  func git(_ args: [String]) -> GitRunner.Output {
     GitRunner.shared.runSync(args, cwd: dir.path)
   }
 
-  private func write(_ name: String, _ text: String) throws {
+  func write(_ name: String, _ text: String) throws {
     try text.write(
       toFile: (dir.path as NSString).appendingPathComponent(name), atomically: true, encoding: .utf8
     )
@@ -204,7 +156,7 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
   }
 
   /// main に 2 コミットのブランチを squash マージした状態を作る。
-  private func makeSquashMergedBranch() throws {
+  func makeSquashMergedBranch() throws {
     XCTAssertTrue(git(["checkout", "-q", "-b", "feat/squash"]).isSuccess)
     try write("b.txt", "1")
     XCTAssertTrue(git(["add", "-A"]).isSuccess)
@@ -215,6 +167,35 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
     XCTAssertTrue(git(["checkout", "-q", "main"]).isSuccess)
     XCTAssertTrue(git(["merge", "--squash", "feat/squash"]).isSuccess)
     XCTAssertTrue(git(["commit", "-qm", "squash"]).isSuccess)
+  }
+
+  /// bare の origin を据えて指定ブランチを push し、`refs/remotes/origin/*` を作る
+  /// （push は remote-tracking ref も更新するが、fetch で明示的に確定させる）。
+  ///
+  /// **origin は被検リポジトリの作業ツリーの外に置く。** bare リポジトリは `.git` を持たないので git は
+  /// 入れ子リポジトリと認識せず、作業ツリーの中に置くと後続の `add -A` が hooks・objects まで丸ごと
+  /// コミットし、`checkout` が origin の実体をディスクから削ってしまう。
+  func addOrigin(pushing branches: [String]) throws {
+    try addRemote(named: "origin", pushing: branches)
+  }
+
+  /// 任意の名前の bare remote を据えて push し、`refs/remotes/<name>/*` を作る。
+  func addRemote(named name: String, pushing branches: [String]) throws {
+    let remote = try remoteDir(named: name)
+    XCTAssertTrue(
+      GitRunner.shared.runSync(["init", "-q", "--bare", remote.path], cwd: remote.path).isSuccess)
+    XCTAssertTrue(git(["remote", "add", name, remote.path]).isSuccess)
+    XCTAssertTrue(git(["push", "-q", name] + branches).isSuccess)
+    XCTAssertTrue(git(["fetch", "-q", name]).isSuccess)
+  }
+
+  /// remote の置き場。`dir` の兄弟に作り、`tearDownWithError` で一緒に片付ける。
+  private func remoteDir(named name: String) throws -> URL {
+    let url = dir.deletingLastPathComponent()
+      .appendingPathComponent("\(dir.lastPathComponent)-\(name).git")
+    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    remoteRoots.append(url)
+    return url
   }
 
   /// ローカルの別リポジトリを submodule として取り込む（`file://` は既定で禁止なので明示的に許す）。
@@ -251,10 +232,10 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
     return failure
   }
 
-  private func unmerged(_ branch: String) throws -> Int? {
-    var value: Int?
-    let done = expectation(description: "unmergedCommitCount")
-    repo.unmergedCommitCount(branchOrCommit: branch, default: "main") {
+  func containment(_ branch: String) throws -> GitBranchContainment? {
+    var value: GitBranchContainment?
+    let done = expectation(description: "branchContainment")
+    repo.branchContainment(branchOrCommit: branch, default: "main") {
       value = $0
       done.fulfill()
     }
