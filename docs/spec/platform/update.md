@@ -1,7 +1,7 @@
 ---
 title: アプリ内アップデート
 description: Sparkle 2 によるサイレント確認 → 自動DL＋署名検証 → 再起動待ちトースト → 終了時 or 即時適用。UI は自前 3 面で標準 Sparkle UI は不使用
-updated: 2026-08-08
+updated: 2026-08-15
 ---
 
 # アプリ内アップデート
@@ -45,7 +45,7 @@ App メニューに「更新を確認…」があり、設定の「今すぐ確�
 ## 起動ゲート
 
 - release ビルド: 常に update サイクルを開始する。
-- dev ビルド（`ORBE_RELEASE` 未定義）: defaults / 起動引数の `SUFeedURL` 上書きがあるときだけ開始する——dev・sandbox インスタンスが GitHub へ確認に行かないため。localhost の appcast でテスト可能（ATS は loopback 許可済み）。defaults で上書きする際のドメインは dev の bundle id `dev.orbe.app.dev`。
+- dev ビルド（`ORBE_RELEASE` 未定義）: defaults / 起動引数の `SUFeedURL` 上書きがあるときだけ開始する——dev・sandbox インスタンスが GitHub へ確認に行かないため。appcast は `http://127.0.0.1:<port>/` を指せばテストできる（IP 直指定の平文読み込みは ATS の対象外）。defaults で上書きする際のドメインは dev の bundle id `dev.orbe.app.dev`。
 - `.app` 以外（テスト・素の `swift build` バイナリ）: 常に不活性。
 
 update サイクルを開始したときだけ、Sparkle の永続値から最終確認時刻を引き継ぐ。開始しなかったビルドは最終確認時刻を持たず、情報行の表示は「—」になる。

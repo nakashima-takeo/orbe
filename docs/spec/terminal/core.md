@@ -1,7 +1,7 @@
 ---
 title: ターミナル基盤
 description: libghostty の surface API を NSView に埋め込む土台 — 描画・入力・クリップボード・ライフサイクル・ビルド構成の契約
-updated: 2026-08-14
+updated: 2026-08-15
 ---
 
 # ターミナル基盤
@@ -68,6 +68,6 @@ surface の可視性はホストが `ghostty_surface_set_occlusion` へ同期す
 
 ## ビルド構成
 
-SwiftPM のみで構成する。GhosttyKit は `.binaryTarget`、markdown プレビュー用に apple/swift-markdown を依存に持つ（→ [editor-pane](../platform/editor-pane.md)）。`Sources/Orbe/` 配下が本体。実行ターゲット `orbe-mcp`／`orbe-report` は [control/api](../control/api.md)、`orbe-cli` は [control/cli](../control/cli.md) が持つ。`scripts/build-app.sh` が `.app` 生成と自己署名を行う。
+SwiftPM のみで構成する。GhosttyKit は `.binaryTarget`、リリースノートの描画用に apple/swift-markdown を依存に持つ（→ [update](../platform/update.md)）。`Sources/Orbe/` 配下が本体。実行ターゲット `orbe-mcp`／`orbe-report` は [control/api](../control/api.md)、`orbe-cli` は [control/cli](../control/cli.md) が持つ。`scripts/build-app.sh` が `.app` 生成と自己署名を行う。
 
 端末テーマ `app/themes/OrbeDark・OrbeLight` は識別色 SSOT から生成してコミットする成果物で、`swift test` が ANSI ink スロットの背景に対する WCAG AA 4.5 と、SSOT からの drift を検証する。

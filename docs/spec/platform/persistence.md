@@ -1,7 +1,7 @@
 ---
 title: workspace 永続
 description: 構成（workspace・タブ・分割ツリー・cwd・エージェントセッション）の JSON 保存と起動時復元・エージェント resume・デバウンス保存
-updated: 2026-08-12
+updated: 2026-08-15
 ---
 
 # workspace 永続
@@ -12,7 +12,7 @@ updated: 2026-08-12
 
 ## workspaces.json — 構成の永続
 
-保存するもの: workspace 名・root path・各 workspace の設定上書き（[workspace](workspace.md)・[settings](../palette/settings.md)）・最終使用時刻（`WorkspacePalette` の MRU 並べ替え用）・アクティブ workspace・ウィンドウサイズ／各 workspace のタブ群と active タブ／各タブの分割ツリー（二分木）・分割比・明示タイトル（[chrome](../chrome/chrome.md)）・EditorPane の開閉と開いているツール（粗粒度。選択ファイル等は持たない・[editor-pane](editor-pane.md)）／各ペインの cwd とエージェントセッション。
+保存するもの: workspace 名・root path・各 workspace の設定上書き（[workspace](workspace.md)・[settings](../palette/settings.md)）・最終使用時刻（`WorkspacePalette` の MRU 並べ替え用）・アクティブ workspace・ウィンドウサイズ／各 workspace のタブ群と active タブ／各タブの分割ツリー（二分木）・分割比・明示タイトル（[chrome](../chrome/chrome.md)）／各ペインの cwd とエージェントセッション。
 
 ### 復元の挙動
 

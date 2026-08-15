@@ -1,7 +1,7 @@
 ---
 title: workspace
 description: 名前付きコンテナの保持・切替・keep-alive と、workspace 毎の設定上書き。切替・作成の UI は palette/workspace が持つ
-updated: 2026-08-08
+updated: 2026-08-15
 ---
 
 # workspace
@@ -25,6 +25,6 @@ host 所有。ドメイン状態（workspace 配列とアクティブ index）�
 
 ## 設定上書き（workspace 毎プロファイル）
 
-各 workspace は**全設定**の上書きを 1 つの均一な設定層で持ち、永続する（→ [persistence](persistence.md)）。値の担体がスコープ非依存の単一型なので、gui.conf 経由の設定も、gui.conf を経由せず chrome へ直配信する設定（エージェントアイコン・タブタイトルフォント → [chrome](../chrome/chrome.md)）も、起動系が読む設定（デフォルトエージェント）も、UI gate（開発中の機能 → [editor-pane](editor-pane.md)）も一律に上書きできる。空層は「上書き無し」へ畳む。
+各 workspace は**全設定**の上書きを 1 つの均一な設定層で持ち、永続する（→ [persistence](persistence.md)）。値の担体がスコープ非依存の単一型なので、gui.conf 経由の設定も、gui.conf を経由せず chrome へ直配信する設定（エージェントアイコン・タブタイトルフォント → [chrome](../chrome/chrome.md)）も、起動系が読む設定（デフォルトエージェント）も一律に上書きできる。空層は「上書き無し」へ畳む。
 
 解決は global 層に当該 workspace の上書き層を重ねた**実効設定**（項目ごとに「上書き ?? global ?? 既定」。エージェントアイコンのマップだけは非 nil ならマップ全体を差し替える＝per-key マージしない）。反映は集約点 `applyActiveWorkspaceConfig()`（外観同期＋gui.conf 再生成＋状態アイコン更新＋右バー gate 再評価）が担い、アクティブ化（workspace 切替・起動復元・空 workspace アクティブ化）・初回起動・workspace 作成・設定パレット適用で呼ぶ——**画面に載るのは常にアクティブ 1 workspace のみ**なので、gui.conf 再生成＋全 surface 一律 reload で常に正しい。上書きの編集は設定パレットのスコープトグル（[settings](../palette/settings.md)）。上書きの無い workspace は global で動く。

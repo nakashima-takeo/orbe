@@ -1,7 +1,7 @@
 ---
 title: レイアウト
 description: window の SwiftUI ホスト構成・workspace / タブ / ペイン分割ツリーの構造・一方向参照・フォーカス管理・ショートカット・オーバーレイ提示機構
-updated: 2026-08-12
+updated: 2026-08-15
 ---
 
 # レイアウト
@@ -10,13 +10,12 @@ updated: 2026-08-12
 
 ## SwiftUI ホスト構成
 
-host 所有。`window.contentView` は SwiftUI ルート `ChromeHostingView`。ルートビュー `AppShell` は最背面に装飾層 `BackgroundGlow`（accent＋working のラジアル・非対話）を敷き、その上に上段 chrome ＋下段 content、表示中は右に sidePanel（EditorPane）を置く。
+host 所有。`window.contentView` は SwiftUI ルート `ChromeHostingView`。ルートビュー `AppShell` は最背面に装飾層 `BackgroundGlow`（accent＋working のラジアル・非対話）を敷き、その上に上段 chrome ＋下段 content を置く。
 
 - `BackgroundGlow` の地は透過状態で変わる: **不透明時（100%・フルスクリーン）は不透明な地を敷き**、**透過時は地を敷かず clear** にする——端末の透明ピクセルをデスクトップまで抜くため。glow ラジアル自体は透過時も残る。
 - content の不透明な地は通常は各端末 surface が描くため、**surface が 1 枚も無い 0 タブ workspace のときだけ** content を薄めた地で埋める。透過ウィンドウ越しにデスクトップが透けるのを防ぐ backstop で、背景不透明度の設定変更にライブ追従する。タブがあるときは出さず二重 veil を避ける。
-- 上段 chrome はネイティブ SwiftUI。content / sidePanel（端末ツリーの器／EditorPane）は既存 AppKit ビューを passthrough representable で内包する。
-- sidePanel の幅は未指定なら窓幅比の既定幅、ドラッグで選ぶと固定値。実効幅は上下限にクランプする（→ [editor-pane](../platform/editor-pane.md)）。
-- 配置状態（content / sidePanel / 表示可否 / 幅）と上段 chrome の状態は薄い `@Observable` モデル経由で `WindowController` が所有・駆動する（状態の正は WindowController）。
+- 上段 chrome はネイティブ SwiftUI。content（端末ツリーの器）は既存 AppKit ビューを passthrough representable で内包する。
+- 配置状態（content とその空判定）と上段 chrome の状態は薄い `@Observable` モデル経由で `WindowController` が所有・駆動する（状態の正は WindowController）。
 - 背景透過／ブラーは `WindowController` が所有する `ChromeTranslucency` を各 SwiftUI root へ Environment 注入して chrome 各面へ配り、各面が自分の地を同じ実効不透明度で薄める——端末面と veil 濃度を揃えるため。端末領域には塗らず二重 veil を避ける（値更新は窓の不透明度同期と同一 tick）。
 - 窓ドラッグは chrome 背景の透明 NSView が `mouseDown` で処理する。1 クリックは `window.performDrag(with:)` で Window Server へ委譲し（Space 切替等に参加させるため）、ダブルクリックはシステム設定 `AppleActionOnDoubleClick` を読んで zoom / miniaturize / 無効を明示実行する。タブ／＋ は前面で tap を持つため空き領域だけを拾う。信号機ボタンの位置は極小 representable が読み、上段テキストの縦中心へ反映する。
 - パレット・オンボーディング等のフルウィンドウ overlay は `AppShell` の `.overlay` でネイティブ SwiftUI compose する（提示状態と各 overlay のモデルを提示元が立て下げる。addSubview／入れ子 NSHostingView は持たない）。窓全面（タイトルバー帯を含む）を占めるため safe-area を無視する。
@@ -32,7 +31,7 @@ host 所有。`window.contentView` は SwiftUI ルート `ChromeHostingView`。�
 chrome キー（`WindowCommand`）は「タブ／ペインが無くても効くか」の網羅分類を持つ。default 節なしの switch なので、将来コマンドを追加するとこの分類はコンパイルで強制される。
 
 - **タブ不要のコマンド**（新タブ・閉じたエージェントタブを開き直す・新規 workspace・workspace 切替・デフォルトエージェント起動・各パレット表示・設定）は window レベルが surface より先に配信するため、surface が 1 枚も無い 0 タブでも効く（overlay 表示中は不活性。surface があるときも同じハンドラへ集約されるので挙動差はない）。
-- **タブ依存のコマンド**（タブ切替・EditorPane 系・リネーム・⌘W）は surface 起点のままで、0 タブでは受け手が無く no-op。
+- **タブ依存のコマンド**（タブ切替・リネーム・⌘W）は surface 起点のままで、0 タブでは受け手が無く no-op。
 
 ## フォーカス
 
@@ -40,7 +39,7 @@ chrome キー（`WindowCommand`）は「タブ／ペインが無くても効く�
 
 ## ショートカット
 
-- Cmd+T 新タブ / Cmd+Shift+T 閉じたエージェントタブを開き直す（後述）/ Cmd+D 左右分割 / Cmd+Shift+D 上下分割 / Cmd+Shift+[ ] および Cmd+Shift+←→ タブ切替 / Cmd+W カスケードクローズ（ペイン → タブ → アクティブ workspace の最後のタブを閉じても 0 タブの空状態でアクティブに残る。ウィンドウは閉じない → [workspace](../platform/workspace.md)）/ Cmd+/ エディタペイン（→ [editor-pane](../platform/editor-pane.md)）/ Cmd+Shift+A エージェント起動パレット・Cmd+Shift+C デフォルトエージェント起動（→ [agent/launch](../agent/launch.md)）/ Cmd+Shift+S workspace パレット（→ [workspace パレット](../palette/workspace.md)）/ Cmd+, 設定パレット（→ [settings](../palette/settings.md)）/ Cmd+F スクロールバック検索（→ [search](../terminal/search.md)）/ Cmd+R タブリネーム（→ [chrome](chrome.md)）/ Cmd+↑↓ スクロールバック先頭/末尾ジャンプ（→ [terminal/core](../terminal/core.md)）/ Cmd+Shift+E アクティブペインの cwd を GUI エディタで開く / ⌘⌘（Cmd 素タップ×2）Attention パレット（→ [attention](../palette/attention.md)。前面時。背面時はメニューバーのドロップダウン → [menubar](menubar.md)）。
+- Cmd+T 新タブ / Cmd+Shift+T 閉じたエージェントタブを開き直す（後述）/ Cmd+D 左右分割 / Cmd+Shift+D 上下分割 / Cmd+Shift+[ ] および Cmd+Shift+←→ タブ切替 / Cmd+W カスケードクローズ（ペイン → タブ → アクティブ workspace の最後のタブを閉じても 0 タブの空状態でアクティブに残る。ウィンドウは閉じない → [workspace](../platform/workspace.md)）/ Cmd+Shift+A エージェント起動パレット・Cmd+Shift+C デフォルトエージェント起動（→ [agent/launch](../agent/launch.md)）/ Cmd+Shift+S workspace パレット（→ [workspace パレット](../palette/workspace.md)）/ Cmd+, 設定パレット（→ [settings](../palette/settings.md)）/ Cmd+F スクロールバック検索（→ [search](../terminal/search.md)）/ Cmd+R タブリネーム（→ [chrome](chrome.md)）/ Cmd+↑↓ スクロールバック先頭/末尾ジャンプ（→ [terminal/core](../terminal/core.md)）/ Cmd+Shift+E アクティブペインの cwd を GUI エディタで開く / ⌘⌘（Cmd 素タップ×2）Attention パレット（→ [attention](../palette/attention.md)。前面時。背面時はメニューバーのドロップダウン → [menubar](menubar.md)）。
 - フォント動的ズーム Cmd +/-/0（ghostty binding action）。
 
 **Cmd+Shift+T は最後に閉じたエージェントタブを開き直す。** スタックに積むのは、人のジェスチャ（タブ行の中クリック・Cmd+W）で閉じられ、かつエージェントセッションを持つペインを 1 枚以上含むタブだけ。シェル exit・エージェント終了・制御 API では積まず、エージェントを含まないタブも積まない——素のシェルは戻してもプロセスもスクロールバックも戻らず、resume を持つ CLI だけが中身ごと戻るため。積んだタブは中身を丸ごと戻すので、同居していた素のシェルペインも分割ツリー・分割比・cwd ごと復活する。戻るもの／戻らないものは起動時復元と同一（→ [persistence](../platform/persistence.md)）。スタックは workspace ごとに独立し上限は数件、アプリ終了で忘れ、workspace を削除するとその workspace のスタックも消える。戻す先は閉じたときの位置（有効範囲へクランプ）で、戻したタブへ切り替える。0 タブの workspace も復活できる。戻すものが無ければ無反応。
