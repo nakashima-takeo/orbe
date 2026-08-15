@@ -63,8 +63,6 @@ open build/Orbe.app
   bundle id 由来なので自動で分かれる（[persistence](../spec/platform/persistence.md)）。成果物パスは両者とも `build/Orbe.app`。
 - release をオプトインにしてあるのは、素の `swift build`（`scripts/orbe-mcp.sh` 等）がフラグ差分で
   焼き直しても dev のままになるようにするため。逆にすると、そこで本番 identity へ静かに落ちる。
-- `-DORBE_RELEASE` は設定パレットの「開発中の機能を有効化」トグルの**未設定時 default**も決める（dev=on / release=off）。
-  `#if DEBUG` は使えない（開発用も公開用も一律 `swift build -c release` で焼くため両ビルドとも false）。
 
 > **worktree での注意**: `git worktree add` で切った作業場では submodule は未取得のまま。`git submodule update` は不要（main のオブジェクトを共有せずフル clone を試み重い）。`build-app.sh` が `vendor/ghostty/build.zig` 不在を検知し、main worktree の `vendor/ghostty` へ symlink を張って自動で用意する。**worktree では `vendor/ghostty` を手動で触らない**（submodule 取得も xcframework コピーも不要）。
 

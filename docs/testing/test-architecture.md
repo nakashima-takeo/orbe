@@ -14,7 +14,7 @@ updated: 2026-08-14
 
 | 表面 | 実体 |
 |---|---|
-| GUI chrome | SwiftUI のパレット・オーバーレイ・MenuBar・Settings・EditorPane |
+| GUI chrome | SwiftUI のパレット・オーバーレイ・MenuBar・Settings |
 | ターミナル表面 | libghostty（キー翻訳・IME・スクロール・マウス） |
 | 制御 API | `control.sock` 上の JSON-RPC（外部契約） |
 | CLI | `orbe-cli` / `orbe-report` |
