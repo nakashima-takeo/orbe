@@ -18,18 +18,19 @@ final class DispatchCleanModelTests: OrbeTestCase {
       [
         DispatchCleanFacts(
           path: "/wt/safe-a", branch: "feat/a", head: "aaa", track: "[gone]",
-          status: GitWorktreeStatusCounts(modified: 0, untracked: 0), containment: .patchEquivalent,
+          status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
+          containment: .patchEquivalent(target: "main"),
           operation: .none),
         DispatchCleanFacts(
           path: "/wt/safe-b", branch: "feat/b", head: "bbb", isPrunable: true, track: "[gone]",
-          containment: .patchEquivalent),
+          containment: .patchEquivalent(target: "main")),
         DispatchCleanFacts(
           path: "/wt/caution", branch: "feat/c", head: "ccc", track: "[gone]",
           status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
           containment: .unmerged(count: 6),
           operation: .none),
         DispatchCleanFacts(path: "/repo", branch: "main", head: "ddd", isMain: true),
-      ], defaultBranchLabel: "main")
+      ])
   }
 
   func testInitialState() {
@@ -77,12 +78,17 @@ final class DispatchCleanModelTests: OrbeTestCase {
     XCTAssertFalse(m.isExpanded(m.rows[0]), "安全行はチェック済みでも開かない")
   }
 
-  /// ブランチを持たない行（detached）には開くものが無い。
-  func testDetachedRowNeverExpands() {
+  /// ブランチを持たない行（detached）は、書くこと（損失・溢れ・判定不能の詳細）が無ければ開かない。
+  func testDetachedRowWithNothingToSayNeverExpands() {
     let m = DispatchCleanModel()
     m.enter(
       rows: DispatchWorktreeClassifier.classify(
-        [DispatchCleanFacts(path: "/wt/detached", head: "eee")], defaultBranchLabel: "main"))
+        [
+          DispatchCleanFacts(
+            path: "/wt/detached", head: "eee",
+            status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
+            containment: .patchEquivalent(target: "main"), operation: .none)
+        ]))
     m.toggleAtCursor()
     XCTAssertTrue(m.isChecked(m.rows[0]))
     XCTAssertFalse(m.isExpanded(m.rows[0]))

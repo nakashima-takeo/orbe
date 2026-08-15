@@ -128,6 +128,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchCleanAgentWorking
   case dispatchCleanAgentWaiting
   case dispatchCleanPaneOpen
+  case dispatchCleanUnverified
 
   // MARK: - Onboarding
   case onboardingBegin

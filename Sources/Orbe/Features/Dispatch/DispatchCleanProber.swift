@@ -8,7 +8,8 @@ import Foundation
 /// プロセスを割かない）。実体が無い（prunable）行は status も停止中の操作も問わない——失うものが
 /// 無いので、作業ツリー側の安全確認は自動的に満たす。
 ///
-/// git は独立レーン（`isolated: true`）で走らせる。worktree 1 本あたり最大 6 本を撒くので、共有の
+/// git は独立レーン（`isolated: true`）で走らせる。worktree 1 本あたり最大 `1 + T×5` 本
+/// （T は比較先の本数。比較先 2 本の unmerged 行で最大 11 本）を撒くので、共有の
 /// read-write lock に載せると、直後に来る掃除の実行（`worktree remove`・`update-ref -d` の
 /// `.exclusive`）が撒いた全プローブの完了を待つ（GCD barrier は submit 済み全ブロックを待つ）。
 /// パレットを閉じてもプローブは走り切るため、共有レーンのままだと閉じた後の掃除まで巻き込む。
@@ -16,6 +17,15 @@ import Foundation
 struct DispatchCleanProber {
   let repo: GitRepo
   let defaultBranch: String
+  /// gh ヒント由来の追加比較先（path → `["origin/<base>"]`）。判定へは `targets(for:)` が組んで渡す。
+  var extraContainmentTargets: [String: [String]] = [:]
+
+  /// この path の判定に渡す比較先リスト（先頭が既定ブランチ＝優先順）。**合成はここ 1 箇所**——
+  /// 発行時台帳（`DispatchDataProvider.issuedProbeTargets`）は「何を渡したか」の記録なので、
+  /// 呼び出し側が同じ式を組み直すと、比較先の出どころが増えたときに記録だけが黙ってずれる。
+  func targets(for path: String) -> [String] {
+    [defaultBranch] + (extraContainmentTargets[path] ?? [])
+  }
 
   /// 実測を集めて path → 実測の辞書で返す。completion はメインで返る（`GitRunner` 契約）。
   func probe(
@@ -44,7 +54,7 @@ struct DispatchCleanProber {
       // 判定してしまう。detached は oid のままで曖昧さが無い。
       repo.branchContainment(
         branchOrCommit: worktree.branch.map { "refs/heads/\($0)" } ?? worktree.head,
-        default: defaultBranch, isolated: true
+        targets: targets(for: worktree.path), isolated: true
       ) { containment in
         probes[worktree.path]?.containment = containment
         group.leave()

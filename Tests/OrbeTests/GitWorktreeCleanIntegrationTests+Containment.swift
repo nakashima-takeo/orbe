@@ -30,7 +30,9 @@ extension GitWorktreeCleanIntegrationTests {
         .filter { $0.hasPrefix("+") }.count, 2,
       "前提: 素の cherry は畳んだ patch-id を照合できず 2 本とも未取り込みと誤判定する")
 
-    XCTAssertEqual(try containment("feat/squash"), .patchEquivalent, "2 段構えなら取り込み済みと判定できる")
+    XCTAssertEqual(
+      try containment("feat/squash"), .patchEquivalent(target: "main"),
+      "2 段構えなら取り込み済みと判定できる")
   }
 
   /// 本当に未マージのブランチは独自コミット件数を返す（safe 群に入れない）。
@@ -57,13 +59,13 @@ extension GitWorktreeCleanIntegrationTests {
     try makeSquashMergedBranch()
     XCTAssertTrue(git(["branch", "feat/ancestor", initial]).isSuccess)
 
-    XCTAssertEqual(try containment("feat/ancestor"), .patchEquivalent)
+    XCTAssertEqual(try containment("feat/ancestor"), .patchEquivalent(target: "main"))
   }
 
   /// **完了条件の中核（git-flow 再現）**。統合先が既定ブランチでない（develop へマージコミットで統合し
   /// remote ブランチは撤去済み）ブランチは、`origin/main` との cherry では「独自コミット N 件」に
   /// 見えるのに、第0段の到達性が「消してもコミットは remote に残る」を証明する。
-  /// 既定ブランチは tip を含まないので「merged → main」は名乗れない（`mergedIntoDefault: false`）。
+  /// 既定ブランチは tip を含まないので「merged → main」は名乗れない（`mergedInto: nil`）。
   func testGitFlowMergeIntoDevelopIsReachableWithoutClaimingMerged() throws {
     XCTAssertTrue(git(["branch", "develop"]).isSuccess)
     XCTAssertTrue(git(["checkout", "-q", "-b", "feat/flow", "develop"]).isSuccess)
@@ -85,7 +87,7 @@ extension GitWorktreeCleanIntegrationTests {
       "前提: 既定ブランチとの cherry では 2 コミット未取り込みに見える（従来の誤表示の形）")
 
     XCTAssertEqual(
-      try containment("feat/flow"), .reachable(mergedIntoDefault: false),
+      try containment("feat/flow"), .reachable(mergedInto: nil),
       "統合先がどこであれ、全コミットが remote-tracking ref から到達可能なら安全")
   }
 
@@ -99,7 +101,7 @@ extension GitWorktreeCleanIntegrationTests {
     XCTAssertTrue(git(["branch", "feat/old", initial]).isSuccess)
     try addOrigin(pushing: ["main"])
 
-    XCTAssertEqual(try containment("feat/old"), .reachable(mergedIntoDefault: true))
+    XCTAssertEqual(try containment("feat/old"), .reachable(mergedInto: "main"))
   }
 
   /// **`unmerged` の count は min（到達不能数, patch 非等価数）**。既定ブランチが統合ブランチより
@@ -191,11 +193,146 @@ extension GitWorktreeCleanIntegrationTests {
       "前提: 短縮名で判定すると、タグの指す未マージコミットの顔になる（曖昧さの実証）")
 
     XCTAssertEqual(
-      try containment("refs/heads/v1.0"), .reachable(mergedIntoDefault: true),
+      try containment("refs/heads/v1.0"), .reachable(mergedInto: "main"),
       "完全 ref ならブランチ自身が判定される")
     XCTAssertEqual(
-      try proberContainment(ofWorktreeNamed: "wt-v1"), .reachable(mergedIntoDefault: true),
+      try proberContainment(ofWorktreeNamed: "wt-v1"), .reachable(mergedInto: "main"),
       "プローブ経由（本番経路）でも同名タグに奪われない")
+  }
+
+  /// **完了条件の中核（squash × 非既定ブランチ統合）**。squash 運用の git-flow（統合先 develop・
+  /// multi-commit squash マージ・feature の remote ブランチは撤去済み）では、到達性（第0段）は
+  /// 立たず（squash で SHA が変わる）、既定ブランチとの cherry も「独自コミット +N 件」と誤る。
+  /// 比較先リストに `origin/develop` が加われば、第2段の squash 検出が実マージ先で証明を立てる。
+  func testSquashMergedIntoDevelopIsProvedByTheExtraTarget() throws {
+    try makeGitFlowSquashMergedBranch()
+
+    XCTAssertEqual(
+      try containment("feat/gf"), .unmerged(count: 2),
+      "前提: 比較先が既定ブランチだけでは「独自コミット 2 件」に見える（従来の破綻の形）")
+
+    XCTAssertEqual(
+      try containment("feat/gf", targets: ["main", "origin/develop"]),
+      .patchEquivalent(target: "origin/develop"), "実マージ先の比較先が squash 取り込みを証明する")
+  }
+
+  /// 到達性（第0段）のラベルも比較先リスト順に決まる——main は tip を含まず origin/develop が
+  /// 含む形では、「merged → develop」（実マージ先）を名乗れる。
+  func testReachableLabelNamesTheFirstTargetContainingTheTip() throws {
+    XCTAssertTrue(git(["branch", "develop"]).isSuccess)
+    XCTAssertTrue(git(["checkout", "-q", "-b", "feat/r", "develop"]).isSuccess)
+    try write("r.txt", "1")
+    XCTAssertTrue(git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(git(["commit", "-qm", "r1"]).isSuccess)
+    XCTAssertTrue(git(["checkout", "-q", "develop"]).isSuccess)
+    XCTAssertTrue(git(["merge", "-q", "--no-ff", "-m", "merge feat/r", "feat/r"]).isSuccess)
+    XCTAssertTrue(git(["checkout", "-q", "main"]).isSuccess)
+    try addOrigin(pushing: ["main", "develop"])
+
+    XCTAssertEqual(
+      try containment("feat/r", targets: ["main", "origin/develop"]),
+      .reachable(mergedInto: "origin/develop"), "tip を含む最初の比較先を名乗る")
+  }
+
+  /// **嘘の base は安全側に倒れる。** 取り込んでいない比較先を足しても cherry が不成立のままなので、
+  /// 判定は `.unmerged` に留まる（gh はヒントであり証明はローカル）。
+  func testExtraTargetThatDoesNotContainTheBranchStaysUnmerged() throws {
+    XCTAssertTrue(git(["branch", "develop"]).isSuccess)
+    XCTAssertTrue(git(["checkout", "-q", "-b", "feat/live", "main"]).isSuccess)
+    try write("l.txt", "1")
+    XCTAssertTrue(git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(git(["commit", "-qm", "l1"]).isSuccess)
+    try write("l.txt", "12")
+    XCTAssertTrue(git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(git(["commit", "-qm", "l2"]).isSuccess)
+    XCTAssertTrue(git(["checkout", "-q", "main"]).isSuccess)
+    try addOrigin(pushing: ["main", "develop"])
+
+    XCTAssertEqual(
+      try containment("feat/live", targets: ["main", "origin/develop"]), .unmerged(count: 2),
+      "取り込んでいない比較先が増えても確認群のまま（count は成功した cherry の min）")
+  }
+
+  /// **欠損 base も安全側に倒れる。** 実在しない target は cherry の失敗としてスキップされ、
+  /// 既定ブランチ側で判定が継続する。cherry が 1 本も成功しなければ count を語らず nil。
+  func testNonexistentTargetIsSkippedAndTotalFailureYieldsNil() throws {
+    XCTAssertTrue(git(["checkout", "-q", "-b", "feat/x", "main"]).isSuccess)
+    try write("x.txt", "1")
+    XCTAssertTrue(git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(git(["commit", "-qm", "x1"]).isSuccess)
+    XCTAssertTrue(git(["checkout", "-q", "main"]).isSuccess)
+    try addOrigin(pushing: ["main"])
+
+    XCTAssertEqual(
+      try containment("feat/x", targets: ["main", "origin/nope"]), .unmerged(count: 1),
+      "実在しない target を混ぜても既定側で判定が継続する")
+    XCTAssertNil(
+      try containment("feat/x", targets: ["origin/nope"]),
+      "全 cherry 失敗なら count を正直に言えないので nil")
+  }
+
+  /// **本番経路の全鎖**。gh の merged PR（base=develop）→ `extraContainmentTargets` が
+  /// `origin/develop` を比較先に足す → プローブが実マージ先で証明を立てる → 分類器の行が
+  /// 安全群に入り、merged PR チップが可視の根拠・証明ピルはサブラインへ降りる。
+  func testMergedPRBaseFlowsFromGhHintToProbeToRow() throws {
+    try makeGitFlowSquashMergedBranch()
+    let wt = dir.appendingPathComponent("wt-gf").path
+    XCTAssertTrue(git(["worktree", "add", "-q", wt, "feat/gf"]).isSuccess)
+    let pr = GitHubBranchPR(
+      number: 7, headRefName: "feat/gf", state: "MERGED", baseRefName: "develop",
+      isCrossRepository: false)
+
+    var worktrees: [GitWorktree] = []
+    let listed = expectation(description: "worktrees")
+    repo.worktrees {
+      worktrees = $0
+      listed.fulfill()
+    }
+    wait(for: [listed], timeout: 20)
+    let path = try XCTUnwrap(worktrees.first { $0.branch == "feat/gf" }?.path)
+
+    let extra = DispatchWorktreeClassifier.extraContainmentTargets(
+      worktrees: worktrees, branchPullRequests: [pr],
+      remoteBranchNames: ["origin/main", "origin/develop"], defaultBranch: "origin/main")
+    XCTAssertEqual(extra[path], ["origin/develop"], "gh ヒントが比較先 1 本になる")
+
+    var probes: [String: DispatchCleanProbe] = [:]
+    let probed = expectation(description: "probe")
+    DispatchCleanProber(repo: repo, defaultBranch: "main", extraContainmentTargets: extra)
+      .probe(worktrees: worktrees, panes: []) {
+        probes = $0
+        probed.fulfill()
+      }
+    wait(for: [probed], timeout: 20)
+    XCTAssertEqual(probes[path]?.containment, .patchEquivalent(target: "origin/develop"))
+
+    let rows = DispatchWorktreeClassifier.rows(
+      DispatchWorktreeClassifier.Input(
+        worktrees: worktrees, branchPullRequests: [pr], probes: probes))
+    let row = try XCTUnwrap(rows.first { $0.branch == "feat/gf" })
+    XCTAssertEqual(row.group, .safe, "squash × 非既定ブランチ統合の行が安全群に入る")
+    XCTAssertTrue(row.chips.contains(.mergedPR(7, base: "develop")), "merged PR チップが可視の根拠")
+    XCTAssertTrue(
+      row.overflowNotes.contains(.mergedInto("develop")),
+      "証明ピルは merged PR チップの立つ行でサブラインへ降りる")
+  }
+
+  /// develop へ 2 コミットのブランチを squash マージし、main と develop だけを push した状態
+  /// （feature の remote ブランチは撤去済みの形）を作る。
+  private func makeGitFlowSquashMergedBranch() throws {
+    XCTAssertTrue(git(["branch", "develop"]).isSuccess)
+    XCTAssertTrue(git(["checkout", "-q", "-b", "feat/gf", "develop"]).isSuccess)
+    try write("g.txt", "1")
+    XCTAssertTrue(git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(git(["commit", "-qm", "g1"]).isSuccess)
+    try write("g.txt", "12")
+    XCTAssertTrue(git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(git(["commit", "-qm", "g2"]).isSuccess)
+    XCTAssertTrue(git(["checkout", "-q", "develop"]).isSuccess)
+    XCTAssertTrue(git(["merge", "--squash", "feat/gf"]).isSuccess)
+    XCTAssertTrue(git(["commit", "-qm", "squash feat/gf"]).isSuccess)
+    XCTAssertTrue(git(["checkout", "-q", "main"]).isSuccess)
+    try addOrigin(pushing: ["main", "develop"])
   }
 
   /// プローブ（`DispatchCleanProber`）を本物の worktree 一覧で回し、対象 worktree の判定を返す。
@@ -233,7 +370,7 @@ extension GitWorktreeCleanIntegrationTests {
       "前提: 終端しないと rev と path の両方に読めて git が解決を拒む")
 
     XCTAssertEqual(
-      try containment("docs"), .reachable(mergedIntoDefault: true),
+      try containment("docs"), .reachable(mergedInto: "main"),
       "パスと同名でも到達性を判定できる")
   }
 

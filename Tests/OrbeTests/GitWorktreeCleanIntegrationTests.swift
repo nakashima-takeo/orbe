@@ -232,10 +232,12 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
     return failure
   }
 
-  func containment(_ branch: String) throws -> GitBranchContainment? {
+  func containment(_ branch: String, targets: [String] = ["main"]) throws
+    -> GitBranchContainment?
+  {
     var value: GitBranchContainment?
     let done = expectation(description: "branchContainment")
-    repo.branchContainment(branchOrCommit: branch, default: "main") {
+    repo.branchContainment(branchOrCommit: branch, targets: targets) {
       value = $0
       done.fulfill()
     }
