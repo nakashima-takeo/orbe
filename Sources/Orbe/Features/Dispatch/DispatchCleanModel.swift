@@ -191,12 +191,6 @@ final class CleanRunToken {
     branchChoice[rowID] = choice
   }
 
-  /// safe 群を全選択する（**トグルではない・追加のみ**。確認行のブランチの扱いにも触らない）。
-  func selectAllSafe() {
-    guard phase == .selecting else { return }
-    for row in rows where row.group == .safe { checked.insert(row.id) }
-  }
-
   var selectedCount: Int { checked.count }
 
   /// チェック済み行のうちローカルブランチも消える件数（フッタ実行ボタンの内訳。

@@ -59,8 +59,8 @@ extension L10n {
     .dispatchCleanSectionCaution: ("確認 — 消えるものがあります", "Check — something will be lost"),
     .dispatchCleanSectionInUse: ("使用中 — 削除できません", "In use — can't be deleted"),
     .dispatchCleanKeyHint: (
-      "space 選択 · ←→ ブランチの扱い · a 安全を全選択",
-      "space Select · ←→ Branch · a Select all safe"
+      "space 選択 · ←→ ブランチの扱い",
+      "space Select · ←→ Branch"
     ),
     .dispatchCleanExecute: ("⌘⏎ %@を削除", "⌘⏎ Delete %@"),
     .dispatchCleanExecuteWithBranches: ("⌘⏎ %@と%@を削除", "⌘⏎ Delete %@ (+%@)"),

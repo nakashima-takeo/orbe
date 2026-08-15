@@ -116,19 +116,6 @@ final class DispatchCleanModelTests: OrbeTestCase {
     XCTAssertEqual(m.cursorRow?.name, "caution")
   }
 
-  /// `a` は追加のみ。既に付いているチェックも、確認行のブランチの扱いも落とさない。
-  func testSelectAllSafeIsAdditiveOnly() {
-    let m = makeModel()
-    m.toggleAtCursor()  // safe-a を外す
-    m.toggle(at: m.rows[2].id)
-    m.chooseBranch(.delete)
-    m.selectAllSafe()
-    XCTAssertTrue(m.isChecked(m.rows[0]), "外れていた安全行が付く")
-    XCTAssertTrue(m.isChecked(m.rows[1]), "付いていた安全行はそのまま")
-    XCTAssertTrue(m.isChecked(m.rows[2]), "確認行のチェックも落とさない")
-    XCTAssertEqual(m.branchChoice(of: m.rows[2]), .delete, "ブランチの扱いにも触らない")
-  }
-
   func testSelectedCountCountsCheckedRows() {
     let m = makeModel()
     m.toggle(at: m.rows[2].id)
