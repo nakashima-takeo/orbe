@@ -16,7 +16,7 @@ private struct VersionProbe: Codable {
 }
 
 /// 旧 settings.json の形（camelCase・設定とアプリ状態が同居）。移行 decode 専用（将来消せる）。
-/// 全 field Optional で寛容に読み、設定 9 項目は `SettingsLayer` へ・アプリ状態 3 項目は `AppStateFile` へ分ける。
+/// 全 field Optional で寛容に読み、設定 8 項目は `SettingsLayer` へ・アプリ状態 3 項目は `AppStateFile` へ分ける。
 private struct LegacySettingsFile: Codable {
   var defaultAgent: String?
   var agentPluginsInstalled: Bool?
@@ -29,9 +29,8 @@ private struct LegacySettingsFile: Codable {
   var backgroundBlur: Bool?
   var cursorStyleBlink: Bool?
   var agentStateIcons: [String: String]?
-  var devFeaturesEnabled: Bool?
 
-  /// 設定 9 項目を新形式レイヤへ。nil は書かない（未設定＝レイヤに載せない）。
+  /// 設定 8 項目を新形式レイヤへ。nil は書かない（未設定＝レイヤに載せない）。
   func toLayer() -> SettingsLayer {
     var layer = SettingsLayer()
     layer[SettingKeys.fontSize] = fontSize
@@ -41,7 +40,6 @@ private struct LegacySettingsFile: Codable {
     layer[SettingKeys.theme] = theme
     layer[SettingKeys.fontFamily] = fontFamily
     layer[SettingKeys.defaultAgent] = defaultAgent
-    layer[SettingKeys.devFeaturesEnabled] = devFeaturesEnabled
     layer[SettingKeys.agentStateIcons] = agentStateIcons
     return layer
   }

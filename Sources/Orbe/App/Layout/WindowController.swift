@@ -18,7 +18,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   // ドメイン/セッション状態（workspaces/activeWorkspace）の所有者。配列の CRUD・index 演算は
   // すべてここへ委譲し、WindowController は NSView 副作用と chrome 投影のコーディネータに徹する。
   let store: SessionStore
-  // chrome 各面（StatusRow・パレット・EditorPane）へ背景透過/ブラーを届ける観測可能ホルダー。
+  // chrome 各面（StatusRow・パレット・overlay）へ背景透過/ブラーを届ける観測可能ホルダー。
   // 値は syncWindowOpacity と同一 tick で更新し、各 NSHostingView root へ Environment 注入する。
   let chromeTranslucency = ChromeTranslucency()
   // エージェント状態面 3 箇所へ状態アイコン上書きを届ける観測可能ホルダー。値は applyActiveWorkspaceConfig が
@@ -28,7 +28,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   // 値は applyActiveWorkspaceConfig が実効設定から同一 tick で更新し、各 NSHostingView root へ注入する。
   let fontResolver = ChromeFontResolver()
   // 現在の UI 言語ホルダー。起動時に app-state の preferredLanguage（未設定は OS 追従）で解決し、
-  // 各 NSHostingView root（AppShell・EditorPaneRoot）へ Environment 注入する。言語変更は初回言語画面と
+  // NSHostingView root（AppShell）へ Environment 注入する。言語変更は初回言語画面と
   // 設定パレットの言語行が行い、@Observable 経由で全 chrome を一斉再描画する。
   let localization = LocalizationStore(
     language: Language(rawValue: AppStatePersistence.load()?.preferredLanguage ?? "")
@@ -48,10 +48,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   // chrome 更新の coalesce 状態。高頻度 report でも runloop tick 単位に 1 回へ間引く。
   private var chromeDirty = false
   private var chromeFlushScheduled = false
-  private let editorPane: EditorPaneController
   // 設定の in-memory SSOT（global 層）。パレット・control・opacity 系・AgentLauncher の default 解決が読む。
   let settingsStore = SettingsStore()
-  var devFeaturesEnabled = false  // 右バー gate。アクティブ WS 実効値から applyActiveWorkspaceConfig が派生。
   // パレット提示の拡張（WindowController+Palette）が設定パレットの defaultAgent 配線で触るため internal。
   let agentLauncher = AgentLauncher()
   // アップデート面。状態（UI 唯一の情報源）は updaterService が生成・所有し、提示配線は WindowController+Update。
@@ -85,8 +83,6 @@ final class WindowController: NSObject, NSWindowDelegate {
       rootView: AppShell(
         model: model, translucency: chromeTranslucency, agentIconResolver: agentIconResolver,
         fontResolver: fontResolver, localization: localization))
-    editorPane = EditorPaneController(
-      translucency: chromeTranslucency, fontResolver: fontResolver, localization: localization)
     store = SessionStore()  // 実体の populate は super.init 後（wire に self が要る）
     super.init()
 
@@ -103,14 +99,6 @@ final class WindowController: NSObject, NSWindowDelegate {
     // makeFirstResponder が成立する（= 起動直後からアクティブペインがキー入力を受ける）状態を作る。
     hostingView.layoutSubtreeIfNeeded()
     wireChromeCallbacks()
-
-    editorPane.onFocusTerminal = { [weak self] in self?.focusActivePane() }
-    editorPane.pane.onToggle = { [weak self] in self?.toggleEditorPane() }
-    editorPane.pane.onWidthChange = { [weak self] width in self?.model.sideWidth = width }
-    editorPane.onDisplayStateChange = { [weak self] in self?.projectEditorDisplayState() }
-    editorPane.onPersistChange = { [weak self] in self?.scheduleSave() }
-    model.sidePanel = editorPane.pane  // 常駐 facade（可視は cwd 追従で決める）
-    editorPane.start()  // dev サーバー検出のポーリングを起こす（ブラウザボタンのグレーアウト追従）
 
     if let file = WorkspacePersistence.load() {
       restore(from: file)  // activateCurrent 経由で applyActiveWorkspaceConfig（外観＋gui.conf）が走る
@@ -318,7 +306,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     DispatchQueue.main.async { [weak self] in self?.flushChrome() }
   }
 
-  /// coalesce した StatusRow 更新を現アクティブ workspace の**最新**状態へ実反映しエディタペインも追従
+  /// coalesce した StatusRow 更新を現アクティブ workspace の**最新**状態へ実反映する
   /// （取りこぼしゼロ＝中間状態のみ落ち最終状態は必ず反映）。同期反映が要る経路（テスト）は直接呼ぶ。
   func flushChrome() {
     chromeFlushScheduled = false
@@ -332,31 +320,7 @@ final class WindowController: NSObject, NSWindowDelegate {
         active: current.active,
         cwd: store.activePaneCwd(),
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
-    editorPane.retarget(cwd: store.activePaneCwd(), ui: store.activeEditorUI())
     refreshAttentionSnapshot()  // Attention 一覧も同じ coalesce 契機で追従（WindowController+Attention）
-  }
-
-  // MARK: - エディタペイン
-
-  /// `Cmd+/`。アクティブタブの本体パネルの開閉トグル（レールは常駐なので隠さない）。
-  /// repo 未解決（非 git）なら no-op。閉じたらターミナルへフォーカスを返す（controller が担う）。
-  func toggleEditorPane() {
-    editorPane.togglePaneOpen()
-  }
-
-  /// EditorPane の facade 可視（repo 解決）・本体開閉を AppShell へ投影する（幅・表示の駆動）。
-  /// 開発中の機能トグルが off の間は facade を常に隠す——gate をこの投影集約点 1 本に閉じ、
-  /// Cmd+G/Cmd+/（toggleEditorPane）等どの経路で editorPane が開いても右バーは AppShell に描画されない。
-  func projectEditorDisplayState() {
-    model.sideFacadeVisible = devFeaturesEnabled && editorPane.facadeVisible
-    model.sidePaneOpen = editorPane.paneOpen
-  }
-
-  /// Cmd+Shift+↑/↓。ToolRail のツールを上下に切替（端でさらに進むと本体を閉じる）。
-  /// 非表示・空状態（ToolRail 非描画）のときは no-op。
-  func navigateEditorTool(_ delta: Int) {
-    guard editorPane.facadeVisible, editorPane.model.empty == nil else { return }
-    editorPane.model.selectAdjacentTool(delta)
   }
 
   /// アクティブタブの preferredFocusPane へフォーカスを戻す（パレットの dismiss と同じ規則）。

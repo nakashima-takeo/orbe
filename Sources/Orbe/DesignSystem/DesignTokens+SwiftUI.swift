@@ -64,7 +64,6 @@ struct ThemeColors {
   let tabActiveText = Color(nsColor: Theme.Color.tabActiveText)
   // 状態の塗り（事前 alpha 済み）
   let selectionFill = Color(nsColor: Theme.Color.selectionFill)
-  let diffSelectionFill = Color(nsColor: Theme.Color.diffSelectionFill)
   let hoverFill = Color(nsColor: Theme.Color.hoverFill)
   let smallPillFill = Color(nsColor: Theme.Color.smallPillFill)
   let plainPillFill = Color(nsColor: Theme.Color.plainPillFill)
@@ -77,14 +76,12 @@ struct ThemeColors {
   // オーバーレイ暗幕
   let scrim = Color(nsColor: Theme.Color.scrim)
   let scrimStrong = Color(nsColor: Theme.Color.scrimStrong)
-  // EditorPane（基色 ink はフルアルファ。view 側で .opacity(α) を掛けて実際の面色にする）
+  // 基色 ink はフルアルファ。view 側で .opacity(α) を掛けて実際の面色にする
   let surfaceInk = Color(nsColor: Theme.Color.surfaceInk)
   let borderInk = Color(nsColor: Theme.Color.borderInk)
-  let paneWash = Color(nsColor: Theme.Color.paneWash)
   let inputWash = Color(nsColor: Theme.Color.inputWash)
   let inputBorder = Color(nsColor: Theme.Color.inputBorder)
   let tintAccent = Color(nsColor: Theme.Color.tintAccent)
-  let promptGreen = Color(nsColor: Theme.Color.promptGreen)
 }
 
 extension Font {
@@ -110,14 +107,9 @@ struct ThemeFonts {
   let meta = Font(Theme.Typography.meta as CTFont)
   let sectionLabel = Font(Theme.Typography.sectionLabel as CTFont)
   let display = Font(Theme.Typography.display as CTFont)
-  // EditorPane
+  // 情報密度優先の行タイポ
   let paneRow = Font(Theme.Typography.paneRow as CTFont)
-  let paneControl = Font(Theme.Typography.paneControl as CTFont)
-  let paneAnnotation = Font(Theme.Typography.paneAnnotation as CTFont)
   let paneSegment = Font(Theme.Typography.paneSegment as CTFont)
-  let paneFootnote = Font(Theme.Typography.paneFootnote as CTFont)
-  let paneBadge = Font(Theme.Typography.paneBadge as CTFont)
-  let paneTag = Font(Theme.Typography.paneTag as CTFont)
   // Help（⌘H チートシート）
   let helpTitle = Font(Theme.Typography.helpTitle as CTFont)
   let helpRow = Font(Theme.Typography.helpRow as CTFont)
@@ -128,7 +120,4 @@ struct ThemeFonts {
   let helpCaption = Font(Theme.Typography.helpCaption as CTFont)
   let helpKeyFn = Font(Theme.Typography.helpKeyFn as CTFont)
   let helpKeyArrow = Font(Theme.Typography.helpKeyArrow as CTFont)
-  let proseBody = Font(Theme.Typography.proseBody as CTFont)
-  let proseHeading = Font(Theme.Typography.proseHeading as CTFont)
-  let proseTitle = Font(Theme.Typography.proseTitle as CTFont)
 }

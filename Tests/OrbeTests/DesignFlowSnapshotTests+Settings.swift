@@ -20,7 +20,6 @@ extension DesignFlowSnapshotTests {
     global[SettingKeys.backgroundBlur] = false
     global[SettingKeys.cursorStyleBlink] = false
     global[SettingKeys.defaultAgent] = "claude"
-    global[SettingKeys.devFeaturesEnabled] = true
     let settings = SettingsPaletteModel(
       values: ScopedSettingsValues(global: global),
       fontNames: ["Menlo", "Monaco", "SF Mono"],
@@ -30,7 +29,7 @@ extension DesignFlowSnapshotTests {
       "settings_palette", size: settingsFlowCardSize,
       render: { paletteSnapshot(settings.render, canvas: settingsFlowCardSize) },
       steps: [
-        // スコープ / フォントサイズ / 背景の不透明度 / 背景のブラー / カーソルの点滅 / テーマ / エージェント / フォント / 開発中の機能を有効化 の 9 行
+        // スコープ / フォントサイズ / 背景の不透明度 / 背景のブラー / カーソルの点滅 / テーマ / エージェント / フォント / タブタイトルのフォント の 9 行
         ("root", {}),
         (
           "theme",
@@ -81,7 +80,6 @@ extension DesignFlowSnapshotTests {
     global[SettingKeys.backgroundBlur] = false
     global[SettingKeys.cursorStyleBlink] = true
     global[SettingKeys.defaultAgent] = "claude"
-    global[SettingKeys.devFeaturesEnabled] = true
     var override = SettingsLayer()
     override[SettingKeys.fontSize] = 16
     override[SettingKeys.backgroundOpacity] = 75
@@ -169,7 +167,6 @@ extension DesignFlowSnapshotTests {
     global[SettingKeys.backgroundOpacity] = 90
     global[SettingKeys.backgroundBlur] = false
     global[SettingKeys.cursorStyleBlink] = false
-    global[SettingKeys.devFeaturesEnabled] = true
     let settings = SettingsPaletteModel(
       values: ScopedSettingsValues(global: global), fontNames: [], agents: [],
       localization: LocalizationStore(language: .ja))

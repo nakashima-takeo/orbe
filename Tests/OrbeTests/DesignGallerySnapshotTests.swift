@@ -66,7 +66,6 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       name: "searchbar.png", dir: dir)
 
     try renderCompletionSnapshot(dir: dir)
-    try renderEditorPaneSnapshots(dir: dir)
     try renderStatusRowSnapshots(dir: dir)
     try renderWorkspaceCreateSnapshots(dir: dir)
     try renderUpdateSnapshots(dir: dir)
@@ -117,46 +116,6 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       chromeBand(overflow, size: size), size: size, name: "statusrow_overflow.png", dir: dir)
   }
 
-  /// EditorPane スナップショット。**本物の EditorPaneRoot＋見本同等 fixture を描く**
-  /// （中身をスタブしない）。design 正典 ステージ（640×520）の scene 5 と同寸:
-  /// ペイン幅 min(552, 58%×640)=371＋スプリッタ5、本体高 440（520 − TopBar26 − TabBar28 − 下段26）。
-  private func renderEditorPaneSnapshots(dir: URL) throws {
-    let size = NSSize(width: 376, height: 440)
-    func write(_ model: EditorPaneModel, _ name: String) throws {
-      // 実機ではウィンドウ地（bgBase＋glow）の上に translucent wash で載るため、地を敷いて撮る。
-      try writePNG(
-        EditorPaneRoot(model: model)
-          .frame(width: size.width, height: size.height)
-          .background(Color.theme.bgBase),
-        size: size, name: name, dir: dir)
-    }
-    // 3ツール × 各状態（ツリー+全文 / md ソース / md プレビュー / git変更+diff / git履歴+CommitDetail
-    // / ブラウザ静的モック）。
-    try write(EditorPaneFixtures.treeModel(), "editorpane_tree.png")
-    try write(EditorPaneFixtures.mdSourceModel(), "editorpane_md_source.png")
-    try write(EditorPaneFixtures.mdPreviewModel(), "editorpane_md_preview.png")
-    try write(EditorPaneFixtures.changesDiffModel(), "editorpane_changes.png")
-    try write(EditorPaneFixtures.changesBannerModel(), "editorpane_changes_banner.png")
-    try write(EditorPaneFixtures.historyModel(), "editorpane_history.png")
-    try write(EditorPaneFixtures.browserModel(), "editorpane_browser.png")
-    // 空状態（git 外）。
-    let empty = EditorPaneModel()
-    empty.empty = "git リポジトリではありません\n~/Downloads"
-    try write(empty, "editorpane_empty.png")
-    // 未コミット変更ゼロ → git レールがグレーアウト（ツリー本体は開いたまま）。
-    let noChange = EditorPaneFixtures.treeModel()
-    noChange.files = []
-    try write(noChange, "editorpane_no_changes.png")
-    // 本体を閉じた常駐レールのみ（32px・git ドット点灯・最下部 ⌘/）。
-    let railClosed = EditorPaneFixtures.treeModel()
-    railClosed.ui.paneOpen = false
-    try writePNG(
-      EditorPaneRoot(model: railClosed)
-        .frame(width: 32, height: 440)
-        .background(Color.theme.bgBase),
-      size: NSSize(width: 32, height: 440), name: "editorpane_rail_closed.png", dir: dir)
-  }
-
   /// 補完ドロップダウン（薄い行・複数 group・cap 超過でスクロール表現＝右つまみ＋下フェード）を端末地に重ねる。
   /// 候補が cap（~5 行）を超えるよう厚めに積み、選択を下方に送って scrollY>0 のスクロール追従
   /// （選択行が下端フェードの上に退避して保たれること）を見る。
@@ -170,7 +129,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       CompletionChoice(
         value: "checkout", description: "ブランチ切替・ファイル復元", insertValue: nil, type: "subcommand"),
       CompletionChoice(value: "main", description: "", insertValue: nil, type: nil),
-      CompletionChoice(value: "feature/editor-pane", description: "", insertValue: nil, type: nil),
+      CompletionChoice(value: "feature/tab-rename", description: "", insertValue: nil, type: nil),
       CompletionChoice(value: "fix/tab-overflow", description: "", insertValue: nil, type: nil),
       CompletionChoice(value: "release/0.2.0", description: "", insertValue: nil, type: nil),
       CompletionChoice(value: "README.md", description: "", insertValue: nil, type: "file"),
@@ -186,8 +145,8 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     // side card は CompletionList の外（AppKit 配置）なので単体で 1 枚撮る（ピクセル突合用）。
     try writePNG(
       CompletionSideCard(
-        name: "feature/editor-pane", kind: .argument,
-        description: "エディタペインの作業ブランチ。説明が複数行に渡るときも折り返して収める"
+        name: "feature/tab-rename", kind: .argument,
+        description: "タブ名変更の作業ブランチ。説明が複数行に渡るときも折り返して収める"
       )
       .padding(Theme.Space.phrase)
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

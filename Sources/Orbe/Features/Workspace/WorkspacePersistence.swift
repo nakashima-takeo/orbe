@@ -110,45 +110,28 @@ struct WorkspaceState: Codable, Equatable {
   }
 }
 
-/// タブごとの EditorPane 画面状態の永続表現（粗粒度）。開閉と、開いているツールだけを持つ。
-/// 選択ファイル等は復元しない（パス依存で脆いため）。
-struct EditorPaneTabState: Codable, Equatable {
-  var open: Bool
-  var tool: String  // "tree" | "git" | "browser"
-}
-
-/// 1 タブの永続表現。分割ツリー（tree）＋ tab 単位メタ（① 明示タイトル ② EditorPane 画面状態）。
+/// 1 タブの永続表現。分割ツリー（tree）＋ tab 単位メタ（明示タイトル）。
 /// 旧形式（タブ＝素の PaneNode）も nil 明示タイトルとして読めるよう Decodable をカスタムする。
 struct TabState: Codable, Equatable {
   var tree: PaneNode
   var explicitTitle: String?
-  var editor: EditorPaneTabState
 
-  enum CodingKeys: String, CodingKey { case tree, explicitTitle, editor }
+  enum CodingKeys: String, CodingKey { case tree, explicitTitle }
 
-  static let defaultEditor = EditorPaneTabState(open: false, tool: "tree")
-
-  init(tree: PaneNode, explicitTitle: String?, editor: EditorPaneTabState = defaultEditor) {
+  init(tree: PaneNode, explicitTitle: String?) {
     self.tree = tree
     self.explicitTitle = explicitTitle
-    self.editor = editor
   }
 
   init(from decoder: Decoder) throws {
-    // 新形式: { "tree": <PaneNode>, "explicitTitle": <String?>, "editor": <EditorPaneTabState> }
+    // 新形式: { "tree": <PaneNode>, "explicitTitle": <String?> }
     if let c = try? decoder.container(keyedBy: CodingKeys.self), c.contains(.tree) {
       tree = try c.decode(PaneNode.self, forKey: .tree)
       explicitTitle = try c.decodeIfPresent(String.self, forKey: .explicitTitle)
-      // editor は後から足したフィールド。欠落も「あるが読めない」も既定へ落として読む——ここで
-      // throw すると tab → workspace → ファイル全体へ decode 失敗が連鎖し、load() が nil を返して
-      // 全 workspace を失う。EditorPaneTabState に非 optional の項目を 1 つ足すだけで、既存の
-      // 全ファイルが後者に落ちる。
-      editor = (try? c.decode(EditorPaneTabState.self, forKey: .editor)) ?? Self.defaultEditor
     } else {
       // 旧形式: タブ＝素の PaneNode（explicitTitle 無し → nil）。
       tree = try PaneNode(from: decoder)
       explicitTitle = nil
-      editor = Self.defaultEditor
     }
   }
   // encode(to:) は CodingKeys から自動合成（新形式で書く）。

@@ -91,9 +91,6 @@ enum Theme {
     static let selectionFill = dynA(
       light: OrbePalette.Chrome.accentLight, lightA: 0.14,
       dark: OrbePalette.Chrome.accentDark, darkA: 0.14)
-    static let diffSelectionFill = dynA(
-      light: OrbePalette.Chrome.accentLight, lightA: 0.10,
-      dark: OrbePalette.Chrome.accentDark, darkA: 0.10)
     static let hoverFill = dynA(
       light: OrbePalette.Chrome.accentLight, lightA: 0.10,
       dark: OrbePalette.Chrome.accentDark, darkA: 0.10)
@@ -125,13 +122,12 @@ enum Theme {
     // ヘルプ（⌘H）の最暗幕。全画面チートシートは背後の情報を要さず、最も深く沈める。
     static let scrimHelp = dynA(light: 0x3a3151, lightA: 0.30, dark: 0x0a080e, darkA: 0.55)
 
-    // EditorPane（Git ワークベンチ）。面と罫線をフルアルファの基色 2 本として持ち、
-    // view 側が用途ごとの α を .opacity(α) で掛ける
+    // カード面・罫線をフルアルファの基色 2 本として持ち、view 側が用途ごとの α を
+    // .opacity(α) で掛ける
     // （α の組み合わせが多く、1 値 1 トークンでは名前が増殖するため。基色が SSOT）。
-    static let surfaceInk = dyn(light: 0x3a3151, dark: 0xffffff)  // ペイン面の基色
-    static let borderInk = dyn(light: 0x6e5aaa, dark: 0xc7b9eb)  // ペイン罫線・枠の基色
-    // ペイン地・入力欄地（最深色の淡い被せ）
-    static let paneWash = dynA(light: 0x3a3151, lightA: 0.05, dark: 0x0a080e, darkA: 0.14)
+    static let surfaceInk = dyn(light: 0x3a3151, dark: 0xffffff)  // カード面の基色
+    static let borderInk = dyn(light: 0x6e5aaa, dark: 0xc7b9eb)  // カード罫線・枠の基色
+    // 入力欄地（最深色の淡い被せ）
     static let inputWash = dynA(light: 0x3a3151, lightA: 0.06, dark: 0x0a080e, darkA: 0.25)
     // 入力欄の枠（borderInk 基調・dark .12 / light .16＝surface1 より濃い）
     static let inputBorder = dynA(light: 0x6e5aaa, lightA: 0.16, dark: 0xc7b9eb, darkA: 0.12)
@@ -139,7 +135,6 @@ enum Theme {
     static let tintAccent = dynA(
       light: OrbePalette.Chrome.accentLight, lightA: 0.12,
       dark: OrbePalette.Chrome.accentDark, darkA: 0.12)
-    static let promptGreen = diffAdded  // プロンプト・コマンド行（green・diffAdded へ収束）
 
     // MARK: 生成ヘルパ
     private static func rgb(_ hex: Int, _ a: CGFloat = 1) -> NSColor {
@@ -184,18 +179,10 @@ enum Theme {
     static let sectionLabel = NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)  // 大文字見出し
     static let display = NSFont.systemFont(ofSize: 26, weight: .regular)  // ページタイトル
 
-    // EditorPane 専用の実寸タイポ（情報密度優先。汎用 type スケールの4段丸めには寄せない）
-    // paneRow=レール行・本文行・チップ / paneControl=ヘッダ・ボタン・入力・履歴タイトル /
-    // paneAnnotation=↑↓・hunk ヘッダ・注記 / paneSegment=セグメント・小ボタン・集計 /
-    // paneFootnote=フッタ・stat・履歴サブ / paneBadge=CommitDetail のファイルバッジ /
-    // paneTag=HEAD/ref/tag バッジ / prose*=md プレビュー（本文・H2+・H1）
+    // 情報密度を優先する行タイポ（汎用 type スケールの4段丸めには寄せない）
+    // paneRow=Dispatch clean の行ラベル / paneSegment=セグメント・小ボタン・集計
     static let paneRow = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
-    static let paneControl = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-    static let paneAnnotation = NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)
     static let paneSegment = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
-    static let paneFootnote = NSFont.monospacedSystemFont(ofSize: 8.5, weight: .regular)
-    static let paneBadge = NSFont.monospacedSystemFont(ofSize: 8, weight: .regular)
-    static let paneTag = NSFont.monospacedSystemFont(ofSize: 7.5, weight: .regular)
 
     // Help（⌘H チートシート）専用の実寸タイポ（デザイン px をそのまま pt に。
     // 11=chrome / 10=meta は既存トークンを再利用し、無いサイズだけ持つ）
@@ -212,10 +199,6 @@ enum Theme {
     static let helpKeyFn = NSFont.monospacedSystemFont(ofSize: 7.5, weight: .regular)
     static let helpKeyArrow = NSFont.monospacedSystemFont(ofSize: 6, weight: .regular)
 
-    static let proseBody = NSFont.systemFont(ofSize: 11.5, weight: .regular)
-    static let proseHeading = NSFont.systemFont(ofSize: 13, weight: .semibold)
-    static let proseTitle = NSFont.systemFont(ofSize: 17, weight: .bold)
-
     // tracking / line-height スカラ（NSFont では表せないため使用側で .tracking() / lineSpacing 換算）
     static let trackingLabel: CGFloat = 1  // 大文字セクション見出し
     static let trackingStatus: CGFloat = 0.3  // ステータスストリップ
@@ -224,7 +207,6 @@ enum Theme {
     static let trackingKey: CGFloat = 1  // ⌘H バッジ・キーバッジ・チップのキー表記
     static let lineBody: CGFloat = 1.6  // 本文プローズ
     static let lineTerminal: CGFloat = 1.55  // ターミナル本文
-    static let linePane: CGFloat = 1.7  // EditorPane の本文・diff 行送り
   }
 
   // MARK: - Opacity（fill 以外の状態。fill は Color.selectionFill/hoverFill）

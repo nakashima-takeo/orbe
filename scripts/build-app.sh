@@ -62,7 +62,7 @@ echo "    初回・submodule 更新時は数分かかる（以降は Zig キャ�
 (cd "$ROOT/vendor/ghostty" && "$ZIG" build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast)
 
 echo "==> swift build -c release"
-# release チャネルだけが -DORBE_RELEASE を焼く（`isDevBuild` と `OrbePaths.fallbackBundleId` の SSOT）。
+# release チャネルだけが -DORBE_RELEASE を焼く（`OrbePaths.fallbackBundleId` と `UpdaterService` の SSOT）。
 # release 側をオプトインにするのは、素の `swift build`（scripts/orbe-mcp.sh が叩く）が
 # フラグ差分で再コンパイルしても dev のままになるようにするため。dev をオプトインにすると、そこで
 # .build/release のバイナリが静かに本番 identity へ落ちる。
@@ -74,7 +74,6 @@ echo "==> バンドル生成: $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$ROOT/.build/release/Orbe" "$APP/Contents/MacOS/Orbe"
-cp -R "$ROOT/.build/release/Orbe_Orbe.bundle" "$APP/Contents/Resources/Orbe_Orbe.bundle"  # SwiftPM リソース（EditorPane のファイル種別アイコン）
 mkdir -p "$APP/Contents/Resources/bin"
 cp "$ROOT/.build/release/orbe-report" "$APP/Contents/Resources/bin/orbe-report"  # エージェント hook が env パスで指す状態報告 CLI（署名対象）
 cp "$ROOT/.build/release/orbe-cli" "$APP/Contents/Resources/bin/orb"  # Orbe 構成 CLI（bare `orb` へ改名・ペイン PATH で解決・署名対象）

@@ -7,7 +7,7 @@ import SwiftUI
 /// CoreText は私用領域をフォールバック探索から除外するため、カスケード指定でも
 /// LastResort（「?」の箱）へ落ちる。描けるのは明示割り当てのみ。点字も既定フォールバックの
 /// AppleBraille は空点を含む点字紙様の字形で、端末（JuliaMono）と見えが揃わないため同様に充てる。
-/// 基底フォントは適用サイトごとに異なる（タブ chrome 11pt・パレット行 12pt・EditorPane 10.5pt 等）ため
+/// 基底フォントは適用サイトごとに異なる（タブ chrome 11pt・パレット行 12pt 等）ため
 /// 引数に取り、グリフフォントは基底のサイズへ揃えて解決する。設定連動（絵文字 Noto/Apple・タブ
 /// タイトルフォント）は `ChromeFontResolver` がこの機構を実効設定で駆動する。
 enum TitleGlyphs {

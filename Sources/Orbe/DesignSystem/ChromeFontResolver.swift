@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// chrome 全域のユーザー由来文字列（タブタイトル・workspace 名・cwd・パレット行・EditorPane の
-/// ファイル名/本文行等）へ、実効設定を反映したフォント割り当てを届ける観測可能ホルダー。
+/// chrome 全域のユーザー由来文字列（タブタイトル・workspace 名・cwd・パレット行・Dispatch の
+/// ブランチ名/issue タイトル等）へ、実効設定を反映したフォント割り当てを届ける観測可能ホルダー。
 /// chrome は複数の独立した `NSHostingView` に跨るため、モデル毎の糸通しでなく単一の Environment で配る
 /// （`AgentIconResolver` と同型）。値の材料はアクティブ workspace の実効設定（emojiFont /
 /// tabTitleFontFamily）で、`applyActiveWorkspaceConfig` が外観/gui.conf と同一 tick で更新する。

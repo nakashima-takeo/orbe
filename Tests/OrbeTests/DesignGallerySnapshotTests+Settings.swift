@@ -79,7 +79,6 @@ extension DesignGallerySnapshotTests {
     global[SettingKeys.backgroundBlur] = false
     global[SettingKeys.cursorStyleBlink] = false
     global[SettingKeys.defaultAgent] = "claude"
-    global[SettingKeys.devFeaturesEnabled] = true
     global[SettingKeys.notificationSound] = notificationSound
     var override = SettingsLayer()
     override[SettingKeys.fontSize] = overrideFontSize

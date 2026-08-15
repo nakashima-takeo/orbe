@@ -23,15 +23,6 @@ import SwiftUI
   /// アクティブ workspace が0タブ（surface が1枚も無い）か。true のとき content の地は端末が塗らないため、
   /// AppShell が baseFill（透過設定追従）で埋める（透過ウィンドウ越しにデスクトップが透けるのを防ぐ）。
   var contentIsEmpty = false
-  /// 右サイドのエディタペイン（起動時に据え、可視は cwd 追従で決める）。
-  var sidePanel: NSView?
-  /// facade（常駐レール）を出すか＝アクティブペインが git repo か（WindowController が投影）。
-  var sideFacadeVisible = false
-  /// 本体パネルが開いているか＝facade 幅が本体分を含むか（閉なら 32px レールのみ）。
-  var sidePaneOpen = false
-  /// ユーザーがドラッグで選んだ幅。nil = 既定（min(552px, 窓幅58%)）。
-  var sideWidth: CGFloat?
-
   /// 前面 overlay の種別と、その描画状態（@Observable モデル）。提示元が立て下げる。
   var overlay: Overlay = .none
   var languageSelect: LanguageSelectModel?
@@ -75,9 +66,9 @@ import SwiftUI
   }
 }
 
-/// アプリの SwiftUI ルート。上段 chrome（固定高・ネイティブ SwiftUI）＋下段 content、
-/// 右にエディタペイン（sidePanel）を配置し、前面 overlay（パレット類・オンボーディング）を `.overlay` で重ねる。
-/// content/sidePanel は既存 AppKit ビューを passthrough で内包する。
+/// アプリの SwiftUI ルート。上段 chrome（固定高・ネイティブ SwiftUI）＋下段 content を配置し、
+/// 前面 overlay（パレット類・オンボーディング）を `.overlay` で重ねる。
+/// content は既存 AppKit ビューを passthrough で内包する。
 struct AppShell: View {
   @Bindable var model: AppShellModel
   /// 背景透過/ブラーのホルダー（WindowController 所有）。子孫 chrome 面へ Environment で配る。
@@ -96,20 +87,11 @@ struct AppShell: View {
       VStack(spacing: 0) {
         StatusRowView(model: model.statusModel)
           .frame(height: Chrome.barHeight)
-        GeometryReader { geo in
-          HStack(spacing: 0) {
-            NSViewContainer(view: model.content)
-              // 0タブ時のみ端末と同濃度の地で埋める（surface が無く BackgroundGlow も透過時は塗らないため）。
-              // baseFill は effectiveOpacity 追従なので背景不透明度の設定変更にライブで従う。タブが載れば
-              // contentIsEmpty=false で clear に戻り二重 veil を避ける。
-              .background(model.contentIsEmpty ? translucency.baseFill : Color.clear)
-            if model.sideFacadeVisible, let sidePanel = model.sidePanel {
-              NSViewContainer(view: sidePanel)
-                .frame(
-                  width: model.sidePaneOpen ? sideWidth(total: geo.size.width) : Chrome.railWidth)
-            }
-          }
-        }
+        NSViewContainer(view: model.content)
+          // 0タブ時のみ端末と同濃度の地で埋める（surface が無く BackgroundGlow も透過時は塗らないため）。
+          // baseFill は effectiveOpacity 追従なので背景不透明度の設定変更にライブで従う。タブが載れば
+          // contentIsEmpty=false で clear に戻り二重 veil を避ける。
+          .background(model.contentIsEmpty ? translucency.baseFill : Color.clear)
       }
     }
     // アップデートの「準備完了」トースト（非モーダル・scrim なし）。モーダル overlay の下に置く
@@ -134,13 +116,6 @@ struct AppShell: View {
     .environment(\.chromeFontResolver, fontResolver)
     // chrome 全面が現在言語を読む単一注入点。言語変更でこの root と全子孫が再描画される。
     .environment(\.localization, localization)
-  }
-
-  /// エディタペインの実効幅。既定は min(552px, 窓幅58%)、
-  /// ドラッグ値は下限 280・上限 窓幅70% にクランプする。
-  private func sideWidth(total: CGFloat) -> CGFloat {
-    let base = model.sideWidth ?? min(552, total * 0.58)
-    return min(max(base, 280), total * 0.7)
   }
 
   @ViewBuilder private var overlayView: some View {

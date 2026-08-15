@@ -201,18 +201,8 @@ regeneration procedure).
 Icons
 --------------------------------------------------------------------------------
 
-* catppuccin/vscode-icons — Catppuccin, thang-nm — MIT License
-  The file/folder icons bundled at Contents/Resources/Orbe_Orbe.bundle/icons
-  (source: Sources/Orbe/Resources/icons/mocha) are copied from the Catppuccin
-  Icons for VSCode project (icons/mocha). The icons/mocha-light variants are the
-  same icons with stroke colors pre-computed for the light appearance (CSS
-  filter brightness(0.55) saturate(1.6), per the design source).
-  https://github.com/catppuccin/vscode-icons
-  License: licenses/catppuccin-vscode-icons-LICENSE.txt
-
 * GitHub octicons — Copyright (c) 2026 GitHub Inc. — MIT License
-  octicon path data is ported into SwiftUI (Sources/Orbe/Features/Dispatch/GitGlyph.swift,
-  Sources/Orbe/Features/EditorPane/EditorPaneHeaders.swift) and is compiled into
-  Contents/MacOS/Orbe.
+  octicon path data is ported into SwiftUI (Sources/Orbe/Features/Dispatch/GitGlyph.swift)
+  and is compiled into Contents/MacOS/Orbe.
   https://github.com/primer/octicons
   License: licenses/octicons-LICENSE.txt

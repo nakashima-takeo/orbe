@@ -37,10 +37,10 @@ extension GitRepo {
 
   /// origin から fetch し、削除された remote 追跡ブランチを prune する（`refs/remotes/origin/*` のみ更新）。
   /// 独立レーン（`.independent`）で走らせる: 数秒かかりうる fetch を GitRunner 共有 queue の barrier
-  /// チェーンから切り離し、後続の `.exclusive`（EditorPane の stage・commit）が in-flight fetch を
+  /// チェーンから切り離し、後続の `.exclusive`（worktree 削除・ブランチ削除）が in-flight fetch を
   /// 待たないようにする（GCD barrier は submit 済み全ブロックの完了を待つため、共有 queue で走らせると
   /// `.read` でも後続の書き込みが数秒ブロックされる）。並行安全: fetch が触るのは `refs/remotes/origin/*`
-  /// だけで、`.exclusive` が守る index・作業ツリーとは領域が交わらない。
+  /// だけで、`.exclusive` が守る ref・作業ツリーとは領域が交わらない。
   /// `GIT_TERMINAL_PROMPT=0`（GitRunner 既定）で認証プロンプトはハングせず失敗に落ちる。
   ///
   /// `--progress`: clone と同じ理由。非 tty の `git fetch` は転送中 1 バイトも書かないため、

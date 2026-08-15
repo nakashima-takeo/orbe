@@ -17,11 +17,8 @@ final class TerminalController {
     case reopenClosedAgentTab
     case nextTab
     case prevTab
-    case prevTool
-    case nextTool
     case switchWorkspace
     case newWorkspace
-    case toggleEditorPane
     case launchDefaultAgent
     case showAgentPalette
     case showDispatchPalette
@@ -53,10 +50,6 @@ final class TerminalController {
 
   /// Cmd+R で付けた明示タイトル（sticky・tab単位）。非nil・非空なら最優先。空入力で nil へ戻す。
   var explicitTitle: String?
-
-  /// このタブの EditorPane UI 状態（単一真実）。開閉・ツール・選択・下書き等をタブ単位で保持し、
-  /// タブ切替で復元する。永続は open/tool の粗粒度のみ（WorkspacePersistence）。
-  let editorUI = EditorPaneUIState()
 
   /// 復元時に元 PaneNode が持っていた agent != nil leaf 数（休眠 agent の総数）。
   /// resume 未対応で素シェル化した leaf も、変換前の node から数えるため取りこぼさない。
@@ -348,13 +341,11 @@ final class TerminalController {
     return nil
   }
 
-  /// このタブの復元単位（分割ツリー・明示タイトル・EditorPane の開閉とツール）。
+  /// このタブの復元単位（分割ツリー・明示タイトル）。
   /// 起動時の一括保存（WorkspacePersistence）と、閉じたタブの復元（⇧⌘T）が共有する——
   /// 両者の契約が同一であることを、同じコードを通ることで保証する。
   func tabState() -> TabState {
-    TabState(
-      tree: snapshot(), explicitTitle: explicitTitle,
-      editor: EditorPaneTabState(open: editorUI.paneOpen, tool: editorUI.tool.persistKey))
+    TabState(tree: snapshot(), explicitTitle: explicitTitle)
   }
 
   /// 現在の分割ツリーを永続スナップショット（PaneNode）に落とす。

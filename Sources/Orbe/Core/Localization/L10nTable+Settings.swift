@@ -87,7 +87,6 @@ extension L10n {
     .settingsBackgroundBlur: ("背景のブラー", "Background Blur"),
     .settingsCursorBlink: ("カーソルの点滅", "Cursor Blink"),
     .settingsAgentIcons: ("エージェントアイコン", "Agent Icons"),
-    .settingsDevFeatures: ("開発中の機能を有効化", "Enable In-Development Features"),
     .settingsWorktreeDir: ("worktree の作成場所", "Worktree Location"),
     .settingsNotificationSound: ("通知音", "Notification Sound"),
     .settingsNotificationSoundVolume: ("音量", "Volume"),

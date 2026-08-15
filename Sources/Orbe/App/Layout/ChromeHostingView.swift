@@ -14,6 +14,6 @@ final class ChromeHostingView: NSHostingView<AppShell> {
     {
       return true
     }
-    return super.performKeyEquivalent(with: event)  // 他は従来どおり（EditorPane の toggle 等）
+    return super.performKeyEquivalent(with: event)  // 他は従来どおり（⌘R のリネーム等）
   }
 }

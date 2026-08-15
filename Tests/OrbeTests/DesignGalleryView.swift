@@ -2,7 +2,7 @@ import SwiftUI
 
 @testable import Orbe
 
-/// スナップショット対象の部品ギャラリー（Buttons / FileBadge / DSTab / PaletteRow）。
+/// スナップショット対象の部品ギャラリー（Buttons / DSTab / PaletteRow）。
 /// `DesignGallerySnapshotTests` が Light/Dark で撮る（`testRenderGallery`）。
 struct GalleryView: View {
   var body: some View {
@@ -13,14 +13,6 @@ struct GalleryView: View {
         Button("Commit") {}.buttonStyle(DSPrimaryButtonStyle()).disabled(true)
         Button("Stage") {}.buttonStyle(DSSecondaryButtonStyle())
         Button("Stage") {}.buttonStyle(DSSecondaryButtonStyle()).disabled(true)
-      }
-
-      label("FileBadge — M / A / D / U")
-      HStack(spacing: Theme.Space.bar) {
-        FileBadge(kind: .modified)
-        FileBadge(kind: .added)
-        FileBadge(kind: .deleted)
-        FileBadge(kind: .conflict)
       }
 
       label("DSTab — active / default")

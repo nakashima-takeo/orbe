@@ -57,7 +57,7 @@ final class ChromeTranslucencyTests: OrbeTestCase {
 
   // MARK: - 各面が塗る backstop（baseFill / additiveBase）の後方互換ゲート
 
-  /// 不透明時、EditorPane 等が敷く `baseFill` は不透明 bgBase を保ち、
+  /// 不透明時、0 タブの content 地等が敷く `baseFill` は不透明 bgBase を保ち、
   /// StatusRow が敷く追加 `additiveBase` は clear（=最背面 BackgroundGlow の暖色 glow を透かす現行）。
   /// この非対称（置換 backstop は不透明・追加 backstop は clear）が後方互換の要——
   /// additiveBase の `translucent ?` ゲートを外すと不透明時に StatusRow が glow を覆い隠す退行になる。

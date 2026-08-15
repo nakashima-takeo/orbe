@@ -5,7 +5,7 @@ let package = Package(
   name: "Orbe",
   platforms: [.macOS(.v14)],
   dependencies: [
-    // CommonMark + GFM パーサ（公式）。EditorPane の markdown を AST へ起こし SwiftUI へ再帰描画する。
+    // CommonMark + GFM パーサ（公式）。リリースノートの markdown を AST へ起こし SwiftUI へ描画する。
     .package(url: "https://github.com/apple/swift-markdown.git", from: "0.6.0"),
     // アプリ内アップデート（appcast + EdDSA 署名検証 + 終了時適用）。UI は自前（SPUUserDriver 実装）。
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
@@ -36,8 +36,6 @@ let package = Package(
         .product(name: "Markdown", package: "swift-markdown"),
         .product(name: "Sparkle", package: "Sparkle"),
       ],
-      // EditorPane のファイル種別アイコン（catppuccin/vscode-icons mocha・MIT。出所は NOTICE）。
-      resources: [.copy("Resources/icons")],
       // v1 土台: libghostty の C コールバックはスレッド保証が API 上不明確で、
       // Swift 6 strict concurrency では安全に表現できない（assumeIsolated は off-main でクラッシュ）。
       // main スレッド規律 + 明示ディスパッチで扱うため言語モードは 5。本格対応は後続ユニットの課題。

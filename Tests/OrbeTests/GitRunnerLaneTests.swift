@@ -6,7 +6,7 @@ import XCTest
 /// を踏むので、これを共有 queue の barrier に載せると **1 本の遅い操作が以後の全 git 操作を止める**。
 /// しかも barrier はプロセス単位でリポジトリ単位ですらないため、巻き添えは別リポジトリにまで及ぶ。
 ///
-/// ここが壊れると、worktree 作成 1 本のハングで差分表示も stage もワークスペース作成も返らなくなる
+/// ここが壊れると、worktree 作成 1 本のハングで worktree の掃除もワークスペース作成も返らなくなる
 /// ——UI が丸ごと固まったように見え、ユーザーには原因が一切見えない。
 final class GitRunnerLaneTests: OrbeTestCase {
   private var fixture: GitHangFixture!
@@ -67,38 +67,42 @@ final class GitRunnerLaneTests: OrbeTestCase {
     return condition()
   }
 
-  private func writeFile(_ name: String, in fixture: GitHangFixture) throws {
-    try "y\n".write(
-      toFile: (fixture.root as NSString).appendingPathComponent(name), atomically: true,
-      encoding: .utf8)
+  /// 消す対象のローカルブランチを 1 本作り、その先端 oid を返す（`deleteBranch` の
+  /// compare-and-swap 引数）。ハングを起こす前に済ませる arrange。
+  private func makeScratchBranch(in fixture: GitHangFixture) throws -> String {
+    XCTAssertTrue(fixture.git(["branch", "scratch"]).isSuccess, "前提: 消す対象のブランチを作れる")
+    let oid = fixture.git(["rev-parse", "scratch"]).stdoutText
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    XCTAssertFalse(oid.isEmpty, "前提: ブランチの先端 oid を読める")
+    return oid
   }
 
   // MARK: - 検証
 
-  /// ハング中の worktree 作成は、同じリポジトリの書き込み（stage）を止めない。
-  /// 止めると、EditorPane の stage が押しても何も起きない状態になる。
+  /// ハング中の worktree 作成は、同じリポジトリの書き込み（ブランチ削除）を止めない。
+  /// 止めると、worktree の掃除が押しても何も起きない状態になる。
   func testHangingWorktreeAddDoesNotBlockOtherWrites() throws {
-    try writeFile("b.txt", in: fixture)
+    let oid = try makeScratchBranch(in: fixture)
     startHangingWorktreeAdd()
 
-    let done = expectation(description: "stageFiles")
-    repo.stageFiles(["b.txt"]) { error in
-      // 巻き添えを免れるだけでなく、stage 自体が通ること。独立レーンの根拠（呼び出し元の index に
-      // 触らない）が崩れると `git add` は index.lock で即 fatal し、待たずに返るのでここだけが気づく。
-      XCTAssertNil(error, "ハング中でも stage は成功する")
+    let done = expectation(description: "deleteBranch")
+    repo.deleteBranch(name: "scratch", expectedOid: oid) { failure in
+      // 巻き添えを免れるだけでなく、削除自体が通ること。独立レーンの根拠（呼び出し元の ref に
+      // 触らない）が崩れると `update-ref` は ref ロックで即失敗し、待たずに返るのでここだけが気づく。
+      XCTAssertNil(failure, "ハング中でもブランチ削除は成功する")
       done.fulfill()
     }
     wait(for: [done], timeout: 5)
   }
 
-  /// ハング中の worktree 作成は、同じリポジトリの読み取り（status・diff）を止めない。
+  /// ハング中の worktree 作成は、同じリポジトリの読み取り（status）を止めない。
   /// GCD の barrier は**後から submit された読み取りも待たせる**ので、ここが最も広く巻き添えを食う。
   func testHangingWorktreeAddDoesNotBlockReads() throws {
     startHangingWorktreeAdd()
 
-    let done = expectation(description: "snapshot")
-    repo.snapshot { snapshot in
-      XCTAssertNotNil(snapshot, "ハング中でも読み取りは成功する")
+    let done = expectation(description: "worktreeStatusCounts")
+    repo.worktreeStatusCounts(at: fixture.root) { counts in
+      XCTAssertNotNil(counts, "ハング中でも読み取りは成功する")
       done.fulfill()
     }
     wait(for: [done], timeout: 5)
@@ -110,12 +114,12 @@ final class GitRunnerLaneTests: OrbeTestCase {
     let other = try GitHangFixture()
     addTeardownBlock { other.cleanup() }
     let otherRepo = try open(other)
-    try writeFile("b.txt", in: other)
+    let oid = try makeScratchBranch(in: other)
     startHangingWorktreeAdd()
 
-    let done = expectation(description: "other repository stageFiles")
-    otherRepo.stageFiles(["b.txt"]) { error in
-      XCTAssertNil(error, "別リポジトリの stage は成功する")
+    let done = expectation(description: "other repository deleteBranch")
+    otherRepo.deleteBranch(name: "scratch", expectedOid: oid) { failure in
+      XCTAssertNil(failure, "別リポジトリのブランチ削除は成功する")
       done.fulfill()
     }
     wait(for: [done], timeout: 5)
