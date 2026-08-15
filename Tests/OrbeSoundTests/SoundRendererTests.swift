@@ -319,4 +319,33 @@ final class SoundRendererTests: XCTestCase {
       program: program, volume: 70, sampleRate: sampleRate, seedKey: "different")
     XCTAssertNotEqual(first, other, "seedKey が違えばノイズ列も違う")
   }
+
+  // MARK: - 音量 → 合成ゲインのマッピング
+
+  /// 両端は設計どおりの値に厳密に落ちる: 5% で 0.05（-26.02 dB）、100% で 1.0（0 dB）。
+  /// ここが動くと最小音量と最大音量の聞こえ方そのものが変わる。
+  func testVolumeMappingPinsBothEnds() {
+    XCTAssertEqual(SoundRenderer.level(forVolume: 5), 0.05, accuracy: 1e-12)
+    XCTAssertEqual(SoundRenderer.level(forVolume: 100), 1.0, accuracy: 1e-12)
+  }
+
+  /// 1 ステップ（5%）はどの音量域でも同じ 1.3695 dB 効く。% を線形の係数にすると 1 ステップの効きが
+  /// 音量域で 15 倍違い、上端は弁別閾（約 1 dB）を割って押しても変わらないステップになる
+  /// ——その退行をここで撃ち落とす。
+  func testVolumeMappingIsEvenlySpacedInDecibels() {
+    for volume in stride(from: 5, through: 95, by: 5) {
+      let step =
+        20
+        * log10(SoundRenderer.level(forVolume: volume + 5) / SoundRenderer.level(forVolume: volume))
+      XCTAssertEqual(step, 1.3695, accuracy: 1e-4, "\(volume)→\(volume + 5)% の効きが等間隔でない")
+    }
+  }
+
+  /// 音量を上げれば必ず大きくなる。
+  func testVolumeMappingIsMonotonic() {
+    for volume in stride(from: 5, through: 95, by: 5) {
+      XCTAssertGreaterThan(
+        SoundRenderer.level(forVolume: volume + 5), SoundRenderer.level(forVolume: volume))
+    }
+  }
 }

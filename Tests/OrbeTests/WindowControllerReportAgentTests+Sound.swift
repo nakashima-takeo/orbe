@@ -28,7 +28,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(
       sound.played,
       [
-        SoundPlayerFake.Played(family: NotificationSound.default, event: .waiting, volume: 70)
+        SoundPlayerFake.Played(family: NotificationSound.default, event: .waiting, volume: 90)
       ], "既定の案・既定の音量で入力待ちが鳴る")
 
     wc.controlReportAgent(

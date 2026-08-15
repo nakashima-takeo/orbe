@@ -6,8 +6,21 @@ import Foundation
 /// **音量がコンプレッサの手前**にあるのが要点で、音量を上げるほど圧縮が深くなる（＝音量は再生側の
 /// ボリュームではなく合成の入力）。事前生成した音声ファイルを同梱するとこの順が崩れる。
 public enum SoundRenderer {
+  /// 音量の下限（5）と、そこでのゲイン（0.05 = -26.02 dB）。上限 100 のゲイン 1.0（0 dB）との間を
+  /// dB で等分する。値域 5...100 は設定の読み込み時クランプと CLI の `--volume` 検証が保証する
+  /// ——ここで二重に守ると値域の持ち主が二人になる。
+  private static let minVolume = 5.0
+  private static let minLevel = 0.05
+
+  /// 音量 % → 合成ゲイン（線形係数）。dB 等間隔で、1 ステップ（5%）が全域で 1.3695 dB 効く
+  /// ——% をそのまま係数にすると 1 ステップの効きが音量域で 15 倍違い、上端は弁別閾（約 1 dB）を
+  /// 割って押しても変わらないステップになる。音量を掛ける経路はすべてここを通る。
+  public static func level(forVolume volume: Int) -> Double {
+    pow(minLevel, (100 - Double(volume)) / (100 - minVolume))
+  }
+
   /// カタログの案 × イベントを合成する（アプリの再生層が使う口）。
-  /// 音量は % をそのまま線形の係数として受ける（設定が渡すのは 5〜100）。
+  /// 音量は % で受け、`level(forVolume:)` で合成ゲインへ写す（設定が渡すのは 5〜100）。
   public static func render(
     family: NotificationSound, event: AgentSoundEvent, volume: Int, sampleRate: Double
   ) -> [Float] {
@@ -41,7 +54,7 @@ public enum SoundRenderer {
     }
     for effect in program.effects { effect.apply(to: &buffer, sampleRate: sampleRate) }
 
-    let level = Double(volume) / 100
+    let level = Self.level(forVolume: volume)
     for i in buffer.indices { buffer[i] *= level }
     DynamicsCompressor.apply(to: &buffer, sampleRate: sampleRate)
     return buffer.map { Float($0) }

@@ -114,7 +114,7 @@ final class SettingsRegistryTests: OrbeTestCase {
       SettingsRegistry.descriptor(.notificationSound).defaultValue(),
       NotificationSound.default.settingValue,
       "既定の案は NotificationSound.default が SSOT（リテラルを 2 箇所に置かない）")
-    XCTAssertEqual(SettingsRegistry.descriptor(.notificationSoundVolume).defaultValue(), .int(70))
+    XCTAssertEqual(SettingsRegistry.descriptor(.notificationSoundVolume).defaultValue(), .int(90))
     XCTAssertEqual(
       SettingsRegistry.descriptor(.notificationSoundEnabled).defaultValue(), .bool(true))
   }

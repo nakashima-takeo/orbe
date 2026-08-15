@@ -77,12 +77,12 @@ extension SettingsPaletteSoundTests {
 
   /// ←/→ で値が動くたび、**変更後の**音量で現在の実効案の `done` が鳴る。
   func testVolumeStepPreviewsWithTheNewVolume() {
-    let p = model(sound: .glass)  // 音量は既定 70
+    let p = model(sound: .glass)  // 音量は既定 90
     let previews = capturePreviews(p)
     _ = captureScheduledEnds(p)
     p.render.selected = volumeRow
     _ = p.render.onRight()
-    XCTAssertEqual(previews(), [Preview(sound: .glass, event: .done, volume: 75)])
+    XCTAssertEqual(previews(), [Preview(sound: .glass, event: .done, volume: 95)])
   }
 
   /// 端でクランプされて値が動かなかった押下では鳴らさない（確かめる対象が無く、長押しで鳴り続けるだけ）。
