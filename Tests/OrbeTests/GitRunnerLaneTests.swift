@@ -87,8 +87,9 @@ final class GitRunnerLaneTests: OrbeTestCase {
 
     let done = expectation(description: "deleteBranch")
     repo.deleteBranch(name: "scratch", expectedOid: oid) { failure in
-      // 巻き添えを免れるだけでなく、削除自体が通ること。独立レーンの根拠（呼び出し元の ref に
-      // 触らない）が崩れると `update-ref` は ref ロックで即失敗し、待たずに返るのでここだけが気づく。
+      // 巻き添えを免れるだけでなく、削除自体が通ること。worktree 作成が触る ref（`refs/heads/hang`）と
+      // 削除対象は交わらないので、レーンが正しければ必ず成功する。barrier へ戻すと `.exclusive` の
+      // ここが in-flight のハングを待たされ、5 秒のタイムアウトで落ちる。
       XCTAssertNil(failure, "ハング中でもブランチ削除は成功する")
       done.fulfill()
     }

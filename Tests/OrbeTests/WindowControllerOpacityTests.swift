@@ -181,6 +181,13 @@ final class WindowControllerOpacityTests: OrbeTestCase {
     XCTAssertEqual(
       guiConfContent(), "font-size = 12\n" + constLines,
       "新 WS は global 継承——生成 conf が 12 へ再生成される（前 WS の 30 を持ち越さない）")
+
+    // 切替（activateCurrent）でも実効設定を再適用する。ここが切れると WS ごとのテーマ・フォント・
+    // gui.conf が切替に追従しなくなるが、実効値を都度算出する assert では気づけない（生成物で見る）。
+    wc.switchWorkspace(to: 0)
+    XCTAssertEqual(
+      guiConfContent(), "font-size = 30\n" + constLines,
+      "切替でも再適用——上書きを持つ元 WS の 30 へ生成 conf が戻る")
   }
 
   private func guiConfContent() -> String {
