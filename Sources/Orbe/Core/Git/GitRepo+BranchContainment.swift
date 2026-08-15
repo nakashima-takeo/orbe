@@ -35,7 +35,9 @@ extension GitRepo {
   ///
   /// `targets` は比較先リスト（非空・先頭が既定ブランチ・順序が優先順）。gh のヒント（merged PR の
   /// base）で 1 本増えることがあるが、**証明は完全にローカル**——嘘の base は cherry の不成立で
-  /// 確認群のままに倒れる。複数比較先が同時に立つときのラベルはリスト順＝既定優先。
+  /// 確認群のままに倒れる。複数比較先が同時に立つときのラベルは**先に立った段**が勝ち、同じ段の
+  /// 中ではリスト順＝既定優先（第1段は全 target を先に回すので、既定への squash 取り込みより
+  /// 後続 target への素の patch 等価が先に立つ）。
   ///
   /// **3 段構え**。第0段は到達性——`rev-list --count <tip> --not --remotes=origin --` が 0 なら、
   /// 全コミットが `refs/remotes/origin/*` から到達可能で、worktree とローカルブランチを消しても
@@ -129,7 +131,7 @@ extension GitRepo {
   /// 第1段（素の cherry）を比較先リスト順に回す。plus == 0 の target が見つかった時点で
   /// `.patchEquivalent(target:)`。cherry が失敗した target はスキップし、成功した target の plus 数を
   /// `succeeded` に積んで第2段へ渡す。remote が 1 つも無いリポジトリ（到達不能数＝全履歴）でも、
-  /// ローカル既定ブランチとの比較で従来どおり判定できる経路。
+  /// ローカル既定ブランチとの比較で判定が立つ経路。
   private func cherryStage(
     _ probe: ContainmentProbe, targets: ArraySlice<String>,
     succeeded: [(target: String, plus: Int)],
@@ -167,19 +169,25 @@ extension GitRepo {
   }
 
   /// 第2段（squash 検出）を、**第1段の cherry が成功した** target について比較先リスト順に回す。
-  /// merged が立った時点で `.patchEquivalent(target:)`、全て立たなければ `.unmerged(count:)`。
+  /// merged が立った時点で `.patchEquivalent(target:)`。
+  ///
+  /// 立たなかった target は「確かめて非取り込み」と「確かめられなかった」を区別して畳む——
+  /// `.unmerged` は「**どの比較先にも** patch 等価でない」という主張なので、1 本でも確かめられて
+  /// いなければ名乗れない（`unresolved` が立っていたら nil）。cherry が 1 本も成功しなければ nil を
+  /// 返す第1段と同じ流儀で、判定不能を「未取り込み」と断定しない。
   private func squashStage(
-    _ probe: ContainmentProbe, targets: ArraySlice<String>, count: Int,
+    _ probe: ContainmentProbe, targets: ArraySlice<String>, count: Int, unresolved: Bool = false,
     completion: @escaping (GitBranchContainment?) -> Void
   ) {
     guard let target = targets.first else {
-      completion(.unmerged(count: count))
+      completion(unresolved ? nil : .unmerged(count: count))
       return
     }
     squashMergedCheck(probe, target: target) { merged in
       guard merged == true else {
         self.squashStage(
-          probe, targets: targets.dropFirst(), count: count, completion: completion)
+          probe, targets: targets.dropFirst(), count: count,
+          unresolved: unresolved || merged == nil, completion: completion)
         return
       }
       completion(.patchEquivalent(target: target))
