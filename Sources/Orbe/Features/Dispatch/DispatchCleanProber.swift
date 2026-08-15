@@ -16,8 +16,15 @@ import Foundation
 struct DispatchCleanProber {
   let repo: GitRepo
   let defaultBranch: String
-  /// gh ヒント由来の追加比較先（path → `["origin/<base>"]`）。判定へは `[defaultBranch] + これ` を渡す。
+  /// gh ヒント由来の追加比較先（path → `["origin/<base>"]`）。判定へは `targets(for:)` が組んで渡す。
   var extraContainmentTargets: [String: [String]] = [:]
+
+  /// この path の判定に渡す比較先リスト（先頭が既定ブランチ＝優先順）。**合成はここ 1 箇所**——
+  /// 発行時台帳（`DispatchDataProvider.issuedProbeTargets`）は「何を渡したか」の記録なので、
+  /// 呼び出し側が同じ式を組み直すと、比較先の出どころが増えたときに記録だけが黙ってずれる。
+  func targets(for path: String) -> [String] {
+    [defaultBranch] + (extraContainmentTargets[path] ?? [])
+  }
 
   /// 実測を集めて path → 実測の辞書で返す。completion はメインで返る（`GitRunner` 契約）。
   func probe(
@@ -46,7 +53,7 @@ struct DispatchCleanProber {
       // 判定してしまう。detached は oid のままで曖昧さが無い。
       repo.branchContainment(
         branchOrCommit: worktree.branch.map { "refs/heads/\($0)" } ?? worktree.head,
-        targets: [defaultBranch] + (extraContainmentTargets[worktree.path] ?? []), isolated: true
+        targets: targets(for: worktree.path), isolated: true
       ) { containment in
         probes[worktree.path]?.containment = containment
         group.leave()

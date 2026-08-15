@@ -49,12 +49,20 @@ final class DispatchDataProvider {
   var issuesLoading = true
   var pullRequestsLoading = true
   /// 分類レーンの実測結果（path → 実測）。nil の間は分類そのものが未着地。
+  ///
+  /// 非 nil でも**全 path が揃っているとは限らない**——prober は main worktree と占有行を省くので
+  /// それらは恒常的に不在で、差分発行が全量発行より先に着地した回は一時的に部分辞書になる。
   private var cleanProbes: [String: DispatchCleanProbe]?
   /// path → **発行時点**の取り込み判定の比較先リスト。`requestedBranchPRHeads` と同型の
   /// 「発行時点で記録する顔ぶれ dedup」——比較先が同じ行を引き直さず、gh 着地で base が判明した
-  /// 行だけを引き直すための台帳。着地の照合（発行時の比較先 == 現台帳）にも使い、独立レーンの
-  /// 順序不定で古い発行の遅着が新しい結果を上書きする窓を塞ぐ。
+  /// 行だけを引き直すための台帳。台帳に無い path のエントリは着地時に落とす（削除済み worktree の
+  /// 残骸を持たない）。
   private var issuedProbeTargets: [String: [String]]?
+  /// 全量発行の世代。独立レーン（concurrent）は順序保証が無いので、**比較先が同じまま**撃たれる
+  /// 全量発行どうし（初回・`fetch --prune` 後・削除後）の遅着を、比較先の照合だけでは弾けない。
+  /// prune 前の結果が prune 後の結果を上書きすると「マージ直後の行が未取り込みのまま」という
+  /// この機能の主用途そのものの失敗になるので、世代で切る。
+  private var probeGeneration = 0
 
   /// gh 取得の上限件数（issues / open PR の一覧。分冊も読む）。
   let ghLimit = 30
@@ -149,37 +157,38 @@ final class DispatchDataProvider {
   /// 台帳（`issuedProbeTargets`)は**発行の時点で**更新する——着地を待って記録すると、その間に来た
   /// もう一方の着地点が同じ顔ぶれを二重に引く（`loadBranchPullRequests` と同じ理由）。
   ///
-  /// 着地は path ごとに「発行時の比較先 == 現台帳」のときだけ `cleanProbes` へマージする。
-  /// probe は独立レーン（concurrent）で順序保証が無く、全量発行と差分発行の遅着が交錯しうる——
-  /// この照合が古い発行の遅着による上書きの窓を塞ぐ。台帳に無い path のエントリは落とす
-  /// （削除済み worktree の残骸を持たない）。
+  /// 着地は 2 つの関門を通ったものだけ `cleanProbes` へマージする。probe は独立レーン
+  /// （concurrent）で順序保証が無く、古い発行の遅着が新しい結果を上書きしうるため:
+  /// **世代**（全量発行より後に撃たれた全量発行があれば、古い方の着地は丸ごと捨てる）と、
+  /// **path ごとの比較先の照合**（全量発行の在庫中に gh 着地で比較先が変わった行は、その行だけ
+  /// 差分発行の結果を勝たせる）。前者だけでは同一比較先の全量どうしを、後者だけでは
+  /// prune 前後の全量どうしを弾けないので、両方が要る。
   func startCleanProbe(_ repo: GitRepo, invalidateAll: Bool) {
     let extra = DispatchWorktreeClassifier.extraContainmentTargets(
       worktrees: worktrees, branchPullRequests: branchPullRequests,
       remoteBranchNames: Set(remoteBranches.map(\.name)), defaultBranch: defaultBranchName)
+    let prober = DispatchCleanProber(
+      repo: repo, defaultBranch: defaultBranchName, extraContainmentTargets: extra)
+    // 台帳は prober が実際に渡す比較先そのもの（合成点を 1 つにして、記録と実入力がずれないようにする）。
     let inputs = Dictionary(
-      uniqueKeysWithValues: worktrees.map {
-        ($0.path, [defaultBranchName] + (extra[$0.path] ?? []))
-      })
+      uniqueKeysWithValues: worktrees.map { ($0.path, prober.targets(for: $0.path)) })
     let stale =
       invalidateAll
       ? worktrees : worktrees.filter { inputs[$0.path] != issuedProbeTargets?[$0.path] }
     guard !stale.isEmpty else { return }
     if invalidateAll {
       issuedProbeTargets = inputs
+      probeGeneration += 1
     } else {
       var ledger = issuedProbeTargets ?? [:]
       for worktree in stale { ledger[worktree.path] = inputs[worktree.path] }
       issuedProbeTargets = ledger
     }
-    let issued = inputs
-    DispatchCleanProber(
-      repo: repo, defaultBranch: defaultBranchName, extraContainmentTargets: extra
-    )
-    .probe(worktrees: stale, panes: paneOccupancies) { [weak self] probes in
-      guard let self else { return }
+    let generation = probeGeneration
+    prober.probe(worktrees: stale, panes: paneOccupancies) { [weak self] probes in
+      guard let self, generation == self.probeGeneration else { return }
       var merged = (self.cleanProbes ?? [:]).filter { self.issuedProbeTargets?[$0.key] != nil }
-      for (path, probe) in probes where issued[path] == self.issuedProbeTargets?[path] {
+      for (path, probe) in probes where inputs[path] == self.issuedProbeTargets?[path] {
         merged[path] = probe
       }
       guard self.cleanProbes != merged else { return }
