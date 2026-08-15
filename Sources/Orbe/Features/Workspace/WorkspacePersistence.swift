@@ -85,7 +85,7 @@ struct WorkspaceState: Codable, Equatable {
   /// のは新が言わない項目だけ——唯一重なる `theme` は新形式の読みが勝つ。形式を先に判定しないのは、
   /// 判定の手掛かりになる「新形式として読めるか」がその `theme` の重なりで崩れ、旧形式ファイルを
   /// 新形式と誤認して残りの項目を全部落とすため。
-  /// field 局所の寛容 decode（`TabState` と同じ家風）で全体を throw させない。
+  /// field 局所の寛容 decode で全体を throw させない。
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     name = try c.decode(String.self, forKey: .name)

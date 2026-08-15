@@ -23,6 +23,7 @@ import SwiftUI
   /// アクティブ workspace が0タブ（surface が1枚も無い）か。true のとき content の地は端末が塗らないため、
   /// AppShell が baseFill（透過設定追従）で埋める（透過ウィンドウ越しにデスクトップが透けるのを防ぐ）。
   var contentIsEmpty = false
+
   /// 前面 overlay の種別と、その描画状態（@Observable モデル）。提示元が立て下げる。
   var overlay: Overlay = .none
   var languageSelect: LanguageSelectModel?

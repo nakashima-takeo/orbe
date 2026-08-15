@@ -18,7 +18,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   // ドメイン/セッション状態（workspaces/activeWorkspace）の所有者。配列の CRUD・index 演算は
   // すべてここへ委譲し、WindowController は NSView 副作用と chrome 投影のコーディネータに徹する。
   let store: SessionStore
-  // chrome 各面（StatusRow・パレット・overlay）へ背景透過/ブラーを届ける観測可能ホルダー。
+  // chrome 各面（StatusRow・パレットのカード・端末上に浮く検索バー／補完 popup）へ背景透過/ブラーを
+  // 届ける観測可能ホルダー。
   // 値は syncWindowOpacity と同一 tick で更新し、各 NSHostingView root へ Environment 注入する。
   let chromeTranslucency = ChromeTranslucency()
   // エージェント状態面 3 箇所へ状態アイコン上書きを届ける観測可能ホルダー。値は applyActiveWorkspaceConfig が

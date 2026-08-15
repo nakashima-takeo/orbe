@@ -27,7 +27,7 @@ import SwiftUI
   }
 
   /// 端末系グリフ/絵文字を含む文字列だけ AttributedString を組む Text ファクトリ。
-  /// 含まない文字列（FileViewer 本文行の大半）は走査を早期打ち切りして素の Text のまま。
+  /// 含まない文字列（cwd・ブランチ名の大半）は走査を早期打ち切りして素の Text のまま。
   func text(_ text: String, base: NSFont) -> Text {
     TitleGlyphs.needsAssignment(text)
       ? Text(attributed(text, base: base)) : Text(verbatim: text)

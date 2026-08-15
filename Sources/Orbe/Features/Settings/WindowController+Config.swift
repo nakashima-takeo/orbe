@@ -12,7 +12,7 @@ extension WindowController {
     return settingsStore.effective(override: current.settingsOverride)
   }
 
-  /// アクティブ workspace の実効設定で外観（テーマ）・状態アイコン・gui.conf・右バー gate を反映し、
+  /// アクティブ workspace の実効設定で外観（テーマ）・状態アイコン・gui.conf を反映し、
   /// ライブ反映（reloadConfig + 窓透過）を予約する。画面に載るのは常にアクティブ 1 workspace のみなので
   /// 全 surface 一律適用で常に正しい。
   func applyActiveWorkspaceConfig() {
