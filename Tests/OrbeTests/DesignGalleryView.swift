@@ -9,10 +9,10 @@ struct GalleryView: View {
     VStack(alignment: .leading, spacing: Theme.Space.bar) {
       label("Button — primary / secondary")
       HStack(spacing: Theme.Space.beat) {
-        Button("Commit") {}.buttonStyle(DSPrimaryButtonStyle())
-        Button("Commit") {}.buttonStyle(DSPrimaryButtonStyle()).disabled(true)
-        Button("Stage") {}.buttonStyle(DSSecondaryButtonStyle())
-        Button("Stage") {}.buttonStyle(DSSecondaryButtonStyle()).disabled(true)
+        Button("作成") {}.buttonStyle(DSPrimaryButtonStyle())
+        Button("作成") {}.buttonStyle(DSPrimaryButtonStyle()).disabled(true)
+        Button("キャンセル") {}.buttonStyle(DSSecondaryButtonStyle())
+        Button("キャンセル") {}.buttonStyle(DSSecondaryButtonStyle()).disabled(true)
       }
 
       label("DSTab — active / default")

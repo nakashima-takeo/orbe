@@ -168,9 +168,7 @@ enum Theme {
     // TopBar・タブ・ストリップ
     static let chrome = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
     static let workspaceName = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-    static let diffHeader = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-    static let diffStat = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-    static let codeSmall = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)  // 差分本文・パネル内
+    static let codeSmall = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)  // 版番号・補足
     static let codeCompact = NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular)  // 補完候補行
     static let bodySmall = NSFont.systemFont(ofSize: 10.5, weight: .regular)  // 小さな補助本文
     static let caption = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)  // 件数・小バッジ・小ボタン

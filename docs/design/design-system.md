@@ -104,9 +104,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `type.code` | 12.5 / regular / mono | コード・入力・ターミナル |
 | `type.chrome` | 11 / regular / mono | TopBar・タブ・ストリップ |
 | `type.workspaceName` | 12 / regular / mono | Workspace 名・パレット行の主名 |
-| `type.diffHeader` | 12 / regular / mono | Diff ヘッダ |
-| `type.diffStat` | 11 / regular / mono-digit | Diff 統計 |
-| `type.codeSmall` | 11 / regular / mono | 差分本文・パネル内 mono11 |
+| `type.codeSmall` | 11 / regular / mono | 版番号・補足の mono11 |
 | `type.codeCompact` | 11.5 / regular / mono | 補完候補行 |
 | `type.bodySmall` | 10.5 / regular / sans | 小さな補助本文 |
 | `type.label` | 12.5 / medium / mono | パレット行・主ラベル |

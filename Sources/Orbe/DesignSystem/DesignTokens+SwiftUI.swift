@@ -37,7 +37,6 @@ struct ThemeColors {
     startPoint: UnitPoint(x: 0, y: 0), endPoint: UnitPoint(x: 0.6, y: 1))
   // diff / 成功・エラー・競合
   let diffAdded = Color(nsColor: Theme.Color.diffAdded)
-  let diffRemoved = Color(nsColor: Theme.Color.diffRemoved)
   let success = Color(nsColor: Theme.Color.success)
   let danger = Color(nsColor: Theme.Color.danger)
   let conflict = Color(nsColor: Theme.Color.conflict)
@@ -97,8 +96,6 @@ struct ThemeFonts {
   let code = Font(Theme.Typography.code as CTFont)
   let chrome = Font(Theme.Typography.chrome as CTFont)
   let workspaceName = Font(Theme.Typography.workspaceName as CTFont)
-  let diffHeader = Font(Theme.Typography.diffHeader as CTFont)
-  let diffStat = Font(Theme.Typography.diffStat as CTFont)
   let codeSmall = Font(Theme.Typography.codeSmall as CTFont)
   let codeCompact = Font(Theme.Typography.codeCompact as CTFont)
   let bodySmall = Font(Theme.Typography.bodySmall as CTFont)
