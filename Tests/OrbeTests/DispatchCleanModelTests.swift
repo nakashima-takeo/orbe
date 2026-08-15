@@ -18,14 +18,15 @@ final class DispatchCleanModelTests: OrbeTestCase {
       [
         DispatchCleanFacts(
           path: "/wt/safe-a", branch: "feat/a", head: "aaa", track: "[gone]",
-          status: GitWorktreeStatusCounts(modified: 0, untracked: 0), unmergedCommits: 0,
+          status: GitWorktreeStatusCounts(modified: 0, untracked: 0), containment: .patchEquivalent,
           operation: .none),
         DispatchCleanFacts(
           path: "/wt/safe-b", branch: "feat/b", head: "bbb", isPrunable: true, track: "[gone]",
-          unmergedCommits: 0),
+          containment: .patchEquivalent),
         DispatchCleanFacts(
           path: "/wt/caution", branch: "feat/c", head: "ccc", track: "[gone]",
-          status: GitWorktreeStatusCounts(modified: 0, untracked: 0), unmergedCommits: 6,
+          status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
+          containment: .unmerged(count: 6),
           operation: .none),
         DispatchCleanFacts(path: "/repo", branch: "main", head: "ddd", isMain: true),
       ], defaultBranchLabel: "main")

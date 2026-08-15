@@ -107,19 +107,25 @@ extension DispatchWorktreeClassifierTests {
       nil, clean, GitWorktreeStatusCounts(modified: 2, untracked: 3),
     ]
     let operations: [GitWorktreeOperationState] = [.none, .unknown, .inProgress(.rebase)]
+    let containments: [GitBranchContainment?] = [
+      nil, .patchEquivalent, .reachable(mergedIntoDefault: true),
+      .reachable(mergedIntoDefault: false), .unmerged(count: 4),
+    ]
     for status in statuses {
       for operation in operations {
         for lockReason in [nil, "USB"] as [String?] {
           for upstream in [nil, "origin/feat/x"] as [String?] {
             for track in [nil, "[gone]", "[ahead 3]"] as [String?] {
-              for unmergedCommits in [nil, 0, 4] as [Int?] {
+              for containment in containments {
                 for openPR in [nil, 139] as [Int?] {
                   for merged in [nil, true, false] as [Bool?] {
                     let facts = DispatchCleanFacts(
                       path: "/wt/x", branch: branch, isMain: isMain, isPrunable: isPrunable,
                       lockReason: lockReason, upstream: upstream, track: track,
-                      closedPR: merged.map { DispatchCleanPR(number: 142, isMerged: $0) },
-                      openPR: openPR, status: status, unmergedCommits: unmergedCommits,
+                      closedPR: merged.map {
+                        DispatchCleanPR(number: 142, isMerged: $0, base: "main")
+                      },
+                      openPR: openPR, status: status, containment: containment,
                       operation: operation, occupancy: occupancy)
                     body(facts, describe(facts))
                   }
@@ -137,7 +143,7 @@ extension DispatchWorktreeClassifierTests {
     branch=\(f.branch ?? "nil") prunable=\(f.isPrunable) main=\(f.isMain) \
     pane=\(f.occupancy != nil) status=\(String(describing: f.status)) op=\(f.operation) \
     lock=\(f.lockReason != nil) up=\(f.upstream ?? "nil") track=\(f.track ?? "nil") \
-    unmerged=\(String(describing: f.unmergedCommits)) openPR=\(String(describing: f.openPR)) \
+    containment=\(String(describing: f.containment)) openPR=\(String(describing: f.openPR)) \
     closedPR=\(String(describing: f.closedPR))
     """
   }

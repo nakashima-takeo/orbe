@@ -94,6 +94,33 @@ final class DispatchGitHubCacheTests: OrbeTestCase {
     XCTAssertEqual(cache.entry(for: key)?.issues, [issue(1)], "PR の保存が issues を壊さない")
   }
 
+  // MARK: - ブランチの PR の取得
+
+  /// ブランチの PR は一覧の窓ではなく **worktree にあるブランチの名指し**で、`--state all` の
+  /// 1 往復で open / closed の両方を引く。直近 N 件の窓では、窓落ちした PR のぶんだけ
+  /// 「マージ済みなのに merged チップが出ない」「レビュー中なのに安全確認を素通りする」が起きる。
+  /// `--limit` は gh が 1 往復で取れる上限（100）。往復コストは件数に依らないので、絞ると
+  /// fork（cross-repo）の同名ブランチの PR で埋まって自リポジトリの PR が窓落ちする側にしか働かない。
+  func testBranchPRFetchNamesTheBranchInsteadOfAWindow() {
+    XCTAssertEqual(
+      GitHubCLI.branchPRArguments(head: "refactor/phase2-2b"),
+      [
+        "pr", "list", "--state", "all", "--head", "refactor/phase2-2b", "--limit", "100",
+        "--json", "number,headRefName,state,baseRefName,isCrossRepository",
+      ])
+  }
+
+  /// 対象は worktree にあるブランチだけ（main worktree は掃除の対象外・detached は PR の head に
+  /// なり得ない）。ここが広がると worktree 本数で抑えているプロセス数の前提が崩れる。
+  func testBranchPRHeadsTargetNonMainWorktreeBranchesOnly() {
+    let heads = DispatchDataProvider.branchPRHeads(of: [
+      GitWorktree(path: "/repo", branch: "main", head: "a", isMain: true),
+      GitWorktree(path: "/wt/x", branch: "refactor/phase2-2b", head: "b", isMain: false),
+      GitWorktree(path: "/wt/detached", branch: nil, head: "c", isMain: false),
+    ])
+    XCTAssertEqual(heads, ["refactor/phase2-2b"])
+  }
+
   // MARK: - probe
 
   /// 認証判定はネットに触らない `gh auth token` で行う。`gh auth status` はトークン検証で API を

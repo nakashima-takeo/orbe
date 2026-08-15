@@ -120,6 +120,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchCleanUntrackedOne
   case dispatchCleanUntrackedOther
   case dispatchCleanInProgress
+  case dispatchCleanSavedOnRemote
   case dispatchCleanRemoteSynced
   case dispatchCleanUnpushed
   case dispatchCleanOwnCommitsOne
