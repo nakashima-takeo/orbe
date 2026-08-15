@@ -266,7 +266,9 @@ enum SettingsRegistry {
       labelKey: .settingsNotificationSoundVolume, activation: .stepper,
       // 下限は 0 でなく 5——「鳴らない状態」の担体はオン/オフ 1 つに閉じる。0 を許すと
       // サブパレットの試聴まで無音になり、聴きながら選ぶという面の目的が立たなくなる。
-      defaultValue: { .int(70) }, domain: .intRange(5...100, step: 5, unit: "%"),
+      // 既定音量は `SoundRenderer.defaultVolume` が SSOT（リテラルを 2 箇所に置かない）。
+      defaultValue: { .int(SoundRenderer.defaultVolume) },
+      domain: .intRange(5...100, step: 5, unit: "%"),
       guiConf: nil,  // gui.conf 非経由（合成の入力＝コンプレッサの手前に掛かる）
       display: { v, _ in percentLabel(v) }, unsetPlaceholderKey: nil),
     SettingDescriptor(

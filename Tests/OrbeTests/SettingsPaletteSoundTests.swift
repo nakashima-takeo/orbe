@@ -55,7 +55,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
 
   // MARK: - root の 3 行
 
-  /// 未設定は既定（案＝`NotificationSound.default`・音量 70%・オン）を出し、通知音行だけが潜れる。
+  /// 未設定は既定（案＝`NotificationSound.default`・音量 90%・オン）を出し、通知音行だけが潜れる。
   func testRootShowsThreeRowsWithDefaults() {
     let p = model()
     XCTAssertTrue(p.render.rows[soundRow].label.contains("通知音"))
@@ -64,7 +64,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
         LocalizationStore(language: .ja).string(NotificationSound.default.labelKey)))
     XCTAssertTrue(p.render.rows[soundRow].chevron, "drillIn 行")
     XCTAssertTrue(p.render.rows[soundRow + 1].label.contains("音量"))
-    XCTAssertTrue(p.render.rows[soundRow + 1].label.contains("70%"))
+    XCTAssertTrue(p.render.rows[soundRow + 1].label.contains("90%"))
     XCTAssertFalse(p.render.rows[soundRow + 1].chevron, "stepper 行")
     XCTAssertTrue(p.render.rows[soundRow + 2].label.contains("通知音のオン/オフ"))
     XCTAssertTrue(p.render.rows[soundRow + 2].label.contains("オン"))
