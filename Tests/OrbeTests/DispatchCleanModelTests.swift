@@ -116,19 +116,6 @@ final class DispatchCleanModelTests: OrbeTestCase {
     XCTAssertEqual(m.cursorRow?.name, "caution")
   }
 
-  /// `a` は追加のみ。既に付いているチェックも、確認行のブランチの扱いも落とさない。
-  func testSelectAllSafeIsAdditiveOnly() {
-    let m = makeModel()
-    m.toggleAtCursor()  // safe-a を外す
-    m.toggle(at: m.rows[2].id)
-    m.chooseBranch(.delete)
-    m.selectAllSafe()
-    XCTAssertTrue(m.isChecked(m.rows[0]), "外れていた安全行が付く")
-    XCTAssertTrue(m.isChecked(m.rows[1]), "付いていた安全行はそのまま")
-    XCTAssertTrue(m.isChecked(m.rows[2]), "確認行のチェックも落とさない")
-    XCTAssertEqual(m.branchChoice(of: m.rows[2]), .delete, "ブランチの扱いにも触らない")
-  }
-
   func testSelectedCountCountsCheckedRows() {
     let m = makeModel()
     m.toggle(at: m.rows[2].id)
@@ -151,23 +138,36 @@ final class DispatchCleanModelTests: OrbeTestCase {
     XCTAssertFalse(m.canExecute)
   }
 
-  /// 安全行は行内注記が出る行だけがブランチを消し、**実体の無い prunable 行はブランチに触らない**。
-  /// 確認行はサブラインで選んだ 2 値がそのまま決める。
+  /// 安全行は実体がありブランチを持つ行だけがブランチを消し、**実体の無い prunable 行は
+  /// ブランチに触らない**。確認行はサブラインで選んだ 2 値がそのまま決める。
   func testDeletesBranchSplitsSafeAndCaution() {
     let m = makeModel()
     XCTAssertTrue(m.rows[0].deletesBranchImplicitly)
     XCTAssertTrue(m.deletesBranch(m.rows[0]), "安全行は無条件にブランチも消す")
     XCTAssertFalse(m.rows[1].deletesBranchImplicitly, "prunable 行は消えるのが登録だけ")
     XCTAssertFalse(m.deletesBranch(m.rows[1]))
-    XCTAssertTrue(
-      m.rows[0].chips.contains(.branchAlsoDeleted), "ブランチも消える行だけが行内注記を持つ")
-    XCTAssertFalse(m.rows[1].chips.contains(.branchAlsoDeleted))
 
     let caution = m.rows[2]
     XCTAssertFalse(m.deletesBranch(caution), "既定の `残す` では消さない")
     m.toggle(at: caution.id)
     m.chooseBranch(.delete)
     XCTAssertTrue(m.deletesBranch(caution))
+  }
+
+  /// フッタ実行ボタンの内訳は、チェック済み行のうち**ブランチも消える行だけ**を数える——
+  /// 選択総数とは別の勘定で、prunable の安全行と `残す` の確認行は選ばれていても入らない。
+  func testBranchDeleteCountFollowsCheckAndBranchChoice() {
+    let m = makeModel()
+    XCTAssertEqual(m.selectedCount, 2)
+    XCTAssertEqual(m.branchDeleteCount, 1, "prunable の安全行はブランチに触らない")
+    m.toggle(at: m.rows[2].id)
+    XCTAssertEqual(m.branchDeleteCount, 1, "確認行の既定 `残す` は数えない")
+    m.chooseBranch(.delete)
+    XCTAssertEqual(m.branchDeleteCount, 2)
+    m.chooseBranch(.keep)
+    XCTAssertEqual(m.branchDeleteCount, 1)
+    m.toggle(at: m.rows[0].id)
+    XCTAssertEqual(m.branchDeleteCount, 0, "チェックを外した行は数えない")
   }
 
   func testRequestsCarryPerRowBranchDecision() {

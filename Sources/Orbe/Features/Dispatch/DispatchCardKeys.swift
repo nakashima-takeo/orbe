@@ -2,7 +2,7 @@ import SwiftUI
 
 /// カード器を常設の first responder 候補にして clean モードのキーを捕捉する祖先 modifier。
 /// list モードでは焦点がヘッダの入力欄にあり、キーは子の `TextField` が消費するのでここへは届かない
-/// （`space` と `a` が絞り込み入力に打てなくならない）。
+/// （`space` が絞り込み入力に打てなくならない）。
 /// 矢印は単一の catch-all に集約する（bare ハンドラが ⌘↑ を食う不確実性を構造で排除する共通規約）。
 struct DispatchCardKeyCapture: ViewModifier {
   @Bindable var model: DispatchPaletteModel
@@ -41,11 +41,6 @@ struct DispatchCardKeyCapture: ViewModifier {
       .onKeyPress(.space) {
         guard model.mode == .clean else { return .ignored }
         model.clean.toggleAtCursor()
-        return .handled
-      }
-      .onKeyPress(KeyEquivalent("a")) {
-        guard model.mode == .clean else { return .ignored }
-        model.clean.selectAllSafe()
         return .handled
       }
       .onKeyPress(KeyEquivalent("o")) {

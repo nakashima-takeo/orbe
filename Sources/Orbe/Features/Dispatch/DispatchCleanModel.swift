@@ -191,18 +191,18 @@ final class CleanRunToken {
     branchChoice[rowID] = choice
   }
 
-  /// safe 群を全選択する（**トグルではない・追加のみ**。確認行のブランチの扱いにも触らない）。
-  func selectAllSafe() {
-    guard phase == .selecting else { return }
-    for row in rows where row.group == .safe { checked.insert(row.id) }
-  }
-
   var selectedCount: Int { checked.count }
+
+  /// チェック済み行のうちローカルブランチも消える件数（フッタ実行ボタンの内訳。
+  /// 保存フィールドは持たず、選択と `deletesBranch(_:)` から毎回導く）。
+  var branchDeleteCount: Int {
+    rows.filter { checked.contains($0.id) && deletesBranch($0) }.count
+  }
 
   var canExecute: Bool { selectedCount > 0 && phase == .selecting }
 
   /// この行でローカルブランチも消すか。
-  /// safe 行は**行内注記が出る行だけ**が無条件に消す——safe 群は「消してもコミットが世界に残る」
+  /// safe 行は**実体がありブランチを持つ行だけ**が無条件に消す——safe 群は「消してもコミットが世界に残る」
   /// （`refs/remotes/origin/*` からの到達性、または比較先への patch 等価）を必ず通っており、
   /// 消して失うものが無いことが確認済みだから。実体の無い prunable 行は消えるのが
   /// 登録だけなのでブランチに触らない。確認行はサブラインで選んだ 2 値がそのまま決める。

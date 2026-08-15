@@ -16,7 +16,7 @@ extension DispatchWorktreeClassifierTests {
         path: "/wt/flow", branch: "feat/flow", upstream: "origin/feat/flow", track: "[gone]",
         status: clean, containment: .reachable(mergedInto: nil), operation: .none))
     XCTAssertEqual(r.group, .safe)
-    XCTAssertEqual(r.chips, [.savedOnRemote, .gone, .branchAlsoDeleted])
+    XCTAssertEqual(r.chips, [.savedOnRemote, .gone])
     XCTAssertFalse(
       r.vocabulary.contains {
         if case .mergedInto = $0 { return true }
@@ -32,7 +32,7 @@ extension DispatchWorktreeClassifierTests {
         path: "/wt/old", branch: "feat/old", upstream: "origin/feat/old", track: "[gone]",
         status: clean, containment: .reachable(mergedInto: "main"), operation: .none))
     XCTAssertEqual(r.group, .safe)
-    XCTAssertEqual(r.chips, [.mergedInto("main"), .gone, .branchAlsoDeleted])
+    XCTAssertEqual(r.chips, [.mergedInto("main"), .gone])
   }
 
   /// merged PR チップはマージ先（gh の `baseRefName`）を運ぶ。**表示専用**で、safe の証明は
@@ -48,7 +48,7 @@ extension DispatchWorktreeClassifierTests {
         closedPR: DispatchCleanPR(number: 123, isMerged: true, base: "develop"),
         status: clean, containment: .reachable(mergedInto: nil), operation: .none))
     XCTAssertEqual(r.group, .safe)
-    XCTAssertEqual(r.chips, [.mergedPR(123, base: "develop"), .savedOnRemote, .branchAlsoDeleted])
+    XCTAssertEqual(r.chips, [.mergedPR(123, base: "develop"), .savedOnRemote])
     XCTAssertEqual(r.overflowNotes, [.gone])
   }
 
@@ -63,7 +63,7 @@ extension DispatchWorktreeClassifierTests {
         status: clean, containment: .patchEquivalent(target: "origin/develop"),
         operation: .none))
     XCTAssertEqual(r.group, .safe)
-    XCTAssertEqual(r.chips, [.mergedPR(123, base: "develop"), .gone, .branchAlsoDeleted])
+    XCTAssertEqual(r.chips, [.mergedPR(123, base: "develop"), .gone])
     XCTAssertEqual(r.overflowNotes, [.mergedInto("develop")], "降りた証明ピルは受け皿に残る")
   }
 

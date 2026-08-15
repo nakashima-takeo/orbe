@@ -164,8 +164,7 @@ enum DispatchWorktreeClassifier {
   /// 枠を空けたまま候補を捨てると、安全行が安全の根拠を 1 つしか出さないまま黙る。
   ///
   /// **切り詰めた候補は捨てずに返す**——受け皿を損失の内訳と兼ねると、`locked` のように損失では
-  /// ない語がどこにも出なくなる。素文字（軸C の使用状況・safe 行の注記）は上限の外なのでピルの後に
-  /// そのまま続く。
+  /// ない語がどこにも出なくなる。素文字（軸C の使用状況）は上限の外なのでピルの後にそのまま続く。
   private static func cluster(
     _ f: DispatchCleanFacts, _ group: CleanGroup, _ axes: AxisSet
   ) -> (chips: [CleanChip], overflow: [CleanChip]) {
@@ -198,14 +197,13 @@ enum DispatchWorktreeClassifier {
     } else if pills.count < 2 {
       pills += rest.prefix(2 - pills.count)
     }
-    var plains = axes.a.filter { !$0.isPill } + axes.c.filter { !$0.isPill }
-    if group == .safe, f.branch != nil, !f.isPrunable { plains.append(.branchAlsoDeleted) }
+    let plains = axes.a.filter { !$0.isPill } + axes.c.filter { !$0.isPill }
     return (pills + plains, (heads + rest + demoted).filter { !pills.contains($0) })
   }
 
   /// 軸A（消すと何を失うか）。優先順位は `進行中 > 未コミット > untracked > prunable`。
-  /// **失うものが無い行は何も名乗らない**——安全群の見出しと行内の `ブランチも削除` が
-  /// 既に同じことを言っており、群の中では冗長になる。
+  /// **失うものが無い行は何も名乗らない**——安全群に居ること自体が「消えて困るものが無い」を
+  /// 語っており、行で繰り返すと群の中では冗長になる。
   private static func axisA(_ f: DispatchCleanFacts, _ group: CleanGroup) -> [CleanChip] {
     guard group != .inUse else { return [] }
     var out: [CleanChip] = []
