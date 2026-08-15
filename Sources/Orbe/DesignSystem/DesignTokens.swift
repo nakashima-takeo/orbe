@@ -180,7 +180,7 @@ enum Theme {
     static let display = NSFont.systemFont(ofSize: 26, weight: .regular)  // ページタイトル
 
     // 情報密度を優先する行タイポ（汎用 type スケールの4段丸めには寄せない）
-    // paneRow=Dispatch clean の行ラベル / paneSegment=セグメント・小ボタン・集計
+    // paneRow=Dispatch clean のアクションボタン / paneSegment=Dispatch clean の群見出し・チェック記号
     static let paneRow = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
     static let paneSegment = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
 
@@ -246,7 +246,6 @@ enum Theme {
 
   enum Stroke {
     static let hairline: CGFloat = 1  // 罫線・枠
-    static let marker: CGFloat = 3  // 引用・スパインの左バー
     static let focusRing: CGFloat = 2  // フォーカスリング（accentFocus）
   }
 
