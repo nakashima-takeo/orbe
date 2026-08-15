@@ -121,7 +121,7 @@ func generateBoard(to dir: URL, rate: Double, volume: Int) throws -> URL {
 }
 
 private func cardHTML(_ entry: BoardEntry, showName: Bool = true) -> String {
-  let stats = String(format: "%.2f s · loud %.1f dB", entry.duration, entry.loudDB)
+  let stats = String(format: "%.2f s · loud %.1f dBFS", entry.duration, entry.loudDB)
   let name = showName ? "\n          <div class=\"name\">\(entry.name)</div>" : ""
   return """
         <div class="card" tabindex="0" data-src="\(entry.file)" data-name="\(entry.name)">\(name)
@@ -228,6 +228,9 @@ private func boardHTML(entries: [BoardEntry], rate: Double, volume: Int) -> Stri
     <header>
       <h1>orbe-sound board</h1>
       <p class="meta">rate \(Int(rate)) Hz · volume \(volume)%</p>
+      <p class="meta">loud = この volume で合成した信号の最大短時間 RMS。
+        フルスケール基準（dBFS）なので、案どうしの比較にそのまま使える——
+        再生機器の音量を変えても動かない。</p>
       <p class="help">クリックで再生。カード右下の A / B で割り当て →
         <kbd>a</kbd> <kbd>b</kbd> で即再生、<kbd>space</kbd> で交互（A/B 比較）。</p>
       <div id="slots">A: <b id="slot-a">—</b> &nbsp; B: <b id="slot-b">—</b></div>
