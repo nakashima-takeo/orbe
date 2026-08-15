@@ -255,13 +255,13 @@ enum DispatchWorktreeClassifier {
   /// safe は全確認済みの含意）。分類は変えない——判定不能を安全と読まない契約は分類側が持つ。
   private static func unverified(_ f: DispatchCleanFacts, _ group: CleanGroup) -> [CleanChip] {
     guard group == .caution else { return [] }
-    // prunable は意図的に問わない（失うものが無く、作業ツリー側の確認は自動的に満たす）。
+    // prunable は作業ツリー側（status・停止中の操作）を意図的に問わない（失うものが無く、
+    // 確認の対象ですらない）。取り込み判定は detached も oid で問うので branch の有無を問わない。
     let status = !f.isPrunable && f.status == nil
     let operation = !f.isPrunable && f.operation == .unknown
-    // detached も oid で判定するので branch の有無を問わない。
     let containment = f.containment == nil
     guard status || operation || containment else { return [] }
-    return [.unverified(status: status, operation: operation, containment: containment)]
+    return [.unverified]
   }
 
   /// 比較先の表示名（先頭の `origin/` を落とす。verdict は渡された名前そのままを運ぶ）。

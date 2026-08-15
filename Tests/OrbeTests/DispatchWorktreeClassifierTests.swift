@@ -143,7 +143,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
         status: clean, containment: nil, operation: .none))
     XCTAssertEqual(r.group, .caution)
     XCTAssertEqual(
-      r.chips, [.gone, .unverified(status: false, operation: false, containment: true)],
+      r.chips, [.gone, .unverified],
       "件数を名乗れないので独自コミットの語は出さず、確かめられなかった事実を判定不能チップが名乗る")
   }
 
@@ -255,7 +255,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
         path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", status: clean,
         containment: nil, operation: .none))
     XCTAssertEqual(
-      r.chips, [.remoteSynced, .unverified(status: false, operation: false, containment: true)])
+      r.chips, [.remoteSynced, .unverified])
   }
 
   /// detached はブランチの行き先そのものが無い（サブラインを開かない条件でもある）。
@@ -298,7 +298,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     XCTAssertNil(r.branch)
     XCTAssertEqual(
       r.chips,
-      [.inProgress(.rebase), .unverified(status: false, operation: false, containment: true)],
+      [.inProgress(.rebase), .unverified],
       "detached でも取り込み判定は oid で問うので、確かめられなかった事実が名乗る")
     XCTAssertEqual(
       r.lossNotes, [.inProgress(.rebase), .uncommitted(2), .untracked(3)],

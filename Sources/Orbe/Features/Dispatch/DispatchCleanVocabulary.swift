@@ -48,9 +48,10 @@ enum CleanChip: Equatable, Identifiable {
   /// 消すと失われうる独自コミット k 件（`GitBranchContainment.unmerged` の `count`。到達不能数と
   /// patch 非等価数の min なので、「既定ブランチに取り込まれていない件数」より小さくなりうる）。
   case ownCommits(Int)
-  /// 安全確認に使う事実を確かめられなかった（確認群に落ちている理由の可視化。分類は変えない——
-  /// 判定不能を安全と読まない契約は既に分類側が持つ）。フラグは何を取得できなかったか。
-  case unverified(status: Bool, operation: Bool, containment: Bool)
+  /// 安全確認に使う事実（status／停止中の git 操作／取り込み判定）のどれかを確かめられなかった
+  /// （確認群に落ちている理由の可視化。分類は変えない——判定不能を安全と読まない契約は既に
+  /// 分類側が持つ）。基本起こらない異常系なので、内訳は持たずチップ 1 枚だけで語る。
+  case unverified
 
   // MARK: 軸C — 使用状況
   case agentWorking
@@ -79,8 +80,7 @@ enum CleanChip: Equatable, Identifiable {
     case .openPR(let n): return "openPR:\(n)"
     case .gone: return "gone"
     case .ownCommits(let n): return "ownCommits:\(n)"
-    case .unverified(let status, let operation, let containment):
-      return "unverified:s\(status)o\(operation)c\(containment)"
+    case .unverified: return "unverified"
     case .agentWorking: return "agentWorking"
     case .agentWaiting: return "agentWaiting"
     case .paneOpen: return "paneOpen"
@@ -174,19 +174,8 @@ struct CleanRow: Identifiable, Equatable {
   /// 確認群だけが開く（安全行は選ぶものが無く、使用中行はチェックできない）。**ブランチの扱いの
   /// セグメントは詳細の中身の 1 つに過ぎない**ので、detached（`branch == nil`）でも書くことが
   /// あれば開く——rebase 停止中の worktree は必ず detached で、そこは損失の内訳が最も要る行。
-  /// 判定不能チップの詳細（何を取得できなかったか）もここでしか読めないため、detached ×
-  /// 判定不能の行も開く。
   var canExpandSubline: Bool {
-    group == .caution
-      && (branch != nil || !lossNotes.isEmpty || !overflowNotes.isEmpty || hasUnverified)
-  }
-
-  /// 判定不能チップが立っているか（サブラインの詳細 1 行の有無と開閉条件が読む）。
-  var hasUnverified: Bool {
-    vocabulary.contains {
-      if case .unverified = $0 { return true }
-      return false
-    }
+    group == .caution && (branch != nil || !lossNotes.isEmpty || !overflowNotes.isEmpty)
   }
 }
 

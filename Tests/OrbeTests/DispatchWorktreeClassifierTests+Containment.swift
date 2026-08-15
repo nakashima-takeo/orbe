@@ -94,39 +94,43 @@ extension DispatchWorktreeClassifierTests {
 
   // MARK: - 判定不能チップ
 
-  /// 安全確認に使う事実を確かめられなかった確認行に、何が取得できなかったかのフラグつきで立つ。
-  /// 分類（群の振り分け）は変えない——判定不能を安全と読まない契約は分類側が既に持つ。
-  func testUnverifiedChipNamesEachMissingFact() {
+  /// 安全確認に使う事実（status／停止中の git 操作／取り込み判定）のどれかを確かめられなかった
+  /// 確認行に立つ。分類（群の振り分け）は変えない——判定不能を安全と読まない契約は分類側が既に持つ。
+  func testUnverifiedChipRaisesWhenAnySafetyFactIsMissing() {
     let status = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", track: "[gone]", status: nil,
         containment: .patchEquivalent(target: "main"), operation: .none))
     XCTAssertEqual(status.group, .caution)
-    XCTAssertTrue(
-      status.vocabulary.contains(
-        .unverified(status: true, operation: false, containment: false)))
+    XCTAssertTrue(status.vocabulary.contains(.unverified))
 
     let operation = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", track: "[gone]", status: clean,
         containment: .patchEquivalent(target: "main"), operation: .unknown))
-    XCTAssertTrue(
-      operation.vocabulary.contains(
-        .unverified(status: false, operation: true, containment: false)))
+    XCTAssertTrue(operation.vocabulary.contains(.unverified))
 
-    let all = row(DispatchCleanFacts(path: "/wt/x", branch: "feat/x", track: "[gone]"))
-    XCTAssertTrue(
-      all.vocabulary.contains(.unverified(status: true, operation: true, containment: true)))
+    let containment = row(
+      DispatchCleanFacts(
+        path: "/wt/x", branch: "feat/x", track: "[gone]", status: clean, containment: nil,
+        operation: .none))
+    XCTAssertTrue(containment.vocabulary.contains(.unverified))
   }
 
   /// prunable は status / 操作を意図的に問わない（失うものが無く、確認の対象ですらない）。
   /// 取り込み判定だけは問う。
   func testUnverifiedDoesNotCountTheWorkingTreeOnPrunableRows() {
-    let r = row(
+    let verified = row(
+      DispatchCleanFacts(
+        path: "/wt/x", branch: "feat/x", isPrunable: true, openPR: 139,
+        containment: .patchEquivalent(target: "main")))
+    XCTAssertEqual(verified.group, .caution, "open PR が安全群入りを塞ぐ")
+    XCTAssertFalse(
+      verified.vocabulary.contains(.unverified), "status nil・操作 unknown でも prunable は数えない")
+
+    let missing = row(
       DispatchCleanFacts(path: "/wt/x", branch: "feat/x", isPrunable: true, openPR: 139))
-    XCTAssertEqual(r.group, .caution, "open PR が安全群入りを塞ぐ")
-    XCTAssertTrue(
-      r.vocabulary.contains(.unverified(status: false, operation: false, containment: true)))
+    XCTAssertTrue(missing.vocabulary.contains(.unverified), "取り込み判定の欠落だけは prunable でも立つ")
   }
 
   /// inUse 行には立たない（probe 自体を省く行で、確認群にいる理由の可視化という目的の外）。
@@ -136,15 +140,16 @@ extension DispatchWorktreeClassifierTests {
         path: "/wt/x", branch: "feat/x",
         occupancy: PaneOccupancy(cwd: "/wt/x", agentState: "working")))
     XCTAssertEqual(r.group, .inUse)
-    XCTAssertFalse(r.hasUnverified)
+    XCTAssertFalse(r.vocabulary.contains(.unverified))
   }
 
-  /// detached × 判定不能の行もサブラインの詳細（何を取得できなかったか）へ到達できる。
-  func testDetachedUnverifiedRowCanOpenItsDetail() {
+  /// detached × 判定不能の行はチップ 1 枚だけで語る——詳細を持たないので、他に書くことが
+  /// 無ければサブラインも開かない（「書くことが無ければ開かない」の従来規則のまま）。
+  func testDetachedUnverifiedRowShowsTheChipWithoutADetail() {
     let r = row(DispatchCleanFacts(path: "/wt/x", status: clean, operation: .none))
     XCTAssertEqual(r.group, .caution)
     XCTAssertNil(r.branch)
-    XCTAssertTrue(r.hasUnverified)
-    XCTAssertTrue(r.canExpandSubline, "ブランチも損失も無くても、判定不能の詳細があるなら開く")
+    XCTAssertEqual(r.chips, [.unverified], "立った事実はチップとして到達できる")
+    XCTAssertFalse(r.canExpandSubline)
   }
 }

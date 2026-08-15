@@ -118,9 +118,5 @@ extension L10n {
     .dispatchCleanAgentWaiting: ("agent 入力待ち", "agent waiting for input"),
     .dispatchCleanPaneOpen: ("タブで表示中", "Open in a tab"),
     .dispatchCleanUnverified: ("情報取得に失敗", "Couldn't fetch info"),
-    .dispatchCleanUnverifiedNote: ("%@ を取得できませんでした", "Couldn't fetch %@"),
-    .dispatchCleanUnverifiedItemStatus: ("作業ツリーの状態", "working tree status"),
-    .dispatchCleanUnverifiedItemOperation: ("停止中の git 操作", "paused git operation"),
-    .dispatchCleanUnverifiedItemContainment: ("取り込み判定", "merge status"),
   ]
 }

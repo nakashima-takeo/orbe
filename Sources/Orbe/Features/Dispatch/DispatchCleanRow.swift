@@ -108,13 +108,6 @@ struct DispatchCleanRow: View {
           .lineLimit(1)
           .truncationMode(.tail)
       }
-      // 判定不能チップの詳細（何を取得できなかったか）。損失の内訳と混ぜない——
-      // 消えると断定できないものを `〜も消えます` に飲み込ませない。
-      if let note = unverifiedNote {
-        Text(note)
-          .lineLimit(1)
-          .truncationMode(.tail)
-      }
       // 溢れたピルは事実のまま出す。損失の内訳と混ぜて `〜も消えます` に飲み込ませない。
       ForEach(row.overflowNotes) { DispatchCleanChip(chip: $0) }
       Spacer(minLength: 0)
@@ -131,19 +124,6 @@ struct DispatchCleanRow: View {
 
   private var lossNote: String {
     row.lossNotes.map { DispatchCleanChip.text($0, l10n) }.joined(separator: " · ")
-  }
-
-  /// 取得できなかった項目の明記（`.unverified` を持つ行だけ）。項目語は「 · 」で連結する。
-  private var unverifiedNote: String? {
-    for case .unverified(let status, let operation, let containment) in row.vocabulary {
-      let items = [
-        status ? l10n.string(.dispatchCleanUnverifiedItemStatus) : nil,
-        operation ? l10n.string(.dispatchCleanUnverifiedItemOperation) : nil,
-        containment ? l10n.string(.dispatchCleanUnverifiedItemContainment) : nil,
-      ].compactMap { $0 }
-      return l10n.format(.dispatchCleanUnverifiedNote, items.joined(separator: " · "))
-    }
-    return nil
   }
 
   /// `残す` / `削除` の 2 値。タップは行クリックと同じくカーソルもその行へ移す。
