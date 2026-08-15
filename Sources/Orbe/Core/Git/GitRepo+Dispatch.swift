@@ -102,8 +102,9 @@ extension GitRepo {
   ///
   /// 独立レーン: 触るのは新規ディレクトリ・`$GIT_COMMON_DIR/worktrees/<名前>`・`-b` 指定時の
   /// `refs/heads/<新ブランチ>`・`--track` 指定時の `.git/config`（`branch.<新ブランチ>.remote/merge`）で、
-  /// **呼び出し元チェックアウトの index には触らない**。barrier が守っていた不変条件（同一チェックアウトの
-  /// `.git/index.lock` を奪い合わない）は壊れない。ref は git 自身が `<ref>.lock`、config は `config.lock`
+  /// **呼び出し元チェックアウトの作業ツリーにも既存 ref にも触らない**（作るのは新規 ref だけ）。barrier が
+  /// 守る不変条件（`.exclusive` の ref・作業ツリー書き込みと領域を奪い合わない）は壊れない。ref は git 自身が
+  /// `<ref>.lock`、config は `config.lock`
   /// で守る（どちらもリトライせず即失敗し、`-b` 指定なら作成済みブランチが残る）。Orbe で `.git/config` を
   /// 書く git 呼び出しはこれだけなので、競合相手は同時実行の `addWorktree` に限られる。
   /// post-checkout hook はユーザーのコードで所要時間に上限が無いため、barrier に置くと 1 本のハングが
