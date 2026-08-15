@@ -23,8 +23,10 @@ import SwiftUI
   var onSelectLanguage: (Language) -> Void = { _ in }
   /// グローバル ⌘⌘ 権限行の ↵/→ で System Settings（Accessibility）を開く（提示元が配線）。
   var onOpenAccessibilitySettings: () -> Void = {}
-  /// 通知音サブパレットの試聴（nil＝鳴らさず止めるだけ＝「なし」行）。提示元が再生層へ繋ぐ。
-  /// **設定は書かない**——聴くことと決めることを分けてある（書くのは ↵ の確定だけ）。
+  /// 通知音の試聴（nil＝鳴らさず止めるだけ＝「なし」行）。提示元が再生層へ繋ぐ。
+  /// 叩くのは通知音サブパレットの行移動と root の音量行で、**設定を書くかは経路ごとに違う**——
+  /// サブパレットは聴くことと決めることを分けて書かず（書くのは ↵ の確定だけ）、音量行は書いた
+  /// 新しい値で鳴らす（音量は数字でなく耳で決めるため）。
   /// 音量まで渡すのは、耳に届く値が root 行の表示と食い違わないため——値の解決はこのスコープの
   /// 実効値（`ScopedSettingsValues`）だけが持つ規約で、提示元は別の解決を持ち込まない。
   var onPreviewSound: ((NotificationSound?, AgentSoundEvent, Int) -> Void)?
@@ -79,9 +81,16 @@ import SwiftUI
   // 試聴インジケータ（EQ）の状態。格納プロパティなのでここに置き、読み書きは `+Sound` だけが行う
   // （extension には格納プロパティを置けない）。
 
-  /// 試聴中の行（EQ を出す行）。鳴り終わり（`SoundCatalog.duration`）で自動的に nil へ戻る**面の状態**で、
+  /// 試聴インジケータ（EQ）の点灯状態。行と、その行で鳴らした音の対象を 1 つで持つ
+  /// ——EQ の色は「今どの面にいるか」でなく「何を鳴らしたか」で決まるため。
+  struct PreviewIndicator {
+    var row: Int
+    var event: AgentSoundEvent
+  }
+
+  /// 試聴中の行と対象（EQ を出す行）。鳴り終わり（`SoundCatalog.duration`）で自動的に nil へ戻る**面の状態**で、
   /// 設定にも `PaletteModel.rows` にも書かない。
-  var previewingRow: Int?
+  var previewIndicator: PreviewIndicator?
   /// 先行する消灯予約を無効化する世代（↑↓ 連打で消灯が食い違わない）。
   var previewGeneration = 0
   /// 鳴り終わりの予約。既定は main queue。テストは手動スケジューラへ差し替えて 2 秒待たずに消灯を見る

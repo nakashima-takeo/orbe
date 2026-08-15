@@ -118,8 +118,9 @@ extension DesignFlowSnapshotTests {
   }
 
   /// Settings パレット通知音: root → 潜る（入場は無音＝EQ 無し）→ ↓ で試聴（EQ 点灯）→ ⇥ で対象反転
-  /// （セグメントの塗りが移り EQ が琥珀へ）→ セグメントのクリックで完了へ戻る。
+  /// （セグメントの塗りが移り EQ が琥珀へ）→ セグメントのクリックで完了へ戻る → root の音量行で `→`。
   /// アクションで初めて現れる状態（EQ の点灯・対象の反転）を撮るのがここの役目。
+  /// 最後の 1 枚は、試聴の 1 経路がサブパレットだけでなく root の音量行にも同じ EQ を出すことを画で押さえる。
   func testSettingsPaletteSound() throws {
     var global = SettingsLayer()
     global[SettingKeys.fontSize] = 14
@@ -149,6 +150,14 @@ extension DesignFlowSnapshotTests {
         ("preview", { settings.render.onDown() }),  // 試聴 → その行の右端に EQ（完了＝緑）
         ("waiting", { _ = settings.render.onTab() }),  // 対象を反転 → 塗りが移り EQ が琥珀へ
         ("tab_click", { settings.render.onTapSegment(0) }),  // クリックで完了へ戻す
+        (
+          "root_volume",
+          {  // root へ戻り音量行（index 14）で `→`。値が動いて完了音が鳴り、EQ が root の行にも出る
+            settings.render.onEscape()  // 通知音サブ → root
+            settings.render.selected = 14
+            _ = settings.render.onRight()
+          }
+        ),
       ])
   }
 
