@@ -1,13 +1,13 @@
 ---
 name: visual-check
-description: Orbe の chrome（DiffPanel・パレット・Onboarding 等の SwiftUI 部分）の見た目を、本物の中身で preview に描き、Claude Design の見本とピクセル単位で突き合わせて一致するまで直す自走ループ。chrome の見た目を変更/新規作成したとき、また「視覚検証」「見た目を確認」「design と合わせて」「ピクセルパーフェクト」などの時に使う。
+description: Orbe の chrome（パレット・ヘルプ・Onboarding 等の SwiftUI 部分）の見た目を、本物の中身で preview に描き、Claude Design の見本とピクセル単位で突き合わせて一致するまで直す自走ループ。chrome の見た目を変更/新規作成したとき、また「視覚検証」「見た目を確認」「design と合わせて」「ピクセルパーフェクト」などの時に使う。
 ---
 
 # visual-check — chrome を design 見本とピクセル突合する
 
 > 前提: 見本の正典「Claude Design プロジェクト（Design MCP）」はメンテナ私有で、このリポジトリには同梱しない。見本に到達できない環境では `docs/design/design-system.md` §2 トークン・§5 準拠で判断する（後述の fallback）。
 
-Orbe の chrome（DiffPanel・パレット・Onboarding 等の SwiftUI 部分）の**見た目**を、本物の中身で preview に描き、Claude Design の見本とピクセル単位で突き合わせ、一致するまで直す自走ループ。値・色・型・状態の正は `docs/design/design-system.md`（§2 トークン〜§5 コンポーネント全状態、§3 アクセシビリティ契約）。着手時に関係する節を Read で開く。
+Orbe の chrome（パレット・ヘルプ・Onboarding 等の SwiftUI 部分）の**見た目**を、本物の中身で preview に描き、Claude Design の見本とピクセル単位で突き合わせ、一致するまで直す自走ループ。値・色・型・状態の正は `docs/design/design-system.md`（§2 トークン〜§5 コンポーネント全状態、§3 アクセシビリティ契約）。着手時に関係する節を Read で開く。
 
 **範囲**: 見た目だけ。focus 越境・IME・Cmd+G 等のランタイム挙動は対象外。
 
