@@ -14,7 +14,7 @@ extension DispatchWorktreeClassifierTests {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/flow", branch: "feat/flow", upstream: "origin/feat/flow", track: "[gone]",
-        status: clean, containment: .reachable(mergedInto: nil), operation: .none))
+        openPR: .none, status: clean, containment: .reachable(mergedInto: nil), operation: .none))
     XCTAssertEqual(r.group, .safe)
     XCTAssertEqual(r.chips, [.savedOnRemote, .gone])
     XCTAssertFalse(
@@ -30,7 +30,8 @@ extension DispatchWorktreeClassifierTests {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/old", branch: "feat/old", upstream: "origin/feat/old", track: "[gone]",
-        status: clean, containment: .reachable(mergedInto: "main"), operation: .none))
+        openPR: .none, status: clean, containment: .reachable(mergedInto: "main"), operation: .none)
+    )
     XCTAssertEqual(r.group, .safe)
     XCTAssertEqual(r.chips, [.mergedInto("main"), .gone])
   }
@@ -46,7 +47,7 @@ extension DispatchWorktreeClassifierTests {
       DispatchCleanFacts(
         path: "/wt/x", branch: "big/x", upstream: "origin/big/x", track: "[gone]",
         closedPR: DispatchCleanPR(number: 123, isMerged: true, base: "develop"),
-        status: clean, containment: .reachable(mergedInto: nil), operation: .none))
+        openPR: .none, status: clean, containment: .reachable(mergedInto: nil), operation: .none))
     XCTAssertEqual(r.group, .safe)
     XCTAssertEqual(r.chips, [.mergedPR(123, base: "develop"), .savedOnRemote])
     XCTAssertEqual(r.overflowNotes, [.gone])
@@ -60,7 +61,7 @@ extension DispatchWorktreeClassifierTests {
       DispatchCleanFacts(
         path: "/wt/x", branch: "big/x", upstream: "origin/big/x", track: "[gone]",
         closedPR: DispatchCleanPR(number: 123, isMerged: true, base: "develop"),
-        status: clean, containment: .patchEquivalent(target: "origin/develop"),
+        openPR: .none, status: clean, containment: .patchEquivalent(target: "origin/develop"),
         operation: .none))
     XCTAssertEqual(r.group, .safe)
     XCTAssertEqual(r.chips, [.mergedPR(123, base: "develop"), .gone])
@@ -72,13 +73,13 @@ extension DispatchWorktreeClassifierTests {
   func testMergedIntoLabelStripsTheRemotePrefix() {
     let patch = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: "[gone]", status: clean,
+        path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: clean,
         containment: .patchEquivalent(target: "origin/develop"), operation: .none))
     XCTAssertTrue(patch.vocabulary.contains(.mergedInto("develop")))
 
     let reachable = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: "[gone]", status: clean,
+        path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: clean,
         containment: .reachable(mergedInto: "origin/develop"), operation: .none))
     XCTAssertTrue(reachable.vocabulary.contains(.mergedInto("develop")))
   }
@@ -89,7 +90,7 @@ extension DispatchWorktreeClassifierTests {
   func testRemoteSyncedSuppressesSavedOnRemote() {
     let synced = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", status: clean,
+        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", openPR: .none, status: clean,
         containment: .reachable(mergedInto: nil), operation: .none))
     XCTAssertFalse(synced.vocabulary.contains(.savedOnRemote), "含意される語は台帳からも消える")
     XCTAssertTrue(synced.vocabulary.contains(.remoteSynced))
@@ -97,13 +98,13 @@ extension DispatchWorktreeClassifierTests {
     let gone = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: "[gone]",
-        status: clean, containment: .reachable(mergedInto: nil), operation: .none))
+        openPR: .none, status: clean, containment: .reachable(mergedInto: nil), operation: .none))
     XCTAssertTrue(
       gone.vocabulary.contains(.savedOnRemote), "同期済みが立たない行では従来どおり名乗る")
 
     let merged = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", status: clean,
+        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", openPR: .none, status: clean,
         containment: .reachable(mergedInto: "main"), operation: .none))
     XCTAssertTrue(
       merged.vocabulary.contains(.mergedInto("main")), "merged はより強い別の主張なので抑制しない")
@@ -116,20 +117,21 @@ extension DispatchWorktreeClassifierTests {
   func testUnverifiedChipRaisesWhenAnySafetyFactIsMissing() {
     let status = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: "[gone]", status: nil,
+        path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: nil,
         containment: .patchEquivalent(target: "main"), operation: .none))
     XCTAssertEqual(status.group, .caution)
     XCTAssertTrue(status.vocabulary.contains(.unverified))
 
     let operation = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: "[gone]", status: clean,
+        path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: clean,
         containment: .patchEquivalent(target: "main"), operation: .unknown))
     XCTAssertTrue(operation.vocabulary.contains(.unverified))
 
     let containment = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: "[gone]", status: clean, containment: nil,
+        path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: clean,
+        containment: nil,
         operation: .none))
     XCTAssertTrue(containment.vocabulary.contains(.unverified))
   }
@@ -139,14 +141,14 @@ extension DispatchWorktreeClassifierTests {
   func testUnverifiedDoesNotCountTheWorkingTreeOnPrunableRows() {
     let verified = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", isPrunable: true, openPR: 139,
+        path: "/wt/x", branch: "feat/x", isPrunable: true, openPR: .open(139),
         containment: .patchEquivalent(target: "main")))
     XCTAssertEqual(verified.group, .caution, "open PR が安全群入りを塞ぐ")
     XCTAssertFalse(
       verified.vocabulary.contains(.unverified), "status nil・操作 unknown でも prunable は数えない")
 
     let missing = row(
-      DispatchCleanFacts(path: "/wt/x", branch: "feat/x", isPrunable: true, openPR: 139))
+      DispatchCleanFacts(path: "/wt/x", branch: "feat/x", isPrunable: true, openPR: .open(139)))
     XCTAssertTrue(missing.vocabulary.contains(.unverified), "取り込み判定の欠落だけは prunable でも立つ")
   }
 
@@ -155,7 +157,7 @@ extension DispatchWorktreeClassifierTests {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x",
-        occupancy: PaneOccupancy(cwd: "/wt/x", agentState: "working")))
+        openPR: .none, occupancy: PaneOccupancy(cwd: "/wt/x", agentState: "working")))
     XCTAssertEqual(r.group, .inUse)
     XCTAssertFalse(r.vocabulary.contains(.unverified))
   }
@@ -163,7 +165,7 @@ extension DispatchWorktreeClassifierTests {
   /// detached × 判定不能の行はチップ 1 枚だけで語る——詳細を持たないので、他に書くことが
   /// 無ければサブラインも開かない（「書くことが無ければ開かない」の従来規則のまま）。
   func testDetachedUnverifiedRowShowsTheChipWithoutADetail() {
-    let r = row(DispatchCleanFacts(path: "/wt/x", status: clean, operation: .none))
+    let r = row(DispatchCleanFacts(path: "/wt/x", openPR: .none, status: clean, operation: .none))
     XCTAssertEqual(r.group, .caution)
     XCTAssertNil(r.branch)
     XCTAssertEqual(r.chips, [.unverified], "立った事実はチップとして到達できる")

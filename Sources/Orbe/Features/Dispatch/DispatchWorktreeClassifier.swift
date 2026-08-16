@@ -11,12 +11,15 @@ enum DispatchWorktreeClassifier {
   struct Input {
     var worktrees: [GitWorktree] = []
     var localBranches: [GitBranch] = []
-    /// ブランチ名指しの PR 取得（`--state all --head <branch>`）の着地。open / closed の両方の
-    /// 事実がここから決まる——一覧の窓（直近 N 件）に頼ると、窓落ちした PR のぶんだけ
+    /// head → ブランチ名指しの PR 取得（`--state all --head <branch>`）の状態。open / closed の
+    /// 両方の事実がここから決まる——一覧の窓（直近 N 件）に頼ると、窓落ちした PR のぶんだけ
     /// 「merged チップが出ない」「レビュー中なのに安全確認を素通りする」が起きる。
-    var branchPullRequests: [GitHubBranchPR] = []
+    /// **取得は head 単位で着地する**ので、状態も head 単位で持つ（1 本の失敗を全体へ波及させない）。
+    var branchPRStates: [String: BranchPRState] = [:]
     /// path → 分類レーンの実測。無い worktree は「判定できなかった」として扱う。
     var probes: [String: DispatchCleanProbe] = [:]
+    /// まだプローブが飛んでいる path。この行は「必要な事実が揃っていない」ので選べない。
+    var probingPaths: Set<String> = []
     var panes: [PaneOccupancy] = []
   }
 
@@ -25,12 +28,27 @@ enum DispatchWorktreeClassifier {
     let occupancy = occupancies(worktreePaths: input.worktrees.map(\.path), panes: input.panes)
     let branchByName = Dictionary(
       input.localBranches.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
-    let prsByHead = branchPRLookup(input.branchPullRequests)
     return classify(
       input.worktrees.map { worktree in
         let probe = input.probes[worktree.path]
         let local = worktree.branch.flatMap { branchByName[$0] }
-        let prs = worktree.branch.flatMap { prsByHead[$0] } ?? []
+        // detached（branch == nil）は PR の head になり得ないので確認対象が無い＝確かめて 0 件。
+        // 台帳に無い head は安全側（まだ確かめていない）に倒す。
+        let prState: BranchPRState =
+          worktree.branch.map { input.branchPRStates[$0] ?? .fetching } ?? .loaded([])
+        // 取得中／失敗の head では PR を 1 つも事実にしない——知らないことを語らせない。
+        let prs: [GitHubBranchPR]
+        switch prState {
+        case .loaded(let all): prs = worktree.branch.flatMap { branchPRLookup(all)[$0] } ?? []
+        case .fetching, .failed: prs = []
+        }
+        let openPR: CleanOpenPR
+        switch prState {
+        case .fetching: openPR = .pending
+        case .failed: openPR = .unverified
+        case .loaded:
+          openPR = prs.first { $0.state == "OPEN" }.map { .open($0.number) } ?? CleanOpenPR.none
+        }
         return DispatchCleanFacts(
           path: worktree.path, branch: worktree.branch, head: worktree.head,
           isMain: worktree.isMain, isPrunable: worktree.isPrunable,
@@ -38,9 +56,10 @@ enum DispatchWorktreeClassifier {
           closedPR: prs.first { $0.state != "OPEN" }.map {
             DispatchCleanPR(number: $0.number, isMerged: $0.state == "MERGED", base: $0.baseRefName)
           },
-          openPR: prs.first { $0.state == "OPEN" }?.number,
+          openPR: openPR,
           status: probe?.status, containment: probe?.containment,
-          operation: probe?.operation ?? .unknown, occupancy: occupancy[worktree.path])
+          operation: probe?.operation ?? .unknown, occupancy: occupancy[worktree.path],
+          isProbing: input.probingPaths.contains(worktree.path))
       })
   }
 
@@ -106,8 +125,12 @@ enum DispatchWorktreeClassifier {
   /// レビュー中のブランチの既定は「残す」——初期チェック済みで並べると、確認の機会が無いまま
   /// レビュー中のブランチが消える。ここを開けておくと「安全の根拠を隠したまま黄の警告だけを出す
   /// 安全行」も作れてしまう（安全群に loss の語が 1 つも立たないことが、この 1 行で決まる）。
+  /// **通るのは「確かめて open PR が無い」（`.none`）だけ**——取得中（`.pending`）も取得失敗
+  /// （`.unverified`）も、レビュー中でないことを確かめていないので落とす。
   private static func passesSafety(_ f: DispatchCleanFacts) -> Bool {
-    guard !f.isMain, f.occupancy == nil, f.lockReason == nil, f.openPR == nil else { return false }
+    guard !f.isMain, f.occupancy == nil, f.lockReason == nil, f.openPR == .none else {
+      return false
+    }
     guard f.isPrunable || f.status?.isClean == true else { return false }
     // **status が clean でも rebase 途中の worktree は safe に入れない。** コンフリクトの無い停止点では
     // status が空になりうるので、status だけを見ていると初期チェック済みのまま消える。
@@ -151,6 +174,8 @@ enum DispatchWorktreeClassifier {
     return CleanRow(
       id: f.path, name: (f.path as NSString).lastPathComponent,
       meta: f.branch ?? abbreviate(f.path), branch: f.branch, head: f.head, group: group,
+      // 選択の対象外である `inUse` 行では値は問われない（そこは群そのものが選べなさを語る）。
+      isReady: !f.isProbing && f.openPR != .pending,
       vocabulary: vocabulary, chips: cluster.chips, lossNotes: lossNotes,
       overflowNotes: cluster.overflow.filter { !lossNotes.contains($0) },
       deletesBranchImplicitly: group == .safe && !f.isPrunable && f.branch != nil)
@@ -238,7 +263,8 @@ enum DispatchWorktreeClassifier {
     let isRemoteSynced = f.upstream != nil && f.track == nil
     var out: [CleanChip] = []
     if case .unmerged(let count) = f.containment { out.append(.ownCommits(count)) }
-    if let number = f.openPR { out.append(.openPR(number)) }
+    // 確かめて居ると分かった PR だけを名乗る（`.pending` / `.unverified` は知らないことを語らない）。
+    if case .open(let number) = f.openPR { out.append(.openPR(number)) }
     if f.upstream == nil, !contained { out.append(.unpushed) }
     if let ahead = ahead(f.track), ahead > 0, !contained { out.append(.remoteAhead(ahead)) }
     if let pr = f.closedPR, pr.isMerged { out.append(.mergedPR(pr.number, base: pr.base)) }
@@ -263,10 +289,13 @@ enum DispatchWorktreeClassifier {
     guard group == .caution else { return [] }
     // prunable は作業ツリー側（status・停止中の操作）を意図的に問わない（失うものが無く、
     // 確認の対象ですらない）。取り込み判定は detached も oid で問うので branch の有無を問わない。
+    // PR 取得の失敗もここが受ける——「情報取得に失敗」はまさにこの意味で、語を増やす理由が無い
+    // （取得**中**は行頭の回転グリフが語るので、チップは立てない）。
     let status = !f.isPrunable && f.status == nil
     let operation = !f.isPrunable && f.operation == .unknown
     let containment = f.containment == nil
-    guard status || operation || containment else { return [] }
+    let pullRequest = f.openPR == .unverified
+    guard status || operation || containment || pullRequest else { return [] }
     return [.unverified]
   }
 

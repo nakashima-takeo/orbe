@@ -94,6 +94,22 @@ final class DispatchGitHubCacheTests: OrbeTestCase {
     XCTAssertEqual(cache.entry(for: key)?.issues, [issue(1)], "PR の保存が issues を壊さない")
   }
 
+  /// ブランチの PR は **head 単位**で保存する。「キーが無い＝未取得」「`[]`＝0 件」の区別を head ごとに
+  /// 保つので、1 本の失敗が他の head の先描きを消さない。
+  func testBranchPRCacheKeepsHeadsIndependent() {
+    let cache = DispatchGitHubCache.shared
+    let key = "/branch-prs/.git"
+    let pr = GitHubBranchPR(
+      number: 7, headRefName: "feat/x", state: "OPEN", baseRefName: "main",
+      isCrossRepository: false)
+    cache.setBranchPullRequests([pr], head: "feat/x", for: key)
+    cache.setBranchPullRequests([], head: "feat/y", for: key)
+    let entry = cache.entry(for: key)
+    XCTAssertEqual(entry?.branchPullRequests["feat/x"], [pr])
+    XCTAssertEqual(entry?.branchPullRequests["feat/y"], [], "0 件も「確かめた」として残る")
+    XCTAssertNil(entry?.branchPullRequests["feat/z"], "キーが無い＝未取得（0 件ではない）")
+  }
+
   // MARK: - ブランチの PR の取得
 
   /// ブランチの PR は一覧の窓ではなく **worktree にあるブランチの名指し**で、`--state all` の

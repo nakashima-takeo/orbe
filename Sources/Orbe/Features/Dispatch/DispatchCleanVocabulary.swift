@@ -122,7 +122,7 @@ enum CleanChip: Equatable, Identifiable {
   }
 }
 
-/// clean 画面の 1 行（分類の出力。画面に入った瞬間に凍結されるスナップショットの要素）。
+/// clean 画面の 1 行（分類の出力。裏の着地のたびに引き直され、画面へそのまま届く）。
 struct CleanRow: Identifiable, Equatable {
   /// worktree の絶対パス（一意）。
   let id: String
@@ -132,9 +132,12 @@ struct CleanRow: Identifiable, Equatable {
   let meta: String
   let branch: String?
   /// 分類した時点の HEAD の oid。ブランチ削除を「この先端のときだけ」に絞るために運ぶ
-  /// （凍結した判定のままコミットを消さない）。
+  /// （確定した時点の判定のままコミットを消さない）。
   let head: String
   let group: CleanGroup
+  /// この行の判断に要る事実が揃ったか。**揃うまで選べない**（＝自動チェックもされない）。
+  /// 揃っていない行も表示はする——何が待たれているのかが見えないほうが不親切だから。
+  let isReady: Bool
   /// この行が事実として名乗った語すべて（軸A + 軸B + 軸C）。
   ///
   /// 右クラスタとサブラインは**すべてここからの分配**で、`chips` / `lossNotes` / `overflowNotes` の
@@ -191,6 +194,29 @@ struct DispatchCleanPR: Equatable {
   let base: String
 }
 
+/// ブランチ PR 取得の状態。**「取得中」「取得失敗」「確かめて分かった」を 1 つの値で区別する**
+/// ——潰すと、確認前の状態が「レビュー中でない」を名乗って安全確認を素通りする。
+enum BranchPRState: Equatable {
+  /// 取得中（この行はまだ選べない）。
+  case fetching
+  /// 確かめられた（`[]` は「紐づく PR は無い」。gh が使えないリポジトリもここ——確認対象が無い）。
+  case loaded([GitHubBranchPR])
+  /// 取得に失敗した（安全と読まず、確認群で「情報取得に失敗」を見せたうえで手動選択させる）。
+  case failed
+}
+
+/// レビュー中の PR。`Int?` では「無い」と「まだ分からない」を兼務してしまい、確認前の状態が
+/// 安全確認を素通りしていた。
+enum CleanOpenPR: Equatable {
+  /// まだ確かめていない（取得中）。
+  case pending
+  /// 確かめられなかった（取得失敗）。
+  case unverified
+  /// 確かめて、紐づく open PR は無い。
+  case none
+  case open(Int)
+}
+
 /// 分類の入力 1 件。git / gh / ペイン走査から採った素の事実だけを持ち、subprocess には依存しない。
 struct DispatchCleanFacts: Equatable {
   let path: String
@@ -208,8 +234,8 @@ struct DispatchCleanFacts: Equatable {
   let track: String?
   /// ブランチに紐づく closed PR。
   let closedPR: DispatchCleanPR?
-  /// ブランチに紐づく open PR の番号。
-  let openPR: Int?
+  /// ブランチに紐づく open PR。
+  let openPR: CleanOpenPR
   /// `status --porcelain` の件数。nil で判定できなかった。
   let status: GitWorktreeStatusCounts?
   /// 消してコミットが世界に残るかの判定結果。nil で判定できなかった。
@@ -218,16 +244,19 @@ struct DispatchCleanFacts: Equatable {
   let operation: GitWorktreeOperationState
   /// このパスを開いているペイン（複数あれば状態を 1 つに畳んだもの）。
   let occupancy: PaneOccupancy?
+  /// この path のプローブがまだ飛んでいる（status・取り込み判定・停止中の操作が未着地）。
+  let isProbing: Bool
 
-  /// 既定値は**すべて安全側**に置く。とりわけ `containment`（nil）と `operation`（`.unknown`）は
-  /// 「判定できなかった」を意味し、省略しただけの事実が「消してよい」と名乗ることはない
-  /// （既定値を第 2 の判断点にしない）。
+  /// 既定値は**すべて安全側**に置く。`containment`（nil）と `operation`（`.unknown`）は
+  /// 「判定できなかった」、`openPR`（`.pending`）は「まだ確かめていない」を意味し、省略しただけの
+  /// 事実が「消してよい」と名乗ることはない（既定値を第 2 の判断点にしない）。
   init(
     path: String, branch: String? = nil, head: String = "", isMain: Bool = false,
     isPrunable: Bool = false, lockReason: String? = nil, upstream: String? = nil,
-    track: String? = nil, closedPR: DispatchCleanPR? = nil, openPR: Int? = nil,
+    track: String? = nil, closedPR: DispatchCleanPR? = nil, openPR: CleanOpenPR = .pending,
     status: GitWorktreeStatusCounts? = nil, containment: GitBranchContainment? = nil,
-    operation: GitWorktreeOperationState = .unknown, occupancy: PaneOccupancy? = nil
+    operation: GitWorktreeOperationState = .unknown, occupancy: PaneOccupancy? = nil,
+    isProbing: Bool = false
   ) {
     self.path = path
     self.branch = branch
@@ -243,6 +272,7 @@ struct DispatchCleanFacts: Equatable {
     self.containment = containment
     self.operation = operation
     self.occupancy = occupancy
+    self.isProbing = isProbing
   }
 
   /// upstream がリモートで消えている。

@@ -29,6 +29,9 @@ extension DesignGallerySnapshotTests {
     try write("dispatch_clean_row.png", DesignSceneFixtures.dispatchCleanRowModel(), 640, 520)
     try write("dispatch_clean.png", DesignSceneFixtures.dispatchCleanModel(), 640, 520)
     try write("dispatch_clean_empty.png", DesignSceneFixtures.dispatchCleanEmptyModel(), 640, 520)
+    // 行ごとの準備完了の途中経過（未確定行は回転グリフ・確定した安全行だけチェックが灯る）。
+    try write(
+      "dispatch_clean_pending.png", DesignSceneFixtures.dispatchCleanPendingModel(), 640, 520)
     try write(
       "dispatch_clean_subline.png", DesignSceneFixtures.dispatchCleanSublineModel(), 640, 520)
     // ピルが 3 枚競合して溢れた語がサブラインへ回る行（`locked` が消えていないことの証拠）。

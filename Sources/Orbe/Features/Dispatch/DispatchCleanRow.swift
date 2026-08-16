@@ -38,6 +38,9 @@ struct DispatchCleanRow: View {
   @Environment(\.chromeFontResolver) private var fontResolver
 
   private var inUse: Bool { row.group == .inUse }
+  /// まだ必要な事実が揃っていない行。**回転グリフが「まだ動いている」を語り**、減光しない
+  /// ——静止＋減光の `inUse`（もう動かない／削除できない）と、動きと減光の 2 軸で分かれる。
+  private var pending: Bool { !inUse && !row.isReady }
   private var cursor: Bool { model.cursorRow?.id == row.id }
   private var expanded: Bool { model.isExpanded(row) }
 
@@ -54,6 +57,9 @@ struct DispatchCleanRow: View {
       if inUse {
         // inUse 行はボックス自体を描かず、同幅の空スペーサで名前の頭を揃える。
         Color.clear.frame(width: 13, height: 13)
+      } else if pending {
+        // 一覧のローディング行と同じ部品・同じ意味（まだ動いている）。
+        StatusGlyphView(kind: .working, size: 10).frame(width: 13, height: 13)
       } else {
         CleanCheckbox(isOn: model.isChecked(row))
       }
@@ -86,7 +92,7 @@ struct DispatchCleanRow: View {
     .background(CleanRowShape(topOnly: expanded).fill(cursor ? Color.theme.selectionFill : .clear))
     .opacity(inUse ? 0.6 : 1)
     .contentShape(Rectangle())
-    .onTapGesture { if !inUse { model.toggle(at: row.id) } }
+    .onTapGesture { if !inUse && !pending { model.toggle(at: row.id) } }
   }
 
   /// **この行の詳細**。チェックした確認行にだけ開く。ブランチの扱いを選ぶセグメントは中身の 1 つで、

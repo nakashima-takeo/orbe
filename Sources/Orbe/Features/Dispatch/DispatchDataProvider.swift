@@ -15,7 +15,8 @@ final class DispatchDataProvider {
   /// 提示元が開く時点の実効値を注入する＝常に最新値で解決する。
   private let worktreeTemplate: String
   /// 開いた時点のペイン占有スナップショット（`SessionStore` を Dispatch から見せないための値型）。
-  private let paneOccupancies: [PaneOccupancy]
+  /// 読み手は分冊（`DispatchDataProvider+CleanProbe.swift`）。
+  let paneOccupancies: [PaneOccupancy]
   private let runner: GitRunner
 
   private(set) var repo: GitRepo?
@@ -23,16 +24,17 @@ final class DispatchDataProvider {
   /// 既定ブランチの ref。`git symbolic-ref --short refs/remotes/origin/HEAD` の出力なので
   /// `origin/main` という remote 追跡名で、取り込み判定の比較対象と新規 worktree の base に使う。
   /// 表示名（`origin/` 剥がし）は verdict を受けた分類器が導く。
-  private var defaultBranchName = "main"
+  /// 読み手は分冊（`DispatchDataProvider+CleanProbe.swift`）。
+  var defaultBranchName = "main"
 
   /// 分冊（`DispatchDataProvider+Clean.swift` / `+GitHub.swift`）も読む。
   private(set) var worktrees: [GitWorktree] = []
   private var localBranches: [GitBranch] = []
-  private var remoteBranches: [GitBranch] = []
+  /// 読み手は分冊（`DispatchDataProvider+CleanProbe.swift`）。
+  var remoteBranches: [GitBranch] = []
   // gh レーンの状態。書き手は分冊（`DispatchDataProvider+GitHub.swift`）、読み手は `rebuild`。
   var issues: [GitHubIssue] = []
   var pullRequests: [GitHubPullRequest] = []
-  var branchPullRequests: [GitHubBranchPR] = []
   /// probe の結果。`nil` = probe 未完。可用性を Optional で持つことで「まだ確かめていない」と
   /// 「確かめて取得可」を 1 つの値で区別する（両者を潰すと、確認前の状態が「gh 確認済み」を
   /// 名乗ってしまう）。
@@ -42,27 +44,42 @@ final class DispatchDataProvider {
   /// ブランチの PR を実際に引ける状態か。取得は git レーン（worktree 一覧）と gh レーン（認証確認）の
   /// 両方が要り、probe 前に発火すると gh 不在の環境で worktree 本数ぶんの失敗プロセスを撒く。
   var githubReady: Bool { probedGitHubState == .ready }
-  /// ブランチの PR を既に gh へ問うた対象ブランチ。同じ顔ぶれなら引き直さない——取得の入口は
-  /// 複数の着地点から叩かれるので、ここが無いと 1 回開くたびに worktree 本数ぶんの往復が
-  /// まるごと重複する。
-  var requestedBranchPRHeads: [String]?
+  /// head → 今回の取得の状態。**記録は発行の時点で置く**（`issuedProbeTargets` と同じ流儀）——
+  /// 着地を待って記録すると、その間に来たもう一方の着地点が同じ head を二重に引く。
+  /// 台帳と in-flight を 1 つの値で持つので、二重管理が生まれない。
+  /// 書き手は分冊（`DispatchDataProvider+GitHub.swift`）。
+  var branchPRFetches: [String: BranchPRState] = [:]
   var issuesLoading = true
   var pullRequestsLoading = true
   /// 分類レーンの実測結果（path → 実測）。nil の間は分類そのものが未着地。
   ///
   /// 非 nil でも**全 path が揃っているとは限らない**——prober は main worktree と占有行を省くので
   /// それらは恒常的に不在で、差分発行が全量発行より先に着地した回は一時的に部分辞書になる。
-  private var cleanProbes: [String: DispatchCleanProbe]?
+  /// 書き手は分冊（`DispatchDataProvider+CleanProbe.swift`）。
+  var cleanProbes: [String: DispatchCleanProbe]?
   /// path → **発行時点**の取り込み判定の比較先リスト。`requestedBranchPRHeads` と同型の
   /// 「発行時点で記録する顔ぶれ dedup」——比較先が同じ行を引き直さず、gh 着地で base が判明した
   /// 行だけを引き直すための台帳。台帳に無い path のエントリは着地時に落とす（削除済み worktree の
   /// 残骸を持たない）。
-  private var issuedProbeTargets: [String: [String]]?
+  var issuedProbeTargets: [String: [String]]?
   /// 全量発行の世代。独立レーン（concurrent）は順序保証が無いので、**比較先が同じまま**撃たれる
   /// 全量発行どうし（初回・`fetch --prune` 後・削除後）の遅着を、比較先の照合だけでは弾けない。
   /// prune 前の結果が prune 後の結果を上書きすると「マージ直後の行が未取り込みのまま」という
   /// この機能の主用途そのものの失敗になるので、世代で切る。
-  private var probeGeneration = 0
+  var probeGeneration = 0
+  /// path → 発行済みで未着地のプローブの本数。**行ごとの準備完了の入力**。
+  /// 集合ではなく多重集合で持つ——全量発行と差分発行が同じ path に重なったとき、先に着地した
+  /// ほうで「揃った」と読むと、後から来る本命の結果より先に行が選べてしまう。
+  /// 書き手は分冊（`DispatchDataProvider+CleanProbe.swift`）。
+  var probingPaths: [String: Int] = [:]
+
+  /// 分類の材料がまだ動いているか（clean 画面の待機表示の唯一の入力）。非 git では立たない
+  /// ——分類レーンがそもそも走らないので、待っても何も来ない。
+  var classificationPending: Bool {
+    guard repo != nil else { return false }
+    return cleanProbes == nil || !probingPaths.isEmpty
+      || branchPRStates.values.contains(.fetching)
+  }
 
   /// gh 取得の上限件数（issues / open PR の一覧。分冊も読む）。
   let ghLimit = 30
@@ -94,29 +111,33 @@ final class DispatchDataProvider {
       }
       self.repo = repo
       self.applyCachedGitHub(repo)
-      self.loadGit(repo)
+      // prune 前なので分類は撃たない（一覧の worktree / branch 行だけ先に描く）。
+      self.loadGit(repo, classifying: false)
       self.loadGitHub(repo)
       self.loadRemotePrune(repo)
     }
   }
 
-  /// 裏で fetch --prune し、成功したら git レーンを丸ごと引き直す（gh 追従と同じプログレッシブ表示）。
-  /// 失敗時は何もせず現状据え置き＝劣化なし。
+  /// 裏で fetch --prune し、**成否を問わず**git レーンを分類ごと引き直す。prune が失敗しても手元の
+  /// ref が最良で、ここで撃たないと分類が永遠に始まらない（clean が 1 行も出ないまま固まる）。
   ///
   /// **分類まで取り直すのが要点**——取り込み判定は到達性（`rev-list --not --remotes`）も cherry も
   /// `refs/remotes/*` の鮮度に依存するので、fetch 前の分類は「GitHub でマージした直後」に必ず
   /// 未取り込みと出る（この機能の主用途がそのまま外れる）。`[gone]` の出どころである
-  /// `localBranches` も prune で初めて確定する。clean 画面は
-  /// `enter(rows:)` で凍結済みなので、カーソルの下でリストが組み替わることはない。
+  /// `localBranches` も prune で初めて確定する。
   private func loadRemotePrune(_ repo: GitRepo) {
-    repo.fetchPrune { [weak self] success in
-      guard let self, success else { return }
-      self.loadGit(repo)
+    repo.fetchPrune { [weak self] _ in
+      self?.loadGit(repo, classifying: true)
     }
   }
 
   /// git レーンを引き直す。分冊（`DispatchDataProvider+Clean.swift`）が削除の完了時にも撃つ。
-  func loadGit(_ repo: GitRepo) {
+  ///
+  /// `classifying` が真のときだけ分類プローブも撃つ——分類の到達性判定は prune 済みの
+  /// `refs/remotes/origin/*` を前提にする（prune 前の origin には remote で消えた ref が残っており、
+  /// そこからの到達性を根拠にすると「消してもコミットは origin に残る」が偽になる）ので、
+  /// prune より前の呼びには載せない。
+  func loadGit(_ repo: GitRepo, classifying: Bool) {
     let group = DispatchGroup()
     group.enter()
     repo.worktrees {
@@ -145,55 +166,8 @@ final class DispatchDataProvider {
     group.notify(queue: .main) {
       self.rebuild()
       // git の事実（ref の中身）が動いた着地なので全行引き直す。
-      self.startCleanProbe(repo, invalidateAll: true)
+      if classifying { self.startCleanProbe(repo, invalidateAll: true) }
       self.loadBranchPullRequests(repo)
-    }
-  }
-
-  /// 分類レーンを起動する。fetch 着地後にも同じ入口から取り直す（結果が同じなら rebuild しない）。
-  ///
-  /// `invalidateAll` が false のとき（gh 着地）は、**比較先の顔ぶれが変わった行だけ**を引き直す
-  /// （merged PR の base が判明して `origin/<base>` が比較先に加わった行がこれに当たる）。
-  /// 台帳（`issuedProbeTargets`)は**発行の時点で**更新する——着地を待って記録すると、その間に来た
-  /// もう一方の着地点が同じ顔ぶれを二重に引く（`loadBranchPullRequests` と同じ理由）。
-  ///
-  /// 着地は 2 つの関門を通ったものだけ `cleanProbes` へマージする。probe は独立レーン
-  /// （concurrent）で順序保証が無く、古い発行の遅着が新しい結果を上書きしうるため:
-  /// **世代**（全量発行より後に撃たれた全量発行があれば、古い方の着地は丸ごと捨てる）と、
-  /// **path ごとの比較先の照合**（全量発行の在庫中に gh 着地で比較先が変わった行は、その行だけ
-  /// 差分発行の結果を勝たせる）。前者だけでは同一比較先の全量どうしを、後者だけでは
-  /// prune 前後の全量どうしを弾けないので、両方が要る。
-  func startCleanProbe(_ repo: GitRepo, invalidateAll: Bool) {
-    let extra = DispatchWorktreeClassifier.extraContainmentTargets(
-      worktrees: worktrees, branchPullRequests: branchPullRequests,
-      remoteBranchNames: Set(remoteBranches.map(\.name)), defaultBranch: defaultBranchName)
-    let prober = DispatchCleanProber(
-      repo: repo, defaultBranch: defaultBranchName, extraContainmentTargets: extra)
-    // 台帳は prober が実際に渡す比較先そのもの（合成点を 1 つにして、記録と実入力がずれないようにする）。
-    let inputs = Dictionary(
-      uniqueKeysWithValues: worktrees.map { ($0.path, prober.targets(for: $0.path)) })
-    let stale =
-      invalidateAll
-      ? worktrees : worktrees.filter { inputs[$0.path] != issuedProbeTargets?[$0.path] }
-    guard !stale.isEmpty else { return }
-    if invalidateAll {
-      issuedProbeTargets = inputs
-      probeGeneration += 1
-    } else {
-      var ledger = issuedProbeTargets ?? [:]
-      for worktree in stale { ledger[worktree.path] = inputs[worktree.path] }
-      issuedProbeTargets = ledger
-    }
-    let generation = probeGeneration
-    prober.probe(worktrees: stale, panes: paneOccupancies) { [weak self] probes in
-      guard let self, generation == self.probeGeneration else { return }
-      var merged = (self.cleanProbes ?? [:]).filter { self.issuedProbeTargets?[$0.key] != nil }
-      for (path, probe) in probes where inputs[path] == self.issuedProbeTargets?[path] {
-        merged[path] = probe
-      }
-      guard self.cleanProbes != merged else { return }
-      self.cleanProbes = merged
-      self.rebuild()
     }
   }
 
@@ -202,13 +176,16 @@ final class DispatchDataProvider {
   func rebuild() {
     guard let model else { return }
     let selectedAction = model.selectedItem?.action
+    let prStates = branchPRStates
     let rows = cleanProbes.map {
       DispatchWorktreeClassifier.rows(
         DispatchWorktreeClassifier.Input(
           worktrees: worktrees, localBranches: localBranches,
-          branchPullRequests: branchPullRequests, probes: $0,
+          branchPRStates: prStates, probes: $0, probingPaths: Set(probingPaths.keys),
           panes: paneOccupancies))
     }
+    // 待機表示は行より先に据える（0 行の瞬間にスケルトンを描くかがここで決まる）。
+    model.classificationPending = classificationPending
     model.classification = rows
     model.hasLoadedOnce = true
     model.sections = DispatchSectionBuilder.build(

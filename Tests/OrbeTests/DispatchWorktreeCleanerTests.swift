@@ -66,7 +66,7 @@ final class DispatchWorktreeCleanerTests: OrbeTestCase {
   }
 
   /// 分類してから実行するまでにブランチが進んだら、worktree は消えてもブランチは残る
-  /// （凍結した判定でコミットを消さない）。失敗は per-row で返り、**生ログが載る**。
+  /// （確定した時点の判定でコミットを消さない）。失敗は per-row で返り、**生ログが載る**。
   func testBranchSurvivesWhenItMovedSinceClassification() throws {
     let wt = try addWorktree("wt", branch: "feat/moved")
     // 分類の後に別の経路からコミットが載る。

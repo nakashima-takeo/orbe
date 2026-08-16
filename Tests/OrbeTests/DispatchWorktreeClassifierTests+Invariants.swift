@@ -122,7 +122,9 @@ extension DispatchWorktreeClassifierTests {
           for upstream in [nil, "origin/feat/x"] as [String?] {
             for track in [nil, "[gone]", "[ahead 3]"] as [String?] {
               for containment in containments {
-                for openPR in [nil, 139] as [Int?] {
+                // 4 値すべてを振る——`.pending` / `.unverified`（確かめていない）も
+                // 不変条件の対象で、そこだけ語が不到達になる形を作らせない。
+                for openPR in [CleanOpenPR.pending, .unverified, .none, .open(139)] {
                   for merged in [nil, true, false] as [Bool?] {
                     let facts = DispatchCleanFacts(
                       path: "/wt/x", branch: branch, isMain: isMain, isPrunable: isPrunable,
@@ -148,7 +150,7 @@ extension DispatchWorktreeClassifierTests {
     branch=\(f.branch ?? "nil") prunable=\(f.isPrunable) main=\(f.isMain) \
     pane=\(f.occupancy != nil) status=\(String(describing: f.status)) op=\(f.operation) \
     lock=\(f.lockReason != nil) up=\(f.upstream ?? "nil") track=\(f.track ?? "nil") \
-    containment=\(String(describing: f.containment)) openPR=\(String(describing: f.openPR)) \
+    containment=\(String(describing: f.containment)) openPR=\(f.openPR) \
     closedPR=\(String(describing: f.closedPR))
     """
   }
