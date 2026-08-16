@@ -53,14 +53,12 @@ extension DispatchWorktreeClassifierTests {
   /// （判定には使わない・表示上の根拠としては真の主張）。証明由来のピルが merged PR チップの行で
   /// overflow へ降りても、その行の右クラスタには merged PR チップが必ず立つ。
   ///
-  /// `remote と同期済み` も根拠として数える——これが立つ行は `remote に保存済み` を抑制するので
-  /// （強い方の主張が同じ事実を含む）、数えないと抑制した行だけが「根拠ゼロ」でこの検査を素通りする。
   func testSafeRowsAlwaysShowTheirEvidence() {
     var violations: [String] = []
     forEachShape { facts, shape in
       let r = row(facts)
       guard r.group == .safe else { return }
-      let evidence = r.vocabulary.filter { $0.tone == .safe || $0 == .remoteSynced }
+      let evidence = r.vocabulary.filter { $0.tone == .safe }
       if !evidence.isEmpty, !evidence.contains(where: { r.chips.contains($0) }) {
         violations.append("根拠が右クラスタに無い — \(shape)")
       }
@@ -71,6 +69,26 @@ extension DispatchWorktreeClassifierTests {
     XCTAssertEqual(
       violations.count, 0,
       "安全行が根拠を隠した（先頭 3 件）: \(violations.prefix(3).joined(separator: " / "))")
+  }
+
+  /// **remote 上のコミットの在り方を語る 3 語は排他。** `merged → \<X\>` はマージ済みを、
+  /// `リモート反映済み` は remote に在ることを、`未 push · ローカルのみ` はどこにも残らないことを
+  /// 主張する——前者ほど強く後者を含意/否定するので、2 つ以上が同じ行に立てばどれかが偽になる。
+  func testRemotePresenceVocabularyIsExclusive() {
+    var violations: [String] = []
+    forEachShape { facts, shape in
+      let r = row(facts)
+      let raised = r.vocabulary.filter {
+        if case .mergedInto = $0 { return true }
+        return $0 == .onRemote || $0 == .unpushed
+      }
+      if raised.count > 1 {
+        violations.append("\(raised.map(\.id).joined(separator: "+")) — \(shape)")
+      }
+    }
+    XCTAssertEqual(
+      violations.count, 0,
+      "remote の在り方を 2 通りで語った（先頭 3 件）: \(violations.prefix(3).joined(separator: " / "))")
   }
 
   /// 2 つの受け皿は重ならない（同じ語をサブラインに 2 度書かない）。

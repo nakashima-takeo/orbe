@@ -197,10 +197,8 @@ enum DispatchWorktreeClassifier {
     // ——「PR #N merged → base」と同じ「merged」を 2 枚並べない。空いた枠は次の事実（[gone] 等）
     // が rest から埋める。
     //
-    // **降ろすのは重複する `.mergedInto` だけ。** `.savedOnRemote` は「到達性は立つがマージとまでは
-    // 主張しない」という別の（かつローカルに証明された）主張なので PR チップと重複せず、しかも
-    // overflow は `canExpandSubline` が確認群限定なので safe 行では描かれない——降ろせば消える。
-    // 降ろすと safe 行に残る安全根拠が gh 由来の主張だけになり、「証明はローカルに閉じる」と逆を向く。
+    // **降ろすのは重複する `.mergedInto` だけ。** 軸B の他の語は「merged」を名乗らないので PR チップと
+    // 重複せず、枠を争ったまま残る。
     let hasMergedPR = axes.b.contains {
       if case .mergedPR = $0 { return true }
       return false
@@ -253,32 +251,40 @@ enum DispatchWorktreeClassifier {
   ///
   /// 取り込みの語は証明の種類で出し分ける: `.patchEquivalent` と tip を含む比較先のある
   /// `.reachable` は「merged → \<実マージ先\>」が真の主張なので名乗る。`.reachable(mergedInto: nil)`
-  /// は単に完全 push 済みで未マージでも立つため「merged」を名乗らせず、到達性だけを主張する
-  /// `.savedOnRemote` を出す（語が主張として偽になるなら、色を弱めるのではなく言わない）。
+  /// は単に完全 push 済みで未マージでも立つため「merged」を名乗らせず、コミットが remote 上に
+  /// 在ることだけを主張する `.onRemote` を出す（語が主張として偽になるなら、色を弱めるのではなく
+  /// 言わない）。
+  ///
+  /// `.onRemote` は**マージ済みの行では出さない**——マージされていれば remote に在ることは含意され、
+  /// 含意される語を重ねると読む側の判断材料が増えないまま行が混む。結果として
+  /// `merged → \<X\>` ／ `リモート反映済み` ／ `未 push · ローカルのみ` は排他になる。
   private static func axisB(_ f: DispatchCleanFacts) -> [CleanChip] {
     guard f.branch != nil else { return [] }
     let contained = isContained(f.containment)
-    // `remote に同期済み` が立つ条件。`remote に保存済み` の抑制条件と同一なので 1 箇所で持つ
-    // （2 つのコピーに割ると、片方だけ動いたとき「両方出る／両方出ない」に静かに壊れる）。
-    let isRemoteSynced = f.upstream != nil && f.track == nil
+    // 「remote 上にコミットが存在する」という事実。到達性が証明できたか、upstream があって
+    // track が空（＝upstream と一致）のどちらか。
+    var isOnRemote = f.upstream != nil && f.track == nil
+    var isMerged = false
     var out: [CleanChip] = []
     if case .unmerged(let count) = f.containment { out.append(.ownCommits(count)) }
     // 確かめて居ると分かった PR だけを名乗る（`.pending` / `.unverified` は知らないことを語らない）。
     if case .open(let number) = f.openPR { out.append(.openPR(number)) }
     if f.upstream == nil, !contained { out.append(.unpushed) }
     if let ahead = ahead(f.track), ahead > 0, !contained { out.append(.remoteAhead(ahead)) }
-    if let pr = f.closedPR, pr.isMerged { out.append(.mergedPR(pr.number, base: pr.base)) }
+    if let pr = f.closedPR, pr.isMerged {
+      out.append(.mergedPR(pr.number, base: pr.base))
+      isMerged = true
+    }
     switch f.containment {
     case .patchEquivalent(let target), .reachable(mergedInto: .some(let target)):
       out.append(.mergedInto(label(target)))
+      isMerged = true
     case .reachable(mergedInto: nil):
-      // 「remote に同期済み」が立つ行では「remote に保存済み」を名乗らない——同期済みが保存済みを
-      // 含意し、強い方の主張が同じ事実を含んで立っている（隠される情報は無い）。
-      if !isRemoteSynced { out.append(.savedOnRemote) }
+      isOnRemote = true
     case .unmerged, nil:
       break
     }
-    if isRemoteSynced { out.append(.remoteSynced) }
+    if isOnRemote, !isMerged { out.append(.onRemote) }
     if f.isGone { out.append(.gone) }
     return out
   }

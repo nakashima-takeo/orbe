@@ -35,10 +35,10 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     XCTAssertEqual(r.lossNotes, [.ownCommits(6)], "黄ピルの行は展開サブラインに損失の内訳を書く")
   }
 
-  /// PR が MERGED で安全確認を全部通れば safe。失うものが無いので軸A は何も名乗らず、
-  /// **空いた枠は軸B の 2 枚目で埋まる**——安全の根拠を 1 つだけ出して黙らない。
-  /// merged PR チップが立つ行では証明ピル（`merged → main`）はピル枠を争わずサブラインへ降り、
-  /// 空いた枠は次の事実が埋める（同じ「merged」を 2 枚並べない）。
+  /// PR が MERGED で安全確認を全部通れば safe。失うものが無いので軸A は何も名乗らない。
+  /// merged PR チップが立つ行では証明ピル（`merged → main`）はピル枠を争わずサブラインへ降り
+  /// （同じ「merged」を 2 枚並べない）、`リモート反映済み` はマージが含意するので立たない
+  /// ——残る右クラスタは PR チップ 1 枚。
   func testMergedPRPassingEveryCheckIsSafe() {
     let r = row(
       DispatchCleanFacts(
@@ -47,7 +47,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
         status: clean,
         containment: .patchEquivalent(target: "main"), operation: .none))
     XCTAssertEqual(r.group, .safe)
-    XCTAssertEqual(r.chips, [.mergedPR(142, base: "main"), .remoteSynced])
+    XCTAssertEqual(r.chips, [.mergedPR(142, base: "main")])
     XCTAssertEqual(
       r.overflowNotes, [.mergedInto("main")],
       "降りた語は台帳に残る（safe 行では描かれないが、同じ主張を PR チップが可視で引き受ける）")
@@ -181,7 +181,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
         status: clean,
         containment: .patchEquivalent(target: "main"), operation: .none))
     XCTAssertEqual(r.group, .caution)
-    XCTAssertEqual(r.chips, [.mergedInto("main"), .remoteSynced])
+    XCTAssertEqual(r.chips, [.mergedInto("main")])
   }
 
   // MARK: - 軸B の語彙と優先順位
@@ -256,15 +256,15 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     XCTAssertEqual(diverged.chips.first, .remoteAhead(1))
   }
 
-  /// upstream があり track が空なら「ローカルを消しても origin に残る」。取り込み判定が
+  /// upstream があり track が空なら「ローカルを消してもコミットは remote に在る」。取り込み判定が
   /// できなかった事実は判定不能チップが名乗る（確認群にいる理由の可視化）。
-  func testRemoteSyncedWhenTrackIsEmpty() {
+  func testOnRemoteWhenTrackIsEmpty() {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", openPR: .none, status: clean,
         containment: nil, operation: .none))
     XCTAssertEqual(
-      r.chips, [.remoteSynced, .unverified])
+      r.chips, [.onRemote, .unverified])
   }
 
   /// detached はブランチの行き先そのものが無い（サブラインを開かない条件でもある）。
@@ -362,6 +362,6 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
         operation: .inProgress(.merge)
       ))
     XCTAssertEqual(r.chips, [.inProgress(.merge), .locked], "loss の 2 枚が残る")
-    XCTAssertEqual(r.overflowNotes, [.mergedInto("main"), .remoteSynced])
+    XCTAssertEqual(r.overflowNotes, [.mergedInto("main")])
   }
 }

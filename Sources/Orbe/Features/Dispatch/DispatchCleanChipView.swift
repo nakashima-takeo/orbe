@@ -37,8 +37,7 @@ struct DispatchCleanChip: View {
     case .prunable: return l10n.string(.dispatchCleanPrunable)
     case .mergedPR(let number, let base): return "PR #\(number) merged → \(base)"
     case .mergedInto(let branch): return "merged → \(branch)"
-    case .savedOnRemote: return l10n.string(.dispatchCleanSavedOnRemote)
-    case .remoteSynced: return l10n.string(.dispatchCleanRemoteSynced)
+    case .onRemote: return l10n.string(.dispatchCleanOnRemote)
     case .remoteAhead(let n): return "remote +\(n)"
     case .unpushed: return l10n.string(.dispatchCleanUnpushed)
     case .openPR(let number): return "PR #\(number) open"

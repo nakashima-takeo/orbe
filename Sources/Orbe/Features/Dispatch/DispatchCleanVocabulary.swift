@@ -35,10 +35,10 @@ enum CleanChip: Equatable, Identifiable {
   case mergedPR(Int, base: String)
   /// 比較先へ取り込み済み（引数は verdict 由来の実マージ先。「merged → \<target\>」）。
   case mergedInto(String)
-  /// 全コミットが remote に残る（到達性の証明。マージされたとまでは主張しない——
-  /// 単に完全 push 済みで未マージでも立つため、「merged」を名乗ると偽になり得る）。
-  case savedOnRemote
-  case remoteSynced
+  /// コミットが remote 上に在る（到達性の証明が立ったか、upstream と一致している）。
+  /// マージされたとまでは主張しない——単に完全 push 済みで未マージでも立つため、
+  /// 「merged」を名乗ると偽になり得る。
+  case onRemote
   /// upstream より k コミット先行している。
   case remoteAhead(Int)
   case unpushed
@@ -69,8 +69,7 @@ enum CleanChip: Equatable, Identifiable {
     case .prunable: return "prunable"
     case .mergedPR(let n, let base): return "mergedPR:\(n):\(base)"
     case .mergedInto(let branch): return "mergedInto:\(branch)"
-    case .savedOnRemote: return "savedOnRemote"
-    case .remoteSynced: return "remoteSynced"
+    case .onRemote: return "onRemote"
     case .remoteAhead(let n): return "remoteAhead:\(n)"
     case .unpushed: return "unpushed"
     case .openPR(let n): return "openPR:\(n)"
@@ -87,11 +86,11 @@ enum CleanChip: Equatable, Identifiable {
 
   var tone: CleanTone {
     switch self {
-    case .mergedPR, .mergedInto, .savedOnRemote: return .safe
+    case .mergedPR, .mergedInto, .onRemote: return .safe
     case .uncommitted, .untracked, .inProgress, .remoteAhead, .unpushed, .openPR, .ownCommits,
       .locked, .agentWaiting, .unverified:
       return .loss
-    case .prunable, .remoteSynced, .gone, .paneOpen, .mainWorktree:
+    case .prunable, .gone, .paneOpen, .mainWorktree:
       return .neutral
     case .agentWorking: return .status
     }
@@ -160,9 +159,9 @@ struct CleanRow: Identifiable, Equatable {
   /// それが許されるのは、安全行に loss の語が 1 つも立たないから——レビュー中の PR を持つ行は
   /// 安全確認で落ち、コミットが世界に残ると確認済みの行は `未 push` / `remote +N` を名乗らない。
   /// 残るのは「コミットが世界に残る」という同じ根拠の言い換え（safe / neutral）に限る——merged PR
-  /// チップが立つ行では証明由来の安全根拠ピル（`merged → X` / `remote に保存済み`）がここへ降りるが、
-  /// merged PR チップ自体が安全根拠の表示として必ずピルに載る（判定には使わない・表示上の根拠と
-  /// しては真の主張。台帳 逸脱 18 / 20。`testSafeRowsRaiseNoLoss` が固定する）。
+  /// チップが立つ行では証明由来の `merged → X` がここへ降りるが、merged PR チップ自体が安全根拠の
+  /// 表示として必ずピルに載る（判定には使わない・表示上の根拠としては真の主張。台帳 逸脱 18 / 20。
+  /// `testSafeRowsRaiseNoLoss` が固定する）。
   let overflowNotes: [CleanChip]
   /// チェックするとブランチも一緒に消える行（safe 群のうち、実体があってブランチを持つ行）。
   let deletesBranchImplicitly: Bool
