@@ -4,19 +4,19 @@ import XCTest
 
 /// 取り込み判定（`GitBranchContainment`）由来の語彙の出し分け。**証明の種類でラベルが変わる**——
 /// patch 等価と「tip を含む比較先のある到達性」は「merged → \<実マージ先\>」が真の主張、
-/// 到達性のみは `remote に保存済み` だけを主張する（偽になり得る語は言わない）。
+/// 到達性のみは `リモート反映済み` だけを主張する（偽になり得る語は言わない）。
 extension DispatchWorktreeClassifierTests {
 
   /// 到達性だけで安全が立った行（統合先が既定ブランチでない git-flow 等）は safe に入り、
-  /// `remote に保存済み` を名乗る。**merged は名乗らない**——第0段は「単に完全 push 済みで未マージ」
+  /// `リモート反映済み` を名乗る。**merged は名乗らない**——第0段は「単に完全 push 済みで未マージ」
   /// でも立つため、「取り込み済み」は主張として偽になり得る。
-  func testReachableRowIsSafeAndClaimsSavedOnRemoteNotMerged() {
+  func testReachableRowIsSafeAndClaimsOnRemoteNotMerged() {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/flow", branch: "feat/flow", upstream: "origin/feat/flow", track: "[gone]",
         openPR: .none, status: clean, containment: .reachable(mergedInto: nil), operation: .none))
     XCTAssertEqual(r.group, .safe)
-    XCTAssertEqual(r.chips, [.savedOnRemote, .gone])
+    XCTAssertEqual(r.chips, [.onRemote, .gone])
     XCTAssertFalse(
       r.vocabulary.contains {
         if case .mergedInto = $0 { return true }
@@ -39,9 +39,8 @@ extension DispatchWorktreeClassifierTests {
   /// merged PR チップはマージ先（gh の `baseRefName`）を運ぶ。**表示専用**で、safe の証明は
   /// `containment`（ローカル git の事実）だけが立てる——gh が届かなくても安全群入りは変わらない。
   ///
-  /// `remote に保存済み` は merged PR チップの行でも降ろさない——マージまでは主張しない別の根拠で
-  /// PR チップと重複せず、safe 行のサブラインは開かない（`canExpandSubline` は確認群限定）ので
-  /// 降ろせば消えてしまう。ローカルに証明した根拠を残し、溢れるのは `[gone]` の側。
+  /// merged PR チップが立つ行では `リモート反映済み` は立たない——マージ済みなら remote に在ることは
+  /// 含意されるので、含意される語を重ねない。空いた枠は次の事実（`[gone]`）が埋める。
   func testMergedPRCarriesItsBaseBranch() {
     let r = row(
       DispatchCleanFacts(
@@ -49,8 +48,9 @@ extension DispatchWorktreeClassifierTests {
         closedPR: DispatchCleanPR(number: 123, isMerged: true, base: "develop"),
         openPR: .none, status: clean, containment: .reachable(mergedInto: nil), operation: .none))
     XCTAssertEqual(r.group, .safe)
-    XCTAssertEqual(r.chips, [.mergedPR(123, base: "develop"), .savedOnRemote])
-    XCTAssertEqual(r.overflowNotes, [.gone])
+    XCTAssertEqual(r.chips, [.mergedPR(123, base: "develop"), .gone])
+    XCTAssertFalse(r.vocabulary.contains(.onRemote))
+    XCTAssertEqual(r.overflowNotes, [])
   }
 
   /// 降ろすのは重複する `merged → <X>` だけ——`PR #N merged → base` と同じ「merged」を 2 枚
@@ -84,30 +84,44 @@ extension DispatchWorktreeClassifierTests {
     XCTAssertTrue(reachable.vocabulary.contains(.mergedInto("develop")))
   }
 
-  /// `remote に同期済み` が立つ行では `remote に保存済み` を名乗らない——同期済みが保存済みを
-  /// 含意し、強い方の主張が同じ事実を含んで立っている（vocabulary からも消える＝サブラインにも
-  /// 出さない）。`merged → <X>` はより強い別の主張なので抑制しない。
-  func testRemoteSyncedSuppressesSavedOnRemote() {
+  /// `リモート反映済み` が立つのは「remote 上にコミットが存在する」という 1 つの事実で、
+  /// 到達性の証明（`.reachable(mergedInto: nil)`）と upstream 一致（track が空）のどちらからでも立つ。
+  /// **マージ済みの行では立たない**——マージされていれば remote に在ることは含意される。
+  func testOnRemoteStandsOnEitherProofAndYieldsToMerged() {
     let synced = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", openPR: .none, status: clean,
-        containment: .reachable(mergedInto: nil), operation: .none))
-    XCTAssertFalse(synced.vocabulary.contains(.savedOnRemote), "含意される語は台帳からも消える")
-    XCTAssertTrue(synced.vocabulary.contains(.remoteSynced))
+        containment: nil, operation: .none))
+    XCTAssertEqual(
+      synced.vocabulary.filter { $0 == .onRemote }, [.onRemote], "upstream 一致だけでも 1 枚立つ")
 
-    let gone = row(
+    let reachable = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: "[gone]",
         openPR: .none, status: clean, containment: .reachable(mergedInto: nil), operation: .none))
-    XCTAssertTrue(
-      gone.vocabulary.contains(.savedOnRemote), "同期済みが立たない行では従来どおり名乗る")
+    XCTAssertEqual(
+      reachable.vocabulary.filter { $0 == .onRemote }, [.onRemote], "到達性だけでも 1 枚立つ")
+
+    let both = row(
+      DispatchCleanFacts(
+        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", openPR: .none, status: clean,
+        containment: .reachable(mergedInto: nil), operation: .none))
+    XCTAssertEqual(
+      both.vocabulary.filter { $0 == .onRemote }, [.onRemote], "両方立っても重ならない")
 
     let merged = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", openPR: .none, status: clean,
         containment: .reachable(mergedInto: "main"), operation: .none))
-    XCTAssertTrue(
-      merged.vocabulary.contains(.mergedInto("main")), "merged はより強い別の主張なので抑制しない")
+    XCTAssertEqual(merged.chips, [.mergedInto("main")])
+    XCTAssertFalse(merged.vocabulary.contains(.onRemote), "マージが含意する語は重ねない")
+
+    let mergedPR = row(
+      DispatchCleanFacts(
+        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x",
+        closedPR: DispatchCleanPR(number: 142, isMerged: true, base: "main"), openPR: .none,
+        status: clean, containment: nil, operation: .none))
+    XCTAssertFalse(mergedPR.vocabulary.contains(.onRemote), "PR merged の行でも重ねない")
   }
 
   // MARK: - 判定不能チップ

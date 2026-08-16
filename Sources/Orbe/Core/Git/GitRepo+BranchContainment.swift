@@ -12,7 +12,7 @@ enum GitBranchContainment: Equatable {
   /// **origin に限るのは鮮度の保証範囲と揃えるため**——Orbe が prune するのは origin だけなので、
   /// 他 remote の tracking ref は remote 側で消えた後もローカルに残り続け、「世界に残る」の根拠にできない。
   /// `mergedInto` は tip を含む最初の比較先（ラベル「merged → \<X\>」を名乗れるか）で、
-  /// 安全事実そのものには関わらない。無ければ nil（到達性だけを主張する `remote に保存済み`）。
+  /// 安全事実そのものには関わらない。無ければ nil（到達性だけを主張する `リモート反映済み`）。
   case reachable(mergedInto: String?)
   /// `target` に patch 等価で存在（cherry 2 段）。ラベルは「merged → \<target\>」。
   case patchEquivalent(target: String)
