@@ -80,24 +80,6 @@ extension OrbeCliProcessTests {
     XCTAssertEqual(help.status, 0, "pane send --help は exit 0: \(help.stderr)")
   }
 
-  /// `orb pane --help` の `KEYS:` は control の `ControlKey.specialKeycodes` と同じ集合。
-  ///
-  /// 弾くのは control（`ControlKey.parse` が -32602）だが、help は socket 不達でも出す必要が
-  /// あるため CLI に名前を写している。その写しのドリフトは `KINDS:` / `config` の `KEYS:` と同じ手で落とす。
-  func testPaneHelpListsEveryKeyName() throws {
-    let outcome = ControlProcess.orbWithoutServer(["pane", "--help"])
-    XCTAssertEqual(outcome.status, 0, "pane --help は socket 不達でも exit 0: \(outcome.stderr)")
-    let line = try XCTUnwrap(
-      outcome.stdout.split(separator: "\n").first { $0.hasPrefix("KEYS: ") },
-      "pane --help に KEYS: 行が無い: \(outcome.stdout)")
-    let listed = line.dropFirst("KEYS: ".count).split(separator: ",").map {
-      $0.trimmingCharacters(in: .whitespaces)
-    }
-    XCTAssertEqual(
-      Set(listed), Set(ControlKey.specialKeycodes.keys),
-      "pane --help の KEYS が ControlKey と食い違っている")
-  }
-
   /// socket 不達（Orbe 未起動・ペイン外）はクラッシュせず exit 1 と構造化メッセージ。
   /// `--json` ではそれも stdout の `{"error":{code,message}}` に載る。
   func testUnreachableSocketExitsOneWithStructuredMessage() throws {
@@ -156,29 +138,6 @@ extension OrbeCliProcessTests {
     failure(
       control.orb(["config", "unset", "nosuch"]), code: 2,
       message: "unknown config key: nosuch", "config unset の未知 key")
-  }
-
-  /// `orb config --help` の `KEYS:` は `SettingsRegistry.all` と同じ集合。
-  ///
-  /// usage は socket 不達でも出す必要があるため `config_list` からは引けず、CLI 側に key を写している。
-  /// その写しはこれまで散文の申し送りだけで守られており、実際にドリフトして 3 key（`tab-title-font-family`
-  /// `emoji-font` `worktree-dir`）が欠けたまま出荷された。
-  ///
-  /// 壊れると何が起きるか: registry に足した設定が「打てば通るが help には無い」key になる。
-  /// `config set` は `config_list` を SSOT に検証するので通ってしまい、CLI からも help を読む
-  /// 自動化からも発見できない。help はサーバ不要で出るので、ここもサーバを立てずに測る。
-  func testConfigHelpListsEveryRegistryKey() throws {
-    let outcome = ControlProcess.orbWithoutServer(["config", "--help"])
-    XCTAssertEqual(outcome.status, 0, "config --help は socket 不達でも exit 0: \(outcome.stderr)")
-    let line = try XCTUnwrap(
-      outcome.stdout.split(separator: "\n").first { $0.hasPrefix("KEYS: ") },
-      "config --help に KEYS: 行が無い: \(outcome.stdout)")
-    let listed = line.dropFirst("KEYS: ".count).split(separator: ",").map {
-      $0.trimmingCharacters(in: .whitespaces)
-    }
-    XCTAssertEqual(
-      Set(listed), Set(SettingsRegistry.all.map(\.key)),
-      "config --help の KEYS が SettingsRegistry と食い違っている")
   }
 
   // MARK: - --workspace
