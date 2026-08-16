@@ -45,8 +45,10 @@ extension DispatchDataProvider {
     let stale: [GitWorktree]
     switch scope {
     case .all:
+      // 対象 0 本でも台帳は張る（＝分類は「全行ぶん済んだ」で着地する）。ここで返ると台帳が無いまま
+      // 残り、`cleanProbes` も nil のままなので clean はスケルトンを回し続ける——全量発行の入口は
+      // prune と削除の 2 つだけなので、そこから自力では抜けられない。
       stale = worktrees
-      guard !stale.isEmpty else { return }
       issuedProbeTargets = inputs
       probeGeneration += 1
     case .changedTargets:

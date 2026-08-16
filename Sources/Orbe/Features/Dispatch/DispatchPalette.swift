@@ -161,8 +161,7 @@ struct DispatchSection: Identifiable {
   /// 表示中の画面。器は共通で中身だけ切り替わる。
   private(set) var mode: DispatchMode = .list
   /// 最新の分類結果（provider が rebuild ごとに更新）。nil は分類レーンが未着地。
-  /// **clean を開いている間は、着地がそのまま画面へ届く**（凍結しない。選択可否は行ごとの
-  /// `isReady` が決める）。
+  /// **clean を開いている間は、着地がそのまま画面へ届く**（選択可否は行ごとの `isReady` が決める）。
   var classification: [CleanRow]? {
     didSet {
       guard mode == .clean else { return }
@@ -170,6 +169,8 @@ struct DispatchSection: Identifiable {
     }
   }
   /// 分類の材料がまだ動いているか（provider の導出値。0 行の clean にスケルトンを出す入力）。
+  /// 行と違って画面を跨いで意味が変わらないので、mode を問わずそのまま流す＝clean を開く時点で
+  /// 既に同値になっている。
   var classificationPending = false {
     didSet { clean.classificationPending = classificationPending }
   }
@@ -237,7 +238,6 @@ struct DispatchSection: Identifiable {
   /// 何も起きないより正しい（0 行の間はスケルトン行が空フレームを埋める）。
   func enterClean() {
     clean.enter(rows: classification ?? [])
-    clean.classificationPending = classificationPending
     mode = .clean
     focus()
   }

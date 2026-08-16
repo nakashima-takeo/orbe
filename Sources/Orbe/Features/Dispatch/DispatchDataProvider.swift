@@ -25,13 +25,13 @@ final class DispatchDataProvider {
   /// `origin/main` という remote 追跡名で、取り込み判定の比較対象と新規 worktree の base に使う。
   /// 表示名（`origin/` 剥がし）は verdict を受けた分類器が導く。
   /// 読み手は分冊（`DispatchDataProvider+CleanProbe.swift`）。
-  var defaultBranchName = "main"
+  private(set) var defaultBranchName = "main"
 
   /// 分冊（`DispatchDataProvider+Clean.swift` / `+GitHub.swift`）も読む。
   private(set) var worktrees: [GitWorktree] = []
   private var localBranches: [GitBranch] = []
   /// 読み手は分冊（`DispatchDataProvider+CleanProbe.swift`）。
-  var remoteBranches: [GitBranch] = []
+  private(set) var remoteBranches: [GitBranch] = []
   // gh レーンの状態。書き手は分冊（`DispatchDataProvider+GitHub.swift`）、読み手は `rebuild`。
   var issues: [GitHubIssue] = []
   var pullRequests: [GitHubPullRequest] = []
@@ -78,10 +78,14 @@ final class DispatchDataProvider {
 
   /// 分類の材料がまだ動いているか（clean 画面の待機表示の唯一の入力）。非 git では立たない
   /// ——分類レーンがそもそも走らないので、待っても何も来ない。
-  var classificationPending: Bool {
+  var classificationPending: Bool { classificationPending(branchPRStates) }
+
+  /// head の状態を渡す版。`rebuild()` は分類器へ渡すぶんと同じ 1 つの `branchPRStates` から
+  /// 待機表示も導く——`branchPRStates` は毎回キャッシュを引き直す導出値なので、1 回の描画のうちに
+  /// 別々に組むと、同じ 1 フレームが 2 つの時点を混ぜて語りうる。
+  func classificationPending(_ states: [String: BranchPRState]) -> Bool {
     guard repo != nil else { return false }
-    return cleanProbes == nil || !probingPaths.isEmpty
-      || branchPRStates.values.contains(.fetching)
+    return cleanProbes == nil || !probingPaths.isEmpty || states.values.contains(.fetching)
   }
 
   /// gh 取得の上限件数（issues / open PR の一覧。分冊も読む）。
@@ -188,7 +192,7 @@ final class DispatchDataProvider {
           panes: paneOccupancies))
     }
     // 待機表示は行より先に据える（0 行の瞬間にスケルトンを描くかがここで決まる）。
-    model.classificationPending = classificationPending
+    model.classificationPending = classificationPending(prStates)
     model.classification = rows
     model.hasLoadedOnce = true
     model.sections = DispatchSectionBuilder.build(
