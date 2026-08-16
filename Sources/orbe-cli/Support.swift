@@ -5,7 +5,7 @@ import Foundation
 // 終了コードは 0 成功 / 2 usage エラー / 1 RPC・接続エラー / 124 wait タイムアウト。
 //
 // 各ドメインの USAGE 行と usage テキストは `Commands+<ドメイン>.swift` が持ち、`topUsage` は
-// それらを合成する——ドメインを 1 つ足すときに触るファイルを 1 つに保つため。
+// それらを合成する——ドメインの説明文がそのドメインのファイルの中だけで完結するように。
 
 // MARK: - 出力・終了
 
@@ -160,9 +160,8 @@ func paneSplitDirection(_ args: inout [String]) -> String {
 }
 
 /// config の `--workspace [<id|current>]`（optional-value）の解決結果。書き込み先が 3 つ実在するので
-/// 3 態を持つ。`--workspace` を取る pane / tab は `pane list` と `tab new` の 2 つだけで、そちらは
-/// `takeWorkspaceId` が `<id|current>` 必須で扱う——この非対称は spec の
-/// 表記（`docs/spec/control/cli.md` で config 系だけが値を省ける形に書かれている）に揃えたもの。
+/// 3 態を持つ。値を省けるのは config 系だけで、他ドメインは `takeWorkspaceId` が `<id|current>`
+/// 必須で扱う——この非対称は spec の表記（`docs/spec/control/cli.md`）に揃えたもの。
 enum WorkspaceTarget {
   case none  // --workspace 未指定
   case active  // --workspace のみ（値なし）
@@ -286,8 +285,8 @@ func usageBlock(_ lines: [String]) -> String {
   lines.map { "  " + $0 }.joined(separator: "\n")
 }
 
-/// トップ help に載る全サーフェス。ドメインを 1 つ足すときに触るのはそのドメインのファイルと、
-/// ここの 1 語（と `main.swift` のルーティング 1 行）だけになる。
+/// トップ help に載る全サーフェス。ドメインを 1 つ足すときに触るのは、そのドメインのファイルと、
+/// ここの 1 語と、`main.swift` のルーティング 1 行の 3 箇所。
 private let allUsageLines =
   configUsageLines + wsUsageLines + paneUsageLines + tabUsageLines + agentUsageLines
   + waitUsageLines
@@ -300,11 +299,11 @@ let topUsage = """
 
   COMMON FLAGS:
     --json              machine-readable JSON output (read commands / errors)
-    --workspace [<id>]  target a workspace (<id> or current). bare --workspace
-                        means the active one and is config-only; pane list /
-                        tab new / agent spawn / agent resume require an explicit
-                        <id>. no other pane / tab command takes it
-    --dir <path>        root/working directory (ws new / tab new / agent)
+    --workspace [<id>]  target a workspace. bare --workspace means the active
+                        one and is config-only; every other command that takes
+                        the flag requires an explicit <id|current>, and the
+                        USAGE lines above show which ones do
+    --dir <path>        root/working directory (see the USAGE lines above)
     --cmd "…"           command to run in the new tab (tab new)
 
   pane / tab default to the current pane via ORBE_PANE. Outside a Orbe pane,

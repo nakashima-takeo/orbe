@@ -4,7 +4,7 @@ import Foundation
 // 各サブコマンドは -> Never で終端して exit で終了コードを返す。
 
 let tabUsageLines = [
-  "orb tab new [--workspace <id>] [--dir <path>] [--cmd \"…\"]",
+  "orb tab new [--workspace <id|current>] [--dir <path>] [--cmd \"…\"]",
   "orb tab close [<tab>]",
 ]
 

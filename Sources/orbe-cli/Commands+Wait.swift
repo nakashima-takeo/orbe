@@ -30,13 +30,14 @@ let waitUsage = """
 // MARK: - サブコマンド
 
 func runWait(_ rest: [String]) -> Never {
-  if hasHelp(rest) {
+  var args = rest
+  // help は値の席を抜き取った後に見る（`--kind -h` の値を help と読んで exit 0 で素通りさせない）。
+  let kinds = takeOptions(&args, "--kind", requires: "a <kind>")
+  let timeoutMs = takeIntOption(&args, "--timeout-ms", requires: "a positive <milliseconds>")
+  if hasHelp(args) {
     print(waitUsage)
     exit(0)
   }
-  var args = rest
-  let kinds = takeOptions(&args, "--kind", requires: "a <kind>")
-  let timeoutMs = takeIntOption(&args, "--timeout-ms", requires: "a positive <milliseconds>")
   rejectLeftovers(args, positionals: 1)
 
   var params: [String: Any] = [:]

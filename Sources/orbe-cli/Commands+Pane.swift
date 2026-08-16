@@ -6,13 +6,21 @@ import Foundation
 // MARK: - usage
 
 let paneUsageLines = [
-  "orb pane list [--workspace <id>] [--json]",
+  "orb pane list [--workspace <id|current>] [--json]",
   "orb pane split [<pane>] [-v | -h]",
   "orb pane close [<pane>]",
   "orb pane focus <pane>",
   "orb pane text [<pane>] [--scrollback] [--json]",
-  "orb pane send [<pane>] --text <text> | --stdin",
+  "orb pane send [<pane>] (--text <text> | --stdin)",
   "orb pane key [<pane>] --key <key>",
+]
+
+/// `pane key --key` が受ける名前付きキー。usage は socket 不達でも出す必要があるため control から
+/// 引けず、`ControlKey` の表をここに写す。この写しのドリフトは `testPaneHelpListsEveryKeyName` が
+/// `ControlKey` の語彙と突き合わせて落とす（`KINDS:` / `KEYS:` の既存 2 例と同じ守り方）。
+let paneKeyNames = [
+  "enter", "return", "tab", "escape", "esc", "space", "backspace", "delete",
+  "up", "down", "left", "right", "home", "end", "pageup", "pagedown",
 ]
 
 let paneUsage = """
@@ -21,11 +29,15 @@ let paneUsage = """
   USAGE:
   \(usageBlock(paneUsageLines))
 
+  KEYS: \(paneKeyNames.joined(separator: ", "))
+  Any single character works too; prefix with ctrl+ / alt+ / shift+ (ctrl+c).
   <pane> defaults to the current pane (ORBE_PANE). Outside a Orbe pane, pass
   an explicit id (see: orb pane list). focus always requires an explicit <pane>.
   text prints the captured screen verbatim (no trailing newline is added).
   send takes exactly one of --text / --stdin and does not press enter — follow
-  it with `orb pane key --key enter` to run what you sent.
+  it with `orb pane key --key enter` to run what you sent. Pass text that starts
+  with "-", or that is empty/whitespace only, through --stdin: a value in an
+  option slot may not start with "-" or be blank.
   """
 
 let paneSplitUsage = """
@@ -165,13 +177,17 @@ private func paneText(_ rest: [String]) -> Never {
 /// `printf '%s' "$PROMPT" | orb pane send --stdin` の未設定は 0 バイトとして現れる一方、
 /// ファイルや heredoc の正当な中身が空白・改行だけであることはあり得るから。
 private func paneSend(_ rest: [String]) -> Never {
-  if hasHelp(rest) {
+  // help は**値の席を抜き取った後**に見る。`--text` の値は任意のユーザーテキストなので、引数列
+  // 全体を走査すると `--text -h` の値が help と読まれ、**何も送らないまま exit 0** になる
+  // （`orb pane send --text "$X" && orb pane key --key enter` が enter だけ押す形）。抜き取った
+  // 後なら値の席の `-h` は `takeOption` のダッシュ拒否に落ちて exit 2 で止まる。
+  var args = rest
+  let text = takeOption(&args, "--text", requires: "a value (use --stdin for text starting with -)")
+  let useStdin = takeFlag(&args, "--stdin")
+  if hasHelp(args) {
     print(paneUsage)
     exit(0)
   }
-  var args = rest
-  let text = takeOption(&args, "--text", requires: "a value")
-  let useStdin = takeFlag(&args, "--stdin")
   if text != nil && useStdin { usageDie("pass only one of --text / --stdin") }
   guard text != nil || useStdin else { usageDie("pane send requires --text or --stdin") }
   rejectLeftovers(args, positionals: 1)
@@ -194,16 +210,15 @@ private func paneSend(_ rest: [String]) -> Never {
 }
 
 /// ペインへ名前付きキーを送る。未知キー名は control の `ControlKey.parse` が -32602 で弾く
-/// （CLI はキー名表を複製しない）。
+/// （CLI が持つのは help 用の写しだけで、判定は複製しない）。
 private func paneKey(_ rest: [String]) -> Never {
-  if hasHelp(rest) {
+  var args = rest
+  let key = takeOption(&args, "--key", requires: "a <key> name")  // help より先に値の席を抜く
+  if hasHelp(args) {
     print(paneUsage)
     exit(0)
   }
-  var args = rest
-  guard let key = takeOption(&args, "--key", requires: "a <key> name") else {
-    usageDie("pane key requires --key <key>")
-  }
+  guard let key else { usageDie("pane key requires --key <key>") }
   rejectLeftovers(args, positionals: 1)
   guard let pane = resolvePaneArg(args) else { paneContextDie() }
   let result = callOrExit("send_key", ["paneId": pane, "key": key])

@@ -17,12 +17,15 @@ let agentUsage = """
   USAGE:
   \(usageBlock(agentUsageLines))
 
-  spawn / resume open a new tab that runs the agent the way the GUI does
-  (resolved absolute path, login shell PATH). <agent> defaults to the target
+  spawn / resume open a new tab that runs the agent the way the GUI does, with
+  the login shell PATH injected: spawn execs the resolved absolute path, resume
+  runs the agent's own resume form and lets that PATH resolve the name.
+  <agent> defaults to the target
   workspace's effective default-agent. --workspace opens in that workspace
   **without bringing it to the front**; use `orb pane focus <pane>` to go there.
-  <session-id> comes from `orb pane list --json` (agentSessionId) or from
-  `orb wait --kind agent_state --json`.
+  <session-id> comes from `orb pane list --json` (agentSessionId); wait for the
+  agent to report first with `orb wait --kind agent_state`, which carries the
+  state word only, never the session id.
   """
 
 // MARK: - サブコマンド
