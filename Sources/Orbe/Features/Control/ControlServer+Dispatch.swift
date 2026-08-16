@@ -41,6 +41,36 @@ extension ControlServer {
     }
   }
 
+  /// エージェント起動（spawn_agent / resume_agent）を dispatch する。非該当は nil。
+  /// ここが見るのは param の在否と型だけで、workspace / agent / sessionId の解決は target が返す。
+  func runAgent(method: String, params: [String: Any], target: ControlTarget)
+    -> Result<Any, ControlError>?
+  {
+    switch method {
+    case "spawn_agent":
+      // command は省略可（対象 workspace の実効 default-agent を target が解く）。ただし
+      // 非文字列を渡した形は「省略」と同じにしない——黙って別の agent が起きる。
+      guard params["command"] == nil || params["command"] is String else {
+        return .failure(ControlError(code: -32602, message: "invalid command"))
+      }
+      return target.controlSpawnAgent(
+        command: params["command"] as? String, workspaceId: params["workspaceId"] as? Int,
+        cwd: params["cwd"] as? String)
+    case "resume_agent":
+      guard let command = params["command"] as? String else {
+        return .failure(ControlError(code: -32602, message: "missing command"))
+      }
+      guard let sessionId = params["sessionId"] as? String else {
+        return .failure(ControlError(code: -32602, message: "missing sessionId"))
+      }
+      return target.controlResumeAgent(
+        command: command, sessionId: sessionId, workspaceId: params["workspaceId"] as? Int,
+        cwd: params["cwd"] as? String)
+    default:
+      return nil
+    }
+  }
+
   /// config（列挙・設定）と workspace CRUD を実行する（config CLI 用）。非該当は nil で未知メソッドへ落とす。
   func runConfigWorkspace(method: String, params: [String: Any], target: ControlTarget)
     -> Result<Any, ControlError>?

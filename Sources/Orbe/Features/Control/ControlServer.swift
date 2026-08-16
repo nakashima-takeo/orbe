@@ -12,6 +12,15 @@ protocol ControlTarget: AnyObject {
   func controlResolvePane(_ id: Int) -> SurfaceView?
   /// 新タブをアクティブ workspace（または指定 workspace）に開く。戻り値は新ペイン ID。
   func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int?
+  /// 検出済みエージェントを新タブで起こす（spawn_agent）。command 省略時は対象 workspace の
+  /// 実効 default-agent を解く。未知 workspaceId は -32004・未検出 command は -32602・
+  /// 検出ゼロは -32000。戻り値は {paneId, tabId, workspaceId, agent:{command, path}}。
+  func controlSpawnAgent(command: String?, workspaceId: Int?, cwd: String?)
+    -> Result<Any, ControlError>
+  /// 既存セッションを resume してエージェントを新タブで起こす（resume_agent）。
+  /// 安全文字集合の外の sessionId は -32602。戻り値の形は spawn_agent と同じ。
+  func controlResumeAgent(command: String, sessionId: String, workspaceId: Int?, cwd: String?)
+    -> Result<Any, ControlError>
   /// 背景/休眠 workspace を前面化し全タブを mount する。戻り値は activate 後の
   /// activeWorkspaceId と当該 workspace のペイン ID 群。未知 id は nil（spawn と違いフォールバックしない）。
   func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, paneIds: [Int])?
@@ -293,9 +302,10 @@ final class ControlServer {
         })
       return .success(["ok": true])
     default:
-      // ペイン/タブ操作・config / workspace CRUD は拡張の dispatch（ControlServer+Dispatch）へ。
-      // どちらも非該当なら未知メソッド。
+      // ペイン/タブ操作・エージェント起動・config / workspace CRUD は拡張の dispatch
+      // （ControlServer+Dispatch）へ。いずれも非該当なら未知メソッド。
       return runPaneTab(method: method, params: params, target: target)
+        ?? runAgent(method: method, params: params, target: target)
         ?? runConfigWorkspace(method: method, params: params, target: target)
         ?? .failure(ControlError(code: -32601, message: "method not found: \(method)"))
     }

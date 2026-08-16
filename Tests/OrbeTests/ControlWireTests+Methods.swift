@@ -34,6 +34,7 @@ extension ControlWireTests {
 
     let resultReturning = [
       "split_pane", "close_pane", "focus_pane", "close_tab",
+      "spawn_agent", "resume_agent",
       "config_list", "config_set", "create_workspace", "rename_workspace",
       "set_workspace_root", "remove_workspace",
     ]
