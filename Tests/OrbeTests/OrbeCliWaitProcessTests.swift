@@ -40,28 +40,77 @@ final class OrbeCliWaitProcessTests: OrbeTestCase {
     XCTAssertTrue(outcome.stderr.contains("timed out"), "理由は stderr へ: \(outcome.stderr)")
   }
 
-  /// イベントで起きたら exit 0 と `event`。`orb` を起こす**前**に発火を予約し、子を待つあいだ回る
-  /// runloop でそれを撃つ（`ControlProcess.run` は main を塞がずに待つ）。
+  /// 子が待機を登録し終えるまで `agent_state` を撃ち続けるタイマーを張る。
+  ///
+  /// 単発の予約（`asyncAfter`）だと「子の起動が予約時刻に間に合う」に賭けることになり、リンク直後の
+  /// cold バイナリでは実際に間に合わず、退行が無いのに 124 で赤くなる。イベントはバッファされない
+  /// （待機者ゼロなら捨てられる）ので、繰り返し撃てば実時間への依存が構造的に消える。
+  ///
+  /// 毎回 idle→working と振るのは、`agentState` の didSet が**値が変わったときだけ** emit するから
+  /// ——同じ状態を撃ち続けても 2 回目以降は何も出ない。よって掴む値は idle と working のどちらもある。
+  private func pumpAgentState(_ control: ControlProcess, pane: SurfaceView) -> DispatchSourceTimer {
+    let ticker = DispatchSource.makeTimerSource(queue: .main)
+    ticker.schedule(deadline: .now(), repeating: .milliseconds(100))
+    ticker.setEventHandler {
+      control.target.controlReportAgent(
+        pane: pane, agent: "codex", state: "idle", sessionId: nil, message: nil)
+      control.target.controlReportAgent(
+        pane: pane, agent: "codex", state: "working", sessionId: nil, message: nil)
+    }
+    ticker.resume()
+    return ticker
+  }
+
+  /// イベントで起きたら exit 0 と `event`。
   func testEventWakesTheWaitAndExitsZero() throws {
     let control = try startControlProcess(workspaces: ["main"])
     let pane = try XCTUnwrap(
       control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
 
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-      control.target.controlReportAgent(
-        pane: pane, agent: "codex", state: "working", sessionId: nil, message: nil)
-    }
+    let ticker = pumpAgentState(control, pane: pane)
+    defer { ticker.cancel() }
 
+    // `--kind` は反復できる（`takeOptions`）。2 個目を素の `takeOption` で書き戻すと残余に落ちて
+    // `unknown option: --kind` になるので、ここで 2 語渡して拾えていることまで見る。
     let outcome = control.orb(
-      ["wait", "\(pane.id)", "--kind", "agent_state", "--timeout-ms", "8000", "--json"])
+      [
+        "wait", "\(pane.id)", "--kind", "agent_state", "--kind", "pane_closed",
+        "--timeout-ms", "8000", "--json",
+      ])
     XCTAssertEqual(outcome.status, 0, "イベントで起きたら exit 0: \(outcome.stdout)\(outcome.stderr)")
     let data = try XCTUnwrap(outcome.stdout.data(using: .utf8))
     let result = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
     let event = try XCTUnwrap(
       result["event"] as? [String: Any], "起きた側は event を返す: \(outcome.stdout)")
-    XCTAssertEqual(event["kind"] as? String, "agent_state")
+    XCTAssertEqual(event["kind"] as? String, "agent_state", "指定した kind のイベントで起きる")
     XCTAssertEqual(event["paneId"] as? Int, pane.id)
-    XCTAssertEqual(event["value"] as? String, "working")
+    XCTAssertTrue(
+      ["idle", "working"].contains(event["value"] as? String ?? ""),
+      "撃った状態語のどちらかを載せる: \(outcome.stdout)")
+  }
+
+  /// `<pane>` 省略は **ORBE_PANE を継がず**全ペインを見る。pane 系（`resolvePaneArg`）と揃えると、
+  /// ペイン内で走らせたスクリプトの `orb wait` が黙って自ペインだけに絞られ、他ペインを待っていた
+  /// 側は 124 で「何も起きなかった」と読む——同じコマンドが環境によって違う意味になる。
+  func testWaitDoesNotFallBackToOrbePane() throws {
+    let control = try startControlProcess(workspaces: ["main"])
+    let pane = try XCTUnwrap(
+      control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
+
+    let ticker = pumpAgentState(control, pane: pane)
+    defer { ticker.cancel() }
+
+    // ORBE_PANE は実在しないペインを指す。継いでいればそこに絞られて 124 になる。
+    let outcome = control.orb(
+      ["wait", "--kind", "agent_state", "--timeout-ms", "8000", "--json"],
+      env: ["ORBE_PANE": silentPane])
+    XCTAssertEqual(
+      outcome.status, 0,
+      "<pane> 省略が ORBE_PANE に絞られている（全ペインを見るのが契約）: \(outcome.stdout)\(outcome.stderr)")
+    let data = try XCTUnwrap(outcome.stdout.data(using: .utf8))
+    let result = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let event = try XCTUnwrap(result["event"] as? [String: Any], "起きた側は event を返す")
+    XCTAssertEqual(event["paneId"] as? Int, pane.id, "ORBE_PANE ではなく実際に鳴ったペインを返す")
   }
 
   /// 未知 kind は control が -32602 で弾く（exit 1）。CLI は 4 語を複製しないので、

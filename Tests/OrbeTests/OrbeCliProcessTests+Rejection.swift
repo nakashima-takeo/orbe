@@ -38,6 +38,10 @@ extension OrbeCliProcessTests {
       ["config", "unset", "font-size", "--workspace=3"],
       ["config", "set", "theme", "dark", "--workspace", "-1"],
       ["config", "set", "font-size", "14", "--workspace", "current", "--workspace", "nosuch"],
+      // agent も `--workspace` を取る。黙って捨てるとフラグごと消えてアクティブ WS に落ち、
+      // **背景 WS に開くつもりのタブが手元の画面を奪う**（前面化しないのが spawn_agent の契約）。
+      ["agent", "spawn", "--workspace=3"],
+      ["agent", "resume", "codex", "s1", "--workspce", "3"],
     ] {
       failure(
         control.orb(args), code: 2, message: "unknown option:",
@@ -95,9 +99,10 @@ extension OrbeCliProcessTests {
       ["pane", "key", "--key", "enter", "--workspace", "3"],
       ["tab", "close", "--workspace", "3"],
       ["pane", "close", "5", "--workspce", "3"],  // 位置引数の後ろに落ちた綴り誤り
-      // wait は pane ドメインの外だが、残余の検査は同じ規律で通る。
+      // wait と agent は pane ドメインの外だが、残余の検査は同じ規律で通る。
       ["wait", "--bogus"],
       ["wait", "--kind", "agent_state", "--workspace", "3"],
+      ["agent", "list", "--bogus"],
     ] {
       failure(
         ControlProcess.orbWithoutServer(args, env: ["ORBE_PANE": "1"]), code: 2,

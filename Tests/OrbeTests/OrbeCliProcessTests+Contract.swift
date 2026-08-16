@@ -49,6 +49,53 @@ extension OrbeCliProcessTests {
     failure(
       ControlProcess.orbWithoutServer(["pane", "close"]), code: 2,
       message: "no pane in context", "ORBE_PANE 無しの pane 対象欠如")
+    // 値の席が空いた形（`--key` はあるが値が無い）は別分岐。ここはフラグごと落ちた形を見る
+    // ——通すと空 key を control へ送って exit 1 に化け、usage エラーと RPC エラーが混ざる。
+    failure(
+      ControlProcess.orbWithoutServer(["pane", "key", "5"]), code: 2,
+      message: "pane key requires --key <key>", "--key 自体の欠如")
+    // 落とすと「再開したつもりが素の spawn」になるので、引数不足は socket の手前で止める。
+    failure(
+      ControlProcess.orbWithoutServer(["agent", "resume", "codex"]), code: 2,
+      message: "agent resume requires <agent> and <session-id>", "resume の引数不足")
+  }
+
+  /// `--text` の値に置かれた `-h` / `--help` を help と読まない。
+  ///
+  /// `pane send` は「任意のユーザーテキストを値に取る」唯一のサーフェスで、引数列全体を help 走査
+  /// すると `--text -h` が**何も送らないまま exit 0** になる。`orb pane send --text "$X" && orb pane
+  /// key --key enter` で `$X` がたまたま `-h` だと、送信ゼロのまま enter だけが押される——静かで、
+  /// 終了コードにも現れない。値の席のダッシュは exit 2 で止まるのが正しい。
+  func testHelpInAValueSlotIsNotTreatedAsHelp() {
+    for value in ["-h", "--help"] {
+      let outcome = ControlProcess.orbWithoutServer(["pane", "send", "5", "--text", value])
+      XCTAssertEqual(
+        outcome.status, 2,
+        "`--text \(value)` が help に化けて exit \(outcome.status): \(outcome.stdout)")
+      XCTAssertFalse(
+        outcome.stdout.contains("orb pane — inspect"), "usage を出して成功扱いにしない")
+    }
+    // `--help` 自体は従来どおり出る（値の席を抜いた後に残っていれば help）。
+    let help = ControlProcess.orbWithoutServer(["pane", "send", "--help"])
+    XCTAssertEqual(help.status, 0, "pane send --help は exit 0: \(help.stderr)")
+  }
+
+  /// `orb pane --help` の `KEYS:` は control の `ControlKey.specialKeycodes` と同じ集合。
+  ///
+  /// 弾くのは control（`ControlKey.parse` が -32602）だが、help は socket 不達でも出す必要が
+  /// あるため CLI に名前を写している。その写しのドリフトは `KINDS:` / `config` の `KEYS:` と同じ手で落とす。
+  func testPaneHelpListsEveryKeyName() throws {
+    let outcome = ControlProcess.orbWithoutServer(["pane", "--help"])
+    XCTAssertEqual(outcome.status, 0, "pane --help は socket 不達でも exit 0: \(outcome.stderr)")
+    let line = try XCTUnwrap(
+      outcome.stdout.split(separator: "\n").first { $0.hasPrefix("KEYS: ") },
+      "pane --help に KEYS: 行が無い: \(outcome.stdout)")
+    let listed = line.dropFirst("KEYS: ".count).split(separator: ",").map {
+      $0.trimmingCharacters(in: .whitespaces)
+    }
+    XCTAssertEqual(
+      Set(listed), Set(ControlKey.specialKeycodes.keys),
+      "pane --help の KEYS が ControlKey と食い違っている")
   }
 
   /// socket 不達（Orbe 未起動・ペイン外）はクラッシュせず exit 1 と構造化メッセージ。

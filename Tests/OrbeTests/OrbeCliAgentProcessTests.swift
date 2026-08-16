@@ -20,7 +20,6 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
   /// 偽 agent の起動マーカー。コマンドの中では 2 つの文字列リテラルに割れているので、
   /// **連結された形はシェルが実際に評価した出力にしか現れない**（入力行の描き返しは目印にならない）。
   private struct FakeAgent {
-    let dir: String
     let path: String
     let marker: String
   }
@@ -47,7 +46,7 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
 
     let fakeDir = dir.path
     ShellPATH.shared = ShellPATH(probe: { "\(fakeDir):/usr/bin:/bin" })
-    return FakeAgent(dir: fakeDir, path: executable.path, marker: marker)
+    return FakeAgent(path: executable.path, marker: marker)
   }
 
   /// 偽 agent の検出完了を待つ（`AgentCatalog.refresh` は非同期）。
@@ -99,9 +98,16 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     let control = try startControlProcess(workspaces: ["main"])
     waitForDetection(control, "codex")
 
+    // 「新タブ」を測るには spawn 前の tab 集合が要る。tabId の非 nil だけを見ると、既存タブの
+    // 使い回しや split への化けを素通しする（開くのは常に新しいタブ、が Orbe の看板の振る舞い）。
+    let tabsBefore = Set(
+      try XCTUnwrap(control.orbJSON(["pane", "list"])["panes"] as? [[String: Any]])
+        .compactMap { $0["tabId"] as? Int })
+
     let spawned = control.orbJSON(["agent", "spawn", "codex"])
     let pane = try XCTUnwrap(spawned["paneId"] as? Int, "spawn_agent が paneId を返さない")
-    XCTAssertNotNil(spawned["tabId"] as? Int, "spawn_agent は tabId も返す")
+    let tabId = try XCTUnwrap(spawned["tabId"] as? Int, "spawn_agent は tabId も返す")
+    XCTAssertFalse(tabsBefore.contains(tabId), "既存タブを使い回さず新タブに生える")
     let workspaceId = try XCTUnwrap(spawned["workspaceId"] as? Int, "spawn_agent は workspaceId も返す")
     let agent = try XCTUnwrap(spawned["agent"] as? [String: Any], "spawn_agent は agent を返す")
     XCTAssertEqual(agent["command"] as? String, "codex")
@@ -138,11 +144,42 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
       control, pane: try XCTUnwrap(spawned["paneId"] as? Int), contains: fake.marker)
   }
 
+  /// 解くのは **対象** workspace の実効設定で、アクティブ WS のではない。ここがこの API と GUI の
+  /// Cmd+Shift+C の唯一の違いなので、対象 ≠ アクティブ・両者に別の `default-agent` という形で測る
+  /// ——同一 WS で測ると `current.settingsOverride` と書き違えても緑のまま通る。
+  func testAgentSpawnWithoutArgumentResolvesTheTargetWorkspaceNotTheActiveOne() throws {
+    _ = try stageFakeAgent("claude")
+    let codex = try stageFakeAgent("codex")
+    let control = try startControlProcess(workspaces: ["main", "background"])
+    waitForDetection(control, "claude")
+    waitForDetection(control, "codex")
+
+    let list = try XCTUnwrap(control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
+    let activeId = try XCTUnwrap(
+      list.first(where: { $0["active"] as? Bool == true })?["id"] as? Int, "アクティブ WS が無い")
+    let backgroundId = try XCTUnwrap(
+      list.first(where: { $0["active"] as? Bool == false })?["id"] as? Int, "背景 WS が無い")
+    for (id, agent) in [(activeId, "claude"), (backgroundId, "codex")] {
+      let written = control.orb(
+        ["config", "set", "default-agent", agent, "--workspace", "\(id)"])
+      XCTAssertEqual(written.status, 0, "default-agent を WS \(id) へ書けない: \(written.stderr)")
+    }
+
+    let spawned = control.orbJSON(["agent", "spawn", "--workspace", "\(backgroundId)"])
+    XCTAssertEqual(
+      (spawned["agent"] as? [String: Any])?["command"] as? String, "codex",
+      "アクティブ WS の default-agent（claude）ではなく対象 WS の設定で解く")
+    waitForPaneText(
+      control, pane: try XCTUnwrap(spawned["paneId"] as? Int), contains: codex.marker)
+  }
+
   /// **背景 workspace への spawn は手元の画面を奪わない。** そのうえで返った paneId は生きている。
   ///
   /// (a) アクティブ workspace が変わらない、(b) 画面が読める＝surface が起きている、
-  /// (c) 入力が届く。3 つが揃って初めて「前面化せずに mount した」と言える。どれか 1 つでも
-  /// 欠けると、`--workspace <背景>` は使えない paneId を返すだけの罠になる。
+  /// (c) 入力が届く、(d) surface が実サイズで生まれている。4 つが揃って初めて「前面化せずに
+  /// mount した」と言える。どれか 1 つでも欠けると、`--workspace <背景>` は使えない paneId を
+  /// 返すだけの罠になる——(d) が欠けた場合だけは静かで、返る画面の折り返し幅だけが
+  /// libghostty 既定サイズのまま狂う（その workspace を前面化するまで直らない）。
   func testAgentSpawnIntoBackgroundWorkspaceKeepsTheForegroundAndStaysUsable() throws {
     let fake = try stageFakeAgent("codex")
     let control = try startControlProcess(workspaces: ["main", "background"])
@@ -174,6 +211,19 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     let sent = control.orb(["pane", "send", "\(pane)", "--text", probe + "\n"])
     XCTAssertEqual(sent.status, 0, "背景ペインへの send_text が失敗した: \(sent.stderr)")
     waitForPaneText(control, pane: pane, contains: probe)
+
+    // (d) surface は実サイズで生まれている。葉のサイズを配るのは window の display サイクルで
+    // 走る `SurfaceScrollView.layout()` だけなので、同じ turn で detach する起こし方は
+    // レイアウトを同期で確定させない限り 0 サイズのまま surface を作ってしまう。
+    let view = try XCTUnwrap(
+      control.target.controlResolvePane(pane), "返った paneId がペインに解決できない")
+    // 相対比較なので、先に基準側が非ゼロであることを言う——0 同士の一致は、まさにここで
+    // 検出したい失敗（ゼロ面積で生まれた surface）と区別がつかない。
+    XCTAssertGreaterThan(
+      control.target.model.content.bounds.width, 0, "前提: content が実サイズを持つ")
+    XCTAssertEqual(
+      view.bounds.size, control.target.model.content.bounds.size,
+      "背景 WS のペインが実サイズで起きていない（pty が libghostty 既定サイズのまま残る）")
   }
 
   /// `orb agent resume` が resume 形の起動コマンド（`codex resume <id>`）で起こす。
