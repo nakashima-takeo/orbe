@@ -57,18 +57,19 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
       }, "偽 \(command) が検出されない（ShellPATH の差し替えが効いていない）")
   }
 
-  /// ペインの画面に文字列が現れるまで待つ。読むのは実バイナリの `orb pane text`。
+  /// ペインの画面に文字列が `times` 回以上現れるまで待つ。読むのは実バイナリの `orb pane text`。
   @discardableResult
   private func waitForPaneText(
-    _ control: ControlProcess, pane: Int, contains needle: String,
+    _ control: ControlProcess, pane: Int, contains needle: String, times: Int = 1,
     file: StaticString = #filePath, line: UInt = #line
   ) -> String {
     var text = ""
     let seen = waitUntil(ControlProcess.paneSettleTimeout) {
       text = control.orb(["pane", "text", "\(pane)", "--scrollback"]).stdout
-      return text.contains(needle)
+      return text.components(separatedBy: needle).count - 1 >= times
     }
-    XCTAssertTrue(seen, "ペイン \(pane) に \"\(needle)\" が現れない: \(text)", file: file, line: line)
+    XCTAssertTrue(
+      seen, "ペイン \(pane) に \"\(needle)\" が \(times) 回以上現れない: \(text)", file: file, line: line)
     return text
   }
 
@@ -176,7 +177,7 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
   /// **背景 workspace への spawn は手元の画面を奪わない。** そのうえで返った paneId は生きている。
   ///
   /// (a) アクティブ workspace が変わらない、(b) 画面が読める＝surface が起きている、
-  /// (c) 入力が届く、(d) surface が実サイズで生まれている。4 つが揃って初めて「前面化せずに
+  /// (c) 入力が本文もキーも届く、(d) surface が実サイズで生まれている。4 つが揃って初めて「前面化せずに
   /// mount した」と言える。どれか 1 つでも欠けると、`--workspace <背景>` は使えない paneId を
   /// 返すだけの罠になる——(d) が欠けた場合だけは静かで、返る画面の折り返し幅だけが
   /// libghostty 既定サイズのまま狂う（その workspace を前面化するまで直らない）。
@@ -206,11 +207,17 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     // (b) 背景でも surface が生きて描いている。
     waitForPaneText(control, pane: pane, contains: fake.marker)
 
-    // (c) 入力も届く（偽 agent は `cat` なので送った行がそのまま画面へ返る）。
+    // (c) 入力も届く。`pane send` と `pane key` の両方を通す——送るのが本文だけなら、画面に
+    // 現れた probe は tty のエコーかもしれず、ペインの中のプロセスが受け取った証拠にならない。
+    // 偽 agent は `cat` で、行が完成する（＝enter が届く）まで 1 バイトも返さないので、probe が
+    // **2 回**現れることが enter の到達そのものを指す（エコー 1 回 ＋ `cat` の反響 1 回）。
     let probe = "PING_" + String(format: "%08x", UInt32.random(in: 0...UInt32.max))
-    let sent = control.orb(["pane", "send", "\(pane)", "--text", probe + "\n"])
+    let sent = control.orb(["pane", "send", "\(pane)", "--text", probe])
     XCTAssertEqual(sent.status, 0, "背景ペインへの send_text が失敗した: \(sent.stderr)")
     waitForPaneText(control, pane: pane, contains: probe)
+    let pressed = control.orb(["pane", "key", "\(pane)", "--key", "enter"])
+    XCTAssertEqual(pressed.status, 0, "背景ペインへの send_key が失敗した: \(pressed.stderr)")
+    waitForPaneText(control, pane: pane, contains: probe, times: 2)
 
     // (d) surface は実サイズで生まれている。葉のサイズを配るのは window の display サイクルで
     // 走る `SurfaceScrollView.layout()` だけなので、同じ turn で detach する起こし方は
