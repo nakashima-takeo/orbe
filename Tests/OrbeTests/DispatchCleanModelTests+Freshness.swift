@@ -2,9 +2,9 @@ import XCTest
 
 @testable import Orbe
 
-/// clean 画面の**鮮度**（`apply(rows:)`）。凍結を撤廃した代わりに、行ごとの準備完了が選択可否を決め、
-/// 自動チェックは確定の瞬間の 1 度きりになった——ここが崩れると「ユーザーが外したチェックが裏の
-/// 着地で復活する」「揃っていない行が選べる」という、破壊操作としては致命の形に戻る。
+/// clean 画面の**鮮度**（`apply(rows:)`）。行ごとの準備完了が選択可否を決め、自動チェックは確定の
+/// 瞬間の 1 度きり——ここが崩れると「ユーザーが外したチェックが裏の着地で復活する」「揃っていない
+/// 行が選べる」という、破壊操作としては致命の形になる。
 @MainActor
 extension DispatchCleanModelTests {
 
@@ -65,6 +65,25 @@ extension DispatchCleanModelTests {
     XCTAssertEqual(m.checked, ["/wt/safe-a"], "消えた行の選択は残らない")
     XCTAssertTrue(m.branchChoice.isEmpty, "消えた行のブランチの扱いも残らない")
     XCTAssertEqual(m.cursorRow?.id, "/wt/safe-a", "近傍へ落ちる")
+  }
+
+  /// **チェックは覚えたまま、揃っていない間は実行の対象から外れる。** その間その行は行頭が回転
+  /// グリフになり、チェックが画面から見えず外す手立ても無い——数と依頼だけが数えていると、
+  /// 見えないチェックのまま worktree が消える。
+  func testCheckedRowLeavesTheExecutionSetWhileItIsNotReady() {
+    let m = DispatchCleanModel()
+    m.enter(rows: rows(readyPaths: ["/wt/safe-a"]))
+    XCTAssertEqual(m.requests().map(\.path), ["/wt/safe-a"])
+
+    m.apply(rows: rows(readyPaths: []))
+    XCTAssertEqual(m.selectedCount, 0, "揃っていない行は数えない")
+    XCTAssertEqual(m.branchDeleteCount, 0)
+    XCTAssertTrue(m.requests().isEmpty, "⌘⏎ も撃たない")
+    XCTAssertFalse(m.canExecute)
+    XCTAssertTrue(m.checked.contains("/wt/safe-a"), "チェックそのものは覚えている")
+
+    m.apply(rows: rows(readyPaths: ["/wt/safe-a"]))
+    XCTAssertEqual(m.requests().map(\.path), ["/wt/safe-a"], "揃い直せばそのまま戻る")
   }
 
   /// **削除中・一部失敗の画面は裏の着地で組み替わらない**（実行対象は `beginRun` が確定済み）。

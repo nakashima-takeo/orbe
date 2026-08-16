@@ -59,40 +59,42 @@ final class DispatchCleanRowRenderTests: SnapshotTestCase {
     XCTAssertNotEqual(develop, main, "マージ先が画に出ていない")
   }
 
-  /// **未確定行はチェックボックスを描かない。** 行頭が回転グリフに替わり、`inUse` 行（何も描かず
-  /// 減光）とも見分けがつく——「まだ選べない」と「削除できない」が別の画になる。
+  /// **未確定行はチェックボックスを描かない**（行頭が回転グリフに替わる）。
+  ///
+  /// 比べる 2 枚は `isReady` **だけ**が違う同じ行で、しかもどちらもカーソル外・未チェックにする
+  /// ——群・チップ・ハイライト・チェック状態のどれかが混ざると、行頭の分岐を丸ごと消しても画は
+  /// 違うままになり、テストが何も守らなくなる。
   func testPendingRowDrawsTheWorkingGlyphInsteadOfACheckbox() throws {
-    let facts = DispatchCleanFacts(
-      path: "/wt/x", branch: "feat/x", head: "aaa", track: "[gone]",
-      status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
-      containment: .patchEquivalent(target: "main"), operation: .none)
-    let pending = try XCTUnwrap(DispatchWorktreeClassifier.classify([facts]).first)
-    let settled = try XCTUnwrap(
-      DispatchWorktreeClassifier.classify([facts.with(openPR: .none)]).first)
+    let ready = try XCTUnwrap(
+      DispatchWorktreeClassifier.classify([
+        // 確認群にするのは、確定しても自動チェックが灯らない（＝2 枚のチェック状態が揃う）ため。
+        DispatchCleanFacts(
+          path: "/wt/x", branch: "feat/x", head: "aaa", track: "[gone]", openPR: .none,
+          status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
+          containment: .unmerged(count: 6), operation: .none)
+      ]).first)
+    let pending = ready.with(isReady: false)
+    XCTAssertTrue(ready.isReady)
     XCTAssertFalse(pending.isReady)
-    XCTAssertTrue(settled.isReady)
 
-    // 未確定行の行頭は回転グリフなので画は時点で変わる（静止した 2 つの側で決定性を確かめる）。
-    let settledPNG = try renderRow(settled)
-    let inUsePNG = try renderRow(inUseRow())
-    XCTAssertEqual(settledPNG, try renderRow(settled), "前提: 静止した行の描画は決定的")
+    let readyPNG = try renderOffCursor(ready)
+    XCTAssertEqual(readyPNG, try renderOffCursor(ready), "前提: 静止した行の描画は決定的")
     XCTAssertNotEqual(
-      try renderRow(pending), settledPNG, "未確定行がチェックボックスのまま描かれている")
-    XCTAssertNotEqual(try renderRow(pending), inUsePNG, "使用中行と同じ画になっている")
+      try renderOffCursor(pending), readyPNG, "未確定行がチェックボックスのまま描かれている")
   }
 
-  private func inUseRow() throws -> CleanRow {
-    try XCTUnwrap(
+  /// カーソルを別の行に預けて、対象行だけを描く（ハイライトの有無を画から外す）。
+  private func renderOffCursor(_ row: CleanRow) throws -> Data {
+    let anchor = try XCTUnwrap(
       DispatchWorktreeClassifier.classify([
         DispatchCleanFacts(
-          path: "/wt/x", branch: "feat/x", head: "aaa", openPR: .none,
-          occupancy: PaneOccupancy(cwd: "/wt/x", agentState: "working"))
+          path: "/wt/anchor", branch: "feat/anchor", head: "bbb", track: "[gone]", openPR: .none,
+          status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
+          containment: .patchEquivalent(target: "main"), operation: .none)
       ]).first)
-  }
-
-  private func renderRow(_ row: CleanRow) throws -> Data {
     let model = DispatchCleanModel()
-    model.enter(rows: [row])
+    model.enter(rows: [anchor, row])
+    XCTAssertEqual(model.cursorRow?.id, anchor.id, "前提: カーソルは対象行に無い")
     return try XCTUnwrap(
       renderPNG(DispatchCleanRow(model: model, row: row), size: size, dark: true))
   }
@@ -131,10 +133,12 @@ final class DispatchCleanRowRenderTests: SnapshotTestCase {
 extension CleanRow {
   /// 語の置き場の 1 つだけを差し替えた行（描画の突合用）。
   fileprivate func with(
+    isReady: Bool? = nil,
     chips: [CleanChip]? = nil, lossNotes: [CleanChip]? = nil, overflowNotes: [CleanChip]? = nil
   ) -> CleanRow {
     CleanRow(
-      id: id, name: name, meta: meta, branch: branch, head: head, group: group, isReady: isReady,
+      id: id, name: name, meta: meta, branch: branch, head: head, group: group,
+      isReady: isReady ?? self.isReady,
       vocabulary: vocabulary, chips: chips ?? self.chips, lossNotes: lossNotes ?? self.lossNotes,
       overflowNotes: overflowNotes ?? self.overflowNotes,
       deletesBranchImplicitly: deletesBranchImplicitly)

@@ -80,9 +80,8 @@ final class CleanRunToken {
 /// 1 行のアダプタにする（このコードベースの規約。テストはモデルを直接叩く）。
 /// 画面ごとの分岐も View に置かず、各メソッドが `phase` を見て自分で畳む。
 ///
-/// **画面は凍結しない。** 裏の分類は着地のたびに `apply(rows:)` で届き、選べるかどうかは行ごとの
-/// `isReady` が決める。唯一のスナップショットは実行（⌘⏎）の瞬間に組む `CleanDeleteRequest` で、
-/// 削除中・一部失敗の画面はそれだけを見る。
+/// **画面は開いている間ずっと最新を映す。** 裏の分類は着地のたびに `apply(rows:)` で届き、選べるかは
+/// 行ごとの `isReady` が決める。唯一のスナップショットは実行（⌘⏎）の `CleanDeleteRequest`。
 @Observable final class DispatchCleanModel {
   /// 群順（safe → caution → inUse）に並んだ最新の分類。
   private(set) var rows: [CleanRow] = []
@@ -127,9 +126,8 @@ final class CleanRunToken {
     apply(rows: rows)
   }
 
-  /// 裏の分類着地を取り込む。**凍結しない**——画面は生きたまま、行ごとの `isReady` が選択可否を
-  /// 決める。削除中・一部失敗の画面では何もしない（実行対象は `beginRun` が確定済みで、それが
-  /// 唯一のスナップショット。古い画面を凍らせる必要は無い）。
+  /// 裏の分類着地を取り込む。画面は生きたまま、行ごとの `isReady` が選択可否を決める。
+  /// 削除中・一部失敗の画面では何もしない（実行対象は `beginRun` が確定済みで、それだけを見る）。
   func apply(rows: [CleanRow]) {
     guard phase == .selecting else { return }
     let anchor = cursorRow?.id
@@ -232,13 +230,15 @@ final class CleanRunToken {
     branchChoice[rowID] = choice
   }
 
-  var selectedCount: Int { checked.count }
+  /// 実行の対象。**チェックボックスが立って見えている行と揃える**——`checked` は行が未確定へ戻っても
+  /// 覚えたままにする（ユーザーの意図を裏の着地で消さない）ので、その間の行は行頭が回転グリフになり、
+  /// チェックが画面から見えず外す手立ても無い。数も依頼もここから導いて 1 箇所で決める。
+  var checkedRows: [CleanRow] { selectableRows.filter { checked.contains($0.id) } }
 
-  /// チェック済み行のうちローカルブランチも消える件数（フッタ実行ボタンの内訳。
-  /// 保存フィールドは持たず、選択と `deletesBranch(_:)` から毎回導く）。
-  var branchDeleteCount: Int {
-    rows.filter { checked.contains($0.id) && deletesBranch($0) }.count
-  }
+  var selectedCount: Int { checkedRows.count }
+
+  /// 実行対象のうちローカルブランチも消える件数（フッタ実行ボタンの内訳。保存フィールドは持たない）。
+  var branchDeleteCount: Int { checkedRows.filter { deletesBranch($0) }.count }
 
   var canExecute: Bool { selectedCount > 0 && phase == .selecting }
 
@@ -255,9 +255,9 @@ final class CleanRunToken {
     }
   }
 
-  /// 実行の依頼一覧（チェックした行だけ・スナップショットの並び順）。
+  /// 実行の依頼一覧（実行対象の行だけ・群順のまま）。
   func requests() -> [CleanDeleteRequest] {
-    rows.filter { checked.contains($0.id) }.map {
+    checkedRows.map {
       CleanDeleteRequest(
         path: $0.id, branch: $0.branch, head: $0.head, deleteBranch: deletesBranch($0))
     }

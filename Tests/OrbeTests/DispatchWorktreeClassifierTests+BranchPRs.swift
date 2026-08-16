@@ -59,9 +59,9 @@ extension DispatchWorktreeClassifierTests {
     XCTAssertFalse(r.vocabulary.contains(.mergedPR(120, base: "main")), "cross-repo の PR は事実にしない")
   }
 
-  /// **head をまたいだ混線を防ぐのは grouping の 1 点だけ。** 取得は head 単位で撃つが、
-  /// `--head` はブランチ名でしか絞れず、返る配列には他人の同名ブランチの PR も混ざる——
-  /// どの PR がどのブランチの事実かは `headRefName` でしか復元できない。
+  /// **行は渡された配列を鵜呑みにせず、`headRefName` で自分の事実だけを採る。**
+  /// `branchPRLookup` は `rows()` と `extraContainmentTargets` の共通口で、後者には head を跨いで
+  /// 平坦化した配列（`landedBranchPRs`）が渡る——この 1 点が消えると隣の head の PR が事実になる。
   func testEachRowTakesOnlyItsOwnHeadFromItsFetch() {
     let rows = DispatchWorktreeClassifier.rows(
       DispatchWorktreeClassifier.Input(
@@ -128,6 +128,32 @@ extension DispatchWorktreeClassifierTests {
   func testProbingRowIsNotReady() {
     let r = branchPRRow(probing: true)
     XCTAssertFalse(r.isReady, "実測が未着地の行は選べない")
+  }
+
+  /// **在庫中の実測を「取得に失敗した」と読まない。** 差分発行が全量発行より先に着地した回は実測が
+  /// 部分辞書で届くので、まだ返っていない行の `containment` も nil になる。そこで判定不能チップを
+  /// 立てると、行頭の回転グリフ（まだ動いている）と同じ行で食い違う。
+  func testProbingRowDoesNotClaimAFailedLookup() {
+    let probing = branchPRRow(containment: nil, probing: true)
+    XCTAssertFalse(probing.vocabulary.contains(.unverified), "着地の前に失敗を名乗らない")
+    let landed = branchPRRow(containment: nil)
+    XCTAssertTrue(landed.vocabulary.contains(.unverified), "着地して nil なら失敗として見せる")
+  }
+
+  /// **台帳に無い head は「まだ確かめていない」へ倒す。** ここが「確かめて 0 件」に倒れると、
+  /// 取得が着地していないブランチが安全群へ入り、自動チェックまで灯る。
+  func testHeadMissingFromTheLedgerFallsBackToFetching() {
+    let rows = DispatchWorktreeClassifier.rows(
+      DispatchWorktreeClassifier.Input(
+        worktrees: [GitWorktree(path: "/wt/x", branch: "feat/x", head: "aaa", isMain: false)],
+        branchPRStates: [:],
+        probes: [
+          "/wt/x": DispatchCleanProbe(
+            status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
+            containment: .patchEquivalent(target: "main"), operation: .none)
+        ]))
+    XCTAssertEqual(rows[0].group, .caution, "台帳に無い head を確かめ済みと読まない")
+    XCTAssertFalse(rows[0].isReady)
   }
 
   // MARK: - 追加比較先（gh ヒント → 取り込み判定の入力）

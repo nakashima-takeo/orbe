@@ -286,11 +286,14 @@ enum DispatchWorktreeClassifier {
   /// 安全確認に使う事実を確かめられなかったことの可視化（確認群限定。inUse は probe 自体を省く行で、
   /// safe は全確認済みの含意）。分類は変えない——判定不能を安全と読まない契約は分類側が持つ。
   private static func unverified(_ f: DispatchCleanFacts, _ group: CleanGroup) -> [CleanChip] {
-    guard group == .caution else { return [] }
+    // **未着地は「確かめられなかった」ではない。** 実測（`probe`）は差分発行が全量発行より先に
+    // 着地した回に部分辞書として届くので、まだ撃った分が返っていない行の `status` / `containment`
+    // も nil になる。そこを失敗と読むと、行頭の回転グリフ（まだ動いている）とチップ（取得に
+    // 失敗した）が同じ行で食い違う。取得中を語るのは行頭 1 箇所——PR 軸の `.pending` と同じ規則。
+    guard group == .caution, !f.isProbing else { return [] }
     // prunable は作業ツリー側（status・停止中の操作）を意図的に問わない（失うものが無く、
     // 確認の対象ですらない）。取り込み判定は detached も oid で問うので branch の有無を問わない。
-    // PR 取得の失敗もここが受ける——「情報取得に失敗」はまさにこの意味で、語を増やす理由が無い
-    // （取得**中**は行頭の回転グリフが語るので、チップは立てない）。
+    // PR 取得の失敗もここが受ける——「情報取得に失敗」はまさにこの意味で、語を増やす理由が無い。
     let status = !f.isPrunable && f.status == nil
     let operation = !f.isPrunable && f.operation == .unknown
     let containment = f.containment == nil
