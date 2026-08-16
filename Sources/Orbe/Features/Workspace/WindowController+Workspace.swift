@@ -42,12 +42,10 @@ extension WindowController {
       rootPath ?? store.activePaneCwd() ?? FileManager.default.homeDirectoryForCurrentUser.path
     store.createWorkspace(name: trimmed, rootPath: root)  // 空 WS を作りアクティブ化する（`~` 展開して格納）
     // 新規 WS は「作成して開く＝作業を始める」意図。0タブ休眠のアクティブ化（自動起こしなし）と違い、
-    // ここは rootPath で1シェルを明示 spawn する。initialCwd は格納後の `current.rootPath`（`~` 展開済み）
-    // を使う。newTab() は initialCwd 無しで初回シェルがホームに開くため使わない。
-    store.appendTabToActive(wire(TerminalController(initialCwd: current.rootPath)))
-    select(current.tabs.count - 1)
+    // ここは rootPath で1シェルを明示 spawn する。cwd は格納後の `current.rootPath`（`~` 展開済み）を
+    // 明示で渡す——0タブ WS の cwd 既定と同値だが、この経路の意図（root で開く）を呼び出しに残す。
+    openTab(workspaceIndex: activeWorkspace, cwd: current.rootPath)
     applyActiveWorkspaceConfig()  // 新 WS は上書き無し＝global 実効へ。前 WS の上書き conf を持ち越さない
-    scheduleSave()
     return store.current.id  // append 直後にアクティブ化されるため current が新規 WS
   }
 
