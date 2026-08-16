@@ -1,7 +1,7 @@
 ---
 title: エージェント起動
-description: claude / codex / agy の自動検出と、⌘⇧A 選択パレット / ⌘⇧C デフォルト起動による新タブでの直接起動
-updated: 2026-08-12
+description: claude / codex / agy の自動検出と、⌘⇧A 選択パレット / ⌘⇧C デフォルト起動 / 制御 API による新タブでの直接起動
+updated: 2026-08-16
 ---
 
 # エージェント起動
@@ -29,6 +29,14 @@ updated: 2026-08-12
 ## 起動形態
 
 アクティブペインの実効 cwd（0 タブは workspace の root path → [layout](../chrome/layout.md)）を引き継いだ新タブで、シェルの代わりに絶対パスのエージェント CLI を直接起動する。環境変数 `PATH` には子プロセス PATH（[shell-path](../platform/shell-path.md)）を注入する——エージェントの子プロセスにも Orbe 自身と同じコマンド解決を保証するため。エージェント終了はシェル exit と同じ経路でタブが閉じる。永続スナップショットでは、hook 由来のエージェントセッションを持つペインは resume 起動、持たない／未対応 CLI のペインは保存 cwd の通常シェルタブで復元される（→ [persistence](../platform/persistence.md)）。
+
+## 外部からの起動
+
+制御 API と `orb agent spawn` / `orb agent resume`（[control/cli](../control/cli.md)）からも起こせる。**GUI と同じ経路**を通る——新タブを起こす関数が 1 本しかなく、絶対パス・PATH 注入・cwd フォールバックの組成をそのまま共有する。起動のされ方が入口ごとに割れると、その差は「GUI からは動くが CLI からは動かない」という遠い形で出る。
+
+外部起動だけが持つのは対象 workspace の指定で、**指定しても前面化しない**（[control/api](../control/api.md) の mount 境界）。このとき解くデフォルトは**対象 workspace の**実効 `default-agent` で、⌘⇧C がアクティブ workspace のそれを読むのと同じ規則を、入力だけ変えて使う。
+
+resume 起動は永続復元だけでなく `orb agent resume` からも走る。セッション ID は `orb pane list --json` の `agentSessionId`（hook 報告が入ってから値を持つ）から取る。
 
 ## デフォルトの永続
 
