@@ -187,7 +187,7 @@ let tools: [[String: Any]] = [
         + "を通るので、シェルの PATH に依存する子プロセスも動く。command 省略時は対象 workspace の実効デフォルト。"
         + "workspaceId を指定してもその workspace は**前面化しない**（手元の画面は動かない）。"
         + "戻り値は paneId / tabId / workspaceId / agent{command,path}。実 session ID は返らない"
-        + "（list_panes の agentSessionId か wait_for_event で取る）。"
+        + "（wait_for_event で agent_state を待ってから list_panes の agentSessionId を読む）。"
     ),
     (
       "inputSchema",
@@ -203,8 +203,8 @@ let tools: [[String: Any]] = [
     (
       "description",
       "既存セッションを再開する形でエージェントを新タブで起こす（claude --resume / codex resume / agy --conversation）。"
-        + "起動経路は spawn_agent と同じで、対象 workspace は前面化しない。sessionId は list_panes の "
-        + "agentSessionId か wait_for_event から取る。"
+        + "起動経路は spawn_agent と同じで、対象 workspace は前面化しない。sessionId の出所は "
+        + "list_panes の agentSessionId（wait_for_event は状態語しか返さない）。"
     ),
     (
       "inputSchema",

@@ -46,6 +46,9 @@ extension ControlServer {
   func runAgent(method: String, params: [String: Any], target: ControlTarget)
     -> Result<Any, ControlError>?
   {
+    // 検査は必ず case の中に置く。この関数は dispatch 連鎖の途中にいて**非該当メソッドでも
+    // 呼ばれる**ので、switch の外で弾くと未知メソッドが -32601 ではなく -32602 を返し、
+    // config 系の workspaceId の意味論まで巻き添えで変わる。
     switch method {
     case "spawn_agent":
       // command は省略可（対象 workspace の実効 default-agent を target が解く）。ただし
@@ -53,6 +56,7 @@ extension ControlServer {
       guard params["command"] == nil || params["command"] is String else {
         return .failure(ControlError(code: -32602, message: "invalid command"))
       }
+      if let error = invalidWorkspaceId(params) { return .failure(error) }
       return target.controlSpawnAgent(
         command: params["command"] as? String, workspaceId: params["workspaceId"] as? Int,
         cwd: params["cwd"] as? String)
@@ -63,12 +67,22 @@ extension ControlServer {
       guard let sessionId = params["sessionId"] as? String else {
         return .failure(ControlError(code: -32602, message: "missing sessionId"))
       }
+      if let error = invalidWorkspaceId(params) { return .failure(error) }
       return target.controlResumeAgent(
         command: command, sessionId: sessionId, workspaceId: params["workspaceId"] as? Int,
         cwd: params["cwd"] as? String)
     default:
       return nil
     }
+  }
+
+  /// `workspaceId` は省略可（アクティブ）だが、非 Int を「省略」と同じにはしない——未知 id を
+  /// -32004 で弾く契約なのに、型違いだけが黙ってアクティブ WS へ逸れて別の場所にタブが生える。
+  private func invalidWorkspaceId(_ params: [String: Any]) -> ControlError? {
+    guard params["workspaceId"] == nil || params["workspaceId"] is Int else {
+      return ControlError(code: -32602, message: "invalid workspaceId")
+    }
+    return nil
   }
 
   /// config（列挙・設定）と workspace CRUD を実行する（config CLI 用）。非該当は nil で未知メソッドへ落とす。

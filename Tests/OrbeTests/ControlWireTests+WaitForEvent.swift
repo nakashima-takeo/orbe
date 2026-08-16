@@ -155,6 +155,7 @@ extension ControlWireTests {
   }
 
   /// `kinds` が `[String]` でなければ -32602（黙って「フィルタ無し＝全通し」に化けない）。
+  /// 空配列も同じ——`Set([])` はどの kind にも一致せず、省略（＝全種）とは正反対の待機になる。
   func testWronglyTypedKindsAreRejected() {
     let wire = startWire(target: FakeControlTarget())
 
@@ -164,6 +165,19 @@ extension ControlWireTests {
     XCTAssertEqual(
       errorCode(wire.request(id: 2, method: "wait_for_event", params: ["kinds": [1, 2]])),
       -32602, "要素が文字列でない kinds は -32602")
+    XCTAssertEqual(
+      errorCode(wire.request(id: 3, method: "wait_for_event", params: ["kinds": [String]()])),
+      -32602, "空の kinds は -32602（省略＝全種と取り違えて黙って時間切れにしない）")
+  }
+
+  /// `paneId` が Int でなければ -32602。黙って nil に落とすと絞り込みが消えて**全ペイン**監視に
+  /// 化け、別ペインのイベントを「待っていたもの」として返す（kinds の取りこぼしより悪い）。
+  func testWronglyTypedPaneIdIsRejected() {
+    let wire = startWire(target: FakeControlTarget())
+
+    XCTAssertEqual(
+      errorCode(wire.request(id: 1, method: "wait_for_event", params: ["paneId": "8001"])),
+      -32602, "文字列の paneId は -32602")
   }
 
   /// `timeoutMs` は正の Int で 24 時間まで。0・負・非 Int・上限超過は -32602。

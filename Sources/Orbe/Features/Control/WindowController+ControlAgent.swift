@@ -11,11 +11,8 @@ extension WindowController {
   func controlSpawnAgent(command: String?, workspaceId: Int?, cwd: String?) -> Result<
     Any, ControlError
   > {
-    switch resolveAgentLaunch(command: command, workspaceId: workspaceId) {
-    case .failure(let error):
-      return .failure(error)
-    case .success(let target):
-      return launchAgentTab(target, command: target.agent.path, cwd: cwd)
+    resolveAgentLaunch(command: command, workspaceId: workspaceId).flatMap { target in
+      launchAgentTab(target, command: target.agent.path, cwd: cwd)
     }
   }
 
@@ -25,10 +22,7 @@ extension WindowController {
   func controlResumeAgent(command: String, sessionId: String, workspaceId: Int?, cwd: String?)
     -> Result<Any, ControlError>
   {
-    switch resolveAgentLaunch(command: command, workspaceId: workspaceId) {
-    case .failure(let error):
-      return .failure(error)
-    case .success(let target):
+    resolveAgentLaunch(command: command, workspaceId: workspaceId).flatMap { target in
       // ここへ来た時点で command は検出済み＝`AgentCatalog.supported` のいずれかなので、
       // nil になるのは sessionId が安全文字集合の外にあるときに限られる。
       guard
