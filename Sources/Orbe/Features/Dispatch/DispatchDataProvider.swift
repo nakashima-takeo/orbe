@@ -57,10 +57,13 @@ final class DispatchDataProvider {
   /// それらは恒常的に不在で、差分発行が全量発行より先に着地した回は一時的に部分辞書になる。
   /// 書き手は分冊（`DispatchDataProvider+CleanProbe.swift`）。
   var cleanProbes: [String: DispatchCleanProbe]?
-  /// path → **発行時点**の取り込み判定の比較先リスト。`requestedBranchPRHeads` と同型の
-  /// 「発行時点で記録する顔ぶれ dedup」——比較先が同じ行を引き直さず、gh 着地で base が判明した
-  /// 行だけを引き直すための台帳。台帳に無い path のエントリは着地時に落とす（削除済み worktree の
-  /// 残骸を持たない）。
+  /// path → **発行時点**の取り込み判定の比較先リスト。「発行時点で記録する顔ぶれ dedup」——
+  /// 比較先が同じ行を引き直さず、gh 着地で base が判明した行だけを引き直すための台帳。
+  /// 台帳に無い path のエントリは着地時に落とす（削除済み worktree の残骸を持たない）。
+  ///
+  /// **nil は「全量発行がまだ一度も走っていない」**＝`fetch --prune` 前を意味し、差分発行
+  /// （`CleanProbeScope.changedTargets`）はこの間 1 本も撃たない。空辞書へ丸めてはならない
+  /// ——丸めると「台帳に無い＝比較先が変わった」と読んで prune 前に全行が飛ぶ。
   var issuedProbeTargets: [String: [String]]?
   /// 全量発行の世代。独立レーン（concurrent）は順序保証が無いので、**比較先が同じまま**撃たれる
   /// 全量発行どうし（初回・`fetch --prune` 後・削除後）の遅着を、比較先の照合だけでは弾けない。
@@ -166,7 +169,7 @@ final class DispatchDataProvider {
     group.notify(queue: .main) {
       self.rebuild()
       // git の事実（ref の中身）が動いた着地なので全行引き直す。
-      if classifying { self.startCleanProbe(repo, invalidateAll: true) }
+      if classifying { self.startCleanProbe(repo, .all) }
       self.loadBranchPullRequests(repo)
     }
   }

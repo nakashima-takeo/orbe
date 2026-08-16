@@ -160,7 +160,7 @@ extension DispatchDataProvider {
     // 消えた head（削除された worktree）への遅着は捨てる。
     guard branchPRFetches[head] == .fetching else { return }
     branchPRFetches[head] = fetched.map(BranchPRState.loaded) ?? .failed
-    if let repo { startCleanProbe(repo, invalidateAll: false) }
+    if let repo { startCleanProbe(repo, .changedTargets) }
     rebuild()
   }
 }

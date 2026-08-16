@@ -1,15 +1,30 @@
 import Foundation
 
+/// プローブ発行の範囲。**差分発行は全量発行が一度走った後にしか成立しない**——比較先の台帳
+/// （`issuedProbeTargets`）が無いまま差分を撃つと「台帳に無い＝比較先が変わった」と読んで全行が
+/// 飛ぶ。それは `fetch --prune` の前に到達性を計算するということで、prune 前の
+/// `refs/remotes/origin/*` には remote で消えた ref が残っているので結論が偽になりうる。
+/// この前提を呼び出し側の裸の真偽値に委ねず、**名前（この型）と関門（`case changedTargets` の
+/// `guard`）の両方**で持つ。
+enum CleanProbeScope {
+  /// git の事実（ref の中身）が動いた着地——`fetch --prune` 後と削除後。全行を撃ち、台帳と世代を
+  /// 張り直す。**分類が始まる唯一の入口**でもある。
+  case all
+  /// gh 着地。**比較先の顔ぶれが変わった行だけ**を撃つ（merged PR の base が判明して
+  /// `origin/<base>` が比較先に加わった行がこれに当たる）。台帳がまだ無い＝全量が一度も走って
+  /// いない＝prune 前なので、そのときは 1 本も撃たず prune 後の全量発行へ合流させる
+  /// ——その全量発行は着地済みの gh ヒントを込みで比較先を組むので、取りこぼしにはならない。
+  case changedTargets
+}
+
 /// 分類レーン（プローブ）の発行と着地。**行ごとの準備完了を決める帳簿**をここに閉じる——
 /// 「何を撃ったか」（比較先の台帳・世代）と「何本が未着地か」（多重集合）が同じ場所にある。
 /// 描画は本体の `rebuild()` へ流す。
 extension DispatchDataProvider {
 
-  /// 分類レーンを起動する。fetch 着地後にも同じ入口から取り直す（結果が同じなら rebuild しない）。
+  /// 分類レーンを起動する。撃つ範囲は `scope` が持つ。
   ///
-  /// `invalidateAll` が false のとき（gh 着地）は、**比較先の顔ぶれが変わった行だけ**を引き直す
-  /// （merged PR の base が判明して `origin/<base>` が比較先に加わった行がこれに当たる）。
-  /// 台帳（`issuedProbeTargets`)は**発行の時点で**更新する——着地を待って記録すると、その間に来た
+  /// 台帳（`issuedProbeTargets`）は**発行の時点で**更新する——着地を待って記録すると、その間に来た
   /// もう一方の着地点が同じ顔ぶれを二重に引く（`loadBranchPullRequests` と同じ理由）。
   ///
   /// 着地は 2 つの関門を通ったものだけ `cleanProbes` へマージする。probe は独立レーン
@@ -18,7 +33,7 @@ extension DispatchDataProvider {
   /// **path ごとの比較先の照合**（全量発行の在庫中に gh 着地で比較先が変わった行は、その行だけ
   /// 差分発行の結果を勝たせる）。前者だけでは同一比較先の全量どうしを、後者だけでは
   /// prune 前後の全量どうしを弾けないので、両方が要る。
-  func startCleanProbe(_ repo: GitRepo, invalidateAll: Bool) {
+  func startCleanProbe(_ repo: GitRepo, _ scope: CleanProbeScope) {
     let extra = DispatchWorktreeClassifier.extraContainmentTargets(
       worktrees: worktrees, branchPullRequests: landedBranchPRs,
       remoteBranchNames: Set(remoteBranches.map(\.name)), defaultBranch: defaultBranchName)
@@ -27,15 +42,18 @@ extension DispatchDataProvider {
     // 台帳は prober が実際に渡す比較先そのもの（合成点を 1 つにして、記録と実入力がずれないようにする）。
     let inputs = Dictionary(
       uniqueKeysWithValues: worktrees.map { ($0.path, prober.targets(for: $0.path)) })
-    let stale =
-      invalidateAll
-      ? worktrees : worktrees.filter { inputs[$0.path] != issuedProbeTargets?[$0.path] }
-    guard !stale.isEmpty else { return }
-    if invalidateAll {
+    let stale: [GitWorktree]
+    switch scope {
+    case .all:
+      stale = worktrees
+      guard !stale.isEmpty else { return }
       issuedProbeTargets = inputs
       probeGeneration += 1
-    } else {
-      var ledger = issuedProbeTargets ?? [:]
+    case .changedTargets:
+      // 台帳が無い＝全量発行がまだ一度も走っていない（＝prune 前）。差分の前提そのものが無い。
+      guard var ledger = issuedProbeTargets else { return }
+      stale = worktrees.filter { inputs[$0.path] != ledger[$0.path] }
+      guard !stale.isEmpty else { return }
       for worktree in stale { ledger[worktree.path] = inputs[worktree.path] }
       issuedProbeTargets = ledger
     }

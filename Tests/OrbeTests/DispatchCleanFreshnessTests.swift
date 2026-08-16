@@ -72,6 +72,54 @@ final class DispatchCleanFreshnessTests: OrbeTestCase {
     XCTAssertEqual(provider.branchPRStates["feat/gone"], .loaded([]), "確かめて 0 件として畳む")
   }
 
+  /// **差分発行は全量発行が一度走るまで 1 本も撃たない。** 台帳が無い状態を「全行の比較先が
+  /// 変わった」と読むと、prune 前に全行のプローブが飛ぶ——分類を prune の後だけに絞った意味が消える。
+  func testDifferentialProbeIsInertUntilTheFirstFullIssuance() throws {
+    try makeWorktree("wt-x", branch: "feat/x")
+    let repo = try openRepo()
+    let model = DispatchPaletteModel()
+    let provider = makeProvider(model)
+    provider.loadGit(repo, classifying: false)
+    XCTAssertTrue(pump({ !provider.worktrees.isEmpty }), "前提: worktree 一覧は着地している")
+
+    provider.startCleanProbe(repo, .changedTargets)
+    XCTAssertTrue(provider.probingPaths.isEmpty, "台帳が無い間は差分を撃たない")
+    XCTAssertNil(model.classification, "prune 前に分類は出ない")
+
+    provider.startCleanProbe(repo, .all)
+    XCTAssertFalse(provider.probingPaths.isEmpty, "全量発行で初めて飛ぶ")
+  }
+
+  /// **gh が prune より先に着地しても、そこでプローブは飛ばない。** gh の往復は 1 本 1 秒前後・
+  /// prune は数秒なので、実機で日常的に起きる順序。ここが破れると最初の確定が prune 前データで
+  /// 起き、prune 後に安全群へ移った行が二度と自動チェックされない（確定は 1 度きりなので）。
+  func testGitHubLandingBeforePruneFiresNoProbe() throws {
+    try makeSlowRemote()
+    try makeWorktree("wt-x", branch: "feat/x")
+    let model = DispatchPaletteModel()
+    let provider = makeProvider(model)
+    provider.load()
+    // prune は数秒かかるので、worktree 一覧の着地だけを待てば「prune 未着地」の窓に居る。
+    XCTAssertTrue(pump({ !provider.worktrees.isEmpty }))
+    XCTAssertNil(model.classification, "前提: まだ prune が着地していない")
+
+    // ここから先は同期。completion はメインで返るので、この間に prune が割り込むことはない。
+    provider.probedGitHubState = .ready
+    provider.branchPRFetches = ["feat/x": .fetching]
+    provider.applyFetchedBranchPRs(
+      head: "feat/x",
+      [
+        GitHubBranchPR(
+          number: 5, headRefName: "feat/x", state: "MERGED", baseRefName: "develop",
+          isCrossRepository: false)
+      ])
+    XCTAssertTrue(provider.probingPaths.isEmpty, "gh 着地は prune 前にプローブを撃たない")
+    XCTAssertNil(model.classification)
+
+    XCTAssertTrue(pump({ model.classification != nil }, timeout: 30), "prune 着地後に初めて分類が出る")
+    XCTAssertTrue(pump({ !provider.classificationPending }, timeout: 30))
+  }
+
   // MARK: - 発行と着地の帳簿
 
   /// **帳簿は多重集合。** 全量発行と差分発行が同じ path に重なったら、両方着地するまで
@@ -87,8 +135,8 @@ final class DispatchCleanFreshnessTests: OrbeTestCase {
     let path = try XCTUnwrap(row(model, branch: "feat/x")).id
     XCTAssertTrue(try XCTUnwrap(row(model, branch: "feat/x")).isReady, "前提: 一巡した行は確定している")
 
-    provider.startCleanProbe(repo, invalidateAll: true)
-    provider.startCleanProbe(repo, invalidateAll: true)
+    provider.startCleanProbe(repo, .all)
+    provider.startCleanProbe(repo, .all)
     XCTAssertEqual(provider.probingPaths[path], 2, "重なった発行は 2 本として数える")
     XCTAssertTrue(provider.classificationPending)
 
@@ -203,6 +251,25 @@ final class DispatchCleanFreshnessTests: OrbeTestCase {
     }
     wait(for: [done], timeout: 20)
     return try XCTUnwrap(opened)
+  }
+
+  /// `fetch --prune` が数秒かかる origin を用意する（gh の着地が prune より先に来る実機の順序を
+  /// 手元で再現するため）。`uploadpack` を眠るラッパーへ差し替えるだけなので、特別な transport も
+  /// ネットワークも要らない。
+  private func makeSlowRemote() throws {
+    remote = FileManager.default.temporaryDirectory
+      .appendingPathComponent("orbe-freshness-slow-\(UUID().uuidString)")
+    XCTAssertTrue(
+      GitRunner.shared.runSync(
+        ["init", "-q", "--bare", "-b", "main", remote.path], cwd: dir.path
+      ).isSuccess)
+    XCTAssertTrue(git(["remote", "add", "origin", remote.path]).isSuccess)
+    XCTAssertTrue(git(["push", "-q", "-u", "origin", "main"]).isSuccess)
+    let wrapper = dir.appendingPathComponent("slow-upload-pack").path
+    try "#!/bin/sh\nsleep 2\nexec git-upload-pack \"$@\"\n".write(
+      toFile: wrapper, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper)
+    XCTAssertTrue(git(["config", "remote.origin.uploadpack", wrapper]).isSuccess)
   }
 
   @discardableResult
