@@ -14,7 +14,7 @@ extension WindowController {
   /// 制御 API（spawn / spawn_agent / resume_agent）が同じ本体を通る——起動のされ方が経路ごとに
   /// 割れると、その差は「GUI からは動くが CLI からは動かない」という形で後から必ず出る。
   ///
-  /// `cwd` 省略は対象 workspace のアクティブペイン cwd → その workspace の rootPath へ落ちる
+  /// `cwd` に nil を渡すと対象 workspace のアクティブペイン cwd → その workspace の rootPath へ落ちる
   /// （`newSurfaceCwd(inWorkspaceAt:)`）。戻り値は生えたペイン・タブ・workspace の id で、
   /// workspaceIndex が範囲外ならタブを作らず nil。
   @discardableResult
@@ -52,11 +52,16 @@ extension WindowController {
   /// attach と detach を**同じ turn で完結できる**ことは実測で確かめてある（AppKit が
   /// `viewDidMoveToWindow` を `addSubview` の中で同期発火する）。ここが成立しているかの合否は
   /// `OrbeCliAgentProcessTests` の背景 workspace 1 本が持つ——外すと、返した paneId は
-  /// 「画面が読めず入力も届かない」ものに退化する。
+  /// 「画面が読めず入力も届かない」ものに退化する。同じテストが surface のサイズも見る。
   private func materializeOffscreen(_ tc: TerminalController) {
     tc.rootContainer.autoresizingMask = [.width, .height]
-    tc.rootContainer.frame = model.content.bounds  // pty winsize を実サイズで起こす
+    tc.rootContainer.frame = model.content.bounds
     tc.rootContainer.isHidden = true
+    // 葉のサイズは `SurfaceScrollView.layout()` だけが配り、それが走るのは window の display
+    // サイクル。同じ turn で detach する以上そのサイクルは来ないので、ここで同期に確定させる
+    // ——さもないと `SurfaceView` は 0 サイズのまま `createSurface` を迎え、`updateSize` の
+    // ゼロ面積ガードに弾かれて pty が libghostty 既定サイズのまま起きる（前面化するまで直らない）。
+    tc.rootContainer.layoutSubtreeIfNeeded()
     model.content.addSubview(tc.rootContainer)  // viewDidMoveToWindow → createSurface
     tc.rootContainer.removeFromSuperview()  // detach。surface は生存
   }
