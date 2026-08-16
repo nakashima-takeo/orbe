@@ -1,7 +1,11 @@
 import Foundation
 
-// orbe-cli の出力・終了・引数ヘルパと usage テキスト。main.swift（socket クライアント）・
-// `Commands+<ドメイン>.swift`（サブコマンド）が共用する。終了コードは 0 成功 / 2 usage エラー / 1 RPC・接続エラー。
+// orbe-cli の出力・終了・引数ヘルパと、全ドメインを束ねるトップ usage。main.swift（socket
+// クライアント）・`Commands+<ドメイン>.swift`（サブコマンド）が共用する。
+// 終了コードは 0 成功 / 2 usage エラー / 1 RPC・接続エラー / 124 wait タイムアウト。
+//
+// 各ドメインの USAGE 行と usage テキストは `Commands+<ドメイン>.swift` が持ち、`topUsage` は
+// それらを合成する——ドメインを 1 つ足すときに触るファイルを 1 つに保つため。
 
 // MARK: - 出力・終了
 
@@ -19,6 +23,13 @@ func printJSON(_ value: Any) {
 
 func stderrLine(_ message: String) {
   FileHandle.standardError.write(Data((message + "\n").utf8))
+}
+
+/// 端末から取り出した生テキストをそのまま stdout へ出す（`print` と違い改行を足さない）。
+/// 取得した端末テキストは整形済みの報告ではなく捕捉した中身なので、`orb pane text > snapshot.txt`
+/// が画面をそのまま再現できる必要がある。
+func writeRaw(_ text: String) {
+  FileHandle.standardOutput.write(Data(text.utf8))
 }
 
 /// usage エラー（引数不正）。終了コード 2。
@@ -114,7 +125,24 @@ func takeOption(_ args: inout [String], _ name: String, requires label: String) 
   return value
 }
 
-/// `--workspace` の有無を抜き取る。
+/// 同じ値必須フラグの複数指定を全部抜き取る（`orb wait --kind agent_state --kind pane_closed`）。
+/// 値の席の規則は `takeOption` と同一（複製しない）。1 個目しか見ない `takeOption` を素で使うと
+/// 2 個目が残余に落ちて `rejectLeftovers` の usage エラーになる。
+func takeOptions(_ args: inout [String], _ name: String, requires label: String) -> [String] {
+  var out: [String] = []
+  while let value = takeOption(&args, name, requires: label) { out.append(value) }
+  return out
+}
+
+/// 値必須の正整数オプション（`--timeout-ms <ms>`）。0 以下・非数値は usage エラー。
+/// `-` 始まりは `takeOption` が先に落とす。
+func takeIntOption(_ args: inout [String], _ name: String, requires label: String) -> Int? {
+  guard let raw = takeOption(&args, name, requires: label) else { return nil }
+  guard let n = Int(raw), n > 0 else { usageDie("\(name) requires \(label)") }
+  return n
+}
+
+/// 値を取らないフラグ（`--scrollback` / `--stdin`）の有無を抜き取る。
 func takeFlag(_ args: inout [String], _ name: String) -> Bool {
   guard let i = args.firstIndex(of: name) else { return false }
   args.remove(at: i)
@@ -160,18 +188,15 @@ func takeWorkspaceTarget(_ args: inout [String], positionals: Int) -> WorkspaceT
   return .active
 }
 
-/// `pane list` / `tab new` の `--workspace <id>`（値必須）を抜き取る。フラグ自体が無ければ nil。
-/// この 2 つが `--workspace` を取る唯一の pane / tab コマンドで、他は残余として usage エラーになる。
-/// bare（値なし）も解決できない値も usage エラー——bare を黙ってアクティブ扱いにすると、
-/// 絞り込みも開く先も指定と無関係に決まる。
+/// `pane list` / `tab new` / `agent spawn` / `agent resume` の `--workspace <id>`（値必須）を
+/// 抜き取る。フラグ自体が無ければ nil。この 4 つが `--workspace` を取る唯一の pane / tab /
+/// agent コマンドで、他は残余として usage エラーになる。bare（値なし）も解決できない値も usage
+/// エラー——bare を黙ってアクティブ扱いにすると、絞り込みも開く先も指定と無関係に決まる。
+///
+/// 値の席の規則（`-` 始まり・空を取らない）は `takeOption` が唯一持つ（ここで二重実装しない）。
 func takeWorkspaceId(_ args: inout [String]) -> Int? {
-  guard let i = args.firstIndex(of: "--workspace") else { return nil }
-  guard i + 1 < args.count, !args[i + 1].hasPrefix("-") else {
-    usageDie("--workspace requires an <id>")
-  }
-  let token = args[i + 1]
+  guard let token = takeOption(&args, "--workspace", requires: "an <id>") else { return nil }
   guard let id = workspaceIdIfResolvable(token) else { usageDie("invalid workspace id: \(token)") }
-  args.removeSubrange(i...(i + 1))
   return id
 }
 
@@ -253,127 +278,39 @@ func resolveWorkspaceId(_ arg: String) -> Int {
   return id
 }
 
-// MARK: - config key 一覧（usage テキスト表示用。key の妥当性・値型は control の config_list を SSOT に引く）
+// MARK: - usage テキスト（ドメインの USAGE 行は `Commands+<ドメイン>.swift` が持つ）
 
-/// `SettingsRegistry.all` の全 key。usage は socket 不達でも出す必要があるため config_list からは
-/// 引けず、ここに写す。この一覧のドリフトは `testConfigHelpListsEveryRegistryKey` が
-/// `config --help` の `KEYS:` 行と registry を突き合わせて落とす。`configSetUsage` の型内訳だけは
-/// 手書きのままなので、registry に key を足したらそちらも足すこと。
-let allConfigKeys = [
-  "font-size", "background-opacity", "background-blur", "cursor-style-blink", "theme",
-  "font-family", "tab-title-font-family", "emoji-font", "default-agent", "agent-state-icons",
-  "worktree-dir", "notification-sound", "notification-sound-volume",
-  "notification-sound-enabled",
-]
+/// USAGE 行の並びを help 本文へ落とす（2 スペース字下げ）。ドメイン単体の usage と `topUsage` が
+/// 同じ 1 つの配列を同じ体裁で組む。
+func usageBlock(_ lines: [String]) -> String {
+  lines.map { "  " + $0 }.joined(separator: "\n")
+}
 
-// MARK: - usage テキスト
+/// トップ help に載る全サーフェス。ドメインを 1 つ足すときに触るのはそのドメインのファイルと、
+/// ここの 1 語（と `main.swift` のルーティング 1 行）だけになる。
+private let allUsageLines =
+  configUsageLines + wsUsageLines + paneUsageLines + tabUsageLines + agentUsageLines
+  + waitUsageLines
 
 let topUsage = """
   orb — configure and control the running Orbe instance
 
   USAGE:
-    orb config list [--workspace [<id>]] [--json]
-    orb config get <key> [--workspace [<id>]] [--json]
-    orb config set <key> <value> [--workspace [<id>]]
-    orb config unset <key> [--workspace [<id>]]
-    orb ws list [--json]
-    orb ws new <name> [--dir <path>]
-    orb ws rename <id|current> <name>
-    orb ws dir <id|current> <path>
-    orb ws switch <id>
-    orb ws rm <id|current>
-    orb pane list [--workspace <id>] [--json]
-    orb pane split [<pane>] [-v | -h]
-    orb pane close [<pane>]
-    orb pane focus <pane>
-    orb tab new [--workspace <id>] [--dir <path>] [--cmd "…"]
-    orb tab close [<tab>]
+  \(usageBlock(allUsageLines))
 
   COMMON FLAGS:
     --json              machine-readable JSON output (read commands / errors)
     --workspace [<id>]  target a workspace (<id> or current). bare --workspace
                         means the active one and is config-only; pane list /
-                        tab new require an explicit <id>. no other pane / tab
-                        command takes it
-    --dir <path>        root/working directory (ws new / tab new)
+                        tab new / agent spawn / agent resume require an explicit
+                        <id>. no other pane / tab command takes it
+    --dir <path>        root/working directory (ws new / tab new / agent)
     --cmd "…"           command to run in the new tab (tab new)
 
   pane / tab default to the current pane via ORBE_PANE. Outside a Orbe pane,
-  pass an explicit id (see: orb pane list).
+  pass an explicit id (see: orb pane list). wait is not a pane command and never
+  falls back to ORBE_PANE — omitting <pane> watches every pane.
   Resolves the target instance from ORBE_STATE_DIR / ORBE_SOCK. Run inside a
   Orbe pane, or the control socket must be reachable; otherwise exits non-zero.
-  Exit codes: 0 success, 2 usage error, 1 RPC/connection error.
-  """
-
-let paneUsage = """
-  orb pane — inspect and manipulate panes in the running instance
-
-  USAGE:
-    orb pane list [--workspace <id|current>] [--json]
-    orb pane split [<pane>] [-v | -h]
-    orb pane close [<pane>]
-    orb pane focus <pane>
-
-  <pane> defaults to the current pane (ORBE_PANE). Outside a Orbe pane, pass
-  an explicit id (see: orb pane list). focus always requires an explicit <pane>.
-  """
-
-let paneSplitUsage = """
-  orb pane split [<pane>] [-v | -h]
-
-  Split <pane> (default: current pane via ORBE_PANE) into two.
-    -v   split into left/right panes (vertical divider, like Cmd+D). default.
-    -h   split into top/bottom panes (horizontal divider, like Cmd+Shift+D).
-  """
-
-let tabUsage = """
-  orb tab — open and close tabs in the running instance
-
-  USAGE:
-    orb tab new [--workspace <id>] [--dir <path>] [--cmd "…"]
-    orb tab close [<tab>]
-
-  tab new opens in the active workspace unless --workspace <id> is given.
-  tab close defaults to the current tab (via ORBE_PANE); outside a Orbe pane,
-  pass an explicit <tab> id (see: orb pane list).
-  """
-
-let configUsage = """
-  orb config — read and set Orbe settings
-
-  USAGE:
-    orb config list [--workspace [<id>]] [--json]
-    orb config get <key> [--workspace [<id>]] [--json]
-    orb config set <key> <value> [--workspace [<id>]]
-    orb config unset <key> [--workspace [<id>]]
-
-  KEYS: \(allConfigKeys.joined(separator: ", "))
-  --workspace targets a workspace: <id> (or current) for a specific one, bare
-  --workspace for the active one. Without the flag, config set/unset writes global.
-  All settings are workspace-overridable; unset clears an override (back to inherit).
-  """
-
-let configSetUsage = """
-  orb config set <key> <value> [--workspace [<id>]]
-
-  KEYS: \(allConfigKeys.joined(separator: ", "))
-    font-size, background-opacity, notification-sound-volume   integer
-    background-blur, cursor-style-blink, notification-sound-enabled   true/false/on/off/1/0
-    theme (auto/light/dark), font-family, tab-title-font-family, emoji-font,
-    default-agent, worktree-dir, notification-sound   string
-    agent-state-icons   map (set it from the settings palette)
-  --workspace <id> writes that workspace's override, bare --workspace the active
-  one (default without the flag: global).
-  """
-
-let wsUsage = """
-  orb ws — manage workspaces
-
-  USAGE:
-    orb ws list [--json]
-    orb ws new <name> [--dir <path>]
-    orb ws rename <id|current> <name>
-    orb ws dir <id|current> <path>
-    orb ws switch <id>
-    orb ws rm <id|current>
+  Exit codes: 0 success, 2 usage error, 1 RPC/connection error, 124 wait timed out.
   """
