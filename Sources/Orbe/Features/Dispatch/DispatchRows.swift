@@ -83,6 +83,11 @@ struct DispatchInfoRow: View {
 /// 先頭グリフ列と名前バーを面トークンの小片で表す。`barWidth` を行ごとに変えて均一ブロックに見せない。
 /// 行高は `DispatchRow` の名前（`workspaceName`）と同じ行ボックスに合わせ、小片はその中で薄く中央に置く。
 struct DispatchSkeletonRow: View {
+  /// 待機中に並べる名前バー幅（行ごとに変え均一ブロックに見せない・要素数＝行数）。
+  /// **一覧の初回ロードと clean の分類待ちが共有する**——同じ「まだ何も分かっていない」を
+  /// 別の並びで描かない。
+  static let widths: [CGFloat] = [260, 200, 300, 170, 240, 190, 220]
+
   let barWidth: CGFloat
 
   var body: some View {

@@ -9,7 +9,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   /// 作業ツリーが clean（安全確認を通る側）。
   let clean = GitWorktreeStatusCounts(modified: 0, untracked: 0)
 
-  private func classify(_ facts: DispatchCleanFacts...) -> [CleanRow] {
+  func classify(_ facts: DispatchCleanFacts...) -> [CleanRow] {
     DispatchWorktreeClassifier.classify(facts)
   }
 
@@ -27,7 +27,8 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
       DispatchCleanFacts(
         path: "/wt/wt-path-template", branch: "ship/wt", upstream: "origin/ship/wt",
         track: "[gone]",
-        closedPR: DispatchCleanPR(number: 120, isMerged: false, base: "main"), status: clean,
+        closedPR: DispatchCleanPR(number: 120, isMerged: false, base: "main"), openPR: .none,
+        status: clean,
         containment: .unmerged(count: 6), operation: .none))
     XCTAssertEqual(r.group, .caution)
     XCTAssertEqual(r.chips, [.ownCommits(6), .gone])
@@ -42,7 +43,8 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/dispatch-delete", branch: "feat/dispatch-delete", upstream: "origin/x",
-        closedPR: DispatchCleanPR(number: 142, isMerged: true, base: "main"), status: clean,
+        closedPR: DispatchCleanPR(number: 142, isMerged: true, base: "main"), openPR: .none,
+        status: clean,
         containment: .patchEquivalent(target: "main"), operation: .none))
     XCTAssertEqual(r.group, .safe)
     XCTAssertEqual(r.chips, [.mergedPR(142, base: "main"), .remoteSynced])
@@ -58,7 +60,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
       DispatchCleanFacts(
         path: "/wt/diff-panel", branch: "fix/diff-panel", upstream: "origin/fix/diff-panel",
         track: "[gone]",
-        status: GitWorktreeStatusCounts(modified: 2, untracked: 3),
+        openPR: .none, status: GitWorktreeStatusCounts(modified: 2, untracked: 3),
         containment: .patchEquivalent(target: "main"),
         operation: .none))
     XCTAssertEqual(r.group, .caution)
@@ -73,7 +75,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/mid-rebase", branch: "feat/mid", upstream: "origin/feat/mid",
-        track: "[gone]", status: clean,
+        track: "[gone]", openPR: .none, status: clean,
         containment: .patchEquivalent(target: "main"), operation: .inProgress(.rebase)))
     XCTAssertEqual(r.group, .caution, "status が空でも停止中の操作は安全確認を落とす")
     XCTAssertEqual(r.chips, [.inProgress(.rebase), .mergedInto("main")])
@@ -84,7 +86,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     for operation in [GitWorktreeOperation.merge, .cherryPick, .bisect] {
       let r = row(
         DispatchCleanFacts(
-          path: "/wt/x", branch: "feat/x", track: "[gone]", status: clean,
+          path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: clean,
           containment: .patchEquivalent(target: "main"),
           operation: .inProgress(operation)))
       XCTAssertEqual(r.chips.first, .inProgress(operation))
@@ -95,7 +97,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   func testUnknownOperationFallsToCaution() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: "[gone]", status: clean,
+        path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: clean,
         containment: .patchEquivalent(target: "main"),
         operation: .unknown))
     XCTAssertEqual(r.group, .caution)
@@ -106,7 +108,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   func testUnknownStatusFallsToCaution() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: "[gone]", status: nil,
+        path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: nil,
         containment: .patchEquivalent(target: "main"),
         operation: .none))
     XCTAssertEqual(r.group, .caution)
@@ -119,7 +121,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
       DispatchCleanFacts(
         path: "/wt/render-batching", branch: "perf/render-batching", isPrunable: true,
         upstream: "origin/perf/render-batching", track: "[gone]",
-        containment: .patchEquivalent(target: "main")))
+        openPR: .none, containment: .patchEquivalent(target: "main")))
     XCTAssertEqual(r.group, .safe)
     XCTAssertEqual(
       r.chips, [.prunable, .mergedInto("main")], "軸A + 軸B のピル 1 枚ずつ")
@@ -130,7 +132,8 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   func testLockedFallsToCaution() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/held", branch: "feat/held", lockReason: "USB", track: "[gone]", status: clean,
+        path: "/wt/held", branch: "feat/held", lockReason: "USB", track: "[gone]", openPR: .none,
+        status: clean,
         containment: .patchEquivalent(target: "main"), operation: .none))
     XCTAssertEqual(r.group, .caution)
     XCTAssertTrue(r.chips.contains(.locked), "軸C で唯一ピルになる語")
@@ -141,7 +144,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: "[gone]",
-        status: clean, containment: nil, operation: .none))
+        openPR: .none, status: clean, containment: nil, operation: .none))
     XCTAssertEqual(r.group, .caution)
     XCTAssertEqual(
       r.chips, [.gone, .unverified],
@@ -149,7 +152,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   }
 
   func testMainWorktreeIsInUse() {
-    let r = row(DispatchCleanFacts(path: "/repo", branch: "main", isMain: true))
+    let r = row(DispatchCleanFacts(path: "/repo", branch: "main", isMain: true, openPR: .none))
     XCTAssertEqual(r.group, .inUse)
     XCTAssertEqual(r.chips, [.mainWorktree])
   }
@@ -160,7 +163,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
       row(
         DispatchCleanFacts(
           path: "/wt/agent-hooks", branch: "feature/agent-hooks", track: "[gone]",
-          containment: .patchEquivalent(target: "main"),
+          openPR: .none, containment: .patchEquivalent(target: "main"),
           occupancy: PaneOccupancy(cwd: "/wt/agent-hooks", agentState: state))
       ).chips
     }
@@ -174,7 +177,8 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   func testNoHintStaysCaution() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/plain", branch: "feat/plain", upstream: "origin/plain", status: clean,
+        path: "/wt/plain", branch: "feat/plain", upstream: "origin/plain", openPR: .none,
+        status: clean,
         containment: .patchEquivalent(target: "main"), operation: .none))
     XCTAssertEqual(r.group, .caution)
     XCTAssertEqual(r.chips, [.mergedInto("main"), .remoteSynced])
@@ -185,17 +189,18 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   /// upstream が無ければ `未 push · ローカルのみ`。open PR があればそちらが先に立つ。
   func testAxisBPrefersTheLoudestLoss() {
     let unpushed = row(
-      DispatchCleanFacts(path: "/wt/x", branch: "feat/x", status: clean, containment: nil))
+      DispatchCleanFacts(
+        path: "/wt/x", branch: "feat/x", openPR: .none, status: clean, containment: nil))
     XCTAssertEqual(unpushed.chips.first, .unpushed)
 
     let openPR = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", openPR: 139, status: clean, containment: nil))
+        path: "/wt/x", branch: "feat/x", openPR: .open(139), status: clean, containment: nil))
     XCTAssertEqual(openPR.chips.first, .openPR(139), "レビュー中の PR は未 push より先に名乗る")
 
     let ownCommits = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", openPR: 139, status: clean,
+        path: "/wt/x", branch: "feat/x", openPR: .open(139), status: clean,
         containment: .unmerged(count: 3)))
     XCTAssertEqual(ownCommits.chips.first, .ownCommits(3), "失うコミットが最優先")
   }
@@ -208,7 +213,8 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x",
         closedPR: DispatchCleanPR(number: 142, isMerged: true, base: "main"),
-        status: clean, containment: .patchEquivalent(target: "main"), operation: .none))
+        openPR: .none, status: clean, containment: .patchEquivalent(target: "main"),
+        operation: .none))
     XCTAssertEqual(merged.group, .safe)
     XCTAssertFalse(
       merged.vocabulary.contains(.unpushed), "失うものが無い行に完全喪失の警告を出さない")
@@ -218,7 +224,8 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     XCTAssertEqual(merged.overflowNotes, [.mergedInto("main")])
 
     let unknown = row(
-      DispatchCleanFacts(path: "/wt/x", branch: "feat/x", status: clean, containment: nil))
+      DispatchCleanFacts(
+        path: "/wt/x", branch: "feat/x", openPR: .none, status: clean, containment: nil))
     XCTAssertTrue(unknown.vocabulary.contains(.unpushed), "判定できていない行では名乗る")
   }
 
@@ -227,7 +234,8 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: "[ahead 3]",
-        closedPR: DispatchCleanPR(number: 142, isMerged: true, base: "main"), status: clean,
+        closedPR: DispatchCleanPR(number: 142, isMerged: true, base: "main"), openPR: .none,
+        status: clean,
         containment: .patchEquivalent(target: "main"),
         operation: .none))
     XCTAssertFalse(r.vocabulary.contains(.remoteAhead(3)))
@@ -238,13 +246,13 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     let ahead = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: "[ahead 3]",
-        status: clean, containment: nil))
+        openPR: .none, status: clean, containment: nil))
     XCTAssertEqual(ahead.chips.first, .remoteAhead(3))
 
     let diverged = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: "[ahead 1, behind 2]",
-        status: clean, containment: nil))
+        openPR: .none, status: clean, containment: nil))
     XCTAssertEqual(diverged.chips.first, .remoteAhead(1))
   }
 
@@ -253,7 +261,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   func testRemoteSyncedWhenTrackIsEmpty() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", status: clean,
+        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", openPR: .none, status: clean,
         containment: nil, operation: .none))
     XCTAssertEqual(
       r.chips, [.remoteSynced, .unverified])
@@ -263,7 +271,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   func testDetachedRowHasNoBranchVocabulary() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/x", status: clean, containment: .patchEquivalent(target: "main"),
+        path: "/wt/x", openPR: .none, status: clean, containment: .patchEquivalent(target: "main"),
         operation: .none))
     XCTAssertTrue(r.chips.isEmpty)
     XCTAssertFalse(r.deletesBranchImplicitly)
@@ -275,7 +283,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", lockReason: "USB", upstream: "origin/feat/x",
         track: "[gone]",
-        status: GitWorktreeStatusCounts(modified: 1, untracked: 0),
+        openPR: .none, status: GitWorktreeStatusCounts(modified: 1, untracked: 0),
         containment: .unmerged(count: 4),
         operation: .none))
     XCTAssertEqual(r.chips.filter(\.isPill).count, 2)
@@ -293,7 +301,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   func testDetachedCautionRowCanStillOpenItsDetail() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/x", status: GitWorktreeStatusCounts(modified: 2, untracked: 3),
+        path: "/wt/x", openPR: .none, status: GitWorktreeStatusCounts(modified: 2, untracked: 3),
         operation: .inProgress(.rebase)))
     XCTAssertEqual(r.group, .caution)
     XCTAssertNil(r.branch)
@@ -311,7 +319,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   func testCautionRowWithNothingToSayDoesNotExpand() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/x", status: clean, containment: .patchEquivalent(target: "main"),
+        path: "/wt/x", openPR: .none, status: clean, containment: .patchEquivalent(target: "main"),
         operation: .none))
     XCTAssertEqual(r.group, .caution)
     XCTAssertTrue(r.vocabulary.isEmpty)
@@ -323,7 +331,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   func testOpenPullRequestKeepsTheRowInCaution() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", isPrunable: true, openPR: 139,
+        path: "/wt/x", branch: "feat/x", isPrunable: true, openPR: .open(139),
         containment: .patchEquivalent(target: "main")))
     XCTAssertEqual(r.group, .caution)
     XCTAssertFalse(r.deletesBranchImplicitly, "レビュー中のブランチを黙って消さない")
@@ -336,7 +344,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/session-restore", branch: "feat/session-restore", lockReason: "USB",
-        status: clean, containment: .patchEquivalent(target: "main"),
+        openPR: .none, status: clean, containment: .patchEquivalent(target: "main"),
         operation: .inProgress(.rebase)))
     XCTAssertEqual(r.chips, [.inProgress(.rebase), .locked], "右クラスタは loss を優先した 2 枚")
     XCTAssertEqual(r.lossNotes, [.inProgress(.rebase)])
@@ -350,32 +358,10 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", lockReason: "USB", upstream: "origin/feat/x",
-        status: clean, containment: .patchEquivalent(target: "main"), operation: .inProgress(.merge)
+        openPR: .none, status: clean, containment: .patchEquivalent(target: "main"),
+        operation: .inProgress(.merge)
       ))
     XCTAssertEqual(r.chips, [.inProgress(.merge), .locked], "loss の 2 枚が残る")
     XCTAssertEqual(r.overflowNotes, [.mergedInto("main"), .remoteSynced])
   }
-
-  // MARK: - 並びと件数
-
-  func testRowsAreOrderedByGroup() {
-    let rows = classify(
-      DispatchCleanFacts(path: "/repo", branch: "main", isMain: true),
-      DispatchCleanFacts(
-        path: "/wt/dirty", branch: "a", track: "[gone]",
-        status: GitWorktreeStatusCounts(modified: 1, untracked: 0), operation: .none),
-      DispatchCleanFacts(
-        path: "/wt/safe", branch: "b", track: "[gone]", status: clean,
-        containment: .patchEquivalent(target: "main"),
-        operation: .none))
-    XCTAssertEqual(rows.map(\.name), ["safe", "dirty", "repo"], "safe → caution → inUse の群順")
-    XCTAssertEqual(DispatchWorktreeClassifier.candidateCount(rows), 1, "候補件数は safe 群から導く")
-  }
-
-  /// clean 画面の meta 列は**ブランチ名だけ**（パスは list モードが見せる）。
-  func testMetaIsTheBranchName() {
-    XCTAssertEqual(row(DispatchCleanFacts(path: "/wt/x", branch: "feat/x")).meta, "feat/x")
-    XCTAssertEqual(row(DispatchCleanFacts(path: "/wt/x")).meta, "/wt/x", "detached はパスへ落とす")
-  }
-
 }

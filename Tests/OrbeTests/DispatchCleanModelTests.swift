@@ -6,8 +6,8 @@ import XCTest
 @MainActor
 final class DispatchCleanModelTests: OrbeTestCase {
 
-  /// safe 2 行（うち 1 行は prunable）・caution 1 行・inUse 1 行の凍結スナップショット。
-  private func makeModel() -> DispatchCleanModel {
+  /// safe 2 行（うち 1 行は prunable）・caution 1 行・inUse 1 行。
+  func makeModel() -> DispatchCleanModel {
     let model = DispatchCleanModel()
     model.enter(rows: makeRows())
     return model
@@ -18,18 +18,18 @@ final class DispatchCleanModelTests: OrbeTestCase {
       [
         DispatchCleanFacts(
           path: "/wt/safe-a", branch: "feat/a", head: "aaa", track: "[gone]",
-          status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
+          openPR: .none, status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
           containment: .patchEquivalent(target: "main"),
           operation: .none),
         DispatchCleanFacts(
           path: "/wt/safe-b", branch: "feat/b", head: "bbb", isPrunable: true, track: "[gone]",
-          containment: .patchEquivalent(target: "main")),
+          openPR: .none, containment: .patchEquivalent(target: "main")),
         DispatchCleanFacts(
           path: "/wt/caution", branch: "feat/c", head: "ccc", track: "[gone]",
-          status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
+          openPR: .none, status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
           containment: .unmerged(count: 6),
           operation: .none),
-        DispatchCleanFacts(path: "/repo", branch: "main", head: "ddd", isMain: true),
+        DispatchCleanFacts(path: "/repo", branch: "main", head: "ddd", isMain: true, openPR: .none),
       ])
   }
 
@@ -86,7 +86,7 @@ final class DispatchCleanModelTests: OrbeTestCase {
         [
           DispatchCleanFacts(
             path: "/wt/detached", head: "eee",
-            status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
+            openPR: .none, status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
             containment: .patchEquivalent(target: "main"), operation: .none)
         ]))
     m.toggleAtCursor()
@@ -239,7 +239,7 @@ final class DispatchCleanModelTests: OrbeTestCase {
 
     XCTAssertEqual(retry.map(\.path), ["/wt/safe-b"])
     XCTAssertEqual(
-      retry.first?.deleteBranch, false, "凍結した依頼のまま（何を消すかは選択画面が決めた通り）")
+      retry.first?.deleteBranch, false, "確定した依頼のまま（何を消すかは選択画面が決めた通り）")
     XCTAssertEqual(m.doneCount, 1, "成功行は消えない")
     XCTAssertFalse(m.runToken === stale, "中断後の再試行が即座に打ち切られないよう札を張り直す")
     m.markRunning(path: "/wt/safe-b")

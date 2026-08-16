@@ -19,18 +19,38 @@ extension DispatchPaletteTests {
     p.activate(at: try XCTUnwrap(p.items.firstIndex { $0.action == .clean }))
     XCTAssertTrue(executed.isEmpty, "clean 行は onExecute に流さない")
     XCTAssertEqual(p.mode, .clean)
-    XCTAssertEqual(p.clean.rows.map(\.name), ["a"], "分類スナップショットで開く")
+    XCTAssertEqual(p.clean.rows.map(\.name), ["a"], "最新の分類で開く")
   }
 
-  /// 分類が未着地なら握り潰す（list に留まる）。
-  func testCleanRowIsInertUntilClassificationLands() throws {
+  /// **分類が未着地でも即座に開く**（着地を待たない）。0 行の間はスケルトンが埋める。
+  func testCleanRowOpensImmediatelyEvenBeforeClassificationLands() throws {
     let p = makeModel()
+    p.classificationPending = true
     var executed: [DispatchItem] = []
     p.onExecute = { executed.append($0) }
 
     p.activate(at: try XCTUnwrap(p.items.firstIndex { $0.action == .clean }))
     XCTAssertTrue(executed.isEmpty)
-    XCTAssertEqual(p.mode, .list, "未着地では画面が変わらない")
+    XCTAssertEqual(p.mode, .clean, "未着地でも画面は開く")
+    XCTAssertTrue(p.clean.rows.isEmpty)
+    XCTAssertTrue(p.clean.classificationPending, "0 行の理由（待機中）が画面へ渡る")
+  }
+
+  /// **clean を開いている間、裏の着地はそのまま画面へ届く**（選択可否は行ごとの `isReady` が決める）。
+  /// list に居る間は届かない——開いた瞬間に `enter(rows:)` が最新を載せるので、届ける先が無い。
+  func testClassificationLandingsReachTheOpenCleanScreen() {
+    let p = makeModel()
+    p.classification = []
+    p.enterClean()
+    XCTAssertTrue(p.clean.rows.isEmpty)
+
+    p.classification = cleanRows()
+    XCTAssertEqual(p.clean.rows.map(\.name), ["a"], "開いている画面へ届く")
+    XCTAssertTrue(p.clean.isChecked(p.clean.rows[0]), "確定した安全行は自動チェックされる")
+
+    p.exitClean()
+    p.classification = []
+    XCTAssertEqual(p.clean.rows.map(\.name), ["a"], "list に居る間は届かない")
   }
 
   /// esc で list へ戻ると、カーソルは入口の `clean` 行を指す。
@@ -162,7 +182,8 @@ extension DispatchPaletteTests {
       [
         DispatchCleanFacts(
           path: "/wt/a", branch: "feat/a", head: "aaa", upstream: "origin/feat/a",
-          track: "[gone]", status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
+          track: "[gone]", openPR: .none,
+          status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
           containment: .patchEquivalent(target: "main"), operation: .none)
       ])
   }

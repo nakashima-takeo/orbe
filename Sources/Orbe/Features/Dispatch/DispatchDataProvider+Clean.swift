@@ -29,7 +29,8 @@ extension DispatchDataProvider {
       repo: repo, localization: localization,
       prunablePaths: Set(worktrees.filter(\.isPrunable).map(\.path))
     ).run(requests, token: token, progress: progress) { [weak self] in
-      self?.loadGit(repo)
+      // 削除は必ず prune の後に起きるので、分類ごと引き直してよい。
+      self?.loadGit(repo, classifying: true)
       completion()
     }
   }

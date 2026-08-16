@@ -308,7 +308,7 @@ extension GitWorktreeCleanIntegrationTests {
 
     let rows = DispatchWorktreeClassifier.rows(
       DispatchWorktreeClassifier.Input(
-        worktrees: worktrees, branchPullRequests: [pr], probes: probes))
+        worktrees: worktrees, branchPRStates: ["feat/gf": .loaded([pr])], probes: probes))
     let row = try XCTUnwrap(rows.first { $0.branch == "feat/gf" })
     XCTAssertEqual(row.group, .safe, "squash × 非既定ブランチ統合の行が安全群に入る")
     XCTAssertTrue(row.chips.contains(.mergedPR(7, base: "develop")), "merged PR チップが可視の根拠")

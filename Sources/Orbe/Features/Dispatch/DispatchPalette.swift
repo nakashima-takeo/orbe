@@ -161,8 +161,20 @@ struct DispatchSection: Identifiable {
   /// 表示中の画面。器は共通で中身だけ切り替わる。
   private(set) var mode: DispatchMode = .list
   /// 最新の分類結果（provider が rebuild ごとに更新）。nil は分類レーンが未着地。
-  var classification: [CleanRow]?
-  /// clean 画面の状態（入った瞬間に分類結果を凍結する）。
+  /// **clean を開いている間は、着地がそのまま画面へ届く**（選択可否は行ごとの `isReady` が決める）。
+  var classification: [CleanRow]? {
+    didSet {
+      guard mode == .clean else { return }
+      clean.apply(rows: classification ?? [])
+    }
+  }
+  /// 分類の材料がまだ動いているか（provider の導出値。0 行の clean にスケルトンを出す入力）。
+  /// 行と違って画面を跨いで意味が変わらないので、mode を問わずそのまま流す＝clean を開く時点で
+  /// 既に同値になっている。
+  var classificationPending = false {
+    didSet { clean.classificationPending = classificationPending }
+  }
+  /// clean 画面の状態。
   let clean = DispatchCleanModel()
   /// 初回ロード完了フラグ。provider の初回 rebuild で立つ。false の間はスケルトン行を出す。
   var hasLoadedOnce = false
@@ -222,11 +234,10 @@ struct DispatchSection: Identifiable {
   /// 入力を受け付けない状態（worktree 作成中／clean の削除実行中）。
   var isBusy: Bool { isPreparing || clean.phase == .deleting }
 
-  /// clean 画面へ入る。分類が未着地（`classification == nil`）なら黙って握り潰す
-  /// （`isPreparing` 中の決定と同じ扱い。新しい表示は足さない）。
+  /// clean 画面へ入る。**分類が未着地でも即座に入る**——開いてから行が生えるほうが、押しても
+  /// 何も起きないより正しい（0 行の間はスケルトン行が空フレームを埋める）。
   func enterClean() {
-    guard let rows = classification else { return }
-    clean.enter(rows: rows)
+    clean.enter(rows: classification ?? [])
     mode = .clean
     focus()
   }

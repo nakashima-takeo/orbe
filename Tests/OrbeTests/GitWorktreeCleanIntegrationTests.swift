@@ -112,7 +112,7 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
     XCTAssertFalse(git(["branch"]).stdoutText.contains("feat/gone"), "未取り込みでも到達性を問わず消える")
   }
 
-  /// **凍結した判定でコミットを消さない**。分類してから削除するまでにブランチが進んだら、
+  /// **確定した時点の判定でコミットを消さない**。分類してから削除するまでにブランチが進んだら、
   /// 先端が一致しないので削除は拒否される（worktree 側の dirty 再確認に対応する、ブランチ側の関門）。
   func testDeleteBranchRefusesWhenBranchMovedSinceProbe() throws {
     XCTAssertTrue(git(["checkout", "-q", "-b", "feat/moved"]).isSuccess)

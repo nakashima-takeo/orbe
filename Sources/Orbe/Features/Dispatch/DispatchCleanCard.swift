@@ -108,14 +108,22 @@ struct DispatchCleanList: View {
   }
 
   /// 選択画面。**空の群は見出しごと出さない**（list モードの規約と同じ）。
+  /// 分類が 1 行も出ていない間は、一覧の初回ロードと同じスケルトン行で空フレームを埋める
+  /// ——clean は即座に開き、行は prune 後の分類が着地してから一度に出る。
   @ViewBuilder private var selection: some View {
-    let visible = Self.sections.filter { section in
-      model.rows.contains { $0.group == section.group }
-    }
-    ForEach(Array(visible.enumerated()), id: \.element.group) { index, section in
-      sectionLabel(section.key, warn: section.warn, first: index == 0)
-      ForEach(model.rows.filter { $0.group == section.group }) { row in
-        DispatchCleanRow(model: model, row: row)
+    if model.rows.isEmpty && model.classificationPending {
+      ForEach(Array(DispatchSkeletonRow.widths.enumerated()), id: \.offset) { _, width in
+        DispatchSkeletonRow(barWidth: width)
+      }
+    } else {
+      let visible = Self.sections.filter { section in
+        model.rows.contains { $0.group == section.group }
+      }
+      ForEach(Array(visible.enumerated()), id: \.element.group) { index, section in
+        sectionLabel(section.key, warn: section.warn, first: index == 0)
+        ForEach(model.rows.filter { $0.group == section.group }) { row in
+          DispatchCleanRow(model: model, row: row)
+        }
       }
     }
   }

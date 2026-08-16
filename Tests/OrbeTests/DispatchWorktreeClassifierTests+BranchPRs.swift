@@ -59,18 +59,20 @@ extension DispatchWorktreeClassifierTests {
     XCTAssertFalse(r.vocabulary.contains(.mergedPR(120, base: "main")), "cross-repo の PR は事実にしない")
   }
 
-  /// **head をまたいだ混線を防ぐのは grouping の 1 点だけ。** 取得は heads ごとに 1 往復するが、
-  /// 結果は 1 本の配列へ平坦化されて届く（`GitHubCLI.fetch(argsList:)` が連結する）ので、
-  /// どの PR がどのブランチの事実かは `headRefName` でしか復元できない。
-  func testEachRowTakesOnlyItsOwnHeadFromTheFlattenedFetch() {
+  /// **行は渡された配列を鵜呑みにせず、`headRefName` で自分の事実だけを採る。**
+  /// `branchPRLookup` は `rows()` と `extraContainmentTargets` の共通口で、後者には head を跨いで
+  /// 平坦化した配列（`landedBranchPRs`）が渡る——この 1 点が消えると隣の head の PR が事実になる。
+  func testEachRowTakesOnlyItsOwnHeadFromItsFetch() {
     let rows = DispatchWorktreeClassifier.rows(
       DispatchWorktreeClassifier.Input(
         worktrees: [
           GitWorktree(path: "/wt/x", branch: "feat/x", head: "aaa", isMain: false),
           GitWorktree(path: "/wt/y", branch: "feat/y", head: "bbb", isMain: false),
         ],
-        branchPullRequests: [
-          pr(10, "OPEN"), pr(20, "MERGED", base: "develop", head: "feat/y"),
+        branchPRStates: [
+          // 隣の head の PR が混ざって届いても、行はそれを自分の事実にしない。
+          "feat/x": .loaded([pr(10, "OPEN"), pr(20, "MERGED", base: "develop", head: "feat/y")]),
+          "feat/y": .loaded([pr(20, "MERGED", base: "develop", head: "feat/y")]),
         ]))
     let x = rows.first { $0.name == "x" }!
     let y = rows.first { $0.name == "y" }!
@@ -78,6 +80,80 @@ extension DispatchWorktreeClassifierTests {
     XCTAssertFalse(x.vocabulary.contains(.mergedPR(20, base: "develop")), "隣の head の PR は拾わない")
     XCTAssertTrue(y.vocabulary.contains(.mergedPR(20, base: "develop")), "feat/y は自分の PR を拾う")
     XCTAssertFalse(y.vocabulary.contains(.openPR(10)), "隣の head の PR は拾わない")
+  }
+
+  // MARK: - 取得の状態（取得中／取得失敗）
+
+  /// **取得中の head は安全群に入れない。** 他の確認が全部通っていても、「レビュー中でない」を
+  /// 確かめていない以上は安全と読まない。行はチップを増やさず、行頭の回転グリフだけで語る。
+  func testFetchingHeadIsNeitherSafeNorReady() {
+    let r = branchPRRow(state: .fetching)
+    XCTAssertEqual(r.group, .caution, "確かめていない PR 軸は安全確認を落とす")
+    XCTAssertFalse(r.isReady, "揃っていない行は選べない")
+    XCTAssertFalse(r.vocabulary.contains(.unverified), "取得中はチップを立てない（グリフが語る）")
+  }
+
+  /// **取得に失敗した head は「情報取得に失敗」を見せたうえで手動選択させる。**
+  /// 安全とは読まない（確認群）が、行そのものは確定しているので選べる。
+  func testFailedHeadFallsToCautionWithTheUnverifiedChip() {
+    let r = branchPRRow(state: .failed)
+    XCTAssertEqual(r.group, .caution)
+    XCTAssertTrue(r.isReady, "決着はついているので手で選べる")
+    XCTAssertTrue(r.vocabulary.contains(.unverified), "情報取得に失敗したことを見せる")
+  }
+
+  /// 確かめて 0 件（`.loaded([])`）なら従来どおり安全群へ入り、確定している。
+  /// gh が使えないリポジトリもこの形で届く。
+  func testVerifiedEmptyHeadIsSafeAndReady() {
+    let r = branchPRRow()
+    XCTAssertEqual(r.group, .safe)
+    XCTAssertTrue(r.isReady)
+    XCTAssertFalse(r.vocabulary.contains(.unverified))
+  }
+
+  /// **detached（`branch == nil`）は PR の head になり得ない**ので、PR 軸を待たない。
+  func testDetachedRowNeverWaitsForThePRAxis() {
+    let rows = DispatchWorktreeClassifier.rows(
+      DispatchWorktreeClassifier.Input(
+        worktrees: [GitWorktree(path: "/wt/d", branch: nil, head: "ccc", isMain: false)],
+        probes: [
+          "/wt/d": DispatchCleanProbe(
+            status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
+            containment: .patchEquivalent(target: "main"), operation: .none)
+        ]))
+    XCTAssertTrue(rows[0].isReady, "確認対象が無いので待つものが無い")
+  }
+
+  /// プローブが飛んでいる間の行は、PR が確定していても選べない。
+  func testProbingRowIsNotReady() {
+    let r = branchPRRow(probing: true)
+    XCTAssertFalse(r.isReady, "実測が未着地の行は選べない")
+  }
+
+  /// **在庫中の実測を「取得に失敗した」と読まない。** 差分発行が全量発行より先に着地した回は実測が
+  /// 部分辞書で届くので、まだ返っていない行の `containment` も nil になる。そこで判定不能チップを
+  /// 立てると、行頭の回転グリフ（まだ動いている）と同じ行で食い違う。
+  func testProbingRowDoesNotClaimAFailedLookup() {
+    let probing = branchPRRow(containment: nil, probing: true)
+    XCTAssertFalse(probing.vocabulary.contains(.unverified), "着地の前に失敗を名乗らない")
+    let landed = branchPRRow(containment: nil)
+    XCTAssertTrue(landed.vocabulary.contains(.unverified), "着地して nil なら失敗として見せる")
+  }
+
+  /// **台帳に無い head は「まだ確かめていない」へ倒す。** ここが「確かめて 0 件」に倒れると、
+  /// 取得が着地していないブランチが安全群へ入り、自動チェックまで灯る。
+  func testHeadMissingFromTheLedgerFallsBackToFetching() {
+    let rows = DispatchWorktreeClassifier.rows(
+      DispatchWorktreeClassifier.Input(
+        worktrees: [GitWorktree(path: "/wt/x", branch: "feat/x", head: "aaa", isMain: false)],
+        branchPRStates: [:],
+        probes: [
+          "/wt/x": DispatchCleanProbe(
+            status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
+            containment: .patchEquivalent(target: "main"), operation: .none)
+        ]))
+    XCTAssertEqual(rows[0].group, .caution, "台帳に無い head を確かめ済みと読まない")
+    XCTAssertFalse(rows[0].isReady)
   }
 
   // MARK: - 追加比較先（gh ヒント → 取り込み判定の入力）
@@ -157,6 +233,15 @@ extension DispatchWorktreeClassifierTests {
     _ prs: [GitHubBranchPR], containment: GitBranchContainment? = .patchEquivalent(target: "main"),
     track: String? = "[gone]"
   ) -> CleanRow {
+    branchPRRow(state: .loaded(prs), containment: containment, track: track)
+  }
+
+  /// head の取得状態そのものを渡す版（取得中／取得失敗の検証はこちらを使う）。
+  private func branchPRRow(
+    state: BranchPRState = .loaded([]),
+    containment: GitBranchContainment? = .patchEquivalent(target: "main"),
+    track: String? = "[gone]", probing: Bool = false
+  ) -> CleanRow {
     let rows = DispatchWorktreeClassifier.rows(
       DispatchWorktreeClassifier.Input(
         worktrees: [
@@ -168,12 +253,13 @@ extension DispatchWorktreeClassifierTests {
             name: "feat/x", relativeDate: "1d", worktreePath: "/wt/x",
             upstream: "origin/feat/x", track: track)
         ],
-        branchPullRequests: prs,
+        branchPRStates: ["feat/x": state],
         probes: [
           "/wt/x": DispatchCleanProbe(
             status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
             containment: containment, operation: .none)
-        ]))
+        ],
+        probingPaths: probing ? ["/wt/x"] : []))
     return rows.first { $0.name == "x" }!
   }
 }

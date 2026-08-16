@@ -59,6 +59,46 @@ final class DispatchCleanRowRenderTests: SnapshotTestCase {
     XCTAssertNotEqual(develop, main, "マージ先が画に出ていない")
   }
 
+  /// **未確定行はチェックボックスを描かない**（行頭が回転グリフに替わる）。
+  ///
+  /// 比べる 2 枚は `isReady` **だけ**が違う同じ行で、しかもどちらもカーソル外・未チェックにする
+  /// ——群・チップ・ハイライト・チェック状態のどれかが混ざると、行頭の分岐を丸ごと消しても画は
+  /// 違うままになり、テストが何も守らなくなる。
+  func testPendingRowDrawsTheWorkingGlyphInsteadOfACheckbox() throws {
+    let ready = try XCTUnwrap(
+      DispatchWorktreeClassifier.classify([
+        // 確認群にするのは、確定しても自動チェックが灯らない（＝2 枚のチェック状態が揃う）ため。
+        DispatchCleanFacts(
+          path: "/wt/x", branch: "feat/x", head: "aaa", track: "[gone]", openPR: .none,
+          status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
+          containment: .unmerged(count: 6), operation: .none)
+      ]).first)
+    let pending = ready.with(isReady: false)
+    XCTAssertTrue(ready.isReady)
+    XCTAssertFalse(pending.isReady)
+
+    let readyPNG = try renderOffCursor(ready)
+    XCTAssertEqual(readyPNG, try renderOffCursor(ready), "前提: 静止した行の描画は決定的")
+    XCTAssertNotEqual(
+      try renderOffCursor(pending), readyPNG, "未確定行がチェックボックスのまま描かれている")
+  }
+
+  /// カーソルを別の行に預けて、対象行だけを描く（ハイライトの有無を画から外す）。
+  private func renderOffCursor(_ row: CleanRow) throws -> Data {
+    let anchor = try XCTUnwrap(
+      DispatchWorktreeClassifier.classify([
+        DispatchCleanFacts(
+          path: "/wt/anchor", branch: "feat/anchor", head: "bbb", track: "[gone]", openPR: .none,
+          status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
+          containment: .patchEquivalent(target: "main"), operation: .none)
+      ]).first)
+    let model = DispatchCleanModel()
+    model.enter(rows: [anchor, row])
+    XCTAssertEqual(model.cursorRow?.id, anchor.id, "前提: カーソルは対象行に無い")
+    return try XCTUnwrap(
+      renderPNG(DispatchCleanRow(model: model, row: row), size: size, dark: true))
+  }
+
   /// 「その語を持つ行の画」と「その語だけ抜いた行の画」が違うことを見る。
   private func assertSublineDraws(
     pick: (CleanRow) -> Bool, strip: (CleanRow) -> CleanRow, message: String
@@ -78,7 +118,7 @@ final class DispatchCleanRowRenderTests: SnapshotTestCase {
       drawn, stripped, "\(message)——分類器が受け皿へ入れても、View が読まなければ画面から消える")
   }
 
-  /// 凍結スナップショットを渡してカーソル行を開き、その行だけを描く。
+  /// 分類を渡してカーソル行を開き、その行だけを描く。
   private func render(_ rows: [CleanRow], expanding rowID: String) throws -> Data {
     let model = DispatchCleanModel()
     model.enter(rows: rows)
@@ -93,10 +133,12 @@ final class DispatchCleanRowRenderTests: SnapshotTestCase {
 extension CleanRow {
   /// 語の置き場の 1 つだけを差し替えた行（描画の突合用）。
   fileprivate func with(
+    isReady: Bool? = nil,
     chips: [CleanChip]? = nil, lossNotes: [CleanChip]? = nil, overflowNotes: [CleanChip]? = nil
   ) -> CleanRow {
     CleanRow(
       id: id, name: name, meta: meta, branch: branch, head: head, group: group,
+      isReady: isReady ?? self.isReady,
       vocabulary: vocabulary, chips: chips ?? self.chips, lossNotes: lossNotes ?? self.lossNotes,
       overflowNotes: overflowNotes ?? self.overflowNotes,
       deletesBranchImplicitly: deletesBranchImplicitly)

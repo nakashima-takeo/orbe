@@ -9,11 +9,14 @@ import Foundation
 final class DispatchGitHubCache {
   static let shared = DispatchGitHubCache()
 
-  /// いずれも `nil` = 未取得（`[]` は 0 件）。GitHubCLI の境界と同じ区別をここでも保つ。
+  /// `issues` / `pullRequests` は `nil` = 未取得（`[]` は 0 件）。GitHubCLI の境界と同じ区別を
+  /// ここでも保つ。
   struct Entry {
     var issues: [GitHubIssue]?
     var pullRequests: [GitHubPullRequest]?
-    var branchPullRequests: [GitHubBranchPR]?
+    /// head → その head の PR。**キーが無い＝未取得**（`[]` は 0 件）。区別を head 単位に保つ
+    /// ——1 本の失敗が、他の head の先描きを消さない。
+    var branchPullRequests: [String: [GitHubBranchPR]] = [:]
   }
 
   private var entries: [String: Entry] = [:]
@@ -29,7 +32,8 @@ final class DispatchGitHubCache {
     entries[key, default: Entry()].pullRequests = pullRequests
   }
 
-  func setBranchPullRequests(_ pullRequests: [GitHubBranchPR], for key: String) {
-    entries[key, default: Entry()].branchPullRequests = pullRequests
+  /// ブランチの PR は head 単位で到着し head 単位で失敗するので、保存も head 単位。
+  func setBranchPullRequests(_ pullRequests: [GitHubBranchPR], head: String, for key: String) {
+    entries[key, default: Entry()].branchPullRequests[head] = pullRequests
   }
 }

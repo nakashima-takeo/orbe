@@ -25,9 +25,6 @@ struct DispatchCard: View {
   /// リスト部の内容基準の高さ上限（380・コンポーネント局所定数）。
   private let listCap: CGFloat = 380
 
-  /// 初回ロード中スケルトンの名前バー幅（行ごとに変え均一ブロックに見せない・要素数＝行数）。
-  private static let skeletonWidths: [CGFloat] = [260, 200, 300, 170, 240, 190, 220]
-
   /// リスト部の実効高。内容にハグしつつ 380 と「窓 − chrome」の小さい方で頭打ち（超過は内部スクロール）。
   private var listHeight: CGFloat {
     let available = max(0, maxHeight - chromeHeight)
@@ -214,7 +211,7 @@ struct DispatchCard: View {
             }
           } else {
             // 初回ロード（最初の rebuild）まで、候補行の形をした非対話プレースホルダで空フレームを埋める。
-            ForEach(Array(Self.skeletonWidths.enumerated()), id: \.offset) { _, width in
+            ForEach(Array(DispatchSkeletonRow.widths.enumerated()), id: \.offset) { _, width in
               DispatchSkeletonRow(barWidth: width)
             }
           }

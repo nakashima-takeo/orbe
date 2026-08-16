@@ -18,11 +18,9 @@ extension DispatchDataProvider {
       pullRequests = cached
       pullRequestsLoading = false
     }
-    // 掃除の突き合わせ（PR が OPEN / MERGED か）は loading の概念を持たない——未着地は「PR を
-    // 知らない」として扱えばよく、その状態で安全群へ入るには gh に依らない推定（`[gone]`・
-    // prunable）が別に要る。`[gone]` は head を消した結果なので open PR とは両立せず、prunable は
-    // ブランチを消さない行なので、知らないまま失うものが無い。
-    if let cached = entry.branchPullRequests { branchPullRequests = cached }
+    // 掃除の突き合わせ（PR が OPEN / MERGED か）はここでは積まない——head ごとの状態を組む
+    // `branchPRStates` がキャッシュを直接読み、今回の取得が未着地／失敗の head だけを前回結果で
+    // 埋める（合成点を 2 つに割ると、着地の順で結果が変わる）。
   }
 
   func loadGitHub(_ repo: GitRepo) {
@@ -65,38 +63,82 @@ extension DispatchDataProvider {
   /// **両側の着地点から同じこの入口を叩き、先に来た側は素通りする**（worktree 未着なら対象が
   /// 空・probe 未完なら `githubReady` が false）。
   ///
-  /// **対象の顔ぶれが同じ回は引かない。** 着地点が複数ある以上この入口は何度も叩かれるが、
-  /// 引き直しに意味があるのは worktree の顔ぶれが変わったときだけで、同じ顔ぶれの再取得は
-  /// worktree 本数ぶんの往復をまるごと二重に払うだけになる（gh の取得列は 1 本で、そこが
-  /// 詰まると後ろのユーザー操作まで待つ）。
+  /// **まだ引いていない head だけを引く。** 着地点が複数ある以上この入口は何度も叩かれるが、
+  /// 引き直しに意味があるのは worktree の顔ぶれが変わったときだけで、同じ head の再取得は
+  /// 往復をまるごと二重に払うだけになる。
   ///
-  /// 記録は**発行の時点**で置く——取得は往復 N 本ぶんの秒数がかかるので、着地を待って記録すると
-  /// その間に来たもう一方の着地点が同じ顔ぶれを二重に引いてしまう。取得できなかったら記録を戻し、
-  /// 次の着地点が引き直せるようにする。
+  /// 記録は**発行の時点**で置く（`branchPRFetches[head] = .fetching`）——取得は 1 本あたり 1 秒前後
+  /// かかるので、着地を待って記録すると、その間に来たもう一方の着地点が同じ head を二重に引く。
+  ///
+  /// **取得に失敗した head はセッション中に引き直さない**（`pending` の抽出がここ 1 箇所に閉じて
+  /// いるので、方針を変えるならこの 1 行）。パレットは開くたびに provider ごと作り直されるため、
+  /// 開き直せば再取得される。
   func loadBranchPullRequests(_ repo: GitRepo) {
     guard githubReady else { return }
     let heads = Self.branchPRHeads(of: worktrees)
-    guard !heads.isEmpty, heads != requestedBranchPRHeads else { return }
-    requestedBranchPRHeads = heads
-    GitHubCLI.shared.branchPullRequests(cwd: repo.root, heads: heads) { [weak self] fetched in
+    // 削除で消えた worktree の残骸を持たない。
+    let alive = Set(heads)
+    branchPRFetches = branchPRFetches.filter { alive.contains($0.key) }
+    let pending = heads.filter { branchPRFetches[$0] == nil }
+    guard !pending.isEmpty else { return }
+    for head in pending { branchPRFetches[head] = .fetching }
+    GitHubCLI.shared.branchPullRequests(cwd: repo.root, heads: pending) { [weak self] head, prs in
       // キャッシュ書き込みは `self` の生存判定より前（issues/PR と同じ理由）。
-      if let fetched {
-        DispatchGitHubCache.shared.setBranchPullRequests(fetched, for: repo.commonDir)
-      } else {
-        self?.requestedBranchPRHeads = nil
+      if let prs {
+        DispatchGitHubCache.shared.setBranchPullRequests(prs, head: head, for: repo.commonDir)
       }
-      self?.applyFetchedBranchPullRequests(fetched)
+      self?.applyFetchedBranchPRs(head: head, prs)
+    }
+  }
+
+  /// 分類器へ渡す head ごとの状態（**導出値**。保存しない）。gh が使えないと**確定**した
+  /// リポジトリは「確かめて 0 件」——確認対象そのものが無いので、行は git の事実だけで判定される
+  /// （従来動作）。今回の取得が未着地／失敗の head は、前回セッションの結果があればそれで確定させる
+  /// （stale-while-revalidate。既存の「取得失敗は据え置き」契約を head 単位に保つ）。
+  var branchPRStates: [String: BranchPRState] {
+    let heads = Self.branchPRHeads(of: worktrees)
+    guard let probed = probedGitHubState else {
+      return Dictionary(uniqueKeysWithValues: heads.map { ($0, BranchPRState.fetching) })
+    }
+    guard probed == .ready else {
+      return Dictionary(uniqueKeysWithValues: heads.map { ($0, BranchPRState.loaded([])) })
+    }
+    let cached =
+      repo.flatMap { DispatchGitHubCache.shared.entry(for: $0.commonDir)?.branchPullRequests }
+      ?? [:]
+    return Dictionary(
+      uniqueKeysWithValues: heads.map { head in
+        switch branchPRFetches[head] {
+        case .loaded(let prs): return (head, .loaded(prs))
+        case .failed: return (head, cached[head].map(BranchPRState.loaded) ?? .failed)
+        case .fetching, nil: return (head, cached[head].map(BranchPRState.loaded) ?? .fetching)
+        }
+      })
+  }
+
+  /// 着地済みの PR を平坦化したもの（`extraContainmentTargets` の入力）。
+  var landedBranchPRs: [GitHubBranchPR] {
+    branchPRStates.values.flatMap { state -> [GitHubBranchPR] in
+      guard case .loaded(let prs) = state else { return [] }
+      return prs
     }
   }
 
   /// ブランチの PR 取得の対象。worktree にあるブランチだけ——main worktree は掃除の対象外、
   /// detached（`branch == nil`）は PR の head になり得ない。
+  ///
+  /// **head は一意にして返す。** `git worktree add --force` は同じブランチを 2 本の worktree へ
+  /// 置けるので、worktree の並びをそのまま head の並びにすると同名が 2 度出る。head は「gh へ問う
+  /// 対象の集合」であって worktree の一覧ではないので、重複はここで畳む——問い合わせの二重払いも、
+  /// この並びを辞書へ起こす読み手（`branchPRStates`）も、同時に守られる。
   static func branchPRHeads(of worktrees: [GitWorktree]) -> [String] {
-    worktrees.filter { !$0.isMain }.compactMap(\.branch)
+    var seen: Set<String> = []
+    return worktrees.filter { !$0.isMain }.compactMap(\.branch).filter { seen.insert($0).inserted }
   }
 
   /// 取得失敗（nil）は差し替えず据え置く。等値なら rebuild もしない（ちらつかない）。
-  /// gh 着地の規則は以下の 3 メソッドが持つ（テストが直接叩く唯一の入口）。
+  /// 一覧 2 レーン（issues / open PR）の規則は以下の 2 メソッドが持つ（テストが直接叩く唯一の入口）。
+  /// head 単位で着地するブランチ PR は別の規則で、`applyFetchedBranchPRs` が持つ。
   /// needsRebuild を代入より先に評価するのが要点——キャッシュ未ヒット時は loading==true なので
   /// 失敗でも必ず rebuild してローディング行を畳む。
   func applyFetchedIssues(_ fetched: [GitHubIssue]?) {
@@ -114,13 +156,18 @@ extension DispatchDataProvider {
     if needsRebuild { rebuild() }
   }
 
-  /// 取得失敗（nil）は差し替えず据え置く。等値なら rebuild もしない（他 2 レーンと同じ規則）。
+  /// head 1 本の着地。失敗（nil）もその head に閉じる——1 本の失敗で全体を捨てると、取れた head の
+  /// 事実まで一緒に消える。
+  ///
   /// gh 着地で merged PR の base が判明したら、**取り込み判定の比較先の顔ぶれが変わった行だけ**
   /// 引き直す（`startCleanProbe` の発行時台帳が差分を判定する）——本再判定の入口はここ 1 点。
-  func applyFetchedBranchPullRequests(_ fetched: [GitHubBranchPR]?) {
-    guard let fetched, fetched != branchPullRequests else { return }
-    branchPullRequests = fetched
+  /// **差分プローブを `rebuild()` より先に撃つ**のが要点。描いてから撃つと、比較先が増えた行が
+  /// 一瞬「確定」に見え、自動チェックが誤って灯る（しかもその後プローブ着地で分類が変わる）。
+  func applyFetchedBranchPRs(head: String, _ fetched: [GitHubBranchPR]?) {
+    // 消えた head（削除された worktree）への遅着は捨てる。
+    guard branchPRFetches[head] == .fetching else { return }
+    branchPRFetches[head] = fetched.map(BranchPRState.loaded) ?? .failed
+    if let repo { startCleanProbe(repo, .changedTargets) }
     rebuild()
-    if let repo { startCleanProbe(repo, invalidateAll: false) }
   }
 }

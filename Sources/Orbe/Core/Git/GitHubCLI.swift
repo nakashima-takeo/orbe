@@ -22,6 +22,13 @@ final class GitHubCLI {
   /// 直列化する理由が無く、同じ列に載せると閉じた PR の取得（worktree 本数ぶんの往復）が
   /// 捌けるまでブラウザが開かない。決定は Enter 一発という前提がそこで崩れる。
   private let webQueue = DispatchQueue(label: "dev.orbe.gh.web", qos: .userInitiated)
+  /// ブランチ PR 取得のレーン。1 往復の取得（`queue`）と分ける——直列に載せると worktree 本数ぶんの
+  /// 往復がそのまま積み上がる（実測 0.75〜1.0 秒/本）。
+  private let branchQueue = DispatchQueue(
+    label: "dev.orbe.gh.branch", qos: .userInitiated, attributes: .concurrent)
+  /// 1 回の発行で並べるレーンの本数。GitHub の secondary rate limit に配慮した控えめな値
+  /// （worktree 11 本でも約 2.5 秒に収まる）。
+  private static let branchFetchConcurrency = 4
   private let lock = DispatchQueue(label: "dev.orbe.gh.state")
   /// 見つかった gh の絶対パス。**見つからなかったことは覚えない**——起動直後のまだ痩せた PATH で
   /// 一度外した結果を焼くと、PATH が整った後も gh が永久に「未導入」のままになる。
@@ -106,45 +113,56 @@ final class GitHubCLI {
   }
 
   /// 指定ブランチ群に紐づく PR（ブランチごとに open/closed 両方）。worktree の掃除で
-  /// 「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見る。`nil` = 取得失敗／`[]` = 該当なし。
+  /// 「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見る。
+  ///
+  /// **結果は head 単位で返し、失敗もその head に閉じる**（`nil` = その head の取得失敗／
+  /// `[]` = 該当なし）——1 本の失敗で全体を捨てると、取れた head の事実まで一緒に消える。
+  /// `each` は head ごとに 1 回、メインで返る（`GitRunner` / `GitHubCLI` の共通契約）。
+  ///
+  /// ラウンドロビンで固定本数のレーンへ静的に配り、各レーンは自分の担当を直列に回す。セマフォで
+  /// 待たせる形にすると heads の本数ぶんスレッドを塞ぐ（thread explosion）。
   func branchPullRequests(
-    cwd: String, heads: [String], completion: @escaping ([GitHubBranchPR]?) -> Void
+    cwd: String, heads: [String], each: @escaping (String, [GitHubBranchPR]?) -> Void
   ) {
-    fetch(cwd: cwd, argsList: heads.map(Self.branchPRArguments(head:)), completion: completion)
+    let lanes = min(Self.branchFetchConcurrency, heads.count)
+    guard lanes > 0 else { return }
+    for lane in 0..<lanes {
+      let mine = heads.enumerated().filter { $0.offset % lanes == lane }.map(\.element)
+      branchQueue.async {
+        guard let gh = self.resolveGh() else {
+          DispatchQueue.main.async { for head in mine { each(head, nil) } }
+          return
+        }
+        for head in mine {
+          let decoded: [GitHubBranchPR]? = self.fetchSync(
+            gh, Self.branchPRArguments(head: head), cwd: cwd)
+          DispatchQueue.main.async { each(head, decoded) }
+        }
+      }
+    }
   }
 
-  /// 取得の共通口（1 コマンド）。
+  /// 取得の共通口（1 往復）。失敗は `nil`（空配列に潰さない——空で潰すと呼び出し側のキャッシュを
+  /// 消してしまう）。
   private func fetch<T: Decodable>(
     cwd: String, args: [String], completion: @escaping ([T]?) -> Void
-  ) {
-    fetch(cwd: cwd, argsList: [args], completion: completion)
-  }
-
-  /// 取得の共通口（複数コマンドを直列に叩いて連結する）。失敗は `nil`（空配列に潰さない——
-  /// 空で潰すと呼び出し側のキャッシュを消してしまう）。**1 本でも失敗したら全体を `nil`** に
-  /// するのが要点で、部分結果で差し替えると失敗したぶんの前回結果だけが静かに消える
-  /// （据え置き契約は配列まるごとの置換が前提）。
-  private func fetch<T: Decodable>(
-    cwd: String, argsList: [[String]], completion: @escaping ([T]?) -> Void
   ) {
     queue.async {
       guard let gh = self.resolveGh() else {
         DispatchQueue.main.async { completion(nil) }
         return
       }
-      var results: [T] = []
-      for args in argsList {
-        let out = self.runSync(gh, args, cwd: cwd)
-        guard out.status == 0,
-          let decoded = try? JSONDecoder().decode([T].self, from: out.stdout)
-        else {
-          DispatchQueue.main.async { completion(nil) }
-          return
-        }
-        results.append(contentsOf: decoded)
-      }
-      DispatchQueue.main.async { completion(results) }
+      let decoded: [T]? = self.fetchSync(gh, args, cwd: cwd)
+      DispatchQueue.main.async { completion(decoded) }
     }
+  }
+
+  /// 1 往復を同期で叩いてデコードする。`nil` = 取得失敗（非 0 終了・タイムアウト・デコード失敗）。
+  /// ローカル変数だけを触るので、どのレーンから並行に呼んでも安全。
+  private func fetchSync<T: Decodable>(_ gh: String, _ args: [String], cwd: String) -> [T]? {
+    let out = runSync(gh, args, cwd: cwd)
+    guard out.status == 0 else { return nil }
+    return try? JSONDecoder().decode([T].self, from: out.stdout)
   }
 
   // MARK: - ブラウザで開く（fire-and-forget）

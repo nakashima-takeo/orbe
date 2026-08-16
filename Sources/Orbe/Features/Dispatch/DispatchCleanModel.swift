@@ -80,11 +80,13 @@ final class CleanRunToken {
 /// 1 行のアダプタにする（このコードベースの規約。テストはモデルを直接叩く）。
 /// 画面ごとの分岐も View に置かず、各メソッドが `phase` を見て自分で畳む。
 ///
-/// 行の一覧は `enter(rows:)` で凍結する。破壊的な複数選択 UI で、カーソルの下のリストが後から届いた
-/// データで組み替わることを構造で禁じるため、裏の分類更新はこの画面に届かない。
+/// **画面は開いている間ずっと最新を映す。** 裏の分類は着地のたびに `apply(rows:)` で届き、選べるかは
+/// 行ごとの `isReady` が決める。唯一のスナップショットは実行（⌘⏎）の `CleanDeleteRequest`。
 @Observable final class DispatchCleanModel {
-  /// 群順（safe → caution → inUse）に並んだ凍結スナップショット。
+  /// 群順（safe → caution → inUse）に並んだ最新の分類。
   private(set) var rows: [CleanRow] = []
+  /// 分類の材料がまだ動いているか（provider の導出値のミラー。0 行のときスケルトンを出す唯一の入力）。
+  var classificationPending = false
   /// `selectableRows` を数えた選択画面のカーソル。
   private(set) var cursor = 0
   /// `failedIndices` を数えた一部失敗画面のカーソル（選択画面とは巡回対象が違うので別に持つ）。
@@ -97,9 +99,12 @@ final class CleanRunToken {
   private(set) var run: CleanRun?
   /// 実行中の削除を止める札（`beginRun` / `retryRequests` が張り直す）。
   private(set) var runToken: CleanRunToken?
+  /// 一度でも確定した行の id。**自動チェックは確定の瞬間に 1 度だけ**——以後のチェックはユーザーの
+  /// もので、裏の着地がそれを踏み潰すことは無い。
+  private var settled: Set<String> = []
 
-  /// カーソル巡回・選択の対象（inUse 行は飛ばす）。
-  var selectableRows: [CleanRow] { rows.filter { $0.group != .inUse } }
+  /// カーソル巡回・選択の対象（使用中行と、まだ事実が揃っていない行は飛ばす）。
+  var selectableRows: [CleanRow] { rows.filter { $0.group != .inUse && $0.isReady } }
 
   /// 画面。`run` が無ければ選択、据わっていれば一部失敗、それ以外は削除中。
   var phase: CleanPhase {
@@ -107,16 +112,50 @@ final class CleanRunToken {
     return run.isSettled ? .failed : .deleting
   }
 
-  /// 分類スナップショットで画面を開く。safe 群を全チェック・確認群は未選択・ブランチの扱いは全て
-  /// `残す`・カーソルは先頭。
+  /// clean へ入る。状態を初期化してから最初の分類を載せる（未着地なら 0 行で開き、着地は
+  /// `apply(rows:)` が受ける）。
   func enter(rows: [CleanRow]) {
-    self.rows = rows
+    self.rows = []
     cursor = 0
     failureCursor = 0
-    checked = Set(rows.filter { $0.group == .safe }.map(\.id))
+    checked = []
     branchChoice = [:]
+    settled = []
     run = nil
     runToken = nil
+    apply(rows: rows)
+  }
+
+  /// 裏の分類着地を取り込む。画面は生きたまま、行ごとの `isReady` が選択可否を決める。
+  /// 削除中・一部失敗の画面では何もしない（実行対象は `beginRun` が確定済みで、それだけを見る）。
+  func apply(rows: [CleanRow]) {
+    guard phase == .selecting else { return }
+    let anchor = cursorRow?.id
+    let previous = cursor
+    self.rows = rows
+    // 消えた worktree の選択・ブランチの扱いを残さない。
+    let ids = Set(rows.map(\.id))
+    checked.formIntersection(ids)
+    branchChoice = branchChoice.filter { ids.contains($0.key) }
+    settled.formIntersection(ids)
+    // **確定した瞬間の行だけ**自動チェックする。既に確定済みの行は触らない
+    // （ユーザーが外したチェックが、裏の着地で復活しない）。
+    for row in rows where row.isReady && !settled.contains(row.id) {
+      settled.insert(row.id)
+      if row.group == .safe { checked.insert(row.id) }
+    }
+    restoreCursor(anchor: anchor, previous: previous)
+  }
+
+  /// カーソルは**行 id で**引き継ぐ。index で持つと、行が確定して巡回対象へ増えた瞬間に
+  /// 指す worktree が変わる。指していた行が消えたら近傍へ落とす。
+  private func restoreCursor(anchor: String?, previous: Int) {
+    let rows = selectableRows
+    if let anchor, let index = rows.firstIndex(where: { $0.id == anchor }) {
+      cursor = index
+      return
+    }
+    cursor = rows.isEmpty ? 0 : min(previous, rows.count - 1)
   }
 
   // MARK: - 選択（2 軸）
@@ -191,13 +230,15 @@ final class CleanRunToken {
     branchChoice[rowID] = choice
   }
 
-  var selectedCount: Int { checked.count }
+  /// 実行の対象。**チェックボックスが立って見えている行と揃える**——`checked` は行が未確定へ戻っても
+  /// 覚えたままにする（ユーザーの意図を裏の着地で消さない）ので、その間の行は行頭が回転グリフになり、
+  /// チェックが画面から見えず外す手立ても無い。数も依頼もここから導いて 1 箇所で決める。
+  var checkedRows: [CleanRow] { selectableRows.filter { checked.contains($0.id) } }
 
-  /// チェック済み行のうちローカルブランチも消える件数（フッタ実行ボタンの内訳。
-  /// 保存フィールドは持たず、選択と `deletesBranch(_:)` から毎回導く）。
-  var branchDeleteCount: Int {
-    rows.filter { checked.contains($0.id) && deletesBranch($0) }.count
-  }
+  var selectedCount: Int { checkedRows.count }
+
+  /// 実行対象のうちローカルブランチも消える件数（フッタ実行ボタンの内訳。保存フィールドは持たない）。
+  var branchDeleteCount: Int { checkedRows.filter { deletesBranch($0) }.count }
 
   var canExecute: Bool { selectedCount > 0 && phase == .selecting }
 
@@ -214,9 +255,9 @@ final class CleanRunToken {
     }
   }
 
-  /// 実行の依頼一覧（チェックした行だけ・スナップショットの並び順）。
+  /// 実行の依頼一覧（実行対象の行だけ・群順のまま）。
   func requests() -> [CleanDeleteRequest] {
-    rows.filter { checked.contains($0.id) }.map {
+    checkedRows.map {
       CleanDeleteRequest(
         path: $0.id, branch: $0.branch, head: $0.head, deleteBranch: deletesBranch($0))
     }
@@ -264,7 +305,7 @@ final class CleanRunToken {
     runToken = nil
   }
 
-  /// 失敗行だけの再実行の依頼を返す。**凍結した分類・凍結した依頼のまま**で、成功行は `.done` のまま
+  /// 失敗行だけの再実行の依頼を返す。**実行の瞬間に確定した依頼のまま**で、成功行は `.done` のまま
   /// 残る。中断の札も張り直す（中断後の再試行が即座に打ち切られない）。
   ///
   /// **失敗行はここでは待機へ戻さない**——実際に撃たれた行だけを `markRunning` が動かすので、
