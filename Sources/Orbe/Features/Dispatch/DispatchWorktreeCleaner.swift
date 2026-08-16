@@ -32,7 +32,8 @@ struct DispatchWorktreeCleaner {
   /// だから。**確かめる述語は `DispatchWorktreeClassifier.passesSafety` の作業ツリー側と同じ 2 つ**——
   /// 「初期チェックに入る条件」と「撃つ直前に確かめる条件」を食い違わせない
   /// （status が空でも rebase 途中の worktree は消さない）。
-  /// ブランチ側の据え置きは `repo.deleteBranch` が `expectedOid` の compare-and-delete で受け持つ。
+  /// ブランチ側は「確定した時点の先端であるときだけ消す」を `repo.deleteBranch` の `expectedOid`
+  /// compare-and-delete が受け持つ。
   /// git を触る順は `worktree remove` → ブランチ削除（逆順では checkout 済みのブランチを消せない）。
   func run(
     _ requests: [CleanDeleteRequest], token: CleanRunToken,

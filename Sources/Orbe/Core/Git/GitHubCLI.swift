@@ -26,7 +26,7 @@ final class GitHubCLI {
   /// 往復がそのまま積み上がる（実測 0.75〜1.0 秒/本）。
   private let branchQueue = DispatchQueue(
     label: "dev.orbe.gh.branch", qos: .userInitiated, attributes: .concurrent)
-  /// 同時に走らせる gh の本数。GitHub の secondary rate limit に配慮した控えめな値
+  /// 1 回の発行で並べるレーンの本数。GitHub の secondary rate limit に配慮した控えめな値
   /// （worktree 11 本でも約 2.5 秒に収まる）。
   private static let branchFetchConcurrency = 4
   private let lock = DispatchQueue(label: "dev.orbe.gh.state")

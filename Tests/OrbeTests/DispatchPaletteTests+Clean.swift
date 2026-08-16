@@ -19,10 +19,10 @@ extension DispatchPaletteTests {
     p.activate(at: try XCTUnwrap(p.items.firstIndex { $0.action == .clean }))
     XCTAssertTrue(executed.isEmpty, "clean 行は onExecute に流さない")
     XCTAssertEqual(p.mode, .clean)
-    XCTAssertEqual(p.clean.rows.map(\.name), ["a"], "分類スナップショットで開く")
+    XCTAssertEqual(p.clean.rows.map(\.name), ["a"], "最新の分類で開く")
   }
 
-  /// **分類が未着地でも即座に開く**（押しても何も起きない、が無い）。0 行の間はスケルトンが埋める。
+  /// **分類が未着地でも即座に開く**（着地を待たない）。0 行の間はスケルトンが埋める。
   func testCleanRowOpensImmediatelyEvenBeforeClassificationLands() throws {
     let p = makeModel()
     p.classificationPending = true
@@ -36,7 +36,7 @@ extension DispatchPaletteTests {
     XCTAssertTrue(p.clean.classificationPending, "0 行の理由（待機中）が画面へ渡る")
   }
 
-  /// **clean を開いている間、裏の着地はそのまま画面へ届く**（凍結しない）。
+  /// **clean を開いている間、裏の着地はそのまま画面へ届く**（選択可否は行ごとの `isReady` が決める）。
   /// list に居る間は届かない——開いた瞬間に `enter(rows:)` が最新を載せるので、届ける先が無い。
   func testClassificationLandingsReachTheOpenCleanScreen() {
     let p = makeModel()

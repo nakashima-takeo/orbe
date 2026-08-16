@@ -205,8 +205,8 @@ enum BranchPRState: Equatable {
   case failed
 }
 
-/// レビュー中の PR。`Int?` では「無い」と「まだ分からない」を兼務してしまい、確認前の状態が
-/// 安全確認を素通りしていた。
+/// レビュー中の PR。「無い」と「まだ分からない」を 1 つの値に潰すと、確認前の状態が安全確認を
+/// 素通りするので、4 つを別の case で持つ。
 enum CleanOpenPR: Equatable {
   /// まだ確かめていない（取得中）。
   case pending
@@ -217,7 +217,8 @@ enum CleanOpenPR: Equatable {
   case open(Int)
 }
 
-/// 分類の入力 1 件。git / gh / ペイン走査から採った素の事実だけを持ち、subprocess には依存しない。
+/// 分類の入力 1 件。git / gh / ペイン走査から採った事実と、その事実がまだ動いているか
+/// （`isProbing` / `openPR` の未着地）だけを持ち、subprocess には依存しない。
 struct DispatchCleanFacts: Equatable {
   let path: String
   let branch: String?
