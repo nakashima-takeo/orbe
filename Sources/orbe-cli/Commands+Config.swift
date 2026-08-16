@@ -1,7 +1,54 @@
 import Foundation
 
-// `orb config <サブコマンド>` の実装。`runConfig` が argv[2] を手書きでディスパッチし、
+// `orb config <サブコマンド>` の実装と usage。`runConfig` が argv[2] を手書きでディスパッチし、
 // 各サブコマンドは -> Never で終端して exit で終了コードを返す。
+
+// MARK: - usage
+
+/// `SettingsRegistry.all` の全 key。usage は socket 不達でも出す必要があるため config_list からは
+/// 引けず、ここに写す。この一覧のドリフトは `testConfigHelpListsEveryRegistryKey` が
+/// `config --help` の `KEYS:` 行と registry を突き合わせて落とす。`configSetUsage` の型内訳だけは
+/// 手書きのままなので、registry に key を足したらそちらも足すこと。
+let allConfigKeys = [
+  "font-size", "background-opacity", "background-blur", "cursor-style-blink", "theme",
+  "font-family", "tab-title-font-family", "emoji-font", "default-agent", "agent-state-icons",
+  "worktree-dir", "notification-sound", "notification-sound-volume",
+  "notification-sound-enabled",
+]
+
+let configUsageLines = [
+  "orb config list [--workspace [<id>]] [--json]",
+  "orb config get <key> [--workspace [<id>]] [--json]",
+  "orb config set <key> <value> [--workspace [<id>]]",
+  "orb config unset <key> [--workspace [<id>]]",
+]
+
+let configUsage = """
+  orb config — read and set Orbe settings
+
+  USAGE:
+  \(usageBlock(configUsageLines))
+
+  KEYS: \(allConfigKeys.joined(separator: ", "))
+  --workspace targets a workspace: <id> (or current) for a specific one, bare
+  --workspace for the active one. Without the flag, config set/unset writes global.
+  All settings are workspace-overridable; unset clears an override (back to inherit).
+  """
+
+let configSetUsage = """
+  orb config set <key> <value> [--workspace [<id>]]
+
+  KEYS: \(allConfigKeys.joined(separator: ", "))
+    font-size, background-opacity, notification-sound-volume   integer
+    background-blur, cursor-style-blink, notification-sound-enabled   true/false/on/off/1/0
+    theme (auto/light/dark), font-family, tab-title-font-family, emoji-font,
+    default-agent, worktree-dir, notification-sound   string
+    agent-state-icons   map (set it from the settings palette)
+  --workspace <id> writes that workspace's override, bare --workspace the active
+  one (default without the flag: global).
+  """
+
+// MARK: - サブコマンド
 
 func runConfig(_ args: [String]) -> Never {
   // --help はサブコマンドが自分の usage を出す（config set --help → configSetUsage）。ここで握らない。

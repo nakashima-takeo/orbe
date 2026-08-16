@@ -1,7 +1,23 @@
 import Foundation
 
-// `orb ws <サブコマンド>` の実装。`runWorkspace` が argv[2] を手書きでディスパッチし、
+// `orb ws <サブコマンド>` の実装と usage。`runWorkspace` が argv[2] を手書きでディスパッチし、
 // 各サブコマンドは -> Never で終端して exit で終了コードを返す。
+
+let wsUsageLines = [
+  "orb ws list [--json]",
+  "orb ws new <name> [--dir <path>]",
+  "orb ws rename <id|current> <name>",
+  "orb ws dir <id|current> <path>",
+  "orb ws switch <id>",
+  "orb ws rm <id|current>",
+]
+
+let wsUsage = """
+  orb ws — manage workspaces
+
+  USAGE:
+  \(usageBlock(wsUsageLines))
+  """
 
 func runWorkspace(_ args: [String]) -> Never {
   if args.isEmpty || hasHelp(args) {

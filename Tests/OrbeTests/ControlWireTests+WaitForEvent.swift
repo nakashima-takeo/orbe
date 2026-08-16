@@ -136,6 +136,81 @@ extension ControlWireTests {
       "timeout 超過は timedOut:true（エラーにしない）")
   }
 
+  // MARK: - params の検証（待機を張る前に弾く）
+
+  /// 未知 kind は待機を張らずに -32602。素の `Set<String>` フィルタとして通すと永久に一致せず
+  /// **ただ時間切れになる**ので、呼び出し側（`orb wait` / MCP）は「何も起きなかった」と区別できない。
+  func testUnknownKindIsRejectedInsteadOfSilentlyNeverMatching() {
+    let wire = startWire(target: FakeControlTarget())
+
+    XCTAssertEqual(
+      errorCode(wire.request(id: 1, method: "wait_for_event", params: ["kinds": ["nosuch"]])),
+      -32602, "未知 kind は -32602")
+    // 既知の語に混ざった 1 語でも弾く（通ると、その 1 語ぶんだけ黙って待たない待機になる）。
+    XCTAssertEqual(
+      errorCode(
+        wire.request(
+          id: 2, method: "wait_for_event", params: ["kinds": ["agent_state", "nosuch"]])),
+      -32602, "既知 kind に混ざった未知 kind も -32602")
+  }
+
+  /// `kinds` が `[String]` でなければ -32602（黙って「フィルタ無し＝全通し」に化けない）。
+  /// 空配列も同じ——`Set([])` はどの kind にも一致せず、省略（＝全種）とは正反対の待機になる。
+  func testWronglyTypedKindsAreRejected() {
+    let wire = startWire(target: FakeControlTarget())
+
+    XCTAssertEqual(
+      errorCode(wire.request(id: 1, method: "wait_for_event", params: ["kinds": "agent_state"])),
+      -32602, "文字列を直接渡した kinds は -32602")
+    XCTAssertEqual(
+      errorCode(wire.request(id: 2, method: "wait_for_event", params: ["kinds": [1, 2]])),
+      -32602, "要素が文字列でない kinds は -32602")
+    XCTAssertEqual(
+      errorCode(wire.request(id: 3, method: "wait_for_event", params: ["kinds": [String]()])),
+      -32602, "空の kinds は -32602（省略＝全種と取り違えて黙って時間切れにしない）")
+  }
+
+  /// `paneId` が Int でなければ -32602。黙って nil に落とすと絞り込みが消えて**全ペイン**監視に
+  /// 化け、別ペインのイベントを「待っていたもの」として返す（kinds の取りこぼしより悪い）。
+  func testWronglyTypedPaneIdIsRejected() {
+    let wire = startWire(target: FakeControlTarget())
+
+    XCTAssertEqual(
+      errorCode(wire.request(id: 1, method: "wait_for_event", params: ["paneId": "8001"])),
+      -32602, "文字列の paneId は -32602")
+  }
+
+  /// `timeoutMs` は正の Int で 24 時間まで。0・負・非 Int・上限超過は -32602。
+  /// 上限を置くのは `asyncAfter(.milliseconds(_:))` が巨大値でオーバーフローするため。
+  func testInvalidTimeoutMsIsRejected() {
+    let wire = startWire(target: FakeControlTarget())
+    var id = 0
+
+    for bad in [0, -1, 86_400_001] as [Any] {
+      id += 1
+      XCTAssertEqual(
+        errorCode(wire.request(id: id, method: "wait_for_event", params: ["timeoutMs": bad])),
+        -32602, "timeoutMs \(bad) は -32602")
+    }
+    id += 1
+    XCTAssertEqual(
+      errorCode(wire.request(id: id, method: "wait_for_event", params: ["timeoutMs": "300"])),
+      -32602, "非 Int の timeoutMs は -32602")
+  }
+
+  /// 弾いた待機は**張られていない**（待機枠を食い潰さない）。直後の正しい待機が受理され、
+  /// -32005（1 接続 2 件目）にならないことで確かめる。
+  func testRejectedWaitDoesNotOccupyTheSingleWaitSlot() {
+    let wire = startWire(target: FakeControlTarget())
+    XCTAssertEqual(
+      errorCode(wire.request(id: 1, method: "wait_for_event", params: ["kinds": ["nosuch"]])),
+      -32602)
+
+    armWait(wire, id: 2)  // barrier が 1 行目に来る＝-32005 を書いていない
+    ControlServer.shared.emit(ControlEvent(kind: "pwd", paneId: 8009, value: "/x"))
+    XCTAssertEqual(wire.nextResponse()?["id"] as? Int, 2, "弾いた後も次の待機が普通に働く")
+  }
+
   // MARK: - 1 接続 1 待機
 
   /// 2 件目の `wait_for_event` は -32005 で即拒否し、1 件目は生きたままイベントに応答する

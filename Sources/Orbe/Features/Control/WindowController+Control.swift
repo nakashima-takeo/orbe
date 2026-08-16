@@ -1,7 +1,7 @@
 import AppKit
 
 /// 制御チャネル（外部 → Orbe）の domain 操作。列挙は internal getter 越しに読み、
-/// spawn は wire/select/scheduleSave を使う `controlSpawnTab` へ委譲する。
+/// タブを起こす動詞（spawn / spawn_agent / resume_agent）は GUI と共有する `openTab` へ委譲する。
 extension WindowController: ControlTarget {
   func controlListWorkspaces() -> [[String: Any]] {
     workspaces.enumerated().map { i, ws in
@@ -93,10 +93,12 @@ extension WindowController: ControlTarget {
     pane.controller?.paneAgentStateChanged()
   }
 
+  /// 指定 workspace に新タブを開き、新ペイン ID を返す（制御 API の spawn）。未知 workspaceId は
+  /// アクティブへフォールバックする（`spawn_agent` / `resume_agent` は同じ形を継がず -32004 で弾く）。
   func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int? {
     let index =
       workspaceId.flatMap { wid in workspaces.firstIndex { $0.id == wid } } ?? activeWorkspace
-    return controlSpawnTab(workspaceIndex: index, cwd: cwd, command: command)
+    return openTab(workspaceIndex: index, cwd: cwd, command: command)?.paneId
   }
 
   /// 背景/休眠 workspace を前面化し全タブを mount する（制御 API の activate_workspace）。
@@ -107,21 +109,6 @@ extension WindowController: ControlTarget {
     switchWorkspace(to: index)
     let ws = workspaces[index]
     return (ws.id, ws.tabs.flatMap { $0.controlAllPanes().map(\.id) })
-  }
-
-  /// 指定 workspace に新タブを開き、新ペイン ID を返す（制御 API の spawn）。
-  /// cwd 省略時は GUI（Cmd+T）と同じフォールバック意味論で確定させる:
-  /// 対象 workspace のアクティブペイン cwd → その workspace の rootPath。
-  func controlSpawnTab(workspaceIndex: Int, cwd: String?, command: String?) -> Int? {
-    guard workspaces.indices.contains(workspaceIndex) else { return nil }
-    let initialCwd = cwd ?? store.newSurfaceCwd(inWorkspaceAt: workspaceIndex)
-    let tc = wire(TerminalController(initialCwd: initialCwd, initialCommand: command))
-    store.appendTab(tc, toWorkspaceAt: workspaceIndex)  // 背景 WS はここで active も末尾へ
-    if workspaceIndex == activeWorkspace {
-      select(workspaces[workspaceIndex].tabs.count - 1)  // surface を起こす（mount）。背景は keep-alive で遅延。
-    }
-    scheduleSave()
-    return tc.controlAllPanes().first?.id
   }
 
   // MARK: - ペイン/タブ操作（split・close・focus）

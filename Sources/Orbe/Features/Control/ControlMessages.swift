@@ -20,7 +20,11 @@ enum IdGen {
 /// 生の PTY 出力は libghostty が host に出さないため、扱えるのは whitelist された
 /// OSC 由来シグナル（agent 状態・タイトル・cwd）とペインのライフサイクルに限る。
 struct ControlEvent {
-  /// `agent_state` / `pane_title` / `pwd` / `pane_closed`
+  /// `wait_for_event` が受け付ける kind の全体。フィルタの語彙はここが唯一の出所で、
+  /// 未知の語は `registerWait` が待機を張る前に -32602 で弾く（黙って時間切れにしない）。
+  static let kinds: Set<String> = ["agent_state", "pane_title", "pwd", "pane_closed"]
+
+  /// イベント種別。取り得る値は `kinds`。
   let kind: String
   let paneId: Int
   /// kind 固有の値（agent_state なら状態語、pane_title ならタイトル、pwd なら path）。
@@ -42,7 +46,9 @@ enum ControlKey {
 
   /// macOS 仮想キーコード（モード依存のナビゲーションキーのみ。これらは
   /// libghostty が keycode から正しいエスケープを組む＝application cursor mode 等に追従する）。
-  private static let specialKeycodes: [String: UInt32] = [
+  /// 名前付きキーの全体。`orb pane --help` の `KEYS:` 行はここの写しで、ドリフトは
+  /// `testPaneHelpListsEveryKeyName` が突き合わせて落とす（`KINDS:` / `KEYS:` と同じ守り方）。
+  static let specialKeycodes: [String: UInt32] = [
     "enter": 36, "return": 36, "tab": 48, "escape": 53, "esc": 53, "space": 49,
     "backspace": 51, "delete": 117, "up": 126, "down": 125, "left": 123, "right": 124,
     "home": 115, "end": 119, "pageup": 116, "pagedown": 121,

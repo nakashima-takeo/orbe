@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 import OrbePaths
 
-// Orbe 自身を構成・操作する CLI（config / ws / pane / tab）。control.sock（改行区切り JSON-RPC 2.0）へ 1 リクエスト
+// Orbe 自身を構成・操作する CLI（config / ws / pane / tab / agent / wait）。control.sock（改行区切り JSON-RPC 2.0）へ 1 リクエスト
 // 1 接続で直接送る薄いクライアント。GUI 本体と同じ制御契約面を叩く。socket 解決は
 // OrbePaths.controlSocketPath()（ORBE_STATE_DIR 直下・最優先 → ORBE_SOCK → Apple 規定の既定パス）に
 // 一本化し、GUI 本体・mcp と同一実装を共有する。
@@ -124,6 +124,10 @@ case "pane":
   runPane(Array(args.dropFirst()))
 case "tab":
   runTab(Array(args.dropFirst()))
+case "agent":
+  runAgent(Array(args.dropFirst()))
+case "wait":
+  runWait(Array(args.dropFirst()))
 default:
   usageDie("unknown command: \(args[0])")
 }

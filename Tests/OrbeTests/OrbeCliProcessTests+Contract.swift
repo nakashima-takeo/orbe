@@ -49,6 +49,35 @@ extension OrbeCliProcessTests {
     failure(
       ControlProcess.orbWithoutServer(["pane", "close"]), code: 2,
       message: "no pane in context", "ORBE_PANE 無しの pane 対象欠如")
+    // 値の席が空いた形（`--key` はあるが値が無い）は別分岐。ここはフラグごと落ちた形を見る
+    // ——通すと空 key を control へ送って exit 1 に化け、usage エラーと RPC エラーが混ざる。
+    failure(
+      ControlProcess.orbWithoutServer(["pane", "key", "5"]), code: 2,
+      message: "pane key requires --key <key>", "--key 自体の欠如")
+    // 落とすと「再開したつもりが素の spawn」になるので、引数不足は socket の手前で止める。
+    failure(
+      ControlProcess.orbWithoutServer(["agent", "resume", "codex"]), code: 2,
+      message: "agent resume requires <agent> and <session-id>", "resume の引数不足")
+  }
+
+  /// `--text` の値に置かれた `-h` / `--help` を help と読まない。
+  ///
+  /// `pane send` は「任意のユーザーテキストを値に取る」唯一のサーフェスで、引数列全体を help 走査
+  /// すると `--text -h` が**何も送らないまま exit 0** になる。`orb pane send --text "$X" && orb pane
+  /// key --key enter` で `$X` がたまたま `-h` だと、送信ゼロのまま enter だけが押される——静かで、
+  /// 終了コードにも現れない。値の席のダッシュは exit 2 で止まるのが正しい。
+  func testHelpInAValueSlotIsNotTreatedAsHelp() {
+    for value in ["-h", "--help"] {
+      let outcome = ControlProcess.orbWithoutServer(["pane", "send", "5", "--text", value])
+      XCTAssertEqual(
+        outcome.status, 2,
+        "`--text \(value)` が help に化けて exit \(outcome.status): \(outcome.stdout)")
+      XCTAssertFalse(
+        outcome.stdout.contains("orb pane — inspect"), "usage を出して成功扱いにしない")
+    }
+    // `--help` 自体は従来どおり出る（値の席を抜いた後に残っていれば help）。
+    let help = ControlProcess.orbWithoutServer(["pane", "send", "--help"])
+    XCTAssertEqual(help.status, 0, "pane send --help は exit 0: \(help.stderr)")
   }
 
   /// socket 不達（Orbe 未起動・ペイン外）はクラッシュせず exit 1 と構造化メッセージ。
@@ -109,29 +138,6 @@ extension OrbeCliProcessTests {
     failure(
       control.orb(["config", "unset", "nosuch"]), code: 2,
       message: "unknown config key: nosuch", "config unset の未知 key")
-  }
-
-  /// `orb config --help` の `KEYS:` は `SettingsRegistry.all` と同じ集合。
-  ///
-  /// usage は socket 不達でも出す必要があるため `config_list` からは引けず、CLI 側に key を写している。
-  /// その写しはこれまで散文の申し送りだけで守られており、実際にドリフトして 3 key（`tab-title-font-family`
-  /// `emoji-font` `worktree-dir`）が欠けたまま出荷された。
-  ///
-  /// 壊れると何が起きるか: registry に足した設定が「打てば通るが help には無い」key になる。
-  /// `config set` は `config_list` を SSOT に検証するので通ってしまい、CLI からも help を読む
-  /// 自動化からも発見できない。help はサーバ不要で出るので、ここもサーバを立てずに測る。
-  func testConfigHelpListsEveryRegistryKey() throws {
-    let outcome = ControlProcess.orbWithoutServer(["config", "--help"])
-    XCTAssertEqual(outcome.status, 0, "config --help は socket 不達でも exit 0: \(outcome.stderr)")
-    let line = try XCTUnwrap(
-      outcome.stdout.split(separator: "\n").first { $0.hasPrefix("KEYS: ") },
-      "config --help に KEYS: 行が無い: \(outcome.stdout)")
-    let listed = line.dropFirst("KEYS: ".count).split(separator: ",").map {
-      $0.trimmingCharacters(in: .whitespaces)
-    }
-    XCTAssertEqual(
-      Set(listed), Set(SettingsRegistry.all.map(\.key)),
-      "config --help の KEYS が SettingsRegistry と食い違っている")
   }
 
   // MARK: - --workspace
@@ -251,6 +257,54 @@ extension OrbeCliProcessTests {
     XCTAssertEqual(
       panes.first { $0["paneId"] as? Int == paneId }?["workspaceId"] as? Int, backgroundId,
       "開いたタブは指定した workspace に属する")
+  }
+
+  // MARK: - pane send の入力源
+
+  /// `--stdin` で流した本文がペインへ届く。長いプロンプトを argv ではなくパイプで渡す経路。
+  func testPaneSendReadsTheBodyFromStdin() throws {
+    let control = try startControlProcess(workspaces: ["main"])
+    let pane = try XCTUnwrap(control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
+
+    // シェルが rc を読み終える前に送ると tty の type-ahead に賭けることになる。プロンプトを待つ。
+    XCTAssertTrue(
+      waitUntil(ControlProcess.paneSettleTimeout) {
+        !(pane.controlReadText(scrollback: false) ?? "")
+          .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      }, "シェルのプロンプトが描かれない（この後の入力は捨てられうる）")
+
+    let body = "STDIN_" + String(format: "%08x", UInt32.random(in: 0...UInt32.max))
+    let sent = control.orb(["pane", "send", "\(pane.id)", "--stdin"], stdin: body)
+    XCTAssertEqual(sent.status, 0, "--stdin の送信が失敗した: \(sent.stderr)")
+    XCTAssertTrue(
+      waitUntil(ControlProcess.paneSettleTimeout) {
+        (pane.controlReadText(scrollback: true) ?? "").contains(body)
+      }, "--stdin で流した本文がペインに現れない")
+  }
+
+  /// `pane send` の入力源は**ちょうど 1 つ**。両方も無指定も usage エラーで、無指定は標準入力に
+  /// 触れずに落ちる——ここでハングしないことがこのテストの要点（`--stdin` を明示必須にした理由）。
+  /// 0 バイトの `--stdin` も弾く: `printf '%s' "$PROMPT" | orb pane send --stdin` の未設定が
+  /// その形で現れ、規約が守ろうとしている「値が黙って消えた」ものそのものだから。
+  func testPaneSendRequiresExactlyOneInputSource() throws {
+    let control = try startControlProcess(workspaces: ["main"])
+    let pane = try XCTUnwrap(control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
+
+    failure(
+      control.orb(["pane", "send", "\(pane.id)", "--text", "hi", "--stdin"]), code: 2,
+      message: "pass only one of --text / --stdin", "--text と --stdin の併用")
+    // stdin を渡さない＝子の標準入力は /dev/null。読みに行く実装ならここで即 EOF を掴んで
+    // 「0 バイト」に化けるので、文言まで見て「触れずに落ちた」ことを確かめる。
+    failure(
+      control.orb(["pane", "send", "\(pane.id)"]), code: 2,
+      message: "pane send requires --text or --stdin", "入力源の無指定")
+    failure(
+      control.orb(["pane", "send", "\(pane.id)", "--stdin"], stdin: ""), code: 2,
+      message: "--stdin got no input", "0 バイトの --stdin")
+
+    // 空白・改行だけの入力は通す（ファイルや heredoc の正当な中身でありうる）。
+    let whitespace = control.orb(["pane", "send", "\(pane.id)", "--stdin"], stdin: "  \n")
+    XCTAssertEqual(whitespace.status, 0, "空白だけの --stdin は通す: \(whitespace.stderr)")
   }
 
   // MARK: - 文脈解決

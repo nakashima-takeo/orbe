@@ -114,7 +114,12 @@ final class WindowController: NSObject, NSWindowDelegate {
     agentLauncher.appModel = model
     agentLauncher.localization = localization  // 起動パレット・オンボーディングの文言引き用
     configureAgentDefaults()
-    agentLauncher.onLaunch = { [weak self] agent, env in self?.openAgentTab(agent, env: env) }
+    // 起動パレット・Cmd+Shift+C の起動。アクティブ workspace の新タブで agent の絶対パスを起こす。
+    agentLauncher.onLaunch = { [weak self] agent, env in
+      guard let self else { return }
+      self.openTab(
+        workspaceIndex: self.activeWorkspace, cwd: nil, command: agent.path, env: env)
+    }
     // 起動/オンボーディング overlay の畳み込みも、他 overlay と同じく teardown 後の次 tick で focus を再確定する。
     agentLauncher.onDismissPalette = { [weak self] in
       self?.focusActivePane()
@@ -187,9 +192,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   }
 
   func newTab() {
-    store.appendTabToActive(wire(TerminalController(initialCwd: store.newSurfaceCwd())))
-    select(current.tabs.count - 1)
-    scheduleSave()
+    openTab(workspaceIndex: activeWorkspace, cwd: nil)
   }
 
   func nextTab() {
@@ -333,19 +336,6 @@ final class WindowController: NSObject, NSWindowDelegate {
   /// OSC 7 の cwd 報告を受けた。行の cwd 表示を更新し、永続保存を予約する。
   private func paneDidReportPwd() {
     refreshChrome()
-    scheduleSave()
-  }
-
-  // MARK: - エージェント起動（検出・パレット・デフォルト解決は AgentLauncher）
-
-  /// 指定 cwd（既定はアクティブペインの cwd、0タブは workspace の rootPath）の新タブで、
-  /// エージェントをシェルの代わりに直接起動する。Dispatch は解決した worktree パスを cwd に渡す。
-  /// 終了はシェル exit と同じ経路（close_surface_cb → onEmpty）でタブが閉じる。
-  func openAgentTab(_ agent: AgentCLI, env: [String: String] = [:], cwd: String? = nil) {
-    let tc = TerminalController(
-      initialCwd: cwd ?? store.newSurfaceCwd(), initialCommand: agent.path, initialEnv: env)
-    store.appendTabToActive(wire(tc))
-    select(current.tabs.count - 1)
     scheduleSave()
   }
 

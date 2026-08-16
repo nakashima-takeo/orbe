@@ -91,10 +91,8 @@ final class SessionStore {
     }
   }
 
-  /// 新規タブ/エージェント起動の初期 cwd（アクティブ workspace）。
-  func newSurfaceCwd() -> String { newSurfaceCwd(inWorkspaceAt: activeWorkspace) }
-
-  /// 指定 workspace での新規タブ起動の初期 cwd（active ラッパ経由で GUI・エージェント起動も通る）。
+  /// 指定 workspace での新規タブ起動の初期 cwd（GUI・エージェント起動・制御 API のすべてが
+  /// `openTab` 越しにここを通る）。
   /// 当該 workspace のアクティブペインの cwd を継ぎ、ペイン不在（0タブ）はその workspace の rootPath
   /// へ落とす。nil を surface へ渡すと ghostty がホームへ解決してしまうため、ここで必ず確定させる。
   /// workspace index の妥当性は呼び出し側が保証する。
@@ -130,11 +128,6 @@ final class SessionStore {
   }
 
   // MARK: - タブ CRUD（domain）
-
-  /// アクティブ workspace の末尾へタブを足す（active は変えない＝select は呼び出し側）。
-  func appendTabToActive(_ tc: TerminalController) {
-    current.tabs.append(tc)
-  }
 
   /// アクティブ workspace の `index`（有効範囲 0…count へクランプ）へタブを挿し、実挿入 index を返す。
   /// 挿入位置が現 active 以前なら active を 1 つ繰り下げ、挿入前と同じタブを指し続けさせる

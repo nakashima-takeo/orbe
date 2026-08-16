@@ -50,6 +50,12 @@ final class FakeControlTarget: ControlTarget {
     let cwd: String?
     let command: String?
   }
+  struct AgentSpawn {
+    let command: String?
+    let sessionId: String?
+    let workspaceId: Int?
+    let cwd: String?
+  }
   struct Split {
     let paneId: Int
     let direction: String
@@ -76,6 +82,7 @@ final class FakeControlTarget: ControlTarget {
 
   private(set) var reportedAgents: [ReportedAgent] = []
   private(set) var spawns: [Spawn] = []
+  private(set) var agentSpawns: [AgentSpawn] = []
   private(set) var splits: [Split] = []
   private(set) var configSets: [ConfigSet] = []
   private(set) var configLists: [Int?] = []
@@ -109,6 +116,28 @@ final class FakeControlTarget: ControlTarget {
   func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int? {
     spawns.append(Spawn(workspaceId: workspaceId, cwd: cwd, command: command))
     return spawnedPaneId
+  }
+
+  func controlSpawnAgent(command: String?, workspaceId: Int?, cwd: String?) -> Result<
+    Any, ControlError
+  > {
+    agentSpawns.append(
+      AgentSpawn(command: command, sessionId: nil, workspaceId: workspaceId, cwd: cwd))
+    return outcome([
+      "paneId": 4343, "tabId": 4344, "workspaceId": 4345,
+      "agent": ["command": command ?? "claude", "path": "/fake/bin/\(command ?? "claude")"],
+    ])
+  }
+
+  func controlResumeAgent(command: String, sessionId: String, workspaceId: Int?, cwd: String?)
+    -> Result<Any, ControlError>
+  {
+    agentSpawns.append(
+      AgentSpawn(command: command, sessionId: sessionId, workspaceId: workspaceId, cwd: cwd))
+    return outcome([
+      "paneId": 4346, "tabId": 4347, "workspaceId": 4348,
+      "agent": ["command": command, "path": "/fake/bin/\(command)"],
+    ])
   }
 
   func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, paneIds: [Int])? {

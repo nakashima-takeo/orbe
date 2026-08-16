@@ -176,9 +176,12 @@ extension WindowController {
     dismissPalette()
     switch target {
     case .agent(let agent):
-      openAgentTab(agent, env: agentLauncher.launchEnvironment, cwd: dir)
+      openTab(
+        workspaceIndex: activeWorkspace, cwd: dir, command: agent.path,
+        env: agentLauncher.launchEnvironment)
     case .shell:
-      openShellTab(cwd: dir)
+      // command を渡さない＝Cmd+T と同じ既定シェル起動。
+      openTab(workspaceIndex: activeWorkspace, cwd: dir)
     }
     DispatchQueue.main.async { [weak self] in self?.focusActivePane() }
   }
@@ -215,14 +218,6 @@ extension WindowController {
       guard let cwd = ref.pane.currentPwd ?? ref.pane.initialCwd else { return nil }
       return PaneOccupancy(cwd: cwd, agentState: ref.pane.agentState)
     }
-  }
-
-  /// Dispatch の shell 選択で、解決した worktree dir に素シェル（agent を走らせない）の新タブを開く。
-  /// initialCommand を渡さない＝ Cmd+T/newTab と同じ既定シェル起動（`openAgentTab` と対をなす）。
-  func openShellTab(cwd: String) {
-    store.appendTabToActive(wire(TerminalController(initialCwd: cwd)))
-    select(current.tabs.count - 1)
-    scheduleSave()
   }
 
   func reloadPalette() {

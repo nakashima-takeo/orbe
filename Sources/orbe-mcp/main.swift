@@ -125,7 +125,7 @@ let tools: [[String: Any]] = [
     (
       "description",
       "検出済みのエージェント CLI（claude / codex / agy）を列挙する。各要素は command と解決済み絶対 path。"
-        + "spawn の command に渡す候補源。検出未完了なら空配列を返す。"
+        + "spawn_agent の command に渡す候補源。検出未完了なら空配列を返す。"
     ),
     ("inputSchema", schema([:])),
   ]),
@@ -180,6 +180,44 @@ let tools: [[String: Any]] = [
     ),
   ]),
   obj([
+    ("name", "spawn_agent"),
+    (
+      "description",
+      "検出済みエージェントを新タブで起こす。GUI の起動と同じ経路（解決済み絶対パス・login shell の PATH 注入）"
+        + "を通るので、シェルの PATH に依存する子プロセスも動く。command 省略時は対象 workspace の実効デフォルト。"
+        + "workspaceId を指定してもその workspace は**前面化しない**（手元の画面は動かない）。"
+        + "戻り値は paneId / tabId / workspaceId / agent{command,path}。実 session ID は返らない"
+        + "（wait_for_event で agent_state を待ってから list_panes の agentSessionId を読む）。"
+    ),
+    (
+      "inputSchema",
+      schema([
+        "command": strProp("起動する agent（list_agents の command。省略時は対象 WS の実効デフォルト）"),
+        "workspaceId": intProp("開く workspace（省略時アクティブ。未知 id はエラー）"),
+        "cwd": strProp("作業ディレクトリ（省略時は対象 WS のアクティブペイン由来）"),
+      ])
+    ),
+  ]),
+  obj([
+    ("name", "resume_agent"),
+    (
+      "description",
+      "既存セッションを再開する形でエージェントを新タブで起こす（claude --resume / codex resume / agy --conversation）。"
+        + "起動経路は spawn_agent と同じで、対象 workspace は前面化しない。sessionId の出所は "
+        + "list_panes の agentSessionId（wait_for_event は状態語しか返さない）。"
+    ),
+    (
+      "inputSchema",
+      schema(
+        [
+          "command": strProp("再開する agent（claude / codex / agy）"),
+          "sessionId": strProp("再開するセッション ID"),
+          "workspaceId": intProp("開く workspace（省略時アクティブ。未知 id はエラー）"),
+          "cwd": strProp("作業ディレクトリ（省略時は対象 WS のアクティブペイン由来）"),
+        ], required: ["command", "sessionId"])
+    ),
+  ]),
+  obj([
     ("name", "activate_workspace"),
     (
       "description",
@@ -198,6 +236,7 @@ let tools: [[String: Any]] = [
       "状態変化イベントを待つ（長ポーリング）。扱える kind: agent_state / pane_title / pwd / "
         + "pane_closed（libghostty が host に出す OSC シグナル）。生のシェル出力は待てない"
         + "（その用途は get_pane_text をポーリング）。タイムアウトすると timedOut:true を返す。"
+        + "未知の kind と不正な timeoutMs はエラーで弾かれる（黙って時間切れにはならない）。"
     ),
     (
       "inputSchema",

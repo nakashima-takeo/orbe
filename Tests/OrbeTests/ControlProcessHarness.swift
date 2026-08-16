@@ -207,13 +207,18 @@ final class ControlProcess {
   }
 
   /// 同梱名の `orb`（実体は `orbe-cli`）を隔離インスタンスへ向けて起こす。
+  /// `stdin` を渡すと起動前に書いて閉じる（`orb pane send --stdin`）。渡さなければ子の標準入力は
+  /// `/dev/null`——`--stdin` 無しの経路が標準入力に触れたら即 EOF になり、ハングせずに落ちる。
+  /// 起動**前**に書くので読み手はまだ居ない。pipe 容量（macOS で約 64KB）を超える `stdin` は
+  /// そこで詰まり、`processTimeout` にも到達しないまま固まる——渡すのは小さな入力だけにすること。
   @discardableResult
   func orb(
-    _ args: [String], env extra: [String: String] = [:],
+    _ args: [String], env extra: [String: String] = [:], stdin: String? = nil,
     file: StaticString = #filePath, line: UInt = #line
   ) -> Outcome {
     Self.run(
-      Self.executable("orbe-cli"), args, env: Self.childEnv(extra), file: file, line: line)
+      Self.executable("orbe-cli"), args, env: Self.childEnv(extra), stdin: stdin, file: file,
+      line: line)
   }
 
   /// `orb <args> --json` の stdout を JSON オブジェクトとして読む。workspace / pane の id は

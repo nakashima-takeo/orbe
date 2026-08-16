@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe）
-description: Unix socket 上の JSON-RPC でペイン/タブ/workspace を操作する out-of-band 制御チャネルと、MCP ブリッジ・ツール群・mount 境界
-updated: 2026-08-08
+description: Unix socket 上の JSON-RPC でペイン/タブ/workspace/エージェントを操作する out-of-band 制御チャネルと、MCP ブリッジ・ツール群・mount 境界
+updated: 2026-08-16
 ---
 
 # 制御 API（外部 → Orbe）
@@ -38,11 +38,12 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 
 - `list_workspaces` → `{workspaces:[…]}` … id・name・rootPath・active・tabCount・activated・dormantAgentCount（休眠 agent 数＝永続復元した agent 付き leaf 数。休眠 workspace は `list_panes` に出ないため、別途この永続カウントで露出する。活性 workspace は live 側で数えるため常に 0）。
 - `list_panes` → `{panes:[…]}` … paneId・workspaceId・tabId・workspaceName・title・cwd・agentState・agentSessionId（resume 用・未設定なら null）・focused（全 workspace 横断・ツリー順）。
-- `list_agents` → `{agents:[…]}` … 検出済みエージェント CLI の command と解決済み絶対 path を列挙する（読み取り専用）。アプリ保持の検出結果をそのまま返し、新規検出（login shell 起動）は起こさない。検出未完了でもエラーにせず**空配列を返す**。
+- `list_agents` → `{agents:[…]}` … 検出済みエージェント CLI の command と解決済み絶対 path を列挙する（読み取り専用）。アプリ保持の検出結果をそのまま返し、新規検出（login shell 起動）は起こさない。検出未完了でもエラーにせず**空配列を返す**。`spawn_agent` / `resume_agent` に渡す command の候補源。
 - `get_pane_text {paneId, scrollback?}` → `{text}` … 画面テキスト平文。scrollback 真で履歴全体、偽で可視範囲。
 - `send_text {paneId, text}` … ペースト相当で PTY へ書く。bracketed paste 下では改行を含めても**自己実行せず**プロンプトに留まる。コマンド実行は別途 `send_key` の enter。
 - `send_key {paneId, key}` … 名前付きキー（case-insensitive）。特殊キー（enter/tab/escape/space/backspace/delete/上下左右/home/end/pageup/pagedown）は仮想 keycode で press+release を送り、libghostty にモード対応エンコードさせる（application cursor mode 等に追従。修飾も渡すため `ctrl+enter`・`shift+tab` 等が有効）。単一文字の修飾はモード非依存バイトに畳む——`ctrl+<char>` は C0 制御（レンジ外は拒否）、`alt`/`meta`/`option+<char>` は ESC プレフィックス。端末バイト表現を持たない `cmd`/`super` 付き単一文字と未知修飾は `-32602` で拒否する——修飾を黙殺して素の文字を注入しないため（ただし単一文字の `shift` は畳む先が無くビットが落ちる＝`shift+a` は `a`）。
-- `spawn {workspaceId?, cwd?, command?}` … 新タブを開く。command 省略はシェル・指定はそれを直接起動。cwd 省略は GUI の新規タブと同じフォールバック（対象 workspace のペイン cwd → その workspace の rootPath）。戻り値は新ペイン ID。アクティブ workspace 指定時は即 mount、背景 workspace は keep-alive で遅延。workspaceId が未知ならエラーにせずアクティブ workspace へフォールバックする。
+- `spawn {workspaceId?, cwd?, command?}` … 新タブを開く。command 省略はシェル・指定はそれを直接起動。cwd 省略は GUI の新規タブと同じフォールバック（対象 workspace のペイン cwd → その workspace の rootPath）。戻り値は新ペイン ID。workspaceId が未知ならエラーにせずアクティブ workspace へフォールバックする。
+- `spawn_agent {command?, workspaceId?, cwd?}` / `resume_agent {command, sessionId, workspaceId?, cwd?}` → `{paneId, tabId, workspaceId, agent:{command, path}}` … 検出済みエージェントを新タブで起こす。`spawn` との違いは、**GUI の起動（⌘⇧A / ⌘⇧C）と同じ組成**——検出済みの絶対パスを使い、子プロセス PATH を注入する（[agent/launch](../agent/launch.md)）。`command` を渡さない `spawn_agent` は**対象 workspace の**実効 `default-agent` を解く（アクティブ WS ではない）。`resume_agent` はエージェント自身の再開コマンド形を組み立て、セッション ID の文字集合もそこで検証する。未検出 command は `-32602`、解決できるエージェントが無ければ `-32000`。**未知 workspaceId は `-32004`**——`spawn` のフォールバックを継がないのは、新しい入口が「指定と違う対象を黙って触る」振る舞いを引き継ぐ理由がないため。実セッション ID は返さない（`spawn` 時点では存在せず、`resume` では入力の反響でしかない）。取得口は `list_panes` の `agentSessionId` 一つ。
 - `activate_workspace {workspaceId}` → `{activeWorkspaceId, paneIds}` … 背景/休眠 workspace を前面化し全タブを mount する。0 タブ WS は GUI どおり空状態（シェルは自動起動しない・paneIds 空）。未知 id は `-32004`（spawn と違いフォールバックしない）、workspaceId 欠落は `-32602`。既にアクティブな WS への activate は no-op で成功（冪等）。手元 Mac のアクティブ workspace も実際に切り替わる。
 - `config_list {workspaceId?}` → `{settings:[{key, value, scope, type, domain}]}` … 全設定の実効値（global＋当該 WS 上書き＋既定を畳んだ値）・由来 scope（`global`/`workspace`/`default`）・型・ドメイン（stepper の範囲、bool/enum の候補、フォント名一覧、`tab-title-font-family` は開いた列挙〔候補は空提示・任意文字列受理〕、`default-agent` は検出済み command、`agent-state-icons` は状態別 curated symbols）を返す。設定レジストリ走査の generic 1 実装。`workspaceId` 省略はアクティブ WS（未知 id は `-32004`）。読み取り専用。socket 専用。
 - `config_set {key, value, scope, workspaceId?}` → `{ok, key, value, scope}` … 設定を適用する（設定パレットと同一経路）。**全設定**が `scope` ∈ {global, workspace}。workspace は `workspaceId` 省略でアクティブ WS、指定でその WS（非アクティブ可・未知 id は `-32004`）の上書き層へ書く。**保存は常に、ライブ反映は global か対象がアクティブ WS の時だけ**（非アクティブ WS 上書きは次回 activate 時に効く）。値検証はレジストリの domain 駆動＝唯一の検証点で、`value: null` は「解除（継承へ戻す）」として受理する。未知 key・型不一致・値域外・不正 enum は `-32602`。socket 専用。
@@ -55,12 +56,15 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 - `focus_pane {paneId}` … 別 workspace のペインなら activate を伴う（手元 Mac のアクティブ workspace も切り替わる）。冪等。未知 pane は `-32004`。socket 専用。
 - `close_tab {tabId}` … close_pane と同じカスケード規律。未知 tab は `-32004`。socket 専用。
 - `report_agent {paneId, agent, state, sessionId?, message?, messageSource?}` … エージェント hook の状態報告を発信元ペインへ適用する（[agent/notify](../agent/notify.md)）。`messageSource` は文言の出所で、ツール由来かどうかだけが上書き可否を決める（表示には出ない）。`state=="clear"` で状態/コマンド/セッション ID/文言/状態変化時刻を nil、それ以外は state/command を立て sessionId があれば更新し、文言は state の遷移と出所で上書き可否が決まる（状態変化時刻は state が実際に変わったときだけ進む）。
-- `wait_for_event {paneId?, kinds?, timeoutMs?}` … 状態変化を長ポーリングで待つ。kind ∈ {agent_state, pane_title, pwd, pane_closed}。`event.value` は kind 固有。フィルタ一致で {event}、timeout 超過で {timedOut:true}。1 接続あたり待機 1 件（2 件目は `-32005` で即拒否）。
+- `wait_for_event {paneId?, kinds?, timeoutMs?}` … 状態変化を長ポーリングで待つ。kind ∈ {agent_state, pane_title, pwd, pane_closed}。`event.value` は kind 固有（`agent_state` が運ぶのは状態語で、セッション ID ではない）。フィルタ一致で {event}、timeout 超過で {timedOut:true}。1 接続あたり待機 1 件（2 件目は `-32005` で即拒否）。**params は待機を張る前に検証する**——未知 kind・空 kinds・型違いの paneId・値域外の timeoutMs はいずれも `-32602`。黙って通すと「永久に一致せずただ時間切れ」「絞り込みが外れて別ペインのイベントを掴む」という、呼び出し側から何も起きなかったのと区別できない形になるため。timeoutMs に上限を置くのも同じ理由で、際限なく大きな値は待機の期限が事実上訪れなくなり、1 件しかない待機枠を握ったまま応答が返らなくなる。
 - `completion_update` / `completion_end` / `completion_accept` … コマンド補完用（[completion](../palette/completion.md)）。前 2 つは**無応答**。`completion_` 系は宛先解決ガードより前で分岐し、無応答メソッドは宛先不在でも応答を出さない（打鍵ごとの update が accept fd に行を積まない）。読めない行にはこの分岐より前でエラー行を返すため、accept fd から読める行が accept 応答だけとは限らない——クライアントは `id` で自分の応答を選ぶ（[completion](../palette/completion.md)）。socket 専用。
 
 ## 境界
 
-- get_pane_text / send_text / send_key は **mount 済み（surface 生存）ペインにのみ作用**する。永続復元直後はアクティブ workspace の**全タブ**が mount される。背景 workspace のタブは ID を持つが surface 未生成（[workspace](../platform/workspace.md) の workspace 単位 keep-alive 遅延 mount）。未 mount ペインは get_pane_text が空・send 系は no-op。`activate_workspace` で前面化すれば読めるようになる。
+- get_pane_text / send_text / send_key は **mount 済み（surface 生存）ペインにのみ作用**する。条件は surface が生きていることであって、そのペインが見えていることではない。未 mount ペインは get_pane_text が空・send 系は no-op。
+- **制御 API がタブを作るとき（`spawn` / `spawn_agent` / `resume_agent`）は、対象が背景 workspace でもその場で surface を起こす**——前面化はせず、実サイズで起こす。作れと言われた 1 枚をすぐ駆動できないと、返した paneId が「読めず届かない ID」になるため。前面化したいときは `focus_pane` / `activate_workspace` が明示的に担う。
+- 背景 workspace で起こしたエージェントの状態報告は、状態としては載るが**注意喚起の面には出ない**——Attention 一覧・メニューバーのピル・通知音はいずれもアクティブ化済み workspace のペインだけを見る。その workspace を前面化すると出るようになる。スクリプトから待つ経路（`wait_for_event`）はこの制限を受けない。
+- 既存タブの mount は従来どおり workspace 単位の keep-alive 遅延（[workspace](../platform/workspace.md)）。永続復元直後はアクティブ workspace の**全タブ**が mount され、背景 workspace のタブは ID を持つが surface 未生成で、`activate_workspace` で前面化すれば読めるようになる。復元で休眠 workspace のシェルを一斉に起こさないための遅延であり、明示的に 1 枚作れという要求には及ばない。
 - `wait_for_event` が扱うのは libghostty が host に出す OSC 由来シグナル（[libghostty](../terminal/libghostty.md)）とペイン破棄のみ。**生の PTY 出力は待てない**（コマンド完了待ちは agent_state=done か get_pane_text ポーリングで代替する）。
 
 ## libghostty 経路

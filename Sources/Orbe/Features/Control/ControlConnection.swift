@@ -116,12 +116,49 @@ final class Connection: Hashable {
       respond(id: id, result: .failure(ControlError(code: -32005, message: "wait already pending")))
       return
     }
+    // 宛先・フィルタ・期限は待機を張る**前**に検証する。素通しすると待機はどちらかへ倒れ、
+    // どちらも呼び出し側から時間切れと区別できない——絞り込みが黙って消えれば「別ペイン・別種の
+    // イベントで起きる」、一致しない語で張られれば「永遠に起きない」。
+    var paneId: Int?
+    if let raw = params["paneId"] {
+      guard let pid = raw as? Int else {
+        respond(id: id, result: .failure(ControlError(code: -32602, message: "invalid paneId")))
+        return
+      }
+      paneId = pid
+    }
+    var kinds: Set<String>?
+    if let raw = params["kinds"] {
+      guard let list = raw as? [String], !list.isEmpty else {
+        respond(id: id, result: .failure(ControlError(code: -32602, message: "invalid kinds")))
+        return
+      }
+      if let unknown = list.first(where: { !ControlEvent.kinds.contains($0) }) {
+        respond(
+          id: id,
+          result: .failure(ControlError(code: -32602, message: "unknown kind: \(unknown)")))
+        return
+      }
+      kinds = Set(list)
+    }
+    var timeoutMs = 30000
+    if let raw = params["timeoutMs"] {
+      // 上限を置くのは、巨大値だと `.milliseconds(_:)` の deadline が DISPATCH_TIME_FOREVER
+      // まで飽和してタイマーが発火しなくなるため——応答も時間切れも返らないまま 1 接続 1 待機の
+      // 枠を恒久占有し、以後の `wait_for_event` が全て -32005 になる。
+      // 24 時間はベンチマークの最長（分オーダー）を十分に超える。
+      guard let ms = raw as? Int, ms > 0, ms <= 86_400_000 else {
+        respond(id: id, result: .failure(ControlError(code: -32602, message: "invalid timeoutMs")))
+        return
+      }
+      timeoutMs = ms
+    }
+
     waitId = id
-    waitPaneId = params["paneId"] as? Int
-    waitKinds = (params["kinds"] as? [String]).map(Set.init)
+    waitPaneId = paneId
+    waitKinds = kinds
     waitGen += 1
     let gen = waitGen
-    let timeoutMs = params["timeoutMs"] as? Int ?? 30000
     queue.asyncAfter(deadline: .now() + .milliseconds(timeoutMs)) { [weak self] in
       guard let self, self.waitId != nil, self.waitGen == gen else { return }
       let pending = self.waitId

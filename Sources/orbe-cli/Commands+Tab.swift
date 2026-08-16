@@ -1,7 +1,23 @@
 import Foundation
 
-// `orb tab <サブコマンド>` の実装。`runTab` が argv[2] を手書きでディスパッチし、
+// `orb tab <サブコマンド>` の実装と usage。`runTab` が argv[2] を手書きでディスパッチし、
 // 各サブコマンドは -> Never で終端して exit で終了コードを返す。
+
+let tabUsageLines = [
+  "orb tab new [--workspace <id|current>] [--dir <path>] [--cmd \"…\"]",
+  "orb tab close [<tab>]",
+]
+
+let tabUsage = """
+  orb tab — open and close tabs in the running instance
+
+  USAGE:
+  \(usageBlock(tabUsageLines))
+
+  tab new opens in the active workspace unless --workspace <id> is given.
+  tab close defaults to the current tab (via ORBE_PANE); outside a Orbe pane,
+  pass an explicit <tab> id (see: orb pane list).
+  """
 
 func runTab(_ args: [String]) -> Never {
   let rest = Array(args.dropFirst())
