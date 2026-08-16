@@ -20,6 +20,10 @@ enum IdGen {
 /// 生の PTY 出力は libghostty が host に出さないため、扱えるのは whitelist された
 /// OSC 由来シグナル（agent 状態・タイトル・cwd）とペインのライフサイクルに限る。
 struct ControlEvent {
+  /// `wait_for_event` が受け付ける kind の全体。フィルタの語彙はここが唯一の出所で、
+  /// 未知の語は `registerWait` が待機を張る前に -32602 で弾く（黙って時間切れにしない）。
+  static let kinds: Set<String> = ["agent_state", "pane_title", "pwd", "pane_closed"]
+
   /// `agent_state` / `pane_title` / `pwd` / `pane_closed`
   let kind: String
   let paneId: Int

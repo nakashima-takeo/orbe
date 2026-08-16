@@ -116,12 +116,38 @@ final class Connection: Hashable {
       respond(id: id, result: .failure(ControlError(code: -32005, message: "wait already pending")))
       return
     }
+    // フィルタと期限は待機を張る**前**に検証する。素の Set フィルタとして通すと、未知 kind は
+    // 永久に一致せずただ時間切れになり、呼び出し側からは「何も起きなかった」と区別できない。
+    var kinds: Set<String>?
+    if let raw = params["kinds"] {
+      guard let list = raw as? [String] else {
+        respond(id: id, result: .failure(ControlError(code: -32602, message: "invalid kinds")))
+        return
+      }
+      if let unknown = list.first(where: { !ControlEvent.kinds.contains($0) }) {
+        respond(
+          id: id,
+          result: .failure(ControlError(code: -32602, message: "unknown kind: \(unknown)")))
+        return
+      }
+      kinds = Set(list)
+    }
+    var timeoutMs = 30000
+    if let raw = params["timeoutMs"] {
+      // 上限を置くのは `asyncAfter(.milliseconds(_:))` が巨大値でオーバーフローするため。
+      // 24 時間はベンチマークの最長（分オーダー）を十分に超える。
+      guard let ms = raw as? Int, ms > 0, ms <= 86_400_000 else {
+        respond(id: id, result: .failure(ControlError(code: -32602, message: "invalid timeoutMs")))
+        return
+      }
+      timeoutMs = ms
+    }
+
     waitId = id
     waitPaneId = params["paneId"] as? Int
-    waitKinds = (params["kinds"] as? [String]).map(Set.init)
+    waitKinds = kinds
     waitGen += 1
     let gen = waitGen
-    let timeoutMs = params["timeoutMs"] as? Int ?? 30000
     queue.asyncAfter(deadline: .now() + .milliseconds(timeoutMs)) { [weak self] in
       guard let self, self.waitId != nil, self.waitGen == gen else { return }
       let pending = self.waitId
