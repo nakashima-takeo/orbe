@@ -183,6 +183,33 @@ final class DispatchCleanFreshnessTests: OrbeTestCase {
     DispatchGitHubCache.shared.setBranchPullRequests([], head: "feat/y", for: repo.commonDir)
     XCTAssertEqual(
       provider.branchPRStates["feat/y"], .loaded([]), "前回セッションの結果があればそれで確定させる")
+
+    // 未発行／取得中の head も同じ先描きに載る（ここが `.fetching` へ退化すると、開き直すたびに
+    // 全行がスケルトンへ戻る）。
+    provider.branchPRFetches = [:]
+    XCTAssertEqual(provider.branchPRStates["feat/y"], .loaded([]), "未発行でも前回結果で先に描く")
+    XCTAssertEqual(provider.branchPRStates["feat/x"], .fetching, "前回結果が無い head は取得中のまま")
+  }
+
+  /// **同じブランチを持つ worktree が 2 本あっても、問う head は 1 つ。** `git worktree add --force`
+  /// は二重チェックアウトを通すので、worktree の並びをそのまま head の並びにすると同名が 2 度出る
+  /// ——それを辞書へ起こす `branchPRStates` は重複キーで落ち、そのリポジトリではパレットが開けなくなる。
+  func testDuplicateBranchWorktreesFoldIntoOneHead() throws {
+    try makeWorktree("wt-x", branch: "feat/x")
+    XCTAssertTrue(
+      git(["worktree", "add", "--force", "-q", dir.appendingPathComponent("wt-x2").path, "feat/x"])
+        .isSuccess, "前提: --force は二重チェックアウトを通す")
+    let model = DispatchPaletteModel()
+    let provider = makeProvider(model)
+
+    provider.load()
+    XCTAssertTrue(pump({ model.classification != nil && !provider.classificationPending }))
+
+    XCTAssertEqual(
+      provider.worktrees.filter { $0.branch == "feat/x" }.count, 2, "前提: 同じ head の worktree が 2 本")
+    XCTAssertEqual(
+      DispatchDataProvider.branchPRHeads(of: provider.worktrees), ["feat/x"], "問う head は 1 つに畳む")
+    XCTAssertEqual(provider.branchPRStates.count, 1)
   }
 
   /// 台帳に無い head（消えた worktree）への遅着は捨てる。

@@ -126,12 +126,19 @@ extension DispatchDataProvider {
 
   /// ブランチの PR 取得の対象。worktree にあるブランチだけ——main worktree は掃除の対象外、
   /// detached（`branch == nil`）は PR の head になり得ない。
+  ///
+  /// **head は一意にして返す。** `git worktree add --force` は同じブランチを 2 本の worktree へ
+  /// 置けるので、worktree の並びをそのまま head の並びにすると同名が 2 度出る。head は「gh へ問う
+  /// 対象の集合」であって worktree の一覧ではないので、重複はここで畳む——問い合わせの二重払いも、
+  /// この並びを辞書へ起こす読み手（`branchPRStates`）も、同時に守られる。
   static func branchPRHeads(of worktrees: [GitWorktree]) -> [String] {
-    worktrees.filter { !$0.isMain }.compactMap(\.branch)
+    var seen: Set<String> = []
+    return worktrees.filter { !$0.isMain }.compactMap(\.branch).filter { seen.insert($0).inserted }
   }
 
   /// 取得失敗（nil）は差し替えず据え置く。等値なら rebuild もしない（ちらつかない）。
-  /// gh 着地の規則は以下の 3 メソッドが持つ（テストが直接叩く唯一の入口）。
+  /// 一覧 2 レーン（issues / open PR）の規則は以下の 2 メソッドが持つ（テストが直接叩く唯一の入口）。
+  /// head 単位で着地するブランチ PR は別の規則で、`applyFetchedBranchPRs` が持つ。
   /// needsRebuild を代入より先に評価するのが要点——キャッシュ未ヒット時は loading==true なので
   /// 失敗でも必ず rebuild してローディング行を畳む。
   func applyFetchedIssues(_ fetched: [GitHubIssue]?) {
