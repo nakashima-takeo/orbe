@@ -253,6 +253,54 @@ extension OrbeCliProcessTests {
       "開いたタブは指定した workspace に属する")
   }
 
+  // MARK: - pane send の入力源
+
+  /// `--stdin` で流した本文がペインへ届く。長いプロンプトを argv ではなくパイプで渡す経路。
+  func testPaneSendReadsTheBodyFromStdin() throws {
+    let control = try startControlProcess(workspaces: ["main"])
+    let pane = try XCTUnwrap(control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
+
+    // シェルが rc を読み終える前に送ると tty の type-ahead に賭けることになる。プロンプトを待つ。
+    XCTAssertTrue(
+      waitUntil(ControlProcess.paneSettleTimeout) {
+        !(pane.controlReadText(scrollback: false) ?? "")
+          .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      }, "シェルのプロンプトが描かれない（この後の入力は捨てられうる）")
+
+    let body = "STDIN_" + String(format: "%08x", UInt32.random(in: 0...UInt32.max))
+    let sent = control.orb(["pane", "send", "\(pane.id)", "--stdin"], stdin: body)
+    XCTAssertEqual(sent.status, 0, "--stdin の送信が失敗した: \(sent.stderr)")
+    XCTAssertTrue(
+      waitUntil(ControlProcess.paneSettleTimeout) {
+        (pane.controlReadText(scrollback: true) ?? "").contains(body)
+      }, "--stdin で流した本文がペインに現れない")
+  }
+
+  /// `pane send` の入力源は**ちょうど 1 つ**。両方も無指定も usage エラーで、無指定は標準入力に
+  /// 触れずに落ちる——ここでハングしないことがこのテストの要点（`--stdin` を明示必須にした理由）。
+  /// 0 バイトの `--stdin` も弾く: `printf '%s' "$PROMPT" | orb pane send --stdin` の未設定が
+  /// その形で現れ、規約が守ろうとしている「値が黙って消えた」ものそのものだから。
+  func testPaneSendRequiresExactlyOneInputSource() throws {
+    let control = try startControlProcess(workspaces: ["main"])
+    let pane = try XCTUnwrap(control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
+
+    failure(
+      control.orb(["pane", "send", "\(pane.id)", "--text", "hi", "--stdin"]), code: 2,
+      message: "pass only one of --text / --stdin", "--text と --stdin の併用")
+    // stdin を渡さない＝子の標準入力は /dev/null。読みに行く実装ならここで即 EOF を掴んで
+    // 「0 バイト」に化けるので、文言まで見て「触れずに落ちた」ことを確かめる。
+    failure(
+      control.orb(["pane", "send", "\(pane.id)"]), code: 2,
+      message: "pane send requires --text or --stdin", "入力源の無指定")
+    failure(
+      control.orb(["pane", "send", "\(pane.id)", "--stdin"], stdin: ""), code: 2,
+      message: "--stdin got no input", "0 バイトの --stdin")
+
+    // 空白・改行だけの入力は通す（ファイルや heredoc の正当な中身でありうる）。
+    let whitespace = control.orb(["pane", "send", "\(pane.id)", "--stdin"], stdin: "  \n")
+    XCTAssertEqual(whitespace.status, 0, "空白だけの --stdin は通す: \(whitespace.stderr)")
+  }
+
   // MARK: - 文脈解決
 
   /// pane 系の対象は `ORBE_PANE` を既定に取り、`<id|current>` の `current` はアクティブ WS へ解決する。
