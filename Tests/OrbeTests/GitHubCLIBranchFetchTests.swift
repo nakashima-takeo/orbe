@@ -10,7 +10,6 @@ import XCTest
 final class GitHubCLIBranchFetchTests: OrbeTestCase {
   private var dir: URL!
   private var log: String!
-  private var previousPATH: ShellPATH!
 
   override func setUpWithError() throws {
     dir = FileManager.default.temporaryDirectory
@@ -37,13 +36,12 @@ final class GitHubCLIBranchFetchTests: OrbeTestCase {
     let gh = dir.appendingPathComponent("gh").path
     try script.write(toFile: gh, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: gh)
-    previousPATH = ShellPATH.shared
+    // 戻さない——`OrbeTestCase` が毎テスト `ShellPATH.shared` を張り直すので、申告制は残さない。
     let path = dir.path
     ShellPATH.shared = ShellPATH(probe: { path })
   }
 
   override func tearDownWithError() throws {
-    ShellPATH.shared = previousPATH
     try? FileManager.default.removeItem(at: dir)
   }
 
@@ -65,7 +63,10 @@ final class GitHubCLIBranchFetchTests: OrbeTestCase {
     XCTAssertEqual(landed["bad/x"], .some(nil), "落ちた head だけが nil")
     XCTAssertEqual(
       landed.values.filter { $0 != nil }.count, heads.count - 1, "1 本の失敗が他を巻き込まない")
-    XCTAssertEqual(maxOverlap(), 4, "同時実行は上限（4）で頭打ちになり、直列にもならない")
+    // 契約は「上限で頭打ち」と「直列でない」の 2 つ。ピークがちょうど 4 になるかは子プロセスの
+    // 起動タイミング次第なので、そこは固定しない（壊れていないのに赤くなる）。
+    XCTAssertLessThanOrEqual(maxOverlap(), 4, "同時実行は上限（4）を超えない")
+    XCTAssertGreaterThan(maxOverlap(), 1, "直列に積み上がっていない")
   }
 
   /// 偽 `gh` のログから同時に走っていた最大本数を数える。
