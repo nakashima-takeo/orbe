@@ -10,9 +10,9 @@ final class Workspace {
   var rootPath: String
   var tabs: [TerminalController] = []
   var active = 0
-  /// このセッションで一度でも前面化されたか、配下のタブで materialize が開始されたか。
-  /// 1 タブでも activated なら true だが、true でも未activatedタブを含み得る。永続化しない。
-  var activated = false
+  /// 配下に materialize 開始済みのタブが 1 枚以上あるか。
+  /// タブ状態から導出する現在値で、0タブまたは全タブ未activatedなら false。永続化しない。
+  var activated: Bool { tabs.contains(where: \.activated) }
   /// この workspace に最後に切り替えてフォーカスした時刻（MRU 並べ替えのキー）。永続化する。
   /// 旧データ・未使用は nil（並べ替えで最古扱い）。
   var lastUsedAt: Date?

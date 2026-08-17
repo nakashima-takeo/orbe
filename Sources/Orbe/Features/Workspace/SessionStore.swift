@@ -102,8 +102,8 @@ final class SessionStore {
 
   // MARK: - select のブックキーピング（ビューは触らない）
 
-  /// owner を確認してから、tab と workspace の materialize 開始を同時に記録する。
-  /// `tab.activated == true ⇒ workspace.activated == true` の不変条件を作る唯一の経路。
+  /// owner を確認してから、tab の materialize 開始を記録する。
+  /// workspace の activated は配下の tab 状態から導出されるため、別の書込みは持たない。
   @discardableResult func recordMaterialization(
     of tab: TerminalController, in workspace: Workspace
   ) -> Bool {
@@ -111,24 +111,22 @@ final class SessionStore {
       workspace.tabs.contains(where: { $0 === tab })
     else { return false }
     tab.recordMaterializationStarted()
-    workspace.activated = true
     return true
   }
 
-  /// workspace が前面化された履歴を記録する。0タブでも activated / MRU を進める。
-  @discardableResult func recordWorkspaceActivation(_ workspace: Workspace) -> Bool {
+  /// workspace を前面で利用した履歴を記録する。materialize 状態とは独立し、0タブでも MRU を進める。
+  @discardableResult func recordWorkspaceUse(_ workspace: Workspace) -> Bool {
     guard workspaces.contains(where: { $0 === workspace }) else { return false }
-    workspace.activated = true
     workspace.lastUsedAt = Date()
     return true
   }
 
-  /// タブ選択のドメイン記録。index ガード → workspace履歴→`lastUsedAt`→`active` の順で立て、成否を返す。
+  /// タブ選択のドメイン記録。index ガード → workspace の MRU → `active` の順で進め、成否を返す。
   /// ビュー除去/mount/focus/chrome は呼び出し側（WindowController.select）が担う。
   @discardableResult func recordSelection(_ index: Int) -> Bool {
     guard current.tabs.indices.contains(index) else { return false }
     let ws = current
-    _ = recordWorkspaceActivation(ws)
+    _ = recordWorkspaceUse(ws)
     ws.active = index
     return true
   }

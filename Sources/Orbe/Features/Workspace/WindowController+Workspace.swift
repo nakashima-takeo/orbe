@@ -25,7 +25,7 @@ extension WindowController {
   /// 切替・復元・明示削除後の MRU 繰上げの全アクティブ化経路がここを共有する。
   func activateCurrent() {
     if current.tabs.isEmpty {
-      store.recordWorkspaceActivation(current)
+      store.recordWorkspaceUse(current)
       clearActiveContent()  // 0タブ WS のアクティブ化は空状態を表示する（自動シェル起こしはしない）
     } else {
       select(current.active)
