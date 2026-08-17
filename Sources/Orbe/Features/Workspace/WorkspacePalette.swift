@@ -14,9 +14,9 @@ import SwiftUI
     let index: Int
     let name: String
     let isActive: Bool
-    /// このセッションで未だ表示していない（復元のみの）休眠 workspace。暗く出す。
+    /// このセッションで配下のタブを一度も起こしていない完全休眠 workspace。暗く出す。
     let dormant: Bool
-    /// この workspace のエージェント状態ロールアップ（状態順の `[(state, count)]`）。空なら何も出さない。
+    /// activatedタブのlive状態と未activatedタブのdormant数を正準順で並べたロールアップ。
     let agentRollup: [(state: String, count: Int)]
     /// この workspace のディレクトリ設定（rootPath）。詳細メニューの「ディレクトリ」編集にプリフィルする。
     let dir: String

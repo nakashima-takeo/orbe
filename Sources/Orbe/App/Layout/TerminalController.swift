@@ -33,6 +33,10 @@ final class TerminalController {
   let rootContainer = NSView()
   private(set) weak var focusedPane: SurfaceView?
 
+  /// このセッションで、このタブの materialize が一度でも開始されたか。
+  /// 永続化せず、surface 生成の成功可否ではなく window hierarchy への attach 開始を記録する。
+  private(set) var activated = false
+
   /// 最後のペインが閉じられた（このタブを閉じるべき）通知。閉鎖の発火源を添えて渡す
   /// （復元スタックへ積むかの判定に要る）。
   var onEmpty: ((TabCloseOrigin) -> Void)?
@@ -51,10 +55,11 @@ final class TerminalController {
   /// Cmd+R で付けた明示タイトル（sticky・tab単位）。非nil・非空なら最優先。空入力で nil へ戻す。
   var explicitTitle: String?
 
-  /// 復元時に元 PaneNode が持っていた agent != nil leaf 数（休眠 agent の総数）。
-  /// resume 未対応で素シェル化した leaf も、変換前の node から数えるため取りこぼさない。
-  /// 通常（新規）タブは 0。休眠 workspace は活性化前にミューテートされないため不変で正しい。
-  let restoredAgentCount: Int
+  /// 現在このタブに残る、未materializeの復元 agent leaf 数。
+  /// 固定スナップショットではなく pane の由来から導出するため、休眠中の close_pane に追従する。
+  var restoredAgentCount: Int {
+    controlAllPanes().count(where: \.holdsDormantRestoredAgent)
+  }
 
   /// このタブの表示タイトル。① explicitTitle ?? ② アプリ報告タイトル ?? ③ derived(cwd, root)。
   /// rootPath は所属 Workspace が持つため呼び出し側（WindowController）から渡す。
@@ -84,7 +89,6 @@ final class TerminalController {
   init(
     initialCwd: String? = nil, initialCommand: String? = nil, initialEnv: [String: String] = [:]
   ) {
-    restoredAgentCount = 0
     let first = makePane(
       inheritFrom: nil, initialCwd: initialCwd, initialCommand: initialCommand,
       initialEnv: initialEnv)
@@ -102,7 +106,6 @@ final class TerminalController {
   /// 永続スナップショット（PaneNode）から分割ツリーを再構築する。
   /// agent 付きの葉は resumeSpawn で resume コマンドに解決し、起こす。
   init(restoring node: PaneNode, resumeSpawn: ResumeSpawn) {
-    restoredAgentCount = node.agentLeafCount
     let root = buildView(from: node, resumeSpawn: resumeSpawn)
     root.frame = rootContainer.bounds
     root.autoresizingMask = [.width, .height]
@@ -116,12 +119,15 @@ final class TerminalController {
       if let agent, let spawn = resumeSpawn(agent) {
         let pane = makePane(
           inheritFrom: nil, initialCwd: cwd, initialCommand: spawn.command, initialEnv: spawn.env)
+        pane.holdsDormantRestoredAgent = true
         // resume 直後・最初の hook が来る前に snapshot しても agent 情報が保たれるよう再設定する。
         pane.agentCommand = agent.command
         pane.agentSessionId = agent.sessionId
         return wrap(pane)
       }
-      return wrap(makePane(inheritFrom: nil, initialCwd: cwd))
+      let pane = makePane(inheritFrom: nil, initialCwd: cwd)
+      pane.holdsDormantRestoredAgent = agent != nil
+      return wrap(pane)
     case .split(let vertical, let ratio, let first, let second):
       let split = WorkspaceSplitView()
       split.isVertical = vertical
@@ -177,6 +183,14 @@ final class TerminalController {
   /// ペインのエージェント状態変更。どのペインの変化でもタブのインジケータを更新する。
   func paneAgentStateChanged() {
     onAgentStateChange?()
+  }
+
+  /// materialize 開始を記録し、復元 agent を休眠集計から live 側へ移す。
+  /// attach 前に呼ぶことで、surface 起動直後の最初の hook 報告も live として扱う。
+  func recordMaterializationStarted() {
+    guard !activated else { return }
+    activated = true
+    forEachPane(in: rootContainer) { $0.holdsDormantRestoredAgent = false }
   }
 
   /// タブ内の全ペインを優先順位 `waiting > working > done` で1つに畳んだ状態種別。

@@ -66,11 +66,12 @@ extension WindowController {
   }
 
   /// 一過性表示（メニューバー②）用の 1 行 snapshot。発信元ペインの所属 WS・タブから組む。
-  /// 対象は一覧（`AttentionSnapshot.rows`）と同じ **activate 済み workspace のライブペインのみ**
+  /// 対象は一覧（`AttentionSnapshot.rows`）と同じ **activatedタブのライブペインのみ**
   /// ——②は一覧の投影なので、立てる側と取り下げる側が同じ集合を見る。見つからなければ nil。
   private func attentionRow(for pane: SurfaceView) -> AttentionRow? {
     for ws in workspaces where ws.activated {
-      for tab in ws.tabs where tab.controlAllPanes().contains(where: { $0 === pane }) {
+      for tab in ws.tabs
+      where tab.activated && tab.controlAllPanes().contains(where: { $0 === pane }) {
         guard let state = pane.agentState else { return nil }
         return AttentionRow(
           paneId: pane.id,

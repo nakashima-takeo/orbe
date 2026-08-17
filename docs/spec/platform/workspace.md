@@ -1,7 +1,7 @@
 ---
 title: workspace
 description: 名前付きコンテナの保持・切替・keep-alive と、workspace 毎の設定上書き。切替・作成の UI は palette/workspace が持つ
-updated: 2026-08-15
+updated: 2026-08-17
 ---
 
 # workspace
@@ -19,6 +19,8 @@ host 所有。ドメイン状態（workspace 配列とアクティブ index）�
 - アクティブ workspace は**全タブ**の分割ツリーをウィンドウ階層に載せ、アクティブタブのみ可視・他タブは hidden にする——非アクティブタブもフォーカスを待たず surface が起動して復帰でき、タブ切替が可視/非可視のトグルだけで済む（surface を再生成しない）。
 - 隠れタブ・背景 workspace・occluded ウィンドウの surface は**描画のみ**停止する（端末状態・pty は前進。表示復帰時に 1 フレーム描画。可視性同期の契約は [terminal/core](../terminal/core.md)）。
 - アクティブ化では可視タブを即時 mount し、未 mount の隠れタブは後続 runloop tick で 1 枚ずつ分割 mount する——1 turn で N 個の surface を同期生成しないため。隠れタブも最終的に必ず mount され surface が起動する不変は保つ（resume 起動も走る）。分割 mount の途中で別 workspace へ切り替えたら進行中バッチは破棄し（孤児 mount を防ぐ）、次のアクティブ化で再 mount する（冪等）。
+- タブはセッション内だけの `activated` を持ち、window hierarchyへのattachを開始する直前にtrueとなる。workspaceも、前面化された時または配下の1タブでもactivatedとなった時にtrueとなる。`tab.activated ⇒ workspace.activated` は常に成立するが逆は成立せず、workspace内には起動済みタブと休眠タブが混在できる。いずれも永続せず、現仕様では一度trueになるとセッション中は戻らない。
+- 背景workspaceへ新規タブを明示作成したときは、その1枚だけをオフスクリーンでmaterializeし、workspaceと新規タブをactivatedにする。既存の復元タブは起こさず休眠のまま保つ。通常のworkspace前面化は上記どおり全タブを順次起こす。タブ単位の起床・再休眠を直接操作する公開UI/APIは持たない。
 - 新規 workspace の root path は、クイック作成（切替パレットで一致なし名＋Enter）では active ペインの cwd 由来（不明時はホーム）、専用作成フォーム経由では入力パス。
 - アクティブ workspace の最後のタブを閉じても、その workspace は 0 タブの空状態でアクティブに残る（単一・複数 workspace 問わず。ウィンドウは閉じない）。背景 workspace の最後のタブが閉じても 0 タブのまま残す。
 - パレットの詳細メニューからの削除は、アクティブ workspace なら最近使った他 workspace（MRU）を次のアクティブにし、背景 workspace なら現アクティブは不変（workspace が 1 つだけなら削除不可）。

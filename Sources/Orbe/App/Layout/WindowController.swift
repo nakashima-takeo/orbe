@@ -225,7 +225,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     // surface 誕生は後続 tick へ分割し、1 turn で N 個まとめて生成して固まるのを防ぐ。
     for (i, tc) in ws.tabs.enumerated()
     where i == index || tc.rootContainer.superview === model.content {
-      mountTab(tc, visible: i == index)
+      mountTab(tc, in: ws, visible: i == index)
     }
     // overlay 表示中は入力を奪わない（フォーカス復帰は dismiss 側が担う）。
     if model.overlay == .none { focusActivePane() }
@@ -236,7 +236,8 @@ final class WindowController: NSObject, NSWindowDelegate {
 
   /// タブ 1 枚を model.content へ mount（surface 誕生は viewDidMoveToWindow 経由で冪等に 1 度）。
   /// 隠れタブも実サイズで起こす（pty winsize 正常）。frame/isHidden は既 mount でも毎回更新。
-  private func mountTab(_ tc: TerminalController, visible: Bool) {
+  private func mountTab(_ tc: TerminalController, in ws: Workspace, visible: Bool) {
+    guard store.recordMaterialization(of: tc, in: ws) else { return }
     if tc.rootContainer.superview !== model.content {
       tc.rootContainer.autoresizingMask = [.width, .height]
       model.content.addSubview(tc.rootContainer)
@@ -254,7 +255,7 @@ final class WindowController: NSObject, NSWindowDelegate {
       guard let self, let ws, self.current === ws else { return }
       guard let tc = ws.tabs.first(where: { $0.rootContainer.superview !== self.model.content })
       else { return }
-      self.mountTab(tc, visible: false)  // 隠れタブ＝不可視（surface 誕生・resume は走る）
+      self.mountTab(tc, in: ws, visible: false)  // 隠れタブ＝不可視（surface 誕生・resume は走る）
       self.scheduleHiddenMounts(for: ws)
     }
   }
@@ -320,7 +321,7 @@ final class WindowController: NSObject, NSWindowDelegate {
       StatusRowModel.Snapshot(
         workspace: current.name,
         titles: current.tabs.map { $0.displayTitle(workspaceRoot: current.rootPath) },
-        glyphs: current.tabs.map { $0.aggregateAgentState() },
+        glyphs: current.tabs.map { $0.activated ? $0.aggregateAgentState() : nil },
         active: current.active,
         cwd: store.activePaneCwd(),
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))

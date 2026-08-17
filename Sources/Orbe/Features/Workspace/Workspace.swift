@@ -10,8 +10,8 @@ final class Workspace {
   var rootPath: String
   var tabs: [TerminalController] = []
   var active = 0
-  /// このセッションで一度でもアクティブになった（タブをウィンドウへ乗せ surface を起こした）か。
-  /// 復元直後の未切替 workspace は false（＝休眠）。永続化しない（次回起動でまた休眠から始まる）。
+  /// このセッションで一度でも前面化されたか、配下のタブで materialize が開始されたか。
+  /// 1 タブでも activated なら true だが、true でも未activatedタブを含み得る。永続化しない。
   var activated = false
   /// この workspace に最後に切り替えてフォーカスした時刻（MRU 並べ替えのキー）。永続化する。
   /// 旧データ・未使用は nil（並べ替えで最古扱い）。

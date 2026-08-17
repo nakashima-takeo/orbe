@@ -70,6 +70,10 @@ final class SurfaceView: NSView {
   var agentSessionId: String?
   /// エージェント hook が報告した CLI 名（claude/codex/agy）。resume コマンドの構築に使う。
   var agentCommand: String?
+  /// 永続復元した agent leaf が、まだ materialize されていない休眠状態にあるか。
+  /// 保存 schema へは出さず、タブ起床時に false へ落とす。未起動ペインの close 後も
+  /// 現在の view tree から休眠 agent 数を正確に再集計するため、pane 単位で保持する。
+  var holdsDormantRestoredAgent = false
   /// エージェント hook が報告した文言と出所（waiting の質問文・done の最終応答）。
   /// Attention 一覧が読むのは文言だけ。state の遷移で確定し直し、同じ state のあいだは
   /// ツール由来をそれ以外の報告（通知由来・文言なし）から守る（`controlReportAgent`）。永続しない。

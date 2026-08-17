@@ -1,7 +1,7 @@
 ---
 title: Attention パレット
 description: ⌘⌘ と TopBar 件数ストリップで開く、対応すべきエージェントの一覧。状態変化時刻順のフラット表示から Enter でそのペインへ移動する
-updated: 2026-08-08
+updated: 2026-08-17
 ---
 
 # Attention パレット
@@ -18,7 +18,7 @@ updated: 2026-08-08
 
 ## 一覧
 
-対象は **activate 済み workspace のライブペインのみ**（休眠 workspace は対象外）で、エージェント状態が `waiting` / `done` / `working` のペイン。`idle` と未報告は出さない。並びは**状態変化時刻の降順**（同時刻はペイン ID 降順で安定化）で、セクション・グルーピングを持たない——`waiting` と `done` は同格で、状態の差はグリフだけが語る。
+対象は **activatedタブのライブペインのみ**で、エージェント状態が `waiting` / `done` / `working` のペイン。背景workspaceへ明示的に作成されmaterializeされたタブも含み、同じworkspaceに残る未materializeタブは含まない。`idle` と未報告は出さない。並びは**状態変化時刻の降順**（同時刻はペイン ID 降順で安定化）で、セクション・グルーピングを持たない——`waiting` と `done` は同格で、状態の差はグリフだけが語る。
 
 行は 2 段。
 

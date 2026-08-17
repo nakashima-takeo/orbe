@@ -6,7 +6,7 @@ import SwiftUI
 /// 選択の地色・dormant 減光は器（`SelectableRow`・`PaletteCard`）が担う。
 struct WorkspaceSwitcherRow: View {
   let name: String
-  /// 状態ロールアップ（`[(state, count)]`・正準順 working→waiting→done→idle で渡る）。
+  /// 状態ロールアップ（`[(state, count)]`・正準順 working→waiting→done→idle→dormant で渡る）。
   /// 0件・未知状態は `statusSegments` が落とす。
   let rollup: [(state: String, count: Int)]
   let path: String

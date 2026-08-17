@@ -34,19 +34,18 @@ enum AgentRollup {
 }
 
 extension Workspace {
-  /// この workspace の全タブ・全ペインを状態種別ごとに件数集計する（`[state: count]`）。
+  /// この workspace の activated タブだけを状態種別ごとに件数集計する（`[state: count]`）。
   func agentCounts() -> [String: Int] {
     var counts: [String: Int] = [:]
-    for tab in tabs {
+    for tab in tabs where tab.activated {
       for (state, count) in tab.agentStateCounts() { counts[state, default: 0] += count }
     }
     return counts
   }
 
-  /// この workspace が永続している agent != nil leaf の総数（休眠 agent 数）。
-  /// 未起動（activated==false）行の zzz 表示に使う。既存 agentCounts() は agentState 基準で
-  /// 休眠行では 0 になるため、この永続 leaf 基準の別カウントが要る。
+  /// 未activatedタブに現在残る、永続復元由来の agent leaf の総数（休眠 agent 数）。
+  /// workspace 自体が activated でも、live / dormant が混在する間は正の値を返す。
   func dormantAgentCount() -> Int {
-    tabs.reduce(0) { $0 + $1.restoredAgentCount }
+    tabs.lazy.filter { !$0.activated }.reduce(0) { $0 + $1.restoredAgentCount }
   }
 }

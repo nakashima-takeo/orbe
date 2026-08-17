@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe）
 description: Unix socket 上の JSON-RPC でペイン/タブ/workspace/エージェントを操作する out-of-band 制御チャネルと、MCP ブリッジ・ツール群・mount 境界
-updated: 2026-08-16
+updated: 2026-08-17
 ---
 
 # 制御 API（外部 → Orbe）
@@ -36,7 +36,7 @@ workspace / tab / pane にプロセス内単調増加 ID。型をまたいで一
 
 JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`config_*`・workspace CRUD・`split_pane`/`close_pane`/`focus_pane`/`close_tab`・`completion_*` は socket 専用で、MCP ブリッジには出さない（[cli](cli.md) が直に叩く）。
 
-- `list_workspaces` → `{workspaces:[…]}` … id・name・rootPath・active・tabCount・activated・dormantAgentCount（休眠 agent 数＝永続復元した agent 付き leaf 数。休眠 workspace は `list_panes` に出ないため、別途この永続カウントで露出する。活性 workspace は live 側で数えるため常に 0）。
+- `list_workspaces` → `{workspaces:[…]}` … id・name・rootPath・active・tabCount・activated・dormantAgentCount。`activated` は前面化済み、または配下にmaterialize開始済みタブがあることを表す。`dormantAgentCount` は未activatedタブに現在残る復元agent付きleaf数で、混在workspaceでは `activated: true` と正の値が同時に成立する。
 - `list_panes` → `{panes:[…]}` … paneId・workspaceId・tabId・workspaceName・title・cwd・agentState・agentSessionId（resume 用・未設定なら null）・focused（全 workspace 横断・ツリー順）。
 - `list_agents` → `{agents:[…]}` … 検出済みエージェント CLI の command と解決済み絶対 path を列挙する（読み取り専用）。アプリ保持の検出結果をそのまま返し、新規検出（login shell 起動）は起こさない。検出未完了でもエラーにせず**空配列を返す**。`spawn_agent` / `resume_agent` に渡す command の候補源。
 - `get_pane_text {paneId, scrollback?}` → `{text}` … 画面テキスト平文。scrollback 真で履歴全体、偽で可視範囲。
@@ -63,7 +63,7 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 
 - get_pane_text / send_text / send_key は **mount 済み（surface 生存）ペインにのみ作用**する。条件は surface が生きていることであって、そのペインが見えていることではない。未 mount ペインは get_pane_text が空・send 系は no-op。
 - **制御 API がタブを作るとき（`spawn` / `spawn_agent` / `resume_agent`）は、対象が背景 workspace でもその場で surface を起こす**——前面化はせず、実サイズで起こす。作れと言われた 1 枚をすぐ駆動できないと、返した paneId が「読めず届かない ID」になるため。前面化したいときは `focus_pane` / `activate_workspace` が明示的に担う。
-- 背景 workspace で起こしたエージェントの状態報告は、状態としては載るが**注意喚起の面には出ない**——Attention 一覧・メニューバーのピル・通知音はいずれもアクティブ化済み workspace のペインだけを見る。その workspace を前面化すると出るようになる。スクリプトから待つ経路（`wait_for_event`）はこの制限を受けない。
+- 背景workspaceで明示的に作成したタブは、その1枚とowner workspaceをactivatedにするが、`activeWorkspace`・表示タブ・focusは変えない。同じworkspaceの既存復元タブは未materializeのまま残る。作成したタブの状態報告はAttention一覧・メニューバーのピル・通知音へ即時に出る一方、未activatedタブへ直接注入された報告は注意喚起とlive集計へ出さない。`wait_for_event` は表示集合に関係なくイベント自体を扱う。
 - 既存タブの mount は従来どおり workspace 単位の keep-alive 遅延（[workspace](../platform/workspace.md)）。永続復元直後はアクティブ workspace の**全タブ**が mount され、背景 workspace のタブは ID を持つが surface 未生成で、`activate_workspace` で前面化すれば読めるようになる。復元で休眠 workspace のシェルを一斉に起こさないための遅延であり、明示的に 1 枚作れという要求には及ばない。
 - `wait_for_event` が扱うのは libghostty が host に出す OSC 由来シグナル（[libghostty](../terminal/libghostty.md)）とペイン破棄のみ。**生の PTY 出力は待てない**（コマンド完了待ちは agent_state=done か get_pane_text ポーリングで代替する）。
 

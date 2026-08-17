@@ -8,7 +8,7 @@ extension WindowController: ControlTarget {
       [
         "id": ws.id, "name": ws.name, "rootPath": ws.rootPath,
         "active": i == activeWorkspace, "tabCount": ws.tabs.count, "activated": ws.activated,
-        "dormantAgentCount": ws.activated ? 0 : ws.dormantAgentCount(),
+        "dormantAgentCount": ws.dormantAgentCount(),
       ]
     }
   }
