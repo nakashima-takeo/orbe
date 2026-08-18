@@ -69,7 +69,7 @@ extension WindowController {
   /// 対象は一覧（`AttentionSnapshot.rows`）と同じ **activatedタブのライブペインのみ**
   /// ——②は一覧の投影なので、立てる側と取り下げる側が同じ集合を見る。見つからなければ nil。
   private func attentionRow(for pane: SurfaceView) -> AttentionRow? {
-    for ws in workspaces where ws.activated {
+    for ws in workspaces {
       for tab in ws.tabs
       where tab.activated && tab.controlAllPanes().contains(where: { $0 === pane }) {
         guard let state = pane.agentState else { return nil }

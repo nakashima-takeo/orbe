@@ -24,7 +24,7 @@ enum AttentionSnapshot {
   /// 全 workspace を走査して Attention 行を組む。未activatedタブは対象外。
   static func rows(of workspaces: [Workspace]) -> [AttentionRow] {
     var out: [AttentionRow] = []
-    for ws in workspaces where ws.activated {
+    for ws in workspaces {
       for tab in ws.tabs where tab.activated {
         for pane in tab.controlAllPanes() {
           guard let state = pane.agentState, attentionStates.contains(state) else { continue }

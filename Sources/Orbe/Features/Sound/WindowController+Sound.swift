@@ -20,7 +20,7 @@ extension WindowController {
 
   /// ペインが属する workspace（`attentionRow(for:)` と同じ activatedタブの走査）。
   private func workspace(of pane: SurfaceView) -> Workspace? {
-    for ws in workspaces where ws.activated {
+    for ws in workspaces {
       for tab in ws.tabs
       where tab.activated && tab.controlAllPanes().contains(where: { $0 === pane }) { return ws }
     }

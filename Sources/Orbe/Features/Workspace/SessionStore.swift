@@ -126,7 +126,7 @@ final class SessionStore {
   @discardableResult func recordSelection(_ index: Int) -> Bool {
     guard current.tabs.indices.contains(index) else { return false }
     let ws = current
-    _ = recordWorkspaceUse(ws)
+    recordWorkspaceUse(ws)
     ws.active = index
     return true
   }
