@@ -122,6 +122,10 @@ final class WindowControllerControlTests: OrbeTestCase {
     XCTAssertEqual(result.activeWorkspaceId, emptyId)
     XCTAssertTrue(result.paneIds.isEmpty, "0タブ WS はシェルを起こさず paneIds は空配列")
     XCTAssertEqual(wc.window.title, "empty", "0タブ WS も activate で前面化する")
+    let projected = try XCTUnwrap(row(wc, name: "empty"))
+    XCTAssertEqual(projected["active"] as? Bool, true)
+    XCTAssertEqual(projected["activated"] as? Bool, false, "前面選択と起床済みタブの有無は別軸")
+    XCTAssertEqual(projected["dormantAgentCount"] as? Int, 0)
   }
 
   // MARK: - controlListWorkspaces の dormantAgentCount 露出
@@ -132,6 +136,7 @@ final class WindowControllerControlTests: OrbeTestCase {
     let rows = wc.controlListWorkspaces()
     XCTAssertFalse(rows.isEmpty)
     for r in rows {
+      XCTAssertNotNil(r["activated"] as? Bool, "各行に activated(Bool) が露出する")
       XCTAssertNotNil(r["dormantAgentCount"] as? Int, "各行に dormantAgentCount(Int) が露出する")
     }
   }
@@ -323,10 +328,8 @@ final class WindowControllerControlTests: OrbeTestCase {
     XCTAssertEqual(wc.window.title, "main", "アクティブ WS は変わらない")
   }
 
-  /// 活性（activated==true）workspace は復元 agent leaf を持っていても dormantAgentCount が 0。
-  /// dormantAgentCount は未起動行の zzz 専用の永続 leaf カウントで、活性 WS では stale。パレット
-  /// （活性行は live な agentCounts を使う）と契約を揃え、live と dormant の二重計上を防ぐ。
-  func testListWorkspacesActiveWorkspaceReportsZeroDormantAgentCount() throws {
+  /// 全タブ materialize 完了後は復元 agent 由来が live 側へ移り、休眠数は 0 に収束する。
+  func testListWorkspacesFullyMaterializedWorkspaceReportsZeroDormantAgentCount() throws {
     let sleepers = PaneNode.split(
       vertical: true, ratio: 0.5, first: agentLeaf("a"), second: agentLeaf("b"))
     let wc = try restore(
@@ -335,12 +338,45 @@ final class WindowControllerControlTests: OrbeTestCase {
         tabbed("active", tree: sleepers),  // 活性かつ復元 agent 2（永続 leaf は在る）
         tabbed("dormant", tree: sleepers),  // 非活性で復元 agent 2
       ])
-    XCTAssertEqual(row(wc, name: "active")?["active"] as? Bool, true, "前提: active 行は活性")
+    XCTAssertEqual(row(wc, name: "active")?["activated"] as? Bool, true, "前提: active 側は全タブ起床")
     XCTAssertEqual(
       row(wc, name: "active")?["dormantAgentCount"] as? Int, 0,
-      "活性 WS は復元 agent leaf があっても dormantAgentCount は 0")
+      "materialize 時に復元由来を解消する")
     XCTAssertEqual(
       row(wc, name: "dormant")?["dormantAgentCount"] as? Int, 2,
       "非活性 WS は永続 agent leaf 2 を保持")
+  }
+
+  /// 背景 workspace へ 1 タブだけ生やすと、live と休眠復元タブが同時に存在する。
+  func testListWorkspacesRepresentsBackgroundMixedWorkspaceOnIndependentAxes() throws {
+    let wc = try restore(
+      activeWorkspace: 0,
+      [tabbed("main"), tabbed("mixed", tree: agentLeaf("sleeping"))])
+    let mixedId = try XCTUnwrap(row(wc, name: "mixed")?["id"] as? Int)
+
+    _ = try XCTUnwrap(wc.controlSpawn(workspaceId: mixedId, cwd: nil, command: nil))
+
+    let mixed = try XCTUnwrap(row(wc, name: "mixed"))
+    XCTAssertEqual(mixed["active"] as? Bool, false, "前面 workspace は奪わない")
+    XCTAssertEqual(mixed["activated"] as? Bool, true, "新規タブは off-screen materialize 済み")
+    XCTAssertEqual(mixed["dormantAgentCount"] as? Int, 1, "既存復元タブは休眠のまま保つ")
+    let owner = try XCTUnwrap(wc.workspaces.first { $0.name == "mixed" })
+    XCTAssertEqual(owner.tabs.count, 2)
+    XCTAssertEqual(owner.tabs.filter(\.activated).count, 1)
+  }
+
+  func testListPanesKeepsRequiredFieldsForDormantAndLivePanes() throws {
+    let wc = try restore(
+      activeWorkspace: 0,
+      [tabbed("main"), tabbed("dormant", tree: agentLeaf("sleeping"))])
+    let rows = wc.controlListPanes()
+    XCTAssertGreaterThanOrEqual(rows.count, 2)
+    let required = [
+      "paneId", "workspaceId", "tabId", "workspaceName", "title", "cwd", "agentState",
+      "agentSessionId", "focused",
+    ]
+    for pane in rows {
+      for key in required { XCTAssertNotNil(pane[key], "list_panes は \(key) を保つ") }
+    }
   }
 }

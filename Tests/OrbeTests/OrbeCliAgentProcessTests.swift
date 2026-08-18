@@ -203,6 +203,11 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     XCTAssertEqual(
       after.first(where: { $0["active"] as? Bool == true })?["id"] as? Int, activeId,
       "背景 WS への spawn がアクティブ WS を奪っている（前面化しないのが契約）")
+    let background = try XCTUnwrap(after.first { $0["id"] as? Int == backgroundId })
+    XCTAssertEqual(background["active"] as? Bool, false, "背景のまま")
+    XCTAssertEqual(
+      background["activated"] as? Bool, true,
+      "新規タブの off-screen materialize は workspace の現在状態に反映する")
 
     // (b) 背景でも surface が生きて描いている。
     waitForPaneText(control, pane: pane, contains: fake.marker)
