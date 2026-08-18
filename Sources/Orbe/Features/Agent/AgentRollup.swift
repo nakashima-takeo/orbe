@@ -1,11 +1,13 @@
 import Foundation
 
-/// 全 workspace・全タブ・全ペインを横断したエージェント状態の件数集計。
+/// 全 workspace の activated タブ・全ペインを横断したエージェント状態の件数集計。
 /// 件数の単位はペイン＝`agentState` を持つ `SurfaceView` 1 つを 1 件（TerminalController が数える）。
 enum AgentRollup {
   /// 横断ロールアップが扱う状態種別の固定順（working → waiting → done → idle）。
   /// idle はタブには出さない（`aggregateAgentState` の priority が除外）が、横断集計には数えて出す。
   /// 件数の集計対象もこの集合（`countedStates`）で、集計と表示の対象を一致させる。
+  /// `dormant` は `agentState` ではなく未 activated タブの復元由来カウントなので、ここには入れない。
+  /// 表示上は workspace パレットだけが、この順の後ろへ 1 件連結する（`WindowController.reloadPalette`）。
   static let stateOrder = ["working", "waiting", "done", "idle"]
 
   /// タブ/workspace 名の色を決める「最優先状態」の優先順位（waiting > working > done）。

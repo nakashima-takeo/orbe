@@ -42,7 +42,7 @@ workspace を一覧から選んで切り替え、その場で作成・改名・�
 
 並びは、起源 workspace（配列先頭・起動時の最初の workspace）を常に最上位に固定し、残りを最終使用時刻（タブ選択を含むアクティブ化のたびに更新・永続する → [persistence](../platform/persistence.md)）の新しい順（MRU）で並べる。同時刻・未設定（旧データ）同士は元配列順で安定化。並べ替えは表示順のみで配列自体は不変（切替は元オフセットで駆動）。
 
-activatedタブが1枚もない完全休眠workspaceは行全体を減光する。0タブworkspaceも、現在選択中であっても休眠として扱う。背景spawnで1タブだけ起こした混在workspaceは減光を解除するが、残る休眠数はdormantチップに出す。最後のactivatedタブを閉じて未activatedタブだけになれば再び減光する。減光はMRU位置やdormantチップとは独立した別軸で、末尾固定はしない。activated状態は永続せず、次回起動では復元タブが再び休眠から始まる。全agentがidleでも未起動でなければ減光しない。
+activatedタブが1枚もない完全休眠workspaceは行全体を減光する（選択カーソルが載る行は減光解除）。0タブworkspaceは前面にあっても休眠として扱う。背景spawnで1タブだけ起こした混在workspaceは減光を解除するが、残る休眠数はdormantチップに出す。最後のactivatedタブを閉じて未activatedタブだけになれば再び減光する。減光はMRU位置やdormantチップとは独立した別軸で、末尾固定はしない。activated状態は永続せず、次回起動では復元タブが再び休眠から始まる。全agentがidleでも未起動でなければ減光しない。
 
 ## 専用作成フォーム（⌘N・ソース切替: 既存フォルダ / git clone）
 

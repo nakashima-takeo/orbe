@@ -18,7 +18,7 @@
 
 | 根拠 | 確定している契約 |
 | --- | --- |
-| `docs/spec/platform/workspace.md` | workspace activation は配下 tab の現在状態から導出する。0 tab / 全 dormant は false。背景 materialize は MRU を動かさない。ただし同文書の「tab closeではMRUを動かさない」は、前面で残存tabを再選択・表示する列まで含む過広な記述であり、下記のイベント意味へ補正が必要。 |
+| `docs/spec/platform/workspace.md` | workspace activation は配下 tab の現在状態から導出する。0 tab / 全 dormant は false。背景 materialize は MRU を動かさない。tab close の MRU は、前面で残存 tab を再選択・表示する列だけが foreground use として MRU を進める。 |
 | `docs/spec/control/api.md` | `list_workspaces.activated` は live tab の有無。0 tab workspace は `active: true, activated: false` を取り得る。背景作成は新規 tab だけを起こす。 |
 | `docs/spec/palette/workspace.md` | live tab が 0 の workspace を減光し、最後の live tab が失われれば dormant 表示へ戻す。 |
 | `Sources/Orbe/Features/Workspace/Workspace.swift` | `Workspace.activated` は `tabs.contains(where: \.activated)` の computed property。 |
@@ -258,6 +258,6 @@ live `idle` と dormant-restored agent は、現状 UI で同じ zzz に見え�
 ## 残疑義
 
 - 仕様上の未確定事項はない。
-- 実装上の既知差分はない。`docs/spec/platform/workspace.md:24` と計画書のテスト観点に残る「closeはMRUを動かさない」という包括表現だけは、4のイベント別契約へ追随させる必要がある。
+- 実装上の既知差分はない。
 - L4 は lifecycle / foreground 非干渉 / pane 利用可能性を担い、Attention・pill・sound の詳細行列は live-attention 仕様の L2 が担う。この層分担を崩して同じ投影をプロセステストへ重複搭載しない。
 - 7.6 の `removeTab` 直後に workspace が一時的に false となり、WindowController が残 tab を同期 materialize した後に true へ戻る遷移は、domain と host の観測時点の違いとしてテストを分離する。安定 UI 状態だけを見て「最後の live close 後は必ず false」と固定しない。
