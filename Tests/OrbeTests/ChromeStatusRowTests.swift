@@ -147,6 +147,33 @@ final class ChromeStatusRowTests: OrbeTestCase {
     XCTAssertEqual(wc.statusModel.rollup.first?.count, 1, "idle 1 件")
   }
 
+  /// workspace が activated でも、未起床 sibling タブの注入状態をタブグリフや横断集計へ漏らさない。
+  func testMixedWorkspaceGlyphsAndRollupGateEachTabIndependently() throws {
+    let tab = TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)
+    WorkspacePersistence.save(
+      WorkspacesFile(
+        version: WorkspacePersistence.version, activeWorkspace: 0,
+        workspaces: [
+          WorkspaceState(name: "mixed", rootPath: "/tmp", activeTab: 0, tabs: [tab, tab])
+        ]))
+    let wc = WindowController()
+    XCTAssertEqual(wc.current.tabs.map(\.activated), [true, false], "hidden mount の最初の queue 前")
+    let live = try XCTUnwrap(wc.current.tabs[0].controlAllPanes().first)
+    let dormant = try XCTUnwrap(wc.current.tabs[1].controlAllPanes().first)
+    live.agentState = "waiting"
+    dormant.agentState = "done"
+    live.controller?.paneAgentStateChanged()
+    dormant.controller?.paneAgentStateChanged()
+
+    wc.flushChrome()
+
+    XCTAssertEqual(wc.statusModel.glyphs.count, 2)
+    XCTAssertEqual(wc.statusModel.glyphs[0], .waiting)
+    XCTAssertNil(wc.statusModel.glyphs[1])
+    XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["waiting"])
+    XCTAssertEqual(wc.statusModel.rollup.map(\.count), [1])
+  }
+
   // MARK: - 条件3: chrome 以外に常駐 UI を増やさない
 
   /// 安静時（起動直後・タブ追加後）はターミナル本文が同居し、オーバーレイは存在しない。

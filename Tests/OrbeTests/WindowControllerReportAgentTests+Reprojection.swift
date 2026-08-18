@@ -36,6 +36,64 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
   }
 
+  func testWaitingToIdleRetractsAttentionAndMovesTopBarWithoutNewNotification() throws {
+    let (wc, pane) = try makeControllerAndPane()
+    let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
+    wc.controlReportAgent(
+      pane: pane, agent: "claude", state: "waiting", sessionId: nil,
+      message: AgentMessage(text: "q"))
+    flushDelivered(wc)
+    let played = sound.played.count
+
+    wc.controlReportAgent(pane: pane, agent: "claude", state: "idle", sessionId: nil, message: nil)
+    flushDelivered(wc)
+
+    XCTAssertEqual(sound.played.count, played, "idle への変化で新しい音は鳴らさない")
+    XCTAssertTrue(wc.attentionStore.rows.isEmpty)
+    XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["idle"])
+    XCTAssertEqual(wc.statusModel.rollup.map(\.count), [1])
+    XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
+  }
+
+  func testWaitingToUnknownRetractsEveryLiveProjectionWithoutNewNotification() throws {
+    let (wc, pane) = try makeControllerAndPane()
+    let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
+    wc.controlReportAgent(
+      pane: pane, agent: "claude", state: "waiting", sessionId: nil,
+      message: AgentMessage(text: "q"))
+    flushDelivered(wc)
+    let played = sound.played.count
+
+    wc.controlReportAgent(pane: pane, agent: "claude", state: "error", sessionId: nil, message: nil)
+    flushDelivered(wc)
+
+    XCTAssertEqual(sound.played.count, played)
+    XCTAssertTrue(wc.attentionStore.rows.isEmpty)
+    XCTAssertTrue(wc.statusModel.rollup.isEmpty)
+    XCTAssertTrue(wc.statusModel.glyphs.allSatisfy { $0 == nil })
+    XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
+  }
+
+  func testWaitingToClearRetractsEveryProjectionAndClearsState() throws {
+    let (wc, pane) = try makeControllerAndPane()
+    let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
+    wc.controlReportAgent(
+      pane: pane, agent: "claude", state: "waiting", sessionId: nil,
+      message: AgentMessage(text: "q"))
+    flushDelivered(wc)
+    let played = sound.played.count
+
+    wc.controlReportAgent(pane: pane, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    flushDelivered(wc)
+
+    XCTAssertEqual(sound.played.count, played)
+    XCTAssertNil(pane.agentState)
+    XCTAssertTrue(wc.attentionStore.rows.isEmpty)
+    XCTAssertTrue(wc.statusModel.rollup.isEmpty)
+    XCTAssertTrue(wc.statusModel.glyphs.allSatisfy { $0 == nil })
+    XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
+  }
+
   /// done のフォーカス消費（done→idle）で行が消えたらピルを取り下げる。
   /// 消費そのものは通知を持たない（本番でも `wire` の onAgentStateChange が続けて
   /// `refreshChrome` を鳴らす）ので、その 1 手だけテスト側が同じ順で再現する。

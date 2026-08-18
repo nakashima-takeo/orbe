@@ -50,6 +50,9 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     try JSONEncoder().encode(file).write(to: workspacesFile())
     let wc = WindowController()
     XCTAssertEqual(wc.current.tabs.count, 2)
+    // 通知の可視性境界を測る fixture なので、hidden mount の queue 進行速度に依存せず
+    // 両タブを lifecycle 上の live 側へ進める。workspace の setter は使わない。
+    wc.current.tabs.forEach { $0.recordMaterializationStarted() }
     let panes = try wc.current.tabs.map { try XCTUnwrap($0.controlAllPanes().first) }
     return (wc, panes)
   }
@@ -199,12 +202,16 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     XCTAssertNil(wc.attentionStore.transient, "見ているタブの waiting ではピルを立てない")
     wc.flushChrome()
     XCTAssertEqual(wc.attentionStore.rows.map(\.paneId), [pane.id], "抑制するのはピルだけ（一覧は従来どおり）")
+    XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["waiting"])
 
     wc.controlReportAgent(pane: pane, agent: "claude", state: "clear", sessionId: nil, message: nil)
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d"))
     XCTAssertNil(wc.attentionStore.transient, "見ているタブの done でもピルを立てない")
     XCTAssertEqual(pane.agentState, "idle", "done のフォーカス消費は従来どおり効く")
+    wc.flushChrome()
+    XCTAssertTrue(wc.attentionStore.rows.isEmpty)
+    XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["idle"])
   }
 
   /// 抑制の粒度はタブ。見ているタブの中なら、フォーカスしていない split の隣ペインでも②は立てない。
