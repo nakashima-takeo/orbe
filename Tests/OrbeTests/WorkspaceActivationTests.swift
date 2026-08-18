@@ -57,7 +57,7 @@ final class WorkspaceActivationTests: OrbeTestCase {
           return tab
         }
         XCTAssertEqual(
-          ws.activated, ws.tabs.contains(where: \.activated),
+          ws.activated, bitMask != 0,
           "tabCount=\(tabCount), bitMask=\(bitMask)")
       }
     }

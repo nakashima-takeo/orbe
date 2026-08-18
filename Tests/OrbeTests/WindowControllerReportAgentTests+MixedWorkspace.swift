@@ -10,7 +10,7 @@ private struct MixedBackgroundFixture {
   let dormant: SurfaceView
 }
 
-/// 背景 workspace が live / dormant タブ混在になったとき、注意嗚起と常時集計が
+/// 背景 workspace が live / dormant タブ混在になったとき、注意喚起と常時集計が
 /// workspace 全体ではなく発信元タブの現在状態に従うことを固定する。
 extension WindowControllerReportAgentTests {
   private func makeControllerAndMixedBackground() throws -> MixedBackgroundFixture {

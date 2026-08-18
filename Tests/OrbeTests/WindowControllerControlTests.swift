@@ -365,12 +365,15 @@ final class WindowControllerControlTests: OrbeTestCase {
     XCTAssertEqual(owner.tabs.filter(\.activated).count, 1)
   }
 
+  /// 休眠 workspace の pane も列挙対象で、必須フィールドを live と同じだけ揃える。
   func testListPanesKeepsRequiredFieldsForDormantAndLivePanes() throws {
     let wc = try restore(
       activeWorkspace: 0,
       [tabbed("main"), tabbed("dormant", tree: agentLeaf("sleeping"))])
     let rows = wc.controlListPanes()
-    XCTAssertGreaterThanOrEqual(rows.count, 2)
+    XCTAssertEqual(
+      Set(rows.compactMap { $0["workspaceName"] as? String }), ["main", "dormant"],
+      "休眠 workspace の pane も列挙する")
     let required = [
       "paneId", "workspaceId", "tabId", "workspaceName", "title", "cwd", "agentState",
       "agentSessionId", "focused",

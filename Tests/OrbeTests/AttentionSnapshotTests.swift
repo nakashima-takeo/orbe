@@ -4,6 +4,7 @@ import XCTest
 
 /// Attention snapshot builder（`AttentionSnapshot`）の契約を固定する。
 /// 対象は activated タブのライブペインのみ・waiting/done/working のみ・stateChangedAt 降順。
+/// あわせて `Workspace.agentCounts()` / `AgentRollup.grandTotal(of:)` が同じ母集合を数えることも固定する。
 @MainActor
 final class AttentionSnapshotTests: OrbeTestCase {
 

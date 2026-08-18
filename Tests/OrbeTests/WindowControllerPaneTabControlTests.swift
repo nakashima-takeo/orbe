@@ -173,6 +173,7 @@ final class WindowControllerPaneTabControlTests: OrbeTestCase {
     XCTAssertEqual(row(wc, name: "sleepers")?["dormantAgentCount"] as? Int, 0)
   }
 
+  /// 休眠件数は agent 由来 pane だけを数える。非 agent pane の close で減るなら pane 総数を数えている退行。
   func testClosingPlainDormantSplitPaneKeepsRestoredAgentCount() throws {
     let split = PaneNode.split(
       vertical: true, ratio: 0.5, first: agentLeaf("a"),
@@ -190,6 +191,7 @@ final class WindowControllerPaneTabControlTests: OrbeTestCase {
     XCTAssertEqual(sleepers.tabs[0].controlAllPanes().count, 1)
   }
 
+  /// domain の成功が先行し、tab ごと消えるのは main queue の onEmpty——この二段階を両相で固定する。
   func testClosingLastDormantPaneRemovesCountOnlyAfterQueuedTabTeardown() throws {
     let wc = try restore(
       activeWorkspace: 0, [tabbed("main"), tabbed("sleepers", tree: agentLeaf("a"))])
@@ -208,6 +210,7 @@ final class WindowControllerPaneTabControlTests: OrbeTestCase {
     XCTAssertFalse(sleepers.activated)
   }
 
+  /// 前面の close は残存 tab を reselect して起こすため、背景 close と違い activated は true のまま。
   func testClosingLiveTabInForegroundMixedWorkspaceMaterializesRemainingTab() throws {
     let state = WorkspaceState(
       name: "mixed", rootPath: "/tmp", activeTab: 0,
@@ -231,6 +234,7 @@ final class WindowControllerPaneTabControlTests: OrbeTestCase {
     XCTAssertGreaterThan(try XCTUnwrap(wc.current.lastUsedAt), stamp, "残存タブの前面利用で MRU を進める")
   }
 
+  /// 次 tab の前面表示を伴わない close は foreground use ではないので MRU を進めない。
   func testClosingLastForegroundTabKeepsMRUAndReturnsActivationToFalse() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main")])
     let stamp = Date(timeIntervalSinceReferenceDate: 2_000)

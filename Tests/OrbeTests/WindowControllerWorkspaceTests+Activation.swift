@@ -50,6 +50,7 @@ extension WindowControllerWorkspaceTests {
     XCTAssertEqual(items.first { $0.name == "main" }?.dormant, false)
   }
 
+  /// 0 タブ workspace は前面にあっても休眠扱いで減光し、数えるものが無いので dormant チップは出さない。
   func testPaletteTreatsForegroundEmptyWorkspaceAsDormantWithoutChip() throws {
     WorkspacePersistence.save(
       WorkspacesFile(

@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 前面化の段階的 materialize が壊れると、起動時に全 PTY が一旉起動したり、
+/// 前面化の段階的 materialize が壊れると、起動時に全 PTY が一斉起動したり、
 /// workspace 切替後も古い mount ジョブが背景で走り続ける。
 final class WindowControllerActivationLifecycleTests: OrbeTestCase {
   private func restoredAgentTab(_ id: String) -> TabState {
