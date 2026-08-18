@@ -21,7 +21,7 @@ host 所有。ドメイン状態（workspace 配列とアクティブ index）�
 - アクティブ化では可視タブを即時 mount し、未 mount の隠れタブは後続 runloop tick で 1 枚ずつ分割 mount する——1 turn で N 個の surface を同期生成しないため。隠れタブも最終的に必ず mount され surface が起動する不変は保つ（resume 起動も走る）。分割 mount の途中で別 workspace へ切り替えたら進行中バッチは破棄し（孤児 mount を防ぐ）、次のアクティブ化で再 mount する（冪等）。
 - タブはセッション内だけの `activated` を持ち、window hierarchyへのattachを開始する直前にtrueとなる。workspaceの `activated` は配下にactivatedタブが1枚以上あるかから導出する現在値で、0タブまたは全タブ未activatedならfalse。workspace内には起動済みタブと休眠タブが混在でき、最後のactivatedタブを閉じれば残るタブがすべて休眠のworkspaceへ戻る。いずれも永続せず、タブは現仕様では一度trueになると閉じるまで戻らない。
 - 背景workspaceへ新規タブを明示作成したときは、その1枚だけをオフスクリーンでmaterializeする。computedなworkspaceもactivatedになるが、既存の復元タブは起こさず休眠のまま保つ。通常のworkspace前面化は上記どおり全タブを順次起こす。タブ単位の起床・再休眠を直接操作する公開UI/APIは持たない。
-- workspaceの `active`（現在前面にあるか）と `activated`（起動済みタブがあるか）、`lastUsedAt`（前面で利用したMRU）は別の事実である。0タブworkspaceを前面化すると `active: true / activated: false` のままMRUだけを更新し、背景でのmaterializeやタブのcloseではMRUを動かさない。
+- workspaceの `active`（現在前面にあるか）と `activated`（起動済みタブがあるか）、`lastUsedAt`（前面で利用したMRU）は別の事実である。0タブworkspaceを前面化すると `active: true / activated: false` のままMRUだけを更新する。背景でのmaterialize、背景workspaceのtab close、前面workspaceを0tab化するcloseではMRUを動かさない。一方、前面workspaceでtab close後も残存tabを実際にreselectして表示し続ける場合は、新たなforeground useとしてMRUを更新する。
 - 新規 workspace の root path は、クイック作成（切替パレットで一致なし名＋Enter）では active ペインの cwd 由来（不明時はホーム）、専用作成フォーム経由では入力パス。
 - アクティブ workspace の最後のタブを閉じても、その workspace は 0 タブの空状態でアクティブに残る（単一・複数 workspace 問わず。ウィンドウは閉じない）。背景 workspace の最後のタブが閉じても 0 タブのまま残す。
 - パレットの詳細メニューからの削除は、アクティブ workspace なら最近使った他 workspace（MRU）を次のアクティブにし、背景 workspace なら現アクティブは不変（workspace が 1 つだけなら削除不可）。

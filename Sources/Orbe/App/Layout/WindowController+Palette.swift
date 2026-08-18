@@ -225,7 +225,8 @@ extension WindowController {
       let ws = entry.element
       let dormant = !ws.activated
       // activatedタブのlive状態と、未activatedタブの復元agent数は別チップで併記する。
-      // 行全体の減光（workspace履歴）と dormant チップ（タブ状態）も別軸に保つ。
+      // 行全体の減光（activatedタブが無い現在状態）と dormant チップ（休眠中の復元agent数）も
+      // 別の現在値として投影する。
       let dormantCount = ws.dormantAgentCount()
       let rollup =
         AgentRollup.ordered(ws.agentCounts())

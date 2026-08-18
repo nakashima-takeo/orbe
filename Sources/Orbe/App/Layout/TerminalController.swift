@@ -33,8 +33,9 @@ final class TerminalController {
   let rootContainer = NSView()
   private(set) weak var focusedPane: SurfaceView?
 
-  /// このセッションで、このタブの materialize が一度でも開始されたか。
-  /// 永続化せず、surface 生成の成功可否ではなく window hierarchy への attach 開始を記録する。
+  /// このタブが materialize 済み側にある現在状態。現仕様の遷移は false → true のみだが、
+  /// 履歴bitではなく、将来の再休眠では false へ戻せる責務として扱う。
+  /// 永続化せず、surface 生成の成功可否ではなく window hierarchy への attach 開始時に true とする。
   private(set) var activated = false
 
   /// 最後のペインが閉じられた（このタブを閉じるべき）通知。閉鎖の発火源を添えて渡す
