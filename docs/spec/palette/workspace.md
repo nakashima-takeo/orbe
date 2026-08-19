@@ -1,7 +1,7 @@
 ---
 title: workspace パレット
 description: ⌘⇧S の切替パレットと ⌘N の専用作成フォーム。共有 PaletteCard の焦点・入力モダリティ規律もここが持つ
-updated: 2026-08-18
+updated: 2026-08-20
 ---
 
 # workspace パレット（⌘⇧S）
@@ -36,9 +36,9 @@ workspace を一覧から選んで切り替え、その場で作成・改名・�
 
 並びは `[名前] [インラインチップ群] [spacer] [パス]`。名前は統一色（状態や選択で色を変えない）、パスは行右端に寄せた root path（`~` 短縮・tail 省略・muted）。
 
-チップ = 状態アイコン（Glass グリフ・状態色）＋（件数 ≠ 1 のとき `×N`）。件数 1 はアイコンのみ。activatedタブのlive状態を正準順 `working → waiting → done → idle` で並べ、その後へ未activatedタブの復元agent数を独立した `dormant`（zzz）チップとして置く。0 件の状態は出さない（囲み・地色は持たず、固定カラムの空欄も無い）。live集計の母数は [chrome](../chrome/chrome.md) のストリップと同じ。パレットを開いた時点のスナップショットだが、表示中もタブ消滅・0 タブ化・削除・改名・ディレクトリ変更では実状態へ再読込する（agent 状態変化だけでは更新しない）。
+チップ = 状態アイコン（Glass グリフ・状態色）＋（件数 ≠ 1 のとき `×N`）。件数 1 はアイコンのみ。activatedタブのlive状態を正準順 `working → waiting → done → idle` で並べ、その後へ未消費の復元チケット（休眠agent）数を独立した `dormant`（zzz）チップとして置く。0 件の状態は出さない（囲み・地色は持たず、固定カラムの空欄も無い）。live集計の母数は [chrome](../chrome/chrome.md) のストリップと同じ。パレットを開いた時点のスナップショットだが、表示中もタブ消滅・0 タブ化・削除・改名・ディレクトリ変更では実状態へ再読込する（agent 状態変化だけでは更新しない）。
 
-`idle` と `dormant` はどちらもzzz字形を使い得るが、意味と集計は分ける。`idle` は起動済みagentの休止、`dormant` は未materializeの復元agentで、混在workspaceでは `working 1 + dormant 5` のように同時表示できる。dormant件数は現在残っているペインから導出し、resume未対応で素シェル化する復元agentもmaterialize前は含む。休眠中にagentペインを `close_pane` すれば件数から外れ、非agentペインのcloseでは変わらない。タブがmaterializeを開始した時点で、そのタブの復元agentはdormant集計から外れ、以後はliveな `agentState` で数えるため二重計上しない。
+`idle` と `dormant` はどちらもzzz字形を使い得るが、意味と集計は分ける。`idle` は起動済みagentの休止、`dormant` は未消費の復元チケットを持つペインの数で、混在workspaceでは `working 1 + dormant 5` のように同時表示できる。dormant件数は現在残っているペインから導出し、resume未対応で消費時に素シェル化する復元agentも消費前は含む。休眠中にagentペインを `close_pane` すれば件数から外れ、非agentペインのcloseでは変わらない。タブがmaterializeを開始した時点でチケットは消費され、そのタブの復元agentはdormant集計から外れ、以後はliveな `agentState` で数えるため二重計上しない。
 
 並びは、起源 workspace（配列先頭・起動時の最初の workspace）を常に最上位に固定し、残りを最終使用時刻（タブ選択を含むアクティブ化のたびに更新・永続する → [persistence](../platform/persistence.md)）の新しい順（MRU）で並べる。同時刻・未設定（旧データ）同士は元配列順で安定化。並べ替えは表示順のみで配列自体は不変（切替は元オフセットで駆動）。
 

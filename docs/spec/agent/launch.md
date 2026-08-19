@@ -1,7 +1,7 @@
 ---
 title: エージェント起動
 description: claude / codex / agy の自動検出と、⌘⇧A 選択パレット / ⌘⇧C デフォルト起動 / 制御 API による新タブでの直接起動
-updated: 2026-08-16
+updated: 2026-08-20
 ---
 
 # エージェント起動
@@ -28,7 +28,7 @@ updated: 2026-08-16
 
 ## 起動形態
 
-アクティブペインの実効 cwd（0 タブは workspace の root path → [layout](../chrome/layout.md)）を引き継いだ新タブで、シェルの代わりに絶対パスのエージェント CLI を直接起動する。環境変数 `PATH` には子プロセス PATH（[shell-path](../platform/shell-path.md)）を注入する——エージェントの子プロセスにも Orbe 自身と同じコマンド解決を保証するため。エージェント終了はシェル exit と同じ経路でタブが閉じる。永続スナップショットでは、hook 由来のエージェントセッションを持つペインは resume 起動、持たない／未対応 CLI のペインは保存 cwd の通常シェルタブで復元される（→ [persistence](../platform/persistence.md)）。
+アクティブペインの実効 cwd（0 タブは workspace の root path → [layout](../chrome/layout.md)）を引き継いだ新タブで、シェルの代わりに絶対パスのエージェント CLI を直接起動する。環境変数 `PATH` には子プロセス PATH（[shell-path](../platform/shell-path.md)）を注入する——エージェントの子プロセスにも Orbe 自身と同じコマンド解決を保証するため。エージェント終了はシェル exit と同じ経路でタブが閉じる。永続スナップショットでは、hook 由来のエージェントセッションを持つペインは resume 起動、持たない／未対応 CLI のペインは保存 cwd の通常シェルタブで復元される。resume の解決はタブ起床（materialize 開始）時に行う（→ [persistence](../platform/persistence.md)）。
 
 ## 外部からの起動
 

@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe）
 description: Unix socket 上の JSON-RPC でペイン/タブ/workspace/エージェントを操作する out-of-band 制御チャネルと、MCP ブリッジ・ツール群・mount 境界
-updated: 2026-08-18
+updated: 2026-08-20
 ---
 
 # 制御 API（外部 → Orbe）
@@ -36,7 +36,7 @@ workspace / tab / pane にプロセス内単調増加 ID。型をまたいで一
 
 JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`config_*`・workspace CRUD・`split_pane`/`close_pane`/`focus_pane`/`close_tab`・`completion_*` は socket 専用で、MCP ブリッジには出さない（[cli](cli.md) が直に叩く）。
 
-- `list_workspaces` → `{workspaces:[…]}` … id・name・rootPath・active・tabCount・activated・dormantAgentCount。`activated` は配下にmaterialize開始済みタブが1枚以上あるかを表す現在値で、0タブまたは全タブ未activatedならfalse。`dormantAgentCount` は未activatedタブに現在残る復元agent付きleaf数で、混在workspaceでは `activated: true` と正の値が同時に成立する。0タブworkspaceを前面化した場合は `active: true, activated: false, dormantAgentCount: 0` となる。
+- `list_workspaces` → `{workspaces:[…]}` … id・name・rootPath・active・tabCount・activated・dormantAgentCount。`activated` は配下にmaterialize開始済みタブが1枚以上あるかを表す現在値で、0タブまたは全タブ未activatedならfalse。`dormantAgentCount` は現在残る未消費の復元チケット（休眠agent）ペイン数で、混在workspaceでは `activated: true` と正の値が同時に成立する。0タブworkspaceを前面化した場合は `active: true, activated: false, dormantAgentCount: 0` となる。
 - `list_panes` → `{panes:[…]}` … paneId・workspaceId・tabId・workspaceName・title・cwd・agentState・agentSessionId（resume 用・未設定なら null）・focused（全 workspace 横断・ツリー順）。
 - `list_agents` → `{agents:[…]}` … 検出済みエージェント CLI の command と解決済み絶対 path を列挙する（読み取り専用）。アプリ保持の検出結果をそのまま返し、新規検出（login shell 起動）は起こさない。検出未完了でもエラーにせず**空配列を返す**。`spawn_agent` / `resume_agent` に渡す command の候補源。
 - `get_pane_text {paneId, scrollback?}` → `{text}` … 画面テキスト平文。scrollback 真で履歴全体、偽で可視範囲。
@@ -55,7 +55,7 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 - `close_pane {paneId}` … カスケードは GUI（Cmd+W）と同一——最後の pane→tab のカスケードで、アクティブ workspace の最後のタブを閉じても 0 タブの空状態でアクティブに残る（ウィンドウは閉じない）。teardown は main 遅延で走るため応答を先に返す（自己 close も安全）。未知 pane は `-32004`。socket 専用。
 - `focus_pane {paneId}` … 別 workspace のペインなら activate を伴う（手元 Mac のアクティブ workspace も切り替わる）。冪等。未知 pane は `-32004`。socket 専用。
 - `close_tab {tabId}` … close_pane と同じカスケード規律。未知 tab は `-32004`。socket 専用。
-- `report_agent {paneId, agent, state, sessionId?, message?, messageSource?}` … エージェント hook の状態報告を発信元ペインへ適用する（[agent/notify](../agent/notify.md)）。`messageSource` は文言の出所で、ツール由来かどうかだけが上書き可否を決める（表示には出ない）。`state=="clear"` で状態/コマンド/セッション ID/文言/状態変化時刻を nil、それ以外は state/command を立て sessionId があれば更新し、文言は state の遷移と出所で上書き可否が決まる（状態変化時刻は state が実際に変わったときだけ進む）。
+- `report_agent {paneId, agent, state, sessionId?, message?, messageSource?}` … エージェント hook の状態報告を発信元ペインへ適用する（[agent/notify](../agent/notify.md)）。`messageSource` は文言の出所で、ツール由来かどうかだけが上書き可否を決める（表示には出ない）。`state=="clear"` で状態/コマンド/セッション ID/文言/状態変化時刻を消し、それ以外は state/command を立て sessionId があれば更新し、文言は state の遷移と出所で上書き可否が決まる（状態変化時刻は state が実際に変わったときだけ進む）。**未消費（休眠）の復元ペイン宛の報告・clear は破棄する**（[agent/notify](../agent/notify.md)）。
 - `wait_for_event {paneId?, kinds?, timeoutMs?}` … 状態変化を長ポーリングで待つ。kind ∈ {agent_state, pane_title, pwd, pane_closed}。`event.value` は kind 固有（`agent_state` が運ぶのは状態語で、セッション ID ではない）。フィルタ一致で {event}、timeout 超過で {timedOut:true}。1 接続あたり待機 1 件（2 件目は `-32005` で即拒否）。**params は待機を張る前に検証する**——未知 kind・空 kinds・型違いの paneId・値域外の timeoutMs はいずれも `-32602`。黙って通すと「永久に一致せずただ時間切れ」「絞り込みが外れて別ペインのイベントを掴む」という、呼び出し側から何も起きなかったのと区別できない形になるため。timeoutMs に上限を置くのも同じ理由で、際限なく大きな値は待機の期限が事実上訪れなくなり、1 件しかない待機枠を握ったまま応答が返らなくなる。
 - `completion_update` / `completion_end` / `completion_accept` … コマンド補完用（[completion](../palette/completion.md)）。前 2 つは**無応答**。`completion_` 系は宛先解決ガードより前で分岐し、無応答メソッドは宛先不在でも応答を出さない（打鍵ごとの update が accept fd に行を積まない）。読めない行にはこの分岐より前でエラー行を返すため、accept fd から読める行が accept 応答だけとは限らない——クライアントは `id` で自分の応答を選ぶ（[completion](../palette/completion.md)）。socket 専用。
 
