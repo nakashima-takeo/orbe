@@ -27,16 +27,17 @@ enum AttentionSnapshot {
     for ws in workspaces {
       for tab in ws.tabs where tab.activated {
         for pane in tab.controlAllPanes() {
-          guard let state = pane.agentState, attentionStates.contains(state) else { continue }
+          guard let report = pane.agentReport, attentionStates.contains(report.state) else {
+            continue
+          }
           out.append(
             AttentionRow(
               paneId: pane.id,
               workspaceName: ws.name,
               tabTitle: tab.displayTitle(workspaceRoot: ws.rootPath),
-              state: state,
-              message: state == "working" ? nil : pane.agentMessage?.text,
-              // 理論上 nil にならない（stateChangedAt は report が必ず立てる）が、防御で最古扱い。
-              stateChangedAt: pane.agentStateChangedAt ?? .distantPast))
+              state: report.state,
+              message: report.state == "working" ? nil : report.message?.text,
+              stateChangedAt: report.stateChangedAt))
         }
       }
     }

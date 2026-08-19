@@ -72,14 +72,14 @@ extension WindowController {
     for ws in workspaces {
       for tab in ws.tabs
       where tab.activated && tab.controlAllPanes().contains(where: { $0 === pane }) {
-        guard let state = pane.agentState else { return nil }
+        guard let report = pane.agentReport else { return nil }
         return AttentionRow(
           paneId: pane.id,
           workspaceName: ws.name,
           tabTitle: tab.displayTitle(workspaceRoot: ws.rootPath),
-          state: state,
-          message: state == "working" ? nil : pane.agentMessage?.text,
-          stateChangedAt: pane.agentStateChangedAt ?? Date())
+          state: report.state,
+          message: report.state == "working" ? nil : report.message?.text,
+          stateChangedAt: report.stateChangedAt)
       }
     }
     return nil

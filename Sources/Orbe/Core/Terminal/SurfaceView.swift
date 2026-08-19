@@ -57,30 +57,21 @@ final class SurfaceView: NSView {
       }
     }
   }
-  /// エージェント hook が制御ソケット（report_agent）で報告した現在の状態
-  /// （idle/working/waiting/done）。走っていない / clear 時は nil。タブのインジケータ集約が読む。
-  var agentState: String? {
+  /// このペインの agent スロット（none / dormant / live）。永続しない（休眠チケットの同一性
+  /// だけが保存 schema へ写る）。`agent_state` 制御イベントの emit は didSet が一元で担う——
+  /// どの遷移経路（報告・clear・チケット消費・done→idle 消費）でも、導出 `agentState` の
+  /// 実変化だけがイベントを流す。
+  var agentSlot: AgentSlot = .none {
     didSet {
-      if agentState != oldValue {
+      if agentState != oldValue.report?.state {
         ControlServer.shared.emit(ControlEvent(kind: "agent_state", paneId: id, value: agentState))
       }
     }
   }
-  /// エージェント hook が報告した resume 用セッション ID（後続ユニットが永続して再開に使う）。
-  var agentSessionId: String?
-  /// エージェント hook が報告した CLI 名（claude/codex/agy）。resume コマンドの構築に使う。
-  var agentCommand: String?
-  /// 永続復元した agent leaf が、まだ materialize されていない休眠状態にあるか。
-  /// 保存 schema へは出さず、タブ起床時に false へ落とす。未起動ペインの close 後も
-  /// 現在の view tree から休眠 agent 数を正確に再集計するため、pane 単位で保持する。
-  var holdsDormantRestoredAgent = false
-  /// エージェント hook が報告した文言と出所（waiting の質問文・done の最終応答）。
-  /// Attention 一覧が読むのは文言だけ。state の遷移で確定し直し、同じ state のあいだは
-  /// ツール由来をそれ以外の報告（通知由来・文言なし）から守る（`controlReportAgent`）。永続しない。
-  var agentMessage: AgentMessage?
-  /// agentState の値が実際に変わった時刻（Attention 一覧の並び・経過時間表示）。
-  /// 同値の連続報告・done のフォーカス消費（done→idle）では動かさない。永続しない。
-  var agentStateChangedAt: Date?
+  /// 稼働中 agent の最新の自己報告（live 以外は nil）。Attention・rollup の読み口。
+  var agentReport: AgentReport? { agentSlot.report }
+  /// 報告中の状態文字列（idle/working/waiting/done。報告なしは nil）。タブのインジケータ集約が読む。
+  var agentState: String? { agentReport?.state }
   /// 復元時の起動 cwd（surface を working_directory 付きで起こす。inheritFrom が無いとき有効）。
   var initialCwd: String?
   /// 起動時にシェルの代わりに走らせるコマンド（エージェント起動タブ・split の command 指定）。

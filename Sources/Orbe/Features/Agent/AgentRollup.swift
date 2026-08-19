@@ -6,7 +6,7 @@ enum AgentRollup {
   /// 横断ロールアップが扱う状態種別の固定順（working → waiting → done → idle）。
   /// idle はタブには出さない（`aggregateAgentState` の priority が除外）が、横断集計には数えて出す。
   /// 件数の集計対象もこの集合（`countedStates`）で、集計と表示の対象を一致させる。
-  /// `dormant` は `agentState` ではなく未 activated タブの復元由来カウントなので、ここには入れない。
+  /// `dormant` は `agentState` ではなく未消費の復元チケット（`.dormant` slot）の数なので、ここには入れない。
   /// 表示上は workspace パレットだけが、この順の後ろへ 1 件連結する（`WindowController.reloadPalette`）。
   static let stateOrder = ["working", "waiting", "done", "idle"]
 
@@ -45,9 +45,10 @@ extension Workspace {
     return counts
   }
 
-  /// 未activatedタブに現在残る、永続復元由来の agent leaf の総数（休眠 agent 数）。
-  /// workspace 自体が activated でも、live / dormant が混在する間は正の値を返す。
+  /// この workspace に現在残る、未消費の復元チケット（休眠 agent）の総数。
+  /// `.dormant` なペインを数えるだけ——チケットは materialize 開始で必ず消費されるため、
+  /// activated タブに休眠ペインは残らない。live / dormant が混在する間は正の値を返す。
   func dormantAgentCount() -> Int {
-    tabs.lazy.filter { !$0.activated }.reduce(0) { $0 + $1.restoredAgentCount }
+    tabs.reduce(0) { $0 + $1.dormantAgentCount }
   }
 }

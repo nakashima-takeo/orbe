@@ -23,7 +23,7 @@ extension WindowController: ControlTarget {
         "title": pane.paneTitle,
         "cwd": (pane.currentPwd ?? pane.initialCwd).map { $0 as Any } ?? NSNull(),
         "agentState": pane.agentState.map { $0 as Any } ?? NSNull(),
-        "agentSessionId": pane.agentSessionId.map { $0 as Any } ?? NSNull(),
+        "agentSessionId": pane.agentSlot.session?.sessionId.map { $0 as Any } ?? NSNull(),
         "focused": ref.workspaceIndex == activeWorkspace && ref.tabIndex == ws.active
           && ref.tab.focusedPane === pane,
       ]
@@ -51,10 +51,14 @@ extension WindowController: ControlTarget {
     return nil
   }
 
-  /// エージェント hook の状態報告を発信元ペインへ適用する。`state=="clear"` で状態を消し、
-  /// それ以外は state/command を立て sessionId があれば更新する。didSet が agent_state を
-  /// emit し、paneAgentStateChanged がタブ・横断ロールアップを更新する。
+  /// エージェント hook の状態報告を発信元ペインの slot へ適用する。遷移は現 slot × state で決まる:
+  /// `.none` は clear が no-op・それ以外の報告で live 化（手動起動・spawn_agent の初回 hook という
+  /// 正規経路）。`.live` は clear で `.none` へ・それ以外は同一性と報告を更新する。`.dormant`
+  /// （未消費チケット）宛は**破棄**——チケットは報告で消費・変異できず、dormant ペインは surface
+  /// 未生成で報告主のプロセスが存在しえない（届く報告は必ず偽）。slot 代入の didSet が agent_state
+  /// を emit し、paneAgentStateChanged がタブ・横断ロールアップを更新する。
   ///
+  /// 同一性の更新: command は常に上書き・sessionId は sticky（新値があれば更新・無ければ維持）。
   /// Attention 用の保持: stateChangedAt は **state の値が実際に変わったときだけ** now に更新する
   /// （working→working の連続報告で一覧の並びが暴れない）。message は state の遷移で確定し直し、
   /// 同じ state が続くあいだは **ツール由来（`source == "tool"`）の文言を、ツール由来でない報告
@@ -68,26 +72,30 @@ extension WindowController: ControlTarget {
   func controlReportAgent(
     pane: SurfaceView, agent: String, state: String, sessionId: String?, message: AgentMessage?
   ) {
-    if state == "clear" {
-      pane.agentState = nil
-      pane.agentSessionId = nil
-      pane.agentCommand = nil
-      pane.agentMessage = nil
-      pane.agentStateChangedAt = nil
+    if case .dormant = pane.agentSlot {
+      // 破棄（no-op）。chrome の再投影だけは他経路と同じく無条件に流す（投影は同値）。
+    } else if state == "clear" {
+      if case .live = pane.agentSlot { pane.agentSlot = .none }  // .none は既に無で no-op
     } else {
-      let changed = pane.agentState != state
-      if changed { pane.agentStateChangedAt = Date() }
-      pane.agentState = state
-      pane.agentCommand = agent
-      if changed || message?.source == "tool" || pane.agentMessage?.source != "tool" {
-        pane.agentMessage = message
-      }
-      if let sessionId {
-        pane.agentSessionId = sessionId
-      }
-      if changed, state == "waiting" || state == "done" {
-        noteAttentionTransient(for: pane)
-        noteAgentSound(for: pane, state: state)
+      let session = AgentSession(
+        command: agent, sessionId: sessionId ?? pane.agentSlot.session?.sessionId)
+      if let prior = pane.agentReport, prior.state == state {
+        // 同値の連続報告: 時刻は維持し、ツール由来の文言を弱い報告から守る。
+        let keep = message?.source != "tool" && prior.message?.source == "tool"
+        pane.agentSlot = .live(
+          session: session,
+          report: AgentReport(
+            state: state, message: keep ? prior.message : message,
+            stateChangedAt: prior.stateChangedAt))
+      } else {
+        // 実変化（.none・report なしからの誕生を含む）。
+        pane.agentSlot = .live(
+          session: session,
+          report: AgentReport(state: state, message: message, stateChangedAt: Date()))
+        if state == "waiting" || state == "done" {
+          noteAttentionTransient(for: pane)
+          noteAgentSound(for: pane, state: state)
+        }
       }
     }
     pane.controller?.paneAgentStateChanged()

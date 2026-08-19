@@ -137,10 +137,12 @@ struct TabState: Codable, Equatable {
   // encode(to:) は CodingKeys から自動合成（新形式で書く）。
 }
 
-/// ペインで走るエージェントセッション（resume 復開に必要な識別子）。
+/// ペインで走るエージェントセッション＝agent の同一性・再開ハンドル。状態をまたいで持続する
+/// （復元で凍結 → 消費で live へ引き継ぎ → 報告で sessionId が後から確定する）。
+/// sessionId は optional——報告が sessionId を運ぶ前の稼働（live）を表現する。
 struct AgentSession: Codable, Equatable {
   var command: String
-  var sessionId: String
+  var sessionId: String?
 }
 
 /// 1 タブの分割ツリー（二分木）。葉＝1 ペイン（cwd・エージェントセッション）、節＝1 分割（向き・分割比）。
