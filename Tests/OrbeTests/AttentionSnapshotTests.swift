@@ -17,14 +17,16 @@ final class AttentionSnapshotTests: OrbeTestCase {
     return ws
   }
 
-  /// workspace の先頭ペインへ状態を立てる。
+  /// workspace の先頭ペインへ状態を立てる（nil は報告なしへ戻す）。
   private func setState(
     _ ws: Workspace, tab: Int = 0, state: String?, message: String? = nil, at: Date? = nil
   ) {
     let pane = ws.tabs[tab].controlAllPanes()[0]
-    pane.agentState = state
-    pane.agentMessage = message.map { AgentMessage(text: $0) }
-    pane.agentStateChangedAt = at
+    guard let state else {
+      pane.agentSlot = .none
+      return
+    }
+    setReportedState(pane, state, at: at ?? Date(), message: message.map { AgentMessage(text: $0) })
   }
 
   // MARK: builder
@@ -160,10 +162,8 @@ final class AttentionSnapshotTests: OrbeTestCase {
     a.tabs.append(TerminalController(initialCwd: "/tmp/zeta"))
     a.tabs.append(TerminalController(initialCwd: "/tmp/zeta"))
     a.tabs.forEach { $0.recordMaterializationStarted() }
-    a.tabs[0].controlAllPanes()[0].agentState = "working"
-    a.tabs[0].controlAllPanes()[0].agentStateChangedAt = base
-    a.tabs[1].controlAllPanes()[0].agentState = "working"
-    a.tabs[1].controlAllPanes()[0].agentStateChangedAt = base.addingTimeInterval(-1)
+    setReportedState(a.tabs[0].controlAllPanes()[0], "working", at: base)
+    setReportedState(a.tabs[1].controlAllPanes()[0], "working", at: base.addingTimeInterval(-1))
     let b = workspace(name: "alpha")
     setState(b, state: "working", at: base.addingTimeInterval(-2))
     let rows = AttentionSnapshot.rows(of: [a, b])

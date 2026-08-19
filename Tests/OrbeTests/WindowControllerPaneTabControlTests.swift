@@ -128,8 +128,8 @@ final class WindowControllerPaneTabControlTests: OrbeTestCase {
     // close_tab 側と同じくエージェントを載せてから閉じる＝エージェント判定では通る状態にして、
     // 発火源の判定だけが効いていることを固定する。
     let pane = try XCTUnwrap(victim.focusedPane)
-    pane.agentCommand = "claude"
-    pane.agentSessionId = "live-1"
+    pane.agentSlot = .live(
+      session: AgentSession(command: "claude", sessionId: "live-1"), report: nil)
     guard case .success = wc.controlClosePane(paneId: pane.id) else {
       return XCTFail("close_pane は success")
     }
@@ -160,7 +160,7 @@ final class WindowControllerPaneTabControlTests: OrbeTestCase {
     let stamp = Date(timeIntervalSinceReferenceDate: 7_000)
     sleepers.lastUsedAt = stamp
     let agentPane = try XCTUnwrap(
-      sleepers.tabs[0].controlAllPanes().first { $0.holdsDormantRestoredAgent })
+      sleepers.tabs[0].controlAllPanes().first { $0.agentSlot.isDormant })
 
     guard case .success = wc.controlClosePane(paneId: agentPane.id) else {
       return XCTFail("dormant agent pane close")
@@ -181,7 +181,7 @@ final class WindowControllerPaneTabControlTests: OrbeTestCase {
     let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("sleepers", tree: split)])
     let sleepers = try XCTUnwrap(wc.workspaces.first { $0.name == "sleepers" })
     let plain = try XCTUnwrap(
-      sleepers.tabs[0].controlAllPanes().first { !$0.holdsDormantRestoredAgent })
+      sleepers.tabs[0].controlAllPanes().first { !$0.agentSlot.isDormant })
 
     guard case .success = wc.controlClosePane(paneId: plain.id) else {
       return XCTFail("plain dormant pane close")
@@ -279,8 +279,8 @@ final class WindowControllerPaneTabControlTests: OrbeTestCase {
     // エージェント hook のセッション報告（report_agent）と同じくエージェントを載せてから閉じる＝
     // エージェント判定では通る状態にして、発火源の判定だけが効いていることを固定する。
     let victimPane = try XCTUnwrap(wc.current.tabs.first { $0.id == victim }?.focusedPane)
-    victimPane.agentCommand = "claude"
-    victimPane.agentSessionId = "live-1"
+    victimPane.agentSlot = .live(
+      session: AgentSession(command: "claude", sessionId: "live-1"), report: nil)
     guard case .success = wc.controlCloseTab(tabId: victim) else {
       return XCTFail("close_tab は success")
     }

@@ -208,7 +208,8 @@ final class WorkspacePersistenceTests: OrbeTestCase {
 
   // MARK: - エージェントセッションの復元
 
-  /// agent 付き葉は resumeSpawn に解決を依頼し、復元後の snapshot で agent を保つ（再起動往復が冪等）。
+  /// agent 付き葉は消費（materialize 開始）時に resumeSpawn へ解決を依頼し、起動指示を確定する。
+  /// snapshot は休眠中も消費後も agent セッションを保つ（再起動往復が冪等）。
   func testRestoreAgentLeafResolvesResumeAndPreservesAgent() {
     var captured: AgentSession?
     let node: PaneNode = .leaf(
@@ -217,22 +218,35 @@ final class WorkspacePersistenceTests: OrbeTestCase {
       restoring: node,
       resumeSpawn: { session in
         captured = session
-        return ("claude --resume \(session.sessionId)", ["PATH": "/usr/bin"])
+        return ("claude --resume abc-123", ["PATH": "/usr/bin"])
       })
+    XCTAssertNil(captured, "resume 解決は復元時ではなく消費時")
+    XCTAssertEqual(tc.snapshot(), node, "休眠のままの snapshot も agent セッションを保つ")
+
+    tc.recordMaterializationStarted()
     XCTAssertEqual(
       captured, AgentSession(command: "claude", sessionId: "abc-123"),
-      "agent 付き葉は resumeSpawn に解決を依頼する")
-    XCTAssertEqual(tc.snapshot(), node, "復元後の snapshot は agent セッションを保つ（冪等）")
+      "消費時に resumeSpawn へ解決を依頼する")
+    let pane = tc.controlAllPanes()[0]
+    XCTAssertEqual(pane.initialCommand, "claude --resume abc-123", "解決した起動指示が spawn に効く")
+    XCTAssertEqual(pane.initialEnv, ["PATH": "/usr/bin"])
+    XCTAssertEqual(tc.snapshot(), node, "消費後の snapshot も agent セッションを保つ（冪等）")
   }
 
-  /// resume を解決できなければ素のシェルで復元し、agent は付かない。
+  /// resume を解決できなければ消費時に素のシェルへ落ち、以後の snapshot に agent は付かない。
+  /// セッション記録そのものは休眠のあいだ保持される（resume 可否は消費まで判定しない）。
   func testRestoreAgentLeafFallsBackToShellWhenUnresolved() {
     let node: PaneNode = .leaf(
       cwd: "/w", agent: AgentSession(command: "unknown", sessionId: "x"))
     let tc = TerminalController(restoring: node, resumeSpawn: noResume)
+    XCTAssertEqual(tc.snapshot(), node, "休眠のあいだセッション記録は保持される")
+
+    tc.recordMaterializationStarted()
+    let pane = tc.controlAllPanes()[0]
+    XCTAssertEqual(pane.agentSlot, .none, "解決不可なら消費で素のシェルへ落ちる")
+    XCTAssertNil(pane.initialCommand)
     XCTAssertEqual(
-      tc.snapshot(), .leaf(cwd: "/w", agent: nil),
-      "解決不可なら素のシェルで復元し agent は付かない")
+      tc.snapshot(), .leaf(cwd: "/w", agent: nil), "素シェル化後の snapshot に agent は付かない")
   }
 
   // MARK: - ① 明示タイトル（TabState）の永続

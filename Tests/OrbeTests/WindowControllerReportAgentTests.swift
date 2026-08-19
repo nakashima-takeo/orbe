@@ -127,25 +127,25 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
 
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "working", sessionId: nil, message: nil)
-    let first = try XCTUnwrap(pane.agentStateChangedAt)
+    let first = try XCTUnwrap(pane.agentReport?.stateChangedAt)
 
     // 同値の連続報告（working→working）では動かない。
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "working", sessionId: nil,
       message: AgentMessage(text: "m"))
-    XCTAssertEqual(pane.agentStateChangedAt, first, "同値報告で stateChangedAt は動かない")
+    XCTAssertEqual(pane.agentReport?.stateChangedAt, first, "同値報告で stateChangedAt は動かない")
 
     // 実変化（working→waiting）で動く。
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "q"))
-    let second = try XCTUnwrap(pane.agentStateChangedAt)
+    let second = try XCTUnwrap(pane.agentReport?.stateChangedAt)
     XCTAssertNotEqual(second, first, "実変化で stateChangedAt が更新される")
 
     // 実変化を挟んだ後の同値報告（waiting→waiting）でも動かない＝打刻が drift しない。
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: nil)
-    XCTAssertEqual(pane.agentStateChangedAt, second, "実変化後の同値報告でも stateChangedAt は動かない")
+    XCTAssertEqual(pane.agentReport?.stateChangedAt, second, "実変化後の同値報告でも stateChangedAt は動かない")
   }
 
   func testClearResetsAllAttentionFields() throws {
@@ -153,13 +153,9 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "done", sessionId: "s1",
       message: AgentMessage(text: "done!", source: "tool"))
-    XCTAssertEqual(pane.agentMessage?.source, "tool", "前提: 消す対象が立っている")
+    XCTAssertEqual(pane.agentReport?.message?.source, "tool", "前提: 消す対象が立っている")
     wc.controlReportAgent(pane: pane, agent: "claude", state: "clear", sessionId: nil, message: nil)
-    XCTAssertNil(pane.agentState)
-    XCTAssertNil(pane.agentSessionId)
-    XCTAssertNil(pane.agentCommand)
-    XCTAssertNil(pane.agentMessage)
-    XCTAssertNil(pane.agentStateChangedAt)
+    XCTAssertEqual(pane.agentSlot, .none, "clear で同一性ごと無へ戻る")
   }
 
   /// waiting / done への実変化だけが一過性イベント（メニューバー②）を立てる。
@@ -262,11 +258,11 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
       pane: pane, agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d"))
     // 非 nil で拾う——Optional のまま比べると、report が打刻しなくなった退行が nil == nil で
     // 素通りして、このテストが名乗る契約が黙って検証されなくなる。
-    let at = try XCTUnwrap(pane.agentStateChangedAt)
+    let at = try XCTUnwrap(pane.agentReport?.stateChangedAt)
     wc.current.tabs[0].consumeDoneState()
     XCTAssertEqual(pane.agentState, "idle")
-    XCTAssertEqual(pane.agentStateChangedAt, at)
-    XCTAssertEqual(pane.agentMessage?.text, "d")
+    XCTAssertEqual(pane.agentReport?.stateChangedAt, at)
+    XCTAssertEqual(pane.agentReport?.message?.text, "d")
   }
 
   /// flushChrome が AttentionStore の snapshot を更新し、idle 化で一覧から消える。

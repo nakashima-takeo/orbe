@@ -16,7 +16,7 @@ final class WindowControllerControlTests: OrbeTestCase {
 
   // MARK: - fixtures / helpers
 
-  /// resume 未対応 agent を載せた leaf（復元時は素シェル化するが restoredAgentCount には数える）。
+  /// resume 未対応 agent を載せた leaf（消費時に素シェル化するが休眠チケットには数える）。
   private func agentLeaf(_ id: String) -> PaneNode {
     .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: id))
   }

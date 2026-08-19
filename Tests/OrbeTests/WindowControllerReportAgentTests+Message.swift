@@ -22,11 +22,11 @@ extension WindowControllerReportAgentTests {
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "Claude needs your permission", source: "notification"))
-    XCTAssertEqual(pane.agentMessage?.text, "赤と青どちらが好きですか")
+    XCTAssertEqual(pane.agentReport?.message?.text, "赤と青どちらが好きですか")
     // 文言を載せない報告もツール由来を落とせない（守る相手は通知由来に限らない）。
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: nil)
-    XCTAssertEqual(pane.agentMessage?.text, "赤と青どちらが好きですか", "文言なしの報告でもツール由来は残る")
+    XCTAssertEqual(pane.agentReport?.message?.text, "赤と青どちらが好きですか", "文言なしの報告でもツール由来は残る")
   }
 
   /// 完了条件4: ツール由来の文言を持たない待ちは、同 state の通知由来の報告が埋める
@@ -38,16 +38,16 @@ extension WindowControllerReportAgentTests {
       pane: pane, agent: "claude", state: "working", sessionId: nil, message: nil)
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: nil)
-    XCTAssertNil(pane.agentMessage, "文言を載せない報告では文言なし")
+    XCTAssertNil(pane.agentReport?.message, "文言を載せない報告では文言なし")
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(
         text: "Claude Code needs your approval for the plan", source: "notification"))
-    XCTAssertEqual(pane.agentMessage?.text, "Claude Code needs your approval for the plan")
+    XCTAssertEqual(pane.agentReport?.message?.text, "Claude Code needs your approval for the plan")
     // 埋めた文言は通知由来なので、同 state の文言なしの報告で落ちる（stale にならない）。
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: nil)
-    XCTAssertNil(pane.agentMessage, "通知由来は文言なしの報告で落ちる")
+    XCTAssertNil(pane.agentReport?.message, "通知由来は文言なしの報告で落ちる")
   }
 
   /// 完了条件2・3: state の遷移は文言を確定し直す。前の待ちの文言は working への遷移で消え、
@@ -59,15 +59,15 @@ extension WindowControllerReportAgentTests {
       message: AgentMessage(text: "赤と青どちらが好きですか", source: "tool"))
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "working", sessionId: nil, message: nil)
-    XCTAssertNil(pane.agentMessage, "working は文言を持たない")
+    XCTAssertNil(pane.agentReport?.message, "working は文言を持たない")
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "Claude needs your permission", source: "notification"))
-    XCTAssertEqual(pane.agentMessage?.text, "Claude needs your permission")
+    XCTAssertEqual(pane.agentReport?.message?.text, "Claude needs your permission")
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "done", sessionId: nil,
       message: AgentMessage(text: "PR #142 を作成しました", source: "tool"))
-    XCTAssertEqual(pane.agentMessage?.text, "PR #142 を作成しました")
+    XCTAssertEqual(pane.agentReport?.message?.text, "PR #142 を作成しました")
   }
 
   /// 完了条件5: teammate の worker 承認要求が先に waiting を占めた状態でリーダー自身が質問する経路。
@@ -81,7 +81,7 @@ extension WindowControllerReportAgentTests {
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "赤と青どちらが好きですか", source: "tool"))
-    XCTAssertEqual(pane.agentMessage?.text, "赤と青どちらが好きですか")
+    XCTAssertEqual(pane.agentReport?.message?.text, "赤と青どちらが好きですか")
   }
 
   /// 通知由来どうしは上書きし合う。連続する worker 承認要求では待ちの主体が入れ替わっており、
@@ -94,6 +94,6 @@ extension WindowControllerReportAgentTests {
     wc.controlReportAgent(
       pane: pane, agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "agent-b needs permission for Write", source: "notification"))
-    XCTAssertEqual(pane.agentMessage?.text, "agent-b needs permission for Write")
+    XCTAssertEqual(pane.agentReport?.message?.text, "agent-b needs permission for Write")
   }
 }
