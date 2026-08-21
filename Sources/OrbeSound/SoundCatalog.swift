@@ -3,6 +3,11 @@ import Foundation
 /// 12 案 × 2 イベント（完了 / 入力待ち）の合成定義。ここは「何をどう鳴らすか」の宣言だけで、
 /// 部品の語彙は `SoundComponent`、波形の作り方は `SoundSynth`、実際の合成は `SoundRenderer` が担う。
 public enum SoundCatalog {
+  /// ラウドネス整合の目標（最大短時間 RMS・dBFS）。測る条件は「既定音量・48 kHz・300 ms 窓」。
+  /// 12 案のトリム表も、取り込むカスタム音源の正規化（`SoundImport`）もこの 1 点へ揃える
+  /// ——揃える先が 2 箇所に分かれると、案とカスタムの切り替えで鳴りの強さが変わる。
+  public static let loudnessTargetDB = -24.0
+
   /// 案 × イベントの完全な定義（部品列 + エフェクト列 + 全長 + ラウドネストリム）。
   public static func program(_ family: NotificationSound, _ event: AgentSoundEvent) -> SoundProgram
   {
@@ -15,7 +20,7 @@ public enum SoundCatalog {
 
   /// ラウドネス整合の実測トリム（dB）。基準は最大短時間 RMS（300 ms 窓・既定音量 90・48 kHz。
   /// 300 ms に満たない音は全長で測るので、長さを変えると読みが動く）で、全 24 音を
-  /// カタログ中央値 -24.0 dBFS へ合わせた値。音の定義を変えたらその音だけ測り直す
+  /// カタログ中央値 `loudnessTargetDB` へ合わせた値。音の定義を変えたらその音だけ測り直す
   /// （`orbe-sound board` で WAV を出し、300 ms 窓の最大 RMS と目標の差分を足し引きする）。
   /// 測るのは必ず既定音量で——音量はコンプレッサの手前なので圧縮の深さが音ごとに違い、測定点を
   /// 動かすと読みは平行移動せず整合もわずかに崩れる（24 音のばらつき幅は実測で音量 70 が 0.38 dB、

@@ -348,4 +348,33 @@ final class SoundRendererTests: XCTestCase {
         SoundRenderer.level(forVolume: volume + 5), SoundRenderer.level(forVolume: volume))
     }
   }
+
+  // MARK: - マスタ末尾（合成音と取り込み済み音源が共有する 1 本）
+
+  /// 括り出した `finalize` は長さを変えず決定論（案の合成と同じ性質を、取り込み済み音源にも与える）。
+  /// 括り出しが 24 音の出力を 1 サンプルも変えていないことは、既存の決定論・ラウドネス整合・
+  /// 「音量はコンプレッサの手前」の 3 つの釘（`SoundCatalogTests`）が引き続き押さえている。
+  func testFinalizeIsLengthPreservingAndDeterministic() {
+    let samples = (0..<Int(0.3 * sampleRate)).map {
+      Float(0.4 * sin(2 * Double.pi * 523 * Double($0) / sampleRate))
+    }
+    let first = SoundRenderer.finalize(samples, volume: 70, sampleRate: sampleRate)
+    XCTAssertEqual(first.count, samples.count)
+    XCTAssertEqual(first, SoundRenderer.finalize(samples, volume: 70, sampleRate: sampleRate))
+  }
+
+  /// finalize でも音量はコンプレッサの手前に掛かる（下げると圧縮が浅くなる）。
+  /// 取り込み済み音源が「素通しゲインで小さくなるだけ」の鳴り方に退行したらここで落ちる。
+  func testFinalizeAppliesVolumeBeforeTheCompressor() {
+    let samples = (0..<Int(0.5 * sampleRate)).map {
+      Float(0.5 * sin(2 * Double.pi * 440 * Double($0) / sampleRate))
+    }
+    let loud = SoundRenderer.finalize(samples, volume: 100, sampleRate: sampleRate)
+    let quiet = SoundRenderer.finalize(samples, volume: 20, sampleRate: sampleRate)
+    let loudPeak = loud.map { abs($0) }.max() ?? 0
+    let quietPeak = quiet.map { abs($0) }.max() ?? 0
+    let ratio = Float(SoundRenderer.level(forVolume: 20))
+    XCTAssertLessThan(quietPeak, loudPeak)
+    XCTAssertGreaterThan(quietPeak, loudPeak * ratio * 1.02, "コンプレッサの後段なら厳密にこの比になる")
+  }
 }
