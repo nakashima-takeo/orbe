@@ -37,9 +37,9 @@ extension DesignGallerySnapshotTests {
       notificationSound: .custom, customDone: importedSource)
     settingsSound.schedulePreviewEnd = { _, _ in }
     settingsSound.render.selected = 12  // 通知音行
-    settingsSound.render.onActivate()  // 潜る（● はカスタム行）
-    settingsSound.render.selected = 12  // 鋼へ移って試聴 → その行に EQ が点く
-    settingsSound.render.selected = 13  // カスタム行へ（補足・● とともに写る）
+    settingsSound.render.onActivate()  // 潜る（● はカスタム行＝入場の着地もそこ）
+    settingsSound.render.place(12)  // 一度離れる（入場行のままでは選択が動かず試聴が起きない）
+    settingsSound.render.onDown()  // ↓ でカスタム行へ戻って試聴 → この行に EQ・補足・● が揃う
     let soundStage = NSSize(width: 500, height: 460)
     try writePNG(
       paletteSnapshot(settingsSound.render, canvas: soundStage), size: soundStage,

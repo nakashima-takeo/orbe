@@ -150,4 +150,61 @@ extension WindowControllerReportAgentTests {
       pane: dormant, agent: "claude", state: "done", sessionId: nil, message: nil)
     XCTAssertTrue(sound.played.isEmpty)
   }
+
+  // MARK: - 参照集合 GC（実経路）
+
+  private func placeSound(_ name: String) throws {
+    try Data("wav".utf8).write(to: try XCTUnwrap(CustomSoundStore.url(for: name)))
+  }
+
+  private func soundFileNames() throws -> Set<String> {
+    let dir = try XCTUnwrap(CustomSoundStore.directoryURL())
+    return Set(
+      try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+        .map(\.lastPathComponent))
+  }
+
+  /// global へ取り込んでも、**workspace 上書き層が参照する音源は消えない**。
+  ///
+  /// 参照集合が全層（global ＋ 全 workspace 上書き）を走ることと、順序が「新ファイルを書く →
+  /// 設定値を差し替える → GC」であることを、production の 1 経路（`applySetting`）で同時に押さえる
+  /// ——集合が層を取りこぼせば `ws.wav` が、順序が逆なら `new.wav` が消えて落ちる。
+  func testImportKeepsSoundsReferencedByOtherLayers() throws {
+    let (wc, _) = try makeControllerAndTwoActivatedWorkspaces()
+    for name in ["ws.wav", "old.wav", "new.wav"] { try placeSound(name) }
+
+    var wsOverride = SettingsLayer()
+    wsOverride[SettingKeys.notificationSoundCustomDone] = CustomSoundSource(
+      file: "ws.wav", name: "ws.mp3", duration: 1)
+    wc.workspaces[0].settingsOverride = wsOverride
+    wc.settingsStore.applyGlobal(
+      SettingChange(
+        SettingKeys.notificationSoundCustomDone,
+        CustomSoundSource(file: "old.wav", name: "old.mp3", duration: 1)))
+
+    wc.applySetting(
+      SettingChange(
+        SettingKeys.notificationSoundCustomDone,
+        CustomSoundSource(file: "new.wav", name: "new.mp3", duration: 2)), scope: .global)
+
+    XCTAssertEqual(try soundFileNames(), ["ws.wav", "new.wav"], "参照されなくなった old だけが消える")
+  }
+
+  /// workspace を閉じると、その workspace だけが参照していた音源が回収される。
+  /// **残った workspace の参照は消えない**——ここが崩れると、無関係な workspace の音が黙って紋章に戻る。
+  func testClosingWorkspaceReclaimsOnlyItsOwnSound() throws {
+    let (wc, _) = try makeControllerAndTwoActivatedWorkspaces()
+    for name in ["gone.wav", "kept.wav"] { try placeSound(name) }
+
+    for (index, file) in [(0, "gone.wav"), (1, "kept.wav")] {
+      var override = SettingsLayer()
+      override[SettingKeys.notificationSoundCustomDone] = CustomSoundSource(
+        file: file, name: file, duration: 1)
+      wc.workspaces[index].settingsOverride = override
+    }
+
+    wc.closeWorkspace(0)
+
+    XCTAssertEqual(try soundFileNames(), ["kept.wav"], "残った workspace の上書きが指す音源は消えない")
+  }
 }

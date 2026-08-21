@@ -2,10 +2,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 取り込み済み音源の置き場と、参照集合 GC。
+/// 取り込み済み音源の置き場と、参照集合 GC の**純関数部分**（渡された集合の外を消す）。
 ///
-/// GC の呼び出し**順序**（新ファイルを書く → 設定値を差し替える → GC）がこの機構の唯一の危うい点なので、
-/// 「順序どおりなら新しいファイルは生き残る」「逆順なら消えうる」を明示的に押さえる。
+/// 参照集合をどう組むか（どの層まで走るか）と呼び出し順序は `WindowController` 側の契約なので、
+/// そちらは `WindowControllerReportAgentTests+Sound` が実経路で押さえる——ここで代役を立てると、
+/// production に無い順序をテスト内で再現して「順序は守られている」と誤って安心することになる。
 final class CustomSoundStoreTests: OrbeTestCase {
 
   @discardableResult
@@ -26,8 +27,11 @@ final class CustomSoundStoreTests: OrbeTestCase {
   func testDirectoryIsIsolated() throws {
     let dir = try XCTUnwrap(CustomSoundStore.directoryURL())
     XCTAssertEqual(dir.lastPathComponent, "sounds")
-    XCTAssertTrue(
-      dir.path.hasPrefix(TestIsolation.root.path), "置き場が隔離根の外にある: \(dir.path)")
+    // 隔離根の下、ではなく **caseDir 直下**を見る——根の直下は `endCase` の削除に乗らないので、
+    // override が外れて fallback（`StateDir.base()/sounds`）へ落ちても気づけなくなる。
+    XCTAssertEqual(
+      dir.deletingLastPathComponent().path, try XCTUnwrap(TestIsolation.caseDir).path,
+      "置き場が per-test ディレクトリの外にある: \(dir.path)")
     XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path), "参照時に作られる")
   }
 
@@ -61,35 +65,6 @@ final class CustomSoundStoreTests: OrbeTestCase {
     try place("b.wav")
     CustomSoundStore.collectGarbage(referenced: [])
     XCTAssertTrue(try names().isEmpty)
-  }
-
-  /// 「新ファイルを書く → 設定値を差し替える → GC」の順なら、書いたばかりのファイルは生き残り、
-  /// 参照されなくなった旧ファイルだけが消える。
-  func testWriteThenAssignThenCollectKeepsTheNewFile() throws {
-    try place("old.wav")
-    var layer = SettingsLayer()
-    layer[SettingKeys.notificationSoundCustomDone] = CustomSoundSource(
-      file: "old.wav", name: "old.mp3", duration: 1)
-
-    try place("new.wav")  // 1. 書く
-    layer[SettingKeys.notificationSoundCustomDone] = CustomSoundSource(
-      file: "new.wav", name: "new.mp3", duration: 2)  // 2. 値を差し替える
-    CustomSoundStore.collectGarbage(  // 3. GC
-      referenced: Set([layer[SettingKeys.notificationSoundCustomDone]?.file].compactMap { $0 }))
-    XCTAssertEqual(try names(), ["new.wav"])
-  }
-
-  /// 逆順（値を差し替える前に GC）だと、書いたばかりの未参照ファイルを消してしまう
-  /// ——この危うさがあるから順序が契約になっている、ということをテストでも残す。
-  func testCollectingBeforeAssigningWouldDropTheNewFile() throws {
-    var layer = SettingsLayer()
-    layer[SettingKeys.notificationSoundCustomDone] = CustomSoundSource(
-      file: "old.wav", name: "old.mp3", duration: 1)
-    try place("old.wav")
-    try place("new.wav")
-    CustomSoundStore.collectGarbage(
-      referenced: Set([layer[SettingKeys.notificationSoundCustomDone]?.file].compactMap { $0 }))
-    XCTAssertFalse(try names().contains("new.wav"))
   }
 
   /// 前回起動の孤児（手編集・クラッシュ由来）は、次に GC が走ったときにまとめて回収される
