@@ -33,6 +33,10 @@ final class WindowControllerPaneTabControlTests: OrbeTestCase {
       ])
   }
 
+  private func agentLeaf(_ id: String) -> PaneNode {
+    .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: id))
+  }
+
   /// ディスクへ workspaces を書いてから復元済み WindowController を返す。
   private func restore(activeWorkspace: Int, _ workspaces: [WorkspaceState]) throws
     -> WindowController
@@ -124,8 +128,8 @@ final class WindowControllerPaneTabControlTests: OrbeTestCase {
     // close_tab 側と同じくエージェントを載せてから閉じる＝エージェント判定では通る状態にして、
     // 発火源の判定だけが効いていることを固定する。
     let pane = try XCTUnwrap(victim.focusedPane)
-    pane.agentCommand = "claude"
-    pane.agentSessionId = "live-1"
+    pane.agentSlot = .live(
+      session: AgentSession(command: "claude", sessionId: "live-1"), report: nil)
     guard case .success = wc.controlClosePane(paneId: pane.id) else {
       return XCTFail("close_pane は success")
     }
@@ -144,6 +148,104 @@ final class WindowControllerPaneTabControlTests: OrbeTestCase {
       return XCTFail("未知ペインは failure")
     }
     XCTAssertEqual(err.code, -32004)
+  }
+
+  /// 休眠 split の数は復元時の固定値ではなく、現在残る agent 由来 pane から導出する。
+  func testClosingDormantSplitPaneUpdatesOnlyItsRestoredAgentCount() throws {
+    let split = PaneNode.split(
+      vertical: true, ratio: 0.5, first: agentLeaf("a"),
+      second: .leaf(cwd: nil, agent: nil))
+    let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("sleepers", tree: split)])
+    let sleepers = try XCTUnwrap(wc.workspaces.first { $0.name == "sleepers" })
+    let stamp = Date(timeIntervalSinceReferenceDate: 7_000)
+    sleepers.lastUsedAt = stamp
+    let agentPane = try XCTUnwrap(
+      sleepers.tabs[0].controlAllPanes().first { $0.agentSlot.isDormant })
+
+    guard case .success = wc.controlClosePane(paneId: agentPane.id) else {
+      return XCTFail("dormant agent pane close")
+    }
+
+    XCTAssertFalse(sleepers.activated)
+    XCTAssertEqual(sleepers.dormantAgentCount(), 0)
+    XCTAssertEqual(sleepers.tabs[0].controlAllPanes().count, 1, "plain sibling は残る")
+    XCTAssertEqual(sleepers.lastUsedAt, stamp, "背景 close は MRU を動かさない")
+    XCTAssertEqual(row(wc, name: "sleepers")?["dormantAgentCount"] as? Int, 0)
+  }
+
+  /// 休眠件数は agent 由来 pane だけを数える。非 agent pane の close で減るなら pane 総数を数えている退行。
+  func testClosingPlainDormantSplitPaneKeepsRestoredAgentCount() throws {
+    let split = PaneNode.split(
+      vertical: true, ratio: 0.5, first: agentLeaf("a"),
+      second: .leaf(cwd: nil, agent: nil))
+    let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("sleepers", tree: split)])
+    let sleepers = try XCTUnwrap(wc.workspaces.first { $0.name == "sleepers" })
+    let plain = try XCTUnwrap(
+      sleepers.tabs[0].controlAllPanes().first { !$0.agentSlot.isDormant })
+
+    guard case .success = wc.controlClosePane(paneId: plain.id) else {
+      return XCTFail("plain dormant pane close")
+    }
+
+    XCTAssertEqual(sleepers.dormantAgentCount(), 1)
+    XCTAssertEqual(sleepers.tabs[0].controlAllPanes().count, 1)
+  }
+
+  /// domain の成功が先行し、tab ごと消えるのは main queue の onEmpty——この二段階を両相で固定する。
+  func testClosingLastDormantPaneRemovesCountOnlyAfterQueuedTabTeardown() throws {
+    let wc = try restore(
+      activeWorkspace: 0, [tabbed("main"), tabbed("sleepers", tree: agentLeaf("a"))])
+    let sleepers = try XCTUnwrap(wc.workspaces.first { $0.name == "sleepers" })
+    let pane = try XCTUnwrap(sleepers.tabs[0].controlAllPanes().first)
+
+    guard case .success = wc.controlClosePane(paneId: pane.id) else {
+      return XCTFail("last dormant pane close")
+    }
+    XCTAssertEqual(sleepers.tabs.count, 1, "domain success 直後は onEmpty が main queue 待ち")
+    XCTAssertEqual(sleepers.dormantAgentCount(), 1)
+
+    drainMainQueue()
+    XCTAssertTrue(sleepers.tabs.isEmpty)
+    XCTAssertEqual(sleepers.dormantAgentCount(), 0)
+    XCTAssertFalse(sleepers.activated)
+  }
+
+  /// 前面の close は残存 tab を reselect して起こすため、背景 close と違い activated は true のまま。
+  func testClosingLiveTabInForegroundMixedWorkspaceMaterializesRemainingTab() throws {
+    let state = WorkspaceState(
+      name: "mixed", rootPath: "/tmp", activeTab: 0,
+      tabs: [
+        TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil),
+        TabState(tree: agentLeaf("sleeping"), explicitTitle: nil),
+      ])
+    let wc = try restore(activeWorkspace: 0, [state])
+    XCTAssertTrue(wc.current.tabs[0].activated, "選択タブは同期で起床")
+    XCTAssertFalse(wc.current.tabs[1].activated, "main queue に戻る前の hidden タブは休眠")
+    XCTAssertEqual(wc.current.dormantAgentCount(), 1)
+    let stamp = Date(timeIntervalSinceReferenceDate: 1)
+    wc.current.lastUsedAt = stamp
+
+    wc.closeTab(wc.current.tabs[0], origin: .controlAPI)
+
+    XCTAssertEqual(wc.current.tabs.count, 1)
+    XCTAssertTrue(wc.current.tabs[0].activated, "reselect された残存タブは同期 materialize")
+    XCTAssertTrue(wc.current.activated)
+    XCTAssertEqual(wc.current.dormantAgentCount(), 0)
+    XCTAssertGreaterThan(try XCTUnwrap(wc.current.lastUsedAt), stamp, "残存タブの前面利用で MRU を進める")
+  }
+
+  /// 次 tab の前面表示を伴わない close は foreground use ではないので MRU を進めない。
+  func testClosingLastForegroundTabKeepsMRUAndReturnsActivationToFalse() throws {
+    let wc = try restore(activeWorkspace: 0, [tabbed("main")])
+    let stamp = Date(timeIntervalSinceReferenceDate: 2_000)
+    wc.current.lastUsedAt = stamp
+    XCTAssertTrue(wc.current.activated)
+
+    wc.closeTab(wc.current.tabs[0], origin: .controlAPI)
+
+    XCTAssertTrue(wc.current.tabs.isEmpty)
+    XCTAssertFalse(wc.current.activated)
+    XCTAssertEqual(wc.current.lastUsedAt, stamp, "次タブの前面利用が無い close で MRU は進めない")
   }
 
   /// 別 WS の pane を focus すると、その WS が activate されアクティブになる（switchWorkspace 込み）。
@@ -177,8 +279,8 @@ final class WindowControllerPaneTabControlTests: OrbeTestCase {
     // エージェント hook のセッション報告（report_agent）と同じくエージェントを載せてから閉じる＝
     // エージェント判定では通る状態にして、発火源の判定だけが効いていることを固定する。
     let victimPane = try XCTUnwrap(wc.current.tabs.first { $0.id == victim }?.focusedPane)
-    victimPane.agentCommand = "claude"
-    victimPane.agentSessionId = "live-1"
+    victimPane.agentSlot = .live(
+      session: AgentSession(command: "claude", sessionId: "live-1"), report: nil)
     guard case .success = wc.controlCloseTab(tabId: victim) else {
       return XCTFail("close_tab は success")
     }

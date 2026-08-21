@@ -76,10 +76,9 @@ final class WindowControllerRestoreTests: OrbeTestCase {
   /// 分割比・cwd・エージェントセッション・明示タイトル・上書き設定・最終使用時刻・
   /// ウィンドウサイズを 1 本で通す——どれか 1 つを復元が落とせばここで落ちる。
   ///
-  /// 等値がアクティブ側の `lastUsedAt` にも及ぶのは、刻印がタブ選択に紐づくため（0 タブは
-  /// アクティブ化しても進まない）。刻印が進む側の契約は
-  /// `testRoundTripWithMountedTabOnlyAdvancesActiveLastUsedAt` が持つ。
-  func testRoundTripKeepsEveryFieldWhenActiveWorkspaceIsDormant() throws {
+  /// 0 タブでも前面 workspace として利用した時刻は進む。一方、タブの起床状態は
+  /// 永続化しないため、再保存で変わるのはアクティブ側の `lastUsedAt` だけ。
+  func testRoundTripForEmptyActiveWorkspaceAdvancesOnlyLastUsedAt() throws {
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -106,14 +105,18 @@ final class WindowControllerRestoreTests: OrbeTestCase {
       windowSize: WindowSize(width: 700, height: 400))
     WorkspacePersistence.save(original)
 
+    let before = Date()
     let wc = WindowController()
+    XCTAssertTrue(wc.current.tabs.isEmpty)
+    XCTAssertFalse(wc.current.activated, "0 タブは前面表示中でも materialize 済みではない")
     wc.flushSave()
 
     let saved = try XCTUnwrap(WorkspacePersistence.load())
-    XCTAssertEqual(
-      saved.workspaces[0].lastUsedAt, stampBackground,
-      "0 タブ workspace はアクティブ化しても刻印が進まない（タブを選ばないため）")
-    XCTAssertEqual(saved, original, "保存 → 復元 → 再保存で 1 フィールドも欠けない")
+    let stamp = try XCTUnwrap(saved.workspaces[0].lastUsedAt)
+    XCTAssertGreaterThanOrEqual(stamp, before, "0 タブでも workspace の前面利用は MRU を進める")
+    var expected = original
+    expected.workspaces[0].lastUsedAt = stamp
+    XCTAssertEqual(saved, expected, "起床状態は永続化せず、進むのは前面利用の lastUsedAt だけ")
   }
 
   /// タブを mount する通常形でも、動くのはアクティブ workspace の `lastUsedAt` だけ。

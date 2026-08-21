@@ -83,7 +83,8 @@ final class AgentHookPathTests: OrbeTestCase {
     XCTAssertTrue(
       waitUntil(5) { pane.agentState == "waiting" },
       "hook の報告がペイン \(pane.id) に届かない（agentState=\(pane.agentState ?? "nil")）")
-    XCTAssertEqual(pane.agentSessionId, "s-1", "stdin の session_id が resume 鍵としてペインまで届く")
+    XCTAssertEqual(
+      pane.agentSlot.session?.sessionId, "s-1", "stdin の session_id が resume 鍵としてペインまで届く")
   }
 
   /// Orbe 外の端末（`ORBE_PANE` / `ORBE_SOCK` が無い）で走った hook はペインを一切動かさない。

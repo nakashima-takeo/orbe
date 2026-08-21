@@ -1,7 +1,7 @@
 ---
 title: chrome
 description: 常駐 StatusRow 2 段 — 上段に現在地と横断エージェント件数、下段に全幅セグメント形タブ行。イベント駆動で更新する
-updated: 2026-08-15
+updated: 2026-08-21
 ---
 
 # chrome
@@ -44,7 +44,7 @@ updated: 2026-08-15
 
 ## タブのエージェント状態インジケータ
 
-各タブはタイトルの前に、タブ内全ペインの `agentState` を `waiting > working > done` の優先順位で 1 つに畳んだ状態グリフを出す（working=円弧スピナー・waiting=吹き出し浮遊・done=チェック・静止）。Reduce Motion 環境ではアニメーションを止め静的な形で残す。`idle`・無し（nil）は出さない。状態の詳細（種別グリフ＋件数）は上段右端の横断ストリップが持つ。
+各materialize済みタブはタイトルの前に、タブ内全ペインの `agentState` を `waiting > working > done` の優先順位で 1 つに畳んだ状態グリフを出す（working=円弧スピナー・waiting=吹き出し浮遊・done=チェック・静止）。通常のworkspace切替で隠れタブを順次起こしている途中は、まだ未materializeのタブにグリフを出さない。Reduce Motion 環境ではアニメーションを止め静的な形で残す。`idle`・無し（nil）は出さない。状態の詳細（種別グリフ＋件数）は上段右端の横断ストリップが持つ。
 
 各状態のグリフは既定で自前字形だが、設定パレットの「エージェントアイコン」で状態ごとに SF Symbol へ差し替えられる（[settings](../palette/settings.md)）。差し替えても状態のモーション・Reduce Motion 時の静止・選択タブの対テーマ色は維持する。装飾用途の固定グリフ（dispatch の作成中スピナー等）は差し替え対象外。
 
@@ -56,9 +56,9 @@ updated: 2026-08-15
 
 ## 全 workspace 横断エージェント件数（ストリップ）
 
-全 workspace・全タブ・全ペインを走査し、`agentState` を `working / waiting / done / idle` ごとに件数集計する（ペイン単位。idle は数えるが `error`・nil は数えない）。この状態順で状態色グリフ＋件数を出す（グリフは CLI 非依存。タブと同じく設定で SF Symbol へ差し替え可 → [settings](../palette/settings.md)）。項目は区切り線を持たず間隔で分け、休止（idle）項目は減光する。ラベル文字は持たない。件数 0 の種別・全体 0 は出さない。
+全 workspace の**activatedタブ**とその全ペインを走査し、`agentState` を `working / waiting / done / idle` ごとに件数集計する（ペイン単位。idle は数えるが `error`・nil は数えない）。未materializeタブの復元agentはlive件数へ混ぜない。この状態順で状態色グリフ＋件数を出す（グリフは CLI 非依存。タブと同じく設定で SF Symbol へ差し替え可 → [settings](../palette/settings.md)）。項目は区切り線を持たず間隔で分け、休止（idle）項目は減光する。ラベル文字は持たない。件数 0 の種別・全体 0 は出さない。
 
-上段右端に裸のグリフ列（囲みなし）で固定表示し、**クリックで Attention パレットを開く**（→ [attention](../palette/attention.md)）。⌘⌘ は画面に書けないジェスチャなので、可視の入口をここに対で持つ。同じ集計を WorkspacePalette の起動済み workspace 行にも固定 4 カラムの状態カウント表として出す（未起動行は休眠 zzz を休止カラムに表示 → [workspace パレット](../palette/workspace.md)）。
+上段右端に裸のグリフ列（囲みなし）で固定表示し、**クリックで Attention パレットを開く**（→ [attention](../palette/attention.md)）。⌘⌘ は画面に書けないジェスチャなので、可視の入口をここに対で持つ。同じlive集計をWorkspaceパレットにも出し、そこだけは未消費の復元チケット（休眠agent）を持つペイン数を独立したdormant（zzz）チップとして後置する（→ [workspace パレット](../palette/workspace.md)）。
 
 ## アップデートのトースト（右下・非モーダル）
 

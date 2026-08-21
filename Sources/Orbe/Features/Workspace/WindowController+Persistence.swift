@@ -25,7 +25,8 @@ extension WindowController {
   }
 
   /// TabState 1 枚からタブを起こして配線する。起動時復元（restore）と ⇧⌘T（reopenClosedAgentTab）の
-  /// 共通経路——agent 付きの葉は resume コマンドへ解決し、解決できなければ素のシェルで cwd だけ戻す。
+  /// 共通経路——agent 付きの葉は休眠チケットのまま起こし、resume 解決（と解決不能時の素シェル化）は
+  /// タブ起床時に走る（`TerminalController.recordMaterializationStarted`）。ここは resolver を渡すだけ。
   private func makeTab(from state: TabState) -> TerminalController {
     let resume: TerminalController.ResumeSpawn = { [agentLauncher] in
       agentLauncher.resumeSpawn(for: $0)

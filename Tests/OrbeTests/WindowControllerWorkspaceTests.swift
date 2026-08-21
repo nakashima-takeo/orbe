@@ -119,30 +119,36 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
   /// 0タブで保存された workspace を起動時アクティブにしても、クラッシュせずエントリは生き title に出る
   /// （空表示のまま・シェルは自動起動しない）。
   func testRestoreEmptyActiveWorkspaceShowsEmpty() throws {
+    let old = Date(timeIntervalSinceReferenceDate: 10)
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 1,
       workspaces: [
         WorkspaceState(
           name: "main", rootPath: "/tmp", activeTab: 0,
           tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)]),
-        WorkspaceState(name: "empty", rootPath: "/tmp", activeTab: 0, tabs: []),  // 0タブ（休眠）
+        WorkspaceState(name: "empty", rootPath: "/tmp", activeTab: 0, tabs: [], lastUsedAt: old),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
 
+    let before = Date()
     let wc = WindowController()
     XCTAssertEqual(
       wc.window.title, "empty", "0タブ workspace をアクティブ復元してもエントリは生き title に出る")
+    XCTAssertFalse(wc.current.activated, "前面表示と materialize 済みタブの有無は別軸")
+    XCTAssertGreaterThanOrEqual(
+      try XCTUnwrap(wc.current.lastUsedAt), before, "0 タブでも前面利用は MRU を進める")
   }
 
   /// 0タブの休眠 workspace へ切替えてもエントリは消えず、空表示のまま title に出る（自動起動しない）。
   func testSwitchToEmptyWorkspaceKeepsItAndShowsEmpty() throws {
+    let old = Date(timeIntervalSinceReferenceDate: 10)
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
         WorkspaceState(
           name: "main", rootPath: "/tmp", activeTab: 0,
           tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)]),
-        WorkspaceState(name: "dormant", rootPath: "/tmp", activeTab: 0, tabs: []),  // 0タブ（休眠）
+        WorkspaceState(name: "dormant", rootPath: "/tmp", activeTab: 0, tabs: [], lastUsedAt: old),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
 
@@ -150,6 +156,8 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
     XCTAssertEqual(wc.window.title, "main")
     wc.switchWorkspace(to: 1)  // 0タブ workspace へ切替 → 空表示のまま
     XCTAssertEqual(wc.window.title, "dormant", "0タブ workspace へ切替えてもエントリは生存し空表示で開く")
+    XCTAssertFalse(wc.current.activated)
+    XCTAssertGreaterThan(try XCTUnwrap(wc.current.lastUsedAt), old)
     wc.switchWorkspace(to: 0)
     wc.switchWorkspace(to: 1)
     XCTAssertEqual(wc.window.title, "dormant", "離れて戻っても dormant は消えていない")
@@ -272,7 +280,7 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
       "origin(offset 0) は最古でも常に先頭 → 残りは MRU（now 再刻印の newer → older）")
   }
 
-  // MARK: - 休眠 agent 数（未起動 workspace 行の zzz 表示）
+  // MARK: - 休眠 agent 数（未 activated タブに残る復元 agent）
 
   /// PaneNode.agentLeafCount: leaf(agent!=nil)=1、leaf(agent=nil)=0、split は子の和（純ロジック）。
   func testPaneNodeAgentLeafCount() {
@@ -289,23 +297,23 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
     XCTAssertEqual(tree.agentLeafCount, 2, "split は子の agent!=nil leaf の和")
   }
 
-  /// TerminalController(restoring:) の restoredAgentCount は resume 未対応 agent（resumeSpawn が nil で
-  /// 素シェル化する leaf）も含めて数える。snapshot() では 0 でも restoredAgentCount は非 0——本タスクの肝。
-  func testRestoredAgentCountIncludesResumeUnsupported() {
-    let unsupported: TerminalController.ResumeSpawn = { _ in nil }  // 全 leaf を素シェル化
+  /// TerminalController(restoring:) の dormantAgentCount は resume 未対応 agent（消費時に
+  /// 素シェル化する leaf）も含めて数える——resume 可否は消費まで判定しない。
+  func testDormantAgentCountIncludesResumeUnsupported() {
+    let unsupported: TerminalController.ResumeSpawn = { _ in nil }  // 全 leaf を消費時に素シェル化
     let tree = PaneNode.split(
       vertical: true, ratio: 0.5,
       first: .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: "a")),
       second: .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: "b")))
     let tc = TerminalController(restoring: tree, resumeSpawn: unsupported)
     XCTAssertEqual(
-      tc.restoredAgentCount, 2, "resume 未対応で素シェル化しても復元元 node から数え取りこぼさない")
+      tc.dormantAgentCount, 2, "resume 未対応でもチケットは消費まで休眠に数える")
 
     let plain = TerminalController(initialCwd: "/tmp")
-    XCTAssertEqual(plain.restoredAgentCount, 0, "新規タブは 0")
+    XCTAssertEqual(plain.dormantAgentCount, 0, "新規タブは 0")
   }
 
-  /// Workspace.dormantAgentCount() は各タブの restoredAgentCount の和。
+  /// Workspace.dormantAgentCount() は全タブの dormantAgentCount の和（下の fixture は全タブ未 activated）。
   func testDormantAgentCountSumsTabs() {
     let resume: TerminalController.ResumeSpawn = { _ in nil }
     let ws = Workspace(name: "sleepers", rootPath: "/tmp")
@@ -320,51 +328,7 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
           first: .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: "b")),
           second: .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: "c"))),
         resumeSpawn: resume))
-    XCTAssertEqual(ws.dormantAgentCount(), 3, "複数タブの restoredAgentCount の和")
-  }
-
-  /// パレットは未起動（休眠）行の永続 agent 数を通常 idle 色チップへ一本化する（count>0 で [("idle", n)]・
-  /// 0 で無し）。起動済み行は 0 件除外の rollup（agentState 空なら空）。reloadPalette 分岐の end-to-end。
-  func testPaletteShowsDormantRollupForInactiveWorkspacesOnly() throws {
-    func agentLeaf(_ id: String) -> PaneNode {
-      .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: id))  // resume 未対応
-    }
-    let file = WorkspacesFile(
-      version: WorkspacePersistence.version, activeWorkspace: 0,
-      workspaces: [
-        // 起動済み（アクティブ復元）。ordered で 0 件除外（agentState 空）→ rollup 空。
-        WorkspaceState(
-          name: "main", rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(tree: agentLeaf("m"), explicitTitle: nil)]),
-        // 休眠・agent 2つ → [("idle", 2)]
-        WorkspaceState(
-          name: "sleepers", rootPath: "/tmp", activeTab: 0,
-          tabs: [
-            TabState(
-              tree: .split(
-                vertical: true, ratio: 0.5, first: agentLeaf("a"), second: agentLeaf("b")),
-              explicitTitle: nil)
-          ]),
-        // 休眠・agent 0 → rollup 無し
-        WorkspaceState(
-          name: "quiet", rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)]),
-      ])
-    try JSONEncoder().encode(file).write(to: workspacesFile())
-
-    let wc = WindowController()
-    wc.showWorkspacePalette()
-    let items = try XCTUnwrap(wc.model.workspacePalette?.items)
-    func rollup(of name: String) -> [(state: String, count: Int)]? {
-      items.first { $0.name == name }.map(\.agentRollup).flatMap { $0.isEmpty ? nil : $0 }
-    }
-
-    let sleepers = try XCTUnwrap(rollup(of: "sleepers"), "休眠かつ agent>0 は rollup を持つ")
-    XCTAssertEqual(sleepers.map { $0.state }, ["idle"], "休眠 rollup は通常 idle 色チップに一本化")
-    XCTAssertEqual(sleepers.map { $0.count }, [2], "永続 agent leaf の総数")
-
-    XCTAssertNil(rollup(of: "quiet"), "休眠でも agent 0 件なら rollup を出さない")
-    XCTAssertNil(rollup(of: "main"), "起動済みで agentState 0 件は 0 件除外で空")
+    XCTAssertEqual(ws.dormantAgentCount(), 3, "複数タブの休眠チケット数の和")
   }
 
   /// 構成を変えて flushSave すると実際にディスクへ書かれ、再起動相当の新 WindowController で復元される。

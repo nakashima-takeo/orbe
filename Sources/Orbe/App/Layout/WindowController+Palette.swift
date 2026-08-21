@@ -224,15 +224,13 @@ extension WindowController {
     let items = workspaces.enumerated().map { entry -> WorkspacePaletteModel.Item in
       let ws = entry.element
       let dormant = !ws.activated
-      // 未起動行は agentState rollup が元々 0 件のため、永続 leaf の総数を通常 idle 色チップに
-      // 一本化する（0 件は出さない）。起動済み行は 0 件除外の rollup（存在する状態だけチップを出す）。
-      let rollup: [(state: String, count: Int)]
-      if dormant {
-        let n = ws.dormantAgentCount()
-        rollup = n > 0 ? [(state: "idle", count: n)] : []
-      } else {
-        rollup = AgentRollup.ordered(ws.agentCounts())
-      }
+      // live状態のロールアップと、未消費の復元チケット（`.dormant` なペイン）数は別チップで
+      // 併記する。行全体の減光（activatedタブが無い現在状態）と dormant チップ（未消費チケット数）は
+      // 互いに独立した現在値として投影する。
+      let dormantCount = ws.dormantAgentCount()
+      let rollup =
+        AgentRollup.ordered(ws.agentCounts())
+        + (dormantCount > 0 ? [(state: "dormant", count: dormantCount)] : [])
       return WorkspacePaletteModel.Item(
         index: entry.offset, name: ws.name, isActive: entry.offset == activeWorkspace,
         dormant: dormant, agentRollup: rollup, dir: ws.rootPath)

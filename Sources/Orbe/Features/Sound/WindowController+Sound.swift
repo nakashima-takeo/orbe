@@ -10,7 +10,7 @@ extension WindowController {
     if let visibleTab, pane.controller === visibleTab { return }
     // 設定は**発信元ペインが属する workspace の実効値**を読む。workspace 上書き（「この workspace の
     // エージェントはこの音」）が意味を持つのはこの読み方だけ。
-    // 所属が引けない＝休眠 workspace のペイン。②が「幽霊ピルになる」として立てないのと同じ集合を
+    // 所属が引けない＝未activatedタブのペイン。②が「幽霊ピルになる」として立てないのと同じ集合を
     // 見る——一覧にもピルにも出ない音だけが鳴ると、ユーザは出所を辿れない。
     guard let ws = workspace(of: pane) else { return }
     let settings = settingsStore.effective(override: ws.settingsOverride)
@@ -18,10 +18,11 @@ extension WindowController {
     soundPlayer.play(plan.family, event: plan.event, volume: plan.volume)
   }
 
-  /// ペインが属する workspace（`attentionRow(for:)` と同じ走査。報告はライブペインからしか来ない）。
+  /// ペインが属する workspace（`attentionRow(for:)` と同じ activatedタブの走査）。
   private func workspace(of pane: SurfaceView) -> Workspace? {
-    for ws in workspaces where ws.activated {
-      for tab in ws.tabs where tab.controlAllPanes().contains(where: { $0 === pane }) { return ws }
+    for ws in workspaces {
+      for tab in ws.tabs
+      where tab.activated && tab.controlAllPanes().contains(where: { $0 === pane }) { return ws }
     }
     return nil
   }

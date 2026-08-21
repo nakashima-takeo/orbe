@@ -1,7 +1,7 @@
 ---
 title: メニューバー投影
 description: 常駐 NSStatusItem 1 個の 4 態（静か / 状態変化の滲み出しピル / 件数 / ドロップダウン）。Attention の単一情報源を前面化せずに読ませる面
-updated: 2026-08-10
+updated: 2026-08-17
 ---
 
 # メニューバー投影
@@ -73,6 +73,6 @@ updated: 2026-08-10
 
 ## 行の集合と更新
 
-投影する行は **activate 済み workspace のライブペインのみ**（休眠 workspace は対象外）で、エージェント状態が `waiting` / `done` / `working` のペインを状態変化時刻の降順に並べる。`idle` と未報告は出さない。件数と一覧は `waiting`+`done` のみで、`working` は集約 1 行が受ける。
+投影する行は **activatedタブのライブペインのみ**で、エージェント状態が `waiting` / `done` / `working` のペインを状態変化時刻の降順に並べる。背景workspaceへ明示的に作成されmaterializeされたタブも含み、同じworkspaceに残る未materializeタブは含まない。`idle` と未報告は出さない。件数と一覧は `waiting`+`done` のみで、`working` は集約 1 行が受ける。
 
 snapshot は chrome と同じ coalesce 契機で更新する（[chrome](chrome.md)）——メニューバー専用の走査タイミングは作らない。ドロップダウンの経過時間だけは表示中に自走する。

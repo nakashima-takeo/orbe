@@ -12,17 +12,20 @@ import XCTest
 ///
 /// workspace の id はプロセス全域の IdGen で採番され予測不能なため、決して直書きせず
 /// `controlListWorkspaces()` の戻りから読む（配列インデックスでなく id で指す契約でもある）。
+///
+/// 休眠 workspace が list_workspaces / list_panes にどう写るかは分割した拡張ファイル
+/// `+DormantProjection` が測る。ハーネス（`restore` / `tabbed` / `agentLeaf` / `row`）は本体が持つ。
 final class WindowControllerControlTests: OrbeTestCase {
 
   // MARK: - fixtures / helpers
 
-  /// resume 未対応 agent を載せた leaf（復元時は素シェル化するが restoredAgentCount には数える）。
-  private func agentLeaf(_ id: String) -> PaneNode {
+  /// resume 未対応 agent を載せた leaf（消費時に素シェル化するが休眠チケットには数える）。
+  func agentLeaf(_ id: String) -> PaneNode {
     .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: id))
   }
 
   /// 単一 leaf タブを持つ workspace 状態。
-  private func tabbed(_ name: String, tree: PaneNode = .leaf(cwd: nil, agent: nil))
+  func tabbed(_ name: String, tree: PaneNode = .leaf(cwd: nil, agent: nil))
     -> WorkspaceState
   {
     WorkspaceState(
@@ -31,7 +34,7 @@ final class WindowControllerControlTests: OrbeTestCase {
   }
 
   /// ディスクへ workspaces を書いてから復元済み WindowController を返す。
-  private func restore(activeWorkspace: Int, _ workspaces: [WorkspaceState]) throws
+  func restore(activeWorkspace: Int, _ workspaces: [WorkspaceState]) throws
     -> WindowController
   {
     let file = WorkspacesFile(
@@ -42,7 +45,7 @@ final class WindowControllerControlTests: OrbeTestCase {
   }
 
   /// controlListWorkspaces から (name==) の行を引く。
-  private func row(_ wc: WindowController, name: String) -> [String: Any]? {
+  func row(_ wc: WindowController, name: String) -> [String: Any]? {
     wc.controlListWorkspaces().first { $0["name"] as? String == name }
   }
 
@@ -122,6 +125,10 @@ final class WindowControllerControlTests: OrbeTestCase {
     XCTAssertEqual(result.activeWorkspaceId, emptyId)
     XCTAssertTrue(result.paneIds.isEmpty, "0タブ WS はシェルを起こさず paneIds は空配列")
     XCTAssertEqual(wc.window.title, "empty", "0タブ WS も activate で前面化する")
+    let projected = try XCTUnwrap(row(wc, name: "empty"))
+    XCTAssertEqual(projected["active"] as? Bool, true)
+    XCTAssertEqual(projected["activated"] as? Bool, false, "前面選択と起床済みタブの有無は別軸")
+    XCTAssertEqual(projected["dormantAgentCount"] as? Int, 0)
   }
 
   // MARK: - controlListWorkspaces の dormantAgentCount 露出
@@ -132,6 +139,7 @@ final class WindowControllerControlTests: OrbeTestCase {
     let rows = wc.controlListWorkspaces()
     XCTAssertFalse(rows.isEmpty)
     for r in rows {
+      XCTAssertNotNil(r["activated"] as? Bool, "各行に activated(Bool) が露出する")
       XCTAssertNotNil(r["dormantAgentCount"] as? Int, "各行に dormantAgentCount(Int) が露出する")
     }
   }
@@ -166,6 +174,24 @@ final class WindowControllerControlTests: OrbeTestCase {
       XCTAssertNotNil(p["agentSessionId"], "各ペイン行に agentSessionId キーが存在する")
       XCTAssertTrue(p["agentSessionId"] is NSNull, "report_agent 未適用なら null")
     }
+  }
+
+  /// 休眠（未消費チケット）ペインは、同一性（agentSessionId）は露出するが状態（agentState）は
+  /// 出さない——報告は live にしか存在しないため。resume 非対応 CLI で固定する: resume 可能な
+  /// 休眠は従来から値が出ており、「復元時に解決できないチケットを捨てる」設計への差し戻しは
+  /// 未対応 CLI 側でしか観測できない。orbe-cli / orbe-mcp は agentSessionId を resume の鍵、
+  /// agentState を状態として別軸で読む。
+  func testListPanesExposesDormantTicketSessionIdWithoutState() throws {
+    let wc = try restore(
+      activeWorkspace: 0, [tabbed("main"), tabbed("sleeping", tree: agentLeaf("zzz"))])
+    XCTAssertEqual(
+      row(wc, name: "sleeping")?["activated"] as? Bool, false, "前提: 未 activate＝チケットは未消費")
+
+    let pane = try XCTUnwrap(
+      wc.controlListPanes().first { $0["workspaceName"] as? String == "sleeping" })
+
+    XCTAssertEqual(pane["agentSessionId"] as? String, "zzz", "休眠のあいだも resume の鍵は見える")
+    XCTAssertTrue(pane["agentState"] is NSNull, "休眠ペインに報告状態は無い")
   }
 
   // MARK: - controlListAgents（list_agents）
@@ -321,26 +347,5 @@ final class WindowControllerControlTests: OrbeTestCase {
     XCTAssertEqual(
       pane?["cwd"] as? String, "/tmp/bg-root", "対象（背景）WS の rootPath で開く")
     XCTAssertEqual(wc.window.title, "main", "アクティブ WS は変わらない")
-  }
-
-  /// 活性（activated==true）workspace は復元 agent leaf を持っていても dormantAgentCount が 0。
-  /// dormantAgentCount は未起動行の zzz 専用の永続 leaf カウントで、活性 WS では stale。パレット
-  /// （活性行は live な agentCounts を使う）と契約を揃え、live と dormant の二重計上を防ぐ。
-  func testListWorkspacesActiveWorkspaceReportsZeroDormantAgentCount() throws {
-    let sleepers = PaneNode.split(
-      vertical: true, ratio: 0.5, first: agentLeaf("a"), second: agentLeaf("b"))
-    let wc = try restore(
-      activeWorkspace: 0,
-      [
-        tabbed("active", tree: sleepers),  // 活性かつ復元 agent 2（永続 leaf は在る）
-        tabbed("dormant", tree: sleepers),  // 非活性で復元 agent 2
-      ])
-    XCTAssertEqual(row(wc, name: "active")?["active"] as? Bool, true, "前提: active 行は活性")
-    XCTAssertEqual(
-      row(wc, name: "active")?["dormantAgentCount"] as? Int, 0,
-      "活性 WS は復元 agent leaf があっても dormantAgentCount は 0")
-    XCTAssertEqual(
-      row(wc, name: "dormant")?["dormantAgentCount"] as? Int, 2,
-      "非活性 WS は永続 agent leaf 2 を保持")
   }
 }

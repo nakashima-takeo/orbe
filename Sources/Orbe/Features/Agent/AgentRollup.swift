@@ -1,11 +1,13 @@
 import Foundation
 
-/// 全 workspace・全タブ・全ペインを横断したエージェント状態の件数集計。
+/// 全 workspace の activated タブ・全ペインを横断したエージェント状態の件数集計。
 /// 件数の単位はペイン＝`agentState` を持つ `SurfaceView` 1 つを 1 件（TerminalController が数える）。
 enum AgentRollup {
   /// 横断ロールアップが扱う状態種別の固定順（working → waiting → done → idle）。
   /// idle はタブには出さない（`aggregateAgentState` の priority が除外）が、横断集計には数えて出す。
   /// 件数の集計対象もこの集合（`countedStates`）で、集計と表示の対象を一致させる。
+  /// `dormant` は `agentState` ではなく未消費の復元チケット（`.dormant` slot）の数なので、ここには入れない。
+  /// 表示上は workspace パレットだけが、この順の後ろへ 1 件連結する（`WindowController.reloadPalette`）。
   static let stateOrder = ["working", "waiting", "done", "idle"]
 
   /// タブ/workspace 名の色を決める「最優先状態」の優先順位（waiting > working > done）。
@@ -34,19 +36,19 @@ enum AgentRollup {
 }
 
 extension Workspace {
-  /// この workspace の全タブ・全ペインを状態種別ごとに件数集計する（`[state: count]`）。
+  /// この workspace の activated タブだけを状態種別ごとに件数集計する（`[state: count]`）。
   func agentCounts() -> [String: Int] {
     var counts: [String: Int] = [:]
-    for tab in tabs {
+    for tab in tabs where tab.activated {
       for (state, count) in tab.agentStateCounts() { counts[state, default: 0] += count }
     }
     return counts
   }
 
-  /// この workspace が永続している agent != nil leaf の総数（休眠 agent 数）。
-  /// 未起動（activated==false）行の zzz 表示に使う。既存 agentCounts() は agentState 基準で
-  /// 休眠行では 0 になるため、この永続 leaf 基準の別カウントが要る。
+  /// この workspace に現在残る、未消費の復元チケット（休眠 agent）の総数。
+  /// `.dormant` なペインを数えるだけ——チケットは materialize 開始で必ず消費されるため、
+  /// activated タブに休眠ペインは残らない。live / dormant が混在する間は正の値を返す。
   func dormantAgentCount() -> Int {
-    tabs.reduce(0) { $0 + $1.restoredAgentCount }
+    tabs.reduce(0) { $0 + $1.dormantAgentCount }
   }
 }

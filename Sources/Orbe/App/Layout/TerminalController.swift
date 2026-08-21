@@ -33,6 +33,11 @@ final class TerminalController {
   let rootContainer = NSView()
   private(set) weak var focusedPane: SurfaceView?
 
+  /// このタブが materialize 済み側にある現在状態。現仕様の遷移は false → true のみだが、
+  /// 履歴bitではなく、将来の再休眠では false へ戻せる責務として扱う。
+  /// 永続化せず、surface 生成の成功可否ではなく window hierarchy への attach 開始時に true とする。
+  private(set) var activated = false
+
   /// 最後のペインが閉じられた（このタブを閉じるべき）通知。閉鎖の発火源を添えて渡す
   /// （復元スタックへ積むかの判定に要る）。
   var onEmpty: ((TabCloseOrigin) -> Void)?
@@ -51,10 +56,11 @@ final class TerminalController {
   /// Cmd+R で付けた明示タイトル（sticky・tab単位）。非nil・非空なら最優先。空入力で nil へ戻す。
   var explicitTitle: String?
 
-  /// 復元時に元 PaneNode が持っていた agent != nil leaf 数（休眠 agent の総数）。
-  /// resume 未対応で素シェル化した leaf も、変換前の node から数えるため取りこぼさない。
-  /// 通常（新規）タブは 0。休眠 workspace は活性化前にミューテートされないため不変で正しい。
-  let restoredAgentCount: Int
+  /// 現在このタブに残る、未消費の復元チケット（休眠 agent）数。
+  /// 固定スナップショットではなく pane の slot から導出するため、休眠中の close_pane に追従する。
+  var dormantAgentCount: Int {
+    controlAllPanes().count(where: \.agentSlot.isDormant)
+  }
 
   /// このタブの表示タイトル。① explicitTitle ?? ② アプリ報告タイトル ?? ③ derived(cwd, root)。
   /// rootPath は所属 Workspace が持つため呼び出し側（WindowController）から渡す。
@@ -84,7 +90,7 @@ final class TerminalController {
   init(
     initialCwd: String? = nil, initialCommand: String? = nil, initialEnv: [String: String] = [:]
   ) {
-    restoredAgentCount = 0
+    resumeSpawn = nil
     let first = makePane(
       inheritFrom: nil, initialCwd: initialCwd, initialCommand: initialCommand,
       initialEnv: initialEnv)
@@ -99,35 +105,34 @@ final class TerminalController {
   /// 解決できなければ nil（呼び出し側は素のシェルで復元）。
   typealias ResumeSpawn = (AgentSession) -> (command: String, env: [String: String])?
 
+  /// 休眠チケットの消費（materialize 開始）時に resume を解決する resolver。
+  /// 復元時ではなく消費時に解決するため保持する（通常タブは nil）。
+  private let resumeSpawn: ResumeSpawn?
+
   /// 永続スナップショット（PaneNode）から分割ツリーを再構築する。
-  /// agent 付きの葉は resumeSpawn で resume コマンドに解決し、起こす。
-  init(restoring node: PaneNode, resumeSpawn: ResumeSpawn) {
-    restoredAgentCount = node.agentLeafCount
-    let root = buildView(from: node, resumeSpawn: resumeSpawn)
+  /// agent 付きの葉は休眠チケット（`.dormant`）のまま起こし、resume 解決は消費時
+  /// （`recordMaterializationStarted`）まで遅延する。
+  init(restoring node: PaneNode, resumeSpawn: @escaping ResumeSpawn) {
+    self.resumeSpawn = resumeSpawn
+    let root = buildView(from: node)
     root.frame = rootContainer.bounds
     root.autoresizingMask = [.width, .height]
     rootContainer.addSubview(root)
     focusedPane = firstPane(in: rootContainer)
   }
 
-  private func buildView(from node: PaneNode, resumeSpawn: ResumeSpawn) -> NSView {
+  private func buildView(from node: PaneNode) -> NSView {
     switch node {
     case .leaf(let cwd, let agent):
-      if let agent, let spawn = resumeSpawn(agent) {
-        let pane = makePane(
-          inheritFrom: nil, initialCwd: cwd, initialCommand: spawn.command, initialEnv: spawn.env)
-        // resume 直後・最初の hook が来る前に snapshot しても agent 情報が保たれるよう再設定する。
-        pane.agentCommand = agent.command
-        pane.agentSessionId = agent.sessionId
-        return wrap(pane)
-      }
-      return wrap(makePane(inheritFrom: nil, initialCwd: cwd))
+      let pane = makePane(inheritFrom: nil, initialCwd: cwd)
+      if let agent { pane.agentSlot = .dormant(agent) }  // agent 無しは既定の .none のまま
+      return wrap(pane)
     case .split(let vertical, let ratio, let first, let second):
       let split = WorkspaceSplitView()
       split.isVertical = vertical
       split.dividerStyle = .thin
-      split.addArrangedSubview(buildView(from: first, resumeSpawn: resumeSpawn))
-      split.addArrangedSubview(buildView(from: second, resumeSpawn: resumeSpawn))
+      split.addArrangedSubview(buildView(from: first))
+      split.addArrangedSubview(buildView(from: second))
       split.restore(ratio: ratio)
       return split
     }
@@ -179,6 +184,24 @@ final class TerminalController {
     onAgentStateChange?()
   }
 
+  /// materialize 開始を記録し、休眠チケットを一度きり消費する——resume を (command, env) に
+  /// 解決して起動指示を確定し、同一性を live へ引き継ぐ（解決できなければ素シェル化）。attach
+  /// （surface 生成）前に呼ばれるため起動指示は spawn に効き、最初の hook 報告も live で扱われる。
+  func recordMaterializationStarted() {
+    guard !activated else { return }
+    activated = true
+    forEachPane(in: rootContainer) { pane in
+      guard case .dormant(let session) = pane.agentSlot else { return }
+      if let spawn = resumeSpawn?(session) {
+        pane.initialCommand = spawn.command
+        pane.initialEnv = spawn.env
+        pane.agentSlot = .live(session: session, report: nil)  // 同一性を引き継いで消費
+      } else {
+        pane.agentSlot = .none  // resume 非対応 → 素のシェルで起きる
+      }
+    }
+  }
+
   /// タブ内の全ペインを優先順位 `waiting > working > done` で1つに畳んだ状態種別。
   /// idle・nil のみならグリフ無し（nil）。
   func aggregateAgentState() -> AgentStateIcon.Kind? {
@@ -211,10 +234,14 @@ final class TerminalController {
   /// タブ活性化＝完了通知の消費。タブ内全ペインの `done` を `idle`（休止）に遷移させ、
   /// 集約 `done` バッジを消す（idle はタブに出ない）。エージェントは生きて入力待ち＝休止なので、
   /// nil（不在）ではなく idle にして横断集計に休止中として残す。`waiting`・`working` は残す。
-  /// `agentCommand`・`agentSessionId` は触らないため resume を壊さない。
+  /// 同一性（session）と報告の文言・時刻は運んだまま state だけ書き換えるため resume も
+  /// Attention の並びも壊さない。
   func consumeDoneState() {
     forEachPane(in: rootContainer) { pane in
-      if pane.agentState == "done" { pane.agentState = "idle" }
+      guard case .live(let session, .some(var report)) = pane.agentSlot, report.state == "done"
+      else { return }
+      report.state = "idle"
+      pane.agentSlot = .live(session: session, report: report)  // didSet が done→idle を emit
     }
   }
 
@@ -357,10 +384,8 @@ final class TerminalController {
   private func snapshotView(_ v: NSView) -> PaneNode {
     if let leaf = v as? SurfaceScrollView { return snapshotView(leaf.surfaceView) }
     if let s = v as? SurfaceView {
-      var agent: AgentSession?
-      if let command = s.agentCommand, let sessionId = s.agentSessionId {
-        agent = AgentSession(command: command, sessionId: sessionId)
-      }
+      // 永続化するのは sessionId が確定している同一性だけ（resume 不能な記録を書かない）。
+      let agent = s.agentSlot.session.flatMap { $0.sessionId != nil ? $0 : nil }
       return .leaf(cwd: s.currentPwd ?? s.initialCwd, agent: agent)
     }
     if let split = v as? WorkspaceSplitView, split.arrangedSubviews.count == 2 {

@@ -29,7 +29,7 @@ extension WindowController {
     if workspaceIndex == activeWorkspace {
       select(workspaces[workspaceIndex].tabs.count - 1)  // surface を起こす（mount）
     } else {
-      materializeOffscreen(tc)
+      materializeOffscreen(tc, in: workspaces[workspaceIndex])
     }
     scheduleSave()
     guard let paneId = tc.controlAllPanes().first?.id else { return nil }
@@ -53,7 +53,8 @@ extension WindowController {
   /// `viewDidMoveToWindow` を `addSubview` の中で同期発火する）。ここが成立しているかの合否は
   /// `OrbeCliAgentProcessTests` の背景 workspace 1 本が持つ——外すと、返した paneId は
   /// 「画面が読めず入力も届かない」ものに退化する。同じテストが surface のサイズも見る。
-  private func materializeOffscreen(_ tc: TerminalController) {
+  private func materializeOffscreen(_ tc: TerminalController, in ws: Workspace) {
+    guard store.recordMaterialization(of: tc, in: ws) else { return }
     tc.rootContainer.autoresizingMask = [.width, .height]
     tc.rootContainer.frame = model.content.bounds
     tc.rootContainer.isHidden = true

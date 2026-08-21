@@ -144,8 +144,8 @@ final class TerminalControllerTests: OrbeTestCase {
     let tc = TerminalController()
     tc.split(.horizontal)
     let split = rootSplit(tc)!
-    pane(split.arrangedSubviews[0]).agentState = nil
-    pane(split.arrangedSubviews[1]).agentState = "idle"
+    pane(split.arrangedSubviews[0]).agentSlot = .none
+    setReportedState(pane(split.arrangedSubviews[1]), "idle")
     XCTAssertNil(tc.aggregateAgentState(), "idle・nil のみならアイコン無し")
   }
 
@@ -155,8 +155,8 @@ final class TerminalControllerTests: OrbeTestCase {
     let split = rootSplit(tc)!
     let a = pane(split.arrangedSubviews[0])
     let b = pane(split.arrangedSubviews[1])
-    a.agentState = "working"
-    b.agentState = "waiting"
+    setReportedState(a, "working")
+    setReportedState(b, "waiting")
     XCTAssertEqual(tc.aggregateAgentState(), .waiting, "waiting > working")
   }
 
@@ -168,8 +168,8 @@ final class TerminalControllerTests: OrbeTestCase {
     let split = rootSplit(tc)!
     let a = pane(split.arrangedSubviews[0])
     let b = pane(split.arrangedSubviews[1])
-    a.agentState = "done"
-    b.agentState = "done"
+    setReportedState(a, "done")
+    setReportedState(b, "done")
 
     tc.consumeDoneState()
 
@@ -184,8 +184,8 @@ final class TerminalControllerTests: OrbeTestCase {
     let split = rootSplit(tc)!
     let a = pane(split.arrangedSubviews[0])
     let b = pane(split.arrangedSubviews[1])
-    a.agentState = "waiting"
-    b.agentState = "working"
+    setReportedState(a, "waiting")
+    setReportedState(b, "working")
 
     tc.consumeDoneState()
 
@@ -196,15 +196,16 @@ final class TerminalControllerTests: OrbeTestCase {
   func testConsumePreservesAgentSessionForResume() {
     let tc = TerminalController()
     let a = tc.focusedPane!
-    a.agentState = "done"
-    a.agentCommand = "claude"
-    a.agentSessionId = "sess-1"
+    setReportedState(a, "done", command: "claude")
+    let session = AgentSession(command: "claude", sessionId: "sess-1")
+    if case .live(_, let report) = a.agentSlot {
+      a.agentSlot = .live(session: session, report: report)
+    }
 
     tc.consumeDoneState()
 
     XCTAssertEqual(a.agentState, "idle", "done は idle(休止)へ")
-    XCTAssertEqual(a.agentCommand, "claude", "resume 用の command は保持")
-    XCTAssertEqual(a.agentSessionId, "sess-1", "resume 用の sessionId は保持")
+    XCTAssertEqual(a.agentSlot.session, session, "resume 用の同一性（command・sessionId）は保持")
   }
 
   func testConsumeIsScopedToReceiverTab() {
@@ -212,8 +213,8 @@ final class TerminalControllerTests: OrbeTestCase {
     // 消費は受け手タブに閉じ、別タブ（背景タブ）の done は残る。
     let active = TerminalController()
     let background = TerminalController()
-    active.focusedPane!.agentState = "done"
-    background.focusedPane!.agentState = "done"
+    setReportedState(active.focusedPane!, "done")
+    setReportedState(background.focusedPane!, "done")
 
     active.consumeDoneState()
 
@@ -224,7 +225,7 @@ final class TerminalControllerTests: OrbeTestCase {
   func testConsumeOnNonDonePaneNoOp() {
     let tc = TerminalController()
     let a = tc.focusedPane!
-    a.agentState = nil
+    a.agentSlot = .none
 
     tc.consumeDoneState()
 
@@ -244,9 +245,9 @@ final class TerminalControllerTests: OrbeTestCase {
     let bSplit = rootSplit(tc)!.arrangedSubviews[1] as! NSSplitView
     let c = pane(bSplit.arrangedSubviews[1])
 
-    a.agentState = "working"
-    b.agentState = "waiting"
-    c.agentState = "working"
+    setReportedState(a, "working")
+    setReportedState(b, "waiting")
+    setReportedState(c, "working")
 
     let counts = tc.agentStateCounts()
     XCTAssertEqual(counts["working"], 2, "working は 2 ペイン")
@@ -258,8 +259,8 @@ final class TerminalControllerTests: OrbeTestCase {
     let tc = TerminalController()
     tc.split(.horizontal)
     let split = rootSplit(tc)!
-    pane(split.arrangedSubviews[0]).agentState = "idle"
-    pane(split.arrangedSubviews[1]).agentState = nil
+    setReportedState(pane(split.arrangedSubviews[0]), "idle")
+    pane(split.arrangedSubviews[1]).agentSlot = .none
     XCTAssertEqual(tc.agentStateCounts()["idle"], 1, "idle は横断集計に数える")
     XCTAssertEqual(tc.agentStateCounts().count, 1, "nil は数えない")
   }
@@ -326,8 +327,8 @@ final class TerminalControllerTests: OrbeTestCase {
     let split = rootSplit(tc)!
     let a = pane(split.arrangedSubviews[0])
     let b = pane(split.arrangedSubviews[1])
-    a.agentState = "done"
-    b.agentState = "working"
+    setReportedState(a, "done")
+    setReportedState(b, "working")
     // working(b) が done(a) に勝つ（CLI 非依存）
     XCTAssertEqual(tc.aggregateAgentState(), .working)
   }

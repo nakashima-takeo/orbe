@@ -14,29 +14,30 @@ struct AttentionRow: Equatable {
   let stateChangedAt: Date
 }
 
-/// Attention snapshot の builder と派生（pure）。対象は**ライブペインのみ**
-/// （activated な workspace ＝休眠除外）で、agentState ∈ {waiting, done, working} のペインを
+/// Attention snapshot の builder と派生（pure）。対象は**activatedタブのライブペインのみ**で、
+/// agentState ∈ {waiting, done, working} のペインを
 /// stateChangedAt 降順（同時刻は paneId 降順）に並べる。idle・nil は出さない。
 enum AttentionSnapshot {
   /// 一覧に出す状態（idle は出さない。nil は対象外）。
   static let attentionStates: Set<String> = ["waiting", "done", "working"]
 
-  /// 全 workspace を走査して Attention 行を組む。休眠（未 activate）workspace は対象外。
+  /// 全 workspace を走査して Attention 行を組む。未activatedタブは対象外。
   static func rows(of workspaces: [Workspace]) -> [AttentionRow] {
     var out: [AttentionRow] = []
-    for ws in workspaces where ws.activated {
-      for tab in ws.tabs {
+    for ws in workspaces {
+      for tab in ws.tabs where tab.activated {
         for pane in tab.controlAllPanes() {
-          guard let state = pane.agentState, attentionStates.contains(state) else { continue }
+          guard let report = pane.agentReport, attentionStates.contains(report.state) else {
+            continue
+          }
           out.append(
             AttentionRow(
               paneId: pane.id,
               workspaceName: ws.name,
               tabTitle: tab.displayTitle(workspaceRoot: ws.rootPath),
-              state: state,
-              message: state == "working" ? nil : pane.agentMessage?.text,
-              // 理論上 nil にならない（stateChangedAt は report が必ず立てる）が、防御で最古扱い。
-              stateChangedAt: pane.agentStateChangedAt ?? .distantPast))
+              state: report.state,
+              message: report.state == "working" ? nil : report.message?.text,
+              stateChangedAt: report.stateChangedAt))
         }
       }
     }
