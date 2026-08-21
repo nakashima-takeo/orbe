@@ -224,9 +224,9 @@ extension WindowController {
     let items = workspaces.enumerated().map { entry -> WorkspacePaletteModel.Item in
       let ws = entry.element
       let dormant = !ws.activated
-      // activatedタブのlive状態と、未activatedタブの復元agent数は別チップで併記する。
-      // 行全体の減光（activatedタブが無い現在状態）と dormant チップ（休眠中の復元agent数）も
-      // 別の現在値として投影する。
+      // live状態のロールアップと、未消費の復元チケット（`.dormant` なペイン）数は別チップで
+      // 併記する。行全体の減光（activatedタブが無い現在状態）と dormant チップ（未消費チケット数）は
+      // 互いに独立した現在値として投影する。
       let dormantCount = ws.dormantAgentCount()
       let rollup =
         AgentRollup.ordered(ws.agentCounts())

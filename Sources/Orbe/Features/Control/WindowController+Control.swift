@@ -76,7 +76,9 @@ extension WindowController: ControlTarget {
     // 遷移表そのもの。網羅 switch なので、`AgentSlot` にケースが増えたら必ずここの判断を求められる。
     switch pane.agentSlot {
     case .dormant:
-      break  // 破棄。chrome の再投影だけは他経路と同じく無条件に流す（投影は同値）。
+      // 破棄——このペインの slot は一切変えない。末尾の `paneAgentStateChanged()` だけは他経路と
+      // 同じく無条件に通す（chrome の再投影に加え、可視タブの done→idle 消費も走る）。
+      break
     case .live where state == "clear":
       pane.agentSlot = .none
     case .none where state == "clear":
