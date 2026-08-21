@@ -208,7 +208,8 @@ final class WorkspacePersistenceTests: OrbeTestCase {
 
   // MARK: - エージェントセッションの復元
 
-  /// agent 付き葉は resumeSpawn に解決を依頼し、復元後の snapshot で agent を保つ（再起動往復が冪等）。
+  /// agent 付き葉は消費（materialize 開始）時に resumeSpawn へ解決を依頼し、起動指示を確定する。
+  /// snapshot は休眠中も消費後も agent セッションを保つ（再起動往復が冪等）。
   func testRestoreAgentLeafResolvesResumeAndPreservesAgent() {
     var captured: AgentSession?
     let node: PaneNode = .leaf(
@@ -217,22 +218,74 @@ final class WorkspacePersistenceTests: OrbeTestCase {
       restoring: node,
       resumeSpawn: { session in
         captured = session
-        return ("claude --resume \(session.sessionId)", ["PATH": "/usr/bin"])
+        return ("claude --resume abc-123", ["PATH": "/usr/bin"])
       })
+    XCTAssertNil(captured, "resume 解決は復元時ではなく消費時")
+    XCTAssertEqual(tc.snapshot(), node, "休眠のままの snapshot も agent セッションを保つ")
+
+    tc.recordMaterializationStarted()
     XCTAssertEqual(
       captured, AgentSession(command: "claude", sessionId: "abc-123"),
-      "agent 付き葉は resumeSpawn に解決を依頼する")
-    XCTAssertEqual(tc.snapshot(), node, "復元後の snapshot は agent セッションを保つ（冪等）")
+      "消費時に resumeSpawn へ解決を依頼する")
+    let pane = tc.controlAllPanes()[0]
+    XCTAssertEqual(pane.initialCommand, "claude --resume abc-123", "解決した起動指示が spawn に効く")
+    XCTAssertEqual(pane.initialEnv, ["PATH": "/usr/bin"])
+    XCTAssertEqual(tc.snapshot(), node, "消費後の snapshot も agent セッションを保つ（冪等）")
   }
 
-  /// resume を解決できなければ素のシェルで復元し、agent は付かない。
+  /// resume を解決できなければ消費時に素のシェルへ落ち、以後の snapshot に agent は付かない。
+  /// セッション記録そのものは休眠のあいだ保持される（resume 可否は消費まで判定しない）。
   func testRestoreAgentLeafFallsBackToShellWhenUnresolved() {
     let node: PaneNode = .leaf(
       cwd: "/w", agent: AgentSession(command: "unknown", sessionId: "x"))
     let tc = TerminalController(restoring: node, resumeSpawn: noResume)
+    XCTAssertEqual(tc.snapshot(), node, "休眠のあいだセッション記録は保持される")
+
+    tc.recordMaterializationStarted()
+    let pane = tc.controlAllPanes()[0]
+    XCTAssertEqual(pane.agentSlot, .none, "解決不可なら消費で素のシェルへ落ちる")
+    XCTAssertNil(pane.initialCommand)
     XCTAssertEqual(
-      tc.snapshot(), .leaf(cwd: "/w", agent: nil),
-      "解決不可なら素のシェルで復元し agent は付かない")
+      tc.snapshot(), .leaf(cwd: "/w", agent: nil), "素シェル化後の snapshot に agent は付かない")
+  }
+
+  /// agent が command だけ（sessionId キー欠落）の永続ファイルも読め、sessionId は nil になる。
+  /// decode を厳格化すると `load()` が全体 nil に倒れ、ユーザーの workspace 構成が既定で潰され
+  /// 原本が quarantine される——欠落キーは常に緩和方向（エラーではなく nil）で受ける。
+  func testAgentWithoutSessionIdKeyLoadsAsNilIdentity() throws {
+    let tmp = try workspacesFile()
+    let json = """
+      {"version":3,"activeWorkspace":0,"workspaces":[\
+      {"name":"default","rootPath":"/r","activeTab":0,"tabs":[\
+      {"tree":{"leaf":{"cwd":"/r/a","agent":{"command":"claude"}}}}]}]}
+      """
+    try Data(json.utf8).write(to: tmp)
+
+    let loaded = try XCTUnwrap(WorkspacePersistence.load(), "sessionId キー欠落で全構成を失わない")
+    XCTAssertEqual(
+      loaded.workspaces[0].tabs[0].tree,
+      .leaf(cwd: "/r/a", agent: AgentSession(command: "claude", sessionId: nil)),
+      "欠落キーは nil として読む（CLI 名の記録は残る）")
+    XCTAssertTrue(FileManager.default.fileExists(atPath: tmp.path), "原本を quarantine へ退避しない")
+  }
+
+  /// sessionId を持たない同一性は、休眠でも稼働中でも snapshot に書かない。resume 不能な記録を
+  /// ディスクへ増やすと、次の起動で必ず素シェル化する死にチケットが永続し、⇧⌘T のゲートも
+  /// 誤って通り始める。
+  func testSnapshotDropsIdentitiesWithoutASessionId() {
+    let dormant = TerminalController(
+      restoring: .leaf(cwd: "/w", agent: AgentSession(command: "claude", sessionId: nil)),
+      resumeSpawn: noResume)
+    XCTAssertEqual(
+      dormant.snapshot(), .leaf(cwd: "/w", agent: nil), "sessionId 欠落のチケットは保存しない")
+
+    let live = TerminalController()
+    setReportedState(live.focusedPane!, "working", command: "claude")
+    XCTAssertEqual(
+      live.focusedPane?.agentSlot.session, AgentSession(command: "claude", sessionId: nil),
+      "前提: 報告が sessionId を運ぶ前の稼働")
+    XCTAssertEqual(
+      live.snapshot(), .leaf(cwd: nil, agent: nil), "同一性が未確定の稼働も保存しない")
   }
 
   // MARK: - ① 明示タイトル（TabState）の永続

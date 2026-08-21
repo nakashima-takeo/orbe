@@ -29,22 +29,26 @@ final class WorkspaceActivationTests: OrbeTestCase {
     let pane = try XCTUnwrap(tab.controlAllPanes().first)
 
     XCTAssertFalse(tab.activated)
-    XCTAssertEqual(tab.restoredAgentCount, 1)
-    XCTAssertTrue(pane.holdsDormantRestoredAgent)
-    XCTAssertEqual(pane.agentCommand, "claude")
-    XCTAssertEqual(pane.agentSessionId, "resume-1")
+    XCTAssertEqual(tab.dormantAgentCount, 1)
+    XCTAssertEqual(
+      pane.agentSlot, .dormant(AgentSession(command: "claude", sessionId: "resume-1")),
+      "復元チケットは同一性ごと凍結され、消費まで resume を解決しない")
 
     tab.recordMaterializationStarted()
     XCTAssertTrue(tab.activated)
-    XCTAssertEqual(tab.restoredAgentCount, 0)
+    XCTAssertEqual(tab.dormantAgentCount, 0)
+    XCTAssertEqual(
+      pane.agentSlot,
+      .live(session: AgentSession(command: "claude", sessionId: "resume-1"), report: nil),
+      "消費で同一性を引き継いで live 化する（報告はまだ無い）")
   }
 
   func testRestoredPlainAndNewTabsDoNotCreateDormantAgentProvenance() {
     let restoredPlain = TerminalController(
       restoring: .leaf(cwd: "/tmp", agent: nil), resumeSpawn: noResume)
     let new = TerminalController(initialCwd: "/tmp")
-    XCTAssertEqual(restoredPlain.restoredAgentCount, 0)
-    XCTAssertEqual(new.restoredAgentCount, 0)
+    XCTAssertEqual(restoredPlain.dormantAgentCount, 0)
+    XCTAssertEqual(new.dormantAgentCount, 0)
   }
 
   func testWorkspaceActivationAlwaysEqualsAnyActivatedTab() {
@@ -78,9 +82,9 @@ final class WorkspaceActivationTests: OrbeTestCase {
     XCTAssertTrue(store.recordMaterialization(of: target, in: owned))
     XCTAssertTrue(target.activated)
     XCTAssertTrue(owned.activated)
-    XCTAssertEqual(target.restoredAgentCount, 0)
+    XCTAssertEqual(target.dormantAgentCount, 0)
     XCTAssertFalse(sibling.activated)
-    XCTAssertEqual(sibling.restoredAgentCount, 1)
+    XCTAssertEqual(sibling.dormantAgentCount, 1)
     XCTAssertEqual(owned.active, 1)
     XCTAssertEqual(owned.lastUsedAt, Date(timeIntervalSinceReferenceDate: 123))
 
@@ -93,8 +97,8 @@ final class WorkspaceActivationTests: OrbeTestCase {
     XCTAssertFalse(store.recordMaterialization(of: outsideTab, in: outside), "store 外は変更しない")
     XCTAssertFalse(foreignTab.activated)
     XCTAssertFalse(outsideTab.activated)
-    XCTAssertEqual(foreignTab.restoredAgentCount, 1)
-    XCTAssertEqual(outsideTab.restoredAgentCount, 1)
+    XCTAssertEqual(foreignTab.dormantAgentCount, 1)
+    XCTAssertEqual(outsideTab.dormantAgentCount, 1)
   }
 
   func testSelectionAndWorkspaceUseDoNotMaterializeTabs() throws {
@@ -124,12 +128,12 @@ final class WorkspaceActivationTests: OrbeTestCase {
     XCTAssertEqual(ws.dormantAgentCount(), 3)
 
     live.recordMaterializationStarted()
-    XCTAssertEqual(live.restoredAgentCount, 0)
+    XCTAssertEqual(live.dormantAgentCount, 0)
     XCTAssertEqual(ws.dormantAgentCount(), 1)
     XCTAssertEqual(ws.agentCounts(), [:], "hook 報告前は live 状態も 0")
 
-    live.controlAllPanes()[0].agentState = "working"
-    live.controlAllPanes()[1].agentState = "waiting"
+    setReportedState(live.controlAllPanes()[0], "working")
+    setReportedState(live.controlAllPanes()[1], "waiting")
     XCTAssertEqual(ws.agentCounts(), ["working": 1, "waiting": 1])
     XCTAssertEqual(ws.dormantAgentCount(), 1, "live と休眠は別軸で二重計上しない")
 
@@ -138,24 +142,12 @@ final class WorkspaceActivationTests: OrbeTestCase {
     XCTAssertEqual(ws.dormantAgentCount(), 1)
   }
 
-  func testActivatedTabIsExcludedFromDormantCountEvenIfProvenanceIsCorrupted() {
-    let ws = Workspace(name: "w", rootPath: "/tmp")
-    let tab = restoredTab(agentIds: ["a"])
-    ws.tabs = [tab]
-    tab.recordMaterializationStarted()
-    tab.controlAllPanes()[0].holdsDormantRestoredAgent = true
-
-    XCTAssertTrue(tab.activated)
-    XCTAssertEqual(tab.restoredAgentCount, 1, "pane 由来の破損 fixture を明示")
-    XCTAssertEqual(ws.dormantAgentCount(), 0, "consumer は activated タブを休眠集計しない")
-  }
-
   func testLiveRollupCountsKnownStatesAndUsesCanonicalOrder() {
     let ws = Workspace(name: "live", rootPath: "/tmp")
     for state in ["idle", "done", "waiting", "working", "error"] {
       let tab = TerminalController()
       tab.recordMaterializationStarted()
-      tab.controlAllPanes()[0].agentState = state
+      setReportedState(tab.controlAllPanes()[0], state)
       ws.tabs.append(tab)
     }
 

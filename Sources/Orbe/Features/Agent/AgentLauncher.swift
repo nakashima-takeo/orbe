@@ -213,9 +213,8 @@ final class AgentLauncher {
   /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する。
   /// 起動と同じ PATH を渡す。未対応 agent は nil（呼び出し側は素のシェルで復元）。
   func resumeSpawn(for session: AgentSession) -> (command: String, env: [String: String])? {
-    guard
-      let command = AgentCatalog.resumeCommand(
-        forAgent: session.command, sessionId: session.sessionId)
+    guard let sessionId = session.sessionId,
+      let command = AgentCatalog.resumeCommand(forAgent: session.command, sessionId: sessionId)
     else { return nil }
     return (command, launchEnvironment)
   }

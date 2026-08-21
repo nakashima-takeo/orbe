@@ -1,7 +1,7 @@
 ---
 title: chrome
 description: 常駐 StatusRow 2 段 — 上段に現在地と横断エージェント件数、下段に全幅セグメント形タブ行。イベント駆動で更新する
-updated: 2026-08-17
+updated: 2026-08-21
 ---
 
 # chrome
@@ -58,7 +58,7 @@ updated: 2026-08-17
 
 全 workspace の**activatedタブ**とその全ペインを走査し、`agentState` を `working / waiting / done / idle` ごとに件数集計する（ペイン単位。idle は数えるが `error`・nil は数えない）。未materializeタブの復元agentはlive件数へ混ぜない。この状態順で状態色グリフ＋件数を出す（グリフは CLI 非依存。タブと同じく設定で SF Symbol へ差し替え可 → [settings](../palette/settings.md)）。項目は区切り線を持たず間隔で分け、休止（idle）項目は減光する。ラベル文字は持たない。件数 0 の種別・全体 0 は出さない。
 
-上段右端に裸のグリフ列（囲みなし）で固定表示し、**クリックで Attention パレットを開く**（→ [attention](../palette/attention.md)）。⌘⌘ は画面に書けないジェスチャなので、可視の入口をここに対で持つ。同じlive集計をWorkspaceパレットにも出し、そこだけは未activatedタブの復元agent数を独立したdormant（zzz）チップとして後置する（→ [workspace パレット](../palette/workspace.md)）。
+上段右端に裸のグリフ列（囲みなし）で固定表示し、**クリックで Attention パレットを開く**（→ [attention](../palette/attention.md)）。⌘⌘ は画面に書けないジェスチャなので、可視の入口をここに対で持つ。同じlive集計をWorkspaceパレットにも出し、そこだけは未消費の復元チケット（休眠agent）を持つペイン数を独立したdormant（zzz）チップとして後置する（→ [workspace パレット](../palette/workspace.md)）。
 
 ## アップデートのトースト（右下・非モーダル）
 

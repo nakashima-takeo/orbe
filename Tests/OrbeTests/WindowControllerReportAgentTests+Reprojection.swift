@@ -208,7 +208,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertTrue(wc.attentionStore.rows.isEmpty)
 
     let sibling = try XCTUnwrap(wc.current.tabs[0].split(.horizontal, from: pane))
-    sibling.agentState = "waiting"  // report 経路は通さない＝再投影を要求するのは split だけ
+    setReportedState(sibling, "waiting")  // report 経路は通さない＝再投影を要求するのは split だけ
     flushDelivered(wc)
     XCTAssertEqual(wc.attentionStore.rows.map(\.paneId), [sibling.id])
   }

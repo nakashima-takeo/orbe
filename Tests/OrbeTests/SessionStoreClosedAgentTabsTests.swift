@@ -12,10 +12,16 @@ import XCTest
 /// （`tabState().explicitTitle` に載る）。
 final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
 
-  /// resume を必ず解決する（復元後の葉に agent が残り、snapshot に agent が載る）。
+  /// resume を解決する（復元後の葉に agent が残り、snapshot に agent が載る）。
+  /// sessionId を持たないセッションは resume できないので nil。
   private let resume: TerminalController.ResumeSpawn = { session in
-    ("\(session.command) --resume \(session.sessionId)", [:])
+    guard let sessionId = session.sessionId else { return nil }
+    return ("\(session.command) --resume \(sessionId)", [:])
   }
+
+  /// resume を解決できない（未対応 CLI）resolver。解決は消費まで走らないので、休眠のまま
+  /// 閉じるテストでは呼ばれない——それでも「未対応 CLI のタブ」であることを fixture で明示する。
+  private let noResume: TerminalController.ResumeSpawn = { _ in nil }
 
   /// エージェントペイン 1 枚のタブ。明示タイトルで区別できる。
   private func agentTab(_ title: String) -> TerminalController {
@@ -47,6 +53,17 @@ final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
     return ws
   }
 
+  /// resume 非対応のタブ 1 枚だけを持つ workspace（休眠のまま閉じる経路用）。
+  private func makeUnresolvableWorkspace(_ name: String, title: String, tree: PaneNode)
+    -> Workspace
+  {
+    let ws = Workspace(name: name, rootPath: "/tmp")
+    let tc = TerminalController(restoring: tree, resumeSpawn: noResume)
+    tc.explicitTitle = title
+    ws.tabs = [tc]
+    return ws
+  }
+
   // MARK: - 積む条件（発火源 × エージェントの有無）
 
   /// 人のジェスチャ（タブ行の中クリック・⌘W）で閉じたエージェントタブは復元単位ごと積まれる。
@@ -61,6 +78,38 @@ final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
     XCTAssertEqual(
       closed?.state.tree, .leaf(cwd: nil, agent: AgentSession(command: "claude", sessionId: "a")),
       "エージェントセッションごと復元単位に載る")
+  }
+
+  /// resume 非対応 CLI（未知の command）の休眠タブでも、人のジェスチャで閉じれば
+  /// エージェントセッションごと復元単位が積まれる。積むゲートが読むのは「復元単位に agent が
+  /// 載るか」だけで、resume 可否は開き直した後の消費まで判定しない——resume 解決を復元時へ
+  /// 差し戻す（＝未対応 CLI の記録を復元時に捨てる）退行は、claude で組んだ既存テストでは
+  /// 新旧どちらの設計でも積まれてしまうので、この行だけが検出できる。
+  func testGestureCloseOfUnresolvableAgentTabIsAlsoPushed() {
+    let session = AgentSession(command: "unknown", sessionId: "x")
+    let ws = makeUnresolvableWorkspace(
+      "ws", title: "sleeping", tree: .leaf(cwd: "/work", agent: session))
+    let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
+
+    _ = store.removeTab(ws.tabs[0], origin: .gesture)
+
+    XCTAssertEqual(
+      store.popClosedAgentTab()?.state.tree, .leaf(cwd: "/work", agent: session),
+      "未対応 CLI でもセッション記録ごと積む（resume 可否は消費まで判定しない）")
+  }
+
+  /// sessionId を持たない休眠エージェント（sessionId キーを欠く永続ファイル由来の形）は積まない。
+  /// 復元単位を作る snapshot が resume 不能な同一性を漉すので、⇧⌘T のゲートもそこで閉じる
+  /// ——漉さなくなると、開き直しても素のシェルにしかならない死にチケットで ⇧⌘T が反応し始める。
+  func testGestureCloseOfAgentTabWithoutSessionIdIsNotPushed() {
+    let ws = makeUnresolvableWorkspace(
+      "ws", title: "keyless",
+      tree: .leaf(cwd: "/work", agent: AgentSession(command: "claude", sessionId: nil)))
+    let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
+
+    _ = store.removeTab(ws.tabs[0], origin: .gesture)
+
+    XCTAssertNil(store.popClosedAgentTab(), "resume 不能な同一性は復元単位に載らない＝積まない")
   }
 
   /// エージェントペインを持たない素のシェルタブは、人のジェスチャで閉じても積まない。

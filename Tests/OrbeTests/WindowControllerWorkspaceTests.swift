@@ -297,23 +297,23 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
     XCTAssertEqual(tree.agentLeafCount, 2, "split は子の agent!=nil leaf の和")
   }
 
-  /// TerminalController(restoring:) の restoredAgentCount は resume 未対応 agent（resumeSpawn が nil で
-  /// 素シェル化する leaf）も含めて数える。snapshot() では 0 でも restoredAgentCount は非 0。
-  func testRestoredAgentCountIncludesResumeUnsupported() {
-    let unsupported: TerminalController.ResumeSpawn = { _ in nil }  // 全 leaf を素シェル化
+  /// TerminalController(restoring:) の dormantAgentCount は resume 未対応 agent（消費時に
+  /// 素シェル化する leaf）も含めて数える——resume 可否は消費まで判定しない。
+  func testDormantAgentCountIncludesResumeUnsupported() {
+    let unsupported: TerminalController.ResumeSpawn = { _ in nil }  // 全 leaf を消費時に素シェル化
     let tree = PaneNode.split(
       vertical: true, ratio: 0.5,
       first: .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: "a")),
       second: .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: "b")))
     let tc = TerminalController(restoring: tree, resumeSpawn: unsupported)
     XCTAssertEqual(
-      tc.restoredAgentCount, 2, "resume 未対応で素シェル化しても pane に由来フラグが立ち取りこぼさない")
+      tc.dormantAgentCount, 2, "resume 未対応でもチケットは消費まで休眠に数える")
 
     let plain = TerminalController(initialCwd: "/tmp")
-    XCTAssertEqual(plain.restoredAgentCount, 0, "新規タブは 0")
+    XCTAssertEqual(plain.dormantAgentCount, 0, "新規タブは 0")
   }
 
-  /// Workspace.dormantAgentCount() は未 activated タブの restoredAgentCount の和（下の fixture は全タブ未 activated）。
+  /// Workspace.dormantAgentCount() は全タブの dormantAgentCount の和（下の fixture は全タブ未 activated）。
   func testDormantAgentCountSumsTabs() {
     let resume: TerminalController.ResumeSpawn = { _ in nil }
     let ws = Workspace(name: "sleepers", rootPath: "/tmp")
@@ -328,7 +328,7 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
           first: .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: "b")),
           second: .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: "c"))),
         resumeSpawn: resume))
-    XCTAssertEqual(ws.dormantAgentCount(), 3, "未 activated な複数タブの restoredAgentCount の和")
+    XCTAssertEqual(ws.dormantAgentCount(), 3, "複数タブの休眠チケット数の和")
   }
 
   /// 構成を変えて flushSave すると実際にディスクへ書かれ、再起動相当の新 WindowController で復元される。

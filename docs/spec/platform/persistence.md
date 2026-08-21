@@ -1,7 +1,7 @@
 ---
 title: workspace 永続
 description: 構成（workspace・タブ・分割ツリー・cwd・エージェントセッション）の JSON 保存と起動時復元・エージェント resume・デバウンス保存
-updated: 2026-08-15
+updated: 2026-08-20
 ---
 
 # workspace 永続
@@ -19,7 +19,7 @@ updated: 2026-08-15
 - 各ペインは保存 cwd で新シェルを起こす（ライブプロセスは復元対象外）。非アクティブ workspace の surface は切替時に遅延起動する。
 - タブ 0 個（休眠）の workspace もエントリごと保存・復元する（エントリは消えない）。復元時アクティブが 0 タブでも空状態を表示し、背景の 0 タブもそのまま keep する（いずれもシェルは自動起動しない）。
 - cwd は OSC 7（`GHOSTTY_ACTION_PWD`）で報告された値を surface が保持したもの。復元は surface 生成時の working_directory 指定で起こす。
-- エージェントセッションは hook 由来の (CLI 名, session_id)（[agent/notify](../agent/notify.md)）を葉に持ち、復元時に CLI 別の resume コマンド（claude `--resume <id>`／agy `--conversation <id>`／codex `resume <id>`）＋ログインシェル PATH で起こす。CLI 名が未対応・session_id が安全文字集合外なら素のシェルへ fallback する——生成コマンドへの注入を防ぐため。
+- エージェントセッションは hook 由来の (CLI 名, session_id)（[agent/notify](../agent/notify.md)）を葉に持つ。復元直後のペインは記録を凍結したまま休眠し、resume の解決——CLI 別の resume コマンド（claude `--resume <id>`／agy `--conversation <id>`／codex `resume <id>`）＋ログインシェル PATH——は**タブ起床（materialize 開始）時**に行う。CLI 名が未対応・session_id が安全文字集合外なら素のシェルで起きる——生成コマンドへの注入を防ぐため。セッション記録そのものは休眠のあいだ保持され、resume 可否は起床まで判定しない。
 - resume が注入する PATH は `app-state.json` のキャッシュ値から**同期で**読む——起動復元をシェル起動の subprocess にブロックさせないため。キャッシュが無い初回は上限つきで待ち、尽きれば既知パスだけで起こす（[shell-path](shell-path.md)）。
 - 分割比は保存値を一度だけ適用し、以後は実フレームから算出する。
 - タブ 1 枚分の復元単位は `Cmd+Shift+T`（閉じたエージェントタブを開き直す → [layout](../chrome/layout.md)）と共有する——同じ経路を通るので、戻るもの／戻らないものが一致する。閉じたタブの控えはこのファイルに持たず、プロセス内にのみ保つ。

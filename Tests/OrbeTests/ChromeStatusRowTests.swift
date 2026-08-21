@@ -125,7 +125,7 @@ final class ChromeStatusRowTests: OrbeTestCase {
     wc.flushChrome()
     XCTAssertTrue(wc.statusModel.rollup.isEmpty, "状態 0 なら rollup は空")
 
-    pane.agentState = "working"
+    setReportedState(pane, "working")
     pane.controller?.paneAgentStateChanged()  // onAgentStateChange → refreshChrome 経路
     wc.flushChrome()
     XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["working"], "working セグメントが出る")
@@ -138,9 +138,9 @@ final class ChromeStatusRowTests: OrbeTestCase {
     let host = try rootHost(wc)
     let pane = try XCTUnwrap(findAll(SurfaceView.self, in: host).first, "アクティブペイン")
 
-    pane.agentState = "done"
+    setReportedState(pane, "done")
     pane.controller?.paneAgentStateChanged()
-    pane.agentState = "idle"
+    setReportedState(pane, "idle")
     pane.controller?.paneAgentStateChanged()
     wc.flushChrome()
     XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["idle"], "idle セグメントになる")
@@ -160,8 +160,8 @@ final class ChromeStatusRowTests: OrbeTestCase {
     XCTAssertEqual(wc.current.tabs.map(\.activated), [true, false], "hidden mount の最初の queue 前")
     let live = try XCTUnwrap(wc.current.tabs[0].controlAllPanes().first)
     let dormant = try XCTUnwrap(wc.current.tabs[1].controlAllPanes().first)
-    live.agentState = "waiting"
-    dormant.agentState = "done"
+    setReportedState(live, "waiting")
+    setReportedState(dormant, "done")
     live.controller?.paneAgentStateChanged()
     dormant.controller?.paneAgentStateChanged()
 

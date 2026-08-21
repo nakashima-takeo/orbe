@@ -65,8 +65,8 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
   /// エージェントを載せる。
   private func markAsAgent(_ tc: TerminalController) throws {
     let pane = try XCTUnwrap(tc.focusedPane)
-    pane.agentCommand = "claude"
-    pane.agentSessionId = "live-1"
+    pane.agentSlot = .live(
+      session: AgentSession(command: "claude", sessionId: "live-1"), report: nil)
   }
 
   /// main キューに積まれた非同期ブロック（`TerminalController.close` の `onEmpty` ホップ）を捌く。

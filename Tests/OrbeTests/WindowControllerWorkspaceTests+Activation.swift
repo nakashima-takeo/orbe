@@ -91,7 +91,7 @@ extension WindowControllerWorkspaceTests {
       let paneId = try XCTUnwrap(
         wc.controlSpawn(workspaceId: mixed.id, cwd: nil, command: nil))
       let pane = try XCTUnwrap(wc.controlResolvePane(paneId))
-      pane.agentState = state
+      setReportedState(pane, state)
     }
 
     wc.showWorkspacePalette()

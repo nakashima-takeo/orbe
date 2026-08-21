@@ -3,7 +3,7 @@ import Foundation
 /// エージェント hook が報告した文言と、その出所（`report_agent` の message / messageSource）。
 /// 出所は文言に付随する属性なので 1 つの値にまとめる——文言の無い報告は値そのものを持たず、
 /// 「文言なしの出所だけ」は表現できない。
-struct AgentMessage {
+struct AgentMessage: Equatable {
   /// ユーザーへ見せる文言（waiting の質問文・done の最終応答）。Attention 一覧が読むのはこれだけ。
   let text: String
   /// 文言の出所（`"tool"`＝この pane のエージェント自身の hook payload 由来 /
