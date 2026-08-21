@@ -1,14 +1,14 @@
 ---
 title: workspace 永続
 description: 構成（workspace・タブ・分割ツリー・cwd・エージェントセッション）の JSON 保存と起動時復元・エージェント resume・デバウンス保存
-updated: 2026-08-20
+updated: 2026-08-21
 ---
 
 # workspace 永続
 
 アプリを再起動しても作業の構成——workspace・タブ・分割・cwd・エージェントセッション——が戻るための永続層。
 
-保存先は `~/Library/Application Support/<bundle-id>/` 直下。`<bundle-id>` はビルドチャネルごとに異なるため（[channel](channel.md)）、dev（Orbe Dev）と release は state を共有しない。環境変数 `ORBE_STATE_DIR`（非空）を設定するとその dir 直下へ移る——検証用の隔離インスタンス用途で、settings.json・gui.conf・[制御 API](../control/api.md) の control.sock も同じ dir に同居する。テスト用にファイル位置を差し替える seam を持つ。
+保存先は `~/Library/Application Support/<bundle-id>/` 直下。`<bundle-id>` はビルドチャネルごとに異なるため（[channel](channel.md)）、dev（Orbe Dev）と release は state を共有しない。環境変数 `ORBE_STATE_DIR`（非空）を設定するとその dir 直下へ移る——検証用の隔離インスタンス用途で、settings.json・gui.conf・取り込んだ通知音の `sounds/`・[制御 API](../control/api.md) の control.sock も同じ dir に同居する。テスト用にファイル位置を差し替える seam を持つ。
 
 ## workspaces.json — 構成の永続
 
@@ -37,6 +37,7 @@ updated: 2026-08-20
 ## settings.json / app-state.json
 
 - **`settings.json`** … ユーザー設定（global 層）。in-memory SSOT が保持し、変更は即 save する。未知 key（将来の項目・撤去済みの項目）は無視して読む。
+- **`sounds/`** … 取り込んだカスタム通知音（48kHz モノラルの WAV・[agent/sound](../agent/sound.md)）。設定値がファイル名で指す実体で、取り込みごとに一意な名前で書く（同名の上書きが起きないので、鳴っている最中の差し替えでも壊れない）。参照されなくなったファイルは、参照集合が変わったとき——取り込みの確定時と workspace の削除時——に突き合わせて消す。
 - **`app-state.json`** … ユーザー設定でない内部簿記（エージェントプラグインを導入できたか・最後に登録できたエージェントプラグイン名〔[agent/plugin-package](../agent/plugin-package.md)〕・旧補完方式〔managed block〕の導入済みフラグ・ログインシェル由来の PATH のキャッシュ〔[shell-path](shell-path.md)〕・UI 言語）。全項目 optional。
 
 2 ファイルに分けているのは「ユーザーが決めた値」と「アプリが勝手に覚えた値」を混ぜないため。旧形式（両者が同居した 1 枚）は起動時に無損失で分割移行する（旧ファイル全体が読めたときだけ変換する all-or-nothing。読めなければ既定へ fallback）。app-state.json へは全体上書きでなく**マージ**で書く——旧形式が語彙として持たない項目（UI 言語・登録できたエージェントプラグイン名）も、旧形式が語彙としては持つがその 1 ファイルには書かれていない項目（ログインシェル PATH のキャッシュ等）も移行が巻き戻さず、中断した移行からの再移行が冪等になる。
