@@ -125,7 +125,7 @@ final class TerminalController {
     switch node {
     case .leaf(let cwd, let agent):
       let pane = makePane(inheritFrom: nil, initialCwd: cwd)
-      pane.agentSlot = agent.map(AgentSlot.dormant) ?? .none
+      if let agent { pane.agentSlot = .dormant(agent) }  // agent 無しは既定の .none のまま
       return wrap(pane)
     case .split(let vertical, let ratio, let first, let second):
       let split = WorkspaceSplitView()
@@ -238,10 +238,9 @@ final class TerminalController {
   /// Attention の並びも壊さない。
   func consumeDoneState() {
     forEachPane(in: rootContainer) { pane in
-      guard case .live(let session, var report) = pane.agentSlot, report?.state == "done" else {
-        return
-      }
-      report?.state = "idle"
+      guard case .live(let session, .some(var report)) = pane.agentSlot, report.state == "done"
+      else { return }
+      report.state = "idle"
       pane.agentSlot = .live(session: session, report: report)  // didSet が done→idle を emit
     }
   }
