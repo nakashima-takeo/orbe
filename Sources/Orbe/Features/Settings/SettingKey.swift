@@ -51,4 +51,9 @@ enum SettingKeys {
     .notificationSoundCustomDone)
   static let notificationSoundCustomWaiting = SettingKey<CustomSoundSource>(
     .notificationSoundCustomWaiting)
+
+  /// `sounds/` の実体を指す key の全体。**GC の契機判定と参照集合の収集がこの 1 つを読む**
+  /// ——2 箇所に書き分けると、片方だけ足し忘れたときに GC が参照中のファイルを消す
+  /// （しかも鳴る音は紋章へ黙って落ちるので、消えたことに気づけない）。
+  static let customSoundSources = [notificationSoundCustomDone, notificationSoundCustomWaiting]
 }

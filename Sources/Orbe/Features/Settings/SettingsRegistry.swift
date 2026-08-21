@@ -11,7 +11,8 @@ enum SettingDomain {
   case toggle
   /// theme（固定3値）・fontFamily（FontCatalog）・defaultAgent（検出済み）等の列挙。
   case enumeration(values: () -> [String])
-  /// agentStateIcons（状態名→SF Symbol 名）。allowedKeys は提示用（値域として縛らない）。
+  /// agentStateIcons（状態名→SF Symbol 名）・カスタム音源（file/name/duration）。
+  /// allowedKeys は提示用（control の domain が名乗る。値域として縛らない）。
   case stringMap(allowedKeys: () -> [String])
   /// worktreeDir（作成先テンプレート）。値域は列挙でなく構文（`WorktreePathTemplate.validate`）で縛る。
   case pathTemplate
@@ -45,7 +46,7 @@ enum SettingDomain {
       guard allowed.isEmpty || allowed.contains(s) else { return nil }
       return .string(s)
     case .stringMap:
-      // マップの key を状態名・値を SF Symbol 文字列として受ける（curated 外の symbol も許す）。
+      // 文字列マップとしてだけ受け、key/値は縛らない（意味づけと parse は各値型が 1 箇所で持つ）。
       guard let m = jsonValue as? [String: String] else { return nil }
       return .stringMap(m)
     case .pathTemplate:
@@ -310,14 +311,14 @@ enum SettingsRegistry {
       display: boolLabel, unsetPlaceholderKey: nil),
   ]
 
+  /// 取り込み済み音源の実体（`sounds/` 配下のファイル）を指す項目。参照集合 GC の契機判定が読む。
+  /// 参照集合の収集（`WindowController.collectCustomSoundGarbage`）と同じ `SettingKeys` の 1 列から
+  /// 導くので、契機と集合がドリフトしない。
+  static let customSoundSourceIDs = Set(SettingKeys.customSoundSources.map(\.id))
+
   /// root に**行を持たない**項目（`rootOrder` 非掲載）。カスタム音源の 3 件は通知音サブのさらに
   /// 奥（カスタム設定サブ）でだけ編集され、root には「通知音」の 1 行として畳まれて出る
   /// ——`all ⊇ rootOrder` であって等しくはない、という不変条件をこの集合が明示する。
-  /// 取り込み済み音源の実体（`sounds/` 配下のファイル）を指す項目。参照集合 GC の契機判定が読む。
-  static let customSoundSourceIDs: Set<SettingID> = [
-    .notificationSoundCustomDone, .notificationSoundCustomWaiting,
-  ]
-
   static let nonRootIDs: Set<SettingID> = [
     .notificationSoundCustomDone, .notificationSoundCustomWaiting,
     .notificationSoundCustomWaitingSameAsDone,

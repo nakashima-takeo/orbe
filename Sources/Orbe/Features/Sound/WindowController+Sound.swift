@@ -30,11 +30,8 @@ extension WindowController {
     var layers = [settingsStore.global]
     layers += workspaces.compactMap(\.settingsOverride)
     for layer in layers {
-      referenced.formUnion(
-        [
-          layer[SettingKeys.notificationSoundCustomDone],
-          layer[SettingKeys.notificationSoundCustomWaiting],
-        ].compactMap { $0?.file })
+      // 対象 key は `SettingKeys.customSoundSources` が SSOT（GC の契機判定も同じ列を読む）。
+      referenced.formUnion(SettingKeys.customSoundSources.compactMap { layer[$0]?.file })
     }
     CustomSoundStore.collectGarbage(referenced: referenced)
   }

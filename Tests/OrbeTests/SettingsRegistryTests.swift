@@ -145,7 +145,7 @@ final class SettingsRegistryTests: OrbeTestCase {
       "既定の選択は AgentSoundChoice.default が SSOT（リテラルを 2 箇所に置かない）")
     XCTAssertEqual(
       SettingsRegistry.descriptor(.notificationSound).defaultValue(),
-      NotificationSound.default.settingValue, "既定は案（＝紋章）であってカスタムではない")
+      .string(NotificationSound.default.rawValue), "既定は案（＝紋章）であってカスタムではない")
     XCTAssertEqual(
       SettingsRegistry.descriptor(.notificationSoundCustomWaitingSameAsDone).defaultValue(),
       .bool(true), "waiting 同一化は既定オン")

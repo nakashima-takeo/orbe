@@ -63,7 +63,7 @@ Sources/
                          Search / Settings / Sound / Update / Workspace）
     DesignSystem/        トークン・パレット・共有コンポーネント（正は design/）
   OrbePaths/             state dir / control.sock 解決の共有土台（Foundation のみ）
-  OrbeSound/             通知音の純 DSP 層（合成語彙・カタログ・レンダラ・解析。Foundation のみ）
+  OrbeSound/             通知音の純 DSP 層（合成語彙・カタログ・レンダラ・取り込み・解析。Foundation のみ）
   orbe-cli/              orb 実行ターゲット
   orbe-mcp/              MCP ブリッジ実行ターゲット
   orbe-report/           状態報告実行ターゲット

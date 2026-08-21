@@ -21,7 +21,7 @@ let package = Package(
       name: "OrbePaths",
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
-    // 通知音の純 DSP 層（合成プリミティブ・部品語彙・カタログ・レンダラ・数値解析）。Foundation のみで、
+    // 通知音の純 DSP 層（合成プリミティブ・部品語彙・カタログ・レンダラ・取り込み・数値解析）。Foundation のみで、
     // 音を出す手段を持たない（再生は Orbe 側の SoundPlayer）。Orbe 本体と dev CLI（orbe-sound）が共有する。
     .target(
       name: "OrbeSound",
