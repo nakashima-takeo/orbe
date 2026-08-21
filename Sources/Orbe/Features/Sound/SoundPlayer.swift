@@ -4,7 +4,7 @@ import OrbeSound
 
 /// 通知音を実際に鳴らす層。合成（決定論・純関数）と切り離してあり、テストはここをフェイクへ差し替える。
 protocol AgentSoundPlaying: AnyObject {
-  func play(_ family: NotificationSound, event: AgentSoundEvent, volume: Int)
+  func play(_ source: ResolvedSource, event: AgentSoundEvent, volume: Int)
   /// 鳴っている音を止める（サブパレットの「なし」行・行の移動での鳴らし直し）。
   func stopPreview()
 }
@@ -27,7 +27,7 @@ enum AgentSoundOutput {
 ///   サンプルレートが変わりうるので合成済みバッファのキャッシュも捨てる。
 final class SoundPlayer: AgentSoundPlaying {
   private struct CacheKey: Hashable {
-    let family: NotificationSound
+    let source: ResolvedSource
     let event: AgentSoundEvent
     let volume: Int
   }
@@ -41,7 +41,7 @@ final class SoundPlayer: AgentSoundPlaying {
   /// プレイヤーノードを繋いだフォーマット。バッファはこれと**同じインスタンス**で組む
   /// （同じ式で 2 度作ると、片方だけ触ったときに `scheduleBuffer` が不一致で落ちる）。
   private var format: AVAudioFormat?
-  /// 合成済みバッファ。試聴サブパレットは 12 案 × 2 イベントを全部通すので、上限が無いと
+  /// 再生用バッファ。試聴サブパレットは 13 択 × 2 イベントを全部通すので、上限が無いと
   /// 1 日中起動しているプロセスに二度と使われない波形が溜まり続ける（→ `store`）。
   private var cache: [CacheKey: AVAudioPCMBuffer] = [:]
   private var idleStop: DispatchWorkItem?
@@ -53,8 +53,8 @@ final class SoundPlayer: AgentSoundPlaying {
     }
   }
 
-  func play(_ family: NotificationSound, event: AgentSoundEvent, volume: Int) {
-    queue.async { [weak self] in self?.playOnQueue(family, event: event, volume: volume) }
+  func play(_ source: ResolvedSource, event: AgentSoundEvent, volume: Int) {
+    queue.async { [weak self] in self?.playOnQueue(source, event: event, volume: volume) }
   }
 
   func stopPreview() {
@@ -63,9 +63,12 @@ final class SoundPlayer: AgentSoundPlaying {
 
   // MARK: - キュー上（直列）
 
-  private func playOnQueue(_ family: NotificationSound, event: AgentSoundEvent, volume: Int) {
+  private func playOnQueue(_ source: ResolvedSource, event: AgentSoundEvent, volume: Int) {
+    // 取り込み済みファイルが読めないときは**紋章の同 event 音**へ落として鳴らす。設定の不整合
+    // （手編集・`orb config` 直書き）を「無音」で表さない——「鳴らない」の担体はオン/オフだけ。
     guard let player = startedPlayer(),
-      let buffer = buffer(family: family, event: event, volume: volume)
+      let buffer = buffer(source: source, event: event, volume: volume)
+        ?? buffer(source: .synth(.default), event: event, volume: volume)
     else { return }
     // 前の音を止めてから差し替える。深層・紋章・鋼は 2 秒近くあるので、↑↓ の連打で団子にならない。
     player.stop()
@@ -103,33 +106,51 @@ final class SoundPlayer: AgentSoundPlaying {
     self.format = format
   }
 
-  private func buffer(family: NotificationSound, event: AgentSoundEvent, volume: Int)
+  private func buffer(source: ResolvedSource, event: AgentSoundEvent, volume: Int)
     -> AVAudioPCMBuffer?
   {
-    let key = CacheKey(family: family, event: event, volume: volume)
+    let key = CacheKey(source: source, event: event, volume: volume)
     if let cached = cache[key] { return cached }
-    guard let format else { return nil }
-    let samples = SoundRenderer.render(
-      family: family, event: event, volume: volume, sampleRate: format.sampleRate)
-    guard !samples.isEmpty,
+    guard let format,
+      let samples = renderedSamples(source, event: event, volume: volume, format: format),
+      !samples.isEmpty,
       let buffer = AVAudioPCMBuffer(
         pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)),
       let channels = buffer.floatChannelData
     else { return nil }
     buffer.frameLength = AVAudioFrameCount(samples.count)
-    // モノラルの合成結果を 2ch へ複製する。
-    samples.withUnsafeBufferPointer { source in
-      guard let base = source.baseAddress else { return }
+    // モノラルの結果を 2ch へ複製する。
+    samples.withUnsafeBufferPointer { mono in
+      guard let base = mono.baseAddress else { return }
       for channel in 0..<Int(format.channelCount) {
-        channels[channel].update(from: base, count: source.count)
+        channels[channel].update(from: base, count: mono.count)
       }
     }
     store(buffer, for: key)
     return buffer
   }
 
+  /// 鳴らすモノラルサンプル列。合成はその場で組み、取り込み済みは `sounds/` から読み戻して
+  /// **マスタ末尾だけを合成音と同じ 1 実装で通す**（音量ゲイン → コンプレッサ）。だから案と
+  /// カスタムを切り替えても鳴りの強さも音量ノブの手応えも揃う。読めなければ nil（呼び出し側で退避）。
+  private func renderedSamples(
+    _ source: ResolvedSource, event: AgentSoundEvent, volume: Int, format: AVAudioFormat
+  ) -> [Float]? {
+    switch source {
+    case .synth(let family):
+      return SoundRenderer.render(
+        family: family, event: event, volume: volume, sampleRate: format.sampleRate)
+    case .imported(let file):
+      guard let url = CustomSoundStore.url(for: file),
+        let mono = AudioFileDecoder.monoSamples(
+          of: url, sampleRate: format.sampleRate, maxSeconds: SoundImport.maxDuration)
+      else { return nil }
+      return SoundRenderer.finalize(mono, volume: volume, sampleRate: format.sampleRate)
+    }
+  }
+
   /// キャッシュへ載せる。同時に使う音量は常に 1 つ（実効値、または試聴中の実効値）なので、
-  /// 別音量のぶんは載せた瞬間に捨てる——これで上限は 12 案 × 2 イベントに固定される。
+  /// 別音量のぶんは載せた瞬間に捨てる——これで上限は 13 択 × 2 イベントに固定される。
   private func store(_ buffer: AVAudioPCMBuffer, for key: CacheKey) {
     cache = cache.filter { $0.key.volume == key.volume }
     cache[key] = buffer

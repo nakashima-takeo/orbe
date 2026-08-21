@@ -118,10 +118,19 @@ enum SettingsRegistry {
     return ""
   }
 
+  /// カスタム音源 map の提示用 key（値域として縛らない＝parse は `CustomSoundSource` が 1 箇所で持つ）。
+  private static let customSoundKeys = ["file", "name", "duration"]
+
+  /// カスタム音源の値表示は元ファイル名（人が選んだときの手掛かりがそれだけなので）。
+  private static func customSoundLabel(_ v: SettingValue, _ store: LocalizationStore) -> String {
+    CustomSoundSource(settingValue: v)?.name ?? store.string(.settingsSoundCustomUnset)
+  }
+
   /// 格納/gui.conf 生成の正準順（font-size → font-family → tab-title-font-family〔gui.conf 非経由〕→
   /// emoji-font → theme → agent → background-opacity → background-blur → cursor-style-blink →
   /// agent-state-icons〔gui.conf 非経由〕→ worktree-dir〔同〕→
-  /// notification-sound〔同〕→ notification-sound-volume〔同〕→ notification-sound-enabled〔同〕）。
+  /// notification-sound〔同〕→ notification-sound-volume〔同〕→ notification-sound-enabled〔同〕→
+  /// notification-sound-custom-done / -waiting / -waiting-same-as-done〔いずれも同〕）。
   /// `rootOrder`（表示順）とは別物——混同すると gui.conf のバイト順が崩れる。
   static let all: [SettingDescriptor] = [
     SettingDescriptor(
@@ -250,15 +259,16 @@ enum SettingsRegistry {
     SettingDescriptor(
       id: .notificationSound, key: "notification-sound", labelKey: .settingsNotificationSound,
       activation: .drillIn,
-      // 既定の案は `NotificationSound.default` が SSOT（実機で聴き比べて決め直すときの唯一の差し替え点）。
-      defaultValue: { NotificationSound.default.settingValue },
-      domain: .enumeration(values: { NotificationSound.allCases.map(\.rawValue) }),
+      // 既定の選択は `AgentSoundChoice.default`（＝`NotificationSound.default` の案）が SSOT
+      // （実機で聴き比べて決め直すときの唯一の差し替え点）。
+      defaultValue: { AgentSoundChoice.default.settingValue },
+      domain: .enumeration(values: { AgentSoundChoice.allRawValues }),
       guiConf: nil,  // gui.conf 非経由（libghostty 設定ではない）
       display: { v, store in
-        guard case .string(let raw) = v, let sound = NotificationSound(rawValue: raw) else {
+        guard case .string(let raw) = v, let choice = AgentSoundChoice(rawValue: raw) else {
           return ""
         }
-        return store.string(sound.labelKey)
+        return store.string(choice.labelKey)
       },
       unsetPlaceholderKey: nil),
     SettingDescriptor(
@@ -277,6 +287,40 @@ enum SettingsRegistry {
       defaultValue: { .bool(true) }, domain: .toggle,
       guiConf: nil,  // gui.conf 非経由
       display: boolLabel, unsetPlaceholderKey: nil),
+    SettingDescriptor(
+      id: .notificationSoundCustomDone, key: "notification-sound-custom-done",
+      labelKey: .settingsSoundCustomDoneRow, activation: .drillIn,
+      defaultValue: { nil },  // 未取り込み（実効は紋章の同 event 音へフォールバック）
+      domain: .stringMap(allowedKeys: { customSoundKeys }),
+      guiConf: nil,  // gui.conf 非経由
+      display: customSoundLabel, unsetPlaceholderKey: .settingsSoundCustomUnset),
+    SettingDescriptor(
+      id: .notificationSoundCustomWaiting, key: "notification-sound-custom-waiting",
+      labelKey: .settingsSoundCustomWaitingRow, activation: .drillIn,
+      defaultValue: { nil },
+      domain: .stringMap(allowedKeys: { customSoundKeys }),
+      guiConf: nil,  // gui.conf 非経由
+      display: customSoundLabel, unsetPlaceholderKey: .settingsSoundCustomUnset),
+    SettingDescriptor(
+      id: .notificationSoundCustomWaitingSameAsDone,
+      key: "notification-sound-custom-waiting-same-as-done",
+      labelKey: .settingsSoundCustomSameAsDone, activation: .toggle,
+      defaultValue: { .bool(true) }, domain: .toggle,
+      guiConf: nil,  // gui.conf 非経由
+      display: boolLabel, unsetPlaceholderKey: nil),
+  ]
+
+  /// root に**行を持たない**項目（`rootOrder` 非掲載）。カスタム音源の 3 件は通知音サブのさらに
+  /// 奥（カスタム設定サブ）でだけ編集され、root には「通知音」の 1 行として畳まれて出る
+  /// ——`all ⊇ rootOrder` であって等しくはない、という不変条件をこの集合が明示する。
+  /// 取り込み済み音源の実体（`sounds/` 配下のファイル）を指す項目。参照集合 GC の契機判定が読む。
+  static let customSoundSourceIDs: Set<SettingID> = [
+    .notificationSoundCustomDone, .notificationSoundCustomWaiting,
+  ]
+
+  static let nonRootIDs: Set<SettingID> = [
+    .notificationSoundCustomDone, .notificationSoundCustomWaiting,
+    .notificationSoundCustomWaitingSameAsDone,
   ]
 
   /// パレット root の表示順（fontSize → backgroundOpacity → backgroundBlur → cursorStyleBlink →

@@ -76,5 +76,6 @@ extension WindowController {
     }
     reloadPalette()  // パレット表示中の外因変異（shell exit 等）でも表示を実状態へ追従させる
     scheduleSave()
+    collectCustomSoundGarbage()  // 消えた workspace が持っていたカスタム音源も一緒に片づく
   }
 }

@@ -14,16 +14,29 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
   let soundRow = 12
   let volumeRow = 13  // `rootOrder` で通知音行の次
 
-  func model(sound: NotificationSound? = nil, volume: Int? = nil, enabled: Bool? = nil)
-    -> SettingsPaletteModel
-  {
+  /// 通知音サブの「カスタム」行（12 案の次＝末尾）。
+  let customRow = 13
+
+  func model(
+    sound: AgentSoundChoice? = nil, volume: Int? = nil, enabled: Bool? = nil,
+    customDone: CustomSoundSource? = nil, customWaiting: CustomSoundSource? = nil,
+    waitingSameAsDone: Bool? = nil, scope: SettingsScope = .global,
+    override: SettingsLayer = SettingsLayer()
+  ) -> SettingsPaletteModel {
     var global = SettingsLayer()
     global[SettingKeys.notificationSound] = sound
     global[SettingKeys.notificationSoundVolume] = volume
     global[SettingKeys.notificationSoundEnabled] = enabled
+    global[SettingKeys.notificationSoundCustomDone] = customDone
+    global[SettingKeys.notificationSoundCustomWaiting] = customWaiting
+    global[SettingKeys.notificationSoundCustomWaitingSameAsDone] = waitingSameAsDone
     return SettingsPaletteModel(
-      values: ScopedSettingsValues(global: global), fontNames: [], agents: ["claude"],
-      localization: LocalizationStore(language: .ja))
+      values: ScopedSettingsValues(scope: scope, global: global, override: override),
+      fontNames: [], agents: ["claude"], localization: LocalizationStore(language: .ja))
+  }
+
+  func source(_ file: String, _ name: String, duration: Double = 1.5) -> CustomSoundSource {
+    CustomSoundSource(file: file, name: name, duration: duration)
   }
 
   /// 適用された単一代入を順に記録する（1 操作で 2 件届く経路があるため最後の 1 件では足りない）。
@@ -35,15 +48,20 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
 
   /// 試聴の呼び出し 1 件。
   struct Preview: Equatable {
-    let sound: NotificationSound?
+    let source: ResolvedSource?
     let event: AgentSoundEvent
     let volume: Int
+
+    /// 合成音の 1 件（既存の呼び出しをそのままの読みやすさで残すための糖衣）。
+    static func synth(_ family: NotificationSound, event: AgentSoundEvent, volume: Int) -> Preview {
+      Preview(source: .synth(family), event: event, volume: volume)
+    }
   }
 
   func capturePreviews(_ p: SettingsPaletteModel) -> () -> [Preview] {
     var previews: [Preview] = []
-    p.onPreviewSound = { sound, event, volume in
-      previews.append(Preview(sound: sound, event: event, volume: volume))
+    p.onPreviewSound = { source, event, volume in
+      previews.append(Preview(source: source, event: event, volume: volume))
     }
     return { previews }
   }
@@ -73,7 +91,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
 
   /// オフのときの通知音行は保持している案名でなく「なし」を出す（鳴らない設定が鳴りそうに読めない）。
   func testRootShowsNoneWhenDisabled() {
-    let p = model(sound: .steel, enabled: false)
+    let p = model(sound: .preset(.steel), enabled: false)
     XCTAssertTrue(p.render.rows[soundRow].label.contains("なし"))
     XCTAssertFalse(p.render.rows[soundRow].label.contains("鋼"), "保持している案名は出さない")
   }
@@ -104,23 +122,27 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
 
   // MARK: - サブパレットの構成
 
-  /// 行 0 が「なし（オフ）」、続いて 12 案。現在値（●・初期ハイライト）はオンなら案の行。
+  /// 行 0 が「なし（オフ）」、続いて 12 案、末尾に「カスタム」。
+  /// 現在値（●・初期ハイライト）はオンなら選択中の行。
   func testSubpaletteRowsAndCurrentValue() {
-    let p = model(sound: .wood)
+    let p = model(sound: .preset(.wood))
     drillIn(p)
     XCTAssertEqual(p.render.breadcrumb, "‹ 通知音")
     XCTAssertFalse(p.render.fieldVisible, "絞り込み欄は持たない（⇥ が打鍵と衝突しない）")
-    XCTAssertEqual(p.render.rows.count, 13)
+    XCTAssertEqual(p.render.rows.count, 14)
     XCTAssertEqual(p.render.rows[0].label, "  なし（オフ）")
     XCTAssertEqual(p.render.rows[1].label, "  硝子")
     XCTAssertEqual(p.render.rows[3].label, "● 木肌", "現在値に ●")
     XCTAssertEqual(p.render.rows[12].label, "  深層")
+    XCTAssertEqual(p.render.rows[customRow].label, "  カスタム", "末尾がカスタム行")
+    XCTAssertTrue(p.render.rows[customRow].chevron, "1 段深い（設定サブへ潜れる）")
     XCTAssertEqual(p.render.selected, 3, "現在値の行が初期ハイライト")
+    XCTAssertEqual(p.render.rows.filter { $0.label.hasPrefix("● ") }.count, 1, "● はちょうど 1 つ")
   }
 
   /// オフのときは行 0 に ● と初期ハイライトが乗る。
   func testSubpaletteMarksOffRowWhenDisabled() {
-    let p = model(sound: .wood, enabled: false)
+    let p = model(sound: .preset(.wood), enabled: false)
     drillIn(p)
     XCTAssertEqual(p.render.rows[0].label, "● なし（オフ）")
     XCTAssertEqual(p.render.selected, 0)
@@ -151,25 +173,25 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
 
   /// 入場では鳴らない（現在値の行にハイライトが乗るだけ）。移動すればその案が鳴る。
   func testEntryIsSilentAndMovementPreviews() {
-    let p = model(sound: .glass)
+    let p = model(sound: .preset(.glass))
     let previews = capturePreviews(p)
     drillIn(p)
     XCTAssertTrue(previews().isEmpty, "入場では鳴らさない")
     p.render.onDown()  // 電紫
     XCTAssertEqual(previews().count, 1)
-    XCTAssertEqual(previews().last?.sound, .pulse)
+    XCTAssertEqual(previews().last?.source, .synth(.pulse))
     XCTAssertEqual(previews().last?.event, .done, "入場時の試聴対象は完了")
   }
 
   /// 行 0（なし）では鳴らさない——止めるだけ（nil）。
   func testOffRowStopsInsteadOfPlaying() {
-    let p = model(sound: .glass)
+    let p = model(sound: .preset(.glass))
     let previews = capturePreviews(p)
     drillIn(p)
     p.render.onUp()  // 行 0（なし）
     XCTAssertEqual(p.render.selected, 0)
     XCTAssertEqual(previews().count, 1)
-    XCTAssertNil(previews().last?.sound ?? nil, "鳴らさず止めるだけ")
+    XCTAssertNil(previews().last?.source ?? nil, "鳴らさず止めるだけ")
   }
 
   /// 試聴の音量は**このパレットが見せているスコープの実効値**（root の音量行が出している値と同じ）。
@@ -186,17 +208,17 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
   /// 現在値を明示して入場行を固定する——既定を差し替えたときに入場行とホバー先が重なると、
   /// 「選択が動いていないので鳴らない」が正しい挙動のまま落ちる。
   func testHoverPreviews() {
-    let p = model(sound: .glass)
+    let p = model(sound: .preset(.glass))
     let previews = capturePreviews(p)
     drillIn(p)
     p.render.inputModality = .pointer
     p.render.hoverSelect(5)
-    XCTAssertEqual(previews().last?.sound, NotificationSound.allCases[4])
+    XCTAssertEqual(previews().last?.source, .synth(NotificationSound.allCases[4]))
   }
 
   /// 流し聴きは設定を一切書かない（↑↓ で全案を聴いても、← で戻れば元のまま）。
   func testMovementDoesNotAssign() {
-    let p = model(sound: .glass)
+    let p = model(sound: .preset(.glass))
     let changes = captureChanges(p)
     drillIn(p)
     for _ in 0..<12 { p.render.onDown() }
@@ -210,14 +232,14 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
 
   /// ⇥ でセグメントが反転し、今いる行を新しい対象で鳴らし直す。設定は書かない。
   func testTabFlipsPreviewTargetAndReplaysCurrentRow() {
-    let p = model(sound: .wood)
+    let p = model(sound: .preset(.wood))
     let previews = capturePreviews(p)
     let changes = captureChanges(p)
     drillIn(p)
     XCTAssertTrue(p.render.onTab())
     XCTAssertEqual(p.render.segments.map(\.active), [false, true])
     XCTAssertEqual(previews().count, 1)
-    XCTAssertEqual(previews().last?.sound, .wood, "今いる行を鳴らし直す")
+    XCTAssertEqual(previews().last?.source, .synth(.wood), "今いる行を鳴らし直す")
     XCTAssertEqual(previews().last?.event, .waiting)
     // 以降の移動も入力待ちで鳴る。
     p.render.onDown()
@@ -247,21 +269,21 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
 
   /// セグメントのクリックは ⇥ と同じ帰結（対象が変わり、今いる行が新しい対象で鳴る）。
   func testSegmentTapFlipsPreviewTargetLikeTab() {
-    let p = model(sound: .wood)
+    let p = model(sound: .preset(.wood))
     let previews = capturePreviews(p)
     let changes = captureChanges(p)
     drillIn(p)
     p.render.onTapSegment(1)  // 入力待ち
     XCTAssertEqual(p.previewEvent, .waiting)
     XCTAssertEqual(p.render.segments.map(\.active), [false, true])
-    XCTAssertEqual(previews().last?.sound, .wood, "今いる行を鳴らし直す")
+    XCTAssertEqual(previews().last?.source, .synth(.wood), "今いる行を鳴らし直す")
     XCTAssertEqual(previews().last?.event, .waiting)
     XCTAssertTrue(changes().isEmpty, "クリックは設定を書かない")
   }
 
   /// 同じセグメントのクリックでも鳴らし直す（クリックは「鳴らせ」という明示の操作）。
   func testSegmentTapOnActiveTargetReplays() {
-    let p = model(sound: .wood)
+    let p = model(sound: .preset(.wood))
     let previews = capturePreviews(p)
     drillIn(p)
     p.render.onTapSegment(0)  // 完了（すでに選択中）
@@ -283,7 +305,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
 
   /// 案の行の ↵ でその案が確定し、root へ戻って表示が追従する。
   func testApplyFamily() {
-    let p = model(sound: .glass)
+    let p = model(sound: .preset(.glass))
     drillIn(p)
     let changes = captureChanges(p)
     p.render.onDown()  // 電紫
@@ -297,7 +319,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
 
   /// オフのときに案を確定すると、同時にオンへ戻る（選んだ音が鳴らないのは意図と食い違う）。
   func testApplyFamilyWhileDisabledAlsoEnables() {
-    let p = model(sound: .glass, enabled: false)
+    let p = model(sound: .preset(.glass), enabled: false)
     drillIn(p)
     let changes = captureChanges(p)
     p.render.selected = 4  // 気配
@@ -310,7 +332,7 @@ final class SettingsPaletteSoundTests: OrbeTestCase {
 
   /// 行 0「なし」の ↵ はオフにするだけで、**音案の値は触らない**（再度オンにしたら戻る）。
   func testApplyOffKeepsFamily() {
-    let p = model(sound: .steel)
+    let p = model(sound: .preset(.steel))
     drillIn(p)
     let changes = captureChanges(p)
     p.render.selected = 0

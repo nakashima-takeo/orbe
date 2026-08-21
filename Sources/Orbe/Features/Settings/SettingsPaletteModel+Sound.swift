@@ -34,12 +34,24 @@ extension SettingsPaletteModel {
   /// 現在行の試聴。通知音サブパレットにいるときだけ効き、行 0（なし）は鳴らさず止めるだけ。
   /// 選択が**ユーザ操作で**動いた通知（`onSelectionChanged`）と ⇥ の鳴らし直しがここへ来る
   /// ——面の組み立てによる配置（`PaletteModel.place`）は通知を出さないので、入場では鳴らない。
+  ///
+  /// カスタム行は**確定後と同じ解決**（フォールバック込み）で鳴らす。ただし音源が 1 つも
+  /// 取り込まれていない完全未構成のときは解除行と同じく鳴らさない——選ぶ対象がまだ無い行で、
+  /// 紋章の音だけが鳴っても何を確かめたことにもならない。
   func previewSelectedRow() {
     guard isNotificationSoundMode else { return }
+    playPreview(previewSource(row: render.selected), event: previewEvent, row: render.selected)
+  }
+
+  /// 通知音サブの行 → 鳴らす音源（nil＝鳴らさず止めるだけ）。
+  private func previewSource(row: Int) -> ResolvedSource? {
+    if row == notificationSoundCustomRow {
+      guard !values.hasNoCustomSound else { return nil }
+      return values.effSoundSource(choice: .custom, event: previewEvent)
+    }
     let sounds = NotificationSound.allCases
-    let index = render.selected - 1  // 行 0 は「なし（オフ）」
-    let sound = sounds.indices.contains(index) ? sounds[index] : nil
-    playPreview(sound, event: previewEvent, row: render.selected)
+    let index = row - 1  // 行 0 は「なし（オフ）」
+    return sounds.indices.contains(index) ? .synth(sounds[index]) : nil
   }
 
   /// 音量 stepper が値を実際に動かしたときの試聴。新しい実効音量で、現在の実効案の `done` を鳴らす
@@ -47,7 +59,9 @@ extension SettingsPaletteModel {
   /// 案の設定値は off のままでも保持されている）。音量以外の stepper は素通しする。
   func previewVolumeChange(_ d: SettingDescriptor) {
     guard d.id == .notificationSoundVolume else { return }
-    playPreview(values.effNotificationSound, event: .done, row: render.selected)
+    playPreview(
+      values.effSoundSource(choice: values.effNotificationSound, event: .done), event: .done,
+      row: render.selected)
   }
 
   /// 試聴の 1 経路。音を 1 つ鳴らし、その行に EQ を立てて音の長さぶんで畳む。
@@ -55,27 +69,38 @@ extension SettingsPaletteModel {
   /// 「鳴らす・光らせる」だけを持つ。前の音を止めて鳴らし直すのは再生層の責務（`SoundPlayer` が毎回
   /// stop してから鳴らす）なので、ここに時間の規則は無い。音量はこのパレットが見せているスコープの
   /// 実効値——耳と root 行の表示が食い違わないため。
-  func playPreview(_ sound: NotificationSound?, event: AgentSoundEvent, row: Int) {
-    onPreviewSound?(sound, event, values.effNotificationSoundVolume)
-    lightPreviewIndicator(sound: sound, event: event, row: row)
+  func playPreview(_ source: ResolvedSource?, event: AgentSoundEvent, row: Int) {
+    onPreviewSound?(source, event, values.effNotificationSoundVolume)
+    lightPreviewIndicator(source: source, event: event, row: row)
   }
 
-  /// EQ を今鳴っている行へ立て、合成長ぶん経ったら畳む。再生層は完了を通知しないが、音はその場で
-  /// 合成するので**長さは定義から確定している**（`SoundCatalog.duration`）。世代で先行の予約を無効化する。
-  private func lightPreviewIndicator(sound: NotificationSound?, event: AgentSoundEvent, row: Int) {
+  /// EQ を今鳴っている行へ立て、音の長さぶん経ったら畳む。再生層は完了を通知しないが、
+  /// **長さはどちらの音源でも先に確定している**——世代で先行の予約を無効化する。
+  private func lightPreviewIndicator(source: ResolvedSource?, event: AgentSoundEvent, row: Int) {
     previewGeneration &+= 1
     let generation = previewGeneration
-    guard let sound else {
+    guard let source else {
       previewIndicator = nil
       syncPreviewAccessory()
       return
     }
     previewIndicator = PreviewIndicator(row: row, event: event)
     syncPreviewAccessory()
-    schedulePreviewEnd(SoundCatalog.duration(sound, event)) { [weak self] in
+    schedulePreviewEnd(previewDuration(source, event: event)) { [weak self] in
       guard let self, self.previewGeneration == generation else { return }
       self.previewIndicator = nil
       self.syncPreviewAccessory()
+    }
+  }
+
+  /// EQ の点灯時間。合成は定義から（`SoundCatalog.duration`）、取り込み済みは取り込み時に測って
+  /// 設定値へ書いた長さから引く。引けないときは取り込みの長さ上限を使う——実体は必ずその上限以下
+  /// なので、鳴り終わる前に EQ が消えることはない。
+  private func previewDuration(_ source: ResolvedSource, event: AgentSoundEvent) -> Double {
+    switch source {
+    case .synth(let sound): return SoundCatalog.duration(sound, event)
+    case .imported(let file):
+      return values.customSound(file: file)?.duration ?? SoundImport.maxDuration
     }
   }
 
@@ -98,19 +123,33 @@ extension SettingsPaletteModel {
       row: indicator.row, view: AnyView(EqBarsView(color: indicator.event.glyphKind.stateColor)))
   }
 
-  /// 通知音サブの ↵。行 0（なし）はオフにするだけで**音案の値は触らない**（再度オンにしたら戻る）。
+  /// 通知音サブの ↵。行 0（なし）はオフにするだけで**選択の値は触らない**（再度オンにしたら戻る）。
   /// 案の行はその案を確定し、オフだったなら同時にオンへ戻す（選んだ音が鳴らないのは意図と食い違う）。
+  ///
+  /// カスタム行だけは、まだ何も取り込んでいなければ確定でなく `→` と同じ「潜る」になる
+  /// ——確定しても鳴らせる音が無い状態を作らず、次にやることへそのまま連れていく。
   func activateNotificationSoundRow() {
     let sounds = NotificationSound.allCases
     if render.selected == 0 {
       assign(SettingChange(SettingKeys.notificationSoundEnabled, false))
+    } else if render.selected == notificationSoundCustomRow {
+      guard values.effCustomSoundDone != nil else {
+        drillIntoNotificationSoundCustom()
+        return
+      }
+      confirmNotificationSound(.custom)
     } else {
       let index = render.selected - 1
       guard sounds.indices.contains(index) else { return }
-      let wasEnabled = values.effNotificationSoundEnabled
-      assign(SettingChange(SettingKeys.notificationSound, sounds[index]))
-      if !wasEnabled { assign(SettingChange(SettingKeys.notificationSoundEnabled, true)) }
+      confirmNotificationSound(.preset(sounds[index]))
     }
     returnToRoot()
+  }
+
+  /// 選択を確定し、オフだったなら同時にオンへ戻す。
+  private func confirmNotificationSound(_ choice: AgentSoundChoice) {
+    let wasEnabled = values.effNotificationSoundEnabled
+    assign(SettingChange(SettingKeys.notificationSound, choice))
+    if !wasEnabled { assign(SettingChange(SettingKeys.notificationSoundEnabled, true)) }
   }
 }

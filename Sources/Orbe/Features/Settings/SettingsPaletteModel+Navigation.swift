@@ -15,8 +15,13 @@ extension SettingsPaletteModel {
     case .worktreeDir: return .worktreeDirPresets
     case .notificationSound: return .notificationSound
     case .fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink,
-      .notificationSoundVolume, .notificationSoundEnabled:
+      .notificationSoundVolume, .notificationSoundEnabled,
+      .notificationSoundCustomWaitingSameAsDone:
       return .root  // stepper/toggle であって drillIn でない
+    case .notificationSoundCustomDone, .notificationSoundCustomWaiting:
+      // root に行を持たず、カスタム設定サブの中でだけ編集される（`SettingsRegistry.nonRootIDs`）
+      // ——潜る先は「行の ↵ が開くファイル選択」であってサブパレットではない。
+      return .root
     }
   }
 
@@ -34,6 +39,18 @@ extension SettingsPaletteModel {
   func drillIntoWorktreeDirCustom() {
     worktreeDirError = nil  // 前回の不正理由を持ち越さない
     setMode(.worktreeDirCustom, prefill: values.effWorktreeDir)
+  }
+
+  /// 通知音サブから「カスタム」行でカスタム設定サブへ潜る。前回の取り込み失敗は持ち越さない。
+  func drillIntoNotificationSoundCustom() {
+    customSoundError = nil
+    setMode(.notificationSoundCustom)
+  }
+
+  /// カスタム設定サブから通知音サブへ 1 段戻る。潜った「カスタム」行（末尾）へ選択を復元する。
+  func returnToNotificationSound() {
+    customSoundError = nil
+    setMode(.notificationSound, select: notificationSoundCustomRow)
   }
 
   /// カスタム入力からプリセット一覧へ戻る（`Esc`。入力欄の `←` はカーソル移動でここへ届かない）。

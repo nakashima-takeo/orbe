@@ -139,6 +139,10 @@ enum TestIsolation {
     // 向ける（`WindowController` を立てるテストは軒並み agent の状態報告を流すため、張らないと鳴る）。
     AgentSoundOutput.makeOverride = { SoundPlayerFake() }
 
+    // 取り込んだカスタム音源の置き場。既定は `ORBE_STATE_DIR` 直下＝テスト間で共有される根なので、
+    // 書いたファイルが次のテストへ残る。他の永続と同じく caseDir の下へ張り直す。
+    CustomSoundStore.directoryURLOverride = dir.appendingPathComponent("sounds", isDirectory: true)
+
     // 子プロセス PATH の probe。張らないと `WindowController` を立てる多数のテストが開発者の
     // 実ログインシェルを起こし、手元の dotfiles で結果が変わる（CI と手元で違う PATH を見る）。
     ShellPATH.shared = ShellPATH(probe: { "/usr/bin:/bin" })

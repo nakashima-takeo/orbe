@@ -13,7 +13,8 @@ let allConfigKeys = [
   "font-size", "background-opacity", "background-blur", "cursor-style-blink", "theme",
   "font-family", "tab-title-font-family", "emoji-font", "default-agent", "agent-state-icons",
   "worktree-dir", "notification-sound", "notification-sound-volume",
-  "notification-sound-enabled",
+  "notification-sound-enabled", "notification-sound-custom-done",
+  "notification-sound-custom-waiting", "notification-sound-custom-waiting-same-as-done",
 ]
 
 let configUsageLines = [
@@ -40,10 +41,12 @@ let configSetUsage = """
 
   KEYS: \(allConfigKeys.joined(separator: ", "))
     font-size, background-opacity, notification-sound-volume   integer
-    background-blur, cursor-style-blink, notification-sound-enabled   true/false/on/off/1/0
+    background-blur, cursor-style-blink, notification-sound-enabled,
+    notification-sound-custom-waiting-same-as-done   true/false/on/off/1/0
     theme (auto/light/dark), font-family, tab-title-font-family, emoji-font,
-    default-agent, worktree-dir, notification-sound   string
-    agent-state-icons   map (set it from the settings palette)
+    default-agent, worktree-dir, notification-sound (a sound name or custom)   string
+    agent-state-icons, notification-sound-custom-done,
+    notification-sound-custom-waiting   map (set them from the settings palette)
   --workspace <id> writes that workspace's override, bare --workspace the active
   one (default without the flag: global).
   """

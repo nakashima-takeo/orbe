@@ -19,7 +19,7 @@ extension SettingsPaletteSoundTests {
 
   /// 入場では EQ が出ず、試聴すると今いる行に出る。
   func testPreviewLightsIndicatorOnCurrentRow() {
-    let p = model(sound: .glass)
+    let p = model(sound: .preset(.glass))
     _ = captureScheduledEnds(p)
     drillIn(p)
     XCTAssertNil(p.render.rowAccessory, "入場では鳴らないので EQ も出ない")
@@ -29,7 +29,7 @@ extension SettingsPaletteSoundTests {
 
   /// 解除行では鳴らないので EQ も出ない（鳴っていた EQ も畳む）。
   func testOffRowShowsNoIndicator() {
-    let p = model(sound: .glass)
+    let p = model(sound: .preset(.glass))
     _ = captureScheduledEnds(p)
     drillIn(p)
     p.render.onDown()
@@ -40,7 +40,7 @@ extension SettingsPaletteSoundTests {
 
   /// 鳴り終わると EQ が消える。
   func testIndicatorClearsWhenSoundEnds() {
-    let p = model(sound: .glass)
+    let p = model(sound: .preset(.glass))
     let ends = captureScheduledEnds(p)
     drillIn(p)
     p.render.onDown()
@@ -51,7 +51,7 @@ extension SettingsPaletteSoundTests {
 
   /// 先行する消灯予約は後の試聴を消さない（↑↓ 連打で EQ が食い違わない）。
   func testStaleEndDoesNotClearLaterPreview() {
-    let p = model(sound: .glass)
+    let p = model(sound: .preset(.glass))
     let ends = captureScheduledEnds(p)
     drillIn(p)
     p.render.onDown()
@@ -63,7 +63,7 @@ extension SettingsPaletteSoundTests {
 
   /// 面を離れると EQ は畳まれ、予約中の消灯も無効化される。
   func testIndicatorClearsOnLeavingTheMode() {
-    let p = model(sound: .glass)
+    let p = model(sound: .preset(.glass))
     let ends = captureScheduledEnds(p)
     drillIn(p)
     p.render.onDown()
@@ -77,12 +77,12 @@ extension SettingsPaletteSoundTests {
 
   /// ←/→ で値が動くたび、**変更後の**音量で現在の実効案の `done` が鳴る。
   func testVolumeStepPreviewsWithTheNewVolume() {
-    let p = model(sound: .glass)  // 音量は既定 90
+    let p = model(sound: .preset(.glass))  // 音量は既定 90
     let previews = capturePreviews(p)
     _ = captureScheduledEnds(p)
     p.render.selected = volumeRow
     _ = p.render.onRight()
-    XCTAssertEqual(previews(), [Preview(sound: .glass, event: .done, volume: 95)])
+    XCTAssertEqual(previews(), [Preview.synth(.glass, event: .done, volume: 95)])
   }
 
   /// 端でクランプされて値が動かなかった押下では鳴らさない（確かめる対象が無く、長押しで鳴り続けるだけ）。
@@ -106,19 +106,19 @@ extension SettingsPaletteSoundTests {
 
   /// 通知音のオン/オフが off でも鳴る（off のまま音量を決められないと詰む）。保持している案がそのまま鳴る。
   func testVolumeStepPreviewsEvenWhenDisabled() {
-    let p = model(sound: .glass, enabled: false)
+    let p = model(sound: .preset(.glass), enabled: false)
     let previews = capturePreviews(p)
     let changes = captureChanges(p)
     _ = captureScheduledEnds(p)
     p.render.selected = volumeRow
     _ = p.render.onRight()
-    XCTAssertEqual(previews().last?.sound, .glass)
+    XCTAssertEqual(previews().last?.source, .synth(.glass))
     XCTAssertEqual(changes().map(\.id), [.notificationSoundVolume], "オン/オフは書き換えない")
   }
 
   /// EQ は音量行に出て、鳴り終わりで畳む（サブパレットの試聴と同じ 1 経路）。
   func testVolumeStepLightsIndicatorOnTheVolumeRow() {
-    let p = model(sound: .glass)
+    let p = model(sound: .preset(.glass))
     let ends = captureScheduledEnds(p)
     p.render.selected = volumeRow
     _ = p.render.onRight()
@@ -131,7 +131,7 @@ extension SettingsPaletteSoundTests {
   /// サブパレットで試聴対象を「入力待ち」にして戻っても、root が鳴らすのは `done`
   /// ——面の状態（`previewEvent`）は面をまたいで漏れない。
   func testRootPreviewIgnoresSubpalettePreviewTarget() {
-    let p = model(sound: .glass)
+    let p = model(sound: .preset(.glass))
     let previews = capturePreviews(p)
     _ = captureScheduledEnds(p)
     drillIn(p)
@@ -144,7 +144,7 @@ extension SettingsPaletteSoundTests {
 
   /// 絞り込みで行集合が入れ替わると EQ を畳む（EQ は行 index で位置を持つので、無関係な行を指させない）。
   func testFilteringFoldsTheIndicator() {
-    let p = model(sound: .glass)
+    let p = model(sound: .preset(.glass))
     _ = captureScheduledEnds(p)
     p.render.selected = volumeRow
     _ = p.render.onRight()

@@ -29,7 +29,12 @@ import SwiftUI
   /// 新しい値で鳴らす（音量は数字でなく耳で決めるため）。
   /// 音量まで渡すのは、耳に届く値が root 行の表示と食い違わないため——値の解決はこのスコープの
   /// 実効値（`ScopedSettingsValues`）だけが持つ規約で、提示元は別の解決を持ち込まない。
-  var onPreviewSound: ((NotificationSound?, AgentSoundEvent, Int) -> Void)?
+  var onPreviewSound: ((ResolvedSource?, AgentSoundEvent, Int) -> Void)?
+  /// 音声ファイルを選ばせる（本物は NSOpenPanel。nil＝キャンセル or 未配線）。提示元が配線する
+  /// ——テストが実ダイアログを開かないための seam で、`onPreviewSound` と同じ流儀。
+  var pickSoundFile: (() -> URL?)?
+  /// 選んだファイルをその場で取り込む（デコード→打ち切り→正規化→保存）。本物は `SoundFileImporter`。
+  var importSoundFile: ((URL) -> Result<CustomSoundSource, SoundFileImporter.ImportError>)?
 
   /// 現在の UI 言語ホルダー。言語行のマーカー・root 行の現在値表示・自身の文言（breadcrumb/hint）が読む。
   let localization: LocalizationStore
@@ -38,7 +43,7 @@ import SwiftUI
   enum Mode {
     case root, font, tabTitleFont, emojiFont, theme, agent, agentStates,
       agentIcon(AgentStateIcon.Kind), worktreeDirPresets, worktreeDirCustom, language, update,
-      notificationSound
+      notificationSound, notificationSoundCustom
   }
 
   /// root 行。先頭のスコープ切替行と、レジストリ表示順の各設定行。
@@ -102,6 +107,11 @@ import SwiftUI
   /// worktreeDir 入力の直前の不正確定理由（語彙の説明行の先頭に差し込んで出す）。
   /// 編集（queryChanged）と入場（drillIn）でクリアし、エラーは確定時にだけ評価する。
   var worktreeDirError: String?
+
+  /// カスタム音源の取り込みに失敗した理由（カスタム設定サブの先頭に 1 行差し込んで出す）。
+  /// 入場と、この面での次の操作（取り込みのやり直し・トグル・戻り）でクリアする——行の移動では
+  /// 消さない（読みたい理由が、読もうと動いた瞬間に消えないため）。
+  var customSoundError: String?
 
   /// 設定値の解決モデル（global 層・workspace 上書き層・現在スコープ・表示の語彙）。
   var values: ScopedSettingsValues
@@ -216,6 +226,7 @@ import SwiftUI
     case .language: rebuildLanguage()
     case .update: rebuildUpdate()
     case .notificationSound: rebuildNotificationSound()
+    case .notificationSoundCustom: rebuildNotificationSoundCustom()
     }
     render.clampSelection()
   }

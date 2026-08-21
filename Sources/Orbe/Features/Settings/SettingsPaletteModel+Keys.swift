@@ -50,6 +50,8 @@ extension SettingsPaletteModel {
       activateUpdateRow()
     case .notificationSound:
       activateNotificationSoundRow()
+    case .notificationSoundCustom:
+      activateNotificationSoundCustomRow()
     }
   }
 
@@ -106,6 +108,7 @@ extension SettingsPaletteModel {
       returnToRoot()
     case .worktreeDirCustom: break  // editor 入力欄の ← はカーソル移動（ここへは届かない）。戻るは esc
     case .agentIcon: returnToStates()  // 1 段ずつ浅く（アイコン候補→状態一覧）
+    case .notificationSoundCustom: returnToNotificationSound()  // 同上（カスタム設定→通知音一覧）
     }
   }
 
@@ -117,6 +120,16 @@ extension SettingsPaletteModel {
     }
     if case .update = mode {
       rightArrowUpdateRow()  // トグル行は反転、他は no-op（↵ と同じ意味の部分集合）
+      return true
+    }
+    if case .notificationSound = mode {
+      // → は「潜る」意味だけを持つ。1 段深いのは chevron のある「カスタム」行だけ。
+      guard render.selected == notificationSoundCustomRow else { return false }
+      drillIntoNotificationSoundCustom()
+      return true
+    }
+    if case .notificationSoundCustom = mode {
+      activate()  // → は ↵ と同義（音源行は選び直し、トグル行は反転）
       return true
     }
     if case .worktreeDirPresets = mode {
@@ -167,6 +180,7 @@ extension SettingsPaletteModel {
       returnToRoot()
     case .agentIcon: returnToStates()  // 1 段ずつ浅く
     case .worktreeDirCustom: returnToWorktreeDirPresets()  // 同上（カスタム入力→プリセット一覧）
+    case .notificationSoundCustom: returnToNotificationSound()  // 同上（カスタム設定→通知音一覧）
     }
   }
 

@@ -54,9 +54,29 @@ struct ScopedSettingsValues {
   var effTheme: ThemeMode { effective[SettingKeys.theme] }
   var effDefaultAgent: String? { effective[SettingKeys.defaultAgent] }
   var effWorktreeDir: String { effective[SettingKeys.worktreeDir] }
-  var effNotificationSound: NotificationSound { effective[SettingKeys.notificationSound] }
+  var effNotificationSound: AgentSoundChoice { effective[SettingKeys.notificationSound] }
   var effNotificationSoundEnabled: Bool { effective[SettingKeys.notificationSoundEnabled] }
   var effNotificationSoundVolume: Int { effective[SettingKeys.notificationSoundVolume] }
+  var effCustomSoundDone: CustomSoundSource? { effective[SettingKeys.notificationSoundCustomDone] }
+  var effCustomSoundWaiting: CustomSoundSource? {
+    effective[SettingKeys.notificationSoundCustomWaiting]
+  }
+  var effCustomSoundWaitingSameAsDone: Bool {
+    effective[SettingKeys.notificationSoundCustomWaitingSameAsDone]
+  }
+
+  /// カスタムがまだ 1 つも取り込まれていないか（通知音サブのカスタム行を鳴らすかの判定）。
+  var hasNoCustomSound: Bool { effCustomSoundDone == nil && effCustomSoundWaiting == nil }
+
+  /// 選択を明示して音源を解決する（試聴が「この行を選んだら何が鳴るか」を、値を書く前に問う）。
+  func effSoundSource(choice: AgentSoundChoice, event: AgentSoundEvent) -> ResolvedSource {
+    AgentSoundDecision.source(choice: choice, event: event, settings: effective)
+  }
+
+  /// 取り込み済み音源をファイル名から引く（試聴 EQ の点灯時間が読む）。
+  func customSound(file: String) -> CustomSoundSource? {
+    [effCustomSoundDone, effCustomSoundWaiting].compactMap { $0 }.first { $0.file == file }
+  }
 
   /// 実効の状態アイコンマップ（whole-map・A案）。
   var effAgentStateIcons: [AgentStateIcon.Kind: String] {
