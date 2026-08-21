@@ -100,10 +100,9 @@ extension SettingsPaletteModel {
       }
     }
     rebuild()
-    let index = soundCustomRowIndex(row)  // 理由行の増減が確定した後に引き直す
-    render.place(index)
+    render.place(soundCustomRowIndex(row))  // 理由行の増減が確定した後に引き直す
     if let imported {
-      playPreview(.imported(file: imported.file), event: event, row: index)
+      playPreview(.imported(file: imported.file), event: event, target: .soundCustom(row))
     }
   }
 

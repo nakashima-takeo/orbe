@@ -200,6 +200,77 @@ extension SettingsPaletteSoundTests {
     XCTAssertEqual(p.render.rows.count, 3)
   }
 
+  // MARK: - 理由行の出入りと EQ（EQ は行 index でなく行の同一性で付く）
+
+  /// 鳴っている音の EQ は、**理由行が増えても減っても同じ行に付いたまま**。
+  /// 取り込み成功（完了の音源で EQ 点灯）→ 入力待ちの音源で取り込み失敗（理由行が増えて完了の
+  /// 音源の行が 1 つ下がる）→ トグル（理由行が消えて 1 つ上がる）を、音が鳴っている間に続けて
+  /// 起こす。EQ を行 index で持つと、この途中で鳴っていない行——理由行やトグル行——が光る。
+  func testIndicatorStaysOnItsRowWhileTheNoticeComesAndGoes() {
+    let p = model(waitingSameAsDone: false)
+    drillIntoCustom(p)
+    p.schedulePreviewEnd = { _, _ in }  // 鳴り終わりでは消さない＝行の入れ替えだけを見る
+    _ = stubPicker(p, returns: URL(fileURLWithPath: "/tmp/chime.mp3"))
+
+    p.importSoundFile = { _ in .success(self.source("new.wav", "chime.mp3")) }
+    p.render.onActivate()  // 行 0＝完了の音源。取り込み成功でその行が鳴り、EQ が点く
+    XCTAssertEqual(litRowLabel(p), "完了の音源  chime.mp3")
+    XCTAssertEqual(p.render.rowAccessory?.row, 0)
+
+    p.importSoundFile = { _ in .failure(.unreadable) }
+    p.render.selected = 1  // 入力待ちの音源
+    p.render.onActivate()  // 取り込み失敗 → 理由行が先頭に増え、鳴っている行は 1 つ下がる
+    XCTAssertEqual(p.render.rows.count, 4)
+    XCTAssertEqual(litRowLabel(p), "完了の音源  chime.mp3", "行が下がっても鳴っている行に付いたまま")
+    XCTAssertEqual(p.render.rowAccessory?.row, 1)
+
+    p.render.selected = 3  // 理由行のぶん下がったトグル行
+    p.render.onActivate()  // 反転すると理由行が消え、鳴っている行は 1 つ上がる
+    XCTAssertEqual(p.render.rows.count, 3)
+    XCTAssertEqual(litRowLabel(p), "完了の音源  chime.mp3", "行が上がっても同じ")
+    XCTAssertEqual(p.render.rowAccessory?.row, 0)
+  }
+
+  /// トグルで入力待ちの行が無効化されても、EQ は鳴っている行に残る
+  /// （位置は変わらないが行は組み直される＝組み直しのたびに引き直していることの確認）。
+  func testIndicatorSurvivesTheToggleRebuild() {
+    let p = model(waitingSameAsDone: false)
+    drillIntoCustom(p)
+    p.schedulePreviewEnd = { _, _ in }
+    _ = stubPicker(p, returns: URL(fileURLWithPath: "/tmp/w.mp3"))
+    p.importSoundFile = { _ in .success(self.source("w.wav", "w.mp3")) }
+    p.render.selected = 1  // 入力待ちの音源で取り込む
+    p.render.onActivate()
+    XCTAssertEqual(litRowLabel(p), "入力待ちの音源  w.mp3")
+
+    p.render.selected = 2
+    p.render.onActivate()  // 同一化トグルをオンへ → 入力待ちの行は無効行になる
+    XCTAssertFalse(p.render.rows[1].enabled)
+    XCTAssertEqual(p.render.rowAccessory?.row, 1, "無効化されても鳴っている行に残る")
+  }
+
+  /// 面を離れれば EQ は消える（別の面の同じ index を光らせない）。
+  func testIndicatorDoesNotFollowToAnotherFace() {
+    let p = model()
+    drillIntoCustom(p)
+    p.schedulePreviewEnd = { _, _ in }
+    _ = stubPicker(p, returns: URL(fileURLWithPath: "/tmp/chime.mp3"))
+    p.importSoundFile = { _ in .success(self.source("new.wav", "chime.mp3")) }
+    p.render.onActivate()
+    XCTAssertNotNil(p.render.rowAccessory)
+
+    p.render.onLeft()  // 通知音サブへ
+    XCTAssertNil(p.render.rowAccessory)
+  }
+
+  /// EQ が付いている行のラベル（「どの行が光っているか」を index でなく意味で読む）。
+  private func litRowLabel(_ p: SettingsPaletteModel) -> String? {
+    guard let row = p.render.rowAccessory?.row, p.render.rows.indices.contains(row) else {
+      return nil
+    }
+    return p.render.rows[row].label
+  }
+
   // MARK: - workspace スコープ
 
   /// workspace スコープの取り込みは上書き層へ書く。

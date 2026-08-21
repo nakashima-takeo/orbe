@@ -40,7 +40,9 @@ extension SettingsPaletteModel {
   /// ——選ぶ対象がまだ無い行で、紋章の音だけが鳴っても何を確かめたことにもならない。
   func previewSelectedRow() {
     guard isNotificationSoundMode else { return }
-    playPreview(previewSource(row: render.selected), event: previewEvent, row: render.selected)
+    playPreview(
+      previewSource(row: render.selected), event: previewEvent,
+      target: .notificationSound(row: render.selected))
   }
 
   /// 通知音サブの行 → 鳴らす音源（nil＝鳴らさず止めるだけ）。
@@ -61,7 +63,7 @@ extension SettingsPaletteModel {
     guard d.id == .notificationSoundVolume else { return }
     playPreview(
       values.effSoundSource(choice: values.effNotificationSound, event: .done), event: .done,
-      row: render.selected)
+      target: .rootSetting(d.id))
   }
 
   /// 試聴の 1 経路。音を 1 つ鳴らし、その行に EQ を立てて音の長さぶんで畳む。
@@ -69,14 +71,16 @@ extension SettingsPaletteModel {
   /// 「鳴らす・光らせる」だけを持つ。前の音を止めて鳴らし直すのは再生層の責務（`SoundPlayer` が毎回
   /// stop してから鳴らす）なので、ここに時間の規則は無い。音量はこのパレットが見せているスコープの
   /// 実効値——耳と root 行の表示が食い違わないため。
-  func playPreview(_ source: ResolvedSource?, event: AgentSoundEvent, row: Int) {
+  func playPreview(_ source: ResolvedSource?, event: AgentSoundEvent, target: PreviewTarget) {
     onPreviewSound?(source, event, values.effNotificationSoundVolume)
-    lightPreviewIndicator(source: source, event: event, row: row)
+    lightPreviewIndicator(source: source, event: event, target: target)
   }
 
   /// EQ を今鳴っている行へ立て、音の長さぶん経ったら畳む。再生層は完了を通知しないが、
   /// **長さはどちらの音源でも先に確定している**——世代で先行の予約を無効化する。
-  private func lightPreviewIndicator(source: ResolvedSource?, event: AgentSoundEvent, row: Int) {
+  private func lightPreviewIndicator(
+    source: ResolvedSource?, event: AgentSoundEvent, target: PreviewTarget
+  ) {
     previewGeneration &+= 1
     let generation = previewGeneration
     guard let source else {
@@ -84,7 +88,7 @@ extension SettingsPaletteModel {
       syncPreviewAccessory()
       return
     }
-    previewIndicator = PreviewIndicator(row: row, event: event)
+    previewIndicator = PreviewIndicator(target: target, event: event)
     syncPreviewAccessory()
     schedulePreviewEnd(previewDuration(source, event: event)) { [weak self] in
       guard let self, self.previewGeneration == generation else { return }
@@ -112,15 +116,37 @@ extension SettingsPaletteModel {
     syncPreviewAccessory()
   }
 
-  /// 試聴中の行を `render.rowAccessory` へ写す。EQ の色は**鳴らした対象**の状態色（`glyphKind`）で
-  /// 解決する——セグメントのグリフ色と 1 経路を共有し、状態色の二重定義を作らない。
-  private func syncPreviewAccessory() {
-    guard let indicator = previewIndicator else {
+  /// 試聴中の行を `render.rowAccessory` へ写す。行は**現在の行集合に対して引き直す**ので、
+  /// 理由行の出入りやトグルによる行の有効/無効の切り替えが起きても、鳴っている音が属する行に
+  /// 付いたままになる。EQ の色は**鳴らした対象**の状態色（`glyphKind`）で解決する
+  /// ——セグメントのグリフ色と 1 経路を共有し、状態色の二重定義を作らない。
+  func syncPreviewAccessory() {
+    guard let indicator = previewIndicator, let row = previewRow(for: indicator.target) else {
       render.rowAccessory = nil
       return
     }
     render.rowAccessory = PaletteModel.RowAccessory(
-      row: indicator.row, view: AnyView(EqBarsView(color: indicator.event.glyphKind.stateColor)))
+      row: row, view: AnyView(EqBarsView(color: indicator.event.glyphKind.stateColor)))
+  }
+
+  /// 点灯対象 → 現在の行 index（今の面に居ない・行が消えたなら nil＝EQ を出さない）。
+  /// 面をまたいで残った予約が別の面の行を光らせないよう、面の一致もここで見る。
+  private func previewRow(for target: PreviewTarget) -> Int? {
+    switch target {
+    case .rootSetting(let id):
+      guard case .root = mode else { return nil }
+      return visibleRootRows.firstIndex {
+        if case .setting(let d) = $0 { return d.id == id }
+        return false
+      }
+    case .notificationSound(let row):
+      guard isNotificationSoundMode, render.rows.indices.contains(row) else { return nil }
+      return row
+    case .soundCustom(let row):
+      guard case .notificationSoundCustom = mode else { return nil }
+      let index = soundCustomRowIndex(row)
+      return render.rows.indices.contains(index) ? index : nil
+    }
   }
 
   /// 通知音サブの ↵。行 0（なし）はオフにするだけで**選択の値は触らない**（再度オンにしたら戻る）。
