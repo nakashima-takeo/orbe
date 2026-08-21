@@ -257,10 +257,15 @@ extension WindowController: ControlTarget {
       return ["values": [true, false]]
     case .enumeration(let values):
       return ["values": d.id == .defaultAgent ? detectedAgents : values()]
-    case .stringMap:
-      let symbols = Dictionary(
-        uniqueKeysWithValues: AgentStateIcon.curatedSymbols.map { ($0.key.state, $0.value) })
-      return ["symbols": symbols]
+    case .stringMap(let allowedKeys):
+      // map の key は descriptor が名乗る（住人が agentStateIcons 1 つだった頃の固定応答にしない）。
+      // curated symbol は状態アイコンだけの語彙なので、その項目のときにだけ添える。
+      var json: [String: Any] = ["keys": allowedKeys()]
+      if d.id == .agentStateIcons {
+        json["symbols"] = Dictionary(
+          uniqueKeysWithValues: AgentStateIcon.curatedSymbols.map { ($0.key.state, $0.value) })
+      }
+      return json
     case .pathTemplate:
       return ["placeholders": WorktreePathTemplate.placeholders]
     }

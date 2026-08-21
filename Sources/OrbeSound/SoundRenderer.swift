@@ -58,10 +58,23 @@ public enum SoundRenderer {
     }
     for effect in program.effects { effect.apply(to: &buffer, sampleRate: sampleRate) }
 
+    finalize(&buffer, volume: volume, sampleRate: sampleRate)
+    return buffer.map { Float($0) }
+  }
+
+  /// マスタチェーンの末尾（× 音量ゲイン → コンプレッサ）。合成音と取り込み済みのカスタム音源は
+  /// **この 1 本を共有する**——案とカスタムを切り替えても聴感の強さと音量ノブの手応え
+  /// （下げると圧縮が浅くなる挙動を含む）が揃うのは、末尾が同じ 1 実装であることに拠る。
+  public static func finalize(_ samples: [Float], volume: Int, sampleRate: Double) -> [Float] {
+    var buffer = samples.map { Double($0) }
+    finalize(&buffer, volume: volume, sampleRate: sampleRate)
+    return buffer.map { Float($0) }
+  }
+
+  private static func finalize(_ buffer: inout [Double], volume: Int, sampleRate: Double) {
     let level = Self.level(forVolume: volume)
     for i in buffer.indices { buffer[i] *= level }
     DynamicsCompressor.apply(to: &buffer, sampleRate: sampleRate)
-    return buffer.map { Float($0) }
   }
 
   /// 部品ごとに違う（が毎回同じ）ノイズ列を出すためのシード。Swift の `Hasher` はプロセスごとに

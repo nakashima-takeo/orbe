@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（orb）
 description: ペイン内・外から Orbe 自身の設定/ワークスペース/pane/tab/エージェントを操作する `orb` CLI。config/ws/pane/tab/agent/wait サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-08-16
+updated: 2026-08-21
 ---
 
 # Orbe CLI（`orb`）
@@ -14,7 +14,7 @@ updated: 2026-08-16
 
 - `orb config list [--workspace [<id|current>]] [--json]` … 設定の現在値・scope・domain。
 - `orb config get <key> [--workspace [<id|current>]] [--json]` … 単一設定（クライアントが list から抽出）。
-- `orb config set <key> <value> [--workspace [<id|current>]]` … 設定適用。`key` は設定パレットと同じ安定 kebab key。値型は key ごと（数値／真偽〔`true/false/on/off/1/0`〕／文字列）。全設定が `--workspace` で上書き可。
+- `orb config set <key> <value> [--workspace [<id|current>]]` … 設定適用。`key` は設定パレットと同じ安定 kebab key。値型は key ごと（数値／真偽〔`true/false/on/off/1/0`〕／文字列／map〔`agent-state-icons`・カスタム音源の 2 件。CLI からは設定できず、設定パレットから入れる。`unset` は効く〕）。全設定が `--workspace` で上書き可。
 - `orb config unset <key> [--workspace [<id|current>]]` … 上書きを解除して継承へ戻す。`--workspace` 省略は global 明示値の除去、指定はその WS 上書きの解除。
   - `--workspace` の値: フラグのみ＝アクティブ WS、`<id|current>` 指定＝**その WS**（非アクティブ可）。無指定は `set`/`unset` が global を書き、`list`/`get` はアクティブ WS の上書きを重ねた実効値を読む。
   - フラグを取り切った残余が位置引数の席に収まらなければ usage エラー（exit 2）。`--workspace=<id>`（= 区切り）・綴り誤り・2 個目の `--workspace`・席から溢れたトークン（`config set <key> <value> <余り>`）はここで落ちる——黙って捨てると exit 0 のまま指定と違う WS を触ることになる。`-` 始まりを値として通す席は `config set <key> <value>` の `<value>` だけで（`config set font-size -1`）、`<key>` の席は通さない。

@@ -242,7 +242,7 @@ final class PaletteFitTests: OrbeTestCase {
     global[SettingKeys.backgroundBlur] = false
     global[SettingKeys.cursorStyleBlink] = false
     global[SettingKeys.defaultAgent] = "claude"
-    global[SettingKeys.notificationSound] = NotificationSound.glass
+    global[SettingKeys.notificationSound] = .preset(.glass)
     let settings = SettingsPaletteModel(
       values: ScopedSettingsValues(global: global),
       fontNames: ["Menlo", "Monaco", "SF Mono", "JetBrainsMono Nerd Font Mono"],

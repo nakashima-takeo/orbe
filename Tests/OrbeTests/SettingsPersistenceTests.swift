@@ -16,8 +16,59 @@ final class SettingsPersistenceTests: OrbeTestCase {
     layer[SettingKeys.cursorStyleBlink] = false
     layer[SettingKeys.defaultAgent] = "codex"
     layer[SettingKeys.agentStateIcons] = ["working": "gearshape"]
+    layer[SettingKeys.notificationSound] = .custom
+    layer[SettingKeys.notificationSoundCustomDone] = CustomSoundSource(
+      file: "a1b2.wav", name: "chime.mp3", duration: 1.834)
+    layer[SettingKeys.notificationSoundCustomWaitingSameAsDone] = false
     SettingsPersistence.saveGlobal(layer)
     XCTAssertEqual(SettingsPersistence.loadGlobal(), layer)
+  }
+
+  /// カスタム音源はディスク上では 3 フィールドの map（file/name/duration）で、往復しても値が動かない。
+  func testCustomSoundSourceDiskRepresentation() throws {
+    var layer = SettingsLayer()
+    layer[SettingKeys.notificationSoundCustomDone] = CustomSoundSource(
+      file: "a1b2.wav", name: "chime.mp3", duration: 1.834)
+    SettingsPersistence.saveGlobal(layer)
+    let raw = try String(contentsOf: settingsFile(), encoding: .utf8)
+    XCTAssertTrue(raw.contains("\"notification-sound-custom-done\""))
+    XCTAssertTrue(raw.contains("\"file\" : \"a1b2.wav\""))
+    XCTAssertTrue(raw.contains("\"duration\" : \"1.834\""), "秒はミリ秒まで（往復しても丸め直されない）")
+  }
+
+  /// 不正な map（file 欠損・duration が数値でない・duration が 0 以下）は**未設定**として読む
+  /// ——parse は 1 箇所（`CustomSoundSource`）に閉じているので、どの経路から来ても同じ規則になる。
+  func testMalformedCustomSoundSourceReadsAsUnset() throws {
+    for bad in [
+      #"{"name":"x","duration":"1.0"}"#,  // file 欠損
+      #"{"file":"a.wav","duration":"nope"}"#,  // duration が数値でない
+      #"{"file":"a.wav","duration":"0"}"#,  // 長さゼロ
+      #"{"file":"../evil.wav","duration":"1.0"}"#,  // ディレクトリを跨ぐ名前
+    ] {
+      try Data(#"{"version":1,"values":{"notification-sound-custom-done":\#(bad)}}"#.utf8)
+        .write(to: settingsFile())
+      XCTAssertNil(
+        SettingsPersistence.loadGlobal()[SettingKeys.notificationSoundCustomDone], bad)
+    }
+  }
+
+  /// name だけが欠けている map は未設定にしない（鳴らせる実体はあるので、表示名を file で代替する）。
+  func testCustomSoundSourceWithoutNameFallsBackToTheFileName() throws {
+    try Data(
+      #"{"version":1,"values":{"notification-sound-custom-done":{"file":"a.wav","duration":"2.5"}}}"#
+        .utf8
+    ).write(to: settingsFile())
+    let source = SettingsPersistence.loadGlobal()[SettingKeys.notificationSoundCustomDone]
+    XCTAssertEqual(source, CustomSoundSource(file: "a.wav", name: "a.wav", duration: 2.5))
+  }
+
+  /// 未知の案名（旧バージョンが書いた値・手書きの誤り）は未設定として読み、実効は既定へ落ちる。
+  func testUnknownNotificationSoundReadsAsUnset() throws {
+    try Data(#"{"version":1,"values":{"notification-sound":"no-such-sound"}}"#.utf8)
+      .write(to: settingsFile())
+    let layer = SettingsPersistence.loadGlobal()
+    XCTAssertNil(layer[SettingKeys.notificationSound])
+    XCTAssertEqual(EffectiveSettings(layer)[SettingKeys.notificationSound], .default)
   }
 
   /// ディスク表現は canonical key（kebab）＋version マーカー。theme は小文字 rawValue。

@@ -1,7 +1,7 @@
 ---
 title: Orbe デザインシステム
 description: 外観の思想・契約を記す自由記述ドキュメント。値の正は DesignSystem/ の Swift、思想・契約の正は本書
-updated: 2026-08-08
+updated: 2026-08-21
 ---
 
 # Orbe デザインシステム
@@ -176,7 +176,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 
 - **選択の示し方**: リスト行の選択は **tint 背景**（`selectionFill`）。タブの選択のみ**前景色反転**（§5.1）。左 3px バーは**どこでも使わない**（Completion も例外にしない）。下線・太字による選択弁別も持たない。
 - **Tab（セグメント）**: タブ行（高さ28・padding 3・gap 2・地 `tab.rowBg`）の中のセグメント。radius 3・padding 横8・max幅 140・末尾省略。非選択＝地 `tab.segBg`・文字 `text.secondary`（idle/dormant/なしも同じ）・状態グリフ 9px（working は stroke 1.6。idle は非表示）。**選択＝地 `text.primary`（前景色反転）・文字 `tab.activeText`・グリフ＝`state.*Inverse`（対テーマ状態色）**、done の check 線のみ `text.primary`。タブ背景を状態色で塗らない。
-- **Palette row**: default＝`text.secondary`（workspace 行の名前＝最優先状態の色）。hover＝`hoverFill`＋`text.primary`。selected＝`selectionFill` 地。dormant＝`Opacity.dormant`。情報行＝`text.muted`・選択不可。行= padding 5×10・radius 8。workspace 行の右詰め＝状態別カウントピル（padding 1×7・radius pill・地 tint .12・文字 状態色・グリフ 9px）。
+- **Palette row**: default＝`text.secondary`（workspace 行の名前＝最優先状態の色）。hover＝`hoverFill`＋`text.primary`。selected＝`selectionFill` 地。dormant＝`Opacity.dormant`。情報行＝`text.muted`・選択不可。そのうち直前の操作が失敗した理由を述べる行だけ `danger`（§3）——中立な補足と同じ弱さで出さない。行= padding 5×10・radius 8。workspace 行の右詰め＝状態別カウントピル（padding 1×7・radius pill・地 tint .12・文字 状態色・グリフ 9px）。
 - **Button**: primary（主 CTA）＝塗り `accent.primary`・文字 `on.accent`・radius `md`。secondary＝塗りなし・文字 `accent.primary`・枠 1px `surface.1`・hover で `hoverFill`。disabled＝`Opacity.disabled`。
 - **Search field**: 外枠＝`bg.sunken`＋1px `surface.1`＋radius `md`。focus＝リング `accent.focus`。no-match＝`danger`。件数＝`captionDigit`。
 - **Focus / active pane**: アクティブペインは 2px 内側リング `accent.focus`。カーソル点滅と併走。

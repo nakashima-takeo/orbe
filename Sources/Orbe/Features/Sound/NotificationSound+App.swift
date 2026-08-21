@@ -1,7 +1,9 @@
 import OrbeSound
 
 /// `NotificationSound` / `AgentSoundEvent`（OrbeSound の純 DSP 語彙）をアプリの語彙へ橋渡しする層。
-/// ラベル・状態グリフ・設定変換は L10n / `AgentStateIcon` / 設定層に依存するため OrbeSound 側には置けない。
+/// ラベルと状態グリフは L10n / `AgentStateIcon` に依存するため OrbeSound 側には置けない。
+/// 設定値への変換は持たない——設定が持つのは案とカスタムを合わせた `AgentSoundChoice` で、
+/// 案だけを直に設定値へできると `custom` を素通しする key を書けてしまう。
 extension NotificationSound {
   /// 設定パレット行・descriptor display の表示ラベル（`EmojiFontMode.labelKey` 前例＝案自身が名乗る）。
   /// 並行配列で位置結合するとラベル取り違えが黙って通るため、写像はここ 1 箇所に持つ。
@@ -21,16 +23,6 @@ extension NotificationSound {
     case .deep: return .soundDeep
     }
   }
-}
-
-extension NotificationSound: SettingConvertible {
-  init?(settingValue: SettingValue) {
-    guard case .string(let raw) = settingValue, let sound = NotificationSound(rawValue: raw) else {
-      return nil
-    }
-    self = sound
-  }
-  var settingValue: SettingValue { .string(rawValue) }
 }
 
 extension AgentSoundEvent {

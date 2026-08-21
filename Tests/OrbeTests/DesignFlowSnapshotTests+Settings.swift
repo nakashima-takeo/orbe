@@ -116,22 +116,14 @@ extension DesignFlowSnapshotTests {
   }
 
   /// Settings パレット通知音: root → 潜る（入場は無音＝EQ 無し）→ ↓ で試聴（EQ 点灯）→ ⇥ で対象反転
-  /// （セグメントの塗りが移り EQ が琥珀へ）→ セグメントのクリックで完了へ戻る → root の音量行で `→`。
-  /// アクションで初めて現れる状態（EQ の点灯・対象の反転）を撮るのがここの役目。
-  /// 最後の 1 枚は、試聴の 1 経路がサブパレットだけでなく root の音量行にも同じ EQ を出すことを画で押さえる。
+  /// （セグメントの塗りが移り EQ が琥珀へ）→ セグメントのクリックで完了へ戻る → カスタム行へ移り
+  /// `→` で設定サブ → 取り込み成功（補足が元ファイル名へ変わり、確認再生の EQ が点く）→ トグル反転 →
+  /// 取り込み失敗（面の先頭に理由 1 行＝danger）→ カスタムを確定して root の音量行で `→`。
+  /// アクションで初めて現れる状態（EQ の点灯・対象の反転・取り込みの成否）を撮るのがここの役目。
+  /// 最後の 1 枚は、root の通知音行が「カスタム」を名乗ることと、試聴の 1 経路がサブパレットだけで
+  /// なく root の音量行にも同じ EQ を出すことを一緒に画で押さえる。
   func testSettingsPaletteSound() throws {
-    var global = SettingsLayer()
-    global[SettingKeys.fontSize] = 14
-    global[SettingKeys.defaultAgent] = "claude"
-    global[SettingKeys.notificationSound] = NotificationSound.glass
-    let settings = SettingsPaletteModel(
-      values: ScopedSettingsValues(global: global),
-      fontNames: ["Menlo", "Monaco", "SF Mono"],
-      agents: ["claude", "codex", "agy"],
-      localization: LocalizationStore(language: .ja))
-    // 撮影中に鳴り終わりで EQ が消えないよう消灯予約を止める（`pulse` は 0.26 秒で、
-    // `renderPNG` が回す RunLoop 0.2 秒との差は 60ms しかない）。
-    settings.schedulePreviewEnd = { _, _ in }
+    let settings = soundFlowModel()
     let soundStage = NSSize(width: 500, height: 460)
     try flow(
       "settings_palette_sound", size: soundStage,
@@ -148,15 +140,79 @@ extension DesignFlowSnapshotTests {
         ("preview", { settings.render.onDown() }),  // 試聴 → その行の右端に EQ（完了＝緑）
         ("waiting", { _ = settings.render.onTab() }),  // 対象を反転 → 塗りが移り EQ が琥珀へ
         ("tab_click", { settings.render.onTapSegment(0) }),  // クリックで完了へ戻す
-        (
-          "root_volume",
-          {  // root へ戻り音量行（index 13）で `→`。値が動いて完了音が鳴り、EQ が root の行にも出る
-            settings.render.onEscape()  // 通知音サブ → root
-            settings.render.selected = 13
-            _ = settings.render.onRight()
-          }
-        ),
-      ])
+      ] + customSoundSteps(settings))
+  }
+
+  /// 通知音 flow のうちカスタム音源の段（一覧のカスタム行 → 設定サブ → 確定して root へ）。
+  /// 取り込みはファイル選択と取り込み器の seam を差し替えて起こす（実ファイルもパネルも要らない）。
+  private func customSoundSteps(_ settings: SettingsPaletteModel)
+    -> [(label: String, action: () -> Void)]
+  {
+    let doneName = "sonar-ping.mp3"
+    let badName = "field-recording-2026-08-21-take-07-master.aiff"
+    func stub(_ name: String, _ result: Result<CustomSoundSource, SoundFileImporter.ImportError>) {
+      settings.pickSoundFile = { URL(fileURLWithPath: "/tmp/" + name) }
+      settings.importSoundFile = { _ in result }
+    }
+    return [
+      (
+        "custom",
+        {  // カスタム行（index 13・まだ未取り込み＝補足は「未設定」）から `→` で設定サブへ
+          settings.render.selected = 13
+          _ = settings.render.onRight()
+        }
+      ),
+      (
+        "imported",
+        {  // 完了の音源で取り込み成功 → 補足が元ファイル名へ変わり確認再生の EQ が点く
+          stub(
+            doneName, .success(CustomSoundSource(file: "9f2c.wav", name: doneName, duration: 1.83)))
+          settings.render.onActivate()
+        }
+      ),
+      (
+        "same_as_done_off",
+        {  // トグルを反転 → 入力待ちの行が「（完了と同じ）」の無効行から編集できる行へ変わる
+          settings.render.selected = 2
+          settings.render.onActivate()
+        }
+      ),
+      (
+        "import_failed",
+        {  // 取り込み失敗 → 面の先頭に理由 1 行（danger）。長いファイル名で折返しの収まりも見る
+          stub(badName, .failure(.unreadable))
+          settings.render.selected = settings.soundCustomRowIndex(.doneSource)
+          settings.render.onActivate()
+        }
+      ),
+      (
+        "root_volume",
+        {  // `←` で通知音サブ（選択はカスタム行に復元）→ `↵` で確定して root へ。root の通知音行は
+          // 値が「カスタム」に変わっている。続けて音量行（index 13）で `→`。値が動いて完了音が鳴り、
+          // EQ が root の行にも出る
+          settings.render.onEscape()  // カスタム設定サブ → 通知音サブ
+          settings.render.onActivate()  // カスタム行を確定 → root へ
+          settings.render.selected = 13
+          _ = settings.render.onRight()
+        }
+      ),
+    ]
+  }
+
+  /// 通知音 flow の実モデル。撮影中に鳴り終わりで EQ が消えないよう消灯予約を止める
+  /// （`pulse` は 0.26 秒で、`renderPNG` が回す RunLoop 0.2 秒との差は 60ms しかない）。
+  private func soundFlowModel() -> SettingsPaletteModel {
+    var global = SettingsLayer()
+    global[SettingKeys.fontSize] = 14
+    global[SettingKeys.defaultAgent] = "claude"
+    global[SettingKeys.notificationSound] = .preset(.glass)
+    let settings = SettingsPaletteModel(
+      values: ScopedSettingsValues(global: global),
+      fontNames: ["Menlo", "Monaco", "SF Mono"],
+      agents: ["claude", "codex", "agy"],
+      localization: LocalizationStore(language: .ja))
+    settings.schedulePreviewEnd = { _, _ in }
+    return settings
   }
 
   /// Settings パレット agent 空状態: agent 検出ゼロでサブリストへ潜り、情報行（選択不可・text.muted）が

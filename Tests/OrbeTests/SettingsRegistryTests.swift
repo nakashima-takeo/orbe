@@ -24,7 +24,8 @@ final class SettingsRegistryTests: OrbeTestCase {
         .fontSize, .fontFamily, .tabTitleFontFamily, .emojiFont, .theme, .defaultAgent,
         .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .agentStateIcons,
         .worktreeDir, .notificationSound, .notificationSoundVolume,
-        .notificationSoundEnabled,
+        .notificationSoundEnabled, .notificationSoundCustomDone, .notificationSoundCustomWaiting,
+        .notificationSoundCustomWaitingSameAsDone,
       ])
   }
 
@@ -40,11 +41,25 @@ final class SettingsRegistryTests: OrbeTestCase {
       ])
   }
 
-  /// 2 順序は SettingID の全 case を過不足なく含む（追加漏れの検知）。
-  func testAllAndRootOrderCoverEverySettingID() {
+  /// `all` は SettingID の全 case を過不足なく含む。`rootOrder` はその部分集合で、差は
+  /// **root に行を持たない項目の明示リスト**（`nonRootIDs`）とちょうど一致する
+  /// ——「rootOrder が全 case を含む」を単に緩めると、行の書き漏れが検出されなくなる。
+  func testAllCoversEverySettingIDAndRootOrderIsAllMinusTheNonRootSet() {
     let allIDs = Set(SettingID.allCases)
     XCTAssertEqual(Set(SettingsRegistry.all.map(\.id)), allIDs, "all が全 case を含む")
-    XCTAssertEqual(Set(SettingsRegistry.rootOrder.map(\.id)), allIDs, "rootOrder が全 case を含む")
+    XCTAssertEqual(
+      SettingsRegistry.nonRootIDs,
+      [
+        .notificationSoundCustomDone, .notificationSoundCustomWaiting,
+        .notificationSoundCustomWaitingSameAsDone,
+      ], "root に出さない項目はこの 3 件だけ（カスタム設定サブの中でだけ編集される）")
+    XCTAssertEqual(
+      Set(SettingsRegistry.rootOrder.map(\.id)), allIDs.subtracting(SettingsRegistry.nonRootIDs),
+      "rootOrder は非掲載を除く全 case をちょうど覆う")
+    XCTAssertEqual(
+      SettingsRegistry.rootOrder.count,
+      SettingID.allCases.count - SettingsRegistry.nonRootIDs.count,
+      "rootOrder に重複は無い")
   }
 
   // MARK: - key（canonical・SSOT）
@@ -67,6 +82,15 @@ final class SettingsRegistryTests: OrbeTestCase {
       SettingsRegistry.descriptor(.notificationSoundVolume).key, "notification-sound-volume")
     XCTAssertEqual(
       SettingsRegistry.descriptor(.notificationSoundEnabled).key, "notification-sound-enabled")
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.notificationSoundCustomDone).key,
+      "notification-sound-custom-done")
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.notificationSoundCustomWaiting).key,
+      "notification-sound-custom-waiting")
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.notificationSoundCustomWaitingSameAsDone).key,
+      "notification-sound-custom-waiting-same-as-done")
     XCTAssertEqual(SettingsRegistry.confKey(.fontSize), "font-size", "confKey は descriptor.key を引く")
     let keys = SettingsRegistry.all.map(\.key)
     XCTAssertEqual(Set(keys).count, SettingsRegistry.all.count, "key は全項目で一意")
@@ -88,8 +112,13 @@ final class SettingsRegistryTests: OrbeTestCase {
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
       .emojiFont, .agentStateIcons, .worktreeDir, .notificationSound,
       .notificationSoundVolume, .notificationSoundEnabled,
+      .notificationSoundCustomWaitingSameAsDone,
     ] {
       XCTAssertNotNil(SettingsRegistry.descriptor(id).defaultValue(), "\(id) は既定を持つ")
+    }
+    for id in [SettingID.notificationSoundCustomDone, .notificationSoundCustomWaiting] {
+      XCTAssertNil(
+        SettingsRegistry.descriptor(id).defaultValue(), "\(id) は既定なし（未取り込み＝未設定）")
     }
     XCTAssertNil(SettingsRegistry.descriptor(.fontFamily).defaultValue(), "fontFamily は既定なし")
     XCTAssertNil(SettingsRegistry.descriptor(.defaultAgent).defaultValue(), "defaultAgent は既定なし")
@@ -112,8 +141,14 @@ final class SettingsRegistryTests: OrbeTestCase {
       .string("{parent}/{repo}-worktrees/{slug}"), "既定は従来のハードコード規則と同一パスに解決するテンプレート")
     XCTAssertEqual(
       SettingsRegistry.descriptor(.notificationSound).defaultValue(),
-      NotificationSound.default.settingValue,
-      "既定の案は NotificationSound.default が SSOT（リテラルを 2 箇所に置かない）")
+      AgentSoundChoice.default.settingValue,
+      "既定の選択は AgentSoundChoice.default が SSOT（リテラルを 2 箇所に置かない）")
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.notificationSound).defaultValue(),
+      .string(NotificationSound.default.rawValue), "既定は案（＝紋章）であってカスタムではない")
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.notificationSoundCustomWaitingSameAsDone).defaultValue(),
+      .bool(true), "waiting 同一化は既定オン")
     XCTAssertEqual(
       SettingsRegistry.descriptor(.notificationSoundVolume).defaultValue(), .int(90),
       "既定の音量は SoundRenderer.defaultVolume が SSOT——dev CLI の --volume 既定も同じ 1 つを見る")
@@ -125,6 +160,8 @@ final class SettingsRegistryTests: OrbeTestCase {
   func testNotificationSoundHasNoGuiConf() {
     for id in [
       SettingID.notificationSound, .notificationSoundVolume, .notificationSoundEnabled,
+      .notificationSoundCustomDone, .notificationSoundCustomWaiting,
+      .notificationSoundCustomWaitingSameAsDone,
     ] {
       XCTAssertNil(SettingsRegistry.descriptor(id).guiConf, "\(id) は gui.conf に出さない")
     }
@@ -243,6 +280,7 @@ final class SettingsRegistryTests: OrbeTestCase {
   func testToggleItemsHaveToggleDomainAndActivation() {
     for id in [
       SettingID.backgroundBlur, .cursorStyleBlink, .notificationSoundEnabled,
+      .notificationSoundCustomWaitingSameAsDone,
     ] {
       XCTAssertEqual(SettingsRegistry.descriptor(id).activation, .toggle)
       guard case .toggle = SettingsRegistry.descriptor(id).domain else {
@@ -258,6 +296,20 @@ final class SettingsRegistryTests: OrbeTestCase {
     XCTAssertEqual(SettingsRegistry.descriptor(.theme).domain.typeName, "enum")
     XCTAssertEqual(SettingsRegistry.descriptor(.agentStateIcons).domain.typeName, "map")
     XCTAssertEqual(SettingsRegistry.descriptor(.worktreeDir).domain.typeName, "string")
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.notificationSoundCustomDone).domain.typeName, "map")
+  }
+
+  /// 通知音の選択は 12 案 ＋ `custom` の閉じた値域（control config_set の membership 検証もここを読む）。
+  func testNotificationSoundDomainIncludesCustom() {
+    guard case .enumeration(let values) = SettingsRegistry.descriptor(.notificationSound).domain
+    else { return XCTFail("notification-sound の domain は enumeration") }
+    XCTAssertEqual(values(), NotificationSound.allCases.map(\.rawValue) + ["custom"])
+    XCTAssertNil(
+      SettingsRegistry.descriptor(.notificationSound).domain.validate("no-such-sound"),
+      "値域外は拒否する")
+    XCTAssertEqual(
+      SettingsRegistry.descriptor(.notificationSound).domain.validate("custom"), .string("custom"))
   }
 
   // MARK: - isDrillIn（stepper/toggle は潜らない・drillIn は潜る）
@@ -266,12 +318,14 @@ final class SettingsRegistryTests: OrbeTestCase {
     for id in [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink,
       .notificationSoundVolume, .notificationSoundEnabled,
+      .notificationSoundCustomWaitingSameAsDone,
     ] {
       XCTAssertFalse(SettingsRegistry.descriptor(id).isDrillIn, "stepper/toggle（\(id)）は潜らない")
     }
     for id in [
       SettingID.fontFamily, .tabTitleFontFamily, .emojiFont, .theme, .defaultAgent,
-      .agentStateIcons, .worktreeDir, .notificationSound,
+      .agentStateIcons, .worktreeDir, .notificationSound, .notificationSoundCustomDone,
+      .notificationSoundCustomWaiting,
     ] {
       XCTAssertTrue(SettingsRegistry.descriptor(id).isDrillIn, "\(id) は drillIn")
     }

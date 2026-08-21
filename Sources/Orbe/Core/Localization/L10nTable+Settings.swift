@@ -72,6 +72,17 @@ extension L10n {
     ),
     .settingsNotificationSoundNone: ("なし", "None"),
     .settingsNotificationSoundOffRow: ("なし（オフ）", "None (off)"),
+    .settingsNotificationSoundCustom: ("カスタム", "Custom"),
+    .settingsSoundCustomHint: (
+      "↵/→ 選ぶ・切替   ←/esc 戻る", "↵/→ Choose / Toggle   ←/esc Back"
+    ),
+    .settingsSoundCustomUnset: ("未設定", "Not set"),
+    .settingsSoundCustomSameAsDoneValue: ("（完了と同じ）", "(same as done)"),
+    .settingsSoundCustomErrUnreadable: ("読み込めない形式です（%@）", "Unsupported audio file (%@)"),
+    .settingsSoundCustomErrSilent: ("音が入っていません（%@）", "No audio in this file (%@)"),
+    .settingsSoundCustomErrStorage: (
+      "音源を保存できませんでした", "Couldn't save the imported sound"
+    ),
 
     // MARK: Settings registry
     .settingsFontSize: ("フォントサイズ", "Font Size"),
@@ -91,6 +102,9 @@ extension L10n {
     .settingsNotificationSound: ("通知音", "Notification Sound"),
     .settingsNotificationSoundVolume: ("音量", "Volume"),
     .settingsNotificationSoundEnabled: ("通知音のオン/オフ", "Notification Sound On/Off"),
+    .settingsSoundCustomDoneRow: ("完了の音源", "Done Sound File"),
+    .settingsSoundCustomWaitingRow: ("入力待ちの音源", "Waiting Sound File"),
+    .settingsSoundCustomSameAsDone: ("入力待ちも完了と同じ音", "Waiting Uses the Done Sound"),
     .settingsUnset: ("（未設定）", "(unset)"),
     .settingsToggleOn: ("オン", "On"),
     .settingsToggleOff: ("オフ", "Off"),

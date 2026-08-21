@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 /// 設定パレット（Cmd+,）の提示と、単一代入の適用・生成 conf 再反映の配線。
 /// overlay 提示一般（WindowController+Palette）から、設定を適用するという別の関心を分離する。
@@ -41,14 +42,28 @@ extension WindowController {
     // 鳴っている音を止めるだけ。案・音量ともパレットが見せているスコープの実効値で届くので、
     // ここは再生層へ渡すだけ（別の解決を持ち込まない）。
     // 「通知音のオン/オフ」が off でも鳴らす——off のまま案も音量も決め直せないと詰む。
-    p.onPreviewSound = { [weak self] sound, event, volume in
+    p.onPreviewSound = { [weak self] source, event, volume in
       guard let self else { return }
-      guard let sound else {
+      guard let source else {
         self.soundPlayer.stopPreview()
         return
       }
-      self.soundPlayer.play(sound, event: event, volume: volume)
+      self.soundPlayer.play(source, event: event, volume: volume)
     }
+    // 手持ちの音声ファイルを選ばせる。パネルは modal なのでパレットは焦点を失う——閉じた後に
+    // 必ず取り戻す（`focus()` だけでは去りゆくパネルの teardown に負けることがある）。
+    p.pickSoundFile = { [weak self] in
+      let panel = NSOpenPanel()
+      panel.allowsMultipleSelection = false
+      panel.canChooseDirectories = false
+      panel.allowedContentTypes = [.audio]
+      let chosen = panel.runModal() == .OK ? panel.url : nil
+      self?.model.settingsPalette?.focus()
+      self?.reconfirmFocusNextTick()
+      return chosen
+    }
+    // 取り込み（デコード→10 秒打ち切り→正規化→`sounds/` へ保存）。値の保存と GC は `onApply` 側。
+    p.importSoundFile = { SoundFileImporter.importFile(at: $0) }
     p.onDismiss = { [weak self] in self?.dismissPalette() }
     model.settingsPalette = p
     model.overlay = .settingsPalette
@@ -78,6 +93,9 @@ extension WindowController {
       scheduleSave()  // workspaces.json へ永続化（再起動越し復元）
     }
     if scope == .global || target === current { applyActiveWorkspaceConfig() }
+    // カスタム音源の参照集合が変わったので、参照されなくなったファイルを回収する
+    // （順序は「新ファイルを書く → ここで設定値を保存 → GC」。パレット・`orb config`・control が共有）。
+    if SettingsRegistry.customSoundSourceIDs.contains(change.id) { collectCustomSoundGarbage() }
   }
 
   /// ドメインA のライブ反映（hard reload）を trailing debounce で 1 回へ畳む。reloadConfig は

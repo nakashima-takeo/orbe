@@ -46,12 +46,17 @@ extension SettingsPaletteModel {
     }
   }
 
-  /// notificationSound: 行 0 が「なし（オフ）」、続いて 12 案（絞り込み欄なし）。
-  /// **行の移動はその案を鳴らすだけで値を書かない**（書くのは ↵ の確定のみ）ので、流し聴きして
+  /// 「カスタム」行の index（12 案の次＝末尾）。●・↵・→・戻りの選択復元・試聴が同じ 1 箇所を読む
+  /// ——行の並びを変えたときに、それぞれが別々にズレないため。
+  var notificationSoundCustomRow: Int { NotificationSound.allCases.count + 1 }
+
+  /// notificationSound: 行 0 が「なし（オフ）」、続いて 12 案、末尾に「カスタム」（絞り込み欄なし）。
+  /// **行の移動はその音を鳴らすだけで値を書かない**（書くのは ↵ の確定のみ）ので、流し聴きして
   /// ← / esc で戻れば設定は元のまま。リスト直上のセグメントが今どちらのイベントを聴く面かを示し、
   /// ⇥ とそのクリックが反転する。鳴る条件はキー割当ではなくこの面の前提なので、フッターの hint とは別に
   /// リスト直上の一文（caption）で言い切る。
-  /// 現在値（●・初期ハイライト）はオフなら行 0、オンなら現在の案の行。
+  /// 現在値（●・初期ハイライト）はオフなら行 0、オンなら選択中の案（またはカスタム）の行。
+  /// カスタム行の補足には実効の完了音源の表示名を出す（未設定なら「未設定」）。
   func rebuildNotificationSound() {
     render.fieldVisible = false
     render.fieldIsFilter = false
@@ -66,7 +71,12 @@ extension SettingsPaletteModel {
     let sounds = NotificationSound.allCases
     currentRowIndex =
       values.effNotificationSoundEnabled
-      ? sounds.firstIndex(of: values.effNotificationSound).map { $0 + 1 } : 0
+      ? {
+        switch values.effNotificationSound {
+        case .preset(let sound): return sounds.firstIndex(of: sound).map { $0 + 1 }
+        case .custom: return notificationSoundCustomRow
+        }
+      }() : 0
     render.rows =
       [
         PaletteModel.RowItem(
@@ -75,6 +85,14 @@ extension SettingsPaletteModel {
       + sounds.indices.map {
         PaletteModel.RowItem(label: marker($0 + 1) + localization.string(sounds[$0].labelKey))
       }
+      + [
+        PaletteModel.RowItem(
+          label: marker(notificationSoundCustomRow)
+            + localization.string(.settingsNotificationSoundCustom),
+          chevron: true,
+          detail: values.effCustomSoundDone?.name
+            ?? localization.string(.settingsSoundCustomUnset))
+      ]
   }
 
   /// agent: 検出済み CLI の行（絞り込み欄なし・検出ゼロは情報行 1 つ）。

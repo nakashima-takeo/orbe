@@ -114,7 +114,10 @@ final class SoundCatalogTests: XCTestCase {
   }
 
   /// ラウドネス整合: 全 24 音の最大短時間 RMS（300 ms 窓・既定音量 90・48 kHz）が整合目標
-  /// -24.0 dBFS へ揃う（実測残差 ±0.3 dB に余白を足して ±0.8 dB）。これが「他の案と並べて
+  /// （`SoundCatalog.loudnessTargetDB`）へ揃う（実測残差 ±0.3 dB に余白を足して ±0.8 dB）。
+  /// 目標を定数で見るのは、取り込むカスタム音源（`SoundImportTests`）と**同じ 1 点**を向いていることを
+  /// ここでも縛るため——リテラルで書くと、目標を動かしたときにカスタム側だけが追随して両方緑になる。
+  /// これが「他の案と並べて
   /// 音量の違和感が出ない」ことの客観的な物差し——音の定義を変えて外れたら、`SoundCatalog` の
   /// トリム表をその音だけ測り直して目標へ戻す。
   func testLoudnessOfEverySoundStaysAligned() {
@@ -125,7 +128,8 @@ final class SoundCatalogTests: XCTestCase {
           sampleRate: sampleRate)
         let loud = SoundAnalysis.maxShortTermRMSDB(samples, sampleRate: sampleRate)
         XCTAssertEqual(
-          loud, -24.0, accuracy: 0.8, "\(family)/\(event) の音量が揃っていない (\(loud) dBFS)")
+          loud, SoundCatalog.loudnessTargetDB, accuracy: 0.8,
+          "\(family)/\(event) の音量が揃っていない (\(loud) dBFS)")
       }
     }
   }

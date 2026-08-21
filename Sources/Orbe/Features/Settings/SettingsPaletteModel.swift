@@ -29,7 +29,12 @@ import SwiftUI
   /// 新しい値で鳴らす（音量は数字でなく耳で決めるため）。
   /// 音量まで渡すのは、耳に届く値が root 行の表示と食い違わないため——値の解決はこのスコープの
   /// 実効値（`ScopedSettingsValues`）だけが持つ規約で、提示元は別の解決を持ち込まない。
-  var onPreviewSound: ((NotificationSound?, AgentSoundEvent, Int) -> Void)?
+  var onPreviewSound: ((ResolvedSource?, AgentSoundEvent, Int) -> Void)?
+  /// 音声ファイルを選ばせる（本物は NSOpenPanel。nil＝キャンセル or 未配線）。提示元が配線する
+  /// ——テストが実ダイアログを開かないための seam で、`onPreviewSound` と同じ流儀。
+  var pickSoundFile: (() -> URL?)?
+  /// 選んだファイルをその場で取り込む（デコード→打ち切り→正規化→保存）。本物は `SoundFileImporter`。
+  var importSoundFile: ((URL) -> Result<CustomSoundSource, SoundFileImporter.ImportError>)?
 
   /// 現在の UI 言語ホルダー。言語行のマーカー・root 行の現在値表示・自身の文言（breadcrumb/hint）が読む。
   let localization: LocalizationStore
@@ -38,7 +43,7 @@ import SwiftUI
   enum Mode {
     case root, font, tabTitleFont, emojiFont, theme, agent, agentStates,
       agentIcon(AgentStateIcon.Kind), worktreeDirPresets, worktreeDirCustom, language, update,
-      notificationSound
+      notificationSound, notificationSoundCustom
   }
 
   /// root 行。先頭のスコープ切替行と、レジストリ表示順の各設定行。
@@ -81,14 +86,26 @@ import SwiftUI
   // 試聴インジケータ（EQ）の状態。格納プロパティなのでここに置き、読み書きは `+Sound` だけが行う
   // （extension には格納プロパティを置けない）。
 
-  /// 試聴インジケータ（EQ）の点灯状態。行と、その行で鳴らした音の対象を 1 つで持つ
+  /// EQ を出す行の**同一性**。行 index で持たない——理由行（notice）の出入りや絞り込みで行が
+  /// 組み直されると、同じ index が別の行を指してしまい、鳴っている音と無関係な行が光る。
+  /// 「どの行か」を意味で持ち、現在の行集合に対して**引き直す**（`previewRow(for:)`）。
+  enum PreviewTarget: Equatable {
+    /// root の設定行（音量行）。絞り込みで index が動くので SettingID で指す。
+    case rootSetting(SettingID)
+    /// 通知音サブの行。この面の行集合は固定（なし＋12 案＋カスタム）なので index がそのまま同一性。
+    case notificationSound(row: Int)
+    /// カスタム設定サブの行。notice の増減で index が動くので行の種別で指す。
+    case soundCustom(SoundCustomRow)
+  }
+
+  /// 試聴インジケータ（EQ）の点灯状態。**どの行で**・**何の音を**鳴らしたかを 1 つで持つ
   /// ——EQ の色は「今どの面にいるか」でなく「何を鳴らしたか」で決まるため。
   struct PreviewIndicator {
-    var row: Int
+    var target: PreviewTarget
     var event: AgentSoundEvent
   }
 
-  /// 試聴中の行と対象（EQ を出す行）。鳴り終わり（`SoundCatalog.duration`）で自動的に nil へ戻る**面の状態**で、
+  /// 試聴中の行と対象（EQ を出す行）。鳴り終わり（音の長さ）で自動的に nil へ戻る**面の状態**で、
   /// 設定にも `PaletteModel.rows` にも書かない。
   var previewIndicator: PreviewIndicator?
   /// 先行する消灯予約を無効化する世代（↑↓ 連打で消灯が食い違わない）。
@@ -102,6 +119,11 @@ import SwiftUI
   /// worktreeDir 入力の直前の不正確定理由（語彙の説明行の先頭に差し込んで出す）。
   /// 編集（queryChanged）と入場（drillIn）でクリアし、エラーは確定時にだけ評価する。
   var worktreeDirError: String?
+
+  /// カスタム音源の取り込みに失敗した理由（カスタム設定サブの先頭に 1 行差し込んで出す）。
+  /// 入場と、この面での次の操作（取り込みのやり直し・トグル・戻り）でクリアする——行の移動では
+  /// 消さない（読みたい理由が、読もうと動いた瞬間に消えないため）。
+  var customSoundError: String?
 
   /// 設定値の解決モデル（global 層・workspace 上書き層・現在スコープ・表示の語彙）。
   var values: ScopedSettingsValues
@@ -197,8 +219,7 @@ import SwiftUI
 
   /// 現在の mode の行を組み直す（mode はそのまま。入力途中の再描画に使う）。
   func rebuild() {
-    // 面ごとの装飾は組み直すたび白紙から（立てるのは各 rebuild だけ）。試聴 EQ（`rowAccessory`）は
-    // 行の再構築と独立に点いて消える一時状態なので、ここでは触らず `+Sound` が単独で握る。
+    // 面ごとの装飾は組み直すたび白紙から（立てるのは各 rebuild だけ）。
     currentRowIndex = nil
     render.segments = []
     render.caption = ""
@@ -216,7 +237,11 @@ import SwiftUI
     case .language: rebuildLanguage()
     case .update: rebuildUpdate()
     case .notificationSound: rebuildNotificationSound()
+    case .notificationSoundCustom: rebuildNotificationSoundCustom()
     }
+    // 行が入れ替わったので EQ の行を引き直す。点灯そのものは `+Sound` が握るが、**位置は行集合に
+    // 従属する**——組み直した後に置き直さないと、notice の出入りで別の行が光る。
+    syncPreviewAccessory()
     render.clampSelection()
   }
 }

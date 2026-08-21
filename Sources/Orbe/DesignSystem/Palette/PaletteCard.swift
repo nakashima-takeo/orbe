@@ -337,7 +337,7 @@ struct PaletteCard: View {
 
   private func rowKind(_ row: PaletteModel.RowItem) -> PaletteRow.Kind {
     if row.createStyle { return .createAction }
-    if !row.enabled { return .info }
+    if !row.enabled { return row.failure ? .failure : .info }
     return row.dimmed ? .dormant : .normal
   }
 }
