@@ -12,17 +12,20 @@ import XCTest
 ///
 /// workspace の id はプロセス全域の IdGen で採番され予測不能なため、決して直書きせず
 /// `controlListWorkspaces()` の戻りから読む（配列インデックスでなく id で指す契約でもある）。
+///
+/// 休眠 workspace が list_workspaces / list_panes にどう写るかは分割した拡張ファイル
+/// `+DormantProjection` が測る。ハーネス（`restore` / `tabbed` / `agentLeaf` / `row`）は本体が持つ。
 final class WindowControllerControlTests: OrbeTestCase {
 
   // MARK: - fixtures / helpers
 
   /// resume 未対応 agent を載せた leaf（消費時に素シェル化するが休眠チケットには数える）。
-  private func agentLeaf(_ id: String) -> PaneNode {
+  func agentLeaf(_ id: String) -> PaneNode {
     .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: id))
   }
 
   /// 単一 leaf タブを持つ workspace 状態。
-  private func tabbed(_ name: String, tree: PaneNode = .leaf(cwd: nil, agent: nil))
+  func tabbed(_ name: String, tree: PaneNode = .leaf(cwd: nil, agent: nil))
     -> WorkspaceState
   {
     WorkspaceState(
@@ -31,7 +34,7 @@ final class WindowControllerControlTests: OrbeTestCase {
   }
 
   /// ディスクへ workspaces を書いてから復元済み WindowController を返す。
-  private func restore(activeWorkspace: Int, _ workspaces: [WorkspaceState]) throws
+  func restore(activeWorkspace: Int, _ workspaces: [WorkspaceState]) throws
     -> WindowController
   {
     let file = WorkspacesFile(
@@ -42,7 +45,7 @@ final class WindowControllerControlTests: OrbeTestCase {
   }
 
   /// controlListWorkspaces から (name==) の行を引く。
-  private func row(_ wc: WindowController, name: String) -> [String: Any]? {
+  func row(_ wc: WindowController, name: String) -> [String: Any]? {
     wc.controlListWorkspaces().first { $0["name"] as? String == name }
   }
 
@@ -344,60 +347,5 @@ final class WindowControllerControlTests: OrbeTestCase {
     XCTAssertEqual(
       pane?["cwd"] as? String, "/tmp/bg-root", "対象（背景）WS の rootPath で開く")
     XCTAssertEqual(wc.window.title, "main", "アクティブ WS は変わらない")
-  }
-
-  /// 全タブ materialize 完了後は復元 agent 由来が live 側へ移り、休眠数は 0 に収束する。
-  func testListWorkspacesFullyMaterializedWorkspaceReportsZeroDormantAgentCount() throws {
-    let sleepers = PaneNode.split(
-      vertical: true, ratio: 0.5, first: agentLeaf("a"), second: agentLeaf("b"))
-    let wc = try restore(
-      activeWorkspace: 0,
-      [
-        tabbed("active", tree: sleepers),  // 活性かつ復元 agent 2（永続 leaf は在る）
-        tabbed("dormant", tree: sleepers),  // 非活性で復元 agent 2
-      ])
-    XCTAssertEqual(row(wc, name: "active")?["activated"] as? Bool, true, "前提: active 側は全タブ起床")
-    XCTAssertEqual(
-      row(wc, name: "active")?["dormantAgentCount"] as? Int, 0,
-      "materialize 時に復元由来を解消する")
-    XCTAssertEqual(
-      row(wc, name: "dormant")?["dormantAgentCount"] as? Int, 2,
-      "非活性 WS は永続 agent leaf 2 を保持")
-  }
-
-  /// 背景 workspace へ 1 タブだけ生やすと、live と休眠復元タブが同時に存在する。
-  func testListWorkspacesRepresentsBackgroundMixedWorkspaceOnIndependentAxes() throws {
-    let wc = try restore(
-      activeWorkspace: 0,
-      [tabbed("main"), tabbed("mixed", tree: agentLeaf("sleeping"))])
-    let mixedId = try XCTUnwrap(row(wc, name: "mixed")?["id"] as? Int)
-
-    _ = try XCTUnwrap(wc.controlSpawn(workspaceId: mixedId, cwd: nil, command: nil))
-
-    let mixed = try XCTUnwrap(row(wc, name: "mixed"))
-    XCTAssertEqual(mixed["active"] as? Bool, false, "前面 workspace は奪わない")
-    XCTAssertEqual(mixed["activated"] as? Bool, true, "新規タブは off-screen materialize 済み")
-    XCTAssertEqual(mixed["dormantAgentCount"] as? Int, 1, "既存復元タブは休眠のまま保つ")
-    let owner = try XCTUnwrap(wc.workspaces.first { $0.name == "mixed" })
-    XCTAssertEqual(owner.tabs.count, 2)
-    XCTAssertEqual(owner.tabs.filter(\.activated).count, 1)
-  }
-
-  /// 休眠 workspace の pane も列挙対象で、必須フィールドを live と同じだけ揃える。
-  func testListPanesKeepsRequiredFieldsForDormantAndLivePanes() throws {
-    let wc = try restore(
-      activeWorkspace: 0,
-      [tabbed("main"), tabbed("dormant", tree: agentLeaf("sleeping"))])
-    let rows = wc.controlListPanes()
-    XCTAssertEqual(
-      Set(rows.compactMap { $0["workspaceName"] as? String }), ["main", "dormant"],
-      "休眠 workspace の pane も列挙する")
-    let required = [
-      "paneId", "workspaceId", "tabId", "workspaceName", "title", "cwd", "agentState",
-      "agentSessionId", "focused",
-    ]
-    for pane in rows {
-      for key in required { XCTAssertNotNil(pane[key], "list_panes は \(key) を保つ") }
-    }
   }
 }
