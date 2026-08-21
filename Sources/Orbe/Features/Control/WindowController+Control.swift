@@ -73,11 +73,15 @@ extension WindowController: ControlTarget {
   func controlReportAgent(
     pane: SurfaceView, agent: String, state: String, sessionId: String?, message: AgentMessage?
   ) {
-    if case .dormant = pane.agentSlot {
-      // 破棄（no-op）。chrome の再投影だけは他経路と同じく無条件に流す（投影は同値）。
-    } else if state == "clear" {
-      if case .live = pane.agentSlot { pane.agentSlot = .none }  // .none は既に無で no-op
-    } else {
+    // 遷移表そのもの。網羅 switch なので、`AgentSlot` にケースが増えたら必ずここの判断を求められる。
+    switch pane.agentSlot {
+    case .dormant:
+      break  // 破棄。chrome の再投影だけは他経路と同じく無条件に流す（投影は同値）。
+    case .live where state == "clear":
+      pane.agentSlot = .none
+    case .none where state == "clear":
+      break  // 既に無。
+    case .none, .live:
       let session =
         pane.agentSlot.session?.updated(command: agent, sessionId: sessionId)
         ?? AgentSession(command: agent, sessionId: sessionId)
