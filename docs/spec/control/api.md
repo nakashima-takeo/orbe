@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe）
 description: Unix socket 上の JSON-RPC でペイン/タブ/workspace/エージェントを操作する out-of-band 制御チャネルと、MCP ブリッジ・ツール群・mount 境界
-updated: 2026-08-20
+updated: 2026-08-21
 ---
 
 # 制御 API（外部 → Orbe）
@@ -55,7 +55,7 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 - `close_pane {paneId}` … カスケードは GUI（Cmd+W）と同一——最後の pane→tab のカスケードで、アクティブ workspace の最後のタブを閉じても 0 タブの空状態でアクティブに残る（ウィンドウは閉じない）。teardown は main 遅延で走るため応答を先に返す（自己 close も安全）。未知 pane は `-32004`。socket 専用。
 - `focus_pane {paneId}` … 別 workspace のペインなら activate を伴う（手元 Mac のアクティブ workspace も切り替わる）。冪等。未知 pane は `-32004`。socket 専用。
 - `close_tab {tabId}` … close_pane と同じカスケード規律。未知 tab は `-32004`。socket 専用。
-- `report_agent {paneId, agent, state, sessionId?, message?, messageSource?}` … エージェント hook の状態報告を発信元ペインへ適用する（[agent/notify](../agent/notify.md)）。`messageSource` は文言の出所で、ツール由来かどうかだけが上書き可否を決める（表示には出ない）。`state=="clear"` で状態/コマンド/セッション ID/文言/状態変化時刻を消し、それ以外は state/command を立て sessionId があれば更新し、文言は state の遷移と出所で上書き可否が決まる（状態変化時刻は state が実際に変わったときだけ進む）。**未消費（休眠）の復元ペイン宛の報告・clear は破棄する**（[agent/notify](../agent/notify.md)）。
+- `report_agent {paneId, agent, state, sessionId?, message?, messageSource?}` … エージェント hook の状態報告を発信元ペインへ適用する（[agent/notify](../agent/notify.md)）。`messageSource` は文言の出所で、ツール由来かどうかだけが上書き可否を決める（表示には出ない）。`state=="clear"` で状態/コマンド/セッション ID/文言/状態変化時刻を消し、それ以外は state/command を立て、sessionId は新値があれば更新・無ければ同じ CLI からの報告のあいだだけ引き継ぎ（command が変われば捨てる）、文言は state の遷移と出所で上書き可否が決まる（状態変化時刻は state が実際に変わったときだけ進む）。**未消費（休眠）の復元ペイン宛の報告・clear は破棄する**（[agent/notify](../agent/notify.md)）。
 - `wait_for_event {paneId?, kinds?, timeoutMs?}` … 状態変化を長ポーリングで待つ。kind ∈ {agent_state, pane_title, pwd, pane_closed}。`event.value` は kind 固有（`agent_state` が運ぶのは状態語で、セッション ID ではない）。フィルタ一致で {event}、timeout 超過で {timedOut:true}。1 接続あたり待機 1 件（2 件目は `-32005` で即拒否）。**params は待機を張る前に検証する**——未知 kind・空 kinds・型違いの paneId・値域外の timeoutMs はいずれも `-32602`。黙って通すと「永久に一致せずただ時間切れ」「絞り込みが外れて別ペインのイベントを掴む」という、呼び出し側から何も起きなかったのと区別できない形になるため。timeoutMs に上限を置くのも同じ理由で、際限なく大きな値は待機の期限が事実上訪れなくなり、1 件しかない待機枠を握ったまま応答が返らなくなる。
 - `completion_update` / `completion_end` / `completion_accept` … コマンド補完用（[completion](../palette/completion.md)）。前 2 つは**無応答**。`completion_` 系は宛先解決ガードより前で分岐し、無応答メソッドは宛先不在でも応答を出さない（打鍵ごとの update が accept fd に行を積まない）。読めない行にはこの分岐より前でエラー行を返すため、accept fd から読める行が accept 応答だけとは限らない——クライアントは `id` で自分の応答を選ぶ（[completion](../palette/completion.md)）。socket 専用。
 
