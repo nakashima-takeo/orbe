@@ -233,12 +233,12 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsNotificationSoundNone
   case settingsNotificationSoundOffRow
   case settingsNotificationSoundCustom
-  case settingsSoundCustomBreadcrumb
   case settingsSoundCustomHint
   case settingsSoundCustomUnset
   case settingsSoundCustomSameAsDoneValue
   case settingsSoundCustomErrUnreadable
   case settingsSoundCustomErrSilent
+  case settingsSoundCustomErrStorage
 
   // MARK: - Search バー
   case searchPlaceholder

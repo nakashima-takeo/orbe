@@ -35,9 +35,9 @@ extension SettingsPaletteModel {
   /// 選択が**ユーザ操作で**動いた通知（`onSelectionChanged`）と ⇥ の鳴らし直しがここへ来る
   /// ——面の組み立てによる配置（`PaletteModel.place`）は通知を出さないので、入場では鳴らない。
   ///
-  /// カスタム行は**確定後と同じ解決**（フォールバック込み）で鳴らす。ただし音源が 1 つも
-  /// 取り込まれていない完全未構成のときは解除行と同じく鳴らさない——選ぶ対象がまだ無い行で、
-  /// 紋章の音だけが鳴っても何を確かめたことにもならない。
+  /// カスタム行は**確定後と同じ解決**（フォールバック込み）で鳴らす。ただしどの event でも
+  /// 取り込んだ音に辿り着けないとき（`hasUsableCustomSound` が false）は解除行と同じく鳴らさない
+  /// ——選ぶ対象がまだ無い行で、紋章の音だけが鳴っても何を確かめたことにもならない。
   func previewSelectedRow() {
     guard isNotificationSoundMode else { return }
     playPreview(previewSource(row: render.selected), event: previewEvent, row: render.selected)
@@ -46,7 +46,7 @@ extension SettingsPaletteModel {
   /// 通知音サブの行 → 鳴らす音源（nil＝鳴らさず止めるだけ）。
   private func previewSource(row: Int) -> ResolvedSource? {
     if row == notificationSoundCustomRow {
-      guard !values.hasNoCustomSound else { return nil }
+      guard values.hasUsableCustomSound else { return nil }
       return values.effSoundSource(choice: .custom, event: previewEvent)
     }
     let sounds = NotificationSound.allCases
@@ -126,14 +126,15 @@ extension SettingsPaletteModel {
   /// 通知音サブの ↵。行 0（なし）はオフにするだけで**選択の値は触らない**（再度オンにしたら戻る）。
   /// 案の行はその案を確定し、オフだったなら同時にオンへ戻す（選んだ音が鳴らないのは意図と食い違う）。
   ///
-  /// カスタム行だけは、まだ何も取り込んでいなければ確定でなく `→` と同じ「潜る」になる
+  /// カスタム行だけは、鳴らせる取り込み音がまだ無ければ確定でなく `→` と同じ「潜る」になる
   /// ——確定しても鳴らせる音が無い状態を作らず、次にやることへそのまま連れていく。
+  /// 鳴るかどうかは試聴と同じ 1 つの述語（`hasUsableCustomSound`）で見る。
   func activateNotificationSoundRow() {
     let sounds = NotificationSound.allCases
     if render.selected == 0 {
       assign(SettingChange(SettingKeys.notificationSoundEnabled, false))
     } else if render.selected == notificationSoundCustomRow {
-      guard values.effCustomSoundDone != nil else {
+      guard values.hasUsableCustomSound else {
         drillIntoNotificationSoundCustom()
         return
       }

@@ -44,7 +44,11 @@ public enum SoundImport {
   /// 打ち切り → デクリック → ラウドネス正規化。同じ入力からは常に同じ結果になる。
   public static func process(_ samples: [Float], sampleRate: Double) throws -> Processed {
     guard sampleRate > 0 else { throw Failure.silent }
-    var out = samples
+    // 非有限値（float32 の WAV/AIFF/CAF は NaN/Inf を表現できる）はここで落とす。1 個でも通すと
+    // マスタ末尾のコンプレッサが持つ 1 次の帰還が NaN に固着し、そこから末尾までの全サンプルが
+    // NaN のまま出力へ流れる。逆に先頭にあると全窓が NaN 扱いになり、実音のあるファイルが
+    // 「音が入っていない」として弾かれる。マスタ末尾は 12 案と共有なので、守るのはこの入口 1 箇所。
+    var out = samples.map { $0.isFinite ? $0 : 0 }
     let limit = Int((maxDuration * sampleRate).rounded())
     if out.count > limit {
       out = Array(out[0..<limit])
@@ -85,9 +89,14 @@ public enum SoundImport {
   /// 「再生時のマスタ末尾（既定音量）を通した後の最大短時間 RMS が `loudnessTargetDB` になる」
   /// 前段ゲイン（線形）。無音・目標へ届かない極小信号は nil。
   ///
-  /// コンプレッサの静特性は単調（傾きは圧縮比 1/12 〜 素通しの 1 の間）なので、この写像
-  /// 「前段ゲイン dB → 出力 dB」も同じ範囲の傾きを持つ単調関数になり、必要なゲインは
+  /// コンプレッサの静特性は単調（傾きは `DynamicsCompressor.ratio` の逆数 〜 素通しの 1 の間）なので、
+  /// この写像「前段ゲイン dB → 出力 dB」も同じ範囲の傾きを持つ単調関数になり、必要なゲインは
   /// その 2 つの傾きから作った区間に必ず入る。あとは二分探索で詰める。
+  ///
+  /// 合わせるのは短時間 RMS だけで、振幅の天井は見ない。コンプレッサのアタックより速い立ち上がりは
+  /// 素通しするので、クレストの大きい素材はピークが 0 dBFS を数サンプル超えうる（実測で最悪 0.3ms）。
+  /// 天井でも抑えると同じ素材が数 dB 静かになり、「取り込んだ音が 12 案と同格に鳴る」というこの工程の
+  /// 目的そのものが崩れる——ごく短い歪みより、ラウドネス整合を優先する。
   private static func normalizationGain(_ samples: [Float], sampleRate: Double) -> Double? {
     let target = SoundCatalog.loudnessTargetDB
     let base = measure(samples, gainDB: 0, sampleRate: sampleRate)
@@ -96,10 +105,11 @@ public enum SoundImport {
     // 傾きは 1 以下なので、`need` dB 未満のゲインでは目標へ**絶対に**届かない。上限を超えて
     // 要るということは、鳴っているのが雑音底しかないということ。
     guard need <= maxNeededGainDB else { return nil }
-    // 傾き 1（素通し）なら `need` dB、傾き 1/12（最大圧縮）なら `12·need` dB で目標へ届くので、
+    // 傾き 1（素通し）なら `need` dB、傾きが最小（最大圧縮）なら `ratio · need` dB で目標へ届くので、
     // 答えはこの 2 つが挟む区間の中にある。
-    var low = min(need, 12 * need) - searchMarginDB
-    var high = max(need, 12 * need) + searchMarginDB
+    let span = DynamicsCompressor.ratio * need
+    var low = min(need, span) - searchMarginDB
+    var high = max(need, span) + searchMarginDB
     guard measure(samples, gainDB: low, sampleRate: sampleRate) <= target,
       measure(samples, gainDB: high, sampleRate: sampleRate) >= target
     else { return nil }
@@ -111,7 +121,7 @@ public enum SoundImport {
         high = mid
       }
     }
-    return pow(10, (low + high) / 40)
+    return pow(10, ((low + high) / 2) / 20)
   }
 
   /// 前段ゲインを掛けてマスタ末尾（既定音量）を通したときの最大短時間 RMS（dBFS）。

@@ -115,6 +115,26 @@ final class SoundImportTests: XCTestCase {
     }
   }
 
+  /// 非有限値（float の WAV/AIFF/CAF は NaN/Inf を表現できる）が混ざった入力は、実音があれば
+  /// 取り込めて出力に非有限値を残さない。1 個でも通すとマスタ末尾のコンプレッサの帰還が固着し、
+  /// そこから末尾までの全サンプルが NaN になる——先頭に来た場合は逆に、実音があるのに
+  /// 「音が入っていない」として弾かれる。どちらも入口で潰すことで閉じる。
+  func testNonFiniteSamplesAreNeutralizedNotPropagated() throws {
+    for index in [0, 24000, Int(1.5 * sampleRate) - 1] {
+      for bad: Float in [.nan, .infinity, -.infinity] {
+        var input = sine(seconds: 1.5)
+        input[index] = bad
+        let processed = try SoundImport.process(input, sampleRate: sampleRate)
+        XCTAssertTrue(
+          processed.samples.allSatisfy(\.isFinite), "取り込み後に非有限値が残っている (\(index)/\(bad))")
+        let finalized = SoundRenderer.finalize(
+          processed.samples, volume: SoundRenderer.defaultVolume, sampleRate: sampleRate)
+        XCTAssertTrue(
+          finalized.allSatisfy(\.isFinite), "マスタ末尾で非有限値が伝播した (\(index)/\(bad))")
+      }
+    }
+  }
+
   /// 持ち上げ切れない雑音底（目標より 60 dB 以上下）は「音が入っていない」として弾く。
   func testNoiseFloorOnlyInputFails() {
     XCTAssertThrowsError(

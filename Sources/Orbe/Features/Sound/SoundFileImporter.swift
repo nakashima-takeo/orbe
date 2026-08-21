@@ -15,6 +15,9 @@ enum SoundFileImporter {
     case unreadable
     /// 音が入っていない（無音・雑音底しかない）。
     case silent
+    /// 取り込みは通ったが、アプリ領域へ保存できなかった（ディスク・権限）。ユーザーのファイルは
+    /// 無傷なので、この場合だけは**ファイル名を名指ししない**——別のファイルを試させても直らない。
+    case storageFailed
   }
 
   /// 取り込みの全長は 48 kHz モノラルで揃える（保存形式が 1 つなら、再生側の読み戻しも 1 通り）。
@@ -28,7 +31,7 @@ enum SoundFileImporter {
     guard
       let processed = try? SoundImport.process(decoded, sampleRate: storageSampleRate)
     else { return .failure(.silent) }
-    guard let file = write(processed.samples) else { return .failure(.unreadable) }
+    guard let file = write(processed.samples) else { return .failure(.storageFailed) }
     return .success(
       CustomSoundSource(
         file: file, name: url.lastPathComponent, duration: processed.duration))

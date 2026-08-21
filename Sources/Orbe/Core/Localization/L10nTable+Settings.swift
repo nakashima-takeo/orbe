@@ -73,7 +73,6 @@ extension L10n {
     .settingsNotificationSoundNone: ("なし", "None"),
     .settingsNotificationSoundOffRow: ("なし（オフ）", "None (off)"),
     .settingsNotificationSoundCustom: ("カスタム", "Custom"),
-    .settingsSoundCustomBreadcrumb: ("‹ カスタム", "‹ Custom"),
     .settingsSoundCustomHint: (
       "↵/→ 選ぶ・切替   ←/esc 戻る", "↵/→ Choose / Toggle   ←/esc Back"
     ),
@@ -81,6 +80,9 @@ extension L10n {
     .settingsSoundCustomSameAsDoneValue: ("（完了と同じ）", "(same as done)"),
     .settingsSoundCustomErrUnreadable: ("読み込めない形式です（%@）", "Unsupported audio file (%@)"),
     .settingsSoundCustomErrSilent: ("音が入っていません（%@）", "No audio in this file (%@)"),
+    .settingsSoundCustomErrStorage: (
+      "音源を保存できませんでした", "Couldn't save the imported sound"
+    ),
 
     // MARK: Settings registry
     .settingsFontSize: ("フォントサイズ", "Font Size"),

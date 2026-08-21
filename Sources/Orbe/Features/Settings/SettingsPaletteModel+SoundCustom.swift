@@ -8,7 +8,7 @@ import OrbeSound
 /// ——「決める」と「取り込む」を分けると、鳴らす瞬間まで失敗が分からない状態が生まれる。
 extension SettingsPaletteModel {
   /// この面の行（notice を差し込んでも意味がズレないよう、index でなくこの kind で扱う）。
-  enum SoundCustomRow: Int, CaseIterable {
+  enum SoundCustomRow: Int {
     case doneSource, waitingSource, sameAsDoneToggle
   }
 
@@ -26,7 +26,8 @@ extension SettingsPaletteModel {
   func rebuildNotificationSoundCustom() {
     render.fieldVisible = false
     render.fieldIsFilter = false
-    render.breadcrumb = localization.string(.settingsSoundCustomBreadcrumb)
+    // breadcrumb は行ラベルから組む（worktree のカスタム入力と同じ作法。文言を 2 箇所に持たない）。
+    render.breadcrumb = "‹ " + localization.string(.settingsNotificationSoundCustom)
     render.placeholder = ""
     render.hint = localization.string(.settingsSoundCustomHint)
     currentRowIndex = nil  // 値を選ぶ面ではないので ● は持たない
@@ -78,28 +79,31 @@ extension SettingsPaletteModel {
   /// 成功したらその音を実効音量で 1 回鳴らし、その行に EQ を出す——取り込んだ結果が耳で分かる
   /// （音量行の試聴と同じ 1 経路）。失敗は面の先頭に理由 1 行で出し、鳴らす瞬間まで持ち越さない。
   /// キャンセルは no-op。
+  ///
+  /// 出口は 1 つに閉じる。理由行の有無で行 index の意味が変わる面なので、**行を組み直したら必ず
+  /// 種別から選択を置き直す**——どこか 1 経路でも落とすと、選択が別の行（同一化トグル on のときは
+  /// 押せないはずの行）へ黙って移り、次の ↵ が狙っていない設定キーを書き換える。
   private func importCustomSound(for event: AgentSoundEvent, into row: SoundCustomRow) {
     customSoundError = nil
-    guard let url = pickSoundFile?() else {
-      rebuild()
-      return
+    var imported: CustomSoundSource?
+    if let url = pickSoundFile?(), let result = importSoundFile?(url) {
+      switch result {
+      case .success(let source):
+        // 提示元がここで保存し、参照されなくなった旧ファイルを回収する
+        assign(
+          event == .done
+            ? SettingChange(SettingKeys.notificationSoundCustomDone, source)
+            : SettingChange(SettingKeys.notificationSoundCustomWaiting, source))
+        imported = source
+      case .failure(let error):
+        customSoundError = customSoundErrorText(error, name: url.lastPathComponent)
+      }
     }
-    guard let result = importSoundFile?(url) else { return }
-    switch result {
-    case .success(let source):
-      let change =
-        event == .done
-        ? SettingChange(SettingKeys.notificationSoundCustomDone, source)
-        : SettingChange(SettingKeys.notificationSoundCustomWaiting, source)
-      assign(change)  // 提示元がここで保存し、参照されなくなった旧ファイルを回収する
-      rebuild()
-      let index = soundCustomRowIndex(row)
-      render.place(index)
-      playPreview(.imported(file: source.file), event: event, row: index)
-    case .failure(let error):
-      customSoundError = customSoundErrorText(error, name: url.lastPathComponent)
-      rebuild()
-      render.place(soundCustomRowIndex(row))
+    rebuild()
+    let index = soundCustomRowIndex(row)  // 理由行の増減が確定した後に引き直す
+    render.place(index)
+    if let imported {
+      playPreview(.imported(file: imported.file), event: event, row: index)
     }
   }
 
@@ -109,6 +113,8 @@ extension SettingsPaletteModel {
     switch error {
     case .unreadable: return localization.format(.settingsSoundCustomErrUnreadable, name)
     case .silent: return localization.format(.settingsSoundCustomErrSilent, name)
+    // 壊れているのは選んだファイルでなくアプリの保存先なので、名前は出さない。
+    case .storageFailed: return localization.string(.settingsSoundCustomErrStorage)
     }
   }
 }
