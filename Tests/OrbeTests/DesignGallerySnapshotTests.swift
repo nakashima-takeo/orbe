@@ -195,6 +195,11 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     wsModel.rows = [
       wsRow("main", [("working", 2), ("waiting", 1)], "~/dev/main"),
       wsRow("infra", [("done", 3)], "~/work/infra"),
+      // 混在 workspace: 背景 spawn で 1 枚だけ起きた行。live と dormant のチップを併記し減光しない。
+      wsRow("sandbox", [("working", 1), ("dormant", 5)], "~/dev/sandbox"),
+      // 完全休眠（復元のみ）: 減光＋dormant チップ。
+      wsRow("restored", [("dormant", 3)], "~/dev/restored", dimmed: true),
+      // 0 タブ休眠: 減光のみ・チップなし。
       wsRow("archive", [], "~/archive", dimmed: true),
     ]
     try writePNG(
@@ -214,7 +219,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       wsRow("claude", [("working", 2), ("waiting", 1)], "~/dev/claude"),
       wsRow("codex", [("done", 3)], "~/dev/codex"),
       wsRow("agy", [], "~/dev/agy"),
-      wsRow("gemini（休眠）", [], "~/dev/gemini", dimmed: true),
+      wsRow("gemini（休眠）", [("dormant", 1)], "~/dev/gemini", dimmed: true),  // 件数 1 はアイコンのみ
     ]
     try writePNG(
       paletteSnapshot(hugModel, canvas: cardSize), size: cardSize, name: "palette_hug_few.png",
