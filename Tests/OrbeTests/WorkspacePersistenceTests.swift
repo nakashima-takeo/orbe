@@ -249,6 +249,45 @@ final class WorkspacePersistenceTests: OrbeTestCase {
       tc.snapshot(), .leaf(cwd: "/w", agent: nil), "素シェル化後の snapshot に agent は付かない")
   }
 
+  /// agent が command だけ（sessionId キー欠落）の永続ファイルも読め、sessionId は nil になる。
+  /// decode を厳格化すると `load()` が全体 nil に倒れ、ユーザーの workspace 構成が既定で潰され
+  /// 原本が quarantine される——欠落キーは常に緩和方向（エラーではなく nil）で受ける。
+  func testAgentWithoutSessionIdKeyLoadsAsNilIdentity() throws {
+    let tmp = try workspacesFile()
+    let json = """
+      {"version":3,"activeWorkspace":0,"workspaces":[\
+      {"name":"default","rootPath":"/r","activeTab":0,"tabs":[\
+      {"tree":{"leaf":{"cwd":"/r/a","agent":{"command":"claude"}}}}]}]}
+      """
+    try Data(json.utf8).write(to: tmp)
+
+    let loaded = try XCTUnwrap(WorkspacePersistence.load(), "sessionId キー欠落で全構成を失わない")
+    XCTAssertEqual(
+      loaded.workspaces[0].tabs[0].tree,
+      .leaf(cwd: "/r/a", agent: AgentSession(command: "claude", sessionId: nil)),
+      "欠落キーは nil として読む（CLI 名の記録は残る）")
+    XCTAssertTrue(FileManager.default.fileExists(atPath: tmp.path), "原本を quarantine へ退避しない")
+  }
+
+  /// sessionId を持たない同一性は、休眠でも稼働中でも snapshot に書かない。resume 不能な記録を
+  /// ディスクへ増やすと、次の起動で必ず素シェル化する死にチケットが永続し、⇧⌘T のゲートも
+  /// 誤って通り始める。
+  func testSnapshotDropsIdentitiesWithoutASessionId() {
+    let dormant = TerminalController(
+      restoring: .leaf(cwd: "/w", agent: AgentSession(command: "claude", sessionId: nil)),
+      resumeSpawn: noResume)
+    XCTAssertEqual(
+      dormant.snapshot(), .leaf(cwd: "/w", agent: nil), "sessionId 欠落のチケットは保存しない")
+
+    let live = TerminalController()
+    setReportedState(live.focusedPane!, "working", command: "claude")
+    XCTAssertEqual(
+      live.focusedPane?.agentSlot.session, AgentSession(command: "claude", sessionId: nil),
+      "前提: 報告が sessionId を運ぶ前の稼働")
+    XCTAssertEqual(
+      live.snapshot(), .leaf(cwd: nil, agent: nil), "同一性が未確定の稼働も保存しない")
+  }
+
   // MARK: - ① 明示タイトル（TabState）の永続
 
   /// explicitTitle がディスク往復で保たれる。

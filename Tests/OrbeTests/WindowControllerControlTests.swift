@@ -173,6 +173,24 @@ final class WindowControllerControlTests: OrbeTestCase {
     }
   }
 
+  /// 休眠（未消費チケット）ペインは、同一性（agentSessionId）は露出するが状態（agentState）は
+  /// 出さない——報告は live にしか存在しないため。resume 非対応 CLI で固定する: resume 可能な
+  /// 休眠は従来から値が出ており、「復元時に解決できないチケットを捨てる」設計への差し戻しは
+  /// 未対応 CLI 側でしか観測できない。orbe-cli / orbe-mcp は agentSessionId を resume の鍵、
+  /// agentState を状態として別軸で読む。
+  func testListPanesExposesDormantTicketSessionIdWithoutState() throws {
+    let wc = try restore(
+      activeWorkspace: 0, [tabbed("main"), tabbed("sleeping", tree: agentLeaf("zzz"))])
+    XCTAssertEqual(
+      row(wc, name: "sleeping")?["activated"] as? Bool, false, "前提: 未 activate＝チケットは未消費")
+
+    let pane = try XCTUnwrap(
+      wc.controlListPanes().first { $0["workspaceName"] as? String == "sleeping" })
+
+    XCTAssertEqual(pane["agentSessionId"] as? String, "zzz", "休眠のあいだも resume の鍵は見える")
+    XCTAssertTrue(pane["agentState"] is NSNull, "休眠ペインに報告状態は無い")
+  }
+
   // MARK: - controlListAgents（list_agents）
 
   /// 検出未完了（起動直後は AgentCatalog.refresh が非同期で未反映）の WindowController では
