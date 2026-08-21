@@ -3,11 +3,13 @@ import SwiftUI
 /// コマンド/ワークスペースパレットの行（§5）。
 /// default=text.secondary / selected=text.primary＋tint 塗り（hover 独自の着色は持たず、
 /// ホバーは呼び出し側が `onHoverEnter` で選択を追従させる）/
-/// dormant=減光(.45) / info=選択不可・text.muted / createAction=accent 文字＋破線罫線＋右端バッジ。
+/// dormant=減光(.45) / info=選択不可・text.muted / failure=選択不可・danger（失敗の理由行）/
+/// createAction=accent 文字＋破線罫線＋右端バッジ。
 /// detail はラベル後の muted 補足（ディレクトリ等）。
 struct PaletteRow: View {
-  /// 行の性質。`info` は選択不可の情報行（CLI 無し等）。`createAction` は作成導線の行（表示専用装飾）。
-  enum Kind { case normal, dormant, info, createAction }
+  /// 行の性質。`info` は選択不可の情報行（CLI 無し等）、`failure` はその中で失敗の理由を述べる行
+  /// （中立な補足と色で分ける）。`createAction` は作成導線の行（表示専用装飾）。
+  enum Kind { case normal, dormant, info, failure, createAction }
 
   let title: String
   var selected: Bool = false
@@ -33,11 +35,11 @@ struct PaletteRow: View {
 
   var body: some View {
     switch kind {
-    case .info:
+    case .info, .failure:
       HStack {
         Text(title)
           .font(Font.theme.workspaceName)
-          .foregroundStyle(Color.theme.textMuted)
+          .foregroundStyle(kind == .failure ? Color.theme.danger : Color.theme.textMuted)
         Spacer(minLength: 0)
       }
       .padding(.vertical, 5)
@@ -117,6 +119,7 @@ struct PaletteRow: View {
     PaletteRow(title: "notes", detail: "~/notes")
     PaletteRow(title: "gemini (dormant)", kind: .dormant)
     PaletteRow(title: "No CLIs found", showsChevron: false, kind: .info)
+    PaletteRow(title: "Unsupported audio file (take-07.aiff)", showsChevron: false, kind: .failure)
   }
   .padding(Theme.Space.note)
   .frame(width: 480)

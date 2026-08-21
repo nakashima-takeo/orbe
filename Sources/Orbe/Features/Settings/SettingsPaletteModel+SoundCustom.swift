@@ -40,7 +40,7 @@ extension SettingsPaletteModel {
 
     var rows: [PaletteModel.RowItem] = []
     if let customSoundError {
-      rows.append(PaletteModel.RowItem(label: customSoundError, enabled: false))
+      rows.append(PaletteModel.RowItem(label: customSoundError, enabled: false, failure: true))
     }
     rows += [
       PaletteModel.RowItem(

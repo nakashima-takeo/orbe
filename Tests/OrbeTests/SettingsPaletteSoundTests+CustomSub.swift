@@ -163,6 +163,7 @@ extension SettingsPaletteSoundTests {
       XCTAssertEqual(p.render.rows.count, 4, "理由行が 1 行増える")
       XCTAssertEqual(p.render.rows[0].label, expected)
       XCTAssertFalse(p.render.rows[0].enabled)
+      XCTAssertTrue(p.render.rows[0].failure, "失敗の理由なので中立な情報行の色では出さない")
       XCTAssertEqual(p.render.rows[1].label, "完了の音源  未設定", "音源行は未設定のまま")
       XCTAssertEqual(p.render.selected, 1, "選択は操作した行のまま（理由行のぶんずれる）")
       XCTAssertTrue(changes().isEmpty)

@@ -9,6 +9,9 @@ import SwiftUI
     var label: String
     var chevron = false
     var enabled = true
+    /// 情報行のうち、直前の操作が失敗した理由を述べる行。中立な補足と同じ色では出さない
+    /// （§3「エラー＝`danger`」）。`enabled = false` の行にだけ意味を持つ。
+    var failure = false
     var dimmed = false
     /// 設定パレット workspace スコープで、この行が global 継承中（未上書き）か。表示上の区別に使う。
     var inherited = false
