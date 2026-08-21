@@ -6,6 +6,12 @@ enum ResolvedSource: Equatable, Hashable {
   case synth(NotificationSound)
   /// `sounds/` 配下の相対名（`CustomSoundStore` が実体を解決する）。
   case imported(file: String)
+
+  /// 合成音か（＝有限の閉じた値域を持つか）。再生層のキャッシュがこれで載せる/載せないを決める。
+  var isSynth: Bool {
+    if case .synth = self { return true }
+    return false
+  }
 }
 
 /// 「鳴らすか・何を鳴らすか」の判断（純関数）。設定だけを見るのでテストで全組み合わせを機械検証できる。

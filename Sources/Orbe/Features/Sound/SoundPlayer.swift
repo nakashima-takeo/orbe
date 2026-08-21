@@ -32,7 +32,9 @@ final class SoundPlayer: AgentSoundPlaying {
     let volume: Int
   }
 
-  /// 最後の再生からこの秒数だけ鳴らなければエンジンを止める（最長の音でも約 2.2 秒で鳴り終わる）。
+  /// **鳴り終わってから**この秒数だけ次が来なければエンジンを止める。起点を再生開始でなく終了に取るのは、
+  /// 音の長さが合成音（〜2 秒）と取り込み音（最大 `SoundImport.maxDuration`）で桁違いだから
+  /// ——固定の待ち時間に「最長の音は何秒か」を織り込むと、上限を動かすたびここが追随を要求する。
   private let idleTimeout: TimeInterval = 5
 
   private let queue = DispatchQueue(label: "dev.orbe.sound", qos: .userInitiated)
@@ -41,8 +43,9 @@ final class SoundPlayer: AgentSoundPlaying {
   /// プレイヤーノードを繋いだフォーマット。バッファはこれと**同じインスタンス**で組む
   /// （同じ式で 2 度作ると、片方だけ触ったときに `scheduleBuffer` が不一致で落ちる）。
   private var format: AVAudioFormat?
-  /// 再生用バッファ。試聴サブパレットは 13 択 × 2 イベントを全部通すので、上限が無いと
+  /// 合成音の再生用バッファ。試聴サブパレットは 12 案 × 2 イベントを全部通すので、上限が無いと
   /// 1 日中起動しているプロセスに二度と使われない波形が溜まり続ける（→ `store`）。
+  /// 取り込み音は**載せない**（→ `buffer`）。
   private var cache: [CacheKey: AVAudioPCMBuffer] = [:]
   private var idleStop: DispatchWorkItem?
   private var configurationObserver: NSObjectProtocol?
@@ -74,7 +77,7 @@ final class SoundPlayer: AgentSoundPlaying {
     player.stop()
     player.scheduleBuffer(buffer, at: nil, options: [])
     player.play()
-    scheduleIdleStop()
+    scheduleIdleStop(after: Double(buffer.frameLength) / buffer.format.sampleRate)
   }
 
   /// 起動済みのプレイヤー（未構築なら現在の出力フォーマットに合わせて組み、遅延起動する）。
@@ -109,8 +112,12 @@ final class SoundPlayer: AgentSoundPlaying {
   private func buffer(source: ResolvedSource, event: AgentSoundEvent, volume: Int)
     -> AVAudioPCMBuffer?
   {
+    // 取り込み音はキャッシュしない。保存名は取り込みごとの一意名なので、載せると聴き比べたぶんだけ
+    // 二度と当たらないキーが積み上がる（GC が実体を消しても波形だけ残る）。読み戻し＋マスタ末尾の実測は
+    // 10 秒でも合成 1 音より軽く、専用キュー上なので main も止めない——載せない方が素直に有界。
     let key = CacheKey(source: source, event: event, volume: volume)
-    if let cached = cache[key] { return cached }
+    let cacheable = key.source.isSynth
+    if cacheable, let cached = cache[key] { return cached }
     guard let format,
       let samples = renderedSamples(source, event: event, volume: volume, format: format),
       !samples.isEmpty,
@@ -126,7 +133,7 @@ final class SoundPlayer: AgentSoundPlaying {
         channels[channel].update(from: base, count: mono.count)
       }
     }
-    store(buffer, for: key)
+    if cacheable { store(buffer, for: key) }
     return buffer
   }
 
@@ -150,13 +157,15 @@ final class SoundPlayer: AgentSoundPlaying {
   }
 
   /// キャッシュへ載せる。同時に使う音量は常に 1 つ（実効値、または試聴中の実効値）なので、
-  /// 別音量のぶんは載せた瞬間に捨てる——これで上限は 13 択 × 2 イベントに固定される。
+  /// 別音量のぶんは載せた瞬間に捨てる——これで上限は 12 案 × 2 イベントに固定される。
   private func store(_ buffer: AVAudioPCMBuffer, for key: CacheKey) {
     cache = cache.filter { $0.key.volume == key.volume }
     cache[key] = buffer
   }
 
-  private func scheduleIdleStop() {
+  /// `playback` はいま鳴らし始めたバッファの長さ。停止予約はその後ろに置く
+  /// ——`AVAudioPlayerNode.stop()` は再生中バッファを破棄するので、鳴り終わる前に踏むと音が切れる。
+  private func scheduleIdleStop(after playback: TimeInterval) {
     idleStop?.cancel()
     let work = DispatchWorkItem { [weak self] in
       guard let self else { return }
@@ -164,7 +173,7 @@ final class SoundPlayer: AgentSoundPlaying {
       self.engine?.pause()  // レンダーコールバックを止める（グラフは残すので次回は即再開できる）
     }
     idleStop = work
-    queue.asyncAfter(deadline: .now() + idleTimeout, execute: work)
+    queue.asyncAfter(deadline: .now() + playback + idleTimeout, execute: work)
   }
 
   /// 出力デバイスが変わった。エンジンを捨て、次の再生で新しいフォーマットに合わせて組み直す。
