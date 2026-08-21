@@ -45,3 +45,14 @@ struct AgentReport: Equatable {
   /// 同値の連続報告・done のフォーカス消費（done→idle）では動かさない。
   var stateChangedAt: Date
 }
+
+extension AgentSession {
+  /// 報告で同一性を更新する。command は毎報告で上書きし、sessionId は**同じ CLI からの報告の
+  /// あいだだけ** sticky——session id は発行した CLI に属する値なので、CLI が変われば旧 id は
+  /// resume 不能な無意味な値になり捨てる。
+  func updated(command: String, sessionId: String?) -> AgentSession {
+    AgentSession(
+      command: command,
+      sessionId: sessionId ?? (command == self.command ? self.sessionId : nil))
+  }
+}

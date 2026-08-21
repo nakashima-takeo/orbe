@@ -58,7 +58,8 @@ extension WindowController: ControlTarget {
   /// 未生成で報告主のプロセスが存在しえない（届く報告は必ず偽）。slot 代入の didSet が agent_state
   /// を emit し、paneAgentStateChanged がタブ・横断ロールアップを更新する。
   ///
-  /// 同一性の更新: command は常に上書き・sessionId は sticky（新値があれば更新・無ければ維持）。
+  /// 同一性の更新は `AgentSession.updated` が持つ（command は常に上書き・sessionId は同じ CLI
+  /// からの報告のあいだだけ sticky）。
   /// Attention 用の保持: stateChangedAt は **state の値が実際に変わったときだけ** now に更新する
   /// （working→working の連続報告で一覧の並びが暴れない）。message は state の遷移で確定し直し、
   /// 同じ state が続くあいだは **ツール由来（`source == "tool"`）の文言を、ツール由来でない報告
@@ -77,8 +78,9 @@ extension WindowController: ControlTarget {
     } else if state == "clear" {
       if case .live = pane.agentSlot { pane.agentSlot = .none }  // .none は既に無で no-op
     } else {
-      let session = AgentSession(
-        command: agent, sessionId: sessionId ?? pane.agentSlot.session?.sessionId)
+      let session =
+        pane.agentSlot.session?.updated(command: agent, sessionId: sessionId)
+        ?? AgentSession(command: agent, sessionId: sessionId)
       if let prior = pane.agentReport, prior.state == state {
         // 同値の連続報告: 時刻は維持し、ツール由来の文言を弱い報告から守る。
         let keep = message?.source != "tool" && prior.message?.source == "tool"
