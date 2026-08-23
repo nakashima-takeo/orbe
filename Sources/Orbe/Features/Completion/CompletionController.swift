@@ -14,6 +14,9 @@ final class CompletionController: NSView {
   /// accept で置換する現在トークンの範囲（buffer 内 Character オフセット）。
   private(set) var replaceStart = 0
   private(set) var replaceEnd = 0
+  /// 直近 update で engine の commandPath から導出した二層スコープ。accept 経路（record）は
+  /// これを読む——rank と record が同一の engine 事実を共有し、非対称が構造的に起きない。
+  private(set) var scopes = CompletionLearning.LearningScopes(staticScope: "", dynamicScope: "")
 
   override var acceptsFirstResponder: Bool { false }
 
@@ -36,31 +39,29 @@ final class CompletionController: NSView {
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
-  /// 候補と編集状態を差し替え、選択を先頭へ戻す。
-  /// choices は engine の priority 順。ここで表示グループ順へ 1 度だけ並べ替え、
+  /// 候補と編集状態を差し替え、選択を先頭へ戻す。engine の結果（候補と解析事実）をそのまま受け、
+  /// 置換範囲だけ host が導いた値を添える。
+  /// `result.choices` は engine の priority 順。ここで表示グループ順へ 1 度だけ並べ替え、
   /// 以降 selected/current/moveSelection はこの並びの上で回る（見出しはビューが種別境界で導出）。
+  /// `result.query` は候補値と直接比較できる正規化済みトークンで、プレフィックス強調と matchQuality
+  /// の両方がこれを基準にする（パス候補では候補値も basename なので basename 部分が光る）。
   func update(
-    buffer: String, cursor: Int, choices: [CompletionChoice], replaceStart: Int, replaceEnd: Int
+    buffer: String, cursor: Int, result: CompletionResult, replaceStart: Int, replaceEnd: Int
   ) {
-    // 現在トークンの入力済み部分（プレフィックス強調・学習の matchQuality 用）。cursor はトークン途中にも
-    // なり得るため clamp。オフセットは scalar 単位（buffer/replaceStart/cursor すべて zsh/engine と揃えた scalar）。
-    let chars = Array(buffer.unicodeScalars)
-    let end = min(max(cursor, replaceStart), chars.count)
-    let query =
-      replaceStart < end ? String(String.UnicodeScalarView(chars[replaceStart..<end])) : ""
     // engine 元順を学習キー（頻度・recency）で安定再ソートしてから種別グループ化する。学習ゼロなら
     // 入力順を保持（現行と完全一致）。matchQuality が最上位キーなので完全一致優先は不可侵。
-    let scopes = CompletionLearning.scopes(buffer: buffer, replaceStart: replaceStart)
+    let scopes = CompletionLearning.scopes(commandPath: result.commandPath)
     let ranked = CompletionLearning.shared.rank(
-      choices, query: query, scopes: scopes, now: Date().timeIntervalSince1970)
+      result.choices, query: result.query, scopes: scopes, now: Date().timeIntervalSince1970)
     let ordered = CompletionList.displayOrdered(ranked)
     self.buffer = buffer
     self.cursor = cursor
     self.replaceStart = replaceStart
     self.replaceEnd = replaceEnd
+    self.scopes = scopes
     model.choices = ordered
     model.selected = 0
-    model.query = query
+    model.query = result.query
   }
 
   /// 選択を循環移動する（↑/↓）。

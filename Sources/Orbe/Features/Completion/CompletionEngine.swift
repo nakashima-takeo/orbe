@@ -12,11 +12,21 @@ struct CompletionChoice: Equatable {
   let type: String?
 }
 
-/// engine が返す候補集合と、accept で置換する現在トークンの文字長。
+/// engine が返す候補集合と、engine が解析時に確定させた事実。
 struct CompletionResult {
   let choices: [CompletionChoice]
   /// 現在トークン（activeToken）の文字数。accept は `cursor-replaceLength ..< cursor` を置換する。
   let replaceLength: Int
+  /// engine が候補の絞り込みと並べ替えに使った現在トークン。候補値と直接比較できる形で、
+  /// 常に現在トークンの末尾部分（パス候補なら basename・入力済みディレクトリのみなら空）。
+  /// `replaceLength` は置換の座標、`query` は照合の入力で、片方から他方は導出できない。
+  let query: String
+  /// engine が確定させたコマンド列（root ＋ 走査で確定したサブコマンド）。spec の正式名で持つため
+  /// alias（`npm i` / `npm install`）は同じ列になる。コマンド名自体の補完では空。
+  let commandPath: [String]
+
+  /// engine 未ロード / 応答不成立のときに返す何も分かっていない結果。
+  static let empty = CompletionResult(choices: [], replaceLength: 0, query: "", commandPath: [])
 }
 
 /// JavaScriptCore に埋め込んだ spec エンジン（inshellisense runtime 由来 + curated withfig spec）。
@@ -64,7 +74,7 @@ final class CompletionEngine {
 
   /// queue 上で JSContext を駆動して候補を得る。
   private func compute(leftText: String, cwd: String) -> CompletionResult {
-    guard let ctx = ensureContext() else { return CompletionResult(choices: [], replaceLength: 0) }
+    guard let ctx = ensureContext() else { return .empty }
 
     ctx.setObject(leftText, forKeyedSubscript: "__orbe_buffer" as NSString)
     ctx.setObject(cwd, forKeyedSubscript: "__orbe_cwd" as NSString)
@@ -74,7 +84,7 @@ final class CompletionEngine {
     guard let value = ctx.objectForKeyedSubscript("__orbe_result"), !value.isNull,
       let json = value.toString()?.data(using: .utf8),
       let obj = try? JSONSerialization.jsonObject(with: json) as? [String: Any]
-    else { return CompletionResult(choices: [], replaceLength: 0) }
+    else { return .empty }
 
     let replaceLength = obj["replaceLength"] as? Int ?? 0
     let rawChoices = obj["suggestions"] as? [[String: Any]] ?? []
@@ -86,7 +96,9 @@ final class CompletionEngine {
         insertValue: item["insertValue"] as? String,
         type: item["type"] as? String)
     }
-    return CompletionResult(choices: choices, replaceLength: replaceLength)
+    return CompletionResult(
+      choices: choices, replaceLength: replaceLength,
+      query: obj["query"] as? String ?? "", commandPath: obj["commandPath"] as? [String] ?? [])
   }
 
   /// JSContext を lazy 初期化（プロセスに 1 つ共有・spec は初回 load）。queue 上で呼ぶ。

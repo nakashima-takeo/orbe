@@ -141,7 +141,7 @@ final class CompletionEngineTests: OrbeTestCase {
     // rank がその候補を引き上げる。engine→host 学習の結線を突く（差し戻しバグの直結ケース）。
     let h = try XCTUnwrap(EngineHarness { _ in "" })
     let commitType = type(h.complete("git "), name: "commit")
-    let scopes = CompletionLearning.scopes(buffer: "git ", replaceStart: 4)
+    let scopes = CompletionLearning.scopes(commandPath: ["git"])
     let store = try XCTUnwrap(
       CompletionLearning.record(
         scopes: scopes, candidate: "commit", type: commitType, now: 1000, into: .empty),
@@ -167,7 +167,7 @@ final class CompletionEngineTests: OrbeTestCase {
     XCTAssertNil(branchType, "generator 出力のブランチ候補は type 無し（動的候補）")
     let store = try XCTUnwrap(
       CompletionLearning.record(
-        scopes: CompletionLearning.scopes(buffer: "git switch ", replaceStart: 11),
+        scopes: CompletionLearning.scopes(commandPath: ["git", "switch"]),
         candidate: "feature-x", type: branchType, now: 1000, into: .empty),
       "動的候補の record が発火する（v1 の type 門番を撤廃）")
 
@@ -185,7 +185,7 @@ final class CompletionEngineTests: OrbeTestCase {
     XCTAssertNotEqual(rebaseChoices.first?.value, "feature-x", "engine 元順では先頭でない（追い越しの前提）")
     let ranked = CompletionLearning.rank(
       rebaseChoices, query: "",
-      scopes: CompletionLearning.scopes(buffer: "git rebase ", replaceStart: 11),
+      scopes: CompletionLearning.scopes(commandPath: ["git", "rebase"]),
       store: store, now: 1000)
     XCTAssertEqual(ranked.first?.value, "feature-x", "学習したブランチがサブコマンドを跨いで先頭に上がる")
   }
