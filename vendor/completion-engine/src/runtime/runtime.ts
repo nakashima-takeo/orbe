@@ -5,6 +5,7 @@
 // 改変点: spec の取得を @withfig 全網羅 + dynamic import から curated registry の同期参照へ置換。
 // alias 展開・config・log・上流 dynamic spec location 読込は持たない。
 // 解析・spec 走査・postProcess は上流ロジックのまま（責務分界: ファイル操作とシェル実行のみ Swift）。
+// 追加: 走査で確定したコマンド名を復路で blob へ積み、host が解析事実を再導出せずに済むようにする。
 import { parseCommand, CommandToken } from "./parser.js";
 import { getArgDrivenRecommendation, getSubcommandDrivenRecommendation, SuggestionIcons } from "./suggestion.js";
 import { Suggestion, SuggestionBlob } from "./model.js";
@@ -19,6 +20,15 @@ const loadSpec = async (cmd: CommandToken[], signal?: AbortSignal): Promise<Fig.
   return specRegistry[rootToken.token];
 };
 
+// spec ノードの正式名。alias 宣言（`["install","i"]`）は先頭が正式名という withfig の慣習に従う。
+// commandPath は「同じ静的候補集合が出る場所」の同一性を表すので、打鍵された綴りではなくここで決める
+// （`npm i` と `npm install` は同じ spec ノード＝同じ commandPath）。
+const specName = (subcommand: Fig.Subcommand): string => (Array.isArray(subcommand.name) ? subcommand.name[0] : subcommand.name);
+
+// 確定したコマンド名を再帰の復路で積む。コマンド名が確定した位置でだけ包む。
+const withCommand = (name: string, blob: SuggestionBlob | undefined): SuggestionBlob | undefined =>
+  blob && { ...blob, commandPath: [name, ...(blob.commandPath ?? [])] };
+
 // curated registry のみを引く。上流の spec location / 別ファイル spec の遅延読込は持たない。
 const lazyLoadSpecLocation = async (_location: Fig.SpecLocation, _signal?: AbortSignal): Promise<Fig.Spec | undefined> => {
   return;
@@ -27,10 +37,10 @@ const lazyLoadSpecLocation = async (_location: Fig.SpecLocation, _signal?: Abort
 export const getSuggestions = async (cmd: string, cwd: string, shell: Shell, signal?: AbortSignal): Promise<SuggestionBlob | undefined> => {
   const activeCmd = parseCommand(cmd, shell);
   const rootToken = activeCmd.at(0);
-  if (activeCmd.length === 0) {
+  if (rootToken == null) {
     return;
   }
-  if (rootToken != null && !rootToken.complete) {
+  if (!rootToken.complete) {
     return runCommand(rootToken);
   }
 
@@ -52,7 +62,7 @@ export const getSuggestions = async (cmd: string, cwd: string, shell: Shell, sig
   if (result.suggestions.length == 0 && !result.argumentDescription) return;
 
   const activeToken = lastCommand?.complete ? undefined : lastCommand;
-  return { ...result, activeToken };
+  return withCommand(rootToken.token, { ...result, activeToken });
 };
 
 export const getSpecNames = (): string[] => {
@@ -195,17 +205,20 @@ const runArg = async (
 
     const nextSubcommand = await genSubcommand(activeToken.token, subcommand, signal);
     if (nextSubcommand != null) {
-      return runSubcommand(
-        tokens.slice(1),
-        allTokens,
-        nextSubcommand,
-        cwd,
-        shell,
-        persistentOptions,
-        getPersistentTokens(acceptedTokens.concat(activeToken)),
-        undefined,
-        undefined,
-        signal,
+      return withCommand(
+        specName(nextSubcommand),
+        await runSubcommand(
+          tokens.slice(1),
+          allTokens,
+          nextSubcommand,
+          cwd,
+          shell,
+          persistentOptions,
+          getPersistentTokens(acceptedTokens.concat(activeToken)),
+          undefined,
+          undefined,
+          signal,
+        ),
       );
     }
   }
@@ -221,7 +234,12 @@ const runArg = async (
     if (spec == null) return;
     const subcommand = getSubcommand(spec);
     if (subcommand == null) return;
-    return runSubcommand(tokens.slice(1), allTokens, subcommand, cwd, shell, undefined, undefined, undefined, undefined, signal);
+    // wrapper（`sudo git commit` 等）が引数に取るコマンド。registry のキー引きなのでトークンが正式名。
+    // path はリセットせず追記するので、wrapper を含む列がそのまま commandPath になる。
+    return withCommand(
+      tokens[0].token,
+      await runSubcommand(tokens.slice(1), allTokens, subcommand, cwd, shell, undefined, undefined, undefined, undefined, signal),
+    );
   }
   return runArg(
     tokens.slice(1),
@@ -271,17 +289,20 @@ const runSubcommand = async (
 
   const nextSubcommand = await genSubcommand(activeToken.token, subcommand, signal);
   if (nextSubcommand != null) {
-    return runSubcommand(
-      tokens.slice(1),
-      allTokens,
-      nextSubcommand,
-      cwd,
-      shell,
-      getPersistentOptions(persistentOptions, subcommand.options),
-      getPersistentTokens(acceptedTokens.concat(activeToken)),
-      undefined,
-      undefined,
-      signal,
+    return withCommand(
+      specName(nextSubcommand),
+      await runSubcommand(
+        tokens.slice(1),
+        allTokens,
+        nextSubcommand,
+        cwd,
+        shell,
+        getPersistentOptions(persistentOptions, subcommand.options),
+        getPersistentTokens(acceptedTokens.concat(activeToken)),
+        undefined,
+        undefined,
+        signal,
+      ),
     );
   }
 
@@ -312,5 +333,7 @@ const runCommand = async (token: CommandToken): Promise<SuggestionBlob | undefin
         }) as Suggestion,
     ),
     activeToken: token,
+    // コマンド名自体の補完。パスではないので正規化は要らない。commandPath はまだ何も確定していない。
+    partialCmd: token.token,
   };
 };

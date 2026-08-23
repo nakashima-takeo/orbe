@@ -86,6 +86,56 @@ final class CompletionEngineTests: OrbeTestCase {
       type(h.complete("git commit --v"), name: "--verbose"), "option", "option 起源に type が付く")
   }
 
+  // MARK: - 解析事実の payload（host はこれを再導出しない）
+
+  func testEngineQueryIsNormalizedTokenDistinctFromReplaceLength() throws {
+    // パス途中のトークンでは、置換すべき範囲（`sub/mai` の 7 文字）と候補名と比較できる部分
+    // （basename の `mai`）が別物になる。engine は両方を出し、host は前者を編集座標に、
+    // 後者を照合とプレフィックス強調に使う。basename 化は不可逆なので片方から他方は導けない。
+    let h = try XCTUnwrap(
+      EngineHarness(
+        exec: { _ in "" },
+        readdir: { _ in
+          [(name: "main.swift", isDirectory: false), (name: "main.swift.orig", isDirectory: false)]
+        }))
+    let result = h.complete("cat sub/mai")
+    XCTAssertEqual(names(result), ["main.swift", "main.swift.orig"], "候補名は basename 化されている")
+    XCTAssertEqual(result["query"] as? String, "mai", "照合に使ったトークンは basename 部分")
+    XCTAssertEqual(result["replaceLength"] as? Int, 7, "置換範囲はトークン全域")
+  }
+
+  func testEngineQueryEmptyForCompletePathToken() throws {
+    // ディレクトリを打ち切った位置は「まだ何も打っていない」。照合トークンは空になる。
+    let h = try XCTUnwrap(
+      EngineHarness(
+        exec: { _ in "" },
+        readdir: { _ in [(name: "main.swift", isDirectory: false)] }))
+    XCTAssertEqual(h.complete("cat sub/")["query"] as? String, "", "打ち切ったパスの照合トークンは空")
+  }
+
+  func testEngineCommandPathAccumulatesConfirmedCommands() throws {
+    let h = try XCTUnwrap(EngineHarness { _ in "" })
+    let root = h.complete("gi")
+    XCTAssertEqual(root["commandPath"] as? [String], [], "コマンド名自体の補完では確定コマンドがまだ無い")
+    XCTAssertEqual(root["query"] as? String, "gi", "照合トークンは打鍵そのまま")
+    XCTAssertEqual(h.complete("git ")["commandPath"] as? [String], ["git"], "root だけ確定")
+    let withFreeText = h.complete("git commit -m \"fix stuff\" --am")
+    XCTAssertEqual(
+      withFreeText["commandPath"] as? [String], ["git", "commit"],
+      "オプションと引数の自由テキストは確定コマンド列に入らない")
+  }
+
+  func testEngineCommandPathUsesSpecNameForAliases() throws {
+    // alias（`npm i`）と正式名（`npm install`）は同じ spec ノード＝同じ候補集合。commandPath も
+    // 同じ列になり、学習キーが綴りで割れない。
+    let h = try XCTUnwrap(EngineHarness { _ in "" })
+    let short = h.complete("npm i --sa")
+    let long = h.complete("npm install --sa")
+    XCTAssertEqual(names(short), names(long), "alias と正式名で候補集合は同一（前提）")
+    XCTAssertEqual(short["commandPath"] as? [String], ["npm", "install"], "alias でも spec の正式名で積む")
+    XCTAssertEqual(long["commandPath"] as? [String], ["npm", "install"])
+  }
+
   func testEngineSubcommandFeedsLearning() throws {
     // 本番経路の end-to-end 実証: 実 engine が返す subcommand の type で record が発火し（no-op でない）、
     // rank がその候補を引き上げる。engine→host 学習の結線を突く（差し戻しバグの直結ケース）。
