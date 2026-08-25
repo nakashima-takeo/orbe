@@ -3,14 +3,13 @@ import SwiftUI
 
 /// 補完 popup の facade（SearchBar に倣う）。`NSHostingView<CompletionList>` を `SurfaceView` に
 /// 重ねる。focusable な要素を持たず端末がフォーカスを維持する。候補・選択 index を保持し、
-/// accept のために直近 update の buffer/cursor も覚える（位置は SurfaceView が ime_point から置く）。
+/// accept のために直近 update の buffer と置換範囲も覚える（位置は SurfaceView が ime_point から置く）。
 final class CompletionController: NSView {
   private let model = CompletionListModel()
   private let host: NSHostingView<CompletionList>
 
   /// 直近 update の編集状態（accept がこれと選択候補から適用結果を組む）。
   private(set) var buffer = ""
-  private(set) var cursor = 0
   /// accept で置換する現在トークンの範囲（buffer 内 Character オフセット）。
   private(set) var replaceStart = 0
   private(set) var replaceEnd = 0
@@ -46,7 +45,7 @@ final class CompletionController: NSView {
   /// `result.query` は候補値と直接比較できる正規化済みトークンで、プレフィックス強調と matchQuality
   /// の両方がこれを基準にする（パス候補では候補値も basename なので basename 部分が光る）。
   func update(
-    buffer: String, cursor: Int, result: CompletionResult, replaceStart: Int, replaceEnd: Int
+    buffer: String, result: CompletionResult, replaceStart: Int, replaceEnd: Int
   ) {
     // engine 元順を学習キー（頻度・recency）で安定再ソートしてから種別グループ化する。学習ゼロなら
     // 入力順を保持（現行と完全一致）。matchQuality が最上位キーなので完全一致優先は不可侵。
@@ -55,7 +54,6 @@ final class CompletionController: NSView {
       result.choices, query: result.query, scopes: scopes, now: Date().timeIntervalSince1970)
     let ordered = CompletionList.displayOrdered(ranked)
     self.buffer = buffer
-    self.cursor = cursor
     self.replaceStart = replaceStart
     self.replaceEnd = replaceEnd
     self.scopes = scopes

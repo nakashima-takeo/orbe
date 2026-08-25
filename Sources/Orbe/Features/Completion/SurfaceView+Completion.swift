@@ -64,7 +64,7 @@ extension SurfaceView {
           self.completion = controller
         }
         controller.update(
-          buffer: buffer, cursor: cursor, result: result, replaceStart: start, replaceEnd: cur)
+          buffer: buffer, result: result, replaceStart: start, replaceEnd: cur)
         self.positionCompletion(controller)
       }
     }

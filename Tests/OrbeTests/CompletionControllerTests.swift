@@ -33,7 +33,7 @@ final class CompletionControllerTests: OrbeTestCase {
       replaceLength: 14, query: "main.swift", commandPath: ["cat"])
 
     controller.update(
-      buffer: "cat sub/main.swift", cursor: 18, result: result, replaceStart: 4, replaceEnd: 18)
+      buffer: "cat sub/main.swift", result: result, replaceStart: 4, replaceEnd: 18)
 
     XCTAssertEqual(controller.current?.value, "main.swift", "engine の照合トークンで完全一致が先頭に来る")
   }
@@ -47,7 +47,7 @@ final class CompletionControllerTests: OrbeTestCase {
       "update 前は何も分かっていない（前提）")
 
     controller.update(
-      buffer: "git commit --am", cursor: 15,
+      buffer: "git commit --am",
       result: CompletionResult(
         choices: [choice("--amend", type: "option")], replaceLength: 4, query: "--am",
         commandPath: ["git", "commit"]),
@@ -63,14 +63,14 @@ final class CompletionControllerTests: OrbeTestCase {
     // 来たら前回のスコープは残らず、accept が古いコマンドの学習キーへ書かない。
     let controller = controller()
     controller.update(
-      buffer: "git commit --am", cursor: 15,
+      buffer: "git commit --am",
       result: CompletionResult(
         choices: [choice("--amend", type: "option")], replaceLength: 4, query: "--am",
         commandPath: ["git", "commit"]),
       replaceStart: 11, replaceEnd: 15)
 
     controller.update(
-      buffer: "npm install --sa", cursor: 16,
+      buffer: "npm install --sa",
       result: CompletionResult(
         choices: [choice("--save", type: "option")], replaceLength: 4, query: "--sa",
         commandPath: ["npm", "install"]),
