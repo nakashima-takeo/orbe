@@ -205,6 +205,40 @@ final class CompletionEngineTests: OrbeTestCase {
     XCTAssertEqual(ranked.map(\.value), ["commit", "checkout"], "学習した commit が上へ")
   }
 
+  func testEngineLearningSurvivesFreeTextArgumentBetweenPositions() throws {
+    // 引数の自由テキストを挟んだ位置（`git commit -m "fix stuff" --am`）で覚えたオプションが、
+    // 同じコマンド列の別の打鍵位置（`git commit --a`）から引ける。engine が両方のバッファへ
+    // 同じ確定コマンド列を返すので、record と rank が同じ静的スコープを引く。
+    let h = try XCTUnwrap(EngineHarness { _ in "" })
+
+    // accept 経路: 自由テキストを挟んだ位置の確定コマンド列から scopes を作って記録する。
+    let accepted = h.complete("git commit -m \"fix stuff\" --am")
+    let acceptedPath = try XCTUnwrap(accepted["commandPath"] as? [String])
+    let store = try XCTUnwrap(
+      CompletionLearning.record(
+        scopes: CompletionLearning.scopes(commandPath: acceptedPath),
+        candidate: "--amend", type: type(accepted, name: "--amend"), now: 1000, into: .empty),
+      "実 engine の option type で record が発火する")
+
+    // update 経路: 自由テキストの無い別バッファ。確定コマンド列が一致するので同じキーを引く。
+    let typing = h.complete("git commit --a")
+    XCTAssertEqual(typing["commandPath"] as? [String], acceptedPath, "自由テキストの有無で列は変わらない")
+    let choices = (typing["suggestions"] as? [[String: Any]] ?? []).compactMap { s in
+      (s["name"] as? String).map {
+        CompletionChoice(
+          value: $0, description: "", insertValue: s["insertValue"] as? String,
+          type: s["type"] as? String)
+      }
+    }
+    XCTAssertEqual(choices.first?.value, "--all", "engine 元順では --all が先頭・--amend は 2 番目（追い越しの前提）")
+    let ranked = CompletionLearning.rank(
+      choices, query: typing["query"] as? String ?? "",
+      scopes: CompletionLearning.scopes(
+        commandPath: try XCTUnwrap(typing["commandPath"] as? [String])),
+      store: store, now: 1000)
+    XCTAssertEqual(ranked.first?.value, "--amend", "別位置で覚えた --amend が元順を追い越して先頭へ")
+  }
+
   func testEngineDynamicCandidateLearningSharedAcrossSubcommands() throws {
     // 実バンドルの generator が返す type 無しブランチ候補を `git switch ` で record し、
     // **別バッファ** `git rebase ` の実候補に対して rank すると当該ブランチが engine 元順を追い越して

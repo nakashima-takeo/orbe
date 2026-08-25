@@ -186,6 +186,20 @@ final class CompletionTests: OrbeTestCase {
         [choice("-ldflags", insertValue: "-ldflags=")], tokenText: "-ldflags"))
   }
 
+  func testRedundantSoleChoicePathPrefixComparesFullInsertValue() {
+    // パス途中の一択候補（value=="main.swift" / insertValue=="sub/main.swift"）は、比較相手が
+    // ディレクトリ接頭辞込みの完全形。生バッファのトークン全域なら「打ち切り済み」と判定され、
+    // basename だけの照合トークンでは判定されない——これは「accept してもバッファが変わらないか」の
+    // 判定であって照合ではない、という分界を式として固定する。
+    let sole = [choice("main.swift", insertValue: "sub/main.swift", type: "file")]
+    XCTAssertTrue(
+      SurfaceView.isRedundantSoleChoice(sole, tokenText: "sub/main.swift"),
+      "トークン全域と完全形が一致するので冗長")
+    XCTAssertFalse(
+      SurfaceView.isRedundantSoleChoice(sole, tokenText: "main.swift"),
+      "basename だけでは完全形と一致しない＝冗長ではない")
+  }
+
   func testRedundantSoleChoiceIsCaseSensitive() {
     // value は spec の正規名。大小違いの入力は不一致＝閉じない（engine の大小無視とは別契約・安全側）。
     XCTAssertFalse(SurfaceView.isRedundantSoleChoice([choice("pull")], tokenText: "PULL"))
