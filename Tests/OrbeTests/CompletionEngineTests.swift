@@ -106,11 +106,24 @@ final class CompletionEngineTests: OrbeTestCase {
 
   func testEngineQueryEmptyForCompletePathToken() throws {
     // ディレクトリを打ち切った位置は「まだ何も打っていない」。照合トークンは空になる。
+    // 置換範囲はトークン全域のまま（`sub/` の 4 文字）——照合トークンが空でも 0 に落ちない側で、
+    // 「置換の座標」と「照合の入力」が別事実であることのもう一方の端。
     let h = try XCTUnwrap(
       EngineHarness(
         exec: { _ in "" },
         readdir: { _ in [(name: "main.swift", isDirectory: false)] }))
-    XCTAssertEqual(h.complete("cat sub/")["query"] as? String, "", "打ち切ったパスの照合トークンは空")
+    let result = h.complete("cat sub/")
+    XCTAssertEqual(result["query"] as? String, "", "打ち切ったパスの照合トークンは空")
+    XCTAssertEqual(result["replaceLength"] as? Int, 4, "置換範囲はトークン全域のまま")
+  }
+
+  func testEngineQueryIsTypedTokenAtSubcommandPositions() throws {
+    // subcommand / option を出す経路の照合トークンは打鍵そのまま（パスではないので basename 化する
+    // 相手がいない）。トークンがまだ無い位置では空。ここが載らないと、この位置でだけ
+    // プレフィックス強調と一致品質が静かに効かなくなる。
+    let h = try XCTUnwrap(EngineHarness { _ in "" })
+    XCTAssertEqual(h.complete("git commit --am")["query"] as? String, "--am", "option トークンは打鍵そのまま")
+    XCTAssertEqual(h.complete("git ")["query"] as? String, "", "トークンがまだ無い位置は空")
   }
 
   func testEngineCommandPathAccumulatesConfirmedCommands() throws {
@@ -134,6 +147,44 @@ final class CompletionEngineTests: OrbeTestCase {
     XCTAssertEqual(names(short), names(long), "alias と正式名で候補集合は同一（前提）")
     XCTAssertEqual(short["commandPath"] as? [String], ["npm", "install"], "alias でも spec の正式名で積む")
     XCTAssertEqual(long["commandPath"] as? [String], ["npm", "install"])
+  }
+
+  func testEngineCommandPathIncludesSubcommandAfterOptionArgument() throws {
+    // オプションの引数位置を通り抜けてから確定したサブコマンドも確定コマンド列に積まれる。
+    // 積み損ねると `["git"]` へ潰れ、`git commit` 位置の静的候補が `git` 直下と同じ学習キーへ
+    // 混ざる（クラッシュも警告も出ず「学習が効かない」という遠い症状にしかならない）。
+    let h = try XCTUnwrap(EngineHarness { _ in "" })
+    XCTAssertEqual(
+      h.complete("git --exec-path commit --am")["commandPath"] as? [String], ["git", "commit"],
+      "オプションの引数位置を挟んでもサブコマンドは確定コマンド列へ入る")
+  }
+
+  func testEngineCommandPathKeepsIntermediateCommands() throws {
+    // 入れ子が深くても確定した順に全要素が残る。中間要素が落ちると
+    // `docker container ls` と `docker ls` が同じ学習キーへ畳まれる。
+    let h = try XCTUnwrap(EngineHarness { _ in "" })
+    XCTAssertEqual(
+      h.complete("docker container ls -")["commandPath"] as? [String],
+      ["docker", "container", "ls"], "確定したサブコマンドを順に保存する")
+  }
+
+  func testEngineCommandPathFollowsCommandSeparator() throws {
+    // 確定コマンド列は buffer 先頭のコマンドではなく、engine が解析しているコマンド。
+    // コマンド区切りの右側を補完している位置では、候補集合を決めているそちらが列になる。
+    let h = try XCTUnwrap(EngineHarness { _ in "" })
+    XCTAssertEqual(
+      h.complete("ls | grep x ")["commandPath"] as? [String], ["grep"],
+      "コマンド区切りの右側のコマンドが確定コマンド列になる")
+  }
+
+  func testEngineReportsConfirmedFactsWithoutCandidates() throws {
+    // 解析事実は候補の有無と独立に「engine が確定させた分だけ」載る。自由テキストの引数位置は
+    // 候補ゼロでも照合トークンと確定コマンド列を持つ＝「候補ゼロなら既定値」ではない。
+    let h = try XCTUnwrap(EngineHarness { _ in "" })
+    let result = h.complete("git commit -m fo")
+    XCTAssertTrue(names(result).isEmpty, "自由テキストの引数位置に候補は出ない（前提）")
+    XCTAssertEqual(result["query"] as? String, "fo", "打鍵中のトークンは載る")
+    XCTAssertEqual(result["commandPath"] as? [String], ["git", "commit"], "確定済みのコマンド列も載る")
   }
 
   func testEngineSubcommandFeedsLearning() throws {
@@ -356,12 +407,18 @@ final class CompletionEngineTests: OrbeTestCase {
 
   func testEngineUnknownCommandEmpty() throws {
     let h = try XCTUnwrap(EngineHarness { _ in "" })
-    XCTAssertTrue(names(h.complete("frobnicate ")).isEmpty, "未収録コマンドは候補ゼロ")
+    let result = h.complete("frobnicate ")
+    XCTAssertTrue(names(result).isEmpty, "未収録コマンドは候補ゼロ")
+    XCTAssertEqual(result["query"] as? String, "", "何も確定していないので照合トークンは既定値")
+    XCTAssertEqual(result["commandPath"] as? [String], [], "同じく確定コマンド列も既定値")
   }
 
   func testEngineEmptyBufferNoCandidates() throws {
     let h = try XCTUnwrap(EngineHarness { _ in "" })
-    XCTAssertTrue(names(h.complete("")).isEmpty, "空 buffer では候補を出さない")
+    let result = h.complete("")
+    XCTAssertTrue(names(result).isEmpty, "空 buffer では候補を出さない")
+    XCTAssertEqual(result["query"] as? String, "", "何も確定していないので照合トークンは既定値")
+    XCTAssertEqual(result["commandPath"] as? [String], [], "同じく確定コマンド列も既定値")
   }
 
   func testEngineBundleAbsentDegradesGracefully() {
@@ -371,6 +428,8 @@ final class CompletionEngineTests: OrbeTestCase {
     let exp = expectation(description: "suggestions returns")
     CompletionEngine.shared.suggestions(buffer: "git ", cursor: 4, cwd: "/tmp") { result in
       XCTAssertTrue(result.choices.isEmpty)
+      XCTAssertEqual(result.query, "", "解析していないので照合トークンは既定値")
+      XCTAssertEqual(result.commandPath, [], "同じく確定コマンド列も既定値")
       exp.fulfill()
     }
     wait(for: [exp], timeout: 2)
