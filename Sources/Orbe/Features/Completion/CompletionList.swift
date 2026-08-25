@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// 補完ドロップダウンの表示状態（表示順に並べ替え済みの候補・選択 index・入力済みプレフィックス）。
+/// 補完ドロップダウンの表示状態（表示順に並べ替え済みの候補・選択 index・照合トークン）。
 /// host が update/moveSelection で更新する。
 @MainActor @Observable final class CompletionListModel {
   var choices: [CompletionChoice] = []
   var selected = 0
-  /// 現在トークンの入力済み部分。候補値の先頭一致部を accent 色で示す（Autocomplete）。
+  /// engine が照合に使った正規化済みトークン（パス候補では basename・打ち切ったディレクトリでは空）。
+  /// 候補値の先頭一致部を accent 色で示す（Autocomplete）。
   var query = ""
 }
 
