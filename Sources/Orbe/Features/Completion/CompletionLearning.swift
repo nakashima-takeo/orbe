@@ -24,11 +24,15 @@ struct LearningEntry: Codable, Equatable {
 }
 
 /// 学習ストア（`scope<sep>candidate` → entry）。version 付きの Codable マップ。
+/// キーの形が変わったら version を上げる——旧 version のファイルは読まずに捨てる（`load`）。
 struct LearningStore: Codable, Equatable {
+  /// 現行スキーマ。キー左辺は engine の確定コマンド列。
+  static let currentVersion = 2
+
   var version: Int
   var entries: [String: LearningEntry]
 
-  static let empty = LearningStore(version: 1, entries: [:])
+  static let empty = LearningStore(version: currentVersion, entries: [:])
 }
 
 final class CompletionLearning {
@@ -180,10 +184,12 @@ final class CompletionLearning {
     return StateDir.base()?.appendingPathComponent("completion-learning.json")
   }
 
-  /// 読み込み。欠落・壊れは空ストア（新規ユーザ・データ無しは現状の並びと完全一致）。
+  /// 読み込み。欠落・壊れ・別 version は空ストア（新規ユーザ・データ無しは現状の並びと完全一致）。
+  /// 学習は体験を良くするキャッシュであってユーザ資産ではないので、スキーマが変わったら移行せず捨てる。
   static func load() -> LearningStore {
     guard let url = fileURL, let data = try? Data(contentsOf: url),
-      let file = try? JSONDecoder().decode(LearningStore.self, from: data)
+      let file = try? JSONDecoder().decode(LearningStore.self, from: data),
+      file.version == LearningStore.currentVersion
     else { return .empty }
     return file
   }
