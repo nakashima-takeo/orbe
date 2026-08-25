@@ -138,15 +138,17 @@ final class CompletionEngineTests: OrbeTestCase {
       "オプションと引数の自由テキストは確定コマンド列に入らない")
   }
 
-  func testEngineCommandPathUsesSpecNameForAliases() throws {
-    // alias（`npm i`）と正式名（`npm install`）は同じ spec ノード＝同じ候補集合。commandPath も
-    // 同じ列になり、学習キーが綴りで割れない。
+  func testEngineCommandPathIsStableAcrossAliases() throws {
+    // `npm i` と `npm install` は同じ spec ノード＝同じ候補集合。確定コマンド列は spec ノードで
+    // 一意に定まる名前で積むので、打鍵の綴りが違っても同じ列になり、学習キーが綴りで割れない。
     let h = try XCTUnwrap(EngineHarness { _ in "" })
     let short = h.complete("npm i --sa")
     let long = h.complete("npm install --sa")
-    XCTAssertEqual(names(short), names(long), "alias と正式名で候補集合は同一（前提）")
-    XCTAssertEqual(short["commandPath"] as? [String], ["npm", "install"], "alias でも spec の正式名で積む")
-    XCTAssertEqual(long["commandPath"] as? [String], ["npm", "install"])
+    XCTAssertEqual(names(short), names(long), "同じ spec ノードなので候補集合は同一（前提）")
+    XCTAssertEqual(
+      short["commandPath"] as? [String], long["commandPath"] as? [String],
+      "綴りが違っても確定コマンド列は同じ")
+    XCTAssertEqual(short["commandPath"] as? [String], ["npm", "install"])
   }
 
   func testEngineCommandPathIncludesSubcommandAfterOptionArgument() throws {

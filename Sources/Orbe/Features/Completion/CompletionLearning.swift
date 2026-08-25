@@ -78,7 +78,7 @@ final class CompletionLearning {
     let dynamicScope: String
   }
 
-  /// 二層スコープの導出。engine が確定させたコマンド列（root ＋ 確定サブコマンドの spec 正式名）から作る。
+  /// 二層スコープの導出。engine が確定させたコマンド列（root ＋ 確定サブコマンド）から作る。
   /// - staticScope: コマンド列を空白 1 個で join（`["git","commit"]` → `git commit`）。
   /// - dynamicScope: その先頭 1 語。
   /// commandPath が空（コマンド名自体の補完）なら両層とも ""。

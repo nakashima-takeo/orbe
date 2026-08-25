@@ -21,8 +21,9 @@ struct CompletionResult {
   /// 常に現在トークンの末尾部分（パス候補なら basename・入力済みディレクトリのみなら空）。
   /// `replaceLength` は置換の座標、`query` は照合の入力で、片方から他方は導出できない。
   let query: String
-  /// engine が確定させたコマンド列（root ＋ 走査で確定したサブコマンド）。spec の正式名で持つため
-  /// alias（`npm i` / `npm install`）は同じ列になる。コマンド名自体の補完では空。
+  /// engine が確定させたコマンド列（root ＋ 走査で確定したサブコマンド）。同一 spec ノードで一意に
+  /// 定まる名前（宣言配列の先頭）で持つため、打鍵の綴りが違っても（`npm i` / `npm install`）同じ列に
+  /// なる。コマンド名自体の補完では空。
   let commandPath: [String]
 
   /// engine 未ロード / 応答不成立のときに返す何も分かっていない結果。

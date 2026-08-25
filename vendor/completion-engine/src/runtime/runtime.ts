@@ -20,7 +20,7 @@ const loadSpec = async (cmd: CommandToken[], signal?: AbortSignal): Promise<Fig.
   return specRegistry[rootToken.token];
 };
 
-// spec ノードの正式名。alias 宣言（`["install","i"]`）は先頭が正式名という withfig の慣習に従う。
+// spec ノードで一意に定まる名前。宣言配列（`["install","i"]`）の先頭を採る。
 // commandPath は「同じ静的候補集合が出る場所」の同一性を表すので、打鍵された綴りではなくここで決める
 // （`npm i` と `npm install` は同じ spec ノード＝同じ commandPath）。
 const specName = (subcommand: Fig.Subcommand): string => (Array.isArray(subcommand.name) ? subcommand.name[0] : subcommand.name);
