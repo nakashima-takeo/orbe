@@ -62,7 +62,7 @@ export const getSuggestions = async (cmd: string, cwd: string, shell: Shell, sig
   if (result.suggestions.length == 0 && !result.argumentDescription) return;
 
   const activeToken = lastCommand?.complete ? undefined : lastCommand;
-  return withCommand(rootToken.token, { ...result, activeToken });
+  return withCommand(specName(subcommand), { ...result, activeToken });
 };
 
 export const getSpecNames = (): string[] => {
@@ -234,10 +234,10 @@ const runArg = async (
     if (spec == null) return;
     const subcommand = getSubcommand(spec);
     if (subcommand == null) return;
-    // wrapper（`sudo git commit` 等）が引数に取るコマンド。registry のキー引きなのでトークンが正式名。
+    // wrapper（`sudo git commit` 等）が引数に取るコマンド。
     // path はリセットせず追記するので、wrapper を含む列がそのまま commandPath になる。
     return withCommand(
-      tokens[0].token,
+      specName(subcommand),
       await runSubcommand(tokens.slice(1), allTokens, subcommand, cwd, shell, undefined, undefined, undefined, undefined, signal),
     );
   }
