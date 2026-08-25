@@ -41,44 +41,48 @@ final class CompletionControllerTests: OrbeTestCase {
   func testUpdateDerivesLearningScopesFromEngineCommandPath() {
     // accept（record）が読む値そのもの。engine の確定コマンド列から二層スコープを導き、
     // rank と record が同じ事実を共有する。
+    // 打鍵（`npm i`）と確定コマンド列（`["npm","install"]`）がずれる入力を選ぶ——生バッファから
+    // 導くと `npm i` にしかならないので、期待値の `npm install` は engine 由来でしか出ない。
     let controller = controller()
     XCTAssertEqual(
       controller.scopes, CompletionLearning.LearningScopes(staticScope: "", dynamicScope: ""),
       "update 前は何も分かっていない（前提）")
 
     controller.update(
-      buffer: "git commit --am",
+      buffer: "npm i --sa",
       result: CompletionResult(
-        choices: [choice("--amend", type: "option")], replaceLength: 4, query: "--am",
-        commandPath: ["git", "commit"]),
-      replaceStart: 11, replaceEnd: 15)
+        choices: [choice("--save", type: "option")], replaceLength: 4, query: "--sa",
+        commandPath: ["npm", "install"]),
+      replaceStart: 6, replaceEnd: 10)
 
     XCTAssertEqual(
       controller.scopes,
-      CompletionLearning.LearningScopes(staticScope: "git commit", dynamicScope: "git"))
+      CompletionLearning.LearningScopes(staticScope: "npm install", dynamicScope: "npm"))
   }
 
   func testUpdateReplacesLearningScopesOnReuse() {
     // popup は使い回される（`SurfaceView` が既存 controller を再利用する）。別コマンドの結果が
     // 来たら前回のスコープは残らず、accept が古いコマンドの学習キーへ書かない。
+    // 2 回目は引数の自由テキストを挟んだ位置——生バッファから導くと
+    // `git commit -m "fix stuff"` になるので、期待値の `git commit` は engine 由来でしか出ない。
     let controller = controller()
     controller.update(
-      buffer: "git commit --am",
-      result: CompletionResult(
-        choices: [choice("--amend", type: "option")], replaceLength: 4, query: "--am",
-        commandPath: ["git", "commit"]),
-      replaceStart: 11, replaceEnd: 15)
-
-    controller.update(
-      buffer: "npm install --sa",
+      buffer: "npm i --sa",
       result: CompletionResult(
         choices: [choice("--save", type: "option")], replaceLength: 4, query: "--sa",
         commandPath: ["npm", "install"]),
-      replaceStart: 12, replaceEnd: 16)
+      replaceStart: 6, replaceEnd: 10)
+
+    controller.update(
+      buffer: "git commit -m \"fix stuff\" --am",
+      result: CompletionResult(
+        choices: [choice("--amend", type: "option")], replaceLength: 4, query: "--am",
+        commandPath: ["git", "commit"]),
+      replaceStart: 26, replaceEnd: 30)
 
     XCTAssertEqual(
       controller.scopes,
-      CompletionLearning.LearningScopes(staticScope: "npm install", dynamicScope: "npm"),
+      CompletionLearning.LearningScopes(staticScope: "git commit", dynamicScope: "git"),
       "直近 update の確定コマンド列だけが残る")
   }
 }
