@@ -85,6 +85,23 @@ final class CompletionLearningTests: OrbeTestCase {
     XCTAssertEqual(names(ranked), ["main", "main-backup"], "完全一致は動的学習スコアに関わらず上")
   }
 
+  func testExactMatchOutranksLearnedForPathCandidates() {
+    // パス途中のトークン（`cat sub/main.swift`）でも完全一致が守られる。候補値は basename 化
+    // されているので、照合には engine が同じ正規化を通した query（`main.swift`）を渡す——
+    // 両者が同じ世界の値である限り、パス区切りの有無はランキングに影響しない。
+    var store = LearningStore.empty
+    for _ in 0..<16 {
+      store = XCTUnwrap2(
+        CompletionLearning.record(
+          scopes: scopes, candidate: "main.swift.orig", type: "file", now: now, into: store))
+    }
+    let ranked = CompletionLearning.rank(
+      [choice("main.swift.orig", type: "file"), choice("main.swift", type: "file")],
+      query: "main.swift", scopes: scopes, store: store, now: now)
+    XCTAssertEqual(
+      names(ranked), ["main.swift", "main.swift.orig"], "完全一致が高 count の接尾辞付きより上")
+  }
+
   // MARK: - ゴール4: 学習ゼロ回帰（入力順を保持）
 
   func testEmptyStorePreservesInputOrder() {
@@ -122,18 +139,18 @@ final class CompletionLearningTests: OrbeTestCase {
         scopes: scopes, candidate: "--verbose", type: "option", now: now, into: .empty))
   }
 
-  // MARK: - M3: 静的候補は現行スコープ（全プレフィックス）を維持
+  // MARK: - M3: 静的候補はコマンド列スコープ（サブコマンド間で共有しない）
 
-  func testStaticCandidateKeyedByFullPrefixNotSharedAcrossSubcommands() {
-    // `git commit --v` で学習した option --verbose のキーは staticScope "git commit"。
-    let commitScopes = CompletionLearning.scopes(buffer: "git commit --v", replaceStart: 11)
+  func testStaticCandidateKeyedByCommandPathNotSharedAcrossSubcommands() {
+    // `git commit` で学習した option --verbose のキーは staticScope "git commit"。
+    let commitScopes = CompletionLearning.scopes(commandPath: ["git", "commit"])
     let store = XCTUnwrap2(
       CompletionLearning.record(
         scopes: commitScopes, candidate: "--verbose", type: "option", now: now, into: .empty))
-    XCTAssertNotNil(store.entries[key("--verbose", scope: "git commit")], "キーは全プレフィックス")
+    XCTAssertNotNil(store.entries[key("--verbose", scope: "git commit")], "キーは確定コマンド列")
     XCTAssertNil(store.entries[key("--verbose")], "dynamicScope（git）側には記録されない")
-    // `git rebase ` の staticScope は "git rebase" ≠ "git commit" → 静的学習は共有されない。
-    let rebaseScopes = CompletionLearning.scopes(buffer: "git rebase ", replaceStart: 11)
+    // `git rebase` の staticScope は "git rebase" ≠ "git commit" → 静的学習は共有されない。
+    let rebaseScopes = CompletionLearning.scopes(commandPath: ["git", "rebase"])
     XCTAssertNil(
       store.entries[
         CompletionLearning.scope(for: "option", in: rebaseScopes)
@@ -142,13 +159,13 @@ final class CompletionLearningTests: OrbeTestCase {
   }
 
   func testDynamicCandidateSharedAcrossSubcommands() {
-    // `git switch fea` で学習したブランチのキーは dynamicScope "git" → `git rebase ` からも引ける。
-    let switchScopes = CompletionLearning.scopes(buffer: "git switch fea", replaceStart: 11)
+    // `git switch` で学習したブランチのキーは dynamicScope "git" → `git rebase` からも引ける。
+    let switchScopes = CompletionLearning.scopes(commandPath: ["git", "switch"])
     let store = XCTUnwrap2(
       CompletionLearning.record(
         scopes: switchScopes, candidate: "feature-x", type: nil, now: now, into: .empty))
     XCTAssertNotNil(store.entries[key("feature-x")], "動的キーは root 1語スコープ")
-    let rebaseScopes = CompletionLearning.scopes(buffer: "git rebase ", replaceStart: 11)
+    let rebaseScopes = CompletionLearning.scopes(commandPath: ["git", "rebase"])
     XCTAssertNotNil(
       store.entries[
         CompletionLearning.scope(for: nil, in: rebaseScopes)
@@ -180,24 +197,28 @@ final class CompletionLearningTests: OrbeTestCase {
   // MARK: - scopes（二層スコープの導出）
 
   func testScopesDerivation() {
-    // "git commit --v" の現在トークン "--v"（replaceStart=11）→ static="git commit"・dynamic="git"。
+    // static はコマンド列を空白 1 個で join、dynamic はその先頭 1 語。
     XCTAssertEqual(
-      CompletionLearning.scopes(buffer: "git commit --v", replaceStart: 11),
+      CompletionLearning.scopes(commandPath: ["git"]),
+      CompletionLearning.LearningScopes(staticScope: "git", dynamicScope: "git"))
+    XCTAssertEqual(
+      CompletionLearning.scopes(commandPath: ["git", "commit"]),
       CompletionLearning.LearningScopes(staticScope: "git commit", dynamicScope: "git"))
   }
 
-  func testScopesLowercaseAndCollapseSpaces() {
-    // 連続空白は 1 個へ・lowercase する（dynamic も同じ正規化を通した先頭 1 語）。
+  func testScopesLowercaseBothLayers() {
+    // lowercase は両層の手前で 1 度だけ通る。dynamicScope が生ケースで残ると staticScope の
+    // 先頭語と別文字列になり、二層が同じコマンド列を指さなくなる。
     XCTAssertEqual(
-      CompletionLearning.scopes(buffer: "GIT   Commit  x", replaceStart: 14),
+      CompletionLearning.scopes(commandPath: ["Git", "Commit"]),
       CompletionLearning.LearningScopes(staticScope: "git commit", dynamicScope: "git"))
   }
 
   func testScopesEmptyForCommandName() {
-    // コマンド名自体の補完（"gi" の現在トークンが先頭）は両層とも空 scope
-    // （buffer 先頭は入力途中の query 自身。キーにすると打鍵ごとに散る）。
+    // コマンド名自体の補完（`gi`）では確定コマンドが無いので両層とも空 scope
+    // （打鍵中のトークンをキーにすると 1 文字ごとに別キーへ散る）。
     XCTAssertEqual(
-      CompletionLearning.scopes(buffer: "gi", replaceStart: 0),
+      CompletionLearning.scopes(commandPath: []),
       CompletionLearning.LearningScopes(staticScope: "", dynamicScope: ""))
   }
 

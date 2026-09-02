@@ -11,7 +11,7 @@ final class CompletionEngineTests: OrbeTestCase {
   /// CompletionEngine.swift の `installNativeBridge` と同じ顔ぶれ（__orbe_exec / __orbe_access /
   /// __orbe_readdir / __orbe_home）を揃え、同じ駆動契約（__orbe_buffer/__orbe_cwd → __orbe_run()
   /// → microtask drain → __orbe_result）で候補を取る。JS エンジンの契約を host から独立に検証する。
-  private struct EngineHarness {
+  struct EngineHarness {
     let ctx: JSContext
     init?(
       exec: @escaping (String) -> String,
@@ -50,12 +50,12 @@ final class CompletionEngineTests: OrbeTestCase {
     }
   }
 
-  private func names(_ result: [String: Any]) -> [String] {
+  func names(_ result: [String: Any]) -> [String] {
     (result["suggestions"] as? [[String: Any]])?.compactMap { $0["name"] as? String } ?? []
   }
 
   /// 候補 name の `type` フィールド（nil = engine が型を付けていない）。
-  private func type(_ result: [String: Any], name: String) -> String? {
+  func type(_ result: [String: Any], name: String) -> String? {
     (result["suggestions"] as? [[String: Any]])?
       .first { $0["name"] as? String == name }?["type"] as? String
   }
@@ -91,7 +91,7 @@ final class CompletionEngineTests: OrbeTestCase {
     // rank がその候補を引き上げる。engine→host 学習の結線を突く（差し戻しバグの直結ケース）。
     let h = try XCTUnwrap(EngineHarness { _ in "" })
     let commitType = type(h.complete("git "), name: "commit")
-    let scopes = CompletionLearning.scopes(buffer: "git ", replaceStart: 4)
+    let scopes = CompletionLearning.scopes(commandPath: ["git"])
     let store = try XCTUnwrap(
       CompletionLearning.record(
         scopes: scopes, candidate: "commit", type: commitType, now: 1000, into: .empty),
@@ -117,7 +117,7 @@ final class CompletionEngineTests: OrbeTestCase {
     XCTAssertNil(branchType, "generator 出力のブランチ候補は type 無し（動的候補）")
     let store = try XCTUnwrap(
       CompletionLearning.record(
-        scopes: CompletionLearning.scopes(buffer: "git switch ", replaceStart: 11),
+        scopes: CompletionLearning.scopes(commandPath: ["git", "switch"]),
         candidate: "feature-x", type: branchType, now: 1000, into: .empty),
       "動的候補の record が発火する（v1 の type 門番を撤廃）")
 
@@ -135,7 +135,7 @@ final class CompletionEngineTests: OrbeTestCase {
     XCTAssertNotEqual(rebaseChoices.first?.value, "feature-x", "engine 元順では先頭でない（追い越しの前提）")
     let ranked = CompletionLearning.rank(
       rebaseChoices, query: "",
-      scopes: CompletionLearning.scopes(buffer: "git rebase ", replaceStart: 11),
+      scopes: CompletionLearning.scopes(commandPath: ["git", "rebase"]),
       store: store, now: 1000)
     XCTAssertEqual(ranked.first?.value, "feature-x", "学習したブランチがサブコマンドを跨いで先頭に上がる")
   }
@@ -306,12 +306,18 @@ final class CompletionEngineTests: OrbeTestCase {
 
   func testEngineUnknownCommandEmpty() throws {
     let h = try XCTUnwrap(EngineHarness { _ in "" })
-    XCTAssertTrue(names(h.complete("frobnicate ")).isEmpty, "未収録コマンドは候補ゼロ")
+    let result = h.complete("frobnicate ")
+    XCTAssertTrue(names(result).isEmpty, "未収録コマンドは候補ゼロ")
+    XCTAssertEqual(result["query"] as? String, "", "何も確定していないので照合トークンは既定値")
+    XCTAssertEqual(result["commandPath"] as? [String], [], "同じく確定コマンド列も既定値")
   }
 
   func testEngineEmptyBufferNoCandidates() throws {
     let h = try XCTUnwrap(EngineHarness { _ in "" })
-    XCTAssertTrue(names(h.complete("")).isEmpty, "空 buffer では候補を出さない")
+    let result = h.complete("")
+    XCTAssertTrue(names(result).isEmpty, "空 buffer では候補を出さない")
+    XCTAssertEqual(result["query"] as? String, "", "何も確定していないので照合トークンは既定値")
+    XCTAssertEqual(result["commandPath"] as? [String], [], "同じく確定コマンド列も既定値")
   }
 
   func testEngineBundleAbsentDegradesGracefully() {
@@ -321,6 +327,8 @@ final class CompletionEngineTests: OrbeTestCase {
     let exp = expectation(description: "suggestions returns")
     CompletionEngine.shared.suggestions(buffer: "git ", cursor: 4, cwd: "/tmp") { result in
       XCTAssertTrue(result.choices.isEmpty)
+      XCTAssertEqual(result.query, "", "解析していないので照合トークンは既定値")
+      XCTAssertEqual(result.commandPath, [], "同じく確定コマンド列も既定値")
       exp.fulfill()
     }
     wait(for: [exp], timeout: 2)

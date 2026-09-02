@@ -46,6 +46,9 @@ extension SurfaceView {
         let cur = max(0, min(cursor, chars.count))
         let start = max(0, cur - result.replaceLength)
         // 一択かつ現在トークンが候補の表示名と完全一致なら、popup は無意味なので出さない。
+        // ここだけは生バッファのトークン全域を使う——比較相手が `insertValue` の完全形
+        // （`sub/main.swift`）なので、engine の正規化済み `query`（basename）とは比較にならない。
+        // これは「accept してもバッファが変わらないか」の判定であって照合ではない。
         let tokenText = String(String.UnicodeScalarView(chars[start..<cur]))
         if Self.isRedundantSoleChoice(choices, tokenText: tokenText) {
           self.completionEnd()
@@ -61,7 +64,7 @@ extension SurfaceView {
           self.completion = controller
         }
         controller.update(
-          buffer: buffer, cursor: cursor, choices: choices, replaceStart: start, replaceEnd: cur)
+          buffer: buffer, result: result, replaceStart: start, replaceEnd: cur)
         self.positionCompletion(controller)
       }
     }
@@ -90,9 +93,9 @@ extension SurfaceView {
     }
     // 「候補が使われた」瞬間を学習する（advance=Tab・確定=Enter 双方）。全候補が対象で、
     // 除外は record 側の相対ナビゲーション（`../` 等）のみ——呼び出し側は無条件で呼んでよい。
+    // スコープは popup を出した update が engine の commandPath から導いたものをそのまま読む。
     CompletionLearning.shared.record(
-      scopes: CompletionLearning.scopes(
-        buffer: controller.buffer, replaceStart: controller.replaceStart),
+      scopes: controller.scopes,
       candidate: choice.value, type: choice.type, now: Date().timeIntervalSince1970)
     return result
   }

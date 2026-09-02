@@ -5,11 +5,12 @@ import Foundation
 /// `count`・`lastUsed` を frecency スカラへ合成し、一致品質の下・engine 元順の上に差す。
 /// 完全一致優先（matchQuality が最上位キー）は不可侵。
 ///
-/// 学習対象は accept された全候補で、スコープを候補種別で二層化する:
-/// - 静的候補（`type` = subcommand / option）: 直前までの全プレフィックス（過剰スコープ側・誤爆防止）。
-/// - 動的候補（それ以外全部 = type 無し・file・folder・arg 等）: root コマンド 1 語
+/// 学習対象は accept された全候補で、スコープを候補種別で二層化する。層の元になるのは engine が
+/// 解析時に確定させたコマンド列（`CompletionResult.commandPath`）で、host は再導出しない:
+/// - 静的候補（`type` = subcommand / option）: コマンド列そのもの（`git commit`。別コンテキストへの誤爆防止）。
+/// - 動的候補（それ以外全部 = type 無し・file・folder・arg 等）: その先頭 1 語
 ///   （`git switch` で覚えたブランチを `git rebase` でも引けるようサブコマンド間で共有する）。
-/// 導出は `scopes(buffer:replaceStart:)`＋`scope(for:in:)` に集約し、record と rank が必ず共有する
+/// 導出は `scopes(commandPath:)`＋`scope(for:in:)` に集約し、record と rank が必ず共有する
 /// （非対称を構造的に排除する）。`../` `./` 等の相対ナビゲーションは記録から除外する。
 ///
 /// 純関数（`scopes`・`record`・`score`・`rank`）がテストの主対象。永続は自前 JSON
@@ -23,11 +24,15 @@ struct LearningEntry: Codable, Equatable {
 }
 
 /// 学習ストア（`scope<sep>candidate` → entry）。version 付きの Codable マップ。
+/// キーの形が変わったら version を上げる——旧 version のファイルは読まずに捨てる（`load`）。
 struct LearningStore: Codable, Equatable {
+  /// 現行スキーマ。キー左辺は engine の確定コマンド列。
+  static let currentVersion = 2
+
   var version: Int
   var entries: [String: LearningEntry]
 
-  static let empty = LearningStore(version: 1, entries: [:])
+  static let empty = LearningStore(version: currentVersion, entries: [:])
 }
 
 final class CompletionLearning {
@@ -70,27 +75,23 @@ final class CompletionLearning {
   // MARK: - 純ロジック（テストの主対象）
 
   /// 二層スコープ（record と rank が唯一共有する導出結果）。
-  /// - staticScope: 現在トークン直前までの全プレフィックス（subcommand/option 用・誤爆防止）。
-  /// - dynamicScope: root コマンド 1 語（動的候補用・サブコマンド間で共有）。
+  /// - staticScope: 確定コマンド列（subcommand/option 用・誤爆防止）。
+  /// - dynamicScope: その先頭 1 語（動的候補用・サブコマンド間で共有）。
   struct LearningScopes: Equatable {
     let staticScope: String
     let dynamicScope: String
   }
 
-  /// 二層スコープの導出。staticScope は生バッファ `buffer[0..<replaceStart]` を
-  /// 空白分割 → lowercase → 空白 1 個 join。dynamicScope はその先頭トークン
-  /// （`replaceStart == 0`＝コマンド名自体の補完では ""——buffer 先頭は入力途中の query 自身で、
-  /// キーにすると打鍵ごとに別キーへ散るため）。
-  /// オフセットは scalar 単位（buffer 全体と揃える。NFD パスでずれないよう書記素にしない）。
-  static func scopes(buffer: String, replaceStart: Int) -> LearningScopes {
-    let chars = Array(buffer.unicodeScalars)
-    let end = max(0, min(replaceStart, chars.count))
-    let prefix = String(String.UnicodeScalarView(chars[0..<end]))
-    let staticScope = prefix.split(separator: " ").map { $0.lowercased() }
-      .joined(separator: " ")
+  /// 二層スコープの導出。engine が確定させたコマンド列（root ＋ 確定サブコマンド）から作る。
+  /// - staticScope: コマンド列を空白 1 個で join（`["git","commit"]` → `git commit`）。
+  /// - dynamicScope: その先頭 1 語。
+  /// commandPath が空（コマンド名自体の補完）なら両層とも ""。
+  static func scopes(commandPath: [String]) -> LearningScopes {
+    // lowercase は両層の手前で 1 度だけ通す。片層の式の中に埋めると、大文字混じりのコマンドで
+    // もう一方だけ生ケースが残り、同じ列から出た 2 つのスコープが別文字列になる。
+    let path = commandPath.map { $0.lowercased() }
     return LearningScopes(
-      staticScope: staticScope,
-      dynamicScope: staticScope.split(separator: " ").first.map(String.init) ?? "")
+      staticScope: path.joined(separator: " "), dynamicScope: path.first ?? "")
   }
 
   /// type から層を選ぶ（record / rank 共用の唯一の分岐点）。
@@ -183,10 +184,12 @@ final class CompletionLearning {
     return StateDir.base()?.appendingPathComponent("completion-learning.json")
   }
 
-  /// 読み込み。欠落・壊れは空ストア（新規ユーザ・データ無しは現状の並びと完全一致）。
+  /// 読み込み。欠落・壊れ・別 version は空ストア（新規ユーザ・データ無しは現状の並びと完全一致）。
+  /// 学習は体験を良くするキャッシュであってユーザ資産ではないので、スキーマが変わったら移行せず捨てる。
   static func load() -> LearningStore {
     guard let url = fileURL, let data = try? Data(contentsOf: url),
-      let file = try? JSONDecoder().decode(LearningStore.self, from: data)
+      let file = try? JSONDecoder().decode(LearningStore.self, from: data),
+      file.version == LearningStore.currentVersion
     else { return .empty }
     return file
   }

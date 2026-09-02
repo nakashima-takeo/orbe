@@ -394,6 +394,7 @@ export const getSubcommandDrivenRecommendation = async (
         ),
       ),
     ),
+    partialCmd,
   };
 };
 
@@ -449,5 +450,6 @@ export const getArgDrivenRecommendation = async (
       ),
     ),
     argumentDescription: activeArg.description ?? activeArg.name,
+    partialCmd,
   };
 };

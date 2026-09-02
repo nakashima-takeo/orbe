@@ -8,9 +8,15 @@ import { Shell } from "./utils/shell.js";
 type Choice = { name: string; description: string; insertValue?: string; type?: string };
 // replaceLength: 現在トークン（activeToken）の文字数。host は accept 時 cursor-replaceLength..cursor を
 // 候補の insertValue ?? name で置換する（フラグの `=` 分割・パス接頭辞は activeToken/insertValue が織込み済み）。
-type EngineResult = { suggestions: Choice[]; replaceLength: number };
+// query: engine が候補の絞り込みと並べ替えに実際に使った現在トークン。候補名と直接比較できる形で、
+//   常に「そのトークンの末尾部分」という不変条件が成り立つ（パスなら basename・isPathComplete なら ""）。
+//   replaceLength が置換の座標であるのに対し query は照合の入力で、basename 化は不可逆ゆえ互いに導出できない。
+// commandPath: 確定したコマンド列（root ＋ 走査で確定したサブコマンド）。同一 spec ノードで一意に定まる
+//   名前（宣言配列の先頭）で持つので、打鍵の綴りが違っても（`npm i` / `npm install`）同じ列になる。
+//   コマンド名自体の補完では空。
+type EngineResult = { suggestions: Choice[]; replaceLength: number; query: string; commandPath: string[] };
 
-const empty: EngineResult = { suggestions: [], replaceLength: 0 };
+const empty: EngineResult = { suggestions: [], replaceLength: 0, query: "", commandPath: [] };
 
 const complete = async (buffer: string, cwd: string): Promise<EngineResult> => {
   const blob = await getSuggestions(buffer, cwd, Shell.Zsh);
@@ -19,7 +25,7 @@ const complete = async (buffer: string, cwd: string): Promise<EngineResult> => {
     .filter((s) => s.name.length > 0)
     .map((s) => ({ name: s.name, description: s.description ?? "", insertValue: s.insertValue, type: s.type }));
   const replaceLength = blob.activeToken != null ? [...blob.activeToken.token].length : 0;
-  return { suggestions, replaceLength };
+  return { suggestions, replaceLength, query: blob.partialCmd ?? "", commandPath: blob.commandPath ?? [] };
 };
 
 const g = globalThis as unknown as {
