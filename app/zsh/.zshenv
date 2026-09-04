@@ -24,11 +24,9 @@ fi
     # フックは自分を precmd_functions から外して消え、widget ファイルはユーザーの alias・オプションから
     # 隔離した関数スコープでパースする。ORBE_SOCK/ORBE_PANE 不在なら orbe-completion.zsh 側の guard で no-op。
     if [[ -o 'interactive' ]]; then
-        'builtin' 'typeset' '-g' _orbe_widget_file="${${(%):-%x}:A:h}/orbe-completion.zsh"
         _orbe_bootstrap() {
             'builtin' 'emulate' '-L' 'zsh' '-o' 'no_aliases' '-o' 'no_warn_create_global'
-            'builtin' 'local' _orbe_file="$_orbe_widget_file"
-            'builtin' 'unset' '_orbe_widget_file'
+            'builtin' 'local' _orbe_file="${${(%):-%x}:A:h}/orbe-completion.zsh"
             precmd_functions=("${(@)precmd_functions:#_orbe_bootstrap}")
             'builtin' 'unfunction' '--' '_orbe_bootstrap'
             [[ ! -r "$_orbe_file" ]] || 'builtin' 'source' '--' "$_orbe_file"
