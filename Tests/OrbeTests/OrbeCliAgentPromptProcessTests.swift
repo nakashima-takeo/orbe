@@ -13,9 +13,13 @@ import XCTest
 /// 区別できない。`ready:true` の直後に prompt を送れないなら、spawn → prompt の手順が起動前の PTY に
 /// 打ち込んで消える。waiting のエージェントへ text＋Enter が届けば、承認ダイアログの既定選択が確定する。
 ///
-/// `--timeout-ms` は必ず `ControlProcess.processTimeout`（20 秒）より十分小さく取る。
+/// prompt / wait の `--timeout-ms` は `waitTimeoutMs` で `ControlProcess.processTimeout`（20 秒）より
+/// 十分小さく取る——報告が届かない失敗を既定（1 時間）で黙らせず、子の 124 として見せるため。spawn /
+/// resume は既定（30 秒）のまま: 新タブ＋ログインシェル＋agent 起動＋hook 報告を含み、`paneSettleTimeout`
+/// （15 秒）より短い上限を被せると負荷時に正当な経路が 124 で落ちる。
 final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
   private static let sessionId = "fake-session-0001"
+  private static let waitTimeoutMs = 8000
 
   /// 起動時に idle を報告し、以後は 1 行ごとに working → 止まる状態を報告する偽 claude。
   /// `ask:<q>` は質問文つきの waiting、`slow:<t>` は 10 秒 working のまま、`quit` は clear（SessionEnd。
@@ -122,13 +126,18 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
     let ready = try spawnReady()
     let (control, pane) = (ready.control, ready.pane)
 
-    let plain = control.orb(["agent", "prompt", "\(pane)", "--text", "hello"])
+    let plain = control.orb([
+      "agent", "prompt", "\(pane)", "--text", "hello", "--timeout-ms", "\(Self.waitTimeoutMs)",
+    ])
     XCTAssertEqual(plain.status, 0, "done は exit 0: \(plain.stderr)")
     XCTAssertEqual(plain.stdout, "reply:hello\n", "stdout は message 本文のみ")
     XCTAssertTrue(plain.stderr.isEmpty, "成功時に stderr を汚さない: \(plain.stderr)")
 
     let result = try json(
-      control.orb(["agent", "prompt", "\(pane)", "--text", "again", "--json"]).stdout)
+      control.orb([
+        "agent", "prompt", "\(pane)", "--text", "again", "--timeout-ms", "\(Self.waitTimeoutMs)",
+        "--json",
+      ]).stdout)
     XCTAssertEqual(result["state"] as? String, "done")
     XCTAssertEqual(result["message"] as? String, "reply:again")
     XCTAssertNotNil(result["seq"] as? Int, "seq は done イベントの seq")
@@ -148,7 +157,9 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
 
     let ready = try spawnReady()
     let (control, pane) = (ready.control, ready.pane)
-    let outcome = control.orb(["agent", "prompt", "\(pane)", "--stdin"], stdin: "from stdin")
+    let outcome = control.orb(
+      ["agent", "prompt", "\(pane)", "--stdin", "--timeout-ms", "\(Self.waitTimeoutMs)"],
+      stdin: "from stdin")
     XCTAssertEqual(outcome.status, 0, "--stdin の本文で問える: \(outcome.stderr)")
     XCTAssertEqual(outcome.stdout, "reply:from stdin\n")
   }
@@ -159,12 +170,17 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
     let ready = try spawnReady()
     let (control, pane) = (ready.control, ready.pane)
 
-    let asked = control.orb(["agent", "prompt", "\(pane)", "--text", "ask:continue?"])
+    let asked = control.orb(
+      [
+        "agent", "prompt", "\(pane)", "--text", "ask:continue?", "--timeout-ms",
+        "\(Self.waitTimeoutMs)",
+      ])
     XCTAssertEqual(asked.status, 3, "waiting は exit 3: \(asked.stdout)\(asked.stderr)")
     XCTAssertEqual(asked.stdout, "continue?\n", "stdout は質問文")
 
     let probe = "REFUSED_" + String(format: "%08x", UInt32.random(in: 0...UInt32.max))
-    let refused = control.orb(["agent", "prompt", "\(pane)", "--text", probe])
+    let refused = control.orb(
+      ["agent", "prompt", "\(pane)", "--text", probe, "--timeout-ms", "\(Self.waitTimeoutMs)"])
     XCTAssertEqual(refused.status, 1, "busy は RPC エラー（引数の問題ではない）: \(refused.stdout)")
     XCTAssertTrue(
       refused.stderr.contains("-32000") && refused.stderr.contains("agent busy (state: waiting")
@@ -184,7 +200,7 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
     let woke = control.orb(
       [
         "wait", "\(pane)", "--kind", "agent_state", "--value", "done", "--after", "\(seq)",
-        "--timeout-ms", "8000",
+        "--timeout-ms", "\(Self.waitTimeoutMs)",
       ])
     XCTAssertEqual(woke.status, 0, "enter の空行で偽 claude が done を報告する: \(woke.stderr)")
     XCTAssertFalse(
@@ -197,7 +213,8 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
     let ready = try spawnReady()
     let (control, pane) = (ready.control, ready.pane)
 
-    let ended = control.orb(["agent", "prompt", "\(pane)", "--text", "quit"])
+    let ended = control.orb(
+      ["agent", "prompt", "\(pane)", "--text", "quit", "--timeout-ms", "\(Self.waitTimeoutMs)"])
 
     XCTAssertEqual(ended.status, 4, "clear は exit 4: \(ended.stdout)\(ended.stderr)")
     XCTAssertEqual(ended.stdout, "\n", "message が無ければ空")
@@ -237,7 +254,8 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
     XCTAssertEqual(spawned["ready"] as? Bool, true)
     XCTAssertEqual(spawned["agentSessionId"] as? String, Self.sessionId)
 
-    let answered = control.mcpJSON("prompt_agent", ["paneId": pane, "text": "via mcp"])
+    let answered = control.mcpJSON(
+      "prompt_agent", ["paneId": pane, "text": "via mcp", "timeoutMs": Self.waitTimeoutMs])
     XCTAssertEqual(answered["state"] as? String, "done")
     XCTAssertEqual(answered["message"] as? String, "reply:via mcp")
     XCTAssertNotNil(answered["seq"] as? Int)
