@@ -12,67 +12,12 @@ import XCTest
 /// 成立していなければ `orb agent spawn --workspace <背景>` は「paneId は返るが画面が読めず入力も
 /// 届かない paneId」を返す罠になる。
 ///
-/// 検出はマシン依存なので、**必ず偽の実行体と `ShellPATH` の差し替えで固定する**（開発者の Mac には
-/// 本物の claude / codex が居る）。assert は仕込んだ `codex` だけを見て、素の検出結果には依らない。
+/// 検出はマシン依存なので、**必ず偽の実行体と `ShellPATH` の差し替えで固定する**（`FakeAgentStaging`。
+/// 開発者の Mac には本物の claude / codex が居る）。assert は仕込んだ `codex` だけを見て、素の検出結果には
+/// 依らない。ready 待ち（idle を報告する偽 claude）は `OrbeCliAgentPromptProcessTests` が持つ。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続し、実ペインでシェルを走らせる（GhosttyKit 必須）。
 final class OrbeCliAgentProcessTests: OrbeTestCase {
-  /// 偽 agent の起動マーカー。コマンドの中では 2 つの文字列リテラルに割れているので、
-  /// **連結された形はシェルが実際に評価した出力にしか現れない**（入力行の描き返しは目印にならない）。
-  private struct FakeAgent {
-    let path: String
-    let marker: String
-  }
-
-  /// 実行可能な偽 agent をテスト専用 dir へ置き、`ShellPATH` をそこ先頭へ差し替える。
-  /// `AgentLauncher.init` が構築時に 1 回検出するので、**`startControlProcess()` より前に**呼ぶこと。
-  /// `ShellPATH.shared` は `TestIsolation.beginCase` がテストごとに張り直すので戻しは要らない。
-  private func stageFakeAgent(_ command: String) throws -> FakeAgent {
-    let caseDir = try XCTUnwrap(TestIsolation.caseDir, "テスト専用ディレクトリが配られていない")
-    let dir = caseDir.appendingPathComponent("fake-bin", isDirectory: true)
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    let marker = "L4AGENT_" + String(format: "%08x", UInt32.random(in: 0...UInt32.max))
-    let split = marker.replacingOccurrences(of: "_", with: "\"\"_")  // L4AGENT""_xxxx
-    let executable = dir.appendingPathComponent(command)
-    // 引数もそのまま出す（resume が `resume <id>` を渡したことを画面で確かめるため）。
-    // 起動しっぱなしにしないと surface が即閉じてペインごと消える。
-    try """
-    #!/bin/sh
-    echo "\(split) $*"
-    exec /bin/cat
-    """.write(to: executable, atomically: true, encoding: .utf8)
-    try FileManager.default.setAttributes(
-      [.posixPermissions: 0o755], ofItemAtPath: executable.path)
-
-    let fakeDir = dir.path
-    ShellPATH.shared = ShellPATH(probe: { "\(fakeDir):/usr/bin:/bin" })
-    return FakeAgent(path: executable.path, marker: marker)
-  }
-
-  /// 偽 agent の検出完了を待つ（`AgentCatalog.refresh` は非同期）。
-  private func waitForDetection(_ control: ControlProcess, _ command: String) {
-    XCTAssertTrue(
-      waitUntil(ControlProcess.paneSettleTimeout) {
-        control.target.agentLauncher.detectedCommands.contains(command)
-      }, "偽 \(command) が検出されない（ShellPATH の差し替えが効いていない）")
-  }
-
-  /// ペインの画面に文字列が `times` 回以上現れるまで待つ。読むのは実バイナリの `orb pane text`。
-  @discardableResult
-  private func waitForPaneText(
-    _ control: ControlProcess, pane: Int, contains needle: String, times: Int = 1,
-    file: StaticString = #filePath, line: UInt = #line
-  ) -> String {
-    var text = ""
-    let seen = waitUntil(ControlProcess.paneSettleTimeout) {
-      text = control.orb(["pane", "text", "\(pane)", "--scrollback"]).stdout
-      return text.components(separatedBy: needle).count - 1 >= times
-    }
-    XCTAssertTrue(
-      seen, "ペイン \(pane) に \"\(needle)\" が \(times) 回以上現れない: \(text)", file: file, line: line)
-    return text
-  }
-
   /// `orb agent list` が検出済み agent を command＋絶対 path で出す。
   func testAgentListReportsDetectedAgentWithResolvedPath() throws {
     let fake = try stageFakeAgent("codex")
@@ -113,7 +58,9 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     let agent = try XCTUnwrap(spawned["agent"] as? [String: Any], "spawn_agent は agent を返す")
     XCTAssertEqual(agent["command"] as? String, "codex")
     XCTAssertEqual(agent["path"] as? String, fake.path, "起動に使うのは解決済み絶対パス")
-    XCTAssertNil(spawned["sessionId"], "実 session ID は返さない（list_panes / wait が出所）")
+    XCTAssertNil(spawned["sessionId"], "渡した sessionId を反響しない")
+    XCTAssertEqual(spawned["ready"] as? Bool, false, "codex は idle を報告できないので待たず ready:false")
+    XCTAssertNil(spawned["agentSessionId"], "ready:false に agentSessionId は無い")
 
     waitForPaneText(control, pane: pane, contains: fake.marker)
 
