@@ -134,6 +134,9 @@ enum L10n {
       "Add one of VS Code, Cursor, Windsurf, Zed, or Sublime to your PATH, or set a GUI editor in $VISUAL/$EDITOR."
     ),
 
+    // MARK: Tab context menu
+    .tabMenuResetAgentState: ("エージェント状態をリセット", "Reset Agent State"),
+
     // MARK: Agent palette
     .agentPaletteSetDefault: ("デフォルトに設定", "Set as default"),
     .agentPaletteHintList: ("↵ 起動   → 詳細   esc 閉じる", "↵ Launch   → Details   esc Close"),

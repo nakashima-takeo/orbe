@@ -42,7 +42,7 @@ struct AgentReport: Equatable {
   /// 文言と出所（waiting の質問文・done の最終応答）。Attention 一覧が読む。
   var message: AgentMessage?
   /// state の値が実際に変わった時刻（Attention の並び・経過時間表示）。
-  /// 同値の連続報告・done のフォーカス消費（done→idle）では動かさない。
+  /// 同値の連続報告と、報告以外の idle への書き戻し（フォーカス消費・タブのリセット）では動かさない。
   var stateChangedAt: Date
 }
 

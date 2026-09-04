@@ -59,8 +59,7 @@ final class SurfaceView: NSView {
   }
   /// このペインの agent スロット（none / dormant / live）。永続しない（休眠チケットの同一性
   /// だけが保存 schema へ写る）。`agent_state` 制御イベントの emit は didSet が一元で担う——
-  /// どの遷移経路（報告・clear・チケット消費・done→idle 消費）でも、導出 `agentState` の
-  /// 実変化だけがイベントを流す。
+  /// どの遷移経路でも、導出 `agentState` の実変化だけがイベントを流す。
   var agentSlot: AgentSlot = .none {
     didSet {
       if agentState != oldValue.report?.state {
