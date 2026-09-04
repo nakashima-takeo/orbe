@@ -250,7 +250,9 @@ let tools: [[String: Any]] = [
         + "message（その時点の文言。done なら最終応答、waiting なら質問文。無ければキー欠落）・seq。"
         + "送信直後に済んだ遷移も取りこぼさない。エージェントに問う用途はこれを使い、send_text＋send_key は"
         + "生の入力（waiting への応答・シェルコマンド）に、wait_for_event は特殊な待ちにだけ使う。"
-        + "対象が working / waiting なら何も送らずエラー（waiting への応答は send_key で）。"
+        + "対象が working / waiting を報告していれば何も送らずエラー（waiting への応答は send_key で）。"
+        + "判定は hook 報告だけなので、拒めるのは waiting を報告する agent（claude / codex、プラグイン"
+        + "導入済み）に限る——報告経路の無いペインでは承認ダイアログが開いていても送られ、既定選択が確定する。"
         + "タイムアウトは timedOut:true（既定 3600000 ms＝1 時間。MCP クライアント側のツール"
         + "タイムアウトがそれより短いことがあるので timeoutMs を明示するとよい）。"
     ),
