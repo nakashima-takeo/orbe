@@ -244,54 +244,63 @@ final class ControlProcess {
 
   // MARK: - orbe-mcp
 
-  /// `orbe-mcp` を 1 往復させる（`tools/call` 1 行を stdin へ流し `result.content[0].text` を読む）。
-  /// MCP ブリッジの転送と `isError` の畳み込みも同時に踏む。
-  func mcpCall(
-    _ tool: String, _ arguments: [String: Any] = [:],
+  /// `orbe-mcp` を 1 往復させる: `method` の要求 1 行を stdin へ流し、stdout の **1 行目**を応答として
+  /// `result` を返す（応答の前に何かを出す変更が入れば、ここが唯一の破れ口）。`label` は診断用。
+  private static func mcpRoundTrip(
+    method: String, params: [String: Any], label: String,
     file: StaticString = #filePath, line: UInt = #line
-  ) -> (text: String, isError: Bool) {
-    let request: [String: Any] = [
-      "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-      "params": ["name": tool, "arguments": arguments],
-    ]
+  ) -> [String: Any]? {
+    let request: [String: Any] = ["jsonrpc": "2.0", "id": 1, "method": method, "params": params]
     guard let data = try? JSONSerialization.data(withJSONObject: request),
       let requestLine = String(data: data, encoding: .utf8)
     else {
-      XCTFail("tools/call を JSON へ直列化できない: \(tool)", file: file, line: line)
-      return ("", true)
+      XCTFail("\(label) を JSON へ直列化できない", file: file, line: line)
+      return nil
     }
-    let outcome = Self.run(
-      Self.executable("orbe-mcp"), [], env: Self.childEnv(), stdin: requestLine + "\n",
-      file: file, line: line)
-    guard let out = outcome.stdout.split(separator: "\n").first,
-      let payload = out.data(using: .utf8),
-      let obj = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
-      let result = obj["result"] as? [String: Any],
-      let content = result["content"] as? [[String: Any]],
-      let text = content.first?["text"] as? String
-    else {
-      XCTFail(
-        "orbe-mcp の tools/call 応答が読めない（\(tool)）: \(outcome.stdout)\(outcome.stderr)",
-        file: file, line: line)
-      return ("", true)
-    }
-    return (text, result["isError"] as? Bool ?? false)
-  }
-
-  /// `orbe-mcp` の `tools/list` を 1 往復させ、`tools` 配列を返す。socket に触れないのでサーバは要らない。
-  static func mcpToolsList(file: StaticString = #filePath, line: UInt = #line) -> [[String: Any]] {
-    let requestLine = #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#
     let outcome = run(
       executable("orbe-mcp"), [], env: childEnv(), stdin: requestLine + "\n", file: file, line: line
     )
     guard let out = outcome.stdout.split(separator: "\n").first,
       let payload = out.data(using: .utf8),
       let obj = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
-      let tools = (obj["result"] as? [String: Any])?["tools"] as? [[String: Any]]
+      let result = obj["result"] as? [String: Any]
     else {
       XCTFail(
-        "orbe-mcp の tools/list 応答が読めない: \(outcome.stdout)\(outcome.stderr)", file: file,
+        "orbe-mcp の \(label) 応答が読めない: \(outcome.stdout)\(outcome.stderr)", file: file,
         line: line)
+      return nil
+    }
+    return result
+  }
+
+  /// `tools/call` を 1 往復させ `result.content[0].text` を読む。MCP ブリッジの転送と `isError` の
+  /// 畳み込みも同時に踏む。
+  func mcpCall(
+    _ tool: String, _ arguments: [String: Any] = [:],
+    file: StaticString = #filePath, line: UInt = #line
+  ) -> (text: String, isError: Bool) {
+    guard
+      let result = Self.mcpRoundTrip(
+        method: "tools/call", params: ["name": tool, "arguments": arguments],
+        label: "tools/call（\(tool)）", file: file, line: line)
+    else { return ("", true) }
+    guard let content = result["content"] as? [[String: Any]],
+      let text = content.first?["text"] as? String
+    else {
+      XCTFail("tools/call（\(tool)）の result に content が無い: \(result)", file: file, line: line)
+      return ("", true)
+    }
+    return (text, result["isError"] as? Bool ?? false)
+  }
+
+  /// `tools/list` を 1 往復させ `tools` 配列を返す。socket に触れないのでサーバは要らない。
+  static func mcpToolsList(file: StaticString = #filePath, line: UInt = #line) -> [[String: Any]] {
+    guard
+      let result = mcpRoundTrip(
+        method: "tools/list", params: [:], label: "tools/list", file: file, line: line)
+    else { return [] }
+    guard let tools = result["tools"] as? [[String: Any]] else {
+      XCTFail("tools/list の result に tools が無い: \(result)", file: file, line: line)
       return []
     }
     return tools
