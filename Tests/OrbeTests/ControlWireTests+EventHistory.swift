@@ -139,6 +139,9 @@ extension ControlWireTests {
     XCTAssertEqual(seq(response), replayed, "応答の seq は返したイベントの seq")
     XCTAssertLessThan(
       replayed, latest, "応答の seq は最新ではない（最新に化けると次の after で pwd を取りこぼす）")
+
+    ControlServer.shared.emit(done(8207))
+    wire.barrier()  // replay で返した要求は待機を残していない（残ると同じ id の応答がもう 1 行届く）
   }
 
   /// 一致が複数あれば seq 昇順で**最初**の一致を返す（最新ではない）。
@@ -157,6 +160,9 @@ extension ControlWireTests {
       params: ["after": before, "paneId": 8209, "value": "done"])
 
     XCTAssertEqual(event(response)?["message"] as? String, "first", "seq 昇順で最初の一致")
+
+    ControlServer.shared.emit(done(8209, message: "third"))
+    wire.barrier()  // replay で返した要求は待機を残していない
   }
 
   /// `after` 以後に一致が無ければ従来どおり待ち、後続のイベントで起きる。
@@ -210,6 +216,9 @@ extension ControlWireTests {
     XCTAssertEqual(
       event(wire.request(id: 4, method: "wait_for_event", params: ["after": retained]))?["seq"]
         as? Int, retained + 1, "保持範囲の内側の after は replay できる")
+
+    ControlServer.shared.emit(.pwd(paneId: 8212, path: "/after"))
+    wire.barrier()  // -32006 で弾いた要求も replay で返した要求も待機を残していない
   }
 
   /// `after` の型違い・負、`value` の非文字列は待機を張る前に -32602。
