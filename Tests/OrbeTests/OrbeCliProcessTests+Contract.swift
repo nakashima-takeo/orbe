@@ -242,6 +242,23 @@ extension OrbeCliProcessTests {
         .count, panes.count, "`current` も `<id>` として解決する（数値だけの受け付けに退行しない）")
   }
 
+  /// `--json` の応答は control の result をそのまま出すので、成功応答の `seq`（その操作時点の履歴位置）が
+  /// 出る。`pane list` は絞った後の `{panes, seq}` に組み直す例外だが、`seq` は保つ——ここが落ちると
+  /// `orb pane send --json` の seq を `orb wait --after` に渡す手順が組めない。
+  func testJsonResultsCarryTheHistoryPosition() throws {
+    let control = try startControlProcess()
+    let pane = try XCTUnwrap(
+      control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
+    let activeId = try workspaceId(control, active: true)
+
+    XCTAssertNotNil(
+      control.orbJSON(["pane", "send", "\(pane.id)", "--text", "x"])["seq"] as? Int,
+      "pane send --json は {ok, seq} をそのまま出す")
+    let filtered = control.orbJSON(["pane", "list", "--workspace", "\(activeId)"])
+    XCTAssertNotNil(filtered["panes"] as? [[String: Any]], "前提: 絞った panes")
+    XCTAssertNotNil(filtered["seq"] as? Int, "--workspace で絞っても seq を保つ")
+  }
+
   /// `tab new --workspace <id>` は**その** workspace にタブを開く。値が黙って捨てられると、
   /// exit 0 のまま指定と無関係なアクティブ WS にタブが生える——「開けたのに見当たらない」という
   /// 形で現れるので、終了コードでも stdout でも気づけない。

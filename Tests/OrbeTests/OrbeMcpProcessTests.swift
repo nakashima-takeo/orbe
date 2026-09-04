@@ -49,6 +49,42 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
   }
 
+  /// `tools/list` の語彙。`prompt_agent` が出ており、`wait_for_event` の schema に `after` / `value`、
+  /// `spawn_agent` / `resume_agent` に `timeoutMs` がある。description は「問うなら prompt_agent、
+  /// 生の入力は send_text＋send_key」の導線と `ready:false` の意味を持つ——AI が読む唯一の説明なので、
+  /// ここが欠けると AI は `send_text` → `wait_for_event` の取りこぼす手順を組み続ける。
+  func testToolsListExposesPromptAgentAndTheHistoryCursor() throws {
+    let tools = ControlProcess.mcpToolsList()
+    func tool(_ name: String) throws -> [String: Any] {
+      try XCTUnwrap(tools.first { $0["name"] as? String == name }, "\(name) が tools/list に無い")
+    }
+    func properties(_ tool: [String: Any]) -> [String: Any] {
+      (tool["inputSchema"] as? [String: Any])?["properties"] as? [String: Any] ?? [:]
+    }
+
+    let prompt = try tool("prompt_agent")
+    XCTAssertEqual(
+      Set((prompt["inputSchema"] as? [String: Any])?["required"] as? [String] ?? []),
+      ["paneId", "text"], "prompt_agent の必須は paneId と text")
+    XCTAssertNotNil(properties(prompt)["timeoutMs"], "prompt_agent は timeoutMs を受ける")
+    let promptDescription = prompt["description"] as? String ?? ""
+    XCTAssertTrue(
+      promptDescription.contains("send_text") && promptDescription.contains("wait_for_event"),
+      "prompt_agent の description が send_text / wait_for_event との使い分けを導く: \(promptDescription)")
+
+    let wait = properties(try tool("wait_for_event"))
+    XCTAssertNotNil(wait["after"], "wait_for_event は after を受ける")
+    XCTAssertNotNil(wait["value"], "wait_for_event は value を受ける")
+
+    for name in ["spawn_agent", "resume_agent"] {
+      let launch = try tool(name)
+      XCTAssertNotNil(properties(launch)["timeoutMs"], "\(name) は timeoutMs を受ける")
+    }
+    XCTAssertTrue(
+      (try tool("spawn_agent")["description"] as? String ?? "").contains("ready:false"),
+      "spawn_agent の description が ready:false の意味を書く")
+  }
+
   /// `send_text` ＋ `send_key enter` でペインのシェルが実際にコマンドを**実行**する
   /// （`send_text` はペースト相当なので、enter を別送しなければプロンプトに留まったままになる）。
   func testSendTextAndEnterExecutesInPane() throws {

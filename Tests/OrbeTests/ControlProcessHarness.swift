@@ -278,6 +278,25 @@ final class ControlProcess {
     return (text, result["isError"] as? Bool ?? false)
   }
 
+  /// `orbe-mcp` の `tools/list` を 1 往復させ、`tools` 配列を返す。socket に触れないのでサーバは要らない。
+  static func mcpToolsList(file: StaticString = #filePath, line: UInt = #line) -> [[String: Any]] {
+    let requestLine = #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#
+    let outcome = run(
+      executable("orbe-mcp"), [], env: childEnv(), stdin: requestLine + "\n", file: file, line: line
+    )
+    guard let out = outcome.stdout.split(separator: "\n").first,
+      let payload = out.data(using: .utf8),
+      let obj = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+      let tools = (obj["result"] as? [String: Any])?["tools"] as? [[String: Any]]
+    else {
+      XCTFail(
+        "orbe-mcp の tools/list 応答が読めない: \(outcome.stdout)\(outcome.stderr)", file: file,
+        line: line)
+      return []
+    }
+    return tools
+  }
+
   /// `mcpCall` の本文を JSON オブジェクトとして読む（成功系の read ツール用）。
   func mcpJSON(
     _ tool: String, _ arguments: [String: Any] = [:],
