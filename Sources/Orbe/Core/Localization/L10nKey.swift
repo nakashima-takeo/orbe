@@ -1,12 +1,14 @@
 import Foundation
 
+// swiftlint:disable file_length
+
 /// UI 文言の型付きキー。フラット enum・`CaseIterable`（辞書欠落を `L10nCompletenessTests` が機械検出できる）。
 /// 命名はドメイン接頭辞つき（衝突と重複を避ける）。粒度は「1 つの UI 文言 = 1 キー」。値は `L10n.table`。
 ///
 /// 複数形は `xxxOne`/`xxxOther` の 2 キーで持ち、`LocalizationStore.plural(_:one:other:)` が件数で選ぶ。
 /// 位置引数付きテンプレート（`%@`/`%lld`）は `format(_:_:)` で埋める。
 ///
-/// 行数上限は適用外（下記 disable）——ここは「文言を 1 つ増やせば 1 行増える」台帳で、長さは複雑さでなく
+/// 行数上限は適用外（`file_length`・`type_body_length` を disable）——ここは「文言を 1 つ増やせば 1 行増える」台帳で、長さは複雑さでなく
 /// 製品の文言数そのもの。分割もできない（enum の case は extension に置けない）。
 enum L10nKey: String, CaseIterable, Sendable {
   // swiftlint:disable:previous type_body_length
@@ -249,6 +251,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   // MARK: - Editor 起動
   case editorNotFoundTitle
   case editorNotFoundMessage
+
+  // MARK: - Tab context menu（タブ行の右クリック）
+  case tabMenuResetAgentState
 
   // MARK: - Settings registry（descriptor ラベル・値語彙）
   case settingsFontSize

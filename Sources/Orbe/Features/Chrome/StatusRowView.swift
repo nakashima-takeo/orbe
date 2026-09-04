@@ -68,6 +68,7 @@ struct StatusRowView: View {
   @Bindable var model: StatusRowModel
   @Environment(\.chromeTranslucency) private var translucency
   @Environment(\.agentIconResolver) private var iconResolver
+  @Environment(\.localization) private var l10n
   // 寸法計算（StatusRowView+Metrics）が同じ resolver で幅を測るため internal。
   @Environment(\.chromeFontResolver) var fontResolver
 
@@ -167,6 +168,8 @@ struct StatusRowView: View {
           HStack(spacing: Chrome.tabGap) {
             ForEach(model.titles.indices, id: \.self) { i in
               let isEditing = model.editingIndex == i
+              // メニューが開いている間にタブ集合が変わっても、右クリックした時点のタブを指し続ける。
+              let tabId = tabId(i)
               DSTab(
                 title: displayTitle(i), active: i == model.active, stateGlyph: stateGlyph(i),
                 stateSymbol: stateGlyph(i).flatMap { iconResolver.symbol(for: $0) },
@@ -179,6 +182,12 @@ struct StatusRowView: View {
                 onSubmit: { model.onCommitRename(model.editingText) },
                 onCancel: { model.onCancelRename() }
               )
+              .contextMenu {
+                Button(l10n.string(.tabMenuResetAgentState)) {
+                  if let tabId { model.onResetAgentState(tabId) }
+                }
+                .disabled(stateGlyph(i) == nil)
+              }
               .frame(width: widths.indices.contains(i) ? widths[i] : nil)
               // 掴んだタブは指に追従（slot は残す＝commit-on-drop）・前面へ・わずかに透かして浮きを示す。
               .offset(x: dragFrom == i ? dragTranslation : 0)

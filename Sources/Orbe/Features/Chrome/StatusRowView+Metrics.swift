@@ -23,6 +23,11 @@ extension StatusRowView {
     model.glyphs.indices.contains(i) ? model.glyphs[i] : nil
   }
 
+  /// タブ `i` の同一性（`tabIds` を流し込まないホスト＝gallery 等では nil）。
+  func tabId(_ i: Int) -> Int? {
+    model.tabIds.indices.contains(i) ? model.tabIds[i] : nil
+  }
+
   /// タブの自然幅（タイトル＋状態グリフ＋左右余白）。shrink-to-fit の上限（cap は widths 側）。
   func naturalWidth(index i: Int) -> CGFloat {
     naturalWidth(text: displayTitle(i), hasGlyph: stateGlyph(i) != nil)

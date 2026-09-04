@@ -142,6 +142,12 @@ final class WindowController: NSObject, NSWindowDelegate {
       guard let self, self.current.tabs.indices.contains(i) else { return }
       self.closeTab(self.current.tabs[i], origin: .gesture)
     }
+    // コンテキストメニューは開いたまま時間が経ちうるので、位置 index でなく id で解決する。
+    statusModel.onResetAgentState = { [weak self] id in
+      guard let self, let tab = self.current.tabs.first(where: { $0.id == id }) else { return }
+      tab.resetAgentStates()
+      self.refreshChrome()  // タブグリフ・横断ストリップ・Attention 一覧を再投影
+    }
     statusModel.onNewTab = { [weak self] in self?.newTab() }
     statusModel.onAttentionTap = { [weak self] in self?.showAttentionPalette() }
     // pane 非依存 chrome コマンドの window レベル配信（surface が居ない0タブでも届く）。
@@ -322,6 +328,7 @@ final class WindowController: NSObject, NSWindowDelegate {
         workspace: current.name,
         titles: current.tabs.map { $0.displayTitle(workspaceRoot: current.rootPath) },
         glyphs: current.tabs.map { $0.activated ? $0.aggregateAgentState() : nil },
+        tabIds: current.tabs.map(\.id),
         active: current.active,
         cwd: store.activePaneCwd(),
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))

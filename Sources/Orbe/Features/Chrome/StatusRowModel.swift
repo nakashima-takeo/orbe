@@ -7,6 +7,9 @@ import SwiftUI
   var titles: [String] = []
   /// 各タブの集約状態種別（nil で表示なし＝idle/無し）。詳細＋件数は上段右端の rollup 側に出す。
   var glyphs: [AgentStateIcon.Kind?] = []
+  /// 各タブの同一性（`TerminalController.id`）。時間差を持つ操作（コンテキストメニュー）が
+  /// 位置 index の代わりに使う。titles / glyphs と同じ長さ。
+  var tabIds: [Int] = []
   var active = 0
   /// `~` 短縮済みのアクティブペイン cwd。
   var cwd: String?
@@ -23,6 +26,8 @@ import SwiftUI
   var onAttentionTap: () -> Void = {}
   /// タブを `from` から挿入先 index `to`（0…count）へ並び替える（同一 workspace 内・commit-on-drop）。
   var onReorder: (Int, Int) -> Void = { _, _ in }
+  /// タブ `id` 内の全ペインのエージェント状態を idle へ落とす（コンテキストメニュー）。選択切替を挟まない。
+  var onResetAgentState: (Int) -> Void = { _ in }
 
   // MARK: - インライン改名（Cmd+R）
   // これらは `update(Snapshot)` が touch しない別フィールドなので、flushChrome の snapshot 反映で
@@ -50,6 +55,7 @@ import SwiftUI
     let workspace: String
     let titles: [String]
     let glyphs: [AgentStateIcon.Kind?]
+    let tabIds: [Int]
     let active: Int
     let cwd: String?
     let rollup: [(state: String, count: Int)]
@@ -59,6 +65,7 @@ import SwiftUI
     workspace = s.workspace
     titles = s.titles
     glyphs = s.glyphs
+    tabIds = s.tabIds
     active = s.active
     cwd = s.cwd.map { ($0 as NSString).abbreviatingWithTildeInPath }
     rollup = s.rollup
