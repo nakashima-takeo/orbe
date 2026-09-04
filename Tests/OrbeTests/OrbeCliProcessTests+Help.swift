@@ -14,7 +14,7 @@ import XCTest
 /// **help を読んで組み立てる利用者と AI にとっての語彙**だけで、打てば通る機能が「無いもの」になる。
 /// どれもサーバ不要で出る経路なので、ここは `WindowController` を立てずに測る。
 extension OrbeCliProcessTests {
-  /// `orb pane --help` の `KEYS:` は control の `ControlKey.specialKeycodes` と同じ集合。
+  /// `orb pane --help` の `KEYS:` は control の `ControlKey.namedKeys` と同じ集合。
   ///
   /// 弾くのは control（`ControlKey.parse` が -32602）だが、help は socket 不達でも出す必要が
   /// あるため CLI に名前を写している。
@@ -28,7 +28,7 @@ extension OrbeCliProcessTests {
       $0.trimmingCharacters(in: .whitespaces)
     }
     XCTAssertEqual(
-      Set(listed), Set(ControlKey.specialKeycodes.keys),
+      Set(listed), Set(ControlKey.namedKeys.keys),
       "pane --help の KEYS が ControlKey と食い違っている")
   }
 

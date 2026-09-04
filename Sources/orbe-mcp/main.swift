@@ -158,7 +158,7 @@ let tools: [[String: Any]] = [
     (
       "description",
       "ペインへ名前付きキーを送る。例: enter / tab / escape / up / down / left / right / "
-        + "home / end / pageup / pagedown / backspace / 'ctrl+c' / 'ctrl+l'。"
+        + "home / end / pageup / pagedown / backspace / 'ctrl+c' / 'ctrl+l' / 'alt+b' / 'shift+a'。"
     ),
     (
       "inputSchema",
