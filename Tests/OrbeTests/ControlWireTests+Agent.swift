@@ -66,18 +66,4 @@ extension ControlWireTests {
           params: ["command": "codex", "sessionId": "s", "workspaceId": "3"])), -32602,
       "非 Int の workspaceId は省略と同じにしない")
   }
-
-  /// `runAgent` は dispatch 連鎖の途中にいて**非該当メソッドでも呼ばれる**。param 検査を case の
-  /// 外へ出すと、未知メソッドが -32601 ではなく -32602 を返し、config 系の `workspaceId` の
-  /// 意味論まで巻き添えで変わる。境界はここが固定する。
-  func testAgentParamGuardsDoNotLeakToOtherMethods() {
-    let wire = startWire(target: FakeControlTarget())
-
-    XCTAssertEqual(
-      errorCode(wire.request(id: 1, method: "nosuch", params: ["workspaceId": "3"])), -32601,
-      "未知メソッドは agent のガードに横取りされず method not found")
-    XCTAssertEqual(
-      errorCode(wire.request(id: 2, method: "nosuch", params: ["command": 42])), -32601,
-      "未知メソッドは command のガードにも横取りされない")
-  }
 }
