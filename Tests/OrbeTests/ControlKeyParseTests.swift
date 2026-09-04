@@ -7,7 +7,9 @@ import XCTest
 /// （cmd/super 付き単一文字・未知修飾・複数 scalar・制御文字は拒否）と、物理キー経路と同じ形の
 /// `SurfaceKeyInput` に解決する契約を守る。libghostty 非依存（keycode/mods 定数の値だけを参照）。
 final class ControlKeyParseTests: OrbeTestCase {
-  private func mods(_ raw: UInt32) -> ghostty_input_mods_e { ghostty_input_mods_e(rawValue: raw) }
+  private func ghosttyMods(_ raw: UInt32) -> ghostty_input_mods_e {
+    ghostty_input_mods_e(rawValue: raw)
+  }
 
   /// keycode 無しの単一文字入力。
   private func char(
@@ -15,14 +17,15 @@ final class ControlKeyParseTests: OrbeTestCase {
   ) -> SurfaceKeyInput {
     SurfaceKeyInput(
       keycode: SurfaceKeyInput.noKeycode, text: text, unshiftedCodepoint: unshifted,
-      mods: self.mods(mods), consumedMods: self.mods(consumed))
+      mods: ghosttyMods(mods), consumedMods: ghosttyMods(consumed))
   }
 
   func testNamedKeysCarryRealKeycode() {
     XCTAssertEqual(
       ControlKey.parse("enter"),
       SurfaceKeyInput(
-        keycode: 36, text: nil, unshiftedCodepoint: 0, mods: mods(0), consumedMods: mods(0)))
+        keycode: 36, text: nil, unshiftedCodepoint: 0, mods: ghosttyMods(0),
+        consumedMods: ghosttyMods(0)))
     XCTAssertEqual(ControlKey.parse("up")?.keycode, 126)
     XCTAssertEqual(ControlKey.parse("Escape")?.keycode, 53)
   }
@@ -32,7 +35,8 @@ final class ControlKeyParseTests: OrbeTestCase {
     XCTAssertEqual(
       ControlKey.parse("space"),
       SurfaceKeyInput(
-        keycode: 49, text: " ", unshiftedCodepoint: 0x20, mods: mods(0), consumedMods: mods(0)))
+        keycode: 49, text: " ", unshiftedCodepoint: 0x20, mods: ghosttyMods(0),
+        consumedMods: ghosttyMods(0)))
   }
 
   func testModifierCompositionOnNamedKey() {
