@@ -105,6 +105,8 @@ extension L10n {
     .settingsSoundCustomDoneRow: ("完了の音源", "Done Sound File"),
     .settingsSoundCustomWaitingRow: ("入力待ちの音源", "Waiting Sound File"),
     .settingsSoundCustomSameAsDone: ("入力待ちも完了と同じ音", "Waiting Uses the Done Sound"),
+    .settingsMenuBarNoticeDwell: ("メニューバー通知の表示時間", "Menu Bar Notice Duration"),
+    .settingsSecondsValue: ("%lld秒", "%lld s"),
     .settingsUnset: ("（未設定）", "(unset)"),
     .settingsToggleOn: ("オン", "On"),
     .settingsToggleOff: ("オフ", "Off"),

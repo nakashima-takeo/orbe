@@ -119,6 +119,12 @@ enum SettingsRegistry {
     return ""
   }
 
+  /// 秒数の値表示。単位の付け方が言語で割れる（ja は密着・en は空白区切り）ので書式ごと L10n が持つ。
+  private static func secondsLabel(_ v: SettingValue, _ store: LocalizationStore) -> String {
+    if case .int(let n) = v { return store.format(.settingsSecondsValue, n) }
+    return ""
+  }
+
   /// カスタム音源 map の提示用 key（値域として縛らない＝parse は `CustomSoundSource` が 1 箇所で持つ）。
   private static let customSoundKeys = ["file", "name", "duration"]
 
@@ -131,7 +137,8 @@ enum SettingsRegistry {
   /// emoji-font → theme → agent → background-opacity → background-blur → cursor-style-blink →
   /// agent-state-icons〔gui.conf 非経由〕→ worktree-dir〔同〕→
   /// notification-sound〔同〕→ notification-sound-volume〔同〕→ notification-sound-enabled〔同〕→
-  /// notification-sound-custom-done / -waiting / -waiting-same-as-done〔いずれも同〕）。
+  /// notification-sound-custom-done / -waiting / -waiting-same-as-done〔いずれも同〕→
+  /// menubar-notice-dwell〔同〕）。
   /// `rootOrder`（表示順）とは別物——混同すると gui.conf のバイト順が崩れる。
   static let all: [SettingDescriptor] = [
     SettingDescriptor(
@@ -309,6 +316,12 @@ enum SettingsRegistry {
       defaultValue: { .bool(true) }, domain: .toggle,
       guiConf: nil,  // gui.conf 非経由
       display: boolLabel, unsetPlaceholderKey: nil),
+    SettingDescriptor(
+      id: .menuBarNoticeDwell, key: "menubar-notice-dwell",
+      labelKey: .settingsMenuBarNoticeDwell, activation: .stepper,
+      defaultValue: { .int(40) }, domain: .intRange(5...180, step: 5, unit: "s"),
+      guiConf: nil,  // gui.conf 非経由（メニューバー chrome の尺で libghostty 設定ではない）
+      display: secondsLabel, unsetPlaceholderKey: nil),
   ]
 
   /// 取り込み済み音源の実体（`sounds/` 配下のファイル）を指す項目。参照集合 GC の契機判定が読む。
@@ -326,14 +339,14 @@ enum SettingsRegistry {
 
   /// パレット root の表示順（fontSize → backgroundOpacity → backgroundBlur → cursorStyleBlink →
   /// theme → agent → fontFamily → tabTitleFontFamily → emojiFont → agentStateIcons →
-  /// worktreeDir → notificationSound → 音量 → オン/オフ）。
+  /// worktreeDir → notificationSound → 音量 → オン/オフ → メニューバー通知の表示時間）。
   /// 背景関連・フォント関連・通知音関連をそれぞれ隣接させる。
   static let rootOrder: [SettingDescriptor] =
     [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
       .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
       .worktreeDir, .notificationSound, .notificationSoundVolume,
-      .notificationSoundEnabled,
+      .notificationSoundEnabled, .menuBarNoticeDwell,
     ].map { id in all.first { $0.id == id }! }
 
   static func descriptor(_ id: SettingID) -> SettingDescriptor { all.first { $0.id == id }! }

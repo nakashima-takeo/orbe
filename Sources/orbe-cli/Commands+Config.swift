@@ -15,6 +15,7 @@ let allConfigKeys = [
   "worktree-dir", "notification-sound", "notification-sound-volume",
   "notification-sound-enabled", "notification-sound-custom-done",
   "notification-sound-custom-waiting", "notification-sound-custom-waiting-same-as-done",
+  "menubar-notice-dwell",
 ]
 
 let configUsageLines = [
@@ -40,7 +41,8 @@ let configSetUsage = """
   orb config set <key> <value> [--workspace [<id>]]
 
   KEYS: \(allConfigKeys.joined(separator: ", "))
-    font-size, background-opacity, notification-sound-volume   integer
+    font-size, background-opacity, notification-sound-volume,
+    menubar-notice-dwell   integer
     background-blur, cursor-style-blink, notification-sound-enabled,
     notification-sound-custom-waiting-same-as-done   true/false/on/off/1/0
     theme (auto/light/dark), font-family, tab-title-font-family, emoji-font,
