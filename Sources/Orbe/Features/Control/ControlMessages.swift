@@ -97,7 +97,7 @@ enum ControlKey {
     }
 
     guard base.unicodeScalars.count == 1, let scalar = base.unicodeScalars.first,
-      scalar.value >= 0x20, scalar.value != 0x7F,
+      SurfaceKeyInput.textCarriesToKey(base),
       mods & GHOSTTY_MODS_SUPER.rawValue == 0
     else { return nil }
     // shift は大文字化が実際に起きたときだけ消費する。大文字化しない文字（`shift+1` 等）はレイアウト
