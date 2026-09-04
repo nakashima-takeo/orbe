@@ -54,7 +54,7 @@ flowchart TD
    sandbox_pid=$!
    ```
 
-   `ORBE_USER_ZDOTDIR` があれば親 shim が保存したユーザー本来の `ZDOTDIR` を渡す。無くても親 Orbe 内（`ORBE_BUNDLE_ID` あり）なら親 shim を指す `ZDOTDIR` を消す。Orbe 外からの起動ではユーザー自身の `ZDOTDIR` をそのまま保つ。隔離インスタンスは自前の control.sock（`$sandbox_state_dir/control.sock`）を持つ。
+   `ORBE_USER_ZDOTDIR` があれば親 GUI（`CompletionShim.activate()`）が据えたユーザー本来の `ZDOTDIR` を渡す。無くても親 Orbe 内（`ORBE_BUNDLE_ID` あり）なら親 shim を指す `ZDOTDIR` を消す。Orbe 外からの起動ではユーザー自身の `ZDOTDIR` をそのまま保つ。隔離インスタンスは自前の control.sock（`$sandbox_state_dir/control.sock`）を持つ。
 3. **煙探知を 1 本通す（両モード共通）。** `.app` の起動経路と `AppDelegate` の配線は `swift test` の守備範囲外なので、機械的に確かめる場所はここしかない。人間に見せる前に死んだバンドルを弾く意味もあるので、承認モードでも飛ばさない。
    - **必ず手順2 で控えた state dir の sock へ直接投げる。** 手元の Orbe MCP ツール（`mcp__orbe__*`）は `ORBE_STATE_DIR` を持たず**常用インスタンス**に繋がる。使うと利用者の実ペインに目印が打ち込まれたうえ、起こしたバンドルについて何も測らないまま緑になる。素の JSON-RPC で足りる:
      `printf '{"jsonrpc":"2.0","id":1,"method":"list_panes","params":{}}\n' | nc -U "$sandbox_state_dir/control.sock"`
@@ -72,5 +72,5 @@ flowchart TD
 - **`ORBE_STATE_DIR`**: 非空ならその直下へ workspaces・control.sock を隔離する（`StateDir` / `OrbePaths`）。全実行体（GUI・`orb` CLI・MCP）が同一解決を共有し、`orb`/`orbe-mcp` は `ORBE_STATE_DIR` 併用時に継承 `ORBE_SOCK` を無視する（隔離インスタンス操作が実 Orbe へ逸れない）。
 - **`./scripts/build-app.sh`**: `./build/Orbe.app` を生成し、末尾に build-id を出す。
 - **build-id**: `build-app.sh` が git 短縮 SHA を `Info.plist` の `OrbeBuildID` に刻み、chrome（`StatusRowView`）が表示する。**バンドルの同一性を名乗る唯一の値**——バージョン文字列も bundle ID も、版が違っても同じ値を取りうる。
-- **親 Orbe の注入 env**: `ORBE_SOCK` / `ORBE_PANE` は親インスタンス、`ORBE_REPORT_BIN` / `ORBE_BUNDLE_ID` と `GHOSTTY_*` / `TERMINFO` は親バンドル、`ZDOTDIR` は親の補完 shim を指す。`ORBE_USER_ZDOTDIR` は shim が退避したユーザー本来の値なので、除去前に `ZDOTDIR` へ復元する。親の注入層を外せば、新 Orbe が各値を自分の state とバンドルから構成する。
+- **親 Orbe の注入 env**: `ORBE_SOCK` / `ORBE_PANE` は親インスタンス、`ORBE_REPORT_BIN` / `ORBE_BUNDLE_ID` と `GHOSTTY_*` / `TERMINFO` は親バンドル、`ZDOTDIR` は親の補完 shim を指す。`ORBE_USER_ZDOTDIR` は GUI（`CompletionShim.activate()`）が据えたユーザー本来の値なので、除去前に `ZDOTDIR` へ復元する。親の注入層を外せば、新 Orbe が各値を自分の state とバンドルから構成する。
 - **control.sock**: `$ORBE_STATE_DIR/control.sock`。隔離インスタンスを制御 API で駆動する口。
