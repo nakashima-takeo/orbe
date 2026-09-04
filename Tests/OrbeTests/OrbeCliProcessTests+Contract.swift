@@ -62,8 +62,8 @@ extension OrbeCliProcessTests {
 
   /// `--text` の値に置かれた `-h` / `--help` を help と読まない。
   ///
-  /// `pane send` は「任意のユーザーテキストを値に取る」唯一のサーフェスで、引数列全体を help 走査
-  /// すると `--text -h` が**何も送らないまま exit 0** になる。`orb pane send --text "$X" && orb pane
+  /// `pane send` と `agent prompt` は「任意のユーザーテキストを値に取る」サーフェスで（ここは前者で
+  /// 代表する）、引数列全体を help 走査すると `--text -h` が**何も送らないまま exit 0** になる。`orb pane send --text "$X" && orb pane
   /// key --key enter` で `$X` がたまたま `-h` だと、送信ゼロのまま enter だけが押される——静かで、
   /// 終了コードにも現れない。値の席のダッシュは exit 2 で止まるのが正しい。
   func testHelpInAValueSlotIsNotTreatedAsHelp() {
