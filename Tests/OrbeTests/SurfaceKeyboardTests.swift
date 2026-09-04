@@ -7,8 +7,8 @@ import XCTest
 /// キーボード入力の純ロジックを固定する（libghostty surface / NSEvent 実キー非依存）。
 /// - `eventModifierFlags`: option-as-alt 翻訳で使う ghostty mods → NSEvent フラグの逆変換表。
 ///   ここがずれると Option+Enter 等の翻訳が静かに壊れる（人のレビューなしで漏れる契約）。
-/// - `textCarriesToKey`: 制御文字を `key.text` に載せない 0x20 ガード。Alt+Enter が素の Enter に
-///   潰れないための要。
+/// - `textCarriesToKey`: C0 制御文字と DEL を `key.text` に載せないガード。Alt+Enter が素の Enter に
+///   潰れず、Shift+Backspace / Option+Backspace の修飾が落ちないための要。
 final class SurfaceKeyboardTests: OrbeTestCase {
 
   // MARK: - eventModifierFlags（ghostty mods → NSEvent フラグ逆変換）
@@ -43,7 +43,7 @@ final class SurfaceKeyboardTests: OrbeTestCase {
     XCTAssertEqual(SurfaceView.eventModifierFlags(mods(raw)), .control)
   }
 
-  // MARK: - textCarriesToKey（0x20 制御文字ガード）
+  // MARK: - textCarriesToKey（C0 / DEL ガード）
 
   /// 印字可能文字は key.text に載せる。
   func testPrintableTextCarries() {
@@ -63,6 +63,14 @@ final class SurfaceKeyboardTests: OrbeTestCase {
     XCTAssertFalse(SurfaceKeyInput.textCarriesToKey("\r"))  // 0x0D Enter
     XCTAssertFalse(SurfaceKeyInput.textCarriesToKey("\u{1b}"))  // ESC
     XCTAssertFalse(SurfaceKeyInput.textCarriesToKey("\u{00}"))  // NUL
+  }
+
+  /// DEL（0x7F）は 0x20 以上だが制御文字なので載せない。物理 Shift+Backspace / Option+Backspace の
+  /// text が key に乗ると consumed_mods が修飾を差し引き、kitty で `CSI 127;2u` / `CSI 127;3u` に
+  /// ならず素の DEL になる。前後の `~`（0x7E）と 0x80 以上は載せる。
+  func testDELDoesNotCarry() {
+    XCTAssertFalse(SurfaceKeyInput.textCarriesToKey("\u{7f}"))
+    XCTAssertTrue(SurfaceKeyInput.textCarriesToKey("~"))  // 0x7E
   }
 
   /// 空文字列は載せない（先頭バイト無し）。

@@ -9,7 +9,7 @@ struct SurfaceKeyInput: Equatable {
   static let noKeycode: UInt32 = .max
 
   let keycode: UInt32
-  /// 生成文字。制御文字（先頭 UTF-8 バイト < 0x20）は `key.text` に載らず keycode から符号化される。
+  /// 生成文字。C0 制御文字と DEL は `key.text` に載らず keycode から符号化される（`textCarriesToKey`）。
   let text: String?
   /// 無修飾文字（無ければ 0）。
   let unshiftedCodepoint: UInt32
@@ -17,12 +17,13 @@ struct SurfaceKeyInput: Equatable {
   /// text 生成に消費された修飾。翻訳 mods から control / command を除いた集合。
   let consumedMods: ghostty_input_mods_e
 
-  /// text を `key.text` に載せてよいか。制御文字（先頭 UTF-8 バイト < 0x20）は載せず keycode のみで
-  /// 送り、符号化を libghostty に委ねる（載せると effectiveMods が「text 有り」分岐で consumed_mods を
-  /// 差し引き Alt+Enter が潰れる）。scalar でなくバイトで判定するのでマルチバイト UTF-8 は常に載る。
+  /// text を `key.text` に載せてよいか。C0 制御文字（先頭 UTF-8 バイト < 0x20）と DEL（0x7F）は載せず
+  /// keycode のみで送り、符号化を libghostty に委ねる（載せると effectiveMods が「text 有り」分岐で
+  /// consumed_mods を差し引き、Alt+Enter や Shift+Backspace / Option+Backspace の修飾が潰れる）。
+  /// scalar でなくバイトで判定するのでマルチバイト UTF-8 は常に載る。
   static func textCarriesToKey(_ text: String) -> Bool {
     guard let first = text.utf8.first else { return false }
-    return first >= 0x20
+    return first >= 0x20 && first != 0x7F
   }
 }
 
