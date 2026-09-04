@@ -29,6 +29,10 @@ extension SurfaceKeyInputTests {
       keyCode: kVK_Return, characters: "\r", unmodified: "\r", modifiers: [])
     static let optionB = PhysicalKey(
       keyCode: kVK_ANSI_B, characters: "∫", unmodified: "b", modifiers: .option)
+    static let shiftBackspace = PhysicalKey(
+      keyCode: kVK_Delete, characters: "\u{7f}", unmodified: "\u{7f}", modifiers: .shift)
+    static let optionBackspace = PhysicalKey(
+      keyCode: kVK_Delete, characters: "\u{7f}", unmodified: "\u{7f}", modifiers: .option)
 
     func event(_ kind: NSEvent.EventType, in window: NSWindow?) -> NSEvent {
       NSEvent.keyEvent(
@@ -61,5 +65,14 @@ extension SurfaceKeyInputTests {
     assertTyped(.ctrlC, arrives: "\u{03}", in: dump)
     assertTyped(.enter, arrives: "\r", in: dump)
     assertTyped(.optionB, arrives: "\u{1b}b", in: dump)
+  }
+
+  /// kitty keyboard protocol 下で Shift+Backspace / Option+Backspace の修飾が落ちず、CSI u
+  /// （`127;2u` / `127;3u`）で届く。Backspace の text（DEL）が key に乗ると consumed_mods が修飾を
+  /// 差し引き、素の DEL に潰れる（Shift+Backspace を区別するアプリ・Option+Backspace の単語削除が効かない）。
+  func testPhysicalModifiedBackspaceKeepsModifiersUnderKittyProtocol() throws {
+    let dump = try dump(.kitty)
+    assertTyped(.shiftBackspace, arrives: "\u{1b}[127;2u", in: dump)
+    assertTyped(.optionBackspace, arrives: "\u{1b}[127;3u", in: dump)
   }
 }
