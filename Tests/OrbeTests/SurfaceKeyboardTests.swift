@@ -58,8 +58,8 @@ final class SurfaceKeyboardTests: OrbeTestCase {
     XCTAssertFalse(SurfaceKeyInput.textCarriesToKey("\u{1f}"))  // 0x1F
   }
 
-  /// 制御文字は載せない（Enter=\r・ESC・NUL）。翻訳が alt を落とさない構成で Alt+Enter が素の Enter に
-  /// 潰れないための要。
+  /// 制御文字は載せない（Enter=\r・ESC・NUL）。Shift+Enter が（翻訳が alt を落とさない構成では
+  /// Alt+Enter も）素の Enter に潰れないための要。
   func testControlCharsDoNotCarry() {
     XCTAssertFalse(SurfaceKeyInput.textCarriesToKey("\r"))  // 0x0D Enter
     XCTAssertFalse(SurfaceKeyInput.textCarriesToKey("\u{1b}"))  // ESC
