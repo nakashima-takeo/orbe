@@ -30,7 +30,9 @@ let paneUsage = """
   \(usageBlock(paneUsageLines))
 
   KEYS: \(paneKeyNames.joined(separator: ", "))
-  Any single character works too; prefix with ctrl+ / alt+ / shift+ (ctrl+c).
+  Any single Unicode character works too (control characters do not); prefix
+  with ctrl+ / alt+ / shift+ (ctrl+c). shift+ uppercases the letter (shift+a
+  sends A). cmd+ on a character is rejected.
   <pane> defaults to the current pane (ORBE_PANE). Outside a Orbe pane, pass
   an explicit id (see: orb pane list). focus always requires an explicit <pane>.
   text prints the captured screen verbatim (no trailing newline is added).
