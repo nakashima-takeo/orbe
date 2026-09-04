@@ -104,15 +104,15 @@ final class Connection: Hashable {
 
   // MARK: - 応答 / イベント（queue 上）
 
-  /// 成功応答の最上位には `seq`（応答時点の履歴位置＝これより大きい seq はこの操作より後）を刻む。
-  /// イベントで完結した応答は reply が既にそのイベントの `seq` を持つので上書きしない——最新に
+  /// 成功応答の最上位に `seq` を刻む。省略なら応答時点の履歴位置（＝これより大きい seq はこの
+  /// 操作より後）。イベントで完結した応答は呼び出し側が**そのイベントの** `seq` を渡す——最新に
   /// 化けると、replay で返したイベントと応答の間のイベントを次の `after` で取りこぼす。
-  func respond(id: Any?, result: Result<Any, ControlError>) {
+  func respond(id: Any?, result: Result<Any, ControlError>, seq: Int? = nil) {
     var msg: [String: Any] = ["jsonrpc": "2.0", "id": id ?? NSNull()]
     switch result {
     case .success(let value):
-      if var dict = value as? [String: Any], dict["seq"] == nil {
-        dict["seq"] = server?.latestSeq ?? 0
+      if var dict = value as? [String: Any] {
+        if let seq = seq ?? server?.latestSeq { dict["seq"] = seq }
         msg["result"] = dict
       } else {
         msg["result"] = value
@@ -146,7 +146,7 @@ final class Connection: Hashable {
     if let after, let server {
       switch server.replay(after: after, where: purpose.matches) {
       case .match(let record):
-        return respond(id: id, result: purpose.reply(record))
+        return respond(id: id, result: purpose.reply(record), seq: record.seq)
       case .future:
         return reject("after is beyond the latest seq")
       case .evicted:
@@ -178,7 +178,7 @@ final class Connection: Hashable {
     guard !fired.isEmpty else { return }
     pending.removeAll { $0.purpose.matches(record.event) }
     for wait in fired {
-      respond(id: wait.id, result: wait.purpose.reply(record))
+      respond(id: wait.id, result: wait.purpose.reply(record), seq: record.seq)
     }
   }
 

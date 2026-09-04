@@ -1,7 +1,6 @@
 /// 待機の目的——何で起きるか・起きたときの応答の形・時間切れの形。`Connection` が待機ごとに
-/// 1 つ持ち、配信された record を `matches` で選び `reply` で応答へ写す。イベントで完結する
-/// 応答の `seq` は**そのイベントの seq**（応答時点の最新ではない）——履歴から replay して返した
-/// 場合に、そのイベントと応答の間のイベントを次の `after` で取りこぼさないため。
+/// 1 つ持ち、配信された record を `matches` で選び `reply` で応答の本体へ写す。応答の `seq` は
+/// `reply` ではなく `respond` が刻む——イベントで完結した応答は呼び出し側が record の seq を渡す。
 enum WaitPurpose {
   /// `wait_for_event`。フィルタは全て省略可（省略＝全通し）。
   case event(paneId: Int?, kinds: Set<String>?, value: String?)
@@ -62,13 +61,13 @@ enum WaitPurpose {
     }
   }
 
-  /// `matches` した record への応答。
+  /// `matches` した record への応答の本体。
   func reply(_ record: ControlEventRecord) -> Result<Any, ControlError> {
     switch (self, record.event) {
     case (.event, _):
-      return .success(["event": record.toDict(), "seq": record.seq])
+      return .success(["event": record.toDict()])
     case (.promptOutcome, .agentState(_, let state, let message, _)):
-      var d: [String: Any] = ["state": state ?? "clear", "seq": record.seq]
+      var d: [String: Any] = ["state": state ?? "clear"]
       if let message { d["message"] = message }
       return .success(d)
     case (.promptOutcome, _):
@@ -76,7 +75,6 @@ enum WaitPurpose {
     case (.agentReady(_, let launch), .agentState(_, _, _, let sessionId)):
       var d = launch.toDict(ready: true)
       if let sessionId { d["agentSessionId"] = sessionId }
-      d["seq"] = record.seq
       return .success(d)
     case (.agentReady, _):
       return .failure(ControlError(code: -32000, message: "agent exited"))
