@@ -178,7 +178,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
   }
 
-  /// 休眠（未 activate）workspace のペインでは②を立てない——立てる側（`attentionRow(for:)`）は
+  /// 休眠（未 activate）workspace のペインでは②を立てない——通知を組む側（`agentNotice(for:)`）は
   /// 一覧（`AttentionSnapshot.rows`）と同じ activate 済み workspace のみを見る。立ててしまうと、
   /// その行は一覧に出ないので次の flush で即取り下げられる幽霊ピルになる。
   ///
