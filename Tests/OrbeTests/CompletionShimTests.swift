@@ -16,16 +16,25 @@ final class CompletionShimTests: OrbeTestCase {
 
   private var home: URL!
   private var log: URL!
+  // `activate()` が書くプロセス env はハーネスの管轄外＝自分で戻す（zsh 駆動側は env を継承しないので無関係）。
+  private var savedZdotdir: String?
+  private var savedOrbeUserZdotdir: String?
 
   override func setUpWithError() throws {
     home = URL(fileURLWithPath: NSTemporaryDirectory())
       .appendingPathComponent("CompletionShimTests-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
     log = home.appendingPathComponent("source-order.log")
+    let env = ProcessInfo.processInfo.environment
+    savedZdotdir = env["ZDOTDIR"]
+    savedOrbeUserZdotdir = env["ORBE_USER_ZDOTDIR"]
   }
 
   override func tearDownWithError() throws {
     try? FileManager.default.removeItem(at: home)
+    for (key, saved) in [("ZDOTDIR", savedZdotdir), ("ORBE_USER_ZDOTDIR", savedOrbeUserZdotdir)] {
+      if let saved { setenv(key, saved, 1) } else { unsetenv(key) }
+    }
   }
 
   /// rc ファイルを書く。`marker` 指定時は共有ログへ自分の名前を追記する行を先頭に置く（source 順の証跡）。
@@ -267,5 +276,76 @@ final class CompletionShimTests: OrbeTestCase {
     // 同梱物が無い状態（ハーネスが BundledResources.root を管理下の空ディレクトリへ向けている）では
     // shim dir が解決されない＝ activate() は no-op。
     XCTAssertNil(CompletionShim.directoryPath)
+  }
+
+  // MARK: - GUI 側: ユーザーの ZDOTDIR の解決と activate() の所有規則
+
+  /// `orbe-completion.zsh` を持つ dir＝Orbe の shim dir と同定される dir（本番 / Dev / 旧版の区別なし）。
+  private func makeShimDir(named name: String) throws -> String {
+    let dir = home.appendingPathComponent(name)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    try Data().write(to: dir.appendingPathComponent("orbe-completion.zsh"))
+    return dir.path
+  }
+
+  /// 同梱 shim を持つ fake bundle を組んで `BundledResources.root` を向ける。返すのは同梱 shim dir。
+  private func installFakeBundle() throws -> String {
+    let root = home.appendingPathComponent("bundle")
+    let shim = try makeShimDir(named: "bundle/zsh")
+    try Data().write(to: URL(fileURLWithPath: shim).appendingPathComponent(".zshenv"))
+    BundledResources.root = root
+    return shim
+  }
+
+  func testUserZdotdirPrefersInheritedZdotdir() {
+    // ターミナル起動・launchctl setenv 由来の実 ZDOTDIR がそのままユーザー値。
+    let user = home.appendingPathComponent("cfg").path
+    XCTAssertEqual(
+      CompletionShim.userZdotdir(in: ["ZDOTDIR": user, "ORBE_USER_ZDOTDIR": "/elsewhere"]), user)
+  }
+
+  func testUserZdotdirFallsBackToOrbeUserZdotdirWhenInheritedZdotdirIsShimDir() throws {
+    // 親 Orbe・汚染シェルから起動された形: 継承 ZDOTDIR は shim dir なのでユーザー値ではなく、
+    // 親が捕捉して渡した ORBE_USER_ZDOTDIR がユーザー値。
+    let parentShim = try makeShimDir(named: "parent-shim")
+    let user = home.appendingPathComponent("cfg").path
+    XCTAssertEqual(
+      CompletionShim.userZdotdir(in: ["ZDOTDIR": parentShim, "ORBE_USER_ZDOTDIR": user]), user)
+  }
+
+  func testUserZdotdirIsNilWhenOnlyEmptyOrShimValuesInherited() throws {
+    // 空文字・shim dir・不在はどれもユーザー値ではない。
+    let parentShim = try makeShimDir(named: "parent-shim")
+    XCTAssertNil(CompletionShim.userZdotdir(in: [:]))
+    XCTAssertNil(CompletionShim.userZdotdir(in: ["ZDOTDIR": "", "ORBE_USER_ZDOTDIR": ""]))
+    XCTAssertNil(
+      CompletionShim.userZdotdir(in: ["ZDOTDIR": parentShim, "ORBE_USER_ZDOTDIR": parentShim]))
+  }
+
+  func testActivateKeepsOrbeUserZdotdirWhenInheritedZdotdirIsShimDir() throws {
+    // 継承 ZDOTDIR が shim dir のとき、親が捕捉したユーザー値（ORBE_USER_ZDOTDIR）を shim dir で
+    // 上書きしない。旧実装はここで shim dir を退避し、子の shim が自分を source する種を作っていた。
+    let bundled = try installFakeBundle()
+    let parentShim = try makeShimDir(named: "parent-shim")
+    let user = home.appendingPathComponent("cfg").path
+    setenv("ZDOTDIR", parentShim, 1)
+    setenv("ORBE_USER_ZDOTDIR", user, 1)
+    CompletionShim.activate()
+    let env = ProcessInfo.processInfo.environment
+    XCTAssertEqual(env["ORBE_USER_ZDOTDIR"], user)
+    XCTAssertEqual(env["ZDOTDIR"], bundled, "ZDOTDIR は同梱 shim dir へ向く")
+  }
+
+  func testActivateUnsetsOrbeUserZdotdirWhenOnlyContaminatedValuesInherited() throws {
+    // 継承値が shim dir しか無ければ ORBE_USER_ZDOTDIR は消える。以降 GUI プロセス env の
+    // ORBE_USER_ZDOTDIR は「存在すれば必ず正当なユーザー値」と読める（shim がそれを前提に復元する）。
+    let bundled = try installFakeBundle()
+    let parentShim = try makeShimDir(named: "parent-shim")
+    setenv("ZDOTDIR", parentShim, 1)
+    setenv("ORBE_USER_ZDOTDIR", parentShim, 1)
+    CompletionShim.activate()
+    let env = ProcessInfo.processInfo.environment
+    XCTAssertNil(env["ORBE_USER_ZDOTDIR"], "汚染値を子の shim へ通さない")
+    XCTAssertEqual(env["ZDOTDIR"], bundled, "ZDOTDIR は同梱 shim dir へ向く")
   }
 }
