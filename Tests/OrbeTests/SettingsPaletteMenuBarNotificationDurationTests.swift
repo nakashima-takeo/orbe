@@ -2,15 +2,18 @@ import XCTest
 
 @testable import Orbe
 
-/// 設定パレットの「メニューバー通知の表示時間」stepper 行（root 末尾）の検証。
+/// 設定パレットの「メニューバー通知の表示時間」stepper 行の検証。
 /// `SettingsPaletteTests` の拡張として helper（`model`/`captureApply`）を共有する。
 /// 他の stepper と対称に ←→ で 5 秒刻み増減し 5〜180 秒でクランプする。
 @MainActor
 extension SettingsPaletteTests {
-  /// root 末尾の行 index（スコープ行が 0 なので、設定行は 1...rootOrder.count）。
-  private var dwellRow: Int { SettingsRegistry.rootOrder.count }
+  /// 表示時間行の index（scope 行が 0 なので設定行は +1）。行の同一性から引く——末尾決め打ちだと、
+  /// 次に設定を 1 つ足した瞬間に無関係な行を指し、このファイル全体が原因の読めない失敗を出す。
+  private var dwellRow: Int {
+    SettingsRegistry.rootOrder.firstIndex { $0.id == .menuBarNotificationDuration }! + 1
+  }
 
-  /// 表示時間行は root 末尾に既定 40 秒を単位つきで出し、chevron を持たない（stepper）。
+  /// 表示時間行は既定 40 秒を単位つきで出し、chevron を持たない（stepper）。
   func testMenuBarNotificationDurationRowAppearsWithDefault() {
     let p = model()
     XCTAssertTrue(p.render.rows[dwellRow].label.contains("メニューバー通知の表示時間"))

@@ -19,9 +19,10 @@ extension DesignGallerySnapshotTests {
       paletteSnapshot(settingsRoot.render, canvas: rootStage), size: rootStage,
       name: "palette_settings_root.png", dir: dir)
 
-    // root の下端。一覧は上限 320 で内部スクロールに入るため、末尾の 3 行（音量・オン/オフ・
-    // メニューバー通知の表示時間）は選択を末尾へ置かないと画に出ない。stepper 3 行が同じ
-    // 「ラベル␣␣値＋単位」で並ぶか、最長になる WS 上書き注記つきの行が 500 幅に収まるかを見る。
+    // 設定行の下端。一覧は上限 320 で内部スクロールに入るため、音量・オン/オフ・メニューバー通知の
+    // 表示時間（この後に言語行が続く）は選択をそこへ置かないと画に出ない。3 行のうち stepper 2 行
+    // （音量・表示時間）が同じ「ラベル␣␣値＋単位」で並ぶか、最長になる WS 上書き注記つきの行が
+    // 500 幅に収まるかを見る。
     let settingsTail = settingsPaletteModel(overrideDwell: 180)
     settingsTail.render.selected = SettingsRegistry.rootOrder.count  // 表示時間行（scope が 0）
     try writePNG(

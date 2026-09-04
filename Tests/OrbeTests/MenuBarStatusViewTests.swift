@@ -12,7 +12,7 @@ import XCTest
 final class MenuBarStatusViewTests: OrbeTestCase {
 
   /// ここが測るのは姿と幅で滞留ではない——`noteTransient` の必須引数を 1 箇所に閉じる。
-  private let anyDwell: TimeInterval = 40
+  private let anyDwell: TimeInterval = 7
 
   private func fittingSize(
     store: AttentionStore, phase: MenuBarArrival.Phase, ui: MenuBarUIState = MenuBarUIState()

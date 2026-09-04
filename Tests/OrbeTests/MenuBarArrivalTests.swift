@@ -111,7 +111,8 @@ final class MenuBarArrivalTests: OrbeTestCase {
   }
 
   /// 艶の走査中に Reduce Motion が入って到来が来たら、艶はその場の値で固まらず消える
-  /// ——基点が無い＝艶は無い。ticker も回らないので、残ると 22 秒間帯が張り付く。
+  /// ——基点が無い＝艶は無い。ticker も回らないので、残ると滞留のあいだ
+  /// （このファイルが `expired(at:)` へ注入する 22 秒）帯が張り付く。
   func testReduceMotionClearsGlossOnArrival() {
     let driver = MenuBarArrivalDriver()
     driver.arrived(at: t0)

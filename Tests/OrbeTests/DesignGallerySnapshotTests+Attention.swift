@@ -59,7 +59,7 @@ extension DesignGallerySnapshotTests {
           paneId: 9101 + index, workspaceName: pair.0, tabTitle: "emit API 移行",
           state: "waiting", message: pair.1, stateChangedAt: Date())
         store.apply(rows: [row])
-        store.noteTransient(row, dwell: 40)  // 撮るのは②の姿——滞留は画に出ない
+        store.noteTransient(row, dwell: 7)  // 撮るのは②の姿——滞留は画に出ない
         return store
       }
     let countStore = AttentionStore()

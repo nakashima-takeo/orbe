@@ -39,11 +39,11 @@ enum SettingKeys {
   static let notificationSound = DefaultedSettingKey<AgentSoundChoice>(.notificationSound)
   static let notificationSoundVolume = DefaultedSettingKey<Int>(.notificationSoundVolume)
   static let notificationSoundEnabled = DefaultedSettingKey<Bool>(.notificationSoundEnabled)
-  static let menuBarNotificationDuration = DefaultedSettingKey<Int>(.menuBarNotificationDuration)
   /// 「waiting でも done と同じ音を鳴らす」。key に `custom` を含むのは、custom 選択中にしか
   /// 効かないつまみだと公開 key（CLI/control/ディスク）が自ら語るため。
   static let notificationSoundCustomWaitingSameAsDone = DefaultedSettingKey<Bool>(
     .notificationSoundCustomWaitingSameAsDone)
+  static let menuBarNotificationDuration = DefaultedSettingKey<Int>(.menuBarNotificationDuration)
   static let fontFamily = SettingKey<String>(.fontFamily)  // nil＝既定チェーンへ解決
   static let tabTitleFontFamily = SettingKey<String>(.tabTitleFontFamily)  // nil＝システム等幅 11pt
   static let defaultAgent = SettingKey<String>(.defaultAgent)  // nil＝検出先頭へ fallback

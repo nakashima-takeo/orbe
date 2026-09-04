@@ -7,8 +7,9 @@ import Foundation
 
 /// `SettingsRegistry.all` の全 key。usage は socket 不達でも出す必要があるため config_list からは
 /// 引けず、ここに写す。この一覧のドリフトは `testConfigHelpListsEveryRegistryKey` が
-/// `config --help` の `KEYS:` 行と registry を突き合わせて落とす。`configSetUsage` の型内訳だけは
-/// 手書きのままなので、registry に key を足したらそちらも足すこと。
+/// `config --help` の `KEYS:` 行と registry を突き合わせて落とす。`configSetUsage` の型内訳は
+/// key をもう一度手で並べた別の写しで、そちらの取りこぼしは
+/// `testConfigSetHelpAssignsATypeToEveryRegistryKey` が落とす。
 let allConfigKeys = [
   "font-size", "background-opacity", "background-blur", "cursor-style-blink", "theme",
   "font-family", "tab-title-font-family", "emoji-font", "default-agent", "agent-state-icons",

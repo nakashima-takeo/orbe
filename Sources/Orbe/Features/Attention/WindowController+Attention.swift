@@ -1,7 +1,8 @@
 import AppKit
 
 /// Attention パレットの提示と、Attention snapshot（単一情報源 `AttentionStore`）の流し込み。
-/// WindowController 本体から Attention の関心を分離する。
+/// 加えて、見ていないペインの状態変化 1 件を通知（`AgentNotification`）として成立させる入口を持つ
+/// ——メニューバー②と通知音はその 1 件を投影するだけの面で、成立条件も読む設定も面ごとに判断しない。
 extension WindowController {
   /// `flushChrome` から呼ぶ snapshot 更新（既存 coalesce に相乗り。新たな走査タイミングは作らない）。
   /// パレット表示中は開いたまま行を追従させる（`reloadPalette` と同じ流儀）。

@@ -7,7 +7,8 @@ import XCTest
 /// stateChangedAt は **state の値が実際に変わったときだけ** 動き、waiting/done への実変化だけが
 /// transient を立てる。ここで測るのは打刻・clear での消去・done のフォーカス消費での保持・
 /// ②を立てるかどうかの判断・一覧への投影。文言がどの報告で確定するかは分割した拡張ファイル
-/// +Message が、再投影が配達されるか（②の取り下げ・split での追随）は +Reprojection が測る。
+/// +Message が、再投影が配達されるか（②の取り下げ・split での追随）と②の滞留の尺は
+/// +Reprojection が測る。
 ///
 /// 重要: WindowControllerControlTests と同様、実 NSWindow に SurfaceView を接続するため
 /// libghostty ランタイムを起動する（ヘッドレスな純ロジック検証ではない）。

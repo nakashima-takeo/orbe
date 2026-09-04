@@ -10,7 +10,7 @@ import XCTest
 final class AttentionStoreTests: OrbeTestCase {
 
   /// 取り下げの検証は滞留を見ない（見るのは `retracted`）。必須引数の値をここ 1 箇所に閉じる。
-  private let anyDwell: TimeInterval = 40
+  private let anyDwell: TimeInterval = 7
 
   private func row(paneId: Int, state: String, message: String? = nil) -> AttentionRow {
     AttentionRow(
