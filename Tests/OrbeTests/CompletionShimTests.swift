@@ -41,25 +41,33 @@ final class CompletionShimTests: OrbeTestCase {
   }
 
   /// 最初のプロンプト後（＝全 startup file と最初の precmd の後）の bind と env を印字する検証コマンド。
+  /// `CHILD:` は zsh から起こした子プロセスが実際に継ぐ env、`HOOK:` は一回きりフックの痕跡
+  /// （precmd_functions 内の位置 / 関数の有無 / 保持変数）。
   private static let probe = """
     print -r -- "TAB:${${(z)$(bindkey '^I')}[2]}"
     print -r -- "CR:${${(z)$(bindkey '^M')}[2]}"
     print -r -- "FB:${_ORBE_TAB_FALLBACK-unset}"
+    print -r -- "LI:${widgets[zle-line-init]-unset}"
     print -r -- "ZDOTDIR:${ZDOTDIR-unset}"
     print -r -- "OUZ:${ORBE_USER_ZDOTDIR-unset}"
+    print -r -- "CHILD:$(/bin/sh -c 'echo "${ZDOTDIR-unset} ${ORBE_USER_ZDOTDIR-unset}"')"
+    print -r -- "HOOK:${precmd_functions[(I)_orbe_bootstrap]}/${+functions[_orbe_bootstrap]}/${_orbe_widget_file-unset}"
     """
 
-  /// 実 zsh を interactive で起こし、probe を stdin から 1 コマンド目として流して出力を返す。
+  /// 実 zsh を起こし、probe を stdin から 1 コマンド目として流して出力を返す。
   /// widget は最初のプロンプト直前の precmd で入るため、プロンプトを出さない `-c` では観測できない。
   /// pipe 駆動の `zsh -i` はプロンプトを stderr に出すので stdout は probe の出力だけになる。
+  /// 非対話（`interactive: false`）でも zsh は stdin をスクリプトとして読むので同じ駆動が使える。
   /// env は明示辞書のみ（継承しない）。`NO_GLOBAL_RCS` で `/etc/zshrc`・`/etc/zprofile`（path_helper）を
   /// 断ち決定論化する。
-  private func runZsh(extraEnv: [String: String] = [:], login: Bool = false) throws -> String {
+  private func runZsh(
+    extraEnv: [String: String] = [:], login: Bool = false, interactive: Bool = true
+  ) throws -> String {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/zsh")
     var args = ["-o", "NO_GLOBAL_RCS"]
     if login { args.append("-l") }
-    args.append("-i")
+    if interactive { args.append("-i") }
     process.arguments = args
     var env = [
       "HOME": home.path,
@@ -138,14 +146,121 @@ final class CompletionShimTests: OrbeTestCase {
     assertProbe(out, contains: "ZDOTDIR:\(cfg.path)", "ユーザー値へ復元")
   }
 
-  func testLoginShellSourcesZprofileBetweenEnvAndRc() throws {
-    // login shell: .zshenv → .zprofile → .zshrc の順でユーザー rc が読まれる
+  func testLoginShellSourcesAllUserRcInOrder() throws {
+    // login shell: .zshenv → .zprofile → .zshrc → .zlogin の順でユーザー rc が読まれる
     // （shim が復元した ZDOTDIR から zsh が自力で読む）。
     try writeRc(".zshenv", in: home, marker: "user-zshenv")
     try writeRc(".zprofile", in: home, marker: "user-zprofile")
     try writeRc(".zshrc", in: home, marker: "user-zshrc")
+    try writeRc(".zlogin", in: home, marker: "user-zlogin")
     _ = try runZsh(login: true)
-    XCTAssertEqual(sourceOrder(), ["user-zshenv", "user-zprofile", "user-zshrc"])
+    XCTAssertEqual(sourceOrder(), ["user-zshenv", "user-zprofile", "user-zshrc", "user-zlogin"])
+  }
+
+  func testZdotdirUserLoginShellSourcesAllRcFromUserDirAndBindsWidgets() throws {
+    // ZDOTDIR 派の login shell: ユーザー .zshenv が立てた ZDOTDIR の .zprofile → .zshrc → .zlogin が
+    // 読まれ、その後で widget が入る。shim は復元した ZDOTDIR に以降触らないので、続く startup file は
+    // すべて zsh がユーザーの dir から読む（旧方式の「再捕捉」が無くても要件 B が成り立つ形）。
+    let cfg = home.appendingPathComponent("cfg")
+    try writeRc(".zshenv", in: home, marker: "user-zshenv", extra: "export ZDOTDIR=\"$HOME/cfg\"\n")
+    try writeRc(".zprofile", in: cfg, marker: "cfg-zprofile")
+    try writeRc(".zshrc", in: cfg, marker: "cfg-zshrc")
+    try writeRc(".zlogin", in: cfg, marker: "cfg-zlogin")
+    let out = try runZsh(login: true)
+    XCTAssertEqual(sourceOrder(), ["user-zshenv", "cfg-zprofile", "cfg-zshrc", "cfg-zlogin"])
+    assertProbe(out, contains: "TAB:_orbe_complete")
+    assertProbe(out, contains: "CR:_orbe_accept_line")
+    assertProbe(out, contains: "ZDOTDIR:\(cfg.path)", "ユーザーが設定した ZDOTDIR のまま終わる")
+  }
+
+  func testUserAliasesDoNotBreakWidgetInstall() throws {
+    // ユーザーが shim・widget ファイルの語を alias で潰していても widget が入る。shim は全クォートで、
+    // widget ファイルはユーザーの alias から隔離した関数スコープでパースされる（そうでないと
+    // 関数本体の `local` が alias 展開され zle-line-init のチェーンが壊れる）。
+    try writeRc(
+      ".zshenv", in: home, marker: "user-zshenv",
+      extra: "alias builtin=echo\nalias source=echo\nalias local=echo\n")
+    let out = try runZsh()
+    assertProbe(out, contains: "TAB:_orbe_complete")
+    assertProbe(
+      out, contains: "LI:user:_orbe_line_init", "zle-line-init のチェーンが Orbe の widget になっている")
+  }
+
+  func testBootstrapHookLeavesNoTraceAfterFirstPrompt() throws {
+    // 一回きりフック: 最初のプロンプトで widget を入れたら、precmd_functions・関数・保持変数のどれにも
+    // Orbe の痕跡が残らない（毎プロンプト走らず、ユーザーのシェル状態を汚さない）。
+    let out = try runZsh()
+    assertProbe(out, contains: "TAB:_orbe_complete", "フックは一度は走っている")
+    assertProbe(
+      out, contains: "HOOK:0/0/unset", "precmd_functions / 関数 / _orbe_widget_file のどれにも残らない")
+  }
+
+  // MARK: - 汚染 env からの回復（ORBE_USER_ZDOTDIR が Orbe の shim dir を指す・空文字）
+
+  /// 汚染 env の共通観察: 再帰せず（shim は一度しか入らない＝フックの二重登録が無い）、
+  /// ユーザーの rc が home から読まれ、widget が入り、ZDOTDIR / ORBE_USER_ZDOTDIR は unset に戻る。
+  private func assertRecoveredToHome(_ out: String) {
+    XCTAssertEqual(sourceOrder(), ["user-zshenv", "user-zshrc"], "ユーザー値ではないので home 扱い")
+    assertProbe(out, contains: "TAB:_orbe_complete")
+    assertProbe(out, contains: "CR:_orbe_accept_line")
+    assertProbe(out, contains: "ZDOTDIR:unset")
+    assertProbe(out, contains: "OUZ:unset")
+    assertProbe(out, contains: "HOOK:0/0/unset", "shim が二重に走った痕跡（フックの残り）が無い")
+  }
+
+  func testOrbeUserZdotdirPointingAtOwnShimDirRecoversToHome() throws {
+    // 自分自身の shim dir を「ユーザーの ZDOTDIR」として渡された形（旧 shim が子 env に残した
+    // ZDOTDIR=<shim dir> を activate() が退避した結果）。旧 shim はここで自分を source し無限再帰した。
+    try writeRc(".zshenv", in: home, marker: "user-zshenv")
+    try writeRc(".zshrc", in: home, marker: "user-zshrc")
+    let out = try runZsh(extraEnv: ["ORBE_USER_ZDOTDIR": Self.shimDir.path])
+    assertRecoveredToHome(out)
+  }
+
+  func testOrbeUserZdotdirPointingAtAnotherOrbeShimDirRecoversToHome() throws {
+    // 別の Orbe（別 .app・旧版）の shim dir を渡された形（Orbe のペインから起こした Orbe Dev が
+    // 親の shim dir を継ぐ経路）。orbe-completion.zsh を持つ dir は同類として同じ扱いになる。
+    let other = home.appendingPathComponent("Other.app/Contents/Resources/zsh")
+    try FileManager.default.createDirectory(
+      at: other.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.copyItem(at: Self.shimDir, to: other)
+    try writeRc(".zshenv", in: home, marker: "user-zshenv")
+    try writeRc(".zshrc", in: home, marker: "user-zshrc")
+    let out = try runZsh(extraEnv: ["ORBE_USER_ZDOTDIR": other.path])
+    assertRecoveredToHome(out)
+  }
+
+  func testEmptyOrbeUserZdotdirRecoversToHome() throws {
+    // 空文字を渡された形（再帰で巻き戻った旧 shim が残す ZDOTDIR=""・ORBE_USER_ZDOTDIR=""）。
+    // 空文字を ZDOTDIR に復元すると zsh は `/.zshrc` を探しに行き、ユーザーの rc が読まれない。
+    try writeRc(".zshenv", in: home, marker: "user-zshenv")
+    try writeRc(".zshrc", in: home, marker: "user-zshrc")
+    let out = try runZsh(extraEnv: ["ORBE_USER_ZDOTDIR": ""])
+    assertRecoveredToHome(out)
+  }
+
+  // MARK: - 非対話 zsh（子プロセス env のクリーンさ・.zlogin）
+
+  func testNonInteractiveShellLeavesNoShimInChildEnv() throws {
+    // 非対話 zsh（`zsh script` / `zsh -c` 相当）: .zshenv 段で startup が終わっても、そこから起こした
+    // 子プロセスの env に ZDOTDIR=<shim dir> も ORBE_USER_ZDOTDIR も残らない。
+    // 旧 shim は「次の段のために」ZDOTDIR を shim へ戻したまま終わり、ここが汚染の種になっていた。
+    try writeRc(".zshenv", in: home, marker: "user-zshenv")
+    let out = try runZsh(interactive: false)
+    XCTAssertEqual(sourceOrder(), ["user-zshenv"])
+    assertProbe(out, contains: "CHILD:unset unset", "子プロセスの env に shim の痕跡が無い")
+  }
+
+  func testNonInteractiveLoginShellSourcesZloginAndLeavesNoShimInChildEnv() throws {
+    // 非対話 login zsh（`zsh -l -c` 相当）: .zshenv → .zprofile → .zlogin がユーザーの dir から読まれ
+    // （.zshrc は非対話なので読まれない）、子プロセスの env もクリーン。
+    try writeRc(".zshenv", in: home, marker: "user-zshenv")
+    try writeRc(".zprofile", in: home, marker: "user-zprofile")
+    try writeRc(".zshrc", in: home, marker: "user-zshrc")
+    try writeRc(".zlogin", in: home, marker: "user-zlogin")
+    let out = try runZsh(login: true, interactive: false)
+    XCTAssertEqual(sourceOrder(), ["user-zshenv", "user-zprofile", "user-zlogin"])
+    assertProbe(out, contains: "CHILD:unset unset", "子プロセスの env に shim の痕跡が無い")
   }
 
   func testDirectoryPathIsNilWithoutBundle() {
