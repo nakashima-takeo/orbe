@@ -7,9 +7,8 @@ import XCTest
 /// キーボード入力の純ロジックを固定する（libghostty surface / NSEvent 実キー非依存）。
 /// - `eventModifierFlags`: option-as-alt 翻訳で使う ghostty mods → NSEvent フラグの逆変換表。
 ///   ここがずれると Option+Enter 等の翻訳が静かに壊れる（人のレビューなしで漏れる契約）。
-/// - `textCarriesToKey`: C0 制御文字と DEL を `key.text` に載せないガード。層1 既定
-///   （`macos-option-as-alt = true`）では Shift+Backspace の、翻訳が alt を落とさない構成では
-///   Alt+Enter / Option+Backspace の修飾も落ちないための要。
+/// - `textCarriesToKey`: C0 制御文字と DEL を `key.text` に載せないガード。Shift+Backspace の修飾と、
+///   翻訳が alt を落とさない構成での Alt+Enter / Option+Backspace の修飾が、落ちないための要。
 final class SurfaceKeyboardTests: OrbeTestCase {
 
   // MARK: - eventModifierFlags（ghostty mods → NSEvent フラグ逆変換）

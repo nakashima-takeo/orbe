@@ -23,9 +23,9 @@ struct SurfaceKeyInput: Equatable {
   /// text を `key.text` に載せてよいか。C0 制御文字（先頭 UTF-8 バイト < 0x20）と DEL（0x7F）は載せず
   /// keycode のみで送り、符号化を libghostty に委ねる。判定集合は libghostty の `isControl`（C0 と DEL）と
   /// 同一。cf. vendor/ghostty src/input/key_encode.zig（isControl）
-  /// 載せると effectiveMods が consumed_mods を差し引き、層1 既定（`macos-option-as-alt = true`）では
-  /// Shift+Backspace の修飾が潰れる。翻訳（`ghostty_surface_key_translation_mods`）が alt を落とさない
-  /// 構成では consumed に alt が残るので、Alt+Enter / Option+Backspace も同じ潰れ方をする
+  /// 載せると effectiveMods が consumed_mods を差し引き、Shift+Backspace の修飾が潰れる。
+  /// 翻訳（`ghostty_surface_key_translation_mods`）が alt を落とさない構成では consumed に alt が残るので、
+  /// Alt+Enter / Option+Backspace も同じ潰れ方をする
   /// （`true` の翻訳は alt を無条件に落とすので consumed に alt が入らない）。
   /// scalar でなくバイトで判定するのでマルチバイト UTF-8 は常に載る。
   static func textCarriesToKey(_ text: String) -> Bool {
