@@ -37,7 +37,7 @@ extension ControlWireTests {
 
   // MARK: - 送って、止まるまで待つ
 
-  /// テキストが target へ届き、`working` では起きず、`done` で `{state, message, seq}` を返す。
+  /// テキストが target へ届き、`working` / `idle` では起きず、`done` で `{state, message, seq}` を返す。
   func testPromptDeliversTextAndAnswersWithTheFirstStoppingState() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
@@ -49,6 +49,8 @@ extension ControlWireTests {
 
     ControlServer.shared.emit(state(pane, "working"))
     wire.barrier()  // working は「止まった」ではない
+    ControlServer.shared.emit(state(pane, "idle"))
+    wire.barrier()  // idle（done のフォーカス消費で書き戻される）も「止まった」ではない
 
     let before = latestSeq(wire, id: 2) ?? -1
     ControlServer.shared.emit(state(pane, "done", message: "here is the answer"))
