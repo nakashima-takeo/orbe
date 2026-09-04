@@ -158,10 +158,7 @@ private func agentPrompt(_ rest: [String]) -> Never {
   if let timeoutMs { params["timeoutMs"] = timeoutMs }
   let result = callOrExit("prompt_agent", params)
   let d = result as? [String: Any]
-  if d?["timedOut"] as? Bool == true {
-    if wantJSON { printJSON(result) } else { stderrLine("timed out") }
-    exit(124)
-  }
+  if d?["timedOut"] as? Bool == true { timedOutDie(result) }
   if wantJSON {
     printJSON(result)
   } else {

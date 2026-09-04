@@ -62,6 +62,15 @@ func display(_ value: Any) -> String {
   return String(describing: value)
 }
 
+/// 待機の時間切れ（`wait` / `agent prompt`）。終了コード 124 は GNU timeout(1) の時間切れと同じ値で、
+/// 待っていたことが起きていないのに exit 0 を返さない（`orb wait … && 次の処理` が時間切れで先へ
+/// 進む形を作らない）。`--json` は control の result を stdout へ、非 json は理由だけを stderr へ
+/// （stdout へ出すと `text=$(orb wait …)` が偽のイベントを掴む）。
+func timedOutDie(_ result: Any) -> Never {
+  if wantJSON { printJSON(result) } else { stderrLine("timed out") }
+  exit(124)
+}
+
 /// control を叩き、成功なら result を返す。RPC/接続エラーは出力して終了コード 1 で抜ける。
 func callOrExit(_ method: String, _ params: [String: Any]) -> Any {
   switch controlRequest(method: method, params: params) {

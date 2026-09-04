@@ -60,12 +60,7 @@ func runWait(_ rest: [String]) -> Never {
 
   let result = callOrExit("wait_for_event", params)
   let d = result as? [String: Any]
-  // 待っていたイベントが来ていないのに exit 0 を返さない（`orb wait … && 次の処理` が
-  // 時間切れで先へ進む形を作らない）。124 は GNU timeout(1) の時間切れと同じ値。
-  if d?["timedOut"] as? Bool == true {
-    if wantJSON { printJSON(result) } else { stderrLine("timed out") }
-    exit(124)
-  }
+  if d?["timedOut"] as? Bool == true { timedOutDie(result) }
   if wantJSON {
     printJSON(result)
   } else {
