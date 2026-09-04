@@ -46,10 +46,10 @@ extension ControlWireTests {
       ("send_text", ["paneId": pane, "text": "hello"]),
       ("send_key", ["paneId": pane, "key": "ctrl+c"]),
       ("spawn", ["workspaceId": 3, "cwd": "/tmp/cwd", "command": "zsh -l"]),
-      ("spawn_agent", ["command": "claude", "workspaceId": 3, "cwd": "/tmp/cwd"]),
+      ("spawn_agent", ["command": "codex", "workspaceId": 3, "cwd": "/tmp/cwd"]),
       (
         "resume_agent",
-        ["command": "claude", "sessionId": "sess-1", "workspaceId": 3, "cwd": "/tmp/cwd"]
+        ["command": "codex", "sessionId": "sess-1", "workspaceId": 3, "cwd": "/tmp/cwd"]
       ),
       ("activate_workspace", ["workspaceId": 3]),
       ("config_list", ["workspaceId": 3]),

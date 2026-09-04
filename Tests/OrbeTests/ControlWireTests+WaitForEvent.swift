@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// `wait_for_event`（状態変化の長ポーリング）の契約を固定する。フィルタの語・応答ペイロードの
-/// 形・タイムアウト・1 接続 1 待機の規律。
+/// 形・タイムアウト・1 接続に複数の待機を張れること。
 ///
 /// 壊れると、`orb wait` と MCP の待機が黙って的外れになる。フィルタの語（`paneId` / `kinds` /
 /// `timeoutMs` と kind の 4 語）が片側だけずれれば「全イベントで起きる」か「永遠に起きない」の
@@ -35,7 +35,8 @@ extension ControlWireTests {
     let wire = startWire(target: FakeControlTarget())
     armWait(wire, id: 1, params: ["paneId": 8001])
 
-    ControlServer.shared.emit(ControlEvent(kind: "agent_state", paneId: 8001, value: "working"))
+    ControlServer.shared.emit(
+      .agentState(paneId: 8001, state: "working", message: nil, sessionId: nil))
     let response = wire.nextResponse()
 
     XCTAssertEqual(response?["id"] as? Int, 1, "待機を張った要求の id で応答が返る")
@@ -47,7 +48,8 @@ extension ControlWireTests {
     let wire = startWire(target: FakeControlTarget())
     armWait(wire, id: 1, params: ["paneId": 8001])
 
-    ControlServer.shared.emit(ControlEvent(kind: "agent_state", paneId: 8002, value: "working"))
+    ControlServer.shared.emit(
+      .agentState(paneId: 8002, state: "working", message: nil, sessionId: nil))
 
     // barrier の応答が 1 行目に来る＝別ペインのイベントは待機を消費していない。
     wire.barrier()
@@ -58,14 +60,21 @@ extension ControlWireTests {
     let wire = startWire(target: FakeControlTarget())
     var id = 0
 
-    for kind in ["agent_state", "pane_title", "pwd", "pane_closed"] {
+    let events: [ControlEvent] = [
+      .agentState(paneId: 8101, state: "v", message: nil, sessionId: nil),
+      .paneTitle(paneId: 8102, title: "v"),
+      .pwd(paneId: 8103, path: "v"),
+      .paneClosed(paneId: 8104),
+    ]
+    for event in events {
       id += 1
-      armWait(wire, id: id, params: ["kinds": [kind]])
-      ControlServer.shared.emit(ControlEvent(kind: kind, paneId: 8100 + id, value: "v"))
+      armWait(wire, id: id, params: ["kinds": [event.kind]])
+      ControlServer.shared.emit(event)
 
       let response = wire.nextResponse()
-      XCTAssertEqual(response?["id"] as? Int, id, "kind \(kind) の待機が起きる")
-      XCTAssertEqual(event(response)?["kind"] as? String, kind, "起きたイベントの kind がそのまま返る")
+      XCTAssertEqual(response?["id"] as? Int, id, "kind \(event.kind) の待機が起きる")
+      XCTAssertEqual(
+        self.event(response)?["kind"] as? String, event.kind, "起きたイベントの kind がそのまま返る")
     }
   }
 
@@ -74,8 +83,8 @@ extension ControlWireTests {
     let wire = startWire(target: FakeControlTarget())
     armWait(wire, id: 1, params: ["kinds": ["agent_state"]])
 
-    ControlServer.shared.emit(ControlEvent(kind: "pane_title", paneId: 8001, value: "t"))
-    ControlServer.shared.emit(ControlEvent(kind: "pwd", paneId: 8001, value: "/tmp"))
+    ControlServer.shared.emit(.paneTitle(paneId: 8001, title: "t"))
+    ControlServer.shared.emit(.pwd(paneId: 8001, path: "/tmp"))
 
     wire.barrier()
   }
@@ -85,7 +94,7 @@ extension ControlWireTests {
     let wire = startWire(target: FakeControlTarget())
     armWait(wire, id: 1)
 
-    ControlServer.shared.emit(ControlEvent(kind: "pwd", paneId: 8003, value: "/tmp/x"))
+    ControlServer.shared.emit(.pwd(paneId: 8003, path: "/tmp/x"))
     let response = wire.nextResponse()
 
     XCTAssertEqual(response?["id"] as? Int, 1, "フィルタ省略なら kind も paneId も問わず起きる")
@@ -99,7 +108,7 @@ extension ControlWireTests {
     let wire = startWire(target: FakeControlTarget())
     armWait(wire, id: 1)
 
-    ControlServer.shared.emit(ControlEvent(kind: "pane_title", paneId: 8004, value: "zsh"))
+    ControlServer.shared.emit(.paneTitle(paneId: 8004, title: "zsh"))
     let payload = event(wire.nextResponse())
 
     XCTAssertEqual(payload?["kind"] as? String, "pane_title")
@@ -112,7 +121,7 @@ extension ControlWireTests {
     let wire = startWire(target: FakeControlTarget())
     armWait(wire, id: 1)
 
-    ControlServer.shared.emit(ControlEvent(kind: "pane_closed", paneId: 8005, value: nil))
+    ControlServer.shared.emit(.paneClosed(paneId: 8005))
     let payload = event(wire.nextResponse())
 
     XCTAssertEqual(payload?["kind"] as? String, "pane_closed")
@@ -198,51 +207,53 @@ extension ControlWireTests {
       -32602, "非 Int の timeoutMs は -32602")
   }
 
-  /// 弾いた待機は**張られていない**（待機枠を食い潰さない）。直後の正しい待機が受理され、
-  /// -32005（1 接続 2 件目）にならないことで確かめる。
-  func testRejectedWaitDoesNotOccupyTheSingleWaitSlot() {
+  /// 弾いた待機は**張られていない**。直後の正しい待機だけがイベントで起きることで確かめる
+  /// （弾いたはずの待機が残っていれば、同じイベントで id 1 の応答も書かれる）。
+  func testRejectedWaitIsNotArmed() {
     let wire = startWire(target: FakeControlTarget())
     XCTAssertEqual(
       errorCode(wire.request(id: 1, method: "wait_for_event", params: ["kinds": ["nosuch"]])),
       -32602)
 
-    armWait(wire, id: 2)  // barrier が 1 行目に来る＝-32005 を書いていない
-    ControlServer.shared.emit(ControlEvent(kind: "pwd", paneId: 8009, value: "/x"))
+    armWait(wire, id: 2)
+    ControlServer.shared.emit(.pwd(paneId: 8009, path: "/x"))
     XCTAssertEqual(wire.nextResponse()?["id"] as? Int, 2, "弾いた後も次の待機が普通に働く")
+    wire.barrier()  // 弾いた id 1 の応答が後から書かれていない
   }
 
-  // MARK: - 1 接続 1 待機
+  // MARK: - 1 接続に複数の待機
 
-  /// 2 件目の `wait_for_event` は -32005 で即拒否し、1 件目は生きたままイベントに応答する
-  /// （後勝ちで上書きすると 1 件目が無応答になりクライアントがハングする）。
-  func testSecondWaitIsRejectedAndFirstStaysAlive() {
+  /// 同じ接続に 2 件張れ、イベントは一致した待機をそれぞれ自分の `id` で起こす。
+  /// 1 件目を後勝ちで上書きすると無応答になりクライアントがハングし、2 件目を拒めば
+  /// `prompt_agent` の main 往復中に張られた `wait_for_event` が「PTY には書いたのに待てない」になる。
+  func testTwoWaitsOnOneConnectionAnswerByTheirOwnIds() {
     let wire = startWire(target: FakeControlTarget())
-    armWait(wire, id: 1)  // timeoutMs は既定のまま——短くすると timeout 応答が先に来て順序が入れ替わる
+    armWait(wire, id: 1, params: ["paneId": 8006])
+    armWait(wire, id: 2, params: ["paneId": 8016])
 
-    XCTAssertEqual(
-      errorCode(wire.request(id: 2, method: "wait_for_event")), -32005,
-      "2 件目の待機は -32005 で即拒否")
+    ControlServer.shared.emit(
+      .agentState(paneId: 8016, state: "done", message: nil, sessionId: nil))
+    XCTAssertEqual(wire.nextResponse()?["id"] as? Int, 2, "2 件目の待機が自分の id で起きる")
 
-    ControlServer.shared.emit(ControlEvent(kind: "agent_state", paneId: 8006, value: "done"))
-    let response = wire.nextResponse()
-
-    XCTAssertEqual(response?["id"] as? Int, 1, "拒否された 2 件目は 1 件目を壊さない")
+    ControlServer.shared.emit(
+      .agentState(paneId: 8006, state: "done", message: nil, sessionId: nil))
+    XCTAssertEqual(wire.nextResponse()?["id"] as? Int, 1, "1 件目は 2 件目に壊されず生きている")
   }
 
-  /// 応答を返した待機は解けており、次の `wait_for_event` は受理される。
-  func testWaitIsClearedAfterRespondingSoNextWaitIsAccepted() {
+  /// 応答を返した待機は解けており、同じイベントで二度起きない。
+  func testWaitIsClearedAfterResponding() {
     let wire = startWire(target: FakeControlTarget())
     armWait(wire, id: 1)
-    ControlServer.shared.emit(ControlEvent(kind: "pwd", paneId: 8007, value: "/a"))
+    ControlServer.shared.emit(.pwd(paneId: 8007, path: "/a"))
     XCTAssertEqual(wire.nextResponse()?["id"] as? Int, 1)
 
-    // barrier が 1 行目に来る＝2 件目の待機は -32005 を書いていない（受理されている）。
     armWait(wire, id: 2)
 
-    ControlServer.shared.emit(ControlEvent(kind: "pwd", paneId: 8008, value: "/b"))
+    ControlServer.shared.emit(.pwd(paneId: 8008, path: "/b"))
     let response = wire.nextResponse()
 
     XCTAssertEqual(response?["id"] as? Int, 2, "解けた待機の後は次の待機が普通に働く")
     XCTAssertEqual(event(response)?["paneId"] as? Int, 8008)
+    wire.barrier()  // 解けた id 1 が 2 つ目のイベントで再び書かれていない
   }
 }

@@ -9,7 +9,7 @@ extension WindowController {
   /// workspace の実効 `default-agent` を `AgentLauncher.resolveDefault` で解く（GUI の Cmd+Shift+C
   /// と同じ 1 規則。違うのは入力がアクティブ WS ではなく**対象 WS** の実効設定であることだけ）。
   func controlSpawnAgent(command: String?, workspaceId: Int?, cwd: String?) -> Result<
-    Any, ControlError
+    AgentLaunch, ControlError
   > {
     resolveAgentLaunch(command: command, workspaceId: workspaceId).flatMap { target in
       launchAgentTab(target, command: target.agent.path, cwd: cwd)
@@ -20,7 +20,7 @@ extension WindowController {
   /// 起動文字列は `AgentCatalog.resumeCommand`（sessionId の安全文字検証込み）が組む——永続復元の
   /// resume（`AgentLauncher.resumeSpawn`）と同一の形で、login PATH 注入により bare 名で解決する。
   func controlResumeAgent(command: String, sessionId: String, workspaceId: Int?, cwd: String?)
-    -> Result<Any, ControlError>
+    -> Result<AgentLaunch, ControlError>
   {
     resolveAgentLaunch(command: command, workspaceId: workspaceId).flatMap { target in
       // ここへ来た時点で command は検出済み＝`AgentCatalog.supported` のいずれかなので、
@@ -79,7 +79,7 @@ extension WindowController {
   /// 解決済みの起動先へ 1 タブ起こす。env は `AgentLauncher.launchEnvironment`（login shell の
   /// PATH）で、GUI 起動と同じ解決をエージェントの子プロセスにも保証する。
   private func launchAgentTab(_ target: AgentLaunchTarget, command: String, cwd: String?) -> Result<
-    Any, ControlError
+    AgentLaunch, ControlError
   > {
     guard
       let opened = openTab(
@@ -88,9 +88,9 @@ extension WindowController {
     else {
       return .failure(ControlError(code: -32000, message: "spawn failed"))
     }
-    return .success([
-      "paneId": opened.paneId, "tabId": opened.tabId, "workspaceId": opened.workspaceId,
-      "agent": ["command": target.agent.command, "path": target.agent.path],
-    ])
+    return .success(
+      AgentLaunch(
+        paneId: opened.paneId, tabId: opened.tabId, workspaceId: opened.workspaceId,
+        agent: target.agent))
   }
 }

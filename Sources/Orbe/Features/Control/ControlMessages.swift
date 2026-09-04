@@ -17,24 +17,86 @@ enum IdGen {
   }
 }
 
-/// 外部 → Orbe の制御で起きた出来事。`wait_for_event` がフィルタして待つ。
-/// 生の PTY 出力は libghostty が host に出さないため、扱えるのは whitelist された
-/// OSC 由来シグナル（agent 状態・タイトル・cwd）とペインのライフサイクルに限る。
-struct ControlEvent {
+/// 外部 → Orbe の制御で起きた出来事。`wait_for_event` がフィルタして待ち、`prompt_agent` /
+/// `spawn_agent` の待機もこれで起きる。生の PTY 出力は libghostty が host に出さないため、
+/// 扱えるのは whitelist された OSC 由来シグナル（agent 状態・タイトル・cwd）とペインの
+/// ライフサイクルに限る。case ごとの payload は遷移時点の報告そのもの——配信時にペインを
+/// 読み直すと done→idle 消費や次の遷移と競合するので、イベントが運ぶ。
+enum ControlEvent {
+  /// 導出 `agentState` の実変化。`state` nil は報告の消滅（SessionEnd）。`message` / `sessionId` は
+  /// その遷移の報告が運んだもの。
+  case agentState(paneId: Int, state: String?, message: String?, sessionId: String?)
+  case paneTitle(paneId: Int, title: String)
+  case pwd(paneId: Int, path: String?)
+  case paneClosed(paneId: Int)
+
   /// `wait_for_event` が受け付ける kind の全体。フィルタの語彙はここが唯一の出所で、
-  /// 未知の語は `registerWait` が待機を張る前に -32602 で弾く（黙って時間切れにしない）。
+  /// 未知の語は `waitForEvent` が待機を張る前に -32602 で弾く（黙って時間切れにしない）。
   static let kinds: Set<String> = ["agent_state", "pane_title", "pwd", "pane_closed"]
 
-  /// イベント種別。取り得る値は `kinds`。
-  let kind: String
-  let paneId: Int
+  var kind: String {
+    switch self {
+    case .agentState: return "agent_state"
+    case .paneTitle: return "pane_title"
+    case .pwd: return "pwd"
+    case .paneClosed: return "pane_closed"
+    }
+  }
+
+  var paneId: Int {
+    switch self {
+    case .agentState(let paneId, _, _, _), .paneTitle(let paneId, _), .pwd(let paneId, _),
+      .paneClosed(let paneId):
+      return paneId
+    }
+  }
+
   /// kind 固有の値（agent_state なら状態語、pane_title ならタイトル、pwd なら path）。
-  let value: String?
+  var value: String? {
+    switch self {
+    case .agentState(_, let state, _, _): return state
+    case .paneTitle(_, let title): return title
+    case .pwd(_, let path): return path
+    case .paneClosed: return nil
+    }
+  }
 
   func toDict() -> [String: Any] {
     var d: [String: Any] = ["kind": kind, "paneId": paneId]
     if let value { d["value"] = value }
+    if case .agentState(_, _, let message, let sessionId) = self {
+      if let message { d["message"] = message }
+      if let sessionId { d["sessionId"] = sessionId }
+    }
     return d
+  }
+}
+
+/// 発番済みのイベント。履歴・配信・イベントで完結する応答の単位。
+struct ControlEventRecord {
+  let seq: Int
+  let event: ControlEvent
+
+  func toDict() -> [String: Any] {
+    var d = event.toDict()
+    d["seq"] = seq
+    return d
+  }
+}
+
+/// 待機動詞（wait_for_event / prompt_agent / spawn_agent / resume_agent）の `timeoutMs` 検証。
+/// 既定値は動詞ごとに違うので呼び出し側が渡す。
+enum WaitTimeout {
+  /// 上限を置くのは、巨大値だと `.milliseconds(_:)` の deadline が DISPATCH_TIME_FOREVER まで
+  /// 飽和してタイマーが発火しなくなるため——応答も時間切れも返らない待機が残る。
+  /// 24 時間はベンチマークの最長（分オーダー）を十分に超える。
+  static let maxMs = 86_400_000
+
+  /// 省略なら既定、正の Int で上限内ならその値、それ以外は nil（呼び出し側が -32602）。
+  static func parse(_ params: [String: Any], default defaultMs: Int) -> Int? {
+    guard let raw = params["timeoutMs"] else { return defaultMs }
+    guard let ms = raw as? Int, ms > 0, ms <= maxMs else { return nil }
+    return ms
   }
 }
 
@@ -69,6 +131,15 @@ enum ControlKey {
     "pageup": NamedKey(kVK_PageUp), "pagedown": NamedKey(kVK_PageDown),
   ]
 
+  /// `prompt_agent` が送信文の後に押す Enter（`parse("enter")` と同じ 1 打）。
+  static let enter = input(for: NamedKey(kVK_Return), mods: 0)
+
+  private static func input(for named: NamedKey, mods: UInt32) -> SurfaceKeyInput {
+    SurfaceKeyInput(
+      keycode: named.keycode, text: named.text, unshiftedCodepoint: named.unshiftedCodepoint,
+      mods: ghostty_input_mods_e(rawValue: mods), consumedMods: ghostty_input_mods_e(rawValue: 0))
+  }
+
   private static let modTokens: [String: ghostty_input_mods_e] = [
     "ctrl": GHOSTTY_MODS_CTRL, "control": GHOSTTY_MODS_CTRL,
     "alt": GHOSTTY_MODS_ALT, "opt": GHOSTTY_MODS_ALT, "option": GHOSTTY_MODS_ALT,
@@ -90,11 +161,7 @@ enum ControlKey {
       mods |= m.rawValue
     }
 
-    if let named = namedKeys[base] {
-      return SurfaceKeyInput(
-        keycode: named.keycode, text: named.text, unshiftedCodepoint: named.unshiftedCodepoint,
-        mods: ghostty_input_mods_e(rawValue: mods), consumedMods: ghostty_input_mods_e(rawValue: 0))
-    }
+    if let named = namedKeys[base] { return input(for: named, mods: mods) }
 
     guard base.unicodeScalars.count == 1, let scalar = base.unicodeScalars.first,
       SurfaceKeyInput.textCarriesToKey(base),

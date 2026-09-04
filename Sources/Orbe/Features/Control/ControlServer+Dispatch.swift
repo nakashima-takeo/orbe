@@ -1,8 +1,9 @@
 import Foundation
 
-/// 制御チャネルの「拡張」メソッド dispatch（ペイン/タブ操作・config・workspace CRUD）。
-/// 中核の動詞（list/get/send/spawn 等）は `runWindowed` の switch が持ち、ここは fall-through で
-/// 引き受ける。param 検証（-32602）はここで行い、ドメイン解決（-32004 等）は target 側が返す。
+/// 制御チャネルの「拡張」メソッド dispatch（ペイン/タブ操作・config・workspace CRUD）と、
+/// エージェント起動の main 側。中核の動詞（list/get/send/spawn 等）は `runWindowed` の switch が
+/// 持ち、拡張は fall-through で引き受ける。param 検証（-32602）はここで行い、ドメイン解決
+/// （-32004 等）は target 側が返す。
 extension ControlServer {
   /// ペイン/タブ操作（split_pane / close_pane / focus_pane / close_tab）を dispatch する。
   /// 非該当は nil で次のハンドラ（config / workspace）へ落とす。
@@ -41,39 +42,34 @@ extension ControlServer {
     }
   }
 
-  /// エージェント起動（spawn_agent / resume_agent）を dispatch する。非該当は nil。
-  /// ここが見るのは param の在否と型だけで、workspace / agent / sessionId の解決は target が返す。
-  func runAgent(method: String, params: [String: Any], target: ControlTarget)
-    -> Result<Any, ControlError>?
+  /// `spawn_agent` の main 側（param の在否と型だけを見る。workspace / agent の解決は target が返す）。
+  func spawnAgent(params: [String: Any], target: ControlTarget) -> Result<AgentLaunch, ControlError>
   {
-    // 検査は必ず case の中に置く。この関数は dispatch 連鎖の途中にいて**非該当メソッドでも
-    // 呼ばれる**ので、switch の外で弾くと未知メソッドが -32601 ではなく -32602 を返し、
-    // config 系の workspaceId の意味論まで巻き添えで変わる。
-    switch method {
-    case "spawn_agent":
-      // command は省略可（対象 workspace の実効 default-agent を target が解く）。ただし
-      // 非文字列を渡した形は「省略」と同じにしない——黙って別の agent が起きる。
-      guard params["command"] == nil || params["command"] is String else {
-        return .failure(ControlError(code: -32602, message: "invalid command"))
-      }
-      if let error = invalidWorkspaceId(params) { return .failure(error) }
-      return target.controlSpawnAgent(
-        command: params["command"] as? String, workspaceId: params["workspaceId"] as? Int,
-        cwd: params["cwd"] as? String)
-    case "resume_agent":
-      guard let command = params["command"] as? String else {
-        return .failure(ControlError(code: -32602, message: "missing command"))
-      }
-      guard let sessionId = params["sessionId"] as? String else {
-        return .failure(ControlError(code: -32602, message: "missing sessionId"))
-      }
-      if let error = invalidWorkspaceId(params) { return .failure(error) }
-      return target.controlResumeAgent(
-        command: command, sessionId: sessionId, workspaceId: params["workspaceId"] as? Int,
-        cwd: params["cwd"] as? String)
-    default:
-      return nil
+    // command は省略可（対象 workspace の実効 default-agent を target が解く）。ただし
+    // 非文字列を渡した形は「省略」と同じにしない——黙って別の agent が起きる。
+    guard params["command"] == nil || params["command"] is String else {
+      return .failure(ControlError(code: -32602, message: "invalid command"))
     }
+    if let error = invalidWorkspaceId(params) { return .failure(error) }
+    return target.controlSpawnAgent(
+      command: params["command"] as? String, workspaceId: params["workspaceId"] as? Int,
+      cwd: params["cwd"] as? String)
+  }
+
+  /// `resume_agent` の main 側。sessionId の文字集合検証は target（`AgentCatalog.resumeCommand`）が持つ。
+  func resumeAgent(params: [String: Any], target: ControlTarget) -> Result<
+    AgentLaunch, ControlError
+  > {
+    guard let command = params["command"] as? String else {
+      return .failure(ControlError(code: -32602, message: "missing command"))
+    }
+    guard let sessionId = params["sessionId"] as? String else {
+      return .failure(ControlError(code: -32602, message: "missing sessionId"))
+    }
+    if let error = invalidWorkspaceId(params) { return .failure(error) }
+    return target.controlResumeAgent(
+      command: command, sessionId: sessionId, workspaceId: params["workspaceId"] as? Int,
+      cwd: params["cwd"] as? String)
   }
 
   /// `workspaceId` は省略可（アクティブ）だが、非 Int を「省略」と同じにはしない——未知 id を

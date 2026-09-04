@@ -45,7 +45,7 @@ final class SurfaceView: NSView {
   var paneTitle: String = "" {
     didSet {
       if paneTitle != oldValue {
-        ControlServer.shared.emit(ControlEvent(kind: "pane_title", paneId: id, value: paneTitle))
+        ControlServer.shared.emit(.paneTitle(paneId: id, title: paneTitle))
       }
     }
   }
@@ -53,7 +53,7 @@ final class SurfaceView: NSView {
   var currentPwd: String? {
     didSet {
       if currentPwd != oldValue {
-        ControlServer.shared.emit(ControlEvent(kind: "pwd", paneId: id, value: currentPwd))
+        ControlServer.shared.emit(.pwd(paneId: id, path: currentPwd))
       }
     }
   }
@@ -63,7 +63,10 @@ final class SurfaceView: NSView {
   var agentSlot: AgentSlot = .none {
     didSet {
       if agentState != oldValue.report?.state {
-        ControlServer.shared.emit(ControlEvent(kind: "agent_state", paneId: id, value: agentState))
+        ControlServer.shared.emit(
+          .agentState(
+            paneId: id, state: agentState, message: agentReport?.message?.text,
+            sessionId: agentSlot.session?.sessionId))
       }
     }
   }
@@ -254,7 +257,7 @@ final class SurfaceView: NSView {
 
   deinit {
     if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
-    ControlServer.shared.emit(ControlEvent(kind: "pane_closed", paneId: id, value: nil))
+    ControlServer.shared.emit(.paneClosed(paneId: id))
     if let surface {
       Ghostty.shared.unregister(surface)
       ghostty_surface_free(surface)

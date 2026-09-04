@@ -14,13 +14,17 @@ protocol ControlTarget: AnyObject {
   func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int?
   /// 検出済みエージェントを新タブで起こす（spawn_agent）。command 省略時は対象 workspace の
   /// 実効 default-agent を解く。未知 workspaceId は -32004・未検出 command は -32602・
-  /// 検出ゼロは -32000。戻り値は {paneId, tabId, workspaceId, agent:{command, path}}。
+  /// 検出ゼロは -32000。
   func controlSpawnAgent(command: String?, workspaceId: Int?, cwd: String?)
-    -> Result<Any, ControlError>
+    -> Result<AgentLaunch, ControlError>
   /// 既存セッションを resume してエージェントを新タブで起こす（resume_agent）。
-  /// 安全文字集合の外の sessionId は -32602。戻り値の形は spawn_agent と同じ。
+  /// 安全文字集合の外の sessionId は -32602。
   func controlResumeAgent(command: String, sessionId: String, workspaceId: Int?, cwd: String?)
-    -> Result<Any, ControlError>
+    -> Result<AgentLaunch, ControlError>
+  /// ペインのエージェントへ text を送って Enter を押す（prompt_agent）。入力欄が空いている状態
+  /// （idle / done / 報告なし）にだけ届く動詞で、working / waiting は -32000（何も送らない）、
+  /// 未 mount も -32000。成功は nil。
+  func controlPromptAgent(pane: SurfaceView, text: String) -> ControlError?
   /// 背景/休眠 workspace を前面化し全タブを mount する。戻り値は activate 後の
   /// activeWorkspaceId と当該 workspace のペイン ID 群。未知 id は nil（spawn と違いフォールバックしない）。
   func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, paneIds: [Int])?
@@ -67,10 +71,12 @@ final class ControlServer {
 
   weak var target: ControlTarget?
 
-  private let queue = DispatchQueue(label: "dev.orbe.control")
+  let queue = DispatchQueue(label: "dev.orbe.control")
   private var listenFD: Int32 = -1
   private var acceptSource: DispatchSourceRead?
   private var connections: Set<Connection> = []
+  /// イベント履歴と seq の所有者は queue。接続の有無に依らず seq は進む（start 前 / stop 後も積む）。
+  private var history = EventHistory(capacity: 4096)
   private(set) var socketPath = ""
 
   /// socketPath は StateDir から決定的に決まるため init で確定する（start より前に
@@ -107,12 +113,29 @@ final class ControlServer {
     }
   }
 
-  /// 状態変化イベントを wait_for_event の待機者へ配信する（main から呼ばれ queue へ hop）。
-  /// start 前 / stop 後は connections が空なので queue 上で no-op（フラグを main から読まない）。
+  /// 状態変化イベントに seq を振って履歴へ積み、待機者へ配信する（任意スレッドから呼ばれ queue へ hop）。
+  ///
+  /// 順序保証: queue は FIFO なので、main の操作 A の後に積まれる応答 hop は A より前に emit された
+  /// 全イベントを見た後に走り、A が引き起こすイベント（PTY 書込み → hook → report_agent → main →
+  /// didSet → emit）は必ずその後に積まれる。よって応答が刻む `latestSeq` は「A 以前の履歴位置」で、
+  /// A の直後に queue で張った待機は A が引き起こす遷移を取りこぼさない。
   func emit(_ event: ControlEvent) {
     queue.async {
-      for conn in self.connections { conn.deliver(event) }
+      let record = self.history.append(event)
+      for conn in self.connections { conn.deliver(record) }
     }
+  }
+
+  /// 応答時点の最新 seq（queue 上でのみ読む）。
+  var latestSeq: Int {
+    dispatchPrecondition(condition: .onQueue(queue))
+    return history.latestSeq
+  }
+
+  /// `after` 以後の履歴を replay する（queue 上でのみ）。
+  func replay(after: Int, where matches: (ControlEvent) -> Bool) -> EventHistory.Replay {
+    dispatchPrecondition(condition: .onQueue(queue))
+    return history.replay(after: after, where: matches)
   }
 
   // MARK: - ソケット（すべて queue 上）
@@ -214,9 +237,26 @@ final class ControlServer {
     let id = obj["id"]
     let params = obj["params"] as? [String: Any] ?? [:]
 
-    if method == "wait_for_event" {
-      conn.registerWait(id: id, params: params)
+    // 待機を伴う動詞は queue が受け持つ（main → respond の 1 往復では完結しない）。
+    switch method {
+    case "wait_for_event":
+      conn.waitForEvent(id: id, params: params)
       return
+    case "prompt_agent":
+      promptAgent(id: id, params: params, conn: conn)
+      return
+    case "spawn_agent":
+      launchAgent(id: id, params: params, conn: conn) {
+        self.spawnAgent(params: params, target: $0)
+      }
+      return
+    case "resume_agent":
+      launchAgent(id: id, params: params, conn: conn) {
+        self.resumeAgent(params: params, target: $0)
+      }
+      return
+    default:
+      break
     }
 
     DispatchQueue.main.async {
@@ -302,10 +342,9 @@ final class ControlServer {
         })
       return .success(["ok": true])
     default:
-      // ペイン/タブ操作・エージェント起動・config / workspace CRUD は拡張の dispatch
-      // （ControlServer+Dispatch）へ。いずれも非該当なら未知メソッド。
+      // ペイン/タブ操作・config / workspace CRUD は拡張の dispatch（ControlServer+Dispatch）へ。
+      // いずれも非該当なら未知メソッド。
       return runPaneTab(method: method, params: params, target: target)
-        ?? runAgent(method: method, params: params, target: target)
         ?? runConfigWorkspace(method: method, params: params, target: target)
         ?? .failure(ControlError(code: -32601, message: "method not found: \(method)"))
     }
