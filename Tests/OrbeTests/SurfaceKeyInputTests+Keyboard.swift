@@ -47,7 +47,7 @@ extension SurfaceKeyInputTests {
     dump.pane.keyDown(with: key.event(.keyDown, in: dump.pane.window))
     dump.pane.keyUp(with: key.event(.keyUp, in: dump.pane.window))
     XCTAssertEqual(
-      dump.next(), TtyDumpPane.hex(bytes),
+      dump.next(file: file, line: line), TtyDumpPane.hex(bytes),
       "物理キー \(key.unmodified)（characters \(TtyDumpPane.hex(key.characters))）の受信バイトが違う",
       file: file, line: line)
   }

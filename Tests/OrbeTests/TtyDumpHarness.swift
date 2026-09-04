@@ -26,7 +26,7 @@ final class TtyDumpPane {
     mode = sys.argv[1]
     fd = sys.stdin.fileno()
     tty.setraw(fd)
-    enter = {"paste": "\\x1b[?2004h", "kitty": "\\x1b[>1u"}.get(mode, "")
+    enter = {"legacy": "", "paste": "\\x1b[?2004h", "kitty": "\\x1b[>1u"}[mode]
     sys.stdout.write(enter + "READY\\r\\n")
     sys.stdout.flush()
     while True:
@@ -44,32 +44,42 @@ final class TtyDumpPane {
   let pane: SurfaceView
   private var consumed = 0
 
+  struct NotReady: Error {}
+
   /// `controller` のアクティブ workspace に dump のペインを開き、READY を待つ。
   init(
     in controller: WindowController, mode: Mode,
     file: StaticString = #filePath, line: UInt = #line
   ) throws {
     self.controller = controller
-    let script = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("ttydump.py")
-    try Self.script.write(to: script, atomically: true, encoding: .utf8)
+    let scriptURL = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("ttydump.py")
+    try Self.script.write(to: scriptURL, atomically: true, encoding: .utf8)
     let paneId = try XCTUnwrap(
       controller.controlSpawn(
         workspaceId: nil, cwd: nil,
-        command: "/usr/bin/python3 \(script.path) \(mode.rawValue)"),
+        command: "/usr/bin/python3 \(scriptURL.path) \(mode.rawValue)"),
       "dump のペインを開けない", file: file, line: line)
     pane = try XCTUnwrap(controller.controlResolvePane(paneId), file: file, line: line)
-    XCTAssertTrue(
-      ControlProcess.waitUntil(ControlProcess.paneSettleTimeout) {
-        self.screen().contains("READY")
-      },
-      "dump が READY にならない: \(screen())", file: file, line: line)
+    let ready = ControlProcess.waitUntil(ControlProcess.paneSettleTimeout) {
+      self.screen().contains("READY")
+    }
+    guard ready else {
+      XCTFail("dump が READY にならない: \(screen())", file: file, line: line)
+      throw NotReady()
+    }
   }
 
-  /// 次に届いたバイト列（`hex` と同じ表記）。届かなければ nil（`keyTimeout` まで待つ）。
-  func next() -> String? {
+  /// 次に届いたバイト列（`hex` と同じ表記）。`keyTimeout` まで待って届かなければ、画面ごと失敗を
+  /// 記録して nil（符号化の違いではなく未着だと分かるように）。
+  func next(file: StaticString = #filePath, line: UInt = #line) -> String? {
     guard
       ControlProcess.waitUntil(Self.keyTimeout, { self.received().count > self.consumed })
-    else { return nil }
+    else {
+      XCTFail(
+        "\(Self.keyTimeout) 秒で 1 バイトも届かない（受信済み \(consumed) 打）: \(screen())",
+        file: file, line: line)
+      return nil
+    }
     defer { consumed += 1 }
     return received()[consumed]
   }

@@ -61,8 +61,8 @@ final class SurfaceKeyInputTests: OrbeTestCase {
     dump.pane.controlSendKey(
       try XCTUnwrap(ControlKey.parse(spec), "\(spec) が解決できない", file: file, line: line))
     XCTAssertEqual(
-      dump.next(), TtyDumpPane.hex(bytes), "send_key \(spec) の受信バイトが違う", file: file,
-      line: line)
+      dump.next(file: file, line: line), TtyDumpPane.hex(bytes),
+      "send_key \(spec) の受信バイトが違う", file: file, line: line)
   }
 
   // MARK: - 層1 の既定
