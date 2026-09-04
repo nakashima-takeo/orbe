@@ -13,7 +13,7 @@ else
 fi
 # 空文字・Orbe の shim dir（自分自身・別 .app・旧版。orbe-completion.zsh の有無で同定）はユーザー値ではない。
 # unset（zsh は HOME と同義に扱う）へ倒し、shim を「ユーザーの .zshenv」として source する再帰経路を閉じる。
-[[ -n "$ZDOTDIR" && ! -r "$ZDOTDIR/orbe-completion.zsh" ]] || 'builtin' 'unset' 'ZDOTDIR'
+[[ -n "${ZDOTDIR-}" && ! -r "${ZDOTDIR-}/orbe-completion.zsh" ]] || 'builtin' 'unset' 'ZDOTDIR'
 
 {
     # ユーザーの .zshenv を source（読めない rc・ディレクトリな rc は zsh 同様に無視）。
