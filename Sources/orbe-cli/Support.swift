@@ -341,8 +341,10 @@ let topUsage = """
   falls back to ORBE_PANE — omitting <pane> watches every pane.
   Resolves the target instance from ORBE_STATE_DIR / ORBE_SOCK. Run inside a
   Orbe pane, or the control socket must be reachable; otherwise exits non-zero.
-  Every --json result carries seq, the event-history position at that moment;
-  pass it to `orb wait --after` to catch events that happen right after.
+  Every --json result that comes straight from control carries seq, the
+  event-history position at that moment; pass it to `orb wait --after` to catch
+  events that happen right after. `config get` is the one exception: it prints
+  a single row extracted from config_list and has no seq.
   Exit codes: 0 success, 2 usage error, 1 RPC/connection error, 124 timed out
   (wait / agent prompt / agent spawn / agent resume), 3 agent prompt: agent is
   waiting for input, 4 agent prompt: agent session ended.
