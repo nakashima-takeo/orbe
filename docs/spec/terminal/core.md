@@ -1,7 +1,7 @@
 ---
 title: ターミナル基盤
 description: libghostty の surface API を NSView に埋め込む土台 — 描画・入力・クリップボード・ライフサイクル・ビルド構成の契約
-updated: 2026-08-15
+updated: 2026-09-04
 ---
 
 # ターミナル基盤
@@ -46,7 +46,7 @@ surface の可視性はホストが `ghostty_surface_set_occlusion` へ同期す
 - **URL／ファイルパスのオープン**（`OPEN_URL`）は host が処理し `NSWorkspace` で開く。この action は常に処理済みを返し、libghostty のフォールバックオープナーは使わない。C 側の文字列ポインタはコールバック中だけ有効なため、bytes を即コピーしてから main で開く。開き先の解決は純関数: scheme 付きはそのまま、scheme 無しは `~` 展開してファイル URL 扱い、`kind==text` は既定エディタ・それ以外は URL の既定アプリ。
 - **マウス**: 左/右/中および拡張ボタンを libghostty へ転送する（マウスレポートを使う TUI のため）。フォーカス移動は左クリックのみ。マウス位置は tracking area で伝える（enter で viewport 内に位置確立・exit で範囲外座標）。
 - **スクロール**: `scrollWheel` で受けた delta を即蓄積して返し、次 run loop tick の合体 flush で累積 delta と mods を 1 回だけ渡す。`scrollWheel` 内で同期呼び出しはせず、同一 tick の複数入力を 1 回に合体する（累積総量は保存される）。precision／momentum phase は AppKit イベント由来で mods に載せ、mods は最新を採る。
-- **キー入力**: `ghostty_surface_key_translation_mods`（`macos-option-as-alt`）で mods を翻訳したイベントを `interpretKeyEvents` へ渡す（mods 不変時は元イベントを再利用）。surface へ渡す `key.text` は PUA 関数キー（0xF700–0xF8FF）を除外し、先頭バイトが 0x20 以上のときだけ付与する。**C0 制御文字（Enter/Tab/Escape 等）は text を付けず keycode のみで送る**——特殊キー・制御の符号化は libghostty が keycode から行うため。`key.consumed_mods` は翻訳 mods から control/command を除いた集合。
+- **キー入力**: `ghostty_surface_key_translation_mods`（`macos-option-as-alt`）で mods を翻訳したイベントを `interpretKeyEvents` へ渡す（mods 不変時は元イベントを再利用）。surface へ渡すキー入力の値（keycode・生成文字・無修飾文字・mods・消費された mods）は、物理キー経路と制御チャネルの `send_key`（→ [control/api](../control/api.md)）が同じ型で組み、送出の規則はそこに集まる: `key.text` は PUA 関数キー（0xF700–0xF8FF）を除外し、先頭バイトが 0x20 以上かつ DEL（0x7F）でないときだけ付与する。**C0 制御文字（Enter/Tab/Escape 等）と DEL は text を付けず keycode のみで送る**——特殊キー・制御の符号化は libghostty が keycode から行うため（text を載せると消費された修飾が差し引かれ、Shift+Enter や kitty 下の Shift+Backspace の修飾が落ちる）。`key.consumed_mods` は text を生成するために消費された修飾で、物理経路では翻訳 mods から control/command を除いた集合。
 - **ドラッグ&ドロップ**: Finder からのファイル／フォルダ（`.fileURL` のみ受理）は、ドロップ先ペインへフォーカスを移してから、各パスをシェルエスケープしスペース区切りでカーソル位置へ挿入する。Enter は送らない——実行するかはユーザーの判断に残す。
 - 日本語 IME は [ime](ime.md) が持つ。
 

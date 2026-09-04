@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe）
 description: Unix socket 上の JSON-RPC でペイン/タブ/workspace/エージェントを操作する out-of-band 制御チャネルと、MCP ブリッジ・ツール群・mount 境界
-updated: 2026-08-21
+updated: 2026-09-04
 ---
 
 # 制御 API（外部 → Orbe）
@@ -41,7 +41,7 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 - `list_agents` → `{agents:[…]}` … 検出済みエージェント CLI の command と解決済み絶対 path を列挙する（読み取り専用）。アプリ保持の検出結果をそのまま返し、新規検出（login shell 起動）は起こさない。検出未完了でもエラーにせず**空配列を返す**。`spawn_agent` / `resume_agent` に渡す command の候補源。
 - `get_pane_text {paneId, scrollback?}` → `{text}` … 画面テキスト平文。scrollback 真で履歴全体、偽で可視範囲。
 - `send_text {paneId, text}` … ペースト相当で PTY へ書く。bracketed paste 下では改行を含めても**自己実行せず**プロンプトに留まる。コマンド実行は別途 `send_key` の enter。
-- `send_key {paneId, key}` … 名前付きキー（case-insensitive）。特殊キー（enter/tab/escape/space/backspace/delete/上下左右/home/end/pageup/pagedown）は仮想 keycode で press+release を送り、libghostty にモード対応エンコードさせる（application cursor mode 等に追従。修飾も渡すため `ctrl+enter`・`shift+tab` 等が有効）。単一文字の修飾はモード非依存バイトに畳む——`ctrl+<char>` は C0 制御（レンジ外は拒否）、`alt`/`meta`/`option+<char>` は ESC プレフィックス。端末バイト表現を持たない `cmd`/`super` 付き単一文字と未知修飾は `-32602` で拒否する——修飾を黙殺して素の文字を注入しないため（ただし単一文字の `shift` は畳む先が無くビットが落ちる＝`shift+a` は `a`）。
+- `send_key {paneId, key}` … キー名（case-insensitive。修飾は `+` 連結）を合成キーイベント（press+release）へ解決して libghostty のキー経路へ送り、端末モード（legacy / kitty keyboard protocol / application cursor 等）に応じた符号化は libghostty に委ねる。Orbe は端末バイトを組まない——ペースト経路は制御文字を strip するため、キーはキー経路でしか届かない。名前付きキー（enter/tab/escape/space/backspace/delete/上下左右/home/end/pageup/pagedown）は実 keycode を持ち、修飾も渡す（`ctrl+enter`・`shift+tab` 等。端末自身の keybind に消費されペインへ届かないことがある）。単一文字（Unicode scalar 1 つ・制御文字以外）は keycode を持たず、生成文字・無修飾文字・修飾を添える——`ctrl+<char>` はレンジ制限なく libghostty が符号化し（`ctrl+1` は端末の標準どおり素の `1`）、`shift+<char>` は大文字化して送る（大文字化しない文字は shift を修飾のまま渡す）。キー名は小文字化して解決するので `A` は `a`、大文字は `shift+a` で指定する。`alt`/`meta`/`option+<char>` が legacy 端末で ESC 前置になるかは `macos-option-as-alt`（層 1 既定 true → [config](../platform/config.md)）に従い、kitty 下は設定に依らず Alt 修飾として届く。`cmd`/`super` 付き単一文字・未知修飾・`+`・複数 scalar の grapheme・制御文字の単一指定は `-32602`——修飾を黙殺して素の文字を注入しないため（grapheme と制御文字は `send_text` で送る）。
 - `spawn {workspaceId?, cwd?, command?}` … 新タブを開く。command 省略はシェル・指定はそれを直接起動。cwd 省略は GUI の新規タブと同じフォールバック（対象 workspace のペイン cwd → その workspace の rootPath）。戻り値は新ペイン ID。workspaceId が未知ならエラーにせずアクティブ workspace へフォールバックする。
 - `spawn_agent {command?, workspaceId?, cwd?}` / `resume_agent {command, sessionId, workspaceId?, cwd?}` → `{paneId, tabId, workspaceId, agent:{command, path}}` … 検出済みエージェントを新タブで起こす。`spawn` との違いは、**GUI の起動（⌘⇧A / ⌘⇧C）と同じ組成**——検出済みの絶対パスを使い、子プロセス PATH を注入する（[agent/launch](../agent/launch.md)）。`command` を渡さない `spawn_agent` は**対象 workspace の**実効 `default-agent` を解く（アクティブ WS ではない）。`resume_agent` はエージェント自身の再開コマンド形を組み立て、セッション ID の文字集合もそこで検証する。未検出 command は `-32602`、解決できるエージェントが無ければ `-32000`。**未知 workspaceId は `-32004`**——`spawn` のフォールバックを継がないのは、新しい入口が「指定と違う対象を黙って触る」振る舞いを引き継ぐ理由がないため。実セッション ID は返さない（`spawn` 時点では存在せず、`resume` では入力の反響でしかない）。取得口は `list_panes` の `agentSessionId` 一つ。
 - `activate_workspace {workspaceId}` → `{activeWorkspaceId, paneIds}` … 背景/休眠 workspace を前面化し全タブを mount する。0 タブ WS は GUI どおり空状態（シェルは自動起動しない・paneIds 空）。未知 id は `-32004`（spawn と違いフォールバックしない）、workspaceId 欠落は `-32602`。既にアクティブな WS への activate は no-op で成功（冪等）。手元 Mac のアクティブ workspace も実際に切り替わる。
