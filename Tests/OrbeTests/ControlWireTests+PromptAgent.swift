@@ -114,13 +114,15 @@ extension ControlWireTests {
     XCTAssertEqual(result(response)?["message"] as? String, "fast")
   }
 
-  /// 別ペインの停止では起きない。
+  /// 別ペインの停止でも消滅でも起きない——無関係なタブを閉じただけで prompt が "pane closed" に
+  /// 倒れない。
   func testPromptIgnoresOtherPanes() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
 
     prompt(wire, id: 1, paneId: fake.paneId)
     ControlServer.shared.emit(state(fake.paneId + 1, "done"))
+    ControlServer.shared.emit(.paneClosed(paneId: fake.paneId + 1))
     wire.barrier()
   }
 

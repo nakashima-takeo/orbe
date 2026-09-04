@@ -47,7 +47,8 @@ extension ControlWireTests {
       ControlServer.shared.emit(
         .agentState(paneId: entry.1, state: "working", message: nil, sessionId: "s"))
       ControlServer.shared.emit(idle(entry.1 + 1, sessionId: "other"))
-      wire.barrier()  // idle 以外の状態・別ペインの idle では起きない
+      ControlServer.shared.emit(.paneClosed(paneId: entry.1 + 1))
+      wire.barrier()  // idle 以外の状態・別ペインの idle / 消滅では起きない
 
       let before = result(wire.request(id: id + 1, method: "list_workspaces"))?["seq"] as? Int ?? -1
       ControlServer.shared.emit(idle(entry.1, sessionId: "sess-\(entry.1)"))
