@@ -243,20 +243,25 @@ extension OrbeCliProcessTests {
   }
 
   /// `--json` の応答は control の result をそのまま出すので、成功応答の `seq`（その操作時点の履歴位置）が
-  /// 出る。`pane list` は絞った後の `{panes, seq}` に組み直す例外だが、`seq` は保つ——ここが落ちると
-  /// `orb pane send --json` の seq を `orb wait --after` に渡す手順が組めない。
+  /// 出る。`pane list` は panes を絞る例外だが、`seq` は control の値をそのまま保つ——CLI が組み直して
+  /// 0 に化けると、`orb wait --after` に渡した先で「保持している履歴の全部を replay」の意味になり、
+  /// 前ターンの done を掴む。
   func testJsonResultsCarryTheHistoryPosition() throws {
     let control = try startControlProcess()
     let pane = try XCTUnwrap(
       control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
     let activeId = try workspaceId(control, active: true)
 
-    XCTAssertNotNil(
+    let sent = try XCTUnwrap(
       control.orbJSON(["pane", "send", "\(pane.id)", "--text", "x"])["seq"] as? Int,
       "pane send --json は {ok, seq} をそのまま出す")
+    control.target.controlReportAgent(
+      pane: pane, agent: "codex", state: "idle", sessionId: nil, message: nil)
+
     let filtered = control.orbJSON(["pane", "list", "--workspace", "\(activeId)"])
     XCTAssertNotNil(filtered["panes"] as? [[String: Any]], "前提: 絞った panes")
-    XCTAssertNotNil(filtered["seq"] as? Int, "--workspace で絞っても seq を保つ")
+    let listed = try XCTUnwrap(filtered["seq"] as? Int, "--workspace で絞っても seq を保つ")
+    XCTAssertGreaterThan(listed, sent, "pane list の seq は報告の後の履歴位置（組み直しで 0 に化けていない）")
   }
 
   /// `tab new --workspace <id>` は**その** workspace にタブを開く。値が黙って捨てられると、
