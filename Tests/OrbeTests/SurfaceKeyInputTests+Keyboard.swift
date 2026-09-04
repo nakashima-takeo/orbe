@@ -67,9 +67,10 @@ extension SurfaceKeyInputTests {
     assertTyped(.optionB, arrives: "\u{1b}b", in: dump)
   }
 
-  /// kitty keyboard protocol 下で Shift+Backspace / Option+Backspace の修飾が落ちず、CSI u
-  /// （`127;2u` / `127;3u`）で届く。Backspace の text（DEL）が key に乗ると consumed_mods が修飾を
-  /// 差し引き、素の DEL に潰れる（Shift+Backspace を区別するアプリ・Option+Backspace の単語削除が効かない）。
+  /// kitty keyboard protocol 下で Shift+Backspace / Option+Backspace の修飾が CSI u（`127;2u` /
+  /// `127;3u`）で届く。Shift+Backspace が DEL ガードの回帰検知——text（DEL）が key に乗ると consumed_mods
+  /// が shift を差し引き、素の DEL に潰れる。Option+Backspace は既定構成では consumed に alt が入らず
+  /// ガード無しでも通るので、物理経路と `send_key alt+backspace` が同じ `127;3u` になる契約の固定。
   func testPhysicalModifiedBackspaceKeepsModifiersUnderKittyProtocol() throws {
     let dump = try dump(.kitty)
     assertTyped(.shiftBackspace, arrives: "\u{1b}[127;2u", in: dump)

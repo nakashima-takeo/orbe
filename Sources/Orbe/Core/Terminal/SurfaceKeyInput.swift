@@ -14,13 +14,18 @@ struct SurfaceKeyInput: Equatable {
   /// 無修飾文字（無ければ 0）。
   let unshiftedCodepoint: UInt32
   let mods: ghostty_input_mods_e
-  /// `text` を生成するために消費された修飾。libghostty は `mods` − `consumedMods` を効果修飾として
-  /// 符号化する（`text` が無い入力では参照されない）。
+  /// `text` を生成するために消費された修飾。libghostty は `mods` − `consumedMods`（effective mods）を
+  /// keybind 判定と符号化の分岐判定に使う——無修飾扱いになると素の Enter/Tab/Backspace・テキスト直送へ
+  /// 落ち、alt の ESC 前置も消える。CSI に載る修飾値そのものは生 `mods` から作られる。`key.text` に
+  /// 載らない入力では参照されない。cf. vendor/ghostty src/input/key.zig（effectiveMods）
   let consumedMods: ghostty_input_mods_e
 
   /// text を `key.text` に載せてよいか。C0 制御文字（先頭 UTF-8 バイト < 0x20）と DEL（0x7F）は載せず
-  /// keycode のみで送り、符号化を libghostty に委ねる（載せると effectiveMods が「text 有り」分岐で
-  /// consumed_mods を差し引き、Alt+Enter や Shift+Backspace / Option+Backspace の修飾が潰れる）。
+  /// keycode のみで送り、符号化を libghostty に委ねる。判定集合は libghostty の `isControl`（C0 と DEL）と
+  /// 同一。cf. vendor/ghostty src/input/key_encode.zig（isControl）
+  /// 載せると effectiveMods が consumed_mods を差し引き、既定構成では Shift+Backspace の修飾が潰れる。
+  /// Alt+Enter / Option+Backspace は `macos-option-as-alt = false` のときだけ同じ潰れ方をする
+  /// （`true` の翻訳は alt を無条件に落とすので consumed に alt が入らない）。
   /// scalar でなくバイトで判定するのでマルチバイト UTF-8 は常に載る。
   static func textCarriesToKey(_ text: String) -> Bool {
     guard let first = text.utf8.first else { return false }
