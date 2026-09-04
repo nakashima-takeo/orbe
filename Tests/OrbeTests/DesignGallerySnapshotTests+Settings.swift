@@ -23,8 +23,8 @@ extension DesignGallerySnapshotTests {
     // 表示時間（この後に言語行が続く）は選択をそこへ置かないと画に出ない。3 行のうち stepper 2 行
     // （音量・表示時間）が同じ「ラベル␣␣値＋単位」で並ぶか、最長になる WS 上書き注記つきの行が
     // 500 幅に収まるかを見る。
-    let settingsTail = settingsPaletteModel(overrideDwell: 180)
-    settingsTail.render.selected = SettingsRegistry.rootOrder.count  // 表示時間行（scope が 0）
+    let settingsTail = settingsPaletteModel(overrideNotificationDuration: 180)
+    settingsTail.render.selected = SettingsRegistry.rootOrder.count  // 設定行の末尾（scope 行が 0）
     try writePNG(
       paletteSnapshot(settingsTail.render, canvas: rootStage), size: rootStage,
       name: "palette_settings_root_tail.png", dir: dir)
@@ -105,7 +105,7 @@ extension DesignGallerySnapshotTests {
   private func settingsPaletteModel(
     overrideFontSize: Int? = nil, overrideTheme: ThemeMode? = nil,
     notificationSound: AgentSoundChoice? = nil, customDone: CustomSoundSource? = nil,
-    overrideDwell: Int? = nil
+    overrideNotificationDuration: Int? = nil
   ) -> SettingsPaletteModel {
     var global = SettingsLayer()
     global[SettingKeys.fontSize] = 14
@@ -118,7 +118,7 @@ extension DesignGallerySnapshotTests {
     var override = SettingsLayer()
     override[SettingKeys.fontSize] = overrideFontSize
     override[SettingKeys.theme] = overrideTheme
-    override[SettingKeys.menuBarNotificationDuration] = overrideDwell
+    override[SettingKeys.menuBarNotificationDuration] = overrideNotificationDuration
     return SettingsPaletteModel(
       values: ScopedSettingsValues(global: global, override: override),
       fontNames: ["Menlo", "Monaco", "SF Mono"],
