@@ -27,6 +27,7 @@ let agentUsage = """
   Both wait until the agent reports it is ready (its first idle) and then print
   ` ready (session <id>)`; --json carries ready:true and agentSessionId. Agents
   that cannot report idle (codex / agy) return at once with ready:false.
+  <session-id> also comes from `orb pane list --json` (agentSessionId).
   --timeout-ms defaults to 30000; timing out exits 124 with ready:false and
   timedOut:true — the tab is open, the agent just has not reported yet.
   prompt sends <text> plus enter to the agent in <pane> and blocks until the
