@@ -82,7 +82,7 @@ shim `.zshenv` は全 zsh 起動で読まれ、次の順で働く。
 3. ユーザの `.zshenv`（`$ZDOTDIR`、無ければ home）を source する。
 4. interactive のときだけ、一回きりの precmd フックを積む。フックは最初のプロンプト直前に走り、自分を外して消えてから `orbe-completion.zsh` を source する（ユーザの alias・オプションから隔離した関数スコープでパースする）。
 
-以降 shim は `ZDOTDIR` に触らない。続く `.zprofile`・`.zshrc`・`.zlogin` は zsh がユーザの dir から素で読むため、ユーザが `~/.zshenv` で `ZDOTDIR` を設定する構成もそのまま生きる（捕捉し直す対象が無い）。widget は**全 startup file の後**に bind され、ユーザの `.zshrc` 末尾の Tab bind（fzf-tab 等）に後勝ちし、既存の Tab bind は `$_ORBE_TAB_FALLBACK` へ退避されて popup 非表示時のフォールバックになる。
+以降 shim は `ZDOTDIR` に触らない。続く `.zprofile`・`.zshrc`・`.zlogin` は zsh がユーザの dir から素で読むため、ユーザが `~/.zshenv` で `ZDOTDIR` を設定する構成もそのまま生きる。widget は**全 startup file の後**に bind され、ユーザの `.zshrc` 末尾の Tab bind（fzf-tab 等）に後勝ちし、既存の Tab bind は `$_ORBE_TAB_FALLBACK` へ退避されて popup 非表示時のフォールバックになる。
 
 様式は ghostty/kitty shim と同一（`builtin` 前置・全クォート・`always` 節。alias 展開下でも壊れないための規律で、独自変更しない）。ghostty の shell integration 有効時（既定）は ghostty が shim を「ユーザの ZDOTDIR」として `GHOSTTY_ZSH_ZDOTDIR` へ退避・復元するため、ghostty shim → Orbe shim → ユーザ設定の順に連鎖する。`shell-integration = none` でも spawn env の ZDOTDIR がそのまま残り自立動作する。
 
