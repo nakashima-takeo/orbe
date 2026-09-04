@@ -60,7 +60,7 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
   /// index を書いている最中に止まる形を作る。`git add` は clean フィルタの出力を待つ間、
   /// index の lock を握ったままになる。
   private func installHangingCleanFilter() throws {
-    let filter = try fixture.installScript("hang-filter.sh", script: fixture.waitingScript)
+    let filter = try fixture.installScript("hang-filter.sh", body: fixture.waitingBody)
     XCTAssertTrue(fixture.git(["config", "filter.hang.clean", filter]).isSuccess)
     try "*.big filter=hang\n".write(
       toFile: (fixture.root as NSString).appendingPathComponent(".gitattributes"),
@@ -83,7 +83,7 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
   /// 返らない `ext::` transport を相手にした clone。clone は hook を持たないので、止める手段は
   /// これだけ（`protocol.ext.allow` は既定で拒否なので、テストが明示的に開ける）。
   private func cloneFromHangingRemote() throws -> (output: GitRunner.Output, dest: String) {
-    let helper = try fixture.installScript("hang-remote.sh", script: fixture.waitingScript)
+    let helper = try fixture.installScript("hang-remote.sh", body: fixture.waitingBody)
     let dest = fixture.dir.appendingPathComponent("clone-dst").path
     let output = try runSync(
       ["-c", "protocol.ext.allow=always", "clone", "--progress", "ext::\(helper)", dest],
@@ -95,7 +95,7 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
 
   /// 無出力のまま止まった git は打ち切られる。`timedOut` で見分けられ、成功にはならない。
   func testSilentCommandIsStoppedAfterIdleTimeout() throws {
-    try fixture.installHook("pre-commit", script: fixture.waitingScript)
+    try fixture.installHook("pre-commit", body: fixture.waitingBody)
     try stageChange()
 
     let output = try runSync(["commit", "-m", "blocked"])
@@ -107,7 +107,7 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
   /// 出力が流れている限り、総経過時間が上限を超えても打ち切らない。
   /// **アイドル方式であることの歯**——絶対時間で測る実装ならここが落ちる。
   func testStreamingCommandIsNotStopped() throws {
-    try fixture.installHook("pre-commit", script: GitHangFixture.streamingScript)
+    try fixture.installHook("pre-commit", body: GitHangFixture.streamingBody)
     try stageChange()
 
     let output = try runSync(["commit", "-m", "slow but alive"])
@@ -119,7 +119,7 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
   /// 打ち切った後、**孫プロセスが pipe の書き込み端を握っていても**返る。
   /// `terminate()` のあと無期限に EOF を待つ実装（既存 `GitHubCLI` の形）だとここで返らない。
   func testStoppedRunReturnsWhileGrandchildHoldsThePipes() throws {
-    try fixture.installHook("pre-commit", script: fixture.pipeHoldingScript)
+    try fixture.installHook("pre-commit", body: fixture.pipeHoldingBody)
     try stageChange()
 
     let started = Date()
@@ -182,7 +182,7 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
   /// worktree は完成しているので、**成功として返す**。失敗にすると、実在する worktree を指したまま
   /// 再実行が `fatal: a branch named 'x' already exists` で詰む——直した数より多く壊す。
   func testStoppedWorktreeAddSucceedsWhenTheWorktreeExists() throws {
-    try fixture.installHook("post-checkout", script: fixture.waitingScript)
+    try fixture.installHook("post-checkout", body: fixture.waitingBody)
     var repo: GitRepo?
     let opened = expectation(description: "GitRepo.open")
     GitRepo.open(cwd: fixture.root, runner: runner) {
@@ -220,7 +220,7 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
   /// 閉じるので、両方を同じ runner に通す必要がある。
   func testHangingIndependentLaneDoesNotBlockExclusiveWrites() throws {
     let runner = GitRunner(idleTimeout: 60)
-    try fixture.installHook("pre-commit", script: fixture.waitingScript)
+    try fixture.installHook("pre-commit", body: fixture.waitingBody)
     try stageChange()
     let hangFinished = expectation(description: "hanging independent run")
     runner.run(["commit", "-m", "blocked"], cwd: fixture.root, lane: .independent) { _ in
@@ -245,7 +245,7 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
   /// その間ずっと barrier を占有する——打ち切り機構が解こうとした詰まりを、成功した実行で作り直す。
   /// 実行の完了を決めるのは**子の終了**であって EOF ではない、という契約をここで固定する。
   func testSuccessfulRunReturnsWhileGrandchildHoldsThePipes() throws {
-    try fixture.installHook("pre-commit", script: GitHangFixture.daemonizingScript)
+    try fixture.installHook("pre-commit", body: GitHangFixture.daemonizingBody)
     try stageChange()
 
     let started = Date()
@@ -280,7 +280,7 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
   /// そのまま見せると、バナーが宛先パスまみれになって肝心の理由が埋もれる。
   func testCloneFailureReturnsOnlyTheEssentialReason() throws {
     // `ext::` は git が既定で拒否する。前口上を出した後に fatal を出す、ネットワーク不要の失敗。
-    let url = "ext::\(try fixture.installScript("unused.sh", script: fixture.waitingScript))"
+    let url = "ext::\(try fixture.installScript("unused.sh", body: fixture.waitingBody))"
     var failure: GitFailure??
     let done = expectation(description: "clone")
     GitRepo.clone(url: url, dest: fixture.dir.appendingPathComponent("dst").path, runner: runner) {

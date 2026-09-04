@@ -17,7 +17,7 @@ final class GitRunnerLaneTests: OrbeTestCase {
 
   override func setUpWithError() throws {
     fixture = try GitHangFixture()
-    try fixture.installHook("post-checkout", script: fixture.waitingScript)
+    try fixture.installHook("post-checkout", body: fixture.waitingBody)
     repo = try open(fixture)
     // 失敗経路でも必ず解放する（解放し損ねると GitRunner.shared が詰まったまま後続の全テストが死ぬ）。
     addTeardownBlock { [self] in
