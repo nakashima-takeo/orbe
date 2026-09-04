@@ -76,7 +76,7 @@ final class ControlServer {
   private var acceptSource: DispatchSourceRead?
   private var connections: Set<Connection> = []
   /// イベント履歴と seq の所有者は queue。接続の有無に依らず seq は進む（start 前 / stop 後も積む）。
-  private var history = EventHistory(capacity: 4096)
+  private var history = EventHistory(capacity: EventHistory.retainedRecords)
   private(set) var socketPath = ""
 
   /// socketPath は StateDir から決定的に決まるため init で確定する（start より前に

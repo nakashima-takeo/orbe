@@ -90,12 +90,22 @@ struct ControlEventRecord {
 }
 
 /// 待機動詞（wait_for_event / prompt_agent / spawn_agent / resume_agent）の `timeoutMs` 検証。
-/// 既定値は動詞ごとに違うので呼び出し側が渡す。
+/// 既定値は動詞ごとに違うので呼び出し側が渡す。CLI help と MCP description はその値を写しており、
+/// ドリフトは L4 の help / `tools/list` テストが突き合わせて落とす（`KINDS:` / `KEYS:` と同じ守り方）。
 enum WaitTimeout {
   /// 上限を置くのは、巨大値だと `.milliseconds(_:)` の deadline が DISPATCH_TIME_FOREVER まで
   /// 飽和してタイマーが発火しなくなるため——応答も時間切れも返らない待機が残る。
   /// 24 時間はベンチマークの最長（分オーダー）を十分に超える。
   static let maxMs = 86_400_000
+  /// `wait_for_event` の既定（30 秒）。長ポーリング 1 回分として MCP クライアント側のツール
+  /// タイムアウトに収まる長さで、続きはクライアントが `after` で繋ぐ。
+  static let eventDefaultMs = 30_000
+  /// `prompt_agent` の既定（1 時間）。エージェントの 1 ターン（応答か質問で止まるまで）を覆う
+  /// 長さ——`eventDefaultMs` では実作業の途中で切れ、`maxMs` まで伸ばすと放置された待機が丸一日残る。
+  static let promptDefaultMs = 3_600_000
+  /// `spawn_agent` / `resume_agent` の既定（30 秒）。新タブ＋ログインシェル＋agent 起動＋最初の
+  /// hook 報告までを負荷時も含めて覆う長さ（L4 のペイン安定待ち 15 秒の倍）。
+  static let launchDefaultMs = 30_000
 
   /// 省略なら既定、正の Int で上限内ならその値、それ以外は nil（呼び出し側が -32602）。
   static func parse(_ params: [String: Any], default defaultMs: Int) -> Int? {

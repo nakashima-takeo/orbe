@@ -34,6 +34,27 @@ extension OrbeCliProcessTests {
       "agent USAGE に prompt が無い: \(agent.stdout)")
   }
 
+  /// `orb agent --help` / `orb wait --help` が写す既定タイムアウトは control の `WaitTimeout` と同じ値。
+  ///
+  /// 既定を決めるのは control で、help は socket 不達でも出す必要があるため値を写している。写しが
+  /// 古い値を言い続けると、`--timeout-ms` を省く利用者と AI が待ち時間を誤って見積もる。
+  func testHelpDefaultTimeoutsMatchControl() {
+    let agent = ControlProcess.orbWithoutServer(["agent", "--help"])
+    XCTAssertEqual(agent.status, 0, "agent --help は socket 不達でも exit 0: \(agent.stderr)")
+    XCTAssertTrue(
+      agent.stdout.contains("--timeout-ms defaults to \(WaitTimeout.launchDefaultMs)"),
+      "agent --help の spawn / resume の既定が WaitTimeout.launchDefaultMs と食い違っている: \(agent.stdout)")
+    XCTAssertTrue(
+      agent.stdout.contains("(default \(WaitTimeout.promptDefaultMs) ms)"),
+      "agent --help の prompt の既定が WaitTimeout.promptDefaultMs と食い違っている: \(agent.stdout)")
+
+    let wait = ControlProcess.orbWithoutServer(["wait", "--help"])
+    XCTAssertEqual(wait.status, 0, "wait --help は socket 不達でも exit 0: \(wait.stderr)")
+    XCTAssertTrue(
+      wait.stdout.contains("--timeout-ms defaults to \(WaitTimeout.eventDefaultMs)"),
+      "wait --help の既定が WaitTimeout.eventDefaultMs と食い違っている: \(wait.stdout)")
+  }
+
   /// `orb pane --help` の `KEYS:` は control の `ControlKey.namedKeys` と同じ集合。
   ///
   /// 弾くのは control（`ControlKey.parse` が -32602）だが、help は socket 不達でも出す必要が

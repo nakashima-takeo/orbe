@@ -139,7 +139,7 @@ final class Connection: Hashable {
       guard let seq = raw as? Int, seq >= 0 else { return reject("invalid after") }
       after = seq
     }
-    guard let timeoutMs = WaitTimeout.parse(params, default: 30000) else {
+    guard let timeoutMs = WaitTimeout.parse(params, default: WaitTimeout.eventDefaultMs) else {
       return reject("invalid timeoutMs")
     }
 

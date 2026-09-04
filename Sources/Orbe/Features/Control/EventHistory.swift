@@ -13,6 +13,11 @@ struct EventHistory {
     case future
   }
 
+  /// control が保持する件数（4096）。`after` が -32006 で拒まれ始める点を決める契約値で、数十ペインが
+  /// 秒単位で遷移しても `orb wait --after` の往復（秒〜分）のあいだは seq が保持範囲から落ちない広さ。
+  /// 1 record は数百バイトなので常駐しても MB に届かない。超えた分は seq の取り直しに落ちる。
+  static let retainedRecords = 4096
+
   let capacity: Int
   private var records: [ControlEventRecord] = []
   /// リングの最古の位置（`records` が `capacity` に達した後だけ動く）。

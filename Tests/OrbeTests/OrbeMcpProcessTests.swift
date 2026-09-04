@@ -76,9 +76,26 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     XCTAssertNotNil(wait["after"], "wait_for_event は after を受ける")
     XCTAssertNotNil(wait["value"], "wait_for_event は value を受ける")
 
+    // description が写す既定タイムアウトは control の `WaitTimeout` と同じ値——AI が timeoutMs を
+    // 決める唯一の情報源なので、写しが古いと省略時の待ち時間を誤って見積もる（`KINDS:` と同じ守り方）。
+    func description(_ property: Any?) -> String {
+      (property as? [String: Any])?["description"] as? String ?? ""
+    }
+    XCTAssertTrue(
+      description(wait["timeoutMs"]).contains("既定 \(WaitTimeout.eventDefaultMs)"),
+      "wait_for_event の timeoutMs が WaitTimeout.eventDefaultMs と食い違っている")
+    XCTAssertTrue(
+      promptDescription.contains("既定 \(WaitTimeout.promptDefaultMs) ms")
+        && description(properties(prompt)["timeoutMs"])
+          .contains("既定 \(WaitTimeout.promptDefaultMs)・上限 \(WaitTimeout.maxMs)"),
+      "prompt_agent の既定 / 上限が WaitTimeout と食い違っている: \(promptDescription)")
+
     for name in ["spawn_agent", "resume_agent"] {
       let launch = try tool(name)
       XCTAssertNotNil(properties(launch)["timeoutMs"], "\(name) は timeoutMs を受ける")
+      XCTAssertTrue(
+        description(properties(launch)["timeoutMs"]).contains("既定 \(WaitTimeout.launchDefaultMs)"),
+        "\(name) の timeoutMs が WaitTimeout.launchDefaultMs と食い違っている")
     }
     XCTAssertTrue(
       (try tool("spawn_agent")["description"] as? String ?? "").contains("ready:false"),

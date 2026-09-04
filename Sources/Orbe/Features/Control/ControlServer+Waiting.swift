@@ -33,7 +33,7 @@ extension ControlServer {
       return conn.respond(
         id: id, result: .failure(ControlError(code: -32602, message: "missing text")))
     }
-    guard let timeoutMs = WaitTimeout.parse(params, default: 3_600_000) else {
+    guard let timeoutMs = WaitTimeout.parse(params, default: WaitTimeout.promptDefaultMs) else {
       return conn.respond(
         id: id, result: .failure(ControlError(code: -32602, message: "invalid timeoutMs")))
     }
@@ -64,7 +64,7 @@ extension ControlServer {
     id: Any?, params: [String: Any], conn: Connection,
     launch: @escaping (ControlTarget) -> Result<AgentLaunch, ControlError>
   ) {
-    guard let timeoutMs = WaitTimeout.parse(params, default: 30_000) else {
+    guard let timeoutMs = WaitTimeout.parse(params, default: WaitTimeout.launchDefaultMs) else {
       return conn.respond(
         id: id, result: .failure(ControlError(code: -32602, message: "invalid timeoutMs")))
     }
