@@ -43,17 +43,19 @@ enum WaitPurpose {
       if let value, value != event.value { return false }
       return true
     case .promptOutcome(let paneId):
+      if paneId != event.paneId { return false }
       switch event {
-      case .agentState(paneId, let state, _, _):
+      case .agentState(_, let state, _, _):
         return state == nil || state == "done" || state == "waiting"
-      case .paneClosed(paneId):
+      case .paneClosed:
         return true
       default:
         return false
       }
     case .agentReady(let paneId, _):
+      if paneId != event.paneId { return false }
       switch event {
-      case .agentState(paneId, "idle"?, _, _), .paneClosed(paneId):
+      case .agentState(_, "idle"?, _, _), .paneClosed:
         return true
       default:
         return false
