@@ -18,8 +18,10 @@ import XCTest
 ///
 /// 重要: 実 NSWindow に SurfaceView を接続し、実ペインで dump プログラムを走らせる（GhosttyKit 必須）。
 final class SurfaceKeyInputTests: OrbeTestCase {
-  /// dump のペインを 1 枚だけ持つ実 `WindowController`。寿命はテストが持つ（`ControlServer` と同じ形）。
-  private var controller: WindowController?
+  override func setUpWithError() throws {
+    try super.setUpWithError()
+    try stageCuratedDefaults()
+  }
 
   /// 層1 を本物の `app/orbe-defaults.conf` へ向け、プロセス級の ghostty config を読み直す。
   /// 後続のテストへ持ち越さないよう、終了時に外して読み直す。
@@ -41,20 +43,18 @@ final class SurfaceKeyInputTests: OrbeTestCase {
       .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
   }
 
-  /// 層1 を本物にした実 `WindowController` を起こし、0 タブの workspace に dump のペインを開く。
+  /// 実 `WindowController` を起こし、0 タブの workspace に dump のペインを開く。controller の寿命は
+  /// 返す `TtyDumpPane` が持つ——テストのローカル束縛が終わると window ごと畳まれ、ペインと python が落ちる。
   func dump(_ mode: TtyDumpPane.Mode) throws -> TtyDumpPane {
-    try stageCuratedDefaults()
     let fixture = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [])])
     try JSONEncoder().encode(fixture).write(to: workspacesFile())
-    let controller = WindowController()
-    self.controller = controller
-    return try TtyDumpPane(in: controller, mode: mode)
+    return try TtyDumpPane(in: WindowController(), mode: mode)
   }
 
   /// `send_key spec` を送り、PTY に `bytes` が 1 打として届くことを見る。
-  func assertSendKey(
+  private func assertSendKey(
     _ spec: String, arrives bytes: String, in dump: TtyDumpPane,
     file: StaticString = #filePath, line: UInt = #line
   ) throws {

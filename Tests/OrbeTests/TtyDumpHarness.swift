@@ -38,6 +38,9 @@ final class TtyDumpPane {
 
     """
 
+  /// dump のペインを 1 枚だけ持つ実 `WindowController`。ペイン（surface と PTY）の寿命は window が
+  /// 持つので、駆動台がここで抱えて自分と同時に畳む（`ControlProcess.target` と同じ形）。
+  let controller: WindowController
   let pane: SurfaceView
   private var consumed = 0
 
@@ -46,6 +49,7 @@ final class TtyDumpPane {
     in controller: WindowController, mode: Mode,
     file: StaticString = #filePath, line: UInt = #line
   ) throws {
+    self.controller = controller
     let script = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("ttydump.py")
     try Self.script.write(to: script, atomically: true, encoding: .utf8)
     let paneId = try XCTUnwrap(
