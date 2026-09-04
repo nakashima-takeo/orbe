@@ -66,9 +66,12 @@ enum ControlEvent {
   func toDict() -> [String: Any] {
     var d: [String: Any] = ["kind": kind, "paneId": paneId]
     if let value { d["value"] = value }
-    if case .agentState(_, _, let message, let sessionId) = self {
+    switch self {
+    case .agentState(_, _, let message, let sessionId):
       if let message { d["message"] = message }
       if let sessionId { d["sessionId"] = sessionId }
+    case .paneTitle, .pwd, .paneClosed:
+      break
     }
     return d
   }
