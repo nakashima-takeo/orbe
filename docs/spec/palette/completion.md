@@ -93,6 +93,7 @@ shim `.zshenv` は全 zsh 起動で読まれ、次の順で働く。
 - 対応 shell は zsh のみ。bash/fish・tmux/ssh 先は env 不達で無効。
 - Orbe が起こした zsh の子プロセス env に `ZDOTDIR=<shim dir>`・`ORBE_USER_ZDOTDIR` は残らない（対話・非対話・login を問わず）。非 zsh で起動したペイン（agent ペイン等）の env には GUI が据えた両者が見えるが、そこから zsh を起こしても shim が消費してユーザ設定へブリッジする。
 - `exec zsh` は shim を経ず補完無効（ghostty shell integration と同じ制限）。
+- `ORBE_USER_ZDOTDIR` が削除済み `.app` の shim dir を指す場合は同定できず、`ZDOTDIR` が不在の dir を指したままユーザ rc は読まれない（widget は入る）。
 - `zsh -i -c`（プロンプトを出さない）では precmd が走らず widget は入らない。
 - precmd 段で bind・keymap 切替をするプラグイン（zsh-vi-mode の既定 lazy init 等）には `^I` / `^M` を奪われる。Orbe のフックはユーザの `.zshrc` が積む precmd より先に走るため（zsh-vi-mode は `ZVM_INIT_MODE=sourcing` で回避できる）。ユーザ設定が `precmd_functions` を代入で丸ごと潰す場合も widget は入らない。
 - 同梱 spec は curated subset のみ（上流 600+ の全網羅・ユーザ提供 spec・上流 spec の自家 fork 運用は無い。`claude`/`codex` の自家 spec は上流に無いコマンドの新規最小 spec であり fork ではない）。
