@@ -68,14 +68,16 @@ final class SurfaceKeyInputTests: OrbeTestCase {
   // MARK: - 層1 の既定
 
   /// `app/orbe-defaults.conf` は `macos-option-as-alt = true` を持つ。legacy の `alt+<文字>` は
-  /// この値に依存し、未設定だと libghostty がキーボードレイアウトで自動判定する（US 系だけ true）。
+  /// この値に依存し、未設定だと libghostty がキーボードレイアウトで自動判定する（true になるのは
+  /// `com.apple.keylayout.US` / `USInternational` だけ。ABC も false）。
   /// 上のバイト検証は US レイアウトの機（CI を含む）では未設定でも通ってしまうので、行そのものを見る。
   func testCuratedDefaultsEncodeOptionAsAlt() throws {
     let defaults = try String(
       contentsOf: repoRoot().appendingPathComponent("app/orbe-defaults.conf"), encoding: .utf8)
     XCTAssertTrue(
       defaults.split(separator: "\n").contains("macos-option-as-alt = true"),
-      "app/orbe-defaults.conf に macos-option-as-alt = true が無い（US 系以外で alt+<文字> が素の文字になる）")
+      "app/orbe-defaults.conf に macos-option-as-alt = true が無い（US / USInternational 以外で alt+<文字> が素の文字になる）"
+    )
   }
 
   // MARK: - legacy（bracketed paste 無し・kitty 無し）
