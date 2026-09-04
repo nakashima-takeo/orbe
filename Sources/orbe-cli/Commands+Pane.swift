@@ -84,11 +84,12 @@ private func paneList(_ rest: [String]) -> Never {
   var args = rest
   let workspaceId = takeWorkspaceId(&args)
   rejectLeftovers(args, positionals: 0)
-  let result = (callOrExit("list_panes", [:]) as? [String: Any]) ?? [:]
+  var result = (callOrExit("list_panes", [:]) as? [String: Any]) ?? [:]
   var panes = result["panes"] as? [[String: Any]] ?? []
   if let workspaceId { panes = panes.filter { $0["workspaceId"] as? Int == workspaceId } }
   if wantJSON {
-    printJSON(["panes": panes, "seq": result["seq"] ?? 0])
+    result["panes"] = panes
+    printJSON(result)
   } else {
     for p in panes {
       let mark = (p["focused"] as? Bool == true) ? "*" : " "
