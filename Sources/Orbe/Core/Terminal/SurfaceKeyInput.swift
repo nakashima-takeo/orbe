@@ -14,7 +14,8 @@ struct SurfaceKeyInput: Equatable {
   /// 無修飾文字（無ければ 0）。
   let unshiftedCodepoint: UInt32
   let mods: ghostty_input_mods_e
-  /// text 生成に消費された修飾。翻訳 mods から control / command を除いた集合。
+  /// `text` を生成するために消費された修飾。libghostty は `mods` − `consumedMods` を効果修飾として
+  /// 符号化する（`text` が無い入力では参照されない）。
   let consumedMods: ghostty_input_mods_e
 
   /// text を `key.text` に載せてよいか。C0 制御文字（先頭 UTF-8 バイト < 0x20）と DEL（0x7F）は載せず
