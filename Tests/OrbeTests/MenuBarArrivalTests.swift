@@ -9,7 +9,7 @@ final class MenuBarArrivalTests: OrbeTestCase {
 
   /// 基準時刻は 0——注入する秒数がそのまま経過秒になり、境界（1.2s / 2.3s / 22.6s）の判定に
   /// 丸め誤差が混ざらない。滞留はここが `expired(at:)` で注入する時刻（22s）が決めるもので、
-  /// 設定 `menubar-notice-dwell` の既定とは無関係。
+  /// 設定 `menubar-notification-duration` の既定とは無関係。
   private let t0 = Date(timeIntervalSinceReferenceDate: 0)
 
   private func at(_ offset: TimeInterval) -> Date { t0.addingTimeInterval(offset) }

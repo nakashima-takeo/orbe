@@ -271,7 +271,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsSoundCustomDoneRow
   case settingsSoundCustomWaitingRow
   case settingsSoundCustomSameAsDone
-  case settingsMenuBarNoticeDwell
+  case settingsMenuBarNotificationDuration
   case settingsSecondsValue
   case settingsUnset
   case settingsToggleOn

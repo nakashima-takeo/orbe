@@ -35,7 +35,7 @@ import Observation
   var transient: Transient?
 
   /// 一過性イベントを立てる。`dwell`（滞留秒）は到来の属性——立てる側が発信元 workspace の
-  /// 実効設定（`menubar-notice-dwell`）から解決して渡し、その到来が終わるまで動かない。
+  /// 実効設定（`menubar-notification-duration`）から解決して渡し、その到来が終わるまで動かない。
   /// store が既定を持たないのは、発信元を知らない store が設定の既定と別口の既定を作らないため。
   /// ホバー延長は MenuBarController が `expiresAt` を伸ばす。
   func noteTransient(_ row: AttentionRow, dwell: TimeInterval, now: Date = Date()) {

@@ -55,16 +55,17 @@ extension WindowController {
   }
 
   /// メニューバー②（一過性の滲み出しピル）を立てる。滞留は通知が持つ発信元 workspace の
-  /// 実効設定（`menubar-notice-dwell`）から決まり、その到来が終わるまで動かない
+  /// 実効設定（`menubar-notification-duration`）から決まり、その到来が終わるまで動かない
   /// ——設定を変えても今出ているピルには効かず、次の到来から効く。
-  func noteAttentionTransient(_ notice: AgentNotice) {
+  func noteAttentionTransient(_ notification: AgentNotification) {
     attentionStore.noteTransient(
-      notice.row, dwell: TimeInterval(notice.settings[SettingKeys.menuBarNoticeDwell]))
+      notification.row,
+      dwell: TimeInterval(notification.settings[SettingKeys.menuBarNotificationDuration]))
   }
 
   /// 「見ていないペインで起きた状態変化」1 件の文脈。メニューバー②と通知音は、この 1 つの通知を
   /// 投影する 2 つの面で、成立条件（抑制・所属）も読む設定も面ごとに判断しない。
-  struct AgentNotice {
+  struct AgentNotification {
     /// 発信元ペインの行（一覧＝`AttentionSnapshot.rows` と同じ組み立て）。
     let row: AttentionRow
     /// 発信元ペインが属する workspace の実効設定。workspace 上書き（「この workspace で起きた
@@ -78,7 +79,7 @@ extension WindowController {
   /// 注意を二重に奪わないため。もう 1 つは**所属が引けない**ペイン（未activatedタブ）——対象は
   /// 一覧と同じ activatedタブのライブペインのみで、一覧にもピルにも出ない通知だけが届くと
   /// ユーザは出所を辿れない。
-  func agentNotice(for pane: SurfaceView) -> AgentNotice? {
+  func agentNotification(for pane: SurfaceView) -> AgentNotification? {
     // 抑制するのは「見ているタブが実在し、かつペインがそのタブに属する」ときだけ。visibleTab が
     // nil＝背面なら誰も見ていないので必ず成立する（controller は weak。nil 同士を一致と読ませない）。
     if let visibleTab, pane.controller === visibleTab { return nil }
@@ -93,7 +94,7 @@ extension WindowController {
           state: report.state,
           message: report.state == "working" ? nil : report.message?.text,
           stateChangedAt: report.stateChangedAt)
-        return AgentNotice(
+        return AgentNotification(
           row: row, settings: settingsStore.effective(override: ws.settingsOverride))
       }
     }

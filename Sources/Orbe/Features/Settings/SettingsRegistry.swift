@@ -138,7 +138,7 @@ enum SettingsRegistry {
   /// agent-state-icons〔gui.conf 非経由〕→ worktree-dir〔同〕→
   /// notification-sound〔同〕→ notification-sound-volume〔同〕→ notification-sound-enabled〔同〕→
   /// notification-sound-custom-done / -waiting / -waiting-same-as-done〔いずれも同〕→
-  /// menubar-notice-dwell〔同〕）。
+  /// menubar-notification-duration〔同〕）。
   /// `rootOrder`（表示順）とは別物——混同すると gui.conf のバイト順が崩れる。
   static let all: [SettingDescriptor] = [
     SettingDescriptor(
@@ -317,8 +317,8 @@ enum SettingsRegistry {
       guiConf: nil,  // gui.conf 非経由
       display: boolLabel, unsetPlaceholderKey: nil),
     SettingDescriptor(
-      id: .menuBarNoticeDwell, key: "menubar-notice-dwell",
-      labelKey: .settingsMenuBarNoticeDwell, activation: .stepper,
+      id: .menuBarNotificationDuration, key: "menubar-notification-duration",
+      labelKey: .settingsMenuBarNotificationDuration, activation: .stepper,
       defaultValue: { .int(40) }, domain: .intRange(5...180, step: 5, unit: "s"),
       guiConf: nil,  // gui.conf 非経由（メニューバー chrome の尺で libghostty 設定ではない）
       display: secondsLabel, unsetPlaceholderKey: nil),
@@ -346,7 +346,7 @@ enum SettingsRegistry {
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
       .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
       .worktreeDir, .notificationSound, .notificationSoundVolume,
-      .notificationSoundEnabled, .menuBarNoticeDwell,
+      .notificationSoundEnabled, .menuBarNotificationDuration,
     ].map { id in all.first { $0.id == id }! }
 
   static func descriptor(_ id: SettingID) -> SettingDescriptor { all.first { $0.id == id }! }

@@ -11,7 +11,7 @@ extension SettingsPaletteTests {
   private var dwellRow: Int { SettingsRegistry.rootOrder.count }
 
   /// 表示時間行は root 末尾に既定 40 秒を単位つきで出し、chevron を持たない（stepper）。
-  func testMenuBarNoticeDwellRowAppearsWithDefault() {
+  func testMenuBarNotificationDurationRowAppearsWithDefault() {
     let p = model()
     XCTAssertTrue(p.render.rows[dwellRow].label.contains("メニューバー通知の表示時間"))
     XCTAssertTrue(p.render.rows[dwellRow].label.contains("40秒"), "未設定なら既定 40 秒を単位つきで表示")
@@ -20,32 +20,32 @@ extension SettingsPaletteTests {
 
   /// 英語は単位を空白で切って `40 s` と出す（日本語は `40秒` と密着）。
   /// 単位の付け方が言語で割れるので、秒数の値表示は書式ごと言語辞書が持つ。
-  func testMenuBarNoticeDwellRowSeparatesTheUnitInEnglish() {
-    let p = model(menuBarNoticeDwell: 40, language: .en)
-    XCTAssertTrue(p.render.rows[dwellRow].label.contains("Menu Bar Notice Duration"))
+  func testMenuBarNotificationDurationRowSeparatesTheUnitInEnglish() {
+    let p = model(menuBarNotificationDuration: 40, language: .en)
+    XCTAssertTrue(p.render.rows[dwellRow].label.contains("Menu Bar Notification Duration"))
     XCTAssertTrue(p.render.rows[dwellRow].label.contains("40 s"), "英語は数と単位の間を空ける")
   }
 
-  func testMenuBarNoticeDwellIncrement() {
-    let p = model(menuBarNoticeDwell: 40)
+  func testMenuBarNotificationDurationIncrement() {
+    let p = model(menuBarNotificationDuration: 40)
     let applied = captureApply(p)
     p.render.selected = dwellRow
     _ = p.render.onRight()  // → で 5 秒増
-    XCTAssertEqual(applied()?[SettingKeys.menuBarNoticeDwell], 45)
+    XCTAssertEqual(applied()?[SettingKeys.menuBarNotificationDuration], 45)
     XCTAssertTrue(p.render.rows[dwellRow].label.contains("45秒"))
   }
 
-  func testMenuBarNoticeDwellDecrement() {
-    let p = model(menuBarNoticeDwell: 40)
+  func testMenuBarNotificationDurationDecrement() {
+    let p = model(menuBarNotificationDuration: 40)
     let applied = captureApply(p)
     p.render.selected = dwellRow
     p.render.onLeft()  // ← で 5 秒減
-    XCTAssertEqual(applied()?[SettingKeys.menuBarNoticeDwell], 35)
+    XCTAssertEqual(applied()?[SettingKeys.menuBarNotificationDuration], 35)
     XCTAssertTrue(p.render.rows[dwellRow].label.contains("35秒"))
   }
 
-  func testMenuBarNoticeDwellClampHigh() {
-    let p = model(menuBarNoticeDwell: 180)
+  func testMenuBarNotificationDurationClampHigh() {
+    let p = model(menuBarNotificationDuration: 180)
     let applied = captureApply(p)
     p.render.selected = dwellRow
     _ = p.render.onRight()
@@ -53,8 +53,8 @@ extension SettingsPaletteTests {
     XCTAssertTrue(p.render.rows[dwellRow].label.contains("180秒"))
   }
 
-  func testMenuBarNoticeDwellClampLow() {
-    let p = model(menuBarNoticeDwell: 5)
+  func testMenuBarNotificationDurationClampLow() {
+    let p = model(menuBarNotificationDuration: 5)
     let applied = captureApply(p)
     p.render.selected = dwellRow
     p.render.onLeft()
@@ -63,8 +63,8 @@ extension SettingsPaletteTests {
   }
 
   /// stepper 行は潜らない（Enter は no-op）＝ fontSize・音量と同じ。
-  func testMenuBarNoticeDwellRowEnterIsNoop() {
-    let p = model(menuBarNoticeDwell: 40)
+  func testMenuBarNotificationDurationRowEnterIsNoop() {
+    let p = model(menuBarNotificationDuration: 40)
     let applied = captureApply(p)
     p.render.selected = dwellRow
     p.render.onActivate()
@@ -73,10 +73,10 @@ extension SettingsPaletteTests {
   }
 
   /// workspace スコープでは上書き・「（継承）」表示・delete での継承解除が他の stepper 行と同じに効く。
-  func testMenuBarNoticeDwellWorkspaceOverrideAndInherit() {
+  func testMenuBarNotificationDurationWorkspaceOverrideAndInherit() {
     var override = SettingsLayer()
-    override[SettingKeys.menuBarNoticeDwell] = 90
-    let p = model(menuBarNoticeDwell: 40, scope: .workspace, override: override)
+    override[SettingKeys.menuBarNotificationDuration] = 90
+    let p = model(menuBarNotificationDuration: 40, scope: .workspace, override: override)
     XCTAssertTrue(p.render.rows[dwellRow].label.contains("90秒"), "上書きが実効値として出る")
     XCTAssertFalse(p.render.rows[dwellRow].inherited, "上書き中は継承マーク無し")
 

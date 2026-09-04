@@ -3,7 +3,7 @@ import SwiftUI
 
 /// メニューバー②（到来ピル）の尺と easing。design 原典（Menubar_Notification_Animation）の
 /// タイムライン表を尺の原典、keyframe を順序と easing の原典として移植する。
-/// 持つのは展開・艶・収縮まで——両者に挟まれる滞留は設定 `menubar-notice-dwell`（発信元
+/// 持つのは展開・艶・収縮まで——両者に挟まれる滞留は設定 `menubar-notification-duration`（発信元
 /// workspace の実効値）から到来時に決まり、`AttentionStore.Transient.expiresAt` が担う。
 enum MenuBarArrival {
   /// 展開（地・件数・文言・◐ を束ねる単一の窓）。

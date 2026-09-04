@@ -13,7 +13,7 @@ final class SettingsPaletteTests: OrbeTestCase {
     cursorStyleBlink: Bool = false,
     fontFamily: String? = nil, theme: ThemeMode? = nil,
     defaultAgent: String? = nil, worktreeDir: String? = nil,
-    menuBarNoticeDwell: Int? = nil,
+    menuBarNotificationDuration: Int? = nil,
     fontNames: [String] = [],
     agents: [String] = ["claude", "codex", "agy"],
     scope: SettingsScope = .global,
@@ -29,7 +29,7 @@ final class SettingsPaletteTests: OrbeTestCase {
     global[SettingKeys.fontFamily] = fontFamily
     global[SettingKeys.defaultAgent] = defaultAgent
     global[SettingKeys.worktreeDir] = worktreeDir
-    global[SettingKeys.menuBarNoticeDwell] = menuBarNoticeDwell
+    global[SettingKeys.menuBarNotificationDuration] = menuBarNotificationDuration
     return SettingsPaletteModel(
       values: ScopedSettingsValues(scope: scope, global: global, override: override),
       fontNames: fontNames, agents: agents,

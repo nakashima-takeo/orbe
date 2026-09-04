@@ -25,7 +25,7 @@ final class SettingsRegistryTests: OrbeTestCase {
         .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .agentStateIcons,
         .worktreeDir, .notificationSound, .notificationSoundVolume,
         .notificationSoundEnabled, .notificationSoundCustomDone, .notificationSoundCustomWaiting,
-        .notificationSoundCustomWaitingSameAsDone, .menuBarNoticeDwell,
+        .notificationSoundCustomWaitingSameAsDone, .menuBarNotificationDuration,
       ])
   }
 
@@ -37,7 +37,7 @@ final class SettingsRegistryTests: OrbeTestCase {
         .fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
         .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
         .worktreeDir, .notificationSound, .notificationSoundVolume,
-        .notificationSoundEnabled, .menuBarNoticeDwell,
+        .notificationSoundEnabled, .menuBarNotificationDuration,
       ])
   }
 
@@ -92,7 +92,8 @@ final class SettingsRegistryTests: OrbeTestCase {
       SettingsRegistry.descriptor(.notificationSoundCustomWaitingSameAsDone).key,
       "notification-sound-custom-waiting-same-as-done")
     XCTAssertEqual(
-      SettingsRegistry.descriptor(.menuBarNoticeDwell).key, "menubar-notice-dwell")
+      SettingsRegistry.descriptor(.menuBarNotificationDuration).key, "menubar-notification-duration"
+    )
     XCTAssertEqual(SettingsRegistry.confKey(.fontSize), "font-size", "confKey は descriptor.key を引く")
     let keys = SettingsRegistry.all.map(\.key)
     XCTAssertEqual(Set(keys).count, SettingsRegistry.all.count, "key は全項目で一意")
@@ -114,7 +115,7 @@ final class SettingsRegistryTests: OrbeTestCase {
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
       .emojiFont, .agentStateIcons, .worktreeDir, .notificationSound,
       .notificationSoundVolume, .notificationSoundEnabled,
-      .notificationSoundCustomWaitingSameAsDone, .menuBarNoticeDwell,
+      .notificationSoundCustomWaitingSameAsDone, .menuBarNotificationDuration,
     ] {
       XCTAssertNotNil(SettingsRegistry.descriptor(id).defaultValue(), "\(id) は既定を持つ")
     }
@@ -157,7 +158,7 @@ final class SettingsRegistryTests: OrbeTestCase {
     XCTAssertEqual(
       SettingsRegistry.descriptor(.notificationSoundEnabled).defaultValue(), .bool(true))
     XCTAssertEqual(
-      SettingsRegistry.descriptor(.menuBarNoticeDwell).defaultValue(), .int(40),
+      SettingsRegistry.descriptor(.menuBarNotificationDuration).defaultValue(), .int(40),
       "②ピルの既定の滞留は 40 秒——`AttentionStore` は既定を持たず、ここが唯一の出所")
   }
 
@@ -261,7 +262,7 @@ final class SettingsRegistryTests: OrbeTestCase {
     let bo = SettingsRegistry.stepperDomain(.backgroundOpacity)
     XCTAssertEqual(bo.range, 20...100)
     XCTAssertEqual(bo.unit, "%")
-    let dwell = SettingsRegistry.stepperDomain(.menuBarNoticeDwell)
+    let dwell = SettingsRegistry.stepperDomain(.menuBarNotificationDuration)
     XCTAssertEqual(dwell.range, 5...180)
     XCTAssertEqual(dwell.step, 5)
     XCTAssertEqual(dwell.unit, "s")
@@ -281,7 +282,8 @@ final class SettingsRegistryTests: OrbeTestCase {
             / SoundRenderer.level(forVolume: volume.range.lowerBound)),
       1.3695, accuracy: 1e-4, "1 押しの効きは全域 1.3695 dB")
     for id in [
-      SettingID.fontSize, .backgroundOpacity, .notificationSoundVolume, .menuBarNoticeDwell,
+      SettingID.fontSize, .backgroundOpacity, .notificationSoundVolume,
+      .menuBarNotificationDuration,
     ] {
       XCTAssertEqual(SettingsRegistry.descriptor(id).activation, .stepper)
     }
@@ -329,7 +331,7 @@ final class SettingsRegistryTests: OrbeTestCase {
     for id in [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink,
       .notificationSoundVolume, .notificationSoundEnabled,
-      .notificationSoundCustomWaitingSameAsDone, .menuBarNoticeDwell,
+      .notificationSoundCustomWaitingSameAsDone, .menuBarNotificationDuration,
     ] {
       XCTAssertFalse(SettingsRegistry.descriptor(id).isDrillIn, "stepper/toggle（\(id)）は潜らない")
     }

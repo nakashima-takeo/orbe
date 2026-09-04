@@ -178,7 +178,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
   }
 
-  /// 休眠（未 activate）workspace のペインでは②を立てない——通知を組む側（`agentNotice(for:)`）は
+  /// 休眠（未 activate）workspace のペインでは②を立てない——通知を組む側（`agentNotification(for:)`）は
   /// 一覧（`AttentionSnapshot.rows`）と同じ activate 済み workspace のみを見る。立ててしまうと、
   /// その行は一覧に出ないので次の flush で即取り下げられる幽霊ピルになる。
   ///
@@ -199,19 +199,19 @@ extension WindowControllerReportAgentTests {
 
   // MARK: - ②の滞留（発信元 workspace の実効設定から到来時に決まる）
 
-  /// 滞留は**発信元ペインが属する workspace** の実効値（`menubar-notice-dwell`）で決まる。
+  /// 滞留は**発信元ペインが属する workspace** の実効値（`menubar-notification-duration`）で決まる。
   ///
   /// workspace を 2 つ立てて**アクティブでない方**から報告させる——1 つしか無いと発信元＝アクティブに
   /// なり、アクティブの実効設定を読む誤実装でも同じく緑になる（通知音の
   /// `testSoundReadsOriginWorkspaceOverride` と同じ問い）。
   func testTransientDwellReadsOriginWorkspaceOverride() throws {
     let (wc, panes) = try makeControllerAndTwoActivatedWorkspaces()
-    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.menuBarNoticeDwell, 20))
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.menuBarNotificationDuration, 20))
     var originOverride = SettingsLayer()
-    originOverride[SettingKeys.menuBarNoticeDwell] = 120
+    originOverride[SettingKeys.menuBarNotificationDuration] = 120
     wc.workspaces[0].settingsOverride = originOverride
     var activeOverride = SettingsLayer()
-    activeOverride[SettingKeys.menuBarNoticeDwell] = 60
+    activeOverride[SettingKeys.menuBarNotificationDuration] = 60
     wc.workspaces[1].settingsOverride = activeOverride
     XCTAssertTrue(wc.current === wc.workspaces[1], "前提: アクティブは発信元でない方")
 
@@ -236,7 +236,7 @@ extension WindowControllerReportAgentTests {
       transient.expiresAt.timeIntervalSince(transient.arrivedAt), 40, accuracy: 0.001,
       "未設定の既定は 40 秒")
 
-    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.menuBarNoticeDwell, 15))
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.menuBarNotificationDuration, 15))
     wc.controlReportAgent(pane: pane, agent: "claude", state: "done", sessionId: nil, message: nil)
     transient = try XCTUnwrap(wc.attentionStore.transient)
     XCTAssertEqual(

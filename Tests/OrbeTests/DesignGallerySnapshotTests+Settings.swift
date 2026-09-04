@@ -117,7 +117,7 @@ extension DesignGallerySnapshotTests {
     var override = SettingsLayer()
     override[SettingKeys.fontSize] = overrideFontSize
     override[SettingKeys.theme] = overrideTheme
-    override[SettingKeys.menuBarNoticeDwell] = overrideDwell
+    override[SettingKeys.menuBarNotificationDuration] = overrideDwell
     return SettingsPaletteModel(
       values: ScopedSettingsValues(global: global, override: override),
       fontNames: ["Menlo", "Monaco", "SF Mono"],

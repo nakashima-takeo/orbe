@@ -1,13 +1,15 @@
 import AppKit
 import OrbeSound
 
-/// エージェント状態の変化を通知音へ流す。メニューバー②と並ぶ、1 つの通知（`AgentNotice`）の
+/// エージェント状態の変化を通知音へ流す。メニューバー②と並ぶ、1 つの通知（`AgentNotification`）の
 /// 2 つ目の投影面。
 extension WindowController {
   /// 通知 1 件を鳴らす。鳴らすかどうか（状態・オン/オフ・音源）は `AgentSoundDecision` が
   /// 通知の持つ発信元 workspace の実効設定から決める。
-  func noteAgentSound(_ notice: AgentNotice) {
-    guard let plan = AgentSoundDecision.plan(state: notice.row.state, settings: notice.settings)
+  func noteAgentSound(_ notification: AgentNotification) {
+    guard
+      let plan = AgentSoundDecision.plan(
+        state: notification.row.state, settings: notification.settings)
     else { return }
     soundPlayer.play(plan.source, event: plan.event, volume: plan.volume)
   }

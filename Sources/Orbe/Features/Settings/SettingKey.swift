@@ -9,7 +9,7 @@ enum SettingID: CaseIterable {
     defaultAgent, fontFamily, tabTitleFontFamily, emojiFont, agentStateIcons,
     worktreeDir, notificationSound, notificationSoundVolume, notificationSoundEnabled,
     notificationSoundCustomDone, notificationSoundCustomWaiting,
-    notificationSoundCustomWaitingSameAsDone, menuBarNoticeDwell
+    notificationSoundCustomWaitingSameAsDone, menuBarNotificationDuration
 }
 
 /// unset が固有の意味を持つ項目（fontFamily＝既定チェーン・defaultAgent＝検出先頭）の phantom-typed key。
@@ -39,7 +39,7 @@ enum SettingKeys {
   static let notificationSound = DefaultedSettingKey<AgentSoundChoice>(.notificationSound)
   static let notificationSoundVolume = DefaultedSettingKey<Int>(.notificationSoundVolume)
   static let notificationSoundEnabled = DefaultedSettingKey<Bool>(.notificationSoundEnabled)
-  static let menuBarNoticeDwell = DefaultedSettingKey<Int>(.menuBarNoticeDwell)
+  static let menuBarNotificationDuration = DefaultedSettingKey<Int>(.menuBarNotificationDuration)
   /// 「waiting でも done と同じ音を鳴らす」。key に `custom` を含むのは、custom 選択中にしか
   /// 効かないつまみだと公開 key（CLI/control/ディスク）が自ら語るため。
   static let notificationSoundCustomWaitingSameAsDone = DefaultedSettingKey<Bool>(
