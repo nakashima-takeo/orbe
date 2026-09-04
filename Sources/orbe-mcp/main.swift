@@ -274,7 +274,8 @@ let tools: [[String: Any]] = [
         + "pane_closed（libghostty が host に出す OSC シグナル）。生のシェル出力は待てない"
         + "（その用途は get_pane_text をポーリング）。エージェントの応答を待つなら prompt_agent を使う。"
         + "全イベントに 1 本の単調増加 seq が付く。after を渡すと、その seq より後に既に起きた一致イベントも"
-        + "即返す（after の出所は他の応答の seq）。after が保持範囲より古ければ -32006（seq を取り直す）。"
+        + "即返す（after の出所は他の応答の seq）。after が保持範囲より古ければ event history evicted の"
+        + "エラー（seq を取り直す）。"
         + "タイムアウトすると timedOut:true を返す。未知の kind と不正な timeoutMs / after / value は"
         + "エラーで弾かれる（黙って時間切れにはならない）。"
     ),
