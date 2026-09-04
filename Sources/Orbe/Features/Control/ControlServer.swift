@@ -116,9 +116,11 @@ final class ControlServer {
   /// 状態変化イベントに seq を振って履歴へ積み、待機者へ配信する（任意スレッドから呼ばれ queue へ hop）。
   ///
   /// 順序保証: queue は FIFO なので、main の操作 A の後に積まれる応答 hop は A より前に emit された
-  /// 全イベントを見た後に走り、A が引き起こすイベント（PTY 書込み → hook → report_agent → main →
-  /// didSet → emit）は必ずその後に積まれる。よって応答が刻む `latestSeq` は「A 以前の履歴位置」で、
-  /// A の直後に queue で張った待機は A が引き起こす遷移を取りこぼさない。
+  /// 全イベントを見た後に走る。A が引き起こす遷移がプロセス外の報告を経て届く経路（PTY 書込み →
+  /// hook → report_agent → main → didSet → emit）では、そのイベントは必ず応答 hop より後に積まれる
+  /// ——応答が刻む `latestSeq` は「A 以前の履歴位置」で、A の直後に queue で張った待機は A が
+  /// 引き起こす遷移を取りこぼさない。逆に A 自身が main ブロック内で同期的に didSet → emit を撃つ
+  /// 操作（`report_agent`）では emit が応答 hop より先に積まれ、応答の `seq` はその遷移を含む。
   func emit(_ event: ControlEvent) {
     queue.async {
       let record = self.history.append(event)
