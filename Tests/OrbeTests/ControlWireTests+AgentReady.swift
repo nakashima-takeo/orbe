@@ -49,6 +49,7 @@ extension ControlWireTests {
       ControlServer.shared.emit(idle(entry.1 + 1, sessionId: "other"))
       wire.barrier()  // idle 以外の状態・別ペインの idle では起きない
 
+      let before = result(wire.request(id: id + 1, method: "list_workspaces"))?["seq"] as? Int ?? -1
       ControlServer.shared.emit(idle(entry.1, sessionId: "sess-\(entry.1)"))
       let response = wire.nextResponse()
       XCTAssertEqual(response?["id"] as? Int, id, "\(entry.0) は自分の id で起きる")
@@ -62,10 +63,11 @@ extension ControlWireTests {
       XCTAssertEqual(
         launched?["agentSessionId"] as? String, "sess-\(entry.1)",
         "\(entry.0) の agentSessionId は idle 報告が運んだ session id")
-      XCTAssertEqual(
-        launched?["seq"] as? Int,
-        result(wire.request(id: id + 1, method: "list_workspaces"))?["seq"] as? Int,
-        "\(entry.0) の seq はその idle イベントの seq")
+      let seq = launched?["seq"] as? Int ?? -1
+      XCTAssertGreaterThan(seq, before, "\(entry.0) の seq はその idle イベントの seq（起動時点より後）")
+      XCTAssertLessThanOrEqual(
+        seq, result(wire.request(id: id + 2, method: "list_workspaces"))?["seq"] as? Int ?? -1,
+        "\(entry.0) の seq は履歴の中の位置")
     }
   }
 

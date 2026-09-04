@@ -12,8 +12,9 @@ import XCTest
 /// 化ければ、replay で返したイベントと応答の間のイベントを次の `after` で取りこぼす。`-32006` が
 /// `-32602` に混ざれば、呼び出し側は「seq を取り直せ」と「呼び方が間違っている」を区別できない。
 ///
-/// `ControlServer.shared` の履歴はプロセス寿命で溜まり続けるので、seq は必ず直前の応答から読み、
-/// リテラルでは書かない。
+/// `ControlServer.shared` の履歴はプロセス寿命で溜まり続け、他のテストが残した `SurfaceView` の解放
+/// （`pane_closed`）がいつ割り込むかは決められない。seq はリテラルで書かず直前の応答から読み、
+/// 隣接（`+ 1`）ではなく**前後関係**（自分の pane に絞った一致・大小）で言う。`+ 1` の厳密さは L1 が持つ。
 extension ControlWireTests {
   /// 応答時点の履歴位置（成功応答の最上位 `seq`）。
   private func seq(_ response: [String: Any]?) -> Int? {
@@ -41,7 +42,7 @@ extension ControlWireTests {
 
   // MARK: - seq
 
-  /// kind・pane を問わず 1 本の seq が 1 ずつ進み、event 応答の `event.seq` と最上位 `seq` は
+  /// kind・pane を問わず 1 本の seq が進み、event 応答の `event.seq` と最上位 `seq` は
   /// そのイベント自身の seq。
   func testEveryEventCarriesTheNextSeqOnOneCounter() {
     let wire = startWire(target: FakeControlTarget())
@@ -52,16 +53,15 @@ extension ControlWireTests {
     ]
 
     for (index, next) in events.enumerated() {
-      armWait(wire, id: 10 + index)
+      armWait(wire, id: 10 + index, params: ["paneId": next.paneId])
       ControlServer.shared.emit(next)
       let response = wire.nextResponse()
 
-      XCTAssertEqual(
-        event(response)?["seq"] as? Int, previous + 1,
-        "\(next.kind) にも直前のイベントの次の seq が振られる（kind・pane で列を分けない）")
-      XCTAssertEqual(
-        seq(response), previous + 1, "イベントで完結した応答の seq はそのイベントの seq")
-      previous += 1
+      let assigned = event(response)?["seq"] as? Int ?? -1
+      XCTAssertGreaterThan(
+        assigned, previous, "\(next.kind) にも同じ 1 本のカウンタで前より大きい seq が振られる")
+      XCTAssertEqual(seq(response), assigned, "イベントで完結した応答の seq はそのイベントの seq")
+      previous = assigned
     }
   }
 
@@ -80,15 +80,17 @@ extension ControlWireTests {
       ("spawn", [:]),
       ("spawn_agent", ["command": "codex"]),
     ]
+    var position = start
     for (index, entry) in successes.enumerated() {
-      XCTAssertEqual(
-        seq(wire.request(id: 10 + index, method: entry.0, params: entry.1)), start,
-        "\(entry.0) の成功応答は最上位に応答時点の seq を持つ")
+      let seq = seq(wire.request(id: 10 + index, method: entry.0, params: entry.1)) ?? -1
+      XCTAssertGreaterThanOrEqual(
+        seq, position, "\(entry.0) の成功応答は最上位に応答時点の seq を持つ（履歴位置は戻らない）")
+      position = seq
     }
 
     ControlServer.shared.emit(done(8205))
-    XCTAssertEqual(
-      currentSeq(wire, id: 20), start + 1, "イベントが起きた後の応答は進んだ履歴位置を刻む")
+    XCTAssertGreaterThan(
+      currentSeq(wire, id: 20), position, "イベントが起きた後の応答は進んだ履歴位置を刻む")
 
     let failure = wire.request(id: 21, method: "send_text", params: ["paneId": pane])
     XCTAssertNotNil(failure?["error"], "前提: -32602 の失敗応答")
@@ -126,16 +128,17 @@ extension ControlWireTests {
 
     ControlServer.shared.emit(done(8207))
     ControlServer.shared.emit(.pwd(paneId: 8208, path: "/later"))
-    XCTAssertEqual(currentSeq(wire, id: 2), before + 2, "前提: 2 件が履歴に積まれた")
+    let latest = currentSeq(wire, id: 2)
 
     let response = wire.request(
       id: 3, method: "wait_for_event", params: ["after": before, "paneId": 8207])
 
     XCTAssertEqual(event(response)?["paneId"] as? Int, 8207, "既に起きたイベントで即返る")
-    XCTAssertEqual(event(response)?["seq"] as? Int, before + 1)
-    XCTAssertEqual(
-      seq(response), before + 1,
-      "応答の seq は返したイベントの seq（最新 \(before + 2) に化けると次の after で pwd を取りこぼす）")
+    let replayed = event(response)?["seq"] as? Int ?? -1
+    XCTAssertGreaterThan(replayed, before, "返るのは after より後のイベント")
+    XCTAssertEqual(seq(response), replayed, "応答の seq は返したイベントの seq")
+    XCTAssertLessThan(
+      replayed, latest, "応答の seq は最新ではない（最新に化けると次の after で pwd を取りこぼす）")
   }
 
   /// 一致が複数あれば seq 昇順で**最初**の一致を返す（最新ではない）。
@@ -147,14 +150,13 @@ extension ControlWireTests {
       .agentState(paneId: 8209, state: "working", message: nil, sessionId: nil))
     ControlServer.shared.emit(done(8209, message: "first"))
     ControlServer.shared.emit(done(8209, message: "second"))
-    XCTAssertEqual(currentSeq(wire, id: 2), before + 3, "前提: 3 件が履歴に積まれた")
+    wire.barrier()
 
     let response = wire.request(
       id: 3, method: "wait_for_event",
       params: ["after": before, "paneId": 8209, "value": "done"])
 
     XCTAssertEqual(event(response)?["message"] as? String, "first", "seq 昇順で最初の一致")
-    XCTAssertEqual(event(response)?["seq"] as? Int, before + 2)
   }
 
   /// `after` 以後に一致が無ければ従来どおり待ち、後続のイベントで起きる。
@@ -169,7 +171,7 @@ extension ControlWireTests {
     let response = wire.nextResponse()
 
     XCTAssertEqual(response?["id"] as? Int, 2, "履歴に一致が無ければ待機を張って後続で起きる")
-    XCTAssertEqual(event(response)?["seq"] as? Int, before + 1)
+    XCTAssertGreaterThan(event(response)?["seq"] as? Int ?? -1, before)
   }
 
   /// `after` が最新 seq より大きい値は観測しえない＝呼び出し側のバグとして -32602。待機は張らない。
@@ -178,7 +180,8 @@ extension ControlWireTests {
     let latest = currentSeq(wire, id: 1)
 
     XCTAssertEqual(
-      errorCode(wire.request(id: 2, method: "wait_for_event", params: ["after": latest + 1])),
+      errorCode(
+        wire.request(id: 2, method: "wait_for_event", params: ["after": latest + 100_000])),
       -32602, "最新より大きい after は -32602")
 
     ControlServer.shared.emit(.pwd(paneId: 8211, path: "/x"))
@@ -192,7 +195,8 @@ extension ControlWireTests {
     // seq `old + 1` を落とすには容量ぶん＋ 1 件を積む。容量は `ControlServer` の履歴（4096）。
     let capacity = 4096
     for _ in 0...capacity { ControlServer.shared.emit(.pwd(paneId: 8212, path: "/flood")) }
-    XCTAssertEqual(currentSeq(wire, id: 2), old + capacity + 1, "前提: 容量 + 1 件を積んだ")
+    let latest = currentSeq(wire, id: 2)
+    XCTAssertGreaterThanOrEqual(latest, old + capacity + 1, "前提: 容量 + 1 件以上を積んだ")
 
     let response = wire.request(id: 3, method: "wait_for_event", params: ["after": old])
 
@@ -200,9 +204,12 @@ extension ControlWireTests {
     XCTAssertEqual(
       (response?["error"] as? [String: Any])?["message"] as? String, "event history evicted",
       "message も契約の一部（クライアントが seq の取り直しを判断する）")
+    // 保持範囲の内側は replay できる。最古ぴったりは他テストの残骸（pane_closed）が割り込むと
+    // 落ちうるので 1 つ内側を指す（境界の厳密さは L1 が持つ）。
+    let retained = latest - capacity + 1
     XCTAssertEqual(
-      event(wire.request(id: 4, method: "wait_for_event", params: ["after": old + 1]))?["seq"]
-        as? Int, old + 2, "1 つ新しい after は最古の record から replay できる（境界）")
+      event(wire.request(id: 4, method: "wait_for_event", params: ["after": retained]))?["seq"]
+        as? Int, retained + 1, "保持範囲の内側の after は replay できる")
   }
 
   /// `after` の型違い・負、`value` の非文字列は待機を張る前に -32602。

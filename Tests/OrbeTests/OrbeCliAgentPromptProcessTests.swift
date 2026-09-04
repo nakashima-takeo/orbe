@@ -18,7 +18,8 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
   private static let sessionId = "fake-session-0001"
 
   /// 起動時に idle を報告し、以後は 1 行ごとに working → 止まる状態を報告する偽 claude。
-  /// `ask:<q>` は質問文つきの waiting、`slow:<t>` は 10 秒 working のまま、`quit` は clear（SessionEnd）。
+  /// `ask:<q>` は質問文つきの waiting、`slow:<t>` は 10 秒 working のまま、`quit` は clear（SessionEnd。
+  /// プロセスは終えない——終えると pane_closed が clear と競い、応答が -32004 に化けうる）。
   /// それ以外は `reply:<行>` を最終応答として done。
   private func stageReportingClaude() throws -> FakeAgent {
     try stageFakeAgent(
@@ -31,7 +32,7 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
             ask:*) printf '{"message":"%s"}' "${line#ask:}" | "$ORBE_REPORT_BIN" claude waiting ;;
             slow:*) sleep 10; printf '{"last_assistant_message":"reply:%s"}' "${line#slow:}" \\
               | "$ORBE_REPORT_BIN" claude done ;;
-            quit) "$ORBE_REPORT_BIN" claude clear </dev/null; sleep 0.2; exit 0 ;;
+            quit) "$ORBE_REPORT_BIN" claude clear </dev/null ;;
             *) printf '{"last_assistant_message":"reply:%s"}' "$line" | "$ORBE_REPORT_BIN" claude done ;;
           esac
         done
@@ -169,14 +170,25 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
       refused.stderr.contains("-32000") && refused.stderr.contains("agent busy (state: waiting")
         && refused.stderr.contains("send_key"),
       "拒否の理由と send_key への導線が残る: \(refused.stderr)")
-    let panes = control.orbJSON(["pane", "list"])["panes"] as? [[String: Any]]
+    let listed = control.orbJSON(["pane", "list"])
     XCTAssertEqual(
-      panes?.first { $0["paneId"] as? Int == pane }?["agentState"] as? String, "waiting",
-      "拒まれた prompt はエージェントを動かしていない")
+      (listed["panes"] as? [[String: Any]])?.first { $0["paneId"] as? Int == pane }?["agentState"]
+        as? String, "waiting", "拒まれた prompt はエージェントを動かしていない")
+
+    // 「何も送られていない」を決定論的に見る: 生の enter（waiting への正規の応答）を送り、偽 claude が
+    // その空行で done を報告するまで待つ。拒んだ text が先に届いていれば PTY 上で enter より前に
+    // 並ぶので、done の時点で画面に写っているはず——写っていなければ送られていない。
+    let seq = try XCTUnwrap(listed["seq"] as? Int, "seq の出所")
+    let pressed = control.orb(["pane", "key", "\(pane)", "--key", "enter"])
+    XCTAssertEqual(pressed.status, 0, "waiting への enter は送れる: \(pressed.stderr)")
+    let woke = control.orb(
+      [
+        "wait", "\(pane)", "--kind", "agent_state", "--value", "done", "--after", "\(seq)",
+        "--timeout-ms", "8000",
+      ])
+    XCTAssertEqual(woke.status, 0, "enter の空行で偽 claude が done を報告する: \(woke.stderr)")
     XCTAssertFalse(
-      waitUntil(0.5) {
-        control.orb(["pane", "text", "\(pane)", "--scrollback"]).stdout.contains(probe)
-      },
+      control.orb(["pane", "text", "\(pane)", "--scrollback"]).stdout.contains(probe),
       "拒んだ text がペインに書かれている（waiting へ text＋Enter を打つと承認が確定する）")
   }
 

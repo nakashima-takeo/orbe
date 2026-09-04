@@ -50,13 +50,15 @@ extension ControlWireTests {
     ControlServer.shared.emit(state(pane, "working"))
     wire.barrier()  // working は「止まった」ではない
 
+    let before = latestSeq(wire, id: 2) ?? -1
     ControlServer.shared.emit(state(pane, "done", message: "here is the answer"))
     let response = wire.nextResponse()
     XCTAssertEqual(response?["id"] as? Int, 1, "prompt_agent を送った id で応答が返る")
     XCTAssertEqual(result(response)?["state"] as? String, "done")
     XCTAssertEqual(result(response)?["message"] as? String, "here is the answer", "done の文言は最終応答")
-    XCTAssertEqual(
-      result(response)?["seq"] as? Int, latestSeq(wire, id: 2), "seq は返したイベントの seq")
+    let seq = result(response)?["seq"] as? Int ?? -1
+    XCTAssertGreaterThan(seq, before, "seq は返した done イベントの seq（送信前の位置より後）")
+    XCTAssertLessThanOrEqual(seq, latestSeq(wire, id: 3) ?? -1, "seq は履歴の中の位置")
   }
 
   /// `waiting` は `state: waiting`（質問文つき）、報告の消滅（SessionEnd）は `state: clear` で返る。
