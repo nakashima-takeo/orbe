@@ -67,7 +67,7 @@ final class SurfaceKeyboardTests: OrbeTestCase {
 
   /// DEL（0x7F）は 0x20 以上だが制御文字なので載せない。物理 Shift+Backspace / Option+Backspace の
   /// text が key に乗ると consumed_mods が修飾を差し引き、kitty で `CSI 127;2u` / `CSI 127;3u` に
-  /// ならず素の DEL になる。前後の `~`（0x7E）と 0x80 以上は載せる。
+  /// ならず素の DEL になる。直前の `~`（0x7E）は載せる。
   func testDELDoesNotCarry() {
     XCTAssertFalse(SurfaceKeyInput.textCarriesToKey("\u{7f}"))
     XCTAssertTrue(SurfaceKeyInput.textCarriesToKey("~"))  // 0x7E
