@@ -34,7 +34,7 @@ extension ControlWireTests {
 
     let resultReturning = [
       "split_pane", "close_pane", "focus_pane", "close_tab",
-      "spawn_agent", "resume_agent",
+      "spawn_agent", "resume_agent", "prompt_agent",
       "config_list", "config_set", "create_workspace", "rename_workspace",
       "set_workspace_root", "remove_workspace",
     ]
@@ -171,6 +171,8 @@ extension ControlWireTests {
       id: 5, method: "set_workspace_root", params: ["workspaceId": 85, "rootPath": "/tmp/r"])
     _ = wire.request(id: 6, method: "remove_workspace", params: ["workspaceId": 86])
     _ = wire.request(id: 7, method: "activate_workspace", params: ["workspaceId": 87])
+    _ = wire.request(
+      id: 8, method: "prompt_agent", params: ["paneId": fake.paneId, "text": "p", "timeoutMs": 10])
 
     XCTAssertEqual(fake.closedPaneIds, [81], "close_pane は controlClosePane へ paneId を渡す")
     XCTAssertEqual(fake.focusedPaneIds, [82], "focus_pane は controlFocusPane へ paneId を渡す")
@@ -184,5 +186,7 @@ extension ControlWireTests {
       fake.workspaceRoots.last?.rootPath, "/tmp/r", "set_workspace_root は rootPath を渡す")
     XCTAssertEqual(fake.removedWorkspaceIds, [86], "remove_workspace は workspaceId を渡す")
     XCTAssertEqual(fake.activatedWorkspaceIds, [87], "activate_workspace は workspaceId を渡す")
+    XCTAssertEqual(
+      fake.prompts.map(\.paneId), [fake.paneId], "prompt_agent は解決したペインを controlPromptAgent へ渡す")
   }
 }

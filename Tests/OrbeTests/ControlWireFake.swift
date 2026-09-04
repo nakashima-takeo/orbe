@@ -151,11 +151,17 @@ final class FakeControlTarget: ControlTarget {
         agent: AgentCLI(command: command, path: "/fake/bin/\(command)")))
   }
 
+  /// 送信が引き起こす遷移の代役。実経路では hook → `report_agent` → main hop → didSet → emit と
+  /// 戻ってくるので、テストはここで `DispatchQueue.main.async { emit }` のように同じ順序で流す。
+  var promptSideEffect: (() -> Void)?
+
   /// `prompt_agent` の到達記録。`domainFailure` が立っていればそれで拒み、無ければ送れたことにする
   /// （surface 不在で `controlSendText` は no-op なので、実 `WindowController` 経路は L4 が測る）。
   func controlPromptAgent(pane: SurfaceView, text: String) -> ControlError? {
     prompts.append(Prompt(paneId: pane.id, text: text))
-    return domainFailure
+    if let failure = domainFailure { return failure }
+    promptSideEffect?()
+    return nil
   }
 
   func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, paneIds: [Int])? {
