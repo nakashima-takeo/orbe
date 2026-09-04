@@ -84,11 +84,11 @@ private func paneList(_ rest: [String]) -> Never {
   var args = rest
   let workspaceId = takeWorkspaceId(&args)
   rejectLeftovers(args, positionals: 0)
-  let result = callOrExit("list_panes", [:])
-  var panes = (result as? [String: Any])?["panes"] as? [[String: Any]] ?? []
+  let result = (callOrExit("list_panes", [:]) as? [String: Any]) ?? [:]
+  var panes = result["panes"] as? [[String: Any]] ?? []
   if let workspaceId { panes = panes.filter { $0["workspaceId"] as? Int == workspaceId } }
   if wantJSON {
-    printJSON(["panes": panes])
+    printJSON(["panes": panes, "seq": result["seq"] ?? 0])
   } else {
     for p in panes {
       let mark = (p["focused"] as? Bool == true) ? "*" : " "
@@ -175,11 +175,6 @@ private func paneText(_ rest: [String]) -> Never {
 /// `--text` と `--stdin` はどちらか一方が必須。`--stdin` を明示必須にしているので、引数を
 /// 省いたときに黙って標準入力を待つことはない。読み取りは**ペイン解決の後**に置く——引数が
 /// 不正なときに tty で待たせないため。
-///
-/// 空入力の扱いが `--text` と非対称なのは意図的。`--text` は空白のみも弾く（`--text "$PROMPT"`
-/// の `$PROMPT` が空になる形がそこで起きる）。`--stdin` は 0 バイトだけを弾き空白は通す——
-/// `printf '%s' "$PROMPT" | orb pane send --stdin` の未設定は 0 バイトとして現れる一方、
-/// ファイルや heredoc の正当な中身が空白・改行だけであることはあり得るから。
 private func paneSend(_ rest: [String]) -> Never {
   // help は**値の席を抜き取った後**に見る。`--text` の値は任意のユーザーテキストなので、引数列
   // 全体を走査すると `--text -h` の値が help と読まれ、**何も送らないまま exit 0** になる
@@ -192,22 +187,11 @@ private func paneSend(_ rest: [String]) -> Never {
     print(paneUsage)
     exit(0)
   }
-  if text != nil && useStdin { usageDie("pass only one of --text / --stdin") }
-  guard text != nil || useStdin else { usageDie("pane send requires --text or --stdin") }
+  requireTextSource(text: text, useStdin: useStdin, verb: "pane send")
   rejectLeftovers(args, positionals: 1)
   guard let pane = resolvePaneArg(args) else { paneContextDie() }
 
-  let payload: String
-  if let text {
-    payload = text
-  } else {
-    let data = FileHandle.standardInput.readDataToEndOfFile()
-    guard !data.isEmpty else { usageDie("--stdin got no input") }
-    guard let decoded = String(data: data, encoding: .utf8) else {
-      usageDie("--stdin is not valid UTF-8")
-    }
-    payload = decoded
-  }
+  let payload = text ?? readStdinText()
   let result = callOrExit("send_text", ["paneId": pane, "text": payload])
   if wantJSON { printJSON(result) } else { print("sent to pane \(pane)") }
   exit(0)
