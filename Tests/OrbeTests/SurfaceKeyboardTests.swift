@@ -47,32 +47,32 @@ final class SurfaceKeyboardTests: OrbeTestCase {
 
   /// 印字可能文字は key.text に載せる。
   func testPrintableTextCarries() {
-    XCTAssertTrue(SurfaceView.textCarriesToKey("a"))
-    XCTAssertTrue(SurfaceView.textCarriesToKey("Z"))
-    XCTAssertTrue(SurfaceView.textCarriesToKey("1"))
+    XCTAssertTrue(SurfaceKeyInput.textCarriesToKey("a"))
+    XCTAssertTrue(SurfaceKeyInput.textCarriesToKey("Z"))
+    XCTAssertTrue(SurfaceKeyInput.textCarriesToKey("1"))
   }
 
   /// space(0x20) は載せる下端の境界、0x1F は載せない上端の境界。
   func testControlBoundaryAt0x20() {
-    XCTAssertTrue(SurfaceView.textCarriesToKey(" "))  // 0x20
-    XCTAssertFalse(SurfaceView.textCarriesToKey("\u{1f}"))  // 0x1F
+    XCTAssertTrue(SurfaceKeyInput.textCarriesToKey(" "))  // 0x20
+    XCTAssertFalse(SurfaceKeyInput.textCarriesToKey("\u{1f}"))  // 0x1F
   }
 
   /// 制御文字は載せない（Enter=\r・ESC・NUL）。Alt+Enter が素の Enter に潰れないための要。
   func testControlCharsDoNotCarry() {
-    XCTAssertFalse(SurfaceView.textCarriesToKey("\r"))  // 0x0D Enter
-    XCTAssertFalse(SurfaceView.textCarriesToKey("\u{1b}"))  // ESC
-    XCTAssertFalse(SurfaceView.textCarriesToKey("\u{00}"))  // NUL
+    XCTAssertFalse(SurfaceKeyInput.textCarriesToKey("\r"))  // 0x0D Enter
+    XCTAssertFalse(SurfaceKeyInput.textCarriesToKey("\u{1b}"))  // ESC
+    XCTAssertFalse(SurfaceKeyInput.textCarriesToKey("\u{00}"))  // NUL
   }
 
   /// 空文字列は載せない（先頭バイト無し）。
   func testEmptyStringDoesNotCarry() {
-    XCTAssertFalse(SurfaceView.textCarriesToKey(""))
+    XCTAssertFalse(SurfaceKeyInput.textCarriesToKey(""))
   }
 
   /// マルチバイト UTF-8 は先頭バイトが 0x80 以上のため常に載せる（scalar でなくバイト判定）。
   func testMultibyteUTF8Carries() {
-    XCTAssertTrue(SurfaceView.textCarriesToKey("あ"))
-    XCTAssertTrue(SurfaceView.textCarriesToKey("🎉"))
+    XCTAssertTrue(SurfaceKeyInput.textCarriesToKey("あ"))
+    XCTAssertTrue(SurfaceKeyInput.textCarriesToKey("🎉"))
   }
 }
