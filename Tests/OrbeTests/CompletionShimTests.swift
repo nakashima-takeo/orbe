@@ -4,7 +4,7 @@ import XCTest
 
 /// ZDOTDIR shim（`app/zsh/`）の契約を実 `/bin/zsh` で機械検証する。
 /// ユーザー rc の source 順・widget bind の最終勝ち・ZDOTDIR のユーザー値復元・
-/// ORBE_USER_ZDOTDIR の掃除、という「ブリッジの往復」を fake HOME で決定論的に確かめる。
+/// ORBE_USER_ZDOTDIR の消費、という「ブリッジ」を fake HOME で決定論的に確かめる。
 /// env は明示辞書のみ（継承しない）・`NO_GLOBAL_RCS` で global rc を断つ（開発機 dotfiles で flake させない）。
 final class CompletionShimTests: OrbeTestCase {
   /// リポジトリ実体の shim dir（`app/zsh`）。テストは同梱物でなくソースを直接検証する。
@@ -40,7 +40,7 @@ final class CompletionShimTests: OrbeTestCase {
     return text.split(separator: "\n").map(String.init)
   }
 
-  /// shell 初期化後（＝全 startup file 処理後）の bind と env を印字する検証コマンド。
+  /// 最初のプロンプト後（＝全 startup file と最初の precmd の後）の bind と env を印字する検証コマンド。
   private static let probe = """
     print -r -- "TAB:${${(z)$(bindkey '^I')}[2]}"
     print -r -- "CR:${${(z)$(bindkey '^M')}[2]}"
@@ -49,14 +49,17 @@ final class CompletionShimTests: OrbeTestCase {
     print -r -- "OUZ:${ORBE_USER_ZDOTDIR-unset}"
     """
 
-  /// 実 zsh を interactive で起こし probe の出力を返す。env は明示辞書のみ（継承しない）。
-  /// `NO_GLOBAL_RCS` で `/etc/zshrc`・`/etc/zprofile`（path_helper）を断ち決定論化する。
+  /// 実 zsh を interactive で起こし、probe を stdin から 1 コマンド目として流して出力を返す。
+  /// widget は最初のプロンプト直前の precmd で入るため、プロンプトを出さない `-c` では観測できない。
+  /// pipe 駆動の `zsh -i` はプロンプトを stderr に出すので stdout は probe の出力だけになる。
+  /// env は明示辞書のみ（継承しない）。`NO_GLOBAL_RCS` で `/etc/zshrc`・`/etc/zprofile`（path_helper）を
+  /// 断ち決定論化する。
   private func runZsh(extraEnv: [String: String] = [:], login: Bool = false) throws -> String {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/zsh")
     var args = ["-o", "NO_GLOBAL_RCS"]
     if login { args.append("-l") }
-    args += ["-i", "-c", Self.probe]
+    args.append("-i")
     process.arguments = args
     var env = [
       "HOME": home.path,
@@ -69,10 +72,14 @@ final class CompletionShimTests: OrbeTestCase {
     ]
     env.merge(extraEnv) { _, new in new }
     process.environment = env
+    let stdin = Pipe()
     let stdout = Pipe()
+    process.standardInput = stdin
     process.standardOutput = stdout
     process.standardError = FileHandle.nullDevice  // 未読 Pipe はバッファ満杯で子を block しうる。捨てる意図を明示
     try process.run()
+    try stdin.fileHandleForWriting.write(contentsOf: Data((Self.probe + "\n").utf8))
+    try stdin.fileHandleForWriting.close()  // EOF で zsh が終了する
     let data = stdout.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
     return String(data: data, encoding: .utf8) ?? ""
@@ -95,7 +102,7 @@ final class CompletionShimTests: OrbeTestCase {
     assertProbe(out, contains: "TAB:_orbe_complete")
     assertProbe(out, contains: "CR:_orbe_accept_line")
     assertProbe(out, contains: "ZDOTDIR:unset", "元の env に無かった ZDOTDIR は unset へ復元")
-    assertProbe(out, contains: "OUZ:unset", "ORBE_USER_ZDOTDIR は .zshrc で掃除される")
+    assertProbe(out, contains: "OUZ:unset", "ORBE_USER_ZDOTDIR は shim が読んだ時点で消える")
   }
 
   func testUserZshenvSettingZdotdirIsHonored() throws {
@@ -110,13 +117,13 @@ final class CompletionShimTests: OrbeTestCase {
   }
 
   func testLateBindingPluginFallsBackViaOrbeTab() throws {
-    // 後乗り bind との共存（fzf-tab 相当）: ユーザー .zshrc 末尾の bind に widget が後勝ちし、
-    // 元 widget はフォールバックへ退避される。
+    // 後乗り bind との共存（fzf-tab 相当）: ユーザー .zshrc 末尾の bind に、最初の precmd で入る
+    // widget が後勝ちし、元 widget はフォールバックへ退避される。
     try writeRc(
       ".zshrc", in: home, marker: "user-zshrc",
       extra: "my-tab() { :; }\nzle -N my-tab\nbindkey '^I' my-tab\n")
     let out = try runZsh()
-    assertProbe(out, contains: "TAB:_orbe_complete", "shim の widget が定義上最後＝後勝ち")
+    assertProbe(out, contains: "TAB:_orbe_complete", "全 startup file の後に bind＝後勝ち")
     assertProbe(out, contains: "FB:my-tab", "既存 bind はフォールバックへ退避")
   }
 
@@ -132,7 +139,8 @@ final class CompletionShimTests: OrbeTestCase {
   }
 
   func testLoginShellSourcesZprofileBetweenEnvAndRc() throws {
-    // login shell: .zshenv → .zprofile → .zshrc の順でユーザー rc へブリッジされる。
+    // login shell: .zshenv → .zprofile → .zshrc の順でユーザー rc が読まれる
+    // （shim が復元した ZDOTDIR から zsh が自力で読む）。
     try writeRc(".zshenv", in: home, marker: "user-zshenv")
     try writeRc(".zprofile", in: home, marker: "user-zprofile")
     try writeRc(".zshrc", in: home, marker: "user-zshrc")

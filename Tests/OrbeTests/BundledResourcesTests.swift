@@ -74,12 +74,21 @@ final class BundledResourcesTests: OrbeTestCase {
     XCTAssertNil(AgentPluginInstaller.bundledPluginDir, "install.sh が無いなら同梱プラグインと見なさない")
   }
 
-  /// shim の入口は `.zshrc`。これが無い `zsh/` を掴むと ZDOTDIR がユーザーの rc を読めない場所を指す。
-  func testMissingZshrcIsNotAShimDir() throws {
+  /// shim の入口は `.zshenv`。これが無い `zsh/` を掴むと ZDOTDIR がユーザーの rc を読めない場所を指す。
+  func testMissingZshenvIsNotAShimDir() throws {
     let root = try makeBundleLayout(named: "app")
-    try FileManager.default.removeItem(at: root.appendingPathComponent("zsh/.zshrc"))
+    try FileManager.default.removeItem(at: root.appendingPathComponent("zsh/.zshenv"))
     BundledResources.root = root
-    XCTAssertNil(CompletionShim.directoryPath, ".zshrc が無いなら shim dir と見なさない")
+    XCTAssertNil(CompletionShim.directoryPath, ".zshenv が無いなら shim dir と見なさない")
+  }
+
+  /// `orbe-completion.zsh` は Orbe の shim dir を同定する印。これが無い `zsh/` を据えると、
+  /// shim と別インスタンスの `activate()` がその dir をユーザーの ZDOTDIR と誤認する。
+  func testMissingWidgetFileIsNotAShimDir() throws {
+    let root = try makeBundleLayout(named: "app")
+    try FileManager.default.removeItem(at: root.appendingPathComponent("zsh/orbe-completion.zsh"))
+    BundledResources.root = root
+    XCTAssertNil(CompletionShim.directoryPath, "orbe-completion.zsh が無いなら shim dir と見なさない")
   }
 
   /// `bin` が同名のファイルなら PATH へ前置できない。存在確認だけでは通ってしまう境界。
@@ -152,7 +161,8 @@ final class BundledResourcesTests: OrbeTestCase {
     let root = tmp.appendingPathComponent(name, isDirectory: true)
     try write(root.appendingPathComponent("agent-plugin/install.sh"), permissions: 0o755)
     try write(root.appendingPathComponent("completion-engine.js"))
-    try write(root.appendingPathComponent("zsh/.zshrc"))
+    try write(root.appendingPathComponent("zsh/.zshenv"))
+    try write(root.appendingPathComponent("zsh/orbe-completion.zsh"))
     try write(root.appendingPathComponent("bin/orbe-report"), permissions: 0o755)
     try write(root.appendingPathComponent("bin/orb"), permissions: 0o755)
     return root
