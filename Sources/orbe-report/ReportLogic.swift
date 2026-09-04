@@ -62,10 +62,16 @@ func agentMessage(state: String, stdin obj: [String: Any]?) -> (text: String, so
   }
 }
 
-/// 文言の整形。trim して空なら nil、1000 文字で切る（表示は 3 行 clamp。制御ソケットの
-/// 1 行上限〔ControlLineFramer 1MiB〕に対する防御でもあり、十分下回る）。
+/// 文言の整形。C0 制御文字（改行・タブ以外）を落とし、trim して空なら nil、1000 文字で切る（表示は
+/// 3 行 clamp。制御ソケットの 1 行上限〔ControlLineFramer 1MiB〕に対する防御でもあり、十分下回る）。
+/// 制御文字を落とすのは、文言がエージェント（＝untrusted な入力を読む LLM）の生成文で、`orb agent
+/// prompt` の stdout として操作者の端末へ生で流れるため——ESC 列が端末に解釈されると行の上書きに
+/// よる出力の偽装や OSC の副作用が成立する。正当な応答が制御文字を要する場面は無い。
 func truncateMessage(_ s: String?) -> String? {
-  guard let trimmed = s?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty
-  else { return nil }
+  guard let s else { return nil }
+  let printable = s.unicodeScalars.filter { $0.value >= 0x20 || $0 == "\n" || $0 == "\t" }
+  let trimmed = String(String.UnicodeScalarView(printable))
+    .trimmingCharacters(in: .whitespacesAndNewlines)
+  guard !trimmed.isEmpty else { return nil }
   return String(trimmed.prefix(1000))
 }

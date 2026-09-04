@@ -119,6 +119,14 @@ final class MessageExtractTests: XCTestCase {
     XCTAssertEqual(truncateMessage("  hello \n"), "hello")
   }
 
+  /// C0 制御文字（改行・タブ以外）は落とす——文言は `orb agent prompt` の stdout として操作者の
+  /// 端末へ生で流れるので、ESC 列や `\r` が端末に解釈される形（行の上書き・OSC）を入口で断つ。
+  func testTruncateDropsC0ControlCharactersExceptNewlineAndTab() {
+    XCTAssertEqual(
+      truncateMessage("ok\u{1B}[1A\u{1B}[2K\rdone\n\ttab\u{07}\u{00}"), "ok[1A[2Kdone\n\ttab")
+    XCTAssertNil(truncateMessage("\u{1B}\u{1B}"), "制御文字だけの文言は空扱い")
+  }
+
   /// 1000 文字で切る（制御ソケット 1 行上限への防御。表示は 3 行 clamp なので切っても足りる）。
   func testTruncateCapsAt1000Characters() {
     let long = String(repeating: "あ", count: 1500)
