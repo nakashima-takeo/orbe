@@ -207,6 +207,7 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
   func testPromptTimeoutExits124() throws {
     let ready = try spawnReady()
     let (control, pane) = (ready.control, ready.pane)
+    // 1 本目は打ち切り後も 10 秒 working のままで次の prompt が busy に拒まれるので、2 例目は別ペインで測る。
     let second = try XCTUnwrap(control.orbJSON(["agent", "spawn", "claude"])["paneId"] as? Int)
 
     let plain = control.orb([
