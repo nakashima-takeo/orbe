@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// タブ行の寸法計算（幅・自然幅・表示タイトル・状態グリフ）。描画（`StatusRowView`）から分離する。
+/// タブ行の投影値の取り出し（表示タイトル・状態グリフ・同一性）と寸法計算（幅・自然幅）。
+/// 描画（`StatusRowView`）から分離する。
 /// 幅計測の基底は常にタブタイトル実効フォント（描画 `DSTab` と同じ resolver）でズレを避ける。
 extension StatusRowView {
   /// shrink 幅（純関数 `StatusTabLayout`）を出したうえで、編集タブの幅だけ編集用の下限で上書きする。

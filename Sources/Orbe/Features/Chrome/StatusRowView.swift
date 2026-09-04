@@ -186,7 +186,7 @@ struct StatusRowView: View {
                 Button(l10n.string(.tabMenuResetAgentState)) {
                   if let tabId { model.onResetAgentState(tabId) }
                 }
-                .disabled(stateGlyph(i) == nil)
+                .disabled(stateGlyph(i) == nil || tabId == nil)
               }
               .frame(width: widths.indices.contains(i) ? widths[i] : nil)
               // 掴んだタブは指に追従（slot は残す＝commit-on-drop）・前面へ・わずかに透かして浮きを示す。

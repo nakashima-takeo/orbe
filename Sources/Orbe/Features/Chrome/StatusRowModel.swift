@@ -26,8 +26,9 @@ import SwiftUI
   var onAttentionTap: () -> Void = {}
   /// タブを `from` から挿入先 index `to`（0…count）へ並び替える（同一 workspace 内・commit-on-drop）。
   var onReorder: (Int, Int) -> Void = { _, _ in }
-  /// タブ `id` 内の全ペインのエージェント状態を idle へ落とす（コンテキストメニュー）。選択切替を挟まない。
-  var onResetAgentState: (Int) -> Void = { _ in }
+  /// タブ `tabId`（位置 index ではない）内の全ペインのエージェント状態を idle へ落とす
+  /// （コンテキストメニュー）。選択切替を挟まない。
+  var onResetAgentState: (_ tabId: Int) -> Void = { _ in }
 
   // MARK: - インライン改名（Cmd+R）
   // これらは `update(Snapshot)` が touch しない別フィールドなので、flushChrome の snapshot 反映で
