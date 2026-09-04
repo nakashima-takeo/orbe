@@ -53,7 +53,8 @@ final class CompletionShimTests: OrbeTestCase {
   /// 最初のプロンプト後（＝全 startup file と最初の precmd の後）の bind と env を印字する検証コマンド。
   /// `CHILD:` は zsh から起こした子プロセスが実際に継ぐ env、`HOOK:` は一回きりフックの痕跡
   /// （precmd_functions 内の位置 / 関数の有無）、`G:` は残っている `_orbe_*` の変数（名前でなく命名規約で見る。
-  /// widget が意図して残すのは大文字の `_ORBE_*` のみ）。
+  /// widget が意図して残すのは大文字の `_ORBE_*` のみ）、`WSRC:` は widget が実際に source されたファイル
+  /// （widget 関数の定義元パス）。
   private static let probe = """
     print -r -- "TAB:${${(z)$(bindkey '^I')}[2]}"
     print -r -- "CR:${${(z)$(bindkey '^M')}[2]}"
@@ -64,6 +65,7 @@ final class CompletionShimTests: OrbeTestCase {
     print -r -- "CHILD:$(/bin/sh -c 'echo "${ZDOTDIR-unset} ${ORBE_USER_ZDOTDIR-unset}"')"
     print -r -- "HOOK:${precmd_functions[(I)_orbe_bootstrap]}/${+functions[_orbe_bootstrap]}"
     print -r -- "G:${(k)parameters[(I)_orbe_*]}"
+    print -r -- "WSRC:${functions_source[_orbe_complete]-unset}"
     """
 
   /// 実 zsh を起こし、probe を stdin から 1 コマンド目として流して出力を返す。
@@ -71,7 +73,7 @@ final class CompletionShimTests: OrbeTestCase {
   /// pipe 駆動の `zsh -i` はプロンプトを stderr に出すので stdout は probe の出力だけになる。
   /// 非対話（`interactive: false`）でも zsh は stdin をスクリプトとして読むので同じ駆動が使える。
   /// env は明示辞書のみ（継承しない）。`NO_GLOBAL_RCS` で `/etc/zshrc`・`/etc/zprofile`（path_helper）を
-  /// 断ち決定論化する。
+  /// 断ち決定論化する。cwd は fake HOME（相対パス解決の観測点をテスト管轄下に置く）。
   private func runZsh(
     extraEnv: [String: String] = [:], login: Bool = false, interactive: Bool = true
   ) throws -> String {
@@ -92,6 +94,7 @@ final class CompletionShimTests: OrbeTestCase {
     ]
     env.merge(extraEnv) { _, new in new }
     process.environment = env
+    process.currentDirectoryURL = home
     let stdin = Pipe()
     let stdout = Pipe()
     process.standardInput = stdin
@@ -205,6 +208,23 @@ final class CompletionShimTests: OrbeTestCase {
     assertProbe(out, contains: "TAB:_orbe_complete", "フックは一度は走っている")
     assertProbe(out, contains: "HOOK:0/0", "precmd_functions / 関数のどちらにも残らない")
     assertProbe(out, contains: "G:", "shim の一時変数（_orbe_*）が残らない")
+  }
+
+  func testWidgetIsSourcedByAbsolutePathEvenWhenUserRcRecreatesFunctionRecords() throws {
+    // ユーザー rc が関数レコードを作り直す構成（`functions[f]="$functions[f]"` の idiom。全関数ラップ系
+    // プラグインが使う）: 作り直された関数の中では `%x` が空になり、フック本体で widget パスを解くと
+    // `.`（cwd）へ縮退して cwd の同名ファイルを source する（sink が source なので任意コード実行）。
+    // shim はパスをファイルスコープで解いてフックへ渡すので、cwd に罠を置いても同梱 widget が絶対パスで入る。
+    try writeRc(
+      ".zshrc", in: home, marker: "user-zshrc",
+      extra: "functions[_orbe_bootstrap]=\"$functions[_orbe_bootstrap]\"\n")
+    try writeRc("orbe-completion.zsh", in: home, marker: "trap-widget")
+    let out = try runZsh()
+    XCTAssertEqual(sourceOrder(), ["user-zshrc"], "cwd の同名ファイルは source されない")
+    assertProbe(out, contains: "TAB:_orbe_complete")
+    assertProbe(
+      out, contains: "WSRC:\(Self.shimDir.resolvingSymlinksInPath().path)/orbe-completion.zsh",
+      "widget は shim dir の絶対パスで source される")
   }
 
   // MARK: - 汚染 env からの回復（ORBE_USER_ZDOTDIR が Orbe の shim dir を指す・空文字）
