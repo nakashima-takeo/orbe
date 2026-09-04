@@ -33,7 +33,8 @@ let paneUsage = """
   Any single Unicode character works too (control characters and "+" do not);
   prefix with ctrl+ / alt+ / shift+ (ctrl+c). shift+ uppercases the letter
   (shift+a sends A). cmd+ is accepted on named keys only (rejected on a single
-  character); the terminal's own keybinds may consume it before the pane.
+  character). A modified key may be consumed by the terminal's own keybinds
+  before it reaches the pane.
   <pane> defaults to the current pane (ORBE_PANE). Outside a Orbe pane, pass
   an explicit id (see: orb pane list). focus always requires an explicit <pane>.
   text prints the captured screen verbatim (no trailing newline is added).
