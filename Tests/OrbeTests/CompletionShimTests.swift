@@ -5,7 +5,8 @@ import XCTest
 /// ZDOTDIR shim（`app/zsh/`）の契約を実 `/bin/zsh` で機械検証する。
 /// ユーザー rc の source 順・widget bind の最終勝ち・ZDOTDIR のユーザー値復元・
 /// ORBE_USER_ZDOTDIR の消費、という「ブリッジ」を fake HOME で決定論的に確かめる。
-/// env は明示辞書のみ（継承しない）・`NO_GLOBAL_RCS` で global rc を断つ（開発機 dotfiles で flake させない）。
+/// zsh の env は明示辞書のみ（継承しない）・`NO_GLOBAL_RCS` で global rc を断つ（開発機 dotfiles で flake させない）。
+/// GUI 側（`userZdotdir` のユーザー値解決・`activate()` の `ORBE_USER_ZDOTDIR` 所有規則）は in-process で検証する。
 final class CompletionShimTests: OrbeTestCase {
   /// リポジトリ実体の shim dir（`app/zsh`）。テストは同梱物でなくソースを直接検証する。
   private static let shimDir = URL(fileURLWithPath: #filePath)
