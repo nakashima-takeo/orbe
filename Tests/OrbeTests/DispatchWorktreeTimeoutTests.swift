@@ -16,7 +16,7 @@ final class DispatchWorktreeTimeoutTests: OrbeTestCase {
   func testTimedOutWorktreeCreationShowsDedicatedMessage() throws {
     let fixture = try GitHangFixture()
     addTeardownBlock { fixture.cleanup() }
-    try fixture.installHook("reference-transaction", script: fixture.waitingScript)
+    try fixture.installHook("reference-transaction", body: fixture.waitingBody)
 
     // CI は英語なので、`.en` だと既定ストアと文言が一致して写しの経路が測れない。
     let localization = LocalizationStore(language: .ja)
