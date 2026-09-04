@@ -253,4 +253,20 @@ extension ControlWireTests {
     XCTAssertEqual(response?["id"] as? Int, 1, "一致する value で起きる")
     XCTAssertEqual(event(response)?["value"] as? String, "done")
   }
+
+  /// 報告の消滅（SessionEnd）は `value: clear` で待てる——`report_agent` の入力語と同じ語で一致し、
+  /// 他の状態語では起きない。消滅が value 欠落で流れると、`orb wait --value clear` はどの実状態にも
+  /// 一致せず黙って時間切れになる。
+  func testValueClearWakesOnTheReportDisappearance() {
+    let wire = startWire(target: FakeControlTarget())
+    armWait(wire, id: 1, params: ["paneId": 8215, "value": "clear"])
+
+    ControlServer.shared.emit(done(8215))
+    wire.barrier()  // 状態語のある遷移では起きない
+
+    ControlServer.shared.emit(.agentState(paneId: 8215, state: nil, message: nil, sessionId: nil))
+    let response = wire.nextResponse()
+    XCTAssertEqual(response?["id"] as? Int, 1, "報告の消滅で起きる")
+    XCTAssertEqual(event(response)?["value"] as? String, "clear", "消滅は clear の語で運ばれる")
+  }
 }
