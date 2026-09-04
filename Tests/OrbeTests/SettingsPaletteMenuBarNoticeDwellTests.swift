@@ -18,6 +18,14 @@ extension SettingsPaletteTests {
     XCTAssertFalse(p.render.rows[dwellRow].chevron, "stepper 行は chevron を持たない")
   }
 
+  /// 英語は単位を空白で切って `40 s` と出す（日本語は `40秒` と密着）。
+  /// 単位の付け方が言語で割れるので、秒数の値表示は書式ごと言語辞書が持つ。
+  func testMenuBarNoticeDwellRowSeparatesTheUnitInEnglish() {
+    let p = model(menuBarNoticeDwell: 40, language: .en)
+    XCTAssertTrue(p.render.rows[dwellRow].label.contains("Menu Bar Notice Duration"))
+    XCTAssertTrue(p.render.rows[dwellRow].label.contains("40 s"), "英語は数と単位の間を空ける")
+  }
+
   func testMenuBarNoticeDwellIncrement() {
     let p = model(menuBarNoticeDwell: 40)
     let applied = captureApply(p)

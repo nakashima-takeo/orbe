@@ -17,7 +17,8 @@ final class SettingsPaletteTests: OrbeTestCase {
     fontNames: [String] = [],
     agents: [String] = ["claude", "codex", "agy"],
     scope: SettingsScope = .global,
-    override: SettingsLayer = SettingsLayer()
+    override: SettingsLayer = SettingsLayer(),
+    language: Language = .ja
   ) -> SettingsPaletteModel {
     var global = SettingsLayer()
     global[SettingKeys.fontSize] = fontSize
@@ -32,7 +33,7 @@ final class SettingsPaletteTests: OrbeTestCase {
     return SettingsPaletteModel(
       values: ScopedSettingsValues(scope: scope, global: global, override: override),
       fontNames: fontNames, agents: agents,
-      localization: LocalizationStore(language: .ja))
+      localization: LocalizationStore(language: language))
   }
 
   /// 適用を捕捉する（単一代入を空レイヤに当てて結果を観測）。
