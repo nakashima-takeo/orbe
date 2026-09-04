@@ -272,6 +272,15 @@ final class CompletionShimTests: OrbeTestCase {
     assertProbe(out, contains: "CHILD:unset unset", "子プロセスの env に shim の痕跡が無い")
   }
 
+  func testRepositoryShimDirIsIdentifiedByTheSameMarkerOnBothSides() throws {
+    // 門番: Swift の述語がリポジトリ実体を Orbe の shim dir と認め、shim 側のガードも同じファイル名を見ている。
+    // 印は両側に別々に書かれており、片側だけ改名すると他の全テストが緑のまま activate() が no-op になる。
+    XCTAssertTrue(CompletionShim.isShimDirectory(Self.shimDir.path))
+    let zshenv = try String(
+      contentsOf: Self.shimDir.appendingPathComponent(".zshenv"), encoding: .utf8)
+    XCTAssertTrue(zshenv.contains("orbe-completion.zsh"))
+  }
+
   func testDirectoryPathIsNilWithoutBundle() {
     // 同梱物が無い状態（ハーネスが BundledResources.root を管理下の空ディレクトリへ向けている）では
     // shim dir が解決されない＝ activate() は no-op。
