@@ -52,7 +52,8 @@ final class CompletionShimTests: OrbeTestCase {
 
   /// 最初のプロンプト後（＝全 startup file と最初の precmd の後）の bind と env を印字する検証コマンド。
   /// `CHILD:` は zsh から起こした子プロセスが実際に継ぐ env、`HOOK:` は一回きりフックの痕跡
-  /// （precmd_functions 内の位置 / 関数の有無）。
+  /// （precmd_functions 内の位置 / 関数の有無）、`G:` は残っている `_orbe_*` の変数（名前でなく命名規約で見る。
+  /// widget が意図して残すのは大文字の `_ORBE_*` のみ）。
   private static let probe = """
     print -r -- "TAB:${${(z)$(bindkey '^I')}[2]}"
     print -r -- "CR:${${(z)$(bindkey '^M')}[2]}"
@@ -62,6 +63,7 @@ final class CompletionShimTests: OrbeTestCase {
     print -r -- "OUZ:${ORBE_USER_ZDOTDIR-unset}"
     print -r -- "CHILD:$(/bin/sh -c 'echo "${ZDOTDIR-unset} ${ORBE_USER_ZDOTDIR-unset}"')"
     print -r -- "HOOK:${precmd_functions[(I)_orbe_bootstrap]}/${+functions[_orbe_bootstrap]}"
+    print -r -- "G:${(k)parameters[(I)_orbe_*]}"
     """
 
   /// 実 zsh を起こし、probe を stdin から 1 コマンド目として流して出力を返す。
@@ -197,11 +199,12 @@ final class CompletionShimTests: OrbeTestCase {
   }
 
   func testBootstrapHookLeavesNoTraceAfterFirstPrompt() throws {
-    // 一回きりフック: 最初のプロンプトで widget を入れたら、precmd_functions・関数のどちらにも
+    // 一回きりフック: 最初のプロンプトで widget を入れたら、precmd_functions・関数・変数のどれにも
     // Orbe の痕跡が残らない（毎プロンプト走らず、ユーザーのシェル状態を汚さない）。
     let out = try runZsh()
     assertProbe(out, contains: "TAB:_orbe_complete", "フックは一度は走っている")
     assertProbe(out, contains: "HOOK:0/0", "precmd_functions / 関数のどちらにも残らない")
+    assertProbe(out, contains: "G:", "shim の一時変数（_orbe_*）が残らない")
   }
 
   // MARK: - 汚染 env からの回復（ORBE_USER_ZDOTDIR が Orbe の shim dir を指す・空文字）
