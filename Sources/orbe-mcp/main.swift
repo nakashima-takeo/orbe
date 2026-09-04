@@ -157,10 +157,11 @@ let tools: [[String: Any]] = [
     ("name", "send_key"),
     (
       "description",
-      "ペインへキーを送る。名前付きキー: enter / tab / escape / up / down / left / right / "
-        + "home / end / pageup / pagedown / backspace。単一の Unicode 文字（制御文字は不可）にも "
-        + "ctrl / alt / shift を付けられる（'ctrl+c' / 'ctrl+l' / 'alt+b'）。shift は大文字化"
-        + "（'shift+a' は A）。cmd 付きの文字は拒否。"
+      "ペインへキーを送る。名前付きキー: enter / return / tab / escape / esc / space / backspace / "
+        + "delete / up / down / left / right / home / end / pageup / pagedown。単一の Unicode 文字"
+        + "（制御文字と '+' は不可）にも ctrl / alt / shift を付けられる（'ctrl+c' / 'ctrl+l' / "
+        + "'alt+b'）。shift は大文字化（'shift+a' は A）。cmd は名前付きキーにだけ付けられる"
+        + "（'cmd+shift+up'）。"
     ),
     (
       "inputSchema",
