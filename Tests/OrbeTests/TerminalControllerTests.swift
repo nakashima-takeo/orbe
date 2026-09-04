@@ -11,12 +11,13 @@ import XCTest
 /// よって分割の arrangedSubview / rootContainer 直下の葉は SurfaceScrollView で、
 /// その中の SurfaceView は `.surfaceView` で取り出す。
 final class TerminalControllerTests: OrbeTestCase {
-  private func rootSplit(_ tc: TerminalController) -> NSSplitView? {
+  /// 分割した拡張ファイル（+Agent）からも使うため internal。
+  func rootSplit(_ tc: TerminalController) -> NSSplitView? {
     tc.rootContainer.subviews.first as? NSSplitView
   }
 
-  /// 葉ラップ（SurfaceScrollView）から SurfaceView を取り出す。
-  private func pane(_ v: NSView) -> SurfaceView {
+  /// 葉ラップ（SurfaceScrollView）から SurfaceView を取り出す。分割した拡張ファイルからも使う。
+  func pane(_ v: NSView) -> SurfaceView {
     (v as! SurfaceScrollView).surfaceView
   }
 
@@ -136,133 +137,6 @@ final class TerminalControllerTests: OrbeTestCase {
     tc.onAgentStateChange = { fired += 1 }
     tc.paneAgentStateChanged()
     XCTAssertEqual(fired, 1)
-  }
-
-  // MARK: - aggregateAgentState
-
-  func testAggregateNilWhenNoActiveState() {
-    let tc = TerminalController()
-    tc.split(.horizontal)
-    let split = rootSplit(tc)!
-    pane(split.arrangedSubviews[0]).agentSlot = .none
-    setReportedState(pane(split.arrangedSubviews[1]), "idle")
-    XCTAssertNil(tc.aggregateAgentState(), "idle・nil のみならアイコン無し")
-  }
-
-  func testAggregatePicksWaitingOverWorking() {
-    let tc = TerminalController()
-    tc.split(.horizontal)
-    let split = rootSplit(tc)!
-    let a = pane(split.arrangedSubviews[0])
-    let b = pane(split.arrangedSubviews[1])
-    setReportedState(a, "working")
-    setReportedState(b, "waiting")
-    XCTAssertEqual(tc.aggregateAgentState(), .waiting, "waiting > working")
-  }
-
-  // MARK: - consumeDoneState
-
-  func testConsumeClearsAllDonePanesAcrossTab() {
-    let tc = TerminalController()
-    tc.split(.horizontal)
-    let split = rootSplit(tc)!
-    let a = pane(split.arrangedSubviews[0])
-    let b = pane(split.arrangedSubviews[1])
-    setReportedState(a, "done")
-    setReportedState(b, "done")
-
-    tc.consumeDoneState()
-
-    XCTAssertEqual(a.agentState, "idle", "done は idle(休止)へ")
-    XCTAssertEqual(b.agentState, "idle", "done は idle(休止)へ")
-    XCTAssertNil(tc.aggregateAgentState(), "idle はタブに出ない＝集約 done バッジが消える")
-  }
-
-  func testConsumeKeepsWaitingAndWorking() {
-    let tc = TerminalController()
-    tc.split(.horizontal)
-    let split = rootSplit(tc)!
-    let a = pane(split.arrangedSubviews[0])
-    let b = pane(split.arrangedSubviews[1])
-    setReportedState(a, "waiting")
-    setReportedState(b, "working")
-
-    tc.consumeDoneState()
-
-    XCTAssertEqual(a.agentState, "waiting", "waiting は消費しない")
-    XCTAssertEqual(b.agentState, "working", "working は消費しない")
-  }
-
-  func testConsumePreservesAgentSessionForResume() {
-    let tc = TerminalController()
-    let a = tc.focusedPane!
-    setReportedState(a, "done", command: "claude")
-    let session = AgentSession(command: "claude", sessionId: "sess-1")
-    if case .live(_, let report) = a.agentSlot {
-      a.agentSlot = .live(session: session, report: report)
-    }
-
-    tc.consumeDoneState()
-
-    XCTAssertEqual(a.agentState, "idle", "done は idle(休止)へ")
-    XCTAssertEqual(a.agentSlot.session, session, "resume 用の同一性（command・sessionId）は保持")
-  }
-
-  func testConsumeIsScopedToReceiverTab() {
-    // ヘルパーはアクティブ表示タブにだけ consumeDoneState() を呼ぶ。
-    // 消費は受け手タブに閉じ、別タブ（背景タブ）の done は残る。
-    let active = TerminalController()
-    let background = TerminalController()
-    setReportedState(active.focusedPane!, "done")
-    setReportedState(background.focusedPane!, "done")
-
-    active.consumeDoneState()
-
-    XCTAssertEqual(active.focusedPane!.agentState, "idle", "受け手タブの done は idle(休止)へ")
-    XCTAssertEqual(background.focusedPane!.agentState, "done", "背景タブの done は残る")
-  }
-
-  func testConsumeOnNonDonePaneNoOp() {
-    let tc = TerminalController()
-    let a = tc.focusedPane!
-    a.agentSlot = .none
-
-    tc.consumeDoneState()
-
-    XCTAssertNil(a.agentState)
-    XCTAssertNil(tc.aggregateAgentState())
-  }
-
-  // MARK: - agentStateCounts（横断集計の per-tab 基盤）
-
-  func testAgentStateCountsTalliesPerState() {
-    let tc = TerminalController()
-    let a = tc.focusedPane!
-    tc.split(.horizontal)  // root: [a, b]
-    let b = pane(rootSplit(tc)!.arrangedSubviews[1])
-    tc.focusedPaneChanged(b)
-    tc.split(.vertical)  // b を縦分割 → [a, [b, c]]
-    let bSplit = rootSplit(tc)!.arrangedSubviews[1] as! NSSplitView
-    let c = pane(bSplit.arrangedSubviews[1])
-
-    setReportedState(a, "working")
-    setReportedState(b, "waiting")
-    setReportedState(c, "working")
-
-    let counts = tc.agentStateCounts()
-    XCTAssertEqual(counts["working"], 2, "working は 2 ペイン")
-    XCTAssertEqual(counts["waiting"], 1, "waiting は 1 ペイン")
-    XCTAssertNil(counts["done"])
-  }
-
-  func testAgentStateCountsTalliesIdleButNotNil() {
-    let tc = TerminalController()
-    tc.split(.horizontal)
-    let split = rootSplit(tc)!
-    setReportedState(pane(split.arrangedSubviews[0]), "idle")
-    pane(split.arrangedSubviews[1]).agentSlot = .none
-    XCTAssertEqual(tc.agentStateCounts()["idle"], 1, "idle は横断集計に数える")
-    XCTAssertEqual(tc.agentStateCounts().count, 1, "nil は数えない")
   }
 
   // MARK: - displayTitle の precedence（① explicitTitle ?? ② paneTitle ?? ③ derived）

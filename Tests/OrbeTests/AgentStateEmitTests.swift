@@ -2,12 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 報告以外の slot 遷移——復元での休眠チケット代入・チケット消費・`consumeDoneState`——が
-/// `agent_state` 制御イベントをどう出す（出さない）かを固定する。報告経路の同じ契約は
-/// `WindowControllerReportAgentTests+StateEmit` が持つ。
+/// 報告以外の slot 遷移——復元での休眠チケット代入・チケット消費・`consumeDoneState`・
+/// `resetAgentStates`——が `agent_state` 制御イベントをどう出す（出さない）かを固定する。
+/// 報告経路の同じ契約は `WindowControllerReportAgentTests+StateEmit` が持つ。
 ///
 /// 壊れると、`orb wait` / MCP の待機系がタブを起こしただけで起きる（復元・消費は状態変化ではない）か、
-/// done をフォーカスで消費した idle 化を取り逃す。どちらも呼び出し側からは正常動作と区別がつかない。
+/// idle への書き戻しを取り逃す。どちらも呼び出し側からは正常動作と区別がつかない。
 ///
 /// `TerminalController` は window 未接続なら libghostty surface を生成しないため、ここは純ロジック
 /// として駆動できる（GhosttyKit ランタイムは起動しない）。他のイベント源を持たないので、
@@ -114,6 +114,40 @@ final class AgentStateEmitTests: OrbeTestCase {
     let w = armAgentStateWait(id: 1)
 
     tc.consumeDoneState()
+
+    w.barrier()
+  }
+
+  // MARK: - resetAgentStates
+
+  /// タブのコンテキストメニューからの一括リセットは、実変化したペインの `idle` を載せて流れる。
+  func testResetAgentStatesEmitsIdle() throws {
+    let tc = TerminalController()
+    let pane = try XCTUnwrap(tc.focusedPane)
+    setReportedState(pane, "waiting")
+    let w = armAgentStateWait(id: 1, paneId: pane.id)
+
+    tc.resetAgentStates()
+
+    let event = try XCTUnwrap(stateEvent(w.nextResponse()))
+    XCTAssertEqual(event["kind"] as? String, "agent_state")
+    XCTAssertEqual(event["paneId"] as? Int, pane.id)
+    XCTAssertEqual(event["value"] as? String, "idle")
+  }
+
+  /// リセットできる状態のペインが無いタブでは流れない（idle・報告前の live・素のシェル）。
+  func testResetAgentStatesEmitsNothingWithoutAResettablePane() throws {
+    let tc = TerminalController()
+    tc.split(.horizontal)
+    tc.split(.vertical, from: try XCTUnwrap(tc.controlAllPanes().first))
+    let panes = tc.controlAllPanes()
+    XCTAssertEqual(panes.count, 3, "前提: 3 ペイン（idle / 報告前の live / 素のシェル）")
+    setReportedState(panes[0], "idle")
+    panes[1].agentSlot = .live(
+      session: AgentSession(command: "claude", sessionId: "resume-1"), report: nil)
+    let w = armAgentStateWait(id: 1)
+
+    tc.resetAgentStates()
 
     w.barrier()
   }
