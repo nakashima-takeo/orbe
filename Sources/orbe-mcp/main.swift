@@ -161,7 +161,7 @@ let tools: [[String: Any]] = [
         + "delete / up / down / left / right / home / end / pageup / pagedown。単一の Unicode 文字"
         + "（制御文字と '+' は不可）にも ctrl / alt / shift を付けられる（'ctrl+c' / 'ctrl+l' / "
         + "'alt+b'）。shift は大文字化（'shift+a' は A）。cmd は名前付きキーにだけ付けられる"
-        + "（'cmd+shift+up'）。"
+        + "（単一文字に付けると拒否）。ただし端末自身の keybind に消費されペインへ届かないことがある。"
     ),
     (
       "inputSchema",
