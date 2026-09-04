@@ -9,13 +9,9 @@ enum CompletionLegacyCleanup {
 
   /// 除去対象の zshrc。旧 install が書いた場所と同じ解決（ユーザーの `$ZDOTDIR` 尊重・無ければ
   /// home 直下）なので除去も同じ場所を見る。GUI プロセスの ZDOTDIR は `CompletionShim.activate()`
-  /// が shim へ向けた後なので、元の値は ORBE_USER_ZDOTDIR → shim 以外の ZDOTDIR の順で引く。
+  /// が shim へ向けた後なので、ユーザー値は shim と同じ解決（`CompletionShim.userZdotdir`）で引く。
   static var zshrcURL: URL {
-    let env = ProcessInfo.processInfo.environment
-    let dir =
-      env["ORBE_USER_ZDOTDIR"].flatMap { $0.isEmpty ? nil : $0 }
-      ?? env["ZDOTDIR"].flatMap { $0.isEmpty || $0 == CompletionShim.directoryPath ? nil : $0 }
-      ?? FileManager.default.homeDirectoryForCurrentUser.path
+    let dir = CompletionShim.userZdotdir() ?? FileManager.default.homeDirectoryForCurrentUser.path
     return URL(fileURLWithPath: dir).appendingPathComponent(".zshrc")
   }
 

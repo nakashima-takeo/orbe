@@ -10,21 +10,43 @@ import XCTest
 final class CompletionTests: OrbeTestCase {
   private var dir: URL!
   private var zshrc: URL!
+  // `zshrcURL` はプロセス env を読む。env はハーネスの管轄外＝自分で戻す。
+  private var savedZdotdir: String?
+  private var savedOrbeUserZdotdir: String?
 
   override func setUpWithError() throws {
     dir = URL(fileURLWithPath: NSTemporaryDirectory())
       .appendingPathComponent("CompletionTests-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     zshrc = dir.appendingPathComponent(".zshrc")
+    let env = ProcessInfo.processInfo.environment
+    savedZdotdir = env["ZDOTDIR"]
+    savedOrbeUserZdotdir = env["ORBE_USER_ZDOTDIR"]
   }
 
   override func tearDownWithError() throws {
     try? FileManager.default.removeItem(at: dir)
+    for (key, saved) in [("ZDOTDIR", savedZdotdir), ("ORBE_USER_ZDOTDIR", savedOrbeUserZdotdir)] {
+      if let saved { setenv(key, saved, 1) } else { unsetenv(key) }
+    }
   }
 
   private func read() -> String { (try? String(contentsOf: zshrc, encoding: .utf8)) ?? "" }
 
   // MARK: - CompletionLegacyCleanup
+
+  func testZshrcURLResolvesUserZdotdirBehindShim() throws {
+    // GUI プロセス env（activate() 後）: ZDOTDIR は Orbe の shim dir を指すので除去先にせず、
+    // ORBE_USER_ZDOTDIR が指すユーザーの dir の .zshrc を除去先にする（旧 install が書いた場所）。
+    let shim = dir.appendingPathComponent("shim")
+    try FileManager.default.createDirectory(at: shim, withIntermediateDirectories: true)
+    try Data().write(to: shim.appendingPathComponent("orbe-completion.zsh"))
+    let user = dir.appendingPathComponent("cfg")
+    setenv("ZDOTDIR", shim.path, 1)
+    setenv("ORBE_USER_ZDOTDIR", user.path, 1)
+    XCTAssertEqual(
+      CompletionLegacyCleanup.zshrcURL.path, user.appendingPathComponent(".zshrc").path)
+  }
 
   /// 旧 install が書いていた形（前置空行 1 つ＋マーカー対）を再現する。
   private let legacyBlock = """

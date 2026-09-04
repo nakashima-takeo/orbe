@@ -1,7 +1,7 @@
 ---
 title: コマンド補完
 description: zsh の zle フックが control.sock 経由で編集バッファを送り、JavaScriptCore 埋め込みの spec エンジンが候補を算出、カーソル位置のドロップダウンから $BUFFER を直接書き換える
-updated: 2026-08-25
+updated: 2026-09-04
 ---
 
 # コマンド補完
@@ -69,12 +69,20 @@ engine(JS) は純関数のまま、host が種別グループ化の直前に**�
 
 ## 自動有効化（ZDOTDIR interposition）
 
-ユーザのファイルには書き込まない。`.app` の `Resources/zsh/` に shim 3 ファイル（`.zshenv`・`.zprofile`・`.zshrc`）と `orbe-completion.zsh` を同梱し、GUI 起動時（Ghostty 初期化前・バンドル有時のみ）にプロセス env へ `ZDOTDIR=<shim dir>` を据える。起動時 env に ZDOTDIR があれば `ORBE_USER_ZDOTDIR` へ引き継ぐ。surface spawn の base env はプロセス env そのものなので全ペインへ届く。注入点はプロセス env でなければならない——surface config の env_vars は ghostty の shell integration setup に後勝ちし、ghostty が立てた ZDOTDIR を上書きして integration（OSC 7 の cwd 報告）を壊すため。
+ユーザのファイルには書き込まない。`.app` の `Resources/zsh/` に shim `.zshenv` と `orbe-completion.zsh` の 2 ファイルを同梱し、GUI 起動時（Ghostty 初期化前・バンドル有時のみ）にプロセス env へ `ZDOTDIR=<shim dir>` を据える。surface spawn の base env はプロセス env そのものなので全ペインへ届く。注入点はプロセス env でなければならない——surface config の env_vars は ghostty の shell integration setup に後勝ちし、ghostty が立てた ZDOTDIR を上書きして integration（OSC 7 の cwd 報告）を壊すため。
 
-shim は zsh の startup file 探索に割り込み、ユーザ設定へブリッジする。
+**Orbe の shim dir** は `orbe-completion.zsh` を持つ dir で同定する（本番 / Dev / 旧版を区別しない）。GUI と shim が同じ述語を使う。
 
-- `.zshenv` / `.zprofile`: ユーザの同名ファイル（`ORBE_USER_ZDOTDIR`、無ければ home）を source し、ユーザが設定した実効 ZDOTDIR を `ORBE_USER_ZDOTDIR` へ捕捉し直して、ZDOTDIR を shim へ戻す（次の startup file も shim が受ける）。
-- `.zshrc`: ZDOTDIR をユーザ値へ復元してからユーザの `.zshrc` を source し、**その後に** `orbe-completion.zsh` を source する——widget の bind が定義上最後になり、既存の Tab bind は `$_ORBE_TAB_FALLBACK` へ退避されて popup 非表示時のフォールバックになる。最後に `ORBE_USER_ZDOTDIR` を掃除する（以降の `.zlogin`・子プロセスはユーザ値を見る）。
+**ユーザの ZDOTDIR の受け渡し**: GUI は継承 env の `ZDOTDIR` → `ORBE_USER_ZDOTDIR` の順で「空でなく Orbe の shim dir でない」最初の値をユーザの ZDOTDIR とし、あれば `ORBE_USER_ZDOTDIR` に据え、無ければ消す（親 Orbe や汚染したシェルから継いだ shim dir・空文字はユーザ値ではない）。`ORBE_USER_ZDOTDIR` は GUI → shim の一回きりの経路で、shim が読んだ時点で消える。
+
+shim `.zshenv` は全 zsh 起動で読まれ、次の順で働く。
+
+1. `ORBE_USER_ZDOTDIR` を `ZDOTDIR` に復元して消す（無ければ `ZDOTDIR` を unset＝home）。
+2. 復元した値が空文字・Orbe の shim dir なら unset へ倒す。これが env の汚染からの自力回復で、shim を「ユーザの `.zshenv`」として source する再帰経路は構造的に閉じている。
+3. ユーザの `.zshenv`（`$ZDOTDIR`、無ければ home）を source する。
+4. interactive のときだけ、一回きりの precmd フックを積む。フックは最初のプロンプト直前に走り、自分を外して消えてから `orbe-completion.zsh` を source する（ユーザの alias・オプションから隔離した関数スコープでパースする）。
+
+以降 shim は `ZDOTDIR` に触らない。続く `.zprofile`・`.zshrc`・`.zlogin` は zsh がユーザの dir から素で読むため、ユーザが `~/.zshenv` で `ZDOTDIR` を設定する構成もそのまま生きる。widget は**全 startup file の後**に bind され、ユーザの `.zshrc` 末尾の Tab bind（fzf-tab 等）に後勝ちし、既存の Tab bind は `$_ORBE_TAB_FALLBACK` へ退避されて popup 非表示時のフォールバックになる。
 
 様式は ghostty/kitty shim と同一（`builtin` 前置・全クォート・`always` 節。alias 展開下でも壊れないための規律で、独自変更しない）。ghostty の shell integration 有効時（既定）は ghostty が shim を「ユーザの ZDOTDIR」として `GHOSTTY_ZSH_ZDOTDIR` へ退避・復元するため、ghostty shim → Orbe shim → ユーザ設定の順に連鎖する。`shell-integration = none` でも spawn env の ZDOTDIR がそのまま残り自立動作する。
 
@@ -83,8 +91,11 @@ shim は zsh の startup file 探索に割り込み、ユーザ設定へブリ�
 ## 境界
 
 - 対応 shell は zsh のみ。bash/fish・tmux/ssh 先は env 不達で無効。
-- 非 zsh で起動したペイン（agent ペイン等）の env には `ZDOTDIR=<shim dir>` が残って見える（zsh ペインは `.zshrc` で復元済み。残留 env から zsh を起こしても shim がユーザ設定へブリッジするため動作は正しい）。
+- Orbe が起こした zsh の子プロセス env に `ZDOTDIR=<shim dir>`・`ORBE_USER_ZDOTDIR` は残らない（対話・非対話・login を問わず）。非 zsh で起動したペイン（agent ペイン等）の env には GUI が据えた両者が見えるが、そこから zsh を起こしても shim が消費してユーザ設定へブリッジする。
 - `exec zsh` は shim を経ず補完無効（ghostty shell integration と同じ制限）。
+- `ORBE_USER_ZDOTDIR` が削除済み `.app` の shim dir を指す場合は同定できず、`ZDOTDIR` が不在の dir を指したままユーザ rc は読まれない（widget は入る）。
+- `zsh -i -c`（プロンプトを出さない）では precmd が走らず widget は入らない。
+- precmd 段で bind・keymap 切替をするプラグイン（zsh-vi-mode の既定 lazy init 等）には `^I` / `^M` を奪われる。Orbe のフックはユーザの `.zshrc` が積む precmd より先に走るため（zsh-vi-mode は `ZVM_INIT_MODE=sourcing` で回避できる）。ユーザ設定が `precmd_functions` を代入で丸ごと潰す場合も widget は入らない。
 - 同梱 spec は curated subset のみ（上流 600+ の全網羅・ユーザ提供 spec・上流 spec の自家 fork 運用は無い。`claude`/`codex` の自家 spec は上流に無いコマンドの新規最小 spec であり fork ではない）。
 - generator のシェル実行は vendored curated spec のみが起点＝信頼境界内。任意のユーザ spec は受けない。
 - `swift run`（バンドル無し）では ZDOTDIR 未設定＝素の zsh 起動・engine 未ロードで候補非表示（クラッシュしない）。
