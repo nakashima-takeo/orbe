@@ -29,7 +29,7 @@ fi
             'builtin' 'emulate' '-L' 'zsh' '-o' 'no_aliases' '-o' 'no_warn_create_global'
             'builtin' 'local' _orbe_file="$_orbe_widget_file"
             'builtin' 'unset' '_orbe_widget_file'
-            precmd_functions[${precmd_functions[(i)_orbe_bootstrap]}]=()
+            precmd_functions=("${(@)precmd_functions:#_orbe_bootstrap}")
             'builtin' 'unfunction' '--' '_orbe_bootstrap'
             [[ ! -r "$_orbe_file" ]] || 'builtin' 'source' '--' "$_orbe_file"
         }
