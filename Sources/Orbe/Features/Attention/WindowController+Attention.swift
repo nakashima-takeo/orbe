@@ -54,32 +54,47 @@ extension WindowController {
     _ = controlFocusPane(paneId: paneId)
   }
 
-  /// メニューバー②（一過性の滲み出しピル）を立てる。ただし発信元ペインが**見ているタブ**に
-  /// あるときは立てない——端末にその結果もプロンプトも出ている面で、注意だけを二重に奪わないため。
-  /// 抑制は「立てない」だけで、既に出ているピル（別の場所で起きた変化の通知）には触らない。
-  func noteAttentionTransient(for pane: SurfaceView) {
-    // 抑制するのは「見ているタブが実在し、かつペインがそのタブに属する」ときだけ。visibleTab が
-    // nil＝背面なら誰も見ていないので必ず立てる（controller は weak。nil 同士を一致と読ませない）。
-    if let visibleTab, pane.controller === visibleTab { return }
-    guard let row = attentionRow(for: pane) else { return }
-    attentionStore.noteTransient(row)
+  /// メニューバー②（一過性の滲み出しピル）を立てる。滞留は通知が持つ発信元 workspace の
+  /// 実効設定（`menubar-notice-dwell`）から決まり、その到来が終わるまで動かない
+  /// ——設定を変えても今出ているピルには効かず、次の到来から効く。
+  func noteAttentionTransient(_ notice: AgentNotice) {
+    attentionStore.noteTransient(
+      notice.row, dwell: TimeInterval(notice.settings[SettingKeys.menuBarNoticeDwell]))
   }
 
-  /// 一過性表示（メニューバー②）用の 1 行 snapshot。発信元ペインの所属 WS・タブから組む。
-  /// 対象は一覧（`AttentionSnapshot.rows`）と同じ **activatedタブのライブペインのみ**
-  /// ——②は一覧の投影なので、立てる側と取り下げる側が同じ集合を見る。見つからなければ nil。
-  private func attentionRow(for pane: SurfaceView) -> AttentionRow? {
+  /// 「見ていないペインで起きた状態変化」1 件の文脈。メニューバー②と通知音は、この 1 つの通知を
+  /// 投影する 2 つの面で、成立条件（抑制・所属）も読む設定も面ごとに判断しない。
+  struct AgentNotice {
+    /// 発信元ペインの行（一覧＝`AttentionSnapshot.rows` と同じ組み立て）。
+    let row: AttentionRow
+    /// 発信元ペインが属する workspace の実効設定。workspace 上書き（「この workspace で起きた
+    /// 変化の通知はこう」）が意味を持つのはこの読み方だけ——見ている workspace の値ではない。
+    let settings: EffectiveSettings
+  }
+
+  /// 状態変化 1 件を通知として成立させる（成立しなければ nil＝どの面も何もしない）。
+  ///
+  /// 成立しないのは 2 つ。**見ているタブ**のペイン——端末にその結果もプロンプトも出ている面で、
+  /// 注意を二重に奪わないため。もう 1 つは**所属が引けない**ペイン（未activatedタブ）——対象は
+  /// 一覧と同じ activatedタブのライブペインのみで、一覧にもピルにも出ない通知だけが届くと
+  /// ユーザは出所を辿れない。
+  func agentNotice(for pane: SurfaceView) -> AgentNotice? {
+    // 抑制するのは「見ているタブが実在し、かつペインがそのタブに属する」ときだけ。visibleTab が
+    // nil＝背面なら誰も見ていないので必ず成立する（controller は weak。nil 同士を一致と読ませない）。
+    if let visibleTab, pane.controller === visibleTab { return nil }
     for ws in workspaces {
       for tab in ws.tabs
       where tab.activated && tab.controlAllPanes().contains(where: { $0 === pane }) {
         guard let report = pane.agentReport else { return nil }
-        return AttentionRow(
+        let row = AttentionRow(
           paneId: pane.id,
           workspaceName: ws.name,
           tabTitle: tab.displayTitle(workspaceRoot: ws.rootPath),
           state: report.state,
           message: report.state == "working" ? nil : report.message?.text,
           stateChangedAt: report.stateChangedAt)
+        return AgentNotice(
+          row: row, settings: settingsStore.effective(override: ws.settingsOverride))
       }
     }
     return nil

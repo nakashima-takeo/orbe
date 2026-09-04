@@ -9,6 +9,9 @@ import XCTest
 @MainActor
 final class AttentionStoreTests: OrbeTestCase {
 
+  /// 取り下げの検証は滞留を見ない（見るのは `retracted`）。必須引数の値をここ 1 箇所に閉じる。
+  private let anyDwell: TimeInterval = 40
+
   private func row(paneId: Int, state: String, message: String? = nil) -> AttentionRow {
     AttentionRow(
       paneId: paneId, workspaceName: "ws", tabTitle: "tab", state: state, message: message,
@@ -17,12 +20,13 @@ final class AttentionStoreTests: OrbeTestCase {
 
   /// 到来時刻と滞留の満了時刻。`expiresAt` は収縮の開始時刻で、②の総寿命はここから 600ms 先。
   /// `arrivedAt` は「新しい到来か」を MenuBarController が見分ける印なので、到来時刻そのもの。
+  /// 滞留は store が既定を持たず、渡された `dwell` がそのまま `expiresAt` に焼かれる。
   func testNoteTransientStampsArrivalAndDwell() {
     let store = AttentionStore()
     let now = Date(timeIntervalSinceReferenceDate: 1_000_000)
-    store.noteTransient(row(paneId: 1, state: "waiting"), now: now)
+    store.noteTransient(row(paneId: 1, state: "waiting"), dwell: 75, now: now)
     XCTAssertEqual(store.transient?.arrivedAt, now)
-    XCTAssertEqual(store.transient?.expiresAt, now.addingTimeInterval(22))
+    XCTAssertEqual(store.transient?.expiresAt, now.addingTimeInterval(75))
   }
 
   /// 同じ paneId・同じ状態で一覧に居る限りピルは残り、行の中身が変わっても差し替えない
@@ -30,7 +34,7 @@ final class AttentionStoreTests: OrbeTestCase {
   func testTransientSurvivesWhileProjected() {
     let store = AttentionStore()
     store.apply(rows: [row(paneId: 1, state: "waiting", message: "q")])
-    store.noteTransient(row(paneId: 1, state: "waiting", message: "q"))
+    store.noteTransient(row(paneId: 1, state: "waiting", message: "q"), dwell: anyDwell)
     store.apply(rows: [row(paneId: 1, state: "waiting", message: "別の文言")])
     XCTAssertEqual(store.transient?.row.paneId, 1)
     XCTAssertEqual(store.transient?.row.message, "q", "行が残っている間の中身は更新しない")
@@ -44,7 +48,7 @@ final class AttentionStoreTests: OrbeTestCase {
   /// 行ごと消えるため。将来 `state` 条件を落とす変更をここで捕まえる。
   func testTransientWithdrawnWhenSamePaneChangesState() {
     let store = AttentionStore()
-    store.noteTransient(row(paneId: 1, state: "waiting"))
+    store.noteTransient(row(paneId: 1, state: "waiting"), dwell: anyDwell)
     store.apply(rows: [row(paneId: 1, state: "done")])
     XCTAssertEqual(store.transient?.retracted, true)
   }
@@ -56,7 +60,7 @@ final class AttentionStoreTests: OrbeTestCase {
   /// （実測で全緑）。`listRows` は `state` 条件が将来緩んだときに独立して効く歯止めとして残す。
   func testTransientWithdrawnWhenPaneReturnsToWorking() {
     let store = AttentionStore()
-    store.noteTransient(row(paneId: 1, state: "waiting"))
+    store.noteTransient(row(paneId: 1, state: "waiting"), dwell: anyDwell)
     store.apply(rows: [row(paneId: 1, state: "working")])
     XCTAssertEqual(store.transient?.retracted, true)
   }
@@ -64,7 +68,7 @@ final class AttentionStoreTests: OrbeTestCase {
   /// 行そのものが消えれば（idle / clear / 閉じられた）取り下げる。中身は収縮のために残る。
   func testTransientWithdrawnWhenRowGone() {
     let store = AttentionStore()
-    store.noteTransient(row(paneId: 1, state: "waiting"))
+    store.noteTransient(row(paneId: 1, state: "waiting"), dwell: anyDwell)
     store.apply(rows: [])
     XCTAssertEqual(store.transient?.retracted, true)
     XCTAssertEqual(store.transient?.row.paneId, 1, "収縮を描き切るまで中身は残る")
@@ -74,7 +78,7 @@ final class AttentionStoreTests: OrbeTestCase {
   /// （取り下げ後に行が戻っても、閉じかけのピルを開き直しはしない——立て直すのは report 経路）。
   func testRetractionIsStickyAcrossFurtherApplies() {
     let store = AttentionStore()
-    store.noteTransient(row(paneId: 1, state: "waiting"))
+    store.noteTransient(row(paneId: 1, state: "waiting"), dwell: anyDwell)
     store.apply(rows: [])
     store.apply(rows: [row(paneId: 1, state: "waiting")])
     XCTAssertEqual(store.transient?.retracted, true)
@@ -83,7 +87,7 @@ final class AttentionStoreTests: OrbeTestCase {
   /// 別ペインの行が入れ替わってもピルは残る。
   func testTransientSurvivesUnrelatedRowChange() {
     let store = AttentionStore()
-    store.noteTransient(row(paneId: 1, state: "waiting"))
+    store.noteTransient(row(paneId: 1, state: "waiting"), dwell: anyDwell)
     store.apply(rows: [row(paneId: 1, state: "waiting"), row(paneId: 2, state: "done")])
     XCTAssertEqual(store.transient?.row.paneId, 1)
     store.apply(rows: [row(paneId: 1, state: "waiting")])

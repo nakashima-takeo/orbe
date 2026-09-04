@@ -8,12 +8,14 @@ import XCTest
 final class MenuBarArrivalTests: OrbeTestCase {
 
   /// 基準時刻は 0——注入する秒数がそのまま経過秒になり、境界（1.2s / 2.3s / 22.6s）の判定に
-  /// 丸め誤差が混ざらない。
+  /// 丸め誤差が混ざらない。滞留はここが `expired(at:)` で注入する時刻（22s）が決めるもので、
+  /// 設定 `menubar-notice-dwell` の既定とは無関係。
   private let t0 = Date(timeIntervalSinceReferenceDate: 0)
 
   private func at(_ offset: TimeInterval) -> Date { t0.addingTimeInterval(offset) }
 
-  /// 尺は design 原典のタイムライン表どおり。滞留 22 秒と速い収縮 180ms が Orbe の意図的な逸脱。
+  /// 尺は design 原典のタイムライン表どおり。速い収縮 180ms が Orbe の意図的な逸脱
+  /// （滞留はここが持たない——設定から到来ごとに決まる）。
   func testDurationsMatchDesign() {
     XCTAssertEqual(MenuBarArrival.expand, 0.84)
     XCTAssertEqual(MenuBarArrival.glossDelay, 1.2)
@@ -21,7 +23,6 @@ final class MenuBarArrivalTests: OrbeTestCase {
     XCTAssertEqual(MenuBarArrival.collapse, 0.6)
     XCTAssertEqual(MenuBarArrival.collapseQuick, 0.18)
     XCTAssertLessThan(MenuBarArrival.collapseQuick, MenuBarArrival.collapse, "速い収縮は通常より短い")
-    XCTAssertEqual(AttentionStore.transientDwell, 22)
   }
 
   /// 展開は 840ms で開き切り、滞留の間は開いたまま。

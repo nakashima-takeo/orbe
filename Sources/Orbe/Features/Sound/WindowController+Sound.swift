@@ -1,20 +1,14 @@
 import AppKit
 import OrbeSound
 
-/// エージェント状態の変化を通知音へ流す。`noteAttentionTransient`（メニューバー②）と同じ発火点・
-/// 同じ抑制条件で並ぶ 3 番目の利用者。
+/// エージェント状態の変化を通知音へ流す。メニューバー②と並ぶ、1 つの通知（`AgentNotice`）の
+/// 2 つ目の投影面。
 extension WindowController {
-  /// waiting / done への実変化で鳴らす。ただし発信元ペインが**見ているタブ**にあるときは鳴らさない
-  /// ——端末にその結果もプロンプトも出ている面で、注意を二重に奪わないため（②の抑制と 1 文字も違えない）。
-  func noteAgentSound(for pane: SurfaceView, state: String) {
-    if let visibleTab, pane.controller === visibleTab { return }
-    // 設定は**発信元ペインが属する workspace の実効値**を読む。workspace 上書き（「この workspace の
-    // エージェントはこの音」）が意味を持つのはこの読み方だけ。
-    // 所属が引けない＝未activatedタブのペイン。②が「幽霊ピルになる」として立てないのと同じ集合を
-    // 見る——一覧にもピルにも出ない音だけが鳴ると、ユーザは出所を辿れない。
-    guard let ws = workspace(of: pane) else { return }
-    let settings = settingsStore.effective(override: ws.settingsOverride)
-    guard let plan = AgentSoundDecision.plan(state: state, settings: settings) else { return }
+  /// 通知 1 件を鳴らす。鳴らすかどうか（状態・オン/オフ・音源）は `AgentSoundDecision` が
+  /// 通知の持つ発信元 workspace の実効設定から決める。
+  func noteAgentSound(_ notice: AgentNotice) {
+    guard let plan = AgentSoundDecision.plan(state: notice.row.state, settings: notice.settings)
+    else { return }
     soundPlayer.play(plan.source, event: plan.event, volume: plan.volume)
   }
 
@@ -34,14 +28,5 @@ extension WindowController {
       referenced.formUnion(SettingKeys.customSoundSources.compactMap { layer[$0]?.file })
     }
     CustomSoundStore.collectGarbage(referenced: referenced)
-  }
-
-  /// ペインが属する workspace（`attentionRow(for:)` と同じ activatedタブの走査）。
-  private func workspace(of pane: SurfaceView) -> Workspace? {
-    for ws in workspaces {
-      for tab in ws.tabs
-      where tab.activated && tab.controlAllPanes().contains(where: { $0 === pane }) { return ws }
-    }
-    return nil
   }
 }

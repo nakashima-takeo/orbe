@@ -11,6 +11,9 @@ import XCTest
 @MainActor
 final class MenuBarStatusViewTests: OrbeTestCase {
 
+  /// ここが測るのは姿と幅で滞留ではない——`noteTransient` の必須引数を 1 箇所に閉じる。
+  private let anyDwell: TimeInterval = 40
+
   private func fittingSize(
     store: AttentionStore, phase: MenuBarArrival.Phase, ui: MenuBarUIState = MenuBarUIState()
   ) -> NSSize {
@@ -53,7 +56,7 @@ final class MenuBarStatusViewTests: OrbeTestCase {
       paneId: 1, workspaceName: workspace, tabTitle: "tab", state: "waiting", message: message,
       stateChangedAt: Date())
     store.apply(rows: [row])
-    store.noteTransient(row)
+    store.noteTransient(row, dwell: anyDwell)
     return store
   }
 
@@ -73,7 +76,7 @@ final class MenuBarStatusViewTests: OrbeTestCase {
     let store = AttentionStore()
     let long = String(repeating: "とても長い文言 ", count: 40)
     store.apply(rows: [row(state: "waiting"), row(state: "done")])
-    store.noteTransient(row(state: "waiting", message: long))
+    store.noteTransient(row(state: "waiting", message: long), dwell: anyDwell)
     let size = fittingSize(store: store, phase: .open)
     XCTAssertLessThanOrEqual(size.height, 22)
 
@@ -96,7 +99,7 @@ final class MenuBarStatusViewTests: OrbeTestCase {
       tabTitle: "tab", state: "waiting",
       message: String(repeating: "とても長い文言 ", count: 40), stateChangedAt: Date())
     store.apply(rows: [longRow])
-    store.noteTransient(longRow)
+    store.noteTransient(longRow, dwell: anyDwell)
     let size = fittingSize(store: store, phase: .open)
     // 上限＝ピル cap ＋ 外側の水平 padding（hair×2）。
     XCTAssertLessThanOrEqual(
@@ -209,7 +212,7 @@ final class MenuBarStatusViewTests: OrbeTestCase {
   func testWidthGrowsStrictlyWithOpenness() {
     let store = AttentionStore()
     store.apply(rows: [row(state: "waiting"), row(paneId: 2, state: "done")])
-    store.noteTransient(row(state: "waiting", message: longMessage))
+    store.noteTransient(row(state: "waiting", message: longMessage), dwell: anyDwell)
     for closing in [false, true] {
       var previous: CGFloat = 0
       for openness in [0.0, 0.25, 0.5, 0.75, 1.0] {
@@ -234,7 +237,7 @@ final class MenuBarStatusViewTests: OrbeTestCase {
       let store = AttentionStore()
       let rows = (1...count).map { row(paneId: $0, state: "waiting") }
       store.apply(rows: rows)
-      store.noteTransient(row(state: "waiting", message: message))
+      store.noteTransient(row(state: "waiting", message: message), dwell: anyDwell)
       return fittingSize(store: store, phase: phase).width
     }
     for (label, message) in [("短文", shortMessage), ("長文（切り詰めあり）", longMessage)] {
@@ -256,10 +259,10 @@ final class MenuBarStatusViewTests: OrbeTestCase {
     let arriving = row(state: "waiting", message: shortMessage)
     /// 一覧が到来に追いついた store と、まだ追いついていない store。
     let live = AttentionStore()
-    live.noteTransient(arriving)
+    live.noteTransient(arriving, dwell: anyDwell)
     live.apply(rows: [arriving])
     let pending = AttentionStore()
-    pending.noteTransient(arriving)
+    pending.noteTransient(arriving, dwell: anyDwell)
 
     XCTAssertEqual(live.count, 1)
     XCTAssertEqual(pending.count, 0)
@@ -284,7 +287,7 @@ final class MenuBarStatusViewTests: OrbeTestCase {
     bare.apply(rows: rows)
     let withTransient = AttentionStore()
     withTransient.apply(rows: rows)
-    withTransient.noteTransient(row(state: "waiting", message: longMessage))
+    withTransient.noteTransient(row(state: "waiting", message: longMessage), dwell: anyDwell)
     XCTAssertEqual(
       fittingSize(store: withTransient, phase: .closed).width,
       fittingSize(store: bare, phase: .closed).width, accuracy: 0.5)
