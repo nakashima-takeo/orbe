@@ -5,7 +5,9 @@ import XCTest
 
 /// メニューバー②の flow（ファイル分割の拡張）。到来（展開・艶・滞留・収縮）と、
 /// 取り下げ・②中のクリックの閉じ方を、本物の `MenuBarArrivalDriver` で駆動して撮る
-/// （時刻は注入するので実時間を待たない）。
+/// （時刻は注入するので実時間を待たない）。滞留の尺を決めるのは収縮を撃つ `expired(at:)` の時刻だけ
+/// ——`noteTransient` の `dwell` はこの経路（`MenuBarArrivalDriver`）が読まないので、時刻表と
+/// 食い違わない 22 を置くだけ。
 extension DesignFlowSnapshotTests {
   /// メニューバー②の到来: 本物の `arrived` / `tick` / `expired` で駆動し（時刻は注入するので
   /// 実時間を待たない）、展開・艶の走査・滞留・収縮の各フレームを撮る。
@@ -42,7 +44,7 @@ extension DesignFlowSnapshotTests {
         (
           "arrive",
           {
-            store.noteTransient(arriving, now: t0)
+            store.noteTransient(arriving, dwell: 22, now: t0)
             driver.arrived(at: t0)
           }
         ),
@@ -95,7 +97,7 @@ extension DesignFlowSnapshotTests {
         (
           "arrive",
           {
-            store.noteTransient(arriving, now: t0)  // 到来時の件数は 0
+            store.noteTransient(arriving, dwell: 22, now: t0)  // 到来時の件数は 0
             driver.arrived(at: t0)
           }
         ),
@@ -142,7 +144,7 @@ extension DesignFlowSnapshotTests {
         (
           "open",
           {
-            store.noteTransient(arriving, now: t0)
+            store.noteTransient(arriving, dwell: 22, now: t0)
             store.apply(rows: [arriving])
             driver.arrived(at: t0)
             driver.tick(now: t0.addingTimeInterval(0.84))

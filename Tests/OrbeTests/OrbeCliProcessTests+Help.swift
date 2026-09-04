@@ -55,6 +55,30 @@ extension OrbeCliProcessTests {
       "config --help の KEYS が SettingsRegistry と食い違っている")
   }
 
+  /// `orb config set --help` の型内訳は `SettingsRegistry.all` の全 key を漏らさず振り分ける。
+  ///
+  /// `KEYS:` 行が `allConfigKeys` の 1 箇所を写すのに対し、その下の型内訳（integer / true-false /
+  /// string / map の行）は key を**もう一度手で並べた別の写し**で、これまで何も守っていなかった。
+  ///
+  /// 壊れると何が起きるか: key は `KEYS:` に出るのに型が示されないので、`config set` に何を渡せば
+  /// よいかが help から読めない。受け付ける側（`SettingDomain.validate`）は減らないため、
+  /// 終了コードにも出力にも現れない。
+  func testConfigSetHelpAssignsATypeToEveryRegistryKey() throws {
+    let outcome = ControlProcess.orbWithoutServer(["config", "set", "--help"])
+    XCTAssertEqual(
+      outcome.status, 0, "config set --help は socket 不達でも exit 0: \(outcome.stderr)")
+    let lines = outcome.stdout.split(separator: "\n", omittingEmptySubsequences: false)
+    let breakdown = lines.drop { !$0.hasPrefix("KEYS: ") }.dropFirst()
+      .prefix { !$0.hasPrefix("--workspace") }
+    XCTAssertFalse(breakdown.isEmpty, "config set --help に型内訳が無い: \(outcome.stdout)")
+    let listed = Set(
+      breakdown.joined(separator: " ").split(whereSeparator: { $0 == "," || $0.isWhitespace })
+        .map(String.init))
+    for key in SettingsRegistry.all.map(\.key) {
+      XCTAssertTrue(listed.contains(key), "config set --help の型内訳に \(key) が無い")
+    }
+  }
+
   /// `--workspace` に**値を必須で**取るコマンドの USAGE 行は、その値が `<id|current>` だと示す。
   ///
   /// `current` は数値 id と対等な指定で、受け付ける側は全ドメイン共通の 1 実装

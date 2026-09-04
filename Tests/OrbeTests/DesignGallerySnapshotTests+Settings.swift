@@ -19,6 +19,16 @@ extension DesignGallerySnapshotTests {
       paletteSnapshot(settingsRoot.render, canvas: rootStage), size: rootStage,
       name: "palette_settings_root.png", dir: dir)
 
+    // 設定行の下端。一覧は上限 320 で内部スクロールに入るため、音量・オン/オフ・メニューバー通知の
+    // 表示時間（この後に言語行が続く）は選択をそこへ置かないと画に出ない。3 行のうち stepper 2 行
+    // （音量・表示時間）が同じ「ラベル␣␣値＋単位」で並ぶか、最長になる WS 上書き注記つきの行が
+    // 500 幅に収まるかを見る。
+    let settingsTail = settingsPaletteModel(overrideNotificationDuration: 180)
+    settingsTail.render.selected = SettingsRegistry.rootOrder.count  // 設定行の末尾（scope 行が 0）
+    try writePNG(
+      paletteSnapshot(settingsTail.render, canvas: rootStage), size: rootStage,
+      name: "palette_settings_root_tail.png", dir: dir)
+
     let settingsTheme = settingsPaletteModel()
     settingsTheme.render.selected = 5  // テーマ行
     settingsTheme.render.onActivate()  // 潜る → Auto/Dark/Light の固定3択・● が実効値 Auto
@@ -94,7 +104,8 @@ extension DesignGallerySnapshotTests {
   /// 設定パレット gallery 用の実モデル（flow の testSettingsPalette と同じ初期値）。
   private func settingsPaletteModel(
     overrideFontSize: Int? = nil, overrideTheme: ThemeMode? = nil,
-    notificationSound: AgentSoundChoice? = nil, customDone: CustomSoundSource? = nil
+    notificationSound: AgentSoundChoice? = nil, customDone: CustomSoundSource? = nil,
+    overrideNotificationDuration: Int? = nil
   ) -> SettingsPaletteModel {
     var global = SettingsLayer()
     global[SettingKeys.fontSize] = 14
@@ -107,6 +118,7 @@ extension DesignGallerySnapshotTests {
     var override = SettingsLayer()
     override[SettingKeys.fontSize] = overrideFontSize
     override[SettingKeys.theme] = overrideTheme
+    override[SettingKeys.menuBarNotificationDuration] = overrideNotificationDuration
     return SettingsPaletteModel(
       values: ScopedSettingsValues(global: global, override: override),
       fontNames: ["Menlo", "Monaco", "SF Mono"],

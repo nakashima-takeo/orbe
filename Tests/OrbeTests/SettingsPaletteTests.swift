@@ -13,10 +13,12 @@ final class SettingsPaletteTests: OrbeTestCase {
     cursorStyleBlink: Bool = false,
     fontFamily: String? = nil, theme: ThemeMode? = nil,
     defaultAgent: String? = nil, worktreeDir: String? = nil,
+    menuBarNotificationDuration: Int? = nil,
     fontNames: [String] = [],
     agents: [String] = ["claude", "codex", "agy"],
     scope: SettingsScope = .global,
-    override: SettingsLayer = SettingsLayer()
+    override: SettingsLayer = SettingsLayer(),
+    language: Language = .ja
   ) -> SettingsPaletteModel {
     var global = SettingsLayer()
     global[SettingKeys.fontSize] = fontSize
@@ -27,10 +29,11 @@ final class SettingsPaletteTests: OrbeTestCase {
     global[SettingKeys.fontFamily] = fontFamily
     global[SettingKeys.defaultAgent] = defaultAgent
     global[SettingKeys.worktreeDir] = worktreeDir
+    global[SettingKeys.menuBarNotificationDuration] = menuBarNotificationDuration
     return SettingsPaletteModel(
       values: ScopedSettingsValues(scope: scope, global: global, override: override),
       fontNames: fontNames, agents: agents,
-      localization: LocalizationStore(language: .ja))
+      localization: LocalizationStore(language: language))
   }
 
   /// 適用を捕捉する（単一代入を空レイヤに当てて結果を観測）。
@@ -91,9 +94,10 @@ final class SettingsPaletteTests: OrbeTestCase {
       p.render.rows.map(\.chevron),
       [
         false, false, false, false, false, true, true, true, true, true, true, true, true,
-        false, false, true,
+        false, false, false, true,
       ],
-      "スコープ/フォントサイズ/不透明度/ブラー/点滅/通知音の音量/通知音のオン・オフ行は chevron 無し、"
+      "スコープ/フォントサイズ/不透明度/ブラー/点滅/通知音の音量/通知音のオン・オフ/"
+        + "メニューバー通知の表示時間行は chevron 無し、"
         + "テーマ/エージェント/フォント/タブタイトルのフォント/絵文字フォント/アイコン/worktree の作成場所/"
         + "通知音/言語行は drillIn で chevron 有り"
     )

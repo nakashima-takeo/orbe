@@ -1,7 +1,7 @@
 ---
 title: 設定
 description: キュレート既定 → user 設定 → GUI 生成 conf の後勝ち 3 層読み込みと、テーマ（Auto/Dark/Light 外観スイッチ）によるライト/ダーク決定
-updated: 2026-08-15
+updated: 2026-09-04
 ---
 
 # 設定
@@ -41,7 +41,7 @@ ghostty の conf をどう読み、GUI の設定変更をどう端末へ届け�
 
 ## 実効設定と反映
 
-`regenerate` に渡すのは global 層にアクティブ workspace の上書き層を重ねた**実効設定**（[workspace](workspace.md)）。値の担体はスコープ非依存の均一レイヤで、**全設定が workspace 上書き可**。gui.conf に出るのはフォント/テーマ/背景/カーソル/絵文字系のみで、`default-agent`（AgentLauncher 直行）・`agent-state-icons`／`tab-title-font-family`（chrome へ直配信・[chrome](../chrome/chrome.md)）は gui.conf を経由しない。
+`regenerate` に渡すのは global 層にアクティブ workspace の上書き層を重ねた**実効設定**（[workspace](workspace.md)）。値の担体はスコープ非依存の均一レイヤで、**全設定が workspace 上書き可**。gui.conf に出るのはフォント/テーマ/背景/カーソル/絵文字系のみで、`default-agent`（AgentLauncher 直行）・`agent-state-icons`／`tab-title-font-family`（chrome へ直配信・[chrome](../chrome/chrome.md)）・`menubar-notification-duration`（メニューバーのピルが立つ瞬間に発信元 workspace の実効値を読む・[menubar](../chrome/menubar.md)）は gui.conf を経由しない。
 
 反映は集約点 `WindowController.applyActiveWorkspaceConfig()`（外観同期→gui.conf 再生成→config reload）に一本化し、**workspace 切替・起動復元・空 workspace アクティブ化の共有経路・初回起動・新規 workspace 作成（上書き無し＝global 実効へ切り替え、前 workspace の上書きを持ち越さない）・設定パレット適用**が呼ぶ。画面に載るのは常にアクティブ 1 workspace のみなので、全 surface へ一律伝播する reload で常に正しい。font-size のライブ反映は trailing デバウンスでキーリピートの連射を畳む。
 

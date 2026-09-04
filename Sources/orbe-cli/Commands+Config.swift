@@ -7,14 +7,16 @@ import Foundation
 
 /// `SettingsRegistry.all` の全 key。usage は socket 不達でも出す必要があるため config_list からは
 /// 引けず、ここに写す。この一覧のドリフトは `testConfigHelpListsEveryRegistryKey` が
-/// `config --help` の `KEYS:` 行と registry を突き合わせて落とす。`configSetUsage` の型内訳だけは
-/// 手書きのままなので、registry に key を足したらそちらも足すこと。
+/// `config --help` の `KEYS:` 行と registry を突き合わせて落とす。`configSetUsage` の型内訳は
+/// key をもう一度手で並べた別の写しで、そちらの取りこぼしは
+/// `testConfigSetHelpAssignsATypeToEveryRegistryKey` が落とす。
 let allConfigKeys = [
   "font-size", "background-opacity", "background-blur", "cursor-style-blink", "theme",
   "font-family", "tab-title-font-family", "emoji-font", "default-agent", "agent-state-icons",
   "worktree-dir", "notification-sound", "notification-sound-volume",
   "notification-sound-enabled", "notification-sound-custom-done",
   "notification-sound-custom-waiting", "notification-sound-custom-waiting-same-as-done",
+  "menubar-notification-duration",
 ]
 
 let configUsageLines = [
@@ -40,7 +42,8 @@ let configSetUsage = """
   orb config set <key> <value> [--workspace [<id>]]
 
   KEYS: \(allConfigKeys.joined(separator: ", "))
-    font-size, background-opacity, notification-sound-volume   integer
+    font-size, background-opacity, notification-sound-volume,
+    menubar-notification-duration   integer
     background-blur, cursor-style-blink, notification-sound-enabled,
     notification-sound-custom-waiting-same-as-done   true/false/on/off/1/0
     theme (auto/light/dark), font-family, tab-title-font-family, emoji-font,

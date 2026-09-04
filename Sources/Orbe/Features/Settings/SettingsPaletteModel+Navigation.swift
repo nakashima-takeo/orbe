@@ -16,7 +16,7 @@ extension SettingsPaletteModel {
     case .notificationSound: return .notificationSound
     case .fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink,
       .notificationSoundVolume, .notificationSoundEnabled,
-      .notificationSoundCustomWaitingSameAsDone:
+      .notificationSoundCustomWaitingSameAsDone, .menuBarNotificationDuration:
       return .root  // stepper/toggle であって drillIn でない
     case .notificationSoundCustomDone, .notificationSoundCustomWaiting:
       // root に行を持たず、カスタム設定サブの中でだけ編集される（`SettingsRegistry.nonRootIDs`）

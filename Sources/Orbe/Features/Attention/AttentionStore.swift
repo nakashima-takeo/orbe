@@ -14,11 +14,6 @@ import Observation
   /// working の減光集約 1 行の素材（件数と WS 名。0 件は nil）。書式は描画側が L10n で組む。
   var workingSummary: (count: Int, names: [String])? { AttentionSnapshot.workingSummary(rows) }
 
-  /// メニューバー②（状態変化の瞬間の滲み出し）の**滞留**時間（秒）。ユーザー確定値。
-  /// ②の尺のうちここが持つのは滞留だけで、展開・艶・収縮は `MenuBarArrival`。
-  /// 滞留の後に 600ms の収縮が続くので、②の総寿命は 22.6 秒。
-  static let transientDwell: TimeInterval = 22
-
   /// メニューバー②（状態変化の瞬間の滲み出し）の一過性イベント。
   /// waiting / done への実変化のときだけ report 経路（controlReportAgent）が立てる。
   /// 期限管理（ホバー延長・収縮）は MenuBarController が担う。
@@ -39,11 +34,14 @@ import Observation
   }
   var transient: Transient?
 
-  /// 一過性イベントを立てる（滞留 `transientDwell`。ホバー延長は MenuBarController）。
-  func noteTransient(_ row: AttentionRow, now: Date = Date()) {
+  /// 一過性イベントを立てる。`dwell`（滞留秒）は到来の属性——立てる側が発信元 workspace の
+  /// 実効設定（`menubar-notification-duration`）から解決して渡し、その到来が終わるまで動かない。
+  /// store が既定を持たないのは、発信元を知らない store が設定の既定と別口の既定を作らないため。
+  /// ホバー延長は MenuBarController が `expiresAt` を伸ばす。
+  func noteTransient(_ row: AttentionRow, dwell: TimeInterval, now: Date = Date()) {
     transient = Transient(
       row: row, arrivedAt: now, arrivedCount: count,
-      expiresAt: now.addingTimeInterval(Self.transientDwell))
+      expiresAt: now.addingTimeInterval(dwell))
   }
 
   /// 行 snapshot を差し替え、②が指す行が一覧（`listRows`）に**同じ状態で**居なければ取り下げる。

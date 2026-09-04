@@ -17,7 +17,7 @@ enum ResolvedSource: Equatable, Hashable {
 /// 「鳴らすか・何を鳴らすか」の判断（純関数）。設定だけを見るのでテストで全組み合わせを機械検証できる。
 ///
 /// 「見ているタブか」だけはここに入れない——`WindowController` の窓とタブの状態に依存するため、
-/// 呼び出し側（`WindowController.noteAgentSound`）が既存の `visibleTab` 判定で先に弾く。
+/// 通知を組む側（`WindowController.agentNotification(for:)`）が `visibleTab` 判定で先に弾く。
 enum AgentSoundDecision {
   struct Plan: Equatable {
     let source: ResolvedSource

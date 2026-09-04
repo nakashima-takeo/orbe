@@ -5,6 +5,7 @@ import XCTest
 /// `report_agent` が鳴らす chrome 再投影の配達経路（ファイル分割の拡張）。②ピルは一覧の投影なので、
 /// 一覧から行が消えたら取り下げられ、ペイン集合が増えたら追随する。どちらも「操作が本番経路で
 /// 再投影を要求したか」を測るもので、harness（`makeControllerAndPane` 等）は本体ファイルが持つ。
+/// 立てる②の中身のうち滞留の尺——発信元 workspace の実効値から決まる——もここが測る。
 extension WindowControllerReportAgentTests {
 
   // MARK: - ②ピルの取り下げ（一覧の投影であることの配達経路）
@@ -178,7 +179,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
   }
 
-  /// 休眠（未 activate）workspace のペインでは②を立てない——立てる側（`attentionRow(for:)`）は
+  /// 休眠（未 activate）workspace のペインでは②を立てない——通知を組む側（`agentNotification(for:)`）は
   /// 一覧（`AttentionSnapshot.rows`）と同じ activate 済み workspace のみを見る。立ててしまうと、
   /// その行は一覧に出ないので次の flush で即取り下げられる幽霊ピルになる。
   ///
@@ -195,6 +196,53 @@ extension WindowControllerReportAgentTests {
 
     flushDelivered(wc)
     XCTAssertTrue(wc.attentionStore.rows.isEmpty, "一覧にも出ない（立てる側と同じ集合）")
+  }
+
+  // MARK: - ②の滞留（発信元 workspace の実効設定から到来時に決まる）
+
+  /// 滞留は**発信元ペインが属する workspace** の実効値（`menubar-notification-duration`）で決まる。
+  ///
+  /// workspace を 2 つ立てて**アクティブでない方**から報告させる——1 つしか無いと発信元＝アクティブに
+  /// なり、アクティブの実効設定を読む誤実装でも同じく緑になる（通知音の
+  /// `testSoundReadsOriginWorkspaceOverride` と同じ問い）。
+  func testTransientDwellReadsOriginWorkspaceOverride() throws {
+    let (wc, panes) = try makeControllerAndTwoActivatedWorkspaces()
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.menuBarNotificationDuration, 20))
+    var originOverride = SettingsLayer()
+    originOverride[SettingKeys.menuBarNotificationDuration] = 120
+    wc.workspaces[0].settingsOverride = originOverride
+    var activeOverride = SettingsLayer()
+    activeOverride[SettingKeys.menuBarNotificationDuration] = 60
+    wc.workspaces[1].settingsOverride = activeOverride
+    XCTAssertTrue(wc.current === wc.workspaces[1], "前提: アクティブは発信元でない方")
+
+    wc.controlReportAgent(
+      pane: panes[0], agent: "claude", state: "waiting", sessionId: nil,
+      message: AgentMessage(text: "q"))
+
+    let transient = try XCTUnwrap(wc.attentionStore.transient)
+    XCTAssertEqual(
+      transient.expiresAt.timeIntervalSince(transient.arrivedAt), 120, accuracy: 0.001,
+      "アクティブ側（60）でなく発信元 workspace の上書き（120）で滞留が決まる")
+  }
+
+  /// 上書きが無ければ global の実効値。何も設定しなければ既定の 40 秒。
+  func testTransientDwellFallsBackToGlobalThenDefault() throws {
+    let (wc, pane) = try makeControllerAndPane()
+    wc.controlReportAgent(
+      pane: pane, agent: "claude", state: "waiting", sessionId: nil,
+      message: AgentMessage(text: "q"))
+    var transient = try XCTUnwrap(wc.attentionStore.transient)
+    XCTAssertEqual(
+      transient.expiresAt.timeIntervalSince(transient.arrivedAt), 40, accuracy: 0.001,
+      "未設定の既定は 40 秒")
+
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.menuBarNotificationDuration, 15))
+    wc.controlReportAgent(pane: pane, agent: "claude", state: "done", sessionId: nil, message: nil)
+    transient = try XCTUnwrap(wc.attentionStore.transient)
+    XCTAssertEqual(
+      transient.expiresAt.timeIntervalSince(transient.arrivedAt), 15, accuracy: 0.001,
+      "変更は次の到来から効く")
   }
 
   // MARK: - ペイン集合が増える側（split）の再投影
