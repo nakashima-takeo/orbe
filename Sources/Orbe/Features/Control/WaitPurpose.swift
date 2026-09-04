@@ -66,8 +66,9 @@ enum WaitPurpose {
     switch (self, record.event) {
     case (.event, _):
       return .success(["event": record.toDict()])
-    case (.promptOutcome, .agentState(_, let state, let message, _)):
-      var d: [String: Any] = ["state": state ?? "clear"]
+    case (.promptOutcome, .agentState(_, _, let message, _)):
+      var d: [String: Any] = [:]
+      if let state = record.event.value { d["state"] = state }
       if let message { d["message"] = message }
       return .success(d)
     case (.promptOutcome, _):

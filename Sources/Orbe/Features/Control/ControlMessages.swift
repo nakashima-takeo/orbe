@@ -52,9 +52,11 @@ enum ControlEvent {
   }
 
   /// kind 固有の値（agent_state なら状態語、pane_title ならタイトル、pwd なら path）。
+  /// 報告の消滅は `report_agent` の入力語と同じ `clear`——`wait_for_event` の `value` と
+  /// `prompt_agent` の `state` が同じ語で一致するように、語はここだけが持つ。
   var value: String? {
     switch self {
-    case .agentState(_, let state, _, _): return state
+    case .agentState(_, let state, _, _): return state ?? "clear"
     case .paneTitle(_, let title): return title
     case .pwd(_, let path): return path
     case .paneClosed: return nil

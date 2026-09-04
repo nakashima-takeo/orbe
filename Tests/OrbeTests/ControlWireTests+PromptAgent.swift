@@ -76,7 +76,7 @@ extension ControlWireTests {
     prompt(wire, id: 2, paneId: pane)
     ControlServer.shared.emit(state(pane, nil))
     let clear = result(wire.nextResponse())
-    XCTAssertEqual(clear?["state"] as? String, "clear", "報告の消滅は clear（value 無しを state に写す）")
+    XCTAssertEqual(clear?["state"] as? String, "clear", "報告の消滅は clear（イベントの value と同じ語）")
   }
 
   /// 文言の無い遷移では `message` キー自体を持たない（null を置かない）。

@@ -67,8 +67,9 @@ extension WindowControllerReportAgentTests {
       stateEvent(wire.nextResponse())?["value"] as? String, "waiting", "実変化では張った待機が起きる")
   }
 
-  /// clear は「状態なし」を値なしのイベントで伝える——wire 上の null 表現は `value` キーの欠落。
-  func testClearEmitsAnEventWithoutAValueKey() throws {
+  /// clear は「状態なし」を `report_agent` の入力と同じ語 `clear` で伝える——`orb wait --value clear`
+  /// と `orb agent prompt` の `state clear` が同じ語で一致する。
+  func testClearEmitsAnEventWithTheClearValue() throws {
     let (wc, pane) = try makeControllerAndPane()
     let wire = ControlWire(target: nil)
     defer { wire.teardown() }
@@ -81,7 +82,7 @@ extension WindowControllerReportAgentTests {
     let event = try XCTUnwrap(stateEvent(wire.nextResponse()))
     XCTAssertEqual(event["kind"] as? String, "agent_state")
     XCTAssertEqual(event["paneId"] as? Int, pane.id)
-    XCTAssertNil(event["value"], "状態なしは value キーごと落ちる（null を書かない）")
+    XCTAssertEqual(event["value"] as? String, "clear", "報告の消滅は value に clear を載せる")
   }
 
   /// チケット消費直後（`.live(report: nil)`）に届く初回 hook は流れる——resume の本線で
