@@ -206,15 +206,15 @@ final class CompletionShimTests: OrbeTestCase {
 
   // MARK: - 汚染 env からの回復（ORBE_USER_ZDOTDIR が Orbe の shim dir を指す・空文字）
 
-  /// 汚染 env の共通観察: 再帰せず（shim は一度しか入らない＝フックの二重登録が無い）、
-  /// ユーザーの rc が home から読まれ、widget が入り、ZDOTDIR / ORBE_USER_ZDOTDIR は unset に戻る。
+  /// 汚染 env の共通観察: ユーザーの rc が home から読まれ、widget が入り、ZDOTDIR / ORBE_USER_ZDOTDIR は
+  /// unset に戻り、フックが残らない。shim の二重進入は source 順（別 shim の .zshenv の証跡）で観測する。
   private func assertRecoveredToHome(_ out: String) {
     XCTAssertEqual(sourceOrder(), ["user-zshenv", "user-zshrc"], "ユーザー値ではないので home 扱い")
     assertProbe(out, contains: "TAB:_orbe_complete")
     assertProbe(out, contains: "CR:_orbe_accept_line")
     assertProbe(out, contains: "ZDOTDIR:unset")
     assertProbe(out, contains: "OUZ:unset")
-    assertProbe(out, contains: "HOOK:0/0", "shim が二重に走った痕跡（フックの残り）が無い")
+    assertProbe(out, contains: "HOOK:0/0", "フックが precmd_functions / 関数のどちらにも残らない")
   }
 
   func testOrbeUserZdotdirPointingAtOwnShimDirRecoversToHome() throws {
@@ -233,6 +233,11 @@ final class CompletionShimTests: OrbeTestCase {
     try FileManager.default.createDirectory(
       at: other.deletingLastPathComponent(), withIntermediateDirectories: true)
     try FileManager.default.copyItem(at: Self.shimDir, to: other)
+    // 別 shim の .zshenv が「ユーザーの .zshenv」として source されたら証跡が残る（再帰ガードの門番。
+    // フックの自己除去は重複ごと消すので、二重進入はフックの残りでは観測できない）。
+    let otherZshenv = other.appendingPathComponent(".zshenv")
+    let shim = try String(contentsOf: otherZshenv, encoding: .utf8)
+    try Data(("echo other-shim-zshenv >> \"\(log.path)\"\n" + shim).utf8).write(to: otherZshenv)
     try writeRc(".zshenv", in: home, marker: "user-zshenv")
     try writeRc(".zshrc", in: home, marker: "user-zshrc")
     let out = try runZsh(extraEnv: ["ORBE_USER_ZDOTDIR": other.path])
