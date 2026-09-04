@@ -75,8 +75,10 @@ final class AgentCatalogTests: OrbeTestCase {
   /// codex / agy を真にすると spawn が来ない idle を 30 秒待ち、未対応 agent も同じ。
   func testOnlyClaudeReportsIdleOnStart() {
     XCTAssertTrue(AgentCatalog.reportsIdleOnStart("claude"))
-    XCTAssertFalse(AgentCatalog.reportsIdleOnStart("codex"), "codex に SessionStart→idle は無い")
-    XCTAssertFalse(AgentCatalog.reportsIdleOnStart("agy"), "agy に SessionStart→idle は無い")
+    XCTAssertFalse(
+      AgentCatalog.reportsIdleOnStart("codex"),
+      "Orbe の codex hooks は SessionStart を配線していない（codex CLI 自身は持つ）")
+    XCTAssertFalse(AgentCatalog.reportsIdleOnStart("agy"), "agy に SessionStart 相当の hook は無い")
     XCTAssertFalse(AgentCatalog.reportsIdleOnStart("bash"), "未対応 agent は待たない側")
   }
 

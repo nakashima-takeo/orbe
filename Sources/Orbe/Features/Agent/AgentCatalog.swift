@@ -11,8 +11,9 @@ struct AgentCLI: Equatable {
 /// （「ユーザーのシェルが見つけるもの＝候補」の契約。GUI アプリの素の PATH に依存しない）。
 final class AgentCatalog {
   /// CLI 1 つぶんの静的な知識。`resumeFlag` は `<command> <resumeFlag> <sessionId>` の席。
-  /// `reportsIdleOnStart` は起動時に idle を報告する hook（claude の SessionStart）を持つか
-  /// ——出所は `docs/spec/agent/plugin-package.md` の event→state 表。
+  /// `reportsIdleOnStart` は Orbe のプラグインがその CLI の起動時 hook に idle を配線しているか
+  /// （claude の SessionStart→idle。codex CLI 自身も SessionStart を持つが `codex-hooks.json` は
+  /// 配線していない）——出所は `docs/spec/agent/plugin-package.md` の event→state 表。
   struct AgentProfile {
     let command: String
     let resumeFlag: String
