@@ -211,7 +211,7 @@ extension ControlWireTests {
     let wire = startWire(target: fake)
     var id = 0
 
-    // 未知のキー名 / 端末バイト表現を持たない cmd 付き単一文字 / 解けない綴り / 空。
+    // 未知のキー名 / 端末へ届く形が無い cmd 付き単一文字 / 解けない綴り / 空。
     for spec in ["nosuchkey", "cmd+a", "ctrl+", ""] {
       id += 1
       XCTAssertEqual(

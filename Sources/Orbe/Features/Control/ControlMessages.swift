@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import GhosttyKit
 
 /// 制御チャネルの宛先 ID 発番（プロセス内で単調増加・型をまたいで一意）。
@@ -37,21 +38,35 @@ struct ControlEvent {
   }
 }
 
-/// キー名（"enter" / "ctrl+c" / "up" 等）を libghostty への送出形へ解決する。
-/// - `.text`: PTY へ書くバイト列（印字文字・制御バイト。端末モード非依存）。
-/// - `.special`: keycode 経由で libghostty にモード対応エンコードさせる（矢印等）。
+/// キー名（"enter" / "ctrl+c" / "shift+a" 等）を、物理キー経路と同じ `SurfaceKeyInput` へ解決する。
+/// 名前付きキーは実 keycode、単一文字は keycode 無し（libghostty が生成文字・無修飾文字から符号化する）。
 enum ControlKey {
-  case text(String)
-  case special(UInt32, ghostty_input_mods_e)
+  /// 名前付きキーの行。`text` / `unshiftedCodepoint` は keycode だけでは符号化されないキーが持つ
+  /// （space は PC-style 関数キー表にも kitty 表にも無く、text が無いと何も書かれない）。
+  struct NamedKey {
+    let keycode: UInt32
+    let text: String?
+    let unshiftedCodepoint: UInt32
 
-  /// macOS 仮想キーコード（モード依存のナビゲーションキーのみ。これらは
-  /// libghostty が keycode から正しいエスケープを組む＝application cursor mode 等に追従する）。
+    init(_ keycode: Int, text: String? = nil, unshiftedCodepoint: UInt32 = 0) {
+      self.keycode = UInt32(keycode)
+      self.text = text
+      self.unshiftedCodepoint = unshiftedCodepoint
+    }
+  }
+
   /// 名前付きキーの全体。`orb pane --help` の `KEYS:` 行はここの写しで、ドリフトは
   /// `testPaneHelpListsEveryKeyName` が突き合わせて落とす（`KINDS:` / `KEYS:` と同じ守り方）。
-  static let specialKeycodes: [String: UInt32] = [
-    "enter": 36, "return": 36, "tab": 48, "escape": 53, "esc": 53, "space": 49,
-    "backspace": 51, "delete": 117, "up": 126, "down": 125, "left": 123, "right": 124,
-    "home": 115, "end": 119, "pageup": 116, "pagedown": 121,
+  static let namedKeys: [String: NamedKey] = [
+    "enter": NamedKey(kVK_Return), "return": NamedKey(kVK_Return),
+    "tab": NamedKey(kVK_Tab),
+    "escape": NamedKey(kVK_Escape), "esc": NamedKey(kVK_Escape),
+    "space": NamedKey(kVK_Space, text: " ", unshiftedCodepoint: 0x20),
+    "backspace": NamedKey(kVK_Delete), "delete": NamedKey(kVK_ForwardDelete),
+    "up": NamedKey(kVK_UpArrow), "down": NamedKey(kVK_DownArrow),
+    "left": NamedKey(kVK_LeftArrow), "right": NamedKey(kVK_RightArrow),
+    "home": NamedKey(kVK_Home), "end": NamedKey(kVK_End),
+    "pageup": NamedKey(kVK_PageUp), "pagedown": NamedKey(kVK_PageDown),
   ]
 
   private static let modTokens: [String: ghostty_input_mods_e] = [
@@ -62,7 +77,11 @@ enum ControlKey {
     "cmd": GHOSTTY_MODS_SUPER, "super": GHOSTTY_MODS_SUPER,
   ]
 
-  static func parse(_ spec: String) -> ControlKey? {
+  /// spec 全体を lowercased で読む（キー名・修飾・単一文字とも case-insensitive。大文字は `shift+a`）。
+  /// 単一文字は Unicode scalar ちょうど 1 つで制御文字でないもの。複数 scalar の grapheme は無修飾文字を
+  /// 持てず libghostty が修飾を黙殺する、制御文字は `key.text` に載らない——どちらも `send_text` の領分。
+  /// `cmd`/`super` 付き単一文字は端末へ届く形が無いので拒否し、修飾を黙殺して素の文字を注入しない。
+  static func parse(_ spec: String) -> SurfaceKeyInput? {
     let parts = spec.lowercased().split(separator: "+").map(String.init)
     guard let base = parts.last, !base.isEmpty else { return nil }
     var mods: UInt32 = 0
@@ -70,26 +89,32 @@ enum ControlKey {
       guard let m = modTokens[token] else { return nil }
       mods |= m.rawValue
     }
-    let modFlags = ghostty_input_mods_e(rawValue: mods)
 
-    if let keycode = specialKeycodes[base] {
-      return .special(keycode, modFlags)
+    if let named = namedKeys[base] {
+      return SurfaceKeyInput(
+        keycode: named.keycode, text: named.text, unshiftedCodepoint: named.unshiftedCodepoint,
+        mods: ghostty_input_mods_e(rawValue: mods), consumedMods: ghostty_input_mods_e(rawValue: 0))
     }
-    // 単一文字は修飾を端末バイトへ畳む（モード非依存）。ctrl→C0 制御、alt/meta→ESC プレフィックス。
-    // cmd/super は端末バイト表現を持たないので拒否し、修飾を黙殺して素の文字を返さない。
-    if base.count == 1, let scalar = base.unicodeScalars.first {
-      if mods & GHOSTTY_MODS_SUPER.rawValue != 0 { return nil }
-      var text = base
-      if mods & GHOSTTY_MODS_CTRL.rawValue != 0 {
-        let upper = scalar.value & ~0x20  // 'a'→'A'
-        guard upper >= 0x40, upper <= 0x5F else { return nil }  // @A-Z[\]^_
-        text = String(UnicodeScalar(upper & 0x1F)!)
+
+    guard base.unicodeScalars.count == 1, let scalar = base.unicodeScalars.first,
+      SurfaceKeyInput.textCarriesToKey(base),
+      mods & GHOSTTY_MODS_SUPER.rawValue == 0
+    else { return nil }
+    // shift は大文字化が実際に起きたときだけ消費する。大文字化しない文字（`shift+1` 等）はレイアウト
+    // 不明で `!` を作れないので、shift を修飾として残しアプリ側へ伝える（消費扱いにすると kitty で
+    // shift が消えて黙って `1` になる）。
+    var text = base
+    var consumed: UInt32 = 0
+    if mods & GHOSTTY_MODS_SHIFT.rawValue != 0 {
+      let upper = base.uppercased()
+      if upper.unicodeScalars.count == 1, upper != base {
+        text = upper
+        consumed = GHOSTTY_MODS_SHIFT.rawValue
       }
-      if mods & GHOSTTY_MODS_ALT.rawValue != 0 {
-        text = "\u{1b}" + text
-      }
-      return .text(text)
     }
-    return nil
+    return SurfaceKeyInput(
+      keycode: SurfaceKeyInput.noKeycode, text: text, unshiftedCodepoint: scalar.value,
+      mods: ghostty_input_mods_e(rawValue: mods),
+      consumedMods: ghostty_input_mods_e(rawValue: consumed))
   }
 }

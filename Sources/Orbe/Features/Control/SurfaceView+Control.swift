@@ -76,24 +76,10 @@ extension SurfaceView {
     text.withCString { ghostty_surface_text(surface, $0, UInt(text.utf8.count)) }
   }
 
-  /// 解決済みのキーをペインへ送る（PTY バイト or keycode press/release）。
-  func controlSendKey(_ key: ControlKey) {
-    guard let surface = surfacePtr else { return }
-    switch key {
-    case .text(let s):
-      controlSendText(s)
-    case .special(let keycode, let mods):
-      for action in [GHOSTTY_ACTION_PRESS, GHOSTTY_ACTION_RELEASE] {
-        var k = ghostty_input_key_s()
-        k.action = action
-        k.mods = mods
-        k.consumed_mods = ghostty_input_mods_e(rawValue: 0)
-        k.keycode = keycode
-        k.text = nil
-        k.unshifted_codepoint = 0
-        k.composing = false
-        _ = ghostty_surface_key(surface, k)
-      }
+  /// 解決済みのキー入力をペインへ press / release の 1 打として送る。
+  func controlSendKey(_ input: SurfaceKeyInput) {
+    for action in [GHOSTTY_ACTION_PRESS, GHOSTTY_ACTION_RELEASE] {
+      sendKeyInput(input, action: action, composing: false)
     }
   }
 }

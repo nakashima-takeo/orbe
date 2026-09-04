@@ -1,7 +1,7 @@
 import AppKit
 import GhosttyKit
 
-// MARK: - キーボード入力（keyDown → keyAction → sendKeyEvent）
+// MARK: - キーボード入力（keyDown → keyAction → sendKeyEvent → sendKeyInput）
 
 /// キー入力を IME・option-as-alt 翻訳を通して surface へ橋渡しする。
 /// 上流 Ghostty の keyDown データフローに準拠する: `key.mods` には生 event、`interpretKeyEvents` と
@@ -111,42 +111,23 @@ extension SurfaceView {
     return chars
   }
 
-  /// text を `key.text` に載せてよいか。制御文字（先頭 UTF-8 バイト < 0x20）は載せず keycode のみで
-  /// 送り、符号化を libghostty に委ねる（載せると effectiveMods が「text 有り」分岐で consumed_mods を
-  /// 差し引き Alt+Enter が潰れる）。scalar でなくバイトで判定するのでマルチバイト UTF-8 は常に載る。
-  static func textCarriesToKey(_ text: String) -> Bool {
-    guard let first = text.utf8.first else { return false }
-    return first >= 0x20
-  }
-
+  /// NSEvent から `SurfaceKeyInput` を組む。無修飾 codepoint は charactersIgnoringModifiers が ctrl
+  /// 押下で挙動を変えるため使わず、上流と同じく byApplyingModifiers([]) で取る（keyDown/keyUp でのみ有効）。
+  /// consumed_mods は translation 済み mods（option-as-alt 反映後）から算出する。生 mods で算出すると
+  /// effectiveMods が Alt を差し引き Option+Enter が素の Enter に潰れる。consumed_mods=0 だと
+  /// Kitty プロトコル下で Shift/Option が二重適用されうる。
   private func sendKeyEvent(
     _ action: ghostty_input_action_e, event: NSEvent,
     translationMods: NSEvent.ModifierFlags? = nil, text: String, composing: Bool
   ) {
-    guard let surface = surfacePtr else { return }
-    // 無修飾の codepoint。charactersIgnoringModifiers は ctrl 押下で挙動が変わるため使わず、
-    // 上流と同じく byApplyingModifiers([]) で無修飾文字を取る（keyDown/keyUp でのみ有効）。
-    let unshifted = event.characters(byApplyingModifiers: [])?.unicodeScalars.first?.value ?? 0
-    var key = ghostty_input_key_s()
-    key.action = action
-    key.mods = ghosttyMods(event.modifierFlags)
-    // text 変換に control/command は寄与しない、それ以外は消費されたとみなす上流ヒューリスティック。
-    // consumed_mods は translation 済み mods（option-as-alt 反映後）から算出する。生 mods で算出すると
-    // effectiveMods が Alt を差し引き Option+Enter が素の Enter に潰れる。consumed_mods=0 だと
-    // Kitty プロトコル下で Shift/Option が二重適用されうる。
-    key.consumed_mods = ghosttyMods(
-      (translationMods ?? event.modifierFlags).subtracting([.control, .command]))
-    key.keycode = UInt32(event.keyCode)
-    key.unshifted_codepoint = unshifted
-    key.composing = composing
-    if Self.textCarriesToKey(text) {
-      text.withCString { tptr in
-        key.text = tptr
-        _ = ghostty_surface_key(surface, key)
-      }
-    } else {
-      key.text = nil
-      _ = ghostty_surface_key(surface, key)
-    }
+    let input = SurfaceKeyInput(
+      keycode: UInt32(event.keyCode),
+      text: text,
+      unshiftedCodepoint: event.characters(byApplyingModifiers: [])?.unicodeScalars.first?.value
+        ?? 0,
+      mods: ghosttyMods(event.modifierFlags),
+      consumedMods: ghosttyMods(
+        (translationMods ?? event.modifierFlags).subtracting([.control, .command])))
+    sendKeyInput(input, action: action, composing: composing)
   }
 }

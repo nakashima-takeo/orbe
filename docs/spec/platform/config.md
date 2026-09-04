@@ -20,7 +20,7 @@ ghostty の conf をどう読み、GUI の設定変更をどう端末へ届け�
 
 ## 層 1（キュレート既定）
 
-持つのは端末テーマ・フォントチェーン・背景不透明度/ブラー・パディング・カーソル・シェル統合の既定。うち意図が値に宿るもの:
+持つのは端末テーマ・フォントチェーン・背景不透明度/ブラー・パディング・カーソル・シェル統合・Option の Alt 扱いの既定。うち意図が値に宿るもの:
 
 - **`theme = light:OrbeLight,dark:OrbeDark`** … 自前 named theme 2 枚。`app/themes/` の実体は識別色 SSOT（`DesignSystem/OrbePalette.swift`）から生成・コミットされ、`swift test` が ANSI ink スロットの WCAG AA と SSOT 再生成の drift を検証し、さらに層 1 と gui.conf の `theme =` 行からテーマ名をパースして `app/themes/<name>` の実在を照合する——テーマ名は層 1・gui.conf・テーマファイル名・`build-app.sh` の 4 箇所に独立して埋まり、解決に失敗しても ghostty は診断を積むだけで既定色のまま起動してしまうため。
 - **本文等幅チェーンは JetBrainsMono Nerd Font の 1 本だけ**（プライマリ・4 スタイル同梱で bold/italic も設計字形）。`font-family` 行の face は fallback=false で挿さり、presentation を無視してグリフ有無だけで奪うため、広カバレッジのフォントを足すと絵文字を白黒字形で取り、記号の解決先も全角字形のフォントから欧文の半角字形へすり替わる。広カバレッジの JuliaMono（v0.63.2）は `font-family` に入れず、**起動時の `.process` 登録だけで discovery の候補**として効かせる——JetBrains に無い記号（数学記号・多言語等）の受け皿。discovery で引けるのは SVG テーブルを持たない版だけ（カラーフォント判定は text 用途で拒否され、登録が無言で無効化する）で、`swift test` が同梱 TTF の非カラー判定を固定する。これら同梱 TTF（絵文字用含む）は起動時（フォント解決より前）にプロセス登録する（非バンドル起動では no-op）——登録しないと `font-codepoint-map` がファミリ名を解決できず、委譲が無言で外れて見た目だけが元へ戻る。
@@ -28,6 +28,7 @@ ghostty の conf をどう読み、GUI の設定変更をどう端末へ届け�
 - **囲み英数字と記号の一部を `Hiragino Sans W3` へ委譲する `font-codepoint-map`**（日本語固定とは別行・同一ファミリ）… これらは East Asian Width が Ambiguous/Neutral で 1 セル幅に落ち、欧文等幅の小さい字形が出て周囲の日本語に対し極端に小さく見える。日本語フォントで描けば正円・同書体で揃う。委譲しないと discovery が解き、monospace 優先の Score で登録済み JuliaMono（半角字形）が勝ちやすく環境依存にもなるため、map で環境非依存に固定する意味もある。対象は **libghostty がシンボルと見なすブロックに限る**——そこだけがグリフ制約でセル内に収まり、外（`※`・`●■▲`・`⌘`）は制約が掛からず全角字形が隣セルへはみ出す。**VS16 でカラー絵文字になる点（`Ⓜ⚠☁` 等）も外す**——理由は上の切り欠きと同じで、モノクロ固定により絵文字表現が置換文字に落ちる。この 2 条件でレンジが飛び地に割れており、絵文字由来の穴を埋めると無言で壊れるので `swift test` が両方を検証する。全角字形を 1 セル幅で描くため、前後のセルの中身によって制約枠が 1↔2 セルに変わり描画サイズが動く。
 - 背景不透明度は既定でわずかに透ける（設定パレットの既定と対称。GUI 未介入でも初期から透過）、`background-blur` も既定 ON。
 - **`shell-integration-features = no-cursor,no-title`** … cursor はプロンプトでの bar 上書きを止めブロックを効かせ、title は自動タイトル送出を止めてタブ名を chrome の precedence へ委ねる（→ [chrome](../chrome/chrome.md)）。
+- **`macos-option-as-alt = true`** … 物理 Option+<文字>と制御チャネルの `alt+<文字>`（→ [control/api](../control/api.md)）を Alt（Meta）として符号化する。未設定時の libghostty の自動判定は US / USInternational レイアウトだけ true で、ABC・JIS は false——Option+B が `∫`、`send_key alt+b` が legacy 端末で素の `b` になる——ため既定で固定する。代償は、JIS 物理キーボードで `¥` キーを `\` に切り替えていない環境の `Option+¥`（`\`）と、ラテン系非 US 配列（German 等）で Option から打つ `{ } [ ] | \ @ ~` が Alt になること。`~/.config/ghostty` で `false` に戻せる。
 - 絵文字の `font-codepoint-map` は層 1 に置かず、gui.conf（層 3）が**常時出力**する（単一出所・次節）。
 
 ## gui.conf（GUI 管理層）
