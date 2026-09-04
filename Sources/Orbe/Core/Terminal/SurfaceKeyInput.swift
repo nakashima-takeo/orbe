@@ -15,8 +15,8 @@ struct SurfaceKeyInput: Equatable {
   let unshiftedCodepoint: UInt32
   let mods: ghostty_input_mods_e
   /// `text` を生成するために消費された修飾。libghostty は `mods` − `consumedMods`（effective mods）を
-  /// keybind 判定と符号化の分岐判定に使う——無修飾扱いになると素の Enter/Tab/Backspace・テキスト直送へ
-  /// 落ち、alt の ESC 前置も消える。CSI に載る修飾値そのものは生 `mods` から作られる。`key.text` に
+  /// 符号化の分岐判定に使う——無修飾扱いになると素の Enter/Tab/Backspace・テキスト直送へ落ち、
+  /// alt の ESC 前置も消える。CSI に載る修飾値そのものは生 `mods` から作られる。`key.text` に
   /// 載らない入力では参照されない。cf. vendor/ghostty src/input/key.zig（effectiveMods）
   let consumedMods: ghostty_input_mods_e
 
