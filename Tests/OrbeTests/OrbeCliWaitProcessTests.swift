@@ -125,6 +125,49 @@ final class OrbeCliWaitProcessTests: OrbeTestCase {
       "未知 kind の理由が残る: \(outcome.stderr)")
   }
 
+  /// `--after <seq>` は、その seq より後に**既に起きた**一致イベントも返す。seq の出所は他の `--json`
+  /// 応答（ここでは `pane list`）で、待機を張る前に済んだ遷移——`orb pane send` → `orb wait` の隙間
+  /// ——を取りこぼさない。`--value` は状態語の一致で絞る（idle も撃っているので、value が効かなければ
+  /// idle の方が先に返る）。
+  func testAfterReplaysAnEventThatHappenedBeforeTheWait() throws {
+    let control = try startControlProcess(workspaces: ["main"])
+    let pane = try XCTUnwrap(
+      control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
+    let before = try XCTUnwrap(control.orbJSON(["pane", "list"])["seq"] as? Int, "seq の出所")
+
+    control.target.controlReportAgent(
+      pane: pane, agent: "codex", state: "idle", sessionId: nil, message: nil)
+    control.target.controlReportAgent(
+      pane: pane, agent: "codex", state: "working", sessionId: nil, message: nil)
+
+    let outcome = control.orb(
+      [
+        "wait", "\(pane.id)", "--kind", "agent_state", "--value", "working",
+        "--after", "\(before)", "--timeout-ms", "3000", "--json",
+      ])
+    XCTAssertEqual(outcome.status, 0, "既に起きた遷移で即返る: \(outcome.stdout)\(outcome.stderr)")
+    let data = try XCTUnwrap(outcome.stdout.data(using: .utf8))
+    let result = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let event = try XCTUnwrap(result["event"] as? [String: Any], "起きた側は event を返す")
+    XCTAssertEqual(event["value"] as? String, "working", "--value で絞った状態語のイベント")
+    let seq = try XCTUnwrap(event["seq"] as? Int, "event は seq を持つ")
+    XCTAssertGreaterThan(seq, before, "返るのは --after より後のイベント")
+    XCTAssertEqual(result["seq"] as? Int, seq, "応答の seq はそのイベントの seq")
+  }
+
+  /// `--after` は 0 を通し、負・非数値は socket に触れる前の usage エラー。
+  func testAfterAcceptsZeroAndRejectsNegativeOrNonNumeric() {
+    for value in ["-1", "abc"] {
+      let outcome = ControlProcess.orbWithoutServer(["wait", "--after", value])
+      XCTAssertEqual(outcome.status, 2, "`--after \(value)` は usage エラー: \(outcome.stderr)")
+      XCTAssertTrue(
+        outcome.stderr.contains("--after requires a non-negative <seq>"),
+        "期待する値の形を言う: \(outcome.stderr)")
+    }
+    let zero = ControlProcess.orbWithoutServer(["wait", "--after", "0"])
+    XCTAssertEqual(zero.status, 1, "--after 0 は usage を通り、socket 不達（exit 1）まで進む: \(zero.stderr)")
+  }
+
   /// `--timeout-ms` の値の席は CLI が握る（socket へ行く前に exit 2）。
   func testInvalidTimeoutIsAUsageError() {
     for args in [

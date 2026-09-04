@@ -22,12 +22,15 @@ final class Connection: Hashable {
   private var outStart = 0  // outBuffer 内の未送出先頭（front 削除の O(n) コピー回避）
   private var closed = false  // close 済みフラグ。冪等な close と、close 後の write/timeout 応答抑止に使う
 
-  // wait_for_event の待機状態（最大 1 件 / 接続）。
-  private var waitId: Any?
-  private var waitPaneId: Int?
-  private var waitKinds: Set<String>?
-  // 待機の世代。登録ごとに +1 し、タイムアウトクロージャは自分の世代だけを打ち切る
-  // （前の待機のタイムアウトが、後続の別待機を誤発火で横取りするのを防ぐ）。
+  /// 張られている待機。1 接続に複数持て、応答は各リクエストの `id` で区別される。
+  private struct PendingWait {
+    let id: Any?
+    let purpose: WaitPurpose
+    /// 登録ごとに +1 する世代。タイムアウトクロージャは自分の世代だけを打ち切る
+    /// （前の待機のタイムアウトが、後続の別待機を誤発火で横取りするのを防ぐ）。
+    let gen: Int
+  }
+  private var pending: [PendingWait] = []
   private var waitGen = 0
 
   init(fd: Int32, server: ControlServer, queue: DispatchQueue) {
@@ -59,6 +62,7 @@ final class Connection: Hashable {
     readSource = nil
     outBuffer.removeAll(keepingCapacity: false)
     outStart = 0
+    pending.removeAll()
   }
 
   /// 受信エラー・overflow・送信エラーから接続を畳む。connections からの除去と close をまとめる。
@@ -100,88 +104,82 @@ final class Connection: Hashable {
 
   // MARK: - 応答 / イベント（queue 上）
 
-  func respond(id: Any?, result: Result<Any, ControlError>) {
+  /// 成功応答の最上位に `seq` を刻む。省略なら応答時点の履歴位置（＝これより大きい seq はこの
+  /// 操作より後）。イベントで完結した応答は呼び出し側が**そのイベントの** `seq` を渡す——最新に
+  /// 化けると、replay で返したイベントと応答の間のイベントを次の `after` で取りこぼす。
+  func respond(id: Any?, result: Result<Any, ControlError>, seq: Int? = nil) {
     var msg: [String: Any] = ["jsonrpc": "2.0", "id": id ?? NSNull()]
     switch result {
-    case .success(let value): msg["result"] = value
+    case .success(let value):
+      if var dict = value as? [String: Any] {
+        if let seq = seq ?? server?.latestSeq { dict["seq"] = seq }
+        msg["result"] = dict
+      } else {
+        msg["result"] = value
+      }
     case .failure(let err): msg["error"] = ["code": err.code, "message": err.message]
     }
     write(msg)
   }
 
-  func registerWait(id: Any?, params: [String: Any]) {
-    // 仕様は 1 接続 1 待機。既に待機中なら 2 件目は黙って捨てず即エラーで返す
-    // （後勝ち上書きは 1 件目を無応答にしクライアントをハングさせる）。
-    guard waitId == nil else {
-      respond(id: id, result: .failure(ControlError(code: -32005, message: "wait already pending")))
-      return
-    }
+  func waitForEvent(id: Any?, params: [String: Any]) {
     // 宛先・フィルタ・期限は待機を張る**前**に検証する。素通しすると待機はどちらかへ倒れ、
     // どちらも呼び出し側から時間切れと区別できない——絞り込みが黙って消えれば「別ペイン・別種の
     // イベントで起きる」、一致しない語で張られれば「永遠に起きない」。
-    var paneId: Int?
-    if let raw = params["paneId"] {
-      guard let pid = raw as? Int else {
-        respond(id: id, result: .failure(ControlError(code: -32602, message: "invalid paneId")))
-        return
-      }
-      paneId = pid
+    func reject(_ message: String) {
+      respond(id: id, result: .failure(ControlError(code: -32602, message: message)))
     }
-    var kinds: Set<String>?
-    if let raw = params["kinds"] {
-      guard let list = raw as? [String], !list.isEmpty else {
-        respond(id: id, result: .failure(ControlError(code: -32602, message: "invalid kinds")))
-        return
-      }
-      if let unknown = list.first(where: { !ControlEvent.kinds.contains($0) }) {
-        respond(
-          id: id,
-          result: .failure(ControlError(code: -32602, message: "unknown kind: \(unknown)")))
-        return
-      }
-      kinds = Set(list)
+    let purpose: WaitPurpose
+    switch WaitPurpose.eventFilter(params) {
+    case .success(let parsed): purpose = parsed
+    case .failure(let error): return respond(id: id, result: .failure(error))
     }
-    var timeoutMs = 30000
-    if let raw = params["timeoutMs"] {
-      // 上限を置くのは、巨大値だと `.milliseconds(_:)` の deadline が DISPATCH_TIME_FOREVER
-      // まで飽和してタイマーが発火しなくなるため——応答も時間切れも返らないまま 1 接続 1 待機の
-      // 枠を恒久占有し、以後の `wait_for_event` が全て -32005 になる。
-      // 24 時間はベンチマークの最長（分オーダー）を十分に超える。
-      guard let ms = raw as? Int, ms > 0, ms <= 86_400_000 else {
-        respond(id: id, result: .failure(ControlError(code: -32602, message: "invalid timeoutMs")))
-        return
-      }
-      timeoutMs = ms
+    var after: Int?
+    if let raw = params["after"] {
+      guard let seq = raw as? Int, seq >= 0 else { return reject("invalid after") }
+      after = seq
+    }
+    guard let timeoutMs = WaitTimeout.parse(params, default: WaitTimeout.eventDefaultMs) else {
+      return reject("invalid timeoutMs")
     }
 
-    waitId = id
-    waitPaneId = paneId
-    waitKinds = kinds
+    if let after, let server {
+      switch server.replay(after: after, where: purpose.matches) {
+      case .match(let record):
+        return respond(id: id, result: purpose.reply(record), seq: record.seq)
+      case .future:
+        return reject("after is beyond the latest seq")
+      case .evicted:
+        return respond(
+          id: id, result: .failure(ControlError(code: -32006, message: "event history evicted")))
+      case .none:
+        break
+      }
+    }
+    arm(id: id, purpose: purpose, timeoutMs: timeoutMs)
+  }
+
+  /// 待機を張る。時間切れは自分の世代の待機だけを外して `purpose.timedOut` で応答する。
+  func arm(id: Any?, purpose: WaitPurpose, timeoutMs: Int) {
     waitGen += 1
     let gen = waitGen
+    pending.append(PendingWait(id: id, purpose: purpose, gen: gen))
     queue.asyncAfter(deadline: .now() + .milliseconds(timeoutMs)) { [weak self] in
-      guard let self, self.waitId != nil, self.waitGen == gen else { return }
-      let pending = self.waitId
-      self.clearWait()
-      self.respond(id: pending, result: .success(["timedOut": true]))
+      guard let self, let index = self.pending.firstIndex(where: { $0.gen == gen }) else { return }
+      let wait = self.pending.remove(at: index)
+      self.respond(id: wait.id, result: .success(wait.purpose.timedOut))
     }
   }
 
-  /// 待機中ならフィルタ一致するイベントで応答し、消費したかを返す。
-  @discardableResult func deliver(_ event: ControlEvent) -> Bool {
-    guard waitId != nil else { return false }
-    if let paneId = waitPaneId, paneId != event.paneId { return false }
-    if let kinds = waitKinds, !kinds.contains(event.kind) { return false }
-    let pending = waitId
-    clearWait()
-    respond(id: pending, result: .success(["event": event.toDict()]))
-    return true
-  }
-
-  private func clearWait() {
-    waitId = nil
-    waitPaneId = nil
-    waitKinds = nil
+  /// 一致した待機を全て消費し、それぞれの `id` で応答する。
+  func deliver(_ record: ControlEventRecord) {
+    guard !pending.isEmpty else { return }
+    let fired = pending.filter { $0.purpose.matches(record.event) }
+    guard !fired.isEmpty else { return }
+    pending.removeAll { $0.purpose.matches(record.event) }
+    for wait in fired {
+      respond(id: wait.id, result: wait.purpose.reply(record), seq: record.seq)
+    }
   }
 
   private func write(_ obj: [String: Any]) {

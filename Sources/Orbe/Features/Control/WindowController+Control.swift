@@ -109,6 +109,27 @@ extension WindowController: ControlTarget {
     pane.controller?.paneAgentStateChanged()
   }
 
+  /// ペインのエージェントへ text を送って Enter を押す（制御 API の prompt_agent）。届くのは入力欄が
+  /// 空いている状態（idle / done / 報告なし）だけ。`waiting` は permission ダイアログ / AskUserQuestion
+  /// が開いている状態で、そこへ text＋Enter を打つと既定選択の確定＝ツール実行の承認が副作用として
+  /// 起きるので拒む（waiting への応答は `send_key` の領分）。判定は hook 報告の派生値 `agentState`
+  /// だけなので、拒めるのは waiting を報告する agent（claude / codex、プラグイン導入済み）に限る
+  /// ——報告経路の無いペイン（agy・未導入・codex の初回報告前）では、承認ダイアログが開いていても
+  /// 素通りし、既定選択の確定を防げない。
+  func controlPromptAgent(pane: SurfaceView, text: String) -> ControlError? {
+    if let state = pane.agentState, state == "working" || state == "waiting" {
+      return ControlError(
+        code: -32000,
+        message: "agent busy (state: \(state); answer a waiting agent with send_key)")
+    }
+    guard pane.surfacePtr != nil else {
+      return ControlError(code: -32000, message: "pane not mounted")
+    }
+    pane.controlSendText(text)
+    pane.controlSendKey(ControlKey.enter)
+    return nil
+  }
+
   /// 指定 workspace に新タブを開き、新ペイン ID を返す（制御 API の spawn）。未知 workspaceId は
   /// アクティブへフォールバックする（`spawn_agent` / `resume_agent` は同じ形を継がず -32004 で弾く）。
   func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int? {

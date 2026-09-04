@@ -46,12 +46,14 @@ extension ControlWireTests {
       ("send_text", ["paneId": pane, "text": "hello"]),
       ("send_key", ["paneId": pane, "key": "ctrl+c"]),
       ("spawn", ["workspaceId": 3, "cwd": "/tmp/cwd", "command": "zsh -l"]),
-      ("spawn_agent", ["command": "claude", "workspaceId": 3, "cwd": "/tmp/cwd"]),
+      ("spawn_agent", ["command": "codex", "workspaceId": 3, "cwd": "/tmp/cwd"]),
       (
         "resume_agent",
-        ["command": "claude", "sessionId": "sess-1", "workspaceId": 3, "cwd": "/tmp/cwd"]
+        ["command": "codex", "sessionId": "sess-1", "workspaceId": 3, "cwd": "/tmp/cwd"]
       ),
       ("activate_workspace", ["workspaceId": 3]),
+      // 待機を張るので、表駆動で必ず 1 行返るよう短い timeoutMs を添える。
+      ("prompt_agent", ["paneId": pane, "text": "hello", "timeoutMs": 10]),
       ("config_list", ["workspaceId": 3]),
       ("config_set", ["key": "font-size", "value": 14, "scope": "global", "workspaceId": 3]),
       ("create_workspace", ["name": "wsp", "rootPath": "/tmp/root"]),
@@ -95,6 +97,8 @@ extension ControlWireTests {
       RequiredParam(method: "send_key", key: "paneId", code: -32004),
       RequiredParam(method: "send_key", key: "key", code: -32602),
       RequiredParam(method: "activate_workspace", key: "workspaceId", code: -32602),
+      RequiredParam(method: "prompt_agent", key: "paneId", code: -32602),
+      RequiredParam(method: "prompt_agent", key: "text", code: -32602),
       RequiredParam(method: "resume_agent", key: "command", code: -32602),
       RequiredParam(method: "resume_agent", key: "sessionId", code: -32602),
       RequiredParam(method: "report_agent", key: "paneId", code: -32004),

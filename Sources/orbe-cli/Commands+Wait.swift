@@ -7,7 +7,7 @@ import Foundation
 // MARK: - usage
 
 let waitUsageLines = [
-  "orb wait [<pane>] [--kind <kind>]... [--timeout-ms <ms>] [--json]"
+  "orb wait [<pane>] [--kind <kind>]... [--value <value>] [--after <seq>] [--timeout-ms <ms>] [--json]"
 ]
 
 /// help の `KINDS:` 行は control の `ControlEvent.kinds` と一致していなければならない
@@ -23,8 +23,14 @@ let waitUsage = """
   <pane> limits the wait to one pane. Omitting it watches **every** pane; unlike
   the pane commands, wait never falls back to ORBE_PANE.
   --kind may be repeated; omitting it waits for any kind.
+  --value matches the kind-specific value exactly (the state word for
+  agent_state, the title for pane_title, the path for pwd).
+  --after <seq> also returns an event that already happened after that
+  history position (seq comes from any --json result, e.g. `orb pane send
+  --json`); without it only events after the wait is registered count.
   --timeout-ms defaults to 30000. Timing out exits 124 (nothing on stdout,
   `timed out` on stderr; with --json, {"timedOut":true} on stdout).
+  To ask an agent something and wait for its answer, use `orb agent prompt`.
   """
 
 // MARK: - サブコマンド
@@ -33,6 +39,8 @@ func runWait(_ rest: [String]) -> Never {
   var args = rest
   // help は値の席を抜き取った後に見る（`--kind -h` の値を help と読んで exit 0 で素通りさせない）。
   let kinds = takeOptions(&args, "--kind", requires: "a <kind>")
+  let value = takeOption(&args, "--value", requires: "a <value>")
+  let after = takeIntOption(&args, "--after", requires: "a non-negative <seq>", atLeast: 0)
   let timeoutMs = takeIntOption(&args, "--timeout-ms", requires: "a positive <milliseconds>")
   if hasHelp(args) {
     print(waitUsage)
@@ -46,16 +54,13 @@ func runWait(_ rest: [String]) -> Never {
     params["paneId"] = pane
   }
   if !kinds.isEmpty { params["kinds"] = kinds }
+  if let value { params["value"] = value }
+  if let after { params["after"] = after }
   if let timeoutMs { params["timeoutMs"] = timeoutMs }
 
   let result = callOrExit("wait_for_event", params)
   let d = result as? [String: Any]
-  // 待っていたイベントが来ていないのに exit 0 を返さない（`orb wait … && 次の処理` が
-  // 時間切れで先へ進む形を作らない）。124 は GNU timeout(1) の時間切れと同じ値。
-  if d?["timedOut"] as? Bool == true {
-    if wantJSON { printJSON(result) } else { stderrLine("timed out") }
-    exit(124)
-  }
+  if d?["timedOut"] as? Bool == true { timedOutDie(result) }
   if wantJSON {
     printJSON(result)
   } else {

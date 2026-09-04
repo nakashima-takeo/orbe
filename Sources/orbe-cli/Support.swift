@@ -2,7 +2,8 @@ import Foundation
 
 // orbe-cli の出力・終了・引数ヘルパと、全ドメインを束ねるトップ usage。main.swift（socket
 // クライアント）・`Commands+<ドメイン>.swift`（サブコマンド）が共用する。
-// 終了コードは 0 成功 / 2 usage エラー / 1 RPC・接続エラー / 124 wait タイムアウト。
+// 終了コードは 0 成功 / 2 usage エラー / 1 RPC・接続エラー / 124 待機の時間切れ /
+// 3・4 は `agent prompt` の待ち・終了（Commands+Agent.swift）。
 //
 // 各ドメインの USAGE 行と usage テキストは `Commands+<ドメイン>.swift` が持ち、`topUsage` は
 // それらを合成する——ドメインの説明文がそのドメインのファイルの中だけで完結するように。
@@ -59,6 +60,15 @@ func display(_ value: Any) -> String {
   if value is NSNull { return "(unset)" }
   if let s = value as? String { return s }
   return String(describing: value)
+}
+
+/// 待機の時間切れ（`wait` / `agent prompt`）。終了コード 124 は GNU timeout(1) の時間切れと同じ値で、
+/// 待っていたことが起きていないのに exit 0 を返さない（`orb wait … && 次の処理` が時間切れで先へ
+/// 進む形を作らない）。`--json` は control の result を stdout へ、非 json は理由だけを stderr へ
+/// （stdout へ出すと `text=$(orb wait …)` が偽のイベントを掴む）。
+func timedOutDie(_ result: Any) -> Never {
+  if wantJSON { printJSON(result) } else { stderrLine("timed out") }
+  exit(124)
 }
 
 /// control を叩き、成功なら result を返す。RPC/接続エラーは出力して終了コード 1 で抜ける。
@@ -134,12 +144,32 @@ func takeOptions(_ args: inout [String], _ name: String, requires label: String)
   return out
 }
 
-/// 値必須の正整数オプション（`--timeout-ms <ms>`）。0 以下・非数値は usage エラー。
-/// `-` 始まりは `takeOption` が先に落とす。
-func takeIntOption(_ args: inout [String], _ name: String, requires label: String) -> Int? {
+/// 値必須の整数オプション。既定は正整数（`--timeout-ms <ms>`）で、`atLeast: 0` にすると 0 を通す
+/// （`--after <seq>`）。下限未満・非数値は usage エラー。`-` 始まりは `takeOption` が先に落とす。
+func takeIntOption(
+  _ args: inout [String], _ name: String, requires label: String, atLeast minimum: Int = 1
+) -> Int? {
   guard let raw = takeOption(&args, name, requires: label) else { return nil }
-  guard let n = Int(raw), n > 0 else { usageDie("\(name) requires \(label)") }
+  guard let n = Int(raw), n >= minimum else { usageDie("\(name) requires \(label)") }
   return n
+}
+
+/// `--text` / `--stdin` はちょうど一方が必須（`pane send` / `agent prompt` が同じ規則で受ける）。
+func requireTextSource(text: String?, useStdin: Bool, verb: String) {
+  if text != nil && useStdin { usageDie("pass only one of --text / --stdin") }
+  guard text != nil || useStdin else { usageDie("\(verb) requires --text or --stdin") }
+}
+
+/// `--stdin` の中身を読む。0 バイトだけを弾き空白は通す——`printf '%s' "$PROMPT" | … --stdin` の
+/// 未設定は 0 バイトとして現れる一方、ファイルや heredoc の正当な中身が空白・改行だけであることは
+/// あり得るから（`--text` は空白のみも弾く非対称は意図的）。
+func readStdinText() -> String {
+  let data = FileHandle.standardInput.readDataToEndOfFile()
+  guard !data.isEmpty else { usageDie("--stdin got no input") }
+  guard let decoded = String(data: data, encoding: .utf8) else {
+    usageDie("--stdin is not valid UTF-8")
+  }
+  return decoded
 }
 
 /// 値を取らないフラグ（`--scrollback` / `--stdin`）の有無を抜き取る。
@@ -311,5 +341,11 @@ let topUsage = """
   falls back to ORBE_PANE — omitting <pane> watches every pane.
   Resolves the target instance from ORBE_STATE_DIR / ORBE_SOCK. Run inside a
   Orbe pane, or the control socket must be reachable; otherwise exits non-zero.
-  Exit codes: 0 success, 2 usage error, 1 RPC/connection error, 124 wait timed out.
+  Every --json result that comes straight from control carries seq, the
+  event-history position at that moment; pass it to `orb wait --after` to catch
+  events that happen right after. `config get` is the one exception: it prints
+  a single row extracted from config_list and has no seq.
+  Exit codes: 0 success, 2 usage error, 1 RPC/connection error, 124 timed out
+  (wait / agent prompt / agent spawn / agent resume), 3 agent prompt: agent is
+  waiting for input, 4 agent prompt: agent session ended.
   """

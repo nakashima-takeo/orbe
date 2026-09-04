@@ -14,6 +14,47 @@ import XCTest
 /// **help を読んで組み立てる利用者と AI にとっての語彙**だけで、打てば通る機能が「無いもの」になる。
 /// どれもサーバ不要で出る経路なので、ここは `WindowController` を立てずに測る。
 extension OrbeCliProcessTests {
+  /// `orb --help` と `orb agent --help` の USAGE に `agent prompt` が載り、トップの Exit codes 行が
+  /// prompt 固有の 3 / 4 を言う。help から漏れると「打てば通るが無いもの」になり、終了コードが
+  /// 説明されなければ 3 / 4 を読む側が失敗と取り違える。
+  func testAgentPromptIsListedInUsageWithItsExitCodes() {
+    let top = ControlProcess.orbWithoutServer(["--help"])
+    XCTAssertEqual(top.status, 0, "--help は socket 不達でも exit 0: \(top.stderr)")
+    XCTAssertTrue(
+      top.stdout.contains("orb agent prompt <pane> (--text <text> | --stdin)"),
+      "トップ USAGE に agent prompt が無い: \(top.stdout)")
+    XCTAssertTrue(
+      top.stdout.contains("3 agent prompt") && top.stdout.contains("4 agent prompt"),
+      "Exit codes 行に 3 / 4 が無い: \(top.stdout)")
+
+    let agent = ControlProcess.orbWithoutServer(["agent", "--help"])
+    XCTAssertEqual(agent.status, 0, "agent --help は exit 0: \(agent.stderr)")
+    XCTAssertTrue(
+      agent.stdout.contains("orb agent prompt <pane> (--text <text> | --stdin)"),
+      "agent USAGE に prompt が無い: \(agent.stdout)")
+  }
+
+  /// `orb agent --help` / `orb wait --help` が写す既定タイムアウトは control の `WaitTimeout` と同じ値。
+  ///
+  /// 既定を決めるのは control で、help は socket 不達でも出す必要があるため値を写している。写しが
+  /// 古い値を言い続けると、`--timeout-ms` を省く利用者と AI が待ち時間を誤って見積もる。
+  func testHelpDefaultTimeoutsMatchControl() {
+    let agent = ControlProcess.orbWithoutServer(["agent", "--help"])
+    XCTAssertEqual(agent.status, 0, "agent --help は socket 不達でも exit 0: \(agent.stderr)")
+    XCTAssertTrue(
+      agent.stdout.contains("--timeout-ms defaults to \(WaitTimeout.launchDefaultMs)"),
+      "agent --help の spawn / resume の既定が WaitTimeout.launchDefaultMs と食い違っている: \(agent.stdout)")
+    XCTAssertTrue(
+      agent.stdout.contains("(default \(WaitTimeout.promptDefaultMs) ms)"),
+      "agent --help の prompt の既定が WaitTimeout.promptDefaultMs と食い違っている: \(agent.stdout)")
+
+    let wait = ControlProcess.orbWithoutServer(["wait", "--help"])
+    XCTAssertEqual(wait.status, 0, "wait --help は socket 不達でも exit 0: \(wait.stderr)")
+    XCTAssertTrue(
+      wait.stdout.contains("--timeout-ms defaults to \(WaitTimeout.eventDefaultMs)"),
+      "wait --help の既定が WaitTimeout.eventDefaultMs と食い違っている: \(wait.stdout)")
+  }
+
   /// `orb pane --help` の `KEYS:` は control の `ControlKey.namedKeys` と同じ集合。
   ///
   /// 弾くのは control（`ControlKey.parse` が -32602）だが、help は socket 不達でも出す必要が

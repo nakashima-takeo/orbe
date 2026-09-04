@@ -56,6 +56,10 @@ final class FakeControlTarget: ControlTarget {
     let workspaceId: Int?
     let cwd: String?
   }
+  struct Prompt {
+    let paneId: Int
+    let text: String
+  }
   struct Split {
     let paneId: Int
     let direction: String
@@ -83,6 +87,7 @@ final class FakeControlTarget: ControlTarget {
   private(set) var reportedAgents: [ReportedAgent] = []
   private(set) var spawns: [Spawn] = []
   private(set) var agentSpawns: [AgentSpawn] = []
+  private(set) var prompts: [Prompt] = []
   private(set) var splits: [Split] = []
   private(set) var configSets: [ConfigSet] = []
   private(set) var configLists: [Int?] = []
@@ -118,26 +123,45 @@ final class FakeControlTarget: ControlTarget {
     return spawnedPaneId
   }
 
+  /// 起動結果。`command` 省略は codex（idle を報告しない agent）に解く——claude に解くと、
+  /// 応答が ready 待ちに入り表駆動の往復が既定 30 秒を待つことになる。
   func controlSpawnAgent(command: String?, workspaceId: Int?, cwd: String?) -> Result<
-    Any, ControlError
+    AgentLaunch, ControlError
   > {
     agentSpawns.append(
       AgentSpawn(command: command, sessionId: nil, workspaceId: workspaceId, cwd: cwd))
-    return outcome([
-      "paneId": 4343, "tabId": 4344, "workspaceId": 4345,
-      "agent": ["command": command ?? "claude", "path": "/fake/bin/\(command ?? "claude")"],
-    ])
+    return launch(paneId: 4343, tabId: 4344, workspaceId: 4345, command: command ?? "codex")
   }
 
   func controlResumeAgent(command: String, sessionId: String, workspaceId: Int?, cwd: String?)
-    -> Result<Any, ControlError>
+    -> Result<AgentLaunch, ControlError>
   {
     agentSpawns.append(
       AgentSpawn(command: command, sessionId: sessionId, workspaceId: workspaceId, cwd: cwd))
-    return outcome([
-      "paneId": 4346, "tabId": 4347, "workspaceId": 4348,
-      "agent": ["command": command, "path": "/fake/bin/\(command)"],
-    ])
+    return launch(paneId: 4346, tabId: 4347, workspaceId: 4348, command: command)
+  }
+
+  private func launch(paneId: Int, tabId: Int, workspaceId: Int, command: String) -> Result<
+    AgentLaunch, ControlError
+  > {
+    if let failure = domainFailure { return .failure(failure) }
+    return .success(
+      AgentLaunch(
+        paneId: paneId, tabId: tabId, workspaceId: workspaceId,
+        agent: AgentCLI(command: command, path: "/fake/bin/\(command)")))
+  }
+
+  /// 送信が引き起こす遷移の代役。実経路では hook → `report_agent` → main hop → didSet → emit と
+  /// 戻ってくるので、テストはここで `DispatchQueue.main.async { emit }` のように同じ順序で流す。
+  var promptSideEffect: (() -> Void)?
+
+  /// `prompt_agent` の到達記録。`domainFailure` が立っていればそれで拒み、無ければ送れたことにする
+  /// （surface 不在で `controlSendText` は no-op なので、実 `WindowController` 経路は L4 が測る）。
+  func controlPromptAgent(pane: SurfaceView, text: String) -> ControlError? {
+    prompts.append(Prompt(paneId: pane.id, text: text))
+    if let failure = domainFailure { return failure }
+    promptSideEffect?()
+    return nil
   }
 
   func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, paneIds: [Int])? {

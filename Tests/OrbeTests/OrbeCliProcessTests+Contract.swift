@@ -62,8 +62,8 @@ extension OrbeCliProcessTests {
 
   /// `--text` の値に置かれた `-h` / `--help` を help と読まない。
   ///
-  /// `pane send` は「任意のユーザーテキストを値に取る」唯一のサーフェスで、引数列全体を help 走査
-  /// すると `--text -h` が**何も送らないまま exit 0** になる。`orb pane send --text "$X" && orb pane
+  /// `pane send` と `agent prompt` は「任意のユーザーテキストを値に取る」サーフェスで（ここは前者で
+  /// 代表する）、引数列全体を help 走査すると `--text -h` が**何も送らないまま exit 0** になる。`orb pane send --text "$X" && orb pane
   /// key --key enter` で `$X` がたまたま `-h` だと、送信ゼロのまま enter だけが押される——静かで、
   /// 終了コードにも現れない。値の席のダッシュは exit 2 で止まるのが正しい。
   func testHelpInAValueSlotIsNotTreatedAsHelp() {
@@ -240,6 +240,28 @@ extension OrbeCliProcessTests {
     XCTAssertEqual(
       (control.orbJSON(["pane", "list", "--workspace", "current"])["panes"] as? [[String: Any]])?
         .count, panes.count, "`current` も `<id>` として解決する（数値だけの受け付けに退行しない）")
+  }
+
+  /// `--json` の応答は control の result をそのまま出すので、成功応答の `seq`（その操作時点の履歴位置）が
+  /// 出る。`pane list` は panes を絞る例外だが、`seq` は control の値をそのまま保つ——CLI が組み直して
+  /// 0 に化けると、`orb wait --after` に渡した先で「保持している履歴の全部を replay」の意味になり、
+  /// 前ターンの done を掴む。
+  func testJsonResultsCarryTheHistoryPosition() throws {
+    let control = try startControlProcess()
+    let pane = try XCTUnwrap(
+      control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
+    let activeId = try workspaceId(control, active: true)
+
+    let sent = try XCTUnwrap(
+      control.orbJSON(["pane", "send", "\(pane.id)", "--text", "x"])["seq"] as? Int,
+      "pane send --json は {ok, seq} をそのまま出す")
+    control.target.controlReportAgent(
+      pane: pane, agent: "codex", state: "idle", sessionId: nil, message: nil)
+
+    let filtered = control.orbJSON(["pane", "list", "--workspace", "\(activeId)"])
+    XCTAssertNotNil(filtered["panes"] as? [[String: Any]], "前提: 絞った panes")
+    let listed = try XCTUnwrap(filtered["seq"] as? Int, "--workspace で絞っても seq を保つ")
+    XCTAssertGreaterThan(listed, sent, "pane list の seq は報告の後の履歴位置（組み直しで 0 に化けていない）")
   }
 
   /// `tab new --workspace <id>` は**その** workspace にタブを開く。値が黙って捨てられると、
