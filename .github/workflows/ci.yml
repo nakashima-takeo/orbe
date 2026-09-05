@@ -42,7 +42,7 @@ jobs:
           sudo xcodebuild -downloadComponent MetalToolchain
           cd vendor/ghostty
           "$(brew --prefix zig@0.15)/bin/zig" build -Demit-xcframework=true -Dxcframework-target=native
-      - name: build
-        run: swift build
+      - name: build (incl. tests)
+        run: swift build --build-tests
       - name: test
-        run: swift test
+        run: swift test --skip-build
