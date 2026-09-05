@@ -57,8 +57,9 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
 
   /// エージェント hook のセッション報告（制御 API `report_agent`）と同じく、生きたタブへ
   /// エージェントを載せる。
-  private func markAsAgent(_ tc: TerminalTab) {
-    tc.agentSlot = .live(session: AgentSession(command: "claude", sessionId: "live-1"), report: nil)
+  private func markAsAgent(_ tab: TerminalTab) {
+    tab.agentSlot = .live(
+      session: AgentSession(command: "claude", sessionId: "live-1"), report: nil)
   }
 
   /// main キューに積まれた非同期ブロック（`TerminalTab.close` の `onClose` ホップ）を捌く。

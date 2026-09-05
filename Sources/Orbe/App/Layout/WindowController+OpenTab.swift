@@ -22,15 +22,15 @@ extension WindowController {
   ) -> OpenedTab? {
     guard workspaces.indices.contains(workspaceIndex) else { return nil }
     let initialCwd = cwd ?? store.newTabCwd(inWorkspaceAt: workspaceIndex)
-    let tc = wire(TerminalTab(cwd: initialCwd, command: command, env: env))
-    store.appendTab(tc, toWorkspaceAt: workspaceIndex)  // 背景 WS はここで active も末尾へ
+    let tab = wire(TerminalTab(cwd: initialCwd, command: command, env: env))
+    store.appendTab(tab, toWorkspaceAt: workspaceIndex)  // 背景 WS はここで active も末尾へ
     if workspaceIndex == activeWorkspace {
       select(workspaces[workspaceIndex].tabs.count - 1)  // surface を起こす（mount）
     } else {
-      materializeOffscreen(tc, in: workspaces[workspaceIndex])
+      materializeOffscreen(tab, in: workspaces[workspaceIndex])
     }
     scheduleSave()
-    return OpenedTab(tabId: tc.id, workspaceId: workspaces[workspaceIndex].id)
+    return OpenedTab(tabId: tab.id, workspaceId: workspaces[workspaceIndex].id)
   }
 
   /// 背景 workspace に生えたタブの surface を、前面化せずに起こす。
@@ -49,17 +49,17 @@ extension WindowController {
   /// `viewDidMoveToWindow` を `addSubview` の中で同期発火する）。ここが成立しているかの合否は
   /// `OrbeCliAgentProcessTests` の背景 workspace 1 本が持つ——外すと、返した tabId は
   /// 「画面が読めず入力も届かない」ものに退化する。同じテストが surface のサイズも見る。
-  private func materializeOffscreen(_ tc: TerminalTab, in ws: Workspace) {
-    guard store.recordMaterialization(of: tc, in: ws) else { return }
-    tc.view.autoresizingMask = [.width, .height]
-    tc.view.frame = model.content.bounds
-    tc.view.isHidden = true
+  private func materializeOffscreen(_ tab: TerminalTab, in ws: Workspace) {
+    guard store.recordMaterialization(of: tab, in: ws) else { return }
+    tab.view.autoresizingMask = [.width, .height]
+    tab.view.frame = model.content.bounds
+    tab.view.isHidden = true
     // surface のサイズは `SurfaceScrollView.layout()` だけが配り、それが走るのは window の display
     // サイクル。同じ turn で detach する以上そのサイクルは来ないので、ここで同期に確定させる
     // ——さもないと `SurfaceView` は 0 サイズのまま `createSurface` を迎え、`updateSize` の
     // ゼロ面積ガードに弾かれて pty が libghostty 既定サイズのまま起きる（前面化するまで直らない）。
-    tc.view.layoutSubtreeIfNeeded()
-    model.content.addSubview(tc.view)  // viewDidMoveToWindow → createSurface
-    tc.view.removeFromSuperview()  // detach。surface は生存
+    tab.view.layoutSubtreeIfNeeded()
+    model.content.addSubview(tab.view)  // viewDidMoveToWindow → createSurface
+    tab.view.removeFromSuperview()  // detach。surface は生存
   }
 }

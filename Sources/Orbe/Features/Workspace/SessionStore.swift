@@ -141,10 +141,10 @@ final class SessionStore {
   /// アクティブ workspace の `index`（有効範囲 0…count へクランプ）へタブを挿し、実挿入 index を返す。
   /// 挿入位置が現 active 以前なら active を 1 つ繰り下げ、挿入前と同じタブを指し続けさせる
   /// （呼び出し側が直後に select する前提に寄りかからず、store 単体で不変条件を保つ）。
-  func insertTabIntoActive(_ tc: TerminalTab, at index: Int) -> Int {
+  func insertTabIntoActive(_ tab: TerminalTab, at index: Int) -> Int {
     let ws = current
     let dest = min(max(0, index), ws.tabs.count)
-    ws.tabs.insert(tc, at: dest)
+    ws.tabs.insert(tab, at: dest)
     if dest <= ws.active { ws.active += 1 }
     ws.active = min(ws.active, ws.tabs.count - 1)  // 0タブへの挿入（active=0・count=1）を吸収
     return dest
@@ -164,10 +164,10 @@ final class SessionStore {
     let dest = to > from ? to - 1 : to
     guard dest != from else { return false }
     let ws = current
-    let activeTC = ws.tabs.indices.contains(ws.active) ? ws.tabs[ws.active] : nil
+    let activeTab = ws.tabs.indices.contains(ws.active) ? ws.tabs[ws.active] : nil
     let moved = ws.tabs.remove(at: from)
     ws.tabs.insert(moved, at: dest)
-    if let activeTC, let idx = ws.tabs.firstIndex(where: { $0 === activeTC }) {
+    if let activeTab, let idx = ws.tabs.firstIndex(where: { $0 === activeTab }) {
       ws.active = idx
     }
     return true
@@ -176,9 +176,9 @@ final class SessionStore {
   /// 指定 workspace の末尾へタブを足す（control spawn 用）。背景 workspace のときは active も末尾へ。
   /// アクティブ workspace のときは active を触らない（呼び出し側が select で mount する）。index の
   /// 妥当性は呼び出し側が保証する。
-  func appendTab(_ tc: TerminalTab, toWorkspaceAt i: Int) {
+  func appendTab(_ tab: TerminalTab, toWorkspaceAt i: Int) {
     let ws = workspaces[i]
-    ws.tabs.append(tc)
+    ws.tabs.append(tab)
     if i != activeWorkspace { ws.active = ws.tabs.count - 1 }
   }
 
@@ -195,15 +195,15 @@ final class SessionStore {
   /// `ws.active` は `max(0, min(0, -1)) = 0` に補正され、再アクティブ化で index 0 を選べる状態になる。
   /// 人のジェスチャで閉じたエージェントタブなら、配列から外す前に復元単位と位置を開き直しスタックへ
   /// 積む——cwd/セッションは生きた surface から取るため、ビューが外れる前でなければ正しく取れない。
-  func removeTab(_ tc: TerminalTab, origin: TabCloseOrigin) -> CloseTabOutcome {
+  func removeTab(_ tab: TerminalTab, origin: TabCloseOrigin) -> CloseTabOutcome {
     guard
-      let wsIndex = workspaces.firstIndex(where: { ws in ws.tabs.contains { $0 === tc } })
+      let wsIndex = workspaces.firstIndex(where: { ws in ws.tabs.contains { $0 === tab } })
     else { return .notFound }
     let ws = workspaces[wsIndex]
-    guard let idx = ws.tabs.firstIndex(where: { $0 === tc }) else { return .notFound }
+    guard let idx = ws.tabs.firstIndex(where: { $0 === tab }) else { return .notFound }
 
     if origin.isHumanGesture {
-      let state = tc.tabState()
+      let state = tab.tabState()
       if state.agent != nil {
         ws.closedAgentTabs.append(ClosedAgentTab(index: idx, state: state))
         if ws.closedAgentTabs.count > Self.closedAgentTabLimit { ws.closedAgentTabs.removeFirst() }

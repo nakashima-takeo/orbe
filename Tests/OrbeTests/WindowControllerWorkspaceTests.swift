@@ -282,11 +282,11 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
   /// 数える——resume 可否は消費まで判定しない。
   func testDormantIncludesResumeUnsupported() {
     let unsupported: TerminalTab.ResumeSpawn = { _ in nil }  // 消費時に素シェル化
-    let tc = TerminalTab(
+    let tab = TerminalTab(
       restoring: TabState(
         cwd: "/tmp", agent: AgentSession(command: "unknown", sessionId: "a"), explicitTitle: nil),
       resumeSpawn: unsupported)
-    XCTAssertTrue(tc.isDormant, "resume 未対応でもチケットは消費まで休眠に数える")
+    XCTAssertTrue(tab.isDormant, "resume 未対応でもチケットは消費まで休眠に数える")
 
     let plain = TerminalTab(cwd: "/tmp")
     XCTAssertFalse(plain.isDormant, "新規タブは休眠を持たない")

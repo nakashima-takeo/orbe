@@ -3,7 +3,7 @@ import XCTest
 @testable import Orbe
 
 /// 報告以外の slot 遷移——復元での休眠チケット代入・チケット消費・`consumeDoneState`・
-/// `resetAgentStates`——が `agent_state` 制御イベントをどう出す（出さない）かを固定する。
+/// `resetAgentState`——が `agent_state` 制御イベントをどう出す（出さない）かを固定する。
 /// 報告経路の同じ契約は `WindowControllerReportAgentTests+StateEmit` が持つ。
 ///
 /// 壊れると、`orb wait` / MCP の待機系がタブを起こしただけで起きる（復元・消費は状態変化ではない）か、
@@ -72,29 +72,29 @@ final class AgentStateEmitTests: OrbeTestCase {
   func testUnresolvableTicketConsumptionEmitsNothing() throws {
     let w = armAgentStateWait(id: 1)
 
-    let tc = TerminalTab(
+    let tab = TerminalTab(
       restoring: TabState(
         cwd: "/w", agent: AgentSession(command: "unknown", sessionId: "x"), explicitTitle: nil),
       resumeSpawn: noResume)
-    tc.recordMaterializationStarted()
+    tab.recordMaterializationStarted()
 
     w.barrier()
-    XCTAssertEqual(tc.agentSlot, .none, "前提: 素シェルへ落ちている")
+    XCTAssertEqual(tab.agentSlot, .none, "前提: 素シェルへ落ちている")
   }
 
   // MARK: - consumeDoneState
 
   /// done のフォーカス消費（done → idle）は実変化なので `idle` を載せて流れる。
   func testConsumeDoneStateEmitsIdle() throws {
-    let tc = TerminalTab(cwd: "/tmp")
-    setReportedState(tc, "done")
-    let w = armAgentStateWait(id: 1, tabId: tc.id)
+    let tab = TerminalTab(cwd: "/tmp")
+    setReportedState(tab, "done")
+    let w = armAgentStateWait(id: 1, tabId: tab.id)
 
-    tc.consumeDoneState()
+    tab.consumeDoneState()
 
     let event = try XCTUnwrap(stateEvent(w.nextResponse()))
     XCTAssertEqual(event["kind"] as? String, "agent_state")
-    XCTAssertEqual(event["tabId"] as? Int, tc.id)
+    XCTAssertEqual(event["tabId"] as? Int, tab.id)
     XCTAssertEqual(event["value"] as? String, "idle")
   }
 
@@ -112,19 +112,19 @@ final class AgentStateEmitTests: OrbeTestCase {
     w.barrier()
   }
 
-  // MARK: - resetAgentStates
+  // MARK: - resetAgentState
 
   /// タブのコンテキストメニューからのリセットは、実変化した `idle` を載せて流れる。
   func testResetAgentStatesEmitsIdle() throws {
-    let tc = TerminalTab(cwd: "/tmp")
-    setReportedState(tc, "waiting")
-    let w = armAgentStateWait(id: 1, tabId: tc.id)
+    let tab = TerminalTab(cwd: "/tmp")
+    setReportedState(tab, "waiting")
+    let w = armAgentStateWait(id: 1, tabId: tab.id)
 
-    tc.resetAgentStates()
+    tab.resetAgentState()
 
     let event = try XCTUnwrap(stateEvent(w.nextResponse()))
     XCTAssertEqual(event["kind"] as? String, "agent_state")
-    XCTAssertEqual(event["tabId"] as? Int, tc.id)
+    XCTAssertEqual(event["tabId"] as? Int, tab.id)
     XCTAssertEqual(event["value"] as? String, "idle")
   }
 
@@ -137,7 +137,7 @@ final class AgentStateEmitTests: OrbeTestCase {
     let plain = TerminalTab(cwd: "/tmp")
     let w = armAgentStateWait(id: 1)
 
-    for tab in [idle, unreported, plain] { tab.resetAgentStates() }
+    for tab in [idle, unreported, plain] { tab.resetAgentState() }
 
     w.barrier()
   }

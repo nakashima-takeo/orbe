@@ -165,14 +165,14 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   /// ⇧⌘T が共有する契約なので、どちらか 1 つ落ちると片方だけ静かに壊れる。
   func testTabStateCarriesCwdAndTitle() {
     let state = TabState(cwd: "/work/api", agent: nil, explicitTitle: "api")
-    let tc = TerminalTab(restoring: state, resumeSpawn: noResume)
-    XCTAssertEqual(tc.tabState(), state, "tabState は cwd と明示タイトルを一括で載せる")
+    let tab = TerminalTab(restoring: state, resumeSpawn: noResume)
+    XCTAssertEqual(tab.tabState(), state, "tabState は cwd と明示タイトルを一括で載せる")
   }
 
   func testRestoreRoundTripPreservesCwd() {
     let state = TabState(cwd: "/home/me/project", agent: nil, explicitTitle: nil)
-    let tc = TerminalTab(restoring: state, resumeSpawn: noResume)
-    XCTAssertEqual(tc.tabState(), state, "cwd が復元値として保たれる")
+    let tab = TerminalTab(restoring: state, resumeSpawn: noResume)
+    XCTAssertEqual(tab.tabState(), state, "cwd が復元値として保たれる")
   }
 
   // MARK: - エージェントセッションの復元
@@ -183,23 +183,23 @@ final class WorkspacePersistenceTests: OrbeTestCase {
     var captured: AgentSession?
     let state = TabState(
       cwd: "/w", agent: AgentSession(command: "claude", sessionId: "abc-123"), explicitTitle: nil)
-    let tc = TerminalTab(
+    let tab = TerminalTab(
       restoring: state,
       resumeSpawn: { session in
         captured = session
         return ("claude --resume abc-123", ["PATH": "/usr/bin"])
       })
     XCTAssertNil(captured, "resume 解決は復元時ではなく消費時")
-    XCTAssertEqual(tc.tabState(), state, "休眠のままの tabState も agent セッションを保つ")
+    XCTAssertEqual(tab.tabState(), state, "休眠のままの tabState も agent セッションを保つ")
 
-    tc.recordMaterializationStarted()
+    tab.recordMaterializationStarted()
     XCTAssertEqual(
       captured, AgentSession(command: "claude", sessionId: "abc-123"),
       "消費時に resumeSpawn へ解決を依頼する")
-    XCTAssertEqual(tc.surface.initialCommand, "claude --resume abc-123", "解決した起動指示が spawn に効く")
-    XCTAssertEqual(tc.surface.initialEnv["PATH"], "/usr/bin")
-    XCTAssertEqual(tc.surface.initialEnv["ORBE_TAB"], String(tc.id), "runtime 契約の env も乗る")
-    XCTAssertEqual(tc.tabState(), state, "消費後の tabState も agent セッションを保つ（冪等）")
+    XCTAssertEqual(tab.surface.initialCommand, "claude --resume abc-123", "解決した起動指示が spawn に効く")
+    XCTAssertEqual(tab.surface.initialEnv["PATH"], "/usr/bin")
+    XCTAssertEqual(tab.surface.initialEnv["ORBE_TAB"], String(tab.id), "runtime 契約の env も乗る")
+    XCTAssertEqual(tab.tabState(), state, "消費後の tabState も agent セッションを保つ（冪等）")
   }
 
   /// resume を解決できなければ消費時に素のシェルへ落ち、以後の tabState に agent は付かない。
@@ -207,14 +207,14 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   func testRestoreAgentTabFallsBackToShellWhenUnresolved() {
     let state = TabState(
       cwd: "/w", agent: AgentSession(command: "unknown", sessionId: "x"), explicitTitle: nil)
-    let tc = TerminalTab(restoring: state, resumeSpawn: noResume)
-    XCTAssertEqual(tc.tabState(), state, "休眠のあいだセッション記録は保持される")
+    let tab = TerminalTab(restoring: state, resumeSpawn: noResume)
+    XCTAssertEqual(tab.tabState(), state, "休眠のあいだセッション記録は保持される")
 
-    tc.recordMaterializationStarted()
-    XCTAssertEqual(tc.agentSlot, .none, "解決不可なら消費で素のシェルへ落ちる")
-    XCTAssertNil(tc.surface.initialCommand)
+    tab.recordMaterializationStarted()
+    XCTAssertEqual(tab.agentSlot, .none, "解決不可なら消費で素のシェルへ落ちる")
+    XCTAssertNil(tab.surface.initialCommand)
     XCTAssertEqual(
-      tc.tabState(), TabState(cwd: "/w", agent: nil, explicitTitle: nil),
+      tab.tabState(), TabState(cwd: "/w", agent: nil, explicitTitle: nil),
       "素シェル化後の tabState に agent は付かない")
   }
 

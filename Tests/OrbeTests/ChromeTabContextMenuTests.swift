@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// タブ行のコンテキストメニュー「エージェント状態をリセット」の配線
-/// （`StatusRowModel.onResetAgentState` → `WindowController` → `TerminalTab.resetAgentStates`）。
+/// （`StatusRowModel.onResetAgentState` → `WindowController` → `TerminalTab.resetAgentState`）。
 ///
 /// 宛先はタブの同一性（`TerminalTab.id`）で解決する。メニューは開いたまま任意時間止まり、
 /// その間に背景タブが消えると位置 index は別タブを指す——そこが崩れると、右クリックしたのとは

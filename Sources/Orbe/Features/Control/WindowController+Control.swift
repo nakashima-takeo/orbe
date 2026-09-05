@@ -45,7 +45,7 @@ extension WindowController: ControlTarget {
   /// タブを id で解決する（全 workspace の tabs を走査）。
   func controlResolveTab(_ id: Int) -> TerminalTab? {
     for ws in workspaces {
-      for tc in ws.tabs where tc.id == id { return tc }
+      for tab in ws.tabs where tab.id == id { return tab }
     }
     return nil
   }
@@ -151,10 +151,10 @@ extension WindowController: ControlTarget {
   /// 同じ経路を通る。
   func controlFocusTab(tabId: Int) -> Result<Any, ControlError> {
     for (wi, ws) in workspaces.enumerated() {
-      for (ti, tc) in ws.tabs.enumerated() where tc.id == tabId {
+      for (ti, tab) in ws.tabs.enumerated() where tab.id == tabId {
         if wi != activeWorkspace { switchWorkspace(to: wi) }
         select(ti)
-        window.makeFirstResponder(tc.surface)
+        window.makeFirstResponder(tab.surface)
         return .success(["ok": true])
       }
     }
@@ -164,10 +164,10 @@ extension WindowController: ControlTarget {
   /// 指定タブ（TerminalTab.id）を閉じる（close_tab）。id 解決の上で internal 化した closeTab へ
   /// 素直に委譲し、カスケード（アクティブ WS 最後のタブは0タブ空維持）を GUI（Cmd+W）と完全一致させる。
   func controlCloseTab(tabId: Int) -> Result<Any, ControlError> {
-    guard let tc = controlResolveTab(tabId) else {
+    guard let tab = controlResolveTab(tabId) else {
       return .failure(ControlError(code: -32004, message: "tab not found"))
     }
-    closeTab(tc, origin: .controlAPI)
+    closeTab(tab, origin: .controlAPI)
     return .success(["ok": true])
   }
   // MARK: - config（設定の列挙・設定）

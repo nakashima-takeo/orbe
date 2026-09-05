@@ -94,7 +94,7 @@ extension TerminalTabTests {
     XCTAssertNil(tab.agentStateKind)
   }
 
-  // MARK: - resetAgentStates（タブのコンテキストメニューによるリセット）
+  // MARK: - resetAgentState（タブのコンテキストメニューによるリセット）
 
   func testResetSettlesEveryReportedStateToIdle() {
     for state in ["waiting", "working", "done"] {
@@ -102,7 +102,7 @@ extension TerminalTabTests {
       setReportedState(tab, state)
       XCTAssertNotNil(tab.agentStateKind, "前提: タブにグリフが出ている＝リセットできる")
 
-      tab.resetAgentStates()
+      tab.resetAgentState()
 
       XCTAssertEqual(tab.agentState, "idle", "\(state) は idle へ")
       XCTAssertNil(tab.agentStateKind, "idle はタブに出ない＝グリフが消える")
@@ -119,7 +119,7 @@ extension TerminalTabTests {
       tab.agentSlot = .live(session: session, report: report)
     }
 
-    tab.resetAgentStates()
+    tab.resetAgentState()
 
     XCTAssertEqual(tab.agentState, "idle")
     XCTAssertEqual(tab.agentSlot.session, session, "resume 用の同一性（command・sessionId）は保持")
@@ -133,7 +133,7 @@ extension TerminalTabTests {
     setReportedState(target, "waiting")
     setReportedState(background, "waiting")
 
-    target.resetAgentStates()
+    target.resetAgentState()
 
     XCTAssertEqual(target.agentState, "idle", "受け手タブは idle へ")
     XCTAssertEqual(background.agentState, "waiting", "別タブの状態は残る")
@@ -144,7 +144,7 @@ extension TerminalTabTests {
     for slot in [AgentSlot.none, .dormant(ticket), .live(session: ticket, report: nil)] {
       let tab = TerminalTab(cwd: "/tmp")
       tab.agentSlot = slot
-      tab.resetAgentStates()
+      tab.resetAgentState()
       XCTAssertEqual(tab.agentSlot, slot, "素のシェル / 未消費チケット / 報告前の live には何も生やさない")
     }
   }
@@ -156,7 +156,7 @@ extension TerminalTabTests {
     setReportedState(tab, "idle", at: reportedAt)
     XCTAssertNil(tab.agentStateKind, "前提: idle だけのタブにグリフは出ない")
 
-    tab.resetAgentStates()
+    tab.resetAgentState()
 
     XCTAssertEqual(tab.agentState, "idle")
     XCTAssertEqual(tab.agentSlot.report?.stateChangedAt, reportedAt, "打刻も動かない＝何も起きていない")

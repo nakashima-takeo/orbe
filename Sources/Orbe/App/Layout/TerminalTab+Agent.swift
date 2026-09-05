@@ -19,7 +19,7 @@ extension TerminalTab {
   /// ユーザー操作（タブのコンテキストメニュー）によるリセット。waiting / working / done を `idle` へ
   /// 遷移させる。対象集合は `agentStateKind` がグリフを出す集合と同じ定数なので、
   /// 「グリフが出る ⇔ リセットできる」が一致する。
-  func resetAgentStates() { settleToIdle { AgentRollup.priorityOrder.contains($0) } }
+  func resetAgentState() { settleToIdle { AgentRollup.priorityOrder.contains($0) } }
 
   /// 述語を満たす state の live スロットだけ `idle` へ書き戻す。同一性（session）・文言・状態変化時刻は
   /// 運んだまま state だけ書き換えるため resume も Attention の並びも壊さない。

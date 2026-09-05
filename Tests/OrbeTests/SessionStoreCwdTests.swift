@@ -10,7 +10,7 @@ import XCTest
 ///
 /// activeTabCwd() は「今見ているタブの cwd」（chrome の cwd 表示・エディタで開く・Dispatch の基点・
 /// 新 workspace の既定 root が読む）で、アクティブ workspace の選択タブだけを見る。0 タブなら nil。
-final class SessionStoreNewSurfaceCwdTests: OrbeTestCase {
+final class SessionStoreCwdTests: OrbeTestCase {
 
   private func makeStore(rootPath: String, tabs: [TerminalTab]) -> SessionStore {
     let ws = Workspace(name: "ws", rootPath: rootPath)
