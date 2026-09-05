@@ -1,14 +1,14 @@
 ---
 title: UI 言語
 description: 現在言語ホルダー LocalizationStore を @Environment で全 chrome root へ配る日英 2 言語 i18n コア。型付きキー辞書・即時切替・OS 追従の既定・プロセスロケール不干渉
-updated: 2026-08-08
+updated: 2026-09-06
 ---
 
 # UI 言語
 
 UI 言語は **日本語 / 英語の 2 択**で、再起動なしに切り替わる。現在言語は `LocalizationStore` が唯一の SSOT として保持し（所有は `WindowController`）、`@Environment` で全 SwiftUI root へ注入する——chrome は複数の独立 root に跨るため、1 つのストアを配って全体を同時に動かす。言語を代入すると全 root が再描画され、**UI 全体が即時に切り替わる**。Environment 未注入（preview・浮遊 popup）の既定は OS 追従。
 
-**プロセスロケール不干渉（境界）**: `AppleLanguages`・プロセスロケールには一切書き込まない。OS 言語は**読むだけ**。端末 pane の CJK 字形は locale 非依存で固定されており（[config](config.md)）、UI 言語切替はその字形描画に影響しない。
+**プロセスロケール不干渉（境界）**: `AppleLanguages`・プロセスロケールには一切書き込まない。OS 言語は**読むだけ**。端末の CJK 字形は locale 非依存で固定されており（[config](config.md)）、UI 言語切替はその字形描画に影響しない。
 
 **既定言語（OS 追従）**: OS の優先言語の先頭コードが `ja` 始まりなら日本語、それ以外・不明は英語（純関数の分類）。確定した言語は `app-state.json` に永続し（[persistence](persistence.md)）、起動時に「永続値、無ければ OS 追従」で解決する。
 

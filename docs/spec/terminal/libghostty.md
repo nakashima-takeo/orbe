@@ -1,7 +1,7 @@
 ---
 title: libghostty の外部契約
 description: 固定 SHA で埋め込む ghostty のターミナルライブラリ（MIT）。Orbe の実装が乗る、変えられない境界
-updated: 2026-08-08
+updated: 2026-09-06
 ---
 
 # libghostty の外部契約
@@ -10,7 +10,7 @@ ghostty のターミナル描画ライブラリ。MIT ライセンスで、Orbe 
 
 ## API は 2 層
 
-- **surface 埋め込み API**（`include/ghostty.h`）: NSView を渡すと libghostty が Metal で GPU 描画し、PTY/shell 起動・VT パース・フォント整形・検索・リンク検出まで内部で行う。host が担うのは chrome（ウィンドウ/タブ/分割/設定/action 処理）だけ。**Orbe はこちらを採用**。
+- **surface 埋め込み API**（`include/ghostty.h`）: NSView を渡すと libghostty が Metal で GPU 描画し、PTY/shell 起動・VT パース・フォント整形・検索・リンク検出まで内部で行う。host が担うのは chrome（ウィンドウ/タブ/設定/action 処理）だけ。**Orbe はこちらを採用**。
 - **libghostty-vt**（`include/ghostty/vt.h`）: VT パースのみ。描画・PTY は自前で持つことになる。
 
 ## 性質
@@ -18,7 +18,7 @@ ghostty のターミナル描画ライブラリ。MIT ライセンスで、Orbe 
 - **alpha・C API 非安定。** ヘッダ自身が「汎用 embedding 向けに安定化されていない／唯一の利用者は公式 macOS app」と明言している。union/struct タグがヘッダと `.a` で不一致だと、コンパイルが通っても実行時メモリ破壊を起こしうる。main 追従ではなく固定 SHA pin にしているのはこの性質への対処。
 - **リソース自動検出。** shell-integration / themes / terminfo を実行体からの相対で検出する（`Contents/Resources/terminfo/78/xterm-ghostty` をセンチネルに climb）。これが在れば `GHOSTTY_RESOURCES_DIR` は不要で、`.app` は自己完結する。
 - macOS では `login`（setuid root）経由で shell を起動する。
-- cwd はシェルが OSC 7 で報告した値（`terminal.getPwd()`）に依存する。分割時の継承は `ghostty_surface_inherited_config` が運ぶ。
+- cwd はシェルが OSC 7 で報告した値（`terminal.getPwd()`）に依存する。
 
 ## host へ渡る in-band シグナル（OSC 受信の境界）
 

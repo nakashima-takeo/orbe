@@ -1,7 +1,7 @@
 ---
 title: エージェント状態追跡プラグイン（配布物）
 description: claude / codex / agy 兼用プラグインパッケージ app/agent-plugin/ の構造・各 CLI の導入契約・チャネル別のプラグイン名・.app 同梱と毎起動の実体化
-updated: 2026-08-12
+updated: 2026-09-06
 ---
 
 # エージェント状態追跡プラグイン（配布物）
@@ -26,7 +26,7 @@ hook からシムを呼ぶ経路も CLI ごとに違う: claude / codex はそ�
 
 ## チャネル判定シム
 
-シムは**自分と同じチャネルのペインからの呼び出しにだけ応える**。プラグインが持つ `hooks/channel`（実体化時に Orbe が刻む自分の bundle ID）とペインの `ORBE_BUNDLE_ID` を突き合わせ、食い違えば no-op。dev / release の plugin は別枠として両方 enabled になり、CLI は有効な全 plugin の hook を全セッションで走らせるため。判定材料が片方でも欠けたら通す——状態追跡を黙って殺さない。stamp をシムの隣に置くのは、agy がプラグイン本体 subdir だけをステージするため。
+シムは**自分と同じチャネルのタブからの呼び出しにだけ応える**。プラグインが持つ `hooks/channel`（実体化時に Orbe が刻む自分の bundle ID）とタブの `ORBE_BUNDLE_ID` を突き合わせ、食い違えば no-op。dev / release の plugin は別枠として両方 enabled になり、CLI は有効な全 plugin の hook を全セッションで走らせるため。判定材料が片方でも欠けたら通す——状態追跡を黙って殺さない。stamp をシムの隣に置くのは、agy がプラグイン本体 subdir だけをステージするため。
 
 ## event→state 対応
 

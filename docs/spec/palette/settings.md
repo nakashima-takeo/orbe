@@ -1,12 +1,12 @@
 ---
 title: 設定パレット
 description: ⌘, で開く設定パレット。スコープ行＋root 設定行＋ドリルインのサブパレットで全設定を編集し、ライブ反映する
-updated: 2026-09-04
+updated: 2026-09-06
 ---
 
 # 設定パレット（⌘,）
 
-すべての設定をパレット 1 枚で編集する面。Cmd+, で開く（既に開いていれば再フォーカスのみ）。描画は WorkspacePalette／AgentPalette と同じ共有基盤（`PaletteCard`／`PaletteModel`・`AppShell` の `.overlay`）を再利用する。Esc / scrim タップで閉じ、閉じるとアクティブペインへフォーカスが返る。
+すべての設定をパレット 1 枚で編集する面。Cmd+, で開く（既に開いていれば再フォーカスのみ）。描画は WorkspacePalette／AgentPalette と同じ共有基盤（`PaletteCard`／`PaletteModel`・`AppShell` の `.overlay`）を再利用する。Esc / scrim タップで閉じ、閉じるとアクティブタブへフォーカスが返る。
 
 root 行は「スコープ行」と「設定行」の 2 種としてモデル化され、`←→`/`Enter`/`delete` の意味は行 index ではなくこの種別と設定レジストリ（root 型は stepper / toggle / drillIn の 3 種）から駆動する——行の並びが変わってもキー操作の意味が壊れないため。
 

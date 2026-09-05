@@ -1,7 +1,7 @@
 ---
 title: コマンド補完
 description: zsh の zle フックが control.sock 経由で編集バッファを送り、JavaScriptCore 埋め込みの spec エンジンが候補を算出、カーソル位置のドロップダウンから $BUFFER を直接書き換える
-updated: 2026-09-04
+updated: 2026-09-06
 ---
 
 # コマンド補完
@@ -14,17 +14,17 @@ updated: 2026-09-04
 
 ## プロトコル契約（control.sock に追加した 3 メソッド）
 
-[control/api](../control/api.md) の改行区切り JSON-RPC に相乗りする。pane は `$ORBE_PANE` で指す。
+[control/api](../control/api.md) の改行区切り JSON-RPC に相乗りする。tab は `$ORBE_TAB` で指す。
 
-- `completion_update {paneId, buffer, cursor}` … **無応答**。host が現在トークンの候補を算出し、候補>0 かつ補完可能位置ならカーソル矩形直下に popup 表示/更新（選択 index を 0 に戻す）、さもなくば消す。候補が唯一で、accept しても buffer が変わらないときも popup を出さない。ただし直前の Enter 確定から buffer/cursor が不変の間は再表示せず閉じたまま保つ。
-- `completion_accept {paneId, advance}`（id 付き要求応答）… 選択中候補を現在トークンに適用した結果 `{buffer, cursor}` を返す。候補が無い/popup 非表示なら `{buffer:null}`。応答後 popup を消す。`advance=true`（Tab）は素の候補に末尾空白を補い次トークンへ進める。`advance=false`（Enter）は末尾のパス区切り `/` を 1 つ落として（Tab は保つ）空白なしで確定し、以後の同一 `completion_update` による再表示を抑える。省略時は `true`。
-- `completion_end {paneId}` … **無応答**。コマンド確定/中断で popup を消す。
+- `completion_update {tabId, buffer, cursor}` … **無応答**。host が現在トークンの候補を算出し、候補>0 かつ補完可能位置ならカーソル矩形直下に popup 表示/更新（選択 index を 0 に戻す）、さもなくば消す。候補が唯一で、accept しても buffer が変わらないときも popup を出さない。ただし直前の Enter 確定から buffer/cursor が不変の間は再表示せず閉じたまま保つ。
+- `completion_accept {tabId, advance}`（id 付き要求応答）… 選択中候補を現在トークンに適用した結果 `{buffer, cursor}` を返す。候補が無い/popup 非表示なら `{buffer:null}`。応答後 popup を消す。`advance=true`（Tab）は素の候補に末尾空白を補い次トークンへ進める。`advance=false`（Enter）は末尾のパス区切り `/` を 1 つ落として（Tab は保つ）空白なしで確定し、以後の同一 `completion_update` による再表示を抑える。省略時は `true`。
+- `completion_end {tabId}` … **無応答**。コマンド確定/中断で popup を消す。
 
 `completion_update`/`completion_end` は host が応答を書かない（ルータが `completion_` 分岐を宛先解決ガードより前に置き、無応答メソッドは宛先不在でも応答を出さない）——打鍵ごとの update が accept 用 fd に行を積まないため。ただし読めない行には host が分岐より前で `id:null` のエラー行を返すため、この fd に accept 応答以外が混じることはある。zsh 側は accept ごとに進める `id` を送り、`"id":<n>` が値の終端まで一致する行だけを選んで読む——接続は持続するので、締切内に読めなかった応答は fd に残る。id が進まなければ次の確定がそれを拾い、以後ずっと 1 つ前の応答をコマンドラインへ適用し続けてしまうため。
 
 ## zsh 側（`orbe-completion.zsh`）
 
-`ORBE_SOCK`/`ORBE_PANE` 未設定なら widget を一切定義せず no-op。設定時は `zsocket` で `control.sock` へ接続を 1 本張り、ペイン寿命中保持する（失敗は静かに無効化・次の行頭で再接続）。
+`ORBE_SOCK`/`ORBE_TAB` 未設定なら widget を一切定義せず no-op。設定時は `zsocket` で `control.sock` へ接続を 1 本張り、タブ寿命中保持する（失敗は静かに無効化・次の行頭で再接続）。
 
 - 再描画フック: `$BUFFER`/`$CURSOR` が前回送信値から変化したときだけ `completion_update` を fire-and-forget で送る。
 - 確定（Tab / Enter）: `completion_accept` を送り 1 行応答を読む。`result.buffer` が非 null なら `$BUFFER`/`$CURSOR` を直書換する（改行は送らない）——Tab は末尾空白を補い次トークンへ進み、Enter は空白なしで確定して popup を閉じる（host が再表示を抑えるので次の Enter は accept 不可となりコマンド実行へ回る）。null/失敗時のフォールバックはキーごとに分かれ、Tab は退避した従来 Tab、Enter は `accept-line`（＝コマンド実行）へ。いずれもキー bind で自前 widget を挟む方式で、`accept-line` widget 自体は差し替えない。
@@ -62,14 +62,14 @@ engine(JS) は純関数のまま、host が種別グループ化の直前に**�
 
 候補ソースは **JavaScriptCore 埋め込みの spec エンジン**。fig の補完 spec エコシステム（withfig/autocomplete）の宣言的 spec を、inshellisense 由来の parser/suggestion ロジックで解釈する。エンジンは prebuilt の単一 JS バンドルを `JSContext` に load して駆動する（spec の `postProcess` 等が JS 関数のため JS ランタイムが要る）。同梱 spec は主要コマンドの curated subset（一覧は `vendor/completion-engine/README.md`）。うち `claude`・`codex` は上流に無い**自家最小 spec**（実 CLI の `--help` 実測由来・純静的）。
 
-- **責務分界**: JS は parse・spec 走査・postProcess（純変換）だけを担い、シェルは叩かない。spec の generator（動的候補）が要求するシェル実行は、Swift が `JSContext` へ注入した native 関数経由で `posix_spawn` が行う——当該ペインの cwd（OSC 7、未報告時は initialCwd→ホーム）で `zsh -c`・子プロセス PATH（[shell-path](../platform/shell-path.md)）・stdin 無し・stdout のみ・**数秒のハードタイムアウト**・失敗/タイムアウトは空（静的候補は保つ）。子は自分の**プロセスグループのリーダー**として起こし、タイムアウト時はグループごと kill する——孫が pipe を握り続けると書き手が残って EOF が起きず、drain が永久ハングして補完 queue が恒久停止するため。出力は別 queue で drain する。これにより `git checkout <Tab>` が実ブランチ名、`ls <Tab>` がカレント dir の実ファイルを出す。
-- **スレッド規律**: `JSContext` とシェル実行は専用 serial queue（main 非依存）、popup 表示は main へ hop。候補取得は**非同期**で `completion_update` から駆動し、連続更新は debounce で coalesce、generator 結果は短 TTL キャッシュ。ペインごとの単調増加 token で**古い結果を破棄**する（stale ガード）。
+- **責務分界**: JS は parse・spec 走査・postProcess（純変換）だけを担い、シェルは叩かない。spec の generator（動的候補）が要求するシェル実行は、Swift が `JSContext` へ注入した native 関数経由で `posix_spawn` が行う——当該タブの cwd（OSC 7、未報告時は initialCwd→ホーム）で `zsh -c`・子プロセス PATH（[shell-path](../platform/shell-path.md)）・stdin 無し・stdout のみ・**数秒のハードタイムアウト**・失敗/タイムアウトは空（静的候補は保つ）。子は自分の**プロセスグループのリーダー**として起こし、タイムアウト時はグループごと kill する——孫が pipe を握り続けると書き手が残って EOF が起きず、drain が永久ハングして補完 queue が恒久停止するため。出力は別 queue で drain する。これにより `git checkout <Tab>` が実ブランチ名、`ls <Tab>` がカレント dir の実ファイルを出す。
+- **スレッド規律**: `JSContext` とシェル実行は専用 serial queue（main 非依存）、popup 表示は main へ hop。候補取得は**非同期**で `completion_update` から駆動し、連続更新は debounce で coalesce、generator 結果は短 TTL キャッシュ。タブごとの単調増加 token で**古い結果を破棄**する（stale ガード）。
 - **accept**: `completion_accept` はキャッシュした置換範囲＋選択候補の挿入値から適用結果を **main・同期**で組む（JS round trip 無し＝zsh 側の短い read タイムアウト内に収める）。Tab のとき、素の候補は挿入直後に空白を 1 つ補い次トークンへ進める（後続が既に空白なら足さない）。明示挿入値を持つ候補（`--flag=`・パス末尾 `/` 等）は verbatim 挿入で空白を足さない（inshellisense 忠実）。Enter は末尾のパス区切り `/` を 1 つ落として空白を足さず確定し（ディレクトリを `src` の形で確定）、以後の再表示を抑える。候補取得が追いつく前の accept は退避し、従来 Tab へフォールバックする。
 - **出力スキーマ**: 出力は候補列と、engine が解析時に確定させた事実の組。候補は名前・説明・任意の挿入値・任意の `type`（fig の suggestion type）。解析事実は 3 つ——**置換長**（現在トークンの文字数）、**照合トークン**（engine が絞り込みと並べ替えに実際に使った正規化済みの現在トークン。パス候補では basename、ディレクトリを打ち切った位置では空）、**確定コマンド列**（root ＋走査で確定したサブコマンドを、同一 spec ノードで一意に定まる名前〔宣言配列の先頭〕で並べたもの。打鍵の綴りが違っても同じ spec ノードなら同じ列になり、コマンド名自体の補完では空）。置換長と照合トークンは分界がある——前者は**置換すべきトークン全域**＝編集の座標、後者は**候補名と比較できる部分**＝照合の入力で、basename 化は不可逆ゆえ片方から他方は導けない（`cat sub/mai` なら置換長 7・照合トークン `mai`）。host は `type` を UI の種別グルーピング・グリフ導出に（generator 出力など type 無しは nil）、照合トークンをプレフィックス強調と一致品質に、確定コマンド列を学習スコープに使う——どれも生バッファから導き直さない。スキーマを変えたら `vendor/completion-engine/` でバンドルを再生成しコミットする。
 
 ## 自動有効化（ZDOTDIR interposition）
 
-ユーザのファイルには書き込まない。`.app` の `Resources/zsh/` に shim `.zshenv` と `orbe-completion.zsh` の 2 ファイルを同梱し、GUI 起動時（Ghostty 初期化前・バンドル有時のみ）にプロセス env へ `ZDOTDIR=<shim dir>` を据える。surface spawn の base env はプロセス env そのものなので全ペインへ届く。注入点はプロセス env でなければならない——surface config の env_vars は ghostty の shell integration setup に後勝ちし、ghostty が立てた ZDOTDIR を上書きして integration（OSC 7 の cwd 報告）を壊すため。
+ユーザのファイルには書き込まない。`.app` の `Resources/zsh/` に shim `.zshenv` と `orbe-completion.zsh` の 2 ファイルを同梱し、GUI 起動時（Ghostty 初期化前・バンドル有時のみ）にプロセス env へ `ZDOTDIR=<shim dir>` を据える。surface spawn の base env はプロセス env そのものなので全タブへ届く。注入点はプロセス env でなければならない——surface config の env_vars は ghostty の shell integration setup に後勝ちし、ghostty が立てた ZDOTDIR を上書きして integration（OSC 7 の cwd 報告）を壊すため。
 
 **Orbe の shim dir** は `orbe-completion.zsh` を持つ dir で同定する（本番 / Dev / 旧版を区別しない）。GUI と shim が同じ述語を使う。
 
@@ -91,7 +91,7 @@ shim `.zshenv` は全 zsh 起動で読まれ、次の順で働く。
 ## 境界
 
 - 対応 shell は zsh のみ。bash/fish・tmux/ssh 先は env 不達で無効。
-- Orbe が起こした zsh の子プロセス env に `ZDOTDIR=<shim dir>`・`ORBE_USER_ZDOTDIR` は残らない（対話・非対話・login を問わず）。非 zsh で起動したペイン（agent ペイン等）の env には GUI が据えた両者が見えるが、そこから zsh を起こしても shim が消費してユーザ設定へブリッジする。
+- Orbe が起こした zsh の子プロセス env に `ZDOTDIR=<shim dir>`・`ORBE_USER_ZDOTDIR` は残らない（対話・非対話・login を問わず）。非 zsh で起動したタブ（agent タブ等）の env には GUI が据えた両者が見えるが、そこから zsh を起こしても shim が消費してユーザ設定へブリッジする。
 - `exec zsh` は shim を経ず補完無効（ghostty shell integration と同じ制限）。
 - `ORBE_USER_ZDOTDIR` が削除済み `.app` の shim dir を指す場合は同定できず、`ZDOTDIR` が不在の dir を指したままユーザ rc は読まれない（widget は入る）。
 - `zsh -i -c`（プロンプトを出さない）では precmd が走らず widget は入らない。
