@@ -156,6 +156,26 @@ final class WorkspaceActivationTests: OrbeTestCase {
     XCTAssertEqual(ordered.map(\.count), [1, 1, 1, 1])
   }
 
+  /// 同じ state のタブは 1 枚ずつ数える（多重度）。`agentState` 未報告のタブは数えない。
+  func testAgentCountsTalliesActivatedTabsPerState() {
+    let ws = Workspace(name: "w", rootPath: "/tmp")
+    for state in ["working", "waiting", "working", "idle"] {
+      let tab = TerminalTab(cwd: "/tmp")
+      tab.recordMaterializationStarted()
+      setReportedState(tab, state)
+      ws.tabs.append(tab)
+    }
+    let none = TerminalTab(cwd: "/tmp")
+    none.recordMaterializationStarted()
+    ws.tabs.append(none)
+
+    let counts = ws.agentCounts()
+    XCTAssertEqual(counts["working"], 2)
+    XCTAssertEqual(counts["waiting"], 1)
+    XCTAssertEqual(counts["idle"], 1, "idle は横断集計に数える")
+    XCTAssertEqual(counts.count, 3, "nil は数えない")
+  }
+
   func testRemovingTabsImmediatelyRecomputesActivationAndDormantCount() {
     let active = Workspace(name: "front", rootPath: "/tmp")
     active.tabs = [TerminalTab(cwd: "/tmp")]

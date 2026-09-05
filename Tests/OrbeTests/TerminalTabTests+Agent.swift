@@ -161,25 +161,4 @@ extension TerminalTabTests {
     XCTAssertEqual(tab.agentState, "idle")
     XCTAssertEqual(tab.agentSlot.report?.stateChangedAt, reportedAt, "打刻も動かない＝何も起きていない")
   }
-
-  // MARK: - Workspace.agentCounts（横断集計）
-
-  func testAgentCountsTalliesActivatedTabsPerState() {
-    let ws = Workspace(name: "w", rootPath: "/tmp")
-    for state in ["working", "waiting", "working", "idle"] {
-      let tab = TerminalTab(cwd: "/tmp")
-      tab.recordMaterializationStarted()
-      setReportedState(tab, state)
-      ws.tabs.append(tab)
-    }
-    let none = TerminalTab(cwd: "/tmp")
-    none.recordMaterializationStarted()
-    ws.tabs.append(none)
-
-    let counts = ws.agentCounts()
-    XCTAssertEqual(counts["working"], 2)
-    XCTAssertEqual(counts["waiting"], 1)
-    XCTAssertEqual(counts["idle"], 1, "idle は横断集計に数える")
-    XCTAssertEqual(counts.count, 3, "nil は数えない")
-  }
 }

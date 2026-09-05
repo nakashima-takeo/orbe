@@ -169,12 +169,6 @@ final class WorkspacePersistenceTests: OrbeTestCase {
     XCTAssertEqual(tab.tabState(), state, "tabState は cwd と明示タイトルを一括で載せる")
   }
 
-  func testRestoreRoundTripPreservesCwd() {
-    let state = TabState(cwd: "/home/me/project", agent: nil, explicitTitle: nil)
-    let tab = TerminalTab(restoring: state, resumeSpawn: noResume)
-    XCTAssertEqual(tab.tabState(), state, "cwd が復元値として保たれる")
-  }
-
   // MARK: - エージェントセッションの復元
 
   /// agent 付きタブは消費（materialize 開始）時に resumeSpawn へ解決を依頼し、起動指示を確定する。
@@ -297,8 +291,8 @@ final class WorkspacePersistenceTests: OrbeTestCase {
       "既存タブ構成（cwd）を失わず、旧 v2 タブは explicitTitle=nil")
   }
 
-  /// 分割ツリーは葉ごとに 1 タブへ深さ優先順で展開する。明示タイトルは先頭の葉へ、
-  /// `activeTab` は旧アクティブタブの先頭葉の新 index へ写す。
+  /// 分割ツリーは葉ごとに 1 タブへ深さ優先順で展開する。明示タイトルは先頭の葉へ、agent は
+  /// 載っていた葉へ（先頭以外でも落とさない）、`activeTab` は旧アクティブタブの先頭葉の新 index へ写す。
   func testLegacyV3SplitTreeFlattensLeavesInDepthFirstOrder() throws {
     let tmp = try workspacesFile()
     let v3 = """
@@ -306,9 +300,10 @@ final class WorkspacePersistenceTests: OrbeTestCase {
       {"name":"default","rootPath":"/r","activeTab":1,"tabs":[\
       {"tree":{"leaf":{"cwd":"/a"}},"explicitTitle":"first"},\
       {"tree":{"split":{"vertical":true,"ratio":0.4,\
-      "first":{"leaf":{"cwd":"/b","agent":{"command":"claude","sessionId":"s-b"}}},\
+      "first":{"leaf":{"cwd":"/b"}},\
       "second":{"split":{"vertical":false,"ratio":0.5,\
-      "first":{"leaf":{"cwd":"/c"}},"second":{"leaf":{"cwd":"/d"}}}}}},"explicitTitle":"api"},\
+      "first":{"leaf":{"cwd":"/c"}},\
+      "second":{"leaf":{"cwd":"/d","agent":{"command":"claude","sessionId":"s-d"}}}}}}},"explicitTitle":"api"},\
       {"tree":{"leaf":{"cwd":"/e"}}}]}]}
       """
     try Data(v3.utf8).write(to: tmp)
@@ -319,12 +314,12 @@ final class WorkspacePersistenceTests: OrbeTestCase {
       ws.tabs,
       [
         TabState(cwd: "/a", agent: nil, explicitTitle: "first"),
-        TabState(
-          cwd: "/b", agent: AgentSession(command: "claude", sessionId: "s-b"), explicitTitle: "api"),
+        TabState(cwd: "/b", agent: nil, explicitTitle: "api"),
         TabState(cwd: "/c", agent: nil, explicitTitle: nil),
-        TabState(cwd: "/d", agent: nil, explicitTitle: nil),
+        TabState(
+          cwd: "/d", agent: AgentSession(command: "claude", sessionId: "s-d"), explicitTitle: nil),
         TabState(cwd: "/e", agent: nil, explicitTitle: nil),
-      ], "葉の順（深さ優先）・明示タイトルは先頭の葉だけ・agent は葉ごと")
+      ], "葉の順（深さ優先）・明示タイトルは先頭の葉だけ・agent は先頭以外の葉でも葉ごとに引き継ぐ")
     XCTAssertEqual(ws.activeTab, 1, "旧アクティブ（index 1）の先頭葉が新 index 1")
   }
 

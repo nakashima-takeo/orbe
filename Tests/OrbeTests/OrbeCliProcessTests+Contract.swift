@@ -335,10 +335,6 @@ extension OrbeCliProcessTests {
   func testTabAndWorkspaceTargetsResolveFromContext() throws {
     let control = try startControlProcess(workspaces: ["main"])
     let tab = try XCTUnwrap(control.target.current.tabs.first)
-    tab.surface.currentPwd = "/private/tmp/l4-context"
-
-    let text = control.orbJSON(["tab", "list"], env: ["ORBE_TAB": "\(tab.id)"])
-    XCTAssertNotNil(text["tabs"], "前提: list は動く")
     let sent = control.orb(["tab", "send", "--text", "x"], env: ["ORBE_TAB": "\(tab.id)"])
     XCTAssertEqual(sent.status, 0, "ORBE_TAB があれば位置引数なしで送れる: \(sent.stderr)")
     XCTAssertEqual(sent.stdout, "sent to tab \(tab.id)\n", "送信の宛先は ORBE_TAB のタブ")
@@ -357,9 +353,11 @@ extension OrbeCliProcessTests {
       message: "tab focus requires a <tab> id", "ORBE_TAB 付きの `tab focus`")
   }
 
-  /// `orb pane` は不明コマンド（exit 2）。ペイン語彙は `orb tab` に統合され、旧サブコマンドの
-  /// 別名は残さない——残すと 2 つの語彙が同じものを指し、ヘルプと補完がどちらを教えるか割れる。
-  func testPaneCommandIsUnknown() {
+  /// 不明コマンドは socket の手前で exit 2 ＋ `unknown command: <token>`。通すと control へ届いて
+  /// exit 1（RPC エラー）に化け、usage エラーと区別がつかなくなる。標本の語は同時に
+  /// 「`orb tab` の別名として受理しない」ことも押さえる——2 つの語彙が同じ操作を指すと、
+  /// ヘルプと補完がどちらを教えるか割れる。
+  func testUnknownCommandExitsTwo() {
     failure(
       ControlProcess.orbWithoutServer(["pane", "list"]), code: 2,
       message: "unknown command: pane", "`orb pane`")

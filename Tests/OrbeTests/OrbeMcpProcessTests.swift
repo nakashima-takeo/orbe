@@ -12,12 +12,16 @@ import XCTest
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続し、実タブでシェルを走らせる（GhosttyKit 必須）。
 /// ヘッドレスな純ロジック検証ではない。
 final class OrbeMcpProcessTests: OrbeTestCase {
-  /// `list_tabs` から選択中（無ければ先頭）のタブ id を読む。
+  /// 前面 workspace のタブ id。`active` は workspace ごとに 1 枚立つので `list_tabs` の応答から
+  /// 前面を選り分けられない——期待は in-process から取り、MCP 越しの `list_tabs` がそのタブを
+  /// `active` で返すことの導通だけをここで確かめる。
   private func liveTabId(_ control: ControlProcess) throws -> Int {
+    let expected = try XCTUnwrap(control.target.current.tabs.first, "タブが 1 つも無い").id
     let tabs = try XCTUnwrap(
       control.mcpJSON("list_tabs")["tabs"] as? [[String: Any]], "list_tabs が tabs を返さない")
-    let live = tabs.first { $0["active"] as? Bool == true } ?? tabs.first
-    return try XCTUnwrap(live?["tabId"] as? Int, "タブが 1 つも無い")
+    let live = tabs.first { $0["tabId"] as? Int == expected }
+    XCTAssertEqual(live?["active"] as? Bool, true, "MCP 越しの list_tabs が前面タブを active で返す")
+    return expected
   }
 
   /// タブへ 1 行流して実行させる（`send_text` はペースト相当で自己実行しないため enter を別送する）。

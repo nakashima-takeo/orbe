@@ -52,9 +52,8 @@ final class WorkspaceOverridePersistenceTests: OrbeTestCase {
   /// workspaces.json に 1 workspace ＋ 生の settingsOverride を書く（異常キー混在の fixture 用）。
   private func writeOverrideJSON(_ override: String) throws {
     let file = """
-      {"version":3,"activeWorkspace":0,"workspaces":[\
-      {"name":"a","rootPath":"/","activeTab":0,\
-      "tabs":[{"tree":{"leaf":{}}}],\
+      {"version":4,"activeWorkspace":0,"workspaces":[\
+      {"name":"a","rootPath":"/","activeTab":0,"tabs":[{"cwd":"/"}],\
       "settingsOverride":\(override)}]}
       """
     try Data(file.utf8).write(to: workspacesFile())
@@ -86,9 +85,8 @@ final class WorkspaceOverridePersistenceTests: OrbeTestCase {
   func testEmptyOverrideFoldsToNil() throws {
     let tmp = try workspacesFile()
     let file = """
-      {"version":3,"activeWorkspace":0,"workspaces":[\
-      {"name":"a","rootPath":"/","activeTab":0,\
-      "tabs":[{"tree":{"leaf":{}}}],"settingsOverride":{}}]}
+      {"version":4,"activeWorkspace":0,"workspaces":[\
+      {"name":"a","rootPath":"/","activeTab":0,"tabs":[{"cwd":"/"}],"settingsOverride":{}}]}
       """
     try Data(file.utf8).write(to: tmp)
     let loaded = try XCTUnwrap(WorkspacePersistence.load())
