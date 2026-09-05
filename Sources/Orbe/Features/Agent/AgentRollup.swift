@@ -10,8 +10,9 @@ enum AgentRollup {
   /// 表示上は workspace パレットだけが、この順の後ろへ 1 件連結する（`WindowController.reloadPalette`）。
   static let stateOrder = ["working", "waiting", "done", "idle"]
 
-  /// タブ/workspace 名の色を決める「最優先状態」の優先順位（waiting > working > done）。
-  /// idle は畳み込み対象外。表示順の `stateOrder` とは用途が異なる別概念。
+  /// タブグリフに出す（＝リセットできる）状態の集合（`TerminalTab.agentStateKind` / `resetAgentState`）。
+  /// 順序は Dispatch が同じ worktree の複数タブを 1 状態へ畳むときだけ使う（waiting > working > done、
+  /// `DispatchWorktreeClassifier`）。idle はどちらにも入らない。表示順の `stateOrder` とは用途が異なる別概念。
   static let priorityOrder = ["waiting", "working", "done"]
 
   /// 件数に数える状態種別。これ以外（nil 等）はロールアップに数えない。

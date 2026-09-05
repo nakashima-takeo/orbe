@@ -124,7 +124,7 @@ final class BundledResourcesTests: OrbeTestCase {
       "既存 PATH を保持したまま同梱 bin を先頭へ前置する")
   }
 
-  /// env に PATH が無いタブ（split 等）では本プロセスの PATH を土台にする。
+  /// env に PATH が無いタブ（agent 起動でない＝initialEnv に login PATH が入らないタブ）では本プロセスの PATH を土台にする。
   func testPrependFallsBackToProcessPathWhenEnvHasNone() throws {
     let root = try makeBundleLayout(named: "app")
     let processPath = try XCTUnwrap(

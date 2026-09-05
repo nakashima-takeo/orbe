@@ -84,7 +84,7 @@ private struct LegacyWorkspaceState: Decodable {
   }
 }
 
-/// 旧 workspaces.json の設定上書き（camelCase・scopable 7 設定）。
+/// 旧 workspaces.json の設定上書き（camelCase・scopable 7 設定）。移行 decode 専用（将来消せる）。
 private struct LegacyWorkspaceSettingsOverride: Decodable {
   var fontSize: Int?
   var backgroundOpacity: Int?

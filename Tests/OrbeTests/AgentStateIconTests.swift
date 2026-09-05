@@ -14,7 +14,7 @@ final class AgentStateIconTests: OrbeTestCase {
   }
 
   func testIdleHasKindForRollup() {
-    // idle はタブには出ない（aggregateAgentState が除外）が、横断ロールアップには出すため
+    // idle はタブには出ない（agentStateKind が除外）が、横断ロールアップには出すため
     // 種別自体は持つ。タブ非表示の担保は TerminalTabTests 側。
     XCTAssertEqual(AgentStateIcon.kind(state: "idle"), .idle, "idle は横断ロールアップ用の種別を持つ")
   }

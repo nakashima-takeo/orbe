@@ -7,7 +7,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか——原本を退避しないまま既定 workspace で起動すると、`newTab()` が打つ
 /// `scheduleSave()` の `.atomic` write が約 1 秒後に原本を完全に潰す。ユーザーは workspace 構成
-/// （タブ・分割ツリー・cwd・エージェントセッション・上書き設定）を、気づく機会が一度も無いまま
+/// （タブ・cwd・エージェントセッション・上書き設定）を、気づく機会が一度も無いまま
 /// 復元不能に失う。退避に失敗したときに保存を止める assert が落ちれば、保全できていない原本を
 /// 既定構成で潰す＝#85 が直した破壊がそのまま戻る。不在時に退避しない assert が落ちれば、
 /// 初回起動のたびに意味のない退避物が積み上がる。
@@ -16,18 +16,17 @@ import XCTest
 /// `WindowController` を起こす（L2）。
 final class WorkspaceQuarantineTests: OrbeTestCase {
 
-  /// ユーザー構成が入った、壊れた v3 JSON（末尾で切れている）。
+  /// ユーザー構成が入った、壊れた JSON（末尾で切れている）。
   private let corruptJSON = """
-    {"version":3,"activeWorkspace":0,"workspaces":[\
-    {"name":"alpha","rootPath":"/tmp/alpha","activeTab":0,\
-    "tabs":[{"tree":{"leaf":{"cwd":"/tmp/alpha"}}}]},\
-    {"name":"bravo","rootPath":"/tmp/bravo","activeTab":0,"tabs":[{"tree":{"leaf":{}
+    {"version":4,"activeWorkspace":0,"workspaces":[\
+    {"name":"alpha","rootPath":"/tmp/alpha","activeTab":0,"tabs":[{"cwd":"/tmp/alpha"}]},\
+    {"name":"bravo","rootPath":"/tmp/bravo","activeTab":0,"tabs":[{"cwd":
     """
 
-  /// 現在の版が受理しない version の、構造は妥当な JSON（将来の v4 相当）。
+  /// 現在の版が受理しない version の、構造は妥当な JSON（将来 version 相当）。
   private let futureVersionJSON = """
     {"version":999,"activeWorkspace":0,"workspaces":[\
-    {"name":"alpha","rootPath":"/tmp/alpha","activeTab":0,"tabs":[{"tree":{"leaf":{}}}]}]}
+    {"name":"alpha","rootPath":"/tmp/alpha","activeTab":0,"tabs":[{"cwd":"/tmp/alpha"}]}]}
     """
 
   /// state dir に残っている退避物（ハーネスが配る workspaces.json の隣）。

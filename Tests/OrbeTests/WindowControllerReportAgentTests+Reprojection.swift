@@ -3,8 +3,8 @@ import XCTest
 @testable import Orbe
 
 /// `report_agent` が鳴らす chrome 再投影の配達経路（ファイル分割の拡張）。②ピルは一覧の投影なので、
-/// 一覧から行が消えたら取り下げられ、タブ集合が増えたら追随する。どちらも「操作が本番経路で
-/// 再投影を要求したか」を測るもので、harness（`makeControllerAndTab` 等）は本体ファイルが持つ。
+/// 一覧から行が消えたら取り下げられる。「操作が本番経路で再投影を要求したか」を測るもので、
+/// harness（`makeControllerAndTab` 等）は本体ファイルが持つ。
 /// 立てる②の中身のうち滞留の尺——発信元 workspace の実効値から決まる——もここが測る。
 extension WindowControllerReportAgentTests {
 
@@ -111,7 +111,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
   }
 
-  /// ピルが指すタブのタブを閉じたら取り下げる。
+  /// ピルが指すタブを閉じたら取り下げる。
   func testTransientWithdrawnWhenTabClosed() throws {
     let (wc, tabs) = try makeControllerAndTwoTabs()
     wc.controlReportAgent(

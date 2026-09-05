@@ -26,7 +26,7 @@ WATCH=(
   # 補完の legacy 掃除（`CompletionLegacyCleanup`）が書き換える先。ここだけは override を通らず
   # 実体を解く経路なので、ハーネスの隔離ではなくデータ条件で止まっている。解決は ZDOTDIR →
   # ORBE_USER_ZDOTDIR → ホーム（Orbe の shim dir は飛ばす）で、どれが立っているかは実行環境次第なので
-  # 全部張る（非 zsh ペインから `swift test` を走らせると、GUI が据えた ZDOTDIR / ORBE_USER_ZDOTDIR を継ぐ）。
+  # 全部張る（非 zsh のタブから `swift test` を走らせると、GUI が据えた ZDOTDIR / ORBE_USER_ZDOTDIR を継ぐ）。
   "${ZDOTDIR:-$HOME}/.zshrc"
   "${ORBE_USER_ZDOTDIR:-$HOME}/.zshrc"
   "$HOME/.zshrc"

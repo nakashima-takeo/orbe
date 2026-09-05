@@ -47,7 +47,7 @@ final class ControlProcess {
 
   /// `.app` 同梱物のレイアウトを `BundledResources.root`（＝ハーネスが配る `caseDir/resources/`）へ組む。
   ///
-  /// **`WindowController()` より前に呼ぶ**——`injectRuntimeEnv` はタブ生成の時点で
+  /// **`WindowController()` より前に呼ぶ**——`OrbeRuntimeEnv.inject` はタブの materialize 開始の時点で
   /// `reportBinaryPath` / `bundledBinDir` を読むため、後から置いてもタブに注入済みの env には効かない。
   /// 置くのは `bin/` だけで、`completion-engine.js` も `zsh/` も置かない（不在時の graceful degradation を
   /// 測る既存テストの前提を壊さない）。root は caseDir 配下なので、組んだ中身は `endCase` の削除に乗る。

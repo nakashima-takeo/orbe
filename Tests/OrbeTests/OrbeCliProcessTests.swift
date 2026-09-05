@@ -2,9 +2,10 @@ import XCTest
 
 @testable import Orbe
 
-/// 実 `orb`（`orbe-cli`）を子プロセスで起こし、全 22 サブコマンドのうち 20 が実 `WindowController`
+/// 実 `orb`（`orbe-cli`）を子プロセスで起こし、全 22 サブコマンドのうち 19 が実 `WindowController`
 /// を 1 本のライフサイクルとして動かせることを固定する。残る `agent spawn` / `agent resume` は
-/// 検出の仕込み（偽実行体と `ShellPATH` の差し替え）が要るので `OrbeCliAgentProcessTests` が持つ。
+/// 検出の仕込み（偽実行体と `ShellPATH` の差し替え）が要るので `OrbeCliAgentProcessTests` が、
+/// `agent prompt` は `OrbeCliAgentPromptProcessTests` が持つ。
 ///
 /// 1 本に束ねているのは、`ws new → rename → dir → switch → rm` のように後段が前段の
 /// 状態を前提にする連鎖だから。割ると各テストが同じ fixture を組み直すことになり、測っている
@@ -100,7 +101,7 @@ final class OrbeCliProcessTests: OrbeTestCase {
     return scratchId
   }
 
-  /// 20 サブコマンドを 1 つの実 `WindowController` に対して順に叩く。
+  /// 19 サブコマンドを 1 つの実 `WindowController` に対して順に叩く。
   /// `ws rm` を最後に置くのは「最後の 1 つは削除不可（-32000）」を踏まないため。
   func testEverySubcommandDrivesOneLifecycle() throws {
     let control = try startControlProcess(workspaces: ["main"])
@@ -158,7 +159,7 @@ final class OrbeCliProcessTests: OrbeTestCase {
       tabsAfter.contains { $0["tabId"] as? Int == openedTab || $0["tabId"] as? Int == secondTab },
       "tab close: 開いたタブが消える")
 
-    // --- ws rm（20 本目）
+    // --- ws rm（19 本目）
     step(control, ["ws", "rm", "\(scratchId)"], expect: "removed workspace \(scratchId)")
     XCTAssertFalse(
       try workspaceRows(control).contains { $0["id"] as? Int == scratchId },

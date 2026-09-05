@@ -1,5 +1,5 @@
 /// エージェント状態インジケータの種別（Orbe 正典グリフに対応）。
-/// idle は横断ロールアップにのみ出す（タブには出ない＝`TerminalController.aggregateAgentState` の
+/// idle は横断ロールアップにのみ出す（タブには出ない＝`TerminalTab.agentStateKind` の
 /// priority が担う）。描画・色・モーションは `StatusGlyph.swift`（`Kind` から一意に解決）。
 /// 典拠は wezterm-ai-agents プラグインの状態。
 enum AgentStateIcon {

@@ -8,7 +8,7 @@ struct WorkspacesFile: Codable, Equatable {
   var activeWorkspace: Int
   var workspaces: [WorkspaceState]
   /// 終了時のウィンドウサイズ（幅・高さ）。位置は記憶しない。
-  /// optional——旧 JSON（欠落）でも decode 成功し後方互換、無ければ既定 800×500。
+  /// optional——一度もリサイズしていない起動では書かれない。無ければ既定 800×500。
   var windowSize: WindowSize?
 
   init(
@@ -34,10 +34,10 @@ struct WorkspaceState: Codable, Equatable {
   var activeTab: Int
   var tabs: [TabState]
   /// この workspace に最後に切り替えてフォーカスした時刻（MRU 並べ替えのキー）。
-  /// optional——旧 JSON（欠落）でも decode 成功し後方互換、無ければ nil（最古扱い）。
+  /// optional——一度も前面で使っていない workspace では書かれない（タブ選択でも進む）。無ければ nil（最古扱い）。
   var lastUsedAt: Date?
   /// この workspace の設定上書き層（全設定を上書き可）。
-  /// optional——旧 JSON（欠落）でも decode 成功し後方互換、無ければ nil（上書き無し＝global 継承）。
+  /// optional——上書きが 1 項目も無ければ書かれない（＝global 継承）。
   var settingsOverride: SettingsLayer?
 
   enum CodingKeys: String, CodingKey {

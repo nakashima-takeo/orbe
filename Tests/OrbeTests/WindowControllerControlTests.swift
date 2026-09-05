@@ -14,7 +14,7 @@ import XCTest
 /// `controlListWorkspaces()` の戻りから読む（配列インデックスでなく id で指す契約でもある）。
 ///
 /// 休眠 workspace が list_workspaces / list_tabs にどう写るかは分割した拡張ファイル
-/// `+DormantProjection` が測る。ハーネス（`restore` / `tabbed` / `agentLeaf` / `row`）は本体が持つ。
+/// `+DormantProjection` が測る。ハーネス（`restore` / `tabbed` / `agentTab` / `row`）は本体が持つ。
 final class WindowControllerControlTests: OrbeTestCase {
 
   // MARK: - fixtures / helpers

@@ -113,7 +113,7 @@ final class ControlWireTests: OrbeTestCase {
   func testUnknownMethodIsMethodNotFound() {
     let wire = startWire(target: FakeControlTarget())
 
-    wire.send(["jsonrpc": "2.0", "id": 14, "method": "teleport_pane"])
+    wire.send(["jsonrpc": "2.0", "id": 14, "method": "teleport_tab"])
 
     XCTAssertEqual(errorCode(wire.nextResponse()), -32601, "未知 method は -32601")
   }

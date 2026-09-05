@@ -42,7 +42,7 @@ flowchart LR
 
 | ファイル | 中身 | spec |
 |---|---|---|
-| `workspaces.json` | workspace・タブ・分割ツリー・cwd・エージェントセッション | [platform/persistence](spec/platform/persistence.md) |
+| `workspaces.json` | workspace・タブ・cwd・エージェントセッション・ウィンドウサイズ | [platform/persistence](spec/platform/persistence.md) |
 | `settings.json` | ユーザー設定（global 層） | 同上 |
 | `app-state.json` | アプリの内部簿記（PATH キャッシュ・UI 言語など） | 同上 |
 | `gui.conf` | 設定パレットが再生成する ghostty conf の最終層 | [platform/config](spec/platform/config.md) |

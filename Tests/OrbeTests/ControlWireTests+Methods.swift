@@ -92,8 +92,8 @@ extension ControlWireTests {
     wire.barrier()
   }
 
-  /// ペイン時代の method は未知（`-32601`）。タブへの統合は破壊的変更として公言しており、
-  /// 別名で残すと 2 つの語彙が同じ操作を指し、クライアントがどちらを使うべきか決められない。
+  /// これらの名前は method 表に無く（`-32601`）、互換別名としても受理しない——別名で残すと
+  /// 2 つの語彙が同じ操作を指し、クライアントがどちらを使うべきか決められない。
   func testRetiredPaneMethodsAreUnknown() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
