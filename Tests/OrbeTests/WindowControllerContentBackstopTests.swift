@@ -24,7 +24,7 @@ final class WindowControllerContentBackstopTests: OrbeTestCase {
       workspaces: [
         WorkspaceState(
           name: "main", rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)]),
+          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)]),
         WorkspaceState(name: "empty", rootPath: "/tmp", activeTab: 0, tabs: []),  // 0タブ（休眠）
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())

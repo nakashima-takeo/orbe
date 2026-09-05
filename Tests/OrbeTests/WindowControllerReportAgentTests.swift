@@ -22,27 +22,27 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     super.tearDown()
   }
 
-  /// 1 workspace 1 タブで起動し、その先頭ペインを返す。
+  /// 1 workspace 1 タブで起動し、そのタブを返す。
   /// 分割した拡張ファイルからも使うため internal。
-  func makeControllerAndPane() throws -> (WindowController, SurfaceView) {
+  func makeControllerAndTab() throws -> (WindowController, TerminalTab) {
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
         WorkspaceState(
           name: "main", rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)])
+          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)])
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     let wc = WindowController()
-    let pane = try XCTUnwrap(wc.current.tabs.first?.controlAllPanes().first)
-    return (wc, pane)
+    let tab = try XCTUnwrap(wc.current.tabs.first)
+    return (wc, tab)
   }
 
   /// 1 workspace 2 タブ（アクティブはタブ0＝見ているタブ）で起動し、
-  /// タブ順に並べた各タブの先頭ペイン（`panes[i]` がタブ i）を返す。
+  /// タブ順に並べた各タブ（`tabs[i]` がタブ i）を返す。
   /// 分割した拡張ファイルからも使うため internal。
-  func makeControllerAndTwoTabs() throws -> (WindowController, [SurfaceView]) {
-    let tab = TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)
+  func makeControllerAndTwoTabs() throws -> (WindowController, [TerminalTab]) {
+    let tab = TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -54,16 +54,16 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     // 通知の可視性境界を測る fixture なので、hidden mount の queue 進行速度に依存せず
     // 両タブを lifecycle 上の live 側へ進める。workspace の setter は使わない。
     wc.current.tabs.forEach { $0.recordMaterializationStarted() }
-    let panes = try wc.current.tabs.map { try XCTUnwrap($0.controlAllPanes().first) }
-    return (wc, panes)
+    let tabs = try wc.current.tabs.map { try XCTUnwrap($0) }
+    return (wc, tabs)
   }
 
   /// **両方とも activate 済み**の workspace 2 つで起動し、アクティブを 2 つ目へ移してから、
-  /// workspace 順に並べた各先頭ペイン（`panes[i]` が workspace i）を返す。「発信元 workspace の
+  /// workspace 順に並べた各先頭タブ（`tabs[i]` が workspace i）を返す。「発信元 workspace の
   /// 設定で鳴る」のように、発信元とアクティブが別であって初めて測れる契約のための足場。
   /// 分割した拡張ファイルからも使うため internal。
-  func makeControllerAndTwoActivatedWorkspaces() throws -> (WindowController, [SurfaceView]) {
-    let tab = TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)
+  func makeControllerAndTwoActivatedWorkspaces() throws -> (WindowController, [TerminalTab]) {
+    let tab = TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -74,17 +74,17 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     let wc = WindowController()
     _ = wc.controlActivateWorkspace(workspaceId: try XCTUnwrap(wc.workspaces.last).id)
     XCTAssertTrue(wc.workspaces.allSatisfy(\.activated), "前提: どちらも activate 済み")
-    let panes = try wc.workspaces.map {
-      try XCTUnwrap($0.tabs.first?.controlAllPanes().first)
+    let tabs = try wc.workspaces.map {
+      try XCTUnwrap($0.tabs.first)
     }
-    return (wc, panes)
+    return (wc, tabs)
   }
 
   /// アクティブ workspace ＋ 休眠（このセッションで一度も activate していない）workspace で
-  /// 起動し、休眠側の先頭ペインを返す。
+  /// 起動し、休眠側の先頭タブを返す。
   /// 分割した拡張ファイルからも使うため internal。
-  func makeControllerAndDormantPane() throws -> (WindowController, SurfaceView) {
-    let tab = TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)
+  func makeControllerAndDormantTab() throws -> (WindowController, TerminalTab) {
+    let tab = TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -95,7 +95,7 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     let wc = WindowController()
     let dormant = try XCTUnwrap(wc.workspaces.last)
     XCTAssertFalse(dormant.activated, "前提: 復元直後の未切替 workspace は休眠")
-    return (wc, try XCTUnwrap(dormant.tabs.first?.controlAllPanes().first))
+    return (wc, try XCTUnwrap(dormant.tabs.first))
   }
 
   /// AppKit のイベントを実際に取り出して配送し、`done` が真になるまで回す。活性化（`activate` → key 化）は
@@ -124,158 +124,144 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
   }
 
   func testStateChangedAtMovesOnlyOnActualChange() throws {
-    let (wc, pane) = try makeControllerAndPane()
+    let (wc, tab) = try makeControllerAndTab()
 
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "working", sessionId: nil, message: nil)
-    let first = try XCTUnwrap(pane.agentReport?.stateChangedAt)
+      tab: tab, agent: "claude", state: "working", sessionId: nil, message: nil)
+    let first = try XCTUnwrap(tab.agentReport?.stateChangedAt)
 
     // 同値の連続報告（working→working）では動かない。
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "working", sessionId: nil,
+      tab: tab, agent: "claude", state: "working", sessionId: nil,
       message: AgentMessage(text: "m"))
-    XCTAssertEqual(pane.agentReport?.stateChangedAt, first, "同値報告で stateChangedAt は動かない")
+    XCTAssertEqual(tab.agentReport?.stateChangedAt, first, "同値報告で stateChangedAt は動かない")
 
     // 実変化（working→waiting）で動く。
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "waiting", sessionId: nil,
+      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "q"))
-    let second = try XCTUnwrap(pane.agentReport?.stateChangedAt)
+    let second = try XCTUnwrap(tab.agentReport?.stateChangedAt)
     XCTAssertNotEqual(second, first, "実変化で stateChangedAt が更新される")
 
     // 実変化を挟んだ後の同値報告（waiting→waiting）でも動かない＝打刻が drift しない。
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: nil)
-    XCTAssertEqual(pane.agentReport?.stateChangedAt, second, "実変化後の同値報告でも stateChangedAt は動かない")
+      tab: tab, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+    XCTAssertEqual(tab.agentReport?.stateChangedAt, second, "実変化後の同値報告でも stateChangedAt は動かない")
   }
 
   func testClearResetsAllAttentionFields() throws {
-    let (wc, pane) = try makeControllerAndPane()
+    let (wc, tab) = try makeControllerAndTab()
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "done", sessionId: "s1",
+      tab: tab, agent: "claude", state: "done", sessionId: "s1",
       message: AgentMessage(text: "done!", source: "tool"))
-    XCTAssertEqual(pane.agentReport?.message?.source, "tool", "前提: 消す対象が立っている")
-    wc.controlReportAgent(pane: pane, agent: "claude", state: "clear", sessionId: nil, message: nil)
-    XCTAssertEqual(pane.agentSlot, .none, "clear で同一性ごと無へ戻る")
+    XCTAssertEqual(tab.agentReport?.message?.source, "tool", "前提: 消す対象が立っている")
+    wc.controlReportAgent(tab: tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    XCTAssertEqual(tab.agentSlot, .none, "clear で同一性ごと無へ戻る")
   }
 
   /// waiting / done への実変化だけが一過性イベント（メニューバー②）を立てる。
   func testTransientFiresOnlyOnWaitingOrDoneChange() throws {
-    let (wc, pane) = try makeControllerAndPane()
+    let (wc, tab) = try makeControllerAndTab()
     XCTAssertFalse(wc.window.isKeyWindow, "前提: 背面（非 key）なので見ているタブの抑制は効かない")
 
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "working", sessionId: nil, message: nil)
+      tab: tab, agent: "claude", state: "working", sessionId: nil, message: nil)
     XCTAssertNil(wc.attentionStore.transient, "working への変化では立てない")
 
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "waiting", sessionId: nil,
+      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "q"))
     let transient = try XCTUnwrap(wc.attentionStore.transient)
-    XCTAssertEqual(transient.row.paneId, pane.id)
+    XCTAssertEqual(transient.row.tabId, tab.id)
     XCTAssertEqual(transient.row.state, "waiting")
     XCTAssertEqual(transient.row.message, "q")
 
     wc.attentionStore.transient = nil
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "waiting", sessionId: nil,
+      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "q"))
     XCTAssertNil(wc.attentionStore.transient, "同値報告（変化なし）では立てない")
 
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d"))
+      tab: tab, agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d"))
     XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
   }
 
-  /// 見ているタブ（前面ウィンドウのアクティブ表示タブ）のペインでは②を立てない。
+  /// 見ているタブ（前面ウィンドウのアクティブ表示タブ）のタブでは②を立てない。
   /// 抑制されるのはピルだけで、一覧（rows）と done のフォーカス消費は従来どおり効く。
   func testTransientSuppressedOnVisibleTab() throws {
-    let (wc, pane) = try makeControllerAndPane()
+    let (wc, tab) = try makeControllerAndTab()
     makeKey(wc)
 
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "waiting", sessionId: nil,
+      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "q"))
     XCTAssertNil(wc.attentionStore.transient, "見ているタブの waiting ではピルを立てない")
     wc.flushChrome()
-    XCTAssertEqual(wc.attentionStore.rows.map(\.paneId), [pane.id], "抑制するのはピルだけ（一覧は従来どおり）")
+    XCTAssertEqual(wc.attentionStore.rows.map(\.tabId), [tab.id], "抑制するのはピルだけ（一覧は従来どおり）")
     XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["waiting"])
 
-    wc.controlReportAgent(pane: pane, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d"))
+      tab: tab, agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d"))
     XCTAssertNil(wc.attentionStore.transient, "見ているタブの done でもピルを立てない")
-    XCTAssertEqual(pane.agentState, "idle", "done のフォーカス消費は従来どおり効く")
+    XCTAssertEqual(tab.agentState, "idle", "done のフォーカス消費は従来どおり効く")
     wc.flushChrome()
     XCTAssertTrue(wc.attentionStore.rows.isEmpty)
     XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["idle"])
   }
 
-  /// 抑制の粒度はタブ。見ているタブの中なら、フォーカスしていない split の隣ペインでも②は立てない。
-  func testTransientSuppressedOnSplitSiblingInVisibleTab() throws {
-    let (wc, pane) = try makeControllerAndPane()
-    makeKey(wc)
-    let tab = wc.current.tabs[0]
-    let sibling = try XCTUnwrap(tab.split(.horizontal, from: pane))
-    XCTAssertFalse(sibling === tab.focusedPane, "前提: 隣ペインは非フォーカス（でなければタブ粒度を測れない）")
-
-    wc.controlReportAgent(
-      pane: sibling, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
-    XCTAssertNil(wc.attentionStore.transient, "見ているタブなら非フォーカスの隣ペインでもピルを立てない")
-  }
-
-  /// 前面のままでも、見ていない別タブのペインなら②は立つ。
+  /// 前面のままでも、見ていない別タブなら②は立つ。
   func testTransientFiresForBackgroundTabWhileKey() throws {
-    let (wc, panes) = try makeControllerAndTwoTabs()
+    let (wc, tabs) = try makeControllerAndTwoTabs()
     makeKey(wc)
 
     wc.controlReportAgent(
-      pane: panes[1], agent: "claude", state: "waiting", sessionId: nil,
+      tab: tabs[1], agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "q"))
-    XCTAssertEqual(wc.attentionStore.transient?.row.paneId, panes[1].id)
+    XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id)
   }
 
   /// 抑制は「立てない」だけ。別の場所で起きた変化の既存ピルには触らない。
   func testSuppressionKeepsExistingTransient() throws {
-    let (wc, panes) = try makeControllerAndTwoTabs()
+    let (wc, tabs) = try makeControllerAndTwoTabs()
     makeKey(wc)
 
     wc.controlReportAgent(
-      pane: panes[1], agent: "claude", state: "waiting", sessionId: nil,
+      tab: tabs[1], agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "bg"))
-    XCTAssertEqual(wc.attentionStore.transient?.row.paneId, panes[1].id)
+    XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id)
 
     wc.controlReportAgent(
-      pane: panes[0], agent: "claude", state: "waiting", sessionId: nil,
+      tab: tabs[0], agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "fg"))
-    XCTAssertEqual(wc.attentionStore.transient?.row.paneId, panes[1].id, "抑制は既存のピルを消さない")
+    XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id, "抑制は既存のピルを消さない")
   }
 
   /// done のフォーカス消費（done→idle）は stateChangedAt / message を触らない。
   func testConsumeDoneKeepsAttentionTimestamps() throws {
-    let (wc, pane) = try makeControllerAndPane()
+    let (wc, tab) = try makeControllerAndTab()
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d"))
+      tab: tab, agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d"))
     // 非 nil で拾う——Optional のまま比べると、report が打刻しなくなった退行が nil == nil で
     // 素通りして、このテストが名乗る契約が黙って検証されなくなる。
-    let at = try XCTUnwrap(pane.agentReport?.stateChangedAt)
+    let at = try XCTUnwrap(tab.agentReport?.stateChangedAt)
     wc.current.tabs[0].consumeDoneState()
-    XCTAssertEqual(pane.agentState, "idle")
-    XCTAssertEqual(pane.agentReport?.stateChangedAt, at)
-    XCTAssertEqual(pane.agentReport?.message?.text, "d")
+    XCTAssertEqual(tab.agentState, "idle")
+    XCTAssertEqual(tab.agentReport?.stateChangedAt, at)
+    XCTAssertEqual(tab.agentReport?.message?.text, "d")
   }
 
   /// flushChrome が AttentionStore の snapshot を更新し、idle 化で一覧から消える。
   func testFlushChromeProjectsAttentionRows() throws {
-    let (wc, pane) = try makeControllerAndPane()
+    let (wc, tab) = try makeControllerAndTab()
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "waiting", sessionId: nil,
+      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "q"))
     wc.flushChrome()
-    XCTAssertEqual(wc.attentionStore.rows.map(\.paneId), [pane.id])
+    XCTAssertEqual(wc.attentionStore.rows.map(\.tabId), [tab.id])
 
-    wc.controlReportAgent(pane: pane, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
     wc.refreshChrome()
     wc.flushChrome()
     XCTAssertTrue(wc.attentionStore.rows.isEmpty)

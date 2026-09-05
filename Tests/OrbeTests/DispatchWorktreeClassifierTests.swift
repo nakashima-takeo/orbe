@@ -164,13 +164,13 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
         DispatchCleanFacts(
           path: "/wt/agent-hooks", branch: "feature/agent-hooks", track: "[gone]",
           openPR: .none, containment: .patchEquivalent(target: "main"),
-          occupancy: PaneOccupancy(cwd: "/wt/agent-hooks", agentState: state))
+          occupancy: TabOccupancy(cwd: "/wt/agent-hooks", agentState: state))
       ).chips
     }
     XCTAssertEqual(chips("working"), [.agentWorking])
     XCTAssertEqual(chips("waiting"), [.agentWaiting])
-    XCTAssertEqual(chips("done"), [.paneOpen])
-    XCTAssertEqual(chips(nil), [.paneOpen], "素のシェルでもタブが開いていれば使用中")
+    XCTAssertEqual(chips("done"), [.tabOpen])
+    XCTAssertEqual(chips(nil), [.tabOpen], "素のシェルでもタブが開いていれば使用中")
   }
 
   /// 推定が 1 つも立たなければ、安全確認を通っていても候補にはしない。

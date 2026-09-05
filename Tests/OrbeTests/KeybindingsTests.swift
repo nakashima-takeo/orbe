@@ -26,16 +26,17 @@ final class KeybindingsTests: OrbeTestCase {
     XCTAssertEqual(Keybindings.chromeAction(for: key("0")), .resetFontSize)
   }
 
-  func testSplitAndClose() {
-    XCTAssertEqual(Keybindings.chromeAction(for: key("d")), .splitRight)
-    XCTAssertEqual(Keybindings.chromeAction(for: key("D", [.command, .shift])), .splitDown)
-    XCTAssertEqual(Keybindings.chromeAction(for: key("w")), .closePane)
+  func testCloseTab() {
+    XCTAssertEqual(Keybindings.chromeAction(for: key("w")), .closeTab)
+    // ⌘D / ⌘⇧D は未割当（libghostty へ素通し）。
+    XCTAssertNil(Keybindings.chromeAction(for: key("d")))
+    XCTAssertNil(Keybindings.chromeAction(for: key("D", [.command, .shift])))
   }
 
   func testTabsAndFind() {
     XCTAssertEqual(Keybindings.chromeAction(for: key("t")), .newTab)
     // ⌘R はタブリネーム。content 依存の window コマンドとして
-    // `testChromeHostingViewInterceptsPaneIndependentCommandsOnly` の素通し脚が乗るので、割当も固定する。
+    // `testChromeHostingViewInterceptsTabIndependentCommandsOnly` の素通し脚が乗るので、割当も固定する。
     XCTAssertEqual(Keybindings.chromeAction(for: key("r")), .rename)
     // ⇧⌘T は最後に閉じたエージェントタブを開き直す。
     XCTAssertEqual(
@@ -98,17 +99,17 @@ final class KeybindingsTests: OrbeTestCase {
     XCTAssertNil(Keybindings.chromeAction(for: key("x")))
   }
 
-  /// ChromeHostingView は window レベルで pane 非依存 window コマンド（availableWithoutTabs）だけを
-  /// 横取りし、surface 操作系（⌘W closePane）や content 依存コマンド（⌘R renameTab）は
-  /// 素通しする（0タブでも pane 非依存キーが届き、他は surface 経由 no-op のまま、の切り分けの機構部分）。
+  /// ChromeHostingView は window レベルでタブ非依存 window コマンド（availableWithoutTabs）だけを
+  /// 横取りし、surface 操作系（⌘W closeTab）や content 依存コマンド（⌘R renameTab）は
+  /// 素通しする（0タブでもタブ非依存キーが届き、他は surface 経由 no-op のまま、の切り分けの機構部分）。
   /// libghostty 非依存（surface を作らず AppShell の SwiftUI ルートだけ構築する）。
-  func testChromeHostingViewInterceptsPaneIndependentCommandsOnly() {
+  func testChromeHostingViewInterceptsTabIndependentCommandsOnly() {
     let model = AppShellModel(statusModel: StatusRowModel(), content: NSView())
     let view = ChromeHostingView(
       rootView: AppShell(
         model: model, translucency: ChromeTranslucency(), agentIconResolver: AgentIconResolver(),
         fontResolver: ChromeFontResolver(), localization: LocalizationStore(language: .en)))
-    var handled: [TerminalController.WindowCommand] = []
+    var handled: [WindowCommand] = []
     view.onWindowCommand = { command in
       handled.append(command)
       return true
@@ -118,7 +119,7 @@ final class KeybindingsTests: OrbeTestCase {
     XCTAssertEqual(handled, [.newTab], "⌘T でハンドラが .newTab で1回呼ばれる")
 
     _ = view.performKeyEquivalent(with: key("w"))
-    XCTAssertEqual(handled, [.newTab], "⌘W（closePane・surface 操作系）は横取りせずハンドラを呼ばない")
+    XCTAssertEqual(handled, [.newTab], "⌘W（closeTab・surface 操作系）は横取りせずハンドラを呼ばない")
 
     _ = view.performKeyEquivalent(with: key("r"))
     XCTAssertEqual(
@@ -126,10 +127,10 @@ final class KeybindingsTests: OrbeTestCase {
   }
 
   /// `ChromeAction.windowCommand`（surface 経路・window レベル経路が共有する単一ソース mapping）を網羅固定する。
-  /// window 系13アクションは対応する WindowCommand へ、surface ローカル9アクションは nil へ写す。
+  /// window 系13アクションは対応する WindowCommand へ、surface ローカル7アクションは nil へ写す。
   /// この分類が回帰すると 0タブ配信の可否（availableWithoutTabs）とキー振り分け全体がズレる。
   func testWindowCommandMappingIsExhaustive() {
-    let mapped: [(ChromeAction, TerminalController.WindowCommand)] = [
+    let mapped: [(ChromeAction, WindowCommand)] = [
       (.newTab, .newTab),
       (.reopenClosedAgentTab, .reopenClosedAgentTab),
       (.nextTab, .nextTab),
@@ -149,8 +150,7 @@ final class KeybindingsTests: OrbeTestCase {
     }
     // surface ローカル操作（WindowController へ届けない）は nil。
     let surfaceLocal: [ChromeAction] = [
-      .increaseFontSize, .decreaseFontSize, .resetFontSize,
-      .splitRight, .splitDown, .closePane, .find,
+      .increaseFontSize, .decreaseFontSize, .resetFontSize, .closeTab, .find,
       .scrollToTop, .scrollToBottom,
     ]
     for action in surfaceLocal {
@@ -159,17 +159,17 @@ final class KeybindingsTests: OrbeTestCase {
   }
 
   /// `WindowCommand.availableWithoutTabs`（0タブでも window レベルで配信してよいか）の分類を網羅固定する。
-  /// pane 非依存9コマンドのみ true、content 依存4コマンドは false。この分類が回帰すると
+  /// タブ非依存9コマンドのみ true、content 依存4コマンドは false。この分類が回帰すると
   /// 0タブで効くべきキーが死ぬ／効くべきでない content 依存キーが暴発する。
   func testAvailableWithoutTabsClassification() {
-    let available: [TerminalController.WindowCommand] = [
+    let available: [WindowCommand] = [
       .newTab, .reopenClosedAgentTab, .newWorkspace, .switchWorkspace,
       .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings, .toggleHelp,
     ]
     for command in available {
-      XCTAssertTrue(command.availableWithoutTabs, "\(command) は pane 非依存ゆえ 0タブでも配信する")
+      XCTAssertTrue(command.availableWithoutTabs, "\(command) はタブ非依存ゆえ 0タブでも配信する")
     }
-    let requiresTabs: [TerminalController.WindowCommand] = [
+    let requiresTabs: [WindowCommand] = [
       .nextTab, .prevTab, .openEditor, .renameTab,
     ]
     for command in requiresTabs {

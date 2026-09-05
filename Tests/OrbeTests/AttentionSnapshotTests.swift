@@ -3,35 +3,35 @@ import XCTest
 @testable import Orbe
 
 /// Attention snapshot builder（`AttentionSnapshot`）の契約を固定する。
-/// 対象は activated タブのライブペインのみ・waiting/done/working のみ・stateChangedAt 降順。
+/// 対象は activated タブのライブタブのみ・waiting/done/working のみ・stateChangedAt 降順。
 /// あわせて `Workspace.agentCounts()` / `AgentRollup.grandTotal(of:)` が同じ母集合を数えることも固定する。
 @MainActor
 final class AttentionSnapshotTests: OrbeTestCase {
 
-  /// 1 タブ 1 ペインの workspace を組む。live はタブの正規遷移で作る。
+  /// 1 タブの workspace を組む。live はタブの正規遷移で作る。
   private func workspace(name: String, activated: Bool = true) -> Workspace {
     let ws = Workspace(name: name, rootPath: "/tmp/\(name)")
-    let tab = TerminalController(initialCwd: "/tmp/\(name)")
+    let tab = TerminalTab(cwd: "/tmp/\(name)")
     ws.tabs.append(tab)
     if activated { tab.recordMaterializationStarted() }
     return ws
   }
 
-  /// workspace の先頭ペインへ状態を立てる（nil は報告なしへ戻す）。
+  /// workspace のタブへ状態を立てる（nil は報告なしへ戻す）。
   private func setState(
     _ ws: Workspace, tab: Int = 0, state: String?, message: String? = nil, at: Date? = nil
   ) {
-    let pane = ws.tabs[tab].controlAllPanes()[0]
+    let tab = ws.tabs[tab]
     guard let state else {
-      pane.agentSlot = .none
+      tab.agentSlot = .none
       return
     }
-    setReportedState(pane, state, at: at ?? Date(), message: message.map { AgentMessage(text: $0) })
+    setReportedState(tab, state, at: at ?? Date(), message: message.map { AgentMessage(text: $0) })
   }
 
   // MARK: builder
 
-  /// 休眠（未 activate）workspace のペインは出ない。
+  /// 休眠（未 activate）workspace のタブは出ない。
   func testDormantWorkspaceExcluded() {
     let ws = workspace(name: "dormant", activated: false)
     setState(ws, state: "waiting", at: Date())
@@ -44,7 +44,7 @@ final class AttentionSnapshotTests: OrbeTestCase {
   /// 発信元タブの現在状態で母集合を決める。
   func testMixedWorkspaceIncludesOnlyActivatedTab() {
     let ws = workspace(name: "mixed")
-    let dormant = TerminalController(initialCwd: "/tmp/mixed")
+    let dormant = TerminalTab(cwd: "/tmp/mixed")
     ws.tabs.append(dormant)
     setState(ws, tab: 0, state: "waiting", at: Date())
     setState(ws, tab: 1, state: "done", at: Date().addingTimeInterval(1))
@@ -100,8 +100,8 @@ final class AttentionSnapshotTests: OrbeTestCase {
     XCTAssertEqual(AgentRollup.grandTotal(of: workspaces), ["waiting": 1, "done": 1, "working": 1])
   }
 
-  /// stateChangedAt 降順で並び、同時刻は paneId 降順で安定化する。
-  func testSortNewestFirstWithPaneIdTieBreak() throws {
+  /// stateChangedAt 降順で並び、同時刻は tabId 降順で安定化する。
+  func testSortNewestFirstWithTabIdTieBreak() throws {
     let base = Date()
     let old = workspace(name: "old")
     setState(old, state: "done", at: base.addingTimeInterval(-100))
@@ -113,10 +113,10 @@ final class AttentionSnapshotTests: OrbeTestCase {
     setState(tieB, state: "working", at: base.addingTimeInterval(-50))
     let rows = AttentionSnapshot.rows(of: [old, tieA, tieB, newer])
     XCTAssertEqual(rows.map(\.workspaceName), ["newer", "tieB", "tieA", "old"])
-    // 同時刻の 2 枚は paneId 降順（tieB のペインが後に採番され id が大きい）。
+    // 同時刻の 2 枚は tabId 降順（tieB のタブが後に採番され id が大きい）。
     let tieBRow = try XCTUnwrap(rows.first { $0.workspaceName == "tieB" })
     let tieARow = try XCTUnwrap(rows.first { $0.workspaceName == "tieA" })
-    XCTAssertGreaterThan(tieBRow.paneId, tieARow.paneId)
+    XCTAssertGreaterThan(tieBRow.tabId, tieARow.tabId)
   }
 
   /// working 行は message を持たない（ライブ進行は配管しない＝builder が nil に落とす）。
@@ -153,22 +153,22 @@ final class AttentionSnapshotTests: OrbeTestCase {
     XCTAssertEqual(AttentionSnapshot.listRows(rows).count, 2)
   }
 
-  /// working 集約の素材は件数（ペイン数）＋WS 名（重複排除・**出現順**）。working 0 件は nil。
+  /// working 集約の素材は件数（タブ数）＋WS 名（重複排除・**出現順**）。working 0 件は nil。
   /// 名は辞書順と出現順が食い違う組（zeta が先・alpha が後）で採る——`ws1, ws2` のように
   /// 両者が一致する組だと、実装が誤って sort しても通ってしまう。
   func testWorkingSummaryDeduplicatesWorkspacesInAppearanceOrder() {
     let base = Date()
     let a = Workspace(name: "zeta", rootPath: "/tmp/zeta")
-    a.tabs.append(TerminalController(initialCwd: "/tmp/zeta"))
-    a.tabs.append(TerminalController(initialCwd: "/tmp/zeta"))
+    a.tabs.append(TerminalTab(cwd: "/tmp/zeta"))
+    a.tabs.append(TerminalTab(cwd: "/tmp/zeta"))
     a.tabs.forEach { $0.recordMaterializationStarted() }
-    setReportedState(a.tabs[0].controlAllPanes()[0], "working", at: base)
-    setReportedState(a.tabs[1].controlAllPanes()[0], "working", at: base.addingTimeInterval(-1))
+    setReportedState(a.tabs[0], "working", at: base)
+    setReportedState(a.tabs[1], "working", at: base.addingTimeInterval(-1))
     let b = workspace(name: "alpha")
     setState(b, state: "working", at: base.addingTimeInterval(-2))
     let rows = AttentionSnapshot.rows(of: [a, b])
     let summary = AttentionSnapshot.workingSummary(rows)
-    XCTAssertEqual(summary?.count, 3, "件数は WS 数ではなく working ペイン数")
+    XCTAssertEqual(summary?.count, 3, "件数は WS 数ではなく working タブ数")
     XCTAssertEqual(summary?.names, ["zeta", "alpha"], "重複排除して出現順（辞書順に直さない）")
 
     let waitingOnly = workspace(name: "w")

@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// `send_key` が解決した `SurfaceKeyInput` を実 libghostty に符号化させ、ペインの PTY へ届く
+/// `send_key` が解決した `SurfaceKeyInput` を実 libghostty に符号化させ、タブの PTY へ届く
 /// **バイト列**で固定する。端末モード（legacy / bracketed paste / kitty keyboard protocol）ごとの
 /// 符号化は libghostty に一任しているので、Orbe が渡す値の形（keycode 無しの単一文字・text /
 /// unshifted / mods / consumed_mods）が少しでもずれると、ここでしか現れない。
@@ -16,7 +16,7 @@ import XCTest
 /// 層1（`app/orbe-defaults.conf`）を本物のまま読み込む。legacy の `alt+<文字>` の ESC 前置は
 /// そこにある `macos-option-as-alt = true` に依存し、無ければレイアウト次第で素の文字になる。
 ///
-/// 重要: 実 NSWindow に SurfaceView を接続し、実ペインで dump プログラムを走らせる（GhosttyKit 必須）。
+/// 重要: 実 NSWindow に SurfaceView を接続し、実タブで dump プログラムを走らせる（GhosttyKit 必須）。
 final class SurfaceKeyInputTests: OrbeTestCase {
   override func setUpWithError() throws {
     try super.setUpWithError()
@@ -43,25 +43,25 @@ final class SurfaceKeyInputTests: OrbeTestCase {
       .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
   }
 
-  /// 実 `WindowController` を起こし、0 タブの workspace に dump のペインを開く。controller の寿命は
-  /// 返す `TtyDumpPane` が持つ——テストのローカル束縛が終わると window ごと畳まれ、ペインと python が落ちる。
-  func dump(_ mode: TtyDumpPane.Mode) throws -> TtyDumpPane {
+  /// 実 `WindowController` を起こし、0 タブの workspace に dump のタブを開く。controller の寿命は
+  /// 返す `TtyDumpTab` が持つ——テストのローカル束縛が終わると window ごと畳まれ、タブと python が落ちる。
+  func dump(_ mode: TtyDumpTab.Mode) throws -> TtyDumpTab {
     let fixture = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [])])
     try JSONEncoder().encode(fixture).write(to: workspacesFile())
-    return try TtyDumpPane(in: WindowController(), mode: mode)
+    return try TtyDumpTab(in: WindowController(), mode: mode)
   }
 
   /// `send_key spec` を送り、PTY に `bytes` が 1 打として届くことを見る。
   private func assertSendKey(
-    _ spec: String, arrives bytes: String, in dump: TtyDumpPane,
+    _ spec: String, arrives bytes: String, in dump: TtyDumpTab,
     file: StaticString = #filePath, line: UInt = #line
   ) throws {
-    dump.pane.controlSendKey(
+    dump.tab.surface.controlSendKey(
       try XCTUnwrap(ControlKey.parse(spec), "\(spec) が解決できない", file: file, line: line))
     XCTAssertEqual(
-      dump.next(file: file, line: line), TtyDumpPane.hex(bytes),
+      dump.next(file: file, line: line), TtyDumpTab.hex(bytes),
       "send_key \(spec) の受信バイトが違う", file: file, line: line)
   }
 

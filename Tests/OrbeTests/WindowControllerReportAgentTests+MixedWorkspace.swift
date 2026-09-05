@@ -6,34 +6,35 @@ import XCTest
 private struct MixedBackgroundFixture {
   let wc: WindowController
   let workspace: Workspace
-  let live: SurfaceView
-  let dormant: SurfaceView
+  let live: TerminalTab
+  let dormant: TerminalTab
 }
 
 /// 背景 workspace が live / dormant タブ混在になったとき、注意喚起と常時集計が
 /// workspace 全体ではなく発信元タブの現在状態に従うことを固定する。
 extension WindowControllerReportAgentTests {
   private func makeControllerAndMixedBackground() throws -> MixedBackgroundFixture {
-    let dormantAgent = PaneNode.leaf(
-      cwd: nil, agent: AgentSession(command: "unknown", sessionId: "sleeping"))
+    let dormantAgent = TabState(
+      cwd: "/tmp", agent: AgentSession(command: "unknown", sessionId: "sleeping"),
+      explicitTitle: nil)
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
         WorkspaceState(
           name: "main", rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)]),
+          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)]),
         WorkspaceState(
           name: "mixed", rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(tree: dormantAgent, explicitTitle: nil)]),
+          tabs: [dormantAgent]),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     let wc = WindowController()
     let workspace = try XCTUnwrap(wc.workspaces.first { $0.name == "mixed" })
-    let dormant = try XCTUnwrap(workspace.tabs.first?.controlAllPanes().first)
+    let dormant = try XCTUnwrap(workspace.tabs.first)
     workspace.lastUsedAt = Date(timeIntervalSinceReferenceDate: 9_000)
-    let paneId = try XCTUnwrap(
+    let tabId = try XCTUnwrap(
       wc.controlSpawn(workspaceId: workspace.id, cwd: nil, command: nil))
-    let live = try XCTUnwrap(wc.controlResolvePane(paneId))
+    let live = try XCTUnwrap(wc.controlResolveTab(tabId))
 
     XCTAssertFalse(wc.current === workspace)
     XCTAssertTrue(workspace.activated)
@@ -50,12 +51,12 @@ extension WindowControllerReportAgentTests {
     let sound = try XCTUnwrap(fixture.wc.soundPlayer as? SoundPlayerFake)
 
     fixture.wc.controlReportAgent(
-      pane: fixture.live, agent: "claude", state: "waiting", sessionId: nil,
+      tab: fixture.live, agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "question"))
     fixture.wc.flushChrome()
 
-    XCTAssertEqual(fixture.wc.attentionStore.rows.map(\.paneId), [fixture.live.id])
-    XCTAssertEqual(fixture.wc.attentionStore.transient?.row.paneId, fixture.live.id)
+    XCTAssertEqual(fixture.wc.attentionStore.rows.map(\.tabId), [fixture.live.id])
+    XCTAssertEqual(fixture.wc.attentionStore.transient?.row.tabId, fixture.live.id)
     XCTAssertEqual(sound.played.last?.event, .waiting)
     XCTAssertEqual(fixture.wc.statusModel.rollup.map(\.state), ["waiting"])
     XCTAssertEqual(fixture.wc.statusModel.rollup.map(\.count), [1])
@@ -71,7 +72,7 @@ extension WindowControllerReportAgentTests {
     let sound = try XCTUnwrap(fixture.wc.soundPlayer as? SoundPlayerFake)
 
     fixture.wc.controlReportAgent(
-      pane: fixture.live, agent: "claude", state: "done", sessionId: nil,
+      tab: fixture.live, agent: "claude", state: "done", sessionId: nil,
       message: AgentMessage(text: "finished"))
     fixture.wc.flushChrome()
 
@@ -87,7 +88,7 @@ extension WindowControllerReportAgentTests {
     let sound = try XCTUnwrap(fixture.wc.soundPlayer as? SoundPlayerFake)
 
     fixture.wc.controlReportAgent(
-      pane: fixture.dormant, agent: "claude", state: "waiting", sessionId: nil,
+      tab: fixture.dormant, agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "synthetic"))
     fixture.wc.flushChrome()
 
@@ -103,7 +104,7 @@ extension WindowControllerReportAgentTests {
     let fixture = try makeControllerAndMixedBackground()
     let stampBefore = fixture.workspace.lastUsedAt
     fixture.wc.controlReportAgent(
-      pane: fixture.live, agent: "claude", state: "waiting", sessionId: nil,
+      tab: fixture.live, agent: "claude", state: "waiting", sessionId: nil,
       message: AgentMessage(text: "question"))
     fixture.wc.flushChrome()
     let liveTab = try XCTUnwrap(fixture.workspace.tabs.first { $0.activated })

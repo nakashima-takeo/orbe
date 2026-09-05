@@ -109,7 +109,7 @@ extension DispatchWorktreeClassifierTests {
   /// **群を決めるフィールド（`isPrunable` / `isMain` / `occupancy` / `branch`）も振る**——
   /// 振らないと、不到達が最も起きやすい「安全行」「detached 行」「使用中行」が総当たりの外に残る。
   private func forEachShape(_ body: (DispatchCleanFacts) -> Void) {
-    let occupancies: [PaneOccupancy?] = [nil, PaneOccupancy(cwd: "/wt/x", agentState: "waiting")]
+    let occupancies: [TabOccupancy?] = [nil, TabOccupancy(cwd: "/wt/x", agentState: "waiting")]
     for branch in [nil, "feat/x"] as [String?] {
       for isPrunable in [false, true] {
         for isMain in [false, true] {
@@ -123,7 +123,7 @@ extension DispatchWorktreeClassifierTests {
 
   /// 群が決まった 1 つの形の下で、語彙を決めるフィールドを振る。
   private func forEachDetail(
-    _ branch: String?, _ isPrunable: Bool, _ isMain: Bool, _ occupancy: PaneOccupancy?,
+    _ branch: String?, _ isPrunable: Bool, _ isMain: Bool, _ occupancy: TabOccupancy?,
     _ body: (DispatchCleanFacts) -> Void
   ) {
     let statuses: [GitWorktreeStatusCounts?] = [
@@ -166,7 +166,7 @@ extension DispatchWorktreeClassifierTests {
   private func describe(_ f: DispatchCleanFacts) -> String {
     """
     branch=\(f.branch ?? "nil") prunable=\(f.isPrunable) main=\(f.isMain) \
-    pane=\(f.occupancy != nil) status=\(String(describing: f.status)) op=\(f.operation) \
+    tab=\(f.occupancy != nil) status=\(String(describing: f.status)) op=\(f.operation) \
     lock=\(f.lockReason != nil) up=\(f.upstream ?? "nil") track=\(f.track ?? "nil") \
     containment=\(String(describing: f.containment)) openPR=\(f.openPR) \
     closedPR=\(String(describing: f.closedPR))

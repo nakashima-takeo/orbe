@@ -27,8 +27,8 @@ final class HelpModelTests: OrbeTestCase {
 
     m.pressed = ["cmd", "t"]
     m.syncPressedMatch(l10n)
-    XCTAssertEqual(m.pressedRowIDs, ["top/\(L10nKey.helpCatWorkspaceTabsPanes.rawValue)/⌘T"])
-    XCTAssertEqual(m.revealRowID, "top/\(L10nKey.helpCatWorkspaceTabsPanes.rawValue)/⌘T")
+    XCTAssertEqual(m.pressedRowIDs, ["top/\(L10nKey.helpCatWorkspaceTabs.rawValue)/⌘T"])
+    XCTAssertEqual(m.revealRowID, "top/\(L10nKey.helpCatWorkspaceTabs.rawValue)/⌘T")
   }
 
   /// 左右修飾キー（rcmd/rshift/ropt）は combo 語彙へ正規化して一致する。
@@ -37,7 +37,7 @@ final class HelpModelTests: OrbeTestCase {
     m.category = .all
     m.pressed = ["rcmd", "rshift", "s"]
     m.syncPressedMatch(l10n)
-    XCTAssertEqual(m.pressedRowIDs, ["\(L10nKey.helpCatWorkspaceTabsPanes.rawValue)/⌘⇧S"])
+    XCTAssertEqual(m.pressedRowIDs, ["\(L10nKey.helpCatWorkspaceTabs.rawValue)/⌘⇧S"])
   }
 
   /// 同 combo の複数行（⌘↑ / ⌘↓ = cmd ud）は全行ハイライトする。
@@ -70,7 +70,7 @@ final class HelpModelTests: OrbeTestCase {
     m.pressed = ["cmd", "r"]
     m.syncPressedMatch(l10n)
     XCTAssertEqual(m.category, .all)
-    XCTAssertEqual(m.pressedRowIDs, ["\(L10nKey.helpCatWorkspaceTabsPanes.rawValue)/⌘R"])
+    XCTAssertEqual(m.pressedRowIDs, ["\(L10nKey.helpCatWorkspaceTabs.rawValue)/⌘R"])
   }
 
   /// 個別カテゴリ表示中に別カテゴリの combo を押すと「すべて」へ遷移する（検索は保つ）。
@@ -80,7 +80,7 @@ final class HelpModelTests: OrbeTestCase {
     m.pressed = ["cmd", "t"]
     m.syncPressedMatch(l10n)
     XCTAssertEqual(m.category, .all)
-    XCTAssertEqual(m.pressedRowIDs, ["\(L10nKey.helpCatWorkspaceTabsPanes.rawValue)/⌘T"])
+    XCTAssertEqual(m.pressedRowIDs, ["\(L10nKey.helpCatWorkspaceTabs.rawValue)/⌘T"])
   }
 
   /// 検索・キー絞り込みが該当行を隠すときだけクリアして必ず見せる。
@@ -92,7 +92,7 @@ final class HelpModelTests: OrbeTestCase {
     keep.pressed = ["cmd", "t"]
     keep.syncPressedMatch(l10n)
     XCTAssertEqual(keep.query, "タブ")
-    XCTAssertEqual(keep.pressedRowIDs, ["\(L10nKey.helpCatWorkspaceTabsPanes.rawValue)/⌘T"])
+    XCTAssertEqual(keep.pressedRowIDs, ["\(L10nKey.helpCatWorkspaceTabs.rawValue)/⌘T"])
 
     // 検索が該当行を隠す → クリアして見せる。
     let clear = model()

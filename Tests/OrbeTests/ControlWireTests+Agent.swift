@@ -57,7 +57,7 @@ extension ControlWireTests {
     XCTAssertEqual(fake.agentSpawns.last?.cwd, "/tmp/resume", "cwd が名前どおり届く")
     XCTAssertNil(
       (response?["result"] as? [String: Any])?["sessionId"],
-      "渡した sessionId を反響しない（実 ID の出所は list_panes の agentSessionId）")
+      "渡した sessionId を反響しない（実 ID の出所は list_tabs の agentSessionId）")
 
     XCTAssertEqual(
       errorCode(

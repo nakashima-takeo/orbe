@@ -45,7 +45,7 @@ final class WorkspaceQuarantineTests: OrbeTestCase {
       workspaces: [
         WorkspaceState(
           name: "kept", rootPath: "/tmp/kept", activeTab: 0,
-          tabs: [TabState(tree: .leaf(cwd: "/tmp/kept", agent: nil), explicitTitle: nil)])
+          tabs: [TabState(cwd: "/tmp/kept", agent: nil, explicitTitle: nil)])
       ])
   }
 

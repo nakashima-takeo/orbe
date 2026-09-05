@@ -25,15 +25,15 @@ extension DesignFlowSnapshotTests {
     let driver = MenuBarArrivalDriver()
     let seeded = [
       AttentionRow(
-        paneId: 9001, workspaceName: "orbe-remote-ios", tabTitle: "CI 修復", state: "done",
+        tabId: 9001, workspaceName: "orbe-remote-ios", tabTitle: "CI 修復", state: "done",
         message: "build OK — 変更なし", stateChangedAt: t0.addingTimeInterval(-480)),
       AttentionRow(
-        paneId: 9002, workspaceName: "api-gateway", tabTitle: "deploy スクリプト整理",
+        tabId: 9002, workspaceName: "api-gateway", tabTitle: "deploy スクリプト整理",
         state: "waiting", message: "ビルド成果物の掃除方法を選んでください。",
         stateChangedAt: t0.addingTimeInterval(-45)),
     ]
     let arriving = AttentionRow(
-      paneId: 9003, workspaceName: "orbe-core", tabTitle: "emit API 移行", state: "waiting",
+      tabId: 9003, workspaceName: "orbe-core", tabTitle: "emit API 移行", state: "waiting",
       message: "Bash の許可が必要です — bin/rails db:migrate", stateChangedAt: t0)
     try flow(
       "menubar_arrival", size: NSSize(width: 420, height: 64),
@@ -87,7 +87,7 @@ extension DesignFlowSnapshotTests {
     let store = AttentionStore()
     let driver = MenuBarArrivalDriver()
     let arriving = AttentionRow(
-      paneId: 9101, workspaceName: "orbe-core", tabTitle: "emit API 移行", state: "waiting",
+      tabId: 9101, workspaceName: "orbe-core", tabTitle: "emit API 移行", state: "waiting",
       message: "Bash の許可が必要です", stateChangedAt: t0)
     try flow(
       "menubar_arrival_first", size: NSSize(width: 420, height: 64),
@@ -135,7 +135,7 @@ extension DesignFlowSnapshotTests {
     let store = AttentionStore()
     let driver = MenuBarArrivalDriver()
     let arriving = AttentionRow(
-      paneId: 9201, workspaceName: "orbe-core", tabTitle: "emit API 移行", state: "waiting",
+      tabId: 9201, workspaceName: "orbe-core", tabTitle: "emit API 移行", state: "waiting",
       message: "Bash の許可が必要です — bin/rails db:migrate", stateChangedAt: t0)
     try flow(
       "menubar_dismiss", size: NSSize(width: 420, height: 64),

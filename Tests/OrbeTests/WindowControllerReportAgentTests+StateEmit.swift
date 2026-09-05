@@ -15,11 +15,11 @@ import XCTest
 /// barrier の行はその後に書かれるので、イベントが起きていれば barrier より先に待機の応答が届く。
 extension WindowControllerReportAgentTests {
 
-  /// `agent_state` だけを、指定ペインに絞って待つ。登録完了は barrier で確定させる
-  /// （後続の報告が登録前に走らないことをここで決める）。paneId を省くと全ペインを拾う。
-  private func armAgentStateWait(_ wire: ControlWire, id: Int, paneId: Int? = nil) {
+  /// `agent_state` だけを、指定タブに絞って待つ。登録完了は barrier で確定させる
+  /// （後続の報告が登録前に走らないことをここで決める）。tabId を省くと全タブを拾う。
+  private func armAgentStateWait(_ wire: ControlWire, id: Int, tabId: Int? = nil) {
     var params: [String: Any] = ["kinds": ["agent_state"]]
-    if let paneId { params["paneId"] = paneId }
+    if let tabId { params["tabId"] = tabId }
     wire.send(["jsonrpc": "2.0", "id": id, "method": "wait_for_event", "params": params])
     wire.barrier()
   }
@@ -33,36 +33,36 @@ extension WindowControllerReportAgentTests {
 
   /// 初回報告は報告 state を値に載せて 1 発流れる（`.none` → `.live`）。
   func testFirstReportEmitsAgentStateWithTheReportedValue() throws {
-    let (wc, pane) = try makeControllerAndPane()
+    let (wc, tab) = try makeControllerAndTab()
     let wire = ControlWire(target: nil)
     defer { wire.teardown() }
-    armAgentStateWait(wire, id: 1, paneId: pane.id)
+    armAgentStateWait(wire, id: 1, tabId: tab.id)
 
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "working", sessionId: nil, message: nil)
+      tab: tab, agent: "claude", state: "working", sessionId: nil, message: nil)
 
     let event = try XCTUnwrap(stateEvent(wire.nextResponse()))
     XCTAssertEqual(event["kind"] as? String, "agent_state")
-    XCTAssertEqual(event["paneId"] as? Int, pane.id)
+    XCTAssertEqual(event["tabId"] as? Int, tab.id)
     XCTAssertEqual(event["value"] as? String, "working")
   }
 
   /// 同値の連続報告では流れず、次の実変化で流れる。sessionId の新値を載せた同値報告で
   /// 「slot は変わるが導出 state は変わらない」境界も同時に踏む。
   func testSameStateReportIsSilentAndTheNextRealChangeEmits() throws {
-    let (wc, pane) = try makeControllerAndPane()
+    let (wc, tab) = try makeControllerAndTab()
     let wire = ControlWire(target: nil)
     defer { wire.teardown() }
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "working", sessionId: "s-1", message: nil)
-    armAgentStateWait(wire, id: 1, paneId: pane.id)
+      tab: tab, agent: "claude", state: "working", sessionId: "s-1", message: nil)
+    armAgentStateWait(wire, id: 1, tabId: tab.id)
 
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "working", sessionId: "s-2", message: nil)
+      tab: tab, agent: "claude", state: "working", sessionId: "s-2", message: nil)
     wire.barrier()  // barrier が先に返る＝同値報告はイベントを出していない
 
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+      tab: tab, agent: "claude", state: "waiting", sessionId: nil, message: nil)
     XCTAssertEqual(
       stateEvent(wire.nextResponse())?["value"] as? String, "waiting", "実変化では張った待機が起きる")
   }
@@ -70,18 +70,18 @@ extension WindowControllerReportAgentTests {
   /// clear は「状態なし」を `report_agent` の入力と同じ語 `clear` で伝える——`orb wait --value clear`
   /// と `orb agent prompt` の `state clear` が同じ語で一致する。
   func testClearEmitsAnEventWithTheClearValue() throws {
-    let (wc, pane) = try makeControllerAndPane()
+    let (wc, tab) = try makeControllerAndTab()
     let wire = ControlWire(target: nil)
     defer { wire.teardown() }
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "working", sessionId: nil, message: nil)
-    armAgentStateWait(wire, id: 1, paneId: pane.id)
+      tab: tab, agent: "claude", state: "working", sessionId: nil, message: nil)
+    armAgentStateWait(wire, id: 1, tabId: tab.id)
 
-    wc.controlReportAgent(pane: pane, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
 
     let event = try XCTUnwrap(stateEvent(wire.nextResponse()))
     XCTAssertEqual(event["kind"] as? String, "agent_state")
-    XCTAssertEqual(event["paneId"] as? Int, pane.id)
+    XCTAssertEqual(event["tabId"] as? Int, tab.id)
     XCTAssertEqual(event["value"] as? String, "clear", "報告の消滅は value に clear を載せる")
   }
 
@@ -92,52 +92,52 @@ extension WindowControllerReportAgentTests {
     f.tab.recordMaterializationStarted()
     let wire = ControlWire(target: nil)
     defer { wire.teardown() }
-    armAgentStateWait(wire, id: 1, paneId: f.pane.id)
+    armAgentStateWait(wire, id: 1, tabId: f.tab.id)
 
     f.wc.controlReportAgent(
-      pane: f.pane, agent: "claude", state: "working", sessionId: nil, message: nil)
+      tab: f.tab, agent: "claude", state: "working", sessionId: nil, message: nil)
 
     XCTAssertEqual(stateEvent(wire.nextResponse())?["value"] as? String, "working")
   }
 
   // MARK: - 流れない
 
-  /// 一度も報告のないペインへの clear は流れない（状態なし → 状態なしで実変化がない）。
-  func testClearOnAgentlessPaneEmitsNothing() throws {
-    let (wc, pane) = try makeControllerAndPane()
+  /// 一度も報告のないタブへの clear は流れない（状態なし → 状態なしで実変化がない）。
+  func testClearOnAgentlessTabEmitsNothing() throws {
+    let (wc, tab) = try makeControllerAndTab()
     let wire = ControlWire(target: nil)
     defer { wire.teardown() }
-    armAgentStateWait(wire, id: 1, paneId: pane.id)
+    armAgentStateWait(wire, id: 1, tabId: tab.id)
 
-    wc.controlReportAgent(pane: pane, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
 
     wire.barrier()
   }
 
-  /// 消費直後（報告前）のペインへ SessionEnd の clear が来ても流れない（resume 直後に起きる実経路）。
+  /// 消費直後（報告前）のタブへ SessionEnd の clear が来ても流れない（resume 直後に起きる実経路）。
   func testClearBeforeTheFirstHookEmitsNothing() throws {
     let f = try makeControllerAndDormantTicket(command: "claude", sessionId: "resume-1")
     f.tab.recordMaterializationStarted()
     let wire = ControlWire(target: nil)
     defer { wire.teardown() }
-    armAgentStateWait(wire, id: 1, paneId: f.pane.id)
+    armAgentStateWait(wire, id: 1, tabId: f.tab.id)
 
     f.wc.controlReportAgent(
-      pane: f.pane, agent: "claude", state: "clear", sessionId: nil, message: nil)
+      tab: f.tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
 
     wire.barrier()
   }
 
-  /// 休眠チケット宛の偽 report はイベントを出さない。dormant ペインには報告主のプロセスが
+  /// 休眠チケット宛の偽 report はイベントを出さない。dormant タブには報告主のプロセスが
   /// 存在しえないので、ここで流すと待機系が実体のない状態変化で起きる。
   func testForgedReportToDormantTicketEmitsNothing() throws {
     let f = try makeControllerAndDormantTicket(command: "claude", sessionId: "resume-1")
     let wire = ControlWire(target: nil)
     defer { wire.teardown() }
-    armAgentStateWait(wire, id: 1, paneId: f.pane.id)
+    armAgentStateWait(wire, id: 1, tabId: f.tab.id)
 
     f.wc.controlReportAgent(
-      pane: f.pane, agent: "codex", state: "waiting", sessionId: "forged",
+      tab: f.tab, agent: "codex", state: "waiting", sessionId: "forged",
       message: AgentMessage(text: "synthetic"))
 
     wire.barrier()
@@ -148,10 +148,10 @@ extension WindowControllerReportAgentTests {
     let f = try makeControllerAndDormantTicket(command: "claude", sessionId: "resume-1")
     let wire = ControlWire(target: nil)
     defer { wire.teardown() }
-    armAgentStateWait(wire, id: 1, paneId: f.pane.id)
+    armAgentStateWait(wire, id: 1, tabId: f.tab.id)
 
     f.wc.controlReportAgent(
-      pane: f.pane, agent: "claude", state: "clear", sessionId: nil, message: nil)
+      tab: f.tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
 
     wire.barrier()
   }

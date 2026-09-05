@@ -171,7 +171,7 @@ extension DispatchWorktreeClassifierTests {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x",
-        openPR: .none, occupancy: PaneOccupancy(cwd: "/wt/x", agentState: "working")))
+        openPR: .none, occupancy: TabOccupancy(cwd: "/wt/x", agentState: "working")))
     XCTAssertEqual(r.group, .inUse)
     XCTAssertFalse(r.vocabulary.contains(.unverified))
   }

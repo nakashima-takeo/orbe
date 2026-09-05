@@ -90,7 +90,7 @@ final class AgentHookWiringTests: OrbeTestCase {
 
   /// 各定義は**自分の CLI 名**をシムへ渡す。3 ファイルはほぼ同形で、エントリの追加は既存行の
   /// コピペで進むため、`codex-hooks.json` に `claude` が紛れ込む類の取り違えが起きうる。
-  /// 渡した名は `report_agent {agent}` → ペインの agent 同一性（command）に入り resume コマンドの構築に
+  /// 渡した名は `report_agent {agent}` → タブの agent 同一性（command）に入り resume コマンドの構築に
   /// 使われるので、取り違えると resume が別 CLI で立ち上がる。
   func testEachDefinitionPassesItsOwnAgentName() throws {
     for (path, expected) in [

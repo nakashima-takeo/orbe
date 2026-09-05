@@ -190,9 +190,9 @@ final class SettingsMigrationTests: OrbeTestCase {
   /// 新形式（canonical key）の settingsOverride はそのまま読める。
   func testNewFormatWorkspaceOverrideLoads() throws {
     let new = """
-      {"version":3,"activeWorkspace":0,"workspaces":[\
+      {"version":4,"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,\
-      "tabs":[{"tree":{"leaf":{}}}],\
+      "tabs":[{"cwd":"/"}],\
       "settingsOverride":{"font-size":18,"default-agent":"codex"}}]}
       """
     try Data(new.utf8).write(to: workspacesFile())

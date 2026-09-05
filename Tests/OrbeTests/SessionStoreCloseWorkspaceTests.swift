@@ -101,7 +101,7 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
   /// 空のままアクティブで残る（`.emptiedActive`・単一/複数 workspace 問わず）。
   func testRemoveLastTabEmptiesActiveInPlace() {
     let active = ws("active", t3)
-    let tab = TerminalController()
+    let tab = TerminalTab(cwd: "/tmp")
     active.tabs = [tab]
     let alpha = ws("Alpha", t1)  // 他 workspace があっても退避しない
     let beta = ws("Beta", t2)

@@ -11,13 +11,13 @@ import XCTest
 ///
 /// 壊れると何が起きるか: どちらの経路も、捨てられたトークンは exit 0 にも stdout にも stderr にも
 /// 現れないまま**指定と違う対象**を触る。`tab new` はアクティブ WS にタブが生え、`ws new` は既定
-/// root の workspace ができ、`pane close` / `tab close` は指定と無関係な現ペイン・現タブを消す。
+/// root の workspace ができ、`tab close` / `tab close` は指定と無関係な現タブ・現タブを消す。
 /// 人間も自動化も、成功したと読んだまま気づけない。
 extension OrbeCliProcessTests {
   /// `--workspace` の抜き取りは綴りが**完全一致**した 1 個目しか見ないので、`--workspace=3`（= 区切り）・
   /// 綴り誤り・2 個目の指定は残余トークンに落ちる。残余を検査しないとそれらは黙って捨てられ、
   /// exit 0 のまま**指定と違う workspace** を触る——`tab new` はアクティブ WS にタブが生え、
-  /// `pane list` は絞り込みが効かず全 WS のペインが出る。終了コードにも stdout にも現れない。
+  /// `tab list` は絞り込みが効かず全 WS のタブが出る。終了コードにも stdout にも現れない。
   ///
   /// `-` 始まりを値として通す席は `config set <key> <value>` の `<value>` だけ（`config set font-size -1`）。
   /// この境界を「残余に `-` があれば一律エラー」に広げると負の値がすべて usage エラーに化ける。
@@ -29,8 +29,8 @@ extension OrbeCliProcessTests {
 
     for args in [
       ["tab", "new", "--workspace=3"],
-      ["pane", "list", "--workspace=3"],
-      ["pane", "list", "--workspce", "3"],
+      ["tab", "list", "--workspace=3"],
+      ["tab", "list", "--workspce", "3"],
       ["config", "list", "--workspace=3"],
       ["config", "get", "font-size", "--workspace=3"],
       // 黙って捨てると `--workspace` 自体が消えて scope が global に落ち、指定 WS の上書きでは
@@ -76,36 +76,33 @@ extension OrbeCliProcessTests {
     }
   }
 
-  /// pane / tab コマンドは `--workspace` を取らないので、渡された `-` 始まりは必ず誤り。
-  /// 黙って捨てたときの現れ方はコマンドで違う。`pane close` / `tab close` は `ORBE_PANE` 既定へ
-  /// 落ち、**指定と無関係な現ペイン・現タブ**が exit 0 と `closed pane N` を出しながら消える
-  /// （`tab close` なら同タブの全ペイン——走行中のエージェントやシェルセッション——が一括で失われ、
-  /// 終了コードにも stdout にも stderr にも現れないので人間も自動化も気づけない）。`pane split` は
-  /// 指定と違うペインを分割する。`pane focus` は既定へ落ちないので破壊はしないが、「id が無い」と
+  /// tab コマンド（list / new 以外）は `--workspace` を取らないので、渡された `-` 始まりは必ず誤り。
+  /// 黙って捨てたときの現れ方はコマンドで違う。`tab close` は `ORBE_TAB` 既定へ落ち、
+  /// **指定と無関係な現タブ**——走行中のエージェントやシェルセッション——が exit 0 と
+  /// `closed tab N` を出しながら消える（終了コードにも stdout にも stderr にも現れないので人間も
+  /// 自動化も気づけない）。`tab focus` は既定へ落ちないので破壊はしないが、「id が無い」と
   /// いう**誤りの所在を取り違えさせる**文言で落ちる。全部を `unknown option:` へ揃える。
   ///
-  /// pane / tab の id は `IdGen` が 1 から採番するので常に正。よって位置引数の席にも例外を設けず、
+  /// tab の id は `IdGen` が 1 から採番するので常に正。よって位置引数の席にも例外を設けず、
   /// `config` 系（`config set font-size -1` の `-1` は値）と違って残余は先頭から検査する。
-  /// socket に触れる前に落ちることを `orbWithoutServer` で固定する——ORBE_PANE が居ても
+  /// socket に触れる前に落ちることを `orbWithoutServer` で固定する——ORBE_TAB が居ても
   /// 解決へ進まないのが要点で、サーバを立てて確かめると「消えなかった」ことしか見えない。
-  func testPaneAndTabCommandsRejectFlagLikeTokens() {
+  func testTabCommandsRejectFlagLikeTokens() {
     for args in [
-      ["pane", "close", "--workspace", "3"],
-      ["pane", "close", "--bogus"],
-      ["pane", "split", "--workspace=3"],
-      ["pane", "focus", "--workspace", "3"],
-      ["pane", "text", "--workspace", "3"],
-      ["pane", "send", "--text", "hi", "--bogus"],
-      ["pane", "key", "--key", "enter", "--workspace", "3"],
       ["tab", "close", "--workspace", "3"],
-      ["pane", "close", "5", "--workspce", "3"],  // 位置引数の後ろに落ちた綴り誤り
-      // wait と agent は pane ドメインの外だが、残余の検査は同じ規律で通る。
+      ["tab", "close", "--bogus"],
+      ["tab", "focus", "--workspace", "3"],
+      ["tab", "text", "--workspace", "3"],
+      ["tab", "send", "--text", "hi", "--bogus"],
+      ["tab", "key", "--key", "enter", "--workspace", "3"],
+      ["tab", "close", "5", "--workspce", "3"],  // 位置引数の後ろに落ちた綴り誤り
+      // wait と agent は tab ドメインの外だが、残余の検査は同じ規律で通る。
       ["wait", "--bogus"],
       ["wait", "--kind", "agent_state", "--workspace", "3"],
       ["agent", "list", "--bogus"],
     ] {
       failure(
-        ControlProcess.orbWithoutServer(args, env: ["ORBE_PANE": "1"]), code: 2,
+        ControlProcess.orbWithoutServer(args, env: ["ORBE_TAB": "1"]), code: 2,
         message: "unknown option:",
         "解釈されなかったフラグを捨てた `\(args.joined(separator: " "))`")
     }
@@ -120,7 +117,7 @@ extension OrbeCliProcessTests {
   /// 現れないうえ、同じ綴り誤りを `tab new` に渡すと exit 2 で弾かれる——同一フラグ・同一ヘルパで
   /// コマンドによって挙動が割れると、どちらが正しいのか利用者にも自動化にも決められない。
   ///
-  /// workspace 名も `<id|current>` もパスも `-` 始まりを取らないので、pane/tab と同じく先頭から検査する。
+  /// workspace 名も `<id|current>` もパスも `-` 始まりを取らないので、tab/tab と同じく先頭から検査する。
   func testWorkspaceCommandsRejectFlagLikeTokens() {
     for args in [
       ["ws", "list", "--workspace", "3"],
@@ -144,11 +141,11 @@ extension OrbeCliProcessTests {
   /// 壊れると何が起きるか: `orb tab new /repo` が**アクティブ WS の既定 cwd**にタブを開き、
   /// `orb ws new proj /repo` が**既定 root** の workspace を作る（rootPath はその WS の全タブの cwd と
   /// worktree の基点なので、以後そこで開くタブもエージェントも指定と違うディレクトリで走る）。
-  /// `orb pane list 2` は絞り込みが効かず全 WS のペインが出て、`orb pane close 5 6` は 6 に触れない。
+  /// `orb tab list 2` は絞り込みが効かず全 WS のタブが出て、`orb tab close 5 6` は 6 に触れない。
   /// いずれも exit 0 で、終了コードにも stdout にも stderr にも現れない。
   ///
   /// 23 サブコマンドを全て並べるのは、席の数が各コマンドの申告制だから——1 つ書き忘れても他が緑なら
-  /// 気づけない。`ORBE_PANE` を置くのは、pane/tab が既定へ逸れる前に落ちることを見るため。
+  /// 気づけない。`ORBE_TAB` を置くのは、tab/tab が既定へ逸れる前に落ちることを見るため。
   func testExcessPositionalsAreRejectedInsteadOfSilentlyDropped() {
     for args in [
       ["config", "list", "3"],
@@ -161,22 +158,20 @@ extension OrbeCliProcessTests {
       ["ws", "dir", "3", "/tmp/orbe-l4", "extra"],
       ["ws", "switch", "3", "4"],
       ["ws", "rm", "3", "4"],
-      ["pane", "list", "2"],
-      ["pane", "split", "5", "6"],
-      ["pane", "close", "5", "6"],
-      ["pane", "focus", "5", "6"],
+      ["tab", "list", "2"],
+      ["tab", "close", "5", "6"],
+      ["tab", "focus", "5", "6"],
       ["tab", "new", "/tmp/orbe-l4"],  // --dir の書き忘れ
-      ["tab", "close", "1", "2"],
-      ["pane", "text", "5", "6"],
-      ["pane", "send", "5", "6", "--text", "hi"],
-      ["pane", "key", "5", "6", "--key", "enter"],
+      ["tab", "text", "5", "6"],
+      ["tab", "send", "5", "6", "--text", "hi"],
+      ["tab", "key", "5", "6", "--key", "enter"],
       ["agent", "list", "extra"],
       ["agent", "spawn", "claude", "extra"],
       ["agent", "resume", "claude", "sess-1", "extra"],
       ["wait", "5", "6"],
     ] {
       failure(
-        ControlProcess.orbWithoutServer(args, env: ["ORBE_PANE": "1"]), code: 2,
+        ControlProcess.orbWithoutServer(args, env: ["ORBE_TAB": "1"]), code: 2,
         message: "unexpected argument:",
         "席から溢れた `\(args.joined(separator: " "))`")
     }
@@ -210,14 +205,14 @@ extension OrbeCliProcessTests {
       (["tab", "new", "--cmd", "  "], "--cmd requires a value"),
       (["ws", "new", "proj", "--dir", " "], "--dir requires a <path> value"),
       // 新しい値必須フラグも同じ 1 つのヘルパ（`takeOption`）の規律に乗る。
-      (["pane", "send", "5", "--text"], "--text requires a value"),
-      (["pane", "send", "5", "--text", "  "], "--text requires a value"),
-      (["pane", "key", "5", "--key"], "--key requires a <key> name"),
+      (["tab", "send", "5", "--text"], "--text requires a value"),
+      (["tab", "send", "5", "--text", "  "], "--text requires a value"),
+      (["tab", "key", "5", "--key"], "--key requires a <key> name"),
       (["agent", "spawn", "--dir"], "--dir requires a <path> value"),
       (["wait", "--kind"], "--kind requires a <kind>"),
       // `--workspace` の値の席も `takeOption` に載ったので、空白だけの値は「解決できない id」では
       // なく「値が空いている」として落ちる（どちらも exit 2 で、後者の方が誤りの所在に近い）。
-      (["pane", "list", "--workspace", "   "], "--workspace requires an <id>"),
+      (["tab", "list", "--workspace", "   "], "--workspace requires an <id>"),
       (["agent", "spawn", "--workspace"], "--workspace requires an <id>"),
     ] {
       failure(

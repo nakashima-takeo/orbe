@@ -24,7 +24,7 @@ import XCTest
 /// `resultReturning` に 1 行、宛先 ID を取るなら `testDestinationIdsReachTheirOwnDomainVerb` に
 /// 1 行。`wait_for_event` と `completion_*` は `testMethodNamesAreFixed` が個別に扱う。
 ///
-/// **担保外**: `get_pane_text` の `scrollback`（値が `SurfaceView` の libghostty 経路へ吸い込まれ、
+/// **担保外**: `get_tab_text` の `scrollback`（値が `SurfaceView` の libghostty 経路へ吸い込まれ、
 /// surface 無しでは真偽の差が観測できない）と、`completion_accept` の `advance` /
 /// `completion_update` の `buffer`・`cursor`（popup が生まれないと適用結果が出ず、無応答契約で
 /// wire 側の観測面がゼロ）。受け皿は `docs/testing/roadmap.md` のスライス 2（L4）とスライス 5（L2）。
@@ -37,14 +37,14 @@ extension ControlWireTests {
   func validRequests(_ fake: FakeControlTarget)
     -> [(method: String, params: [String: Any])]
   {
-    let pane = fake.paneId
+    let tab = fake.tabId
     return [
       ("list_workspaces", [:]),
-      ("list_panes", [:]),
+      ("list_tabs", [:]),
       ("list_agents", [:]),
-      ("get_pane_text", ["paneId": pane]),
-      ("send_text", ["paneId": pane, "text": "hello"]),
-      ("send_key", ["paneId": pane, "key": "ctrl+c"]),
+      ("get_tab_text", ["tabId": tab]),
+      ("send_text", ["tabId": tab, "text": "hello"]),
+      ("send_key", ["tabId": tab, "key": "ctrl+c"]),
       ("spawn", ["workspaceId": 3, "cwd": "/tmp/cwd", "command": "zsh -l"]),
       ("spawn_agent", ["command": "codex", "workspaceId": 3, "cwd": "/tmp/cwd"]),
       (
@@ -53,25 +53,23 @@ extension ControlWireTests {
       ),
       ("activate_workspace", ["workspaceId": 3]),
       // 待機を張るので、表駆動で必ず 1 行返るよう短い timeoutMs を添える。
-      ("prompt_agent", ["paneId": pane, "text": "hello", "timeoutMs": 10]),
+      ("prompt_agent", ["tabId": tab, "text": "hello", "timeoutMs": 10]),
       ("config_list", ["workspaceId": 3]),
       ("config_set", ["key": "font-size", "value": 14, "scope": "global", "workspaceId": 3]),
       ("create_workspace", ["name": "wsp", "rootPath": "/tmp/root"]),
       ("rename_workspace", ["workspaceId": 3, "name": "renamed"]),
       ("set_workspace_root", ["workspaceId": 3, "rootPath": "/tmp/root2"]),
       ("remove_workspace", ["workspaceId": 3]),
-      ("split_pane", ["paneId": pane, "direction": "right", "command": "vim"]),
-      ("close_pane", ["paneId": pane]),
-      ("focus_pane", ["paneId": pane]),
+      ("focus_tab", ["tabId": 8]),
       ("close_tab", ["tabId": 9]),
       (
         "report_agent",
         [
-          "paneId": pane, "agent": "claude", "state": "waiting",
+          "tabId": tab, "agent": "claude", "state": "waiting",
           "sessionId": "sess-9", "message": "続けますか", "messageSource": "tool",
         ]
       ),
-      ("completion_accept", ["paneId": pane]),
+      ("completion_accept", ["tabId": tab]),
     ]
   }
 
@@ -91,23 +89,20 @@ extension ControlWireTests {
   /// params の検証で弾く経路は `-32602`（この非対称は現状の契約そのもの）。
   var requiredParams: [RequiredParam] {
     [
-      RequiredParam(method: "get_pane_text", key: "paneId", code: -32004),
-      RequiredParam(method: "send_text", key: "paneId", code: -32004),
+      RequiredParam(method: "get_tab_text", key: "tabId", code: -32004),
+      RequiredParam(method: "send_text", key: "tabId", code: -32004),
       RequiredParam(method: "send_text", key: "text", code: -32602),
-      RequiredParam(method: "send_key", key: "paneId", code: -32004),
+      RequiredParam(method: "send_key", key: "tabId", code: -32004),
       RequiredParam(method: "send_key", key: "key", code: -32602),
       RequiredParam(method: "activate_workspace", key: "workspaceId", code: -32602),
-      RequiredParam(method: "prompt_agent", key: "paneId", code: -32602),
+      RequiredParam(method: "prompt_agent", key: "tabId", code: -32602),
       RequiredParam(method: "prompt_agent", key: "text", code: -32602),
       RequiredParam(method: "resume_agent", key: "command", code: -32602),
       RequiredParam(method: "resume_agent", key: "sessionId", code: -32602),
-      RequiredParam(method: "report_agent", key: "paneId", code: -32004),
+      RequiredParam(method: "report_agent", key: "tabId", code: -32004),
       RequiredParam(method: "report_agent", key: "agent", code: -32602),
       RequiredParam(method: "report_agent", key: "state", code: -32602),
-      RequiredParam(method: "split_pane", key: "paneId", code: -32602),
-      RequiredParam(method: "split_pane", key: "direction", code: -32602),
-      RequiredParam(method: "close_pane", key: "paneId", code: -32602),
-      RequiredParam(method: "focus_pane", key: "paneId", code: -32602),
+      RequiredParam(method: "focus_tab", key: "tabId", code: -32602),
       RequiredParam(method: "close_tab", key: "tabId", code: -32602),
       RequiredParam(method: "config_set", key: "key", code: -32602),
       RequiredParam(method: "config_set", key: "value", code: -32602),
@@ -118,7 +113,7 @@ extension ControlWireTests {
       RequiredParam(method: "set_workspace_root", key: "workspaceId", code: -32602),
       RequiredParam(method: "set_workspace_root", key: "rootPath", code: -32602),
       RequiredParam(method: "remove_workspace", key: "workspaceId", code: -32602),
-      RequiredParam(method: "completion_accept", key: "paneId", code: -32004),
+      RequiredParam(method: "completion_accept", key: "tabId", code: -32004),
     ]
   }
 
@@ -158,7 +153,7 @@ extension ControlWireTests {
   ///
   /// 型違いには**正しい値を隣の型へ移した値**を渡す（Int 期待なら数字文字列、String 期待なら
   /// 数値）。配列のような「どの型にもならない値」だけだと、キャストを片側へ緩める改変——例えば
-  /// CLI が全部文字列で送ってくるのに合わせて `paneId` に `Int(文字列)` を許す——が 1 本も
+  /// CLI が全部文字列で送ってくるのに合わせて `tabId` に `Int(文字列)` を許す——が 1 本も
   /// 落とさずに通る。spec の `-32602` は「欠落・型不一致・値域外」の 3 つを名指しており、
   /// ここが型不一致を受け持つ。
   func testWronglyTypedParamsAreRejectedLikeMissingOnes() {
@@ -183,30 +178,6 @@ extension ControlWireTests {
     }
   }
 
-  /// `split_pane` の `direction` が受理するのは `right` / `down` の 2 語だけ。
-  func testSplitPaneDirectionVocabularyIsFixed() {
-    let fake = FakeControlTarget()
-    let wire = startWire(target: fake)
-    var id = 0
-
-    for direction in ["right", "down"] {
-      id += 1
-      let response = wire.request(
-        id: id, method: "split_pane", params: ["paneId": fake.paneId, "direction": direction])
-      XCTAssertNil(response?["error"], "direction \(direction) は受理する")
-      XCTAssertEqual(fake.splits.last?.direction, direction, "受理した direction がそのまま target へ届く")
-    }
-
-    for direction in ["left", "up", "vertical", "RIGHT", ""] {
-      id += 1
-      XCTAssertEqual(
-        errorCode(
-          wire.request(
-            id: id, method: "split_pane", params: ["paneId": fake.paneId, "direction": direction])),
-        -32602, "direction \(direction) は値域外で -32602")
-    }
-  }
-
   /// `send_key` は文字列でも `ControlKey.parse` が解けない指定を値域外として弾く。
   /// 黙って無視して `{"ok":true}` を返すようになると、エージェントが送った enter が
   /// 実行されないまま成功と読まれる（`ControlKey.parse` 自体の語彙は L1 が持つ）。
@@ -220,7 +191,7 @@ extension ControlWireTests {
       id += 1
       XCTAssertEqual(
         errorCode(
-          wire.request(id: id, method: "send_key", params: ["paneId": fake.paneId, "key": spec])),
+          wire.request(id: id, method: "send_key", params: ["tabId": fake.tabId, "key": spec])),
         -32602, "解けないキー指定 \(spec) は -32602（無視して ok を返さない）")
     }
   }
@@ -251,12 +222,12 @@ extension ControlWireTests {
     _ = wire.request(
       id: 1, method: "report_agent",
       params: [
-        "paneId": fake.paneId, "agent": "claude", "state": "waiting",
+        "tabId": fake.tabId, "agent": "claude", "state": "waiting",
         "sessionId": "sess-9", "message": "続けますか", "messageSource": "tool",
       ])
 
     let reported = fake.reportedAgents.last
-    XCTAssertEqual(reported?.paneId, fake.paneId, "paneId が指すペインへ適用する")
+    XCTAssertEqual(reported?.tabId, fake.tabId, "tabId が指すタブへ適用する")
     XCTAssertEqual(reported?.agent, "claude", "agent が名前どおり届く")
     XCTAssertEqual(reported?.state, "waiting", "state が名前どおり届く")
     XCTAssertEqual(reported?.sessionId, "sess-9", "sessionId が名前どおり届く")
@@ -275,7 +246,7 @@ extension ControlWireTests {
     _ = wire.request(
       id: 1, method: "report_agent",
       params: [
-        "paneId": fake.paneId, "agent": "claude", "state": "done", "messageSource": "tool",
+        "tabId": fake.tabId, "agent": "claude", "state": "done", "messageSource": "tool",
       ])
 
     let reported = fake.reportedAgents.last
@@ -293,8 +264,8 @@ extension ControlWireTests {
       params: ["workspaceId": 3, "cwd": "/tmp/cwd", "command": "zsh -l"])
 
     XCTAssertEqual(
-      (response?["result"] as? [String: Any])?["paneId"] as? Int, fake.spawnedPaneId,
-      "戻りは新ペイン ID を paneId で返す")
+      (response?["result"] as? [String: Any])?["tabId"] as? Int, fake.spawnedTabId,
+      "戻りは新タブ ID を tabId で返す")
     let spawn = fake.spawns.last
     XCTAssertEqual(spawn?.workspaceId, 3, "workspaceId が名前どおり届く")
     XCTAssertEqual(spawn?.cwd, "/tmp/cwd", "cwd が名前どおり届く")
@@ -304,7 +275,7 @@ extension ControlWireTests {
   /// `spawn` が失敗（target が nil を返す）したら -32000。
   func testSpawnFailureIsCannotExecute() {
     let fake = FakeControlTarget()
-    fake.spawnedPaneId = nil
+    fake.spawnedTabId = nil
     let wire = startWire(target: fake)
 
     XCTAssertEqual(errorCode(wire.request(id: 1, method: "spawn")), -32000, "spawn 失敗は -32000")
@@ -319,19 +290,6 @@ extension ControlWireTests {
     XCTAssertEqual(
       errorCode(wire.request(id: 1, method: "activate_workspace", params: ["workspaceId": 77])),
       -32004, "未知 workspace は -32004")
-  }
-
-  /// `split_pane` の optional `command` が名前どおり target へ届く。
-  func testSplitPaneCommandReachesTarget() {
-    let fake = FakeControlTarget()
-    let wire = startWire(target: fake)
-
-    _ = wire.request(
-      id: 1, method: "split_pane",
-      params: ["paneId": fake.paneId, "direction": "down", "command": "htop"])
-
-    XCTAssertEqual(fake.splits.last?.command, "htop", "split_pane の command が名前どおり届く")
-    XCTAssertEqual(fake.splits.last?.paneId, fake.paneId, "分割元 paneId が名前どおり届く")
   }
 
   /// `config_set` / `config_list` の optional `workspaceId` が名前どおり target へ届く。
@@ -365,6 +323,6 @@ extension ControlWireTests {
     XCTAssertEqual(fake.createdWorkspaces.map(\.name), ["a", "b"], "name が名前どおり届く")
     XCTAssertEqual(
       fake.createdWorkspaces.map(\.rootPath), ["/tmp/r", nil],
-      "rootPath が名前どおり届き、省略は nil（アクティブペイン cwd 導出へ委ねる）")
+      "rootPath が名前どおり届き、省略は nil（アクティブタブ cwd 導出へ委ねる）")
   }
 }

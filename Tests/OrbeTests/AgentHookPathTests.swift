@@ -3,16 +3,16 @@ import XCTest
 
 @testable import Orbe
 
-/// エージェント hook の実経路を継ぎ目ごと 1 本で通す——ペインへ注入された env の**実値**で
+/// エージェント hook の実経路を継ぎ目ごと 1 本で通す——タブへ注入された env の**実値**で
 /// 同梱シムを実 `/bin/sh` から起こし、`orbe-report` が `report_agent` を組み立て、実
-/// `ControlServer` を通って発信元ペインの状態が変わるまで。
+/// `ControlServer` を通って発信元タブの状態が変わるまで。
 ///
 /// 区間ごとの検証は既に在る（シムのチャネルゲートは `AgentShimChannelGateTests`、stdin の解釈は
-/// `ReportLogicTests`、`report_agent` の wire は L3、ペイン状態の上書き規律は
+/// `ReportLogicTests`、`report_agent` の wire は L3、タブ状態の上書き規律は
 /// `WindowControllerReportAgentTests`）。残る穴は継ぎ目そのもので、注入された env が実際に
-/// シムと `orbe-report` を正しいペインへ導くかは、どの区間テストも見ていない。
+/// シムと `orbe-report` を正しいタブへ導くかは、どの区間テストも見ていない。
 ///
-/// 壊れると何が起きるか: エージェントの状態がペインに一切出なくなる。しかもどの実行体も
+/// 壊れると何が起きるか: エージェントの状態がタブに一切出なくなる。しかもどの実行体も
 /// エラーを出さない——シムは env が欠ければ黙って exit 0、`orbe-report` は接続できなくても exit 0。
 final class AgentHookPathTests: OrbeTestCase {
   /// リポジトリ実体のプラグインパッケージ。このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
@@ -37,7 +37,7 @@ final class AgentHookPathTests: OrbeTestCase {
     return hooks.appendingPathComponent("orbe-agent-status.sh")
   }
 
-  /// 同梱シムを実 `/bin/sh` で起こす。env はペインから受け取った実値そのままで、親からは継承しない。
+  /// 同梱シムを実 `/bin/sh` で起こす。env はタブから受け取った実値そのままで、親からは継承しない。
   @discardableResult
   private func runShim(
     _ shim: URL, env: [String: String], state: String, stdin: String,
@@ -51,27 +51,27 @@ final class AgentHookPathTests: OrbeTestCase {
     return outcome
   }
 
-  /// ペインの実 env を取る。`PATH` だけ明示で種を置く——`prependBundledBin` は空なら親プロセスの
+  /// タブの実 env を取る。`PATH` だけ明示で種を置く——`prependBundledBin` は空なら親プロセスの
   /// `PATH` を読むため、置かないと env に親の値が混ざる。
-  private func paneEnv(_ pane: SurfaceView) -> [String: String] {
+  private func tabEnv(_ tab: TerminalTab) -> [String: String] {
     var env = ["PATH": "/usr/bin:/bin"]
-    pane.injectRuntimeEnv(to: &env)
+    OrbeRuntimeEnv.inject(into: &env, tabId: tab.id)
     return env
   }
 
-  private func firstPane(_ control: ControlProcess) throws -> SurfaceView {
-    try XCTUnwrap(control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
+  private func firstTab(_ control: ControlProcess) throws -> TerminalTab {
+    try XCTUnwrap(control.target.current.tabs.first, "タブが無い")
   }
 
-  /// 注入 env → 同梱シム → `orbe-report` → `report_agent` → ペイン状態、が 1 本で通る。
-  func testInjectedEnvCarriesHookReportToItsOwnPane() throws {
+  /// 注入 env → 同梱シム → `orbe-report` → `report_agent` → タブ状態、が 1 本で通る。
+  func testInjectedEnvCarriesHookReportToItsOwnTab() throws {
     let control = try startControlProcess(workspaces: ["main"])
     let shim = try stagePlugin()
-    let pane = try firstPane(control)
-    let env = paneEnv(pane)
+    let tab = try firstTab(control)
+    let env = tabEnv(tab)
 
     // 継ぎ目の材料。ここが欠けた時点で以降は全部 no-op になるので、先に実値を固定する。
-    XCTAssertEqual(env["ORBE_PANE"], String(pane.id), "自ペイン id が報告元として注入される")
+    XCTAssertEqual(env["ORBE_TAB"], String(tab.id), "自タブ id が報告元として注入される")
     XCTAssertEqual(env["ORBE_SOCK"], ControlServer.shared.socketPath, "自インスタンスの socket が注入される")
     XCTAssertEqual(
       env["ORBE_REPORT_BIN"], BundledResources.root?.appendingPathComponent("bin/orbe-report").path,
@@ -81,22 +81,22 @@ final class AgentHookPathTests: OrbeTestCase {
     runShim(shim, env: env, state: "waiting", stdin: #"{"session_id":"s-1","message":"許可しますか"}"#)
 
     XCTAssertTrue(
-      waitUntil(5) { pane.agentState == "waiting" },
-      "hook の報告がペイン \(pane.id) に届かない（agentState=\(pane.agentState ?? "nil")）")
+      waitUntil(5) { tab.agentState == "waiting" },
+      "hook の報告がタブ \(tab.id) に届かない（agentState=\(tab.agentState ?? "nil")）")
     XCTAssertEqual(
-      pane.agentSlot.session?.sessionId, "s-1", "stdin の session_id が resume 鍵としてペインまで届く")
+      tab.agentSlot.session?.sessionId, "s-1", "stdin の session_id が resume 鍵としてタブまで届く")
   }
 
-  /// Orbe 外の端末（`ORBE_PANE` / `ORBE_SOCK` が無い）で走った hook はペインを一切動かさない。
+  /// Orbe 外の端末（`ORBE_TAB` / `ORBE_SOCK` が無い）で走った hook はタブを一切動かさない。
   /// hook は Orbe を知らないセッションでも走るため、ここが no-op でないと無関係な端末の活動が
-  /// ペインの状態として現れる。
-  func testHookOutsideOrbePaneLeavesPaneStateUntouched() throws {
+  /// タブの状態として現れる。
+  func testHookOutsideOrbeTabLeavesTabStateUntouched() throws {
     let control = try startControlProcess(workspaces: ["main"])
     let shim = try stagePlugin()
-    let pane = try firstPane(control)
-    let env = paneEnv(pane)
+    let tab = try firstTab(control)
+    let env = tabEnv(tab)
 
-    for dropped in ["ORBE_PANE", "ORBE_SOCK"] {
+    for dropped in ["ORBE_TAB", "ORBE_SOCK"] {
       var partial = env
       partial.removeValue(forKey: dropped)
       runShim(shim, env: partial, state: "working", stdin: "{}")
@@ -104,8 +104,8 @@ final class AgentHookPathTests: OrbeTestCase {
       // 経路なら socket への書き込みは済んでいる。残るのはサーバの受信と main hop だけなので、
       // 短い猶予で足りる（成功側の 5 秒は同じ区間に置いた余裕で、ここより長い必然は無い）。
       XCTAssertFalse(
-        waitUntil(0.5) { pane.agentState != nil },
-        "\(dropped) が無い呼び出しでペイン状態が動いた（agentState=\(pane.agentState ?? "nil")）")
+        waitUntil(0.5) { tab.agentState != nil },
+        "\(dropped) が無い呼び出しでタブ状態が動いた（agentState=\(tab.agentState ?? "nil")）")
     }
   }
 }

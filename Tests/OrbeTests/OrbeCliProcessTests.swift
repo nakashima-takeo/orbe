@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 実 `orb`（`orbe-cli`）を子プロセスで起こし、全 23 サブコマンドのうち 21 が実 `WindowController`
+/// 実 `orb`（`orbe-cli`）を子プロセスで起こし、全 22 サブコマンドのうち 20 が実 `WindowController`
 /// を 1 本のライフサイクルとして動かせることを固定する。残る `agent spawn` / `agent resume` は
 /// 検出の仕込み（偽実行体と `ShellPATH` の差し替え）が要るので `OrbeCliAgentProcessTests` が持つ。
 ///
@@ -14,7 +14,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか: CLI が組み立てる control メソッド名の綴りは、どのテストにも現れない。
 /// 片方だけ改名すれば `-32601` で全滅するが、それに気づく経路がこの 1 本しかない。
-/// workspace / pane の id は `IdGen` 採番で予測不能なので、必ず `--json` の出力から読む。
+/// workspace / tab の id は `IdGen` 採番で予測不能なので、必ず `--json` の出力から読む。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliProcessTests: OrbeTestCase {
@@ -100,7 +100,7 @@ final class OrbeCliProcessTests: OrbeTestCase {
     return scratchId
   }
 
-  /// 21 サブコマンドを 1 つの実 `WindowController` に対して順に叩く。
+  /// 20 サブコマンドを 1 つの実 `WindowController` に対して順に叩く。
   /// `ws rm` を最後に置くのは「最後の 1 つは削除不可（-32000）」を踏まないため。
   func testEverySubcommandDrivesOneLifecycle() throws {
     let control = try startControlProcess(workspaces: ["main"])
@@ -122,90 +122,88 @@ final class OrbeCliProcessTests: OrbeTestCase {
       "agent list: agents を返さない（検出ゼロは空配列で成功）")
 
     // --- wait（1）: 何も起きなければ時間切れ（exit 124）。イベントで起きる側は専用ファイルが持つ。
-    // 宛先に実在しないペインを置くのは、fixture のシェルが OSC 7 で撃つ `pwd` で起きないため。
+    // 宛先に実在しないタブを置くのは、fixture のシェルが OSC 7 で撃つ `pwd` で起きないため。
     let waited = control.orb(["wait", "999999", "--timeout-ms", "200"])
     XCTAssertEqual(waited.status, 124, "wait: 時間切れは exit 124: \(waited.stderr)")
 
-    // --- pane / tab（9）: pane list → tab new → pane split → pane text/send/key
-    //     → pane focus → pane close → tab close
-    let panesBefore = try XCTUnwrap(
-      control.orbJSON(["pane", "list"])["panes"] as? [[String: Any]], "pane list: panes を返さない")
-    XCTAssertFalse(panesBefore.isEmpty, "pane list: アクティブ WS のペインが 1 つも出ない")
+    // --- tab（7）: tab list → tab new → tab text/send/key → tab focus → tab close
+    let tabsBefore = try XCTUnwrap(
+      control.orbJSON(["tab", "list"])["tabs"] as? [[String: Any]], "tab list: tabs を返さない")
+    XCTAssertFalse(tabsBefore.isEmpty, "tab list: アクティブ WS のタブが 1 つも出ない")
 
     let opened = control.orbJSON(["tab", "new", "--dir", "/tmp"])
-    let openedPane = try XCTUnwrap(opened["paneId"] as? Int, "tab new: paneId を返さない")
-    let split = control.orbJSON(["pane", "split", "\(openedPane)"])
-    let splitPane = try XCTUnwrap(split["paneId"] as? Int, "pane split: 新ペイン id を返さない")
+    let openedTab = try XCTUnwrap(opened["tabId"] as? Int, "tab new: tabId を返さない")
+    let second = control.orbJSON(["tab", "new", "--dir", "/tmp"])
+    let secondTab = try XCTUnwrap(second["tabId"] as? Int, "tab new: 2 枚目の tabId を返さない")
 
-    // pane text は生テキストを返す（`--json` なら text キー）。中身はシェルの rc 次第なので
+    // tab text は生テキストを返す（`--json` なら text キー）。中身はシェルの rc 次第なので
     // ここで見るのは「読める形で返る」ことだけ——実際の描画内容は agent / mcp のテストが見る。
     XCTAssertNotNil(
-      control.orbJSON(["pane", "text", "\(openedPane)"])["text"] as? String,
-      "pane text: text を返さない")
-    step(control, ["pane", "send", "\(openedPane)", "--text", "echo hi"], expect: "sent to pane")
+      control.orbJSON(["tab", "text", "\(openedTab)"])["text"] as? String,
+      "tab text: text を返さない")
+    step(control, ["tab", "send", "\(openedTab)", "--text", "echo hi"], expect: "sent to tab")
     step(
-      control, ["pane", "key", "\(openedPane)", "--key", "enter"],
-      expect: "sent key enter to pane")
+      control, ["tab", "key", "\(openedTab)", "--key", "enter"],
+      expect: "sent key enter to tab")
 
-    step(control, ["pane", "focus", "\(splitPane)"], expect: "focused pane \(splitPane)")
-    step(control, ["pane", "close", "\(splitPane)"], expect: "closed pane \(splitPane)")
-    // tab close は位置引数を省くと ORBE_PANE の所属タブを list_panes 走査で解決する。
+    step(control, ["tab", "focus", "\(openedTab)"], expect: "focused tab \(openedTab)")
+    step(control, ["tab", "close", "\(secondTab)"], expect: "closed tab \(secondTab)")
+    // tab close は位置引数を省くと ORBE_TAB を宛先にする。
     step(
-      control, ["tab", "close"], expect: "closed tab",
-      env: ["ORBE_PANE": "\(openedPane)"])
+      control, ["tab", "close"], expect: "closed tab \(openedTab)",
+      env: ["ORBE_TAB": "\(openedTab)"])
 
-    let panesAfter = try XCTUnwrap(control.orbJSON(["pane", "list"])["panes"] as? [[String: Any]])
+    let tabsAfter = try XCTUnwrap(control.orbJSON(["tab", "list"])["tabs"] as? [[String: Any]])
     XCTAssertFalse(
-      panesAfter.contains { $0["paneId"] as? Int == openedPane },
-      "tab close: 開いたタブのペインが消える")
+      tabsAfter.contains { $0["tabId"] as? Int == openedTab || $0["tabId"] as? Int == secondTab },
+      "tab close: 開いたタブが消える")
 
-    // --- ws rm（21 本目）
+    // --- ws rm（20 本目）
     step(control, ["ws", "rm", "\(scratchId)"], expect: "removed workspace \(scratchId)")
     XCTAssertFalse(
       try workspaceRows(control).contains { $0["id"] as? Int == scratchId },
       "ws rm: 削除した WS が一覧から消える")
   }
 
-  /// ペインのシェルで bare `orb` が**同梱** CLI へ解決し、走った先がこのインスタンスの自ペインになる。
+  /// タブのシェルで bare `orb` が**同梱** CLI へ解決し、走った先がこのインスタンスの自タブになる。
   ///
-  /// 2 つを別々に測る。前半は `PATH` 前置そのもの——ペインの実 env で `command -v orb` を引き、
-  /// 同梱 `bin/orb` に解決することを見る。ペイン内の効果だけでは前置は測れない: 開発機の PATH には
-  /// 別インスタンスの `orb` が居ることがあり、しかもペインは `ORBE_STATE_DIR` を継承するので、
+  /// 2 つを別々に測る。前半は `PATH` 前置そのもの——タブの実 env で `command -v orb` を引き、
+  /// 同梱 `bin/orb` に解決することを見る。タブ内の効果だけでは前置は測れない: 開発機の PATH には
+  /// 別インスタンスの `orb` が居ることがあり、しかもタブは `ORBE_STATE_DIR` を継承するので、
   /// **どの** `orb` が走ってもこのインスタンスの socket へ届いて後半が通ってしまう。
   ///
-  /// 後半は注入された `ORBE_PANE` と socket 到達——`pane split` は位置引数を省くと `ORBE_PANE` を
-  /// 宛先にするので、ペインが 2 枚になったこと自体がその 2 つを同時に示す。観測をレイアウトの実変化で
-  /// 取るのは、ペインのテキストがプロンプトのテーマや rc に依るため。
-  func testBareOrbResolvesToBundledCliInsidePane() throws {
+  /// 後半は socket 到達——`orb tab new` がこのインスタンスへ届けば、タブが 2 枚になったこと自体が
+  /// それを示す。観測をタブ集合の実変化で取るのは、タブのテキストがプロンプトのテーマや rc に依るため。
+  func testBareOrbResolvesToBundledCliInsideTab() throws {
     let control = try startControlProcess(workspaces: ["main"])
     let tab = try XCTUnwrap(control.target.current.tabs.first, "タブが無い")
-    let pane = try XCTUnwrap(tab.controlAllPanes().first, "ペインが無い")
-    XCTAssertEqual(tab.controlAllPanes().count, 1, "前提: 分割前は 1 ペイン")
+    let surface = tab.surface
+    XCTAssertEqual(control.target.current.tabs.count, 1, "前提: 1 タブ")
 
     // PATH 前置の解決先そのもの。`PATH` に種を置くのは、前置が空なら親プロセスの PATH を読むため。
     var env = ["PATH": "/usr/bin:/bin"]
-    pane.injectRuntimeEnv(to: &env)
+    OrbeRuntimeEnv.inject(into: &env, tabId: tab.id)
     let resolved = ControlProcess.run(
       URL(fileURLWithPath: "/bin/sh"), ["-c", "command -v orb"], env: env)
     let bundled = try XCTUnwrap(BundledResources.root, "同梱物がステージされていない")
       .appendingPathComponent("bin/orb").path
     XCTAssertEqual(
       resolved.stdout.trimmingCharacters(in: .whitespacesAndNewlines), bundled,
-      "ペインの PATH 先頭が同梱 orb へ解決しない（前置が外れると別インスタンスの orb に落ちる）")
+      "タブの PATH 先頭が同梱 orb へ解決しない（前置が外れると別インスタンスの orb に落ちる）")
 
     // シェルが rc を読み終える前に送ると tty の type-ahead に賭けることになり、失われた入力は
     // `controlSendText` の無言 no-op として誰も報告しない。プロンプトが描かれてから送る。
     XCTAssertTrue(
-      waitUntil(ControlProcess.paneSettleTimeout) {
-        !(pane.controlReadText(scrollback: false) ?? "")
+      waitUntil(ControlProcess.tabSettleTimeout) {
+        !(surface.controlReadText(scrollback: false) ?? "")
           .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       }, "シェルのプロンプトが描かれない（この後の入力は捨てられうる）")
 
-    pane.controlSendText("orb pane split")
-    pane.controlSendKey(try XCTUnwrap(ControlKey.parse("enter")))
+    surface.controlSendText("orb tab new")
+    surface.controlSendKey(try XCTUnwrap(ControlKey.parse("enter")))
 
     XCTAssertTrue(
-      waitUntil(ControlProcess.paneSettleTimeout) { tab.controlAllPanes().count == 2 },
-      "bare `orb` がペイン内で解決していない: \(pane.controlReadText(scrollback: true) ?? "")")
+      waitUntil(ControlProcess.tabSettleTimeout) { control.target.current.tabs.count == 2 },
+      "bare `orb` がタブ内で解決していない: \(surface.controlReadText(scrollback: true) ?? "")")
   }
 }

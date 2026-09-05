@@ -14,11 +14,11 @@ final class WorkspaceMRUPersistenceTests: OrbeTestCase {
       workspaces: [
         WorkspaceState(
           name: "recent", rootPath: "/", activeTab: 0,
-          tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)],
+          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)],
           lastUsedAt: stamp),
         WorkspaceState(
           name: "never", rootPath: "/", activeTab: 0,
-          tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)],
+          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)],
           lastUsedAt: nil),
       ])
     WorkspacePersistence.save(original)

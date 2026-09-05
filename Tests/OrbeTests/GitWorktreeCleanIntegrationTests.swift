@@ -152,7 +152,7 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
     XCTAssertTrue(git(["commit", "-qm", "c1"]).isSuccess)
     let probed = git(["rev-parse", "HEAD"]).stdoutText.trimmingCharacters(
       in: .whitespacesAndNewlines)
-    // 分類の後にコミットが載る（別のペイン・別のツールから）。
+    // 分類の後にコミットが載る（別のタブ・別のツールから）。
     try write("c.txt", "1")
     XCTAssertTrue(git(["add", "-A"]).isSuccess)
     XCTAssertTrue(git(["commit", "-qm", "c2"]).isSuccess)

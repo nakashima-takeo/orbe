@@ -7,9 +7,7 @@ import XCTest
 final class WindowControllerActivationLifecycleTests: OrbeTestCase {
   private func restoredAgentTab(_ id: String) -> TabState {
     TabState(
-      tree: .leaf(
-        cwd: nil, agent: AgentSession(command: "unknown", sessionId: id)),
-      explicitTitle: nil)
+      cwd: "/tmp", agent: AgentSession(command: "unknown", sessionId: id), explicitTitle: nil)
   }
 
   private func save(activeWorkspace: Int, workspaces: [WorkspaceState]) {
@@ -74,7 +72,7 @@ final class WindowControllerActivationLifecycleTests: OrbeTestCase {
           tabs: [restoredAgentTab("a"), restoredAgentTab("b"), restoredAgentTab("c")]),
         WorkspaceState(
           name: "new", rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)]),
+          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)]),
       ])
     let wc = WindowController()
     let old = wc.workspaces[0]

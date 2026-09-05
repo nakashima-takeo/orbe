@@ -37,7 +37,7 @@ final class AppShellFocusTests: OrbeTestCase {
   func testNoOverlayIsNoOp() {
     let model = makeModel()
     model.overlay = .none
-    // .none（端末）は host（focusActivePane）が担うため、ここでは何もしない（クラッシュしない）。
+    // .none（端末）は host（focusActiveTab）が担うため、ここでは何もしない（クラッシュしない）。
     model.focusCurrentOverlayField()
   }
 

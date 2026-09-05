@@ -15,8 +15,8 @@ import XCTest
 /// 子プロセスがサーバの応答を待ち・サーバが main を待つ相互デッドロックになる。`run` は終了を
 /// runloop を回しながら待つ。テスト本体で生 `Process` を組まないこと。
 ///
-/// **子プロセスの env は明示辞書のみ**（親から継承しない）。`swift test` を Orbe のペインから走らせると
-/// 親に開発者の実 `ORBE_SOCK` / `ORBE_PANE` / `ORBE_REPORT_BIN` が居る。`orbe-report` は `ORBE_SOCK` を
+/// **子プロセスの env は明示辞書のみ**（親から継承しない）。`swift test` を Orbe のタブから走らせると
+/// 親に開発者の実 `ORBE_SOCK` / `ORBE_TAB` / `ORBE_REPORT_BIN` が居る。`orbe-report` は `ORBE_SOCK` を
 /// 直読みする（`ORBE_STATE_DIR` を見ない）ので、継承すると**テストが開発者の実 Orbe へ状態報告を飛ばす**。
 ///
 /// これが壊れると、実行体をまたいだ導通——引数解釈・終了コード・stdout・組み立てる JSON-RPC・
@@ -24,9 +24,9 @@ import XCTest
 final class ControlProcess {
   /// 子プロセスの終了を待つ上限。**実時間の検証ではない**——進まなくなったら諦めるための上限。
   static let processTimeout: TimeInterval = 20
-  /// 実ペインへ送った入力が画面へ反映されるまでの上限。ペインの spawn ＋ ログインシェルの起動 ＋
+  /// 実タブへ送った入力が画面へ反映されるまでの上限。タブの spawn ＋ ログインシェルの起動 ＋
   /// 描画までを含むので `processTimeout` と別に持つ。これも実時間の検証ではない。
-  static let paneSettleTimeout: TimeInterval = 15
+  static let tabSettleTimeout: TimeInterval = 15
   /// runloop を 1 回まわす刻み。control queue と main hop の両方をここで進ませる。
   private static let stepSeconds: TimeInterval = 0.01
 
@@ -47,8 +47,8 @@ final class ControlProcess {
 
   /// `.app` 同梱物のレイアウトを `BundledResources.root`（＝ハーネスが配る `caseDir/resources/`）へ組む。
   ///
-  /// **`WindowController()` より前に呼ぶ**——`injectRuntimeEnv` はペイン生成の時点で
-  /// `reportBinaryPath` / `bundledBinDir` を読むため、後から置いてもペインに注入済みの env には効かない。
+  /// **`WindowController()` より前に呼ぶ**——`injectRuntimeEnv` はタブ生成の時点で
+  /// `reportBinaryPath` / `bundledBinDir` を読むため、後から置いてもタブに注入済みの env には効かない。
   /// 置くのは `bin/` だけで、`completion-engine.js` も `zsh/` も置かない（不在時の graceful degradation を
   /// 測る既存テストの前提を壊さない）。root は caseDir 配下なので、組んだ中身は `endCase` の削除に乗る。
   @discardableResult
@@ -207,7 +207,7 @@ final class ControlProcess {
   }
 
   /// 同梱名の `orb`（実体は `orbe-cli`）を隔離インスタンスへ向けて起こす。
-  /// `stdin` を渡すと起動前に書いて閉じる（`orb pane send --stdin`）。渡さなければ子の標準入力は
+  /// `stdin` を渡すと起動前に書いて閉じる（`orb tab send --stdin`）。渡さなければ子の標準入力は
   /// `/dev/null`——`--stdin` 無しの経路が標準入力に触れたら即 EOF になり、ハングせずに落ちる。
   /// 起動**前**に書くので読み手はまだ居ない。pipe 容量（macOS で約 64KB）を超える `stdin` は
   /// そこで詰まり、`processTimeout` にも到達しないまま固まる——渡すのは小さな入力だけにすること。
@@ -221,7 +221,7 @@ final class ControlProcess {
       line: line)
   }
 
-  /// `orb <args> --json` の stdout を JSON オブジェクトとして読む。workspace / pane の id は
+  /// `orb <args> --json` の stdout を JSON オブジェクトとして読む。workspace / tab の id は
   /// `IdGen` 採番で予測不能なので、テストは必ずこの出力から読む（直書きしない）。
   func orbJSON(
     _ args: [String], env extra: [String: String] = [:],
@@ -338,7 +338,7 @@ extension OrbeTestCase {
       workspaces: names.map {
         WorkspaceState(
           name: $0, rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)])
+          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)])
       })
     try JSONEncoder().encode(fixture).write(to: workspacesFile())
     let control = ControlProcess(target: WindowController())

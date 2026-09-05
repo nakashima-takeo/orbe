@@ -5,18 +5,18 @@ import XCTest
 
 /// `orb agent`（list / spawn / resume）を実バイナリ × 実 `WindowController` で固定する。
 ///
-/// このファイルの合否ゲートは 2 つ。ひとつは「**本当に起動した**」——起動マーカーが実ペインの
+/// このファイルの合否ゲートは 2 つ。ひとつは「**本当に起動した**」——起動マーカーが実タブの
 /// 画面に現れること。もうひとつは「**背景 workspace を指定しても手元の画面が飛ばない**」
-/// ——アクティブ workspace が動かないまま、返った paneId が読めて入力も届くこと。後者は
+/// ——アクティブ workspace が動かないまま、返った tabId が読めて入力も届くこと。後者は
 /// 「作ったタブの surface を前面化せずに起こす」という設計が実際に成立するかを測る唯一の場所で、
-/// 成立していなければ `orb agent spawn --workspace <背景>` は「paneId は返るが画面が読めず入力も
-/// 届かない paneId」を返す罠になる。
+/// 成立していなければ `orb agent spawn --workspace <背景>` は「tabId は返るが画面が読めず入力も
+/// 届かない tabId」を返す罠になる。
 ///
 /// 検出はマシン依存なので、**必ず偽の実行体と `ShellPATH` の差し替えで固定する**（`FakeAgentStaging`。
 /// 開発者の Mac には本物の claude / codex が居る）。assert は仕込んだ `codex` だけを見て、素の検出結果には
 /// 依らない。ready 待ち（idle を報告する偽 claude）は `OrbeCliAgentPromptProcessTests` が持つ。
 ///
-/// 重要: 実 `NSWindow` に `SurfaceView` を接続し、実ペインでシェルを走らせる（GhosttyKit 必須）。
+/// 重要: 実 `NSWindow` に `SurfaceView` を接続し、実タブでシェルを走らせる（GhosttyKit 必須）。
 final class OrbeCliAgentProcessTests: OrbeTestCase {
   /// `orb agent list` が検出済み agent を command＋絶対 path で出す。
   func testAgentListReportsDetectedAgentWithResolvedPath() throws {
@@ -38,7 +38,7 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
   }
 
   /// `orb agent spawn <agent>` がアクティブ workspace の新タブでエージェントを**実際に起動する**。
-  /// 戻り値の 4 つ（paneId / tabId / workspaceId / agent）が揃うことも同時に見る。
+  /// 戻り値の 3 つ（tabId / workspaceId / agent）が揃うことも同時に見る。
   func testAgentSpawnLaunchesTheAgentInANewTab() throws {
     let fake = try stageFakeAgent("codex")
     let control = try startControlProcess(workspaces: ["main"])
@@ -47,13 +47,12 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     // 「新タブ」を測るには spawn 前の tab 集合が要る。tabId の非 nil だけを見ると、既存タブの
     // 使い回しや split への化けを素通しする（開くのは常に新しいタブ、が Orbe の看板の振る舞い）。
     let tabsBefore = Set(
-      try XCTUnwrap(control.orbJSON(["pane", "list"])["panes"] as? [[String: Any]])
+      try XCTUnwrap(control.orbJSON(["tab", "list"])["tabs"] as? [[String: Any]])
         .compactMap { $0["tabId"] as? Int })
 
     let spawned = control.orbJSON(["agent", "spawn", "codex"])
-    let pane = try XCTUnwrap(spawned["paneId"] as? Int, "spawn_agent が paneId を返さない")
-    let tabId = try XCTUnwrap(spawned["tabId"] as? Int, "spawn_agent は tabId も返す")
-    XCTAssertFalse(tabsBefore.contains(tabId), "既存タブを使い回さず新タブに生える")
+    let tab = try XCTUnwrap(spawned["tabId"] as? Int, "spawn_agent が tabId を返さない")
+    XCTAssertFalse(tabsBefore.contains(tab), "既存タブを使い回さず新タブに生える")
     let workspaceId = try XCTUnwrap(spawned["workspaceId"] as? Int, "spawn_agent は workspaceId も返す")
     let agent = try XCTUnwrap(spawned["agent"] as? [String: Any], "spawn_agent は agent を返す")
     XCTAssertEqual(agent["command"] as? String, "codex")
@@ -62,11 +61,11 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     XCTAssertEqual(spawned["ready"] as? Bool, false, "codex は idle を報告できないので待たず ready:false")
     XCTAssertNil(spawned["agentSessionId"], "ready:false に agentSessionId は無い")
 
-    waitForPaneText(control, pane: pane, contains: fake.marker)
+    waitForTabText(control, tab: tab, contains: fake.marker)
 
-    let panes = try XCTUnwrap(control.orbJSON(["pane", "list"])["panes"] as? [[String: Any]])
+    let tabs = try XCTUnwrap(control.orbJSON(["tab", "list"])["tabs"] as? [[String: Any]])
     XCTAssertEqual(
-      panes.first { $0["paneId"] as? Int == pane }?["workspaceId"] as? Int, workspaceId,
+      tabs.first { $0["tabId"] as? Int == tab }?["workspaceId"] as? Int, workspaceId,
       "返った workspaceId は実際の所属 workspace")
   }
 
@@ -88,8 +87,8 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     XCTAssertEqual(
       (spawned["agent"] as? [String: Any])?["command"] as? String, "codex",
       "省略時は対象 WS の実効 default-agent が起きる")
-    waitForPaneText(
-      control, pane: try XCTUnwrap(spawned["paneId"] as? Int), contains: fake.marker)
+    waitForTabText(
+      control, tab: try XCTUnwrap(spawned["tabId"] as? Int), contains: fake.marker)
   }
 
   /// 解くのは **対象** workspace の実効設定で、アクティブ WS のではない。ここがこの API と GUI の
@@ -117,15 +116,15 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     XCTAssertEqual(
       (spawned["agent"] as? [String: Any])?["command"] as? String, "codex",
       "アクティブ WS の default-agent（claude）ではなく対象 WS の設定で解く")
-    waitForPaneText(
-      control, pane: try XCTUnwrap(spawned["paneId"] as? Int), contains: codex.marker)
+    waitForTabText(
+      control, tab: try XCTUnwrap(spawned["tabId"] as? Int), contains: codex.marker)
   }
 
-  /// **背景 workspace への spawn は手元の画面を奪わない。** そのうえで返った paneId は生きている。
+  /// **背景 workspace への spawn は手元の画面を奪わない。** そのうえで返った tabId は生きている。
   ///
   /// (a) アクティブ workspace が変わらない、(b) 画面が読める＝surface が起きている、
   /// (c) 入力が本文もキーも届く、(d) surface が実サイズで生まれている。4 つが揃って初めて「前面化せずに
-  /// mount した」と言える。どれか 1 つでも欠けると、`--workspace <背景>` は使えない paneId を
+  /// mount した」と言える。どれか 1 つでも欠けると、`--workspace <背景>` は使えない tabId を
   /// 返すだけの罠になる——(d) が欠けた場合だけは静かで、返る画面の折り返し幅だけが
   /// libghostty 既定サイズのまま狂う（その workspace を前面化するまで直らない）。
   func testAgentSpawnIntoBackgroundWorkspaceKeepsTheForegroundAndStaysUsable() throws {
@@ -141,7 +140,7 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
 
     let spawned = control.orbJSON(
       ["agent", "spawn", "codex", "--workspace", "\(backgroundId)"])
-    let pane = try XCTUnwrap(spawned["paneId"] as? Int, "背景 WS への spawn が paneId を返さない")
+    let tab = try XCTUnwrap(spawned["tabId"] as? Int, "背景 WS への spawn が tabId を返さない")
     XCTAssertEqual(
       spawned["workspaceId"] as? Int, backgroundId, "指定した背景 WS に生える")
 
@@ -157,32 +156,32 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
       "新規タブの off-screen materialize は workspace の現在状態に反映する")
 
     // (b) 背景でも surface が生きて描いている。
-    waitForPaneText(control, pane: pane, contains: fake.marker)
+    waitForTabText(control, tab: tab, contains: fake.marker)
 
-    // (c) 入力も届く。`pane send` と `pane key` の両方を通す——送るのが本文だけなら、画面に
-    // 現れた probe は tty のエコーかもしれず、ペインの中のプロセスが受け取った証拠にならない。
+    // (c) 入力も届く。`tab send` と `tab key` の両方を通す——送るのが本文だけなら、画面に
+    // 現れた probe は tty のエコーかもしれず、タブの中のプロセスが受け取った証拠にならない。
     // 偽 agent は `cat` で、行が完成する（＝enter が届く）まで 1 バイトも返さないので、probe が
     // **2 回**現れることが enter の到達そのものを指す（エコー 1 回 ＋ `cat` の反響 1 回）。
     let probe = "PING_" + String(format: "%08x", UInt32.random(in: 0...UInt32.max))
-    let sent = control.orb(["pane", "send", "\(pane)", "--text", probe])
-    XCTAssertEqual(sent.status, 0, "背景ペインへの send_text が失敗した: \(sent.stderr)")
-    waitForPaneText(control, pane: pane, contains: probe)
-    let pressed = control.orb(["pane", "key", "\(pane)", "--key", "enter"])
-    XCTAssertEqual(pressed.status, 0, "背景ペインへの send_key が失敗した: \(pressed.stderr)")
-    waitForPaneText(control, pane: pane, contains: probe, times: 2)
+    let sent = control.orb(["tab", "send", "\(tab)", "--text", probe])
+    XCTAssertEqual(sent.status, 0, "背景タブへの send_text が失敗した: \(sent.stderr)")
+    waitForTabText(control, tab: tab, contains: probe)
+    let pressed = control.orb(["tab", "key", "\(tab)", "--key", "enter"])
+    XCTAssertEqual(pressed.status, 0, "背景タブへの send_key が失敗した: \(pressed.stderr)")
+    waitForTabText(control, tab: tab, contains: probe, times: 2)
 
     // (d) surface は実サイズで生まれている。葉のサイズを配るのは window の display サイクルで
     // 走る `SurfaceScrollView.layout()` だけなので、同じ turn で detach する起こし方は
     // レイアウトを同期で確定させない限り 0 サイズのまま surface を作ってしまう。
     let view = try XCTUnwrap(
-      control.target.controlResolvePane(pane), "返った paneId がペインに解決できない")
+      control.target.controlResolveTab(tab)?.view, "返った tabId がタブに解決できない")
     // 相対比較なので、先に基準側が非ゼロであることを言う——0 同士の一致は、まさにここで
     // 検出したい失敗（ゼロ面積で生まれた surface）と区別がつかない。
     XCTAssertGreaterThan(
       control.target.model.content.bounds.width, 0, "前提: content が実サイズを持つ")
     XCTAssertEqual(
       view.bounds.size, control.target.model.content.bounds.size,
-      "背景 WS のペインが実サイズで起きていない（pty が libghostty 既定サイズのまま残る）")
+      "背景 WS のタブが実サイズで起きていない（pty が libghostty 既定サイズのまま残る）")
   }
 
   /// `orb agent resume` が resume 形の起動コマンド（`codex resume <id>`）で起こす。
@@ -193,11 +192,11 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
 
     let sessionId = UUID().uuidString
     let resumed = control.orbJSON(["agent", "resume", "codex", sessionId])
-    let pane = try XCTUnwrap(resumed["paneId"] as? Int, "resume_agent が paneId を返さない")
+    let tab = try XCTUnwrap(resumed["tabId"] as? Int, "resume_agent が tabId を返さない")
     XCTAssertEqual((resumed["agent"] as? [String: Any])?["command"] as? String, "codex")
     XCTAssertNil(resumed["sessionId"], "渡した sessionId を反響しない")
 
-    let text = waitForPaneText(control, pane: pane, contains: fake.marker)
+    let text = waitForTabText(control, tab: tab, contains: fake.marker)
     XCTAssertTrue(
       text.contains("resume \(sessionId)"),
       "resume の引数が agent へ渡っていない（素の起動に化けている）: \(text)")
@@ -238,8 +237,8 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     waitForDetection(control, "codex")
 
     let spawned = control.mcpJSON("spawn_agent", ["command": "codex"])
-    let pane = try XCTUnwrap(spawned["paneId"] as? Int, "MCP 越しの spawn_agent が paneId を返さない")
+    let tab = try XCTUnwrap(spawned["tabId"] as? Int, "MCP 越しの spawn_agent が tabId を返さない")
     XCTAssertEqual((spawned["agent"] as? [String: Any])?["path"] as? String, fake.path)
-    waitForPaneText(control, pane: pane, contains: fake.marker)
+    waitForTabText(control, tab: tab, contains: fake.marker)
   }
 }

@@ -4,7 +4,7 @@ import XCTest
 
 @testable import Orbe
 
-/// `orb` の契約——終了コード・`--json` の出力先・文脈解決（`ORBE_PANE` / `current`）・
+/// `orb` の契約——終了コード・`--json` の出力先・文脈解決（`ORBE_TAB` / `current`）・
 /// `--workspace` の意味論——を型ごとの代表で固定する。ライフサイクル 1 本（`OrbeCliProcessTests`）が
 /// 「全サブコマンドが通る」ことを見るのに対し、こちらは「破れ方」を見る。
 ///
@@ -13,7 +13,7 @@ import XCTest
 /// `--json` の出力先が stdout から逸れれば機械可読という前提ごと壊れる。`--workspace` が値を
 /// 黙って捨てれば、指定したのと**違う** workspace の設定が書き換わる（非破壊な誤りではない）。
 ///
-/// `--workspace` の意味論は config 系（3 態）と pane/tab（`<id>` 必須）で異なり、
+/// `--workspace` の意味論は config 系（3 態）と tab/tab（`<id>` 必須）で異なり、
 /// `docs/spec/control/cli.md` はこれを書き分けている。表面的な一貫性のために潰さない。
 extension OrbeCliProcessTests {
   /// arrange の書き込みを叩き、失敗したら stderr ごと理由を出す（素の status 比較だと
@@ -44,16 +44,16 @@ extension OrbeCliProcessTests {
       ControlProcess.orbWithoutServer(["config", "get"]), code: 2,
       message: "config get requires <key>", "引数不足")
     failure(
-      ControlProcess.orbWithoutServer(["pane", "close", "abc"]), code: 2,
-      message: "invalid pane id: abc", "非数値 id")
+      ControlProcess.orbWithoutServer(["tab", "close", "abc"]), code: 2,
+      message: "invalid tab id: abc", "非数値 id")
     failure(
-      ControlProcess.orbWithoutServer(["pane", "close"]), code: 2,
-      message: "no pane in context", "ORBE_PANE 無しの pane 対象欠如")
+      ControlProcess.orbWithoutServer(["tab", "close"]), code: 2,
+      message: "no tab in context", "ORBE_TAB 無しの tab 対象欠如")
     // 値の席が空いた形（`--key` はあるが値が無い）は別分岐。ここはフラグごと落ちた形を見る
     // ——通すと空 key を control へ送って exit 1 に化け、usage エラーと RPC エラーが混ざる。
     failure(
-      ControlProcess.orbWithoutServer(["pane", "key", "5"]), code: 2,
-      message: "pane key requires --key <key>", "--key 自体の欠如")
+      ControlProcess.orbWithoutServer(["tab", "key", "5"]), code: 2,
+      message: "tab key requires --key <key>", "--key 自体の欠如")
     // 落とすと「再開したつもりが素の spawn」になるので、引数不足は socket の手前で止める。
     failure(
       ControlProcess.orbWithoutServer(["agent", "resume", "codex"]), code: 2,
@@ -62,25 +62,25 @@ extension OrbeCliProcessTests {
 
   /// `--text` の値に置かれた `-h` / `--help` を help と読まない。
   ///
-  /// `pane send` と `agent prompt` は「任意のユーザーテキストを値に取る」サーフェスで（ここは前者で
-  /// 代表する）、引数列全体を help 走査すると `--text -h` が**何も送らないまま exit 0** になる。`orb pane send --text "$X" && orb pane
+  /// `tab send` と `agent prompt` は「任意のユーザーテキストを値に取る」サーフェスで（ここは前者で
+  /// 代表する）、引数列全体を help 走査すると `--text -h` が**何も送らないまま exit 0** になる。`orb tab send --text "$X" && orb tab
   /// key --key enter` で `$X` がたまたま `-h` だと、送信ゼロのまま enter だけが押される——静かで、
   /// 終了コードにも現れない。値の席のダッシュは exit 2 で止まるのが正しい。
   func testHelpInAValueSlotIsNotTreatedAsHelp() {
     for value in ["-h", "--help"] {
-      let outcome = ControlProcess.orbWithoutServer(["pane", "send", "5", "--text", value])
+      let outcome = ControlProcess.orbWithoutServer(["tab", "send", "5", "--text", value])
       XCTAssertEqual(
         outcome.status, 2,
         "`--text \(value)` が help に化けて exit \(outcome.status): \(outcome.stdout)")
       XCTAssertFalse(
-        outcome.stdout.contains("orb pane — inspect"), "usage を出して成功扱いにしない")
+        outcome.stdout.contains("orb tab — inspect"), "usage を出して成功扱いにしない")
     }
     // `--help` 自体は従来どおり出る（値の席を抜いた後に残っていれば help）。
-    let help = ControlProcess.orbWithoutServer(["pane", "send", "--help"])
-    XCTAssertEqual(help.status, 0, "pane send --help は exit 0: \(help.stderr)")
+    let help = ControlProcess.orbWithoutServer(["tab", "send", "--help"])
+    XCTAssertEqual(help.status, 0, "tab send --help は exit 0: \(help.stderr)")
   }
 
-  /// socket 不達（Orbe 未起動・ペイン外）はクラッシュせず exit 1 と構造化メッセージ。
+  /// socket 不達（Orbe 未起動・タブ外）はクラッシュせず exit 1 と構造化メッセージ。
   /// `--json` ではそれも stdout の `{"error":{code,message}}` に載る。
   func testUnreachableSocketExitsOneWithStructuredMessage() throws {
     let missing = TestIsolation.root.appendingPathComponent("no-orbe-here").path
@@ -196,7 +196,7 @@ extension OrbeCliProcessTests {
       "その unset はアクティブ WS の上書きを実際に外す")
   }
 
-  /// pane/tab の `--workspace` は `<id>` 必須（「どれに絞るか・どこに開くか」で bare に割り当てる
+  /// tab/tab の `--workspace` は `<id>` 必須（「どれに絞るか・どこに開くか」で bare に割り当てる
   /// 意味が無い）。値が解決できないトークンは、フラグの前後どちらに位置引数が来ても同じ usage
   /// エラーにする——順序で「key に落ちて弾かれる」と「黙って無視してアクティブ WS へ書く」に
   /// 割れると、後者は指定と違う workspace を書き換える破壊的な誤りになる。
@@ -204,14 +204,14 @@ extension OrbeCliProcessTests {
     let control = try startControlProcess()
 
     failure(
-      control.orb(["pane", "list", "--workspace"]), code: 2,
-      message: "--workspace requires an <id>", "pane list の bare --workspace")
+      control.orb(["tab", "list", "--workspace"]), code: 2,
+      message: "--workspace requires an <id>", "tab list の bare --workspace")
     failure(
       control.orb(["tab", "new", "--workspace"]), code: 2,
       message: "--workspace requires an <id>", "tab new の bare --workspace")
     failure(
-      control.orb(["pane", "list", "--workspace", "nosuch"]), code: 2,
-      message: "invalid workspace id: nosuch", "pane list の非解決トークン")
+      control.orb(["tab", "list", "--workspace", "nosuch"]), code: 2,
+      message: "invalid workspace id: nosuch", "tab list の非解決トークン")
     failure(
       control.orb(["config", "set", "font-size", "14", "--workspace", "nosuch"]), code: 2,
       message: "invalid workspace id: nosuch", "値が後置された非解決トークン")
@@ -230,38 +230,37 @@ extension OrbeCliProcessTests {
       control.orb(["config", "unset", "font-size", "--workspace", "nosuch"]), code: 2,
       message: "invalid workspace id: nosuch", "config unset の非解決トークン")
 
-    // 正しい `<id>` 指定は通り、その workspace のペインだけに絞られる。
+    // 正しい `<id>` 指定は通り、その workspace のタブだけに絞られる。
     let activeId = try workspaceId(control, active: true)
-    let panes = try XCTUnwrap(
-      control.orbJSON(["pane", "list", "--workspace", "\(activeId)"])["panes"] as? [[String: Any]])
-    XCTAssertFalse(panes.isEmpty, "--workspace <id> の絞り込みで結果が消えない")
+    let tabs = try XCTUnwrap(
+      control.orbJSON(["tab", "list", "--workspace", "\(activeId)"])["tabs"] as? [[String: Any]])
+    XCTAssertFalse(tabs.isEmpty, "--workspace <id> の絞り込みで結果が消えない")
     XCTAssertTrue(
-      panes.allSatisfy { $0["workspaceId"] as? Int == activeId }, "指定した WS のペインだけが残る")
+      tabs.allSatisfy { $0["workspaceId"] as? Int == activeId }, "指定した WS のタブだけが残る")
     XCTAssertEqual(
-      (control.orbJSON(["pane", "list", "--workspace", "current"])["panes"] as? [[String: Any]])?
-        .count, panes.count, "`current` も `<id>` として解決する（数値だけの受け付けに退行しない）")
+      (control.orbJSON(["tab", "list", "--workspace", "current"])["tabs"] as? [[String: Any]])?
+        .count, tabs.count, "`current` も `<id>` として解決する（数値だけの受け付けに退行しない）")
   }
 
   /// `--json` の応答は control の result をそのまま出すので、成功応答の `seq`（その操作時点の履歴位置）が
-  /// 出る。`pane list` は panes を絞る例外だが、`seq` は control の値をそのまま保つ——CLI が組み直して
+  /// 出る。`tab list` は tabs を絞る例外だが、`seq` は control の値をそのまま保つ——CLI が組み直して
   /// 0 に化けると、`orb wait --after` に渡した先で「保持している履歴の全部を replay」の意味になり、
   /// 前ターンの done を掴む。
   func testJsonResultsCarryTheHistoryPosition() throws {
     let control = try startControlProcess()
-    let pane = try XCTUnwrap(
-      control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
+    let tab = try XCTUnwrap(control.target.current.tabs.first, "タブが無い")
     let activeId = try workspaceId(control, active: true)
 
     let sent = try XCTUnwrap(
-      control.orbJSON(["pane", "send", "\(pane.id)", "--text", "x"])["seq"] as? Int,
-      "pane send --json は {ok, seq} をそのまま出す")
+      control.orbJSON(["tab", "send", "\(tab.id)", "--text", "x"])["seq"] as? Int,
+      "tab send --json は {ok, seq} をそのまま出す")
     control.target.controlReportAgent(
-      pane: pane, agent: "codex", state: "idle", sessionId: nil, message: nil)
+      tab: tab, agent: "codex", state: "idle", sessionId: nil, message: nil)
 
-    let filtered = control.orbJSON(["pane", "list", "--workspace", "\(activeId)"])
-    XCTAssertNotNil(filtered["panes"] as? [[String: Any]], "前提: 絞った panes")
+    let filtered = control.orbJSON(["tab", "list", "--workspace", "\(activeId)"])
+    XCTAssertNotNil(filtered["tabs"] as? [[String: Any]], "前提: 絞った tabs")
     let listed = try XCTUnwrap(filtered["seq"] as? Int, "--workspace で絞っても seq を保つ")
-    XCTAssertGreaterThan(listed, sent, "pane list の seq は報告の後の履歴位置（組み直しで 0 に化けていない）")
+    XCTAssertGreaterThan(listed, sent, "tab list の seq は報告の後の履歴位置（組み直しで 0 に化けていない）")
   }
 
   /// `tab new --workspace <id>` は**その** workspace にタブを開く。値が黙って捨てられると、
@@ -271,75 +270,78 @@ extension OrbeCliProcessTests {
     let control = try startControlProcess()
     let backgroundId = try workspaceId(control, active: false)
 
-    let paneId = try XCTUnwrap(
-      control.orbJSON(["tab", "new", "--workspace", "\(backgroundId)"])["paneId"] as? Int,
-      "tab new が paneId を返さない")
+    let tabId = try XCTUnwrap(
+      control.orbJSON(["tab", "new", "--workspace", "\(backgroundId)"])["tabId"] as? Int,
+      "tab new が tabId を返さない")
 
-    let panes = try XCTUnwrap(control.orbJSON(["pane", "list"])["panes"] as? [[String: Any]])
+    let tabs = try XCTUnwrap(control.orbJSON(["tab", "list"])["tabs"] as? [[String: Any]])
     XCTAssertEqual(
-      panes.first { $0["paneId"] as? Int == paneId }?["workspaceId"] as? Int, backgroundId,
+      tabs.first { $0["tabId"] as? Int == tabId }?["workspaceId"] as? Int, backgroundId,
       "開いたタブは指定した workspace に属する")
   }
 
-  // MARK: - pane send の入力源
+  // MARK: - tab send の入力源
 
-  /// `--stdin` で流した本文がペインへ届く。長いプロンプトを argv ではなくパイプで渡す経路。
-  func testPaneSendReadsTheBodyFromStdin() throws {
+  /// `--stdin` で流した本文がタブへ届く。長いプロンプトを argv ではなくパイプで渡す経路。
+  func testTabSendReadsTheBodyFromStdin() throws {
     let control = try startControlProcess(workspaces: ["main"])
-    let pane = try XCTUnwrap(control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
+    let tab = try XCTUnwrap(control.target.current.tabs.first, "タブが無い")
+    let surface = tab.surface
 
     // シェルが rc を読み終える前に送ると tty の type-ahead に賭けることになる。プロンプトを待つ。
     XCTAssertTrue(
-      waitUntil(ControlProcess.paneSettleTimeout) {
-        !(pane.controlReadText(scrollback: false) ?? "")
+      waitUntil(ControlProcess.tabSettleTimeout) {
+        !(surface.controlReadText(scrollback: false) ?? "")
           .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       }, "シェルのプロンプトが描かれない（この後の入力は捨てられうる）")
 
     let body = "STDIN_" + String(format: "%08x", UInt32.random(in: 0...UInt32.max))
-    let sent = control.orb(["pane", "send", "\(pane.id)", "--stdin"], stdin: body)
+    let sent = control.orb(["tab", "send", "\(tab.id)", "--stdin"], stdin: body)
     XCTAssertEqual(sent.status, 0, "--stdin の送信が失敗した: \(sent.stderr)")
     XCTAssertTrue(
-      waitUntil(ControlProcess.paneSettleTimeout) {
-        (pane.controlReadText(scrollback: true) ?? "").contains(body)
-      }, "--stdin で流した本文がペインに現れない")
+      waitUntil(ControlProcess.tabSettleTimeout) {
+        (surface.controlReadText(scrollback: true) ?? "").contains(body)
+      }, "--stdin で流した本文がタブに現れない")
   }
 
-  /// `pane send` の入力源は**ちょうど 1 つ**。両方も無指定も usage エラーで、無指定は標準入力に
+  /// `tab send` の入力源は**ちょうど 1 つ**。両方も無指定も usage エラーで、無指定は標準入力に
   /// 触れずに落ちる——ここでハングしないことがこのテストの要点（`--stdin` を明示必須にした理由）。
-  /// 0 バイトの `--stdin` も弾く: `printf '%s' "$PROMPT" | orb pane send --stdin` の未設定が
+  /// 0 バイトの `--stdin` も弾く: `printf '%s' "$PROMPT" | orb tab send --stdin` の未設定が
   /// その形で現れ、規約が守ろうとしている「値が黙って消えた」ものそのものだから。
-  func testPaneSendRequiresExactlyOneInputSource() throws {
+  func testTabSendRequiresExactlyOneInputSource() throws {
     let control = try startControlProcess(workspaces: ["main"])
-    let pane = try XCTUnwrap(control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
+    let tab = try XCTUnwrap(control.target.current.tabs.first, "タブが無い")
 
     failure(
-      control.orb(["pane", "send", "\(pane.id)", "--text", "hi", "--stdin"]), code: 2,
+      control.orb(["tab", "send", "\(tab.id)", "--text", "hi", "--stdin"]), code: 2,
       message: "pass only one of --text / --stdin", "--text と --stdin の併用")
     // stdin を渡さない＝子の標準入力は /dev/null。読みに行く実装ならここで即 EOF を掴んで
     // 「0 バイト」に化けるので、文言まで見て「触れずに落ちた」ことを確かめる。
     failure(
-      control.orb(["pane", "send", "\(pane.id)"]), code: 2,
-      message: "pane send requires --text or --stdin", "入力源の無指定")
+      control.orb(["tab", "send", "\(tab.id)"]), code: 2,
+      message: "tab send requires --text or --stdin", "入力源の無指定")
     failure(
-      control.orb(["pane", "send", "\(pane.id)", "--stdin"], stdin: ""), code: 2,
+      control.orb(["tab", "send", "\(tab.id)", "--stdin"], stdin: ""), code: 2,
       message: "--stdin got no input", "0 バイトの --stdin")
 
     // 空白・改行だけの入力は通す（ファイルや heredoc の正当な中身でありうる）。
-    let whitespace = control.orb(["pane", "send", "\(pane.id)", "--stdin"], stdin: "  \n")
+    let whitespace = control.orb(["tab", "send", "\(tab.id)", "--stdin"], stdin: "  \n")
     XCTAssertEqual(whitespace.status, 0, "空白だけの --stdin は通す: \(whitespace.stderr)")
   }
 
   // MARK: - 文脈解決
 
-  /// pane 系の対象は `ORBE_PANE` を既定に取り、`<id|current>` の `current` はアクティブ WS へ解決する。
-  func testPaneAndWorkspaceTargetsResolveFromContext() throws {
+  /// tab 系の対象は `ORBE_TAB` を既定に取り、`<id|current>` の `current` はアクティブ WS へ解決する。
+  func testTabAndWorkspaceTargetsResolveFromContext() throws {
     let control = try startControlProcess(workspaces: ["main"])
     let tab = try XCTUnwrap(control.target.current.tabs.first)
-    let pane = try XCTUnwrap(tab.controlAllPanes().first)
+    tab.surface.currentPwd = "/private/tmp/l4-context"
 
-    let split = control.orb(["pane", "split"], env: ["ORBE_PANE": "\(pane.id)"])
-    XCTAssertEqual(split.status, 0, "ORBE_PANE があれば位置引数なしで split できる: \(split.stderr)")
-    XCTAssertEqual(tab.controlAllPanes().count, 2, "分割の宛先は ORBE_PANE のペイン")
+    let text = control.orbJSON(["tab", "list"], env: ["ORBE_TAB": "\(tab.id)"])
+    XCTAssertNotNil(text["tabs"], "前提: list は動く")
+    let sent = control.orb(["tab", "send", "--text", "x"], env: ["ORBE_TAB": "\(tab.id)"])
+    XCTAssertEqual(sent.status, 0, "ORBE_TAB があれば位置引数なしで送れる: \(sent.stderr)")
+    XCTAssertEqual(sent.stdout, "sent to tab \(tab.id)\n", "送信の宛先は ORBE_TAB のタブ")
 
     write(control, ["ws", "rename", "current", "l4-current"], "current 宛ての ws rename")
     XCTAssertEqual(

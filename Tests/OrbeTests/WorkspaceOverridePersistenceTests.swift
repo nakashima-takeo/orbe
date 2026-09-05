@@ -19,14 +19,14 @@ final class WorkspaceOverridePersistenceTests: OrbeTestCase {
       workspaces: [
         WorkspaceState(
           name: "styled", rootPath: "/", activeTab: 0,
-          tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)],
+          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)],
           settingsOverride: layer {
             $0[SettingKeys.fontSize] = 20
             $0[SettingKeys.theme] = .dark
           }),
         WorkspaceState(
           name: "plain", rootPath: "/", activeTab: 0,
-          tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)],
+          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)],
           settingsOverride: nil),
       ])
     WorkspacePersistence.save(original)

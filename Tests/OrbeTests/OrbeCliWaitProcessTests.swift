@@ -5,7 +5,7 @@ import XCTest
 
 /// `orb wait`（状態変化の長ポーリング）の終了コードと出力先を実バイナリで固定する。
 ///
-/// 壊れると何が起きるか: `orb wait <pane> --kind agent_state && 次の処理` が、待っていたことが
+/// 壊れると何が起きるか: `orb wait <tab> --kind agent_state && 次の処理` が、待っていたことが
 /// **起きていないのに**次へ進む。時間切れを exit 0 で返すのがまさにその形で、終了コードにも
 /// stdout にも現れない（非 --json の `timed out` を stdout へ出すと `text=$(orb wait …)` が
 /// 偽のイベントを掴む）。未知 kind も同じ穴で、素のフィルタに通すと永久に一致せずただ時間切れになり
@@ -13,15 +13,15 @@ import XCTest
 ///
 /// `--timeout-ms` は必ず `ControlProcess.processTimeout`（20 秒）より十分小さく取る。
 final class OrbeCliWaitProcessTests: OrbeTestCase {
-  /// 時間切れを測る待機の宛先。**実在しないペイン**を指す——fixture のペインは起きたシェルが
+  /// 時間切れを測る待機の宛先。**実在しないタブ**を指す——fixture のタブは起きたシェルが
   /// OSC 7 で `pwd` を撃つので、フィルタ無しで待つと本物のイベントで起きてしまい、
   /// 時間切れの経路を測れない（測っているつもりで exit 0 の側を見ることになる）。
-  private let silentPane = "999999"
+  private let silentTab = "999999"
 
   /// `--json` のタイムアウトは control の result をそのまま stdout へ載せ、exit 124。
   func testTimeoutExits124WithTimedOutPayload() throws {
     let control = try startControlProcess(workspaces: ["main"])
-    let outcome = control.orb(["wait", silentPane, "--timeout-ms", "300", "--json"])
+    let outcome = control.orb(["wait", silentTab, "--timeout-ms", "300", "--json"])
 
     XCTAssertEqual(outcome.status, 124, "時間切れは exit 124（成功していないのに 0 を返さない）")
     let data = try XCTUnwrap(outcome.stdout.data(using: .utf8))
@@ -32,7 +32,7 @@ final class OrbeCliWaitProcessTests: OrbeTestCase {
   /// 非 `--json` の時間切れは **stdout を汚さず** stderr へ理由を出す。
   func testTimeoutKeepsStdoutCleanWithoutJson() throws {
     let control = try startControlProcess(workspaces: ["main"])
-    let outcome = control.orb(["wait", silentPane, "--timeout-ms", "300"])
+    let outcome = control.orb(["wait", silentTab, "--timeout-ms", "300"])
 
     XCTAssertEqual(outcome.status, 124, "非 --json でも時間切れは exit 124")
     XCTAssertTrue(
@@ -48,14 +48,14 @@ final class OrbeCliWaitProcessTests: OrbeTestCase {
   ///
   /// 毎回 idle→working と振るのは、`agentState` の didSet が**値が変わったときだけ** emit するから
   /// ——同じ状態を撃ち続けても 2 回目以降は何も出ない。よって掴む値は idle と working のどちらもある。
-  private func pumpAgentState(_ control: ControlProcess, pane: SurfaceView) -> DispatchSourceTimer {
+  private func pumpAgentState(_ control: ControlProcess, tab: TerminalTab) -> DispatchSourceTimer {
     let ticker = DispatchSource.makeTimerSource(queue: .main)
     ticker.schedule(deadline: .now(), repeating: .milliseconds(100))
     ticker.setEventHandler {
       control.target.controlReportAgent(
-        pane: pane, agent: "codex", state: "idle", sessionId: nil, message: nil)
+        tab: tab, agent: "codex", state: "idle", sessionId: nil, message: nil)
       control.target.controlReportAgent(
-        pane: pane, agent: "codex", state: "working", sessionId: nil, message: nil)
+        tab: tab, agent: "codex", state: "working", sessionId: nil, message: nil)
     }
     ticker.resume()
     return ticker
@@ -64,17 +64,17 @@ final class OrbeCliWaitProcessTests: OrbeTestCase {
   /// イベントで起きたら exit 0 と `event`。
   func testEventWakesTheWaitAndExitsZero() throws {
     let control = try startControlProcess(workspaces: ["main"])
-    let pane = try XCTUnwrap(
-      control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
+    let tab = try XCTUnwrap(
+      control.target.current.tabs.first, "タブが無い")
 
-    let ticker = pumpAgentState(control, pane: pane)
+    let ticker = pumpAgentState(control, tab: tab)
     defer { ticker.cancel() }
 
     // `--kind` は反復できる（`takeOptions`）。2 個目を素の `takeOption` で書き戻すと残余に落ちて
     // `unknown option: --kind` になるので、ここで 2 語渡して拾えていることまで見る。
     let outcome = control.orb(
       [
-        "wait", "\(pane.id)", "--kind", "agent_state", "--kind", "pane_closed",
+        "wait", "\(tab.id)", "--kind", "agent_state", "--kind", "tab_closed",
         "--timeout-ms", "8000", "--json",
       ])
     XCTAssertEqual(outcome.status, 0, "イベントで起きたら exit 0: \(outcome.stdout)\(outcome.stderr)")
@@ -83,34 +83,34 @@ final class OrbeCliWaitProcessTests: OrbeTestCase {
     let event = try XCTUnwrap(
       result["event"] as? [String: Any], "起きた側は event を返す: \(outcome.stdout)")
     XCTAssertEqual(event["kind"] as? String, "agent_state", "指定した kind のイベントで起きる")
-    XCTAssertEqual(event["paneId"] as? Int, pane.id)
+    XCTAssertEqual(event["tabId"] as? Int, tab.id)
     XCTAssertTrue(
       ["idle", "working"].contains(event["value"] as? String ?? ""),
       "撃った状態語のどちらかを載せる: \(outcome.stdout)")
   }
 
-  /// `<pane>` 省略は **ORBE_PANE を継がず**全ペインを見る。pane 系（`resolvePaneArg`）と揃えると、
-  /// ペイン内で走らせたスクリプトの `orb wait` が黙って自ペインだけに絞られ、他ペインを待っていた
+  /// `<tab>` 省略は **ORBE_TAB を継がず**全タブを見る。tab 系（`resolveTabArg`）と揃えると、
+  /// タブ内で走らせたスクリプトの `orb wait` が黙って自タブだけに絞られ、他タブを待っていた
   /// 側は 124 で「何も起きなかった」と読む——同じコマンドが環境によって違う意味になる。
-  func testWaitDoesNotFallBackToOrbePane() throws {
+  func testWaitDoesNotFallBackToOrbeTab() throws {
     let control = try startControlProcess(workspaces: ["main"])
-    let pane = try XCTUnwrap(
-      control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
+    let tab = try XCTUnwrap(
+      control.target.current.tabs.first, "タブが無い")
 
-    let ticker = pumpAgentState(control, pane: pane)
+    let ticker = pumpAgentState(control, tab: tab)
     defer { ticker.cancel() }
 
-    // ORBE_PANE は実在しないペインを指す。継いでいればそこに絞られて 124 になる。
+    // ORBE_TAB は実在しないタブを指す。継いでいればそこに絞られて 124 になる。
     let outcome = control.orb(
       ["wait", "--kind", "agent_state", "--timeout-ms", "8000", "--json"],
-      env: ["ORBE_PANE": silentPane])
+      env: ["ORBE_TAB": silentTab])
     XCTAssertEqual(
       outcome.status, 0,
-      "<pane> 省略が ORBE_PANE に絞られている（全ペインを見るのが契約）: \(outcome.stdout)\(outcome.stderr)")
+      "<tab> 省略が ORBE_TAB に絞られている（全タブを見るのが契約）: \(outcome.stdout)\(outcome.stderr)")
     let data = try XCTUnwrap(outcome.stdout.data(using: .utf8))
     let result = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
     let event = try XCTUnwrap(result["event"] as? [String: Any], "起きた側は event を返す")
-    XCTAssertEqual(event["paneId"] as? Int, pane.id, "ORBE_PANE ではなく実際に鳴ったペインを返す")
+    XCTAssertEqual(event["tabId"] as? Int, tab.id, "ORBE_TAB ではなく実際に鳴ったタブを返す")
   }
 
   /// 未知 kind は control が -32602 で弾く（exit 1）。CLI は 4 語を複製しないので、
@@ -126,23 +126,23 @@ final class OrbeCliWaitProcessTests: OrbeTestCase {
   }
 
   /// `--after <seq>` は、その seq より後に**既に起きた**一致イベントも返す。seq の出所は他の `--json`
-  /// 応答（ここでは `pane list`）で、待機を張る前に済んだ遷移——`orb pane send` → `orb wait` の隙間
+  /// 応答（ここでは `tab list`）で、待機を張る前に済んだ遷移——`orb tab send` → `orb wait` の隙間
   /// ——を取りこぼさない。`--value` は状態語の一致で絞る（idle も撃っているので、value が効かなければ
   /// idle の方が先に返る）。
   func testAfterReplaysAnEventThatHappenedBeforeTheWait() throws {
     let control = try startControlProcess(workspaces: ["main"])
-    let pane = try XCTUnwrap(
-      control.target.current.tabs.first?.controlAllPanes().first, "ペインが無い")
-    let before = try XCTUnwrap(control.orbJSON(["pane", "list"])["seq"] as? Int, "seq の出所")
+    let tab = try XCTUnwrap(
+      control.target.current.tabs.first, "タブが無い")
+    let before = try XCTUnwrap(control.orbJSON(["tab", "list"])["seq"] as? Int, "seq の出所")
 
     control.target.controlReportAgent(
-      pane: pane, agent: "codex", state: "idle", sessionId: nil, message: nil)
+      tab: tab, agent: "codex", state: "idle", sessionId: nil, message: nil)
     control.target.controlReportAgent(
-      pane: pane, agent: "codex", state: "working", sessionId: nil, message: nil)
+      tab: tab, agent: "codex", state: "working", sessionId: nil, message: nil)
 
     let outcome = control.orb(
       [
-        "wait", "\(pane.id)", "--kind", "agent_state", "--value", "working",
+        "wait", "\(tab.id)", "--kind", "agent_state", "--value", "working",
         "--after", "\(before)", "--timeout-ms", "3000", "--json",
       ])
     XCTAssertEqual(outcome.status, 0, "既に起きた遷移で即返る: \(outcome.stdout)\(outcome.stderr)")
@@ -173,7 +173,7 @@ final class OrbeCliWaitProcessTests: OrbeTestCase {
     for args in [
       ["wait", "--timeout-ms", "0"], ["wait", "--timeout-ms", "abc"], ["wait", "--timeout-ms"],
     ] {
-      let outcome = ControlProcess.orbWithoutServer(args, env: ["ORBE_PANE": "1"])
+      let outcome = ControlProcess.orbWithoutServer(args, env: ["ORBE_TAB": "1"])
       XCTAssertEqual(
         outcome.status, 2, "`\(args.joined(separator: " "))` は usage エラー: \(outcome.stderr)")
       XCTAssertTrue(

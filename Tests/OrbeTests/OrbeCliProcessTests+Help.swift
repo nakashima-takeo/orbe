@@ -7,7 +7,7 @@ import XCTest
 ///
 /// help は socket 不達でも出す必要があるため、control に問い合わせて組むことができない。そのため
 /// key 名・設定 key・`--workspace` の受ける値は CLI 側に写しが置かれており、写しは黙ってドリフト
-/// する——実際に `config --help` から 3 key が消え、`pane list` / `tab new` の `--workspace` から
+/// する——実際に `config --help` から 3 key が消え、`tab list` / `tab new` の `--workspace` から
 /// `current` が消えたまま出荷された。
 ///
 /// 壊れると何が起きるか: 受け付ける側は減らないので、終了コードにも出力にも現れない。減るのは
@@ -21,7 +21,7 @@ extension OrbeCliProcessTests {
     let top = ControlProcess.orbWithoutServer(["--help"])
     XCTAssertEqual(top.status, 0, "--help は socket 不達でも exit 0: \(top.stderr)")
     XCTAssertTrue(
-      top.stdout.contains("orb agent prompt <pane> (--text <text> | --stdin)"),
+      top.stdout.contains("orb agent prompt <tab> (--text <text> | --stdin)"),
       "トップ USAGE に agent prompt が無い: \(top.stdout)")
     XCTAssertTrue(
       top.stdout.contains("3 agent prompt") && top.stdout.contains("4 agent prompt"),
@@ -30,7 +30,7 @@ extension OrbeCliProcessTests {
     let agent = ControlProcess.orbWithoutServer(["agent", "--help"])
     XCTAssertEqual(agent.status, 0, "agent --help は exit 0: \(agent.stderr)")
     XCTAssertTrue(
-      agent.stdout.contains("orb agent prompt <pane> (--text <text> | --stdin)"),
+      agent.stdout.contains("orb agent prompt <tab> (--text <text> | --stdin)"),
       "agent USAGE に prompt が無い: \(agent.stdout)")
   }
 
@@ -55,22 +55,22 @@ extension OrbeCliProcessTests {
       "wait --help の既定が WaitTimeout.eventDefaultMs と食い違っている: \(wait.stdout)")
   }
 
-  /// `orb pane --help` の `KEYS:` は control の `ControlKey.namedKeys` と同じ集合。
+  /// `orb tab --help` の `KEYS:` は control の `ControlKey.namedKeys` と同じ集合。
   ///
   /// 弾くのは control（`ControlKey.parse` が -32602）だが、help は socket 不達でも出す必要が
   /// あるため CLI に名前を写している。
-  func testPaneHelpListsEveryKeyName() throws {
-    let outcome = ControlProcess.orbWithoutServer(["pane", "--help"])
-    XCTAssertEqual(outcome.status, 0, "pane --help は socket 不達でも exit 0: \(outcome.stderr)")
+  func testTabHelpListsEveryKeyName() throws {
+    let outcome = ControlProcess.orbWithoutServer(["tab", "--help"])
+    XCTAssertEqual(outcome.status, 0, "tab --help は socket 不達でも exit 0: \(outcome.stderr)")
     let line = try XCTUnwrap(
       outcome.stdout.split(separator: "\n").first { $0.hasPrefix("KEYS: ") },
-      "pane --help に KEYS: 行が無い: \(outcome.stdout)")
+      "tab --help に KEYS: 行が無い: \(outcome.stdout)")
     let listed = line.dropFirst("KEYS: ".count).split(separator: ",").map {
       $0.trimmingCharacters(in: .whitespaces)
     }
     XCTAssertEqual(
       Set(listed), Set(ControlKey.namedKeys.keys),
-      "pane --help の KEYS が ControlKey と食い違っている")
+      "tab --help の KEYS が ControlKey と食い違っている")
   }
 
   /// `orb config --help` の `KEYS:` は `SettingsRegistry.all` と同じ集合。

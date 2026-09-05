@@ -4,10 +4,10 @@ import XCTest
 
 @testable import Orbe
 
-/// ペインの PTY へ届いた生バイトを観測する駆動台。テストクラスではない支援ファイルで、
+/// タブの PTY へ届いた生バイトを観測する駆動台。テストクラスではない支援ファイルで、
 /// `ControlProcessHarness` と同じ位置づけ。
 ///
-/// ペインに raw tty で読む dump プログラム（python3）を起こし、受信したバイト列を hex で画面へ
+/// タブに raw tty で読む dump プログラム（python3）を起こし、受信したバイト列を hex で画面へ
 /// 書かせる。画面は `controlReadText` で読めるので、surface へ送ったキー入力が端末モード
 /// （legacy / bracketed paste / kitty keyboard protocol）に応じてどんなバイトになったかを、
 /// libghostty の符号化を通した実物で測れる。モードの切替（bracketed paste の有効化・kitty flags の
@@ -15,7 +15,7 @@ import XCTest
 ///
 /// 1 打ごとに `next()` で待ってから次を送る——連打すると dump の 1 回の read に複数打が合流し、
 /// 打鍵単位の突き合わせができなくなる。
-final class TtyDumpPane {
+final class TtyDumpTab {
   enum Mode: String { case legacy, paste, kitty }
 
   /// 1 打あたりの到達を待つ上限。実時間の検証ではなく、進まなくなったら諦めるための上限。
@@ -38,15 +38,15 @@ final class TtyDumpPane {
 
     """
 
-  /// dump のペインを 1 枚だけ持つ実 `WindowController`。ペイン（surface と PTY）の寿命は window が
+  /// dump のタブを 1 枚だけ持つ実 `WindowController`。タブ（surface と PTY）の寿命は window が
   /// 持つので、駆動台がここで抱えて自分と同時に畳む（`ControlProcess.target` と同じ形）。
   let controller: WindowController
-  let pane: SurfaceView
+  let tab: TerminalTab
   private var consumed = 0
 
   struct NotReady: Error {}
 
-  /// `controller` のアクティブ workspace に dump のペインを開き、READY を待つ。
+  /// `controller` のアクティブ workspace に dump のタブを開き、READY を待つ。
   init(
     in controller: WindowController, mode: Mode,
     file: StaticString = #filePath, line: UInt = #line
@@ -54,13 +54,13 @@ final class TtyDumpPane {
     self.controller = controller
     let scriptURL = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("ttydump.py")
     try Self.script.write(to: scriptURL, atomically: true, encoding: .utf8)
-    let paneId = try XCTUnwrap(
+    let tabId = try XCTUnwrap(
       controller.controlSpawn(
         workspaceId: nil, cwd: nil,
         command: "/usr/bin/python3 \(scriptURL.path) \(mode.rawValue)"),
-      "dump のペインを開けない", file: file, line: line)
-    pane = try XCTUnwrap(controller.controlResolvePane(paneId), file: file, line: line)
-    let ready = ControlProcess.waitUntil(ControlProcess.paneSettleTimeout) {
+      "dump のタブを開けない", file: file, line: line)
+    tab = try XCTUnwrap(controller.controlResolveTab(tabId), file: file, line: line)
+    let ready = ControlProcess.waitUntil(ControlProcess.tabSettleTimeout) {
       self.screen().contains("READY")
     }
     guard ready else {
@@ -89,7 +89,7 @@ final class TtyDumpPane {
     bytes.utf8.map { String(format: "%02x", $0) }.joined()
   }
 
-  private func screen() -> String { pane.controlReadText(scrollback: true) ?? "" }
+  private func screen() -> String { tab.surface.controlReadText(scrollback: true) ?? "" }
 
   private func received() -> [String] {
     screen().split(separator: "\n").compactMap { line in
