@@ -348,4 +348,20 @@ extension OrbeCliProcessTests {
       try workspaceRows(control).first(where: { $0["active"] as? Bool == true })?["name"]
         as? String, "l4-current", "current はアクティブ WS へ解決する")
   }
+
+  /// `tab focus` は `<tab>` 省略時に **ORBE_TAB を継がない**——自タブへの focus は無意味で、
+  /// 継ぐと「id を書き忘れた」誤りが exit 0 の no-op に化ける。`wait` / `agent prompt` と同じ規律。
+  func testTabFocusDoesNotFallBackToOrbeTab() {
+    failure(
+      ControlProcess.orbWithoutServer(["tab", "focus"], env: ["ORBE_TAB": "1"]), code: 2,
+      message: "tab focus requires a <tab> id", "ORBE_TAB 付きの `tab focus`")
+  }
+
+  /// `orb pane` は不明コマンド（exit 2）。ペイン語彙は `orb tab` に統合され、旧サブコマンドの
+  /// 別名は残さない——残すと 2 つの語彙が同じものを指し、ヘルプと補完がどちらを教えるか割れる。
+  func testPaneCommandIsUnknown() {
+    failure(
+      ControlProcess.orbWithoutServer(["pane", "list"]), code: 2,
+      message: "unknown command: pane", "`orb pane`")
+  }
 }

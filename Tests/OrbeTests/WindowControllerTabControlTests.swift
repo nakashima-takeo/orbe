@@ -201,6 +201,83 @@ final class WindowControllerTabControlTests: OrbeTestCase {
     XCTAssertEqual(err.code, -32004)
   }
 
+  // MARK: - controlListTabs の active
+
+  /// `active` は「その workspace で選択中のタブ」——前面かに依らず workspace ごとに 1 枚だけ true。
+  /// 前面のタブだけを true にすると、背景 workspace へ `spawn` したクライアントが「今そこで
+  /// 選ばれているタブ」を知る手段が無くなる（前面かは `list_workspaces.active` が答える）。
+  func testListTabsMarksTheSelectedTabOfEveryWorkspaceActive() throws {
+    let wc = try restore(
+      activeWorkspace: 0,
+      [
+        twoTabbed("main"),
+        WorkspaceState(
+          name: "background", rootPath: "/tmp", activeTab: 1,
+          tabs: [Self.plainTab, Self.plainTab]),
+      ])
+    let background = try XCTUnwrap(wc.workspaces.first { $0.name == "background" })
+    XCTAssertEqual(background.active, 1, "前提: 背景 WS は 2 枚目を選択中")
+    guard case .success = wc.controlFocusTab(tabId: wc.current.tabs[1].id) else {
+      return XCTFail("focus_tab は success")
+    }
+
+    let active = wc.controlListTabs().filter { $0["active"] as? Bool == true }
+
+    XCTAssertEqual(
+      Set(active.compactMap { $0["tabId"] as? Int }),
+      [wc.current.tabs[1].id, background.tabs[1].id],
+      "前面・背景それぞれの選択中タブが 1 枚ずつ true")
+  }
+
+  // MARK: - tab_closed（タブの消滅で流れる）
+
+  /// `tab_closed` の待機を張り、登録完了を barrier で確定させる。
+  private func armTabClosedWait(_ wire: ControlWire, id: Int, tabId: Int) {
+    wire.send([
+      "jsonrpc": "2.0", "id": id, "method": "wait_for_event",
+      "params": ["kinds": ["tab_closed"], "tabId": tabId],
+    ])
+    wire.barrier()
+  }
+
+  private func closedTabId(_ response: [String: Any]?) -> Int? {
+    ((response?["result"] as? [String: Any])?["event"] as? [String: Any])?["tabId"] as? Int
+  }
+
+  /// close_tab で閉じた前面タブは `tab_closed` を流す——mount 済みの view と生成済み surface を
+  /// 持つタブが、閉じた後にどこからも保持されずに消滅する。壊れると（強参照が残ると）イベントが
+  /// 流れず `orb wait` / `prompt_agent` が閉じたタブをタイムアウトまで待ち、surface もリークする。
+  func testCloseTabEmitsTabClosedForTheClosedForegroundTab() throws {
+    let wc = try restore(activeWorkspace: 0, [twoTabbed("main")])
+    let victim = wc.current.tabs[0].id
+    let wire = ControlWire(target: nil)
+    defer { wire.teardown() }
+    armTabClosedWait(wire, id: 1, tabId: victim)
+
+    guard case .success = wc.controlCloseTab(tabId: victim) else {
+      return XCTFail("close_tab は success")
+    }
+
+    XCTAssertEqual(closedTabId(wire.nextResponse()), victim, "閉じたタブの id で tab_closed が流れる")
+  }
+
+  /// workspace ごと閉じると、持っていた全タブの `tab_closed` が流れる（背景 workspace の未 mount
+  /// タブも漏らさない）。
+  func testCloseWorkspaceEmitsTabClosedForEveryTabItHeld() throws {
+    let wc = try restore(activeWorkspace: 0, [tabbed("main"), twoTabbed("doomed")])
+    let doomed = try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "doomed" })
+    let held = wc.workspaces[doomed].tabs.map(\.id)
+    let wire = ControlWire(target: nil)
+    defer { wire.teardown() }
+    for (i, tabId) in held.enumerated() { armTabClosedWait(wire, id: i + 1, tabId: tabId) }
+
+    wc.closeWorkspace(doomed)
+
+    XCTAssertEqual(
+      Set([closedTabId(wire.nextResponse()), closedTabId(wire.nextResponse())].compactMap { $0 }),
+      Set(held), "閉じた workspace の全タブが tab_closed を流す")
+  }
+
   // MARK: - config の workspace ターゲット化
 
   /// config_set は workspaceId 指定で非アクティブ WS の上書きへ in-place で書き、アクティブ WS の
