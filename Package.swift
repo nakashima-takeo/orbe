@@ -23,9 +23,15 @@ let package = Package(
     ),
     // 通知音の純 DSP 層（合成プリミティブ・部品語彙・カタログ・レンダラ・取り込み・数値解析）。Foundation のみで、
     // 音を出す手段を持たない（再生は Orbe 側の SoundPlayer）。Orbe 本体と dev CLI（orbe-sound）が共有する。
+    // debug でも最適化して焼く: 純 DSP のループは -Onone だと 40 倍遅く、テストが分オーダーになる。
+    // 代償として、このターゲットでは `assert` / `assertionFailure` が消える（stdlib が -Onone 限定で
+    // 実装している）。失敗を呼び出し側へ伝えるなら throw か戻り値で表す。
     .target(
       name: "OrbeSound",
-      swiftSettings: [.swiftLanguageMode(.v5)]
+      swiftSettings: [
+        .swiftLanguageMode(.v5),
+        .unsafeFlags(["-O"], .when(configuration: .debug)),
+      ]
     ),
     .executableTarget(
       name: "Orbe",
