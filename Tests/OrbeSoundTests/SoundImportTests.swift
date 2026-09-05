@@ -27,7 +27,8 @@ final class SoundImportTests: XCTestCase {
 
   /// 10 秒を超える入力は 10 秒で切られ、その長さが `duration` に載る。
   func testTruncatesToTheMaximumDuration() throws {
-    let processed = try SoundImport.process(sine(seconds: 30), sampleRate: sampleRate)
+    let processed = try SoundImport.process(
+      sine(seconds: SoundImport.maxDuration + 1), sampleRate: sampleRate)
     XCTAssertEqual(processed.duration, SoundImport.maxDuration, accuracy: 1e-9)
     XCTAssertEqual(processed.samples.count, Int(SoundImport.maxDuration * sampleRate))
   }
@@ -45,7 +46,8 @@ final class SoundImportTests: XCTestCase {
       let range = Int(from * sampleRate)..<min(samples.count, Int(to * sampleRate))
       return SoundAnalysis.rmsDB(Array(samples[range]))
     }
-    let truncated = try SoundImport.process(sine(seconds: 30), sampleRate: sampleRate)
+    let truncated = try SoundImport.process(
+      sine(seconds: SoundImport.maxDuration + 1), sampleRate: sampleRate)
     // 9.9〜10.0 秒（フェード区間）は、その直前の 0.1 秒より明確に小さい。
     XCTAssertLessThan(
       tailRMS(truncated.samples, from: 9.9, to: 10.0),

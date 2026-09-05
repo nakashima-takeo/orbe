@@ -15,7 +15,7 @@ extension DispatchWorktreeClassifierTests {
   /// 開けない行に語を積んだら、それは不到達（＝消えている）。
   func testEveryRaisedFactIsReachable() {
     var violations: [String] = []
-    forEachShape { facts, shape in
+    forEachShape { facts in
       let r = row(facts)
       // 安全行だけは 2 枚に載らなかった語が出ない（サブラインを開かないため。台帳 逸脱 18）。
       // **記録済みの唯一の不到達**で、その中身が安全な範囲に留まることは下の 2 本が別に固定する
@@ -23,7 +23,7 @@ extension DispatchWorktreeClassifierTests {
       guard r.group != .safe else { return }
       let reachable = r.chips + (r.canExpandSubline ? r.lossNotes + r.overflowNotes : [])
       for chip in r.vocabulary where !reachable.contains(chip) {
-        violations.append("\(chip.id) が不到達 — \(shape)")
+        violations.append("\(chip.id) が不到達 — \(describe(facts))")
       }
     }
     XCTAssertEqual(
@@ -36,11 +36,11 @@ extension DispatchWorktreeClassifierTests {
   /// 立った時点で「安全の根拠を隠したまま警告だけ出す行」が作れてしまう。
   func testSafeRowsRaiseNoLoss() {
     var violations: [String] = []
-    forEachShape { facts, shape in
+    forEachShape { facts in
       let r = row(facts)
       guard r.group == .safe else { return }
       for chip in r.vocabulary where chip.tone == .loss {
-        violations.append("\(chip.id) — \(shape)")
+        violations.append("\(chip.id) — \(describe(facts))")
       }
     }
     XCTAssertEqual(
@@ -55,15 +55,15 @@ extension DispatchWorktreeClassifierTests {
   ///
   func testSafeRowsAlwaysShowTheirEvidence() {
     var violations: [String] = []
-    forEachShape { facts, shape in
+    forEachShape { facts in
       let r = row(facts)
       guard r.group == .safe else { return }
       let evidence = r.vocabulary.filter { $0.tone == .safe }
       if !evidence.isEmpty, !evidence.contains(where: { r.chips.contains($0) }) {
-        violations.append("根拠が右クラスタに無い — \(shape)")
+        violations.append("根拠が右クラスタに無い — \(describe(facts))")
       }
       for chip in r.overflowNotes where chip.tone == .loss {
-        violations.append("不到達の溢れが損失を含む: \(chip.id) — \(shape)")
+        violations.append("不到達の溢れが損失を含む: \(chip.id) — \(describe(facts))")
       }
     }
     XCTAssertEqual(
@@ -76,14 +76,14 @@ extension DispatchWorktreeClassifierTests {
   /// 主張する——前者ほど強く後者を含意/否定するので、2 つ以上が同じ行に立てばどれかが偽になる。
   func testRemotePresenceVocabularyIsExclusive() {
     var violations: [String] = []
-    forEachShape { facts, shape in
+    forEachShape { facts in
       let r = row(facts)
       let raised = r.vocabulary.filter {
         if case .mergedInto = $0 { return true }
         return $0 == .onRemote || $0 == .unpushed
       }
       if raised.count > 1 {
-        violations.append("\(raised.map(\.id).joined(separator: "+")) — \(shape)")
+        violations.append("\(raised.map(\.id).joined(separator: "+")) — \(describe(facts))")
       }
     }
     XCTAssertEqual(
@@ -94,10 +94,10 @@ extension DispatchWorktreeClassifierTests {
   /// 2 つの受け皿は重ならない（同じ語をサブラインに 2 度書かない）。
   func testTheTwoReceptaclesNeverOverlap() {
     var violations: [String] = []
-    forEachShape { facts, shape in
+    forEachShape { facts in
       let r = row(facts)
       for chip in r.overflowNotes where r.chips.contains(chip) || r.lossNotes.contains(chip) {
-        violations.append("\(chip.id) — \(shape)")
+        violations.append("\(chip.id) — \(describe(facts))")
       }
     }
     XCTAssertEqual(
@@ -108,7 +108,7 @@ extension DispatchWorktreeClassifierTests {
   /// 分類の入力になりうる形を総当たりする。
   /// **群を決めるフィールド（`isPrunable` / `isMain` / `occupancy` / `branch`）も振る**——
   /// 振らないと、不到達が最も起きやすい「安全行」「detached 行」「使用中行」が総当たりの外に残る。
-  private func forEachShape(_ body: (DispatchCleanFacts, String) -> Void) {
+  private func forEachShape(_ body: (DispatchCleanFacts) -> Void) {
     let occupancies: [PaneOccupancy?] = [nil, PaneOccupancy(cwd: "/wt/x", agentState: "waiting")]
     for branch in [nil, "feat/x"] as [String?] {
       for isPrunable in [false, true] {
@@ -124,7 +124,7 @@ extension DispatchWorktreeClassifierTests {
   /// 群が決まった 1 つの形の下で、語彙を決めるフィールドを振る。
   private func forEachDetail(
     _ branch: String?, _ isPrunable: Bool, _ isMain: Bool, _ occupancy: PaneOccupancy?,
-    _ body: (DispatchCleanFacts, String) -> Void
+    _ body: (DispatchCleanFacts) -> Void
   ) {
     let statuses: [GitWorktreeStatusCounts?] = [
       nil, clean, GitWorktreeStatusCounts(modified: 2, untracked: 3),
@@ -152,7 +152,7 @@ extension DispatchWorktreeClassifierTests {
                       },
                       openPR: openPR, status: status, containment: containment,
                       operation: operation, occupancy: occupancy)
-                    body(facts, describe(facts))
+                    body(facts)
                   }
                 }
               }

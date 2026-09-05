@@ -9,18 +9,49 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
   private var remoteRoots: [URL] = []
   /// 分冊（`+Containment`）も読む。
   var repo: GitRepo!
+  /// init + 1 コミットの雛形。作るのはクラスで 1 回で、各テストは複製を `dir` に受け取る。
+  private nonisolated(unsafe) static var template: URL?
 
   override func setUpWithError() throws {
     dir = FileManager.default.temporaryDirectory
       .appendingPathComponent("orbe-clean-repo-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    XCTAssertTrue(git(["init", "-q", "-b", "main"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.email", "t@example.com"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.name", "t"]).isSuccess)
-    try write("a.txt", "x")
-    XCTAssertTrue(git(["add", "-A"]).isSuccess)
-    XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
+    let template = try Self.template ?? Self.makeTemplate()
+    Self.template = template
+    try FileManager.default.copyItem(at: template, to: dir)
     repo = try open()
+  }
+
+  override static func tearDown() {
+    if let template { try? FileManager.default.removeItem(at: template) }
+    template = nil
+    super.tearDown()
+  }
+
+  /// 雛形を作れなかったら空の repo を配らずそのテストを落とす。
+  private struct TemplateFailure: Error {}
+
+  private static func makeTemplate() throws -> URL {
+    let url = FileManager.default.temporaryDirectory
+      .appendingPathComponent("orbe-clean-template-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    var handedOff = false
+    defer { if !handedOff { try? FileManager.default.removeItem(at: url) } }
+    func git(_ args: [String]) throws {
+      guard GitRunner.shared.runSync(args, cwd: url.path).isSuccess else {
+        XCTFail("雛形リポジトリを作れない: git \(args.joined(separator: " "))")
+        throw TemplateFailure()
+      }
+    }
+    try git(["init", "-q", "-b", "main"])
+    try git(["config", "user.email", "t@example.com"])
+    try git(["config", "user.name", "t"])
+    try "x".write(
+      toFile: (url.path as NSString).appendingPathComponent("a.txt"), atomically: true,
+      encoding: .utf8)
+    try git(["add", "-A"])
+    try git(["commit", "-qm", "init"])
+    handedOff = true
+    return url
   }
 
   override func tearDownWithError() throws {
