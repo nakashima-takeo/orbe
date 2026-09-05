@@ -6,8 +6,10 @@ import XCTest
 extension WindowControllerWorkspaceTests {
   /// パレットは休眠復元 agent を live idle と混ぜず dormant チップで表す。
   func testPaletteShowsDormantRestoredAgentsAsDistinctKind() throws {
-    func agentLeaf(_ id: String) -> PaneNode {
-      .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: id))  // resume 未対応
+    func agentTab(_ id: String) -> TabState {
+      TabState(
+        cwd: "/tmp", agent: AgentSession(command: "unknown", sessionId: id),  // resume 未対応
+        explicitTitle: nil)
     }
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
@@ -15,20 +17,15 @@ extension WindowControllerWorkspaceTests {
         // 起動済み（アクティブ復元）。ordered で 0 件除外（agentState 空）→ rollup 空。
         WorkspaceState(
           name: "main", rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(tree: agentLeaf("m"), explicitTitle: nil)]),
+          tabs: [agentTab("m")]),
         // 休眠・agent 2つ → [("dormant", 2)]
         WorkspaceState(
           name: "sleepers", rootPath: "/tmp", activeTab: 0,
-          tabs: [
-            TabState(
-              tree: .split(
-                vertical: true, ratio: 0.5, first: agentLeaf("a"), second: agentLeaf("b")),
-              explicitTitle: nil)
-          ]),
+          tabs: [agentTab("a"), agentTab("b")]),
         // 休眠・agent 0 → rollup 無し
         WorkspaceState(
           name: "quiet", rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)]),
+          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)]),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
 
@@ -68,30 +65,30 @@ extension WindowControllerWorkspaceTests {
 
   /// mixed workspace では live 正準順の後ろに dormant を併記し、行全体は減光しない。
   func testPaletteShowsLiveAndDormantChipsTogetherInCanonicalOrder() throws {
-    let dormantTree = PaneNode.split(
-      vertical: true, ratio: 0.5,
-      first: .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: "a")),
-      second: .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: "b")))
+    let dormantTabs = ["a", "b"].map {
+      TabState(
+        cwd: "/tmp", agent: AgentSession(command: "unknown", sessionId: $0), explicitTitle: nil)
+    }
     let backgroundStamp = Date(timeIntervalSinceReferenceDate: 5_000)
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
         WorkspaceState(
           name: "main", rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)]),
+          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)]),
         WorkspaceState(
           name: "mixed", rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(tree: dormantTree, explicitTitle: nil)], lastUsedAt: backgroundStamp),
+          tabs: dormantTabs, lastUsedAt: backgroundStamp),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     let wc = WindowController()
     let mixed = try XCTUnwrap(wc.workspaces.first { $0.name == "mixed" })
 
     for state in ["working", "waiting", "done", "idle"] {
-      let paneId = try XCTUnwrap(
+      let tabId = try XCTUnwrap(
         wc.controlSpawn(workspaceId: mixed.id, cwd: nil, command: nil))
-      let pane = try XCTUnwrap(wc.controlResolvePane(paneId))
-      setReportedState(pane, state)
+      let tab = try XCTUnwrap(wc.controlResolveTab(tabId))
+      setReportedState(tab, state)
     }
 
     wc.showWorkspacePalette()
@@ -102,6 +99,6 @@ extension WindowControllerWorkspaceTests {
     XCTAssertEqual(item.agentRollup.map(\.count), [1, 1, 1, 1, 2])
     XCTAssertEqual(mixed.lastUsedAt, backgroundStamp, "背景 materialize は MRU を動かさない")
     XCTAssertEqual(mixed.tabs.filter(\.activated).count, 4)
-    XCTAssertEqual(mixed.tabs.filter { !$0.activated }.count, 1)
+    XCTAssertEqual(mixed.tabs.filter { !$0.activated }.count, 2)
   }
 }

@@ -299,7 +299,7 @@ extension GitWorktreeCleanIntegrationTests {
     var probes: [String: DispatchCleanProbe] = [:]
     let probed = expectation(description: "probe")
     DispatchCleanProber(repo: repo, defaultBranch: "main", extraContainmentTargets: extra)
-      .probe(worktrees: worktrees, panes: []) {
+      .probe(worktrees: worktrees, tabs: []) {
         probes = $0
         probed.fulfill()
       }
@@ -342,7 +342,7 @@ extension GitWorktreeCleanIntegrationTests {
     let done = expectation(description: "probe")
     repo.worktrees { worktrees in
       DispatchCleanProber(repo: self.repo, defaultBranch: "main")
-        .probe(worktrees: worktrees, panes: []) {
+        .probe(worktrees: worktrees, tabs: []) {
           probes = $0
           done.fulfill()
         }

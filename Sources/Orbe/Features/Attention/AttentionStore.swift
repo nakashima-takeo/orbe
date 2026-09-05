@@ -20,7 +20,7 @@ import Observation
   struct Transient {
     let row: AttentionRow
     /// 到来時刻。ホバー延長では変わらない——MenuBarController が「新しい到来か」を見分ける印
-    /// （同じ paneId の積み替えも新しい到来なので `paneId` の比較では見分けられない）。
+    /// （同じ tabId の積み替えも新しい到来なので `tabId` の比較では見分けられない）。
     let arrivedAt: Date
     /// 到来した瞬間の件数。開いている間の②はこれを見せる——`count` は報告の coalesce で
     /// 展開の途中に増えるので、実件数を見せると 0→1 の到来で数字が展開中に閃く（原典は
@@ -58,7 +58,7 @@ import Observation
     rows = newRows
     guard let transient, !transient.retracted else { return }
     let projected = listRows.contains {
-      $0.paneId == transient.row.paneId && $0.state == transient.row.state
+      $0.tabId == transient.row.tabId && $0.state == transient.row.state
     }
     if !projected { self.transient?.retracted = true }
   }

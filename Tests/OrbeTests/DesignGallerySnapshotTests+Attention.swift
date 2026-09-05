@@ -12,27 +12,27 @@ extension DesignGallerySnapshotTests {
     let now = Date()
     return [
       AttentionRow(
-        paneId: 9006, workspaceName: "api-gateway", tabTitle: "deploy スクリプト整理",
+        tabId: 9006, workspaceName: "api-gateway", tabTitle: "deploy スクリプト整理",
         state: "waiting",
         message: "ビルド成果物の掃除方法を選んでください。1) rm -rf dist で全削除して作り直す 2) dist/legacy だけ残して選択削除 "
           + "3) 何もしない。CI キャッシュは 1) の場合のみ無効化が必要です。どれで進めますか？",
         stateChangedAt: now.addingTimeInterval(-45)),
       AttentionRow(
-        paneId: 9005, workspaceName: "ghostty-fork", tabTitle: "renderer テスト追加",
+        tabId: 9005, workspaceName: "ghostty-fork", tabTitle: "renderer テスト追加",
         state: "working", message: nil, stateChangedAt: now.addingTimeInterval(-60)),
       AttentionRow(
-        paneId: 9004, workspaceName: "orbe-core", tabTitle: "docs 同期", state: "done",
+        tabId: 9004, workspaceName: "orbe-core", tabTitle: "docs 同期", state: "done",
         message: "PR #142 を作成しました +18 −4。emit API の説明を README と docs/emit.md の両方に反映済み。",
         stateChangedAt: now.addingTimeInterval(-2 * 60)),
       AttentionRow(
-        paneId: 9003, workspaceName: "orbe-core", tabTitle: "emit API 移行", state: "waiting",
+        tabId: 9003, workspaceName: "orbe-core", tabTitle: "emit API 移行", state: "waiting",
         message: "Bash の許可が必要です — bin/rails db:migrate（スキーマに 2 テーブル追加）",
         stateChangedAt: now.addingTimeInterval(-3 * 60)),
       AttentionRow(
-        paneId: 9002, workspaceName: "orbe-core", tabTitle: "emit API 移行", state: "working",
+        tabId: 9002, workspaceName: "orbe-core", tabTitle: "emit API 移行", state: "working",
         message: nil, stateChangedAt: now.addingTimeInterval(-4 * 60)),
       AttentionRow(
-        paneId: 9001, workspaceName: "orbe-remote-ios", tabTitle: "CI 修復", state: "done",
+        tabId: 9001, workspaceName: "orbe-remote-ios", tabTitle: "CI 修復", state: "done",
         message: "build OK — 変更なし", stateChangedAt: now.addingTimeInterval(-8 * 60)),
     ]
   }
@@ -56,7 +56,7 @@ extension DesignGallerySnapshotTests {
         let store = AttentionStore()
         // ②が指す行は一覧にも居る（居なければ `apply(rows:)` が②を取り下げる）＝件数は 1 以上。
         let row = AttentionRow(
-          paneId: 9101 + index, workspaceName: pair.0, tabTitle: "emit API 移行",
+          tabId: 9101 + index, workspaceName: pair.0, tabTitle: "emit API 移行",
           state: "waiting", message: pair.1, stateChangedAt: Date())
         store.apply(rows: [row])
         store.noteTransient(row, dwell: 7)  // 撮るのは②の姿——滞留は画に出ない

@@ -3,9 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// タブ切替・workspace 切替のフォーカス復元規則
-/// （最後にフォーカスしていたペインへ戻る = preferredFocusPane）と、
-/// ペイン → WindowController のウィンドウレベル chrome 経路を固定する。
+/// タブ切替・workspace 切替のフォーカス復元規則（アクティブタブの surface へ戻る）と、
+/// surface → WindowController のウィンドウレベル chrome 経路を固定する。
 /// WindowControllerWorkspaceTests と同様、実 NSWindow + libghostty ランタイムを使う。
 final class WindowControllerFocusRestoreTests: OrbeTestCase {
   override func setUp() {
@@ -14,53 +13,37 @@ final class WindowControllerFocusRestoreTests: OrbeTestCase {
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
   }
 
-  /// アクティブタブを分割し、2 枚目のペインへフォーカスを移した状態を作る。
-  private func splitAndFocusSecondPane(_ wc: WindowController) -> SurfaceView {
+  func testTabSwitchRestoresActiveTabSurface() {
+    let wc = WindowController()
     let first = wc.window.firstResponder as! SurfaceView
-    let tc = first.controller!
-    tc.split(.horizontal)
-    let secondLeaf =
-      (tc.rootContainer.subviews.first as! NSSplitView).arrangedSubviews[1] as! SurfaceScrollView
-    let second = secondLeaf.surfaceView
-    wc.window.makeFirstResponder(second)
-    return second
-  }
-
-  func testTabSwitchRestoresLastFocusedPane() {
-    let wc = WindowController()
-    let second = splitAndFocusSecondPane(wc)
-    wc.newTab()  // タブ2 へ（フォーカスはタブ2 のペイン）
-    XCTAssertFalse(wc.window.firstResponder === second, "新タブではフォーカスが移っている")
+    wc.newTab()  // タブ2 へ（フォーカスはタブ2 の surface）
+    XCTAssertFalse(wc.window.firstResponder === first, "新タブではフォーカスが移っている")
     wc.prevTab()  // タブ1 へ戻る
-    XCTAssertTrue(
-      wc.window.firstResponder === second,
-      "タブ切替で最後にフォーカスしていたペインへ戻る")
+    XCTAssertTrue(wc.window.firstResponder === first, "タブ切替でそのタブの surface へ戻る")
   }
 
-  func testWorkspaceSwitchRestoresLastFocusedPane() {
+  func testWorkspaceSwitchRestoresActiveTabSurface() {
     let wc = WindowController()
-    let second = splitAndFocusSecondPane(wc)
+    let first = wc.window.firstResponder as! SurfaceView
     wc.createWorkspace(name: "other")  // workspace 2 へ
-    XCTAssertFalse(wc.window.firstResponder === second, "別 workspace ではフォーカスが移っている")
+    XCTAssertFalse(wc.window.firstResponder === first, "別 workspace ではフォーカスが移っている")
     wc.switchWorkspace(to: 0)  // 元 workspace へ戻る
-    XCTAssertTrue(
-      wc.window.firstResponder === second,
-      "workspace 切替で最後にフォーカスしていたペインへ戻る")
+    XCTAssertTrue(wc.window.firstResponder === first, "workspace 切替でアクティブタブの surface へ戻る")
   }
 
-  /// ペインからのウィンドウレベル chrome コマンドが WindowController まで届く
+  /// surface からのウィンドウレベル chrome コマンドが WindowController まで届く
   /// （タブ操作は firstResponder の移動で観測する）。
-  func testWindowCommandRoutesPaneToWindowController() {
+  func testWindowCommandRoutesSurfaceToWindowController() {
     let wc = WindowController()
-    let pane = wc.window.firstResponder as! SurfaceView
+    let surface = wc.window.firstResponder as! SurfaceView
 
-    pane.controller?.requestWindowCommand(.newTab)
-    XCTAssertFalse(wc.window.firstResponder === pane, "newTab が届けば新タブのペインへフォーカスが移る")
+    surface.perform(.newTab)
+    XCTAssertFalse(wc.window.firstResponder === surface, "newTab が届けば新タブの surface へフォーカスが移る")
 
-    pane.controller?.requestWindowCommand(.prevTab)
-    XCTAssertTrue(wc.window.firstResponder === pane, "prevTab が届けば元タブのペインへ戻る")
+    surface.perform(.prevTab)
+    XCTAssertTrue(wc.window.firstResponder === surface, "prevTab が届けば元タブの surface へ戻る")
 
-    pane.controller?.requestWindowCommand(.nextTab)
-    XCTAssertFalse(wc.window.firstResponder === pane, "nextTab が届けば隣タブのペインへ移る")
+    surface.perform(.nextTab)
+    XCTAssertFalse(wc.window.firstResponder === surface, "nextTab が届けば隣タブの surface へ移る")
   }
 }

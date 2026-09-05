@@ -10,8 +10,8 @@ import XCTest
 /// `-32006` で拒み、呼び出し側は seq を取り直す羽目になる。seq が 1 本の単調増加でなくなれば
 /// 「これより大きい seq はこの操作より後」という応答の `seq` の意味が崩れる。
 final class EventHistoryTests: OrbeTestCase {
-  private func stateEvent(_ paneId: Int, _ state: String) -> ControlEvent {
-    .agentState(paneId: paneId, state: state, message: nil, sessionId: nil)
+  private func stateEvent(_ tabId: Int, _ state: String) -> ControlEvent {
+    .agentState(tabId: tabId, state: state, message: nil, sessionId: nil)
   }
 
   private func matchedSeq(_ replay: EventHistory.Replay) -> Int? {
@@ -21,19 +21,19 @@ final class EventHistoryTests: OrbeTestCase {
 
   // MARK: - seq
 
-  /// seq は kind・pane を問わず 1 本で、1 始まりの単調増加。
-  func testSeqIsOneMonotonicCounterAcrossKindsAndPanes() {
+  /// seq は kind・tab を問わず 1 本で、1 始まりの単調増加。
+  func testSeqIsOneMonotonicCounterAcrossKindsAndTabs() {
     var history = EventHistory(capacity: 8)
     XCTAssertEqual(history.latestSeq, 0, "イベント未発生なら 0")
 
     let seqs = [
       history.append(stateEvent(1, "working")),
-      history.append(.paneTitle(paneId: 2, title: "t")),
-      history.append(.pwd(paneId: 3, path: "/p")),
-      history.append(.paneClosed(paneId: 1)),
+      history.append(.title(tabId: 2, title: "t")),
+      history.append(.pwd(tabId: 3, path: "/p")),
+      history.append(.tabClosed(tabId: 1)),
     ].map(\.seq)
 
-    XCTAssertEqual(seqs, [1, 2, 3, 4], "kind と pane を跨いで 1 本の seq が 1 から振られる")
+    XCTAssertEqual(seqs, [1, 2, 3, 4], "kind と tab を跨いで 1 本の seq が 1 から振られる")
     XCTAssertEqual(history.latestSeq, 4, "latestSeq は最後に振った seq")
   }
 

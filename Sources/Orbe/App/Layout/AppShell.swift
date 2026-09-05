@@ -5,10 +5,10 @@ import SwiftUI
 /// 状態の所有は WindowController/AgentLauncher のまま。ここは「何をどこに置くか」だけを運ぶ。
 ///
 /// ドメイン状態（`workspaces`/`activeWorkspace` 等）は意図的にここへ持ち上げない＝WindowController を
-/// 命令的コーディネータとして残す。端末ペインツリーは AppKit を命令的に reparent するしかなく
+/// 命令的コーディネータとして残す。端末タブの view は AppKit を命令的に reparent するしかなく
 /// （NSView 同一性依存の keep-alive・scrollback は declarative で表現不能＝NSViewRepresentable＋
 /// Coordinator 境界そのもの）、chrome は `refreshChrome()` の Snapshot 投影で既に reactive。
-/// 生ドメインを View に晒すと SwiftUI が AppKit 型（`TerminalController` 等）へ結合し分離が悪化する。
+/// 生ドメインを View に晒すと SwiftUI が AppKit 型（`TerminalTab` 等）へ結合し分離が悪化する。
 @Observable final class AppShellModel {
   /// 前面 overlay の種別。`AppShell` が `.overlay` で対応する SwiftUI を compose する。
   enum Overlay {
@@ -18,7 +18,7 @@ import SwiftUI
 
   /// 上段 chrome（ネイティブ SwiftUI `StatusRowView` の状態）。
   let statusModel: StatusRowModel
-  /// 端末ツリー（アクティブ workspace の全タブ rootContainer を WindowController が出し入れする器）。
+  /// 端末の器（アクティブ workspace の全タブの view を WindowController が出し入れする）。
   let content: NSView
   /// アクティブ workspace が0タブ（surface が1枚も無い）か。true のとき content の地は端末が塗らないため、
   /// AppShell が baseFill（透過設定追従）で埋める（透過ウィンドウ越しにデスクトップが透けるのを防ぐ）。
@@ -49,7 +49,7 @@ import SwiftUI
   /// 現在の overlay の入力欄へ focus を再確定する（各モデルの focusToken を進め、描画後に `@FocusState` を
   /// 立て直す）。overlay 遷移（overlay→overlay・overlay→端末）では去りゆくカードの TextField（field editor）
   /// teardown が次 runloop tick に走り、同期で当てた新しい focus を奪い返す。その次 tick でここを呼び、
-  /// 遷移先 overlay の入力欄へ focus を取り戻して teardown に勝つ。`.none`（端末）は host（`focusActivePane`）が担う。
+  /// 遷移先 overlay の入力欄へ focus を取り戻して teardown に勝つ。`.none`（端末）は host（`focusActiveTab`）が担う。
   func focusCurrentOverlayField() {
     switch overlay {
     case .none: break

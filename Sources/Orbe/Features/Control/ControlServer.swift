@@ -5,12 +5,12 @@ import Foundation
 /// 実体は WindowController。ControlServer がリクエストを main へ hop して叩く。
 protocol ControlTarget: AnyObject {
   func controlListWorkspaces() -> [[String: Any]]
-  func controlListPanes() -> [[String: Any]]
+  func controlListTabs() -> [[String: Any]]
   /// 検出済みエージェント CLI を列挙する（読み取り専用）。
   /// 検出未完了なら空配列（エラーにしない）。
   func controlListAgents() -> [[String: Any]]
-  func controlResolvePane(_ id: Int) -> SurfaceView?
-  /// 新タブをアクティブ workspace（または指定 workspace）に開く。戻り値は新ペイン ID。
+  func controlResolveTab(_ id: Int) -> TerminalTab?
+  /// 新タブをアクティブ workspace（または指定 workspace）に開く。戻り値は新タブ ID。
   func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int?
   /// 検出済みエージェントを新タブで起こす（spawn_agent）。command 省略時は対象 workspace の
   /// 実効 default-agent を解く。未知 workspaceId は -32004・未検出 command は -32602・
@@ -21,25 +21,19 @@ protocol ControlTarget: AnyObject {
   /// 安全文字集合の外の sessionId は -32602。
   func controlResumeAgent(command: String, sessionId: String, workspaceId: Int?, cwd: String?)
     -> Result<AgentLaunch, ControlError>
-  /// ペインのエージェントへ text を送って Enter を押す（prompt_agent）。入力欄が空いている状態
+  /// タブのエージェントへ text を送って Enter を押す（prompt_agent）。入力欄が空いている状態
   /// （idle / done / 報告なし）にだけ届く動詞で、working / waiting は -32000（何も送らない）、
   /// 未 mount も -32000。成功は nil。
-  func controlPromptAgent(pane: SurfaceView, text: String) -> ControlError?
+  func controlPromptAgent(tab: TerminalTab, text: String) -> ControlError?
   /// 背景/休眠 workspace を前面化し全タブを mount する。戻り値は activate 後の
-  /// activeWorkspaceId と当該 workspace のペイン ID 群。未知 id は nil（spawn と違いフォールバックしない）。
-  func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, paneIds: [Int])?
-  /// エージェント hook の状態報告を発信元ペインへ適用する（report_agent）。
+  /// activeWorkspaceId と当該 workspace のタブ ID 群。未知 id は nil（spawn と違いフォールバックしない）。
+  func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, tabIds: [Int])?
+  /// エージェント hook の状態報告を発信元タブへ適用する（report_agent）。
   func controlReportAgent(
-    pane: SurfaceView, agent: String, state: String, sessionId: String?, message: AgentMessage?)
-  /// 指定ペインを分割し新ペイン ID を返す（split_pane）。direction は "right"=左右 / "down"=上下。
-  /// 所有 TerminalController の split(from:command:) へ委譲する。未解決ペインは -32004。
-  func controlSplitPane(paneId: Int, direction: String, command: String?)
-    -> Result<Any, ControlError>
-  /// 指定ペインを閉じる（close_pane）。所有 TerminalController.close へ委譲。未解決は -32004。
-  func controlClosePane(paneId: Int) -> Result<Any, ControlError>
-  /// 指定ペインへフォーカスする（focus_pane）。別 WS なら activate＋タブ選択も行う。未解決は -32004。
-  func controlFocusPane(paneId: Int) -> Result<Any, ControlError>
-  /// 指定タブ（TerminalController.id）を閉じる（close_tab）。カスケードは GUI（Cmd+W）と一致。未解決は -32004。
+    tab: TerminalTab, agent: String, state: String, sessionId: String?, message: AgentMessage?)
+  /// 指定タブへフォーカスする（focus_tab）。別 WS なら activate＋タブ選択も行う。未解決は -32004。
+  func controlFocusTab(tabId: Int) -> Result<Any, ControlError>
+  /// 指定タブ（TerminalTab.id）を閉じる（close_tab）。カスケードは GUI（Cmd+W）と一致。未解決は -32004。
   func controlCloseTab(tabId: Int) -> Result<Any, ControlError>
   /// 全設定項目の実効値・由来 scope・型・値域（domain）を列挙する（config CLI 用・読み取り専用）。
   /// workspaceId 指定でその WS の上書きを重ねる（未指定はアクティブ WS）。未知 id は -32004。
@@ -80,7 +74,7 @@ final class ControlServer {
   private(set) var socketPath = ""
 
   /// socketPath は StateDir から決定的に決まるため init で確定する（start より前に
-  /// ペイン env 注入が socketPath を読む——復元ペインは WindowController.init 内 restore で
+  /// タブの env 注入が socketPath を読む——復元タブは WindowController.init 内 restore で
   /// mount され、AppDelegate の start() より前に走るため）。空なら制御 API 無効。
   private init() {
     guard let dir = StateDir.base() else { return }
@@ -274,8 +268,8 @@ final class ControlServer {
     // 補完系は無応答契約（update/end は nil）を含むため、target 有無に依らず最優先で分離する
     // （target==nil 時に update/end が "no window" 応答を書くと、打鍵ぶんの行が accept 応答の前に積む）。
     if method.hasPrefix("completion_") {
-      let pane = (params["paneId"] as? Int).flatMap { target?.controlResolvePane($0) }
-      return runCompletion(method: method, pane: pane, params: params)
+      let surface = (params["tabId"] as? Int).flatMap { target?.controlResolveTab($0)?.surface }
+      return runCompletion(method: method, surface: surface, params: params)
     }
 
     guard let target = target else {
@@ -284,46 +278,46 @@ final class ControlServer {
     return runWindowed(method: method, params: params, target: target)
   }
 
-  /// ウィンドウ（target）を要するペイン/タブ/workspace 操作を実行する。
+  /// ウィンドウ（target）を要するタブ/workspace 操作を実行する。
   private func runWindowed(method: String, params: [String: Any], target: ControlTarget)
     -> Result<Any, ControlError>
   {
-    func pane() -> SurfaceView? { (params["paneId"] as? Int).flatMap(target.controlResolvePane) }
-    let notFound = ControlError(code: -32004, message: "pane not found")
+    func tab() -> TerminalTab? { (params["tabId"] as? Int).flatMap(target.controlResolveTab) }
+    let notFound = ControlError(code: -32004, message: "tab not found")
 
     switch method {
     case "list_workspaces":
       return .success(["workspaces": target.controlListWorkspaces()])
-    case "list_panes":
-      return .success(["panes": target.controlListPanes()])
+    case "list_tabs":
+      return .success(["tabs": target.controlListTabs()])
     case "list_agents":
       return .success(["agents": target.controlListAgents()])
-    case "get_pane_text":
-      guard let p = pane() else { return .failure(notFound) }
+    case "get_tab_text":
+      guard let t = tab() else { return .failure(notFound) }
       let scrollback = params["scrollback"] as? Bool ?? false
-      return .success(["text": p.controlReadText(scrollback: scrollback) ?? ""])
+      return .success(["text": t.surface.controlReadText(scrollback: scrollback) ?? ""])
     case "send_text":
-      guard let p = pane() else { return .failure(notFound) }
+      guard let t = tab() else { return .failure(notFound) }
       guard let text = params["text"] as? String else {
         return .failure(ControlError(code: -32602, message: "missing text"))
       }
-      p.controlSendText(text)
+      t.surface.controlSendText(text)
       return .success(["ok": true])
     case "send_key":
-      guard let p = pane() else { return .failure(notFound) }
+      guard let t = tab() else { return .failure(notFound) }
       guard let spec = params["key"] as? String, let key = ControlKey.parse(spec) else {
         return .failure(ControlError(code: -32602, message: "invalid key"))
       }
-      p.controlSendKey(key)
+      t.surface.controlSendKey(key)
       return .success(["ok": true])
     case "spawn":
       guard
-        let pid = target.controlSpawn(
+        let tid = target.controlSpawn(
           workspaceId: params["workspaceId"] as? Int,
           cwd: params["cwd"] as? String,
           command: params["command"] as? String)
       else { return .failure(ControlError(code: -32000, message: "spawn failed")) }
-      return .success(["paneId": pid])
+      return .success(["tabId": tid])
     case "activate_workspace":
       guard let wid = params["workspaceId"] as? Int else {
         return .failure(ControlError(code: -32602, message: "missing workspaceId"))
@@ -331,22 +325,22 @@ final class ControlServer {
       guard let r = target.controlActivateWorkspace(workspaceId: wid) else {
         return .failure(ControlError(code: -32004, message: "workspace not found"))
       }
-      return .success(["activeWorkspaceId": r.activeWorkspaceId, "paneIds": r.paneIds])
+      return .success(["activeWorkspaceId": r.activeWorkspaceId, "tabIds": r.tabIds])
     case "report_agent":
-      guard let p = pane() else { return .failure(notFound) }
+      guard let t = tab() else { return .failure(notFound) }
       guard let agent = params["agent"] as? String, let state = params["state"] as? String else {
         return .failure(ControlError(code: -32602, message: "missing agent/state"))
       }
       target.controlReportAgent(
-        pane: p, agent: agent, state: state, sessionId: params["sessionId"] as? String,
+        tab: t, agent: agent, state: state, sessionId: params["sessionId"] as? String,
         message: (params["message"] as? String).map {
           AgentMessage(text: $0, source: params["messageSource"] as? String)
         })
       return .success(["ok": true])
     default:
-      // ペイン/タブ操作・config / workspace CRUD は拡張の dispatch（ControlServer+Dispatch）へ。
+      // タブ操作・config / workspace CRUD は拡張の dispatch（ControlServer+Dispatch）へ。
       // いずれも非該当なら未知メソッド。
-      return runPaneTab(method: method, params: params, target: target)
+      return runTab(method: method, params: params, target: target)
         ?? runConfigWorkspace(method: method, params: params, target: target)
         ?? .failure(ControlError(code: -32601, message: "method not found: \(method)"))
     }
@@ -354,22 +348,26 @@ final class ControlServer {
 
   /// 補完系メソッドを main で実行する。`completion_update` /
   /// `completion_end` は無応答契約で nil を返し、Connection が書込みを抑止する。
-  private func runCompletion(method: String, pane: SurfaceView?, params: [String: Any])
+  private func runCompletion(method: String, surface: SurfaceView?, params: [String: Any])
     -> Result<Any, ControlError>?
   {
     switch method {
     case "completion_update":
-      if let pane, let buffer = params["buffer"] as? String, let cursor = params["cursor"] as? Int {
-        pane.completionUpdate(buffer: buffer, cursor: cursor)
+      if let surface, let buffer = params["buffer"] as? String,
+        let cursor = params["cursor"] as? Int
+      {
+        surface.completionUpdate(buffer: buffer, cursor: cursor)
       }
       return nil
     case "completion_end":
-      pane?.completionEnd()
+      surface?.completionEnd()
       return nil
     case "completion_accept":
-      guard let pane else { return .failure(ControlError(code: -32004, message: "pane not found")) }
+      guard let surface else {
+        return .failure(ControlError(code: -32004, message: "tab not found"))
+      }
       let advance = params["advance"] as? Bool ?? true
-      if let applied = pane.completionAccept(advance: advance) {
+      if let applied = surface.completionAccept(advance: advance) {
         return .success(["buffer": applied.buffer, "cursor": applied.cursor])
       }
       return .success(["buffer": NSNull()])

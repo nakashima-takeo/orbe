@@ -105,7 +105,7 @@ extension L10n {
       "git 操作が進行中のため中止しました", "Stopped: a git operation is in progress"
     ),
     .dispatchCleanFailedWorktree: (
-      "削除できませんでした — ペインで使用中の可能性", "Couldn't delete — may be in use by a pane"
+      "削除できませんでした — タブで使用中の可能性", "Couldn't delete — may be in use by a tab"
     ),
     .dispatchCleanFailedBranch: (
       "worktree は削除 · ブランチは残しました", "Worktree removed · branch kept"
@@ -122,7 +122,7 @@ extension L10n {
     .dispatchCleanOwnCommitsOther: ("独自コミット %lld 件", "%lld own commits"),
     .dispatchCleanAgentWorking: ("agent 作業中", "agent working"),
     .dispatchCleanAgentWaiting: ("agent 入力待ち", "agent waiting for input"),
-    .dispatchCleanPaneOpen: ("タブで表示中", "Open in a tab"),
+    .dispatchCleanTabOpen: ("タブで表示中", "Open in a tab"),
     .dispatchCleanUnverified: ("情報取得に失敗", "Couldn't fetch info"),
   ]
 }

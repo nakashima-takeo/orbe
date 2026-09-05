@@ -13,19 +13,19 @@ extension WindowController: ControlTarget {
     }
   }
 
-  func controlListPanes() -> [[String: Any]] {
-    store.allPanes().map { ref in
+  /// 全タブを列挙する（list_tabs）。`active` は「その workspace で選択中のタブ」——背景 workspace でも
+  /// 1 枚 true で、前面かは `list_workspaces` の `active` で分かる。
+  func controlListTabs() -> [[String: Any]] {
+    store.allTabs().map { ref in
       let ws = workspaces[ref.workspaceIndex]
-      let pane = ref.pane
+      let tab = ref.tab
       return [
-        "paneId": pane.id, "workspaceId": ws.id, "tabId": ref.tab.id,
-        "workspaceName": ws.name,
-        "title": pane.paneTitle,
-        "cwd": (pane.currentPwd ?? pane.initialCwd).map { $0 as Any } ?? NSNull(),
-        "agentState": pane.agentState.map { $0 as Any } ?? NSNull(),
-        "agentSessionId": pane.agentSlot.session?.sessionId.map { $0 as Any } ?? NSNull(),
-        "focused": ref.workspaceIndex == activeWorkspace && ref.tabIndex == ws.active
-          && ref.tab.focusedPane === pane,
+        "tabId": tab.id, "workspaceId": ws.id, "workspaceName": ws.name,
+        "title": tab.surface.title,
+        "cwd": tab.cwd,
+        "agentState": tab.agentState.map { $0 as Any } ?? NSNull(),
+        "agentSessionId": tab.agentSlot.session?.sessionId.map { $0 as Any } ?? NSNull(),
+        "active": ref.tabIndex == ws.active,
       ]
     }
   }
@@ -42,21 +42,20 @@ extension WindowController: ControlTarget {
     agents.map { ["command": $0.command, "path": $0.path] }
   }
 
-  func controlResolvePane(_ id: Int) -> SurfaceView? {
+  /// タブを id で解決する（全 workspace の tabs を走査）。
+  func controlResolveTab(_ id: Int) -> TerminalTab? {
     for ws in workspaces {
-      for tc in ws.tabs {
-        for pane in tc.controlAllPanes() where pane.id == id { return pane }
-      }
+      for tab in ws.tabs where tab.id == id { return tab }
     }
     return nil
   }
 
-  /// エージェント hook の状態報告を発信元ペインの slot へ適用する。遷移は現 slot × state で決まる:
+  /// エージェント hook の状態報告を発信元タブの slot へ適用する。遷移は現 slot × state で決まる:
   /// `.none` は clear が no-op・それ以外の報告で live 化（手動起動・spawn_agent の初回 hook という
   /// 正規経路）。`.live` は clear で `.none` へ・それ以外は同一性と報告を更新する。`.dormant`
-  /// （未消費チケット）宛は**破棄**——チケットは報告で消費・変異できず、dormant ペインは surface
+  /// （未消費チケット）宛は**破棄**——チケットは報告で消費・変異できず、dormant タブは surface
   /// 未生成で報告主のプロセスが存在しえない（届く報告は必ず偽）。slot 代入の didSet が agent_state
-  /// を emit し、paneAgentStateChanged がタブ・横断ロールアップを更新する。
+  /// を emit し、`onAgentStateChange` がタブ・横断ロールアップを更新する。
   ///
   /// 同一性の更新は `AgentSession.updated` が持つ（command は常に上書き・sessionId は同じ CLI
   /// からの報告のあいだだけ sticky）。
@@ -66,152 +65,111 @@ extension WindowController: ControlTarget {
   /// （通知由来・文言なし）で上書きしない**。1 つの待ちを複数の hook が順に報告する CLI があるため（claude は
   /// AskUserQuestion のダイアログを開く時点で質問文を、その約 6 秒後に汎用の定型文を撃つ）、
   /// 出所で守らないと具体的な文言が定型文に潰れる。逆に通知由来どうしは上書きし合う——待ちの主体が
-  /// この pane のエージェントとは限らず（teammate の worker が出す承認要求はリーダーの pane へ
+  /// このタブのエージェントとは限らず（teammate の worker が出す承認要求はリーダーのタブへ
   /// 即時に届き、要求ごとに文言が違う）、保持すると別の待ちの文言が居残るため。waiting / done への
   /// 実変化は 1 つの通知（`agentNotification`）として成立させ、メニューバーの一過性表示と通知音という
   /// 2 つの面へ流す（成立条件——見ているタブ・未activatedタブでは通知しない——は通知側が 1 回だけ解く）。
   func controlReportAgent(
-    pane: SurfaceView, agent: String, state: String, sessionId: String?, message: AgentMessage?
+    tab: TerminalTab, agent: String, state: String, sessionId: String?, message: AgentMessage?
   ) {
     // 遷移表そのもの。網羅 switch なので、`AgentSlot` にケースが増えたら必ずここの判断を求められる。
-    switch pane.agentSlot {
+    switch tab.agentSlot {
     case .dormant:
-      // 破棄——このペインの slot は一切変えない。末尾の `paneAgentStateChanged()` だけは他経路と
-      // 同じく無条件に通す（chrome の再投影に加え、可視タブの done→idle 消費も走る）。
-      break
+      break  // 破棄——このタブの slot は一切変えない。
     case .live where state == "clear":
-      pane.agentSlot = .none
+      tab.agentSlot = .none
     case .none where state == "clear":
       break  // 既に無。
     case .none, .live:
       let session =
-        pane.agentSlot.session?.updated(command: agent, sessionId: sessionId)
+        tab.agentSlot.session?.updated(command: agent, sessionId: sessionId)
         ?? AgentSession(command: agent, sessionId: sessionId)
-      if let prior = pane.agentReport, prior.state == state {
+      if let prior = tab.agentReport, prior.state == state {
         // 同値の連続報告: 時刻は維持し、ツール由来の文言を弱い報告から守る。
         let keep = message?.source != "tool" && prior.message?.source == "tool"
-        pane.agentSlot = .live(
+        tab.agentSlot = .live(
           session: session,
           report: AgentReport(
             state: state, message: keep ? prior.message : message,
             stateChangedAt: prior.stateChangedAt))
       } else {
         // 実変化（.none・report なしからの誕生を含む）。
-        pane.agentSlot = .live(
+        tab.agentSlot = .live(
           session: session,
           report: AgentReport(state: state, message: message, stateChangedAt: Date()))
-        if state == "waiting" || state == "done", let notification = agentNotification(for: pane) {
+        if state == "waiting" || state == "done", let notification = agentNotification(for: tab) {
           noteAttentionTransient(notification)
           noteAgentSound(notification)
         }
       }
     }
-    pane.controller?.paneAgentStateChanged()
   }
 
-  /// ペインのエージェントへ text を送って Enter を押す（制御 API の prompt_agent）。届くのは入力欄が
+  /// タブのエージェントへ text を送って Enter を押す（制御 API の prompt_agent）。届くのは入力欄が
   /// 空いている状態（idle / done / 報告なし）だけ。`waiting` は permission ダイアログ / AskUserQuestion
   /// が開いている状態で、そこへ text＋Enter を打つと既定選択の確定＝ツール実行の承認が副作用として
   /// 起きるので拒む（waiting への応答は `send_key` の領分）。判定は hook 報告の派生値 `agentState`
   /// だけなので、拒めるのは waiting を報告する agent（claude / codex、プラグイン導入済み）に限る
-  /// ——報告経路の無いペイン（agy・未導入・codex の初回報告前）では、承認ダイアログが開いていても
+  /// ——報告経路の無いタブ（agy・未導入・codex の初回報告前）では、承認ダイアログが開いていても
   /// 素通りし、既定選択の確定を防げない。
-  func controlPromptAgent(pane: SurfaceView, text: String) -> ControlError? {
-    if let state = pane.agentState, state == "working" || state == "waiting" {
+  func controlPromptAgent(tab: TerminalTab, text: String) -> ControlError? {
+    if let state = tab.agentState, state == "working" || state == "waiting" {
       return ControlError(
         code: -32000,
         message: "agent busy (state: \(state); answer a waiting agent with send_key)")
     }
-    guard pane.surfacePtr != nil else {
-      return ControlError(code: -32000, message: "pane not mounted")
+    guard tab.surface.surfacePtr != nil else {
+      return ControlError(code: -32000, message: "tab not mounted")
     }
-    pane.controlSendText(text)
-    pane.controlSendKey(ControlKey.enter)
+    tab.surface.controlSendText(text)
+    tab.surface.controlSendKey(ControlKey.enter)
     return nil
   }
 
-  /// 指定 workspace に新タブを開き、新ペイン ID を返す（制御 API の spawn）。未知 workspaceId は
+  /// 指定 workspace に新タブを開き、新タブ ID を返す（制御 API の spawn）。未知 workspaceId は
   /// アクティブへフォールバックする（`spawn_agent` / `resume_agent` は同じ形を継がず -32004 で弾く）。
   func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int? {
     let index =
       workspaceId.flatMap { wid in workspaces.firstIndex { $0.id == wid } } ?? activeWorkspace
-    return openTab(workspaceIndex: index, cwd: cwd, command: command)?.paneId
+    return openTab(workspaceIndex: index, cwd: cwd, command: command)?.tabId
   }
 
   /// 背景/休眠 workspace を前面化し全タブを mount する（制御 API の activate_workspace）。
   /// 切替実体は `switchWorkspace(to:)` に委譲（既アクティブ no-op・0タブは空表示〔自動起動なし〕・mount・
-  /// フォーカス・保存を既存経路が担う）。paneId 群は `controlListPanes` と同じ導出で組む。
-  func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, paneIds: [Int])? {
+  /// フォーカス・保存を既存経路が担う）。
+  func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, tabIds: [Int])? {
     guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else { return nil }
     switchWorkspace(to: index)
     let ws = workspaces[index]
-    return (ws.id, ws.tabs.flatMap { $0.controlAllPanes().map(\.id) })
+    return (ws.id, ws.tabs.map(\.id))
   }
 
-  // MARK: - ペイン/タブ操作（split・close・focus）
+  // MARK: - タブ操作（focus・close）
 
-  /// 指定ペインを分割し新ペイン ID を返す（split_pane）。direction は "right"=左右（Cmd+D）・
-  /// "down"=上下（Cmd+Shift+D）。所有 TerminalController の split(from:command:) へ委譲する。
-  func controlSplitPane(paneId: Int, direction: String, command: String?) -> Result<
-    Any, ControlError
-  > {
-    guard let pane = controlResolvePane(paneId), let tc = pane.controller else {
-      return .failure(ControlError(code: -32004, message: "pane not found"))
-    }
-    let orientation: NSUserInterfaceLayoutOrientation =
-      direction == "right" ? .horizontal : .vertical
-    // ここへ来る＝ペインは解決済みだが split 自体が失敗（未 mount 等）。"pane not found" は誤誘導。
-    guard let newPane = tc.split(orientation, from: pane, command: command) else {
-      return .failure(ControlError(code: -32000, message: "split failed"))
-    }
-    return .success(["paneId": newPane.id])
-  }
-
-  /// 指定ペインを閉じる（close_pane）。所有 TerminalController.close へ委譲し、畳み込み・カスケード
-  /// （最後の 1 枚ならタブを閉じ、アクティブ WS 最後のタブは0タブ空維持）は既存ロジックに一任する。
-  func controlClosePane(paneId: Int) -> Result<Any, ControlError> {
-    guard let pane = controlResolvePane(paneId), let tc = pane.controller else {
-      return .failure(ControlError(code: -32004, message: "pane not found"))
-    }
-    tc.close(pane, origin: .controlAPI)
-    return .success(["ok": true])
-  }
-
-  /// 指定ペインへフォーカスする（focus_pane）。list_panes と同じ走査で (wsIndex, tabIndex) を特定し、
-  /// 別 WS なら switchWorkspace で activate、その上でタブを選び first responder を移す（既フォーカスでも成功＝冪等）。
-  func controlFocusPane(paneId: Int) -> Result<Any, ControlError> {
+  /// 指定タブへフォーカスする（focus_tab）。別 WS なら switchWorkspace で activate、その上でタブを選び
+  /// first responder を移す（既フォーカスでも成功＝冪等）。Attention / メニューバーの「そのタブへ移動」も
+  /// 同じ経路を通る。
+  func controlFocusTab(tabId: Int) -> Result<Any, ControlError> {
     for (wi, ws) in workspaces.enumerated() {
-      for (ti, tc) in ws.tabs.enumerated() {
-        for pane in tc.controlAllPanes() where pane.id == paneId {
-          if wi != activeWorkspace { switchWorkspace(to: wi) }
-          select(ti)
-          window.makeFirstResponder(pane)
-          tc.focusedPaneChanged(pane)
-          return .success(["ok": true])
-        }
+      for (ti, tab) in ws.tabs.enumerated() where tab.id == tabId {
+        if wi != activeWorkspace { switchWorkspace(to: wi) }
+        select(ti)
+        window.makeFirstResponder(tab.surface)
+        return .success(["ok": true])
       }
     }
-    return .failure(ControlError(code: -32004, message: "pane not found"))
+    return .failure(ControlError(code: -32004, message: "tab not found"))
   }
 
-  /// 指定タブ（TerminalController.id）を閉じる（close_tab）。id 解決の上で internal 化した closeTab へ
-  /// 素直に委譲し、カスケード（ペイン→タブ→アクティブ WS 最後のタブは0タブ空維持）を GUI（Cmd+W）と完全一致させる。
+  /// 指定タブ（TerminalTab.id）を閉じる（close_tab）。id 解決の上で internal 化した closeTab へ
+  /// 素直に委譲し、カスケード（アクティブ WS 最後のタブは0タブ空維持）を GUI（Cmd+W）と完全一致させる。
   func controlCloseTab(tabId: Int) -> Result<Any, ControlError> {
-    guard let tc = controlResolveTab(tabId) else {
+    guard let tab = controlResolveTab(tabId) else {
       return .failure(ControlError(code: -32004, message: "tab not found"))
     }
-    closeTab(tc, origin: .controlAPI)
+    closeTab(tab, origin: .controlAPI)
     return .success(["ok": true])
   }
-
-  /// タブを id で解決する（controlResolvePane の鏡。全 workspace の tabs を tc.id で走査）。
-  func controlResolveTab(_ id: Int) -> TerminalController? {
-    for ws in workspaces {
-      for tc in ws.tabs where tc.id == id { return tc }
-    }
-    return nil
-  }
-
   // MARK: - config（設定の列挙・設定）
 
   /// 全設定項目の実効値・由来 scope・型・値域（domain）を列挙する（config CLI）。実効値は global 層に

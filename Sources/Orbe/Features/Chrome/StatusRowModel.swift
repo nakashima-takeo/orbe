@@ -7,11 +7,11 @@ import SwiftUI
   var titles: [String] = []
   /// 各タブの集約状態種別（nil で表示なし＝idle/無し）。詳細＋件数は上段右端の rollup 側に出す。
   var glyphs: [AgentStateIcon.Kind?] = []
-  /// 各タブの同一性（`TerminalController.id`）。時間差を持つ操作（コンテキストメニュー）が
+  /// 各タブの同一性（`TerminalTab.id`）。時間差を持つ操作（コンテキストメニュー）が
   /// 位置 index の代わりに使う。titles / glyphs と同じ長さ。
   var tabIds: [Int] = []
   var active = 0
-  /// `~` 短縮済みのアクティブペイン cwd。
+  /// `~` 短縮済みのアクティブタブの cwd。
   var cwd: String?
   /// 全 workspace 横断のエージェント状態ロールアップ（状態順の `[(state, count)]`）。
   var rollup: [(state: String, count: Int)] = []
@@ -26,7 +26,7 @@ import SwiftUI
   var onAttentionTap: () -> Void = {}
   /// タブを `from` から挿入先 index `to`（0…count）へ並び替える（同一 workspace 内・commit-on-drop）。
   var onReorder: (Int, Int) -> Void = { _, _ in }
-  /// タブ `tabId`（位置 index ではない）内の全ペインのエージェント状態を idle へ落とす
+  /// タブ `tabId`（位置 index ではない）のエージェント状態を idle へ落とす
   /// （コンテキストメニュー）。選択切替を挟まない。
   var onResetAgentState: (_ tabId: Int) -> Void = { _ in }
 

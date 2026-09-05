@@ -101,7 +101,7 @@ final class ControlWireTests: OrbeTestCase {
   func testMissingParamsIsTreatedAsEmpty() {
     let wire = startWire(target: FakeControlTarget())
 
-    wire.send(["jsonrpc": "2.0", "id": 13, "method": "list_panes"])
+    wire.send(["jsonrpc": "2.0", "id": 13, "method": "list_tabs"])
     let response = wire.nextResponse()
 
     XCTAssertNotNil(response?["result"], "params 省略は空 params 扱い（エラーにしない）")
@@ -113,7 +113,7 @@ final class ControlWireTests: OrbeTestCase {
   func testUnknownMethodIsMethodNotFound() {
     let wire = startWire(target: FakeControlTarget())
 
-    wire.send(["jsonrpc": "2.0", "id": 14, "method": "teleport_pane"])
+    wire.send(["jsonrpc": "2.0", "id": 14, "method": "teleport_tab"])
 
     XCTAssertEqual(errorCode(wire.nextResponse()), -32601, "未知 method は -32601")
   }
@@ -134,7 +134,7 @@ final class ControlWireTests: OrbeTestCase {
   func testWithoutTargetIsNoWindow() {
     let wire = startWireWithoutTarget()
 
-    wire.send(["jsonrpc": "2.0", "id": 16, "method": "list_panes"])
+    wire.send(["jsonrpc": "2.0", "id": 16, "method": "list_tabs"])
     let response = wire.nextResponse()
 
     XCTAssertEqual(errorCode(response), -32000, "target 不在は -32000")
@@ -207,7 +207,7 @@ final class ControlWireTests: OrbeTestCase {
   func testObjectWithoutMethodIsInvalidRequestAndKeepsId() {
     let wire = startWire(target: FakeControlTarget())
 
-    wire.send(["jsonrpc": "2.0", "id": 19, "params": ["paneId": 1]])
+    wire.send(["jsonrpc": "2.0", "id": 19, "params": ["tabId": 1]])
     let response = wire.nextResponse()
 
     XCTAssertEqual(errorCode(response), -32600, "method 欠落は invalid request")

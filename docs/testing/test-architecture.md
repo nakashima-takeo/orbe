@@ -62,7 +62,7 @@ updated: 2026-08-14
 - **起動と差し替え**: Foundation のみ。依存は引数で受ける
 - **データ**: 不要（値を直接組む）
 - **実行**: CI 全量
-- **配置**: `Tests/OrbeTests/<型名>Tests.swift`。大きい対象は `<型名>Tests+<話題>.swift` に分割。`Orbe` 以外のターゲットのモジュール内部シンボルを測るものだけは当該ターゲット（`Tests/OrbeCliTests` / `OrbePathsTests` / `OrbeReportTests` / `OrbeSoundTests` / `OrbeSoundCliTests`）に置く——`OrbeTestCase` は `OrbeTests` の中にあり他ターゲットからは継承できないので、隔離が要る対象をそちらへ置かない
+- **配置**: `Tests/OrbeTests/<型名>Tests.swift`。大きい対象は `<型名>Tests+<話題>.swift` に分割。`Orbe` 以外のターゲットのモジュール内部シンボルを測るものだけは当該ターゲット（`OrbePathsTests` / `OrbeReportTests` / `OrbeSoundTests` / `OrbeSoundCliTests`）に置く——`OrbeTestCase` は `OrbeTests` の中にあり他ターゲットからは継承できないので、隔離が要る対象をそちらへ置かない
 
 ### L2 プロセス内結合
 
@@ -76,15 +76,15 @@ updated: 2026-08-14
 ### L3 wire 契約
 
 - **担保する**: 制御プロトコルの語。method 名・params キー・エラーコード（`-32700` / `-32600` / `-32601` / `-32602` / `-32004` / `-32006` / `-32000`）・`wait_for_event` のフィルタ・履歴カーソル（`after` / `value` / 応答の `seq`）とタイムアウト・`prompt_agent` と spawn / resume の ready 待ちの経路・行 framing・不正入力の扱い
-- **担保しない**: ドメインの振る舞い（L2）・実バイナリの引数解釈（L4）。観測面を持たない params も L3 の外で、受け皿は [roadmap.md](roadmap.md) が持つ——`get_pane_text` の `scrollback`（値が libghostty surface へ吸い込まれる）と、`completion_accept` の `advance` / `completion_update` の `buffer`・`cursor`（popup が生まれないと適用結果が出ず、無応答契約で wire 側に観測点が無い）
+- **担保しない**: ドメインの振る舞い（L2）・実バイナリの引数解釈（L4）。観測面を持たない params も L3 の外で、受け皿は [roadmap.md](roadmap.md) が持つ——`get_tab_text` の `scrollback`（値が libghostty surface へ吸い込まれる）と、`completion_accept` の `advance` / `completion_update` の `buffer`・`cursor`（popup が生まれないと適用結果が出ず、無応答契約で wire 側に観測点が無い）
 - **起動と差し替え**: **socketpair 上の実 `Connection`**。テストが socketpair の片端を `ControlServer.shared.adopt(fd:)` へ載せ、もう片端から行を書いて応答を読む。`ControlTarget` は Fake。listener は張らない（`start()` を呼ばない）ので、実 socket に bind する L4 と待ち受けを奪い合わず、path も持たないため `sun_path` 制約を受けない。`ControlServer.init()` は private なのでインスタンスは `.shared` を使う
-- **データ**: Fake target が返す値をテストが決める。宛先解決に使う `SurfaceView` は window に載せない裸のビューで、libghostty surface は生まれない
+- **データ**: Fake target が返す値をテストが決める。宛先解決に使う `TerminalTab` は window に載せないタブで、libghostty surface は生まれない
 - **実行**: CI 全量
 - **ツール**: XCTest
 
 ### L4 プロセス境界・制御チャネル導通
 
-- **担保する**: 実行体をまたいだ導通。実 `orbe-cli` / `orbe-mcp` / `orbe-report` の引数解釈・終了コード・stdout・組み立てる JSON-RPC。ペインへの env 注入から `orbe-report` が `report_agent` を届けるまでの hook 実経路。bare `orb` の PATH 解決
+- **担保する**: 実行体をまたいだ導通。実 `orbe-cli` / `orbe-mcp` / `orbe-report` の引数解釈・終了コード・stdout・組み立てる JSON-RPC。タブへの env 注入から `orbe-report` が `report_agent` を届けるまでの hook 実経路。bare `orb` の PATH 解決
 - **担保しない**: `.app` の起動経路と `AppDelegate` の配線
 - **起動と差し替え**: テストプロセス内で `ControlServer.shared.start(target:)` に実 `WindowController` を与え、外部プロセスとして `.build/.../debug/` のビルド済みバイナリを起動する。バイナリ位置は `Bundle(for:).bundleURL` の親から解決する。同梱物はハーネスが配る `BundledResources.root`（caseDir 配下）の下へ `.app` と同じレイアウトで置く（`bin/orb`・`bin/orbe-report`）
 - **データ**: 単一ハーネス（L2 と同じ）。サーバの `socketPath` と子プロセスの `ORBE_STATE_DIR` は同じ値を指す。テスト冒頭で `socketPath` の実値を assert する（空や別値だと `start` が no-op になり、クライアント側は "Orbe not running" と区別できず緑に化ける）
@@ -121,6 +121,6 @@ updated: 2026-08-14
 どの層も担当しないと決めたもの。壊れたら実使用で気づくことになる。
 
 - **`.app` の起動経路と `AppDelegate` の配線**（`ControlServer.start` を実際に呼ぶのはここだけ）→ `sandbox-run` スキルで、リリース時と `.app` 構成を変えたときに人が回す
-- **性能の実行時間**（起動時間・大量ペイン時の応答）。SLO が定義されていない状態で時間を測ると、マシン差で flaky になるだけで回帰検知にならない。コードに書かれた境界値は L1 が固める
+- **性能の実行時間**（起動時間・大量タブ時の応答）。SLO が定義されていない状態で時間を測ると、マシン差で flaky になるだけで回帰検知にならない。コードに書かれた境界値は L1 が固める
 - **TCC 権限が絡む分岐の実環境挙動**（アクセシビリティ・入力監視）。分岐そのものは注入点を作って L1 で固める
 - **dev / release 2 チャネル併存時の state・socket 分離**

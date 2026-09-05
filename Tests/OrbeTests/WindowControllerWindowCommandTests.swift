@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// window レベルの pane 非依存 chrome コマンド配信（`handleWindowKeyCommand`）の overlay／改名編集ガードと、
+/// window レベルの tab 非依存 chrome コマンド配信（`handleWindowKeyCommand`）の overlay／改名編集ガードと、
 /// タブのインライン改名（Cmd+R）の確定/取消セマンティクスを固定する。0タブでも届く window コマンドが、
 /// パレット/フォーム表示中・改名編集中には暴発しない（＝入力を横取りしない）契約。
 ///
@@ -17,7 +17,7 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
       workspaces: [
         WorkspaceState(
           name: "main", rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)])
+          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)])
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     // preferredLanguage を確定させ、初回言語選択 overlay（languageSelect）で overlay==.none の前提が

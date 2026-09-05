@@ -15,7 +15,7 @@ import XCTest
 /// 叩くのは 3 枚のうち**中間**のタブ——両端だと「常に先頭へ挿す」「常に末尾へ挿す」実装と区別できず、
 /// 閉じた位置が運ばれていることを固定できない（`ChromeMiddleClickTests` が中央タブを叩くのと同じ作法）。
 /// 復元単位も既定値と区別できる値（エージェント＋素のシェルの分割・明示タイトル）で
-/// 仕込む——全部既定値だと `makeTab` を素の `TerminalController()` に退化させても緑のままになる。
+/// 仕込む——全部既定値だと `makeTab` を素の `TerminalTab(cwd: "/tmp")` に退化させても緑のままになる。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerReopenAgentTabTests: OrbeTestCase {
@@ -27,22 +27,16 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
   }
 
-  /// 3 タブ: [0] 素のシェル "a"（アクティブ）/ [1] エージェント＋素のシェルの分割 "api" /
-  /// [2] エージェント 1 枚 "c"。エージェントの有無で積む/積まないが分かれる 3 種を 1 つの
-  /// workspace に揃える。
+  /// 3 タブ: [0] 素のシェル "a"（アクティブ）/ [1] エージェント "api" / [2] エージェント "c"。
+  /// エージェントの有無で積む/積まないが分かれる種類を 1 つの workspace に揃える。
   private func restoreThreeTabs() throws -> WindowController {
     try restore([
-      TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: "a"),
+      TabState(cwd: "/tmp", agent: nil, explicitTitle: "a"),
       TabState(
-        tree: .split(
-          vertical: true, ratio: 0.4,
-          first: .leaf(
-            cwd: "/work/api", agent: AgentSession(command: "claude", sessionId: "api-1")),
-          second: .leaf(cwd: "/work/web", agent: nil)),
+        cwd: "/work/api", agent: AgentSession(command: "claude", sessionId: "api-1"),
         explicitTitle: "api"),
       TabState(
-        tree: .leaf(cwd: nil, agent: AgentSession(command: "claude", sessionId: "c-1")),
-        explicitTitle: "c"),
+        cwd: "/tmp", agent: AgentSession(command: "claude", sessionId: "c-1"), explicitTitle: "c"),
     ])
   }
 
@@ -61,16 +55,15 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
     wc.current.tabs.map(\.explicitTitle)
   }
 
-  /// エージェント hook のセッション報告（制御 API `report_agent`）と同じく、生きたペインへ
+  /// エージェント hook のセッション報告（制御 API `report_agent`）と同じく、生きたタブへ
   /// エージェントを載せる。
-  private func markAsAgent(_ tc: TerminalController) throws {
-    let pane = try XCTUnwrap(tc.focusedPane)
-    pane.agentSlot = .live(
+  private func markAsAgent(_ tab: TerminalTab) {
+    tab.agentSlot = .live(
       session: AgentSession(command: "claude", sessionId: "live-1"), report: nil)
   }
 
-  /// main キューに積まれた非同期ブロック（`TerminalController.close` の `onEmpty` ホップ）を捌く。
-  /// FIFO なので、close の後に積んだこのブロックが走った時点で `onEmpty` は処理済み。
+  /// main キューに積まれた非同期ブロック（`TerminalTab.close` の `onClose` ホップ）を捌く。
+  /// FIFO なので、close の後に積んだこのブロックが走った時点で `onClose` は処理済み。
   private func drainMainQueue() {
     let exp = expectation(description: "main queue drained")
     DispatchQueue.main.async { exp.fulfill() }
@@ -79,7 +72,6 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
 
   /// ⇧⌘T は、閉じたエージェントタブを**閉じた位置**へ、**閉じた時の復元単位**のまま戻し、そのタブへ
   /// 切り替える。位置・状態・選択の 3 点が本機能の観測可能な契約のすべて。
-  /// 同居していた素のシェルペインも分割ツリーごと戻る（ゲートは積む対象にだけ効き、戻す中身は削らない）。
   func testReopenRestoresAtClosedPositionWithStateAndSelectsIt() throws {
     let wc = try restoreThreeTabs()
     XCTAssertEqual(titles(wc), ["a", "api", "c"], "前提: 中間が api")
@@ -92,16 +84,11 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
       wc.handleWindowKeyCommand(.reopenClosedAgentTab), "⇧⌘T は window コマンドとして消費される")
 
     XCTAssertEqual(titles(wc), ["a", "api", "c"], "先頭でも末尾でもなく、閉じた位置へ戻る")
-    let restored = wc.current.tabs[1]
-    guard case .split(let vertical, _, let first, let second) = restored.snapshot() else {
-      return XCTFail("分割ツリーごと戻る（素の新規タブに退化していない）")
-    }
-    XCTAssertTrue(vertical, "分割の向きも復元単位に載って戻る")
-    guard case .leaf(_, let agent) = first else { return XCTFail("エージェント側の葉が残る") }
+    let restored = wc.current.tabs[1].tabState()
     XCTAssertEqual(
-      agent, AgentSession(command: "claude", sessionId: "api-1"), "エージェントはセッションごと戻る")
-    XCTAssertEqual(
-      second, .leaf(cwd: "/work/web", agent: nil), "同居していた素のシェルペインも cwd ごと戻る")
+      restored.agent, AgentSession(command: "claude", sessionId: "api-1"),
+      "エージェントはセッションごと戻る（素の新規タブに退化していない）")
+    XCTAssertEqual(restored.cwd, "/work/api", "cwd も復元単位に載って戻る")
     XCTAssertEqual(wc.current.active, 1, "戻したタブへ切り替わる（既存のタブ生成系と同じく見せる）")
   }
 
@@ -124,8 +111,8 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
   /// `availableWithoutTabs` に `.reopenClosedAgentTab` を入れたことが効く経路——ここが死ぬと
   /// 「うっかり最後のタブを閉じた」という本機能の主用途が成立しない。
   func testReopenRevivesEmptiedWorkspace() throws {
-    let wc = try restore([TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: "only")])
-    try markAsAgent(wc.current.tabs[0])
+    let wc = try restore([TabState(cwd: "/tmp", agent: nil, explicitTitle: "only")])
+    markAsAgent(wc.current.tabs[0])
 
     wc.statusModel.onCloseTab(0)
     XCTAssertTrue(wc.current.tabs.isEmpty, "前提: 0タブ（休眠）workspace")
@@ -152,17 +139,16 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
   /// は shell の exit と同じ入口で、Orbe が登録した callback をその場で呼ぶ。callback が渡す発火源が
   /// `.gesture` に化ければ「`exit` したタブが ⇧⌘T で復活する」が起きるが、`close` を直接叩くテストでは
   /// callback 自身を踏まないため気づけない。この先の
-  /// `close` → main へ async → `onEmpty` → `closeTab` → `removeTab` も同時に通る。
-  /// エージェントを載せた生きたペインで叩く＝エージェント判定では通る＝発火源の判定だけが効く。
+  /// `close` → main へ async → `onClose` → `closeTab` → `removeTab` も同時に通る。
+  /// エージェントを載せた生きたタブで叩く＝エージェント判定では通る＝発火源の判定だけが効く。
   func testProcessClosedAgentTabIsNotReopenable() throws {
     let wc = try restoreThreeTabs()
-    let victim = wc.current.tabs[0]  // 単一ペインの葉タブ（close がそのままタブ閉鎖へカスケードする）
-    try markAsAgent(victim)
+    let victim = wc.current.tabs[0]
+    markAsAgent(victim)
 
-    let surface = try XCTUnwrap(victim.focusedPane?.surfacePtr, "前提: surface 生成済みのペイン")
+    let surface = try XCTUnwrap(victim.surface.surfacePtr, "前提: surface 生成済みのタブ")
     ghostty_surface_request_close(surface)
-    drainMainQueue()  // close_surface_cb → close
-    drainMainQueue()  // close → onEmpty → closeTab
+    drainMainQueue()  // close → onClose → closeTab
 
     XCTAssertEqual(titles(wc), ["api", "c"], "前提: 先頭タブが落ちている")
     XCTAssertTrue(wc.current.closedAgentTabs.isEmpty, "プロセス終了で落ちたタブは積まない")

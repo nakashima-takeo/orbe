@@ -89,8 +89,6 @@ extension WindowController {
       return .failure(ControlError(code: -32000, message: "spawn failed"))
     }
     return .success(
-      AgentLaunch(
-        paneId: opened.paneId, tabId: opened.tabId, workspaceId: opened.workspaceId,
-        agent: target.agent))
+      AgentLaunch(tabId: opened.tabId, workspaceId: opened.workspaceId, agent: target.agent))
   }
 }

@@ -132,7 +132,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchCleanOwnCommitsOther
   case dispatchCleanAgentWorking
   case dispatchCleanAgentWaiting
-  case dispatchCleanPaneOpen
+  case dispatchCleanTabOpen
   case dispatchCleanUnverified
 
   // MARK: - Onboarding
@@ -347,7 +347,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case attentionHintClose
   case attentionEmpty
   case menubarWorkingSummary
-  case menubarClickToPane
+  case menubarClickToTab
   case menubarOpenOrbe
   case menubarPermissionHint
   case settingsGlobalCmdTapLabel
@@ -362,7 +362,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpCatBasics
   case helpCatAllShortcuts
   case helpCatGeneral
-  case helpCatWorkspaceTabsPanes
+  case helpCatWorkspaceTabs
   case helpCatAgents
   case helpCatTerminal
   case helpTopSubtitle
@@ -386,9 +386,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutRenameTab
   case helpShortcutNextTab
   case helpShortcutPrevTab
-  case helpShortcutSplitRight
-  case helpShortcutSplitDown
-  case helpShortcutClosePane
+  case helpShortcutCloseTab
   case helpShortcutLaunchDefaultAgent
   case helpShortcutAgentPalette
   case helpShortcutDispatchPalette

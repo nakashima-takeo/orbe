@@ -45,14 +45,14 @@ extension SurfaceKeyInputTests {
 
   /// キー 1 打（press + release）を物理経路へ流し、PTY に `bytes` が届くことを見る。
   private func assertTyped(
-    _ key: PhysicalKey, arrives bytes: String, in dump: TtyDumpPane,
+    _ key: PhysicalKey, arrives bytes: String, in dump: TtyDumpTab,
     file: StaticString = #filePath, line: UInt = #line
   ) {
-    dump.pane.keyDown(with: key.event(.keyDown, in: dump.pane.window))
-    dump.pane.keyUp(with: key.event(.keyUp, in: dump.pane.window))
+    dump.tab.surface.keyDown(with: key.event(.keyDown, in: dump.tab.surface.window))
+    dump.tab.surface.keyUp(with: key.event(.keyUp, in: dump.tab.surface.window))
     XCTAssertEqual(
-      dump.next(file: file, line: line), TtyDumpPane.hex(bytes),
-      "物理キー \(key.unmodified)（characters \(TtyDumpPane.hex(key.characters))）の受信バイトが違う",
+      dump.next(file: file, line: line), TtyDumpTab.hex(bytes),
+      "物理キー \(key.unmodified)（characters \(TtyDumpTab.hex(key.characters))）の受信バイトが違う",
       file: file, line: line)
   }
 

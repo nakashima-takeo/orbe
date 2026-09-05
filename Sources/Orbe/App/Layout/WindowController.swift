@@ -3,8 +3,8 @@ import GhosttyKit
 import SwiftUI
 
 /// 1 ウィンドウを所有し、複数の workspace を束ねる。
-/// workspace = 名前付きコンテナ（root path ＋ 複数タブ）。各タブは独立した分割ツリー
-/// （TerminalController）。非アクティブ workspace の TerminalController はオブジェクトとして
+/// workspace = 名前付きコンテナ（root path ＋ 複数タブ）。各タブは端末 surface 1 枚
+/// （TerminalTab）。非アクティブ workspace の TerminalTab はオブジェクトとして
 /// 保持され続け、配下 surface は生きたまま（keep-alive）。
 /// 構成はディスクに永続化し、起動時に復元する（WorkspacePersistence）。
 final class WindowController: NSObject, NSWindowDelegate {
@@ -57,7 +57,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   let updaterService = UpdaterService()
   // Attention 一覧の単一情報源。flushChrome が snapshot を流し込み、パレットとメニューバーが読む。
   let attentionStore = AttentionStore()
-  // 通知音の再生層。見ていないペインの状態変化（WindowController+Sound）と設定パレットの試聴が使う。
+  // 通知音の再生層。見ていないタブの状態変化（WindowController+Sound）と設定パレットの試聴が使う。
   let soundPlayer: AgentSoundPlaying = AgentSoundOutput.make()
 
   // 読みは store へ転送する（制御チャネル・chrome・パレット・永続・テストが多数の箇所で読むため、
@@ -96,8 +96,8 @@ final class WindowController: NSObject, NSWindowDelegate {
     window.contentView = hostingView
     syncWindowOpacity()  // 起動時に既定 95% の背景透過を適用（WindowController+Opacity）
     // 背景ブラーの初回適用は windowDidBecomeKey が担う（init は windowNumber 未確定で CGS が効かない）。
-    // SwiftUI に content スロット（端末ツリーの器）を即マウントさせ、初回 select() の
-    // makeFirstResponder が成立する（= 起動直後からアクティブペインがキー入力を受ける）状態を作る。
+    // SwiftUI に content スロット（端末の器）を即マウントさせ、初回 select() の
+    // makeFirstResponder が成立する（= 起動直後からアクティブタブがキー入力を受ける）状態を作る。
     hostingView.layoutSubtreeIfNeeded()
     wireChromeCallbacks()
 
@@ -122,7 +122,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     }
     // 起動/オンボーディング overlay の畳み込みも、他 overlay と同じく teardown 後の次 tick で focus を再確定する。
     agentLauncher.onDismissPalette = { [weak self] in
-      self?.focusActivePane()
+      self?.focusActiveTab()
       self?.reconfirmFocusNextTick()
     }
     // 同梱プラグインの実体化はオンボーディングとも言語選択とも独立に、どちらのゲートにも入れず
@@ -145,12 +145,12 @@ final class WindowController: NSObject, NSWindowDelegate {
     // コンテキストメニューは開いたまま時間が経ちうるので、位置 index でなく id で解決する。
     statusModel.onResetAgentState = { [weak self] id in
       guard let self, let tab = self.current.tabs.first(where: { $0.id == id }) else { return }
-      tab.resetAgentStates()
+      tab.resetAgentState()
       self.refreshChrome()  // タブグリフ・横断ストリップ・Attention 一覧を再投影
     }
     statusModel.onNewTab = { [weak self] in self?.newTab() }
     statusModel.onAttentionTap = { [weak self] in self?.showAttentionPalette() }
-    // pane 非依存 chrome コマンドの window レベル配信（surface が居ない0タブでも届く）。
+    // タブ非依存 chrome コマンドの window レベル配信（surface が居ない0タブでも届く）。
     hostingView.onWindowCommand = { [weak self] command in
       self?.handleWindowKeyCommand(command) ?? false
     }
@@ -176,25 +176,18 @@ final class WindowController: NSObject, NSWindowDelegate {
 
   // MARK: - タブ（アクティブ workspace 内）
 
-  /// タブ（TerminalController）に上位への通知クロージャを配線する。生成は呼び出し側。
+  /// タブ（TerminalTab）に上位への通知クロージャを配線する。生成は呼び出し側。
   /// 制御チャネル（WindowController+Control）も使うため internal。
-  func wire(_ tc: TerminalController) -> TerminalController {
-    tc.onEmpty = { [weak self, weak tc] origin in self?.closeTab(tc, origin: origin) }
-    tc.onActiveTitleChange = { [weak self] in self?.refreshChrome() }
-    tc.onLayoutChange = { [weak self] in
-      // ペイン集合が変われば chrome（タブの集約グリフ・横断ロールアップ・Attention 一覧・
-      // アクティブペイン cwd）はすべて変わる。closeTab / closeWorkspace と同じ
-      // 「集合が変わったら再投影＋保存」に揃える。
-      self?.refreshChrome()
-      self?.scheduleSave()
-    }
-    tc.onPwdChange = { [weak self] in self?.paneDidReportPwd() }
-    tc.onAgentStateChange = { [weak self] in
+  func wire(_ tab: TerminalTab) -> TerminalTab {
+    tab.onClose = { [weak self, weak tab] origin in self?.closeTab(tab, origin: origin) }
+    tab.onTitleChange = { [weak self] in self?.refreshChrome() }
+    tab.onPwdChange = { [weak self] in self?.tabDidReportPwd() }
+    tab.onAgentStateChange = { [weak self] in
       self?.consumeVisibleTabDone()
       self?.refreshChrome()
     }
-    tc.onWindowCommand = { [weak self] command in self?.handleWindowCommand(command) }
-    return tc
+    tab.onWindowCommand = { [weak self] command in self?.handleWindowCommand(command) }
+    return tab
   }
 
   func newTab() {
@@ -210,7 +203,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     select(i)
   }
 
-  /// 不変条件: model.content はアクティブ workspace の全タブの rootContainer を保持し、アクティブ
+  /// 不変条件: model.content はアクティブ workspace の全タブの view を保持し、アクティブ
   /// のみ可視・他は isHidden（他 WS のビューは外す。surface は keep-alive）。可視タブは即時 mount し、
   /// 未 mount の隠れタブは後続 tick へ分割 mount（surface 誕生を 1 turn で N 個積まない）。全タブは
   /// 最終的に mount され viewDidMoveToWindow で surface が誕生。制御チャネルも使うため internal。
@@ -222,19 +215,18 @@ final class WindowController: NSObject, NSWindowDelegate {
     model.contentIsEmpty = false  // タブが載る＝surface が地を塗るので 0タブ backstop を下げる（二重 veil 回避）
     let ws = current
     // アクティブ WS に属さないビュー（前 WS のタブ）を外す。surface は keep-alive で生存。
-    let wanted = ws.tabs.map { ObjectIdentifier($0.rootContainer) }
+    let wanted = ws.tabs.map { ObjectIdentifier($0.view) }
     for sub in model.content.subviews where !wanted.contains(ObjectIdentifier(sub)) {
       sub.removeFromSuperview()
     }
     // 可視タブを同期 mount（即操作可能に＝この turn の surface 誕生を 1 枚へ上限化）。既 mount の
     // 隠れタブは isHidden/frame を即時更新（既に surface 在りで安価）。未 mount の隠れタブの
     // surface 誕生は後続 tick へ分割し、1 turn で N 個まとめて生成して固まるのを防ぐ。
-    for (i, tc) in ws.tabs.enumerated()
-    where i == index || tc.rootContainer.superview === model.content {
-      mountTab(tc, in: ws, visible: i == index)
+    for (i, tab) in ws.tabs.enumerated() where i == index || tab.view.superview === model.content {
+      mountTab(tab, in: ws, visible: i == index)
     }
     // overlay 表示中は入力を奪わない（フォーカス復帰は dismiss 側が担う）。
-    if model.overlay == .none { focusActivePane() }
+    if model.overlay == .none { focusActiveTab() }
     consumeVisibleTabDone()
     refreshChrome()
     scheduleHiddenMounts(for: ws)
@@ -242,62 +234,62 @@ final class WindowController: NSObject, NSWindowDelegate {
 
   /// タブ 1 枚を model.content へ mount（surface 誕生は viewDidMoveToWindow 経由で冪等に 1 度）。
   /// 隠れタブも実サイズで起こす（pty winsize 正常）。frame/isHidden は既 mount でも毎回更新。
-  private func mountTab(_ tc: TerminalController, in ws: Workspace, visible: Bool) {
-    guard store.recordMaterialization(of: tc, in: ws) else { return }
-    if tc.rootContainer.superview !== model.content {
-      tc.rootContainer.autoresizingMask = [.width, .height]
-      model.content.addSubview(tc.rootContainer)
+  private func mountTab(_ tab: TerminalTab, in ws: Workspace, visible: Bool) {
+    guard store.recordMaterialization(of: tab, in: ws) else { return }
+    if tab.view.superview !== model.content {
+      tab.view.autoresizingMask = [.width, .height]
+      model.content.addSubview(tab.view)
     }
-    tc.rootContainer.frame = model.content.bounds
-    tc.rootContainer.isHidden = !visible
+    tab.view.frame = model.content.bounds
+    tab.view.isHidden = !visible
   }
 
   /// 未 mount の隠れタブを後続 runloop tick で 1 枚ずつ mount（surface 誕生を分割）。
   /// 全タブ最終 mount・resume 起動を保つ。フラッシュ時に対象 WS がまだアクティブか
   /// 確認し、切替済みなら破棄して孤児 addSubview を防ぐ（次のアクティブ化でまた mount 対象＝冪等）。
   private func scheduleHiddenMounts(for ws: Workspace) {
-    guard ws.tabs.contains(where: { $0.rootContainer.superview !== model.content }) else { return }
+    guard ws.tabs.contains(where: { $0.view.superview !== model.content }) else { return }
     DispatchQueue.main.async { [weak self, weak ws] in
       guard let self, let ws, self.current === ws else { return }
-      guard let tc = ws.tabs.first(where: { $0.rootContainer.superview !== self.model.content })
+      guard let tab = ws.tabs.first(where: { $0.view.superview !== self.model.content })
       else { return }
-      self.mountTab(tc, in: ws, visible: false)  // 隠れタブ＝不可視（surface 誕生・resume は走る）
+      self.mountTab(tab, in: ws, visible: false)  // 隠れタブ＝不可視（surface 誕生・resume は走る）
       self.scheduleHiddenMounts(for: ws)
     }
   }
 
   /// 「見ているタブ」＝ウィンドウがキー（前面）のときの、アクティブ workspace のアクティブ表示タブ。
-  /// 背面・0タブなら nil。粒度がタブなので、split で隣に見えているペインもこのタブに含まれる。
+  /// 背面・0タブなら nil。
   /// done のフォーカス消費・メニューバー②の抑制・通知音の抑制が、この 1 つの判定を共有する。
-  var visibleTab: TerminalController? {
+  var visibleTab: TerminalTab? {
     guard window.isKeyWindow, current.tabs.indices.contains(current.active) else { return nil }
     return current.tabs[current.active]
   }
 
-  /// 完了通知の消費：見ているタブの全 done ペインを消費して集約 done バッジを消す。
+  /// 完了通知の消費：見ているタブの done を消費して done バッジを消す。
   /// 背面・背景タブの done は残す。3 トリガ（タブ活性化・done 到着・前面復帰）が共有する。
   private func consumeVisibleTabDone() { visibleTab?.consumeDoneState() }
 
-  /// タブを閉じる。発火源はユーザー操作（Cmd+W）に限らず、shell の exit
-  /// （close_surface_cb → onEmpty）が背景タブ・背景 workspace からも届くため、
+  /// タブを閉じる唯一の合流点。発火源はユーザー操作（Cmd+W）に限らず、shell の exit
+  /// （close_surface_cb → onClose）が背景タブ・背景 workspace からも届くため、
   /// アクティブ文脈を前提にせず所属 workspace を特定して処理する。
   /// 制御 API（`close_tab`）も id 解決の上でここへ委譲する（WindowController+Control）ため internal。
   /// `origin` は判断せず store へ素通しする（復元スタックへ積むかは removeTab が決める）。
-  func closeTab(_ tc: TerminalController?, origin: TabCloseOrigin) {
-    guard let tc else { return }
+  func closeTab(_ tab: TerminalTab?, origin: TabCloseOrigin) {
+    guard let tab else { return }
     // タブ集合が変わると editingIndex（位置 index）が別タブを指しうる。編集中なら畳む
     // （前方の背景タブが shell exit する等、フォーカスを保ったまま集合が変わる経路を決定的に解除）。
     if statusModel.editingIndex != nil { endTabRename() }
-    switch store.removeTab(tc, origin: origin) {
+    switch store.removeTab(tab, origin: origin) {
     case .notFound:
       return
     case .emptiedActive:
-      // アクティブ workspace が0タブ化。閉じたタブの rootContainer を content から外し空表示にする
+      // アクティブ workspace が0タブ化。閉じたタブの view を content から外し空表示にする
       // （従来 select が担う唯一のビュー除去経路をここで明示し surface leak を避ける）。
       clearActiveContent()
     case .reselectActive(let i):
-      // 閉じたタブの rootContainer を model.content から外す唯一の経路が select() の不要ビュー除去なので、
-      // 背景タブの close も必ず通す（通さないと外れた TerminalController を retain し続け surface がリークする）。
+      // 閉じたタブの view を model.content から外す唯一の経路が select() の不要ビュー除去なので、
+      // 背景タブの close も必ず通す（通さないと外れた TerminalTab を retain し続け surface がリークする）。
       select(i)
     case .backgroundChanged:
       refreshChrome()  // 背景タブ/背景 workspace の空化でも chrome 横断 rollup を同期する
@@ -307,7 +299,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   }
 
   /// chrome 更新を要求する。`window.title`（Mission Control 用・O(1)）は即時反映し、重い StatusRow
-  /// snapshot（全 workspace×全タブ×全ペイン走査）は dirty を立て runloop tick 末尾に 1 回だけ予約。
+  /// snapshot（全 workspace×全タブ走査）は dirty を立て runloop tick 末尾に 1 回だけ予約。
   /// 同一 turn 内の N 回の要求（高頻度 report_agent 等）は 1 回の `flushChrome` に畳む。
   func refreshChrome() {
     window.title = current.name
@@ -327,22 +319,22 @@ final class WindowController: NSObject, NSWindowDelegate {
       StatusRowModel.Snapshot(
         workspace: current.name,
         titles: current.tabs.map { $0.displayTitle(workspaceRoot: current.rootPath) },
-        glyphs: current.tabs.map { $0.activated ? $0.aggregateAgentState() : nil },
+        glyphs: current.tabs.map { $0.activated ? $0.agentStateKind : nil },
         tabIds: current.tabs.map(\.id),
         active: current.active,
-        cwd: store.activePaneCwd(),
+        cwd: store.activeTabCwd(),
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
     refreshAttentionSnapshot()  // Attention 一覧も同じ coalesce 契機で追従（WindowController+Attention）
   }
 
-  /// アクティブタブの preferredFocusPane へフォーカスを戻す（パレットの dismiss と同じ規則）。
-  func focusActivePane() {
+  /// アクティブタブの surface へフォーカスを戻す（パレットの dismiss と同じ規則）。
+  func focusActiveTab() {
     guard current.tabs.indices.contains(current.active) else { return }
-    window.makeFirstResponder(current.tabs[current.active].preferredFocusPane)
+    window.makeFirstResponder(current.tabs[current.active].surface)
   }
 
   /// OSC 7 の cwd 報告を受けた。行の cwd 表示を更新し、永続保存を予約する。
-  private func paneDidReportPwd() {
+  private func tabDidReportPwd() {
     refreshChrome()
     scheduleSave()
   }

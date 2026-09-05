@@ -6,7 +6,7 @@ import XCTest
 /// `wait_for_event`（状態変化の長ポーリング）の契約を固定する。フィルタの語・応答ペイロードの
 /// 形・タイムアウト・1 接続に複数の待機を張れること。
 ///
-/// 壊れると、`orb wait` と MCP の待機が黙って的外れになる。フィルタの語（`paneId` / `kinds` /
+/// 壊れると、`orb wait` と MCP の待機が黙って的外れになる。フィルタの語（`tabId` / `kinds` /
 /// `timeoutMs` と kind の 4 語）が片側だけずれれば「全イベントで起きる」か「永遠に起きない」の
 /// どちらかに倒れ、どちらも呼び出し側からは正常動作と区別がつかない。
 ///
@@ -30,28 +30,28 @@ extension ControlWireTests {
 
   // MARK: - フィルタ
 
-  /// `paneId` 一致で起きる。
-  func testPaneIdFilterWakesOnMatch() {
+  /// `tabId` 一致で起きる。
+  func testTabIdFilterWakesOnMatch() {
     let wire = startWire(target: FakeControlTarget())
-    armWait(wire, id: 1, params: ["paneId": 8001])
+    armWait(wire, id: 1, params: ["tabId": 8001])
 
     ControlServer.shared.emit(
-      .agentState(paneId: 8001, state: "working", message: nil, sessionId: nil))
+      .agentState(tabId: 8001, state: "working", message: nil, sessionId: nil))
     let response = wire.nextResponse()
 
     XCTAssertEqual(response?["id"] as? Int, 1, "待機を張った要求の id で応答が返る")
-    XCTAssertEqual(event(response)?["paneId"] as? Int, 8001)
+    XCTAssertEqual(event(response)?["tabId"] as? Int, 8001)
   }
 
-  /// `paneId` 不一致は素通りする（別ペインのイベントで起こさない）。
-  func testPaneIdFilterIgnoresOtherPanes() {
+  /// `tabId` 不一致は素通りする（別タブのイベントで起こさない）。
+  func testTabIdFilterIgnoresOtherTabs() {
     let wire = startWire(target: FakeControlTarget())
-    armWait(wire, id: 1, params: ["paneId": 8001])
+    armWait(wire, id: 1, params: ["tabId": 8001])
 
     ControlServer.shared.emit(
-      .agentState(paneId: 8002, state: "working", message: nil, sessionId: nil))
+      .agentState(tabId: 8002, state: "working", message: nil, sessionId: nil))
 
-    // barrier の応答が 1 行目に来る＝別ペインのイベントは待機を消費していない。
+    // barrier の応答が 1 行目に来る＝別タブのイベントは待機を消費していない。
     wire.barrier()
   }
 
@@ -61,10 +61,10 @@ extension ControlWireTests {
     var id = 0
 
     let events: [ControlEvent] = [
-      .agentState(paneId: 8101, state: "v", message: nil, sessionId: nil),
-      .paneTitle(paneId: 8102, title: "v"),
-      .pwd(paneId: 8103, path: "v"),
-      .paneClosed(paneId: 8104),
+      .agentState(tabId: 8101, state: "v", message: nil, sessionId: nil),
+      .title(tabId: 8102, title: "v"),
+      .pwd(tabId: 8103, path: "v"),
+      .tabClosed(tabId: 8104),
     ]
     for event in events {
       id += 1
@@ -83,8 +83,8 @@ extension ControlWireTests {
     let wire = startWire(target: FakeControlTarget())
     armWait(wire, id: 1, params: ["kinds": ["agent_state"]])
 
-    ControlServer.shared.emit(.paneTitle(paneId: 8001, title: "t"))
-    ControlServer.shared.emit(.pwd(paneId: 8001, path: "/tmp"))
+    ControlServer.shared.emit(.title(tabId: 8001, title: "t"))
+    ControlServer.shared.emit(.pwd(tabId: 8001, path: "/tmp"))
 
     wire.barrier()
   }
@@ -94,25 +94,25 @@ extension ControlWireTests {
     let wire = startWire(target: FakeControlTarget())
     armWait(wire, id: 1)
 
-    ControlServer.shared.emit(.pwd(paneId: 8003, path: "/tmp/x"))
+    ControlServer.shared.emit(.pwd(tabId: 8003, path: "/tmp/x"))
     let response = wire.nextResponse()
 
-    XCTAssertEqual(response?["id"] as? Int, 1, "フィルタ省略なら kind も paneId も問わず起きる")
+    XCTAssertEqual(response?["id"] as? Int, 1, "フィルタ省略なら kind も tabId も問わず起きる")
     XCTAssertEqual(event(response)?["kind"] as? String, "pwd")
   }
 
   // MARK: - ペイロードの形
 
-  /// 応答は `{event:{kind,paneId,value}}`。
-  func testEventPayloadCarriesKindPaneIdAndValue() {
+  /// 応答は `{event:{kind,tabId,value}}`。
+  func testEventPayloadCarriesKindTabIdAndValue() {
     let wire = startWire(target: FakeControlTarget())
     armWait(wire, id: 1)
 
-    ControlServer.shared.emit(.paneTitle(paneId: 8004, title: "zsh"))
+    ControlServer.shared.emit(.title(tabId: 8004, title: "zsh"))
     let payload = event(wire.nextResponse())
 
-    XCTAssertEqual(payload?["kind"] as? String, "pane_title")
-    XCTAssertEqual(payload?["paneId"] as? Int, 8004)
+    XCTAssertEqual(payload?["kind"] as? String, "title")
+    XCTAssertEqual(payload?["tabId"] as? Int, 8004)
     XCTAssertEqual(payload?["value"] as? String, "zsh")
   }
 
@@ -121,10 +121,10 @@ extension ControlWireTests {
     let wire = startWire(target: FakeControlTarget())
     armWait(wire, id: 1)
 
-    ControlServer.shared.emit(.paneClosed(paneId: 8005))
+    ControlServer.shared.emit(.tabClosed(tabId: 8005))
     let payload = event(wire.nextResponse())
 
-    XCTAssertEqual(payload?["kind"] as? String, "pane_closed")
+    XCTAssertEqual(payload?["kind"] as? String, "tab_closed")
     XCTAssertNil(payload?["value"], "value 無しのイベントはキーごと落とす（null を置かない）")
   }
 
@@ -179,14 +179,14 @@ extension ControlWireTests {
       -32602, "空の kinds は -32602（省略＝全種と取り違えて黙って時間切れにしない）")
   }
 
-  /// `paneId` が Int でなければ -32602。黙って nil に落とすと絞り込みが消えて**全ペイン**監視に
-  /// 化け、別ペインのイベントを「待っていたもの」として返す（kinds の取りこぼしより悪い）。
-  func testWronglyTypedPaneIdIsRejected() {
+  /// `tabId` が Int でなければ -32602。黙って nil に落とすと絞り込みが消えて**全タブ**監視に
+  /// 化け、別タブのイベントを「待っていたもの」として返す（kinds の取りこぼしより悪い）。
+  func testWronglyTypedTabIdIsRejected() {
     let wire = startWire(target: FakeControlTarget())
 
     XCTAssertEqual(
-      errorCode(wire.request(id: 1, method: "wait_for_event", params: ["paneId": "8001"])),
-      -32602, "文字列の paneId は -32602")
+      errorCode(wire.request(id: 1, method: "wait_for_event", params: ["tabId": "8001"])),
+      -32602, "文字列の tabId は -32602")
   }
 
   /// `timeoutMs` は正の Int で 24 時間まで。0・負・非 Int・上限超過は -32602。
@@ -216,7 +216,7 @@ extension ControlWireTests {
       -32602)
 
     armWait(wire, id: 2)
-    ControlServer.shared.emit(.pwd(paneId: 8009, path: "/x"))
+    ControlServer.shared.emit(.pwd(tabId: 8009, path: "/x"))
     XCTAssertEqual(wire.nextResponse()?["id"] as? Int, 2, "弾いた後も次の待機が普通に働く")
     wire.barrier()  // 弾いた id 1 の応答が後から書かれていない
   }
@@ -228,15 +228,15 @@ extension ControlWireTests {
   /// `prompt_agent` の main 往復中に張られた `wait_for_event` が「PTY には書いたのに待てない」になる。
   func testTwoWaitsOnOneConnectionAnswerByTheirOwnIds() {
     let wire = startWire(target: FakeControlTarget())
-    armWait(wire, id: 1, params: ["paneId": 8006])
-    armWait(wire, id: 2, params: ["paneId": 8016])
+    armWait(wire, id: 1, params: ["tabId": 8006])
+    armWait(wire, id: 2, params: ["tabId": 8016])
 
     ControlServer.shared.emit(
-      .agentState(paneId: 8016, state: "done", message: nil, sessionId: nil))
+      .agentState(tabId: 8016, state: "done", message: nil, sessionId: nil))
     XCTAssertEqual(wire.nextResponse()?["id"] as? Int, 2, "2 件目の待機が自分の id で起きる")
 
     ControlServer.shared.emit(
-      .agentState(paneId: 8006, state: "done", message: nil, sessionId: nil))
+      .agentState(tabId: 8006, state: "done", message: nil, sessionId: nil))
     XCTAssertEqual(wire.nextResponse()?["id"] as? Int, 1, "1 件目は 2 件目に壊されず生きている")
   }
 
@@ -244,16 +244,16 @@ extension ControlWireTests {
   func testWaitIsClearedAfterResponding() {
     let wire = startWire(target: FakeControlTarget())
     armWait(wire, id: 1)
-    ControlServer.shared.emit(.pwd(paneId: 8007, path: "/a"))
+    ControlServer.shared.emit(.pwd(tabId: 8007, path: "/a"))
     XCTAssertEqual(wire.nextResponse()?["id"] as? Int, 1)
 
     armWait(wire, id: 2)
 
-    ControlServer.shared.emit(.pwd(paneId: 8008, path: "/b"))
+    ControlServer.shared.emit(.pwd(tabId: 8008, path: "/b"))
     let response = wire.nextResponse()
 
     XCTAssertEqual(response?["id"] as? Int, 2, "解けた待機の後は次の待機が普通に働く")
-    XCTAssertEqual(event(response)?["paneId"] as? Int, 8008)
+    XCTAssertEqual(event(response)?["tabId"] as? Int, 8008)
     wire.barrier()  // 解けた id 1 が 2 つ目のイベントで再び書かれていない
   }
 }

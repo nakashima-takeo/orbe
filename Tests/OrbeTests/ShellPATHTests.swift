@@ -153,7 +153,7 @@ final class ShellPATHTests: OrbeTestCase {
     XCTAssertEqual(AppStatePersistence.load()?.cachedShellPath, "/opt/custom/bin:/usr/bin")
   }
 
-  /// 同期待ちの天井はプロセス全体で 1 つ。起動復元は agent ペインの数だけ `value()` を呼ぶので、
+  /// 同期待ちの天井はプロセス全体で 1 つ。起動復元は agent タブの数だけ `value()` を呼ぶので、
   /// 呼び出しごとに配り直すとメインスレッドが止まる合計時間が掛け算になる。
   func testSyncWaitBudgetIsSharedAcrossCalls() {
     let blocked = DispatchSemaphore(value: 0)

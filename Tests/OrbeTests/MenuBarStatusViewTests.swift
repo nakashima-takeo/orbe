@@ -22,9 +22,9 @@ final class MenuBarStatusViewTests: OrbeTestCase {
     return host.fittingSize
   }
 
-  private func row(paneId: Int = 1, state: String, message: String? = nil) -> AttentionRow {
+  private func row(tabId: Int = 1, state: String, message: String? = nil) -> AttentionRow {
     AttentionRow(
-      paneId: paneId, workspaceName: "ws", tabTitle: "tab", state: state, message: message,
+      tabId: tabId, workspaceName: "ws", tabTitle: "tab", state: state, message: message,
       stateChangedAt: Date())
   }
 
@@ -53,7 +53,7 @@ final class MenuBarStatusViewTests: OrbeTestCase {
   private func transientStore(workspace: String, message: String) -> AttentionStore {
     let store = AttentionStore()
     let row = AttentionRow(
-      paneId: 1, workspaceName: workspace, tabTitle: "tab", state: "waiting", message: message,
+      tabId: 1, workspaceName: workspace, tabTitle: "tab", state: "waiting", message: message,
       stateChangedAt: Date())
     store.apply(rows: [row])
     store.noteTransient(row, dwell: anyDwell)
@@ -95,7 +95,7 @@ final class MenuBarStatusViewTests: OrbeTestCase {
   func testTransientPillCapsOverallWidth() {
     let store = AttentionStore()
     let longRow = AttentionRow(
-      paneId: 1, workspaceName: String(repeating: "workspace-name-", count: 10),
+      tabId: 1, workspaceName: String(repeating: "workspace-name-", count: 10),
       tabTitle: "tab", state: "waiting",
       message: String(repeating: "とても長い文言 ", count: 40), stateChangedAt: Date())
     store.apply(rows: [longRow])
@@ -211,7 +211,7 @@ final class MenuBarStatusViewTests: OrbeTestCase {
   /// 展開（`closing: false`）と収縮（`closing: true`）は別の曲線を描くので、両方で見る。
   func testWidthGrowsStrictlyWithOpenness() {
     let store = AttentionStore()
-    store.apply(rows: [row(state: "waiting"), row(paneId: 2, state: "done")])
+    store.apply(rows: [row(state: "waiting"), row(tabId: 2, state: "done")])
     store.noteTransient(row(state: "waiting", message: longMessage), dwell: anyDwell)
     for closing in [false, true] {
       var previous: CGFloat = 0
@@ -235,7 +235,7 @@ final class MenuBarStatusViewTests: OrbeTestCase {
   func testCountLeavesWidthUntouchedWhileOpen() {
     func width(phase: MenuBarArrival.Phase, count: Int, message: String) -> CGFloat {
       let store = AttentionStore()
-      let rows = (1...count).map { row(paneId: $0, state: "waiting") }
+      let rows = (1...count).map { row(tabId: $0, state: "waiting") }
       store.apply(rows: rows)
       store.noteTransient(row(state: "waiting", message: message), dwell: anyDwell)
       return fittingSize(store: store, phase: phase).width
@@ -282,7 +282,7 @@ final class MenuBarStatusViewTests: OrbeTestCase {
   /// 文言 3 スロットの gap が残らない。これが「①③↔②の境界で幅が飛ばない」の実体で、
   /// 単調性テストは相対比較なので固定オフセットを見逃す（ここは厳密な等式で押さえる）。
   func testClosedTransientHasSameWidthAsCountPill() {
-    let rows = [row(state: "waiting"), row(paneId: 2, state: "done")]
+    let rows = [row(state: "waiting"), row(tabId: 2, state: "done")]
     let bare = AttentionStore()
     bare.apply(rows: rows)
     let withTransient = AttentionStore()

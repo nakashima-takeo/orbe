@@ -5,38 +5,36 @@ import XCTest
 /// 閉じたエージェントタブの開き直しスタック（⇧⌘T）の純ドメイン契約を固定する。
 ///
 /// 観測可能な契約は「積むのは人のジェスチャで閉じたエージェントタブだけ」「閉じた時の index と復元単位が
-/// 残る」「復元単位はタブ丸ごと（同居する素のシェルペインも分割ツリーごと）」「LIFO・workspace ごとに
-/// 独立・上限 10」「挿入位置のクランプ」。
-/// TerminalController は window 未接続なら libghostty surface を生成しないため、ここでは純ロジックとして
+/// 残る」「LIFO・workspace ごとに独立・上限 10」「挿入位置のクランプ」。
+/// TerminalTab は window 未接続なら libghostty surface を生成しないため、ここでは純ロジックとして
 /// 検証できる（GhosttyKit ランタイムは起動しない）。スタックのエントリは明示タイトルで区別する
 /// （`tabState().explicitTitle` に載る）。
 final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
 
-  /// resume を解決する（復元後の葉に agent が残り、snapshot に agent が載る）。
+  /// resume を解決する（復元後も agent が残り、tabState に agent が載る）。
   /// sessionId を持たないセッションは resume できないので nil。
-  private let resume: TerminalController.ResumeSpawn = { session in
+  private let resume: TerminalTab.ResumeSpawn = { session in
     guard let sessionId = session.sessionId else { return nil }
     return ("\(session.command) --resume \(sessionId)", [:])
   }
 
   /// resume を解決できない（未対応 CLI）resolver。解決は消費まで走らないので、休眠のまま
   /// 閉じるテストでは呼ばれない——それでも「未対応 CLI のタブ」であることを fixture で明示する。
-  private let noResume: TerminalController.ResumeSpawn = { _ in nil }
+  private let noResume: TerminalTab.ResumeSpawn = { _ in nil }
 
-  /// エージェントペイン 1 枚のタブ。明示タイトルで区別できる。
-  private func agentTab(_ title: String) -> TerminalController {
-    tab(title, tree: .leaf(cwd: nil, agent: AgentSession(command: "claude", sessionId: title)))
+  /// エージェントタブ。明示タイトルで区別できる。
+  private func agentTab(_ title: String) -> TerminalTab {
+    tab(title, cwd: "/tmp", agent: AgentSession(command: "claude", sessionId: title))
   }
 
   /// エージェントを持たない素のシェルタブ。
-  private func shellTab(_ title: String) -> TerminalController {
-    tab(title, tree: .leaf(cwd: nil, agent: nil))
+  private func shellTab(_ title: String) -> TerminalTab {
+    tab(title, cwd: "/tmp", agent: nil)
   }
 
-  private func tab(_ title: String, tree: PaneNode) -> TerminalController {
-    let tc = TerminalController(restoring: tree, resumeSpawn: resume)
-    tc.explicitTitle = title
-    return tc
+  private func tab(_ title: String, cwd: String, agent: AgentSession?) -> TerminalTab {
+    TerminalTab(
+      restoring: TabState(cwd: cwd, agent: agent, explicitTitle: title), resumeSpawn: resume)
   }
 
   /// エージェントタブだけを並べた workspace を組む。
@@ -46,21 +44,24 @@ final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
     return ws
   }
 
-  /// 1 タブだけ持つ workspace を任意のツリーで組む。
-  private func makeWorkspace(_ name: String, title: String, tree: PaneNode) -> Workspace {
+  /// 1 タブだけ持つ workspace を任意の cwd・agent で組む。
+  private func makeWorkspace(_ name: String, title: String, cwd: String, agent: AgentSession?)
+    -> Workspace
+  {
     let ws = Workspace(name: name, rootPath: "/tmp")
-    ws.tabs = [tab(title, tree: tree)]
+    ws.tabs = [tab(title, cwd: cwd, agent: agent)]
     return ws
   }
 
   /// resume 非対応のタブ 1 枚だけを持つ workspace（休眠のまま閉じる経路用）。
-  private func makeUnresolvableWorkspace(_ name: String, title: String, tree: PaneNode)
-    -> Workspace
-  {
+  private func makeUnresolvableWorkspace(
+    _ name: String, title: String, cwd: String, agent: AgentSession?
+  ) -> Workspace {
     let ws = Workspace(name: name, rootPath: "/tmp")
-    let tc = TerminalController(restoring: tree, resumeSpawn: noResume)
-    tc.explicitTitle = title
-    ws.tabs = [tc]
+    ws.tabs = [
+      TerminalTab(
+        restoring: TabState(cwd: cwd, agent: agent, explicitTitle: title), resumeSpawn: noResume)
+    ]
     return ws
   }
 
@@ -76,7 +77,7 @@ final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
     let closed = store.popClosedAgentTab()
     XCTAssertEqual(closed?.state.explicitTitle, "a", "閉じたタブの復元単位が積まれる")
     XCTAssertEqual(
-      closed?.state.tree, .leaf(cwd: nil, agent: AgentSession(command: "claude", sessionId: "a")),
+      closed?.state.agent, AgentSession(command: "claude", sessionId: "a"),
       "エージェントセッションごと復元単位に載る")
   }
 
@@ -87,24 +88,24 @@ final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
   /// 新旧どちらの設計でも積まれてしまうので、この行だけが検出できる。
   func testGestureCloseOfUnresolvableAgentTabIsAlsoPushed() {
     let session = AgentSession(command: "unknown", sessionId: "x")
-    let ws = makeUnresolvableWorkspace(
-      "ws", title: "sleeping", tree: .leaf(cwd: "/work", agent: session))
+    let ws = makeUnresolvableWorkspace("ws", title: "sleeping", cwd: "/work", agent: session)
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
 
     _ = store.removeTab(ws.tabs[0], origin: .gesture)
 
     XCTAssertEqual(
-      store.popClosedAgentTab()?.state.tree, .leaf(cwd: "/work", agent: session),
+      store.popClosedAgentTab()?.state,
+      TabState(cwd: "/work", agent: session, explicitTitle: "sleeping"),
       "未対応 CLI でもセッション記録ごと積む（resume 可否は消費まで判定しない）")
   }
 
   /// sessionId を持たない休眠エージェント（sessionId キーを欠く永続ファイル由来の形）は積まない。
-  /// 復元単位を作る snapshot が resume 不能な同一性を漉すので、⇧⌘T のゲートもそこで閉じる
+  /// 復元単位を作る tabState が resume 不能な同一性を漉すので、⇧⌘T のゲートもそこで閉じる
   /// ——漉さなくなると、開き直しても素のシェルにしかならない死にチケットで ⇧⌘T が反応し始める。
   func testGestureCloseOfAgentTabWithoutSessionIdIsNotPushed() {
     let ws = makeUnresolvableWorkspace(
-      "ws", title: "keyless",
-      tree: .leaf(cwd: "/work", agent: AgentSession(command: "claude", sessionId: nil)))
+      "ws", title: "keyless", cwd: "/work",
+      agent: AgentSession(command: "claude", sessionId: nil))
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
 
     _ = store.removeTab(ws.tabs[0], origin: .gesture)
@@ -112,44 +113,14 @@ final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
     XCTAssertNil(store.popClosedAgentTab(), "resume 不能な同一性は復元単位に載らない＝積まない")
   }
 
-  /// エージェントペインを持たない素のシェルタブは、人のジェスチャで閉じても積まない。
+  /// エージェントを持たない素のシェルタブは、人のジェスチャで閉じても積まない。
   func testGestureCloseOfPlainShellTabIsNotPushed() {
-    let ws = makeWorkspace("ws", title: "plain", tree: .leaf(cwd: "/work", agent: nil))
+    let ws = makeWorkspace("ws", title: "plain", cwd: "/work", agent: nil)
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
 
     _ = store.removeTab(ws.tabs[0], origin: .gesture)
 
     XCTAssertNil(store.popClosedAgentTab(), "素のシェルタブは積まない（⇧⌘T は無反応）")
-  }
-
-  /// 分割の中に素のシェルペインが混ざっていても、エージェントペインが 1 枚あれば積む。
-  /// 戻す単位はタブ丸ごと——同居していた素のシェルペインも、分割の向き・比・cwd ごとそのまま戻る。
-  func testAgentTabSplitWithPlainShellIsPushedWholeTree() {
-    let tree: PaneNode = .split(
-      vertical: true, ratio: 0.4,
-      first: .leaf(cwd: "/work/api", agent: AgentSession(command: "claude", sessionId: "s1")),
-      second: .leaf(cwd: "/work/web", agent: nil))
-    let ws = makeWorkspace("ws", title: "mixed", tree: tree)
-    let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
-
-    _ = store.removeTab(ws.tabs[0], origin: .gesture)
-
-    XCTAssertEqual(
-      store.popClosedAgentTab()?.state.tree, tree,
-      "分割ツリー・分割比・cwd ごと、素のシェルペインも含めて丸ごと積む")
-  }
-
-  /// エージェントが 1 枚も無い分割タブは、ペインが何枚あっても積まない。
-  func testPlainShellSplitIsNotPushed() {
-    let tree: PaneNode = .split(
-      vertical: false, ratio: 0.5,
-      first: .leaf(cwd: "/work/a", agent: nil), second: .leaf(cwd: "/work/b", agent: nil))
-    let ws = makeWorkspace("ws", title: "plainSplit", tree: tree)
-    let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
-
-    _ = store.removeTab(ws.tabs[0], origin: .gesture)
-
-    XCTAssertNil(store.popClosedAgentTab(), "素のシェルだけの分割タブも積まない")
   }
 
   /// シェル exit・エージェント終了（.process）と制御 API（.controlAPI）では、エージェントタブでも積まない。

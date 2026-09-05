@@ -1,59 +1,9 @@
 import Foundation
 import GhosttyKit
 
-/// 外部制御チャネルがペインへ作用する libghostty 経路。
+/// 外部制御チャネルが surface へ作用する libghostty 経路。
 /// すべて main スレッドで呼ぶ（libghostty surface API は main 規律）。
 extension SurfaceView {
-  /// `.app` 同梱の状態報告 binary（`<bundle>/Contents/Resources/bin/orbe-report`）の絶対パス。
-  /// `swift run`（バンドル無し）では nil → env 未注入で hook が no-op。
-  static var reportBinaryPath: String? {
-    guard let resources = BundledResources.root else { return nil }
-    let path = resources.appendingPathComponent("bin/orbe-report").path
-    return FileManager.default.isExecutableFile(atPath: path) ? path : nil
-  }
-
-  /// `.app` 同梱 CLI（`<bundle>/Contents/Resources/bin`。bare `orb` を含む）のディレクトリ。
-  /// root ペインの PATH 先頭へ前置してペイン内から bare `orb` を解決させる。`swift run`（バンドル無し）
-  /// では nil → PATH 注入なし。
-  static var bundledBinDir: String? {
-    guard let resources = BundledResources.root else { return nil }
-    let path = resources.appendingPathComponent("bin").path
-    var isDir: ObjCBool = false
-    guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else {
-      return nil
-    }
-    return path
-  }
-
-  /// 同梱 CLI（bare `orb`）を全ペインで解決させるため bin/ を PATH 先頭へ前置する。既存 PATH
-  /// （root agent タブは initialEnv の login PATH・root その他と split は本プロセスの PATH）を保持して
-  /// 前置だけ行う（login シェルの path_helper 越しでも bin/ が残る）。split は libghostty の
-  /// inherited_config が bin/ 入り PATH を運ばないため split でも呼ぶ（呼ばないと split で `orb` が
-  /// not found）。バンドル無し（swift run）では no-op。
-  static func prependBundledBin(to env: inout [String: String]) {
-    guard let binDir = bundledBinDir else { return }
-    let base = env["PATH"] ?? ProcessInfo.processInfo.environment["PATH"] ?? ""
-    env["PATH"] = base.isEmpty ? binDir : "\(binDir):\(base)"
-  }
-
-  /// Orbe runtime 契約の env を全ペイン（root＋split）へ注入する。split は親プロセスの env を継承する
-  /// ので、自分の id で ORBE_PANE を上書きしないと親ペイン id で誤報告する。エージェント hook
-  /// （シム → orbe-report）はこれらが無ければ no-op。
-  /// - ORBE_PANE: 報告元のペイン。
-  /// - ORBE_BUNDLE_ID: このインスタンスのチャネル identity。シムが他チャネルの plugin から来た
-  ///   呼び出しを落とすのに使う（`.app` でなくても常に名乗る。同梱 binary が無ければシムが先に no-op）。
-  /// - ORBE_REPORT_BIN: 同梱 binary の絶対パス（`swift run` では未解決→未設定＝no-op）。
-  /// - ORBE_SOCK: このインスタンスの制御 socket。
-  /// - PATH: 同梱 CLI（bare `orb`）の bin/ を前置。衝突は改名で解消済みゆえ順序非依存で解決する。
-  func injectRuntimeEnv(to env: inout [String: String]) {
-    Self.prependBundledBin(to: &env)
-    env["ORBE_PANE"] = String(id)
-    env["ORBE_BUNDLE_ID"] = StateDir.bundleId
-    if let bin = Self.reportBinaryPath { env["ORBE_REPORT_BIN"] = bin }
-    let sock = ControlServer.shared.socketPath
-    if !sock.isEmpty { env["ORBE_SOCK"] = sock }
-  }
-
   /// 画面テキストを平文で読む。`scrollback` 真ならスクロールバック全体、偽なら可視範囲のみ。
   func controlReadText(scrollback: Bool) -> String? {
     guard let surface = surfacePtr else { return nil }
@@ -76,7 +26,7 @@ extension SurfaceView {
     text.withCString { ghostty_surface_text(surface, $0, UInt(text.utf8.count)) }
   }
 
-  /// 解決済みのキー入力をペインへ press / release の 1 打として送る。
+  /// 解決済みのキー入力を surface へ press / release の 1 打として送る。
   func controlSendKey(_ input: SurfaceKeyInput) {
     for action in [GHOSTTY_ACTION_PRESS, GHOSTTY_ACTION_RELEASE] {
       sendKeyInput(input, action: action, composing: false)

@@ -22,7 +22,7 @@ fi
 } always {
     # interactive のみ: 全 startup file の後＝最初のプロンプト直前の precmd で一度だけ widget を source する。
     # フックは自分を precmd_functions から外して消え、widget ファイルはユーザーの alias・オプションから
-    # 隔離した関数スコープでパースする。ORBE_SOCK/ORBE_PANE 不在なら orbe-completion.zsh 側の guard で no-op。
+    # 隔離した関数スコープでパースする。ORBE_SOCK/ORBE_TAB 不在なら orbe-completion.zsh 側の guard で no-op。
     if [[ -o 'interactive' ]]; then
         # ${(%):-%x} は source 中のこのファイル（関数内では定義元の関数レコード次第で空になる）。:A:h でその dir。
         'builtin' 'typeset' '-g' _orbe_widget_file="${${(%):-%x}:A:h}/orbe-completion.zsh"

@@ -61,7 +61,7 @@ extension DispatchDataProvider {
     }
     for worktree in stale { probingPaths[worktree.path, default: 0] += 1 }
     let generation = probeGeneration
-    prober.probe(worktrees: stale, panes: paneOccupancies) { [weak self] probes in
+    prober.probe(worktrees: stale, tabs: tabOccupancies) { [weak self] probes in
       guard let self else { return }
       // 減らすのは**世代照合より前**。捨てる着地でも発行の 1 本は終わっているので、ここを飛ばすと
       // その path が永遠に「取得中」＝選べないまま残る。

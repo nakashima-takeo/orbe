@@ -134,7 +134,7 @@ final class WindowControllerOpacityTests: OrbeTestCase {
         workspaces: [
           WorkspaceState(
             name: "alpha", rootPath: "/tmp", activeTab: 0,
-            tabs: [TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)],
+            tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)],
             settingsOverride: override { $0[SettingKeys.backgroundOpacity] = 80 })  // WS 上書き＝透過
         ]))
     let wc = WindowController()  // 上記をディスクから復元

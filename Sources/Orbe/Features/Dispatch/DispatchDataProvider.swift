@@ -14,9 +14,9 @@ final class DispatchDataProvider {
   /// worktree 新規作成先のテンプレート（実効設定 `worktree-dir`）。パレットは開くたびに生成されるため、
   /// 提示元が開く時点の実効値を注入する＝常に最新値で解決する。
   private let worktreeTemplate: String
-  /// 開いた時点のペイン占有スナップショット（`SessionStore` を Dispatch から見せないための値型）。
+  /// 開いた時点のタブ占有スナップショット（`SessionStore` を Dispatch から見せないための値型）。
   /// 読み手は分冊（`DispatchDataProvider+CleanProbe.swift`）。
-  let paneOccupancies: [PaneOccupancy]
+  let tabOccupancies: [TabOccupancy]
   private let runner: GitRunner
 
   private(set) var repo: GitRepo?
@@ -93,13 +93,13 @@ final class DispatchDataProvider {
 
   init(
     cwd: String, model: DispatchPaletteModel, localization: LocalizationStore,
-    worktreeTemplate: String, paneOccupancies: [PaneOccupancy] = [], runner: GitRunner = .shared
+    worktreeTemplate: String, tabOccupancies: [TabOccupancy] = [], runner: GitRunner = .shared
   ) {
     self.cwd = cwd
     self.model = model
     self.localization = localization
     self.worktreeTemplate = worktreeTemplate
-    self.paneOccupancies = paneOccupancies
+    self.tabOccupancies = tabOccupancies
     self.runner = runner
   }
 
@@ -189,7 +189,7 @@ final class DispatchDataProvider {
         DispatchWorktreeClassifier.Input(
           worktrees: worktrees, localBranches: localBranches,
           branchPRStates: prStates, probes: $0, probingPaths: Set(probingPaths.keys),
-          panes: paneOccupancies))
+          tabs: tabOccupancies))
     }
     // 待機表示は行より先に据える（0 行の瞬間にスケルトンを描くかがここで決まる）。
     model.classificationPending = classificationPending(prStates)

@@ -2,7 +2,7 @@ import XCTest
 
 /// 状態報告シム（`app/agent-plugin/.../hooks/orbe-agent-status.sh`）のチャネルゲートを実 `/bin/sh` で
 /// 機械検証する。dev / release の plugin は別名の別枠として両方 enabled になるため、シムは自分の
-/// 実体化コピーに刻まれた bundle ID とペインが名乗る `ORBE_BUNDLE_ID` が一致する呼び出しにだけ応える。
+/// 実体化コピーに刻まれた bundle ID とタブが名乗る `ORBE_BUNDLE_ID` が一致する呼び出しにだけ応える。
 /// テストは同梱物でなくリポジトリ実体のプラグインを temp へ複製して走らせる（`CompletionShimTests` と同じ形）。
 /// 呼び方は claude / codex の絶対パス呼びと agy の相対呼び（cwd＝プラグインルート）の両方を突く。
 final class AgentShimChannelGateTests: OrbeTestCase {
@@ -95,7 +95,7 @@ final class AgentShimChannelGateTests: OrbeTestCase {
     XCTAssertEqual(result.exitCode, 0)
   }
 
-  /// 自チャネルのペインからの呼び出しは委譲し、引数と stdin（hook JSON）が透過する。
+  /// 自チャネルのタブからの呼び出しは委譲し、引数と stdin（hook JSON）が透過する。
   func testMatchingChannelDelegatesWithArgumentsAndStdin() throws {
     try writeChannel("dev.orbe.app.dev")
     let result = try runShim(bundleId: "dev.orbe.app.dev")
@@ -105,7 +105,7 @@ final class AgentShimChannelGateTests: OrbeTestCase {
     XCTAssertTrue(delegated.contains(#"stdin:{"session_id":"s1"}"#), delegated)
   }
 
-  /// 他チャネルのペインからの呼び出しは黙って落とす（release の枠が dev のペインを追わない）。
+  /// 他チャネルのタブからの呼び出しは黙って落とす（release の枠が dev のタブを追わない）。
   func testMismatchedChannelDoesNotDelegate() throws {
     try writeChannel("dev.orbe.app")
     let result = try runShim(bundleId: "dev.orbe.app.dev")
@@ -134,7 +134,7 @@ final class AgentShimChannelGateTests: OrbeTestCase {
     XCTAssertNotNil(result.delegated)
   }
 
-  /// ペインが `ORBE_BUNDLE_ID` を名乗らない（旧リリース版の Orbe）なら通す＝同じく fail-open。
+  /// タブが `ORBE_BUNDLE_ID` を名乗らない（旧リリース版の Orbe）なら通す＝同じく fail-open。
   func testMissingBundleIdDelegates() throws {
     try writeChannel("dev.orbe.app.dev")
     let result = try runShim(bundleId: nil)

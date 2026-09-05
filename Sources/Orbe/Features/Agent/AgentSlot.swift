@@ -1,9 +1,9 @@
 import Foundation
 
-/// ペイン 1 枚の「agent スロット」の状態機械。格納は `SurfaceView.agentSlot` の 1 箇所だけで、
+/// タブ 1 枚の「agent スロット」の状態機械。格納は `TerminalTab.agentSlot` の 1 箇所だけで、
 /// 「未消費のチケットに報告がある」「同一性なしの稼働」のような表現不能な状態を型で排除する。
 /// exited は置かない——今日の配管に「動いて止まった」を生む遷移も読む消費者も存在しない
-/// （プロセス終了は libghostty がペインごと閉じる）。再休眠等が実装されたらケースを足す。
+/// （プロセス終了は libghostty がタブごと閉じる）。再休眠等が実装されたらケースを足す。
 enum AgentSlot: Equatable {
   /// agent と無関係なただのシェル。
   case none
@@ -14,7 +14,7 @@ enum AgentSlot: Equatable {
 }
 
 extension AgentSlot {
-  /// スロットが保持する同一性（none は nil）。list_panes・snapshot の読み口。
+  /// スロットが保持する同一性（none は nil）。list_tabs・snapshot の読み口。
   var session: AgentSession? {
     switch self {
     case .none: return nil

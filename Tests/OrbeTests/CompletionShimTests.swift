@@ -90,7 +90,7 @@ final class CompletionShimTests: OrbeTestCase {
       "ZDOTDIR": Self.shimDir.path,
       // widget guard を通す（zsocket は遅延接続なので bind 検証に実 socket は不要）。
       "ORBE_SOCK": home.appendingPathComponent("nosock").path,
-      "ORBE_PANE": "1",
+      "ORBE_TAB": "1",
     ]
     env.merge(extraEnv) { _, new in new }
     process.environment = env
@@ -250,7 +250,7 @@ final class CompletionShimTests: OrbeTestCase {
   }
 
   func testOrbeUserZdotdirPointingAtAnotherOrbeShimDirRecoversToHome() throws {
-    // 別の Orbe（別 .app・旧版）の shim dir を渡された形（Orbe のペインから起こした Orbe Dev が
+    // 別の Orbe（別 .app・旧版）の shim dir を渡された形（Orbe のタブから起こした Orbe Dev が
     // 親の shim dir を継ぐ経路）。orbe-completion.zsh を持つ dir は同類として同じ扱いになる。
     let other = home.appendingPathComponent("Other.app/Contents/Resources/zsh")
     try FileManager.default.createDirectory(

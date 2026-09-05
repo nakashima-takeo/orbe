@@ -3,21 +3,21 @@
 /// `reply` ではなく `respond` が刻む——イベントで完結した応答は呼び出し側が record の seq を渡す。
 enum WaitPurpose {
   /// `wait_for_event`。フィルタは全て省略可（省略＝全通し）。
-  case event(paneId: Int?, kinds: Set<String>?, value: String?)
+  case event(tabId: Int?, kinds: Set<String>?, value: String?)
   /// `prompt_agent`。送信より後で最初に止まる agent_state（done / waiting / 消滅）で返す。
-  case promptOutcome(paneId: Int)
+  case promptOutcome(tabId: Int)
   /// `spawn_agent` / `resume_agent`。起動より後の最初の idle で返す。
-  case agentReady(paneId: Int, launch: AgentLaunch)
+  case agentReady(tabId: Int, launch: AgentLaunch)
 
-  /// `wait_for_event` の params（paneId / kinds / value）を `.event` へ解く。失敗は -32602。
+  /// `wait_for_event` の params（tabId / kinds / value）を `.event` へ解く。失敗は -32602。
   static func eventFilter(_ params: [String: Any]) -> Result<WaitPurpose, ControlError> {
     func invalid(_ message: String) -> Result<WaitPurpose, ControlError> {
       .failure(ControlError(code: -32602, message: message))
     }
-    var paneId: Int?
-    if let raw = params["paneId"] {
-      guard let pid = raw as? Int else { return invalid("invalid paneId") }
-      paneId = pid
+    var tabId: Int?
+    if let raw = params["tabId"] {
+      guard let tid = raw as? Int else { return invalid("invalid tabId") }
+      tabId = tid
     }
     var kinds: Set<String>?
     if let raw = params["kinds"] {
@@ -32,30 +32,30 @@ enum WaitPurpose {
       guard let v = raw as? String else { return invalid("invalid value") }
       value = v
     }
-    return .success(.event(paneId: paneId, kinds: kinds, value: value))
+    return .success(.event(tabId: tabId, kinds: kinds, value: value))
   }
 
   func matches(_ event: ControlEvent) -> Bool {
     switch self {
-    case .event(let paneId, let kinds, let value):
-      if let paneId, paneId != event.paneId { return false }
+    case .event(let tabId, let kinds, let value):
+      if let tabId, tabId != event.tabId { return false }
       if let kinds, !kinds.contains(event.kind) { return false }
       if let value, value != event.value { return false }
       return true
-    case .promptOutcome(let paneId):
-      if paneId != event.paneId { return false }
+    case .promptOutcome(let tabId):
+      if tabId != event.tabId { return false }
       switch event {
       case .agentState(_, let state, _, _):
         return state == nil || state == "done" || state == "waiting"
-      case .paneClosed:
+      case .tabClosed:
         return true
       default:
         return false
       }
-    case .agentReady(let paneId, _):
-      if paneId != event.paneId { return false }
+    case .agentReady(let tabId, _):
+      if tabId != event.tabId { return false }
       switch event {
-      case .agentState(_, "idle"?, _, _), .paneClosed:
+      case .agentState(_, "idle"?, _, _), .tabClosed:
         return true
       default:
         return false
@@ -74,7 +74,7 @@ enum WaitPurpose {
       if let message { d["message"] = message }
       return .success(d)
     case (.promptOutcome, _):
-      return .failure(ControlError(code: -32004, message: "pane closed"))
+      return .failure(ControlError(code: -32004, message: "tab closed"))
     case (.agentReady(_, let launch), .agentState(_, _, _, let sessionId)):
       var d = launch.toDict(ready: true)
       if let sessionId { d["agentSessionId"] = sessionId }

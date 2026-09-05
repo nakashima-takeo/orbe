@@ -18,7 +18,7 @@ extension ControlWireTests {
     let wire = startWire(target: FakeControlTarget())
 
     let first = #"{"jsonrpc":"2.0","id":41,"method":"list_workspaces"}"#
-    let second = #"{"jsonrpc":"2.0","id":42,"method":"list_panes"}"#
+    let second = #"{"jsonrpc":"2.0","id":42,"method":"list_tabs"}"#
     wire.sendRaw(Data("\(first)\n\(second)\n".utf8))
 
     XCTAssertEqual(wire.nextResponse()?["id"] as? Int, 41, "1 つ目の応答が先に返る")

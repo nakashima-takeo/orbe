@@ -1,14 +1,14 @@
 import Foundation
 
 /// 名前付きの、プロジェクト/文脈レベルのコンテナ。
-/// root path（拠点）を持ち、複数タブ（TerminalController）を束ねる。
+/// root path（拠点）を持ち、複数タブ（TerminalTab）を束ねる。
 /// 非アクティブな間も生存し続け、配下 surface は生きたまま（keep-alive）。
 final class Workspace {
   /// 制御チャネルの宛先 ID。
   let id = IdGen.next()
   var name: String
   var rootPath: String
-  var tabs: [TerminalController] = []
+  var tabs: [TerminalTab] = []
   var active = 0
   /// 配下に materialize 開始済みのタブが 1 枚以上あるか。
   /// タブ状態から導出する現在値で、0タブまたは全タブ未activatedなら false。永続化しない。

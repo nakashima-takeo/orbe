@@ -8,7 +8,7 @@ struct WorkspacesFile: Codable, Equatable {
   var activeWorkspace: Int
   var workspaces: [WorkspaceState]
   /// 終了時のウィンドウサイズ（幅・高さ）。位置は記憶しない。
-  /// optional——旧 JSON（欠落）でも decode 成功し後方互換、無ければ既定 800×500。
+  /// optional——一度もリサイズしていない起動では書かれない。無ければ既定 800×500。
   var windowSize: WindowSize?
 
   init(
@@ -28,40 +28,16 @@ struct WindowSize: Codable, Equatable {
   var height: Double
 }
 
-/// 旧 workspaces.json の設定上書き（camelCase・scopable 7 設定）。移行 decode 専用（将来消せる）。
-private struct LegacyWorkspaceSettingsOverride: Codable {
-  var fontSize: Int?
-  var backgroundOpacity: Int?
-  var backgroundBlur: Bool?
-  var theme: ThemeMode?
-  var fontFamily: String?
-  var cursorStyleBlink: Bool?
-  var agentStateIcons: [String: String]?
-
-  /// 新形式レイヤへ（nil は載せない）。ThemeMode は旧 raw と新 `.string` で表現が同じ。
-  func toLayer() -> SettingsLayer {
-    var layer = SettingsLayer()
-    layer[SettingKeys.fontSize] = fontSize
-    layer[SettingKeys.backgroundOpacity] = backgroundOpacity
-    layer[SettingKeys.backgroundBlur] = backgroundBlur
-    layer[SettingKeys.theme] = theme
-    layer[SettingKeys.fontFamily] = fontFamily
-    layer[SettingKeys.cursorStyleBlink] = cursorStyleBlink
-    layer[SettingKeys.agentStateIcons] = agentStateIcons
-    return layer
-  }
-}
-
 struct WorkspaceState: Codable, Equatable {
   var name: String
   var rootPath: String
   var activeTab: Int
   var tabs: [TabState]
   /// この workspace に最後に切り替えてフォーカスした時刻（MRU 並べ替えのキー）。
-  /// optional——旧 JSON（欠落）でも decode 成功し後方互換、無ければ nil（最古扱い）。
+  /// optional——一度も前面で使っていない workspace では書かれない（タブ選択でも進む）。無ければ nil（最古扱い）。
   var lastUsedAt: Date?
   /// この workspace の設定上書き層（全設定を上書き可）。
-  /// optional——旧 JSON（欠落）でも decode 成功し後方互換、無ければ nil（上書き無し＝global 継承）。
+  /// optional——上書きが 1 項目も無ければ書かれない（＝global 継承）。
   var settingsOverride: SettingsLayer?
 
   enum CodingKeys: String, CodingKey {
@@ -80,12 +56,8 @@ struct WorkspaceState: Codable, Equatable {
     self.settingsOverride = settingsOverride
   }
 
-  /// settingsOverride は新形式（canonical key・kebab）と旧 camelCase struct の**両方で読めるだけ読み、
-  /// 現行の key 空間である新形式を上に重ねる**。camelCase は kebab と綴りが重ならないので、旧が埋める
-  /// のは新が言わない項目だけ——唯一重なる `theme` は新形式の読みが勝つ。形式を先に判定しないのは、
-  /// 判定の手掛かりになる「新形式として読めるか」がその `theme` の重なりで崩れ、旧形式ファイルを
-  /// 新形式と誤認して残りの項目を全部落とすため。
-  /// field 局所の寛容 decode で全体を throw させない。
+  /// settingsOverride は 1 キー単位で寛容に読む（`SettingsLayer` 自身の decode）——未知 key・型不一致の
+  /// 1 項目で層ごと失わない（global 層と同じ家風）。読めた項目が 1 つも無ければ nil（上書き無し＝global 継承）。
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     name = try c.decode(String.self, forKey: .name)
@@ -93,51 +65,19 @@ struct WorkspaceState: Codable, Equatable {
     activeTab = try c.decode(Int.self, forKey: .activeTab)
     tabs = try c.decode([TabState].self, forKey: .tabs)
     lastUsedAt = try c.decodeIfPresent(Date.self, forKey: .lastUsedAt)
-
-    guard c.contains(.settingsOverride) else {
-      settingsOverride = nil
-      return
-    }
-    // 新形式は 1 キー単位で寛容に読む——未知 key・型不一致の 1 項目で層ごと失わない（global 層と
-    // 同じ家風）。旧 camelCase struct の decode は all-or-nothing（`loadGlobal` の旧形式移行と同じ）。
-    // 現行の key 空間である新形式を上に重ねる（旧 camelCase は新形式が言わない項目だけを埋める）。
-    // 読めた項目が 1 つも無ければ nil（上書き無し＝global 継承）。次回 save で新形式へ揃う。
-    let new = (try? c.decode(SettingsLayer.self, forKey: .settingsOverride)) ?? SettingsLayer()
-    let old = try? c.decode(LegacyWorkspaceSettingsOverride.self, forKey: .settingsOverride)
-    let legacy = old?.toLayer() ?? SettingsLayer()
-    let merged = legacy.overlaid(with: new)
-    settingsOverride = merged.isEmpty ? nil : merged
+    let layer = try? c.decode(SettingsLayer.self, forKey: .settingsOverride)
+    settingsOverride = layer.flatMap { $0.isEmpty ? nil : $0 }
   }
 }
 
-/// 1 タブの永続表現。分割ツリー（tree）＋ tab 単位メタ（明示タイトル）。
-/// 旧形式（タブ＝素の PaneNode）も nil 明示タイトルとして読めるよう Decodable をカスタムする。
+/// 1 タブの永続表現。cwd・エージェントセッション・明示タイトル。
 struct TabState: Codable, Equatable {
-  var tree: PaneNode
+  var cwd: String
+  var agent: AgentSession?
   var explicitTitle: String?
-
-  enum CodingKeys: String, CodingKey { case tree, explicitTitle }
-
-  init(tree: PaneNode, explicitTitle: String?) {
-    self.tree = tree
-    self.explicitTitle = explicitTitle
-  }
-
-  init(from decoder: Decoder) throws {
-    // 新形式: { "tree": <PaneNode>, "explicitTitle": <String?> }
-    if let c = try? decoder.container(keyedBy: CodingKeys.self), c.contains(.tree) {
-      tree = try c.decode(PaneNode.self, forKey: .tree)
-      explicitTitle = try c.decodeIfPresent(String.self, forKey: .explicitTitle)
-    } else {
-      // 旧形式: タブ＝素の PaneNode（explicitTitle 無し → nil）。
-      tree = try PaneNode(from: decoder)
-      explicitTitle = nil
-    }
-  }
-  // encode(to:) は CodingKeys から自動合成（新形式で書く）。
 }
 
-/// ペインで走るエージェントセッション＝agent の同一性・再開ハンドル。状態をまたいで持続する
+/// タブで走るエージェントセッション＝agent の同一性・再開ハンドル。状態をまたいで持続する
 /// （復元で凍結 → 消費で live へ引き継ぎ → 報告で sessionId が後から確定する）。
 /// sessionId は optional——報告が sessionId を運ぶ前の稼働（live）を表現する。
 struct AgentSession: Codable, Equatable {
@@ -145,22 +85,8 @@ struct AgentSession: Codable, Equatable {
   var sessionId: String?
 }
 
-/// 1 タブの分割ツリー（二分木）。葉＝1 ペイン（cwd・エージェントセッション）、節＝1 分割（向き・分割比）。
-indirect enum PaneNode: Codable, Equatable {
-  case leaf(cwd: String?, agent: AgentSession?)
-  case split(vertical: Bool, ratio: Double, first: PaneNode, second: PaneNode)
-
-  /// この分割ツリーが持つ agent != nil の leaf 数（永続 agent セッションの総数）。
-  var agentLeafCount: Int {
-    switch self {
-    case .leaf(_, let agent): return agent != nil ? 1 : 0
-    case .split(_, _, let first, let second): return first.agentLeafCount + second.agentLeafCount
-    }
-  }
-}
-
 enum WorkspacePersistence {
-  static let version = 3
+  static let version = 4
 
   /// テスト用に保存先を差し替える（設定時はこちらを使う）。本番は nil。
   static var fileURLOverride: URL?
@@ -177,8 +103,9 @@ enum WorkspacePersistence {
   }
 
   /// 読み込み。欠落・壊れ・非互換 version は nil（呼び出し側が既定で fallback）。
-  /// 旧 v2（タブ＝素の PaneNode）も TabState のカスタム Decodable で読める。
-  /// 受理後、次回 save で snapshotFile が version:3 で書き直す＝自動移行。
+  /// version を先に読み、現行（4）は素直に decode、旧 v2 / v3 は移行専用 decoder
+  /// （`WorkspacePersistence+Legacy`）で読んで平坦化する。受理後、次回 save で snapshotFile が
+  /// version:4 で書き直す＝自動移行。
   ///
   /// 原本が「在るのに使えない」ときは nil を返す前に退避する。直後の既定起動が打つ save が
   /// `.atomic` write で原本を完全に潰すため、ここで残さないと復元手段が消える。
@@ -187,15 +114,25 @@ enum WorkspacePersistence {
     unsalvagedOriginal = nil
     guard let url = fileURL else { return nil }  // 保存先が決まらない。save も同じ guard で書かない
     guard FileManager.default.fileExists(atPath: url.path) else { return nil }  // 初回起動
-    guard let data = try? Data(contentsOf: url),
-      let file = try? JSONDecoder().decode(WorkspacesFile.self, from: data),
-      file.version == 2 || file.version == version
-    else {
+    guard let data = try? Data(contentsOf: url), let file = decode(data) else {
       quarantine(url)  // 読めない・構造破損・非互換 version＝ユーザー構成が入っている原本
       return nil
     }
     guard !file.workspaces.isEmpty else { return nil }  // 中身が無い＝失う構成が無い
     return file
+  }
+
+  private struct VersionProbe: Decodable {
+    let version: Int
+  }
+
+  private static func decode(_ data: Data) -> WorkspacesFile? {
+    guard let probe = try? JSONDecoder().decode(VersionProbe.self, from: data) else { return nil }
+    switch probe.version {
+    case version: return try? JSONDecoder().decode(WorkspacesFile.self, from: data)
+    case 2, 3: return loadLegacy(data)
+    default: return nil
+    }
   }
 
   /// 使えなかった原本を隣へ退避する（最新 1 件だけ残す）。

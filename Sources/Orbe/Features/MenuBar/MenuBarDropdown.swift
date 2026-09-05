@@ -118,7 +118,7 @@ struct MenuBarDropdownView: View {
   var onOpenOrbe: () -> Void
   var onPermissionHint: () -> Void
 
-  @State private var hoveredPaneId: Int?
+  @State private var hoveredTabId: Int?
 
   /// 地色。Theme.Glass.surface と同基色（dark 0x1e1a26 / light 白）のドロップダウン専用濃度 0.94
   /// （デザイン rgba(panel, 0.94)。既存 GlassLevel の 0.72/0.85/0.90 とは別段のため局所で持つ）。
@@ -141,17 +141,17 @@ struct MenuBarDropdownView: View {
             .padding(.vertical, 5)
             .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
         } else {
-          ForEach(store.listRows, id: \.paneId) { row in
+          ForEach(store.listRows, id: \.tabId) { row in
             AttentionRowView(row: row)
               .padding(.vertical, 5)
               .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
               .background(
                 RoundedRectangle(cornerRadius: Theme.Radius.row)
-                  .fill(hoveredPaneId == row.paneId ? Color.theme.selectionFill : .clear)
+                  .fill(hoveredTabId == row.tabId ? Color.theme.selectionFill : .clear)
               )
               .contentShape(Rectangle())
               .onTapGesture { onSelectRow(row) }
-              .onHover { if $0 { hoveredPaneId = row.paneId } }
+              .onHover { if $0 { hoveredTabId = row.tabId } }
           }
         }
         if let working = store.workingSummary {
@@ -179,7 +179,7 @@ struct MenuBarDropdownView: View {
 
       Rectangle().fill(Color.theme.borderInk.opacity(0.08)).frame(height: Theme.Stroke.hairline)
       HStack(spacing: 0) {
-        Text(localization.string(.menubarClickToPane))
+        Text(localization.string(.menubarClickToTab))
           .foregroundStyle(Color.theme.textMuted)
         Spacer(minLength: Theme.Space.beat)
         HStack(spacing: Theme.Space.tick) {

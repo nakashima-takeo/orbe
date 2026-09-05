@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// ペインに重ねるスクロールバック検索バー。
+/// 端末に重ねるスクロールバック検索バー。
 /// 検索エンジンは libghostty 側（surface の search アクション）。本バーは needle 入力・
 /// 件数表示・次/前ジャンプのトリガを surface へ橋渡しするだけ。
 ///

@@ -7,7 +7,7 @@ import SwiftUI
 ///
 /// 4 態: ①要対応 0＝減光 ◐ ②状態変化の瞬間（`store.transient` が生きている間）＝滲み出しピル
 /// ③収縮後＝◐＋件数（waiting+done のみ） ④クリック＝ドロップダウン（`MenuBarDropdown`）。
-/// ②の間のクリックだけは該当ペインへ直行する（前面化＋focus）。main スレッド規律
+/// ②の間のクリックだけは該当タブへ直行する（前面化＋focus）。main スレッド規律
 /// （AppKit・AttentionStore と同じ）で、monitor / timer / target-action はすべて main で届く。
 ///
 /// ②の開閉は `MenuBarArrivalDriver` が位相として持ち、controller が tween 中だけ 1/60s の
@@ -28,7 +28,7 @@ final class MenuBarController: NSObject {
   private var dropdown: MenuBarDropdown?
   private var transientTimer: Timer?
   private var ticker: Timer?
-  /// 直近に driver へ渡した到来時刻。同じペインの積み替えも「新しい到来」なのでここで見分ける。
+  /// 直近に driver へ渡した到来時刻。同じタブの積み替えも「新しい到来」なのでここで見分ける。
   private var lastArrivedAt: Date?
 
   init(store: AttentionStore, windowController: WindowController, localization: LocalizationStore) {
@@ -117,7 +117,7 @@ final class MenuBarController: NSObject {
   // MARK: - クリック分岐
 
   @objc private func statusItemClicked() {
-    // ②の間のクリック＝該当ペインへ直行（前面化＋focus）。ドロップダウンは開かない。
+    // ②の間のクリック＝該当タブへ直行（前面化＋focus）。ドロップダウンは開かない。
     // 閉じ方は滞留満了と同じ収縮で、尺だけが速い（②を落とすのは閉じ切った `advance`）。
     // 取り下げ済み（閉じかけ）のピルは②としてもう生きていないので、通常のクリックへ落とす。
     if let transient = store.transient, !transient.retracted {
@@ -125,7 +125,7 @@ final class MenuBarController: NSObject {
       advance()
       NSApp.activate(ignoringOtherApps: true)
       windowController.window.makeKeyAndOrderFront(nil)
-      windowController.focusAttentionPane(paneId: transient.row.paneId)
+      windowController.focusAttentionTab(tabId: transient.row.tabId)
       closeDropdown()
       return
     }
@@ -151,9 +151,9 @@ final class MenuBarController: NSObject {
     d.onSelectRow = { [weak self] row in
       guard let self else { return }
       self.closeDropdown()
-      NSApp.activate(ignoringOtherApps: true)  // 行クリック＝orbe 前面化＋ペインへ移動
+      NSApp.activate(ignoringOtherApps: true)  // 行クリック＝orbe 前面化＋タブへ移動
       self.windowController.window.makeKeyAndOrderFront(nil)
-      self.windowController.focusAttentionPane(paneId: row.paneId)
+      self.windowController.focusAttentionTab(tabId: row.tabId)
     }
     d.onOpenOrbe = { [weak self] in
       guard let self else { return }

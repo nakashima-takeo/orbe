@@ -44,13 +44,13 @@ final class HelpCatalogTests: OrbeTestCase {
 
   /// タブ左右移動は矢印が主・括弧が従。トップ厳選には矢印だけを載せ、一覧でも矢印 2 行を括弧 2 行より先に置く。
   func testTabTraversalPrefersArrowsOverBrackets() {
-    let picks = HelpCatalog.topPicks[.helpCatWorkspaceTabsPanes] ?? []
+    let picks = HelpCatalog.topPicks[.helpCatWorkspaceTabs] ?? []
     XCTAssertTrue(picks.contains("⌘⇧→"), "トップ厳選のタブ移動が矢印 ⌘⇧→ でない")
     XCTAssertFalse(picks.contains("⌘⇧]"), "トップ厳選に括弧 ⌘⇧] が載っている")
 
-    guard let group = HelpCatalog.all.first(where: { $0.title == .helpCatWorkspaceTabsPanes })
+    guard let group = HelpCatalog.all.first(where: { $0.title == .helpCatWorkspaceTabs })
     else {
-      return XCTFail("カテゴリ helpCatWorkspaceTabsPanes が all に無い")
+      return XCTFail("カテゴリ helpCatWorkspaceTabs が all に無い")
     }
     let traversal = ["⌘⇧→", "⌘⇧←", "⌘⇧]", "⌘⇧["]
     XCTAssertEqual(
@@ -70,10 +70,10 @@ final class HelpCatalogTests: OrbeTestCase {
     XCTAssertEqual(ids.count, Set(ids).count, "KB 配列の id が重複している")
   }
 
-  /// 棚卸しの総数（28）と「すべて」件数の導出が一致する。
+  /// 棚卸しの総数（26）と「すべて」件数の導出が一致する。
   func testTotalCount() {
-    XCTAssertEqual(HelpCatalog.totalCount, 28)
-    XCTAssertEqual(HelpCatalog.all.map(\.rows.count), [4, 12, 4, 8])
+    XCTAssertEqual(HelpCatalog.totalCount, 26)
+    XCTAssertEqual(HelpCatalog.all.map(\.rows.count), [4, 10, 4, 8])
   }
 
   /// ⌘⌘（Attention パレット）は画面のどこにも書けない発見不能なジェスチャなので、

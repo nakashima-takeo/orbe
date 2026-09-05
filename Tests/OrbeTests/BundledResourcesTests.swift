@@ -96,7 +96,7 @@ final class BundledResourcesTests: OrbeTestCase {
     let root = tmp.appendingPathComponent("app", isDirectory: true)
     try write(root.appendingPathComponent("bin"))
     BundledResources.root = root
-    XCTAssertNil(SurfaceView.bundledBinDir, "bin がディレクトリでなければ PATH へ前置しない")
+    XCTAssertNil(OrbeRuntimeEnv.bundledBinDir, "bin がディレクトリでなければ PATH へ前置しない")
   }
 
   /// `orbe-report` の実行権と `bin/` の存在は独立した条件。
@@ -105,9 +105,9 @@ final class BundledResourcesTests: OrbeTestCase {
     let root = try makeBundleLayout(named: "app")
     try setPermissions(0o644, at: root.appendingPathComponent("bin/orbe-report"))
     BundledResources.root = root
-    XCTAssertNil(SurfaceView.reportBinaryPath, "orbe-report が非実行可能なら env へ注入しない")
+    XCTAssertNil(OrbeRuntimeEnv.reportBinaryPath, "orbe-report が非実行可能なら env へ注入しない")
     XCTAssertEqual(
-      SurfaceView.bundledBinDir, root.appendingPathComponent("bin").path,
+      OrbeRuntimeEnv.bundledBinDir, root.appendingPathComponent("bin").path,
       "orbe-report の実行権と bin/ の存在は独立した条件")
   }
 
@@ -118,20 +118,20 @@ final class BundledResourcesTests: OrbeTestCase {
     let root = try makeBundleLayout(named: "app")
     BundledResources.root = root
     var env = ["PATH": "/usr/bin:/bin"]
-    SurfaceView.prependBundledBin(to: &env)
+    OrbeRuntimeEnv.prependBundledBin(to: &env)
     XCTAssertEqual(
       env["PATH"], "\(root.appendingPathComponent("bin").path):/usr/bin:/bin",
       "既存 PATH を保持したまま同梱 bin を先頭へ前置する")
   }
 
-  /// env に PATH が無いペイン（split 等）では本プロセスの PATH を土台にする。
+  /// env に PATH が無いタブ（agent 起動でない＝initialEnv に login PATH が入らないタブ）では本プロセスの PATH を土台にする。
   func testPrependFallsBackToProcessPathWhenEnvHasNone() throws {
     let root = try makeBundleLayout(named: "app")
     let processPath = try XCTUnwrap(
       ProcessInfo.processInfo.environment["PATH"], "テストプロセスに PATH が無い")
     BundledResources.root = root
     var env: [String: String] = [:]
-    SurfaceView.prependBundledBin(to: &env)
+    OrbeRuntimeEnv.prependBundledBin(to: &env)
     XCTAssertEqual(
       env["PATH"], "\(root.appendingPathComponent("bin").path):\(processPath)",
       "env に PATH が無ければ本プロセスの PATH を土台に前置する")
@@ -141,16 +141,16 @@ final class BundledResourcesTests: OrbeTestCase {
   func testPrependIsNoOpWithoutBundle() {
     BundledResources.root = tmp
     var env = ["PATH": "/usr/bin:/bin"]
-    SurfaceView.prependBundledBin(to: &env)
+    OrbeRuntimeEnv.prependBundledBin(to: &env)
     XCTAssertEqual(env["PATH"], "/usr/bin:/bin", "同梱 bin が無ければ PATH を変えない")
   }
 
   /// バンドル無しかつ env に PATH が無ければ PATH キー自体を生やさない
-  /// （生やすと本プロセスの PATH がペインへ漏れ、ログインシェルの解決を横取りする）。
+  /// （生やすと本プロセスの PATH がタブへ漏れ、ログインシェルの解決を横取りする）。
   func testPrependAddsNoPathKeyWithoutBundle() {
     BundledResources.root = tmp
     var env: [String: String] = [:]
-    SurfaceView.prependBundledBin(to: &env)
+    OrbeRuntimeEnv.prependBundledBin(to: &env)
     XCTAssertNil(env["PATH"], "同梱 bin が無ければ PATH キーを生やさない")
   }
 
@@ -191,8 +191,8 @@ final class BundledResourcesTests: OrbeTestCase {
       ("AgentPluginInstaller.bundledPluginDir", AgentPluginInstaller.bundledPluginDir?.path),
       ("CompletionEngine.bundlePath", CompletionEngine.bundlePath),
       ("CompletionShim.directoryPath", CompletionShim.directoryPath),
-      ("SurfaceView.reportBinaryPath", SurfaceView.reportBinaryPath),
-      ("SurfaceView.bundledBinDir", SurfaceView.bundledBinDir),
+      ("OrbeRuntimeEnv.reportBinaryPath", OrbeRuntimeEnv.reportBinaryPath),
+      ("OrbeRuntimeEnv.bundledBinDir", OrbeRuntimeEnv.bundledBinDir),
     ]
   }
 
@@ -202,8 +202,8 @@ final class BundledResourcesTests: OrbeTestCase {
       "AgentPluginInstaller.bundledPluginDir": root.appendingPathComponent("agent-plugin").path,
       "CompletionEngine.bundlePath": root.appendingPathComponent("completion-engine.js").path,
       "CompletionShim.directoryPath": root.appendingPathComponent("zsh").path,
-      "SurfaceView.reportBinaryPath": root.appendingPathComponent("bin/orbe-report").path,
-      "SurfaceView.bundledBinDir": root.appendingPathComponent("bin").path,
+      "OrbeRuntimeEnv.reportBinaryPath": root.appendingPathComponent("bin/orbe-report").path,
+      "OrbeRuntimeEnv.bundledBinDir": root.appendingPathComponent("bin").path,
     ]
   }
 

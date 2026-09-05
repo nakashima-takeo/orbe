@@ -16,7 +16,7 @@ import XCTest
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**
 /// （GhosttyKit 必須）。ただし surface（＝実シェル）が起きるのはアクティブ workspace に
-/// タブがある fixture だけ——非アクティブ workspace の `TerminalController` はオブジェクトとして
+/// タブがある fixture だけ——非アクティブ workspace の `TerminalTab` はオブジェクトとして
 /// 生きるが window に載らないので surface は生まれない。等値で見たい検証はこの休眠側に寄せる。
 final class WindowControllerRestoreTests: OrbeTestCase {
 
@@ -38,7 +38,7 @@ final class WindowControllerRestoreTests: OrbeTestCase {
     WorkspaceState(
       name: name, rootPath: "/tmp", activeTab: activeTab,
       tabs: (0..<count).map {
-        TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: "t\($0)")
+        TabState(cwd: "/tmp", agent: nil, explicitTitle: "t\($0)")
       })
   }
 
@@ -88,17 +88,13 @@ final class WindowControllerRestoreTests: OrbeTestCase {
         WorkspaceState(
           name: "loaded", rootPath: "/tmp/loaded", activeTab: 1,
           tabs: [
+            TabState(cwd: "/work/api", agent: nil, explicitTitle: "api"),
             TabState(
-              tree: .split(
-                vertical: true, ratio: 0.3,
-                first: .leaf(cwd: "/work/api", agent: nil),
-                second: .leaf(
-                  cwd: "/work/web",
-                  // resume 対応 CLI ＋ 安全文字集合の sessionId。解決できないと素のシェルへ
-                  // 落ちて agent が消える（＝ここが等値にならない）。
-                  agent: AgentSession(command: "claude", sessionId: "web-1"))),
-              explicitTitle: "api"),
-            TabState(tree: .leaf(cwd: "/work/docs", agent: nil), explicitTitle: nil),
+              cwd: "/work/web",
+              // resume 対応 CLI ＋ 安全文字集合の sessionId。解決できないと素のシェルへ
+              // 落ちて agent が消える（＝ここが等値にならない）。
+              agent: AgentSession(command: "claude", sessionId: "web-1"), explicitTitle: nil),
+            TabState(cwd: "/work/docs", agent: nil, explicitTitle: nil),
           ],
           lastUsedAt: stampFront, settingsOverride: overrideLayer()),
       ],
@@ -129,12 +125,12 @@ final class WindowControllerRestoreTests: OrbeTestCase {
       workspaces: [
         WorkspaceState(
           name: "background", rootPath: "/tmp/bg", activeTab: 0,
-          tabs: [TabState(tree: .leaf(cwd: "/work/bg", agent: nil), explicitTitle: "bg")],
+          tabs: [TabState(cwd: "/work/bg", agent: nil, explicitTitle: "bg")],
           lastUsedAt: stampBackground),
         WorkspaceState(
           name: "front", rootPath: home, activeTab: 0,
           tabs: [
-            TabState(tree: .leaf(cwd: home, agent: nil), explicitTitle: "front")
+            TabState(cwd: home, agent: nil, explicitTitle: "front")
           ],
           lastUsedAt: stampFront, settingsOverride: overrideLayer()),
       ],
@@ -154,8 +150,8 @@ final class WindowControllerRestoreTests: OrbeTestCase {
     XCTAssertEqual(saved, expected, "進むのは lastUsedAt だけ——mount してもモデルは他に 1 つも動かない")
   }
 
-  /// 旧バージョン（v2＝タブが素の `PaneNode`）のファイルからの起動は、タブ構成を失わずに
-  /// 現行バージョンで書き直す。壊れると v3 導入後に一度も起動していないユーザーが、起動 1 回で
+  /// 旧バージョン（v2＝タブが素の分割ツリー）のファイルからの起動は、タブ構成を失わずに
+  /// 現行バージョンで書き直す。壊れると v4 導入後に一度も起動していないユーザーが、起動 1 回で
   /// 全タブを失う（次の保存が空の姿でディスクを上書きする）。
   func testLaunchFromLegacyV2FileRewritesToCurrentVersion() throws {
     try Data(
@@ -170,43 +166,8 @@ final class WindowControllerRestoreTests: OrbeTestCase {
 
     let saved = try XCTUnwrap(WorkspacePersistence.load())
     XCTAssertEqual(saved.version, WorkspacePersistence.version, "起動 1 回で現行バージョンへ書き直す")
-    XCTAssertEqual(
-      saved.workspaces[0].tabs[0].tree, .leaf(cwd: "/r/a", agent: nil), "v2 のタブ構成を失わない")
-  }
-
-  /// 保存分割比は mount 後の**実レイアウト**へ適用される。上の 2 本は非 mount 側なので、
-  /// `WorkspaceSplitView.ratio` が bounds 0 で保存値をそのまま返す fallback しか通らない
-  /// ——`layout()` の `setPosition` が消えても等値は保たれてしまう。ここが唯一その適用を見る。
-  /// 壊れると復元した分割が全部 50/50 で開く（保存値は往復するので気づけない）。
-  func testRestoredSplitRatioIsAppliedToMountedLayout() throws {
-    let home = FileManager.default.homeDirectoryForCurrentUser.path
-    let wc = launch(
-      activeWorkspace: 0,
-      [
-        WorkspaceState(
-          name: "front", rootPath: home, activeTab: 0,
-          tabs: [
-            TabState(
-              tree: .split(
-                vertical: true, ratio: 0.3,
-                first: .leaf(cwd: home, agent: nil), second: .leaf(cwd: home, agent: nil)),
-              explicitTitle: nil)
-          ])
-      ],
-      windowSize: WindowSize(width: 700, height: 400))
-    wc.window.layoutIfNeeded()
-
-    // 実レイアウトを通ったことを先に確定させる——bounds 0 なら ratio は保存値をそのまま返し、
-    // 下の assert が恒真になって唯一の適用検証が無言で死ぬ。
-    let split = try XCTUnwrap(
-      wc.current.tabs[wc.current.active].rootContainer.subviews.first as? WorkspaceSplitView,
-      "復元したタブの root は分割ビュー")
-    XCTAssertGreaterThan(split.bounds.width, 0, "分割ビューが実フレームを持つ（0 なら下の検証は恒真）")
-
-    guard case .split(_, let ratio, _, _) = wc.current.tabs[wc.current.active].snapshot() else {
-      return XCTFail("復元したタブは分割木のまま")
-    }
-    XCTAssertEqual(ratio, 0.3, accuracy: 0.02, "保存分割比が実フレームへ適用される（未適用なら 0.5 になる）")
+    XCTAssertEqual(saved.workspaces[0].tabs.map(\.cwd), ["/r/a"], "v2 のタブ構成を失わない")
+    XCTAssertEqual(wc.current.tabs.count, 1)
   }
 
   // MARK: - index のクランプ（範囲外の保存値で起動しても配列を踏み外さない）
@@ -280,7 +241,7 @@ final class WindowControllerRestoreTests: OrbeTestCase {
   // MARK: - 保存のデバウンス
 
   /// `scheduleSave` は即書かず、締切を過ぎてから 1 回書く（高頻度な cwd 報告をまとめるため）。
-  /// アクティブを 0 タブにするのは、ペイン由来の予期しない保存予約を混ぜないため。
+  /// アクティブを 0 タブにするのは、タブ由来の予期しない保存予約を混ぜないため。
   func testScheduleSaveWritesOnlyAfterDebounce() throws {
     let wc = launch(activeWorkspace: 0, [state("dormant", activeTab: 0, tabs: 0)])
     wc.flushSave()  // 起動由来の予約を確定させて場を空にする

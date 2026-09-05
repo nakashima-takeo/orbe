@@ -1,7 +1,7 @@
 import AppKit
 
 /// Attention パレットの提示と、Attention snapshot（単一情報源 `AttentionStore`）の流し込み。
-/// 加えて、見ていないペインの状態変化 1 件を通知（`AgentNotification`）として成立させる入口を持つ
+/// 加えて、見ていないタブの状態変化 1 件を通知（`AgentNotification`）として成立させる入口を持つ
 /// ——メニューバー②と通知音はその 1 件を投影するだけの面。
 extension WindowController {
   /// `flushChrome` から呼ぶ snapshot 更新（既存 coalesce に相乗り。新たな走査タイミングは作らない）。
@@ -38,9 +38,9 @@ extension WindowController {
     }
     let p = AttentionPaletteModel(localization: localization)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
-    p.onFocusPane = { [weak self] paneId in
+    p.onFocusTab = { [weak self] tabId in
       guard let self else { return }
-      _ = self.controlFocusPane(paneId: paneId)  // WS activate＋タブ選択＋ペイン focus（既存経路を共用）
+      _ = self.controlFocusTab(tabId: tabId)  // WS activate＋タブ選択＋surface focus（既存経路を共用）
       self.dismissPalette()  // done のフォーカス消費は select() 経由で既存規律どおり効く
     }
     p.setRows(attentionStore.rows)
@@ -50,9 +50,9 @@ extension WindowController {
     reconfirmFocusNextTick()  // 別 overlay からの遷移で去りゆくカードの teardown に勝つ
   }
 
-  /// メニューバー②のクリック直行・行クリックが使う「そのペインへ移動」（前面化は呼び出し側）。
-  func focusAttentionPane(paneId: Int) {
-    _ = controlFocusPane(paneId: paneId)
+  /// メニューバー②のクリック直行・行クリックが使う「そのタブへ移動」（前面化は呼び出し側）。
+  func focusAttentionTab(tabId: Int) {
+    _ = controlFocusTab(tabId: tabId)
   }
 
   /// メニューバー②（一過性の滲み出しピル）を立てる。滞留は通知が持つ発信元 workspace の
@@ -64,41 +64,36 @@ extension WindowController {
       dwell: TimeInterval(notification.settings[SettingKeys.menuBarNotificationDuration]))
   }
 
-  /// 「見ていないペインで起きた状態変化」1 件の文脈。メニューバー②と通知音は、この 1 つの通知を
+  /// 「見ていないタブで起きた状態変化」1 件の文脈。メニューバー②と通知音は、この 1 つの通知を
   /// 投影する 2 つの面で、成立条件（抑制・所属）も読む設定も面ごとに判断しない。
   struct AgentNotification {
-    /// 発信元ペインの行（一覧＝`AttentionSnapshot.rows` と同じ組み立て）。
+    /// 発信元タブの行（一覧＝`AttentionSnapshot.rows` と同じ組み立て）。
     let row: AttentionRow
-    /// 発信元ペインが属する workspace の実効設定。workspace 上書き（「この workspace で起きた
+    /// 発信元タブが属する workspace の実効設定。workspace 上書き（「この workspace で起きた
     /// 変化の通知はこう」）が意味を持つのはこの読み方だけ——見ている workspace の値ではない。
     let settings: EffectiveSettings
   }
 
   /// 状態変化 1 件を通知として成立させる（成立しなければ nil＝どの面も何もしない）。
   ///
-  /// 成立しないのは 2 つ。**見ているタブ**のペイン——端末にその結果もプロンプトも出ている面で、
-  /// 注意を二重に奪わないため。もう 1 つは**所属が引けない**ペイン（未activatedタブ）——対象は
-  /// 一覧と同じ activatedタブのライブペインのみで、一覧にもピルにも出ない通知だけが届くと
-  /// ユーザは出所を辿れない。
-  func agentNotification(for pane: SurfaceView) -> AgentNotification? {
-    // 抑制するのは「見ているタブが実在し、かつペインがそのタブに属する」ときだけ。visibleTab が
-    // nil＝背面なら誰も見ていないので必ず成立する（controller は weak。nil 同士を一致と読ませない）。
-    if let visibleTab, pane.controller === visibleTab { return nil }
-    for ws in workspaces {
-      for tab in ws.tabs
-      where tab.activated && tab.controlAllPanes().contains(where: { $0 === pane }) {
-        guard let report = pane.agentReport else { return nil }
-        let row = AttentionRow(
-          paneId: pane.id,
-          workspaceName: ws.name,
-          tabTitle: tab.displayTitle(workspaceRoot: ws.rootPath),
-          state: report.state,
-          message: report.state == "working" ? nil : report.message?.text,
-          stateChangedAt: report.stateChangedAt)
-        return AgentNotification(
-          row: row, settings: settingsStore.effective(override: ws.settingsOverride))
-      }
-    }
-    return nil
+  /// 成立しないのは 2 つ。**見ているタブ**——端末にその結果もプロンプトも出ている面で、
+  /// 注意を二重に奪わないため。もう 1 つは**未activatedタブ**——対象は一覧と同じ activatedタブの
+  /// ライブスロットのみで、一覧にもピルにも出ない通知だけが届くとユーザは出所を辿れない。
+  func agentNotification(for tab: TerminalTab) -> AgentNotification? {
+    // 抑制するのは「見ているタブが実在し、かつそのタブ」のときだけ。visibleTab が
+    // nil＝背面なら誰も見ていないので必ず成立する。
+    if let visibleTab, tab === visibleTab { return nil }
+    guard tab.activated, let report = tab.agentReport,
+      let ws = workspaces.first(where: { ws in ws.tabs.contains { $0 === tab } })
+    else { return nil }
+    let row = AttentionRow(
+      tabId: tab.id,
+      workspaceName: ws.name,
+      tabTitle: tab.displayTitle(workspaceRoot: ws.rootPath),
+      state: report.state,
+      message: report.state == "working" ? nil : report.message?.text,
+      stateChangedAt: report.stateChangedAt)
+    return AgentNotification(
+      row: row, settings: settingsStore.effective(override: ws.settingsOverride))
   }
 }

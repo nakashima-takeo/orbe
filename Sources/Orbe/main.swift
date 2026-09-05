@@ -5,11 +5,11 @@ import AppKit
 // IPC サーバを内包するプロセスの定石として SIGPIPE を無視し、write は戻り値で扱う。
 signal(SIGPIPE, SIG_IGN)
 
-// 親が Claude Code セッションだと、その判定マーカーが Orbe に継承され各ペインの
+// 親が Claude Code セッションだと、その判定マーカーが Orbe に継承され各タブの
 // claude へ漏れる。CLAUDE_CODE_CHILD_SESSION が伝播すると子 claude は自身を「子セッション」
 // と判定し、独立 transcript を書かず /resume 履歴に残らない。Orbe はターミナルのホストで
-// あり親のセッション文脈を子へ伝播すべきでない——ペイン spawn 前にこれらマーカーを一掃し、
-// 各ペインを独立したトップレベルセッションとして起こす（入れ子でも有効）。
+// あり親のセッション文脈を子へ伝播すべきでない——タブの spawn 前にこれらマーカーを一掃し、
+// 各タブを独立したトップレベルセッションとして起こす（入れ子でも有効）。
 // 一方 CLAUDE_CODE_USE_BEDROCK / _USE_VERTEX 等のユーザー設定・認証系は子が必要とするため残す。
 let inheritedSessionMarkers = [
   "CLAUDECODE",

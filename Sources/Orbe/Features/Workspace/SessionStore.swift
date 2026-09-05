@@ -1,7 +1,7 @@
 import Foundation
 
 /// タブ閉鎖の発火源。閉鎖経路（surface・libghostty ランタイム・制御 API）から
-/// `TerminalController.close` → `onEmpty` → `WindowController.closeTab` → `SessionStore.removeTab`
+/// `TerminalTab.close` → `onClose` → `WindowController.closeTab` → `SessionStore.removeTab`
 /// まで素通しで届き、開き直しスタック（⇧⌘T）へ積むかの判定に入る。
 /// デフォルト値を持たせない＝全呼び出し元が発火源を明示することをコンパイラが強制する。
 enum TabCloseOrigin {
@@ -9,7 +9,7 @@ enum TabCloseOrigin {
   case gesture
   /// シェル exit・エージェント終了（libghostty の close_surface_cb）。
   case process
-  /// 制御 API（close_tab・close_pane のカスケード）。経路を問わず一律。
+  /// 制御 API（close_tab）。
   case controlAPI
 
   /// 人が自分の意思でタブを畳んだ閉鎖か（外から落ちた閉鎖と分ける）。
@@ -22,17 +22,15 @@ enum TabCloseOrigin {
   }
 }
 
-/// 走査で得た 1 ペインと、その居場所（workspace / タブの index と所有タブ）。
-/// `SessionStore.allPanes()` の要素で、制御 API の列挙と Dispatch の cwd 突合が共有する。
-struct PaneRef {
+/// 走査で得た 1 タブと、その居場所（workspace / タブの index）。
+/// `SessionStore.allTabs()` の要素で、制御 API の列挙と Dispatch の cwd 突合が共有する。
+struct TabRef {
   let workspaceIndex: Int
   let tabIndex: Int
-  let tab: TerminalController
-  let pane: SurfaceView
+  let tab: TerminalTab
 }
 
 /// 閉じたエージェントタブ 1 枚の開き直しエントリ。`index` は閉じた時点のタブ位置。
-/// `state` はタブ丸ごと（同居していた素のシェルペインも分割ツリーごと）。
 struct ClosedAgentTab {
   let index: Int
   let state: TabState
@@ -41,7 +39,7 @@ struct ClosedAgentTab {
 /// ドメイン/セッション状態（`workspaces` と `activeWorkspace`）の唯一の所有者。
 /// 配列の CRUD・active index 補正・MRU 退避先選定・workspace の index 演算といった純ドメイン
 /// ロジックだけを持ち、ビューの mount/reparent や chrome 投影は WindowController に残す。
-/// Foundation のみに依存する（同モジュール型 `Workspace`/`TerminalController` の名前参照は
+/// Foundation のみに依存する（同モジュール型 `Workspace`/`TerminalTab` の名前参照は
 /// フレームワーク import を要さない）。
 final class SessionStore {
   private(set) var workspaces: [Workspace]
@@ -65,48 +63,41 @@ final class SessionStore {
 
   // MARK: - 純ドメイン読み
 
-  /// 指定 workspace のアクティブペインの実効 cwd（OSC 7 報告前は起動時 cwd＝復元値）。
-  /// snapshot() と同じ `currentPwd ?? initialCwd` の契約。タブ index ガードつき
-  /// （workspace index の妥当性は呼び出し側が保証する）。
-  private func paneCwd(inWorkspaceAt i: Int) -> String? {
+  /// 指定 workspace のアクティブタブの実効 cwd（`TerminalTab.cwd`）。0タブは nil。
+  /// workspace index の妥当性は呼び出し側が保証する。
+  private func tabCwd(inWorkspaceAt i: Int) -> String? {
     let ws = workspaces[i]
     guard ws.tabs.indices.contains(ws.active) else { return nil }
-    let pane = ws.tabs[ws.active].focusedPane
-    return pane?.currentPwd ?? pane?.initialCwd
+    return ws.tabs[ws.active].cwd
   }
 
-  /// アクティブペインの実効 cwd。
-  func activePaneCwd() -> String? { paneCwd(inWorkspaceAt: activeWorkspace) }
+  /// アクティブ workspace のアクティブタブの実効 cwd。0タブは nil。
+  func activeTabCwd() -> String? { tabCwd(inWorkspaceAt: activeWorkspace) }
 
-  /// 全 workspace × 全タブ × 分割ツリー全葉のペイン（**休眠 workspace も含む**）。
-  /// 休眠ペインは `currentPwd` を持たないが `initialCwd`（復元値）は持つので、cwd の話には必ず含める。
-  /// 葉の列挙は `TerminalController.controlAllPanes()`（深さ優先）に委ねる。
-  func allPanes() -> [PaneRef] {
+  /// 全 workspace × 全タブ（**休眠 workspace も含む**）。
+  /// 休眠タブは `currentPwd` を持たないが `initialCwd`（復元値）は持つので、cwd の話には必ず含める。
+  func allTabs() -> [TabRef] {
     workspaces.enumerated().flatMap { wi, ws in
-      ws.tabs.enumerated().flatMap { ti, tab in
-        tab.controlAllPanes().map {
-          PaneRef(workspaceIndex: wi, tabIndex: ti, tab: tab, pane: $0)
-        }
-      }
+      ws.tabs.enumerated().map { ti, tab in TabRef(workspaceIndex: wi, tabIndex: ti, tab: tab) }
     }
   }
 
   /// 指定 workspace での新規タブ起動の初期 cwd（GUI・エージェント起動・制御 API のすべてが
   /// `openTab` 越しにここを通る）。
-  /// 当該 workspace のアクティブペインの cwd を継ぎ、ペイン不在（0タブ）はその workspace の rootPath
+  /// 当該 workspace のアクティブタブの cwd を継ぎ、タブ不在（0タブ）はその workspace の rootPath
   /// へ落とす。nil を surface へ渡すと ghostty がホームへ解決してしまうため、ここで必ず確定させる。
   /// workspace index の妥当性は呼び出し側が保証する。
-  func newSurfaceCwd(inWorkspaceAt i: Int) -> String {
-    paneCwd(inWorkspaceAt: i) ?? workspaces[i].rootPath
+  func newTabCwd(inWorkspaceAt i: Int) -> String {
+    tabCwd(inWorkspaceAt: i) ?? workspaces[i].rootPath
   }
 
   // MARK: - select のブックキーピング（ビューは触らない）
 
   /// owner を確認してから、tab の materialize 開始を記録する。
   /// workspace の activated は配下の tab 状態から導出されるため、別の書込みは持たない。
-  @discardableResult func recordMaterialization(
-    of tab: TerminalController, in workspace: Workspace
-  ) -> Bool {
+  @discardableResult func recordMaterialization(of tab: TerminalTab, in workspace: Workspace)
+    -> Bool
+  {
     guard workspaces.contains(where: { $0 === workspace }),
       workspace.tabs.contains(where: { $0 === tab })
     else { return false }
@@ -150,10 +141,10 @@ final class SessionStore {
   /// アクティブ workspace の `index`（有効範囲 0…count へクランプ）へタブを挿し、実挿入 index を返す。
   /// 挿入位置が現 active 以前なら active を 1 つ繰り下げ、挿入前と同じタブを指し続けさせる
   /// （呼び出し側が直後に select する前提に寄りかからず、store 単体で不変条件を保つ）。
-  func insertTabIntoActive(_ tc: TerminalController, at index: Int) -> Int {
+  func insertTabIntoActive(_ tab: TerminalTab, at index: Int) -> Int {
     let ws = current
     let dest = min(max(0, index), ws.tabs.count)
-    ws.tabs.insert(tc, at: dest)
+    ws.tabs.insert(tab, at: dest)
     if dest <= ws.active { ws.active += 1 }
     ws.active = min(ws.active, ws.tabs.count - 1)  // 0タブへの挿入（active=0・count=1）を吸収
     return dest
@@ -163,7 +154,7 @@ final class SessionStore {
   func popClosedAgentTab() -> ClosedAgentTab? { current.closedAgentTabs.popLast() }
 
   /// アクティブ workspace 内でタブを `from` から `to`（挿入先 index・0…count）へ移動する。範囲外・
-  /// 実移動なし（同位置）は false。アクティブだった `TerminalController` の参照を控え、並べ替え後の
+  /// 実移動なし（同位置）は false。アクティブだった `TerminalTab` の参照を控え、並べ替え後の
   /// index を引き直して `active` を補正する（from/to の前後で場合分けするより堅牢）。ビュー副作用は
   /// 持たない（全タブは mount 済みのまま・可視/非可視も不変）＝呼び出し側が chrome 再投影と保存を担う。
   @discardableResult func moveTab(from: Int, to: Int) -> Bool {
@@ -173,10 +164,10 @@ final class SessionStore {
     let dest = to > from ? to - 1 : to
     guard dest != from else { return false }
     let ws = current
-    let activeTC = ws.tabs.indices.contains(ws.active) ? ws.tabs[ws.active] : nil
+    let activeTab = ws.tabs.indices.contains(ws.active) ? ws.tabs[ws.active] : nil
     let moved = ws.tabs.remove(at: from)
     ws.tabs.insert(moved, at: dest)
-    if let activeTC, let idx = ws.tabs.firstIndex(where: { $0 === activeTC }) {
+    if let activeTab, let idx = ws.tabs.firstIndex(where: { $0 === activeTab }) {
       ws.active = idx
     }
     return true
@@ -185,9 +176,9 @@ final class SessionStore {
   /// 指定 workspace の末尾へタブを足す（control spawn 用）。背景 workspace のときは active も末尾へ。
   /// アクティブ workspace のときは active を触らない（呼び出し側が select で mount する）。index の
   /// 妥当性は呼び出し側が保証する。
-  func appendTab(_ tc: TerminalController, toWorkspaceAt i: Int) {
+  func appendTab(_ tab: TerminalTab, toWorkspaceAt i: Int) {
     let ws = workspaces[i]
-    ws.tabs.append(tc)
+    ws.tabs.append(tab)
     if i != activeWorkspace { ws.active = ws.tabs.count - 1 }
   }
 
@@ -203,19 +194,17 @@ final class SessionStore {
   /// エントリをその場に残したまま `.emptiedActive` を返す（退避せず空でアクティブ維持）。空化時の
   /// `ws.active` は `max(0, min(0, -1)) = 0` に補正され、再アクティブ化で index 0 を選べる状態になる。
   /// 人のジェスチャで閉じたエージェントタブなら、配列から外す前に復元単位と位置を開き直しスタックへ
-  /// 積む——分割比は実フレームから、cwd/セッションは生きた surface から取るため、ビューが外れる前で
-  /// なければ正しく取れない。積む単位はタブ丸ごと（同居する素のシェルペインも分割ツリーごと）。
-  func removeTab(_ tc: TerminalController, origin: TabCloseOrigin) -> CloseTabOutcome {
+  /// 積む——cwd/セッションは生きた surface から取るため、ビューが外れる前でなければ正しく取れない。
+  func removeTab(_ tab: TerminalTab, origin: TabCloseOrigin) -> CloseTabOutcome {
     guard
-      let wsIndex = workspaces.firstIndex(where: { ws in ws.tabs.contains { $0 === tc } })
+      let wsIndex = workspaces.firstIndex(where: { ws in ws.tabs.contains { $0 === tab } })
     else { return .notFound }
     let ws = workspaces[wsIndex]
-    guard let idx = ws.tabs.firstIndex(where: { $0 === tc }) else { return .notFound }
+    guard let idx = ws.tabs.firstIndex(where: { $0 === tab }) else { return .notFound }
 
     if origin.isHumanGesture {
-      let state = tc.tabState()
-      // エージェントペインを 1 枚でも含むタブだけ積む（agent 付き葉の数で判定）。
-      if state.tree.agentLeafCount > 0 {
+      let state = tab.tabState()
+      if state.agent != nil {
         ws.closedAgentTabs.append(ClosedAgentTab(index: idx, state: state))
         if ws.closedAgentTabs.count > Self.closedAgentTabLimit { ws.closedAgentTabs.removeFirst() }
       }

@@ -187,12 +187,30 @@ final class SettingsMigrationTests: OrbeTestCase {
     XCTAssertEqual(override[SettingKeys.agentStateIcons], ["working": "gearshape"])
   }
 
-  /// 新形式（canonical key）の settingsOverride はそのまま読める。
-  func testNewFormatWorkspaceOverrideLoads() throws {
-    let new = """
+  /// 旧 camelCase と新形式が 1 つの settingsOverride に混在していても、両方の項目を読む——旧が埋める
+  /// のは新が言わない項目だけで、同じ設定が両綴りにあれば新形式の値が勝つ。形式を先に判定して
+  /// 片方だけ読むと、混在ファイル（新版で 1 項目だけ書き換えた旧ファイル）の残りの項目が消える。
+  func testLegacyOverrideMixedWithNewFormatKeepsBothAndNewFormatWins() throws {
+    let mixed = """
       {"version":3,"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,\
       "tabs":[{"tree":{"leaf":{}}}],\
+      "settingsOverride":{"fontSize":16,"font-size":18,"fontFamily":"Hack","theme":"dark"}}]}
+      """
+    try Data(mixed.utf8).write(to: workspacesFile())
+    let file = try XCTUnwrap(WorkspacePersistence.load(), "混在 override でも load 成功")
+    let override = try XCTUnwrap(file.workspaces[0].settingsOverride, "上書き層へ変換される")
+    XCTAssertEqual(override[SettingKeys.fontSize], 18, "両綴りにある項目は新形式の値が勝つ")
+    XCTAssertEqual(override[SettingKeys.fontFamily], "Hack", "旧綴りにしか無い項目は旧から埋まる")
+    XCTAssertEqual(override[SettingKeys.theme], .dark, "綴りが重なる theme も読める")
+  }
+
+  /// 新形式（canonical key）の settingsOverride はそのまま読める。
+  func testNewFormatWorkspaceOverrideLoads() throws {
+    let new = """
+      {"version":4,"activeWorkspace":0,"workspaces":[\
+      {"name":"a","rootPath":"/","activeTab":0,\
+      "tabs":[{"cwd":"/"}],\
       "settingsOverride":{"font-size":18,"default-agent":"codex"}}]}
       """
     try Data(new.utf8).write(to: workspacesFile())

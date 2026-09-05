@@ -2,7 +2,7 @@ import Carbon.HIToolbox
 import GhosttyKit
 
 /// 制御チャネルの宛先 ID 発番（プロセス内で単調増加・型をまたいで一意）。
-/// workspace / tab(TerminalController) / pane(SurfaceView) すべてが同じ空間から引く。
+/// workspace / tab(TerminalTab) が同じ空間から引く。
 /// main スレッド規律下でのみ呼ばれる（全オブジェクト生成は main）。
 enum IdGen {
   nonisolated(unsafe) private static var counter = 0
@@ -11,7 +11,7 @@ enum IdGen {
     return counter
   }
   /// カウンタを少なくとも `value` まで前進させる。復元カードの id（前回 run の値）と、以後
-  /// 新規採番される pane/card の id の衝突を避けるため load 時に呼ぶ。
+  /// 新規採番される tab/card の id の衝突を避けるため load 時に呼ぶ。
   static func bump(atLeast value: Int) {
     if counter < value { counter = value }
   }
@@ -19,58 +19,58 @@ enum IdGen {
 
 /// 外部 → Orbe の制御で起きた出来事。`wait_for_event` がフィルタして待ち、`prompt_agent` /
 /// `spawn_agent` の待機もこれで起きる。生の PTY 出力は libghostty が host に出さないため、
-/// 扱えるのは whitelist された OSC 由来シグナル（agent 状態・タイトル・cwd）とペインの
-/// ライフサイクルに限る。case ごとの payload は遷移時点の報告そのもの——配信時にペインを
+/// 扱えるのは whitelist された OSC 由来シグナル（agent 状態・タイトル・cwd）とタブの
+/// ライフサイクルに限る。case ごとの payload は遷移時点の報告そのもの——配信時にタブを
 /// 読み直すと done→idle 消費や次の遷移と競合するので、イベントが運ぶ。
 enum ControlEvent {
   /// 導出 `agentState` の実変化。`state` nil は報告の消滅（SessionEnd）。`message` / `sessionId` は
   /// その遷移の報告が運んだもの。
-  case agentState(paneId: Int, state: String?, message: String?, sessionId: String?)
-  case paneTitle(paneId: Int, title: String)
-  case pwd(paneId: Int, path: String?)
-  case paneClosed(paneId: Int)
+  case agentState(tabId: Int, state: String?, message: String?, sessionId: String?)
+  case title(tabId: Int, title: String)
+  case pwd(tabId: Int, path: String?)
+  case tabClosed(tabId: Int)
 
   /// `wait_for_event` が受け付ける kind の全体。フィルタの語彙はここが唯一の出所で、
   /// 未知の語は `waitForEvent` が待機を張る前に -32602 で弾く（黙って時間切れにしない）。
-  static let kinds: Set<String> = ["agent_state", "pane_title", "pwd", "pane_closed"]
+  static let kinds: Set<String> = ["agent_state", "title", "pwd", "tab_closed"]
 
   var kind: String {
     switch self {
     case .agentState: return "agent_state"
-    case .paneTitle: return "pane_title"
+    case .title: return "title"
     case .pwd: return "pwd"
-    case .paneClosed: return "pane_closed"
+    case .tabClosed: return "tab_closed"
     }
   }
 
-  var paneId: Int {
+  var tabId: Int {
     switch self {
-    case .agentState(let paneId, _, _, _), .paneTitle(let paneId, _), .pwd(let paneId, _),
-      .paneClosed(let paneId):
-      return paneId
+    case .agentState(let tabId, _, _, _), .title(let tabId, _), .pwd(let tabId, _),
+      .tabClosed(let tabId):
+      return tabId
     }
   }
 
-  /// kind 固有の値（agent_state なら状態語、pane_title ならタイトル、pwd なら path）。
+  /// kind 固有の値（agent_state なら状態語、title ならタイトル、pwd なら path）。
   /// 報告の消滅は `report_agent` の入力語と同じ `clear`——`wait_for_event` の `value` と
   /// `prompt_agent` の `state` が同じ語で一致するように、語はここだけが持つ。
   var value: String? {
     switch self {
     case .agentState(_, let state, _, _): return state ?? "clear"
-    case .paneTitle(_, let title): return title
+    case .title(_, let title): return title
     case .pwd(_, let path): return path
-    case .paneClosed: return nil
+    case .tabClosed: return nil
     }
   }
 
   func toDict() -> [String: Any] {
-    var d: [String: Any] = ["kind": kind, "paneId": paneId]
+    var d: [String: Any] = ["kind": kind, "tabId": tabId]
     if let value { d["value"] = value }
     switch self {
     case .agentState(_, _, let message, let sessionId):
       if let message { d["message"] = message }
       if let sessionId { d["sessionId"] = sessionId }
-    case .paneTitle, .pwd, .paneClosed:
+    case .title, .pwd, .tabClosed:
       break
     }
     return d
@@ -104,7 +104,7 @@ enum WaitTimeout {
   /// 長さ——`eventDefaultMs` では実作業の途中で切れ、`maxMs` まで伸ばすと放置された待機が丸一日残る。
   static let promptDefaultMs = 3_600_000
   /// `spawn_agent` / `resume_agent` の既定（30 秒）。新タブ＋ログインシェル＋agent 起動＋最初の
-  /// hook 報告までを負荷時も含めて覆う長さ（L4 のペイン安定待ち 15 秒の倍）。
+  /// hook 報告までを負荷時も含めて覆う長さ（L4 のタブ安定待ち 15 秒の倍）。
   static let launchDefaultMs = 30_000
 
   /// 省略なら既定、正の Int で上限内ならその値、それ以外は nil（呼び出し側が -32602）。
@@ -132,8 +132,8 @@ enum ControlKey {
     }
   }
 
-  /// 名前付きキーの全体。`orb pane --help` の `KEYS:` 行はここの写しで、ドリフトは
-  /// `testPaneHelpListsEveryKeyName` が突き合わせて落とす（`KINDS:` / `KEYS:` と同じ守り方）。
+  /// 名前付きキーの全体。`orb tab --help` の `KEYS:` 行はここの写しで、ドリフトは
+  /// `testTabHelpListsEveryKeyName` が突き合わせて落とす（`KINDS:` / `KEYS:` と同じ守り方）。
   static let namedKeys: [String: NamedKey] = [
     "enter": NamedKey(kVK_Return), "return": NamedKey(kVK_Return),
     "tab": NamedKey(kVK_Tab),

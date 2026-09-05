@@ -7,7 +7,7 @@ import XCTest
 /// 常駐 chrome（ネイティブ SwiftUI `StatusRowView` ＋ `StatusRowModel`）の完了条件を検証する。
 ///
 /// 条件1: macOS のウィンドウタイトルバーを表示しない。
-/// 条件2: chrome に workspace 名・タブ・アクティブペインの cwd が同居し、タブ 1 枚でも見える。
+/// 条件2: chrome に workspace 名・タブ・アクティブタブの cwd が同居し、タブ 1 枚でも見える。
 /// 条件3: この chrome 以外に常駐 UI を増やさない（オーバーレイは呼んだ時だけ）。
 ///
 /// 描画は SwiftUI なので、行レベルの状態は `WindowController.statusModel`（SSOT）で検証する。
@@ -56,11 +56,11 @@ final class ChromeStatusRowTests: OrbeTestCase {
     host.layoutSubtreeIfNeeded()
 
     // chrome はターミナル本文（SurfaceView）より上に位置し、重ならない。
-    let pane = try XCTUnwrap(findAll(SurfaceView.self, in: host).first, "アクティブペイン")
-    let paneInHost = pane.convert(pane.bounds, to: host)
+    let surface = try XCTUnwrap(findAll(SurfaceView.self, in: host).first, "アクティブタブの surface")
+    let surfaceInHost = surface.convert(surface.bounds, to: host)
     let chromeBottom = host.isFlipped ? Chrome.barHeight : host.bounds.height - Chrome.barHeight
-    let paneTop = host.isFlipped ? paneInHost.minY : paneInHost.maxY
-    XCTAssertEqual(paneTop, chromeBottom, accuracy: 1, "本文は chrome の真下から始まる＝chrome は常時占有")
+    let surfaceTop = host.isFlipped ? surfaceInHost.minY : surfaceInHost.maxY
+    XCTAssertEqual(surfaceTop, chromeBottom, accuracy: 1, "本文は chrome の真下から始まる＝chrome は常時占有")
 
     // タブ 1 枚でも 1 タブぶんのタイトルが chrome 状態に出る。
     wc.flushChrome()  // chrome は coalesce 済み——同期読み前に最終状態を確定させる
@@ -75,10 +75,9 @@ final class ChromeStatusRowTests: OrbeTestCase {
     wc.flushChrome()  // chrome は coalesce 済み——同期読み前に最終状態を確定させる
     XCTAssertEqual(wc.statusModel.workspace, "default", "workspace 名が chrome に出る")
 
-    // アクティブペインが cwd を報告すると、chrome 行に実 cwd が 1 箇所だけ出る（OSC 7 経路）。
-    let pane = try XCTUnwrap(findAll(SurfaceView.self, in: host).first, "アクティブペイン")
-    pane.currentPwd = "/private/var/orbe-cwd-probe"
-    pane.controller?.panePwdChanged()
+    // アクティブタブの surface が cwd を報告すると、chrome 行に実 cwd が 1 箇所だけ出る（OSC 7 経路）。
+    let surface = try XCTUnwrap(findAll(SurfaceView.self, in: host).first, "アクティブタブの surface")
+    surface.currentPwd = "/private/var/orbe-cwd-probe"
     wc.flushChrome()
     XCTAssertEqual(
       wc.statusModel.cwd, "/private/var/orbe-cwd-probe", "cwd は chrome 行に 1 箇所だけ出る")
@@ -116,32 +115,27 @@ final class ChromeStatusRowTests: OrbeTestCase {
 
   // MARK: - 横断エージェント状態ロールアップ
 
-  /// アクティブ workspace の全ペインの状態が rollup 件数に出る。件数 0 の種別は出ない。
-  func testRollupShowsActivePaneStateCounts() throws {
+  /// アクティブ workspace の全タブの状態が rollup 件数に出る。件数 0 の種別は出ない。
+  func testRollupShowsActiveTabStateCounts() throws {
     let wc = WindowController()
-    let host = try rootHost(wc)
-    let pane = try XCTUnwrap(findAll(SurfaceView.self, in: host).first, "アクティブペイン")
+    let tab = try XCTUnwrap(wc.current.tabs.first)
 
     wc.flushChrome()
     XCTAssertTrue(wc.statusModel.rollup.isEmpty, "状態 0 なら rollup は空")
 
-    setReportedState(pane, "working")
-    pane.controller?.paneAgentStateChanged()  // onAgentStateChange → refreshChrome 経路
+    setReportedState(tab, "working")
     wc.flushChrome()
     XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["working"], "working セグメントが出る")
     XCTAssertEqual(wc.statusModel.rollup.first?.count, 1, "working 1 件")
   }
 
-  /// done → idle に遷移したペインは idle 件数として rollup に出る。
+  /// done → idle に遷移したタブは idle 件数として rollup に出る。
   func testRollupReflectsDoneToIdleTransition() throws {
     let wc = WindowController()
-    let host = try rootHost(wc)
-    let pane = try XCTUnwrap(findAll(SurfaceView.self, in: host).first, "アクティブペイン")
+    let tab = try XCTUnwrap(wc.current.tabs.first)
 
-    setReportedState(pane, "done")
-    pane.controller?.paneAgentStateChanged()
-    setReportedState(pane, "idle")
-    pane.controller?.paneAgentStateChanged()
+    setReportedState(tab, "done")
+    setReportedState(tab, "idle")
     wc.flushChrome()
     XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["idle"], "idle セグメントになる")
     XCTAssertEqual(wc.statusModel.rollup.first?.count, 1, "idle 1 件")
@@ -149,7 +143,7 @@ final class ChromeStatusRowTests: OrbeTestCase {
 
   /// workspace が activated でも、未起床 sibling タブの注入状態をタブグリフや横断集計へ漏らさない。
   func testMixedWorkspaceGlyphsAndRollupGateEachTabIndependently() throws {
-    let tab = TabState(tree: .leaf(cwd: nil, agent: nil), explicitTitle: nil)
+    let tab = TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)
     WorkspacePersistence.save(
       WorkspacesFile(
         version: WorkspacePersistence.version, activeWorkspace: 0,
@@ -158,12 +152,10 @@ final class ChromeStatusRowTests: OrbeTestCase {
         ]))
     let wc = WindowController()
     XCTAssertEqual(wc.current.tabs.map(\.activated), [true, false], "hidden mount の最初の queue 前")
-    let live = try XCTUnwrap(wc.current.tabs[0].controlAllPanes().first)
-    let dormant = try XCTUnwrap(wc.current.tabs[1].controlAllPanes().first)
+    let live = try XCTUnwrap(wc.current.tabs[0])
+    let dormant = try XCTUnwrap(wc.current.tabs[1])
     setReportedState(live, "waiting")
     setReportedState(dormant, "done")
-    live.controller?.paneAgentStateChanged()
-    dormant.controller?.paneAgentStateChanged()
 
     wc.flushChrome()
 

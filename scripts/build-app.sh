@@ -76,7 +76,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$ROOT/.build/release/Orbe" "$APP/Contents/MacOS/Orbe"
 mkdir -p "$APP/Contents/Resources/bin"
 cp "$ROOT/.build/release/orbe-report" "$APP/Contents/Resources/bin/orbe-report"  # エージェント hook が env パスで指す状態報告 CLI（署名対象）
-cp "$ROOT/.build/release/orbe-cli" "$APP/Contents/Resources/bin/orb"  # Orbe 構成 CLI（bare `orb` へ改名・ペイン PATH で解決・署名対象）
+cp "$ROOT/.build/release/orbe-cli" "$APP/Contents/Resources/bin/orb"  # Orbe 構成 CLI（bare `orb` へ改名・タブの PATH で解決・署名対象）
 cp "$ROOT/app/Info.plist" "$APP/Contents/Info.plist"
 # identity は app/Info.plist が SSOT（＝release の値）。dev チャネルのときだけ導出値で上書きし、
 # 別アプリとして共存させる。CFBundleExecutable は Orbe のまま（実行体名を変えるとバイナリ配置と

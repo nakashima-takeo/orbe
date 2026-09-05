@@ -7,7 +7,7 @@ extension SurfaceView {
     // availableWithoutTabs のコマンドは surface 在席時も root が先に消費するためここへは来ないが、
     // mapping は網羅ゆえ残す（window 経路優先・surface 経路はフォールバック定義）。
     if let command = action.windowCommand {
-      controller?.requestWindowCommand(command)
+      tab?.requestWindowCommand(command)
       return
     }
     // 残りは surface ローカル操作。
@@ -15,9 +15,7 @@ extension SurfaceView {
     case .increaseFontSize: surfaceBinding("increase_font_size:1")
     case .decreaseFontSize: surfaceBinding("decrease_font_size:1")
     case .resetFontSize: surfaceBinding("reset_font_size")
-    case .splitRight: controller?.split(.horizontal)
-    case .splitDown: controller?.split(.vertical)
-    case .closePane: controller?.close(self, origin: .gesture)
+    case .closeTab: tab?.close(origin: .gesture)
     case .find: showSearch()
     case .scrollToTop: surfaceBinding("scroll_to_top")
     case .scrollToBottom: surfaceBinding("scroll_to_bottom")

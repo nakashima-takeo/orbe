@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-/// アクティブペインの cwd を GUI エディタで開く（Cmd+Shift+E）。
+/// アクティブタブの cwd を GUI エディタで開く（Cmd+Shift+E）。
 /// エディタは「$VISUAL → $EDITOR（GUI のみ）→ PATH 検索」で決め、`ShellPATH` の PATH
 /// で実行ファイルを解決する（GUI アプリの貧弱な PATH ではユーザー導入の `code` 等が見えない）。
 enum EditorLauncher {

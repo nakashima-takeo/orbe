@@ -1,11 +1,11 @@
 import Foundation
 
-/// Attention 一覧の 1 行（値型 snapshot）。`SurfaceView` 参照を UI に漏らさず、
+/// Attention 一覧の 1 行（値型 snapshot）。`TerminalTab` 参照を UI に漏らさず、
 /// パレット・メニューバードロップダウンが同じ形を読む。
 struct AttentionRow: Equatable {
-  let paneId: Int
+  let tabId: Int
   let workspaceName: String
-  /// TerminalController.displayTitle(workspaceRoot:) の導出タイトル。
+  /// TerminalTab.displayTitle(workspaceRoot:) の導出タイトル。
   let tabTitle: String
   /// "waiting" | "done" | "working"（builder が対象状態のみ集める）。
   let state: String
@@ -14,9 +14,9 @@ struct AttentionRow: Equatable {
   let stateChangedAt: Date
 }
 
-/// Attention snapshot の builder と派生（pure）。対象は**activatedタブのライブペインのみ**で、
-/// agentState ∈ {waiting, done, working} のペインを
-/// stateChangedAt 降順（同時刻は paneId 降順）に並べる。idle・nil は出さない。
+/// Attention snapshot の builder と派生（pure）。対象は**activatedタブのライブスロットのみ**で、
+/// agentState ∈ {waiting, done, working} のタブを
+/// stateChangedAt 降順（同時刻は tabId 降順）に並べる。idle・nil は出さない。
 enum AttentionSnapshot {
   /// 一覧に出す状態（idle は出さない。nil は対象外）。
   static let attentionStates: Set<String> = ["waiting", "done", "working"]
@@ -26,24 +26,22 @@ enum AttentionSnapshot {
     var out: [AttentionRow] = []
     for ws in workspaces {
       for tab in ws.tabs where tab.activated {
-        for pane in tab.controlAllPanes() {
-          guard let report = pane.agentReport, attentionStates.contains(report.state) else {
-            continue
-          }
-          out.append(
-            AttentionRow(
-              paneId: pane.id,
-              workspaceName: ws.name,
-              tabTitle: tab.displayTitle(workspaceRoot: ws.rootPath),
-              state: report.state,
-              message: report.state == "working" ? nil : report.message?.text,
-              stateChangedAt: report.stateChangedAt))
+        guard let report = tab.agentReport, attentionStates.contains(report.state) else {
+          continue
         }
+        out.append(
+          AttentionRow(
+            tabId: tab.id,
+            workspaceName: ws.name,
+            tabTitle: tab.displayTitle(workspaceRoot: ws.rootPath),
+            state: report.state,
+            message: report.state == "working" ? nil : report.message?.text,
+            stateChangedAt: report.stateChangedAt))
       }
     }
     return out.sorted {
       if $0.stateChangedAt != $1.stateChangedAt { return $0.stateChangedAt > $1.stateChangedAt }
-      return $0.paneId > $1.paneId
+      return $0.tabId > $1.tabId
     }
   }
 

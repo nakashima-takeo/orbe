@@ -47,7 +47,7 @@ struct DispatchCleanChip: View {
     case .unverified: return l10n.string(.dispatchCleanUnverified)
     case .agentWorking: return l10n.string(.dispatchCleanAgentWorking)
     case .agentWaiting: return l10n.string(.dispatchCleanAgentWaiting)
-    case .paneOpen: return l10n.string(.dispatchCleanPaneOpen)
+    case .tabOpen: return l10n.string(.dispatchCleanTabOpen)
     case .locked: return "locked"
     case .mainWorktree: return "main worktree"
     }

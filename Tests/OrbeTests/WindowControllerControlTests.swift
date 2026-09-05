@@ -13,24 +13,23 @@ import XCTest
 /// workspace の id はプロセス全域の IdGen で採番され予測不能なため、決して直書きせず
 /// `controlListWorkspaces()` の戻りから読む（配列インデックスでなく id で指す契約でもある）。
 ///
-/// 休眠 workspace が list_workspaces / list_panes にどう写るかは分割した拡張ファイル
-/// `+DormantProjection` が測る。ハーネス（`restore` / `tabbed` / `agentLeaf` / `row`）は本体が持つ。
+/// 休眠 workspace が list_workspaces / list_tabs にどう写るかは分割した拡張ファイル
+/// `+DormantProjection` が測る。ハーネス（`restore` / `tabbed` / `agentTab` / `row`）は本体が持つ。
 final class WindowControllerControlTests: OrbeTestCase {
 
   // MARK: - fixtures / helpers
 
-  /// resume 未対応 agent を載せた leaf（消費時に素シェル化するが休眠チケットには数える）。
-  func agentLeaf(_ id: String) -> PaneNode {
-    .leaf(cwd: nil, agent: AgentSession(command: "unknown", sessionId: id))
+  /// resume 未対応 agent を載せたタブ（消費時に素シェル化するが休眠チケットには数える）。
+  func agentTab(_ id: String) -> TabState {
+    TabState(
+      cwd: "/tmp", agent: AgentSession(command: "unknown", sessionId: id), explicitTitle: nil)
   }
 
-  /// 単一 leaf タブを持つ workspace 状態。
-  func tabbed(_ name: String, tree: PaneNode = .leaf(cwd: nil, agent: nil))
-    -> WorkspaceState
-  {
-    WorkspaceState(
-      name: name, rootPath: "/tmp", activeTab: 0,
-      tabs: [TabState(tree: tree, explicitTitle: nil)])
+  static let plainTab = TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)
+
+  /// 素のシェルタブ 1 枚（既定）または指定タブ群を持つ workspace 状態。
+  func tabbed(_ name: String, tabs: [TabState] = [plainTab]) -> WorkspaceState {
+    WorkspaceState(name: name, rootPath: "/tmp", activeTab: 0, tabs: tabs)
   }
 
   /// ディスクへ workspaces を書いてから復元済み WindowController を返す。
@@ -52,8 +51,8 @@ final class WindowControllerControlTests: OrbeTestCase {
   // MARK: - controlActivateWorkspace
 
   /// 背景（active==false）workspace を activate すると、その workspace がアクティブになり、
-  /// 戻り値は自身の id と当該 workspace のペイン ID 群（非空）。
-  func testActivateBackgroundWorkspaceMakesItActiveAndReturnsPaneIds() throws {
+  /// 戻り値は自身の id と当該 workspace のタブ ID 群（非空）。
+  func testActivateBackgroundWorkspaceMakesItActiveAndReturnsTabIds() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("background")])
     XCTAssertEqual(wc.window.title, "main")
 
@@ -64,7 +63,7 @@ final class WindowControllerControlTests: OrbeTestCase {
     let result = try XCTUnwrap(
       wc.controlActivateWorkspace(workspaceId: bgId), "既知 id の activate は非 nil")
     XCTAssertEqual(result.activeWorkspaceId, bgId, "戻りの activeWorkspaceId は指定した背景 WS 自身")
-    XCTAssertFalse(result.paneIds.isEmpty, "全タブ mount 後のペイン ID 群を返す")
+    XCTAssertFalse(result.tabIds.isEmpty, "全タブ mount 後のタブ ID 群を返す")
     XCTAssertEqual(wc.window.title, "background", "背景 WS が前面化しアクティブになる")
     XCTAssertEqual(row(wc, name: "background")?["active"] as? Bool, true, "list 上も active になる")
   }
@@ -80,7 +79,7 @@ final class WindowControllerControlTests: OrbeTestCase {
     let again = try XCTUnwrap(
       wc.controlActivateWorkspace(workspaceId: mainId), "既アクティブへの activate も success")
     XCTAssertEqual(again.activeWorkspaceId, mainId, "アクティブは移らず自身を返す")
-    XCTAssertEqual(again.paneIds, before.paneIds, "冪等: ペイン集合は増えも変わりもしない")
+    XCTAssertEqual(again.tabIds, before.tabIds, "冪等: タブ集合は増えも変わりもしない")
     XCTAssertEqual(wc.window.title, "main", "title 不変")
   }
 
@@ -93,26 +92,25 @@ final class WindowControllerControlTests: OrbeTestCase {
     XCTAssertEqual(wc.window.title, "main", "未知 id の activate はアクティブを変えない")
   }
 
-  /// 返す paneIds は `list_panes`（controlListPanes）の当該 workspace 導出と一致する
-  /// （activate 応答と後続 list_panes がズレない契約）。
-  func testActivateReturnedPaneIdsMatchListPanesDerivation() throws {
-    let split = PaneNode.split(
-      vertical: true, ratio: 0.5,
-      first: .leaf(cwd: nil, agent: nil), second: .leaf(cwd: nil, agent: nil))
-    let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("background", tree: split)])
+  /// 返す tabIds は `list_tabs`（controlListTabs）の当該 workspace 導出と一致する
+  /// （activate 応答と後続 list_tabs がズレない契約）。
+  func testActivateReturnedTabIdsMatchListTabsDerivation() throws {
+    let wc = try restore(
+      activeWorkspace: 0,
+      [tabbed("main"), tabbed("background", tabs: [Self.plainTab, Self.plainTab])])
     let bgId = try XCTUnwrap(row(wc, name: "background")?["id"] as? Int)
 
     let result = try XCTUnwrap(wc.controlActivateWorkspace(workspaceId: bgId))
-    let fromListPanes = wc.controlListPanes()
+    let fromListTabs = wc.controlListTabs()
       .filter { $0["workspaceId"] as? Int == bgId }
-      .compactMap { $0["paneId"] as? Int }
-    XCTAssertEqual(result.paneIds.count, 2, "分割ツリーの 2 leaf 分のペインを返す")
-    XCTAssertEqual(result.paneIds, fromListPanes, "activate の paneIds は list_panes と同一導出")
+      .compactMap { $0["tabId"] as? Int }
+    XCTAssertEqual(result.tabIds.count, 2, "2 タブ分の id を返す")
+    XCTAssertEqual(result.tabIds, fromListTabs, "activate の tabIds は list_tabs と同一導出")
   }
 
   /// 0タブの休眠 workspace を activate すると、前面化はするがシェルは自動起動せず、
-  /// paneIds は空配列で返る（0タブ空状態の表示・自動起こしなしの契約）。
-  func testActivateEmptyDormantWorkspaceShowsEmptyAndReturnsNoPanes() throws {
+  /// tabIds は空配列で返る（0タブ空状態の表示・自動起こしなしの契約）。
+  func testActivateEmptyDormantWorkspaceShowsEmptyAndReturnsNoTabs() throws {
     let wc = try restore(
       activeWorkspace: 0,
       [
@@ -123,7 +121,7 @@ final class WindowControllerControlTests: OrbeTestCase {
 
     let result = try XCTUnwrap(wc.controlActivateWorkspace(workspaceId: emptyId))
     XCTAssertEqual(result.activeWorkspaceId, emptyId)
-    XCTAssertTrue(result.paneIds.isEmpty, "0タブ WS はシェルを起こさず paneIds は空配列")
+    XCTAssertTrue(result.tabIds.isEmpty, "0タブ WS はシェルを起こさず tabIds は空配列")
     XCTAssertEqual(wc.window.title, "empty", "0タブ WS も activate で前面化する")
     let projected = try XCTUnwrap(row(wc, name: "empty"))
     XCTAssertEqual(projected["active"] as? Bool, true)
@@ -144,54 +142,52 @@ final class WindowControllerControlTests: OrbeTestCase {
     }
   }
 
-  /// 休眠 workspace の dormantAgentCount は永続復元した agent!=nil leaf 数を反映する
+  /// 休眠 workspace の dormantAgentCount は永続復元した agent 付きタブ数を反映する
   /// （agentState には出ない休眠 agent を、この永続カウントで露出する）。
   func testListWorkspacesDormantAgentCountReflectsPersistedAgents() throws {
-    let sleepers = PaneNode.split(
-      vertical: true, ratio: 0.5, first: agentLeaf("a"), second: agentLeaf("b"))
     let wc = try restore(
       activeWorkspace: 0,
       [
         tabbed("main"),
-        tabbed("sleepers", tree: sleepers),  // 休眠 agent 2
+        tabbed("sleepers", tabs: [agentTab("a"), agentTab("b")]),  // 休眠 agent 2
         tabbed("quiet"),  // 休眠 agent 0
       ])
     XCTAssertEqual(
-      row(wc, name: "sleepers")?["dormantAgentCount"] as? Int, 2, "永続 agent leaf 2 を反映")
+      row(wc, name: "sleepers")?["dormantAgentCount"] as? Int, 2, "永続 agent タブ 2 を反映")
     XCTAssertEqual(
       row(wc, name: "quiet")?["dormantAgentCount"] as? Int, 0, "agent 無しの休眠 WS は 0")
   }
 
-  // MARK: - controlListPanes の agentSessionId 露出
+  // MARK: - controlListTabs の agentSessionId 露出
 
-  /// list_panes の各ペインに agentSessionId フィールドが出る。report_agent 未適用のペインは
+  /// list_tabs の各タブに agentSessionId フィールドが出る。report_agent 未適用のタブは
   /// null（NSNull）で、agentState と同じ null 許容の写し方に揃う（resume の鍵）。
-  func testListPanesExposesAgentSessionIdAsNullWhenUnset() throws {
+  func testListTabsExposesAgentSessionIdAsNullWhenUnset() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main")])
-    let panes = wc.controlListPanes()
-    XCTAssertFalse(panes.isEmpty)
-    for p in panes {
-      XCTAssertNotNil(p["agentSessionId"], "各ペイン行に agentSessionId キーが存在する")
-      XCTAssertTrue(p["agentSessionId"] is NSNull, "report_agent 未適用なら null")
+    let tabs = wc.controlListTabs()
+    XCTAssertFalse(tabs.isEmpty)
+    for t in tabs {
+      XCTAssertNotNil(t["agentSessionId"], "各タブ行に agentSessionId キーが存在する")
+      XCTAssertTrue(t["agentSessionId"] is NSNull, "report_agent 未適用なら null")
     }
   }
 
-  /// 休眠（未消費チケット）ペインは、同一性（agentSessionId）は露出するが状態（agentState）は
+  /// 休眠（未消費チケット）タブは、同一性（agentSessionId）は露出するが状態（agentState）は
   /// 出さない——報告は live にしか存在しないため。resume 非対応 CLI で固定する: resume 可能な
   /// 休眠は従来から値が出ており、「復元時に解決できないチケットを捨てる」設計への差し戻しは
   /// 未対応 CLI 側でしか観測できない。orbe-cli / orbe-mcp は agentSessionId を resume の鍵、
   /// agentState を状態として別軸で読む。
-  func testListPanesExposesDormantTicketSessionIdWithoutState() throws {
+  func testListTabsExposesDormantTicketSessionIdWithoutState() throws {
     let wc = try restore(
-      activeWorkspace: 0, [tabbed("main"), tabbed("sleeping", tree: agentLeaf("zzz"))])
+      activeWorkspace: 0, [tabbed("main"), tabbed("sleeping", tabs: [agentTab("zzz")])])
     XCTAssertEqual(
       row(wc, name: "sleeping")?["activated"] as? Bool, false, "前提: 未 activate＝チケットは未消費")
 
-    let pane = try XCTUnwrap(
-      wc.controlListPanes().first { $0["workspaceName"] as? String == "sleeping" })
+    let tab = try XCTUnwrap(
+      wc.controlListTabs().first { $0["workspaceName"] as? String == "sleeping" })
 
-    XCTAssertEqual(pane["agentSessionId"] as? String, "zzz", "休眠のあいだも resume の鍵は見える")
-    XCTAssertTrue(pane["agentState"] is NSNull, "休眠ペインに報告状態は無い")
+    XCTAssertEqual(tab["agentSessionId"] as? String, "zzz", "休眠のあいだも resume の鍵は見える")
+    XCTAssertTrue(tab["agentState"] is NSNull, "休眠タブに報告状態は無い")
   }
 
   // MARK: - controlListAgents（list_agents）
@@ -317,18 +313,18 @@ final class WindowControllerControlTests: OrbeTestCase {
 
   // MARK: - controlSpawn の cwd フォールバック（spawn）
 
-  /// cwd 省略の spawn は対象 workspace の rootPath で開く（0タブ＝ペイン不在のフォールバック）。
-  /// GUI（Cmd+T）の newSurfaceCwd と同一意味論で、従来の「常にホーム」ギャップの是正。
+  /// cwd 省略の spawn は対象 workspace の rootPath で開く（0タブ＝タブ不在のフォールバック）。
+  /// GUI（Cmd+T）の newTabCwd と同一意味論で、従来の「常にホーム」ギャップの是正。
   func testSpawnWithoutCwdFallsBackToWorkspaceRootPath() throws {
     let wc = try restore(
       activeWorkspace: 0,
       [WorkspaceState(name: "empty", rootPath: "/tmp/empty-root", activeTab: 0, tabs: [])])
     let id = try XCTUnwrap(row(wc, name: "empty")?["id"] as? Int)
-    let paneId = try XCTUnwrap(
+    let tabId = try XCTUnwrap(
       wc.controlSpawn(workspaceId: id, cwd: nil, command: nil), "0タブ WS への spawn は成功する")
-    let pane = wc.controlListPanes().first { $0["paneId"] as? Int == paneId }
+    let tab = wc.controlListTabs().first { $0["tabId"] as? Int == tabId }
     XCTAssertEqual(
-      pane?["cwd"] as? String, "/tmp/empty-root", "cwd 省略はホームでなく対象 WS の rootPath")
+      tab?["cwd"] as? String, "/tmp/empty-root", "cwd 省略はホームでなく対象 WS の rootPath")
   }
 
   /// cwd 省略で非アクティブ workspace へ spawn しても、アクティブ側でなく**対象 workspace の**
@@ -341,11 +337,11 @@ final class WindowControllerControlTests: OrbeTestCase {
         WorkspaceState(name: "bg", rootPath: "/tmp/bg-root", activeTab: 0, tabs: []),
       ])
     let bgId = try XCTUnwrap(row(wc, name: "bg")?["id"] as? Int)
-    let paneId = try XCTUnwrap(
+    let tabId = try XCTUnwrap(
       wc.controlSpawn(workspaceId: bgId, cwd: nil, command: nil), "背景 WS への spawn は成功する")
-    let pane = wc.controlListPanes().first { $0["paneId"] as? Int == paneId }
+    let tab = wc.controlListTabs().first { $0["tabId"] as? Int == tabId }
     XCTAssertEqual(
-      pane?["cwd"] as? String, "/tmp/bg-root", "対象（背景）WS の rootPath で開く")
+      tab?["cwd"] as? String, "/tmp/bg-root", "対象（背景）WS の rootPath で開く")
     XCTAssertEqual(wc.window.title, "main", "アクティブ WS は変わらない")
   }
 }

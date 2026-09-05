@@ -9,7 +9,7 @@ extension L10n {
     .helpCatBasics: ("基本操作", "Basics"),
     .helpCatAllShortcuts: ("すべて", "All"),
     .helpCatGeneral: ("全般", "General"),
-    .helpCatWorkspaceTabsPanes: ("ワークスペース・タブ・ペイン", "Workspaces, Tabs & Panes"),
+    .helpCatWorkspaceTabs: ("ワークスペース・タブ", "Workspaces & Tabs"),
     .helpCatAgents: ("エージェント", "Agents"),
     .helpCatTerminal: ("ターミナル", "Terminal"),
     .helpTopSubtitle: (
@@ -40,9 +40,7 @@ extension L10n {
     .helpShortcutRenameTab: ("タブをリネーム", "Rename tab"),
     .helpShortcutNextTab: ("次のタブへ", "Next tab"),
     .helpShortcutPrevTab: ("前のタブへ", "Previous tab"),
-    .helpShortcutSplitRight: ("ペインを左右に分割", "Split pane left/right"),
-    .helpShortcutSplitDown: ("ペインを上下に分割", "Split pane top/bottom"),
-    .helpShortcutClosePane: ("ペインを閉じる", "Close pane"),
+    .helpShortcutCloseTab: ("タブを閉じる", "Close tab"),
     .helpShortcutLaunchDefaultAgent: ("デフォルトエージェントを起動", "Launch default agent"),
     .helpShortcutAgentPalette: ("エージェント起動パレット", "Agent launch palette"),
     .helpShortcutDispatchPalette: (
@@ -51,7 +49,7 @@ extension L10n {
     ),
     // 「⌘ を 2 回」はキー表記 ⌘⌘ が語るのでラベルからは落とす（トップ厳選の 1 行に収める）。
     .helpShortcutAttentionPalette: (
-      "Attention パレット（要対応のペイン）", "Attention palette (panes needing you)"
+      "Attention パレット（要対応のタブ）", "Attention palette (tabs needing you)"
     ),
     .helpShortcutFind: ("スクロールバック検索", "Search scrollback"),
     .helpShortcutScrollTop: ("スクロールバック先頭へ", "Jump to scrollback top"),

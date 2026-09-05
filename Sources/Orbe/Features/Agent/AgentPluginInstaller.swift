@@ -62,7 +62,7 @@ enum AgentPluginInstaller {
       .appendingPathComponent("agent-plugin.tmp-\(UUID().uuidString)", isDirectory: true)
     do {
       try fm.copyItem(at: src, to: tmp)
-      // 自分のチャネル（bundle ID）をシムの隣へ刻む。シムがこれとペインの ORBE_BUNDLE_ID を
+      // 自分のチャネル（bundle ID）をシムの隣へ刻む。シムがこれとタブの ORBE_BUNDLE_ID を
       // 突き合わせ、他チャネルの Orbe から来た呼び出しを落とす。差し替えの前に書くので、
       // 実体化先が channel を持たない瞬間は生じない。
       guard let name = pluginName(in: tmp) else {

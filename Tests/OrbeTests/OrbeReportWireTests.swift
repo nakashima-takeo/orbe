@@ -7,16 +7,16 @@ import XCTest
 /// `orbe-report` が制御ソケットへ書く**生の 1 行**を、テスト自前の AF_UNIX listener で受けて固定する。
 ///
 /// なぜ実サーバ経由でなくこの形かというと、`orbe-report` は Orbe とモジュールを共有せず wire の語を
-/// リテラルで持つため。実サーバへ流して振る舞いを観測する形だと、`orbe-report` 側だけ `paneId` を
-/// `pane_id` に改名しても「報告が届かない」としか見えず、受け側が黙って無視した結果と区別できない。
+/// リテラルで持つため。実サーバへ流して振る舞いを観測する形だと、`orbe-report` 側だけ `tabId` を
+/// `tab_id` に改名しても「報告が届かない」としか見えず、受け側が黙って無視した結果と区別できない。
 /// 生の 1 行を読めば、どの語がどう欠けたかがその場で出る。
 ///
 /// 壊れると何が起きるか: hook からの状態報告が無言で no-op に倒れる。エージェントの状態は
-/// ペインに一切現れなくなるが、どの実行体もエラーを出さない（`orbe-report` は接続できなくても
+/// タブに一切現れなくなるが、どの実行体もエラーを出さない（`orbe-report` は接続できなくても
 /// exit 0、サーバは知らない params を捨てるだけ）。
 final class OrbeReportWireTests: OrbeTestCase {
-  /// 報告元として名乗るペイン id（実ペインは要らない——測るのは wire に載る語だけ）。
-  private static let paneId = 7
+  /// 報告元として名乗るタブ id（実タブは要らない——測るのは wire に載る語だけ）。
+  private static let tabId = 7
 
   private var listenFD: Int32 = -1
   private var socketPath = ""
@@ -67,7 +67,7 @@ final class OrbeReportWireTests: OrbeTestCase {
     file: StaticString = #filePath, line: UInt = #line
   ) -> String? {
     var env = [
-      "PATH": "/usr/bin:/bin", "ORBE_PANE": String(Self.paneId), "ORBE_SOCK": socketPath,
+      "PATH": "/usr/bin:/bin", "ORBE_TAB": String(Self.tabId), "ORBE_SOCK": socketPath,
     ]
     for key in dropping { env.removeValue(forKey: key) }
     let outcome = ControlProcess.run(
@@ -128,9 +128,9 @@ final class OrbeReportWireTests: OrbeTestCase {
 
     XCTAssertEqual(method, "report_agent", "hook の状態報告が乗る control メソッド名")
     XCTAssertEqual(
-      Set(params.keys), ["paneId", "agent", "state", "sessionId", "message", "messageSource"],
+      Set(params.keys), ["tabId", "agent", "state", "sessionId", "message", "messageSource"],
       "params のキー集合（増減はどちらも受け側との断絶になる）")
-    XCTAssertEqual(params["paneId"] as? Int, Self.paneId, "報告元は ORBE_PANE の値をそのまま載せる")
+    XCTAssertEqual(params["tabId"] as? Int, Self.tabId, "報告元は ORBE_TAB の値をそのまま載せる")
     XCTAssertEqual(params["agent"] as? String, "claude", "argv[1] が agent")
     XCTAssertEqual(params["state"] as? String, "waiting", "argv[2] が state")
     XCTAssertEqual(params["sessionId"] as? String, "s-1", "stdin の session_id が sessionId になる")
@@ -166,18 +166,18 @@ final class OrbeReportWireTests: OrbeTestCase {
   }
 
   /// サブエージェントの hook payload（`agent_id` 入り）は接続すら張らずに落ちる。
-  /// ここが緩むと、サブエージェントの活動が親ペインの状態を上書きして表示が暴れる。
+  /// ここが緩むと、サブエージェントの活動が親タブの状態を上書きして表示が暴れる。
   func testSubagentPayloadNeverConnects() throws {
     let raw = report(state: "done", stdin: #"{"session_id":"s-1","agent_id":"sub-1"}"#)
     XCTAssertNil(raw, "agent_id 入りの報告は socket へ接続しない")
   }
 
-  /// Orbe 外（`ORBE_PANE` / `ORBE_SOCK` が無い端末）では接続しない。hook は Orbe を知らない
+  /// Orbe 外（`ORBE_TAB` / `ORBE_SOCK` が無い端末）では接続しない。hook は Orbe を知らない
   /// セッションでも走るため、ここが no-op でないと無関係な端末から報告が飛ぶ。
-  func testMissingPaneOrSocketEnvNeverConnects() throws {
+  func testMissingTabOrSocketEnvNeverConnects() throws {
     XCTAssertNil(
-      report(state: "working", stdin: "{}", dropping: ["ORBE_PANE"]),
-      "ORBE_PANE が無ければ報告しない")
+      report(state: "working", stdin: "{}", dropping: ["ORBE_TAB"]),
+      "ORBE_TAB が無ければ報告しない")
     XCTAssertNil(
       report(state: "working", stdin: "{}", dropping: ["ORBE_SOCK"]),
       "ORBE_SOCK が無ければ報告しない")

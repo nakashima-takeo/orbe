@@ -15,16 +15,16 @@ extension WindowControllerReportAgentTests {
 
   /// waiting / done への実変化だけが鳴る（②ピルと同じ条件）。
   func testSoundFiresOnlyOnWaitingOrDoneChange() throws {
-    let (wc, pane) = try makeControllerAndPane()
+    let (wc, tab) = try makeControllerAndTab()
     XCTAssertFalse(wc.window.isKeyWindow, "前提: 背面（非 key）なので見ているタブの抑制は効かない")
     let sound = try recorder(wc)
 
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "working", sessionId: nil, message: nil)
+      tab: tab, agent: "claude", state: "working", sessionId: nil, message: nil)
     XCTAssertTrue(sound.played.isEmpty, "working への変化では鳴らさない")
 
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+      tab: tab, agent: "claude", state: "waiting", sessionId: nil, message: nil)
     XCTAssertEqual(
       sound.played,
       [
@@ -32,54 +32,54 @@ extension WindowControllerReportAgentTests {
       ], "既定の案・既定の音量で入力待ちが鳴る")
 
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+      tab: tab, agent: "claude", state: "waiting", sessionId: nil, message: nil)
     XCTAssertEqual(sound.played.count, 1, "同値報告（変化なし）では鳴らさない")
 
-    wc.controlReportAgent(pane: pane, agent: "claude", state: "done", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, agent: "claude", state: "done", sessionId: nil, message: nil)
     XCTAssertEqual(sound.played.last?.event, .done)
 
-    wc.controlReportAgent(pane: pane, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
     XCTAssertEqual(sound.played.count, 2, "clear では鳴らさない")
   }
 
-  /// 見ているタブ（前面ウィンドウのアクティブ表示タブ）のペインでは鳴らさない。別タブなら鳴る
+  /// 見ているタブ（前面ウィンドウのアクティブ表示タブ）のタブでは鳴らさない。別タブなら鳴る
   /// ——端末にその結果もプロンプトも出ている面で、注意を二重に奪わないため（②の抑制と同じ判定）。
   func testSoundSuppressedOnVisibleTabOnly() throws {
-    let (wc, panes) = try makeControllerAndTwoTabs()
+    let (wc, tabs) = try makeControllerAndTwoTabs()
     makeKey(wc)
     let sound = try recorder(wc)
 
     wc.controlReportAgent(
-      pane: panes[0], agent: "claude", state: "waiting", sessionId: nil, message: nil)
+      tab: tabs[0], agent: "claude", state: "waiting", sessionId: nil, message: nil)
     XCTAssertTrue(sound.played.isEmpty, "見ているタブ（タブ0）では鳴らさない")
 
     wc.controlReportAgent(
-      pane: panes[1], agent: "claude", state: "waiting", sessionId: nil, message: nil)
+      tab: tabs[1], agent: "claude", state: "waiting", sessionId: nil, message: nil)
     XCTAssertEqual(sound.played.count, 1, "見ていないタブ（タブ1）では鳴る")
   }
 
   /// 通知音がオフなら鳴らない（設定はライブに効く＝鳴らす直前に実効設定を読む）。
   func testDisabledSettingSilencesTheReport() throws {
-    let (wc, pane) = try makeControllerAndPane()
+    let (wc, tab) = try makeControllerAndTab()
     let sound = try recorder(wc)
     wc.settingsStore.applyGlobal(SettingChange(SettingKeys.notificationSoundEnabled, false))
 
-    wc.controlReportAgent(pane: pane, agent: "claude", state: "done", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, agent: "claude", state: "done", sessionId: nil, message: nil)
     XCTAssertTrue(sound.played.isEmpty)
 
     wc.settingsStore.applyGlobal(SettingChange(SettingKeys.notificationSoundEnabled, true))
     wc.controlReportAgent(
-      pane: pane, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+      tab: tab, agent: "claude", state: "waiting", sessionId: nil, message: nil)
     XCTAssertEqual(sound.played.count, 1, "オンへ戻せば次の報告から鳴る")
   }
 
-  /// 読むのは**発信元ペインが属する workspace** の実効設定（「この workspace のエージェントはこの音」
+  /// 読むのは**発信元タブが属する workspace** の実効設定（「この workspace のエージェントはこの音」
   /// という上書きが意味を持つのはこの読み方だけ）。
   ///
   /// workspace を 2 つ立てて**アクティブでない方**から報告させる——1 つしか無いと発信元＝アクティブに
   /// なり、アクティブの実効設定を読む誤実装（`activeEffectiveSettings()`）でも同じく緑になる。
   func testSoundReadsOriginWorkspaceOverride() throws {
-    let (wc, panes) = try makeControllerAndTwoActivatedWorkspaces()
+    let (wc, tabs) = try makeControllerAndTwoActivatedWorkspaces()
     let sound = try recorder(wc)
     wc.settingsStore.applyGlobal(SettingChange(SettingKeys.notificationSound, .preset(.glass)))
     var originOverride = SettingsLayer()
@@ -93,7 +93,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertTrue(wc.current === wc.workspaces[1], "前提: アクティブは発信元でない方")
 
     wc.controlReportAgent(
-      pane: panes[0], agent: "claude", state: "done", sessionId: nil, message: nil)
+      tab: tabs[0], agent: "claude", state: "done", sessionId: nil, message: nil)
     XCTAssertEqual(
       sound.played, [SoundPlayerFake.Played.synth(.steel, event: .done, volume: 30)],
       "アクティブ側でなく発信元 workspace の上書きで鳴る")
@@ -102,7 +102,7 @@ extension WindowControllerReportAgentTests {
   /// 設定パレットの試聴コールバックが再生層へ繋がっている（案は鳴らし、「なし」行は止める）。
   /// モデル側の「どちらを配るか」は `SettingsPaletteSoundTests` が測るので、ここは配線だけ。
   func testPreviewCallbackReachesThePlayer() throws {
-    let (wc, _) = try makeControllerAndPane()
+    let (wc, _) = try makeControllerAndTab()
     let sound = try recorder(wc)
     wc.showSettingsPalette()
     let palette = try XCTUnwrap(wc.model.settingsPalette)
@@ -119,7 +119,7 @@ extension WindowControllerReportAgentTests {
   /// カスタム選択なら、取り込み済み音源が `.imported` のまま再生層へ届く（発信元 workspace の
   /// 上書きが効く経路も同じ）——解決は `AgentSoundDecision` が持ち、配達の途中で案へ化けない。
   func testCustomSourceReachesThePlayer() throws {
-    let (wc, panes) = try makeControllerAndTwoActivatedWorkspaces()
+    let (wc, tabs) = try makeControllerAndTwoActivatedWorkspaces()
     let sound = try recorder(wc)
     wc.settingsStore.applyGlobal(SettingChange(SettingKeys.notificationSound, .custom))
     var originOverride = SettingsLayer()
@@ -128,26 +128,26 @@ extension WindowControllerReportAgentTests {
     wc.workspaces[0].settingsOverride = originOverride
 
     wc.controlReportAgent(
-      pane: panes[0], agent: "claude", state: "done", sessionId: nil, message: nil)
+      tab: tabs[0], agent: "claude", state: "done", sessionId: nil, message: nil)
     XCTAssertEqual(
       sound.played,
       [SoundPlayerFake.Played(source: .imported(file: "origin.wav"), event: .done, volume: 90)])
 
     // アクティブ側（上書き無し＝カスタム未設定）は紋章の同 event 音へ落ちる。
     wc.controlReportAgent(
-      pane: panes[1], agent: "claude", state: "waiting", sessionId: nil, message: nil)
+      tab: tabs[1], agent: "claude", state: "waiting", sessionId: nil, message: nil)
     XCTAssertEqual(
       sound.played.last, .synth(NotificationSound.default, event: .waiting, volume: 90))
   }
 
-  /// 休眠（未 activate）workspace のペインからの報告では鳴らさない——②が「幽霊ピルになる」として
+  /// 休眠（未 activate）workspace のタブからの報告では鳴らさない——②が「幽霊ピルになる」として
   /// 立てないのと同じ集合。一覧にもピルにも出ない音だけが鳴ると、ユーザは出所を辿れない。
-  func testDormantWorkspacePaneIsSilent() throws {
-    let (wc, dormant) = try makeControllerAndDormantPane()
+  func testDormantWorkspaceTabIsSilent() throws {
+    let (wc, dormant) = try makeControllerAndDormantTab()
     let sound = try recorder(wc)
 
     wc.controlReportAgent(
-      pane: dormant, agent: "claude", state: "done", sessionId: nil, message: nil)
+      tab: dormant, agent: "claude", state: "done", sessionId: nil, message: nil)
     XCTAssertTrue(sound.played.isEmpty)
   }
 

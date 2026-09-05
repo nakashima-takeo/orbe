@@ -73,10 +73,10 @@ Orbe は AI エージェントとの開発を前提に設計した macOS ネイ�
 | chrome | ターミナル surface の外側にある Orbe 自身の UI 全般（StatusRow・タブ行・パレット等） |
 | surface | libghostty が描くターミナル 1 枚。`SurfaceView`（NSView）1 つに対応する |
 | workspace | プロジェクトごとにタブ・作業ディレクトリ・設定を束ねる名前付きコンテナ |
-| mount / 休眠 | 分割ツリーをウィンドウ階層へ載せる（外す）こと。休眠 workspace は surface 未生成のまま保持される |
+| mount / 休眠 | タブ（の端末 surface）をウィンドウ階層へ載せる（外す）こと。休眠 workspace は surface 未生成のまま保持される |
 | Dispatch | worktree / ブランチ / Issue / PR から作業を開始するパレット（⌘⇧X） |
 | Attention | 対応すべきエージェント（waiting / done）を横断集約する単一情報源とその表示面 |
-| エージェント状態 | ペイン単位の `working / waiting / done / idle`。hook 報告で遷移する |
+| エージェント状態 | タブ単位の `working / waiting / done / idle`。hook 報告で遷移する |
 | チャネル | dev / release のビルド identity。bundle ID から state まで全分離 |
 | state dir | インスタンスの永続一式（workspaces.json 等）と control.sock の置き場 |
 | gui.conf | 設定パレットが再生成する ghostty conf の最終層（user 設定より後勝ち） |

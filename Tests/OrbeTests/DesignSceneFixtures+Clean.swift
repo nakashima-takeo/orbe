@@ -121,7 +121,7 @@ extension DesignSceneFixtures {
       DispatchCleanFacts(
         path: path("agent-hooks"), branch: "feature/agent-hooks",
         upstream: "origin/feature/agent-hooks", track: "[gone]",
-        openPR: .none, occupancy: PaneOccupancy(cwd: path("agent-hooks"), agentState: "working")),
+        openPR: .none, occupancy: TabOccupancy(cwd: path("agent-hooks"), agentState: "working")),
       // 軸B: PR merged（安全・ブランチも消える）
       DispatchCleanFacts(
         path: path("dispatch-delete"), branch: "feat/dispatch-delete",
@@ -151,7 +151,7 @@ extension DesignSceneFixtures {
         openPR: .none, containment: .patchEquivalent(target: "main")),
       // 軸B: PR merged（2 本目の安全行）
       DispatchCleanFacts(
-        path: path("pane-focus"), branch: "fix/pane-focus", upstream: "origin/fix/pane-focus",
+        path: path("tab-focus"), branch: "fix/tab-focus", upstream: "origin/fix/tab-focus",
         closedPR: DispatchCleanPR(number: 131, isMerged: true, base: "main"), openPR: .none,
         status: cleanStatus,
         containment: .patchEquivalent(target: "main"), operation: .none),

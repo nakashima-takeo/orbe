@@ -101,7 +101,7 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
   /// 空のままアクティブで残る（`.emptiedActive`・単一/複数 workspace 問わず）。
   func testRemoveLastTabEmptiesActiveInPlace() {
     let active = ws("active", t3)
-    let tab = TerminalController()
+    let tab = TerminalTab(cwd: "/tmp")
     active.tabs = [tab]
     let alpha = ws("Alpha", t1)  // 他 workspace があっても退避しない
     let beta = ws("Beta", t2)
@@ -112,5 +112,33 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
     }
     XCTAssertTrue(store.current === active, "退避せず同一 workspace がアクティブのまま")
     XCTAssertTrue(store.current.tabs.isEmpty, "その workspace は0タブの空状態で残る")
+  }
+
+  // MARK: - removeTab は選択中タブの同一性を保つ
+
+  /// 選択中でないタブを閉じても、選択はそれまで見ていたタブに留まる——後方のタブが消えるときも、
+  /// 前方のタブが消えて index が詰まるときも（背景タブの shell exit で起きる）。index をそのまま
+  /// 残すと隣のタブへ選択が飛び、見ていた端末が別のものに入れ替わる。
+  /// 見ていたタブがどの時点でも先頭・末尾にならない並びにしてあるので、末尾へ寄せる実装も
+  /// index を据え置く実装も、どちらの脚かで落ちる。
+  func testRemovingAnotherTabKeepsTheSelectedTab() {
+    let active = ws("active", t3)
+    let first = TerminalTab(cwd: "/a")
+    let viewed = TerminalTab(cwd: "/b")
+    let mid = TerminalTab(cwd: "/c")
+    let last = TerminalTab(cwd: "/d")
+    active.tabs = [first, viewed, mid, last]
+    active.active = 1
+    let store = SessionStore(workspaces: [active], activeWorkspace: 0)
+
+    guard case .reselectActive(let afterLast) = store.removeTab(last, origin: .process) else {
+      return XCTFail("後方のタブを閉じたら残りを選び直す")
+    }
+    XCTAssertTrue(active.tabs[afterLast] === viewed, "後方が消えても見ていたタブが選択されたまま")
+
+    guard case .reselectActive(let afterFirst) = store.removeTab(first, origin: .process) else {
+      return XCTFail("前方のタブを閉じたら残りを選び直す")
+    }
+    XCTAssertTrue(active.tabs[afterFirst] === viewed, "前方が消えても見ていたタブが選択されたまま")
   }
 }

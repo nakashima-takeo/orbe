@@ -66,8 +66,8 @@ let package = Package(
       dependencies: ["OrbePaths"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
-    // Orbe 自身を構成・操作する CLI（config / ws / pane / tab）。control.sock へ JSON-RPC を直接送る。
-    // .app 同梱時は Contents/Resources/bin/orb へ改名され、ペイン PATH で bare `orb` に解決する。
+    // Orbe 自身を構成・操作する CLI（config / ws / tab / agent / wait）。control.sock へ JSON-RPC を直接送る。
+    // .app 同梱時は Contents/Resources/bin/orb へ改名され、タブの PATH で bare `orb` に解決する。
     // GhosttyKit/AppKit に依存しない独立実行体（Foundation のみ）。
     .executableTarget(
       name: "orbe-cli",
@@ -105,11 +105,6 @@ let package = Package(
     .testTarget(
       name: "OrbeTests",
       dependencies: ["Orbe"],
-      swiftSettings: [.swiftLanguageMode(.v5)]
-    ),
-    .testTarget(
-      name: "OrbeCliTests",
-      dependencies: ["orbe-cli"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(

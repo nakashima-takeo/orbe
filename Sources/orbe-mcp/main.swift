@@ -113,10 +113,10 @@ let tools: [[String: Any]] = [
     ("inputSchema", schema([:])),
   ]),
   obj([
-    ("name", "list_panes"),
+    ("name", "list_tabs"),
     (
       "description",
-      "全ペインを列挙する。paneId（操作の宛先）・所属 workspace/tab・タイトル・cwd・エージェント状態・フォーカスの有無を返す。"
+      "全タブを列挙する。tabId（操作の宛先）・所属 workspace・タイトル・cwd・エージェント状態・その workspace で選択中か（active）を返す。"
         + "応答の seq はこの時点のイベント履歴位置（他の成功応答も同じく seq を持つ）。"
     ),
     ("inputSchema", schema([:])),
@@ -131,20 +131,20 @@ let tools: [[String: Any]] = [
     ("inputSchema", schema([:])),
   ]),
   obj([
-    ("name", "get_pane_text"),
-    ("description", "ペインの画面テキストを平文で取得する。scrollback=true で履歴全体、false で可視範囲のみ。"),
+    ("name", "get_tab_text"),
+    ("description", "タブの画面テキストを平文で取得する。scrollback=true で履歴全体、false で可視範囲のみ。"),
     (
       "inputSchema",
       schema(
-        ["paneId": intProp("対象ペイン ID"), "scrollback": boolProp("履歴全体を含めるか（既定 false）")],
-        required: ["paneId"])
+        ["tabId": intProp("対象タブ ID"), "scrollback": boolProp("履歴全体を含めるか（既定 false）")],
+        required: ["tabId"])
     ),
   ]),
   obj([
     ("name", "send_text"),
     (
       "description",
-      "ペインへテキストをペースト相当で送る（生の入力）。bracketed paste 下では改行を含めても"
+      "タブへテキストをペースト相当で送る（生の入力）。bracketed paste 下では改行を含めても"
         + "自己実行せずプロンプトに留まる。コマンドを実行するには送信後に send_key で enter を送る。"
         + "エージェントに問うなら prompt_agent を使う。応答の seq はこの送信以前の履歴位置で、"
         + "wait_for_event の after に渡せる。"
@@ -152,36 +152,36 @@ let tools: [[String: Any]] = [
     (
       "inputSchema",
       schema(
-        ["paneId": intProp("対象ペイン ID"), "text": strProp("送るテキスト")],
-        required: ["paneId", "text"])
+        ["tabId": intProp("対象タブ ID"), "text": strProp("送るテキスト")],
+        required: ["tabId", "text"])
     ),
   ]),
   obj([
     ("name", "send_key"),
     (
       "description",
-      "ペインへキーを送る。名前付きキー: enter / return / tab / escape / esc / space / backspace / "
+      "タブへキーを送る。名前付きキー: enter / return / tab / escape / esc / space / backspace / "
         + "delete / up / down / left / right / home / end / pageup / pagedown。単一の Unicode 文字"
         + "（制御文字と '+' は不可）にも ctrl / alt / shift を付けられる（'ctrl+c' / 'ctrl+l' / "
         + "'alt+b'）。shift は大文字化（'shift+a' は A）。cmd は名前付きキーにだけ付けられる"
-        + "（単一文字に付けると拒否）。修飾付きキーは端末自身の keybind に先に消費され、ペインへ届かない"
+        + "（単一文字に付けると拒否）。修飾付きキーは端末自身の keybind に先に消費され、タブへ届かない"
         + "ことがある。"
     ),
     (
       "inputSchema",
       schema(
-        ["paneId": intProp("対象ペイン ID"), "key": strProp("キー名（修飾は + 連結。例 'ctrl+c'）")],
-        required: ["paneId", "key"])
+        ["tabId": intProp("対象タブ ID"), "key": strProp("キー名（修飾は + 連結。例 'ctrl+c'）")],
+        required: ["tabId", "key"])
     ),
   ]),
   obj([
     ("name", "spawn"),
-    ("description", "新しいタブを開く。command 省略時はシェル、指定時はそのコマンドを直接起動。戻り値は新ペイン ID。"),
+    ("description", "新しいタブを開く。command 省略時はシェル、指定時はそのコマンドを直接起動。戻り値は新タブ ID（tabId）。"),
     (
       "inputSchema",
       schema([
         "workspaceId": intProp("開く workspace（省略時アクティブ）"),
-        "cwd": strProp("作業ディレクトリ（省略時アクティブペイン由来）"),
+        "cwd": strProp("作業ディレクトリ（省略時アクティブタブ由来）"),
         "command": strProp("シェルの代わりに起動するコマンド（絶対パス推奨）"),
       ])
     ),
@@ -193,7 +193,7 @@ let tools: [[String: Any]] = [
       "検出済みエージェントを新タブで起こす。GUI の起動と同じ経路（解決済み絶対パス・login shell の PATH 注入）"
         + "を通るので、シェルの PATH に依存する子プロセスも動く。command 省略時は対象 workspace の実効デフォルト。"
         + "workspaceId を指定してもその workspace は**前面化しない**（手元の画面は動かない）。"
-        + "戻り値は paneId / tabId / workspaceId / agent{command,path} / ready / seq。idle を報告できる"
+        + "戻り値は tabId / workspaceId / agent{command,path} / ready / seq。idle を報告できる"
         + "agent（claude）は準備できた（最初の idle）まで待ち ready:true と agentSessionId（実 session ID）を"
         + "返すので、続けて prompt_agent を送れる。ready:false は prompt を送れる保証が無い——codex / agy は"
         + "idle を報告できず即返り、時間切れ（timedOut:true）はタブは開いたが報告がまだ来ていない。"
@@ -203,7 +203,7 @@ let tools: [[String: Any]] = [
       schema([
         "command": strProp("起動する agent（list_agents の command。省略時は対象 WS の実効デフォルト）"),
         "workspaceId": intProp("開く workspace（省略時アクティブ。未知 id はエラー）"),
-        "cwd": strProp("作業ディレクトリ（省略時は対象 WS のアクティブペイン由来）"),
+        "cwd": strProp("作業ディレクトリ（省略時は対象 WS のアクティブタブ由来）"),
         "timeoutMs": intProp("準備完了を待つ上限 ミリ秒（既定 30000）"),
       ])
     ),
@@ -215,7 +215,7 @@ let tools: [[String: Any]] = [
       "既存セッションを再開する形でエージェントを新タブで起こす（claude --resume / codex resume / agy --conversation）。"
         + "起動経路・戻り値（ready / agentSessionId / timeoutMs の意味）は spawn_agent と同じで、"
         + "対象 workspace は前面化しない。sessionId の出所は spawn_agent の agentSessionId か "
-        + "list_panes の agentSessionId。"
+        + "list_tabs の agentSessionId。"
     ),
     (
       "inputSchema",
@@ -224,7 +224,7 @@ let tools: [[String: Any]] = [
           "command": strProp("再開する agent（claude / codex / agy）"),
           "sessionId": strProp("再開するセッション ID"),
           "workspaceId": intProp("開く workspace（省略時アクティブ。未知 id はエラー）"),
-          "cwd": strProp("作業ディレクトリ（省略時は対象 WS のアクティブペイン由来）"),
+          "cwd": strProp("作業ディレクトリ（省略時は対象 WS のアクティブタブ由来）"),
           "timeoutMs": intProp("準備完了を待つ上限 ミリ秒（既定 30000）"),
         ], required: ["command", "sessionId"])
     ),
@@ -234,7 +234,7 @@ let tools: [[String: Any]] = [
     (
       "description",
       "休眠/背景 workspace をアクティブ化して全タブを mount する。戻り値は activeWorkspaceId と mount された"
-        + "ペインの paneId 群。0タブ WS は空状態を表示（シェルは自動起動せず paneIds は空配列）。既にアクティブなら no-op で成功。"
+        + "タブの tabId 群。0タブ WS は空状態を表示（シェルは自動起動せず tabIds は空配列）。既にアクティブなら no-op で成功。"
     ),
     (
       "inputSchema",
@@ -245,14 +245,14 @@ let tools: [[String: Any]] = [
     ("name", "prompt_agent"),
     (
       "description",
-      "ペインのエージェントに text を送って enter を押し、エージェントが止まるまで待つ。"
+      "タブのエージェントに text を送って enter を押し、エージェントが止まるまで待つ。"
         + "戻り値は state（done=応答を終えた / waiting=質問か承認を求めている / clear=セッションが終わった）・"
         + "message（その時点の文言。done なら最終応答、waiting なら質問文。無ければキー欠落）・seq。"
         + "送信直後に済んだ遷移も取りこぼさない。エージェントに問う用途はこれを使い、send_text＋send_key は"
         + "生の入力（waiting への応答・シェルコマンド）に、wait_for_event は特殊な待ちにだけ使う。"
         + "対象が working / waiting を報告していれば何も送らずエラー（waiting への応答は send_key で）。"
         + "判定は hook 報告だけなので、拒めるのは waiting を報告する agent（claude / codex、プラグイン"
-        + "導入済み）に限る——報告経路の無いペインでは承認ダイアログが開いていても送られ、既定選択が確定する。"
+        + "導入済み）に限る——報告経路の無いタブでは承認ダイアログが開いていても送られ、既定選択が確定する。"
         + "タイムアウトは timedOut:true（既定 3600000 ms＝1 時間。MCP クライアント側のツール"
         + "タイムアウトがそれより短いことがあるので timeoutMs を明示するとよい）。"
     ),
@@ -260,19 +260,19 @@ let tools: [[String: Any]] = [
       "inputSchema",
       schema(
         [
-          "paneId": intProp("対象ペイン ID（spawn_agent の paneId）"),
+          "tabId": intProp("対象タブ ID（spawn_agent の tabId）"),
           "text": strProp("送るテキスト（改行を含んでよい）"),
           "timeoutMs": intProp("エージェントが止まるまで待つ上限 ミリ秒（既定 3600000・上限 86400000）"),
-        ], required: ["paneId", "text"])
+        ], required: ["tabId", "text"])
     ),
   ]),
   obj([
     ("name", "wait_for_event"),
     (
       "description",
-      "状態変化イベントを待つ（長ポーリング）。扱える kind: agent_state / pane_title / pwd / "
-        + "pane_closed（libghostty が host に出す OSC シグナル）。生のシェル出力は待てない"
-        + "（その用途は get_pane_text をポーリング）。エージェントの応答を待つなら prompt_agent を使う。"
+      "状態変化イベントを待つ（長ポーリング）。扱える kind: agent_state / title / pwd / "
+        + "tab_closed（libghostty が host に出す OSC シグナル）。生のシェル出力は待てない"
+        + "（その用途は get_tab_text をポーリング）。エージェントの応答を待つなら prompt_agent を使う。"
         + "全イベントに 1 本の単調増加 seq が付く。after を渡すと、その seq より後に既に起きた一致イベントも"
         + "即返す（after の出所は他の応答の seq）。after が保持範囲より古ければ event history evicted の"
         + "エラー（seq を取り直す）。"
@@ -282,7 +282,7 @@ let tools: [[String: Any]] = [
     (
       "inputSchema",
       schema([
-        "paneId": intProp("このペインのイベントだけ待つ（省略時は全ペイン）"),
+        "tabId": intProp("このタブのイベントだけ待つ（省略時は全タブ）"),
         "kinds": [
           "type": "array", "items": ["type": "string"],
           "description": "待つ kind の集合（省略時は全種）",
