@@ -1,37 +1,21 @@
 import Foundation
 
-/// 制御チャネルの「拡張」メソッド dispatch（ペイン/タブ操作・config・workspace CRUD）と、
+/// 制御チャネルの「拡張」メソッド dispatch（タブ操作・config・workspace CRUD）と、
 /// エージェント起動の main 側。中核の動詞（list/get/send/spawn 等）は `runWindowed` の switch が
 /// 持ち、拡張は fall-through で引き受ける。param 検証（-32602）はここで行い、ドメイン解決
 /// （-32004 等）は target 側が返す。
 extension ControlServer {
-  /// ペイン/タブ操作（split_pane / close_pane / focus_pane / close_tab）を dispatch する。
+  /// タブ操作（focus_tab / close_tab）を dispatch する。
   /// 非該当は nil で次のハンドラ（config / workspace）へ落とす。
-  func runPaneTab(method: String, params: [String: Any], target: ControlTarget)
+  func runTab(method: String, params: [String: Any], target: ControlTarget)
     -> Result<Any, ControlError>?
   {
     switch method {
-    case "split_pane":
-      guard let pid = params["paneId"] as? Int else {
-        return .failure(ControlError(code: -32602, message: "missing paneId"))
+    case "focus_tab":
+      guard let tid = params["tabId"] as? Int else {
+        return .failure(ControlError(code: -32602, message: "missing tabId"))
       }
-      guard let direction = params["direction"] as? String,
-        direction == "right" || direction == "down"
-      else {
-        return .failure(ControlError(code: -32602, message: "invalid direction"))
-      }
-      return target.controlSplitPane(
-        paneId: pid, direction: direction, command: params["command"] as? String)
-    case "close_pane":
-      guard let pid = params["paneId"] as? Int else {
-        return .failure(ControlError(code: -32602, message: "missing paneId"))
-      }
-      return target.controlClosePane(paneId: pid)
-    case "focus_pane":
-      guard let pid = params["paneId"] as? Int else {
-        return .failure(ControlError(code: -32602, message: "missing paneId"))
-      }
-      return target.controlFocusPane(paneId: pid)
+      return target.controlFocusTab(tabId: tid)
     case "close_tab":
       guard let tid = params["tabId"] as? Int else {
         return .failure(ControlError(code: -32602, message: "missing tabId"))

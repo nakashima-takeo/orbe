@@ -11,7 +11,7 @@ extension WindowController {
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
       if self.model.overlay == .none {
-        self.focusActivePane()
+        self.focusActiveTab()
       } else {
         self.model.focusCurrentOverlayField()
       }
@@ -91,9 +91,9 @@ extension WindowController {
       model.workspaceCreate?.focus()
       return
     }
-    // パス初期値＝アクティブペインの cwd（`~` 短縮）、無ければ `~`。clone 先の親も同じ初期値（model init）。
+    // パス初期値＝アクティブタブの cwd（`~` 短縮）、無ければ `~`。clone 先の親も同じ初期値（model init）。
     let initialPath =
-      store.activePaneCwd().map { ($0 as NSString).abbreviatingWithTildeInPath } ?? "~"
+      store.activeTabCwd().map { ($0 as NSString).abbreviatingWithTildeInPath } ?? "~"
     let m = WorkspaceCreateModel(path: initialPath, localization: localization)
     m.onCreate = { [weak self] path, name in
       guard let self else { return }
@@ -123,11 +123,11 @@ extension WindowController {
       defaultCommand: agentLauncher.resolvedDefaultCommand)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
 
-    let cwd = store.activePaneCwd() ?? FileManager.default.homeDirectoryForCurrentUser.path
+    let cwd = store.activeTabCwd() ?? FileManager.default.homeDirectoryForCurrentUser.path
     let provider = DispatchDataProvider(
       cwd: cwd, model: p, localization: localization,
       worktreeTemplate: activeEffectiveSettings()[SettingKeys.worktreeDir],
-      paneOccupancies: paneOccupancies())
+      tabOccupancies: tabOccupancies())
 
     // クロージャは兄弟パレット同様 [weak self] のみとし、p/provider は self.model 経由で辿る
     // （p が onExecute を保持するため、p を強参照すると開くたびに自己循環でリークする）。
@@ -169,7 +169,7 @@ extension WindowController {
   }
 
   /// 解決済みディレクトリで新タブを起こす唯一の 1 本（Enter の実行と clean の `o タブで開く` が共に通る）。
-  /// `dismissPalette()` ＋次 tick の `focusActivePane()` の 2 点セットは、DispatchOverlay
+  /// `dismissPalette()` ＋次 tick の `focusActiveTab()` の 2 点セットは、DispatchOverlay
   /// （focus を握る TextField 入り）の SwiftUI teardown が非同期で、同期のフォーカス確定の後に
   /// first responder を奪いうるという既知の事情への手当てなので、2 箇所に複製しない。
   private func openResolvedDirectory(_ dir: String, target: DispatchTarget) {
@@ -183,7 +183,7 @@ extension WindowController {
       // command を渡さない＝Cmd+T と同じ既定シェル起動。
       openTab(workspaceIndex: activeWorkspace, cwd: dir)
     }
-    DispatchQueue.main.async { [weak self] in self?.focusActivePane() }
+    DispatchQueue.main.async { [weak self] in self?.focusActiveTab() }
   }
 
   /// clean の削除の駆動を配線する。1 件ごとの進捗をモデルへ流し、駆動が終わったら終端
@@ -211,20 +211,17 @@ extension WindowController {
     }
   }
 
-  /// 全 workspace × 全タブ × 全葉のペインが開いているディレクトリ（休眠 workspace も含む）。
-  /// 「そのパスをペインが開いている worktree は消せない」の判定材料。
-  private func paneOccupancies() -> [PaneOccupancy] {
-    store.allPanes().compactMap { ref in
-      guard let cwd = ref.pane.currentPwd ?? ref.pane.initialCwd else { return nil }
-      return PaneOccupancy(cwd: cwd, agentState: ref.pane.agentState)
-    }
+  /// 全 workspace × 全タブが開いているディレクトリ（休眠 workspace も含む）。
+  /// 「そのパスをタブが開いている worktree は消せない」の判定材料。
+  private func tabOccupancies() -> [TabOccupancy] {
+    store.allTabs().map { TabOccupancy(cwd: $0.tab.cwd, agentState: $0.tab.agentState) }
   }
 
   func reloadPalette() {
     let items = workspaces.enumerated().map { entry -> WorkspacePaletteModel.Item in
       let ws = entry.element
       let dormant = !ws.activated
-      // live状態のロールアップと、未消費の復元チケット（`.dormant` なペイン）数は別チップで
+      // live状態のロールアップと、未消費の復元チケット（`.dormant` なタブ）数は別チップで
       // 併記する。行全体の減光（activatedタブが無い現在状態）と dormant チップ（未消費チケット数）は
       // 互いに独立した現在値として投影する。
       let dormantCount = ws.dormantAgentCount()
@@ -264,11 +261,11 @@ extension WindowController {
     reconfirmFocusNextTick()
   }
 
-  /// ヘルプを畳み、アクティブペインへ first responder を戻す（パレット dismiss と同じ規則）。
+  /// ヘルプを畳み、アクティブタブへ first responder を戻す（パレット dismiss と同じ規則）。
   func dismissHelp() {
     model.help = nil
     model.overlay = .none
-    focusActivePane()
+    focusActiveTab()
     reconfirmFocusNextTick()
   }
 
@@ -282,7 +279,7 @@ extension WindowController {
     model.settingsPalette = nil
     model.attentionPalette = nil
     model.help = nil
-    focusActivePane()
+    focusActiveTab()
     // teardown 後の次 tick で focus を再確定する。overlay==.none のままなら端末へ、直後に別 overlay へ
     // 差し替わっていれば（例: 切替パレットの ＋新規 → dismiss→作成フォーム）その overlay の入力欄へ当たる。
     reconfirmFocusNextTick()
@@ -309,9 +306,9 @@ extension WindowController {
     statusModel.editFocusToken &+= 1  // 描画後に field editor へ first responder
   }
 
-  /// インライン改名を畳み、アクティブペインへ first responder を戻す（パレット dismiss と同じ規則）。
+  /// インライン改名を畳み、アクティブタブへ first responder を戻す（パレット dismiss と同じ規則）。
   func endTabRename() {
     statusModel.editingIndex = nil
-    focusActivePane()
+    focusActiveTab()
   }
 }

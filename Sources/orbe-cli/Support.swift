@@ -27,7 +27,7 @@ func stderrLine(_ message: String) {
 }
 
 /// 端末から取り出した生テキストをそのまま stdout へ出す（`print` と違い改行を足さない）。
-/// 取得した端末テキストは整形済みの報告ではなく捕捉した中身なので、`orb pane text > snapshot.txt`
+/// 取得した端末テキストは整形済みの報告ではなく捕捉した中身なので、`orb tab text > snapshot.txt`
 /// が画面をそのまま再現できる必要がある。
 func writeRaw(_ text: String) {
   FileHandle.standardOutput.write(Data(text.utf8))
@@ -135,7 +135,7 @@ func takeOption(_ args: inout [String], _ name: String, requires label: String) 
   return value
 }
 
-/// 同じ値必須フラグの複数指定を全部抜き取る（`orb wait --kind agent_state --kind pane_closed`）。
+/// 同じ値必須フラグの複数指定を全部抜き取る（`orb wait --kind agent_state --kind tab_closed`）。
 /// 値の席の規則は `takeOption` と同一（複製しない）。1 個目しか見ない `takeOption` を素で使うと
 /// 2 個目が残余に落ちて `rejectLeftovers` の usage エラーになる。
 func takeOptions(_ args: inout [String], _ name: String, requires label: String) -> [String] {
@@ -154,7 +154,7 @@ func takeIntOption(
   return n
 }
 
-/// `--text` / `--stdin` はちょうど一方が必須（`pane send` / `agent prompt` が同じ規則で受ける）。
+/// `--text` / `--stdin` はちょうど一方が必須（`tab send` / `agent prompt` が同じ規則で受ける）。
 func requireTextSource(text: String?, useStdin: Bool, verb: String) {
   if text != nil && useStdin { usageDie("pass only one of --text / --stdin") }
   guard text != nil || useStdin else { usageDie("\(verb) requires --text or --stdin") }
@@ -177,16 +177,6 @@ func takeFlag(_ args: inout [String], _ name: String) -> Bool {
   guard let i = args.firstIndex(of: name) else { return false }
   args.remove(at: i)
   return true
-}
-
-/// `pane split` の分割方向を引数から決める（`args` から `-v`/`-h` を抜き取る）。
-/// `-h`=上下（down）、`-v`／既定=左右（right）。両立指定は usage エラー。
-/// help（`--help`）は呼び出し側が事前に握るため `-h` はここでは常に上下フラグ。
-func paneSplitDirection(_ args: inout [String]) -> String {
-  let wantH = takeFlag(&args, "-h")
-  let wantV = takeFlag(&args, "-v")
-  if wantH && wantV { usageDie("pass only one of -v / -h") }
-  return wantH ? "down" : "right"
 }
 
 /// config の `--workspace [<id|current>]`（optional-value）の解決結果。書き込み先が 3 つ実在するので
@@ -217,9 +207,9 @@ func takeWorkspaceTarget(_ args: inout [String], positionals: Int) -> WorkspaceT
   return .active
 }
 
-/// `pane list` / `tab new` / `agent spawn` / `agent resume` の `--workspace <id>`（値必須）を
-/// 抜き取る。フラグ自体が無ければ nil。この 4 つが `--workspace` を取る唯一の pane / tab /
-/// agent コマンドで、他は残余として usage エラーになる。bare（値なし）も解決できない値も usage
+/// `tab list` / `tab new` / `agent spawn` / `agent resume` の `--workspace <id>`（値必須）を
+/// 抜き取る。フラグ自体が無ければ nil。この 4 つが `--workspace` を取る唯一の tab / agent
+/// コマンドで、他は残余として usage エラーになる。bare（値なし）も解決できない値も usage
 /// エラー——bare を黙ってアクティブ扱いにすると、絞り込みも開く先も指定と無関係に決まる。
 ///
 /// 値の席の規則（`-` 始まり・空を取らない）は `takeOption` が唯一持つ（ここで二重実装しない）。
@@ -234,17 +224,17 @@ func takeWorkspaceId(_ args: inout [String]) -> Int? {
 /// `positionals` はそのサブコマンドが持つ位置引数の席の数。これを超えて残ったトークンは
 /// どの席にも座れなかった＝解釈されなかったので usage エラー。`dashOK` は先頭から何席まで
 /// `-` 始まりを値として通すかで、該当するのは `config set <key> <value>` の `<value>` だけ
-/// （`config set font-size -1`。`<key>` の席は呼び出し側が別途弾く）。ws / pane / tab は id も
+/// （`config set font-size -1`。`<key>` の席は呼び出し側が別途弾く）。ws / tab は id も
 /// 名前もパスも `-` 始まりを取らないので `dashOK: 0`＝先頭から検査する。
 ///
 /// 残余に落ちる形は 2 通りある。フラグの抜き取り（`takeWorkspaceTarget` / `takeWorkspaceId` /
 /// `takeOption`）は綴りが**完全一致**した 1 個目しか見ないので `--workspace=3`・`--dir=/x`
 /// （= 区切り）・綴り誤り・2 個目の指定が落ち、フラグ名を書き忘れた値（`orb tab new /repo`）や
-/// 席から溢れた位置引数（`orb pane close 5 6`）も落ちる。検査しないとどちらも黙って捨てられ、
+/// 席から溢れた位置引数（`orb tab close 5 6`）も落ちる。検査しないとどちらも黙って捨てられ、
 /// exit 0 のまま**指定と違う対象**を触る——`tab new` はアクティブ WS の既定 cwd にタブが生え、
-/// `ws new` は既定 root の workspace ができ、`pane list` は絞り込みが効かず全 WS のペインが出る。
-/// `pane close` / `tab close` では指定と無関係な現ペイン・現タブが消える。いずれも終了コードにも
-/// stdout にも stderr にも現れない。
+/// `ws new` は既定 root の workspace ができ、`tab list` は絞り込みが効かず全 WS のタブが出る。
+/// `tab close` では指定と無関係な現タブが消える。いずれも終了コードにも stdout にも stderr にも
+/// 現れない。
 func rejectLeftovers(_ args: [String], positionals: Int, dashOK: Int = 0) {
   if let flag = args.dropFirst(dashOK).first(where: { $0.hasPrefix("-") }) {
     usageDie("unknown option: \(flag)")
@@ -261,41 +251,32 @@ func workspaceIdIfResolvable(_ token: String) -> Int? {
   return nil
 }
 
-/// ペイン系コマンドの現ペイン既定。GUI が注入する `ORBE_PANE`（自ペイン id）を読む。
-func resolveCurrentPane() -> Int? {
-  ProcessInfo.processInfo.environment["ORBE_PANE"].flatMap(Int.init)
+/// タブ系コマンドの現タブ既定。GUI が注入する `ORBE_TAB`（自タブ id）を読む。
+func resolveCurrentTab() -> Int? {
+  ProcessInfo.processInfo.environment["ORBE_TAB"].flatMap(Int.init)
 }
 
-/// pane 位置引数（省略時 ORBE_PANE）を解決する。位置引数があれば数値化（不正は usage エラー）、
-/// 無ければ現ペイン。どちらも無ければ nil（呼び出し側が `orb pane list` を促す誘導エラーへ）。
+/// tab 位置引数（省略時 ORBE_TAB）を解決する。位置引数があれば数値化（不正は usage エラー）、
+/// 無ければ現タブ。どちらも無ければ nil（呼び出し側が `orb tab list` を促す誘導エラーへ）。
 ///
-/// 位置引数が居るなら数値化に失敗した時点で usage エラー——`-h` のような非数値が黙って現ペイン
+/// 位置引数が居るなら数値化に失敗した時点で usage エラー——`-h` のような非数値が黙って現タブ
 /// 既定へ逸れることは無い。ただし `-1` は `Int()` を通るので、`-` 始まりを弾くのは呼び出し側の
 /// `rejectLeftovers(_:positionals:dashOK:)` の役割。
-func resolvePaneArg(_ args: [String]) -> Int? {
+func resolveTabArg(_ args: [String]) -> Int? {
   if let first = args.first {
-    guard let id = Int(first) else { usageDie("invalid pane id: \(first)") }
+    guard let id = Int(first) else { usageDie("invalid tab id: \(first)") }
     return id
   }
-  return resolveCurrentPane()
+  return resolveCurrentTab()
 }
 
-/// Orbe 外で対象ペイン省略時の誘導エラー（exit 2）。
-func paneContextDie() -> Never {
-  usageDie("no pane in context — pass a pane id (see: orb pane list)")
+/// Orbe 外で対象タブ省略時の誘導エラー（exit 2）。
+func tabContextDie() -> Never {
+  usageDie("no tab in context — pass a tab id (see: orb tab list)")
 }
 
-/// ORBE_PANE の所属タブ id を list_panes 走査で解決する（tab close の現タブ既定）。
-func tabIdForPane(_ paneId: Int) -> Int? {
-  let result = callOrExit("list_panes", [:])
-  let panes = (result as? [String: Any])?["panes"] as? [[String: Any]] ?? []
-  return panes.first { $0["paneId"] as? Int == paneId }?["tabId"] as? Int
-}
-
-/// `<id|current>` を workspace id へ解決する。`current` は list_workspaces の active:true 要素の id。
-func resolveWorkspaceId(_ arg: String) -> Int {
-  if let n = Int(arg) { return n }
-  guard arg == "current" else { usageDie("invalid workspace id: \(arg)") }
+/// 前面 workspace の id（list_workspaces の active:true 要素）。無ければ transport エラー。
+func activeWorkspaceId() -> Int {
   let result = callOrExit("list_workspaces", [:])
   guard
     let list = (result as? [String: Any])?["workspaces"] as? [[String: Any]],
@@ -305,6 +286,13 @@ func resolveWorkspaceId(_ arg: String) -> Int {
     transportDie("no active workspace")
   }
   return id
+}
+
+/// `<id|current>` を workspace id へ解決する。`current` は前面 workspace の id。
+func resolveWorkspaceId(_ arg: String) -> Int {
+  if let n = Int(arg) { return n }
+  guard arg == "current" else { usageDie("invalid workspace id: \(arg)") }
+  return activeWorkspaceId()
 }
 
 // MARK: - usage テキスト（ドメインの USAGE 行は `Commands+<ドメイン>.swift` が持つ）
@@ -318,8 +306,7 @@ func usageBlock(_ lines: [String]) -> String {
 /// トップ help に載る全サーフェス。ドメインを 1 つ足すときに触るのは、そのドメインのファイルと、
 /// ここの 1 語と、`main.swift` のルーティング 1 行の 3 箇所。
 private let allUsageLines =
-  configUsageLines + wsUsageLines + paneUsageLines + tabUsageLines + agentUsageLines
-  + waitUsageLines
+  configUsageLines + wsUsageLines + tabUsageLines + agentUsageLines + waitUsageLines
 
 let topUsage = """
   orb — configure and control the running Orbe instance
@@ -336,11 +323,11 @@ let topUsage = """
     --dir <path>        root/working directory (see the USAGE lines above)
     --cmd "…"           command to run in the new tab (tab new)
 
-  pane / tab default to the current pane via ORBE_PANE. Outside a Orbe pane,
-  pass an explicit id (see: orb pane list). wait is not a pane command and never
-  falls back to ORBE_PANE — omitting <pane> watches every pane.
+  tab commands default to the current tab via ORBE_TAB. Outside a Orbe tab,
+  pass an explicit id (see: orb tab list). wait is not a tab command and never
+  falls back to ORBE_TAB — omitting <tab> watches every tab.
   Resolves the target instance from ORBE_STATE_DIR / ORBE_SOCK. Run inside a
-  Orbe pane, or the control socket must be reachable; otherwise exits non-zero.
+  Orbe tab, or the control socket must be reachable; otherwise exits non-zero.
   Every --json result that comes straight from control carries seq, the
   event-history position at that moment; pass it to `orb wait --after` to catch
   events that happen right after. `config get` is the one exception: it prints

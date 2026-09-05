@@ -62,7 +62,7 @@ struct AttentionRowView: View {
     VStack(spacing: 0) {
       AttentionRowView(
         row: AttentionRow(
-          paneId: 1, workspaceName: "api-gateway", tabTitle: "deploy スクリプト整理",
+          tabId: 1, workspaceName: "api-gateway", tabTitle: "deploy スクリプト整理",
           state: "waiting",
           message:
             "ビルド成果物の掃除方法を選んでください。1) rm -rf dist で全削除して作り直す 2) dist/legacy だけ残して選択削除 3) 何もしない。"
@@ -70,11 +70,11 @@ struct AttentionRowView: View {
           stateChangedAt: Date().addingTimeInterval(-45)))
       AttentionRowView(
         row: AttentionRow(
-          paneId: 2, workspaceName: "ghostty-fork", tabTitle: "renderer テスト追加",
+          tabId: 2, workspaceName: "ghostty-fork", tabTitle: "renderer テスト追加",
           state: "working", message: nil, stateChangedAt: Date().addingTimeInterval(-60)))
       AttentionRowView(
         row: AttentionRow(
-          paneId: 3, workspaceName: "orbe-core", tabTitle: "docs 同期", state: "done",
+          tabId: 3, workspaceName: "orbe-core", tabTitle: "docs 同期", state: "done",
           message: "PR #142 を作成しました +18 −4。emit API の説明を README と docs/emit.md の両方に反映済み。",
           stateChangedAt: Date().addingTimeInterval(-120)))
     }

@@ -15,8 +15,8 @@ extension SurfaceView {
       !urls.isEmpty
     else { return false }
 
-    // ドロップ先 surface へフォーカスを移す。移さないと、挿入されたパスが見えているペインと
-    // 後でユーザーが押す Enter の実行先ペインが食い違う（mouseDown と同じ理由）。
+    // ドロップ先 surface へフォーカスを移す。移さないと、挿入されたパスが見えている surface と
+    // 後でユーザーが押す Enter の実行先が食い違う（mouseDown と同じ理由）。
     window?.makeFirstResponder(self)
 
     let text = urls.map { Self.escapeShellPath($0.path) }.joined(separator: " ")

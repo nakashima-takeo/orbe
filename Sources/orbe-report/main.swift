@@ -2,14 +2,14 @@ import Darwin
 import Foundation
 
 // Orbe エージェント状態の報告 CLI。各 CLI の hook（シム orbe-agent-status.sh）から
-// `orbe-report <agent> <state>` で呼ばれ、発信元ペインの状態を Orbe の制御ソケットへ
-// JSON-RPC 1 行で送る。Orbe が注入する env（ORBE_PANE/ORBE_SOCK）が無ければ no-op。
+// `orbe-report <agent> <state>` で呼ばれ、発信元タブの状態を Orbe の制御ソケットへ
+// JSON-RPC 1 行で送る。Orbe が注入する env（ORBE_TAB/ORBE_SOCK）が無ければ no-op。
 // 接続は orbe-mcp の connectControl と同型（1 リクエスト 1 接続・同期）。
 
 let env = ProcessInfo.processInfo.environment
 
-// Orbe 内ペインの目印が無ければ Orbe 外＝no-op。
-guard let paneIdStr = env["ORBE_PANE"], let paneId = Int(paneIdStr),
+// Orbe 内タブの目印が無ければ Orbe 外＝no-op。
+guard let tabIdStr = env["ORBE_TAB"], let tabId = Int(tabIdStr),
   let socketPath = env["ORBE_SOCK"], !socketPath.isEmpty
 else { exit(0) }
 
@@ -23,7 +23,7 @@ guard !agent.isEmpty, !state.isEmpty else { exit(0) }
 // session_id 抽出と background_tasks 判定（ReportLogic.swift）の両方に使う。
 let hookObj = parseHookJSON(FileHandle.standardInput.readDataToEndOfFile())
 
-// サブエージェントのフックは親と同じ session_id で届くが、ペインの状態ではないので報告しない。
+// サブエージェントのフックは親と同じ session_id で届くが、タブの状態ではないので報告しない。
 if isSubagentReport(hookObj) { exit(0) }
 
 func connectControl() -> Int32? {
@@ -72,7 +72,7 @@ let resumeId =
   ?? env["ANTIGRAVITY_CONVERSATION_ID"].flatMap { $0.isEmpty ? nil : $0 }
 let reportedState = effectiveState(state, stdin: hookObj)
 var params: [String: Any] = [
-  "paneId": paneId, "agent": agent, "state": reportedState,
+  "tabId": tabId, "agent": agent, "state": reportedState,
 ]
 if let resumeId { params["sessionId"] = resumeId }
 // waiting/done の文言（Notification message・質問文・最終応答）と、その出所。無ければ載せない。

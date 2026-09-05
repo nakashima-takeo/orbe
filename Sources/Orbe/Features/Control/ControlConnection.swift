@@ -7,7 +7,7 @@ import Foundation
 final class Connection: Hashable {
   /// 改行無しの 1 行上限（1 MiB）。制御 JSON-RPC は通常数 KB なので十分広く、枯渇を防ぐ。
   private static let maxLineBytes = 1 << 20
-  /// 出力滞留上限（8 MiB）。get_pane_text の scrollback 全体でも収まる広さを取りつつ、
+  /// 出力滞留上限（8 MiB）。get_tab_text の scrollback 全体でも収まる広さを取りつつ、
   /// 読まないクライアントを有限で切る。
   private static let maxOutBytes = 8 << 20
 
@@ -124,7 +124,7 @@ final class Connection: Hashable {
 
   func waitForEvent(id: Any?, params: [String: Any]) {
     // 宛先・フィルタ・期限は待機を張る**前**に検証する。素通しすると待機はどちらかへ倒れ、
-    // どちらも呼び出し側から時間切れと区別できない——絞り込みが黙って消えれば「別ペイン・別種の
+    // どちらも呼び出し側から時間切れと区別できない——絞り込みが黙って消えれば「別タブ・別種の
     // イベントで起きる」、一致しない語で張られれば「永遠に起きない」。
     func reject(_ message: String) {
       respond(id: id, result: .failure(ControlError(code: -32602, message: message)))

@@ -2,11 +2,11 @@ import Darwin
 import Foundation
 import OrbePaths
 
-// Orbe 自身を構成・操作する CLI（config / ws / pane / tab / agent / wait）。control.sock（改行区切り JSON-RPC 2.0）へ 1 リクエスト
+// Orbe 自身を構成・操作する CLI（config / ws / tab / agent / wait）。control.sock（改行区切り JSON-RPC 2.0）へ 1 リクエスト
 // 1 接続で直接送る薄いクライアント。GUI 本体と同じ制御契約面を叩く。socket 解決は
 // OrbePaths.controlSocketPath()（ORBE_STATE_DIR 直下・最優先 → ORBE_SOCK → Apple 規定の既定パス）に
 // 一本化し、GUI 本体・mcp と同一実装を共有する。
-// .app 同梱時は Contents/Resources/bin/orb へ改名され、ペイン PATH で bare `orb` に解決する。
+// .app 同梱時は Contents/Resources/bin/orb へ改名され、タブの PATH で bare `orb` に解決する。
 // 引数パース・出力・サブコマンドは Support.swift / `Commands+<ドメイン>.swift`（Foundation + OrbePaths のみ・手書き）。
 
 // MARK: - socket 解決（OrbePaths に委譲）
@@ -18,7 +18,7 @@ let socketPath: String = OrbePaths.controlSocketPath() ?? ""
 enum RPCResult {
   case ok(Any)
   case rpcError(code: Int, message: String)
-  case transport(String)  // 接続不可・framing 異常等（Orbe 未起動 or ペイン外）
+  case transport(String)  // 接続不可・framing 異常等（Orbe 未起動 or タブ外）
 }
 
 func connectControl() -> Int32? {
@@ -120,8 +120,6 @@ case "config":
   runConfig(Array(args.dropFirst()))
 case "ws":
   runWorkspace(Array(args.dropFirst()))
-case "pane":
-  runPane(Array(args.dropFirst()))
 case "tab":
   runTab(Array(args.dropFirst()))
 case "agent":

@@ -4,7 +4,7 @@ import Foundation
 /// 「停止している git 操作」を実測して集める。**判定はしない**——群への振り分けは
 /// `DispatchWorktreeClassifier` が純粋に行う。
 ///
-/// ペイン占有・main worktree で inUse と判った行はプローブを省く（消せないと分かっている行に
+/// タブ占有・main worktree で inUse と判った行はプローブを省く（消せないと分かっている行に
 /// プロセスを割かない）。実体が無い（prunable）行は status も停止中の操作も問わない——失うものが
 /// 無いので、作業ツリー側の安全確認は自動的に満たす。
 ///
@@ -29,11 +29,11 @@ struct DispatchCleanProber {
 
   /// 実測を集めて path → 実測の辞書で返す。completion はメインで返る（`GitRunner` 契約）。
   func probe(
-    worktrees: [GitWorktree], panes: [PaneOccupancy],
+    worktrees: [GitWorktree], tabs: [TabOccupancy],
     completion: @escaping ([String: DispatchCleanProbe]) -> Void
   ) {
     let occupancy = DispatchWorktreeClassifier.occupancies(
-      worktreePaths: worktrees.map(\.path), panes: panes)
+      worktreePaths: worktrees.map(\.path), tabs: tabs)
     var probes: [String: DispatchCleanProbe] = [:]
     let group = DispatchGroup()
     for worktree in worktrees where !worktree.isMain && occupancy[worktree.path] == nil {

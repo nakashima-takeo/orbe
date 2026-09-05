@@ -57,7 +57,7 @@ enum CleanChip: Equatable, Identifiable {
   // MARK: 軸C — 使用状況
   case agentWorking
   case agentWaiting
-  case paneOpen
+  case tabOpen
   case locked
   case mainWorktree
 
@@ -78,7 +78,7 @@ enum CleanChip: Equatable, Identifiable {
     case .unverified: return "unverified"
     case .agentWorking: return "agentWorking"
     case .agentWaiting: return "agentWaiting"
-    case .paneOpen: return "paneOpen"
+    case .tabOpen: return "tabOpen"
     case .locked: return "locked"
     case .mainWorktree: return "mainWorktree"
     }
@@ -90,7 +90,7 @@ enum CleanChip: Equatable, Identifiable {
     case .uncommitted, .untracked, .inProgress, .remoteAhead, .unpushed, .openPR, .ownCommits,
       .locked, .agentWaiting, .unverified:
       return .loss
-    case .prunable, .gone, .paneOpen, .mainWorktree:
+    case .prunable, .gone, .tabOpen, .mainWorktree:
       return .neutral
     case .agentWorking: return .status
     }
@@ -113,7 +113,7 @@ enum CleanChip: Equatable, Identifiable {
   /// 使用状況は「ピルを増やす」のではなく群の移動そのものが表す。
   var isPill: Bool {
     switch self {
-    case .agentWorking, .agentWaiting, .paneOpen, .mainWorktree:
+    case .agentWorking, .agentWaiting, .tabOpen, .mainWorktree:
       return false
     default:
       return true
@@ -177,9 +177,9 @@ struct CleanRow: Identifiable, Equatable {
   }
 }
 
-/// ペインが開いているディレクトリのスナップショット（`SessionStore` を Dispatch から見せないための値型）。
-struct PaneOccupancy: Equatable {
-  /// ペインの実効 cwd。
+/// タブが開いているディレクトリのスナップショット（`SessionStore` を Dispatch から見せないための値型）。
+struct TabOccupancy: Equatable {
+  /// タブの実効 cwd。
   let cwd: String
   /// agent の状態（`working` / `waiting` / `done` / `idle`）。素のシェルなら nil。
   let agentState: String?
@@ -216,7 +216,7 @@ enum CleanOpenPR: Equatable {
   case open(Int)
 }
 
-/// 分類の入力 1 件。git / gh / ペイン走査から採った事実と、その事実がまだ動いているか
+/// 分類の入力 1 件。git / gh / タブ走査から採った事実と、その事実がまだ動いているか
 /// （`isProbing` / `openPR` の未着地）だけを持ち、subprocess には依存しない。
 struct DispatchCleanFacts: Equatable {
   let path: String
@@ -242,8 +242,8 @@ struct DispatchCleanFacts: Equatable {
   let containment: GitBranchContainment?
   /// 停止している git 操作。
   let operation: GitWorktreeOperationState
-  /// このパスを開いているペイン（複数あれば状態を 1 つに畳んだもの）。
-  let occupancy: PaneOccupancy?
+  /// このパスを開いているタブ（複数あれば状態を 1 つに畳んだもの）。
+  let occupancy: TabOccupancy?
   /// この path のプローブがまだ飛んでいる（status・取り込み判定・停止中の操作が未着地）。
   let isProbing: Bool
 
@@ -255,7 +255,7 @@ struct DispatchCleanFacts: Equatable {
     isPrunable: Bool = false, lockReason: String? = nil, upstream: String? = nil,
     track: String? = nil, closedPR: DispatchCleanPR? = nil, openPR: CleanOpenPR = .pending,
     status: GitWorktreeStatusCounts? = nil, containment: GitBranchContainment? = nil,
-    operation: GitWorktreeOperationState = .unknown, occupancy: PaneOccupancy? = nil,
+    operation: GitWorktreeOperationState = .unknown, occupancy: TabOccupancy? = nil,
     isProbing: Bool = false
   ) {
     self.path = path

@@ -34,13 +34,13 @@ extension WindowController {
   }
 
   /// workspace を新規作成してアクティブ化し、その id を返す（name 空なら nil）。UI（パレットの onCreate）と
-  /// control `create_workspace` が共用する。rootPath 省略時はアクティブペインの cwd → ホームを導出する。
+  /// control `create_workspace` が共用する。rootPath 省略時はアクティブタブの cwd → ホームを導出する。
   @discardableResult
   func createWorkspace(name: String, rootPath: String? = nil) -> Int? {
     let trimmed = name.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return nil }
     let root =
-      rootPath ?? store.activePaneCwd() ?? FileManager.default.homeDirectoryForCurrentUser.path
+      rootPath ?? store.activeTabCwd() ?? FileManager.default.homeDirectoryForCurrentUser.path
     store.createWorkspace(name: trimmed, rootPath: root)  // 空 WS を作りアクティブ化する（`~` 展開して格納）
     // 新規 WS は「作成して開く＝作業を始める」意図。0タブ休眠のアクティブ化（自動起こしなし）と違い、
     // ここは rootPath で1シェルを明示 spawn する。cwd は格納後の `current.rootPath`（`~` 展開済み）を

@@ -20,7 +20,7 @@ enum HelpCatalog {
     let rows: [Row]
   }
 
-  /// 全ショートカット。並びはトップビュー厳選の導出順（全般 → ワークスペース・タブ・ペイン → … → ターミナル）を兼ねる。
+  /// 全ショートカット。並びはトップビュー厳選の導出順（全般 → ワークスペース・タブ → … → ターミナル）を兼ねる。
   /// 掲載は「押せば必ず効く」ものに限る。
   static let all: [Group] = [
     Group(
@@ -32,7 +32,7 @@ enum HelpCatalog {
         Row(key: "⌘Q", label: .helpShortcutQuit, combo: ["cmd", "q"]),
       ]),
     Group(
-      title: .helpCatWorkspaceTabsPanes,
+      title: .helpCatWorkspaceTabs,
       rows: [
         Row(key: "⌘⇧S", label: .helpShortcutSwitchWorkspace, combo: ["cmd", "shift", "s"]),
         Row(key: "⌘N", label: .helpShortcutNewWorkspace, combo: ["cmd", "n"]),
@@ -43,9 +43,7 @@ enum HelpCatalog {
         Row(key: "⌘⇧←", label: .helpShortcutPrevTab, combo: ["cmd", "shift", "left"]),
         Row(key: "⌘⇧]", label: .helpShortcutNextTab, combo: ["cmd", "shift", "]"]),
         Row(key: "⌘⇧[", label: .helpShortcutPrevTab, combo: ["cmd", "shift", "["]),
-        Row(key: "⌘D", label: .helpShortcutSplitRight, combo: ["cmd", "d"]),
-        Row(key: "⌘⇧D", label: .helpShortcutSplitDown, combo: ["cmd", "shift", "d"]),
-        Row(key: "⌘W", label: .helpShortcutClosePane, combo: ["cmd", "w"]),
+        Row(key: "⌘W", label: .helpShortcutCloseTab, combo: ["cmd", "w"]),
       ]),
     Group(
       title: .helpCatAgents,
@@ -74,7 +72,7 @@ enum HelpCatalog {
   /// トップビュー（基本操作）に出す厳選セット（カテゴリ → 表示キー列）。
   static let topPicks: [L10nKey: [String]] = [
     .helpCatGeneral: ["⌘H", "⌘,", "⌘⇧E", "⌘Q"],
-    .helpCatWorkspaceTabsPanes: ["⌘⇧S", "⌘N", "⌘T", "⌘⇧→"],
+    .helpCatWorkspaceTabs: ["⌘⇧S", "⌘N", "⌘T", "⌘⇧→"],
     .helpCatAgents: ["⌘⇧C", "⌘⇧A", "⌘⇧X", "⌘⌘"],
   ]
 

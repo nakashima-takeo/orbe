@@ -6,9 +6,7 @@ enum ChromeAction {
   case increaseFontSize
   case decreaseFontSize
   case resetFontSize
-  case splitRight  // 縦線で左右に分割
-  case splitDown  // 横線で上下に分割
-  case closePane
+  case closeTab
   case newTab
   case reopenClosedAgentTab  // 最後に閉じたエージェントタブを開き直す
   case nextTab
@@ -19,7 +17,7 @@ enum ChromeAction {
   case launchDefaultAgent  // デフォルトエージェントを新タブで起動
   case showAgentPalette  // エージェント起動パレットを開く
   case showDispatchPalette  // Dispatch パレット（worktree/branch/issue/PR から起動）を開く
-  case openEditor  // アクティブペインの cwd を GUI エディタで開く
+  case openEditor  // アクティブタブの cwd を GUI エディタで開く
   case rename  // フォーカス中タブをリネーム
   case showSettings  // 設定パレットを開く
   case scrollToTop  // スクロールバック先頭へジャンプ
@@ -27,11 +25,28 @@ enum ChromeAction {
   case toggleHelp  // ヘルプオーバーレイ（ショートカットチートシート）をトグル開閉
 }
 
+/// surface から届く、ウィンドウレベルの chrome 操作（タブ・workspace）。
+enum WindowCommand {
+  case newTab
+  case reopenClosedAgentTab
+  case nextTab
+  case prevTab
+  case switchWorkspace
+  case newWorkspace
+  case launchDefaultAgent
+  case showAgentPalette
+  case showDispatchPalette
+  case openEditor
+  case renameTab
+  case showSettings
+  case toggleHelp
+}
+
 extension ChromeAction {
   /// WindowController へ届く window コマンドへの写像。surface ローカル操作は nil。
   /// surface 経路（`SurfaceView.perform`）と window レベル経路（`ChromeHostingView`）が
   /// 共有する単一ソース mapping（網羅 switch）。
-  var windowCommand: TerminalController.WindowCommand? {
+  var windowCommand: WindowCommand? {
     switch self {
     case .newTab: return .newTab
     case .reopenClosedAgentTab: return .reopenClosedAgentTab
@@ -46,16 +61,15 @@ extension ChromeAction {
     case .rename: return .renameTab
     case .showSettings: return .showSettings
     case .toggleHelp: return .toggleHelp
-    case .increaseFontSize, .decreaseFontSize, .resetFontSize,
-      .splitRight, .splitDown, .closePane, .find,
+    case .increaseFontSize, .decreaseFontSize, .resetFontSize, .closeTab, .find,
       .scrollToTop, .scrollToBottom:
       return nil
     }
   }
 }
 
-extension TerminalController.WindowCommand {
-  /// タブ/ペインが無くても意味を持ち安全に実行できる window コマンドか。
+extension WindowCommand {
+  /// タブが無くても意味を持ち安全に実行できる window コマンドか。
   /// true のものだけを window レベル（`ChromeHostingView.performKeyEquivalent`）で0タブでも配信する。
   /// 網羅 switch（default 無し）＝新ケース追加時に分類漏れをコンパイルエラーで検出する。
   var availableWithoutTabs: Bool {
@@ -98,9 +112,7 @@ enum Keybindings {
     case "f": return .find  // Cmd+F
     case "r": return .rename  // Cmd+R
     case "n": return .newWorkspace  // Cmd+N
-    case "d": return .splitRight  // Cmd+D
-    case "D": return .splitDown  // Cmd+Shift+D
-    case "w": return .closePane  // Cmd+W
+    case "w": return .closeTab  // Cmd+W
     case "t": return .newTab  // Cmd+T
     case "T": return .reopenClosedAgentTab  // Cmd+Shift+T
     case "}": return .nextTab  // Cmd+Shift+]

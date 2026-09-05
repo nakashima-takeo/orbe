@@ -34,7 +34,7 @@ final class ShellPATH {
 
   /// キャッシュが皆無のとき、`value(wait: .bounded)` が実行中の probe を待つ**プロセス全体の**予算。
   /// メインスレッドから呼ばれうる経路（エディタ起動・resume 復元・agent 起動）を止める合計時間の天井で、
-  /// 呼び出しごとには配り直さない——起動復元は agent ペインの数だけ `value()` を呼ぶ。
+  /// 呼び出しごとには配り直さない——起動復元は agent タブの数だけ `value()` を呼ぶ。
   /// 超えても probe は走り続け、着地すれば以後の呼び出しが正しい値を得る（同一セッションで自己修復する）。
   static let syncWaitBudget: TimeInterval = 2
 

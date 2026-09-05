@@ -20,12 +20,12 @@ enum DispatchWorktreeClassifier {
     var probes: [String: DispatchCleanProbe] = [:]
     /// まだプローブが飛んでいる path。この行は「必要な事実が揃っていない」ので選べない。
     var probingPaths: Set<String> = []
-    var panes: [PaneOccupancy] = []
+    var tabs: [TabOccupancy] = []
   }
 
   /// 各レーンから届いた事実を 1 worktree ぶんずつ突き合わせて行に落とす（レーンをまたぐ組み立ての SSOT）。
   static func rows(_ input: Input) -> [CleanRow] {
-    let occupancy = occupancies(worktreePaths: input.worktrees.map(\.path), panes: input.panes)
+    let occupancy = occupancies(worktreePaths: input.worktrees.map(\.path), tabs: input.tabs)
     let branchByName = Dictionary(
       input.localBranches.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
     return classify(
@@ -321,13 +321,13 @@ enum DispatchWorktreeClassifier {
   private static func axisC(_ f: DispatchCleanFacts) -> [CleanChip] {
     var out: [CleanChip] = []
     if f.lockReason != nil { out.append(.locked) }
-    // main worktree は常に削除不可という 1 つの事実で言い切る（ペインの有無を重ねて言わない）。
+    // main worktree は常に削除不可という 1 つの事実で言い切る（タブの有無を重ねて言わない）。
     if f.isMain { return out + [.mainWorktree] }
     guard let occupancy = f.occupancy else { return out }
     switch occupancy.agentState {
     case "working": out.append(.agentWorking)
     case "waiting": out.append(.agentWaiting)
-    default: out.append(.paneOpen)
+    default: out.append(.tabOpen)
     }
     return out
   }
@@ -343,36 +343,36 @@ enum DispatchWorktreeClassifier {
     return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
   }
 
-  // MARK: - ペイン占有の帰属
+  // MARK: - タブ占有の帰属
 
-  /// ペイン群を worktree のパスへ帰属させる。
+  /// タブ群を worktree のパスへ帰属させる。
   ///
   /// - 両辺を `standardizingPath` → `resolvingSymlinksInPath` で正規化する（macOS では `/tmp` `/var` が
   ///   symlink で、OSC 7 の pwd と `git worktree list` のパスが素では一致しない）。
-  /// - 子ディレクトリにいるペインも占有とみなす。判定は**パス構成要素単位**の前置一致で、
+  /// - 子ディレクトリにいるタブも占有とみなす。判定は**パス構成要素単位**の前置一致で、
   ///   文字列 prefix ではない（`/a/foo` が `/a/foobar` に誤ヒットする）。
   /// - worktree が入れ子になっている構成があるので**最も長く一致した worktree に帰属**させる
-  ///   （1 つのペインを親と子の両方の占有にしない）。
-  /// - 同じ worktree に複数のペインが居たら `AgentRollup.priorityOrder` で状態を 1 つに畳む。
-  static func occupancies(worktreePaths: [String], panes: [PaneOccupancy])
-    -> [String: PaneOccupancy]
+  ///   （1 つのタブを親と子の両方の占有にしない）。
+  /// - 同じ worktree に複数のタブが居たら `AgentRollup.priorityOrder` で状態を 1 つに畳む。
+  static func occupancies(worktreePaths: [String], tabs: [TabOccupancy])
+    -> [String: TabOccupancy]
   {
     let normalized = worktreePaths.map { ($0, components($0)) }
-    var out: [String: PaneOccupancy] = [:]
-    for pane in panes {
-      let paneComponents = components(pane.cwd)
+    var out: [String: TabOccupancy] = [:]
+    for tab in tabs {
+      let tabComponents = components(tab.cwd)
       let owner =
         normalized
-        .filter { isPrefix($0.1, of: paneComponents) }
+        .filter { isPrefix($0.1, of: tabComponents) }
         .max { $0.1.count < $1.1.count }
       guard let owner else { continue }
-      out[owner.0] = merge(out[owner.0], pane)
+      out[owner.0] = merge(out[owner.0], tab)
     }
     return out
   }
 
-  /// 同じ worktree を占めるペインの状態を 1 つに畳む（waiting > working > done > その他）。
-  private static func merge(_ current: PaneOccupancy?, _ next: PaneOccupancy) -> PaneOccupancy {
+  /// 同じ worktree を占めるタブの状態を 1 つに畳む（waiting > working > done > その他）。
+  private static func merge(_ current: TabOccupancy?, _ next: TabOccupancy) -> TabOccupancy {
     guard let current else { return next }
     return priority(next.agentState) < priority(current.agentState) ? next : current
   }

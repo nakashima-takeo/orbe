@@ -3,7 +3,7 @@ import AppKit
 /// 構成変化のデバウンス保存・終了時 flush と、保存ファイル／閉じたエージェントタブのスタックからの復元。
 /// WindowController 本体から永続化の読み書き両面を分離する。
 extension WindowController {
-  /// 保存ファイルから workspaces/タブ木/ウィンドウサイズを起こす（起動時に init から 1 回）。
+  /// 保存ファイルから workspaces/タブ/ウィンドウサイズを起こす（起動時に init から 1 回）。
   func restore(from file: WorkspacesFile) {
     restoreWindowSize(file.windowSize)
     var restored: [Workspace] = []
@@ -25,15 +25,11 @@ extension WindowController {
   }
 
   /// TabState 1 枚からタブを起こして配線する。起動時復元（restore）と ⇧⌘T（reopenClosedAgentTab）の
-  /// 共通経路——agent 付きの葉は休眠チケットのまま起こし、resume 解決（と解決不能時の素シェル化）は
-  /// タブ起床時に走る（`TerminalController.recordMaterializationStarted`）。ここは resolver を渡すだけ。
-  private func makeTab(from state: TabState) -> TerminalController {
-    let resume: TerminalController.ResumeSpawn = { [agentLauncher] in
-      agentLauncher.resumeSpawn(for: $0)
-    }
-    let tc = TerminalController(restoring: state.tree, resumeSpawn: resume)
-    tc.explicitTitle = state.explicitTitle
-    return wire(tc)
+  /// 共通経路——agent 付きは休眠チケットのまま起こし、resume 解決（と解決不能時の素シェル化）は
+  /// タブ起床時に走る（`TerminalTab.recordMaterializationStarted`）。ここは resolver を渡すだけ。
+  private func makeTab(from state: TabState) -> TerminalTab {
+    let resume: TerminalTab.ResumeSpawn = { [agentLauncher] in agentLauncher.resumeSpawn(for: $0) }
+    return wire(TerminalTab(restoring: state, resumeSpawn: resume))
   }
 
   /// ⇧⌘T。アクティブ workspace の開き直しスタックから直近の 1 枚を、閉じた時の index（有効範囲へ

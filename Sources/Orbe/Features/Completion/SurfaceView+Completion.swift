@@ -22,7 +22,7 @@ extension SurfaceView {
       }
       completionSuppressed = nil  // buffer/cursor が動いた＝ユーザ編集。通常動作へ戻す
     }
-    let cwd = currentPwd ?? initialCwd ?? NSHomeDirectory()
+    let cwd = currentPwd ?? initialCwd
     completionRequestSeq &+= 1
     let seq = completionRequestSeq
 

@@ -18,7 +18,7 @@ func sessionId(from obj: [String: Any]?) -> String? {
 }
 
 /// サブエージェント実行中の hook payload か（`agent_id` はサブエージェントのときだけ入る）。
-/// サブエージェントの活動はペインのセッション状態ではないので報告しない。
+/// サブエージェントの活動はタブのセッション状態ではないので報告しない。
 /// 見るのは `agent_id` だけ——`agent_type` は `--agent` で起動した本体スレッドにも入るため、
 /// そちらで判定すると本体の報告まで丸ごと落ちる。
 func isSubagentReport(_ obj: [String: Any]?) -> Bool {

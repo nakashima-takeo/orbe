@@ -15,26 +15,22 @@ extension Ghostty {
       return true
 
     case GHOSTTY_ACTION_SET_TITLE, GHOSTTY_ACTION_SET_TAB_TITLE:
-      // ペインのタイトルを更新し、所属タブのラベルへ反映する。
+      // surface のタイトルを更新する（タブへの反映は didSet が実変化時だけ転送する）。
       guard let surf = surface(of: target), let cstr = action.action.set_title.title else {
         return true
       }
       let title = String(cString: cstr)
       DispatchQueue.main.async { [weak self] in
-        guard let v = self?.view(for: surf) else { return }
-        v.paneTitle = title
-        v.controller?.paneTitleChanged(v)
+        self?.view(for: surf)?.title = title
       }
       return true
 
     case GHOSTTY_ACTION_PWD:
-      // OSC 7 の cwd を該当ペインに保持し、1 列 chrome の cwd 表示と永続保存へ流す。
+      // OSC 7 の cwd を該当 surface に保持する（chrome の cwd 表示と永続保存へは didSet が転送する）。
       guard let surf = surface(of: target), let cstr = action.action.pwd.pwd else { return true }
       let pwd = String(cString: cstr)
       DispatchQueue.main.async { [weak self] in
-        guard let v = self?.view(for: surf) else { return }
-        v.currentPwd = pwd
-        v.controller?.panePwdChanged()
+        self?.view(for: surf)?.currentPwd = pwd
       }
       return true
 
@@ -75,7 +71,7 @@ extension Ghostty {
     }
   }
 
-  /// SEARCH_TOTAL / SEARCH_SELECTED: スクロールバック検索の件数を該当ペインへ反映する。
+  /// SEARCH_TOTAL / SEARCH_SELECTED: スクロールバック検索の件数を該当 surface へ反映する。
   private func handleSearchCount(_ action: ghostty_action_s, target: ghostty_target_s) -> Bool {
     guard let surf = surface(of: target) else { return true }
     DispatchQueue.main.async { [weak self] in

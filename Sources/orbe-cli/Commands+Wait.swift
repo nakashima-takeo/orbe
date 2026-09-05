@@ -1,13 +1,13 @@
 import Foundation
 
-// `orb wait` の実装と usage。pane ドメインの外にあるトップレベル動詞なので、pane の既定
-// （`ORBE_PANE`）は継がない——ペイン内で走らせたベンチスクリプトが黙って自ペインだけを見る形に
-// なると、同じコマンドが環境によって違う意味になる。自ペインを待ちたければ `orb wait $ORBE_PANE`。
+// `orb wait` の実装と usage。tab ドメインの外にあるトップレベル動詞なので、tab の既定
+// （`ORBE_TAB`）は継がない——タブ内で走らせたベンチスクリプトが黙って自タブだけを見る形に
+// なると、同じコマンドが環境によって違う意味になる。自タブを待ちたければ `orb wait $ORBE_TAB`。
 
 // MARK: - usage
 
 let waitUsageLines = [
-  "orb wait [<pane>] [--kind <kind>]... [--value <value>] [--after <seq>] [--timeout-ms <ms>] [--json]"
+  "orb wait [<tab>] [--kind <kind>]... [--value <value>] [--after <seq>] [--timeout-ms <ms>] [--json]"
 ]
 
 /// help の `KINDS:` 行は control の `ControlEvent.kinds` と一致していなければならない
@@ -19,14 +19,14 @@ let waitUsage = """
   USAGE:
   \(usageBlock(waitUsageLines))
 
-  KINDS: agent_state, pane_title, pwd, pane_closed
-  <pane> limits the wait to one pane. Omitting it watches **every** pane; unlike
-  the pane commands, wait never falls back to ORBE_PANE.
+  KINDS: agent_state, title, pwd, tab_closed
+  <tab> limits the wait to one tab. Omitting it watches **every** tab; unlike
+  the tab commands, wait never falls back to ORBE_TAB.
   --kind may be repeated; omitting it waits for any kind.
   --value matches the kind-specific value exactly (the state word for
-  agent_state, the title for pane_title, the path for pwd).
+  agent_state, the title for title, the path for pwd).
   --after <seq> also returns an event that already happened after that
-  history position (seq comes from any --json result, e.g. `orb pane send
+  history position (seq comes from any --json result, e.g. `orb tab send
   --json`); without it only events after the wait is registered count.
   --timeout-ms defaults to 30000. Timing out exits 124 (nothing on stdout,
   `timed out` on stderr; with --json, {"timedOut":true} on stdout).
@@ -50,8 +50,8 @@ func runWait(_ rest: [String]) -> Never {
 
   var params: [String: Any] = [:]
   if let first = args.first {
-    guard let pane = Int(first) else { usageDie("invalid pane id: \(first)") }
-    params["paneId"] = pane
+    guard let tab = Int(first) else { usageDie("invalid tab id: \(first)") }
+    params["tabId"] = tab
   }
   if !kinds.isEmpty { params["kinds"] = kinds }
   if let value { params["value"] = value }
@@ -66,7 +66,7 @@ func runWait(_ rest: [String]) -> Never {
   } else {
     let event = d?["event"] as? [String: Any]
     print(
-      "\(event?["kind"] as? String ?? "?")\t\(event?["paneId"] as? Int ?? -1)"
+      "\(event?["kind"] as? String ?? "?")\t\(event?["tabId"] as? Int ?? -1)"
         + "\t\(display(event?["value"] ?? NSNull()))")
   }
   exit(0)

@@ -4,9 +4,9 @@ import AppKit
 ///
 /// 本家 macOS Ghostty の `SurfaceScrollView` のアルゴリズムを Orbe の C API 直叩きスタイルに移植したもの。
 ///
-/// このインスタンスの同一性は分割ツリーの変更（分割/クローズ/workspace 切替）をまたいで
-/// 保たれねばならない（再生成すると scrollback 状態が失われる・cf. ghostty-org/ghostty#9444）。
-/// ゆえに分割ツリーは AppKit のまま据え置く（`TerminalController` 参照）。
+/// このインスタンスの同一性はタブ切替・workspace 切替をまたいで保たれねばならない
+/// （再生成すると scrollback 状態が失われる・cf. ghostty-org/ghostty#9444）。
+/// ゆえにタブの view は AppKit のまま据え置く（`TerminalTab` 参照）。
 ///
 /// ## 座標系
 /// AppKit は +Y 上向き（原点 = 左下）、ターミナルは概念上 +Y 下向き（row 0 が上）。

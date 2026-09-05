@@ -65,11 +65,10 @@ final class Ghostty {
       pb.clearContents()
       pb.setString(String(cString: data), forType: .string)
     }
-    // surface クローズ要求（shell の exit 等）: 該当ペインを閉じる
+    // surface クローズ要求（shell の exit 等）: 所属タブを閉じる
     rt.close_surface_cb = { userdata, _ in
       guard let userdata else { return }
-      let view = SurfaceView.from(userdata)
-      DispatchQueue.main.async { view.controller?.close(view, origin: .process) }
+      SurfaceView.from(userdata).tab?.close(origin: .process)
     }
 
     guard let a = ghostty_app_new(&rt, config) else { fatalError("ghostty_app_new failed") }

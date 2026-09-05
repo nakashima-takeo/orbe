@@ -2,10 +2,9 @@ import AppKit
 
 /// 新タブの生成（`openTab`）と、背景 workspace での surface 起こし（`materializeOffscreen`）。
 extension WindowController {
-  /// `openTab` が起こした 1 枚の宛先 id 一式。制御 API の応答（`{paneId, tabId, workspaceId}`）は
+  /// `openTab` が起こした 1 枚の宛先 id 一式。制御 API の応答（`{tabId, workspaceId}`）は
   /// これをそのまま写す。
   struct OpenedTab {
-    let paneId: Int
     let tabId: Int
     let workspaceId: Int
   }
@@ -14,17 +13,16 @@ extension WindowController {
   /// 制御 API（spawn / spawn_agent / resume_agent）が同じ本体を通る——起動のされ方が経路ごとに
   /// 割れると、その差は「GUI からは動くが CLI からは動かない」という形で後から必ず出る。
   ///
-  /// `cwd` に nil を渡すと対象 workspace のアクティブペイン cwd → その workspace の rootPath へ落ちる
-  /// （`newSurfaceCwd(inWorkspaceAt:)`）。戻り値は生えたペイン・タブ・workspace の id で、
+  /// `cwd` に nil を渡すと対象 workspace のアクティブタブの cwd → その workspace の rootPath へ落ちる
+  /// （`newTabCwd(inWorkspaceAt:)`）。戻り値は生えたタブ・workspace の id で、
   /// workspaceIndex が範囲外ならタブを作らず nil。
   @discardableResult
   func openTab(
     workspaceIndex: Int, cwd: String?, command: String? = nil, env: [String: String] = [:]
   ) -> OpenedTab? {
     guard workspaces.indices.contains(workspaceIndex) else { return nil }
-    let initialCwd = cwd ?? store.newSurfaceCwd(inWorkspaceAt: workspaceIndex)
-    let tc = wire(
-      TerminalController(initialCwd: initialCwd, initialCommand: command, initialEnv: env))
+    let initialCwd = cwd ?? store.newTabCwd(inWorkspaceAt: workspaceIndex)
+    let tc = wire(TerminalTab(cwd: initialCwd, command: command, env: env))
     store.appendTab(tc, toWorkspaceAt: workspaceIndex)  // 背景 WS はここで active も末尾へ
     if workspaceIndex == activeWorkspace {
       select(workspaces[workspaceIndex].tabs.count - 1)  // surface を起こす（mount）
@@ -32,9 +30,7 @@ extension WindowController {
       materializeOffscreen(tc, in: workspaces[workspaceIndex])
     }
     scheduleSave()
-    guard let paneId = tc.controlAllPanes().first?.id else { return nil }
-    return OpenedTab(
-      paneId: paneId, tabId: tc.id, workspaceId: workspaces[workspaceIndex].id)
+    return OpenedTab(tabId: tc.id, workspaceId: workspaces[workspaceIndex].id)
   }
 
   /// 背景 workspace に生えたタブの surface を、前面化せずに起こす。
@@ -51,19 +47,19 @@ extension WindowController {
   ///
   /// attach と detach を**同じ turn で完結できる**ことは実測で確かめてある（AppKit が
   /// `viewDidMoveToWindow` を `addSubview` の中で同期発火する）。ここが成立しているかの合否は
-  /// `OrbeCliAgentProcessTests` の背景 workspace 1 本が持つ——外すと、返した paneId は
+  /// `OrbeCliAgentProcessTests` の背景 workspace 1 本が持つ——外すと、返した tabId は
   /// 「画面が読めず入力も届かない」ものに退化する。同じテストが surface のサイズも見る。
-  private func materializeOffscreen(_ tc: TerminalController, in ws: Workspace) {
+  private func materializeOffscreen(_ tc: TerminalTab, in ws: Workspace) {
     guard store.recordMaterialization(of: tc, in: ws) else { return }
-    tc.rootContainer.autoresizingMask = [.width, .height]
-    tc.rootContainer.frame = model.content.bounds
-    tc.rootContainer.isHidden = true
-    // 葉のサイズは `SurfaceScrollView.layout()` だけが配り、それが走るのは window の display
+    tc.view.autoresizingMask = [.width, .height]
+    tc.view.frame = model.content.bounds
+    tc.view.isHidden = true
+    // surface のサイズは `SurfaceScrollView.layout()` だけが配り、それが走るのは window の display
     // サイクル。同じ turn で detach する以上そのサイクルは来ないので、ここで同期に確定させる
     // ——さもないと `SurfaceView` は 0 サイズのまま `createSurface` を迎え、`updateSize` の
     // ゼロ面積ガードに弾かれて pty が libghostty 既定サイズのまま起きる（前面化するまで直らない）。
-    tc.rootContainer.layoutSubtreeIfNeeded()
-    model.content.addSubview(tc.rootContainer)  // viewDidMoveToWindow → createSurface
-    tc.rootContainer.removeFromSuperview()  // detach。surface は生存
+    tc.view.layoutSubtreeIfNeeded()
+    model.content.addSubview(tc.view)  // viewDidMoveToWindow → createSurface
+    tc.view.removeFromSuperview()  // detach。surface は生存
   }
 }

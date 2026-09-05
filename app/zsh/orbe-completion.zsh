@@ -1,9 +1,9 @@
 # Orbe ドロップダウン補完（zsh）。
-# Orbe が起こした zsh でのみ env が立つ。ORBE_SOCK / ORBE_PANE 未設定なら全 widget を定義せず no-op。
+# Orbe が起こした zsh でのみ env が立つ。ORBE_SOCK / ORBE_TAB 未設定なら全 widget を定義せず no-op。
 # $BUFFER/$CURSOR を control.sock 経由で host へ通知し、Tab で host が返す補完後 buffer を zle 変数へ直書きする。
 # tmux/ssh 先・bash/fish は env 不達で何も起きない（劣化なしの無効）。
 
-[[ -n $ORBE_SOCK && -n $ORBE_PANE ]] || return 0
+[[ -n $ORBE_SOCK && -n $ORBE_TAB ]] || return 0
 [[ -n $_ORBE_COMPLETION_LOADED ]] && return 0
 zmodload zsh/net/socket 2>/dev/null || return 0
 typeset -g _ORBE_COMPLETION_LOADED=1
@@ -94,7 +94,7 @@ _orbe_send_update() {
   local REPLY
   _orbe_json_escape "$BUFFER"
   _orbe_send \
-    "{\"jsonrpc\":\"2.0\",\"method\":\"completion_update\",\"params\":{\"paneId\":$ORBE_PANE,\"buffer\":\"$REPLY\",\"cursor\":$CURSOR}}"
+    "{\"jsonrpc\":\"2.0\",\"method\":\"completion_update\",\"params\":{\"tabId\":$ORBE_TAB,\"buffer\":\"$REPLY\",\"cursor\":$CURSOR}}"
 }
 
 # zle-line-init: fd を確保し差分検出をリセットする。
@@ -114,7 +114,7 @@ _orbe_line_pre_redraw() {
 # zle-line-finish: コマンド確定/中断で popup を消す（completion_end・無応答）。
 _orbe_line_finish() {
   [[ -n $_ORBE_FD ]] || return
-  _orbe_send "{\"jsonrpc\":\"2.0\",\"method\":\"completion_end\",\"params\":{\"paneId\":$ORBE_PANE}}"
+  _orbe_send "{\"jsonrpc\":\"2.0\",\"method\":\"completion_end\",\"params\":{\"tabId\":$ORBE_TAB}}"
 }
 
 # completion_accept を id 付きで送り 1 行応答を読む。advance=true は次トークンへ進む確定（Tab）、
@@ -129,7 +129,7 @@ _orbe_try_accept() {
   local advance=$1
   local -i id=$(( ++_ORBE_ACCEPT_ID ))
   _orbe_connect \
-    && _orbe_send "{\"jsonrpc\":\"2.0\",\"id\":$id,\"method\":\"completion_accept\",\"params\":{\"paneId\":$ORBE_PANE,\"advance\":$advance}}" \
+    && _orbe_send "{\"jsonrpc\":\"2.0\",\"id\":$id,\"method\":\"completion_accept\",\"params\":{\"tabId\":$ORBE_TAB,\"advance\":$advance}}" \
     || return 1
   local line resp=
   # 応答のキー順は保証が無いので、id の直後が値の終端（`,` か `}`）であることまで見る

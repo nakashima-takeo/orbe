@@ -32,7 +32,7 @@ extension WindowController {
       model.settingsPalette?.focus()
     } else {
       model.overlay = .none
-      focusActivePane()
+      focusActiveTab()
     }
     reconfirmFocusNextTick()
   }

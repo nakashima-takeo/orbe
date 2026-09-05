@@ -32,57 +32,28 @@ final class SurfaceView: NSView {
   private var occlusionGate = SurfaceOcclusionGate()
   /// 所属 window の occlusion 通知購読。viewDidMoveToWindow で付け替える。
   private var occlusionObserver: NSObjectProtocol?
-  /// 制御チャネルの宛先 ID（外部からこのペインを一意に指す）。
-  let id = IdGen.next()
-  /// 所属するレイアウト。分割/クローズの委譲先。
-  weak var controller: TerminalController?
-  /// 分割で生成された場合の継承元ペイン（フォント・cwd 等を継承する）。
-  /// weak かつ view 参照——生 surface ポインタだと、surface 生成を遅延する経路
-  /// （背景 workspace への制御 split 等）で継承元が先に解放されると UAF になる。
-  /// weak view なら解放時に nil へ落ち、既定 config で安全に起きる。
-  weak var inheritFrom: SurfaceView?
+  /// 所属タブ。シェルが報告した事実（タイトル・cwd）と閉鎖要求の通知先。
+  weak var tab: TerminalTab?
   /// シェルが報告するタイトル（OSC 0/2）。タブ表示に使う。
-  var paneTitle: String = "" {
+  var title: String = "" {
     didSet {
-      if paneTitle != oldValue {
-        ControlServer.shared.emit(.paneTitle(paneId: id, title: paneTitle))
-      }
+      if title != oldValue { tab?.titleChanged() }
     }
   }
   /// シェルが OSC 7 で報告した現在の cwd（永続の保存値）。
   var currentPwd: String? {
     didSet {
-      if currentPwd != oldValue {
-        ControlServer.shared.emit(.pwd(paneId: id, path: currentPwd))
-      }
+      if currentPwd != oldValue { tab?.pwdChanged() }
     }
   }
-  /// このペインの agent スロット（none / dormant / live）。永続しない（休眠チケットの同一性
-  /// だけが保存 schema へ写る）。`agent_state` 制御イベントの emit は didSet が一元で担う——
-  /// どの遷移経路でも、導出 `agentState` の実変化だけがイベントを流す。
-  var agentSlot: AgentSlot = .none {
-    didSet {
-      if agentState != oldValue.report?.state {
-        ControlServer.shared.emit(
-          .agentState(
-            paneId: id, state: agentState, message: agentReport?.message?.text,
-            sessionId: agentSlot.session?.sessionId))
-      }
-    }
-  }
-  /// 稼働中 agent の最新の自己報告（live 以外は nil）。Attention・rollup の読み口。
-  var agentReport: AgentReport? { agentSlot.report }
-  /// 報告中の状態文字列（idle/working/waiting/done。報告なしは nil）。タブのインジケータ集約が読む。
-  var agentState: String? { agentReport?.state }
-  /// 復元時の起動 cwd（surface を working_directory 付きで起こす。inheritFrom が無いとき有効）。
-  var initialCwd: String?
-  /// 起動時にシェルの代わりに走らせるコマンド（エージェント起動タブ・split の command 指定）。
-  /// 継承の有無に依らず適用する（cwd は inherited_config が運び、その上でこのコマンドを起こす）。
+  /// 起動 cwd（surface を working_directory 付きで起こす）。
+  let initialCwd: String
+  /// 起動時にシェルの代わりに走らせるコマンド（エージェント起動タブ）。
   var initialCommand: String?
-  /// 起動時に追加する環境変数（エージェント起動タブ。inheritFrom が無いとき有効）。
+  /// 起動時に追加する環境変数（エージェント起動タブの login PATH・Orbe runtime 契約）。
   var initialEnv: [String: String] = [:]
 
-  /// 内部の surface ハンドル（cwd 継承元として参照される）。
+  /// 内部の surface ハンドル（制御チャネルの読み書きが参照する）。
   var surfacePtr: ghostty_surface_t? { surface }
 
   // MARK: - スクロールバー状態（更新ロジックは SurfaceView+Scrollbar.swift。ラップ層が読む）
@@ -111,12 +82,13 @@ final class SurfaceView: NSView {
   }
 
   /// surface の userdata（不透明ポインタ）から SurfaceView を復元する。
-  /// クリップボード等のコールバックが対象ペインを特定するのに使う。
+  /// クリップボード等のコールバックが対象 surface を特定するのに使う。
   static func from(_ userdata: UnsafeMutableRawPointer) -> SurfaceView {
     Unmanaged<SurfaceView>.fromOpaque(userdata).takeUnretainedValue()
   }
 
-  override init(frame: NSRect) {
+  init(frame: NSRect, cwd: String) {
+    initialCwd = cwd
     super.init(frame: frame)
     // wantsLayer は立てない。libghostty の Metal レンダラが自前の IOSurfaceLayer を
     // 代入してから wantsLayer=true を立てることで view を layer-hosting にする
@@ -158,22 +130,15 @@ final class SurfaceView: NSView {
 
   /// surface を生成する（初回の window 参加時に一度だけ）。
   private func createSurface(in win: NSWindow) {
-    // 分割で生まれたペインはフォント・cwd 等を親から継承（cwd は OSC 7 経由で
-    // ghostty が記憶した値を inherited_config が運ぶ）、ルートは既定 config。
-    var sc =
-      inheritFrom?.surfacePtr.map {
-        ghostty_surface_inherited_config($0, GHOSTTY_SURFACE_CONTEXT_SPLIT)
-      }
-      ?? ghostty_surface_config_new()
+    var sc = ghostty_surface_config_new()
     sc.platform_tag = GHOSTTY_PLATFORM_MACOS
     sc.platform.macos.nsview = Unmanaged.passUnretained(self).toOpaque()
     sc.userdata = Unmanaged.passUnretained(self).toOpaque()  // コールバックから自分を復元
     sc.scale_factor = win.backingScaleFactor
-    // font_size 0 = config の font-size を使う（キュレート既定）。分割は親を継承。
+    // font_size 0 = config の font-size を使う（キュレート既定）。
 
-    // 復元・エージェント起動時は cwd / 起動コマンド / 環境変数を指定して起こす（ルートのみ。
-    // 分割は親から継承）。ポインタは ghostty_surface_new 呼び出し中だけ有効——
-    // strdup で固定し呼び出し後に解放する。
+    // cwd / 起動コマンド / 環境変数はタブが確定した値をそのまま渡す。ポインタは
+    // ghostty_surface_new 呼び出し中だけ有効——strdup で固定し呼び出し後に解放する。
     var owned: [UnsafeMutablePointer<CChar>] = []
     defer { owned.forEach { free($0) } }
     func retain(_ s: String) -> UnsafePointer<CChar> {
@@ -181,16 +146,9 @@ final class SurfaceView: NSView {
       owned.append(p)
       return UnsafePointer(p)
     }
-    var env: [String: String] = [:]
-    if inheritFrom == nil {
-      if let cwd = initialCwd { sc.working_directory = retain(cwd) }
-      env = initialEnv
-    }
-    // command は継承の有無に依らず適用する（split の command 指定でも指定コマンドで起こす。
-    // 継承 cwd は inherited_config が運び、その上でこのコマンドが動く）。
+    sc.working_directory = retain(initialCwd)
     if let command = initialCommand { sc.command = retain(command) }
-    injectRuntimeEnv(to: &env)  // 同梱 CLI の PATH・pane identity・状態報告の宛先（全ペイン）
-    var envs = env.map { ghostty_env_var_s(key: retain($0.key), value: retain($0.value)) }
+    var envs = initialEnv.map { ghostty_env_var_s(key: retain($0.key), value: retain($0.value)) }
     let surf: ghostty_surface_t? = envs.withUnsafeMutableBufferPointer { buf in
       if let base = buf.baseAddress, buf.count > 0 {
         sc.env_vars = base
@@ -229,7 +187,7 @@ final class SurfaceView: NSView {
     if desired { updateSize() }
   }
 
-  /// 自分または祖先（rootContainer）の isHidden 変化。タブ切替の不可視化経路。
+  /// 自分または祖先（タブの view）の isHidden 変化。タブ切替の不可視化経路。
   override func viewDidHide() {
     super.viewDidHide()
     syncOcclusion()
@@ -257,7 +215,6 @@ final class SurfaceView: NSView {
 
   deinit {
     if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
-    ControlServer.shared.emit(.paneClosed(paneId: id))
     if let surface {
       Ghostty.shared.unregister(surface)
       ghostty_surface_free(surface)
@@ -317,7 +274,6 @@ final class SurfaceView: NSView {
 
   override func becomeFirstResponder() -> Bool {
     setSurfaceFocus(true)
-    controller?.focusedPaneChanged(self)
     return super.becomeFirstResponder()
   }
   override func resignFirstResponder() -> Bool {

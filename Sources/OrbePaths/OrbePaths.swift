@@ -6,7 +6,7 @@ import Foundation
 /// 解決規則:
 /// - state dir: `ORBE_STATE_DIR`（非空なら隔離）→ Apple 規定の `~/Library/Application Support/<bundle-id>/`
 /// - control.sock: `ORBE_STATE_DIR`（非空の明示指定。`ORBE_SOCK` は見ない）→ `ORBE_SOCK`
-///   （GUI がペインへ注入する実パス）→ `appSupportDir()/control.sock`
+///   （GUI がタブへ注入する実パス）→ `appSupportDir()/control.sock`
 ///
 /// クライアントの socket 解決はサーバ（ControlServer = `stateDirBase()/control.sock`）と同じ
 /// `stateDirBase()` を通るため、一致は偶然でなく構造として保証される。
@@ -23,10 +23,10 @@ public enum OrbePaths {
   }()
 
   /// このプロセスの bundle ID（＝チャネル identity）。バンドルを持たない実行体では焼き込み値へ落ちる。
-  /// state の置き場（`appSupportDir()`）とペインへ注入する identity が同じ解決を通ることを構造で保証する。
+  /// state の置き場（`appSupportDir()`）とタブへ注入する identity が同じ解決を通ることを構造で保証する。
   public static var bundleId: String { Bundle.main.bundleIdentifier ?? fallbackBundleId }
 
-  /// runtime 契約の環境変数名（GUI がペインへ注入し、CLI/report/補完が読む）。
+  /// runtime 契約の環境変数名（GUI がタブへ注入し、CLI/report/補完が読む）。
   public static let stateDirEnvVar = "ORBE_STATE_DIR"
   public static let sockEnvVar = "ORBE_SOCK"
 
@@ -58,7 +58,7 @@ public enum OrbePaths {
   }
 
   /// control.sock の絶対パス。`ORBE_STATE_DIR`（明示指定）が非空なら `$ORBE_STATE_DIR/control.sock`
-  /// を使い、`ORBE_SOCK` は見ない（明示＞暗黙）。未設定時は `ORBE_SOCK`（GUI がペインへ注入する
+  /// を使い、`ORBE_SOCK` は見ない（明示＞暗黙）。未設定時は `ORBE_SOCK`（GUI がタブへ注入する
   /// 実パス）→ `appSupportDir()/control.sock`。解決不能なら nil。env はテスト seam（既定は実環境）。
   public static func controlSocketPath(
     env: [String: String] = ProcessInfo.processInfo.environment

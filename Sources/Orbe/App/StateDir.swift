@@ -12,6 +12,6 @@ enum StateDir {
   /// （全インスタンス共有の固定パスが要る用途向け）。存在しなければ作成する。
   static func appSupport() -> URL? { OrbePaths.appSupportDir() }
 
-  /// このインスタンスの bundle ID（チャネル identity）。ペインへ注入し、実体化コピーへも刻む。
+  /// このインスタンスの bundle ID（チャネル identity）。タブへ注入し、実体化コピーへも刻む。
   static var bundleId: String { OrbePaths.bundleId }
 }
