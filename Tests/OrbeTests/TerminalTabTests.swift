@@ -17,6 +17,9 @@ final class TerminalTabTests: OrbeTestCase {
   /// 閉鎖要求は onClose を発火し、**発火源を判断せずそのまま素通しする**。
   /// 全ケースを回すのは、素通しがどれか 1 つへの決め打ちに化けるのを止めるため——化けても
   /// コンパイルは通り、「⌘W で閉じたタブが戻らない」か「shell exit まで積む」が静かに起きる。
+  ///
+  /// 発火は要求の中では起きない——⌘W の keyDown・シェル exit の libghostty コールバックの最中に
+  /// 上位が surface を解放すると、戻った先が解放済みの view を触る。
   func testCloseFiresOnCloseCarryingOrigin() {
     for origin in [TabCloseOrigin.gesture, .process, .controlAPI] {
       let tab = TerminalTab(cwd: "/tmp")
@@ -26,7 +29,8 @@ final class TerminalTabTests: OrbeTestCase {
         received = $0
         exp.fulfill()
       }
-      tab.close(origin: origin)  // main へ async
+      tab.close(origin: origin)
+      XCTAssertNil(received, "閉鎖要求の中では発火しない（要求元が戻ってから）")
       wait(for: [exp], timeout: 1.0)
       XCTAssertEqual(received, origin, "close の発火源をそのまま上位へ渡す")
     }

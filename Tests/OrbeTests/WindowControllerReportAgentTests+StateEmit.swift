@@ -100,6 +100,35 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(stateEvent(wire.nextResponse())?["value"] as? String, "working")
   }
 
+  /// 見ているタブへの done 報告は、フォーカス消費で即 idle へ戻るが、履歴には done → idle の順で
+  /// 両方が並ぶ。`orb wait --value done` は消費より先に done を掴める（消費が先に走ると done は
+  /// 履歴に現れず、待つ側はタイムアウトまで気づけない）。
+  func testDoneOnTheVisibleTabIsEmittedBeforeItsConsumptionToIdle() throws {
+    let (wc, tab) = try makeControllerAndTab()
+    makeKey(wc)
+    let wire = ControlWire(target: nil)
+    defer { wire.teardown() }
+    for (id, value) in [(1, "done"), (2, "idle")] {
+      wire.send([
+        "jsonrpc": "2.0", "id": id, "method": "wait_for_event",
+        "params": ["kinds": ["agent_state"], "tabId": tab.id, "value": value],
+      ])
+    }
+    wire.barrier()
+
+    wc.controlReportAgent(
+      tab: tab, agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d"))
+
+    XCTAssertEqual(tab.agentState, "idle", "前提: 見ているタブの done はフォーカス消費される")
+    let done = try XCTUnwrap(stateEvent(wire.nextResponse()))
+    let idle = try XCTUnwrap(stateEvent(wire.nextResponse()))
+    XCTAssertEqual(done["value"] as? String, "done", "消費前の done が先に流れる")
+    XCTAssertEqual(idle["value"] as? String, "idle", "消費後の idle が後に流れる")
+    XCTAssertLessThan(
+      try XCTUnwrap(done["seq"] as? Int), try XCTUnwrap(idle["seq"] as? Int),
+      "履歴は done → idle の順")
+  }
+
   // MARK: - 流れない
 
   /// 一度も報告のないタブへの clear は流れない（状態なし → 状態なしで実変化がない）。
