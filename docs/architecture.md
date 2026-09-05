@@ -16,7 +16,7 @@ flowchart LR
         GK["GhosttyKit<br>（libghostty・静的リンク）"]
         CS["ControlServer<br>control.sock"]
     end
-    ORB["orb<br>（.app 同梱・全ペイン PATH）"] -->|JSON-RPC| CS
+    ORB["orb<br>（.app 同梱・全タブ PATH）"] -->|JSON-RPC| CS
     REP["orbe-report<br>（.app 同梱・agent hook が exec）"] -->|JSON-RPC| CS
     MCP["orbe-mcp<br>（非同梱・.mcp.json が起動）"] -->|JSON-RPC 転送| CS
     AI["MCP クライアント<br>（エージェント）"] -->|stdio| MCP
@@ -27,7 +27,7 @@ flowchart LR
 | 実行体 | 役割 | 依存 | spec |
 |---|---|---|---|
 | `Orbe.app` | ターミナル本体。libghostty を静的リンクし Metal 描画 | GhosttyKit・swift-markdown・Sparkle | [terminal/core](spec/terminal/core.md) |
-| `orb` | Orbe 自身を操作する CLI（config / ws / pane / tab） | Foundation のみ | [control/cli](spec/control/cli.md) |
+| `orb` | Orbe 自身を操作する CLI（config / ws / tab / agent / wait） | Foundation のみ | [control/cli](spec/control/cli.md) |
 | `orbe-report` | エージェント CLI の hook から状態を報告 | Foundation のみ | [agent/notify](spec/agent/notify.md) |
 | `orbe-mcp` | MCP（stdio）を制御チャネルへ転送するブリッジ | Foundation のみ | [control/api](spec/control/api.md) |
 | `orbe-sound` | 通知音の制作ループ CLI（dev 専用・`.app` 非同梱・制御チャネルに繋がない） | Foundation・OrbeSound | [agent/sound](spec/agent/sound.md) |
@@ -74,11 +74,11 @@ spec の領域フォルダ（[spec/README.md](spec/README.md)）は概ね `Featu
 
 ## 環境変数
 
-Orbe が**ペインへ注入する**もの（外部契約。CLI・hook・補完が読む）:
+Orbe が**タブへ注入する**もの（外部契約。CLI・hook・補完が読む）:
 
 | 変数 | 意味 | spec |
 |---|---|---|
-| `ORBE_PANE` | ペイン自身の ID | [agent/notify](spec/agent/notify.md) |
+| `ORBE_TAB` | タブ自身の ID | [agent/notify](spec/agent/notify.md) |
 | `ORBE_SOCK` | このインスタンスの control.sock 絶対パス | 同上 |
 | `ORBE_REPORT_BIN` | 同梱 `orbe-report` の絶対パス | 同上 |
 | `ORBE_BUNDLE_ID` | チャネル identity（dev/release 判別） | 同上 |

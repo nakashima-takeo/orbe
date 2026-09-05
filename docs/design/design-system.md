@@ -179,7 +179,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 - **Palette row**: default＝`text.secondary`（workspace 行の名前＝最優先状態の色）。hover＝`hoverFill`＋`text.primary`。selected＝`selectionFill` 地。dormant＝`Opacity.dormant`。情報行＝`text.muted`・選択不可。そのうち直前の操作が失敗した理由を述べる行だけ `danger`（§3）——中立な補足と同じ弱さで出さない。行= padding 5×10・radius 8。workspace 行の右詰め＝状態別カウントピル（padding 1×7・radius pill・地 tint .12・文字 状態色・グリフ 9px）。
 - **Button**: primary（主 CTA）＝塗り `accent.primary`・文字 `on.accent`・radius `md`。secondary＝塗りなし・文字 `accent.primary`・枠 1px `surface.1`・hover で `hoverFill`。disabled＝`Opacity.disabled`。
 - **Search field**: 外枠＝`bg.sunken`＋1px `surface.1`＋radius `md`。focus＝リング `accent.focus`。no-match＝`danger`。件数＝`captionDigit`。
-- **Focus / active pane**: アクティブペインは 2px 内側リング `accent.focus`。カーソル点滅と併走。
+- **Focus / active tab**: アクティブタブの端末は 2px 内側リング `accent.focus`。カーソル点滅と併走。
 - **Onboarding**: waiting＝`text.muted`。installing＝スピナー（`accent.primary`）。done＝`✓` `success`。failed＝`✗` `danger`＋再試行 secondary。skipped＝`text.muted`・取り消し線。
 - **Empty state**: 中央・`type.body`・`text.muted` の一文＋必要なら `type.meta` ヒント。装飾なし。
 
