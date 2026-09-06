@@ -30,7 +30,10 @@ extension ControlServer {
       guard case .success(let until) = date("until") else { return .failure(invalid("until")) }
       var limit = sessionLogDefaultLimit
       if let raw = params["limit"] {
-        guard let n = raw as? Int, (1...sessionLogMaxLimit).contains(n) else {
+        // JSONSerialization は true / false も NSNumber に載せ `as? Int` が 1 / 0 として通す。
+        // `"10"`（文字列）と対称に、Bool は整数ではないので弾く。
+        let isBool = (raw as? NSNumber).map { CFGetTypeID($0) == CFBooleanGetTypeID() } ?? false
+        guard !isBool, let n = raw as? Int, (1...sessionLogMaxLimit).contains(n) else {
           return .failure(invalid("limit"))
         }
         limit = n

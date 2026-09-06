@@ -68,13 +68,14 @@ extension ControlWireTests {
     XCTAssertEqual((limited?["result"] as? [String: Any])?["truncated"] as? Bool, true)
   }
 
-  /// 型違い・ISO 不正・limit の値域外は -32602。
+  /// 型違い・ISO 不正・limit の値域外・limit の JSON Bool（NSNumber 越しに 1 と読めてしまう）は -32602。
   func testSessionLogRejectsMalformedParams() {
     let wire = startWireWithoutTarget()
     var id = 0
     for params in [
       ["since": 12], ["since": "yesterday"], ["until": ["x"]], ["limit": 0],
-      ["limit": ControlServer.sessionLogMaxLimit + 1], ["limit": "10"], ["sessionId": 3],
+      ["limit": ControlServer.sessionLogMaxLimit + 1], ["limit": "10"], ["limit": true],
+      ["sessionId": 3],
     ] as [[String: Any]] {
       id += 1
       XCTAssertEqual(
