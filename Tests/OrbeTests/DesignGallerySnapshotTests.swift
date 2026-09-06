@@ -114,6 +114,43 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     overflow.rollup = [("working", 8), ("waiting", 2), ("idle", 15)]
     try writePNG(
       chromeBand(overflow, size: size), size: size, name: "statusrow_overflow.png", dir: dir)
+
+    // grouped: 見本 workspaceSnapshot の storefront——同 worktree の連（4・2・2）＋管理外の単独 1。
+    // 連の中の選択セル・識別バー・区切り線・1 枚は現行の絵。cwd あり。
+    let grouped = StatusRowModel()
+    grouped.workspace = "storefront"
+    grouped.titles = [
+      "s/s/checkout", "s/api", "storefront", "s/s/hooks",
+      "~/d/s/fix-cart-badge", "~/d/s/f/src",
+      "~/d/s/i18n-ja", "~/d/s/i/locales",
+      "~/notes",
+    ]
+    grouped.glyphs = [.working, .waiting, nil, .working, .done, nil, .done, nil, nil]
+    grouped.segments = [0..<4, 4..<6, 6..<8, 8..<9]
+    grouped.segmentColorIndices = ["storefront", "fix-cart-badge", "i18n-ja", "notes"].map {
+      WorktreeColor.index(forKey: $0)
+    }
+    grouped.active = 3
+    grouped.cwd = "~/dev/storefront/src/hooks"
+    grouped.rollup = [("working", 2), ("waiting", 1), ("done", 2), ("idle", 4)]
+    try writePNG(
+      chromeBand(grouped, size: size), size: size, name: "statusrow_grouped.png", dir: dir)
+
+    // grouped overflow: 長い名前 × 3 連（4+4+3）で全タブが床 40、バー幅ぶん器が広い状態。
+    let groupedOverflow = StatusRowModel()
+    groupedOverflow.workspace = "infra"
+    groupedOverflow.titles = (0..<11).map { "terraform-apply-session-\($0)" }
+    groupedOverflow.glyphs = (0..<11).map { glyphCycle[$0 % glyphCycle.count] }
+    groupedOverflow.segments = [0..<4, 4..<8, 8..<11]
+    groupedOverflow.segmentColorIndices = ["network", "compute", "storage"].map {
+      WorktreeColor.index(forKey: $0)
+    }
+    groupedOverflow.active = 5
+    groupedOverflow.cwd = "~/work/infra-worktrees/compute"
+    groupedOverflow.rollup = [("working", 3), ("waiting", 3), ("done", 3), ("idle", 2)]
+    try writePNG(
+      chromeBand(groupedOverflow, size: size), size: size, name: "statusrow_grouped_overflow.png",
+      dir: dir)
   }
 
   /// 補完ドロップダウン（薄い行・複数 group・cap 超過でスクロール表現＝右つまみ＋下フェード）を端末地に重ねる。

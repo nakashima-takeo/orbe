@@ -4,11 +4,20 @@ import SwiftUI
 /// 描画（`StatusRowView`）から分離する。
 /// 幅計測の基底は常にタブタイトル実効フォント（描画 `DSTab` と同じ resolver）でズレを避ける。
 extension StatusRowView {
+  /// 描くセグメント列。controller が流した `model.segments` が titles を覆っていればそれ、
+  /// 流し込まないホスト（gallery 等）では全タブ単独。
+  var segments: [Range<Int>] {
+    let n = model.titles.count
+    let covers = model.segments.first?.lowerBound == 0 && model.segments.last?.upperBound == n
+    return covers ? model.segments : StatusTabLayout.singletons(count: n)
+  }
+
   /// shrink 幅（純関数 `StatusTabLayout`）を出したうえで、編集タブの幅だけ編集用の下限で上書きする。
   /// 純関数のシグネチャは変えず、上書きは View 側に閉じる（溢れは横 ScrollView が吸収）。
   func tabWidths(available: CGFloat) -> [CGFloat] {
     var widths = StatusTabLayout.widths(
-      naturals: model.titles.indices.map(naturalWidth(index:)), available: available)
+      naturals: model.titles.indices.map(naturalWidth(index:)), segments: segments,
+      available: available)
     if let e = model.editingIndex, widths.indices.contains(e) {
       widths[e] = min(Chrome.tabMaxWidth, max(editingNaturalWidth(), Chrome.tabEditFloor))
     }
