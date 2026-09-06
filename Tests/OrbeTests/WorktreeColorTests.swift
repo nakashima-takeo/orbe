@@ -37,6 +37,11 @@ final class WorktreeColorTests: OrbeTestCase {
     XCTAssertEqual(WorktreeColor.index(forKey: nfc), 25, "NFC の UTF-8 で符号化")
   }
 
+  /// 表の色は互いに異なる（色相ステップや色数を変えても重複が黙って入らない番人）。
+  func testPaletteColorsAreDistinct() {
+    XCTAssertEqual(Set(WorktreePalette.hex).count, WorktreePalette.hex.count)
+  }
+
   // MARK: - 生成物の drift
 
   /// コミット済み `WorktreePalette.swift` は `scripts/gen-worktree-palette.py` の出力と byte 一致する。

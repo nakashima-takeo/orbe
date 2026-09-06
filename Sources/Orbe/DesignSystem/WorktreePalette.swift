@@ -1,8 +1,7 @@
 // scripts/gen-worktree-palette.py が生成する。手で編集せず、式を変えたらスクリプトを直して再生成する。
-import Foundation
 
-/// worktree 識別色 48（index は `WorktreeColor.index(forKey:)`）。24 色相（h = i×15+7）× 2 トーン
-/// （0–23 淡 oklch(0.80 0.09 h) / 24–47 濃 oklch(0.64 0.15 h)）を CSS Color 4 の彩度落としで sRGB へ写した hex。
+/// worktree 識別色（index は `WorktreeColor.index(forKey:)`）。色相 × トーンの oklch を CSS Color 4 の
+/// 彩度落としで sRGB へ写した hex。式と色数は scripts/gen-worktree-palette.py の HUES / TONES が正。
 enum WorktreePalette {
   static let hex: [Int] = [
     0xf1a6b4, 0xf2a7a4, 0xf1aa95, 0xedae88, 0xe5b37e, 0xdbb879, 0xcebe7a, 0xbfc47f,

@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""worktree 識別色 48 色を oklch から sRGB hex へ写し、Swift の定数表として書き出す。
+"""worktree 識別色を oklch から sRGB hex へ写し、Swift の定数表として書き出す。
 
-生成式（orbe_design の theme.ts `worktreePalette` と同一）:
-  index i (0..47) → tone = i // 24（0: 淡 L=0.80 C=0.09 / 1: 濃 L=0.64 C=0.15）、hue = (i % 24) * 15 + 7
+生成式（orbe_design の theme.ts `worktreePalette` と同一。色相数・トーンは HUES / TONES が正）:
+  index i → tone = TONES[i // HUES]、hue = (i % HUES) * (360 / HUES) + 7
 
 oklch → oklab → linear sRGB（Björn Ottosson の行列）→ gamma 符号化 → 8bit 丸め。
-48 色のうち 9 チャンネルが sRGB 域外（最大 0.09）で、単純なチャンネルクランプでは見本と
-色相がずれる。ブラウザが `oklch()` を表示するときと同じ CSS Color 4 §13.2 のガマット写像
-（chroma を [0, C] で二分探索し、クリップ結果との ΔEOK が JND 0.02 未満になる最大 chroma を採る）
-で落とすので、見本の色相を保つ。
+一部のチャンネルが sRGB 域外に出るので、CSS Color 4 が挙げる 3 つのガマット写像のうち、見本
+theme.ts（ブラウザ）と color.js が採る binary-search local MINDE
+（https://drafts.csswg.org/css-color-4/#GMA-Binary-local-MINDE ・chroma を [0, C] で二分探索し、
+クリップ結果との ΔEOK が JND 0.02 未満になる最大 chroma を採る）で落とし、見本と同じ色に揃える
+（単純なチャンネルクランプとの差は数色・色相差は最大 3° 程度だが、根拠は見本と同じ写像であること）。
 
 生成物 Sources/Orbe/DesignSystem/WorktreePalette.swift はコミットする（アプリに色計算を持ち込まない）。
 式を変えたら再実行する:
@@ -23,6 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DST = ROOT / "Sources/Orbe/DesignSystem/WorktreePalette.swift"
 
 HUES = 24
+HUE_STEP = 360 / HUES
 TONES = [(0.80, 0.09), (0.64, 0.15)]  # (L, C)
 JND = 0.02
 EPSILON = 0.0001
@@ -70,11 +72,12 @@ def delta_eok(a: tuple[float, float, float], b: tuple[float, float, float]) -> f
 
 
 def to_srgb_linear(l: float, c: float, h: float) -> tuple[float, float, float]:
-    """CSS Color 4 §13.2 のガマット写像。域内ならそのまま、域外なら chroma を落として写す。"""
+    """CSS Color 4 の binary-search local MINDE ガマット写像。域内ならそのまま、域外なら chroma を落として写す。"""
     origin = oklab_to_linear_srgb(*oklch_to_oklab(l, c, h))
     if in_gamut(origin):
         return origin
     lo, hi, lo_in_gamut = 0.0, c, True
+    current = origin
     clipped = clip(origin)
     if delta_eok(linear_srgb_to_oklab(*clipped), oklch_to_oklab(l, c, h)) < JND:
         return clipped
@@ -94,7 +97,7 @@ def to_srgb_linear(l: float, c: float, h: float) -> tuple[float, float, float]:
             lo = chroma
         else:
             hi = chroma
-    return clipped
+    return clip(current)
 
 
 def gamma(c: float) -> float:
@@ -108,7 +111,7 @@ def hex_of(rgb: tuple[float, float, float]) -> int:
 
 def palette() -> list[int]:
     return [
-        hex_of(to_srgb_linear(l, c, i * 15 + 7))
+        hex_of(to_srgb_linear(l, c, i * HUE_STEP + 7))
         for (l, c) in TONES
         for i in range(HUES)
     ]
@@ -118,10 +121,9 @@ def render(colors: list[int]) -> str:
     rows = [colors[i : i + 8] for i in range(0, len(colors), 8)]
     body = "\n".join("    " + " ".join(f"0x{c:06x}," for c in row) for row in rows)
     return f"""// scripts/gen-worktree-palette.py が生成する。手で編集せず、式を変えたらスクリプトを直して再生成する。
-import Foundation
 
-/// worktree 識別色 48（index は `WorktreeColor.index(forKey:)`）。24 色相（h = i×15+7）× 2 トーン
-/// （0–23 淡 oklch(0.80 0.09 h) / 24–47 濃 oklch(0.64 0.15 h)）を CSS Color 4 の彩度落としで sRGB へ写した hex。
+/// worktree 識別色（index は `WorktreeColor.index(forKey:)`）。色相 × トーンの oklch を CSS Color 4 の
+/// 彩度落としで sRGB へ写した hex。式と色数は scripts/gen-worktree-palette.py の HUES / TONES が正。
 enum WorktreePalette {{
   static let hex: [Int] = [
 {body}
