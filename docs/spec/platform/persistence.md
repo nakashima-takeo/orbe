@@ -22,7 +22,7 @@ updated: 2026-09-06
 - cwd は OSC 7（`GHOSTTY_ACTION_PWD`）で報告された値を surface が保持したもの。復元は surface 生成時の working_directory 指定で起こす。
 - エージェントセッションは hook 由来の (CLI 名, session_id)（[agent/notify](../agent/notify.md)）をタブに持つ。復元直後のタブは記録を凍結したまま休眠し、resume の解決——CLI 別の resume コマンド（claude `--resume <id>`／agy `--conversation <id>`／codex `resume <id>`）＋ログインシェル PATH——は**タブ起床（materialize 開始）時**に行う。CLI 名が未対応・session_id が安全文字集合外なら素のシェルで起きる——生成コマンドへの注入を防ぐため。セッション記録そのものは休眠のあいだ保持され、resume 可否は起床まで判定しない。
 - resume が注入する PATH は `app-state.json` のキャッシュ値から**同期で**読む——起動復元をシェル起動の subprocess にブロックさせないため。キャッシュが無い初回は上限つきで待ち、尽きれば既知パスだけで起こす（[shell-path](shell-path.md)）。
-- タブ 1 枚分の復元単位は、閉じたセッションの復元（⇧⌘T パレット → [closed-agents](../palette/closed-agents.md)、制御 API `restore_sessions`）と共有する。ただし閉じたセッションの復元が持ち込むのは cwd と同一性だけで、明示タイトルは付かず、位置は workspace の末尾になる。閉じたセッションの記録はこのファイルではなく[寿命ログ](session-log.md)が持つ。
+- タブ 1 枚分の復元単位は、閉じたセッションの復元（⇧⌘T パレット → [closed-agents](../palette/closed-agents.md)、制御 API `restore_sessions`）と共有する。ただし閉じたセッションの復元が持ち込むのは cwd と同一性だけで、明示タイトルは付かず、位置は新規タブと同じ規則（同じ worktree の連の右端、無ければ末尾）になる。閉じたセッションの記録はこのファイルではなく[寿命ログ](session-log.md)が持つ。
 - ウィンドウサイズは画面 `visibleFrame` へクランプして復元し、位置は保存せず毎回中央表示。記憶するのはユーザー意図サイズ（クランプ前）で、小画面での表示クランプは記憶値を破壊しない。
 - `NSWindow.isRestorable = false` で OS 標準の復元は使わない。
 

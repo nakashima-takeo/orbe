@@ -39,6 +39,6 @@ state dir（[persistence](persistence.md) と同じ場所。チャネル別・`O
 
 ## 復元
 
-復元は「閉じた同一性を、それが属していた workspace の末尾に休眠チケットとして足す」1 種類だけ。起動時復元と同じチケットで、起床（materialize 開始）時に resume が解決される。持ち込むのは cwd と同一性だけ——明示タイトルは付かず、位置は末尾になる。workspace は rootPath で照合し、無ければログの名前・rootPath で作り直す（workspace ごと失った場合こそ災害の本体で、作り直しは安く可逆）。既に同じ session_id のタブ（live／休眠）があればスキップし、今あるものを消す操作は無い。復元されたものは「閉じたまま戻っていない」の導出から自然に外れる。
+復元は「閉じた同一性を、それが属していた workspace に休眠チケットとして足す」1 種類だけ。起動時復元と同じチケットで、起床（materialize 開始）時に resume が解決される。持ち込むのは cwd と同一性だけ——明示タイトルは付かず、位置は新規タブと同じ規則（同じ worktree の連が残っていればその右端、無ければ末尾 → [chrome](../chrome/chrome.md) の連）になる。workspace は rootPath で照合し、無ければログの名前・rootPath で作り直す（workspace ごと失った場合こそ災害の本体で、作り直しは安く可逆）。既に同じ session_id のタブ（live／休眠）があればスキップし、今あるものを消す操作は無い。復元されたものは「閉じたまま戻っていない」の導出から自然に外れる。
 
 入口は 3 つ。人が 1 件ずつ戻すのは [⇧⌘T パレット](../palette/closed-agents.md)、多数を一度に戻すのは制御 API の [`restore_sessions`](../control/api.md)（[orb session](../control/cli.md) と MCP から）。復元後にアクティブ workspace に足したチケットは、[layout](../chrome/layout.md) の mount 規律どおり次の選択操作に続いて順次起床し（起動復元と同じ）、背景 workspace に足したものはその workspace のアクティブ化で起きる。
