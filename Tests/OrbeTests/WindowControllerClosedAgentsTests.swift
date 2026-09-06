@@ -80,6 +80,23 @@ final class WindowControllerClosedAgentsTests: OrbeTestCase {
       wc.model.closedAgentsPalette?.groups.isEmpty == true, "戻ったものは一覧から消える")
   }
 
+  func testOpenPaletteFollowsATabThatCloses() throws {
+    let wc = try restore()
+    let opened = try XCTUnwrap(wc.openTab(workspaceIndex: 0, cwd: "/tmp"))
+    let tab = try XCTUnwrap(wc.controlResolveTab(opened.tabId))
+    tab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: "m-1"))
+    wc.showClosedAgentsPalette()
+    let palette = try XCTUnwrap(wc.model.closedAgentsPalette)
+    XCTAssertTrue(palette.groups.isEmpty, "前提: 生きている同一性は出ない")
+
+    wc.closeTab(tab, origin: .process)
+    wc.flushChrome()
+
+    XCTAssertEqual(wc.presentedOverlay, .closedAgentsPalette, "開いたまま")
+    XCTAssertEqual(palette.groups.flatMap { $0.items.map(\.sessionId) }, ["m-1"], "閉じた分が一覧に増える")
+    XCTAssertEqual(palette.groups.first?.origin, .process)
+  }
+
   func testMembersRestoreOnlyTheChosenOne() throws {
     let wc = try restore()
     try closeAgentTab(wc, in: 0, id: "m-1", origin: .controlAPI)

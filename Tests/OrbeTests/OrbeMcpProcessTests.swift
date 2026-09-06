@@ -134,6 +134,21 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     XCTAssertTrue(restoreDescription.contains("already-present"), "id ごとの status の語を書く")
   }
 
+  /// `session_log` / `restore_sessions` の `tools/call` が control へ届く。ブリッジはツール名を method 名として
+  /// 総称転送するので、この 2 語が control 側の綴りと食い違えば tools/list は緑のまま呼び出しだけが死ぬ。
+  func testSessionLogAndRestoreSessionsReachControlThroughTheBridge() throws {
+    let control = try startControlProcess()
+
+    let log = control.mcpJSON("session_log", ["limit": 5])
+    XCTAssertNotNil(log["events"] as? [[String: Any]], "session_log が events を返す: \(log)")
+    XCTAssertEqual(log["truncated"] as? Bool, false)
+
+    let restore = control.mcpJSON("restore_sessions", ["sessionIds": ["nope-1"]])
+    XCTAssertEqual(
+      (restore["results"] as? [[String: Any]])?.first?["status"] as? String, "unknown",
+      "配列の sessionIds がそのまま届き、id ごとの status が返る: \(restore)")
+  }
+
   /// `send_text` ＋ `send_key enter` でタブのシェルが実際にコマンドを**実行**する
   /// （`send_text` はペースト相当なので、enter を別送しなければプロンプトに留まったままになる）。
   func testSendTextAndEnterExecutesInTab() throws {

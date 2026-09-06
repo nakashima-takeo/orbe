@@ -1,3 +1,5 @@
+import Foundation
+import OrbeSessionLog
 import XCTest
 
 @testable import Orbe
@@ -175,37 +177,97 @@ final class OrbeCliProcessTests: OrbeTestCase {
       "ws rm: 削除した WS が一覧から消える")
   }
 
-  /// session の 3 本。閉じた同一性がログに残っていることを前提に、log（2 行・相対 `--since`）→
-  /// closed（1 群・`at`）→ restore（`--at` で群ごと・再実行は already-present・未知 id は exit 1）。
+  /// session の 3 本。閉じた同一性がログに残っていることを前提に、log → closed → restore。
   private func driveSessionSubcommands(_ control: ControlProcess, sessionId: String) throws {
+    try driveSessionLog(control, sessionId: sessionId)
+    try driveSessionClosedAndRestore(control, sessionId: sessionId)
+  }
+
+  private func sessionIds(_ result: [String: Any]) -> [String] {
+    (result["events"] as? [[String: Any]] ?? []).compactMap {
+      ($0["agent"] as? [String: Any])?["sessionId"] as? String
+    }
+  }
+
+  /// `session log`: 2 行・`--limit` はファイル順の末尾を残して stderr で告げる・相対 `--since` の 3 単位・
+  /// `--until`・`--session`。境界は 90 分前の opened を 1 行足して見る（サーバは in-process と同じファイルを読む）。
+  private func driveSessionLog(_ control: ControlProcess, sessionId: String) throws {
     let log = try XCTUnwrap(control.orbJSON(["session", "log"])["events"] as? [[String: Any]])
     XCTAssertEqual(
       log.map { $0["event"] as? String }, ["opened", "closed"], "session log: opened → closed の 2 行"
     )
     XCTAssertEqual(
       log.last?["origin"] as? String, "controlAPI", "session log: tab close は controlAPI")
-    let human = step(control, ["session", "log", "--since", "30m"], expect: sessionId)
-    XCTAssertTrue(human.contains("\tcontrolAPI"), "session log: 人向けの行に origin が載る: \(human)")
+    let limited = control.orb(["session", "log", "--limit", "1", "--json"])
+    XCTAssertEqual(limited.status, 0, limited.stderr)
+    XCTAssertTrue(
+      limited.stderr.contains("truncated"),
+      "session log --limit: 落とした側を stderr で告げる: \(limited.stderr)")
+    let limitedJSON = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(limited.stdout.utf8)) as? [String: Any])
     XCTAssertEqual(
-      (control.orbJSON(["session", "log", "--session", "nope"])["events"] as? [[String: Any]])?
-        .count,
-      0, "session log --session: 一致しない id は空")
+      (limitedJSON["events"] as? [[String: Any]])?.map { $0["event"] as? String }, ["closed"],
+      "session log --limit 1: 新しい側の 1 件")
+    XCTAssertEqual(limitedJSON["truncated"] as? Bool, true)
 
+    let oldId = "l4-old-1"
+    try SessionLogWriter.append(
+      SessionEvent(
+        ts: Date().addingTimeInterval(-90 * 60), kind: .opened,
+        workspace: .init(name: "main", rootPath: "/tmp"), cwd: "/tmp",
+        agent: .init(command: "claude", sessionId: oldId)),
+      to: XCTUnwrap(AgentSessionLog.fileURL))
+    let recent = step(control, ["session", "log", "--since", "30m"], expect: sessionId)
+    XCTAssertTrue(recent.contains("\tcontrolAPI"), "session log: 人向けの行に origin が載る: \(recent)")
+    XCTAssertFalse(recent.contains(oldId), "session log --since 30m: 90 分前の行は落ちる: \(recent)")
+    for since in ["2h", "1d"] {
+      step(control, ["session", "log", "--since", since], expect: oldId)
+    }
+    let hourAgo = SessionEvent.iso8601(Date().addingTimeInterval(-3600))
+    XCTAssertEqual(
+      sessionIds(control.orbJSON(["session", "log", "--until", hourAgo])), [oldId],
+      "session log --until: 1 時間前までは 90 分前の 1 行だけ")
+    XCTAssertEqual(
+      sessionIds(control.orbJSON(["session", "log", "--session", "nope"])), [],
+      "session log --session: 一致しない id は空")
+  }
+
+  /// `session closed` は新しい順の群（人向けの見出し・メンバー行・`--json` の `at`）、`session restore` は
+  /// 位置引数と `--at` の両方で `restored`、再実行は already-present、未知 id は exit 1。2 群目は gesture で
+  /// 閉じた同一性を in-process で作る。
+  private func driveSessionClosedAndRestore(_ control: ControlProcess, sessionId: String) throws {
+    let second = "l4-sess-2"
+    let opened = try XCTUnwrap(control.target.openTab(workspaceIndex: 0, cwd: "/tmp"))
+    let tab = try XCTUnwrap(control.target.controlResolveTab(opened.tabId))
+    tab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: second))
+    control.target.closeTab(tab, origin: .gesture)
+
+    let human = step(control, ["session", "closed"], expect: "1 session closed (gesture)")
+    XCTAssertTrue(
+      human.contains("1 session closed (controlAPI)"), "session closed: 群ごとの見出し: \(human)")
+    XCTAssertTrue(
+      human.contains("\tclaude\t\(second)\tmain\t"), "session closed: メンバー行: \(human)")
     let groups = try XCTUnwrap(
       control.orbJSON(["session", "closed"])["groups"] as? [[String: Any]],
       "session closed: groups を返さない")
-    XCTAssertEqual(groups.count, 1, "session closed: 閉じたまま戻っていない 1 群")
-    XCTAssertEqual(groups.first?["origin"] as? String, "controlAPI")
-    let at = try XCTUnwrap(groups.first?["at"] as? String, "session closed: 群の at")
-    let sessions = try XCTUnwrap(groups.first?["sessions"] as? [[String: Any]])
+    XCTAssertEqual(
+      groups.map { $0["origin"] as? String }, ["gesture", "controlAPI"], "session closed: 新しい順")
+    let at = try XCTUnwrap(groups.last?["at"] as? String, "session closed: 群の at")
+    let sessions = try XCTUnwrap(groups.last?["sessions"] as? [[String: Any]])
     XCTAssertEqual((sessions.first?["agent"] as? [String: Any])?["sessionId"] as? String, sessionId)
 
+    step(control, ["session", "restore", second], expect: "\(second)\trestored")
     step(control, ["session", "restore", "--at", at], expect: "\(sessionId)\trestored")
     let restoredTabs = try XCTUnwrap(control.orbJSON(["tab", "list"])["tabs"] as? [[String: Any]])
-    XCTAssertTrue(
-      restoredTabs.contains { $0["agentSessionId"] as? String == sessionId },
-      "session restore: 休眠チケットが tab list に agentSessionId 付きで現れる")
-    step(control, ["session", "restore", sessionId], expect: "\(sessionId)\talready-present")
+    for id in [sessionId, second] {
+      XCTAssertTrue(
+        restoredTabs.contains { $0["agentSessionId"] as? String == id },
+        "session restore: 休眠チケット \(id) が tab list に agentSessionId 付きで現れる")
+    }
+    let again = control.orbJSON(["session", "restore", sessionId, second])
+    XCTAssertEqual(
+      (again["results"] as? [[String: Any]])?.map { $0["status"] as? String },
+      ["already-present", "already-present"], "session restore --json: 再実行は already-present")
     XCTAssertTrue(
       try XCTUnwrap(control.orbJSON(["session", "closed"])["groups"] as? [[String: Any]]).isEmpty,
       "session closed: 戻ったものは消える")

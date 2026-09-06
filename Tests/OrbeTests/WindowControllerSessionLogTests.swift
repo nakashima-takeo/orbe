@@ -104,6 +104,43 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
       "resume を解決できなければ unresolved で終わる")
   }
 
+  func testDeletingAWorkspaceFromThePaletteClosesAsGesture() throws {
+    let wc = try restore([plain("main"), plain("doomed")])
+    let tab = try XCTUnwrap(wc.workspaces[1].tabs.first)
+    tab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: "g-1"))
+
+    wc.showWorkspacePalette()
+    try XCTUnwrap(wc.model.workspacePalette).onClose?(1)
+
+    XCTAssertEqual(wc.workspaces.map(\.name), ["main"])
+    XCTAssertEqual(
+      wc.sessionLog.lastEvent(sessionId: "g-1")?.kind, .closed(origin: .gesture, reason: nil),
+      "パレットからの削除は人の操作＝gesture")
+  }
+
+  func testUnwritableLogDoesNotStopTabOperations() throws {
+    let dead = try XCTUnwrap(TestIsolation.caseDir)
+      .appendingPathComponent("missing", isDirectory: true)
+      .appendingPathComponent("agent-sessions.jsonl")
+    AgentSessionLog.fileURLOverride = dead
+    let wc = try restore([plain("main", tabs: 2)])
+    let tab = try XCTUnwrap(wc.current.tabs.first)
+
+    wc.controlReportAgent(
+      tab: tab, report: AgentHookReport(agent: "claude", state: "idle", sessionId: "s-1"))
+    wc.closeTab(tab, origin: .gesture)
+
+    XCTAssertEqual(wc.current.tabs.count, 1, "書けなくてもタブは閉じる")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: dead.path))
+    XCTAssertEqual(
+      wc.sessionLog.events.map(\.kind), [.opened, .closed(origin: .gesture, reason: nil)],
+      "メモリの記録は続く")
+    wc.showClosedAgentsPalette()
+    XCTAssertEqual(
+      wc.model.closedAgentsPalette?.groups.flatMap { $0.items.map(\.sessionId) }, ["s-1"],
+      "⇧⌘T はメモリから出せる")
+  }
+
   func testInitPrunesOldRowsAndRewritesAtomically() throws {
     let url = try XCTUnwrap(AgentSessionLog.fileURL)
     let old = SessionEvent(
