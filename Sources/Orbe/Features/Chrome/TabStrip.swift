@@ -22,9 +22,9 @@ struct TabStrip: Equatable {
     let cells: [Cell]
     /// worktree 識別色番号（`Color.theme.worktreeBar` の index）。
     let colorIndex: Int
-    /// 2 枚以上の連＝左端に識別バー・各セル左に区切り線。
-    var bar: Bool { cells.count >= 2 }
     var range: Range<Int> { (cells.first?.index ?? 0)..<((cells.last?.index ?? -1) + 1) }
+    /// 左端に識別バー・各セル左に区切り線を持つ連か（述語は `StatusTabLayout.hasBar` の 1 つ）。
+    var bar: Bool { StatusTabLayout.hasBar(range) }
   }
 
   var segments: [Segment] = []
@@ -36,12 +36,16 @@ struct TabStrip: Equatable {
   var titles: [String] { cells.map(\.title) }
   var glyphs: [AgentStateIcon.Kind?] { cells.map(\.glyph) }
   var tabIds: [Int?] { cells.map(\.tabId) }
+  /// 掴みが凍結している構造＝連ごとのタブ同一性。集合・順序・連の分割のどれが変わっても変わる
+  /// （タイトル・グリフだけの更新では変わらない）。掴みの破棄トリガはこれを観る。
+  var dragStructure: [[Int?]] { segments.map { $0.cells.map(\.tabId) } }
 
   init(segments: [Segment] = []) {
     self.segments = segments
   }
 
-  /// 平坦な列から組む。`segments` を渡さないホスト（gallery 等）は全タブ単独。
+  /// 平坦な列から組む。テスト・ギャラリー用——本番は controller が `init(segments:)` で構造化して組む。
+  /// `segments` を渡さなければ全タブ単独。`glyphs`／`tabIds`／`colorIndices` は足りない分を nil／0 で埋める。
   init(
     titles: [String], glyphs: [AgentStateIcon.Kind?] = [], tabIds: [Int] = [],
     segments: [Range<Int>]? = nil, colorIndices: [Int] = []

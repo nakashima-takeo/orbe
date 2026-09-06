@@ -36,11 +36,9 @@ struct StatusRowView: View {
   /// 並び替えジェスチャは `StatusRowView+Reorder.swift`。
   let dragActivation: CGFloat = 6
 
-  // ドラッグ並び替えの掴み状態（掴み中のみ非 nil・onEnded でリセット）。commit-on-drop のためデータは触らない。
-  @State var drag: DragSession?
-  // タブ集合/順序の変化で破棄した掴みの startLocation。同じ掴みの後続 onChanged が新しい session を
-  // 起こさないためのしるし（別の掴みは startLocation が違う）。
-  @State var discardedDragStart: CGPoint?
+  // ドラッグ並び替えの掴み状態（遷移は `DragState` に閉じる）。commit-on-drop のためデータは触らない。
+  @State var dragState = DragState()
+  private var drag: DragSession? { dragState.session }
 
   var body: some View {
     ZStack(alignment: .topLeading) {
@@ -129,6 +127,7 @@ struct StatusRowView: View {
           HStack(spacing: Chrome.tabGap) {
             ForEach(strip.segments.indices, id: \.self) { s in
               let segment = strip.segments[s]
+              let grabbed = drag.flatMap { $0.source == .segment(s) ? $0 : nil }
               DSTabSegment {
                 if segment.bar {
                   DSSegmentBar(color: Color.theme.worktreeBar[segment.colorIndex])
@@ -145,9 +144,9 @@ struct StatusRowView: View {
                 }
               }
               // 掴んだセグメントは指に追従（slot は残す＝commit-on-drop）・前面へ・わずかに透かして浮きを示す。
-              .offset(x: drag?.source == .segment(s) ? drag?.translation ?? 0 : 0)
-              .zIndex(drag?.source == .segment(s) ? 1 : 0)
-              .opacity(drag?.source == .segment(s) ? 0.85 : 1)
+              .offset(x: grabbed?.translation ?? 0)
+              .zIndex(grabbed == nil ? 0 : 1)
+              .opacity(grabbed == nil ? 1 : 0.85)
             }
             StatusPlusButton(action: model.onNewTab)
           }
@@ -159,7 +158,7 @@ struct StatusRowView: View {
               Rectangle()
                 .fill(Color.theme.accentPrimary)
                 .frame(width: 2, height: Chrome.tabHeight)
-                .offset(x: insertionCaretX(drag))
+                .offset(x: Self.insertionCaretX(drag))
                 .allowsHitTesting(false)
             }
           }
@@ -169,13 +168,10 @@ struct StatusRowView: View {
         .onChange(of: model.editingIndex) { _, new in
           if let n = new { proxy.scrollTo(n, anchor: .center) }
         }
-        .onChange(of: model.strip.tabIds) { _, _ in
-          // 掴み中にタブ集合・順序が変わったら（shell exit・cd 再判定等）掴み状態を破棄する。index が
-          // 総崩れするため継続は不正、かつ onEnded は発火しないので、ここで解除しないと浮いたまま復帰しない。
-          if let drag {
-            discardedDragStart = drag.start
-            self.drag = nil
-          }
+        .onChange(of: model.strip.dragStructure) { _, _ in
+          // 掴み中にタブ集合・順序・連構造が変わったら（shell exit・cd 再判定等）掴み状態を破棄する。
+          // 凍結した幾何が実体とずれ、掴んでいた View は構造ごと消えて onEnded が来ない。
+          dragState.discard()
           proxy.scrollTo(model.active, anchor: .center)
         }
       }
@@ -189,6 +185,7 @@ struct StatusRowView: View {
     // メニューが開いている間にタブ集合が変わっても、右クリックした時点のタブを指し続ける。
     let tabId = cell.tabId
     let isEditing = model.editingIndex == i
+    let grabbed = drag.flatMap { $0.source == .tab(i) ? $0 : nil }
     return DSTab(
       title: displayTitle(cell), active: i == model.active, stateGlyph: cell.glyph,
       stateSymbol: cell.glyph.flatMap { iconResolver.symbol(for: $0) },
@@ -210,9 +207,9 @@ struct StatusRowView: View {
     }
     .frame(width: width)
     // 掴んだセルは指に追従（セグメントの中に収める）・前面へ・わずかに透かして浮きを示す。
-    .offset(x: drag?.source == .tab(i) ? drag.map(cellOffset) ?? 0 : 0)
-    .zIndex(drag?.source == .tab(i) ? 1 : 0)
-    .opacity(drag?.source == .tab(i) ? 0.85 : 1)
+    .offset(x: grabbed.map(Self.cellOffset) ?? 0)
+    .zIndex(grabbed == nil ? 0 : 1)
+    .opacity(grabbed == nil ? 1 : 0.85)
     .id(i)  // scrollTo(active) は平坦 index
   }
 }

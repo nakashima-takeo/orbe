@@ -20,10 +20,12 @@ import SwiftUI
   var onNewTab: () -> Void = {}
   /// 右端の件数ストリップのクリック（Attention パレットを開く）。
   var onAttentionTap: () -> Void = {}
-  /// タブを `from` から挿入先 index `to`（0…count）へ並び替える（同一セグメント内・commit-on-drop）。
-  var onReorder: (Int, Int) -> Void = { _, _ in }
-  /// タブ `from` を含むセグメントを丸ごと、セグメント境界 `to`（タブ index・0…count）へ動かす。
-  var onReorderSegment: (Int, Int) -> Void = { _, _ in }
+  /// タブ `from` を挿入先 `to`（タブ index・0…count・**挿入前 index 基準**＝自分を抜く前の並びで数える）へ
+  /// 並び替える（同一セグメント内・commit-on-drop）。
+  var onReorder: (_ from: Int, _ to: Int) -> Void = { _, _ in }
+  /// タブ `from` を含むセグメントを丸ごと、セグメント境界 `to`（タブ index・0…count・挿入前 index 基準）
+  /// へ動かす。
+  var onReorderSegment: (_ from: Int, _ to: Int) -> Void = { _, _ in }
   /// タブ `tabId`（位置 index ではない）のエージェント状態を idle へ落とす
   /// （コンテキストメニュー）。選択切替を挟まない。
   var onResetAgentState: (_ tabId: Int) -> Void = { _ in }

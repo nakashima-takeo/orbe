@@ -2,10 +2,13 @@ import SwiftUI
 
 /// タブ行の幅計算とセグメント幾何（純関数・単体テスト可能）。寸法は `Chrome` と `DSSegmentBar.width`。
 enum StatusTabLayout {
-  /// `segments` を渡さないホスト（gallery 等）の既定＝全タブ単独（`TabStrip.init(titles:...)` が使う）。
+  /// 全タブ単独の連（テスト・ギャラリー用 `TabStrip.init(titles:...)` の既定）。
   static func singletons(count: Int) -> [Range<Int>] {
     (0..<count).map { $0..<($0 + 1) }
   }
+
+  /// 連が識別バー（と各セル左の区切り線）を持つか＝2 枚以上。描画・room・x 積算が共有する唯一の述語。
+  static func hasBar(_ range: Range<Int>) -> Bool { range.count >= 2 }
 
   /// shrink-to-fit の幅計算。自然幅を maxWidth で cap し、収まればそのまま、溢れれば CSS flex shrink と
   /// 同じく**自然幅に比例して縮め、minWidth の床に達したタブは凍結して残りへ再配分**する
@@ -17,7 +20,7 @@ enum StatusTabLayout {
     let capped = naturals.map { min($0, Chrome.tabMaxWidth) }
     guard !capped.isEmpty else { return [] }
     let gaps = Chrome.tabGap * CGFloat(segments.count)  // 要素は n 連 + ＋ボタンで計 n+1、その間の隙間は n 個
-    let bars = DSSegmentBar.width * CGFloat(segments.filter { $0.count >= 2 }.count)
+    let bars = DSSegmentBar.width * CGFloat(segments.filter(hasBar).count)
     let room = available - gaps - Chrome.tabHeight - bars  // ＋ボタンは tabHeight 角
     if capped.reduce(0, +) <= room { return capped }
 
@@ -70,6 +73,13 @@ enum StatusTabLayout {
     let segments: [SegmentFrame]
     /// 最後のセグメントの右端。
     var rowEnd: CGFloat { segments.last?.maxX ?? 0 }
+    /// セル `i` を含むセグメント。cells と segments は同じ連から組むので必ず 1 つある。
+    func segment(containing i: Int) -> SegmentFrame {
+      guard let seg = segments.first(where: { $0.range.contains(i) }) else {
+        preconditionFailure("cell \(i) belongs to no segment")
+      }
+      return seg
+    }
     /// タブ総数（＝末尾への挿入 index）。
     var count: Int { cells.count }
   }
@@ -80,7 +90,7 @@ enum StatusTabLayout {
     var segs: [SegmentFrame] = []
     var x: CGFloat = 0
     for r in segments {
-      let bar = r.count >= 2
+      let bar = hasBar(r)
       let x0 = x
       if bar { x += DSSegmentBar.width }
       for i in r {
