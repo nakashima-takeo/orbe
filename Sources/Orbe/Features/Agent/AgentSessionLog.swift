@@ -20,8 +20,8 @@ final class AgentSessionLog {
     do {
       let all = try SessionLogReader.read(url).events
       let kept = SessionLogRetention.prune(all, now: now)
-      if kept.count != all.count { try SessionLogWriter.rewrite(kept, to: url) }
       events = kept
+      if kept.count != all.count { try SessionLogWriter.rewrite(kept, to: url) }
     } catch {
       NSLog("[session-log] load failed: \(error)")
     }

@@ -5,9 +5,6 @@ import OrbeSessionLog
 /// background queue へ hop して応答だけを制御キューへ戻す——accept・配信・timeout を直列に捌く 1 本の
 /// キューを最大 5MB の復号で塞がない。窓（target）を要さないので、Orbe が起きていれば常に答える。
 extension ControlServer {
-  static let sessionLogDefaultLimit = 1000
-  static let sessionLogMaxLimit = 10000
-
   /// `session_log` の params。型違い・ISO 不正・limit の値域外は -32602。
   struct SessionLogQueryParams {
     let since: Date?
@@ -28,12 +25,12 @@ extension ControlServer {
       }
       let since = try date("since")
       let until = try date("until")
-      var limit = sessionLogDefaultLimit
+      var limit = SessionLogLimits.defaultLimit
       if let raw = params["limit"] {
         // JSONSerialization は true / false も NSNumber に載せ `as? Int` が 1 / 0 として通す。
         // `"10"`（文字列）と対称に、Bool は整数ではないので弾く。
         let isBool = (raw as? NSNumber).map { CFGetTypeID($0) == CFBooleanGetTypeID() } ?? false
-        guard !isBool, let n = raw as? Int, (1...sessionLogMaxLimit).contains(n) else {
+        guard !isBool, let n = raw as? Int, (1...SessionLogLimits.maxLimit).contains(n) else {
           throw invalid("limit")
         }
         limit = n

@@ -245,19 +245,21 @@ func rejectLeftovers(_ args: [String], positionals: Int, dashOK: Int = 0) {
   }
 }
 
-/// `--since` の値。`<n>m|h|d`（30m / 2h / 3d）なら `now` からの相対を ISO 8601 に直し、それ以外は
-/// ISO 8601 として解けることを確かめてそのまま返す。どちらでもなければ usage エラー。
-/// 秒・週・複合（`1h30m`）は受けない。
-func parseSinceOrDie(_ raw: String, now: Date = Date()) -> String {
+/// `--since` の値を時刻に解く。`<n>m|h|d`（30m / 2h / 3d）は `now` からの相対、それ以外は ISO 8601。
+/// どちらでもなければ usage エラー。秒・週・複合（`1h30m`）は受けない。
+func parseSinceOrDie(_ raw: String, now: Date = Date()) -> Date {
   if let unit = raw.last, let n = Int(raw.dropLast()), n > 0 {
     switch unit {
-    case "m": return SessionEvent.iso8601(now.addingTimeInterval(-Double(n) * 60))
-    case "h": return SessionEvent.iso8601(now.addingTimeInterval(-Double(n) * 3600))
-    case "d": return SessionEvent.iso8601(now.addingTimeInterval(-Double(n) * 86400))
+    case "m": return now.addingTimeInterval(-Double(n) * 60)
+    case "h": return now.addingTimeInterval(-Double(n) * 3600)
+    case "d": return now.addingTimeInterval(-Double(n) * 86400)
     default: break
     }
   }
-  return parseISOOrDie(raw, flag: "--since")
+  guard let parsed = SessionEvent.parseISO8601(raw) else {
+    usageDie("--since requires an ISO 8601 time (e.g. 2026-09-06T10:32:37Z) or <n>m|h|d")
+  }
+  return parsed
 }
 
 /// ISO 8601（`2026-09-06T10:32:37Z` / 小数秒付き）として解ける値を wire 形（ミリ秒・Z）に正規化して返す。
@@ -356,8 +358,9 @@ let topUsage = """
   Orbe tab, or the control socket must be reachable; otherwise exits non-zero.
   Every --json result that comes straight from control carries seq, the
   event-history position at that moment; pass it to `orb wait --after` to catch
-  events that happen right after. `config get` is the one exception: it prints
-  a single row extracted from config_list and has no seq.
+  events that happen right after. Two exceptions have no seq: `config get`
+  prints a single row extracted from config_list, and `session closed` is a
+  view the CLI derives from session_log and list_tabs.
   Exit codes: 0 success, 2 usage error, 1 RPC/connection error (also session
   restore when an id is unknown), 124 timed out (wait / agent prompt / agent
   spawn / agent resume), 3 agent prompt: agent is waiting for input,

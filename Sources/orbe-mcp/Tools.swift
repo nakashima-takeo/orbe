@@ -161,7 +161,8 @@ let tools: [[String: Any]] = [
       "description",
       "エージェントセッションの寿命ログ（event=opened / closed）を時刻昇順で返す。各行は ts・workspace"
         + "{name,rootPath}・cwd・agent{command,sessionId}、closed は origin（agent / gesture / process / "
-        + "controlAPI / unresolved）と任意の reason を持つ。閉じたまま戻っていないものは、sessionId ごとに"
+        + "controlAPI / unresolved）と任意の reason・title（閉じた時点のタブ表示名）を持つ。閉じたまま"
+        + "戻っていないものは、sessionId ごとに"
         + "最後のイベントが event=closed で、かつ list_tabs の agentSessionId に居ない id。同時刻に "
         + "origin=process で閉じた群（5 秒以内）が事故の署名。復元は restore_sessions。limit 既定 1000"
         + "（上限 10000。超えた分は古い側が落ち truncated=true）。"
@@ -181,9 +182,11 @@ let tools: [[String: Any]] = [
     (
       "description",
       "閉じたセッションを休眠チケットとして該当 workspace（rootPath 一致。無ければログの名前で作る）の"
-        + "末尾に戻す。resume_agent と違い起動しない——選択も前面化もせず、次にそのタブが選ばれたとき "
-        + "resume で起きる。復元先が背景 workspace のとき、話しかけるには先に focus_tab / activate_workspace "
-        + "で起こす（起こす前の prompt_agent は tab not mounted）。結果は id ごとに restored / "
+        + "末尾に戻す。resume_agent と違い起動しない——選択も前面化もせず、タブが mount されたとき resume で"
+        + "起きる（アクティブ workspace に戻した分は次にいずれかのタブを選んだとき他の未 mount タブと順次、"
+        + "背景 workspace の分はその workspace のアクティブ化で）。復元先が背景 workspace のとき、話しかける"
+        + "には先に focus_tab / activate_workspace で起こす（起こす前の prompt_agent は tab not mounted）。"
+        + "結果は id ごとに restored / "
         + "already-present / unknown（部分成功も成功・冪等）。多数を一度に戻すときはこのツール"
         + "（または orb session restore）を使う——Orbe の ⇧⌘T パレットは 1 件ずつしか戻さない。"
     ),

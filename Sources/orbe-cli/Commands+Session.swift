@@ -28,15 +28,17 @@ let sessionUsage = """
   10000); when older events are dropped, stderr says so.
   closed lists sessions whose last event is closed and that are not open in
   any tab now, newest first, in groups: closes with the same origin within 5 s
-  form one group (closed by you never groups). --json is {groups:[{at, origin,
-  sessions}]}; `at` is the group's oldest close and is what --at takes.
+  form one group (closed by you never groups). --since keeps the groups whose
+  `at` is at or after that time. --json is {groups:[{at, origin, sessions}]};
+  `at` is the group's oldest close and is what --at takes.
   restore brings sessions back as dormant tickets at the end of their
   workspace (matched by rootPath; created from the log when missing). They are
-  not selected or brought to the front; the agent resumes when the tab is
-  next selected. --at <iso> restores every session still gone from the group
-  with that `at` (the value `session closed` prints; whole seconds also
-  match) — this is the way to bring many back at once. Exit 1 if any id is
-  unknown to the log.
+  not selected or brought to the front; each resumes when its tab is mounted
+  (in the active workspace the next tab selection mounts the pending tabs one
+  by one; in a background workspace, when that workspace is activated).
+  --at <iso> restores every session still gone from the groups with that `at`
+  (the value `session closed` prints; whole seconds also match) — this is the
+  way to bring many back at once. Exit 1 if any id is unknown to the log.
   """
 
 // MARK: - サブコマンド
@@ -72,7 +74,7 @@ private func sessionLog(_ rest: [String]) -> Never {
   rejectLeftovers(args, positionals: 0)
 
   var params: [String: Any] = [:]
-  if let since { params["since"] = parseSinceOrDie(since) }
+  if let since { params["since"] = SessionEvent.iso8601(parseSinceOrDie(since)) }
   if let until { params["until"] = parseISOOrDie(until, flag: "--until") }
   if let limit { params["limit"] = limit }
   if let session { params["sessionId"] = session }
@@ -98,7 +100,10 @@ private func sessionClosed(_ rest: [String]) -> Never {
   }
   rejectLeftovers(args, positionals: 0)
 
-  let groups = closedGroups(since: since)
+  // 群は常に全 closed から切り、--since は群の `at` で後から絞る——切る範囲を変えると `at` が動き、
+  // `session closed` が出した値を `restore --at` が解けなくなる。
+  let cutoff = since.map { parseSinceOrDie($0) }
+  let groups = closedGroups().filter { group in cutoff.map { group.at >= $0 } ?? true }
   if wantJSON {
     printJSON(["groups": groups.map(groupJSON)])
   } else {
@@ -107,10 +112,11 @@ private func sessionClosed(_ rest: [String]) -> Never {
       print(
         "\(group.atISO)\t\(n) \(n == 1 ? "session" : "sessions") closed (\(group.origin.rawValue))")
       for event in group.sessions {
-        var line =
-          "\t\(event.agent.command)\t\(event.sessionId)\t\(event.workspace.name)\t\(event.cwd)"
-        if let reason = event.closeReason { line += "\t\(reason)" }
-        print(line)
+        print(
+          [
+            "", event.agent.command, event.sessionId, event.workspace.name, event.cwd,
+            event.closeReason.map(untabbed) ?? "-",
+          ].joined(separator: "\t"))
       }
     }
   }
@@ -132,17 +138,17 @@ private func sessionRestore(_ rest: [String]) -> Never {
   if let at {
     guard args.isEmpty else { usageDie("pass either <session-id>... or --at <iso>, not both") }
     let atISO = parseISOOrDie(at, flag: "--at")
-    guard let group = closedGroups(since: nil).first(where: { $0.atISO == atISO }) else {
-      transportDie("no closed group at \(at)")
-    }
-    ids = group.sessions.map(\.sessionId)
+    // 同じ `at` の群は複数ありうる（workspace 削除で同時に閉じた gesture は 1 件ずつ単独の群になる）。
+    let groups = closedGroups().filter { $0.atISO == atISO }
+    guard !groups.isEmpty else { transportDie("no closed group at \(at)") }
+    ids = groups.flatMap { $0.sessions.map(\.sessionId) }
   } else {
     guard !args.isEmpty else { usageDie("session restore requires <session-id>... or --at <iso>") }
     ids = args
   }
 
-  let result = callOrExit("restore_sessions", ["sessionIds": ids])
-  let rows = (result as? [String: Any])?["results"] as? [[String: Any]] ?? []
+  let result = restoreSessions(ids)
+  let rows = result["results"] as? [[String: Any]] ?? []
   if wantJSON {
     printJSON(result)
   } else {
@@ -159,14 +165,13 @@ private func sessionRestore(_ rest: [String]) -> Never {
 
 // MARK: - 導出（`closed` と `restore --at` が共有する）
 
-/// `session_log`（最大 10000 件）と `list_tabs` から「閉じたまま戻っていない」群を新しい順に組む。
+/// `session_log`（上限いっぱい）と `list_tabs` から「閉じたまま戻っていない」群を新しい順に組む。
 /// present は `list_tabs` の `agentSessionId`（live / 休眠とも）。
-private func closedGroups(since: String?) -> [SessionBurst] {
-  var params: [String: Any] = ["limit": ControlLimits.sessionLogMaxLimit]
-  if let since { params["since"] = parseSinceOrDie(since) }
-  let logResult = callOrExit("session_log", params) as? [String: Any]
+private func closedGroups() -> [SessionBurst] {
+  let logResult =
+    callOrExit("session_log", ["limit": SessionLogLimits.maxLimit]) as? [String: Any]
   if logResult?["truncated"] as? Bool == true {
-    stderrLine("truncated: older events omitted (narrow with --since)")
+    stderrLine("truncated: only the newest \(SessionLogLimits.maxLimit) events were read")
   }
   let events = decodeEvents(logResult)
   let tabs = (callOrExit("list_tabs", [:]) as? [String: Any])?["tabs"] as? [[String: Any]] ?? []
@@ -174,9 +179,20 @@ private func closedGroups(since: String?) -> [SessionBurst] {
   return SessionLogQuery.closedGroups(events: events, present: present).reversed()
 }
 
-/// control が知る上限の写し（`session_log` の limit 上限）。超えた分は control 側が `truncated` で告げる。
-private enum ControlLimits {
-  static let sessionLogMaxLimit = 10000
+/// `restore_sessions` を 1 回の上限ごとに分けて呼び、`results` を連結した 1 つの result にする
+/// （`seq` など他のキーは最後の応答のもの）。
+private func restoreSessions(_ ids: [String]) -> [String: Any] {
+  var merged: [String: Any] = [:]
+  var rows: [[String: Any]] = []
+  for start in stride(from: 0, to: ids.count, by: SessionLogLimits.restoreMaxIds) {
+    let chunk = Array(ids[start..<min(start + SessionLogLimits.restoreMaxIds, ids.count)])
+    guard let result = callOrExit("restore_sessions", ["sessionIds": chunk]) as? [String: Any]
+    else { transportDie("invalid restore_sessions result") }
+    rows += result["results"] as? [[String: Any]] ?? []
+    merged = result
+  }
+  merged["results"] = rows
+  return merged
 }
 
 /// `session_log` の result（wire 形の配列）を `SessionEvent` へ。形が違えば transport エラー。
@@ -200,7 +216,7 @@ private func groupJSON(_ group: SessionBurst) -> [String: Any] {
 }
 
 /// 人向けの 1 行: `ts\tevent\tcommand\tsessionId\tworkspace\tcwd\ttitle\torigin[/reason]`
-/// （opened の title と origin は `-`）。タイトル中のタブ文字は列を壊さないよう空白にする。
+/// （opened の title と origin は `-`）。タイトル・reason 中のタブ文字は列を壊さないよう空白にする。
 private func eventLine(_ event: SessionEvent) -> String {
   let name: String
   let title: String
@@ -212,11 +228,16 @@ private func eventLine(_ event: SessionEvent) -> String {
     ending = "-"
   case .closed(let origin, let reason, let closeTitle):
     name = "closed"
-    title = closeTitle?.replacingOccurrences(of: "\t", with: " ") ?? "-"
-    ending = origin.rawValue + (reason.map { "/" + $0 } ?? "")
+    title = closeTitle.map(untabbed) ?? "-"
+    ending = origin.rawValue + (reason.map { "/" + untabbed($0) } ?? "")
   }
   return [
     SessionEvent.iso8601(event.ts), name, event.agent.command, event.sessionId,
     event.workspace.name, event.cwd, title, ending,
   ].joined(separator: "\t")
+}
+
+/// タブ区切りの列に載せる任意文字列（hook 由来の title / reason）からタブ文字を除く。
+private func untabbed(_ s: String) -> String {
+  s.replacingOccurrences(of: "\t", with: " ")
 }

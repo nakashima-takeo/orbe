@@ -74,7 +74,7 @@ extension ControlWireTests {
     var id = 0
     for params in [
       ["since": 12], ["since": "yesterday"], ["until": ["x"]], ["limit": 0],
-      ["limit": ControlServer.sessionLogMaxLimit + 1], ["limit": "10"], ["limit": true],
+      ["limit": SessionLogLimits.maxLimit + 1], ["limit": "10"], ["limit": true],
       ["sessionId": 3],
     ] as [[String: Any]] {
       id += 1

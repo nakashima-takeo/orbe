@@ -1,3 +1,4 @@
+import OrbeSessionLog
 import XCTest
 
 @testable import Orbe
@@ -124,7 +125,8 @@ final class OrbeMcpProcessTests: OrbeTestCase {
         ((log["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])?.keys ?? [:].keys),
       ["since", "until", "limit", "sessionId"])
     XCTAssertTrue(
-      logDescription.contains("既定 \(ControlServer.sessionLogDefaultLimit)"), "limit の既定を写す")
+      logDescription.contains("既定 \(SessionLogLimits.defaultLimit)"), "limit の既定を写す")
+    XCTAssertTrue(logDescription.contains("上限 \(SessionLogLimits.maxLimit)"), "limit の上限を写す")
 
     let restore = try tool("restore_sessions")
     XCTAssertEqual(
@@ -134,6 +136,12 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     XCTAssertTrue(restoreDescription.contains("already-present"), "id ごとの status の語を書く")
     XCTAssertTrue(
       restoreDescription.contains("orb session restore"), "多数を一度に戻す入口がここだと書く（⇧⌘T は 1 件ずつ）")
+    let idsProp =
+      ((restore["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])?["sessionIds"]
+      as? [String: Any]
+    XCTAssertTrue(
+      (idsProp?["description"] as? String ?? "").contains("\(SessionLogLimits.restoreMaxIds) 件"),
+      "sessionIds の上限を写す")
   }
 
   /// `session_log` / `restore_sessions` の `tools/call` が control へ届く。ブリッジはツール名を method 名として

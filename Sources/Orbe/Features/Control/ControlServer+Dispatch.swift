@@ -1,4 +1,5 @@
 import Foundation
+import OrbeSessionLog
 
 /// 制御チャネルの「拡張」メソッド dispatch（タブ操作・config・workspace CRUD・セッション復元）と、
 /// エージェント起動の main 側・hook 報告の params 復号。中核の動詞（list/get/send/spawn 等）は
@@ -88,7 +89,9 @@ extension ControlServer {
     guard let ids = params["sessionIds"] as? [String] else {
       return .failure(ControlError(code: -32602, message: "missing sessionIds"))
     }
-    guard !ids.isEmpty, ids.count <= 100, ids.allSatisfy(AgentCatalog.isSafeSessionId) else {
+    guard !ids.isEmpty, ids.count <= SessionLogLimits.restoreMaxIds,
+      ids.allSatisfy(AgentCatalog.isSafeSessionId)
+    else {
       return .failure(ControlError(code: -32602, message: "invalid sessionIds"))
     }
     return target.controlRestoreSessions(sessionIds: ids)
