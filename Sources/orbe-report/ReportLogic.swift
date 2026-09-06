@@ -62,6 +62,13 @@ func agentMessage(state: String, stdin obj: [String: Any]?) -> (text: String, so
   }
 }
 
+/// セッション終了の理由。Claude Code の SessionEnd hook が stdin JSON の `reason`（`clear` / `logout` /
+/// `prompt_input_exit` / `other`）で運ぶ。他の hook・他の CLI は持たないので自然に nil。文言と同じ
+/// 無害化を通す——Orbe はこれをセッションログに書き、`orb session log` が端末へ流すため。
+func endReason(from obj: [String: Any]?) -> String? {
+  truncateMessage(obj?["reason"] as? String)
+}
+
 /// 文言の整形。C0 制御文字（改行・タブ以外）を落とし、trim して空なら nil、1000 文字で切る（表示は
 /// 3 行 clamp。制御ソケットの 1 行上限〔ControlLineFramer 1MiB〕に対する防御でもあり、十分下回る）。
 /// 制御文字を落とすのは、文言がエージェント（＝untrusted な入力を読む LLM）の生成文で、`orb agent

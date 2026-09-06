@@ -75,7 +75,7 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
   func testCloseLastWorkspaceIsBlocked() {
     let wc = WindowController()
     // 既定1つだけの状態で削除を試みる → 何も起きず default が残る。
-    wc.closeWorkspace(0)
+    wc.closeWorkspace(0, origin: .gesture)
     XCTAssertEqual(wc.window.title, "default", "workspace が最後の1つのときは削除されない")
   }
 
@@ -86,7 +86,7 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
     wc.createWorkspace(name: "drop")  // index 2, active
     wc.switchWorkspace(to: 1)  // keep をアクティブに（drop は非アクティブ）
     XCTAssertEqual(wc.window.title, "keep")
-    wc.closeWorkspace(2)  // 非アクティブ drop を削除
+    wc.closeWorkspace(2, origin: .gesture)  // 非アクティブ drop を削除
     XCTAssertEqual(wc.window.title, "keep", "非アクティブ削除後もアクティブは keep のまま")
   }
 
@@ -95,7 +95,7 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
     let wc = WindowController()
     wc.createWorkspace(name: "second")  // index 1, active
     XCTAssertEqual(wc.window.title, "second")
-    wc.closeWorkspace(1)  // アクティブ自身を削除
+    wc.closeWorkspace(1, origin: .gesture)  // アクティブ自身を削除
     XCTAssertEqual(wc.window.title, "default", "アクティブ削除後は残った workspace がアクティブ")
   }
 

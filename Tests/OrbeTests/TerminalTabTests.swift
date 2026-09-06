@@ -37,7 +37,8 @@ final class TerminalTabTests: OrbeTestCase {
   }
 
   /// ⌘W（`.closeTab`）は人のジェスチャとして届く。キーから close までの唯一の分岐点で、
-  /// ここが `.process` に化けると ⇧⌘T が主用途（⌘W で閉じた直後）で無反応になる。
+  /// ここが `.process` に化けると寿命ログの終わり方が「落ちた」になり、⇧⌘T のバッジと
+  /// `orb session closed` の群の切り方が人の操作を事故として扱う。
   func testCloseTabChromeActionReportsGestureOrigin() {
     let tab = TerminalTab(cwd: "/tmp")
     let exp = expectation(description: "onClose fires")
@@ -152,7 +153,7 @@ final class TerminalTabTests: OrbeTestCase {
     tab.surface.currentPwd = "/work"
     tab.explicitTitle = "api"
     let session = AgentSession(command: "claude", sessionId: "s-1")
-    tab.agentSlot = .live(session: session, report: nil)
+    setReportedState(tab, "idle", sessionId: "s-1")
     XCTAssertEqual(
       tab.tabState(), TabState(cwd: "/work", agent: session, explicitTitle: "api"))
   }

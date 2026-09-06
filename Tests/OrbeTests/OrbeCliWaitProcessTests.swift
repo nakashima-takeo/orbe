@@ -53,9 +53,9 @@ final class OrbeCliWaitProcessTests: OrbeTestCase {
     ticker.schedule(deadline: .now(), repeating: .milliseconds(100))
     ticker.setEventHandler {
       control.target.controlReportAgent(
-        tab: tab, agent: "codex", state: "idle", sessionId: nil, message: nil)
+        tab: tab, report: AgentHookReport(agent: "codex", state: "idle"))
       control.target.controlReportAgent(
-        tab: tab, agent: "codex", state: "working", sessionId: nil, message: nil)
+        tab: tab, report: AgentHookReport(agent: "codex", state: "working"))
     }
     ticker.resume()
     return ticker
@@ -136,9 +136,9 @@ final class OrbeCliWaitProcessTests: OrbeTestCase {
     let before = try XCTUnwrap(control.orbJSON(["tab", "list"])["seq"] as? Int, "seq の出所")
 
     control.target.controlReportAgent(
-      tab: tab, agent: "codex", state: "idle", sessionId: nil, message: nil)
+      tab: tab, report: AgentHookReport(agent: "codex", state: "idle"))
     control.target.controlReportAgent(
-      tab: tab, agent: "codex", state: "working", sessionId: nil, message: nil)
+      tab: tab, report: AgentHookReport(agent: "codex", state: "working"))
 
     let outcome = control.orb(
       [

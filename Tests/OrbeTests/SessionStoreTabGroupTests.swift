@@ -131,29 +131,21 @@ final class SessionStoreTabGroupTests: OrbeTestCase {
     XCTAssertTrue(activeTab(background) === new, "背景 workspace の active は挿したタブ")
   }
 
-  // MARK: - ⇧⌘T（insertTabIntoActive(near:)）
+  // MARK: - 復元（insertRestoredTab）
 
-  /// 同キーの連があれば、閉じた位置に関わらずその右端へ戻る。
-  func testReopenJoinsExistingSegmentRegardlessOfClosedIndex() {
-    let store = makeStore(["a", "a", "b", "c"])
+  /// 復元した休眠チケットは同キーの連の右端へ入り、選択は挿す前と同じタブを指し続ける。
+  /// 背景 workspace でも active を挿したタブへ動かさない（復元は見せる先を変えない）。
+  func testRestoredTabJoinsItsSegmentWithoutMovingSelection() {
+    let store = makeStore(["a", "b", "b"], active: 1)
+    let before = activeTab(store.current)
 
-    XCTAssertEqual(store.insertTabIntoActive(tab("a"), near: 4), 2, "閉じた位置（末尾）ではなく a の右端")
-    XCTAssertEqual(keys(store.current), ["a", "a", "a", "b", "c"])
-  }
+    XCTAssertEqual(store.insertRestoredTab(tab("a"), intoWorkspaceAt: 0), 1, "a の連の右端")
+    XCTAssertEqual(keys(store.current), ["a", "a", "b", "b"])
+    XCTAssertTrue(activeTab(store.current) === before, "選択は同じタブのまま（index は 2 へ）")
 
-  /// 同キーが無く、元位置が連を割るなら、その連の右端へ丸めて挿す。
-  func testReopenWithoutPeersRoundsSplittingIndexToSegmentEnd() {
-    let store = makeStore(["a", "a", "a", "b"])
-
-    XCTAssertEqual(store.insertTabIntoActive(tab("z"), near: 1), 3, "a の連（0..<3）を割らず右端へ")
-    XCTAssertEqual(keys(store.current), ["a", "a", "a", "z", "b"])
-  }
-
-  /// 同キーが無く、元位置がセグメント境界なら、その位置にそのまま挿さる。
-  func testReopenWithoutPeersKeepsBoundaryIndex() {
-    let store = makeStore(["a", "a", "b"])
-
-    XCTAssertEqual(store.insertTabIntoActive(tab("z"), near: 2), 2, "a と b の境界はそのまま")
-    XCTAssertEqual(keys(store.current), ["a", "a", "z", "b"])
+    let background = workspace(["a"], active: 0)
+    let two = SessionStore(workspaces: [workspace(["x"]), background], activeWorkspace: 0)
+    XCTAssertEqual(two.insertRestoredTab(tab("z"), intoWorkspaceAt: 1), 1, "同キーが無ければ末尾")
+    XCTAssertEqual(background.active, 0, "背景 workspace の active は動かない")
   }
 }

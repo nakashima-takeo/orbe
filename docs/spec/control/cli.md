@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（orb）
-description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェントを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/wait サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-09-06
+description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/session/wait サブコマンド・socket 文脈解決・終了コード契約
+updated: 2026-09-07
 ---
 
 # Orbe CLI（`orb`）
@@ -50,6 +50,14 @@ updated: 2026-09-06
 
 `prompt` は「入力欄が空いている状態にだけ届く」動詞で、対象が `working` / `waiting` なら何も送らずエラー（exit 1）——`waiting` へのテキスト送信は承認の確定になるため。waiting への応答は `tab key` で行う。既定 timeout は 1 時間。人間向け stdout は**答えの文言だけ**（`done` の最終応答・`waiting` の質問文。無ければ空）で、`answer=$(orb agent prompt …)` の形で受けられる。止まった状態は終了コードで伝える（下記）。
 
+### session（閉じたエージェントセッションの記録と復元）
+
+[寿命ログ](../platform/session-log.md)を読み、閉じたまま戻っていないセッションを戻す。全 workspace 横断。
+
+- `orb session log [--since <iso|30m|2h|3d>] [--until <iso>] [--limit <n>] [--session <id>] [--json]` … `session_log` をそのまま。人間向けは 1 行 1 イベント（`ts event command sessionId workspace cwd title origin[/reason]` のタブ区切り。`title` は closed だけが持ち、opened は `-`。各列の制御文字——hook 由来の `title`・`reason` や OSC 7 由来の `cwd` に混じりうるタブ・改行・ESC 等——は空白に置き換える）。`--since` の相対指定（`<n>m|h|d` のみ）は CLI が ISO へ直してから送る（`--until` は ISO のみ）。切れた分（`truncated`）は stderr で告げる。
+- `orb session closed [--since …] [--json]` … 閉じたまま戻っていないセッションを、同じ事故で閉じた群（`gesture` 以外の同じ origin が 5 秒以内に続くもの）にまとめて新しい順に出す。`session_log` と `list_tabs` を突き合わせた派生ビューで、CLI が組む。群の代表時刻は群の最古の `closed` の `ts` で、群の一部を復元しても動かない。`--since` は群をその代表時刻で絞る——群を切る範囲は変えない（範囲が変わると代表時刻が動き、`restore --at` で解けなくなる）。人間向けは群ごとに見出し行（`at`、件数、origin）を出し、続けて 1 行 1 セッション（先頭列を空けた `command sessionId workspace cwd reason` のタブ区切り。`reason` が無ければ `-`。制御文字の扱いは `session log` と同じ）。`--json` は `{groups:[{at, origin, sessions:[event…]}]}`。
+- `orb session restore <session-id>... [--json]` / `orb session restore --at <iso> [--json]` … `restore_sessions`。`--at` は `session closed` が出した `at` をそのまま渡し、その `at` を持つ群すべての全員を戻す（受理した ISO はミリ秒付きに正規化してから完全一致で照合する。ミリ秒を省いた値は `.000` として扱う）。id の数が `restore_sessions` の 1 回の上限を超えれば分けて送る。id ごとの status を出し、`unknown` が 1 つでもあれば exit 1。`--workspace` は無い——戻す先はログが決める。
+
 ### 待機
 
 - `orb wait [<tab>] [--kind <kind>]... [--value <value>] [--after <seq>] [--timeout-ms <ms>] [--json]` … 状態変化イベントを待つ低水準の口。`--kind` は繰り返せ、省略は全 kind。`--value` は kind 固有値の一致（`--kind agent_state --value done` 等）。`--after` は「この seq より後」（0 以上）で、既に済んだ一致があれば待たずに返る。既定 timeout は 30 秒。
@@ -62,7 +70,7 @@ kind の語彙と値域の検証は control が持つ（未知 kind は CLI を�
 
 ### 共通
 
-各サブコマンドは対応する [制御 API](api.md) メソッドへそのまま乗る。`--json` は全サブコマンドで効き、control の result をそのまま出す——成功応答に載る `seq`（[api](api.md)）もそのまま出る（例外は 2 つ——`config get` は `config_list` から抽出した 1 行で `seq` を持たない、`tab list` は `--workspace` で絞った後の `{"tabs":[…], "seq": N}`）。write が採番した id（`ws new` の workspaceId・`tab new` の tabId）は人間向け出力にも載るが、書式が割れずに読めるのは `--json` だけ。`--help`（`-h` も同じ）は全階層で効き、固有 usage を持つのは `config set` だけで、他はドメインの usage を出す。`<id|current>` の `current` はアクティブ WS。
+各サブコマンドは対応する [制御 API](api.md) メソッドへそのまま乗る。`--json` は全サブコマンドで効き、control の result をそのまま出す——成功応答に載る `seq`（[api](api.md)）もそのまま出る（例外は 3 つ——`config get` は `config_list` から抽出した 1 行で `seq` を持たない、`session closed` は `session_log` と `list_tabs` から CLI が組む派生ビューで `seq` を持たない、`tab list` は `--workspace` で絞った後の `{"tabs":[…], "seq": N}`）。write が採番した id（`ws new` の workspaceId・`tab new` の tabId）は人間向け出力にも載るが、書式が割れずに読めるのは `--json` だけ。`--help`（`-h` も同じ）は全階層で効き、固有 usage を持つのは `config set` だけで、他はドメインの usage を出す。`<id|current>` の `current` はアクティブ WS。
 
 値必須フラグ（`--workspace <id>` / `--dir <path>` / `--cmd "…"` / `--text <text>` / `--key <key>` / `--kind <kind>` / `--value <value>` / `--after <seq>` / `--timeout-ms <ms>`）の値は `-` 始まりも空（空白だけの形も含む）も取らない（usage エラー、exit 2）。`orb tab new --dir "$DIR" --cmd "$CMD"` の `$DIR` が空になる形が両方ここで落ちる——引用符が無ければトークンごと消えて `--cmd` が cwd に化け、引用符があれば空文字が cwd として通ってしまうため。パスは絶対パスで渡す（`-` 始まりのディレクトリは `./-foo` の形）——相対パスは CLI も control も解決せずそのまま格納するので、利用者のシェルの cwd 基準にはならない。`~` 始まりを展開するのは workspace のパス（`ws new --dir` / `ws dir`）だけで、`tab new --dir` は展開せずそのまま cwd にする。
 
@@ -74,7 +82,7 @@ control.sock の解決順は `ORBE_STATE_DIR`（非空の明示指定・最優�
 
 ## 終了コード・エラー
 
-- 成功=0、usage エラー（未知 key・引数不足・非数値 id・対象欠如等でクライアントが弾く）=2、RPC/接続エラー=1、`agent prompt` がエージェントの入力待ち（`waiting`）で止まった=3、同じくセッション終了（`clear`）で止まった=4、`wait` / `agent prompt` / `agent spawn` / `agent resume` の時間切れ=124。
+- 成功=0、usage エラー（未知 key・引数不足・非数値 id・対象欠如等でクライアントが弾く）=2、RPC/接続エラー=1、`session restore` で 1 つでも `unknown` があった=1（打ち間違いを黙らせない）、`agent prompt` がエージェントの入力待ち（`waiting`）で止まった=3、同じくセッション終了（`clear`）で止まった=4、`wait` / `agent prompt` / `agent spawn` / `agent resume` の時間切れ=124。
 - 時間切れに専用コードを与えるのは、待っていたイベントが来ていないのに `orb wait … && 次の処理` が進むのを止めるため——この CLI は成功していないのに 0 を返さない。124 は `timeout(1)` の慣習で、Orbe の文書を読まなくても意味が通る。時間切れは `--json` なら結果を stdout に出すが、それ以外では stdout に何も書かない（`text=$(orb wait …)` が偽のイベントを掴まないため）。`agent prompt` の 3 / 4 も同じ理由で非 0——答えは返っていないので `&& 次の処理` を進めない。3 と 4 を分けるのは対処が違うため（3 は答えを送る、4 は起こし直す）。
 - Orbe 未起動や Orbe 外（socket 不達）は、クラッシュせず構造化メッセージ＋非 0 終了（`--json` 時は `{"error":{code,message}}`）。
 - control の error は code/message をそのまま出す（値域外・不正 enum・未知/最後の workspace・未知 tab 等は control 側が弾く）。未知 key・型不一致はクライアントが `config_list` を SSOT に事前に弾く。

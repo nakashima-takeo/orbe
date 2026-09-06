@@ -1,8 +1,10 @@
+import Foundation
+import OrbeSessionLog
 import XCTest
 
 @testable import Orbe
 
-/// 実 `orb`（`orbe-cli`）を子プロセスで起こし、全 22 サブコマンドのうち 19 が実 `WindowController`
+/// 実 `orb`（`orbe-cli`）を子プロセスで起こし、全 25 サブコマンドのうち 22 が実 `WindowController`
 /// を 1 本のライフサイクルとして動かせることを固定する。残る `agent spawn` / `agent resume` は
 /// 検出の仕込み（偽実行体と `ShellPATH` の差し替え）が要るので `OrbeCliAgentProcessTests` が、
 /// `agent prompt` は `OrbeCliAgentPromptProcessTests` が持つ。
@@ -101,7 +103,7 @@ final class OrbeCliProcessTests: OrbeTestCase {
     return scratchId
   }
 
-  /// 19 サブコマンドを 1 つの実 `WindowController` に対して順に叩く。
+  /// 22 サブコマンドを 1 つの実 `WindowController` に対して順に叩く。
   /// `ws rm` を最後に置くのは「最後の 1 つは削除不可（-32000）」を踏まないため。
   func testEverySubcommandDrivesOneLifecycle() throws {
     let control = try startControlProcess(workspaces: ["main"])
@@ -149,6 +151,12 @@ final class OrbeCliProcessTests: OrbeTestCase {
 
     step(control, ["tab", "focus", "\(openedTab)"], expect: "focused tab \(openedTab)")
     step(control, ["tab", "close", "\(secondTab)"], expect: "closed tab \(secondTab)")
+    // 閉じる前に同一性（hook の報告）を載せる——`tab close` が寿命ログに closed(controlAPI) を残し、
+    // 続く session の 3 本がそれを読む。報告は main で直接適用する（report_agent は orb に無い）。
+    let openedTerminal = try XCTUnwrap(control.target.controlResolveTab(openedTab))
+    control.target.controlReportAgent(
+      tab: openedTerminal,
+      report: AgentHookReport(agent: "claude", state: "idle", sessionId: "l4-sess-1"))
     // tab close は位置引数を省くと ORBE_TAB を宛先にする。
     step(
       control, ["tab", "close"], expect: "closed tab \(openedTab)",
@@ -159,11 +167,137 @@ final class OrbeCliProcessTests: OrbeTestCase {
       tabsAfter.contains { $0["tabId"] as? Int == openedTab || $0["tabId"] as? Int == secondTab },
       "tab close: 開いたタブが消える")
 
-    // --- ws rm（19 本目）
+    // --- session（3）: log → closed → restore
+    try driveSessionSubcommands(control, sessionId: "l4-sess-1")
+
+    // --- ws rm（22 本目）
     step(control, ["ws", "rm", "\(scratchId)"], expect: "removed workspace \(scratchId)")
     XCTAssertFalse(
       try workspaceRows(control).contains { $0["id"] as? Int == scratchId },
       "ws rm: 削除した WS が一覧から消える")
+  }
+
+  /// session の 3 本。閉じた同一性がログに残っていることを前提に、log → closed → restore。
+  private func driveSessionSubcommands(_ control: ControlProcess, sessionId: String) throws {
+    try driveSessionLog(control, sessionId: sessionId)
+    try driveSessionClosedAndRestore(control, sessionId: sessionId)
+  }
+
+  private func sessionIds(_ result: [String: Any]) -> [String] {
+    (result["events"] as? [[String: Any]] ?? []).compactMap {
+      ($0["agent"] as? [String: Any])?["sessionId"] as? String
+    }
+  }
+
+  /// `session log`: 2 行・`--limit` はファイル順の末尾を残して stderr で告げる・人向けの行の title 列
+  /// （closed だけ）・相対 `--since` の 3 単位・`--until`・`--session`。境界は 90 分前の opened を 1 行足して
+  /// 見る（サーバは in-process と同じファイルを読む）。
+  private func driveSessionLog(_ control: ControlProcess, sessionId: String) throws {
+    let log = try XCTUnwrap(control.orbJSON(["session", "log"])["events"] as? [[String: Any]])
+    XCTAssertEqual(
+      log.map { $0["event"] as? String }, ["opened", "closed"], "session log: opened → closed の 2 行"
+    )
+    XCTAssertEqual(
+      log.last?["origin"] as? String, "controlAPI", "session log: tab close は controlAPI")
+    let limited = control.orb(["session", "log", "--limit", "1", "--json"])
+    XCTAssertEqual(limited.status, 0, limited.stderr)
+    XCTAssertTrue(
+      limited.stderr.contains("truncated"),
+      "session log --limit: 落とした側を stderr で告げる: \(limited.stderr)")
+    let limitedJSON = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(limited.stdout.utf8)) as? [String: Any])
+    XCTAssertEqual(
+      (limitedJSON["events"] as? [[String: Any]])?.map { $0["event"] as? String }, ["closed"],
+      "session log --limit 1: 新しい側の 1 件")
+    XCTAssertEqual(limitedJSON["truncated"] as? Bool, true)
+
+    let oldId = "l4-old-1"
+    try SessionLogWriter.append(
+      SessionEvent(
+        ts: Date().addingTimeInterval(-90 * 60), kind: .opened,
+        workspace: .init(name: "main", rootPath: "/tmp"), cwd: "/tmp",
+        agent: .init(command: "claude", sessionId: oldId)),
+      to: XCTUnwrap(AgentSessionLog.fileURL))
+    let recent = step(control, ["session", "log", "--since", "30m"], expect: sessionId)
+    let columns = recent.split(separator: "\n").map {
+      $0.split(separator: "\t", omittingEmptySubsequences: false)
+    }
+    XCTAssertEqual(columns.map(\.count), [8, 8], "session log: 人向けの行は 8 列: \(recent)")
+    XCTAssertEqual(
+      columns.map { $0[6] == "-" }, [true, false], "session log: title 列は closed にだけ載る")
+    XCTAssertEqual(columns.last?[7], "controlAPI", "session log: 人向けの行に origin が載る: \(recent)")
+    XCTAssertFalse(recent.contains(oldId), "session log --since 30m: 90 分前の行は落ちる: \(recent)")
+    for since in ["2h", "1d"] {
+      step(control, ["session", "log", "--since", since], expect: oldId)
+    }
+    let hourAgo = SessionEvent.iso8601(Date().addingTimeInterval(-3600))
+    XCTAssertEqual(
+      sessionIds(control.orbJSON(["session", "log", "--until", hourAgo])), [oldId],
+      "session log --until: 1 時間前までは 90 分前の 1 行だけ")
+    XCTAssertEqual(
+      sessionIds(control.orbJSON(["session", "log", "--session", "nope"])), [],
+      "session log --session: 一致しない id は空")
+  }
+
+  /// `session closed` は新しい順の群（人向けの見出し・メンバー行・`--json` の `at`）、`session restore` は
+  /// 位置引数と `--at`（ミリ秒を落とした ISO でも群に当たる）の両方で `restored`、再実行は already-present、
+  /// 未知 id は exit 1。2 群目は gesture で閉じた同一性を in-process で作る。
+  private func driveSessionClosedAndRestore(_ control: ControlProcess, sessionId: String) throws {
+    let second = "l4-sess-2"
+    let opened = try XCTUnwrap(control.target.openTab(workspaceIndex: 0, cwd: "/tmp"))
+    let tab = try XCTUnwrap(control.target.controlResolveTab(opened.tabId))
+    tab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: second))
+    control.target.closeTab(tab, origin: .gesture)
+
+    let human = step(control, ["session", "closed"], expect: "1 session closed (gesture)")
+    XCTAssertTrue(
+      human.contains("1 session closed (controlAPI)"), "session closed: 群ごとの見出し: \(human)")
+    XCTAssertTrue(
+      human.contains("\tclaude\t\(second)\tmain\t"), "session closed: メンバー行: \(human)")
+    let groups = try XCTUnwrap(
+      control.orbJSON(["session", "closed"])["groups"] as? [[String: Any]],
+      "session closed: groups を返さない")
+    XCTAssertEqual(
+      groups.map { $0["origin"] as? String }, ["gesture", "controlAPI"], "session closed: 新しい順")
+    let at = try XCTUnwrap(groups.last?["at"] as? String, "session closed: 群の at")
+    let sessions = try XCTUnwrap(groups.last?["sessions"] as? [[String: Any]])
+    XCTAssertEqual((sessions.first?["agent"] as? [String: Any])?["sessionId"] as? String, sessionId)
+
+    step(control, ["session", "restore", second], expect: "\(second)\trestored")
+    step(control, ["session", "restore", "--at", at], expect: "\(sessionId)\trestored")
+
+    // 秒ちょうどに閉じた群は、ミリ秒を書かない ISO（人が打つ形）でも当たる。Orbe 本体の記録として
+    // 積む（`restore_sessions` はメモリを読む）。
+    let wholeId = "l4-old-2"
+    let wholeSecond = Date(
+      timeIntervalSince1970: (Date().timeIntervalSince1970 - 80 * 60).rounded(.down))
+    for kind in [SessionEvent.Kind.opened, .closed(origin: .process, reason: nil, title: nil)] {
+      control.target.sessionLog.record(
+        SessionEvent(
+          ts: wholeSecond, kind: kind, workspace: .init(name: "main", rootPath: "/tmp"),
+          cwd: "/tmp", agent: .init(command: "claude", sessionId: wholeId)))
+    }
+    let wholeISO = SessionEvent.iso8601(wholeSecond)
+    XCTAssertTrue(wholeISO.hasSuffix(".000Z"), "前提: 秒ちょうどの at")
+    step(
+      control, ["session", "restore", "--at", String(wholeISO.dropLast(5)) + "Z"],
+      expect: "\(wholeId)\trestored")
+    let restoredTabs = try XCTUnwrap(control.orbJSON(["tab", "list"])["tabs"] as? [[String: Any]])
+    for id in [sessionId, second, wholeId] {
+      XCTAssertTrue(
+        restoredTabs.contains { $0["agentSessionId"] as? String == id },
+        "session restore: 休眠チケット \(id) が tab list に agentSessionId 付きで現れる")
+    }
+    let again = control.orbJSON(["session", "restore", sessionId, second])
+    XCTAssertEqual(
+      (again["results"] as? [[String: Any]])?.map { $0["status"] as? String },
+      ["already-present", "already-present"], "session restore --json: 再実行は already-present")
+    XCTAssertTrue(
+      try XCTUnwrap(control.orbJSON(["session", "closed"])["groups"] as? [[String: Any]]).isEmpty,
+      "session closed: 戻ったものは消える")
+    let unknown = control.orb(["session", "restore", "nope-1"])
+    XCTAssertEqual(unknown.status, 1, "session restore: 未知 id は exit 1: \(unknown.stderr)")
+    XCTAssertTrue(unknown.stdout.contains("nope-1\tunknown"), unknown.stdout)
   }
 
   /// タブのシェルで bare `orb` が**同梱** CLI へ解決し、走った先がこのインスタンスの自タブになる。

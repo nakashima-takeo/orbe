@@ -35,6 +35,28 @@ extension AgentSlot {
   }
 }
 
+/// エージェント hook 1 発の報告（`report_agent` の params と同じ形）。適用は `TerminalTab.applyReport`。
+struct AgentHookReport: Equatable {
+  var agent: String
+  var state: String
+  var sessionId: String?
+  var message: AgentMessage?
+  /// hook が運ぶ終了理由（Claude Code の SessionEnd: `clear` / `logout` / `prompt_input_exit` / `other`）。
+  /// 他の hook・他の CLI は持たない。
+  var reason: String?
+
+  init(
+    agent: String, state: String, sessionId: String? = nil, message: AgentMessage? = nil,
+    reason: String? = nil
+  ) {
+    self.agent = agent
+    self.state = state
+    self.sessionId = sessionId
+    self.message = message
+    self.reason = reason
+  }
+}
+
 /// 稼働中プロセスの最新の自己報告。live と完全に同じ寿命（dormant / none には存在しえない）。
 struct AgentReport: Equatable {
   /// 報告された状態（idle / working / waiting / done）。

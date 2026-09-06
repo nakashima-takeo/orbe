@@ -64,9 +64,10 @@ extension WindowController {
     scheduleSave()
   }
 
-  /// workspace を閉じる（WorkspacePalette の明示削除）。最後の 1 つは残す。
-  func closeWorkspace(_ index: Int) {
-    switch store.closeWorkspace(index) {
+  /// workspace を閉じる。最後の 1 つは残す。`origin` は呼び手が名乗る（WorkspacePalette の削除は
+  /// `.gesture`・`remove_workspace` は `.controlAPI`）——配下のタブが同一性の終わり方として写す。
+  func closeWorkspace(_ index: Int, origin: TabCloseOrigin) {
+    switch store.closeWorkspace(index, origin: origin) {
     case .invalid:
       return
     case .activeChanged:

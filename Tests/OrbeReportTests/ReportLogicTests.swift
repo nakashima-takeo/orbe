@@ -74,6 +74,28 @@ final class ReportLogicTests: XCTestCase {
     XCTAssertEqual(effectiveState("working", stdin: obj), "working")
   }
 
+  // MARK: endReason(from:)
+
+  /// SessionEnd の `reason` をそのまま運ぶ。
+  func testEndReasonIsExtractedFromReasonKey() {
+    XCTAssertEqual(endReason(from: ["reason": "logout"]), "logout")
+    XCTAssertEqual(endReason(from: ["reason": "prompt_input_exit"]), "prompt_input_exit")
+  }
+
+  /// 欠落・空・非文字列・stdin なしは nil（他の hook・他の CLI の経路）。
+  func testEndReasonIsNilWhenAbsentOrEmpty() {
+    XCTAssertNil(endReason(from: ["session_id": "s1"]))
+    XCTAssertNil(endReason(from: ["reason": ""]))
+    XCTAssertNil(endReason(from: ["reason": "   "]))
+    XCTAssertNil(endReason(from: ["reason": 1]))
+    XCTAssertNil(endReason(from: nil))
+  }
+
+  /// 文言と同じ無害化（制御文字の除去・trim）を通す。
+  func testEndReasonIsSanitizedLikeMessages() {
+    XCTAssertEqual(endReason(from: ["reason": " \u{07}clear\u{00} \n"]), "clear")
+  }
+
   // MARK: sessionId(from:)
 
   /// claude/codex の "session_id" を返す。

@@ -72,14 +72,18 @@ final class AgentCatalog {
     }
   }
 
+  /// resume コマンドへ埋めてよい sessionId の文字集合（非空・letter / number / `-` / `_` / `.`）。
+  /// `resumeCommand` と `restore_sessions` の検証が同じ 1 関数を読む。
+  static func isSafeSessionId(_ sessionId: String) -> Bool {
+    !sessionId.isEmpty
+      && sessionId.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }
+  }
+
   /// 各 CLI の resume コマンド文字列（`/bin/sh -c` 経由で実行される前提）。
   /// 未対応 agent・安全な文字集合（UUID 等）外の sessionId は nil（呼び出し側が素のシェルへ fallback）。
   /// command は表のリテラルでのみ一致し、sessionId は文字集合検証するため shell インジェクションを防ぐ。
   static func resumeCommand(forAgent command: String, sessionId: String) -> String? {
-    guard !sessionId.isEmpty,
-      sessionId.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }),
-      let profile = profile(command)
-    else { return nil }
+    guard isSafeSessionId(sessionId), let profile = profile(command) else { return nil }
     return "\(profile.command) \(profile.resumeFlag) \(sessionId)"
   }
 

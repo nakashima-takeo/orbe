@@ -8,7 +8,7 @@ enum ChromeAction {
   case resetFontSize
   case closeTab
   case newTab
-  case reopenClosedAgentTab  // 最後に閉じたエージェントタブを開き直す
+  case showClosedAgentsPalette  // 閉じたエージェント パレットを開く
   case nextTab
   case prevTab
   case find  // スクロールバック検索バーを開く
@@ -28,7 +28,7 @@ enum ChromeAction {
 /// surface から届く、ウィンドウレベルの chrome 操作（タブ・workspace）。
 enum WindowCommand {
   case newTab
-  case reopenClosedAgentTab
+  case showClosedAgentsPalette
   case nextTab
   case prevTab
   case switchWorkspace
@@ -49,7 +49,7 @@ extension ChromeAction {
   var windowCommand: WindowCommand? {
     switch self {
     case .newTab: return .newTab
-    case .reopenClosedAgentTab: return .reopenClosedAgentTab
+    case .showClosedAgentsPalette: return .showClosedAgentsPalette
     case .nextTab: return .nextTab
     case .prevTab: return .prevTab
     case .switchWorkspace: return .switchWorkspace
@@ -74,7 +74,7 @@ extension WindowCommand {
   /// 網羅 switch（default 無し）＝新ケース追加時に分類漏れをコンパイルエラーで検出する。
   var availableWithoutTabs: Bool {
     switch self {
-    case .newTab, .reopenClosedAgentTab, .newWorkspace, .switchWorkspace,
+    case .newTab, .showClosedAgentsPalette, .newWorkspace, .switchWorkspace,
       .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings, .toggleHelp:
       return true
     case .nextTab, .prevTab, .openEditor, .renameTab:
@@ -114,7 +114,7 @@ enum Keybindings {
     case "n": return .newWorkspace  // Cmd+N
     case "w": return .closeTab  // Cmd+W
     case "t": return .newTab  // Cmd+T
-    case "T": return .reopenClosedAgentTab  // Cmd+Shift+T
+    case "T": return .showClosedAgentsPalette  // Cmd+Shift+T
     case "}": return .nextTab  // Cmd+Shift+]
     case "{": return .prevTab  // Cmd+Shift+[
     case "S": return .switchWorkspace  // Cmd+Shift+S

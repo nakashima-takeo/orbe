@@ -23,7 +23,7 @@ final class AttentionSnapshotTests: OrbeTestCase {
   ) {
     let tab = ws.tabs[tab]
     guard let state else {
-      tab.agentSlot = .none
+      clearAgentState(tab)
       return
     }
     setReportedState(tab, state, at: at ?? Date(), message: message.map { AgentMessage(text: $0) })

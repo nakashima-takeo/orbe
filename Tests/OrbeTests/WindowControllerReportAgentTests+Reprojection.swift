@@ -26,13 +26,14 @@ extension WindowControllerReportAgentTests {
   func testTransientWithdrawnWhenTabReturnsToWorking() throws {
     let (wc, tab) = try makeControllerAndTab()
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
     flushDelivered(wc)
     XCTAssertNotNil(wc.attentionStore.transient, "waiting のままなら取り下げない")
 
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "working", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "working"))
     flushDelivered(wc)
     XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
   }
@@ -41,12 +42,14 @@ extension WindowControllerReportAgentTests {
     let (wc, tab) = try makeControllerAndTab()
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
     flushDelivered(wc)
     let played = sound.played.count
 
-    wc.controlReportAgent(tab: tab, agent: "claude", state: "idle", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "idle"))
     flushDelivered(wc)
 
     XCTAssertEqual(sound.played.count, played, "idle への変化で新しい音は鳴らさない")
@@ -60,12 +63,14 @@ extension WindowControllerReportAgentTests {
     let (wc, tab) = try makeControllerAndTab()
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
     flushDelivered(wc)
     let played = sound.played.count
 
-    wc.controlReportAgent(tab: tab, agent: "claude", state: "error", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "error"))
     flushDelivered(wc)
 
     XCTAssertEqual(sound.played.count, played)
@@ -79,12 +84,14 @@ extension WindowControllerReportAgentTests {
     let (wc, tab) = try makeControllerAndTab()
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
     flushDelivered(wc)
     let played = sound.played.count
 
-    wc.controlReportAgent(tab: tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "clear"))
     flushDelivered(wc)
 
     XCTAssertEqual(sound.played.count, played)
@@ -101,7 +108,9 @@ extension WindowControllerReportAgentTests {
   func testTransientWithdrawnWhenDoneConsumedToIdle() throws {
     let (wc, tab) = try makeControllerAndTab()
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d")))
     flushDelivered(wc)
     XCTAssertNotNil(wc.attentionStore.transient)
 
@@ -115,8 +124,10 @@ extension WindowControllerReportAgentTests {
   func testTransientWithdrawnWhenTabClosed() throws {
     let (wc, tabs) = try makeControllerAndTwoTabs()
     wc.controlReportAgent(
-      tab: tabs[1], agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: tabs[1],
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
     flushDelivered(wc)
     XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id)
 
@@ -129,18 +140,18 @@ extension WindowControllerReportAgentTests {
   func testTransientSurvivesUnrelatedTabChange() throws {
     let (wc, tabs) = try makeControllerAndTwoTabs()
     wc.controlReportAgent(
-      tab: tabs[1], agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: tabs[1],
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
     flushDelivered(wc)
     XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id)
 
-    wc.controlReportAgent(
-      tab: tabs[0], agent: "claude", state: "working", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tabs[0], report: AgentHookReport(agent: "claude", state: "working"))
     flushDelivered(wc)
     XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id)
 
-    wc.controlReportAgent(
-      tab: tabs[0], agent: "claude", state: "clear", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tabs[0], report: AgentHookReport(agent: "claude", state: "clear"))
     flushDelivered(wc)
     XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id)
   }
@@ -149,13 +160,17 @@ extension WindowControllerReportAgentTests {
   func testTransientReplacementFromWaitingToDoneSurvivesFlush() throws {
     let (wc, tab) = try makeControllerAndTab()
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
     flushDelivered(wc)
     XCTAssertEqual(wc.attentionStore.transient?.row.state, "waiting")
 
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d")))
     XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
     flushDelivered(wc)
     XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
@@ -172,8 +187,10 @@ extension WindowControllerReportAgentTests {
     XCTAssertFalse(wc.window.isKeyWindow, "前提: 背面（非 key）なので見ているタブの抑制は効かない")
 
     wc.controlReportAgent(
-      tab: dormantTab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: dormantTab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
     XCTAssertNil(wc.attentionStore.transient, "休眠 workspace のタブでは②を立てない")
 
     flushDelivered(wc)
@@ -199,8 +216,10 @@ extension WindowControllerReportAgentTests {
     XCTAssertTrue(wc.current === wc.workspaces[1], "前提: アクティブは発信元でない方")
 
     wc.controlReportAgent(
-      tab: tabs[0], agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: tabs[0],
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
 
     let transient = try XCTUnwrap(wc.attentionStore.transient)
     XCTAssertEqual(
@@ -212,15 +231,17 @@ extension WindowControllerReportAgentTests {
   func testTransientDwellFallsBackToGlobalThenDefault() throws {
     let (wc, tab) = try makeControllerAndTab()
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
     var transient = try XCTUnwrap(wc.attentionStore.transient)
     XCTAssertEqual(
       transient.expiresAt.timeIntervalSince(transient.arrivedAt), 40, accuracy: 0.001,
       "未設定の既定は 40 秒")
 
     wc.settingsStore.applyGlobal(SettingChange(SettingKeys.menuBarNotificationDuration, 15))
-    wc.controlReportAgent(tab: tab, agent: "claude", state: "done", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "done"))
     transient = try XCTUnwrap(wc.attentionStore.transient)
     XCTAssertEqual(
       transient.expiresAt.timeIntervalSince(transient.arrivedAt), 15, accuracy: 0.001,

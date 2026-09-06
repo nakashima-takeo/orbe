@@ -69,8 +69,10 @@ extension WindowControllerReportAgentTests {
     let f = try makeControllerAndDormantTicket(command: "claude", sessionId: "resume-1")
 
     f.wc.controlReportAgent(
-      tab: f.tab, agent: "codex", state: "waiting", sessionId: "forged",
-      message: AgentMessage(text: "synthetic"))
+      tab: f.tab,
+      report: AgentHookReport(
+        agent: "codex", state: "waiting", sessionId: "forged",
+        message: AgentMessage(text: "synthetic")))
 
     XCTAssertEqual(f.tab.agentSlot, .dormant(f.ticket), "報告は破棄され slot は完全に不変")
     let row = try XCTUnwrap(listTabRow(f.wc, tabId: f.tab.id))
@@ -83,7 +85,7 @@ extension WindowControllerReportAgentTests {
   func testForgedReportDoesNotStopDormantTicketFromResuming() throws {
     let f = try makeControllerAndDormantTicket(command: "claude", sessionId: "resume-1")
     f.wc.controlReportAgent(
-      tab: f.tab, agent: "codex", state: "working", sessionId: "forged", message: nil)
+      tab: f.tab, report: AgentHookReport(agent: "codex", state: "working", sessionId: "forged"))
 
     f.tab.recordMaterializationStarted()
 
@@ -103,8 +105,7 @@ extension WindowControllerReportAgentTests {
   func testDormantTicketDiscardsClearAndKeepsTicketOnEveryObservedFace() throws {
     let f = try makeControllerAndDormantTicket(command: "claude", sessionId: "resume-1")
 
-    f.wc.controlReportAgent(
-      tab: f.tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    f.wc.controlReportAgent(tab: f.tab, report: AgentHookReport(agent: "claude", state: "clear"))
 
     XCTAssertEqual(f.tab.agentSlot, .dormant(f.ticket), "clear も破棄され slot は完全に不変")
     let row = try XCTUnwrap(listTabRow(f.wc, tabId: f.tab.id))
@@ -117,8 +118,7 @@ extension WindowControllerReportAgentTests {
   /// （clear がチケット消費の分岐を狂わせない）。
   func testClearDoesNotDivertUnresolvableTicketFromFallingBackToShell() throws {
     let f = try makeControllerAndDormantTicket(command: "unknown", sessionId: "x")
-    f.wc.controlReportAgent(
-      tab: f.tab, agent: "unknown", state: "clear", sessionId: nil, message: nil)
+    f.wc.controlReportAgent(tab: f.tab, report: AgentHookReport(agent: "unknown", state: "clear"))
     XCTAssertEqual(f.tab.agentSlot, .dormant(f.ticket), "clear はチケットを消費も破壊もしない")
 
     f.tab.recordMaterializationStarted()
@@ -134,7 +134,7 @@ extension WindowControllerReportAgentTests {
   func testClearOnAgentlessTabIsNoOp() throws {
     let (wc, tab) = try makeControllerAndTab()
 
-    wc.controlReportAgent(tab: tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "clear"))
 
     XCTAssertEqual(tab.agentSlot, .none)
     let row = try XCTUnwrap(listTabRow(wc, tabId: tab.id))
@@ -150,7 +150,7 @@ extension WindowControllerReportAgentTests {
     let (wc, tab) = try makeControllerAndTab()
 
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "working", sessionId: "s-1", message: nil)
+      tab: tab, report: AgentHookReport(agent: "claude", state: "working", sessionId: "s-1"))
 
     let session = AgentSession(command: "claude", sessionId: "s-1")
     XCTAssertEqual(tab.agentSlot.session, session, "報告した CLI 名と sessionId が同一性になる")
@@ -165,8 +165,7 @@ extension WindowControllerReportAgentTests {
   func testFirstReportWithoutSessionIdGoesLiveButPersistsNothing() throws {
     let (wc, tab) = try makeControllerAndTab()
 
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "working", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "working"))
 
     XCTAssertEqual(
       tab.agentSlot.session, AgentSession(command: "claude", sessionId: nil), "CLI 名だけが立つ")
@@ -184,19 +183,17 @@ extension WindowControllerReportAgentTests {
     let (wc, tab) = try makeControllerAndTab()
 
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "working", sessionId: "a", message: nil)
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+      tab: tab, report: AgentHookReport(agent: "claude", state: "working", sessionId: "a"))
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "waiting"))
     XCTAssertEqual(tab.agentSlot.session?.sessionId, "a", "同一 CLI なら運ばない報告でも鍵は生き残る")
     XCTAssertEqual(listTabRow(wc, tabId: tab.id)?["agentSessionId"] as? String, "a")
 
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: "b", message: nil)
+      tab: tab, report: AgentHookReport(agent: "claude", state: "waiting", sessionId: "b"))
     XCTAssertEqual(tab.agentSlot.session?.sessionId, "b", "新値が来れば上書きする")
 
     // state は直前と同値（同値枝）のまま CLI だけ入れ替える。
-    wc.controlReportAgent(
-      tab: tab, agent: "codex", state: "waiting", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "codex", state: "waiting"))
     XCTAssertEqual(
       tab.agentSlot.session, AgentSession(command: "codex", sessionId: nil),
       "CLI が変われば command を上書きしたうえで旧 id を捨てる")
@@ -212,8 +209,7 @@ extension WindowControllerReportAgentTests {
     f.tab.recordMaterializationStarted()
     XCTAssertEqual(f.tab.agentSlot, .live(session: f.ticket, report: nil), "前提: 消費済み・初回報告前")
 
-    f.wc.controlReportAgent(
-      tab: f.tab, agent: "claude", state: "working", sessionId: nil, message: nil)
+    f.wc.controlReportAgent(tab: f.tab, report: AgentHookReport(agent: "claude", state: "working"))
 
     XCTAssertEqual(f.tab.agentSlot.session, f.ticket, "同一 CLI の初回報告はチケットの鍵を残す")
     XCTAssertEqual(
@@ -233,15 +229,13 @@ extension WindowControllerReportAgentTests {
     f.tab.recordMaterializationStarted()
     XCTAssertEqual(workspace.dormantAgentCount(), 0, "前提: 消費で休眠から外れる")
 
-    f.wc.controlReportAgent(
-      tab: f.tab, agent: "claude", state: "working", sessionId: nil, message: nil)
-    f.wc.controlReportAgent(
-      tab: f.tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    f.wc.controlReportAgent(tab: f.tab, report: AgentHookReport(agent: "claude", state: "working"))
+    f.wc.controlReportAgent(tab: f.tab, report: AgentHookReport(agent: "claude", state: "clear"))
     XCTAssertEqual(f.tab.agentSlot, .none, "clear は無へ戻す（休眠へは戻さない）")
     XCTAssertEqual(workspace.dormantAgentCount(), 0)
 
     f.wc.controlReportAgent(
-      tab: f.tab, agent: "claude", state: "working", sessionId: "new", message: nil)
+      tab: f.tab, report: AgentHookReport(agent: "claude", state: "working", sessionId: "new"))
     XCTAssertEqual(
       f.tab.agentSlot.session, AgentSession(command: "claude", sessionId: "new"),
       "再報告は休眠を経ずに live 化する")

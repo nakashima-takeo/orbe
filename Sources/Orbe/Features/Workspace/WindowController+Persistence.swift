@@ -1,6 +1,6 @@
 import AppKit
 
-/// 構成変化のデバウンス保存・終了時 flush と、保存ファイル／閉じたエージェントタブのスタックからの復元。
+/// 構成変化のデバウンス保存・終了時 flush と、保存ファイル／休眠チケットからの復元。
 /// WindowController 本体から永続化の読み書き両面を分離する。
 extension WindowController {
   /// 保存ファイルから workspaces/タブ/ウィンドウサイズを起こす（起動時に init から 1 回）。
@@ -24,23 +24,24 @@ extension WindowController {
     activateCurrent()  // 復元アクティブが0タブ（休眠保存）なら空表示（シェルは起こさない）
   }
 
-  /// TabState 1 枚からタブを起こして配線する。起動時復元（restore）と ⇧⌘T（reopenClosedAgentTab）の
-  /// 共通経路——agent 付きは休眠チケットのまま起こし、resume 解決（と解決不能時の素シェル化）は
+  /// TabState 1 枚からタブを起こして配線する。起動時復元（restore）と `restoreDormantTab` の共通経路
+  /// ——agent 付きは休眠チケットのまま起こし、resume 解決（と解決不能時の素シェル化）は
   /// タブ起床時に走る（`TerminalTab.recordMaterializationStarted`）。ここは resolver を渡すだけ。
   private func makeTab(from state: TabState) -> TerminalTab {
     let resume: TerminalTab.ResumeSpawn = { [agentLauncher] in agentLauncher.resumeSpawn(for: $0) }
     return wire(TerminalTab(restoring: state, resumeSpawn: resume))
   }
 
-  /// ⇧⌘T。アクティブ workspace の開き直しスタックから直近の 1 枚を、同 worktree のセグメント右端
-  /// （無ければ閉じた時の index をセグメント境界へ丸めた位置）に起こしてそのタブへ切り替える。
-  /// スタックが空なら何もしない（音もダイアログも出さない）。
-  /// 復元されるもの・されないものは起動時復元と同一（makeTab を共有する）。
-  func reopenClosedAgentTab() {
-    guard let closed = store.popClosedAgentTab() else { return }
-    let index = store.insertTabIntoActive(makeTab(from: closed.state), near: closed.index)
-    select(index)  // 0タブ workspace への復活も含め、既存のタブ生成系と同じく起こしたタブを見せる
+  /// 休眠チケット 1 枚を workspace へ足す。`restore_sessions` と ⇧⌘T が共有する復元単位。
+  /// 起動時復元と `makeTab` を共有するが、閉じたセッションの復元が持ち込むのは cwd と同一性だけ
+  /// （明示タイトルは付かない）。位置は新規タブと同じ規則——同じ worktree の連の右端、無ければ末尾。
+  /// 選択・mount はしない（起床は既存の mount 規律に従う）。
+  func restoreDormantTab(_ state: TabState, intoWorkspaceAt index: Int) -> TabRef {
+    let tab = makeTab(from: state)
+    let tabIndex = store.insertRestoredTab(tab, intoWorkspaceAt: index)
+    refreshChrome()
     scheduleSave()
+    return TabRef(workspaceIndex: index, tabIndex: tabIndex, tab: tab)
   }
 
   // ユーザーのリサイズ確定で意図サイズを記憶し、保存を予約する（高頻度なドラッグはデバウンスでまとまる）。

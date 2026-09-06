@@ -19,7 +19,7 @@ extension StatusRowView {
   }
 
   func displayTitle(_ cell: TabStrip.Cell) -> String {
-    cell.title.isEmpty ? "Terminal" : cell.title
+    cell.title.isEmpty ? TabTitle.fallback : cell.title
   }
 
   /// タブの自然幅（タイトル＋状態グリフ＋左右余白）。shrink-to-fit の上限（cap は widths 側）。

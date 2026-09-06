@@ -80,6 +80,8 @@ if let message = agentMessage(state: reportedState, stdin: hookObj) {
   params["message"] = message.text
   params["messageSource"] = message.source
 }
+// SessionEnd の終了理由。payload に `reason` を持つ hook はこれだけなので state で門番しない。
+if let reason = endReason(from: hookObj) { params["reason"] = reason }
 
 // Orbe が動いていなければ接続できない＝no-op（exit 0）。
 guard let fd = connectControl() else { exit(0) }

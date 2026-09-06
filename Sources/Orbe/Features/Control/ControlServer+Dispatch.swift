@@ -1,9 +1,10 @@
 import Foundation
+import OrbeSessionLog
 
-/// 制御チャネルの「拡張」メソッド dispatch（タブ操作・config・workspace CRUD）と、
-/// エージェント起動の main 側。中核の動詞（list/get/send/spawn 等）は `runWindowed` の switch が
-/// 持ち、拡張は fall-through で引き受ける。param 検証（-32602）はここで行い、ドメイン解決
-/// （-32004 等）は target 側が返す。
+/// 制御チャネルの「拡張」メソッド dispatch（タブ操作・config・workspace CRUD・セッション復元）と、
+/// エージェント起動の main 側・hook 報告の params 復号。中核の動詞（list/get/send/spawn 等）は
+/// `runWindowed` の switch が持ち、拡張は fall-through で引き受ける。param 検証（-32602）はここで
+/// 行い、ドメイン解決（-32004 等）は target 側が返す。
 extension ControlServer {
   /// タブ操作（focus_tab / close_tab）を dispatch する。
   /// 非該当は nil で次のハンドラ（config / workspace）へ落とす。
@@ -24,6 +25,20 @@ extension ControlServer {
     default:
       return nil
     }
+  }
+
+  /// `report_agent` の params を hook 1 発の報告へ写す。`agent` / `state` が無ければ nil（-32602）。
+  /// optional の `sessionId` / `message`（＋`messageSource`）/ `reason` は名前どおり運ぶ。
+  func hookReport(_ params: [String: Any]) -> AgentHookReport? {
+    guard let agent = params["agent"] as? String, let state = params["state"] as? String else {
+      return nil
+    }
+    return AgentHookReport(
+      agent: agent, state: state, sessionId: params["sessionId"] as? String,
+      message: (params["message"] as? String).map {
+        AgentMessage(text: $0, source: params["messageSource"] as? String)
+      },
+      reason: params["reason"] as? String)
   }
 
   /// `spawn_agent` の main 側（param の在否と型だけを見る。workspace / agent の解決は target が返す）。
@@ -63,6 +78,23 @@ extension ControlServer {
       return ControlError(code: -32602, message: "invalid workspaceId")
     }
     return nil
+  }
+
+  /// `restore_sessions` を dispatch する。params の検証（型・件数・安全文字集合）はここで、ログの照合と
+  /// 復元は target が行う。非該当は nil で未知メソッドへ落とす。
+  func runSession(method: String, params: [String: Any], target: ControlTarget)
+    -> Result<Any, ControlError>?
+  {
+    guard method == "restore_sessions" else { return nil }
+    guard let ids = params["sessionIds"] as? [String] else {
+      return .failure(ControlError(code: -32602, message: "missing sessionIds"))
+    }
+    guard !ids.isEmpty, ids.count <= SessionLogLimits.restoreMaxIds,
+      ids.allSatisfy(AgentCatalog.isSafeSessionId)
+    else {
+      return .failure(ControlError(code: -32602, message: "invalid sessionIds"))
+    }
+    return target.controlRestoreSessions(sessionIds: ids)
   }
 
   /// config（列挙・設定）と workspace CRUD を実行する（config CLI 用）。非該当は nil で未知メソッドへ落とす。

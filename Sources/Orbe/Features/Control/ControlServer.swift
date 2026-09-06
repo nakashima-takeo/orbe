@@ -29,8 +29,7 @@ protocol ControlTarget: AnyObject {
   /// activeWorkspaceId と当該 workspace のタブ ID 群。未知 id は nil（spawn と違いフォールバックしない）。
   func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, tabIds: [Int])?
   /// エージェント hook の状態報告を発信元タブへ適用する（report_agent）。
-  func controlReportAgent(
-    tab: TerminalTab, agent: String, state: String, sessionId: String?, message: AgentMessage?)
+  func controlReportAgent(tab: TerminalTab, report: AgentHookReport)
   /// 指定タブへフォーカスする（focus_tab）。別 WS なら activate＋タブ選択も行う。未解決は -32004。
   func controlFocusTab(tabId: Int) -> Result<Any, ControlError>
   /// 指定タブ（TerminalTab.id）を閉じる（close_tab）。カスケードは GUI（Cmd+W）と一致。未解決は -32004。
@@ -50,6 +49,9 @@ protocol ControlTarget: AnyObject {
   func controlSetWorkspaceRoot(workspaceId: Int, rootPath: String) -> Result<Any, ControlError>
   /// workspace を削除する（id 未発見 -32004・最後の 1 つは削除不可 -32000）。
   func controlRemoveWorkspace(workspaceId: Int) -> Result<Any, ControlError>
+  /// 閉じたセッションを休眠チケットとして戻す（restore_sessions）。id ごとの status
+  /// （restored / already-present / unknown）を返す。窓は runOnMain が保証する。
+  func controlRestoreSessions(sessionIds: [String]) -> Result<Any, ControlError>
 }
 
 struct ControlError: Error {
@@ -233,10 +235,13 @@ final class ControlServer {
     let id = obj["id"]
     let params = obj["params"] as? [String: Any] ?? [:]
 
-    // 待機を伴う動詞は queue が受け持つ（main → respond の 1 往復では完結しない）。
+    // main を要さない動詞（待機系＋ファイル読み）は queue が受け持つ。
     switch method {
     case "wait_for_event":
       conn.waitForEvent(id: id, params: params)
+      return
+    case "session_log":
+      sessionLog(id: id, params: params, conn: conn)
       return
     case "prompt_agent":
       promptAgent(id: id, params: params, conn: conn)
@@ -328,20 +333,17 @@ final class ControlServer {
       return .success(["activeWorkspaceId": r.activeWorkspaceId, "tabIds": r.tabIds])
     case "report_agent":
       guard let t = tab() else { return .failure(notFound) }
-      guard let agent = params["agent"] as? String, let state = params["state"] as? String else {
+      guard let report = hookReport(params) else {
         return .failure(ControlError(code: -32602, message: "missing agent/state"))
       }
-      target.controlReportAgent(
-        tab: t, agent: agent, state: state, sessionId: params["sessionId"] as? String,
-        message: (params["message"] as? String).map {
-          AgentMessage(text: $0, source: params["messageSource"] as? String)
-        })
+      target.controlReportAgent(tab: t, report: report)
       return .success(["ok": true])
     default:
-      // タブ操作・config / workspace CRUD は拡張の dispatch（ControlServer+Dispatch）へ。
+      // タブ操作・config / workspace CRUD・セッション復元は拡張の dispatch（ControlServer+Dispatch）へ。
       // いずれも非該当なら未知メソッド。
       return runTab(method: method, params: params, target: target)
         ?? runConfigWorkspace(method: method, params: params, target: target)
+        ?? runSession(method: method, params: params, target: target)
         ?? .failure(ControlError(code: -32601, message: "method not found: \(method)"))
     }
   }

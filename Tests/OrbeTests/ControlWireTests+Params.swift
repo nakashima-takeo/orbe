@@ -67,9 +67,12 @@ extension ControlWireTests {
         [
           "tabId": tab, "agent": "claude", "state": "waiting",
           "sessionId": "sess-9", "message": "続けますか", "messageSource": "tool",
+          "reason": "other",
         ]
       ),
       ("completion_accept", ["tabId": tab]),
+      ("session_log", ["since": "2026-01-01T00:00:00.000Z", "limit": 10]),
+      ("restore_sessions", ["sessionIds": ["sess-1"]]),
     ]
   }
 
@@ -114,6 +117,7 @@ extension ControlWireTests {
       RequiredParam(method: "set_workspace_root", key: "rootPath", code: -32602),
       RequiredParam(method: "remove_workspace", key: "workspaceId", code: -32602),
       RequiredParam(method: "completion_accept", key: "tabId", code: -32004),
+      RequiredParam(method: "restore_sessions", key: "sessionIds", code: -32602),
     ]
   }
 
@@ -213,7 +217,7 @@ extension ControlWireTests {
 
   // MARK: - 方式 2: ガードの無い optional param
 
-  /// `report_agent` の optional 3 件が名前どおり target へ届く。`message` は
+  /// `report_agent` の optional 4 件が名前どおり target へ届く。`message` は
   /// `AgentMessage(text:source:)` へ畳まれるので text と source の両方を見る。
   func testReportAgentOptionalParamsReachTarget() {
     let fake = FakeControlTarget()
@@ -223,7 +227,7 @@ extension ControlWireTests {
       id: 1, method: "report_agent",
       params: [
         "tabId": fake.tabId, "agent": "claude", "state": "waiting",
-        "sessionId": "sess-9", "message": "続けますか", "messageSource": "tool",
+        "sessionId": "sess-9", "message": "続けますか", "messageSource": "tool", "reason": "other",
       ])
 
     let reported = fake.reportedAgents.last
@@ -236,6 +240,7 @@ extension ControlWireTests {
       reported?.messageSource, "tool",
       "messageSource は AgentMessage.source へ畳まれる。-32602 ガードが無く欠落しても目に見えないため、"
         + "この経路以外にこの語を固定する手段が無い（#50 が名指しした穴）")
+    XCTAssertEqual(reported?.reason, "other", "reason が名前どおり届く（セッションログの closed に載る語）")
   }
 
   /// `message` を送らなければ `AgentMessage` 自体が組まれない（`messageSource` 単独では立たない）。

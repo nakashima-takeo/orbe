@@ -1,39 +1,36 @@
 import Foundation
+import OrbeSessionLog
 
-/// タブ閉鎖の発火源。閉鎖経路（surface・libghostty ランタイム・制御 API）から
+/// タブが store から外れる発火源。閉鎖経路（surface・libghostty ランタイム・制御 API）から
 /// `TerminalTab.close` → `onClose` → `WindowController.closeTab` → `SessionStore.removeTab`
-/// まで素通しで届き、開き直しスタック（⇧⌘T）へ積むかの判定に入る。
+/// まで素通しで届き、workspace 削除でも配下タブへ同じ口で配られる。同一性を持ったまま外れたタブは
+/// これを「同一性の終わり方」としてセッションログへ写す。
 /// デフォルト値を持たせない＝全呼び出し元が発火源を明示することをコンパイラが強制する。
 enum TabCloseOrigin {
-  /// 人のジェスチャ（タブ行の中クリック・⌘W）。
+  /// 人のジェスチャ（タブ行の中クリック・⌘W・WorkspacePalette の削除）。
   case gesture
   /// シェル exit・エージェント終了（libghostty の close_surface_cb）。
   case process
-  /// 制御 API（close_tab）。
+  /// 制御 API（close_tab・remove_workspace）。
   case controlAPI
 
-  /// 人が自分の意思でタブを畳んだ閉鎖か（外から落ちた閉鎖と分ける）。
-  /// 網羅 switch（default 無し）＝閉鎖経路が増えたとき分類漏れをコンパイルエラーで検出する。
-  var isHumanGesture: Bool {
+  /// セッションログの終わり方への写し。網羅 switch（default 無し）＝閉鎖経路が増えたとき
+  /// 分類漏れをコンパイルエラーで検出する。
+  var sessionLogOrigin: SessionEvent.CloseOrigin {
     switch self {
-    case .gesture: return true
-    case .process, .controlAPI: return false
+    case .gesture: return .gesture
+    case .process: return .process
+    case .controlAPI: return .controlAPI
     }
   }
 }
 
-/// 走査で得た 1 タブと、その居場所（workspace / タブの index）。
-/// `SessionStore.allTabs()` の要素で、制御 API の列挙と Dispatch の cwd 突合が共有する。
+/// 1 タブと、その居場所（workspace / タブの index）。
+/// `SessionStore.allTabs()` の走査結果と `restoreDormantTab` の戻り値が共有する。
 struct TabRef {
   let workspaceIndex: Int
   let tabIndex: Int
   let tab: TerminalTab
-}
-
-/// 閉じたエージェントタブ 1 枚の開き直しエントリ。`index` は閉じた時点のタブ位置。
-struct ClosedAgentTab {
-  let index: Int
-  let state: TabState
 }
 
 /// ドメイン/セッション状態（`workspaces` と `activeWorkspace`）の唯一の所有者。
@@ -49,10 +46,6 @@ final class SessionStore {
   private(set) var workspaces: [Workspace]
   private(set) var activeWorkspace: Int
   var current: Workspace { workspaces[activeWorkspace] }
-
-  /// 開き直しスタックの上限（workspace ごと）。数件戻せれば足りる用途で、閉じたタブの
-  /// スナップショットを無制限に抱え込まないための上限。
-  private static let closedAgentTabLimit = 10
 
   init(workspaces: [Workspace] = [], activeWorkspace: Int = 0) {
     self.workspaces = workspaces
@@ -92,6 +85,12 @@ final class SessionStore {
     workspaces.enumerated().flatMap { wi, ws in
       ws.tabs.enumerated().map { ti, tab in TabRef(workspaceIndex: wi, tabIndex: ti, tab: tab) }
     }
+  }
+
+  /// 今 Orbe に居る同一性（全 workspace・live / 休眠を問わない）。`list_tabs` の `agentSessionId` と
+  /// 同じ読み口なので、CLI 側の「戻っていない」の導出と一致する。
+  var presentSessionIds: Set<String> {
+    Set(allTabs().compactMap { $0.tab.agentSlot.session?.sessionId })
   }
 
   /// 指定 workspace での新規タブ起動の初期 cwd（GUI・エージェント起動・制御 API のすべてが
@@ -154,43 +153,31 @@ final class SessionStore {
   /// アクティブ workspace では active を触らず同じタブを指し続けさせる（呼び出し側が直後に select で
   /// mount する）。背景 workspace では active を挿したタブへ。workspace index の妥当性は呼び出し側が保証する。
   func insertTab(_ tab: TerminalTab, intoWorkspaceAt i: Int) -> Int {
-    let dest = Self.insertionIndex(forKey: tab.groupKey, in: workspaces[i].tabs)
-    return insert(tab, at: dest, intoWorkspaceAt: i)
-  }
-
-  /// ⇧⌘T。アクティブ workspace に同キーの連があればその右端へ（新規タブと同じ規則）。無ければ `index`
-  /// （閉じた時の位置）を 0…count へクランプし、連を割る位置ならその連の右端へ丸めて挿す。実挿入 index を返す。
-  func insertTabIntoActive(_ tab: TerminalTab, near index: Int) -> Int {
-    let tabs = current.tabs
-    let dest: Int
-    if tabs.contains(where: { $0.groupKey == tab.groupKey }) {
-      dest = Self.insertionIndex(forKey: tab.groupKey, in: tabs)
-    } else {
-      let clamped = min(max(0, index), tabs.count)
-      let splits =
-        clamped > 0 && clamped < tabs.count
-        && tabs[clamped - 1].groupKey == tabs[clamped].groupKey
-      dest = splits ? Self.segment(containing: clamped, in: tabs).upperBound : clamped
-    }
-    return insert(tab, at: dest, intoWorkspaceAt: activeWorkspace)
-  }
-
-  /// 挿入の実体。アクティブ workspace では挿入位置が現 active 以前なら active を 1 つ繰り下げ、
-  /// 挿入前と同じタブを指し続けさせる（0タブへの挿入は count−1 へのクランプで吸収）。
-  private func insert(_ tab: TerminalTab, at dest: Int, intoWorkspaceAt i: Int) -> Int {
     let ws = workspaces[i]
-    ws.tabs.insert(tab, at: dest)
-    if i == activeWorkspace {
-      if dest <= ws.active { ws.active += 1 }
-      ws.active = min(ws.active, ws.tabs.count - 1)
-    } else {
-      ws.active = dest
-    }
+    let dest = insert(tab, intoWorkspaceAt: i)
+    if i != activeWorkspace { ws.active = dest }
     return dest
   }
 
-  /// アクティブ workspace の開き直しスタックから直近の 1 件を取り出す（LIFO）。空なら nil＝呼び出し側は無反応。
-  func popClosedAgentTab() -> ClosedAgentTab? { current.closedAgentTabs.popLast() }
+  /// 復元した休眠チケットを、指定 workspace の同キー連の右端（無ければ末尾）へ挿し、実挿入 index を返す。
+  /// `active` は挿す前と同じタブを指し続ける——復元は「見せる先を変えない」ので、背景 workspace で
+  /// active を挿したタブへ動かす `insertTab` を継がない（0 タブだった workspace は `active == 0` のままで
+  /// 新タブがそれになる）。workspace index の妥当性は呼び出し側が保証する。
+  func insertRestoredTab(_ tab: TerminalTab, intoWorkspaceAt i: Int) -> Int {
+    insert(tab, intoWorkspaceAt: i)
+  }
+
+  /// 挿入の実体。同キー連の右端へ挿し、挿入前と同じタブを指し続けさせる（挿入位置が現 active 以前なら
+  /// active を 1 つ繰り下げ、0 タブへの挿入は count−1 へのクランプで吸収）。選択をどう振るかは
+  /// 呼び出し側のポリシー。
+  private func insert(_ tab: TerminalTab, intoWorkspaceAt i: Int) -> Int {
+    let ws = workspaces[i]
+    let dest = Self.insertionIndex(forKey: tab.groupKey, in: ws.tabs)
+    ws.tabs.insert(tab, at: dest)
+    if dest <= ws.active { ws.active += 1 }
+    ws.active = min(ws.active, ws.tabs.count - 1)
+    return dest
+  }
 
   /// アクティブ workspace 内でタブを `from` から `to`（挿入先 index・0…count・挿入前基準）へ移動する。
   /// 挿入先は from の連の中（連の右端への挿入 = upperBound を含む）に限り、連の外・範囲外・
@@ -215,6 +202,13 @@ final class SessionStore {
     return true
   }
 
+  /// タブが store から外れることを、配列から外す**前**にタブへ告げる唯一の口。同一性が残っていれば
+  /// タブがその終わりをログへ写す——記録側が所属 workspace をタブから引くため、外した後では引けず、
+  /// イベントが無言で落ちる。
+  private func detach(_ tab: TerminalTab, origin: TabCloseOrigin) {
+    tab.recordDetached(origin: origin)
+  }
+
   /// `removeTab` の判定結果。呼び出し側はこれに応じてビュー副作用を実行する。
   enum CloseTabOutcome {
     case notFound
@@ -228,8 +222,7 @@ final class SessionStore {
   /// （フォーカスは連の中に留める）。アクティブ workspace が空（0タブ）化したときは
   /// エントリをその場に残したまま `.emptiedActive` を返す（退避せず空でアクティブ維持）。空化時の
   /// `ws.active` は `max(0, min(0, -1)) = 0` に補正され、再アクティブ化で index 0 を選べる状態になる。
-  /// 人のジェスチャで閉じたエージェントタブなら、配列から外す前に復元単位と位置を開き直しスタックへ
-  /// 積む——cwd/セッションは生きた surface から取るため、ビューが外れる前でなければ正しく取れない。
+  /// 配列から外す前に同一性の終わりをタブへ告げる（`detach`）。
   func removeTab(_ tab: TerminalTab, origin: TabCloseOrigin) -> CloseTabOutcome {
     guard
       let wsIndex = workspaces.firstIndex(where: { ws in ws.tabs.contains { $0 === tab } })
@@ -237,14 +230,7 @@ final class SessionStore {
     let ws = workspaces[wsIndex]
     guard let idx = ws.tabs.firstIndex(where: { $0 === tab }) else { return .notFound }
 
-    if origin.isHumanGesture {
-      let state = tab.tabState()
-      if state.agent != nil {
-        ws.closedAgentTabs.append(ClosedAgentTab(index: idx, state: state))
-        if ws.closedAgentTabs.count > Self.closedAgentTabLimit { ws.closedAgentTabs.removeFirst() }
-      }
-    }
-
+    detach(tab, origin: origin)
     let r = Self.segment(containing: idx, in: ws.tabs)
     ws.tabs.remove(at: idx)
     if idx < ws.active {
@@ -279,8 +265,14 @@ final class SessionStore {
   /// workspace を新規作成して末尾をアクティブにする（タブ起こしは呼び出し側）。`~` は
   /// `setWorkspaceDir` と同じくホーム展開する（CLI の `--dir '~/x'` 等をリテラル格納させない）。
   func createWorkspace(name: String, rootPath: String) {
+    activeWorkspace = appendWorkspace(name: name, rootPath: rootPath)
+  }
+
+  /// workspace を末尾に足し、その index を返す。アクティブ化しない（`restore_sessions` が復元先を
+  /// 作り直すときの形——「作って開く」意図の `createWorkspace` と違い、見せる先を変えない）。
+  func appendWorkspace(name: String, rootPath: String) -> Int {
     workspaces.append(Workspace(name: name, rootPath: (rootPath as NSString).expandingTildeInPath))
-    activeWorkspace = workspaces.count - 1
+    return workspaces.count - 1
   }
 
   /// workspace を改名する（前後空白を除去。空・範囲外は false）。
@@ -309,9 +301,11 @@ final class SessionStore {
   /// workspace を削除して `activeWorkspace` をシフトする。最後の 1 つは残す（`.invalid`）。
   /// 背景 workspace の削除ではアクティブの同一性を保つ（index を詰めるだけ）。アクティブ workspace の
   /// 削除では MRU（`lastUsedAt` 最大の他 workspace）を次のアクティブにする。
-  func closeWorkspace(_ index: Int) -> CloseWorkspaceOutcome {
+  /// 配下のタブには外れる前に `origin`（呼び手が名乗る発火源）を配る（`.invalid` では何も告げない）。
+  func closeWorkspace(_ index: Int, origin: TabCloseOrigin) -> CloseWorkspaceOutcome {
     guard workspaces.indices.contains(index), workspaces.count > 1 else { return .invalid }
     guard index == activeWorkspace else {
+      workspaces[index].tabs.forEach { detach($0, origin: origin) }
       workspaces.remove(at: index)
       if index < activeWorkspace { activeWorkspace -= 1 }
       return .backgroundChanged
@@ -319,6 +313,7 @@ final class SessionStore {
     // アクティブ workspace の削除。MRU target のオブジェクト参照を控え、削除後に index を引き直す。
     guard let target = mruWorkspaceIndex(excluding: index) else { return .invalid }
     let targetWS = workspaces[target]
+    workspaces[index].tabs.forEach { detach($0, origin: origin) }
     workspaces.remove(at: index)
     activeWorkspace = workspaces.firstIndex { $0 === targetWS } ?? 0
     return .activeChanged

@@ -137,6 +137,17 @@ final class OrbeReportWireTests: OrbeTestCase {
     XCTAssertEqual(params["message"] as? String, "許可しますか")
   }
 
+  /// SessionEnd の `reason` は `reason` キーで運ぶ（受け側はセッションログの closed に載せる）。
+  /// 持たない hook では載せない——`clear` の報告に理由が付くか付かないかは、この 1 語で決まる。
+  func testSessionEndReasonRidesOnTheWireOnlyWhenPresent() throws {
+    let ended = try request(
+      report(state: "clear", stdin: #"{"session_id":"s-1","reason":"logout"}"#))
+    XCTAssertEqual(ended.params["reason"] as? String, "logout", "stdin の reason が reason になる")
+
+    let plain = try request(report(state: "clear", stdin: #"{"session_id":"s-1"}"#))
+    XCTAssertNil(plain.params["reason"], "reason を持たない hook では載せない")
+  }
+
   /// `messageSource` の値は受け側 `AgentMessage` のリテラルと 1 対 1。通知由来なら `notification`、
   /// ツール由来（`AskUserQuestion` の質問文）なら `tool`。
   func testMessageSourceLiteralsMatchReceiverVocabulary() throws {

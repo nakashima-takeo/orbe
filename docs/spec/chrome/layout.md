@@ -1,7 +1,7 @@
 ---
 title: レイアウト
 description: window の SwiftUI ホスト構成・workspace / タブ / surface の構造・一方向参照・フォーカス管理・ショートカット・オーバーレイ提示機構
-updated: 2026-09-06
+updated: 2026-09-07
 ---
 
 # レイアウト
@@ -30,7 +30,7 @@ host 所有。`window.contentView` は SwiftUI ルート `ChromeHostingView`。�
 
 chrome キー（`WindowCommand`）は「タブが無くても効くか」の網羅分類を持つ。default 節なしの switch なので、将来コマンドを追加するとこの分類はコンパイルで強制される。
 
-- **タブ不要のコマンド**（新タブ・閉じたエージェントタブを開き直す・新規 workspace・workspace 切替・デフォルトエージェント起動・各パレット表示・設定）は window レベルが surface より先に配信するため、surface が 1 枚も無い 0 タブでも効く（overlay 表示中は不活性。surface があるときも同じハンドラへ集約されるので挙動差はない）。
+- **タブ不要のコマンド**（新タブ・閉じたエージェント パレット・新規 workspace・workspace 切替・デフォルトエージェント起動・各パレット表示・設定）は window レベルが surface より先に配信するため、surface が 1 枚も無い 0 タブでも効く（overlay 表示中は不活性。surface があるときも同じハンドラへ集約されるので挙動差はない）。
 - **タブ依存のコマンド**（タブ切替・リネーム・⌘W）は surface 起点のままで、0 タブでは受け手が無く no-op。
 
 ## フォーカス
@@ -39,10 +39,10 @@ chrome キー（`WindowCommand`）は「タブが無くても効くか」の網�
 
 ## ショートカット
 
-- Cmd+T 新タブ / Cmd+Shift+T 閉じたエージェントタブを開き直す（後述）/ Cmd+Shift+[ ] および Cmd+Shift+←→ タブ切替 / Cmd+W タブを閉じる（アクティブ workspace の最後のタブを閉じても 0 タブの空状態でアクティブに残る。ウィンドウは閉じない → [workspace](../platform/workspace.md)）/ Cmd+Shift+A エージェント起動パレット・Cmd+Shift+C デフォルトエージェント起動（→ [agent/launch](../agent/launch.md)）/ Cmd+Shift+S workspace パレット（→ [workspace パレット](../palette/workspace.md)）/ Cmd+, 設定パレット（→ [settings](../palette/settings.md)）/ Cmd+F スクロールバック検索（→ [search](../terminal/search.md)）/ Cmd+R タブリネーム（→ [chrome](chrome.md)）/ Cmd+↑↓ スクロールバック先頭/末尾ジャンプ（→ [terminal/core](../terminal/core.md)）/ Cmd+Shift+E アクティブタブの cwd を GUI エディタで開く / ⌘⌘（Cmd 素タップ×2）Attention パレット（→ [attention](../palette/attention.md)。前面時。背面時はメニューバーのドロップダウン → [menubar](menubar.md)）。
+- Cmd+T 新タブ / Cmd+Shift+T 閉じたエージェント パレット（後述）/ Cmd+Shift+[ ] および Cmd+Shift+←→ タブ切替 / Cmd+W タブを閉じる（アクティブ workspace の最後のタブを閉じても 0 タブの空状態でアクティブに残る。ウィンドウは閉じない → [workspace](../platform/workspace.md)）/ Cmd+Shift+A エージェント起動パレット・Cmd+Shift+C デフォルトエージェント起動（→ [agent/launch](../agent/launch.md)）/ Cmd+Shift+S workspace パレット（→ [workspace パレット](../palette/workspace.md)）/ Cmd+, 設定パレット（→ [settings](../palette/settings.md)）/ Cmd+F スクロールバック検索（→ [search](../terminal/search.md)）/ Cmd+R タブリネーム（→ [chrome](chrome.md)）/ Cmd+↑↓ スクロールバック先頭/末尾ジャンプ（→ [terminal/core](../terminal/core.md)）/ Cmd+Shift+E アクティブタブの cwd を GUI エディタで開く / ⌘⌘（Cmd 素タップ×2）Attention パレット（→ [attention](../palette/attention.md)。前面時。背面時はメニューバーのドロップダウン → [menubar](menubar.md)）。
 - フォント動的ズーム Cmd +/-/0（ghostty binding action）。
 
-**Cmd+Shift+T は最後に閉じたエージェントタブを開き直す。** スタックに積むのは、人のジェスチャ（タブ行の中クリック・Cmd+W）で閉じられ、かつエージェントセッションを持つタブだけ。シェル exit・エージェント終了・制御 API では積まず、エージェントを含まないタブも積まない——素のシェルは戻してもプロセスもスクロールバックも戻らず、resume を持つ CLI だけが中身ごと戻るため。積んだタブは cwd・明示タイトル・エージェントセッションごと戻す。戻るもの／戻らないものは起動時復元と同一（→ [persistence](../platform/persistence.md)）。スタックは workspace ごとに独立し上限は数件、アプリ終了で忘れ、workspace を削除するとその workspace のスタックも消える。戻す先は新規タブと同じ規則——同じ worktree の連が残っていればその右端、無ければ閉じたときの位置（他の連を割る位置ならその連の境界へ丸める）——で、戻したタブへ切り替える（→ [chrome](chrome.md) の連）。0 タブの workspace も復活できる。戻すものが無ければ無反応。
+**Cmd+Shift+T は「閉じたエージェント」パレットを開く**（→ [closed-agents](../palette/closed-agents.md)）。この workspace で閉じたまま戻っていないエージェントセッションを[寿命ログ](../platform/session-log.md)から一覧し、Enter で 1 件を休眠チケットとして戻して起こす。閉じ方（人のジェスチャ・プロセス終了・制御 API・エージェント自身の終了）を問わず、アプリの再起動をまたいで戻せる。素のシェルタブは対象外——戻してもプロセスもスクロールバックも戻らず、resume を持つ CLI だけが中身ごと戻るため。戻るのは cwd と同一性だけで、明示タイトルは付かず、位置は新規タブと同じ規則——同じ worktree の連が残っていればその右端、無ければ末尾（→ [persistence](../platform/persistence.md)・[chrome](chrome.md) の連）。0 タブの workspace でも開く。
 
 ## cwd の確定
 

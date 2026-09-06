@@ -36,7 +36,7 @@ extension ControlWireTests {
       "focus_tab", "close_tab",
       "spawn_agent", "resume_agent", "prompt_agent",
       "config_list", "config_set", "create_workspace", "rename_workspace",
-      "set_workspace_root", "remove_workspace",
+      "set_workspace_root", "remove_workspace", "restore_sessions",
     ]
     let fixtures = fixtures(fake)
 

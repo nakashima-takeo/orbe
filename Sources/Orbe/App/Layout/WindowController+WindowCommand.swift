@@ -7,7 +7,7 @@ extension WindowController {
   func handleWindowCommand(_ command: WindowCommand) {
     switch command {
     case .newTab: newTab()
-    case .reopenClosedAgentTab: reopenClosedAgentTab()
+    case .showClosedAgentsPalette: showClosedAgentsPalette()
     case .nextTab: nextTab()
     case .prevTab: prevTab()
     case .switchWorkspace: showWorkspacePalette()

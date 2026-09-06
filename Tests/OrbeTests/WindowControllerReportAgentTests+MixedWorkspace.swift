@@ -52,8 +52,10 @@ extension WindowControllerReportAgentTests {
     let sound = try XCTUnwrap(fixture.wc.soundPlayer as? SoundPlayerFake)
 
     fixture.wc.controlReportAgent(
-      tab: fixture.live, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "question"))
+      tab: fixture.live,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "question")))
     fixture.wc.flushChrome()
 
     XCTAssertEqual(fixture.wc.attentionStore.rows.map(\.tabId), [fixture.live.id])
@@ -73,8 +75,10 @@ extension WindowControllerReportAgentTests {
     let sound = try XCTUnwrap(fixture.wc.soundPlayer as? SoundPlayerFake)
 
     fixture.wc.controlReportAgent(
-      tab: fixture.live, agent: "claude", state: "done", sessionId: nil,
-      message: AgentMessage(text: "finished"))
+      tab: fixture.live,
+      report: AgentHookReport(
+        agent: "claude", state: "done", sessionId: nil,
+        message: AgentMessage(text: "finished")))
     fixture.wc.flushChrome()
 
     XCTAssertEqual(fixture.wc.attentionStore.rows.map(\.state), ["done"])
@@ -89,8 +93,10 @@ extension WindowControllerReportAgentTests {
     let sound = try XCTUnwrap(fixture.wc.soundPlayer as? SoundPlayerFake)
 
     fixture.wc.controlReportAgent(
-      tab: fixture.dormant, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "synthetic"))
+      tab: fixture.dormant,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "synthetic")))
     fixture.wc.flushChrome()
 
     XCTAssertTrue(fixture.workspace.activated, "live sibling があるので workspace 自体は true")
@@ -105,8 +111,10 @@ extension WindowControllerReportAgentTests {
     let fixture = try makeControllerAndMixedBackground()
     let stampBefore = fixture.workspace.lastUsedAt
     fixture.wc.controlReportAgent(
-      tab: fixture.live, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "question"))
+      tab: fixture.live,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "question")))
     fixture.wc.flushChrome()
     let liveTab = try XCTUnwrap(fixture.workspace.tabs.first { $0.activated })
 
@@ -147,7 +155,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(try live().rollup.map(\.state), ["dormant"], "前提: 開いた時点は休眠チケットのみ")
 
     wc.controlReportAgent(
-      tab: fixture.live, agent: "claude", state: "working", sessionId: nil, message: nil)
+      tab: fixture.live, report: AgentHookReport(agent: "claude", state: "working"))
     wc.flushChrome()
     XCTAssertEqual(try live().rollup.map(\.state), ["working", "dormant"])
     XCTAssertEqual(try live().rollup.map(\.count), [1, 1])
@@ -207,7 +215,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(palette.render.breadcrumb, "‹ mixed")
 
     wc.controlReportAgent(
-      tab: fixture.live, agent: "claude", state: "working", sessionId: nil, message: nil)
+      tab: fixture.live, report: AgentHookReport(agent: "claude", state: "working"))
     wc.flushChrome()
 
     XCTAssertEqual(palette.render.breadcrumb, "‹ mixed", "追随は詳細メニューから引き戻さない")

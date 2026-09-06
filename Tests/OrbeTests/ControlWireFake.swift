@@ -44,6 +44,7 @@ final class FakeControlTarget: ControlTarget {
     let sessionId: String?
     let messageText: String?
     let messageSource: String?
+    let reason: String?
   }
   struct Spawn {
     let workspaceId: Int?
@@ -93,6 +94,7 @@ final class FakeControlTarget: ControlTarget {
   private(set) var focusedTabIds: [Int] = []
   private(set) var closedTabIds: [Int] = []
   private(set) var resolvedTabIds: [Int] = []
+  private(set) var restoredSessionIds: [[String]] = []
 
   // MARK: - 宛先
 
@@ -162,13 +164,12 @@ final class FakeControlTarget: ControlTarget {
     return activateResult
   }
 
-  func controlReportAgent(
-    tab: TerminalTab, agent: String, state: String, sessionId: String?, message: AgentMessage?
-  ) {
+  func controlReportAgent(tab: TerminalTab, report: AgentHookReport) {
     reportedAgents.append(
       ReportedAgent(
-        tabId: tab.id, agent: agent, state: state, sessionId: sessionId,
-        messageText: message?.text, messageSource: message?.source))
+        tabId: tab.id, agent: report.agent, state: report.state, sessionId: report.sessionId,
+        messageText: report.message?.text, messageSource: report.message?.source,
+        reason: report.reason))
   }
 
   func controlFocusTab(tabId: Int) -> Result<Any, ControlError> {
@@ -211,5 +212,10 @@ final class FakeControlTarget: ControlTarget {
   func controlRemoveWorkspace(workspaceId: Int) -> Result<Any, ControlError> {
     removedWorkspaceIds.append(workspaceId)
     return outcome(["ok": true])
+  }
+
+  func controlRestoreSessions(sessionIds: [String]) -> Result<Any, ControlError> {
+    restoredSessionIds.append(sessionIds)
+    return outcome(["results": sessionIds.map { ["sessionId": $0, "status": "restored"] }])
   }
 }

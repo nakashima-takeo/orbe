@@ -19,26 +19,23 @@ extension WindowControllerReportAgentTests {
     XCTAssertFalse(wc.window.isKeyWindow, "前提: 背面（非 key）なので見ているタブの抑制は効かない")
     let sound = try recorder(wc)
 
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "working", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "working"))
     XCTAssertTrue(sound.played.isEmpty, "working への変化では鳴らさない")
 
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "waiting"))
     XCTAssertEqual(
       sound.played,
       [
         SoundPlayerFake.Played.synth(NotificationSound.default, event: .waiting, volume: 90)
       ], "既定の案・既定の音量で入力待ちが鳴る")
 
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "waiting"))
     XCTAssertEqual(sound.played.count, 1, "同値報告（変化なし）では鳴らさない")
 
-    wc.controlReportAgent(tab: tab, agent: "claude", state: "done", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "done"))
     XCTAssertEqual(sound.played.last?.event, .done)
 
-    wc.controlReportAgent(tab: tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "clear"))
     XCTAssertEqual(sound.played.count, 2, "clear では鳴らさない")
   }
 
@@ -49,12 +46,10 @@ extension WindowControllerReportAgentTests {
     makeKey(wc)
     let sound = try recorder(wc)
 
-    wc.controlReportAgent(
-      tab: tabs[0], agent: "claude", state: "waiting", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tabs[0], report: AgentHookReport(agent: "claude", state: "waiting"))
     XCTAssertTrue(sound.played.isEmpty, "見ているタブ（タブ0）では鳴らさない")
 
-    wc.controlReportAgent(
-      tab: tabs[1], agent: "claude", state: "waiting", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tabs[1], report: AgentHookReport(agent: "claude", state: "waiting"))
     XCTAssertEqual(sound.played.count, 1, "見ていないタブ（タブ1）では鳴る")
   }
 
@@ -64,12 +59,11 @@ extension WindowControllerReportAgentTests {
     let sound = try recorder(wc)
     wc.settingsStore.applyGlobal(SettingChange(SettingKeys.notificationSoundEnabled, false))
 
-    wc.controlReportAgent(tab: tab, agent: "claude", state: "done", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "done"))
     XCTAssertTrue(sound.played.isEmpty)
 
     wc.settingsStore.applyGlobal(SettingChange(SettingKeys.notificationSoundEnabled, true))
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "waiting"))
     XCTAssertEqual(sound.played.count, 1, "オンへ戻せば次の報告から鳴る")
   }
 
@@ -92,8 +86,7 @@ extension WindowControllerReportAgentTests {
     wc.workspaces[1].settingsOverride = activeOverride
     XCTAssertTrue(wc.current === wc.workspaces[1], "前提: アクティブは発信元でない方")
 
-    wc.controlReportAgent(
-      tab: tabs[0], agent: "claude", state: "done", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tabs[0], report: AgentHookReport(agent: "claude", state: "done"))
     XCTAssertEqual(
       sound.played, [SoundPlayerFake.Played.synth(.steel, event: .done, volume: 30)],
       "アクティブ側でなく発信元 workspace の上書きで鳴る")
@@ -127,15 +120,13 @@ extension WindowControllerReportAgentTests {
       file: "origin.wav", name: "origin.mp3", duration: 1.5)
     wc.workspaces[0].settingsOverride = originOverride
 
-    wc.controlReportAgent(
-      tab: tabs[0], agent: "claude", state: "done", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tabs[0], report: AgentHookReport(agent: "claude", state: "done"))
     XCTAssertEqual(
       sound.played,
       [SoundPlayerFake.Played(source: .imported(file: "origin.wav"), event: .done, volume: 90)])
 
     // アクティブ側（上書き無し＝カスタム未設定）は紋章の同 event 音へ落ちる。
-    wc.controlReportAgent(
-      tab: tabs[1], agent: "claude", state: "waiting", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tabs[1], report: AgentHookReport(agent: "claude", state: "waiting"))
     XCTAssertEqual(
       sound.played.last, .synth(NotificationSound.default, event: .waiting, volume: 90))
   }
@@ -146,8 +137,7 @@ extension WindowControllerReportAgentTests {
     let (wc, dormant) = try makeControllerAndDormantTab()
     let sound = try recorder(wc)
 
-    wc.controlReportAgent(
-      tab: dormant, agent: "claude", state: "done", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: dormant, report: AgentHookReport(agent: "claude", state: "done"))
     XCTAssertTrue(sound.played.isEmpty)
   }
 
@@ -203,7 +193,7 @@ extension WindowControllerReportAgentTests {
       wc.workspaces[index].settingsOverride = override
     }
 
-    wc.closeWorkspace(0)
+    wc.closeWorkspace(0, origin: .gesture)
 
     XCTAssertEqual(try soundFileNames(), ["kept.wav"], "残った workspace の上書きが指す音源は消えない")
   }

@@ -38,9 +38,9 @@ final class KeybindingsTests: OrbeTestCase {
     // ⌘R はタブリネーム。content 依存の window コマンドとして
     // `testChromeHostingViewInterceptsTabIndependentCommandsOnly` の素通し脚が乗るので、割当も固定する。
     XCTAssertEqual(Keybindings.chromeAction(for: key("r")), .rename)
-    // ⇧⌘T は最後に閉じたエージェントタブを開き直す。
+    // ⇧⌘T は「閉じたエージェント」パレットを開く。
     XCTAssertEqual(
-      Keybindings.chromeAction(for: key("T", [.command, .shift])), .reopenClosedAgentTab)
+      Keybindings.chromeAction(for: key("T", [.command, .shift])), .showClosedAgentsPalette)
     XCTAssertEqual(Keybindings.chromeAction(for: key("}", [.command, .shift])), .nextTab)
     XCTAssertEqual(Keybindings.chromeAction(for: key("{", [.command, .shift])), .prevTab)
     // 矢印は別名として次/前タブに割当（Cmd+Shift+→ / Cmd+Shift+←）。
@@ -132,7 +132,7 @@ final class KeybindingsTests: OrbeTestCase {
   func testWindowCommandMappingIsExhaustive() {
     let mapped: [(ChromeAction, WindowCommand)] = [
       (.newTab, .newTab),
-      (.reopenClosedAgentTab, .reopenClosedAgentTab),
+      (.showClosedAgentsPalette, .showClosedAgentsPalette),
       (.nextTab, .nextTab),
       (.prevTab, .prevTab),
       (.switchWorkspace, .switchWorkspace),
@@ -163,7 +163,7 @@ final class KeybindingsTests: OrbeTestCase {
   /// 0タブで効くべきキーが死ぬ／効くべきでない content 依存キーが暴発する。
   func testAvailableWithoutTabsClassification() {
     let available: [WindowCommand] = [
-      .newTab, .reopenClosedAgentTab, .newWorkspace, .switchWorkspace,
+      .newTab, .showClosedAgentsPalette, .newWorkspace, .switchWorkspace,
       .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings, .toggleHelp,
     ]
     for command in available {
