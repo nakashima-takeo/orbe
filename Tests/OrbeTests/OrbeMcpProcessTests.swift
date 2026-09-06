@@ -106,6 +106,34 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       "spawn_agent の description が ready:false の意味を書く")
   }
 
+  /// `session_log` / `restore_sessions` が tools/list に在り、AI が「閉じたまま戻っていないもの」を導く
+  /// 手順（closed の最後のイベント × list_tabs に居ない → restore_sessions）が description に書いてある。
+  /// この導線が無いと AI は生ログを前に何を戻せばよいか決められず、生きているセッションを二重に戻す。
+  func testToolsListExposesSessionLogAndRestoreWithTheDerivationRecipe() throws {
+    let tools = ControlProcess.mcpToolsList()
+    func tool(_ name: String) throws -> [String: Any] {
+      try XCTUnwrap(tools.first { $0["name"] as? String == name }, "\(name) が tools/list に無い")
+    }
+    let log = try tool("session_log")
+    let logDescription = log["description"] as? String ?? ""
+    for word in ["closed", "list_tabs", "restore_sessions"] {
+      XCTAssertTrue(logDescription.contains(word), "session_log の description に \(word) が無い")
+    }
+    XCTAssertEqual(
+      Set(
+        ((log["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])?.keys ?? [:].keys),
+      ["since", "until", "limit", "sessionId"])
+    XCTAssertTrue(
+      logDescription.contains("既定 \(ControlServer.sessionLogDefaultLimit)"), "limit の既定を写す")
+
+    let restore = try tool("restore_sessions")
+    XCTAssertEqual(
+      (restore["inputSchema"] as? [String: Any])?["required"] as? [String], ["sessionIds"])
+    let restoreDescription = restore["description"] as? String ?? ""
+    XCTAssertTrue(restoreDescription.contains("resume_agent"), "resume_agent との違い（起動しない）を書く")
+    XCTAssertTrue(restoreDescription.contains("already-present"), "id ごとの status の語を書く")
+  }
+
   /// `send_text` ＋ `send_key enter` でタブのシェルが実際にコマンドを**実行**する
   /// （`send_text` はペースト相当なので、enter を別送しなければプロンプトに留まったままになる）。
   func testSendTextAndEnterExecutesInTab() throws {
