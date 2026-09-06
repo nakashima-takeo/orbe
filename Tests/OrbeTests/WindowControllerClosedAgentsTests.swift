@@ -5,7 +5,7 @@ import XCTest
 @testable import Orbe
 
 /// ⇧⌘T の配線を実 `WindowController` で端から端まで通す——対象はアクティブ workspace の閉じた同一性だけ、
-/// ↵ で選んだ 1 件が末尾に戻り選択されて起きる、戻ったものは一覧から消える。
+/// ↵ で選んだ 1 件が戻り（同 worktree の連の右端、無ければ末尾）選択されて起きる、戻ったものは一覧から消える。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerClosedAgentsTests: OrbeTestCase {
@@ -69,7 +69,8 @@ final class WindowControllerClosedAgentsTests: OrbeTestCase {
 
     XCTAssertEqual(wc.presentedOverlay, .none, "復元でパレットは閉じる")
     XCTAssertEqual(wc.current.tabs.count, 3, "戻るのは選んだ 1 件だけ")
-    XCTAssertEqual(wc.current.tabs.last?.agentSlot.session?.sessionId, "m-1", "末尾に足す")
+    XCTAssertEqual(
+      wc.current.tabs.last?.agentSlot.session?.sessionId, "m-1", "同じ cwd の連の右端＝末尾に足す")
     XCTAssertEqual(wc.current.active, 2, "復元したタブを選択して起こす")
     XCTAssertEqual(wc.sessionLog.lastEvent(sessionId: "m-1")?.kind, .opened, "起床で opened が付く")
     XCTAssertTrue(wc.current.tabs[2].activated)

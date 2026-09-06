@@ -5,7 +5,8 @@ import XCTest
 @testable import Orbe
 
 /// `restore_sessions` の実体（`controlRestoreSessions`）を実 `WindowController` で固定する——ログの
-/// 復元先を rootPath で照合し、無ければ作り、休眠チケットとして末尾に足し、選択もアクティブ化もしない。
+/// 復元先を rootPath で照合し、無ければ作り、休眠チケットを足し（同 worktree の連の右端、無ければ末尾）、
+/// 選択もアクティブ化もしない。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerRestoreSessionsTests: OrbeTestCase {

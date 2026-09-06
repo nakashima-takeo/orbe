@@ -181,8 +181,8 @@ let tools: [[String: Any]] = [
     ("name", "restore_sessions"),
     (
       "description",
-      "閉じたセッションを休眠チケットとして該当 workspace（rootPath 一致。無ければログの名前で作る）の"
-        + "末尾に戻す。resume_agent と違い起動しない——選択も前面化もせず、タブが mount されたとき resume で"
+      "閉じたセッションを休眠チケットとして該当 workspace（rootPath 一致。無ければログの名前で作る）へ"
+        + "戻す（位置は新規タブと同じ規則＝同じ worktree の連の右端、無ければ末尾）。resume_agent と違い起動しない——選択も前面化もせず、タブが mount されたとき resume で"
         + "起きる（アクティブ workspace に戻した分は次にいずれかのタブを選んだとき他の未 mount タブと順次、"
         + "背景 workspace の分はその workspace のアクティブ化で）。復元先が背景 workspace のとき、話しかける"
         + "には先に focus_tab / activate_workspace で起こす（起こす前の prompt_agent は tab not mounted）。"

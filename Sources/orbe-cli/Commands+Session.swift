@@ -31,9 +31,10 @@ let sessionUsage = """
   form one group (closed by you never groups). --since keeps the groups whose
   `at` is at or after that time. --json is {groups:[{at, origin, sessions}]};
   `at` is the group's oldest close and is what --at takes.
-  restore brings sessions back as dormant tickets at the end of their
-  workspace (matched by rootPath; created from the log when missing). They are
-  not selected or brought to the front; each resumes when its tab is mounted
+  restore brings sessions back as dormant tickets into their workspace
+  (matched by rootPath; created from the log when missing), placed like a new
+  tab: at the end of the run of tabs from the same worktree, else last. They
+  are not selected or brought to the front; each resumes when its tab is mounted
   (in the active workspace the next tab selection mounts the pending tabs one
   by one; in a background workspace, when that workspace is activated).
   --at <iso> restores every session still gone from the groups with that `at`
