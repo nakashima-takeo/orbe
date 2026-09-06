@@ -25,8 +25,8 @@ enum TabCloseOrigin {
   }
 }
 
-/// 走査で得た 1 タブと、その居場所（workspace / タブの index）。
-/// `SessionStore.allTabs()` の要素で、制御 API の列挙と Dispatch の cwd 突合が共有する。
+/// 1 タブと、その居場所（workspace / タブの index）。
+/// `SessionStore.allTabs()` の走査結果と `restoreDormantTab` の戻り値が共有する。
 struct TabRef {
   let workspaceIndex: Int
   let tabIndex: Int
@@ -154,7 +154,7 @@ final class SessionStore {
   /// mount する）。背景 workspace では active を挿したタブへ。workspace index の妥当性は呼び出し側が保証する。
   func insertTab(_ tab: TerminalTab, intoWorkspaceAt i: Int) -> Int {
     let ws = workspaces[i]
-    let dest = insertKeepingSelection(tab, intoWorkspaceAt: i)
+    let dest = insert(tab, intoWorkspaceAt: i)
     if i != activeWorkspace { ws.active = dest }
     return dest
   }
@@ -164,12 +164,13 @@ final class SessionStore {
   /// active を挿したタブへ動かす `insertTab` を継がない（0 タブだった workspace は `active == 0` のままで
   /// 新タブがそれになる）。workspace index の妥当性は呼び出し側が保証する。
   func insertRestoredTab(_ tab: TerminalTab, intoWorkspaceAt i: Int) -> Int {
-    insertKeepingSelection(tab, intoWorkspaceAt: i)
+    insert(tab, intoWorkspaceAt: i)
   }
 
-  /// 挿入の実体。同キー連の右端へ挿し、挿入位置が現 active 以前なら active を 1 つ繰り下げて
-  /// 挿入前と同じタブを指し続けさせる（0タブへの挿入は count−1 へのクランプで吸収）。
-  private func insertKeepingSelection(_ tab: TerminalTab, intoWorkspaceAt i: Int) -> Int {
+  /// 挿入の実体。同キー連の右端へ挿し、挿入前と同じタブを指し続けさせる（挿入位置が現 active 以前なら
+  /// active を 1 つ繰り下げ、0 タブへの挿入は count−1 へのクランプで吸収）。選択をどう振るかは
+  /// 呼び出し側のポリシー。
+  private func insert(_ tab: TerminalTab, intoWorkspaceAt i: Int) -> Int {
     let ws = workspaces[i]
     let dest = Self.insertionIndex(forKey: tab.groupKey, in: ws.tabs)
     ws.tabs.insert(tab, at: dest)

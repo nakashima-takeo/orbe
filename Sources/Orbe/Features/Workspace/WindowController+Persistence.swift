@@ -36,7 +36,6 @@ extension WindowController {
   /// 起動時復元と `makeTab` を共有するが、閉じたセッションの復元が持ち込むのは cwd と同一性だけ
   /// （明示タイトルは付かない）。位置は新規タブと同じ規則——同じ worktree の連の右端、無ければ末尾。
   /// 選択・mount はしない（起床は既存の mount 規律に従う）。
-  @discardableResult
   func restoreDormantTab(_ state: TabState, intoWorkspaceAt index: Int) -> TabRef {
     let tab = makeTab(from: state)
     let tabIndex = store.insertRestoredTab(tab, intoWorkspaceAt: index)
