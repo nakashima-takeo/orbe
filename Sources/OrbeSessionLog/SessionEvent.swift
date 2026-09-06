@@ -43,8 +43,9 @@ public struct SessionEvent: Codable, Equatable {
   public var cwd: String
   public var agent: Agent
 
+  /// `ts` は wire の精度（ミリ秒）に丸めて持つ——書いた値と読み戻した値が等しいことを型の構築で保証する。
   public init(ts: Date, kind: Kind, workspace: Workspace, cwd: String, agent: Agent) {
-    self.ts = ts
+    self.ts = Self.parseISO8601(Self.iso8601(ts)) ?? ts
     self.kind = kind
     self.workspace = workspace
     self.cwd = cwd

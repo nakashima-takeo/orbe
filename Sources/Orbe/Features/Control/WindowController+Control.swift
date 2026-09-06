@@ -50,59 +50,16 @@ extension WindowController: ControlTarget {
     return nil
   }
 
-  /// エージェント hook の状態報告を発信元タブの slot へ適用する。遷移は現 slot × state で決まる:
-  /// `.none` は clear が no-op・それ以外の報告で live 化（手動起動・spawn_agent の初回 hook という
-  /// 正規経路）。`.live` は clear で `.none` へ・それ以外は同一性と報告を更新する。`.dormant`
-  /// （未消費チケット）宛は**破棄**——チケットは報告で消費・変異できず、dormant タブは surface
-  /// 未生成で報告主のプロセスが存在しえない（届く報告は必ず偽）。slot 代入の didSet が agent_state
-  /// を emit し、`onAgentStateChange` がタブ・横断ロールアップを更新する。
-  ///
-  /// 同一性の更新は `AgentSession.updated` が持つ（command は常に上書き・sessionId は同じ CLI
-  /// からの報告のあいだだけ sticky）。
-  /// Attention 用の保持: stateChangedAt は **state の値が実際に変わったときだけ** now に更新する
-  /// （working→working の連続報告で一覧の並びが暴れない）。message は state の遷移で確定し直し、
-  /// 同じ state が続くあいだは **ツール由来（`source == "tool"`）の文言を、ツール由来でない報告
-  /// （通知由来・文言なし）で上書きしない**。1 つの待ちを複数の hook が順に報告する CLI があるため（claude は
-  /// AskUserQuestion のダイアログを開く時点で質問文を、その約 6 秒後に汎用の定型文を撃つ）、
-  /// 出所で守らないと具体的な文言が定型文に潰れる。逆に通知由来どうしは上書きし合う——待ちの主体が
-  /// このタブのエージェントとは限らず（teammate の worker が出す承認要求はリーダーのタブへ
-  /// 即時に届き、要求ごとに文言が違う）、保持すると別の待ちの文言が居残るため。waiting / done への
-  /// 実変化は 1 つの通知（`agentNotification`）として成立させ、メニューバーの一過性表示と通知音という
-  /// 2 つの面へ流す（成立条件——見ているタブ・未activatedタブでは通知しない——は通知側が 1 回だけ解く）。
-  func controlReportAgent(
-    tab: TerminalTab, agent: String, state: String, sessionId: String?, message: AgentMessage?
-  ) {
-    // 遷移表そのもの。網羅 switch なので、`AgentSlot` にケースが増えたら必ずここの判断を求められる。
-    switch tab.agentSlot {
-    case .dormant:
-      break  // 破棄——このタブの slot は一切変えない。
-    case .live where state == "clear":
-      tab.agentSlot = .none
-    case .none where state == "clear":
-      break  // 既に無。
-    case .none, .live:
-      let session =
-        tab.agentSlot.session?.updated(command: agent, sessionId: sessionId)
-        ?? AgentSession(command: agent, sessionId: sessionId)
-      if let prior = tab.agentReport, prior.state == state {
-        // 同値の連続報告: 時刻は維持し、ツール由来の文言を弱い報告から守る。
-        let keep = message?.source != "tool" && prior.message?.source == "tool"
-        tab.agentSlot = .live(
-          session: session,
-          report: AgentReport(
-            state: state, message: keep ? prior.message : message,
-            stateChangedAt: prior.stateChangedAt))
-      } else {
-        // 実変化（.none・report なしからの誕生を含む）。
-        tab.agentSlot = .live(
-          session: session,
-          report: AgentReport(state: state, message: message, stateChangedAt: Date()))
-        if state == "waiting" || state == "done", let notification = agentNotification(for: tab) {
-          noteAttentionTransient(notification)
-          noteAgentSound(notification)
-        }
-      }
-    }
+  /// エージェント hook の状態報告を発信元タブへ適用する。遷移表と同一性の寿命の判断はタブ
+  /// （`TerminalTab.applyReport`）が持ち、ここは waiting / done への実変化を 1 つの通知
+  /// （`agentNotification`）として成立させ、メニューバーの一過性表示と通知音という 2 つの面へ流す
+  /// （成立条件——見ているタブ・未activatedタブでは通知しない——は通知側が 1 回だけ解く）。
+  func controlReportAgent(tab: TerminalTab, report: AgentHookReport) {
+    guard tab.applyReport(report), report.state == "waiting" || report.state == "done",
+      let notification = agentNotification(for: tab)
+    else { return }
+    noteAttentionTransient(notification)
+    noteAgentSound(notification)
   }
 
   /// タブのエージェントへ text を送って Enter を押す（制御 API の prompt_agent）。届くのは入力欄が
@@ -325,7 +282,7 @@ extension WindowController: ControlTarget {
     guard workspaces.count > 1 else {
       return .failure(ControlError(code: -32000, message: "cannot remove last workspace"))
     }
-    closeWorkspace(index)
+    closeWorkspace(index, origin: .controlAPI)
     return .success(["ok": true])
   }
 }

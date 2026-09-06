@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// SessionStore.closeWorkspace(_:) の純ドメイン契約を固定する。
+/// SessionStore.closeWorkspace(_:origin:) の純ドメイン契約を固定する。
 ///
 /// 契約は3つ。①アクティブ workspace を削除したら MRU（`lastUsedAt` 最大の他 workspace）を次のアクティブに
 /// する（作成順の隣ではない）。②背景 workspace を削除してもアクティブ workspace の同一性は保つ。
@@ -33,7 +33,7 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
     let def = ws("default", t3)
     let store = SessionStore(workspaces: [def, alpha, beta], activeWorkspace: 0)
 
-    XCTAssertEqual(store.closeWorkspace(0), .activeChanged)
+    XCTAssertEqual(store.closeWorkspace(0, origin: .gesture), .activeChanged)
     XCTAssertTrue(
       store.current === beta, "アクティブ削除後は MRU(lastUsedAt 最大)の Beta（作成順の隣 Alpha ではない）")
   }
@@ -46,7 +46,7 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
     let c = ws("C", t3)
     let store = SessionStore(workspaces: [a, b, c], activeWorkspace: 1)
 
-    XCTAssertEqual(store.closeWorkspace(1), .activeChanged)
+    XCTAssertEqual(store.closeWorkspace(1, origin: .gesture), .activeChanged)
     XCTAssertTrue(store.current === c, "MRU=C を参照で引き直す")
     XCTAssertEqual(store.activeWorkspace, 1, "C の index は削除で 2→1 に詰まる")
   }
@@ -60,7 +60,7 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
     let c = ws("C", t3)
     let store = SessionStore(workspaces: [a, b, c], activeWorkspace: 1)
 
-    XCTAssertEqual(store.closeWorkspace(2), .backgroundChanged, "背景(C)の削除")
+    XCTAssertEqual(store.closeWorkspace(2, origin: .gesture), .backgroundChanged, "背景(C)の削除")
     XCTAssertTrue(store.current === b, "アクティブは B のまま")
     XCTAssertEqual(store.activeWorkspace, 1, "後ろの削除では index は詰まらない")
   }
@@ -72,7 +72,8 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
     let c = ws("C", t3)
     let store = SessionStore(workspaces: [a, b, c], activeWorkspace: 2)  // active = C
 
-    XCTAssertEqual(store.closeWorkspace(0), .backgroundChanged, "背景(A・アクティブより前)の削除")
+    XCTAssertEqual(
+      store.closeWorkspace(0, origin: .gesture), .backgroundChanged, "背景(A・アクティブより前)の削除")
     XCTAssertTrue(store.current === c, "アクティブは同一 C を指し続ける")
     XCTAssertEqual(store.activeWorkspace, 1, "前の削除で index を 2→1 に詰める")
   }
@@ -83,15 +84,15 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
     let only = ws("only", t1)
     let store = SessionStore(workspaces: [only], activeWorkspace: 0)
 
-    XCTAssertEqual(store.closeWorkspace(0), .invalid, "最後の1つは削除できない")
+    XCTAssertEqual(store.closeWorkspace(0, origin: .gesture), .invalid, "最後の1つは削除できない")
     XCTAssertEqual(store.workspaces.count, 1, "配列は不変")
     XCTAssertTrue(store.current === only)
   }
 
   func testCloseOutOfRangeIsInvalid() {
     let store = SessionStore(workspaces: [ws("a", t1), ws("b", t2)], activeWorkspace: 0)
-    XCTAssertEqual(store.closeWorkspace(5), .invalid, "範囲外 index は .invalid")
-    XCTAssertEqual(store.closeWorkspace(-1), .invalid, "負の index は .invalid")
+    XCTAssertEqual(store.closeWorkspace(5, origin: .gesture), .invalid, "範囲外 index は .invalid")
+    XCTAssertEqual(store.closeWorkspace(-1, origin: .gesture), .invalid, "負の index は .invalid")
     XCTAssertEqual(store.workspaces.count, 2, "配列は不変")
   }
 

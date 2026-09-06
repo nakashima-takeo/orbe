@@ -126,36 +126,40 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
   func testStateChangedAtMovesOnlyOnActualChange() throws {
     let (wc, tab) = try makeControllerAndTab()
 
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "working", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "working"))
     let first = try XCTUnwrap(tab.agentReport?.stateChangedAt)
 
     // 同値の連続報告（working→working）では動かない。
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "working", sessionId: nil,
-      message: AgentMessage(text: "m"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "working", sessionId: nil,
+        message: AgentMessage(text: "m")))
     XCTAssertEqual(tab.agentReport?.stateChangedAt, first, "同値報告で stateChangedAt は動かない")
 
     // 実変化（working→waiting）で動く。
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
     let second = try XCTUnwrap(tab.agentReport?.stateChangedAt)
     XCTAssertNotEqual(second, first, "実変化で stateChangedAt が更新される")
 
     // 実変化を挟んだ後の同値報告（waiting→waiting）でも動かない＝打刻が drift しない。
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "waiting"))
     XCTAssertEqual(tab.agentReport?.stateChangedAt, second, "実変化後の同値報告でも stateChangedAt は動かない")
   }
 
   func testClearResetsAllAttentionFields() throws {
     let (wc, tab) = try makeControllerAndTab()
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "done", sessionId: "s1",
-      message: AgentMessage(text: "done!", source: "tool"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "done", sessionId: "s1",
+        message: AgentMessage(text: "done!", source: "tool")))
     XCTAssertEqual(tab.agentReport?.message?.source, "tool", "前提: 消す対象が立っている")
-    wc.controlReportAgent(tab: tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "clear"))
     XCTAssertEqual(tab.agentSlot, .none, "clear で同一性ごと無へ戻る")
   }
 
@@ -164,13 +168,14 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     let (wc, tab) = try makeControllerAndTab()
     XCTAssertFalse(wc.window.isKeyWindow, "前提: 背面（非 key）なので見ているタブの抑制は効かない")
 
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "working", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "working"))
     XCTAssertNil(wc.attentionStore.transient, "working への変化では立てない")
 
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
     let transient = try XCTUnwrap(wc.attentionStore.transient)
     XCTAssertEqual(transient.row.tabId, tab.id)
     XCTAssertEqual(transient.row.state, "waiting")
@@ -178,12 +183,16 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
 
     wc.attentionStore.transient = nil
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
     XCTAssertNil(wc.attentionStore.transient, "同値報告（変化なし）では立てない")
 
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d")))
     XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
   }
 
@@ -194,16 +203,20 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     makeKey(wc)
 
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
     XCTAssertNil(wc.attentionStore.transient, "見ているタブの waiting ではピルを立てない")
     wc.flushChrome()
     XCTAssertEqual(wc.attentionStore.rows.map(\.tabId), [tab.id], "抑制するのはピルだけ（一覧は従来どおり）")
     XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["waiting"])
 
-    wc.controlReportAgent(tab: tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "clear"))
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d")))
     XCTAssertNil(wc.attentionStore.transient, "見ているタブの done でもピルを立てない")
     XCTAssertEqual(tab.agentState, "idle", "done のフォーカス消費は従来どおり効く")
     wc.flushChrome()
@@ -217,8 +230,10 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     makeKey(wc)
 
     wc.controlReportAgent(
-      tab: tabs[1], agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: tabs[1],
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
     XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id)
   }
 
@@ -228,13 +243,17 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     makeKey(wc)
 
     wc.controlReportAgent(
-      tab: tabs[1], agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "bg"))
+      tab: tabs[1],
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "bg")))
     XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id)
 
     wc.controlReportAgent(
-      tab: tabs[0], agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "fg"))
+      tab: tabs[0],
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "fg")))
     XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id, "抑制は既存のピルを消さない")
   }
 
@@ -242,7 +261,9 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
   func testConsumeDoneKeepsAttentionTimestamps() throws {
     let (wc, tab) = try makeControllerAndTab()
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d")))
     // 非 nil で拾う——Optional のまま比べると、report が打刻しなくなった退行が nil == nil で
     // 素通りして、このテストが名乗る契約が黙って検証されなくなる。
     let at = try XCTUnwrap(tab.agentReport?.stateChangedAt)
@@ -256,12 +277,14 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
   func testFlushChromeProjectsAttentionRows() throws {
     let (wc, tab) = try makeControllerAndTab()
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "q"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "q")))
     wc.flushChrome()
     XCTAssertEqual(wc.attentionStore.rows.map(\.tabId), [tab.id])
 
-    wc.controlReportAgent(tab: tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "clear"))
     wc.refreshChrome()
     wc.flushChrome()
     XCTAssertTrue(wc.attentionStore.rows.isEmpty)

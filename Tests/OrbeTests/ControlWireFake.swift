@@ -44,6 +44,7 @@ final class FakeControlTarget: ControlTarget {
     let sessionId: String?
     let messageText: String?
     let messageSource: String?
+    let reason: String?
   }
   struct Spawn {
     let workspaceId: Int?
@@ -162,13 +163,12 @@ final class FakeControlTarget: ControlTarget {
     return activateResult
   }
 
-  func controlReportAgent(
-    tab: TerminalTab, agent: String, state: String, sessionId: String?, message: AgentMessage?
-  ) {
+  func controlReportAgent(tab: TerminalTab, report: AgentHookReport) {
     reportedAgents.append(
       ReportedAgent(
-        tabId: tab.id, agent: agent, state: state, sessionId: sessionId,
-        messageText: message?.text, messageSource: message?.source))
+        tabId: tab.id, agent: report.agent, state: report.state, sessionId: report.sessionId,
+        messageText: report.message?.text, messageSource: report.message?.source,
+        reason: report.reason))
   }
 
   func controlFocusTab(tabId: Int) -> Result<Any, ControlError> {

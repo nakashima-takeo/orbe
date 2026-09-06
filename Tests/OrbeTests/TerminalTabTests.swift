@@ -152,7 +152,7 @@ final class TerminalTabTests: OrbeTestCase {
     tab.surface.currentPwd = "/work"
     tab.explicitTitle = "api"
     let session = AgentSession(command: "claude", sessionId: "s-1")
-    tab.agentSlot = .live(session: session, report: nil)
+    setReportedState(tab, "idle", sessionId: "s-1")
     XCTAssertEqual(
       tab.tabState(), TabState(cwd: "/work", agent: session, explicitTitle: "api"))
   }

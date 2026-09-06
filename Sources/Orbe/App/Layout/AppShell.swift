@@ -13,7 +13,7 @@ import SwiftUI
   /// 前面 overlay の種別。`AppShell` が `.overlay` で対応する SwiftUI を compose する。
   enum Overlay {
     case none, languageSelect, workspacePalette, workspaceCreate, agentPalette, dispatchPalette,
-      settingsPalette, onboarding, updateChanges, attentionPalette, help
+      settingsPalette, onboarding, updateChanges, attentionPalette, closedAgentsPalette, help
   }
 
   /// 上段 chrome（ネイティブ SwiftUI `StatusRowView` の状態）。
@@ -35,6 +35,7 @@ import SwiftUI
   var dispatchProvider: DispatchDataProvider?
   var settingsPalette: SettingsPaletteModel?
   var attentionPalette: AttentionPaletteModel?
+  var closedAgentsPalette: ClosedAgentsPaletteModel?
   var onboarding: OnboardingModel?
   var help: HelpModel?
   /// アップデートの状態モデル（トースト層・変更内容シート・設定パレットが共有する唯一の情報源）。
@@ -60,6 +61,7 @@ import SwiftUI
     case .dispatchPalette: dispatchPalette?.focus()
     case .settingsPalette: settingsPalette?.focus()
     case .attentionPalette: attentionPalette?.focus()
+    case .closedAgentsPalette: closedAgentsPalette?.focus()
     case .onboarding: onboarding?.focus()
     case .updateChanges: update?.focusChanges()
     case .help: help?.focus()
@@ -137,6 +139,8 @@ struct AppShell: View {
       if let palette = model.settingsPalette { PaletteOverlay(model: palette.render) }
     case .attentionPalette:
       if let palette = model.attentionPalette { PaletteOverlay(model: palette.render) }
+    case .closedAgentsPalette:
+      if let palette = model.closedAgentsPalette { PaletteOverlay(model: palette.render) }
     case .onboarding:
       if let onboarding = model.onboarding { OnboardingOverlay(model: onboarding) }
     case .updateChanges:

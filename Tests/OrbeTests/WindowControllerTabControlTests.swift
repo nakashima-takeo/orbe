@@ -140,19 +140,17 @@ final class WindowControllerTabControlTests: OrbeTestCase {
     let tabIds = Set(wc.controlListTabs().compactMap { $0["tabId"] as? Int })
     XCTAssertEqual(tabIds.count, 2, "前提: 2 タブ")
     let victim = try XCTUnwrap(tabIds.first)
-    // エージェント hook のセッション報告（report_agent）と同じくエージェントを載せてから閉じる＝
-    // エージェント判定では通る状態にして、発火源の判定だけが効いていることを固定する。
+    // エージェント hook のセッション報告（report_agent）と同じくエージェントを載せてから閉じる。
     let victimTab = try XCTUnwrap(wc.current.tabs.first { $0.id == victim })
-    victimTab.agentSlot = .live(
-      session: AgentSession(command: "claude", sessionId: "live-1"), report: nil)
+    setReportedState(victimTab, "idle", sessionId: "live-1")
     guard case .success = wc.controlCloseTab(tabId: victim) else {
       return XCTFail("close_tab は success")
     }
     XCTAssertFalse(
       wc.controlListTabs().contains { $0["tabId"] as? Int == victim }, "閉じたタブは消える")
-    XCTAssertTrue(
-      wc.current.closedAgentTabs.isEmpty,
-      "制御 API の閉鎖は開き直しスタックへ積まない（⇧⌘T の対象は人のジェスチャだけ）")
+    XCTAssertEqual(
+      wc.sessionLog.lastEvent(sessionId: "live-1")?.closeOrigin, .controlAPI,
+      "制御 API の閉鎖は同一性の終わり方 controlAPI としてログに写る")
   }
 
   /// close_tab は未知 tabId を -32004 で弾く。
@@ -271,7 +269,7 @@ final class WindowControllerTabControlTests: OrbeTestCase {
     defer { wire.teardown() }
     for (i, tabId) in held.enumerated() { armTabClosedWait(wire, id: i + 1, tabId: tabId) }
 
-    wc.closeWorkspace(doomed)
+    wc.closeWorkspace(doomed, origin: .gesture)
 
     XCTAssertEqual(
       Set([closedTabId(wire.nextResponse()), closedTabId(wire.nextResponse())].compactMap { $0 }),

@@ -32,7 +32,7 @@ extension WindowControllerControlTests {
       setReportedState(tab, open)
       XCTAssertNil(wc.controlPromptAgent(tab: tab, text: "hello"), "\(open) には送れる")
     }
-    tab.agentSlot = .none
+    clearAgentState(tab)
     XCTAssertNil(wc.controlPromptAgent(tab: tab, text: "hello"), "報告の無いタブにも送れる")
   }
 

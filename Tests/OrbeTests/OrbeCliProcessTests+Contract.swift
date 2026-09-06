@@ -255,7 +255,7 @@ extension OrbeCliProcessTests {
       control.orbJSON(["tab", "send", "\(tab.id)", "--text", "x"])["seq"] as? Int,
       "tab send --json は {ok, seq} をそのまま出す")
     control.target.controlReportAgent(
-      tab: tab, agent: "codex", state: "idle", sessionId: nil, message: nil)
+      tab: tab, report: AgentHookReport(agent: "codex", state: "idle"))
 
     let filtered = control.orbJSON(["tab", "list", "--workspace", "\(activeId)"])
     XCTAssertNotNil(filtered["tabs"] as? [[String: Any]], "前提: 絞った tabs")

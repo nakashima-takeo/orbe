@@ -64,6 +64,14 @@ final class SessionEventCodingTests: XCTestCase {
     XCTAssertThrowsError(try JSONDecoder().decode(SessionEvent.self, from: Data(line.utf8)))
   }
 
+  func testTimestampIsHeldAtWirePrecision() throws {
+    let event = Fixture.opened("a", at: 0.1234567)
+    let line = try SessionLogWriter.encodeLine(event)
+    XCTAssertEqual(
+      try JSONDecoder().decode(SessionEvent.self, from: line), event,
+      "メモリの値と読み戻した値が等しい（ミリ秒未満は構築時に落ちる）")
+  }
+
   func testISO8601HelpersAgree() {
     let date = Fixture.base.addingTimeInterval(12.345)
     let text = SessionEvent.iso8601(date)

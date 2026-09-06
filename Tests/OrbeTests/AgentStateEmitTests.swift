@@ -102,8 +102,7 @@ final class AgentStateEmitTests: OrbeTestCase {
   func testConsumeDoneStateEmitsNothingWithoutADoneState() throws {
     let waiting = TerminalTab(cwd: "/tmp")
     setReportedState(waiting, "waiting")
-    let unreported = TerminalTab(cwd: "/tmp")
-    unreported.agentSlot = .live(session: ticket, report: nil)
+    let unreported = liveUnreportedTab(session: ticket)
     let plain = TerminalTab(cwd: "/tmp")
     let w = armAgentStateWait(id: 1)
 
@@ -132,8 +131,7 @@ final class AgentStateEmitTests: OrbeTestCase {
   func testResetAgentStatesEmitsNothingWithoutAResettableState() throws {
     let idle = TerminalTab(cwd: "/tmp")
     setReportedState(idle, "idle")
-    let unreported = TerminalTab(cwd: "/tmp")
-    unreported.agentSlot = .live(session: ticket, report: nil)
+    let unreported = liveUnreportedTab(session: ticket)
     let plain = TerminalTab(cwd: "/tmp")
     let w = armAgentStateWait(id: 1)
 

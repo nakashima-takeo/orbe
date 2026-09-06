@@ -14,18 +14,20 @@ extension WindowControllerReportAgentTests {
   /// （claude の AskUserQuestion: PreToolUse が質問文、約 6 秒後の Notification が定型文）。
   func testNotificationDoesNotOverwriteToolMessage() throws {
     let (wc, tab) = try makeControllerAndTab()
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "working"))
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "working", sessionId: nil, message: nil)
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "赤と青どちらが好きですか", source: "tool")))
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "赤と青どちらが好きですか", source: "tool"))
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "Claude needs your permission", source: "notification"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "Claude needs your permission", source: "notification")))
     XCTAssertEqual(tab.agentReport?.message?.text, "赤と青どちらが好きですか")
     // 文言を載せない報告もツール由来を落とせない（守る相手は通知由来に限らない）。
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "waiting"))
     XCTAssertEqual(tab.agentReport?.message?.text, "赤と青どちらが好きですか", "文言なしの報告でもツール由来は残る")
   }
 
@@ -34,19 +36,18 @@ extension WindowControllerReportAgentTests {
   /// 約 6 秒後の Notification が plan approval の文言を載せる）。
   func testNotificationFillsWaitingThatStartedWithoutMessage() throws {
     let (wc, tab) = try makeControllerAndTab()
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "working", sessionId: nil, message: nil)
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "working"))
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "waiting"))
     XCTAssertNil(tab.agentReport?.message, "文言を載せない報告では文言なし")
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(
-        text: "Claude Code needs your approval for the plan", source: "notification"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(
+          text: "Claude Code needs your approval for the plan", source: "notification")))
     XCTAssertEqual(tab.agentReport?.message?.text, "Claude Code needs your approval for the plan")
     // 埋めた文言は通知由来なので、同 state の文言なしの報告で落ちる（stale にならない）。
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "waiting"))
     XCTAssertNil(tab.agentReport?.message, "通知由来は文言なしの報告で落ちる")
   }
 
@@ -55,18 +56,23 @@ extension WindowControllerReportAgentTests {
   func testStateChangeRedeterminesMessage() throws {
     let (wc, tab) = try makeControllerAndTab()
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "赤と青どちらが好きですか", source: "tool"))
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "working", sessionId: nil, message: nil)
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "赤と青どちらが好きですか", source: "tool")))
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "working"))
     XCTAssertNil(tab.agentReport?.message, "working は文言を持たない")
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "Claude needs your permission", source: "notification"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "Claude needs your permission", source: "notification")))
     XCTAssertEqual(tab.agentReport?.message?.text, "Claude needs your permission")
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "done", sessionId: nil,
-      message: AgentMessage(text: "PR #142 を作成しました", source: "tool"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "done", sessionId: nil,
+        message: AgentMessage(text: "PR #142 を作成しました", source: "tool")))
     XCTAssertEqual(tab.agentReport?.message?.text, "PR #142 を作成しました")
   }
 
@@ -76,11 +82,15 @@ extension WindowControllerReportAgentTests {
   func testToolMessageOverwritesNotificationMessage() throws {
     let (wc, tab) = try makeControllerAndTab()
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "agent-a needs permission for Bash", source: "notification"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "agent-a needs permission for Bash", source: "notification")))
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "赤と青どちらが好きですか", source: "tool"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "赤と青どちらが好きですか", source: "tool")))
     XCTAssertEqual(tab.agentReport?.message?.text, "赤と青どちらが好きですか")
   }
 
@@ -89,11 +99,15 @@ extension WindowControllerReportAgentTests {
   func testNotificationMessageOverwritesEarlierNotificationMessage() throws {
     let (wc, tab) = try makeControllerAndTab()
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "agent-a needs permission for Bash", source: "notification"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "agent-a needs permission for Bash", source: "notification")))
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil,
-      message: AgentMessage(text: "agent-b needs permission for Write", source: "notification"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "waiting", sessionId: nil,
+        message: AgentMessage(text: "agent-b needs permission for Write", source: "notification")))
     XCTAssertEqual(tab.agentReport?.message?.text, "agent-b needs permission for Write")
   }
 }

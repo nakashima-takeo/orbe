@@ -18,7 +18,6 @@ extension TerminalTabTests {
 
   func testGlyphNilWhenNoActiveState() {
     let none = TerminalTab(cwd: "/tmp")
-    none.agentSlot = .none
     XCTAssertNil(none.agentStateKind, "nil ならアイコン無し")
     let idle = TerminalTab(cwd: "/tmp")
     setReportedState(idle, "idle")
@@ -58,11 +57,8 @@ extension TerminalTabTests {
 
   func testConsumePreservesAgentSessionForResume() {
     let tab = TerminalTab(cwd: "/tmp")
-    setReportedState(tab, "done", command: "claude")
     let session = AgentSession(command: "claude", sessionId: "sess-1")
-    if case .live(_, let report) = tab.agentSlot {
-      tab.agentSlot = .live(session: session, report: report)
-    }
+    setReportedState(tab, "done", command: "claude", sessionId: "sess-1")
 
     tab.consumeDoneState()
 
@@ -86,7 +82,6 @@ extension TerminalTabTests {
 
   func testConsumeOnNonDoneTabNoOp() {
     let tab = TerminalTab(cwd: "/tmp")
-    tab.agentSlot = .none
 
     tab.consumeDoneState()
 
@@ -113,11 +108,8 @@ extension TerminalTabTests {
     let tab = TerminalTab(cwd: "/tmp")
     let reportedAt = Date(timeIntervalSince1970: 1000)
     let question = AgentMessage(text: "approve?", source: "tool")
-    setReportedState(tab, "waiting", at: reportedAt, message: question)
     let session = AgentSession(command: "claude", sessionId: "sess-1")
-    if case .live(_, let report) = tab.agentSlot {
-      tab.agentSlot = .live(session: session, report: report)
-    }
+    setReportedState(tab, "waiting", at: reportedAt, message: question, sessionId: "sess-1")
 
     tab.resetAgentState()
 
@@ -141,9 +133,14 @@ extension TerminalTabTests {
 
   func testResetLeavesSlotsWithoutAReportedStateUntouched() {
     let ticket = AgentSession(command: "claude", sessionId: "resume-1")
-    for slot in [AgentSlot.none, .dormant(ticket), .live(session: ticket, report: nil)] {
-      let tab = TerminalTab(cwd: "/tmp")
-      tab.agentSlot = slot
+    let state = TabState(cwd: "/tmp", agent: ticket, explicitTitle: nil)
+    let tabs = [
+      TerminalTab(cwd: "/tmp"),
+      TerminalTab(restoring: state, resumeSpawn: { _ in nil }),
+      liveUnreportedTab(session: ticket),
+    ]
+    for tab in tabs {
+      let slot = tab.agentSlot
       tab.resetAgentState()
       XCTAssertEqual(tab.agentSlot, slot, "素のシェル / 未消費チケット / 報告前の live には何も生やさない")
     }

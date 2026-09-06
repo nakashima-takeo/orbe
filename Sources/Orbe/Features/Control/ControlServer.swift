@@ -29,8 +29,7 @@ protocol ControlTarget: AnyObject {
   /// activeWorkspaceId と当該 workspace のタブ ID 群。未知 id は nil（spawn と違いフォールバックしない）。
   func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, tabIds: [Int])?
   /// エージェント hook の状態報告を発信元タブへ適用する（report_agent）。
-  func controlReportAgent(
-    tab: TerminalTab, agent: String, state: String, sessionId: String?, message: AgentMessage?)
+  func controlReportAgent(tab: TerminalTab, report: AgentHookReport)
   /// 指定タブへフォーカスする（focus_tab）。別 WS なら activate＋タブ選択も行う。未解決は -32004。
   func controlFocusTab(tabId: Int) -> Result<Any, ControlError>
   /// 指定タブ（TerminalTab.id）を閉じる（close_tab）。カスケードは GUI（Cmd+W）と一致。未解決は -32004。
@@ -328,14 +327,10 @@ final class ControlServer {
       return .success(["activeWorkspaceId": r.activeWorkspaceId, "tabIds": r.tabIds])
     case "report_agent":
       guard let t = tab() else { return .failure(notFound) }
-      guard let agent = params["agent"] as? String, let state = params["state"] as? String else {
+      guard let report = hookReport(params) else {
         return .failure(ControlError(code: -32602, message: "missing agent/state"))
       }
-      target.controlReportAgent(
-        tab: t, agent: agent, state: state, sessionId: params["sessionId"] as? String,
-        message: (params["message"] as? String).map {
-          AgentMessage(text: $0, source: params["messageSource"] as? String)
-        })
+      target.controlReportAgent(tab: t, report: report)
       return .success(["ok": true])
     default:
       // タブ操作・config / workspace CRUD は拡張の dispatch（ControlServer+Dispatch）へ。

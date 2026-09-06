@@ -26,6 +26,20 @@ extension ControlServer {
     }
   }
 
+  /// `report_agent` の params を hook 1 発の報告へ写す。`agent` / `state` が無ければ nil（-32602）。
+  /// optional の `sessionId` / `message`（＋`messageSource`）/ `reason` は名前どおり運ぶ。
+  func hookReport(_ params: [String: Any]) -> AgentHookReport? {
+    guard let agent = params["agent"] as? String, let state = params["state"] as? String else {
+      return nil
+    }
+    return AgentHookReport(
+      agent: agent, state: state, sessionId: params["sessionId"] as? String,
+      message: (params["message"] as? String).map {
+        AgentMessage(text: $0, source: params["messageSource"] as? String)
+      },
+      reason: params["reason"] as? String)
+  }
+
   /// `spawn_agent` の main 側（param の在否と型だけを見る。workspace / agent の解決は target が返す）。
   func spawnAgent(params: [String: Any], target: ControlTarget) -> Result<AgentLaunch, ControlError>
   {

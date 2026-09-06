@@ -59,6 +59,10 @@ final class WindowController: NSObject, NSWindowDelegate {
   let attentionStore = AttentionStore()
   // 通知音の再生層。見ていないタブの状態変化（WindowController+Sound）と設定パレットの試聴が使う。
   let soundPlayer: AgentSoundPlaying = AgentSoundOutput.make()
+  // エージェントセッションの寿命ログ（agent-sessions.jsonl）の書き手。起動時に読んで剪定した結果を
+  // メモリに持ち、タブの同一性の遷移（wire の onIdentityTransition）を積む。復元（restore）より先に
+  // 出来ていることが要る——復元タブの起床が opened を書く。
+  let sessionLog = AgentSessionLog()
 
   // 読みは store へ転送する（制御チャネル・chrome・パレット・永続・テストが多数の箇所で読むため、
   // 従来の可視性（internal）を保って読み site を無改変にする）。所有と全ミューテーションは store。
@@ -186,6 +190,10 @@ final class WindowController: NSObject, NSWindowDelegate {
       self?.consumeVisibleTabDone()
       self?.refreshChrome()
     }
+    tab.onIdentityTransition = { [weak self, weak tab] transition in
+      guard let self, let tab else { return }
+      self.recordSessionEvent(transition, of: tab)
+    }
     tab.onWindowCommand = { [weak self] command in self?.handleWindowCommand(command) }
     return tab
   }
@@ -274,7 +282,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   /// （close_surface_cb → onClose）が背景タブ・背景 workspace からも届くため、
   /// アクティブ文脈を前提にせず所属 workspace を特定して処理する。
   /// 制御 API（`close_tab`）も id 解決の上でここへ委譲する（WindowController+Control）ため internal。
-  /// `origin` は判断せず store へ素通しする（復元スタックへ積むかは removeTab が決める）。
+  /// `origin` は判断せず store へ素通しする（同一性の終わり方としてタブがログへ写す）。
   func closeTab(_ tab: TerminalTab?, origin: TabCloseOrigin) {
     guard let tab else { return }
     // タブ集合が変わると editingIndex（位置 index）が別タブを指しうる。編集中なら畳む
@@ -325,6 +333,7 @@ final class WindowController: NSObject, NSWindowDelegate {
         cwd: store.activeTabCwd(),
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
     refreshAttentionSnapshot()  // Attention 一覧も同じ coalesce 契機で追従（WindowController+Attention）
+    refreshClosedAgentsPalette()  // ⇧⌘T の一覧も同じ契機で追従（WindowController+ClosedAgents）
   }
 
   /// アクティブタブの surface へフォーカスを戻す（パレットの dismiss と同じ規則）。

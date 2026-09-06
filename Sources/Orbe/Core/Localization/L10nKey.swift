@@ -355,6 +355,21 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsGlobalCmdTapDenied
   case settingsGlobalCmdTapRestartNote
 
+  // MARK: - Closed agents（⇧⌘T パレット）
+  case closedAgentsEmpty
+  case closedAgentsHintRestore
+  case closedAgentsHintDrill
+  case closedAgentsHintRestoreOne
+  case closedAgentsHintBack
+  case closedAgentsHintSelect
+  case closedAgentsHintClose
+  case closedAgentsGroupCount
+  case closedAgentsOriginGesture
+  case closedAgentsOriginProcess
+  case closedAgentsOriginAgent
+  case closedAgentsOriginControlAPI
+  case closedAgentsOriginUnresolved
+
   // MARK: - Help（⌘H チートシート）
   case helpSearchPlaceholder
   case helpHitCountOne
@@ -382,7 +397,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutSwitchWorkspace
   case helpShortcutNewWorkspace
   case helpShortcutNewTab
-  case helpShortcutReopenClosedAgentTab
+  case helpShortcutClosedAgents
   case helpShortcutRenameTab
   case helpShortcutNextTab
   case helpShortcutPrevTab

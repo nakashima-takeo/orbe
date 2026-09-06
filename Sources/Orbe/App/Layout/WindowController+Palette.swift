@@ -74,7 +74,7 @@ extension WindowController {
       self?.setWorkspaceDir(i, to: dir)
       self?.reloadPalette()
     }
-    p.onClose = { [weak self] i in self?.closeWorkspace(i) }
+    p.onClose = { [weak self] i in self?.closeWorkspace(i, origin: .gesture) }
     p.onDismiss = { [weak self] in self?.dismissPalette() }
     model.workspacePalette = p
     model.overlay = .workspacePalette
@@ -278,6 +278,7 @@ extension WindowController {
     model.dispatchProvider = nil
     model.settingsPalette = nil
     model.attentionPalette = nil
+    model.closedAgentsPalette = nil
     model.help = nil
     focusActiveTab()
     // teardown 後の次 tick で focus を再確定する。overlay==.none のままなら端末へ、直後に別 overlay へ

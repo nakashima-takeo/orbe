@@ -25,7 +25,7 @@ extension WindowController {
     case .languageSelect, .onboarding, .updateChanges, .help:
       return
     case .none, .workspacePalette, .workspaceCreate, .agentPalette, .dispatchPalette,
-      .settingsPalette:
+      .settingsPalette, .closedAgentsPalette:
       showAttentionPalette()
     }
   }

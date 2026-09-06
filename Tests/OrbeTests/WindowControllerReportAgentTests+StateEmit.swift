@@ -38,8 +38,7 @@ extension WindowControllerReportAgentTests {
     defer { wire.teardown() }
     armAgentStateWait(wire, id: 1, tabId: tab.id)
 
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "working", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "working"))
 
     let event = try XCTUnwrap(stateEvent(wire.nextResponse()))
     XCTAssertEqual(event["kind"] as? String, "agent_state")
@@ -54,15 +53,14 @@ extension WindowControllerReportAgentTests {
     let wire = ControlWire(target: nil)
     defer { wire.teardown() }
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "working", sessionId: "s-1", message: nil)
+      tab: tab, report: AgentHookReport(agent: "claude", state: "working", sessionId: "s-1"))
     armAgentStateWait(wire, id: 1, tabId: tab.id)
 
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "working", sessionId: "s-2", message: nil)
+      tab: tab, report: AgentHookReport(agent: "claude", state: "working", sessionId: "s-2"))
     wire.barrier()  // barrier が先に返る＝同値報告はイベントを出していない
 
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "waiting", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "waiting"))
     XCTAssertEqual(
       stateEvent(wire.nextResponse())?["value"] as? String, "waiting", "実変化では張った待機が起きる")
   }
@@ -73,11 +71,10 @@ extension WindowControllerReportAgentTests {
     let (wc, tab) = try makeControllerAndTab()
     let wire = ControlWire(target: nil)
     defer { wire.teardown() }
-    wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "working", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "working"))
     armAgentStateWait(wire, id: 1, tabId: tab.id)
 
-    wc.controlReportAgent(tab: tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "clear"))
 
     let event = try XCTUnwrap(stateEvent(wire.nextResponse()))
     XCTAssertEqual(event["kind"] as? String, "agent_state")
@@ -94,8 +91,7 @@ extension WindowControllerReportAgentTests {
     defer { wire.teardown() }
     armAgentStateWait(wire, id: 1, tabId: f.tab.id)
 
-    f.wc.controlReportAgent(
-      tab: f.tab, agent: "claude", state: "working", sessionId: nil, message: nil)
+    f.wc.controlReportAgent(tab: f.tab, report: AgentHookReport(agent: "claude", state: "working"))
 
     XCTAssertEqual(stateEvent(wire.nextResponse())?["value"] as? String, "working")
   }
@@ -117,7 +113,9 @@ extension WindowControllerReportAgentTests {
     wire.barrier()
 
     wc.controlReportAgent(
-      tab: tab, agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d")))
 
     XCTAssertEqual(tab.agentState, "idle", "前提: 見ているタブの done はフォーカス消費される")
     let done = try XCTUnwrap(stateEvent(wire.nextResponse()))
@@ -138,7 +136,7 @@ extension WindowControllerReportAgentTests {
     defer { wire.teardown() }
     armAgentStateWait(wire, id: 1, tabId: tab.id)
 
-    wc.controlReportAgent(tab: tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "clear"))
 
     wire.barrier()
   }
@@ -151,8 +149,7 @@ extension WindowControllerReportAgentTests {
     defer { wire.teardown() }
     armAgentStateWait(wire, id: 1, tabId: f.tab.id)
 
-    f.wc.controlReportAgent(
-      tab: f.tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    f.wc.controlReportAgent(tab: f.tab, report: AgentHookReport(agent: "claude", state: "clear"))
 
     wire.barrier()
   }
@@ -166,8 +163,10 @@ extension WindowControllerReportAgentTests {
     armAgentStateWait(wire, id: 1, tabId: f.tab.id)
 
     f.wc.controlReportAgent(
-      tab: f.tab, agent: "codex", state: "waiting", sessionId: "forged",
-      message: AgentMessage(text: "synthetic"))
+      tab: f.tab,
+      report: AgentHookReport(
+        agent: "codex", state: "waiting", sessionId: "forged",
+        message: AgentMessage(text: "synthetic")))
 
     wire.barrier()
   }
@@ -179,8 +178,7 @@ extension WindowControllerReportAgentTests {
     defer { wire.teardown() }
     armAgentStateWait(wire, id: 1, tabId: f.tab.id)
 
-    f.wc.controlReportAgent(
-      tab: f.tab, agent: "claude", state: "clear", sessionId: nil, message: nil)
+    f.wc.controlReportAgent(tab: f.tab, report: AgentHookReport(agent: "claude", state: "clear"))
 
     wire.barrier()
   }
