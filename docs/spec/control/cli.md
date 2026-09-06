@@ -50,6 +50,14 @@ updated: 2026-09-06
 
 `prompt` は「入力欄が空いている状態にだけ届く」動詞で、対象が `working` / `waiting` なら何も送らずエラー（exit 1）——`waiting` へのテキスト送信は承認の確定になるため。waiting への応答は `tab key` で行う。既定 timeout は 1 時間。人間向け stdout は**答えの文言だけ**（`done` の最終応答・`waiting` の質問文。無ければ空）で、`answer=$(orb agent prompt …)` の形で受けられる。止まった状態は終了コードで伝える（下記）。
 
+### session（閉じたエージェントセッションの記録と復元）
+
+[寿命ログ](../platform/session-log.md)を読み、閉じたまま戻っていないセッションを戻す。全 workspace 横断。
+
+- `orb session log [--since <iso|30m|2h|3d>] [--until <iso>] [--limit <n>] [--session <id>] [--json]` … `session_log` をそのまま。人間向けは 1 行 1 イベント（`ts event command sessionId workspace cwd title origin[/reason]` のタブ区切り。`title` は closed だけが持ち、opened は `-`。タイトル中のタブ文字は空白に置き換える）。`--since` / `--until` の相対指定（`<n>m|h|d` のみ）は CLI が ISO へ直してから送る。切れた分（`truncated`）は stderr で告げる。
+- `orb session closed [--since …] [--json]` … 閉じたまま戻っていないセッションを、同じ事故で閉じた群（`gesture` 以外の同じ origin が 5 秒以内に続くもの）にまとめて新しい順に出す。`session_log` と `list_tabs` を突き合わせた派生ビューで、CLI が組む。群の代表時刻は群の最古の `closed` の `ts` で、群の一部を復元しても動かない。`--json` は `{groups:[{at, origin, sessions:[event…]}]}`。
+- `orb session restore <session-id>... [--json]` / `orb session restore --at <iso> [--json]` … `restore_sessions`。`--at` は `session closed` が出した `at` をそのまま渡し、その群の全員を戻す（受理した ISO はミリ秒付きに正規化してから完全一致で照合する。ミリ秒を省いた値は `.000` として扱う）。id ごとの status を出し、`unknown` が 1 つでもあれば exit 1。`--workspace` は無い——戻す先はログが決める。
+
 ### 待機
 
 - `orb wait [<tab>] [--kind <kind>]... [--value <value>] [--after <seq>] [--timeout-ms <ms>] [--json]` … 状態変化イベントを待つ低水準の口。`--kind` は繰り返せ、省略は全 kind。`--value` は kind 固有値の一致（`--kind agent_state --value done` 等）。`--after` は「この seq より後」（0 以上）で、既に済んだ一致があれば待たずに返る。既定 timeout は 30 秒。
@@ -74,7 +82,7 @@ control.sock の解決順は `ORBE_STATE_DIR`（非空の明示指定・最優�
 
 ## 終了コード・エラー
 
-- 成功=0、usage エラー（未知 key・引数不足・非数値 id・対象欠如等でクライアントが弾く）=2、RPC/接続エラー=1、`agent prompt` がエージェントの入力待ち（`waiting`）で止まった=3、同じくセッション終了（`clear`）で止まった=4、`wait` / `agent prompt` / `agent spawn` / `agent resume` の時間切れ=124。
+- 成功=0、usage エラー（未知 key・引数不足・非数値 id・対象欠如等でクライアントが弾く）=2、RPC/接続エラー=1、`session restore` で 1 つでも `unknown` があった=1（打ち間違いを黙らせない）、`agent prompt` がエージェントの入力待ち（`waiting`）で止まった=3、同じくセッション終了（`clear`）で止まった=4、`wait` / `agent prompt` / `agent spawn` / `agent resume` の時間切れ=124。
 - 時間切れに専用コードを与えるのは、待っていたイベントが来ていないのに `orb wait … && 次の処理` が進むのを止めるため——この CLI は成功していないのに 0 を返さない。124 は `timeout(1)` の慣習で、Orbe の文書を読まなくても意味が通る。時間切れは `--json` なら結果を stdout に出すが、それ以外では stdout に何も書かない（`text=$(orb wait …)` が偽のイベントを掴まないため）。`agent prompt` の 3 / 4 も同じ理由で非 0——答えは返っていないので `&& 次の処理` を進めない。3 と 4 を分けるのは対処が違うため（3 は答えを送る、4 は起こし直す）。
 - Orbe 未起動や Orbe 外（socket 不達）は、クラッシュせず構造化メッセージ＋非 0 終了（`--json` 時は `{"error":{code,message}}`）。
 - control の error は code/message をそのまま出す（値域外・不正 enum・未知/最後の workspace・未知 tab 等は control 側が弾く）。未知 key・型不一致はクライアントが `config_list` を SSOT に事前に弾く。

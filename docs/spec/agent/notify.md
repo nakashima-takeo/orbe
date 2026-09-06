@@ -28,13 +28,14 @@ tab identity は env で運ぶ（tty 経路を要さない）。Orbe は全タ�
   - 既知の制約: teammate の worker が出す承認要求はリーダーのタブへ届くが、リーダーの承認/拒否は hook を発火しない（ツール実行ではないため）。結果、承認しても `waiting` は次の報告が来るまで残る。
 - `state=="done"` かつ stdin の `background_tasks` に running が 1 つでもあれば `working` に読み替える——claude の Stop はバックグラウンド作業（bg Bash・bg サブエージェント）残存時も発火するため。フィールド欠落・空配列・型不一致は読み替えずそのまま `done`。判定・抽出は pure 関数として切り出す。
 - `waiting` / `done` は表示用の文言と**その出所**も stdin から取り出して載せる（`waiting` は permission 通知の文言〔出所は通知〕、無ければ待っているツールの先頭質問文〔出所はツール〕。`done` は最終アシスタント応答〔出所はツール〕）。出所は**どの payload フィールドから取ったか**そのもので、別途の判定を持たない。C0 制御文字（改行・タブ以外）を落とし、trim して空なら載せず、長文は切って制御ソケットの 1 行上限に対して防御する——文言は `orb agent prompt` の stdout として端末へそのまま流れるので、入口で無害化する。当該フィールドを持たない CLI は自然に文言なし。
+- SessionEnd 相当の hook が終了理由（claude の `reason`: `clear` / `logout` / `prompt_input_exit` / `other` 等）を渡す CLI では、それを文言と同じ無害化（C0 制御文字除去・trim・長さ上限）を通して `report_agent` の `reason` に載せる。持たない CLI は自然に無し。
 - 接続は 1 リクエスト 1 接続・同期。
 
 ## 状態の保持と reset
 
 状態語は `idle` / `working` / `waiting` / `done` / `clear`。
 
-タブが持つのは 2 つ: **報告**（状態・文言〔出所つき〕・状態変化時刻）は稼働中の自己報告として一体で保持され、`clear` で同一性ごと消える。**同一性**（CLI 名・session_id）は状態遷移をまたいで持続し、CLI 名は報告のたび更新、session_id は**同じ CLI からの報告のあいだだけ**新値があれば更新・無ければ維持する——session_id は発行した CLI に属する値なので、CLI 名が変わった報告では新値が無い限り旧 session_id を捨てる（resume 不能なペアを作らないため）。**未消費（休眠）の復元ペイン宛の報告・clear は破棄する**——休眠ペインは surface 未生成で報告主のプロセスが存在しえず、復元チケットは報告で消費・変異できない（消費は materialize 開始のみ → [persistence](../platform/persistence.md)）。
+タブが持つのは 2 つ: **報告**（状態・文言〔出所つき〕・状態変化時刻）は稼働中の自己報告として一体で保持され、`clear` で同一性ごと消える——同一性の消滅（と session_id の切替）は[寿命ログ](../platform/session-log.md)の `closed(agent)` / `opened` として記録される。**同一性**（CLI 名・session_id）は状態遷移をまたいで持続し、CLI 名は報告のたび更新、session_id は**同じ CLI からの報告のあいだだけ**新値があれば更新・無ければ維持する——session_id は発行した CLI に属する値なので、CLI 名が変わった報告では新値が無い限り旧 session_id を捨てる（resume 不能なペアを作らないため）。**未消費（休眠）の復元ペイン宛の報告・clear は破棄する**——休眠ペインは surface 未生成で報告主のプロセスが存在しえず、復元チケットは報告で消費・変異できない（消費は materialize 開始のみ → [persistence](../platform/persistence.md)）。
 
 文言は **state の遷移で確定し直し、同じ state が続くあいだツール由来の文言はツール由来でない報告で上書きされない**（それ以外の組み合わせは上書きする）。1 つの待ちを複数の hook が順に報告する CLI があり（claude は AskUserQuestion のダイアログを開く時点で質問文を、その約 6 秒後に汎用の定型文を撃つ）、出所で守らないと具体的な文言が定型文に潰れるため。逆にツール由来でない報告どうしが上書きし合うのは、待ちの主体がこのタブのエージェントとは限らず（teammate の worker が出す承認要求はリーダーのタブへ届き、要求ごとに文言が違う）、保持すると別の待ちの文言が居残るため。
 
