@@ -21,7 +21,7 @@ updated: 2026-09-06
   - `unresolved` — 休眠チケットの起床で resume を組み立てられず（CLI 未検出・不正な id）、Orbe が素のシェルとして起こした。
 - `closed` だけが `title`（閉じた時点のタブ表示名。[chrome](../chrome/chrome.md) のタブバーと同じ導出）を持つ。人がセッションを見分ける手掛かりは閉じた時点の名前であり、`opened` の時点は既定名しか無いため。タイトルは同一性の属性ではなく閉じた時点の写しで、途中の変更履歴は持たない。
 
-1 つの `opened` に `closed` は高々 1 つ。`opened` があって `closed` が無い同一性が「今生きている」。例外は 1 つ——休眠チケットが起床できずに `unresolved`、または休眠のまま外れて `gesture` / `controlAPI` で終わる場合は、直前の `closed` に続いてもう 1 つ `closed` が付く（間に `opened` が無い。チケットは復元で戻った時点では起きておらず、`opened` は起床時にしか付かないため）。
+1 つの `opened` に `closed` は高々 1 つ。`opened` があって `closed` が無い同一性が「今生きている」。例外は 1 つ——休眠チケットが起床できずに `unresolved`、または休眠のまま外れて `gesture` / `controlAPI` で終わる場合は、`opened` を挟まない `closed` が続く（復元して起こさずに閉じる、を繰り返せば何本でも。チケットは復元で戻った時点では起きておらず、`opened` は起床時にしか付かないため）。
 
 書かないもの: 同一性が既に終わったタブを閉じても行は増えない。session_id 不明のまま閉じたタブは記録しない。**アプリ終了では書かない**——タブは workspaces.json に休眠チケットとして残るので失われていない。復元でも書かない——チケットを足すだけで、起床時に `opened` が付く。
 
@@ -39,6 +39,6 @@ state dir（[persistence](persistence.md) と同じ場所。チャネル別・`O
 
 ## 復元
 
-復元は「閉じた同一性を、それが属していた workspace の末尾に休眠チケットとして足す」1 種類だけ。起動時復元と同じチケットなので、戻るもの／戻らないものが一致し、起床（materialize 開始）時に resume が解決される。workspace は rootPath で照合し、無ければログの名前・rootPath で作り直す（workspace ごと失った場合こそ災害の本体で、作り直しは安く可逆）。既に同じ session_id のタブ（live／休眠）があればスキップし、今あるものを消す操作は無い。復元されたものは「閉じたまま戻っていない」の導出から自然に外れる。
+復元は「閉じた同一性を、それが属していた workspace の末尾に休眠チケットとして足す」1 種類だけ。起動時復元と同じチケットで、起床（materialize 開始）時に resume が解決される。持ち込むのは cwd と同一性だけ——明示タイトルは付かず、位置は末尾になる。workspace は rootPath で照合し、無ければログの名前・rootPath で作り直す（workspace ごと失った場合こそ災害の本体で、作り直しは安く可逆）。既に同じ session_id のタブ（live／休眠）があればスキップし、今あるものを消す操作は無い。復元されたものは「閉じたまま戻っていない」の導出から自然に外れる。
 
-入口は 3 つ。人が 1 件ずつ戻すのは [⇧⌘T パレット](../palette/closed-agents.md)、多数を一度に戻すのは制御 API の [`restore_sessions`](../control/api.md)（[orb session](../control/cli.md) と MCP から）。復元後にアクティブ workspace に足したチケットは、[layout](../chrome/layout.md) の mount 規律どおり先頭の選択に続いて順次起床する（起動復元と同じ）。
+入口は 3 つ。人が 1 件ずつ戻すのは [⇧⌘T パレット](../palette/closed-agents.md)、多数を一度に戻すのは制御 API の [`restore_sessions`](../control/api.md)（[orb session](../control/cli.md) と MCP から）。復元後にアクティブ workspace に足したチケットは、[layout](../chrome/layout.md) の mount 規律どおり次の選択操作に続いて順次起床し（起動復元と同じ）、背景 workspace に足したものはその workspace のアクティブ化で起きる。
