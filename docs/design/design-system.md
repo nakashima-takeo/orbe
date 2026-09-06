@@ -6,8 +6,8 @@ updated: 2026-09-07
 
 # Orbe デザインシステム
 
-> ステータス: v0.5.0 · 2026-09-07
-> 値の正（SSOT）: chrome/semantic は `Sources/Orbe/DesignSystem/DesignTokens.swift`（機械可読ミラー `docs/design/tokens.json`）／ 識別色（端末 ANSI 16 色・chrome 共有アンカー）は `Sources/Orbe/DesignSystem/OrbePalette.swift`（端末 conf を生成し、chrome アンカーへ定数を供給）／ worktree 識別色 48 色（24 色相 × 2 トーン）は `Sources/Orbe/DesignSystem/WorktreePalette.swift`（`scripts/gen-worktree-palette.py` が oklch から生成・手で編集しない）。
+> ステータス: v0.6.0 · 2026-09-07
+> 値の正（SSOT）: chrome/semantic は `Sources/Orbe/DesignSystem/DesignTokens.swift`（機械可読ミラー `docs/design/tokens.json`）／ 識別色（端末 ANSI 16 色・chrome 共有アンカー）は `Sources/Orbe/DesignSystem/OrbePalette.swift`（端末 conf を生成し、chrome アンカーへ定数を供給）／ worktree 識別色 48 色（24 色相 × 2 トーン）を dark / light 別に持つ表は `Sources/Orbe/DesignSystem/WorktreePalette.swift`（`scripts/gen-worktree-palette.py` が oklch から生成・手で編集しない）。
 > ガラス質感・elevation・glow は `Sources/Orbe/DesignSystem/DesignTokens+Glass.swift` が所有（本書は再定義しない）。
 > 本書は思想・契約を記す自由記述ドキュメントで、**思想・契約の正は本書、値の正は上記 Swift**。Orbe の外観の**正**はこのリポジトリの中で閉じている。ただしコード中の一部コメントは、値が決まった経緯の記録として設計見本（リポジトリ外）を引用する——それは出所の記録であって、正ではない。
 
@@ -41,12 +41,13 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `surface.0` | 面 | `rgba(255,255,255,.03)` | `rgba(58,49,81,.05)` |
 | `surface.1` | 罫線・secondary 枠 | `rgba(255,220,180,.08)` | `rgba(110,90,170,.12)` |
 | `surface.2` | 面（強）・強枠 | `rgba(255,220,180,.10)` | `rgba(110,90,170,.15)` |
-| `text.primary` | 本文・選択ラベル・タブ反転面の地 | `#eaddc7` | `#3a3151` |
+| `text.primary` | 本文・選択ラベル・タブ反転面の地 | `#e6e1f0` | `#3a3151` |
 | `text.secondary` | 通常ラベル・非選択タブ文字 | `#b8afc4` | `#5f5678` |
 | `text.tertiary` | 三次 | `#8b8397` | `#8d85a3` |
 | `text.muted` | 非アクティブ・補助・ヒント | `#8b8397` | `#8d85a3` |
 | `accent.primary` | 選択・自分の出番・プロンプト | `#9068f0` | `#6d43d8` |
 | `accent.focus` | フォーカス | `#9068f0` | `#6d43d8` |
+| `accent.bright` | accent の明色変種（tint(accent) 面上の強調文字・タブ行の挿入キャレット） | `#b18aff` | `#6d43d8` |
 | `on.accent` | accent 塗り上のインク＝地色 | `#1a1721` | `#fcfbfe` |
 | `diff.added` / `success` | 追加・成功（green） | `#81b88b` | `#279a4d` |
 | `diff.removed` / `danger` | 削除・エラー（red） | `#d16969` | `#e02d33` |
@@ -65,20 +66,21 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `accentCheckStroke` | accent 塗り面上の ✓（clean のチェックボックス） | `#ffffff` | `#f3f0fa` |
 | `tab.rowBg` | タブ行全幅の地 | `rgba(0,0,0,.28)` | `rgba(58,49,81,.08)` |
 | `tab.segBg` | 単独タブ（1 枚の連）の地 | `rgba(255,255,255,.10)` | `rgba(58,49,81,.06)` |
-| `tab.groupBg` | グループ（2 枚以上の連）の地の下敷き（上に `worktree.tint` を重ねる） | `rgba(255,255,255,.04)` | `rgba(58,49,81,.04)` |
-| `worktree.bar[0…47]` | 連の左端の worktree 識別色（basename のハッシュで選ぶ） | `WorktreePalette`（テーマ非依存） | 同左 |
-| `worktree.tint[0…47]` | グループの地に重ねる識別色の淡塗り | `WorktreePalette` の各色 .12 | 同左 |
-| `worktree.frame[0…47]` | グループの器の外側 1px 枠 | `WorktreePalette` の各色 .38 | 同左 |
-| `tab.divider` | グループ内セルの区切り線（`surface.1` と同色相・識別色の地の上で読める濃さ） | `rgba(199,185,235,.18)` | `rgba(110,90,170,.24)` |
+| `tab.groupBg` | グループ（2 枚以上の連）の地の下敷き（上に `worktree.tint` を重ねる） | `rgba(255,255,255,.04)` | `rgba(58,49,81,.02)` |
+| `worktree.bar[0…47]` | 連の左端の worktree 識別色（番号は basename のハッシュでテーマ共通・色はテーマごと） | `WorktreePalette.dark` | `WorktreePalette.light` |
+| `worktree.tint[0…47]` | グループの地に重ねる識別色の淡塗り | `WorktreePalette.dark` の各色 .12 | `WorktreePalette.light` の各色 .14 |
+| `worktree.frame[0…47]` | グループの器の外側 1px 枠 | `WorktreePalette.dark` の各色 .38 | `WorktreePalette.light` の各色 .45 |
+| `tab.divider` | グループ内セルの区切り線（識別色を敷いた地の上でも読める濃さ） | `rgba(255,255,255,.14)` | `rgba(58,49,81,.16)` |
 | `tab.activeText` | 選択セグメント（反転面）の文字 | `#1a1721` | `#f3f0fa` |
 
 **意図的な同値収束（事故ではない）**: Orbe の配色は色階層が少なく、複数の semantic 名が同一値へ収束する。SSOT では別名で表現している。
 `accent.focus` ＝ `accent.primary`／ `text.tertiary` ＝ `text.muted`／
 `success` ＝ `diff.added`（green）／ `danger` ＝ `diff.removed`（red）／
-`state.dormant` ＝ `text.muted`／ `surface.0` ＝ `bg.sunken`／ `tab.groupBg` ＝ `bg.deepest`。
+`state.dormant` ＝ `text.muted`／ `surface.0` ＝ `bg.sunken`。
 `state.done`（完了・緑）と `diff.added`（green）、`state.waiting`（要応答・黄）と `conflict`（ANSI黄）は**別トークンとして分離**（light では偶々同値だが dark では異なる。SSOT は状態色を `StateHue`、ANSI 系を端末アンカーから別々に導く）。
 **反転色（`state.*Inverse`）は対テーマの状態色**＝dark/light の値を入れ替えただけ（選択タブの反転面上でコントラストを確保する仕組み）。
 **light の `tab.activeText` `#f3f0fa` は `bg.base` `#fcfbfe` と別値**（on.accent の流用不可）。
+**worktree 識別色は番号がテーマ共通・色がテーマごと**——48 の番号は basename のハッシュで決まりテーマで変わらず、その番号が引く色は dark（暗い chrome の上で光るトーン）と light（白い紙面の上で沈むトーン）の別々の表から取る。
 
 ### 2.2 状態の塗り・tint（事前 alpha 済み・per-theme）
 選択・hover は `accent.primary` の淡塗り（テーマごとの accent 基調に α を掛けた事前合成値）。状態別 tint は件数ピル・バッジの淡塗り（各テーマの状態色の 12–14%）。
@@ -180,7 +182,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 本書は color と意味の契約＋主要寸法に留める（実装の画素は各コンポーネントが持つ）。
 
 - **選択の示し方**: リスト行の選択は **tint 背景**（`selectionFill`）。タブの選択のみ**前景色反転**（§5.1）。**選択を左 3px バーで示すことはどこでもしない**（Completion も例外にしない）。下線・太字による選択弁別も持たない（タブ行の左 3px バーは選択ではなく worktree の識別色で、意味が別）。
-- **Tab（セグメント）**: タブ行（高さ28・padding 3・gap 6・地 `tab.rowBg`）の中の器。**面を持つのはグループ（同じ worktree のタブ 2 枚以上の連）だけ**——地 `tab.groupBg` に `worktree.tint` を重ね・radius 4・クリップ、器の**外側**に 1px の `worktree.frame` の枠（幅の取り分に含まれず gap に重なる）、左端に識別色バー 3px（縦いっぱい）、各セルの左に hairline `tab.divider` の区切り線（先頭セルを含む・選択セルでも残る）。1 枚の連は単独タブの器で、地 `tab.segBg`・radius 3 だけを持ち、枠・バー・区切り線を持たない。
+- **Tab（セグメント）**: タブ行（高さ28・padding 3・gap 6・地 `tab.rowBg`）の中の器。**面を持つのはグループ（同じ worktree のタブ 2 枚以上の連）だけ**——地 `tab.groupBg` に `worktree.tint` を重ね・radius 4・クリップ、器の**外側**に 1px の `worktree.frame` の枠（幅の取り分に含まれず gap に重なる）、左端に識別色バー 3px（縦いっぱい・番号はテーマ共通で色はテーマごと）、各セルの左に hairline `tab.divider` の区切り線（先頭セルを含む・選択セルでも残る）。1 枚の連は単独タブの器で、地 `tab.segBg`・radius 3 だけを持ち、枠・バー・区切り線を持たない。
 - **Tab のセル**: padding 横8・グリフとタイトルの間 6・幅は床40〜上限140（超える名前は末尾省略）。非選択＝地なし（器の地が透ける）・文字 `text.secondary`（idle/dormant/なしも同じ）・状態グリフ 12px（working は stroke 1.6。idle は非表示）。**選択＝地 `text.primary`（前景色反転。区切り線を持つセルでは左 1px を空けて線を残す）・文字 `tab.activeText`・グリフ＝`state.*Inverse`（対テーマ状態色）**、done の check 線のみ `text.primary`。タブ背景を状態色で塗らない。
 - **Palette row**: default＝`text.secondary`（workspace 行の名前＝最優先状態の色）。hover＝`hoverFill`＋`text.primary`。selected＝`selectionFill` 地。dormant＝`Opacity.dormant`。情報行＝`text.muted`・選択不可。そのうち直前の操作が失敗した理由を述べる行だけ `danger`（§3）——中立な補足と同じ弱さで出さない。行= padding 5×10・radius 8。workspace 行の右詰め＝状態別カウントピル（padding 1×7・radius pill・地 tint .12・文字 状態色・グリフ 9px）。
 - **Button**: primary（主 CTA）＝塗り `accent.primary`・文字 `on.accent`・radius `md`。secondary＝塗りなし・文字 `accent.primary`・枠 1px `surface.1`・hover で `hoverFill`。disabled＝`Opacity.disabled`。
@@ -194,7 +196,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 - **TopBar（上段 26px）**: 背景透明（最背面の chromeBg＋ambient が見える）・**罫線なし**。左 padding 16＋信号機の柱 80px。縦位置は信号機 close ボタン中央へ整列。空白は窓ドラッグ面。
   - 左: `workspace名`（mono 11・`text.primary`）。cwd・build-id は名前の後に muted で後置（→§9）。
   - 右: ステータスストリップ（§4 の書式）・右 padding 16。
-- **TabBar（下段 28px・全幅セグメント行）**: 地 `tab.rowBg`・padding 3・セグメント間 gap 6。器とセルは §5 Tab 契約。行に収まらないときは**行内の全セル**が幅に比例して縮み（床 40・器ではなく行が再配分の単位）、それ以下は横スクロール。＋ボタンはセグメント様式（地 `tab.segBg`・radius 3）で末尾に置く（→§9）。
+- **TabBar（下段 28px・全幅セグメント行）**: 地 `tab.rowBg`・padding 3・セグメント間 gap 6。器とセルは §5 Tab 契約。行に収まらないときは**行内の全セル**が幅に比例して縮み（床 40・器ではなく行が再配分の単位）、それ以下は横スクロール。＋ボタンはセグメント様式（地 `tab.segBg`・radius 3）で末尾に置く（→§9）。並び替えのドラッグ中は挿入先に幅 2 の縦キャレット `accent.bright`（識別色の地の上に立つ）。
 
 ---
 
