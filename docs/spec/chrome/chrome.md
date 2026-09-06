@@ -64,7 +64,7 @@ updated: 2026-09-06
 
 全 workspace の**activatedタブ**を走査し、`agentState` を `working / waiting / done / idle` ごとに件数集計する（タブ単位。idle は数えるが `error`・nil は数えない）。未materializeタブの復元agentはlive件数へ混ぜない。この状態順で状態色グリフ＋件数を出す（グリフは CLI 非依存。タブと同じく設定で SF Symbol へ差し替え可 → [settings](../palette/settings.md)）。項目は区切り線を持たず間隔で分け、休止（idle）項目は減光する。ラベル文字は持たない。件数 0 の種別・全体 0 は出さない。
 
-上段右端に裸のグリフ列（囲みなし）で固定表示し、**クリックで Attention パレットを開く**（→ [attention](../palette/attention.md)）。⌘⌘ は画面に書けないジェスチャなので、可視の入口をここに対で持つ。同じlive集計をWorkspaceパレットにも出し、そこだけは未消費の復元チケット（休眠agent）を持つタブ数を独立したdormant（zzz）チップとして後置する（→ [workspace パレット](../palette/workspace.md)）。
+上段右端に裸のグリフ列（囲みなし）で固定表示し、**クリックで Attention パレットを開く**（→ [attention](../palette/attention.md)）。⌘⌘ は画面に書けないジェスチャなので、可視の入口をここに対で持つ。同じlive集計を同じ更新契機でWorkspaceパレットにも出し、そこだけは未消費の復元チケット（休眠agent）を持つタブ数を独立したdormant（zzz）チップとして後置する（→ [workspace パレット](../palette/workspace.md)）。
 
 ## アップデートのトースト（右下・非モーダル）
 
@@ -74,4 +74,4 @@ updated: 2026-09-06
 
 行の余白ドラッグでウィンドウ移動、余白ダブルクリックでシステム設定準拠の zoom/minimize（機構は [layout](layout.md)）。
 
-更新はイベント駆動: タブのタイトル変更・タブ/workspace 切替・cwd 到着・いずれかのタブのエージェント状態変化・タブ集合の変化（開く・閉じる）。重い StatusRow snapshot（全 workspace×全タブ走査）は runloop tick 単位に coalesce され、同一 tick 内の複数要求は tick 末尾の 1 回へ畳まれる（trailing-edge。中間状態は落ちるが最終状態は必ず反映＝取りこぼしゼロ）。`window.title`（アクティブ workspace 名。Mission Control 等の外部観測用で画面には出ない）は O(1) なので coalesce せず即時反映する。
+更新はイベント駆動: タブのタイトル変更・タブ/workspace 切替・cwd 到着・いずれかのタブのエージェント状態変化・タブ集合の変化（開く・閉じる）・背景 workspace でのタブの materialize（休眠の解除）。重い StatusRow snapshot（全 workspace×全タブ走査）は runloop tick 単位に coalesce され、同一 tick 内の複数要求は tick 末尾の 1 回へ畳まれる（trailing-edge。中間状態は落ちるが最終状態は必ず反映＝取りこぼしゼロ）。`window.title`（アクティブ workspace 名。Mission Control 等の外部観測用で画面には出ない）は O(1) なので coalesce せず即時反映する。

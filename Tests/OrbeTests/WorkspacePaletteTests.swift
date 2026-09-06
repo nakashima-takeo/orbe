@@ -9,23 +9,23 @@ import XCTest
 @MainActor
 final class WorkspacePaletteTests: OrbeTestCase {
 
-  // MARK: - ヘルパ
+  // MARK: - ヘルパ（分割した拡張ファイル +LiveStates からも使うため internal）
 
-  private func palette() -> WorkspacePaletteModel {
+  func palette() -> WorkspacePaletteModel {
     WorkspacePaletteModel(localization: LocalizationStore(language: .ja))
   }
 
-  private func items(_ names: [(String, Bool)]) -> [WorkspacePaletteModel.Item] {
+  func items(_ names: [(String, Bool)]) -> [WorkspacePaletteModel.Item] {
     names.enumerated().map {
       WorkspacePaletteModel.Item(
-        index: $0.offset, name: $0.element.0, isActive: $0.element.1, dormant: false,
-        agentRollup: [], dir: "/tmp/\($0.element.0)")
+        index: $0.offset, name: $0.element.0, isActive: $0.element.1,
+        dir: "/tmp/\($0.element.0)", live: .init(rollup: [], dormant: false))
     }
   }
 
   /// 入力欄が first responder の間の方向キー/確定/取消（一覧・改名モード）。
   /// 入力欄の onKeyPress/onSubmit→意味メソッドの写像と同じ筋でモデルを駆動する。
-  private func send(_ p: WorkspacePaletteModel, _ selector: Selector) {
+  func send(_ p: WorkspacePaletteModel, _ selector: Selector) {
     if selector == enter {
       p.render.onActivate()
     } else if selector == esc {
@@ -38,14 +38,14 @@ final class WorkspacePaletteTests: OrbeTestCase {
       _ = p.render.onRight()
     }
   }
-  private var enter: Selector { #selector(NSResponder.insertNewline(_:)) }
-  private var esc: Selector { #selector(NSResponder.cancelOperation(_:)) }
-  private var down: Selector { #selector(NSResponder.moveDown(_:)) }
-  private var up: Selector { #selector(NSResponder.moveUp(_:)) }
-  private var right: Selector { #selector(NSResponder.moveRight(_:)) }
+  var enter: Selector { #selector(NSResponder.insertNewline(_:)) }
+  var esc: Selector { #selector(NSResponder.cancelOperation(_:)) }
+  var down: Selector { #selector(NSResponder.moveDown(_:)) }
+  var up: Selector { #selector(NSResponder.moveUp(_:)) }
+  var right: Selector { #selector(NSResponder.moveRight(_:)) }
 
   /// 詳細メニュー（入力欄なし＝カードがキーを捕捉）の素のキー入力。keyCode→意味メソッドの写像で駆動する。
-  private func key(_ p: WorkspacePaletteModel, _ keyCode: UInt16) {
+  func key(_ p: WorkspacePaletteModel, _ keyCode: UInt16) {
     switch keyCode {
     case kDown: p.render.onDown()
     case kUp: p.render.onUp()
@@ -55,11 +55,11 @@ final class WorkspacePaletteTests: OrbeTestCase {
     default: break
     }
   }
-  private let kDown: UInt16 = 125, kUp: UInt16 = 126, kReturn: UInt16 = 36, kLeft: UInt16 = 123,
+  let kDown: UInt16 = 125, kUp: UInt16 = 126, kReturn: UInt16 = 36, kLeft: UInt16 = 123,
     kEsc: UInt16 = 53
 
   /// クエリ入力（絞り込み駆動）。入力欄バインドの onChange と同じ筋で model を更新する。
-  private func type(_ p: WorkspacePaletteModel, _ text: String) {
+  func type(_ p: WorkspacePaletteModel, _ text: String) {
     p.render.query = text
     p.render.onQueryChange()
   }
@@ -163,9 +163,11 @@ final class WorkspacePaletteTests: OrbeTestCase {
     let p = palette()
     p.setItems([
       WorkspacePaletteModel.Item(
-        index: 0, name: "live", isActive: true, dormant: false, agentRollup: [], dir: "/"),
+        index: 0, name: "live", isActive: true, dir: "/",
+        live: .init(rollup: [], dormant: false)),
       WorkspacePaletteModel.Item(
-        index: 1, name: "sleep", isActive: false, dormant: true, agentRollup: [], dir: "/"),
+        index: 1, name: "sleep", isActive: false, dir: "/",
+        live: .init(rollup: [], dormant: true)),
     ])
     XCTAssertEqual(p.render.rows.count, 3, "2 workspace ＋ 末尾の常設 createFlow 行")
     XCTAssertFalse(p.render.rows[0].dimmed, "起きている workspace の行は減光しない")
