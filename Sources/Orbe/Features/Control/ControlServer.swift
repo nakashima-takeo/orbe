@@ -49,6 +49,9 @@ protocol ControlTarget: AnyObject {
   func controlSetWorkspaceRoot(workspaceId: Int, rootPath: String) -> Result<Any, ControlError>
   /// workspace を削除する（id 未発見 -32004・最後の 1 つは削除不可 -32000）。
   func controlRemoveWorkspace(workspaceId: Int) -> Result<Any, ControlError>
+  /// 閉じたセッションを休眠チケットとして戻す（restore_sessions）。id ごとの status
+  /// （restored / already-present / unknown）を返す。窓は runOnMain が保証する。
+  func controlRestoreSessions(sessionIds: [String]) -> Result<Any, ControlError>
 }
 
 struct ControlError: Error {
@@ -232,10 +235,13 @@ final class ControlServer {
     let id = obj["id"]
     let params = obj["params"] as? [String: Any] ?? [:]
 
-    // 待機を伴う動詞は queue が受け持つ（main → respond の 1 往復では完結しない）。
+    // main を要さない動詞（待機系＋ファイル読み）は queue が受け持つ。
     switch method {
     case "wait_for_event":
       conn.waitForEvent(id: id, params: params)
+      return
+    case "session_log":
+      sessionLog(id: id, params: params, conn: conn)
       return
     case "prompt_agent":
       promptAgent(id: id, params: params, conn: conn)
@@ -337,6 +343,7 @@ final class ControlServer {
       // いずれも非該当なら未知メソッド。
       return runTab(method: method, params: params, target: target)
         ?? runConfigWorkspace(method: method, params: params, target: target)
+        ?? runSession(method: method, params: params, target: target)
         ?? .failure(ControlError(code: -32601, message: "method not found: \(method)"))
     }
   }

@@ -79,6 +79,21 @@ extension ControlServer {
     return nil
   }
 
+  /// `restore_sessions` を dispatch する。params の検証（型・件数・安全文字集合）はここで、ログの照合と
+  /// 復元は target が行う。非該当は nil で未知メソッドへ落とす。
+  func runSession(method: String, params: [String: Any], target: ControlTarget)
+    -> Result<Any, ControlError>?
+  {
+    guard method == "restore_sessions" else { return nil }
+    guard let ids = params["sessionIds"] as? [String] else {
+      return .failure(ControlError(code: -32602, message: "missing sessionIds"))
+    }
+    guard !ids.isEmpty, ids.count <= 100, ids.allSatisfy(AgentCatalog.isSafeSessionId) else {
+      return .failure(ControlError(code: -32602, message: "invalid sessionIds"))
+    }
+    return target.controlRestoreSessions(sessionIds: ids)
+  }
+
   /// config（列挙・設定）と workspace CRUD を実行する（config CLI 用）。非該当は nil で未知メソッドへ落とす。
   func runConfigWorkspace(method: String, params: [String: Any], target: ControlTarget)
     -> Result<Any, ControlError>?

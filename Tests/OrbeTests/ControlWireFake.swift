@@ -94,6 +94,7 @@ final class FakeControlTarget: ControlTarget {
   private(set) var focusedTabIds: [Int] = []
   private(set) var closedTabIds: [Int] = []
   private(set) var resolvedTabIds: [Int] = []
+  private(set) var restoredSessionIds: [[String]] = []
 
   // MARK: - 宛先
 
@@ -211,5 +212,10 @@ final class FakeControlTarget: ControlTarget {
   func controlRemoveWorkspace(workspaceId: Int) -> Result<Any, ControlError> {
     removedWorkspaceIds.append(workspaceId)
     return outcome(["ok": true])
+  }
+
+  func controlRestoreSessions(sessionIds: [String]) -> Result<Any, ControlError> {
+    restoredSessionIds.append(sessionIds)
+    return outcome(["results": sessionIds.map { ["sessionId": $0, "status": "restored"] }])
   }
 }
