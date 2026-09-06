@@ -45,6 +45,8 @@ public enum SessionLogQuery {
       .map(\.element)
     for event in ordered {
       guard let origin = event.closeOrigin else { continue }
+      // out.last で束ねると SessionBurst のコピーが sessions を二重参照し、append が毎回全体を複製する
+      // （O(n²)）。添字で読む。
       let i = out.count - 1
       if origin != .gesture, i >= 0, out[i].origin == origin,
         let tail = out[i].sessions.last?.ts, event.ts.timeIntervalSince(tail) <= window
