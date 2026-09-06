@@ -47,8 +47,6 @@ final class ClosedAgentsPaletteTests: OrbeTestCase {
     let (m, restored) = model([
       group([item("c", at: 100, origin: .gesture)], origin: .gesture), burst,
     ])
-    XCTAssertEqual(m.render.rows.map(\.chevron), [false, true], "2 件以上の群だけ chevron")
-
     m.activate()
     m.render.selected = 1
     m.activate()

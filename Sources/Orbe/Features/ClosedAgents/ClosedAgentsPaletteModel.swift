@@ -145,7 +145,7 @@ import SwiftUI
             ? itemRow(group.items[0])
             : PaletteModel.RowItem(
               label: localization.format(.closedAgentsGroupCount, group.items.count),
-              chevron: true, customContent: AnyView(ClosedAgentGroupRowView(group: group)))
+              customContent: AnyView(ClosedAgentGroupRowView(group: group)))
         }
     case .members(let atKey):
       let group = groups.first { $0.atKey == atKey }
