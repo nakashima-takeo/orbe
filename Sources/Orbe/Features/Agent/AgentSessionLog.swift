@@ -20,6 +20,7 @@ final class AgentSessionLog {
     do {
       let all = try SessionLogReader.read(url).events
       let kept = SessionLogRetention.prune(all, now: now)
+      // rewrite に失敗してもこのプロセスは剪定結果を持つ（パレットと restore_sessions はメモリを読む）。
       events = kept
       if kept.count != all.count { try SessionLogWriter.rewrite(kept, to: url) }
     } catch {

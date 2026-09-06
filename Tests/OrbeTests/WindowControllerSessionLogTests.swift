@@ -32,6 +32,13 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
     try SessionLogReader.read(XCTUnwrap(AgentSessionLog.fileURL)).events
   }
 
+  private func opened(_ sessionId: String, secondsAgo: TimeInterval) -> SessionEvent {
+    SessionEvent(
+      ts: Date().addingTimeInterval(-secondsAgo), kind: .opened,
+      workspace: .init(name: "w", rootPath: "/tmp"), cwd: "/tmp",
+      agent: .init(command: "claude", sessionId: sessionId))
+  }
+
   func testReportAndGestureCloseWriteOpenedThenClosedWithWorkspaceAndCwd() throws {
     let wc = try restore([plain("main", rootPath: "/tmp/root")])
     let tab = try XCTUnwrap(wc.current.tabs.first)
@@ -160,14 +167,8 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
 
   func testInitPrunesOldRowsAndRewritesAtomically() throws {
     let url = try XCTUnwrap(AgentSessionLog.fileURL)
-    let old = SessionEvent(
-      ts: Date().addingTimeInterval(-40 * 86400), kind: .opened,
-      workspace: .init(name: "w", rootPath: "/tmp"), cwd: "/tmp",
-      agent: .init(command: "claude", sessionId: "old"))
-    let recent = SessionEvent(
-      ts: Date().addingTimeInterval(-60), kind: .opened,
-      workspace: .init(name: "w", rootPath: "/tmp"), cwd: "/tmp",
-      agent: .init(command: "claude", sessionId: "recent"))
+    let old = opened("old", secondsAgo: 40 * 86400)
+    let recent = opened("recent", secondsAgo: 60)
     try SessionLogWriter.append(old, to: url)
     try SessionLogWriter.append(recent, to: url)
 
@@ -183,10 +184,7 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
 
   func testInitWithoutChangesDoesNotRewrite() throws {
     let url = try XCTUnwrap(AgentSessionLog.fileURL)
-    let recent = SessionEvent(
-      ts: Date().addingTimeInterval(-60), kind: .opened,
-      workspace: .init(name: "w", rootPath: "/tmp"), cwd: "/tmp",
-      agent: .init(command: "claude", sessionId: "recent"))
+    let recent = opened("recent", secondsAgo: 60)
     try SessionLogWriter.append(recent, to: url)
     let before =
       try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
@@ -197,5 +195,33 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
     let after =
       try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
     XCTAssertEqual(before, after, "落ちるものが無ければ書き直さない")
+  }
+
+  /// 書き直しに失敗しても、そのプロセスは剪定結果をメモリに持つ。逆だと state dir が書けないあいだ
+  /// ⇧⌘T が空・`restore_sessions` が全 id に unknown になる一方、`session log` には全行が見える。
+  func testInitKeepsPrunedEventsInMemoryWhenRewriteFails() throws {
+    let url = try XCTUnwrap(AgentSessionLog.fileURL)
+    let old = opened("old", secondsAgo: 40 * 86400)
+    let recent = opened("recent", secondsAgo: 60)
+    try SessionLogWriter.append(old, to: url)
+    try SessionLogWriter.append(recent, to: url)
+
+    // 0555 は read を通し、同ディレクトリへの一時ファイル作成（rewrite）だけを EACCES で落とす。
+    // root で走ると権限が効かないので、プローブして効かない環境は skip する。
+    let dir = url.deletingLastPathComponent()
+    let fm = FileManager.default
+    try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path)
+    // 0555 のままだと endCase() の removeItem が失敗して caseDir が残る。
+    defer { try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
+    let probe = dir.appendingPathComponent("probe")
+    if (try? Data().write(to: probe)) != nil {
+      try? fm.removeItem(at: probe)
+      throw XCTSkip("ディレクトリ権限が効かない環境（root 等）では書き直し失敗を作れない")
+    }
+
+    let log = AgentSessionLog()
+
+    XCTAssertEqual(log.events, [recent], "書き直せなくてもメモリは剪定結果を持つ")
+    XCTAssertEqual(try SessionLogReader.read(url).events, [old, recent], "ファイルは手つかず")
   }
 }
