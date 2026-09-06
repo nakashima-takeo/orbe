@@ -63,7 +63,7 @@ final class TerminalTab {
   /// 新タブの cwd 継承はすべてこの 1 つの定義を読む。
   var cwd: String { surface.currentPwd ?? surface.initialCwd }
 
-  /// 所属セグメントのキー＝cwd が属する git worktree ルート（管理外は cwd 自身）の実パス。
+  /// 所属セグメントのキー＝cwd が属する git worktree ルート（管理外は cwd 自身）の正準形パス。
   /// cwd が変わった時に 1 回だけ再計算し（`pwdChanged`）、永続しない（復元時に保存 cwd から同じ規則で
   /// 再計算する）。同キーのタブが配列上で隣接する不変条件は `SessionStore` が保証する。
   /// setter が internal なのは、不変条件の検証がキーの純配列ロジックで済むよう注入口を残すため

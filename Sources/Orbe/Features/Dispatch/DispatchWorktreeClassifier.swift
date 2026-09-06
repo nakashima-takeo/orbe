@@ -347,8 +347,11 @@ enum DispatchWorktreeClassifier {
 
   /// タブ群を worktree のパスへ帰属させる。
   ///
-  /// - 両辺を `GitWorktreeRoot.normalizedPath` で実パスへ正規化する（macOS では `/tmp` `/var` が
+  /// - 両辺を `GitWorktreeRoot.normalizedPath` で正準形に揃える（macOS では `/tmp` `/var` が
   ///   symlink で、OSC 7 の pwd と `git worktree list` のパスが素では一致しない）。
+  /// - タブ行のセグメント所属（`TerminalTab.groupKey`＝`.git` を祖先方向へ探す同期判定）とは別の
+  ///   帰属判定。こちらは `git worktree list` への最長前置一致なので、submodule や入れ子 repo に
+  ///   いるタブは親 worktree の占有に数えつつ、タブ行では自身のキーで別セグメントになりうる。
   /// - 子ディレクトリにいるタブも占有とみなす。判定は**パス構成要素単位**の前置一致で、
   ///   文字列 prefix ではない（`/a/foo` が `/a/foobar` に誤ヒットする）。
   /// - worktree が入れ子になっている構成があるので**最も長く一致した worktree に帰属**させる
