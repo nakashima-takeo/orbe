@@ -67,6 +67,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
 
     try renderCompletionSnapshot(dir: dir)
     try renderStatusRowSnapshots(dir: dir)
+    try renderStatusRowSegmentSnapshots(dir: dir)
     try renderWorkspaceCreateSnapshots(dir: dir)
     try renderUpdateSnapshots(dir: dir)
     try renderAttentionSnapshots(dir: dir)
@@ -85,9 +86,12 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     .frame(width: size.width, height: size.height, alignment: .top)
   }
 
+  /// design 正典 のステージ同寸（chrome 帯 28+28 ＋ 空のターミナル領域）。
+  private var statusRowStageSize: NSSize { NSSize(width: 640, height: 520) }
+
+  /// 連を持たない（全タブ単独）段——通常と overflow。
   private func renderStatusRowSnapshots(dir: URL) throws {
-    // design 正典 のステージ同寸（chrome 帯 26+28 ＋ 空のターミナル領域）。
-    let size = NSSize(width: 640, height: 520)
+    let size = statusRowStageSize
 
     // 通常: design 正典 Terminal シーンの fixture（11 タブ・ストリップ 3/1/5/2・cwd なし）。
     let normal = StatusRowModel()
@@ -116,6 +120,12 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     overflow.rollup = [("working", 8), ("waiting", 2), ("idle", 15)]
     try writePNG(
       chromeBand(overflow, size: size), size: size, name: "statusrow_overflow.png", dir: dir)
+  }
+
+  /// 同 worktree のタブが連なる段——識別バー・区切り線・連の中の選択セル・床 40。
+  private func renderStatusRowSegmentSnapshots(dir: URL) throws {
+    let size = statusRowStageSize
+    let glyphCycle: [AgentStateIcon.Kind?] = [.working, .waiting, .done, nil]
 
     // grouped: 見本 workspaceSnapshot の storefront——同 worktree の連（4・2・2）＋管理外の単独 1。
     // 連の中の選択セル・識別バー・区切り線・1 枚は現行の絵。cwd あり。
@@ -153,6 +163,21 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     try writePNG(
       chromeBand(groupedOverflow, size: size), size: size, name: "statusrow_grouped_overflow.png",
       dir: dir)
+
+    // fitting: 行に余る枚数で、幅が自然幅そのままに出る段。2〜3 文字のタブは床 40 に持ち上がり、
+    // 短い名前ばかりの連でもセルが潰れないことを見る（溢れた段だけでは床が shrink に隠れて見えない）。
+    let fitting = StatusRowModel()
+    fitting.workspace = "orbe"
+    fitting.strip = TabStrip(
+      titles: ["ui", "web", "src/renderer", "~/notes"],
+      glyphs: [.working, nil, .done, nil],
+      segments: [0..<3, 3..<4],
+      colorIndices: ["orbe", "notes"].map { WorktreeColor.index(forKey: $0) })
+    fitting.active = 0
+    fitting.cwd = "~/dev/orbe/ui"
+    fitting.rollup = [("working", 1), ("done", 1), ("idle", 2)]
+    try writePNG(
+      chromeBand(fitting, size: size), size: size, name: "statusrow_fitting.png", dir: dir)
   }
 
   /// 補完ドロップダウン（薄い行・複数 group・cap 超過でスクロール表現＝右つまみ＋下フェード）を端末地に重ねる。

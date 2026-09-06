@@ -67,7 +67,9 @@ struct DSTab: View {
       }
     }
     .padding(.horizontal, Theme.Space.step)
-    .frame(maxWidth: Chrome.tabMaxWidth, maxHeight: .infinity)
+    // 床 40 に持ち上げられたセルは中身より広い。余りは右へ送り、どのセルもグリフ／文字が左端から
+    // 同じ 8pt で始まるようにする（中央寄せだと短い名前だけ書き出しがずれる）。
+    .frame(maxWidth: Chrome.tabMaxWidth, maxHeight: .infinity, alignment: .leading)
     .background(Rectangle().fill(selected ? Color.theme.textPrimary : .clear))
     .overlay(alignment: .leading) {
       if divided { Rectangle().fill(Color.theme.surface1).frame(width: 1) }

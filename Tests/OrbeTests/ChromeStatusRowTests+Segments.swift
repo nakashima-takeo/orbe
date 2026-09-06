@@ -48,6 +48,14 @@ extension ChromeStatusRowTests {
     XCTAssertEqual(widths, naturals)
   }
 
+  /// 床 40 は shrink 時だけの下限ではなくセルの幅そのものの床。行に余っていても、2 文字のタブは
+  /// 自然幅（数十 pt）ではなく 40 で立つ。上限 140 は逆側の同じ規則。
+  func testShortAndLongNaturalsClampToFloorAndCapWhenFitting() {
+    let widths = StatusTabLayout.widths(
+      naturals: [18, 40, 100, 300], segments: StatusTabLayout.singletons(count: 4), available: 800)
+    XCTAssertEqual(widths, [Chrome.tabMinWidth, 40, 100, Chrome.tabMaxWidth])
+  }
+
   // MARK: - geometry
 
   /// x 積算: 連の先頭でバー幅ぶん進み、連の中は隙間なし、連と連の間だけ tabGap。

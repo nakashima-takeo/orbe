@@ -13,7 +13,8 @@ enum Chrome {
   static let tabHeight: CGFloat = tabRowHeight - tabRowPad * 2  // セグメント高（行 fill）
   static let tabGap: CGFloat = 2  // セグメント間
   static let tabMaxWidth: CGFloat = 140  // セル 1 枚の上限。超える名前は省略記号で切り詰め
-  // shrink-to-fit の下限（セル 1 枚の床）。数文字＋省略記号が読める幅。これ以上は縮めず横スクロールへ回す。
+  // セル 1 枚の床。数文字＋省略記号が読める幅。短い名前でもこれを下回らず、shrink もここで止めて
+  // 以降は横スクロールへ回す。
   static let tabMinWidth: CGFloat = 40
   // インライン改名の編集セルの下限幅（数語を打てる幅）。shrink 床（40）だと打てないため View 側で上書きする。
   static let tabEditFloor: CGFloat = 120

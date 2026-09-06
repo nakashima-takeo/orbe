@@ -10,14 +10,17 @@ enum StatusTabLayout {
   /// 連が識別バー（と各セル左の区切り線）を持つか＝2 枚以上。描画・room・x 積算が共有する唯一の述語。
   static func hasBar(_ range: Range<Int>) -> Bool { range.count >= 2 }
 
-  /// shrink-to-fit の幅計算。自然幅を maxWidth で cap し、収まればそのまま、溢れれば CSS flex shrink と
-  /// 同じく**自然幅に比例して縮め、minWidth の床に達したタブは凍結して残りへ再配分**する
-  /// （min-width 0 まで潰さず床 40 を設けている。可読性のための設計判断・`docs/design/design-system.md` §9）。
+  /// shrink-to-fit の幅計算。自然幅を床 40〜上限 140 に収め（数文字の短い名前でも 40 の幅を持つ）、
+  /// 合計が room に収まればそのまま、溢れれば**その幅に比例して縮め、床に達したセルは凍結して
+  /// 残りの不足を残りのセルへ再配分**する。
+  /// 再配分の単位は**行**であって連ではない——連は識別バー・区切り線・角丸を持つ視覚の単位で、幅の
+  /// 取り分は持たない。同じ長さのタブは、どの連にいても、単独でも同じ幅になる（溢れたら全タブが
+  /// 等しく縮む、という見本の規則）。
   /// room は available からセグメント間の隙間・＋ボタン・2 枚以上の連の識別バー幅を引いた値
   /// （バー幅は器の床に含む）。全タブが床でも溢れる時だけ合計が room を超え横スクロールへ。
   /// `naturals` と同じ要素数を返す。
   static func widths(naturals: [CGFloat], segments: [Range<Int>], available: CGFloat) -> [CGFloat] {
-    let capped = naturals.map { min($0, Chrome.tabMaxWidth) }
+    let capped = naturals.map { min(max($0, Chrome.tabMinWidth), Chrome.tabMaxWidth) }
     guard !capped.isEmpty else { return [] }
     let gaps = Chrome.tabGap * CGFloat(segments.count)  // 要素は n 連 + ＋ボタンで計 n+1、その間の隙間は n 個
     let bars = DSSegmentBar.width * CGFloat(segments.filter(hasBar).count)
