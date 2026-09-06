@@ -124,9 +124,10 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       Set(
         ((log["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])?.keys ?? [:].keys),
       ["since", "until", "limit", "sessionId"])
+    // 数字の直後の区切りまで含める——部分一致だと 10000 → 1000 のような下げ方向のドリフトを取り逃す。
     XCTAssertTrue(
-      logDescription.contains("既定 \(SessionLogLimits.defaultLimit)"), "limit の既定を写す")
-    XCTAssertTrue(logDescription.contains("上限 \(SessionLogLimits.maxLimit)"), "limit の上限を写す")
+      logDescription.contains("既定 \(SessionLogLimits.defaultLimit)（"), "limit の既定を写す")
+    XCTAssertTrue(logDescription.contains("上限 \(SessionLogLimits.maxLimit)。"), "limit の上限を写す")
 
     let restore = try tool("restore_sessions")
     XCTAssertEqual(

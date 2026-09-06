@@ -84,12 +84,15 @@ extension ControlWireTests {
     }
   }
 
-  /// 空・101 件・安全文字集合の外は -32602（target へ届かない）。
+  /// 空・上限 +1 件・安全文字集合の外は -32602（target へ届かない）。
   func testRestoreSessionsRejectsBadIdLists() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
     var id = 0
-    for ids in [[], Array(repeating: "s", count: 101), ["ok", "a;rm -rf /"], [""]] {
+    for ids in [
+      [], Array(repeating: "s", count: SessionLogLimits.restoreMaxIds + 1), ["ok", "a;rm -rf /"],
+      [""],
+    ] {
       id += 1
       XCTAssertEqual(
         errorCode(wire.request(id: id, method: "restore_sessions", params: ["sessionIds": ids])),
