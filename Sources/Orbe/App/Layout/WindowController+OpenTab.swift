@@ -51,6 +51,9 @@ extension WindowController {
   /// 「画面が読めず入力も届かない」ものに退化する。同じテストが surface のサイズも見る。
   private func materializeOffscreen(_ tab: TerminalTab, in ws: Workspace) {
     guard store.recordMaterialization(of: tab, in: ws) else { return }
+    // 素シェルを背景 workspace に起こす場合 `agentSlot` は変わらず、`activated` の反転だけが起きる。
+    // ここで要求しないと減光解除が chrome 更新点（`flushChrome`）へ届かない。
+    refreshChrome()
     tab.view.autoresizingMask = [.width, .height]
     tab.view.frame = model.content.bounds
     tab.view.isHidden = true
