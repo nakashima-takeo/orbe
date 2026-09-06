@@ -119,4 +119,32 @@ final class WindowControllerActivationLifecycleTests: OrbeTestCase {
       for tab in tabs { XCTAssertNil(tab["activated"]) }
     }
   }
+
+  /// 休眠チケットの消費（隠れタブの段階的 materialize）は、パレットを開いたままでも行チップへ届く。
+  /// 届かないと「もう起きているのに休眠件数が残ったまま」の行を見て workspace を選ぶことになる。
+  func testHiddenMountTicketConsumptionReachesOpenWorkspacePaletteRow() throws {
+    save(
+      activeWorkspace: 0,
+      workspaces: [
+        WorkspaceState(
+          name: "main", rootPath: "/tmp", activeTab: 0,
+          tabs: [restoredAgentTab("a"), restoredAgentTab("b"), restoredAgentTab("c")])
+      ])
+    let wc = WindowController()
+    wc.showWorkspacePalette()
+    func rollup() throws -> [(state: String, count: Int)] {
+      try XCTUnwrap(wc.model.workspacePalette?.items.first).live.rollup
+    }
+    XCTAssertEqual(try rollup().map(\.state), ["dormant"])
+    XCTAssertEqual(try rollup().map(\.count), [2], "前提: 未消費の復元チケット 2 枚")
+
+    observeAfterAlreadyQueuedJobs {}
+    wc.flushChrome()
+    XCTAssertEqual(try rollup().map(\.count), [1], "1 枚起きた分だけ休眠件数が減る")
+
+    observeAfterAlreadyQueuedJobs {}
+    wc.flushChrome()
+    XCTAssertTrue(try rollup().isEmpty, "全て消費された休眠チップは消える")
+    XCTAssertEqual(wc.model.overlay, .workspacePalette, "追随のためにパレットを閉じない")
+  }
 }

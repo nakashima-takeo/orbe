@@ -192,4 +192,28 @@ extension WindowControllerReportAgentTests {
     XCTAssertFalse(try live().dormant, "素シェル 1 枚の起床で行の減光が解ける")
     XCTAssertEqual(try live().rollup.map(\.state), ["dormant"], "未消費チケットは残る")
   }
+
+  /// 表示中の追随は現在値だけの差し替えで、構造の再読込ではない。詳細メニューへ潜っている間に
+  /// 報告が届いても一覧へ引き戻さず（＝選んだ対象と打ちかけの操作を奪わず）、戻ると最新のチップが出る。
+  func testOpenWorkspacePaletteSubmenuSurvivesAgentStateChange() throws {
+    let fixture = try makeControllerAndMixedBackground()
+    let wc = fixture.wc
+    wc.showWorkspacePalette()
+    let palette = try XCTUnwrap(wc.model.workspacePalette)
+    let index = try XCTUnwrap(wc.workspaces.firstIndex { $0 === fixture.workspace })
+    palette.render.onDown()  // 起源 "main" の次＝背景の "mixed" 行
+    XCTAssertTrue(palette.render.onRight(), "詳細メニューへ潜る")
+    XCTAssertEqual(palette.render.breadcrumb, "‹ mixed")
+
+    wc.controlReportAgent(
+      tab: fixture.live, agent: "claude", state: "working", sessionId: nil, message: nil)
+    wc.flushChrome()
+
+    XCTAssertEqual(palette.render.breadcrumb, "‹ mixed", "追随は詳細メニューから引き戻さない")
+
+    palette.goBack()  // ← で一覧へ
+    let item = try XCTUnwrap(palette.items.first { $0.index == index })
+    XCTAssertEqual(
+      item.live.rollup.map(\.state), ["working", "dormant"], "戻った一覧に最新のチップが出る")
+  }
 }

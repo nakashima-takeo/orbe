@@ -76,4 +76,30 @@ extension WorkspacePaletteTests {
     XCTAssertEqual(p.items[1].live.rollup.map(\.state), ["working"])
     XCTAssertFalse(p.render.rows[1].dimmed, "戻った一覧に最新の現在値が出る")
   }
+
+  /// 改名入力中に届く live 更新は、打ちかけの名前も改名の宛先も動かさない（構造の再読込を流用すると
+  /// 一覧へ引き戻され、入力中の文字列が消える）。
+  func testUpdateLiveStatesKeepsRenameInputAndCommitTarget() {
+    let p = palette()
+    var renamed: (Int, String)?
+    p.onRename = { renamed = ($0, $1) }
+    p.setItems(liveItems())
+    send(p, down)  // api-infra 行
+    send(p, right)  // 詳細メニューへ潜る
+    key(p, kReturn)  // 改名モード（現名プリフィル）
+    type(p, "api-infra-2")  // 打ちかけの新名
+
+    p.updateLiveStates([
+      .init(rollup: [], dormant: false),
+      .init(rollup: [(state: "working", count: 1)], dormant: false),
+      .init(rollup: [], dormant: false),
+    ])
+
+    XCTAssertEqual(p.render.query, "api-infra-2", "打ちかけの名前を live 更新が消さない")
+    XCTAssertTrue(p.render.rows.isEmpty, "改名モードのまま（一覧へ引き戻されない）")
+
+    send(p, enter)
+    XCTAssertEqual(renamed?.0, 1, "改名の宛先は潜った先の workspace のまま")
+    XCTAssertEqual(renamed?.1, "api-infra-2")
+  }
 }
