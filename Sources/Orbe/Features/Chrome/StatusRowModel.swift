@@ -10,6 +10,11 @@ import SwiftUI
   /// 各タブの同一性（`TerminalTab.id`）。時間差を持つ操作（コンテキストメニュー）が
   /// 位置 index の代わりに使う。titles / glyphs と同じ長さ。
   var tabIds: [Int] = []
+  /// セグメント（隣接する同 worktree のタブの連）。`SessionStore.segments(of:)` が導いた連を controller が
+  /// 流す。titles を覆わない（空）ホスト＝gallery 等では全タブ単独として描く。
+  var segments: [Range<Int>] = []
+  /// 各セグメントの worktree 識別色番号（`Color.theme.worktreeBar` の index）。`segments` と同じ長さ。
+  var segmentColorIndices: [Int] = []
   var active = 0
   /// `~` 短縮済みのアクティブタブの cwd。
   var cwd: String?
@@ -24,8 +29,10 @@ import SwiftUI
   var onNewTab: () -> Void = {}
   /// 右端の件数ストリップのクリック（Attention パレットを開く）。
   var onAttentionTap: () -> Void = {}
-  /// タブを `from` から挿入先 index `to`（0…count）へ並び替える（同一 workspace 内・commit-on-drop）。
+  /// タブを `from` から挿入先 index `to`（0…count）へ並び替える（同一セグメント内・commit-on-drop）。
   var onReorder: (Int, Int) -> Void = { _, _ in }
+  /// タブ `from` を含むセグメントを丸ごと、セグメント境界 `to`（タブ index・0…count）へ動かす。
+  var onReorderSegment: (Int, Int) -> Void = { _, _ in }
   /// タブ `tabId`（位置 index ではない）のエージェント状態を idle へ落とす
   /// （コンテキストメニュー）。選択切替を挟まない。
   var onResetAgentState: (_ tabId: Int) -> Void = { _ in }
@@ -57,6 +64,8 @@ import SwiftUI
     let titles: [String]
     let glyphs: [AgentStateIcon.Kind?]
     let tabIds: [Int]
+    let segments: [Range<Int>]
+    let segmentColorIndices: [Int]
     let active: Int
     let cwd: String?
     let rollup: [(state: String, count: Int)]
@@ -67,6 +76,8 @@ import SwiftUI
     titles = s.titles
     glyphs = s.glyphs
     tabIds = s.tabIds
+    segments = s.segments
+    segmentColorIndices = s.segmentColorIndices
     active = s.active
     cwd = s.cwd.map { ($0 as NSString).abbreviatingWithTildeInPath }
     rollup = s.rollup

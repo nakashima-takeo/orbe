@@ -32,12 +32,13 @@ extension WindowController {
     return wire(TerminalTab(restoring: state, resumeSpawn: resume))
   }
 
-  /// ⇧⌘T。アクティブ workspace の開き直しスタックから直近の 1 枚を、閉じた時の index（有効範囲へ
-  /// クランプ）に起こしてそのタブへ切り替える。スタックが空なら何もしない（音もダイアログも出さない）。
+  /// ⇧⌘T。アクティブ workspace の開き直しスタックから直近の 1 枚を、同 worktree のセグメント右端
+  /// （無ければ閉じた時の index をセグメント境界へ丸めた位置）に起こしてそのタブへ切り替える。
+  /// スタックが空なら何もしない（音もダイアログも出さない）。
   /// 復元されるもの・されないものは起動時復元と同一（makeTab を共有する）。
   func reopenClosedAgentTab() {
     guard let closed = store.popClosedAgentTab() else { return }
-    let index = store.insertTabIntoActive(makeTab(from: closed.state), at: closed.index)
+    let index = store.insertTabIntoActive(makeTab(from: closed.state), near: closed.index)
     select(index)  // 0タブ workspace への復活も含め、既存のタブ生成系と同じく起こしたタブを見せる
     scheduleSave()
   }

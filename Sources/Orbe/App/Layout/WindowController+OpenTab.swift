@@ -23,9 +23,9 @@ extension WindowController {
     guard workspaces.indices.contains(workspaceIndex) else { return nil }
     let initialCwd = cwd ?? store.newTabCwd(inWorkspaceAt: workspaceIndex)
     let tab = wire(TerminalTab(cwd: initialCwd, command: command, env: env))
-    store.appendTab(tab, toWorkspaceAt: workspaceIndex)  // 背景 WS はここで active も末尾へ
+    let index = store.insertTab(tab, intoWorkspaceAt: workspaceIndex)  // 背景 WS はここで active も新タブへ
     if workspaceIndex == activeWorkspace {
-      select(workspaces[workspaceIndex].tabs.count - 1)  // surface を起こす（mount）
+      select(index)  // surface を起こす（mount）
     } else {
       materializeOffscreen(tab, in: workspaces[workspaceIndex])
     }

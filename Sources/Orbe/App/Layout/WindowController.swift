@@ -156,12 +156,21 @@ final class WindowController: NSObject, NSWindowDelegate {
     }
     statusModel.onReorder = { [weak self] from, to in
       guard let self, self.store.moveTab(from: from, to: to) else { return }
-      // 並び替えで titles 順が変わると editingIndex（位置 index）が別タブを指す（count 不変で
-      // StatusRowView 側の onChange も検知不能）。編集中なら畳む。
-      if self.statusModel.editingIndex != nil { self.endTabRename() }
-      self.refreshChrome()  // current.tabs 順を再投影（表示追従）
-      self.scheduleSave()  // 新順を workspaces.json へ（1 秒デバウンス）
+      self.tabsDidReorder()
     }
+    statusModel.onReorderSegment = { [weak self] from, to in
+      guard let self, self.store.moveSegment(containing: from, to: to) else { return }
+      self.tabsDidReorder()
+    }
+  }
+
+  /// アクティブ workspace のタブ順が変わった（並び替え・cd 再判定）。順が変わると editingIndex
+  /// （位置 index）が別タブを指す（count 不変で StatusRowView 側の onChange も検知不能）ので編集中なら
+  /// 畳み、current.tabs 順を再投影して新順を workspaces.json へ（1 秒デバウンス）。
+  private func tabsDidReorder() {
+    if statusModel.editingIndex != nil { endTabRename() }
+    refreshChrome()
+    scheduleSave()
   }
 
   /// AgentLauncher の default agent 配線（読み＝アクティブ WS の実効値・書込＝global スコープの設定変更）。
@@ -181,7 +190,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   func wire(_ tab: TerminalTab) -> TerminalTab {
     tab.onClose = { [weak self, weak tab] origin in self?.closeTab(tab, origin: origin) }
     tab.onTitleChange = { [weak self] in self?.refreshChrome() }
-    tab.onPwdChange = { [weak self] in self?.tabDidReportPwd() }
+    tab.onPwdChange = { [weak self, weak tab] in self?.tabDidReportPwd(tab) }
     tab.onAgentStateChange = { [weak self] in
       self?.consumeVisibleTabDone()
       self?.refreshChrome()
@@ -209,7 +218,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   /// 最終的に mount され viewDidMoveToWindow で surface が誕生。制御チャネルも使うため internal。
   func select(_ index: Int) {
     guard store.recordSelection(index) else { return }
-    // 別タブへ切替＝インライン改名の文脈が崩れる。編集中なら畳む（dragFrom と同じ「集合/選択が
+    // 別タブへ切替＝インライン改名の文脈が崩れる。編集中なら畳む（DragSession と同じ「集合/選択が
     // 変わったら継続は不正」不変条件。blur 自己修復に頼らず SSOT 遷移点で決定的に解除する）。
     if statusModel.editingIndex != nil { endTabRename() }
     model.contentIsEmpty = false  // タブが載る＝surface が地を塗るので 0タブ backstop を下げる（二重 veil 回避）
@@ -315,12 +324,17 @@ final class WindowController: NSObject, NSWindowDelegate {
     chromeFlushScheduled = false
     guard chromeDirty else { return }
     chromeDirty = false
+    let segments = SessionStore.segments(of: current.tabs)
     statusModel.update(
       StatusRowModel.Snapshot(
         workspace: current.name,
         titles: current.tabs.map { $0.displayTitle(workspaceRoot: current.rootPath) },
         glyphs: current.tabs.map { $0.activated ? $0.agentStateKind : nil },
         tabIds: current.tabs.map(\.id),
+        segments: segments,
+        segmentColorIndices: segments.map {
+          WorktreeColor.index(forKey: current.tabs[$0.lowerBound].groupKey)
+        },
         active: current.active,
         cwd: store.activeTabCwd(),
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
@@ -333,10 +347,16 @@ final class WindowController: NSObject, NSWindowDelegate {
     window.makeFirstResponder(current.tabs[current.active].surface)
   }
 
-  /// OSC 7 の cwd 報告を受けた。行の cwd 表示を更新し、永続保存を予約する。
-  private func tabDidReportPwd() {
-    refreshChrome()
-    scheduleSave()
+  /// OSC 7 の cwd 報告を受けた。所属キーが変わって隣接不変条件が破れていればタブを移し（アクティブ
+  /// workspace の順が変わったときだけ打ちかけの改名を畳む）、行の cwd 表示を更新し、永続保存を予約する。
+  private func tabDidReportPwd(_ tab: TerminalTab?) {
+    guard let tab else { return }
+    if store.regroup(tab) == activeWorkspace {
+      tabsDidReorder()
+    } else {
+      refreshChrome()
+      scheduleSave()
+    }
   }
 
   // アプリ前面復帰：背面で届いていたアクティブ表示タブの done を消費する。

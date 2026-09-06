@@ -29,14 +29,16 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
 
   /// 3 タブ: [0] 素のシェル "a"（アクティブ）/ [1] エージェント "api" / [2] エージェント "c"。
   /// エージェントの有無で積む/積まないが分かれる種類を 1 つの workspace に揃える。
+  /// cwd は 3 枚とも別 worktree（git 管理外の別ディレクトリ）——同 worktree のセグメントがあると
+  /// 戻し先はその右端に決まり、閉じた位置が運ばれていることを固定できない。
   private func restoreThreeTabs() throws -> WindowController {
     try restore([
-      TabState(cwd: "/tmp", agent: nil, explicitTitle: "a"),
+      TabState(cwd: "/tmp/a", agent: nil, explicitTitle: "a"),
       TabState(
         cwd: "/work/api", agent: AgentSession(command: "claude", sessionId: "api-1"),
         explicitTitle: "api"),
       TabState(
-        cwd: "/tmp", agent: AgentSession(command: "claude", sessionId: "c-1"), explicitTitle: "c"),
+        cwd: "/tmp/c", agent: AgentSession(command: "claude", sessionId: "c-1"), explicitTitle: "c"),
     ])
   }
 
