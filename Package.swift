@@ -21,6 +21,12 @@ let package = Package(
       name: "OrbePaths",
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
+    // エージェントセッションの寿命ログ（agent-sessions.jsonl）の型・読み書き・派生を本体と `orb` CLI で
+    // 共有する薄い土台。Foundation のみ・独立ライブラリ（OrbePaths と同じ理由）。
+    .target(
+      name: "OrbeSessionLog",
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
     // 通知音の純 DSP 層（合成プリミティブ・部品語彙・カタログ・レンダラ・取り込み・数値解析）。Foundation のみで、
     // 音を出す手段を持たない（再生は Orbe 側の SoundPlayer）。Orbe 本体と dev CLI（orbe-sound）が共有する。
     // debug でも最適化して焼く: 純 DSP のループは -Onone だと 40 倍遅く、テストが分オーダーになる。
@@ -38,6 +44,7 @@ let package = Package(
       dependencies: [
         "GhosttyKit",
         "OrbePaths",
+        "OrbeSessionLog",
         "OrbeSound",
         .product(name: "Markdown", package: "swift-markdown"),
         .product(name: "Sparkle", package: "Sparkle"),
@@ -66,12 +73,12 @@ let package = Package(
       dependencies: ["OrbePaths"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
-    // Orbe 自身を構成・操作する CLI（config / ws / tab / agent / wait）。control.sock へ JSON-RPC を直接送る。
-    // .app 同梱時は Contents/Resources/bin/orb へ改名され、タブの PATH で bare `orb` に解決する。
+    // Orbe 自身を構成・操作する CLI（config / ws / tab / agent / session / wait）。control.sock へ JSON-RPC を
+    // 直接送る。.app 同梱時は Contents/Resources/bin/orb へ改名され、タブの PATH で bare `orb` に解決する。
     // GhosttyKit/AppKit に依存しない独立実行体（Foundation のみ）。
     .executableTarget(
       name: "orbe-cli",
-      dependencies: ["OrbePaths"],
+      dependencies: ["OrbePaths", "OrbeSessionLog"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     // エージェント hook → Orbe の状態報告 CLI（.app 同梱・env で位置を指される）。
@@ -100,6 +107,11 @@ let package = Package(
     .testTarget(
       name: "OrbePathsTests",
       dependencies: ["OrbePaths"],
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .testTarget(
+      name: "OrbeSessionLogTests",
+      dependencies: ["OrbeSessionLog"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
