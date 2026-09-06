@@ -5,7 +5,9 @@ import XCTest
 @testable import Orbe
 
 /// ⇧⌘T「閉じたエージェント」パレットの flow（ファイル分割の拡張。撮り方は本体の `flow` を共有する）。
-private let closedAgentsFlowCardSize = NSSize(width: 560, height: 360)
+/// 窓は「リストが cap（`PaletteCard.capHeight` 320）で頭打ちになる」ところまで高くする。
+/// これより低いと止めているのが窓であって cap ではなくなり、cap 超えの画が撮れない。
+private let closedAgentsFlowCardSize = NSSize(width: 560, height: 560)
 private let closedAgentsRoot = "/Users/me/orbe"
 
 /// flow の素材。`now` からの経過で閉じた時刻を組む。
@@ -56,7 +58,8 @@ private struct ClosedAgentsFixture {
 }
 
 extension DesignFlowSnapshotTests {
-  /// 空状態 → 一覧 → ↓ で選択 → 最悪ケース。状態は本物の `ClosedAgentsPaletteModel` のアクションが生む。
+  /// 空状態 → 一覧 → ↓ で選択 → ⌘↓ で末尾（cap で隠れた行と 5 種目のバッジが出る）→ 最悪ケース。
+  /// 状態は本物の `ClosedAgentsPaletteModel` のアクションが生む。
   func testClosedAgents() throws {
     let fixture = ClosedAgentsFixture(now: Date())
     let palette = ClosedAgentsPaletteModel(localization: LocalizationStore(language: .ja))
@@ -67,6 +70,7 @@ extension DesignFlowSnapshotTests {
         ("empty", { palette.setItems([]) }),
         ("list", { palette.setItems(fixture.list) }),
         ("down", { palette.render.onDown() }),
+        ("bottom", { palette.render.onJumpBottom() }),
         ("worst", { palette.setItems(fixture.worst) }),
       ])
   }
