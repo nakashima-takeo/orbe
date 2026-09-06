@@ -24,8 +24,9 @@ let sessionUsage = """
   event per line: ts, event, command, sessionId, workspace, cwd, title,
   origin[/reason] (title is the tab's title when it closed; title and origin
   are `-` on opened). --since takes an ISO 8601 time or a relative
-  <n>m / <n>h / <n>d; --until is ISO 8601 only. --limit defaults to 1000 (max
-  10000); when older events are dropped, stderr says so.
+  <n>m / <n>h / <n>d; --until is ISO 8601 only. --limit defaults to
+  \(SessionLogLimits.defaultLimit) (max \(SessionLogLimits.maxLimit)); when older
+  events are dropped, stderr says so.
   closed lists sessions whose last event is closed and that are not open in
   any tab now, newest first, in groups: closes with the same origin within 5 s
   form one group (closed by you never groups). --since keeps the groups whose
@@ -38,8 +39,9 @@ let sessionUsage = """
   (in the active workspace the next tab selection mounts the pending tabs one
   by one; in a background workspace, when that workspace is activated).
   --at <iso> restores every session still gone from the groups with that `at`
-  (the value `session closed` prints; whole seconds also match) — this is the
-  way to bring many back at once. Exit 1 if any id is unknown to the log.
+  (the value `session closed` prints, matched exactly after normalizing to
+  milliseconds; a value without them means .000) — this is the way to bring
+  many back at once. Exit 1 if any id is unknown to the log.
   """
 
 // MARK: - サブコマンド
@@ -139,7 +141,7 @@ private func sessionRestore(_ rest: [String]) -> Never {
   if let at {
     guard args.isEmpty else { usageDie("pass either <session-id>... or --at <iso>, not both") }
     let atISO = parseISOOrDie(at, flag: "--at")
-    // 同じ `at` の群は複数ありうる（workspace 削除で同時に閉じた gesture は 1 件ずつ単独の群になる）。
+    // 同じ `at` の群は複数ありうる（origin の違う closed が同じミリ秒に落ちると群は分かれ、`at` は並ぶ）。
     let groups = closedGroups().filter { $0.atISO == atISO }
     guard !groups.isEmpty else { transportDie("no closed group at \(at)") }
     ids = groups.flatMap { $0.sessions.map(\.sessionId) }
