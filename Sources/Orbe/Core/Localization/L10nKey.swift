@@ -358,12 +358,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   // MARK: - Closed agents（⇧⌘T パレット）
   case closedAgentsEmpty
   case closedAgentsHintRestore
-  case closedAgentsHintDrill
-  case closedAgentsHintRestoreOne
-  case closedAgentsHintBack
   case closedAgentsHintSelect
   case closedAgentsHintClose
-  case closedAgentsGroupCount
   case closedAgentsOriginGesture
   case closedAgentsOriginProcess
   case closedAgentsOriginAgent

@@ -10,31 +10,38 @@ final class ClosedAgentsSnapshotTests: OrbeTestCase {
 
   private func event(
     _ id: String, at seconds: TimeInterval, closed: SessionEvent.CloseOrigin? = nil,
-    rootPath: String = "/repo", reason: String? = nil
+    rootPath: String = "/repo", title: String? = nil
   ) -> SessionEvent {
     SessionEvent(
       ts: base.addingTimeInterval(seconds),
-      kind: closed.map { .closed(origin: $0, reason: reason, title: nil) } ?? .opened,
+      kind: closed.map { .closed(origin: $0, reason: nil, title: title) } ?? .opened,
       workspace: .init(name: "ws", rootPath: rootPath), cwd: rootPath + "/src/\(id)",
       agent: .init(command: "claude", sessionId: id))
   }
 
-  func testGroupsAreFilteredByRootPathAndNewestFirst() {
+  func testItemsAreFilteredByRootPathExcludePresentAndRunNewestFirst() {
     let events = [
       event("a", at: 0), event("b", at: 0), event("other", at: 0, rootPath: "/elsewhere"),
-      event("a", at: 10, closed: .process), event("b", at: 12, closed: .process),
+      event("a", at: 10, closed: .process, title: "deploy-api"),
+      event("b", at: 12, closed: .process),
       event("other", at: 13, closed: .process, rootPath: "/elsewhere"),
-      event("c", at: 0), event("c", at: 100, closed: .gesture),
+      event("c", at: 0), event("c", at: 100, closed: .gesture, title: "release notes"),
+      event("live", at: 0),
     ]
-    let groups = ClosedAgentsSnapshot.groups(events: events, present: [], rootPath: "/repo")
+    let items = ClosedAgentsSnapshot.items(events: events, present: [], rootPath: "/repo")
 
-    XCTAssertEqual(groups.map(\.origin), [.gesture, .process], "新しい順")
-    XCTAssertEqual(groups[1].items.map(\.sessionId), ["b", "a"], "群内も新しい順・他 WS のメンバーは落ちる")
-    XCTAssertEqual(groups[1].atKey, SessionEvent.iso8601(base.addingTimeInterval(10)))
-    XCTAssertEqual(groups[1].items[0].rootPath, "/repo")
-    XCTAssertEqual(groups[1].items[0].cwd, "/repo/src/b")
+    XCTAssertEqual(items.map(\.sessionId), ["c", "b", "a"], "平らに新しい順・他 WS は落ちる・生きているものは出ない")
+    XCTAssertEqual(items.map(\.origin), [.gesture, .process, .process])
+    XCTAssertEqual(
+      items.map(\.title), ["release notes", nil, "deploy-api"], "closed の title をそのまま持つ")
+    XCTAssertEqual(items[2].rootPath, "/repo")
+    XCTAssertEqual(items[2].cwd, "/repo/src/a")
+    XCTAssertEqual(
+      ClosedAgentsSnapshot.items(events: events, present: ["b"], rootPath: "/repo").map(
+        \.sessionId),
+      ["c", "a"], "present は除く")
     XCTAssertTrue(
-      ClosedAgentsSnapshot.groups(events: events, present: [], rootPath: "/nowhere").isEmpty,
+      ClosedAgentsSnapshot.items(events: events, present: [], rootPath: "/nowhere").isEmpty,
       "一致する workspace が無ければ空")
   }
 

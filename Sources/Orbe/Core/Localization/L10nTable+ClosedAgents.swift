@@ -7,12 +7,8 @@ extension L10n {
       "この workspace で閉じたエージェントはありません", "No closed agents in this workspace"
     ),
     .closedAgentsHintRestore: ("復元", "Restore"),
-    .closedAgentsHintDrill: ("中身", "Contents"),
-    .closedAgentsHintRestoreOne: ("この 1 件を復元", "Restore this one"),
-    .closedAgentsHintBack: ("戻る", "Back"),
     .closedAgentsHintSelect: ("選択", "Select"),
     .closedAgentsHintClose: ("閉じる", "Close"),
-    .closedAgentsGroupCount: ("%lld 件", "%lld sessions"),
     // 終わり方のバッジ。色でなく語で語る。
     .closedAgentsOriginGesture: ("自分で閉じた", "closed by you"),
     .closedAgentsOriginProcess: ("落ちた", "crashed"),

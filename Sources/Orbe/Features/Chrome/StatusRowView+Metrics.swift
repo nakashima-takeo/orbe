@@ -17,7 +17,7 @@ extension StatusRowView {
 
   func displayTitle(_ i: Int) -> String {
     let t = model.titles[i]
-    return t.isEmpty ? "Terminal" : t
+    return t.isEmpty ? TabTitle.fallback : t
   }
 
   func stateGlyph(_ i: Int) -> AgentStateIcon.Kind? {

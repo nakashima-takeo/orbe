@@ -43,8 +43,8 @@ extension WindowController {
     }
     let p = ClosedAgentsPaletteModel(localization: localization)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
-    p.onRestore = { [weak self] items in self?.restoreClosedAgents(items) }
-    p.setGroups(currentClosedAgentGroups())
+    p.onRestore = { [weak self] item in self?.restoreClosedAgent(item) }
+    p.setItems(currentClosedAgentItems())
     model.closedAgentsPalette = p
     model.overlay = .closedAgentsPalette
     p.focus()
@@ -54,32 +54,26 @@ extension WindowController {
   /// `flushChrome` から呼ぶ追従（既存 coalesce に相乗り）。表示中だけ一覧を組み直す。
   func refreshClosedAgentsPalette() {
     guard model.overlay == .closedAgentsPalette else { return }
-    model.closedAgentsPalette?.setGroups(currentClosedAgentGroups())
+    model.closedAgentsPalette?.setItems(currentClosedAgentItems())
   }
 
-  private func currentClosedAgentGroups() -> [ClosedAgentGroup] {
-    ClosedAgentsSnapshot.groups(
+  private func currentClosedAgentItems() -> [ClosedAgentItem] {
+    ClosedAgentsSnapshot.items(
       events: sessionLog.events,
       present: ClosedAgentsSnapshot.presentSessionIds(of: workspaces),
       rootPath: current.rootPath)
   }
 
-  /// 休眠チケットとしてアクティブ workspace の末尾に足し、復元した先頭のタブを選択して起こす。
-  /// 残りは `select` に続く既存の分割 mount（`scheduleHiddenMounts`）で順次起床する——起動復元で
-  /// アクティブ workspace の全タブが順次 resume されるのと同じで、mount 規律に例外は作らない。
-  private func restoreClosedAgents(_ items: [ClosedAgentItem]) {
-    let index = activeWorkspace
-    var first: Int?
-    for item in items {
-      restoreDormantTab(
-        TabState(
-          cwd: item.cwd,
-          agent: AgentSession(command: item.command, sessionId: item.sessionId),
-          explicitTitle: nil),
-        intoWorkspaceAt: index)
-      if first == nil { first = current.tabs.count - 1 }
-    }
-    if let first { select(first) }
-    dismissPalette()  // dismiss の focusActiveTab が新しい active＝復元した先頭へ当たる
+  /// 選んだ 1 件を休眠チケットとしてアクティブ workspace の末尾に足し、パレットを閉じてそのタブを
+  /// 選択して起こす。1 度に戻すのは 1 件——多数を戻すのは orb / MCP の `restore_sessions` の役割。
+  private func restoreClosedAgent(_ item: ClosedAgentItem) {
+    restoreDormantTab(
+      TabState(
+        cwd: item.cwd,
+        agent: AgentSession(command: item.command, sessionId: item.sessionId),
+        explicitTitle: nil),
+      intoWorkspaceAt: activeWorkspace)
+    select(current.tabs.count - 1)
+    dismissPalette()  // dismiss の focusActiveTab が新しい active＝復元したタブへ当たる
   }
 }

@@ -8,94 +8,66 @@ import XCTest
 private let closedAgentsFlowCardSize = NSSize(width: 560, height: 360)
 private let closedAgentsRoot = "/Users/me/orbe"
 
-private func closedItem(
-  _ id: String, _ cwd: String, ago: TimeInterval, origin: SessionEvent.CloseOrigin,
-  reason: String? = nil, now: Date
-) -> ClosedAgentItem {
-  ClosedAgentItem(
-    sessionId: id, command: "claude", cwd: cwd, rootPath: closedAgentsRoot,
-    closedAt: now.addingTimeInterval(-ago), origin: origin, reason: reason)
-}
+/// flow の素材。`now` からの経過で閉じた時刻を組む。
+private struct ClosedAgentsFixture {
+  let now: Date
 
-private func closedGroup(
-  _ items: [ClosedAgentItem], origin: SessionEvent.CloseOrigin, now: Date
-) -> ClosedAgentGroup {
-  let at = items.map(\.closedAt).min() ?? now
-  return ClosedAgentGroup(at: at, atKey: SessionEvent.iso8601(at), origin: origin, items: items)
-}
-
-/// 各 origin のバッジ・reason 付きの 1 件行・3 件の群行が 1 画に並ぶ普段の一覧。
-private func closedAgentsGroups(now: Date) -> [ClosedAgentGroup] {
   func item(
-    _ id: String, _ cwd: String, ago: TimeInterval, origin: SessionEvent.CloseOrigin,
-    reason: String? = nil
+    _ id: String, _ title: String?, _ cwd: String, ago: TimeInterval,
+    origin: SessionEvent.CloseOrigin
   ) -> ClosedAgentItem {
-    closedItem(id, cwd, ago: ago, origin: origin, reason: reason, now: now)
+    ClosedAgentItem(
+      sessionId: id, command: "claude", cwd: cwd, rootPath: closedAgentsRoot, title: title,
+      closedAt: now.addingTimeInterval(-ago), origin: origin)
   }
-  func group(_ items: [ClosedAgentItem], _ origin: SessionEvent.CloseOrigin) -> ClosedAgentGroup {
-    closedGroup(items, origin: origin, now: now)
-  }
-  return [
-    group([item("g", closedAgentsRoot + "/Sources/Orbe", ago: 45, origin: .gesture)], .gesture),
-    group([item("a", closedAgentsRoot, ago: 8 * 60, origin: .agent, reason: "logout")], .agent),
-    group(
-      [
-        item("p3", closedAgentsRoot + "/Tests", ago: 30 * 60 - 3, origin: .process),
-        item("p2", closedAgentsRoot + "/docs/spec", ago: 30 * 60 - 1, origin: .process),
-        item("p1", closedAgentsRoot + "/Sources/orbe-cli", ago: 30 * 60, origin: .process),
-      ], .process),
-    group(
-      [item("c", closedAgentsRoot + "/scripts", ago: 2 * 3600, origin: .controlAPI)], .controlAPI),
-    group([item("u", closedAgentsRoot, ago: 3 * 86400, origin: .unresolved)], .unresolved),
-  ]
-}
 
-/// 最悪ケース: 深い cwd・長い reason・多い件数。右端の列（バッジ・経過時間・潜れる印）が生き残り、
-/// 溢れは cwd の末尾省略に落ちること、行が cap を超えて内部スクロールに入ることを画で見る。
-private func closedAgentsWorstGroups(now: Date) -> [ClosedAgentGroup] {
-  let deep = closedAgentsRoot + "/Sources/Orbe/Features/ClosedAgents/Internal/Rendering/Rows"
-  return [
-    closedGroup(
-      [
-        closedItem(
-          "w1", deep, ago: 12, origin: .unresolved,
-          reason: "resume に失敗しました: セッションファイルが見つかりません (~/.claude/projects/…)", now: now)
-      ], origin: .unresolved, now: now),
-    closedGroup(
-      (0..<9).map {
-        closedItem(
-          "m\($0)", "\(deep)/\($0)", ago: TimeInterval(600 + $0), origin: .process, now: now)
-      }, origin: .process, now: now),
-  ]
+  /// 各 origin のバッジが 1 つずつ揃うタイトル付きの一覧。同じ事故で落ちた 3 行（process）はそのまま並ぶ。
+  var list: [ClosedAgentItem] {
+    [
+      item("g", "release notes", closedAgentsRoot + "/Sources/Orbe", ago: 45, origin: .gesture),
+      item("a", "PR #142 レビュー対応", closedAgentsRoot, ago: 8 * 60, origin: .agent),
+      item("p3", "docs-sync", closedAgentsRoot + "/Tests", ago: 30 * 60 - 3, origin: .process),
+      item(
+        "p2", "renderer-tests", closedAgentsRoot + "/docs/spec", ago: 30 * 60 - 1,
+        origin: .process),
+      item(
+        "p1", "deploy-api", closedAgentsRoot + "/Sources/orbe-cli", ago: 30 * 60,
+        origin: .process),
+      item("c", "swift test", closedAgentsRoot + "/scripts", ago: 2 * 3600, origin: .controlAPI),
+      item("u", "emit API 設計", closedAgentsRoot, ago: 3 * 86400, origin: .unresolved),
+    ]
+  }
+
+  /// 最悪ケース: 幅を超える長いタイトル・深い cwd・title 無しの `Terminal` 行・cap を超える件数。
+  /// タイトルが末尾省略で 1 行に収まり、脇の CLI・cwd・バッジ・経過時間が右端の列で揃い、
+  /// 行が cap を超えて内部スクロールに入ることを画で見る。
+  var worst: [ClosedAgentItem] {
+    let deep = closedAgentsRoot + "/Sources/Orbe/Features/ClosedAgents/Internal/Rendering/Rows"
+    let long = String(repeating: "とても長いタイトル", count: 12)
+    return [
+      item("w1", long, deep, ago: 12, origin: .unresolved),
+      item("w2", nil, deep, ago: 40, origin: .gesture),
+    ]
+      + (0..<9).map {
+        item(
+          "m\($0)", "worker-\($0)", "\(deep)/\($0)", ago: TimeInterval(600 + $0), origin: .process)
+      }
+  }
 }
 
 extension DesignFlowSnapshotTests {
-  /// 空状態 → 一覧 → ↓ で選択 → → で群に潜る → ← で戻る → 最悪ケースの一覧とその中身。
-  /// 状態は本物の `ClosedAgentsPaletteModel` のアクションが生む（drill / back の breadcrumb と hint も画に出る）。
+  /// 空状態 → 一覧 → ↓ で選択 → 最悪ケース。状態は本物の `ClosedAgentsPaletteModel` のアクションが生む。
   func testClosedAgents() throws {
-    let now = Date()
-    let groups = closedAgentsGroups(now: now)
-    let worst = closedAgentsWorstGroups(now: now)
+    let fixture = ClosedAgentsFixture(now: Date())
     let palette = ClosedAgentsPaletteModel(localization: LocalizationStore(language: .ja))
     try flow(
       "closed_agents", size: closedAgentsFlowCardSize,
       render: { paletteOverlaySnapshot(palette.render, canvas: closedAgentsFlowCardSize) },
       steps: [
-        ("empty", { palette.setGroups([]) }),
-        ("list", { palette.setGroups(groups) }),
-        ("down", { palette.render.onDown() }),  // 1 件行 → 1 件行（agent・reason 付き）
-        ("down_group", { palette.render.onDown() }),  // 3 件の群行へ
-        ("drill", { _ = palette.render.onRight() }),  // 群の中身（breadcrumb に閉じた時刻）
-        ("back", { palette.render.onLeft() }),  // 群行へ戻る（選択も復元される）
-        // 選択は末尾（＝ 9 件の群行）へ明示的に置き、次の → を決定的にする。
-        (
-          "worst",
-          {
-            palette.setGroups(worst)
-            palette.render.onJumpBottom()
-          }
-        ),
-        ("worst_drill", { _ = palette.render.onRight() }),  // 9 件の中身
+        ("empty", { palette.setItems([]) }),
+        ("list", { palette.setItems(fixture.list) }),
+        ("down", { palette.render.onDown() }),
+        ("worst", { palette.setItems(fixture.worst) }),
       ])
   }
 }

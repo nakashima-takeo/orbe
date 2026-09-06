@@ -5,7 +5,7 @@ import XCTest
 @testable import Orbe
 
 /// ⇧⌘T の配線を実 `WindowController` で端から端まで通す——対象はアクティブ workspace の閉じた同一性だけ、
-/// ↵ で末尾に戻り先頭が選択されて起きる、戻ったものは一覧から消える。
+/// ↵ で選んだ 1 件が末尾に戻り選択されて起きる、戻ったものは一覧から消える。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerClosedAgentsTests: OrbeTestCase {
@@ -44,18 +44,17 @@ final class WindowControllerClosedAgentsTests: OrbeTestCase {
     XCTAssertTrue(wc.handleWindowKeyCommand(.showClosedAgentsPalette))
     XCTAssertEqual(wc.presentedOverlay, .closedAgentsPalette)
     let palette = try XCTUnwrap(wc.model.closedAgentsPalette)
-    XCTAssertEqual(palette.groups.flatMap { $0.items.map(\.sessionId) }, ["m-1"])
-    XCTAssertEqual(palette.groups.first?.origin, .gesture)
+    XCTAssertEqual(palette.items.map(\.sessionId), ["m-1"])
+    XCTAssertEqual(palette.items.first?.origin, .gesture)
 
     wc.dismissPalette()
     wc.switchWorkspace(to: 1)
     wc.showClosedAgentsPalette()
     XCTAssertEqual(
-      wc.model.closedAgentsPalette?.groups.flatMap { $0.items.map(\.sessionId) }, ["o-1"],
-      "別 workspace では別の一覧")
+      wc.model.closedAgentsPalette?.items.map(\.sessionId), ["o-1"], "別 workspace では別の一覧")
   }
 
-  func testEnterRestoresAtTheEndSelectsTheFirstAndRemovesThemFromTheList() throws {
+  func testEnterRestoresTheChosenOneAtTheEndSelectsItAndRemovesItFromTheList() throws {
     let wc = try restore()
     try closeAgentTab(wc, in: 0, id: "m-1", origin: .controlAPI)
     try closeAgentTab(wc, in: 0, id: "m-2", origin: .controlAPI)
@@ -64,20 +63,20 @@ final class WindowControllerClosedAgentsTests: OrbeTestCase {
 
     wc.showClosedAgentsPalette()
     let palette = try XCTUnwrap(wc.model.closedAgentsPalette)
-    XCTAssertEqual(palette.groups.count, 1, "5 秒以内・同 origin は 1 群")
+    XCTAssertEqual(palette.items.map(\.sessionId), ["m-2", "m-1"], "同じ事故の 2 件も平らに新しい順")
+    palette.render.selected = 1  // m-1
     palette.activate()
 
     XCTAssertEqual(wc.presentedOverlay, .none, "復元でパレットは閉じる")
-    XCTAssertEqual(
-      wc.current.tabs.suffix(2).map { $0.agentSlot.session?.sessionId }, ["m-2", "m-1"],
-      "群の順（新しい順）で末尾に足す")
-    XCTAssertEqual(wc.current.active, 2, "復元した先頭のタブを選択して起こす")
-    XCTAssertEqual(wc.sessionLog.lastEvent(sessionId: "m-2")?.kind, .opened, "起床で opened が付く")
+    XCTAssertEqual(wc.current.tabs.count, 3, "戻るのは選んだ 1 件だけ")
+    XCTAssertEqual(wc.current.tabs.last?.agentSlot.session?.sessionId, "m-1", "末尾に足す")
+    XCTAssertEqual(wc.current.active, 2, "復元したタブを選択して起こす")
+    XCTAssertEqual(wc.sessionLog.lastEvent(sessionId: "m-1")?.kind, .opened, "起床で opened が付く")
     XCTAssertTrue(wc.current.tabs[2].activated)
 
     wc.showClosedAgentsPalette()
-    XCTAssertTrue(
-      wc.model.closedAgentsPalette?.groups.isEmpty == true, "戻ったものは一覧から消える")
+    XCTAssertEqual(
+      wc.model.closedAgentsPalette?.items.map(\.sessionId), ["m-2"], "戻ったものは一覧から消える")
   }
 
   func testOpenPaletteFollowsATabThatCloses() throws {
@@ -87,31 +86,13 @@ final class WindowControllerClosedAgentsTests: OrbeTestCase {
     tab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: "m-1"))
     wc.showClosedAgentsPalette()
     let palette = try XCTUnwrap(wc.model.closedAgentsPalette)
-    XCTAssertTrue(palette.groups.isEmpty, "前提: 生きている同一性は出ない")
+    XCTAssertTrue(palette.items.isEmpty, "前提: 生きている同一性は出ない")
 
     wc.closeTab(tab, origin: .process)
     wc.flushChrome()
 
     XCTAssertEqual(wc.presentedOverlay, .closedAgentsPalette, "開いたまま")
-    XCTAssertEqual(palette.groups.flatMap { $0.items.map(\.sessionId) }, ["m-1"], "閉じた分が一覧に増える")
-    XCTAssertEqual(palette.groups.first?.origin, .process)
-  }
-
-  func testMembersRestoreOnlyTheChosenOne() throws {
-    let wc = try restore()
-    try closeAgentTab(wc, in: 0, id: "m-1", origin: .controlAPI)
-    try closeAgentTab(wc, in: 0, id: "m-2", origin: .controlAPI)
-
-    wc.showClosedAgentsPalette()
-    let palette = try XCTUnwrap(wc.model.closedAgentsPalette)
-    XCTAssertTrue(palette.drillIn())
-    palette.render.selected = 1  // m-1（群内は新しい順）
-    palette.activate()
-
-    XCTAssertEqual(wc.current.tabs.last?.agentSlot.session?.sessionId, "m-1")
-    XCTAssertEqual(wc.current.tabs.count, 3)
-    wc.showClosedAgentsPalette()
-    XCTAssertEqual(
-      wc.model.closedAgentsPalette?.groups.flatMap { $0.items.map(\.sessionId) }, ["m-2"])
+    XCTAssertEqual(palette.items.map(\.sessionId), ["m-1"], "閉じた分が一覧に増える")
+    XCTAssertEqual(palette.items.first?.origin, .process)
   }
 }

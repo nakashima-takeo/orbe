@@ -155,8 +155,7 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
       wc.sessionLog.events.map(\.closeOrigin), [nil, .gesture], "メモリの記録は続く")
     wc.showClosedAgentsPalette()
     XCTAssertEqual(
-      wc.model.closedAgentsPalette?.groups.flatMap { $0.items.map(\.sessionId) }, ["s-1"],
-      "⇧⌘T はメモリから出せる")
+      wc.model.closedAgentsPalette?.items.map(\.sessionId), ["s-1"], "⇧⌘T はメモリから出せる")
   }
 
   func testInitPrunesOldRowsAndRewritesAtomically() throws {

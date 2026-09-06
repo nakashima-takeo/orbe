@@ -2,6 +2,9 @@ import Foundation
 
 /// タブ名 ③派生の純粋ロジック（UI・AppKit 非依存）。
 enum TabTitle {
+  /// タイトルが空のときに出す既定語（タブバーと ⇧⌘T の行が同じ語を使う）。
+  static let fallback = "Terminal"
+
   /// fish prompt_pwd 純正: 末尾要素はフル、それ以外は頭1文字、隠しdirはドット+1字、深さ上限なし。
   /// 先頭のスラッシュは保持する（チルダは通常要素として頭1字になる）。
   static func compactPath(_ path: String) -> String {
