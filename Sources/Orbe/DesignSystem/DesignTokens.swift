@@ -86,6 +86,9 @@ enum Theme {
     static let tabRowBg = dynA(light: 0x3a3151, lightA: 0.08, dark: 0x000000, darkA: 0.28)
     static let tabSegBg = dynA(light: 0x3a3151, lightA: 0.06, dark: 0xffffff, darkA: 0.10)
     static let tabActiveText = dyn(light: 0xf3f0fa, dark: 0x171420)  // light は bgBase と別値
+    /// worktree 識別バー（セグメント左端 3px）。番号は `WorktreeColor.index(forKey:)`。
+    /// light 固有トーンは見本（orbe_design `theme.ts`）側で保留中——実物を見て決めるまで dark と同値。
+    static let worktreeBar: [NSColor] = WorktreePalette.hex.map { rgb($0) }
 
     // 状態の塗り（事前 alpha 済み・テーマごとの accent 基調へ α を掛けた合成値）
     static let selectionFill = dynA(

@@ -67,6 +67,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
 
     try renderCompletionSnapshot(dir: dir)
     try renderStatusRowSnapshots(dir: dir)
+    try renderStatusRowSegmentSnapshots(dir: dir)
     try renderWorkspaceCreateSnapshots(dir: dir)
     try renderUpdateSnapshots(dir: dir)
     try renderAttentionSnapshots(dir: dir)
@@ -85,20 +86,24 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     .frame(width: size.width, height: size.height, alignment: .top)
   }
 
+  /// design 正典 のステージ同寸（chrome 帯 28+28 ＋ 空のターミナル領域）。
+  private var statusRowStageSize: NSSize { NSSize(width: 640, height: 520) }
+
+  /// 連を持たない（全タブ単独）段——通常と overflow。
   private func renderStatusRowSnapshots(dir: URL) throws {
-    // design 正典 のステージ同寸（chrome 帯 26+28 ＋ 空のターミナル領域）。
-    let size = NSSize(width: 640, height: 520)
+    let size = statusRowStageSize
 
     // 通常: design 正典 Terminal シーンの fixture（11 タブ・ストリップ 3/1/5/2・cwd なし）。
     let normal = StatusRowModel()
     normal.workspace = "orbe-core"
-    normal.titles = [
-      "src/renderer", "libghostty", "tests", "docs/spec", "agent-hooks", "state-store",
-      "api-docs", "hooks-spec", "perf/batching", "release-0.9", "ci-fix",
-    ]
-    normal.glyphs = [
-      .working, .waiting, nil, .done, .working, .working, .done, .done, nil, .done, .done,
-    ]
+    normal.strip = TabStrip(
+      titles: [
+        "src/renderer", "libghostty", "tests", "docs/spec", "agent-hooks", "state-store",
+        "api-docs", "hooks-spec", "perf/batching", "release-0.9", "ci-fix",
+      ],
+      glyphs: [
+        .working, .waiting, nil, .done, .working, .working, .done, .done, nil, .done, .done,
+      ])
     normal.active = 0
     normal.rollup = [("working", 3), ("waiting", 1), ("done", 5), ("idle", 2)]
     try writePNG(chromeBand(normal, size: size), size: size, name: "statusrow_normal.png", dir: dir)
@@ -107,13 +112,72 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     let overflow = StatusRowModel()
     overflow.workspace = "infra"
     let glyphCycle: [AgentStateIcon.Kind?] = [.working, .waiting, .done, nil]
-    overflow.titles = (0..<10).map { "terraform-apply-session-\($0)" }
-    overflow.glyphs = (0..<10).map { glyphCycle[$0 % glyphCycle.count] }
+    overflow.strip = TabStrip(
+      titles: (0..<10).map { "terraform-apply-session-\($0)" },
+      glyphs: (0..<10).map { glyphCycle[$0 % glyphCycle.count] })
     overflow.active = 6
     overflow.cwd = "~/work/infra/terraform/modules/network"
     overflow.rollup = [("working", 8), ("waiting", 2), ("idle", 15)]
     try writePNG(
       chromeBand(overflow, size: size), size: size, name: "statusrow_overflow.png", dir: dir)
+  }
+
+  /// 同 worktree のタブが連なる段——識別バー・区切り線・連の中の選択セル・床 40。
+  private func renderStatusRowSegmentSnapshots(dir: URL) throws {
+    let size = statusRowStageSize
+    let glyphCycle: [AgentStateIcon.Kind?] = [.working, .waiting, .done, nil]
+
+    // grouped: 見本 workspaceSnapshot の storefront——同 worktree の連（4・2・2）＋管理外の単独 1。
+    // 連の中の選択セル・識別バー・区切り線・1 枚は現行の絵。cwd あり。
+    let grouped = StatusRowModel()
+    grouped.workspace = "storefront"
+    grouped.strip = TabStrip(
+      titles: [
+        "s/s/checkout", "s/api", "storefront", "s/s/hooks",
+        "~/d/s/fix-cart-badge", "~/d/s/f/src",
+        "~/d/s/i18n-ja", "~/d/s/i/locales",
+        "~/notes",
+      ],
+      glyphs: [.working, .waiting, nil, .working, .done, nil, .done, nil, nil],
+      segments: [0..<4, 4..<6, 6..<8, 8..<9],
+      colorIndices: ["storefront", "fix-cart-badge", "i18n-ja", "notes"].map {
+        WorktreeColor.index(forKey: $0)
+      })
+    grouped.active = 3
+    grouped.cwd = "~/dev/storefront/src/hooks"
+    grouped.rollup = [("working", 2), ("waiting", 1), ("done", 2), ("idle", 4)]
+    try writePNG(
+      chromeBand(grouped, size: size), size: size, name: "statusrow_grouped.png", dir: dir)
+
+    // grouped overflow: 長い名前 × 3 連（4+4+3）で全タブが床 40、バー幅ぶん器が広い状態。
+    let groupedOverflow = StatusRowModel()
+    groupedOverflow.workspace = "infra"
+    groupedOverflow.strip = TabStrip(
+      titles: (0..<11).map { "terraform-apply-session-\($0)" },
+      glyphs: (0..<11).map { glyphCycle[$0 % glyphCycle.count] },
+      segments: [0..<4, 4..<8, 8..<11],
+      colorIndices: ["network", "compute", "storage"].map { WorktreeColor.index(forKey: $0) })
+    groupedOverflow.active = 5
+    groupedOverflow.cwd = "~/work/infra-worktrees/compute"
+    groupedOverflow.rollup = [("working", 3), ("waiting", 3), ("done", 3), ("idle", 2)]
+    try writePNG(
+      chromeBand(groupedOverflow, size: size), size: size, name: "statusrow_grouped_overflow.png",
+      dir: dir)
+
+    // fitting: 行に余る枚数で、幅が自然幅そのままに出る段。2〜3 文字のタブは床 40 に持ち上がり、
+    // 短い名前ばかりの連でもセルが潰れないことを見る（溢れた段だけでは床が shrink に隠れて見えない）。
+    let fitting = StatusRowModel()
+    fitting.workspace = "orbe"
+    fitting.strip = TabStrip(
+      titles: ["ui", "web", "src/renderer", "~/notes"],
+      glyphs: [.working, nil, .done, nil],
+      segments: [0..<3, 3..<4],
+      colorIndices: ["orbe", "notes"].map { WorktreeColor.index(forKey: $0) })
+    fitting.active = 0
+    fitting.cwd = "~/dev/orbe/ui"
+    fitting.rollup = [("working", 1), ("done", 1), ("idle", 2)]
+    try writePNG(
+      chromeBand(fitting, size: size), size: size, name: "statusrow_fitting.png", dir: dir)
   }
 
   /// 補完ドロップダウン（薄い行・複数 group・cap 超過でスクロール表現＝右つまみ＋下フェード）を端末地に重ねる。

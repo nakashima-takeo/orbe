@@ -4,8 +4,9 @@ import XCTest
 
 /// SessionStore.moveTab(from:to:) の純ドメイン契約を固定する。
 ///
-/// moveTab はアクティブ workspace 内でタブを `from` から `to`（挿入先 index・0…count・挿入前基準）へ
-/// 動かす。観測可能な契約は「戻り値（実移動したか）」「tabs の並び（TerminalTab の同一性順）」
+/// moveTab はアクティブ workspace 内でタブを `from` から `to`（挿入先 index・挿入前基準）へ動かす。
+/// 移動先は掴んだタブの連（同 `groupKey` の隣接列）の中に限る——連をまたぐ拒否と連ごとの移動は
+/// `SessionStoreTabGroupTests+Reorder` が持つ。観測可能な契約は「戻り値（実移動したか）」「tabs の並び（TerminalTab の同一性順）」
 /// 「active が指す TerminalTab（index ではなく参照が追従するか）」の3つ。
 /// TerminalTab は window 未接続なら libghostty surface を生成しないため、ここでは純ロジックとして
 /// トポロジーだけ検証できる（GhosttyKit ランタイムは起動しない）。
@@ -13,6 +14,7 @@ final class SessionStoreMoveTabTests: OrbeTestCase {
 
   /// n 本のタブを持つアクティブ workspace 1つだけの SessionStore を組む。
   /// 返す配列は各タブの参照（同一性で並びと参照追従を照合するため）。
+  /// 全タブ同 cwd＝1 セグメントなので、連ガードは素通り（0…count のどこへでも動かせる）。
   private func makeStore(tabCount n: Int, active: Int = 0) -> (SessionStore, [TerminalTab]) {
     let ws = Workspace(name: "ws", rootPath: "/tmp")
     let tabs = (0..<n).map { _ in TerminalTab(cwd: "/tmp") }

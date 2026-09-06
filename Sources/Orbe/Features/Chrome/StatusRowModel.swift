@@ -4,12 +4,8 @@ import SwiftUI
 /// SwiftUI `StatusRowView` が描く。信号機ボタンの縦位置（system furniture）もここへ集める。
 @Observable final class StatusRowModel {
   var workspace = ""
-  var titles: [String] = []
-  /// 各タブの集約状態種別（nil で表示なし＝idle/無し）。詳細＋件数は上段右端の rollup 側に出す。
-  var glyphs: [AgentStateIcon.Kind?] = []
-  /// 各タブの同一性（`TerminalTab.id`）。時間差を持つ操作（コンテキストメニュー）が
-  /// 位置 index の代わりに使う。titles / glyphs と同じ長さ。
-  var tabIds: [Int] = []
+  /// タブ行（セル＋セグメント構造）。1 つの値として代入され、View はこれだけを辿る。
+  var strip = TabStrip()
   var active = 0
   /// `~` 短縮済みのアクティブタブの cwd。
   var cwd: String?
@@ -24,8 +20,12 @@ import SwiftUI
   var onNewTab: () -> Void = {}
   /// 右端の件数ストリップのクリック（Attention パレットを開く）。
   var onAttentionTap: () -> Void = {}
-  /// タブを `from` から挿入先 index `to`（0…count）へ並び替える（同一 workspace 内・commit-on-drop）。
-  var onReorder: (Int, Int) -> Void = { _, _ in }
+  /// タブ `from` を挿入先 `to`（タブ index・0…count・**挿入前 index 基準**＝自分を抜く前の並びで数える）へ
+  /// 並び替える（同一セグメント内・commit-on-drop）。
+  var onReorder: (_ from: Int, _ to: Int) -> Void = { _, _ in }
+  /// タブ `from` を含むセグメントを丸ごと、セグメント境界 `to`（タブ index・0…count・挿入前 index 基準）
+  /// へ動かす。
+  var onReorderSegment: (_ from: Int, _ to: Int) -> Void = { _, _ in }
   /// タブ `tabId`（位置 index ではない）のエージェント状態を idle へ落とす
   /// （コンテキストメニュー）。選択切替を挟まない。
   var onResetAgentState: (_ tabId: Int) -> Void = { _ in }
@@ -54,9 +54,7 @@ import SwiftUI
   /// chrome へ反映する 1 回ぶんのスナップショット。
   struct Snapshot {
     let workspace: String
-    let titles: [String]
-    let glyphs: [AgentStateIcon.Kind?]
-    let tabIds: [Int]
+    let strip: TabStrip
     let active: Int
     let cwd: String?
     let rollup: [(state: String, count: Int)]
@@ -64,9 +62,7 @@ import SwiftUI
 
   func update(_ s: Snapshot) {
     workspace = s.workspace
-    titles = s.titles
-    glyphs = s.glyphs
-    tabIds = s.tabIds
+    strip = s.strip
     active = s.active
     cwd = s.cwd.map { ($0 as NSString).abbreviatingWithTildeInPath }
     rollup = s.rollup

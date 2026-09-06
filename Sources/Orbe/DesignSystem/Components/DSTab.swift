@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// セグメント形ワークスペースタブ（TabBar・§5 Tab 契約）。
-/// 非選択=地 tabSegBg・文字 textSecondary・状態色グリフ 12px。
+/// タブ 1 枚のセル（TabBar・§5 Tab 契約）。地と角丸は器 `DSTabSegment` が持ち、セルは反転面と
+/// 左区切り線だけを持つ。非選択=地 透明・文字 textSecondary・状態色グリフ 12px。
 /// 選択=地 textPrimary（前景色反転）・文字 tabActiveText・対テーマ状態色グリフ
 /// （done の check 線のみ textPrimary）。タブ背景を状態色で塗らない。idle/nil はグリフ非表示。
 /// `editing` のときはタイトルを裸の `TextField` へ差し替え、選択面のまま field editor でその場編集する
@@ -17,6 +17,8 @@ struct DSTab: View {
   var action: () -> Void = {}
   /// 中ボタンクリック（押し下げで即発火）。app 層がタブごと閉じる操作に配線する。
   var onMiddleClick: () -> Void = {}
+  /// 左端に 1pt の区切り線（surface1）を持つ（2 枚以上のセグメントの各セル）。セル幅の内側に描く。
+  var divided: Bool = false
 
   /// インライン改名の編集バリアント（app 層が駆動）。true でタイトルを `TextField` へ差し替える。
   var editing: Bool = false
@@ -65,11 +67,13 @@ struct DSTab: View {
       }
     }
     .padding(.horizontal, Theme.Space.step)
-    .frame(maxWidth: Chrome.tabMaxWidth, maxHeight: .infinity)
-    .background(
-      RoundedRectangle(cornerRadius: Theme.Radius.xs)
-        .fill(selected ? Color.theme.textPrimary : Color.theme.tabSegBg)
-    )
+    // 床 40 に持ち上げられたセルは中身より広い。余りは右へ送り、どのセルもグリフ／文字が左端から
+    // 同じ 8pt で始まるようにする（中央寄せだと短い名前だけ書き出しがずれる）。
+    .frame(maxWidth: Chrome.tabMaxWidth, maxHeight: .infinity, alignment: .leading)
+    .background(Rectangle().fill(selected ? Color.theme.textPrimary : .clear))
+    .overlay(alignment: .leading) {
+      if divided { Rectangle().fill(Color.theme.surface1).frame(width: 1) }
+    }
     .contentShape(Rectangle())
     // 編集中は tap を付けない（app 層も drag を付けない＝ジェスチャ排他が構造的に成立する）。
     .modifier(TapUnless(disabled: editing, action: action))
@@ -176,10 +180,10 @@ private struct FieldEditorSelectAll: NSViewRepresentable {
 
 #Preview("DSTab") {
   HStack(spacing: Chrome.tabGap) {
-    DSTab(title: "src/renderer", active: true, stateGlyph: .working)
-    DSTab(title: "libghostty", stateGlyph: .waiting)
-    DSTab(title: "tests")
-    DSTab(title: "docs/spec", stateGlyph: .done)
+    DSTabSegment { DSTab(title: "src/renderer", active: true, stateGlyph: .working) }
+    DSTabSegment { DSTab(title: "libghostty", stateGlyph: .waiting) }
+    DSTabSegment { DSTab(title: "tests") }
+    DSTabSegment { DSTab(title: "docs/spec", stateGlyph: .done) }
   }
   .padding(Chrome.tabRowPad)
   .frame(height: Chrome.tabRowHeight)

@@ -11,7 +11,7 @@ extension WindowController {
       let ws = Workspace(name: state.name, rootPath: state.rootPath)
       ws.lastUsedAt = state.lastUsedAt  // MRU 並べ替えキーを読み戻す（旧データは nil）
       ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
-      for tab in state.tabs { ws.tabs.append(makeTab(from: tab)) }
+      for tab in state.tabs { ws.tabs.append(makeTab(from: tab)) }  // 隣接の正規化は下の store.load
       // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）は空表示
       // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。
       ws.active = ws.tabs.isEmpty ? 0 : min(max(0, state.activeTab), ws.tabs.count - 1)
@@ -32,12 +32,13 @@ extension WindowController {
     return wire(TerminalTab(restoring: state, resumeSpawn: resume))
   }
 
-  /// ⇧⌘T。アクティブ workspace の開き直しスタックから直近の 1 枚を、閉じた時の index（有効範囲へ
-  /// クランプ）に起こしてそのタブへ切り替える。スタックが空なら何もしない（音もダイアログも出さない）。
+  /// ⇧⌘T。アクティブ workspace の開き直しスタックから直近の 1 枚を、同 worktree のセグメント右端
+  /// （無ければ閉じた時の index をセグメント境界へ丸めた位置）に起こしてそのタブへ切り替える。
+  /// スタックが空なら何もしない（音もダイアログも出さない）。
   /// 復元されるもの・されないものは起動時復元と同一（makeTab を共有する）。
   func reopenClosedAgentTab() {
     guard let closed = store.popClosedAgentTab() else { return }
-    let index = store.insertTabIntoActive(makeTab(from: closed.state), at: closed.index)
+    let index = store.insertTabIntoActive(makeTab(from: closed.state), near: closed.index)
     select(index)  // 0タブ workspace への復活も含め、既存のタブ生成系と同じく起こしたタブを見せる
     scheduleSave()
   }

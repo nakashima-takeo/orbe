@@ -4,12 +4,12 @@ import XCTest
 
 @testable import Orbe
 
-/// ⇧⌘T（最後に閉じたエージェントタブを閉じた位置へ開き直す）の配線を、実 `WindowController` で
-/// 端から端まで通す。
+/// ⇧⌘T（最後に閉じたエージェントタブを開き直す。同 worktree の連があればその右端、無ければ閉じた
+/// 位置）の配線を、実 `WindowController` で端から端まで通す。
 ///
 /// 純ドメイン側の契約——積む/積まない・閉じた index の記録・LIFO・上限——は
 /// `SessionStoreClosedAgentTabsTests` が `SessionStore` を直接叩いて固定する。ここが守るのはその外側、
-/// つまり「⇧⌘T が閉じた位置・閉じた時の復元単位・そのタブへの切り替えを実際に起こすか」。
+/// つまり「⇧⌘T が閉じた位置（連が無いとき）・閉じた時の復元単位・そのタブへの切り替えを実際に起こすか」。
 /// store の契約がいくら固くても、`reopenClosedAgentTab` が `closed.index` を捨てれば機能は消える。
 ///
 /// 叩くのは 3 枚のうち**中間**のタブ——両端だと「常に先頭へ挿す」「常に末尾へ挿す」実装と区別できず、
@@ -29,14 +29,16 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
 
   /// 3 タブ: [0] 素のシェル "a"（アクティブ）/ [1] エージェント "api" / [2] エージェント "c"。
   /// エージェントの有無で積む/積まないが分かれる種類を 1 つの workspace に揃える。
+  /// cwd は 3 枚とも別 worktree（git 管理外の別ディレクトリ）——同 worktree のセグメントがあると
+  /// 戻し先はその右端に決まり、閉じた位置が運ばれていることを固定できない。
   private func restoreThreeTabs() throws -> WindowController {
     try restore([
-      TabState(cwd: "/tmp", agent: nil, explicitTitle: "a"),
+      TabState(cwd: "/tmp/a", agent: nil, explicitTitle: "a"),
       TabState(
         cwd: "/work/api", agent: AgentSession(command: "claude", sessionId: "api-1"),
         explicitTitle: "api"),
       TabState(
-        cwd: "/tmp", agent: AgentSession(command: "claude", sessionId: "c-1"), explicitTitle: "c"),
+        cwd: "/tmp/c", agent: AgentSession(command: "claude", sessionId: "c-1"), explicitTitle: "c"),
     ])
   }
 
@@ -70,9 +72,9 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
     wait(for: [exp], timeout: 1.0)
   }
 
-  /// ⇧⌘T は、閉じたエージェントタブを**閉じた位置**へ、**閉じた時の復元単位**のまま戻し、そのタブへ
-  /// 切り替える。位置・状態・選択の 3 点が本機能の観測可能な契約のすべて。
-  func testReopenRestoresAtClosedPositionWithStateAndSelectsIt() throws {
+  /// ⇧⌘T は、閉じたエージェントタブを**閉じた位置**（同 worktree の連が無いとき）へ、**閉じた時の
+  /// 復元単位**のまま戻し、そのタブへ切り替える。位置・状態・選択の 3 点が本機能の観測可能な契約のすべて。
+  func testReopenRestoresAtClosedPositionWhenNoSegmentWithStateAndSelectsIt() throws {
     let wc = try restoreThreeTabs()
     XCTAssertEqual(titles(wc), ["a", "api", "c"], "前提: 中間が api")
     XCTAssertEqual(wc.current.active, 0, "前提: 先頭がアクティブ（復元後の active=1 と区別する）")
@@ -83,7 +85,7 @@ final class WindowControllerReopenAgentTabTests: OrbeTestCase {
     XCTAssertTrue(
       wc.handleWindowKeyCommand(.reopenClosedAgentTab), "⇧⌘T は window コマンドとして消費される")
 
-    XCTAssertEqual(titles(wc), ["a", "api", "c"], "先頭でも末尾でもなく、閉じた位置へ戻る")
+    XCTAssertEqual(titles(wc), ["a", "api", "c"], "同 worktree の連が無いので、先頭でも末尾でもなく閉じた位置へ")
     let restored = wc.current.tabs[1].tabState()
     XCTAssertEqual(
       restored.agent, AgentSession(command: "claude", sessionId: "api-1"),

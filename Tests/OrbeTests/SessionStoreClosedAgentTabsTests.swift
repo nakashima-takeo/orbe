@@ -32,9 +32,13 @@ final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
     tab(title, cwd: "/tmp", agent: nil)
   }
 
+  /// タブごとに別 worktree（groupKey = タイトル）に置く——同 worktree のセグメントがあると挿入位置は
+  /// その右端に決まり、`near:` の位置運びを検証できないため。
   private func tab(_ title: String, cwd: String, agent: AgentSession?) -> TerminalTab {
-    TerminalTab(
+    let tab = TerminalTab(
       restoring: TabState(cwd: cwd, agent: agent, explicitTitle: title), resumeSpawn: resume)
+    tab.groupKey = title
+    return tab
   }
 
   /// エージェントタブだけを並べた workspace を組む。
@@ -223,12 +227,12 @@ final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
 
   /// 指定した index にタブが挿さり、後続が 1 つ後ろへ押し出される。
   /// 中間を叩くのが要点——先頭・末尾だけだと `insert(at: 0)` や `append` の決め打ちと区別できず、
-  /// 戻り値が合っているだけで「閉じた位置へ戻す」が壊れていても気づけない。
+  /// 戻り値が合っているだけで「連が無ければ閉じた位置へ戻す」が壊れていても気づけない。
   func testInsertLandsAtGivenIndexAndShiftsFollowers() {
     let ws = makeWorkspace("ws", agents: ["a", "b", "c"])
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
 
-    XCTAssertEqual(store.insertTabIntoActive(agentTab("mid"), at: 1), 1, "戻り値は実挿入 index")
+    XCTAssertEqual(store.insertTabIntoActive(agentTab("mid"), near: 1), 1, "戻り値は実挿入 index")
 
     XCTAssertEqual(
       ws.tabs.map(\.explicitTitle), ["a", "mid", "b", "c"], "指定 index へ挿さり後続が押し出される")
@@ -239,8 +243,8 @@ final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
     let ws = makeWorkspace("ws", agents: ["a", "b"])
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
 
-    XCTAssertEqual(store.insertTabIntoActive(agentTab("head"), at: -3), 0, "負値は先頭へクランプ")
-    XCTAssertEqual(store.insertTabIntoActive(agentTab("tail"), at: 99), 3, "count 超は末尾へクランプ")
+    XCTAssertEqual(store.insertTabIntoActive(agentTab("head"), near: -3), 0, "負値は先頭へクランプ")
+    XCTAssertEqual(store.insertTabIntoActive(agentTab("tail"), near: 99), 3, "count 超は末尾へクランプ")
     XCTAssertEqual(
       ws.tabs.map(\.explicitTitle), ["head", "a", "b", "tail"], "クランプ先の位置へ実際に挿さる")
   }
@@ -250,7 +254,7 @@ final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
     let ws = makeWorkspace("ws", agents: [])
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
 
-    XCTAssertEqual(store.insertTabIntoActive(agentTab("only"), at: 5), 0, "0タブでは index 0 へ")
+    XCTAssertEqual(store.insertTabIntoActive(agentTab("only"), near: 5), 0, "0タブでは index 0 へ")
     XCTAssertEqual(ws.active, 0, "active は唯一のタブを指す（範囲外に飛ばない）")
   }
 
@@ -260,7 +264,7 @@ final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
     ws.active = 1
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
 
-    XCTAssertEqual(store.insertTabIntoActive(agentTab("head"), at: 0), 0)
+    XCTAssertEqual(store.insertTabIntoActive(agentTab("head"), near: 0), 0)
     XCTAssertEqual(ws.tabs[ws.active].explicitTitle, "b", "active は挿入前と同じタブを指す")
   }
 
@@ -271,7 +275,7 @@ final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
     ws.active = 1
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
 
-    XCTAssertEqual(store.insertTabIntoActive(agentTab("mid"), at: 1), 1)
+    XCTAssertEqual(store.insertTabIntoActive(agentTab("mid"), near: 1), 1)
 
     XCTAssertEqual(ws.tabs.map(\.explicitTitle), ["a", "mid", "b"])
     XCTAssertEqual(ws.tabs[ws.active].explicitTitle, "b", "active は挿入前と同じタブを指す")
