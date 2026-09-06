@@ -33,6 +33,13 @@ final class SessionLogQueryTests: XCTestCase {
     XCTAssertEqual(bursts[0].sessions.map(\.sessionId), ["a", "b", "c"], "群内は時刻昇順")
   }
 
+  func testSameTimestampKeepsInputOrder() {
+    let ids = (0..<20).map { "s\($0)" }
+    let bursts = SessionLogQuery.bursts(ids.map { Fixture.closed($0, at: 1) })
+    XCTAssertEqual(bursts.count, 1)
+    XCTAssertEqual(bursts[0].sessions.map(\.sessionId), ids, "同時刻の closed はファイル順で安定")
+  }
+
   func testWindowIsMeasuredFromThePreviousMember() {
     let chain = SessionLogQuery.bursts([
       Fixture.closed("a", at: 0), Fixture.closed("b", at: 4), Fixture.closed("c", at: 8),

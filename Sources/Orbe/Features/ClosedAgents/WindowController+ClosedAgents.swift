@@ -3,8 +3,9 @@ import OrbeSessionLog
 
 /// 同一性の寿命の記録と、⇧⌘T「閉じたエージェント」パレットの提示・追従・復元。
 ///
-/// 記録: タブは「何が始まり／終わったか」だけを決め、所属 workspace（名前・rootPath）はここで引いて
-/// `SessionEvent` に組む——タブは上位を型として参照しない（`layout.md` の一方向参照）。
+/// 記録: タブは「何が始まり／終わったか」だけを決め、所属 workspace（名前・rootPath）と closed の
+/// タイトルはここで引いて `SessionEvent` に組む——タブは上位を型として参照しない（`layout.md` の
+/// 一方向参照）し、派生タイトルは workspace の rootPath に依存する。
 extension WindowController {
   /// `TerminalTab.onIdentityTransition` の受け口。store の口（`detach`）は配列から外す**前**に告げるので、
   /// 閉じる経路でも所属 workspace が引ける。見つからなければ書かない。
@@ -19,7 +20,8 @@ extension WindowController {
       kind = .opened
       agent = identity
     case .closed(let identity, let origin, let reason):
-      kind = .closed(origin: origin, reason: reason)
+      kind = .closed(
+        origin: origin, reason: reason, title: tab.displayTitle(workspaceRoot: ws.rootPath))
       agent = identity
     }
     sessionLog.record(

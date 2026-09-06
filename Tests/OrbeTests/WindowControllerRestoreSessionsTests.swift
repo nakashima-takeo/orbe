@@ -25,7 +25,7 @@ final class WindowControllerRestoreSessionsTests: OrbeTestCase {
     _ id: String, rootPath: String, name: String = "gone", cwd: String = "/tmp/x"
   ) -> SessionEvent {
     SessionEvent(
-      ts: Date(), kind: .closed(origin: .process, reason: nil),
+      ts: Date(), kind: .closed(origin: .process, reason: nil, title: nil),
       workspace: .init(name: name, rootPath: rootPath), cwd: cwd,
       agent: .init(command: "claude", sessionId: id))
   }

@@ -7,7 +7,8 @@ import XCTest
 /// 実 `WindowController` 越しに `agent-sessions.jsonl` へ何が書かれるかを固定する。
 ///
 /// 壊れると何が起きるか: 行に workspace 名・rootPath・cwd が載らなければ `restore_sessions` と
-/// ⇧⌘T が復元先を失う。起動時の剪定が動かなければログが際限なく育つ。
+/// ⇧⌘T が復元先を失う。closed にタブのタイトルが載らなければ人が ⇧⌘T の行を見分けられない。
+/// 起動時の剪定が動かなければログが際限なく育つ。
 ///
 /// 重要: 実 NSWindow に SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerSessionLogTests: OrbeTestCase {
@@ -41,7 +42,14 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
     wc.closeTab(tab, origin: .gesture)
 
     let events = try fileEvents()
-    XCTAssertEqual(events.map(\.kind), [.opened, .closed(origin: .gesture, reason: nil)])
+    XCTAssertEqual(
+      events.map(\.kind),
+      [
+        .opened,
+        .closed(
+          origin: .gesture, reason: nil,
+          title: TabTitle.derive(pwd: "/tmp/root/src", root: "/tmp/root")),
+      ], "closed には閉じた時点の表示タイトル（ここでは cwd の派生）が載り、opened には載らない")
     XCTAssertEqual(
       events.map(\.workspace),
       Array(repeating: .init(name: "main", rootPath: "/tmp/root"), count: 2))
@@ -49,6 +57,18 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
     XCTAssertEqual(
       events.map(\.agent), Array(repeating: .init(command: "claude", sessionId: "s-1"), count: 2))
     XCTAssertEqual(wc.sessionLog.events, events, "メモリとファイルは同じものを見る")
+  }
+
+  func testClosedCarriesTheExplicitTitleWhenTheTabHasOne() throws {
+    let wc = try restore([plain("main", rootPath: "/tmp/root")])
+    let tab = try XCTUnwrap(wc.current.tabs.first)
+    tab.explicitTitle = "release notes"
+    wc.controlReportAgent(
+      tab: tab, report: AgentHookReport(agent: "claude", state: "idle", sessionId: "s-1"))
+
+    wc.closeTab(tab, origin: .gesture)
+
+    XCTAssertEqual(try fileEvents().last?.closeTitle, "release notes", "タブバーに出ていた語がそのまま載る")
   }
 
   func testRemoveWorkspaceViaControlClosesAsControlAPI() throws {
@@ -61,8 +81,7 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
       return XCTFail("remove_workspace は success")
     }
 
-    XCTAssertEqual(
-      wc.sessionLog.lastEvent(sessionId: "c-1")?.kind, .closed(origin: .controlAPI, reason: nil))
+    XCTAssertEqual(wc.sessionLog.lastEvent(sessionId: "c-1")?.closeOrigin, .controlAPI)
     XCTAssertEqual(wc.sessionLog.lastEvent(sessionId: "c-1")?.workspace.name, "doomed")
   }
 
@@ -100,7 +119,7 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
     DispatchQueue.main.async { drained.fulfill() }
     wait(for: [drained], timeout: 1)
     XCTAssertEqual(
-      wc.sessionLog.lastEvent(sessionId: "u-1")?.kind, .closed(origin: .unresolved, reason: nil),
+      wc.sessionLog.lastEvent(sessionId: "u-1")?.closeOrigin, .unresolved,
       "resume を解決できなければ unresolved で終わる")
   }
 
@@ -114,7 +133,7 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
 
     XCTAssertEqual(wc.workspaces.map(\.name), ["main"])
     XCTAssertEqual(
-      wc.sessionLog.lastEvent(sessionId: "g-1")?.kind, .closed(origin: .gesture, reason: nil),
+      wc.sessionLog.lastEvent(sessionId: "g-1")?.closeOrigin, .gesture,
       "パレットからの削除は人の操作＝gesture")
   }
 
@@ -133,8 +152,7 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
     XCTAssertEqual(wc.current.tabs.count, 1, "書けなくてもタブは閉じる")
     XCTAssertFalse(FileManager.default.fileExists(atPath: dead.path))
     XCTAssertEqual(
-      wc.sessionLog.events.map(\.kind), [.opened, .closed(origin: .gesture, reason: nil)],
-      "メモリの記録は続く")
+      wc.sessionLog.events.map(\.closeOrigin), [nil, .gesture], "メモリの記録は続く")
     wc.showClosedAgentsPalette()
     XCTAssertEqual(
       wc.model.closedAgentsPalette?.groups.flatMap { $0.items.map(\.sessionId) }, ["s-1"],

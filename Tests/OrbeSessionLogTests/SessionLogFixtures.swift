@@ -18,10 +18,11 @@ enum Fixture {
 
   static func closed(
     _ id: String, at seconds: TimeInterval, origin: SessionEvent.CloseOrigin = .process,
-    reason: String? = nil, rootPath: String = "/repo"
+    reason: String? = nil, title: String? = nil, rootPath: String = "/repo"
   ) -> SessionEvent {
     SessionEvent(
-      ts: base.addingTimeInterval(seconds), kind: .closed(origin: origin, reason: reason),
+      ts: base.addingTimeInterval(seconds),
+      kind: .closed(origin: origin, reason: reason, title: title),
       workspace: .init(name: "ws", rootPath: rootPath), cwd: rootPath + "/src",
       agent: .init(command: "claude", sessionId: id))
   }

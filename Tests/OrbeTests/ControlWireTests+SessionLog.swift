@@ -13,7 +13,7 @@ extension ControlWireTests {
   private func event(_ id: String, at seconds: TimeInterval, closed: Bool) -> SessionEvent {
     SessionEvent(
       ts: Date(timeIntervalSince1970: 1_800_000_000 + seconds),
-      kind: closed ? .closed(origin: .process, reason: nil) : .opened,
+      kind: closed ? .closed(origin: .process, reason: nil, title: nil) : .opened,
       workspace: .init(name: "w", rootPath: "/tmp"), cwd: "/tmp",
       agent: .init(command: "claude", sessionId: id))
   }

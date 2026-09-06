@@ -35,12 +35,15 @@ public enum SessionLogQuery {
   }
 
   /// closed だけを受け取り `ts` 昇順に走査して群を切る。gesture は常に単独。それ以外は直前と同じ origin
-  /// で `window` 秒以内に続くものを同じ群にする。
+  /// で `window` 秒以内に続くものを同じ群にする。同時刻の closed は入力順（ファイル順）を保つ。
   public static func bursts(_ closed: [SessionEvent], window: TimeInterval = burstWindow)
     -> [SessionBurst]
   {
     var out: [SessionBurst] = []
-    for event in closed.sorted(by: { $0.ts < $1.ts }) {
+    let ordered = closed.enumerated()
+      .sorted { ($0.element.ts, $0.offset) < ($1.element.ts, $1.offset) }
+      .map(\.element)
+    for event in ordered {
       guard let origin = event.closeOrigin else { continue }
       if origin != .gesture, let last = out.last, last.origin == origin,
         let tail = last.sessions.last, event.ts.timeIntervalSince(tail.ts) <= window

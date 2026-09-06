@@ -201,7 +201,8 @@ private func eventLine(_ event: SessionEvent) -> String {
   let ending: String
   switch event.kind {
   case .opened: ending = "-"
-  case .closed(let origin, let reason): ending = origin.rawValue + (reason.map { "/" + $0 } ?? "")
+  case .closed(let origin, let reason, _):
+    ending = origin.rawValue + (reason.map { "/" + $0 } ?? "")
   }
   return [
     SessionEvent.iso8601(event.ts), event.closeOrigin == nil ? "opened" : "closed",

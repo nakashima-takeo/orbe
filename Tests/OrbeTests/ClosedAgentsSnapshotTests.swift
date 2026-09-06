@@ -14,7 +14,7 @@ final class ClosedAgentsSnapshotTests: OrbeTestCase {
   ) -> SessionEvent {
     SessionEvent(
       ts: base.addingTimeInterval(seconds),
-      kind: closed.map { .closed(origin: $0, reason: reason) } ?? .opened,
+      kind: closed.map { .closed(origin: $0, reason: reason, title: nil) } ?? .opened,
       workspace: .init(name: "ws", rootPath: rootPath), cwd: rootPath + "/src/\(id)",
       agent: .init(command: "claude", sessionId: id))
   }
