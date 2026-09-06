@@ -347,7 +347,7 @@ enum DispatchWorktreeClassifier {
 
   /// タブ群を worktree のパスへ帰属させる。
   ///
-  /// - 両辺を `standardizingPath` → `resolvingSymlinksInPath` で正規化する（macOS では `/tmp` `/var` が
+  /// - 両辺を `GitWorktreeRoot.normalizedPath` で実パスへ正規化する（macOS では `/tmp` `/var` が
   ///   symlink で、OSC 7 の pwd と `git worktree list` のパスが素では一致しない）。
   /// - 子ディレクトリにいるタブも占有とみなす。判定は**パス構成要素単位**の前置一致で、
   ///   文字列 prefix ではない（`/a/foo` が `/a/foobar` に誤ヒットする）。
@@ -385,8 +385,7 @@ enum DispatchWorktreeClassifier {
   }
 
   private static func components(_ path: String) -> [String] {
-    ((path as NSString).standardizingPath as NSString).resolvingSymlinksInPath
-      .split(separator: "/").map(String.init)
+    GitWorktreeRoot.normalizedPath(path).split(separator: "/").map(String.init)
   }
 
   private static func isPrefix(_ prefix: [String], of path: [String]) -> Bool {
