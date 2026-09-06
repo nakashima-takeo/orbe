@@ -45,9 +45,9 @@ final class WindowControllerActivationLifecycleTests: OrbeTestCase {
     XCTAssertEqual(control["dormantAgentCount"] as? Int, 2)
     wc.showWorkspacePalette()
     let initialItem = try XCTUnwrap(wc.model.workspacePalette?.items.first)
-    XCTAssertEqual(initialItem.dormant, false)
-    XCTAssertEqual(initialItem.agentRollup.map(\.state), ["dormant"])
-    XCTAssertEqual(initialItem.agentRollup.map(\.count), [2])
+    XCTAssertEqual(initialItem.live.dormant, false)
+    XCTAssertEqual(initialItem.live.rollup.map(\.state), ["dormant"])
+    XCTAssertEqual(initialItem.live.rollup.map(\.count), [2])
 
     var firstSentinel: [Bool] = []
     var dormantAtFirstSentinel = -1

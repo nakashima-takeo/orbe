@@ -150,11 +150,12 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
     let workspace = WorkspacePaletteModel(localization: LocalizationStore(language: .ja))
     let items = [
       WorkspacePaletteModel.Item(
-        index: 0, name: "main", isActive: true, dormant: false, agentRollup: [], dir: "/"),
+        index: 0, name: "main", isActive: true, dir: "/", live: .init(rollup: [], dormant: false)),
       WorkspacePaletteModel.Item(
-        index: 1, name: "infra", isActive: false, dormant: false, agentRollup: [], dir: "/"),
+        index: 1, name: "infra", isActive: false, dir: "/", live: .init(rollup: [], dormant: false)),
       WorkspacePaletteModel.Item(
-        index: 2, name: "archive", isActive: false, dormant: true, agentRollup: [], dir: "/"),
+        index: 2, name: "archive", isActive: false, dir: "/",
+        live: .init(rollup: [], dormant: true)),
     ]
     try flow(
       "workspace_filter", size: cardSize,
@@ -191,10 +192,10 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
     let workspace = WorkspacePaletteModel(localization: LocalizationStore(language: .ja))
     let items = [
       WorkspacePaletteModel.Item(
-        index: 0, name: "main", isActive: true, dormant: false, agentRollup: [], dir: "/"),
+        index: 0, name: "main", isActive: true, dir: "/", live: .init(rollup: [], dormant: false)),
       WorkspacePaletteModel.Item(
-        index: 1, name: "infra-experiments", isActive: false, dormant: false, agentRollup: [],
-        dir: "/Users/me/code/infra"),
+        index: 1, name: "infra-experiments", isActive: false, dir: "/Users/me/code/infra",
+        live: .init(rollup: [], dormant: false)),
     ]
     try flow(
       "workspace_rename", size: cardSize,
@@ -244,7 +245,7 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
     ]
     let items = names.enumerated().map { i, n in
       WorkspacePaletteModel.Item(
-        index: i, name: n, isActive: i == 0, dormant: false, agentRollup: [], dir: "/")
+        index: i, name: n, isActive: i == 0, dir: "/", live: .init(rollup: [], dormant: false))
     }
     let workspace = WorkspacePaletteModel(localization: LocalizationStore(language: .ja))
     // shrink の段だけ窓を下げる。`flow` は 1 本の size で撮るので、キャンバスは 300 のまま

@@ -128,8 +128,8 @@ extension WindowControllerReportAgentTests {
       fixture.wc.workspaces.firstIndex { $0 === fixture.workspace })
     let item = try XCTUnwrap(
       fixture.wc.model.workspacePalette?.items.first { $0.index == workspaceIndex })
-    XCTAssertTrue(item.dormant)
-    XCTAssertEqual(item.agentRollup.map(\.state), ["dormant"])
-    XCTAssertEqual(item.agentRollup.map(\.count), [1])
+    XCTAssertTrue(item.live.dormant)
+    XCTAssertEqual(item.live.rollup.map(\.state), ["dormant"])
+    XCTAssertEqual(item.live.rollup.map(\.count), [1])
   }
 }

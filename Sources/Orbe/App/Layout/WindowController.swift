@@ -325,6 +325,7 @@ final class WindowController: NSObject, NSWindowDelegate {
         cwd: store.activeTabCwd(),
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
     refreshAttentionSnapshot()  // Attention 一覧も同じ coalesce 契機で追従（WindowController+Attention）
+    refreshWorkspacePaletteLiveStates()  // 表示中の workspace パレットの行チップも同じ契機で追従
   }
 
   /// アクティブタブの surface へフォーカスを戻す（パレットの dismiss と同じ規則）。

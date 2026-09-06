@@ -18,8 +18,8 @@ final class WorkspacePaletteTests: OrbeTestCase {
   private func items(_ names: [(String, Bool)]) -> [WorkspacePaletteModel.Item] {
     names.enumerated().map {
       WorkspacePaletteModel.Item(
-        index: $0.offset, name: $0.element.0, isActive: $0.element.1, dormant: false,
-        agentRollup: [], dir: "/tmp/\($0.element.0)")
+        index: $0.offset, name: $0.element.0, isActive: $0.element.1,
+        dir: "/tmp/\($0.element.0)", live: .init(rollup: [], dormant: false))
     }
   }
 
@@ -163,9 +163,11 @@ final class WorkspacePaletteTests: OrbeTestCase {
     let p = palette()
     p.setItems([
       WorkspacePaletteModel.Item(
-        index: 0, name: "live", isActive: true, dormant: false, agentRollup: [], dir: "/"),
+        index: 0, name: "live", isActive: true, dir: "/",
+        live: .init(rollup: [], dormant: false)),
       WorkspacePaletteModel.Item(
-        index: 1, name: "sleep", isActive: false, dormant: true, agentRollup: [], dir: "/"),
+        index: 1, name: "sleep", isActive: false, dir: "/",
+        live: .init(rollup: [], dormant: true)),
     ])
     XCTAssertEqual(p.render.rows.count, 3, "2 workspace ＋ 末尾の常設 createFlow 行")
     XCTAssertFalse(p.render.rows[0].dimmed, "起きている workspace の行は減光しない")

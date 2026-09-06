@@ -7,7 +7,7 @@ enum AgentRollup {
   /// idle はタブには出さない（`agentStateKind` の priority が除外）が、横断集計には数えて出す。
   /// 件数の集計対象もこの集合（`countedStates`）で、集計と表示の対象を一致させる。
   /// `dormant` は `agentState` ではなく未消費の復元チケット（`.dormant` slot）の数なので、ここには入れない。
-  /// 表示上は workspace パレットだけが、この順の後ろへ 1 件連結する（`WindowController.reloadPalette`）。
+  /// 表示上は workspace パレットだけが、この順の後ろへ 1 件連結する（`Workspace.paletteLiveState()`）。
   static let stateOrder = ["working", "waiting", "done", "idle"]
 
   /// タブグリフに出す（＝リセットできる）状態の集合（`TerminalTab.agentStateKind` / `resetAgentState`）。
