@@ -7,17 +7,19 @@ import XCTest
 extension WorkspacePaletteTests {
   // MARK: - live 追随（表示中に届く agent 状態変化）
 
-  /// 構造は据え置き・現在値だけを差し替える入口。3 件のうち index 1 が休眠＋復元チケット 2 枚。
+  /// 構造は据え置き・現在値だけを差し替える入口。行順は起源固定＋MRU で決まるため `index`
+  /// （workspace 配列 offset）は行位置と一致しない——`updateLiveStates` の `states` は行順ではなく
+  /// offset で引く。休眠＋復元チケット 2 枚を持つのは行 1 の api-infra（offset 2）。
   private func liveItems() -> [WorkspacePaletteModel.Item] {
     [
       WorkspacePaletteModel.Item(
         index: 0, name: "api", isActive: true, dir: "/",
         live: .init(rollup: [], dormant: false)),
       WorkspacePaletteModel.Item(
-        index: 1, name: "api-infra", isActive: false, dir: "/",
+        index: 2, name: "api-infra", isActive: false, dir: "/",
         live: .init(rollup: [(state: "dormant", count: 2)], dormant: true)),
       WorkspacePaletteModel.Item(
-        index: 2, name: "docs", isActive: false, dir: "/",
+        index: 1, name: "docs", isActive: false, dir: "/",
         live: .init(rollup: [], dormant: false)),
     ]
   }
@@ -30,10 +32,10 @@ extension WorkspacePaletteTests {
     let token = p.render.focusToken
     let rowCount = p.render.rows.count
 
-    p.updateLiveStates([
+    p.updateLiveStates([  // offset 順: api / docs / api-infra
+      .init(rollup: [], dormant: false),
       .init(rollup: [], dormant: false),
       .init(rollup: [(state: "working", count: 1), (state: "dormant", count: 1)], dormant: false),
-      .init(rollup: [], dormant: false),
     ])
 
     XCTAssertEqual(p.items[1].live.rollup.map(\.state), ["working", "dormant"])
@@ -45,10 +47,10 @@ extension WorkspacePaletteTests {
     XCTAssertEqual(p.render.focusToken, token, "live 更新は focus を確定し直さない")
     XCTAssertTrue(p.render.fieldVisible, "一覧モードのまま")
 
-    p.updateLiveStates([
+    p.updateLiveStates([  // offset 順: api / docs / api-infra
+      .init(rollup: [], dormant: false),
       .init(rollup: [], dormant: false),
       .init(rollup: [], dormant: true),  // 最後の live タブが消えた
-      .init(rollup: [], dormant: false),
     ])
     XCTAssertTrue(p.items[1].live.rollup.isEmpty, "0 件になったチップは消える")
     XCTAssertTrue(p.render.rows[1].dimmed, "起床済みタブが尽きた行は再び減光する")
@@ -63,10 +65,10 @@ extension WorkspacePaletteTests {
     send(p, right)  // 詳細メニューへ潜る
     XCTAssertEqual(p.render.breadcrumb, "‹ api-infra")
 
-    p.updateLiveStates([
+    p.updateLiveStates([  // offset 順: api / docs / api-infra
+      .init(rollup: [], dormant: false),
       .init(rollup: [], dormant: false),
       .init(rollup: [(state: "working", count: 1)], dormant: false),
-      .init(rollup: [], dormant: false),
     ])
 
     XCTAssertEqual(p.render.breadcrumb, "‹ api-infra", "live 更新は詳細メニューから引き戻さない")
@@ -89,17 +91,17 @@ extension WorkspacePaletteTests {
     key(p, kReturn)  // 改名モード（現名プリフィル）
     type(p, "api-infra-2")  // 打ちかけの新名
 
-    p.updateLiveStates([
+    p.updateLiveStates([  // offset 順: api / docs / api-infra
+      .init(rollup: [], dormant: false),
       .init(rollup: [], dormant: false),
       .init(rollup: [(state: "working", count: 1)], dormant: false),
-      .init(rollup: [], dormant: false),
     ])
 
     XCTAssertEqual(p.render.query, "api-infra-2", "打ちかけの名前を live 更新が消さない")
     XCTAssertTrue(p.render.rows.isEmpty, "改名モードのまま（一覧へ引き戻されない）")
 
     send(p, enter)
-    XCTAssertEqual(renamed?.0, 1, "改名の宛先は潜った先の workspace のまま")
+    XCTAssertEqual(renamed?.0, 2, "改名の宛先は潜った先の workspace（行位置ではなく offset）のまま")
     XCTAssertEqual(renamed?.1, "api-infra-2")
   }
 }

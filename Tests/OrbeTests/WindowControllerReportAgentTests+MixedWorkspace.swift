@@ -10,8 +10,9 @@ private struct MixedBackgroundFixture {
   let dormant: TerminalTab
 }
 
-/// 背景 workspace が live / dormant タブ混在になったとき、注意喚起と常時集計が
-/// workspace 全体ではなく発信元タブの現在状態に従うことを固定する。
+/// 背景 workspace が live / dormant タブ混在になったときの投影。注意喚起と常時集計が workspace 全体
+/// ではなく発信元タブの現在状態に従うこと、および表示中の workspace パレット行が chrome ストリップと
+/// 同じ契機で実状態へ追随することを固定する。
 extension WindowControllerReportAgentTests {
   private func makeControllerAndMixedBackground() throws -> MixedBackgroundFixture {
     let dormantAgent = TabState(
