@@ -10,13 +10,15 @@ public enum SessionLogRetention {
     maxBytes: Int = defaultMaxBytes
   ) -> [SessionEvent] {
     let cutoff = now.addingTimeInterval(-retention)
-    var kept = events.filter { $0.ts >= cutoff }
-    var sizes = kept.map { (try? SessionLogWriter.encodeLine($0).count) ?? 0 }
-    var total = sizes.reduce(0, +)
-    while total > maxBytes, !kept.isEmpty {
-      total -= sizes.removeFirst()
-      kept.removeFirst()
+    let recent = events.filter { $0.ts >= cutoff }
+    var total = 0
+    var start = recent.endIndex
+    while start > recent.startIndex {
+      let size = (try? SessionLogWriter.encodeLine(recent[start - 1]).count) ?? 0
+      guard total + size <= maxBytes else { break }
+      total += size
+      start -= 1
     }
-    return kept
+    return Array(recent[start...])
   }
 }

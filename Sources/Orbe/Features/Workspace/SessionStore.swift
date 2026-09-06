@@ -75,6 +75,12 @@ final class SessionStore {
     }
   }
 
+  /// 今 Orbe に居る同一性（全 workspace・live / 休眠を問わない）。`list_tabs` の `agentSessionId` と
+  /// 同じ読み口なので、CLI 側の「戻っていない」の導出と一致する。
+  var presentSessionIds: Set<String> {
+    Set(allTabs().compactMap { $0.tab.agentSlot.session?.sessionId })
+  }
+
   /// 指定 workspace での新規タブ起動の初期 cwd（GUI・エージェント起動・制御 API のすべてが
   /// `openTab` 越しにここを通る）。
   /// 当該 workspace のアクティブタブの cwd を継ぎ、タブ不在（0タブ）はその workspace の rootPath
@@ -168,7 +174,8 @@ final class SessionStore {
   }
 
   /// タブが store から外れることを、配列から外す**前**にタブへ告げる唯一の口。同一性が残っていれば
-  /// タブがその終わりをログへ写す——cwd は生きた surface から取るため、外した後では正しく取れない。
+  /// タブがその終わりをログへ写す——記録側が所属 workspace をタブから引くため、外した後では引けず、
+  /// イベントが無言で落ちる。
   private func detach(_ tab: TerminalTab, origin: TabCloseOrigin) {
     tab.recordDetached(origin: origin)
   }
@@ -222,12 +229,12 @@ final class SessionStore {
   /// workspace を新規作成して末尾をアクティブにする（タブ起こしは呼び出し側）。`~` は
   /// `setWorkspaceDir` と同じくホーム展開する（CLI の `--dir '~/x'` 等をリテラル格納させない）。
   func createWorkspace(name: String, rootPath: String) {
-    activeWorkspace = insertWorkspace(name: name, rootPath: rootPath)
+    activeWorkspace = appendWorkspace(name: name, rootPath: rootPath)
   }
 
   /// workspace を末尾に足し、その index を返す。アクティブ化しない（`restore_sessions` が復元先を
   /// 作り直すときの形——「作って開く」意図の `createWorkspace` と違い、見せる先を変えない）。
-  func insertWorkspace(name: String, rootPath: String) -> Int {
+  func appendWorkspace(name: String, rootPath: String) -> Int {
     workspaces.append(Workspace(name: name, rootPath: (rootPath as NSString).expandingTildeInPath))
     return workspaces.count - 1
   }

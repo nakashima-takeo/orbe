@@ -171,37 +171,35 @@ final class TerminalTab {
   /// 即時に届き、要求ごとに文言が違う）、保持すると別の待ちの文言が居残るため。
   @discardableResult
   func applyReport(_ report: AgentHookReport, now: Date = Date()) -> Bool {
-    let (agent, state, sessionId, message) = (
-      report.agent, report.state, report.sessionId, report.message
-    )
     let before = identity(of: agentSlot)
     var changed = false
     // 遷移表そのもの。網羅 switch なので、`AgentSlot` にケースが増えたら必ずここの判断を求められる。
     switch agentSlot {
     case .dormant:
       break  // 破棄——このタブの slot は一切変えない。
-    case .live where state == "clear":
+    case .live where report.state == "clear":
       agentSlot = .none
       changed = true
-    case .none where state == "clear":
+    case .none where report.state == "clear":
       break  // 既に無。
     case .none, .live:
       let session =
-        agentSlot.session?.updated(command: agent, sessionId: sessionId)
-        ?? AgentSession(command: agent, sessionId: sessionId)
-      if let prior = agentReport, prior.state == state {
+        agentSlot.session?.updated(command: report.agent, sessionId: report.sessionId)
+        ?? AgentSession(command: report.agent, sessionId: report.sessionId)
+      if let prior = agentReport, prior.state == report.state {
         // 同値の連続報告: 時刻は維持し、ツール由来の文言を弱い報告から守る。
-        let keep = message?.source != "tool" && prior.message?.source == "tool"
+        let keep = report.message?.source != "tool" && prior.message?.source == "tool"
         agentSlot = .live(
           session: session,
           report: AgentReport(
-            state: state, message: keep ? prior.message : message,
+            state: report.state, message: keep ? prior.message : report.message,
             stateChangedAt: prior.stateChangedAt))
       } else {
         // 実変化（.none・report なしからの誕生を含む）。
         agentSlot = .live(
           session: session,
-          report: AgentReport(state: state, message: message, stateChangedAt: now))
+          report: AgentReport(
+            state: report.state, message: report.message, stateChangedAt: now))
         changed = true
       }
     }

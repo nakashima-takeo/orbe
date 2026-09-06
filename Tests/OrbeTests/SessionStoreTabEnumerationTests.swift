@@ -2,8 +2,9 @@ import XCTest
 
 @testable import Orbe
 
-/// `SessionStore.allTabs()` の契約。「そのパスをタブが開いている worktree は消せない」の判定材料で、
-/// **アクティブ workspace のアクティブタブだけ**では取りこぼす（休眠 workspace のタブも含める）。
+/// `SessionStore.allTabs()` と、その上に立つ `presentSessionIds` の契約。「そのパスをタブが開いている
+/// worktree は消せない」「この同一性は今 Orbe に居る」の判定材料で、**アクティブ workspace のアクティブ
+/// タブだけ**では取りこぼす（休眠 workspace のタブも含める）。
 final class SessionStoreTabEnumerationTests: OrbeTestCase {
 
   private func makeStore() -> SessionStore {
@@ -38,5 +39,26 @@ final class SessionStoreTabEnumerationTests: OrbeTestCase {
   func testEmptyWhenNoTabs() {
     let ws = Workspace(name: "ws", rootPath: "/tmp/ws")
     XCTAssertTrue(SessionStore(workspaces: [ws], activeWorkspace: 0).allTabs().isEmpty)
+  }
+
+  /// 居る同一性は live / 休眠を問わず全 workspace から集め、sessionId の無い報告は数えない。
+  /// 落とすと `restore_sessions` と ⇧⌘T が生きているセッションを二重に戻す。
+  func testPresentSessionIdsSpanLiveAndDormantTabsOfEveryWorkspace() {
+    let live = Workspace(name: "live", rootPath: "/tmp")
+    let liveTab = TerminalTab(cwd: "/tmp")
+    liveTab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: "l-1"))
+    let unnamed = TerminalTab(cwd: "/tmp")
+    unnamed.applyReport(AgentHookReport(agent: "claude", state: "idle"))
+    live.tabs = [liveTab, unnamed, TerminalTab(cwd: "/tmp")]
+    let dormant = Workspace(name: "dormant", rootPath: "/tmp")
+    dormant.tabs = [
+      TerminalTab(
+        restoring: TabState(
+          cwd: "/tmp", agent: AgentSession(command: "codex", sessionId: "d-1"), explicitTitle: nil),
+        resumeSpawn: { _ in nil })
+    ]
+
+    let store = SessionStore(workspaces: [live, dormant], activeWorkspace: 0)
+    XCTAssertEqual(store.presentSessionIds, ["l-1", "d-1"])
   }
 }

@@ -27,14 +27,14 @@ extension WindowController {
   /// TabState 1 枚からタブを起こして配線する。起動時復元（restore）と `restoreDormantTab` の共通経路
   /// ——agent 付きは休眠チケットのまま起こし、resume 解決（と解決不能時の素シェル化）は
   /// タブ起床時に走る（`TerminalTab.recordMaterializationStarted`）。ここは resolver を渡すだけ。
-  func makeTab(from state: TabState) -> TerminalTab {
+  private func makeTab(from state: TabState) -> TerminalTab {
     let resume: TerminalTab.ResumeSpawn = { [agentLauncher] in agentLauncher.resumeSpawn(for: $0) }
     return wire(TerminalTab(restoring: state, resumeSpawn: resume))
   }
 
-  /// 休眠チケット 1 枚を workspace の末尾に足す。`restore_sessions` と ⇧⌘T が共有する復元単位で、
-  /// 復元されるもの・されないものは起動時復元と同一（`makeTab` を共有する）。選択・mount はしない
-  /// （起床は既存の mount 規律に従う）。
+  /// 休眠チケット 1 枚を workspace の末尾に足す。`restore_sessions` と ⇧⌘T が共有する復元単位。
+  /// 起動時復元と `makeTab` を共有するが、閉じたセッションの復元が持ち込むのは cwd と同一性だけ
+  /// （明示タイトルは付かず、位置は末尾）。選択・mount はしない（起床は既存の mount 規律に従う）。
   @discardableResult
   func restoreDormantTab(_ state: TabState, intoWorkspaceAt index: Int) -> TerminalTab {
     let tab = makeTab(from: state)

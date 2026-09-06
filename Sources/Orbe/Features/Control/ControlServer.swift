@@ -339,7 +339,7 @@ final class ControlServer {
       target.controlReportAgent(tab: t, report: report)
       return .success(["ok": true])
     default:
-      // タブ操作・config / workspace CRUD は拡張の dispatch（ControlServer+Dispatch）へ。
+      // タブ操作・config / workspace CRUD・セッション復元は拡張の dispatch（ControlServer+Dispatch）へ。
       // いずれも非該当なら未知メソッド。
       return runTab(method: method, params: params, target: target)
         ?? runConfigWorkspace(method: method, params: params, target: target)

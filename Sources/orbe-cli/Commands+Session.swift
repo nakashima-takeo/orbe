@@ -202,18 +202,21 @@ private func groupJSON(_ group: SessionBurst) -> [String: Any] {
 /// 人向けの 1 行: `ts\tevent\tcommand\tsessionId\tworkspace\tcwd\ttitle\torigin[/reason]`
 /// （opened の title と origin は `-`）。タイトル中のタブ文字は列を壊さないよう空白にする。
 private func eventLine(_ event: SessionEvent) -> String {
+  let name: String
   let title: String
   let ending: String
   switch event.kind {
   case .opened:
+    name = "opened"
     title = "-"
     ending = "-"
   case .closed(let origin, let reason, let closeTitle):
+    name = "closed"
     title = closeTitle?.replacingOccurrences(of: "\t", with: " ") ?? "-"
     ending = origin.rawValue + (reason.map { "/" + $0 } ?? "")
   }
   return [
-    SessionEvent.iso8601(event.ts), event.closeOrigin == nil ? "opened" : "closed",
-    event.agent.command, event.sessionId, event.workspace.name, event.cwd, title, ending,
+    SessionEvent.iso8601(event.ts), name, event.agent.command, event.sessionId,
+    event.workspace.name, event.cwd, title, ending,
   ].joined(separator: "\t")
 }

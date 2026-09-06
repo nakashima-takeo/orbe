@@ -72,7 +72,7 @@ final class SessionStoreDetachTests: OrbeTestCase {
     XCTAssertEqual(ws.active, 0)
     XCTAssertEqual(ws.tabs.count, 3, "末尾に足す")
 
-    let index = store.insertWorkspace(name: "new", rootPath: "~/x")
+    let index = store.appendWorkspace(name: "new", rootPath: "~/x")
     XCTAssertEqual(index, 2)
     XCTAssertEqual(store.activeWorkspace, 0, "アクティブ化しない")
     XCTAssertEqual(

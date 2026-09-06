@@ -3,8 +3,7 @@ import Foundation
 /// `agent-sessions.jsonl` の読み手。行の復号規則はここだけが持つ（起動時の剪定も `session_log` も
 /// この `read` を通る）。
 public enum SessionLogReader {
-  /// ファイル順（昇順）で読む。不在は空。末尾に改行の無い最後の断片（追記途中）と復号できない行は
-  /// 読み飛ばす。`since <= ts <= until` と `sessionId` で絞り、`limit` を超えたら新しい側を残して
+  /// ファイル順（昇順）で読む。不在は空。末尾に改行の無い最後の断片と復号できない行は読み飛ばす。`since <= ts <= until` と `sessionId` で絞り、`limit` を超えたら新しい側を残して
   /// `truncated` を立てる。
   public static func read(
     _ url: URL, since: Date? = nil, until: Date? = nil, limit: Int? = nil,

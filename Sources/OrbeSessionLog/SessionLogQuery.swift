@@ -45,10 +45,11 @@ public enum SessionLogQuery {
       .map(\.element)
     for event in ordered {
       guard let origin = event.closeOrigin else { continue }
-      if origin != .gesture, let last = out.last, last.origin == origin,
-        let tail = last.sessions.last, event.ts.timeIntervalSince(tail.ts) <= window
+      let i = out.count - 1
+      if origin != .gesture, i >= 0, out[i].origin == origin,
+        let tail = out[i].sessions.last?.ts, event.ts.timeIntervalSince(tail) <= window
       {
-        out[out.count - 1].sessions.append(event)
+        out[i].sessions.append(event)
       } else {
         out.append(SessionBurst(at: event.ts, origin: origin, sessions: [event]))
       }

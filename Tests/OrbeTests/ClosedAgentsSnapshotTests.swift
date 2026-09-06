@@ -44,22 +44,4 @@ final class ClosedAgentsSnapshotTests: OrbeTestCase {
       ClosedAgentsSnapshot.items(events: events, present: [], rootPath: "/nowhere").isEmpty,
       "一致する workspace が無ければ空")
   }
-
-  func testPresentSessionIdsSpanLiveAndDormantTabsOfEveryWorkspace() {
-    let live = Workspace(name: "live", rootPath: "/tmp")
-    let liveTab = TerminalTab(cwd: "/tmp")
-    liveTab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: "l-1"))
-    let unnamed = TerminalTab(cwd: "/tmp")
-    unnamed.applyReport(AgentHookReport(agent: "claude", state: "idle"))
-    live.tabs = [liveTab, unnamed, TerminalTab(cwd: "/tmp")]
-    let dormant = Workspace(name: "dormant", rootPath: "/tmp")
-    dormant.tabs = [
-      TerminalTab(
-        restoring: TabState(
-          cwd: "/tmp", agent: AgentSession(command: "codex", sessionId: "d-1"), explicitTitle: nil),
-        resumeSpawn: { _ in nil })
-    ]
-
-    XCTAssertEqual(ClosedAgentsSnapshot.presentSessionIds(of: [live, dormant]), ["l-1", "d-1"])
-  }
 }

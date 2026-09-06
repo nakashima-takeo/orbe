@@ -1,9 +1,9 @@
 import Foundation
 
-/// 制御チャネルの「拡張」メソッド dispatch（タブ操作・config・workspace CRUD）と、
-/// エージェント起動の main 側。中核の動詞（list/get/send/spawn 等）は `runWindowed` の switch が
-/// 持ち、拡張は fall-through で引き受ける。param 検証（-32602）はここで行い、ドメイン解決
-/// （-32004 等）は target 側が返す。
+/// 制御チャネルの「拡張」メソッド dispatch（タブ操作・config・workspace CRUD・セッション復元）と、
+/// エージェント起動の main 側・hook 報告の params 復号。中核の動詞（list/get/send/spawn 等）は
+/// `runWindowed` の switch が持ち、拡張は fall-through で引き受ける。param 検証（-32602）はここで
+/// 行い、ドメイン解決（-32004 等）は target 側が返す。
 extension ControlServer {
   /// タブ操作（focus_tab / close_tab）を dispatch する。
   /// 非該当は nil で次のハンドラ（config / workspace）へ落とす。

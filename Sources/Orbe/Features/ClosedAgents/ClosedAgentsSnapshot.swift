@@ -27,12 +27,6 @@ enum ClosedAgentsSnapshot {
       .compactMap(item)
   }
 
-  /// 今 Orbe に居る同一性（全 workspace・live / 休眠を問わない）。`list_tabs` の `agentSessionId` と
-  /// 同じ読み口なので、CLI 側の導出と一致する。
-  static func presentSessionIds(of workspaces: [Workspace]) -> Set<String> {
-    Set(workspaces.flatMap { ws in ws.tabs.compactMap { $0.agentSlot.session?.sessionId } })
-  }
-
   private static func item(_ event: SessionEvent) -> ClosedAgentItem? {
     guard let origin = event.closeOrigin else { return nil }
     return ClosedAgentItem(

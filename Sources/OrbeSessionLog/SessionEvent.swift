@@ -8,7 +8,7 @@ import Foundation
 public struct SessionEvent: Codable, Equatable {
   /// 同一性の終わり方。`agent` / `unresolved` はタブの中で決まり、残る 3 値はタブが store から
   /// 外れた経路（`TabCloseOrigin`）の写し。
-  public enum CloseOrigin: String, Codable, CaseIterable {
+  public enum CloseOrigin: String, Codable {
     case agent, gesture, process, controlAPI, unresolved
   }
 
@@ -20,8 +20,8 @@ public struct SessionEvent: Codable, Equatable {
   }
 
   public struct Workspace: Codable, Equatable {
-    public var name: String
-    public var rootPath: String
+    public let name: String
+    public let rootPath: String
 
     public init(name: String, rootPath: String) {
       self.name = name
@@ -30,8 +30,8 @@ public struct SessionEvent: Codable, Equatable {
   }
 
   public struct Agent: Codable, Equatable {
-    public var command: String
-    public var sessionId: String
+    public let command: String
+    public let sessionId: String
 
     public init(command: String, sessionId: String) {
       self.command = command
@@ -39,11 +39,11 @@ public struct SessionEvent: Codable, Equatable {
     }
   }
 
-  public var ts: Date
-  public var kind: Kind
-  public var workspace: Workspace
-  public var cwd: String
-  public var agent: Agent
+  public let ts: Date
+  public let kind: Kind
+  public let workspace: Workspace
+  public let cwd: String
+  public let agent: Agent
 
   /// `ts` は wire の精度（ミリ秒）に丸め、closed の空の `reason` / `title` は nil に正規化して持つ——
   /// 書いた値と読み戻した値が等しいことを型の構築で保証する。
@@ -76,8 +76,12 @@ public struct SessionEvent: Codable, Equatable {
   }
 
   private static func normalized(_ kind: Kind) -> Kind {
-    guard case .closed(let origin, let reason, let title) = kind else { return kind }
-    return .closed(origin: origin, reason: nonEmpty(reason), title: nonEmpty(title))
+    switch kind {
+    case .opened:
+      return .opened
+    case .closed(let origin, let reason, let title):
+      return .closed(origin: origin, reason: nonEmpty(reason), title: nonEmpty(title))
+    }
   }
 
   private static func nonEmpty(_ s: String?) -> String? {
