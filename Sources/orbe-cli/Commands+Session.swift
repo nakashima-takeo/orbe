@@ -116,8 +116,8 @@ private func sessionClosed(_ rest: [String]) -> Never {
         print(
           [
             "", event.agent.command, event.sessionId, event.workspace.name, event.cwd,
-            event.closeReason.map(untabbed) ?? "-",
-          ].joined(separator: "\t"))
+            event.closeReason ?? "-",
+          ].map(cell).joined(separator: "\t"))
       }
     }
   }
@@ -217,7 +217,7 @@ private func groupJSON(_ group: SessionBurst) -> [String: Any] {
 }
 
 /// 人向けの 1 行: `ts\tevent\tcommand\tsessionId\tworkspace\tcwd\ttitle\torigin[/reason]`
-/// （opened の title と origin は `-`）。タイトル・reason 中のタブ文字は列を壊さないよう空白にする。
+/// （opened の title と origin は `-`）。
 private func eventLine(_ event: SessionEvent) -> String {
   let name: String
   let title: String
@@ -229,16 +229,21 @@ private func eventLine(_ event: SessionEvent) -> String {
     ending = "-"
   case .closed(let origin, let reason, let closeTitle):
     name = "closed"
-    title = closeTitle.map(untabbed) ?? "-"
-    ending = origin.rawValue + (reason.map { "/" + untabbed($0) } ?? "")
+    title = closeTitle ?? "-"
+    ending = origin.rawValue + (reason.map { "/" + $0 } ?? "")
   }
   return [
     SessionEvent.iso8601(event.ts), name, event.agent.command, event.sessionId,
     event.workspace.name, event.cwd, title, ending,
-  ].joined(separator: "\t")
+  ].map(cell).joined(separator: "\t")
 }
 
-/// タブ区切りの列に載せる任意文字列（hook 由来の title / reason）からタブ文字を除く。
-private func untabbed(_ s: String) -> String {
-  s.replacingOccurrences(of: "\t", with: " ")
+/// タブ区切りの行に載せるセル。タブは列を、改行は行を壊し、ESC 等は読み手の端末が解釈するため、
+/// 制御文字はまとめて空白にする（title / reason は hook 由来、cwd は OSC 7 由来の任意文字列）。
+private func cell(_ s: String) -> String {
+  var scalars = String.UnicodeScalarView()
+  for scalar in s.unicodeScalars {
+    scalars.append(CharacterSet.controlCharacters.contains(scalar) ? " " : scalar)
+  }
+  return String(scalars)
 }
