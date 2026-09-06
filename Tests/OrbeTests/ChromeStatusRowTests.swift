@@ -64,7 +64,7 @@ final class ChromeStatusRowTests: OrbeTestCase {
 
     // タブ 1 枚でも 1 タブぶんのタイトルが chrome 状態に出る。
     wc.flushChrome()  // chrome は coalesce 済み——同期読み前に最終状態を確定させる
-    XCTAssertEqual(wc.statusModel.titles.count, 1, "タブ 1 枚でもタブが 1 つ見える")
+    XCTAssertEqual(wc.statusModel.strip.count, 1, "タブ 1 枚でもタブが 1 つ見える")
   }
 
   /// workspace 名・各タブのタイトル・cwd が同じ chrome（statusModel）に同居する。
@@ -85,10 +85,10 @@ final class ChromeStatusRowTests: OrbeTestCase {
     // タブタイトルは ③ 派生で cwd の fish 圧縮名になる（root 外＝home 外なので絶対 compact）。
     // 行の実 cwd（フルパス）とは別表現＝同じ文字列の埋め込みではない。
     XCTAssertEqual(
-      wc.statusModel.titles.first, "/p/v/orbe-cwd-probe",
-      "タブタイトルは cwd の派生圧縮名: \(wc.statusModel.titles)")
+      wc.statusModel.strip.titles.first, "/p/v/orbe-cwd-probe",
+      "タブタイトルは cwd の派生圧縮名: \(wc.statusModel.strip.titles)")
     XCTAssertNotEqual(
-      wc.statusModel.titles.first, wc.statusModel.cwd, "タブタイトルは行の実 cwd フルパスとは別表現")
+      wc.statusModel.strip.titles.first, wc.statusModel.cwd, "タブタイトルは行の実 cwd フルパスとは別表現")
   }
 
   /// workspace 切替で chrome の workspace 名も追従する。
@@ -108,9 +108,9 @@ final class ChromeStatusRowTests: OrbeTestCase {
     let wc = WindowController()
     wc.newTab()
     wc.flushChrome()
-    XCTAssertEqual(wc.statusModel.titles.count, 2, "タブ 2 が chrome に出る")
+    XCTAssertEqual(wc.statusModel.strip.count, 2, "タブ 2 が chrome に出る")
     XCTAssertTrue(
-      wc.statusModel.titles.indices.contains(wc.statusModel.active), "アクティブ index は範囲内")
+      wc.statusModel.strip.titles.indices.contains(wc.statusModel.active), "アクティブ index は範囲内")
   }
 
   // MARK: - 横断エージェント状態ロールアップ
@@ -159,9 +159,9 @@ final class ChromeStatusRowTests: OrbeTestCase {
 
     wc.flushChrome()
 
-    XCTAssertEqual(wc.statusModel.glyphs.count, 2)
-    XCTAssertEqual(wc.statusModel.glyphs[0], .waiting)
-    XCTAssertNil(wc.statusModel.glyphs[1])
+    XCTAssertEqual(wc.statusModel.strip.glyphs.count, 2)
+    XCTAssertEqual(wc.statusModel.strip.glyphs[0], .waiting)
+    XCTAssertNil(wc.statusModel.strip.glyphs[1])
     XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["waiting"])
     XCTAssertEqual(wc.statusModel.rollup.map(\.count), [1])
   }

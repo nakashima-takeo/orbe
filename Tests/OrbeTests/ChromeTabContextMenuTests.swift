@@ -87,28 +87,28 @@ final class ChromeTabContextMenuTests: OrbeTestCase {
     let tab = tab(wc, at: 0)
     setReportedState(tab, "waiting", message: AgentMessage(text: "approve?", source: "tool"))
     wc.flushChrome()
-    XCTAssertEqual(wc.statusModel.glyphs.first, .waiting, "前提: タブに waiting グリフが出ている")
+    XCTAssertEqual(wc.statusModel.strip.glyphs.first, .waiting, "前提: タブに waiting グリフが出ている")
     XCTAssertEqual(wc.attentionStore.rows.map(\.state), ["waiting"], "前提: Attention 一覧に載っている")
 
     wc.statusModel.onResetAgentState(wc.current.tabs[0].id)
     wc.flushChrome()
 
-    XCTAssertNil(wc.statusModel.glyphs.first ?? nil, "タブグリフが消える")
+    XCTAssertNil(wc.statusModel.strip.glyphs.first ?? nil, "タブグリフが消える")
     XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["idle"], "横断ストリップは休止へ移る")
     XCTAssertTrue(wc.attentionStore.rows.isEmpty, "Attention 一覧から消える")
   }
 
   // MARK: - 宛先を指せる土台
 
-  /// `tabIds` はタブ行と同じ順・同じ長さで並ぶ（`stateGlyph(i)` と `tabId(i)` が同じタブを指す）。
+  /// セルの `tabId` はタブ行と同じ順で並ぶ（同じセルのグリフと同一性が同じタブを指す）。
   func testTabIdsMirrorTheTabRowInOrder() {
     let wc = WindowController()
     wc.newTab()
     wc.newTab()
     wc.flushChrome()
 
-    XCTAssertEqual(wc.statusModel.tabIds, wc.current.tabs.map(\.id), "タブ行と同じ順")
-    XCTAssertEqual(wc.statusModel.tabIds.count, wc.statusModel.titles.count, "titles と同じ長さ")
-    XCTAssertEqual(wc.statusModel.tabIds.count, wc.statusModel.glyphs.count, "glyphs と同じ長さ")
+    XCTAssertEqual(
+      wc.statusModel.strip.cells.compactMap(\.tabId), wc.current.tabs.map(\.id), "タブ行と同じ順")
+    XCTAssertEqual(wc.statusModel.strip.tabIds.count, wc.statusModel.strip.count, "セルごとに 1 つ")
   }
 }

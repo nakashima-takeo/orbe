@@ -2,7 +2,7 @@ import SwiftUI
 
 /// タブ行の幅計算とセグメント幾何（純関数・単体テスト可能）。寸法は `Chrome` と `DSSegmentBar.width`。
 enum StatusTabLayout {
-  /// `segments` を流し込まないホスト（gallery 等）の既定＝全タブ単独。View の唯一の「導出」で、連の分割はしない。
+  /// `segments` を渡さないホスト（gallery 等）の既定＝全タブ単独（`TabStrip.init(titles:...)` が使う）。
   static func singletons(count: Int) -> [Range<Int>] {
     (0..<count).map { $0..<($0 + 1) }
   }

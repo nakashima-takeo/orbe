@@ -61,7 +61,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(fixture.wc.statusModel.rollup.map(\.state), ["waiting"])
     XCTAssertEqual(fixture.wc.statusModel.rollup.map(\.count), [1])
     XCTAssertTrue(
-      fixture.wc.statusModel.glyphs.allSatisfy { $0 == nil },
+      fixture.wc.statusModel.strip.glyphs.allSatisfy { $0 == nil },
       "背景 workspace の live は横断 rollup には入るが、現在 workspace のタブ列には漏らさない")
     XCTAssertTrue(fixture.wc.current === activeBefore, "背景報告で前面 workspace を奪わない")
     XCTAssertEqual(fixture.workspace.lastUsedAt, stampBefore, "背景 materialize/report で MRU を動かさない")

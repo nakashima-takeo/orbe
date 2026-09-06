@@ -92,13 +92,14 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     // 通常: design 正典 Terminal シーンの fixture（11 タブ・ストリップ 3/1/5/2・cwd なし）。
     let normal = StatusRowModel()
     normal.workspace = "orbe-core"
-    normal.titles = [
-      "src/renderer", "libghostty", "tests", "docs/spec", "agent-hooks", "state-store",
-      "api-docs", "hooks-spec", "perf/batching", "release-0.9", "ci-fix",
-    ]
-    normal.glyphs = [
-      .working, .waiting, nil, .done, .working, .working, .done, .done, nil, .done, .done,
-    ]
+    normal.strip = TabStrip(
+      titles: [
+        "src/renderer", "libghostty", "tests", "docs/spec", "agent-hooks", "state-store",
+        "api-docs", "hooks-spec", "perf/batching", "release-0.9", "ci-fix",
+      ],
+      glyphs: [
+        .working, .waiting, nil, .done, .working, .working, .done, .done, nil, .done, .done,
+      ])
     normal.active = 0
     normal.rollup = [("working", 3), ("waiting", 1), ("done", 5), ("idle", 2)]
     try writePNG(chromeBand(normal, size: size), size: size, name: "statusrow_normal.png", dir: dir)
@@ -107,8 +108,9 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     let overflow = StatusRowModel()
     overflow.workspace = "infra"
     let glyphCycle: [AgentStateIcon.Kind?] = [.working, .waiting, .done, nil]
-    overflow.titles = (0..<10).map { "terraform-apply-session-\($0)" }
-    overflow.glyphs = (0..<10).map { glyphCycle[$0 % glyphCycle.count] }
+    overflow.strip = TabStrip(
+      titles: (0..<10).map { "terraform-apply-session-\($0)" },
+      glyphs: (0..<10).map { glyphCycle[$0 % glyphCycle.count] })
     overflow.active = 6
     overflow.cwd = "~/work/infra/terraform/modules/network"
     overflow.rollup = [("working", 8), ("waiting", 2), ("idle", 15)]
@@ -119,17 +121,18 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     // 連の中の選択セル・識別バー・区切り線・1 枚は現行の絵。cwd あり。
     let grouped = StatusRowModel()
     grouped.workspace = "storefront"
-    grouped.titles = [
-      "s/s/checkout", "s/api", "storefront", "s/s/hooks",
-      "~/d/s/fix-cart-badge", "~/d/s/f/src",
-      "~/d/s/i18n-ja", "~/d/s/i/locales",
-      "~/notes",
-    ]
-    grouped.glyphs = [.working, .waiting, nil, .working, .done, nil, .done, nil, nil]
-    grouped.segments = [0..<4, 4..<6, 6..<8, 8..<9]
-    grouped.segmentColorIndices = ["storefront", "fix-cart-badge", "i18n-ja", "notes"].map {
-      WorktreeColor.index(forKey: $0)
-    }
+    grouped.strip = TabStrip(
+      titles: [
+        "s/s/checkout", "s/api", "storefront", "s/s/hooks",
+        "~/d/s/fix-cart-badge", "~/d/s/f/src",
+        "~/d/s/i18n-ja", "~/d/s/i/locales",
+        "~/notes",
+      ],
+      glyphs: [.working, .waiting, nil, .working, .done, nil, .done, nil, nil],
+      segments: [0..<4, 4..<6, 6..<8, 8..<9],
+      colorIndices: ["storefront", "fix-cart-badge", "i18n-ja", "notes"].map {
+        WorktreeColor.index(forKey: $0)
+      })
     grouped.active = 3
     grouped.cwd = "~/dev/storefront/src/hooks"
     grouped.rollup = [("working", 2), ("waiting", 1), ("done", 2), ("idle", 4)]
@@ -139,12 +142,11 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     // grouped overflow: 長い名前 × 3 連（4+4+3）で全タブが床 40、バー幅ぶん器が広い状態。
     let groupedOverflow = StatusRowModel()
     groupedOverflow.workspace = "infra"
-    groupedOverflow.titles = (0..<11).map { "terraform-apply-session-\($0)" }
-    groupedOverflow.glyphs = (0..<11).map { glyphCycle[$0 % glyphCycle.count] }
-    groupedOverflow.segments = [0..<4, 4..<8, 8..<11]
-    groupedOverflow.segmentColorIndices = ["network", "compute", "storage"].map {
-      WorktreeColor.index(forKey: $0)
-    }
+    groupedOverflow.strip = TabStrip(
+      titles: (0..<11).map { "terraform-apply-session-\($0)" },
+      glyphs: (0..<11).map { glyphCycle[$0 % glyphCycle.count] },
+      segments: [0..<4, 4..<8, 8..<11],
+      colorIndices: ["network", "compute", "storage"].map { WorktreeColor.index(forKey: $0) })
     groupedOverflow.active = 5
     groupedOverflow.cwd = "~/work/infra-worktrees/compute"
     groupedOverflow.rollup = [("working", 3), ("waiting", 3), ("done", 3), ("idle", 2)]

@@ -324,21 +324,29 @@ final class WindowController: NSObject, NSWindowDelegate {
     chromeFlushScheduled = false
     guard chromeDirty else { return }
     chromeDirty = false
-    let segments = SessionStore.segments(of: current.tabs)
     statusModel.update(
       StatusRowModel.Snapshot(
         workspace: current.name,
-        titles: current.tabs.map { $0.displayTitle(workspaceRoot: current.rootPath) },
-        glyphs: current.tabs.map { $0.activated ? $0.agentStateKind : nil },
-        tabIds: current.tabs.map(\.id),
-        segments: segments,
-        segmentColorIndices: segments.map {
-          WorktreeColor.index(forKey: current.tabs[$0.lowerBound].groupKey)
-        },
+        strip: tabStrip(of: current),
         active: current.active,
         cwd: store.activeTabCwd(),
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
     refreshAttentionSnapshot()  // Attention 一覧も同じ coalesce 契機で追従（WindowController+Attention）
+  }
+
+  /// タブ行の投影。連の分割は `SessionStore.segments(of:)`、色番号は連の先頭タブのキーから。
+  private func tabStrip(of ws: Workspace) -> TabStrip {
+    TabStrip(
+      segments: SessionStore.segments(of: ws.tabs).map { r in
+        TabStrip.Segment(
+          cells: r.map { i in
+            let tab = ws.tabs[i]
+            return TabStrip.Cell(
+              index: i, title: tab.displayTitle(workspaceRoot: ws.rootPath),
+              glyph: tab.activated ? tab.agentStateKind : nil, tabId: tab.id)
+          },
+          colorIndex: WorktreeColor.index(forKey: ws.tabs[r.lowerBound].groupKey))
+      })
   }
 
   /// アクティブタブの surface へフォーカスを戻す（パレットの dismiss と同じ規則）。

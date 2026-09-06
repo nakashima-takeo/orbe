@@ -37,16 +37,12 @@ final class StatusRowViewTests: OrbeTestCase {
 
   // MARK: - 描くセグメント列
 
-  /// controller が流し込まない（空）ホストでは全タブ単独として描く。流し込まれていればそのまま。
-  func testSegmentsDefaultToSingletonsWhenNotProvided() {
-    let model = StatusRowModel()
-    model.titles = ["a", "b", "c"]
-    let view = StatusRowView(model: model)
-
-    XCTAssertEqual(view.segments, [0..<1, 1..<2, 2..<3], "空なら単独")
-
-    model.segments = [0..<2, 2..<3]
-    XCTAssertEqual(view.segments, [0..<2, 2..<3], "流し込まれた連はそのまま")
+  /// controller が流し込まない（segments 無し）ホストでは全タブ単独。流し込まれていればそのまま。
+  func testStripDefaultsToSingletonsWhenSegmentsNotProvided() {
+    XCTAssertEqual(TabStrip(titles: ["a", "b", "c"]).ranges, [0..<1, 1..<2, 2..<3], "無ければ単独")
+    XCTAssertEqual(
+      TabStrip(titles: ["a", "b", "c"], segments: [0..<2, 2..<3]).ranges, [0..<2, 2..<3],
+      "流し込まれた連はそのまま")
   }
 
   // MARK: - セルの掴み（自セグメントの中だけ）

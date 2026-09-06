@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// タブグループの配線を実 `WindowController` で端から端まで通す——復元時の正規化、⌘T の挿入位置と
-/// 選択、cd（OSC 7）による再判定、セグメント移動、そして chrome への投影（`statusModel.segments`）。
+/// 選択、cd（OSC 7）による再判定、セグメント移動、そして chrome への投影（`statusModel.strip`）。
 ///
 /// 純ドメインの規則は `SessionStoreTabGroupTests` が持つ。ここが守るのはその外側——`openTab` が
 /// 実挿入 index を select すること、`onPwdChange` が `regroup` に繋がり chrome と保存へ届くこと、
@@ -48,9 +48,9 @@ final class WindowControllerTabGroupTests: OrbeTestCase {
     XCTAssertEqual(wc.current.active, 1, "保存時 index 2 のタブ（2 枚目の g1）を指し続ける")
 
     wc.flushChrome()
-    XCTAssertEqual(wc.statusModel.segments, [0..<2, 2..<3, 3..<4])
+    XCTAssertEqual(wc.statusModel.strip.ranges, [0..<2, 2..<3, 3..<4])
     XCTAssertEqual(
-      wc.statusModel.segmentColorIndices, ["/tmp/g1", "/tmp/g2", "/tmp/g3"].map(colorIndex),
+      wc.statusModel.strip.colorIndices, ["/tmp/g1", "/tmp/g2", "/tmp/g3"].map(colorIndex),
       "連ごとの色番号はその worktree キーから")
   }
 
@@ -63,7 +63,7 @@ final class WindowControllerTabGroupTests: OrbeTestCase {
     XCTAssertEqual(cwds(wc), ["/tmp/g1", "/tmp/g1", "/tmp/g1", "/tmp/g2"], "g1 の連の右端（末尾ではない）")
     XCTAssertEqual(wc.current.active, 2, "生えたタブが選ばれる")
     wc.flushChrome()
-    XCTAssertEqual(wc.statusModel.segments, [0..<3, 3..<4])
+    XCTAssertEqual(wc.statusModel.strip.ranges, [0..<3, 3..<4])
     XCTAssertEqual(wc.statusModel.active, 2)
   }
 
@@ -77,7 +77,7 @@ final class WindowControllerTabGroupTests: OrbeTestCase {
     XCTAssertEqual(cwds(wc), ["/tmp/g1", "/tmp/g1", "/tmp/g3", "/tmp/g2"], "元の連の直右へ")
     XCTAssertTrue(wc.current.tabs[wc.current.active] === moved, "cd したタブを見続ける")
     wc.flushChrome()
-    XCTAssertEqual(wc.statusModel.segments, [0..<2, 2..<3, 3..<4])
+    XCTAssertEqual(wc.statusModel.strip.ranges, [0..<2, 2..<3, 3..<4])
     XCTAssertEqual(wc.statusModel.active, 2)
 
     wc.flushSave()
@@ -96,7 +96,7 @@ final class WindowControllerTabGroupTests: OrbeTestCase {
     XCTAssertEqual(cwds(wc), ["/tmp/g2", "/tmp/g1", "/tmp/g1"], "g1 の連が末尾へ")
     XCTAssertTrue(wc.current.tabs[wc.current.active] === viewed, "active は同じタブ")
     wc.flushChrome()
-    XCTAssertEqual(wc.statusModel.segments, [0..<1, 1..<3])
+    XCTAssertEqual(wc.statusModel.strip.ranges, [0..<1, 1..<3])
     XCTAssertEqual(wc.statusModel.active, 1)
   }
 }

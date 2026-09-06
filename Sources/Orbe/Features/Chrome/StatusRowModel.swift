@@ -4,17 +4,8 @@ import SwiftUI
 /// SwiftUI `StatusRowView` が描く。信号機ボタンの縦位置（system furniture）もここへ集める。
 @Observable final class StatusRowModel {
   var workspace = ""
-  var titles: [String] = []
-  /// 各タブの集約状態種別（nil で表示なし＝idle/無し）。詳細＋件数は上段右端の rollup 側に出す。
-  var glyphs: [AgentStateIcon.Kind?] = []
-  /// 各タブの同一性（`TerminalTab.id`）。時間差を持つ操作（コンテキストメニュー）が
-  /// 位置 index の代わりに使う。titles / glyphs と同じ長さ。
-  var tabIds: [Int] = []
-  /// セグメント（隣接する同 worktree のタブの連）。`SessionStore.segments(of:)` が導いた連を controller が
-  /// 流す。titles を覆わない（空）ホスト＝gallery 等では全タブ単独として描く。
-  var segments: [Range<Int>] = []
-  /// 各セグメントの worktree 識別色番号（`Color.theme.worktreeBar` の index）。`segments` と同じ長さ。
-  var segmentColorIndices: [Int] = []
+  /// タブ行（セル＋セグメント構造）。1 つの値として代入され、View はこれだけを辿る。
+  var strip = TabStrip()
   var active = 0
   /// `~` 短縮済みのアクティブタブの cwd。
   var cwd: String?
@@ -61,11 +52,7 @@ import SwiftUI
   /// chrome へ反映する 1 回ぶんのスナップショット。
   struct Snapshot {
     let workspace: String
-    let titles: [String]
-    let glyphs: [AgentStateIcon.Kind?]
-    let tabIds: [Int]
-    let segments: [Range<Int>]
-    let segmentColorIndices: [Int]
+    let strip: TabStrip
     let active: Int
     let cwd: String?
     let rollup: [(state: String, count: Int)]
@@ -73,11 +60,7 @@ import SwiftUI
 
   func update(_ s: Snapshot) {
     workspace = s.workspace
-    titles = s.titles
-    glyphs = s.glyphs
-    tabIds = s.tabIds
-    segments = s.segments
-    segmentColorIndices = s.segmentColorIndices
+    strip = s.strip
     active = s.active
     cwd = s.cwd.map { ($0 as NSString).abbreviatingWithTildeInPath }
     rollup = s.rollup
