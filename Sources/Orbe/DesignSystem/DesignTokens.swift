@@ -99,6 +99,8 @@ enum Theme {
     static let worktreeFrame: [NSColor] = WorktreePalette.hex.map {
       dynA(light: $0, lightA: 0.38, dark: $0, darkA: 0.38)
     }
+    /// グループ内セルの区切り線。surface1 と同色相だが、識別色を敷いた地の上で読める濃さへ上げる。
+    static let tabDivider = dynA(light: 0x6e5aaa, lightA: 0.24, dark: 0xc7b9eb, darkA: 0.18)
 
     // 状態の塗り（事前 alpha 済み・テーマごとの accent 基調へ α を掛けた合成値）
     static let selectionFill = dynA(

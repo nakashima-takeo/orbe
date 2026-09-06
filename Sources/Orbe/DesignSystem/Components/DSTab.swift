@@ -17,7 +17,7 @@ struct DSTab: View {
   var action: () -> Void = {}
   /// 中ボタンクリック（押し下げで即発火）。app 層がタブごと閉じる操作に配線する。
   var onMiddleClick: () -> Void = {}
-  /// 左端に 1pt の区切り線（surface1）を持つ（2 枚以上のセグメントの各セル）。セル幅の内側に描き、
+  /// 左端に 1pt の区切り線（tabDivider）を持つ（2 枚以上のセグメントの各セル）。セル幅の内側に描き、
   /// 選択セルでも残る（選択面がその 1pt を空ける）。
   var divided: Bool = false
 
@@ -78,7 +78,7 @@ struct DSTab: View {
     )
     .overlay(alignment: .leading) {
       if divided {
-        Rectangle().fill(Color.theme.surface1).frame(width: Theme.Stroke.hairline)
+        Rectangle().fill(Color.theme.tabDivider).frame(width: Theme.Stroke.hairline)
       }
     }
     .contentShape(Rectangle())
