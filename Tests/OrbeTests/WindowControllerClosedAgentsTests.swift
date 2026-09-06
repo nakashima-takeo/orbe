@@ -14,13 +14,16 @@ final class WindowControllerClosedAgentsTests: OrbeTestCase {
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
   }
 
+  /// `main` は cwd の違う 2 連（`/tmp`・`/var/tmp`）。単一の連だと「連の右端」と「末尾」が同じ index に
+  /// なり、復元先を末尾に固定する実装と区別できない（識別できる位置で叩く作法）。
   private func restore() throws -> WindowController {
-    let plain = TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)
+    let tmp = TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)
+    let varTmp = TabState(cwd: "/var/tmp", agent: nil, explicitTitle: nil)
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
-        WorkspaceState(name: "main", rootPath: "/tmp/main", activeTab: 0, tabs: [plain, plain]),
-        WorkspaceState(name: "other", rootPath: "/tmp/other", activeTab: 0, tabs: [plain]),
+        WorkspaceState(name: "main", rootPath: "/tmp/main", activeTab: 0, tabs: [tmp, varTmp]),
+        WorkspaceState(name: "other", rootPath: "/tmp/other", activeTab: 0, tabs: [tmp]),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     return WindowController()
@@ -54,7 +57,7 @@ final class WindowControllerClosedAgentsTests: OrbeTestCase {
       wc.model.closedAgentsPalette?.items.map(\.sessionId), ["o-1"], "別 workspace では別の一覧")
   }
 
-  func testEnterRestoresTheChosenOneAtTheEndSelectsItAndRemovesItFromTheList() throws {
+  func testEnterRestoresTheChosenOneAtItsRunsEndSelectsItAndRemovesItFromTheList() throws {
     let wc = try restore()
     try closeAgentTab(wc, in: 0, id: "m-1", origin: .controlAPI)
     try closeAgentTab(wc, in: 0, id: "m-2", origin: .controlAPI)
@@ -68,12 +71,12 @@ final class WindowControllerClosedAgentsTests: OrbeTestCase {
     palette.activate()
 
     XCTAssertEqual(wc.presentedOverlay, .none, "復元でパレットは閉じる")
-    XCTAssertEqual(wc.current.tabs.count, 3, "戻るのは選んだ 1 件だけ")
     XCTAssertEqual(
-      wc.current.tabs.last?.agentSlot.session?.sessionId, "m-1", "同じ cwd の連の右端＝末尾に足す")
-    XCTAssertEqual(wc.current.active, 2, "復元したタブを選択して起こす")
+      wc.current.tabs.map { $0.agentSlot.session?.sessionId }, [nil, "m-1", nil],
+      "戻るのは選んだ 1 件だけで、末尾ではなく同じ cwd の連（/tmp）の右端に足す")
+    XCTAssertEqual(wc.current.active, 1, "復元したタブを選択して起こす")
     XCTAssertEqual(wc.sessionLog.lastEvent(sessionId: "m-1")?.kind, .opened, "起床で opened が付く")
-    XCTAssertTrue(wc.current.tabs[2].activated)
+    XCTAssertTrue(wc.current.tabs[1].activated)
 
     wc.showClosedAgentsPalette()
     XCTAssertEqual(
