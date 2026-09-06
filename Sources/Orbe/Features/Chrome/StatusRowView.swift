@@ -164,7 +164,7 @@ struct StatusRowView: View {
           .overlay(alignment: .leading) {
             if let drag {
               Rectangle()
-                .fill(Color.theme.accentPrimary)
+                .fill(Color.theme.accentBright)
                 .frame(width: 2, height: Chrome.tabHeight)
                 .offset(x: Self.insertionCaretX(drag))
                 .allowsHitTesting(false)

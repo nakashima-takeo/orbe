@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """worktree 識別色を oklch から sRGB hex へ写し、Swift の定数表として書き出す。
 
-生成式（orbe_design の theme.ts `worktreePalette` と同一。色相数・トーンは HUES / TONES が正）:
-  index i → tone = TONES[i // HUES]、hue = (i % HUES) * (360 / HUES) + 7
+生成式（色相数・トーンは HUES / TONES が正）:
+  index i → tone = TONES[theme][i // HUES]、hue = (i % HUES) * (360 / HUES) + 7
+
+番号（`WorktreeColor.index(forKey:)`）はテーマ共通で、色だけがテーマごとに違う。dark は暗い chrome の
+上で光るトーン、light は白い紙面の上で沈むトーンを採る。
 
 oklch → oklab → linear sRGB（Björn Ottosson の行列）→ gamma 符号化 → 8bit 丸め。
 一部のチャンネルが sRGB 域外に出るので、CSS Color 4 が規定するガマット写像 binary-search local MINDE
 （https://drafts.csswg.org/css-color-4/#GMA-Binary-local-MINDE ・chroma を [0, C] で二分探索し、
 クリップ結果との ΔEOK が JND 0.02 未満になる最大 chroma を採る）で落とす。見本 theme.ts が書いている
 のは oklch の値そのもので、写像はこの規定に従う。
-
-48 色のうち 44 色は Chrome の実描画と 8bit まで一致する。残る 4 色（域外に出る cyan 帯）はブラウザが
-規定の写像ではなくチャンネルクランプで落とすため 1 チャンネル最大 6/255 ずれる——バー幅 3pt では
-見分けられない差で、こちらは規定の写像を採る。
 
 生成物 Sources/Orbe/DesignSystem/WorktreePalette.swift はコミットする（アプリに色計算を持ち込まない）。
 式を変えたら再実行する:
@@ -28,7 +27,11 @@ DST = ROOT / "Sources/Orbe/DesignSystem/WorktreePalette.swift"
 
 HUES = 24
 HUE_STEP = 360 / HUES
-TONES = [(0.80, 0.09), (0.64, 0.15)]  # (L, C)
+# テーマごとの淡 / 濃 2 トーンの (L, C)。
+TONES = {
+    "dark": [(0.80, 0.09), (0.64, 0.15)],
+    "light": [(0.62, 0.13), (0.48, 0.15)],
+}
 JND = 0.02
 EPSILON = 0.0001
 
@@ -112,29 +115,38 @@ def hex_of(rgb: tuple[float, float, float]) -> int:
     return (r << 16) | (g << 8) | b
 
 
-def palette() -> list[int]:
+def palette(theme: str) -> list[int]:
     return [
         hex_of(to_srgb_linear(l, c, i * HUE_STEP + 7))
-        for (l, c) in TONES
+        for (l, c) in TONES[theme]
         for i in range(HUES)
     ]
 
 
-def render(colors: list[int]) -> str:
+def table(name: str, colors: list[int]) -> str:
     rows = [colors[i : i + 8] for i in range(0, len(colors), 8)]
     body = "\n".join("    " + " ".join(f"0x{c:06x}," for c in row) for row in rows)
+    return f"  static let {name}: [Int] = [\n{body}\n  ]"
+
+
+def render(palettes: dict[str, list[int]]) -> str:
+    tables = "\n".join(table(theme, colors) for theme, colors in palettes.items())
     return f"""// scripts/gen-worktree-palette.py が生成する。手で編集せず、式を変えたらスクリプトを直して再生成する。
 
-/// worktree 識別色（index は `WorktreeColor.index(forKey:)`）。色相 × トーンの oklch を CSS Color 4 の
-/// 彩度落としで sRGB へ写した hex。式と色数は scripts/gen-worktree-palette.py の HUES / TONES が正。
+/// worktree 識別色。番号（`WorktreeColor.index(forKey:)`）はテーマ共通で、色だけがテーマごとに違う。
+/// 色相 × トーンの oklch を CSS Color 4 の彩度落としで sRGB へ写した hex。
+/// 式と色数は scripts/gen-worktree-palette.py の HUES / TONES が正。
 enum WorktreePalette {{
-  static let hex: [Int] = [
-{body}
-  ]
+  static let count = {len(next(iter(palettes.values())))}
+{tables}
 }}
 """
 
 
+def generate() -> str:
+    return render({theme: palette(theme) for theme in TONES})
+
+
 if __name__ == "__main__":
-    DST.write_text(render(palette()))
+    DST.write_text(generate())
     print(f"wrote {DST}")

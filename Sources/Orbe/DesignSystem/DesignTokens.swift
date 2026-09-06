@@ -36,7 +36,8 @@ enum Theme {
       light: OrbePalette.Chrome.accentLight,
       dark: OrbePalette.Chrome.accentDark)  // 選択・自分の出番・プロンプト（SSOT）
     static let accentFocus = accentPrimary  // フォーカス（accentPrimary へ収束）
-    // accent の明色変種。tint(accent) 面上の強調文字（ヘルプの絞り込みチップ等）。
+    // accent の明色変種。tint(accent) 面上の強調文字（ヘルプの絞り込みチップ等）と、
+    // タブ行の挿入キャレット（識別色の地の上に立つ）。
     // light は紙面で accent 自体のコントラストが十分なため accent と同値。
     static let accentBright = dyn(light: 0x6d43d8, dark: 0xb18aff)
     static let onAccent = dyn(
@@ -86,21 +87,21 @@ enum Theme {
     static let tabRowBg = dynA(light: 0x3a3151, lightA: 0.08, dark: 0x000000, darkA: 0.28)
     static let tabSegBg = dynA(light: 0x3a3151, lightA: 0.06, dark: 0xffffff, darkA: 0.10)
     static let tabActiveText = dyn(light: 0xf3f0fa, dark: 0x171420)  // light は bgBase と別値
-    /// worktree 識別バー（セグメント左端 3px）。番号は `WorktreeColor.index(forKey:)`。
-    /// light 固有トーンは見本（orbe_design `theme.ts`）側で保留中——実物を見て決めるまで dark と同値。
-    static let worktreeBar: [NSColor] = WorktreePalette.hex.map { rgb($0) }
-    /// グループ（2 枚以上の連）の地の下敷き。bgDeepest へ収束。上に worktreeTint を重ねる。
-    static let tabGroupBg = bgDeepest
+    /// worktree 識別バー（セグメント左端 3px）。番号は `WorktreeColor.index(forKey:)` でテーマ共通、
+    /// 色はテーマごと（dark は暗い chrome の上で光り、light は紙面の上で沈むトーン）。
+    static let worktreeBar: [NSColor] = worktreeColors { dyn(light: $0, dark: $1) }
+    /// グループ（2 枚以上の連）の地の下敷き。上に worktreeTint を重ねる。
+    static let tabGroupBg = dynA(light: 0x3a3151, lightA: 0.02, dark: 0xffffff, darkA: 0.04)
     /// グループの地に重ねる worktree 識別色の淡塗り。番号は worktreeBar と同じ。
-    static let worktreeTint: [NSColor] = WorktreePalette.hex.map {
-      dynA(light: $0, lightA: 0.12, dark: $0, darkA: 0.12)
+    static let worktreeTint: [NSColor] = worktreeColors {
+      dynA(light: $0, lightA: 0.14, dark: $1, darkA: 0.12)
     }
     /// グループの枠（器の外側 1px）。番号は worktreeBar と同じ。
-    static let worktreeFrame: [NSColor] = WorktreePalette.hex.map {
-      dynA(light: $0, lightA: 0.38, dark: $0, darkA: 0.38)
+    static let worktreeFrame: [NSColor] = worktreeColors {
+      dynA(light: $0, lightA: 0.45, dark: $1, darkA: 0.38)
     }
-    /// グループ内セルの区切り線。surface1 と同色相だが、識別色を敷いた地の上で読める濃さへ上げる。
-    static let tabDivider = dynA(light: 0x6e5aaa, lightA: 0.24, dark: 0xc7b9eb, darkA: 0.18)
+    /// グループ内セルの区切り線。識別色を敷いた地の上でも読める濃さ。
+    static let tabDivider = dynA(light: 0x3a3151, lightA: 0.16, dark: 0xffffff, darkA: 0.14)
 
     // 状態の塗り（事前 alpha 済み・テーマごとの accent 基調へ α を掛けた合成値）
     static let selectionFill = dynA(
@@ -152,6 +153,10 @@ enum Theme {
       dark: OrbePalette.Chrome.accentDark, darkA: 0.12)
 
     // MARK: 生成ヘルパ
+    /// worktree 識別色 48 本を、番号ごとの (light hex, dark hex) から作る。
+    private static func worktreeColors(_ make: (Int, Int) -> NSColor) -> [NSColor] {
+      (0..<WorktreePalette.count).map { make(WorktreePalette.light[$0], WorktreePalette.dark[$0]) }
+    }
     private static func rgb(_ hex: Int, _ a: CGFloat = 1) -> NSColor {
       NSColor(
         srgbRed: CGFloat((hex >> 16) & 0xff) / 255,
