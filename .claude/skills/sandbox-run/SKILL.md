@@ -56,9 +56,40 @@ flowchart TD
 
    `ORBE_USER_ZDOTDIR` があれば親 GUI（`CompletionShim.activate()`）が据えたユーザー本来の `ZDOTDIR` を渡す。無くても親 Orbe 内（`ORBE_BUNDLE_ID` あり）なら親 shim を指す `ZDOTDIR` を消す。Orbe 外からの起動ではユーザー自身の `ZDOTDIR` をそのまま保つ。隔離インスタンスは自前の control.sock（`$sandbox_state_dir/control.sock`）を持つ。
 3. **煙探知を 1 本通す（両モード共通）。** `.app` の起動経路と `AppDelegate` の配線は `swift test` の守備範囲外なので、機械的に確かめる場所はここしかない。人間に見せる前に死んだバンドルを弾く意味もあるので、承認モードでも飛ばさない。
-   - **必ず手順2 で控えた state dir の sock へ直接投げる。** 手元の Orbe MCP ツール（`mcp__orbe__*`）は `ORBE_STATE_DIR` を持たず**常用インスタンス**に繋がる。使うと利用者の実タブに目印が打ち込まれたうえ、起こしたバンドルについて何も測らないまま緑になる。素の JSON-RPC で足りる:
-     `printf '{"jsonrpc":"2.0","id":1,"method":"list_tabs","params":{}}\n' | nc -U "$sandbox_state_dir/control.sock"`
    - まず `$sandbox_state_dir/control.sock` が現れるまで待つ（最大 10 秒）。GUI の起動から `ControlServer` が bind するまでには実時間があるので、待たずに叩くと健全なバンドルを不合格にする。最後まで現れなければ起動経路が `ControlServer` を張っていないということなので失敗。
+   - **必ず手順2 で控えた state dir の sock へ直接投げる。** 手元の Orbe MCP ツール（`mcp__orbe__*`）は `ORBE_STATE_DIR` を持たず**常用インスタンス**に繋がる。使うと利用者の実タブに目印が打ち込まれたうえ、起こしたバンドルについて何も測らないまま緑になる。以降の API 呼び出しには、次の `sandbox_rpc <method> '<params の JSON>'` を使う（Python 3 が必要）。
+
+     **応答の改行まで受信してから接続を閉じる。** `ControlServer` はクライアントから EOF を受けると接続を閉じるため、送信側も応答を読むまで開いたままにする。受信待ちには 5 秒のタイムアウトを設け、空応答・途中切断・JSON-RPC エラーは終了コードで失敗を伝える。
+
+     ```zsh
+     sandbox_rpc() {
+       python3 - "$sandbox_state_dir/control.sock" "$@" <<'PY'
+     import json
+     import socket
+     import sys
+
+     request = {"jsonrpc": "2.0", "id": 1, "method": sys.argv[2],
+                "params": json.loads(sys.argv[3])}
+     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+         sock.settimeout(5)
+         sock.connect(sys.argv[1])
+         sock.sendall((json.dumps(request) + "\n").encode())
+         with sock.makefile("rb") as stream:
+             line = stream.readline()
+     if not line.endswith(b"\n"):
+         sys.exit("control.sock: 応答の改行前に切断されました")
+     response = json.loads(line)
+     if response.get("id") != request["id"]:
+         sys.exit("control.sock: 応答の id が一致しません")
+     if "error" in response:
+         sys.exit(json.dumps(response["error"], ensure_ascii=False))
+     print(json.dumps(response["result"], ensure_ascii=False))
+     PY
+     }
+
+     sandbox_rpc list_tabs '{}'
+     ```
+
    - `list_tabs` でタブを取り、`send_text` に `echo L4D""ONE_<id>` を送る（`<id>` は毎回ランダム。目印の途中に**空のダブルクォート 2 つ**を挟む）。続けて `send_key enter` を送り、`get_tab_text` に連結形 `L4DONE_<id>` が現れるまで**最大 15 秒**ポーリングする。
    - 目印をコマンド行の中で 2 つのリテラルに割るのが要点で、連結形はシェルが引用符除去を**評価した**出力にしか現れない。入力行がそのまま描き返されても目印にはならないので、実 `.app` ＝利用者の rc とテーマが走る環境でも判定が揺れない。
    - 15 秒で出なければ、起こしたバンドルは制御 API から駆動できていない。駆動も承認も始めず、失敗として呼び出し側へ返す。
