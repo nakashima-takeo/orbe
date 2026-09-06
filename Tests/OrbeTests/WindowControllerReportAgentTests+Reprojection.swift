@@ -76,7 +76,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(sound.played.count, played)
     XCTAssertTrue(wc.attentionStore.rows.isEmpty)
     XCTAssertTrue(wc.statusModel.rollup.isEmpty)
-    XCTAssertTrue(wc.statusModel.glyphs.allSatisfy { $0 == nil })
+    XCTAssertTrue(wc.statusModel.strip.glyphs.allSatisfy { $0 == nil })
     XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
   }
 
@@ -98,7 +98,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertNil(tab.agentState)
     XCTAssertTrue(wc.attentionStore.rows.isEmpty)
     XCTAssertTrue(wc.statusModel.rollup.isEmpty)
-    XCTAssertTrue(wc.statusModel.glyphs.allSatisfy { $0 == nil })
+    XCTAssertTrue(wc.statusModel.strip.glyphs.allSatisfy { $0 == nil })
     XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
   }
 

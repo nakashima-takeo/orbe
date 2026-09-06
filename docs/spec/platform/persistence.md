@@ -17,6 +17,7 @@ updated: 2026-09-06
 ### 復元の挙動
 
 - 各タブは保存 cwd で新シェルを起こす（ライブプロセスは復元対象外）。非アクティブ workspace の surface は切替時に遅延起動する。
+- 復元時、同じ git worktree のタブが保存順で隣接していなければ、初出の位置へ寄せて連にする（タブ行の隣接不変条件 → [chrome](../chrome/chrome.md)）。連のキーは保存しない——保存 cwd から同じ規則で導き直す。
 - タブ 0 個（休眠）の workspace もエントリごと保存・復元する（エントリは消えない）。復元時アクティブが 0 タブでも空状態を表示し、背景の 0 タブもそのまま keep する（いずれもシェルは自動起動しない）。
 - cwd は OSC 7（`GHOSTTY_ACTION_PWD`）で報告された値を surface が保持したもの。復元は surface 生成時の working_directory 指定で起こす。
 - エージェントセッションは hook 由来の (CLI 名, session_id)（[agent/notify](../agent/notify.md)）をタブに持つ。復元直後のタブは記録を凍結したまま休眠し、resume の解決——CLI 別の resume コマンド（claude `--resume <id>`／agy `--conversation <id>`／codex `resume <id>`）＋ログインシェル PATH——は**タブ起床（materialize 開始）時**に行う。CLI 名が未対応・session_id が安全文字集合外なら素のシェルで起きる——生成コマンドへの注入を防ぐため。セッション記録そのものは休眠のあいだ保持され、resume 可否は起床まで判定しない。

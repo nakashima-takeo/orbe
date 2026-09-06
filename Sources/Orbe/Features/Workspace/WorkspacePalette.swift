@@ -10,16 +10,26 @@ import SwiftUI
 /// 描画は `PaletteOverlay`/`PaletteCard`（`AppShell` の `.overlay` が compose）。本モデルは
 /// mode/entries の意味を駆動し、行・選択・絞り込み欄・キー意図を `render`(PaletteModel) へ立て下げる。
 @Observable final class WorkspacePaletteModel {
+  /// タブ集合から導く現在値の束。構造スナップショット（`setItems`）とは別の cadence で差し替わる。
+  /// フィールドを増やすときは `==` も同時に直す（比較漏れは「変化しても描き変わらない」形で出る）。
+  struct LiveState: Equatable {
+    /// activated タブの live 状態を正準順に並べ、未消費の復元チケット数を dormant として後置したロールアップ。
+    var rollup: [(state: String, count: Int)]
+    /// このセッションで配下のタブを一度も起こしていない完全休眠 workspace。暗く出す。
+    var dormant: Bool
+
+    static func == (a: Self, b: Self) -> Bool {
+      a.dormant == b.dormant && a.rollup.elementsEqual(b.rollup, by: ==)
+    }
+  }
+
   struct Item {
     let index: Int
     let name: String
     let isActive: Bool
-    /// このセッションで配下のタブを一度も起こしていない完全休眠 workspace。暗く出す。
-    let dormant: Bool
-    /// activatedタブのlive状態と未activatedタブのdormant数を正準順で並べたロールアップ。
-    let agentRollup: [(state: String, count: Int)]
     /// この workspace のディレクトリ設定（rootPath）。詳細メニューの「ディレクトリ」編集にプリフィルする。
     let dir: String
+    var live: LiveState
   }
 
   var onSwitch: ((Int) -> Void)?
@@ -47,7 +57,7 @@ import SwiftUI
   private enum Action { case rename, setDir, close }
 
   let render = PaletteModel()
-  /// 現在の workspace 一覧（計算済み `agentRollup` を含む）。読みは公開（テストが rollup 写像を検証する）。
+  /// 現在の workspace 一覧（構造＋現在値の束）。読みは公開（テストが rollup 写像を検証する）。
   private(set) var items: [Item] = []
   private var mode: Mode = .list
   private var entries: [Entry] = []
@@ -88,6 +98,24 @@ import SwiftUI
     } else {
       setMode(.list)
     }
+  }
+
+  /// タブ集合から導く現在値だけを差し替える（構造は据え置き）。`states` は workspace 配列と同じ
+  /// offset で引く。モード・絞り込み・選択カーソル・focus には触れないので、パレット表示中の
+  /// agent 状態変化を操作の途中に割り込ませても入力が乱れない。
+  /// 一覧以外のモードでは items だけ更新する（戻るときの `setMode(.list)` が最新値から行を組む）。
+  func updateLiveStates(_ states: [LiveState]) {
+    var updated = items
+    var changed = false
+    for i in updated.indices {
+      guard states.indices.contains(updated[i].index), updated[i].live != states[updated[i].index]
+      else { continue }
+      updated[i].live = states[updated[i].index]
+      changed = true
+    }
+    guard changed else { return }  // 同値の再描画は @Observable のカード再評価を無駄に誘発する
+    items = updated
+    if case .list = mode { rebuild() }
   }
 
   /// 開いた直後、選択カーソルをアクティブ workspace 行へ載せる（提示元がパレットを開くとき
@@ -184,10 +212,10 @@ import SwiftUI
       switch entry {
       case .workspace(let it):
         return PaletteModel.RowItem(
-          label: it.name, dimmed: it.dormant,
+          label: it.name, dimmed: it.live.dormant,
           customContent: AnyView(
             WorkspaceSwitcherRow(
-              name: it.name, rollup: it.agentRollup,
+              name: it.name, rollup: it.live.rollup,
               path: (it.dir as NSString).abbreviatingWithTildeInPath)))
       case .create(let name):
         return PaletteModel.RowItem(label: localization.format(.wsCreateInline, name))
@@ -283,5 +311,19 @@ import SwiftUI
   private func beginSetDir(_ idx: Int) {
     setMode(.setDir(idx))  // focus() が常設の入力欄へ first responder を移す
     render.query = dir(of: idx)  // 現ディレクトリをプリフィルして編集させる
+  }
+}
+
+extension Workspace {
+  /// パレット行が読む現在値の束（チップ集計と行の減光）。`reloadPalette`（構造の再読込）と
+  /// live 追随の両方がここだけを読む——同じ表示を 2 通りに数える定義を作らない。
+  /// live 状態のロールアップと未消費の復元チケット（`.dormant` なタブ）数は別チップで併記し、
+  /// 行全体の減光（activated タブが 1 枚も無い現在状態）とは互いに独立した現在値として投影する。
+  func paletteLiveState() -> WorkspacePaletteModel.LiveState {
+    let dormantCount = dormantAgentCount()
+    return WorkspacePaletteModel.LiveState(
+      rollup: AgentRollup.ordered(agentCounts())
+        + (dormantCount > 0 ? [(state: "dormant", count: dormantCount)] : []),
+      dormant: !activated)
   }
 }

@@ -12,58 +12,19 @@ enum Chrome {
   static let tabRowPad: CGFloat = 3  // タブ行の内側余白（上下左右）
   static let tabHeight: CGFloat = tabRowHeight - tabRowPad * 2  // セグメント高（行 fill）
   static let tabGap: CGFloat = 2  // セグメント間
-  static let tabMaxWidth: CGFloat = 140  // セグメント 1 本の上限。超える名前は省略記号で切り詰め
-  // shrink-to-fit の下限。数文字＋省略記号が読める幅。これ以上は縮めず横スクロールへ回す。
+  static let tabMaxWidth: CGFloat = 140  // セル 1 枚の上限。超える名前は省略記号で切り詰め
+  // セル 1 枚の床。数文字＋省略記号が読める幅。短い名前でもこれを下回らず、shrink もここで止めて
+  // 以降は横スクロールへ回す。
   static let tabMinWidth: CGFloat = 40
-  // インライン改名の編集タブの下限幅（数語を打てる幅）。shrink 床（40）だと打てないため View 側で上書きする。
+  // インライン改名の編集セルの下限幅（数語を打てる幅）。shrink 床（40）だと打てないため View 側で上書きする。
   static let tabEditFloor: CGFloat = 120
-}
-
-/// shrink-to-fit の幅計算（純関数・単体テスト可能）。自然幅を maxWidth で cap し、収まればそのまま、
-/// 溢れれば CSS flex shrink と同じく**自然幅に比例して縮め、minWidth の床に達したタブは凍結して
-/// 残りへ再配分**する（min-width 0 まで潰さず床 40 を設けている。可読性のための設計判断・
-/// `docs/design/design-system.md` §9）。
-/// 全タブが床でも溢れる時だけ合計が available を超え横スクロールへ。
-enum StatusTabLayout {
-  /// 各タブへ与える幅（寸法は `Chrome` の定数を使う）。`naturals` と同じ要素数。
-  static func widths(naturals: [CGFloat], available: CGFloat) -> [CGFloat] {
-    let capped = naturals.map { min($0, Chrome.tabMaxWidth) }
-    let n = CGFloat(capped.count)
-    guard n > 0 else { return [] }
-    let gaps = Chrome.tabGap * n  // 要素は n タブ + ＋ボタンで計 n+1、その間の隙間は n 個
-    let room = available - gaps - Chrome.tabHeight  // ＋ボタンは tabHeight 角
-    if capped.reduce(0, +) <= room { return capped }
-
-    var result = capped
-    var frozen = [Bool](repeating: false, count: capped.count)
-    while true {
-      let flexTotal = zip(capped, frozen).filter { !$0.1 }.map(\.0).reduce(0, +)
-      let frozenTotal = zip(result, frozen).filter { $0.1 }.map(\.0).reduce(0, +)
-      let target = room - frozenTotal
-      guard flexTotal > 0 else { break }
-      let scale = target / flexTotal
-      var changed = false
-      for i in result.indices where !frozen[i] {
-        let w = capped[i] * scale
-        if w < Chrome.tabMinWidth {
-          result[i] = Chrome.tabMinWidth
-          frozen[i] = true
-          changed = true
-        } else {
-          result[i] = w
-        }
-      }
-      if !changed { break }
-    }
-    return result
-  }
 }
 
 /// 最上段 chrome をネイティブ SwiftUI で描く（TopBar＋TabBar・§5.1）。
 /// 上段=現在地（workspace 名・build-id・cwd、左）とステータスストリップ（右端）、テキストは信号機の
 /// 縦中央へ整列・背景は透明（最背面の BackgroundGlow が見える）。下段=全幅セグメント形タブ行
-/// （地 tabRowBg・DSTab・shrink＋横スクロール・＋ボタン）。罫線は持たない（tabRowBg の濃度差が境界）。
-/// 背景に窓ドラッグ（タブ/ボタンのクリックは奪わない）。
+/// （地 tabRowBg・同 worktree のタブを連ねた DSTabSegment・shrink＋横スクロール・＋ボタン）。
+/// 罫線は持たない（tabRowBg の濃度差が境界）。背景に窓ドラッグ（タブ/ボタンのクリックは奪わない）。
 struct StatusRowView: View {
   @Bindable var model: StatusRowModel
   @Environment(\.chromeTranslucency) private var translucency
@@ -76,13 +37,9 @@ struct StatusRowView: View {
   /// 並び替えジェスチャは `StatusRowView+Reorder.swift`。
   let dragActivation: CGFloat = 6
 
-  // ドラッグ並び替えの一時状態（掴み中のみ有効・onEnded でリセット）。commit-on-drop のためデータは触らない。
-  @State var dragFrom: Int?  // 掴んでいるタブの実配列 index
-  @State var dragTranslation: CGFloat = 0  // 掴み開始からの水平移動量
-  @State var dropIndex: Int?  // 挿入先 index（0…count）
-  // 掴み開始時のタブ幅を固定する（挿入先/キャレット計算の基準）。掴み中にグリフ出現等で live な幅が動いても
-  // 基準がぶれず、確定ドロップが 1 個分ずれない。commit-on-drop のレイアウト凍結と整合。
-  @State var dragWidths: [CGFloat] = []
+  // ドラッグ並び替えの掴み状態（遷移は `DragState` に閉じる）。commit-on-drop のためデータは触らない。
+  @State var dragState = DragState()
+  private var drag: DragSession? { dragState.session }
 
   var body: some View {
     ZStack(alignment: .topLeading) {
@@ -160,44 +117,37 @@ struct StatusRowView: View {
       .background(Color.theme.tabRowBg, ignoresSafeAreaEdges: [])
   }
 
+  /// セル・セグメント構造・幅はすべて 1 回の body 評価で読んだ `strip` から出す。入れ子 ForEach の
+  /// 子は捕捉した値だけを辿り、model の配列を index で引かない（集合と構造が別々に更新される窓を持たない）。
   private var tabStrip: some View {
     GeometryReader { geo in
-      let widths = tabWidths(available: geo.size.width)
+      let strip = model.strip
+      let widths = tabWidths(strip, available: geo.size.width)
       ScrollViewReader { proxy in
         ScrollView(.horizontal, showsIndicators: false) {
           HStack(spacing: Chrome.tabGap) {
-            ForEach(model.titles.indices, id: \.self) { i in
-              let isEditing = model.editingIndex == i
-              // メニューが開いている間にタブ集合が変わっても、右クリックした時点のタブを指し続ける。
-              let tabId = tabId(i)
-              DSTab(
-                title: displayTitle(i), active: i == model.active, stateGlyph: stateGlyph(i),
-                stateSymbol: stateGlyph(i).flatMap { iconResolver.symbol(for: $0) },
-                action: { model.onSelect(i) },
-                onMiddleClick: { model.onCloseTab(i) },
-                editing: isEditing,
-                editingText: $model.editingText,
-                editFocusToken: model.editFocusToken,
-                editPlaceholder: model.editingPlaceholder,
-                onSubmit: { model.onCommitRename(model.editingText) },
-                onCancel: { model.onCancelRename() }
-              )
-              .contextMenu {
-                Button(l10n.string(.tabMenuResetAgentState)) {
-                  if let tabId { model.onResetAgentState(tabId) }
+            ForEach(strip.segments.indices, id: \.self) { s in
+              let segment = strip.segments[s]
+              let grabbed = drag.flatMap { $0.source == .segment(s) ? $0 : nil }
+              DSTabSegment {
+                if segment.bar {
+                  DSSegmentBar(color: Color.theme.worktreeBar[segment.colorIndex])
+                    .gesture(dragGesture(.segment(s), widths: widths, segments: strip.ranges))
                 }
-                .disabled(stateGlyph(i) == nil || tabId == nil)
+                ForEach(segment.cells) { cell in
+                  // 2 枚以上の連ではセルを掴む。単独タブはセルがセグメントそのもの（境界へ落とす）。
+                  tabCell(cell, divided: segment.bar, width: widths[cell.index])
+                    .gesture(
+                      dragGesture(
+                        segment.bar ? .tab(cell.index) : .segment(s), widths: widths,
+                        segments: strip.ranges),
+                      including: model.editingIndex == cell.index ? .subviews : .all)
+                }
               }
-              .frame(width: widths.indices.contains(i) ? widths[i] : nil)
-              // 掴んだタブは指に追従（slot は残す＝commit-on-drop）・前面へ・わずかに透かして浮きを示す。
-              .offset(x: dragFrom == i ? dragTranslation : 0)
-              .zIndex(dragFrom == i ? 1 : 0)
-              .opacity(dragFrom == i ? 0.85 : 1)
-              // 編集タブには drag を付けない（.subviews で TextField 操作は通し、掴み替えだけ止める）。
-              .gesture(
-                tabDragGesture(i: i, widths: widths), including: isEditing ? .subviews : .all
-              )
-              .id(i)
+              // 掴んだセグメントは指に追従（slot は残す＝commit-on-drop）・前面へ・わずかに透かして浮きを示す。
+              .offset(x: grabbed?.translation ?? 0)
+              .zIndex(grabbed == nil ? 0 : 1)
+              .opacity(grabbed == nil ? 1 : 0.85)
             }
             StatusPlusButton(action: model.onNewTab)
           }
@@ -205,11 +155,11 @@ struct StatusRowView: View {
           .frame(height: Chrome.tabHeight)
           // 挿入キャレット（離せばここに入る）。隣接タブはずらさない。
           .overlay(alignment: .leading) {
-            if let j = dropIndex {
+            if let drag {
               Rectangle()
                 .fill(Color.theme.accentPrimary)
                 .frame(width: 2, height: Chrome.tabHeight)
-                .offset(x: insertionCaretX(j, widths: dragWidths))
+                .offset(x: Self.insertionCaretX(drag))
                 .allowsHitTesting(false)
             }
           }
@@ -219,20 +169,49 @@ struct StatusRowView: View {
         .onChange(of: model.editingIndex) { _, new in
           if let n = new { proxy.scrollTo(n, anchor: .center) }
         }
-        .onChange(of: model.titles.count) { _, _ in
-          // 掴み中にタブ集合が変わったら（shell exit 等）掴み状態を破棄する。index が総崩れするため
-          // 継続は不正、かつ onEnded は発火しないので、ここで解除しないと浮いたまま復帰しない。
-          if dragFrom != nil {
-            dragFrom = nil
-            dragTranslation = 0
-            dropIndex = nil
-            dragWidths = []
-          }
+        .onChange(of: model.strip.dragStructure) { _, _ in
+          // 掴み中にタブ集合・順序・連構造が変わったら（shell exit・cd 再判定等）掴み状態を破棄する。
+          // 凍結した幾何が実体とずれ、掴んでいた View は構造ごと消えて onEnded が来ない。
+          dragState.discard()
           proxy.scrollTo(model.active, anchor: .center)
         }
       }
     }
     .frame(maxWidth: .infinity, maxHeight: Chrome.tabHeight)
+  }
+
+  /// セル 1 枚（DSTab）に app 層の配線（選択・中クリック・改名・コンテキストメニュー・掴み中の追従）を付ける。
+  private func tabCell(_ cell: TabStrip.Cell, divided: Bool, width: CGFloat) -> some View {
+    let i = cell.index
+    // メニューが開いている間にタブ集合が変わっても、右クリックした時点のタブを指し続ける。
+    let tabId = cell.tabId
+    let isEditing = model.editingIndex == i
+    let grabbed = drag.flatMap { $0.source == .tab(i) ? $0 : nil }
+    return DSTab(
+      title: displayTitle(cell), active: i == model.active, stateGlyph: cell.glyph,
+      stateSymbol: cell.glyph.flatMap { iconResolver.symbol(for: $0) },
+      action: { model.onSelect(i) },
+      onMiddleClick: { model.onCloseTab(i) },
+      divided: divided,
+      editing: isEditing,
+      editingText: $model.editingText,
+      editFocusToken: model.editFocusToken,
+      editPlaceholder: model.editingPlaceholder,
+      onSubmit: { model.onCommitRename(model.editingText) },
+      onCancel: { model.onCancelRename() }
+    )
+    .contextMenu {
+      Button(l10n.string(.tabMenuResetAgentState)) {
+        if let tabId { model.onResetAgentState(tabId) }
+      }
+      .disabled(cell.glyph == nil || tabId == nil)
+    }
+    .frame(width: width)
+    // 掴んだセルは指に追従（セグメントの中に収める）・前面へ・わずかに透かして浮きを示す。
+    .offset(x: grabbed.map(Self.cellOffset) ?? 0)
+    .zIndex(grabbed == nil ? 0 : 1)
+    .opacity(grabbed == nil ? 1 : 0.85)
+    .id(i)  // scrollTo(active) は平坦 index
   }
 }
 

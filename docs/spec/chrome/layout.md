@@ -42,7 +42,7 @@ chrome キー（`WindowCommand`）は「タブが無くても効くか」の網�
 - Cmd+T 新タブ / Cmd+Shift+T 閉じたエージェント パレット（後述）/ Cmd+Shift+[ ] および Cmd+Shift+←→ タブ切替 / Cmd+W タブを閉じる（アクティブ workspace の最後のタブを閉じても 0 タブの空状態でアクティブに残る。ウィンドウは閉じない → [workspace](../platform/workspace.md)）/ Cmd+Shift+A エージェント起動パレット・Cmd+Shift+C デフォルトエージェント起動（→ [agent/launch](../agent/launch.md)）/ Cmd+Shift+S workspace パレット（→ [workspace パレット](../palette/workspace.md)）/ Cmd+, 設定パレット（→ [settings](../palette/settings.md)）/ Cmd+F スクロールバック検索（→ [search](../terminal/search.md)）/ Cmd+R タブリネーム（→ [chrome](chrome.md)）/ Cmd+↑↓ スクロールバック先頭/末尾ジャンプ（→ [terminal/core](../terminal/core.md)）/ Cmd+Shift+E アクティブタブの cwd を GUI エディタで開く / ⌘⌘（Cmd 素タップ×2）Attention パレット（→ [attention](../palette/attention.md)。前面時。背面時はメニューバーのドロップダウン → [menubar](menubar.md)）。
 - フォント動的ズーム Cmd +/-/0（ghostty binding action）。
 
-**Cmd+Shift+T は「閉じたエージェント」パレットを開く**（→ [closed-agents](../palette/closed-agents.md)）。この workspace で閉じたまま戻っていないエージェントセッションを[寿命ログ](../platform/session-log.md)から一覧し、Enter で 1 件を末尾に休眠チケットとして戻して起こす。閉じ方（人のジェスチャ・プロセス終了・制御 API・エージェント自身の終了）を問わず、アプリの再起動をまたいで戻せる。素のシェルタブは対象外——戻してもプロセスもスクロールバックも戻らず、resume を持つ CLI だけが中身ごと戻るため。戻るのは cwd と同一性だけで、明示タイトルは付かず、位置は末尾（→ [persistence](../platform/persistence.md)）。0 タブの workspace でも開く。
+**Cmd+Shift+T は「閉じたエージェント」パレットを開く**（→ [closed-agents](../palette/closed-agents.md)）。この workspace で閉じたまま戻っていないエージェントセッションを[寿命ログ](../platform/session-log.md)から一覧し、Enter で 1 件を末尾に休眠チケットとして戻して起こす。閉じ方（人のジェスチャ・プロセス終了・制御 API・エージェント自身の終了）を問わず、アプリの再起動をまたいで戻せる。素のシェルタブは対象外——戻してもプロセスもスクロールバックも戻らず、resume を持つ CLI だけが中身ごと戻るため。戻るのは cwd と同一性だけで、明示タイトルは付かず、位置は新規タブと同じ規則——同じ worktree の連が残っていればその右端、無ければ末尾（→ [persistence](../platform/persistence.md)・[chrome](chrome.md) の連）。0 タブの workspace でも開く。
 
 ## cwd の確定
 

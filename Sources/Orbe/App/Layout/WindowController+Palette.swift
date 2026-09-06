@@ -218,19 +218,11 @@ extension WindowController {
   }
 
   func reloadPalette() {
-    let items = workspaces.enumerated().map { entry -> WorkspacePaletteModel.Item in
-      let ws = entry.element
-      let dormant = !ws.activated
-      // live状態のロールアップと、未消費の復元チケット（`.dormant` なタブ）数は別チップで
-      // 併記する。行全体の減光（activatedタブが無い現在状態）と dormant チップ（未消費チケット数）は
-      // 互いに独立した現在値として投影する。
-      let dormantCount = ws.dormantAgentCount()
-      let rollup =
-        AgentRollup.ordered(ws.agentCounts())
-        + (dormantCount > 0 ? [(state: "dormant", count: dormantCount)] : [])
-      return WorkspacePaletteModel.Item(
-        index: entry.offset, name: ws.name, isActive: entry.offset == activeWorkspace,
-        dormant: dormant, agentRollup: rollup, dir: ws.rootPath)
+    let items = workspaces.enumerated().map { entry in
+      WorkspacePaletteModel.Item(
+        index: entry.offset, name: entry.element.name,
+        isActive: entry.offset == activeWorkspace, dir: entry.element.rootPath,
+        live: entry.element.paletteLiveState())
     }
     // 起源 workspace（配列先頭 offset 0＝起動時の default WS）を MRU より優先して常に最上位へ固定する
     // （改名しても最上位。第一キー）。残りは最近使った順（MRU）: lastUsedAt 降順、同時刻・未設定
@@ -248,6 +240,14 @@ extension WindowController {
     // field editor の teardown（次 tick）が first responder を奪う。overlay 遷移と同じく次 tick で
     // focus を再確定して teardown に勝つ（定石の適用漏れを塞ぐ）。
     if model.overlay == .workspacePalette { reconfirmFocusNextTick() }
+  }
+
+  /// パレット表示中の行チップ（状態集計・行の減光）を実状態へ追随させる。構造（名前・並び・アクティブ印）は
+  /// 触らないので、絞り込み・選択カーソル・focus・詳細メニューへ潜っている状態は一切動かない。
+  /// chrome ストリップと同じ coalesce 点（`flushChrome`）から流れる。
+  func refreshWorkspacePaletteLiveStates() {
+    guard model.overlay == .workspacePalette else { return }
+    model.workspacePalette?.updateLiveStates(workspaces.map { $0.paletteLiveState() })
   }
 
   /// Cmd+H。ヘルプオーバーレイ（ショートカットチートシート）を開く。閉じ側（トグル・esc・scrim）は

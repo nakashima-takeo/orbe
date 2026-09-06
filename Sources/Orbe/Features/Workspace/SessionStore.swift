@@ -36,6 +36,10 @@ struct TabRef {
 /// ドメイン/セッション状態（`workspaces` と `activeWorkspace`）の唯一の所有者。
 /// 配列の CRUD・active index 補正・MRU 退避先選定・workspace の index 演算といった純ドメイン
 /// ロジックだけを持ち、ビューの mount/reparent や chrome 投影は WindowController に残す。
+///
+/// タブ配列の不変条件「同じ `groupKey` のタブは配列上で必ず隣接する」の唯一の保証者。変異点
+/// （挿入・cd 再判定・並び替え・セグメント移動・load の正規化）がすべてこれを守り、
+/// 「セグメント」はドメイン型ではなく `segments(of:)` が配列から導く連。
 /// Foundation のみに依存する（同モジュール型 `Workspace`/`TerminalTab` の名前参照は
 /// フレームワーク import を要さない）。
 final class SessionStore {
@@ -49,7 +53,15 @@ final class SessionStore {
   }
 
   /// 復元/初期化で組み立て済みの配列一式を差し替える（WindowController.init が wire 後に渡す）。
+  /// 隣接不変条件の入口——各 workspace のタブを `grouped` で正規化し、active は同一性で引き直す。
   func load(workspaces: [Workspace], activeWorkspace: Int) {
+    for ws in workspaces {
+      let activeTab = ws.tabs.indices.contains(ws.active) ? ws.tabs[ws.active] : nil
+      ws.tabs = Self.grouped(ws.tabs)
+      if let activeTab, let idx = ws.tabs.firstIndex(where: { $0 === activeTab }) {
+        ws.active = idx
+      }
+    }
     self.workspaces = workspaces
     self.activeWorkspace = activeWorkspace
   }
@@ -137,13 +149,45 @@ final class SessionStore {
 
   // MARK: - タブ CRUD（domain）
 
-  /// アクティブ workspace 内でタブを `from` から `to`（挿入先 index・0…count）へ移動する。範囲外・
+  /// 新規タブ。指定 workspace の同キー連の右端（無ければ末尾）へ挿し、実挿入 index を返す。
+  /// アクティブ workspace では active を触らず同じタブを指し続けさせる（呼び出し側が直後に select で
+  /// mount する）。背景 workspace では active を挿したタブへ。workspace index の妥当性は呼び出し側が保証する。
+  func insertTab(_ tab: TerminalTab, intoWorkspaceAt i: Int) -> Int {
+    let ws = workspaces[i]
+    let dest = insertKeepingSelection(tab, intoWorkspaceAt: i)
+    if i != activeWorkspace { ws.active = dest }
+    return dest
+  }
+
+  /// 復元した休眠チケットを、指定 workspace の同キー連の右端（無ければ末尾）へ挿し、実挿入 index を返す。
+  /// `active` は挿す前と同じタブを指し続ける——復元は「見せる先を変えない」ので、背景 workspace で
+  /// active を挿したタブへ動かす `insertTab` を継がない（0 タブだった workspace は `active == 0` のままで
+  /// 新タブがそれになる）。workspace index の妥当性は呼び出し側が保証する。
+  func insertRestoredTab(_ tab: TerminalTab, intoWorkspaceAt i: Int) -> Int {
+    insertKeepingSelection(tab, intoWorkspaceAt: i)
+  }
+
+  /// 挿入の実体。同キー連の右端へ挿し、挿入位置が現 active 以前なら active を 1 つ繰り下げて
+  /// 挿入前と同じタブを指し続けさせる（0タブへの挿入は count−1 へのクランプで吸収）。
+  private func insertKeepingSelection(_ tab: TerminalTab, intoWorkspaceAt i: Int) -> Int {
+    let ws = workspaces[i]
+    let dest = Self.insertionIndex(forKey: tab.groupKey, in: ws.tabs)
+    ws.tabs.insert(tab, at: dest)
+    if dest <= ws.active { ws.active += 1 }
+    ws.active = min(ws.active, ws.tabs.count - 1)
+    return dest
+  }
+
+  /// アクティブ workspace 内でタブを `from` から `to`（挿入先 index・0…count・挿入前基準）へ移動する。
+  /// 挿入先は from の連の中（連の右端への挿入 = upperBound を含む）に限り、連の外・範囲外・
   /// 実移動なし（同位置）は false。アクティブだった `TerminalTab` の参照を控え、並べ替え後の
   /// index を引き直して `active` を補正する（from/to の前後で場合分けするより堅牢）。ビュー副作用は
   /// 持たない（全タブは mount 済みのまま・可視/非可視も不変）＝呼び出し側が chrome 再投影と保存を担う。
   @discardableResult func moveTab(from: Int, to: Int) -> Bool {
     let tabs = current.tabs
     guard tabs.indices.contains(from), (0...tabs.count).contains(to) else { return false }
+    let r = Self.segment(containing: from, in: tabs)
+    guard (r.lowerBound...r.upperBound).contains(to) else { return false }
     // `to` は挿入前 index 基準。from を抜いた後の実挿入先が from と同じなら実移動なし。
     let dest = to > from ? to - 1 : to
     guard dest != from else { return false }
@@ -155,22 +199,6 @@ final class SessionStore {
       ws.active = idx
     }
     return true
-  }
-
-  /// 指定 workspace の末尾へタブを足す（control spawn 用）。背景 workspace のときは active も末尾へ。
-  /// アクティブ workspace のときは active を触らない（呼び出し側が select で mount する）。index の
-  /// 妥当性は呼び出し側が保証する。
-  func appendTab(_ tab: TerminalTab, toWorkspaceAt i: Int) {
-    let ws = workspaces[i]
-    ws.tabs.append(tab)
-    if i != activeWorkspace { ws.active = ws.tabs.count - 1 }
-  }
-
-  /// 復元した休眠チケットを指定 workspace の末尾へ足す。`active` は動かさない——復元は「見せる先を
-  /// 変えない」ので、背景 WS で active を末尾へ動かす `appendTab` を継がない（0 タブだった WS は
-  /// `active == 0` のままで新タブがそれになる）。index の妥当性は呼び出し側が保証する。
-  func appendRestoredTab(_ tab: TerminalTab, toWorkspaceAt i: Int) {
-    workspaces[i].tabs.append(tab)
   }
 
   /// タブが store から外れることを、配列から外す**前**にタブへ告げる唯一の口。同一性が残っていれば
@@ -188,7 +216,9 @@ final class SessionStore {
     case backgroundChanged
   }
 
-  /// タブを配列から外し active を補正して分岐を返す。アクティブ workspace が空（0タブ）化したときは
+  /// タブを配列から外し active を補正して分岐を返す。閉じたタブがアクティブなら右隣が新 active になる
+  /// （index 据え置き・末尾は左へクランプ）が、2 枚以上の連の右端だったときだけ同じ連の左隣を優先する
+  /// （フォーカスは連の中に留める）。アクティブ workspace が空（0タブ）化したときは
   /// エントリをその場に残したまま `.emptiedActive` を返す（退避せず空でアクティブ維持）。空化時の
   /// `ws.active` は `max(0, min(0, -1)) = 0` に補正され、再アクティブ化で index 0 を選べる状態になる。
   /// 配列から外す前に同一性の終わりをタブへ告げる（`detach`）。
@@ -200,8 +230,13 @@ final class SessionStore {
     guard let idx = ws.tabs.firstIndex(where: { $0 === tab }) else { return .notFound }
 
     detach(tab, origin: origin)
+    let r = Self.segment(containing: idx, in: ws.tabs)
     ws.tabs.remove(at: idx)
-    if idx < ws.active { ws.active -= 1 }
+    if idx < ws.active {
+      ws.active -= 1
+    } else if idx == ws.active, idx == r.upperBound - 1, r.lowerBound < idx {
+      ws.active = idx - 1  // 連の右端を閉じた＝左隣は同じ連
+    }
     ws.active = max(0, min(ws.active, ws.tabs.count - 1))  // 0タブ時は 0
 
     guard wsIndex == activeWorkspace else { return .backgroundChanged }

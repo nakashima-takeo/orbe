@@ -32,16 +32,17 @@ extension WindowController {
       rootPath: current.rootPath)
   }
 
-  /// 選んだ 1 件を休眠チケットとしてアクティブ workspace の末尾に足し、パレットを閉じてそのタブを
-  /// 選択して起こす。1 度に戻すのは 1 件——多数を戻すのは orb / MCP の `restore_sessions` の役割。
+  /// 選んだ 1 件を休眠チケットとしてアクティブ workspace に足し（同じ worktree の連の右端、無ければ末尾）、
+  /// パレットを閉じてそのタブを選択して起こす。1 度に戻すのは 1 件——多数を戻すのは orb / MCP の
+  /// `restore_sessions` の役割。
   private func restoreClosedAgent(_ item: ClosedAgentItem) {
-    restoreDormantTab(
+    let restored = restoreDormantTab(
       TabState(
         cwd: item.cwd,
         agent: AgentSession(command: item.command, sessionId: item.sessionId),
         explicitTitle: nil),
       intoWorkspaceAt: activeWorkspace)
-    select(current.tabs.count - 1)
+    select(restored.tabIndex)
     dismissPalette()  // dismiss の focusActiveTab が新しい active＝復元したタブへ当たる
   }
 }

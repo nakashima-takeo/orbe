@@ -59,18 +59,18 @@ final class SessionStoreDetachTests: OrbeTestCase {
     XCTAssertFalse(told, "最後の 1 つは消えないので告げない")
   }
 
-  func testAppendRestoredTabKeepsActiveAndInsertWorkspaceKeepsActiveWorkspace() {
+  func testInsertRestoredTabKeepsSelectionAndAppendWorkspaceKeepsActiveWorkspace() {
     let ws = Workspace(name: "w", rootPath: "/tmp")
     ws.tabs = [TerminalTab(cwd: "/tmp"), TerminalTab(cwd: "/tmp")]
     ws.active = 0
     let store = SessionStore(
       workspaces: [ws, Workspace(name: "bg", rootPath: "/tmp")], activeWorkspace: 0)
 
-    store.appendRestoredTab(TerminalTab(cwd: "/tmp"), toWorkspaceAt: 1)
-    XCTAssertEqual(store.workspaces[1].active, 0, "背景 WS でも active を動かさない")
-    store.appendRestoredTab(TerminalTab(cwd: "/tmp"), toWorkspaceAt: 0)
-    XCTAssertEqual(ws.active, 0)
-    XCTAssertEqual(ws.tabs.count, 3, "末尾に足す")
+    XCTAssertEqual(store.insertRestoredTab(TerminalTab(cwd: "/tmp"), intoWorkspaceAt: 1), 0)
+    XCTAssertEqual(store.workspaces[1].active, 0, "0 タブの背景 WS は新タブが active になる")
+    XCTAssertEqual(store.insertRestoredTab(TerminalTab(cwd: "/tmp"), intoWorkspaceAt: 0), 2)
+    XCTAssertEqual(ws.active, 0, "アクティブ WS でも選択は動かさない")
+    XCTAssertEqual(ws.tabs.count, 3, "同キーの連の右端＝末尾に足す")
 
     let index = store.appendWorkspace(name: "new", rootPath: "~/x")
     XCTAssertEqual(index, 2)

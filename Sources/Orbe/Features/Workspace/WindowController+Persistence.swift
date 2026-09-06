@@ -11,7 +11,7 @@ extension WindowController {
       let ws = Workspace(name: state.name, rootPath: state.rootPath)
       ws.lastUsedAt = state.lastUsedAt  // MRU 並べ替えキーを読み戻す（旧データは nil）
       ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
-      for tab in state.tabs { ws.tabs.append(makeTab(from: tab)) }
+      for tab in state.tabs { ws.tabs.append(makeTab(from: tab)) }  // 隣接の正規化は下の store.load
       // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）は空表示
       // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。
       ws.active = ws.tabs.isEmpty ? 0 : min(max(0, state.activeTab), ws.tabs.count - 1)
@@ -32,16 +32,17 @@ extension WindowController {
     return wire(TerminalTab(restoring: state, resumeSpawn: resume))
   }
 
-  /// 休眠チケット 1 枚を workspace の末尾に足す。`restore_sessions` と ⇧⌘T が共有する復元単位。
+  /// 休眠チケット 1 枚を workspace へ足す。`restore_sessions` と ⇧⌘T が共有する復元単位。
   /// 起動時復元と `makeTab` を共有するが、閉じたセッションの復元が持ち込むのは cwd と同一性だけ
-  /// （明示タイトルは付かず、位置は末尾）。選択・mount はしない（起床は既存の mount 規律に従う）。
+  /// （明示タイトルは付かない）。位置は新規タブと同じ規則——同じ worktree の連の右端、無ければ末尾。
+  /// 選択・mount はしない（起床は既存の mount 規律に従う）。
   @discardableResult
-  func restoreDormantTab(_ state: TabState, intoWorkspaceAt index: Int) -> TerminalTab {
+  func restoreDormantTab(_ state: TabState, intoWorkspaceAt index: Int) -> TabRef {
     let tab = makeTab(from: state)
-    store.appendRestoredTab(tab, toWorkspaceAt: index)
+    let tabIndex = store.insertRestoredTab(tab, intoWorkspaceAt: index)
     refreshChrome()
     scheduleSave()
-    return tab
+    return TabRef(workspaceIndex: index, tabIndex: tabIndex, tab: tab)
   }
 
   // ユーザーのリサイズ確定で意図サイズを記憶し、保存を予約する（高頻度なドラッグはデバウンスでまとまる）。

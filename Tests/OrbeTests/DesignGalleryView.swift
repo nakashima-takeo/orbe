@@ -15,26 +15,44 @@ struct GalleryView: View {
         Button("キャンセル") {}.buttonStyle(DSSecondaryButtonStyle()).disabled(true)
       }
 
-      label("DSTab — active / default")
-      HStack(spacing: 0) {
-        DSTab(title: "claude", active: true, stateGlyph: .working)
-        DSTab(title: "build", stateGlyph: .waiting)
-        DSTab(title: "agy")
+      label("DSTab — single: active / default")
+      HStack(spacing: Chrome.tabGap) {
+        DSTabSegment { DSTab(title: "claude", active: true, stateGlyph: .working) }
+        DSTabSegment { DSTab(title: "build", stateGlyph: .waiting) }
+        DSTabSegment { DSTab(title: "agy") }
       }
-      .padding(Theme.Space.tick)
-      .background(Color.theme.bgSunken)
-      .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+      .padding(Chrome.tabRowPad)
+      .frame(height: Chrome.tabRowHeight)
+      .background(Color.theme.tabRowBg)
+      .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.xs))
+
+      label("DSTabSegment — grouped (worktree bar + divided cells, selected inside)")
+      HStack(spacing: Chrome.tabGap) {
+        DSTabSegment {
+          DSSegmentBar(color: Color.theme.worktreeBar[WorktreeColor.index(forKey: "storefront")])
+          DSTab(title: "s/s/checkout", stateGlyph: .working, divided: true)
+          DSTab(title: "s/api", active: true, stateGlyph: .waiting, divided: true)
+          DSTab(title: "storefront", divided: true)
+        }
+        DSTabSegment { DSTab(title: "~/notes") }
+      }
+      .padding(Chrome.tabRowPad)
+      .frame(height: Chrome.tabRowHeight)
+      .background(Color.theme.tabRowBg)
+      .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.xs))
 
       label("DSTab — editing (Cmd+R inline rename)")
       // 実 TabBar を再現（地 tab.rowBg・padding 3・gap 2・＋ボタン）。編集タブは下限 tabEditFloor 幅。
       HStack(spacing: Chrome.tabGap) {
-        DSTab(
-          title: "feature/editor", active: false, stateGlyph: .working,
-          editing: true, editingText: .constant("feature/editor")
-        )
-        .frame(width: Chrome.tabEditFloor)
-        DSTab(title: "build", stateGlyph: .waiting)
-        DSTab(title: "agy")
+        DSTabSegment {
+          DSTab(
+            title: "feature/editor", active: false, stateGlyph: .working,
+            editing: true, editingText: .constant("feature/editor")
+          )
+          .frame(width: Chrome.tabEditFloor)
+        }
+        DSTabSegment { DSTab(title: "build", stateGlyph: .waiting) }
+        DSTabSegment { DSTab(title: "agy") }
       }
       .padding(Chrome.tabRowPad)
       .frame(height: Chrome.tabRowHeight)
@@ -43,12 +61,14 @@ struct GalleryView: View {
 
       label("DSTab — editing empty (派生名 placeholder)")
       HStack(spacing: Chrome.tabGap) {
-        DSTab(
-          title: "", active: false, stateGlyph: .working,
-          editing: true, editingText: .constant(""), editPlaceholder: "src · main"
-        )
-        .frame(width: Chrome.tabEditFloor)
-        DSTab(title: "build", stateGlyph: .waiting)
+        DSTabSegment {
+          DSTab(
+            title: "", active: false, stateGlyph: .working,
+            editing: true, editingText: .constant(""), editPlaceholder: "src · main"
+          )
+          .frame(width: Chrome.tabEditFloor)
+        }
+        DSTabSegment { DSTab(title: "build", stateGlyph: .waiting) }
       }
       .padding(Chrome.tabRowPad)
       .frame(height: Chrome.tabRowHeight)

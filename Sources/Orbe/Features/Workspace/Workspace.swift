@@ -8,6 +8,9 @@ final class Workspace {
   let id = IdGen.next()
   var name: String
   var rootPath: String
+  /// 並びは「同じ `groupKey` のタブは配列上で必ず隣接する」不変条件を持ち、保証者は `SessionStore` だけ
+  /// ——変異は SessionStore 経由（復元の組み立てだけは直接 append し、直後の `SessionStore.load` の
+  /// 正規化を必ず通す）。
   var tabs: [TerminalTab] = []
   var active = 0
   /// 配下に materialize 開始済みのタブが 1 枚以上あるか。
