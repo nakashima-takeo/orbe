@@ -7,7 +7,7 @@ updated: 2026-08-21
 # Orbe デザインシステム
 
 > ステータス: v0.4.0 · 2026-07-11
-> 値の正（SSOT）: chrome/semantic は `Sources/Orbe/DesignSystem/DesignTokens.swift`（機械可読ミラー `docs/design/tokens.json`）／ 識別色（端末 ANSI 16 色・chrome 共有アンカー）は `Sources/Orbe/DesignSystem/OrbePalette.swift`（端末 conf を生成し、chrome アンカーへ定数を供給）。
+> 値の正（SSOT）: chrome/semantic は `Sources/Orbe/DesignSystem/DesignTokens.swift`（機械可読ミラー `docs/design/tokens.json`）／ 識別色（端末 ANSI 16 色・chrome 共有アンカー）は `Sources/Orbe/DesignSystem/OrbePalette.swift`（端末 conf を生成し、chrome アンカーへ定数を供給）／ worktree 識別色 48 色（24 色相 × 2 トーン）は `Sources/Orbe/DesignSystem/WorktreePalette.swift`（`scripts/gen-worktree-palette.py` が oklch から生成・手で編集しない）。
 > ガラス質感・elevation・glow は `Sources/Orbe/DesignSystem/DesignTokens+Glass.swift` が所有（本書は再定義しない）。
 > 本書は思想・契約を記す自由記述ドキュメントで、**思想・契約の正は本書、値の正は上記 Swift**。Orbe の外観の**正**はこのリポジトリの中で閉じている。ただしコード中の一部コメントは、値が決まった経緯の記録として設計見本（リポジトリ外）を引用する——それは出所の記録であって、正ではない。
 
@@ -174,8 +174,9 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 
 本書は color と意味の契約＋主要寸法に留める（実装の画素は各コンポーネントが持つ）。
 
-- **選択の示し方**: リスト行の選択は **tint 背景**（`selectionFill`）。タブの選択のみ**前景色反転**（§5.1）。左 3px バーは**どこでも使わない**（Completion も例外にしない）。下線・太字による選択弁別も持たない。
-- **Tab（セグメント）**: タブ行（高さ28・padding 3・gap 2・地 `tab.rowBg`）の中のセグメント。radius 3・padding 横8・max幅 140・末尾省略。非選択＝地 `tab.segBg`・文字 `text.secondary`（idle/dormant/なしも同じ）・状態グリフ 9px（working は stroke 1.6。idle は非表示）。**選択＝地 `text.primary`（前景色反転）・文字 `tab.activeText`・グリフ＝`state.*Inverse`（対テーマ状態色）**、done の check 線のみ `text.primary`。タブ背景を状態色で塗らない。
+- **選択の示し方**: リスト行の選択は **tint 背景**（`selectionFill`）。タブの選択のみ**前景色反転**（§5.1）。**選択を左 3px バーで示すことはどこでもしない**（Completion も例外にしない）。下線・太字による選択弁別も持たない（タブ行の左 3px バーは選択ではなく worktree の識別色で、意味が別）。
+- **Tab（セグメント）**: タブ行（高さ28・padding 3・gap 2・地 `tab.rowBg`）の中の器。地 `tab.segBg`・radius 3・クリップ。同じ worktree のタブが 2 枚以上なら左端に識別色バー 3px（縦いっぱい）が立ち、各セルの左に hairline `surface.1` の区切り線が入る。1 枚なら器＝単独タブでバーも区切り線も持たない。
+- **Tab のセル**: padding 横8・グリフとタイトルの間 6・幅は床40〜上限140（超える名前は末尾省略）。非選択＝地なし（器の `tab.segBg` が透ける）・文字 `text.secondary`（idle/dormant/なしも同じ）・状態グリフ 12px（working は stroke 1.6。idle は非表示）。**選択＝地 `text.primary`（前景色反転）・文字 `tab.activeText`・グリフ＝`state.*Inverse`（対テーマ状態色）**、done の check 線のみ `text.primary`。タブ背景を状態色で塗らない。
 - **Palette row**: default＝`text.secondary`（workspace 行の名前＝最優先状態の色）。hover＝`hoverFill`＋`text.primary`。selected＝`selectionFill` 地。dormant＝`Opacity.dormant`。情報行＝`text.muted`・選択不可。そのうち直前の操作が失敗した理由を述べる行だけ `danger`（§3）——中立な補足と同じ弱さで出さない。行= padding 5×10・radius 8。workspace 行の右詰め＝状態別カウントピル（padding 1×7・radius pill・地 tint .12・文字 状態色・グリフ 9px）。
 - **Button**: primary（主 CTA）＝塗り `accent.primary`・文字 `on.accent`・radius `md`。secondary＝塗りなし・文字 `accent.primary`・枠 1px `surface.1`・hover で `hoverFill`。disabled＝`Opacity.disabled`。
 - **Search field**: 外枠＝`bg.sunken`＋1px `surface.1`＋radius `md`。focus＝リング `accent.focus`。no-match＝`danger`。件数＝`captionDigit`。
@@ -188,7 +189,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 - **TopBar（上段 26px）**: 背景透明（最背面の chromeBg＋ambient が見える）・**罫線なし**。左 padding 16＋信号機の柱 80px。縦位置は信号機 close ボタン中央へ整列。空白は窓ドラッグ面。
   - 左: `workspace名`（mono 11・`text.primary`）。cwd・build-id は名前の後に muted で後置（→§9）。
   - 右: ステータスストリップ（§4 の書式）・右 padding 16。
-- **TabBar（下段 28px・全幅セグメント行）**: 地 `tab.rowBg`・padding 3・セグメント間 gap 2。タブは §5 Tab 契約。行に収まらないときは全タブが縮み（min 40）、それ以下は横スクロール。＋ボタンはセグメント様式（地 `tab.segBg`・radius 3）で末尾に置く（→§9）。
+- **TabBar（下段 28px・全幅セグメント行）**: 地 `tab.rowBg`・padding 3・セグメント間 gap 2。器とセルは §5 Tab 契約。行に収まらないときは**行内の全セル**が幅に比例して縮み（床 40・器ではなく行が再配分の単位）、それ以下は横スクロール。＋ボタンはセグメント様式（地 `tab.segBg`・radius 3）で末尾に置く（→§9）。
 
 ---
 
