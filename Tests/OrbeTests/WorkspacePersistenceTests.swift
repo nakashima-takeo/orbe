@@ -161,8 +161,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
 
   // MARK: - 復元単位（TabState）の組み立て
 
-  /// 復元単位（tabState）は cwd だけでなく明示タイトルも載せる——起動時復元と
-  /// ⇧⌘T が共有する契約なので、どちらか 1 つ落ちると片方だけ静かに壊れる。
+  /// 復元単位（tabState）は cwd だけでなく明示タイトルも載せる——落ちると ⌘R の改名が再起動で消える。
   func testTabStateCarriesCwdAndTitle() {
     let state = TabState(cwd: "/work/api", agent: nil, explicitTitle: "api")
     let tab = TerminalTab(restoring: state, resumeSpawn: noResume)
@@ -234,8 +233,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   }
 
   /// sessionId を持たない同一性は、休眠でも稼働中でも tabState に書かない。resume 不能な記録を
-  /// ディスクへ増やすと、次の起動で必ず素シェル化する死にチケットが永続し、⇧⌘T のゲートも
-  /// 誤って通り始める。
+  /// ディスクへ増やすと、次の起動で必ず素シェル化する死にチケットが永続する。
   func testTabStateDropsIdentitiesWithoutASessionId() {
     let dormant = TerminalTab(
       restoring: TabState(

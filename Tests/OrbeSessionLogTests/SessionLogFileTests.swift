@@ -3,11 +3,11 @@ import XCTest
 
 @testable import OrbeSessionLog
 
-/// 書き手（追記・原子的書き直し）と読み手（途中行の読み飛ばし・絞り込み・truncated）の契約。
-/// 壊れると、追記途中の行を読んで壊れた 1 件が混ざるか、`--since` が効かずに全件が返る。
+/// 書き手（追記・原子的書き直し）と読み手（改行で終わらない末尾行の読み飛ばし・絞り込み・truncated）の契約。
+/// 壊れると、改行の着地前の行を読んで壊れた 1 件が混ざるか、`--since` が効かずに全件が返る。
 final class SessionLogFileTests: XCTestCase {
   func testAppendWritesOneLinePerEventWithOwnerOnlyPermissions() throws {
-    let url = try Fixture.tempFile()
+    let url = try tempLogFile()
     try SessionLogWriter.append(Fixture.opened("a", at: 0), to: url)
     try SessionLogWriter.append(Fixture.closed("a", at: 1), to: url)
 
@@ -20,18 +20,18 @@ final class SessionLogFileTests: XCTestCase {
   }
 
   func testMissingFileReadsAsEmpty() throws {
-    let url = try Fixture.tempFile("nope.jsonl")
+    let url = try tempLogFile("nope.jsonl")
     let result = try SessionLogReader.read(url)
     XCTAssertEqual(result.events, [])
     XCTAssertFalse(result.truncated)
   }
 
   func testReaderSkipsUnterminatedTailAndBrokenLines() throws {
-    let url = try Fixture.tempFile()
+    let url = try tempLogFile()
     var data = try SessionLogWriter.encodeLine(Fixture.opened("a", at: 0))
     data.append(Data("not json\n".utf8))
     data.append(try SessionLogWriter.encodeLine(Fixture.closed("a", at: 1)))
-    data.append(try SessionLogWriter.encodeLine(Fixture.opened("b", at: 2)).dropLast(5))
+    data.append(try SessionLogWriter.encodeLine(Fixture.opened("b", at: 2)).dropLast(1))
     try data.write(to: url)
 
     let events = try SessionLogReader.read(url).events
@@ -39,7 +39,7 @@ final class SessionLogFileTests: XCTestCase {
   }
 
   func testReaderFiltersBySinceUntilAndSessionId() throws {
-    let url = try Fixture.tempFile()
+    let url = try tempLogFile()
     for event in [
       Fixture.opened("a", at: 0), Fixture.opened("b", at: 10), Fixture.closed("a", at: 20),
       Fixture.closed("b", at: 30),
@@ -57,7 +57,7 @@ final class SessionLogFileTests: XCTestCase {
   }
 
   func testReaderKeepsNewestWhenOverLimit() throws {
-    let url = try Fixture.tempFile()
+    let url = try tempLogFile()
     for i in 0..<5 { try SessionLogWriter.append(Fixture.opened("s\(i)", at: Double(i)), to: url) }
     let result = try SessionLogReader.read(url, limit: 2)
     XCTAssertEqual(result.events.map(\.sessionId), ["s3", "s4"])
@@ -66,7 +66,7 @@ final class SessionLogFileTests: XCTestCase {
   }
 
   func testRewriteReplacesContentAndLeavesNoTempFile() throws {
-    let url = try Fixture.tempFile()
+    let url = try tempLogFile()
     try SessionLogWriter.append(Fixture.opened("old", at: 0), to: url)
     try SessionLogWriter.rewrite([Fixture.opened("new", at: 1)], to: url)
 

@@ -65,8 +65,8 @@ final class SessionEventCodingTests: XCTestCase {
     XCTAssertEqual(event.ts, Fixture.base)
   }
 
-  func testOpenedWithOriginOrTitleIsUndecodable() {
-    for extra in [#""origin":"process","#, #""title":"x","#] {
+  func testOpenedWithOriginReasonOrTitleIsUndecodable() {
+    for extra in [#""origin":"process","#, #""reason":"x","#, #""title":"x","#] {
       let line = """
         {"ts":"2027-01-15T08:00:00Z","event":"opened",\(extra)\
         "workspace":{"name":"w","rootPath":"/r"},"cwd":"/r",\

@@ -79,6 +79,25 @@ final class WindowControllerClosedAgentsTests: OrbeTestCase {
       wc.model.closedAgentsPalette?.items.map(\.sessionId), ["m-2"], "戻ったものは一覧から消える")
   }
 
+  /// 最後の 1 枚を閉じて 0 タブになった workspace でも ⇧⌘T → ↵ で戻る（`availableWithoutTabs`）。
+  /// 壊れると「うっかり最後のタブを閉じた」という主用途で何も戻らない。
+  func testEnterRestoresIntoAnEmptiedWorkspace() throws {
+    let wc = try restore()
+    try closeAgentTab(wc, in: 0, id: "m-1", origin: .gesture)
+    for tab in wc.current.tabs { wc.closeTab(tab, origin: .gesture) }
+    XCTAssertTrue(wc.current.tabs.isEmpty, "前提: 0 タブ（休眠）workspace")
+
+    XCTAssertTrue(wc.handleWindowKeyCommand(.showClosedAgentsPalette), "0 タブでも開く")
+    let palette = try XCTUnwrap(wc.model.closedAgentsPalette)
+    XCTAssertEqual(palette.items.map(\.sessionId), ["m-1"])
+    palette.activate()
+
+    XCTAssertEqual(
+      wc.current.tabs.map { $0.agentSlot.session?.sessionId }, ["m-1"], "0 タブからも戻る")
+    XCTAssertEqual(wc.current.active, 0, "唯一のタブを指す")
+    XCTAssertTrue(wc.current.tabs[0].activated, "選択して起こす")
+  }
+
   func testOpenPaletteFollowsATabThatCloses() throws {
     let wc = try restore()
     let opened = try XCTUnwrap(wc.openTab(workspaceIndex: 0, cwd: "/tmp"))

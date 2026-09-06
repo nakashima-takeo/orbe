@@ -26,11 +26,15 @@ enum Fixture {
       workspace: .init(name: "ws", rootPath: rootPath), cwd: rootPath + "/src",
       agent: .init(command: "claude", sessionId: id))
   }
+}
 
-  static func tempFile(_ name: String = "agent-sessions.jsonl") throws -> URL {
+extension XCTestCase {
+  /// テスト専用ディレクトリの中のログファイル URL。ディレクトリはテスト終了時に消す。
+  func tempLogFile(_ name: String = "agent-sessions.jsonl") throws -> URL {
     let dir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
       .appendingPathComponent("orbe-sessionlog-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
     return dir.appendingPathComponent(name)
   }
 }

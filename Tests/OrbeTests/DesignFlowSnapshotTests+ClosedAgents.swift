@@ -24,16 +24,22 @@ private struct ClosedAgentsFixture {
   }
 
   /// 各 origin のバッジが 1 つずつ揃うタイトル付きの一覧。同じ事故で落ちた 3 行（process）はそのまま並ぶ。
+  /// `d` は OSC タイトル未受信のまま閉じた既定ケース——記録された title が cwd 由来の派生名で、
+  /// 主役と脇の末尾が同じ語になる。経過時間は分の境界から離す（コマ間の 0.2 秒で表示が変わらない）。
   var list: [ClosedAgentItem] {
     [
       item("g", "release notes", closedAgentsRoot + "/Sources/Orbe", ago: 45, origin: .gesture),
-      item("a", "PR #142 レビュー対応", closedAgentsRoot, ago: 8 * 60, origin: .agent),
-      item("p3", "docs-sync", closedAgentsRoot + "/Tests", ago: 30 * 60 - 3, origin: .process),
       item(
-        "p2", "renderer-tests", closedAgentsRoot + "/docs/spec", ago: 30 * 60 - 1,
+        "d", TabTitle.derive(pwd: closedAgentsRoot, root: closedAgentsRoot), closedAgentsRoot,
+        ago: 3 * 60 + 20, origin: .process),
+      item("a", "PR #142 レビュー対応", closedAgentsRoot, ago: 8 * 60, origin: .agent),
+      item(
+        "p3", "docs-sync", closedAgentsRoot + "/Tests", ago: 30 * 60 + 20, origin: .process),
+      item(
+        "p2", "renderer-tests", closedAgentsRoot + "/docs/spec", ago: 30 * 60 + 22,
         origin: .process),
       item(
-        "p1", "deploy-api", closedAgentsRoot + "/Sources/orbe-cli", ago: 30 * 60,
+        "p1", "deploy-api", closedAgentsRoot + "/Sources/orbe-cli", ago: 30 * 60 + 25,
         origin: .process),
       item("c", "swift test", closedAgentsRoot + "/scripts", ago: 2 * 3600, origin: .controlAPI),
       item("u", "emit API 設計", closedAgentsRoot, ago: 3 * 86400, origin: .unresolved),
@@ -62,10 +68,14 @@ extension DesignFlowSnapshotTests {
   /// 状態は本物の `ClosedAgentsPaletteModel` のアクションが生む。
   func testClosedAgents() throws {
     let fixture = ClosedAgentsFixture(now: Date())
-    let palette = ClosedAgentsPaletteModel(localization: LocalizationStore(language: .ja))
+    let l10n = LocalizationStore(language: .ja)
+    let palette = ClosedAgentsPaletteModel(localization: l10n)
     try flow(
       "closed_agents", size: closedAgentsFlowCardSize,
-      render: { paletteOverlaySnapshot(palette.render, canvas: closedAgentsFlowCardSize) },
+      render: {
+        paletteOverlaySnapshot(palette.render, canvas: closedAgentsFlowCardSize)
+          .environment(\.localization, l10n)
+      },
       steps: [
         ("empty", { palette.setItems([]) }),
         ("list", { palette.setItems(fixture.list) }),

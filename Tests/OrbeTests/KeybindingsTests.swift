@@ -38,7 +38,7 @@ final class KeybindingsTests: OrbeTestCase {
     // ⌘R はタブリネーム。content 依存の window コマンドとして
     // `testChromeHostingViewInterceptsTabIndependentCommandsOnly` の素通し脚が乗るので、割当も固定する。
     XCTAssertEqual(Keybindings.chromeAction(for: key("r")), .rename)
-    // ⇧⌘T は最後に閉じたエージェントタブを開き直す。
+    // ⇧⌘T は「閉じたエージェント」パレットを開く。
     XCTAssertEqual(
       Keybindings.chromeAction(for: key("T", [.command, .shift])), .showClosedAgentsPalette)
     XCTAssertEqual(Keybindings.chromeAction(for: key("}", [.command, .shift])), .nextTab)

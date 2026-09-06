@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// `orb` が**解釈できなかったトークン**を捨てずに落とすことを、全 22 サブコマンドで固定する。
+/// `orb` が**解釈できなかったトークン**を捨てずに落とすことを、全 25 サブコマンドで固定する。
 /// 契約そのもの（終了コード・`--workspace` の意味論）は `OrbeCliProcessTests+Contract` が持ち、
 /// こちらは「取り切った後に残ったトークン」と「値の席に来た形」の 2 経路だけを見る。
 /// 残余は `-` 始まりだけでなく**席から溢れた位置引数**も見る——`--dir` を書き忘れた `orb tab new /repo`
@@ -146,8 +146,8 @@ extension OrbeCliProcessTests {
   /// `orb tab list 2` は絞り込みが効かず全 WS のタブが出て、`orb tab close 5 6` は 6 に触れない。
   /// いずれも exit 0 で、終了コードにも stdout にも stderr にも現れない。
   ///
-  /// 22 サブコマンドを全て並べるのは、席の数が各コマンドの申告制だから——1 つ書き忘れても他が緑なら
-  /// 気づけない。`ORBE_TAB` を置くのは、tab 系が既定へ逸れる前に落ちることを見るため。
+  /// 24 サブコマンド（`session restore` は位置引数が可変長で溢れが無い）を全て並べるのは、席の数が
+  /// 各コマンドの申告制だから——1 つ書き忘れても他が緑なら気づけない。`ORBE_TAB` を置くのは、tab 系が既定へ逸れる前に落ちることを見るため。
   func testExcessPositionalsAreRejectedInsteadOfSilentlyDropped() {
     for args in [
       ["config", "list", "3"],
