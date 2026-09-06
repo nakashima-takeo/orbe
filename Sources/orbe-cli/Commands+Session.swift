@@ -1,0 +1,210 @@
+import Foundation
+import OrbeSessionLog
+
+// `orb session <サブコマンド>` の実装と usage。エージェントセッションの寿命ログ（`session_log`）を読み、
+// 「閉じたまま戻っていない」群を導き、`restore_sessions` で戻す。群の導出は Orbe 本体の ⇧⌘T と
+// 同じ `SessionLogQuery.closedGroups`（OrbeSessionLog）を読むので、CLI と GUI で答えが割れない。
+
+// MARK: - usage
+
+let sessionUsageLines = [
+  "orb session log [--since <iso|30m|2h|3d>] [--until <iso>] [--limit <n>] [--session <id>] [--json]",
+  "orb session closed [--since <iso|30m|2h|3d>] [--json]",
+  "orb session restore <session-id>... [--json]",
+  "orb session restore --at <iso> [--json]",
+]
+
+let sessionUsage = """
+  orb session — closed agent sessions: log, what is still gone, restore
+
+  USAGE:
+  \(usageBlock(sessionUsageLines))
+
+  log prints the session lifetime log (opened / closed) in file order, one
+  event per line: ts, event, command, sessionId, workspace, cwd, origin[/reason]
+  (origin is `-` on opened). --since takes an ISO 8601 time or a relative
+  <n>m / <n>h / <n>d; --until is ISO 8601 only. --limit defaults to 1000 (max
+  10000); when older events are dropped, stderr says so.
+  closed lists sessions whose last event is closed and that are not open in
+  any tab now, newest first, in groups: closes with the same origin within 5 s
+  form one group (closed by you never groups). --json is {groups:[{at, origin,
+  sessions}]}; `at` is the group's oldest close and is what --at takes.
+  restore brings sessions back as dormant tickets at the end of their
+  workspace (matched by rootPath; created from the log when missing). They are
+  not selected or brought to the front; the agent resumes when the tab is
+  next selected. --at <iso> restores every session still gone from the group
+  with that `at`. Exit 1 if any id is unknown to the log.
+  """
+
+// MARK: - サブコマンド
+
+func runSession(_ args: [String]) -> Never {
+  let rest = Array(args.dropFirst())
+  switch args.first {
+  case "log": sessionLog(rest)
+  case "closed": sessionClosed(rest)
+  case "restore": sessionRestore(rest)
+  case nil:
+    print(sessionUsage)
+    exit(2)
+  case .some(let other):
+    if hasHelp([other]) {
+      print(sessionUsage)
+      exit(0)
+    }
+    usageDie("unknown session command: \(other)")
+  }
+}
+
+private func sessionLog(_ rest: [String]) -> Never {
+  var args = rest
+  let since = takeOption(&args, "--since", requires: "an ISO 8601 time or <n>m|h|d")
+  let until = takeOption(&args, "--until", requires: "an ISO 8601 time")
+  let limit = takeIntOption(&args, "--limit", requires: "a positive <n>")
+  let session = takeOption(&args, "--session", requires: "a <session-id>")
+  if hasHelp(args) {
+    print(sessionUsage)
+    exit(0)
+  }
+  rejectLeftovers(args, positionals: 0)
+
+  var params: [String: Any] = [:]
+  if let since { params["since"] = parseSinceOrDie(since) }
+  if let until { params["until"] = parseISOOrDie(until, flag: "--until") }
+  if let limit { params["limit"] = limit }
+  if let session { params["sessionId"] = session }
+  let result = callOrExit("session_log", params)
+  let d = result as? [String: Any]
+  if d?["truncated"] as? Bool == true {
+    stderrLine("truncated: older events omitted (raise --limit)")
+  }
+  if wantJSON {
+    printJSON(result)
+  } else {
+    for event in decodeEvents(d) { print(eventLine(event)) }
+  }
+  exit(0)
+}
+
+private func sessionClosed(_ rest: [String]) -> Never {
+  var args = rest
+  let since = takeOption(&args, "--since", requires: "an ISO 8601 time or <n>m|h|d")
+  if hasHelp(args) {
+    print(sessionUsage)
+    exit(0)
+  }
+  rejectLeftovers(args, positionals: 0)
+
+  let groups = closedGroups(since: since)
+  if wantJSON {
+    printJSON(["groups": groups.map(groupJSON)])
+  } else {
+    for group in groups {
+      let n = group.sessions.count
+      print(
+        "\(group.atISO)\t\(n) \(n == 1 ? "session" : "sessions") closed (\(group.origin.rawValue))")
+      for event in group.sessions {
+        var line =
+          "\t\(event.agent.command)\t\(event.sessionId)\t\(event.workspace.name)\t\(event.cwd)"
+        if let reason = event.closeReason { line += "\t\(reason)" }
+        print(line)
+      }
+    }
+  }
+  exit(0)
+}
+
+/// id の列挙か `--at <iso>` のどちらか一方で戻す。id ごとの status を出し、`unknown` が 1 つでもあれば
+/// exit 1（RPC 自体は成功＝部分成功）。
+private func sessionRestore(_ rest: [String]) -> Never {
+  var args = rest
+  let at = takeOption(&args, "--at", requires: "an ISO 8601 time (the `at` of `session closed`)")
+  if hasHelp(args) {
+    print(sessionUsage)
+    exit(0)
+  }
+  rejectLeftovers(args, positionals: args.count)  // 位置引数は可変・`-` 始まり不可
+
+  let ids: [String]
+  if let at {
+    guard args.isEmpty else { usageDie("pass either <session-id>... or --at <iso>, not both") }
+    _ = parseISOOrDie(at, flag: "--at")
+    guard let group = closedGroups(since: nil).first(where: { $0.atISO == at }) else {
+      transportDie("no closed group at \(at)")
+    }
+    ids = group.sessions.map(\.sessionId)
+  } else {
+    guard !args.isEmpty else { usageDie("session restore requires <session-id>... or --at <iso>") }
+    ids = args
+  }
+
+  let result = callOrExit("restore_sessions", ["sessionIds": ids])
+  let rows = (result as? [String: Any])?["results"] as? [[String: Any]] ?? []
+  if wantJSON {
+    printJSON(result)
+  } else {
+    for row in rows {
+      var line = "\(row["sessionId"] as? String ?? "?")\t\(row["status"] as? String ?? "?")"
+      if let ws = row["workspaceId"] as? Int, let tab = row["tabId"] as? Int {
+        line += "\tws:\(ws)\ttab:\(tab)"
+      }
+      print(line)
+    }
+  }
+  exit(rows.contains { $0["status"] as? String == "unknown" } ? 1 : 0)
+}
+
+// MARK: - 導出（`closed` と `restore --at` が共有する）
+
+/// `session_log`（最大 10000 件）と `list_tabs` から「閉じたまま戻っていない」群を新しい順に組む。
+/// present は `list_tabs` の `agentSessionId`（live / 休眠とも）。
+private func closedGroups(since: String?) -> [SessionBurst] {
+  var params: [String: Any] = ["limit": ControlLimits.sessionLogMaxLimit]
+  if let since { params["since"] = parseSinceOrDie(since) }
+  let logResult = callOrExit("session_log", params) as? [String: Any]
+  if logResult?["truncated"] as? Bool == true {
+    stderrLine("truncated: older events omitted (narrow with --since)")
+  }
+  let events = decodeEvents(logResult)
+  let tabs = (callOrExit("list_tabs", [:]) as? [String: Any])?["tabs"] as? [[String: Any]] ?? []
+  let present = Set(tabs.compactMap { $0["agentSessionId"] as? String })
+  return SessionLogQuery.closedGroups(events: events, present: present).reversed()
+}
+
+/// control が知る上限の写し（`session_log` の limit 上限）。超えた分は control 側が `truncated` で告げる。
+private enum ControlLimits {
+  static let sessionLogMaxLimit = 10000
+}
+
+/// `session_log` の result（wire 形の配列）を `SessionEvent` へ。形が違えば transport エラー。
+private func decodeEvents(_ result: [String: Any]?) -> [SessionEvent] {
+  guard let raw = result?["events"] as? [[String: Any]],
+    let data = try? JSONSerialization.data(withJSONObject: raw),
+    let events = try? JSONDecoder().decode([SessionEvent].self, from: data)
+  else { transportDie("invalid session_log result") }
+  return events
+}
+
+private func eventDicts(_ events: [SessionEvent]) -> [[String: Any]] {
+  guard let data = try? JSONEncoder().encode(events),
+    let dicts = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+  else { return [] }
+  return dicts
+}
+
+private func groupJSON(_ group: SessionBurst) -> [String: Any] {
+  ["at": group.atISO, "origin": group.origin.rawValue, "sessions": eventDicts(group.sessions)]
+}
+
+/// 人向けの 1 行: `ts\tevent\tcommand\tsessionId\tworkspace\tcwd\torigin[/reason]`（opened の origin は `-`）。
+private func eventLine(_ event: SessionEvent) -> String {
+  let ending: String
+  switch event.kind {
+  case .opened: ending = "-"
+  case .closed(let origin, let reason): ending = origin.rawValue + (reason.map { "/" + $0 } ?? "")
+  }
+  return [
+    SessionEvent.iso8601(event.ts), event.closeOrigin == nil ? "opened" : "closed",
+    event.agent.command, event.sessionId, event.workspace.name, event.cwd, ending,
+  ].joined(separator: "\t")
+}

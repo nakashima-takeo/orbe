@@ -1,4 +1,5 @@
 import Foundation
+import OrbeSessionLog
 
 // orbe-cli の出力・終了・引数ヘルパと、全ドメインを束ねるトップ usage。main.swift（socket
 // クライアント）・`Commands+<ドメイン>.swift`（サブコマンド）が共用する。
@@ -244,6 +245,29 @@ func rejectLeftovers(_ args: [String], positionals: Int, dashOK: Int = 0) {
   }
 }
 
+/// `--since` の値。`<n>m|h|d`（30m / 2h / 3d）なら `now` からの相対を ISO 8601 に直し、それ以外は
+/// ISO 8601 として解けることを確かめてそのまま返す。どちらでもなければ usage エラー。
+/// 秒・週・複合（`1h30m`）は受けない。
+func parseSinceOrDie(_ raw: String, now: Date = Date()) -> String {
+  if let unit = raw.last, let n = Int(raw.dropLast()), n > 0 {
+    switch unit {
+    case "m": return SessionEvent.iso8601(now.addingTimeInterval(-Double(n) * 60))
+    case "h": return SessionEvent.iso8601(now.addingTimeInterval(-Double(n) * 3600))
+    case "d": return SessionEvent.iso8601(now.addingTimeInterval(-Double(n) * 86400))
+    default: break
+    }
+  }
+  return parseISOOrDie(raw, flag: "--since")
+}
+
+/// ISO 8601（`2026-09-06T10:32:37Z` / 小数秒付き）として解ける値だけをそのまま通す。解けなければ usage エラー。
+func parseISOOrDie(_ raw: String, flag: String) -> String {
+  guard SessionEvent.parseISO8601(raw) != nil else {
+    usageDie("\(flag) requires an ISO 8601 time (e.g. 2026-09-06T10:32:37Z)")
+  }
+  return raw
+}
+
 /// `<token>` が数値 workspace id か `current` なら解決した id を返す（それ以外 nil＝値として消費しない）。
 func workspaceIdIfResolvable(_ token: String) -> Int? {
   if let n = Int(token) { return n }
@@ -306,7 +330,8 @@ func usageBlock(_ lines: [String]) -> String {
 /// トップ help に載る全サーフェス。ドメインを 1 つ足すときに触るのは、そのドメインのファイルと、
 /// ここの 1 語と、`main.swift` のルーティング 1 行の 3 箇所。
 private let allUsageLines =
-  configUsageLines + wsUsageLines + tabUsageLines + agentUsageLines + waitUsageLines
+  configUsageLines + wsUsageLines + tabUsageLines + agentUsageLines + sessionUsageLines
+  + waitUsageLines
 
 let topUsage = """
   orb — configure and control the running Orbe instance
@@ -332,7 +357,8 @@ let topUsage = """
   event-history position at that moment; pass it to `orb wait --after` to catch
   events that happen right after. `config get` is the one exception: it prints
   a single row extracted from config_list and has no seq.
-  Exit codes: 0 success, 2 usage error, 1 RPC/connection error, 124 timed out
-  (wait / agent prompt / agent spawn / agent resume), 3 agent prompt: agent is
-  waiting for input, 4 agent prompt: agent session ended.
+  Exit codes: 0 success, 2 usage error, 1 RPC/connection error (also session
+  restore when an id is unknown), 124 timed out (wait / agent prompt / agent
+  spawn / agent resume), 3 agent prompt: agent is waiting for input,
+  4 agent prompt: agent session ended.
   """

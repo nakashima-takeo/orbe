@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 実 `orb`（`orbe-cli`）を子プロセスで起こし、全 22 サブコマンドのうち 19 が実 `WindowController`
+/// 実 `orb`（`orbe-cli`）を子プロセスで起こし、全 25 サブコマンドのうち 22 が実 `WindowController`
 /// を 1 本のライフサイクルとして動かせることを固定する。残る `agent spawn` / `agent resume` は
 /// 検出の仕込み（偽実行体と `ShellPATH` の差し替え）が要るので `OrbeCliAgentProcessTests` が、
 /// `agent prompt` は `OrbeCliAgentPromptProcessTests` が持つ。
@@ -101,7 +101,7 @@ final class OrbeCliProcessTests: OrbeTestCase {
     return scratchId
   }
 
-  /// 19 サブコマンドを 1 つの実 `WindowController` に対して順に叩く。
+  /// 22 サブコマンドを 1 つの実 `WindowController` に対して順に叩く。
   /// `ws rm` を最後に置くのは「最後の 1 つは削除不可（-32000）」を踏まないため。
   func testEverySubcommandDrivesOneLifecycle() throws {
     let control = try startControlProcess(workspaces: ["main"])
@@ -149,6 +149,12 @@ final class OrbeCliProcessTests: OrbeTestCase {
 
     step(control, ["tab", "focus", "\(openedTab)"], expect: "focused tab \(openedTab)")
     step(control, ["tab", "close", "\(secondTab)"], expect: "closed tab \(secondTab)")
+    // 閉じる前に同一性（hook の報告）を載せる——`tab close` が寿命ログに closed(controlAPI) を残し、
+    // 続く session の 3 本がそれを読む。報告は main で直接適用する（report_agent は orb に無い）。
+    let openedTerminal = try XCTUnwrap(control.target.controlResolveTab(openedTab))
+    control.target.controlReportAgent(
+      tab: openedTerminal,
+      report: AgentHookReport(agent: "claude", state: "idle", sessionId: "l4-sess-1"))
     // tab close は位置引数を省くと ORBE_TAB を宛先にする。
     step(
       control, ["tab", "close"], expect: "closed tab \(openedTab)",
@@ -159,11 +165,53 @@ final class OrbeCliProcessTests: OrbeTestCase {
       tabsAfter.contains { $0["tabId"] as? Int == openedTab || $0["tabId"] as? Int == secondTab },
       "tab close: 開いたタブが消える")
 
-    // --- ws rm（19 本目）
+    // --- session（3）: log → closed → restore
+    try driveSessionSubcommands(control, sessionId: "l4-sess-1")
+
+    // --- ws rm（22 本目）
     step(control, ["ws", "rm", "\(scratchId)"], expect: "removed workspace \(scratchId)")
     XCTAssertFalse(
       try workspaceRows(control).contains { $0["id"] as? Int == scratchId },
       "ws rm: 削除した WS が一覧から消える")
+  }
+
+  /// session の 3 本。閉じた同一性がログに残っていることを前提に、log（2 行・相対 `--since`）→
+  /// closed（1 群・`at`）→ restore（`--at` で群ごと・再実行は already-present・未知 id は exit 1）。
+  private func driveSessionSubcommands(_ control: ControlProcess, sessionId: String) throws {
+    let log = try XCTUnwrap(control.orbJSON(["session", "log"])["events"] as? [[String: Any]])
+    XCTAssertEqual(
+      log.map { $0["event"] as? String }, ["opened", "closed"], "session log: opened → closed の 2 行"
+    )
+    XCTAssertEqual(
+      log.last?["origin"] as? String, "controlAPI", "session log: tab close は controlAPI")
+    let human = step(control, ["session", "log", "--since", "30m"], expect: sessionId)
+    XCTAssertTrue(human.contains("\tcontrolAPI"), "session log: 人向けの行に origin が載る: \(human)")
+    XCTAssertEqual(
+      (control.orbJSON(["session", "log", "--session", "nope"])["events"] as? [[String: Any]])?
+        .count,
+      0, "session log --session: 一致しない id は空")
+
+    let groups = try XCTUnwrap(
+      control.orbJSON(["session", "closed"])["groups"] as? [[String: Any]],
+      "session closed: groups を返さない")
+    XCTAssertEqual(groups.count, 1, "session closed: 閉じたまま戻っていない 1 群")
+    XCTAssertEqual(groups.first?["origin"] as? String, "controlAPI")
+    let at = try XCTUnwrap(groups.first?["at"] as? String, "session closed: 群の at")
+    let sessions = try XCTUnwrap(groups.first?["sessions"] as? [[String: Any]])
+    XCTAssertEqual((sessions.first?["agent"] as? [String: Any])?["sessionId"] as? String, sessionId)
+
+    step(control, ["session", "restore", "--at", at], expect: "\(sessionId)\trestored")
+    let restoredTabs = try XCTUnwrap(control.orbJSON(["tab", "list"])["tabs"] as? [[String: Any]])
+    XCTAssertTrue(
+      restoredTabs.contains { $0["agentSessionId"] as? String == sessionId },
+      "session restore: 休眠チケットが tab list に agentSessionId 付きで現れる")
+    step(control, ["session", "restore", sessionId], expect: "\(sessionId)\talready-present")
+    XCTAssertTrue(
+      try XCTUnwrap(control.orbJSON(["session", "closed"])["groups"] as? [[String: Any]]).isEmpty,
+      "session closed: 戻ったものは消える")
+    let unknown = control.orb(["session", "restore", "nope-1"])
+    XCTAssertEqual(unknown.status, 1, "session restore: 未知 id は exit 1: \(unknown.stderr)")
+    XCTAssertTrue(unknown.stdout.contains("nope-1\tunknown"), unknown.stdout)
   }
 
   /// タブのシェルで bare `orb` が**同梱** CLI へ解決し、走った先がこのインスタンスの自タブになる。

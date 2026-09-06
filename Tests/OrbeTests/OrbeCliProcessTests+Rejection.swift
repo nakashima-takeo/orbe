@@ -100,6 +100,8 @@ extension OrbeCliProcessTests {
       ["wait", "--bogus"],
       ["wait", "--kind", "agent_state", "--workspace", "3"],
       ["agent", "list", "--bogus"],
+      ["session", "log", "--bogus"],
+      ["session", "restore", "s-1", "--workspace", "3"],  // restore に --workspace は無い
     ] {
       failure(
         ControlProcess.orbWithoutServer(args, env: ["ORBE_TAB": "1"]), code: 2,
@@ -169,6 +171,8 @@ extension OrbeCliProcessTests {
       ["agent", "spawn", "claude", "extra"],
       ["agent", "resume", "claude", "sess-1", "extra"],
       ["agent", "prompt", "5", "6", "--text", "hi"],
+      ["session", "log", "extra"],
+      ["session", "closed", "extra"],
       ["wait", "5", "6"],
     ] {
       failure(
@@ -211,6 +215,8 @@ extension OrbeCliProcessTests {
       (["tab", "key", "5", "--key"], "--key requires a <key> name"),
       (["agent", "spawn", "--dir"], "--dir requires a <path> value"),
       (["wait", "--kind"], "--kind requires a <kind>"),
+      (["session", "log", "--since"], "--since requires an ISO 8601 time or <n>m|h|d"),
+      (["session", "restore", "--at"], "--at requires an ISO 8601 time"),
       // `--workspace` の値の席も `takeOption` に載ったので、空白だけの値は「解決できない id」では
       // なく「値が空いている」として落ちる（どちらも exit 2 で、後者の方が誤りの所在に近い）。
       (["tab", "list", "--workspace", "   "], "--workspace requires an <id>"),

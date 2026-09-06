@@ -58,6 +58,20 @@ extension OrbeCliProcessTests {
     failure(
       ControlProcess.orbWithoutServer(["agent", "resume", "codex"]), code: 2,
       message: "agent resume requires <agent> and <session-id>", "resume の引数不足")
+    // 相対指定は <n>m|h|d だけ。解けない値を黙って全件にすると `--since` が効いていないことに気づけない。
+    failure(
+      ControlProcess.orbWithoutServer(["session", "log", "--since", "yesterday"]), code: 2,
+      message: "--since requires an ISO 8601 time", "解けない --since")
+    failure(
+      ControlProcess.orbWithoutServer(["session", "log", "--since", "1h30m"]), code: 2,
+      message: "--since requires an ISO 8601 time", "複合の相対指定")
+    failure(
+      ControlProcess.orbWithoutServer(["session", "restore"]), code: 2,
+      message: "session restore requires <session-id>... or --at <iso>", "restore の対象欠如")
+    failure(
+      ControlProcess.orbWithoutServer(["session", "restore", "s-1", "--at", "2026-01-01T00:00:00Z"]
+      ),
+      code: 2, message: "not both", "id と --at の併用")
   }
 
   /// `--text` の値に置かれた `-h` / `--help` を help と読まない。
