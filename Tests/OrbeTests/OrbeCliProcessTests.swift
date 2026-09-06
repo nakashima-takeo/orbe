@@ -189,8 +189,9 @@ final class OrbeCliProcessTests: OrbeTestCase {
     }
   }
 
-  /// `session log`: 2 行・`--limit` はファイル順の末尾を残して stderr で告げる・相対 `--since` の 3 単位・
-  /// `--until`・`--session`。境界は 90 分前の opened を 1 行足して見る（サーバは in-process と同じファイルを読む）。
+  /// `session log`: 2 行・`--limit` はファイル順の末尾を残して stderr で告げる・人向けの行の title 列
+  /// （closed だけ）・相対 `--since` の 3 単位・`--until`・`--session`。境界は 90 分前の opened を 1 行足して
+  /// 見る（サーバは in-process と同じファイルを読む）。
   private func driveSessionLog(_ control: ControlProcess, sessionId: String) throws {
     let log = try XCTUnwrap(control.orbJSON(["session", "log"])["events"] as? [[String: Any]])
     XCTAssertEqual(
@@ -218,7 +219,13 @@ final class OrbeCliProcessTests: OrbeTestCase {
         agent: .init(command: "claude", sessionId: oldId)),
       to: XCTUnwrap(AgentSessionLog.fileURL))
     let recent = step(control, ["session", "log", "--since", "30m"], expect: sessionId)
-    XCTAssertTrue(recent.contains("\tcontrolAPI"), "session log: 人向けの行に origin が載る: \(recent)")
+    let columns = recent.split(separator: "\n").map {
+      $0.split(separator: "\t", omittingEmptySubsequences: false)
+    }
+    XCTAssertEqual(columns.map(\.count), [8, 8], "session log: 人向けの行は 8 列: \(recent)")
+    XCTAssertEqual(
+      columns.map { $0[6] == "-" }, [true, false], "session log: title 列は closed にだけ載る")
+    XCTAssertEqual(columns.last?[7], "controlAPI", "session log: 人向けの行に origin が載る: \(recent)")
     XCTAssertFalse(recent.contains(oldId), "session log --since 30m: 90 分前の行は落ちる: \(recent)")
     for since in ["2h", "1d"] {
       step(control, ["session", "log", "--since", since], expect: oldId)
@@ -233,8 +240,8 @@ final class OrbeCliProcessTests: OrbeTestCase {
   }
 
   /// `session closed` は新しい順の群（人向けの見出し・メンバー行・`--json` の `at`）、`session restore` は
-  /// 位置引数と `--at` の両方で `restored`、再実行は already-present、未知 id は exit 1。2 群目は gesture で
-  /// 閉じた同一性を in-process で作る。
+  /// 位置引数と `--at`（ミリ秒を落とした ISO でも群に当たる）の両方で `restored`、再実行は already-present、
+  /// 未知 id は exit 1。2 群目は gesture で閉じた同一性を in-process で作る。
   private func driveSessionClosedAndRestore(_ control: ControlProcess, sessionId: String) throws {
     let second = "l4-sess-2"
     let opened = try XCTUnwrap(control.target.openTab(workspaceIndex: 0, cwd: "/tmp"))
@@ -258,8 +265,25 @@ final class OrbeCliProcessTests: OrbeTestCase {
 
     step(control, ["session", "restore", second], expect: "\(second)\trestored")
     step(control, ["session", "restore", "--at", at], expect: "\(sessionId)\trestored")
+
+    // 秒ちょうどに閉じた群は、ミリ秒を書かない ISO（人が打つ形）でも当たる。Orbe 本体の記録として
+    // 積む（`restore_sessions` はメモリを読む）。
+    let wholeId = "l4-old-2"
+    let wholeSecond = Date(
+      timeIntervalSince1970: (Date().timeIntervalSince1970 - 80 * 60).rounded(.down))
+    for kind in [SessionEvent.Kind.opened, .closed(origin: .process, reason: nil, title: nil)] {
+      control.target.sessionLog.record(
+        SessionEvent(
+          ts: wholeSecond, kind: kind, workspace: .init(name: "main", rootPath: "/tmp"),
+          cwd: "/tmp", agent: .init(command: "claude", sessionId: wholeId)))
+    }
+    let wholeISO = SessionEvent.iso8601(wholeSecond)
+    XCTAssertTrue(wholeISO.hasSuffix(".000Z"), "前提: 秒ちょうどの at")
+    step(
+      control, ["session", "restore", "--at", String(wholeISO.dropLast(5)) + "Z"],
+      expect: "\(wholeId)\trestored")
     let restoredTabs = try XCTUnwrap(control.orbJSON(["tab", "list"])["tabs"] as? [[String: Any]])
-    for id in [sessionId, second] {
+    for id in [sessionId, second, wholeId] {
       XCTAssertTrue(
         restoredTabs.contains { $0["agentSessionId"] as? String == id },
         "session restore: 休眠チケット \(id) が tab list に agentSessionId 付きで現れる")

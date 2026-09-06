@@ -260,12 +260,13 @@ func parseSinceOrDie(_ raw: String, now: Date = Date()) -> String {
   return parseISOOrDie(raw, flag: "--since")
 }
 
-/// ISO 8601（`2026-09-06T10:32:37Z` / 小数秒付き）として解ける値だけをそのまま通す。解けなければ usage エラー。
+/// ISO 8601（`2026-09-06T10:32:37Z` / 小数秒付き）として解ける値を wire 形（ミリ秒・Z）に正規化して返す。
+/// 解けなければ usage エラー。群の `at` との照合も、control へ渡す値も、この 1 形に揃う。
 func parseISOOrDie(_ raw: String, flag: String) -> String {
-  guard SessionEvent.parseISO8601(raw) != nil else {
+  guard let parsed = SessionEvent.parseISO8601(raw) else {
     usageDie("\(flag) requires an ISO 8601 time (e.g. 2026-09-06T10:32:37Z)")
   }
-  return raw
+  return SessionEvent.iso8601(parsed)
 }
 
 /// `<token>` が数値 workspace id か `current` なら解決した id を返す（それ以外 nil＝値として消費しない）。

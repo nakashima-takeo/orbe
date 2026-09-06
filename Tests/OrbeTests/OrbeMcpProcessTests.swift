@@ -132,6 +132,8 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     let restoreDescription = restore["description"] as? String ?? ""
     XCTAssertTrue(restoreDescription.contains("resume_agent"), "resume_agent との違い（起動しない）を書く")
     XCTAssertTrue(restoreDescription.contains("already-present"), "id ごとの status の語を書く")
+    XCTAssertTrue(
+      restoreDescription.contains("orb session restore"), "多数を一度に戻す入口がここだと書く（⇧⌘T は 1 件ずつ）")
   }
 
   /// `session_log` / `restore_sessions` の `tools/call` が control へ届く。ブリッジはツール名を method 名として

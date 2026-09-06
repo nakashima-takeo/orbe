@@ -2,8 +2,8 @@ import Foundation
 import OrbeSessionLog
 
 // `orb session <サブコマンド>` の実装と usage。エージェントセッションの寿命ログ（`session_log`）を読み、
-// 「閉じたまま戻っていない」群を導き、`restore_sessions` で戻す。群の導出は Orbe 本体の ⇧⌘T と
-// 同じ `SessionLogQuery.closedGroups`（OrbeSessionLog）を読むので、CLI と GUI で答えが割れない。
+// 「閉じたまま戻っていない」群を導き、`restore_sessions` で戻す。群（同じ事故で閉じたもの）を扱う入口は
+// ここと MCP だけで、Orbe 本体の ⇧⌘T は 1 件ずつ戻す。
 
 // MARK: - usage
 
@@ -21,8 +21,9 @@ let sessionUsage = """
   \(usageBlock(sessionUsageLines))
 
   log prints the session lifetime log (opened / closed) in file order, one
-  event per line: ts, event, command, sessionId, workspace, cwd, origin[/reason]
-  (origin is `-` on opened). --since takes an ISO 8601 time or a relative
+  event per line: ts, event, command, sessionId, workspace, cwd, title,
+  origin[/reason] (title is the tab's title when it closed; title and origin
+  are `-` on opened). --since takes an ISO 8601 time or a relative
   <n>m / <n>h / <n>d; --until is ISO 8601 only. --limit defaults to 1000 (max
   10000); when older events are dropped, stderr says so.
   closed lists sessions whose last event is closed and that are not open in
@@ -33,7 +34,9 @@ let sessionUsage = """
   workspace (matched by rootPath; created from the log when missing). They are
   not selected or brought to the front; the agent resumes when the tab is
   next selected. --at <iso> restores every session still gone from the group
-  with that `at`. Exit 1 if any id is unknown to the log.
+  with that `at` (the value `session closed` prints; whole seconds also
+  match) — this is the way to bring many back at once. Exit 1 if any id is
+  unknown to the log.
   """
 
 // MARK: - サブコマンド
@@ -128,8 +131,8 @@ private func sessionRestore(_ rest: [String]) -> Never {
   let ids: [String]
   if let at {
     guard args.isEmpty else { usageDie("pass either <session-id>... or --at <iso>, not both") }
-    _ = parseISOOrDie(at, flag: "--at")
-    guard let group = closedGroups(since: nil).first(where: { $0.atISO == at }) else {
+    let atISO = parseISOOrDie(at, flag: "--at")
+    guard let group = closedGroups(since: nil).first(where: { $0.atISO == atISO }) else {
       transportDie("no closed group at \(at)")
     }
     ids = group.sessions.map(\.sessionId)
@@ -196,16 +199,21 @@ private func groupJSON(_ group: SessionBurst) -> [String: Any] {
   ["at": group.atISO, "origin": group.origin.rawValue, "sessions": eventDicts(group.sessions)]
 }
 
-/// 人向けの 1 行: `ts\tevent\tcommand\tsessionId\tworkspace\tcwd\torigin[/reason]`（opened の origin は `-`）。
+/// 人向けの 1 行: `ts\tevent\tcommand\tsessionId\tworkspace\tcwd\ttitle\torigin[/reason]`
+/// （opened の title と origin は `-`）。タイトル中のタブ文字は列を壊さないよう空白にする。
 private func eventLine(_ event: SessionEvent) -> String {
+  let title: String
   let ending: String
   switch event.kind {
-  case .opened: ending = "-"
-  case .closed(let origin, let reason, _):
+  case .opened:
+    title = "-"
+    ending = "-"
+  case .closed(let origin, let reason, let closeTitle):
+    title = closeTitle?.replacingOccurrences(of: "\t", with: " ") ?? "-"
     ending = origin.rawValue + (reason.map { "/" + $0 } ?? "")
   }
   return [
     SessionEvent.iso8601(event.ts), event.closeOrigin == nil ? "opened" : "closed",
-    event.agent.command, event.sessionId, event.workspace.name, event.cwd, ending,
+    event.agent.command, event.sessionId, event.workspace.name, event.cwd, title, ending,
   ].joined(separator: "\t")
 }

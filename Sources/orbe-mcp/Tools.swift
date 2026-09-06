@@ -184,7 +184,8 @@ let tools: [[String: Any]] = [
         + "末尾に戻す。resume_agent と違い起動しない——選択も前面化もせず、次にそのタブが選ばれたとき "
         + "resume で起きる。復元先が背景 workspace のとき、話しかけるには先に focus_tab / activate_workspace "
         + "で起こす（起こす前の prompt_agent は tab not mounted）。結果は id ごとに restored / "
-        + "already-present / unknown（部分成功も成功・冪等）。"
+        + "already-present / unknown（部分成功も成功・冪等）。多数を一度に戻すときはこのツール"
+        + "（または orb session restore）を使う——Orbe の ⇧⌘T パレットは 1 件ずつしか戻さない。"
     ),
     (
       "inputSchema",
