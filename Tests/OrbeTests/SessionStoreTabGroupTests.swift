@@ -120,8 +120,9 @@ final class SessionStoreTabGroupTests: OrbeTestCase {
   }
 
   /// 背景 workspace では挿したタブが active になる（制御 API の spawn がそのタブを見せる準備）。
+  /// 初期 active は挿入先（index 1）と別にしておく——同じだと active を触らない実装でも緑になる。
   func testInsertTabIntoBackgroundWorkspaceActivatesInsertedTab() {
-    let background = workspace(["a", "b"], active: 1)
+    let background = workspace(["a", "b"], active: 0)
     let store = SessionStore(
       workspaces: [workspace(["x"]), background], activeWorkspace: 0)
     let new = tab("a")

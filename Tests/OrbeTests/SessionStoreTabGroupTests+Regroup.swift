@@ -27,6 +27,17 @@ extension SessionStoreTabGroupTests {
     XCTAssertEqual(keys(store.current), ["a", "a", "z", "b"], "元の連の直右")
   }
 
+  /// 既に自分の連の中にいるタブは、キーの再計算が走っても動かない（同 worktree 内の `cd src` が最頻経路）。
+  func testRegroupLeavesTabAttachedToItsOwnSegmentInPlace() {
+    let store = makeStore(["a", "a", "a", "b"])
+    let tab = store.current.tabs[0]
+    tab.groupKey = "a"
+
+    XCTAssertNil(store.regroup(tab), "隣接している＝不変条件は保たれている")
+    XCTAssertTrue(store.current.tabs[0] === tab)
+    XCTAssertEqual(keys(store.current), ["a", "a", "a", "b"])
+  }
+
   /// 単独セグメントのタブは、キーが変わっても位置を変えない（Q2: その場に留まりキーだけ変わる）。
   func testRegroupLeavesSingletonInPlace() {
     let store = makeStore(["a", "b", "c"])

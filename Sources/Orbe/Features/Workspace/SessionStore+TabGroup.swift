@@ -64,6 +64,8 @@ extension SessionStore {
     guard strayPeer || splitting else { return nil }
     let activeTab = ws.tabs.indices.contains(ws.active) ? ws.tabs[ws.active] : nil
     ws.tabs.remove(at: idx)
+    // ②の `idx - 1` は除去前 index を除去後配列に当てている——左隣は除去で動かないので同じ位置。
+    // `idx > 0` は `splitting` の `left != nil` が含意する（不変条件は大域的に SessionStore が保証する建前）。
     let dest =
       strayPeer
       ? Self.insertionIndex(forKey: key, in: ws.tabs)

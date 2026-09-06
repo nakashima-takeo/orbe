@@ -227,7 +227,7 @@ final class SessionStoreClosedAgentTabsTests: OrbeTestCase {
 
   /// 指定した index にタブが挿さり、後続が 1 つ後ろへ押し出される。
   /// 中間を叩くのが要点——先頭・末尾だけだと `insert(at: 0)` や `append` の決め打ちと区別できず、
-  /// 戻り値が合っているだけで「閉じた位置へ戻す」が壊れていても気づけない。
+  /// 戻り値が合っているだけで「連が無ければ閉じた位置へ戻す」が壊れていても気づけない。
   func testInsertLandsAtGivenIndexAndShiftsFollowers() {
     let ws = makeWorkspace("ws", agents: ["a", "b", "c"])
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)

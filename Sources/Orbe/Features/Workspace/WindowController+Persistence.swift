@@ -11,7 +11,7 @@ extension WindowController {
       let ws = Workspace(name: state.name, rootPath: state.rootPath)
       ws.lastUsedAt = state.lastUsedAt  // MRU 並べ替えキーを読み戻す（旧データは nil）
       ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
-      for tab in state.tabs { ws.tabs.append(makeTab(from: tab)) }
+      for tab in state.tabs { ws.tabs.append(makeTab(from: tab)) }  // 隣接の正規化は下の store.load
       // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）は空表示
       // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。
       ws.active = ws.tabs.isEmpty ? 0 : min(max(0, state.activeTab), ws.tabs.count - 1)

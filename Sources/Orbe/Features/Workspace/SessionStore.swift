@@ -152,22 +152,25 @@ final class SessionStore {
 
   /// 新規タブ。指定 workspace の同キー連の右端（無ければ末尾）へ挿し、実挿入 index を返す。
   /// アクティブ workspace では active を触らず同じタブを指し続けさせる（呼び出し側が直後に select で
-  /// mount する）。背景 workspace では active を挿したタブへ。index の妥当性は呼び出し側が保証する。
+  /// mount する）。背景 workspace では active を挿したタブへ。workspace index の妥当性は呼び出し側が保証する。
   func insertTab(_ tab: TerminalTab, intoWorkspaceAt i: Int) -> Int {
     let dest = Self.insertionIndex(forKey: tab.groupKey, in: workspaces[i].tabs)
     return insert(tab, at: dest, intoWorkspaceAt: i)
   }
 
-  /// ⇧⌘T。アクティブ workspace に同キーの連があればその右端へ。無ければ `index`（閉じた時の位置）を
-  /// 0…count へクランプし、連を割る位置ならその連の右端へ丸めて挿す。実挿入 index を返す。
+  /// ⇧⌘T。アクティブ workspace に同キーの連があればその右端へ（新規タブと同じ規則）。無ければ `index`
+  /// （閉じた時の位置）を 0…count へクランプし、連を割る位置ならその連の右端へ丸めて挿す。実挿入 index を返す。
   func insertTabIntoActive(_ tab: TerminalTab, near index: Int) -> Int {
     let tabs = current.tabs
-    var dest = Self.insertionIndex(forKey: tab.groupKey, in: tabs)
-    if !tabs.contains(where: { $0.groupKey == tab.groupKey }) {
-      dest = min(max(0, index), tabs.count)
-      if dest > 0, dest < tabs.count, tabs[dest - 1].groupKey == tabs[dest].groupKey {
-        dest = Self.segment(containing: dest, in: tabs).upperBound
-      }
+    let dest: Int
+    if tabs.contains(where: { $0.groupKey == tab.groupKey }) {
+      dest = Self.insertionIndex(forKey: tab.groupKey, in: tabs)
+    } else {
+      let clamped = min(max(0, index), tabs.count)
+      let splits =
+        clamped > 0 && clamped < tabs.count
+        && tabs[clamped - 1].groupKey == tabs[clamped].groupKey
+      dest = splits ? Self.segment(containing: clamped, in: tabs).upperBound : clamped
     }
     return insert(tab, at: dest, intoWorkspaceAt: activeWorkspace)
   }
@@ -246,8 +249,8 @@ final class SessionStore {
     ws.tabs.remove(at: idx)
     if idx < ws.active {
       ws.active -= 1
-    } else if idx == ws.active, r.count >= 2, idx == r.upperBound - 1 {
-      ws.active = idx - 1
+    } else if idx == ws.active, idx == r.upperBound - 1, r.lowerBound < idx {
+      ws.active = idx - 1  // 連の右端を閉じた＝左隣は同じ連
     }
     ws.active = max(0, min(ws.active, ws.tabs.count - 1))  // 0タブ時は 0
 
