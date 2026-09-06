@@ -1,7 +1,7 @@
 ---
 title: エージェントセッションの寿命ログ
 description: 同一性（CLI 名 + session_id）の始まりと終わりを追記型の agent-sessions.jsonl に記録し、消えたタブを休眠チケットとして戻せるようにする
-updated: 2026-09-06
+updated: 2026-09-07
 ---
 
 # エージェントセッションの寿命ログ

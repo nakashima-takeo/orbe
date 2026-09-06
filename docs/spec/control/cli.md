@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（orb）
 description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/session/wait サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-09-06
+updated: 2026-09-07
 ---
 
 # Orbe CLI（`orb`）
@@ -54,9 +54,9 @@ updated: 2026-09-06
 
 [寿命ログ](../platform/session-log.md)を読み、閉じたまま戻っていないセッションを戻す。全 workspace 横断。
 
-- `orb session log [--since <iso|30m|2h|3d>] [--until <iso>] [--limit <n>] [--session <id>] [--json]` … `session_log` をそのまま。人間向けは 1 行 1 イベント（`ts event command sessionId workspace cwd title origin[/reason]` のタブ区切り。`title` は closed だけが持ち、opened は `-`。タイトル中のタブ文字は空白に置き換える）。`--since` の相対指定（`<n>m|h|d` のみ）は CLI が ISO へ直してから送る（`--until` は ISO のみ）。切れた分（`truncated`）は stderr で告げる。
-- `orb session closed [--since …] [--json]` … 閉じたまま戻っていないセッションを、同じ事故で閉じた群（`gesture` 以外の同じ origin が 5 秒以内に続くもの）にまとめて新しい順に出す。`session_log` と `list_tabs` を突き合わせた派生ビューで、CLI が組む。群の代表時刻は群の最古の `closed` の `ts` で、群の一部を復元しても動かない。`--since` は群をその代表時刻で絞る——群を切る範囲は変えない（範囲が変わると代表時刻が動き、`restore --at` で解けなくなる）。`--json` は `{groups:[{at, origin, sessions:[event…]}]}`。
-- `orb session restore <session-id>... [--json]` / `orb session restore --at <iso> [--json]` … `restore_sessions`。`--at` は `session closed` が出した `at` をそのまま渡し、その `at` を持つ群すべての全員を戻す（受理した ISO はミリ秒付きに正規化してから完全一致で照合する。ミリ秒を省いた値は `.000` として扱う。workspace 削除で同時に閉じた `gesture` は 1 件ずつ単独の群になるので同じ `at` が並ぶ）。id の数が `restore_sessions` の 1 回の上限を超えれば分けて送る。id ごとの status を出し、`unknown` が 1 つでもあれば exit 1。`--workspace` は無い——戻す先はログが決める。
+- `orb session log [--since <iso|30m|2h|3d>] [--until <iso>] [--limit <n>] [--session <id>] [--json]` … `session_log` をそのまま。人間向けは 1 行 1 イベント（`ts event command sessionId workspace cwd title origin[/reason]` のタブ区切り。`title` は closed だけが持ち、opened は `-`。各列の制御文字——hook 由来の `title`・`reason` や OSC 7 由来の `cwd` に混じりうるタブ・改行・ESC 等——は空白に置き換える）。`--since` の相対指定（`<n>m|h|d` のみ）は CLI が ISO へ直してから送る（`--until` は ISO のみ）。切れた分（`truncated`）は stderr で告げる。
+- `orb session closed [--since …] [--json]` … 閉じたまま戻っていないセッションを、同じ事故で閉じた群（`gesture` 以外の同じ origin が 5 秒以内に続くもの）にまとめて新しい順に出す。`session_log` と `list_tabs` を突き合わせた派生ビューで、CLI が組む。群の代表時刻は群の最古の `closed` の `ts` で、群の一部を復元しても動かない。`--since` は群をその代表時刻で絞る——群を切る範囲は変えない（範囲が変わると代表時刻が動き、`restore --at` で解けなくなる）。人間向けは群ごとに見出し行（`at`、件数、origin）を出し、続けて 1 行 1 セッション（先頭列を空けた `command sessionId workspace cwd reason` のタブ区切り。`reason` が無ければ `-`。制御文字の扱いは `session log` と同じ）。`--json` は `{groups:[{at, origin, sessions:[event…]}]}`。
+- `orb session restore <session-id>... [--json]` / `orb session restore --at <iso> [--json]` … `restore_sessions`。`--at` は `session closed` が出した `at` をそのまま渡し、その `at` を持つ群すべての全員を戻す（受理した ISO はミリ秒付きに正規化してから完全一致で照合する。ミリ秒を省いた値は `.000` として扱う）。id の数が `restore_sessions` の 1 回の上限を超えれば分けて送る。id ごとの status を出し、`unknown` が 1 つでもあれば exit 1。`--workspace` は無い——戻す先はログが決める。
 
 ### 待機
 

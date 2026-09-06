@@ -1,7 +1,7 @@
 ---
 title: workspace 永続
 description: 構成（workspace・タブ・cwd・エージェントセッション）の JSON 保存と起動時復元・エージェント resume・デバウンス保存
-updated: 2026-09-06
+updated: 2026-09-07
 ---
 
 # workspace 永続

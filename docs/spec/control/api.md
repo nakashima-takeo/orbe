@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe）
 description: Unix socket 上の JSON-RPC でタブ/workspace/エージェントを操作する out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
-updated: 2026-09-06
+updated: 2026-09-07
 ---
 
 # 制御 API（外部 → Orbe）
