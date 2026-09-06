@@ -17,7 +17,8 @@ struct DSTab: View {
   var action: () -> Void = {}
   /// 中ボタンクリック（押し下げで即発火）。app 層がタブごと閉じる操作に配線する。
   var onMiddleClick: () -> Void = {}
-  /// 左端に 1pt の区切り線（surface1）を持つ（2 枚以上のセグメントの各セル）。セル幅の内側に描く。
+  /// 左端に 1pt の区切り線（surface1）を持つ（2 枚以上のセグメントの各セル）。セル幅の内側に描き、
+  /// 選択セルでも残る（選択面がその 1pt を空ける）。
   var divided: Bool = false
 
   /// インライン改名の編集バリアント（app 層が駆動）。true でタイトルを `TextField` へ差し替える。
@@ -70,9 +71,15 @@ struct DSTab: View {
     // 床 40 に持ち上げられたセルは中身より広い。余りは右へ送り、どのセルもグリフ／文字が左端から
     // 同じ 8pt で始まるようにする（中央寄せだと短い名前だけ書き出しがずれる）。
     .frame(maxWidth: Chrome.tabMaxWidth, maxHeight: .infinity, alignment: .leading)
-    .background(Rectangle().fill(selected ? Color.theme.textPrimary : .clear))
+    // 選択面は区切り線ぶん右から始める（塗りが線を覆って溶けるのを避ける）。文字・グリフは動かさない。
+    .background(
+      Rectangle().fill(selected ? Color.theme.textPrimary : .clear)
+        .padding(.leading, divided ? Theme.Stroke.hairline : 0)
+    )
     .overlay(alignment: .leading) {
-      if divided { Rectangle().fill(Color.theme.surface1).frame(width: 1) }
+      if divided {
+        Rectangle().fill(Color.theme.surface1).frame(width: Theme.Stroke.hairline)
+      }
     }
     .contentShape(Rectangle())
     // 編集中は tap を付けない（app 層も drag を付けない＝ジェスチャ排他が構造的に成立する）。

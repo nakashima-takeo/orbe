@@ -11,7 +11,7 @@ enum Chrome {
   static let edgePad: CGFloat = 16  // TopBar の左右余白
   static let tabRowPad: CGFloat = 3  // タブ行の内側余白（上下左右）
   static let tabHeight: CGFloat = tabRowHeight - tabRowPad * 2  // セグメント高（行 fill）
-  static let tabGap: CGFloat = 2  // セグメント間
+  static let tabGap: CGFloat = 6  // セグメント間
   static let tabMaxWidth: CGFloat = 140  // セル 1 枚の上限。超える名前は省略記号で切り詰め
   // セル 1 枚の床。数文字＋省略記号が読める幅。短い名前でもこれを下回らず、shrink もここで止めて
   // 以降は横スクロールへ回す。
@@ -110,7 +110,9 @@ struct StatusRowView: View {
 
   private var bottomRow: some View {
     tabStrip
-      .padding(Chrome.tabRowPad)
+      // 行の内側余白 3 は「ScrollView の外側 2 ＋ スクロール内容の内側 1」に割る。グループの枠は器の
+      // 外側 1px なので、その帯をスクロール内容に含めないと ScrollView が枠の上下・行左端を切る。
+      .padding(Chrome.tabRowPad - DSTabSegmentMetrics.frameOutset)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       // ShapeStyle 版 background は既定で safe area へ自動拡張する。実窓（fullSizeContentView）では
       // タイトルバー帯の safe area が行を貫くため、拡張を止めないと帯が TopBar まで覆う。
@@ -122,24 +124,29 @@ struct StatusRowView: View {
   private var tabStrip: some View {
     GeometryReader { geo in
       let strip = model.strip
-      let widths = tabWidths(strip, available: geo.size.width)
+      let inset = DSTabSegmentMetrics.frameOutset
+      let available = geo.size.width - inset * 2
+      let widths = tabWidths(strip, available: available)
       ScrollViewReader { proxy in
         ScrollView(.horizontal, showsIndicators: false) {
           HStack(spacing: Chrome.tabGap) {
             ForEach(strip.segments.indices, id: \.self) { s in
               let segment = strip.segments[s]
               let grabbed = drag.flatMap { $0.source == .segment(s) ? $0 : nil }
-              DSTabSegment {
-                if segment.bar {
+              DSTabSegment(
+                kind: segment.isGroup
+                  ? .group(colorIndex: segment.colorIndex) : .single
+              ) {
+                if segment.isGroup {
                   DSSegmentBar(color: Color.theme.worktreeBar[segment.colorIndex])
                     .gesture(dragGesture(.segment(s), widths: widths, segments: strip.ranges))
                 }
                 ForEach(segment.cells) { cell in
                   // 2 枚以上の連ではセルを掴む。単独タブはセルがセグメントそのもの（境界へ落とす）。
-                  tabCell(cell, divided: segment.bar, width: widths[cell.index])
+                  tabCell(cell, divided: segment.isGroup, width: widths[cell.index])
                     .gesture(
                       dragGesture(
-                        segment.bar ? .tab(cell.index) : .segment(s), widths: widths,
+                        segment.isGroup ? .tab(cell.index) : .segment(s), widths: widths,
                         segments: strip.ranges),
                       including: model.editingIndex == cell.index ? .subviews : .all)
                 }
@@ -151,7 +158,7 @@ struct StatusRowView: View {
             }
             StatusPlusButton(action: model.onNewTab)
           }
-          .frame(minWidth: geo.size.width, alignment: .leading)
+          .frame(minWidth: available, alignment: .leading)
           .frame(height: Chrome.tabHeight)
           // 挿入キャレット（離せばここに入る）。隣接タブはずらさない。
           .overlay(alignment: .leading) {
@@ -163,6 +170,7 @@ struct StatusRowView: View {
                 .allowsHitTesting(false)
             }
           }
+          .padding(inset)
         }
         .onChange(of: model.active) { _, new in proxy.scrollTo(new, anchor: .center) }
         // 編集開始時、編集タブが横スクロール域外でも可視域へ入れる。
@@ -177,7 +185,7 @@ struct StatusRowView: View {
         }
       }
     }
-    .frame(maxWidth: .infinity, maxHeight: Chrome.tabHeight)
+    .frame(maxWidth: .infinity, maxHeight: Chrome.tabHeight + DSTabSegmentMetrics.frameOutset * 2)
   }
 
   /// セル 1 枚（DSTab）に app 層の配線（選択・中クリック・改名・コンテキストメニュー・掴み中の追従）を付ける。

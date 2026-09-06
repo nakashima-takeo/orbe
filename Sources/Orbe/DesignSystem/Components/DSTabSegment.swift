@@ -1,15 +1,54 @@
 import SwiftUI
 
-/// 同 worktree のタブを連ねる器（§5 Tab 契約）。地 tabSegBg・radius xs・クリップを器が持ち、
-/// 中身（バー・セル）は app 層が合成する。1 枚でも器 1 本（＝単独タブの絵）。
+/// `DSTabSegment` の固有寸法。generic な View 型は型引数なしに static を引けないため別に持つ。
+enum DSTabSegmentMetrics {
+  /// グループの枠が器の外側へはみ出す幅。行の合成（`StatusRowView`）はこの帯をスクロール内容に含める。
+  static let frameOutset: CGFloat = Theme.Stroke.hairline
+}
+
+/// 同 worktree のタブを連ねる器（§5 Tab 契約）。地・角丸・枠・クリップを器が持ち、中身（バー・セル）は
+/// app 層が合成する。単独タブは無彩色の地 tabSegBg のみ、グループ（2 枚以上の連）は tabGroupBg に
+/// worktree 識別色を重ねた地と、器の外側 1px の識別色枠で囲む。
 struct DSTabSegment<Content: View>: View {
+  enum Kind: Equatable {
+    /// 1 枚の連＝単独タブの絵。
+    case single
+    /// 2 枚以上の連。番号は `worktreeBar` と同じ worktree 識別色番号。
+    case group(colorIndex: Int)
+  }
+
+  var kind: Kind = .single
   @ViewBuilder let content: () -> Content
+
+  private var radius: CGFloat {
+    switch kind {
+    case .single: Theme.Radius.xs
+    case .group: Theme.Radius.sm
+    }
+  }
 
   var body: some View {
     HStack(spacing: 0) { content() }
       .frame(maxHeight: .infinity)
-      .background(RoundedRectangle(cornerRadius: Theme.Radius.xs).fill(Color.theme.tabSegBg))
-      .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.xs))
+      .background {
+        switch kind {
+        case .single:
+          RoundedRectangle(cornerRadius: radius).fill(Color.theme.tabSegBg)
+        case .group(let i):
+          RoundedRectangle(cornerRadius: radius).fill(Color.theme.tabGroupBg)
+          RoundedRectangle(cornerRadius: radius).fill(Color.theme.worktreeTint[i])
+        }
+      }
+      .clipShape(RoundedRectangle(cornerRadius: radius))
+      // クリップの後に掛ける（前に置くと器の外へ出た枠ごと切られる）。
+      .overlay {
+        if case .group(let i) = kind {
+          RoundedRectangle(cornerRadius: radius)
+            .inset(by: -DSTabSegmentMetrics.frameOutset)
+            .strokeBorder(
+              Color.theme.worktreeFrame[i], lineWidth: DSTabSegmentMetrics.frameOutset)
+        }
+      }
   }
 }
 
@@ -30,7 +69,7 @@ struct DSSegmentBar: View {
 
 #Preview("DSTabSegment") {
   HStack(spacing: Chrome.tabGap) {
-    DSTabSegment {
+    DSTabSegment(kind: .group(colorIndex: WorktreeColor.index(forKey: "orbe"))) {
       DSSegmentBar(color: Color.theme.worktreeBar[WorktreeColor.index(forKey: "orbe")])
       DSTab(title: "src/renderer", active: true, stateGlyph: .working, divided: true)
       DSTab(title: "libghostty", stateGlyph: .waiting, divided: true)

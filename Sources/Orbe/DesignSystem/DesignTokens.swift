@@ -89,6 +89,16 @@ enum Theme {
     /// worktree 識別バー（セグメント左端 3px）。番号は `WorktreeColor.index(forKey:)`。
     /// light 固有トーンは見本（orbe_design `theme.ts`）側で保留中——実物を見て決めるまで dark と同値。
     static let worktreeBar: [NSColor] = WorktreePalette.hex.map { rgb($0) }
+    /// グループ（2 枚以上の連）の地の下敷き。bgDeepest へ収束。上に worktreeTint を重ねる。
+    static let tabGroupBg = bgDeepest
+    /// グループの地に重ねる worktree 識別色の淡塗り。番号は worktreeBar と同じ。
+    static let worktreeTint: [NSColor] = WorktreePalette.hex.map {
+      dynA(light: $0, lightA: 0.12, dark: $0, darkA: 0.12)
+    }
+    /// グループの枠（器の外側 1px）。番号は worktreeBar と同じ。
+    static let worktreeFrame: [NSColor] = WorktreePalette.hex.map {
+      dynA(light: $0, lightA: 0.38, dark: $0, darkA: 0.38)
+    }
 
     // 状態の塗り（事前 alpha 済み・テーマごとの accent 基調へ α を掛けた合成値）
     static let selectionFill = dynA(
@@ -234,8 +244,8 @@ enum Theme {
   // MARK: - Radius
 
   enum Radius {
-    static let xs: CGFloat = 3  // タブセグメント
-    static let sm: CGFloat = 4  // バッジ・キーヒント
+    static let xs: CGFloat = 3  // 単独タブの器・＋ボタン
+    static let sm: CGFloat = 4  // バッジ・キーヒント・タブグループの器
     static let row: CGFloat = 8  // リスト行・小コントロール
     static let md: CGFloat = 10  // 入力・小パネル
     static let card: CGFloat = 12  // カード・設定行

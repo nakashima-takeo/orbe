@@ -67,7 +67,7 @@ extension ChromeStatusRowTests {
     XCTAssertEqual(geo.cells.map(\.width), [50, 60, 70])
     XCTAssertEqual(geo.segments.map(\.x), [0, bar + 110 + gap])
     XCTAssertEqual(geo.segments.map(\.width), [bar + 110, 70], "連 = バー + Σセル、単独はセルだけ")
-    XCTAssertEqual(geo.segments.map(\.bar), [true, false], "バーは 2 枚以上の連だけ")
+    XCTAssertEqual(geo.segments.map(\.isGroup), [true, false], "グループは 2 枚以上の連だけ")
     XCTAssertEqual(geo.rowEnd, bar + 110 + gap + 70)
     XCTAssertEqual(geo.count, 3, "タブ総数＝末尾への挿入 index")
   }

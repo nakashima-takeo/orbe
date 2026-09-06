@@ -62,6 +62,9 @@ struct ThemeColors {
   let tabSegBg = Color(nsColor: Theme.Color.tabSegBg)
   let tabActiveText = Color(nsColor: Theme.Color.tabActiveText)
   let worktreeBar = Theme.Color.worktreeBar.map { Color(nsColor: $0) }
+  let tabGroupBg = Color(nsColor: Theme.Color.tabGroupBg)
+  let worktreeTint = Theme.Color.worktreeTint.map { Color(nsColor: $0) }
+  let worktreeFrame = Theme.Color.worktreeFrame.map { Color(nsColor: $0) }
   // 状態の塗り（事前 alpha 済み）
   let selectionFill = Color(nsColor: Theme.Color.selectionFill)
   let hoverFill = Color(nsColor: Theme.Color.hoverFill)

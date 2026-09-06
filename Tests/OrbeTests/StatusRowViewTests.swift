@@ -19,7 +19,8 @@ final class StatusRowViewTests: OrbeTestCase {
   private let bar = DSSegmentBar.width
 
   /// 幅 100 のセル 6 枚: 連 [0,1,2]（バー）・単独 [3]・連 [4,5]（バー）。
-  /// x: セル 3,103,203 ｜ 連 0 = 0…303 ｜ セル 305 ｜ 連 1 = 305…405 ｜ セル 410,510 ｜ 連 2 = 407…610。
+  /// x: セル bar,bar+100,bar+200 ｜ 連 0 = 0…bar+300 ｜ 単独 3 = そこから +gap の 100 幅
+  /// ｜ 連 2 = そのさらに +gap から bar+200 幅。
   private var geometry: StatusTabLayout.Geometry {
     StatusTabLayout.geometry(
       widths: Array(repeating: 100, count: 6), segments: [0..<3, 3..<4, 4..<6])
@@ -129,10 +130,12 @@ final class StatusRowViewTests: OrbeTestCase {
 
   /// セグメント掴みのキャレットはセグメント間の隙間の中央（末尾は行末の外側）。
   func testSegmentCaretSitsInGapCenter() {
+    let seg2X = bar + 400 + gap * 2
     XCTAssertEqual(
-      StatusRowView.insertionCaretX(session(.segment(0), dropIndex: 4)), 407 - gap / 2 - 1)
+      StatusRowView.insertionCaretX(session(.segment(0), dropIndex: 4)), seg2X - gap / 2 - 1)
     XCTAssertEqual(
-      StatusRowView.insertionCaretX(session(.segment(0), dropIndex: 6)), 610 + gap / 2 - 1)
+      StatusRowView.insertionCaretX(session(.segment(0), dropIndex: 6)),
+      seg2X + bar + 200 + gap / 2 - 1)
     XCTAssertEqual(
       StatusRowView.insertionCaretX(session(.segment(2), dropIndex: 0)), 0, "先頭は 0 で止める")
   }
