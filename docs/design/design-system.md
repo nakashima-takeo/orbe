@@ -65,6 +65,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `accentCheckStroke` | accent 塗り面上の ✓（clean のチェックボックス） | `#ffffff` | `#f3f0fa` |
 | `tab.rowBg` | タブ行全幅の地 | `rgba(0,0,0,.28)` | `rgba(58,49,81,.08)` |
 | `tab.segBg` | 非選択セグメントの地 | `rgba(255,255,255,.10)` | `rgba(58,49,81,.06)` |
+| `worktree.bar[0…47]` | 連の左端の worktree 識別色（basename のハッシュで選ぶ） | `WorktreePalette`（テーマ非依存） | 同左 |
 | `tab.activeText` | 選択セグメント（反転面）の文字 | `#1a1721` | `#f3f0fa` |
 
 **意図的な同値収束（事故ではない）**: Orbe の配色は色階層が少なく、複数の semantic 名が同一値へ収束する。SSOT では別名で表現している。
