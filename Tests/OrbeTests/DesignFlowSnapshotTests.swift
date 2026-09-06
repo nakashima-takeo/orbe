@@ -186,6 +186,61 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
       ])
   }
 
+  /// Workspace live 追随: 絞り込み・選択カーソルを置いたまま現在値だけが差し替わる過程を撮る。
+  /// materialize（減光解除・working 出現・dormant 減）→ settle（done → idle・0 件化で消滅）が
+  /// 連番に出て、絞り込み文字列と選択行は動かない。
+  func testWorkspaceLiveStatus() throws {
+    let workspace = WorkspacePaletteModel(localization: LocalizationStore(language: .ja))
+    let items = [
+      WorkspacePaletteModel.Item(
+        index: 0, name: "orbe", isActive: true, dir: "/",
+        live: .init(rollup: [(state: "done", count: 1)], dormant: false)),
+      WorkspacePaletteModel.Item(
+        index: 1, name: "orbe-infra", isActive: false, dir: "/",
+        live: .init(rollup: [(state: "dormant", count: 2)], dormant: true)),
+      WorkspacePaletteModel.Item(
+        index: 2, name: "docs", isActive: false, dir: "/",
+        live: .init(rollup: [], dormant: false)),
+    ]
+    try flow(
+      "workspace_live_status", size: cardSize,
+      render: { paletteSnapshot(workspace.render, canvas: cardSize) },
+      steps: [
+        ("list", { workspace.setItems(items) }),
+        (
+          "filter",
+          {
+            workspace.render.query = "orbe"  // orbe / orbe-infra が残る
+            workspace.render.onQueryChange()
+          }
+        ),
+        ("select", { workspace.render.onDown() }),  // 選択カーソルを orbe-infra 行へ
+        (
+          "materialize",  // 背景で 1 枚起きた: 減光が解け working が dormant の前に出る
+          {
+            workspace.updateLiveStates([
+              .init(rollup: [(state: "done", count: 1)], dormant: false),
+              .init(
+                rollup: [(state: "working", count: 1), (state: "dormant", count: 1)],
+                dormant: false),
+              .init(rollup: [], dormant: false),
+            ])
+          }
+        ),
+        (
+          "settle",  // done を消費して 0 件化・working は idle へ落ちる
+          {
+            workspace.updateLiveStates([
+              .init(rollup: [], dormant: false),
+              .init(
+                rollup: [(state: "idle", count: 1), (state: "dormant", count: 1)], dormant: false),
+              .init(rollup: [], dormant: false),
+            ])
+          }
+        ),
+      ])
+  }
+
   /// Workspace 改名: 一覧 → 行選択 → drillIn（詳細メニュー）→ 改名アクション activate → 改名入力欄。
   /// 入力欄だけのプロンプト（行ゼロ）でカードが空帯を作らず header＋hint に畳まれるかを撮る。
   func testWorkspaceRename() throws {

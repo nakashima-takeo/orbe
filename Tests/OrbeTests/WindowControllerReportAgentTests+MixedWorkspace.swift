@@ -132,4 +132,64 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(item.live.rollup.map(\.state), ["dormant"])
     XCTAssertEqual(item.live.rollup.map(\.count), [1])
   }
+
+  /// 表示中の workspace パレットの行チップは、chrome ストリップと同じ契機で実状態へ追随する
+  /// （開き直さなくても報告・リセットが届く）。
+  func testOpenWorkspacePaletteFollowsAgentStateChanges() throws {
+    let fixture = try makeControllerAndMixedBackground()
+    let wc = fixture.wc
+    wc.showWorkspacePalette()
+    let index = try XCTUnwrap(wc.workspaces.firstIndex { $0 === fixture.workspace })
+    func live() throws -> WorkspacePaletteModel.LiveState {
+      try XCTUnwrap(wc.model.workspacePalette?.items.first { $0.index == index }).live
+    }
+    XCTAssertEqual(try live().rollup.map(\.state), ["dormant"], "前提: 開いた時点は休眠チケットのみ")
+
+    wc.controlReportAgent(
+      tab: fixture.live, agent: "claude", state: "working", sessionId: nil, message: nil)
+    wc.flushChrome()
+    XCTAssertEqual(try live().rollup.map(\.state), ["working", "dormant"])
+    XCTAssertEqual(try live().rollup.map(\.count), [1, 1])
+
+    fixture.live.resetAgentState()
+    wc.flushChrome()
+    XCTAssertEqual(
+      try live().rollup.map(\.state), ["idle", "dormant"], "リセットは working を idle へ落とす")
+    XCTAssertEqual(wc.model.overlay, .workspacePalette, "追随のためにパレットを閉じない")
+  }
+
+  /// 素シェルの背景 materialize は `agentSlot` を動かさないため、materialize 自身が chrome 更新を
+  /// 要求しないと表示中パレットの減光が解けない（契機の穴）。
+  func testBackgroundPlainShellSpawnLiftsRowDimmingWhilePaletteIsOpen() throws {
+    let file = WorkspacesFile(
+      version: WorkspacePersistence.version, activeWorkspace: 0,
+      workspaces: [
+        WorkspaceState(
+          name: "main", rootPath: "/tmp", activeTab: 0,
+          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)]),
+        WorkspaceState(
+          name: "sleeping", rootPath: "/tmp", activeTab: 0,
+          tabs: [
+            TabState(
+              cwd: "/tmp", agent: AgentSession(command: "unknown", sessionId: "s"),
+              explicitTitle: nil)
+          ]),
+      ])
+    try JSONEncoder().encode(file).write(to: workspacesFile())
+    let wc = WindowController()
+    let sleeping = try XCTUnwrap(wc.workspaces.first { $0.name == "sleeping" })
+    wc.showWorkspacePalette()
+    let index = try XCTUnwrap(wc.workspaces.firstIndex { $0 === sleeping })
+    func live() throws -> WorkspacePaletteModel.LiveState {
+      try XCTUnwrap(wc.model.workspacePalette?.items.first { $0.index == index }).live
+    }
+    XCTAssertTrue(try live().dormant, "前提: 配下のタブを一度も起こしていない")
+    wc.flushChrome()  // 以降の追随が spawn 自身の chrome 要求だけで起きることを見るため dirty を落とす
+
+    XCTAssertNotNil(wc.controlSpawn(workspaceId: sleeping.id, cwd: nil, command: nil))
+    wc.flushChrome()
+
+    XCTAssertFalse(try live().dormant, "素シェル 1 枚の起床で行の減光が解ける")
+    XCTAssertEqual(try live().rollup.map(\.state), ["dormant"], "未消費チケットは残る")
+  }
 }
