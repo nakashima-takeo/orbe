@@ -2,7 +2,8 @@ import SwiftUI
 
 /// `DSTabSegment` の固有寸法。generic な View 型は型引数なしに static を引けないため別に持つ。
 enum DSTabSegmentMetrics {
-  /// グループの枠が器の外側へはみ出す幅。行の合成（`StatusRowView`）はこの帯をスクロール内容に含める。
+  /// グループの枠が器の外側へはみ出す幅。行の合成（`StatusRowView`）は ScrollView のクリップを
+  /// この幅だけ広げる。
   static let frameOutset: CGFloat = Theme.Stroke.hairline
 }
 
@@ -78,9 +79,7 @@ struct DSSegmentBar: View {
     }
     DSTabSegment { DSTab(title: "docs/spec", stateGlyph: .done) }
   }
-  .padding(Chrome.tabRowPad)
-  .frame(height: Chrome.tabRowHeight)
-  .background(Color.theme.tabRowBg)
+  .tabRowShell()
   .padding(Theme.Space.phrase)
   .background(Color.theme.bgBase)
 }

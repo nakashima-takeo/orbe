@@ -192,9 +192,7 @@ private struct FieldEditorSelectAll: NSViewRepresentable {
     DSTabSegment { DSTab(title: "tests") }
     DSTabSegment { DSTab(title: "docs/spec", stateGlyph: .done) }
   }
-  .padding(Chrome.tabRowPad)
-  .frame(height: Chrome.tabRowHeight)
-  .background(Color.theme.tabRowBg)
+  .tabRowShell()
   .padding(Theme.Space.phrase)
   .background(Color.theme.bgBase)
 }
