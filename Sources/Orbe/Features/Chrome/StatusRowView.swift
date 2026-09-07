@@ -124,9 +124,7 @@ struct StatusRowView: View {
   // MARK: - 下段（セグメント形タブ行・全幅）
 
   private var bottomRow: some View {
-    tabStrip
-      .frame(maxWidth: .infinity)
-      .tabRowShell()
+    tabStrip.tabRowShell()
   }
 
   /// セル・セグメント構造・幅はすべて 1 回の body 評価で読んだ `strip` から出す。入れ子 ForEach の
