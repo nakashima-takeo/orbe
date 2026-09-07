@@ -9,15 +9,30 @@ enum Chrome {
   static let barHeight: CGFloat = headerHeight + tabRowHeight
   static let leftColumn: CGFloat = 80  // 信号機ボタンを避ける左の柱
   static let edgePad: CGFloat = 16  // TopBar の左右余白
-  static let tabRowPad: CGFloat = 3  // タブ行の内側余白（上下左右）
-  static let tabHeight: CGFloat = tabRowHeight - tabRowPad * 2  // セグメント高（行 fill）
-  static let tabGap: CGFloat = 6  // セグメント間
+  static let tabRowPadY: CGFloat = 3  // タブ行の上下余白
+  static let tabGap: CGFloat = 5  // セグメント間
+  // タブ行の左右端の余白。端の隙間はセグメント間と同じリズムなので tabGap から導く。
+  static let tabRowPadX: CGFloat = tabGap
+  static let tabHeight: CGFloat = tabRowHeight - tabRowPadY * 2  // セグメント高（行 fill）
   static let tabMaxWidth: CGFloat = 140  // セル 1 枚の上限。超える名前は省略記号で切り詰め
   // セル 1 枚の床。数文字＋省略記号が読める幅。短い名前でもこれを下回らず、shrink もここで止めて
   // 以降は横スクロールへ回す。
   static let tabMinWidth: CGFloat = 40
   // インライン改名の編集セルの下限幅（数語を打てる幅）。shrink 床（40）だと打てないため View 側で上書きする。
   static let tabEditFloor: CGFloat = 120
+}
+
+extension View {
+  /// タブ行の殻（§5.1 TabBar）: 上下 tabRowPadY・左右 tabRowPadX の余白、行高、地 tabRowBg。
+  /// 実行の行と #Preview / gallery が同じ殻で描く。
+  func tabRowShell() -> some View {
+    padding(.vertical, Chrome.tabRowPadY)
+      .padding(.horizontal, Chrome.tabRowPadX)
+      .frame(height: Chrome.tabRowHeight)
+      // ShapeStyle 版 background は既定で safe area へ自動拡張する。実窓（fullSizeContentView）では
+      // タイトルバー帯の safe area が行を貫くため、拡張を止めないと帯が TopBar まで覆う。
+      .background(Color.theme.tabRowBg, ignoresSafeAreaEdges: [])
+  }
 }
 
 /// 最上段 chrome をネイティブ SwiftUI で描く（TopBar＋TabBar・§5.1）。
@@ -49,7 +64,7 @@ struct StatusRowView: View {
       WindowDragArea()
       VStack(spacing: 0) {
         topRow.frame(height: Chrome.headerHeight)
-        bottomRow.frame(height: Chrome.tabRowHeight)
+        bottomRow
       }
     }
     // 透過時は端末と同濃度の veil を敷く（不透明時は clear＝最背面 BackgroundGlow の glow を透かす現行）。
@@ -109,14 +124,7 @@ struct StatusRowView: View {
   // MARK: - 下段（セグメント形タブ行・全幅）
 
   private var bottomRow: some View {
-    tabStrip
-      // 行の内側余白 3 は「ScrollView の外側 2 ＋ スクロール内容の内側 1」に割る。グループの枠は器の
-      // 外側 1px なので、その帯をスクロール内容に含めないと ScrollView が枠の上下・行左端を切る。
-      .padding(Chrome.tabRowPad - DSTabSegmentMetrics.frameOutset)
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      // ShapeStyle 版 background は既定で safe area へ自動拡張する。実窓（fullSizeContentView）では
-      // タイトルバー帯の safe area が行を貫くため、拡張を止めないと帯が TopBar まで覆う。
-      .background(Color.theme.tabRowBg, ignoresSafeAreaEdges: [])
+    tabStrip.tabRowShell()
   }
 
   /// セル・セグメント構造・幅はすべて 1 回の body 評価で読んだ `strip` から出す。入れ子 ForEach の
@@ -124,8 +132,7 @@ struct StatusRowView: View {
   private var tabStrip: some View {
     GeometryReader { geo in
       let strip = model.strip
-      let inset = DSTabSegmentMetrics.frameOutset
-      let available = geo.size.width - inset * 2
+      let available = geo.size.width
       let widths = tabWidths(strip, available: available)
       ScrollViewReader { proxy in
         ScrollView(.horizontal, showsIndicators: false) {
@@ -170,8 +177,11 @@ struct StatusRowView: View {
                 .allowsHitTesting(false)
             }
           }
-          .padding(inset)
         }
+        // グループの枠は器の外側 1px の描画のはみ出し。ScrollView 自前のクリップは viewport ちょうどで
+        // これを切るので、クリップを外し、枠ぶんだけ広げた矩形で自分でクリップする。
+        .scrollClipDisabled()
+        .clipShape(Rectangle().inset(by: -DSTabSegmentMetrics.frameOutset))
         .onChange(of: model.active) { _, new in proxy.scrollTo(new, anchor: .center) }
         // 編集開始時、編集タブが横スクロール域外でも可視域へ入れる。
         .onChange(of: model.editingIndex) { _, new in
@@ -185,7 +195,7 @@ struct StatusRowView: View {
         }
       }
     }
-    .frame(maxWidth: .infinity, maxHeight: Chrome.tabHeight + DSTabSegmentMetrics.frameOutset * 2)
+    .frame(maxWidth: .infinity, maxHeight: Chrome.tabHeight)
   }
 
   /// セル 1 枚（DSTab）に app 層の配線（選択・中クリック・改名・コンテキストメニュー・掴み中の追従）を付ける。

@@ -225,7 +225,7 @@ final class ChromeStatusRowTests: OrbeTestCase {
   /// 床に達したタブは凍結され、残りへ再配分されて合計はちょうど room に収まる。
   func testOverflowShrinksProportionallyAndRedistributes() {
     let naturals: [CGFloat] = [100, 50, 100, 50]
-    let available: CGFloat = 260  // room = 260 - 6*4 - 22 = 214 < 300
+    let available: CGFloat = 260  // 自然幅の合計 300 が room を超える幅
     let widths = widths(naturals, available: available)
     let room = available - gap * 4 - plus
     XCTAssertEqual(widths.reduce(0, +), room, accuracy: 0.5, "床に達しない限り合計は room に一致")

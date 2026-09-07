@@ -21,9 +21,7 @@ struct GalleryView: View {
         DSTabSegment { DSTab(title: "build", stateGlyph: .waiting) }
         DSTabSegment { DSTab(title: "agy") }
       }
-      .padding(Chrome.tabRowPad)
-      .frame(height: Chrome.tabRowHeight)
-      .background(Color.theme.tabRowBg)
+      .tabRowShell()
       .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.xs))
 
       label("DSTabSegment — grouped (tinted ground + frame + bar, selected inside) / single")
@@ -36,13 +34,11 @@ struct GalleryView: View {
         }
         DSTabSegment { DSTab(title: "~/notes") }
       }
-      .padding(Chrome.tabRowPad)
-      .frame(height: Chrome.tabRowHeight)
-      .background(Color.theme.tabRowBg)
+      .tabRowShell()
       .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.xs))
 
       label("DSTab — editing (Cmd+R inline rename)")
-      // 実 TabBar を再現（地 tab.rowBg・padding 3・gap 6・＋ボタン）。編集タブは下限 tabEditFloor 幅。
+      // 実 TabBar を再現（殻は tabRowShell・gap は tabGap）。編集タブは下限 tabEditFloor 幅。
       HStack(spacing: Chrome.tabGap) {
         DSTabSegment {
           DSTab(
@@ -54,9 +50,7 @@ struct GalleryView: View {
         DSTabSegment { DSTab(title: "build", stateGlyph: .waiting) }
         DSTabSegment { DSTab(title: "agy") }
       }
-      .padding(Chrome.tabRowPad)
-      .frame(height: Chrome.tabRowHeight)
-      .background(Color.theme.tabRowBg)
+      .tabRowShell()
       .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.xs))
 
       label("DSTab — editing empty (派生名 placeholder)")
@@ -70,9 +64,7 @@ struct GalleryView: View {
         }
         DSTabSegment { DSTab(title: "build", stateGlyph: .waiting) }
       }
-      .padding(Chrome.tabRowPad)
-      .frame(height: Chrome.tabRowHeight)
-      .background(Color.theme.tabRowBg)
+      .tabRowShell()
       .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.xs))
 
       label("PaletteRow — selected / default / dormant / info")
