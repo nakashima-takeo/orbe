@@ -29,7 +29,7 @@ struct GalleryView: View {
       label("DSTabSegment — grouped (tinted ground + frame + bar, selected inside) / single")
       HStack(spacing: Chrome.tabGap) {
         DSTabSegment(kind: .group(colorIndex: WorktreeColor.index(forKey: "storefront"))) {
-          DSSegmentBar(color: Color.theme.worktreeBar[WorktreeColor.index(forKey: "storefront")])
+          DSSegmentBar(colorIndex: WorktreeColor.index(forKey: "storefront"))
           DSTab(title: "s/s/checkout", stateGlyph: .working, divided: true)
           DSTab(title: "s/api", active: true, stateGlyph: .waiting, divided: true)
           DSTab(title: "storefront", divided: true)
@@ -42,7 +42,7 @@ struct GalleryView: View {
       .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.xs))
 
       label("DSTab — editing (Cmd+R inline rename)")
-      // 実 TabBar を再現（地 tab.rowBg・padding 3・gap 2・＋ボタン）。編集タブは下限 tabEditFloor 幅。
+      // 実 TabBar を再現（地 tab.rowBg・padding 3・gap 6・＋ボタン）。編集タブは下限 tabEditFloor 幅。
       HStack(spacing: Chrome.tabGap) {
         DSTabSegment {
           DSTab(

@@ -120,10 +120,15 @@ final class StatusRowViewTests: OrbeTestCase {
   /// 挿入先はセグメント境界（タブ index で表す）。隣の連の中心を越えるまでは自分の境界（no-op）。
   func testSegmentDropIndexSnapsToSegmentBoundaries() {
     XCTAssertEqual(StatusRowView.dropIndex(session(.segment(0))), 0, "自分の左境界")
+    let ownCenter = (bar + 300) / 2
+    let neighborCenter = bar + 300 + gap + 50
+    let toNeighborCenter = neighborCenter - ownCenter
     XCTAssertEqual(
-      StatusRowView.dropIndex(session(.segment(0), translation: 200)), 3, "隣の中心手前＝自連の右境界")
+      StatusRowView.dropIndex(session(.segment(0), translation: toNeighborCenter - 5)), 3,
+      "隣の中心手前＝自連の右境界")
     XCTAssertEqual(
-      StatusRowView.dropIndex(session(.segment(0), translation: 210)), 4, "隣の中心を越えた＝その後ろ")
+      StatusRowView.dropIndex(session(.segment(0), translation: toNeighborCenter + 5)), 4,
+      "隣の中心を越えた＝その後ろ")
     XCTAssertEqual(StatusRowView.dropIndex(session(.segment(0), translation: 1000)), 6, "末尾 = タブ総数")
     XCTAssertEqual(StatusRowView.dropIndex(session(.segment(2), translation: -1000)), 0, "先頭")
   }

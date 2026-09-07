@@ -138,7 +138,7 @@ struct StatusRowView: View {
                   ? .group(colorIndex: segment.colorIndex) : .single
               ) {
                 if segment.isGroup {
-                  DSSegmentBar(color: Color.theme.worktreeBar[segment.colorIndex])
+                  DSSegmentBar(colorIndex: segment.colorIndex)
                     .gesture(dragGesture(.segment(s), widths: widths, segments: strip.ranges))
                 }
                 ForEach(segment.cells) { cell in

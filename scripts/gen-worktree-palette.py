@@ -137,7 +137,7 @@ def render(palettes: dict[str, list[int]]) -> str:
 /// 色相 × トーンの oklch を CSS Color 4 の彩度落としで sRGB へ写した hex。
 /// 式と色数は scripts/gen-worktree-palette.py の HUES / TONES が正。
 enum WorktreePalette {{
-  static let count = {len(next(iter(palettes.values())))}
+  static let count = {next(iter(palettes))}.count
 {tables}
 }}
 """

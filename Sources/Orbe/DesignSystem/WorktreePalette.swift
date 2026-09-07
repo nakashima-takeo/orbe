@@ -4,7 +4,7 @@
 /// 色相 × トーンの oklch を CSS Color 4 の彩度落としで sRGB へ写した hex。
 /// 式と色数は scripts/gen-worktree-palette.py の HUES / TONES が正。
 enum WorktreePalette {
-  static let count = 48
+  static let count = dark.count
   static let dark: [Int] = [
     0xf1a6b4, 0xf2a7a4, 0xf1aa95, 0xedae88, 0xe5b37e, 0xdbb879, 0xcebe7a, 0xbfc47f,
     0xaec98a, 0x9dcd97, 0x8cd0a7, 0x7ed1b7, 0x74d1c7, 0x71cfd6, 0x75cce4, 0x80c8ee,

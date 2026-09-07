@@ -52,15 +52,16 @@ struct DSTabSegment<Content: View>: View {
   }
 }
 
-/// セグメント左端の worktree 識別バー（縦 fill）。ジェスチャは app 層が付ける。
+/// セグメント左端の worktree 識別バー（縦 fill）。番号は `DSTabSegment.Kind.group` と同じ worktree
+/// 識別色番号。ジェスチャは app 層が付ける。
 struct DSSegmentBar: View {
   /// バー幅（DS 部品の固有寸法。幅計算 `StatusTabLayout` もこれを読む）。
   static let width: CGFloat = 3
-  let color: Color
+  let colorIndex: Int
 
   var body: some View {
     Rectangle()
-      .fill(color)
+      .fill(Color.theme.worktreeBar[colorIndex])
       .frame(width: Self.width)
       .frame(maxHeight: .infinity)
       .contentShape(Rectangle())
@@ -70,7 +71,7 @@ struct DSSegmentBar: View {
 #Preview("DSTabSegment") {
   HStack(spacing: Chrome.tabGap) {
     DSTabSegment(kind: .group(colorIndex: WorktreeColor.index(forKey: "orbe"))) {
-      DSSegmentBar(color: Color.theme.worktreeBar[WorktreeColor.index(forKey: "orbe")])
+      DSSegmentBar(colorIndex: WorktreeColor.index(forKey: "orbe"))
       DSTab(title: "src/renderer", active: true, stateGlyph: .working, divided: true)
       DSTab(title: "libghostty", stateGlyph: .waiting, divided: true)
       DSTab(title: "tests", divided: true)

@@ -16,7 +16,6 @@ final class WorktreeColorTests: OrbeTestCase {
   /// 番号は basename の FNV-1a（32bit・UTF-8）を 48 で割った余り。既知ベクトルで符号化を固定する。
   func testIndexIsFnv1aOfBasenameModuloPaletteSize() {
     XCTAssertEqual(WorktreePalette.count, 48, "表は 48 色")
-    XCTAssertEqual(WorktreePalette.dark.count, WorktreePalette.count)
     XCTAssertEqual(WorktreePalette.light.count, WorktreePalette.count)
     XCTAssertEqual(WorktreeColor.index(forKey: "/w/a"), 28, "FNV-1a(\"a\") = 0xe40c292c → mod 48")
     XCTAssertEqual(
