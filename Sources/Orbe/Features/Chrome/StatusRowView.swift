@@ -10,7 +10,7 @@ enum Chrome {
   static let leftColumn: CGFloat = 80  // 信号機ボタンを避ける左の柱
   static let edgePad: CGFloat = 16  // TopBar の左右余白
   static let tabRowPadY: CGFloat = 3  // タブ行の上下余白
-  static let tabGap: CGFloat = 6  // セグメント間
+  static let tabGap: CGFloat = 5  // セグメント間
   // タブ行の左右端の余白。端の隙間はセグメント間と同じリズムなので tabGap から導く。
   static let tabRowPadX: CGFloat = tabGap
   static let tabHeight: CGFloat = tabRowHeight - tabRowPadY * 2  // セグメント高（行 fill）
