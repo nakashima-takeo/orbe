@@ -38,7 +38,7 @@ struct GalleryView: View {
       .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.xs))
 
       label("DSTab — editing (Cmd+R inline rename)")
-      // 実 TabBar を再現（殻は tabRowShell・gap は tabGap・＋ボタン）。編集タブは下限 tabEditFloor 幅。
+      // 実 TabBar を再現（殻は tabRowShell・gap は tabGap）。編集タブは下限 tabEditFloor 幅。
       HStack(spacing: Chrome.tabGap) {
         DSTabSegment {
           DSTab(

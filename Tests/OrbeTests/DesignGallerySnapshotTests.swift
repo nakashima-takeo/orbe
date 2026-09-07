@@ -165,7 +165,8 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       dir: dir)
 
     // grouped scroll: 全タブが床 40 でも収まらず横スクロールへ回る段。行端でタブが切れる位置
-    // （枠 1px ぶんクリップを広げるため、行端から 5）と、先頭の連の枠が切られずに出ることを見る。
+    // （枠 1px ぶんクリップを広げるため、行端から 4＝余白 5 − 枠 1）と、先頭の連の枠が切られずに
+    // 出ることを見る。
     let groupedScroll = StatusRowModel()
     groupedScroll.workspace = "monorepo"
     groupedScroll.strip = TabStrip(
