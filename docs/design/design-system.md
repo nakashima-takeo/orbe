@@ -67,7 +67,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `tab.rowBg` | タブ行全幅の地 | `rgba(0,0,0,.28)` | `rgba(58,49,81,.08)` |
 | `tab.segBg` | 単独タブ（1 枚の連）の地 | `rgba(255,255,255,.10)` | `rgba(58,49,81,.06)` |
 | `tab.groupBg` | グループ（2 枚以上の連）の地の下敷き（上に `worktree.tint` を重ねる） | `rgba(255,255,255,.04)` | `rgba(58,49,81,.02)` |
-| `worktree.bar[0…47]` | 連の左端の worktree 識別色（番号は basename のハッシュでテーマ共通・色はテーマごと） | `WorktreePalette.dark` | `WorktreePalette.light` |
+| `worktree.bar[0…47]` | 連の左端の worktree 識別色（番号は basename のハッシュでテーマ共通・色はテーマごと。dark は暗い chrome の上で光るトーン、light は白い紙面の上で沈むトーン） | `WorktreePalette.dark` | `WorktreePalette.light` |
 | `worktree.tint[0…47]` | グループの地に重ねる識別色の淡塗り | `WorktreePalette.dark` の各色 .12 | `WorktreePalette.light` の各色 .14 |
 | `worktree.frame[0…47]` | グループの器の外側 1px 枠 | `WorktreePalette.dark` の各色 .38 | `WorktreePalette.light` の各色 .45 |
 | `tab.divider` | グループ内セルの区切り線（識別色を敷いた地の上でも読める濃さ） | `rgba(255,255,255,.14)` | `rgba(58,49,81,.16)` |
@@ -80,7 +80,6 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 `state.done`（完了・緑）と `diff.added`（green）、`state.waiting`（要応答・黄）と `conflict`（ANSI黄）は**別トークンとして分離**（light では偶々同値だが dark では異なる。SSOT は状態色を `StateHue`、ANSI 系を端末アンカーから別々に導く）。
 **反転色（`state.*Inverse`）は対テーマの状態色**＝dark/light の値を入れ替えただけ（選択タブの反転面上でコントラストを確保する仕組み）。
 **light の `tab.activeText` `#f3f0fa` は `bg.base` `#fcfbfe` と別値**（on.accent の流用不可）。
-**worktree 識別色は番号がテーマ共通・色がテーマごと**——48 の番号は basename のハッシュで決まりテーマで変わらず、その番号が引く色は dark（暗い chrome の上で光るトーン）と light（白い紙面の上で沈むトーン）の別々の表から取る。
 
 ### 2.2 状態の塗り・tint（事前 alpha 済み・per-theme）
 選択・hover は `accent.primary` の淡塗り（テーマごとの accent 基調に α を掛けた事前合成値）。状態別 tint は件数ピル・バッジの淡塗り（各テーマの状態色の 12–14%）。
@@ -182,7 +181,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 本書は color と意味の契約＋主要寸法に留める（実装の画素は各コンポーネントが持つ）。
 
 - **選択の示し方**: リスト行の選択は **tint 背景**（`selectionFill`）。タブの選択のみ**前景色反転**（§5.1）。**選択を左 3px バーで示すことはどこでもしない**（Completion も例外にしない）。下線・太字による選択弁別も持たない（タブ行の左 3px バーは選択ではなく worktree の識別色で、意味が別）。
-- **Tab（セグメント）**: タブ行（高さ28・padding 3・gap 6・地 `tab.rowBg`）の中の器。**面を持つのはグループ（同じ worktree のタブ 2 枚以上の連）だけ**——地 `tab.groupBg` に `worktree.tint` を重ね・radius 4・クリップ、器の**外側**に 1px の `worktree.frame` の枠（幅の取り分に含まれず gap に重なる）、左端に識別色バー 3px（縦いっぱい・番号はテーマ共通で色はテーマごと）、各セルの左に hairline `tab.divider` の区切り線（先頭セルを含む・選択セルでも残る）。1 枚の連は単独タブの器で、地 `tab.segBg`・radius 3 だけを持ち、枠・バー・区切り線を持たない。
+- **Tab（セグメント）**: タブ行（高さ28・padding 3・gap 6・地 `tab.rowBg`）の中の器。**面を持つのはグループ（同じ worktree のタブ 2 枚以上の連）だけ**——地 `tab.groupBg` に `worktree.tint` を重ね・radius 4・クリップ、器の**外側**に 1px の `worktree.frame` の枠（幅の取り分に含まれず gap に重なる）、左端に識別色バー 3px（縦いっぱい）、各セルの左に hairline `tab.divider` の区切り線（先頭セルを含む・選択セルでも残る）。1 枚の連は単独タブの器で、地 `tab.segBg`・radius 3 だけを持ち、枠・バー・区切り線を持たない。
 - **Tab のセル**: padding 横8・グリフとタイトルの間 6・幅は床40〜上限140（超える名前は末尾省略）。非選択＝地なし（器の地が透ける）・文字 `text.secondary`（idle/dormant/なしも同じ）・状態グリフ 12px（working は stroke 1.6。idle は非表示）。**選択＝地 `text.primary`（前景色反転。区切り線を持つセルでは左 1px を空けて線を残す）・文字 `tab.activeText`・グリフ＝`state.*Inverse`（対テーマ状態色）**、done の check 線のみ `text.primary`。タブ背景を状態色で塗らない。
 - **Palette row**: default＝`text.secondary`（workspace 行の名前＝最優先状態の色）。hover＝`hoverFill`＋`text.primary`。selected＝`selectionFill` 地。dormant＝`Opacity.dormant`。情報行＝`text.muted`・選択不可。そのうち直前の操作が失敗した理由を述べる行だけ `danger`（§3）——中立な補足と同じ弱さで出さない。行= padding 5×10・radius 8。workspace 行の右詰め＝状態別カウントピル（padding 1×7・radius pill・地 tint .12・文字 状態色・グリフ 9px）。
 - **Button**: primary（主 CTA）＝塗り `accent.primary`・文字 `on.accent`・radius `md`。secondary＝塗りなし・文字 `accent.primary`・枠 1px `surface.1`・hover で `hoverFill`。disabled＝`Opacity.disabled`。
@@ -218,7 +217,7 @@ SwiftUI は `Color.theme.x` / `Font.theme.x`（`DesignTokens+SwiftUI.swift` の�
 
 - token id は `domain.role`（`text.secondary`）。Swift は `Theme.<Domain>.<roleCamel>`（`Theme.Color.textSecondary`）。`tokens.json` と1対1。
 - appearances は `dark` / `light`。新トークンは semantic（役割）で足し、生 hex を component に書かない。原始パレットを増やすときは、識別色は `OrbePalette.swift`・chrome は `DesignTokens.swift` に定義を足し、本書と `tokens.json` へ反映する。
-- バージョンは `docs/design/tokens.json` の `$meta.version`（semver）。値変更は minor、役割の追加/削除は major 目安。本書冒頭の日付も更新する。
+- バージョンは `docs/design/tokens.json` の `$meta.version`（semver）。0.x の間は役割の追加/削除も minor、値変更は patch。1.0 は役割集合の安定を宣言するときに上げる。本書冒頭の日付も更新する。
 
 ---
 
@@ -226,7 +225,7 @@ SwiftUI は `Color.theme.x` / `Font.theme.x`（`DesignTokens+SwiftUI.swift` の�
 
 中央ターミナル（Ghostty が描く Metal レイヤー）も chrome の外観に寄せる。色は chrome のトークンとは別レイヤー（Ghostty の named theme）で持ち、`theme = light:OrbeLight,dark:OrbeDark`（バンドル `Contents/Resources/ghostty/themes/` はこの2枚のみ・出所 `app/themes/`）に固定。
 
-- **配色**: ANSI 16 色＋端末 bg/fg/cursor/selection は識別色 SSOT `OrbePalette.swift` が持ち、`renderConf` が conf 2枚（`app/themes/OrbeDark` / `OrbeLight`）を生成する（手写しの転写なし）。16 色は確定配色値。dark は **VS Code Dark+ のシンタックストークン色**を ANSI スロットへ再配置したもの（VS Code の `terminal.ansi*` とは別物）、light は無彩色ランプ 0/7/15 が **Catppuccin Latte** 由来（8 のみ AA 是正）で有彩色 1–6 は light 背景向けに決めた値。chrome と共有するアンカーは 背景 `chromeBg`（`#1a1721`/light `#fcfbfe`）・前景 `chromeText`（`#eaddc7`/`#3a3151`）・カーソル `accent`（`#9068f0`/`#6d43d8`）・赤 `diffDel`（1・9）・緑 `diffAdded`（2・10）・黄 `conflict`（3・11）で、dark/light とも端末 ink と同値。light の bright 赤/緑/黄（9–14）は normal（1–6）のミラー。ink スロット {1-6,8-14} は原則 各モードの背景に対し WCAG AA 4.5 以上（構造色 0/7/15 は最暗/最明淡色として ANSI 慣習で対象外）。ただし確定値の一部は 4.5 に満たず、人が承認済みの確定値を優先してゲートから除外する（`OrbePalette.aaExemptDark/Light`＝dark 8・light 1/2/3/9/10/11）。`swift test`（`OrbePaletteTests`）が除外外の ink のコントラストと conf の drift（SSOT からの再生成＝コミット済み）を検証し、回帰と転写ドリフトをコミット不能にする。
+- **配色**: ANSI 16 色＋端末 bg/fg/cursor/selection は識別色 SSOT `OrbePalette.swift` が持ち、`renderConf` が conf 2枚（`app/themes/OrbeDark` / `OrbeLight`）を生成する（手写しの転写なし）。16 色は確定配色値。dark は **VS Code Dark+ のシンタックストークン色**を ANSI スロットへ再配置したもの（VS Code の `terminal.ansi*` とは別物）、light は無彩色ランプ 0/7/15 が **Catppuccin Latte** 由来（8 のみ AA 是正）で有彩色 1–6 は light 背景向けに決めた値。chrome と共有するアンカーは 背景 `chromeBg`（`#171420`/light `#fcfbfe`）・前景 `chromeText`（`#e6e1f0`/`#3a3151`）・カーソル `accent`（`#9068f0`/`#6d43d8`）・赤 `diffDel`（1・9）・緑 `diffAdded`（2・10）・黄 `conflict`（3・11）で、dark/light とも端末 ink と同値。light の bright 赤/緑/黄（9–14）は normal（1–6）のミラー。ink スロット {1-6,8-14} は原則 各モードの背景に対し WCAG AA 4.5 以上（構造色 0/7/15 は最暗/最明淡色として ANSI 慣習で対象外）。ただし確定値の一部は 4.5 に満たず、人が承認済みの確定値を優先してゲートから除外する（`OrbePalette.aaExemptDark/Light`＝dark 8・light 1/2/3/9/10/11）。`swift test`（`OrbePaletteTests`）が除外外の ink のコントラストと conf の drift（SSOT からの再生成＝コミット済み）を検証し、回帰と転写ドリフトをコミット不能にする。
 - **テーマ選択**: ユーザーが選べるのは **Auto / Dark / Light の外観スイッチ**（`ThemeMode`・`NSApp.appearance` 経由で chrome とターミナルが揃って切替）だけで、ターミナル配色自体は選べない。gui.conf が上記 theme 行を常時吐き、`~/.config/ghostty` の theme 指定を無効化する。
 - **カーソル**: 電紫のブロック（`cursor-style = block`＋テーマの `cursor-color`＝accent）＋点滅 ON/OFF は設定パレット。点滅周期は Ghostty ハードコードの標準 600ms（chrome の `blink` 1.1s（§2.5）とは周期が異なるが、エンジンを fork しない方針で受容）。
 - **背景透過**: 既定 `background-opacity = 0.9`。半透明の端末越しに AppShell 最背面の accent＋working glow が中央へ滲む。ユーザーが設定パレットで不透明度を明示すると層3（`gui.conf`）が後勝ちする。
