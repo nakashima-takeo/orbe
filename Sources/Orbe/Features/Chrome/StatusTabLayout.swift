@@ -7,8 +7,9 @@ enum StatusTabLayout {
     (0..<count).map { $0..<($0 + 1) }
   }
 
-  /// 連が識別バー（と各セル左の区切り線）を持つか＝2 枚以上。描画・room・x 積算が共有する唯一の述語。
-  static func hasBar(_ range: Range<Int>) -> Bool { range.count >= 2 }
+  /// 連がグループ＝2 枚以上か。識別色の地・外側 1px 枠・識別バー・区切り線と room・x 積算が
+  /// 共有する唯一の述語。
+  static func isGroup(_ range: Range<Int>) -> Bool { range.count >= 2 }
 
   /// shrink-to-fit の幅計算。自然幅を床 40〜上限 140 に収め（数文字の短い名前でも 40 の幅を持つ）、
   /// 合計が room に収まればそのまま、溢れれば**その幅に比例して縮め、床に達したセルは凍結して
@@ -23,7 +24,7 @@ enum StatusTabLayout {
     let capped = naturals.map { min(max($0, Chrome.tabMinWidth), Chrome.tabMaxWidth) }
     guard !capped.isEmpty else { return [] }
     let gaps = Chrome.tabGap * CGFloat(segments.count)  // 要素は n 連 + ＋ボタンで計 n+1、その間の隙間は n 個
-    let bars = DSSegmentBar.width * CGFloat(segments.filter(hasBar).count)
+    let bars = DSSegmentBar.width * CGFloat(segments.filter(isGroup).count)
     let room = available - gaps - Chrome.tabHeight - bars  // ＋ボタンは tabHeight 角
     if capped.reduce(0, +) <= room { return capped }
 
@@ -64,8 +65,8 @@ enum StatusTabLayout {
     let range: Range<Int>
     let x: CGFloat
     let width: CGFloat
-    /// 2 枚以上の連＝左端に識別バーを持つ。
-    let bar: Bool
+    /// 2 枚以上の連＝グループ（左端に識別バーを持つ）。
+    let isGroup: Bool
     var midX: CGFloat { x + width / 2 }
     var maxX: CGFloat { x + width }
   }
@@ -87,21 +88,22 @@ enum StatusTabLayout {
     var count: Int { cells.count }
   }
 
-  /// x 積算: セグメント x0 → (bar ? +バー幅) → セルを隙間なし → セグメント幅 = バー + Σセル → 次は +tabGap。
+  /// x 積算: セグメント x0 → (グループなら +バー幅) → セルを隙間なし → セグメント幅 = バー + Σセル
+  /// → 次は +tabGap。
   static func geometry(widths: [CGFloat], segments: [Range<Int>]) -> Geometry {
     var cells: [CellFrame] = []
     var segs: [SegmentFrame] = []
     var x: CGFloat = 0
     for r in segments {
-      let bar = hasBar(r)
+      let group = isGroup(r)
       let x0 = x
-      if bar { x += DSSegmentBar.width }
+      if group { x += DSSegmentBar.width }
       for i in r {
         let w = widths.indices.contains(i) ? widths[i] : 0
         cells.append(CellFrame(x: x, width: w))
         x += w
       }
-      segs.append(SegmentFrame(range: r, x: x0, width: x - x0, bar: bar))
+      segs.append(SegmentFrame(range: r, x: x0, width: x - x0, isGroup: group))
       x += Chrome.tabGap
     }
     return Geometry(cells: cells, segments: segs)

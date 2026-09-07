@@ -20,11 +20,11 @@ struct TabStrip: Equatable {
   /// 隣接する同 worktree のタブの連。
   struct Segment: Equatable {
     let cells: [Cell]
-    /// worktree 識別色番号（`Color.theme.worktreeBar` の index）。
+    /// worktree 識別色番号（`worktreeBar` / `worktreeTint` / `worktreeFrame` 共通の index）。
     let colorIndex: Int
     var range: Range<Int> { (cells.first?.index ?? 0)..<((cells.last?.index ?? -1) + 1) }
-    /// 左端に識別バー・各セル左に区切り線を持つ連か（述語は `StatusTabLayout.hasBar` の 1 つ）。
-    var bar: Bool { StatusTabLayout.hasBar(range) }
+    /// グループ＝2 枚以上の連か（述語は `StatusTabLayout.isGroup` の 1 つ）。
+    var isGroup: Bool { StatusTabLayout.isGroup(range) }
   }
 
   var segments: [Segment] = []

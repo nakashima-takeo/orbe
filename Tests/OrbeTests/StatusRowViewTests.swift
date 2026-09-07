@@ -19,7 +19,8 @@ final class StatusRowViewTests: OrbeTestCase {
   private let bar = DSSegmentBar.width
 
   /// 幅 100 のセル 6 枚: 連 [0,1,2]（バー）・単独 [3]・連 [4,5]（バー）。
-  /// x: セル 3,103,203 ｜ 連 0 = 0…303 ｜ セル 305 ｜ 連 1 = 305…405 ｜ セル 410,510 ｜ 連 2 = 407…610。
+  /// x: セル bar,bar+100,bar+200 ｜ 連 0 = 0…bar+300 ｜ 単独 3 = そこから +gap の 100 幅
+  /// ｜ 連 2 = そのさらに +gap から bar+200 幅。
   private var geometry: StatusTabLayout.Geometry {
     StatusTabLayout.geometry(
       widths: Array(repeating: 100, count: 6), segments: [0..<3, 3..<4, 4..<6])
@@ -119,20 +120,27 @@ final class StatusRowViewTests: OrbeTestCase {
   /// 挿入先はセグメント境界（タブ index で表す）。隣の連の中心を越えるまでは自分の境界（no-op）。
   func testSegmentDropIndexSnapsToSegmentBoundaries() {
     XCTAssertEqual(StatusRowView.dropIndex(session(.segment(0))), 0, "自分の左境界")
+    let ownCenter = (bar + 300) / 2
+    let neighborCenter = bar + 300 + gap + 50
+    let toNeighborCenter = neighborCenter - ownCenter
     XCTAssertEqual(
-      StatusRowView.dropIndex(session(.segment(0), translation: 200)), 3, "隣の中心手前＝自連の右境界")
+      StatusRowView.dropIndex(session(.segment(0), translation: toNeighborCenter - 5)), 3,
+      "隣の中心手前＝自連の右境界")
     XCTAssertEqual(
-      StatusRowView.dropIndex(session(.segment(0), translation: 210)), 4, "隣の中心を越えた＝その後ろ")
+      StatusRowView.dropIndex(session(.segment(0), translation: toNeighborCenter + 5)), 4,
+      "隣の中心を越えた＝その後ろ")
     XCTAssertEqual(StatusRowView.dropIndex(session(.segment(0), translation: 1000)), 6, "末尾 = タブ総数")
     XCTAssertEqual(StatusRowView.dropIndex(session(.segment(2), translation: -1000)), 0, "先頭")
   }
 
   /// セグメント掴みのキャレットはセグメント間の隙間の中央（末尾は行末の外側）。
   func testSegmentCaretSitsInGapCenter() {
+    let seg2X = bar + 400 + gap * 2
     XCTAssertEqual(
-      StatusRowView.insertionCaretX(session(.segment(0), dropIndex: 4)), 407 - gap / 2 - 1)
+      StatusRowView.insertionCaretX(session(.segment(0), dropIndex: 4)), seg2X - gap / 2 - 1)
     XCTAssertEqual(
-      StatusRowView.insertionCaretX(session(.segment(0), dropIndex: 6)), 610 + gap / 2 - 1)
+      StatusRowView.insertionCaretX(session(.segment(0), dropIndex: 6)),
+      seg2X + bar + 200 + gap / 2 - 1)
     XCTAssertEqual(
       StatusRowView.insertionCaretX(session(.segment(2), dropIndex: 0)), 0, "先頭は 0 で止める")
   }

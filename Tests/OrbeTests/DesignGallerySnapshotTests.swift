@@ -164,6 +164,23 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       chromeBand(groupedOverflow, size: size), size: size, name: "statusrow_grouped_overflow.png",
       dir: dir)
 
+    // grouped scroll: 全タブが床 40 でも収まらず横スクロールへ回る段。行端でタブが切れる位置
+    // （枠 1px 帯をスクロール内容に含めるため、行端から 2）と、先頭の連の枠が切られずに出ることを見る。
+    let groupedScroll = StatusRowModel()
+    groupedScroll.workspace = "monorepo"
+    groupedScroll.strip = TabStrip(
+      titles: (0..<18).map { "package-\($0)" },
+      glyphs: (0..<18).map { glyphCycle[$0 % glyphCycle.count] },
+      segments: [0..<5, 5..<9, 9..<10, 10..<14, 14..<18],
+      colorIndices: ["core", "web", "scratch", "api", "cli"].map { WorktreeColor.index(forKey: $0) }
+    )
+    groupedScroll.active = 2
+    groupedScroll.cwd = "~/dev/monorepo/packages/core"
+    groupedScroll.rollup = [("working", 5), ("waiting", 4), ("done", 5), ("idle", 4)]
+    try writePNG(
+      chromeBand(groupedScroll, size: size), size: size, name: "statusrow_grouped_scroll.png",
+      dir: dir)
+
     // fitting: 行に余る枚数で、幅が自然幅そのままに出る段。2〜3 文字のタブは床 40 に持ち上がり、
     // 短い名前ばかりの連でもセルが潰れないことを見る（溢れた段だけでは床が shrink に隠れて見えない）。
     let fitting = StatusRowModel()
