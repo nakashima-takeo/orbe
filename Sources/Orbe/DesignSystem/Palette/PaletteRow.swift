@@ -76,7 +76,7 @@ struct PaletteRow: View {
 
     case .createAction:
       SelectableRow(selected: selected, action: action, onHoverEnter: onHoverEnter) {
-        Text(title)
+        fontResolver.text(title, base: Theme.Typography.workspaceName)
           .font(Font.theme.workspaceName)
           .foregroundStyle(Color.theme.accentPrimary)
           .lineLimit(1)
