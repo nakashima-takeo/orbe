@@ -47,6 +47,13 @@ final class SessionStoreCwdTests: OrbeTestCase {
     XCTAssertNil(store.activeTabCwd())
   }
 
+  /// 「新規に開く場所の既定」は 0 タブでホームへ落ちる——workspace の rootPath は使わない
+  /// （作成フォームの初期パス・Dispatch の基点・control `create_workspace` の rootPath 省略が読む）。
+  func testActiveTabCwdOrHomeFallsBackToHomeWithoutTabs() {
+    let store = makeStore(rootPath: "/tmp/ws-root", tabs: [])
+    XCTAssertEqual(store.activeTabCwdOrHome(), NSHomeDirectory())
+  }
+
   /// アクティブ workspace の選択タブの cwd（報告があれば報告値）——別タブ・別 workspace は見ない。
   func testActiveTabCwdFollowsTheSelectedTabOfTheActiveWorkspace() {
     let background = Workspace(name: "background", rootPath: "/tmp/bg")

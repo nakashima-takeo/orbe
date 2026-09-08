@@ -311,6 +311,28 @@ final class WindowControllerControlTests: OrbeTestCase {
     XCTAssertEqual(wc.workspaces.count, before, "弾いた作成で workspace が増えない")
   }
 
+  /// rootPath を省略した create_workspace は、アクティブタブの cwd を root にして作る。
+  ///
+  /// 壊れると何が起きるか: root を指定せず作った workspace が意図と別の場所に紐づき、そこで開く
+  /// タブもエージェントも別ディレクトリで走る。省略時の導出は API 側の契約なので、GUI の作成フォーム
+  /// （root を必ず渡す）を直しても静かに割れる。
+  func testCreateWorkspaceWithoutRootPathUsesActiveTabCwd() throws {
+    let wc = try restore(
+      activeWorkspace: 0,
+      [
+        WorkspaceState(
+          name: "main", rootPath: "/private/tmp/ws-root", activeTab: 0,
+          tabs: [TabState(cwd: "/private/tmp", agent: nil, explicitTitle: nil)])
+      ])
+    XCTAssertEqual(wc.store.activeTabCwd(), "/private/tmp", "前提: アクティブタブの cwd")
+    guard case .success(let value) = wc.controlCreateWorkspace(name: "proj", rootPath: nil) else {
+      return XCTFail("rootPath 省略の作成は success")
+    }
+    XCTAssertEqual(
+      (value as? [String: Any])?["rootPath"] as? String, "/private/tmp",
+      "省略時の root はアクティブタブの cwd（作成元 workspace の rootPath ではない）")
+  }
+
   // MARK: - controlSpawn の cwd フォールバック（spawn）
 
   /// cwd 省略の spawn は対象 workspace の rootPath で開く（0タブ＝タブ不在のフォールバック）。
