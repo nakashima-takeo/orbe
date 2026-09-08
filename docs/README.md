@@ -38,7 +38,7 @@ Orbe は、作業場所の準備・エージェントの起動・状態確認を
 **palette/ — オーバーレイ型 UI**
 
 - [dispatch](spec/palette/dispatch.md) — 作業コンテキストから始める（⌘⇧X）
-- [workspace](spec/palette/workspace.md) — workspace 切替・作成（⌘⇧S / ⌘N）・共有 PaletteCard 規律
+- [workspace](spec/palette/workspace.md) — workspace 切替・作成（⌘⇧S）・共有 PaletteCard 規律
 - [settings](spec/palette/settings.md) — 設定パレット（⌘,）
 - [attention](spec/palette/attention.md) — 対応すべきエージェントの一覧（⌘⌘）
 - [closed-agents](spec/palette/closed-agents.md) — 閉じたエージェントの一覧と復元（⌘⇧T）
