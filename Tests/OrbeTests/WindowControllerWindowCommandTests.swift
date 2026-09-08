@@ -39,7 +39,7 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
   /// パレット入力中の ⌘T 等の暴発を防ぐ（キーは subtree/keyDown へ流れる）。
   func testWindowKeyCommandInertWhileOverlayShowing() throws {
     let wc = try restoreSingleTab()
-    wc.showWorkspaceCreate()  // overlay を .workspaceCreate に立てる
+    wc.showWorkspaceCreate(name: nil)  // overlay を .workspaceCreate に立てる
     XCTAssertNotEqual(wc.presentedOverlay, .none, "前提: overlay 表示中")
     let before = wc.current.tabs.count
     XCTAssertFalse(wc.handleWindowKeyCommand(.newTab), "overlay 表示中は横取りせず false を返す")

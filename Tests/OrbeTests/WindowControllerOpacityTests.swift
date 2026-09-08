@@ -113,7 +113,7 @@ final class WindowControllerOpacityTests: OrbeTestCase {
     XCTAssertEqual(
       wc.activeEffectiveSettings()[SettingKeys.backgroundOpacity], 80, "アクティブ WS の上書きを反映")
 
-    wc.createWorkspace(name: "other")  // 上書き無しの新 WS がアクティブ
+    wc.createWorkspace(name: "other", rootPath: "/tmp/ws-other")  // 上書き無しの新 WS がアクティブ
     XCTAssertEqual(
       wc.activeEffectiveSettings()[SettingKeys.backgroundOpacity], 100, "上書き無し WS は global を継承")
     wc.current.settingsOverride = override { $0[SettingKeys.backgroundOpacity] = 50 }
@@ -177,7 +177,7 @@ final class WindowControllerOpacityTests: OrbeTestCase {
       "font-codepoint-map = \(EmojiPresentationRanges.confValue)=Noto Color Emoji\n"
       + "theme = light:OrbeLight,dark:OrbeDark\n"
     XCTAssertEqual(guiConfContent(), "font-size = 30\n" + constLines, "上書き WS では生成 conf が 30")
-    wc.createWorkspace(name: "other")  // 上書き無しの新 WS がアクティブに
+    wc.createWorkspace(name: "other", rootPath: "/tmp/ws-other")  // 上書き無しの新 WS がアクティブに
     XCTAssertEqual(
       guiConfContent(), "font-size = 12\n" + constLines,
       "新 WS は global 継承——生成 conf が 12 へ再生成される（前 WS の 30 を持ち越さない）")

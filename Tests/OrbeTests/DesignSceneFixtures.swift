@@ -27,8 +27,8 @@ enum DesignSceneFixtures {
       row("api-gateway", [("working", 2), ("done", 3)], "~/work/api-gw"),
       row("notes", [("idle", 1)], "~/notes"),
       row("api-docs", [("waiting", 1), ("done", 2)], "~/work/api-docs"),
-      // 一覧末尾に常設の作成導線行（破線罫線・accent 文字・右端 ⌘N バッジ）。
-      .init(label: "＋ 新規ワークスペース — パスから作成", trailingBadge: "⌘N", createStyle: true),
+      // 一覧末尾に常設の作成導線行（破線罫線・accent 文字）。
+      .init(label: "＋ 新規ワークスペース — パスから作成", createStyle: true),
     ]
     model.selected = 0
     return model

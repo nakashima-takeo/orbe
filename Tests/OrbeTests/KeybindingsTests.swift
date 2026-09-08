@@ -63,10 +63,8 @@ final class KeybindingsTests: OrbeTestCase {
 
   func testWorkspacePalette() {
     XCTAssertEqual(Keybindings.chromeAction(for: key("S", [.command, .shift])), .switchWorkspace)
-    // Cmd+N（Shift なし）は作成フォームを開く。
-    XCTAssertEqual(Keybindings.chromeAction(for: key("n")), .newWorkspace)
     // Opt/Ctrl 併用は奪わない。
-    XCTAssertNil(Keybindings.chromeAction(for: key("n", [.command, .option])))
+    XCTAssertNil(Keybindings.chromeAction(for: key("S", [.command, .shift, .option])))
   }
 
   func testShowSettings() {
@@ -127,7 +125,7 @@ final class KeybindingsTests: OrbeTestCase {
   }
 
   /// `ChromeAction.windowCommand`（surface 経路・window レベル経路が共有する単一ソース mapping）を網羅固定する。
-  /// window 系13アクションは対応する WindowCommand へ、surface ローカル7アクションは nil へ写す。
+  /// window 系12アクションは対応する WindowCommand へ、surface ローカル7アクションは nil へ写す。
   /// この分類が回帰すると 0タブ配信の可否（availableWithoutTabs）とキー振り分け全体がズレる。
   func testWindowCommandMappingIsExhaustive() {
     let mapped: [(ChromeAction, WindowCommand)] = [
@@ -136,7 +134,6 @@ final class KeybindingsTests: OrbeTestCase {
       (.nextTab, .nextTab),
       (.prevTab, .prevTab),
       (.switchWorkspace, .switchWorkspace),
-      (.newWorkspace, .newWorkspace),
       (.launchDefaultAgent, .launchDefaultAgent),
       (.showAgentPalette, .showAgentPalette),
       (.showDispatchPalette, .showDispatchPalette),
@@ -159,11 +156,11 @@ final class KeybindingsTests: OrbeTestCase {
   }
 
   /// `WindowCommand.availableWithoutTabs`（0タブでも window レベルで配信してよいか）の分類を網羅固定する。
-  /// タブ非依存9コマンドのみ true、content 依存4コマンドは false。この分類が回帰すると
+  /// タブ非依存8コマンドのみ true、content 依存4コマンドは false。この分類が回帰すると
   /// 0タブで効くべきキーが死ぬ／効くべきでない content 依存キーが暴発する。
   func testAvailableWithoutTabsClassification() {
     let available: [WindowCommand] = [
-      .newTab, .showClosedAgentsPalette, .newWorkspace, .switchWorkspace,
+      .newTab, .showClosedAgentsPalette, .switchWorkspace,
       .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings, .toggleHelp,
     ]
     for command in available {

@@ -4,7 +4,7 @@ import SwiftUI
 /// default=text.secondary / selected=text.primary＋tint 塗り（hover 独自の着色は持たず、
 /// ホバーは呼び出し側が `onHoverEnter` で選択を追従させる）/
 /// dormant=減光(.45) / info=選択不可・text.muted / failure=選択不可・danger（失敗の理由行）/
-/// createAction=accent 文字＋破線罫線＋右端バッジ。
+/// createAction=accent 文字＋破線罫線。
 /// detail はラベル後の muted 補足（ディレクトリ等）。
 struct PaletteRow: View {
   /// 行の性質。`info` は選択不可の情報行（CLI 無し等）、`failure` はその中で失敗の理由を述べる行
@@ -21,8 +21,6 @@ struct PaletteRow: View {
   var leading: AnyView?
   /// ラベル後に muted で出す補足（workspace 行のディレクトリ等）。
   var detail: String?
-  /// 行末に出す表示専用バッジ（作成導線の `⌘N` 等）。`createAction` の行でだけ描かれる。nil で出さない。
-  var trailingBadge: String?
   /// 行末（chevron の位置）に置く付属ビュー（試聴 EQ 等）。`normal` / `dormant` の行でだけ描かれる。
   /// nil で出さない。
   var trailing: AnyView?
@@ -78,23 +76,11 @@ struct PaletteRow: View {
 
     case .createAction:
       SelectableRow(selected: selected, action: action, onHoverEnter: onHoverEnter) {
-        HStack(spacing: Theme.Space.step) {
-          Text(title)
-            .font(Font.theme.workspaceName)
-            .foregroundStyle(Color.theme.accentPrimary)
-            .lineLimit(1)
-            .layoutPriority(1)
-          Spacer(minLength: 0)
-          if let trailingBadge {
-            Text(trailingBadge)
-              .font(Font.theme.meta)
-              .foregroundStyle(Color.theme.textMuted)
-              .padding(.horizontal, Theme.Space.step)
-              .padding(.vertical, Theme.Space.hair)
-              .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.sm).fill(Color.theme.smallPillFill))
-          }
-        }
+        fontResolver.text(title, base: Theme.Typography.workspaceName)
+          .font(Font.theme.workspaceName)
+          .foregroundStyle(Color.theme.accentPrimary)
+          .lineLimit(1)
+          .frame(maxWidth: .infinity, alignment: .leading)
       }
       .overlay(
         RoundedRectangle(cornerRadius: Theme.Radius.row)

@@ -23,14 +23,14 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
   /// 既存と一致しない名前で作成すると、その workspace がアクティブになる（条件4 の host 側）。
   func testCreateWorkspaceMakesItActive() {
     let wc = WindowController()
-    wc.createWorkspace(name: "infra")
+    wc.createWorkspace(name: "infra", rootPath: "/tmp/ws-infra")
     XCTAssertEqual(wc.window.title, "infra", "作成した workspace がアクティブ（title に反映）")
   }
 
   /// 既存 workspace を選ぶと、その workspace に切り替わる（条件5 の host 側・観測は title）。
   func testSwitchWorkspaceChangesActive() {
     let wc = WindowController()
-    wc.createWorkspace(name: "infra")  // index 1, active
+    wc.createWorkspace(name: "infra", rootPath: "/tmp/ws-infra")  // index 1, active
     XCTAssertEqual(wc.window.title, "infra")
     wc.switchWorkspace(to: 0)  // default へ戻す
     XCTAssertEqual(wc.window.title, "default", "index 0 への切替で default がアクティブ")
@@ -40,8 +40,8 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
   /// 戻った先の名前が保たれていることは、その workspace が削除/再生成されていない証左。
   func testRoundTripSwitchPreservesWorkspaces() {
     let wc = WindowController()
-    wc.createWorkspace(name: "alpha")  // index 1
-    wc.createWorkspace(name: "beta")  // index 2, active
+    wc.createWorkspace(name: "alpha", rootPath: "/tmp/ws-alpha")  // index 1
+    wc.createWorkspace(name: "beta", rootPath: "/tmp/ws-beta")  // index 2, active
     XCTAssertEqual(wc.window.title, "beta")
 
     wc.switchWorkspace(to: 0)  // default
@@ -55,7 +55,7 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
   /// 改名はアクティブ workspace の title に反映される（条件6 の改名・host 側）。
   func testRenameActiveWorkspaceUpdatesTitle() {
     let wc = WindowController()
-    wc.createWorkspace(name: "old")  // index 1, active
+    wc.createWorkspace(name: "old", rootPath: "/tmp/ws-old")  // index 1, active
     wc.renameWorkspace(1, to: "new")
     XCTAssertEqual(wc.window.title, "new", "アクティブ workspace の改名は title に反映")
   }
@@ -63,7 +63,7 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
   /// 非アクティブ workspace を改名しても、改名後にそこへ切り替えると新名が見える（条件6・観測）。
   func testRenameInactiveWorkspaceIsRetained() {
     let wc = WindowController()
-    wc.createWorkspace(name: "tmp")  // index 1, active
+    wc.createWorkspace(name: "tmp", rootPath: "/tmp/ws-tmp")  // index 1, active
     wc.switchWorkspace(to: 0)  // default をアクティブに
     wc.renameWorkspace(1, to: "renamed")  // 非アクティブ(index 1)を改名
     XCTAssertEqual(wc.window.title, "default", "非アクティブの改名はアクティブ title を変えない")
@@ -82,8 +82,8 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
   /// 複数あるとき、非アクティブを削除でき、アクティブは維持される（条件6 の削除）。
   func testCloseInactiveWorkspaceKeepsActive() {
     let wc = WindowController()
-    wc.createWorkspace(name: "keep")  // index 1, active
-    wc.createWorkspace(name: "drop")  // index 2, active
+    wc.createWorkspace(name: "keep", rootPath: "/tmp/ws-keep")  // index 1, active
+    wc.createWorkspace(name: "drop", rootPath: "/tmp/ws-drop")  // index 2, active
     wc.switchWorkspace(to: 1)  // keep をアクティブに（drop は非アクティブ）
     XCTAssertEqual(wc.window.title, "keep")
     wc.closeWorkspace(2, origin: .gesture)  // 非アクティブ drop を削除
@@ -93,7 +93,7 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
   /// アクティブ workspace を削除すると別 workspace に切り替わる（条件6 の削除・active ケース）。
   func testCloseActiveWorkspaceSwitchesToAnother() {
     let wc = WindowController()
-    wc.createWorkspace(name: "second")  // index 1, active
+    wc.createWorkspace(name: "second", rootPath: "/tmp/ws-second")  // index 1, active
     XCTAssertEqual(wc.window.title, "second")
     wc.closeWorkspace(1, origin: .gesture)  // アクティブ自身を削除
     XCTAssertEqual(wc.window.title, "default", "アクティブ削除後は残った workspace がアクティブ")
@@ -206,7 +206,7 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
   /// 観測はモデルではなくディスク経由で行う。
   func testSwitchStampsLastUsedAtOnDisk() throws {
     let wc = WindowController()
-    wc.createWorkspace(name: "infra")  // index 1, active
+    wc.createWorkspace(name: "infra", rootPath: "/tmp/ws-infra")  // index 1, active
     let before = Date()
     wc.switchWorkspace(to: 0)  // default(index 0) へ切替 → default に lastUsedAt 刻印
     wc.flushSave()
@@ -313,7 +313,7 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
   /// 構成を変えて flushSave すると実際にディスクへ書かれ、再起動相当の新 WindowController で復元される。
   func testFlushSaveThenReloadRestoresAcrossInstances() throws {
     let wc1 = WindowController()
-    wc1.createWorkspace(name: "persisted")  // index 1, active
+    wc1.createWorkspace(name: "persisted", rootPath: "/tmp/ws-persisted")  // index 1, active
     wc1.flushSave()  // デバウンス待たず確定保存
 
     let saved = try workspacesFile()

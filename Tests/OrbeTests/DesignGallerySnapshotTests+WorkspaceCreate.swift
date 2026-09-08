@@ -9,7 +9,8 @@ import XCTest
 extension DesignGallerySnapshotTests {
 
   /// ワークスペース作成フォームを design 正典 ステージ同寸（640×520）で撮る。folder=(a)追従＋補完・
-  /// (b)リンク解除中／clone=(c)通常・(d)URL空・(e)リンク解除中・(f)待機・(g)失敗。見本と突合。
+  /// (b)リンク解除中・(b')引き継いだ長い名前／clone=(c)通常・(d)URL空・
+  /// (e)リンク解除中・(f)待機・(g)失敗。見本と突合。
   func renderWorkspaceCreateSnapshots(dir: URL) throws {
     let stage = NSSize(width: 640, height: 520)
     func write(_ name: String, _ model: WorkspaceCreateModel) throws {
@@ -35,6 +36,12 @@ extension DesignGallerySnapshotTests {
     let unlinked = WorkspaceCreateModel(path: "~")
     unlinked.setName("my-workspace")
     try write("workspacecreate_unlinked.png", unlinked)
+
+    // (b') 切替パレットが引き継ぐ名前は任意長のユーザー入力。名前欄とフッターの作成プレビュー文が
+    // 欄幅を超える名前で破綻しないことを見る。
+    try write(
+      "workspacecreate_seeded_long.png",
+      WorkspaceCreateModel(path: "~", name: "very-long-workspace-name-that-overflows-the-field"))
 
     // --- git clone ソース（見本 WorkspaceCreateFlow.tsx の src==="clone" と突合）---
     let repoURL = "https://github.com/you/repo.git"

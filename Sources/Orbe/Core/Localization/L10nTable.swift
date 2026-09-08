@@ -106,9 +106,7 @@ enum L10n {
     .wsUnlinkRelink: ("リンク解除中 — 再リンク", "Unlinked — relink"),
 
     // MARK: Workspace パレット
-    .wsPalettePlaceholder: (
-      "workspace を切替 / 入力で新規作成", "Switch workspace / type to create"
-    ),
+    .wsPalettePlaceholder: ("workspace を切替", "Switch workspace"),
     .wsPaletteHintList: (
       "↵ 切替/作成   → 詳細   esc 閉じる", "↵ Switch/Create   → Details   esc Close"
     ),
@@ -117,8 +115,10 @@ enum L10n {
     .wsRenameHint: ("↵ 改名を確定   esc 取消", "↵ Confirm rename   esc Cancel"),
     .wsSetDirPlaceholder: ("ディレクトリのパス", "Directory path"),
     .wsSetDirHint: ("↵ ディレクトリを確定   esc 取消", "↵ Confirm directory   esc Cancel"),
-    .wsCreateInline: ("＋ \"%@\" を新規作成", "＋ Create \"%@\""),
     .wsCreateFlowRow: ("＋ 新規ワークスペース — パスから作成", "＋ New workspace — create from a path"),
+    .wsCreateFlowRowNamed: (
+      "＋ 新規ワークスペース \"%@\" — パスから作成", "＋ New workspace \"%@\" — create from a path"
+    ),
     .wsActionRename: ("改名", "Rename"),
     .wsActionSetDir: ("ディレクトリ", "Directory"),
     .wsActionClose: ("削除", "Delete"),

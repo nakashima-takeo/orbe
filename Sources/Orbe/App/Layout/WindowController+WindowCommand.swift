@@ -11,7 +11,6 @@ extension WindowController {
     case .nextTab: nextTab()
     case .prevTab: prevTab()
     case .switchWorkspace: showWorkspacePalette()
-    case .newWorkspace: showWorkspaceCreate()
     case .launchDefaultAgent: agentLauncher.launchDefault()
     case .showAgentPalette: agentLauncher.showPalette()
     case .showDispatchPalette: showDispatchPalette()

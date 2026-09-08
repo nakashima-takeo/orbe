@@ -145,7 +145,8 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
   }
 
   /// Workspace 絞り込み: setItems(一覧) → query を変え onQueryChange() で rebuild() を走らせる。
-  /// 絞り込みで行が減る／一致なしで create 行が生える／空に戻すと全件、が連番に出る。
+  /// 絞り込みで行が減る／一致ゼロでも末尾の作成導線行だけは残り、打った名前がその行の文言に入る
+  /// （行幅を超える長さでも 1 行に収まる）／空に戻すと全件、が連番に出る。
   func testWorkspaceFilter() throws {
     let workspace = WorkspacePaletteModel(localization: LocalizationStore(language: .ja))
     let items = [
@@ -172,7 +173,15 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
         (
           "create",
           {
-            workspace.render.query = "newproj"  // 一致なし → create 行が生える
+            workspace.render.query = "newproj"  // 一致なし → 作成導線行に名前が現れる
+            workspace.render.onQueryChange()
+          }
+        ),
+        (
+          "create_long",
+          {
+            // 行幅を超える長い名前。作成導線行が破綻せず 1 行に省略されることを見る。
+            workspace.render.query = "very-long-workspace-name-that-overflows-the-row"
             workspace.render.onQueryChange()
           }
         ),

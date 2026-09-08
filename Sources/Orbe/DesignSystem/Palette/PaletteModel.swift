@@ -19,9 +19,7 @@ import SwiftUI
     var leading: AnyView?
     /// ラベルの後に muted で出す補足（workspace 行のディレクトリ等）。nil で出さない。
     var detail: String?
-    /// 行末に出す表示専用バッジ（作成導線の `⌘N` 等）。`createStyle` の行でだけ描かれる。nil で出さない。
-    var trailingBadge: String?
-    /// 作成導線の行スタイル（accent 文字＋破線罫線＋右端バッジ）。表示専用（キー挙動は載せない）。
+    /// 作成導線の行スタイル（accent 文字＋破線罫線）。表示専用（キー挙動は載せない）。
     var createStyle = false
     /// 汎用 `PaletteRow` の代わりに `SelectableRow` 上へ直接描く専用行コンテンツ（WS切替行）。nil で `PaletteRow`。
     var customContent: AnyView?
