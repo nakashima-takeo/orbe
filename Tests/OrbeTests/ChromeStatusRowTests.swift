@@ -94,7 +94,7 @@ final class ChromeStatusRowTests: OrbeTestCase {
   /// workspace 切替で chrome の workspace 名も追従する。
   func testRowWorkspaceNameFollowsActiveWorkspace() throws {
     let wc = WindowController()
-    wc.createWorkspace(name: "infra", rootPath: wc.store.activeTabCwdOrHome())
+    wc.createWorkspace(name: "infra", rootPath: "/tmp/ws-infra")
     wc.flushChrome()
     XCTAssertEqual(wc.statusModel.workspace, "infra", "切替後の workspace 名が chrome に出る")
 
@@ -178,7 +178,7 @@ final class ChromeStatusRowTests: OrbeTestCase {
     XCTAssertTrue(findAll(SearchBar.self, in: host).isEmpty, "検索バーは常駐しない")
 
     wc.newTab()
-    wc.createWorkspace(name: "second", rootPath: wc.store.activeTabCwdOrHome())
+    wc.createWorkspace(name: "second", rootPath: "/tmp/ws-second")
     XCTAssertEqual(wc.presentedOverlay, .none, "操作後もパレットは常駐しない")
     XCTAssertTrue(findAll(SearchBar.self, in: host).isEmpty, "操作後も検索バーは常駐しない")
   }
