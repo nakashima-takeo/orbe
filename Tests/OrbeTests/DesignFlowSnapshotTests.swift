@@ -177,6 +177,14 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
           }
         ),
         (
+          "create_long",
+          {
+            // 行幅を超える長い名前。作成導線行が破綻せず 1 行に省略されることを見る。
+            workspace.render.query = "very-long-workspace-name-that-overflows-the-row"
+            workspace.render.onQueryChange()
+          }
+        ),
+        (
           "reset",
           {
             workspace.render.query = ""  // 全件へ戻る

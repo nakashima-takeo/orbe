@@ -9,7 +9,8 @@ import XCTest
 extension DesignGallerySnapshotTests {
 
   /// ワークスペース作成フォームを design 正典 ステージ同寸（640×520）で撮る。folder=(a)追従＋補完・
-  /// (b)リンク解除中／clone=(c)通常・(d)URL空・(e)リンク解除中・(f)待機・(g)失敗。見本と突合。
+  /// (b)リンク解除中・(b')切替パレットから名前を引き継いで開いた初期状態／clone=(c)通常・(d)URL空・
+  /// (e)リンク解除中・(f)待機・(g)失敗。見本と突合。
   func renderWorkspaceCreateSnapshots(dir: URL) throws {
     let stage = NSSize(width: 640, height: 520)
     func write(_ name: String, _ model: WorkspaceCreateModel) throws {
@@ -35,6 +36,11 @@ extension DesignGallerySnapshotTests {
     let unlinked = WorkspaceCreateModel(path: "~")
     unlinked.setName("my-workspace")
     try write("workspacecreate_unlinked.png", unlinked)
+
+    // (b') 切替パレットから名前を引き継いで開いた初期状態: 手入力を経ずに init だけでリンク解除中
+    // （「リンク解除中 — 再リンク」あり）になることを見る。
+    try write(
+      "workspacecreate_seeded.png", WorkspaceCreateModel(path: "~", name: "zzz-check"))
 
     // --- git clone ソース（見本 WorkspaceCreateFlow.tsx の src==="clone" と突合）---
     let repoURL = "https://github.com/you/repo.git"
