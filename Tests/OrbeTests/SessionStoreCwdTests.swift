@@ -8,8 +8,7 @@ import XCTest
 /// （currentPwd ?? initialCwd）を継ぎ、タブ不在（0タブ）は workspace の rootPath へ落とす。
 /// nil を surface へ渡すと ghostty がホームへ解決してしまうため、非 Optional であること自体が契約。
 ///
-/// activeTabCwd() は「今見ているタブの cwd」（chrome の cwd 表示・エディタで開く・Dispatch の基点・
-/// 新 workspace の既定 root が読む）で、アクティブ workspace の選択タブだけを見る。0 タブなら nil。
+/// activeTabCwd() は「今見ているタブの cwd」で、アクティブ workspace の選択タブだけを見る。0 タブなら nil。
 final class SessionStoreCwdTests: OrbeTestCase {
 
   private func makeStore(rootPath: String, tabs: [TerminalTab]) -> SessionStore {

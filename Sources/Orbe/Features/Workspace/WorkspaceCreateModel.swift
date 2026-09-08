@@ -42,7 +42,7 @@ import Foundation
   /// 失敗理由を現在言語の文言へ写すためのストア（提示元＝WindowController が渡す）。
   private let localization: LocalizationStore
 
-  /// - name: リンク解除状態で開く名前。nil＝ソースの導出名へ追従（linked）。
+  /// - Parameter name: リンク解除状態で開く名前。nil＝ソースの導出名へ追従（linked）。
   init(
     path: String, name: String? = nil,
     localization: LocalizationStore = LocalizationStore(language: .systemDefault)

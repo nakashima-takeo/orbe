@@ -4,7 +4,7 @@ import SwiftUI
 /// default=text.secondary / selected=text.primary＋tint 塗り（hover 独自の着色は持たず、
 /// ホバーは呼び出し側が `onHoverEnter` で選択を追従させる）/
 /// dormant=減光(.45) / info=選択不可・text.muted / failure=選択不可・danger（失敗の理由行）/
-/// createAction=accent 文字＋破線罫線＋右端バッジ。
+/// createAction=accent 文字＋破線罫線。
 /// detail はラベル後の muted 補足（ディレクトリ等）。
 struct PaletteRow: View {
   /// 行の性質。`info` は選択不可の情報行（CLI 無し等）、`failure` はその中で失敗の理由を述べる行
