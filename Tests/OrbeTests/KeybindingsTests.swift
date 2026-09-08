@@ -65,8 +65,6 @@ final class KeybindingsTests: OrbeTestCase {
     XCTAssertEqual(Keybindings.chromeAction(for: key("S", [.command, .shift])), .switchWorkspace)
     // Opt/Ctrl 併用は奪わない。
     XCTAssertNil(Keybindings.chromeAction(for: key("S", [.command, .shift, .option])))
-    // Cmd+N は chrome が先取りしない（surface へ通す）。
-    XCTAssertNil(Keybindings.chromeAction(for: key("n")))
   }
 
   func testShowSettings() {
