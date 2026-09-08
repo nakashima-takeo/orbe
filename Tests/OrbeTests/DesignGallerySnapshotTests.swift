@@ -272,7 +272,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     // WorkspacePalette 一覧（フィルタ欄＋WS切替行：名前＋インラインチップ＋パス）。
     let wsModel = PaletteModel()
     wsModel.fieldVisible = true
-    wsModel.placeholder = "workspace を切替 / 入力で新規作成"
+    wsModel.placeholder = "workspace を切替"
     wsModel.hint = "↵ 切替/作成   → 詳細   esc 閉じる"
     wsModel.rows = [
       wsRow("main", [("working", 2), ("waiting", 1)], "~/dev/main"),
@@ -325,7 +325,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     let model = PaletteModel()
     model.fieldVisible = fieldVisible
     if fieldVisible {
-      model.placeholder = "workspace を切替 / 入力で新規作成"
+      model.placeholder = "workspace を切替"
       model.hint = "↵ 切替/作成   → 詳細   esc 閉じる"
     } else {
       model.hint = "↵ 起動   → 詳細   esc 閉じる"

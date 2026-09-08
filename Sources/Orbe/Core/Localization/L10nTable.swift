@@ -106,9 +106,7 @@ enum L10n {
     .wsUnlinkRelink: ("リンク解除中 — 再リンク", "Unlinked — relink"),
 
     // MARK: Workspace パレット
-    .wsPalettePlaceholder: (
-      "workspace を切替 / 入力で新規作成", "Switch workspace / type to create"
-    ),
+    .wsPalettePlaceholder: ("workspace を切替", "Switch workspace"),
     .wsPaletteHintList: (
       "↵ 切替/作成   → 詳細   esc 閉じる", "↵ Switch/Create   → Details   esc Close"
     ),

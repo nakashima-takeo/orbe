@@ -346,7 +346,7 @@ struct PaletteCard: View {
   private func capPreviewModel(fieldVisible: Bool) -> PaletteModel {
     let model = PaletteModel()
     model.fieldVisible = fieldVisible
-    model.placeholder = fieldVisible ? "Switch workspace / type to create" : ""
+    model.placeholder = fieldVisible ? "Switch workspace" : ""
     model.hint =
       fieldVisible ? "↵ Switch/Create   → Details   esc Close" : "↵ Launch   → Details   esc Close"
     let rollups: [[(state: String, count: Int)]] = [
