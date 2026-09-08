@@ -79,6 +79,11 @@ final class SessionStore {
   /// アクティブ workspace のアクティブタブの実効 cwd。0タブは nil。
   func activeTabCwd() -> String? { tabCwd(inWorkspaceAt: activeWorkspace) }
 
+  /// 新規に開く場所の既定——アクティブタブの cwd、0タブならホーム。
+  func activeTabCwdOrHome() -> String {
+    activeTabCwd() ?? FileManager.default.homeDirectoryForCurrentUser.path
+  }
+
   /// 全 workspace × 全タブ（**休眠 workspace も含む**）。
   /// 休眠タブは `currentPwd` を持たないが `initialCwd`（復元値）は持つので、cwd の話には必ず含める。
   func allTabs() -> [TabRef] {

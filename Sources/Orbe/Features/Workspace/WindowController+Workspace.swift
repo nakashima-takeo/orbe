@@ -33,15 +33,13 @@ extension WindowController {
     applyActiveWorkspaceConfig()  // 実効設定（外観＋gui.conf）は0タブでも従来どおり反映する
   }
 
-  /// workspace を新規作成してアクティブ化し、その id を返す（name 空なら nil）。UI（パレットの onCreate）と
-  /// control `create_workspace` が共用する。rootPath 省略時はアクティブタブの cwd → ホームを導出する。
+  /// workspace を新規作成してアクティブ化し、その id を返す（name 空なら nil）。作成フォームの確定と
+  /// control `create_workspace` が共用する。root は呼び手が決めて渡す。
   @discardableResult
-  func createWorkspace(name: String, rootPath: String? = nil) -> Int? {
+  func createWorkspace(name: String, rootPath: String) -> Int? {
     let trimmed = name.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return nil }
-    let root =
-      rootPath ?? store.activeTabCwd() ?? FileManager.default.homeDirectoryForCurrentUser.path
-    store.createWorkspace(name: trimmed, rootPath: root)  // 空 WS を作りアクティブ化する（`~` 展開して格納）
+    store.createWorkspace(name: trimmed, rootPath: rootPath)  // 空 WS を作りアクティブ化する（`~` 展開して格納）
     // 新規 WS は「作成して開く＝作業を始める」意図。0タブ休眠のアクティブ化（自動起こしなし）と違い、
     // ここは rootPath で1シェルを明示 spawn する。cwd は格納後の `current.rootPath`（`~` 展開済み）を
     // 明示で渡す——0タブ WS の cwd 既定と同値だが、この経路の意図（root で開く）を呼び出しに残す。

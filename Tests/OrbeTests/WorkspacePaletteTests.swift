@@ -9,7 +9,7 @@ import XCTest
 @MainActor
 final class WorkspacePaletteTests: OrbeTestCase {
 
-  // MARK: - ヘルパ（分割した拡張ファイル +LiveStates からも使うため internal）
+  // MARK: - ヘルパ（分割した拡張ファイル（+LiveStates / +CreateFlow）からも使うため internal）
 
   func palette() -> WorkspacePaletteModel {
     WorkspacePaletteModel(localization: LocalizationStore(language: .ja))
@@ -64,7 +64,7 @@ final class WorkspacePaletteTests: OrbeTestCase {
     p.render.onQueryChange()
   }
 
-  // MARK: - 一覧: Enter で切替・絞り込み・新規作成
+  // MARK: - 一覧: Enter で切替・絞り込み
 
   func testEnterFiresSwitchForSelectedWorkspace() {
     let p = palette()
@@ -90,7 +90,7 @@ final class WorkspacePaletteTests: OrbeTestCase {
     var switched: Int?
     var createFlow = false
     p.onSwitch = { switched = $0 }
-    p.onCreateFlow = { createFlow = true }
+    p.onCreateFlow = { _ in createFlow = true }
     p.setItems(items([("a", true), ("b", false)]))
     send(p, up)  // 先頭で上 → 末尾（＝常設の createFlow 行）へラップ
     send(p, enter)
@@ -112,14 +112,14 @@ final class WorkspacePaletteTests: OrbeTestCase {
   func testTypingFiltersToMatchingWorkspace() {
     let p = palette()
     var switched: Int?
-    var created: String?
+    var seed: String??
     p.onSwitch = { switched = $0 }
-    p.onCreate = { created = $0 }
+    p.onCreateFlow = { seed = $0 }
     p.setItems(items([("default", true), ("api", false), ("web", false)]))
     type(p, "ap")
     send(p, enter)
     XCTAssertEqual(switched, 1, "'ap' は 'api'(index 1) に絞り込まれ Enter で switch(1)")
-    XCTAssertNil(created, "既存一致時は create を発火しない")
+    XCTAssertNil(seed, "一致行の Enter は作成導線を発火しない")
   }
 
   func testTypingFilterIsCaseInsensitive() {
@@ -130,32 +130,6 @@ final class WorkspacePaletteTests: OrbeTestCase {
     type(p, "WE")
     send(p, enter)
     XCTAssertEqual(switched, 2, "'WE' は大小無視で 'Web'(index 2) に一致")
-  }
-
-  func testTypingNonMatchingNameThenEnterCreates() {
-    let p = palette()
-    var created: String?
-    var switched: Int?
-    p.onCreate = { created = $0 }
-    p.onSwitch = { switched = $0 }
-    p.setItems(items([("default", true), ("api", false)]))
-    type(p, "infra")  // 一致なし → create 行が出て選択される
-    send(p, enter)
-    XCTAssertEqual(created, "infra", "一致しない名前の Enter は create('infra')")
-    XCTAssertNil(switched, "一致しない名前では switch しない")
-  }
-
-  func testExactMatchDoesNotOfferCreate() {
-    let p = palette()
-    var created: String?
-    var switched: Int?
-    p.onCreate = { created = $0 }
-    p.onSwitch = { switched = $0 }
-    p.setItems(items([("default", true), ("api", false)]))
-    type(p, "api")
-    send(p, enter)
-    XCTAssertEqual(switched, 1, "完全一致名の Enter は switch")
-    XCTAssertNil(created)
   }
 
   /// 休眠 workspace の行は減光フラグ付きで描画される（並びは渡された順のまま・並べ替えは host 側）。
@@ -173,30 +147,6 @@ final class WorkspacePaletteTests: OrbeTestCase {
     XCTAssertFalse(p.render.rows[0].dimmed, "起きている workspace の行は減光しない")
     XCTAssertTrue(p.render.rows[1].dimmed, "休眠 workspace の行は減光する")
     XCTAssertTrue(p.render.rows[2].createStyle, "末尾は作成導線（createFlow）の行")
-  }
-
-  // MARK: - 末尾常設の「＋ 新規ワークスペース」行
-
-  func testCreateFlowRowAlwaysPresentAndFiresCallback() {
-    let p = palette()
-    var createFlow = false
-    p.onCreateFlow = { createFlow = true }
-    p.setItems(items([("default", true), ("api", false)]))
-    let last = p.render.rows.last
-    XCTAssertEqual(last?.createStyle, true, "末尾は作成導線の行スタイル")
-    XCTAssertEqual(last?.trailingBadge, "⌘N", "右端に ⌘N バッジ")
-    send(p, down)  // api
-    send(p, down)  // createFlow
-    send(p, enter)
-    XCTAssertTrue(createFlow, "createFlow 行の Enter は onCreateFlow")
-  }
-
-  func testCreateFlowRowSurvivesFiltering() {
-    let p = palette()
-    p.setItems(items([("default", true), ("api", false)]))
-    type(p, "zzz")  // 一致なし → [quick-create, createFlow]
-    XCTAssertEqual(p.render.rows.count, 2, "quick-create 行＋末尾 createFlow")
-    XCTAssertEqual(p.render.rows.last?.createStyle, true, "絞り込み中も createFlow は末尾に残る")
   }
 
   // MARK: - → で詳細メニューに潜る（改名 / 削除）
@@ -294,18 +244,6 @@ final class WorkspacePaletteTests: OrbeTestCase {
     send(p, enter)  // 改名確定
     XCTAssertNil(closed, "単一 workspace の詳細メニューに削除は無い")
     XCTAssertEqual(renamed?.0, 0, "改名は選べる（削除のみ不在）")
-  }
-
-  func testRightArrowOnCreateRowDoesNotDrill() {
-    // create 行で → を押しても潜らない（workspace 行でないため）。Enter は create のまま。
-    let p = palette()
-    var created: String?
-    p.onCreate = { created = $0 }
-    p.setItems(items([("default", true)]))
-    type(p, "infra")  // rows: [create] のみ
-    send(p, right)  // → は無視（潜らない）
-    send(p, enter)  // 一覧のまま create
-    XCTAssertEqual(created, "infra", "create 行では → で潜らず Enter で作成")
   }
 
   // MARK: - 戻る / 閉じる

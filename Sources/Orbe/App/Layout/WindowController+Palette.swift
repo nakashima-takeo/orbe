@@ -58,13 +58,9 @@ extension WindowController {
       self?.switchWorkspace(to: i)
       self?.dismissPalette()
     }
-    p.onCreate = { [weak self] name in
-      self?.createWorkspace(name: name)
+    p.onCreateFlow = { [weak self] name in
       self?.dismissPalette()
-    }
-    p.onCreateFlow = { [weak self] in
-      self?.dismissPalette()
-      self?.showWorkspaceCreate()
+      self?.showWorkspaceCreate(name: name)
     }
     p.onRename = { [weak self] i, name in
       self?.renameWorkspace(i, to: name)
@@ -84,17 +80,12 @@ extension WindowController {
     reconfirmFocusNextTick()  // 去りゆくカード（作成フォーム等）の teardown に focus を奪われないよう次 tick で再確定
   }
 
-  /// Cmd+N / 切替パレット末尾の「＋ 新規ワークスペース」。ソース切替（既存フォルダ / git clone）で workspace を
-  /// 作る専用フォーム。既に開いていれば入力欄へ再フォーカス。dismiss は切替画面（⌘⇧S パレット）へ戻す。
-  func showWorkspaceCreate() {
-    if model.overlay == .workspaceCreate {
-      model.workspaceCreate?.focus()
-      return
-    }
-    // パス初期値＝アクティブタブの cwd（`~` 短縮）、無ければ `~`。clone 先の親も同じ初期値（model init）。
-    let initialPath =
-      store.activeTabCwd().map { ($0 as NSString).abbreviatingWithTildeInPath } ?? "~"
-    let m = WorkspaceCreateModel(path: initialPath, localization: localization)
+  /// 切替パレット末尾の「＋ 新規ワークスペース」。ソース切替（既存フォルダ / git clone）で workspace を
+  /// 作る専用フォーム。`name` 非 nil でリンク解除状態の名前を引き継ぐ。dismiss は切替画面（⌘⇧S パレット）へ戻す。
+  func showWorkspaceCreate(name: String?) {
+    // パス初期値＝アクティブタブの cwd（`~` 短縮）。clone 先の親も同じ初期値（model init）。
+    let initialPath = (store.activeTabCwdOrHome() as NSString).abbreviatingWithTildeInPath
+    let m = WorkspaceCreateModel(path: initialPath, name: name, localization: localization)
     m.onCreate = { [weak self] path, name in
       guard let self else { return }
       self.createWorkspace(name: name, rootPath: path)
@@ -123,7 +114,7 @@ extension WindowController {
       defaultCommand: agentLauncher.resolvedDefaultCommand)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
 
-    let cwd = store.activeTabCwd() ?? FileManager.default.homeDirectoryForCurrentUser.path
+    let cwd = store.activeTabCwdOrHome()
     let provider = DispatchDataProvider(
       cwd: cwd, model: p, localization: localization,
       worktreeTemplate: activeEffectiveSettings()[SettingKeys.worktreeDir],

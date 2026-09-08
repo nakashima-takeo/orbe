@@ -70,10 +70,10 @@ final class HelpCatalogTests: OrbeTestCase {
     XCTAssertEqual(ids.count, Set(ids).count, "KB 配列の id が重複している")
   }
 
-  /// 棚卸しの総数（26）と「すべて」件数の導出が一致する。
+  /// 棚卸しの総数（25）と「すべて」件数の導出が一致する。
   func testTotalCount() {
-    XCTAssertEqual(HelpCatalog.totalCount, 26)
-    XCTAssertEqual(HelpCatalog.all.map(\.rows.count), [4, 10, 4, 8])
+    XCTAssertEqual(HelpCatalog.totalCount, 25)
+    XCTAssertEqual(HelpCatalog.all.map(\.rows.count), [4, 9, 4, 8])
   }
 
   /// ⌘⌘（Attention パレット）は画面のどこにも書けない発見不能なジェスチャなので、

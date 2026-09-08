@@ -172,7 +172,7 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
         (
           "create",
           {
-            workspace.render.query = "newproj"  // 一致なし → create 行が生える
+            workspace.render.query = "newproj"  // 一致なし → 作成導線行に名前が現れる
             workspace.render.onQueryChange()
           }
         ),

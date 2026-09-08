@@ -183,8 +183,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case wsRenameHint
   case wsSetDirPlaceholder
   case wsSetDirHint
-  case wsCreateInline
   case wsCreateFlowRow
+  case wsCreateFlowRowNamed
   case wsActionRename
   case wsActionSetDir
   case wsActionClose
@@ -391,7 +391,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutOpenEditor
   case helpShortcutQuit
   case helpShortcutSwitchWorkspace
-  case helpShortcutNewWorkspace
   case helpShortcutNewTab
   case helpShortcutClosedAgents
   case helpShortcutRenameTab

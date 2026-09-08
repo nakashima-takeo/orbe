@@ -15,13 +15,13 @@ import Foundation
 
   /// アクティブなソース。切替で本文フォームが差し替わる。
   private(set) var source: Source = .folder
-  /// パス欄（`~` 可・folder ソース）。編集のたびに補完を起こし、名前を追従へ戻す。
+  /// パス欄（`~` 可・folder ソース）。編集のたびに補完を起こす。
   var path: String
-  /// リポジトリ URL（clone ソース）。初期値は空欄（placeholder で例を薄字表示）。編集で名前を追従へ戻す。
+  /// リポジトリ URL（clone ソース）。初期値は空欄（placeholder で例を薄字表示）。
   private(set) var cloneURL: String = ""
   /// clone 先の親ディレクトリ（`~` 可・clone ソース）。初期値は folder の path と同じ導出。
   private(set) var cloneDir: String
-  /// 名前欄の手入力値。nil＝ソースの導出名へ追従（linked）。手入力で非 nil（リンク解除）。folder/clone 共有。
+  /// 明示された名前。nil＝ソースの導出名へ追従（linked）。非 nil＝リンク解除。folder/clone 共有。
   private(set) var name: String?
   /// clone 実行の状態機械。
   private(set) var cloneState: CloneState = .idle
@@ -42,10 +42,14 @@ import Foundation
   /// 失敗理由を現在言語の文言へ写すためのストア（提示元＝WindowController が渡す）。
   private let localization: LocalizationStore
 
-  init(path: String, localization: LocalizationStore = LocalizationStore(language: .systemDefault))
-  {
+  /// - name: リンク解除状態で開く名前。nil＝ソースの導出名へ追従（linked）。
+  init(
+    path: String, name: String? = nil,
+    localization: LocalizationStore = LocalizationStore(language: .systemDefault)
+  ) {
     self.path = path
     self.cloneDir = path  // clone 先の親も folder と同じ初期値（cwd 短縮 or `~`）
+    self.name = name
     self.localization = localization
   }
 
@@ -116,25 +120,21 @@ import Foundation
 
   func focus() { focusToken &+= 1 }
 
-  /// ソース切替。入力（path/cloneURL/cloneDir）は保持し、名前だけ追従へ戻す（導出元が変わるため）。
-  /// clone の試行状態も捨てる（`.failed` の inline エラーが folder タブへ持ち越らないよう `.idle` へ）。
+  /// ソース切替。入力（path/cloneURL/cloneDir）と名前の状態は保持する（追従中なら切替先の導出元から導かれる）。
+  /// clone の試行状態は捨てる（`.failed` の inline エラーが folder タブへ持ち越らないよう `.idle` へ）。
   /// focusToken を進め、切替先ソースの主入力欄（folder=パス / clone=URL）へ focus を移す——SrcTab は
   /// ボタンで、切替で旧ソースの入力欄が unmount されるため、明示的に focus を張り直さないと「どの欄にも
   /// focus が無い」状態になり esc/↑↓/tab を拾う TextField が消える（表示中は常に入力欄 focus の不変）。
   func setSource(_ newValue: Source) {
     source = newValue
-    name = nil  // アクティブソースが変わると導出元が変わる＝relink
     cloneState = .idle  // clone スコープの失敗表示をソース境界で捨てる
     focusToken &+= 1  // 切替先ソースの主入力欄へ focus を移す（View が次 tick で確定）
   }
 
-  /// URL 編集（clone 入力欄バインドの setter から）。名前を追従へ戻す（URL 変更で導出名が変わる）。
-  /// 同値の書き戻し（TextField が現在値を再送するケース）では relink しない＝手入力名を消さない
-  /// （folder 側 `setPath` と同じ冪等契約）。
+  /// URL 編集（clone 入力欄バインドの setter から）。名前には触れない（追従中なら導出名が追う）。
   func setCloneURL(_ newValue: String) {
     guard newValue != cloneURL else { return }
     cloneURL = newValue
-    name = nil
   }
 
   /// clone 先編集（clone 入力欄バインドの setter から）。名前には無関係。
@@ -143,20 +143,19 @@ import Foundation
     cloneDir = newValue
   }
 
-  /// パス編集（入力欄バインドの setter から）。名前を追従へ戻し、補完を背景 queue で起こす。
+  /// パス編集（入力欄バインドの setter から）。補完を背景 queue で起こす。名前には触れない。
   func setPath(_ newValue: String) {
     guard newValue != path else { return }
     path = newValue
-    name = nil  // パス変更で名前は追従へ戻す
     refreshSuggestions()
   }
 
-  /// 名前手入力（入力欄バインドの setter から）。リンクを解除して手入力値を保持する。
+  /// 名前手入力（入力欄バインドの setter から）。リンクを解除して明示値を保持する。
   func setName(_ newValue: String) {
     name = newValue
   }
 
-  /// 「再リンク」押下。名前をパス追従へ戻す。
+  /// 「再リンク」押下。名前を導出名への追従へ戻す（`name` を nil へ書く唯一の経路）。
   func relink() { name = nil }
 
   /// 補完ハイライトの移動（↑↓・巡回）。
@@ -171,14 +170,13 @@ import Foundation
     highlighted = d < 0 ? 0 : suggestions.count - 1
   }
 
-  /// ⇥ 補完確定。ハイライト候補のフルパスへ差し替え、名前を追従へ戻し、ドロップダウンを閉じる。
+  /// ⇥ 補完確定。ハイライト候補のフルパスへ差し替え、ドロップダウンを閉じる。名前には触れない。
   /// 候補が無ければ false（呼び出し側は名前欄へ focus を送る）。マウスで候補行をタップした確定でも
   /// パス欄へ focus を戻す（focusToken を進める）——表示中は常に入力欄が focus の不変を保つ。
   @discardableResult
   func acceptSuggestion() -> Bool {
     guard suggestions.indices.contains(highlighted) else { return false }
     path = (suggestions[highlighted].fullPath as NSString).abbreviatingWithTildeInPath
-    name = nil
     highlighted = 0
     suggestions = []  // 確定でドロップダウンを閉じる（再度打鍵で開き直す）
     focusToken &+= 1  // パス欄へ focus を戻す（マウス確定で focus が抜けても入力欄へ復帰）

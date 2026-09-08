@@ -117,8 +117,10 @@ enum L10n {
     .wsRenameHint: ("↵ 改名を確定   esc 取消", "↵ Confirm rename   esc Cancel"),
     .wsSetDirPlaceholder: ("ディレクトリのパス", "Directory path"),
     .wsSetDirHint: ("↵ ディレクトリを確定   esc 取消", "↵ Confirm directory   esc Cancel"),
-    .wsCreateInline: ("＋ \"%@\" を新規作成", "＋ Create \"%@\""),
     .wsCreateFlowRow: ("＋ 新規ワークスペース — パスから作成", "＋ New workspace — create from a path"),
+    .wsCreateFlowRowNamed: (
+      "＋ 新規ワークスペース \"%@\" — パスから作成", "＋ New workspace \"%@\" — create from a path"
+    ),
     .wsActionRename: ("改名", "Rename"),
     .wsActionSetDir: ("ディレクトリ", "Directory"),
     .wsActionClose: ("削除", "Delete"),

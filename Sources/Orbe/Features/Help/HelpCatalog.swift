@@ -35,7 +35,6 @@ enum HelpCatalog {
       title: .helpCatWorkspaceTabs,
       rows: [
         Row(key: "⌘⇧S", label: .helpShortcutSwitchWorkspace, combo: ["cmd", "shift", "s"]),
-        Row(key: "⌘N", label: .helpShortcutNewWorkspace, combo: ["cmd", "n"]),
         Row(key: "⌘T", label: .helpShortcutNewTab, combo: ["cmd", "t"]),
         Row(key: "⌘⇧T", label: .helpShortcutClosedAgents, combo: ["cmd", "shift", "t"]),
         Row(key: "⌘R", label: .helpShortcutRenameTab, combo: ["cmd", "r"]),
@@ -72,7 +71,7 @@ enum HelpCatalog {
   /// トップビュー（基本操作）に出す厳選セット（カテゴリ → 表示キー列）。
   static let topPicks: [L10nKey: [String]] = [
     .helpCatGeneral: ["⌘H", "⌘,", "⌘⇧E", "⌘Q"],
-    .helpCatWorkspaceTabs: ["⌘⇧S", "⌘N", "⌘T", "⌘⇧→"],
+    .helpCatWorkspaceTabs: ["⌘⇧S", "⌘T", "⌘⇧→"],
     .helpCatAgents: ["⌘⇧C", "⌘⇧A", "⌘⇧X", "⌘⌘"],
   ]
 

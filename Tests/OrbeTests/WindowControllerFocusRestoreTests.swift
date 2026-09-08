@@ -25,7 +25,7 @@ final class WindowControllerFocusRestoreTests: OrbeTestCase {
   func testWorkspaceSwitchRestoresActiveTabSurface() {
     let wc = WindowController()
     let first = wc.window.firstResponder as! SurfaceView
-    wc.createWorkspace(name: "other")  // workspace 2 へ
+    wc.createWorkspace(name: "other", rootPath: wc.store.activeTabCwdOrHome())  // workspace 2 へ
     XCTAssertFalse(wc.window.firstResponder === first, "別 workspace ではフォーカスが移っている")
     wc.switchWorkspace(to: 0)  // 元 workspace へ戻る
     XCTAssertTrue(wc.window.firstResponder === first, "workspace 切替でアクティブタブの surface へ戻る")

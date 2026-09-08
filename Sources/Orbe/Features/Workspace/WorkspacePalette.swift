@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Cmd+Shift+S で開く workspace コマンドパレットの状態機械（ドリルイン式）。
 ///
-/// - 一覧: 入力で絞り込み、↑↓ で選択、Enter で切替（一致なし入力＋Enter で新規作成）、
+/// - 一覧: 入力で絞り込み、↑↓ で選択、Enter で切替（末尾の作成導線行なら作成フォームへ）、
 ///   選択 workspace 行で → を押すと同じカードが詳細メニューに潜る、Esc で閉じる。
 /// - 詳細メニュー（改名 / ディレクトリ / 削除）: ↑↓ で選択、Enter で実行、← か Esc で一覧へ戻る。
 /// - 改名 / ディレクトリ: 入力欄に現値をプリフィルし Enter で確定、Esc で詳細メニューへ戻る。
@@ -33,9 +33,8 @@ import SwiftUI
   }
 
   var onSwitch: ((Int) -> Void)?
-  var onCreate: ((String) -> Void)?
-  /// 末尾常設の「＋ 新規ワークスペース」行＝専用作成フォームへ遷移。
-  var onCreateFlow: (() -> Void)?
+  /// 末尾常設の「＋ 新規ワークスペース」行＝専用作成フォームへ遷移。引数は作成フォームへ引き継ぐ名前。
+  var onCreateFlow: ((String?) -> Void)?
   var onRename: ((Int, String) -> Void)?
   var onSetDir: ((Int, String) -> Void)?
   var onClose: ((Int) -> Void)?
@@ -49,9 +48,8 @@ import SwiftUI
   }
   private enum Entry {
     case workspace(Item)
-    case create(String)
-    /// 末尾常設の作成フォーム導線（絞り込み中も残す）。
-    case createFlow
+    /// 末尾常設の作成フォーム導線（絞り込み中も残す）。`seed` は作成フォームへ引き継ぐ名前・nil＝引き継ぎ無し。
+    case createFlow(seed: String?)
     case action(Action)
   }
   private enum Action { case rename, setDir, close }
@@ -173,10 +171,9 @@ import SwiftUI
       let matched =
         query.isEmpty ? items : items.filter { $0.name.localizedCaseInsensitiveContains(query) }
       entries = matched.map { .workspace($0) }
-      if !query.isEmpty, !items.contains(where: { $0.name == query }) {
-        entries.append(.create(query))
-      }
-      entries.append(.createFlow)  // 一覧末尾に常設（絞り込み中も残す）
+      // 末尾常設。入力が非空で完全同名が無ければ、その入力を作成フォームの名前として引き継ぐ。
+      let seed = (!query.isEmpty && !items.contains { $0.name == query }) ? query : nil
+      entries.append(.createFlow(seed: seed))
     case .submenu:
       entries = [.action(.rename), .action(.setDir)]
       if items.count > 1 { entries.append(.action(.close)) }  // 最後の1つは削除メニューを出さない
@@ -217,11 +214,11 @@ import SwiftUI
             WorkspaceSwitcherRow(
               name: it.name, rollup: it.live.rollup,
               path: (it.dir as NSString).abbreviatingWithTildeInPath)))
-      case .create(let name):
-        return PaletteModel.RowItem(label: localization.format(.wsCreateInline, name))
-      case .createFlow:
-        return PaletteModel.RowItem(
-          label: localization.string(.wsCreateFlowRow), trailingBadge: "⌘N", createStyle: true)
+      case .createFlow(let seed):
+        let label =
+          seed.map { localization.format(.wsCreateFlowRowNamed, $0) }
+          ?? localization.string(.wsCreateFlowRow)
+        return PaletteModel.RowItem(label: label, createStyle: true)
       case .action(let a):
         let label: String = {
           switch a {
@@ -244,8 +241,7 @@ import SwiftUI
       guard entries.indices.contains(render.selected) else { return }
       switch entries[render.selected] {
       case .workspace(let it): onSwitch?(it.index)
-      case .create(let name): onCreate?(name)
-      case .createFlow: onCreateFlow?()
+      case .createFlow(let seed): onCreateFlow?(seed)
       case .action: break
       }
     case .submenu(let idx):
@@ -279,7 +275,7 @@ import SwiftUI
     } ?? 0
   }
 
-  /// 一覧で選択中の workspace 行 → 詳細メニューへ潜る。create 行・詳細メニューでは無視。
+  /// 一覧で選択中の workspace 行 → 詳細メニューへ潜る。作成導線行・詳細メニューでは無視。
   func drillIn() {
     guard case .list = mode, entries.indices.contains(render.selected),
       case .workspace(let it) = entries[render.selected]
@@ -298,7 +294,7 @@ import SwiftUI
 
   func queryChanged() {
     if case .list = mode {
-      render.selected = 0  // 行集合が入れ替わるため選択は先頭へ戻す（create 行への誤着地を防ぐ）
+      render.selected = 0  // 行集合が入れ替わるため選択は先頭へ戻す（先頭の一致行、一致ゼロなら末尾の作成導線行）
       rebuild()
     }  // 絞り込みは一覧のみ
   }

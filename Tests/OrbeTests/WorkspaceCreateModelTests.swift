@@ -36,12 +36,23 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
     XCTAssertEqual(m.curName, "orbe", "実効名は導出名へ戻る")
   }
 
-  func testSetPathRelinksAndReDerivesName() {
+  func testSetPathKeepsExplicitName() {
     let m = WorkspaceCreateModel(path: "~/github/orbe")
-    m.setName("custom")  // 一旦リンク解除
+    m.setName("custom")  // リンク解除
     m.setPath("~/work/infra")
-    XCTAssertTrue(m.linked, "パス編集で名前は追従へ戻る")
-    XCTAssertEqual(m.curName, "infra", "新パスの末尾セグメントへ再導出")
+    XCTAssertFalse(m.linked, "パス編集は名前を追従へ戻さない")
+    XCTAssertEqual(m.curName, "custom", "明示した名前は残る")
+    m.relink()
+    XCTAssertEqual(m.curName, "infra", "再リンクで新パスの末尾セグメントへ導出")
+  }
+
+  /// 切替パレットから名前を引き継いで開いた画面は、最初からリンク解除状態で始まる。
+  func testSeedNameOpensUnlinked() {
+    let m = WorkspaceCreateModel(path: "~/github/orbe", name: "zzz-check")
+    XCTAssertFalse(m.linked, "引き継いだ名前はリンク解除で始まる")
+    XCTAssertEqual(m.curName, "zzz-check")
+    m.relink()
+    XCTAssertEqual(m.curName, "orbe", "再リンクでパス追従へ")
   }
 
   // MARK: - 作成可否 / 作成
@@ -82,7 +93,7 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
 
   // MARK: - 補完の確定 / ハイライト
 
-  func testAcceptSuggestionSwapsPathAndRelinks() {
+  func testAcceptSuggestionSwapsPathAndKeepsExplicitName() {
     let m = WorkspaceCreateModel(path: "~/github/rh")
     m.suggestions = [
       FolderSuggestion(name: "orbe", fullPath: "/opt/src/orbe", isRepo: true),
@@ -93,8 +104,8 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
     let tokenBefore = m.focusToken
     XCTAssertTrue(m.acceptSuggestion(), "候補ありは true")
     XCTAssertEqual(m.path, "/opt/src/orbe-x", "ハイライト候補のフルパスへ差し替え")
-    XCTAssertTrue(m.linked, "確定で名前は追従へ戻る")
-    XCTAssertEqual(m.curName, "orbe-x")
+    XCTAssertFalse(m.linked, "補完確定は名前を追従へ戻さない")
+    XCTAssertEqual(m.curName, "custom", "明示した名前は残る")
     XCTAssertTrue(m.suggestions.isEmpty, "確定でドロップダウンを閉じる")
     XCTAssertEqual(m.highlighted, 0)
     XCTAssertEqual(m.focusToken, tokenBefore &+ 1, "確定でパス欄へ focus を戻す（focusToken 前進）")
@@ -179,30 +190,34 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
     XCTAssertEqual(m.curName, "workspace", "空 URL は workspace へフォールバック")
   }
 
-  func testSetCloneURLRelinksName() {
+  func testSetCloneURLKeepsExplicitName() {
     let m = WorkspaceCreateModel(path: "~")
     m.setSource(.clone)
     m.setCloneURL("https://github.com/you/repo.git")
     m.setName("custom")
     XCTAssertFalse(m.linked, "手入力でリンク解除")
     m.setCloneURL("https://github.com/you/other.git")
-    XCTAssertTrue(m.linked, "URL 変更で名前は追従へ戻る")
-    XCTAssertEqual(m.curName, "other")
+    XCTAssertFalse(m.linked, "URL 編集は名前を追従へ戻さない")
+    XCTAssertEqual(m.curName, "custom", "明示した名前は残る")
+    m.relink()
+    XCTAssertEqual(m.curName, "other", "再リンクで新 URL の導出名へ")
   }
 
-  func testSetSourceKeepsInputsAndRelinksName() {
+  func testSetSourceKeepsInputsAndNameState() {
     let m = WorkspaceCreateModel(path: "~/github/orbe")
     m.setSource(.clone)
     m.setCloneURL("https://github.com/you/repo.git")
     m.setName("custom")  // clone 名を手入力（リンク解除）
     XCTAssertFalse(m.linked)
     m.setSource(.folder)
-    XCTAssertTrue(m.linked, "ソース切替で名前は追従へ戻る")
+    XCTAssertFalse(m.linked, "ソース切替は名前を追従へ戻さない")
     XCTAssertEqual(m.path, "~/github/orbe", "folder 入力は保持")
     XCTAssertEqual(m.cloneURL, "https://github.com/you/repo.git", "clone 入力も保持")
-    XCTAssertEqual(m.curName, "orbe", "folder の追従名へ")
+    XCTAssertEqual(m.curName, "custom", "明示した名前は残る")
+    m.relink()
+    XCTAssertEqual(m.curName, "orbe", "追従中は folder の導出名へ")
     m.setSource(.clone)
-    XCTAssertEqual(m.curName, "repo", "clone の追従名へ")
+    XCTAssertEqual(m.curName, "repo", "追従中は切替先 clone の導出名へ")
   }
 
   func testSetSourceBumpsFocusTokenToRefocusPrimaryField() {

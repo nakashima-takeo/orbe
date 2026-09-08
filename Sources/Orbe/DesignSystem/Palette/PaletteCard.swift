@@ -329,7 +329,6 @@ struct PaletteCard: View {
       PaletteRow(
         title: row.label, selected: selected, showsChevron: row.chevron, kind: rowKind(row),
         inherited: row.inherited, leading: row.leading, detail: row.detail,
-        trailingBadge: row.trailingBadge,
         trailing: model.rowAccessory.flatMap { $0.row == i ? $0.view : nil },
         action: tap, onHoverEnter: hoverEnter)
     }

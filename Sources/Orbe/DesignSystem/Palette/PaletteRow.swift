@@ -21,8 +21,6 @@ struct PaletteRow: View {
   var leading: AnyView?
   /// ラベル後に muted で出す補足（workspace 行のディレクトリ等）。
   var detail: String?
-  /// 行末に出す表示専用バッジ（作成導線の `⌘N` 等）。`createAction` の行でだけ描かれる。nil で出さない。
-  var trailingBadge: String?
   /// 行末（chevron の位置）に置く付属ビュー（試聴 EQ 等）。`normal` / `dormant` の行でだけ描かれる。
   /// nil で出さない。
   var trailing: AnyView?
@@ -78,23 +76,11 @@ struct PaletteRow: View {
 
     case .createAction:
       SelectableRow(selected: selected, action: action, onHoverEnter: onHoverEnter) {
-        HStack(spacing: Theme.Space.step) {
-          Text(title)
-            .font(Font.theme.workspaceName)
-            .foregroundStyle(Color.theme.accentPrimary)
-            .lineLimit(1)
-            .layoutPriority(1)
-          Spacer(minLength: 0)
-          if let trailingBadge {
-            Text(trailingBadge)
-              .font(Font.theme.meta)
-              .foregroundStyle(Color.theme.textMuted)
-              .padding(.horizontal, Theme.Space.step)
-              .padding(.vertical, Theme.Space.hair)
-              .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.sm).fill(Color.theme.smallPillFill))
-          }
-        }
+        Text(title)
+          .font(Font.theme.workspaceName)
+          .foregroundStyle(Color.theme.accentPrimary)
+          .lineLimit(1)
+          .frame(maxWidth: .infinity, alignment: .leading)
       }
       .overlay(
         RoundedRectangle(cornerRadius: Theme.Radius.row)

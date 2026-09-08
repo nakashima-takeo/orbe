@@ -32,7 +32,6 @@ extension L10n {
     .helpShortcutOpenEditor: ("cwd を GUI エディタで開く", "Open cwd in GUI editor"),
     .helpShortcutQuit: ("Orbe を終了", "Quit Orbe"),
     .helpShortcutSwitchWorkspace: ("ワークスペース切替", "Switch workspace"),
-    .helpShortcutNewWorkspace: ("新規ワークスペース", "New workspace"),
     .helpShortcutNewTab: ("新しいタブ", "New tab"),
     .helpShortcutClosedAgents: ("閉じたエージェント", "Closed agents"),
     .helpShortcutRenameTab: ("タブをリネーム", "Rename tab"),
