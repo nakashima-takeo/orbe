@@ -135,7 +135,7 @@ orb --help                      # コマンド一覧
 
 MCP クライアントからも **`orbe-mcp`** を介してタブの起動・テキスト取得・入力・エージェントへの指示を行えます。ブリッジは配布アプリには同梱されず、リポジトリの [`scripts/orbe-mcp.sh`](scripts/orbe-mcp.sh) がソースからビルドして起動します。
 
-起動設定は [`.mcp.json`](.mcp.json) の `orbe` を参照してください。既定の接続先は **Orbe Dev**。配布版へ接続する場合は、MCP クライアントから `ORBE_SOCK` に配布版の `control.sock` の絶対パスを渡します。接続先の解決規則と公開ツールは [制御 API・MCP の仕様](docs/spec/control/api.md)にあります。
+利用する場合は、このスクリプトの絶対パスを MCP クライアントに stdio サーバーの起動コマンドとして登録してください。既定の接続先は **Orbe Dev**。配布版へ接続する場合は、MCP クライアントから `ORBE_SOCK` に配布版の `control.sock` の絶対パスを渡します。接続先の解決規則と公開ツールは [制御 API・MCP の仕様](docs/spec/control/api.md)にあります。
 
 ## ソースからビルド
 
