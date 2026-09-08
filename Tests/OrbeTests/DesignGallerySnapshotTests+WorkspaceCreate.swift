@@ -9,7 +9,7 @@ import XCTest
 extension DesignGallerySnapshotTests {
 
   /// ワークスペース作成フォームを design 正典 ステージ同寸（640×520）で撮る。folder=(a)追従＋補完・
-  /// (b)リンク解除中・(b')切替パレットから名前を引き継いで開いた初期状態／clone=(c)通常・(d)URL空・
+  /// (b)リンク解除中・(b')引き継いだ長い名前／clone=(c)通常・(d)URL空・
   /// (e)リンク解除中・(f)待機・(g)失敗。見本と突合。
   func renderWorkspaceCreateSnapshots(dir: URL) throws {
     let stage = NSSize(width: 640, height: 520)
@@ -37,10 +37,11 @@ extension DesignGallerySnapshotTests {
     unlinked.setName("my-workspace")
     try write("workspacecreate_unlinked.png", unlinked)
 
-    // (b') 切替パレットから名前を引き継いで開いた初期状態: 手入力を経ずに init だけでリンク解除中
-    // （「リンク解除中 — 再リンク」あり）になることを見る。
+    // (b') 切替パレットが引き継ぐ名前は任意長のユーザー入力。名前欄とフッターの作成プレビュー文が
+    // 欄幅を超える名前で破綻しないことを見る。
     try write(
-      "workspacecreate_seeded.png", WorkspaceCreateModel(path: "~", name: "zzz-check"))
+      "workspacecreate_seeded_long.png",
+      WorkspaceCreateModel(path: "~", name: "very-long-workspace-name-that-overflows-the-field"))
 
     // --- git clone ソース（見本 WorkspaceCreateFlow.tsx の src==="clone" と突合）---
     let repoURL = "https://github.com/you/repo.git"
