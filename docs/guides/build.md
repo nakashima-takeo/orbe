@@ -1,7 +1,7 @@
 ---
 title: ビルド手順
 description: libghostty の自前ビルドから Orbe.app の生成・起動まで。前提ツール・チャネル・lint / format
-updated: 2026-08-08
+updated: 2026-09-07
 ---
 
 # ビルド手順
@@ -12,9 +12,32 @@ Orbe は libghostty を**自前ビルド**して使う（クリーン・MIT・�
 
 | ツール | 要否 | 入手 |
 |---|---|---|
-| **フル Xcode** | **必須** | CLT だけでは不可（後述）。App Store か Apple Developer から。 |
+| **フル Xcode（26 系）** | **必須** | App Store か Apple Developer から。Swift ツールチェーンと Icon Composer 形式のアイコンを扱う `actool` を使う。CLT だけでは不可。 |
+| Metal Toolchain | 必須 | `xcodebuild -downloadComponent MetalToolchain` で追加する（[CI](../../.github/workflows/ci.yml)でも導入）。 |
 | Zig 0.15.2 | 必須 | `brew install zig@0.15`。ghostty が `minimum_zig_version = 0.15.2` を要求し、brew の素の `zig`(0.16) では不可。**`zig@0.15` は keg-only なので `zig` は PATH に入らない**が、`build-app.sh` が `brew --prefix zig@0.15` から自動解決する（別経路で入れた場合は `ZIG=/path/to/zig` で上書き）。 |
-| ディスク空き | ~20GB+ | Xcode 展開用。 |
+
+Xcode を導入して初回セットアップを済ませたら、使用中の開発ツールを確認する。
+
+```bash
+xcode-select -p
+xcodebuild -version
+```
+
+`xcode-select -p` が `/Library/Developer/CommandLineTools` を指している場合は、使う Xcode へ切り替える。標準の配置なら次のコマンドを使う。
+
+```bash
+sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+```
+
+次に Zig と Metal Toolchain を導入し、Metal コンパイラを確認する。
+
+```bash
+brew install zig@0.15
+xcodebuild -downloadComponent MetalToolchain
+xcrun -sdk macosx metal --version
+```
+
+アイコンは [`app/Orbe.icon`](../../app/Orbe.icon/) の [Icon Composer 形式](https://developer.apple.com/documentation/xcode/creating-your-app-icon-using-icon-composer)を使い、[`build-app.sh`](../../scripts/build-app.sh) が `actool` でコンパイルする。
 
 ### なぜフル Xcode が必須か（CLT では不可）
 
