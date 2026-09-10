@@ -14,6 +14,49 @@ import XCTest
 /// **help を読んで組み立てる利用者と AI にとっての語彙**だけで、打てば通る機能が「無いもの」になる。
 /// どれもサーバ不要で出る経路なので、ここは `WindowController` を立てずに測る。
 extension OrbeCliProcessTests {
+  func testUnknownWorkspaceCommandIsRejectedEvenWithHelp() {
+    for suffix in [[], ["--help"], ["-h"]] {
+      let args = ["ws", "bogus"] + suffix
+      let outcome = ControlProcess.orbWithoutServer(args)
+      let label = "orb " + args.joined(separator: " ")
+
+      failure(outcome, code: 2, message: "unknown ws command: bogus", label)
+      XCTAssertTrue(outcome.stdout.isEmpty, "\(label) の stdout は空: \(outcome.stdout)")
+    }
+  }
+
+  func testWorkspaceHelpWorksAtEveryDefinedLevelWithoutServer() {
+    let usage = ControlProcess.orbWithoutServer(["ws", "--help"])
+    XCTAssertEqual(usage.status, 0, usage.stderr)
+    XCTAssertTrue(usage.stdout.hasPrefix("orb ws — manage workspaces\n"), usage.stdout)
+    XCTAssertTrue(usage.stdout.contains("USAGE:\n"), usage.stdout)
+
+    let commands = [
+      [], ["list"], ["new"], ["rename"], ["dir"], ["switch"], ["rm"],
+      ["rename", "current", "renamed"],
+    ]
+    for command in commands {
+      for flag in ["--help", "-h"] {
+        let args = ["ws"] + command + [flag]
+        let outcome = ControlProcess.orbWithoutServer(args)
+        let label = "orb " + args.joined(separator: " ")
+
+        XCTAssertEqual(outcome.status, 0, "\(label) は socket 不達でも exit 0: \(outcome.stderr)")
+        XCTAssertEqual(outcome.stdout, usage.stdout, "\(label) は ws の usage を表示する")
+        XCTAssertTrue(outcome.stderr.isEmpty, "\(label) の stderr は空: \(outcome.stderr)")
+      }
+    }
+  }
+
+  func testWorkspaceWithoutSubcommandShowsUsageAndExitsTwo() {
+    let usage = ControlProcess.orbWithoutServer(["ws", "--help"])
+    let outcome = ControlProcess.orbWithoutServer(["ws"])
+
+    XCTAssertEqual(outcome.status, 2, "引数なしの orb ws は exit 2: \(outcome.stderr)")
+    XCTAssertEqual(outcome.stdout, usage.stdout, "引数なしの orb ws は ws の usage を表示する")
+    XCTAssertTrue(outcome.stderr.isEmpty, "引数なしの orb ws の stderr は空: \(outcome.stderr)")
+  }
+
   /// `orb --help` と `orb agent --help` の USAGE に `agent prompt` が載り、トップの Exit codes 行が
   /// prompt 固有の 3 / 4 を言う。help から漏れると「打てば通るが無いもの」になり、終了コードが
   /// 説明されなければ 3 / 4 を読む側が失敗と取り違える。
