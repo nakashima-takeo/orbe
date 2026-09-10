@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（orb）
 description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/session/wait サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-09-07
+updated: 2026-09-11
 ---
 
 # Orbe CLI（`orb`）
@@ -70,7 +70,9 @@ kind の語彙と値域の検証は control が持つ（未知 kind は CLI を�
 
 ### 共通
 
-各サブコマンドは対応する [制御 API](api.md) メソッドへそのまま乗る。`--json` は全サブコマンドで効き、control の result をそのまま出す——成功応答に載る `seq`（[api](api.md)）もそのまま出る（例外は 3 つ——`config get` は `config_list` から抽出した 1 行で `seq` を持たない、`session closed` は `session_log` と `list_tabs` から CLI が組む派生ビューで `seq` を持たない、`tab list` は `--workspace` で絞った後の `{"tabs":[…], "seq": N}`）。write が採番した id（`ws new` の workspaceId・`tab new` の tabId）は人間向け出力にも載るが、書式が割れずに読めるのは `--json` だけ。`--help`（`-h` も同じ）は全階層で効き、固有 usage を持つのは `config set` だけで、他はドメインの usage を出す。`<id|current>` の `current` はアクティブ WS。
+各サブコマンドは対応する [制御 API](api.md) メソッドへそのまま乗る。`--json` は全サブコマンドで効き、control の result をそのまま出す——成功応答に載る `seq`（[api](api.md)）もそのまま出る（例外は 3 つ——`config get` は `config_list` から抽出した 1 行で `seq` を持たない、`session closed` は `session_log` と `list_tabs` から CLI が組む派生ビューで `seq` を持たない、`tab list` は `--workspace` で絞った後の `{"tabs":[…], "seq": N}`）。write が採番した id（`ws new` の workspaceId・`tab new` の tabId）は人間向け出力にも載るが、書式が割れずに読めるのは `--json` だけ。`<id|current>` の `current` はアクティブ WS。
+
+`--help`（`-h` も同じ）は定義済みの全階層で usage を表示して exit 0 となり、RPC を送らない。固有 usage を持つのは `config set` だけで、他はドメインの usage を出す。未知のサブコマンドは、後続に help があっても usage エラー（exit 2）とし、診断を stderr に出して stdout は空にする（例: `orb ws bogus --help`）。`ws` の各操作は、必要な位置引数が未指定でも help を表示する。引数なしの `orb ws` は usage を表示して exit 2 となる。
 
 値必須フラグ（`--workspace <id>` / `--dir <path>` / `--cmd "…"` / `--text <text>` / `--key <key>` / `--kind <kind>` / `--value <value>` / `--after <seq>` / `--timeout-ms <ms>`）の値は `-` 始まりも空（空白だけの形も含む）も取らない（usage エラー、exit 2）。`orb tab new --dir "$DIR" --cmd "$CMD"` の `$DIR` が空になる形が両方ここで落ちる——引用符が無ければトークンごと消えて `--cmd` が cwd に化け、引用符があれば空文字が cwd として通ってしまうため。パスは絶対パスで渡す（`-` 始まりのディレクトリは `./-foo` の形）——相対パスは CLI も control も解決せずそのまま格納するので、利用者のシェルの cwd 基準にはならない。`~` 始まりを展開するのは workspace のパス（`ws new --dir` / `ws dir`）だけで、`tab new --dir` は展開せずそのまま cwd にする。
 
