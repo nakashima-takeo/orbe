@@ -20,23 +20,31 @@ let wsUsage = """
   """
 
 func runWorkspace(_ args: [String]) -> Never {
-  if args.isEmpty || hasHelp(args) {
-    print(wsUsage)
-    exit(args.isEmpty ? 2 : 0)
-  }
   let rest = Array(args.dropFirst())
-  switch args[0] {
+  switch args.first {
   case "list": wsList(rest)
   case "new": wsNew(rest)
   case "rename": wsRename(rest)
   case "dir": wsDir(rest)
   case "switch": wsSwitch(rest)
   case "rm": wsRemove(rest)
-  default: usageDie("unknown ws command: \(args[0])")
+  case nil:
+    print(wsUsage)
+    exit(2)
+  case .some(let other):
+    if hasHelp([other]) {
+      print(wsUsage)
+      exit(0)
+    }
+    usageDie("unknown ws command: \(other)")
   }
 }
 
 private func wsList(_ rest: [String]) -> Never {
+  if hasHelp(rest) {
+    print(wsUsage)
+    exit(0)
+  }
   rejectLeftovers(rest, positionals: 0)
   let result = callOrExit("list_workspaces", [:])
   if wantJSON {
@@ -55,6 +63,10 @@ private func wsList(_ rest: [String]) -> Never {
 }
 
 private func wsNew(_ args: [String]) -> Never {
+  if hasHelp(args) {
+    print(wsUsage)
+    exit(0)
+  }
   var rest = args
   let dir = takeOption(&rest, "--dir", requires: "a <path> value")
   rejectLeftovers(rest, positionals: 1)
@@ -72,6 +84,10 @@ private func wsNew(_ args: [String]) -> Never {
 }
 
 private func wsRename(_ rest: [String]) -> Never {
+  if hasHelp(rest) {
+    print(wsUsage)
+    exit(0)
+  }
   rejectLeftovers(rest, positionals: 2)
   guard rest.count >= 2 else { usageDie("ws rename requires <id|current> <name>") }
   let id = resolveWorkspaceId(rest[0])
@@ -82,6 +98,10 @@ private func wsRename(_ rest: [String]) -> Never {
 }
 
 private func wsDir(_ rest: [String]) -> Never {
+  if hasHelp(rest) {
+    print(wsUsage)
+    exit(0)
+  }
   rejectLeftovers(rest, positionals: 2)
   guard rest.count >= 2 else { usageDie("ws dir requires <id|current> <path>") }
   let id = resolveWorkspaceId(rest[0])
@@ -92,6 +112,10 @@ private func wsDir(_ rest: [String]) -> Never {
 }
 
 private func wsSwitch(_ rest: [String]) -> Never {
+  if hasHelp(rest) {
+    print(wsUsage)
+    exit(0)
+  }
   rejectLeftovers(rest, positionals: 1)
   guard let arg = rest.first, let id = Int(arg) else {
     usageDie("ws switch requires a numeric <id>")
@@ -102,6 +126,10 @@ private func wsSwitch(_ rest: [String]) -> Never {
 }
 
 private func wsRemove(_ rest: [String]) -> Never {
+  if hasHelp(rest) {
+    print(wsUsage)
+    exit(0)
+  }
   rejectLeftovers(rest, positionals: 1)
   guard let arg = rest.first else { usageDie("ws rm requires <id|current>") }
   let id = resolveWorkspaceId(arg)
