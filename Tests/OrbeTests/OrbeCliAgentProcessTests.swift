@@ -173,7 +173,7 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     // (d) surface は実サイズで生まれている。端末面のサイズを配るのは window の display サイクルで
     // 走る器（`TabFacesView`）と `SurfaceScrollView` の `layout()` だけなので、同じ turn で detach
     // する起こし方はレイアウトを同期で確定させない限り 0 サイズのまま surface を作ってしまう。
-    // 端末面は器から背（14）と焦点帯（2）を除いた寸法。
+    // 端末面は器から背と焦点帯を除いた寸法。
     let surface = try XCTUnwrap(
       control.target.controlResolveTab(tab)?.surface, "返った tabId がタブに解決できない")
     // 相対比較なので、先に基準側が非ゼロであることを言う——0 同士の一致は、まさにここで
@@ -181,7 +181,9 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     let content = control.target.model.content.bounds.size
     XCTAssertGreaterThan(content.width, 0, "前提: content が実サイズを持つ")
     XCTAssertEqual(
-      surface.bounds.size, CGSize(width: content.width - 14, height: content.height - 2),
+      surface.bounds.size,
+      CGSize(
+        width: content.width - FaceGeometry.spine, height: content.height - FaceGeometry.focusBand),
       "背景 WS のタブが実サイズで起きていない（pty が libghostty 既定サイズのまま残る）")
   }
 
