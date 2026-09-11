@@ -1,7 +1,8 @@
 import AppKit
 
 /// 背: 面の継ぎ目に立つ 14px の帯。隠れた面の印（その面のキー色のグラデとグリフ）か、両面が
-/// 見えているときのグリップを描く。動かさずに離せばクリック、4px 動けばドラッグとして器へ伝える。
+/// 見えているときのグリップを描く。動かさずに離せばクリック、4px 動けばドラッグ（ポインタごとに位置を、
+/// 離したことを 1 回）として器へ伝える。
 final class SpineView: NSView {
   var look: FaceGeometry.SpineLook = .hidden(.editor) {
     didSet {
@@ -27,6 +28,8 @@ final class SpineView: NSView {
   var onDrag: ((CGFloat) -> Void)?
   /// 動かさずに離した。
   var onClick: (() -> Void)?
+  /// ドラッグの末に離した。
+  var onRelease: (() -> Void)?
 
   private var drag: (x0: CGFloat, moved: Bool)?
 
@@ -157,6 +160,6 @@ final class SpineView: NSView {
   override func mouseUp(with event: NSEvent) {
     guard let d = drag else { return }
     drag = nil
-    if !d.moved { onClick?() }
+    if d.moved { onRelease?() } else { onClick?() }
   }
 }
