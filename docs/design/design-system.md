@@ -1,12 +1,12 @@
 ---
 title: Orbe デザインシステム
 description: 外観の思想・契約を記す自由記述ドキュメント。値の正は DesignSystem/ の Swift、思想・契約の正は本書
-updated: 2026-09-07
+updated: 2026-09-12
 ---
 
 # Orbe デザインシステム
 
-> ステータス: v0.6.0 · 2026-09-07
+> ステータス: v0.7.0 · 2026-09-12
 > 値の正（SSOT）: chrome/semantic は `Sources/Orbe/DesignSystem/DesignTokens.swift`（機械可読ミラー `docs/design/tokens.json`）／ 識別色（端末 ANSI 16 色・chrome 共有アンカー）は `Sources/Orbe/DesignSystem/OrbePalette.swift`（端末 conf を生成し、chrome アンカーへ定数を供給）／ worktree 識別色 48 色（24 色相 × 2 トーン）を dark / light 別に持つ表は `Sources/Orbe/DesignSystem/WorktreePalette.swift`（`scripts/gen-worktree-palette.py` が oklch から生成・手で編集しない）。
 > ガラス質感・elevation・glow は `Sources/Orbe/DesignSystem/DesignTokens+Glass.swift` が所有（本書は再定義しない）。
 > 本書は思想・契約を記す自由記述ドキュメントで、**思想・契約の正は本書、値の正は上記 Swift**。Orbe の外観の**正**はこのリポジトリの中で閉じている。ただしコード中の一部コメントは、値が決まった経緯の記録として設計見本（リポジトリ外）を引用する——それは出所の記録であって、正ではない。
@@ -19,7 +19,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 ## 1. 原則
 
 1. **温かく、落ち着いて、密に。** 地は温かい炭／藤紙。装飾は最小、情報は密。
-2. **色は状態と自分の出番に。** 無彩に近い土台の上で、色は **エージェントの状態（確定配色の温度分け）** と **自分の出番（電紫 accent＝選択・プロンプト）** にだけ使う。
+2. **色は状態と自分の出番に。** 無彩に近い土台の上で、色は **エージェントの状態（確定配色の温度分け）** と **自分の出番（電紫 accent＝選択・プロンプト）** にだけ使う。これに **面のキー色（どの面に居るか）** が加わる——タブの中の端末面とエディター面を識別する 2 色（`face.terminal` は無彩の藤、`face.editor` は amber）で、背の印・分割中の焦点帯・位置ドットだけが使う。状態でも選択でもない「居場所」の色なので、状態色・accent とは混ぜない。
 3. **状態は3チャンネルで冗長に。** 動き=working／吹き出し=waiting／チェック=done／zzz=idle。色・形・動きのどれを失っても判別できる（→ §3・§4）。
 4. **選択は tint 塗り、タブだけ反転。** リスト行の選択は `selectionFill` の淡塗り。タブの選択のみ前景色を背景にした**反転表示**（背景を状態色で塗らない）。左 3px バー・下線・太字による選択弁別は使わない。
 5. **ラベルはターミナル語。** UI 本文・プローズはシステムサンセリフ、ターミナル・ラベル・コード・ステータス語は monospace。
@@ -72,6 +72,10 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `worktree.frame[0…47]` | グループの器の外側 1px 枠 | `WorktreePalette.dark` の各色 .38 | `WorktreePalette.light` の各色 .45 |
 | `tab.divider` | グループ内セルの区切り線（識別色を敷いた地の上でも読める濃さ） | `rgba(255,255,255,.14)` | `rgba(58,49,81,.16)` |
 | `tab.activeText` | 選択セグメント（反転面）の文字 | `#1a1721` | `#f3f0fa` |
+| `face.editor` | エディター面のキー色（背の印・焦点帯・位置ドット） | `#e0a97c` | `#bf6a2e` |
+| `face.terminal` | 端末面のキー色（同上。dark は `text.secondary` と偶然同値だが別トークン） | `#b8afc4` | `#5f5678` |
+| `editor.ghost` | エディター面の空状態の ◐（沈んだ塗り） | `#3d3752` | `#d9d3e6` |
+| `editor.icon` | エディター面のアイコン・kbd の文字（dark は `kbKeyText` と偶然同値だが別トークン） | `#a99fb8` | `#766e8d` |
 
 **意図的な同値収束（事故ではない）**: Orbe の配色は色階層が少なく、複数の semantic 名が同一値へ収束する。SSOT では別名で表現している。
 `accent.focus` ＝ `accent.primary`／ `text.tertiary` ＝ `text.muted`／
@@ -119,6 +123,8 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `type.captionDigit` | 11 / medium / mono-digit | 件数（`monospacedDigit`） |
 | `type.meta` | 10 / regular / mono | 行番号・メタ・ヒント・path |
 | `type.sectionLabel` | 9.5 / regular / mono | 大文字セクション見出し（uppercase は使用側 `textCase`） |
+| `type.editorLead` | 13 / regular / sans | エディター面の空状態の一文 |
+| `type.editorHint` | 12 / regular / mono | エディター面のショートカット行・kbd |
 
 **tracking / line-height スカラ**（NSFont では表せず、使用側で `.tracking()` / lineSpacing 換算）:
 `tracking.label` 1（大文字セクション見出し）／ `tracking.status` 0.3（ステータスストリップ）／ `line.body` 1.6（本文）／ `line.terminal` 1.55（ターミナル本文）。
@@ -142,6 +148,9 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `spin` | 1.6s | working スピナー（linear infinite・rotate360） |
 | `float` | 2.6s | waiting 浮遊（ease-in-out infinite・translateY `floatOffset` -1） |
 | `blink` | 1.1s | 点滅（0–55% 表示 / 56–100% 非表示） |
+| `faceSlide` | 320ms | 面のスライド（⌘E・背クリック）。イージング `cubic-bezier(0.32, 0.72, 0, 1)` |
+| `spineLook` | 200ms | 背の地の切替（印 ⇄ グリップ） |
+| `faceDot` | 240ms | 位置ドットの幅・色 |
 
 > リズム規律: 同種の遷移に別々の時間を使わない。`reduce motion` 環境では遷移は `instant`・ループは停止（スピナーは静的な 3/4 円弧のまま残り、形で working と判別できる）。
 
@@ -188,7 +197,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 - **Search field**: 外枠＝`bg.sunken`＋1px `surface.1`＋radius `md`。focus＝リング `accent.focus`。no-match＝`danger`。件数＝`captionDigit`。
 - **Focus / active tab**: アクティブタブの端末は 2px 内側リング `accent.focus`。カーソル点滅と併走。
 - **Onboarding**: waiting＝`text.muted`。installing＝スピナー（`accent.primary`）。done＝`✓` `success`。failed＝`✗` `danger`＋再試行 secondary。skipped＝`text.muted`・取り消し線。
-- **Empty state**: 中央・`type.body`・`text.muted` の一文＋必要なら `type.meta` ヒント。装飾なし。
+- **Empty state**: 中央・`type.body`・`text.muted` の一文＋必要なら `type.meta` ヒント。装飾なし。**エディター面**の空状態は見本の値をそのまま持つ: ◐（`OrbeMarkGlyph` 44・`editor.ghost`）・その 18 下に `type.editorLead`・`text.muted` の一文・22 下にショートカット行（gap 8。ラベル `type.editorHint`・`text.muted`・幅 170 右寄せ ＋ gap 12 ＋ kbd）。kbd＝`type.editorHint`・文字 `editor.icon`・枠 hairline `borderInk` .14（light ×1.4）・radius `sm`・padding 1×7・地 `surfaceInk` .05（light ×0.6）。
 
 ### 5.1 chrome（2 段 28+28・TopBar＋TabBar）
 

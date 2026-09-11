@@ -1,7 +1,7 @@
 ---
 title: ターミナル基盤
 description: libghostty の surface API を NSView に埋め込む土台 — 描画・入力・クリップボード・ライフサイクル・ビルド構成の契約
-updated: 2026-09-06
+updated: 2026-09-12
 ---
 
 # ターミナル基盤
@@ -50,9 +50,13 @@ surface の可視性はホストが `ghostty_surface_set_occlusion` へ同期す
 - **ドラッグ&ドロップ**: Finder からのファイル／フォルダ（`.fileURL` のみ受理）は、ドロップ先の端末へフォーカスを移してから、各パスをシェルエスケープしスペース区切りでカーソル位置へ挿入する。Enter は送らない——実行するかはユーザーの判断に残す。
 - 日本語 IME は [ime](ime.md) が持つ。
 
+## 面の中の端末
+
+各タブの surface は `NSScrollView` ラップ層に包まれ、その view がタブの器の**端末面**に載る（→ [editor/faces](../editor/faces.md)）。端末面が見えている間、surface のサイズは面の中身の寸法と一致する（面が最小幅より狭いときは最小幅のまま錨側へ滑り出る）。端末面が隠れている間は surface のサイズを変えない——見えていた最後の寸法で据え置き、隠れたまま生まれた端末は戻したときに得る寸法で起こす。幅 0 の面は不可視扱いで、可視性の同期（後述）どおり描画だけが止まり端末状態と pty は前進する。面の遷移では中身のサイズを遷移開始時に 1 回だけ確定し、動くのは面の clip と中身の位置だけ（フレームごとの pty resize をしない）。
+
 ## スクロールバー
 
-各タブの surface は `NSScrollView` ラップ層に包まれ、ネイティブの overlay スクローラ（autohide）を持つ。スクロール量とセル寸法は libghostty のアクションで受け取り、documentView の高さとスクロール位置に同期する（AppKit の +Y 上向きへ反転）。バードラッグは live scroll を行へ換算し、binding action で core へ送る（同一行は冗長送信を抑制）。
+ラップ層はネイティブの overlay スクローラ（autohide）を持つ。スクロール量とセル寸法は libghostty のアクションで受け取り、documentView の高さとスクロール位置に同期する（AppKit の +Y 上向きへ反転）。バードラッグは live scroll を行へ換算し、binding action で core へ送る（同一行は冗長送信を抑制）。
 
 端末フォーカス時の `Cmd+↑`/`Cmd+↓`（Shift なし）は chrome が先取りし、スクロールバック先頭/末尾へジャンプさせる。このため ghostty 既定の `jump_to_prompt` はこの 2 キーからは呼べない。
 
