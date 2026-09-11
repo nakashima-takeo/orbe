@@ -4,7 +4,8 @@ import XCTest
 
 /// タブの面の配置の永続——`workspaces.json` の `tabs[].faces` の形、既定の省略、読めない値の寛容 decode。
 ///
-/// 壊れると何が起きるか。既定を書いてしまうと既存ファイルの wire shape が変わり、外部の読み手が壊れる。
+/// 壊れると何が起きるか。既定を書いてしまうと、既定のままの大多数のタブに冗長な既定値が積まれ、`windowSize` /
+/// `lastUsedAt` / `settingsOverride` と同じ「不在 ⇔ 既定」の家風から外れる。
 /// 読めない `faces` でファイルごと捨てると、1 タブの値の破損で全 workspace の復元が消える。
 /// 範囲外の割合をそのまま置くと隠れた面が焦点になり、起動直後のキーが見えない面へ届く。
 extension WorkspacePersistenceTests {
