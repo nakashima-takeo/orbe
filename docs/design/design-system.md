@@ -9,6 +9,7 @@ updated: 2026-09-12
 > ステータス: v0.7.0 · 2026-09-12
 > 値の正（SSOT）: chrome/semantic は `Sources/Orbe/DesignSystem/DesignTokens.swift`（機械可読ミラー `docs/design/tokens.json`）／ 識別色（端末 ANSI 16 色・chrome 共有アンカー）は `Sources/Orbe/DesignSystem/OrbePalette.swift`（端末 conf を生成し、chrome アンカーへ定数を供給）／ worktree 識別色 48 色（24 色相 × 2 トーン）を dark / light 別に持つ表は `Sources/Orbe/DesignSystem/WorktreePalette.swift`（`scripts/gen-worktree-palette.py` が oklch から生成・手で編集しない）。
 > ガラス質感・elevation・glow は `Sources/Orbe/DesignSystem/DesignTokens+Glass.swift` が所有（本書は再定義しない）。
+> エディター面のトークン（`face.*` / `editor.*` / `type.editor*` / `faceSlide` `spineLook` `faceDot`）は `Sources/Orbe/DesignSystem/DesignTokens+Editor.swift` が所有。
 > 本書は思想・契約を記す自由記述ドキュメントで、**思想・契約の正は本書、値の正は上記 Swift**。Orbe の外観の**正**はこのリポジトリの中で閉じている。ただしコード中の一部コメントは、値が決まった経緯の記録として設計見本（リポジトリ外）を引用する——それは出所の記録であって、正ではない。
 
 Orbe は AI コーディングエージェントのためのネイティブ macOS ターミナル。外観は
@@ -73,14 +74,15 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `tab.divider` | グループ内セルの区切り線（識別色を敷いた地の上でも読める濃さ） | `rgba(255,255,255,.14)` | `rgba(58,49,81,.16)` |
 | `tab.activeText` | 選択セグメント（反転面）の文字 | `#1a1721` | `#f3f0fa` |
 | `face.editor` | エディター面のキー色（背の印・焦点帯・位置ドット） | `#e0a97c` | `#bf6a2e` |
-| `face.terminal` | 端末面のキー色（同上。dark は `text.secondary` と偶然同値だが別トークン） | `#b8afc4` | `#5f5678` |
+| `face.terminal` | 端末面のキー色（同上。dark / light とも `text.secondary` と偶然同値だが別トークン） | `#b8afc4` | `#5f5678` |
 | `editor.ghost` | エディター面の空状態の ◐（沈んだ塗り） | `#3d3752` | `#d9d3e6` |
-| `editor.icon` | エディター面のアイコン・kbd の文字（dark は `kbKeyText` と偶然同値だが別トークン） | `#a99fb8` | `#766e8d` |
+| `editor.icon` | エディター面のアイコン・kbd の文字（dark / light とも `kbKeyText` と偶然同値だが別トークン） | `#a99fb8` | `#766e8d` |
 
 **意図的な同値収束（事故ではない）**: Orbe の配色は色階層が少なく、複数の semantic 名が同一値へ収束する。SSOT では別名で表現している。
 `accent.focus` ＝ `accent.primary`／ `text.tertiary` ＝ `text.muted`／
 `success` ＝ `diff.added`（green）／ `danger` ＝ `diff.removed`（red）／
-`state.dormant` ＝ `text.muted`／ `surface.0` ＝ `bg.sunken`。
+`state.dormant` ＝ `text.muted`／ `surface.0` ＝ `bg.sunken`／
+`face.terminal` ＝ `text.secondary`／ `editor.icon` ＝ `kbKeyText`（面のキー色・エディター面の文字は役割が別なので参照しない）。
 `state.done`（完了・緑）と `diff.added`（green）、`state.waiting`（要応答・黄）と `conflict`（ANSI黄）は**別トークンとして分離**（light では偶々同値だが dark では異なる。SSOT は状態色を `StateHue`、ANSI 系を端末アンカーから別々に導く）。
 **反転色（`state.*Inverse`）は対テーマの状態色**＝dark/light の値を入れ替えただけ（選択タブの反転面上でコントラストを確保する仕組み）。
 **light の `tab.activeText` `#f3f0fa` は `bg.base` `#fcfbfe` と別値**（on.accent の流用不可）。
