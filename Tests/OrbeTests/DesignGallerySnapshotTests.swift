@@ -72,6 +72,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     try renderUpdateSnapshots(dir: dir)
     try renderAttentionSnapshots(dir: dir)
     try renderHelpSnapshots(dir: dir)
+    try renderEditorSnapshots(dir: dir)
   }
 
   /// StatusRow（最上段 chrome）の状態。gallery は borderless 窓なので信号機は無く、
@@ -116,7 +117,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       titles: (0..<10).map { "terraform-apply-session-\($0)" },
       glyphs: (0..<10).map { glyphCycle[$0 % glyphCycle.count] })
     overflow.active = 6
-    overflow.cwd = "~/work/infra/terraform/modules/network"
+    overflow.location = "~/work/infra/terraform/modules/network"
     overflow.rollup = [("working", 8), ("waiting", 2), ("idle", 15)]
     try writePNG(
       chromeBand(overflow, size: size), size: size, name: "statusrow_overflow.png", dir: dir)
@@ -144,7 +145,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
         WorktreeColor.index(forKey: $0)
       })
     grouped.active = 3
-    grouped.cwd = "~/dev/storefront/src/hooks"
+    grouped.location = "~/dev/storefront/src/hooks"
     grouped.rollup = [("working", 2), ("waiting", 1), ("done", 2), ("idle", 4)]
     try writePNG(
       chromeBand(grouped, size: size), size: size, name: "statusrow_grouped.png", dir: dir)
@@ -158,7 +159,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       segments: [0..<4, 4..<8, 8..<11],
       colorIndices: ["network", "compute", "storage"].map { WorktreeColor.index(forKey: $0) })
     groupedOverflow.active = 5
-    groupedOverflow.cwd = "~/work/infra-worktrees/compute"
+    groupedOverflow.location = "~/work/infra-worktrees/compute"
     groupedOverflow.rollup = [("working", 3), ("waiting", 3), ("done", 3), ("idle", 2)]
     try writePNG(
       chromeBand(groupedOverflow, size: size), size: size, name: "statusrow_grouped_overflow.png",
@@ -176,7 +177,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       colorIndices: ["core", "web", "scratch", "api", "cli"].map { WorktreeColor.index(forKey: $0) }
     )
     groupedScroll.active = 2
-    groupedScroll.cwd = "~/dev/monorepo/packages/core"
+    groupedScroll.location = "~/dev/monorepo/packages/core"
     groupedScroll.rollup = [("working", 5), ("waiting", 4), ("done", 5), ("idle", 4)]
     try writePNG(
       chromeBand(groupedScroll, size: size), size: size, name: "statusrow_grouped_scroll.png",
@@ -192,7 +193,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       segments: [0..<3, 3..<4],
       colorIndices: ["orbe", "notes"].map { WorktreeColor.index(forKey: $0) })
     fitting.active = 0
-    fitting.cwd = "~/dev/orbe/ui"
+    fitting.location = "~/dev/orbe/ui"
     fitting.rollup = [("working", 1), ("done", 1), ("idle", 2)]
     try writePNG(
       chromeBand(fitting, size: size), size: size, name: "statusrow_fitting.png", dir: dir)
