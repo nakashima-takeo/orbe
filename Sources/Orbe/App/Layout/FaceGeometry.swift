@@ -80,17 +80,17 @@ enum FaceGeometry {
   }
 
   /// 背のドラッグ中。`x` は器の左端からの距離で、0…内容幅に収めた連続値がそのままエディター幅になる。
-  /// `g0` は掴んだ瞬間の解決結果。結果は正規形。
+  /// `g0` は掴んだ瞬間の解決結果。焦点は動かさない——焦点の面が幅 0 になるときだけ残る面へ移る
+  /// （正規形）。結果は正規形。
   static func drag(_ faces: FaceLayout, from g0: Resolved, x: CGFloat) -> FaceLayout {
     let c = g0.contentWidth
     guard c > 0 else { return faces }
     let w = min(max(x, 0), c)
-    let focus: Face =
-      w <= 0 ? .terminal : w >= c ? .editor : (g0.editorWidth > 0 ? g0.faces.focus : .editor)
-    return FaceLayout(editorRatio: Double(w / c), focus: focus).normalized
+    return FaceLayout(editorRatio: Double(w / c), focus: g0.faces.focus).normalized
   }
 
   /// 背を離した: 端に寄せた面（`closeEdge` 未満）は閉じ、それ以外はドラッグの値をそのまま確定する。
+  /// 閉じる側が焦点の面なら残る面へ焦点が移る（全面の配置は正規形でその面が焦点）。
   static func release(_ faces: FaceLayout, contentWidth c: CGFloat) -> FaceLayout {
     let eW = (faces.editorRatio * c).rounded()
     if eW < closeEdge { return .terminalOnly }
