@@ -52,6 +52,12 @@ final class TabFacesView: NSView {
     terminal.autoresizingMask = []
     editorFace.addSubview(editor)
     terminalFace.addSubview(terminal)
+    wireSpine()
+  }
+  required init?(coder: NSCoder) { fatalError("not supported") }
+
+  /// 背の操作を器の状態へ結ぶ。init の外に置き、閉包が読む `faces` を常に鏡（プロパティ）にする。
+  private func wireSpine() {
     spine.onGrab = { [unowned self] in
       dragOrigin = resolved
       window?.makeFirstResponder(focusTarget)
@@ -63,7 +69,6 @@ final class TabFacesView: NSView {
       onFacesRequested?(FaceGeometry.spineClick(faces, resolved), true)
     }
   }
-  required init?(coder: NSCoder) { fatalError("not supported") }
 
   deinit { clock?.cancel() }
 
