@@ -22,11 +22,13 @@ enum ChromeAction {
   case scrollToTop  // スクロールバック先頭へジャンプ
   case scrollToBottom  // スクロールバック末尾へジャンプ
   case toggleHelp  // ヘルプオーバーレイ（ショートカットチートシート）をトグル開閉
+  case toggleEditorFace  // エディター面 ⇄ 端末面（分割中は焦点の往復）
 }
 
-/// surface から届く、ウィンドウレベルの chrome 操作（タブ・workspace）。
+/// 面（surface・エディター pane）から届く、ウィンドウレベルの chrome 操作（タブ・workspace）。
 enum WindowCommand {
   case newTab
+  case closeTab
   case showClosedAgentsPalette
   case nextTab
   case prevTab
@@ -38,15 +40,17 @@ enum WindowCommand {
   case renameTab
   case showSettings
   case toggleHelp
+  case toggleEditorFace
 }
 
 extension ChromeAction {
   /// WindowController へ届く window コマンドへの写像。surface ローカル操作は nil。
-  /// surface 経路（`SurfaceView.perform`）と window レベル経路（`ChromeHostingView`）が
-  /// 共有する単一ソース mapping（網羅 switch）。
+  /// 面の経路（`SurfaceView.perform`・`EditorPaneView.keyDown`）と window レベル経路
+  /// （`ChromeHostingView`）が共有する単一ソース mapping（網羅 switch）。
   var windowCommand: WindowCommand? {
     switch self {
     case .newTab: return .newTab
+    case .closeTab: return .closeTab
     case .showClosedAgentsPalette: return .showClosedAgentsPalette
     case .nextTab: return .nextTab
     case .prevTab: return .prevTab
@@ -58,7 +62,8 @@ extension ChromeAction {
     case .rename: return .renameTab
     case .showSettings: return .showSettings
     case .toggleHelp: return .toggleHelp
-    case .increaseFontSize, .decreaseFontSize, .resetFontSize, .closeTab, .find,
+    case .toggleEditorFace: return .toggleEditorFace
+    case .increaseFontSize, .decreaseFontSize, .resetFontSize, .find,
       .scrollToTop, .scrollToBottom:
       return nil
     }
@@ -74,7 +79,7 @@ extension WindowCommand {
     case .newTab, .showClosedAgentsPalette, .switchWorkspace,
       .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings, .toggleHelp:
       return true
-    case .nextTab, .prevTab, .openEditor, .renameTab:
+    case .nextTab, .prevTab, .openEditor, .renameTab, .closeTab, .toggleEditorFace:
       return false
     }
   }
@@ -106,6 +111,7 @@ enum Keybindings {
     case "-": return .decreaseFontSize
     case "0": return .resetFontSize
     case ",": return .showSettings  // Cmd+,
+    case "e": return .toggleEditorFace  // Cmd+E
     case "f": return .find  // Cmd+F
     case "r": return .rename  // Cmd+R
     case "w": return .closeTab  // Cmd+W

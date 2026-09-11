@@ -55,12 +55,14 @@ final class ChromeStatusRowTests: OrbeTestCase {
     let host = try rootHost(wc)
     host.layoutSubtreeIfNeeded()
 
-    // chrome はターミナル本文（SurfaceView）より上に位置し、重ならない。
+    // chrome はターミナル本文（SurfaceView）より上に位置し、重ならない。本文は chrome の真下の
+    // 面の焦点帯（透明・常に確保）の下から始まる。
     let surface = try XCTUnwrap(findAll(SurfaceView.self, in: host).first, "アクティブタブの surface")
     let surfaceInHost = surface.convert(surface.bounds, to: host)
-    let chromeBottom = host.isFlipped ? Chrome.barHeight : host.bounds.height - Chrome.barHeight
+    let contentTop = Chrome.barHeight + FaceGeometry.focusBand
+    let expectedTop = host.isFlipped ? contentTop : host.bounds.height - contentTop
     let surfaceTop = host.isFlipped ? surfaceInHost.minY : surfaceInHost.maxY
-    XCTAssertEqual(surfaceTop, chromeBottom, accuracy: 1, "本文は chrome の真下から始まる＝chrome は常時占有")
+    XCTAssertEqual(surfaceTop, expectedTop, accuracy: 1, "本文は chrome の真下から始まる＝chrome は常時占有")
 
     // タブ 1 枚でも 1 タブぶんのタイトルが chrome 状態に出る。
     wc.flushChrome()  // chrome は coalesce 済み——同期読み前に最終状態を確定させる
@@ -80,7 +82,7 @@ final class ChromeStatusRowTests: OrbeTestCase {
     surface.currentPwd = "/private/var/orbe-cwd-probe"
     wc.flushChrome()
     XCTAssertEqual(
-      wc.statusModel.cwd, "/private/var/orbe-cwd-probe", "cwd は chrome 行に 1 箇所だけ出る")
+      wc.statusModel.location, "/private/var/orbe-cwd-probe", "cwd は chrome 行に 1 箇所だけ出る")
 
     // タブタイトルは ③ 派生で cwd の fish 圧縮名になる（root 外＝home 外なので絶対 compact）。
     // 行の実 cwd（フルパス）とは別表現＝同じ文字列の埋め込みではない。
@@ -88,7 +90,8 @@ final class ChromeStatusRowTests: OrbeTestCase {
       wc.statusModel.strip.titles.first, "/p/v/orbe-cwd-probe",
       "タブタイトルは cwd の派生圧縮名: \(wc.statusModel.strip.titles)")
     XCTAssertNotEqual(
-      wc.statusModel.strip.titles.first, wc.statusModel.cwd, "タブタイトルは行の実 cwd フルパスとは別表現")
+      wc.statusModel.strip.titles.first, wc.statusModel.location,
+      "タブタイトルは行の実 cwd フルパスとは別表現")
   }
 
   /// workspace 切替で chrome の workspace 名も追従する。

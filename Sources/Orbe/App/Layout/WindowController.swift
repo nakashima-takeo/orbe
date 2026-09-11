@@ -204,6 +204,12 @@ final class WindowController: NSObject, NSWindowDelegate {
       self.recordSessionEvent(transition, of: tab)
     }
     tab.onWindowCommand = { [weak self] command in self?.handleWindowCommand(command) }
+    tab.onFacesChange = { [weak self, weak tab] in
+      guard let tab else { return }
+      self?.tabFacesDidChange(tab)
+    }
+    tab.view.onProjectionChange = { [weak self] in self?.refreshChrome() }
+    tab.view.configure(translucency: chromeTranslucency, localization: localization)
     return tab
   }
 
@@ -337,7 +343,8 @@ final class WindowController: NSObject, NSWindowDelegate {
         workspace: current.name,
         strip: tabStrip(of: current),
         active: current.active,
-        cwd: store.activeTabCwd(),
+        location: activeTab?.location,
+        faceDots: activeTab?.view.projection.dots,
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
     refreshAttentionSnapshot()  // Attention 一覧も同じ coalesce 契機で追従（WindowController+Attention）
     refreshClosedAgentsPalette()  // ⇧⌘T の一覧も同じ契機で追従（WindowController+ClosedAgents）
@@ -359,10 +366,11 @@ final class WindowController: NSObject, NSWindowDelegate {
       })
   }
 
-  /// アクティブタブの surface へフォーカスを戻す（パレットの dismiss と同じ規則）。
+  /// アクティブタブの焦点の面（端末 surface かエディター pane）へフォーカスを戻す
+  /// （パレットの dismiss と同じ規則）。
   func focusActiveTab() {
-    guard current.tabs.indices.contains(current.active) else { return }
-    window.makeFirstResponder(current.tabs[current.active].surface)
+    guard let tab = activeTab else { return }
+    window.makeFirstResponder(tab.focusTarget)
   }
 
   /// OSC 7 の cwd 報告を受けた。所属キーが変わって隣接不変条件が破れていればタブを移し（アクティブ

@@ -170,17 +170,18 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     XCTAssertEqual(pressed.status, 0, "背景タブへの send_key が失敗した: \(pressed.stderr)")
     waitForTabText(control, tab: tab, contains: probe, times: 2)
 
-    // (d) surface は実サイズで生まれている。葉のサイズを配るのは window の display サイクルで
-    // 走る `SurfaceScrollView.layout()` だけなので、同じ turn で detach する起こし方は
-    // レイアウトを同期で確定させない限り 0 サイズのまま surface を作ってしまう。
-    let view = try XCTUnwrap(
-      control.target.controlResolveTab(tab)?.view, "返った tabId がタブに解決できない")
+    // (d) surface は実サイズで生まれている。端末面のサイズを配るのは window の display サイクルで
+    // 走る器（`TabFacesView`）と `SurfaceScrollView` の `layout()` だけなので、同じ turn で detach
+    // する起こし方はレイアウトを同期で確定させない限り 0 サイズのまま surface を作ってしまう。
+    // 端末面は器から背（14）と焦点帯（2）を除いた寸法。
+    let surface = try XCTUnwrap(
+      control.target.controlResolveTab(tab)?.surface, "返った tabId がタブに解決できない")
     // 相対比較なので、先に基準側が非ゼロであることを言う——0 同士の一致は、まさにここで
     // 検出したい失敗（ゼロ面積で生まれた surface）と区別がつかない。
-    XCTAssertGreaterThan(
-      control.target.model.content.bounds.width, 0, "前提: content が実サイズを持つ")
+    let content = control.target.model.content.bounds.size
+    XCTAssertGreaterThan(content.width, 0, "前提: content が実サイズを持つ")
     XCTAssertEqual(
-      view.bounds.size, control.target.model.content.bounds.size,
+      surface.bounds.size, CGSize(width: content.width - 14, height: content.height - 2),
       "背景 WS のタブが実サイズで起きていない（pty が libghostty 既定サイズのまま残る）")
   }
 

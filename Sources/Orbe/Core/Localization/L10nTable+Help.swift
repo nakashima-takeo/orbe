@@ -30,6 +30,7 @@ extension L10n {
     .helpShortcutHelp: ("ヘルプ / チートシート", "Help / cheat sheet"),
     .helpShortcutSettings: ("設定を開く", "Open settings"),
     .helpShortcutOpenEditor: ("cwd を GUI エディタで開く", "Open cwd in GUI editor"),
+    .helpShortcutToggleEditorFace: ("エディターとターミナルを切替", "Switch editor / terminal"),
     .helpShortcutQuit: ("Orbe を終了", "Quit Orbe"),
     .helpShortcutSwitchWorkspace: (
       "ワークスペースを切り替え・作成", "Switch / create workspace"

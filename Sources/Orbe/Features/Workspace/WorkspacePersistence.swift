@@ -70,11 +70,41 @@ struct WorkspaceState: Codable, Equatable {
   }
 }
 
-/// 1 タブの永続表現。cwd・エージェントセッション・明示タイトル。
+/// 1 タブの永続表現。cwd・エージェントセッション・明示タイトル・面の配置。
 struct TabState: Codable, Equatable {
   var cwd: String
   var agent: AgentSession?
   var explicitTitle: String?
+  /// 面の配置。既定（端末だけ）は書かず、読めなければ既定へ落とす（ファイル全体は失わない）。
+  var faces: FaceLayout
+
+  enum CodingKeys: String, CodingKey {
+    case cwd, agent, explicitTitle, faces
+  }
+
+  init(cwd: String, agent: AgentSession?, explicitTitle: String?, faces: FaceLayout = .terminalOnly)
+  {
+    self.cwd = cwd
+    self.agent = agent
+    self.explicitTitle = explicitTitle
+    self.faces = faces
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    cwd = try c.decode(String.self, forKey: .cwd)
+    agent = try c.decodeIfPresent(AgentSession.self, forKey: .agent)
+    explicitTitle = try c.decodeIfPresent(String.self, forKey: .explicitTitle)
+    faces = ((try? c.decode(FaceLayout.self, forKey: .faces)) ?? .terminalOnly).normalized
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(cwd, forKey: .cwd)
+    try c.encodeIfPresent(agent, forKey: .agent)
+    try c.encodeIfPresent(explicitTitle, forKey: .explicitTitle)
+    if faces != .terminalOnly { try c.encode(faces, forKey: .faces) }
+  }
 }
 
 /// タブで走るエージェントセッション＝agent の同一性・再開ハンドル。状態をまたいで持続する

@@ -111,7 +111,7 @@ extension WindowController: ControlTarget {
       for (ti, tab) in ws.tabs.enumerated() where tab.id == tabId {
         if wi != activeWorkspace { switchWorkspace(to: wi) }
         select(ti)
-        window.makeFirstResponder(tab.surface)
+        window.makeFirstResponder(tab.focusTarget)
         return .success(["ok": true])
       }
     }

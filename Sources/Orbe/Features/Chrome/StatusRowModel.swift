@@ -7,8 +7,10 @@ import SwiftUI
   /// タブ行（セル＋セグメント構造）。1 つの値として代入され、View はこれだけを辿る。
   var strip = TabStrip()
   var active = 0
-  /// `~` 短縮済みのアクティブタブの cwd。
-  var cwd: String?
+  /// `~` 短縮済みの現在地（アクティブタブの焦点の面が居る場所）。
+  var location: String?
+  /// アクティブタブの位置ドット（エディター・端末）。0 タブは nil。
+  var faceDots: FaceGeometry.FaceDots?
   /// 全 workspace 横断のエージェント状態ロールアップ（状態順の `[(state, count)]`）。
   var rollup: [(state: String, count: Int)] = []
   /// 検証インスタンス限定の build-id（`ORBE_STATE_DIR` 設定時のみ）。本物では nil。
@@ -56,7 +58,8 @@ import SwiftUI
     let workspace: String
     let strip: TabStrip
     let active: Int
-    let cwd: String?
+    let location: String?
+    let faceDots: FaceGeometry.FaceDots?
     let rollup: [(state: String, count: Int)]
   }
 
@@ -64,7 +67,8 @@ import SwiftUI
     workspace = s.workspace
     strip = s.strip
     active = s.active
-    cwd = s.cwd.map { ($0 as NSString).abbreviatingWithTildeInPath }
+    location = s.location.map { ($0 as NSString).abbreviatingWithTildeInPath }
+    faceDots = s.faceDots
     rollup = s.rollup
   }
 

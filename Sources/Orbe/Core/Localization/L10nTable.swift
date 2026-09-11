@@ -136,6 +136,11 @@ enum L10n {
       "Add one of VS Code, Cursor, Windsurf, Zed, or Sublime to your PATH, or set a GUI editor in $VISUAL/$EDITOR."
     ),
 
+    // MARK: Editor 面（空状態）
+    .editorEmptyLead: ("ファイルを開いて編集を開始", "Open a file to start editing"),
+    .editorEmptySearchProject: ("プロジェクト全体を検索", "Search the whole project"),
+    .editorEmptyBackToTerminal: ("ターミナルへ戻る", "Back to terminal"),
+
     // MARK: Tab context menu
     .tabMenuResetAgentState: ("エージェント状態をリセット", "Reset Agent State"),
 

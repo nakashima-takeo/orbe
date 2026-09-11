@@ -3,20 +3,24 @@ import GhosttyKit
 import OrbeSessionLog
 
 /// タブ 1 枚。端末 surface 1 枚（`SurfaceView`）と「タブとしての状態」——制御チャネルの宛先 ID・
-/// エージェントスロット・明示タイトル・復元単位——を所有する。外部から指す単位・エージェントが走る
-/// 単位・永続の単位はすべてこのタブで、`SurfaceView` はシェルが報告する事実（タイトル・cwd）と
+/// エージェントスロット・明示タイトル・面の配置・復元単位——を所有する。外部から指す単位・エージェントが
+/// 走る単位・永続の単位はすべてこのタブで、`SurfaceView` はシェルが報告する事実（タイトル・cwd）と
 /// 端末 I/O だけを持つ。
 ///
-/// `view`（`SurfaceScrollView`）は AppKit の NSView として作り直さずに mount / 隠す / 外すだけを行う。
+/// `view`（`TabFacesView`）は AppKit の NSView として作り直さずに mount / 隠す / 外すだけを行う。
 /// SwiftUI に所有させて再生成すると scrollback と非アクティブ workspace の keep-alive
 /// （NSView 同一性に依存）を壊す（cf. ghostty-org/ghostty#9444）。
 final class TerminalTab {
   /// 制御チャネルの宛先 ID（外部からこのタブを一意に指す）。
   let id = IdGen.next()
-  /// mount 単位（ネイティブ overlay スクロールバー付きの surface ラップ）。`WindowController` が
-  /// content へ載せる／隠す／外す。
-  let view: SurfaceScrollView
-  var surface: SurfaceView { view.surfaceView }
+  /// mount 単位（エディター面・背・端末面の器）。`WindowController` が content へ載せる／隠す／外す。
+  let view: TabFacesView
+  var surface: SurfaceView { view.terminal.surfaceView }
+
+  /// 面の配置（エディター幅の割合・焦点の面）。正規形に限り、書き換えは `setFaces` だけが行う。
+  private(set) var faces: FaceLayout
+  /// 面の配置が変わった通知（永続保存・chrome 更新・焦点の追従は上位）。
+  var onFacesChange: (() -> Void)?
 
   /// このタブが materialize 済み側にある現在状態。現仕様の遷移は false → true のみだが、
   /// 履歴bitではなく、将来の再休眠では false へ戻せる責務として扱う。
@@ -112,11 +116,12 @@ final class TerminalTab {
   /// 通常タブは cwd だけ。エージェント起動タブは起動コマンド・追加環境変数も指定して起こす。
   init(cwd: String, command: String? = nil, env: [String: String] = [:]) {
     resumeSpawn = nil
-    view = SurfaceScrollView(surfaceView: SurfaceView(frame: .zero, cwd: cwd))
+    faces = .terminalOnly
+    view = Self.makeView(cwd: cwd, faces: faces)
     groupKey = Self.groupKey(cwd: cwd)
     surface.initialCommand = command
     surface.initialEnv = env
-    surface.tab = self
+    wireView()
   }
 
   /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する。
@@ -131,11 +136,27 @@ final class TerminalTab {
   /// 起こし、resume 解決は消費時（`recordMaterializationStarted`）まで遅延する。
   init(restoring state: TabState, resumeSpawn: @escaping ResumeSpawn) {
     self.resumeSpawn = resumeSpawn
-    view = SurfaceScrollView(surfaceView: SurfaceView(frame: .zero, cwd: state.cwd))
+    faces = state.faces.normalized
+    view = Self.makeView(cwd: state.cwd, faces: faces)
     groupKey = Self.groupKey(cwd: state.cwd)
     explicitTitle = state.explicitTitle
     if let agent = state.agent { agentSlot = .dormant(agent) }
+    wireView()
+  }
+
+  private static func makeView(cwd: String, faces: FaceLayout) -> TabFacesView {
+    TabFacesView(
+      terminal: SurfaceScrollView(surfaceView: SurfaceView(frame: .zero, cwd: cwd)),
+      editor: EditorPaneView(frame: .zero), faces: faces)
+  }
+
+  /// 両面がタブを知り（事実の通知先）、背の求める配置がタブの状態を通って器へ戻るよう配線する。
+  private func wireView() {
     surface.tab = self
+    view.editor.tab = self
+    view.onFacesRequested = { [weak self] faces, animated in
+      self?.setFaces(faces, animated: animated)
+    }
   }
 
   /// materialize 開始を記録し、起動指示を確定する。休眠チケットは一度きり消費する——resume を
@@ -249,7 +270,23 @@ final class TerminalTab {
     return SessionEvent.Agent(command: session.command, sessionId: sessionId)
   }
 
-  /// surface からのウィンドウレベル chrome キー（タブ・workspace）を上位へ転送する。
+  /// 配置を書き換える唯一の口。正規化し、同じなら何もしない。器へ写し、上位へ通知する。
+  func setFaces(_ faces: FaceLayout, animated: Bool) {
+    let normalized = faces.normalized
+    guard normalized != self.faces else { return }
+    self.faces = normalized
+    view.set(normalized, animated: animated)
+    onFacesChange?()
+  }
+
+  /// 面が first responder になった。焦点の記憶を面に追従させる（resign では触らない——パレットで
+  /// 一時的に焦点を失っても面の記憶は残る）。
+  func paneDidFocus(_ face: Face) {
+    guard faces.focus != face else { return }
+    setFaces(FaceLayout(editorRatio: faces.editorRatio, focus: face), animated: false)
+  }
+
+  /// 面（surface・エディター pane）からのウィンドウレベル chrome キー（タブ・workspace）を上位へ転送する。
   func requestWindowCommand(_ command: WindowCommand) {
     onWindowCommand?(command)
   }
@@ -274,13 +311,13 @@ final class TerminalTab {
     DispatchQueue.main.async { [weak self] in self?.onClose?(origin) }
   }
 
-  /// このタブの復元単位（cwd・エージェントセッション・明示タイトル）。起動時の一括保存
+  /// このタブの復元単位（cwd・エージェントセッション・明示タイトル・面の配置）。起動時の一括保存
   /// （WorkspacePersistence）が読み、復元は `TerminalTab(restoring:)` が同じ形を受ける。
   /// 永続化するのは sessionId が確定している同一性だけ（resume 不能な記録を書かない）。
   func tabState() -> TabState {
     TabState(
       cwd: cwd, agent: agentSlot.session.flatMap { $0.sessionId != nil ? $0 : nil },
-      explicitTitle: explicitTitle)
+      explicitTitle: explicitTitle, faces: faces)
   }
 
   deinit {

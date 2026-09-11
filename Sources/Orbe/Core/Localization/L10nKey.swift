@@ -252,6 +252,11 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorNotFoundTitle
   case editorNotFoundMessage
 
+  // MARK: - Editor 面（空状態）
+  case editorEmptyLead
+  case editorEmptySearchProject
+  case editorEmptyBackToTerminal
+
   // MARK: - Tab context menu（タブ行の右クリック）
   case tabMenuResetAgentState
 
@@ -389,6 +394,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutHelp
   case helpShortcutSettings
   case helpShortcutOpenEditor
+  case helpShortcutToggleEditorFace
   case helpShortcutQuit
   case helpShortcutSwitchWorkspace
   case helpShortcutNewTab

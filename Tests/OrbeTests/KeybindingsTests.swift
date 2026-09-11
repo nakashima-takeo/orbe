@@ -82,6 +82,13 @@ final class KeybindingsTests: OrbeTestCase {
     XCTAssertNil(Keybindings.chromeAction(for: key("c")))
   }
 
+  func testToggleEditorFace() {
+    // ⌘E はエディター面 ⇄ 端末面（⌘⇧E の GUI エディタ起動とは別）。
+    XCTAssertEqual(Keybindings.chromeAction(for: key("e")), .toggleEditorFace)
+    XCTAssertEqual(Keybindings.chromeAction(for: key("E", [.command, .shift])), .openEditor)
+    XCTAssertNil(Keybindings.chromeAction(for: key("e", [.command, .option])))
+  }
+
   func testHelpToggle() {
     // ⌘H はヘルプオーバーレイのトグル（macOS Hide から奪取）。
     XCTAssertEqual(Keybindings.chromeAction(for: key("h")), .toggleHelp)
@@ -124,12 +131,13 @@ final class KeybindingsTests: OrbeTestCase {
       handled, [.newTab], "⌘R（renameTab・content 依存）は横取りせず subtree へ流す")
   }
 
-  /// `ChromeAction.windowCommand`（surface 経路・window レベル経路が共有する単一ソース mapping）を網羅固定する。
-  /// window 系12アクションは対応する WindowCommand へ、surface ローカル7アクションは nil へ写す。
+  /// `ChromeAction.windowCommand`（面の経路・window レベル経路が共有する単一ソース mapping）を網羅固定する。
+  /// window 系14アクションは対応する WindowCommand へ、surface ローカル6アクションは nil へ写す。
   /// この分類が回帰すると 0タブ配信の可否（availableWithoutTabs）とキー振り分け全体がズレる。
   func testWindowCommandMappingIsExhaustive() {
     let mapped: [(ChromeAction, WindowCommand)] = [
       (.newTab, .newTab),
+      (.closeTab, .closeTab),
       (.showClosedAgentsPalette, .showClosedAgentsPalette),
       (.nextTab, .nextTab),
       (.prevTab, .prevTab),
@@ -141,13 +149,14 @@ final class KeybindingsTests: OrbeTestCase {
       (.rename, .renameTab),
       (.showSettings, .showSettings),
       (.toggleHelp, .toggleHelp),
+      (.toggleEditorFace, .toggleEditorFace),
     ]
     for (action, command) in mapped {
       XCTAssertEqual(action.windowCommand, command, "\(action) は window コマンド \(command) へ写す")
     }
     // surface ローカル操作（WindowController へ届けない）は nil。
     let surfaceLocal: [ChromeAction] = [
-      .increaseFontSize, .decreaseFontSize, .resetFontSize, .closeTab, .find,
+      .increaseFontSize, .decreaseFontSize, .resetFontSize, .find,
       .scrollToTop, .scrollToBottom,
     ]
     for action in surfaceLocal {
@@ -156,7 +165,7 @@ final class KeybindingsTests: OrbeTestCase {
   }
 
   /// `WindowCommand.availableWithoutTabs`（0タブでも window レベルで配信してよいか）の分類を網羅固定する。
-  /// タブ非依存8コマンドのみ true、content 依存4コマンドは false。この分類が回帰すると
+  /// タブ非依存8コマンドのみ true、content 依存6コマンドは false。この分類が回帰すると
   /// 0タブで効くべきキーが死ぬ／効くべきでない content 依存キーが暴発する。
   func testAvailableWithoutTabsClassification() {
     let available: [WindowCommand] = [
@@ -167,7 +176,7 @@ final class KeybindingsTests: OrbeTestCase {
       XCTAssertTrue(command.availableWithoutTabs, "\(command) はタブ非依存ゆえ 0タブでも配信する")
     }
     let requiresTabs: [WindowCommand] = [
-      .nextTab, .prevTab, .openEditor, .renameTab,
+      .nextTab, .prevTab, .openEditor, .renameTab, .closeTab, .toggleEditorFace,
     ]
     for command in requiresTabs {
       XCTAssertFalse(
