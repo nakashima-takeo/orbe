@@ -43,23 +43,30 @@ private struct EditorKbd: View {
   let key: String
   @Environment(\.colorScheme) private var scheme
 
+  // 見本の dark 値。light は換算（地 ×0.6 / 枠 ×1.4）。
+  private static let fill: CGFloat = 0.05
+  private static let border: CGFloat = 0.14
+
   var body: some View {
     let dark = scheme == .dark
     Text(key)
       .font(Font.theme.editorHint)
       .tracking(Theme.Typography.trackingKey)
       .foregroundStyle(Color.theme.editorIcon)
+      // tracking は末尾グリフの後にも付くため、その分だけ trailing を詰めて光学中央を保つ。
+      .padding(.trailing, -Theme.Typography.trackingKey)
       .padding(.vertical, 1)
       .padding(.horizontal, 7)
       .padding(Theme.Stroke.hairline)
       .background(
         RoundedRectangle(cornerRadius: Theme.Radius.sm)
-          .fill(Color.theme.surfaceInk.opacity(dark ? 0.05 : 0.03))
+          .fill(Color.theme.surfaceInk.opacity(dark ? Self.fill : Self.fill * 0.6))
       )
       .overlay(
         RoundedRectangle(cornerRadius: Theme.Radius.sm)
           .strokeBorder(
-            Color.theme.borderInk.opacity(dark ? 0.14 : 0.196), lineWidth: Theme.Stroke.hairline))
+            Color.theme.borderInk.opacity(dark ? Self.border : Self.border * 1.4),
+            lineWidth: Theme.Stroke.hairline))
   }
 }
 
