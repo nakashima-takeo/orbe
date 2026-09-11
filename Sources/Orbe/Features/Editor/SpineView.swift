@@ -24,14 +24,21 @@ final class SpineView: NSView {
   }
   /// 掴んだ（mouseDown）。器はここで解決結果を凍結し、焦点の面へ first responder を戻す。
   var onGrab: (() -> Void)?
-  /// ドラッグ中。`x` は器の左端からの距離。
+  /// ドラッグ中。`x` は背の左端が来るべき、器の左端からの距離（掴んだ位置のオフセットを引いてある
+  /// ので、背の中のどこを掴んでも引いた距離だけ動く）。
   var onDrag: ((CGFloat) -> Void)?
   /// 動かさずに離した。
   var onClick: (() -> Void)?
   /// ドラッグの末に離した。
   var onRelease: (() -> Void)?
 
-  private var drag: (x0: CGFloat, moved: Bool)?
+  /// 掴んだ位置（器の左端からの x・背の左端からのオフセット）と、閾値を越えて動いたか。
+  private struct Grab {
+    let x0: CGFloat
+    let offset: CGFloat
+    var moved = false
+  }
+  private var drag: Grab?
 
   override init(frame: NSRect) {
     super.init(frame: frame)
@@ -142,7 +149,8 @@ final class SpineView: NSView {
   }
 
   override func mouseDown(with event: NSEvent) {
-    drag = (x(in: event), false)
+    let x0 = x(in: event)
+    drag = Grab(x0: x0, offset: x0 - frame.minX)
     onGrab?()
   }
 
@@ -154,7 +162,7 @@ final class SpineView: NSView {
       d.moved = true
       drag = d
     }
-    onDrag?(x)
+    onDrag?(x - d.offset)
   }
 
   override func mouseUp(with event: NSEvent) {
