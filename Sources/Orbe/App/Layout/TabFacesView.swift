@@ -1,7 +1,11 @@
 import AppKit
+import SwiftUI
 
 /// タブの器: [エディター面 | 背 | 端末面]。配置（`FaceLayout`）を幅で解いた結果を子の frame に写すだけで、
 /// 配置の正はタブが持つ。面は clip の器で、中身の幅は面の幅に等しい。
+///
+/// 相互作用（背のドラッグ・面の遷移）は幅に依らない形（割合と時刻）で持ち、`layout()` はそれを新しい幅へ
+/// 写す——器の再レイアウトは chrome 更新などから随時起きるので、確定配置で相互作用を捨てない。
 ///
 /// 隠れた端末の中身は最後に見えていた寸法のまま据え置く（隠すたびの pty resize と scrollback の
 /// 再折り返しを避ける）。隠れたまま生まれた端末は「戻したときに得る寸法」で起きる。
@@ -14,9 +18,9 @@ final class TabFacesView: NSView {
   private let editorFace = FaceClipView()
   private let terminalFace = FaceClipView()
 
-  /// タブが `set` で写す配置の鏡。ドラッグ中は書き換えない。
+  /// タブが `set` で写す配置の鏡。ドラッグ中は書き換えない。遷移の終点でもある。
   private(set) var faces: FaceLayout
-  /// 今見えている配置を器の幅で解いた結果（ドラッグ中はポインタの値）。
+  /// 今見えている配置を器の幅で解いた結果（ドラッグ中はポインタの値、遷移中は終点）。
   private(set) var resolved: FaceGeometry.Resolved
   var projection: FaceGeometry.Projection { resolved.projection }
   /// 投影（ドット・背の見え方・分割中か）が変わった。器の幅で変わりうるので chrome はここから追従する。
@@ -27,11 +31,20 @@ final class TabFacesView: NSView {
   /// 焦点の面の responder。
   var focusTarget: NSView { faces.focus == .editor ? editor : terminal.surfaceView }
 
+  /// 相互作用の状態。幅に依らない形で持ち、`layout()` が新しい幅へ写す。
+  private enum Interaction {
+    case settled
+    /// 背のドラッグ中: 掴んだ瞬間の配置と、ポインタが求める現在の配置。
+    case dragging(origin: FaceLayout, current: FaceLayout)
+    /// 遷移中: 起点のエディター割合と開始時刻。終点は鏡 `faces`。
+    case sliding(fromRatio: Double, start: CFTimeInterval)
+  }
+  private var interaction: Interaction = .settled
+
   private var lastVisibleTerminalSize: CGSize?
   private var reportedProjection: FaceGeometry.Projection?
   /// 今置いてあるエディター幅（遷移の起点）。
   private var placedEditorWidth: CGFloat = 0
-  private var dragOrigin: FaceGeometry.Resolved?
   /// ドラッグ中、次のフレームで中身へ配る寸法の元。
   private var pendingDragSizes: FaceGeometry.Resolved?
   private var clock: FrameClock?
@@ -56,21 +69,21 @@ final class TabFacesView: NSView {
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
+  deinit { clock?.cancel() }
+
   /// 背の操作を器の状態へ結ぶ。init の外に置き、閉包が読む `faces` を常に鏡（プロパティ）にする。
   private func wireSpine() {
     spine.onGrab = { [unowned self] in
-      dragOrigin = resolved
+      interaction = .dragging(origin: faces, current: faces)
       window?.makeFirstResponder(focusTarget)
     }
     spine.onDrag = { [unowned self] x in drag(to: x) }
     spine.onRelease = { [unowned self] in release() }
     spine.onClick = { [unowned self] in
-      dragOrigin = nil
-      onFacesRequested?(FaceGeometry.spineClick(faces, resolved), true)
+      interaction = .settled
+      onFacesRequested?(FaceGeometry.spineClick(resolved), true)
     }
   }
-
-  deinit { clock?.cancel() }
 
   /// 窓の環境（透過・言語）を面へ配る。
   func configure(translucency: ChromeTranslucency, localization: LocalizationStore) {
@@ -86,12 +99,19 @@ final class TabFacesView: NSView {
     settle(to: FaceGeometry.resolve(faces, width: bounds.width), animated: animated)
   }
 
+  /// 器の幅が変わった。現在の相互作用の状態を新しい幅へ写す。
   override func layout() {
     super.layout()
-    clock?.cancel()
-    clock = nil
-    pendingDragSizes = nil
-    apply(FaceGeometry.resolve(faces, width: bounds.width))
+    switch interaction {
+    case .settled:
+      apply(FaceGeometry.resolve(faces, width: bounds.width))
+    case .dragging(_, let current):
+      pendingDragSizes = nil
+      apply(FaceGeometry.resolve(current, width: bounds.width))
+    case .sliding:
+      prepareSlide(to: FaceGeometry.resolve(faces, width: bounds.width))
+      slideFrame(now: CACurrentMediaTime())
+    }
   }
 
   // MARK: - 配置
@@ -103,17 +123,18 @@ final class TabFacesView: NSView {
     if animatable, target.editorWidth != placedEditorWidth {
       startSlide(from: placedEditorWidth, to: target)
     } else {
-      clock?.cancel()
-      clock = nil
+      stopClock()
+      interaction = .settled
       apply(target)
     }
   }
 
-  /// 解決結果を子へ写す（中身のサイズ・可視・焦点帯・背・位置）。
+  /// 解決結果を子へ写す（中身のサイズ・可視・塗り・位置）。
   private func apply(_ g: FaceGeometry.Resolved) {
     resolved = g
     applySizes(g)
-    decorate(g)
+    setVisibility(g)
+    paint(g)
     place(editorWidth: g.editorWidth, g)
     report(g.projection)
   }
@@ -125,10 +146,14 @@ final class TabFacesView: NSView {
     setSize(terminal, terminalContentSize(g))
   }
 
-  /// 可視・焦点帯・背の見え方。
-  private func decorate(_ g: FaceGeometry.Resolved) {
+  /// 幅 0 の面を隠す。
+  private func setVisibility(_ g: FaceGeometry.Resolved) {
     editorFace.isHidden = g.editorWidth <= 0
     terminalFace.isHidden = g.terminalWidth <= 0
+  }
+
+  /// 焦点帯と背の見え方。
+  private func paint(_ g: FaceGeometry.Resolved) {
     editorFace.bandColor = g.isSplit && g.faces.focus == .editor ? Theme.Color.faceEditor : nil
     terminalFace.bandColor =
       g.isSplit && g.faces.focus == .terminal ? Theme.Color.faceTerminal : nil
@@ -175,11 +200,15 @@ final class TabFacesView: NSView {
 
   /// ポインタごとに面と背を置く。中身の resize は次のフレームへ間引く。
   private func drag(to x: CGFloat) {
-    guard let origin = dragOrigin else { return }
-    let g = FaceGeometry.resolve(FaceGeometry.drag(faces, from: origin, x: x), width: bounds.width)
+    guard case .dragging(let origin, _) = interaction else { return }
+    let g0 = FaceGeometry.resolve(origin, width: bounds.width)
+    let current = FaceGeometry.drag(from: g0, x: x)
+    interaction = .dragging(origin: origin, current: current)
+    let g = FaceGeometry.resolve(current, width: bounds.width)
     resolved = g
     pendingDragSizes = g
-    decorate(g)
+    setVisibility(g)
+    paint(g)
     place(editorWidth: g.editorWidth, g)
     report(g.projection)
     if clock == nil {
@@ -196,12 +225,11 @@ final class TabFacesView: NSView {
 
   /// 離した: 端に寄せていれば閉じる配置をタブへ 1 回だけ求め、変わらなければその場で確定する。
   private func release() {
-    guard dragOrigin != nil else { return }
-    dragOrigin = nil
-    clock?.cancel()
-    clock = nil
+    guard case .dragging(_, let current) = interaction else { return }
+    interaction = .settled
+    stopClock()
     flushDragSizes()
-    let final = FaceGeometry.release(resolved.faces, contentWidth: resolved.contentWidth)
+    let final = FaceGeometry.release(current, contentWidth: resolved.contentWidth)
     if final == faces {
       settle(to: FaceGeometry.resolve(faces, width: bounds.width), animated: true)
     } else {
@@ -212,30 +240,43 @@ final class TabFacesView: NSView {
   // MARK: - 遷移
 
   private func startSlide(from: CGFloat, to target: FaceGeometry.Resolved) {
-    clock?.cancel()
+    stopClock()
+    let start = CACurrentMediaTime()
+    interaction = .sliding(fromRatio: Double(from / target.contentWidth), start: start)
+    prepareSlide(to: target)
+    clock = FrameClock(view: self) { [unowned self] in slideFrame(now: CACurrentMediaTime()) }
+    slideFrame(now: start)
+  }
+
+  /// 遷移の終点を据える: 中身のサイズは 1 回で確定し、現れる側は最初の 1 フレームから見せ、隠れる側は
+  /// 終端まで倒さない。塗りは終点の規則。
+  private func prepareSlide(to target: FaceGeometry.Resolved) {
     resolved = target
     applySizes(target)
-    // 現れる側は最初の 1 フレームから見せる。隠れる側は終端で隠す。
     if target.editorWidth > 0 { editorFace.isHidden = false }
     if target.terminalWidth > 0 { terminalFace.isHidden = false }
-    editorFace.bandColor =
-      target.isSplit && target.faces.focus == .editor ? Theme.Color.faceEditor : nil
-    terminalFace.bandColor =
-      target.isSplit && target.faces.focus == .terminal ? Theme.Color.faceTerminal : nil
-    spine.look = target.projection.spineLook
+    paint(target)
     report(target.projection)
-    let easing = UnitBezier(
-      p1: Theme.Motion.faceSlideEasing.p1, p2: Theme.Motion.faceSlideEasing.p2)
-    let start = CACurrentMediaTime()
-    clock = FrameClock(view: self) { [unowned self] in
-      let progress = min(1, CGFloat((CACurrentMediaTime() - start) / Theme.Motion.faceSlide))
-      place(editorWidth: from + (target.editorWidth - from) * easing.value(at: progress), target)
-      if progress >= 1 {
-        clock?.cancel()
-        clock = nil
-        apply(FaceGeometry.resolve(faces, width: bounds.width))
-      }
+  }
+
+  /// 遷移の 1 フレーム。`now` の進行で起点と終点の間に背を置き、終端で確定配置へ着地する。
+  func slideFrame(now: CFTimeInterval) {
+    guard case .sliding(let fromRatio, let start) = interaction else { return }
+    let target = resolved
+    let progress = min(1, (now - start) / Theme.Motion.faceSlide)
+    let eased = CGFloat(Theme.Motion.faceSlideCurve.value(at: max(0, progress)))
+    let from = CGFloat(fromRatio) * target.contentWidth
+    place(editorWidth: from + (target.editorWidth - from) * eased, target)
+    if progress >= 1 {
+      stopClock()
+      interaction = .settled
+      apply(FaceGeometry.resolve(faces, width: bounds.width))
     }
+  }
+
+  private func stopClock() {
+    clock?.cancel()
+    clock = nil
   }
 
   /// display link 駆動でフレームごとに `tick` を呼ぶ。遷移の補間とドラッグ中の resize の間引きが共有する。

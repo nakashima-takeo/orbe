@@ -2,15 +2,10 @@ import AppKit
 
 /// 面の機構の上位配線——⌘E と、配置が変わったときの保存・chrome・焦点の追従。
 extension WindowController {
-  /// アクティブ workspace のアクティブタブ。0 タブなら nil。
-  var activeTab: TerminalTab? {
-    current.tabs.indices.contains(current.active) ? current.tabs[current.active] : nil
-  }
-
   /// ⌘E。分割中は焦点の往復、それ以外は端末 ⇄ エディター全面。0 タブは no-op。
   func toggleEditorFace() {
     guard let tab = activeTab else { return }
-    tab.setFaces(FaceGeometry.toggle(tab.faces, tab.view.resolved), animated: true)
+    tab.setFaces(FaceGeometry.toggle(tab.view.resolved), animated: true)
   }
 
   /// タブの配置が変わった。保存を予約し chrome を更新し、そのタブを見ているなら焦点の面へ first

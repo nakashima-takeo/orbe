@@ -29,19 +29,19 @@ final class WindowControllerFacesTests: OrbeTestCase {
     return WindowController()
   }
 
-  private func pump(_ seconds: TimeInterval) {
+  func pump(_ seconds: TimeInterval) {
     let end = Date().addingTimeInterval(seconds)
     while Date() < end {
       RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.005))
     }
   }
 
-  private func layout(_ wc: WindowController) {
+  func layout(_ wc: WindowController) {
     wc.window.contentView?.layoutSubtreeIfNeeded()
   }
 
   /// 器の内容幅（窓の content 幅から背を除いた値）。
-  private func contentWidth(_ wc: WindowController) -> CGFloat {
+  func contentWidth(_ wc: WindowController) -> CGFloat {
     wc.model.content.bounds.width - FaceGeometry.spine
   }
 

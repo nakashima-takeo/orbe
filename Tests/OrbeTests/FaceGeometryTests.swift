@@ -105,10 +105,10 @@ final class FaceGeometryTests: OrbeTestCase {
   /// 分割していなければ端末 ⇄ エディター全面を往復する。
   func testToggleSwapsTheFullFace() {
     XCTAssertEqual(
-      FaceGeometry.toggle(.terminalOnly, resolved(0, .terminal)),
+      FaceGeometry.toggle(resolved(0, .terminal)),
       FaceLayout(editorRatio: 1, focus: .editor), "端末だけ → エディター全面")
     XCTAssertEqual(
-      FaceGeometry.toggle(FaceLayout(editorRatio: 1, focus: .editor), resolved(1, .editor)),
+      FaceGeometry.toggle(resolved(1, .editor)),
       .terminalOnly, "エディター全面 → 端末だけ")
   }
 
@@ -117,8 +117,8 @@ final class FaceGeometryTests: OrbeTestCase {
     let terminalFocused = FaceLayout(editorRatio: 0.5, focus: .terminal)
     let editorFocused = FaceLayout(editorRatio: 0.5, focus: .editor)
 
-    XCTAssertEqual(FaceGeometry.toggle(terminalFocused, resolved(0.5, .terminal)), editorFocused)
-    XCTAssertEqual(FaceGeometry.toggle(editorFocused, resolved(0.5, .editor)), terminalFocused)
+    XCTAssertEqual(FaceGeometry.toggle(resolved(0.5, .terminal)), editorFocused)
+    XCTAssertEqual(FaceGeometry.toggle(resolved(0.5, .editor)), terminalFocused)
   }
 
   // MARK: - 背のクリック
@@ -126,21 +126,20 @@ final class FaceGeometryTests: OrbeTestCase {
   /// 隣が隠れていれば全開、自分が隠れていれば戻る。
   func testSpineClickOpensTheHiddenFace() {
     XCTAssertEqual(
-      FaceGeometry.spineClick(.terminalOnly, resolved(0, .terminal)),
+      FaceGeometry.spineClick(resolved(0, .terminal)),
       FaceLayout(editorRatio: 1, focus: .editor), "端末だけ → エディター全面")
     XCTAssertEqual(
-      FaceGeometry.spineClick(FaceLayout(editorRatio: 1, focus: .editor), resolved(1, .editor)),
+      FaceGeometry.spineClick(resolved(1, .editor)),
       .terminalOnly, "エディター全面 → 端末だけ")
   }
 
   /// 分割中は焦点の面が全面になる。
   func testSpineClickWhileSplitExpandsTheFocusedFace() {
     XCTAssertEqual(
-      FaceGeometry.spineClick(FaceLayout(editorRatio: 0.5, focus: .editor), resolved(0.5, .editor)),
+      FaceGeometry.spineClick(resolved(0.5, .editor)),
       FaceLayout(editorRatio: 1, focus: .editor))
     XCTAssertEqual(
-      FaceGeometry.spineClick(
-        FaceLayout(editorRatio: 0.5, focus: .terminal), resolved(0.5, .terminal)),
+      FaceGeometry.spineClick(resolved(0.5, .terminal)),
       .terminalOnly)
   }
 
@@ -151,22 +150,20 @@ final class FaceGeometryTests: OrbeTestCase {
     let split = FaceLayout(editorRatio: 0.5, focus: .terminal)
 
     XCTAssertEqual(
-      FaceGeometry.drag(split, from: resolved(0.5, .terminal), x: 300),
+      FaceGeometry.drag(from: resolved(0.5, .terminal), x: 300),
       FaceLayout(editorRatio: 0.3, focus: .terminal))
     XCTAssertEqual(
-      FaceGeometry.drag(
-        FaceLayout(editorRatio: 0.5, focus: .editor), from: resolved(0.5, .editor), x: 300),
+      FaceGeometry.drag(from: resolved(0.5, .editor), x: 300),
       FaceLayout(editorRatio: 0.3, focus: .editor), "エディター焦点も動かない")
   }
 
   /// 隠れている面から引き出せる（端末だけ → 分割、エディター全面 → 分割）。
   func testDragOpensAHiddenFace() {
     XCTAssertEqual(
-      FaceGeometry.drag(.terminalOnly, from: resolved(0, .terminal), x: 400),
+      FaceGeometry.drag(from: resolved(0, .terminal), x: 400),
       FaceLayout(editorRatio: 0.4, focus: .terminal))
     XCTAssertEqual(
-      FaceGeometry.drag(
-        FaceLayout(editorRatio: 1, focus: .editor), from: resolved(1, .editor), x: 600),
+      FaceGeometry.drag(from: resolved(1, .editor), x: 600),
       FaceLayout(editorRatio: 0.6, focus: .editor))
   }
 
@@ -176,10 +173,10 @@ final class FaceGeometryTests: OrbeTestCase {
     let terminalFocused = FaceLayout(editorRatio: 0.5, focus: .terminal)
 
     XCTAssertEqual(
-      FaceGeometry.drag(editorFocused, from: resolved(0.5, .editor), x: -50), .terminalOnly,
+      FaceGeometry.drag(from: resolved(0.5, .editor), x: -50), .terminalOnly,
       "左端を越えたらエディターが閉じ焦点は端末へ")
     XCTAssertEqual(
-      FaceGeometry.drag(terminalFocused, from: resolved(0.5, .terminal), x: 2000),
+      FaceGeometry.drag(from: resolved(0.5, .terminal), x: 2000),
       FaceLayout(editorRatio: 1, focus: .editor), "右端を越えたら端末が閉じ焦点はエディターへ")
   }
 
@@ -188,7 +185,7 @@ final class FaceGeometryTests: OrbeTestCase {
     let split = FaceLayout(editorRatio: 0.5, focus: .terminal)
     let empty = FaceGeometry.resolve(split, width: 14)
 
-    XCTAssertEqual(FaceGeometry.drag(split, from: empty, x: 100), split)
+    XCTAssertEqual(FaceGeometry.drag(from: empty, x: 100), split)
   }
 
   // MARK: - 背を離す

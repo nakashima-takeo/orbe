@@ -281,13 +281,15 @@ final class WindowController: NSObject, NSWindowDelegate {
     }
   }
 
+  /// アクティブ workspace のアクティブタブ。0 タブなら nil。
+  var activeTab: TerminalTab? {
+    current.tabs.indices.contains(current.active) ? current.tabs[current.active] : nil
+  }
+
   /// 「見ているタブ」＝ウィンドウがキー（前面）のときの、アクティブ workspace のアクティブ表示タブ。
   /// 背面・0タブなら nil。
   /// done のフォーカス消費・メニューバー②の抑制・通知音の抑制が、この 1 つの判定を共有する。
-  var visibleTab: TerminalTab? {
-    guard window.isKeyWindow, current.tabs.indices.contains(current.active) else { return nil }
-    return current.tabs[current.active]
-  }
+  var visibleTab: TerminalTab? { window.isKeyWindow ? activeTab : nil }
 
   /// 完了通知の消費：見ているタブの done を消費して done バッジを消す。
   /// 背面・背景タブの done は残す。3 トリガ（タブ活性化・done 到着・前面復帰）が共有する。

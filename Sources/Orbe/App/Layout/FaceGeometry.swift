@@ -64,7 +64,8 @@ enum FaceGeometry {
   }
 
   /// ⌘E: 分割中は焦点の往復。それ以外は端末 ⇄ エディターの全面切替。
-  static func toggle(_ faces: FaceLayout, _ g: Resolved) -> FaceLayout {
+  static func toggle(_ g: Resolved) -> FaceLayout {
+    let faces = g.faces
     if g.isSplit {
       return FaceLayout(
         editorRatio: faces.editorRatio, focus: faces.focus == .editor ? .terminal : .editor)
@@ -73,18 +74,18 @@ enum FaceGeometry {
   }
 
   /// 背を動かさずに離した: 隣が隠れていれば全開、自分が隠れていれば戻る、分割中は焦点側で全面。
-  static func spineClick(_ faces: FaceLayout, _ g: Resolved) -> FaceLayout {
+  static func spineClick(_ g: Resolved) -> FaceLayout {
     if g.editorWidth <= 0 { return FaceLayout(editorRatio: 1, focus: .editor) }
     if g.terminalWidth <= 0 { return .terminalOnly }
-    return faces.focus == .editor ? FaceLayout(editorRatio: 1, focus: .editor) : .terminalOnly
+    return g.faces.focus == .editor ? FaceLayout(editorRatio: 1, focus: .editor) : .terminalOnly
   }
 
   /// 背のドラッグ中。`x` は器の左端からの距離で、0…内容幅に収めた連続値がそのままエディター幅になる。
   /// `g0` は掴んだ瞬間の解決結果。焦点は動かさない——焦点の面が幅 0 になるときだけ残る面へ移る
   /// （正規形）。結果は正規形。
-  static func drag(_ faces: FaceLayout, from g0: Resolved, x: CGFloat) -> FaceLayout {
+  static func drag(from g0: Resolved, x: CGFloat) -> FaceLayout {
     let c = g0.contentWidth
-    guard c > 0 else { return faces }
+    guard c > 0 else { return g0.faces }
     let w = min(max(x, 0), c)
     return FaceLayout(editorRatio: Double(w / c), focus: g0.faces.focus).normalized
   }
