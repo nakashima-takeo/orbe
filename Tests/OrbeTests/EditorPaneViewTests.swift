@@ -64,6 +64,74 @@ final class EditorPaneViewTests: OrbeTestCase {
     window.orderOut(nil)
   }
 
+  /// 文書を切り替えると見せる面が入れ替わり、それぞれの文書の本文・undo はその文書の面に残る
+  /// （面を 1 つ使い回して本文を差し替えていれば、戻ったときに undo も本文も失われる）。
+  func testSwitchingDocumentsSwapsTheSurfacesAndKeepsEachDocumentsState() throws {
+    let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.view.editor
+    let window = hosted(tab)
+    let first = try tab.editor.open(try file("one.txt", "one"))
+    let second = try tab.editor.open(try file("two.txt", "two"))
+    window.makeFirstResponder(second.surface.responder)
+
+    first.surface.responder.keyDown(with: .key("X", []))
+    XCTAssertEqual(first.surface.text, "Xone")
+    XCTAssertTrue(pane.document === second, "見せているのは焦点の文書の面")
+    XCTAssertNil(first.surface.view.superview, "焦点でない文書の面は外れている")
+
+    tab.editor.activate(first)
+    XCTAssertTrue(pane.document === first)
+    XCTAssertTrue(first.surface.view.superview === pane)
+    XCTAssertNil(second.surface.view.superview)
+    XCTAssertEqual(first.surface.text, "Xone", "戻っても本文はその文書の面に残っている")
+
+    first.surface.responder.undoManager?.undo()
+    XCTAssertEqual(first.surface.text, "one", "undo 履歴も文書ごとに残っている")
+    window.orderOut(nil)
+  }
+
+  /// 見せる文書が入れ替わるとき、面の中にあった焦点は新しい行き先（次の文書の面・空状態なら面自身）へ移る。
+  ///
+  /// バグ疑い（未修正・spec `editor/code.md` の「焦点」節）: `show` は新しい行き先を決める前に前の文書の
+  /// 面を外すので、AppKit が first responder を窓へ戻した後になり、gate（焦点が自分の配下か）が必ず外れる。
+  /// 結果、文書を切り替えても閉じても打鍵の行き先が消える。`open_file` は直後に `controlFocusTab` が
+  /// 張り直すので今は見えないが、u4 のファイルタブ切替はこの経路しか持たない。
+  func testSwappingTheShownDocumentKeepsTheFocusInsideThePane() throws {
+    let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let window = hosted(tab)
+    let first = try tab.editor.open(try file("p.txt", "p"))
+    let second = try tab.editor.open(try file("q.txt", "q"))
+    window.makeFirstResponder(second.surface.responder)
+
+    tab.editor.activate(first)
+    XCTExpectFailure("切替で焦点が窓へ落ちる") {
+      XCTAssertTrue(window.firstResponder === first.surface.responder, "切り替えた先の面へ移る")
+    }
+
+    window.makeFirstResponder(first.surface.responder)
+    tab.editor.close(first)
+    XCTExpectFailure("閉じたときも焦点が窓へ落ちる") {
+      XCTAssertTrue(window.firstResponder === second.surface.responder, "閉じたら残る文書の面へ移る")
+    }
+    window.orderOut(nil)
+  }
+
+  /// 面の外（端末）に焦点があるときに文書を開いても、焦点は奪わない。
+  func testOpeningADocumentDoesNotStealFocusFromOutsideThePane() throws {
+    let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let window = hosted(tab, focus: .terminal)
+    let outsider = NSTextField(frame: .zero)
+    tab.view.addSubview(outsider)
+    window.makeFirstResponder(outsider)
+
+    let document = try tab.editor.open(try file("d.txt", "x"))
+
+    XCTAssertTrue(tab.view.editor.document === document, "面の中身は入れ替わる")
+    XCTAssertFalse(
+      window.firstResponder === document.surface.responder, "面の外にある焦点は動かさない")
+    window.orderOut(nil)
+  }
+
   func testCommandSSavesTheActiveDocument() throws {
     let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let url = try file("c.txt", "abc")
