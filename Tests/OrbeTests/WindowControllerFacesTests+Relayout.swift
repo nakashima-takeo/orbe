@@ -22,7 +22,7 @@ extension WindowControllerFacesTests {
 
     spine.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
     spine.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 500, y: y), in: wc.window))
-    pump(0.05)
+    tab.view.needsLayout = true
     layout(wc)
     XCTAssertEqual(tab.view.resolved.editorWidth, 500 - offset, "再レイアウト後もドラッグ中の幅のまま")
     XCTAssertEqual(spine.frame.minX, 500 - offset, "背も動かない")
@@ -45,6 +45,7 @@ extension WindowControllerFacesTests {
     let start = CACurrentMediaTime()
     wc.handleWindowCommand(.toggleEditorFace)
     pump(0.02)
+    tab.view.needsLayout = true
     layout(wc)
     XCTAssertGreaterThan(spine.frame.minX, 0, "遷移が始まっている")
     XCTAssertLessThan(spine.frame.minX, full, "再レイアウトしても終点へ飛ばない")

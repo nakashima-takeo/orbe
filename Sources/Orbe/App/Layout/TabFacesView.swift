@@ -23,6 +23,9 @@ final class TabFacesView: NSView {
   /// 今見えている配置を器の幅で解いた結果（ドラッグ中はポインタの値、遷移中は終点）。
   private(set) var resolved: FaceGeometry.Resolved
   var projection: FaceGeometry.Projection { resolved.projection }
+  /// 確定済みの配置（鏡 `faces`）を今の幅で解いた結果。相互作用中でもポインタ値を映さないので、
+  /// コマンド（⌘E）はこちらを読む。
+  var committed: FaceGeometry.Resolved { FaceGeometry.resolve(faces, width: bounds.width) }
   /// 投影（ドット・背の見え方・分割中か）が変わった。器の幅で変わりうるので chrome はここから追従する。
   var onProjectionChange: (() -> Void)?
   /// 背のクリック／離したときに求める配置。タブが正規化して状態に置き、`set` で戻す。
@@ -74,6 +77,7 @@ final class TabFacesView: NSView {
   /// 背の操作を器の状態へ結ぶ。init の外に置き、閉包が読む `faces` を常に鏡（プロパティ）にする。
   private func wireSpine() {
     spine.onGrab = { [unowned self] in
+      stopClock()
       interaction = .dragging(origin: faces, current: faces)
       window?.makeFirstResponder(focusTarget)
     }
@@ -96,20 +100,20 @@ final class TabFacesView: NSView {
   func set(_ faces: FaceLayout, animated: Bool) {
     guard faces != self.faces else { return }
     self.faces = faces
-    settle(to: FaceGeometry.resolve(faces, width: bounds.width), animated: animated)
+    settle(to: committed, animated: animated)
   }
 
-  /// 器の幅が変わった。現在の相互作用の状態を新しい幅へ写す。
+  /// 器が再レイアウトされた（幅が変わったとは限らない）。今の相互作用を今の幅で置き直す。
   override func layout() {
     super.layout()
     switch interaction {
     case .settled:
-      apply(FaceGeometry.resolve(faces, width: bounds.width))
+      apply(committed)
     case .dragging(_, let current):
       pendingDragSizes = nil
       apply(FaceGeometry.resolve(current, width: bounds.width))
     case .sliding:
-      prepareSlide(to: FaceGeometry.resolve(faces, width: bounds.width))
+      prepareSlide(to: committed)
       slideFrame(now: CACurrentMediaTime())
     }
   }
@@ -231,7 +235,7 @@ final class TabFacesView: NSView {
     flushDragSizes()
     let final = FaceGeometry.release(current, contentWidth: resolved.contentWidth)
     if final == faces {
-      settle(to: FaceGeometry.resolve(faces, width: bounds.width), animated: true)
+      settle(to: committed, animated: true)
     } else {
       onFacesRequested?(final, true)
     }
@@ -262,7 +266,7 @@ final class TabFacesView: NSView {
   /// 遷移の 1 フレーム。`now` の進行で起点と終点の間に背を置き、終端で確定配置へ着地する。
   func slideFrame(now: CFTimeInterval) {
     guard case .sliding(let fromRatio, let start) = interaction else { return }
-    let target = resolved
+    let target = committed
     let progress = min(1, (now - start) / Theme.Motion.faceSlide)
     let eased = CGFloat(Theme.Motion.faceSlideCurve.value(at: max(0, progress)))
     let from = CGFloat(fromRatio) * target.contentWidth
@@ -270,7 +274,7 @@ final class TabFacesView: NSView {
     if progress >= 1 {
       stopClock()
       interaction = .settled
-      apply(FaceGeometry.resolve(faces, width: bounds.width))
+      apply(target)
     }
   }
 
