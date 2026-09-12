@@ -12,7 +12,6 @@ final class FakeTextSurface: TextSurface {
   var visibleRange = NSRange(location: 0, length: 0)
   /// 塗られた区間（役割付き）。`applyHighlights` の ranges で外し、spans で置く。
   private(set) var highlights: [HighlightSpan] = []
-  private(set) var applied = 0
 
   init(text: String, style: TextSurfaceStyle = .fake) {
     storage = NSMutableString(string: text)
@@ -24,7 +23,6 @@ final class FakeTextSurface: TextSurface {
   func substring(in range: NSRange) -> String { storage.substring(with: range) }
 
   func applyHighlights(_ spans: [HighlightSpan], in ranges: IndexSet) {
-    applied += 1
     highlights.removeAll { ranges.intersects(integersIn: Range($0.range)!) }
     highlights.append(contentsOf: spans)
   }

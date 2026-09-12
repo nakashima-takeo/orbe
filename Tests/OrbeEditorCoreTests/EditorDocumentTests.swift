@@ -133,14 +133,14 @@ final class EditorDocumentTests: XCTestCase {
     let url = try temp("b.swift", "let a = 1\n")
     let (document, surface) = try open(url)
     XCTAssertTrue(surface.texts(of: .keyword).contains("let"))
-    let applied = surface.applied
 
-    surface.replace(NSRange(location: 0, length: 3), with: "var")
-    XCTAssertGreaterThan(surface.applied, applied)
+    // 長さの変わる置換にする——塗り直しが起きなければ、古い区間（0..<3）が新しい本文の "pub" を指す。
+    surface.replace(NSRange(location: 0, length: 3), with: "public var")
+    XCTAssertTrue(surface.texts(of: .keyword).contains("public"))
     XCTAssertTrue(surface.texts(of: .keyword).contains("var"))
     XCTAssertFalse(surface.texts(of: .keyword).contains("let"))
 
-    surface.replace(NSRange(location: 10, length: 0), with: "// note\n")
+    surface.replace(NSRange(location: 17, length: 0), with: "// note\n")
     XCTAssertTrue(surface.texts(of: .comment).contains("// note"))
     XCTAssertEqual(document.lineIndex.lineCount, 3)
 
