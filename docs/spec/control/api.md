@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe）
 description: Unix socket 上の JSON-RPC でタブ/workspace/エージェントを操作する out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
-updated: 2026-09-08
+updated: 2026-09-12
 ---
 
 # 制御 API（外部 → Orbe）
@@ -46,7 +46,7 @@ workspace / tab にプロセス内単調増加 ID。型をまたいで一意。�
 
 ## ツール
 
-JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`config_*`・workspace CRUD・`focus_tab`/`close_tab`・`completion_*` は socket 専用で、MCP ブリッジには出さない（[cli](cli.md) が直に叩く）。
+JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`config_*`・workspace CRUD・`focus_tab`/`close_tab`/`open_file`・`completion_*` は socket 専用で、MCP ブリッジには出さない（[cli](cli.md) が直に叩く）。
 
 - `list_workspaces` → `{workspaces:[…]}` … id・name・rootPath・active・tabCount・activated・dormantAgentCount。`activated` は配下にmaterialize開始済みタブが1枚以上あるかを表す現在値で、0タブまたは全タブ未activatedならfalse。`dormantAgentCount` は現在残る未消費の復元チケット（休眠agent）タブ数で、混在workspaceでは `activated: true` と正の値が同時に成立する。0タブworkspaceを前面化した場合は `active: true, activated: false, dormantAgentCount: 0` となる。
 - `list_tabs` → `{tabs:[…], seq}` … tabId・workspaceId・workspaceName・title・cwd・agentState・agentSessionId（resume 用・未設定なら null）・active（その workspace で選択中のタブ。背景 workspace でも 1 枚 true で、前面かは `list_workspaces` の `active` と合わせて分かる）。全 workspace 横断・タブ順。`seq` は snapshot 時点の履歴位置で、tab の状態と同じ瞬間の値。
@@ -66,6 +66,7 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 - `set_workspace_root {workspaceId, rootPath}` … GUI パレットのディレクトリ変更と同一経路（trim・`~` 展開・実在チェックなし・アクティブなら chrome 即時更新・永続化）。未知 id は `-32004`、空は `-32602`。socket 専用。
 - `remove_workspace {workspaceId}` … 未知 id は `-32004`。最後の 1 つは削除不可で `-32000`（[workspace](../platform/workspace.md) の「最低 1 枚を残す」規律）。socket 専用。
 - `focus_tab {tabId}` … そのタブを選択して端末へフォーカスを移す。別 workspace のタブなら activate を伴う（手元 Mac のアクティブ workspace も切り替わる）。冪等。未知 tab は `-32004`。socket 専用。
+- `open_file {tabId, path}` … そのタブのエディターでファイルを開き（→ [editor/code](../editor/code.md)）、エディター面が見える配置にして（隠れていれば全面、分割中は焦点だけ）、`focus_tab` と同じくタブを選んでテキスト面へフォーカスを移す。`path` は絶対か、`~` 展開の上でタブの実効 cwd からの相対。既に開いているファイルは焦点を移すだけ。未知 tab は `-32004`、`path` 欠落・空は `-32602`、読めない・UTF-8 でないファイルは `-32000`（面は変わらない）。socket 専用。
 - `close_tab {tabId}` … GUI（Cmd+W）と同一——アクティブ workspace の最後のタブを閉じても 0 タブの空状態でアクティブに残る（ウィンドウは閉じない）。応答の `seq` より前にタブが消える（応答直後の `list_tabs` に出ない）。未知 tab は `-32004`。socket 専用。
 - `report_agent {tabId, agent, state, sessionId?, message?, messageSource?, reason?}` … エージェント hook の状態報告を発信元タブへ適用する（[agent/notify](../agent/notify.md)）。`reason` は hook が渡す終了理由で、`state=="clear"` のとき[寿命ログ](../platform/session-log.md)の `closed` に載る（表示には出ない）。`messageSource` は文言の出所で、ツール由来かどうかだけが上書き可否を決める（表示には出ない）。`state=="clear"` で状態/コマンド/セッション ID/文言/状態変化時刻を消し、それ以外は state/command を立て、sessionId は新値があれば更新・無ければ同じ CLI からの報告のあいだだけ引き継ぎ（command が変われば捨てる）、文言は state の遷移と出所で上書き可否が決まる（状態変化時刻は state が実際に変わったときだけ進む）。**未消費（休眠）の復元タブ宛の報告・clear は破棄する**（[agent/notify](../agent/notify.md)）。
 - `session_log {since?, until?, limit?, sessionId?}` → `{events:[…], truncated}` … [寿命ログ](../platform/session-log.md)の生イベント列を時刻昇順で返す。各要素は `ts`（UTC・ミリ秒・`Z`）・`event`（`opened` / `closed`）・`workspace{name, rootPath}`・`cwd`・`agent{command, sessionId}`、`closed` はさらに `origin`（`agent` / `gesture` / `process` / `controlAPI` / `unresolved`）と任意の `reason`・`title`。`since` / `until` は閉区間の ISO 8601、`limit` は既定 1000・上限 10000 で、超えた分は**古い側を落として** `truncated: true`。派生（閉じたまま戻っていないもの・時刻 T に生きていた集合）はこの API では作らず呼び出し側が組む——「戻っていない」は `sessionId` ごとの最後のイベントが `closed` で `list_tabs` の `agentSessionId` に無いもの。ウィンドウ未接続でも答え、ファイル不在は空の成功。型違い・ISO として読めない値・値域外・JSON の真偽値を数として渡した `limit` は `-32602`。
