@@ -77,6 +77,25 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "abc")
   }
 
+  /// 保存は undo の区切り——打つ → 保存 → 打つ → ⌘Z で、戻るのは保存の後の打鍵だけ
+  /// （区切らなければ挿入位置が繋がる限り 1 つのまとまりで、保存前の打鍵まで一緒に戻る）。
+  func testSavingMarksAnUndoBoundary() throws {
+    let url = try file("d.txt", "")
+    let (document, _) = try opened(url)
+
+    type("ab", into: document)
+    try document.save()
+    type("cd", into: document)
+    XCTAssertEqual(document.surface.text, "abcd")
+
+    document.surface.responder.undoManager?.undo()
+    XCTAssertEqual(document.surface.text, "ab", "保存の後の打鍵だけが戻る")
+    XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "ab", "保存した内容はそのまま")
+
+    document.surface.responder.undoManager?.undo()
+    XCTAssertEqual(document.surface.text, "", "もう 1 回で保存前の打鍵が戻る")
+  }
+
   /// 色付けは本文を書き換えないので、色の付いた文書を開いただけでは未保存にならない
   /// （面の本文を編集して色を置いていれば、開いた瞬間に全ファイルが未保存になる）。
   func testOpeningAColoredDocumentIsNotDirty() throws {

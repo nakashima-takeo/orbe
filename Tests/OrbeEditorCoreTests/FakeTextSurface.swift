@@ -10,6 +10,7 @@ final class FakeTextSurface: TextSurface {
   var style: TextSurfaceStyle
   weak var delegate: TextSurfaceDelegate?
   var visibleRange = NSRange(location: 0, length: 0)
+  private(set) var undoBoundaries = 0
   /// 塗られた区間（役割付き）。`applyHighlights` の ranges で外し、spans で置く。
   private(set) var highlights: [HighlightSpan] = []
 
@@ -26,6 +27,8 @@ final class FakeTextSurface: TextSurface {
     highlights.removeAll { ranges.intersects(integersIn: Range($0.range)!) }
     highlights.append(contentsOf: spans)
   }
+
+  func markUndoBoundary() { undoBoundaries += 1 }
 
   /// 編集を起こす（人の打鍵に相当）。
   func replace(_ range: NSRange, with replacement: String) {

@@ -75,6 +75,10 @@ final class STTextSurface: NSObject, TextSurface {
     }
   }
 
+  func markUndoBoundary() {
+    textView.breakUndoCoalescing()
+  }
+
   private func apply(_ style: TextSurfaceStyle) {
     textView.font = style.font
     textView.textColor = style.textColor

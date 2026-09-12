@@ -24,6 +24,10 @@ public protocol TextSurface: AnyObject {
   /// 今見えている本文の区間（viewport のレイアウト後に更新される）。
   var visibleRange: NSRange { get }
 
+  /// undo の履歴にここで区切りを置く。続けて打った文字はまとめて戻るが、区切りをまたいでは戻らない
+  /// （保存が呼ぶ——⌘Z が保存前の打鍵まで一緒に戻さないため）。
+  func markUndoBoundary()
+
   var delegate: TextSurfaceDelegate? { get set }
 }
 

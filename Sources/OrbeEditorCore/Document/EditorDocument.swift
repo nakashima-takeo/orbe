@@ -47,10 +47,11 @@ public final class EditorDocument {
     }
   }
 
-  /// 面の本文をそのまま UTF-8 で書く（改行・末尾改行は本文のまま）。
+  /// 面の本文をそのまま UTF-8 で書く（改行・末尾改行は本文のまま）。保存は undo の区切りでもある。
   public func save() throws {
     try Data(surface.text.utf8).write(to: url, options: .atomic)
     isDirty = false
+    surface.markUndoBoundary()
   }
 
   /// 構文層から全区間を再発行する（外観切替などで色を解き直す口）。
