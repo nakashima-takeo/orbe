@@ -121,6 +121,13 @@ final class EditorDocumentTests: XCTestCase {
     XCTAssertTrue(surface.texts(of: .variable).contains("margin"), "style の中の CSS")
   }
 
+  /// injections: Markdown のコードブロックは囲みが名乗る言語（```swift）として色付く。
+  func testMarkdownFencedCodeUsesTheFenceLanguage() throws {
+    let (_, surface) = try open(Queries.samples.appendingPathComponent("sample.md"))
+    XCTAssertTrue(surface.texts(of: .keyword).contains("let"), "```swift の中は Swift として塗る")
+    XCTAssertTrue(surface.texts(of: .variable).contains("index"), "Markdown だけでは出ない役割")
+  }
+
   /// 編集すると変わった範囲が塗り直され、編集後の本文に対して色が正しく付く。
   func testHighlightsFollowEdits() throws {
     let url = try temp("b.swift", "let a = 1\n")
