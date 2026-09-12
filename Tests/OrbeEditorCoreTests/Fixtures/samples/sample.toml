@@ -1,0 +1,9 @@
+# Tool pins.
+[tools]
+swiftlint = "0.63.3"
+
+[editor]
+line-height = 18
+gutter = 50
+enabled = true
+languages = ["swift", "markdown", "json"]

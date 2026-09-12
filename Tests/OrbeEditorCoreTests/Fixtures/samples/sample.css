@@ -1,0 +1,9 @@
+/* Code view metrics from the design sample. */
+.code {
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 18px;
+  padding-top: 4px;
+}
+
+.gutter { width: 50px; text-align: right; }
