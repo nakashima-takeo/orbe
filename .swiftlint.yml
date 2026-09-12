@@ -27,6 +27,24 @@ custom_rules:
     message: "同梱リソースの解決は BundledResources.root を通す（唯一の注入点）"
     severity: error
 
+  editor_text_engine_seam:
+    name: "テキストエンジンは OrbeEditorText に閉じる"
+    included: ".*/Sources/.*\\.swift"
+    excluded: ".*/Sources/OrbeEditorText/.*"
+    # SwiftPM の暗黙 import で Orbe 本体からも `import STTextView` が通る。エンジンの差し替えが
+    # target の差し替えで済むよう、他所で型に触れる口をここで塞ぐ（合成点は面を作る 1 関数だけ）。
+    regex: "^\\s*import STTextView\\b"
+    message: "STTextView は Sources/OrbeEditorText からだけ import する（面は makeTextSurface で作る）"
+    severity: error
+
+  editor_syntax_engine_seam:
+    name: "tree-sitter は OrbeEditorCore に閉じる"
+    included: ".*/Sources/.*\\.swift"
+    excluded: ".*/Sources/OrbeEditorCore/.*"
+    regex: "^\\s*import (SwiftTreeSitter\\w*|TreeSitter\\w+)\\b"
+    message: "tree-sitter は Sources/OrbeEditorCore からだけ import する（色は役割付き区間で受け取る）"
+    severity: error
+
   test_isolation_harness:
     name: "テストの基底は OrbeTestCase"
     included: ".*/Tests/OrbeTests/.*\\.swift"
