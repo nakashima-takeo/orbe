@@ -48,9 +48,11 @@ final class EditorPaneView: NSView {
   }
 
   /// 焦点の文書の面を見せる（nil なら空状態）。前の文書の面は外すだけで、面は文書と一緒に生き続ける。
-  /// 焦点が自分の配下にあって行き先と違えば、行き先へ移す（再入で呼ばない）。
+  /// 焦点が面の中にあれば新しい行き先へ移す——判定は前の面を外す前に取る（外した瞬間に AppKit が
+  /// first responder を窓へ戻すので、外した後では「中にあった」ことが分からない）。
   func show(_ document: EditorDocument?) {
     guard document !== self.document else { return }
+    let hadFocusInside = focusIsInside
     self.document?.surface.view.removeFromSuperview()
     self.document = document
     if let document {
@@ -60,11 +62,15 @@ final class EditorPaneView: NSView {
       addSubview(view)
     }
     host.isHidden = document != nil
-    if let window, let responder = window.firstResponder as? NSView,
-      responder === self || responder.isDescendant(of: self), responder !== focusTarget
-    {
-      window.makeFirstResponder(focusTarget)
+    if hadFocusInside, window?.firstResponder !== focusTarget {
+      window?.makeFirstResponder(focusTarget)
     }
+  }
+
+  /// first responder が自分か配下にあるか。
+  private var focusIsInside: Bool {
+    guard let responder = window?.firstResponder as? NSView else { return false }
+    return responder === self || responder.isDescendant(of: self)
   }
 
   /// 焦点の行き先。文書があればそのテキスト面、無ければ自分。
@@ -90,9 +96,7 @@ final class EditorPaneView: NSView {
   /// chrome キーの解決点。first responder が自分か配下のときだけ効く（隠れたタブの pane は subview から
   /// 外れているが、gate は必ず入れる）。
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
-    guard let responder = window?.firstResponder as? NSView,
-      responder === self || responder.isDescendant(of: self),
-      let action = Keybindings.chromeAction(for: event)
+    guard focusIsInside, let action = Keybindings.chromeAction(for: event)
     else { return super.performKeyEquivalent(with: event) }
     switch action.owner {
     case .window:

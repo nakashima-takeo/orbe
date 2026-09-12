@@ -91,11 +91,8 @@ final class EditorPaneViewTests: OrbeTestCase {
   }
 
   /// 見せる文書が入れ替わるとき、面の中にあった焦点は新しい行き先（次の文書の面・空状態なら面自身）へ移る。
-  ///
-  /// バグ疑い（未修正・spec `editor/code.md` の「焦点」節）: `show` は新しい行き先を決める前に前の文書の
-  /// 面を外すので、AppKit が first responder を窓へ戻した後になり、gate（焦点が自分の配下か）が必ず外れる。
-  /// 結果、文書を切り替えても閉じても打鍵の行き先が消える。`open_file` は直後に `controlFocusTab` が
-  /// 張り直すので今は見えないが、u4 のファイルタブ切替はこの経路しか持たない。
+  /// 前の面を外すと AppKit が first responder を窓へ戻すので、「中にあった」は外す前に取っていなければ
+  /// ならない——外した後に見ると焦点は窓に落ちたままになり、切り替えても閉じても打鍵の行き先が消える。
   func testSwappingTheShownDocumentKeepsTheFocusInsideThePane() throws {
     let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hosted(tab)
@@ -104,15 +101,13 @@ final class EditorPaneViewTests: OrbeTestCase {
     window.makeFirstResponder(second.surface.responder)
 
     tab.editor.activate(first)
-    XCTExpectFailure("切替で焦点が窓へ落ちる") {
-      XCTAssertTrue(window.firstResponder === first.surface.responder, "切り替えた先の面へ移る")
-    }
+    XCTAssertTrue(window.firstResponder === first.surface.responder, "切り替えた先の面へ移る")
 
-    window.makeFirstResponder(first.surface.responder)
     tab.editor.close(first)
-    XCTExpectFailure("閉じたときも焦点が窓へ落ちる") {
-      XCTAssertTrue(window.firstResponder === second.surface.responder, "閉じたら残る文書の面へ移る")
-    }
+    XCTAssertTrue(window.firstResponder === second.surface.responder, "閉じたら残る文書の面へ移る")
+
+    tab.editor.close(second)
+    XCTAssertTrue(window.firstResponder === tab.view.editor, "最後の文書を閉じたら面自身へ")
     window.orderOut(nil)
   }
 
