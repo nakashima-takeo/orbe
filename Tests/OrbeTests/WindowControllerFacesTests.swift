@@ -146,17 +146,17 @@ final class WindowControllerFacesTests: OrbeTestCase {
     let y = spine.centerInWindow.y
 
     spine.mouseDown(with: .mouse(.leftMouseDown, at: spine.centerInWindow, in: wc.window))
-    spine.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 150, y: y), in: wc.window))
-    spine.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 150, y: y), in: wc.window))
-    XCTAssertEqual(tab.faces, .terminalOnly, "エディター 150 は閉じる")
+    spine.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 30, y: y), in: wc.window))
+    spine.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 30, y: y), in: wc.window))
+    XCTAssertEqual(tab.faces, .terminalOnly, "端ぎりぎりのエディターは閉じる")
     XCTAssertTrue(wc.window.firstResponder === tab.surface)
 
-    let nearRight = contentWidth(wc) - 100
+    let nearRight = contentWidth(wc) - 30
     spine.mouseDown(with: .mouse(.leftMouseDown, at: spine.centerInWindow, in: wc.window))
     spine.mouseDragged(
       with: .mouse(.leftMouseDragged, at: NSPoint(x: nearRight, y: y), in: wc.window))
     spine.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: nearRight, y: y), in: wc.window))
-    XCTAssertEqual(tab.faces, FaceLayout(editorRatio: 1, focus: .editor), "端末 100 は閉じる")
+    XCTAssertEqual(tab.faces, FaceLayout(editorRatio: 1, focus: .editor), "端ぎりぎりの端末は閉じる")
     XCTAssertTrue(wc.window.firstResponder === tab.view.editor, "焦点は残ったエディターへ")
   }
 

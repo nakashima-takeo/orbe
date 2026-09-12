@@ -190,30 +190,30 @@ final class FaceGeometryTests: OrbeTestCase {
 
   // MARK: - 背を離す
 
-  /// 閉じる境（200）より狭い面は閉じ、境ちょうどからは幅をそのまま確定する。
+  /// 閉じる境（40）より狭い面は閉じ、境ちょうどからは幅をそのまま確定する。
   func testReleaseClosesAFaceNarrowerThanTheCloseEdge() {
     XCTAssertEqual(
-      FaceGeometry.release(FaceLayout(editorRatio: 0.199, focus: .terminal), contentWidth: 1000),
-      .terminalOnly, "エディター 199 は閉じる")
+      FaceGeometry.release(FaceLayout(editorRatio: 0.039, focus: .terminal), contentWidth: 1000),
+      .terminalOnly, "エディター 39 は閉じる")
     XCTAssertEqual(
-      FaceGeometry.release(FaceLayout(editorRatio: 0.801, focus: .terminal), contentWidth: 1000),
-      FaceLayout(editorRatio: 1, focus: .editor), "端末 199 は閉じる")
+      FaceGeometry.release(FaceLayout(editorRatio: 0.961, focus: .terminal), contentWidth: 1000),
+      FaceLayout(editorRatio: 1, focus: .editor), "端末 39 は閉じる")
 
-    let editorAtEdge = FaceLayout(editorRatio: 0.2, focus: .terminal)
+    let editorAtEdge = FaceLayout(editorRatio: 0.04, focus: .terminal)
     XCTAssertEqual(
-      FaceGeometry.release(editorAtEdge, contentWidth: 1000), editorAtEdge, "エディター 200 は残る")
-    let terminalAtEdge = FaceLayout(editorRatio: 0.8, focus: .terminal)
+      FaceGeometry.release(editorAtEdge, contentWidth: 1000), editorAtEdge, "エディター 40 は残る")
+    let terminalAtEdge = FaceLayout(editorRatio: 0.96, focus: .terminal)
     XCTAssertEqual(
-      FaceGeometry.release(terminalAtEdge, contentWidth: 1000), terminalAtEdge, "端末 200 は残る")
+      FaceGeometry.release(terminalAtEdge, contentWidth: 1000), terminalAtEdge, "端末 40 は残る")
   }
 
   /// 閉じる側が焦点の面なら、残る面へ焦点が移る。
   func testReleaseMovesFocusToTheRemainingFace() {
     XCTAssertEqual(
-      FaceGeometry.release(FaceLayout(editorRatio: 0.1, focus: .editor), contentWidth: 1000),
+      FaceGeometry.release(FaceLayout(editorRatio: 0.02, focus: .editor), contentWidth: 1000),
       .terminalOnly)
     XCTAssertEqual(
-      FaceGeometry.release(FaceLayout(editorRatio: 0.95, focus: .terminal), contentWidth: 1000),
+      FaceGeometry.release(FaceLayout(editorRatio: 0.98, focus: .terminal), contentWidth: 1000),
       FaceLayout(editorRatio: 1, focus: .editor))
   }
 }

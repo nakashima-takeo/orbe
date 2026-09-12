@@ -10,8 +10,8 @@ enum FaceGeometry {
   static let focusBand: CGFloat = 2
   /// これ未満の移動はクリック扱い。
   static let dragThreshold: CGFloat = 4
-  /// 背を離したとき、面がこれより狭ければ端に寄せたとみなして閉じる。
-  static let closeEdge: CGFloat = 200
+  /// 背を離したとき、面がこれより狭ければ端ぎりぎりに寄せたとみなして閉じる（使えない細い面を残さない）。
+  static let closeEdge: CGFloat = 40
 
   /// 背の見え方: 隠れた面の印（その面のキー色）か、両面が見えているときのグリップ。
   enum SpineLook: Equatable {
