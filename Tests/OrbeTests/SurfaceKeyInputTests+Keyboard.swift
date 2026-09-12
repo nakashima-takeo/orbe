@@ -33,6 +33,8 @@ extension SurfaceKeyInputTests {
       keyCode: kVK_Delete, characters: "\u{7f}", unmodified: "\u{7f}", modifiers: .shift)
     static let optionBackspace = PhysicalKey(
       keyCode: kVK_Delete, characters: "\u{7f}", unmodified: "\u{7f}", modifiers: .option)
+    static let commandS = PhysicalKey(
+      keyCode: kVK_ANSI_S, characters: "s", unmodified: "s", modifiers: .command)
 
     func event(_ kind: NSEvent.EventType, in window: NSWindow?) -> NSEvent {
       NSEvent.keyEvent(
@@ -76,5 +78,13 @@ extension SurfaceKeyInputTests {
     let dump = try dump(.kitty)
     assertTyped(.shiftBackspace, arrives: "\u{1b}[127;2u", in: dump)
     assertTyped(.optionBackspace, arrives: "\u{1b}[127;3u", in: dump)
+  }
+
+  /// 端末焦点の ⌘S は Orbe が束縛せず ghostty へ素通しする（エディターが所有するキーなので端末側では
+  /// chrome アクションにしない）。kitty protocol 下なら super 付きの CSI u として届くので、先取りに
+  /// 戻した瞬間に 1 バイトも来なくなる。
+  func testCommandSIsNotSwallowedByChromeAndReachesTheTerminal() throws {
+    let dump = try dump(.kitty)
+    assertTyped(.commandS, arrives: "\u{1b}[115;9u", in: dump)
   }
 }
