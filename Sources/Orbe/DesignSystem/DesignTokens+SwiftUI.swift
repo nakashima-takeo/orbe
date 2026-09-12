@@ -86,6 +86,11 @@ struct ThemeColors {
   let inputWash = Color(nsColor: Theme.Color.inputWash)
   let inputBorder = Color(nsColor: Theme.Color.inputBorder)
   let tintAccent = Color(nsColor: Theme.Color.tintAccent)
+  // エディター面（面のキー色・空状態）
+  let faceEditor = Color(nsColor: Theme.Color.faceEditor)
+  let faceTerminal = Color(nsColor: Theme.Color.faceTerminal)
+  let editorGhost = Color(nsColor: Theme.Color.editorGhost)
+  let editorIcon = Color(nsColor: Theme.Color.editorIcon)
 }
 
 extension Font {
@@ -122,4 +127,7 @@ struct ThemeFonts {
   let helpCaption = Font(Theme.Typography.helpCaption as CTFont)
   let helpKeyFn = Font(Theme.Typography.helpKeyFn as CTFont)
   let helpKeyArrow = Font(Theme.Typography.helpKeyArrow as CTFont)
+  // エディター面の空状態
+  let editorLead = Font(Theme.Typography.editorLead as CTFont)
+  let editorHint = Font(Theme.Typography.editorHint as CTFont)
 }

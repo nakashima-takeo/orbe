@@ -1,7 +1,7 @@
 ---
 title: workspace 永続
 description: 構成（workspace・タブ・cwd・エージェントセッション）の JSON 保存と起動時復元・エージェント resume・デバウンス保存
-updated: 2026-09-07
+updated: 2026-09-12
 ---
 
 # workspace 永続
@@ -12,7 +12,7 @@ updated: 2026-09-07
 
 ## workspaces.json — 構成の永続
 
-保存するもの: workspace 名・root path・各 workspace の設定上書き（[workspace](workspace.md)・[settings](../palette/settings.md)）・最終使用時刻（`WorkspacePalette` の MRU 並べ替え用）・アクティブ workspace・ウィンドウサイズ／各 workspace のタブ群と active タブ／各タブの cwd・エージェントセッション・明示タイトル（[chrome](../chrome/chrome.md)）。
+保存するもの: workspace 名・root path・各 workspace の設定上書き（[workspace](workspace.md)・[settings](../palette/settings.md)）・最終使用時刻（`WorkspacePalette` の MRU 並べ替え用）・アクティブ workspace・ウィンドウサイズ／各 workspace のタブ群と active タブ／各タブの cwd・エージェントセッション・明示タイトル（[chrome](../chrome/chrome.md)）・面の配置（エディター幅の割合と焦点の面 → [editor/faces](../editor/faces.md)。既定＝端末だけのときは書かない）。
 
 ### 復元の挙動
 
@@ -30,7 +30,7 @@ updated: 2026-09-07
 
 ### 互換と破損時の退避
 
-現行形式は version 4 で、タブは `{cwd, agent?, explicitTitle?}` の平坦な形。旧形式（version 2 / 3。タブが分割ツリーを持つ）は移行専用の経路が一度だけ読み、分割ツリーの葉を深さ優先順に 1 葉 = 1 タブへ展開する——明示タイトルは先頭の葉に付け、active タブは旧 active タブの先頭葉へ写し、cwd の無い葉は workspace の root path で起こす。次回保存で version 4 へ置き換わる（workspace 一覧・cwd・エージェントセッション・workspace 別設定を失わない。失うのは配置と分割比だけ）。旧 camelCase の設定上書きもこの経路だけが読む。後から足したフィールドは**欠落**を許容する。「あるが読めない」を既定へ落とすのは `editor` と設定層（`settingsOverride`）の 2 つだけで、そのほか——タブ本体（`cwd`・エージェントセッション）・`explicitTitle`・`lastUsedAt`・`windowSize`・workspace の名前や index——はファイル全体の fallback へ落ちて**全 workspace を失う**。optional で後から足したフィールドも、既定へ落とす decode を自分で書かない限りこちら側になる。設定層（global・workspace 上書きとも）は現行形式なら読めない 1 キーだけを落として残りを活かし、値ごと読めなければ上書き無し（global 継承）へ落ちる——1 項目の異常で層ごと消さないため。旧 camelCase の読みは global 移行・workspace 上書きとも all-or-nothing で、そこでは範囲外の `theme` が既定値として層に載る。値域を持つ項目は、範囲外の値を**最寄りの端へ丸めて**層に載せる——読出には拒否を返す先が無く、既定へ落とすと「大きくしたい／小さくしたい」という書き手の意図まで捨てるため。丸めは書き込み経路の検証と同じ値域を関門 1 つで共有する。
+現行形式は version 4 で、タブは `{cwd, agent?, explicitTitle?, faces?}` の平坦な形。旧形式（version 2 / 3。タブが分割ツリーを持つ）は移行専用の経路が一度だけ読み、分割ツリーの葉を深さ優先順に 1 葉 = 1 タブへ展開する——明示タイトルは先頭の葉に付け、active タブは旧 active タブの先頭葉へ写し、cwd の無い葉は workspace の root path で起こす。次回保存で version 4 へ置き換わる（workspace 一覧・cwd・エージェントセッション・workspace 別設定を失わない。失うのは配置と分割比だけ）。旧 camelCase の設定上書きもこの経路だけが読む。後から足したフィールドは**欠落**を許容する。「あるが読めない」を既定へ落とすのはタブの面の配置（`faces`。読めなければ端末だけへ、割合が範囲外なら 0…1 へ丸めて焦点を正規形へ寄せる）と設定層（`settingsOverride`）の 2 つだけで、そのほか——タブ本体（`cwd`・エージェントセッション）・`explicitTitle`・`lastUsedAt`・`windowSize`・workspace の名前や index——はファイル全体の fallback へ落ちて**全 workspace を失う**。optional で後から足したフィールドも、既定へ落とす decode を自分で書かない限りこちら側になる。設定層（global・workspace 上書きとも）は現行形式なら読めない 1 キーだけを落として残りを活かし、値ごと読めなければ上書き無し（global 継承）へ落ちる——1 項目の異常で層ごと消さないため。旧 camelCase の読みは global 移行・workspace 上書きとも all-or-nothing で、そこでは範囲外の `theme` が既定値として層に載る。値域を持つ項目は、範囲外の値を**最寄りの端へ丸めて**層に載せる——読出には拒否を返す先が無く、既定へ落とすと「大きくしたい／小さくしたい」という書き手の意図まで捨てるため。丸めは書き込み経路の検証と同じ値域を関門 1 つで共有する。
 
 壊れている・非互換バージョン・空 JSON は既定の単一 workspace で fallback する。このとき**原本が在るのに使えなかった**場合（読めない・構造破損・非互換バージョン）は、fallback する前に原本を同じディレクトリの `workspaces-broken-<日時>.json` へ退避する——直後の既定起動が打つ保存が原本を潰すため。退避物は最新 1 件だけ残す。退避できなかった原本が原位置に残っている間は、そのセッションはその場所へ書かない（保全できていない原本を潰さないため）。ファイル不在（初回起動）と空 JSON は失う構成が無いので退避しない。
 

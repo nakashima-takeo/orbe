@@ -36,9 +36,10 @@ extension View {
 }
 
 /// 最上段 chrome をネイティブ SwiftUI で描く（TopBar＋TabBar・§5.1）。
-/// 上段=現在地（workspace 名・build-id・cwd、左）とステータスストリップ（右端）、テキストは信号機の
-/// 縦中央へ整列・背景は透明（最背面の BackgroundGlow が見える）。下段=全幅セグメント形タブ行
-/// （地 tabRowBg・同 worktree のタブを連ねた DSTabSegment・shrink＋横スクロール・＋ボタン）。
+/// 上段=現在地（workspace 名・build-id・焦点の面の現在地、左）とステータスストリップ（右端）、テキストは
+/// 信号機の縦中央へ整列・背景は透明（最背面の BackgroundGlow が見える）。下段=全幅セグメント形タブ行
+/// （地 tabRowBg・同 worktree のタブを連ねた DSTabSegment・shrink＋横スクロール・＋ボタン）と右端の
+/// 位置ドット（エディター・端末の焦点と可視）。
 /// 罫線は持たない（tabRowBg の濃度差が境界）。背景に窓ドラッグ（タブ/ボタンのクリックは奪わない）。
 struct StatusRowView: View {
   @Bindable var model: StatusRowModel
@@ -81,8 +82,9 @@ struct StatusRowView: View {
     return min(max(shift, -4), 4)
   }
 
-  // 左＝現在地（workspace 名→build-id→cwd の粗→細）、右端＝ステータスストリップ。中央は空（窓ドラッグ面）。
-  // 幅が足りない時は cwd から縮む（workspace 名・build-id は layoutPriority、ストリップは fixedSize で保護）。
+  // 左＝現在地（workspace 名→build-id→焦点の面の現在地 の粗→細）、右端＝ステータスストリップ。
+  // 中央は空（窓ドラッグ面）。幅が足りない時は現在地から縮む（workspace 名・build-id は layoutPriority、
+  // ストリップは fixedSize で保護）。
   private var topRow: some View {
     HStack(spacing: Theme.Space.beat) {
       fontResolver.text(model.workspace, base: Theme.Typography.chrome)
@@ -97,8 +99,8 @@ struct StatusRowView: View {
           .lineLimit(1)
           .layoutPriority(1)
       }
-      if let cwd = model.cwd, !cwd.isEmpty {
-        fontResolver.text(cwd, base: Theme.Typography.meta)
+      if let location = model.location, !location.isEmpty {
+        fontResolver.text(location, base: Theme.Typography.meta)
           .font(Font.theme.meta)
           .foregroundStyle(Color.theme.textMuted)
           .lineLimit(1)
@@ -132,66 +134,73 @@ struct StatusRowView: View {
   private var tabStrip: some View {
     GeometryReader { geo in
       let strip = model.strip
-      let available = geo.size.width
+      let dots = model.faceDots
+      // 位置ドットは ScrollView の外（右端）に置き、その予約幅を行の利用可能幅から引く。
+      let available = geo.size.width - (dots == nil ? 0 : Chrome.faceDotsWidth)
       let widths = tabWidths(strip, available: available)
-      ScrollViewReader { proxy in
-        ScrollView(.horizontal, showsIndicators: false) {
-          HStack(spacing: Chrome.tabGap) {
-            ForEach(strip.segments.indices, id: \.self) { s in
-              let segment = strip.segments[s]
-              let grabbed = drag.flatMap { $0.source == .segment(s) ? $0 : nil }
-              DSTabSegment(
-                kind: segment.isGroup
-                  ? .group(colorIndex: segment.colorIndex) : .single
-              ) {
-                if segment.isGroup {
-                  DSSegmentBar(colorIndex: segment.colorIndex)
-                    .gesture(dragGesture(.segment(s), widths: widths, segments: strip.ranges))
+      HStack(spacing: 0) {
+        ScrollViewReader { proxy in
+          ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Chrome.tabGap) {
+              ForEach(strip.segments.indices, id: \.self) { s in
+                let segment = strip.segments[s]
+                let grabbed = drag.flatMap { $0.source == .segment(s) ? $0 : nil }
+                DSTabSegment(
+                  kind: segment.isGroup
+                    ? .group(colorIndex: segment.colorIndex) : .single
+                ) {
+                  if segment.isGroup {
+                    DSSegmentBar(colorIndex: segment.colorIndex)
+                      .gesture(dragGesture(.segment(s), widths: widths, segments: strip.ranges))
+                  }
+                  ForEach(segment.cells) { cell in
+                    // 2 枚以上の連ではセルを掴む。単独タブはセルがセグメントそのもの（境界へ落とす）。
+                    tabCell(cell, divided: segment.isGroup, width: widths[cell.index])
+                      .gesture(
+                        dragGesture(
+                          segment.isGroup ? .tab(cell.index) : .segment(s), widths: widths,
+                          segments: strip.ranges),
+                        including: model.editingIndex == cell.index ? .subviews : .all)
+                  }
                 }
-                ForEach(segment.cells) { cell in
-                  // 2 枚以上の連ではセルを掴む。単独タブはセルがセグメントそのもの（境界へ落とす）。
-                  tabCell(cell, divided: segment.isGroup, width: widths[cell.index])
-                    .gesture(
-                      dragGesture(
-                        segment.isGroup ? .tab(cell.index) : .segment(s), widths: widths,
-                        segments: strip.ranges),
-                      including: model.editingIndex == cell.index ? .subviews : .all)
-                }
+                // 掴んだセグメントは指に追従（slot は残す＝commit-on-drop）・前面へ・わずかに透かして浮きを示す。
+                .offset(x: grabbed?.translation ?? 0)
+                .zIndex(grabbed == nil ? 0 : 1)
+                .opacity(grabbed == nil ? 1 : 0.85)
               }
-              // 掴んだセグメントは指に追従（slot は残す＝commit-on-drop）・前面へ・わずかに透かして浮きを示す。
-              .offset(x: grabbed?.translation ?? 0)
-              .zIndex(grabbed == nil ? 0 : 1)
-              .opacity(grabbed == nil ? 1 : 0.85)
+              StatusPlusButton(action: model.onNewTab)
             }
-            StatusPlusButton(action: model.onNewTab)
-          }
-          .frame(minWidth: available, alignment: .leading)
-          .frame(height: Chrome.tabHeight)
-          // 挿入キャレット（離せばここに入る）。隣接タブはずらさない。
-          .overlay(alignment: .leading) {
-            if let drag {
-              Rectangle()
-                .fill(Color.theme.accentBright)
-                .frame(width: 2, height: Chrome.tabHeight)
-                .offset(x: Self.insertionCaretX(drag))
-                .allowsHitTesting(false)
+            .frame(minWidth: available, alignment: .leading)
+            .frame(height: Chrome.tabHeight)
+            // 挿入キャレット（離せばここに入る）。隣接タブはずらさない。
+            .overlay(alignment: .leading) {
+              if let drag {
+                Rectangle()
+                  .fill(Color.theme.accentBright)
+                  .frame(width: 2, height: Chrome.tabHeight)
+                  .offset(x: Self.insertionCaretX(drag))
+                  .allowsHitTesting(false)
+              }
             }
           }
+          // グループの枠は器の外側 1px の描画のはみ出し。ScrollView 自前のクリップは viewport ちょうどで
+          // これを切るので、クリップを外し、枠ぶんだけ広げた矩形で自分でクリップする。
+          .scrollClipDisabled()
+          .clipShape(Rectangle().inset(by: -DSTabSegmentMetrics.frameOutset))
+          .onChange(of: model.active) { _, new in proxy.scrollTo(new, anchor: .center) }
+          // 編集開始時、編集タブが横スクロール域外でも可視域へ入れる。
+          .onChange(of: model.editingIndex) { _, new in
+            if let n = new { proxy.scrollTo(n, anchor: .center) }
+          }
+          .onChange(of: model.strip.dragStructure) { _, _ in
+            // 掴み中にタブ集合・順序・連構造が変わったら（shell exit・cd 再判定等）掴み状態を破棄する。
+            // 凍結した幾何が実体とずれ、掴んでいた View は構造ごと消えて onEnded が来ない。
+            dragState.discard()
+            proxy.scrollTo(model.active, anchor: .center)
+          }
         }
-        // グループの枠は器の外側 1px の描画のはみ出し。ScrollView 自前のクリップは viewport ちょうどで
-        // これを切るので、クリップを外し、枠ぶんだけ広げた矩形で自分でクリップする。
-        .scrollClipDisabled()
-        .clipShape(Rectangle().inset(by: -DSTabSegmentMetrics.frameOutset))
-        .onChange(of: model.active) { _, new in proxy.scrollTo(new, anchor: .center) }
-        // 編集開始時、編集タブが横スクロール域外でも可視域へ入れる。
-        .onChange(of: model.editingIndex) { _, new in
-          if let n = new { proxy.scrollTo(n, anchor: .center) }
-        }
-        .onChange(of: model.strip.dragStructure) { _, _ in
-          // 掴み中にタブ集合・順序・連構造が変わったら（shell exit・cd 再判定等）掴み状態を破棄する。
-          // 凍結した幾何が実体とずれ、掴んでいた View は構造ごと消えて onEnded が来ない。
-          dragState.discard()
-          proxy.scrollTo(model.active, anchor: .center)
+        if let dots {
+          FaceDotsView(dots: dots)
         }
       }
     }

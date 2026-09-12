@@ -204,6 +204,12 @@ final class WindowController: NSObject, NSWindowDelegate {
       self.recordSessionEvent(transition, of: tab)
     }
     tab.onWindowCommand = { [weak self] command in self?.handleWindowCommand(command) }
+    tab.onFacesChange = { [weak self, weak tab] in
+      guard let tab else { return }
+      self?.tabFacesDidChange(tab)
+    }
+    tab.view.onProjectionChange = { [weak self] in self?.refreshChrome() }
+    tab.view.configure(translucency: chromeTranslucency, localization: localization)
     return tab
   }
 
@@ -275,13 +281,15 @@ final class WindowController: NSObject, NSWindowDelegate {
     }
   }
 
+  /// アクティブ workspace のアクティブタブ。0 タブなら nil。
+  var activeTab: TerminalTab? {
+    current.tabs.indices.contains(current.active) ? current.tabs[current.active] : nil
+  }
+
   /// 「見ているタブ」＝ウィンドウがキー（前面）のときの、アクティブ workspace のアクティブ表示タブ。
   /// 背面・0タブなら nil。
   /// done のフォーカス消費・メニューバー②の抑制・通知音の抑制が、この 1 つの判定を共有する。
-  var visibleTab: TerminalTab? {
-    guard window.isKeyWindow, current.tabs.indices.contains(current.active) else { return nil }
-    return current.tabs[current.active]
-  }
+  var visibleTab: TerminalTab? { window.isKeyWindow ? activeTab : nil }
 
   /// 完了通知の消費：見ているタブの done を消費して done バッジを消す。
   /// 背面・背景タブの done は残す。3 トリガ（タブ活性化・done 到着・前面復帰）が共有する。
@@ -337,7 +345,8 @@ final class WindowController: NSObject, NSWindowDelegate {
         workspace: current.name,
         strip: tabStrip(of: current),
         active: current.active,
-        cwd: store.activeTabCwd(),
+        location: activeTab?.location,
+        faceDots: activeTab?.view.projection.dots,
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
     refreshAttentionSnapshot()  // Attention 一覧も同じ coalesce 契機で追従（WindowController+Attention）
     refreshClosedAgentsPalette()  // ⇧⌘T の一覧も同じ契機で追従（WindowController+ClosedAgents）
@@ -359,10 +368,11 @@ final class WindowController: NSObject, NSWindowDelegate {
       })
   }
 
-  /// アクティブタブの surface へフォーカスを戻す（パレットの dismiss と同じ規則）。
+  /// アクティブタブの焦点の面（端末 surface かエディター pane）へフォーカスを戻す
+  /// （パレットの dismiss と同じ規則）。
   func focusActiveTab() {
-    guard current.tabs.indices.contains(current.active) else { return }
-    window.makeFirstResponder(current.tabs[current.active].surface)
+    guard let tab = activeTab else { return }
+    window.makeFirstResponder(tab.focusTarget)
   }
 
   /// OSC 7 の cwd 報告を受けた。所属キーが変わって隣接不変条件が破れていればタブを移し（アクティブ
