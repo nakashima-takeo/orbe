@@ -191,11 +191,10 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     try renderStatusRowFittingSnapshot(dir: dir)
   }
 
-  /// fitting: 行に余る枚数で、幅が自然幅そのままに出る段。
+  /// fitting: 行に余る枚数で、幅が自然幅そのままに出る段。2〜3 文字のタブは床 40 に持ち上がり、
+  /// 短い名前ばかりの連でもセルが潰れないことを見る（溢れた段だけでは床が shrink に隠れて見えない）。
   private func renderStatusRowFittingSnapshot(dir: URL) throws {
     let size = statusRowStageSize
-    // fitting: 行に余る枚数で、幅が自然幅そのままに出る段。2〜3 文字のタブは床 40 に持ち上がり、
-    // 短い名前ばかりの連でもセルが潰れないことを見る（溢れた段だけでは床が shrink に隠れて見えない）。
     let fitting = StatusRowModel()
     fitting.workspace = "orbe"
     fitting.strip = TabStrip(

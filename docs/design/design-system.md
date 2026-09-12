@@ -81,8 +81,8 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 **意図的な同値収束（事故ではない）**: Orbe の配色は色階層が少なく、複数の semantic 名が同一値へ収束する。SSOT では別名で表現している。
 `accent.focus` ＝ `accent.primary`／ `text.tertiary` ＝ `text.muted`／
 `success` ＝ `diff.added`（green）／ `danger` ＝ `diff.removed`（red）／
-`state.dormant` ＝ `text.muted`／ `surface.0` ＝ `bg.sunken`／
-`face.terminal` ＝ `text.secondary`／ `editor.icon` ＝ `kbKeyText`（面のキー色・エディター面の文字は役割が別なので参照しない）。
+`state.dormant` ＝ `text.muted`／ `surface.0` ＝ `bg.sunken`。
+**値だけが一致する独立トークン**: `face.terminal` ＝ `text.secondary`／ `editor.icon` ＝ `kbKeyText`（上の収束と違い SSOT でも互いを参照せず、片方の値が動いてももう片方は追随しない）。
 `state.done`（完了・緑）と `diff.added`（green）、`state.waiting`（要応答・黄）と `conflict`（ANSI黄）は**別トークンとして分離**（light では偶々同値だが dark では異なる。SSOT は状態色を `StateHue`、ANSI 系を端末アンカーから別々に導く）。
 **反転色（`state.*Inverse`）は対テーマの状態色**＝dark/light の値を入れ替えただけ（選択タブの反転面上でコントラストを確保する仕組み）。
 **light の `tab.activeText` `#f3f0fa` は `bg.base` `#fcfbfe` と別値**（on.accent の流用不可）。

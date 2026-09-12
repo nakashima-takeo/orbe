@@ -37,15 +37,14 @@ struct EditorEmptyView: View {
   }
 }
 
-/// 空状態のキー表記（枠 hairline 0.14・地 fill 0.05・radius 4・padding 1 7）。light は見本の換算
-/// （hairline ×1.4 / fill ×0.6）。
+/// 空状態のキー表記（枠 hairline・地 fill・radius 4・padding 1 7）。
 private struct EditorKbd: View {
   let key: String
   @Environment(\.colorScheme) private var scheme
 
   // 見本の dark 値。light は換算（地 ×0.6 / 枠 ×1.4）。
-  private static let fill: CGFloat = 0.05
-  private static let border: CGFloat = 0.14
+  private static let fillAlpha: CGFloat = 0.05
+  private static let borderAlpha: CGFloat = 0.14
 
   var body: some View {
     let dark = scheme == .dark
@@ -60,12 +59,12 @@ private struct EditorKbd: View {
       .padding(Theme.Stroke.hairline)
       .background(
         RoundedRectangle(cornerRadius: Theme.Radius.sm)
-          .fill(Color.theme.surfaceInk.opacity(dark ? Self.fill : Self.fill * 0.6))
+          .fill(Color.theme.surfaceInk.opacity(dark ? Self.fillAlpha : Self.fillAlpha * 0.6))
       )
       .overlay(
         RoundedRectangle(cornerRadius: Theme.Radius.sm)
           .strokeBorder(
-            Color.theme.borderInk.opacity(dark ? Self.border : Self.border * 1.4),
+            Color.theme.borderInk.opacity(dark ? Self.borderAlpha : Self.borderAlpha * 1.4),
             lineWidth: Theme.Stroke.hairline))
   }
 }
