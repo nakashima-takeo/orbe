@@ -12,15 +12,34 @@ extension Theme.Color {
   static let editorGhost = editorDyn(light: 0xd9d3e6, dark: 0x3d3752)
   /// エディター面のアイコン・kbd の文字。dark / light とも kbKeyText と偶然同値だが役割が違うので別トークン。
   static let editorIcon = editorDyn(light: 0x766e8d, dark: 0xa99fb8)
+  /// コードの素の文字（役割を持たない字）。dark / light とも statusText と偶然同値だが役割が違うので別トークン。
+  static let editorCodeText = editorDyn(light: 0x4d4368, dark: 0xcdc7e2)
+  /// 行番号。textMuted の α .55。
+  static let editorLineNumber = editorDynA(light: 0x8d85a3, dark: 0x8b8397, alpha: 0.55)
+
+  // 構文色。dark は VSCode Dark Modern の実在トークン色（5 色は端末 ANSI と偶然同値だが、端末色は
+  // 別レイヤー〔design-system §8〕なので参照しない）。light は見本の値。
+  static let syntaxKeyword = editorDyn(light: 0x2f63c9, dark: 0x569cd6)
+  static let syntaxKeywordControl = editorDyn(light: 0xa03a98, dark: 0xc586c0)
+  static let syntaxType = editorDyn(light: 0x178a72, dark: 0x4ec9b0)
+  static let syntaxFunction = editorDyn(light: 0x8a7a12, dark: 0xdcdcaa)
+  static let syntaxString = editorDyn(light: 0xb0562a, dark: 0xce9178)
+  static let syntaxComment = editorDyn(light: 0x8d87a0, dark: 0x7a7387)
+  static let syntaxVariable = editorDyn(light: 0x2a7bbd, dark: 0x9cdcfe)
+  static let syntaxPunctuation = editorDyn(light: 0x4a4658, dark: 0xd4d4d4)
 
   /// `DesignTokens.swift` の private ヘルパは参照不可なので自前で持つ。
   private static func editorDyn(light: Int, dark: Int) -> NSColor {
+    editorDynA(light: light, dark: dark, alpha: 1)
+  }
+
+  private static func editorDynA(light: Int, dark: Int, alpha: CGFloat) -> NSColor {
     NSColor(name: nil) { ap in
       let hex = ap.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
       return NSColor(
         srgbRed: CGFloat((hex >> 16) & 0xff) / 255,
         green: CGFloat((hex >> 8) & 0xff) / 255,
-        blue: CGFloat(hex & 0xff) / 255, alpha: 1)
+        blue: CGFloat(hex & 0xff) / 255, alpha: alpha)
     }
   }
 }
@@ -30,6 +49,12 @@ extension Theme.Typography {
   static let editorLead = NSFont.systemFont(ofSize: 13, weight: .regular)
   /// エディター面のショートカット行・kbd（mono 12）。
   static let editorHint = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+  /// コード本体（mono 12）。
+  static let editorCode = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+  /// 行番号（mono 11）。
+  static let editorLineNumber = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+  /// コード本体の行高（pt。`lineBody` 等の倍率とは単位が違う）。
+  static let editorLineHeight: CGFloat = 18
 }
 
 extension Theme.Motion {

@@ -22,6 +22,13 @@ final class TerminalTab {
   /// 面の配置が変わった通知（永続保存・chrome 更新・焦点の追従は上位）。
   var onFacesChange: (() -> Void)?
 
+  /// エディター面のセッション（開いた文書の列と焦点の文書）。書き手はタブだけで、外（制御 API）は
+  /// `openFile` を通る。エディターの型は UI に閉じた `@MainActor` で、タブはその外（main スレッド規律の
+  /// nonisolated）にいるため、触る点（生成・配線・`openFile`）だけ `MainActor.assumeIsolated` で境を越える。
+  let editor: EditorSession
+  /// 開いた文書の列・焦点の文書・未保存の有無が変わった通知（chrome 更新は上位）。
+  var onEditorChange: (() -> Void)?
+
   /// このタブが materialize 済み側にある現在状態。現仕様の遷移は false → true のみだが、
   /// 履歴bitではなく、将来の再休眠では false へ戻せる責務として扱う。
   /// 永続化せず、surface 生成の成功可否ではなく window hierarchy への attach 開始時に true とする。
@@ -114,9 +121,13 @@ final class TerminalTab {
   }
 
   /// 通常タブは cwd だけ。エージェント起動タブは起動コマンド・追加環境変数も指定して起こす。
-  init(cwd: String, command: String? = nil, env: [String: String] = [:]) {
+  init(
+    cwd: String, command: String? = nil, env: [String: String] = [:],
+    editorSurfaces: EditorSurfaces = .shared
+  ) {
     resumeSpawn = nil
     faces = .terminalOnly
+    editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
     view = Self.makeView(cwd: cwd, faces: faces)
     groupKey = Self.groupKey(cwd: cwd)
     surface.initialCommand = command
@@ -137,6 +148,7 @@ final class TerminalTab {
   init(restoring state: TabState, resumeSpawn: @escaping ResumeSpawn) {
     self.resumeSpawn = resumeSpawn
     faces = state.faces.normalized
+    editor = MainActor.assumeIsolated { EditorSession(surfaces: .shared) }
     view = Self.makeView(cwd: state.cwd, faces: faces)
     groupKey = Self.groupKey(cwd: state.cwd)
     explicitTitle = state.explicitTitle
@@ -151,11 +163,20 @@ final class TerminalTab {
   }
 
   /// 両面がタブを知り（事実の通知先）、背の求める配置がタブの状態を通って器へ戻るよう配線する。
+  /// セッションの変化は器（面の中身）へ写してから上位へ 1 本で上げる。
   private func wireView() {
     surface.tab = self
     view.editor.tab = self
     view.onFacesRequested = { [weak self] faces, animated in
       self?.setFaces(faces, animated: animated)
+    }
+    MainActor.assumeIsolated {
+      editor.onChange = { [weak self] in
+        guard let self else { return }
+        view.editor.show(editor.activeDocument)
+        onEditorChange?()
+      }
+      editor.onFocus = { [weak self] in self?.paneDidFocus(.editor) }
     }
   }
 
@@ -284,6 +305,11 @@ final class TerminalTab {
   func paneDidFocus(_ face: Face) {
     guard faces.focus != face else { return }
     setFaces(FaceLayout(editorRatio: faces.editorRatio, focus: face), animated: false)
+  }
+
+  /// エディターでファイルを開いて焦点の文書にする（制御 API の入口）。読めない・UTF-8 でないは throw。
+  func openFile(_ url: URL) throws {
+    try MainActor.assumeIsolated { try editor.open(url) }
   }
 
   /// 面（surface・エディター pane）からのウィンドウレベル chrome キー（タブ・workspace）を上位へ転送する。
