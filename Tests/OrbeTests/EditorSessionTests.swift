@@ -1,4 +1,5 @@
 import AppKit
+import OrbeEditorCore
 import XCTest
 
 @testable import Orbe
@@ -19,10 +20,20 @@ final class EditorSessionTests: OrbeTestCase {
     return url
   }
 
+  /// `body` の間に `onChange` が上がった本数。操作ごとの差分で見る——累積の絶対値は、別の操作が
+  /// 通知を 1 本増やしただけで、この仕様と関係なく落ちる。
+  private func notifications(_ session: EditorSession, during body: () throws -> Void) rethrows
+    -> Int
+  {
+    var count = 0
+    session.onChange = { count += 1 }
+    defer { session.onChange = nil }
+    try body()
+    return count
+  }
+
   func testOpenActivateCloseAndNotify() throws {
     let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
-    var changes = 0
-    session.onChange = { changes += 1 }
     let a = try file("a.txt", "a")
     let b = try file("b.txt", "b")
 
@@ -30,21 +41,19 @@ final class EditorSessionTests: OrbeTestCase {
     let docB = try session.open(b)
     XCTAssertTrue(session.activeDocument === docB)
     XCTAssertEqual(session.documents.count, 2)
-    XCTAssertEqual(changes, 2)
 
-    XCTAssertTrue(try session.open(a) === docA, "同じファイルは焦点を移すだけ")
-    XCTAssertTrue(session.activeDocument === docA)
+    var reopened: EditorDocument?
+    let reopenCount = try notifications(session) { reopened = try session.open(a) }
+    XCTAssertTrue(reopened === docA, "同じファイルは焦点を移すだけ")
     XCTAssertEqual(session.documents.count, 2)
-    XCTAssertEqual(changes, 3)
+    XCTAssertEqual(reopenCount, 1, "焦点が移ったので 1 本")
 
-    session.activate(docA)
-    XCTAssertEqual(changes, 3, "既に焦点なら通知しない")
+    XCTAssertEqual(notifications(session) { session.activate(docA) }, 0, "既に焦点なら通知しない")
 
-    session.close(docA)
+    XCTAssertEqual(notifications(session) { session.close(docA) }, 1)
     XCTAssertTrue(session.activeDocument === docB, "焦点の文書を閉じれば隣へ")
     session.close(docB)
     XCTAssertNil(session.activeDocument)
-    XCTAssertEqual(changes, 5)
   }
 
   func testUnsavedChangesAreNotified() throws {
