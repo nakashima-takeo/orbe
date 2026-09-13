@@ -15,8 +15,15 @@ final class TempGitRepo {
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     root = GitWorktreeRoot.normalizedPath(dir.path)
     XCTAssertTrue(git(["init", "-q", "-b", "main"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.email", "t@example.com"]).isSuccess)
-    XCTAssertTrue(git(["config", "user.name", "t"]).isSuccess)
+    // 開発者の global 設定（署名・hook・除外ファイル）を repo-local で封じる——`HOME` は隔離されないので、
+    // 封じないと commit が署名で落ちる・ユーザーの pre-commit が temp リポジトリで走る。
+    for (key, value) in [
+      ("user.email", "t@example.com"), ("user.name", "t"), ("commit.gpgsign", "false"),
+      ("core.hooksPath", dir.appendingPathComponent("no-hooks").path),
+      ("core.excludesFile", "/dev/null"),
+    ] {
+      XCTAssertTrue(git(["config", key, value]).isSuccess)
+    }
     try write("a.txt", "one\n")
     XCTAssertTrue(git(["add", "-A"]).isSuccess)
     XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
