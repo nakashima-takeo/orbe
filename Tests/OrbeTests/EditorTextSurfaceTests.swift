@@ -96,6 +96,22 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     XCTAssertEqual(document.surface.text, "", "もう 1 回で保存前の打鍵が戻る")
   }
 
+  /// 面は器の上端の余白を除いた高さに収まり、器の高さが変わっても収まり続ける（余白の分だけ長いと
+  /// 最下行が常に切れ、余白の帯が素地として露出する）。
+  func testSurfaceFitsTheContainerBelowTheTopInset() throws {
+    let surface = surfaces.make("x")
+    let container = surface.view
+    let inset = EditorStyle.make().topInset
+    container.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+    container.layoutSubtreeIfNeeded()
+    let scroll = try XCTUnwrap(container.subviews.first)
+    XCTAssertEqual(scroll.frame, NSRect(x: 0, y: inset, width: 800, height: 600 - inset))
+
+    container.frame = NSRect(x: 0, y: 0, width: 500, height: 300)
+    container.layoutSubtreeIfNeeded()
+    XCTAssertEqual(scroll.frame, NSRect(x: 0, y: inset, width: 500, height: 300 - inset))
+  }
+
   /// 色付けは本文を書き換えないので、色の付いた文書を開いただけでは未保存にならない
   /// （面の本文を編集して色を置いていれば、開いた瞬間に全ファイルが未保存になる）。
   func testOpeningAColoredDocumentIsNotDirty() throws {

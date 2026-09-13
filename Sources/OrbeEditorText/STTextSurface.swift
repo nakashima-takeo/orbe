@@ -9,7 +9,7 @@ import STTextView
 final class STTextSurface: NSObject, TextSurface {
   /// 上端の余白を持つ器。スクロールビューの contentInsets は使わない——横に浮くガター（floating
   /// subview）が inset を無視して行番号だけ下へずれる（STTextView が FB21059465 として回避している）。
-  private let container = FlippedView()
+  private let container = SurfaceContainerView()
   private let scrollView: NSScrollView
   private let textView: SurfaceTextView
 
@@ -28,7 +28,6 @@ final class STTextSurface: NSObject, TextSurface {
     textView = scrollView.documentView as! SurfaceTextView
     self.style = style
     super.init()
-    scrollView.autoresizingMask = [.width, .height]
     container.addSubview(scrollView)
     // clear にすると gutter も clear になり、NSVisualEffectView の地が敷かれない（器の veil が透ける）。
     textView.backgroundColor = .clear
@@ -87,7 +86,7 @@ final class STTextSurface: NSObject, TextSurface {
     textView.defaultParagraphStyle = paragraph
     textView.insertionPointColor = style.caretColor
     textView.caretSize = style.caretSize
-    scrollView.frame = container.bounds.insetBy(top: style.topInset)
+    container.topInset = style.topInset
     textView.showsLineNumbers = true
     if let gutter = textView.gutterView {
       gutter.font = style.gutterFont
@@ -106,13 +105,21 @@ final class STTextSurface: NSObject, TextSurface {
   }
 }
 
-private final class FlippedView: NSView {
-  override var isFlipped: Bool { true }
-}
+/// 上端の余白を空けてスクロールビューを置く器。器の高さが変わるたびに置き直す（autoresizing は
+/// 起点が .zero だと余白を保てず、面が器より余白の分だけ長くなって最下行が切れる）。
+private final class SurfaceContainerView: NSView {
+  var topInset: CGFloat = 0 {
+    didSet { needsLayout = true }
+  }
 
-extension NSRect {
-  fileprivate func insetBy(top: CGFloat) -> NSRect {
-    NSRect(x: minX, y: minY + top, width: width, height: max(0, height - top))
+  override var isFlipped: Bool { true }
+
+  override func layout() {
+    super.layout()
+    for subview in subviews {
+      subview.frame = NSRect(
+        x: 0, y: topInset, width: bounds.width, height: max(0, bounds.height - topInset))
+    }
   }
 }
 

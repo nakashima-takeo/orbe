@@ -85,7 +85,7 @@ final class EditorPaneView: NSView {
   }
 
   override func mouseDown(with event: NSEvent) {
-    window?.makeFirstResponder(self)
+    window?.makeFirstResponder(focusTarget)
   }
 
   override func becomeFirstResponder() -> Bool {

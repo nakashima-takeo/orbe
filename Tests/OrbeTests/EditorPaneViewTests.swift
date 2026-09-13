@@ -127,6 +127,24 @@ final class EditorPaneViewTests: OrbeTestCase {
     window.orderOut(nil)
   }
 
+  /// 面のクリックは焦点の行き先（文書があればテキスト面）へ焦点を運ぶ。pane 自身を指すと、テキスト面が
+  /// 覆っていない余白を押しただけで打鍵が消える。
+  func testMouseDownFocusesTheFocusTarget() throws {
+    let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.view.editor
+    let window = hosted(tab)
+    window.makeFirstResponder(nil)
+
+    pane.mouseDown(with: .mouse(.leftMouseDown, at: pane.centerInWindow, in: window))
+    XCTAssertTrue(window.firstResponder === pane, "空状態では面自身")
+
+    let document = try tab.editor.open(try file("m.txt", "x"))
+    window.makeFirstResponder(nil)
+    pane.mouseDown(with: .mouse(.leftMouseDown, at: pane.centerInWindow, in: window))
+    XCTAssertTrue(window.firstResponder === document.surface.responder, "文書があればテキスト面")
+    window.orderOut(nil)
+  }
+
   func testCommandSSavesTheActiveDocument() throws {
     let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let url = try file("c.txt", "abc")
