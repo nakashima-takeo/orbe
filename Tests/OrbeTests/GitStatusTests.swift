@@ -52,13 +52,16 @@ final class GitStatusTests: OrbeTestCase {
   func testBadgeDerivation() {
     let status = parse([
       ordinary(".M", "m.txt"), ordinary("M.", "staged.txt"), ordinary("A.", "a.txt"),
-      ordinary("AM", "am.txt"), ordinary(".T", "t.txt"), unmerged("c.txt"), "? u.txt", "? dir/",
+      ordinary("AM", "am.txt"), ordinary(".T", "t.txt"), ordinary(".D", "d.txt"),
+      renamed("R.", "r.txt"), "old.txt", unmerged("c.txt"), "? u.txt", "? dir/",
     ])
     XCTAssertEqual(status.badge(of: "m.txt"), .modified)
     XCTAssertEqual(status.badge(of: "staged.txt"), .modified)
     XCTAssertEqual(status.badge(of: "a.txt"), .added)
     XCTAssertEqual(status.badge(of: "am.txt"), .modified, "index に追加した後の編集は unstaged 側が勝つ")
     XCTAssertEqual(status.badge(of: "t.txt"), .modified)
+    XCTAssertEqual(status.badge(of: "d.txt"), .modified, "削除も M")
+    XCTAssertEqual(status.badge(of: "r.txt"), .modified, "rename も M")
     XCTAssertEqual(status.badge(of: "c.txt"), .conflicted)
     XCTAssertEqual(status.badge(of: "u.txt"), .untracked)
     XCTAssertEqual(status.badge(of: "dir"), .untracked, "未追跡ディレクトリ自身")

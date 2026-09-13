@@ -53,8 +53,56 @@ final class GitRepoObserveTests: OrbeTestCase {
     XCTAssertEqual(status.badge(of: "notes.txt"), .untracked)
     XCTAssertEqual(status.badge(of: "dir/inner.txt"), .untracked, "未追跡ディレクトリの中")
     XCTAssertEqual(status.untrackedDirectories, ["dir"])
-    XCTAssertFalse(
-      FileManager.default.fileExists(atPath: repo.root + "/.git/index.lock"), "観測は index を書き換えない")
+  }
+
+  /// 観測は index を書き換えない。stat だけ変わったファイル（同じ内容で mtime が違う）を見ても、
+  /// キャッシュの更新で index を書き直さない——ユーザーが作業中のリポジトリを見るだけでロックを取らない。
+  func testStatusDoesNotRewriteTheIndex() throws {
+    let git = try repo.open()
+    let index = repo.root + "/.git/index"
+    try FileManager.default.setAttributes(
+      [.modificationDate: Date(timeIntervalSinceNow: -100)], ofItemAtPath: repo.root + "/a.txt")
+    let before = try Data(contentsOf: URL(fileURLWithPath: index))
+
+    XCTAssertNotNil(status(git))
+    XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: index)), before)
+  }
+
+  /// 観測（status・index の OID・blob）は、同じ runner で詰まっている `.exclusive` の書き込みを待たない。
+  /// 待つと、巨大リポジトリの status がある間だけでなく、hook で止まった commit の間もバッジが更新されない。
+  func testObservationIsNotBlockedByAHangingExclusiveWrite() throws {
+    let fixture = try GitHangFixture()
+    addTeardownBlock { fixture.cleanup() }
+    try fixture.installHook("pre-commit", body: fixture.waitingBody)
+    let runner = GitRunner(idleTimeout: 60)
+    var opened: GitRepo?
+    let open = expectation(description: "open")
+    GitRepo.open(cwd: fixture.root, runner: runner) {
+      opened = $0
+      open.fulfill()
+    }
+    wait(for: [open], timeout: 20)
+    let git = try XCTUnwrap(opened)
+    let hangFinished = expectation(description: "hanging exclusive commit")
+    runner.run(
+      ["commit", "--allow-empty", "-m", "blocked"], cwd: fixture.root, lane: .exclusive
+    ) { _ in hangFinished.fulfill() }
+    XCTAssertTrue(fixture.waitUntilHung(), "前提: 書き込みが hook でハングしていること")
+
+    let done = expectation(description: "status / ls-files / cat-file")
+    git.status { status in
+      XCTAssertNotNil(status)
+      git.indexEntries(relativePaths: ["a.txt"]) { entries in
+        git.blob(oid: entries?["a.txt"] ?? "") { data in
+          XCTAssertEqual(data.flatMap { String(data: $0, encoding: .utf8) }, "x\n")
+          done.fulfill()
+        }
+      }
+    }
+    wait(for: [done], timeout: 3)
+
+    fixture.release()
+    wait(for: [hangFinished], timeout: 60)
   }
 
   /// index の OID は `git add` で変わり、blob はその版の生の中身。index に無い・競合中は引けない。
