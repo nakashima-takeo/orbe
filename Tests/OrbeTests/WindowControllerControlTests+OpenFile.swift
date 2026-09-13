@@ -36,50 +36,14 @@ extension WindowControllerControlTests {
     let result = wc.controlOpenFile(tabId: second, path: "note.md")
     guard case .success = result else { return XCTFail("\(result)") }
     XCTAssertEqual(tab.faces, FaceLayout(editorRatio: 1, focus: .editor), "隠れていれば全面")
-    let opened = MainActor.assumeIsolated { tab.editor.activeDocument?.url.standardizedFileURL }
-    XCTAssertEqual(opened, url.standardizedFileURL)
+    let opened = MainActor.assumeIsolated { tab.editor.activeDocument?.url }
+    XCTAssertEqual(opened, url.resolvingSymlinksInPath())
     XCTAssertTrue(wc.controlListTabs()[1]["active"] as? Bool == true, "そのタブが選ばれる")
     XCTAssertTrue(wc.window.firstResponder === tab.focusTarget, "テキスト面へフォーカス")
 
     tab.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
     _ = wc.controlOpenFile(tabId: second, path: url.path)
     XCTAssertEqual(tab.faces, FaceLayout(editorRatio: 0.5, focus: .editor), "分割中は焦点だけ")
-  }
-
-  /// symlink は実体へ解いて開く——保存（一時ファイルの rename）がリンクを通常ファイルに置き換えず、
-  /// 実体へ届く。リンク経由と実体のパスで開いても同じ 1 文書。
-  func testOpenFileResolvesSymlinksSoSavingReachesTheTarget() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
-    let target = try caseFile("real.txt", "OLD")
-    let link = dir.appendingPathComponent("link.txt")
-    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
-    let wc = try restore(
-      activeWorkspace: 0,
-      [tabbed("main", tabs: [TabState(cwd: dir.path, agent: nil, explicitTitle: nil)])])
-    let tabId = try XCTUnwrap(wc.controlListTabs()[0]["tabId"] as? Int)
-    let tab = try XCTUnwrap(wc.controlResolveTab(tabId))
-
-    guard case .success = wc.controlOpenFile(tabId: tabId, path: "link.txt") else {
-      return XCTFail("リンク経由で開ける")
-    }
-    guard case .success = wc.controlOpenFile(tabId: tabId, path: target.path) else {
-      return XCTFail("実体のパスでも開ける")
-    }
-    let (count, opened) = MainActor.assumeIsolated {
-      (tab.editor.documents.count, tab.editor.documents.first?.url)
-    }
-    XCTAssertEqual(count, 1, "同じ実体は 1 文書")
-    XCTAssertEqual(opened, target.resolvingSymlinksInPath())
-
-    try MainActor.assumeIsolated {
-      let responder = try XCTUnwrap(tab.editor.activeDocument?.surface.responder)
-      responder.perform(Selector(("insertText:")), with: "NEW ")
-      try tab.editor.saveActive()
-    }
-    XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "NEW OLD", "実体へ書かれる")
-    let attributes = try FileManager.default.attributesOfItem(atPath: link.path)
-    XCTAssertEqual(
-      attributes[.type] as? FileAttributeType, .typeSymbolicLink, "リンクは通常ファイルにならない")
   }
 
   func testOpenFileErrors() throws {

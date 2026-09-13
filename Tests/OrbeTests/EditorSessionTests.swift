@@ -75,6 +75,28 @@ final class EditorSessionTests: OrbeTestCase {
     XCTAssertEqual(changes, 2)
   }
 
+  /// 文書の識別は symlink を解いた実体——リンク経由と実体のパスで開いても同じ 1 文書で、保存
+  /// （一時ファイルの rename）がリンクを通常ファイルに置き換えず実体へ届く。
+  func testOpenResolvesSymlinksSoSavingReachesTheTarget() throws {
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    let target = try file("real.txt", "OLD")
+    let link = target.deletingLastPathComponent().appendingPathComponent("link.txt")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+    let viaLink = try session.open(link)
+    let viaTarget = try session.open(target)
+    XCTAssertTrue(viaLink === viaTarget, "同じ実体は 1 文書")
+    XCTAssertEqual(session.documents.count, 1)
+    XCTAssertEqual(viaLink.url, target.resolvingSymlinksInPath())
+
+    viaLink.surface.responder.perform(Selector(("insertText:")), with: "NEW ")
+    try session.saveActive()
+    XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "NEW OLD", "実体へ書かれる")
+    let attributes = try FileManager.default.attributesOfItem(atPath: link.path)
+    XCTAssertEqual(
+      attributes[.type] as? FileAttributeType, .typeSymbolicLink, "リンクは通常ファイルにならない")
+  }
+
   func testOpenFailsForMissingOrBinary() throws {
     let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
     XCTAssertThrowsError(try session.open(URL(fileURLWithPath: "/nonexistent/x.txt")))

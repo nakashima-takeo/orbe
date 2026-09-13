@@ -21,8 +21,11 @@ final class EditorSession {
   var hasUnsavedChanges: Bool { documents.contains { $0.isDirty } }
 
   /// ファイルを開いて焦点にする。既に開いていれば焦点を移すだけ（本文は面にあるものが正）。
+  /// 文書の識別は symlink を解いた実体のパス——保存は一時ファイルの rename なので、リンクのパスへ書くと
+  /// リンク自体が通常ファイルに置き換わり実体へ届かない。同じ実体を別の綴りで開いても文書が割れない。
   @discardableResult
   func open(_ url: URL) throws -> EditorDocument {
+    let url = url.resolvingSymlinksInPath()
     if let existing = documents.first(where: { $0.url == url }) {
       activate(existing)
       return existing
