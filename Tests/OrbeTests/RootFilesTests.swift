@@ -217,6 +217,13 @@ final class RootFilesTests: OrbeTestCase {
     let bystander = Recorder()
     files.addObserver(bystander)
     XCTAssertNil(files.baseline(for: url), "死んだ観測者の関心は刈られる")
+
+    var another: Recorder? = Recorder()
+    files.addObserver(another!, interest: url)
+    pumpMain(until: { files.baseline(for: url) == "one\n" })
+    another = nil
+    try repo.write("b.txt", "b\n")
+    pumpMain(until: { files.baseline(for: url) == nil }, "観測者の出入りが無くても、次の取り直しで消える")
   }
 
   /// 競合中（stage 0 が無い）と UTF-8 でない index 版は baseline 無し。status には競合・A として出る。
