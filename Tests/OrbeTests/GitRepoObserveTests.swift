@@ -125,6 +125,24 @@ final class GitRepoObserveTests: OrbeTestCase {
     XCTAssertNil(blob(git, "0000000000000000000000000000000000000000"), "無い OID は nil")
   }
 
+  /// ファイル名は pathspec として解釈しない——`:` 始まり（magic）・`[` `*`（glob）でもそのファイルの
+  /// OID が引け、`:(` 始まりで git が fatal にならない（fatal だと根の全 baseline が凍る）。環境が
+  /// `GIT_LITERAL_PATHSPECS` を持っていても（`:(literal)` ごと literal にされる）結果は同じ。
+  func testIndexEntriesTakeFileNamesLiterally() throws {
+    let git = try repo.open()
+    let names = [":colon.txt", ":(x)weird.txt", "brackets[1].txt", "star*.txt", ":^neg.txt"]
+    for name in names { try repo.write(name, "\(name)\n") }
+    XCTAssertTrue(repo.git(["add", "--"] + names.map { ":(literal)" + $0 }).isSuccess)
+
+    let entries = try XCTUnwrap(indexEntries(git, names + ["brackets1.txt"]))
+    XCTAssertEqual(Set(entries.keys), Set(names), "5 つとも引け、glob が余計なものに当たらない")
+
+    setenv("GIT_LITERAL_PATHSPECS", "1", 1)
+    defer { unsetenv("GIT_LITERAL_PATHSPECS") }
+    XCTAssertEqual(
+      try XCTUnwrap(indexEntries(git, names)).count, names.count, "環境の pathspec 設定に左右されない")
+  }
+
   private func status(_ git: GitRepo) -> GitStatus? {
     var result: GitStatus?
     let done = expectation(description: "status")

@@ -21,13 +21,18 @@ extension GitRepo {
 
   /// index にある blob の OID（相対パス → OID。stage 0 だけ＝競合中のパスは含まない）。
   /// 空の問い合わせは git を起こさない。git が失敗したら nil。
+  ///
+  /// パスはファイル名そのもの（ユーザーのデータ）なので pathspec として解釈させない——`:` 始まりは magic、
+  /// `*` `[` は glob で、`:(` 始まりは fatal になって根の全 baseline が凍る。`:(literal)` を前置し、
+  /// これを無効化する環境変数は `GitRunner` が落とす。
   func indexEntries(relativePaths: [String], completion: @escaping ([String: String]?) -> Void) {
     guard !relativePaths.isEmpty else {
       completion([:])
       return
     }
     runner.run(
-      ["ls-files", "-s", "-z", "--"] + relativePaths, cwd: root, lane: .independent
+      ["ls-files", "-s", "-z", "--"] + relativePaths.map { ":(literal)" + $0 }, cwd: root,
+      lane: .independent
     ) { output in
       guard output.isSuccess else {
         completion(nil)

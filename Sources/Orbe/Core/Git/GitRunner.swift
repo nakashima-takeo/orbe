@@ -247,6 +247,12 @@ final class GitRunner {
     var env = ProcessInfo.processInfo.environment
     env["PATH"] = ShellPATH.shared.value()
     env["GIT_TERMINAL_PROMPT"] = "0"  // 資格情報等の対話でハングさせない
+    // pathspec の解釈を環境に変えさせない（`:(literal)` ごと literal 扱いにされる・glob が効く）。
+    for key in [
+      "GIT_LITERAL_PATHSPECS", "GIT_GLOB_PATHSPECS", "GIT_NOGLOB_PATHSPECS", "GIT_ICASE_PATHSPECS",
+    ] {
+      env.removeValue(forKey: key)
+    }
     return env
   }
 }
