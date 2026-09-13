@@ -141,6 +141,11 @@ final class GitRepoObserveTests: OrbeTestCase {
     defer { unsetenv("GIT_LITERAL_PATHSPECS") }
     XCTAssertEqual(
       try XCTUnwrap(indexEntries(git, names)).count, names.count, "環境の pathspec 設定に左右されない")
+    setenv("GIT_ICASE_PATHSPECS", "1", 1)
+    defer { unsetenv("GIT_ICASE_PATHSPECS") }
+    XCTAssertEqual(
+      try XCTUnwrap(indexEntries(git, names.map { $0.uppercased() })), [:],
+      "大小無視の照合は `:(literal)` を貫通する——別の綴りのキーで返さない")
   }
 
   private func status(_ git: GitRepo) -> GitStatus? {

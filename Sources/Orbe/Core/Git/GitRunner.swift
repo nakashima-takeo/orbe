@@ -247,7 +247,9 @@ final class GitRunner {
     var env = ProcessInfo.processInfo.environment
     env["PATH"] = ShellPATH.shared.value()
     env["GIT_TERMINAL_PROMPT"] = "0"  // 資格情報等の対話でハングさせない
-    // pathspec の解釈を環境に変えさせない（`:(literal)` ごと literal 扱いにされる・glob が効く）。
+    // pathspec の解釈を環境に変えさせない。LITERAL は `:(literal)` ごと literal にして黙って 0 件にし、
+    // ICASE は `:(literal)` を貫通して別の綴りのパスに当てる。GLOB / NOGLOB は明示 magic には効かないが、
+    // 両方立っていると pathspec を取る git が丸ごと fatal になる。
     for key in [
       "GIT_LITERAL_PATHSPECS", "GIT_GLOB_PATHSPECS", "GIT_NOGLOB_PATHSPECS", "GIT_ICASE_PATHSPECS",
     ] {
