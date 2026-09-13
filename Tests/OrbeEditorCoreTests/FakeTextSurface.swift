@@ -30,7 +30,12 @@ final class FakeTextSurface: TextSurface {
   func applyHighlights(_ spans: [HighlightSpan], in ranges: IndexSet) {
     appliedRanges.append(ranges)
     appliedSpans.append(spans)
-    highlights.removeAll { ranges.intersects(integersIn: Range($0.range)!) }
+    // 本物の rendering attribute と同じく、ranges と重なる部分だけ外し、外側の色は残す。
+    highlights = highlights.flatMap { span -> [HighlightSpan] in
+      var kept = IndexSet(integersIn: Range(span.range)!)
+      kept.subtract(ranges)
+      return kept.rangeView.map { HighlightSpan(range: NSRange($0), role: span.role) }
+    }
     highlights.append(contentsOf: spans)
   }
 

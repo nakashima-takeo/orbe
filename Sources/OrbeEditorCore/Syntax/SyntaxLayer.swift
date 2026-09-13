@@ -33,18 +33,20 @@ final class SyntaxLayer {
     return layer.didChangeContent(LanguageLayer.Content(string: text), using: input)
   }
 
-  /// 区間集合と交差する役割付き区間。並びは tree-sitter の優先順（後のものが上に塗られる）。
-  /// tree-sitter は集合と交差する**マッチ**を返し、そのマッチの他の capture は集合の外にありうる——
-  /// それをそのまま塗ると、集合の外の正しい色をこのマッチだけで決まった色で上書きするので落とす。
+  /// 区間集合の中の役割付き区間。並びは tree-sitter の優先順（後のものが上に塗られる）。
+  /// tree-sitter は集合と交差する**マッチ**を返すので、capture は集合の外へはみ出しうる（マッチの他の
+  /// capture が外にある・capture 自体が集合をまたぐ）。集合で切り、外には 1 文字も触らない——外は
+  /// 塗り直さないので、そこにある細かい capture の正しい色を広い capture の色で潰さない。
   func highlights(in set: IndexSet, text: String) -> [HighlightSpan] {
     guard let ranges = try? layer.highlights(in: set, provider: text.predicateTextProvider) else {
       return []
     }
-    return ranges.compactMap { named in
-      guard let range = Range(named.range), set.intersects(integersIn: range),
-        let role = CaptureRoleMap.role(for: named.name)
-      else { return nil }
-      return HighlightSpan(range: named.range, role: role)
+    return ranges.flatMap { named -> [HighlightSpan] in
+      guard let range = Range(named.range), let role = CaptureRoleMap.role(for: named.name)
+      else { return [] }
+      return set.intersection(IndexSet(integersIn: range)).rangeView.map {
+        HighlightSpan(range: NSRange($0), role: role)
+      }
     }
   }
 

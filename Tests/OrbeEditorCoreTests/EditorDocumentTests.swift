@@ -159,11 +159,11 @@ final class EditorDocumentTests: XCTestCase {
     XCTAssertEqual(document.lineIndex.lineCount, 3)
   }
 
-  /// 打鍵で塗るのは、塗り直す区間と交差する区間だけ——tree-sitter は区間と交差する**マッチ**を返し、
-  /// そのマッチの他の capture は区間の外にありうる。それを塗ると外の正しい色がそのマッチだけで決まった
-  /// 色で上書きされる（Go の `NewLineIndex` が 1 文字の挿入で function 色になる）。全位置へ 1 文字挿入し、
-  /// 塗った区間がすべて塗り直す区間と交差し、その外の色が動かないことを見る。
-  func testEditingPaintsOnlySpansIntersectingTheChangedRanges() throws {
+  /// 打鍵で塗るのは塗り直す区間の中だけ——tree-sitter は区間と交差する**マッチ**を返し、その capture は
+  /// 区間の外へはみ出しうる。はみ出しを塗ると外の正しい色が潰れる（Go の `NewLineIndex` が 1 文字の
+  /// 挿入で function 色になる）。全位置へ 1 文字挿入し、塗った区間がすべて塗り直す区間の中に収まり、
+  /// その外の色が動かないことを見る。
+  func testEditingPaintsOnlyInsideTheChangedRanges() throws {
     let source = try String(contentsOf: Queries.samples.appendingPathComponent("sample.go"))
     var strays: [String] = []
     var recolored: [String] = []
@@ -177,12 +177,10 @@ final class EditorDocumentTests: XCTestCase {
       let painted = try XCTUnwrap(surface.appliedRanges.last)
       let spans = try XCTUnwrap(surface.appliedSpans.last)
       if !painted.contains(integersIn: 0..<surface.length) { narrowEdits += 1 }
-      for span in spans where !painted.intersects(integersIn: Range(span.range)!) {
+      for span in spans where !painted.contains(integersIn: Range(span.range)!) {
         strays.append("挿入 \(position) → \(span.range) \(span.role)")
       }
-      var touched = painted
-      for span in spans { touched.insert(integersIn: Range(span.range)!) }
-      for offset in 0..<surface.length where !touched.contains(offset) && offset != position {
+      for offset in 0..<surface.length where !painted.contains(offset) && offset != position {
         let old = offset < position ? offset : offset - 1
         if surface.role(at: offset) != before[old] {
           recolored.append("挿入 \(position) → offset \(offset)")
@@ -190,9 +188,50 @@ final class EditorDocumentTests: XCTestCase {
       }
       withExtendedLifetime(document) {}
     }
-    XCTAssertEqual(strays, [], "塗り直す区間と交差しない区間を塗った")
-    XCTAssertEqual(recolored, [], "触っていない字の色が動いた")
+    XCTAssertEqual(strays, [], "塗り直す区間からはみ出して塗った")
+    XCTAssertEqual(recolored, [], "塗り直す区間の外の色が動いた")
     XCTAssertGreaterThan(narrowEdits, 0, "全文を塗り直す編集ばかりでは外を見ていない")
+  }
+
+  /// スクロールで新しく見えた区間を塗るとき、その手前にある画面内の字を潰さない——塗り直す区間が可視
+  /// 区間の真部分集合になるのはこの経路だけで、区間をまたぐ広い capture（文字列）が、区間の外にある
+  /// 細かい capture（文字列の中の `$` と `1`）の色を潰しうる。
+  func testScrollingIntoTheMiddleOfAStringKeepsTheColorsBeforeIt() throws {
+    let (document, surface) = try open(Queries.samples.appendingPathComponent("sample.sh"))
+    let quote = try XCTUnwrap(location(of: "\"$1\"", in: surface))
+    XCTAssertEqual(surface.role(at: quote), .string)
+    XCTAssertEqual(surface.role(at: quote + 1), .punctuation, "前提: `$` は文字列の中の記号")
+    XCTAssertEqual(surface.role(at: quote + 2), .variable, "前提: `1` は文字列の中の変数")
+
+    surface.visibleRange = NSRange(location: 0, length: 4)
+    surface.replace(NSRange(location: 2, length: 0), with: " ")
+    surface.scroll(to: NSRange(location: quote + 3, length: 40))
+
+    XCTAssertEqual(surface.role(at: quote + 2), .punctuation, "`$` の色は動かない")
+    XCTAssertEqual(surface.role(at: quote + 3), .variable, "`1` の色は動かない")
+    XCTAssertEqual(surface.role(at: quote + 4), .string)
+    withExtendedLifetime(document) {}
+  }
+
+  /// injection でも同じ——Markdown のコードフェンス全体を覆う capture（文字列）が、フェンスの中の
+  /// Swift の `let`（区間の外）を潰さない。
+  func testScrollingIntoAFencedCodeBlockKeepsTheInnerColorsBeforeIt() throws {
+    let (document, surface) = try open(Queries.samples.appendingPathComponent("sample.md"))
+    let keyword = try XCTUnwrap(location(of: "let index", in: surface))
+    XCTAssertEqual(surface.role(at: keyword), .keyword, "前提: フェンスの中の Swift が色付く")
+
+    surface.visibleRange = NSRange(location: 0, length: 4)
+    surface.replace(NSRange(location: 2, length: 0), with: " ")
+    surface.scroll(to: NSRange(location: keyword + 4, length: 40))
+
+    XCTAssertEqual(surface.role(at: keyword + 1), .keyword, "`let` の色は動かない")
+    withExtendedLifetime(document) {}
+  }
+
+  /// 本文の中の文字列の位置（無ければ nil）。
+  private func location(of needle: String, in surface: FakeTextSurface) -> Int? {
+    let range = (surface.text as NSString).range(of: needle)
+    return range.location == NSNotFound ? nil : range.location
   }
 
   /// 編集のたびに見えている区間を塗り直す（木の差分に出ない隣の役割変化を画面に残さない）。
