@@ -11,6 +11,12 @@ enum GitWorktreeRoot {
     ((path as NSString).standardizingPath as NSString).resolvingSymlinksInPath
   }
 
+  /// cwd が属するエディター／タブ行の根。「worktree ルート、管理外は cwd 自身」の規則の唯一の置き場
+  /// （タブの `groupKey` と、文書の結線が属する根のサービスが同じ値を見る）。
+  static func root(of cwd: String) -> String {
+    locate(cwd: cwd) ?? normalizedPath(cwd)
+  }
+
   /// 正規化した cwd から自身を含めて `/` まで上へ辿り、最初に `.git` を持つディレクトリ（正準形）。
   /// 無ければ nil。存在しないパス（消えた worktree）は `.git` が見つからないまま祖先へ上がるだけ——
   /// cwd が不在だと入口の正規化は効かないので、見つけたルートを改めて正準化して返す（`.git` が
