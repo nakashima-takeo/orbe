@@ -54,7 +54,7 @@ xcrun -sdk macosx metal --version
   API の正はこのコミットの `vendor/ghostty/include/ghostty.h`（外部契約は [spec/terminal/libghostty.md](../spec/terminal/libghostty.md)）。
 - libghostty は alpha・API 非安定のため、**main 追従ではなく固定 SHA で pin**。アップグレード時はヘッダの型差分を確認。
 - swift-tree-sitter は `exact: "0.10.0"`。リポジトリに迷子タグ 0.25.0（0.10.0 より古いコード）があり、`from:` で書くと静かにそちらへ解決される。
-- 文法のうち javascript 0.23.1 / css 0.23.2 / python 0.23.6 / yaml 0.7.0 は `exact`。これより新しいタグの manifest は scanner.c を source から落としており、リンクに失敗する。上げるときは当該タグの `Package.swift` の `sources` に scanner.c があるか確認する。
+- 文法のうち javascript 0.23.1 / css 0.23.2 / python 0.23.6 / yaml 0.7.0 は `exact`。これより新しいタグ（javascript / css / python の v0.25.0、yaml の v0.7.1 以降）の `Package.swift` は `sources` を `FileManager.default.fileExists(atPath: "src/scanner.c")` で条件分岐しており、依存として評価されると cwd 相対の判定が false になって scanner.c がリンクされない（ファイル自体は存在する）。上げるときは当該タグの `Package.swift` の `sources` が `fileExists` で分岐していないか確認する——分岐していれば scanner.c を持つ文法は必ずリンクに失敗する。`from:` の文法も上流が同じ manifest へ移れば同じ失敗をする。
 - swift-tree-sitter が引く tree-sitter 本体は 0.25 系。本体 0.27 で `Package.swift` が削除されたので、swift-tree-sitter を上げるときはその依存先も確認する。
 
 ## ビルド手順（Xcode 導入後）
