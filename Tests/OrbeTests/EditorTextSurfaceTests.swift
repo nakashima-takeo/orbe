@@ -96,6 +96,96 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     XCTAssertEqual(document.surface.text, "", "もう 1 回で保存前の打鍵が戻る")
   }
 
+  /// 本文の丸ごと置き換えは、通常の編集と同じく文書へ 1 回で届き（索引が追従する）、⌘Z で丸ごと戻る。
+  /// 置き換えの後に打った打鍵は置き換えと一緒には戻らない（区切りになる）。
+  func testReplaceAllReachesTheDocumentOnceAndUndoesAsOneStep() throws {
+    let (document, _) = try opened(try file("e.swift", "let a = 1\n"))
+    type("x", into: document)
+    var edits: [TextEdit] = []
+    let spy = SurfaceSpy(inner: document) { edits.append($0) }
+    document.surface.delegate = spy
+
+    document.surface.replaceAll(with: "struct S {}\nlet b = 2\n")
+    XCTAssertEqual(document.surface.text, "struct S {}\nlet b = 2\n")
+    XCTAssertEqual(
+      edits, [TextEdit(range: NSRange(location: 0, length: 11), replacementLength: 22)], "全体の置換 1 回"
+    )
+    XCTAssertEqual(document.lineIndex, LineIndex(text: document.surface.text))
+
+    document.surface.markUndoBoundary()
+    type("y", into: document)
+    document.surface.responder.undoManager?.undo()
+    XCTAssertEqual(document.surface.text, "struct S {}\nlet b = 2\n", "置き換えの後の打鍵だけ戻る")
+    document.surface.responder.undoManager?.undo()
+    XCTAssertEqual(document.surface.text, "xlet a = 1\n", "置き換えが丸ごと戻る")
+    withExtendedLifetime(spy) {}
+  }
+
+  /// 変換中（marked text）に本文が丸ごと差し替わっても、変換セッションは畳まれていて次の変換操作が古い
+  /// 本文の位置を指さない。⌘S は `keyDown` を経ずに解決されるので、変換途中でも保存が通って未保存が消え、
+  /// その直後の外部変更で差し替えが走りうる（畳まないと本文が短くなった側で落ち、長い側で無関係な位置が削れる）。
+  func testReplaceAllEndsAnInputMethodCompositionFirst() throws {
+    let (document, _) = try opened(try file("f.txt", "let a = 1\n"))
+    let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
+    document.surface.responder.perform(#selector(NSResponder.moveToEndOfDocument(_:)), with: nil)
+    client.setMarkedText(
+      "かん", selectedRange: NSRange(location: 0, length: 2),
+      replacementRange: NSRange(location: NSNotFound, length: 0))
+    XCTAssertTrue(client.hasMarkedText())
+    XCTAssertEqual(document.surface.text, "let a = 1\nかん")
+
+    document.surface.replaceAll(with: "short\n")
+    XCTAssertFalse(client.hasMarkedText(), "置き換えの前に変換を畳む")
+    // 畳めていなければ次の変換操作でプロセスごと落ち、残りのテストの結果が消える。
+    guard !client.hasMarkedText() else { return }
+    XCTAssertEqual(document.surface.text, "short\n")
+
+    client.setMarkedText(
+      "き", selectedRange: NSRange(location: 0, length: 1),
+      replacementRange: NSRange(location: NSNotFound, length: 0))
+    client.insertText("き", replacementRange: NSRange(location: NSNotFound, length: 0))
+    XCTAssertEqual(document.surface.text, "short\nき", "次の変換操作は新しい本文の末尾に付く")
+  }
+
+  /// 置き換え後の選択は解け、キャレットは同じオフセットへ戻る（契約は `TextSurface` の doc と code の
+  /// 「テキストエンジンの境界」）。本文が短くなる側は TextKit の丸めと結果が一致するので、ここでは clamp の
+  /// 有無を判別できない。
+  func testReplaceAllRestoresTheCaretOffsetAndCollapsesTheSelection() throws {
+    let (document, _) = try opened(try file("g.txt", "0123456789\n"))
+    let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
+    document.surface.responder.perform(#selector(NSResponder.moveToEndOfDocument(_:)), with: nil)
+    document.surface.responder.perform(
+      #selector(NSResponder.moveLeftAndModifySelection(_:)), with: nil)
+    XCTAssertEqual(client.selectedRange(), NSRange(location: 10, length: 1), "前提: 末尾側に選択がある")
+
+    document.surface.replaceAll(with: "01234\n")
+    XCTAssertEqual(
+      client.selectedRange(), NSRange(location: 6, length: 0), "選択は解け、末尾に収まる（TextKit の丸めと一致）")
+
+    document.surface.replaceAll(with: "0123456789abc\n")
+    XCTAssertEqual(client.selectedRange(), NSRange(location: 6, length: 0), "収まるなら同じオフセット")
+  }
+
+  /// 文書の前に割り込んで編集を記録する delegate（文書へも流す）。
+  private final class SurfaceSpy: TextSurfaceDelegate {
+    let inner: EditorDocument
+    let record: (TextEdit) -> Void
+    init(inner: EditorDocument, record: @escaping (TextEdit) -> Void) {
+      self.inner = inner
+      self.record = record
+    }
+    func surface(_ surface: any TextSurface, didChange edit: TextEdit) {
+      record(edit)
+      inner.surface(surface, didChange: edit)
+    }
+    func surface(_ surface: any TextSurface, focusDidChange focused: Bool) {
+      inner.surface(surface, focusDidChange: focused)
+    }
+    func surfaceDidLayoutViewport(_ surface: any TextSurface) {
+      inner.surfaceDidLayoutViewport(surface)
+    }
+  }
+
   /// 面は器の上端の余白を除いた高さに収まり、器の高さが変わっても収まり続ける（余白の分だけ長いと
   /// 最下行が常に切れ、余白の帯が素地として露出する）。
   func testSurfaceFitsTheContainerBelowTheTopInset() throws {

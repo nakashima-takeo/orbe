@@ -9,7 +9,9 @@ final class EditorSession {
   private let surfaces: EditorSurfaces
   private(set) var documents: [EditorDocument] = []
   private(set) var activeDocument: EditorDocument?
-  /// 列・焦点・未保存の有無が変わった。
+  /// 文書ごとの根のサービスとの結線。文書と同寿命（閉じれば捨てる）。
+  private var links: [ObjectIdentifier: DocumentLink] = [:]
+  /// 列・焦点・未保存の有無・「ディスクが変わった」の有無が変わった。
   var onChange: (() -> Void)?
   /// 焦点の文書のテキスト面が first responder になった。
   var onFocus: (() -> Void)?
@@ -30,11 +32,14 @@ final class EditorSession {
       activate(existing)
       return existing
     }
-    let text = try EditorDocument.read(url)
+    let contents = try EditorDocument.read(url)
     let document = EditorDocument(
-      url: url, surface: surfaces.make(text), registry: surfaces.registry)
+      url: url, contents: contents, surface: surfaces.make(contents.text),
+      registry: surfaces.registry)
     document.onDirtyChange = { [weak self] _ in self?.onChange?() }
+    document.onDiskChange = { [weak self] _ in self?.onChange?() }
     document.onFocusChange = { [weak self] focused in if focused { self?.onFocus?() } }
+    links[ObjectIdentifier(document)] = DocumentLink(document: document)
     documents.append(document)
     activeDocument = document
     onChange?()
@@ -49,19 +54,16 @@ final class EditorSession {
     onChange?()
   }
 
-  func save(_ document: EditorDocument) throws {
-    try document.save()
-  }
-
-  func saveActive() throws {
-    guard let activeDocument else { return }
-    try save(activeDocument)
+  /// 焦点の文書を保存する。force でなければ、ディスクが変わっていれば失敗する（→ `EditorDocument.save`）。
+  func saveActive(force: Bool = false) throws {
+    try activeDocument?.save(force: force)
   }
 
   /// 文書を閉じる（面も一緒に消える）。未保存でも黙って捨てる。焦点だった文書を閉じれば隣の文書へ。
   func close(_ document: EditorDocument) {
     guard let index = documents.firstIndex(where: { $0 === document }) else { return }
     documents.remove(at: index)
+    links[ObjectIdentifier(document)] = nil
     if activeDocument === document {
       activeDocument = documents.isEmpty ? nil : documents[min(index, documents.count - 1)]
     }

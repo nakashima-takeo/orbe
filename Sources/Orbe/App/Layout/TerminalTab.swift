@@ -97,9 +97,9 @@ final class TerminalTab {
   /// （書くのは init・`pwdChanged`・テストだけ）。
   var groupKey: String
 
-  /// 「管理外は cwd 自身」というタブグループの規則。
+  /// タブグループの規則は根の規則そのもの（`GitWorktreeRoot.root(of:)`）。
   static func groupKey(cwd: String) -> String {
-    GitWorktreeRoot.locate(cwd: cwd) ?? GitWorktreeRoot.normalizedPath(cwd)
+    GitWorktreeRoot.root(of: cwd)
   }
 
   /// このタブの表示タイトル。① explicitTitle ?? ② アプリ報告タイトル ?? ③ derived(cwd, root)。

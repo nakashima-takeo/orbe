@@ -33,8 +33,11 @@ final class EditorDocumentTests: XCTestCase {
   }
 
   private func open(_ url: URL) throws -> (EditorDocument, FakeTextSurface) {
-    let surface = FakeTextSurface(text: try EditorDocument.read(url))
-    return (EditorDocument(url: url, surface: surface, registry: registry), surface)
+    let contents = try EditorDocument.read(url)
+    let surface = FakeTextSurface(text: contents.text)
+    return (
+      EditorDocument(url: url, contents: contents, surface: surface, registry: registry), surface
+    )
   }
 
   // MARK: - 読む

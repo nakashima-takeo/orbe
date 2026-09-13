@@ -29,7 +29,8 @@ final class GitRunner {
     /// 同一リポジトリの ref・作業ツリーを書く操作。共有 queue の barrier で単独直列化する
     /// （git のロックは待たずに即 fatal するため、順番はアプリ側で作る）。
     case exclusive
-    /// 共有チェックアウトと領域が交わらない操作。独立レーンで走らせ、barrier チェーンに載せない。
+    /// 共有チェックアウトと領域が交わらない操作、または結果が古くても取り直せる観測（status・index の
+    /// 読み。監視が取り直す）。独立レーンで走らせ、barrier チェーンに載せない。
     case independent
   }
 
@@ -246,6 +247,14 @@ final class GitRunner {
     var env = ProcessInfo.processInfo.environment
     env["PATH"] = ShellPATH.shared.value()
     env["GIT_TERMINAL_PROMPT"] = "0"  // 資格情報等の対話でハングさせない
+    // pathspec の解釈を環境に変えさせない。LITERAL は `:(literal)` ごと literal にして黙って 0 件にし、
+    // ICASE は `:(literal)` を貫通して別の綴りのパスに当てる。GLOB / NOGLOB は明示 magic には効かないが、
+    // 両方立っていると pathspec を取る git が丸ごと fatal になる。
+    for key in [
+      "GIT_LITERAL_PATHSPECS", "GIT_GLOB_PATHSPECS", "GIT_NOGLOB_PATHSPECS", "GIT_ICASE_PATHSPECS",
+    ] {
+      env.removeValue(forKey: key)
+    }
     return env
   }
 }

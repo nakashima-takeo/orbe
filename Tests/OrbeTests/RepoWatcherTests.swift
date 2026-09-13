@@ -1,0 +1,145 @@
+import XCTest
+
+@testable import Orbe
+
+/// 実 FSEvents: 根の下の変化がパス集合として、git dir の中の変化は「git が変わった」だけとして、根の綴りで届く。
+/// 壊れると外部変更が一つも拾えない（temp dir は `/var` が symlink で、実パスのまま比べると根に当たらない）、
+/// `.git/objects` の churn で status を取り直し続ける、ビルド中に通知が出ない。
+final class RepoWatcherTests: OrbeTestCase {
+  private var repo: TempGitRepo!
+  private var batches: [RepoWatcher.Batch] = []
+  private var watcher: RepoWatcher?
+
+  override func setUpWithError() throws {
+    repo = try TempGitRepo()
+    XCTAssertTrue(repo.root.hasPrefix("/var/"), "前提: temp dir は symlink 経由の綴り（\(repo.root)）")
+    let gitDir = repo.root + "/.git"
+    watcher = RepoWatcher(roots: [repo.root, gitDir], gitDirs: [gitDir]) { [weak self] batch in
+      self?.batches.append(batch)
+    }
+    XCTAssertNotNil(watcher)
+    // fixture の初期 commit が残した変化が、監視を始めた後の最初の配達に混ざって届くことがある（FSEvents
+    // の「今から」の境界は厳密ではない）。目印を 1 つ書いてその配達を待ち、以後のテストが自分の起こした
+    // 変化だけを見るようにする——配達は起きた順なので、目印より前の変化はここで出尽くす。
+    try repo.write(".orbe-watch-marker", "")
+    pumpMain(until: { batches.contains { $0.paths.contains(repo.root + "/.orbe-watch-marker") } })
+    batches.removeAll()
+  }
+
+  override func tearDownWithError() throws {
+    watcher = nil
+    repo.cleanup()
+  }
+
+  func testWorktreeChangesArriveAsRootSpelledPaths() throws {
+    try repo.write("src/new.txt", "x\n")
+    pumpMain(until: { !batches.isEmpty }, "書き込みの通知")
+    let batch = try XCTUnwrap(batches.first)
+    XCTAssertTrue(batch.paths.contains(repo.root + "/src/new.txt"), "根の綴りで届く: \(batch.paths)")
+    XCTAssertFalse(batch.paths.contains { $0.hasPrefix("/private/") }, "実パスのままにしない")
+    XCTAssertFalse(batch.scanAll)
+  }
+
+  /// git の操作は「git が変わった」だけを立て、パス集合には `.git` の中を入れない。objects（loose・
+  /// multi-pack-index）・reflog・他の worktree や submodule の私有状態・`.lock` の出入りだけでは
+  /// 「git が変わった」にならない——それだけではバッチが生まれないので、作業ツリーの変化を 1 つ起こして
+  /// そのバッチ（畳まれる）で見る。
+  func testGitOperationsRaiseGitChangedWithoutPaths() throws {
+    XCTAssertTrue(
+      GitRunner.shared.runSync(
+        ["hash-object", "-w", "--stdin"], cwd: repo.dir.path, stdin: Data("blob\n".utf8)
+      )
+      .isSuccess)
+    for noise in [
+      "index.lock", "objects/pack/multi-pack-index", "logs/HEAD", "worktrees/other/index",
+      "worktrees/other/HEAD", "modules/sub/index",
+    ] {
+      try repo.write(".git/" + noise, "n\n")
+    }
+    try FileManager.default.removeItem(atPath: repo.root + "/.git/index.lock")
+    try repo.write("a.txt", "changed\n")
+    pumpMain(until: { !batches.isEmpty }, "作業ツリーの変化")
+    XCTAssertEqual(batches.map(\.gitChanged), [false], "関係ない出入りは git の変化ではない")
+    batches.removeAll()
+
+    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+    pumpMain(until: { batches.contains { $0.gitChanged } }, "index の変化")
+    XCTAssertTrue(
+      batches.allSatisfy { $0.paths.allSatisfy { !$0.contains("/.git/") } },
+      "git dir の中はパスに出ない: \(batches)")
+    batches.removeAll()
+
+    XCTAssertTrue(repo.git(["commit", "-qm", "c"]).isSuccess)
+    pumpMain(until: { batches.contains { $0.gitChanged } }, "HEAD / refs の変化")
+    batches.removeAll()
+
+    XCTAssertTrue(repo.git(["tag", "t"]).isSuccess)
+    XCTAssertTrue(repo.git(["pack-refs", "--all"]).isSuccess)
+    pumpMain(until: { batches.contains { $0.gitChanged } }, "packed-refs の変化（loose ref が消える）")
+    batches.removeAll()
+    XCTAssertTrue(repo.git(["tag", "-d", "t"]).isSuccess)
+    pumpMain(until: { batches.contains { $0.gitChanged } }, "packed な tag の削除は packed-refs だけが変わる")
+  }
+
+  /// git dir の中の判定を実時間ゼロで押さえる。とくに fsmonitor の cookie は git が status のたびに作って
+  /// 消すので、拾うと自分の status が自分を呼び戻す閉路になる。
+  func testGitDirFilterIgnoresGitsOwnReadSideEffects() {
+    for ignored in [
+      "/fsmonitor--daemon/cookies/93678-1", "/fsmonitor--daemon.ipc",
+      "/objects/pack/multi-pack-index",
+      "/objects/ab/cdef", "/logs/HEAD", "/worktrees/other/index", "/modules/sub/index",
+      "/index.lock", "/packed-refs.lock", "/worktrees", "/objects",
+    ] {
+      XCTAssertFalse(RepoWatcher.isGitStateChange(ignored), ignored)
+    }
+    for state in [
+      "/index", "/HEAD", "/ORIG_HEAD", "/refs/heads/main", "/packed-refs", "/reftable/tables.list",
+      "/MERGE_HEAD", "/rebase-merge/done", "/sequencer/todo", "/AUTO_MERGE", "/some-new-state-file",
+    ] {
+      XCTAssertTrue(RepoWatcher.isGitStateChange(state), state)
+    }
+  }
+
+  /// linked worktree の根は、自分の gitDir（commonDir の中）の変化は拾い、隣の worktree の私有状態では
+  /// 取り直さない。
+  func testLinkedWorktreeIgnoresSiblingWorktreeState() throws {
+    let linked = repo.addWorktree("wt", branch: "feat/wt")
+    let sibling = repo.addWorktree("other", branch: "feat/other")
+    let gitDir = repo.root + "/.git/worktrees/wt"
+    let commonDir = repo.root + "/.git"
+    var linkedBatches: [RepoWatcher.Batch] = []
+    let watcher = RepoWatcher(roots: [linked, gitDir, commonDir], gitDirs: [commonDir, gitDir]) {
+      linkedBatches.append($0)
+    }
+    XCTAssertNotNil(watcher)
+    try repo.write(".orbe-watch-marker", "", in: linked)
+    pumpMain(until: { linkedBatches.contains { $0.paths.contains(linked + "/.orbe-watch-marker") } }
+    )
+    linkedBatches.removeAll()
+
+    try repo.write("a.txt", "sibling\n", in: sibling)
+    XCTAssertTrue(repo.git(["add", "a.txt"], in: sibling).isSuccess)
+    try repo.write("mine.txt", "m\n", in: linked)
+    pumpMain(until: { !linkedBatches.isEmpty })
+    XCTAssertEqual(linkedBatches.map(\.gitChanged), [false], "隣の worktree の index では取り直さない")
+    linkedBatches.removeAll()
+
+    XCTAssertTrue(repo.git(["add", "mine.txt"], in: linked).isSuccess)
+    pumpMain(until: { linkedBatches.contains { $0.gitChanged } }, "自分の index（commonDir の中）は拾う")
+    withExtendedLifetime(watcher) {}
+  }
+
+  /// 変わり続ける間も 1 秒に 1 回は出る（後追いだけだと飢餓する）。測るのは「書き続けている**最中に**
+  /// 出たか」——上限があれば 1 秒過ぎに出るのでループ終了時点で非空、後追いだけなら書き終わるまで出ない。
+  func testContinuousChangesStillFlushWithinTheMaximumDelay() throws {
+    let start = Date()
+    var writes = 0
+    while Date().timeIntervalSince(start) < 1.6 {
+      try repo.write("busy.txt", "\(writes)\n")
+      writes += 1
+      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05))
+    }
+    XCTAssertGreaterThan(writes, 20, "前提: デバウンス間隔より密に書き続けた")
+    XCTAssertFalse(batches.isEmpty, "書き続けている最中に上限で出る")
+  }
+}

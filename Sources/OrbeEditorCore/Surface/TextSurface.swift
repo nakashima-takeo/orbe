@@ -22,6 +22,12 @@ public protocol TextSurface: AnyObject {
   /// （保存が呼ぶ——⌘Z が保存前の打鍵まで一緒に戻さないため）。
   func markUndoBoundary()
 
+  /// 本文を丸ごと置き換える編集。通常の編集と同じく undo に載り、`didChange`（範囲 = 全体）を呼び出しから
+  /// 戻るまでに同期で 1 回通す（外部で書き換えられたファイルの差し替えが呼ぶ——行索引・構文木・ハンクが
+  /// 打鍵と同じ経路で追従する）。変換中の IME セッションは置き換える前に畳む（その取り消しの `didChange`
+  /// が 1 回先に通る）。置き換え後の選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。
+  func replaceAll(with text: String)
+
   var delegate: TextSurfaceDelegate? { get set }
 }
 
