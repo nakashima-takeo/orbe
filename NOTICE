@@ -161,6 +161,12 @@ Code editor (Contents/MacOS/Orbe, Contents/Resources/TreeSitter*.bundle)
   The parser runtime (lib/src, C). Statically linked into Contents/MacOS/Orbe.
   https://github.com/tree-sitter/tree-sitter
   License: licenses/tree-sitter-LICENSE.txt
+  The compiled lib/src additionally includes the following ICU-derived headers
+  (lib/src/unicode/utf8.h, utf16.h, umachine.h; per lib/src/unicode/README.md),
+  whose macros are expanded into the lexer and query code:
+  - ICU (International Components for Unicode) — Copyright © 1991-2019 Unicode, Inc. — Unicode License (ICU 58 and later)
+    https://github.com/unicode-org/icu
+    License: licenses/tree-sitter-unicode-LICENSE.txt
 
   The grammars below are each a separate work under their own MIT license.
   Their generated parsers (src/parser.c and, where present, src/scanner.c) are
