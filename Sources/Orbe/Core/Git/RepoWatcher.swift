@@ -11,7 +11,7 @@ final class RepoWatcher {
   struct Batch: Equatable {
     /// 変わったパス（root の綴りの絶対パス）。git dir の中は含まない。
     var paths: Set<String> = []
-    /// git dir の中で index・HEAD・refs・merge / rebase の進行状態が変わった。
+    /// git dir の中で状態（index・HEAD・refs・merge / rebase の進行状態）が変わった。
     var gitChanged = false
     /// 取りこぼし（イベントの drop・root の付け替え）。全部見直す。
     var scanAll = false
@@ -38,7 +38,9 @@ final class RepoWatcher {
   ///   - gitDirs: このうち git dir であるもの（中の churn を index・HEAD・refs に絞る）。
   init?(roots: [String], gitDirs: [String], onChange: @escaping (Batch) -> Void) {
     self.onChange = onChange
-    self.gitDirs = gitDirs
+    // 長い方から当てる——linked worktree の gitDir は commonDir の中にあり、自分の私有状態は自分の
+    // gitDir 側で拾い、commonDir 側に落ちる `worktrees/` は他人のものとして弾ける。
+    self.gitDirs = gitDirs.sorted { $0.count > $1.count }
     var seen: Set<String> = []
     watched = roots.compactMap { root in
       let real = Self.realPath(root)
@@ -106,12 +108,20 @@ final class RepoWatcher {
     kFSEventStreamEventFlagMustScanSubDirs | kFSEventStreamEventFlagRootChanged
       | kFSEventStreamEventFlagUserDropped | kFSEventStreamEventFlagKernelDropped)
 
-  /// git dir の中で関心があるのは index・HEAD・refs・merge / rebase の進行状態だけ
-  /// （objects や各種 `.lock` の出入りで取り直さない）。
+  /// git dir の中で status・baseline に関係しないもの。objects（multi-pack-index を含む）・reflog・
+  /// 他の worktree と submodule の私有状態・各種 `.lock` は弾き、それ以外（index・HEAD・refs・packed-refs・
+  /// reftable・merge / rebase / sequencer の進行状態と、git が今後足す状態ファイル）は拾う——
+  /// 拾う側を列挙すると未知のファイルが取りこぼし側に倒れる。
+  private static let ignoredGitDirEntries: Set<Substring> = [
+    "objects", "logs", "worktrees", "modules",
+  ]
+
+  /// `sub` は git dir からの相対パス（`/` 始まり）。先頭の構成要素で弾く（その要素自身の出入りも含む）。
   private static func isGitStateChange(_ sub: String) -> Bool {
     guard !sub.hasSuffix(".lock") else { return false }
-    return sub.contains("index") || sub.contains("HEAD") || sub.contains("/refs")
-      || sub.contains("MERGE") || sub.contains("rebase")
+    let first = sub.dropFirst().split(
+      separator: "/", maxSplits: 1, omittingEmptySubsequences: false)
+    return !ignoredGitDirEntries.contains(first.first ?? "")
   }
 
   /// 後追い 200ms、ただし最初の保留から 1s で強制。

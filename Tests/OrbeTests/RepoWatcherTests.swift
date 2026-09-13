@@ -40,21 +40,26 @@ final class RepoWatcherTests: OrbeTestCase {
     XCTAssertFalse(batch.scanAll)
   }
 
-  /// git の操作は「git が変わった」だけを立て、パス集合には `.git` の中を入れない。`objects` と `.lock` の
-  /// 出入りだけでは「git が変わった」にならない（直後の作業ツリーの変化と同じバッチに畳まれるので、
-  /// そのバッチで見る）。
+  /// git の操作は「git が変わった」だけを立て、パス集合には `.git` の中を入れない。objects（loose・
+  /// multi-pack-index）・reflog・他の worktree や submodule の私有状態・`.lock` の出入りだけでは
+  /// 「git が変わった」にならない——それだけではバッチが生まれないので、作業ツリーの変化を 1 つ起こして
+  /// そのバッチ（畳まれる）で見る。
   func testGitOperationsRaiseGitChangedWithoutPaths() throws {
     XCTAssertTrue(
       GitRunner.shared.runSync(
         ["hash-object", "-w", "--stdin"], cwd: repo.dir.path, stdin: Data("blob\n".utf8)
       )
       .isSuccess)
-    let lock = URL(fileURLWithPath: repo.root + "/.git/index.lock")
-    try Data().write(to: lock)
-    try FileManager.default.removeItem(at: lock)
+    for noise in [
+      "index.lock", "objects/pack/multi-pack-index", "logs/HEAD", "worktrees/other/index",
+      "worktrees/other/HEAD", "modules/sub/index",
+    ] {
+      try repo.write(".git/" + noise, "n\n")
+    }
+    try FileManager.default.removeItem(atPath: repo.root + "/.git/index.lock")
     try repo.write("a.txt", "changed\n")
     pumpMain(until: { !batches.isEmpty }, "作業ツリーの変化")
-    XCTAssertEqual(batches.map(\.gitChanged), [false], "objects と .lock だけの変化は git の変化ではない")
+    XCTAssertEqual(batches.map(\.gitChanged), [false], "関係ない出入りは git の変化ではない")
     batches.removeAll()
 
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
@@ -66,6 +71,39 @@ final class RepoWatcherTests: OrbeTestCase {
 
     XCTAssertTrue(repo.git(["commit", "-qm", "c"]).isSuccess)
     pumpMain(until: { batches.contains { $0.gitChanged } }, "HEAD / refs の変化")
+    batches.removeAll()
+
+    XCTAssertTrue(repo.git(["tag", "t"]).isSuccess)
+    XCTAssertTrue(repo.git(["pack-refs", "--all"]).isSuccess)
+    pumpMain(until: { batches.contains { $0.gitChanged } }, "packed-refs の変化（loose ref が消える）")
+    batches.removeAll()
+    XCTAssertTrue(repo.git(["tag", "-d", "t"]).isSuccess)
+    pumpMain(until: { batches.contains { $0.gitChanged } }, "packed な tag の削除は packed-refs だけが変わる")
+  }
+
+  /// linked worktree の根は、自分の gitDir（commonDir の中）の変化は拾い、隣の worktree の私有状態では
+  /// 取り直さない。
+  func testLinkedWorktreeIgnoresSiblingWorktreeState() throws {
+    let linked = repo.addWorktree("wt", branch: "feat/wt")
+    let sibling = repo.addWorktree("other", branch: "feat/other")
+    let gitDir = repo.root + "/.git/worktrees/wt"
+    let commonDir = repo.root + "/.git"
+    var linkedBatches: [RepoWatcher.Batch] = []
+    let watcher = RepoWatcher(roots: [linked, gitDir, commonDir], gitDirs: [commonDir, gitDir]) {
+      linkedBatches.append($0)
+    }
+    XCTAssertNotNil(watcher)
+
+    try repo.write("a.txt", "sibling\n", in: sibling)
+    XCTAssertTrue(repo.git(["add", "a.txt"], in: sibling).isSuccess)
+    try repo.write("mine.txt", "m\n", in: linked)
+    pumpMain(until: { !linkedBatches.isEmpty })
+    XCTAssertEqual(linkedBatches.map(\.gitChanged), [false], "隣の worktree の index では取り直さない")
+    linkedBatches.removeAll()
+
+    XCTAssertTrue(repo.git(["add", "mine.txt"], in: linked).isSuccess)
+    pumpMain(until: { linkedBatches.contains { $0.gitChanged } }, "自分の index（commonDir の中）は拾う")
+    withExtendedLifetime(watcher) {}
   }
 
   /// 変わり続ける間も 1 秒に 1 回は出る（後追いだけだと飢餓する）。測るのは「書き続けている**最中に**
