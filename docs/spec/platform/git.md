@@ -1,12 +1,12 @@
 ---
 title: git 実行
-description: git CLI を起動する共通基盤。3 つの並行レーンと、無出力での打ち切り
-updated: 2026-08-15
+description: git CLI を起動する共通基盤。3 つの並行レーン・無出力での打ち切り・観測の契約
+updated: 2026-09-13
 ---
 
 # git 実行
 
-Orbe が git に触る操作——Dispatch の worktree 作成・掃除（[dispatch](../palette/dispatch.md)）、workspace 作成の clone（[workspace パレット](../palette/workspace.md)）、ブランチ・worktree の一覧——はすべて `/usr/bin/git` の子プロセスとして走る。それらの起動を 1 箇所に集める基盤が持つ契約をここに置く。個々の面が「どう見せるか」は各面の spec が持ち、ここは「どう走らせるか」だけを持つ。
+Orbe が git に触る操作——Dispatch の worktree 作成・掃除（[dispatch](../palette/dispatch.md)）、workspace 作成の clone（[workspace パレット](../palette/workspace.md)）、ブランチ・worktree の一覧、エディターの根の観測（[editor/files](../editor/files.md)）——はすべて `/usr/bin/git` の子プロセスとして走る。それらの起動を 1 箇所に集める基盤が持つ契約をここに置く。個々の面が「どう見せるか」は各面の spec が持ち、ここは「どう走らせるか」だけを持つ。
 
 hooks・署名がユーザーのシェル環境と同等に動くよう、全呼び出しがログインシェル由来の PATH を引き継ぐ（[shell-path](shell-path.md)）。`GIT_TERMINAL_PROMPT=0` を必ず渡す——資格情報の対話プロンプトは GUI からは見えず、待てば無限に待つことになるので、認証が要る操作は待たずに失敗へ落とす。
 
@@ -16,9 +16,9 @@ hooks・署名がユーザーのシェル環境と同等に動くよう、全呼
 
 - **読み取り** — 並行に走る。
 - **同一リポジトリの ref・作業ツリーを書く操作** — 単独で直列化する。git のロックは待たずに即 fatal するため、順番はアプリ側で作る。
-- **共有チェックアウトと領域が交わらない操作**（clone・worktree 作成・fetch・掃除の分類プローブ） — 独立レーンで走らせ、直列化のチェーンに載せない。
+- **共有チェックアウトと領域が交わらない操作、または結果が古くても取り直せる観測**（clone・worktree 作成・fetch・掃除の分類プローブ・エディターの根の status と index の読み） — 独立レーンで走らせ、直列化のチェーンに載せない。
 
-3 つ目を分けるのは、直列化がプロセス単位で効くため。時間の上限が無い操作をそこへ置くと、無関係な読み取りまでその完了を待たされる。プローブのように「本数ぶん走り、かつ直後の操作を待たせてはいけない」ものも、呼び出し側の判断でこのレーンへ逃がせる。
+3 つ目を分けるのは、直列化がプロセス単位で効くため。時間の上限が無い操作をそこへ置くと、無関係な読み取りまでその完了を待たされる。プローブのように「本数ぶん走り、かつ直後の操作を待たせてはいけない」ものも、呼び出し側の判断でこのレーンへ逃がせる。観測を載せるのは逆の理由——直列化は submit 済みの全ブロックの完了を待つため、巨大リポジトリの status を読み取りレーンに置くと worktree の削除や ref の更新がその完了を待つ。観測は監視が取り直すので、古い結果が返っても害が無い。
 
 ## 無応答の打ち切り
 
@@ -33,3 +33,7 @@ hooks・署名がユーザーのシェル環境と同等に動くよう、全呼
 ## 観測
 
 worktree の状態を見る `status` には `--no-optional-locks` を渡す。ユーザーが作業中のリポジトリを観測するだけでロックを取らないため。
+
+エディターの根の観測（[editor/files](../editor/files.md)）は 3 つの読みで成る。status は porcelain v2 の NUL 区切りで、見え方を左右するユーザー設定（`status.showUntrackedFiles`・`core.quotepath`・`diff.ignoreSubmodules`）を引数で封じる。index の版は `ls-files -s` の OID で引き、変わったときだけ `cat-file blob` で本文を取る——blob は filter・textconv・外部 diff を通らない生の中身で、信頼できないリポジトリの diff driver を起動しない。
+
+チェックアウトの解決は toplevel・git dir・common dir の 3 値。linked worktree では git dir が本体側の `worktrees/<name>` を指し、index・HEAD はそこにある（監視の対象）。綴りは git の返すままにする——`git worktree list` の生パスとの等値比較に使うため、正準形と比べる場では比べる側が両辺を揃える。
