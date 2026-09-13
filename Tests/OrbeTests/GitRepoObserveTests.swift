@@ -131,11 +131,12 @@ final class GitRepoObserveTests: OrbeTestCase {
   func testIndexEntriesTakeFileNamesLiterally() throws {
     let git = try repo.open()
     let names = [":colon.txt", ":(x)weird.txt", "brackets[1].txt", "star*.txt", ":^neg.txt"]
-    for name in names { try repo.write(name, "\(name)\n") }
-    XCTAssertTrue(repo.git(["add", "--"] + names.map { ":(literal)" + $0 }).isSuccess)
+    let decoys = ["brackets1.txt", "star1.txt"]
+    for name in names + decoys { try repo.write(name, "\(name)\n") }
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
 
-    let entries = try XCTUnwrap(indexEntries(git, names + ["brackets1.txt"]))
-    XCTAssertEqual(Set(entries.keys), Set(names), "5 つとも引け、glob が余計なものに当たらない")
+    let entries = try XCTUnwrap(indexEntries(git, names))
+    XCTAssertEqual(Set(entries.keys), Set(names), "5 つとも引け、glob が index にある囮に当たらない")
 
     setenv("GIT_LITERAL_PATHSPECS", "1", 1)
     defer { unsetenv("GIT_LITERAL_PATHSPECS") }

@@ -171,14 +171,19 @@ final class EditorDocumentDiskTests: XCTestCase {
     let (document, surface) = try open(url)
     XCTAssertEqual(surface.text, "hello\n", "本文に BOM は含めない")
 
-    try document.save()
-    XCTAssertEqual(try Data(contentsOf: url), bom + Data("hello\n".utf8), "触らない ⌘S でも BOM は残る")
-    document.reconcileWithDisk()
-    XCTAssertFalse(document.isDiskChanged, "自分の保存は外部変更ではない")
-
+    // 未保存の状態で照合する——未編集だと同じ本文の差し替えで黙って自己修復し、ダイジェストの出どころが
+    // 本文に戻る退行を捕まえられない。
     surface.replace(NSRange(location: 0, length: 0), with: "x")
+    document.reconcileWithDisk()
+    XCTAssertFalse(document.isDiskChanged, "開いた直後: ディスクの姿は BOM を含むバイト列で取る")
+
+    try document.save(force: true)
+    XCTAssertEqual(try Data(contentsOf: url), bom + Data("xhello\n".utf8), "BOM は残る")
+    surface.replace(NSRange(location: 0, length: 0), with: "y")
+    document.reconcileWithDisk()
+    XCTAssertFalse(document.isDiskChanged, "自分の保存は外部変更ではない（保存が置く姿も書いたバイト列）")
     try document.save()
-    XCTAssertEqual(try Data(contentsOf: url), bom + Data("xhello\n".utf8))
+    XCTAssertEqual(try Data(contentsOf: url), bom + Data("yxhello\n".utf8))
 
     let plain = try temp("plain.txt", "hi\n")
     let (plainDocument, _) = try open(plain)

@@ -147,8 +147,10 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     XCTAssertEqual(document.surface.text, "short\nき", "次の変換操作は新しい本文の末尾に付く")
   }
 
-  /// 置き換え後の選択は解け、キャレットは同じオフセット——本文が短くなればその末尾（→ code の契約）。
-  func testReplaceAllKeepsTheCaretOffsetClampedToTheNewLength() throws {
+  /// 置き換え後の選択は解け、キャレットは同じオフセットへ戻る（契約は `TextSurface` の doc と code の
+  /// 「テキストエンジンの境界」）。本文が短くなる側は TextKit の丸めと結果が一致するので、ここでは clamp の
+  /// 有無を判別できない。
+  func testReplaceAllRestoresTheCaretOffsetAndCollapsesTheSelection() throws {
     let (document, _) = try opened(try file("g.txt", "0123456789\n"))
     let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
     document.surface.responder.perform(#selector(NSResponder.moveToEndOfDocument(_:)), with: nil)
@@ -157,7 +159,8 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     XCTAssertEqual(client.selectedRange(), NSRange(location: 10, length: 1), "前提: 末尾側に選択がある")
 
     document.surface.replaceAll(with: "01234\n")
-    XCTAssertEqual(client.selectedRange(), NSRange(location: 6, length: 0), "選択は解け、末尾に収まる")
+    XCTAssertEqual(
+      client.selectedRange(), NSRange(location: 6, length: 0), "選択は解け、末尾に収まる（TextKit の丸めと一致）")
 
     document.surface.replaceAll(with: "0123456789abc\n")
     XCTAssertEqual(client.selectedRange(), NSRange(location: 6, length: 0), "収まるなら同じオフセット")

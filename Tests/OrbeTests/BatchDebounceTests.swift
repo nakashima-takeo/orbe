@@ -7,8 +7,8 @@ import XCTest
 final class BatchDebounceTests: OrbeTestCase {
   private let t0 = Date(timeIntervalSinceReferenceDate: 1000)
 
-  private func batch(_ path: String, git: Bool = false) -> RepoWatcher.Batch {
-    RepoWatcher.Batch(paths: [path], gitChanged: git, scanAll: false)
+  private func batch(_ path: String, git: Bool = false, scan: Bool = false) -> RepoWatcher.Batch {
+    RepoWatcher.Batch(paths: [path], gitChanged: git, scanAll: scan)
   }
 
   func testTrailingDebounceFollowsTheLatestChange() {
@@ -24,7 +24,6 @@ final class BatchDebounceTests: OrbeTestCase {
       debounce.flush(at: t0.addingTimeInterval(0.35)),
       RepoWatcher.Batch(paths: ["/a", "/b"], gitChanged: false, scanAll: false), "積んだ変化は 1 つに畳む")
     XCTAssertNil(debounce.dueDate, "取り出せば空")
-    XCTAssertTrue(debounce.pending.isEmpty)
   }
 
   func testMaximumDelayCapsAContinuousStream() {
@@ -33,7 +32,7 @@ final class BatchDebounceTests: OrbeTestCase {
     var due = debounce.note(batch("/0"), at: now)
     for i in 1...20 {
       now = t0.addingTimeInterval(Double(i) * 0.15)
-      due = debounce.note(batch("/\(i)", git: i == 7), at: now)
+      due = debounce.note(batch("/\(i)", git: i == 7, scan: i == 3), at: now)
       XCTAssertLessThanOrEqual(due, t0.addingTimeInterval(1.0), "上限を超えて延びない（\(i) 回目）")
       XCTAssertNil(debounce.flush(at: min(now, t0.addingTimeInterval(0.99))))
     }
@@ -41,8 +40,11 @@ final class BatchDebounceTests: OrbeTestCase {
     let flushed = debounce.flush(at: t0.addingTimeInterval(1.0))
     XCTAssertEqual(flushed?.paths.count, 21)
     XCTAssertEqual(flushed?.gitChanged, true)
+    XCTAssertEqual(flushed?.scanAll, true)
     XCTAssertEqual(
       debounce.note(batch("/again"), at: t0.addingTimeInterval(1.05)), t0.addingTimeInterval(1.25),
       "次の変化から新しい窓が始まる")
+    XCTAssertEqual(
+      debounce.flush(at: t0.addingTimeInterval(1.25))?.paths, ["/again"], "前の窓の変化は残らない")
   }
 }

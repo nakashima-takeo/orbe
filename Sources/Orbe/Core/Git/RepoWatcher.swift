@@ -11,7 +11,7 @@ final class RepoWatcher {
   struct Batch: Equatable {
     /// 変わったパス（root の綴りの絶対パス）。git dir の中は含まない。
     var paths: Set<String> = []
-    /// git dir の中で状態（index・HEAD・refs・merge / rebase の進行状態）が変わった。
+    /// git dir の中で状態が変わった（何を状態と見るかは `isGitStateChange`）。
     var gitChanged = false
     /// 取りこぼし（イベントの drop・root の付け替え）。全部見直す。
     var scanAll = false
@@ -37,7 +37,9 @@ final class RepoWatcher {
 
   /// - Parameters:
   ///   - roots: 監視するディレクトリ（根・gitDir・commonDir）。
-  ///   - gitDirs: このうち git dir であるもの（中の churn を index・HEAD・refs に絞る）。
+  ///   - gitDirs: このうち git dir であるもの（中の変化を状態ファイルに絞る規則は `isGitStateChange`）。
+  ///     linked worktree では自分の gitDir と commonDir の両方を渡す——最長一致で、commonDir 側の
+  ///     `worktrees/` を他人の私有状態として弾ける。
   init?(roots: [String], gitDirs: [String], onChange: @escaping (Batch) -> Void) {
     self.onChange = onChange
     // 長い方から当てる——linked worktree の gitDir は commonDir の中にあり、自分の私有状態は自分の
@@ -116,8 +118,9 @@ final class RepoWatcher {
       | kFSEventStreamEventFlagUserDropped | kFSEventStreamEventFlagKernelDropped)
 
   /// git dir の中で status・baseline に関係しないもの。objects（multi-pack-index を含む）・reflog・
-  /// 他の worktree の私有状態・submodule の内部・各種 `.lock` は弾き、それ以外（index・HEAD・refs・
-  /// packed-refs・reftable・merge / rebase / sequencer の進行状態と、git が今後足す状態ファイル）は
+  /// 他の worktree の私有状態・submodule の内部（`--ignore-submodules=none` で親の status には効くが、
+  /// 先頭 1 段では objects の churn と分離できないため切る）・各種 `.lock` は弾き、それ以外（index・HEAD・
+  /// refs・packed-refs・reftable・merge / rebase / sequencer の進行状態と、git が今後足す状態ファイル）は
   /// 拾う——拾う側を列挙すると未知のファイルが取りこぼし側に倒れる。
   ///
   /// **git 自身の読み取りが生む副産物も弾く**: fsmonitor デーモン（`core.fsmonitor`）は git が読むたびに

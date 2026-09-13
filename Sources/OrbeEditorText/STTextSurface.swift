@@ -79,10 +79,14 @@ final class STTextSurface: NSObject, TextSurface {
   /// STTextView の置換は undo 登録と `didChangeTextIn` を 1 回ずつ通す（`text` の代入は undo 登録を
   /// 切るので使わない）。置換後の選択は本文の外を指しうるので、元のキャレット位置を新しい長さに収めて置く。
   ///
-  /// 変換中（marked text）は置換の**前**に畳む。STTextView は本文の置換で marked range を捨てず、古い本文を
-  /// 指したまま残った range を次の変換操作で force-unwrap するため（本文が短くなればクラッシュ、長ければ
-  /// 無関係な位置が削れる）。`inputContext?.discardMarkedText()` では `hasMarkedText` が消えない。
+  /// 変換中（marked text）は置換の**前**に畳む。STTextView 2.4.1 時点: 本文の置換で marked range を捨てず、
+  /// 古い本文を指したまま残った range を次の変換操作で force-unwrap する（本文が短くなればクラッシュ、
+  /// 長ければ無関係な位置が削れる）。畳むのは 2 つで 1 組——input context に `discardMarkedText()` で
+  /// 変換セッションを捨てさせ（これだけでは `hasMarkedText` が消えない）、クライアント側の marked range は
+  /// `unmarkText()` で消す。同じ force-unwrap は undo / redo で本文が動くときにも残る（上流の欠陥。ここでは
+  /// 塞いでいない）。
   func replaceAll(with text: String) {
+    textView.inputContext?.discardMarkedText()
     textView.unmarkText()
     let caret = textView.textSelection.location
     textView.replaceCharacters(in: textView.textLayoutManager.documentRange, with: text)

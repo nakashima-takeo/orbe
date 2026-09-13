@@ -112,6 +112,10 @@ final class RepoWatcherTests: OrbeTestCase {
       linkedBatches.append($0)
     }
     XCTAssertNotNil(watcher)
+    try repo.write(".orbe-watch-marker", "", in: linked)
+    pumpMain(until: { linkedBatches.contains { $0.paths.contains(linked + "/.orbe-watch-marker") } }
+    )
+    linkedBatches.removeAll()
 
     try repo.write("a.txt", "sibling\n", in: sibling)
     XCTAssertTrue(repo.git(["add", "a.txt"], in: sibling).isSuccess)

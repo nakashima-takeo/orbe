@@ -7,32 +7,38 @@ struct BatchDebounce {
   static let debounce: TimeInterval = 0.2
   static let maximumDelay: TimeInterval = 1.0
 
-  private(set) var pending = RepoWatcher.Batch()
-  private var firstAt: Date?
-  private var lastAt: Date?
+  /// 保留中の窓。最初の変化と直近の変化の時刻から期限が決まる。
+  private struct Window {
+    let first: Date
+    var last: Date
+    var due: Date {
+      min(
+        last.addingTimeInterval(BatchDebounce.debounce),
+        first.addingTimeInterval(BatchDebounce.maximumDelay))
+    }
+  }
+
+  private var pending = RepoWatcher.Batch()
+  private var window: Window?
 
   /// 次に出すべき時刻。保留が無ければ nil。
-  var dueDate: Date? {
-    guard let firstAt, let lastAt else { return nil }
-    return min(
-      lastAt.addingTimeInterval(Self.debounce), firstAt.addingTimeInterval(Self.maximumDelay))
-  }
+  var dueDate: Date? { window?.due }
 
   /// 変化を積み、次に出すべき時刻を返す。
   mutating func note(_ batch: RepoWatcher.Batch, at now: Date) -> Date {
     pending.merge(batch)
-    if firstAt == nil { firstAt = now }
-    lastAt = now
-    return dueDate ?? now
+    var window = self.window ?? Window(first: now, last: now)
+    window.last = now
+    self.window = window
+    return window.due
   }
 
   /// 期限が来ていれば積んだ変化を取り出して空にする。まだなら nil（呼び手は `dueDate` で張り直す）。
   mutating func flush(at now: Date) -> RepoWatcher.Batch? {
-    guard let due = dueDate, now >= due else { return nil }
+    guard let window, now >= window.due else { return nil }
     defer {
       pending = RepoWatcher.Batch()
-      firstAt = nil
-      lastAt = nil
+      self.window = nil
     }
     return pending
   }

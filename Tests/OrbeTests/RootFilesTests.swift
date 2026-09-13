@@ -199,8 +199,8 @@ final class RootFilesTests: OrbeTestCase {
 
     let untracked = repo.url("nope.txt")
     try repo.write("nope.txt", "u\n")
-    let third = Recorder()
-    files.addObserver(third, interest: untracked)
+    let untrackedObserver = Recorder()
+    files.addObserver(untrackedObserver, interest: untracked)
     pumpMain(until: { files.status?.badge(of: "nope.txt") == .untracked })
     XCTAssertNil(files.baseline(for: untracked), "未追跡は baseline 無し")
   }

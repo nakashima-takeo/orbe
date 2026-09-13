@@ -50,7 +50,7 @@ final class LineDiffTests: XCTestCase {
   /// 共通部分を落とした残りが上限を超えると、残り全体を 1 つの変更区間にする（二乗の時間を避ける）。
   /// 残りの中に離れた 2 箇所の変更を置く——Myers なら 2 区間、畳めば 1 区間に割れるので、上限の値・
   /// `<=` の境界・畳む分岐の 3 つがどれも守られる。
-  func testLargeReplacementCollapsesIntoOneHunk() {
+  func testLargeReplacementCollapsesButAtTheLimitStillDiffs() {
     let n = LineDiff.maximumComparedLines
     func text(_ count: Int, changingEnds: Bool) -> String {
       let lines = (0..<count).map { i -> String in

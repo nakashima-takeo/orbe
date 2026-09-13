@@ -19,7 +19,8 @@ protocol RootFilesObserver: AnyObject {
 /// ここ 1 か所に閉じる。管理外なら監視と一覧・新規作成だけが働く。
 ///
 /// 観測（status → 関心のあるパスの index の OID → 変わった OID の blob）は根ごとに 1 本のジョブに直列化し、
-/// 実行中に来た要求は「終わったらもう 1 回」に畳む。結果は常に最新の index を映す（古い結果が後から乗らない）。
+/// 実行中に来た要求は「終わったらもう 1 回」に畳む。古い結果が後から乗らない（index が動けば監視が取り直す。
+/// status と baseline は別々の git 起動で読むので同一時点の保証は無い）。
 @MainActor
 final class RootFiles {
   struct Entry: Equatable {
@@ -82,6 +83,15 @@ final class RootFiles {
     weak var observer: RootFilesObserver?
     let interest: URL?
     let relativePath: String?
+
+    var isLive: Bool { observer != nil }
+  }
+
+  /// 生きている観測者（`observer` が解けた `Observation`）。
+  private struct LiveObservation {
+    let observer: RootFilesObserver
+    let interest: URL?
+    let relativePath: String?
   }
 
   private struct Baseline {
@@ -119,19 +129,29 @@ final class RootFiles {
   }
 
   func removeObserver(_ observer: RootFilesObserver) {
-    observations.removeAll { $0.observer == nil || $0.observer === observer }
+    observations.removeAll { !$0.isLive || $0.observer === observer }
     dropUnwantedBaselines()
   }
 
   private func prune() {
-    guard observations.contains(where: { $0.observer == nil }) else { return }
-    observations.removeAll { $0.observer == nil }
+    guard observations.contains(where: { !$0.isLive }) else { return }
+    observations.removeAll { !$0.isLive }
     dropUnwantedBaselines()
   }
 
-  /// 生きている観測者の関心の和集合（`notify` / `finish` と同じく、消えた観測者は数えない）。
+  /// 生きている観測者だけ（死んだ要素は次の観測者の出入りで `prune` が捨てる）。読む側は必ずここを通る。
+  private var live: [LiveObservation] {
+    observations.compactMap { observation in
+      observation.observer.map {
+        LiveObservation(
+          observer: $0, interest: observation.interest, relativePath: observation.relativePath)
+      }
+    }
+  }
+
+  /// 生きている観測者の関心の和集合。
   private var interests: [String] {
-    Array(Set(observations.compactMap { $0.observer == nil ? nil : $0.relativePath })).sorted()
+    Array(Set(live.compactMap(\.relativePath))).sorted()
   }
 
   private func dropUnwantedBaselines() {
@@ -166,9 +186,7 @@ final class RootFiles {
   }
 
   private func notify(_ body: (RootFilesObserver) -> Void) {
-    for observation in observations {
-      if let observer = observation.observer { body(observer) }
-    }
+    for observation in live { body(observation.observer) }
   }
 
   // MARK: - 取り直しジョブ
@@ -235,11 +253,11 @@ final class RootFiles {
       self.status = status
       notify { $0.rootFilesStatusDidChange(self) }
     }
-    for observation in observations {
-      guard let observer = observation.observer, let interest = observation.interest,
-        let relativePath = observation.relativePath, changed.contains(relativePath)
+    for observation in live {
+      guard let interest = observation.interest, let relativePath = observation.relativePath,
+        changed.contains(relativePath)
       else { continue }
-      observer.rootFiles(self, baselineDidChange: interest)
+      observation.observer.rootFiles(self, baselineDidChange: interest)
     }
     isRefreshing = false
     if refreshAgain {
@@ -251,8 +269,9 @@ final class RootFiles {
   // MARK: - 一覧と新規作成
 
   /// ディレクトリの中身（`.git` を除く。ドットファイルは含む）。名前順（大小無視）。
-  /// 種別は一覧と一緒に取る（1 件ずつ stat すると数千件のディレクトリで main が止まる）。URL は呼び手の
-  /// 綴り（正準形）で組み直す——一覧が返す URL は実パス（`/private/…`）になる。
+  /// 種別は 1 件ずつ属性辞書（`attributesOfItem`。owner / group の名前解決まで走る）で取ると数千件で
+  /// main が止まるので、resource value で取る。URL は呼び手の綴り（正準形）で組み直す——一覧が返す URL は
+  /// 実パス（`/private/…`）になる。
   func entries(of directory: URL) throws -> [Entry] {
     try FileManager.default.contentsOfDirectory(
       at: directory, includingPropertiesForKeys: [.isDirectoryKey], options: []
