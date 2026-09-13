@@ -17,12 +17,13 @@ final class RepoWatcher {
     var scanAll = false
 
     var isEmpty: Bool { paths.isEmpty && !gitChanged && !scanAll }
-  }
 
-  /// 連続するイベントの間はこれだけ待つ。
-  static let debounce: TimeInterval = 0.2
-  /// 最初の保留からこれだけ経てば、続いていても出す（ビルド中に永遠に出ないことがない）。
-  static let maximumDelay: TimeInterval = 1.0
+    mutating func merge(_ other: Batch) {
+      paths.formUnion(other.paths)
+      gitChanged = gitChanged || other.gitChanged
+      scanAll = scanAll || other.scanAll
+    }
+  }
 
   private var stream: FSEventStreamRef?
   private let onChange: (Batch) -> Void
@@ -30,9 +31,9 @@ final class RepoWatcher {
   /// commonDir の中にある）。
   private let watched: [(spelling: String, real: String)]
   private let gitDirs: [String]
-  private var pending = Batch()
-  private var trailing: DispatchWorkItem?
-  private var deadline: DispatchWorkItem?
+  private var debounce = BatchDebounce()
+  /// `debounce.dueDate` に張った 1 本のタイマー。
+  private var timer: DispatchWorkItem?
 
   /// - Parameters:
   ///   - roots: 監視するディレクトリ（根・gitDir・commonDir）。
@@ -81,8 +82,7 @@ final class RepoWatcher {
   }
 
   deinit {
-    trailing?.cancel()
-    deadline?.cancel()
+    timer?.cancel()
     if let stream {
       FSEventStreamStop(stream)
       FSEventStreamInvalidate(stream)
@@ -91,7 +91,7 @@ final class RepoWatcher {
   }
 
   private func handle(paths: [String], flags: [FSEventStreamEventFlags]) {
-    var batch = pending
+    var batch = Batch()
     for (path, flag) in zip(paths, flags) {
       if flag & Self.scanAllFlags != 0 {
         batch.scanAll = true
@@ -108,7 +108,7 @@ final class RepoWatcher {
       }
     }
     guard !batch.isEmpty else { return }
-    schedule(batch)
+    arm(at: debounce.note(batch, at: Date()))
   }
 
   private static let scanAllFlags = FSEventStreamEventFlags(
@@ -131,30 +131,22 @@ final class RepoWatcher {
     return !ignoredGitDirEntries.contains(first.first ?? "")
   }
 
-  /// 後追い 200ms、ただし最初の保留から 1s で強制。
-  private func schedule(_ batch: Batch) {
-    let first = pending.isEmpty
-    pending = batch
-    trailing?.cancel()
-    let work = DispatchWorkItem { [weak self] in self?.flush() }
-    trailing = work
-    DispatchQueue.main.asyncAfter(deadline: .now() + Self.debounce, execute: work)
-    if first {
-      let limit = DispatchWorkItem { [weak self] in self?.flush() }
-      deadline = limit
-      DispatchQueue.main.asyncAfter(deadline: .now() + Self.maximumDelay, execute: limit)
-    }
+  /// タイマーを `due` に張り直す（常に 1 本）。
+  private func arm(at due: Date) {
+    timer?.cancel()
+    let work = DispatchWorkItem { [weak self] in self?.fire() }
+    timer = work
+    DispatchQueue.main.asyncAfter(
+      deadline: .now() + max(0, due.timeIntervalSinceNow), execute: work)
   }
 
-  private func flush() {
-    trailing?.cancel()
-    deadline?.cancel()
-    trailing = nil
-    deadline = nil
-    let batch = pending
-    pending = Batch()
-    guard !batch.isEmpty else { return }
-    onChange(batch)
+  private func fire() {
+    timer = nil
+    if let batch = debounce.flush(at: Date()) {
+      onChange(batch)
+    } else if let due = debounce.dueDate {
+      arm(at: due)
+    }
   }
 
   /// 実パスで届いたイベントを、その場所の呼び手の綴りへ付け替える。
