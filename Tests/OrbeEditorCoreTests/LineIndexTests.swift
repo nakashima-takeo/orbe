@@ -6,7 +6,7 @@ import XCTest
 /// 行頭索引——オフセット⇄(行, 桁) と、編集後の索引が本文から作り直したものと一致すること。
 /// 壊れると tree-sitter へ渡す InputEdit の点がずれ、編集のたびに構文木が壊れて色が乱れる。
 final class LineIndexTests: XCTestCase {
-  func testPointsAndLineRanges() {
+  func testPointsAndColumns() {
     let index = LineIndex(text: "ab\ncd\n\nefg")
     XCTAssertEqual(index.lineCount, 4)
     XCTAssertEqual(index.point(at: 0).row, 0)

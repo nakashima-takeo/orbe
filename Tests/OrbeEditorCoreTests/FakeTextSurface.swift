@@ -7,7 +7,6 @@ final class FakeTextSurface: TextSurface {
   let view = NSView()
   var responder: NSView { view }
   private(set) var storage: NSMutableString
-  var style: TextSurfaceStyle
   weak var delegate: TextSurfaceDelegate?
   /// 見えている区間。既定は「何も見えていない」（可視の塗り直しを見るテストが明示する）。
   var visibleRange = NSRange(location: 0, length: 0)
@@ -18,9 +17,8 @@ final class FakeTextSurface: TextSurface {
   private(set) var appliedRanges: [IndexSet] = []
   private(set) var appliedSpans: [[HighlightSpan]] = []
 
-  init(text: String, style: TextSurfaceStyle = .fake) {
+  init(text: String) {
     storage = NSMutableString(string: text)
-    self.style = style
   }
 
   var text: String { storage as String }
@@ -93,14 +91,6 @@ final class FakeTextSurface: TextSurface {
   func texts(of role: SyntaxRole) -> Set<String> {
     Set(highlights.filter { $0.role == role }.map { substring(in: $0.range) })
   }
-}
-
-extension TextSurfaceStyle {
-  static let fake = TextSurfaceStyle(
-    font: .monospacedSystemFont(ofSize: 12, weight: .regular), lineHeight: 18, topInset: 4,
-    textColor: .textColor, caretColor: .textColor, caretSize: CGSize(width: 1.5, height: 14),
-    gutterFont: .monospacedSystemFont(ofSize: 11, weight: .regular), gutterTextColor: .textColor,
-    gutterWidth: 50, gutterTrailingInset: 8, roleColors: [:])
 }
 
 /// テスト実行体は同梱物を持たないので、SwiftPM が資源バンドルを並べる `.build/<config>`

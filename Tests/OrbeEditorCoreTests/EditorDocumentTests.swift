@@ -173,7 +173,7 @@ final class EditorDocumentTests: XCTestCase {
       let (document, surface) = try open(try temp("edit.go", source))
       let before = (0..<surface.length).map { surface.role(at: $0) }
       surface.replace(NSRange(location: position, length: 0), with: "x")
-      XCTAssertEqual(surface.appliedRanges.count, 2, "編集で 1 回塗る")
+      XCTAssertEqual(surface.appliedRanges.count, 2, "編集の塗りは 1 回の applyHighlights にまとまる")
       let painted = try XCTUnwrap(surface.appliedRanges.last)
       let spans = try XCTUnwrap(surface.appliedSpans.last)
       if !painted.contains(integersIn: 0..<surface.length) { narrowEdits += 1 }
@@ -242,7 +242,7 @@ final class EditorDocumentTests: XCTestCase {
     surface.visibleRange = NSRange(location: 100, length: 80)
 
     // コメントの中への挿入——構文木の変化はそのコメントに閉じる。
-    let comment = (surface.text as NSString).range(of: "// ").location + 2
+    let comment = try XCTUnwrap(location(of: "// ", in: surface)) + 2
     surface.replace(NSRange(location: comment, length: 0), with: " ")
     let painted = try XCTUnwrap(surface.appliedRanges.last)
     XCTAssertTrue(painted.contains(integersIn: 100..<180), "編集で可視区間を塗り直す")

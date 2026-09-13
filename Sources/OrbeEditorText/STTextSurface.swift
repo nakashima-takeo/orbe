@@ -18,7 +18,7 @@ final class STTextSurface: NSObject, TextSurface {
   weak var delegate: TextSurfaceDelegate?
   private(set) var visibleRange = NSRange(location: 0, length: 0)
 
-  let style: TextSurfaceStyle
+  private let style: TextSurfaceStyle
 
   init(style: TextSurfaceStyle, text: String) {
     scrollView = SurfaceTextView.scrollableTextView()

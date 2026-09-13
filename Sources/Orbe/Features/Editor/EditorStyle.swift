@@ -2,8 +2,7 @@ import AppKit
 import OrbeEditorCore
 import OrbeEditorText
 
-/// エディターの見え方を `Theme` から組む唯一の場所。フォント設定が入るときはここだけが設定を読み、
-/// 開いている面へ `style` を配り直す。
+/// エディターの見え方を `Theme` から組む唯一の場所。
 enum EditorStyle {
   static func make() -> TextSurfaceStyle {
     TextSurfaceStyle(

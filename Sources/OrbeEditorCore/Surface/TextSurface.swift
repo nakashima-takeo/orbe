@@ -12,9 +12,6 @@ public protocol TextSurface: AnyObject {
   var text: String { get }
   func substring(in range: NSRange) -> String
 
-  /// 見え方（生成時に渡したもの）。
-  var style: TextSurfaceStyle { get }
-
   /// `ranges` の既存の色を外し、`spans` を置く。描画属性としてのみ持ち、本文と undo を汚さない。
   func applyHighlights(_ spans: [HighlightSpan], in ranges: IndexSet)
 
