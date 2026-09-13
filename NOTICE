@@ -130,6 +130,73 @@ Markdown parsing (Contents/MacOS/Orbe)
   - utf8.c — Public Software Group e. V., Berlin — MIT License
 
 --------------------------------------------------------------------------------
+Code editor (Contents/MacOS/Orbe, Contents/Resources/TreeSitter*.bundle)
+--------------------------------------------------------------------------------
+
+* STTextView — Copyright Marcin Krzyżanowski — GPL-3.0 (dual-licensed with a
+  commercial license; Orbe uses it under the GPL-3.0 terms, which its own
+  GPL-3.0-or-later grant satisfies)
+  The text engine of the editor face (TextKit 2 view, gutter, rendering
+  attributes). Linked into Contents/MacOS/Orbe.
+  https://github.com/krzyzanowskim/STTextView
+  License: licenses/STTextView-LICENSE.txt
+
+* STTextKitPlus — Copyright (c) Marcin Krzyżanowski — BSD-3-Clause
+  TextKit 2 helpers pulled in by STTextView. Linked into Contents/MacOS/Orbe.
+  https://github.com/krzyzanowskim/STTextKitPlus
+  License: licenses/STTextKitPlus-LICENSE.txt
+
+* CoreTextSwift — Copyright (c) 2020-2023 Marcin Krzyzanowski — MIT License
+  CoreText helpers pulled in by STTextView. Linked into Contents/MacOS/Orbe.
+  https://github.com/krzyzanowskim/CoreTextSwift
+  License: licenses/CoreTextSwift-LICENSE.txt
+
+* swift-tree-sitter — Copyright (c) 2021, Chime — BSD-3-Clause
+  Swift bindings for tree-sitter (SwiftTreeSitter, SwiftTreeSitterLayer).
+  Linked into Contents/MacOS/Orbe.
+  https://github.com/tree-sitter/swift-tree-sitter
+  License: licenses/swift-tree-sitter-LICENSE.txt
+
+* tree-sitter — Copyright (c) 2018-2024 Max Brunsfeld — MIT License
+  The parser runtime (lib/src, C). Statically linked into Contents/MacOS/Orbe.
+  https://github.com/tree-sitter/tree-sitter
+  License: licenses/tree-sitter-LICENSE.txt
+
+  The grammars below are each a separate work under their own MIT license.
+  Their generated parsers (src/parser.c and, where present, src/scanner.c) are
+  statically linked into Contents/MacOS/Orbe, and their query files
+  (queries/*.scm) are bundled verbatim as Contents/Resources/TreeSitter*.bundle.
+
+  - tree-sitter-bash — Copyright (c) 2017 Max Brunsfeld — MIT License
+    https://github.com/tree-sitter/tree-sitter-bash — License: licenses/tree-sitter-bash-LICENSE.txt
+  - tree-sitter-css — Copyright (c) 2018 Max Brunsfeld — MIT License
+    https://github.com/tree-sitter/tree-sitter-css — License: licenses/tree-sitter-css-LICENSE.txt
+  - tree-sitter-dockerfile — Copyright (c) 2021 Camden Cheek — MIT License
+    https://github.com/camdencheek/tree-sitter-dockerfile — License: licenses/tree-sitter-dockerfile-LICENSE.txt
+  - tree-sitter-go — Copyright (c) 2014 Max Brunsfeld — MIT License
+    https://github.com/tree-sitter/tree-sitter-go — License: licenses/tree-sitter-go-LICENSE.txt
+  - tree-sitter-html — Copyright (c) 2014 Max Brunsfeld — MIT License
+    https://github.com/tree-sitter/tree-sitter-html — License: licenses/tree-sitter-html-LICENSE.txt
+  - tree-sitter-javascript — Copyright (c) 2014 Max Brunsfeld — MIT License
+    https://github.com/tree-sitter/tree-sitter-javascript — License: licenses/tree-sitter-javascript-LICENSE.txt
+  - tree-sitter-json — Copyright (c) 2014 Max Brunsfeld — MIT License
+    https://github.com/tree-sitter/tree-sitter-json — License: licenses/tree-sitter-json-LICENSE.txt
+  - tree-sitter-markdown (block and inline grammars) — Copyright (c) 2021 Matthias Deiml — MIT License
+    https://github.com/tree-sitter-grammars/tree-sitter-markdown — License: licenses/tree-sitter-markdown-LICENSE.txt
+  - tree-sitter-python — Copyright (c) 2016 Max Brunsfeld — MIT License
+    https://github.com/tree-sitter/tree-sitter-python — License: licenses/tree-sitter-python-LICENSE.txt
+  - tree-sitter-rust — Copyright (c) 2017 Maxim Sokolov — MIT License
+    https://github.com/tree-sitter/tree-sitter-rust — License: licenses/tree-sitter-rust-LICENSE.txt
+  - tree-sitter-swift — Copyright (c) 2021 alex-pinkus — MIT License
+    https://github.com/alex-pinkus/tree-sitter-swift — License: licenses/tree-sitter-swift-LICENSE.txt
+  - tree-sitter-toml — Copyright (c) Ika <ikatyang@gmail.com> — MIT License
+    https://github.com/tree-sitter-grammars/tree-sitter-toml — License: licenses/tree-sitter-toml-LICENSE.txt
+  - tree-sitter-typescript (TypeScript and TSX grammars) — Copyright (c) 2017 Max Brunsfeld — MIT License
+    https://github.com/tree-sitter/tree-sitter-typescript — License: licenses/tree-sitter-typescript-LICENSE.txt
+  - tree-sitter-yaml — Copyright (c) 2024 tree-sitter-grammars contributors; Copyright (c) 2019-2021 Ika — MIT License
+    https://github.com/tree-sitter-grammars/tree-sitter-yaml — License: licenses/tree-sitter-yaml-LICENSE.txt
+
+--------------------------------------------------------------------------------
 Fonts (Contents/Resources/*.ttf)
 --------------------------------------------------------------------------------
 

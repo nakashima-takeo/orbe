@@ -77,12 +77,22 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `face.terminal` | 端末面のキー色（同上。dark / light とも `text.secondary` と偶然同値だが別トークン） | `#b8afc4` | `#5f5678` |
 | `editor.ghost` | エディター面の空状態の ◐（沈んだ塗り） | `#3d3752` | `#d9d3e6` |
 | `editor.icon` | エディター面のアイコン・kbd の文字（dark / light とも `kbKeyText` と偶然同値だが別トークン） | `#a99fb8` | `#766e8d` |
+| `editor.codeText` | コードの素の文字（役割を持たない字。dark / light とも `statusText` と偶然同値だが別トークン） | `#cdc7e2` | `#4d4368` |
+| `editor.lineNumber` | 行番号（`text.muted` の α .55） | `rgba(139,131,151,.55)` | `rgba(141,133,163,.55)` |
+| `syntax.keyword` | 構文: キーワード | `#569cd6` | `#2f63c9` |
+| `syntax.keywordControl` | 構文: 制御の流れ（return / if / for / import …） | `#c586c0` | `#a03a98` |
+| `syntax.type` | 構文: 型 | `#4ec9b0` | `#178a72` |
+| `syntax.function` | 構文: 関数 | `#dcdcaa` | `#8a7a12` |
+| `syntax.string` | 構文: 文字列 | `#ce9178` | `#b0562a` |
+| `syntax.comment` | 構文: コメント | `#7a7387` | `#8d87a0` |
+| `syntax.variable` | 構文: 変数・引数・プロパティ | `#9cdcfe` | `#2a7bbd` |
+| `syntax.punctuation` | 構文: 記号・演算子・区切り | `#d4d4d4` | `#4a4658` |
 
 **意図的な同値収束（事故ではない）**: Orbe の配色は色階層が少なく、複数の semantic 名が同一値へ収束する。SSOT では別名で表現している。
 `accent.focus` ＝ `accent.primary`／ `text.tertiary` ＝ `text.muted`／
 `success` ＝ `diff.added`（green）／ `danger` ＝ `diff.removed`（red）／
 `state.dormant` ＝ `text.muted`／ `surface.0` ＝ `bg.sunken`。
-**値だけが一致する独立トークン**: `face.terminal` ＝ `text.secondary`／ `editor.icon` ＝ `kbKeyText`（上の収束と違い SSOT でも互いを参照せず、片方の値が動いてももう片方は追随しない）。
+**値だけが一致する独立トークン**: `face.terminal` ＝ `text.secondary`／ `editor.icon` ＝ `kbKeyText`／ `editor.codeText` ＝ `statusText`（上の収束と違い SSOT でも互いを参照せず、片方の値が動いてももう片方は追随しない）。`syntax.*` の dark は VSCode Dark Modern の実在トークン色で、5 色が端末の ANSI（§8）と偶然同値だが、端末色は別レイヤーなので参照しない。
 `state.done`（完了・緑）と `diff.added`（green）、`state.waiting`（要応答・黄）と `conflict`（ANSI黄）は**別トークンとして分離**（light では偶々同値だが dark では異なる。SSOT は状態色を `StateHue`、ANSI 系を端末アンカーから別々に導く）。
 **反転色（`state.*Inverse`）は対テーマの状態色**＝dark/light の値を入れ替えただけ（選択タブの反転面上でコントラストを確保する仕組み）。
 **light の `tab.activeText` `#f3f0fa` は `bg.base` `#fcfbfe` と別値**（on.accent の流用不可）。
@@ -127,9 +137,11 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `type.sectionLabel` | 9.5 / regular / mono | 大文字セクション見出し（uppercase は使用側 `textCase`） |
 | `type.editorLead` | 13 / regular / sans | エディター面の空状態の一文 |
 | `type.editorHint` | 12 / regular / mono | エディター面のショートカット行・kbd |
+| `type.editorCode` | 12 / regular / mono | コード本体 |
+| `type.editorLineNumber` | 11 / regular / mono | 行番号 |
 
 **tracking / line-height スカラ**（NSFont では表せず、使用側で `.tracking()` / lineSpacing 換算）:
-`tracking.label` 1（大文字セクション見出し）／ `tracking.status` 0.3（ステータスストリップ）／ `line.body` 1.6（本文）／ `line.terminal` 1.55（ターミナル本文）。
+`tracking.label` 1（大文字セクション見出し）／ `tracking.status` 0.3（ステータスストリップ）／ `line.body` 1.6（本文）／ `line.terminal` 1.55（ターミナル本文）／ `line.editorCode` 18pt（コード本体。倍率ではなく固定値）。
 
 ### 2.4 余白・角丸・線
 - **spacing（2/4pt グリッド・穴なし）**: `hair 2 / tick 4 / note 6 / step 8 / beat 12 / bar 16 / span 20 / phrase 24`
@@ -199,6 +211,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 - **Search field**: 外枠＝`bg.sunken`＋1px `surface.1`＋radius `md`。focus＝リング `accent.focus`。no-match＝`danger`。件数＝`captionDigit`。
 - **Focus / active tab**: アクティブタブの端末は 2px 内側リング `accent.focus`。カーソル点滅と併走。
 - **Onboarding**: waiting＝`text.muted`。installing＝スピナー（`accent.primary`）。done＝`✓` `success`。failed＝`✗` `danger`＋再試行 secondary。skipped＝`text.muted`・取り消し線。
+- **Code view**（エディター面の文書）: 見本 `CodeView.tsx` の値をそのまま持つ。本文 `type.editorCode`・行高 `line.editorCode` 18・上余白 4・素の文字 `editor.codeText`・役割ごとに `syntax.*`。行番号ガター幅 50・右寄せ・右余白 8・`type.editorLineNumber`・`editor.lineNumber`、本文はガターの右端から始まる。キャレット `accent.bright` 1.5×14。テキスト選択の地はシステムの選択色（テキストエンジンに差し替え口が無い）。地は面の veil（`bg.base` × 実効不透明度）。
 - **Empty state**: 中央・`type.body`・`text.muted` の一文＋必要なら `type.meta` ヒント。装飾なし。**エディター面**の空状態は見本の値をそのまま持つ: ◐（`OrbeMarkGlyph` 44・`editor.ghost`）・その 18 下に `type.editorLead`・`text.muted` の一文・22 下にショートカット行（gap 8。ラベル `type.editorHint`・`text.muted`・幅 170 右寄せ ＋ gap 12 ＋ kbd）。kbd＝`type.editorHint`・文字 `editor.icon`・枠 hairline `borderInk` .14（light ×1.4）・radius `sm`・padding 1×7・地 `surfaceInk` .05（light ×0.6）。
 
 ### 5.1 chrome（2 段 28+28・TopBar＋TabBar）

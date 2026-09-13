@@ -107,6 +107,15 @@ cp "$ROOT/app/completion-engine.js" "$APP/Contents/Resources/completion-engine.j
 cp "$ROOT/LICENSE" "$APP/Contents/Resources/LICENSE"    # Orbe 自身のライセンス (GPL-3.0-or-later)
 cp "$ROOT/NOTICE" "$APP/Contents/Resources/NOTICE"      # 第三者の帰属表示
 cp -R "$ROOT/licenses" "$APP/Contents/Resources/licenses"  # 第三者ライセンス全文（OFL-1.1 等は全文同梱が要求される）
+# tree-sitter の queries（色付けの規則）。SwiftPM が文法ごとに資源バンドルへ写したものを Resources 直下へ並べ、
+# `LanguageRegistry` が `BundledResources.root` 直下から解く。16 個（文法 14 パッケージ・TypeScript と
+# Markdown は 2 つずつ）揃わなければ色の無いエディターが黙って出荷されるので、ここで落とす。
+cp -R "$ROOT"/.build/release/TreeSitter*.bundle "$APP/Contents/Resources/"
+QUERY_BUNDLES="$(find "$APP/Contents/Resources" -maxdepth 1 -name 'TreeSitter*.bundle' | wc -l | tr -d ' ')"
+if [ "$QUERY_BUNDLES" != "16" ]; then
+  echo "エラー: tree-sitter の queries バンドルが 16 個でない ($QUERY_BUNDLES)。swift build -c release が全文法を焼いたか確認せよ" >&2
+  exit 1
+fi
 # アプリアイコン: Icon Composer の app/Orbe.icon を actool でコンパイルし、
 # Assets.car（macOS 26+ の light/dark 外観切替）と Orbe.icns（macOS 14–25 フォールバック）を
 # 同時生成して Resources へ出力する。Info.plist は CFBundleIconName=Orbe で参照する。

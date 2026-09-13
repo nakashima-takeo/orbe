@@ -31,8 +31,8 @@ final class TabFacesView: NSView {
   /// 背のクリック／離したときに求める配置。タブが正規化して状態に置き、`set` で戻す。
   var onFacesRequested: ((FaceLayout, _ animated: Bool) -> Void)?
 
-  /// 焦点の面の responder。
-  var focusTarget: NSView { faces.focus == .editor ? editor : terminal.surfaceView }
+  /// 焦点の面の responder（エディターは文書があればそのテキスト面、無ければ pane）。
+  var focusTarget: NSView { faces.focus == .editor ? editor.focusTarget : terminal.surfaceView }
 
   /// 相互作用の状態。幅に依らない形で持ち、`layout()` が新しい幅へ写す。
   private enum Interaction {

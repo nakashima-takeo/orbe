@@ -1,7 +1,7 @@
 ---
 title: ビルド手順
 description: libghostty の自前ビルドから Orbe.app の生成・起動まで。前提ツール・チャネル・lint / format
-updated: 2026-09-07
+updated: 2026-09-12
 ---
 
 # ビルド手順
@@ -53,6 +53,9 @@ xcrun -sdk macosx metal --version
 - ghostty: `vendor/ghostty` submodule を `3ba5e9c24390412fb1dbb08c51008f1efdcff97b` に pin。
   API の正はこのコミットの `vendor/ghostty/include/ghostty.h`（外部契約は [spec/terminal/libghostty.md](../spec/terminal/libghostty.md)）。
 - libghostty は alpha・API 非安定のため、**main 追従ではなく固定 SHA で pin**。アップグレード時はヘッダの型差分を確認。
+- swift-tree-sitter は `exact: "0.10.0"`。リポジトリに迷子タグ 0.25.0（0.10.0 より古いコード）があり、`from:` で書くと静かにそちらへ解決される。
+- 文法のうち javascript 0.23.1 / css 0.23.2 / python 0.23.6 / yaml 0.7.0 は `exact`。これより新しいタグの manifest は scanner.c を source から落としており、リンクに失敗する。上げるときは当該タグの `Package.swift` の `sources` に scanner.c があるか確認する。
+- swift-tree-sitter が引く tree-sitter 本体は 0.25 系。本体 0.27 で `Package.swift` が削除されたので、swift-tree-sitter を上げるときはその依存先も確認する。
 
 ## ビルド手順（Xcode 導入後）
 
@@ -94,6 +97,8 @@ open build/Orbe.app
 ### リソース解決（GHOSTTY_RESOURCES_DIR は不要）
 
 ghostty は shell-integration / themes / terminfo を**実行体からの相対**で自動検出する（`Contents/Resources/terminfo/78/xterm-ghostty` をセンチネルに climb）。`build-app.sh` がこれらを `Orbe.app/Contents/Resources/{ghostty,terminfo}` に同梱するため、`.app` は **環境変数なしで自己完結**する（ghostty 公式アプリと同じ方式）。
+
+エディターの色付け規則（tree-sitter の queries）は SwiftPM が文法ごとに `TreeSitter<Pkg>_TreeSitter<Target>.bundle` へ写す。`build-app.sh` がそれを `Contents/Resources/` 直下へ並べ（16 個揃わなければ落ちる）、`swift build` ではビルド成果物の隣（`.build/<config>/`）にあるので、どちらでも `LanguageRegistry` が実行体の隣から解く。テストは同梱物を持たない実行体なので `.build/debug` を明示注入する。
 
 `swift build` の **debug バイナリを単体起動する dev 時のみ**、リソースが実行体の隣に無いため env を渡す:
 ```bash

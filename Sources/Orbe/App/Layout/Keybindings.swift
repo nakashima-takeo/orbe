@@ -23,6 +23,7 @@ enum ChromeAction {
   case scrollToBottom  // スクロールバック末尾へジャンプ
   case toggleHelp  // ヘルプオーバーレイ（ショートカットチートシート）をトグル開閉
   case toggleEditorFace  // エディター面 ⇄ 端末面（分割中は焦点の往復）
+  case saveDocument  // エディター焦点の文書を保存
 }
 
 /// 面（surface・エディター pane）から届く、ウィンドウレベルの chrome 操作（タブ・workspace）。
@@ -64,8 +65,33 @@ extension ChromeAction {
     case .toggleHelp: return .toggleHelp
     case .toggleEditorFace: return .toggleEditorFace
     case .increaseFontSize, .decreaseFontSize, .resetFontSize, .find,
-      .scrollToTop, .scrollToBottom:
+      .scrollToTop, .scrollToBottom, .saveDocument:
       return nil
+    }
+  }
+
+  /// キーを所有する面。window コマンドは面を問わず上位へ、端末のキーはエディター焦点中に消え、
+  /// エディターのキーは端末焦点中に端末へ素通しし、両面のキーは焦点の面がそれぞれの意味で扱う。
+  enum Owner {
+    case window
+    case terminal
+    case editor
+    case eachFace
+  }
+
+  /// 網羅 switch（default 無し）＝新ケース追加時に所有面の分類をコンパイルで求める。
+  var owner: Owner {
+    switch self {
+    case .newTab, .closeTab, .showClosedAgentsPalette, .nextTab, .prevTab, .switchWorkspace,
+      .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .openEditor, .rename,
+      .showSettings, .toggleHelp, .toggleEditorFace:
+      return .window
+    case .increaseFontSize, .decreaseFontSize, .resetFontSize, .find:
+      return .terminal
+    case .saveDocument:
+      return .editor
+    case .scrollToTop, .scrollToBottom:
+      return .eachFace
     }
   }
 }
@@ -114,6 +140,7 @@ enum Keybindings {
     case "e": return .toggleEditorFace  // Cmd+E
     case "f": return .find  // Cmd+F
     case "r": return .rename  // Cmd+R
+    case "s": return .saveDocument  // Cmd+S
     case "w": return .closeTab  // Cmd+W
     case "t": return .newTab  // Cmd+T
     case "T": return .showClosedAgentsPalette  // Cmd+Shift+T

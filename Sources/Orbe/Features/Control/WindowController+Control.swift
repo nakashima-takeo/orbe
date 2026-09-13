@@ -127,6 +127,29 @@ extension WindowController: ControlTarget {
     closeTab(tab, origin: .controlAPI)
     return .success(["ok": true])
   }
+
+  /// 指定タブのエディターでファイルを開く（open_file）。`path` は絶対か、`~` 展開の上でタブの実効 cwd
+  /// からの相対。開けたら配置をエディターが見える正規形へ（隠れていれば全面・分割中は焦点だけ）、
+  /// `focus_tab` と同じ経路でタブを選んで first responder を移す。
+  func controlOpenFile(tabId: Int, path: String) -> Result<Any, ControlError> {
+    guard let tab = controlResolveTab(tabId) else {
+      return .failure(ControlError(code: -32004, message: "tab not found"))
+    }
+    let expanded = (path as NSString).expandingTildeInPath
+    let url =
+      expanded.hasPrefix("/")
+      ? URL(fileURLWithPath: expanded)
+      : URL(fileURLWithPath: expanded, relativeTo: URL(fileURLWithPath: tab.cwd, isDirectory: true))
+    do {
+      try tab.openFile(url.standardizedFileURL)
+    } catch {
+      return .failure(ControlError(code: -32000, message: "cannot open \(url.path): \(error)"))
+    }
+    let ratio = tab.faces.editorRatio == 0 ? 1 : tab.faces.editorRatio
+    tab.setFaces(FaceLayout(editorRatio: ratio, focus: .editor), animated: true)
+    return controlFocusTab(tabId: tabId)
+  }
+
   // MARK: - config（設定の列挙・設定）
 
   /// 全設定項目の実効値・由来 scope・型・値域（domain）を列挙する（config CLI）。実効値は global 層に

@@ -45,6 +45,7 @@ updated: 2026-09-12
 | 9 | 生成物 | `.app` の静的検査（署名・同梱物・`Info.plist`）・agent-plugin パッケージ構成・tokens の全単射 drift ゲート。Swift 側が期待する同梱物の相対パス（`bin/orbe-report`・`agent-plugin/install.sh`・`completion-engine.js`・`zsh/.zshenv`・`zsh/orbe-completion.zsh`・`orbe-defaults.conf`）と `scripts/build-app.sh` の配置の照合——ずれると全機能が無警告で no-op に倒れる。フォントに対しては `TerminalFontDelegationTests` が同じ論法で番人になっている。#72 #77 | — | 未着手 |
 | 10 | 外部プロセス異常系 | `gh` の 3 分岐フォールバック・`GitHubCLI` の打ち切り後の待ち・`AgentCatalog` の 10 秒タイムアウト。#13 #95 | — | 未着手 |
 | 11 | カバレッジ可視化 | `swift test --enable-code-coverage` → lcov → PR コメント。閾値ゲートにはしない | — | 未着手 |
+| 12 | エディター | エディター面の中身。純ロジックは専用 target `OrbeEditorCoreTests`（行索引・capture 名の正規化・16 文法の queries 解決・15 言語と injections の色付け・保存の往復を、fake のテキスト面と見本ファイルで回す。queries の根は `.build/<config>` を明示注入する——ハーネスが `BundledResources.root` を空 dir へ張り替えるため）。`Tests/OrbeTests` 側は本物のテキストエンジンで打鍵・undo・未保存の意味、面の中身の入れ替えと焦点の行き先、chrome キーの所有面（⌘S の保存と端末への素通し）、`open_file`、`EditorStyle`（見本の寸法と役割色の外観追従）。**u2（文書・色付け・面の中身）まで完了**し、u3 以降の面の骨・git 差分・検索が乗る。担保しないもの: Edit メニュー経由のキー（⌘Z / ⌘⇧Z / ⌘X / ⌘C / ⌘V / ⌘A）と IME——`MainMenu` が responder chain に載る `.app` 起動経路が層の外——と描画（キャレット・選択の地・面の veil）。どちらも人が実機と gallery で見る | 0 | 実装中 |
 
 ## 前倒しリファクタ
 

@@ -9,6 +9,28 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-markdown.git", from: "0.6.0"),
     // アプリ内アップデート（appcast + EdDSA 署名検証 + 終了時適用）。UI は自前（SPUUserDriver 実装）。
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
+    // コードエディターのテキストエンジン（TextKit 2 の自前ビュー・ガター・rendering attribute）。GPLv3。
+    .package(url: "https://github.com/krzyzanowskim/STTextView", from: "2.4.1"),
+    // tree-sitter の Swift 束縛（ランタイム同梱・LanguageLayer による injections 込みの色付け）。
+    // `from:` は迷子タグ 0.25.0（0.10.0 より古い）を掴むので exact で固定する（docs/guides/build.md）。
+    .package(url: "https://github.com/tree-sitter/swift-tree-sitter", exact: "0.10.0"),
+    // 文法 14 パッケージ（16 パーサ）。exact の 4 つは v0.25 世代 manifest が scanner.c を落として
+    // リンクに失敗するため導入前タグへ固定（docs/guides/build.md）。
+    .package(url: "https://github.com/tree-sitter/tree-sitter-json", from: "0.24.8"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-typescript", from: "0.23.2"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-html", from: "0.23.2"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-go", from: "0.25.0"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-rust", from: "0.24.2"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-bash", from: "0.25.1"),
+    .package(url: "https://github.com/tree-sitter-grammars/tree-sitter-markdown", from: "0.5.3"),
+    .package(url: "https://github.com/tree-sitter-grammars/tree-sitter-toml", from: "0.7.0"),
+    .package(url: "https://github.com/camdencheek/tree-sitter-dockerfile", from: "0.2.0"),
+    .package(
+      url: "https://github.com/alex-pinkus/tree-sitter-swift", exact: "0.7.3-with-generated-files"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-javascript", exact: "0.23.1"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-css", exact: "0.23.2"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-python", exact: "0.23.6"),
+    .package(url: "https://github.com/tree-sitter-grammars/tree-sitter-yaml", exact: "0.7.0"),
   ],
   targets: [
     .binaryTarget(
@@ -39,6 +61,40 @@ let package = Package(
         .unsafeFlags(["-O"], .when(configuration: .debug)),
       ]
     ),
+    // コードエディターの中核（文書・行索引・言語・tree-sitter の色付け・テキスト面の契約）。
+    // テキストエンジン（STTextView）も Theme / L10n も知らない——境界は target 依存でコンパイラが保証する。
+    .target(
+      name: "OrbeEditorCore",
+      dependencies: [
+        .product(name: "SwiftTreeSitter", package: "swift-tree-sitter"),
+        .product(name: "SwiftTreeSitterLayer", package: "swift-tree-sitter"),
+        .product(name: "TreeSitterJSON", package: "tree-sitter-json"),
+        .product(name: "TreeSitterTypeScript", package: "tree-sitter-typescript"),
+        .product(name: "TreeSitterHTML", package: "tree-sitter-html"),
+        .product(name: "TreeSitterGo", package: "tree-sitter-go"),
+        .product(name: "TreeSitterRust", package: "tree-sitter-rust"),
+        .product(name: "TreeSitterBash", package: "tree-sitter-bash"),
+        .product(name: "TreeSitterMarkdown", package: "tree-sitter-markdown"),
+        .product(name: "TreeSitterTOML", package: "tree-sitter-toml"),
+        .product(name: "TreeSitterDockerfile", package: "tree-sitter-dockerfile"),
+        .product(name: "TreeSitterSwift", package: "tree-sitter-swift"),
+        .product(name: "TreeSitterJavaScript", package: "tree-sitter-javascript"),
+        .product(name: "TreeSitterCSS", package: "tree-sitter-css"),
+        .product(name: "TreeSitterPython", package: "tree-sitter-python"),
+        .product(name: "TreeSitterYAML", package: "tree-sitter-yaml"),
+      ],
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    // テキスト面（`TextSurface`）の STTextView 実装。公開は面を作る 1 関数だけで、エンジンの型は外に出さない。
+    // エンジンの移行はこの target の差し替え。
+    .target(
+      name: "OrbeEditorText",
+      dependencies: [
+        "OrbeEditorCore",
+        .product(name: "STTextView", package: "STTextView"),
+      ],
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
     .executableTarget(
       name: "Orbe",
       dependencies: [
@@ -46,6 +102,8 @@ let package = Package(
         "OrbePaths",
         "OrbeSessionLog",
         "OrbeSound",
+        "OrbeEditorCore",
+        "OrbeEditorText",
         .product(name: "Markdown", package: "swift-markdown"),
         .product(name: "Sparkle", package: "Sparkle"),
       ],
@@ -115,8 +173,14 @@ let package = Package(
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
+      name: "OrbeEditorCoreTests",
+      dependencies: ["OrbeEditorCore"],
+      resources: [.copy("Fixtures")],
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .testTarget(
       name: "OrbeTests",
-      dependencies: ["Orbe"],
+      dependencies: ["Orbe", "OrbeEditorCore", "OrbeEditorText"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
