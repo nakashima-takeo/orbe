@@ -39,6 +39,10 @@ final class FakeTextSurface: TextSurface {
 
   func markUndoBoundary() { undoBoundaries += 1 }
 
+  func replaceAll(with text: String) {
+    replace(NSRange(location: 0, length: length), with: text)
+  }
+
   /// 編集を起こす（人の打鍵に相当）。塗った区間は本物の描画属性と同じく文字に付いて動く——
   /// 編集より後ろは平行移動し、編集に掛かった区間は編集の外側だけが残る（置換文字は無色）。
   func replace(_ range: NSRange, with replacement: String) {

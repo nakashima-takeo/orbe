@@ -76,6 +76,14 @@ final class STTextSurface: NSObject, TextSurface {
     textView.breakUndoCoalescing()
   }
 
+  /// STTextView の置換は undo 登録と `didChangeTextIn` を 1 回ずつ通す（`text` の代入は undo 登録を
+  /// 切るので使わない）。置換後の選択は本文の外を指しうるので、元のキャレット位置を新しい長さに収めて置く。
+  func replaceAll(with text: String) {
+    let caret = textView.textSelection.location
+    textView.replaceCharacters(in: textView.textLayoutManager.documentRange, with: text)
+    textView.textSelection = NSRange(location: min(caret, length), length: 0)
+  }
+
   private func apply(_ style: TextSurfaceStyle) {
     textView.font = style.font
     textView.textColor = style.textColor
