@@ -1,7 +1,7 @@
 ---
 title: テスト実装ロードマップ
 description: テストアーキテクチャへ到達するためのスライスと進捗
-updated: 2026-09-12
+updated: 2026-09-13
 ---
 
 # テスト実装ロードマップ
@@ -45,7 +45,7 @@ updated: 2026-09-12
 | 9 | 生成物 | `.app` の静的検査（署名・同梱物・`Info.plist`）・agent-plugin パッケージ構成・tokens の全単射 drift ゲート。Swift 側が期待する同梱物の相対パス（`bin/orbe-report`・`agent-plugin/install.sh`・`completion-engine.js`・`zsh/.zshenv`・`zsh/orbe-completion.zsh`・`orbe-defaults.conf`）と `scripts/build-app.sh` の配置の照合——ずれると全機能が無警告で no-op に倒れる。フォントに対しては `TerminalFontDelegationTests` が同じ論法で番人になっている。#72 #77 | — | 未着手 |
 | 10 | 外部プロセス異常系 | `gh` の 3 分岐フォールバック・`GitHubCLI` の打ち切り後の待ち・`AgentCatalog` の 10 秒タイムアウト。#13 #95 | — | 未着手 |
 | 11 | カバレッジ可視化 | `swift test --enable-code-coverage` → lcov → PR コメント。閾値ゲートにはしない | — | 未着手 |
-| 12 | エディター | エディター面の中身。純ロジックは専用 target `OrbeEditorCoreTests`（行索引・capture 名の正規化・16 文法の queries 解決・15 言語と injections の色付け・保存の往復を、fake のテキスト面と見本ファイルで回す。queries の根は `.build/<config>` を明示注入する——テスト実行体が同梱物を持たないため）。`Tests/OrbeTests` 側は本物のテキストエンジンで打鍵・undo・未保存の意味（queries はここも明示注入する——ハーネスが `BundledResources.root` を空 dir へ張り替えるため）、面の中身の入れ替えと焦点の行き先、chrome キーの所有面（⌘S の保存と端末への素通し）、`open_file`、`EditorStyle`（見本の寸法と役割色の外観追従）。**u2（文書・色付け・面の中身）まで完了**し、u3 以降の面の骨・git 差分・検索が乗る。担保しないもの: Edit メニュー経由のキー（⌘Z / ⌘⇧Z / ⌘X / ⌘C / ⌘V / ⌘A）と IME——`MainMenu` が responder chain に載る `.app` 起動経路が層の外——と描画（キャレット・選択の地・面の veil）。どちらも人が実機と gallery で見る | 0 | 実装中 |
+| 12 | エディター | エディター面の中身。純ロジックは専用 target `OrbeEditorCoreTests`（行索引・capture 名の正規化・16 文法の queries 解決・15 言語と injections の色付け・保存の往復を、fake のテキスト面と見本ファイルで回す。queries の根は `.build/<config>` を明示注入する——テスト実行体が同梱物を持たないため）。`Tests/OrbeTests` 側は本物のテキストエンジンで打鍵・undo・未保存の意味（queries はここも明示注入する——ハーネスが `BundledResources.root` を空 dir へ張り替えるため）、面の中身の入れ替えと焦点の行き先、chrome キーの所有面（⌘S の保存と端末への素通し）、`open_file`、`EditorStyle`（見本の寸法と役割色の外観追従）。git と FS の土台（u3）は `OrbeEditorCoreTests` が行差分（ハンク）と文書のディスクの姿（外部変更の差し替えと印・force 保存）を fake の面で、`Tests/OrbeTests` が実 git リポジトリ（`TempGitRepo`）と実 FSEvents で根の判定・監視の 3 本の通知・status とバッジ・index 版の baseline・観測者の関心・一覧と新規作成・寿命・文書の結線（外で書き換えたファイルの反映と ⌘S の失敗）を固める。観測が `.exclusive` のハングに巻き込まれないことは `GitHangFixture` で測る。待ちは `pumpMain` で通知を待ち、時間で眠らない。監視のテストは fixture が直前に起こした変化が最初の配達に混ざるので、目印を 1 つ書いてその配達を待ってから測る。**u3（git と FS）まで完了**し、u4 以降の面の骨・git ガター・検索が乗る。担保しないもの: Edit メニュー経由のキー（⌘Z / ⌘⇧Z / ⌘X / ⌘C / ⌘V / ⌘A）と IME——`MainMenu` が responder chain に載る `.app` 起動経路が層の外——と描画（キャレット・選択の地・面の veil）。どちらも人が実機と gallery で見る。FSEvents の取りこぼし（「全部見直せ」）は起こせないので担保しない。取り直しジョブの直列化は観察面を持たず、最終状態が最新の index と一致することだけを見る | 0 | 実装中 |
 
 ## 前倒しリファクタ
 
