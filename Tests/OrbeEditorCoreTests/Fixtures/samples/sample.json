@@ -1,0 +1,6 @@
+{
+  "name": "orbe",
+  "version": "0.7.1",
+  "faces": ["terminal", "editor"],
+  "editor": { "lineHeight": 18, "gutter": 50, "enabled": true, "theme": null }
+}

@@ -1,0 +1,12 @@
+# CI matrix for the editor face.
+name: ci
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift build --build-tests
+      - run: swift test --skip-build
+        env:
+          ORBE_GALLERY: "1"

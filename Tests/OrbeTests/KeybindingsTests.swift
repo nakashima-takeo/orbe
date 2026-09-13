@@ -45,6 +45,26 @@ final class KeybindingsTests: OrbeTestCase {
     XCTAssertEqual(Keybindings.chromeAction(for: .key("f")), .find)
   }
 
+  /// ⌘S はエディターが所有する（端末焦点では ghostty へ素通しし、エディター焦点では保存）。
+  func testSaveDocument() {
+    XCTAssertEqual(Keybindings.chromeAction(for: .key("s")), .saveDocument)
+    XCTAssertEqual(ChromeAction.saveDocument.owner, .editor)
+    XCTAssertNil(ChromeAction.saveDocument.windowCommand)
+  }
+
+  /// 所有面の分類: window コマンドを持つものは `.window`、端末固有は `.terminal`、⌘↑↓ は両面。
+  func testOwnerClassification() {
+    for action in [ChromeAction.closeTab, .toggleEditorFace, .rename, .switchWorkspace] {
+      XCTAssertEqual(action.owner, .window, "\(action)")
+      XCTAssertNotNil(action.windowCommand, "\(action)")
+    }
+    for action in [ChromeAction.find, .increaseFontSize, .decreaseFontSize, .resetFontSize] {
+      XCTAssertEqual(action.owner, .terminal, "\(action)")
+    }
+    XCTAssertEqual(ChromeAction.scrollToTop.owner, .eachFace)
+    XCTAssertEqual(ChromeAction.scrollToBottom.owner, .eachFace)
+  }
+
   func testScrollJump() {
     // Shift なしの Cmd+↑ / Cmd+↓ でスクロールバックの先頭・末尾へジャンプ。
     XCTAssertEqual(Keybindings.chromeAction(for: arrow(.upArrow)), .scrollToTop)

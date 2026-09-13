@@ -395,6 +395,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutSettings
   case helpShortcutOpenEditor
   case helpShortcutToggleEditorFace
+  case helpShortcutSaveDocument
   case helpShortcutQuit
   case helpShortcutSwitchWorkspace
   case helpShortcutNewTab

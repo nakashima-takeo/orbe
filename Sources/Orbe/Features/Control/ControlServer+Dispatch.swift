@@ -6,7 +6,7 @@ import OrbeSessionLog
 /// `runWindowed` の switch が持ち、拡張は fall-through で引き受ける。param 検証（-32602）はここで
 /// 行い、ドメイン解決（-32004 等）は target 側が返す。
 extension ControlServer {
-  /// タブ操作（focus_tab / close_tab）を dispatch する。
+  /// タブ操作（focus_tab / close_tab / open_file）を dispatch する。
   /// 非該当は nil で次のハンドラ（config / workspace）へ落とす。
   func runTab(method: String, params: [String: Any], target: ControlTarget)
     -> Result<Any, ControlError>?
@@ -22,6 +22,14 @@ extension ControlServer {
         return .failure(ControlError(code: -32602, message: "missing tabId"))
       }
       return target.controlCloseTab(tabId: tid)
+    case "open_file":
+      guard let tid = params["tabId"] as? Int else {
+        return .failure(ControlError(code: -32602, message: "missing tabId"))
+      }
+      guard let path = params["path"] as? String, !path.isEmpty else {
+        return .failure(ControlError(code: -32602, message: "missing path"))
+      }
+      return target.controlOpenFile(tabId: tid, path: path)
     default:
       return nil
     }

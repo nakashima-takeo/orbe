@@ -209,6 +209,7 @@ final class WindowController: NSObject, NSWindowDelegate {
       self?.tabFacesDidChange(tab)
     }
     tab.view.onProjectionChange = { [weak self] in self?.refreshChrome() }
+    tab.onEditorChange = { [weak self] in self?.refreshChrome() }
     tab.view.configure(translucency: chromeTranslucency, localization: localization)
     return tab
   }

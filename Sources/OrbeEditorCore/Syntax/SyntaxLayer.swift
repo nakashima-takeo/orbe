@@ -1,0 +1,57 @@
+import Foundation
+import SwiftTreeSitter
+import SwiftTreeSitterLayer
+
+/// 文書 1 つの構文木（injections 込みの `LanguageLayer`）。解析し、編集を追い、役割付き区間を発行する。
+/// 単位は UTF-16（tree-sitter の既定符号化）。バイトはその 2 倍。
+final class SyntaxLayer {
+  private let layer: LanguageLayer
+
+  init(configuration: LanguageConfiguration, registry: LanguageRegistry) throws {
+    layer = try LanguageLayer(
+      languageConfig: configuration,
+      configuration: LanguageLayer.Configuration(languageProvider: registry.languageProvider))
+  }
+
+  /// 本文全体を初めて解析する。
+  func parseAll(_ text: String, lineIndex: LineIndex) -> IndexSet {
+    let length = text.utf16.count
+    let edit = InputEdit(
+      startByte: 0, oldEndByte: 0, newEndByte: length * 2, startPoint: .zero, oldEndPoint: .zero,
+      newEndPoint: Self.point(at: length, in: lineIndex))
+    return layer.didChangeContent(LanguageLayer.Content(string: text), using: edit)
+  }
+
+  /// 編集を構文木へ写して再解析し、塗り直すべき区間を返す。`old` は編集前の索引、`new` は編集後。
+  func didChange(_ edit: TextEdit, text: String, old: LineIndex, new: LineIndex) -> IndexSet {
+    let input = InputEdit(
+      startByte: edit.range.location * 2, oldEndByte: NSMaxRange(edit.range) * 2,
+      newEndByte: NSMaxRange(edit.newRange) * 2,
+      startPoint: Self.point(at: edit.range.location, in: old),
+      oldEndPoint: Self.point(at: NSMaxRange(edit.range), in: old),
+      newEndPoint: Self.point(at: NSMaxRange(edit.newRange), in: new))
+    return layer.didChangeContent(LanguageLayer.Content(string: text), using: input)
+  }
+
+  /// 区間集合の中の役割付き区間。並びは tree-sitter の優先順（後のものが上に塗られる）。
+  /// tree-sitter は集合と交差する**マッチ**を返すので、capture は集合の外へはみ出しうる（マッチの他の
+  /// capture が外にある・capture 自体が集合をまたぐ）。集合で切り、外には 1 文字も触らない——外は
+  /// 塗り直さないので、そこにある細かい capture の正しい色を広い capture の色で潰さない。
+  func highlights(in set: IndexSet, text: String) -> [HighlightSpan] {
+    guard let ranges = try? layer.highlights(in: set, provider: text.predicateTextProvider) else {
+      return []
+    }
+    return ranges.flatMap { named -> [HighlightSpan] in
+      guard let range = Range(named.range), let role = CaptureRoleMap.role(for: named.name)
+      else { return [] }
+      return set.intersection(IndexSet(integersIn: range)).rangeView.map {
+        HighlightSpan(range: NSRange($0), role: role)
+      }
+    }
+  }
+
+  private static func point(at offset: Int, in index: LineIndex) -> Point {
+    let p = index.point(at: offset)
+    return Point(row: p.row, column: p.column * 2)
+  }
+}
