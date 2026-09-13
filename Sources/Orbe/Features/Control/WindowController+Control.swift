@@ -1,4 +1,5 @@
 import AppKit
+import OrbeEditorCore
 
 /// 制御チャネル（外部 → Orbe）の domain 操作。列挙は internal getter 越しに読み、
 /// タブを起こす動詞（spawn / spawn_agent / resume_agent）は GUI と共有する `openTab` へ委譲する。
@@ -129,8 +130,10 @@ extension WindowController: ControlTarget {
   }
 
   /// 指定タブのエディターでファイルを開く（open_file）。`path` は絶対か、`~` 展開の上でタブの実効 cwd
-  /// からの相対。開けたら配置をエディターが見える正規形へ（隠れていれば全面・分割中は焦点だけ）、
-  /// `focus_tab` と同じ経路でタブを選んで first responder を移す。
+  /// からの相対。symlink は実体へ解く——保存は一時ファイルの rename なので、リンクのパスへ書くと
+  /// リンク自体が通常ファイルに置き換わり実体へ届かない。同じ実体を別の綴りで開いても文書が割れない。
+  /// 開けたら配置をエディターが見える正規形へ（隠れていれば全面・分割中は焦点だけ）、`focus_tab` と
+  /// 同じ経路でタブを選んで first responder を移す。
   func controlOpenFile(tabId: Int, path: String) -> Result<Any, ControlError> {
     guard let tab = controlResolveTab(tabId) else {
       return .failure(ControlError(code: -32004, message: "tab not found"))
@@ -141,9 +144,11 @@ extension WindowController: ControlTarget {
       ? URL(fileURLWithPath: expanded)
       : URL(fileURLWithPath: expanded, relativeTo: URL(fileURLWithPath: tab.cwd, isDirectory: true))
     do {
-      try tab.openFile(url.standardizedFileURL)
+      try tab.openFile(url.resolvingSymlinksInPath())
+    } catch EditorDocumentError.notUTF8 {
+      return .failure(ControlError(code: -32000, message: "not UTF-8: \(url.path)"))
     } catch {
-      return .failure(ControlError(code: -32000, message: "cannot open \(url.path): \(error)"))
+      return .failure(ControlError(code: -32000, message: "cannot read: \(url.path)"))
     }
     let ratio = tab.faces.editorRatio == 0 ? 1 : tab.faces.editorRatio
     tab.setFaces(FaceLayout(editorRatio: ratio, focus: .editor), animated: true)

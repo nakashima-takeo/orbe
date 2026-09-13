@@ -46,6 +46,42 @@ extension WindowControllerControlTests {
     XCTAssertEqual(tab.faces, FaceLayout(editorRatio: 0.5, focus: .editor), "分割中は焦点だけ")
   }
 
+  /// symlink は実体へ解いて開く——保存（一時ファイルの rename）がリンクを通常ファイルに置き換えず、
+  /// 実体へ届く。リンク経由と実体のパスで開いても同じ 1 文書。
+  func testOpenFileResolvesSymlinksSoSavingReachesTheTarget() throws {
+    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let target = try caseFile("real.txt", "OLD")
+    let link = dir.appendingPathComponent("link.txt")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+    let wc = try restore(
+      activeWorkspace: 0,
+      [tabbed("main", tabs: [TabState(cwd: dir.path, agent: nil, explicitTitle: nil)])])
+    let tabId = try XCTUnwrap(wc.controlListTabs()[0]["tabId"] as? Int)
+    let tab = try XCTUnwrap(wc.controlResolveTab(tabId))
+
+    guard case .success = wc.controlOpenFile(tabId: tabId, path: "link.txt") else {
+      return XCTFail("リンク経由で開ける")
+    }
+    guard case .success = wc.controlOpenFile(tabId: tabId, path: target.path) else {
+      return XCTFail("実体のパスでも開ける")
+    }
+    let (count, opened) = MainActor.assumeIsolated {
+      (tab.editor.documents.count, tab.editor.documents.first?.url)
+    }
+    XCTAssertEqual(count, 1, "同じ実体は 1 文書")
+    XCTAssertEqual(opened, target.resolvingSymlinksInPath())
+
+    try MainActor.assumeIsolated {
+      let responder = try XCTUnwrap(tab.editor.activeDocument?.surface.responder)
+      responder.perform(Selector(("insertText:")), with: "NEW ")
+      try tab.editor.saveActive()
+    }
+    XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "NEW OLD", "実体へ書かれる")
+    let attributes = try FileManager.default.attributesOfItem(atPath: link.path)
+    XCTAssertEqual(
+      attributes[.type] as? FileAttributeType, .typeSymbolicLink, "リンクは通常ファイルにならない")
+  }
+
   func testOpenFileErrors() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main")])
     let tabId = try XCTUnwrap(wc.controlListTabs()[0]["tabId"] as? Int)
@@ -58,8 +94,17 @@ extension WindowControllerControlTests {
     }
     if case .failure(let error) = wc.controlOpenFile(tabId: tabId, path: "/nonexistent/x.txt") {
       XCTAssertEqual(error.code, -32000)
+      XCTAssertEqual(error.message, "cannot read: /nonexistent/x.txt")
     } else {
       XCTFail("開けないファイルは -32000")
+    }
+    let binary = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("bin")
+    try Data([0xff, 0xfe, 0xc3]).write(to: binary)
+    if case .failure(let error) = wc.controlOpenFile(tabId: tabId, path: binary.path) {
+      XCTAssertEqual(error.code, -32000)
+      XCTAssertEqual(error.message, "not UTF-8: \(binary.path)")
+    } else {
+      XCTFail("UTF-8 でないファイルは -32000")
     }
     XCTAssertEqual(tab.faces, .terminalOnly, "失敗では面は変わらない")
     XCTAssertNil(MainActor.assumeIsolated { tab.editor.activeDocument })
