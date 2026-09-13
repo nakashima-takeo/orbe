@@ -81,7 +81,7 @@ final class EditorPaneView: NSView {
   /// 空状態の中身は静止しているので、面のどこを押しても面自身が受ける（焦点を取る）。
   override func hitTest(_ point: NSPoint) -> NSView? {
     let hit = super.hitTest(point)
-    return document == nil ? hit.map { _ in self } : hit
+    return document == nil && hit != nil ? self : hit
   }
 
   override func mouseDown(with event: NSEvent) {

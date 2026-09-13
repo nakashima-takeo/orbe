@@ -10,13 +10,10 @@ public protocol TextSurface: AnyObject {
   var responder: NSView { get }
 
   var text: String { get }
-  /// UTF-16 の長さ。
-  var length: Int { get }
   func substring(in range: NSRange) -> String
 
-  /// 見え方。setter でフォント・行高・文字色・キャレット・ガター・役割→色を面へ適用する。
-  /// 既に塗ってある色は塗り直さない（再発行できるのは構文層だけ）。
-  var style: TextSurfaceStyle { get set }
+  /// 見え方（生成時に渡したもの）。
+  var style: TextSurfaceStyle { get }
 
   /// `ranges` の既存の色を外し、`spans` を置く。描画属性としてのみ持ち、本文と undo を汚さない。
   func applyHighlights(_ spans: [HighlightSpan], in ranges: IndexSet)
@@ -34,7 +31,6 @@ public protocol TextSurface: AnyObject {
 @MainActor
 public protocol TextSurfaceDelegate: AnyObject {
   func surface(_ surface: any TextSurface, didChange edit: TextEdit)
-  func surfaceDidChangeSelection(_ surface: any TextSurface)
   func surface(_ surface: any TextSurface, focusDidChange focused: Bool)
   func surfaceDidLayoutViewport(_ surface: any TextSurface)
 }

@@ -33,8 +33,8 @@ extension TerminalTabTests {
     window.orderOut(nil)
   }
 
-  /// 端末固有の chrome キー（検索・フォント）は消費して何も起こさず、両面のキー（⌘↑）と通常キーは飲まずに
-  /// 流す（文書があればテキスト面へ届く。空状態では `keyDown` が飲む）。
+  /// 端末固有の chrome キー（検索・フォント）は消費して何も起こさず、両面のキー（⌘↑）と通常キーは
+  /// 先取りせずに流す。
   func testEditorPaneSwallowsTerminalOnlyKeysAndPassesSharedKeys() {
     let tab = TerminalTab(cwd: "/tmp")
     var received: [WindowCommand] = []
@@ -49,7 +49,6 @@ extension TerminalTabTests {
         with: .key(String(UnicodeScalar(NSEvent.SpecialKey.upArrow.rawValue)!))),
       "⌘↑ は両面のキー＝テキスト面へ流す")
     XCTAssertFalse(pane.performKeyEquivalent(with: .key("a", [])), "通常キーは先取りしない")
-    pane.keyDown(with: .key("a", []))
 
     XCTAssertEqual(received, [], "window コマンドにはならない")
     window.orderOut(nil)

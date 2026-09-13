@@ -14,7 +14,7 @@ public final class LanguageRegistry {
     self.queriesRoot = queriesRoot
   }
 
-  public func configuration(for language: SyntaxLanguage) -> LanguageConfiguration? {
+  func configuration(for language: SyntaxLanguage) -> LanguageConfiguration? {
     configuration(for: language.grammar)
   }
 

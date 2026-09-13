@@ -46,7 +46,7 @@ enum WindowCommand {
 
 extension ChromeAction {
   /// WindowController へ届く window コマンドへの写像。surface ローカル操作は nil。
-  /// 面の経路（`SurfaceView.perform`・`EditorPaneView.keyDown`）と window レベル経路
+  /// 面の経路（`SurfaceView.perform`・`EditorPaneView.performKeyEquivalent`）と window レベル経路
   /// （`ChromeHostingView`）が共有する単一ソース mapping（網羅 switch）。
   var windowCommand: WindowCommand? {
     switch self {

@@ -1,8 +1,8 @@
 import AppKit
-import OrbeEditorCore
 import XCTest
 
 @testable import Orbe
+@testable import OrbeEditorCore
 
 /// 本物のテキストエンジンと文書の噛み合わせ——打鍵が文書へ届き、続けた打鍵が ⌘Z 1 回でまとめて
 /// 戻り、未保存は本文の比較ではなく「保存の後に編集があったか」。fake の面では見えない部分だけを

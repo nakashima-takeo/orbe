@@ -18,13 +18,6 @@ public struct LineIndex: Equatable, Sendable {
     return (row, offset - starts[row])
   }
 
-  /// 行の区間（行末の改行を含む。最終行は本文の末尾まで＝`length` を渡す）。
-  public func lineRange(_ row: Int, textLength: Int) -> NSRange {
-    let start = starts[row]
-    let end = row + 1 < starts.count ? starts[row + 1] : textLength
-    return NSRange(location: start, length: end - start)
-  }
-
   /// 編集を索引へ写す。`edit.range` 内で終わる行を落とし、置換文字列の行を差し込み、以降を平行移動する。
   public mutating func apply(_ edit: TextEdit, replacement: String) {
     let removedEnd = NSMaxRange(edit.range)

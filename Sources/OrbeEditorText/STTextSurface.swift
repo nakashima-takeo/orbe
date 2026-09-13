@@ -18,9 +18,7 @@ final class STTextSurface: NSObject, TextSurface {
   weak var delegate: TextSurfaceDelegate?
   private(set) var visibleRange = NSRange(location: 0, length: 0)
 
-  var style: TextSurfaceStyle {
-    didSet { apply(style) }
-  }
+  let style: TextSurfaceStyle
 
   init(style: TextSurfaceStyle, text: String) {
     scrollView = SurfaceTextView.scrollableTextView()
@@ -52,7 +50,7 @@ final class STTextSurface: NSObject, TextSurface {
 
   var text: String { textView.text ?? "" }
 
-  var length: Int {
+  private var length: Int {
     NSRange(textView.textContentManager.documentRange, in: textView.textContentManager).length
   }
 
@@ -131,10 +129,6 @@ extension STTextSurface: @preconcurrency STTextViewDelegate {
     let range = NSRange(affectedCharRange, in: textView.textContentManager)
     delegate?.surface(
       self, didChange: TextEdit(range: range, replacementLength: replacementString.utf16.count))
-  }
-
-  func textViewDidChangeSelection(_ notification: Notification) {
-    delegate?.surfaceDidChangeSelection(self)
   }
 
   func textViewInsertionPointView(_ textView: STTextView, frame: CGRect)

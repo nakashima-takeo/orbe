@@ -15,9 +15,6 @@ final class LineIndexTests: XCTestCase {
     XCTAssertEqual(index.point(at: 6).row, 2)
     XCTAssertEqual(index.point(at: 9).row, 3)
     XCTAssertEqual(index.point(at: 9).column, 2)
-    XCTAssertEqual(index.lineRange(0, textLength: 10), NSRange(location: 0, length: 3))
-    XCTAssertEqual(index.lineRange(2, textLength: 10), NSRange(location: 6, length: 1))
-    XCTAssertEqual(index.lineRange(3, textLength: 10), NSRange(location: 7, length: 3))
   }
 
   func testEmptyAndTrailingNewline() {

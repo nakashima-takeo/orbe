@@ -56,7 +56,7 @@
       let url = dir.appendingPathComponent("LineIndex.swift")
       try? Data(sample.utf8).write(to: url)
       let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot))
-      try? tab.editor.open(url)
+      _ = try? tab.editor.open(url)
       return CodePane(tab: tab)
     }
 

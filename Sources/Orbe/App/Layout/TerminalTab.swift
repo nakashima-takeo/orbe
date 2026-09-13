@@ -309,7 +309,7 @@ final class TerminalTab {
 
   /// エディターでファイルを開いて焦点の文書にする（制御 API の入口）。読めない・UTF-8 でないは throw。
   func openFile(_ url: URL) throws {
-    try MainActor.assumeIsolated { try editor.open(url) }
+    _ = try MainActor.assumeIsolated { try editor.open(url) }
   }
 
   /// 面（surface・エディター pane）からのウィンドウレベル chrome キー（タブ・workspace）を上位へ転送する。

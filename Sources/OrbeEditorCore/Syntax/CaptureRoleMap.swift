@@ -13,7 +13,7 @@ public enum CaptureRoleMap {
     return nil
   }
 
-  private static let table: [String: SyntaxRole?] = [
+  private static let table: [String: SyntaxRole] = [
     // 制御の流れ
     "keyword.control": .keywordControl,
     "keyword.return": .keywordControl,
@@ -37,12 +37,6 @@ public enum CaptureRoleMap {
     "tag.attribute": .variable,
     "markup.heading": .keyword,
     "text.title": .keyword,
-    // CSS の at-rule
-    "supports": .keyword,
-    "media": .keyword,
-    "keyframes": .keyword,
-    "import": .keyword,
-    "charset": .keyword,
     // 型
     "type": .type,
     "constructor": .type,

@@ -4,7 +4,7 @@ import SwiftTreeSitterLayer
 
 /// 文書 1 つの構文木（injections 込みの `LanguageLayer`）。解析し、編集を追い、役割付き区間を発行する。
 /// 単位は UTF-16（tree-sitter の既定符号化）。バイトはその 2 倍。
-public final class SyntaxLayer {
+final class SyntaxLayer {
   private let layer: LanguageLayer
 
   init(configuration: LanguageConfiguration, registry: LanguageRegistry) throws {

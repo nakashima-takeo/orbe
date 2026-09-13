@@ -82,7 +82,7 @@ enum Grammar: String, CaseIterable, Sendable {
     case "markdown_inline": self = .markdownInline
     case "json": self = .json
     case "typescript", "ts": self = .typescript
-    case "javascript", "js": self = .javascript
+    case "javascript", "js", "jsx": self = .javascript
     case "tsx": self = .tsx
     case "css": self = .css
     case "html": self = .html
@@ -146,11 +146,18 @@ enum Grammar: String, CaseIterable, Sendable {
     let name: String
   }
 
-  /// highlights を組むファイルの列。TypeScript / TSX は上流の `tree-sitter.json` どおり JavaScript の
-  /// highlights を下に敷く（単体の highlights.scm は TS 固有の差分しか持たない）。後のファイルが先に
-  /// 塗られ、前のファイルほど優先される（tree-sitter の highlight 規則）ので、上流の並びをそのまま持つ。
+  /// highlights を組むファイルの列（上流の `tree-sitter.json` どおり）。JavaScript は本体・JSX・引数の
+  /// 3 本、TypeScript / TSX は TS 固有の差分の後に JavaScript のものを重ねる（単体の highlights.scm は
+  /// TS 固有の差分しか持たない）。前のファイルが先に塗られ、後のファイルほど優先される（同じ字に当たった
+  /// 後のパターンが勝つ tree-sitter の highlight 規則）ので、上流の並びをそのまま持つ。
   var highlightFiles: [QueryFile] {
     switch self {
+    case .javascript:
+      return [
+        QueryFile(grammar: .javascript, name: "highlights.scm"),
+        QueryFile(grammar: .javascript, name: "highlights-jsx.scm"),
+        QueryFile(grammar: .javascript, name: "highlights-params.scm"),
+      ]
     case .typescript:
       return [
         QueryFile(grammar: .typescript, name: "highlights.scm"),

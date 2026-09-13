@@ -14,8 +14,9 @@ let package = Package(
     // tree-sitter の Swift 束縛（ランタイム同梱・LanguageLayer による injections 込みの色付け）。
     // `from:` は迷子タグ 0.25.0（0.10.0 より古い）を掴むので exact で固定する（docs/guides/build.md）。
     .package(url: "https://github.com/tree-sitter/swift-tree-sitter", exact: "0.10.0"),
-    // 文法 14 パッケージ（16 パーサ）。exact の 4 つは v0.25 世代 manifest が scanner.c を落として
-    // リンクに失敗するため導入前タグへ固定（docs/guides/build.md）。
+    // 文法 14 パッケージ（16 パーサ）。exact の 4 つは、新しいタグの manifest が scanner.c を cwd 相対の
+    // fileExists で条件付きにしていて依存として評価すると落ち、リンクに失敗するため導入前タグへ固定
+    // （docs/guides/build.md）。
     .package(url: "https://github.com/tree-sitter/tree-sitter-json", from: "0.24.8"),
     .package(url: "https://github.com/tree-sitter/tree-sitter-typescript", from: "0.23.2"),
     .package(url: "https://github.com/tree-sitter/tree-sitter-html", from: "0.23.2"),

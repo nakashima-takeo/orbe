@@ -88,8 +88,6 @@ extension EditorDocument: TextSurfaceDelegate {
     fresh = set
   }
 
-  public func surfaceDidChangeSelection(_ surface: any TextSurface) {}
-
   public func surface(_ surface: any TextSurface, focusDidChange focused: Bool) {
     onFocusChange?(focused)
   }
