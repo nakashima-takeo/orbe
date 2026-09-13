@@ -18,9 +18,9 @@ final class RepoWatcherTests: OrbeTestCase {
       self?.batches.append(batch)
     }
     XCTAssertNotNil(watcher)
-    // fixture の初期 commit が残した変化は、監視を始めた後の最初の配達に混ざって届く（FSEvents の
-    // 「今から」は直前の変化を切り落とさない）。目印を 1 つ書いてその配達を待ち、以後のテストが
-    // 自分の起こした変化だけを見るようにする——配達は起きた順なので、目印より前の変化はここで出尽くす。
+    // fixture の初期 commit が残した変化が、監視を始めた後の最初の配達に混ざって届くことがある（FSEvents
+    // の「今から」の境界は厳密ではない）。目印を 1 つ書いてその配達を待ち、以後のテストが自分の起こした
+    // 変化だけを見るようにする——配達は起きた順なので、目印より前の変化はここで出尽くす。
     try repo.write(".orbe-watch-marker", "")
     pumpMain(until: { batches.contains { $0.paths.contains(repo.root + "/.orbe-watch-marker") } })
     batches.removeAll()

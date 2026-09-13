@@ -48,15 +48,31 @@ final class LineDiffTests: XCTestCase {
   }
 
   /// 共通部分を落とした残りが上限を超えると、残り全体を 1 つの変更区間にする（二乗の時間を避ける）。
+  /// 残りの中に離れた 2 箇所の変更を置く——Myers なら 2 区間、畳めば 1 区間に割れるので、上限の値・
+  /// `<=` の境界・畳む分岐の 3 つがどれも守られる。
   func testLargeReplacementCollapsesIntoOneHunk() {
     let n = LineDiff.maximumComparedLines
-    let base = "keep\n" + (0..<n).map { "old \($0)\n" }.joined() + "tail\n"
-    let current = "keep\n" + (0..<n).map { "new \($0)\n" }.joined() + "tail\n"
-    XCTAssertEqual(LineDiff.hunks(base: base, current: current), [hunk(2, n, 2, n)])
-
-    let small = "keep\n" + (0..<(n / 2)).map { "old \($0)\n" }.joined() + "tail\n"
-    let smallNew = "keep\n" + (0..<(n / 2)).map { "new \($0)\n" }.joined() + "tail\n"
+    func text(_ count: Int, changingEnds: Bool) -> String {
+      let lines = (0..<count).map { i -> String in
+        changingEnds && (i == 0 || i == count - 1) ? "new \(i)\n" : "old \(i)\n"
+      }
+      return "keep\n" + lines.joined() + "tail\n"
+    }
     XCTAssertEqual(
-      LineDiff.hunks(base: small, current: smallNew), [hunk(2, n / 2, 2, n / 2)], "上限内も同じ形")
+      LineDiff.hunks(base: text(n, changingEnds: false), current: text(n, changingEnds: true)),
+      [hunk(2, n, 2, n)], "残り 2n 行 > 上限: 1 区間に畳む")
+    XCTAssertEqual(
+      LineDiff.hunks(
+        base: text(n / 2, changingEnds: false), current: text(n / 2, changingEnds: true)),
+      [hunk(2, 1, 2, 1), hunk(n / 2 + 1, 1, n / 2 + 1, 1)], "残り n 行 = 上限: 差分を取る")
+  }
+
+  /// 上限を超える片側だけの変化（大きな貼り付け・index 版が空）でも、件数 0 の側は直前の行を指す。
+  func testLargeOneSidedChangesKeepTheZeroCountConvention() {
+    let n = LineDiff.maximumComparedLines + 500
+    let block = (0..<n).map { "line \($0)\n" }.joined()
+    XCTAssertEqual(LineDiff.hunks(base: "keep\n", current: "keep\n" + block), [hunk(1, 0, 2, n)])
+    XCTAssertEqual(LineDiff.hunks(base: "keep\n" + block, current: "keep\n"), [hunk(2, n, 1, 0)])
+    XCTAssertEqual(LineDiff.hunks(base: "", current: block), [hunk(0, 0, 1, n)])
   }
 }

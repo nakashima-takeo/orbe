@@ -89,7 +89,7 @@ public enum LineDiff {
   }
 
   /// 行の中身と、改行で終わっているか。最後の行だけ改行を欠きうる。
-  private struct Line: Hashable {
+  private struct Line: Equatable {
     let body: Substring
     let terminated: Bool
   }

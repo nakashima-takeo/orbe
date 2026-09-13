@@ -159,7 +159,7 @@ public final class EditorDocument {
     hunks = baseline.map { LineDiff.hunks(base: $0, current: surface.text) } ?? []
   }
 
-  /// 打鍵ごとに差分を取らず、runloop 1 回に 1 度だけ作り直す。
+  /// 同じ runloop ターンに複数届いた編集（複数キャレット等）を 1 回の作り直しに畳む。
   private func scheduleHunks() {
     guard baseline != nil, !needsHunks else { return }
     needsHunks = true

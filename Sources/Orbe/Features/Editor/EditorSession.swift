@@ -54,14 +54,9 @@ final class EditorSession {
     onChange?()
   }
 
-  /// force でなければ、ディスクが変わっていれば失敗する（→ `EditorDocument.save`）。
-  func save(_ document: EditorDocument, force: Bool = false) throws {
-    try document.save(force: force)
-  }
-
+  /// 焦点の文書を保存する。force でなければ、ディスクが変わっていれば失敗する（→ `EditorDocument.save`）。
   func saveActive(force: Bool = false) throws {
-    guard let activeDocument else { return }
-    try save(activeDocument, force: force)
+    try activeDocument?.save(force: force)
   }
 
   /// 文書を閉じる（面も一緒に消える）。未保存でも黙って捨てる。焦点だった文書を閉じれば隣の文書へ。

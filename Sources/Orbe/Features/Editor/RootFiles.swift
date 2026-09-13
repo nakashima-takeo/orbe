@@ -129,8 +129,9 @@ final class RootFiles {
     dropUnwantedBaselines()
   }
 
+  /// 生きている観測者の関心の和集合（`notify` / `finish` と同じく、消えた観測者は数えない）。
   private var interests: [String] {
-    Array(Set(observations.compactMap(\.relativePath))).sorted()
+    Array(Set(observations.compactMap { $0.observer == nil ? nil : $0.relativePath })).sorted()
   }
 
   private func dropUnwantedBaselines() {
@@ -228,6 +229,8 @@ final class RootFiles {
   }
 
   private func finish(status: GitStatus?, changed: [String]) {
+    // 連鎖の最中に関心が消えたパス（取り始めたときの集合で走り切る）を書き戻さない。
+    dropUnwantedBaselines()
     if status != self.status {
       self.status = status
       notify { $0.rootFilesStatusDidChange(self) }
@@ -248,30 +251,39 @@ final class RootFiles {
   // MARK: - 一覧と新規作成
 
   /// ディレクトリの中身（`.git` を除く。ドットファイルは含む）。名前順（大小無視）。
+  /// 種別は一覧と一緒に取る（1 件ずつ stat すると数千件のディレクトリで main が止まる）。URL は呼び手の
+  /// 綴り（正準形）で組み直す——一覧が返す URL は実パス（`/private/…`）になる。
   func entries(of directory: URL) throws -> [Entry] {
-    let manager = FileManager.default
-    return try manager.contentsOfDirectory(atPath: directory.path)
-      .filter { $0 != ".git" }
-      .map { name in
-        let url = directory.appendingPathComponent(name)
-        let type = (try? manager.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType
-        let isDirectory = type == .typeDirectory
-        return Entry(
-          name: name, url: directory.appendingPathComponent(name, isDirectory: isDirectory),
-          isDirectory: isDirectory)
-      }
-      .sorted { $0.name.caseInsensitiveCompare($1.name) == .orderedAscending }
+    try FileManager.default.contentsOfDirectory(
+      at: directory, includingPropertiesForKeys: [.isDirectoryKey], options: []
+    )
+    .filter { $0.lastPathComponent != ".git" }
+    .map { found in
+      let name = found.lastPathComponent
+      let isDirectory =
+        (try? found.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+      return Entry(
+        name: name, url: directory.appendingPathComponent(name, isDirectory: isDirectory),
+        isDirectory: isDirectory)
+    }
+    .sorted { $0.name.caseInsensitiveCompare($1.name) == .orderedAscending }
   }
 
   /// 空ファイルを作る。既に在れば失敗。中間ディレクトリは作らない。
   func createFile(at url: URL) throws {
-    guard !FileManager.default.fileExists(atPath: url.path) else { throw Error.alreadyExists(url) }
+    guard !Self.exists(url) else { throw Error.alreadyExists(url) }
     try Data().write(to: url)
   }
 
   /// フォルダを作る。既に在れば失敗。中間ディレクトリは作らない。
   func createDirectory(at url: URL) throws {
-    guard !FileManager.default.fileExists(atPath: url.path) else { throw Error.alreadyExists(url) }
+    guard !Self.exists(url) else { throw Error.alreadyExists(url) }
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+  }
+
+  /// 一覧と同じ土俵（symlink を辿らない）。`fileExists` は辿るので、壊れた symlink を「無い」と見て
+  /// リンク先（根の外もありうる）へ書いてしまう。
+  private static func exists(_ url: URL) -> Bool {
+    (try? FileManager.default.attributesOfItem(atPath: url.path)) != nil
   }
 }

@@ -69,7 +69,8 @@ final class RootFilesTests: OrbeTestCase {
     let inside = repo.root + "/.git"
     try FileManager.default.createDirectory(
       atPath: inside + "/.git", withIntermediateDirectories: true)
-    // 解決の完了は、同じ runner の barrier（先に積んだ読み取りの完了を待つ）が返ることで知る。
+    // 解決の完了は、同じ runner の barrier（先に積んだ読み取りの完了を待つ）が返ることで知る——
+    // `GitRepo.open` が `.read` レーンに載っていることに依存する（`.independent` へ移すとここは待たない）。
     let runner = GitRunner()
     let files = RootFiles(root: inside, runner: runner)
     let settled = expectation(description: "rev-parse が返った")
@@ -114,6 +115,12 @@ final class RootFilesTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     XCTAssertTrue(repo.git(["commit", "-qm", "c"]).isSuccess)
     pumpMain(until: { files.status?.badge(of: "a.txt") == nil }, "commit で clean")
+    let gitDir = repo.root + "/.git"
+    XCTAssertTrue(
+      recorder.changes.allSatisfy { change in
+        guard case .paths(let paths) = change else { return true }
+        return paths.allSatisfy { $0 != gitDir && !$0.hasPrefix(gitDir + "/") }
+      }, "根の監視は .git の中をパス集合に載せない: \(recorder.changes)")
 
     try repo.write("dir/inner.txt", "i\n")
     pumpMain(until: { files.status?.badge(of: "dir/inner.txt") == .untracked }, "未追跡ディレクトリの中は U")
@@ -192,9 +199,24 @@ final class RootFilesTests: OrbeTestCase {
 
     let untracked = repo.url("nope.txt")
     try repo.write("nope.txt", "u\n")
-    files.addObserver(Recorder(), interest: untracked)
+    let third = Recorder()
+    files.addObserver(third, interest: untracked)
     pumpMain(until: { files.status?.badge(of: "nope.txt") == .untracked })
     XCTAssertNil(files.baseline(for: untracked), "未追跡は baseline 無し")
+  }
+
+  /// 観測者が消えれば関心も消える——次に観測者が出入りしたときに刈られ、baseline のキャッシュも捨てる。
+  func testADeadObserversInterestIsPruned() throws {
+    let files = RootFiles(root: repo.root)
+    let url = repo.url("a.txt")
+    var only: Recorder? = Recorder()
+    files.addObserver(only!, interest: url)
+    pumpMain(until: { files.baseline(for: url) == "one\n" })
+
+    only = nil
+    let bystander = Recorder()
+    files.addObserver(bystander)
+    XCTAssertNil(files.baseline(for: url), "死んだ観測者の関心は刈られる")
   }
 
   /// 競合中（stage 0 が無い）と UTF-8 でない index 版は baseline 無し。status には競合・A として出る。
@@ -253,11 +275,28 @@ final class RootFilesTests: OrbeTestCase {
     try FileManager.default.createSymbolicLink(
       at: dir.appendingPathComponent("link"), withDestinationURL: dir.appendingPathComponent("Sub"))
 
+    let broken = dir.appendingPathComponent("broken")
+    try FileManager.default.createSymbolicLink(
+      at: broken, withDestinationURL: dir.appendingPathComponent("nowhere"))
+
     let entries = try files.entries(of: dir)
     XCTAssertEqual(
-      entries.map(\.name), [".hidden", "a.txt", "b.txt", "link", "Sub"], "名前順（大小無視）・.git は出ない")
-    XCTAssertEqual(entries.map(\.isDirectory), [false, false, false, false, true], "symlink は辿らない")
+      entries.map(\.name), [".hidden", "a.txt", "b.txt", "broken", "link", "Sub"],
+      "名前順（大小無視）・.git は出ない")
+    XCTAssertEqual(
+      entries.map(\.isDirectory), [false, false, false, false, false, true], "symlink は辿らない")
+    XCTAssertEqual(
+      entries.map(\.url.path), entries.map { dir.appendingPathComponent($0.name).path })
     XCTAssertEqual(try Data(contentsOf: dir.appendingPathComponent("b.txt")), Data(), "空ファイル")
+
+    XCTAssertThrowsError(try files.createFile(at: broken), "壊れた symlink は「在る」（リンク先へ書かない）") {
+      XCTAssertEqual($0 as? RootFiles.Error, .alreadyExists(broken))
+    }
+    XCTAssertThrowsError(try files.createDirectory(at: broken)) {
+      XCTAssertEqual($0 as? RootFiles.Error, .alreadyExists(broken))
+    }
+    XCTAssertFalse(
+      FileManager.default.fileExists(atPath: dir.appendingPathComponent("nowhere").path))
 
     XCTAssertThrowsError(try files.createFile(at: dir.appendingPathComponent("b.txt"))) {
       XCTAssertEqual($0 as? RootFiles.Error, .alreadyExists(dir.appendingPathComponent("b.txt")))
@@ -276,6 +315,6 @@ final class RootFilesTests: OrbeTestCase {
     held = nil
     XCTAssertNil(observed, "離せば消える（監視も止まる）")
     let again = RootFiles.shared(for: repo.root)
-    XCTAssertFalse(again === observed)
+    XCTAssertTrue(RootFiles.shared(for: repo.root) === again, "解放後は登録簿に載り直す")
   }
 }

@@ -5,11 +5,12 @@ import Foundation
 /// 結果が古くても監視が取り直す観測。`.independent` で走らせ、巨大リポジトリの status が
 /// `.exclusive`（worktree remove・update-ref）を待たせないようにする。
 extension GitRepo {
-  /// status の見え方を左右するユーザー設定（`status.showUntrackedFiles`・`core.quotepath`・
-  /// `diff.ignoreSubmodules`）を引数で封じ、`--no-optional-locks` で index を書き換えない。
+  /// status の見え方を左右するユーザー設定（`status.showUntrackedFiles`・`diff.ignoreSubmodules`）を
+  /// 引数で封じ、`--no-optional-locks` で index を書き換えない。パスは `-z` で verbatim に出る
+  /// （`core.quotepath` は参照されない）。
   static let statusArguments = [
-    "--no-optional-locks", "-c", "core.quotepath=false", "status", "--porcelain=v2", "-z",
-    "--untracked-files=normal", "--ignore-submodules=none",
+    "--no-optional-locks", "status", "--porcelain=v2", "-z", "--untracked-files=normal",
+    "--ignore-submodules=none",
   ]
 
   /// worktree の status。git が失敗したら nil。

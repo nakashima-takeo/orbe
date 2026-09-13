@@ -193,8 +193,9 @@ final class EditorDocumentDiskTests: XCTestCase {
 
   // MARK: - ハンク
 
-  /// baseline を置けば即時にハンクが出て、編集は runloop 1 回に間引いて作り直す。baseline を外せば空。
-  func testHunksFollowTheBaselineImmediatelyAndEditsAfterOneRunLoopTurn() throws {
+  /// baseline を置けば即時にハンクが出て、編集は同期では作り直さず、連続した編集で作り直しは 1 回。
+  /// baseline を外せば空。
+  func testHunksFollowTheBaselineImmediatelyAndConsecutiveEditsRebuildOnce() throws {
     let (document, surface) = try open(try temp("e.txt", "a\nb\nc\n"))
     XCTAssertEqual(document.hunks, [])
     var notified = 0
@@ -223,11 +224,14 @@ final class EditorDocumentDiskTests: XCTestCase {
   }
 
   /// runloop を回して条件の成立を待つ（ハンクの作り直しは main へ 1 回だけ積まれる）。
-  private func pumpMain(until condition: () -> Bool, timeout: TimeInterval = 5) {
+  private func pumpMain(
+    until condition: () -> Bool, timeout: TimeInterval = 5, file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
     let deadline = Date().addingTimeInterval(timeout)
     while !condition(), Date() < deadline {
       RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
     }
-    XCTAssertTrue(condition(), "条件が \(timeout) 秒以内に成立しない")
+    XCTAssertTrue(condition(), "条件が \(timeout) 秒以内に成立しない", file: file, line: line)
   }
 }

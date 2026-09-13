@@ -26,7 +26,8 @@ final class RepoWatcher {
 
   private var stream: FSEventStreamRef?
   private let onChange: (Batch) -> Void
-  /// 監視する場所（呼び手の綴りと実パス）。付け替えは最長一致で行う（根の中の `.git` は git dir が勝つ）。
+  /// 監視する場所（呼び手の綴りと実パス）。付け替えは最長一致で行う（linked worktree の gitDir は
+  /// commonDir の中にある）。
   private let watched: [(spelling: String, real: String)]
   private let gitDirs: [String]
   private var pending = Batch()
@@ -68,9 +69,15 @@ final class RepoWatcher {
           kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagUseCFTypes
             | kFSEventStreamCreateFlagWatchRoot))
     else { return nil }
-    self.stream = stream
     FSEventStreamSetDispatchQueue(stream, .main)
-    FSEventStreamStart(stream)
+    // queue への登録の失敗は start の戻り値でしか分からない。捨てると「監視が張れた」と信じたまま
+    // イベントが 1 件も来ない。start していない stream に Stop は呼べない。
+    guard FSEventStreamStart(stream) else {
+      FSEventStreamInvalidate(stream)
+      FSEventStreamRelease(stream)
+      return nil
+    }
+    self.stream = stream
   }
 
   deinit {

@@ -36,7 +36,7 @@ final class GitRepoObserveTests: OrbeTestCase {
     XCTAssertEqual(GitWorktreeRoot.normalizedPath(opened.commonDir), repo.root + "/.git")
   }
 
-  /// status は M / A / U / 競合を相対パスで返し、未追跡ディレクトリは前方一致で引ける。
+  /// status は M / A / 未追跡（ファイルとディレクトリ）を相対パスで返し、未追跡ディレクトリは前方一致で引ける。
   /// ユーザーの `status.showUntrackedFiles=no` があっても未追跡は出る。
   func testStatusReflectsTheWorktreeRegardlessOfUserSettings() throws {
     let git = try repo.open()
