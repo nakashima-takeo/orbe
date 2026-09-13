@@ -68,7 +68,8 @@ final class RepoWatcherTests: OrbeTestCase {
     pumpMain(until: { batches.contains { $0.gitChanged } }, "HEAD / refs の変化")
   }
 
-  /// 変わり続ける間も 1 秒に 1 回は出る（後追いだけだと飢餓する）。
+  /// 変わり続ける間も 1 秒に 1 回は出る（後追いだけだと飢餓する）。測るのは「書き続けている**最中に**
+  /// 出たか」——上限があれば 1 秒過ぎに出るのでループ終了時点で非空、後追いだけなら書き終わるまで出ない。
   func testContinuousChangesStillFlushWithinTheMaximumDelay() throws {
     let start = Date()
     var writes = 0
@@ -77,9 +78,7 @@ final class RepoWatcherTests: OrbeTestCase {
       writes += 1
       RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05))
     }
-    pumpMain(until: { !batches.isEmpty }, "連続書き込みの通知")
     XCTAssertGreaterThan(writes, 20, "前提: デバウンス間隔より密に書き続けた")
-    XCTAssertLessThan(
-      Date().timeIntervalSince(start), 1.6 + RepoWatcher.maximumDelay + 0.5, "上限で強制的に出る")
+    XCTAssertFalse(batches.isEmpty, "書き続けている最中に上限で出る")
   }
 }
