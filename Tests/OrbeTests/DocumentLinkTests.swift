@@ -86,6 +86,21 @@ final class DocumentLinkTests: OrbeTestCase {
       "新しい baseline との差分")
   }
 
+  /// 根のサービスは開いている文書が握っている間だけ生きる。文書を全部閉じれば離され、監視も止まる。
+  func testClosingAllDocumentsReleasesTheRootService() throws {
+    let session = session()
+    let documentA = try session.open(repo.url("a.txt"))
+    try repo.write("b.txt", "b\n")
+    let documentB = try session.open(repo.url("b.txt"))
+    weak var files = RootFiles.shared(for: repo.root)
+    XCTAssertNotNil(files)
+
+    session.close(documentA)
+    XCTAssertNotNil(files, "まだ b.txt が握っている")
+    session.close(documentB)
+    XCTAssertNil(files, "全部閉じれば離される")
+  }
+
   /// 文書が属する根は文書の実体から解く（タブの根ではない）。管理外のファイルは baseline 無し。
   func testDocumentOutsideAnyRepositoryHasNoBaseline() throws {
     let outside = FileManager.default.temporaryDirectory.appendingPathComponent(

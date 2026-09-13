@@ -79,6 +79,25 @@ final class RootFilesTests: OrbeTestCase {
     XCTAssertNil(files.status)
   }
 
+  /// `.git` はあるが git が失敗する根（壊れた `.git` ファイル）も管理外。
+  func testRootWithABrokenGitFileIsUnmanaged() throws {
+    let broken = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "orbe-broken-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: broken, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: broken) }
+    try "gitdir: /nonexistent/orbe/.git\n".write(
+      to: broken.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+    let root = GitWorktreeRoot.normalizedPath(broken.path)
+    XCTAssertEqual(GitWorktreeRoot.root(of: root), root, "前提: 根の規則はこの `.git` を根と見る")
+    let runner = GitRunner()
+    let files = RootFiles(root: root, runner: runner)
+    let settled = expectation(description: "rev-parse が返った")
+    runner.run(["version"], cwd: root, lane: .exclusive) { _ in settled.fulfill() }
+    wait(for: [settled], timeout: 20)
+    XCTAssertNil(files.repo)
+    XCTAssertNil(files.status)
+  }
+
   // MARK: - status と監視
 
   func testStatusFollowsExternalWritesAndGitOperations() throws {
@@ -98,6 +117,40 @@ final class RootFilesTests: OrbeTestCase {
 
     try repo.write("dir/inner.txt", "i\n")
     pumpMain(until: { files.status?.badge(of: "dir/inner.txt") == .untracked }, "未追跡ディレクトリの中は U")
+  }
+
+  /// 「status が変わった」は取り直しの結果が前と違うときだけ出る。変化を起こしても status が同じなら鳴らない。
+  /// 取り直しは根ごとに直列なので、後に起こした変化の通知が届いた時点で前の取り直しは終わっている。
+  func testStatusNotificationFiresOnlyWhenTheResultDiffers() throws {
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    files.addObserver(recorder)
+    pumpMain(until: { files.status != nil })
+    try repo.write("a.txt", "changed\n")
+    pumpMain(until: { files.status?.badge(of: "a.txt") == .modified })
+    XCTAssertEqual(recorder.statusChanges, 2)
+
+    let seen = recorder.changes.count
+    try repo.write("a.txt", "changed again\n")
+    pumpMain(
+      until: { recorder.changes.dropFirst(seen).contains { $0.includes(repo.root + "/a.txt") } },
+      "変化は届く")
+    try repo.write("b.txt", "new\n")
+    pumpMain(until: { files.status?.badge(of: "b.txt") == .untracked })
+    XCTAssertTrue(repo.git(["add", "b.txt"]).isSuccess)
+    pumpMain(until: { files.status?.badge(of: "b.txt") == .added })
+    XCTAssertEqual(recorder.statusChanges, 4, "M のままの書き直しでは鳴らない（M → U → A の 3 回だけ）")
+  }
+
+  /// 根が git 管理下と分かる前（解決は非同期）に起きた変化も落とさない。
+  func testChangesDuringRootResolutionAreNotLost() throws {
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    files.addObserver(recorder)
+    try repo.write("early.txt", "e\n")
+    pumpMain(
+      until: { recorder.changes.contains { $0.includes(repo.root + "/early.txt") } }, "解決前の変化")
+    pumpMain(until: { files.status?.badge(of: "early.txt") == .untracked })
   }
 
   /// linked worktree の根で、本体側にある index が変われば拾う。
@@ -142,6 +195,30 @@ final class RootFilesTests: OrbeTestCase {
     files.addObserver(Recorder(), interest: untracked)
     pumpMain(until: { files.status?.badge(of: "nope.txt") == .untracked })
     XCTAssertNil(files.baseline(for: untracked), "未追跡は baseline 無し")
+  }
+
+  /// 競合中（stage 0 が無い）と UTF-8 でない index 版は baseline 無し。status には競合・A として出る。
+  func testConflictedAndNonUTF8FilesHaveNoBaseline() throws {
+    XCTAssertTrue(repo.git(["checkout", "-qb", "other"]).isSuccess)
+    try repo.write("a.txt", "other\n")
+    XCTAssertTrue(repo.git(["commit", "-qam", "other"]).isSuccess)
+    XCTAssertTrue(repo.git(["checkout", "-q", "main"]).isSuccess)
+    try repo.write("a.txt", "main\n")
+    XCTAssertTrue(repo.git(["commit", "-qam", "main"]).isSuccess)
+    XCTAssertFalse(repo.git(["merge", "other"]).isSuccess, "前提: 競合する")
+    try Data([0xFF, 0xFE, 0x00]).write(to: repo.url("bin.dat"))
+    XCTAssertTrue(repo.git(["add", "bin.dat"]).isSuccess)
+
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    files.addObserver(recorder, interest: repo.url("a.txt"))
+    files.addObserver(recorder, interest: repo.url("bin.dat"))
+    pumpMain(until: { files.status != nil })
+    XCTAssertEqual(files.status?.badge(of: "a.txt"), .conflicted)
+    XCTAssertEqual(files.status?.badge(of: "bin.dat"), .added)
+    XCTAssertNil(files.baseline(for: repo.url("a.txt")), "競合中は index 版が定まらない")
+    XCTAssertNil(files.baseline(for: repo.url("bin.dat")), "UTF-8 でない版は使わない")
+    XCTAssertEqual(recorder.baselineChanges, [], "無いものの初回取得は通知しない")
   }
 
   /// 関心は観測者に紐づく——同じファイルを 2 つが追い、片方が消えても残った方の baseline は追従し続ける。
