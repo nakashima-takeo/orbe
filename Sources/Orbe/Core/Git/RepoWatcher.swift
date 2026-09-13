@@ -116,19 +116,21 @@ final class RepoWatcher {
       | kFSEventStreamEventFlagUserDropped | kFSEventStreamEventFlagKernelDropped)
 
   /// git dir の中で status・baseline に関係しないもの。objects（multi-pack-index を含む）・reflog・
-  /// 他の worktree と submodule の私有状態・各種 `.lock` は弾き、それ以外（index・HEAD・refs・packed-refs・
-  /// reftable・merge / rebase / sequencer の進行状態と、git が今後足す状態ファイル）は拾う——
-  /// 拾う側を列挙すると未知のファイルが取りこぼし側に倒れる。
+  /// 他の worktree の私有状態・submodule の内部・各種 `.lock` は弾き、それ以外（index・HEAD・refs・
+  /// packed-refs・reftable・merge / rebase / sequencer の進行状態と、git が今後足す状態ファイル）は
+  /// 拾う——拾う側を列挙すると未知のファイルが取りこぼし側に倒れる。
+  ///
+  /// **git 自身の読み取りが生む副産物も弾く**: fsmonitor デーモン（`core.fsmonitor`）は git が読むたびに
+  /// `fsmonitor--daemon/cookies/<pid>-<n>` を作って消す（`--no-optional-locks` でも抑止されない）。
+  /// 拾うと自分の status が自分を呼び戻し、根を開いている限り git が回り続ける。
   private static let ignoredGitDirEntries: Set<Substring> = [
-    "objects", "logs", "worktrees", "modules",
+    "objects", "logs", "worktrees", "modules", "fsmonitor--daemon", "fsmonitor--daemon.ipc",
   ]
 
   /// `sub` は git dir からの相対パス（`/` 始まり）。先頭の構成要素で弾く（その要素自身の出入りも含む）。
-  private static func isGitStateChange(_ sub: String) -> Bool {
+  static func isGitStateChange(_ sub: String) -> Bool {
     guard !sub.hasSuffix(".lock") else { return false }
-    let first = sub.dropFirst().split(
-      separator: "/", maxSplits: 1, omittingEmptySubsequences: false)
-    return !ignoredGitDirEntries.contains(first.first ?? "")
+    return !ignoredGitDirEntries.contains(sub.dropFirst().prefix { $0 != "/" })
   }
 
   /// タイマーを `due` に張り直す（常に 1 本）。

@@ -81,6 +81,25 @@ final class RepoWatcherTests: OrbeTestCase {
     pumpMain(until: { batches.contains { $0.gitChanged } }, "packed な tag の削除は packed-refs だけが変わる")
   }
 
+  /// git dir の中の判定を実時間ゼロで押さえる。とくに fsmonitor の cookie は git が status のたびに作って
+  /// 消すので、拾うと自分の status が自分を呼び戻す閉路になる。
+  func testGitDirFilterIgnoresGitsOwnReadSideEffects() {
+    for ignored in [
+      "/fsmonitor--daemon/cookies/93678-1", "/fsmonitor--daemon.ipc",
+      "/objects/pack/multi-pack-index",
+      "/objects/ab/cdef", "/logs/HEAD", "/worktrees/other/index", "/modules/sub/index",
+      "/index.lock", "/packed-refs.lock", "/worktrees", "/objects",
+    ] {
+      XCTAssertFalse(RepoWatcher.isGitStateChange(ignored), ignored)
+    }
+    for state in [
+      "/index", "/HEAD", "/ORIG_HEAD", "/refs/heads/main", "/packed-refs", "/reftable/tables.list",
+      "/MERGE_HEAD", "/rebase-merge/done", "/sequencer/todo", "/AUTO_MERGE", "/some-new-state-file",
+    ] {
+      XCTAssertTrue(RepoWatcher.isGitStateChange(state), state)
+    }
+  }
+
   /// linked worktree の根は、自分の gitDir（commonDir の中）の変化は拾い、隣の worktree の私有状態では
   /// 取り直さない。
   func testLinkedWorktreeIgnoresSiblingWorktreeState() throws {
