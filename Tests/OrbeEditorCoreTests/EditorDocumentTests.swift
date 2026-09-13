@@ -143,9 +143,72 @@ final class EditorDocumentTests: XCTestCase {
     surface.replace(NSRange(location: 17, length: 0), with: "// note\n")
     XCTAssertTrue(surface.texts(of: .comment).contains("// note"))
     XCTAssertEqual(document.lineIndex.lineCount, 3)
+  }
 
-    document.rehighlightAll()
-    XCTAssertTrue(surface.texts(of: .keyword).contains("var"))
+  /// 打鍵で塗るのは、塗り直す区間と交差する区間だけ——tree-sitter は区間と交差する**マッチ**を返し、
+  /// そのマッチの他の capture は区間の外にありうる。それを塗ると外の正しい色がそのマッチだけで決まった
+  /// 色で上書きされる（Go の `NewLineIndex` が 1 文字の挿入で function 色になる）。全位置へ 1 文字挿入し、
+  /// 塗った区間がすべて塗り直す区間と交差し、その外の色が動かないことを見る。
+  func testEditingPaintsOnlySpansIntersectingTheChangedRanges() throws {
+    let source = try String(contentsOf: Queries.samples.appendingPathComponent("sample.go"))
+    var strays: [String] = []
+    var recolored: [String] = []
+    var narrowEdits = 0
+    for position in 0...source.utf16.count {
+      // 文書は面の delegate を weak で持たれるので、編集の間は生かしておく。
+      let (document, surface) = try open(try temp("edit.go", source))
+      let before = (0..<surface.length).map { surface.role(at: $0) }
+      surface.replace(NSRange(location: position, length: 0), with: "x")
+      XCTAssertEqual(surface.appliedRanges.count, 2, "編集で 1 回塗る")
+      let painted = try XCTUnwrap(surface.appliedRanges.last)
+      let spans = try XCTUnwrap(surface.appliedSpans.last)
+      if !painted.contains(integersIn: 0..<surface.length) { narrowEdits += 1 }
+      for span in spans where !painted.intersects(integersIn: Range(span.range)!) {
+        strays.append("挿入 \(position) → \(span.range) \(span.role)")
+      }
+      var touched = painted
+      for span in spans { touched.insert(integersIn: Range(span.range)!) }
+      for offset in 0..<surface.length where !touched.contains(offset) && offset != position {
+        let old = offset < position ? offset : offset - 1
+        if surface.role(at: offset) != before[old] {
+          recolored.append("挿入 \(position) → offset \(offset)")
+        }
+      }
+      withExtendedLifetime(document) {}
+    }
+    XCTAssertEqual(strays, [], "塗り直す区間と交差しない区間を塗った")
+    XCTAssertEqual(recolored, [], "触っていない字の色が動いた")
+    XCTAssertGreaterThan(narrowEdits, 0, "全文を塗り直す編集ばかりでは外を見ていない")
+  }
+
+  /// 編集のたびに見えている区間を塗り直す（木の差分に出ない隣の役割変化を画面に残さない）。
+  /// 見えていない区間は次に見えたとき 1 回だけ塗り、動かなければ塗らない。
+  func testEditsRepaintTheVisibleRangeAndScrollingPaintsStaleRangesOnce() throws {
+    let (document, surface) = try open(Queries.samples.appendingPathComponent("sample.go"))
+    let length = surface.length
+    surface.visibleRange = NSRange(location: 100, length: 80)
+
+    // コメントの中への挿入——構文木の変化はそのコメントに閉じる。
+    let comment = (surface.text as NSString).range(of: "// ").location + 2
+    surface.replace(NSRange(location: comment, length: 0), with: " ")
+    let painted = try XCTUnwrap(surface.appliedRanges.last)
+    XCTAssertTrue(painted.contains(integersIn: 100..<180), "編集で可視区間を塗り直す")
+    XCTAssertTrue(painted.contains(comment), "変わった区間も塗る")
+    XCTAssertFalse(painted.contains(length - 1), "見えていない末尾は塗らない")
+
+    let before = surface.appliedRanges.count
+    surface.scroll(to: NSRange(location: 120, length: 40))
+    XCTAssertEqual(surface.appliedRanges.count, before, "塗り済みの中で動いても塗らない")
+
+    surface.scroll(to: NSRange(location: length - 50, length: 200))
+    XCTAssertEqual(surface.appliedRanges.count, before + 1, "初めて見える区間は塗る")
+    let stale = try XCTUnwrap(surface.appliedRanges.last)
+    XCTAssertTrue(stale.contains(integersIn: (length - 50)..<(length + 1)), "本文の長さに収めて塗る")
+    XCTAssertFalse(stale.contains(150), "塗り済みは含めない")
+
+    surface.scroll(to: NSRange(location: length - 50, length: 200))
+    XCTAssertEqual(surface.appliedRanges.count, before + 1, "同じ区間へ戻っても塗らない")
+    withExtendedLifetime(document) {}
   }
 
   func testUnknownLanguageOpensWithoutColors() throws {

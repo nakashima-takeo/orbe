@@ -8,6 +8,11 @@ public enum EditorDocumentError: Error, Equatable {
 /// 開いたファイル 1 つ。識別（URL）・言語・未保存の有無・行索引・構文層を持ち、本文の正は対になる
 /// テキスト面にある（開いてから閉じるまで 1 対 1）。面の delegate として編集を受け、索引と構文木を
 /// 追従させて塗り直す。
+///
+/// 塗り直す範囲は「構文木が変わった区間 ∪ 今見えている区間」。木の差分だけでは、隣のノードの変化で
+/// 役割が変わるのに自分の区間は変わらない字（呼び出しになった識別子など）が古い色のまま残る。
+/// 見えている区間を毎回塗り直せば画面に古い色は残らず、見えていない区間は次に見えたときに
+/// 1 回だけ塗る（`fresh` が「最後の編集の後に塗った区間」を持つ）。
 @MainActor
 public final class EditorDocument {
   public let url: URL
@@ -22,6 +27,8 @@ public final class EditorDocument {
   /// テキスト面が first responder になった／やめた。
   public var onFocusChange: ((Bool) -> Void)?
   private let syntax: SyntaxLayer?
+  /// 最後の編集の後に塗った区間。編集のたびに（変わった区間 ∪ 可視区間）へ置き直す。
+  private var fresh = IndexSet()
 
   /// ファイルを UTF-8 として読む。読めない・UTF-8 でないは throw。
   public static func read(_ url: URL) throws -> String {
@@ -42,8 +49,8 @@ public final class EditorDocument {
     surface.delegate = self
     if let syntax {
       let text = surface.text
-      let set = syntax.parseAll(text, lineIndex: lineIndex)
-      surface.applyHighlights(syntax.highlights(in: set, text: text), in: set)
+      highlight(syntax.parseAll(text, lineIndex: lineIndex), text: text)
+      fresh = IndexSet(integersIn: 0..<text.utf16.count)
     }
   }
 
@@ -54,12 +61,17 @@ public final class EditorDocument {
     surface.markUndoBoundary()
   }
 
-  /// 構文層から全区間を再発行する（外観切替などで色を解き直す口）。
-  public func rehighlightAll() {
-    guard let syntax else { return }
-    let text = surface.text
-    let all = IndexSet(integersIn: 0..<text.utf16.count)
-    surface.applyHighlights(syntax.highlights(in: all, text: text), in: all)
+  private func highlight(_ set: IndexSet, text: String) {
+    guard let syntax, !set.isEmpty else { return }
+    surface.applyHighlights(syntax.highlights(in: set, text: text), in: set)
+  }
+
+  /// 今見えている区間（本文の長さに収めたもの）。
+  private var visibleSet: IndexSet {
+    let range = surface.visibleRange
+    let end = min(NSMaxRange(range), surface.text.utf16.count)
+    guard range.location < end else { return IndexSet() }
+    return IndexSet(integersIn: range.location..<end)
   }
 }
 
@@ -70,8 +82,10 @@ extension EditorDocument: TextSurfaceDelegate {
     isDirty = true
     guard let syntax else { return }
     let text = surface.text
-    let set = syntax.didChange(edit, text: text, old: old, new: lineIndex)
-    surface.applyHighlights(syntax.highlights(in: set, text: text), in: set)
+    var set = syntax.didChange(edit, text: text, old: old, new: lineIndex)
+    set.formUnion(visibleSet)
+    highlight(set, text: text)
+    fresh = set
   }
 
   public func surfaceDidChangeSelection(_ surface: any TextSurface) {}
@@ -80,5 +94,12 @@ extension EditorDocument: TextSurfaceDelegate {
     onFocusChange?(focused)
   }
 
-  public func surfaceDidLayoutViewport(_ surface: any TextSurface) {}
+  /// 見える区間が動いた。最後の編集の後にまだ塗っていない部分だけ塗る。
+  public func surfaceDidLayoutViewport(_ surface: any TextSurface) {
+    guard syntax != nil else { return }
+    let stale = visibleSet.subtracting(fresh)
+    guard !stale.isEmpty else { return }
+    highlight(stale, text: surface.text)
+    fresh.formUnion(stale)
+  }
 }

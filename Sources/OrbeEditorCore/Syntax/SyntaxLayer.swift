@@ -33,13 +33,18 @@ public final class SyntaxLayer {
     return layer.didChangeContent(LanguageLayer.Content(string: text), using: input)
   }
 
-  /// 区間集合に掛かる役割付き区間。並びは tree-sitter の優先順（後のものが上に塗られる）。
+  /// 区間集合と交差する役割付き区間。並びは tree-sitter の優先順（後のものが上に塗られる）。
+  /// tree-sitter は集合と交差する**マッチ**を返し、そのマッチの他の capture は集合の外にありうる——
+  /// それをそのまま塗ると、集合の外の正しい色をこのマッチだけで決まった色で上書きするので落とす。
   func highlights(in set: IndexSet, text: String) -> [HighlightSpan] {
     guard let ranges = try? layer.highlights(in: set, provider: text.predicateTextProvider) else {
       return []
     }
     return ranges.compactMap { named in
-      CaptureRoleMap.role(for: named.name).map { HighlightSpan(range: named.range, role: $0) }
+      guard let range = Range(named.range), set.intersects(integersIn: range),
+        let role = CaptureRoleMap.role(for: named.name)
+      else { return nil }
+      return HighlightSpan(range: named.range, role: role)
     }
   }
 

@@ -9,10 +9,14 @@ final class FakeTextSurface: TextSurface {
   private(set) var storage: NSMutableString
   var style: TextSurfaceStyle
   weak var delegate: TextSurfaceDelegate?
+  /// 見えている区間。既定は「何も見えていない」（可視の塗り直しを見るテストが明示する）。
   var visibleRange = NSRange(location: 0, length: 0)
   private(set) var undoBoundaries = 0
   /// 塗られた区間（役割付き）。`applyHighlights` の ranges で外し、spans で置く。
   private(set) var highlights: [HighlightSpan] = []
+  /// `applyHighlights` に渡された ranges と spans の履歴（呼び出しごと）。
+  private(set) var appliedRanges: [IndexSet] = []
+  private(set) var appliedSpans: [[HighlightSpan]] = []
 
   init(text: String, style: TextSurfaceStyle = .fake) {
     storage = NSMutableString(string: text)
@@ -24,17 +28,56 @@ final class FakeTextSurface: TextSurface {
   func substring(in range: NSRange) -> String { storage.substring(with: range) }
 
   func applyHighlights(_ spans: [HighlightSpan], in ranges: IndexSet) {
+    appliedRanges.append(ranges)
+    appliedSpans.append(spans)
     highlights.removeAll { ranges.intersects(integersIn: Range($0.range)!) }
     highlights.append(contentsOf: spans)
   }
 
   func markUndoBoundary() { undoBoundaries += 1 }
 
-  /// 編集を起こす（人の打鍵に相当）。
+  /// 編集を起こす（人の打鍵に相当）。塗った区間は本物の描画属性と同じく文字に付いて動く——
+  /// 編集より後ろは平行移動し、編集に掛かった区間は編集の外側だけが残る（置換文字は無色）。
   func replace(_ range: NSRange, with replacement: String) {
+    let length = (replacement as NSString).length
     storage.replaceCharacters(in: range, with: replacement)
-    delegate?.surface(
-      self, didChange: TextEdit(range: range, replacementLength: (replacement as NSString).length))
+    let delta = length - range.length
+    highlights = highlights.flatMap { span -> [HighlightSpan] in
+      let start = span.range.location
+      let end = NSMaxRange(span.range)
+      if end <= range.location { return [span] }
+      if start >= NSMaxRange(range) {
+        return [
+          HighlightSpan(
+            range: NSRange(location: start + delta, length: end - start), role: span.role)
+        ]
+      }
+      var parts: [HighlightSpan] = []
+      if start < range.location {
+        parts.append(
+          HighlightSpan(
+            range: NSRange(location: start, length: range.location - start), role: span.role))
+      }
+      if end > NSMaxRange(range) {
+        let tail = NSMaxRange(range)
+        parts.append(
+          HighlightSpan(range: NSRange(location: tail + delta, length: end - tail), role: span.role)
+        )
+      }
+      return parts
+    }
+    delegate?.surface(self, didChange: TextEdit(range: range, replacementLength: length))
+  }
+
+  /// 見える区間を動かして viewport の通知を流す。
+  func scroll(to range: NSRange) {
+    visibleRange = range
+    delegate?.surfaceDidLayoutViewport(self)
+  }
+
+  /// オフセットの字の役割（後に塗られた区間が勝つ）。区間に入っていなければ nil＝素の文字。
+  func role(at offset: Int) -> SyntaxRole? {
+    highlights.last { NSLocationInRange(offset, $0.range) }?.role
   }
 
   func focus(_ focused: Bool) {
