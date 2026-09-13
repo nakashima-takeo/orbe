@@ -31,8 +31,8 @@ public final class EditorDocument {
     didSet { if isDirty != oldValue { onDirtyChange?(isDirty) } }
   }
   public var onDirtyChange: ((Bool) -> Void)?
-  /// ディスクの内容が最後に読んだ／書いたものと違い、差し替えられていない（未保存の本文がある）。
-  /// 照合のたびに導出し直す（読めない・消えた・同じ・差し替えたなら false）。
+  /// ディスクの内容が最後に読んだ／書いたものと違い、差し替えられていない（未保存の本文がある、または
+  /// UTF-8 として読めない内容が書かれている）。照合のたびに導出し直す（消えた・同じ・差し替えたなら false）。
   public private(set) var isDiskChanged = false {
     didSet { if isDiskChanged != oldValue { onDiskChange?(isDiskChanged) } }
   }
@@ -104,9 +104,16 @@ public final class EditorDocument {
 
   /// 実ファイルを読み直してディスクの姿と比べる。違っていて未保存でなければ本文を差し替え（undo 可、
   /// 未保存にならない、undo の区切り）、未保存なら `isDiskChanged` を立てて本文は保つ。
-  /// 読めない（消えた・UTF-8 でない）ときと同じ内容のときは印を消す。
+  /// 消えた・同じ内容なら印を消す。UTF-8 でない内容（別の符号化・バイナリ）が書かれていれば一致を
+  /// 証明できないので、差し替えずに印を立てる（外の書き込みを ⌘S で潰さない）。
   public func reconcileWithDisk() {
-    guard let onDisk = try? Self.read(url) else {
+    let onDisk: String
+    do {
+      onDisk = try Self.read(url)
+    } catch EditorDocumentError.notUTF8 {
+      isDiskChanged = true
+      return
+    } catch {
       isDiskChanged = false
       return
     }

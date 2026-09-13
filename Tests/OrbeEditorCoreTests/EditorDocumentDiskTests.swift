@@ -134,6 +134,30 @@ final class EditorDocumentDiskTests: XCTestCase {
     XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "basame\n", "作り直す")
   }
 
+  /// 外のツールが UTF-8 でない内容（別の符号化・バイナリ）を書いたら、一致を証明できないので印が立ち、
+  /// ⌘S は失敗する——未編集でも差し替えられない。UTF-8 なら拒否されるのにバイナリなら通る、という
+  /// 非対称を作らない。消えたファイルはこれまでどおり印を立てない。
+  func testNonUTF8ExternalWriteMarksTheDocumentAndBlocksSave() throws {
+    let url = try temp("f.txt", "text\n")
+    let (document, surface) = try open(url)
+    let bytes = Data([0x82, 0xA0, 0x82, 0xA2, 0x0A])
+
+    try bytes.write(to: url)
+    document.reconcileWithDisk()
+    XCTAssertTrue(document.isDiskChanged, "未編集でも差し替えられないので印が立つ")
+    XCTAssertEqual(surface.text, "text\n", "本文はそのまま")
+    XCTAssertThrowsError(try document.save()) { error in
+      XCTAssertEqual(error as? EditorDocumentError, .diskChanged(url))
+    }
+    XCTAssertEqual(try Data(contentsOf: url), bytes, "ディスクは変わらない")
+
+    surface.replace(NSRange(location: 0, length: 0), with: "x")
+    XCTAssertThrowsError(try document.save(), "未保存でも同じ")
+    try document.save(force: true)
+    XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "xtext\n")
+    XCTAssertFalse(document.isDiskChanged)
+  }
+
   // MARK: - ハンク
 
   /// baseline を置けば即時にハンクが出て、編集は runloop 1 回に間引いて作り直す。baseline を外せば空。
