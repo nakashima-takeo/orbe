@@ -31,8 +31,8 @@ public final class EditorDocument {
     didSet { if isDirty != oldValue { onDirtyChange?(isDirty) } }
   }
   public var onDirtyChange: ((Bool) -> Void)?
-  /// ディスクの内容が最後に読んだ／書いたものと違い、未保存の本文があるので差し替えられていない。
-  /// 照合のたびに導出し直す（読めない・消えた・同じなら false）。
+  /// ディスクの内容が最後に読んだ／書いたものと違い、差し替えられていない（未保存の本文がある）。
+  /// 照合のたびに導出し直す（読めない・消えた・同じ・差し替えたなら false）。
   public private(set) var isDiskChanged = false {
     didSet { if isDiskChanged != oldValue { onDiskChange?(isDiskChanged) } }
   }
@@ -87,12 +87,12 @@ public final class EditorDocument {
   }
 
   /// 面の本文をそのまま UTF-8 で書く（改行・末尾改行は本文のまま）。保存は undo の区切りでもある。
-  /// force でなければ直前にディスクを読み直し、最後に読んだ／書いた内容と違えば `diskChanged` で
-  /// 失敗してディスクに触れない（監視の通知が届く前でも同じ判定）。
+  /// force でなければ直前にディスクと照合する（監視の通知が届く前でも同じ判定）——未編集なら差し替えて
+  /// から書き、未保存の本文があれば `diskChanged` で失敗してディスクに触れない。
   public func save(force: Bool = false) throws {
-    if !force, let onDisk = try? Self.read(url), Self.digest(onDisk) != diskDigest {
-      isDiskChanged = true
-      throw EditorDocumentError.diskChanged(url)
+    if !force {
+      reconcileWithDisk()
+      if isDiskChanged { throw EditorDocumentError.diskChanged(url) }
     }
     let text = surface.text
     try Data(text.utf8).write(to: url, options: .atomic)

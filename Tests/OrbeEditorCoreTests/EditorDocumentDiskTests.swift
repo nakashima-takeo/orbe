@@ -82,10 +82,21 @@ final class EditorDocumentDiskTests: XCTestCase {
     XCTAssertEqual(diskChanges, [true, false])
   }
 
-  /// 監視が届く前の ⌘S でもディスクを読み直して同じ判定をする。外のツールが元に戻せば印は消える。
+  /// 監視が届く前の ⌘S でも同じ判定——未編集の文書は差し替えてから書き（外の編集は失われない）、
+  /// 未保存の文書は失敗する。外のツールが元に戻せば印は消える。
   func testSaveChecksTheDiskWithoutWaitingForAWatcherAndTheMarkClearsWhenRestored() throws {
     let url = try temp("c.txt", "old\n")
     let (document, surface) = try open(url)
+
+    try Data("theirs\n".utf8).write(to: url)
+    try document.save()
+    XCTAssertEqual(surface.text, "theirs\n", "未編集なら差し替わる")
+    XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "theirs\n")
+    XCTAssertFalse(document.isDiskChanged)
+    XCTAssertFalse(document.isDirty)
+
+    try Data("old\n".utf8).write(to: url)
+    document.reconcileWithDisk()
     surface.replace(NSRange(location: 0, length: 0), with: "x")
 
     try Data("theirs\n".utf8).write(to: url)
