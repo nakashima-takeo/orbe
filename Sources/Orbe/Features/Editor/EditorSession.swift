@@ -32,9 +32,10 @@ final class EditorSession {
       activate(existing)
       return existing
     }
-    let text = try EditorDocument.read(url)
+    let contents = try EditorDocument.read(url)
     let document = EditorDocument(
-      url: url, surface: surfaces.make(text), registry: surfaces.registry)
+      url: url, contents: contents, surface: surfaces.make(contents.text),
+      registry: surfaces.registry)
     document.onDirtyChange = { [weak self] _ in self?.onChange?() }
     document.onDiskChange = { [weak self] _ in self?.onChange?() }
     document.onFocusChange = { [weak self] focused in if focused { self?.onFocus?() } }

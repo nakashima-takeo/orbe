@@ -55,28 +55,43 @@ public final class EditorDocument {
   private let syntax: SyntaxLayer?
   /// 最後の編集の後に塗った区間。編集のたびに（変わった区間 ∪ 可視区間）へ置き直す。
   private var fresh = IndexSet()
-  /// 最後に読んだ／書いた内容のダイジェスト（UTF-8 に解いた本文のもの。BOM は解く時点で落ちる）。
+  /// 最後に読んだ／書いたファイルのバイト列のダイジェスト（ディスクの姿）。
   private var diskDigest: SHA256Digest
+  /// 開いた／差し替えたときにファイルが UTF-8 BOM で始まっていたか。保存で同じように書き戻す。
+  private var hasBOM: Bool
   private var needsHunks = false
   /// ディスクの内容で本文を差し替えている間は、その編集で未保存を立てない。
   private var isReplacingFromDisk = false
 
-  /// ファイルを UTF-8 として読む。読めない・UTF-8 でないは throw。
-  public static func read(_ url: URL) throws -> String {
-    guard let data = try? Data(contentsOf: url) else { throw EditorDocumentError.unreadable(url) }
-    guard let text = String(data: data, encoding: .utf8) else {
-      throw EditorDocumentError.notUTF8(url)
-    }
-    return text
+  /// ファイルから読んだ内容。本文のほかに、ディスクの姿と BOM の有無を持つ（文書がそのまま引き継ぐ）。
+  public struct Contents {
+    public let text: String
+    fileprivate let digest: SHA256Digest
+    fileprivate let hasBOM: Bool
   }
 
-  public init(url: URL, surface: any TextSurface, registry: LanguageRegistry) {
+  private static let bom = Data([0xEF, 0xBB, 0xBF])
+
+  /// ファイルを UTF-8 として読む。読めない・UTF-8 でないは throw。先頭の BOM は本文に含めない。
+  public static func read(_ url: URL) throws -> Contents {
+    guard let data = try? Data(contentsOf: url) else { throw EditorDocumentError.unreadable(url) }
+    let hasBOM = data.starts(with: bom)
+    guard let text = String(data: hasBOM ? data.dropFirst(bom.count) : data, encoding: .utf8)
+    else { throw EditorDocumentError.notUTF8(url) }
+    return Contents(text: text, digest: SHA256.hash(data: data), hasBOM: hasBOM)
+  }
+
+  /// `surface` は `contents.text` で作った面。
+  public init(
+    url: URL, contents: Contents, surface: any TextSurface, registry: LanguageRegistry
+  ) {
     self.url = url
     self.surface = surface
     language = SyntaxLanguage.detect(url: url)
     let text = surface.text
     lineIndex = LineIndex(text: text)
-    diskDigest = Self.digest(text)
+    diskDigest = contents.digest
+    hasBOM = contents.hasBOM
     syntax = language.flatMap { registry.configuration(for: $0) }
       .flatMap { try? SyntaxLayer(configuration: $0, registry: registry) }
     surface.delegate = self
@@ -86,17 +101,18 @@ public final class EditorDocument {
     }
   }
 
-  /// 面の本文をそのまま UTF-8 で書く（改行・末尾改行は本文のまま）。保存は undo の区切りでもある。
-  /// force でなければ直前にディスクと照合する（監視の通知が届く前でも同じ判定）——未編集なら差し替えて
-  /// から書き、未保存の本文があれば `diskChanged` で失敗してディスクに触れない。
+  /// 面の本文をそのまま UTF-8 で書く（改行・末尾改行は本文のまま。開いたとき BOM があれば付け直す）。
+  /// 保存は undo の区切りでもある。force でなければ直前にディスクと照合する（監視の通知が届く前でも
+  /// 同じ判定）——未編集なら差し替えてから書き、未保存の本文があれば `diskChanged` で失敗して
+  /// ディスクに触れない。
   public func save(force: Bool = false) throws {
     if !force {
       reconcileWithDisk()
       if isDiskChanged { throw EditorDocumentError.diskChanged(url) }
     }
-    let text = surface.text
-    try Data(text.utf8).write(to: url, options: .atomic)
-    diskDigest = Self.digest(text)
+    let data = (hasBOM ? Self.bom : Data()) + Data(surface.text.utf8)
+    try data.write(to: url, options: .atomic)
+    diskDigest = SHA256.hash(data: data)
     isDirty = false
     isDiskChanged = false
     surface.markUndoBoundary()
@@ -107,7 +123,7 @@ public final class EditorDocument {
   /// 消えた・同じ内容なら印を消す。UTF-8 でない内容（別の符号化・バイナリ）が書かれていれば一致を
   /// 証明できないので、差し替えずに印を立てる（外の書き込みを ⌘S で潰さない）。
   public func reconcileWithDisk() {
-    let onDisk: String
+    let onDisk: Contents
     do {
       onDisk = try Self.read(url)
     } catch EditorDocumentError.notUTF8 {
@@ -117,8 +133,7 @@ public final class EditorDocument {
       isDiskChanged = false
       return
     }
-    let digest = Self.digest(onDisk)
-    guard digest != diskDigest else {
+    guard onDisk.digest != diskDigest else {
       isDiskChanged = false
       return
     }
@@ -127,15 +142,12 @@ public final class EditorDocument {
       return
     }
     isReplacingFromDisk = true
-    surface.replaceAll(with: onDisk)
+    surface.replaceAll(with: onDisk.text)
     isReplacingFromDisk = false
-    diskDigest = digest
+    diskDigest = onDisk.digest
+    hasBOM = onDisk.hasBOM
     surface.markUndoBoundary()
     isDiskChanged = false
-  }
-
-  private static func digest(_ text: String) -> SHA256Digest {
-    SHA256.hash(data: Data(text.utf8))
   }
 
   private func highlight(_ set: IndexSet, text: String) {

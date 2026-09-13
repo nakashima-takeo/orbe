@@ -29,8 +29,11 @@ final class EditorDocumentDiskTests: XCTestCase {
   }
 
   private func open(_ url: URL) throws -> (EditorDocument, FakeTextSurface) {
-    let surface = FakeTextSurface(text: try EditorDocument.read(url))
-    return (EditorDocument(url: url, surface: surface, registry: registry), surface)
+    let contents = try EditorDocument.read(url)
+    let surface = FakeTextSurface(text: contents.text)
+    return (
+      EditorDocument(url: url, contents: contents, surface: surface, registry: registry), surface
+    )
   }
 
   // MARK: - 外部変更
@@ -156,6 +159,36 @@ final class EditorDocumentDiskTests: XCTestCase {
     try document.save(force: true)
     XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "xtext\n")
     XCTAssertFalse(document.isDiskChanged)
+  }
+
+  /// UTF-8 BOM で始まるファイルは、開いたときの有無を保存で保つ——一文字も触らない ⌘S で先頭 3 バイトが
+  /// 消えない。本文には含めず、ディスクの姿はバイト列で取るので、自分の保存は外部変更にならず、外のツールが
+  /// BOM だけを足せば変化として拾って以後はそれに倣う。
+  func testUTF8BOMIsPreservedAcrossSave() throws {
+    let bom = Data([0xEF, 0xBB, 0xBF])
+    let url = try temp("bom.txt", "")
+    try (bom + Data("hello\n".utf8)).write(to: url)
+    let (document, surface) = try open(url)
+    XCTAssertEqual(surface.text, "hello\n", "本文に BOM は含めない")
+
+    try document.save()
+    XCTAssertEqual(try Data(contentsOf: url), bom + Data("hello\n".utf8), "触らない ⌘S でも BOM は残る")
+    document.reconcileWithDisk()
+    XCTAssertFalse(document.isDiskChanged, "自分の保存は外部変更ではない")
+
+    surface.replace(NSRange(location: 0, length: 0), with: "x")
+    try document.save()
+    XCTAssertEqual(try Data(contentsOf: url), bom + Data("xhello\n".utf8))
+
+    let plain = try temp("plain.txt", "hi\n")
+    let (plainDocument, _) = try open(plain)
+    try plainDocument.save()
+    XCTAssertEqual(try Data(contentsOf: plain), Data("hi\n".utf8), "無かった BOM は足さない")
+    try (bom + Data("hi\n".utf8)).write(to: plain)
+    plainDocument.reconcileWithDisk()
+    XCTAssertFalse(plainDocument.isDiskChanged, "BOM だけの変化も差し替え（本文は同じ）")
+    try plainDocument.save()
+    XCTAssertEqual(try Data(contentsOf: plain), bom + Data("hi\n".utf8), "外のツールが足した BOM に倣う")
   }
 
   // MARK: - ハンク
