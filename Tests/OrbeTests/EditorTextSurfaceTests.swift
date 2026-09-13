@@ -136,6 +136,8 @@ final class EditorTextSurfaceTests: OrbeTestCase {
 
     document.surface.replaceAll(with: "short\n")
     XCTAssertFalse(client.hasMarkedText(), "置き換えの前に変換を畳む")
+    // 畳めていなければ次の変換操作でプロセスごと落ち、残りのテストの結果が消える。
+    guard !client.hasMarkedText() else { return }
     XCTAssertEqual(document.surface.text, "short\n")
 
     client.setMarkedText(
