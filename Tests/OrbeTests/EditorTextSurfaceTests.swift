@@ -121,6 +121,46 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     withExtendedLifetime(spy) {}
   }
 
+  /// 変換中（marked text）に本文が丸ごと差し替わっても、変換セッションは畳まれていて次の変換操作が古い
+  /// 本文の位置を指さない。⌘S は `keyDown` を経ずに解決されるので、変換途中でも保存が通って未保存が消え、
+  /// その直後の外部変更で差し替えが走りうる（畳まないと本文が短くなった側で落ち、長い側で無関係な位置が削れる）。
+  func testReplaceAllEndsAnInputMethodCompositionFirst() throws {
+    let (document, _) = try opened(try file("f.txt", "let a = 1\n"))
+    let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
+    document.surface.responder.perform(#selector(NSResponder.moveToEndOfDocument(_:)), with: nil)
+    client.setMarkedText(
+      "かん", selectedRange: NSRange(location: 0, length: 2),
+      replacementRange: NSRange(location: NSNotFound, length: 0))
+    XCTAssertTrue(client.hasMarkedText())
+    XCTAssertEqual(document.surface.text, "let a = 1\nかん")
+
+    document.surface.replaceAll(with: "short\n")
+    XCTAssertFalse(client.hasMarkedText(), "置き換えの前に変換を畳む")
+    XCTAssertEqual(document.surface.text, "short\n")
+
+    client.setMarkedText(
+      "き", selectedRange: NSRange(location: 0, length: 1),
+      replacementRange: NSRange(location: NSNotFound, length: 0))
+    client.insertText("き", replacementRange: NSRange(location: NSNotFound, length: 0))
+    XCTAssertEqual(document.surface.text, "short\nき", "次の変換操作は新しい本文の末尾に付く")
+  }
+
+  /// 置き換え後の選択は解け、キャレットは同じオフセット——本文が短くなればその末尾（→ code の契約）。
+  func testReplaceAllKeepsTheCaretOffsetClampedToTheNewLength() throws {
+    let (document, _) = try opened(try file("g.txt", "0123456789\n"))
+    let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
+    document.surface.responder.perform(#selector(NSResponder.moveToEndOfDocument(_:)), with: nil)
+    document.surface.responder.perform(
+      #selector(NSResponder.moveLeftAndModifySelection(_:)), with: nil)
+    XCTAssertEqual(client.selectedRange(), NSRange(location: 10, length: 1), "前提: 末尾側に選択がある")
+
+    document.surface.replaceAll(with: "01234\n")
+    XCTAssertEqual(client.selectedRange(), NSRange(location: 6, length: 0), "選択は解け、末尾に収まる")
+
+    document.surface.replaceAll(with: "0123456789abc\n")
+    XCTAssertEqual(client.selectedRange(), NSRange(location: 6, length: 0), "収まるなら同じオフセット")
+  }
+
   /// 文書の前に割り込んで編集を記録する delegate（文書へも流す）。
   private final class SurfaceSpy: TextSurfaceDelegate {
     let inner: EditorDocument
