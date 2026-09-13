@@ -42,7 +42,7 @@ updated: 2026-09-14
 
 ## エディターの根
 
-タブの cwd が属する git worktree ルート（タブ行の連と同じキー）。git 管理外は cwd。規則と、根ごとのサービス（監視・git 状態・一覧と新規作成）は [files](files.md) が持つ。
+タブの cwd が属する git worktree ルート（タブ行の連と同じキー）。git 管理外は cwd。規則と、根ごとのサービス（監視・git 状態・baseline・一覧と新規作成）は [files](files.md) が持つ。
 
 ## 面の中身と空状態
 
