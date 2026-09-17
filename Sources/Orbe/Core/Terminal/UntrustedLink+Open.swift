@@ -2,7 +2,7 @@ import AppKit
 import UniformTypeIdentifiers
 
 /// allow の実行側。ローカルファイルは家族ごとに決めた開き先へ明示的に渡し、Launch Services の
-/// ファイル→handler 解決（実行ビット付きの `.txt` を Terminal に渡す等）には委ねない。メインスレッドで呼ぶ。
+/// ファイル→handler 解決（拡張子の無い実行ファイルや `.command` を Terminal に渡す等）には委ねない。メインスレッドで呼ぶ。
 extension UntrustedLink.Target {
   func open() {
     let workspace = NSWorkspace.shared
@@ -19,7 +19,7 @@ extension UntrustedLink.Target {
     case .typed(let url, let type):
       Self.open(url, withDefaultAppFor: type)
     case .folder(let url):
-      workspace.activateFileViewerSelecting([url])
+      workspace.selectFile(nil, inFileViewerRootedAtPath: url.path)
     }
   }
 

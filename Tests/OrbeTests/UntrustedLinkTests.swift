@@ -102,7 +102,9 @@ final class UntrustedLinkTests: OrbeTestCase {
   /// このマシンが実際に名乗るホスト名のファイルリンク（`ls --hyperlink` の出力形）は、既定の判定で開く。
   func testFileLinkWithThisMachinesHostNameIsAllowedByDefault() throws {
     let file = try makeFile("notes.txt")
-    let raw = "file://\(ProcessInfo.processInfo.hostName)\(file.path)"
+    var name = [CChar](repeating: 0, count: Int(MAXHOSTNAMELEN) + 1)
+    XCTAssertEqual(gethostname(&name, name.count), 0)
+    let raw = "file://\(String(cString: name))\(file.path)"
     XCTAssertEqual(UntrustedLink(raw).decision, .allow(.text(canonical(file))))
   }
 
@@ -121,28 +123,43 @@ final class UntrustedLinkTests: OrbeTestCase {
 
   // MARK: - 表示文字列
 
-  /// ファイルリンクの表示は、端末出力の綴りではなく開く実体のパス。
-  func testFileLinkDisplaysResolvedPath() throws {
-    let file = try makeFile("notes.txt")
-    let link = dir.appendingPathComponent("alias")
+  /// 確認に回るファイルリンクの表示は、端末出力の綴りではなく開く実体のパス。
+  func testConfirmedFileLinkDisplaysResolvedPath() throws {
+    let file = try makeFile("a.zip", Self.binaryContent)
+    let link = dir.appendingPathComponent("alias.zip")
     try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
-    XCTAssertEqual(
-      UntrustedLink("file://\(Self.localHost)\(link.path)", localHosts: [Self.localHost])
-        .displayString,
-      canonical(file).path)
+    let untrusted = UntrustedLink(
+      "file://\(Self.localHost)\(link.path)", localHosts: [Self.localHost])
+    let decision = untrusted.decision
+    XCTAssertEqual(decision, .confirm(canonical(file)))
+    XCTAssertEqual(untrusted.displayString(for: decision), canonical(file).path)
   }
 
-  /// ファイル以外のリンクは元の文字列を表示し、不可視文字は `\u{XXXX}` として見せる。
-  func testNonFileLinkDisplaysRawTextWithInvisibleCharactersVisualized() {
-    XCTAssertEqual(
-      UntrustedLink("vscode://file/etc/hosts").displayString, "vscode://file/etc/hosts")
-    for scalar in Self.invisibleScalars {
-      XCTAssertEqual(
-        UntrustedLink("https://example.com/a\(scalar)b").displayString,
-        "https://example.com/a\\u{\(Self.hex(scalar))}b")
+  /// 開かなかったファイルリンクの表示は、理由（別ホスト・query 等）が見える元の文字列。コピーは
+  /// ホスト名が変わった直後の逃げ道として、このマシンで開けるローカルのパス。
+  func testBlockedFileLinkDisplaysRawTextAndCopiesLocalPath() throws {
+    let file = try makeFile("notes.txt")
+    for raw in ["file://other-host.local\(file.path)", "file://\(file.path)?x=1"] {
+      let untrusted = UntrustedLink(raw, localHosts: [Self.localHost])
+      guard case .block = untrusted.decision else {
+        XCTFail("\(raw) が開かないと判定されない: \(untrusted.decision)")
+        continue
+      }
+      XCTAssertEqual(untrusted.displayString(for: untrusted.decision), raw)
+      XCTAssertEqual(untrusted.copyString, canonical(file).path, raw)
     }
-    XCTAssertEqual(
-      UntrustedLink("vscode://file/a b/café/🦊").displayString, "vscode://file/a b/café/🦊")
+  }
+
+  /// ファイル以外のリンクは表示もコピーも元の文字列で、不可視文字は `\u{XXXX}` として見せる。
+  func testNonFileLinkDisplaysRawTextWithInvisibleCharactersVisualized() {
+    let custom = UntrustedLink("vscode://file/a b/café/🦊")
+    XCTAssertEqual(custom.displayString(for: custom.decision), "vscode://file/a b/café/🦊")
+    for scalar in Self.invisibleScalars {
+      let web = UntrustedLink("https://example.com/a\(scalar)b")
+      let visualized = "https://example.com/a\\u{\(Self.hex(scalar))}b"
+      XCTAssertEqual(web.displayString(for: web.decision), visualized)
+      XCTAssertEqual(web.copyString, visualized)
+    }
   }
 
   // MARK: - OSC 8 由来の識別

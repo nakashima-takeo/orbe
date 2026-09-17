@@ -51,6 +51,19 @@ extension UntrustedLinkTests {
     }
   }
 
+  /// VS Code 系のワークスペースは、中身がテキストでもエディタに渡さず確認を求める（エディタが中のタスクを
+  /// 自動実行しうる）。
+  func testEditorWorkspaceRequiresConfirmation() throws {
+    let workspace = try makeFile("evil.code-workspace", Data("{\"folders\": []}\n".utf8))
+    XCTAssertEqual(fileDecision(workspace), .confirm(canonical(workspace)))
+  }
+
+  /// 動画の型（MPEG-2 TS）を名乗る `.ts` でも、中身がテキスト（TypeScript）ならエディタで開く。
+  func testTypeScriptFileOpensInEditorDespiteVideoType() throws {
+    let source = try makeFile("index.ts", Data("export const a: number = 1;\n".utf8))
+    XCTAssertEqual(fileDecision(source), .allow(.text(canonical(source))))
+  }
+
   // MARK: - 画像・PDF・音声/動画
 
   /// 画像・PDF・音声/動画は、ファイルの型で引いた既定アプリで開く。
@@ -66,6 +79,17 @@ extension UntrustedLinkTests {
       XCTAssertEqual(url, canonical(file), name)
       XCTAssertTrue(type.conforms(to: family), "\(name) の型 \(type.identifier)")
     }
+  }
+
+  /// テキストの型にも準拠する `.svg` は、中身がテキストでもエディタではなく画像の既定アプリで開く。
+  func testSVGOpensAsImageDespiteTextType() throws {
+    let svg = try makeFile("a.svg", Data("<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n".utf8))
+    guard case .allow(.typed(let url, let type)) = fileDecision(svg) else {
+      XCTFail("a.svg が型の既定アプリで開かれない: \(fileDecision(svg))")
+      return
+    }
+    XCTAssertEqual(url, canonical(svg))
+    XCTAssertTrue(type.conforms(to: .image), "a.svg の型 \(type.identifier)")
   }
 
   // MARK: - フォルダ
@@ -96,12 +120,17 @@ extension UntrustedLinkTests {
 
   // MARK: - 開かないファイル
 
-  /// 別の場所を指す転送ファイルは、中身がテキストでも開かない。
+  /// 別の場所を指す転送ファイル（Finder エイリアスを含む）は、中身がテキストでも開かない。
   func testForwardingFilesAreBlocked() throws {
     for name in ["a.webloc", "a.inetloc", "a.fileloc", "a.afploc", "a.url"] {
       let file = try makeFile(name)
       XCTAssertEqual(fileDecision(file), .block(.unsafeFile), name)
     }
+    let alias = dir.appendingPathComponent("Fake alias")
+    let bookmark = try makeDirectory("Fake.app").bookmarkData(
+      options: .suitableForBookmarkFile, includingResourceValuesForKeys: nil, relativeTo: nil)
+    try URL.writeBookmarkData(bookmark, to: alias)
+    XCTAssertEqual(fileDecision(alias), .block(.unsafeFile), "Finder エイリアス")
   }
 
   /// アプリバンドルと、中身がテキストでない実行ファイルは開かない。

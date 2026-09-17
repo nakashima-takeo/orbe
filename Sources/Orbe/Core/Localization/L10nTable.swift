@@ -151,7 +151,8 @@ enum L10n {
     .linkBlockedOK: ("OK", "OK"),
     .linkBlockedCopy: ("リンクをコピー", "Copy Link"),
     .linkBlockedMalformed: (
-      "対象が scheme 付きの絶対 URL ではありません。", "The target is not an absolute URL with a scheme."
+      "対象が Orbe の開ける形のリンクではありません（scheme や宛先が無い、ファイルに query や fragment が付いている等）。",
+      "The target is not a link Orbe can open (no scheme, no recipient, or a file link with a query or fragment)."
     ),
     .linkBlockedUnsafeCharacters: (
       "対象に不可視文字または改行文字が含まれています。",
