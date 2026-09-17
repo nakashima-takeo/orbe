@@ -41,25 +41,23 @@ if [ ! -f "$ROOT/vendor/ghostty/build.zig" ]; then
   trap 'rm -rf "$ROOT/vendor/ghostty"; mkdir "$ROOT/vendor/ghostty"' EXIT INT TERM
 fi
 
-# zig@0.15 は keg-only で brew が PATH に通さない。素の `zig` は 0.16 が入りうるが
-# ghostty は minimum_zig_version = 0.15.2 を要求するため通らない。brew prefix から
-# 解決し、別経路で入れている場合は ZIG で上書きできるようにする。
-ZIG="${ZIG:-}"
-if [ -z "$ZIG" ]; then
-  if zig_prefix="$(brew --prefix zig@0.15 2>/dev/null)" && [ -x "$zig_prefix/bin/zig" ]; then
-    ZIG="$zig_prefix/bin/zig"
-  else
-    ZIG="zig"
-  fi
-fi
-if ! command -v "$ZIG" >/dev/null 2>&1; then
-  echo "エラー: zig が見つからない ($ZIG)。'brew install zig@0.15' 後、必要なら ZIG=/path/to/zig を指定せよ" >&2
+# zig は mise.toml が固定する版だけを使う（ghostty の build.zig が major.minor の一致を要求する）。
+# ROOT で解決するのは、worktree では vendor/ghostty が main worktree への symlink で、そこで mise を
+# 評価すると物理 cwd 側の mise.toml が読まれるため。
+command -v mise >/dev/null || {
+  echo "エラー: mise が未導入。導入は docs/guides/build.md の「前提ツール」を参照せよ（例: brew install mise）" >&2
   exit 1
-fi
+}
+ZIG="$(cd "$ROOT" && mise which zig)" || {
+  echo "エラー: zig が未導入。'mise install' を実行せよ" >&2
+  exit 1
+}
 
 echo "==> エンジン(libghostty)を ReleaseFast でビルド"
 echo "    初回・submodule 更新時は数分かかる（以降は Zig キャッシュで一瞬）"
-(cd "$ROOT/vendor/ghostty" && "$ZIG" build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast)
+# Orbe が使うのは xcframework と share リソースだけ。上流 Ghostty.app（xcodebuild・SwiftLint フェーズ）まで
+# 組むと Xcode の版に Orbe のビルドが従属するので、emit-macos-app は切る。
+(cd "$ROOT/vendor/ghostty" && "$ZIG" build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast -Demit-macos-app=false)
 
 echo "==> swift build -c release"
 # release チャネルだけが -DORBE_RELEASE を焼く（`OrbePaths.fallbackBundleId` と `UpdaterService` の SSOT）。

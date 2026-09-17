@@ -1,7 +1,7 @@
 ---
 title: libghostty の外部契約
 description: 固定 SHA で埋め込む ghostty のターミナルライブラリ（MIT）。Orbe の実装が乗る、変えられない境界
-updated: 2026-09-06
+updated: 2026-09-17
 ---
 
 # libghostty の外部契約
@@ -25,12 +25,12 @@ ghostty のターミナル描画ライブラリ。MIT ライセンスで、Orbe 
 surface の出力ストリーム由来のイベントは `action_cb`（`ghostty_action_tag_e`, `include/ghostty.h`）経由でのみ host に届く。何が出て何が出ないかの境界は固定されている。
 
 - **host に露出する OSC 由来 action**: `SET_TITLE`/`SET_TAB_TITLE`（OSC 0/2）, `PWD`（OSC 7）, `DESKTOP_NOTIFICATION`（OSC 9 / 777）, `PROGRESS_REPORT`（OSC 9;4）, `MOUSE_OVER_LINK`（OSC 8）, `COLOR_CHANGE`（OSC 4/10/11）。
-- **OSC 52 clipboard は action_cb を経ず、専用のクリップボードコールバックで host に渡る**（`read_clipboard_cb`／`confirm_read_clipboard_cb`／`write_clipboard_cb`、`include/ghostty.h`）。Orbe は OSC 52 read をこの経路で空文字拒否している（→ [core](core.md)）。
+- **OSC 52 clipboard と Kitty clipboard（OSC 5522）は action_cb を経ず、専用のクリップボードコールバックで host に渡る**（`read_clipboard_cb`／`confirm_read_clipboard_cb`／`write_clipboard_cb`、`include/ghostty.h`）。拒否は config（`clipboard-read`／`clipboard-write`）と `ghostty_surface_deny_clipboard_request` で表す。`clipboard-read = deny` は Kitty の paste event（mode 5522）に伴うパスワード付き read も、パスワードによる許可を見る前に拒否する。`ask` では確認が要る読み取り（OSC 52 read、パスワード許可の無い Kitty read）が `confirm_read_clipboard_cb` に回り、host が拒否しても応答は `deny` と異なる（OSC 52: 中身あり→空の応答、空→無応答。データだけを求める Kitty read: 中身あり→EPERM、空→成功。型一覧も併せて求める Kitty read は空でも EPERM）。paste event のパスワード付き read は許可済みとして確認を経ず、型一覧だけの Kitty read も確認免除で応答される。Orbe は端末アプリ発の読み取りを config で断っている（→ [core](core.md)）。
 - **内部完結で host に来ない**: OSC 66/21 kitty・OSC 133 semantic prompt など。
 - **独自/未知の OSC 番号は受け取れない**: OSC パーサ（`src/terminal/osc.zig`）はホワイトリスト方式で、未知番号は `.invalid` に遷移して全バイトを破棄する。
 - **APC/DCS も host 非露出**: `src/terminal/stream.zig` で parse はされるが、apprt 層で C API action に変換されない。
 
-帰結: アプリ独自データを `action_cb` に乗せて host へ運びたければ、**標準の通知 OSC（9/777）に相乗りする**しか無い。独自番号や APC/DCS を通すには libghostty の改修が要り、pin と衝突する。典拠は `vendor/ghostty` の `include/ghostty.h`・`src/terminal/osc.zig`・`src/terminal/stream.zig`（pin SHA `3ba5e9c2`）。
+帰結: アプリ独自データを `action_cb` に乗せて host へ運びたければ、**標準の通知 OSC（9/777）に相乗りする**しか無い。独自番号や APC/DCS を通すには libghostty の改修が要り、pin と衝突する。典拠は `vendor/ghostty` の `include/ghostty.h`・`src/terminal/osc.zig`・`src/terminal/stream.zig`（pin SHA `f9a3f24a`）。
 
 ## host が画面テキストを読む（out-of-band 取得）
 
@@ -51,5 +51,5 @@ in-band の境界とは別に、host から能動的に画面テキストを取�
 ## 所在
 
 - GitHub: https://github.com/ghostty-org/ghostty
-- Orbe では `vendor/ghostty` submodule として固定 SHA `3ba5e9c2` に pin する。
+- Orbe では `vendor/ghostty` submodule として固定 SHA `f9a3f24a` に pin する。
 - ビルド手順は [guides/build](../../guides/build.md)。

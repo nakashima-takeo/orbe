@@ -1,5 +1,6 @@
 import AppKit
 import GhosttyKit
+import UniformTypeIdentifiers
 
 /// libghostty ランタイム（プロセスに 1 つ）。
 /// app/config の生成、runtime callbacks の配線、surface→view レジストリを持つ。
@@ -37,33 +38,47 @@ final class Ghostty {
     rt.action_cb = { appPtr, target, action in
       Ghostty.shared.handleAction(appPtr, target, action)
     }
-    // クリップボード読み取り（ペースト）: NSPasteboard を読んで complete で返す。
-    // confirmed=false で返すと、安全な内容はそのまま貼られ、危険なペーストや OSC 52 read
-    // （端末アプリ発の読み取り）だけが confirm_read_clipboard_cb へ回る（upstream 準拠）。
-    rt.read_clipboard_cb = { userdata, _, state in
-      guard let userdata, let surface = SurfaceView.from(userdata).surfacePtr else { return false }
-      let text = NSPasteboard.general.string(forType: .string) ?? ""
-      text.withCString { ghostty_surface_complete_clipboard_request(surface, $0, state, false) }
-      return true
+    // クリップボードは text/plain だけを扱い、Orbe は確認 UI を持たない。端末アプリ発の読み取り
+    // （OSC 52 / Kitty）は orbe-defaults の clipboard-read = deny で core が断つので、既定で host に
+    // 届く読み取りはユーザー発のペーストとその型一覧だけ。user 設定で allow / ask に変えると
+    // 端末アプリ発の読み取りも届く。
+    // read: STARTED を返すのは complete を呼んだときだけ（呼ばずに STARTED は state をリークし、
+    // 呼んで UNAVAILABLE は二重解放）。PRIMARY（X11 の選択クリップボード）は macOS に無いので
+    // UNSUPPORTED。SELECTION は paste_from_selection（⌘⇧V）が使うので general に向ける。
+    rt.read_clipboard_cb = { userdata, location, state, mimes, mimesLen, list in
+      guard location != GHOSTTY_CLIPBOARD_PRIMARY, let userdata,
+        let surface = SurfaceView.from(userdata).surfacePtr
+      else {
+        return GHOSTTY_CLIPBOARD_READ_UNSUPPORTED
+      }
+      let wantsText = (0..<mimesLen).contains { i in
+        mimes?[i].map { strcmp($0, "text/plain") == 0 } ?? false
+      }
+      let text = NSPasteboard.general.string(forType: .string)
+      guard (wantsText && text != nil) || list else { return GHOSTTY_CLIPBOARD_READ_UNAVAILABLE }
+      Ghostty.completeClipboardRead(
+        surface, state: state, text: wantsText ? text : nil, listsText: list && text != nil)
+      return GHOSTTY_CLIPBOARD_READ_STARTED
     }
-    // 確認フェーズ。ここへ来るのは危険ペーストと OSC 52 read のみ。
-    // OSC 52 read は情報漏洩になるため、実内容を返さず空文字で完了して拒否する
-    // （空 + confirmed で完了させ state をリークさせない）。危険ペーストの確認 UI は v1.1、
-    // 今は従来どおり許可する。
-    rt.confirm_read_clipboard_cb = { userdata, str, state, request in
+    // confirm: 確認が要る操作のうち通すのはペーストだけ。渡された表現をそのまま確認済みで完了する
+    // （借用ポインタはコールバック中だけ有効。同期に完了するのでコピー不要）。
+    rt.confirm_read_clipboard_cb = { userdata, confirm, state, request in
       guard let userdata, let surface = SurfaceView.from(userdata).surfacePtr else { return }
-      if request == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ {
-        "".withCString { ghostty_surface_complete_clipboard_request(surface, $0, state, true) }
+      guard request == GHOSTTY_CLIPBOARD_REQUEST_PASTE, let confirm else {
+        ghostty_surface_deny_clipboard_request(surface, state)
         return
       }
-      ghostty_surface_complete_clipboard_request(surface, str, state, true)
+      let c = confirm.pointee
+      var payload = ghostty_clipboard_complete_s(
+        contents: c.contents, contents_len: c.contents_len,
+        available: c.available, available_len: c.available_len,
+        confirmed: true, remember: false)
+      ghostty_surface_complete_clipboard_request(surface, &payload, state)
     }
-    // クリップボード書き込み（コピー）: 先頭コンテンツを NSPasteboard へ
-    rt.write_clipboard_cb = { _, _, contents, len, _ in
-      guard let contents, len > 0, let data = contents[0].data else { return }
-      let pb = NSPasteboard.general
-      pb.clearContents()
-      pb.setString(String(cString: data), forType: .string)
+    // write: 確認が要る書き込みは通さない。
+    rt.write_clipboard_cb = { _, _, contents, len, confirm in
+      guard !confirm, let contents else { return }
+      Ghostty.writeClipboard(UnsafeBufferPointer(start: contents, count: len))
     }
     // surface クローズ要求（shell の exit 等）: 所属タブを閉じる
     rt.close_surface_cb = { userdata, _ in
@@ -86,6 +101,52 @@ final class Ghostty {
     ghostty_app_update_config(app, new)
     ghostty_config_free(config)
     config = new
+  }
+
+  /// 最初のテキスト表現を NSPasteboard の文字列として置く。テキスト表現が無ければ何もしない（クリップボードを消さない）。
+  /// Kitty write の MIME は core が正規化せず端末アプリの書いた名前のまま来るので、plain text と見なすかは
+  /// macOS の型システム（UTType）に判定させる。本文は UTF-8 としてしか読まないので、UTF-16 系の plain text は
+  /// テキスト表現と見なさない（NUL 混じりの文字列を置かない）。
+  private static func writeClipboard(_ contents: UnsafeBufferPointer<ghostty_clipboard_content_s>) {
+    for content in contents {
+      guard let mime = content.mime,
+        let type = UTType(mimeType: String(cString: mime)),
+        type.conforms(to: .plainText),
+        !type.conforms(to: .utf16PlainText),
+        let data = content.data,
+        let text = String(
+          bytes: UnsafeRawBufferPointer(start: data, count: content.len), encoding: .utf8)
+      else { continue }
+      let pb = NSPasteboard.general
+      pb.clearContents()
+      pb.setString(text, forType: .string)
+      return
+    }
+  }
+
+  /// text/plain 1 表現（と型一覧）でクリップボード読み取りを完了する。C 側へ渡すポインタは呼び出しの間だけ有効。
+  private static func completeClipboardRead(
+    _ surface: ghostty_surface_t, state: UnsafeMutableRawPointer?, text: String?, listsText: Bool
+  ) {
+    let mime = Array("text/plain".utf8CString)
+    let data = Array((text ?? "").utf8CString)
+    mime.withUnsafeBufferPointer { mime in
+      data.withUnsafeBufferPointer { data in
+        let contents: [ghostty_clipboard_content_s] =
+          text == nil
+          ? [] : [.init(mime: mime.baseAddress, data: data.baseAddress, len: data.count - 1)]
+        let available: [UnsafePointer<CChar>?] = listsText ? [mime.baseAddress] : []
+        contents.withUnsafeBufferPointer { contents in
+          available.withUnsafeBufferPointer { available in
+            var payload = ghostty_clipboard_complete_s(
+              contents: contents.baseAddress, contents_len: contents.count,
+              available: available.baseAddress, available_len: available.count,
+              confirmed: false, remember: false)
+            ghostty_surface_complete_clipboard_request(surface, &payload, state)
+          }
+        }
+      }
+    }
   }
 
   // MARK: - surface → view レジストリ

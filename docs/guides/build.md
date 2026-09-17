@@ -1,7 +1,7 @@
 ---
 title: ビルド手順
 description: libghostty の自前ビルドから Orbe.app の生成・起動まで。前提ツール・チャネル・lint / format
-updated: 2026-09-07
+updated: 2026-09-17
 ---
 
 # ビルド手順
@@ -12,9 +12,10 @@ Orbe は libghostty を**自前ビルド**して使う（クリーン・MIT・�
 
 | ツール | 要否 | 入手 |
 |---|---|---|
-| **フル Xcode（26 系）** | **必須** | App Store か Apple Developer から。Swift ツールチェーンと Icon Composer 形式のアイコンを扱う `actool` を使う。CLT だけでは不可。 |
+| **フル Xcode（26 系以上）** | **必須** | App Store か Apple Developer から。Swift ツールチェーンと Icon Composer 形式のアイコンを扱う `actool` を使う。CLT だけでは不可。 |
 | Metal Toolchain | 必須 | `xcodebuild -downloadComponent MetalToolchain` で追加する（[CI](../../.github/workflows/ci.yml)でも導入）。 |
-| Zig 0.15.2 | 必須 | `brew install zig@0.15`。ghostty が `minimum_zig_version = 0.15.2` を要求し、brew の素の `zig`(0.16) では不可。**`zig@0.15` は keg-only なので `zig` は PATH に入らない**が、`build-app.sh` が `brew --prefix zig@0.15` から自動解決する（別経路で入れた場合は `ZIG=/path/to/zig` で上書き）。 |
+| [mise](https://mise.jdx.dev/) | 必須 | `brew install mise`。[`mise.toml`](../../mise.toml) が固定する Zig・SwiftLint の版を導入・解決する台帳。`build-app.sh` は mise が無いと導入案内を出して止まる。 |
+| Zig 0.16.0 | 必須 | [`mise.toml`](../../mise.toml) で版を固定。導入は `mise install`（swiftlint と同じ台帳）。ghostty の `build.zig` は zig の major.minor の完全一致を要求するので、版は勝手に上げられない（ghostty の pin と対で上げる）。`build-app.sh` は `mise which zig` で実体を解決し、PATH の `zig` は見ない。 |
 
 Xcode を導入して初回セットアップを済ませたら、使用中の開発ツールを確認する。
 
@@ -29,10 +30,11 @@ xcodebuild -version
 sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
 ```
 
-次に Zig と Metal Toolchain を導入し、Metal コンパイラを確認する。
+次に mise を入れ、Zig（と SwiftLint）を mise で、Metal Toolchain を Xcode で導入し、Metal コンパイラを確認する。
 
 ```bash
-brew install zig@0.15
+brew install mise
+mise install
 xcodebuild -downloadComponent MetalToolchain
 xcrun -sdk macosx metal --version
 ```
@@ -50,7 +52,7 @@ xcrun -sdk macosx metal --version
 
 ## バージョン pin
 
-- ghostty: `vendor/ghostty` submodule を `3ba5e9c24390412fb1dbb08c51008f1efdcff97b` に pin。
+- ghostty: `vendor/ghostty` submodule を `f9a3f24a56bf05f70894e1a084809d4fffadf420` に pin。
   API の正はこのコミットの `vendor/ghostty/include/ghostty.h`（外部契約は [spec/terminal/libghostty.md](../spec/terminal/libghostty.md)）。
 - libghostty は alpha・API 非安定のため、**main 追従ではなく固定 SHA で pin**。アップグレード時はヘッダの型差分を確認。
 
@@ -67,7 +69,7 @@ open build/Orbe.app
 
 `build/Orbe.app` と `/Applications/Orbe Dev.app` は同じ bundle id なので、state も control.sock も共有する。`open` は既存インスタンスを前面化するだけでソケットの持ち主は入れ替わらないため、常用の Orbe Dev を起動したまま新ビルドを起こしても古い方が応答し続ける（症状は「新ビルドにしたのに直っていない」という遠い形で出る）。入れ替えるには先に常用を quit するか、本物に触らず確かめるなら `ORBE_STATE_DIR` で隔離する（`scripts/sandbox-run.sh start`。手順は `.claude/skills/sandbox-run`）。
 
-`build-app.sh` がエンジン(libghostty)を ReleaseFast で焼き（`zig build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast`）、xcframework と share リソースを生成してから Orbe.app をバンドルする。初回・submodule 更新時は数分かかるが、以降は Zig のキャッシュで実質一瞬。
+`build-app.sh` がエンジン(libghostty)を ReleaseFast で焼き（`zig build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast -Demit-macos-app=false`）、xcframework と share リソースを生成してから Orbe.app をバンドルする。`-Demit-macos-app=false` は上流 Ghostty.app（xcodebuild）を組まないための指定で、Orbe が使うのは xcframework と share リソースだけ。初回・submodule 更新時は数分かかるが、以降は Zig のキャッシュで実質一瞬。
 
 ### ビルドチャネル（ORBE_CHANNEL）
 
