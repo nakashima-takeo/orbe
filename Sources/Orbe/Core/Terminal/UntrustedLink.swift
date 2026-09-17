@@ -1,9 +1,14 @@
 import Foundation
 import UniformTypeIdentifiers
 
-/// OSC 8 で端末出力が指すリンク。見えている文字列と別の対象を隠せるため、Launch Services へ渡す前に
+/// OSC 8 で端末出力が指すリンク。見えている文字列と別の対象を隠せるため、開く前に
 /// allow / confirm / block の 3 値で判定する。判定は URL 文字列・ローカル host 名の集合・ファイルシステムの
 /// 状態だけから決まる。
+///
+/// ローカルファイルの危険はファイルの型ではなく Launch Services が選ぶ handler にある（実行ビット付きの
+/// `.txt` は Terminal、`.py` は IDLE、`.jnlp` は JavaLauncher、`.fileloc` は中で参照した先に渡る）。
+/// だから allow は「開き先」を伴い、Orbe が内容の家族ごとに開き先を決める。家族のどれでもないものは
+/// allow に落ちず confirm になる。
 struct UntrustedLink: Equatable {
   enum BlockReason: Equatable {
     case malformed
@@ -14,12 +19,24 @@ struct UntrustedLink: Equatable {
     case unsafeFile
   }
 
+  /// allow の開き先。
+  enum Target: Equatable {
+    /// URL の既定アプリ（web・mail）。
+    case url(URL)
+    /// GUI コードエディタ（無ければ plain text の既定アプリ）。実行しない。
+    case text(URL)
+    /// ファイルの型で引いた既定アプリ（画像・PDF・音声/動画）。
+    case typed(URL, UTType)
+    /// Finder で表示。
+    case folder(URL)
+  }
+
   enum Decision: Equatable {
-    /// 実行を伴わず挙動が定まっている scheme。そのまま開く。
-    case allow(URL)
-    /// 独自 scheme。登録アプリを何でも起動できるので、対象と開き先を見せて人が決める。
+    /// Orbe が決めた開き先で開く。
+    case allow(Target)
+    /// 対象と開き先アプリを見せて人が決める。任意のアプリを起動できる scheme と、家族のどれでもないファイル。
     case confirm(URL)
-    /// 不正形式・実行されうるローカルファイル等。開かない。
+    /// 開かず理由を示す。
     case block(BlockReason)
   }
 
@@ -56,7 +73,7 @@ struct UntrustedLink: Equatable {
     case "http", "https":
       // `https:relative` のような authority 無しは消費者ごとに解決が変わる。
       guard let host = url.host, !host.isEmpty else { return .block(.invalidWeb) }
-      return .allow(url)
+      return .allow(.url(url))
 
     case "mailto":
       // 宛先は path に入る。素の `mailto:` でメールアプリに空の要求を送らない。
@@ -65,7 +82,7 @@ struct UntrustedLink: Equatable {
       else {
         return .block(.malformed)
       }
-      return .allow(url)
+      return .allow(.url(url))
 
     case "file":
       return fileDecision(url)
@@ -81,7 +98,7 @@ struct UntrustedLink: Equatable {
   var displayString: String {
     let normalized: String
     if let url = URL(string: raw), url.isFileURL {
-      normalized = url.standardizedFileURL.resolvingSymlinksInPath().path
+      normalized = (Self.canonicalFileURL(url) ?? url.standardizedFileURL).path
     } else {
       normalized = raw
     }
@@ -89,7 +106,7 @@ struct UntrustedLink: Equatable {
     result.unicodeScalars.reserveCapacity(normalized.unicodeScalars.count)
     for scalar in normalized.unicodeScalars {
       if Self.isUnsafeCharacter(scalar) {
-        result += "\\u{\(String(scalar.value, radix: 16, uppercase: true))}"
+        result += String(format: "\\u{%04X}", scalar.value)
       } else {
         result.unicodeScalars.append(scalar)
       }
@@ -104,52 +121,87 @@ struct UntrustedLink: Equatable {
 
     // 端末出力の綴りではなく実体で判定する。`..` と symlink を畳み、無害そうな名前の裏の実行ファイルを
     // 見逃さない。
-    let canonical = url.standardizedFileURL.resolvingSymlinksInPath()
+    guard let canonical = Self.canonicalFileURL(url) else { return .block(.inaccessibleFile) }
     let values: URLResourceValues
     do {
       values = try canonical.resourceValues(forKeys: [
-        .contentTypeKey, .isDirectoryKey, .isExecutableKey, .isRegularFileKey,
+        .contentTypeKey, .isDirectoryKey, .isPackageKey, .isRegularFileKey,
       ])
     } catch {
       return .block(.inaccessibleFile)
     }
-    guard values.isDirectory == true || values.isRegularFile == true else {
-      return .block(.inaccessibleFile)
+    let isDirectory = values.isDirectory == true
+    guard isDirectory || values.isRegularFile == true else { return .block(.inaccessibleFile) }
+    let type = values.contentType ?? .data
+
+    // 判定順は家族の包含関係で決まる: `.js` は executable にも text にも準拠し、`.svg` は image にも
+    // text にも準拠する。
+    let isText = type.conforms(to: .text)
+    if Self.forwardingOrExecutableTypes.contains(where: type.conforms(to:)), !isText {
+      return .block(.unsafeFile)
     }
-    guard !Self.isUnsafeFile(canonical, values) else { return .block(.unsafeFile) }
-    return .allow(canonical)
+    if Self.mediaTypes.contains(where: type.conforms(to:)) {
+      return .allow(.typed(canonical, type))
+    }
+    if isText { return .allow(.text(canonical)) }
+    if !isDirectory, Self.hasNoDeclaredType(type), Self.looksLikeText(canonical) {
+      return .allow(.text(canonical))
+    }
+    if isDirectory, values.isPackage != true { return .allow(.folder(canonical)) }
+    return .confirm(canonical)
   }
 
-  private static func isUnsafeFile(_ url: URL, _ values: URLResourceValues) -> Bool {
-    // Launch Services は拡張子でハンドラを選ぶので、実行ビットが無くても実行されうる容器を拡張子で弾く。
-    if unsafePathExtensions.contains(url.pathExtension.lowercased()) { return true }
-    // 拡張子が無い・偽っているファイルは UTI で。system 宣言の広い型を使い、シェルスクリプトや
-    // アプリバンドルの下位型を自動で含める。
-    if let type = values.contentType, unsafeContentTypes.contains(where: type.conforms(to:)) {
-      return true
-    }
-    return values.isDirectory != true && values.isExecutable == true
+  /// `..` と symlink を全部畳んだ実体。存在しなければ nil。Foundation の symlink 解決は `/private` を
+  /// 剥がして `/tmp`・`/etc` 自身を symlink のまま残すので、realpath(3) で畳む。
+  private static func canonicalFileURL(_ url: URL) -> URL? {
+    guard let resolved = realpath(url.standardizedFileURL.path, nil) else { return nil }
+    defer { free(resolved) }
+    return URL(fileURLWithPath: String(cString: resolved))
   }
 
+  /// 中身が別の対象を指す転送ファイル（`.webloc`・`.fileloc`・`.url` 等）と、アプリ・実行形式
+  /// （`.app`・unix 実行形式・`.dylib`・`.jar`・`.exe` 等）。テキストでない限り開かない。
+  private static let forwardingOrExecutableTypes: [UTType] =
+    [.internetLocation, UTType("public.stored-url"), .application, .executable].compactMap { $0 }
+
+  private static let mediaTypes: [UTType] = [.image, .pdf, .audiovisualContent]
+
+  /// macOS が型を知らないファイル（`.zig`・`.rs`・`.env` 等は動的な型、Dockerfile 等の拡張子無しは
+  /// 素のデータ型になる）。型が無いので中身で判定する。
+  private static func hasNoDeclaredType(_ type: UTType) -> Bool {
+    type.isDynamic || type == .data
+  }
+
+  private static let sniffLength = 8 * 1024
+
+  /// 先頭 8 KiB が NUL を含まない UTF-8 ならテキストと見なす。
+  private static func looksLikeText(_ url: URL) -> Bool {
+    guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+    let data: Data
+    do {
+      data = try handle.read(upToCount: sniffLength) ?? Data()
+    } catch {
+      return false
+    }
+    guard !data.contains(0) else { return false }
+    if data.count < sniffLength { return String(data: data, encoding: .utf8) != nil }
+    // 切れ目が多バイト列の途中に当たりうるので、末尾 3 バイトまでは削って読み直す。
+    return (0...3).contains { String(data: data.dropLast($0), encoding: .utf8) != nil }
+  }
+
+  /// 表示と実体を食い違わせうる scalar。列挙ではなく Unicode の性質で断つ: 一般カテゴリが
+  /// Other（制御・書式・私用・未割当・サロゲート）か Separator（U+0020 を除く空白・行・段落区切り）、
+  /// または Default_Ignorable（ソフトハイフン・異体字セレクタ・結合書記素接合子・タグ文字等）。
   static func isUnsafeCharacter(_ scalar: Unicode.Scalar) -> Bool {
-    switch scalar.value {
-    case 0x00...0x1F, 0x7F...0x9F:  // C0/C1 制御（CR・LF・NEL を含む）
-      return true
-    case 0x061C, 0x200B...0x200F, 0x202A...0x202E, 0x2066...0x2069:  // 方向制御・ゼロ幅
-      return true
-    case 0x2028...0x2029:  // 行・段落区切り
-      return true
-    case 0x2060, 0xFEFF:  // Word Joiner・BOM
+    if scalar == " " { return false }
+    let properties = scalar.properties
+    if properties.isDefaultIgnorableCodePoint { return true }
+    switch properties.generalCategory {
+    case .control, .format, .privateUse, .surrogate, .unassigned,
+      .spaceSeparator, .lineSeparator, .paragraphSeparator:
       return true
     default:
       return false
     }
   }
-
-  static let unsafePathExtensions: Set<String> = [
-    "action", "app", "applescript", "class", "command", "desktop", "inetloc", "jar",
-    "mobileconfig", "mpkg", "pkg", "scpt", "terminal", "tool", "url", "webloc", "workflow",
-  ]
-
-  static let unsafeContentTypes: [UTType] = [.application, .executable, .script]
 }

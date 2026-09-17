@@ -130,8 +130,8 @@ extension Ghostty {
       let language = view?.localization?.language ?? .systemDefault
       let link = UntrustedLink(raw)
       switch link.decision {
-      case .allow(let url):
-        NSWorkspace.shared.open(url)
+      case .allow(let target):
+        target.open()
       case .confirm(let url):
         UntrustedLinkAlert.confirm(
           url, display: link.displayString, language: language, in: view?.window)

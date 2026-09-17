@@ -6,8 +6,8 @@ import XCTest
 /// OSC 8 リンク（端末出力が見えている文字列と別の対象を指せるリンク）を開く前の allow / confirm / block 判定を固定する。
 /// ファイル系は caseDir に置いた実ファイルで判定させる。
 ///
-/// 壊れると何が起きるか: 端末出力が仕込んだ `file:///…/x.command`・実行ビット付きファイル・別ホストの
-/// ファイル・不可視文字で偽装した URL が、⌘クリック 1 回で Launch Services に渡り実行される。
+/// 壊れると何が起きるか: 端末出力が仕込んだ `file:///…/x.command`・アプリ・実行形式・転送ファイル・別ホストの
+/// ファイル・不可視文字で偽装した URL が、⌘クリック 1 回で Launch Services の handler に渡り実行される。
 /// 逆に判定が厳しすぎると、`ls --hyperlink`・ripgrep が出す `file://<このMacのホスト名>/path` や web リンクが
 /// 開かなくなり、日常のファイルリンクが使えなくなる。`vscode://` 等が確認無しに開けば、任意の登録アプリが
 /// 端末出力の意のままに起動する。
@@ -27,8 +27,9 @@ final class UntrustedLinkTests: OrbeTestCase {
   /// host のある http / https は、元の URL のまま開く。
   func testWebLinkWithHostIsAllowedAsIs() {
     XCTAssertEqual(
-      decision("https://example.com/a?b=1#c"), .allow(URL(string: "https://example.com/a?b=1#c")!))
-    XCTAssertEqual(decision("http://example.com"), .allow(URL(string: "http://example.com")!))
+      decision("https://example.com/a?b=1#c"),
+      .allow(.url(URL(string: "https://example.com/a?b=1#c")!)))
+    XCTAssertEqual(decision("http://example.com"), .allow(.url(URL(string: "http://example.com")!)))
   }
 
   /// authority の無い web URL は、消費者ごとに解決が変わるので開かない。
@@ -39,7 +40,7 @@ final class UntrustedLinkTests: OrbeTestCase {
   /// 宛先のある mailto は開き、宛先の無い mailto は開かない。
   func testMailtoOpensOnlyWithRecipient() {
     XCTAssertEqual(
-      decision("mailto:a@example.com"), .allow(URL(string: "mailto:a@example.com")!))
+      decision("mailto:a@example.com"), .allow(.url(URL(string: "mailto:a@example.com")!)))
     XCTAssertEqual(decision("mailto:"), .block(.malformed))
   }
 
@@ -86,7 +87,7 @@ final class UntrustedLinkTests: OrbeTestCase {
       "file://\(Self.localHost)\(path)",
       "file://\(Self.localHost.uppercased())\(path)",
     ] {
-      XCTAssertEqual(decision(raw), .allow(canonical(file)), raw)
+      XCTAssertEqual(decision(raw), .allow(.text(canonical(file))), raw)
     }
   }
 
@@ -94,7 +95,7 @@ final class UntrustedLinkTests: OrbeTestCase {
   func testFileLinkWithThisMachinesHostNameIsAllowedByDefault() throws {
     let file = try makeFile("notes.txt")
     let raw = "file://\(ProcessInfo.processInfo.hostName)\(file.path)"
-    XCTAssertEqual(UntrustedLink(raw).decision, .allow(canonical(file)))
+    XCTAssertEqual(UntrustedLink(raw).decision, .allow(.text(canonical(file))))
   }
 
   /// このマシン以外の host を指すファイルリンクは、同じパスのファイルがあっても開かない。
@@ -112,7 +113,7 @@ final class UntrustedLinkTests: OrbeTestCase {
 
   // MARK: - file の実体
 
-  /// 通常ファイルとディレクトリは、`..` と symlink を解決した実体の URL で開く。
+  /// 通常ファイルとディレクトリは、`..` と symlink を解決した実体の URL で開く（テキストはエディタ、フォルダは Finder）。
   func testOrdinaryFileAndDirectoryOpenAtResolvedLocation() throws {
     let file = try makeFile("notes.txt")
     let folder = dir.appendingPathComponent("folder", isDirectory: true)
@@ -134,17 +135,25 @@ final class UntrustedLinkTests: OrbeTestCase {
     XCTAssertEqual(decision("file:///dev/null"), .block(.inaccessibleFile))
   }
 
-  /// 実行されうるファイルは開かない——実行ビット・スクリプトの型・実行されうる拡張子・アプリバンドルの
-  /// いずれで判定されても。
-  func testExecutableFilesAreBlocked() throws {
-    let executableBit = try makeFile("tool.txt", executable: true)
-    let shellScript = try makeFile("setup.sh")
-    let terminalLauncher = try makeFile("run.command")
+  /// テキストは実行ビット・スクリプトの型に関わらず GUI エディタで開く（実行しない）。
+  func testTextFilesOpenInEditorRegardlessOfExecutableBit() throws {
+    for target in [
+      try makeFile("tool.txt", executable: true), try makeFile("setup.sh", executable: true),
+      try makeFile("run.command"), try makeFile("app.py"),
+    ] {
+      XCTAssertEqual(
+        decision("file://\(target.path)"), .allow(.text(canonical(target))),
+        target.lastPathComponent)
+    }
+  }
+
+  /// 別の場所を指す転送ファイルとアプリ・実行形式は開かない。
+  func testForwardingAndExecutableFilesAreBlocked() throws {
     let webLocation = try makeFile("site.webloc")
     let appBundle = dir.appendingPathComponent("Fake.app", isDirectory: true)
     try FileManager.default.createDirectory(at: appBundle, withIntermediateDirectories: true)
 
-    for target in [executableBit, shellScript, terminalLauncher, webLocation, appBundle] {
+    for target in [webLocation, appBundle] {
       XCTAssertEqual(
         decision("file://\(target.path)"), .block(.unsafeFile), target.lastPathComponent)
     }
@@ -206,14 +215,19 @@ final class UntrustedLinkTests: OrbeTestCase {
     return url
   }
 
+  /// `..` と symlink を畳んだ実体（`/private` を剥がす Foundation の解決ではなく realpath(3) と同じ）。
   private func canonical(_ url: URL) -> URL {
-    url.standardizedFileURL.resolvingSymlinksInPath()
+    let resolved = realpath(url.path, nil)!
+    defer { free(resolved) }
+    return URL(fileURLWithPath: String(cString: resolved))
   }
 }
 
 extension UntrustedLink.Decision {
   fileprivate var allowedPath: String? {
-    guard case .allow(let url) = self else { return nil }
-    return url.path
+    switch self {
+    case .allow(.text(let url)), .allow(.folder(let url)): return url.path
+    default: return nil
+    }
   }
 }

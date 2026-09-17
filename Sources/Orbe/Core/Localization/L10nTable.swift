@@ -169,8 +169,8 @@ enum L10n {
       "The local target does not exist or is not a regular file or directory."
     ),
     .linkBlockedUnsafeFile: (
-      "このローカルの対象を開くとコードが実行される可能性があります。",
-      "Opening this local target could execute code."
+      "ローカルの対象がアプリ・実行形式か、別の場所を指す転送ファイルです。",
+      "The local target is an application, an executable, or a file that forwards to another location."
     ),
 
     // MARK: Tab context menu
