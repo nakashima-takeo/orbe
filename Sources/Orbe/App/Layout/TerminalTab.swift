@@ -25,7 +25,7 @@ final class TerminalTab {
 
   /// エディター面のセッション（開いた文書の列と焦点の文書）。書き手はタブだけで、外（制御 API）は
   /// `openFile` を通る。エディターの型は UI に閉じた `@MainActor` で、タブはその外（main スレッド規律の
-  /// nonisolated）にいるため、触る点（生成・配線・`openFile`）だけ `MainActor.assumeIsolated` で境を越える。
+  /// nonisolated）にいるため、このプロパティに触る箇所はいずれも `MainActor.assumeIsolated` で境を越える。
   let editor: EditorSession
   /// 開いた文書の列・焦点の文書・未保存の有無が変わった通知（chrome 更新・永続保存は上位）。
   var onEditorChange: (() -> Void)?
