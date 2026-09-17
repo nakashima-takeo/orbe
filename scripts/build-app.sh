@@ -22,14 +22,57 @@ if [ "$CHANNEL" != "release" ]; then
   PLUGIN_NAME="${SRC_PLUGIN_NAME}-dev"
 fi
 
-# --- worktree ガード: submodule 未取得なら main worktree の vendor/ghostty へ symlink ---
-# git worktree add は submodule を checkout せず、worktree での submodule update は main の
-# オブジェクトを共有せずフル clone を試みて重い。エンジンは pin SHA 不変ゆえ、main worktree の
-# vendor/ghostty（zig-out 含む）を symlink で共有すればビルドが通る（zig は cache hit で実質 read-only）。
+# --- エンジン実体の解決: 焼く vendor/ghostty の HEAD が、この checkout の pin（index の gitlink）と一致することを確かめる ---
+# 実体の有無と HEAD は `git submodule status` の prefix（' ' 一致 / '+' 不一致 / '-' 未取得）と SHA で読む。
+# '-' の SHA は pin であって HEAD ではない。ずれていれば zig を起こす前に、原因別の復旧コマンドを示して止める。
+PIN="$(git -C "$ROOT" rev-parse :vendor/ghostty 2>/dev/null)" || {
+  echo "エラー: vendor/ghostty の pin を解決できない。git checkout で submodule を持つ状態からビルドせよ" >&2
+  exit 1
+}
+# 前回のビルドが trap を通らず残した symlink を先に戻す（symlink 上では git submodule status も update も失敗する）。
+if [ -L "$ROOT/vendor/ghostty" ]; then
+  rm "$ROOT/vendor/ghostty"
+  mkdir "$ROOT/vendor/ghostty"
+fi
 if [ ! -f "$ROOT/vendor/ghostty/build.zig" ]; then
+  # submodule 未取得（git worktree）: main worktree の実 checkout が同じ pin なら symlink で共有する
+  # （zig-out・.zig-cache も共有され、zig は cache hit で実質 read-only）。
   MAIN_WT="$(git -C "$ROOT" worktree list --porcelain | sed -n 's/^worktree //p' | head -1)"
-  if [ -z "$MAIN_WT" ] || [ ! -f "$MAIN_WT/vendor/ghostty/build.zig" ]; then
-    echo "エラー: main worktree の vendor/ghostty を解決できない ($MAIN_WT)。main で submodule を取得済みか確認せよ" >&2
+  MAIN_ST="$(git -C "$MAIN_WT" submodule status -- vendor/ghostty 2>/dev/null)" || MAIN_ST=""
+  MAIN_PIN="$(git -C "$MAIN_WT" rev-parse :vendor/ghostty)"
+  # worktree 内に実 checkout するコマンド。reference 先は main の checkout ではなく共通 git dir の
+  # module store（main が deinit 済みでも残り、git オブジェクトを alternates で借りられる）。
+  STORE="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)/modules/vendor/ghostty"
+  if [ -d "$STORE/objects" ]; then
+    WT_CHECKOUT="git -C '$ROOT' submodule update --init --reference '$STORE' vendor/ghostty"
+  else
+    WT_CHECKOUT="git -C '$ROOT' submodule update --init vendor/ghostty"
+  fi
+  WT_NOTE="（zig の初回ビルドに数分・.zig-cache 約 1GB。以後この worktree の git worktree remove には --force が要る）"
+  case "${MAIN_ST:0:1}" in
+    " " | "+") MAIN_HEAD="${MAIN_ST:1:40}" ;;
+    *) MAIN_HEAD="" ;;
+  esac
+  if [ "$MAIN_HEAD" != "$PIN" ]; then
+    if [ -z "$MAIN_HEAD" ]; then
+      echo "エラー: main worktree ($MAIN_WT) に vendor/ghostty の実体が無く、共有できない" >&2
+    elif [ "$MAIN_PIN" = "$PIN" ]; then
+      echo "エラー: main worktree の vendor/ghostty の checkout が main の pin とずれていて、共有できない" >&2
+      echo "  main の vendor/ghostty HEAD: $MAIN_HEAD" >&2
+    else
+      echo "エラー: このブランチの vendor/ghostty の pin が main worktree の checkout と違い、共有できない" >&2
+      echo "  main の vendor/ghostty HEAD: $MAIN_HEAD" >&2
+    fi
+    echo "  main の pin:                 $MAIN_PIN" >&2
+    echo "  このブランチの pin:          $PIN" >&2
+    if [ "$MAIN_PIN" = "$PIN" ]; then
+      echo "main の submodule を pin に合わせる:" >&2
+      echo "  git -C '$MAIN_WT' submodule update --init vendor/ghostty" >&2
+      echo "main を触らないなら、この worktree 内に実 checkout する$WT_NOTE:" >&2
+    else
+      echo "この worktree 内に実 checkout する$WT_NOTE:" >&2
+    fi
+    echo "  $WT_CHECKOUT" >&2
     exit 1
   fi
   echo "==> worktree 検出: vendor/ghostty を main worktree へ symlink ($MAIN_WT)"
@@ -39,6 +82,16 @@ if [ ! -f "$ROOT/vendor/ghostty/build.zig" ]; then
   # symlink を残すと git status がエラーになり lefthook・確定コミット・worktree remove を壊す。
   # .app には share/font をコピー済みで、vendor はビルド完了後は不要（次回ビルドで再 symlink）。
   trap 'rm -rf "$ROOT/vendor/ghostty"; mkdir "$ROOT/vendor/ghostty"' EXIT INT TERM
+else
+  ST="$(git -C "$ROOT" submodule status -- vendor/ghostty)"
+  if [ "${ST:0:1}" != " " ]; then
+    echo "エラー: vendor/ghostty の checkout が pin とずれている" >&2
+    echo "  vendor/ghostty HEAD: ${ST:1:40}" >&2
+    echo "  pin:                 $PIN" >&2
+    echo "pin に合わせる:" >&2
+    echo "  git -C '$ROOT' submodule update --init vendor/ghostty" >&2
+    exit 1
+  fi
 fi
 
 # zig は mise.toml が固定する版だけを使う（ghostty の build.zig が major.minor の一致を要求する）。

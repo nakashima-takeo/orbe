@@ -55,6 +55,7 @@ xcrun -sdk macosx metal --version
 - ghostty: `vendor/ghostty` submodule を `f9a3f24a56bf05f70894e1a084809d4fffadf420` に pin。
   API の正はこのコミットの `vendor/ghostty/include/ghostty.h`（外部契約は [spec/terminal/libghostty.md](../spec/terminal/libghostty.md)）。
 - libghostty は alpha・API 非安定のため、**main 追従ではなく固定 SHA で pin**。アップグレード時はヘッダの型差分を確認。
+- `build-app.sh` は焼く前に `vendor/ghostty` の checkout が pin と一致するか確かめ、ずれていれば関係する SHA（checkout の HEAD・pin）と復旧コマンドを示して止める。pull・rebase で pin が動いたら `git submodule update --init vendor/ghostty`。
 
 ## ビルド手順（Xcode 導入後）
 
@@ -89,7 +90,7 @@ open build/Orbe.app
 - release をオプトインにしてあるのは、素の `swift build`（`scripts/orbe-mcp.sh` 等）がフラグ差分で
   焼き直しても dev のままになるようにするため。逆にすると、そこで本番 identity へ静かに落ちる。
 
-> **worktree での注意**: `git worktree add` で切った作業場では submodule は未取得のまま。`git submodule update` は不要（main のオブジェクトを共有せずフル clone を試み重い）。`build-app.sh` が `vendor/ghostty/build.zig` 不在を検知し、main worktree の `vendor/ghostty` へ symlink を張って自動で用意する。**worktree では `vendor/ghostty` を手動で触らない**（submodule 取得も xcframework コピーも不要）。
+> **worktree での注意**: `git worktree add` で切った作業場では submodule は未取得のまま。`build-app.sh` は、main worktree の `vendor/ghostty` の checkout がこの worktree の pin と一致するときだけ、そこへ symlink を張って共有する（ビルド後は空ディレクトリへ戻す）。ブランチが pin を進めている・main の submodule が pin とずれている・main に submodule の実体が無いときは止まり、案内のコマンド（main の module store を `--reference` にした `git submodule update`）でこの worktree 内に実 checkout する。git オブジェクトは main と共有されるが、zig の初回ビルド（数分）と `.zig-cache`（約 1GB）は worktree ごとに乗り、`git worktree remove` には `--force` が要る。ビルドが SIGKILL 等で中断して symlink が残っても、次の `build-app.sh` が冒頭で空ディレクトリへ戻すので、復旧コマンドより先に `build-app.sh` を再実行する。
 
 > 静的ライブラリのため Package.swift で Metal/CoreText/AppKit 等のシステムフレームワークを明示リンクしている。
 
