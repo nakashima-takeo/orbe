@@ -4,47 +4,42 @@ import XCTest
 
 @testable import Orbe
 
-/// 端末とシステムのクリップボード（`NSPasteboard.general`）の往来を、実 libghostty と実タブの PTY で固定する。
+/// 端末とクリップボード（`Ghostty.pasteboard`）の往来を、実 libghostty と実タブの PTY で固定する。
 /// ユーザー発の ⌘V / ⌘⇧V / ⌘C・選択・中クリックは通り、端末アプリ発の読み取り（OSC 52 / Kitty clipboard）は
-/// クリップボードの中身に関わらず拒否される。端末アプリ発の書き込みはテキスト表現だけが入る。
+/// クリップボードの中身に関わらず拒否される。端末アプリ発の書き込みはテキスト表現だけが入り、確認を求める
+/// 設定では入らない。
 ///
 /// 壊れると何が起きるか: ⌘V で何も貼れない・⌘C でコピーできない・選択しただけではコピーされない・
 /// 中クリックが無反応になる（libghostty の契約や既定値が変わるとホストのコールバックが静かに空振りする）。
 /// 端末アプリが書いたテキストが `text/plain;charset=utf-8` で黙って捨てられる。逆に、macOS がテキストと解さない
 /// MIME（`;` の後に空白を入れた `text/plain; charset=UTF-8`）の書き込みでクリップボードが消える——Orbe は MIME を自前で
 /// 分解せず判定を macOS の型解決に委ねる境界を固定している。あるいは端末で動く任意のプログラムが、ユーザーの
-/// クリップボード（パスワード等）を黙って読み出せる。中身の有無で応答が変わるだけでも、
-/// 「クリップボードに文字列があるか」が端末アプリへ漏れる。
+/// クリップボード（パスワード等）を黙って読み出せる——`clipboard-read = ask` にしたユーザーでは、確認の拒否が
+/// 唯一の防壁になる。中身の有無で応答が変わるだけでも、「クリップボードに文字列があるか」が端末アプリへ漏れる。
 ///
 /// 層1（`app/orbe-defaults.conf`）を本物のまま読み込む。読み取りの拒否はそこにある
-/// `clipboard-read = deny` が担う。`NSPasteboard.general` はハーネスが隔離しないシステム全域の
-/// 状態なので、テストが書き換える前の中身を `tearDown` で戻す。
+/// `clipboard-read = deny` が担う。クリップボードはハーネスがテストごとの一意名の pasteboard へ向けている。
 final class SurfaceClipboardTests: OrbeTestCase {
   private static let secret = "clipboard-secret"
-
-  private var savedPasteboard: [NSPasteboardItem] = []
 
   override func setUpWithError() throws {
     try super.setUpWithError()
     try stageCuratedDefaults()
-    savedPasteboard = (NSPasteboard.general.pasteboardItems ?? []).map { item in
-      let copy = NSPasteboardItem()
-      for type in item.types {
-        if let data = item.data(forType: type) { copy.setData(data, forType: type) }
-      }
-      return copy
-    }
   }
 
-  override func tearDown() {
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.writeObjects(savedPasteboard)
-    super.tearDown()
-  }
+  private var clipboard: String? { Ghostty.pasteboard.string(forType: .string) }
 
   private func setClipboard(_ text: String?) {
-    NSPasteboard.general.clearContents()
-    if let text { NSPasteboard.general.setString(text, forType: .string) }
+    Ghostty.pasteboard.clearContents()
+    if let text { Ghostty.pasteboard.setString(text, forType: .string) }
+  }
+
+  /// ghostty の user 層に書いて読み直す。
+  private func useUserConfig(_ contents: String) throws {
+    let userConfig = try XCTUnwrap(Config.userFileURLOverride)
+    try contents.write(to: userConfig, atomically: true, encoding: .utf8)
+    addTeardownBlock { try? FileManager.default.removeItem(at: userConfig) }
+    Ghostty.shared.reloadConfig()
   }
 
   private static let commandA = PhysicalKey(
@@ -104,7 +99,7 @@ final class SurfaceClipboardTests: OrbeTestCase {
 
     Self.commandC.type(into: dump.tab.surface)
 
-    XCTAssertEqual(NSPasteboard.general.string(forType: .string), "READY")
+    XCTAssertEqual(clipboard, "READY")
   }
 
   /// ⌘A で選択するだけで、⌘C を押さなくても選択がクリップボードの文字列を置き換える。
@@ -114,7 +109,7 @@ final class SurfaceClipboardTests: OrbeTestCase {
 
     Self.commandA.type(into: dump.tab.surface)
 
-    XCTAssertEqual(NSPasteboard.general.string(forType: .string), "READY")
+    XCTAssertEqual(clipboard, "READY")
   }
 
   /// 中クリックで、クリップボードの文字列がペーストされる。
@@ -142,42 +137,70 @@ final class SurfaceClipboardTests: OrbeTestCase {
   /// OSC 52 の読み取り要求には、クリップボードに文字列があっても空でも何も返らない。
   /// 応答が無いことは、後続の Kitty 読み取り要求への応答が最初に届くバイトであることで見る。
   func testOSC52ReadGetsNoResponseRegardlessOfClipboard() throws {
-    for clipboard in [Self.secret, nil] {
-      setClipboard(clipboard)
+    for contents in [Self.secret, nil] {
+      setClipboard(contents)
       let dump = try dump(.osc52Read)
 
       let first = dump.next() ?? ""
 
       XCTAssertTrue(
         first.hasPrefix(TtyDumpTab.hex("\u{1b}]5522;")),
-        "クリップボード \(clipboard ?? "空") で OSC 52 に応答が返った: \(first)")
+        "クリップボード \(contents ?? "空") で OSC 52 に応答が返った: \(first)")
     }
   }
 
   /// Kitty clipboard の読み取り要求には、クリップボードに文字列があっても空でも拒否（EPERM）だけが返る。
   func testKittyClipboardReadIsDeniedRegardlessOfClipboard() throws {
-    for clipboard in [Self.secret, nil] {
-      setClipboard(clipboard)
+    for contents in [Self.secret, nil] {
+      setClipboard(contents)
       let dump = try dump(.kittyRead)
 
       XCTAssertEqual(
-        dump.next(), TtyDumpTab.hex("\u{1b}]5522;type=read:status=EPERM\u{1b}\\"),
-        "クリップボード \(clipboard ?? "空") で拒否以外が返った")
+        dump.next(), Self.kittyReadDenied, "クリップボード \(contents ?? "空") で拒否以外が返った")
     }
   }
 
   /// ユーザー設定で読み取りを許しても、PRIMARY（選択クリップボード）の読み取りには非対応（ENOSYS）が返り、
   /// クリップボードの中身は渡らない。
   func testKittyPrimaryReadIsUnsupportedEvenWhenReadsAllowed() throws {
-    let userConfig = try XCTUnwrap(Config.userFileURLOverride)
-    try "clipboard-read = allow\n".write(to: userConfig, atomically: true, encoding: .utf8)
-    addTeardownBlock { try? FileManager.default.removeItem(at: userConfig) }
-    Ghostty.shared.reloadConfig()
+    try useUserConfig("clipboard-read = allow\n")
     setClipboard(Self.secret)
 
     let dump = try dump(.kittyReadPrimary)
 
     XCTAssertEqual(dump.next(), TtyDumpTab.hex("\u{1b}]5522;type=read:status=ENOSYS\u{1b}\\"))
+  }
+
+  /// 読み取りに確認を求める設定（`clipboard-read = ask`）でも、確認で拒否するので OSC 52 の読み取りに
+  /// クリップボードの中身は渡らず、続く Kitty の読み取りには拒否（EPERM）が返る。
+  func testReadsRequiringConfirmationAreDenied() throws {
+    try useUserConfig("clipboard-read = ask\n")
+    setClipboard(Self.secret)
+    let dump = try dump(.osc52Read)
+
+    var received = ""
+    while !received.contains(Self.kittyReadDenied), let chunk = dump.next() {
+      received += chunk
+    }
+
+    XCTAssertTrue(received.contains(Self.kittyReadDenied), received)
+    let leaked = TtyDumpTab.hex(Data(Self.secret.utf8).base64EncodedString())
+    XCTAssertFalse(received.contains(leaked), "OSC 52 の応答に中身が渡った: \(received)")
+  }
+
+  /// 書き込みに確認を求める設定（`clipboard-write = ask`）では、OSC 52 の書き込みはクリップボードを変えない。
+  /// 確認を求めない設定の同じ書き込みはクリップボードの文字列になる（書き込みの処理を待てている対照）。
+  func testOSC52WriteRequiringConfirmationLeavesClipboardUnchanged() throws {
+    for (setting, expected) in [
+      ("allow", TtyDumpTab.osc52WrittenText), ("ask", "before write"),
+    ] {
+      try useUserConfig("clipboard-write = \(setting)\n")
+      setClipboard("before write")
+      let dump = try dump(.osc52Write)
+
+      XCTAssertEqual(dump.next(), Self.kittyReadDenied, setting)
+      XCTAssertEqual(clipboard, expected, setting)
+    }
   }
 
   /// Kitty clipboard の書き込みで charset 付きの MIME（`text/plain;charset=utf-8`）で書かれたテキストが、
@@ -187,7 +210,7 @@ final class SurfaceClipboardTests: OrbeTestCase {
     let dump = try dump(.kittyWriteCharset)
 
     XCTAssertEqual(dump.next(), Self.kittyWriteDone)
-    XCTAssertEqual(NSPasteboard.general.string(forType: .string), TtyDumpTab.kittyWrittenText)
+    XCTAssertEqual(clipboard, TtyDumpTab.kittyWrittenText)
   }
 
   /// RFC 上はテキストでも macOS がテキストと解さない MIME（`;` の後に空白が入る `text/plain; charset=UTF-8`）
@@ -198,7 +221,7 @@ final class SurfaceClipboardTests: OrbeTestCase {
     let dump = try dump(.kittyWriteSpacedCharset)
 
     XCTAssertEqual(dump.next(), Self.kittyWriteDone)
-    XCTAssertEqual(NSPasteboard.general.string(forType: .string), "before write")
+    XCTAssertEqual(clipboard, "before write")
   }
 
   /// macOS がテキストと解しても UTF-16 系の plain text（`text/plain;charset=utf-16`）だけの書き込みは、
@@ -208,8 +231,10 @@ final class SurfaceClipboardTests: OrbeTestCase {
     let dump = try dump(.kittyWriteUTF16)
 
     XCTAssertEqual(dump.next(), Self.kittyWriteDone)
-    XCTAssertEqual(NSPasteboard.general.string(forType: .string), "before write")
+    XCTAssertEqual(clipboard, "before write")
   }
 
+  private static let kittyReadDenied = TtyDumpTab.hex(
+    "\u{1b}]5522;type=read:status=EPERM\u{1b}\\")
   private static let kittyWriteDone = TtyDumpTab.hex("\u{1b}]5522;type=write:status=DONE\u{1b}\\")
 }

@@ -22,13 +22,16 @@ final class TtyDumpTab {
   /// `osc52Read` は OSC 52 の読み取り要求の直後に Kitty clipboard の読み取り要求を続けて出す。両者は
   /// libghostty の同じ経路（surface の mailbox → ホスト）を順に通り、Kitty 側は許可でも拒否でも必ず
   /// 応答するので、OSC 52 に応答があればそれより先に届く——応答が「無い」ことを待ち時間に頼らず測れる。
+  /// `osc52Write` は OSC 52 の書き込み（本文 `osc52WrittenText`）の直後に同じ Kitty 読み取り要求を出し、
+  /// その応答が届いた時点で書き込みが処理済みであることを測れるようにする。
   /// `kittyWrite*` は Kitty clipboard の書き込みを 1 件（本文 `kittyWrittenText`）、モード名が示す MIME で出す。
   /// `kittyWriteUTF16` の本文は BOM 無しの UTF-16LE（ASCII の本文でも NUL 混じりのバイト列になる）。
   enum Mode: String {
-    case legacy, paste, kitty, osc52Read, kittyRead, kittyReadPrimary
+    case legacy, paste, kitty, osc52Read, osc52Write, kittyRead, kittyReadPrimary
     case kittyWriteCharset, kittyWriteSpacedCharset, kittyWriteUTF16
   }
 
+  static let osc52WrittenText = "osc52-written"
   static let kittyWrittenText = "kitty-written"
 
   /// 1 打あたりの到達を待つ上限。実時間の検証ではなく、進まなくなったら諦めるための上限。
@@ -44,15 +47,17 @@ final class TtyDumpTab {
         return ("\\x1b]5522;type=write\\x1b\\\\"
             + "\\x1b]5522;type=wdata:mime=" + b64(mime) + ";" + body + "\\x1b\\\\"
             + "\\x1b]5522;type=wdata\\x1b\\\\")
+    kitty_read = "\\x1b]5522;type=read;" + b64("text/plain") + "\\x1b\\\\"
     fd = sys.stdin.fileno()
     tty.setraw(fd)
     enter = {
         "legacy": "",
         "paste": "\\x1b[?2004h",
         "kitty": "\\x1b[>1u",
-        "osc52Read": "\\x1b]52;c;?\\x07\\x1b]5522;type=read;dGV4dC9wbGFpbg==\\x1b\\\\",
-        "kittyRead": "\\x1b]5522;type=read;dGV4dC9wbGFpbg==\\x1b\\\\",
-        "kittyReadPrimary": "\\x1b]5522;type=read:loc=primary;dGV4dC9wbGFpbg==\\x1b\\\\",
+        "osc52Read": "\\x1b]52;c;?\\x07" + kitty_read,
+        "osc52Write": "\\x1b]52;c;" + b64("\(osc52WrittenText)") + "\\x07" + kitty_read,
+        "kittyRead": kitty_read,
+        "kittyReadPrimary": "\\x1b]5522;type=read:loc=primary;" + b64("text/plain") + "\\x1b\\\\",
         "kittyWriteCharset": kitty_write("text/plain;charset=utf-8"),
         "kittyWriteSpacedCharset": kitty_write("text/plain; charset=UTF-8"),
         "kittyWriteUTF16": kitty_write("text/plain;charset=utf-16", "utf-16-le"),

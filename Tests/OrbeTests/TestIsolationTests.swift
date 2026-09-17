@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import OrbePaths
 import XCTest
 
@@ -27,6 +27,12 @@ final class TestIsolationTests: OrbeTestCase {
     XCTAssertFalse(path.isEmpty, "空＝制御 API 無効。ハーネスがパス長を超えさせている")
     XCTAssertEqual(path, TestIsolation.root.appendingPathComponent("control.sock").path)
     XCTAssertLessThan(path.utf8.count, 104, "AF_UNIX の sun_path 上限")
+  }
+
+  /// 端末のクリップボードはシステム全域の general ではなく、テストごとの一意名の pasteboard。
+  /// 外れると `swift test` のたびに開発者のクリップボードが置き換わり、履歴アプリへ流れる。
+  func testTerminalPasteboardIsNotTheGeneralPasteboard() {
+    XCTAssertNotEqual(Ghostty.pasteboard.name, NSPasteboard.general.name)
   }
 
   /// 同梱リソースの探索根は管理下の空ディレクトリ（既定の Xcode bin ではない）。
