@@ -66,6 +66,7 @@ struct FileTabView: View {
   private static let activeFillAlpha = 0.045
   private static let hairlineAlpha = 0.07
   private let accentBar: CGFloat = 1.5
+  private let padX: CGFloat = 10
   private let dotSize: CGFloat = 7
   private let closeGlyph: CGFloat = 10
   private let closeHit: CGFloat = 14
@@ -90,7 +91,7 @@ struct FileTabView: View {
         .contentShape(Rectangle())
         .onTapGesture { shell.requestClose(tab.id) }
     }
-    .padding(.horizontal, Theme.Space.beat)
+    .padding(.horizontal, padX)
     .frame(height: Theme.Layout.editorFileTabs)
     .background(tab.isActive ? ink.fill(Self.activeFillAlpha) : .clear)
     .overlay(alignment: .top) {

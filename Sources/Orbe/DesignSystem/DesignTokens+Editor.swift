@@ -74,14 +74,14 @@ extension Theme.Typography {
   static let editorPanelTitle = NSFont.systemFont(ofSize: 11, weight: .regular)
   /// エクスプローラーのルート行（sans 11 bold・tracking 0.8）。
   static let editorRootLabel = NSFont.systemFont(ofSize: 11, weight: .bold)
-  /// ツリー行の名前（sans 13）。
-  static let editorTreeRow = NSFont.systemFont(ofSize: 13, weight: .regular)
+  /// ツリー行の名前（sans 12.5）。
+  static let editorTreeRow = NSFont.systemFont(ofSize: 12.5, weight: .regular)
   /// ツリー行の git バッジ（mono 11）。
   static let editorBadge = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-  /// ファイルタブの題（sans 12.5）。
-  static let editorFileTab = NSFont.systemFont(ofSize: 12.5, weight: .regular)
-  /// パンくず（sans 11.5）。
-  static let editorBreadcrumb = NSFont.systemFont(ofSize: 11.5, weight: .regular)
+  /// ファイルタブの題（sans 12）。
+  static let editorFileTab = NSFont.systemFont(ofSize: 12, weight: .regular)
+  /// パンくず（sans 11）。
+  static let editorBreadcrumb = NSFont.systemFont(ofSize: 11, weight: .regular)
   /// 種別チップのグリフ（mono bold。サイズはチップが決める）。
   static func editorChip(size: CGFloat) -> NSFont {
     NSFont.monospacedSystemFont(ofSize: size, weight: .bold)
@@ -93,18 +93,24 @@ extension Theme.Typography {
 }
 
 extension Theme.Layout {
-  /// 骨の寸法（見本 EditorLayer.tsx）。レール｜サイドバー｜列の頭（ファイルタブ行 → パンくず）。
-  static let editorRail: CGFloat = 52
-  static let editorSidebar: CGFloat = 272
+  /// 骨の寸法（デザインキャンバス『CmdELayers』Main の値）。レール｜サイドバー｜列の頭（ファイルタブ行 →
+  /// パンくず）。レール・サイドバーの右、ファイルタブ行の下の hairline 1 はこれらの外側に足す。
+  static let editorRail: CGFloat = 36
+  /// レールのアイコン。
+  static let editorRailGlyph: CGFloat = 20
+  static let editorSidebar: CGFloat = 240
   /// 列幅がこれ未満ならサイドバーを畳む。
   static let editorSidebarMin: CGFloat = 720
-  static let editorFileTabs: CGFloat = 34
-  static let editorBreadcrumb: CGFloat = 22
-  static let editorPanelHeader: CGFloat = 32
-  static let editorRow: CGFloat = 22
-  static let editorChip: CGFloat = 16
+  static let editorFileTabs: CGFloat = 28
+  static let editorBreadcrumb: CGFloat = 20
+  static let editorPanelHeader: CGFloat = 28
+  static let editorRow: CGFloat = 20
+  /// ツリー行・ファイルタブの種別チップ。
+  static let editorChip: CGFloat = 14
   /// パンくずの末尾のチップ。
-  static let editorChipSmall: CGFloat = 13
+  static let editorChipSmall: CGFloat = 12
+  /// 折りたたみのシェブロン。
+  static let editorChevron: CGFloat = 16
 }
 
 extension Theme.Opacity {

@@ -36,19 +36,19 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertTrue(pane.sidebarVisible)
     XCTAssertTrue(pane.shell.sidebarVisible, "写しにも出る")
     XCTAssertEqual(
-      pane.bodyRect, NSRect(x: 53 + 273, y: 35, width: 900 - 326, height: 400 - 2 - 35),
+      pane.bodyRect, NSRect(x: 37 + 241, y: 29, width: 900 - 278, height: 400 - 2 - 29),
       "レール・サイドバーの右、タブ行の下の hairline はその外側")
 
     let document = try tab.editor.open(try file("a.swift", "let a = 1\n"))
     tab.view.layoutSubtreeIfNeeded()
-    XCTAssertEqual(pane.bodyRect.minY, 35 + 22, "文書があればパンくずの分だけ下がる")
+    XCTAssertEqual(pane.bodyRect.minY, 29 + 20, "文書があればパンくずの分だけ下がる")
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
 
     window.setContentSize(NSSize(width: 640 + FaceGeometry.spine, height: 400))
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertFalse(pane.sidebarVisible, "720 未満ではサイドバーを畳む")
     XCTAssertFalse(pane.shell.sidebarVisible)
-    XCTAssertEqual(pane.bodyRect.minX, 53, "レールだけ残る")
+    XCTAssertEqual(pane.bodyRect.minX, 37, "レールだけ残る")
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
   }
 
@@ -63,10 +63,10 @@ final class EditorPaneViewShellTests: OrbeTestCase {
       pane.hitTest(pane.convert(NSPoint(x: x, y: y), to: pane.superview))
     }
     XCTAssertTrue(hit(pane.bodyRect.midX, pane.bodyRect.midY) === pane, "本体は面自身")
-    let rail = try XCTUnwrap(hit(26, 26))
+    let rail = try XCTUnwrap(hit(18, 18))
     XCTAssertFalse(rail === pane, "レールは host が受ける")
     XCTAssertTrue(rail.isDescendant(of: pane))
-    let tabs = try XCTUnwrap(hit(pane.bodyRect.midX, 17))
+    let tabs = try XCTUnwrap(hit(pane.bodyRect.midX, 14))
     XCTAssertFalse(tabs === pane, "タブ行の帯は host が受ける")
   }
 

@@ -38,10 +38,16 @@ struct FileChip: Equatable {
     }
   }
 
-  /// 16px のチップの文字サイズ。見本は S 10 / M↓ 8 / {} 9——1 字は 10、記号 2 字は 9、それ以外の 2 字は 8。
-  var fontSize: CGFloat {
-    if glyph.count == 1 { return 10 }
-    return glyph.allSatisfy(\.isPunctuation) || glyph.allSatisfy(\.isSymbol) ? 9 : 8
+  /// チップの文字サイズ。16 のとき 1 字は 10、記号 2 字は 9、それ以外の 2 字は 8（見本 S 10 / M↓ 8 / {} 9）で、
+  /// 他の寸法へは比例して丸める（14 → 9 / 8 / 7、12 → 8 / 7 / 6）。
+  func fontSize(for size: CGFloat) -> CGFloat {
+    let base: CGFloat
+    if glyph.count == 1 {
+      base = 10
+    } else {
+      base = glyph.allSatisfy(\.isPunctuation) || glyph.allSatisfy(\.isSymbol) ? 9 : 8
+    }
+    return (base * size / 16).rounded()
   }
 }
 
@@ -61,8 +67,8 @@ extension ThemeColors {
   }
 }
 
-/// 種別チップ（角丸の単色文字 ＋ 色相 .16 の淡い地）。16 は radius 3・字はグリフの字数で、13（パンくず）は
-/// radius 2・8px。
+/// 種別チップ（角丸の単色文字 ＋ 色相 .16 の淡い地）。ツリー行・ファイルタブは 14（radius 3）、パンくずは
+/// 12（radius 2）。字はグリフの字数と寸法で決まる。
 struct FileChipView: View {
   let chip: FileChip
   var size: CGFloat = Theme.Layout.editorChip
@@ -76,7 +82,7 @@ struct FileChipView: View {
     let ground =
       chip.hue == nil ? EditorInk(scheme).fill(Self.groundAlpha) : color.opacity(Self.groundAlpha)
     Text(chip.glyph)
-      .font(Font(Theme.Typography.editorChip(size: small ? 8 : chip.fontSize) as CTFont))
+      .font(Font(Theme.Typography.editorChip(size: chip.fontSize(for: size)) as CTFont))
       .foregroundStyle(color)
       .frame(width: size, height: size)
       .background(

@@ -19,11 +19,17 @@ final class FileChipTests: OrbeTestCase {
       FileChip.resolve(URL(fileURLWithPath: "/x/Makefile")), FileChip(glyph: "·", hue: nil))
   }
 
-  /// 見本の 3 種の文字サイズ（S 10 / M↓ 8 / {} 9）を規則で再現する。
-  func testGlyphSizeFollowsTheSample() {
-    XCTAssertEqual(FileChip(glyph: "S", hue: .orange).fontSize, 10)
-    XCTAssertEqual(FileChip(glyph: "M↓", hue: .blue).fontSize, 8)
-    XCTAssertEqual(FileChip(glyph: "{}", hue: .yellow).fontSize, 9)
-    XCTAssertEqual(FileChip(glyph: "TS", hue: .sky).fontSize, 8)
+  /// 16 のときの 3 種（S 10 / M↓ 8 / {} 9）を規則で再現し、14 / 12 へは比例して丸める。
+  func testGlyphSizeScalesWithTheChip() {
+    XCTAssertEqual(FileChip(glyph: "S", hue: .orange).fontSize(for: 16), 10)
+    XCTAssertEqual(FileChip(glyph: "M↓", hue: .blue).fontSize(for: 16), 8)
+    XCTAssertEqual(FileChip(glyph: "{}", hue: .yellow).fontSize(for: 16), 9)
+    XCTAssertEqual(FileChip(glyph: "TS", hue: .sky).fontSize(for: 16), 8)
+    XCTAssertEqual(FileChip(glyph: "S", hue: .orange).fontSize(for: 14), 9)
+    XCTAssertEqual(FileChip(glyph: "{}", hue: .yellow).fontSize(for: 14), 8)
+    XCTAssertEqual(FileChip(glyph: "TS", hue: .sky).fontSize(for: 14), 7)
+    XCTAssertEqual(FileChip(glyph: "S", hue: .orange).fontSize(for: 12), 8)
+    XCTAssertEqual(FileChip(glyph: "{}", hue: .yellow).fontSize(for: 12), 7)
+    XCTAssertEqual(FileChip(glyph: "TS", hue: .sky).fontSize(for: 12), 6)
   }
 }

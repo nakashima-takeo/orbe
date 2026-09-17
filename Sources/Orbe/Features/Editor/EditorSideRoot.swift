@@ -34,7 +34,6 @@ struct RailView: View {
   private static let sunkAlpha = 0.22
   private static let hairlineAlpha = 0.07
   private static let selectedFillAlpha = 0.04
-  private let glyphSize: CGFloat = 29
   private let accentBar: CGFloat = 2
 
   var body: some View {
@@ -55,7 +54,7 @@ struct RailView: View {
 
   private func railItem(_ item: Item, selected: Bool, ink: EditorInk) -> some View {
     EditorGlyphView(
-      glyph: EditorGlyphs.railFiles, size: glyphSize,
+      glyph: EditorGlyphs.railFiles, size: Theme.Layout.editorRailGlyph,
       color: selected ? Color.theme.textPrimary : Color.theme.editorTertiary
     )
     .frame(width: Theme.Layout.editorRail, height: Theme.Layout.editorRail)
@@ -182,9 +181,9 @@ struct TreeChevron: View {
 
   var body: some View {
     EditorGlyphView(
-      glyph: EditorGlyphs.chevron, size: Theme.Layout.editorChip, color: Color.theme.editorIcon
+      glyph: EditorGlyphs.chevron, size: Theme.Layout.editorChevron, color: Color.theme.editorIcon
     )
     .rotationEffect(open ? .degrees(90) : .zero)
-    .frame(width: Theme.Layout.editorChip)
+    .frame(width: Theme.Layout.editorChevron)
   }
 }
