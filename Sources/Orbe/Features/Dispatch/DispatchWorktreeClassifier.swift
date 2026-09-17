@@ -52,7 +52,8 @@ enum DispatchWorktreeClassifier {
         return DispatchCleanFacts(
           path: worktree.path, branch: worktree.branch, head: worktree.head,
           isMain: worktree.isMain, isPrunable: worktree.isPrunable,
-          lockReason: worktree.lockReason, upstream: local?.upstream, track: local?.track,
+          lockReason: worktree.lockReason, upstream: local?.upstream?.short,
+          track: local?.upstream?.track,
           closedPR: prs.first { $0.state != "OPEN" }.map {
             DispatchCleanPR(number: $0.number, isMerged: $0.state == "MERGED", base: $0.baseRefName)
           },
@@ -332,10 +333,10 @@ enum DispatchWorktreeClassifier {
     return out
   }
 
-  /// `%(upstream:track)` の `[ahead N]`（`[ahead 1, behind 2]` も拾う）。
-  private static func ahead(_ track: String?) -> Int? {
-    guard let track, let range = track.range(of: "ahead ") else { return nil }
-    return Int(track[range.upperBound...].prefix { $0.isNumber })
+  /// upstream より先行している件数（`[gone]`・同期済みは nil）。
+  private static func ahead(_ track: GitUpstreamTrack?) -> Int? {
+    guard case .counts(let ahead, _) = track else { return nil }
+    return ahead
   }
 
   private static func abbreviate(_ path: String) -> String {

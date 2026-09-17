@@ -15,12 +15,15 @@ import XCTest
 /// `refs/remotes/origin/*` が base になり、origin の新しい tip とは一致しない。
 @MainActor
 final class DispatchWorktreeBaseTests: OrbeTestCase {
-  private var dir: URL!
-  private var local: String!
-  private var origin: String!
+  var dir: URL!
+  var local: String!
+  var origin: String!
+  /// provider が弱参照で持つモデル（行の同期を読むテストのために生かしておく）。
+  var palette: DispatchPaletteModel!
 
-  /// `main` / `feat` / `topic` を持つ origin を立て、手元の clone の remote 追跡 ref を**わざと古いまま**
-  /// にする。`mine` は手元にだけあるローカルブランチ（fetch で動く ref をベースに取らない題材）。
+  /// `main` / `feat` / `topic` / `stale` を持つ origin を立て、手元の clone の remote 追跡 ref を**わざと
+  /// 古いまま**にする。`mine` は upstream の無い手元だけのローカルブランチ（着地を待たない題材）、
+  /// `stale` は origin を追跡する手元のブランチ（分冊 `+Refresh` の題材）。
   override func setUpWithError() throws {
     dir = FileManager.default.temporaryDirectory
       .appendingPathComponent("orbe-wtbase-\(UUID().uuidString)")
@@ -39,7 +42,7 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
 
     XCTAssertTrue(run(["clone", "-q", origin, other], cwd: dir.path).isSuccess)
     try identify(other)
-    for branch in ["feat", "topic"] {
+    for branch in ["feat", "topic", "stale"] {
       XCTAssertTrue(run(["checkout", "-q", "-b", branch, "main"], cwd: other).isSuccess)
       try commit("\(branch)-1", in: other)
       XCTAssertTrue(run(["push", "-q", "-u", "origin", branch], cwd: other).isSuccess)
@@ -51,9 +54,11 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
       run(
         ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"], cwd: local
       ).isSuccess)
+    // `stale` は origin を追跡する手元のブランチ（checkout していない＝Local branch 行の題材）。
+    XCTAssertTrue(run(["branch", "-q", "--track", "stale", "origin/stale"], cwd: local).isSuccess)
 
     // 以降の origin 側の前進は手元に入らない＝手元の remote 追跡 ref は古い。
-    for branch in ["main", "feat", "topic"] {
+    for branch in ["main", "feat", "topic", "stale"] {
       XCTAssertTrue(run(["checkout", "-q", branch], cwd: other).isSuccess)
       try commit("\(branch)-2", in: other)
       XCTAssertTrue(run(["push", "-q", "origin", branch], cwd: other).isSuccess)
@@ -94,14 +99,15 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     XCTAssertEqual(head(of: path), originTip("feat"), "fetch 後の origin/feat が base")
   }
 
-  /// **既存ブランチの checkout は fetch で動く ref をベースに取らないので待たない。** ここが待つと、
-  /// fetch が長引くリポジトリで「手元のブランチを開くだけ」が分単位で止まる。
+  /// **upstream の無い Local branch の checkout は fetch で動く ref をベースに取らないので待たない。**
+  /// ここが待つと、fetch が長引くリポジトリで「手元のブランチを開くだけ」が分単位で止まる
+  /// （origin を追跡する行は着地を待つ——分冊 `+Refresh`）。
   ///
   /// 待たなかった証拠は、作成が返った時点で手元の `origin/main` がまだ古いこと——fetch が着地して
   /// いれば ref は新しい tip へ動いている。**この否定の assert を測る窓だけは壁時計で区切らない**
   /// ——窓の中で作成（非同期 git 2 本）を走らせるので、遅い機械では窓が先に閉じて「正しい実装のまま
   /// 赤」になる。fetch はテストが門を開けるまで待たせ、作成が返ってから開ける。
-  func testLocalBranchWorktreeDoesNotWaitForTheFetch() throws {
+  func testLocalBranchWithoutUpstreamDoesNotWaitForTheFetch() throws {
     let provider = try startWithSlowFetch(holdingFetch: true)
     let path = try resolve(provider, .localBranch(name: "mine", existingWorktree: nil))
     XCTAssertNotEqual(
@@ -204,18 +210,27 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
 
   // MARK: - ヘルパ
 
-  private struct CreationFailed: Error {
+  struct CreationFailed: Error {
     let detail: String
   }
 
-  /// provider を起こし、git レーンの着地（worktree 一覧）まで進める。
-  private func start() throws -> DispatchDataProvider {
+  /// provider を起こし、git レーンの着地（列挙 → 行の組み直し）まで進める。
+  ///
+  /// **待つのは「行が組まれたこと」まで。** gh レーンの着地でも描き直しは走って `hasLoadedOnce` が
+  /// 立つので、旗だけを待つと列挙前（ブランチ 0 件・既定ブランチ未解決）の provider を掴んだまま
+  /// Enter を撃つ回が混ざり、着地を待つ経路が待たずに通る。
+  func start() throws -> DispatchDataProvider {
+    palette = DispatchPaletteModel()
     let provider = DispatchDataProvider(
-      cwd: local, model: DispatchPaletteModel(), localization: LocalizationStore(language: .ja),
+      cwd: local, model: palette, localization: LocalizationStore(language: .ja),
       // 作成先を一時ディレクトリの中へ落とす（後始末に乗せる）。
       worktreeTemplate: "{parent}/wt-{slug}")
     provider.load()
-    XCTAssertTrue(pump({ !provider.worktrees.isEmpty }), "前提: git レーンは着地している")
+    XCTAssertTrue(
+      pump({
+        palette.items.contains { $0.glyph == .worktree }
+          && palette.items.contains { $0.glyph == .localBranch }
+      }), "前提: git レーンは着地している（worktree 行と Local branch 行が組まれるまで）")
     return provider
   }
 
@@ -225,7 +240,7 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
   ///
   /// `holdingFetch` は眠りを `releaseFetch()` まで続けさせる。着地を待つ側のテストは fetch が自力で
   /// 明ける必要があるので数秒の眠りのまま、待たない側だけが門を使う。
-  private func startWithSlowFetch(holdingFetch: Bool = false) throws -> DispatchDataProvider {
+  func startWithSlowFetch(holdingFetch: Bool = false) throws -> DispatchDataProvider {
     let wrapper = dir.appendingPathComponent("slow-upload-pack").path
     if holdingFetch {
       try FileManager.default.createDirectory(
@@ -248,15 +263,21 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     try? FileManager.default.removeItem(atPath: fetchGate)
   }
 
-  private func resolve(_ provider: DispatchDataProvider, _ action: DispatchAction) throws -> String
-  {
-    var resolution: DispatchDataProvider.DirectoryResolution?
-    provider.prepareDirectory(for: action) { resolution = $0 }
-    XCTAssertTrue(pump({ resolution != nil }, timeout: 30), "作成が返らない")
-    guard case .ready(let path) = try XCTUnwrap(resolution) else {
-      throw CreationFailed(detail: String(describing: resolution))
+  func resolve(_ provider: DispatchDataProvider, _ action: DispatchAction) throws -> String {
+    let outcome = try prepare(provider, action)
+    guard case .resolved(.ready(let path)) = outcome else {
+      throw CreationFailed(detail: String(describing: outcome))
     }
     return path
+  }
+
+  func prepare(_ provider: DispatchDataProvider, _ action: DispatchAction) throws
+    -> DispatchDataProvider.DispatchPrepareOutcome
+  {
+    var outcome: DispatchDataProvider.DispatchPrepareOutcome?
+    provider.prepareDirectory(for: action) { outcome = $0 }
+    XCTAssertTrue(pump({ outcome != nil }, timeout: 30), "解決が返らない")
+    return try XCTUnwrap(outcome)
   }
 
   private func identify(_ repo: String) throws {
@@ -264,7 +285,7 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     XCTAssertTrue(run(["config", "user.name", "t"], cwd: repo).isSuccess)
   }
 
-  private func commit(_ name: String, in repo: String) throws {
+  func commit(_ name: String, in repo: String) throws {
     try name.write(
       toFile: (repo as NSString).appendingPathComponent("\(name).txt"), atomically: true,
       encoding: .utf8)
@@ -272,11 +293,11 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     XCTAssertTrue(run(["commit", "-qm", name], cwd: repo).isSuccess)
   }
 
-  private func head(of worktree: String) -> String {
+  func head(of worktree: String) -> String {
     oid(["rev-parse", "HEAD"], cwd: worktree)
   }
 
-  private func originTip(_ branch: String) -> String {
+  func originTip(_ branch: String) -> String {
     oid(["rev-parse", branch], cwd: origin)
   }
 
@@ -284,17 +305,17 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     oid(["rev-parse", "origin/\(branch)"], cwd: local)
   }
 
-  private func oid(_ args: [String], cwd: String) -> String {
+  func oid(_ args: [String], cwd: String) -> String {
     run(args, cwd: cwd).stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   @discardableResult
-  private func run(_ args: [String], cwd: String) -> GitRunner.Output {
+  func run(_ args: [String], cwd: String) -> GitRunner.Output {
     GitRunner.shared.runSync(args, cwd: cwd)
   }
 
   /// main queue を回しながら条件の成立を待つ（provider の completion は main で届く）。
-  private func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
+  func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while !condition(), Date() < deadline {
       RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))

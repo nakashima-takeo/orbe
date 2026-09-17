@@ -9,74 +9,138 @@ extension DispatchDataProvider {
     case failed(String)
   }
 
+  /// Enter の解決の結末。解決したか、作らずにユーザーへ問うか。
+  enum DispatchPrepareOutcome {
+    case resolved(DirectoryResolution)
+    /// Local branch が upstream より遅れていて fast-forward できる。worktree は作っていない——
+    /// 最新化して作るか、そのまま作るかを選択画面が問う。
+    case staleBranch(DispatchBranchSync)
+  }
+
   /// 行種別に応じて対象ディレクトリを解決する（必要なら worktree を新規作成する）。
   /// 作成は追加のみ（現在の作業ツリーは不可侵）。失敗は Git 層の `GitFailure` を UI 言語へ写して返す。
   /// 既存ディレクトリを返すだけの経路はリポジトリを要さない——非 git（`repo == nil`）を畳むのは
   /// リポジトリが要る作成経路（`createWorktree`）の責務。
   func prepareDirectory(
-    for action: DispatchAction, completion: @escaping (DirectoryResolution) -> Void
+    for action: DispatchAction, completion: @escaping (DispatchPrepareOutcome) -> Void
   ) {
+    let resolved = { completion(.resolved($0)) }
     switch action {
     case .worktree(let path):
-      completion(.ready(path))
+      resolved(.ready(path))
 
     case .localBranch(let name, let existing):
       if let existing {
-        completion(.ready(existing))
+        resolved(.ready(existing))
         return
       }
-      createWorktree(
-        at: worktreeDir(forSlug: slug(name)), base: .ref(name), newBranch: nil,
-        completion: completion)
+      resolveLocalBranch(name, completion: completion)
 
     case .remoteBranch(let name, let existing):
       if let existing {
-        completion(.ready(existing))
+        resolved(.ready(existing))
         return
       }
       let local = localName(fromRemote: name)
       createWorktree(
         at: worktreeDir(forSlug: slug(local)), base: .ref(name),
-        newBranch: GitNewBranch(name: local, tracksBase: true), completion: completion)
+        newBranch: GitNewBranch(name: local, tracksBase: true), completion: resolved)
 
     case .issue(let number, let existing, let branchExists):
       if let existing {
-        completion(.ready(existing))
+        resolved(.ready(existing))
         return
       }
       let branch = "issue/\(number)"
       let path = worktreeDir(forSlug: slug(branch))
       if branchExists {
         // 既存ブランチから worktree 追加（-b を外す）＝ git worktree add <path> issue/<n>。
-        createWorktree(at: path, base: .ref(branch), newBranch: nil, completion: completion)
+        createWorktree(at: path, base: .ref(branch), newBranch: nil, completion: resolved)
       } else {
         // 新規: git worktree add -b issue/<n> --no-track <path> <default>。既定ブランチを upstream に
         // 持つと `git push` が既定ブランチへ向かって拒否され、`push.autoSetupRemote` も（upstream が
         // 既にあるため）発動しない。upstream 無しなら git が正しい `--set-upstream` へ導く。
         createWorktree(
           at: path, base: .defaultBranch,
-          newBranch: GitNewBranch(name: branch, tracksBase: false), completion: completion)
+          newBranch: GitNewBranch(name: branch, tracksBase: false), completion: resolved)
       }
 
     case .pullRequest(let number, let headRef, let isCrossRepo, let existing):
       if let existing {
-        completion(.ready(existing))
+        resolved(.ready(existing))
         return
       }
       // fork（cross-repo）PR は head ref がローカルに無く、現 dir を破壊せず隔離 worktree に持ち込む
       // 汎用手段が無い。安全側に倒し、worktree 化はせず「ブラウザで開く」へ誘導する（残った前提の決着）。
       if isCrossRepo {
-        completion(.failed(localization.format(.dispatchErrForkPR, number)))
+        resolved(.failed(localization.format(.dispatchErrForkPR, number)))
         return
       }
       createWorktree(
         at: worktreeDir(forSlug: slug(headRef)), base: .ref("origin/\(headRef)"),
-        newBranch: GitNewBranch(name: headRef, tracksBase: true), completion: completion)
+        newBranch: GitNewBranch(name: headRef, tracksBase: true), completion: resolved)
 
     case .clean:
       // clean 行はディレクトリを持たない。決定は `DispatchPaletteModel.activate` がパレット内で畳むため
       // ここへは届かない——網羅 switch は、行種別が増えたときの分類漏れを検出する役だけを果たす。
       assertionFailure("clean 行は prepareDirectory を通らない")
+    }
+  }
+
+  /// Local branch 行の Enter。**信頼する remote を追跡する行は fetch の着地を待ってから判定する**
+  /// ——着地前の値で決めると、提示直後に速く押した人だけが最新化を選べない。着地後の値で
+  /// fast-forward できる遅れなら作らずに問い、それ以外（同期済み・分岐・↑ だけ・`[gone]`）は今どおり作る。
+  /// upstream が無い／信頼しない remote の行は fetch で動く値に依存しないので待たない。
+  private func resolveLocalBranch(
+    _ name: String, completion: @escaping (DispatchPrepareOutcome) -> Void
+  ) {
+    let create = { self.createLocalBranchWorktree(name: name) { completion(.resolved($0)) } }
+    guard let branch = localBranches.first(where: { $0.name == name }),
+      DispatchBranchSync.tracksTrustedRemote(branch)
+    else {
+      create()
+      return
+    }
+    remoteFetchLanding.notify(queue: .main) {
+      let sync = self.localBranches.first { $0.name == name }.flatMap(DispatchBranchSync.init)
+      if let sync, sync.isFastForwardable {
+        completion(.staleBranch(sync))
+      } else {
+        create()
+      }
+    }
+  }
+
+  /// 既存のローカルブランチをそのまま checkout した worktree を作る。同期の検査を通らない——
+  /// 最新化画面の「そのまま作成」がこれで、検査を通すと再び「遅れている」が返って堂々巡りになる。
+  func createLocalBranchWorktree(
+    name: String, completion: @escaping (DirectoryResolution) -> Void
+  ) {
+    createWorktree(
+      at: worktreeDir(forSlug: slug(name)), base: .ref(name), newBranch: nil,
+      completion: completion)
+  }
+
+  /// 最新化画面の「最新化して作成」。fetch → fast-forward → 列挙の引き直し → 作成、を直列に進める
+  /// 手順の唯一の定義。`creating` は作成が始まった時点（最新化が済んだ時点）で 1 度呼ぶ。
+  /// 引き直しを挟むのは、ff が済んだ一覧の行が同期ピルを失った姿で戻るため（成功後に作成が落ちたとき）。
+  func refreshAndCreate(
+    _ sync: DispatchBranchSync, creating: @escaping () -> Void,
+    completion: @escaping (Result<DirectoryResolution, GitRefreshFailure>) -> Void
+  ) {
+    guard let repo else {
+      createLocalBranchWorktree(name: sync.name) { completion(.success($0)) }
+      return
+    }
+    repo.fastForwardBranch(name: sync.name, upstream: sync.upstream) { failure in
+      if let failure {
+        completion(.failure(failure))
+        return
+      }
+      self.loadGit(repo, classifying: false) {
+        creating()
+        self.createLocalBranchWorktree(name: sync.name) { completion(.success($0)) }
+      }
     }
   }
 

@@ -17,15 +17,15 @@ final class DispatchCleanModelTests: OrbeTestCase {
     DispatchWorktreeClassifier.classify(
       [
         DispatchCleanFacts(
-          path: "/wt/safe-a", branch: "feat/a", head: "aaa", track: "[gone]",
+          path: "/wt/safe-a", branch: "feat/a", head: "aaa", track: .gone,
           openPR: .none, status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
           containment: .patchEquivalent(target: "main"),
           operation: .none),
         DispatchCleanFacts(
-          path: "/wt/safe-b", branch: "feat/b", head: "bbb", isPrunable: true, track: "[gone]",
+          path: "/wt/safe-b", branch: "feat/b", head: "bbb", isPrunable: true, track: .gone,
           openPR: .none, containment: .patchEquivalent(target: "main")),
         DispatchCleanFacts(
-          path: "/wt/caution", branch: "feat/c", head: "ccc", track: "[gone]",
+          path: "/wt/caution", branch: "feat/c", head: "ccc", track: .gone,
           openPR: .none, status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
           containment: .unmerged(count: 6),
           operation: .none),

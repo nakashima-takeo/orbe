@@ -17,6 +17,8 @@ enum DispatchAction: Equatable {
 /// Dispatch パレットの中身。器（カード枠・焦点契約・高さ契約）は共通で、中身だけ切り替わる。
 enum DispatchMode: Equatable {
   case list, clean
+  /// 遅れた Local branch を最新化してから作るかを選ぶ画面。
+  case refresh
 }
 
 /// ⇥ 巡回で選ぶ起動先。解決した worktree で agent を走らせるか、素の shell を開くか。
@@ -75,83 +77,6 @@ enum DispatchInfoKind: Equatable {
   }
 }
 
-/// Dispatch パレット（⌘⇧X）が表示する 1 行。実データ（worktree/branch/issue/PR）と実行ペイロードを持つ。
-/// 色や強調は種別＋`isPrimary` から View が導く。
-struct DispatchItem: Identifiable {
-  /// 先頭グリフ列の種別（見た目とグリフ色を決める）。
-  enum Glyph { case worktree, localBranch, remoteBranch, issue, pullRequest, clean }
-
-  let id = UUID()
-  /// 先頭グリフ（情報/ローディング行は nil で空欄）。
-  var glyph: Glyph?
-  /// 色付き ID（issue/PR の `#151` 等・diffAdd）。nil で出さない。
-  var idText: String?
-  let name: String
-  /// 名前の後に muted で出す補足（worktree の `~/wt/… · branch`・branch の `1d前` 等）。nil で出さない。
-  var detail: String?
-  /// `detail` を言語別に引くキー（実データ由来でない固定文言の行）。View が引き、`detail` に優先する。
-  var detailKey: L10nKey?
-  /// 名前・ID・補足のほかに絞り込みへ効かせる別名（`clean` 行の `rm` / `prune` / `掃除`）。
-  var aliases: [String] = []
-  /// clean 行の候補件数（safe 群の件数）。nil で行末バッジを出さない（0 件でも行そのものは残る）。
-  var candidateCount: Int?
-  /// PR のレビュー状態ノート（名前直後・muted・小）。nil で出さない。View が言語別に引く。
-  var reviewNote: DispatchReviewNote?
-  /// 行末チップ（`#142` 等・branch グリフ付き）。
-  var badges: [DispatchBadge] = []
-  /// worktree/branch 行が紐づく open PR 番号（issue/PR 行では nil）。
-  /// 行末バッジ `#<PR>` と同一の番号（同じ prByHead ルックアップ）を焼く SSOT で、
-  /// 「バッジが出る行 ＝ 開ける行」を構造で保証する。
-  var linkedPRNumber: Int?
-  /// worktree の working リング（10×10）を右端に出すか。
-  var showsWorkingIndicator = false
-  /// 右端へ寄せる worktree 解決ノート（issue の新規・PR の checkout 等）。nil で出さない。View が言語別に引く。
-  var worktreeNote: DispatchWorktreeKind?
-  /// 情報/ローディング行の種別（文言は View が引く。対話行は nil）。
-  var infoKind: DispatchInfoKind?
-  /// アクティブ worktree（グリフ=working 色・名前=chromeText）。他行は muted/secondary。
-  var isPrimary = false
-  /// 決定（↵／行タップ）のペイロード（情報/ローディング行は nil）。
-  var action: DispatchAction?
-  /// フッターに出す実行説明（選択に連動して差し替わる）。情報/ローディング行は nil。
-  var footer: DispatchFooter?
-  /// 選択・実行の対象外の行（gh 誘導情報・ローディング）。キー移動で飛ばし muted 表示する。
-  var isInteractive = true
-  /// ローディング中の行（先頭に working スピナを出す）。
-  var isLoadingRow = false
-
-  /// ⌘↵/「開く」で GitHub をブラウザ表示できる行か（issue/PR／open PR に紐づく worktree・branch）。
-  var canOpenWeb: Bool {
-    if linkedPRNumber != nil { return true }
-    switch action {
-    case .issue, .pullRequest: return true
-    default: return false
-    }
-  }
-}
-
-/// 行末チップ（`#142` 等）。先頭に branch グリフ・地は tint(diffAdd, .12)。
-struct DispatchBadge: Identifiable {
-  let text: String
-  var id: String { text }
-}
-
-/// 選択行に連動するフッターの中身。
-enum DispatchFooter: Equatable {
-  /// 実行説明。`↵ <target> <前置> <agent> を新しいタブで起動` の骨。前置句は worktree 解決種別から、
-  /// agent 名は選択中 agent（動的）を、後置句は共通キーを View が言語別に挿す（Japanese 断片の連結を排す）。
-  case launch(target: String, kind: DispatchWorktreeKind)
-  /// 注記のみ（実行説明もキーヒントも出さない行）。
-  case note(L10nKey)
-}
-
-/// 見出し（選択対象外）と行の束。
-struct DispatchSection: Identifiable {
-  let title: String
-  var items: [DispatchItem]
-  var id: String { title }
-}
-
 /// ⌘⇧X で開く Dispatch パレットの表示状態（@Observable）。実データ（worktree/branch/issue/PR）を
 /// セクションに持ち、フィルタ・⇥ 起動先切替・決定（↵／行タップ）/⌘↵ 開くの意図をクロージャで外へ配線する。
 /// 実データ取得と section 組み立ては `DispatchDataProvider`＋`DispatchSectionBuilder`（外）が担う。
@@ -176,6 +101,8 @@ struct DispatchSection: Identifiable {
   }
   /// clean 画面の状態。
   let clean = DispatchCleanModel()
+  /// 最新化画面の状態。入るたびに行と遅れの事実から作り直し、出るときに捨てる。
+  private(set) var refresh: DispatchRefreshModel?
   /// 初回ロード完了フラグ。provider の初回 rebuild で立つ。false の間はスケルトン行を出す。
   var hasLoadedOnce = false
   /// 選択とホバー追従ガード（汎用パレットと共有する `ModalSelection`）。
@@ -228,11 +155,40 @@ struct DispatchSection: Identifiable {
   var onCleanExecute: ([CleanDeleteRequest], CleanRunToken) -> Void = { _, _ in }
   /// clean の失敗行をタブで開く。パスは解決済み（既存 worktree）なので `prepareDirectory` を通らない。
   var onOpenWorktree: (String) -> Void = { _ in }
+  /// 最新化画面の決定。選んだ作り方で worktree を作って起動する（最新化して／そのまま）。
+  var onSettleStale: (DispatchStaleChoice, DispatchBranchSync) -> Void = { _, _ in }
 
   init() {}
 
-  /// 入力を受け付けない状態（worktree 作成中／clean の削除実行中）。
-  var isBusy: Bool { isPreparing || clean.phase == .deleting }
+  /// 入力を受け付けない状態（worktree 作成中／clean の削除実行中／最新化中）。
+  var isBusy: Bool { isPreparing || clean.phase == .deleting || refresh?.isBusy == true }
+
+  /// 最新化画面へ入る。Enter の解決経路が「ff できる遅れ」を返したときだけ来る（判定は provider）。
+  func enterRefresh(item: DispatchItem, sync: DispatchBranchSync) {
+    refresh = DispatchRefreshModel(item: item, sync: sync)
+    mode = .refresh
+    focus()
+  }
+
+  /// 最新化画面の esc。選択・失敗では list へ戻る（カーソルは入った行のまま）。busy は無反応。
+  func exitRefresh() {
+    guard let refresh, !refresh.isBusy else { return }
+    leaveRefresh()
+  }
+
+  /// 作成の失敗を畳む唯一の 1 本（一覧の Enter・そのまま作成・最新化後の作成が共に通る）。
+  /// 理由はフッタに赤で出し、最新化画面に居たなら一覧へ戻す——ff は済んでいるので画面に残す事実が無い。
+  func failPreparation(_ message: String) {
+    isPreparing = false
+    errorMessage = message
+    if mode == .refresh { leaveRefresh() }
+  }
+
+  private func leaveRefresh() {
+    refresh = nil
+    mode = .list
+    focus()
+  }
 
   /// clean 画面へ入る。**分類が未着地でも即座に入る**——開いてから行が生えるほうが、押しても
   /// 何も起きないより正しい（0 行の間はスケルトン行が空フレームを埋める）。

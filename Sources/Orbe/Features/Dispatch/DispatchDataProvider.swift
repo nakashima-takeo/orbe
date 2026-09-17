@@ -30,6 +30,10 @@ final class DispatchDataProvider {
   /// を作ることがある（git の `followRemoteHEAD` 既定）ので、中身だけ待つと `origin/HEAD` を持たない
   /// repo で Issue 新規がフォールバックの固定名を指したまま撃たれる。
   let remoteFetchLanding = DispatchGroup()
+  /// `remoteFetchLanding` が明けた（列挙が fetch 後の値になった）。着地と同じ点で立てる——fetch の
+  /// 完了ハンドラで立てると、引き直しの前に別レーンの着地が `rebuild` を呼び、fetch 前の値で
+  /// Local branch 行の同期ピルが描かれる。
+  private(set) var remoteFetchLanded = false
 
   private(set) var repo: GitRepo?
   /// 本体 worktree のパス。読み手は分冊（`DispatchDataProvider+Create.swift`）。
@@ -42,7 +46,8 @@ final class DispatchDataProvider {
 
   /// 分冊（`DispatchDataProvider+Clean.swift` / `+GitHub.swift`）も読む。
   private(set) var worktrees: [GitWorktree] = []
-  private var localBranches: [GitBranch] = []
+  /// 読み手は分冊（`DispatchDataProvider+Create.swift`。Local branch 行の Enter の判定）。
+  private(set) var localBranches: [GitBranch] = []
   /// 読み手は分冊（`DispatchDataProvider+CleanProbe.swift`）。
   private(set) var remoteBranches: [GitBranch] = []
   // gh レーンの状態。書き手は分冊（`DispatchDataProvider+GitHub.swift`）、読み手は `rebuild`。
@@ -146,17 +151,20 @@ final class DispatchDataProvider {
   /// 未取り込みと出る（この機能の主用途がそのまま外れる）。`[gone]` の出どころである
   /// `localBranches` も prune で初めて確定する。
   ///
-  /// 新規ブランチを切る worktree 作成もこの fetch の着地を待つので（`remoteFetchLanding`）、`enter()` は
-  /// **発行の直前**に置く——発行と `enter()` の間に窓を空けると、そこで撃たれた作成が待たずに通る。
-  /// `leave()` は引き直しの着地に置く（`loadGit` は削除の完了でも撃たれるので、対が prune 起点の 1 回に
-  /// だけ付くよう完了ハンドラで受ける）。group 自体を強く捕まえるのは、provider が先に消えても対を
-  /// 閉じるため。
+  /// fetch 後の値に依存する経路（新規ブランチを切る作成・Local branch 行の遅れの判定）はこの fetch の
+  /// 着地を待つので（`remoteFetchLanding`）、`enter()` は**発行の直前**に置く——発行と `enter()` の間に
+  /// 窓を空けると、そこで撃たれた作成が待たずに通る。`leave()` は引き直しの着地に置く（`loadGit` は
+  /// 削除の完了でも撃たれるので、対が prune 起点の 1 回にだけ付くよう完了ハンドラで受ける）。
+  /// group 自体を強く捕まえるのは、provider が先に消えても対を閉じるため。
   private func loadRemotePrune(_ repo: GitRepo) {
     let landing = remoteFetchLanding
     landing.enter()
     repo.fetchPrune { [weak self] _ in
       guard let self else { return landing.leave() }
-      self.loadGit(repo, classifying: true) { landing.leave() }
+      self.loadGit(repo, classifying: true) { [weak self] in
+        self?.remoteFetchLanded = true
+        landing.leave()
+      }
     }
   }
 
@@ -165,7 +173,8 @@ final class DispatchDataProvider {
   /// `classifying` が真のときだけ分類プローブも撃つ——分類の到達性判定は prune 済みの
   /// `refs/remotes/origin/*` を前提にする（prune 前の origin には remote で消えた ref が残っており、
   /// そこからの到達性を根拠にすると「消してもコミットは origin に残る」が偽になる）ので、
-  /// prune より前の呼びには載せない。`landed` は 4 本の read が揃った時点で 1 度だけ呼ばれる。
+  /// prune より前の呼びには載せない。`landed` は 4 本の read が揃った時点で、**描画（`rebuild`）の前に**
+  /// 1 度だけ呼ばれる——着地の定義は「列挙の引き直しまで」で、着地で立つ旗を読んで描く側と揃える。
   func loadGit(_ repo: GitRepo, classifying: Bool, landed: (() -> Void)? = nil) {
     let group = DispatchGroup()
     group.enter()
@@ -193,8 +202,8 @@ final class DispatchDataProvider {
     // ブランチの PR も worktree 一覧が要る（名指しの取得）ので同じ着地点から叩く——削除で
     // worktree の顔ぶれが変われば対象も変わる。顔ぶれが同じ回は入口が畳むので、何度叩いても安い。
     group.notify(queue: .main) {
-      self.rebuild()
       landed?()
+      self.rebuild()
       // git の事実（ref の中身）が動いた着地なので全行引き直す。
       if classifying { self.startCleanProbe(repo, .all) }
       self.loadBranchPullRequests(repo)
@@ -224,7 +233,8 @@ final class DispatchDataProvider {
         issues: issues, pullRequests: pullRequests, githubState: githubState,
         issuesLoading: issuesLoading, pullRequestsLoading: pullRequestsLoading,
         currentWorktree: repo?.root,
-        cleanCandidates: rows.map(DispatchWorktreeClassifier.candidateCount)))
+        cleanCandidates: rows.map(DispatchWorktreeClassifier.candidateCount),
+        remoteFetchLanded: remoteFetchLanded))
     model.restoreSelection(matching: selectedAction)
   }
 }

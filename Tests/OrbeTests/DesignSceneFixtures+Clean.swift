@@ -120,7 +120,7 @@ extension DesignSceneFixtures {
       // 軸C: agent 作業中（使用中へ移る）
       DispatchCleanFacts(
         path: path("agent-hooks"), branch: "feature/agent-hooks",
-        upstream: "origin/feature/agent-hooks", track: "[gone]",
+        upstream: "origin/feature/agent-hooks", track: .gone,
         openPR: .none, occupancy: TabOccupancy(cwd: path("agent-hooks"), agentState: "working")),
       // 軸B: PR merged（安全・ブランチも消える）
       DispatchCleanFacts(
@@ -132,7 +132,7 @@ extension DesignSceneFixtures {
       // 軸B: 独自コミット（`[gone]` に潰されずに損失を名乗る）
       DispatchCleanFacts(
         path: path("wt-path-template"), branch: "ship/…", upstream: "origin/ship/…",
-        track: "[gone]", closedPR: DispatchCleanPR(number: 118, isMerged: false, base: "main"),
+        track: .gone, closedPR: DispatchCleanPR(number: 118, isMerged: false, base: "main"),
         openPR: .none, status: cleanStatus, containment: .unmerged(count: 6), operation: .none),
       // 軸A: 未コミット＋untracked（溢れた分はサブラインの損失内訳へ）／軸B: open PR
       DispatchCleanFacts(
@@ -147,7 +147,7 @@ extension DesignSceneFixtures {
       // 軸A: prunable（実体が無く、ブランチには触らない）
       DispatchCleanFacts(
         path: path("render-batching"), branch: "perf/render-batching", isPrunable: true,
-        upstream: "origin/perf/render-batching", track: "[gone]",
+        upstream: "origin/perf/render-batching", track: .gone,
         openPR: .none, containment: .patchEquivalent(target: "main")),
       // 軸B: PR merged（2 本目の安全行）
       DispatchCleanFacts(
