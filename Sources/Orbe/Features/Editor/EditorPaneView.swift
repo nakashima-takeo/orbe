@@ -297,8 +297,8 @@ final class EditorPaneView: NSView {
     return super.becomeFirstResponder()
   }
 
-  /// chrome キーの解決点。first responder が自分か配下のときだけ効く（隠れたタブの pane は subview から
-  /// 外れているが、gate は必ず入れる）。
+  /// chrome キーの解決点。first responder が自分か配下のときだけ効く——隠れたタブの pane も窓に残るので、
+  /// 焦点が自分か配下に無いときは素通しする。
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
     guard focusIsInside, let action = Keybindings.chromeAction(for: event)
     else { return super.performKeyEquivalent(with: event) }

@@ -19,8 +19,9 @@ enum UnsavedGate {
     return alert
   }
 
-  /// 応答を解決する。保存 → 順に `save()`（1 つでも失敗すれば false。ディスクの変更なら印が立ったまま残り
-  /// ⌘S の上書き確認へ、書けない先なら beep——エラー面は持たない）／保存しない → true／キャンセル → false。
+  /// 応答を解決する。保存 → 順に `save()`（1 つでも失敗すれば false。失敗はいずれも beep＋ログ——エラー面は
+  /// 持たない——で、ディスクの変更ならさらに印が立ったまま残り ⌘S の上書き確認へ）／保存しない → true／
+  /// キャンセル → false。
   static func proceed(
     _ response: NSApplication.ModalResponse, discarding documents: [EditorDocument]
   )
