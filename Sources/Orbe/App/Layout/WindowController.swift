@@ -28,6 +28,9 @@ final class WindowController: NSObject, NSWindowDelegate {
   // chrome 全域のフォント割り当て（絵文字 Noto/Apple・タブタイトルフォント）を届ける観測可能ホルダー。
   // 値は applyActiveWorkspaceConfig が実効設定から同一 tick で更新し、各 NSHostingView root へ注入する。
   let fontResolver = ChromeFontResolver()
+  // エディター面のサイドバーの幅と開閉。アプリ全体で 1 つ（タブ・workspace をまたいで同じ）で、
+  // app-state から起こして各タブの面へ配る。
+  let editorSidebar = MainActor.assumeIsolated { EditorSidebarState.loaded() }
   // 現在の UI 言語ホルダー。起動時に app-state の preferredLanguage（未設定は OS 追従）で解決し、
   // NSHostingView root（AppShell）へ Environment 注入する。言語変更は初回言語画面と
   // 設定パレットの言語行が行い、@Observable 経由で全 chrome を一斉再描画する。
@@ -214,7 +217,8 @@ final class WindowController: NSObject, NSWindowDelegate {
       self?.scheduleSave()
     }
     tab.view.configure(
-      translucency: chromeTranslucency, localization: localization, fontResolver: fontResolver)
+      translucency: chromeTranslucency, localization: localization, fontResolver: fontResolver,
+      sidebar: editorSidebar)
     return tab
   }
 

@@ -11,8 +11,8 @@ struct EditorFaceRoot: View {
   }
 }
 
-/// エディター面の AppKit 側の根。骨の幾何——レール｜サイドバー（列幅 ≥ 720）｜列の頭（ファイルタブ行 →
-/// 文書があればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（焦点の
+/// エディター面の AppKit 側の根。骨の幾何——レール｜サイドバー（開いていて本体に最低幅が残るとき）｜列の頭
+/// （ファイルタブ行 → 文書があればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（焦点の
 /// 文書のテキスト面、無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
 ///
 /// 骨の状態はセッションの写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれだけを読む。
@@ -32,6 +32,12 @@ final class EditorPaneView: NSView {
   private let headerHost: NSHostingView<EditorHeaderRoot>
   private let emptyHost: NSHostingView<EditorFaceRoot>
   private(set) var document: EditorDocument?
+  /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
+  private(set) var sidebar = EditorSidebarState() {
+    didSet { observeSidebar() }
+  }
+  /// サイドバーと本体の境のドラッグの当たり。
+  private let sidebarHandle = SidebarResizeHandle()
   private var localization = LocalizationStore(language: .systemDefault)
   private var fontResolver = ChromeFontResolver()
   /// 地の veil。設定パレットで不透明度を変えた直後も追従する（観測して再描画）。
@@ -58,22 +64,30 @@ final class EditorPaneView: NSView {
       host.autoresizingMask = []
       addSubview(host)
     }
+    sidebarHandle.autoresizingMask = []
+    addSubview(sidebarHandle)
+    sidebarHandle.onDrag = { [weak self] width in self?.resizeSidebar(to: width) }
+    sidebarHandle.onRelease = { [weak self] in self?.sidebar.commit() }
     wireShell()
     wireTree()
+    observeSidebar()
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
   override var isFlipped: Bool { true }
 
-  /// 窓の環境（透過・言語・フォント割り当て）を面へ配る。別 root は Environment を継承しないので root を作り直す。
+  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態）を面へ配る。別 root は Environment を継承
+  /// しないので root を作り直す。
   func configure(
     translucency: ChromeTranslucency, localization: LocalizationStore,
-    fontResolver: ChromeFontResolver
+    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState
   ) {
     self.translucency = translucency
     self.localization = localization
     self.fontResolver = fontResolver
+    self.sidebar = sidebar
     installRoots()
+    needsLayout = true
   }
 
   private func installRoots() {
@@ -202,14 +216,41 @@ final class EditorPaneView: NSView {
 
   // MARK: - 幾何
 
-  /// 左列の幅（レール ＋ 右の hairline、サイドバーが出るときは ＋272 ＋ hairline）。
+  /// 左列の幅（レール ＋ 右の hairline、サイドバーが出るときは ＋幅 ＋ hairline）。
   private var sideWidth: CGFloat {
     Theme.Layout.editorRail + Theme.Stroke.hairline
-      + (sidebarVisible ? Theme.Layout.editorSidebar + Theme.Stroke.hairline : 0)
+      + (sidebarVisible ? sidebar.width + Theme.Stroke.hairline : 0)
   }
 
-  /// 列幅が 720 以上のときだけサイドバーを出す。
-  var sidebarVisible: Bool { bounds.width >= Theme.Layout.editorSidebarMin }
+  /// 開いていて、本体に最低幅が残るときだけサイドバーを出す（狭い列では一時的に隠し、広がれば戻る。
+  /// 手で閉じた状態は列幅に関係なく閉じたまま）。
+  var sidebarVisible: Bool { sidebar.isOpen && sidebarFits(width: sidebar.width) }
+
+  private func sidebarFits(width: CGFloat) -> Bool {
+    bounds.width >= Theme.Layout.editorRail + Theme.Stroke.hairline * 2 + width
+      + Theme.Layout.editorBodyMinWidth
+  }
+
+  /// ドラッグ中の幅。上限は本体に最低幅が残るまで（下限は状態が守る）。
+  private func resizeSidebar(to width: CGFloat) {
+    let ceiling =
+      bounds.width - Theme.Layout.editorRail - Theme.Stroke.hairline * 2
+      - Theme.Layout.editorBodyMinWidth
+    sidebar.setWidth(min(width, max(ceiling, Theme.Layout.editorSidebarMinWidth)))
+    layoutSubtreeIfNeeded()
+  }
+
+  private func observeSidebar() {
+    withObservationTracking {
+      _ = sidebar.width
+      _ = sidebar.isOpen
+    } onChange: { [weak self] in
+      DispatchQueue.main.async {
+        self?.needsLayout = true
+        self?.observeSidebar()
+      }
+    }
+  }
 
   /// 列の頭の高さ（ファイルタブ行 ＋ 下の hairline、文書があればパンくずも）。
   private var headerHeight: CGFloat {
@@ -235,6 +276,10 @@ final class EditorPaneView: NSView {
     let body = bodyRect
     emptyHost.frame = body
     document?.surface.view.frame = body
+    sidebarHandle.isHidden = !sidebarVisible
+    sidebarHandle.frame = NSRect(
+      x: sideWidth - Theme.Stroke.hairline - Theme.Layout.editorSidebarHandle / 2, y: 0,
+      width: Theme.Layout.editorSidebarHandle, height: bounds.height)
   }
 
   // MARK: - 可視性（ツリーが根のサービスを握る寿命）
@@ -329,29 +374,5 @@ final class EditorPaneView: NSView {
     } catch {
       NSLog("[editor] save failed: \(error)")
     }
-  }
-
-  // MARK: - 地
-
-  private func observeTranslucency() {
-    guard let translucency else { return }
-    withObservationTracking {
-      _ = translucency.effectiveOpacity
-    } onChange: { [weak self] in
-      DispatchQueue.main.async {
-        self?.needsDisplay = true
-        self?.observeTranslucency()
-      }
-    }
-  }
-
-  override func viewDidChangeEffectiveAppearance() {
-    super.viewDidChangeEffectiveAppearance()
-    needsDisplay = true
-  }
-
-  override func draw(_ dirtyRect: NSRect) {
-    Theme.Color.bgBase.withAlphaComponent(translucency?.effectiveOpacity ?? 1).setFill()
-    dirtyRect.fill()
   }
 }

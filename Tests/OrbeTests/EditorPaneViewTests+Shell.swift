@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 面の骨——pane が幾何を解き（レール｜サイドバー（≥720）｜列の頭｜本体）、骨の host はクリックを自分で
+/// 面の骨——pane が幾何を解き（レール｜サイドバー（開いていて本体に最低幅が残るとき）｜列の頭｜本体）、骨の host はクリックを自分で
 /// 受け、ツリーは面が窓に付いて隠れていない間だけ根のサービスを握り、cd で根が変わればツリーを作り直す。
 ///
 /// 壊れると何が起きるか。hitTest が面全体を self に固定したままだと骨がクリックできない。隠れたタブの
@@ -27,7 +27,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     return window
   }
 
-  func testWideFaceShowsTheSidebarAndNarrowFaceFoldsIt() throws {
+  func testSidebarShowsWhileTheBodyKeepsItsMinimumWidthAndHidesOtherwise() throws {
     let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hosted(tab, width: 900)
@@ -44,12 +44,66 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertEqual(pane.bodyRect.minY, 29 + 20, "文書があればパンくずの分だけ下がる")
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
 
+    window.setContentSize(NSSize(width: 678 + FaceGeometry.spine, height: 400))
+    tab.view.layoutSubtreeIfNeeded()
+    XCTAssertTrue(pane.sidebarVisible, "本体にちょうど 400 残る幅までは出す")
+
     window.setContentSize(NSSize(width: 640 + FaceGeometry.spine, height: 400))
     tab.view.layoutSubtreeIfNeeded()
-    XCTAssertFalse(pane.sidebarVisible, "720 未満ではサイドバーを畳む")
+    XCTAssertFalse(pane.sidebarVisible, "本体に 400 残らなければ一時的に隠す")
     XCTAssertFalse(pane.shell.sidebarVisible)
     XCTAssertEqual(pane.bodyRect.minX, 37, "レールだけ残る")
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
+    XCTAssertTrue(pane.sidebar.isOpen, "隠しても開いている記憶は変わらない")
+
+    window.setContentSize(NSSize(width: 900 + FaceGeometry.spine, height: 400))
+    tab.view.layoutSubtreeIfNeeded()
+    XCTAssertTrue(pane.sidebarVisible, "広がれば戻る")
+
+    pane.sidebar.toggle()
+    tab.view.layoutSubtreeIfNeeded()
+    XCTAssertFalse(pane.sidebarVisible, "手で閉じれば列幅に関係なく閉じたまま")
+    XCTAssertEqual(pane.bodyRect.minX, 37)
+  }
+
+  /// 境の当たりをドラッグするとサイドバーの幅が連続で追従し、下限 160 と「本体に 400 残る」上限で止まり、
+  /// 離すと書き戻す。幅はアプリ全体で 1 つなので、同じ状態を配られた別の面も同じ幅になる。
+  func testDraggingTheHandleResizesTheSidebarWithinBounds() throws {
+    let state = EditorSidebarState()
+    let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let other = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    for t in [tab, other] {
+      t.view.configure(
+        translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
+        fontResolver: ChromeFontResolver(), sidebar: state)
+    }
+    let pane = tab.view.editor
+    let window = hosted(tab, width: 900)
+    defer { window.orderOut(nil) }
+
+    let handle = try XCTUnwrap(pane.subviews.first { $0 is SidebarResizeHandle })
+    XCTAssertFalse(handle.isHidden)
+    XCTAssertEqual(
+      handle.frame, NSRect(x: 37 + 240 - 2, y: 0, width: 4, height: 398), "hairline を跨ぐ 4pt")
+    let hit = pane.hitTest(pane.convert(NSPoint(x: 37 + 240, y: 200), to: pane.superview))
+    XCTAssertTrue(hit === handle, "境は当たりが受ける")
+
+    func point(_ x: CGFloat) -> NSPoint {
+      pane.convert(NSPoint(x: x, y: 200), to: nil)
+    }
+    handle.mouseDown(with: .mouse(.leftMouseDown, at: point(278), in: window))
+    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: point(278 + 60), in: window))
+    XCTAssertEqual(state.width, 300, "引いた距離だけ広がる")
+    XCTAssertEqual(pane.bodyRect.minX, 37 + 301, "その場で置き直す")
+    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: point(278 - 200), in: window))
+    XCTAssertEqual(state.width, 160, "下限")
+    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: point(278 + 600), in: window))
+    XCTAssertEqual(state.width, 900 - 36 - 2 - 400, "本体に 400 残るまで")
+    handle.mouseUp(with: .mouse(.leftMouseUp, at: point(278 + 600), in: window))
+
+    let otherWindow = hosted(other, width: 900)
+    defer { otherWindow.orderOut(nil) }
+    XCTAssertEqual(other.view.editor.bodyRect.minX, 37 + 462 + 1, "同じ状態を配られた面は同じ幅")
   }
 
   /// 空状態でも骨（レール・サイドバー・タブ行）はクリックを自分で受け、本体だけが面自身に固定される。

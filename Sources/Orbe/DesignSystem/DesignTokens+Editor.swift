@@ -98,9 +98,14 @@ extension Theme.Layout {
   static let editorRail: CGFloat = 36
   /// レールのアイコン。
   static let editorRailGlyph: CGFloat = 20
+  /// サイドバーの既定の幅（ドラッグで可変・app-state に記憶）。
   static let editorSidebar: CGFloat = 240
-  /// 列幅がこれ未満ならサイドバーを畳む。
-  static let editorSidebarMin: CGFloat = 720
+  /// サイドバーの幅の下限。
+  static let editorSidebarMinWidth: CGFloat = 160
+  /// 本体（テキスト面）に残す最低幅。サイドバーの幅の上限と、狭い列で一時的に隠す規則が使う。
+  static let editorBodyMinWidth: CGFloat = 400
+  /// サイドバーと本体の境（hairline）に置くドラッグの当たりの幅。
+  static let editorSidebarHandle: CGFloat = 4
   static let editorFileTabs: CGFloat = 28
   static let editorBreadcrumb: CGFloat = 20
   static let editorPanelHeader: CGFloat = 28
