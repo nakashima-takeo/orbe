@@ -186,10 +186,14 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
   /// 名前は提示時の読み（フォールバックの固定名）のまま撃たれ、既定が `main` でない repo では
   /// 存在しない ref を指す。ここでは手元の `main`（古い）と `origin/main`（fetch 後）が別物なので、
   /// どちらの名前で切ったかが HEAD に出る。
+  ///
+  /// Enter は fetch が未着地の窓で撃つ——窓を作らないと、fetch が Enter より先に明けた回は名前を
+  /// 提示時に捕まえる実装でも緑になる。
   func testIssueWorktreeUsesTheDefaultBranchDiscoveredByTheFetch() throws {
     XCTAssertTrue(
       run(["symbolic-ref", "--delete", "refs/remotes/origin/HEAD"], cwd: local).isSuccess)
-    let provider = try start()
+    let provider = try startWithSlowFetch()
+    XCTAssertEqual(provider.defaultBranchName, "main", "前提: 提示時の名前はフォールバック")
     let path = try resolve(
       provider, .issue(number: 44, existingWorktree: nil, existingBranch: false))
     XCTAssertEqual(
