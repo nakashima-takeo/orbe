@@ -38,7 +38,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     let window = hosted(tab, width: 900)
     defer { window.orderOut(nil) }
 
-    XCTAssertTrue(pane.shell.sidebarOpen, "写しにも出る")
+    XCTAssertTrue(pane.sidebar.isOpen)
     XCTAssertEqual(
       pane.bodyRect, NSRect(x: 37 + 241, y: 29, width: 900 - 278, height: 400 - 2 - 29),
       "レール・サイドバーの右、タブ行の下の hairline はその外側")
@@ -50,7 +50,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
 
     window.setContentSize(NSSize(width: 360 + FaceGeometry.spine, height: 400))
     tab.view.layoutSubtreeIfNeeded()
-    XCTAssertTrue(pane.shell.sidebarOpen, "狭い列でも隠れない")
+    XCTAssertTrue(pane.sidebar.isOpen, "狭い列でも隠れない")
     XCTAssertEqual(pane.shownSidebarWidth, 360 - 36 - 2 - 160, "本体に 160 残るまで表示幅を切り詰める")
     XCTAssertEqual(pane.bodyRect.minX, 37 + 162 + 1)
     XCTAssertEqual(pane.bodyRect.width, 160)
@@ -93,13 +93,12 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     pane.shell.toggleSidebar()
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertFalse(pane.sidebar.isOpen, "レールの選択中の項目を押すと閉じる")
-    XCTAssertFalse(pane.shell.sidebarOpen, "閉じている間はレールの選択印が無い")
     XCTAssertEqual(pane.bodyRect.minX, 37, "レールだけ残る")
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
 
     pane.shell.toggleSidebar()
     tab.view.layoutSubtreeIfNeeded()
-    XCTAssertTrue(pane.shell.sidebarOpen, "もう一度押すと開く")
+    XCTAssertTrue(pane.sidebar.isOpen, "もう一度押すと開く")
     XCTAssertEqual(pane.bodyRect.minX, 37 + 241)
   }
 

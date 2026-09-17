@@ -1,6 +1,6 @@
 import Foundation
 
-/// 骨（ファイルタブ行・パンくず・サイドバーの可否）の写し。pane が所有し、セッションの変化のたびに
+/// 骨（ファイルタブ行・パンくず）の写し。pane が所有し、セッションの変化のたびに
 /// `update` で無条件に組み直す。SwiftUI はこの写しだけを読み、`EditorSession` / `EditorDocument` を
 /// 直接観測しない。操作は閉包で pane へ戻り、pane がタブ経由でセッションに書く。
 @MainActor @Observable
@@ -22,8 +22,6 @@ final class EditorShellModel {
     let directory: URL?
   }
 
-  /// サイドバーを開いているか（エクスプローラーが出て、レールに選択印が立つ）。
-  var sidebarOpen = true
   var tabs: [FileTab] = []
   var activeID: URL?
   /// 焦点の文書のディレクトリの断片（末尾のファイルは `activeName` / `activeChip`）。

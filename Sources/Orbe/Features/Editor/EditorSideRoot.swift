@@ -6,14 +6,15 @@ import SwiftUI
 struct EditorSideRoot: View {
   let shell: EditorShellModel
   let tree: FileTree
+  /// 開閉の真実（pane と同じ 1 つ。写しを挟まない）。
+  let sidebar: EditorSidebarState
   let localization: LocalizationStore
   let fontResolver: ChromeFontResolver
 
   var body: some View {
     HStack(spacing: 0) {
-      RailView(
-        selection: shell.sidebarOpen ? .files : nil, onSelect: { _ in shell.toggleSidebar() })
-      if shell.sidebarOpen {
+      RailView(selection: sidebar.isOpen ? .files : nil, onSelect: { _ in shell.toggleSidebar() })
+      if sidebar.isOpen {
         ExplorerView(shell: shell, tree: tree)
       }
     }

@@ -24,7 +24,7 @@ struct EditorFaceRoot: View {
 /// エディター焦点中に端末へ届けない。
 final class EditorPaneView: NSView {
   weak var tab: TerminalTab?
-  /// 骨の写し（ファイルタブ行・パンくず・サイドバーの可否）。
+  /// 骨の写し（ファイルタブ行・パンくず）。
   let shell = EditorShellModel()
   /// エクスプローラーのツリー。根が変われば作り直す。
   private(set) var tree: FileTree
@@ -49,7 +49,8 @@ final class EditorPaneView: NSView {
     tree = FileTree(root: root)
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
-        shell: shell, tree: tree, localization: localization, fontResolver: fontResolver))
+        shell: shell, tree: tree, sidebar: sidebar, localization: localization,
+        fontResolver: fontResolver))
     headerHost = NSHostingView(
       rootView: EditorHeaderRoot(
         shell: shell, localization: localization, fontResolver: fontResolver))
@@ -92,7 +93,8 @@ final class EditorPaneView: NSView {
 
   private func installRoots() {
     sideHost.rootView = EditorSideRoot(
-      shell: shell, tree: tree, localization: localization, fontResolver: fontResolver)
+      shell: shell, tree: tree, sidebar: sidebar, localization: localization,
+      fontResolver: fontResolver)
     headerHost.rootView = EditorHeaderRoot(
       shell: shell, localization: localization, fontResolver: fontResolver)
     emptyHost.rootView = EditorFaceRoot(localization: localization)
@@ -203,11 +205,10 @@ final class EditorPaneView: NSView {
   /// 根が変わった（cd）。ツリーを作り直し、握っていたなら握り直す。
   func setRoot(_ root: String) {
     guard root != tree.root else { return }
-    let live = tree.isLive
     tree.isLive = false
     tree = FileTree(root: root)
     wireTree()
-    tree.isLive = live
+    updateLiveness()
     installRoots()
     if let tab {
       shell.update(from: tab.editor, root: root)
@@ -295,7 +296,6 @@ final class EditorPaneView: NSView {
 
   override func layout() {
     super.layout()
-    if shell.sidebarOpen != sidebar.isOpen { shell.sidebarOpen = sidebar.isOpen }
     let sideWidth = self.sideWidth
     sideHost.frame = NSRect(
       x: 0, y: 0, width: min(sideWidth, bounds.width), height: bounds.height)
@@ -347,8 +347,9 @@ final class EditorPaneView: NSView {
   /// 空状態の中身は静止しているので、本体のどこを押しても面自身が受ける（焦点を取る）。骨の host は
   /// 自分で受ける。
   override func hitTest(_ point: NSPoint) -> NSView? {
-    guard let hit = super.hitTest(point), document == nil else { return super.hitTest(point) }
-    return hit === emptyHost || hit.isDescendant(of: emptyHost) ? self : hit
+    let hit = super.hitTest(point)
+    guard document == nil, let hit else { return hit }
+    return hit.isDescendant(of: emptyHost) ? self : hit
   }
 
   override func mouseDown(with event: NSEvent) {
