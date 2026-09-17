@@ -47,12 +47,13 @@ updated: 2026-09-17
 
 **危険はファイルの型ではなく、Launch Services がその型に選ぶ handler にある。** 実行ビット付きの `.txt` は Terminal に、`.py` は IDLE に、`.jnlp` は Java に、`.configprofile` はプロファイル導入に、`.fileloc` は中で参照した先に渡る。だから Orbe はローカルファイルを Launch Services の型→handler 解決に渡さず、内容の家族ごとに開き先を自分で決める。判定は上から順。
 
-1. **転送・実行の家族 → block（転送／実行ファイル）**: 中身が別の対象を指す転送ファイル（`.webloc`・`.inetloc`・`.fileloc`・`.afploc`・`.url` 等、macOS が「保存された URL」と解する型）、またはアプリ・実行形式（`.app`・unix 実行形式・`.dylib`・`.o`・`.jar`・`.class`・`.exe` 等、macOS がアプリか実行可能と解する型）でテキストでもないもの。`.js` のように実行可能にもテキストにも準拠する型はテキストとして扱う。
+1. **転送ファイル → block（転送／実行ファイル）**: 中身が別の対象を指すもの（`.webloc`・`.inetloc`・`.fileloc`・`.afploc`・`.url` 等、macOS が「保存された URL」と解する型）。
 2. **画像・PDF・音声/動画 → allow（その型の既定アプリ）**: 既定アプリは型で引く（ファイルで引くと実行ビットで handler が化ける）。`.svg` は画像。
-3. **テキスト → allow（GUI コードエディタ）**: macOS がテキストと解する型の通常ファイル（ソース・設定・ログ・`.html`・`.command`・`.py`・`.sh`・`.scpt`・`.jnlp`・`.configprofile` を含む。実行ビットは見ない）。開き先は ⌘⇧E と**同じ解決**の GUI コードエディタ（→ [chrome/layout](../chrome/layout.md#gui-エディタ起動cmdshifte)）にファイルパスを渡す。エディタは実行しない。GUI エディタが見つからなければ plain text の既定アプリ（TextEdit 等）に明示的に渡す——テキストには安全な閲覧先が必ずあるので、確認や警告で止めない。
-4. **型が無いファイル → 中身で判定**: macOS に型が無い通常ファイル（`.zig`・`.rs`・`.go`・`.lock`・`.env`・`.conf`・Dockerfile 等）は、先頭 8 KiB が NUL を含まない UTF-8 ならテキスト（3 と同じ開き先）、そうでなければ confirm。
-5. **フォルダ（package でないディレクトリ）→ allow（Finder で表示）**。
-6. **それ以外 → confirm**: `.zip`・`.dmg`・`.pkg`・`.docx`・`.plist`・`.shortcut`・`.terminal`・`.prefPane`・`.saver`・`.scptd`・`.xcodeproj`・型の無いバイナリ等。**列挙の抜けは allow でなく confirm に落ちる**——新しい危険な型が現れても黙って開かない。confirm で開くときは Launch Services の handler に渡す（そのアプリ名を見せた上で人が決めている）。
+3. **テキスト → allow（GUI コードエディタ）**: macOS がテキストと解する型の通常ファイル（ソース・設定・ログ・`.html`・`.command`・`.py`・`.sh`・`.scpt`・`.jnlp`・`.configprofile`・`.js` を含む。実行ビットは見ない）。開き先は ⌘⇧E と**同じ解決**の GUI コードエディタ（→ [chrome/layout](../chrome/layout.md#gui-エディタ起動cmdshifte)）にファイルパスを渡す。エディタは実行しない。GUI エディタが見つからなければ plain text の既定アプリ（TextEdit 等）に明示的に渡す——テキストには安全な閲覧先が必ずあるので、確認や警告で止めない。
+4. **型が無い・実行形式の通常ファイル → 中身で判定**: macOS に型が無い通常ファイル（`.zig`・`.rs`・`.go`・`.lock`・`.env`・`.conf`・Dockerfile 等）と、実行形式と解される通常ファイル（拡張子が無く実行ビットが付いたシェルスクリプト等）は、先頭 8 KiB が NUL を含まない UTF-8 ならテキスト（3 と同じ開き先）。そうでなければ型が無いものは confirm、実行形式は 5 へ。
+5. **アプリ・実行形式 → block（転送／実行ファイル）**: `.app`・unix 実行形式（`/bin/ls` 等のバイナリ）・`.dylib`・`.o`・`.jar`・`.class`・`.exe` 等、macOS がアプリか実行可能と解する型で中身がテキストでないもの。ディレクトリ/バンドル（`.app`）は中身判定の対象外で常に block。
+6. **フォルダ（package でないディレクトリ）→ allow（Finder で表示）**。
+7. **それ以外 → confirm**: `.zip`・`.dmg`・`.pkg`・`.docx`・`.plist`・`.shortcut`・`.terminal`・`.prefPane`・`.saver`・`.scptd`・`.xcodeproj`・型の無いバイナリ等。**列挙の抜けは allow でなく confirm に落ちる**——新しい危険な型が現れても黙って開かない。confirm で開くときは Launch Services の handler に渡す（そのアプリ名を見せた上で人が決めている）。
 
 ### 確認・ブロックの見せ方
 
