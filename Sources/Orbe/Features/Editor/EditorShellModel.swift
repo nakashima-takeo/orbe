@@ -22,7 +22,10 @@ final class EditorShellModel {
     let directory: URL?
   }
 
+  /// サイドバーが今見えているか（開いていて、本体に最低幅が残る）。
   var sidebarVisible = true
+  /// サイドバーを開いているか（レールの選択印。狭い列で一時的に隠れていても立つ）。
+  var sidebarOpen = true
   var tabs: [FileTab] = []
   var activeID: URL?
   /// 焦点の文書のディレクトリの断片（末尾のファイルは `activeName` / `activeChip`）。
@@ -37,6 +40,8 @@ final class EditorShellModel {
   @ObservationIgnored var createFile: () -> Void = {}
   @ObservationIgnored var createDirectory: () -> Void = {}
   @ObservationIgnored var collapseAll: () -> Void = {}
+  /// レールの選択中の項目を押した（サイドバーを閉じる／開く）。
+  @ObservationIgnored var toggleSidebar: () -> Void = {}
   /// 行内入力を Enter / Esc で終えた（焦点を面へ戻す）。
   @ObservationIgnored var endInlineInput: () -> Void = {}
 

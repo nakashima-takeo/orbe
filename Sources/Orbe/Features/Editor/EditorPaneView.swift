@@ -113,6 +113,7 @@ final class EditorPaneView: NSView {
     shell.createFile = { [weak self] in self?.beginNew(isDirectory: false) }
     shell.createDirectory = { [weak self] in self?.beginNew(isDirectory: true) }
     shell.collapseAll = { [weak self] in self?.tree.collapseAll() }
+    shell.toggleSidebar = { [weak self] in self?.sidebar.toggle() }
     shell.endInlineInput = { [weak self] in self?.focusEditor() }
   }
 
@@ -268,6 +269,7 @@ final class EditorPaneView: NSView {
   override func layout() {
     super.layout()
     if shell.sidebarVisible != sidebarVisible { shell.sidebarVisible = sidebarVisible }
+    if shell.sidebarOpen != sidebar.isOpen { shell.sidebarOpen = sidebar.isOpen }
     let sideWidth = self.sideWidth
     sideHost.frame = NSRect(
       x: 0, y: 0, width: min(sideWidth, bounds.width), height: bounds.height)

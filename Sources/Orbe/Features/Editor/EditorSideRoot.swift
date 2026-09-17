@@ -10,7 +10,8 @@ struct EditorSideRoot: View {
 
   var body: some View {
     HStack(spacing: 0) {
-      RailView()
+      RailView(
+        selection: shell.sidebarOpen ? .files : nil, onSelect: { _ in shell.toggleSidebar() })
       if shell.sidebarVisible {
         ExplorerView(shell: shell, tree: tree)
       }
@@ -21,13 +22,16 @@ struct EditorSideRoot: View {
   }
 }
 
-/// レール: 幅 52 のアイコン列。項目は「ファイル」1 つ（u7 が検索を足す）。選択は左 2px の accent の
-/// 縦線 ＋ 淡い地（design-system §5 のエディター面の例外）。
+/// レール: 幅 36 のアイコン列。項目は「ファイル」1 つ。選択は左 2px の accent の縦線 ＋ 淡い地
+/// （design-system §5 のエディター面の例外）で、サイドバーが閉じている間は無い（`selection == nil`）。
+/// 押すと `onSelect`——選択中の項目ならサイドバーを閉じ、閉じていれば開く（項目が増えれば別の項目への切替）。
 struct RailView: View {
   enum Item: CaseIterable {
     case files
   }
 
+  let selection: Item?
+  let onSelect: (Item) -> Void
   @Environment(\.colorScheme) private var scheme
 
   // 見本 Rail.tsx の値。
@@ -41,7 +45,9 @@ struct RailView: View {
     HStack(spacing: 0) {
       VStack(spacing: 0) {
         ForEach(Item.allCases, id: \.self) { item in
-          railItem(item, selected: true, ink: ink)
+          railItem(item, selected: selection == item, ink: ink)
+            .contentShape(Rectangle())
+            .onTapGesture { onSelect(item) }
         }
         Spacer(minLength: 0)
       }

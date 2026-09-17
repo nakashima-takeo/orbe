@@ -60,10 +60,22 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertTrue(pane.sidebarVisible, "広がれば戻る")
 
-    pane.sidebar.toggle()
+    pane.shell.toggleSidebar()
     tab.view.layoutSubtreeIfNeeded()
+    XCTAssertFalse(pane.sidebar.isOpen, "レールの選択中の項目を押すと閉じる")
     XCTAssertFalse(pane.sidebarVisible, "手で閉じれば列幅に関係なく閉じたまま")
+    XCTAssertFalse(pane.shell.sidebarOpen, "閉じている間はレールの選択印が無い")
     XCTAssertEqual(pane.bodyRect.minX, 37)
+
+    pane.shell.toggleSidebar()
+    tab.view.layoutSubtreeIfNeeded()
+    XCTAssertTrue(pane.sidebarVisible, "もう一度押すと開く")
+    XCTAssertTrue(pane.shell.sidebarOpen)
+
+    window.setContentSize(NSSize(width: 640 + FaceGeometry.spine, height: 400))
+    tab.view.layoutSubtreeIfNeeded()
+    XCTAssertTrue(pane.shell.sidebarOpen, "狭い列で一時的に隠れても開いている印は残る")
+    XCTAssertFalse(pane.shell.sidebarVisible)
   }
 
   /// 境の当たりをドラッグするとサイドバーの幅が連続で追従し、下限 160 と「本体に 400 残る」上限で止まり、
