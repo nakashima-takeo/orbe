@@ -127,7 +127,6 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     let window = hostEditor(tab, width: 900, height: 240)
     defer { window.orderOut(nil) }
     let scroll = try XCTUnwrap(scrollView(in: pane.sideHost))
-    RunLoop.main.run(until: Date().addingTimeInterval(0.2))
     XCTAssertEqual(scroll.documentVisibleRect.minY, 0, "前提: 先頭に居る")
 
     pane.shell.open(deep)
@@ -139,13 +138,5 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     XCTAssertEqual(pane.tree.newEntry?.directory, "d19", "選択したファイルの親（画面外だった深い場所）に挿す")
     pumpMain(until: { scroll.documentVisibleRect.minY > 0 }, "入力行へ送る")
     _ = try inputField(pane, in: window)
-  }
-
-  private func scrollView(in view: NSView) -> NSScrollView? {
-    for subview in view.subviews {
-      if let scroll = subview as? NSScrollView { return scroll }
-      if let scroll = scrollView(in: subview) { return scroll }
-    }
-    return nil
   }
 }

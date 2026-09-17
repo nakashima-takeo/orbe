@@ -22,7 +22,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     XCTAssertEqual(
       pane.bodyRect, NSRect(x: 37 + 241, y: 29, width: 900 - 278, height: 400 - 2 - 29),
       "レール・サイドバーの右、タブ行の下の hairline はその外側")
-    let wide = try PaneProbe(pane)
+    let wide = try probe(pane) { p in try !PaneProbe.same(p.rgb(18), p.rgb(37 + 60)) }
     let railGround = try wide.rgb(18)
     let explorerGround = try wide.rgb(37 + 60)
 
@@ -163,7 +163,10 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
-    let open = try PaneProbe(pane)
+    let open = try probe(pane) { p in
+      try !PaneProbe.same(p.rgb(1, y: 18), p.rgb(18, y: 60))
+        && !PaneProbe.same(p.rgb(18, y: 60), p.rgb(37 + 60))
+    }
     let railGround = try open.rgb(18, y: 60)
     let explorerGround = try open.rgb(37 + 60)
     XCTAssertFalse(PaneProbe.same(try open.rgb(1, y: 18), railGround), "開いていれば左縁に選択印")
@@ -178,7 +181,10 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     }
     pane.shell.toggleSidebar()
     settled(37, "閉じればレールだけ")
-    let closed = try PaneProbe(pane)
+    let closed = try probe(pane) { p in
+      try PaneProbe.same(p.rgb(1, y: 18), railGround)
+        && !PaneProbe.same(p.rgb(37 + 60), explorerGround)
+    }
     XCTAssertTrue(PaneProbe.same(try closed.rgb(1, y: 18), railGround), "閉じている間は選択印が無い")
     XCTAssertTrue(PaneProbe.same(try closed.rgb(18, y: 18), railGround))
     XCTAssertFalse(PaneProbe.same(try closed.rgb(37 + 60), explorerGround), "エクスプローラーの地は消える")
@@ -187,7 +193,10 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
 
     pane.shell.toggleSidebar()
     settled(37 + 241, "開けば戻る")
-    let reopened = try PaneProbe(pane)
+    let reopened = try probe(pane) { p in
+      try !PaneProbe.same(p.rgb(1, y: 18), railGround)
+        && PaneProbe.same(p.rgb(37 + 60), explorerGround)
+    }
     XCTAssertFalse(PaneProbe.same(try reopened.rgb(1, y: 18), railGround), "選択印が戻る")
     XCTAssertTrue(PaneProbe.same(try reopened.rgb(37 + 60), explorerGround), "エクスプローラーの地が戻る")
     try assertSidebarContentFills(pane, width: 240)
@@ -235,35 +244,16 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     settled(37 + 301, "開けば記憶の幅で戻る")
   }
 
-  /// 面を描いて 1 行（ツリーの下の空き。根の行より下）の色を x で引く。
-  private struct PaneProbe {
-    let rep: NSBitmapImageRep
-    let scale: CGFloat
-    let y: Int
-
-    init(_ pane: EditorPaneView) throws {
-      RunLoop.current.run(until: Date().addingTimeInterval(0.2))  // SwiftUI の描画コミット
-      rep = try XCTUnwrap(pane.bitmapImageRepForCachingDisplay(in: pane.bounds))
-      pane.cacheDisplay(in: pane.bounds, to: rep)
-      scale = CGFloat(rep.pixelsWide) / pane.bounds.width
-      y = Int((pane.bounds.height - 12) * scale)
-    }
-
-    func rgb(_ x: CGFloat, y row: CGFloat? = nil) throws -> [Int] {
-      let y = row.map { Int($0 * scale) } ?? y
-      let c = try XCTUnwrap(rep.colorAt(x: Int(x * scale), y: y)?.usingColorSpace(.deviceRGB))
-      return [c.redComponent, c.greenComponent, c.blueComponent].map { Int($0 * 255) }
-    }
-
-    static func same(_ a: [Int], _ b: [Int]) -> Bool { zip(a, b).allSatisfy { abs($0 - $1) <= 2 } }
-  }
-
   /// SwiftUI の中身（エクスプローラーの地と右の hairline）が pane の決めた表示幅を埋めているかを描画で見る。
   /// pane の矩形が動いても中身が固定幅のままなら、右の線が古い位置に残り、新しい境には地しか無い。
   private func assertSidebarContentFills(_ pane: EditorPaneView, width: CGFloat) throws {
-    let probe = try PaneProbe(pane)
-    let ground = try probe.rgb(37 + 60)
     let edge = 37 + width
+    let probe = try probe(pane) { p in
+      let ground = try p.rgb(37 + 60)
+      return try PaneProbe.same(p.rgb(edge - 2), ground)
+        && !PaneProbe.same(p.rgb(edge + 0.5), ground)
+    }
+    let ground = try probe.rgb(37 + 60)
     XCTAssertTrue(PaneProbe.same(try probe.rgb(edge - 2), ground), "境の手前まで地が続く")
     XCTAssertFalse(PaneProbe.same(try probe.rgb(edge + 0.5), ground), "境に hairline がある")
     if width > 240 {
@@ -277,7 +267,9 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
   private func assertSidebarContentIsGone(
     _ pane: EditorPaneView, railGround: [Int], explorerGround: [Int]
   ) throws {
-    let probe = try PaneProbe(pane)
+    let probe = try probe(pane) { p in
+      try PaneProbe.same(p.rgb(18), railGround) && !PaneProbe.same(p.rgb(50), explorerGround)
+    }
     XCTAssertTrue(PaneProbe.same(try probe.rgb(18), railGround), "レールの地は残る")
     let body = try probe.rgb(50)
     XCTAssertFalse(PaneProbe.same(body, explorerGround), "37 より右にエクスプローラーの地は無い")
