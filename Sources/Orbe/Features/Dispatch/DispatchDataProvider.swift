@@ -24,6 +24,11 @@ final class DispatchDataProvider {
   /// 待ってから撃つ（`createWorktree`）。1 回きりのイベントなので台帳ではなく `DispatchGroup` で持つ
   /// ——未着地なら着地後に・着地済み／未発行なら即実行、が `notify` の定義そのもの。
   /// 待つ側は分冊（`DispatchDataProvider+Create.swift`）。
+  ///
+  /// **着地は fetch プロセスの完了ではなく、その後の git 列挙の引き直しが揃った時点**——ベース ref の
+  /// 中身だけでなく、ベースの名前（`defaultBranchName`）も fetch 後の値になる。fetch は `origin/HEAD`
+  /// を作ることがある（git の `followRemoteHEAD` 既定）ので、中身だけ待つと `origin/HEAD` を持たない
+  /// repo で Issue 新規がフォールバックの固定名を指したまま撃たれる。
   let remoteFetchLanding = DispatchGroup()
 
   private(set) var repo: GitRepo?
@@ -141,16 +146,17 @@ final class DispatchDataProvider {
   /// 未取り込みと出る（この機能の主用途がそのまま外れる）。`[gone]` の出どころである
   /// `localBranches` も prune で初めて確定する。
   ///
-  /// 新規ブランチを切る worktree 作成（`createWorktree`）もこの fetch の着地を待つので、`enter()` は
+  /// 新規ブランチを切る worktree 作成もこの fetch の着地を待つので（`remoteFetchLanding`）、`enter()` は
   /// **発行の直前**に置く——発行と `enter()` の間に窓を空けると、そこで撃たれた作成が待たずに通る。
-  /// `leave()` は completion に 1 つ（成否どちらでも 1 回呼ばれる `GitRunner` 契約）で、group 自体を
-  /// 強く捕まえる——provider が先に消えても enter/leave の対は閉じる。
+  /// `leave()` は引き直しの着地に置く（`loadGit` は削除の完了でも撃たれるので、対が prune 起点の 1 回に
+  /// だけ付くよう完了ハンドラで受ける）。group 自体を強く捕まえるのは、provider が先に消えても対を
+  /// 閉じるため。
   private func loadRemotePrune(_ repo: GitRepo) {
     let landing = remoteFetchLanding
     landing.enter()
     repo.fetchPrune { [weak self] _ in
-      landing.leave()
-      self?.loadGit(repo, classifying: true)
+      guard let self else { return landing.leave() }
+      self.loadGit(repo, classifying: true) { landing.leave() }
     }
   }
 
@@ -159,8 +165,8 @@ final class DispatchDataProvider {
   /// `classifying` が真のときだけ分類プローブも撃つ——分類の到達性判定は prune 済みの
   /// `refs/remotes/origin/*` を前提にする（prune 前の origin には remote で消えた ref が残っており、
   /// そこからの到達性を根拠にすると「消してもコミットは origin に残る」が偽になる）ので、
-  /// prune より前の呼びには載せない。
-  func loadGit(_ repo: GitRepo, classifying: Bool) {
+  /// prune より前の呼びには載せない。`landed` は 4 本の read が揃った時点で 1 度だけ呼ばれる。
+  func loadGit(_ repo: GitRepo, classifying: Bool, landed: (() -> Void)? = nil) {
     let group = DispatchGroup()
     group.enter()
     repo.worktrees {
@@ -188,6 +194,7 @@ final class DispatchDataProvider {
     // worktree の顔ぶれが変われば対象も変わる。顔ぶれが同じ回は入口が畳むので、何度叩いても安い。
     group.notify(queue: .main) {
       self.rebuild()
+      landed?()
       // git の事実（ref の中身）が動いた着地なので全行引き直す。
       if classifying { self.startCleanProbe(repo, .all) }
       self.loadBranchPullRequests(repo)
