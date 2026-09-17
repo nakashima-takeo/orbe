@@ -44,7 +44,7 @@ Terminal engine (Contents/MacOS/Orbe, Contents/Resources/{ghostty,terminfo})
   - zlib — zlib License
     https://zlib.net — License: licenses/zlib-LICENSE.txt
   - Oniguruma — BSD-2-Clause
-    https://github.com/kkos/oniguruma — License: licenses/oniguruma-LICENSE.txt
+    https://github.com/kkos/oniguruma — License: licenses/oniguruma-COPYING.txt
   - simdutf — Apache-2.0 OR MIT (used under Apache-2.0)
     https://github.com/simdutf/simdutf — License: licenses/Apache-2.0.txt
   - Wuffs — MIT OR Apache-2.0 (the license file carries both)
