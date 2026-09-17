@@ -86,6 +86,6 @@ struct FileChipView: View {
       .foregroundStyle(color)
       .frame(width: size, height: size)
       .background(
-        RoundedRectangle(cornerRadius: small ? Theme.Space.hair : Theme.Radius.xs).fill(ground))
+        RoundedRectangle(cornerRadius: small ? 2 : Theme.Radius.xs).fill(ground))
   }
 }

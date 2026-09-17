@@ -120,7 +120,7 @@ struct ExplorerView: View {
     .background(ink.sunk(Self.sunkAlpha))
   }
 
-  /// パネルヘッダー 32: 題と、右端の 3 ツール（新規ファイル／新規フォルダ／すべて折りたたむ）。
+  /// パネルヘッダー 28: 題と、右端の 3 ツール（新規ファイル／新規フォルダ／すべて折りたたむ）。
   private var header: some View {
     HStack(spacing: 0) {
       Text(l10n.string(.editorExplorerTitle))
@@ -145,7 +145,7 @@ struct ExplorerView: View {
     .frame(height: Theme.Layout.editorPanelHeader)
   }
 
-  /// ルート行 22: シェブロン ＋ 根の basename（大文字）。クリックで根の開閉。
+  /// ルート行 20: シェブロン ＋ 根の basename（大文字）。クリックで根の開閉。
   private var rootRow: some View {
     HStack(spacing: 0) {
       TreeChevron(open: tree.isRootOpen)

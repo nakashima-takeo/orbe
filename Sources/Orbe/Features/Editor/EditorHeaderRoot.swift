@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 列の頭（ファイルタブ行 34 → 文書があればパンくず 22）の SwiftUI ルート。器の中の別 root なので環境は
+/// 列の頭（ファイルタブ行 28 → 文書があればパンくず 20）の SwiftUI ルート。器の中の別 root なので環境は
 /// 明示注入する。文書が無いときはタブ行の帯だけ。
 struct EditorHeaderRoot: View {
   let shell: EditorShellModel

@@ -80,7 +80,8 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `editor.text` | エディター面の 2 段目の文字——コードの素文字・ファイル名・タブ題・パンくずの末尾（dark / light とも `statusText` と偶然同値だが別トークン） | `#cdc7e2` | `#4d4368` |
 | `editor.tertiary` | エディター面の三次の文字——レールの非選択・パンくずの区切り（`text.tertiary` は `text.muted` の別名なので別値） | `#6d667a` | `#aca4bd` |
 | `editor.modified` | 変更の黄——M バッジ・外部変更で衝突中のドット（dark は `conflict` と偶然同値だが light が違い、git 競合でもない） | `#e2cd6d` | `#a07f0c` |
-| `editor.hue.{orange,blue,yellow,sky,violet,cyan,red,green,teal}` | 種別チップの色相（文字と α .16 の地）。種別 → 色相の表は `FileChip` が持つ | 見本 `palette.ts` の hue | 同 |
+| `editor.hue.{orange,blue,yellow,sky,violet,cyan,red,green,teal}` | 種別チップの色相（文字と α .16 の地）。種別 → 色相の表は `FileChip` が持つ | `DesignTokens+Editor.swift` の `editorHue*`（`tokens.json` の `editor.hue.*`） | 同 |
+| `surfaceInk` | カード・面の基色（view 側で α を掛ける。HelpCard・MenuBar、エディター面の hover 地 .045 / 選択地 .04・.045 / kbd 地 .05） | `#ffffff` | `#3a3151` |
 | `sunkInk` | 沈み面の基色（dark は scrim と同じ暗幕の基色）。view 側で α を掛ける（レール .22・サイドバー .45・ファイルタブ行 .22。light は ×0.3） | `#0a080e` | `#3a3151` |
 | `editor.lineNumber` | 行番号（`text.muted` の α .55） | `rgba(139,131,151,.55)` | `rgba(141,133,163,.55)` |
 | `syntax.keyword` | 構文: キーワード | `#569cd6` | `#2f63c9` |
@@ -152,13 +153,13 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `type.editorChip` | 16 で 10 / 9 / 8 / bold / mono | 種別チップのグリフ（字数で決め、14 / 12 へは比例して丸める） |
 
 **tracking / line-height スカラ**（NSFont では表せず、使用側で `.tracking()` / lineSpacing 換算）:
-`tracking.label` 1（大文字セクション見出し）／ `tracking.status` 0.3（ステータスストリップ）／ `line.body` 1.6（本文）／ `line.terminal` 1.55（ターミナル本文）／ `line.editorCode` 18pt（コード本体。倍率ではなく固定値）。
+`tracking.label` 1（大文字セクション見出し）／ `tracking.status` 0.3（ステータスストリップ）／ `tracking.key` 1（⌘H バッジ・キーバッジ・チップのキー表記）／ `tracking.panelTitle` 0.5（サイドバーのパネルヘッダーの題）／ `tracking.rootLabel` 0.8（エクスプローラーのルート行）／ `line.body` 1.6（本文）／ `line.terminal` 1.55（ターミナル本文）／ `line.editorCode` 18pt（コード本体。倍率ではなく固定値）。
 
 ### 2.4 余白・角丸・線
 - **spacing（2/4pt グリッド・穴なし）**: `hair 2 / tick 4 / note 6 / step 8 / beat 12 / bar 16 / span 20 / phrase 24`
 - **radius**: `xs 3`（単独タブの器・＋ボタン）/ `sm 4`（バッジ・キーヒント・タブグループの器）/ `row 8`（リスト行・小コントロール）/ `md 10`（入力・小パネル）/ `card 12`（カード・設定行）/ `lg 16`（パネル・オーバーレイ）/ `pill 999`（カウントピル・トグル）
 - **stroke**: `hairline 1`（罫線・枠）/ `focusRing 2`（フォーカスリング）
-- **layout（エディター面の骨）**: `editorRail 36`（アイコン 20）/ `editorSidebar 240`（既定。ドラッグで可変）/ `editorSidebarMinWidth 160` / `editorBodyMinWidth 160`（サイドバーの幅の上限と、狭い列で表示幅を切り詰める規則）/ `editorSidebarHandle 4`（境の当たり）/ `editorFileTabs 28` / `editorBreadcrumb 20`（レール・サイドバーの右、ファイルタブ行の下の hairline 1 はこれらの外側に足す） / `editorPanelHeader 28` / `editorRow 20` / `editorChip 14`（パンくずの末尾は 12）/ `editorChevron 16`。見本の半透明面の light 換算は `opacity.editorSunkLight 0.3` / `editorFillLight 0.6` / `editorHairlineLight 1.4`。
+- **layout（エディター面の骨）**: `editorRail 36` / `editorRailGlyph 20`（レールのアイコン）/ `editorSidebar 240`（既定。ドラッグで可変）/ `editorSidebarMinWidth 160` / `editorBodyMinWidth 160`（サイドバーの幅の上限と、狭い列で表示幅を切り詰める規則）/ `editorSidebarHandle 4`（境の当たり）/ `editorFileTabs 28` / `editorBreadcrumb 20`（レール・サイドバーの右、ファイルタブ行の下の hairline 1 はこれらの外側に足す） / `editorPanelHeader 28` / `editorRow 20` / `editorChip 14` / `editorChipSmall 12`（パンくずの末尾）/ `editorChevron 16`。見本の半透明面の light 換算は `opacity.editorSunkLight 0.3` / `editorFillLight 0.6` / `editorHairlineLight 1.4`。
 - elevation（面の影）は `DesignTokens+Glass.swift` が所有。本書・`tokens.json` は再定義しない。
 
 ### 2.5 モーション（拍）
@@ -215,7 +216,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 
 本書は color と意味の契約＋主要寸法に留める（実装の画素は各コンポーネントが持つ）。
 
-- **選択の示し方**: リスト行の選択は **tint 背景**（`selectionFill`）。タブの選択のみ**前景色反転**（§5.1）。**選択を左 3px バーで示すことはどこでもしない**（Completion も例外にしない）。下線・太字による選択弁別も持たない（タブ行の左 3px バーは選択ではなく worktree の識別色で、意味が別）。
+- **選択の示し方**: リスト行の選択は **tint 背景**（`selectionFill`）。タブの選択のみ**前景色反転**（§5.1）。**選択を左バーで示すのはエディター面のレールだけ（次項）。chrome ではどこでもしない**（Completion も例外にしない）。下線・太字による選択弁別も持たない（タブ行の左 3px バーは選択ではなく worktree の識別色で、意味が別）。
 - **エディター面の例外**（見本 `Rail.tsx`・`CodeView.tsx` の値をそのまま持つ）: レールの選択項目は左 2px の `accent.primary` の縦線 ＋ 地 `surfaceInk` .04（light ×0.6）、ファイルタブの選択は上縁 1.5px の `accent.primary` ＋ 地 `surfaceInk` .045。どちらも chrome の反転や tint とは別の、面の中に閉じた見せ方で、この 2 か所以外へ広げない。エクスプローラーのツリー行の選択は通常どおり `selectionFill`。
 - **Tab（セグメント）**: タブ行（高さ 28・padding 上下 3・左右 5（＝gap）・gap 5・地 `tab.rowBg`）の中の器。**面を持つのはグループ（同じ worktree のタブ 2 枚以上の連）だけ**——地 `tab.groupBg` に `worktree.tint` を重ね・radius 4・クリップ、器の**外側**に 1px の `worktree.frame` の枠（幅の取り分に含まれず gap に重なる）、左端に識別色バー 3px（縦いっぱい）、各セルの左に hairline `tab.divider` の区切り線（先頭セルを含む・選択セルでも残る）。1 枚の連は単独タブの器で、地 `tab.segBg`・radius 3 だけを持ち、枠・バー・区切り線を持たない。
 - **Tab のセル**: padding 横8・グリフとタイトルの間 6・幅は床40〜上限140（超える名前は末尾省略）。非選択＝地なし（器の地が透ける）・文字 `text.secondary`（idle/dormant/なしも同じ）・状態グリフ 12px（working は stroke 1.6。idle は非表示）。**選択＝地 `text.primary`（前景色反転。区切り線を持つセルでは左 1px を空けて線を残す）・文字 `tab.activeText`・グリフ＝`state.*Inverse`（対テーマ状態色）**、done の check 線のみ `text.primary`。タブ背景を状態色で塗らない。

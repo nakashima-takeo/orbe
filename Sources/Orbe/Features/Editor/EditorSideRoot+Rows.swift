@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// ツリー行 22: 深さぶんのガイド、ディレクトリはシェブロン／ファイルは種別チップ、名前（色はバッジに従う）、
+/// ツリー行 20: 深さぶんのガイド、ディレクトリはシェブロン／ファイルは種別チップ、名前（色はバッジに従う）、
 /// 右端に git バッジ。ホバーは淡い塗り、選択は selectionFill。
 struct TreeRowView: View {
   let row: FileTree.Row
