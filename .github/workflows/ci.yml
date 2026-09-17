@@ -39,10 +39,10 @@ jobs:
         if: steps.ghosttykit.outputs.cache-hit != 'true'
         run: |
           git submodule update --init --depth 1 vendor/ghostty
-          brew install zig@0.15
+          brew install zig
           sudo xcodebuild -downloadComponent MetalToolchain
           cd vendor/ghostty
-          "$(brew --prefix zig@0.15)/bin/zig" build -Demit-xcframework=true -Dxcframework-target=native
+          zig build -Demit-xcframework=true -Dxcframework-target=native -Demit-macos-app=false
       - name: build (incl. tests)
         run: swift build --build-tests
       - name: test

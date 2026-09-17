@@ -21,7 +21,7 @@ Terminal engine (Contents/MacOS/Orbe, Contents/Resources/{ghostty,terminfo})
 
 * libghostty — Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors — MIT License
   Orbe embeds libghostty as its terminal engine. It is statically linked: the
-  build produces libghostty-internal-fat.a (Info.plist BinaryPath), which is
+  build produces libghostty-internal.a (Info.plist BinaryPath), which is
   compiled into Contents/MacOS/Orbe — no dylib appears in `otool -L`. Parts of
   Orbe's Swift code are ported from Ghostty's macOS sources. The shell
   integration scripts (Contents/Resources/ghostty/shell-integration) and the
