@@ -237,4 +237,16 @@ final class UnsavedGateTests: OrbeTestCase {
     other.restore(paths: [repo.url("b.txt").path], active: repo.root + "/gone.txt")
     XCTAssertEqual(other.activeDocument?.url, repo.url("b.txt"), "アクティブが落ちていれば先頭")
   }
+
+  /// materialize より先に `open_file` が開いた文書は、復元に焦点を奪われない。
+  func testRestoreKeepsADocumentOpenedBeforeIt() throws {
+    let session = session()
+    try repo.write("b.txt", "b\n")
+    try repo.write("c.txt", "c\n")
+    let c = try session.open(repo.url("c.txt"))
+    session.restore(
+      paths: [repo.url("a.txt").path, repo.url("b.txt").path], active: repo.url("b.txt").path)
+    XCTAssertEqual(session.documents.map(\.url.lastPathComponent), ["c.txt", "a.txt", "b.txt"])
+    XCTAssertTrue(session.activeDocument === c, "先に居た焦点を保つ")
+  }
 }
