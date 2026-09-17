@@ -1,5 +1,4 @@
 import AppKit
-import Carbon.HIToolbox
 import XCTest
 
 @testable import Orbe
@@ -13,43 +12,12 @@ import XCTest
 /// NSEvent は合成する。`characters(byApplyingModifiers:)` は keyCode をレイアウトで引き直すので、
 /// 期待値は「kVK_ANSI_A が `a` を出す」ラテン系レイアウト（CI の US を含む）を前提にする。
 extension SurfaceKeyInputTests {
-  /// 物理キー 1 打の NSEvent 材料（macOS が US レイアウトで実際に組む値）。
-  struct PhysicalKey {
-    let keyCode: Int
-    let characters: String
-    let unmodified: String
-    let modifiers: NSEvent.ModifierFlags
-
-    static let a = PhysicalKey(keyCode: kVK_ANSI_A, characters: "a", unmodified: "a", modifiers: [])
-    static let shiftA = PhysicalKey(
-      keyCode: kVK_ANSI_A, characters: "A", unmodified: "A", modifiers: .shift)
-    static let ctrlC = PhysicalKey(
-      keyCode: kVK_ANSI_C, characters: "\u{03}", unmodified: "c", modifiers: .control)
-    static let enter = PhysicalKey(
-      keyCode: kVK_Return, characters: "\r", unmodified: "\r", modifiers: [])
-    static let optionB = PhysicalKey(
-      keyCode: kVK_ANSI_B, characters: "∫", unmodified: "b", modifiers: .option)
-    static let shiftBackspace = PhysicalKey(
-      keyCode: kVK_Delete, characters: "\u{7f}", unmodified: "\u{7f}", modifiers: .shift)
-    static let optionBackspace = PhysicalKey(
-      keyCode: kVK_Delete, characters: "\u{7f}", unmodified: "\u{7f}", modifiers: .option)
-
-    func event(_ kind: NSEvent.EventType, in window: NSWindow?) -> NSEvent {
-      NSEvent.keyEvent(
-        with: kind, location: .zero, modifierFlags: modifiers, timestamp: 0,
-        windowNumber: window?.windowNumber ?? 0, context: nil,
-        characters: characters, charactersIgnoringModifiers: unmodified, isARepeat: false,
-        keyCode: UInt16(keyCode))!
-    }
-  }
-
   /// キー 1 打（press + release）を物理経路へ流し、PTY に `bytes` が届くことを見る。
   private func assertTyped(
     _ key: PhysicalKey, arrives bytes: String, in dump: TtyDumpTab,
     file: StaticString = #filePath, line: UInt = #line
   ) {
-    dump.tab.surface.keyDown(with: key.event(.keyDown, in: dump.tab.surface.window))
-    dump.tab.surface.keyUp(with: key.event(.keyUp, in: dump.tab.surface.window))
+    key.type(into: dump.tab.surface)
     XCTAssertEqual(
       dump.next(file: file, line: line), TtyDumpTab.hex(bytes),
       "物理キー \(key.unmodified)（characters \(TtyDumpTab.hex(key.characters))）の受信バイトが違う",

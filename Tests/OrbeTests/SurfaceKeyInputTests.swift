@@ -23,34 +23,10 @@ final class SurfaceKeyInputTests: OrbeTestCase {
     try stageCuratedDefaults()
   }
 
-  /// 層1 を本物の `app/orbe-defaults.conf` へ向け、プロセス級の ghostty config を読み直す。
-  /// 後続のテストへ持ち越さないよう、終了時に外して読み直す。
-  private func stageCuratedDefaults() throws {
-    let root = try XCTUnwrap(BundledResources.root)
-    let staged = root.appendingPathComponent("orbe-defaults.conf")
-    try FileManager.default.copyItem(
-      at: repoRoot().appendingPathComponent("app/orbe-defaults.conf"), to: staged)
-    Ghostty.shared.reloadConfig()
-    addTeardownBlock {
-      try? FileManager.default.removeItem(at: staged)
-      Ghostty.shared.reloadConfig()
-    }
-  }
-
   /// このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
   private func repoRoot() -> URL {
     URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-  }
-
-  /// 実 `WindowController` を起こし、0 タブの workspace に dump のタブを開く。controller の寿命は
-  /// 返す `TtyDumpTab` が持つ——テストのローカル束縛が終わると window ごと畳まれ、タブと python が落ちる。
-  func dump(_ mode: TtyDumpTab.Mode) throws -> TtyDumpTab {
-    let fixture = WorkspacesFile(
-      version: WorkspacePersistence.version, activeWorkspace: 0,
-      workspaces: [WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [])])
-    try JSONEncoder().encode(fixture).write(to: workspacesFile())
-    return try TtyDumpTab(in: WindowController(), mode: mode)
   }
 
   /// `send_key spec` を送り、PTY に `bytes` が 1 打として届くことを見る。

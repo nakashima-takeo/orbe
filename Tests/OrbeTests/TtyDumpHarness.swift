@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Foundation
 import XCTest
 
@@ -96,5 +97,70 @@ final class TtyDumpTab {
       let trimmed = line.trimmingCharacters(in: .whitespaces)
       return trimmed.hasPrefix("GOT ") ? String(trimmed.dropFirst(4)) : nil
     }
+  }
+}
+
+/// 物理キー 1 打の NSEvent 材料（macOS が US レイアウトで実際に組む値）。
+struct PhysicalKey {
+  let keyCode: Int
+  let characters: String
+  let unmodified: String
+  let modifiers: NSEvent.ModifierFlags
+
+  static let a = PhysicalKey(keyCode: kVK_ANSI_A, characters: "a", unmodified: "a", modifiers: [])
+  static let shiftA = PhysicalKey(
+    keyCode: kVK_ANSI_A, characters: "A", unmodified: "A", modifiers: .shift)
+  static let ctrlC = PhysicalKey(
+    keyCode: kVK_ANSI_C, characters: "\u{03}", unmodified: "c", modifiers: .control)
+  static let enter = PhysicalKey(
+    keyCode: kVK_Return, characters: "\r", unmodified: "\r", modifiers: [])
+  static let optionB = PhysicalKey(
+    keyCode: kVK_ANSI_B, characters: "∫", unmodified: "b", modifiers: .option)
+  static let shiftBackspace = PhysicalKey(
+    keyCode: kVK_Delete, characters: "\u{7f}", unmodified: "\u{7f}", modifiers: .shift)
+  static let optionBackspace = PhysicalKey(
+    keyCode: kVK_Delete, characters: "\u{7f}", unmodified: "\u{7f}", modifiers: .option)
+
+  func event(_ kind: NSEvent.EventType, in window: NSWindow?) -> NSEvent {
+    NSEvent.keyEvent(
+      with: kind, location: .zero, modifierFlags: modifiers, timestamp: 0,
+      windowNumber: window?.windowNumber ?? 0, context: nil,
+      characters: characters, charactersIgnoringModifiers: unmodified, isARepeat: false,
+      keyCode: UInt16(keyCode))!
+  }
+
+  /// press と release を物理経路（`keyDown` / `keyUp`）へ流す。
+  func type(into surface: SurfaceView) {
+    surface.keyDown(with: event(.keyDown, in: surface.window))
+    surface.keyUp(with: event(.keyUp, in: surface.window))
+  }
+}
+
+extension OrbeTestCase {
+  /// 層1 を本物の `app/orbe-defaults.conf` へ向け、プロセス級の ghostty config を読み直す。
+  /// 後続のテストへ持ち越さないよう、終了時に外して読み直す。
+  func stageCuratedDefaults() throws {
+    let root = try XCTUnwrap(BundledResources.root)
+    let staged = root.appendingPathComponent("orbe-defaults.conf")
+    // このファイル: <repo>/Tests/OrbeTests/TtyDumpHarness.swift → 3 階層上が repo root。
+    let repoRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    try FileManager.default.copyItem(
+      at: repoRoot.appendingPathComponent("app/orbe-defaults.conf"), to: staged)
+    Ghostty.shared.reloadConfig()
+    addTeardownBlock {
+      try? FileManager.default.removeItem(at: staged)
+      Ghostty.shared.reloadConfig()
+    }
+  }
+
+  /// 実 `WindowController` を起こし、0 タブの workspace に dump のタブを開く。controller の寿命は
+  /// 返す `TtyDumpTab` が持つ——テストのローカル束縛が終わると window ごと畳まれ、タブと python が落ちる。
+  func dump(_ mode: TtyDumpTab.Mode) throws -> TtyDumpTab {
+    let fixture = WorkspacesFile(
+      version: WorkspacePersistence.version, activeWorkspace: 0,
+      workspaces: [WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [])])
+    try JSONEncoder().encode(fixture).write(to: workspacesFile())
+    return try TtyDumpTab(in: WindowController(), mode: mode)
   }
 }
