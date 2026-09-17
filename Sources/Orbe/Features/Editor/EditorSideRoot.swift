@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// レール＋サイドバー（エクスプローラー）の SwiftUI ルート。器の中の別 root なので環境は明示注入する。
-/// 幅は pane が決める（レール 52、サイドバーが出るときは ＋272）。
+/// 幅は pane が決める（レール 36 ＋ hairline、サイドバーが出るときは ＋幅 ＋ hairline）。レールは固定幅で、
+/// エクスプローラーは残りを埋める——サイドバーの幅の持ち主は pane で、ここは与えられた幅を埋めるだけ。
 struct EditorSideRoot: View {
   let shell: EditorShellModel
   let tree: FileTree
@@ -100,8 +101,7 @@ struct ExplorerView: View {
           }
         }
       }
-      .frame(width: Theme.Layout.editorSidebar, alignment: .top)
-      .frame(maxHeight: .infinity, alignment: .top)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
       Rectangle().fill(ink.hairline(Self.hairlineAlpha)).frame(width: Theme.Stroke.hairline)
     }
     .frame(maxHeight: .infinity)
@@ -115,6 +115,7 @@ struct ExplorerView: View {
         .font(Font.theme.editorPanelTitle)
         .tracking(Theme.Typography.trackingPanelTitle)
         .foregroundStyle(Color.theme.textMuted)
+        .lineLimit(1)
       Spacer(minLength: 0)
       HStack(spacing: Theme.Space.hair) {
         EditorIconButton(
