@@ -9,7 +9,8 @@ struct EditorHeaderRoot: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      FileTabsView(shell: shell).frame(height: Theme.Layout.editorFileTabs)
+      FileTabsView(shell: shell)
+        .frame(height: Theme.Layout.editorFileTabs + Theme.Stroke.hairline)
       if shell.activeName != nil {
         BreadcrumbView(shell: shell).frame(height: Theme.Layout.editorBreadcrumb)
       }
@@ -31,23 +32,24 @@ struct FileTabsView: View {
 
   var body: some View {
     let ink = EditorInk(scheme)
-    ScrollViewReader { proxy in
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 0) {
-          ForEach(shell.tabs) { tab in
-            FileTabView(tab: tab, shell: shell).id(tab.id)
+    VStack(spacing: 0) {
+      ScrollViewReader { proxy in
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: 0) {
+            ForEach(shell.tabs) { tab in
+              FileTabView(tab: tab, shell: shell).id(tab.id)
+            }
           }
         }
+        .onChange(of: shell.activeID) { _, id in
+          if let id { proxy.scrollTo(id) }
+        }
       }
-      .onChange(of: shell.activeID) { _, id in
-        if let id { proxy.scrollTo(id) }
-      }
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-    .background(ink.sunk(Self.sunkAlpha))
-    .overlay(alignment: .bottom) {
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .frame(height: Theme.Layout.editorFileTabs)
       Rectangle().fill(ink.hairline(Self.hairlineAlpha)).frame(height: Theme.Stroke.hairline)
     }
+    .background(ink.sunk(Self.sunkAlpha))
   }
 }
 

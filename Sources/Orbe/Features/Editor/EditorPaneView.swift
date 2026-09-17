@@ -202,17 +202,19 @@ final class EditorPaneView: NSView {
 
   // MARK: - 幾何
 
-  /// 左列の幅（レール、サイドバーが出るときは ＋272）。
+  /// 左列の幅（レール ＋ 右の hairline、サイドバーが出るときは ＋272 ＋ hairline）。
   private var sideWidth: CGFloat {
-    Theme.Layout.editorRail + (sidebarVisible ? Theme.Layout.editorSidebar : 0)
+    Theme.Layout.editorRail + Theme.Stroke.hairline
+      + (sidebarVisible ? Theme.Layout.editorSidebar + Theme.Stroke.hairline : 0)
   }
 
   /// 列幅が 720 以上のときだけサイドバーを出す。
   var sidebarVisible: Bool { bounds.width >= Theme.Layout.editorSidebarMin }
 
-  /// 列の頭の高さ（ファイルタブ行、文書があればパンくずも）。
+  /// 列の頭の高さ（ファイルタブ行 ＋ 下の hairline、文書があればパンくずも）。
   private var headerHeight: CGFloat {
-    Theme.Layout.editorFileTabs + (document != nil ? Theme.Layout.editorBreadcrumb : 0)
+    Theme.Layout.editorFileTabs + Theme.Stroke.hairline
+      + (document != nil ? Theme.Layout.editorBreadcrumb : 0)
   }
 
   /// 本体（テキスト面か空状態）の矩形。

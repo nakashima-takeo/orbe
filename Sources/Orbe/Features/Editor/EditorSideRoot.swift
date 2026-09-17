@@ -12,7 +12,7 @@ struct EditorSideRoot: View {
     HStack(spacing: 0) {
       RailView()
       if shell.sidebarVisible {
-        ExplorerView(shell: shell, tree: tree).frame(width: Theme.Layout.editorSidebar)
+        ExplorerView(shell: shell, tree: tree)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -39,18 +39,18 @@ struct RailView: View {
 
   var body: some View {
     let ink = EditorInk(scheme)
-    VStack(spacing: 0) {
-      ForEach(Item.allCases, id: \.self) { item in
-        railItem(item, selected: true, ink: ink)
+    HStack(spacing: 0) {
+      VStack(spacing: 0) {
+        ForEach(Item.allCases, id: \.self) { item in
+          railItem(item, selected: true, ink: ink)
+        }
+        Spacer(minLength: 0)
       }
-      Spacer(minLength: 0)
-    }
-    .frame(width: Theme.Layout.editorRail)
-    .frame(maxHeight: .infinity)
-    .background(ink.sunk(Self.sunkAlpha))
-    .overlay(alignment: .trailing) {
+      .frame(width: Theme.Layout.editorRail)
       Rectangle().fill(ink.hairline(Self.hairlineAlpha)).frame(width: Theme.Stroke.hairline)
     }
+    .frame(maxHeight: .infinity)
+    .background(ink.sunk(Self.sunkAlpha))
   }
 
   private func railItem(_ item: Item, selected: Bool, ink: EditorInk) -> some View {
@@ -79,26 +79,28 @@ struct ExplorerView: View {
 
   var body: some View {
     let ink = EditorInk(scheme)
-    VStack(spacing: 0) {
-      header
-      rootRow
-      ScrollView(.vertical) {
-        LazyVStack(spacing: 0) {
-          ForEach(tree.rows) { row in
-            if case .input(let isDirectory) = row.kind {
-              InlineInputRow(row: row, isDirectory: isDirectory, tree: tree, shell: shell)
-            } else {
-              TreeRowView(row: row, tree: tree, shell: shell)
+    HStack(spacing: 0) {
+      VStack(spacing: 0) {
+        header
+        rootRow
+        ScrollView(.vertical) {
+          LazyVStack(spacing: 0) {
+            ForEach(tree.rows) { row in
+              if case .input(let isDirectory) = row.kind {
+                InlineInputRow(row: row, isDirectory: isDirectory, tree: tree, shell: shell)
+              } else {
+                TreeRowView(row: row, tree: tree, shell: shell)
+              }
             }
           }
         }
       }
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    .background(ink.sunk(Self.sunkAlpha))
-    .overlay(alignment: .trailing) {
+      .frame(width: Theme.Layout.editorSidebar, alignment: .top)
+      .frame(maxHeight: .infinity, alignment: .top)
       Rectangle().fill(ink.hairline(Self.hairlineAlpha)).frame(width: Theme.Stroke.hairline)
     }
+    .frame(maxHeight: .infinity)
+    .background(ink.sunk(Self.sunkAlpha))
   }
 
   /// パネルヘッダー 32: 題と、右端の 3 ツール（新規ファイル／新規フォルダ／すべて折りたたむ）。

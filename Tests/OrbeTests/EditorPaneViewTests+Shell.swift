@@ -36,18 +36,19 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertTrue(pane.sidebarVisible)
     XCTAssertTrue(pane.shell.sidebarVisible, "写しにも出る")
     XCTAssertEqual(
-      pane.bodyRect, NSRect(x: 52 + 272, y: 34, width: 900 - 324, height: 400 - 2 - 34))
+      pane.bodyRect, NSRect(x: 53 + 273, y: 35, width: 900 - 326, height: 400 - 2 - 35),
+      "レール・サイドバーの右、タブ行の下の hairline はその外側")
 
     let document = try tab.editor.open(try file("a.swift", "let a = 1\n"))
     tab.view.layoutSubtreeIfNeeded()
-    XCTAssertEqual(pane.bodyRect.minY, 34 + 22, "文書があればパンくずの分だけ下がる")
+    XCTAssertEqual(pane.bodyRect.minY, 35 + 22, "文書があればパンくずの分だけ下がる")
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
 
     window.setContentSize(NSSize(width: 640 + FaceGeometry.spine, height: 400))
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertFalse(pane.sidebarVisible, "720 未満ではサイドバーを畳む")
     XCTAssertFalse(pane.shell.sidebarVisible)
-    XCTAssertEqual(pane.bodyRect.minX, 52, "レールだけ残る")
+    XCTAssertEqual(pane.bodyRect.minX, 53, "レールだけ残る")
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
   }
 
