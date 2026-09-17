@@ -213,7 +213,11 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     let detail: String
   }
 
-  /// provider を起こし、git レーンの着地（worktree 一覧）まで進める。
+  /// provider を起こし、git レーンの着地（列挙 → 行の組み直し）まで進める。
+  ///
+  /// **待つのは「行が組まれたこと」まで。** gh レーンの着地でも描き直しは走って `hasLoadedOnce` が
+  /// 立つので、旗だけを待つと列挙前（ブランチ 0 件・既定ブランチ未解決）の provider を掴んだまま
+  /// Enter を撃つ回が混ざり、着地を待つ経路が待たずに通る。
   func start() throws -> DispatchDataProvider {
     palette = DispatchPaletteModel()
     let provider = DispatchDataProvider(
@@ -221,7 +225,12 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
       // 作成先を一時ディレクトリの中へ落とす（後始末に乗せる）。
       worktreeTemplate: "{parent}/wt-{slug}")
     provider.load()
-    XCTAssertTrue(pump({ palette.hasLoadedOnce }), "前提: git レーンは着地している（初回の描画まで）")
+    XCTAssertTrue(
+      pump({
+        provider.defaultBranchName != nil
+          && palette.items.contains { $0.glyph == .worktree }
+          && palette.items.contains { $0.glyph == .localBranch }
+      }), "前提: git レーンは着地している（worktree 行と Local branch 行が組まれるまで）")
     return provider
   }
 
