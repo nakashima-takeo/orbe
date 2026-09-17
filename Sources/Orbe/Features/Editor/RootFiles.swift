@@ -68,6 +68,7 @@ final class RootFiles {
   private let runner: GitRunner
   /// nil = 管理外（または解決前）。
   private(set) var repo: GitRepo?
+  /// 最後に成功した取り直しの結果（git 管理下のみ。失敗では変わらない）。
   private(set) var status: GitStatus?
   private var observations: [Observation] = []
   /// 根の監視。git 管理下と分かっても張り替えない（張り替えの隙間に届いたイベントが落ちる）。
@@ -246,10 +247,12 @@ final class RootFiles {
     }
   }
 
+  /// git の一時失敗（`status == nil`）では前の status を保つ——「最後に成功した取り直しの結果」が status の
+  /// 意味で、失敗のたびにバッジが消えて戻らないため。
   private func finish(status: GitStatus?, changed: [String]) {
     // 連鎖の最中に関心が消えたパス（取り始めたときの集合で走り切る）を書き戻さない。
     dropUnwantedBaselines()
-    if status != self.status {
+    if let status, status != self.status {
       self.status = status
       notify { $0.rootFilesStatusDidChange(self) }
     }
