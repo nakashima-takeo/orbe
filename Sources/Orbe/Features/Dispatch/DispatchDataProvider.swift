@@ -18,6 +18,10 @@ final class DispatchDataProvider {
   /// 読み手は分冊（`DispatchDataProvider+CleanProbe.swift`）。
   let tabOccupancies: [TabOccupancy]
   private let runner: GitRunner
+  /// 提示時に発行した `fetch --prune` の着地。ベースから新しいブランチを切る作成は、この着地を
+  /// 待ってから撃つ（`createWorktree`）。1 回きりのイベントなので台帳ではなく `DispatchGroup` で持つ
+  /// ——未着地なら着地後に・着地済み／未発行なら即実行、が `notify` の定義そのもの。
+  private let remoteFetchLanding = DispatchGroup()
 
   private(set) var repo: GitRepo?
   private var mainWorktree: String?
@@ -132,8 +136,16 @@ final class DispatchDataProvider {
   /// `refs/remotes/*` の鮮度に依存するので、fetch 前の分類は「GitHub でマージした直後」に必ず
   /// 未取り込みと出る（この機能の主用途がそのまま外れる）。`[gone]` の出どころである
   /// `localBranches` も prune で初めて確定する。
+  ///
+  /// 新規ブランチを切る worktree 作成（`createWorktree`）もこの fetch の着地を待つので、`enter()` は
+  /// **発行の直前**に置く——発行と `enter()` の間に窓を空けると、そこで撃たれた作成が待たずに通る。
+  /// `leave()` は completion に 1 つ（成否どちらでも 1 回呼ばれる `GitRunner` 契約）で、group 自体を
+  /// 強く捕まえる——provider が先に消えても enter/leave の対は閉じる。
   private func loadRemotePrune(_ repo: GitRepo) {
+    let landing = remoteFetchLanding
+    landing.enter()
     repo.fetchPrune { [weak self] _ in
+      landing.leave()
       self?.loadGit(repo, classifying: true)
     }
   }
@@ -286,6 +298,11 @@ final class DispatchDataProvider {
   /// 解決済みパスへ worktree を作る。作成先が作業ツリー内に落ちるときだけ、**作成できた後で**共有
   /// exclude へ除外を冪等に入れる（プリセット由来かカスタム由来かを問わず、解決済みパスだけで判定する）。
   /// 除外の成否は作成に影響しない。
+  ///
+  /// **新しいブランチを切るなら、そのベースは fetch 後の状態であるべき**——提示時の `fetch --prune` が
+  /// まだ走っているなら着地を待ってから撃つ。判定を呼び出し側ではなくここに置くのは、作成経路が
+  /// 増えたときの包み忘れを構造で塞ぐため。既存ブランチを checkout するだけの経路はベースを持たない
+  /// ので待たない。
   private func createWorktree(
     at path: String, base: String, newBranch: GitNewBranch?,
     completion: @escaping (DirectoryResolution) -> Void
@@ -302,18 +319,27 @@ final class DispatchDataProvider {
       parentIsNew: !FileManager.default.fileExists(
         atPath: (path as NSString).deletingLastPathComponent))
     let localization = self.localization
-    repo.addWorktree(path: path, base: base, newBranch: newBranch) { failure in
-      if let failure {
-        switch failure {
-        case .timedOut: completion(.failed(localization.string(.gitTimedOut)))
-        case .reason(let reason): completion(.failed(reason))
+    let add = {
+      repo.addWorktree(path: path, base: base, newBranch: newBranch) { failure in
+        if let failure {
+          switch failure {
+          case .timedOut: completion(.failed(localization.string(.gitTimedOut)))
+          case .reason(let reason): completion(.failed(reason))
+          }
+          return
         }
-        return
+        // 書くのは作成できたときだけ（失敗した作成の除外を残さない）。この時点では対象が実在するので
+        // `check-ignore` の「既にユーザーが塞いでいるか」判定も正しく効く。
+        repo.applyWorktreeExclude(entry, worktreeRoot: root) { completion(.ready(path)) }
       }
-      // 書くのは作成できたときだけ（失敗した作成の除外を残さない）。この時点では対象が実在するので
-      // `check-ignore` の「既にユーザーが塞いでいるか」判定も正しく効く。
-      repo.applyWorktreeExclude(entry, worktreeRoot: root) { completion(.ready(path)) }
     }
+    guard newBranch != nil else {
+      add()
+      return
+    }
+    // 着地の成否は問わない——fetch が落ちたなら手元の `refs/remotes/origin/*` が最良で、dispatch の
+    // 他経路（分類の引き直し）と同じ「失敗は据え置き」に揃える。
+    remoteFetchLanding.notify(queue: .main, execute: add)
   }
 
   /// issue/PR／PR に紐づく worktree・branch をブラウザで開く（fire-and-forget）。
