@@ -20,7 +20,7 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
   private var origin: String!
 
   /// `main` / `feat` / `topic` を持つ origin を立て、手元の clone の remote 追跡 ref を**わざと古いまま**
-  /// にする。`mine` は手元にだけあるローカルブランチ（ベースを持たない checkout の題材）。
+  /// にする。`mine` は手元にだけあるローカルブランチ（fetch で動く ref をベースに取らない題材）。
   override func setUpWithError() throws {
     dir = FileManager.default.temporaryDirectory
       .appendingPathComponent("orbe-wtbase-\(UUID().uuidString)")
@@ -94,8 +94,8 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     XCTAssertEqual(head(of: path), originTip("feat"), "fetch 後の origin/feat が base")
   }
 
-  /// **既存ブランチの checkout はベースを持たないので待たない。** ここが待つと、fetch が長引く
-  /// リポジトリで「手元のブランチを開くだけ」が分単位で止まる。
+  /// **既存ブランチの checkout は fetch で動く ref をベースに取らないので待たない。** ここが待つと、
+  /// fetch が長引くリポジトリで「手元のブランチを開くだけ」が分単位で止まる。
   ///
   /// 待たなかった証拠は、作成が返った時点で手元の `origin/main` がまだ古いこと——fetch が着地して
   /// いれば ref は新しい tip へ動いている。**この否定の assert を測る窓だけは壁時計で区切らない**

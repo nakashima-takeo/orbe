@@ -101,8 +101,8 @@ extension DispatchDataProvider {
   ///
   /// **新しいブランチを切るなら、そのベースは fetch 後の状態であるべき**——提示時の `fetch --prune` が
   /// まだ走っているなら着地を待ってから撃つ。判定を呼び出し側ではなくここに置くのは、作成経路が
-  /// 増えたときの包み忘れを構造で塞ぐため。既存ブランチを checkout するだけの経路はベースを持たない
-  /// ので待たない。
+  /// 増えたときの包み忘れを構造で塞ぐため。既存ブランチを checkout するだけの経路は fetch で動く ref を
+  /// ベースに取らないので待たない。
   private func createWorktree(
     at path: String, base: WorktreeBase, newBranch: GitNewBranch?,
     completion: @escaping (DirectoryResolution) -> Void
