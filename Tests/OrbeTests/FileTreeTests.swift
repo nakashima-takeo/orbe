@@ -216,7 +216,7 @@ final class FileTreeTests: OrbeTestCase {
     XCTAssertEqual(tree.rows.firstIndex(where: \.isInput), 2, "docs・src の次")
 
     XCTAssertFalse(commit(tree, "main.swift"), "既に在れば入力に留まる")
-    XCTAssertNotNil(tree.newEntry)
+    XCTAssertEqual(tree.newEntry?.name, "main.swift", "弾かれても打ちかけは残る")
     XCTAssertFalse(commit(tree, " "), "空は無効")
     XCTAssertFalse(commit(tree, "nested/x.swift"), "`/` 入りは無効（中間ディレクトリは作らない）")
     XCTAssertFalse(FileManager.default.fileExists(atPath: repo.root + "/src/nested"))

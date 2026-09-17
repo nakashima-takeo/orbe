@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 面の骨——骨の操作が pane に結線されてセッション・ツリー・焦点へ届き、行内入力は出すたびに作り直されて行が消えれば
+/// 面の骨——骨の操作が pane に結線されてセッション・ツリー・焦点へ届き、行内入力は出すたびに作り直され、入力の状態が落ちれば
 /// 終わり、骨の host はクリックを自分で受け、ツリーは面が窓に付いて隠れていない間だけ根のサービスを握り、cd で根が
 /// 変わればツリーを作り直す（サイドバーの幅は `EditorPaneViewSidebarTests`）。
 ///
@@ -12,14 +12,15 @@ import XCTest
 @MainActor
 final class EditorPaneViewShellTests: OrbeTestCase {
   /// 行内入力を続けて出すと前の入力は消えて新しい入力だけが出る。入力の終わりは入力の状態が落ちることで、
-  /// Esc・焦点の移動だけでなく、すべて折りたたむ・根を畳む・作成先を畳む・レールで閉じる・cd でも落ち、焦点がまだ
-  /// 入力欄か窓に居れば面の行き先へ移る。
+  /// Esc・焦点の移動だけでなく、すべて折りたたむ・根を畳む・作成先を畳む・レールで閉じる・cd でも落ち、入力欄に
+  /// 居た焦点は面の行き先（文書のテキスト面）へ移る。
   func testInlineInputIsRecreatedPerRequestAndEndsWhenItsStateDrops() throws {
     let dir = try XCTUnwrap(TestIsolation.caseDir)
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
+    let document = try tab.editor.open(try caseFile("a.txt", "a"))
 
     pane.shell.createFile()
     XCTAssertTrue(window.firstResponder === pane, "入力を出す前に面自身が焦点を取る")
@@ -37,11 +38,14 @@ final class EditorPaneViewShellTests: OrbeTestCase {
       if pane.tree.newEntry == nil { pane.shell.createFile() }
       let before = pane.tree
       let generation = try XCTUnwrap(before.newEntry).generation
+      _ = try inputField(pane, in: window)  // 前提: 入力欄が焦点を持っている
       try transition()
       pumpMain(
         until: { before.newEntry?.generation != generation }, timeout: 5,
         "\(how): 入力の状態が落ちる")
-      pumpMain(until: { window.firstResponder === pane }, timeout: 5, "\(how): 焦点は面の行き先へ")
+      pumpMain(
+        until: { window.firstResponder === document.surface.responder }, timeout: 5,
+        "\(how): 入力欄に居た焦点は面の行き先へ")
     }
     try endsWhenTheStateDrops("レールで閉じる") { pane.shell.toggleSidebar() }
     pane.shell.toggleSidebar()

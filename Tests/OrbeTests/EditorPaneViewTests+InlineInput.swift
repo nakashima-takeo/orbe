@@ -12,14 +12,6 @@ import XCTest
 /// 生まれて見えない）。Esc の後に焦点が窓へ落ちて打鍵と ⌘S が死ぬ。端末へ抜けたのに焦点がエディターへ引き戻される。
 @MainActor
 final class EditorPaneViewInlineInputTests: OrbeTestCase {
-  /// 入力欄（field editor）が焦点を取るまで待って返す。
-  private func inputField(_ pane: EditorPaneView, in window: NSWindow) throws -> NSTextView {
-    pumpMain(
-      until: { (window.firstResponder as? NSView)?.isDescendant(of: pane.sideHost) == true },
-      "入力欄が焦点を取る")
-    return try XCTUnwrap(window.firstResponder as? NSTextView)
-  }
-
   private func escape(in window: NSWindow) -> NSEvent {
     NSEvent.keyEvent(
       with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,

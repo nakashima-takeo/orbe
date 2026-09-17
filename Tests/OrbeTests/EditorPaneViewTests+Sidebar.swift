@@ -79,7 +79,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     XCTAssertEqual(handle.frame.minX, 37 + 162 - 2, "当たりは描かれている境に居る")
     XCTAssertFalse(handle.isHidden)
     handle.cursorUpdate(with: .mouse(.mouseMoved, at: panePoint(pane, 37 + 162), in: window))
-    XCTAssertTrue(NSCursor.current === NSCursor.resizeLeftRight, "境に合わせるとカーソルが左右矢印")
+    XCTAssertTrue(NSCursor.current === NSCursor.resizeLeftRight, "境の当たりは左右矢印のカーソルを出す")
     handle.mouseDown(with: .mouse(.leftMouseDown, at: panePoint(pane, 37 + 162), in: window))
     handle.mouseDragged(
       with: .mouse(.leftMouseDragged, at: panePoint(pane, 37 + 162 + 40), in: window))
@@ -248,18 +248,18 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
   /// pane の矩形が動いても中身が固定幅のままなら、右の線が古い位置に残り、新しい境には地しか無い。
   private func assertSidebarContentFills(_ pane: EditorPaneView, width: CGFloat) throws {
     let edge = 37 + width
-    let probe = try probe(pane) { p in
+    let drawn = try probe(pane) { p in
       let ground = try p.rgb(37 + 60)
       return try PaneProbe.same(p.rgb(edge - 2), ground)
         && !PaneProbe.same(p.rgb(edge + 0.5), ground)
     }
-    let ground = try probe.rgb(37 + 60)
-    XCTAssertTrue(PaneProbe.same(try probe.rgb(edge - 2), ground), "境の手前まで地が続く")
-    XCTAssertFalse(PaneProbe.same(try probe.rgb(edge + 0.5), ground), "境に hairline がある")
+    let ground = try drawn.rgb(37 + 60)
+    XCTAssertTrue(PaneProbe.same(try drawn.rgb(edge - 2), ground), "境の手前まで地が続く")
+    XCTAssertFalse(PaneProbe.same(try drawn.rgb(edge + 0.5), ground), "境に hairline がある")
     if width > 240 {
       XCTAssertTrue(
-        PaneProbe.same(try probe.rgb(37 + 240 - 2), ground), "既定の幅 240 の位置には線が残らない")
-      XCTAssertTrue(PaneProbe.same(try probe.rgb(37 + 240 + 0.5), ground))
+        PaneProbe.same(try drawn.rgb(37 + 240 - 2), ground), "既定の幅 240 の位置には線が残らない")
+      XCTAssertTrue(PaneProbe.same(try drawn.rgb(37 + 240 + 0.5), ground))
     }
   }
 
@@ -267,12 +267,12 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
   private func assertSidebarContentIsGone(
     _ pane: EditorPaneView, railGround: [Int], explorerGround: [Int]
   ) throws {
-    let probe = try probe(pane) { p in
+    let drawn = try probe(pane) { p in
       try PaneProbe.same(p.rgb(18), railGround) && !PaneProbe.same(p.rgb(50), explorerGround)
     }
-    XCTAssertTrue(PaneProbe.same(try probe.rgb(18), railGround), "レールの地は残る")
-    let body = try probe.rgb(50)
+    XCTAssertTrue(PaneProbe.same(try drawn.rgb(18), railGround), "レールの地は残る")
+    let body = try drawn.rgb(50)
     XCTAssertFalse(PaneProbe.same(body, explorerGround), "37 より右にエクスプローラーの地は無い")
-    XCTAssertTrue(PaneProbe.same(try probe.rgb(100), body), "本体の地が続く（はみ出しが無い）")
+    XCTAssertTrue(PaneProbe.same(try drawn.rgb(100), body), "本体の地が続く（はみ出しが無い）")
   }
 }

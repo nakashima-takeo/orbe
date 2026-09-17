@@ -30,15 +30,27 @@ extension OrbeTestCase {
   }
 
   /// 面を描いて測る。`ready` が成立するまで描き直す（SwiftUI の描画コミットに固定で眠らない）。成立しなければ
-  /// 最後の測定を返し、呼び手の assert が落ちる。
-  func probe(_ pane: EditorPaneView, until ready: (PaneProbe) throws -> Bool) throws -> PaneProbe {
+  /// 最後の測定を返し、この場で落ちる。
+  func probe(
+    _ pane: EditorPaneView, file: StaticString = #filePath, line: UInt = #line,
+    until ready: (PaneProbe) throws -> Bool
+  ) throws -> PaneProbe {
     let deadline = Date().addingTimeInterval(5)
     var probe = try PaneProbe(pane)
     while try !ready(probe), Date() < deadline {
       RunLoop.main.run(until: Date().addingTimeInterval(0.02))
       probe = try PaneProbe(pane)
     }
+    XCTAssertTrue(try ready(probe), "5 秒以内に成立しない", file: file, line: line)
     return probe
+  }
+
+  /// 行内入力の入力欄（field editor）が焦点を取るまで待って返す。
+  func inputField(_ pane: EditorPaneView, in window: NSWindow) throws -> NSTextView {
+    pumpMain(
+      until: { (window.firstResponder as? NSView)?.isDescendant(of: pane.sideHost) == true },
+      "入力欄が焦点を取る")
+    return try XCTUnwrap(window.firstResponder as? NSTextView)
   }
 
   /// 配下の最初の NSScrollView（SwiftUI の ScrollView の裏）。

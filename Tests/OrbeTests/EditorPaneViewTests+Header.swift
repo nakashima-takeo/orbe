@@ -20,9 +20,9 @@ final class EditorPaneViewHeaderTests: OrbeTestCase {
     XCTAssertEqual(pane.headerHeight, 29)
     pumpMain(until: { pane.headerHost.fittingSize.height == 29 }, "文書が無ければタブ行の帯だけ")
     let x = pane.bodyRect.midX
-    let probe = try probe(pane) { p in !PaneProbe.same(try p.rgb(x, y: 14), try p.rgb(x, y: 200)) }
+    let drawn = try probe(pane) { p in !PaneProbe.same(try p.rgb(x, y: 14), try p.rgb(x, y: 200)) }
     XCTAssertFalse(
-      PaneProbe.same(try probe.rgb(x, y: 14), try probe.rgb(x, y: 200)),
+      PaneProbe.same(try drawn.rgb(x, y: 14), try drawn.rgb(x, y: 200)),
       "文書が無くてもファイルタブ行の帯（沈み面）は本体の地と違う色で残る")
 
     _ = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"))
