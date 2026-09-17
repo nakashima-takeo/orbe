@@ -112,7 +112,7 @@ final class Ghostty {
       guard let mime = content.mime,
         let type = UTType(mimeType: String(cString: mime)),
         type.conforms(to: .plainText),
-        !type.conforms(to: .utf16PlainText), !type.conforms(to: .utf16ExternalPlainText),
+        !type.conforms(to: .utf16PlainText),
         let data = content.data,
         let text = String(
           bytes: UnsafeRawBufferPointer(start: data, count: content.len), encoding: .utf8)
