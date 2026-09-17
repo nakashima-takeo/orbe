@@ -25,7 +25,7 @@ ghostty のターミナル描画ライブラリ。MIT ライセンスで、Orbe 
 surface の出力ストリーム由来のイベントは `action_cb`（`ghostty_action_tag_e`, `include/ghostty.h`）経由でのみ host に届く。何が出て何が出ないかの境界は固定されている。
 
 - **host に露出する OSC 由来 action**: `SET_TITLE`/`SET_TAB_TITLE`（OSC 0/2）, `PWD`（OSC 7）, `DESKTOP_NOTIFICATION`（OSC 9 / 777）, `PROGRESS_REPORT`（OSC 9;4）, `MOUSE_OVER_LINK`（OSC 8）, `COLOR_CHANGE`（OSC 4/10/11）。
-- **OSC 52 clipboard と Kitty clipboard（OSC 5522）は action_cb を経ず、専用のクリップボードコールバックで host に渡る**（`read_clipboard_cb`／`confirm_read_clipboard_cb`／`write_clipboard_cb`、`include/ghostty.h`）。拒否は config（`clipboard-read`／`clipboard-write`）と `ghostty_surface_deny_clipboard_request` で表す。Orbe は端末アプリ発の読み取りを config で断っている（→ [core](core.md)）。
+- **OSC 52 clipboard と Kitty clipboard（OSC 5522）は action_cb を経ず、専用のクリップボードコールバックで host に渡る**（`read_clipboard_cb`／`confirm_read_clipboard_cb`／`write_clipboard_cb`、`include/ghostty.h`）。拒否は config（`clipboard-read`／`clipboard-write`）と `ghostty_surface_deny_clipboard_request` で表す。`clipboard-read = deny` は Kitty の paste event（mode 5522）に伴うパスワード付き read も、パスワードによる許可を見る前に拒否する。Orbe は端末アプリ発の読み取りを config で断っている（→ [core](core.md)）。
 - **内部完結で host に来ない**: OSC 66/21 kitty・OSC 133 semantic prompt など。
 - **独自/未知の OSC 番号は受け取れない**: OSC パーサ（`src/terminal/osc.zig`）はホワイトリスト方式で、未知番号は `.invalid` に遷移して全バイトを破棄する。
 - **APC/DCS も host 非露出**: `src/terminal/stream.zig` で parse はされるが、apprt 層で C API action に変換されない。
