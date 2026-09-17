@@ -26,6 +26,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
       - name: GhosttyKit cache key
         id: ghostty
         run: echo "sha=$(git ls-tree --object-only HEAD vendor/ghostty)" >> "$GITHUB_OUTPUT"
@@ -39,7 +40,6 @@ jobs:
         if: steps.ghosttykit.outputs.cache-hit != 'true'
         run: |
           git submodule update --init --depth 1 vendor/ghostty
-          brew install zig
           sudo xcodebuild -downloadComponent MetalToolchain
           cd vendor/ghostty
           zig build -Demit-xcframework=true -Dxcframework-target=native -Demit-macos-app=false

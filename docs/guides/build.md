@@ -14,7 +14,7 @@ Orbe は libghostty を**自前ビルド**して使う（クリーン・MIT・�
 |---|---|---|
 | **フル Xcode（26 系以上）** | **必須** | App Store か Apple Developer から。Swift ツールチェーンと Icon Composer 形式のアイコンを扱う `actool` を使う。CLT だけでは不可。 |
 | Metal Toolchain | 必須 | `xcodebuild -downloadComponent MetalToolchain` で追加する（[CI](../../.github/workflows/ci.yml)でも導入）。 |
-| Zig 0.16 | 必須 | `brew install zig`。ghostty が `minimum_zig_version = 0.16.0` を要求する。`build-app.sh` は PATH の `zig` を使う（別経路で入れた場合は `ZIG=/path/to/zig` で上書き）。 |
+| Zig 0.16.0 | 必須 | [`mise.toml`](../../mise.toml) で版を固定。導入は `mise install`（swiftlint と同じ台帳）。ghostty の `build.zig` は zig の major.minor の完全一致を要求するので、版は勝手に上げられない（ghostty の pin と対で上げる）。`build-app.sh` は `mise which zig` で実体を解決し、PATH の `zig` は見ない。 |
 
 Xcode を導入して初回セットアップを済ませたら、使用中の開発ツールを確認する。
 
@@ -29,10 +29,10 @@ xcodebuild -version
 sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
 ```
 
-次に Zig と Metal Toolchain を導入し、Metal コンパイラを確認する。
+次に Zig（と SwiftLint）を mise で、Metal Toolchain を Xcode で導入し、Metal コンパイラを確認する。
 
 ```bash
-brew install zig
+mise install
 xcodebuild -downloadComponent MetalToolchain
 xcrun -sdk macosx metal --version
 ```

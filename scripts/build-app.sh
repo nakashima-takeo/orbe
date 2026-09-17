@@ -41,11 +41,13 @@ if [ ! -f "$ROOT/vendor/ghostty/build.zig" ]; then
   trap 'rm -rf "$ROOT/vendor/ghostty"; mkdir "$ROOT/vendor/ghostty"' EXIT INT TERM
 fi
 
-ZIG="${ZIG:-zig}"
-if ! command -v "$ZIG" >/dev/null 2>&1; then
-  echo "エラー: zig が見つからない ($ZIG)。'brew install zig' 後、必要なら ZIG=/path/to/zig を指定せよ" >&2
+# zig は mise.toml が固定する版だけを使う（ghostty の build.zig が major.minor の一致を要求する）。
+# ROOT で解決するのは、worktree では vendor/ghostty が main worktree への symlink で、そこで mise を
+# 評価すると物理 cwd 側の mise.toml が読まれるため。
+ZIG="$(cd "$ROOT" && mise which zig)" || {
+  echo "エラー: zig が未導入。'mise install' を実行せよ" >&2
   exit 1
-fi
+}
 
 echo "==> エンジン(libghostty)を ReleaseFast でビルド"
 echo "    初回・submodule 更新時は数分かかる（以降は Zig キャッシュで一瞬）"
