@@ -11,7 +11,7 @@ import XCTest
 /// シェル終了のたびに確認が出てプロセスの後始末が止まる。
 @MainActor
 final class UnsavedGateTests: OrbeTestCase {
-  private var repo: TempGitRepo!
+  var repo: TempGitRepo!
 
   override func setUpWithError() throws {
     repo = try TempGitRepo()
@@ -25,7 +25,7 @@ final class UnsavedGateTests: OrbeTestCase {
     EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
   }
 
-  private func edit(_ document: EditorDocument, _ text: String = "x") {
+  func edit(_ document: EditorDocument, _ text: String = "x") {
     document.surface.responder.perform(Selector(("insertText:")), with: text)
   }
 
@@ -75,7 +75,7 @@ final class UnsavedGateTests: OrbeTestCase {
 
   // MARK: - 入口: タブを閉じる
 
-  private func restore(_ tabs: [TabState]) throws -> WindowController {
+  func restore(_ tabs: [TabState]) throws -> WindowController {
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [WorkspaceState(name: "main", rootPath: repo.root, activeTab: 0, tabs: tabs)])
