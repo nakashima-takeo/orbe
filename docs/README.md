@@ -27,6 +27,7 @@ Orbe は、作業場所の準備・エージェントの起動・状態確認を
 - [libghostty](spec/terminal/libghostty.md) — 埋め込むエンジンの外部契約（変えられない境界）
 - [ime](spec/terminal/ime.md) — 日本語 IME 入力
 - [search](spec/terminal/search.md) — スクロールバック検索（⌘F）
+- [links](spec/terminal/links.md) — リンクを開く（正規表現リンクはそのまま、OSC 8 は 3 段判定）
 
 **chrome/ — GUI の枠**
 

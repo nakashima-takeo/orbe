@@ -1,7 +1,7 @@
 ---
 title: ビルド手順
 description: libghostty の自前ビルドから Orbe.app の生成・起動まで。前提ツール・チャネル・lint / format
-updated: 2026-09-07
+updated: 2026-09-18
 ---
 
 # ビルド手順
@@ -12,9 +12,10 @@ Orbe は libghostty を**自前ビルド**して使う（クリーン・MIT・�
 
 | ツール | 要否 | 入手 |
 |---|---|---|
-| **フル Xcode（26 系）** | **必須** | App Store か Apple Developer から。Swift ツールチェーンと Icon Composer 形式のアイコンを扱う `actool` を使う。CLT だけでは不可。 |
+| **フル Xcode（26 系以上）** | **必須** | App Store か Apple Developer から。Swift ツールチェーンと Icon Composer 形式のアイコンを扱う `actool` を使う。CLT だけでは不可。 |
 | Metal Toolchain | 必須 | `xcodebuild -downloadComponent MetalToolchain` で追加する（[CI](../../.github/workflows/ci.yml)でも導入）。 |
-| Zig 0.15.2 | 必須 | `brew install zig@0.15`。ghostty が `minimum_zig_version = 0.15.2` を要求し、brew の素の `zig`(0.16) では不可。**`zig@0.15` は keg-only なので `zig` は PATH に入らない**が、`build-app.sh` が `brew --prefix zig@0.15` から自動解決する（別経路で入れた場合は `ZIG=/path/to/zig` で上書き）。 |
+| [mise](https://mise.jdx.dev/) | 必須 | `brew install mise`。[`mise.toml`](../../mise.toml) が固定する Zig・SwiftLint の版を導入・解決する台帳。`build-app.sh` は mise が無いと導入案内を出して止まる。 |
+| Zig 0.16.0 | 必須 | [`mise.toml`](../../mise.toml) で版を固定。導入は `mise install`（swiftlint と同じ台帳）。ghostty の `build.zig` は zig の major.minor の完全一致を要求するので、版は勝手に上げられない（ghostty の pin と対で上げる）。`build-app.sh` は `mise which zig` で実体を解決し、PATH の `zig` は見ない。 |
 
 Xcode を導入して初回セットアップを済ませたら、使用中の開発ツールを確認する。
 
@@ -29,10 +30,11 @@ xcodebuild -version
 sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
 ```
 
-次に Zig と Metal Toolchain を導入し、Metal コンパイラを確認する。
+次に mise を入れ、Zig（と SwiftLint）を mise で、Metal Toolchain を Xcode で導入し、Metal コンパイラを確認する。
 
 ```bash
-brew install zig@0.15
+brew install mise
+mise install
 xcodebuild -downloadComponent MetalToolchain
 xcrun -sdk macosx metal --version
 ```
@@ -50,9 +52,10 @@ xcrun -sdk macosx metal --version
 
 ## バージョン pin
 
-- ghostty: `vendor/ghostty` submodule を `3ba5e9c24390412fb1dbb08c51008f1efdcff97b` に pin。
+- ghostty: `vendor/ghostty` submodule を `f9a3f24a56bf05f70894e1a084809d4fffadf420` に pin。
   API の正はこのコミットの `vendor/ghostty/include/ghostty.h`（外部契約は [spec/terminal/libghostty.md](../spec/terminal/libghostty.md)）。
 - libghostty は alpha・API 非安定のため、**main 追従ではなく固定 SHA で pin**。アップグレード時はヘッダの型差分を確認。
+- `build-app.sh` は焼く前に `vendor/ghostty` の checkout が pin と一致するか確かめ、未取得かずれていれば関係する SHA（checkout の HEAD・pin）と復旧コマンドを示して止める。共有経路（下の worktree の注意）へ進むのは、linked worktree で submodule が未取得のときだけ。pull・rebase で pin が動いたら `git submodule update --init vendor/ghostty`。
 
 ## ビルド手順（Xcode 導入後）
 
@@ -67,7 +70,7 @@ open build/Orbe.app
 
 `build/Orbe.app` と `/Applications/Orbe Dev.app` は同じ bundle id なので、state も control.sock も共有する。`open` は既存インスタンスを前面化するだけでソケットの持ち主は入れ替わらないため、常用の Orbe Dev を起動したまま新ビルドを起こしても古い方が応答し続ける（症状は「新ビルドにしたのに直っていない」という遠い形で出る）。入れ替えるには先に常用を quit するか、本物に触らず確かめるなら `ORBE_STATE_DIR` で隔離する（`scripts/sandbox-run.sh start`。手順は `.claude/skills/sandbox-run`）。
 
-`build-app.sh` がエンジン(libghostty)を ReleaseFast で焼き（`zig build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast`）、xcframework と share リソースを生成してから Orbe.app をバンドルする。初回・submodule 更新時は数分かかるが、以降は Zig のキャッシュで実質一瞬。
+`build-app.sh` がエンジン(libghostty)を ReleaseFast で焼き（`zig build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast -Demit-macos-app=false`）、xcframework と share リソースを生成してから Orbe.app をバンドルする。`-Demit-macos-app=false` は上流 Ghostty.app（xcodebuild）を組まないための指定で、Orbe が使うのは xcframework と share リソースだけ。初回・submodule 更新時は数分かかるが、以降は Zig のキャッシュで実質一瞬。
 
 ### ビルドチャネル（ORBE_CHANNEL）
 
@@ -87,7 +90,7 @@ open build/Orbe.app
 - release をオプトインにしてあるのは、素の `swift build`（`scripts/orbe-mcp.sh` 等）がフラグ差分で
   焼き直しても dev のままになるようにするため。逆にすると、そこで本番 identity へ静かに落ちる。
 
-> **worktree での注意**: `git worktree add` で切った作業場では submodule は未取得のまま。`git submodule update` は不要（main のオブジェクトを共有せずフル clone を試み重い）。`build-app.sh` が `vendor/ghostty/build.zig` 不在を検知し、main worktree の `vendor/ghostty` へ symlink を張って自動で用意する。**worktree では `vendor/ghostty` を手動で触らない**（submodule 取得も xcframework コピーも不要）。
+> **worktree での注意**: `git worktree add` で切った作業場では submodule は未取得のまま。`build-app.sh` は、main worktree の `vendor/ghostty` の checkout がこの worktree の pin と一致するときだけ、そこへ symlink を張って共有する（ビルド後は空ディレクトリへ戻す）。ブランチが pin を進めている・main の submodule が pin とずれている・main に submodule の実体が無いときは止まり、案内のコマンド（main の module store を `--reference` にした `git submodule update`）でこの worktree 内に実 checkout する。git オブジェクトは main と共有されるが、zig の初回ビルド（数分）と `.zig-cache`（約 1GB）は worktree ごとに乗り、`git worktree remove` には `--force` が要る。ビルドが SIGKILL 等で中断して symlink が残っても、次の `build-app.sh` が冒頭で空ディレクトリへ戻すので、復旧コマンドより先に `build-app.sh` を再実行する。
 
 > 静的ライブラリのため Package.swift で Metal/CoreText/AppKit 等のシステムフレームワークを明示リンクしている。
 

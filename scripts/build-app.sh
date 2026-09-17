@@ -22,44 +22,101 @@ if [ "$CHANNEL" != "release" ]; then
   PLUGIN_NAME="${SRC_PLUGIN_NAME}-dev"
 fi
 
-# --- worktree ガード: submodule 未取得なら main worktree の vendor/ghostty へ symlink ---
-# git worktree add は submodule を checkout せず、worktree での submodule update は main の
-# オブジェクトを共有せずフル clone を試みて重い。エンジンは pin SHA 不変ゆえ、main worktree の
-# vendor/ghostty（zig-out 含む）を symlink で共有すればビルドが通る（zig は cache hit で実質 read-only）。
-if [ ! -f "$ROOT/vendor/ghostty/build.zig" ]; then
+# --- エンジン実体の解決: 焼く vendor/ghostty の HEAD が、この checkout の pin（index の gitlink）と一致することを確かめる ---
+# 実体の有無と HEAD は `git submodule status` の prefix（' ' 一致 / '+' 不一致 / '-' 未取得）と SHA で読む。
+# '-' の SHA は pin であって HEAD ではない。ずれていれば zig を起こす前に、原因別の復旧コマンドを示して止める。
+PIN="$(git -C "$ROOT" rev-parse :vendor/ghostty 2>/dev/null)" || {
+  echo "エラー: vendor/ghostty の pin を解決できない。git checkout で submodule を持つ状態からビルドせよ" >&2
+  exit 1
+}
+# 前回のビルドが trap を通らず残した symlink を先に戻す（symlink 上では git submodule status も update も失敗する）。
+if [ -L "$ROOT/vendor/ghostty" ]; then
+  rm "$ROOT/vendor/ghostty"
+  mkdir "$ROOT/vendor/ghostty"
+fi
+ST="$(git -C "$ROOT" submodule status -- vendor/ghostty)"
+GIT_DIR_ABS="$(git -C "$ROOT" rev-parse --path-format=absolute --git-dir)"
+COMMON_DIR_ABS="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)"
+if [ "${ST:0:1}" = "-" ] && [ "$GIT_DIR_ABS" != "$COMMON_DIR_ABS" ]; then
+  # 未取得の linked worktree: main worktree の実 checkout が同じ pin なら symlink で共有する
+  # （zig-out・.zig-cache も共有され、zig は cache hit で実質 read-only）。
   MAIN_WT="$(git -C "$ROOT" worktree list --porcelain | sed -n 's/^worktree //p' | head -1)"
-  if [ -z "$MAIN_WT" ] || [ ! -f "$MAIN_WT/vendor/ghostty/build.zig" ]; then
-    echo "エラー: main worktree の vendor/ghostty を解決できない ($MAIN_WT)。main で submodule を取得済みか確認せよ" >&2
+  MAIN_ST="$(git -C "$MAIN_WT" submodule status -- vendor/ghostty 2>/dev/null)" || MAIN_ST=""
+  MAIN_PIN="$(git -C "$MAIN_WT" rev-parse :vendor/ghostty)"
+  # worktree 内に実 checkout するコマンド。reference 先は main の checkout ではなく共通 git dir の
+  # module store（main が deinit 済みでも残り、git オブジェクトを alternates で借りられる）。
+  STORE="$COMMON_DIR_ABS/modules/vendor/ghostty"
+  if [ -d "$STORE/objects" ]; then
+    WT_CHECKOUT="git -C '$ROOT' submodule update --init --reference '$STORE' vendor/ghostty"
+  else
+    WT_CHECKOUT="git -C '$ROOT' submodule update --init vendor/ghostty"
+  fi
+  WT_NOTE="（zig の初回ビルドに数分・.zig-cache 約 1GB。以後この worktree の git worktree remove には --force が要る）"
+  case "${MAIN_ST:0:1}" in
+    " " | "+") MAIN_HEAD="${MAIN_ST:1:40}" ;;
+    *) MAIN_HEAD="" ;;
+  esac
+  if [ "$MAIN_HEAD" != "$PIN" ]; then
+    if [ -z "$MAIN_HEAD" ]; then
+      echo "エラー: main worktree ($MAIN_WT) に vendor/ghostty の実体が無く、共有できない" >&2
+    elif [ "$MAIN_PIN" = "$PIN" ]; then
+      echo "エラー: main worktree の vendor/ghostty の checkout が main の pin とずれていて、共有できない" >&2
+      echo "  main の vendor/ghostty HEAD: $MAIN_HEAD" >&2
+    else
+      echo "エラー: このブランチの vendor/ghostty の pin が main worktree の checkout と違い、共有できない" >&2
+      echo "  main の vendor/ghostty HEAD: $MAIN_HEAD" >&2
+    fi
+    echo "  main の pin:                 $MAIN_PIN" >&2
+    echo "  このブランチの pin:          $PIN" >&2
+    if [ "$MAIN_PIN" = "$PIN" ]; then
+      echo "main の submodule を pin に合わせる:" >&2
+      echo "  git -C '$MAIN_WT' submodule update --init vendor/ghostty" >&2
+      echo "main を触らないなら、この worktree 内に実 checkout する$WT_NOTE:" >&2
+    else
+      echo "この worktree 内に実 checkout する$WT_NOTE:" >&2
+    fi
+    echo "  $WT_CHECKOUT" >&2
     exit 1
   fi
   echo "==> worktree 検出: vendor/ghostty を main worktree へ symlink ($MAIN_WT)"
-  rm -rf "$ROOT/vendor/ghostty"
+  rmdir "$ROOT/vendor/ghostty"
   ln -s "$MAIN_WT/vendor/ghostty" "$ROOT/vendor/ghostty"
   # ビルド後（EXIT/INT/TERM）に symlink を submodule 未 checkout（空ディレクトリ）へ戻す。
   # symlink を残すと git status がエラーになり lefthook・確定コミット・worktree remove を壊す。
   # .app には share/font をコピー済みで、vendor はビルド完了後は不要（次回ビルドで再 symlink）。
-  trap 'rm -rf "$ROOT/vendor/ghostty"; mkdir "$ROOT/vendor/ghostty"' EXIT INT TERM
-fi
-
-# zig@0.15 は keg-only で brew が PATH に通さない。素の `zig` は 0.16 が入りうるが
-# ghostty は minimum_zig_version = 0.15.2 を要求するため通らない。brew prefix から
-# 解決し、別経路で入れている場合は ZIG で上書きできるようにする。
-ZIG="${ZIG:-}"
-if [ -z "$ZIG" ]; then
-  if zig_prefix="$(brew --prefix zig@0.15 2>/dev/null)" && [ -x "$zig_prefix/bin/zig" ]; then
-    ZIG="$zig_prefix/bin/zig"
-  else
-    ZIG="zig"
-  fi
-fi
-if ! command -v "$ZIG" >/dev/null 2>&1; then
-  echo "エラー: zig が見つからない ($ZIG)。'brew install zig@0.15' 後、必要なら ZIG=/path/to/zig を指定せよ" >&2
+  trap 'rm -f "$ROOT/vendor/ghostty"; mkdir "$ROOT/vendor/ghostty"' EXIT INT TERM
+elif [ "${ST:0:1}" = "-" ]; then
+  echo "エラー: vendor/ghostty が未取得" >&2
+  echo "  pin: $PIN" >&2
+  echo "取得する:" >&2
+  echo "  git -C '$ROOT' submodule update --init vendor/ghostty" >&2
+  exit 1
+elif [ "${ST:0:1}" != " " ]; then
+  echo "エラー: vendor/ghostty の checkout が pin とずれている" >&2
+  echo "  vendor/ghostty HEAD: ${ST:1:40}" >&2
+  echo "  pin:                 $PIN" >&2
+  echo "pin に合わせる:" >&2
+  echo "  git -C '$ROOT' submodule update --init vendor/ghostty" >&2
   exit 1
 fi
 
+# zig は mise.toml が固定する版だけを使う（ghostty の build.zig が major.minor の一致を要求する）。
+# ROOT で解決するのは、worktree では vendor/ghostty が main worktree への symlink で、そこで mise を
+# 評価すると物理 cwd 側の mise.toml が読まれるため。
+command -v mise >/dev/null || {
+  echo "エラー: mise が未導入。導入は docs/guides/build.md の「前提ツール」を参照せよ（例: brew install mise）" >&2
+  exit 1
+}
+ZIG="$(cd "$ROOT" && mise which zig)" || {
+  echo "エラー: zig が未導入。'mise install' を実行せよ" >&2
+  exit 1
+}
+
 echo "==> エンジン(libghostty)を ReleaseFast でビルド"
 echo "    初回・submodule 更新時は数分かかる（以降は Zig キャッシュで一瞬）"
-(cd "$ROOT/vendor/ghostty" && "$ZIG" build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast)
+# Orbe が使うのは xcframework と share リソースだけ。上流 Ghostty.app（xcodebuild・SwiftLint フェーズ）まで
+# 組むと Xcode の版に Orbe のビルドが従属するので、emit-macos-app は切る。
+(cd "$ROOT/vendor/ghostty" && "$ZIG" build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast -Demit-macos-app=false)
 
 echo "==> swift build -c release"
 # release チャネルだけが -DORBE_RELEASE を焼く（`OrbePaths.fallbackBundleId` と `UpdaterService` の SSOT）。

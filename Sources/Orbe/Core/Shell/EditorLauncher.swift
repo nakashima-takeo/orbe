@@ -1,35 +1,19 @@
-import AppKit
 import Foundation
 
-/// アクティブタブの cwd を GUI エディタで開く（Cmd+Shift+E）。
+/// GUI コードエディタの解決と起動。⌘⇧E（cwd をフォルダとして開く）と OSC 8 リンク（テキストファイルを
+/// 開く）が同じ解決を共有し、それぞれ別のエディタに落ちない。
 /// エディタは「$VISUAL → $EDITOR（GUI のみ）→ PATH 検索」で決め、`ShellPATH` の PATH
 /// で実行ファイルを解決する（GUI アプリの貧弱な PATH ではユーザー導入の `code` 等が見えない）。
 enum EditorLauncher {
   /// PATH 検索の対象。先頭ヒットを採る。`$EDITOR` が GUI かの判定にも使う。
   private static let guiEditors = ["code", "cursor", "windsurf", "zed", "subl"]
 
-  /// cwd を検出エディタでフォルダとして開く。cwd 不明は beep、エディタ未検出は NSAlert（現在言語）。
-  static func openCwd(_ cwd: String?, localization: LocalizationStore) {
-    guard let cwd else {
-      NSSound.beep()
-      return
-    }
-    guard let editor = resolve() else {
-      let alert = NSAlert()
-      alert.messageText = localization.string(.editorNotFoundTitle)
-      alert.informativeText = localization.string(.editorNotFoundMessage)
-      alert.runModal()
-      return
-    }
-    open(directory: cwd, editor: editor)
-  }
-
   /// 見つかったエディタの絶対パス。**見つからなかったことは覚えない**——起動直後のまだ痩せた PATH で
   /// 一度外した結果を焼くと、PATH が整った後も「エディタ未検出」のままになる。
   private static var cached: String?
 
-  /// 起動すべきエディタを解決する。見つからなければ nil。
-  private static func resolve() -> String? {
+  /// 起動すべきエディタの絶対パス。見つからなければ nil。
+  static func resolve() -> String? {
     if let cached { return cached }
     let result = resolveUncached()
     cached = result
@@ -70,13 +54,13 @@ enum EditorLauncher {
     return nil
   }
 
-  /// `editor <directory>` をバックグラウンド起動する（Orbe をブロックしない）。
+  /// `editor <path>` をバックグラウンド起動する（Orbe をブロックしない）。path はフォルダでもファイルでも同じ。
   /// PATH は起動のたび `ShellPATH` から取る（解決時点の値を焼くと、まだ痩せていた PATH を
   /// そのセッションの全エディタ起動へ引き継いでしまう）。
-  private static func open(directory: String, editor: String) {
+  static func open(_ path: String, editor: String) {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: editor)
-    process.arguments = [directory]
+    process.arguments = [path]
     var environment = ProcessInfo.processInfo.environment
     environment["PATH"] = ShellPATH.shared.value()
     process.environment = environment

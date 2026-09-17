@@ -268,6 +268,21 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorNotFoundTitle
   case editorNotFoundMessage
 
+  // MARK: - Link（OSC 8 リンクの確認・ブロック）
+  case linkConfirmTitle
+  case linkConfirmMessage
+  case linkConfirmMessageDefaultApp
+  case linkConfirmOpen
+  case linkBlockedTitle
+  case linkBlockedOK
+  case linkBlockedCopy
+  case linkBlockedMalformed
+  case linkBlockedUnsafeCharacters
+  case linkBlockedInvalidWeb
+  case linkBlockedRemoteFile
+  case linkBlockedInaccessibleFile
+  case linkBlockedUnsafeFile
+
   // MARK: - Tab context menu（タブ行の右クリック）
   case tabMenuResetAgentState
 

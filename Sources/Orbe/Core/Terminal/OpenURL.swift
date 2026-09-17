@@ -2,18 +2,20 @@ import AppKit
 import GhosttyKit
 import UniformTypeIdentifiers
 
-/// libghostty の OPEN_URL アクションの host 側処理。
-/// 本家 macOS 版と同じく NSWorkspace で開く。これを実装しないと libghostty の
+/// libghostty の OPEN_URL アクションのうち、正規表現で検出したリンク（見えている文字列が対象）の
+/// host 側処理。NSWorkspace で開く。これを実装しないと libghostty の
 /// フォールバック（`internal_os.open`）が走り、`os/open.zig` の無限ループ
 /// （stderr の改行を消費しないループ）を踏んで CPU 暴走・ログ洪水になる。
+/// OSC 8（端末出力が対象を隠せるリンク）は `UntrustedLink` の判定を通す。
 enum OpenURL {
   enum Kind {
-    case unknown, text, html
+    case unknown, text, html, osc8
 
     init(_ c: ghostty_action_open_url_kind_e) {
       switch c {
       case GHOSTTY_ACTION_OPEN_URL_KIND_TEXT: self = .text
       case GHOSTTY_ACTION_OPEN_URL_KIND_HTML: self = .html
+      case GHOSTTY_ACTION_OPEN_URL_KIND_OSC8: self = .osc8
       default: self = .unknown
       }
     }

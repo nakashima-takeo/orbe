@@ -1,7 +1,7 @@
 ---
 title: 全体構成
 description: 実行体と制御チャネル・state dir・Sources/ モジュール構成の一望図
-updated: 2026-09-08
+updated: 2026-09-18
 ---
 
 # 全体構成
@@ -58,6 +58,7 @@ Sources/
       Terminal/          libghostty 埋め込み（SurfaceView・入力・描画）
       Git/               git 実行層（AppKit 非依存）
       Localization/      日英 2 言語 i18n コア
+      Shell/             ログインシェル由来の PATH 解決・GUI エディタ起動
     Features/            機能単位（Agent / Attention / Chrome / Completion /
                          Control / Dispatch / Help / MenuBar /
                          Search / Settings / Sound / Update / Workspace）
