@@ -11,10 +11,10 @@ import XCTest
 /// クリックできない。隠れたタブのツリーが握り続けると全タブの根を常時監視する。
 @MainActor
 final class EditorPaneViewShellTests: OrbeTestCase {
-  /// 行内入力を続けて出すと前の入力は消えて新しい入力だけが出る。行が画面から消えることは入力の終わりで、
-  /// Esc・blur だけでなく、すべて折りたたむ・根を畳む・レールで閉じる・cd でも入力は落ち、窓へ落ちた焦点は面の
-  /// 行き先へ戻る。
-  func testInlineInputIsRecreatedPerRequestAndEndsWhenItsRowDisappears() throws {
+  /// 行内入力を続けて出すと前の入力は消えて新しい入力だけが出る。入力の終わりは入力の状態が落ちることで、
+  /// Esc・焦点の移動だけでなく、すべて折りたたむ・根を畳む・レールで閉じる・cd でも落ち、焦点がまだ入力欄か窓に
+  /// 居れば面の行き先へ移る。
+  func testInlineInputIsRecreatedPerRequestAndEndsWhenItsStateDrops() throws {
     let dir = try XCTUnwrap(TestIsolation.caseDir)
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
@@ -24,33 +24,33 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     pane.shell.createFile()
     XCTAssertTrue(window.firstResponder === pane, "入力を出す前に面自身が焦点を取る")
     let first = try XCTUnwrap(pane.tree.newEntry)
+    pane.tree.setNewName("draft")
     pane.shell.createDirectory()
     let second = try XCTUnwrap(pane.tree.newEntry)
     XCTAssertNotEqual(first.generation, second.generation)
     XCTAssertTrue(second.isDirectory)
+    XCTAssertEqual(second.name, "", "新しい入力は空の名前から")
     pane.tree.cancelNew(first.generation)
-    XCTAssertNotNil(pane.tree.newEntry, "古い入力の取り消し（blur・消失）は今の入力に触れない")
+    XCTAssertNotNil(pane.tree.newEntry, "古い入力の取り消し（blur）は今の入力に触れない")
 
-    func settle(_ condition: () -> Bool, _ message: String) {
-      pumpMain(until: { condition() }, timeout: 5, message)
-    }
-    func endsWhenTheRowDisappears(_ how: String, _ disappear: () -> Void) {
+    func endsWhenTheStateDrops(_ how: String, _ transition: () throws -> Void) throws {
       if pane.tree.newEntry == nil { pane.shell.createFile() }
-      // 行が画面に生まれてから消す（SwiftUI の描画コミットに猶予。`renderPNG` と同じ）。
-      RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-      window.makeFirstResponder(nil)
-      disappear()
-      settle({ pane.tree.newEntry == nil }, "\(how): 行が消えれば入力は終わる")
-      settle({ window.firstResponder === pane }, "\(how): 窓へ落ちた焦点は面の行き先へ")
+      let before = pane.tree
+      let generation = try XCTUnwrap(before.newEntry).generation
+      try transition()
+      pumpMain(
+        until: { before.newEntry?.generation != generation }, timeout: 5,
+        "\(how): 入力の状態が落ちる")
+      pumpMain(until: { window.firstResponder === pane }, timeout: 5, "\(how): 焦点は面の行き先へ")
     }
-    endsWhenTheRowDisappears("レールで閉じる") { pane.shell.toggleSidebar() }
+    try endsWhenTheStateDrops("レールで閉じる") { pane.shell.toggleSidebar() }
     pane.shell.toggleSidebar()
-    endsWhenTheRowDisappears("根を畳む") { pane.tree.isRootOpen = false }
+    try endsWhenTheStateDrops("根を畳む") { pane.tree.isRootOpen = false }
     pane.tree.isRootOpen = true
-    endsWhenTheRowDisappears("すべて折りたたむ") { pane.shell.collapseAll() }
+    try endsWhenTheStateDrops("すべて折りたたむ") { pane.shell.collapseAll() }
     let other = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("other")
     try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
-    endsWhenTheRowDisappears("cd") { tab.surface.currentPwd = other.path }
+    try endsWhenTheStateDrops("cd") { tab.surface.currentPwd = other.path }
   }
 
   /// 骨の操作（新規ファイル・ツリーの行・ファイルタブ・パンくず・すべて折りたたむ・行内入力の確定）は pane に
@@ -88,7 +88,8 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertEqual(pane.tree.expanded, ["d"], "パンくずのディレクトリが開く")
     pane.shell.createFile()
     XCTAssertEqual(pane.tree.newEntry?.directory, "d", "選択したディレクトリに挿す")
-    XCTAssertTrue(pane.tree.commitNew("x.swift"))
+    pane.tree.setNewName("x.swift")
+    XCTAssertTrue(pane.tree.commitNew())
     XCTAssertEqual(pane.document?.url.lastPathComponent, "x.swift", "作ったファイルは pane 経由で開く")
 
     pane.shell.collapseAll()

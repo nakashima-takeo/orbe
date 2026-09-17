@@ -27,20 +27,25 @@ final class FileTree: RootFilesObserver {
     let isSelected: Bool
   }
 
+  /// 行内入力の状態。打ちかけの名前もここに持つ——view の寿命（容器が行を捨てて作り直す）に依らない。
   struct NewEntry: Equatable {
     /// 挿す先のディレクトリ（相対パス。根は空）。
     let directory: String
     let isDirectory: Bool
-    /// 出すたびに進む番号。行の同一性（SwiftUI の view と打ちかけの名前）を出すたびに作り直し、取り消しを
-    /// 「その入力がまだ出ている間」に限る——古い入力の blur・消失が新しい入力を消さない。
+    /// 出すたびに進む番号。行の同一性を出すたびに作り直し、取り消しを「その入力がまだ出ている間」に限る
+    /// ——古い入力の blur が新しい入力を消さない。
     let generation: Int
+    var name = ""
   }
 
   /// 根（正規形）。
   let root: String
   /// ルート行の題（根の basename を大文字）。
   let rootName: String
-  var isRootOpen = true
+  /// 根を畳めば行内入力も終わる（入力行は根の配下にしか無い）。
+  var isRootOpen = true {
+    didSet { if !isRootOpen { newEntry = nil } }
+  }
   private(set) var expanded: Set<String> = []
   /// 相対ディレクトリ → 一覧。空文字が根。
   private(set) var entries: [String: [RootFiles.Entry]] = [:]
@@ -55,10 +60,16 @@ final class FileTree: RootFilesObserver {
   private(set) var selection: Selection?
   /// 選択表示する行（相対パス）。
   var selected: String? { selection?.path }
-  private(set) var newEntry: NewEntry?
+  /// 行内入力。非 nil → nil へ落ちることが「入力の終わり」で、理由（Enter・Esc・取り消し・畳む・閉じる・cd）を
+  /// 問わず `onInputEnded` を同期に出す。
+  private(set) var newEntry: NewEntry? {
+    didSet { if oldValue != nil, newEntry == nil { onInputEnded?() } }
+  }
   private var newGeneration = 0
   /// 行内入力でファイルを作った（呼び手が開く）。
   @ObservationIgnored var onCreated: ((URL) -> Void)?
+  /// 行内入力が終わった（呼び手が焦点を引き取る）。
+  @ObservationIgnored var onInputEnded: (() -> Void)?
   @ObservationIgnored private var files: RootFiles?
 
   /// 面が見えている間 true。立てると根のサービスを握って展開中を取り直し、下ろすと離す。
@@ -196,12 +207,17 @@ final class FileTree: RootFilesObserver {
   /// 入力行の `Row.id`。NUL はファイル名に入らないので実ファイルの行と衝突しない。
   static func inputRowID(_ entry: NewEntry) -> String { "\0new:\(entry.generation)" }
 
+  /// 打ちかけの名前。
+  func setNewName(_ name: String) {
+    newEntry?.name = name
+  }
+
   /// 名前を確定して作る。空・`/` 入り・既に在る・作れないは beep して入力に留まる（false）。
   /// 作った変化は監視が拾うが、体感のため親をその場で取り直す。ファイルなら `onCreated` で開く。
   @discardableResult
-  func commitNew(_ name: String) -> Bool {
+  func commitNew() -> Bool {
     guard let newEntry, let files else { return false }
-    let name = name.trimmingCharacters(in: .whitespaces)
+    let name = newEntry.name.trimmingCharacters(in: .whitespaces)
     guard !name.isEmpty, !name.contains("/") else {
       NSSound.beep()
       return false
@@ -226,9 +242,14 @@ final class FileTree: RootFilesObserver {
     return true
   }
 
-  /// 行内入力を取り消す。その世代がまだ出ているときだけ（古い入力の blur・消失は今の入力に触れない）。
+  /// 行内入力を取り消す。その世代がまだ出ているときだけ（古い入力の blur は今の入力に触れない）。
   func cancelNew(_ generation: Int) {
     guard newEntry?.generation == generation else { return }
+    newEntry = nil
+  }
+
+  /// 出ている行内入力を取り消す（サイドバーを閉じる・cd）。
+  func cancelNew() {
     newEntry = nil
   }
 

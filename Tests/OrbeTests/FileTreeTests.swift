@@ -25,6 +25,12 @@ final class FileTreeTests: OrbeTestCase {
     repo.cleanup()
   }
 
+  /// 名前を打って Enter。
+  private func commit(_ tree: FileTree, _ name: String) -> Bool {
+    tree.setNewName(name)
+    return tree.commitNew()
+  }
+
   private func names(_ tree: FileTree) -> [String] {
     tree.rows.map { String(repeating: "  ", count: $0.depth) + $0.name }
   }
@@ -188,14 +194,14 @@ final class FileTreeTests: OrbeTestCase {
     XCTAssertEqual(tree.rows.first(where: \.isInput)?.depth, 1, "入力行は親の子の先頭")
     XCTAssertEqual(tree.rows.firstIndex(where: \.isInput), 2, "docs・src の次")
 
-    XCTAssertFalse(tree.commitNew("main.swift"), "既に在れば入力に留まる")
+    XCTAssertFalse(commit(tree, "main.swift"), "既に在れば入力に留まる")
     XCTAssertNotNil(tree.newEntry)
-    XCTAssertFalse(tree.commitNew(" "), "空は無効")
-    XCTAssertFalse(tree.commitNew("nested/x.swift"), "`/` 入りは無効（中間ディレクトリは作らない）")
+    XCTAssertFalse(commit(tree, " "), "空は無効")
+    XCTAssertFalse(commit(tree, "nested/x.swift"), "`/` 入りは無効（中間ディレクトリは作らない）")
     XCTAssertFalse(FileManager.default.fileExists(atPath: repo.root + "/src/nested"))
     XCTAssertNotNil(tree.newEntry)
 
-    XCTAssertTrue(tree.commitNew("fresh.swift"))
+    XCTAssertTrue(commit(tree, "fresh.swift"))
     XCTAssertNil(tree.newEntry)
     XCTAssertTrue(FileManager.default.fileExists(atPath: repo.root + "/src/fresh.swift"))
     XCTAssertEqual(created, [repo.url("src/fresh.swift")], "ファイルは開く")
@@ -205,7 +211,7 @@ final class FileTreeTests: OrbeTestCase {
     tree.beginNew(isDirectory: true)
     XCTAssertEqual(tree.newEntry?.directory, "docs", "ディレクトリの選択はそこへ")
     XCTAssertEqual(tree.newEntry?.isDirectory, true)
-    XCTAssertTrue(tree.commitNew("guides"))
+    XCTAssertTrue(commit(tree, "guides"))
     XCTAssertTrue(
       tree.rows.contains { $0.id == "docs/guides" && $0.kind == .directory(isExpanded: false) })
     XCTAssertEqual(created.count, 1, "フォルダは開かない")

@@ -38,8 +38,10 @@ extension EditorPaneView {
       _ = sidebar.isOpen
     } onChange: { [weak self] in
       DispatchQueue.main.async {
-        self?.needsLayout = true
-        self?.observeSidebar()
+        guard let self else { return }
+        self.needsLayout = true
+        if !self.sidebar.isOpen { self.tree.cancelNew() }  // 閉じれば入力行は消える＝入力の終わり
+        self.observeSidebar()
       }
     }
   }

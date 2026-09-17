@@ -5,11 +5,11 @@ import XCTest
 
 /// 行内の新規作成を本物の入力欄（SwiftUI の TextField）で駆動する——出せば入力欄が焦点を取って打鍵が入り、
 /// Enter で作ってファイルなら開いて焦点はテキスト面へ、Esc で取り消して焦点は面の行き先へ、入力欄の外を
-/// 押して抜ければ取り消すだけで焦点は引き戻さない。深い行や入力行は可視位置へ送られる（送られなければ
-/// 遅延生成の行は生まれず、焦点も打鍵も宙に浮く）。
+/// 押して抜ければ取り消すだけで焦点は引き戻さない（窓へ落ちただけでは取り消さない）。深い行や入力行は
+/// 可視位置へ送られる。
 ///
 /// 壊れると何が起きるか。「新規ファイル」を押しても打鍵が 1 文字も入らない（入力欄が焦点を取らない・画面外に
-/// 生まれる）。Esc の後に焦点が窓へ落ちて打鍵と ⌘S が死ぬ。端末へ抜けたのに焦点がエディターへ引き戻される。
+/// 生まれて見えない）。Esc の後に焦点が窓へ落ちて打鍵と ⌘S が死ぬ。端末へ抜けたのに焦点がエディターへ引き戻される。
 @MainActor
 final class EditorPaneViewInlineInputTests: OrbeTestCase {
   /// 入力欄（field editor）が焦点を取るまで待って返す。
@@ -100,15 +100,20 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     pane.shell.createFile()
     _ = try inputField(pane, in: window)
     XCTAssertTrue(window.makeFirstResponder(outsider))
-    pumpMain(until: { pane.tree.newEntry == nil }, "焦点を失えば取り消す")
-    RunLoop.main.run(until: Date().addingTimeInterval(0.1))  // 引き取りの判定は次のターン
-
+    pumpMain(until: { pane.tree.newEntry == nil }, "別の view へ移れば取り消す")
     let responder = try XCTUnwrap(window.firstResponder as? NSView)
     XCTAssertFalse(responder.isDescendant(of: pane), "抜けた先に焦点が残る（面へ引き戻さない）")
+
+    pane.shell.createFile()
+    _ = try inputField(pane, in: window)
+    window.makeFirstResponder(nil)
+    pumpMain(until: { window.firstResponder === window }, "前提: 焦点が窓へ落ちる")
+    RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+    XCTAssertNotNil(pane.tree.newEntry, "窓へ落ちただけ（人の操作ではない）では取り消さない")
   }
 
-  /// 低い窓で深い文書をアクティブにするとツリーがその行まで送り、深い挿し先の入力行も可視位置に生まれて
-  /// 焦点を取る（行は遅延生成なので、送られなければ行も入力欄も存在しない）。
+  /// 低い窓で深い文書をアクティブにするとツリーがその行まで送り、深い挿し先の入力行も可視位置へ送られて
+  /// 焦点を取る。
   func testDeepRowsAndTheInputRowAreScrolledIntoView() throws {
     let dir = try XCTUnwrap(TestIsolation.caseDir)
     for index in 0..<20 {
@@ -128,8 +133,11 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     pane.shell.open(deep)
     pumpMain(until: { scroll.documentVisibleRect.minY > 0 }, "アクティブにした深い行へ送る")
 
+    scroll.contentView.scroll(to: .zero)  // 先頭へ戻してから出す（送りが起きたことを位置で見る）
+    scroll.reflectScrolledClipView(scroll.contentView)
     pane.shell.createFile()
     XCTAssertEqual(pane.tree.newEntry?.directory, "d19", "選択したファイルの親（画面外だった深い場所）に挿す")
+    pumpMain(until: { scroll.documentVisibleRect.minY > 0 }, "入力行へ送る")
     _ = try inputField(pane, in: window)
   }
 

@@ -54,15 +54,15 @@ struct TreeRowView: View {
   }
 }
 
-/// 新規作成の行内入力。現れたら first responder、Enter で作る、Esc・フォーカス喪失で取り消す。行が消えたら
-/// （どの経路でも）pane へ世代を添えて知らせる——入力の終わりと焦点の引き取りはそこ 1 か所。
+/// 新規作成の行内入力。現れたら first responder、Enter で作る、Esc で取り消す。名前はツリーの状態に束ねる——
+/// 容器が行を捨てて作り直しても打ちかけは残り、入力の終わりは view の寿命ではなく状態が落ちること。
+/// 焦点の喪失は pane に知らせ、別の view へ移ったときだけ取り消しになる。
 struct InlineInputRow: View {
   let row: FileTree.Row
   let isDirectory: Bool
   let generation: Int
   let tree: FileTree
   let shell: EditorShellModel
-  @State private var name = ""
   @FocusState private var focused: Bool
   @State private var didFocus = false
   @Environment(\.colorScheme) private var scheme
@@ -75,7 +75,7 @@ struct InlineInputRow: View {
       } else {
         Color.clear.frame(width: Theme.Layout.editorChip, height: Theme.Layout.editorChip)
       }
-      TextField("", text: $name)
+      TextField("", text: Binding(get: { tree.newEntry?.name ?? "" }, set: tree.setNewName))
         .textFieldStyle(.plain)
         .font(Font.theme.editorTreeRow)
         .foregroundStyle(Color.theme.editorText)
@@ -83,7 +83,7 @@ struct InlineInputRow: View {
         .lineLimit(1)
         .focused($focused)
         .padding(.leading, Theme.Space.note)
-        .onSubmit { tree.commitNew(name) }
+        .onSubmit { tree.commitNew() }
         .onKeyPress(.escape) {
           tree.cancelNew(generation)
           return .handled
@@ -93,14 +93,13 @@ struct InlineInputRow: View {
           if now {
             didFocus = true
           } else if didFocus {
-            tree.cancelNew(generation)
+            shell.inlineInputLostFocus(generation)
           }
         }
     }
     .padding(.leading, 10)
     .padding(.trailing, Theme.Space.step)
     .frame(height: Theme.Layout.editorRow)
-    .onDisappear { shell.inlineInputDidEnd(generation) }
   }
 }
 

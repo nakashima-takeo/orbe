@@ -117,13 +117,14 @@ final class EditorPaneView: NSView {
     shell.createDirectory = { [weak self] in self?.beginNew(isDirectory: true) }
     shell.collapseAll = { [weak self] in self?.tree.collapseAll() }
     shell.toggleSidebar = { [weak self] in self?.sidebar.toggle() }
-    shell.inlineInputDidEnd = { [weak self] generation in
-      self?.inlineInputDidEnd(generation: generation)
+    shell.inlineInputLostFocus = { [weak self] generation in
+      self?.inlineInputLostFocus(generation: generation)
     }
   }
 
   private func wireTree() {
     tree.onCreated = { [weak self] url in self?.open(url) }
+    tree.onInputEnded = { [weak self] in self?.inlineInputDidEnd() }
   }
 
   /// 骨から開く。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）。開けたらその行を
@@ -169,22 +170,25 @@ final class EditorPaneView: NSView {
     tree.beginNew(isDirectory: isDirectory)
   }
 
-  /// 行内入力の行が画面から消えた（Enter・Esc・blur・すべて折りたたむ・根を畳む・サイドバーを閉じる・cd）。
-  /// その世代がまだ出ていれば落とし、field editor を失って窓か面の中の別の view（骨の host・空状態の host）に
-  /// 落ちた焦点を面の行き先へ引き取る（端末をクリックして抜けたなら焦点は面の外にあるので触らない。次の
-  /// 入力が出ていればそれが持つ）。判定は次のターン——行の消失と AppKit の first responder の付け替えは
-  /// 同じ更新の中で順序を持たない。
-  private func inlineInputDidEnd(generation: Int) {
+  /// 入力欄が焦点を失った。別の view（端末・テキスト面・面自身）へ移ったなら取り消し＝入力の終わり。窓へ
+  /// 落ちただけなら人の操作ではない（容器が行を捨てて作り直した）ので触らない——行が戻れば入力欄が焦点を
+  /// 取り直し、打ちかけの名前は状態に残っている。
+  private func inlineInputLostFocus(generation: Int) {
+    guard let responder = window?.firstResponder, responder !== window,
+      (responder as? NSView)?.isDescendant(of: sideHost) != true
+    else { return }
     tree.cancelNew(generation)
-    DispatchQueue.main.async { [weak self] in
-      guard let self, let window, tree.newEntry == nil else { return }
-      let responder = window.firstResponder
-      let target = focusTarget
-      if responder === target || (responder as? NSView)?.isDescendant(of: target) == true { return }
-      let outside =
-        (responder as? NSView).map { !$0.isDescendant(of: self) } ?? (responder !== window)
-      if !outside { window.makeFirstResponder(target) }
-    }
+  }
+
+  /// 行内入力が終わった（状態が落ちた。Enter・Esc・取り消し・すべて折りたたむ・根を畳む・サイドバーを閉じる・
+  /// cd）。焦点がまだ入力欄（骨の host 配下）か窓に居れば、その場で面の行き先へ移す。別の view へ移って
+  /// 終わったなら（端末をクリックして抜けた）そこに居るので触らない。
+  private func inlineInputDidEnd() {
+    guard let window else { return }
+    let responder = window.firstResponder
+    let strayed =
+      responder === window || (responder as? NSView)?.isDescendant(of: sideHost) == true
+    if strayed { window.makeFirstResponder(focusTarget) }
   }
 
   private func focusEditor() {
@@ -208,6 +212,7 @@ final class EditorPaneView: NSView {
   /// 根が変わった（cd）。ツリーを作り直し、握っていたなら握り直す。
   func setRoot(_ root: String) {
     guard root != tree.root else { return }
+    tree.cancelNew()
     tree.isLive = false
     tree = FileTree(root: root)
     wireTree()
