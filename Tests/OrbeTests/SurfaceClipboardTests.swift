@@ -5,11 +5,12 @@ import XCTest
 @testable import Orbe
 
 /// 端末とシステムのクリップボード（`NSPasteboard.general`）の往来を、実 libghostty と実タブの PTY で固定する。
-/// ユーザー発の ⌘V / ⌘C は通り、端末アプリ発の読み取り（OSC 52 / Kitty clipboard）はクリップボードの
-/// 中身に関わらず拒否される。
+/// ユーザー発の ⌘V / ⌘⇧V / ⌘C・選択・中クリックは通り、端末アプリ発の読み取り（OSC 52 / Kitty clipboard）は
+/// クリップボードの中身に関わらず拒否される。端末アプリ発の書き込みはテキスト表現だけが入る。
 ///
-/// 壊れると何が起きるか: ⌘V で何も貼れない・⌘C でコピーできない（libghostty の契約が変わると
-/// ホストのコールバックが静かに空振りする）。あるいは端末で動く任意のプログラムが、ユーザーの
+/// 壊れると何が起きるか: ⌘V で何も貼れない・⌘C でコピーできない・選択しただけではコピーされない・
+/// 中クリックが無反応になる（libghostty の契約や既定値が変わるとホストのコールバックが静かに空振りする）。
+/// 端末アプリが書いたテキストが、MIME に charset が付くだけで黙って捨てられる。あるいは端末で動く任意のプログラムが、ユーザーの
 /// クリップボード（パスワード等）を黙って読み出せる。中身の有無で応答が変わるだけでも、
 /// 「クリップボードに文字列があるか」が端末アプリへ漏れる。
 ///
@@ -50,6 +51,24 @@ final class SurfaceClipboardTests: OrbeTestCase {
     keyCode: kVK_ANSI_C, characters: "c", unmodified: "c", modifiers: .command)
   private static let commandV = PhysicalKey(
     keyCode: kVK_ANSI_V, characters: "v", unmodified: "v", modifiers: .command)
+  private static let commandShiftV = PhysicalKey(
+    keyCode: kVK_ANSI_V, characters: "V", unmodified: "V", modifiers: [.command, .shift])
+
+  private static func middleClick(into surface: SurfaceView) throws {
+    let center = CGPoint(x: surface.bounds.midX, y: surface.bounds.midY)
+    for type in [CGEventType.otherMouseDown, .otherMouseUp] {
+      let cgEvent = try XCTUnwrap(
+        CGEvent(
+          mouseEventSource: nil, mouseType: type, mouseCursorPosition: center,
+          mouseButton: .center))
+      let event = try XCTUnwrap(NSEvent(cgEvent: cgEvent))
+      if type == .otherMouseDown {
+        surface.otherMouseDown(with: event)
+      } else {
+        surface.otherMouseUp(with: event)
+      }
+    }
+  }
 
   // MARK: - ユーザー発
 
@@ -75,15 +94,45 @@ final class SurfaceClipboardTests: OrbeTestCase {
     XCTAssertEqual(dump.next(bytes: expected.count / 2), expected)
   }
 
-  /// ⌘A → ⌘C で、画面の選択がクリップボードの文字列を置き換える。
+  /// 選択の後にクリップボードが別の文字列へ変わっていても、⌘C で画面の選択がクリップボードの文字列を置き換える。
   func testCommandCCopiesSelectionToClipboard() throws {
     let dump = try dump(.legacy)
-    setClipboard("before copy")
-
     Self.commandA.type(into: dump.tab.surface)
+    setClipboard("after select")
+
     Self.commandC.type(into: dump.tab.surface)
 
     XCTAssertEqual(NSPasteboard.general.string(forType: .string), "READY")
+  }
+
+  /// ⌘A で選択するだけで、⌘C を押さなくても選択がクリップボードの文字列を置き換える。
+  func testSelectingAloneCopiesSelectionToClipboard() throws {
+    let dump = try dump(.legacy)
+    setClipboard("before select")
+
+    Self.commandA.type(into: dump.tab.surface)
+
+    XCTAssertEqual(NSPasteboard.general.string(forType: .string), "READY")
+  }
+
+  /// 中クリックで、クリップボードの文字列がペーストされる。
+  func testMiddleClickPastesClipboardText() throws {
+    let dump = try dump(.legacy)
+    setClipboard("middle-click paste")
+
+    try Self.middleClick(into: dump.tab.surface)
+
+    XCTAssertEqual(dump.next(), TtyDumpTab.hex("middle-click paste"))
+  }
+
+  /// ⌘⇧V（選択クリップボードからのペースト）も、クリップボードの文字列をペーストする。
+  func testCommandShiftVPastesClipboardText() throws {
+    let dump = try dump(.legacy)
+    setClipboard("selection paste")
+
+    Self.commandShiftV.type(into: dump.tab.surface)
+
+    XCTAssertEqual(dump.next(), TtyDumpTab.hex("selection paste"))
   }
 
   // MARK: - 端末アプリ発
@@ -114,4 +163,40 @@ final class SurfaceClipboardTests: OrbeTestCase {
         "クリップボード \(clipboard ?? "空") で拒否以外が返った")
     }
   }
+
+  /// ユーザー設定で読み取りを許しても、PRIMARY（選択クリップボード）の読み取りには非対応（ENOSYS）が返り、
+  /// クリップボードの中身は渡らない。
+  func testKittyPrimaryReadIsUnsupportedEvenWhenReadsAllowed() throws {
+    let userConfig = try XCTUnwrap(Config.userFileURLOverride)
+    try "clipboard-read = allow\n".write(to: userConfig, atomically: true, encoding: .utf8)
+    addTeardownBlock { try? FileManager.default.removeItem(at: userConfig) }
+    Ghostty.shared.reloadConfig()
+    setClipboard(Self.secret)
+
+    let dump = try dump(.kittyReadPrimary)
+
+    XCTAssertEqual(dump.next(), TtyDumpTab.hex("\u{1b}]5522;type=read:status=ENOSYS\u{1b}\\"))
+  }
+
+  /// Kitty clipboard の書き込みで charset 付きの MIME（`text/plain;charset=utf-8`）で書かれたテキストが、
+  /// クリップボードの文字列になる。
+  func testKittyWriteWithCharsetMimeSetsClipboardText() throws {
+    setClipboard("before write")
+    let dump = try dump(.kittyWriteCharset)
+
+    XCTAssertEqual(dump.next(), Self.kittyWriteDone)
+    XCTAssertEqual(NSPasteboard.general.string(forType: .string), TtyDumpTab.kittyWrittenText)
+  }
+
+  /// macOS がテキストと解さない MIME（`;` の後に空白が入る `text/plain; charset=UTF-8`）だけの書き込みは、
+  /// クリップボードを変えない。
+  func testKittyWriteWithoutTextRepresentationLeavesClipboardUnchanged() throws {
+    setClipboard("before write")
+    let dump = try dump(.kittyWriteSpacedCharset)
+
+    XCTAssertEqual(dump.next(), Self.kittyWriteDone)
+    XCTAssertEqual(NSPasteboard.general.string(forType: .string), "before write")
+  }
+
+  private static let kittyWriteDone = TtyDumpTab.hex("\u{1b}]5522;type=write:status=DONE\u{1b}\\")
 }

@@ -12,7 +12,7 @@ import XCTest
 /// 書かせる。画面は `controlReadText` で読めるので、surface へ送ったキー入力が端末モード
 /// （legacy / bracketed paste / kitty keyboard protocol）に応じてどんなバイトになったかを、
 /// libghostty の符号化を通した実物で測れる。モードの切替（bracketed paste の有効化・kitty flags の
-/// push）と、端末への問い合わせ（クリップボード読み取り要求）は dump 自身が READY の前に出す。
+/// push）と、端末への要求（クリップボードの読み取り・書き込み）は dump 自身が READY の前に出す。
 ///
 /// 1 打ごとに `next()` で待ってから次を送る——連打すると dump の 1 回の read に複数打が合流し、
 /// 打鍵単位の突き合わせができなくなる。
@@ -20,14 +20,26 @@ final class TtyDumpTab {
   /// `osc52Read` は OSC 52 の読み取り要求の直後に Kitty clipboard の読み取り要求を続けて出す。両者は
   /// libghostty の同じ経路（surface の mailbox → ホスト）を順に通り、Kitty 側は許可でも拒否でも必ず
   /// 応答するので、OSC 52 に応答があればそれより先に届く——応答が「無い」ことを待ち時間に頼らず測れる。
-  enum Mode: String { case legacy, paste, kitty, osc52Read, kittyRead }
+  /// `kittyWrite*` は Kitty clipboard の書き込みを 1 件（本文 `kittyWrittenText`）、モード名が示す MIME で出す。
+  enum Mode: String {
+    case legacy, paste, kitty, osc52Read, kittyRead, kittyReadPrimary
+    case kittyWriteCharset, kittyWriteSpacedCharset
+  }
+
+  static let kittyWrittenText = "kitty-written"
 
   /// 1 打あたりの到達を待つ上限。実時間の検証ではなく、進まなくなったら諦めるための上限。
   static let keyTimeout: TimeInterval = 5
 
   private static let script = """
-    import os, sys, tty
+    import base64, os, sys, tty
     mode = sys.argv[1]
+    def b64(text):
+        return base64.b64encode(text.encode()).decode()
+    def kitty_write(mime):
+        return ("\\x1b]5522;type=write\\x1b\\\\"
+            + "\\x1b]5522;type=wdata:mime=" + b64(mime) + ";" + b64("\(kittyWrittenText)") + "\\x1b\\\\"
+            + "\\x1b]5522;type=wdata\\x1b\\\\")
     fd = sys.stdin.fileno()
     tty.setraw(fd)
     enter = {
@@ -36,6 +48,9 @@ final class TtyDumpTab {
         "kitty": "\\x1b[>1u",
         "osc52Read": "\\x1b]52;c;?\\x07\\x1b]5522;type=read;dGV4dC9wbGFpbg==\\x1b\\\\",
         "kittyRead": "\\x1b]5522;type=read;dGV4dC9wbGFpbg==\\x1b\\\\",
+        "kittyReadPrimary": "\\x1b]5522;type=read:loc=primary;dGV4dC9wbGFpbg==\\x1b\\\\",
+        "kittyWriteCharset": kitty_write("text/plain;charset=utf-8"),
+        "kittyWriteSpacedCharset": kitty_write("text/plain; charset=UTF-8"),
     }[mode]
     sys.stdout.write(enter + "READY\\r\\n")
     sys.stdout.flush()
