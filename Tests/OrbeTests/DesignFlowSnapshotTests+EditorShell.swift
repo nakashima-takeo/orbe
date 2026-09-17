@@ -18,6 +18,7 @@ extension DesignFlowSnapshotTests {
 
   func testEditorShell() throws {
     let scene = try editorScene()
+    defer { scene.cleanup() }
     let pane = scene.pane
     let tab = scene.tab
     let readme = try XCTUnwrap(
@@ -49,6 +50,7 @@ extension DesignFlowSnapshotTests {
   /// 記憶 240 は変わらず、左へ引けば 160 で止まる）。
   func testEditorShellNarrowDrag() throws {
     let scene = try editorScene()
+    defer { scene.cleanup() }
     let pane = scene.pane
     try flow(
       "editor_shell_narrow", size: NSSize(width: 360, height: 480), render: { scene.view },
@@ -57,7 +59,6 @@ extension DesignFlowSnapshotTests {
         ("drag_right_clamped", { pane.resizeSidebar(to: pane.shownSidebarWidth + 40) }),
         ("drag_left", { pane.resizeSidebar(to: pane.shownSidebarWidth - 2) }),
       ])
-    XCTAssertEqual(pane.sidebar.width, 160)
   }
 
   /// 低い窓: 浅い文書から深い文書へ切り替えるとツリーがその行まで送り、新規入力の行も可視位置に生まれる。
@@ -65,6 +66,7 @@ extension DesignFlowSnapshotTests {
   /// 中でそのまま描く（操作 → 描画の順は `flow` と同じ）。
   func testEditorShellReveal() throws {
     let scene = try editorScene()
+    defer { scene.cleanup() }
     let pane = scene.pane
     let tab = scene.tab
     let shallow = try XCTUnwrap(

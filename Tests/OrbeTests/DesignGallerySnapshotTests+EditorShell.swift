@@ -9,6 +9,7 @@ extension DesignGallerySnapshotTests {
   func renderEditorShellSnapshots(dir: URL) throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let scene = try EditorShellFixtures.scene(queriesRoot: queriesRoot)
+    defer { scene.cleanup() }
     scene.warmUp()
     pumpMain(until: { scene.isReady }, "git バッジが揃う")
     try writePNG(

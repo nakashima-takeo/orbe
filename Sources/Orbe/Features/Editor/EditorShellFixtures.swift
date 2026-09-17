@@ -17,10 +17,22 @@
 
     @MainActor final class Scene {
       let tab: TerminalTab
+      /// 一時リポジトリ（`cleanup()` で消す）。
+      let directory: URL
       var pane: EditorPaneView { tab.view.editor }
       private var warmWindow: NSWindow?
 
-      init(tab: TerminalTab) { self.tab = tab }
+      init(tab: TerminalTab, directory: URL) {
+        self.tab = tab
+        self.directory = directory
+      }
+
+      /// 面を窓から外し、一時リポジトリを消す。
+      func cleanup() {
+        warmWindow = nil
+        pane.removeFromSuperview()
+        try? FileManager.default.removeItem(at: directory)
+      }
 
       /// 面を窓に付けてツリーに根のサービスを握らせる（status の取り直しが始まる）。撮った後は面が窓から
       /// 外れるので、操作を窓の中で起こしたい flow は操作の前にもう一度呼ぶ（寸法は撮る絵と同じに）。
@@ -49,8 +61,7 @@
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent().deletingLastPathComponent()
       let dir = FileManager.default.temporaryDirectory
-        .appendingPathComponent("orbe-editor-shell-\(ProcessInfo.processInfo.processIdentifier)")
-      try? FileManager.default.removeItem(at: dir)
+        .appendingPathComponent("orbe-editor-shell-\(UUID().uuidString)")
       for relative in copied {
         let dest = dir.appendingPathComponent(relative)
         try FileManager.default.createDirectory(
@@ -80,7 +91,7 @@
       _ = try tab.editor.open(dir.appendingPathComponent("docs/design/tokens.json"))
       _ = try tab.editor.open(
         dir.appendingPathComponent("Sources/Orbe/Features/Editor/FileTree.swift"))
-      return Scene(tab: tab)
+      return Scene(tab: tab, directory: dir)
     }
 
     private struct ShellPane: NSViewRepresentable {
