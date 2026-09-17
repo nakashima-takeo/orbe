@@ -52,11 +52,13 @@ struct DispatchRefreshHeader: View {
             direction: .down, count: model.sync.behind, em: Theme.Typography.meta.pointSize),
           Color.theme.tintAccent, Color.theme.accentPrimary)
       }
-      Text(l10n.string(.dispatchCleanBack))
-        .font(Font.theme.meta)
-        .foregroundStyle(Color.theme.textMuted)
-        .lineLimit(1)
-        .fixedSize()
+      if !model.isBusy {
+        Text(l10n.string(.dispatchCleanBack))
+          .font(Font.theme.meta)
+          .foregroundStyle(Color.theme.textMuted)
+          .lineLimit(1)
+          .fixedSize()
+      }
     }
   }
 
