@@ -98,7 +98,9 @@ struct ExplorerView: View {
         rootRow
         ScrollViewReader { proxy in
           ScrollView(.vertical) {
-            LazyVStack(spacing: 0) {
+            // 行は展開した分だけ（人の操作の範囲）なので遅延で生まない——遅延の容器は生まれた直後の行を
+            // 捨てて作り直すことがあり、「行が消えた＝入力の終わり」の契約が自分の入力を取り消す。
+            VStack(spacing: 0) {
               ForEach(tree.rows) { row in
                 if case .input(let isDirectory, let generation) = row.kind {
                   InlineInputRow(
@@ -110,7 +112,7 @@ struct ExplorerView: View {
               }
             }
           }
-          // 行は遅延で生まれる（可視域外の行は無い）ので、入力行と選択行は可視位置へ送る。
+          // 入力行と選択行は可視位置へ送る。
           .onChange(of: tree.newEntry) { _, entry in
             if let entry { proxy.scrollTo(FileTree.inputRowID(entry)) }
           }

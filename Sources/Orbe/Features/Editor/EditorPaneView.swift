@@ -170,17 +170,20 @@ final class EditorPaneView: NSView {
   }
 
   /// 行内入力の行が画面から消えた（Enter・Esc・blur・すべて折りたたむ・根を畳む・サイドバーを閉じる・cd）。
-  /// その世代がまだ出ていれば落とし、field editor を失って窓か骨の host に落ちた焦点を面の行き先へ引き取る
-  /// （端末をクリックして抜けたなら焦点は端末にあるので触らない。次の入力が出ていればそれが持つ）。判定は
-  /// 次のターン——行の消失と AppKit の first responder の付け替えは同じ更新の中で順序を持たない。
+  /// その世代がまだ出ていれば落とし、field editor を失って窓か面の中の別の view（骨の host・空状態の host）に
+  /// 落ちた焦点を面の行き先へ引き取る（端末をクリックして抜けたなら焦点は面の外にあるので触らない。次の
+  /// 入力が出ていればそれが持つ）。判定は次のターン——行の消失と AppKit の first responder の付け替えは
+  /// 同じ更新の中で順序を持たない。
   private func inlineInputDidEnd(generation: Int) {
     tree.cancelNew(generation)
     DispatchQueue.main.async { [weak self] in
       guard let self, let window, tree.newEntry == nil else { return }
       let responder = window.firstResponder
-      let strayed =
-        responder === window || (responder as? NSView)?.isDescendant(of: sideHost) == true
-      if strayed { window.makeFirstResponder(focusTarget) }
+      let target = focusTarget
+      if responder === target || (responder as? NSView)?.isDescendant(of: target) == true { return }
+      let outside =
+        (responder as? NSView).map { !$0.isDescendant(of: self) } ?? (responder !== window)
+      if !outside { window.makeFirstResponder(target) }
     }
   }
 

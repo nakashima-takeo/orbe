@@ -36,11 +36,6 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     window.makeFirstResponder(nil)
 
     pane.shell.createFile()
-    // バグ疑い: 全量実行の中でだけ、入力行が生まれた直後（約 30ms）に LazyVStack が行を捨てて `onDisappear` が
-    // 走り、「行が消えた＝入力の終わり」の契約が自分の入力を取り消す（単独・前置クラス付きでは再現しない）。
-    let options = XCTExpectedFailure.Options()
-    options.isStrict = false
-    XCTExpectFailure("LazyVStack の行の作り直しが入力の終わりとして扱われる", options: options)
     let field = try inputField(pane, in: window)
     field.insertText("fresh.txt", replacementRange: NSRange(location: 0, length: 0))
     field.keyDown(with: .key("\r", []))
