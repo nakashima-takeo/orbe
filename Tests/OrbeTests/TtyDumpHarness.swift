@@ -13,6 +13,8 @@ import XCTest
 /// （legacy / bracketed paste / kitty keyboard protocol）に応じてどんなバイトになったかを、
 /// libghostty の符号化を通した実物で測れる。モードの切替（bracketed paste の有効化・kitty flags の
 /// push）と、端末への要求（クリップボードの読み取り・書き込み）は dump 自身が READY の前に出す。
+/// 画面はその前に scrollback ごと消し、READY から始まる dump の出力だけにする——タブは macOS では
+/// `login(1)` 経由で起動し、その Last login バナーの有無は実行ユーザーのホームの `.hushlogin` で決まる。
 ///
 /// 1 打ごとに `next()` で待ってから次を送る——連打すると dump の 1 回の read に複数打が合流し、
 /// 打鍵単位の突き合わせができなくなる。
@@ -52,7 +54,7 @@ final class TtyDumpTab {
         "kittyWriteCharset": kitty_write("text/plain;charset=utf-8"),
         "kittyWriteSpacedCharset": kitty_write("text/plain; charset=UTF-8"),
     }[mode]
-    sys.stdout.write(enter + "READY\\r\\n")
+    sys.stdout.write("\\x1b[H\\x1b[2J\\x1b[3J" + enter + "READY\\r\\n")
     sys.stdout.flush()
     while True:
         data = os.read(fd, 4096)
