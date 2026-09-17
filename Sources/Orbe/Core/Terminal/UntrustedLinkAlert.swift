@@ -22,7 +22,8 @@ enum UntrustedLinkAlert {
   }
 
   static func block(
-    _ reason: UntrustedLink.BlockReason, display: String, language: Language, in window: NSWindow?
+    _ reason: UntrustedLink.BlockReason, display: String, copy: String, language: Language,
+    in window: NSWindow?
   ) {
     let alert = NSAlert()
     alert.messageText = L10n.string(.linkBlockedTitle, language)
@@ -31,11 +32,11 @@ enum UntrustedLinkAlert {
     alert.addButton(withTitle: L10n.string(.linkBlockedOK, language))
     alert.addButton(withTitle: L10n.string(.linkBlockedCopy, language))
     present(alert, in: window) { response in
-      // コピーするのは無害化した表示文字列。開く近道は作らない。
+      // コピーするのは無害化した文字列。開く近道は作らない。
       guard response == .alertSecondButtonReturn else { return }
       let pasteboard = NSPasteboard.general
       pasteboard.clearContents()
-      pasteboard.setString(display, forType: .string)
+      pasteboard.setString(copy, forType: .string)
     }
   }
 

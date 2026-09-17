@@ -11,6 +11,10 @@ import UniformTypeIdentifiers
 final class Ghostty {
   nonisolated(unsafe) static let shared = Ghostty()
 
+  /// 端末とやり取りするクリップボード。テストはシステム全域の general を書き換えないよう一意名の
+  /// pasteboard に差し替える。
+  nonisolated(unsafe) static var pasteboard: NSPasteboard = .general
+
   let app: ghostty_app_t
   private(set) var config: ghostty_config_t
 
@@ -54,7 +58,7 @@ final class Ghostty {
       let wantsText = (0..<mimesLen).contains { i in
         mimes?[i].map { strcmp($0, "text/plain") == 0 } ?? false
       }
-      let text = NSPasteboard.general.string(forType: .string)
+      let text = Ghostty.pasteboard.string(forType: .string)
       guard (wantsText && text != nil) || list else { return GHOSTTY_CLIPBOARD_READ_UNAVAILABLE }
       Ghostty.completeClipboardRead(
         surface, state: state, text: wantsText ? text : nil, listsText: list && text != nil)
@@ -75,10 +79,13 @@ final class Ghostty {
         confirmed: true, remember: false)
       ghostty_surface_complete_clipboard_request(surface, &payload, state)
     }
-    // write: 確認が要る書き込みは通さない。
+    // write: 確認が要る書き込みは通さない。宛先（PRIMARY 等）によらず通常のクリップボードに置く——
+    // nvim は `*` レジスタを OSC 52 の PRIMARY で書くので、捨てると `"*y` が効かない（読み取り側で
+    // PRIMARY を断るのは中身を漏らさないためで、書き込みには当たらない）。
     rt.write_clipboard_cb = { _, _, contents, len, confirm in
       guard !confirm, let contents else { return }
-      Ghostty.writeClipboard(UnsafeBufferPointer(start: contents, count: len))
+      Ghostty.writeClipboard(
+        UnsafeBufferPointer(start: contents, count: len), to: Ghostty.pasteboard)
     }
     // surface クローズ要求（shell の exit 等）: 所属タブを閉じる
     rt.close_surface_cb = { userdata, _ in
@@ -107,7 +114,9 @@ final class Ghostty {
   /// Kitty write の MIME は core が正規化せず端末アプリの書いた名前のまま来るので、plain text と見なすかは
   /// macOS の型システム（UTType）に判定させる。本文は UTF-8 としてしか読まないので、UTF-16 系の plain text は
   /// テキスト表現と見なさない（NUL 混じりの文字列を置かない）。
-  private static func writeClipboard(_ contents: UnsafeBufferPointer<ghostty_clipboard_content_s>) {
+  private static func writeClipboard(
+    _ contents: UnsafeBufferPointer<ghostty_clipboard_content_s>, to pasteboard: NSPasteboard
+  ) {
     for content in contents {
       guard let mime = content.mime,
         let type = UTType(mimeType: String(cString: mime)),
@@ -117,9 +126,8 @@ final class Ghostty {
         let text = String(
           bytes: UnsafeRawBufferPointer(start: data, count: content.len), encoding: .utf8)
       else { continue }
-      let pb = NSPasteboard.general
-      pb.clearContents()
-      pb.setString(text, forType: .string)
+      pasteboard.clearContents()
+      pasteboard.setString(text, forType: .string)
       return
     }
   }

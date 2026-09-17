@@ -34,15 +34,18 @@ if [ -L "$ROOT/vendor/ghostty" ]; then
   rm "$ROOT/vendor/ghostty"
   mkdir "$ROOT/vendor/ghostty"
 fi
-if [ ! -f "$ROOT/vendor/ghostty/build.zig" ]; then
-  # submodule 未取得（git worktree）: main worktree の実 checkout が同じ pin なら symlink で共有する
+ST="$(git -C "$ROOT" submodule status -- vendor/ghostty)"
+GIT_DIR_ABS="$(git -C "$ROOT" rev-parse --path-format=absolute --git-dir)"
+COMMON_DIR_ABS="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)"
+if [ "${ST:0:1}" = "-" ] && [ "$GIT_DIR_ABS" != "$COMMON_DIR_ABS" ]; then
+  # 未取得の linked worktree: main worktree の実 checkout が同じ pin なら symlink で共有する
   # （zig-out・.zig-cache も共有され、zig は cache hit で実質 read-only）。
   MAIN_WT="$(git -C "$ROOT" worktree list --porcelain | sed -n 's/^worktree //p' | head -1)"
   MAIN_ST="$(git -C "$MAIN_WT" submodule status -- vendor/ghostty 2>/dev/null)" || MAIN_ST=""
   MAIN_PIN="$(git -C "$MAIN_WT" rev-parse :vendor/ghostty)"
   # worktree 内に実 checkout するコマンド。reference 先は main の checkout ではなく共通 git dir の
   # module store（main が deinit 済みでも残り、git オブジェクトを alternates で借りられる）。
-  STORE="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)/modules/vendor/ghostty"
+  STORE="$COMMON_DIR_ABS/modules/vendor/ghostty"
   if [ -d "$STORE/objects" ]; then
     WT_CHECKOUT="git -C '$ROOT' submodule update --init --reference '$STORE' vendor/ghostty"
   else
@@ -76,22 +79,25 @@ if [ ! -f "$ROOT/vendor/ghostty/build.zig" ]; then
     exit 1
   fi
   echo "==> worktree 検出: vendor/ghostty を main worktree へ symlink ($MAIN_WT)"
-  rm -rf "$ROOT/vendor/ghostty"
+  rmdir "$ROOT/vendor/ghostty"
   ln -s "$MAIN_WT/vendor/ghostty" "$ROOT/vendor/ghostty"
   # ビルド後（EXIT/INT/TERM）に symlink を submodule 未 checkout（空ディレクトリ）へ戻す。
   # symlink を残すと git status がエラーになり lefthook・確定コミット・worktree remove を壊す。
   # .app には share/font をコピー済みで、vendor はビルド完了後は不要（次回ビルドで再 symlink）。
-  trap 'rm -rf "$ROOT/vendor/ghostty"; mkdir "$ROOT/vendor/ghostty"' EXIT INT TERM
-else
-  ST="$(git -C "$ROOT" submodule status -- vendor/ghostty)"
-  if [ "${ST:0:1}" != " " ]; then
-    echo "エラー: vendor/ghostty の checkout が pin とずれている" >&2
-    echo "  vendor/ghostty HEAD: ${ST:1:40}" >&2
-    echo "  pin:                 $PIN" >&2
-    echo "pin に合わせる:" >&2
-    echo "  git -C '$ROOT' submodule update --init vendor/ghostty" >&2
-    exit 1
-  fi
+  trap 'rm -f "$ROOT/vendor/ghostty"; mkdir "$ROOT/vendor/ghostty"' EXIT INT TERM
+elif [ "${ST:0:1}" = "-" ]; then
+  echo "エラー: vendor/ghostty が未取得" >&2
+  echo "  pin: $PIN" >&2
+  echo "取得する:" >&2
+  echo "  git -C '$ROOT' submodule update --init vendor/ghostty" >&2
+  exit 1
+elif [ "${ST:0:1}" != " " ]; then
+  echo "エラー: vendor/ghostty の checkout が pin とずれている" >&2
+  echo "  vendor/ghostty HEAD: ${ST:1:40}" >&2
+  echo "  pin:                 $PIN" >&2
+  echo "pin に合わせる:" >&2
+  echo "  git -C '$ROOT' submodule update --init vendor/ghostty" >&2
+  exit 1
 fi
 
 # zig は mise.toml が固定する版だけを使う（ghostty の build.zig が major.minor の一致を要求する）。

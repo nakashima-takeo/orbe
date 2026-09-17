@@ -129,15 +129,17 @@ extension Ghostty {
       let view = surf.flatMap { self?.view(for: $0) }
       let language = view?.localization?.language ?? .systemDefault
       let link = UntrustedLink(raw)
-      switch link.decision {
+      let decision = link.decision
+      switch decision {
       case .allow(let target):
         target.open()
       case .confirm(let url):
         UntrustedLinkAlert.confirm(
-          url, display: link.displayString, language: language, in: view?.window)
+          url, display: link.displayString(for: decision), language: language, in: view?.window)
       case .block(let reason):
         UntrustedLinkAlert.block(
-          reason, display: link.displayString, language: language, in: view?.window)
+          reason, display: link.displayString(for: decision), copy: link.copyString,
+          language: language, in: view?.window)
       }
     }
     return true

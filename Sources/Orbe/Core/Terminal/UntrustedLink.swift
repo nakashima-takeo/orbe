@@ -5,11 +5,12 @@ import UniformTypeIdentifiers
 /// allow / confirm / block の 3 値で判定する。判定は URL 文字列・ローカル host 名の集合・ファイルシステムの
 /// 状態だけから決まる。
 ///
-/// ローカルファイルの危険はファイルの型ではなく Launch Services が選ぶ handler にある（実行ビット付きの
-/// `.txt` は Terminal、`.py` は IDLE、`.jnlp` は JavaLauncher、`.fileloc` は中で参照した先に渡る）。
+/// ローカルファイルの危険はファイルの型ではなく Launch Services が選ぶ handler にある（拡張子の無い
+/// 実行ファイルや `.command` は Terminal、`.py` は IDLE、`.jnlp` は JavaLauncher、`.fileloc` は中で
+/// 参照した先に渡る）。
 /// だから allow は「開き先」を伴い、Orbe が内容の家族ごとに開き先を決める。家族のどれでもないものは
 /// allow に落ちず confirm になる。
-struct UntrustedLink: Equatable {
+struct UntrustedLink {
   enum BlockReason: Equatable {
     case malformed
     case unsafeCharacters
@@ -27,7 +28,7 @@ struct UntrustedLink: Equatable {
     case text(URL)
     /// ファイルの型で引いた既定アプリ（画像・PDF・音声/動画）。
     case typed(URL, UTType)
-    /// Finder で表示。
+    /// Finder でフォルダ自身を開く。
     case folder(URL)
   }
 
@@ -49,10 +50,12 @@ struct UntrustedLink: Equatable {
     self.localHosts = Set(localHosts.map { $0.lowercased() }).union(["", "localhost"])
   }
 
-  /// coreutils `ls`・ripgrep・fd・cargo は `file://<gethostname()>/path` を出すので、このマシンが名乗る
-  /// 名前をすべてローカルと認める。
+  /// coreutils `ls`・ripgrep・fd・cargo は `file://<gethostname()>/path` を出すので、同じ取り方で得た
+  /// このマシンの名前をローカルと認める。
   static func machineHostNames() -> Set<String> {
-    Set([ProcessInfo.processInfo.hostName] + Host.current().names)
+    var buffer = [CChar](repeating: 0, count: Int(MAXHOSTNAMELEN) + 1)
+    guard gethostname(&buffer, buffer.count) == 0 else { return [] }
+    return [String(cString: buffer)]
   }
 
   var decision: Decision {
@@ -92,20 +95,27 @@ struct UntrustedLink: Equatable {
     }
   }
 
-  /// 表示用の 1 行文字列。`file` は開く対象（`..`・symlink 解決後のパス）、それ以外は元の文字列で、
-  /// 不可視文字は `\u{XXXX}` に可視化する。Orbe はリンクのホバー表示を持たないので、これが真の対象を
-  /// 人に見せる唯一の場所。
-  var displayString: String {
-    let normalized: String
-    if let url = URL(string: raw), url.isFileURL {
-      normalized = (Self.canonicalFileURL(url) ?? url.standardizedFileURL).path
-    } else {
-      normalized = raw
-    }
+  /// ダイアログに出す 1 行文字列。file の confirm は開く実体（`..`・symlink 解決後）のパス、それ以外は
+  /// 元の文字列（block ではその理由——別ホスト・query 等——が見えるように）。Orbe はリンクのホバー表示を
+  /// 持たないので、これが真の対象を人に見せる唯一の場所。
+  func displayString(for decision: Decision) -> String {
+    if case .confirm(let url) = decision, url.isFileURL { return Self.visualized(url.path) }
+    return Self.visualized(raw)
+  }
+
+  /// block の「リンクをコピー」が置く文字列。file はローカルのパス（ホスト名が変わった直後に自分の
+  /// ファイルが別ホストと判定されたときの逃げ道）、それ以外は元の文字列。
+  var copyString: String {
+    guard let url = URL(string: raw), url.isFileURL else { return Self.visualized(raw) }
+    return Self.visualized((Self.canonicalFileURL(url) ?? url.standardizedFileURL).path)
+  }
+
+  /// 不可視文字を `\u{XXXX}` に可視化する。
+  private static func visualized(_ text: String) -> String {
     var result = ""
-    result.unicodeScalars.reserveCapacity(normalized.unicodeScalars.count)
-    for scalar in normalized.unicodeScalars {
-      if Self.isUnsafeCharacter(scalar) {
+    result.unicodeScalars.reserveCapacity(text.unicodeScalars.count)
+    for scalar in text.unicodeScalars {
+      if isUnsafeCharacter(scalar) {
         result += String(format: "\\u{%04X}", scalar.value)
       } else {
         result.unicodeScalars.append(scalar)
@@ -146,6 +156,9 @@ struct UntrustedLink: Equatable {
     // スクリプトが実行ビットで unix 実行形式の型に、`.ts` の TypeScript が MPEG-2 TS の型になるため
     // （中身がテキストなら編集対象で、実行も再生もしない）。
     if forwardingTypes.contains(where: type.conforms(to:)) { return .block(.unsafeFile) }
+    if canonical.pathExtension.lowercased() == editorWorkspaceExtension {
+      return .confirm(canonical)
+    }
     if visualTypes.contains(where: type.conforms(to:)) { return .allow(.typed(canonical, type)) }
     if type.conforms(to: .text) { return .allow(.text(canonical)) }
     if !isDirectory,
@@ -168,9 +181,13 @@ struct UntrustedLink: Equatable {
     return URL(fileURLWithPath: String(cString: resolved))
   }
 
-  /// 中身が別の対象を指す転送ファイル（`.webloc`・`.fileloc`・`.url` 等）。開かない。
+  /// 中身が別の対象を指す転送ファイル（`.webloc`・`.fileloc`・`.url`・Finder エイリアス等）。開かない。
   private static let forwardingTypes: [UTType] =
-    [.internetLocation, UTType("public.stored-url")].compactMap { $0 }
+    [.internetLocation, UTType("public.stored-url"), .aliasFile].compactMap { $0 }
+
+  /// VS Code 系エディタのワークスペース。中身はテキストだが、エディタはワークスペースとして開き、
+  /// Cursor 等は信頼の確認なしにその中のタスクを自動実行する。中身判定より前に confirm へ回す。
+  private static let editorWorkspaceExtension = "code-workspace"
 
   /// アプリ・実行形式（`.app`・unix 実行形式・`.dylib`・`.jar`・`.exe` 等）。中身がテキストでない限り開かない。
   private static let executableTypes: [UTType] = [.application, .executable]

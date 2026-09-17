@@ -1,7 +1,7 @@
 ---
 title: レイアウト
 description: window の SwiftUI ホスト構成・workspace / タブ / surface の構造・一方向参照・フォーカス管理・ショートカット・オーバーレイ提示機構
-updated: 2026-09-17
+updated: 2026-09-18
 ---
 
 # レイアウト
@@ -50,4 +50,4 @@ chrome キー（`WindowCommand`）は「タブが無くても効くか」の網�
 
 ## GUI エディタ起動（Cmd+Shift+E）
 
-アクティブタブの cwd（OSC 7 報告値、無ければ初期 cwd）を GUI エディタでフォルダとして開く。エディタは `$VISUAL` → `$EDITOR`（GUI エディタのときのみ採用）→ PATH 検索（`code`/`cursor`/`windsurf`/`zed`/`subl` の先頭ヒット）で決定し、解決・起動は子プロセス PATH（[shell-path](../platform/shell-path.md)）で行う——GUI アプリの限定 PATH を回避するため。解決できたときだけプロセス内に覚える。未検出は `NSAlert`、cwd 不明はビープ。同じ解決を端末のリンク（→ [terminal/links](../terminal/links.md)）のテキストファイルにも使い、そこではフォルダの代わりにファイルパスを渡す。
+アクティブタブの cwd（OSC 7 報告値、無ければ初期 cwd）を GUI エディタでフォルダとして開く。エディタは `$VISUAL` → `$EDITOR`（GUI エディタのときのみ採用）→ PATH 検索（`code`/`cursor`/`windsurf`/`zed`/`subl` の先頭ヒット）で決定し、解決・起動は子プロセス PATH（[shell-path](../platform/shell-path.md)）で行う——GUI アプリの限定 PATH を回避するため。解決できたときだけプロセス内に覚える。未検出は `NSAlert`、cwd 不明はビープ。同じ解決を OSC 8 リンク（→ [terminal/links](../terminal/links.md)）のテキストファイルにも使い、そこではフォルダの代わりにファイルパスを渡す。
