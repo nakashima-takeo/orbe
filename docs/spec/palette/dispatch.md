@@ -49,7 +49,7 @@ scrim ＋ ガラスパネル。上端アンカー・窓幅に追随する上限�
 - **Worktree 行**: 既存パスをそのまま使用（非破壊）。
 - **Local branch**: 既存 worktree があれば再利用、無ければ `git worktree add`。
 - **Remote branch**: `origin/<名前>` から、それを upstream として追跡するローカルブランチを作って add。
-- **Issue**: 他行種別と対称で、`issue/<番号>` を既存 worktree／ローカルブランチと突合し 3 分岐（既存 worktree あれば再利用／同名ブランチだけ既存ならそこから追加／どちらも無ければデフォルトブランチ（`origin/HEAD` が解決すれば `origin/<既定>`・未設定ならローカルの既定ブランチ）から `-b issue/<番号>` で追加）。行末ノート／フッターも実解決に一致する（既存worktree／checkout → worktree／新規worktree）。
+- **Issue**: 他行種別と対称で、`issue/<番号>` を既存 worktree／ローカルブランチと突合し 3 分岐（既存 worktree あれば再利用／同名ブランチだけ既存ならそこから追加／どちらも無ければデフォルトブランチ（`origin/HEAD` が解決すれば `origin/<既定>`・解決できなければ固定名 `main`——ローカルの既定ブランチを探しには行かないので、`origin/HEAD` を持たず既定が `main` でないリポジトリでは作成が失敗する）から `-b issue/<番号>` で追加）。行末ノート／フッターも実解決に一致する（既存worktree／checkout → worktree／新規worktree）。
 - **PR（same-repo）**: `origin/<head>` を追跡する head ブランチの worktree を作成/再利用。fork（cross-repo）PR は worktree 化せず、⌘↵ でのブラウザ表示へ誘導する。
 
 新しいブランチを切る 3 経路（Issue の新規・Remote branch・PR）は、提示時に走る `fetch --prune` の着地を待ってからベースを読む（→ [データ供給](#データ供給プログレッシブ)）。
