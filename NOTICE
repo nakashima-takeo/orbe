@@ -129,8 +129,10 @@ Fonts (Contents/Resources/*.ttf, and fonts embedded in Contents/MacOS/Orbe)
 --------------------------------------------------------------------------------
 
 * JetBrains Mono Nerd Font — OFL-1.1
-  Bundled unmodified in Contents/Resources. The glyphs added by the Nerd Fonts
-  patch come from the icon sets described under Symbols Nerd Font.
+  Bundled unmodified in Contents/Resources as
+  JetBrainsMonoNerdFont-{Regular,Bold,Italic,BoldItalic}.ttf. The glyphs added
+  by the Nerd Fonts patch come from the icon sets described under Symbols Nerd
+  Font.
   https://github.com/JetBrains/JetBrainsMono, https://github.com/ryanoasis/nerd-fonts
   License: licenses/OFL-1.1.txt
 
@@ -151,14 +153,14 @@ Fonts (Contents/Resources/*.ttf, and fonts embedded in Contents/MacOS/Orbe)
   License: licenses/nerd-fonts-symbols-only-LICENSE.txt
 
 * JuliaMono — OFL-1.1
-  Bundled unmodified in Contents/Resources.
+  Bundled unmodified in Contents/Resources as JuliaMono-Regular.ttf.
   https://github.com/cormullion/juliamono
   License: licenses/OFL-1.1.txt
 
 * Noto Color Emoji — OFL-1.1
-  Bundled in Contents/Resources with its bitmap glyphs repacked, unmodified,
-  from the upstream CBDT/CBLC format into an sbix table so that CoreText can
-  render them.
+  Bundled in Contents/Resources as NotoColorEmoji-sbix.ttf with its bitmap
+  glyphs repacked, unmodified, from the upstream CBDT/CBLC format into an sbix
+  table so that CoreText can render them.
   https://github.com/googlefonts/noto-emoji
   License: licenses/OFL-1.1.txt
 
