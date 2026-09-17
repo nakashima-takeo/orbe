@@ -136,6 +136,43 @@ enum L10n {
       "Add one of VS Code, Cursor, Windsurf, Zed, or Sublime to your PATH, or set a GUI editor in $VISUAL/$EDITOR."
     ),
 
+    // MARK: Link（OSC 8）
+    .linkConfirmTitle: ("端末出力のリンクを開きますか？", "Open Link from Terminal Output?"),
+    .linkConfirmMessage: (
+      "このリンクは「%@」で開かれます。宛先に心当たりがあり、信頼できる場合だけ開いてください。",
+      "This link will open in “%@”. Open it only if you recognize and trust the destination."
+    ),
+    .linkConfirmMessageDefaultApp: (
+      "このリンクは既定のアプリで開かれます。宛先に心当たりがあり、信頼できる場合だけ開いてください。",
+      "This link will open in the default application. Open it only if you recognize and trust the destination."
+    ),
+    .linkConfirmOpen: ("開く", "Open Link"),
+    .linkBlockedTitle: ("Orbe はこのリンクを開きませんでした", "Orbe Blocked This Link"),
+    .linkBlockedOK: ("OK", "OK"),
+    .linkBlockedCopy: ("リンクをコピー", "Copy Link"),
+    .linkBlockedMalformed: (
+      "対象が scheme 付きの絶対 URL ではありません。", "The target is not an absolute URL with a scheme."
+    ),
+    .linkBlockedUnsafeCharacters: (
+      "対象に不可視文字または改行文字が含まれています。",
+      "The target contains invisible or line-breaking characters."
+    ),
+    .linkBlockedInvalidWeb: (
+      "web の対象に有効なホストがありません。", "The web target does not contain a valid host."
+    ),
+    .linkBlockedRemoteFile: (
+      "ファイルの対象がこの Mac 以外のホストを指しています。",
+      "The file target names a host other than this Mac."
+    ),
+    .linkBlockedInaccessibleFile: (
+      "ローカルの対象が存在しないか、通常のファイル／ディレクトリではありません。",
+      "The local target does not exist or is not a regular file or directory."
+    ),
+    .linkBlockedUnsafeFile: (
+      "ローカルの対象がアプリ・実行形式か、別の場所を指す転送ファイルです。",
+      "The local target is an application, an executable, or a file that forwards to another location."
+    ),
+
     // MARK: Tab context menu
     .tabMenuResetAgentState: ("エージェント状態をリセット", "Reset Agent State"),
 
