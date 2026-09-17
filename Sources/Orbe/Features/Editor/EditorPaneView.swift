@@ -180,14 +180,16 @@ final class EditorPaneView: NSView {
     tree.cancelNew(generation)
   }
 
-  /// 行内入力が終わった（状態が落ちた。Enter・Esc・取り消し・すべて折りたたむ・根を畳む・サイドバーを閉じる・
-  /// cd）。焦点がまだ入力欄（骨の host 配下）か窓に居れば、その場で面の行き先へ移す。別の view へ移って
-  /// 終わったなら（端末をクリックして抜けた）そこに居るので触らない。
+  /// 行内入力が終わった（状態が落ちた。Enter・Esc・取り消し・すべて折りたたむ・根を畳む・作成先を畳む・
+  /// サイドバーを閉じる・cd）。焦点がまだ入力欄（骨の host 配下）か面自身（`beginNew` が停めた・預かっている）
+  /// か窓に居れば、その場で面の行き先へ移す。別の view へ移って終わったなら（端末をクリックして抜けた）
+  /// そこに居るので触らない。
   private func inlineInputDidEnd() {
     guard let window else { return }
     let responder = window.firstResponder
     let strayed =
-      responder === window || (responder as? NSView)?.isDescendant(of: sideHost) == true
+      responder === window || responder === self
+      || (responder as? NSView)?.isDescendant(of: sideHost) == true
     if strayed { window.makeFirstResponder(focusTarget) }
   }
 

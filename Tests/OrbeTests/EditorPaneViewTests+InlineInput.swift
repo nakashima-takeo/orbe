@@ -112,6 +112,26 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     XCTAssertNotNil(pane.tree.newEntry, "窓へ落ちただけ（人の操作ではない）では取り消さない")
   }
 
+  /// 焦点が面の外にある状態で入力を出すと面自身が焦点を取る。行が焦点を取る前に入力が落ちれば（同じターンで
+  /// すべて折りたたむ）、焦点は面に残らず文書のテキスト面へ移る。
+  func testInputEndingBeforeTheRowTakesFocusHandsTheFocusToTheTextSurface() throws {
+    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.view.editor
+    let window = hostEditor(tab, width: 900)
+    defer { window.orderOut(nil) }
+    let document = try tab.editor.open(try caseFile("a.txt", "a"))
+    let outsider = NSTextField(frame: NSRect(x: 0, y: 0, width: 50, height: 20))
+    tab.view.addSubview(outsider)
+    XCTAssertTrue(window.makeFirstResponder(outsider))
+
+    pane.shell.createFile()
+    XCTAssertTrue(window.firstResponder === pane, "前提: 入力を出す前に面自身が焦点を取る")
+    pane.shell.collapseAll()
+    XCTAssertNil(pane.tree.newEntry)
+    XCTAssertTrue(window.firstResponder === document.surface.responder, "面に残らずテキスト面へ")
+  }
+
   /// 低い窓で深い文書をアクティブにするとツリーがその行まで送り、深い挿し先の入力行も可視位置へ送られて
   /// 焦点を取る。
   func testDeepRowsAndTheInputRowAreScrolledIntoView() throws {
