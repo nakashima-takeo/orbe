@@ -142,16 +142,19 @@ struct UntrustedLink: Equatable {
     _ canonical: URL, type: UTType, isDirectory: Bool, isPackage: Bool
   ) -> Decision {
     // 判定順は家族の包含関係で決まる: `.js` は executable にも text にも準拠し、`.svg` は image にも
-    // text にも準拠する。実行形式の block より前に中身判定を置くのは、拡張子の無いシェルスクリプトが
-    // 実行ビットで unix 実行形式の型になるため（中身がテキストなら編集対象で、実行はしない）。
+    // text にも準拠する。実行形式・音声/動画の判定より前に中身判定を置くのは、拡張子の無いシェル
+    // スクリプトが実行ビットで unix 実行形式の型に、`.ts` の TypeScript が MPEG-2 TS の型になるため
+    // （中身がテキストなら編集対象で、実行も再生もしない）。
     if forwardingTypes.contains(where: type.conforms(to:)) { return .block(.unsafeFile) }
-    if mediaTypes.contains(where: type.conforms(to:)) { return .allow(.typed(canonical, type)) }
+    if visualTypes.contains(where: type.conforms(to:)) { return .allow(.typed(canonical, type)) }
     if type.conforms(to: .text) { return .allow(.text(canonical)) }
-    if !isDirectory, hasNoDeclaredType(type) || type.conforms(to: .executable),
+    if !isDirectory,
+      contentDecidedTypes.contains(where: type.conforms(to:)) || hasNoDeclaredType(type),
       looksLikeText(canonical)
     {
       return .allow(.text(canonical))
     }
+    if type.conforms(to: .audiovisualContent) { return .allow(.typed(canonical, type)) }
     if executableTypes.contains(where: type.conforms(to:)) { return .block(.unsafeFile) }
     if isDirectory, !isPackage { return .allow(.folder(canonical)) }
     return .confirm(canonical)
@@ -172,7 +175,12 @@ struct UntrustedLink: Equatable {
   /// アプリ・実行形式（`.app`・unix 実行形式・`.dylib`・`.jar`・`.exe` 等）。中身がテキストでない限り開かない。
   private static let executableTypes: [UTType] = [.application, .executable]
 
-  private static let mediaTypes: [UTType] = [.image, .pdf, .audiovisualContent]
+  /// 型だけでは開き先を決めない家族。実行形式と音声/動画は、拡張子の衝突（`.ts`）や実行ビットで
+  /// テキストがこの型を名乗るので、中身がテキストならエディタに向ける。
+  private static let contentDecidedTypes: [UTType] = [.executable, .audiovisualContent]
+
+  /// 型だけで開き先が決まる家族（画像・PDF）。`.svg` はテキストにも準拠するが画像として扱う。
+  private static let visualTypes: [UTType] = [.image, .pdf]
 
   /// macOS が型を知らないファイル（`.zig`・`.rs`・`.env` 等は動的な型、Dockerfile 等の拡張子無しは
   /// 素のデータ型になる）。型が無いので中身で判定する。
