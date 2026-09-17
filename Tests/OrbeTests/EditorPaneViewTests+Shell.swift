@@ -3,11 +3,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 面の骨——pane が幾何を解き（レール｜サイドバー（開いていて本体に最低幅が残るとき）｜列の頭｜本体）、骨の host はクリックを自分で
+/// 面の骨——pane が幾何を解き（レール｜サイドバー（開いているとき。狭い列では表示幅を切り詰める）｜列の頭｜本体）、骨の host はクリックを自分で
 /// 受け、ツリーは面が窓に付いて隠れていない間だけ根のサービスを握り、cd で根が変わればツリーを作り直す。
 ///
 /// 壊れると何が起きるか。hitTest が面全体を self に固定したままだと骨がクリックできない。隠れたタブの
-/// ツリーが握り続けると全タブの根を常時監視する。狭い面でサイドバーが畳まれないと本体が潰れる。
+/// ツリーが握り続けると全タブの根を常時監視する。狭い面でサイドバーの表示幅が切り詰まらないと本体が潰れる。
 @MainActor
 final class EditorPaneViewShellTests: OrbeTestCase {
   private func file(_ name: String, _ text: String) throws -> URL {
@@ -27,14 +27,13 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     return window
   }
 
-  func testSidebarShowsWhileTheBodyKeepsItsMinimumWidthAndHidesOtherwise() throws {
+  func testSidebarStaysOpenInNarrowColumnsWithItsShownWidthTrimmed() throws {
     let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hosted(tab, width: 900)
     defer { window.orderOut(nil) }
 
-    XCTAssertTrue(pane.sidebarVisible)
-    XCTAssertTrue(pane.shell.sidebarVisible, "写しにも出る")
+    XCTAssertTrue(pane.shell.sidebarOpen, "写しにも出る")
     XCTAssertEqual(
       pane.bodyRect, NSRect(x: 37 + 241, y: 29, width: 900 - 278, height: 400 - 2 - 29),
       "レール・サイドバーの右、タブ行の下の hairline はその外側")
@@ -44,41 +43,39 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertEqual(pane.bodyRect.minY, 29 + 20, "文書があればパンくずの分だけ下がる")
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
 
-    window.setContentSize(NSSize(width: 678 + FaceGeometry.spine, height: 400))
+    window.setContentSize(NSSize(width: 360 + FaceGeometry.spine, height: 400))
     tab.view.layoutSubtreeIfNeeded()
-    XCTAssertTrue(pane.sidebarVisible, "本体にちょうど 400 残る幅までは出す")
-
-    window.setContentSize(NSSize(width: 640 + FaceGeometry.spine, height: 400))
-    tab.view.layoutSubtreeIfNeeded()
-    XCTAssertFalse(pane.sidebarVisible, "本体に 400 残らなければ一時的に隠す")
-    XCTAssertFalse(pane.shell.sidebarVisible)
-    XCTAssertEqual(pane.bodyRect.minX, 37, "レールだけ残る")
+    XCTAssertTrue(pane.shell.sidebarOpen, "狭い列でも隠れない")
+    XCTAssertEqual(pane.shownSidebarWidth, 360 - 36 - 2 - 160, "本体に 160 残るまで表示幅を切り詰める")
+    XCTAssertEqual(pane.bodyRect.minX, 37 + 162 + 1)
+    XCTAssertEqual(pane.bodyRect.width, 160)
+    XCTAssertEqual(pane.sidebar.width, 240, "記憶の幅は変えない")
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
-    XCTAssertTrue(pane.sidebar.isOpen, "隠しても開いている記憶は変わらない")
+
+    window.setContentSize(NSSize(width: 120 + FaceGeometry.spine, height: 400))
+    tab.view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(pane.shownSidebarWidth, 0, "極端な幅では残りをそのまま分け、0 まで縮む")
+    XCTAssertEqual(pane.bodyRect.minX, 37 + 1)
 
     window.setContentSize(NSSize(width: 900 + FaceGeometry.spine, height: 400))
     tab.view.layoutSubtreeIfNeeded()
-    XCTAssertTrue(pane.sidebarVisible, "広がれば戻る")
+    XCTAssertEqual(pane.shownSidebarWidth, 240, "広がれば記憶の幅に戻る")
+    XCTAssertEqual(pane.bodyRect.minX, 37 + 241)
 
     pane.shell.toggleSidebar()
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertFalse(pane.sidebar.isOpen, "レールの選択中の項目を押すと閉じる")
-    XCTAssertFalse(pane.sidebarVisible, "手で閉じれば列幅に関係なく閉じたまま")
     XCTAssertFalse(pane.shell.sidebarOpen, "閉じている間はレールの選択印が無い")
-    XCTAssertEqual(pane.bodyRect.minX, 37)
+    XCTAssertEqual(pane.bodyRect.minX, 37, "レールだけ残る")
+    XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
 
     pane.shell.toggleSidebar()
     tab.view.layoutSubtreeIfNeeded()
-    XCTAssertTrue(pane.sidebarVisible, "もう一度押すと開く")
-    XCTAssertTrue(pane.shell.sidebarOpen)
-
-    window.setContentSize(NSSize(width: 640 + FaceGeometry.spine, height: 400))
-    tab.view.layoutSubtreeIfNeeded()
-    XCTAssertTrue(pane.shell.sidebarOpen, "狭い列で一時的に隠れても開いている印は残る")
-    XCTAssertFalse(pane.shell.sidebarVisible)
+    XCTAssertTrue(pane.shell.sidebarOpen, "もう一度押すと開く")
+    XCTAssertEqual(pane.bodyRect.minX, 37 + 241)
   }
 
-  /// 境の当たりをドラッグするとサイドバーの幅が連続で追従し、下限 160 と「本体に 400 残る」上限で止まり、
+  /// 境の当たりをドラッグするとサイドバーの幅が連続で追従し、下限 160 と「本体に 160 残る」上限で止まり、
   /// 離すと書き戻す。幅はアプリ全体で 1 つなので、同じ状態を配られた別の面も同じ幅になる。
   func testDraggingTheHandleResizesTheSidebarWithinBounds() throws {
     let state = EditorSidebarState()
@@ -116,12 +113,12 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     handle.mouseDragged(with: .mouse(.leftMouseDragged, at: point(278 - 200), in: window))
     XCTAssertEqual(state.width, 160, "下限")
     handle.mouseDragged(with: .mouse(.leftMouseDragged, at: point(278 + 600), in: window))
-    XCTAssertEqual(state.width, 900 - 36 - 2 - 400, "本体に 400 残るまで")
+    XCTAssertEqual(state.width, 900 - 36 - 2 - 160, "本体に 160 残るまで")
     handle.mouseUp(with: .mouse(.leftMouseUp, at: point(278 + 600), in: window))
 
     let otherWindow = hosted(other, width: 900)
     defer { otherWindow.orderOut(nil) }
-    XCTAssertEqual(other.view.editor.bodyRect.minX, 37 + 462 + 1, "同じ状態を配られた面は同じ幅")
+    XCTAssertEqual(other.view.editor.bodyRect.minX, 37 + 702 + 1, "同じ状態を配られた面は同じ幅")
   }
 
   /// SwiftUI の中身（エクスプローラーの地と右の hairline）が pane の決めた幅を埋めているかを描画で見る。

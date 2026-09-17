@@ -11,7 +11,7 @@ struct EditorFaceRoot: View {
   }
 }
 
-/// エディター面の AppKit 側の根。骨の幾何——レール｜サイドバー（開いていて本体に最低幅が残るとき）｜列の頭
+/// エディター面の AppKit 側の根。骨の幾何——レール｜サイドバー（開いているとき）｜列の頭
 /// （ファイルタブ行 → 文書があればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（焦点の
 /// 文書のテキスト面、無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
 ///
@@ -217,27 +217,25 @@ final class EditorPaneView: NSView {
 
   // MARK: - 幾何
 
-  /// 左列の幅（レール ＋ 右の hairline、サイドバーが出るときは ＋幅 ＋ hairline）。
+  /// 左列の幅（レール ＋ 右の hairline、サイドバーが開いていれば ＋表示幅 ＋ hairline）。
   private var sideWidth: CGFloat {
     Theme.Layout.editorRail + Theme.Stroke.hairline
-      + (sidebarVisible ? sidebar.width + Theme.Stroke.hairline : 0)
+      + (sidebar.isOpen ? shownSidebarWidth + Theme.Stroke.hairline : 0)
   }
 
-  /// 開いていて、本体に最低幅が残るときだけサイドバーを出す（狭い列では一時的に隠し、広がれば戻る。
-  /// 手で閉じた状態は列幅に関係なく閉じたまま）。
-  var sidebarVisible: Bool { sidebar.isOpen && sidebarFits(width: sidebar.width) }
+  /// サイドバーの表示幅。記憶の幅を、本体に最低幅が残るところまで切り詰める（記憶は変えない——列が
+  /// 広がれば記憶の幅に戻る）。列がそれでも足りなければ残りをそのまま分け、0 まで縮む。
+  var shownSidebarWidth: CGFloat { min(sidebar.width, max(0, sidebarCeiling)) }
 
-  private func sidebarFits(width: CGFloat) -> Bool {
-    bounds.width >= Theme.Layout.editorRail + Theme.Stroke.hairline * 2 + width
-      + Theme.Layout.editorBodyMinWidth
+  /// 本体に最低幅を残したときのサイドバーの幅の上限。
+  private var sidebarCeiling: CGFloat {
+    bounds.width - Theme.Layout.editorRail - Theme.Stroke.hairline * 2
+      - Theme.Layout.editorBodyMinWidth
   }
 
   /// ドラッグ中の幅。上限は本体に最低幅が残るまで（下限は状態が守る）。
   private func resizeSidebar(to width: CGFloat) {
-    let ceiling =
-      bounds.width - Theme.Layout.editorRail - Theme.Stroke.hairline * 2
-      - Theme.Layout.editorBodyMinWidth
-    sidebar.setWidth(min(width, max(ceiling, Theme.Layout.editorSidebarMinWidth)))
+    sidebar.setWidth(min(width, max(sidebarCeiling, Theme.Layout.editorSidebarMinWidth)))
     layoutSubtreeIfNeeded()
   }
 
@@ -268,7 +266,6 @@ final class EditorPaneView: NSView {
 
   override func layout() {
     super.layout()
-    if shell.sidebarVisible != sidebarVisible { shell.sidebarVisible = sidebarVisible }
     if shell.sidebarOpen != sidebar.isOpen { shell.sidebarOpen = sidebar.isOpen }
     let sideWidth = self.sideWidth
     sideHost.frame = NSRect(
@@ -278,7 +275,7 @@ final class EditorPaneView: NSView {
     let body = bodyRect
     emptyHost.frame = body
     document?.surface.view.frame = body
-    sidebarHandle.isHidden = !sidebarVisible
+    sidebarHandle.isHidden = !sidebar.isOpen
     sidebarHandle.frame = NSRect(
       x: sideWidth - Theme.Stroke.hairline - Theme.Layout.editorSidebarHandle / 2, y: 0,
       width: Theme.Layout.editorSidebarHandle, height: bounds.height)

@@ -102,8 +102,8 @@ extension Theme.Layout {
   static let editorSidebar: CGFloat = 240
   /// サイドバーの幅の下限。
   static let editorSidebarMinWidth: CGFloat = 160
-  /// 本体（テキスト面）に残す最低幅。サイドバーの幅の上限と、狭い列で一時的に隠す規則が使う。
-  static let editorBodyMinWidth: CGFloat = 400
+  /// 本体（テキスト面）に残す最低幅。サイドバーの幅の上限と、狭い列で表示幅を切り詰める規則が使う。
+  static let editorBodyMinWidth: CGFloat = 160
   /// サイドバーと本体の境（hairline）に置くドラッグの当たりの幅。
   static let editorSidebarHandle: CGFloat = 4
   static let editorFileTabs: CGFloat = 28

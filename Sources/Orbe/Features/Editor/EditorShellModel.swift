@@ -22,9 +22,7 @@ final class EditorShellModel {
     let directory: URL?
   }
 
-  /// サイドバーが今見えているか（開いていて、本体に最低幅が残る）。
-  var sidebarVisible = true
-  /// サイドバーを開いているか（レールの選択印。狭い列で一時的に隠れていても立つ）。
+  /// サイドバーを開いているか（エクスプローラーが出て、レールに選択印が立つ）。
   var sidebarOpen = true
   var tabs: [FileTab] = []
   var activeID: URL?

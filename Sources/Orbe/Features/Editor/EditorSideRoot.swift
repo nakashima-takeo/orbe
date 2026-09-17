@@ -13,7 +13,7 @@ struct EditorSideRoot: View {
     HStack(spacing: 0) {
       RailView(
         selection: shell.sidebarOpen ? .files : nil, onSelect: { _ in shell.toggleSidebar() })
-      if shell.sidebarVisible {
+      if shell.sidebarOpen {
         ExplorerView(shell: shell, tree: tree)
       }
     }

@@ -42,7 +42,7 @@
       var view: some View { ShellPane(pane: pane) }
     }
 
-    /// 骨込みの面。gallery が dark / light・広い幅・狭い幅を撮る。
+    /// 骨込みの面。gallery が dark / light・広い幅・狭い幅（サイドバーが切り詰まる）を撮る。
     @MainActor static func scene(queriesRoot: URL) throws -> Scene {
       let repoRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
