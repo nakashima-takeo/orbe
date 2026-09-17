@@ -1,7 +1,7 @@
 ---
 title: Dispatch パレット
 description: ⌘⇧X で開くコマンドパレット。worktree/ブランチ/Issue/PR を実データで列挙し、選んで Enter で「エージェントが起動した状態のタブ」を開く
-updated: 2026-09-06
+updated: 2026-09-17
 ---
 
 # Dispatch パレット（⌘⇧X）
@@ -26,7 +26,7 @@ scrim ＋ ガラスパネル。上端アンカー・窓幅に追随する上限�
 
 パレット提示と同時にデータロードが走る。git（worktree/branch 列挙・数十 ms）は即描画。初回ロードまでは候補行の形をしたスケルトン行を出し、開いた瞬間の空フレームを埋める（[clean](#clean--worktree-の掃除) の選択画面も、分類が 1 行も出ていない間は同じスケルトン行で埋める）。gh（issue/PR 取得・ネット）は前回結果を先に描いて裏で取り直す。git・gh とも子プロセス PATH（[shell-path](../platform/shell-path.md)）でサブプロセス実行し、completion をメインで受ける。
 
-- **git 列挙**: worktree 一覧・local/remote branch 一覧（`refs/remotes/origin/HEAD` 等のノイズ除外。local branch は既存 worktree パスも取得して再利用判定に使う）・デフォルトブランチ。remote branch は即時読みに加え、裏で `git fetch --prune origin` を**独立レーン**で走らせ、成功時に読み直して当該セクションだけ差し替える（失敗時はキャッシュ据え置きで UI 非破壊）。独立レーンにするのは、共有 queue の barrier チェーンに載せると直後に Enter で来る worktree 作成がこの数秒の fetch を待たされるため。
+- **git 列挙**: worktree 一覧・local/remote branch 一覧（`refs/remotes/origin/HEAD` 等のノイズ除外。local branch は既存 worktree パスも取得して再利用判定に使う）・デフォルトブランチ。remote branch は即時読みに加え、裏で `git fetch --prune origin` を**独立レーン**で走らせ、成功時に読み直して当該セクションだけ差し替える（失敗時はキャッシュ据え置きで UI 非破壊）。独立レーンにするのは、共有 queue の barrier チェーンに載せると無関係な git 操作までこの数秒の fetch を待たされるため——待つかどうかは実行基盤ではなくパレットが経路ごとに決める。**ベースから新しいブランチを切る worktree 作成（Issue の新規・Remote branch 行・PR 行）だけは、この fetch が走っている間はその着地を待ってから行う**——待たなければ、提示直後の Enter が fetch 前の古い `refs/remotes/origin/*` から worktree を切る。**着地は fetch プロセスの完了ではなく、その後の git 列挙の引き直しまで揃った時点**を指し、ベースの名前（既定ブランチ）も fetch 後に解決した値を使う——fetch は `origin/HEAD` を作ることがあるので、ref の中身だけを待つと、`origin/HEAD` を持たないリポジトリで Issue 新規がフォールバックの固定名を指したまま撃たれる。着地の成否は問わない（失敗したなら手元の origin ref が最良で、gh 取得・分類と同じ「失敗は据え置き」に揃える）。作成の直前に別の fetch は撃たない——同一リポジトリで fetch を並走させると `refs/remotes/origin/*` のロックで片方が落ちる（git はロックを待たず即失敗する）。既存ブランチを checkout するだけの経路（Worktree 行・Local branch 行・Issue の同名ブランチ既存）は fetch で動く ref をベースに取らないので待たない。
 - **GitHub 取得**: 可用性を `notGitHub`／`ghMissing`／`ghUnauthed`／`ready` に分類（origin URL が github.com か → ローカルの認証情報の有無）してから `gh issue list`／`gh pr list --json` で取得する。可用性の判定は**ネットに触らない**——疎通不能を「未認証」と誤分類すると、通信できないだけの状態で誘導情報行が出て前回結果が消えるため。ネット待ちはタイムアウトつき（stdout/stderr を並行排出しデッドロックを避ける）。
 - **gh 結果のキャッシュ**: 取得結果はリポジトリ（`git-common-dir`）単位でプロセス内に保持し、次に開いたときは**前回結果を最初の描画フレームから描いた**うえで裏で取り直す（2 回目以降はローディング行を経由しない）。worktree 間で共有され、アプリ終了で消える。取得成功時はセクションをまるごと置換するので、閉じた issue／マージ済み PR は残らない。**取得失敗（オフライン・タイムアウト・非 0 終了・デコード失敗）は差し替えず前回結果を据え置く**（remote branch の裏 fetch と同じ規約）。失敗と「0 件」は取得層で区別され、0 件成功では行が消える。取得結果が前回と等値ならセクションを再構築しない。
 - **フォールバック 3 分岐**: `notGitHub`→Issues/PR 両セクション非表示／`ghMissing`・`ghUnauthed`→Issues に誘導情報行 1 本／`ready`→実データ（0 件セクションは非表示）。
@@ -48,9 +48,13 @@ scrim ＋ ガラスパネル。上端アンカー・窓幅に追随する上限�
 
 - **Worktree 行**: 既存パスをそのまま使用（非破壊）。
 - **Local branch**: 既存 worktree があれば再利用、無ければ `git worktree add`。
-- **Remote branch**: ローカル追跡ブランチを作って add。
-- **Issue**: 他行種別と対称で、`issue/<番号>` を既存 worktree／ローカルブランチと突合し 3 分岐（既存 worktree あれば再利用／同名ブランチだけ既存ならそこから追加／どちらも無ければデフォルトブランチから `-b issue/<番号>` で追加）。行末ノート／フッターも実解決に一致する（既存worktree／checkout → worktree／新規worktree）。
-- **PR（same-repo）**: head ブランチの worktree を作成/再利用。fork（cross-repo）PR は worktree 化せず、⌘↵ でのブラウザ表示へ誘導する。
+- **Remote branch**: `origin/<名前>` から、それを upstream として追跡するローカルブランチを作って add。
+- **Issue**: 他行種別と対称で、`issue/<番号>` を既存 worktree／ローカルブランチと突合し 3 分岐（既存 worktree あれば再利用／同名ブランチだけ既存ならそこから追加／どちらも無ければデフォルトブランチ（`origin/HEAD` が解決すれば `origin/<既定>`・解決できなければ固定名 `main`——ローカルの既定ブランチを探しには行かないので、`origin/HEAD` を持たず既定が `main` でないリポジトリでは作成が失敗する）から `-b issue/<番号>` で追加）。行末ノート／フッターも実解決に一致する（既存worktree／checkout → worktree／新規worktree）。
+- **PR（same-repo）**: `origin/<head>` を追跡する head ブランチの worktree を作成/再利用。fork（cross-repo）PR は worktree 化せず、⌘↵ でのブラウザ表示へ誘導する。
+
+新しいブランチを切る 3 経路（Issue の新規・Remote branch・PR）は、提示時に走る `fetch --prune` の着地を待ってからベースを読む——ref の中身も、既定ブランチの名前も、着地後の値を使う（→ [データ供給](#データ供給プログレッシブ)）。
+
+**新規ブランチの upstream は経路ごとに決まり、git の既定（`branch.autoSetupMerge`）には委ねない。** remote ブランチと同名で起こす 2 経路（Remote branch・PR）は `origin/<同名>` を追跡する。**`issue/<番号>` は upstream を持たない**——既定ブランチを upstream にすると `git push` がそのブランチへ向かって拒否され（`push.default=simple`）、upstream が既にあるので `push.autoSetupRemote` も発動しない。upstream が無ければ git 自身が `--set-upstream` へ導く。
 
 **worktree の作成場所**は実効設定 `worktree-dir`（[settings](settings.md)・[config](../platform/config.md)）のテンプレートから解決する。語彙は `{repo_path}`（main worktree の絶対パス）・`{parent}`（その親）・`{repo}`（その basename）・`{slug}`（branch 名の `/`→`-`）の 4 語＋先頭 `~` のみで、既定は `{parent}/{repo}-worktrees/{slug}`。4 語はすべて `{repo_path}` 1 つから導く——`{parent}/{repo}` は定義上つねに `{repo_path}` と同値であり、その同値を呼び手が整合した値を渡すことに委ねない。置換 → `~` 展開 → **純字句の**正規化（`.`・`..`・重複スラッシュを畳む。symlink は解決しない——実在する repo root と、これから作る作成先を同じ土俵で比べるため）で確定する。語彙に語を足すときは検証の既知トークン集合と置換の両方に入れる必要がある（検証だけ通って未置換のまま残ると、その名前のディレクトリが実際に作られる）。
 
@@ -58,7 +62,7 @@ scrim ＋ ガラスパネル。上端アンカー・窓幅に追随する上限�
 
 **失敗時**（パス衝突・checkout 済・ネット不通）: palette を閉じずフッターに失敗理由を赤で表示し、agent を起動しない。作成が失敗したときは除外も書かない——何も起きなかった操作がユーザーの repo を書き換えない。失敗理由は git stderr から実質行（`fatal:`／`error:` 行・無ければ最終非空行）を抜く——成功時にも出る進捗風メッセージで本当の理由を覆い隠さないため（この整形は git ラッパー層に閉じる）。
 
-**作成中の進捗表示・入力ロック**: 非同期作成の完了を待つ間 `isPreparing` を立て、フッターにスピナ＋「作成中…」を出す。この間は入力を受け付けない（Enter 再実行＝`git worktree add` 二重起動を弾く／↑↓・⇥・検索入力・Esc/scrim 閉じを握り潰す）。既存 worktree 再利用など同期に済むケースは同一 tick で palette が閉じるため進捗は描画されない。
+**作成中の進捗表示・入力ロック**: 非同期作成の完了を待つ間 `isPreparing` を立て、フッターにスピナ＋「作成中…」を出す。この間は入力を受け付けない（Enter 再実行＝`git worktree add` 二重起動を弾く／↑↓・⇥・検索入力・Esc/scrim 閉じを握り潰す）。**fetch の着地待ちも同じ表示と同じロックに乗る**ので、fetch が長引くリポジトリではその間ずっとロックされ、中断はできない（`--progress` で進捗が流れる限り無応答の打ち切りも効かない）。既存 worktree 再利用など同期に済むケースは同一 tick で palette が閉じるため進捗は描画されない。
 
 **無応答の打ち切り**: `git worktree add` は独立レーンで走り、無出力が続けば打ち切られる（→ [git](../platform/git.md)）。打ち切られたとき **worktree の実体が出来ていれば成功として開く**——post-checkout hook は worktree が完成した後に走るので、hook が返らないだけの状態を失敗として扱うと、実在する worktree を指したまま再実行が「ブランチが既にある」で詰む。実体が無いまま打ち切られたときは失敗理由として専用の文言（応答が無いため中断した旨）をフッターに出す。git が自分で理由を言えた場合はそちらを出す。
 

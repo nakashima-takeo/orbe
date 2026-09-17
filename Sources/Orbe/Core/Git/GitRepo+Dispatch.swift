@@ -98,7 +98,9 @@ extension GitRepo {
   }
 
   /// worktree を追加する（現在の作業ツリーは一切変更しない・隔離された新規ディレクトリを作る）。
-  /// `git worktree add [-b <newBranch>] [--track] <path> <base>`。成功なら nil、失敗なら理由。
+  /// `git worktree add [-b <newBranch> --track|--no-track] <path> <base>`。成功なら nil、失敗なら理由。
+  /// 新規ブランチを切るときは追跡を**常に明示する**——省くとユーザーの `branch.autoSetupMerge` 次第で
+  /// upstream が付いたり付かなかったりし、呼び手が期待する契約が環境で揺れる。
   ///
   /// 独立レーン: 触るのは新規ディレクトリ・`$GIT_COMMON_DIR/worktrees/<名前>`・`-b` 指定時の
   /// `refs/heads/<新ブランチ>`・`--track` 指定時の `.git/config`（`branch.<新ブランチ>.remote/merge`）で、
@@ -110,12 +112,13 @@ extension GitRepo {
   /// post-checkout hook はユーザーのコードで所要時間に上限が無いため、barrier に置くと 1 本のハングが
   /// 以後の全 git 操作を止める。
   func addWorktree(
-    path: String, base: String, newBranch: String?, track: Bool,
+    path: String, base: String, newBranch: GitNewBranch?,
     completion: @escaping (GitFailure?) -> Void
   ) {
     var args = ["worktree", "add"]
-    if let newBranch { args += ["-b", newBranch] }
-    if track { args.append("--track") }
+    if let newBranch {
+      args += ["-b", newBranch.name, newBranch.tracksBase ? "--track" : "--no-track"]
+    }
     args += [path, base]
     runner.run(args, cwd: root, lane: .independent) { output in
       guard !output.isSuccess else {
