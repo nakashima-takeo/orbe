@@ -1,7 +1,7 @@
 ---
 title: ビルド手順
 description: libghostty の自前ビルドから Orbe.app の生成・起動まで。前提ツール・チャネル・lint / format
-updated: 2026-09-17
+updated: 2026-09-18
 ---
 
 # ビルド手順
@@ -55,7 +55,7 @@ xcrun -sdk macosx metal --version
 - ghostty: `vendor/ghostty` submodule を `f9a3f24a56bf05f70894e1a084809d4fffadf420` に pin。
   API の正はこのコミットの `vendor/ghostty/include/ghostty.h`（外部契約は [spec/terminal/libghostty.md](../spec/terminal/libghostty.md)）。
 - libghostty は alpha・API 非安定のため、**main 追従ではなく固定 SHA で pin**。アップグレード時はヘッダの型差分を確認。
-- `build-app.sh` は焼く前に `vendor/ghostty` の checkout が pin と一致するか確かめ、ずれていれば関係する SHA（checkout の HEAD・pin）と復旧コマンドを示して止める。pull・rebase で pin が動いたら `git submodule update --init vendor/ghostty`。
+- `build-app.sh` は焼く前に `vendor/ghostty` の checkout が pin と一致するか確かめ、未取得かずれていれば関係する SHA（checkout の HEAD・pin）と復旧コマンドを示して止める。共有経路（下の worktree の注意）へ進むのは、linked worktree で submodule が未取得のときだけ。pull・rebase で pin が動いたら `git submodule update --init vendor/ghostty`。
 
 ## ビルド手順（Xcode 導入後）
 
