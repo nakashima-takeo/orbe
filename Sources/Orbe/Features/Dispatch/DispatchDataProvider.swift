@@ -230,8 +230,7 @@ final class DispatchDataProvider {
         return
       }
       createWorktree(
-        at: worktreeDir(forSlug: slug(name)), base: name, newBranch: nil, track: false,
-        completion: completion)
+        at: worktreeDir(forSlug: slug(name)), base: name, newBranch: nil, completion: completion)
 
     case .remoteBranch(let name, let existing):
       if let existing {
@@ -240,8 +239,8 @@ final class DispatchDataProvider {
       }
       let local = localName(fromRemote: name)
       createWorktree(
-        at: worktreeDir(forSlug: slug(local)), base: name, newBranch: local, track: true,
-        completion: completion)
+        at: worktreeDir(forSlug: slug(local)), base: name,
+        newBranch: GitNewBranch(name: local, tracksBase: true), completion: completion)
 
     case .issue(let number, let existing, let branchExists):
       if let existing {
@@ -252,13 +251,14 @@ final class DispatchDataProvider {
       let path = worktreeDir(forSlug: slug(branch))
       if branchExists {
         // 既存ブランチから worktree 追加（-b を外す）＝ git worktree add <path> issue/<n>。
-        createWorktree(
-          at: path, base: branch, newBranch: nil, track: false, completion: completion)
+        createWorktree(at: path, base: branch, newBranch: nil, completion: completion)
       } else {
-        // 新規: git worktree add -b issue/<n> <path> <default>。
+        // 新規: git worktree add -b issue/<n> --no-track <path> <default>。既定ブランチを upstream に
+        // 持つと `git push` が既定ブランチへ向かって拒否され、`push.autoSetupRemote` も（upstream が
+        // 既にあるため）発動しない。upstream 無しなら git が正しい `--set-upstream` へ導く。
         createWorktree(
-          at: path, base: defaultBranchName, newBranch: branch, track: false,
-          completion: completion)
+          at: path, base: defaultBranchName,
+          newBranch: GitNewBranch(name: branch, tracksBase: false), completion: completion)
       }
 
     case .pullRequest(let number, let headRef, let isCrossRepo, let existing):
@@ -274,7 +274,7 @@ final class DispatchDataProvider {
       }
       createWorktree(
         at: worktreeDir(forSlug: slug(headRef)), base: "origin/\(headRef)",
-        newBranch: headRef, track: true, completion: completion)
+        newBranch: GitNewBranch(name: headRef, tracksBase: true), completion: completion)
 
     case .clean:
       // clean 行はディレクトリを持たない。決定は `DispatchPaletteModel.activate` がパレット内で畳むため
@@ -287,7 +287,7 @@ final class DispatchDataProvider {
   /// exclude へ除外を冪等に入れる（プリセット由来かカスタム由来かを問わず、解決済みパスだけで判定する）。
   /// 除外の成否は作成に影響しない。
   private func createWorktree(
-    at path: String, base: String, newBranch: String?, track: Bool,
+    at path: String, base: String, newBranch: GitNewBranch?,
     completion: @escaping (DirectoryResolution) -> Void
   ) {
     guard let repo else {
@@ -302,7 +302,7 @@ final class DispatchDataProvider {
       parentIsNew: !FileManager.default.fileExists(
         atPath: (path as NSString).deletingLastPathComponent))
     let localization = self.localization
-    repo.addWorktree(path: path, base: base, newBranch: newBranch, track: track) { failure in
+    repo.addWorktree(path: path, base: base, newBranch: newBranch) { failure in
       if let failure {
         switch failure {
         case .timedOut: completion(.failed(localization.string(.gitTimedOut)))

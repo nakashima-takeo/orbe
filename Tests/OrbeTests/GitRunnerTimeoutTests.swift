@@ -194,7 +194,8 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
     var failure: GitFailure??
     let done = expectation(description: "addWorktree")
     try XCTUnwrap(repo).addWorktree(
-      path: fixture.worktreePath, base: "main", newBranch: "hang", track: false
+      path: fixture.worktreePath, base: "main",
+      newBranch: GitNewBranch(name: "hang", tracksBase: false)
     ) {
       failure = $0
       done.fulfill()

@@ -18,6 +18,15 @@ struct GitWorktree: Equatable {
   var lockReason: String?
 }
 
+/// `git worktree add -b` で切る新規ブランチ。追跡の指定（`--track` / `--no-track`）は git が
+/// 新規ブランチにだけ許すので、名前と 1 つの値にまとめて「既存ブランチの checkout には付かない」を
+/// 型で表す。
+struct GitNewBranch: Equatable {
+  let name: String
+  /// base を upstream として追跡するか。
+  let tracksBase: Bool
+}
+
 /// `git for-each-ref` の 1 ブランチ（local / remote 兼用）。
 struct GitBranch: Equatable {
   /// 短縮名（local は `feat/x`・remote は `origin/feat/x`）。
