@@ -44,6 +44,8 @@ final class EditorSidebarStateTests: OrbeTestCase {
     try Data(#"{"preferredLanguage":"ja","editorSidebar":"garbage"}"#.utf8).write(
       to: appStateFile())
     XCTAssertEqual(AppStatePersistence.load()?.preferredLanguage, "ja", "他の項目は生きる")
+    XCTAssertEqual(
+      AppStatePersistence.load()?.editorSidebar, EditorSidebarRecord(), "読めない記録は全 field nil")
     let garbage = EditorSidebarState.loaded()
     XCTAssertEqual(garbage.width, 240)
     XCTAssertTrue(garbage.isOpen)
