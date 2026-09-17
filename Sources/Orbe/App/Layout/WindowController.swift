@@ -265,15 +265,18 @@ final class WindowController: NSObject, NSWindowDelegate {
   }
 
   /// タブ 1 枚を model.content へ mount（surface 誕生は viewDidMoveToWindow 経由で冪等に 1 度）。
-  /// 隠れタブも実サイズで起こす（pty winsize 正常）。frame/isHidden は既 mount でも毎回更新。
+  /// 隠れタブも実サイズで起こす（pty winsize 正常）。frame/isHidden は既 mount でも毎回更新し、
+  /// addSubview より先に確定させる——窓に付いた瞬間の可視性で面（エクスプローラー）が根のサービスを
+  /// 握るか決まるので、隠れタブを一瞬でも見えている扱いにしない（`materializeOffscreen` と同じ順）。
   private func mountTab(_ tab: TerminalTab, in ws: Workspace, visible: Bool) {
     guard store.recordMaterialization(of: tab, in: ws) else { return }
-    if tab.view.superview !== model.content {
-      tab.view.autoresizingMask = [.width, .height]
-      model.content.addSubview(tab.view)
-    }
     tab.view.frame = model.content.bounds
     tab.view.isHidden = !visible
+    if tab.view.superview !== model.content {
+      tab.view.autoresizingMask = [.width, .height]
+      tab.view.layoutSubtreeIfNeeded()
+      model.content.addSubview(tab.view)
+    }
   }
 
   /// 未 mount の隠れタブを後続 runloop tick で 1 枚ずつ mount（surface 誕生を分割）。
