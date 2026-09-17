@@ -28,7 +28,7 @@ extension DesignGallerySnapshotTests {
         StatusRowModel.Snapshot(
           workspace: "orbe",
           strip: TabStrip(titles: ["src/renderer", "docs"], glyphs: [.working, nil]),
-          active: 0, location: "~/dev/orbe", faceDots: dots, rollup: [("working", 1)]))
+          active: 0, location: .path("~/dev/orbe"), faceDots: dots, rollup: [("working", 1)]))
       try writePNG(
         ZStack(alignment: .top) {
           BackgroundGlow()

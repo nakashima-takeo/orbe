@@ -82,7 +82,7 @@ final class ChromeStatusRowTests: OrbeTestCase {
     surface.currentPwd = "/private/var/orbe-cwd-probe"
     wc.flushChrome()
     XCTAssertEqual(
-      wc.statusModel.location, "/private/var/orbe-cwd-probe", "cwd は chrome 行に 1 箇所だけ出る")
+      wc.statusModel.location, [.text("/private/var/orbe-cwd-probe")], "cwd は chrome 行に 1 箇所だけ出る")
 
     // タブタイトルは ③ 派生で cwd の fish 圧縮名になる（root 外＝home 外なので絶対 compact）。
     // 行の実 cwd（フルパス）とは別表現＝同じ文字列の埋め込みではない。
@@ -90,7 +90,7 @@ final class ChromeStatusRowTests: OrbeTestCase {
       wc.statusModel.strip.titles.first, "/p/v/orbe-cwd-probe",
       "タブタイトルは cwd の派生圧縮名: \(wc.statusModel.strip.titles)")
     XCTAssertNotEqual(
-      wc.statusModel.strip.titles.first, wc.statusModel.location,
+      wc.statusModel.strip.titles.first, wc.statusModel.location.first?.text,
       "タブタイトルは行の実 cwd フルパスとは別表現")
   }
 

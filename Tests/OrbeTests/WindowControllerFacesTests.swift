@@ -329,12 +329,39 @@ final class WindowControllerFacesTests: OrbeTestCase {
       [TabState(cwd: src.path, agent: nil, explicitTitle: nil)], rootPath: root.path)
 
     wc.flushChrome()
-    XCTAssertEqual(wc.statusModel.location, src.path, "端末焦点は cwd")
+    XCTAssertEqual(wc.statusModel.location, [.text(src.path)], "端末焦点は cwd 1 本")
 
     wc.handleWindowCommand(.toggleEditorFace)
     wc.flushChrome()
+    let normalizedRoot = GitWorktreeRoot.normalizedPath(root.path)
     XCTAssertEqual(
-      wc.statusModel.location, GitWorktreeRoot.normalizedPath(root.path), "エディター焦点は worktree ルート")
+      wc.statusModel.location, [.dim(normalizedRoot)], "エディター焦点で文書が無ければ根だけ（dim）")
+
+    let file = src.appendingPathComponent("a.txt")
+    try Data("x".utf8).write(to: file)
+    try XCTUnwrap(wc.activeTab).openFile(file)
+    wc.flushChrome()
+    XCTAssertEqual(
+      wc.statusModel.location, [.dim(normalizedRoot + "/"), .text("src/a.txt")],
+      "根の下の文書は根（dim）＋相対パス（text）")
+
+    let outside = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("o.txt")
+    try Data("x".utf8).write(to: outside)
+    try XCTUnwrap(wc.activeTab).openFile(outside)
+    wc.flushChrome()
+    XCTAssertEqual(
+      wc.statusModel.location, [.text(outside.resolvingSymlinksInPath().path)], "根の外の文書は絶対パス 1 本")
+  }
+
+  /// 事実 → 表現の写し: `~` 短縮は純粋なパス片にかけてから区切りを足す（短縮が末尾の `/` を落とすため）。
+  func testLocationPartsAbbreviateBeforeAddingTheSeparator() {
+    let home = NSHomeDirectory()
+    XCTAssertEqual(
+      StatusRowModel.parts(of: .file(root: home + "/dev", relative: "a/b.swift")),
+      [.dim("~/dev/"), .text("a/b.swift")])
+    XCTAssertEqual(StatusRowModel.parts(of: .root(home)), [.dim("~")])
+    XCTAssertEqual(StatusRowModel.parts(of: .path(home + "/x")), [.text("~/x")])
+    XCTAssertEqual(StatusRowModel.parts(of: .path("/private/var/y")), [.text("/private/var/y")])
   }
 
   /// 位置ドットはアクティブタブの面の可視と焦点を映し、0 タブでは無い。

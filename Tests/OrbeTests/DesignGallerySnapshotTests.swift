@@ -123,7 +123,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       titles: (0..<10).map { "terraform-apply-session-\($0)" },
       glyphs: (0..<10).map { glyphCycle[$0 % glyphCycle.count] })
     overflow.active = 6
-    overflow.location = "~/work/infra/terraform/modules/network"
+    overflow.location = [.text("~/work/infra/terraform/modules/network")]
     overflow.faceDots = .init(editor: .off, terminal: .focus)
     overflow.rollup = [("working", 8), ("waiting", 2), ("idle", 15)]
     try writePNG(
@@ -152,7 +152,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
         WorktreeColor.index(forKey: $0)
       })
     grouped.active = 3
-    grouped.location = "~/dev/storefront/src/hooks"
+    grouped.location = [.text("~/dev/storefront/src/hooks")]
     grouped.faceDots = .init(editor: .off, terminal: .focus)
     grouped.rollup = [("working", 2), ("waiting", 1), ("done", 2), ("idle", 4)]
     try writePNG(
@@ -167,7 +167,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       segments: [0..<4, 4..<8, 8..<11],
       colorIndices: ["network", "compute", "storage"].map { WorktreeColor.index(forKey: $0) })
     groupedOverflow.active = 5
-    groupedOverflow.location = "~/work/infra-worktrees/compute"
+    groupedOverflow.location = [.text("~/work/infra-worktrees/compute")]
     groupedOverflow.faceDots = .init(editor: .off, terminal: .focus)
     groupedOverflow.rollup = [("working", 3), ("waiting", 3), ("done", 3), ("idle", 2)]
     try writePNG(
@@ -186,7 +186,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       colorIndices: ["core", "web", "scratch", "api", "cli"].map { WorktreeColor.index(forKey: $0) }
     )
     groupedScroll.active = 2
-    groupedScroll.location = "~/dev/monorepo/packages/core"
+    groupedScroll.location = [.text("~/dev/monorepo/packages/core")]
     groupedScroll.faceDots = .init(editor: .off, terminal: .focus)
     groupedScroll.rollup = [("working", 5), ("waiting", 4), ("done", 5), ("idle", 4)]
     try writePNG(
@@ -208,7 +208,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       segments: [0..<3, 3..<4],
       colorIndices: ["orbe", "notes"].map { WorktreeColor.index(forKey: $0) })
     fitting.active = 0
-    fitting.location = "~/dev/orbe/ui"
+    fitting.location = [.text("~/dev/orbe/ui")]
     fitting.faceDots = .init(editor: .off, terminal: .focus)
     fitting.rollup = [("working", 1), ("done", 1), ("idle", 2)]
     try writePNG(

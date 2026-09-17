@@ -1,5 +1,17 @@
 import SwiftUI
 
+/// TopBar の現在地の断片。`dim` は根（`textMuted`）、`text` はその下の相対パス・cwd（`statusText`）。
+struct LocationPart: Equatable {
+  enum Tone: Equatable {
+    case dim, text
+  }
+  let text: String
+  let tone: Tone
+
+  static func dim(_ text: String) -> LocationPart { LocationPart(text: text, tone: .dim) }
+  static func text(_ text: String) -> LocationPart { LocationPart(text: text, tone: .text) }
+}
+
 /// 最上段 chrome（StatusRow）の状態。WindowController が `update` で流し込み、
 /// SwiftUI `StatusRowView` が描く。信号機ボタンの縦位置（system furniture）もここへ集める。
 @Observable final class StatusRowModel {
@@ -7,8 +19,8 @@ import SwiftUI
   /// タブ行（セル＋セグメント構造）。1 つの値として代入され、View はこれだけを辿る。
   var strip = TabStrip()
   var active = 0
-  /// `~` 短縮済みの現在地（アクティブタブの焦点の面が居る場所）。
-  var location: String?
+  /// 現在地（アクティブタブの焦点の面が居る場所）。`~` 短縮済みのトーン付き断片列。空は出さない。
+  var location: [LocationPart] = []
   /// アクティブタブの位置ドット（エディター・端末）。0 タブは nil。
   var faceDots: FaceGeometry.FaceDots?
   /// 全 workspace 横断のエージェント状態ロールアップ（状態順の `[(state, count)]`）。
@@ -58,7 +70,7 @@ import SwiftUI
     let workspace: String
     let strip: TabStrip
     let active: Int
-    let location: String?
+    let location: TerminalTab.Location?
     let faceDots: FaceGeometry.FaceDots?
     let rollup: [(state: String, count: Int)]
   }
@@ -67,9 +79,20 @@ import SwiftUI
     workspace = s.workspace
     strip = s.strip
     active = s.active
-    location = s.location.map { ($0 as NSString).abbreviatingWithTildeInPath }
+    location = s.location.map(Self.parts(of:)) ?? []
     faceDots = s.faceDots
     rollup = s.rollup
+  }
+
+  /// 事実 → 表現の写し（1 か所）。`~` 短縮は純粋なパス片（根・パス）にかけてから区切り `/` を足す
+  /// （`abbreviatingWithTildeInPath` は末尾の `/` を落とす）。
+  static func parts(of location: TerminalTab.Location) -> [LocationPart] {
+    let short = { (path: String) in (path as NSString).abbreviatingWithTildeInPath }
+    switch location {
+    case .path(let path): return [.text(short(path))]
+    case .root(let root): return [.dim(short(root))]
+    case .file(let root, let relative): return [.dim(short(root) + "/"), .text(relative)]
+    }
   }
 
   /// 検証インスタンス（`ORBE_STATE_DIR` 非空）でだけ、`.app` に刻まれた build-id を返す。
