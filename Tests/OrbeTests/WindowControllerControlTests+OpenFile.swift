@@ -39,6 +39,40 @@ extension WindowControllerControlTests {
     XCTAssertEqual(tab.faces, FaceLayout(editorRatio: 0.5, focus: .editor), "分割中は焦点だけ")
   }
 
+  /// 一度も起きていない背景 workspace のタブ（前回開いていた文書を持つ）へ `open_file` すると、materialize の
+  /// 復元に焦点を奪われず、要求したファイルが見える。
+  func testOpenFileOnADormantTabKeepsTheRequestedDocumentActiveThroughRestore() throws {
+    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let a = try caseFile("a.txt", "a").resolvingSymlinksInPath()
+    let c = try caseFile("c.txt", "c").resolvingSymlinksInPath()
+    let wc = try restore(
+      activeWorkspace: 0,
+      [
+        tabbed("main"),
+        WorkspaceState(
+          name: "bg", rootPath: dir.path, activeTab: 0,
+          tabs: [
+            TabState(
+              cwd: dir.path, agent: nil, explicitTitle: nil,
+              editor: EditorState(open: [a.path], active: a.path))
+          ]),
+      ])
+    let tab = wc.workspaces[1].tabs[0]
+    XCTAssertTrue(MainActor.assumeIsolated { tab.editor.documents.isEmpty }, "前提: まだ起きていない")
+
+    let result = wc.controlOpenFile(tabId: tab.id, path: c.path)
+    guard case .success = result else { return XCTFail("\(result)") }
+
+    XCTAssertEqual(wc.activeWorkspace, 1, "そのタブの workspace が前面に出る")
+    let (documents, active) = MainActor.assumeIsolated {
+      (tab.editor.documents.map(\.url), tab.editor.activeDocument?.url)
+    }
+    XCTAssertEqual(active, c, "要求した文書が焦点のまま（復元が奪わない）")
+    XCTAssertEqual(Set(documents), [a, c], "前回開いていた文書も戻る")
+    let shown = MainActor.assumeIsolated { tab.view.editor.document?.url }
+    XCTAssertEqual(shown, c, "面に載っているのも要求した文書")
+  }
+
   func testOpenFileErrors() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main")])
     let tabId = try XCTUnwrap(wc.controlListTabs()[0]["tabId"] as? Int)
