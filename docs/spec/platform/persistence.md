@@ -1,7 +1,7 @@
 ---
 title: workspace 永続
 description: 構成（workspace・タブ・cwd・エージェントセッション）の JSON 保存と起動時復元・エージェント resume・デバウンス保存
-updated: 2026-09-12
+updated: 2026-09-17
 ---
 
 # workspace 永続
@@ -12,7 +12,7 @@ updated: 2026-09-12
 
 ## workspaces.json — 構成の永続
 
-保存するもの: workspace 名・root path・各 workspace の設定上書き（[workspace](workspace.md)・[settings](../palette/settings.md)）・最終使用時刻（`WorkspacePalette` の MRU 並べ替え用）・アクティブ workspace・ウィンドウサイズ／各 workspace のタブ群と active タブ／各タブの cwd・エージェントセッション・明示タイトル（[chrome](../chrome/chrome.md)）・面の配置（エディター幅の割合と焦点の面 → [editor/faces](../editor/faces.md)。既定＝端末だけのときは書かない）。
+保存するもの: workspace 名・root path・各 workspace の設定上書き（[workspace](workspace.md)・[settings](../palette/settings.md)）・最終使用時刻（`WorkspacePalette` の MRU 並べ替え用）・アクティブ workspace・ウィンドウサイズ／各 workspace のタブ群と active タブ／各タブの cwd・エージェントセッション・明示タイトル（[chrome](../chrome/chrome.md)）・面の配置（エディター幅の割合と焦点の面 → [editor/faces](../editor/faces.md)。既定＝端末だけのときは書かない）・エディターで開いていた文書（実体パスの列とアクティブの実体パス → [editor/shell](../editor/shell.md)。1 つも無ければ書かない）。
 
 ### 復元の挙動
 
@@ -20,6 +20,7 @@ updated: 2026-09-12
 - 復元時、同じ git worktree のタブが保存順で隣接していなければ、初出の位置へ寄せて連にする（タブ行の隣接不変条件 → [chrome](../chrome/chrome.md)）。連のキーは保存しない——保存 cwd から同じ規則で導き直す。
 - タブ 0 個（休眠）の workspace もエントリごと保存・復元する（エントリは消えない）。復元時アクティブが 0 タブでも空状態を表示し、背景の 0 タブもそのまま keep する（いずれもシェルは自動起動しない）。
 - cwd は OSC 7（`GHOSTTY_ACTION_PWD`）で報告された値を surface が保持したもの。復元は surface 生成時の working_directory 指定で起こす。
+- 開いていた文書は、タブ起床（materialize 開始）時に順に開き直す。消えた・読めないファイルは黙って落ち、アクティブが落ちていれば先頭がアクティブになる。未保存の内容は戻らない。起きなかったタブは未消費の状態をそのまま次の保存へ書き戻す——一度も見なかったタブの文書が再起動を重ねても失われない。
 - エージェントセッションは hook 由来の (CLI 名, session_id)（[agent/notify](../agent/notify.md)）をタブに持つ。復元直後のタブは記録を凍結したまま休眠し、resume の解決——CLI 別の resume コマンド（claude `--resume <id>`／agy `--conversation <id>`／codex `resume <id>`）＋ログインシェル PATH——は**タブ起床（materialize 開始）時**に行う。CLI 名が未対応・session_id が安全文字集合外なら素のシェルで起きる——生成コマンドへの注入を防ぐため。セッション記録そのものは休眠のあいだ保持され、resume 可否は起床まで判定しない。
 - resume が注入する PATH は `app-state.json` のキャッシュ値から**同期で**読む——起動復元をシェル起動の subprocess にブロックさせないため。キャッシュが無い初回は上限つきで待ち、尽きれば既知パスだけで起こす（[shell-path](shell-path.md)）。
 - タブ 1 枚分の復元単位は、閉じたセッションの復元（⇧⌘T パレット → [closed-agents](../palette/closed-agents.md)、制御 API `restore_sessions`）と共有する。ただし閉じたセッションの復元が持ち込むのは cwd と同一性だけで、明示タイトルは付かず、位置は新規タブと同じ規則（同じ worktree の連の右端、無ければ末尾）になる。閉じたセッションの記録はこのファイルではなく[寿命ログ](session-log.md)が持つ。
@@ -30,7 +31,7 @@ updated: 2026-09-12
 
 ### 互換と破損時の退避
 
-現行形式は version 4 で、タブは `{cwd, agent?, explicitTitle?, faces?}` の平坦な形。旧形式（version 2 / 3。タブが分割ツリーを持つ）は移行専用の経路が一度だけ読み、分割ツリーの葉を深さ優先順に 1 葉 = 1 タブへ展開する——明示タイトルは先頭の葉に付け、active タブは旧 active タブの先頭葉へ写し、cwd の無い葉は workspace の root path で起こす。次回保存で version 4 へ置き換わる（workspace 一覧・cwd・エージェントセッション・workspace 別設定を失わない。失うのは配置と分割比だけ）。旧 camelCase の設定上書きもこの経路だけが読む。後から足したフィールドは**欠落**を許容する。「あるが読めない」を既定へ落とすのはタブの面の配置（`faces`。読めなければ端末だけへ、割合が範囲外なら 0…1 へ丸めて焦点を正規形へ寄せる）と設定層（`settingsOverride`）の 2 つだけで、そのほか——タブ本体（`cwd`・エージェントセッション）・`explicitTitle`・`lastUsedAt`・`windowSize`・workspace の名前や index——はファイル全体の fallback へ落ちて**全 workspace を失う**。optional で後から足したフィールドも、既定へ落とす decode を自分で書かない限りこちら側になる。設定層（global・workspace 上書きとも）は現行形式なら読めない 1 キーだけを落として残りを活かし、値ごと読めなければ上書き無し（global 継承）へ落ちる——1 項目の異常で層ごと消さないため。旧 camelCase の読みは global 移行・workspace 上書きとも all-or-nothing で、そこでは範囲外の `theme` が既定値として層に載る。値域を持つ項目は、範囲外の値を**最寄りの端へ丸めて**層に載せる——読出には拒否を返す先が無く、既定へ落とすと「大きくしたい／小さくしたい」という書き手の意図まで捨てるため。丸めは書き込み経路の検証と同じ値域を関門 1 つで共有する。
+現行形式は version 4 で、タブは `{cwd, agent?, explicitTitle?, faces?, editor?}` の平坦な形。旧形式（version 2 / 3。タブが分割ツリーを持つ）は移行専用の経路が一度だけ読み、分割ツリーの葉を深さ優先順に 1 葉 = 1 タブへ展開する——明示タイトルは先頭の葉に付け、active タブは旧 active タブの先頭葉へ写し、cwd の無い葉は workspace の root path で起こす。次回保存で version 4 へ置き換わる（workspace 一覧・cwd・エージェントセッション・workspace 別設定を失わない。失うのは配置と分割比だけ）。旧 camelCase の設定上書きもこの経路だけが読む。後から足したフィールドは**欠落**を許容する。「あるが読めない」を既定へ落とすのはタブの面の配置（`faces`。読めなければ端末だけへ、割合が範囲外なら 0…1 へ丸めて焦点を正規形へ寄せる）・開いていた文書（`editor`。読めなければ無しへ）と設定層（`settingsOverride`）の 3 つだけで、そのほか——タブ本体（`cwd`・エージェントセッション）・`explicitTitle`・`lastUsedAt`・`windowSize`・workspace の名前や index——はファイル全体の fallback へ落ちて**全 workspace を失う**。optional で後から足したフィールドも、既定へ落とす decode を自分で書かない限りこちら側になる。設定層（global・workspace 上書きとも）は現行形式なら読めない 1 キーだけを落として残りを活かし、値ごと読めなければ上書き無し（global 継承）へ落ちる——1 項目の異常で層ごと消さないため。旧 camelCase の読みは global 移行・workspace 上書きとも all-or-nothing で、そこでは範囲外の `theme` が既定値として層に載る。値域を持つ項目は、範囲外の値を**最寄りの端へ丸めて**層に載せる——読出には拒否を返す先が無く、既定へ落とすと「大きくしたい／小さくしたい」という書き手の意図まで捨てるため。丸めは書き込み経路の検証と同じ値域を関門 1 つで共有する。
 
 壊れている・非互換バージョン・空 JSON は既定の単一 workspace で fallback する。このとき**原本が在るのに使えなかった**場合（読めない・構造破損・非互換バージョン）は、fallback する前に原本を同じディレクトリの `workspaces-broken-<日時>.json` へ退避する——直後の既定起動が打つ保存が原本を潰すため。退避物は最新 1 件だけ残す。退避できなかった原本が原位置に残っている間は、そのセッションはその場所へ書かない（保全できていない原本を潰さないため）。ファイル不在（初回起動）と空 JSON は失う構成が無いので退避しない。
 
