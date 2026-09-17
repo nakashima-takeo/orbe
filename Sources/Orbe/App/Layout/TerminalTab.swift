@@ -128,8 +128,8 @@ final class TerminalTab {
     resumeSpawn = nil
     faces = .terminalOnly
     editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
-    view = Self.makeView(cwd: cwd, faces: faces)
     groupKey = Self.groupKey(cwd: cwd)
+    view = Self.makeView(cwd: cwd, root: groupKey, faces: faces)
     surface.initialCommand = command
     surface.initialEnv = env
     wireView()
@@ -149,21 +149,21 @@ final class TerminalTab {
     self.resumeSpawn = resumeSpawn
     faces = state.faces.normalized
     editor = MainActor.assumeIsolated { EditorSession(surfaces: .shared) }
-    view = Self.makeView(cwd: state.cwd, faces: faces)
     groupKey = Self.groupKey(cwd: state.cwd)
+    view = Self.makeView(cwd: state.cwd, root: groupKey, faces: faces)
     explicitTitle = state.explicitTitle
     if let agent = state.agent { agentSlot = .dormant(agent) }
     wireView()
   }
 
-  private static func makeView(cwd: String, faces: FaceLayout) -> TabFacesView {
+  private static func makeView(cwd: String, root: String, faces: FaceLayout) -> TabFacesView {
     TabFacesView(
       terminal: SurfaceScrollView(surfaceView: SurfaceView(frame: .zero, cwd: cwd)),
-      editor: EditorPaneView(frame: .zero), faces: faces)
+      editor: EditorPaneView(root: root), faces: faces)
   }
 
   /// 両面がタブを知り（事実の通知先）、背の求める配置がタブの状態を通って器へ戻るよう配線する。
-  /// セッションの変化は器（面の中身）へ写してから上位へ 1 本で上げる。
+  /// セッションの変化は器（面の骨と中身）へ写してから上位へ 1 本で上げる。
   private func wireView() {
     surface.tab = self
     view.editor.tab = self
@@ -173,7 +173,7 @@ final class TerminalTab {
     MainActor.assumeIsolated {
       editor.onChange = { [weak self] in
         guard let self else { return }
-        view.editor.show(editor.activeDocument)
+        view.editor.sessionDidChange()
         onEditorChange?()
       }
       editor.onFocus = { [weak self] in self?.paneDidFocus(.editor) }
@@ -324,9 +324,11 @@ final class TerminalTab {
   }
 
   /// surface が OSC 7 で cwd を報告した（`SurfaceView.currentPwd` の didSet が実変化時だけ呼ぶ）。
+  /// 根が変わればエディター面のツリーも作り直す。
   func pwdChanged() {
     ControlServer.shared.emit(.pwd(tabId: id, path: surface.currentPwd))
     groupKey = Self.groupKey(cwd: cwd)
+    view.editor.setRoot(groupKey)
     onPwdChange?()
   }
 

@@ -141,6 +141,12 @@ enum L10n {
     .editorEmptySearchProject: ("プロジェクト全体を検索", "Search the whole project"),
     .editorEmptyBackToTerminal: ("ターミナルへ戻る", "Back to terminal"),
 
+    // MARK: Editor 面（骨: エクスプローラー）
+    .editorExplorerTitle: ("エクスプローラー", "Explorer"),
+    .editorNewFile: ("新規ファイル", "New File"),
+    .editorNewFolder: ("新規フォルダ", "New Folder"),
+    .editorCollapseAll: ("すべて折りたたむ", "Collapse All"),
+
     // MARK: Tab context menu
     .tabMenuResetAgentState: ("エージェント状態をリセット", "Reset Agent State"),
 

@@ -73,7 +73,8 @@ struct FileChipView: View {
   var body: some View {
     let small = size < Theme.Layout.editorChip
     let color = chip.hue.map { Color.theme.editorHue($0) } ?? Color.theme.textPrimary
-    let ground = chip.hue == nil ? EditorInk(scheme).fill(Self.groundAlpha) : color.opacity(Self.groundAlpha)
+    let ground =
+      chip.hue == nil ? EditorInk(scheme).fill(Self.groundAlpha) : color.opacity(Self.groundAlpha)
     Text(chip.glyph)
       .font(Font(Theme.Typography.editorChip(size: small ? 8 : chip.fontSize) as CTFont))
       .foregroundStyle(color)

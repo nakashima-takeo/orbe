@@ -11,40 +11,160 @@ struct EditorFaceRoot: View {
   }
 }
 
-/// エディター面の AppKit 側の根。地は chrome と同じ veil で塗り、焦点の文書があればそのテキスト面を
-/// 全面に載せ、無ければ空状態（SwiftUI）を見せる。chrome キーは `performKeyEquivalent` で先取りし、
-/// window コマンドはタブ経由で上位へ、⌘S は保存、端末のキーは消し、両面のキーと通常の打鍵は
-/// テキスト面へ流す。空状態では通常の打鍵を飲む——エディター焦点中に端末へ届けない。
+/// エディター面の AppKit 側の根。骨の幾何——レール｜サイドバー（列幅 ≥ 720）｜列の頭（ファイルタブ行 →
+/// 文書があればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（焦点の
+/// 文書のテキスト面、無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
+///
+/// 骨の状態はセッションの写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれだけを読む。
+/// セッションの変化は `sessionDidChange` 1 本で受け、写し → 面の差し替え → ツリーの追従の順に進める。
+/// ツリーは面が画面に見えている間（窓に付き、隠れていない）だけ根のサービスを握る。
+///
+/// chrome キーは `performKeyEquivalent` で先取りし、window コマンドはタブ経由で上位へ、⌘S は保存、
+/// 端末のキーは消し、両面のキーと通常の打鍵はテキスト面へ流す。空状態では通常の打鍵を飲む——
+/// エディター焦点中に端末へ届けない。
 final class EditorPaneView: NSView {
   weak var tab: TerminalTab?
-  private let host: NSHostingView<EditorFaceRoot>
+  /// 骨の写し（ファイルタブ行・パンくず・サイドバーの可否）。
+  let shell = EditorShellModel()
+  /// エクスプローラーのツリー。根が変われば作り直す。
+  private(set) var tree: FileTree
+  private let sideHost: NSHostingView<EditorSideRoot>
+  private let headerHost: NSHostingView<EditorHeaderRoot>
+  private let emptyHost: NSHostingView<EditorFaceRoot>
   private(set) var document: EditorDocument?
+  private var localization = LocalizationStore(language: .systemDefault)
+  private var fontResolver = ChromeFontResolver()
   /// 地の veil。設定パレットで不透明度を変えた直後も追従する（観測して再描画）。
   var translucency: ChromeTranslucency? {
     didSet { observeTranslucency() }
   }
 
-  override init(frame: NSRect) {
-    host = NSHostingView(
-      rootView: EditorFaceRoot(localization: LocalizationStore(language: .systemDefault)))
-    super.init(frame: frame)
+  init(root: String) {
+    tree = FileTree(root: root)
+    sideHost = NSHostingView(
+      rootView: EditorSideRoot(
+        shell: shell, tree: tree, localization: localization, fontResolver: fontResolver))
+    headerHost = NSHostingView(
+      rootView: EditorHeaderRoot(
+        shell: shell, localization: localization, fontResolver: fontResolver))
+    emptyHost = NSHostingView(rootView: EditorFaceRoot(localization: localization))
+    super.init(frame: .zero)
     wantsLayer = true
     layerContentsRedrawPolicy = .onSetNeedsDisplay
-    // SwiftUI 背景の alpha を窓まで通す（透過時に不透明ラスタで塞がない）。
-    host.wantsLayer = true
-    host.layer?.isOpaque = false
-    host.autoresizingMask = [.width, .height]
-    host.frame = bounds
-    addSubview(host)
+    for host in [sideHost, headerHost, emptyHost] as [NSView] {
+      // SwiftUI 背景の alpha を窓まで通す（透過時に不透明ラスタで塞がない）。
+      host.wantsLayer = true
+      host.layer?.isOpaque = false
+      host.autoresizingMask = []
+      addSubview(host)
+    }
+    wireShell()
+    wireTree()
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
   override var isFlipped: Bool { true }
 
-  /// 窓の環境（透過・言語）を面へ配る。
-  func configure(translucency: ChromeTranslucency, localization: LocalizationStore) {
+  /// 窓の環境（透過・言語・フォント割り当て）を面へ配る。別 root は Environment を継承しないので root を作り直す。
+  func configure(
+    translucency: ChromeTranslucency, localization: LocalizationStore,
+    fontResolver: ChromeFontResolver
+  ) {
     self.translucency = translucency
-    host.rootView = EditorFaceRoot(localization: localization)
+    self.localization = localization
+    self.fontResolver = fontResolver
+    installRoots()
+  }
+
+  private func installRoots() {
+    sideHost.rootView = EditorSideRoot(
+      shell: shell, tree: tree, localization: localization, fontResolver: fontResolver)
+    headerHost.rootView = EditorHeaderRoot(
+      shell: shell, localization: localization, fontResolver: fontResolver)
+    emptyHost.rootView = EditorFaceRoot(localization: localization)
+  }
+
+  // MARK: - 骨の操作 → セッション
+
+  private func wireShell() {
+    shell.open = { [weak self] url in self?.open(url) }
+    shell.activate = { [weak self] url in
+      guard let self, let tab, let document = tab.editor.documents.first(where: { $0.url == url })
+      else { return }
+      tab.editor.activate(document)
+      focusEditor()
+    }
+    shell.requestClose = { [weak self] url in self?.requestClose(url) }
+    shell.revealDirectory = { [weak self] url in self?.tree.revealDirectory(url) }
+    shell.createFile = { [weak self] in self?.beginNew(isDirectory: false) }
+    shell.createDirectory = { [weak self] in self?.beginNew(isDirectory: true) }
+    shell.collapseAll = { [weak self] in self?.tree.collapseAll() }
+    shell.endInlineInput = { [weak self] in self?.focusEditor() }
+  }
+
+  private func wireTree() {
+    tree.onCreated = { [weak self] url in self?.open(url) }
+  }
+
+  /// 骨から開く。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）。開けたら焦点を面へ。
+  private func open(_ url: URL) {
+    guard let tab else { return }
+    do {
+      try tab.editor.open(url)
+    } catch {
+      NSSound.beep()
+      return
+    }
+    focusEditor()
+  }
+
+  /// ファイルタブの ×。未保存でなければ閉じる（未保存の確認は次の段で足す）。
+  private func requestClose(_ url: URL) {
+    guard let tab, let document = tab.editor.documents.first(where: { $0.url == url }) else {
+      return
+    }
+    tab.editor.close(document)
+  }
+
+  /// 行内入力を出す前に pane 自身を first responder にする——`paneDidFocus(.editor)` が走る経路は
+  /// テキスト面と pane の 2 つしか無く、field editor が直接焦点を取ると分割中の焦点帯と位置ドットが
+  /// 端末を指したままになる。
+  private func beginNew(isDirectory: Bool) {
+    window?.makeFirstResponder(self)
+    tree.beginNew(isDirectory: isDirectory)
+  }
+
+  private func focusEditor() {
+    window?.makeFirstResponder(focusTarget)
+  }
+
+  // MARK: - セッション → 骨
+
+  /// セッションが変わった。写しを無条件に組み直し、焦点の文書の面を見せ、文書が変わっていればツリーの
+  /// 祖先を開いて選択する。写しを `show` に相乗りさせない——同一文書の未保存・衝突の変化は `show` の
+  /// guard で止まる。
+  func sessionDidChange() {
+    guard let tab else { return }
+    let active = tab.editor.activeDocument
+    let changed = active !== document
+    shell.update(from: tab.editor, root: tree.root)
+    show(active)
+    if changed, let url = active?.url { tree.reveal(url) }
+  }
+
+  /// 根が変わった（cd）。ツリーを作り直し、握っていたなら握り直す。
+  func setRoot(_ root: String) {
+    guard root != tree.root else { return }
+    let live = tree.isLive
+    tree.isLive = false
+    tree = FileTree(root: root)
+    wireTree()
+    tree.isLive = live
+    installRoots()
+    if let tab {
+      shell.update(from: tab.editor, root: root)
+      if let url = tab.editor.activeDocument?.url { tree.reveal(url) }
+    }
   }
 
   /// 焦点の文書の面を見せる（nil なら空状態）。前の文書の面は外すだけで、面は文書と一緒に生き続ける。
@@ -57,15 +177,74 @@ final class EditorPaneView: NSView {
     self.document = document
     if let document {
       let view = document.surface.view
-      view.autoresizingMask = [.width, .height]
-      view.frame = bounds
+      view.autoresizingMask = []
+      view.frame = bodyRect
       addSubview(view)
     }
-    host.isHidden = document != nil
+    emptyHost.isHidden = document != nil
+    needsLayout = true
     if hadFocusInside, window?.firstResponder !== focusTarget {
       window?.makeFirstResponder(focusTarget)
     }
   }
+
+  // MARK: - 幾何
+
+  /// 左列の幅（レール、サイドバーが出るときは ＋272）。
+  private var sideWidth: CGFloat {
+    Theme.Layout.editorRail + (sidebarVisible ? Theme.Layout.editorSidebar : 0)
+  }
+
+  /// 列幅が 720 以上のときだけサイドバーを出す。
+  var sidebarVisible: Bool { bounds.width >= Theme.Layout.editorSidebarMin }
+
+  /// 列の頭の高さ（ファイルタブ行、文書があればパンくずも）。
+  private var headerHeight: CGFloat {
+    Theme.Layout.editorFileTabs + (document != nil ? Theme.Layout.editorBreadcrumb : 0)
+  }
+
+  /// 本体（テキスト面か空状態）の矩形。
+  var bodyRect: NSRect {
+    NSRect(
+      x: sideWidth, y: headerHeight, width: max(0, bounds.width - sideWidth),
+      height: max(0, bounds.height - headerHeight))
+  }
+
+  override func layout() {
+    super.layout()
+    if shell.sidebarVisible != sidebarVisible { shell.sidebarVisible = sidebarVisible }
+    let sideWidth = self.sideWidth
+    sideHost.frame = NSRect(
+      x: 0, y: 0, width: min(sideWidth, bounds.width), height: bounds.height)
+    headerHost.frame = NSRect(
+      x: sideWidth, y: 0, width: max(0, bounds.width - sideWidth), height: headerHeight)
+    let body = bodyRect
+    emptyHost.frame = body
+    document?.surface.view.frame = body
+  }
+
+  // MARK: - 可視性（ツリーが根のサービスを握る寿命）
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    updateLiveness()
+  }
+
+  override func viewDidHide() {
+    super.viewDidHide()
+    updateLiveness()
+  }
+
+  override func viewDidUnhide() {
+    super.viewDidUnhide()
+    updateLiveness()
+  }
+
+  private func updateLiveness() {
+    tree.isLive = window != nil && !isHiddenOrHasHiddenAncestor
+  }
+
+  // MARK: - 焦点とキー
 
   /// first responder が自分か配下にあるか。
   private var focusIsInside: Bool {
@@ -78,10 +257,11 @@ final class EditorPaneView: NSView {
 
   override var acceptsFirstResponder: Bool { true }
 
-  /// 空状態の中身は静止しているので、面のどこを押しても面自身が受ける（焦点を取る）。
+  /// 空状態の中身は静止しているので、本体のどこを押しても面自身が受ける（焦点を取る）。骨の host は
+  /// 自分で受ける。
   override func hitTest(_ point: NSPoint) -> NSView? {
-    let hit = super.hitTest(point)
-    return document == nil && hit != nil ? self : hit
+    guard let hit = super.hitTest(point), document == nil else { return super.hitTest(point) }
+    return hit === emptyHost || hit.isDescendant(of: emptyHost) ? self : hit
   }
 
   override func mouseDown(with event: NSEvent) {

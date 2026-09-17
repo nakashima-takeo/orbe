@@ -10,7 +10,8 @@ import XCTest
 @MainActor
 final class EditorShellModelTests: OrbeTestCase {
   private func file(_ name: String, _ text: String = "x") throws -> URL {
-    let dir = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("root/src", isDirectory: true)
+    let dir = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent(
+      "root/src", isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let url = dir.appendingPathComponent(name)
     try Data(text.utf8).write(to: url)

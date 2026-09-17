@@ -131,8 +131,10 @@ final class FileTreeTests: OrbeTestCase {
     tree.reveal(repo.url("src/main.swift"))
 
     tree.beginNew(isDirectory: false)
-    XCTAssertEqual(tree.newEntry, FileTree.NewEntry(directory: "src", isDirectory: false), "ファイルの選択はその親へ")
-    XCTAssertEqual(tree.rows.first { $0.kind == .input(isDirectory: false) }?.depth, 1, "入力行は親の子の先頭")
+    XCTAssertEqual(
+      tree.newEntry, FileTree.NewEntry(directory: "src", isDirectory: false), "ファイルの選択はその親へ")
+    XCTAssertEqual(
+      tree.rows.first { $0.kind == .input(isDirectory: false) }?.depth, 1, "入力行は親の子の先頭")
     XCTAssertEqual(tree.rows.firstIndex { $0.kind == .input(isDirectory: false) }, 2, "docs・src の次")
 
     XCTAssertFalse(tree.commitNew("main.swift"), "既に在れば入力に留まる")
@@ -147,9 +149,11 @@ final class FileTreeTests: OrbeTestCase {
 
     tree.toggle("docs")
     tree.beginNew(isDirectory: true)
-    XCTAssertEqual(tree.newEntry, FileTree.NewEntry(directory: "docs", isDirectory: true), "ディレクトリの選択はそこへ")
+    XCTAssertEqual(
+      tree.newEntry, FileTree.NewEntry(directory: "docs", isDirectory: true), "ディレクトリの選択はそこへ")
     XCTAssertTrue(tree.commitNew("guides"))
-    XCTAssertTrue(tree.rows.contains { $0.id == "docs/guides" && $0.kind == .directory(isExpanded: false) })
+    XCTAssertTrue(
+      tree.rows.contains { $0.id == "docs/guides" && $0.kind == .directory(isExpanded: false) })
     XCTAssertEqual(created.count, 1, "フォルダは開かない")
 
     tree.beginNew(isDirectory: false)

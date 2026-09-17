@@ -11,18 +11,19 @@ import Foundation
 /// 展開集合は根からの相対パスの集合で、祖先について閉じている（畳めば配下も外れる）。永続しない。
 @MainActor @Observable
 final class FileTree: RootFilesObserver {
+  enum RowKind: Equatable {
+    case directory(isExpanded: Bool)
+    case file(badge: GitStatus.Badge?)
+    /// 新規作成の行内入力（ディレクトリならシェブロンの幅を空ける）。
+    case input(isDirectory: Bool)
+  }
+
   struct Row: Identifiable, Equatable {
-    enum Kind: Equatable {
-      case directory(isExpanded: Bool)
-      case file(badge: GitStatus.Badge?)
-      /// 新規作成の行内入力（ディレクトリならシェブロンの幅を空ける）。
-      case input(isDirectory: Bool)
-    }
     let id: String
     let depth: Int
     let name: String
     let url: URL
-    let kind: Kind
+    let kind: RowKind
     let isSelected: Bool
   }
 
@@ -215,7 +216,8 @@ final class FileTree: RootFilesObserver {
 
   private func reloadAll() {
     reload("")
-    for directory in expanded.sorted(by: { $0.count < $1.count }) where expanded.contains(directory) {
+    for directory in expanded.sorted(by: { $0.count < $1.count }) where expanded.contains(directory)
+    {
       reload(directory)
     }
   }

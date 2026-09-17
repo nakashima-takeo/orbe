@@ -89,9 +89,13 @@ final class TabFacesView: NSView {
     }
   }
 
-  /// 窓の環境（透過・言語）を面へ配る。
-  func configure(translucency: ChromeTranslucency, localization: LocalizationStore) {
-    editor.configure(translucency: translucency, localization: localization)
+  /// 窓の環境（透過・言語・フォント割り当て）を面へ配る。
+  func configure(
+    translucency: ChromeTranslucency, localization: LocalizationStore,
+    fontResolver: ChromeFontResolver
+  ) {
+    editor.configure(
+      translucency: translucency, localization: localization, fontResolver: fontResolver)
     spine.translucency = translucency
   }
 
