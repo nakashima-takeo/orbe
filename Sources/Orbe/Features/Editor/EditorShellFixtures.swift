@@ -22,10 +22,11 @@
 
       init(tab: TerminalTab) { self.tab = tab }
 
-      /// 面を窓に付けてツリーに根のサービスを握らせる（status の取り直しが始まる）。
-      func warmUp() {
+      /// 面を窓に付けてツリーに根のサービスを握らせる（status の取り直しが始まる）。撮った後は面が窓から
+      /// 外れるので、操作を窓の中で起こしたい flow は操作の前にもう一度呼ぶ（寸法は撮る絵と同じに）。
+      func warmUp(size: NSSize = NSSize(width: 1100, height: 640)) {
         let window = NSWindow(
-          contentRect: NSRect(x: 0, y: 0, width: 1100, height: 640), styleMask: [.borderless],
+          contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless],
           backing: .buffered, defer: false)
         window.contentView = pane
         pane.layoutSubtreeIfNeeded()

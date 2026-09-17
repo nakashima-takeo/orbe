@@ -97,8 +97,29 @@ final class FileTreeTests: OrbeTestCase {
     XCTAssertFalse(tree.rows.contains { $0.id == "src/sub" })
 
     try repo.write("docs/inner/x.txt", "x\n")
-    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+    try repo.write("src/marker.txt", "m\n")
+    pumpMain(until: { tree.rows.contains { $0.id == "src/marker.txt" } }, "同じバッチの配達")
     XCTAssertNil(tree.entries["docs"], "展開していないディレクトリは取り直さない")
+  }
+
+  /// 離せば根のサービスは解放され（強参照は `files` だけ）、以後の変化は届かない。
+  func testReleasingTheServiceFreesItAndStopsDelivery() throws {
+    let tree = FileTree(root: repo.root)
+    tree.isLive = true
+    tree.toggle("src")
+    weak var service = RootFiles.shared(for: repo.root)
+    XCTAssertNotNil(service, "前提: 握っている間は生きている")
+
+    tree.isLive = false
+    pumpMain(until: { service == nil }, "離せば解放される（握り続けると全タブの根を常時監視する）")
+
+    let witness = FileTree(root: repo.root)  // 配達の目印を待つ立会人（同じ根を握り直す）
+    witness.isLive = true
+    witness.toggle("src")
+    try repo.write("src/after.txt", "a\n")
+    pumpMain(until: { witness.rows.contains { $0.id == "src/after.txt" } }, "目印の配達")
+    XCTAssertFalse(tree.rows.contains { $0.id == "src/after.txt" }, "離したツリーには届かない")
+    XCTAssertEqual(names(tree), ["docs", "src", "  sub", "  main.swift", "a.txt"], "キャッシュは保つ")
   }
 
   func testRevealOpensAncestorsAndSelectsTheFile() {

@@ -12,13 +12,19 @@ struct EditorSideRoot: View {
   let fontResolver: ChromeFontResolver
 
   var body: some View {
-    HStack(spacing: 0) {
-      RailView(selection: sidebar.isOpen ? .files : nil, onSelect: { _ in shell.toggleSidebar() })
-      if sidebar.isOpen {
-        ExplorerView(shell: shell, tree: tree)
+    // GeometryReader は中身の最小幅に縛られず host の幅を取る——エクスプローラーのヘッダー（3 ボタン）より
+    // 狭く切り詰められても root が中央寄せで左へずれず、レールは 0〜36 に居る。溢れは右で、切り落とす。
+    GeometryReader { _ in
+      HStack(spacing: 0) {
+        RailView(
+          selection: sidebar.isOpen ? .files : nil, onSelect: { _ in shell.toggleSidebar() })
+        if sidebar.isOpen {
+          ExplorerView(shell: shell, tree: tree)
+        }
       }
+      .frame(maxHeight: .infinity)
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    .clipped()
     .environment(\.localization, localization)
     .environment(\.chromeFontResolver, fontResolver)
   }

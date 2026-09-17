@@ -8,13 +8,6 @@ import XCTest
 ///
 /// 重要: 実 NSWindow に接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 extension WindowControllerControlTests {
-  private func caseFile(_ name: String, _ text: String) throws -> URL {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
-    let url = dir.appendingPathComponent(name)
-    try Data(text.utf8).write(to: url)
-    return url
-  }
-
   func testOpenFileShowsTheEditorAndFocusesTheTab() throws {
     let dir = try XCTUnwrap(TestIsolation.caseDir)
     let url = try caseFile("note.md", "# hi\n")
