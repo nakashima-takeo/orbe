@@ -79,8 +79,10 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertEqual(pane.document?.url.lastPathComponent, "a.swift", "ツリーの行で開く")
     XCTAssertTrue(window.firstResponder === pane.document?.surface.responder, "焦点はテキスト面へ")
     pane.shell.open(b)
+    window.makeFirstResponder(nil)
     pane.shell.activate(a)
     XCTAssertEqual(pane.document?.url.lastPathComponent, "a.swift", "ファイルタブで切り替える")
+    XCTAssertTrue(window.firstResponder === pane.document?.surface.responder, "切り替えても焦点はテキスト面へ")
 
     pane.shell.revealDirectory(sub)
     XCTAssertEqual(pane.tree.expanded, ["d"], "パンくずのディレクトリが開く")

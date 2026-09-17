@@ -122,6 +122,23 @@ final class FileTreeTests: OrbeTestCase {
     XCTAssertEqual(names(tree), ["docs", "src", "  sub", "  main.swift", "a.txt"], "キャッシュは保つ")
   }
 
+  /// 読めないディレクトリは空として扱い、展開しようとしても畳んだまま。
+  func testUnreadableDirectoryStaysCollapsed() throws {
+    let locked = repo.root + "/docs"
+    try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked)
+    defer {
+      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked)
+    }
+    let tree = FileTree(root: repo.root)
+    tree.isLive = true
+
+    tree.toggle("docs")
+
+    XCTAssertFalse(tree.expanded.contains("docs"))
+    XCTAssertNil(tree.entries["docs"])
+    XCTAssertEqual(names(tree), ["docs", "src", "a.txt"], "行は閉じたまま残る")
+  }
+
   func testRevealOpensAncestorsAndSelectsTheFile() {
     let tree = FileTree(root: repo.root)
     tree.reveal(repo.url("src/sub/deep.md"))
@@ -174,6 +191,9 @@ final class FileTreeTests: OrbeTestCase {
     XCTAssertFalse(tree.commitNew("main.swift"), "既に在れば入力に留まる")
     XCTAssertNotNil(tree.newEntry)
     XCTAssertFalse(tree.commitNew(" "), "空は無効")
+    XCTAssertFalse(tree.commitNew("nested/x.swift"), "`/` 入りは無効（中間ディレクトリは作らない）")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: repo.root + "/src/nested"))
+    XCTAssertNotNil(tree.newEntry)
 
     XCTAssertTrue(tree.commitNew("fresh.swift"))
     XCTAssertNil(tree.newEntry)

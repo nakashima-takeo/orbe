@@ -14,9 +14,9 @@ extension OrbeTestCase {
   }
 
   /// タブを幅 `width` のエディター全面（＋背）の窓に載せる。
-  func hostEditor(_ tab: TerminalTab, width: CGFloat) -> NSWindow {
+  func hostEditor(_ tab: TerminalTab, width: CGFloat, height: CGFloat = 400) -> NSWindow {
     let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: width + FaceGeometry.spine, height: 400),
+      contentRect: NSRect(x: 0, y: 0, width: width + FaceGeometry.spine, height: height),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = tab.view
     tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
