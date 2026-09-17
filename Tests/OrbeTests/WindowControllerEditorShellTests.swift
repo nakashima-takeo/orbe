@@ -95,9 +95,9 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
     XCTAssertNil(try XCTUnwrap(WorkspacePersistence.load()).workspaces[0].tabs[0].editor)
 
     try XCTUnwrap(wc.activeTab).openFile(a)
-    let deadline = expectation(description: "デバウンスの締切をまたぐ")
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { deadline.fulfill() }
-    wait(for: [deadline], timeout: 4)
+    pumpMain(
+      until: { WorkspacePersistence.load()?.workspaces[0].tabs[0].editor != nil }, timeout: 4,
+      "デバウンスの締切をまたいで書かれる")
 
     XCTAssertEqual(
       try XCTUnwrap(WorkspacePersistence.load()).workspaces[0].tabs[0].editor,
