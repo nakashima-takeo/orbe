@@ -105,11 +105,14 @@ final class Ghostty {
 
   /// 最初のテキスト表現を NSPasteboard の文字列として置く。テキスト表現が無ければ何もしない（クリップボードを消さない）。
   /// Kitty write の MIME は core が正規化せず端末アプリの書いた名前のまま来るので、plain text と見なすかは
-  /// macOS の型システム（UTType）に判定させる。
+  /// macOS の型システム（UTType）に判定させる。本文は UTF-8 としてしか読まないので、UTF-16 系の plain text は
+  /// テキスト表現と見なさない（NUL 混じりの文字列を置かない）。
   private static func writeClipboard(_ contents: UnsafeBufferPointer<ghostty_clipboard_content_s>) {
     for content in contents {
       guard let mime = content.mime,
-        UTType(mimeType: String(cString: mime))?.conforms(to: .plainText) == true,
+        let type = UTType(mimeType: String(cString: mime)),
+        type.conforms(to: .plainText),
+        !type.conforms(to: .utf16PlainText), !type.conforms(to: .utf16ExternalPlainText),
         let data = content.data,
         let text = String(
           bytes: UnsafeRawBufferPointer(start: data, count: content.len), encoding: .utf8)
