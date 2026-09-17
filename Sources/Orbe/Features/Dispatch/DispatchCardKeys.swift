@@ -80,8 +80,8 @@ struct DispatchCardKeyCapture: ViewModifier {
 
   private func refreshNavigation(_ press: KeyPress) -> KeyPress.Result {
     switch press.key {
-    case .upArrow: model.refresh?.move(-1)
-    case .downArrow: model.refresh?.move(1)
+    case .upArrow: model.moveRefresh(-1)
+    case .downArrow: model.moveRefresh(1)
     // ⇥ は clean と同じ理由で握る。
     case .tab: break
     default: return .ignored

@@ -101,6 +101,7 @@ final class DispatchRefreshRowRenderTests: SnapshotTestCase {
     model.fail(failure)
     return try XCTUnwrap(
       renderPNG(
-        DispatchRefreshRow(model: model, choice: .refreshed, onTap: {}), size: size, dark: true))
+        DispatchRefreshRow(model: model, choice: .refreshed, onTap: {}, onHoverEnter: {}),
+        size: size, dark: true))
   }
 }

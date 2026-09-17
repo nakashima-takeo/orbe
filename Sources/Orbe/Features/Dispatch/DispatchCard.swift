@@ -46,8 +46,11 @@ struct DispatchCard: View {
           DispatchCleanList(model: model.clean).frame(height: listHeight)
         case .refresh:
           if let refresh = model.refresh {
-            DispatchRefreshList(model: refresh, onConfirm: { model.confirmRefresh($0) })
-              .frame(height: listHeight, alignment: .top)
+            DispatchRefreshList(
+              model: refresh, onConfirm: { model.confirmRefresh($0) },
+              onHover: { model.hoverRefresh($0) }
+            )
+            .frame(height: listHeight, alignment: .top)
           }
         }
         divider

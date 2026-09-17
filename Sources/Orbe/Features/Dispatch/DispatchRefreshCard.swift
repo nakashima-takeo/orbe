@@ -89,6 +89,7 @@ struct DispatchRefreshHeader: View {
 struct DispatchRefreshList: View {
   @Bindable var model: DispatchRefreshModel
   let onConfirm: (DispatchStaleChoice) -> Void
+  let onHover: (DispatchStaleChoice) -> Void
   @Environment(\.localization) private var l10n
 
   var body: some View {
@@ -100,8 +101,11 @@ struct DispatchRefreshList: View {
         .padding(.top, Theme.Space.step)
         .padding(.horizontal, 10)
         .padding(.bottom, 3)
-      DispatchRefreshRow(model: model, choice: .refreshed, onTap: { onConfirm(.refreshed) })
-      DispatchRefreshRow(model: model, choice: .asIs, onTap: { onConfirm(.asIs) })
+      DispatchRefreshRow(
+        model: model, choice: .refreshed, onTap: { onConfirm(.refreshed) },
+        onHoverEnter: { onHover(.refreshed) })
+      DispatchRefreshRow(
+        model: model, choice: .asIs, onTap: { onConfirm(.asIs) }, onHoverEnter: { onHover(.asIs) })
     }
     .padding(Theme.Space.note)
     .background(
@@ -116,7 +120,10 @@ struct DispatchRefreshList: View {
 struct DispatchRefreshRow: View {
   @Bindable var model: DispatchRefreshModel
   let choice: DispatchStaleChoice
+  /// 行タップ＝決定（一覧の行と同じ）。
   let onTap: () -> Void
+  /// ホバー開始＝選択の追従（決定は走らない）。効くかどうかは入力モダリティが握る（→ `ModalSelection`）。
+  let onHoverEnter: () -> Void
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -147,6 +154,7 @@ struct DispatchRefreshRow: View {
     .background(RoundedRectangle(cornerRadius: Theme.Radius.row).fill(fill))
     .contentShape(Rectangle())
     .onTapGesture(perform: onTap)
+    .onHover { if $0 { onHoverEnter() } }
   }
 
   private var fill: Color {

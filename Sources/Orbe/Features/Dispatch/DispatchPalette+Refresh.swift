@@ -4,6 +4,20 @@ import Foundation
 /// clean と同じく、画面ごとの分岐は View に置かず名前付きメソッドが `refresh.phase` を見て自分で畳む。
 extension DispatchPaletteModel {
 
+  /// 最新化画面の ↑↓。キー移動なので一覧と同じくモダリティを `.keyboard` へ戻し、実マウス移動があるまで
+  /// ホバーに選択を奪わせない（一覧は `selected` の setter が戻す。ここは選択が `refresh` 側にあるので明示する）。
+  func moveRefresh(_ direction: Int) {
+    inputModality = .keyboard
+    refresh?.move(direction)
+  }
+
+  /// 最新化画面のホバー追従。門は一覧の `hoverSelect` と同じ入力モダリティ（実マウス移動後だけ効く）。
+  /// 決定は走らず、busy では動かない。
+  func hoverRefresh(_ choice: DispatchStaleChoice) {
+    guard inputModality == .pointer else { return }
+    refresh?.choose(choice)
+  }
+
   /// 最新化画面の ⏎。カーソルの行を実行する。busy は無反応。
   func confirmRefresh() {
     guard let refresh, !refresh.isBusy else { return }

@@ -39,9 +39,9 @@ extension DispatchPaletteTests {
     XCTAssertEqual(p.refresh?.choice, .refreshed)
     XCTAssertEqual(p.refresh?.phase, .choosing)
 
-    p.refresh?.move(1)
+    p.moveRefresh(1)
     XCTAssertEqual(p.refresh?.choice, .asIs)
-    p.refresh?.move(1)
+    p.moveRefresh(1)
     XCTAssertEqual(p.refresh?.choice, .refreshed, "2 行のトグル")
 
     p.exitRefresh()
@@ -65,7 +65,7 @@ extension DispatchPaletteTests {
     XCTAssertTrue(p.isBusy, "最新化中は入力を受け付けない")
 
     p.enterRefresh(item: item, sync: sync)
-    p.refresh?.move(1)
+    p.moveRefresh(1)
     p.confirmRefresh()
     XCTAssertEqual(settled.map(\.0), [.refreshed, .asIs])
     XCTAssertEqual(p.refresh?.phase, .creating)
@@ -87,7 +87,7 @@ extension DispatchPaletteTests {
     XCTAssertEqual(p.refresh?.phase, .creating)
 
     p.enterRefresh(item: item, sync: sync)
-    p.refresh?.move(1)
+    p.moveRefresh(1)
     p.confirmRefresh(.refreshed)
     XCTAssertEqual(settled, [.asIs, .refreshed])
     XCTAssertEqual(p.refresh?.phase, .updating)
@@ -104,7 +104,7 @@ extension DispatchPaletteTests {
     p.startRefresh()
     XCTAssertEqual(count, 1)
 
-    p.refresh?.move(1)
+    p.moveRefresh(1)
     XCTAssertEqual(p.refresh?.choice, .refreshed)
     p.confirmRefresh()
     p.confirmRefresh(.asIs)
@@ -112,6 +112,43 @@ extension DispatchPaletteTests {
     XCTAssertEqual(count, 1, "二重起動しない")
     p.exitRefresh()
     XCTAssertEqual(p.mode, .refresh, "esc でも抜けない")
+  }
+
+  /// ホバー追従は一覧と同じ門（実マウス移動後の `.pointer`）で効き、決定は走らない。
+  /// キー移動で `.keyboard` へ戻ると、スクロールで行がカーソル下へ来ても選択を奪われない。
+  func testHoverFollowsTheCursorThroughTheSharedModality() throws {
+    let p = makeModel()
+    let (item, sync) = try staleMain(p)
+    var settled = 0
+    p.onSettleStale = { _, _ in settled += 1 }
+    p.enterRefresh(item: item, sync: sync)
+
+    p.hoverRefresh(.asIs)
+    XCTAssertEqual(p.refresh?.choice, .refreshed, "実マウス移動前は追従しない")
+    p.inputModality = .pointer
+    p.hoverRefresh(.asIs)
+    XCTAssertEqual(p.refresh?.choice, .asIs, "ホバーで選択が追従する")
+    XCTAssertEqual(settled, 0, "ホバーでは決定が走らない")
+
+    p.moveRefresh(1)
+    XCTAssertEqual(p.refresh?.choice, .refreshed)
+    p.hoverRefresh(.asIs)
+    XCTAssertEqual(p.refresh?.choice, .refreshed, "キー移動で .keyboard へ戻り、ホバーに奪われない")
+  }
+
+  /// busy（最新化中・作成中）ではホバーでも選択が動かない。
+  func testHoverIsIgnoredWhileBusy() throws {
+    let p = makeModel()
+    let (item, sync) = try staleMain(p)
+    p.enterRefresh(item: item, sync: sync)
+    p.inputModality = .pointer
+    p.startRefresh()
+    p.hoverRefresh(.asIs)
+    XCTAssertEqual(p.refresh?.choice, .refreshed, "最新化中は動かない")
+
+    p.refresh?.beginCreating()
+    p.hoverRefresh(.asIs)
+    XCTAssertEqual(p.refresh?.choice, .refreshed, "作成中も動かない")
   }
 
   /// 失敗すると同じ画面に戻り、カーソルは「そのまま作成」へ落ちる。`r` と行 0 の ⏎ で再試行できる。
