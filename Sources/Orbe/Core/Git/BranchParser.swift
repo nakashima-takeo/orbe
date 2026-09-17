@@ -20,7 +20,7 @@ enum BranchParser {
   }
 
   /// `%(upstream:track)` の書式は固定（空 / `[gone]` / `[ahead N]` / `[behind M]` / `[ahead N, behind M]`）。
-  static func parseTrack(_ text: String?) -> GitUpstreamTrack? {
+  private static func parseTrack(_ text: String?) -> GitUpstreamTrack? {
     guard let text else { return nil }
     if text == "[gone]" { return .gone }
     return .counts(ahead: count("ahead ", in: text), behind: count("behind ", in: text))

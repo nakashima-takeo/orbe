@@ -43,26 +43,26 @@ extension GitRepo {
     let local = "refs/heads/\(name)"
     runner.run(
       ["fetch", "--progress", upstream.remote, upstream.remoteRef], cwd: root, lane: .independent
-    ) { output in
-      guard output.isSuccess else {
-        completion(.fetch(GitRepo.failure(from: output)))
+    ) { fetched in
+      guard fetched.isSuccess else {
+        completion(.fetch(GitRepo.failure(from: fetched)))
         return
       }
       let args = ["merge-base", "--is-ancestor", local, upstream.ref]
-      self.runner.run(args, cwd: self.root) { output in
-        if output.exited, output.status == 1 {
+      self.runner.run(args, cwd: self.root) { ancestry in
+        if ancestry.exited, ancestry.status == 1 {
           completion(.fastForward(nil))
           return
         }
-        guard output.isSuccess else {
-          completion(.fastForward(GitRepo.failure(from: output)))
+        guard ancestry.isSuccess else {
+          completion(.fastForward(GitRepo.failure(from: ancestry)))
           return
         }
         self.runner.run(
           ["fetch", "--no-write-fetch-head", ".", "\(upstream.ref):\(local)"], cwd: self.root,
           lane: .exclusive
-        ) { output in
-          completion(output.isSuccess ? nil : .fastForward(GitRepo.failure(from: output)))
+        ) { advanced in
+          completion(advanced.isSuccess ? nil : .fastForward(GitRepo.failure(from: advanced)))
         }
       }
     }

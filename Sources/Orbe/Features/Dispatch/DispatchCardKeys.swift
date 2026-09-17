@@ -82,8 +82,8 @@ struct DispatchCardKeyCapture: ViewModifier {
     switch press.key {
     case .upArrow: model.refresh?.move(-1)
     case .downArrow: model.refresh?.move(1)
-    // ⇥ は clean と同じ理由で握る。⇧⇥ だけは既定の焦点移動に任せる。
-    case .tab where !press.modifiers.contains(.shift): break
+    // ⇥ は clean と同じ理由で握る。
+    case .tab: break
     default: return .ignored
     }
     return .handled
