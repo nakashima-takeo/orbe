@@ -12,12 +12,15 @@ import XCTest
 /// 書かせる。画面は `controlReadText` で読めるので、surface へ送ったキー入力が端末モード
 /// （legacy / bracketed paste / kitty keyboard protocol）に応じてどんなバイトになったかを、
 /// libghostty の符号化を通した実物で測れる。モードの切替（bracketed paste の有効化・kitty flags の
-/// push）は dump 自身が行う。
+/// push）と、端末への問い合わせ（クリップボード読み取り要求）は dump 自身が READY の前に出す。
 ///
 /// 1 打ごとに `next()` で待ってから次を送る——連打すると dump の 1 回の read に複数打が合流し、
 /// 打鍵単位の突き合わせができなくなる。
 final class TtyDumpTab {
-  enum Mode: String { case legacy, paste, kitty }
+  /// `osc52Read` は OSC 52 の読み取り要求の直後に Kitty clipboard の読み取り要求を続けて出す。両者は
+  /// libghostty の同じ経路（surface の mailbox → ホスト）を順に通り、Kitty 側は許可でも拒否でも必ず
+  /// 応答するので、OSC 52 に応答があればそれより先に届く——応答が「無い」ことを待ち時間に頼らず測れる。
+  enum Mode: String { case legacy, paste, kitty, osc52Read, kittyRead }
 
   /// 1 打あたりの到達を待つ上限。実時間の検証ではなく、進まなくなったら諦めるための上限。
   static let keyTimeout: TimeInterval = 5
@@ -27,7 +30,13 @@ final class TtyDumpTab {
     mode = sys.argv[1]
     fd = sys.stdin.fileno()
     tty.setraw(fd)
-    enter = {"legacy": "", "paste": "\\x1b[?2004h", "kitty": "\\x1b[>1u"}[mode]
+    enter = {
+        "legacy": "",
+        "paste": "\\x1b[?2004h",
+        "kitty": "\\x1b[>1u",
+        "osc52Read": "\\x1b]52;c;?\\x07\\x1b]5522;type=read;dGV4dC9wbGFpbg==\\x1b\\\\",
+        "kittyRead": "\\x1b]5522;type=read;dGV4dC9wbGFpbg==\\x1b\\\\",
+    }[mode]
     sys.stdout.write(enter + "READY\\r\\n")
     sys.stdout.flush()
     while True:
@@ -83,6 +92,31 @@ final class TtyDumpTab {
     }
     defer { consumed += 1 }
     return received()[consumed]
+  }
+
+  /// 次に届いた `byteCount` バイト以上を、何回の read に分かれていても連結して返す（ペーストのように
+  /// libghostty が複数回に分けて書く入力用）。届かなければ `next()` と同じく失敗を記録して nil。
+  func next(bytes byteCount: Int, file: StaticString = #filePath, line: UInt = #line) -> String? {
+    var joined = ""
+    var taken = 0
+    let arrived = ControlProcess.waitUntil(Self.keyTimeout) {
+      let pending = self.received().dropFirst(self.consumed)
+      joined = ""
+      taken = 0
+      for chunk in pending where joined.count < byteCount * 2 {
+        joined += chunk
+        taken += 1
+      }
+      return joined.count >= byteCount * 2
+    }
+    guard arrived else {
+      XCTFail(
+        "\(Self.keyTimeout) 秒で \(byteCount) バイト揃わない（届いたのは \(joined)）: \(screen())",
+        file: file, line: line)
+      return nil
+    }
+    consumed += taken
+    return joined
   }
 
   /// 期待値の側を dump と同じ表記へ（`"\u{1b}[A"` → `"1b5b41"`）。
