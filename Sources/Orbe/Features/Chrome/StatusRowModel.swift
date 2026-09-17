@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// TopBar の現在地の断片。`dim` は根（`textMuted`）、`text` はその下の相対パス・cwd（`statusText`）。
+/// TopBar の現在地の断片。`dim` は cwd・根（`textMuted`）、`text` は根の下の相対パス・根の外の絶対パス
+/// （`statusText`）。
 struct LocationPart: Equatable {
   enum Tone: Equatable {
     case dim, text
@@ -89,9 +90,10 @@ struct LocationPart: Equatable {
   static func parts(of location: TerminalTab.Location) -> [LocationPart] {
     let short = { (path: String) in (path as NSString).abbreviatingWithTildeInPath }
     switch location {
-    case .path(let path): return [.text(short(path))]
+    case .cwd(let path): return [.dim(short(path))]
     case .root(let root): return [.dim(short(root))]
     case .file(let root, let relative): return [.dim(short(root) + "/"), .text(relative)]
+    case .absolute(let path): return [.text(short(path))]
     }
   }
 

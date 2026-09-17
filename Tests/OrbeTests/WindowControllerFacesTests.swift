@@ -329,7 +329,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
       [TabState(cwd: src.path, agent: nil, explicitTitle: nil)], rootPath: root.path)
 
     wc.flushChrome()
-    XCTAssertEqual(wc.statusModel.location, [.text(src.path)], "端末焦点は cwd 1 本")
+    XCTAssertEqual(wc.statusModel.location, [.dim(src.path)], "端末焦点は cwd 1 本（弱く）")
 
     wc.handleWindowCommand(.toggleEditorFace)
     wc.flushChrome()
@@ -360,8 +360,10 @@ final class WindowControllerFacesTests: OrbeTestCase {
       StatusRowModel.parts(of: .file(root: home + "/dev", relative: "a/b.swift")),
       [.dim("~/dev/"), .text("a/b.swift")])
     XCTAssertEqual(StatusRowModel.parts(of: .root(home)), [.dim("~")])
-    XCTAssertEqual(StatusRowModel.parts(of: .path(home + "/x")), [.text("~/x")])
-    XCTAssertEqual(StatusRowModel.parts(of: .path("/private/var/y")), [.text("/private/var/y")])
+    XCTAssertEqual(StatusRowModel.parts(of: .cwd(home + "/x")), [.dim("~/x")])
+    XCTAssertEqual(
+      StatusRowModel.parts(of: .absolute("/private/var/y")), [.text("/private/var/y")],
+      "根の外の文書だけ強く")
   }
 
   /// 位置ドットはアクティブタブの面の可視と焦点を映し、0 タブでは無い。
