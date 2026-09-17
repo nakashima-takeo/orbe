@@ -17,6 +17,11 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     return url
   }
 
+  /// 面の座標 x（y は中ほど）を窓座標へ。
+  private func point(_ pane: EditorPaneView, _ x: CGFloat) -> NSPoint {
+    pane.convert(NSPoint(x: x, y: 200), to: nil)
+  }
+
   private func hosted(_ tab: TerminalTab, width: CGFloat) -> NSWindow {
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: width + FaceGeometry.spine, height: 400),
@@ -51,6 +56,29 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertEqual(pane.bodyRect.width, 160)
     XCTAssertEqual(pane.sidebar.width, 240, "記憶の幅は変えない")
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
+
+    // 切り詰め中のドラッグ。起点は描かれている境（162）で、記憶（240）ではない。
+    let handle = try XCTUnwrap(pane.subviews.first { $0 is SidebarResizeHandle })
+    XCTAssertEqual(handle.frame.minX, 37 + 162 - 2, "当たりは描かれている境に居る")
+    handle.mouseDown(with: .mouse(.leftMouseDown, at: point(pane, 37 + 162), in: window))
+    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: point(pane, 37 + 162 + 40), in: window))
+    XCTAssertEqual(pane.shownSidebarWidth, 162, "上限に押し付けても境は動かない")
+    XCTAssertEqual(pane.sidebar.width, 240, "境が動かないドラッグは記憶に触れない")
+    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: point(pane, 37 + 162 - 2), in: window))
+    XCTAssertEqual(pane.shownSidebarWidth, 160, "境はポインタに追従する（起点は 162）")
+    XCTAssertEqual(pane.sidebar.width, 160, "境を動かせば記憶もそこへ")
+    handle.mouseUp(with: .mouse(.leftMouseUp, at: point(pane, 37 + 160), in: window))
+    pane.sidebar.setWidth(240)
+    pane.sidebar.commit()
+
+    window.setContentSize(NSSize(width: 340 + FaceGeometry.spine, height: 400))
+    tab.view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(pane.shownSidebarWidth, 142, "下限 160 を割って切り詰まる")
+    handle.mouseDown(with: .mouse(.leftMouseDown, at: point(pane, 37 + 142), in: window))
+    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: point(pane, 37 + 142 - 50), in: window))
+    XCTAssertEqual(pane.shownSidebarWidth, 142, "下限までも出せない列では動かない")
+    XCTAssertEqual(pane.sidebar.width, 240, "動かないので記憶にも触れない")
+    handle.mouseUp(with: .mouse(.leftMouseUp, at: point(pane, 37 + 92), in: window))
 
     window.setContentSize(NSSize(width: 120 + FaceGeometry.spine, height: 400))
     tab.view.layoutSubtreeIfNeeded()
@@ -98,9 +126,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     let hit = pane.hitTest(pane.convert(NSPoint(x: 37 + 240, y: 200), to: pane.superview))
     XCTAssertTrue(hit === handle, "境は当たりが受ける")
 
-    func point(_ x: CGFloat) -> NSPoint {
-      pane.convert(NSPoint(x: x, y: 200), to: nil)
-    }
+    func point(_ x: CGFloat) -> NSPoint { self.point(pane, x) }
     handle.mouseDown(with: .mouse(.leftMouseDown, at: point(278), in: window))
     handle.mouseDragged(with: .mouse(.leftMouseDragged, at: point(278 + 60), in: window))
     XCTAssertEqual(state.width, 300, "引いた距離だけ広がる")

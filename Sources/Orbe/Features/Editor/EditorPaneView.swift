@@ -233,9 +233,16 @@ final class EditorPaneView: NSView {
       - Theme.Layout.editorBodyMinWidth
   }
 
-  /// ドラッグ中の幅。上限は本体に最低幅が残るまで（下限は状態が守る）。
+  /// ドラッグ中の幅。上限は本体に最低幅が残るまで（下限は状態が守る）。列が狭くてサイドバーを下限まで
+  /// も出せないときは掴んでも動かせないので、記憶に触れない。境が動かないドラッグ（切り詰め中に上限へ
+  /// 押し付ける）も記憶を書き換えない——記憶は「境を動かした」ときだけ変わる。
   private func resizeSidebar(to width: CGFloat) {
-    sidebar.setWidth(min(width, max(sidebarCeiling, Theme.Layout.editorSidebarMinWidth)))
+    let ceiling = sidebarCeiling
+    guard ceiling >= Theme.Layout.editorSidebarMinWidth else { return }
+    let target = min(width, ceiling)
+    guard target != shownSidebarWidth else { return }
+    sidebar.setWidth(target)
+    needsLayout = true  // setWidth は立てない（観測は次のターン）。その場で置き直すために明示する。
     layoutSubtreeIfNeeded()
   }
 
