@@ -13,14 +13,14 @@ enum UnsavedGate {
     alert.informativeText = L10n.format(
       count == 1 ? .editorUnsavedMessageOne : .editorUnsavedMessageOther, language, count)
     alert.addButton(withTitle: L10n.string(.editorUnsavedSave, language))
-    alert.addButton(withTitle: L10n.string(.editorUnsavedDiscard, language)).hasDestructiveAction =
-      true
+    let discard = alert.addButton(withTitle: L10n.string(.editorUnsavedDiscard, language))
+    discard.hasDestructiveAction = true
     alert.addButton(withTitle: L10n.string(.commonCancel, language)).keyEquivalent = "\u{1b}"
     return alert
   }
 
-  /// 応答を解決する。保存 → 順に `save()`（1 つでもディスクの変更で失敗すれば false。失敗した文書は印が
-  /// 立ったまま残り、⌘S の上書き確認へ）／保存しない → true／キャンセル → false。
+  /// 応答を解決する。保存 → 順に `save()`（1 つでも失敗すれば false。ディスクの変更なら印が立ったまま残り
+  /// ⌘S の上書き確認へ、書けない先なら beep——エラー面は持たない）／保存しない → true／キャンセル → false。
   static func proceed(
     _ response: NSApplication.ModalResponse, discarding documents: [EditorDocument]
   )
@@ -32,6 +32,8 @@ enum UnsavedGate {
         do {
           try document.save()
         } catch {
+          NSSound.beep()
+          NSLog("[editor] save before discard failed: \(error)")
           return false
         }
       }
@@ -43,14 +45,16 @@ enum UnsavedGate {
     }
   }
 
-  /// 印の立った文書の ⌘S。ボタンは 上書き／キャンセル（Esc）。
+  /// 印の立った文書の ⌘S。ボタンは 上書き／キャンセル（Esc）。上書きは戻せない（ディスクの内容が消える）
+  /// のに対しキャンセルは何も失わないので、上書きに Return を割り当てない——習慣の ⌘S に続く反射の Return で
+  /// エージェントの編集を消さない。
   static func overwriteAlert(language: Language) -> NSAlert {
     let alert = NSAlert()
     alert.messageText = L10n.string(.editorOverwriteTitle, language)
     alert.informativeText = L10n.string(.editorOverwriteMessage, language)
-    alert.addButton(withTitle: L10n.string(.editorOverwriteConfirm, language))
-      .hasDestructiveAction =
-      true
+    let confirm = alert.addButton(withTitle: L10n.string(.editorOverwriteConfirm, language))
+    confirm.hasDestructiveAction = true
+    confirm.keyEquivalent = ""
     alert.addButton(withTitle: L10n.string(.commonCancel, language)).keyEquivalent = "\u{1b}"
     return alert
   }

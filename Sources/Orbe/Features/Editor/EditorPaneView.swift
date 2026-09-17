@@ -361,23 +361,30 @@ final class EditorPaneView: NSView {
   override func keyDown(with event: NSEvent) {}
 
   /// ⌘S。ディスクが変わっていて失敗したら「上書き／キャンセル」を sheet で出し、上書きで force 保存する。
-  /// それ以外の失敗はログだけ。
+  /// force 保存するのは同意した文書——sheet の間もセッションは動く（エージェントの `open_file` が焦点を
+  /// 差し替える）ので、応答時点の焦点ではなく出した時点の文書を束ね、まだ居ることを確かめてから書く
+  /// （`requestClose` と同型）。それ以外の失敗は beep（`open` と同じ理由でエラー面は持たない）。
   private func saveActiveDocument() {
     guard let tab else { return }
     do {
       try tab.editor.saveActive()
     } catch EditorDocumentError.diskChanged {
-      guard let window else { return }
+      guard let window, let target = tab.editor.activeDocument else { return }
       let alert = UnsavedGate.overwriteAlert(language: localization.language)
-      alert.beginSheetModal(for: window) { [weak self] response in
-        guard let self, let tab = self.tab, UnsavedGate.shouldOverwrite(response) else { return }
+      alert.beginSheetModal(for: window) { [weak self, weak target] response in
+        guard let self, let tab = self.tab, let target,
+          tab.editor.documents.contains(where: { $0 === target }),
+          UnsavedGate.shouldOverwrite(response)
+        else { return }
         do {
-          try tab.editor.saveActive(force: true)
+          try target.save(force: true)
         } catch {
+          NSSound.beep()
           NSLog("[editor] forced save failed: \(error)")
         }
       }
     } catch {
+      NSSound.beep()
       NSLog("[editor] save failed: \(error)")
     }
   }

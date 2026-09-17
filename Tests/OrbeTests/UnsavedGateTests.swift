@@ -67,6 +67,8 @@ final class UnsavedGateTests: OrbeTestCase {
     XCTAssertTrue(many.informativeText.hasPrefix("3 件"))
     let overwrite = UnsavedGate.overwriteAlert(language: .en)
     XCTAssertEqual(overwrite.buttons.map(\.title), ["Overwrite", "Cancel"])
+    XCTAssertEqual(overwrite.buttons[0].keyEquivalent, "", "上書きは Return で確定しない（戻せない側）")
+    XCTAssertEqual(overwrite.buttons[1].keyEquivalent, "\u{1b}", "Esc はキャンセル")
     XCTAssertTrue(UnsavedGate.shouldOverwrite(.alertFirstButtonReturn))
     XCTAssertFalse(UnsavedGate.shouldOverwrite(.alertSecondButtonReturn))
   }
@@ -177,6 +179,43 @@ final class UnsavedGateTests: OrbeTestCase {
     window.endSheet(try XCTUnwrap(window.attachedSheet), returnCode: .alertFirstButtonReturn)
     XCTAssertTrue(tab.editor.documents.isEmpty, "保存して閉じる")
     XCTAssertEqual(try String(contentsOf: repo.url("a.txt"), encoding: .utf8), "xone\n")
+  }
+
+  // MARK: - 入口: ⌘S の上書き
+
+  /// 印の立った文書の ⌘S は上書き確認を sheet で出し、キャンセルならディスクを触らず、上書きなら本文で置き換えて
+  /// 印が落ちる。上書きされるのは確認を出した文書——sheet の間に別の文書を開いて焦点が移っても変わらない。
+  func testCommandSOverwritesOnlyTheDocumentThatWasConfirmed() throws {
+    let tab = TerminalTab(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    window.contentView = tab.view
+    tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    defer { window.orderOut(nil) }
+    let pane = tab.view.editor
+    let a = try tab.editor.open(repo.url("a.txt"))
+    window.makeFirstResponder(a.surface.responder)
+    edit(a)
+    try repo.write("a.txt", "outside\n")
+
+    XCTAssertTrue(pane.performKeyEquivalent(with: .key("s")))
+    let sheet = try XCTUnwrap(window.attachedSheet, "外部変更で失敗すれば上書き確認")
+    window.endSheet(sheet, returnCode: .alertSecondButtonReturn)
+    XCTAssertEqual(
+      try String(contentsOf: repo.url("a.txt"), encoding: .utf8), "outside\n", "キャンセルは触らない")
+    XCTAssertTrue(a.isDirty)
+
+    XCTAssertTrue(pane.performKeyEquivalent(with: .key("s")))
+    try repo.write("b.txt", "b\n")
+    let b = try tab.editor.open(repo.url("b.txt"))  // sheet の間にエージェントが別の文書を開く
+    XCTAssertTrue(tab.editor.activeDocument === b)
+    window.endSheet(try XCTUnwrap(window.attachedSheet), returnCode: .alertFirstButtonReturn)
+    XCTAssertEqual(
+      try String(contentsOf: repo.url("a.txt"), encoding: .utf8), "xone\n", "同意した文書を上書き")
+    XCTAssertFalse(a.isDirty)
+    XCTAssertFalse(a.isDiskChanged, "印が落ちる")
+    XCTAssertEqual(try String(contentsOf: repo.url("b.txt"), encoding: .utf8), "b\n", "焦点の文書は触らない")
   }
 
   // MARK: - 復元
