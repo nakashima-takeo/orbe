@@ -51,4 +51,27 @@ final class EditorShellModelTests: OrbeTestCase {
     XCTAssertNil(shell.activeName)
     XCTAssertTrue(shell.crumbs.isEmpty)
   }
+
+  /// 未保存の文書が外で書き換えられると、写しは衝突（ドットが変更の黄）を持ち、外の内容に戻れば消える。
+  func testConflictFollowsExternalWritesOnADirtyDocument() throws {
+    let repo = try TempGitRepo()
+    defer { repo.cleanup() }
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    let document = try session.open(repo.url("a.txt"))
+    document.surface.responder.perform(Selector(("insertText:")), with: "Z")
+    let shell = EditorShellModel()
+    shell.update(from: session, root: repo.root)
+    XCTAssertEqual(shell.tabs.map(\.isConflicted), [false])
+
+    try repo.write("a.txt", "outside\n")
+    pumpMain(until: { document.isDiskChanged }, "監視で印が立つ")
+    shell.update(from: session, root: repo.root)
+    XCTAssertEqual(shell.tabs.map(\.isConflicted), [true])
+    XCTAssertEqual(shell.tabs.map(\.isDirty), [true])
+
+    try document.save(force: true)
+    shell.update(from: session, root: repo.root)
+    XCTAssertEqual(shell.tabs.map(\.isConflicted), [false], "上書きで印が消える")
+    XCTAssertEqual(try String(contentsOf: repo.url("a.txt"), encoding: .utf8), "Zone\n")
+  }
 }
