@@ -98,13 +98,16 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
   /// リポジトリで「手元のブランチを開くだけ」が分単位で止まる。
   ///
   /// 待たなかった証拠は、作成が返った時点で手元の `origin/main` がまだ古いこと——fetch が着地して
-  /// いれば ref は新しい tip へ動いている。
+  /// いれば ref は新しい tip へ動いている。**この否定の assert を測る窓だけは壁時計で区切らない**
+  /// ——窓の中で作成（非同期 git 2 本）を走らせるので、遅い機械では窓が先に閉じて「正しい実装のまま
+  /// 赤」になる。fetch はテストが門を開けるまで待たせ、作成が返ってから開ける。
   func testLocalBranchWorktreeDoesNotWaitForTheFetch() throws {
-    let provider = try startWithSlowFetch()
+    let provider = try startWithSlowFetch(holdingFetch: true)
     let path = try resolve(provider, .localBranch(name: "mine", existingWorktree: nil))
     XCTAssertNotEqual(
       localRemoteTip("main"), originTip("main"), "作成が返った時点で fetch はまだ着地していない")
     XCTAssertEqual(head(of: path), oid(["rev-parse", "mine"], cwd: local))
+    releaseFetch()
   }
 
   /// **fetch が失敗しても作成は続く。** 手元の `refs/remotes/origin/*` が最良で、ここで止めると
@@ -212,17 +215,33 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     return provider
   }
 
-  /// `fetch --prune` を数秒かかる状態にしてから provider を起こす。返るのは fetch が未着地の窓に居る
-  /// provider——ここで作成を撃たないと「待つかどうか」を測れない。
-  private func startWithSlowFetch() throws -> DispatchDataProvider {
+  /// fetch を遅らせてから provider を起こす。返るのは fetch が未着地の窓に居る provider——ここで
+  /// 作成を撃たないと「待つかどうか」を測れない。遅延は `remote.origin.uploadpack` を眠るラッパーへ
+  /// 差し替えて作る（ネットワークも特別な transport も要らない）。
+  ///
+  /// `holdingFetch` は眠りを `releaseFetch()` まで続けさせる。着地を待つ側のテストは fetch が自力で
+  /// 明ける必要があるので数秒の眠りのまま、待たない側だけが門を使う。
+  private func startWithSlowFetch(holdingFetch: Bool = false) throws -> DispatchDataProvider {
     let wrapper = dir.appendingPathComponent("slow-upload-pack").path
-    try "#!/bin/sh\nsleep 2\nexec git-upload-pack \"$@\"\n".write(
+    if holdingFetch {
+      try FileManager.default.createDirectory(
+        atPath: fetchGate, withIntermediateDirectories: true)
+    }
+    let wait = holdingFetch ? "while [ -d \"\(fetchGate)\" ]; do sleep 0.05; done" : "sleep 2"
+    try "#!/bin/sh\n\(wait)\nexec git-upload-pack \"$@\"\n".write(
       toFile: wrapper, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper)
     XCTAssertTrue(run(["config", "remote.origin.uploadpack", wrapper], cwd: local).isSuccess)
     let provider = try start()
     XCTAssertNotEqual(localRemoteTip("main"), originTip("main"), "前提: まだ fetch が着地していない")
     return provider
+  }
+
+  /// fetch を止めている門。消えた時点で `uploadpack` のラッパーが先へ進む。
+  private var fetchGate: String { dir.appendingPathComponent("fetch-gate").path }
+
+  private func releaseFetch() {
+    try? FileManager.default.removeItem(atPath: fetchGate)
   }
 
   private func resolve(_ provider: DispatchDataProvider, _ action: DispatchAction) throws -> String
