@@ -159,9 +159,9 @@ final class UntrustedLinkTests: OrbeTestCase {
     }
   }
 
-  /// 無害そうな名前の symlink や `..` の綴りの裏にある実行ファイルも、実体で判定して開かない。
+  /// 無害そうな名前の symlink や `..` の綴りの裏にあるバイナリ実行ファイルも、実体で判定して開かない。
   func testExecutableBehindHarmlessSpellingIsBlocked() throws {
-    let executable = try makeFile("tool", executable: true)
+    let executable = try makeFile("tool", Data([0xCF, 0xFA, 0xED, 0xFE, 0x00]), executable: true)
     let disguise = dir.appendingPathComponent("readme.txt")
     try FileManager.default.createSymbolicLink(at: disguise, withDestinationURL: executable)
     let folder = dir.appendingPathComponent("folder", isDirectory: true)
@@ -169,6 +169,12 @@ final class UntrustedLinkTests: OrbeTestCase {
 
     XCTAssertEqual(decision("file://\(disguise.path)"), .block(.unsafeFile))
     XCTAssertEqual(decision("file://\(folder.path)/../tool"), .block(.unsafeFile))
+  }
+
+  /// 拡張子の無い実行ビット付きファイルでも、中身がテキスト（シェルスクリプト等）ならエディタで開く。
+  func testExecutableWithTextContentOpensInEditor() throws {
+    let script = try makeFile("tool", Data("#!/bin/sh\necho hi\n".utf8), executable: true)
+    XCTAssertEqual(decision("file://\(script.path)"), .allow(.text(canonical(script))))
   }
 
   // MARK: - 表示文字列
@@ -207,9 +213,11 @@ final class UntrustedLinkTests: OrbeTestCase {
     UntrustedLink(raw, localHosts: [Self.localHost]).decision
   }
 
-  private func makeFile(_ name: String, executable: Bool = false) throws -> URL {
+  private func makeFile(
+    _ name: String, _ data: Data = Data("content\n".utf8), executable: Bool = false
+  ) throws -> URL {
     let url = dir.appendingPathComponent(name)
-    try Data("content\n".utf8).write(to: url)
+    try data.write(to: url)
     try FileManager.default.setAttributes(
       [.posixPermissions: executable ? 0o755 : 0o644], ofItemAtPath: url.path)
     return url

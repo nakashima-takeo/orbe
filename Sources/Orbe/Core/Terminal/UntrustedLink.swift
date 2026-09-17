@@ -132,22 +132,28 @@ struct UntrustedLink: Equatable {
     }
     let isDirectory = values.isDirectory == true
     guard isDirectory || values.isRegularFile == true else { return .block(.inaccessibleFile) }
-    let type = values.contentType ?? .data
+    return Self.familyDecision(
+      canonical, type: values.contentType ?? .data, isDirectory: isDirectory,
+      isPackage: values.isPackage == true)
+  }
 
+  /// 実在する通常ファイル／ディレクトリを内容の家族に振り分け、開き先を決める。
+  private static func familyDecision(
+    _ canonical: URL, type: UTType, isDirectory: Bool, isPackage: Bool
+  ) -> Decision {
     // 判定順は家族の包含関係で決まる: `.js` は executable にも text にも準拠し、`.svg` は image にも
-    // text にも準拠する。
-    let isText = type.conforms(to: .text)
-    if Self.forwardingOrExecutableTypes.contains(where: type.conforms(to:)), !isText {
-      return .block(.unsafeFile)
-    }
-    if Self.mediaTypes.contains(where: type.conforms(to:)) {
-      return .allow(.typed(canonical, type))
-    }
-    if isText { return .allow(.text(canonical)) }
-    if !isDirectory, Self.hasNoDeclaredType(type), Self.looksLikeText(canonical) {
+    // text にも準拠する。実行形式の block より前に中身判定を置くのは、拡張子の無いシェルスクリプトが
+    // 実行ビットで unix 実行形式の型になるため（中身がテキストなら編集対象で、実行はしない）。
+    if forwardingTypes.contains(where: type.conforms(to:)) { return .block(.unsafeFile) }
+    if mediaTypes.contains(where: type.conforms(to:)) { return .allow(.typed(canonical, type)) }
+    if type.conforms(to: .text) { return .allow(.text(canonical)) }
+    if !isDirectory, hasNoDeclaredType(type) || type.conforms(to: .executable),
+      looksLikeText(canonical)
+    {
       return .allow(.text(canonical))
     }
-    if isDirectory, values.isPackage != true { return .allow(.folder(canonical)) }
+    if executableTypes.contains(where: type.conforms(to:)) { return .block(.unsafeFile) }
+    if isDirectory, !isPackage { return .allow(.folder(canonical)) }
     return .confirm(canonical)
   }
 
@@ -159,10 +165,12 @@ struct UntrustedLink: Equatable {
     return URL(fileURLWithPath: String(cString: resolved))
   }
 
-  /// 中身が別の対象を指す転送ファイル（`.webloc`・`.fileloc`・`.url` 等）と、アプリ・実行形式
-  /// （`.app`・unix 実行形式・`.dylib`・`.jar`・`.exe` 等）。テキストでない限り開かない。
-  private static let forwardingOrExecutableTypes: [UTType] =
-    [.internetLocation, UTType("public.stored-url"), .application, .executable].compactMap { $0 }
+  /// 中身が別の対象を指す転送ファイル（`.webloc`・`.fileloc`・`.url` 等）。開かない。
+  private static let forwardingTypes: [UTType] =
+    [.internetLocation, UTType("public.stored-url")].compactMap { $0 }
+
+  /// アプリ・実行形式（`.app`・unix 実行形式・`.dylib`・`.jar`・`.exe` 等）。中身がテキストでない限り開かない。
+  private static let executableTypes: [UTType] = [.application, .executable]
 
   private static let mediaTypes: [UTType] = [.image, .pdf, .audiovisualContent]
 
