@@ -44,6 +44,10 @@ fi
 # zig は mise.toml が固定する版だけを使う（ghostty の build.zig が major.minor の一致を要求する）。
 # ROOT で解決するのは、worktree では vendor/ghostty が main worktree への symlink で、そこで mise を
 # 評価すると物理 cwd 側の mise.toml が読まれるため。
+command -v mise >/dev/null || {
+  echo "エラー: mise が未導入。導入は docs/guides/build.md の「前提ツール」を参照せよ（例: brew install mise）" >&2
+  exit 1
+}
 ZIG="$(cd "$ROOT" && mise which zig)" || {
   echo "エラー: zig が未導入。'mise install' を実行せよ" >&2
   exit 1
