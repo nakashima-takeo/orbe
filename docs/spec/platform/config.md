@@ -1,7 +1,7 @@
 ---
 title: 設定
 description: キュレート既定 → user 設定 → GUI 生成 conf の後勝ち 3 層読み込みと、テーマ（Auto/Dark/Light 外観スイッチ）によるライト/ダーク決定
-updated: 2026-09-04
+updated: 2026-09-17
 ---
 
 # 設定
@@ -20,7 +20,7 @@ ghostty の conf をどう読み、GUI の設定変更をどう端末へ届け�
 
 ## 層 1（キュレート既定）
 
-持つのは端末テーマ・フォントチェーン・背景不透明度/ブラー・パディング・カーソル・シェル統合・Option の Alt 扱いの既定。うち意図が値に宿るもの:
+持つのは端末テーマ・フォントチェーン・背景不透明度/ブラー・パディング・カーソル・シェル統合・Option の Alt 扱い・端末アプリからのクリップボード読み取り可否の既定。うち意図が値に宿るもの:
 
 - **`theme = light:OrbeLight,dark:OrbeDark`** … 自前 named theme 2 枚。`app/themes/` の実体は識別色 SSOT（`DesignSystem/OrbePalette.swift`）から生成・コミットされ、`swift test` が ANSI ink スロットの WCAG AA と SSOT 再生成の drift を検証し、さらに層 1 と gui.conf の `theme =` 行からテーマ名をパースして `app/themes/<name>` の実在を照合する——テーマ名は層 1・gui.conf・テーマファイル名・`build-app.sh` の 4 箇所に独立して埋まり、解決に失敗しても ghostty は診断を積むだけで既定色のまま起動してしまうため。
 - **本文等幅チェーンは JetBrainsMono Nerd Font の 1 本だけ**（プライマリ・4 スタイル同梱で bold/italic も設計字形）。`font-family` 行の face は fallback=false で挿さり、presentation を無視してグリフ有無だけで奪うため、広カバレッジのフォントを足すと絵文字を白黒字形で取り、記号の解決先も全角字形のフォントから欧文の半角字形へすり替わる。広カバレッジの JuliaMono（v0.63.2）は `font-family` に入れず、**起動時の `.process` 登録だけで discovery の候補**として効かせる——JetBrains に無い記号（数学記号・多言語等）の受け皿。discovery で引けるのは SVG テーブルを持たない版だけ（カラーフォント判定は text 用途で拒否され、登録が無言で無効化する）で、`swift test` が同梱 TTF の非カラー判定を固定する。これら同梱 TTF（絵文字用含む）は起動時（フォント解決より前）にプロセス登録する（非バンドル起動では no-op）——登録しないと `font-codepoint-map` がファミリ名を解決できず、委譲が無言で外れて見た目だけが元へ戻る。
@@ -29,6 +29,7 @@ ghostty の conf をどう読み、GUI の設定変更をどう端末へ届け�
 - 背景不透明度は既定でわずかに透ける（設定パレットの既定と対称。GUI 未介入でも初期から透過）、`background-blur` も既定 ON。
 - **`shell-integration-features = no-cursor,no-title`** … cursor はプロンプトでの bar 上書きを止めブロックを効かせ、title は自動タイトル送出を止めてタブ名を chrome の precedence へ委ねる（→ [chrome](../chrome/chrome.md)）。
 - **`macos-option-as-alt = true`** … 物理 Option+<文字>と制御チャネルの `alt+<文字>`（→ [control/api](../control/api.md)）を Alt（Meta）として符号化する。未設定時の libghostty の自動判定は US / USInternational レイアウトだけ true で、ABC・JIS は false——Option+B が `∫`、`send_key alt+b` が legacy 端末で素の `b` になる——ため既定で固定する。代償は、JIS 物理キーボードで `¥` キーを `\` に切り替えていない環境の `Option+¥`（`\`）と、ラテン系非 US 配列（German 等）で Option から打つ `{ } [ ] | \ @ ~` が Alt になること。`~/.config/ghostty` で `false` に戻せる。
+- **`clipboard-read = deny`** … 端末アプリ発のクリップボード読み取り（OSC 52 / Kitty clipboard）を libghostty で断つ（→ [terminal/core](../terminal/core.md)）。Orbe は確認 UI を持たないので `ask` は `deny` と同じに振る舞う。`~/.config/ghostty` で `allow` に戻せる。
 - 絵文字の `font-codepoint-map` は層 1 に置かず、gui.conf（層 3）が**常時出力**する（単一出所・次節）。
 
 ## gui.conf（GUI 管理層）

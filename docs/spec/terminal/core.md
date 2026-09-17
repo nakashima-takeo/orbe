@@ -1,7 +1,7 @@
 ---
 title: ターミナル基盤
 description: libghostty の surface API を NSView に埋め込む土台 — 描画・入力・クリップボード・ライフサイクル・ビルド構成の契約
-updated: 2026-09-06
+updated: 2026-09-17
 ---
 
 # ターミナル基盤
@@ -41,7 +41,7 @@ surface の可視性はホストが `ghostty_surface_set_occlusion` へ同期す
 
 全キーボード入力・修飾キー・マウス選択・コピー&ペーストを扱う。
 
-- **クリップボード**: 危険ペーストの確認は `confirm_read_clipboard_cb` に回り、許可する。**OSC 52 read（端末アプリ発のクリップボード読み取り）は空文字で完了して拒否する**——クリップボード内容の情報漏洩を防ぐため。
+- **クリップボード**: 端末アプリ発の読み取り（OSC 52 read・Kitty clipboard read）は Orbe 既定の `clipboard-read = deny`（→ [config](../platform/config.md)）で libghostty が拒否し、host には届かない——クリップボード内容の情報漏洩を防ぐため。host に届く読み取りはユーザー発のペーストとその型一覧で、扱う表現は `text/plain` だけ。Orbe は確認 UI を持たないので、確認が要る操作のうち通すのはペーストだけ（確認済みとして完了）で、それ以外は拒否する。書き込みも同じ論理で、確認が要る書き込み（user が `clipboard-write = ask` にした場合）は通さず、`text/plain` 表現だけを NSPasteboard へ置く。
 - **ベル**（`RING_BELL`）は警告音のみで、視覚表現を持たない。
 - **URL／ファイルパスのオープン**（`OPEN_URL`）は host が処理し `NSWorkspace` で開く。この action は常に処理済みを返し、libghostty のフォールバックオープナーは使わない。C 側の文字列ポインタはコールバック中だけ有効なため、bytes を即コピーしてから main で開く。開き先の解決は純関数: scheme 付きはそのまま、scheme 無しは `~` 展開してファイル URL 扱い、`kind==text` は既定エディタ・それ以外は URL の既定アプリ。
 - **マウス**: 左/右/中および拡張ボタンを libghostty へ転送する（マウスレポートを使う TUI のため）。フォーカス移動は左クリックのみ。マウス位置は tracking area で伝える（enter で viewport 内に位置確立・exit で範囲外座標）。
