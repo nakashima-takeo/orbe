@@ -1,5 +1,6 @@
 import AppKit
 import GhosttyKit
+import UniformTypeIdentifiers
 
 /// libghostty ランタイム（プロセスに 1 つ）。
 /// app/config の生成、runtime callbacks の配線、surface→view レジストリを持つ。
@@ -38,12 +39,16 @@ final class Ghostty {
       Ghostty.shared.handleAction(appPtr, target, action)
     }
     // クリップボードは text/plain だけを扱い、Orbe は確認 UI を持たない。端末アプリ発の読み取り
-    // （OSC 52 / Kitty）は orbe-defaults の clipboard-read = deny で core が断つので、host に届く
-    // 読み取りはユーザー発のペーストとその型一覧だけ。
+    // （OSC 52 / Kitty）は orbe-defaults の clipboard-read = deny で core が断つので、既定で host に
+    // 届く読み取りはユーザー発のペーストとその型一覧だけ。user 設定で allow / ask に変えると
+    // 端末アプリ発の読み取りも届く。
     // read: STARTED を返すのは complete を呼んだときだけ（呼ばずに STARTED は state をリークし、
-    // 呼んで UNAVAILABLE は二重解放）。
-    rt.read_clipboard_cb = { userdata, _, state, mimes, mimesLen, list in
-      guard let userdata, let surface = SurfaceView.from(userdata).surfacePtr else {
+    // 呼んで UNAVAILABLE は二重解放）。PRIMARY（X11 の選択クリップボード）は macOS に無いので
+    // UNSUPPORTED。SELECTION は paste_from_selection（⌘⇧V）が使うので general に向ける。
+    rt.read_clipboard_cb = { userdata, location, state, mimes, mimesLen, list in
+      guard location != GHOSTTY_CLIPBOARD_PRIMARY, let userdata,
+        let surface = SurfaceView.from(userdata).surfacePtr
+      else {
         return GHOSTTY_CLIPBOARD_READ_UNSUPPORTED
       }
       let wantsText = (0..<mimesLen).contains { i in
@@ -70,20 +75,10 @@ final class Ghostty {
         confirmed: true, remember: false)
       ghostty_surface_complete_clipboard_request(surface, &payload, state)
     }
-    // write: 確認が要る書き込みは通さない。最初の text/plain 表現を NSPasteboard へ。
+    // write: 確認が要る書き込みは通さない。
     rt.write_clipboard_cb = { _, _, contents, len, confirm in
       guard !confirm, let contents else { return }
-      for i in 0..<len {
-        let content = contents[i]
-        guard let mime = content.mime, strcmp(mime, "text/plain") == 0, let data = content.data,
-          let text = String(
-            bytes: UnsafeRawBufferPointer(start: data, count: content.len), encoding: .utf8)
-        else { continue }
-        let pb = NSPasteboard.general
-        pb.clearContents()
-        pb.setString(text, forType: .string)
-        return
-      }
+      Ghostty.writeClipboard(UnsafeBufferPointer(start: contents, count: len))
     }
     // surface クローズ要求（shell の exit 等）: 所属タブを閉じる
     rt.close_surface_cb = { userdata, _ in
@@ -106,6 +101,24 @@ final class Ghostty {
     ghostty_app_update_config(app, new)
     ghostty_config_free(config)
     config = new
+  }
+
+  /// 最初のテキスト表現を NSPasteboard の文字列として置く。テキスト表現が無ければ何もしない（クリップボードを消さない）。
+  /// Kitty write の MIME は core が正規化せず端末アプリの書いた名前のまま来るので、plain text と見なすかは
+  /// macOS の型システム（UTType）に判定させる。
+  private static func writeClipboard(_ contents: UnsafeBufferPointer<ghostty_clipboard_content_s>) {
+    for content in contents {
+      guard let mime = content.mime,
+        UTType(mimeType: String(cString: mime))?.conforms(to: .plainText) == true,
+        let data = content.data,
+        let text = String(
+          bytes: UnsafeRawBufferPointer(start: data, count: content.len), encoding: .utf8)
+      else { continue }
+      let pb = NSPasteboard.general
+      pb.clearContents()
+      pb.setString(text, forType: .string)
+      return
+    }
   }
 
   /// text/plain 1 表現（と型一覧）でクリップボード読み取りを完了する。C 側へ渡すポインタは呼び出しの間だけ有効。
