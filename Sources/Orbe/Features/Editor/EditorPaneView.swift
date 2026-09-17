@@ -106,6 +106,7 @@ final class EditorPaneView: NSView {
       guard let self, let tab, let document = tab.editor.documents.first(where: { $0.url == url })
       else { return }
       tab.editor.activate(document)
+      tree.reveal(document.url)
       focusEditor()
     }
     shell.requestClose = { [weak self] url in self?.requestClose(url) }
@@ -123,15 +124,18 @@ final class EditorPaneView: NSView {
     tree.onCreated = { [weak self] url in self?.open(url) }
   }
 
-  /// 骨から開く。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）。開けたら焦点を面へ。
+  /// 骨から開く。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）。開けたらその行を
+  /// 選択して焦点を面へ——既に焦点の文書ならセッションは変わらないので、選択はここで明示に移す。
   private func open(_ url: URL) {
     guard let tab else { return }
+    let document: EditorDocument
     do {
-      try tab.editor.open(url)
+      document = try tab.editor.open(url)
     } catch {
       NSSound.beep()
       return
     }
+    tree.reveal(document.url)
     focusEditor()
   }
 

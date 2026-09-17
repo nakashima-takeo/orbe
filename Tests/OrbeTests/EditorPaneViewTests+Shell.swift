@@ -293,6 +293,16 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     a.surface.responder.perform(Selector(("insertText:")), with: "Z")
     XCTAssertEqual(pane.shell.tabs.map(\.isDirty), [true, false], "同一文書の未保存の変化も写る")
 
+    try FileManager.default.createDirectory(
+      at: dir.appendingPathComponent("docs"), withIntermediateDirectories: true)
+    pane.tree.toggle("docs")
+    XCTAssertEqual(pane.tree.selected, "docs")
+    pane.shell.open(b.url)
+    XCTAssertEqual(pane.tree.selected, "b.md", "既に焦点の文書の行を押しても選択はそこへ移る")
+    pane.tree.toggle("docs")
+    pane.shell.activate(b.url)
+    XCTAssertEqual(pane.tree.selected, "b.md", "既に焦点の文書のファイルタブでも同じ")
+
     tab.editor.close(b)
     XCTAssertEqual(pane.shell.tabs.map(\.name), ["a.swift"])
     XCTAssertTrue(pane.document === a)

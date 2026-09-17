@@ -45,8 +45,16 @@ final class FileTree: RootFilesObserver {
   /// 相対ディレクトリ → 一覧。空文字が根。
   private(set) var entries: [String: [RootFiles.Entry]] = [:]
   private(set) var status: GitStatus?
+  struct Selection: Equatable {
+    let path: String
+    let isDirectory: Bool
+  }
+
+  /// 選択表示する行と、その種別（新規作成の挿し先を決める）。種別は選ばせた側が知っているので一緒に持つ——
+  /// 一覧のキャッシュから引き直すと、すべて畳んだ後は親の一覧が無く、ディレクトリがファイル扱いになる。
+  private(set) var selection: Selection?
   /// 選択表示する行（相対パス）。
-  private(set) var selected: String?
+  var selected: String? { selection?.path }
   private(set) var newEntry: NewEntry?
   private var newGeneration = 0
   /// 行内入力でファイルを作った（呼び手が開く）。
@@ -119,7 +127,7 @@ final class FileTree: RootFilesObserver {
   // MARK: - 開閉・選択
 
   func toggle(_ directory: String) {
-    selected = directory
+    selection = Selection(path: directory, isDirectory: true)
     if expanded.contains(directory) {
       collapse(directory)
     } else {
@@ -137,23 +145,23 @@ final class FileTree: RootFilesObserver {
   /// 文書をアクティブにした。根の下なら祖先を開いてその行を選択表示し、根の外なら選択を外す。
   func reveal(_ url: URL) {
     guard let path = relativePath(of: url) else {
-      selected = nil
+      selection = nil
       return
     }
-    revealPath(path)
+    revealPath(path, isDirectory: false)
   }
 
   /// パンくずのディレクトリ。祖先ごと開いて選択表示する。
   func revealDirectory(_ url: URL) {
     guard let path = relativePath(of: url) else { return }
-    revealPath(path)
+    revealPath(path, isDirectory: true)
     expand(path)
   }
 
-  private func revealPath(_ path: String) {
+  private func revealPath(_ path: String, isDirectory: Bool) {
     isRootOpen = true
     for ancestor in Self.ancestors(of: path) { expand(ancestor) }
-    selected = path
+    selection = Selection(path: path, isDirectory: isDirectory)
   }
 
   private func expand(_ directory: String) {
@@ -174,8 +182,8 @@ final class FileTree: RootFilesObserver {
   /// 行内入力を出す。挿す先は、選択がディレクトリならそこ、ファイルならその親、無ければ根。
   func beginNew(isDirectory: Bool) {
     let directory: String
-    if let selected {
-      directory = self.isDirectory(selected) ? selected : Self.parent(of: selected)
+    if let selection {
+      directory = selection.isDirectory ? selection.path : Self.parent(of: selection.path)
     } else {
       directory = ""
     }
@@ -212,7 +220,8 @@ final class FileTree: RootFilesObserver {
     }
     self.newEntry = nil
     reload(newEntry.directory)
-    selected = Self.join(newEntry.directory, name)
+    selection = Selection(
+      path: Self.join(newEntry.directory, name), isDirectory: newEntry.isDirectory)
     if !newEntry.isDirectory { onCreated?(url) }
     return true
   }
@@ -249,10 +258,6 @@ final class FileTree: RootFilesObserver {
       collapse(directory)
       entries[directory] = nil
     }
-  }
-
-  private func isDirectory(_ path: String) -> Bool {
-    entries[Self.parent(of: path)]?.first { $0.name == Self.name(of: path) }?.isDirectory ?? false
   }
 
   // MARK: - 通知
@@ -306,11 +311,6 @@ final class FileTree: RootFilesObserver {
   private static func parent(of path: String) -> String {
     guard let slash = path.lastIndex(of: "/") else { return "" }
     return String(path[..<slash])
-  }
-
-  private static func name(of path: String) -> String {
-    guard let slash = path.lastIndex(of: "/") else { return path }
-    return String(path[path.index(after: slash)...])
   }
 
   /// 根を除く祖先（浅い順）。
