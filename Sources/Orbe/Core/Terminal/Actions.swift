@@ -63,7 +63,7 @@ extension Ghostty {
       return handleScrollbar(action, target: target)
 
     case GHOSTTY_ACTION_OPEN_URL:
-      return handleOpenURL(action)
+      return handleOpenURL(action, target: target)
 
     default:
       // 未対応アクションは未処理として返す
@@ -108,7 +108,9 @@ extension Ghostty {
   /// OPEN_URL: ターミナル内の URL/ファイルパスを macOS の作法で開く。
   /// これを処理しないと libghostty のフォールバック（`os/open.zig` の無限ループバグ）を踏む。
   /// C 側の `url` ポインタはコールバック中だけ有効なので、bytes を即コピーしてから main へ渡す。
-  private func handleOpenURL(_ action: ghostty_action_s) -> Bool {
+  /// OSC 8 は端末出力が見えている文字列と別の対象を隠せるので、`UntrustedLink` の判定を通す
+  /// （判定はファイル I/O を伴い、確認・ブロックの表示は描画ロック外で要るため main の次の turn）。
+  private func handleOpenURL(_ action: ghostty_action_s, target: ghostty_target_s) -> Bool {
     let v = action.action.open_url
     let kind = OpenURL.Kind(v.kind)
     let raw: String
@@ -118,7 +120,26 @@ extension Ghostty {
       raw = ""
     }
     guard !raw.isEmpty else { return true }
-    DispatchQueue.main.async { OpenURL.open(kind: kind, url: OpenURL.resolve(raw)) }
+    guard kind == .osc8 else {
+      DispatchQueue.main.async { OpenURL.open(kind: kind, url: OpenURL.resolve(raw)) }
+      return true
+    }
+    let surf = surface(of: target)
+    DispatchQueue.main.async { [weak self] in
+      let view = surf.flatMap { self?.view(for: $0) }
+      let language = view?.localization?.language ?? .systemDefault
+      let link = UntrustedLink(raw)
+      switch link.decision {
+      case .allow(let url):
+        NSWorkspace.shared.open(url)
+      case .confirm(let url):
+        UntrustedLinkAlert.confirm(
+          url, display: link.displayString, language: language, in: view?.window)
+      case .block(let reason):
+        UntrustedLinkAlert.block(
+          reason, display: link.displayString, language: language, in: view?.window)
+      }
+    }
     return true
   }
 
