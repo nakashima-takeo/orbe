@@ -1,5 +1,6 @@
 import AppKit
 import GhosttyKit
+import OrbeEditorCore
 import OrbeSessionLog
 
 /// タブ 1 枚。端末 surface 1 枚（`SurfaceView`）と「タブとしての状態」——制御チャネルの宛先 ID・
@@ -305,6 +306,11 @@ final class TerminalTab {
   func paneDidFocus(_ face: Face) {
     guard faces.focus != face else { return }
     setFaces(FaceLayout(editorRatio: faces.editorRatio, focus: face), animated: false)
+  }
+
+  /// 閉じれば失われる文書（未保存の列）。閉じる・終了の確認が読む。
+  func unsavedDocuments() -> [EditorDocument] {
+    MainActor.assumeIsolated { editor.documentsToDiscard() }
   }
 
   /// エディターでファイルを開いて焦点の文書にする（制御 API の入口）。読めない・UTF-8 でないは throw。

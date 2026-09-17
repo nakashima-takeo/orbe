@@ -297,34 +297,6 @@ final class WindowController: NSObject, NSWindowDelegate {
   /// 背面・背景タブの done は残す。3 トリガ（タブ活性化・done 到着・前面復帰）が共有する。
   private func consumeVisibleTabDone() { visibleTab?.consumeDoneState() }
 
-  /// タブを閉じる唯一の合流点。発火源はユーザー操作（Cmd+W）に限らず、shell の exit
-  /// （close_surface_cb → onClose）が背景タブ・背景 workspace からも届くため、
-  /// アクティブ文脈を前提にせず所属 workspace を特定して処理する。
-  /// 制御 API（`close_tab`）も id 解決の上でここへ委譲する（WindowController+Control）ため internal。
-  /// `origin` は判断せず store へ素通しする（同一性の終わり方としてタブがログへ写す）。
-  func closeTab(_ tab: TerminalTab?, origin: TabCloseOrigin) {
-    guard let tab else { return }
-    // タブ集合が変わると editingIndex（位置 index）が別タブを指しうる。編集中なら畳む
-    // （前方の背景タブが shell exit する等、フォーカスを保ったまま集合が変わる経路を決定的に解除）。
-    if statusModel.editingIndex != nil { endTabRename() }
-    switch store.removeTab(tab, origin: origin) {
-    case .notFound:
-      return
-    case .emptiedActive:
-      // アクティブ workspace が0タブ化。閉じたタブの view を content から外し空表示にする
-      // （従来 select が担う唯一のビュー除去経路をここで明示し surface leak を避ける）。
-      clearActiveContent()
-    case .reselectActive(let i):
-      // 閉じたタブの view を model.content から外す唯一の経路が select() の不要ビュー除去なので、
-      // 背景タブの close も必ず通す（通さないと外れた TerminalTab を retain し続け surface がリークする）。
-      select(i)
-    case .backgroundChanged:
-      refreshChrome()  // 背景タブ/背景 workspace の空化でも chrome 横断 rollup を同期する
-    }
-    reloadPalette()  // パレット表示中の外因変異（shell exit でのタブ消滅・0タブ化）でも表示を実状態へ追従させる
-    scheduleSave()
-  }
-
   /// chrome 更新を要求する。`window.title`（Mission Control 用・O(1)）は即時反映し、重い StatusRow
   /// snapshot（全 workspace×全タブ走査）は dirty を立て runloop tick 末尾に 1 回だけ予約。
   /// 同一 turn 内の N 回の要求（高頻度 report_agent 等）は 1 回の `flushChrome` に畳む。

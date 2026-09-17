@@ -64,7 +64,25 @@ extension WindowController {
 
   /// workspace を閉じる。最後の 1 つは残す。`origin` は呼び手が名乗る（WorkspacePalette の削除は
   /// `.gesture`・`remove_workspace` は `.controlAPI`）——配下のタブが同一性の終わり方として写す。
+  /// 人の操作で、配下のタブのエディターに未保存の文書があれば合計で 1 回 sheet で確認する（`closeTab` と
+  /// 同じ関門。`store.closeWorkspace` はタブを直接外し `closeTab` を通らない）。
   func closeWorkspace(_ index: Int, origin: TabCloseOrigin) {
+    guard workspaces.indices.contains(index) else { return }
+    let unsaved = origin == .gesture ? workspaces[index].tabs.flatMap { $0.unsavedDocuments() } : []
+    guard !unsaved.isEmpty else {
+      performCloseWorkspace(index, origin: origin)
+      return
+    }
+    let workspace = workspaces[index]
+    confirmDiscard(unsaved) { [weak self, weak workspace] in
+      guard let self, let workspace,
+        let index = self.workspaces.firstIndex(where: { $0 === workspace })
+      else { return }
+      self.performCloseWorkspace(index, origin: origin)
+    }
+  }
+
+  private func performCloseWorkspace(_ index: Int, origin: TabCloseOrigin) {
     switch store.closeWorkspace(index, origin: origin) {
     case .invalid:
       return

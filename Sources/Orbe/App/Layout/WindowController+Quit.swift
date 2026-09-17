@@ -1,4 +1,5 @@
 import AppKit
+import OrbeEditorCore
 
 /// 窓の ✕ をアプリ終了の要求へ橋渡しする。終了してよいかの判断（実行中プロセスの確認）は
 /// 唯一の関門である `AppDelegate.applicationShouldTerminate` が持つ。
@@ -14,5 +15,24 @@ extension WindowController {
     // 止まってしまう——実行中プロセスの是非を問う画面で、当のプロセスの出力が凍る。
     RunLoop.main.perform { NSApp.terminate(nil) }
     return false
+  }
+
+  /// 全 workspace の全タブで、閉じれば失われる文書（未保存の列）。終了の関門が読む。
+  func unsavedDocuments() -> [EditorDocument] {
+    workspaces.flatMap { $0.tabs.flatMap { $0.unsavedDocuments() } }
+  }
+
+  /// 未保存の確認を sheet で出し、保存／保存しないで進んでよければ `proceed` を呼ぶ（保存が外部変更で
+  /// 失敗すれば呼ばない）。タブを閉じる・workspace を閉じるの 2 入口が共有する。sheet は非同期に
+  /// 確定する——`tab.close` は main-queue のブロックから届き、その中のモーダルは端末描画と制御 API を
+  /// 止める（`windowShouldClose` の注記）。
+  func confirmDiscard(_ unsaved: [EditorDocument], then proceed: @escaping () -> Void) {
+    MainActor.assumeIsolated {
+      UnsavedGate.alert(count: unsaved.count, language: localization.language).beginSheetModal(
+        for: window
+      ) { response in
+        if UnsavedGate.proceed(response, discarding: unsaved) { proceed() }
+      }
+    }
   }
 }

@@ -118,12 +118,24 @@ final class EditorPaneView: NSView {
     focusEditor()
   }
 
-  /// ファイルタブの ×。未保存でなければ閉じる（未保存の確認は次の段で足す）。
+  /// ファイルタブの ×。未保存なら確認を sheet で出し、保存／保存しないで閉じる（保存が外部変更で失敗すれば
+  /// 閉じない）。応答が返るまでに文書が消えていれば何もしない。
   private func requestClose(_ url: URL) {
     guard let tab, let document = tab.editor.documents.first(where: { $0.url == url }) else {
       return
     }
-    tab.editor.close(document)
+    guard document.isDirty, let window else {
+      tab.editor.close(document)
+      return
+    }
+    let alert = UnsavedGate.alert(count: 1, language: localization.language)
+    alert.beginSheetModal(for: window) { [weak self, weak document] response in
+      guard let self, let tab = self.tab, let document,
+        tab.editor.documents.contains(where: { $0 === document }),
+        UnsavedGate.proceed(response, discarding: [document])
+      else { return }
+      tab.editor.close(document)
+    }
   }
 
   /// 行内入力を出す前に pane 自身を first responder にする——`paneDidFocus(.editor)` が走る経路は
@@ -295,10 +307,23 @@ final class EditorPaneView: NSView {
   /// 空状態で通常の打鍵を飲む（文書があれば打鍵はテキスト面に届き、ここへは来ない）。
   override func keyDown(with event: NSEvent) {}
 
+  /// ⌘S。ディスクが変わっていて失敗したら「上書き／キャンセル」を sheet で出し、上書きで force 保存する。
+  /// それ以外の失敗はログだけ。
   private func saveActiveDocument() {
     guard let tab else { return }
     do {
       try tab.editor.saveActive()
+    } catch EditorDocumentError.diskChanged {
+      guard let window else { return }
+      let alert = UnsavedGate.overwriteAlert(language: localization.language)
+      alert.beginSheetModal(for: window) { [weak self] response in
+        guard let self, let tab = self.tab, UnsavedGate.shouldOverwrite(response) else { return }
+        do {
+          try tab.editor.saveActive(force: true)
+        } catch {
+          NSLog("[editor] forced save failed: \(error)")
+        }
+      }
     } catch {
       NSLog("[editor] save failed: \(error)")
     }
