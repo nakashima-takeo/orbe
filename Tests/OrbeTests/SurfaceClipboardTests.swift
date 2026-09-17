@@ -201,5 +201,15 @@ final class SurfaceClipboardTests: OrbeTestCase {
     XCTAssertEqual(NSPasteboard.general.string(forType: .string), "before write")
   }
 
+  /// macOS がテキストと解しても UTF-16 系の plain text（`text/plain;charset=utf-16`）だけの書き込みは、
+  /// クリップボードを変えない（UTF-16 の本文を UTF-8 として読んだ NUL 混じりの文字列を置かない）。
+  func testKittyWriteWithUTF16MimeLeavesClipboardUnchanged() throws {
+    setClipboard("before write")
+    let dump = try dump(.kittyWriteUTF16)
+
+    XCTAssertEqual(dump.next(), Self.kittyWriteDone)
+    XCTAssertEqual(NSPasteboard.general.string(forType: .string), "before write")
+  }
+
   private static let kittyWriteDone = TtyDumpTab.hex("\u{1b}]5522;type=write:status=DONE\u{1b}\\")
 }

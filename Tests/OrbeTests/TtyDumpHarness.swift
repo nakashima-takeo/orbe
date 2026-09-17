@@ -23,9 +23,10 @@ final class TtyDumpTab {
   /// libghostty の同じ経路（surface の mailbox → ホスト）を順に通り、Kitty 側は許可でも拒否でも必ず
   /// 応答するので、OSC 52 に応答があればそれより先に届く——応答が「無い」ことを待ち時間に頼らず測れる。
   /// `kittyWrite*` は Kitty clipboard の書き込みを 1 件（本文 `kittyWrittenText`）、モード名が示す MIME で出す。
+  /// `kittyWriteUTF16` の本文は BOM 無しの UTF-16LE（ASCII の本文でも NUL 混じりのバイト列になる）。
   enum Mode: String {
     case legacy, paste, kitty, osc52Read, kittyRead, kittyReadPrimary
-    case kittyWriteCharset, kittyWriteSpacedCharset
+    case kittyWriteCharset, kittyWriteSpacedCharset, kittyWriteUTF16
   }
 
   static let kittyWrittenText = "kitty-written"
@@ -36,11 +37,12 @@ final class TtyDumpTab {
   private static let script = """
     import base64, os, sys, tty
     mode = sys.argv[1]
-    def b64(text):
-        return base64.b64encode(text.encode()).decode()
-    def kitty_write(mime):
+    def b64(text, encoding="utf-8"):
+        return base64.b64encode(text.encode(encoding)).decode()
+    def kitty_write(mime, encoding="utf-8"):
+        body = b64("\(kittyWrittenText)", encoding)
         return ("\\x1b]5522;type=write\\x1b\\\\"
-            + "\\x1b]5522;type=wdata:mime=" + b64(mime) + ";" + b64("\(kittyWrittenText)") + "\\x1b\\\\"
+            + "\\x1b]5522;type=wdata:mime=" + b64(mime) + ";" + body + "\\x1b\\\\"
             + "\\x1b]5522;type=wdata\\x1b\\\\")
     fd = sys.stdin.fileno()
     tty.setraw(fd)
@@ -53,6 +55,7 @@ final class TtyDumpTab {
         "kittyReadPrimary": "\\x1b]5522;type=read:loc=primary;dGV4dC9wbGFpbg==\\x1b\\\\",
         "kittyWriteCharset": kitty_write("text/plain;charset=utf-8"),
         "kittyWriteSpacedCharset": kitty_write("text/plain; charset=UTF-8"),
+        "kittyWriteUTF16": kitty_write("text/plain;charset=utf-16", "utf-16-le"),
     }[mode]
     sys.stdout.write("\\x1b[H\\x1b[2J\\x1b[3J" + enter + "READY\\r\\n")
     sys.stdout.flush()
