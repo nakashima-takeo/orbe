@@ -181,10 +181,16 @@ final class FileTree: RootFilesObserver {
     if entries[directory] == nil { reload(directory) }
   }
 
+  /// 畳む（配下ごと）。挿し先が畳まれれば入力行は画面から消えるので、入力も終わる。
   private func collapse(_ directory: String) {
     for path in expanded where path == directory || path.hasPrefix(directory + "/") {
       expanded.remove(path)
       entries[path] = nil
+    }
+    if let newEntry,
+      newEntry.directory == directory || newEntry.directory.hasPrefix(directory + "/")
+    {
+      self.newEntry = nil
     }
   }
 

@@ -167,6 +167,27 @@ final class FileTreeTests: OrbeTestCase {
     XCTAssertEqual(names(tree), ["docs", "src", "a.txt"], "根は開いたまま全部畳む")
   }
 
+  /// 挿し先（かその祖先）を畳めば入力行は画面から消えるので、入力も終わる（他のディレクトリを畳んでも残る）。
+  func testCollapsingTheTargetDirectoryEndsTheInput() {
+    let tree = FileTree(root: repo.root)
+    tree.isLive = true
+    var ended = 0
+    tree.onInputEnded = { ended += 1 }
+    tree.toggle("src")
+    tree.toggle("src/sub")
+    tree.beginNew(isDirectory: false)
+    XCTAssertEqual(tree.newEntry?.directory, "src/sub")
+
+    tree.toggle("docs")
+    tree.toggle("docs")
+    XCTAssertNotNil(tree.newEntry, "無関係のディレクトリを畳んでも残る")
+    XCTAssertEqual(ended, 0)
+
+    tree.toggle("src")
+    XCTAssertNil(tree.newEntry, "祖先を畳めば終わる")
+    XCTAssertEqual(ended, 1, "終わりは 1 回")
+  }
+
   /// 選択の種別は選ばせた側が持つ——すべて畳んで親の一覧が無くなっても、深いディレクトリの選択はそこへ挿す。
   func testNewEntryGoesIntoTheSelectedDirectoryEvenAfterCollapsingAll() {
     let tree = FileTree(root: repo.root)

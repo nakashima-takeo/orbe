@@ -12,8 +12,8 @@ import XCTest
 @MainActor
 final class EditorPaneViewShellTests: OrbeTestCase {
   /// 行内入力を続けて出すと前の入力は消えて新しい入力だけが出る。入力の終わりは入力の状態が落ちることで、
-  /// Esc・焦点の移動だけでなく、すべて折りたたむ・根を畳む・レールで閉じる・cd でも落ち、焦点がまだ入力欄か窓に
-  /// 居れば面の行き先へ移る。
+  /// Esc・焦点の移動だけでなく、すべて折りたたむ・根を畳む・作成先を畳む・レールで閉じる・cd でも落ち、焦点がまだ
+  /// 入力欄か窓に居れば面の行き先へ移る。
   func testInlineInputIsRecreatedPerRequestAndEndsWhenItsStateDrops() throws {
     let dir = try XCTUnwrap(TestIsolation.caseDir)
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
@@ -48,7 +48,13 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     try endsWhenTheStateDrops("根を畳む") { pane.tree.isRootOpen = false }
     pane.tree.isRootOpen = true
     try endsWhenTheStateDrops("すべて折りたたむ") { pane.shell.collapseAll() }
-    let other = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("other")
+    let sub = dir.appendingPathComponent("d")
+    try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+    pane.shell.revealDirectory(sub)
+    pane.shell.createFile()
+    XCTAssertEqual(pane.tree.newEntry?.directory, "d", "前提: 挿し先は d")
+    try endsWhenTheStateDrops("作成先のディレクトリを畳む") { pane.tree.toggle("d") }
+    let other = dir.appendingPathComponent("other")
     try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
     try endsWhenTheStateDrops("cd") { tab.surface.currentPwd = other.path }
   }
