@@ -131,11 +131,10 @@ final class FileTreeTests: OrbeTestCase {
     tree.reveal(repo.url("src/main.swift"))
 
     tree.beginNew(isDirectory: false)
-    XCTAssertEqual(
-      tree.newEntry, FileTree.NewEntry(directory: "src", isDirectory: false), "ファイルの選択はその親へ")
-    XCTAssertEqual(
-      tree.rows.first { $0.kind == .input(isDirectory: false) }?.depth, 1, "入力行は親の子の先頭")
-    XCTAssertEqual(tree.rows.firstIndex { $0.kind == .input(isDirectory: false) }, 2, "docs・src の次")
+    XCTAssertEqual(tree.newEntry?.directory, "src", "ファイルの選択はその親へ")
+    XCTAssertEqual(tree.newEntry?.isDirectory, false)
+    XCTAssertEqual(tree.rows.first(where: \.isInput)?.depth, 1, "入力行は親の子の先頭")
+    XCTAssertEqual(tree.rows.firstIndex(where: \.isInput), 2, "docs・src の次")
 
     XCTAssertFalse(tree.commitNew("main.swift"), "既に在れば入力に留まる")
     XCTAssertNotNil(tree.newEntry)
@@ -149,15 +148,31 @@ final class FileTreeTests: OrbeTestCase {
 
     tree.toggle("docs")
     tree.beginNew(isDirectory: true)
-    XCTAssertEqual(
-      tree.newEntry, FileTree.NewEntry(directory: "docs", isDirectory: true), "ディレクトリの選択はそこへ")
+    XCTAssertEqual(tree.newEntry?.directory, "docs", "ディレクトリの選択はそこへ")
+    XCTAssertEqual(tree.newEntry?.isDirectory, true)
     XCTAssertTrue(tree.commitNew("guides"))
     XCTAssertTrue(
       tree.rows.contains { $0.id == "docs/guides" && $0.kind == .directory(isExpanded: false) })
     XCTAssertEqual(created.count, 1, "フォルダは開かない")
 
     tree.beginNew(isDirectory: false)
-    tree.cancelNew()
+    let first = try XCTUnwrap(tree.newEntry)
+    tree.beginNew(isDirectory: true)
+    let second = try XCTUnwrap(tree.newEntry)
+    XCTAssertNotEqual(first.generation, second.generation, "出すたびに世代が進む（行の同一性が変わる）")
+    XCTAssertNotEqual(
+      FileTree.inputRowID(first), FileTree.inputRowID(second), "同じ挿し先でも別の行")
+    XCTAssertEqual(tree.rows.filter(\.isInput).count, 1, "入力行は 1 つだけ")
+    tree.cancelNew(first.generation)
+    XCTAssertNotNil(tree.newEntry, "古い世代の取り消しは今の入力に触れない")
+    tree.cancelNew(second.generation)
     XCTAssertNil(tree.newEntry)
+  }
+}
+
+extension FileTree.Row {
+  fileprivate var isInput: Bool {
+    if case .input = kind { return true }
+    return false
   }
 }

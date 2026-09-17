@@ -168,6 +168,48 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertTrue(same(try rgb(37 + 240 + 0.5), ground))
   }
 
+  /// 行内入力を続けて出すと前の入力は消えて新しい入力だけが出る。行が画面から消えることは入力の終わりで、
+  /// Esc・blur だけでなく、すべて折りたたむ・根を畳む・レールで閉じる・cd でも入力は落ち、窓へ落ちた焦点は面の
+  /// 行き先へ戻る。
+  func testInlineInputIsRecreatedPerRequestAndEndsWhenItsRowDisappears() throws {
+    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.view.editor
+    let window = hosted(tab, width: 900)
+    defer { window.orderOut(nil) }
+
+    pane.shell.createFile()
+    XCTAssertTrue(window.firstResponder === pane, "入力を出す前に面自身が焦点を取る")
+    let first = try XCTUnwrap(pane.tree.newEntry)
+    pane.shell.createDirectory()
+    let second = try XCTUnwrap(pane.tree.newEntry)
+    XCTAssertNotEqual(first.generation, second.generation)
+    XCTAssertTrue(second.isDirectory)
+    pane.tree.cancelNew(first.generation)
+    XCTAssertNotNil(pane.tree.newEntry, "古い入力の取り消し（blur・消失）は今の入力に触れない")
+
+    func settle(_ condition: () -> Bool, _ message: String) {
+      pumpMain(until: { condition() }, timeout: 5, message)
+    }
+    func endsWhenTheRowDisappears(_ how: String, _ disappear: () -> Void) {
+      if pane.tree.newEntry == nil { pane.shell.createFile() }
+      // 行が画面に生まれてから消す（SwiftUI の描画コミットに猶予。`renderPNG` と同じ）。
+      RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+      window.makeFirstResponder(nil)
+      disappear()
+      settle({ pane.tree.newEntry == nil }, "\(how): 行が消えれば入力は終わる")
+      settle({ window.firstResponder === pane }, "\(how): 窓へ落ちた焦点は面の行き先へ")
+    }
+    endsWhenTheRowDisappears("レールで閉じる") { pane.shell.toggleSidebar() }
+    pane.shell.toggleSidebar()
+    endsWhenTheRowDisappears("根を畳む") { pane.tree.isRootOpen = false }
+    pane.tree.isRootOpen = true
+    endsWhenTheRowDisappears("すべて折りたたむ") { pane.shell.collapseAll() }
+    let other = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("other")
+    try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+    endsWhenTheRowDisappears("cd") { tab.surface.currentPwd = other.path }
+  }
+
   /// 空状態でも骨（レール・サイドバー・タブ行）はクリックを自分で受け、本体だけが面自身に固定される。
   func testEmptyStateFixesOnlyTheBodyToThePane() throws {
     let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))

@@ -54,10 +54,12 @@ struct TreeRowView: View {
   }
 }
 
-/// 新規作成の行内入力。現れたら first responder、Enter で作る、Esc・フォーカス喪失で取り消す。
+/// 新規作成の行内入力。現れたら first responder、Enter で作る、Esc・フォーカス喪失で取り消す。行が消えたら
+/// （どの経路でも）pane へ世代を添えて知らせる——入力の終わりと焦点の引き取りはそこ 1 か所。
 struct InlineInputRow: View {
   let row: FileTree.Row
   let isDirectory: Bool
+  let generation: Int
   let tree: FileTree
   let shell: EditorShellModel
   @State private var name = ""
@@ -81,26 +83,24 @@ struct InlineInputRow: View {
         .lineLimit(1)
         .focused($focused)
         .padding(.leading, Theme.Space.note)
-        .onSubmit {
-          if tree.commitNew(name) { shell.endInlineInput() }
-        }
+        .onSubmit { tree.commitNew(name) }
         .onKeyPress(.escape) {
-          tree.cancelNew()
-          shell.endInlineInput()
+          tree.cancelNew(generation)
           return .handled
         }
         .onAppear { focused = true }
         .onChange(of: focused) { _, now in
           if now {
             didFocus = true
-          } else if didFocus, tree.newEntry != nil {
-            tree.cancelNew()
+          } else if didFocus {
+            tree.cancelNew(generation)
           }
         }
     }
     .padding(.leading, 10)
     .padding(.trailing, Theme.Space.step)
     .frame(height: Theme.Layout.editorRow)
+    .onDisappear { shell.inlineInputDidEnd(generation) }
   }
 }
 

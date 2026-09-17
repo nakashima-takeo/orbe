@@ -114,7 +114,9 @@ final class EditorPaneView: NSView {
     shell.createDirectory = { [weak self] in self?.beginNew(isDirectory: true) }
     shell.collapseAll = { [weak self] in self?.tree.collapseAll() }
     shell.toggleSidebar = { [weak self] in self?.sidebar.toggle() }
-    shell.endInlineInput = { [weak self] in self?.focusEditor() }
+    shell.inlineInputDidEnd = { [weak self] generation in
+      self?.inlineInputDidEnd(generation: generation)
+    }
   }
 
   private func wireTree() {
@@ -153,12 +155,27 @@ final class EditorPaneView: NSView {
     }
   }
 
-  /// 行内入力を出す前に pane 自身を first responder にする——`paneDidFocus(.editor)` が走る経路は
-  /// テキスト面と pane の 2 つしか無く、field editor が直接焦点を取ると分割中の焦点帯と位置ドットが
-  /// 端末を指したままになる。
+  /// 行内入力を出す前に、焦点が面の外にあれば pane 自身を first responder にする——`paneDidFocus(.editor)`
+  /// が走る経路はテキスト面と pane の 2 つしか無く、field editor が直接焦点を取ると分割中の焦点帯と
+  /// 位置ドットが端末を指したままになる。
   private func beginNew(isDirectory: Bool) {
-    window?.makeFirstResponder(self)
+    if !focusIsInside { window?.makeFirstResponder(self) }
     tree.beginNew(isDirectory: isDirectory)
+  }
+
+  /// 行内入力の行が画面から消えた（Enter・Esc・blur・すべて折りたたむ・根を畳む・サイドバーを閉じる・cd）。
+  /// その世代がまだ出ていれば落とし、field editor を失って窓か骨の host に落ちた焦点を面の行き先へ引き取る
+  /// （端末をクリックして抜けたなら焦点は端末にあるので触らない。次の入力が出ていればそれが持つ）。判定は
+  /// 次のターン——行の消失と AppKit の first responder の付け替えは同じ更新の中で順序を持たない。
+  private func inlineInputDidEnd(generation: Int) {
+    tree.cancelNew(generation)
+    DispatchQueue.main.async { [weak self] in
+      guard let self, let window, tree.newEntry == nil else { return }
+      let responder = window.firstResponder
+      let strayed =
+        responder === window || (responder as? NSView)?.isDescendant(of: sideHost) == true
+      if strayed { window.makeFirstResponder(focusTarget) }
+    }
   }
 
   private func focusEditor() {

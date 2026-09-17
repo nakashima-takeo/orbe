@@ -89,15 +89,26 @@ struct ExplorerView: View {
       VStack(spacing: 0) {
         header
         rootRow
-        ScrollView(.vertical) {
-          LazyVStack(spacing: 0) {
-            ForEach(tree.rows) { row in
-              if case .input(let isDirectory) = row.kind {
-                InlineInputRow(row: row, isDirectory: isDirectory, tree: tree, shell: shell)
-              } else {
-                TreeRowView(row: row, tree: tree, shell: shell)
+        ScrollViewReader { proxy in
+          ScrollView(.vertical) {
+            LazyVStack(spacing: 0) {
+              ForEach(tree.rows) { row in
+                if case .input(let isDirectory, let generation) = row.kind {
+                  InlineInputRow(
+                    row: row, isDirectory: isDirectory, generation: generation, tree: tree,
+                    shell: shell)
+                } else {
+                  TreeRowView(row: row, tree: tree, shell: shell)
+                }
               }
             }
+          }
+          // 行は遅延で生まれる（可視域外の行は無い）ので、入力行と選択行は可視位置へ送る。
+          .onChange(of: tree.newEntry) { _, entry in
+            if let entry { proxy.scrollTo(FileTree.inputRowID(entry)) }
+          }
+          .onChange(of: tree.selected) { _, path in
+            if let path { proxy.scrollTo(path) }
           }
         }
       }

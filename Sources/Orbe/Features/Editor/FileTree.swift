@@ -14,8 +14,8 @@ final class FileTree: RootFilesObserver {
   enum RowKind: Equatable {
     case directory(isExpanded: Bool)
     case file(badge: GitStatus.Badge?)
-    /// 新規作成の行内入力（ディレクトリならシェブロンの幅を空ける）。
-    case input(isDirectory: Bool)
+    /// 新規作成の行内入力（ディレクトリならシェブロンの幅を空ける）。世代は `NewEntry.generation`。
+    case input(isDirectory: Bool, generation: Int)
   }
 
   struct Row: Identifiable, Equatable {
@@ -31,6 +31,9 @@ final class FileTree: RootFilesObserver {
     /// 挿す先のディレクトリ（相対パス。根は空）。
     let directory: String
     let isDirectory: Bool
+    /// 出すたびに進む番号。行の同一性（SwiftUI の view と打ちかけの名前）を出すたびに作り直し、取り消しを
+    /// 「その入力がまだ出ている間」に限る——古い入力の blur・消失が新しい入力を消さない。
+    let generation: Int
   }
 
   /// 根（正規形）。
@@ -45,6 +48,7 @@ final class FileTree: RootFilesObserver {
   /// 選択表示する行（相対パス）。
   private(set) var selected: String?
   private(set) var newEntry: NewEntry?
+  private var newGeneration = 0
   /// 行内入力でファイルを作った（呼び手が開く）。
   @ObservationIgnored var onCreated: ((URL) -> Void)?
   @ObservationIgnored private var files: RootFiles?
@@ -90,8 +94,9 @@ final class FileTree: RootFilesObserver {
     if let newEntry, newEntry.directory == directory {
       out.append(
         Row(
-          id: "\0new:\(directory)", depth: depth, name: "", url: url(of: directory),
-          kind: .input(isDirectory: newEntry.isDirectory), isSelected: false))
+          id: Self.inputRowID(newEntry), depth: depth, name: "", url: url(of: directory),
+          kind: .input(isDirectory: newEntry.isDirectory, generation: newEntry.generation),
+          isSelected: false))
     }
     for entry in Self.directoriesFirst(entries[directory] ?? []) {
       let path = Self.join(directory, entry.name)
@@ -176,8 +181,12 @@ final class FileTree: RootFilesObserver {
     }
     isRootOpen = true
     for ancestor in Self.ancestors(of: directory) + [directory] { expand(ancestor) }
-    newEntry = NewEntry(directory: directory, isDirectory: isDirectory)
+    newGeneration += 1
+    newEntry = NewEntry(directory: directory, isDirectory: isDirectory, generation: newGeneration)
   }
+
+  /// 入力行の `Row.id`。NUL はファイル名に入らないので実ファイルの行と衝突しない。
+  static func inputRowID(_ entry: NewEntry) -> String { "\0new:\(entry.generation)" }
 
   /// 名前を確定して作る。空・`/` 入り・既に在る・作れないは beep して入力に留まる（false）。
   /// 作った変化は監視が拾うが、体感のため親をその場で取り直す。ファイルなら `onCreated` で開く。
@@ -208,7 +217,9 @@ final class FileTree: RootFilesObserver {
     return true
   }
 
-  func cancelNew() {
+  /// 行内入力を取り消す。その世代がまだ出ているときだけ（古い入力の blur・消失は今の入力に触れない）。
+  func cancelNew(_ generation: Int) {
+    guard newEntry?.generation == generation else { return }
     newEntry = nil
   }
 

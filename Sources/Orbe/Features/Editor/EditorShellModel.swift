@@ -40,8 +40,9 @@ final class EditorShellModel {
   @ObservationIgnored var collapseAll: () -> Void = {}
   /// レールの選択中の項目を押した（サイドバーを閉じる／開く）。
   @ObservationIgnored var toggleSidebar: () -> Void = {}
-  /// 行内入力を Enter / Esc で終えた（焦点を面へ戻す）。
-  @ObservationIgnored var endInlineInput: () -> Void = {}
+  /// 行内入力の行が画面から消えた（その世代）。入力の終わりは全部ここを通る——Enter・Esc・blur も、
+  /// すべて折りたたむ・根を畳む・サイドバーを閉じる・cd も。
+  @ObservationIgnored var inlineInputDidEnd: (Int) -> Void = { _ in }
 
   func update(from session: EditorSession, root: String) {
     let active = session.activeDocument
