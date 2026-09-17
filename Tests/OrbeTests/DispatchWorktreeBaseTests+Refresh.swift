@@ -99,6 +99,24 @@ extension DispatchWorktreeBaseTests {
     XCTAssertEqual(oid(["rev-parse", "stale"], cwd: local), before)
   }
 
+  /// **「そのまま作成」は同期の検査を通らない。** 遅れた枝でも手元の地点から作り、ローカルの ref は
+  /// 動かさない——検査を通すと再び「遅れている」が返り、選択画面から前へ進めなくなる。
+  func testCreateAsIsStartsFromTheLocalTipAndLeavesTheRefAlone() throws {
+    let provider = try start()
+    let sync = try staleSync(provider)
+    let before = oid(["rev-parse", "stale"], cwd: local)
+    XCTAssertNotEqual(before, originTip("stale"), "前提: 遅れている")
+
+    var resolution: DispatchDataProvider.DirectoryResolution?
+    provider.createLocalBranchWorktree(name: sync.name) { resolution = $0 }
+    XCTAssertTrue(pump({ resolution != nil }, timeout: 30))
+    guard case .ready(let path) = try XCTUnwrap(resolution) else {
+      return XCTFail("\(String(describing: resolution))")
+    }
+    XCTAssertEqual(head(of: path), before, "遅れたまま手元の地点から作る")
+    XCTAssertEqual(oid(["rev-parse", "stale"], cwd: local), before, "ローカル ref は動かない")
+  }
+
   /// fetch が落ちたら fetch 段の失敗として返り、ローカルは無傷。
   func testRefreshReportsFetchFailure() throws {
     let provider = try start()
