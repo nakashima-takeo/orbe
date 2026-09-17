@@ -54,9 +54,9 @@ struct TreeRowView: View {
   }
 }
 
-/// 新規作成の行内入力。現れたら first responder、Enter で作る、Esc で取り消す。名前はツリーの状態に束ねる——
-/// 容器が行を捨てて作り直しても打ちかけは残り、入力の終わりは view の寿命ではなく状態が落ちること。
-/// 焦点の喪失は pane に知らせ、別の view へ移ったときだけ取り消しになる。
+/// 新規作成の行内入力。現れたら first responder（窓か面が持っているとき）、Enter で作る、Esc で取り消す。
+/// 名前はツリーの状態に束ねる——容器が行を捨てて作り直しても打ちかけは残り、入力の終わりは view の寿命では
+/// なく状態が落ちること。焦点の喪失は pane に知らせ、別の view へ移ったときだけ取り消しになる。
 struct InlineInputRow: View {
   let row: FileTree.Row
   let isDirectory: Bool
@@ -88,7 +88,7 @@ struct InlineInputRow: View {
           tree.cancelNew(generation)
           return .handled
         }
-        .onAppear { focused = true }
+        .onAppear { if shell.inlineInputMayTakeFocus() { focused = true } }
         .onChange(of: focused) { _, now in
           if now {
             didFocus = true

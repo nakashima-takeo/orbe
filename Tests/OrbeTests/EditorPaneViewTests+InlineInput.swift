@@ -108,8 +108,33 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     _ = try inputField(pane, in: window)
     window.makeFirstResponder(nil)
     pumpMain(until: { window.firstResponder === window }, "前提: 焦点が窓へ落ちる")
-    RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+    pane.sideHost.layoutSubtreeIfNeeded()  // 保留中の SwiftUI 更新を走らせ、onChange(of: focused) を確定させる
     XCTAssertNotNil(pane.tree.newEntry, "窓へ落ちただけ（人の操作ではない）では取り消さない")
+    XCTAssertTrue(window.firstResponder === pane, "入力は生かしたまま面が焦点を預かる")
+
+    XCTAssertTrue(window.makeFirstResponder(outsider))
+    pumpMain(until: { pane.tree.newEntry == nil }, "預かっている間に面の外へ移れば取り消す")
+  }
+
+  /// 入力中に別種の「新規」を押すと、前の入力欄が焦点を手放し、新しい入力行が焦点を取って打鍵が入る。
+  func testSwitchingTheKindWhileTypingFocusesTheNewInput() throws {
+    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.view.editor
+    let window = hostEditor(tab, width: 900)
+    defer { window.orderOut(nil) }
+
+    pane.shell.createFile()
+    let first = try inputField(pane, in: window)
+    first.insertText("dra", replacementRange: NSRange(location: 0, length: 0))
+    XCTAssertEqual(pane.tree.newEntry?.name, "dra", "打鍵は状態へ")
+
+    pane.shell.createDirectory()
+    XCTAssertTrue(window.firstResponder === pane, "前の入力欄は面へ焦点を手放す")
+    let second = try inputField(pane, in: window)
+    second.insertText("dir", replacementRange: NSRange(location: 0, length: 0))
+    XCTAssertEqual(pane.tree.newEntry?.isDirectory, true)
+    XCTAssertEqual(pane.tree.newEntry?.name, "dir", "新しい入力行が焦点を取って打鍵が入る")
   }
 
   /// 焦点が面の外にある状態で入力を出すと面自身が焦点を取る。行が焦点を取る前に入力が落ちれば（同じターンで

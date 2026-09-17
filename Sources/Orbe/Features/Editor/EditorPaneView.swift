@@ -120,6 +120,10 @@ final class EditorPaneView: NSView {
     shell.inlineInputLostFocus = { [weak self] generation in
       self?.inlineInputLostFocus(generation: generation)
     }
+    shell.inlineInputMayTakeFocus = { [weak self] in
+      guard let self, let window else { return true }
+      return window.firstResponder === window || window.firstResponder === self
+    }
   }
 
   private func wireTree() {
@@ -162,22 +166,35 @@ final class EditorPaneView: NSView {
     }
   }
 
-  /// 行内入力を出す前に、焦点が面の外にあれば pane 自身を first responder にする——`paneDidFocus(.editor)`
-  /// が走る経路はテキスト面と pane の 2 つしか無く、field editor が直接焦点を取ると分割中の焦点帯と
-  /// 位置ドットが端末を指したままになる。
+  /// 行内入力を出す前に pane 自身を first responder にする——`paneDidFocus(.editor)` が走る経路はテキスト面と
+  /// pane の 2 つしか無く、field editor が直接焦点を取ると分割中の焦点帯と位置ドットが端末を指したままになる。
+  /// 続けて出したときは前の入力欄がここで焦点を手放し、新しい行が「面が持っている」と見て取る。
   private func beginNew(isDirectory: Bool) {
-    if !focusIsInside { window?.makeFirstResponder(self) }
+    window?.makeFirstResponder(self)
     tree.beginNew(isDirectory: isDirectory)
   }
 
   /// 入力欄が焦点を失った。別の view（端末・テキスト面・面自身）へ移ったなら取り消し＝入力の終わり。窓へ
-  /// 落ちただけなら人の操作ではない（容器が行を捨てて作り直した）ので触らない——行が戻れば入力欄が焦点を
-  /// 取り直し、打ちかけの名前は状態に残っている。
+  /// 落ちたなら人の操作ではない（容器が行を捨てた）ので、入力は生かしたまま焦点を面が預かる——行が戻れば
+  /// 入力欄が取り直し、預かっている間に面が焦点を外へ明け渡せば `resignFirstResponder` から同じ判定を通る。
   private func inlineInputLostFocus(generation: Int) {
-    guard let responder = window?.firstResponder, responder !== window,
-      (responder as? NSView)?.isDescendant(of: sideHost) != true
-    else { return }
+    guard let window else { return }
+    let responder = window.firstResponder
+    if responder === window {
+      window.makeFirstResponder(self)
+      return
+    }
+    guard (responder as? NSView)?.isDescendant(of: sideHost) != true else { return }
     tree.cancelNew(generation)
+  }
+
+  /// 行内入力を預かっている間に焦点を明け渡した。行き先が決まった次のターンに、入力欄と同じ判定へ通す
+  /// （戻った行の入力欄なら残り、面の外なら取り消し）。
+  override func resignFirstResponder() -> Bool {
+    if let generation = tree.newEntry?.generation {
+      DispatchQueue.main.async { [weak self] in self?.inlineInputLostFocus(generation: generation) }
+    }
+    return super.resignFirstResponder()
   }
 
   /// 行内入力が終わった（状態が落ちた。Enter・Esc・取り消し・すべて折りたたむ・根を畳む・作成先を畳む・

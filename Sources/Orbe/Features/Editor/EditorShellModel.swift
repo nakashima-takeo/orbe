@@ -38,8 +38,12 @@ final class EditorShellModel {
   @ObservationIgnored var collapseAll: () -> Void = {}
   /// レールの選択中の項目を押した（サイドバーを閉じる／開く）。
   @ObservationIgnored var toggleSidebar: () -> Void = {}
-  /// 行内入力の入力欄が焦点を失った（その世代）。別の view へ移ったなら pane が取り消す。
+  /// 行内入力の入力欄が焦点を失った（その世代）。別の view へ移ったなら pane が取り消し、窓へ落ちたなら
+  /// pane が預かる。
   @ObservationIgnored var inlineInputLostFocus: (Int) -> Void = { _ in }
+  /// 行内入力の行が現れた。焦点を取ってよいか（窓か面自身が持っているときだけ。人が別の view へ移していれば
+  /// 奪わない）。
+  @ObservationIgnored var inlineInputMayTakeFocus: () -> Bool = { true }
 
   func update(from session: EditorSession, root: String) {
     let active = session.activeDocument
