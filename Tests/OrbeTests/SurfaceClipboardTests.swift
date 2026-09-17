@@ -10,7 +10,9 @@ import XCTest
 ///
 /// 壊れると何が起きるか: ⌘V で何も貼れない・⌘C でコピーできない・選択しただけではコピーされない・
 /// 中クリックが無反応になる（libghostty の契約や既定値が変わるとホストのコールバックが静かに空振りする）。
-/// 端末アプリが書いたテキストが、MIME に charset が付くだけで黙って捨てられる。あるいは端末で動く任意のプログラムが、ユーザーの
+/// 端末アプリが書いたテキストが `text/plain;charset=utf-8` で黙って捨てられる。逆に、macOS がテキストと解さない
+/// MIME（`;` の後に空白を入れた `text/plain; charset=UTF-8`）の書き込みでクリップボードが消える——Orbe は MIME を自前で
+/// 分解せず判定を macOS の型解決に委ねる境界を固定している。あるいは端末で動く任意のプログラムが、ユーザーの
 /// クリップボード（パスワード等）を黙って読み出せる。中身の有無で応答が変わるだけでも、
 /// 「クリップボードに文字列があるか」が端末アプリへ漏れる。
 ///
@@ -188,9 +190,10 @@ final class SurfaceClipboardTests: OrbeTestCase {
     XCTAssertEqual(NSPasteboard.general.string(forType: .string), TtyDumpTab.kittyWrittenText)
   }
 
-  /// macOS がテキストと解さない MIME（`;` の後に空白が入る `text/plain; charset=UTF-8`）だけの書き込みは、
-  /// クリップボードを変えない。
-  func testKittyWriteWithoutTextRepresentationLeavesClipboardUnchanged() throws {
+  /// RFC 上はテキストでも macOS がテキストと解さない MIME（`;` の後に空白が入る `text/plain; charset=UTF-8`）
+  /// だけの書き込みは、クリップボードを変えない。Orbe は MIME を自前で分解せず、判定を macOS の型解決に
+  /// 委ねる——その境界をここで固定する。
+  func testKittyWriteWithMimeMacOSDoesNotResolveAsTextLeavesClipboardUnchanged() throws {
     setClipboard("before write")
     let dump = try dump(.kittyWriteSpacedCharset)
 
