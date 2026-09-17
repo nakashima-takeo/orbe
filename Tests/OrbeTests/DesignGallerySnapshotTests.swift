@@ -60,6 +60,12 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
 
     try renderDispatchSnapshots(dir: dir)
 
+    // エディター面は StatusRow の段より前に撮る。連（segments）の段を撮った後は、この test の中で
+    // main queue のブロックが入れ子の run loop で捌かれなくなり（原因未特定・test 内の状態）、
+    // git の子プロセスの完了（main へ dispatch）を待つ骨の fixture が揃わない。
+    try renderEditorSnapshots(dir: dir)
+    try renderEditorShellSnapshots(dir: dir)
+
     // SearchBar（empty / typing / no-match / match / overflow）。
     try writePNG(
       SearchBarFixtures.gallery(), size: NSSize(width: 320, height: 320),
@@ -72,7 +78,6 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     try renderUpdateSnapshots(dir: dir)
     try renderAttentionSnapshots(dir: dir)
     try renderHelpSnapshots(dir: dir)
-    try renderEditorSnapshots(dir: dir)
   }
 
   /// StatusRow（最上段 chrome）の状態。gallery は borderless 窓なので信号機は無く、
