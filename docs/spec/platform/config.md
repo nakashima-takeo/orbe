@@ -29,7 +29,7 @@ ghostty の conf をどう読み、GUI の設定変更をどう端末へ届け�
 - 背景不透明度は既定でわずかに透ける（設定パレットの既定と対称。GUI 未介入でも初期から透過）、`background-blur` も既定 ON。
 - **`shell-integration-features = no-cursor,no-title`** … cursor はプロンプトでの bar 上書きを止めブロックを効かせ、title は自動タイトル送出を止めてタブ名を chrome の precedence へ委ねる（→ [chrome](../chrome/chrome.md)）。
 - **`macos-option-as-alt = true`** … 物理 Option+<文字>と制御チャネルの `alt+<文字>`（→ [control/api](../control/api.md)）を Alt（Meta）として符号化する。未設定時の libghostty の自動判定は US / USInternational レイアウトだけ true で、ABC・JIS は false——Option+B が `∫`、`send_key alt+b` が legacy 端末で素の `b` になる——ため既定で固定する。代償は、JIS 物理キーボードで `¥` キーを `\` に切り替えていない環境の `Option+¥`（`\`）と、ラテン系非 US 配列（German 等）で Option から打つ `{ } [ ] | \ @ ~` が Alt になること。`~/.config/ghostty` で `false` に戻せる。
-- **`clipboard-read = deny`** … 端末アプリ発のクリップボード読み取り（OSC 52 / Kitty clipboard）を libghostty で断つ（→ [terminal/core](../terminal/core.md)）。Orbe は確認 UI を持たないので `ask` は `deny` と同じに振る舞う。`~/.config/ghostty` で `allow` に戻せる。
+- **`clipboard-read = deny`** … 端末アプリ発のクリップボード読み取り（OSC 52 / Kitty clipboard）を libghostty で断つ（→ [terminal/core](../terminal/core.md)）。`~/.config/ghostty` で `allow` に戻せる。`ask` にすると、確認が要る読み取りは Orbe の確認コールバックが拒否するので中身は渡らないが、応答は `deny` と異なり、クリップボードが空かどうかが端末アプリに分かる。
 - 絵文字の `font-codepoint-map` は層 1 に置かず、gui.conf（層 3）が**常時出力**する（単一出所・次節）。
 
 ## gui.conf（GUI 管理層）
