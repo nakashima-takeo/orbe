@@ -69,7 +69,10 @@ extension EditorPaneView {
     let body = bodyRect
     emptyHost.frame = body
     document?.surface.view.frame = body
-    sidebarHandle.isHidden = !sidebar.isOpen
+    // 当たりは境を動かせるときだけ（`resizeSidebar` の guard と同じ条件）——動かない列に出すとレールの右 1pt を
+    // 覆ってリサイズカーソルだけが出る。
+    sidebarHandle.isHidden =
+      !sidebar.isOpen || sidebarCeiling < Theme.Layout.editorSidebarMinWidth
     sidebarHandle.frame = NSRect(
       x: sideWidth - Theme.Stroke.hairline - Theme.Layout.editorSidebarHandle / 2, y: 0,
       width: Theme.Layout.editorSidebarHandle, height: bounds.height)

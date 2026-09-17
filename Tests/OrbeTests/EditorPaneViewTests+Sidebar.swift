@@ -77,6 +77,9 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
 
     let handle = try XCTUnwrap(pane.subviews.first { $0 is SidebarResizeHandle })
     XCTAssertEqual(handle.frame.minX, 37 + 162 - 2, "当たりは描かれている境に居る")
+    XCTAssertFalse(handle.isHidden)
+    handle.cursorUpdate(with: .mouse(.mouseMoved, at: panePoint(pane, 37 + 162), in: window))
+    XCTAssertTrue(NSCursor.current === NSCursor.resizeLeftRight, "境に合わせるとカーソルが左右矢印")
     handle.mouseDown(with: .mouse(.leftMouseDown, at: panePoint(pane, 37 + 162), in: window))
     handle.mouseDragged(
       with: .mouse(.leftMouseDragged, at: panePoint(pane, 37 + 162 + 40), in: window))
@@ -93,6 +96,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     window.setContentSize(NSSize(width: 340 + FaceGeometry.spine, height: 400))
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(pane.shownSidebarWidth, 142, "下限 160 を割って切り詰まる")
+    XCTAssertTrue(handle.isHidden, "下限までも出せない列では当たりを出さない（レールの右 1pt を覆わない）")
     handle.mouseDown(with: .mouse(.leftMouseDown, at: panePoint(pane, 37 + 142), in: window))
     handle.mouseDragged(
       with: .mouse(.leftMouseDragged, at: panePoint(pane, 37 + 142 - 50), in: window))
