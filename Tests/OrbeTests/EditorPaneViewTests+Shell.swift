@@ -125,6 +125,13 @@ final class EditorPaneViewShellTests: OrbeTestCase {
       handle.frame, NSRect(x: 37 + 240 - 2, y: 0, width: 4, height: 398), "hairline を跨ぐ 4pt")
     let hit = pane.hitTest(pane.convert(NSPoint(x: 37 + 240, y: 200), to: pane.superview))
     XCTAssertTrue(hit === handle, "境は当たりが受ける")
+    let document = try tab.editor.open(try file("a.swift", "let a = 1\n"))
+    tab.view.layoutSubtreeIfNeeded()
+    let edge = pane.hitTest(
+      pane.convert(NSPoint(x: pane.bodyRect.minX + 0.5, y: 200), to: pane.superview))
+    XCTAssertTrue(edge === handle, "文書を開いていても当たりの右 1pt はテキスト面に覆われない")
+    tab.editor.close(document)
+    tab.view.layoutSubtreeIfNeeded()
 
     func point(_ x: CGFloat) -> NSPoint { self.point(pane, x) }
     handle.mouseDown(with: .mouse(.leftMouseDown, at: point(278), in: window))

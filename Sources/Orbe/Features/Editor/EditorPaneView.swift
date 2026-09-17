@@ -227,7 +227,8 @@ final class EditorPaneView: NSView {
       let view = document.surface.view
       view.autoresizingMask = []
       view.frame = bodyRect
-      addSubview(view)
+      // 境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なる。テキスト面の下に置いて当たりを保つ。
+      addSubview(view, positioned: .below, relativeTo: sidebarHandle)
     }
     emptyHost.isHidden = document != nil
     needsLayout = true
