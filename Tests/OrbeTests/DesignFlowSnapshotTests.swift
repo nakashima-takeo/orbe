@@ -311,7 +311,7 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
         }
       },
       steps: [
-        ("list", { DesignSceneFixtures.enterStaleMain(palette) }),
+        ("enter", { DesignSceneFixtures.enterStaleMain(palette) }),
         ("down", { palette.refresh?.move(1) }),
         ("up", { palette.refresh?.move(-1) }),
         ("exit", { palette.exitRefresh() }),

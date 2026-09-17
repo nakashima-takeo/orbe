@@ -22,7 +22,7 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
   var palette: DispatchPaletteModel!
 
   /// `main` / `feat` / `topic` / `stale` を持つ origin を立て、手元の clone の remote 追跡 ref を**わざと
-  /// 古いまま**にする。`mine` は手元にだけあるローカルブランチ（fetch で動く ref をベースに取らない題材）、
+  /// 古いまま**にする。`mine` は upstream の無い手元だけのローカルブランチ（着地を待たない題材）、
   /// `stale` は origin を追跡する手元のブランチ（分冊 `+Refresh` の題材）。
   override func setUpWithError() throws {
     dir = FileManager.default.temporaryDirectory
@@ -99,14 +99,15 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     XCTAssertEqual(head(of: path), originTip("feat"), "fetch 後の origin/feat が base")
   }
 
-  /// **既存ブランチの checkout は fetch で動く ref をベースに取らないので待たない。** ここが待つと、
-  /// fetch が長引くリポジトリで「手元のブランチを開くだけ」が分単位で止まる。
+  /// **upstream の無い Local branch の checkout は fetch で動く ref をベースに取らないので待たない。**
+  /// ここが待つと、fetch が長引くリポジトリで「手元のブランチを開くだけ」が分単位で止まる
+  /// （origin を追跡する行は着地を待つ——分冊 `+Refresh`）。
   ///
   /// 待たなかった証拠は、作成が返った時点で手元の `origin/main` がまだ古いこと——fetch が着地して
   /// いれば ref は新しい tip へ動いている。**この否定の assert を測る窓だけは壁時計で区切らない**
   /// ——窓の中で作成（非同期 git 2 本）を走らせるので、遅い機械では窓が先に閉じて「正しい実装のまま
   /// 赤」になる。fetch はテストが門を開けるまで待たせ、作成が返ってから開ける。
-  func testLocalBranchWorktreeDoesNotWaitForTheFetch() throws {
+  func testLocalBranchWithoutUpstreamDoesNotWaitForTheFetch() throws {
     let provider = try startWithSlowFetch(holdingFetch: true)
     let path = try resolve(provider, .localBranch(name: "mine", existingWorktree: nil))
     XCTAssertNotEqual(
@@ -227,8 +228,7 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     provider.load()
     XCTAssertTrue(
       pump({
-        provider.defaultBranchName != nil
-          && palette.items.contains { $0.glyph == .worktree }
+        palette.items.contains { $0.glyph == .worktree }
           && palette.items.contains { $0.glyph == .localBranch }
       }), "前提: git レーンは着地している（worktree 行と Local branch 行が組まれるまで）")
     return provider
@@ -264,8 +264,9 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
   }
 
   func resolve(_ provider: DispatchDataProvider, _ action: DispatchAction) throws -> String {
-    guard case .resolved(.ready(let path)) = try prepare(provider, action) else {
-      throw CreationFailed(detail: "作成に至らなかった")
+    let outcome = try prepare(provider, action)
+    guard case .resolved(.ready(let path)) = outcome else {
+      throw CreationFailed(detail: String(describing: outcome))
     }
     return path
   }
