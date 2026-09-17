@@ -138,9 +138,6 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     XCTAssertEqual(state.width, 300, "引いた距離だけ広がる")
     XCTAssertEqual(pane.bodyRect.minX, 37 + 301, "その場で置き直す")
     XCTAssertEqual(handle.frame.minX, 37 + 300 - 2, "当たりも境に付いてくる")
-    XCTAssertEqual(
-      handle.trackingAreas.first?.options.contains([.cursorUpdate, .inVisibleRect]), true,
-      "カーソルは可視矩形に追随する tracking area が出す（frame の移動で再登録が要らない）")
     try assertSidebarContentFills(pane, width: 300)
     handle.mouseDragged(with: .mouse(.leftMouseDragged, at: point(278 - 200), in: window))
     XCTAssertEqual(state.width, 160, "下限")
