@@ -218,6 +218,7 @@ struct DispatchRow: View {
 
   /// 右端: worktree/branch はチップ（＋working リング）、issue/PR は muted ノート。issue/PR は末尾に「開く」。
   /// clean 行は候補件数バッジ＋`⏎`（**0 件ならバッジだけ消え、行そのものは残る**）。
+  /// Local branch 行は上のどれも無いときだけ同期ピル（`↑N` / `↓N`）。
   private var trailing: some View {
     HStack(spacing: Theme.Space.tick) {
       if let count = item.candidateCount {
@@ -250,6 +251,8 @@ struct DispatchRow: View {
           .foregroundStyle(Color.theme.textMuted)
           .lineLimit(1)
           .fixedSize()
+      } else if let sync = item.sync {
+        DispatchSyncPills(sync: sync)
       }
       if let onOpenWeb {
         OpenWebButton(action: onOpenWeb)

@@ -182,7 +182,7 @@ extension DispatchPaletteTests {
       [
         DispatchCleanFacts(
           path: "/wt/a", branch: "feat/a", head: "aaa", upstream: "origin/feat/a",
-          track: "[gone]", openPR: .none,
+          track: .gone, openPR: .none,
           status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
           containment: .patchEquivalent(target: "main"), operation: .none)
       ])

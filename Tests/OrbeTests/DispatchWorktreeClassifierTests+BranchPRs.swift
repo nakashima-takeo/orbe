@@ -231,7 +231,7 @@ extension DispatchWorktreeClassifierTests {
   /// `track` を nil にすると `[gone]` の推定が消え、**推定が PR だけになる**行を作れる。
   private func branchPRRow(
     _ prs: [GitHubBranchPR], containment: GitBranchContainment? = .patchEquivalent(target: "main"),
-    track: String? = "[gone]"
+    track: GitUpstreamTrack? = .gone
   ) -> CleanRow {
     branchPRRow(state: .loaded(prs), containment: containment, track: track)
   }
@@ -240,7 +240,7 @@ extension DispatchWorktreeClassifierTests {
   private func branchPRRow(
     state: BranchPRState = .loaded([]),
     containment: GitBranchContainment? = .patchEquivalent(target: "main"),
-    track: String? = "[gone]", probing: Bool = false
+    track: GitUpstreamTrack? = .gone, probing: Bool = false
   ) -> CleanRow {
     let rows = DispatchWorktreeClassifier.rows(
       DispatchWorktreeClassifier.Input(
@@ -251,7 +251,9 @@ extension DispatchWorktreeClassifierTests {
         localBranches: [
           GitBranch(
             name: "feat/x", relativeDate: "1d", worktreePath: "/wt/x",
-            upstream: "origin/feat/x", track: track)
+            upstream: GitUpstream(
+              short: "origin/feat/x", ref: "refs/remotes/origin/feat/x", remote: "origin",
+              remoteRef: "refs/heads/feat/x", track: track))
         ],
         branchPRStates: ["feat/x": state],
         probes: [

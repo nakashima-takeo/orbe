@@ -69,7 +69,7 @@ final class DispatchCleanRowRenderTests: SnapshotTestCase {
       DispatchWorktreeClassifier.classify([
         // 確認群にするのは、確定しても自動チェックが灯らない（＝2 枚のチェック状態が揃う）ため。
         DispatchCleanFacts(
-          path: "/wt/x", branch: "feat/x", head: "aaa", track: "[gone]", openPR: .none,
+          path: "/wt/x", branch: "feat/x", head: "aaa", track: .gone, openPR: .none,
           status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
           containment: .unmerged(count: 6), operation: .none)
       ]).first)
@@ -88,7 +88,7 @@ final class DispatchCleanRowRenderTests: SnapshotTestCase {
     let anchor = try XCTUnwrap(
       DispatchWorktreeClassifier.classify([
         DispatchCleanFacts(
-          path: "/wt/anchor", branch: "feat/anchor", head: "bbb", track: "[gone]", openPR: .none,
+          path: "/wt/anchor", branch: "feat/anchor", head: "bbb", track: .gone, openPR: .none,
           status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
           containment: .patchEquivalent(target: "main"), operation: .none)
       ]).first)

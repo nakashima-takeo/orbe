@@ -27,6 +27,29 @@ struct GitNewBranch: Equatable {
   let tracksBase: Bool
 }
 
+/// upstream との同期（`%(upstream:track)` を解釈した値）。同期済みは `GitUpstream.track` の nil。
+enum GitUpstreamTrack: Equatable {
+  /// upstream がリモートで消えている（`[gone]`）。
+  case gone
+  /// `[ahead N]` / `[behind M]` / `[ahead N, behind M]`。出ない側は 0。
+  case counts(ahead: Int, behind: Int)
+}
+
+/// ローカルブランチの upstream。`for-each-ref` の upstream 系フィールドを 1 回だけ解釈した値で、
+/// 表示（`short`）も最新化の git コマンド（`remote` / `remoteRef` / `ref`）もここから組む。
+struct GitUpstream: Equatable {
+  /// `%(upstream:short)`（`origin/x`。表示用）。
+  let short: String
+  /// `%(upstream)`（`refs/remotes/origin/x`。追跡 ref）。
+  let ref: String
+  /// `%(upstream:remotename)`（`origin`）。
+  let remote: String
+  /// `%(upstream:remoteref)`（`refs/heads/x`。remote 側の ref）。
+  let remoteRef: String
+  /// `%(upstream:track)`。nil は同期済み。
+  let track: GitUpstreamTrack?
+}
+
 /// `git for-each-ref` の 1 ブランチ（local / remote 兼用）。
 struct GitBranch: Equatable {
   /// 短縮名（local は `feat/x`・remote は `origin/feat/x`）。
@@ -35,10 +58,8 @@ struct GitBranch: Equatable {
   let relativeDate: String
   /// このブランチが既にチェックアウトされている worktree の絶対パス（`worktreepath`）。無ければ nil。
   let worktreePath: String?
-  /// upstream の短縮名（`origin/x`）。無ければ nil。
-  let upstream: String?
-  /// `%(upstream:track)`（`[gone]` / `[ahead 1]` 等）。空なら nil。
-  var track: String?
+  /// upstream。無ければ nil（remote ブランチは常に nil）。
+  let upstream: GitUpstream?
 }
 
 // MARK: - GitHub（gh CLI）

@@ -298,6 +298,26 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
       ])
   }
 
+  /// 最新化の選択画面: 遅れた Local branch 行から入り、↓ でカーソルが「そのまま作成」へ移り
+  /// （フッタの前置句も追従する）、esc で一覧へ戻るとカーソルは入った行のまま、という遷移を撮る。
+  func testRefresh() throws {
+    let palette = DesignSceneFixtures.dispatchModel()
+    try flow(
+      "refresh", size: NSSize(width: 640, height: 520),
+      render: {
+        ZStack {
+          BackgroundGlow()
+          DispatchOverlay(model: palette)
+        }
+      },
+      steps: [
+        ("list", { DesignSceneFixtures.enterStaleMain(palette) }),
+        ("down", { palette.refresh?.move(1) }),
+        ("up", { palette.refresh?.move(-1) }),
+        ("exit", { palette.exitRefresh() }),
+      ])
+  }
+
   /// 低い窓での収まり: 器が窓高からカードの上限を逆算し、**縮むのは行リストだけ**という契約を撮る。
   /// overlay ごと撮るのは、上端アンカーが 66:16 の比を保って譲る様子がここでしか出ないため。
   /// few（3 件・内容にハグ）→ many（18 件・窓に合わせてリストが縮む）→ select_last（末尾選択に

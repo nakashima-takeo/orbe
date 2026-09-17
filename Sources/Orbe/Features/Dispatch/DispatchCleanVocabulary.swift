@@ -230,8 +230,8 @@ struct DispatchCleanFacts: Equatable {
   let lockReason: String?
   /// upstream の短縮名（`origin/x`）。無ければ未 push。
   let upstream: String?
-  /// `%(upstream:track)`（`[gone]` / `[ahead 1]` 等）。空なら nil。
-  let track: String?
+  /// upstream との同期。nil は同期済み（upstream が無いときも nil）。
+  let track: GitUpstreamTrack?
   /// ブランチに紐づく closed PR。
   let closedPR: DispatchCleanPR?
   /// ブランチに紐づく open PR。
@@ -253,7 +253,8 @@ struct DispatchCleanFacts: Equatable {
   init(
     path: String, branch: String? = nil, head: String = "", isMain: Bool = false,
     isPrunable: Bool = false, lockReason: String? = nil, upstream: String? = nil,
-    track: String? = nil, closedPR: DispatchCleanPR? = nil, openPR: CleanOpenPR = .pending,
+    track: GitUpstreamTrack? = nil, closedPR: DispatchCleanPR? = nil,
+    openPR: CleanOpenPR = .pending,
     status: GitWorktreeStatusCounts? = nil, containment: GitBranchContainment? = nil,
     operation: GitWorktreeOperationState = .unknown, occupancy: TabOccupancy? = nil,
     isProbing: Bool = false
@@ -276,7 +277,7 @@ struct DispatchCleanFacts: Equatable {
   }
 
   /// upstream がリモートで消えている。
-  var isGone: Bool { track == "[gone]" }
+  var isGone: Bool { track == .gone }
 }
 
 /// 分類レーンが 1 worktree について実測した事実。

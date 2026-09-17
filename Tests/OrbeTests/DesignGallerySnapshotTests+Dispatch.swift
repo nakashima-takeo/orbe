@@ -43,5 +43,11 @@ extension DesignGallerySnapshotTests {
       "dispatch_clean_failure.png", DesignSceneFixtures.dispatchCleanFailureModel(), 640, 520)
     // 右クラスタが 2 枚のピルで最も詰まる画面なので、狭窓の証拠を残す。
     try write("dispatch_clean_narrow.png", DesignSceneFixtures.dispatchCleanModel(), 360, 520)
+    // 最新化の 3 画面: 選択（既定）/ 最新化中（busy フッタ）/ 失敗（行 0 が失敗・カーソルは行 1）。
+    try write("dispatch_refresh.png", DesignSceneFixtures.dispatchRefreshModel(), 640, 520)
+    try write(
+      "dispatch_refresh_updating.png", DesignSceneFixtures.dispatchRefreshUpdatingModel(), 640, 520)
+    try write(
+      "dispatch_refresh_failed.png", DesignSceneFixtures.dispatchRefreshFailedModel(), 640, 520)
   }
 }

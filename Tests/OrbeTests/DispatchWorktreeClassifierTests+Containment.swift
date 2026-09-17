@@ -13,7 +13,7 @@ extension DispatchWorktreeClassifierTests {
   func testReachableRowIsSafeAndClaimsOnRemoteNotMerged() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/flow", branch: "feat/flow", upstream: "origin/feat/flow", track: "[gone]",
+        path: "/wt/flow", branch: "feat/flow", upstream: "origin/feat/flow", track: .gone,
         openPR: .none, status: clean, containment: .reachable(mergedInto: nil), operation: .none))
     XCTAssertEqual(r.group, .safe)
     XCTAssertEqual(r.chips, [.onRemote, .gone])
@@ -29,7 +29,7 @@ extension DispatchWorktreeClassifierTests {
   func testReachableAncestorStillClaimsMergedInto() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/old", branch: "feat/old", upstream: "origin/feat/old", track: "[gone]",
+        path: "/wt/old", branch: "feat/old", upstream: "origin/feat/old", track: .gone,
         openPR: .none, status: clean, containment: .reachable(mergedInto: "main"), operation: .none)
     )
     XCTAssertEqual(r.group, .safe)
@@ -44,7 +44,7 @@ extension DispatchWorktreeClassifierTests {
   func testMergedPRCarriesItsBaseBranch() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "big/x", upstream: "origin/big/x", track: "[gone]",
+        path: "/wt/x", branch: "big/x", upstream: "origin/big/x", track: .gone,
         closedPR: DispatchCleanPR(number: 123, isMerged: true, base: "develop"),
         openPR: .none, status: clean, containment: .reachable(mergedInto: nil), operation: .none))
     XCTAssertEqual(r.group, .safe)
@@ -59,7 +59,7 @@ extension DispatchWorktreeClassifierTests {
   func testMergedPRDemotesOnlyTheDuplicateMergedInto() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "big/x", upstream: "origin/big/x", track: "[gone]",
+        path: "/wt/x", branch: "big/x", upstream: "origin/big/x", track: .gone,
         closedPR: DispatchCleanPR(number: 123, isMerged: true, base: "develop"),
         openPR: .none, status: clean, containment: .patchEquivalent(target: "origin/develop"),
         operation: .none))
@@ -73,13 +73,13 @@ extension DispatchWorktreeClassifierTests {
   func testMergedIntoLabelStripsTheRemotePrefix() {
     let patch = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: clean,
+        path: "/wt/x", branch: "feat/x", track: .gone, openPR: .none, status: clean,
         containment: .patchEquivalent(target: "origin/develop"), operation: .none))
     XCTAssertTrue(patch.vocabulary.contains(.mergedInto("develop")))
 
     let reachable = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: clean,
+        path: "/wt/x", branch: "feat/x", track: .gone, openPR: .none, status: clean,
         containment: .reachable(mergedInto: "origin/develop"), operation: .none))
     XCTAssertTrue(reachable.vocabulary.contains(.mergedInto("develop")))
   }
@@ -97,7 +97,7 @@ extension DispatchWorktreeClassifierTests {
 
     let reachable = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: "[gone]",
+        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: .gone,
         openPR: .none, status: clean, containment: .reachable(mergedInto: nil), operation: .none))
     XCTAssertEqual(
       reachable.vocabulary.filter { $0 == .onRemote }, [.onRemote], "到達性だけでも 1 枚立つ")
@@ -131,20 +131,20 @@ extension DispatchWorktreeClassifierTests {
   func testUnverifiedChipRaisesWhenAnySafetyFactIsMissing() {
     let status = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: nil,
+        path: "/wt/x", branch: "feat/x", track: .gone, openPR: .none, status: nil,
         containment: .patchEquivalent(target: "main"), operation: .none))
     XCTAssertEqual(status.group, .caution)
     XCTAssertTrue(status.vocabulary.contains(.unverified))
 
     let operation = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: clean,
+        path: "/wt/x", branch: "feat/x", track: .gone, openPR: .none, status: clean,
         containment: .patchEquivalent(target: "main"), operation: .unknown))
     XCTAssertTrue(operation.vocabulary.contains(.unverified))
 
     let containment = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: clean,
+        path: "/wt/x", branch: "feat/x", track: .gone, openPR: .none, status: clean,
         containment: nil,
         operation: .none))
     XCTAssertTrue(containment.vocabulary.contains(.unverified))

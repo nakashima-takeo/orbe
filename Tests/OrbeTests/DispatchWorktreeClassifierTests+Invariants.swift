@@ -138,7 +138,7 @@ extension DispatchWorktreeClassifierTests {
       for operation in operations {
         for lockReason in [nil, "USB"] as [String?] {
           for upstream in [nil, "origin/feat/x"] as [String?] {
-            for track in [nil, "[gone]", "[ahead 3]"] as [String?] {
+            for track in [nil, .gone, .counts(ahead: 3, behind: 0)] as [GitUpstreamTrack?] {
               for containment in containments {
                 // 4 値すべてを振る——`.pending` / `.unverified`（確かめていない）も
                 // 不変条件の対象で、そこだけ語が不到達になる形を作らせない。
@@ -167,7 +167,7 @@ extension DispatchWorktreeClassifierTests {
     """
     branch=\(f.branch ?? "nil") prunable=\(f.isPrunable) main=\(f.isMain) \
     tab=\(f.occupancy != nil) status=\(String(describing: f.status)) op=\(f.operation) \
-    lock=\(f.lockReason != nil) up=\(f.upstream ?? "nil") track=\(f.track ?? "nil") \
+    lock=\(f.lockReason != nil) up=\(f.upstream ?? "nil") track=\(String(describing: f.track)) \
     containment=\(String(describing: f.containment)) openPR=\(f.openPR) \
     closedPR=\(String(describing: f.closedPR))
     """
