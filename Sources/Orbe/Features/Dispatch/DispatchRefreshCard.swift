@@ -137,7 +137,7 @@ struct DispatchRefreshRow: View {
         .lineLimit(1)
         .truncationMode(.tail)
         .frame(maxWidth: .infinity, alignment: .leading)
-      if choice == .refreshed { trailing }
+      if failure != nil { trailing }
     }
     .padding(.horizontal, 10)
     .padding(.vertical, 5)
@@ -179,21 +179,12 @@ struct DispatchRefreshRow: View {
     }
   }
 
-  /// 行 0 の右端: 通常は「既定」、失敗時は同期ピル＋再試行。
-  @ViewBuilder private var trailing: some View {
+  /// 失敗した行 0 の右端: 同期ピル＋再試行。通常時の右端は空（既定行は初期選択で伝わる）。
+  private var trailing: some View {
     HStack(spacing: Theme.Space.tick) {
-      if failure != nil {
-        DispatchSyncPills(sync: model.sync)
-        CleanCapsule(text: l10n.string(.dispatchRefreshRetry), active: false)
-          .font(Font.theme.sectionLabel)
-      } else {
-        Text(l10n.string(.dispatchRefreshDefault))
-          .font(Font.theme.sectionLabel)
-          .foregroundStyle(Color.theme.accentPrimary)
-          .padding(.horizontal, 7)
-          .padding(.vertical, 1)
-          .background(Capsule().fill(Color.theme.tintAccent))
-      }
+      DispatchSyncPills(sync: model.sync)
+      CleanCapsule(text: l10n.string(.dispatchRefreshRetry), active: false)
+        .font(Font.theme.sectionLabel)
     }
     .fixedSize()
   }

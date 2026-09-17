@@ -140,7 +140,6 @@ extension L10n {
     .dispatchRefreshFailedHeader: ("— 最新化に失敗（%@）", "— update failed (%@)"),
     .dispatchRefreshFailedDesc: ("%@ に失敗 — %@", "%@ failed — %@"),
     .dispatchRefreshDiverged: ("%@ と分岐", "diverged from %@"),
-    .dispatchRefreshDefault: ("既定", "default"),
     .dispatchRefreshRetry: ("r 再試行", "r Retry"),
     .dispatchHintRetry: ("再試行", "Retry"),
     .dispatchHintBack: ("戻る", "Back"),

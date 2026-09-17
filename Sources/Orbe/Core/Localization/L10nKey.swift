@@ -144,7 +144,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchRefreshFailedHeader
   case dispatchRefreshFailedDesc
   case dispatchRefreshDiverged
-  case dispatchRefreshDefault
   case dispatchRefreshRetry
   case dispatchHintRetry
   case dispatchHintBack
