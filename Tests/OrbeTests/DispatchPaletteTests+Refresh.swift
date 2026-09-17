@@ -72,6 +72,27 @@ extension DispatchPaletteTests {
     XCTAssertTrue(p.isBusy)
   }
 
+  /// 行タップは決定。カーソルに関係なくその行へ選択を移してから実行する（一覧の行タップと同じ）。
+  func testRowTapMovesTheCursorAndConfirms() throws {
+    let p = makeModel()
+    let (item, sync) = try staleMain(p)
+    var settled: [DispatchStaleChoice] = []
+    p.onSettleStale = { choice, _ in settled.append(choice) }
+
+    p.enterRefresh(item: item, sync: sync)
+    XCTAssertEqual(p.refresh?.choice, .refreshed)
+    p.confirmRefresh(.asIs)
+    XCTAssertEqual(settled, [.asIs])
+    XCTAssertEqual(p.refresh?.choice, .asIs, "タップした行へ選択が移る")
+    XCTAssertEqual(p.refresh?.phase, .creating)
+
+    p.enterRefresh(item: item, sync: sync)
+    p.refresh?.move(1)
+    p.confirmRefresh(.refreshed)
+    XCTAssertEqual(settled, [.asIs, .refreshed])
+    XCTAssertEqual(p.refresh?.phase, .updating)
+  }
+
   /// busy（最新化中・作成中）では ⏎・↑↓・esc・r のどれも効かない——fetch は中断できないので、
   /// 中断できる顔をしない。
   func testBusyIgnoresEveryKey() throws {
@@ -86,6 +107,7 @@ extension DispatchPaletteTests {
     p.refresh?.move(1)
     XCTAssertEqual(p.refresh?.choice, .refreshed)
     p.confirmRefresh()
+    p.confirmRefresh(.asIs)
     p.retryRefresh()
     XCTAssertEqual(count, 1, "二重起動しない")
     p.exitRefresh()
@@ -111,7 +133,7 @@ extension DispatchPaletteTests {
     XCTAssertEqual(p.refresh?.phase, .updating)
 
     p.refresh?.fail(.fastForward(nil))
-    p.startRefresh()
+    p.confirmRefresh(.refreshed)
     XCTAssertEqual(choices.count, 3, "行 0 のタップも再試行")
 
     p.enterRefresh(item: item, sync: sync)

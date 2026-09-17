@@ -46,7 +46,7 @@ struct DispatchCard: View {
           DispatchCleanList(model: model.clean).frame(height: listHeight)
         case .refresh:
           if let refresh = model.refresh {
-            DispatchRefreshList(model: refresh, onConfirm: { confirmRefresh($0) })
+            DispatchRefreshList(model: refresh, onConfirm: { model.confirmRefresh($0) })
               .frame(height: listHeight, alignment: .top)
           }
         }
@@ -77,14 +77,6 @@ struct DispatchCard: View {
     .simultaneousGesture(TapGesture().onEnded { model.focus() })
     .onChange(of: model.focusToken, initial: true) {
       focus = model.mode == .list ? .field : .card
-    }
-  }
-
-  /// 最新化の行タップ。行 0 は選択に関係なく最新化を撃ち、行 1 は選ぶだけ（決定は ⏎）。
-  private func confirmRefresh(_ choice: DispatchStaleChoice) {
-    switch choice {
-    case .refreshed: model.startRefresh()
-    case .asIs: model.refresh?.choose(.asIs)
     }
   }
 

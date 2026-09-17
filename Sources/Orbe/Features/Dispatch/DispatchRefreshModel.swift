@@ -48,7 +48,7 @@ enum DispatchRefreshPhase: Equatable {
     choice = choice == .refreshed ? .asIs : .refreshed
   }
 
-  /// 行タップで選ぶ（決定はしない）。
+  /// 行を直接選ぶ（行タップの選択移動）。busy では動かさない。
   func choose(_ choice: DispatchStaleChoice) {
     guard !isBusy else { return }
     self.choice = choice

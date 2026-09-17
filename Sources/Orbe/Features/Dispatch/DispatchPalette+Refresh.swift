@@ -4,7 +4,7 @@ import Foundation
 /// clean と同じく、画面ごとの分岐は View に置かず名前付きメソッドが `refresh.phase` を見て自分で畳む。
 extension DispatchPaletteModel {
 
-  /// 最新化画面の ⏎（行タップも通る）。カーソルの行を実行する。busy は無反応。
+  /// 最新化画面の ⏎。カーソルの行を実行する。busy は無反応。
   func confirmRefresh() {
     guard let refresh, !refresh.isBusy else { return }
     switch refresh.choice {
@@ -14,6 +14,13 @@ extension DispatchPaletteModel {
       refresh.beginCreating()
       onSettleStale(.asIs, refresh.sync)
     }
+  }
+
+  /// 最新化画面の行タップ＝決定。一覧の行タップと同じく、選択移動と実行が一体で走る。busy は無反応。
+  func confirmRefresh(_ choice: DispatchStaleChoice) {
+    guard let refresh, !refresh.isBusy else { return }
+    refresh.choose(choice)
+    confirmRefresh()
   }
 
   /// 「最新化して作成」を撃つ唯一の funnel（⏎・行 0 のタップ・`r` が共に通る）。busy は無反応。
