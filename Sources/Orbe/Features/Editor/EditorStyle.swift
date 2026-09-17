@@ -9,7 +9,7 @@ enum EditorStyle {
       font: Theme.Typography.editorCode,
       lineHeight: Theme.Typography.editorLineHeight,
       topInset: Theme.Space.tick,
-      textColor: Theme.Color.editorCodeText,
+      textColor: Theme.Color.editorText,
       caretColor: Theme.Color.accentBright,
       caretSize: CGSize(width: 1.5, height: 14),
       gutterFont: Theme.Typography.editorLineNumber,

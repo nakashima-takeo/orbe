@@ -83,6 +83,7 @@ struct ThemeColors {
   // 基色 ink はフルアルファ。view 側で .opacity(α) を掛けて実際の面色にする
   let surfaceInk = Color(nsColor: Theme.Color.surfaceInk)
   let borderInk = Color(nsColor: Theme.Color.borderInk)
+  let sunkInk = Color(nsColor: Theme.Color.sunkInk)
   let inputWash = Color(nsColor: Theme.Color.inputWash)
   let inputBorder = Color(nsColor: Theme.Color.inputBorder)
   let tintAccent = Color(nsColor: Theme.Color.tintAccent)
@@ -91,6 +92,18 @@ struct ThemeColors {
   let faceTerminal = Color(nsColor: Theme.Color.faceTerminal)
   let editorGhost = Color(nsColor: Theme.Color.editorGhost)
   let editorIcon = Color(nsColor: Theme.Color.editorIcon)
+  let editorText = Color(nsColor: Theme.Color.editorText)
+  let editorTertiary = Color(nsColor: Theme.Color.editorTertiary)
+  let editorModified = Color(nsColor: Theme.Color.editorModified)
+  let editorHueOrange = Color(nsColor: Theme.Color.editorHueOrange)
+  let editorHueBlue = Color(nsColor: Theme.Color.editorHueBlue)
+  let editorHueYellow = Color(nsColor: Theme.Color.editorHueYellow)
+  let editorHueSky = Color(nsColor: Theme.Color.editorHueSky)
+  let editorHueViolet = Color(nsColor: Theme.Color.editorHueViolet)
+  let editorHueCyan = Color(nsColor: Theme.Color.editorHueCyan)
+  let editorHueRed = Color(nsColor: Theme.Color.editorHueRed)
+  let editorHueGreen = Color(nsColor: Theme.Color.editorHueGreen)
+  let editorHueTeal = Color(nsColor: Theme.Color.editorHueTeal)
 }
 
 extension Font {
@@ -130,4 +143,11 @@ struct ThemeFonts {
   // エディター面の空状態
   let editorLead = Font(Theme.Typography.editorLead as CTFont)
   let editorHint = Font(Theme.Typography.editorHint as CTFont)
+  // エディター面の骨
+  let editorPanelTitle = Font(Theme.Typography.editorPanelTitle as CTFont)
+  let editorRootLabel = Font(Theme.Typography.editorRootLabel as CTFont)
+  let editorTreeRow = Font(Theme.Typography.editorTreeRow as CTFont)
+  let editorBadge = Font(Theme.Typography.editorBadge as CTFont)
+  let editorFileTab = Font(Theme.Typography.editorFileTab as CTFont)
+  let editorBreadcrumb = Font(Theme.Typography.editorBreadcrumb as CTFont)
 }
