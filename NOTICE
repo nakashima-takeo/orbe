@@ -66,6 +66,9 @@ Terminal engine (Contents/MacOS/Orbe, Contents/Resources/{ghostty,terminfo})
   - jsmn — MIT License
     Bundled in sentry-native's source.
     https://github.com/zserge/jsmn — License: licenses/jsmn-LICENSE.txt
+  - MPack — MIT License
+    Bundled in sentry-native's source.
+    https://github.com/ludocode/mpack — License: licenses/mpack-LICENSE.txt
   - Google Breakpad — composite (BSD-3-Clause and the licenses of its bundled
     parts; see the license file)
     sentry-native's crash backend on macOS. Its license requires this notice
