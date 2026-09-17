@@ -44,6 +44,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     window.setContentSize(NSSize(width: 120 + FaceGeometry.spine, height: 400))
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(pane.shownSidebarWidth, 0, "極端な幅では残りをそのまま分け、0 まで縮む")
+    XCTAssertTrue(pane.sidebar.isOpen, "見えるかは開閉だけで決まる（列幅は関係ない）")
     XCTAssertEqual(pane.bodyRect.minX, 37 + 1)
     try assertSidebarContentIsGone(pane, railGround: railGround, explorerGround: explorerGround)
 
@@ -152,6 +153,87 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     XCTAssertEqual(other.view.editor.bodyRect.minX, 37 + 702 + 1, "同じ状態を配られた面は同じ幅")
   }
 
+  /// レールの「ファイル」で閉じれば SwiftUI の中身（エクスプローラーの地）も消えてレールの選択印（左縁の accent）が
+  /// 無くなり、もう一度押せば地・境の線・選択印が戻る。pane の矩形が動いても中身が追随しなければ、閉じた後に
+  /// エクスプローラーの地が本体に残る／開いた後に本体の地だけが見える。置き直しは観測の非同期ホップを待つ。
+  func testRailToggleRemovesAndRestoresTheExplorerContentAndTheSelectionMark() throws {
+    let root = try XCTUnwrap(TestIsolation.caseDir).path
+    let tab = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.view.editor
+    let window = hostEditor(tab, width: 900)
+    defer { window.orderOut(nil) }
+    let open = try PaneProbe(pane)
+    let railGround = try open.rgb(18, y: 60)
+    let explorerGround = try open.rgb(37 + 60)
+    XCTAssertFalse(PaneProbe.same(try open.rgb(1, y: 18), railGround), "開いていれば左縁に選択印")
+    XCTAssertFalse(PaneProbe.same(try open.rgb(18, y: 18), railGround), "選択項目の淡い地")
+
+    func settled(_ bodyMinX: CGFloat, _ message: String) {
+      pumpMain(
+        until: {
+          tab.view.layoutSubtreeIfNeeded()
+          return pane.bodyRect.minX == bodyMinX
+        }, message)
+    }
+    pane.shell.toggleSidebar()
+    settled(37, "閉じればレールだけ")
+    let closed = try PaneProbe(pane)
+    XCTAssertTrue(PaneProbe.same(try closed.rgb(1, y: 18), railGround), "閉じている間は選択印が無い")
+    XCTAssertTrue(PaneProbe.same(try closed.rgb(18, y: 18), railGround))
+    XCTAssertFalse(PaneProbe.same(try closed.rgb(37 + 60), explorerGround), "エクスプローラーの地は消える")
+    XCTAssertTrue(
+      PaneProbe.same(try closed.rgb(37 + 60), try closed.rgb(pane.bodyRect.midX)), "本体の地が続く")
+
+    pane.shell.toggleSidebar()
+    settled(37 + 241, "開けば戻る")
+    let reopened = try PaneProbe(pane)
+    XCTAssertFalse(PaneProbe.same(try reopened.rgb(1, y: 18), railGround), "選択印が戻る")
+    XCTAssertTrue(PaneProbe.same(try reopened.rgb(37 + 60), explorerGround), "エクスプローラーの地が戻る")
+    try assertSidebarContentFills(pane, width: 240)
+  }
+
+  /// 幅と開閉はアプリ全体で 1 つ——既に窓に載っている別のタブの面も、ドラッグと開閉に追随する（置き直しは
+  /// 観測の非同期ホップ越し。自分でドラッグした面だけがその場で置き直す）。
+  func testSharedSidebarStateMovesEveryHostedPane() throws {
+    let state = EditorSidebarState()
+    let root = try XCTUnwrap(TestIsolation.caseDir).path
+    let tab = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let other = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    for t in [tab, other] {
+      t.view.configure(
+        translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
+        fontResolver: ChromeFontResolver(), sidebar: state)
+    }
+    let pane = tab.view.editor
+    let otherPane = other.view.editor
+    let window = hostEditor(tab, width: 900)
+    let otherWindow = hostEditor(other, width: 900)
+    defer {
+      window.orderOut(nil)
+      otherWindow.orderOut(nil)
+    }
+    func settled(_ bodyMinX: CGFloat, _ message: String) {
+      pumpMain(
+        until: {
+          other.view.layoutSubtreeIfNeeded()
+          tab.view.layoutSubtreeIfNeeded()
+          return otherPane.bodyRect.minX == bodyMinX && pane.bodyRect.minX == bodyMinX
+        }, message)
+    }
+
+    let handle = try XCTUnwrap(pane.subviews.first { $0 is SidebarResizeHandle })
+    handle.mouseDown(with: .mouse(.leftMouseDown, at: panePoint(pane, 278), in: window))
+    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: panePoint(pane, 278 + 60), in: window))
+    handle.mouseUp(with: .mouse(.leftMouseUp, at: panePoint(pane, 278 + 60), in: window))
+    settled(37 + 301, "片方で引けばもう片方の面も同じ幅へ")
+    try assertSidebarContentFills(otherPane, width: 300)
+
+    otherPane.shell.toggleSidebar()
+    settled(37, "片方で閉じればもう片方も閉じる")
+    otherPane.shell.toggleSidebar()
+    settled(37 + 301, "開けば記憶の幅で戻る")
+  }
+
   /// 面を描いて 1 行（ツリーの下の空き。根の行より下）の色を x で引く。
   private struct PaneProbe {
     let rep: NSBitmapImageRep
@@ -166,7 +248,8 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
       y = Int((pane.bounds.height - 12) * scale)
     }
 
-    func rgb(_ x: CGFloat) throws -> [Int] {
+    func rgb(_ x: CGFloat, y row: CGFloat? = nil) throws -> [Int] {
+      let y = row.map { Int($0 * scale) } ?? y
       let c = try XCTUnwrap(rep.colorAt(x: Int(x * scale), y: y)?.usingColorSpace(.deviceRGB))
       return [c.redComponent, c.greenComponent, c.blueComponent].map { Int($0 * 255) }
     }
