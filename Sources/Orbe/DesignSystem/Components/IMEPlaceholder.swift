@@ -86,7 +86,7 @@ private struct MarkedTextObserver: NSViewRepresentable {
       } else {
         unsubscribe()
         // 非フォーカス欄は変換していない＝composing は false 固定。update 経路から SwiftUI state を
-        // 同期で触らないよう次 tick へ逃がす（WindowProbe と同流儀）。
+        // 同期で触らないよう次 tick へ逃がす（TrafficLightsProbe と同流儀）。
         DispatchQueue.main.async { [weak self] in self?.onComposingChange(false) }
       }
     }
@@ -102,7 +102,7 @@ private struct MarkedTextObserver: NSViewRepresentable {
           })
       }
       // 初回評価も update 経路（updateNSView→setActive→subscribe）から SwiftUI state を同期で
-      // 触らないよう次 tick へ逃がす（false 経路・WindowProbe と同流儀）。通知駆動の evaluate は
+      // 触らないよう次 tick へ逃がす（false 経路・TrafficLightsProbe と同流儀）。通知駆動の evaluate は
       // 元々 .main queue 経由で非同期のため、これで両経路とも update フェーズ外に揃う。
       DispatchQueue.main.async { [weak self] in self?.evaluate() }
     }
