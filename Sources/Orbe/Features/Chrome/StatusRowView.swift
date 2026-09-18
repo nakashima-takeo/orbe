@@ -76,7 +76,7 @@ struct StatusRowView: View {
 
   /// 上段の左余白と縦シフト。信号機が chrome の上にあれば信号機ぶんの柱を空けて縦中央を close へ寄せ
   /// （ずれ幅が行高を食いうるため ±4 に clamp）、無ければ通常余白・シフト 0。
-  private var headerInsets: (leading: CGFloat, yShift: CGFloat) {
+  private var headerLayout: (leading: CGFloat, yShift: CGFloat) {
     switch model.trafficLights {
     case .absent:
       return (Chrome.edgePad, 0)
@@ -88,7 +88,7 @@ struct StatusRowView: View {
   /// 信号機の在否が変わったときの柱の開閉（フルスクリーン遷移の終端で 80⇄16pt 動く）を滑らかにする。
   /// `over` のまま縦位置だけが動く probe の読み直しはこの拍に乗せず、即座に反映する。
   /// Reduce Motion では在否の変化も即座に切り替える（状態グリフと同流儀）。
-  private var headerInsetsAnimation: Animation? {
+  private var headerLayoutAnimation: Animation? {
     guard !reduceMotion else { return nil }
     let (p1, p2) = Theme.Motion.easing
     return .timingCurve(p1.x, p1.y, p2.x, p2.y, duration: Theme.Motion.base)
@@ -128,11 +128,11 @@ struct StatusRowView: View {
           .onTapGesture { model.onAttentionTap() }
       }
     }
-    .padding(.leading, headerInsets.leading)
+    .padding(.leading, headerLayout.leading)
     .padding(.trailing, Chrome.edgePad)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-    .offset(y: headerInsets.yShift)
-    .animation(headerInsetsAnimation, value: model.trafficLights.isOverChrome)
+    .offset(y: headerLayout.yShift)
+    .animation(headerLayoutAnimation, value: model.trafficLights.isOverChrome)
   }
 
   // MARK: - 下段（セグメント形タブ行・全幅）

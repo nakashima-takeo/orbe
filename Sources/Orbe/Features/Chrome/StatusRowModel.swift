@@ -60,8 +60,8 @@ enum TrafficLights: Equatable {
   /// 取消（Esc・blur・他所クリック）。
   var onCancelRename: () -> Void = {}
 
-  /// 信号機の置かれ方。既定は「標準位置にある」——probe を持たない見本系（preview・gallery）と
-  /// probe が読む前の初回描画を、窓状態の見た目で描くため。
+  /// 信号機の置かれ方。既定は「上段の縦中央にある（寄せ量 0）」姿——probe を持たない見本系
+  /// （preview・gallery）と probe が読む前の初回描画を、柱の空いた姿で決定的に描くため。
   var trafficLights: TrafficLights = .over(centerY: Chrome.headerHeight / 2)
 
   init() { buildId = Self.verificationBuildID() }

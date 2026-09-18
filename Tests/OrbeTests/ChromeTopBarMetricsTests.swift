@@ -10,8 +10,8 @@ import XCTest
 /// 壊れると何が起きるか。信号機が chrome の上に無い（ネイティブ・フルスクリーン）あいだに柱を
 /// 畳まないと、上段左に 80pt の空白の穴が残り、workspace 名が画面端から遠く浮いたまま読まれる。
 /// 逆に信号機がある窓状態で柱を畳むと、テキストが信号機の下へ潜り込んで両方が読めなくなる。
-/// 既定値が窓状態でないと、probe を持たない見本系（preview・gallery）と probe が読む前の初回描画が
-/// 柱の無い姿で出て、実行時に一拍おいて 16→80pt へ跳ねる。
+/// 既定値が柱の空いた姿でないと、probe を持たない見本系（preview・gallery）と probe が読む前の
+/// 初回描画が柱の無い姿で出て、実行時に一拍おいて 16→80pt へ跳ねる。
 /// 数値は宣言を読めば分かるが、どのトークンが上段のどこに効くかは描いて測らないと分からない。
 @MainActor
 final class ChromeTopBarMetricsTests: OrbeTestCase {
@@ -84,7 +84,8 @@ final class ChromeTopBarMetricsTests: OrbeTestCase {
       leading: CGFloat(first) / scale, centerY: CGFloat(weighted / count) / scale)
   }
 
-  /// 見本系（probe を持たない）と probe が読む前の初回描画は、信号機が標準位置にある姿で描かれる。
+  /// 見本系（probe を持たない）と probe が読む前の初回描画は、信号機が上段の縦中央にある
+  /// （寄せ量 0）姿で描かれ、左の柱が空く。
   func testTopBarLeavesTheTrafficLightColumnByDefault() throws {
     let ink = try topBarInk()
 
