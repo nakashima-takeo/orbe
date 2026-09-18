@@ -1,7 +1,15 @@
 import SwiftUI
 
+/// 信号機（close ボタン）の chrome に対する置かれ方。実窓を読む probe（`AppShell` が付ける）が書く。
+enum TrafficLights: Equatable {
+  /// chrome の上に無い（ネイティブ・フルスクリーンで AppKit が上端の帯へ移した／窓にボタンが無い）。
+  case absent
+  /// chrome 上端から close ボタン中央までの距離。
+  case over(centerY: CGFloat)
+}
+
 /// 最上段 chrome（StatusRow）の状態。WindowController が `update` で流し込み、
-/// SwiftUI `StatusRowView` が描く。信号機ボタンの縦位置（system furniture）もここへ集める。
+/// SwiftUI `StatusRowView` が描く。信号機の置かれ方（system furniture）もここへ集める。
 @Observable final class StatusRowModel {
   var workspace = ""
   /// タブ行（セル＋セグメント構造）。1 つの値として代入され、View はこれだけを辿る。
@@ -46,8 +54,9 @@ import SwiftUI
   /// 取消（Esc・blur・他所クリック）。
   var onCancelRename: () -> Void = {}
 
-  /// 信号機（close ボタン）中央の chrome 上端からの距離。fullscreen 等で信号機が無いと nil。
-  var closeCenterY: CGFloat?
+  /// 信号機の置かれ方。既定は「標準位置にある」——probe を持たない見本系（preview・gallery）と
+  /// probe が読む前の初回描画を、窓状態の見た目で描くため。
+  var trafficLights: TrafficLights = .over(centerY: Chrome.headerHeight / 2)
 
   init() { buildId = Self.verificationBuildID() }
 

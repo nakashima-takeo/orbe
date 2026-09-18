@@ -90,6 +90,8 @@ struct AppShell: View {
       VStack(spacing: 0) {
         StatusRowView(model: model.statusModel)
           .frame(height: Chrome.barHeight)
+          // 実窓の信号機を読むのは製品の殻だけ（見本系は既定値で描く）。
+          .background(TrafficLightsProbe(model: model.statusModel))
         NSViewContainer(view: model.content)
           // 0タブ時のみ端末と同濃度の地で埋める（surface が無く BackgroundGlow も透過時は塗らないため）。
           // baseFill は effectiveOpacity 追従なので背景不透明度の設定変更にライブで従う。タブが載れば
