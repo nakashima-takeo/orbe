@@ -6,6 +6,12 @@ enum TrafficLights: Equatable {
   case absent
   /// chrome 上端から close ボタン中央までの距離。
   case over(centerY: CGFloat)
+
+  /// 信号機が chrome の上にあるか。上段左の柱の在否はこれだけで決まり、`centerY` の揺れには反応しない。
+  var isOverChrome: Bool {
+    if case .over = self { return true }
+    return false
+  }
 }
 
 /// 最上段 chrome（StatusRow）の状態。WindowController が `update` で流し込み、

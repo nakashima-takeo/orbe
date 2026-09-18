@@ -85,8 +85,9 @@ struct StatusRowView: View {
     }
   }
 
-  /// 信号機の在否が変わったときの余白の寄せ（フルスクリーン遷移の終端で 80⇄16pt 動く）。
-  /// Reduce Motion では即座に切り替える（状態グリフと同流儀）。
+  /// 信号機の在否が変わったときの柱の開閉（フルスクリーン遷移の終端で 80⇄16pt 動く）を滑らかにする。
+  /// `over` のまま縦位置だけが動く probe の読み直しはこの拍に乗せず、即座に反映する。
+  /// Reduce Motion では在否の変化も即座に切り替える（状態グリフと同流儀）。
   private var headerInsetsAnimation: Animation? {
     guard !reduceMotion else { return nil }
     let (p1, p2) = Theme.Motion.easing
@@ -131,7 +132,7 @@ struct StatusRowView: View {
     .padding(.trailing, Chrome.edgePad)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     .offset(y: headerInsets.yShift)
-    .animation(headerInsetsAnimation, value: model.trafficLights)
+    .animation(headerInsetsAnimation, value: model.trafficLights.isOverChrome)
   }
 
   // MARK: - 下段（セグメント形タブ行・全幅）
