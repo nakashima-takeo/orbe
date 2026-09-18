@@ -17,7 +17,8 @@ host 所有。`window.contentView` は SwiftUI ルート `ChromeHostingView`。�
 - 上段 chrome はネイティブ SwiftUI。content（端末の器）は既存 AppKit ビューを passthrough representable で内包する。
 - 配置状態（content とその空判定）と上段 chrome の状態は薄い `@Observable` モデル経由で `WindowController` が所有・駆動する（状態の正は WindowController）。
 - 背景透過／ブラーは `WindowController` が所有する `ChromeTranslucency` を各 SwiftUI root へ Environment 注入して chrome 各面へ配り、各面が自分の地を同じ実効不透明度で薄める——端末面と veil 濃度を揃えるため。端末領域には塗らず二重 veil を避ける（値更新は窓の不透明度同期と同一 tick）。
-- 窓ドラッグは chrome 背景の透明 NSView が `mouseDown` で処理する。1 クリックは `window.performDrag(with:)` で Window Server へ委譲し（Space 切替等に参加させるため）、ダブルクリックはシステム設定 `AppleActionOnDoubleClick` を読んで zoom / miniaturize / 無効を明示実行する。タブ／＋ は前面で tap を持つため空き領域だけを拾う。信号機ボタンの位置は極小 representable が読み、上段テキストの縦中心へ反映する。
+- 窓ドラッグは chrome 背景の透明 NSView が `mouseDown` で処理する。1 クリックは `window.performDrag(with:)` で Window Server へ委譲し（Space 切替等に参加させるため）、ダブルクリックはシステム設定 `AppleActionOnDoubleClick` を読んで zoom / miniaturize / 無効を明示実行する。タブ／＋ は前面で tap を持つため空き領域だけを拾う。
+- 信号機ボタンが chrome の上にあるか・あるならその縦位置は、殻（`AppShell`）が付けた極小 representable が実窓から読み、上段の左余白と縦中心へ反映する（→ [chrome](chrome.md)）。実窓を読むのはここだけで、見本系（preview・gallery）は probe を持たず「信号機が標準位置にある」既定で決定的に描く。読み直す契機は窓への配置・レイアウト・**フルスクリーン遷移の完了**——遷移の最中はレイアウトと macOS によるボタンの移動の前後関係が定まらないため、幾何が確定した時点で決め直す。
 - パレット・オンボーディング等のフルウィンドウ overlay は `AppShell` の `.overlay` でネイティブ SwiftUI compose する（提示状態と各 overlay のモデルを提示元が立て下げる。addSubview／入れ子 NSHostingView は持たない）。窓全面（タイトルバー帯を含む）を占めるため safe-area を無視する。
 
 ## 構造と参照方向
