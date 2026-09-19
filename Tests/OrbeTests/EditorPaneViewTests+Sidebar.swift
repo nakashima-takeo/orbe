@@ -29,7 +29,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     let document = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"))
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(pane.bodyRect.minY, 29 + 20, "文書があればパンくずの分だけ下がる")
-    XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
+    XCTAssertEqual(document.surface.view.frame, pane.surfaceRect)
 
     window.setContentSize(NSSize(width: 360 + FaceGeometry.spine, height: 400))
     tab.view.layoutSubtreeIfNeeded()
@@ -38,7 +38,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     XCTAssertEqual(pane.bodyRect.minX, 37 + 162 + 1)
     XCTAssertEqual(pane.bodyRect.width, 160)
     XCTAssertEqual(pane.sidebar.width, 240, "記憶の幅は変えない")
-    XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
+    XCTAssertEqual(document.surface.view.frame, pane.surfaceRect)
     try assertSidebarContentFills(pane, width: 162)
 
     window.setContentSize(NSSize(width: 120 + FaceGeometry.spine, height: 400))
@@ -57,7 +57,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertFalse(pane.sidebar.isOpen, "レールの選択中の項目を押すと閉じる")
     XCTAssertEqual(pane.bodyRect.minX, 37, "レールだけ残る")
-    XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
+    XCTAssertEqual(document.surface.view.frame, pane.surfaceRect)
 
     pane.shell.toggleSidebar()
     tab.view.layoutSubtreeIfNeeded()

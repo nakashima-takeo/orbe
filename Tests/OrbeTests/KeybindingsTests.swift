@@ -52,17 +52,18 @@ final class KeybindingsTests: OrbeTestCase {
     XCTAssertNil(ChromeAction.saveDocument.windowCommand)
   }
 
-  /// 所有面の分類: window コマンドを持つものは `.window`、端末固有は `.terminal`、⌘↑↓ は両面。
+  /// 所有面の分類: window コマンドを持つものは `.window`、フォントは端末固有、⌘F と ⌘↑↓ は両面。
   func testOwnerClassification() {
     for action in [ChromeAction.closeTab, .toggleEditorFace, .rename, .switchWorkspace] {
       XCTAssertEqual(action.owner, .window, "\(action)")
       XCTAssertNotNil(action.windowCommand, "\(action)")
     }
-    for action in [ChromeAction.find, .increaseFontSize, .decreaseFontSize, .resetFontSize] {
+    for action in [ChromeAction.increaseFontSize, .decreaseFontSize, .resetFontSize] {
       XCTAssertEqual(action.owner, .terminal, "\(action)")
     }
-    XCTAssertEqual(ChromeAction.scrollToTop.owner, .eachFace)
-    XCTAssertEqual(ChromeAction.scrollToBottom.owner, .eachFace)
+    for action in [ChromeAction.find, .scrollToTop, .scrollToBottom] {
+      XCTAssertEqual(action.owner, .eachFace, "\(action)")
+    }
   }
 
   func testScrollJump() {

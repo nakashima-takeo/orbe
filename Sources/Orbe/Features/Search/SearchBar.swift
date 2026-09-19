@@ -19,6 +19,11 @@ final class SearchBar: NSView {
   var onNext: (() -> Void)? { didSet { model.onNext = onNext } }
   var onPrev: (() -> Void)? { didSet { model.onPrev = onPrev } }
   var onClose: (() -> Void)? { didSet { model.onClose = onClose } }
+  /// 入力欄の文字列。置くのは表示への写しで、検索を起こすのは呼ぶ側（エディターが選択文字列を種にするとき）。
+  var needle: String {
+    get { model.needle }
+    set { model.needle = newValue }
+  }
 
   /// 背景透過・現在言語ホルダー（WindowController 所有）を root へ渡す。透過時は端末上でも veil 濃度を揃え、
   /// 現在言語はプレースホルダ・件数表示を選択言語で描き設定切替に一斉追従させる（別 NSHostingView root ゆえ明示注入）。

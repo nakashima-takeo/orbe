@@ -38,7 +38,7 @@ final class EditorPaneViewTests: OrbeTestCase {
     let document = try XCTUnwrap(try tab.editor.open(try file("a.swift", "let a = 1\n")))
     XCTAssertTrue(pane.document === document, "セッションの変化が器へ写る")
     XCTAssertTrue(document.surface.view.superview === pane)
-    XCTAssertEqual(document.surface.view.frame, pane.bodyRect, "骨の右下の本体いっぱい")
+    XCTAssertEqual(document.surface.view.frame, pane.surfaceRect, "骨の右下の本体（俯瞰の左）いっぱい")
     XCTAssertTrue(tab.focusTarget === document.surface.responder, "行き先はテキスト面")
     XCTAssertTrue(window.firstResponder === document.surface.responder, "配下にあった焦点は行き先へ移る")
 
