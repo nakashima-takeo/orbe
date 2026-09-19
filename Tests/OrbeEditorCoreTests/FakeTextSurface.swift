@@ -19,6 +19,7 @@ final class FakeTextSurface: TextSurface {
   /// 最後に押された行の印。
   private(set) var lineMarks = LineMarkSpans.empty
   var onOpenLink: ((URL) -> Void)?
+  private(set) var ground: NSColor?
 
   init(text: String) {
     storage = NSMutableString(string: text)
@@ -43,6 +44,8 @@ final class FakeTextSurface: TextSurface {
   func markUndoBoundary() { undoBoundaries += 1 }
 
   func setLineMarks(_ spans: LineMarkSpans) { lineMarks = spans }
+
+  func setGround(_ color: NSColor) { ground = color }
 
   func replaceAll(with text: String) {
     replace(NSRange(location: 0, length: length), with: text)

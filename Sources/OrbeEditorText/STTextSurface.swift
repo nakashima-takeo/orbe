@@ -19,6 +19,7 @@ final class STTextSurface: NSObject, TextSurface {
   private let textView: SurfaceTextView
   private let marksView: LineMarksView
   private let decorationView: LineDecorationView
+  private let groundView = GutterGroundView()
   private var clipObservers: [NSObjectProtocol] = []
 
   var view: NSView { container }
@@ -72,6 +73,7 @@ final class STTextSurface: NSObject, TextSurface {
     // 本文の overlay は contentView の下（本文・キャレット・選択の下に出る）。ガターの overlay は
     // ガターの subview で、印の列はガターの右端に錨を置く（上流は桁が増えるとガターを右へ伸ばす）。
     textView.addSubview(decorationView, positioned: .below, relativeTo: nil)
+    textView.gutterView?.addSubview(groundView, positioned: .below, relativeTo: nil)
     textView.gutterView?.addSubview(marksView)
     // overlay の矩形は clip view の矩形の関数——スクロール（bounds）と窓の live resize（frame。上流はその間
     // layout を止める）の両方で置き直す。
@@ -126,6 +128,11 @@ final class STTextSurface: NSObject, TextSurface {
     marksView.spans = spans
   }
 
+  func setGround(_ color: NSColor) {
+    container.ground = color
+    groundView.color = color
+  }
+
   /// overlay 2 枚を viewport の矩形に置き直して描き直す。frame は可視矩形に、bounds の原点は text container
   /// 基準の同じ点に置く——view の座標がそのまま container の座標になり、描く側が座標を手で引かない
   /// （横スクロールでも縦スクロールでも同じ式）。ガターの y は文書の y と同じ（上流は行番号を文書の y に置く）。
@@ -138,6 +145,14 @@ final class STTextSurface: NSObject, TextSurface {
     decorationView.setBoundsOrigin(NSPoint(x: visible.minX, y: visible.minY))
     decorationView.needsDisplay = true
     if let gutter = textView.gutterView {
+      // ガターの地は clip view の矩形（テキスト view の高さに依らない）とガターの交わり。器はその分を塗らない。
+      let clip = scrollView.contentView.bounds
+      let ground = CGRect(x: 0, y: clip.minY, width: gutter.frame.width, height: clip.height)
+        .intersection(gutter.frame)
+      groundView.frame = ground
+      container.groundHole = NSRect(
+        x: 0, y: ground.minY - clip.minY + style.topInset, width: ground.width,
+        height: ground.height)
       marksView.frame = NSRect(
         x: gutter.bounds.width - style.marks.gutterWidth, y: visible.minY,
         width: style.marks.gutterWidth, height: visible.height)
@@ -204,24 +219,6 @@ final class STTextSurface: NSObject, TextSurface {
   /// 倍率を渡す。
   private static func naturalLineHeight(of font: NSFont) -> CGFloat {
     NSLayoutManager().defaultLineHeight(for: font)
-  }
-}
-
-/// 上端の余白を空けてスクロールビューを置く器。器の高さが変わるたびに置き直す（autoresizing は
-/// 起点が .zero だと余白を保てず、面が器より余白の分だけ長くなって最下行が切れる）。
-private final class SurfaceContainerView: NSView {
-  var topInset: CGFloat = 0 {
-    didSet { needsLayout = true }
-  }
-
-  override var isFlipped: Bool { true }
-
-  override func layout() {
-    super.layout()
-    for subview in subviews {
-      subview.frame = NSRect(
-        x: 0, y: topInset, width: bounds.width, height: max(0, bounds.height - topInset))
-    }
   }
 }
 

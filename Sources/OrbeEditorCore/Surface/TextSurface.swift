@@ -34,6 +34,11 @@ public protocol TextSurface: AnyObject {
   /// 本文の URL が ⌘クリックされた。行き先（外部ブラウザ等）は面を組む側が決める。
   var onOpenLink: ((URL) -> Void)? { get set }
 
+  /// 面の地。面は本文の下とガターの上に同じ色を敷く——横スクロールで本文がガターの下を通っても透けず、透過の
+  /// veil が二重に重ならない。面を載せる側は自分の地と同じ色（透過設定を反映した veil）を渡し、面の矩形には
+  /// 自分の地を描かず、設定が変われば渡し直す。
+  func setGround(_ color: NSColor)
+
   var delegate: TextSurfaceDelegate? { get set }
 }
 

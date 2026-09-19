@@ -252,6 +252,7 @@ final class EditorPaneView: NSView {
     self.document?.surface.view.removeFromSuperview()
     self.document = document
     if let document {
+      document.surface.setGround(groundColor)
       let view = document.surface.view
       view.autoresizingMask = []
       view.frame = bodyRect

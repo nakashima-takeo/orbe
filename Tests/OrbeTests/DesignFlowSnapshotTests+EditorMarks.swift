@@ -15,6 +15,7 @@ extension DesignFlowSnapshotTests {
     let tab = scene.tab
     let go = try tab.editor.open(scene.directory.appendingPathComponent("main.go"))
     let scroll = { go.surface.view.subviews.first as? NSScrollView }
+    let pane = scene.pane
     try flow(
       "editor_decor", size: NSSize(width: 1000, height: 480), render: { scene.view },
       steps: [
@@ -25,6 +26,16 @@ extension DesignFlowSnapshotTests {
             guard let scroll = scroll() else { return }
             scroll.contentView.scroll(to: NSPoint(x: 20 * 7.4, y: 0))
             scroll.reflectScrolledClipView(scroll.contentView)
+          }
+        ),
+        (
+          "translucent",
+          {  // 透過設定: ガターの地も面の地と同じ濃度の veil になり、本文はその下を通る
+            pane.configure(
+              translucency: ChromeTranslucency(
+                effectiveOpacity: 0.6, translucent: true, blur: false),
+              localization: LocalizationStore(language: .systemDefault),
+              fontResolver: ChromeFontResolver(), sidebar: pane.sidebar)
           }
         ),
       ])
