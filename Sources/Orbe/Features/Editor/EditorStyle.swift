@@ -8,6 +8,8 @@ enum EditorStyle {
   private static let markAlpha: CGFloat = 0.85
   /// インデント線の塗り（見本 fill(0.06)。light は `Theme.Opacity.editorFillLight` を掛ける）。
   private static let indentGuideAlpha: Double = 0.06
+  /// ファイル内検索の一致の地（見本 SearchPanel のヒット tint(modified, 0.30)）。
+  private static let searchMatchAlpha: CGFloat = 0.30
 
   static func make() -> TextSurfaceStyle {
     TextSurfaceStyle(
@@ -39,17 +41,79 @@ enum EditorStyle {
       decorations: TextSurfaceStyle.Decorations(
         indentGuideColor: fill(indentGuideAlpha), indentGuideWidth: 1,
         whitespaceColor: Theme.Color.editorWhitespace, whitespaceDiameter: 2,
-        linkUnderlineThickness: 1, linkUnderlineOffset: 3))
+        linkUnderlineThickness: 1, linkUnderlineOffset: 3,
+        searchMatchColor: Theme.Color.editorModified.withAlphaComponent(searchMatchAlpha),
+        searchMatchRadius: 2))
+  }
+
+  /// 俯瞰（見本 CodeView.tsx のミニマップと印の列）の見え方。
+  static func overview() -> OverviewStyle {
+    OverviewStyle(
+      minimapWidth: Theme.Layout.editorMinimap, marksWidth: Theme.Layout.editorScrollMarks,
+      border: hairline(0.07), band: Theme.Color.editorText.withAlphaComponent(0.07),
+      row: Theme.Color.syntaxPunctuation.withAlphaComponent(0.15),
+      commentRow: Theme.Color.syntaxComment.withAlphaComponent(0.40),
+      minimapAdded: Theme.Color.diffAdded.withAlphaComponent(0.9),
+      minimapModified: Theme.Color.diffModified.withAlphaComponent(0.9),
+      marksAdded: Theme.Color.diffAdded.withAlphaComponent(0.8),
+      marksModified: Theme.Color.diffModified.withAlphaComponent(0.8),
+      caret: Theme.Color.textPrimary.withAlphaComponent(0.7))
   }
 
   /// 見本の fill(α) を外観で換算した塗り（`EditorInk.fill` の NSColor 版。換算は `EditorInk.fillAlpha`）。
   private static func fill(_ alpha: Double) -> NSColor {
     NSColor(name: nil) { appearance in
       Theme.Color.surfaceInk.withAlphaComponent(
-        EditorInk.fillAlpha(
-          alpha, dark: appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua))
+        EditorInk.fillAlpha(alpha, dark: isDark(appearance)))
     }
   }
+
+  /// 見本の hairline(α) を外観で換算した縁（`EditorInk.hairline` の NSColor 版）。
+  private static func hairline(_ alpha: Double) -> NSColor {
+    NSColor(name: nil) { appearance in
+      Theme.Color.borderInk.withAlphaComponent(
+        isDark(appearance) ? alpha : alpha * Theme.Opacity.editorHairlineLight)
+    }
+  }
+
+  private static func isDark(_ appearance: NSAppearance) -> Bool {
+    appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+  }
+}
+
+/// 俯瞰の見え方。寸法は見本 `CodeView.tsx` の値（行 2・ピッチ 4・桁 0.55・インデント桁 1.1・上限 72・余白 上 6 左 8
+/// 右 4・印の位置）で、色は α 込みの名前付き NSColor（外観は描画時に解く）。
+struct OverviewStyle {
+  let minimapWidth: CGFloat
+  let marksWidth: CGFloat
+  /// ミニマップの行の高さと、行ごとの縦のピッチ。
+  let rowHeight: CGFloat = 2
+  let pitch: CGFloat = 4
+  /// 1 桁の幅と、インデント 1 桁の幅、行の右端の上限（左余白から）。
+  let columnWidth: CGFloat = 0.55
+  let indentWidth: CGFloat = 1.1
+  let maxRowExtent: CGFloat = 72
+  let rowRadius: CGFloat = 1
+  let topInset: CGFloat = 6
+  let leadingInset: CGFloat = 8
+  /// ミニマップ左端の git 印（x・幅）。
+  let minimapMarkX: CGFloat = 1
+  let minimapMarkWidth: CGFloat = 2
+  /// 印の列の追加／変更のバー（x・幅）とカーソルの印（x・幅・高）。
+  let marksBarX: CGFloat = 2
+  let marksBarWidth: CGFloat = 4
+  let caretMarkX: CGFloat = 6
+  let caretMarkWidth: CGFloat = 5
+  let caretMarkHeight: CGFloat = 2
+  let border: NSColor
+  let band: NSColor
+  let row: NSColor
+  let commentRow: NSColor
+  let minimapAdded: NSColor
+  let minimapModified: NSColor
+  let marksAdded: NSColor
+  let marksModified: NSColor
+  let caret: NSColor
 }
 
 /// セッションが文書を開くときに使う、queries の所在と面の作り方。テキストエンジン（OrbeEditorText）と

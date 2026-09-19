@@ -20,6 +20,15 @@ final class FakeTextSurface: TextSurface {
   private(set) var lineMarks = LineMarkSpans.empty
   var onOpenLink: ((URL) -> Void)?
   private(set) var ground: NSColor?
+  /// 見えている範囲（本文の言葉）。テストが置く。
+  var viewport = TextViewport.empty
+  /// `scrollToCenter` に渡されたオフセットの履歴。
+  private(set) var centered: [Int] = []
+  var selectedRange = NSRange(location: 0, length: 0) {
+    didSet { delegate?.surfaceDidChangeSelection(self) }
+  }
+  private(set) var searchHighlights: [NSRange] = []
+  private(set) var indentUnit = IndentUnit.fallback
 
   init(text: String) {
     storage = NSMutableString(string: text)
@@ -46,6 +55,12 @@ final class FakeTextSurface: TextSurface {
   func setLineMarks(_ spans: LineMarkSpans) { lineMarks = spans }
 
   func setGround(_ color: NSColor) { ground = color }
+
+  func scrollToCenter(_ offset: Int) { centered.append(offset) }
+
+  func setSearchHighlights(_ ranges: [NSRange]) { searchHighlights = ranges }
+
+  func setIndentUnit(_ unit: Int) { indentUnit = unit }
 
   func replaceAll(with text: String) {
     replace(NSRange(location: 0, length: length), with: text)

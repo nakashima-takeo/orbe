@@ -184,6 +184,12 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     func surfaceDidLayoutViewport(_ surface: any TextSurface) {
       inner.surfaceDidLayoutViewport(surface)
     }
+    func surfaceDidScroll(_ surface: any TextSurface) {
+      inner.surfaceDidScroll(surface)
+    }
+    func surfaceDidChangeSelection(_ surface: any TextSurface) {
+      inner.surfaceDidChangeSelection(surface)
+    }
   }
 
   /// 面は器の上端の余白を除いた高さに収まり、器の高さが変わっても収まり続ける（余白の分だけ長いと
@@ -214,5 +220,93 @@ final class EditorTextSurfaceTests: OrbeTestCase {
       surfaces.registry.configuration(for: language), "色付けが走る前提（queries が解けている）")
     XCTAssertFalse(document.isDirty)
     XCTAssertFalse(session.hasUnsavedChanges)
+  }
+}
+
+/// 俯瞰と検索がエンジンに求める契約——viewport は実際に layout された行の矩形から本文の言葉で出て、
+/// `scrollToCenter` はその行を clip の中央へ、選択は読み書きでき変化が delegate へ届く。
+extension EditorTextSurfaceTests {
+  fileprivate struct Tall {
+    let document: EditorDocument
+    let window: NSWindow
+    let scroll: NSScrollView
+  }
+
+  fileprivate func openedTall(_ lines: Int) throws -> Tall {
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    let text = (1...lines).map { "line \($0)\n" }.joined()
+    let url = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent(
+      "tall-\(UUID().uuidString).txt")
+    try Data(text.utf8).write(to: url)
+    let document = try session.open(url)
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 400, height: 200), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    window.contentView = document.surface.view
+    document.surface.view.frame = try XCTUnwrap(window.contentView).bounds
+    document.surface.view.layoutSubtreeIfNeeded()
+    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    let scroll = try XCTUnwrap(document.surface.view.subviews.first as? NSScrollView)
+    pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "viewport が出る")
+    withExtendedLifetime(session) {}
+    return Tall(document: document, window: window, scroll: scroll)
+  }
+
+  func testViewportReportsTheTopLineAndItsHiddenFraction() throws {
+    let tall = try openedTall(100)
+    let (document, scroll) = (tall.document, tall.scroll)
+    let lineHeight = EditorStyle.make().lineHeight
+    let inset = EditorStyle.make().topInset
+    var viewport = document.surface.viewport
+    XCTAssertEqual(viewport.firstVisible, 0)
+    XCTAssertEqual(viewport.hiddenFraction, 0)
+    XCTAssertEqual(viewport.visibleLines, (200 - inset) / lineHeight, accuracy: 0.01, "可視矩形の行数（小数）")
+
+    scroll.contentView.scroll(to: NSPoint(x: 0, y: 49 * lineHeight + lineHeight / 2))
+    scroll.reflectScrolledClipView(scroll.contentView)
+    pumpMain(until: { document.surface.viewport.firstVisible > 0 }, "viewport が動く")
+    viewport = document.surface.viewport
+    XCTAssertEqual(viewport.firstVisible, document.lineIndex.start(ofRow: 49), "先頭に見えている行の行頭")
+    XCTAssertEqual(viewport.hiddenFraction, 0.5, accuracy: 0.01, "半分隠れている")
+  }
+
+  func testScrollToCenterPutsTheLineInTheMiddleOfTheClipAndClampsAtTheEnds() throws {
+    let document = try openedTall(100).document
+    let visible = document.surface.viewport.visibleLines
+    var scrolled = 0
+    document.onViewportChange = { scrolled += 1 }
+    document.surface.scrollToCenter(document.lineIndex.start(ofRow: 60))
+    pumpMain(until: { document.surface.viewport.firstVisible > 0 }, "動く")
+    let first =
+      CGFloat(document.lineIndex.point(at: document.surface.viewport.firstVisible).row)
+      + document.surface.viewport.hiddenFraction
+    XCTAssertEqual(first, 60.5 - visible / 2, accuracy: 0.6, "行 60 の中心が clip の中央")
+    XCTAssertGreaterThan(scrolled, 0, "viewport の変化が届く")
+
+    document.surface.scrollToCenter(0)
+    pumpMain(until: { document.surface.viewport.firstVisible == 0 }, "先頭で止まる")
+    XCTAssertEqual(document.surface.viewport.hiddenFraction, 0)
+    document.surface.scrollToCenter(document.lineIndex.start(ofRow: 99))
+    pumpMain(
+      until: {
+        document.lineIndex.point(at: document.surface.viewport.firstVisible).row >= 99
+          - Int(visible)
+      },
+      "末尾で止まる")
+  }
+
+  func testSelectedRangeIsReadWriteAndChangesReachTheDocument() throws {
+    let tall = try openedTall(3)
+    let (document, window) = (tall.document, tall.window)
+    var changes = 0
+    document.onSelectionChange = { changes += 1 }
+    document.surface.selectedRange = NSRange(location: 7, length: 4)
+    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 7, length: 4))
+    pumpMain(until: { changes > 0 }, "選択の変化が届く")
+    XCTAssertEqual(document.surface.viewport.firstVisible, 0, "置くだけで見せない")
+    window.makeFirstResponder(document.surface.responder)
+    let before = changes
+    document.surface.responder.perform(#selector(NSResponder.moveToEndOfDocument(_:)), with: nil)
+    pumpMain(until: { changes > before }, "人の操作でも届く")
   }
 }

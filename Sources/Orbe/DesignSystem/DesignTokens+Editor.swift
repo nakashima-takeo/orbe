@@ -119,6 +119,9 @@ extension Theme.Layout {
   /// 行番号ガター（右寄せの数字が収まる幅）と、その右の git の印の列。本文は 2 つの右端から始まる。
   static let editorLineNumberGutter: CGFloat = 50
   static let editorMarkGutter: CGFloat = 19
+  /// 本体の右の俯瞰——ミニマップと、その右のスクロール印の列。ミニマップの左の hairline 1 は外側に足す。
+  static let editorMinimap: CGFloat = 100
+  static let editorScrollMarks: CGFloat = 13
   /// 折りたたみのシェブロン。
   static let editorChevron: CGFloat = 16
 }
