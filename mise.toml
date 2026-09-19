@@ -1,2 +1,4 @@
 [tools]
 swiftlint = "0.63.3"
+# ghostty の build.zig は zig の major.minor の完全一致を要求する。pin を進めるときは対で上げる。
+zig = "0.16.0"

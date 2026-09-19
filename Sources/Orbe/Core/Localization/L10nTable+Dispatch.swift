@@ -124,5 +124,31 @@ extension L10n {
     .dispatchCleanAgentWaiting: ("agent 入力待ち", "agent waiting for input"),
     .dispatchCleanTabOpen: ("タブで表示中", "Open in a tab"),
     .dispatchCleanUnverified: ("情報取得に失敗", "Couldn't fetch info"),
+    .dispatchRefreshSection: ("worktree の作り方", "How to create the worktree"),
+    .dispatchRefreshTitle: ("最新化して作成", "Update, then create"),
+    .dispatchRefreshAsIsTitle: ("そのまま作成", "Create as is"),
+    .dispatchRefreshDesc: (
+      "fetch → fast-forward → %@ と同じ地点から", "fetch → fast-forward → start from %@"
+    ),
+    .dispatchRefreshAsIsDesc: ("ローカルの %@ のまま · %@", "local %@ as is · %@"),
+    .dispatchRefreshBehindOne: (
+      "— %1$@ より %2$lld コミット遅れています", "— %2$lld commit behind %1$@"
+    ),
+    .dispatchRefreshBehindOther: (
+      "— %1$@ より %2$lld コミット遅れています", "— %2$lld commits behind %1$@"
+    ),
+    .dispatchRefreshFailedHeader: ("— 最新化に失敗（%@）", "— update failed (%@)"),
+    .dispatchRefreshFailedDesc: ("%@ に失敗 — %@", "%@ failed — %@"),
+    .dispatchRefreshDiverged: ("%@ と分岐", "diverged from %@"),
+    .dispatchRefreshRetry: ("r 再試行", "r Retry"),
+    .dispatchHintRetry: ("再試行", "Retry"),
+    .dispatchHintBack: ("戻る", "Back"),
+    .dispatchPrepRefreshed: (
+      "を最新化してcheckoutしたworktreeで", "· updated checkout worktree ·"
+    ),
+    .dispatchPrepAsIs: ("をそのままcheckoutしたworktreeで", "· checkout worktree as is ·"),
+    .dispatchRefreshing: (
+      "最新化中… %@ を fetch → fast-forward", "Updating… fetch → fast-forward %@"
+    ),
   ]
 }

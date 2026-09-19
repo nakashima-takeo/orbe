@@ -52,7 +52,8 @@ final class GitRunnerLaneTests: OrbeTestCase {
   private func startHangingWorktreeAdd() {
     hangStarted = true
     repo.addWorktree(
-      path: fixture.worktreePath, base: "main", newBranch: "hang", track: false
+      path: fixture.worktreePath, base: "main",
+      newBranch: GitNewBranch(name: "hang", tracksBase: false)
     ) { [self] _ in hangReturned = true }
     XCTAssertTrue(fixture.waitUntilHung(), "前提: post-checkout hook がハングしていること")
   }

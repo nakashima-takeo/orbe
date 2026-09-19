@@ -102,7 +102,7 @@ extension DispatchCleanModelTests {
       (paths ?? all).map { path in
         DispatchCleanFacts(
           path: path, branch: "feat/\((path as NSString).lastPathComponent)", head: "aaa",
-          track: "[gone]", openPR: readyPaths.contains(path) ? CleanOpenPR.none : .pending,
+          track: .gone, openPR: readyPaths.contains(path) ? CleanOpenPR.none : .pending,
           status: GitWorktreeStatusCounts(modified: 0, untracked: 0),
           containment: path.hasSuffix("caution")
             ? .unmerged(count: 6) : .patchEquivalent(target: "main"),

@@ -15,12 +15,29 @@ extension WindowController {
     case .launchDefaultAgent: agentLauncher.launchDefault()
     case .showAgentPalette: agentLauncher.showPalette()
     case .showDispatchPalette: showDispatchPalette()
-    case .openEditor: EditorLauncher.openCwd(store.activeTabCwd(), localization: localization)
+    case .openEditor: openEditor()
     case .renameTab: beginTabRename()
     case .showSettings: showSettingsPalette()
     case .toggleHelp: showHelp()
     case .toggleEditorFace: toggleEditorFace()
     }
+  }
+
+  /// アクティブタブの cwd を GUI エディタでフォルダとして開く（Cmd+Shift+E）。
+  /// cwd 不明はビープ、エディタ未検出は NSAlert（現在言語）。
+  private func openEditor() {
+    guard let cwd = store.activeTabCwd() else {
+      NSSound.beep()
+      return
+    }
+    guard let editor = EditorLauncher.resolve() else {
+      let alert = NSAlert()
+      alert.messageText = localization.string(.editorNotFoundTitle)
+      alert.informativeText = localization.string(.editorNotFoundMessage)
+      alert.runModal()
+      return
+    }
+    EditorLauncher.open(cwd, editor: editor)
   }
 
   /// window レベルのタブ非依存コマンドのハンドラ。overlay 表示中・タブのインライン改名中は不活性
