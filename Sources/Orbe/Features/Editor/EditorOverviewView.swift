@@ -96,6 +96,17 @@ final class EditorOverviewView: NSView {
 
   // MARK: - クリック
 
+  /// 俯瞰の上のホイール／トラックパッドは本文のスクロールへそのまま渡す（縦スクローラーが無いので、右端の列が
+  /// スクロールの死角にならないように）。渡す先はテキスト面の view を包む scroll view——AppKit の一般の口だけで、
+  /// 面の契約は増やさない。
+  override func scrollWheel(with event: NSEvent) {
+    guard let scroll = document?.surface.responder.enclosingScrollView else {
+      super.scrollWheel(with: event)
+      return
+    }
+    scroll.scrollWheel(with: event)
+  }
+
   override func mouseDown(with event: NSEvent) {
     jump(to: convert(event.locationInWindow, from: nil))
   }

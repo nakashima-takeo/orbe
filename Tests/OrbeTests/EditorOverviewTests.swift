@@ -138,6 +138,20 @@ final class EditorOverviewTests: OrbeTestCase {
       try alpha(view, view.bounds.minX + 1 + 8 + 2, view.bounds.height - 7) > 40, "最後の行の縮図が窓に入る")
   }
 
+  /// 俯瞰の上のホイールは本文をスクロールする（縦スクローラーが無いので、右端の列が死角にならない）。
+  func testScrollingOverTheOverviewScrollsTheText() throws {
+    let hosted = try host(lines(1000))
+    let view = hosted.pane.overview
+    XCTAssertEqual(hosted.document.surface.viewport.firstVisible, 0)
+    let wheel = try XCTUnwrap(
+      CGEvent(
+        scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -180, wheel2: 0,
+        wheel3: 0))
+    view.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: wheel)))
+    pumpMain(until: { hosted.document.surface.viewport.firstVisible > 0 }, "本文がスクロールする")
+    XCTAssertGreaterThan(hosted.scroll.contentView.bounds.minY, 0)
+  }
+
   /// ミニマップのクリックでその行が本文の中央に来る。縁と印の列のクリックは何もしない。
   func testClickingTheMinimapCentersThatLine() throws {
     let hosted = try host(lines(1000))
