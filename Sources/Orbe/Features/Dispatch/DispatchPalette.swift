@@ -5,7 +5,7 @@ import SwiftUI
 enum DispatchAction: Equatable {
   case worktree(path: String)
   case localBranch(name: String)
-  /// name は `origin/x`（remote 短縮名）。
+  /// name は `origin/x`（`refs/remotes/` を除いた正確な名前）。
   case remoteBranch(name: String, existingWorktree: String?)
   /// existingBranch は `issue/<n>` ブランチだけ（worktree 無しで）既存か（他 case は git ref に紐づくため不要）。
   case issue(number: Int, existingWorktree: String?, existingBranch: Bool)

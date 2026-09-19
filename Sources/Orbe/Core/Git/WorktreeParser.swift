@@ -1,8 +1,8 @@
 import Foundation
 
 /// `git worktree list --porcelain -z` の出力をパースする。
-/// 各行は NUL 終端で、チェックアウトの終わりに空の行（もう 1 つの NUL）が付く。パスにも `locked` /
-/// `prunable` の理由にも LF が入りうるので、LF 区切りの `--porcelain` ではなくこの形で読む。
+/// 各行は NUL 終端で、チェックアウトの終わりに空の行（もう 1 つの NUL）が付く。パスは LF を含みうるので、
+/// LF 区切りの `--porcelain` ではなくこの形で読む。
 /// 各チェックアウトは `worktree <path>` / `HEAD <oid>` / `branch <ref>` / `detached` /
 /// `locked [reason]` / `prunable <reason>` を持つ。
 /// 先頭ブロックが本体（main）worktree（git は main を最初に列挙する）。

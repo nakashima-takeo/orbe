@@ -16,7 +16,7 @@ final class GitWorktreeParserTests: OrbeTestCase {
     let worktrees = WorktreeParser.parse(input)
     XCTAssertEqual(worktrees.count, 2)
     XCTAssertEqual(worktrees[0].path, "/Users/x/github/orbe")
-    XCTAssertEqual(worktrees[0].branch, "main", "refs/heads/ を落とした短縮名")
+    XCTAssertEqual(worktrees[0].branch, "main", "refs/heads/ を除いた正確な名前")
     XCTAssertTrue(worktrees[0].isMain, "先頭が main worktree")
     XCTAssertEqual(worktrees[1].branch, "feat/x")
     XCTAssertFalse(worktrees[1].isMain)

@@ -6,7 +6,7 @@ import Foundation
 struct GitWorktree: Equatable {
   /// worktree の絶対パス。
   let path: String
-  /// チェックアウト中のブランチ（`refs/heads/` を落とした短縮名）。detached なら nil。
+  /// チェックアウト中のブランチ（`refs/heads/` を除いた正確な名前）。detached なら nil。
   let branch: String?
   /// HEAD の oid。
   let head: String
