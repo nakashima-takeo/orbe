@@ -132,16 +132,15 @@ extension WindowController {
       guard let target = p.selectedTarget else { return }
       p.errorMessage = nil
       p.isPreparing = true  // 進捗表示 ON。非同期 worktree 作成の待機中だけフッターにスピナが出る。
-      provider.prepareDirectory(for: action) { [weak self] resolution in
+      provider.prepareDirectory(for: action) { [weak self] outcome in
         guard let self, let p = self.model.dispatchPalette else { return }
-        switch resolution {
-        case .ready(let dir):
-          // 同期 .ready（既存 worktree 等）では true→dismiss が 1 tick で走り palette が破棄され無描画。
+        switch outcome {
+        case .resolved(let resolution):
+          self.settleDispatch(resolution, target: target)
+        case .staleBranch(let sync):
+          // 作っていない。一覧の旗を下ろして最新化画面へ（以後の busy は画面の相が持つ）。
           p.isPreparing = false
-          self.openResolvedDirectory(dir, target: target)
-        case .failed(let message):
-          p.isPreparing = false  // 進捗表示 OFF。エラー表示にスピナが被らないよう必ず下ろす。
-          p.errorMessage = message
+          p.enterRefresh(item: item, sync: sync)
         }
       }
     }
@@ -150,6 +149,7 @@ extension WindowController {
       provider.openWeb(for: item)
     }
     wireDispatchClean(p)
+    wireDispatchRefresh(p)
 
     model.dispatchPalette = p
     model.dispatchProvider = provider
@@ -175,6 +175,47 @@ extension WindowController {
       openTab(workspaceIndex: activeWorkspace, cwd: dir)
     }
     DispatchQueue.main.async { [weak self] in self?.focusActiveTab() }
+  }
+
+  /// 解決の終端（一覧の Enter・最新化画面の 2 択が共に通る）。開けたら起動し、失敗はモデルが畳む。
+  private func settleDispatch(
+    _ resolution: DispatchDataProvider.DirectoryResolution, target: DispatchTarget
+  ) {
+    guard let p = model.dispatchPalette else { return }
+    switch resolution {
+    case .ready(let dir):
+      // 同期 .ready（既存 worktree 等）では true→dismiss が 1 tick で走り palette が破棄され無描画。
+      p.isPreparing = false
+      openResolvedDirectory(dir, target: target)
+    case .failed(let message):
+      p.failPreparation(message)
+    }
+  }
+
+  /// 最新化画面の 2 択を配線する。手順（fetch → fast-forward → 作成）は provider が持ち、ここは
+  /// 進行（作成が始まった）と終端をモデルへ流すだけ。
+  private func wireDispatchRefresh(_ p: DispatchPaletteModel) {
+    p.onSettleStale = { [weak self] choice, sync in
+      guard let self, let p = self.model.dispatchPalette,
+        let provider = self.model.dispatchProvider, let target = p.selectedTarget
+      else { return }
+      switch choice {
+      case .asIs:
+        provider.createLocalBranchWorktree(name: sync.name) { [weak self] resolution in
+          self?.settleDispatch(resolution, target: target)
+        }
+      case .refreshed:
+        provider.refreshAndCreate(
+          sync, creating: { [weak self] in self?.model.dispatchPalette?.refresh?.beginCreating() },
+          completion: { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .failure(let failure): self.model.dispatchPalette?.refresh?.fail(failure)
+            case .success(let resolution): self.settleDispatch(resolution, target: target)
+            }
+          })
+      }
+    }
   }
 
   /// clean の削除の駆動を配線する。1 件ごとの進捗をモデルへ流し、駆動が終わったら終端

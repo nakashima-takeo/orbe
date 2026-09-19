@@ -16,10 +16,55 @@ extension GitRepo {
       [
         "for-each-ref", "refs/heads", "--sort=-committerdate",
         "--format=%(refname:short)|%(committerdate:relative)|%(worktreepath)|%(upstream:short)"
-          + "|%(upstream:track)",
+          + "|%(upstream)|%(upstream:remotename)|%(upstream:remoteref)|%(upstream:track)",
       ], cwd: root
     ) { output in
       completion(output.isSuccess ? BranchParser.parseLocal(output.stdoutText) : [])
+    }
+  }
+
+  /// ローカルブランチを upstream の tip まで fast-forward する（fetch → 祖先判定 → ローカル ref の前進）。
+  /// 成功なら nil、失敗なら落ちた段と理由。
+  ///
+  /// 3 段に分けるのは、段ごとに競合相手が違うから。remote からの fetch は `fetchPrune` と同じ領域
+  /// （`refs/remotes/*`）だけを書く独立レーン——ネット待ちのプロセスを直列レーンに置くと、その間の
+  /// 全 git 読み取りが止まる。祖先判定は読み取りで、「分岐している」を stderr の字面ではなく終了コードで
+  /// 知るために残す。ローカル ref を進める `fetch .` は `refs/heads/*` を書くので直列レーンに置くが、
+  /// ネットに触らず実質即時。
+  ///
+  /// ローカル ref の書き込みを `update-ref` や `branch -f` でなく `fetch .` にするのは、**git 自身が書き込みの
+  /// 瞬間に「非 fast-forward」と「どこかの worktree で checkout 中」を検査して拒む**から——祖先判定と
+  /// 書き込みの間にローカルが動いても、また提示時に worktree が無かったブランチが裏のタブで checkout
+  /// されていても、既存の作業ツリーを動かさない。remote も ref も `upstream` の事実から組む。完全 ref
+  /// で名指しするのは同名タグとの取り違えを避けるため。
+  func fastForwardBranch(
+    name: String, upstream: GitUpstream, completion: @escaping (GitRefreshFailure?) -> Void
+  ) {
+    let local = "refs/heads/\(name)"
+    runner.run(
+      ["fetch", "--progress", upstream.remote, upstream.remoteRef], cwd: root, lane: .independent
+    ) { fetched in
+      guard fetched.isSuccess else {
+        completion(.fetch(GitRepo.failure(from: fetched)))
+        return
+      }
+      let args = ["merge-base", "--is-ancestor", local, upstream.ref]
+      self.runner.run(args, cwd: self.root) { ancestry in
+        if ancestry.exited, ancestry.status == 1 {
+          completion(.fastForward(nil))
+          return
+        }
+        guard ancestry.isSuccess else {
+          completion(.fastForward(GitRepo.failure(from: ancestry)))
+          return
+        }
+        self.runner.run(
+          ["fetch", "--no-write-fetch-head", ".", "\(upstream.ref):\(local)"], cwd: self.root,
+          lane: .exclusive
+        ) { advanced in
+          completion(advanced.isSuccess ? nil : .fastForward(GitRepo.failure(from: advanced)))
+        }
+      }
     }
   }
 
@@ -98,7 +143,9 @@ extension GitRepo {
   }
 
   /// worktree を追加する（現在の作業ツリーは一切変更しない・隔離された新規ディレクトリを作る）。
-  /// `git worktree add [-b <newBranch>] [--track] <path> <base>`。成功なら nil、失敗なら理由。
+  /// `git worktree add [-b <newBranch> --track|--no-track] <path> <base>`。成功なら nil、失敗なら理由。
+  /// 新規ブランチを切るときは追跡を**常に明示する**——省くとユーザーの `branch.autoSetupMerge` 次第で
+  /// upstream が付いたり付かなかったりし、呼び手が期待する契約が環境で揺れる。
   ///
   /// 独立レーン: 触るのは新規ディレクトリ・`$GIT_COMMON_DIR/worktrees/<名前>`・`-b` 指定時の
   /// `refs/heads/<新ブランチ>`・`--track` 指定時の `.git/config`（`branch.<新ブランチ>.remote/merge`）で、
@@ -110,12 +157,13 @@ extension GitRepo {
   /// post-checkout hook はユーザーのコードで所要時間に上限が無いため、barrier に置くと 1 本のハングが
   /// 以後の全 git 操作を止める。
   func addWorktree(
-    path: String, base: String, newBranch: String?, track: Bool,
+    path: String, base: String, newBranch: GitNewBranch?,
     completion: @escaping (GitFailure?) -> Void
   ) {
     var args = ["worktree", "add"]
-    if let newBranch { args += ["-b", newBranch] }
-    if track { args.append("--track") }
+    if let newBranch {
+      args += ["-b", newBranch.name, newBranch.tracksBase ? "--track" : "--no-track"]
+    }
     args += [path, base]
     runner.run(args, cwd: root, lane: .independent) { output in
       guard !output.isSuccess else {

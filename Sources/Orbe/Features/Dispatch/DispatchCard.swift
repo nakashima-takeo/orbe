@@ -1,19 +1,18 @@
 import SwiftUI
 
-/// Dispatch カードの焦点の宛先。list は入力欄、clean は TextField を持たないのでカード器が受ける。
+/// Dispatch カードの焦点の宛先。list は入力欄、clean と最新化は TextField を持たないのでカード器が受ける。
 enum DispatchFocus: Hashable {
   case field, card
 }
 
 /// Dispatch のカード本体。ヘッダ（❯＋絞り込み入力欄＋起動 agent チップ）＋
 /// リスト部（可変セクション・maxHeight 380・内部スクロール）＋フッター（選択連動の実行説明/エラー＋キーヒント）。
-/// 器はそのままに、中身だけ list / clean の 2 モードで切り替わる。
+/// 器はそのままに、中身だけ list / clean / 最新化の 3 モードで切り替わる。
 /// 外郭は `GlassPanel(.popup, radius 14)`。list ではヘッダの `TextField` にキーを集約し、↑↓/⇥/esc/↵/⌘↵ を
 /// 横取りしてフォーカス逸脱を防ぐ（`PaletteCard`/`SearchField` の field モードと同パターン）。
 struct DispatchCard: View {
   @Bindable var model: DispatchPaletteModel
   @Environment(\.localization) private var l10n
-  @Environment(\.chromeFontResolver) private var fontResolver
   /// カード全体の高さ上限（窓に収める。DispatchOverlay が窓高から算出して渡す）。
   let maxHeight: CGFloat
   @FocusState private var focus: DispatchFocus?
@@ -40,20 +39,35 @@ struct DispatchCard: View {
       VStack(spacing: 0) {
         header
         divider
-        if model.mode == .clean {
-          DispatchCleanList(model: model.clean).frame(height: listHeight)
-        } else {
+        switch model.mode {
+        case .list:
           list
+        case .clean:
+          DispatchCleanList(model: model.clean).frame(height: listHeight)
+        case .refresh:
+          if let refresh = model.refresh {
+            DispatchRefreshList(
+              model: refresh, onConfirm: { model.confirmRefresh($0) },
+              onHover: { model.hoverRefresh($0) }
+            )
+            .frame(height: listHeight, alignment: .top)
+          }
         }
         divider
-        if model.mode == .clean {
+        switch model.mode {
+        case .list:
+          footer
+        case .clean:
           DispatchCleanFooter(
             model: model.clean, onExecute: { model.executeClean() },
             onClose: { model.exitOrCancelClean() }
           )
           .background(chromeProbe)
-        } else {
-          footer
+        case .refresh:
+          if let refresh = model.refresh {
+            DispatchRefreshFooter(model: refresh, targetName: model.selectedTargetName)
+              .background(chromeProbe)
+          }
         }
       }
     }
@@ -82,24 +96,32 @@ struct DispatchCard: View {
 
   // MARK: - ヘッダ（絞り込み入力欄）
 
-  /// 枠と ❯ は両モード共通。中身だけ切り替える。
-  /// **入力欄は clean でも mount したまま**幅 0・opacity 0 で隠す（`PaletteCard` が記録している罠と同じ——
+  /// 枠と ❯ は全モード共通。中身だけ切り替える。
+  /// **入力欄は clean / 最新化でも mount したまま**幅 0・opacity 0 で隠す（`PaletteCard` が記録している罠と同じ——
   /// 焦点の宛先が同じ更新 pass で新規 mount されると SwiftUI は `@FocusState` を取りこぼし、
   /// first responder がカード器に残ってキーが死ぬ）。
+  ///
+  /// 要素の間隔は HStack の spacing でなく各要素の leading padding が運ぶ——幅 0 で隠した入力欄も
+  /// spacing を両側で消費するので、spacing に任せると `❯` と中身の間が 2 倍に開く。
   private var header: some View {
-    HStack(spacing: Theme.Space.step + Theme.Space.hair) {
+    let gap = Theme.Space.step + Theme.Space.hair
+    return HStack(spacing: 0) {
       Text("❯")
         .font(Font.theme.title)
         .foregroundStyle(Color.theme.accentPrimary)
       queryField
         .frame(maxWidth: model.mode == .list ? .infinity : 0)
+        .padding(.leading, gap)
         .opacity(model.mode == .list ? 1 : 0)
         .allowsHitTesting(model.mode == .list)
-      if model.mode == .clean {
-        DispatchCleanHeader(model: model.clean)
-      } else {
+      switch model.mode {
+      case .list:
         Spacer(minLength: Theme.Space.step)
-        targetChip
+        targetChip.padding(.leading, gap * 2)
+      case .clean:
+        DispatchCleanHeader(model: model.clean)
+      case .refresh:
+        if let refresh = model.refresh { DispatchRefreshHeader(model: refresh) }
       }
     }
     .padding(.horizontal, Theme.Space.bar)
@@ -267,7 +289,6 @@ struct DispatchCard: View {
 
   private var footer: some View {
     HStack(spacing: Theme.Space.step) {
-      // 説明は 1 つの Text に連結して単位で truncate（狭幅で個々に折り返して崩れるのを防ぐ）。
       description
         .font(Font.theme.meta)
         .lineLimit(1)
@@ -293,23 +314,14 @@ struct DispatchCard: View {
 
   @ViewBuilder private var description: some View {
     if model.isPreparing {
-      // 作成中は左端の `↵` を出さず、gh「読み込み中…」行と同語彙の working スピナ＋muted ラベルのみ。
-      HStack(spacing: Theme.Space.note) {
-        StatusGlyphView(kind: .working, size: 10)
-        Text(l10n.string(.dispatchPreparing)).foregroundStyle(Color.theme.textMuted)
-      }
+      DispatchBusyLabel(text: l10n.string(.dispatchPreparing))
     } else if let error = model.errorMessage {
       Text(error).foregroundStyle(Color.theme.danger)
     } else {
       switch model.selectedItem?.footer {
       case .launch(let target, let kind):
-        Text("↵ ").foregroundStyle(Color.theme.textMuted)
-          + fontResolver.text(target, base: Theme.Typography.meta)
-          .foregroundStyle(Color.theme.textPrimary)
-          + Text(" " + l10n.string(kind.prepositionKey) + " ")
-          .foregroundStyle(Color.theme.textMuted)
-          + Text(model.selectedTargetName).foregroundStyle(Color.theme.accentPrimary)
-          + Text(" " + l10n.string(.dispatchLaunchSuffix)).foregroundStyle(Color.theme.textMuted)
+        DispatchLaunchLine(
+          target: target, preposition: kind.prepositionKey, agent: model.selectedTargetName)
       case .note(let key):
         Text(l10n.string(key)).foregroundStyle(Color.theme.textMuted)
       case nil:
@@ -320,21 +332,16 @@ struct DispatchCard: View {
 
   private var keyHints: some View {
     HStack(spacing: Theme.Space.step + Theme.Space.hair) {
-      keyHint("↑↓", l10n.string(.dispatchHintSelect))
-      keyHint("⇥", l10n.string(.dispatchHintAgent))
-      if model.selectedItem?.canOpenWeb == true { keyHint("⌘↵", l10n.string(.dispatchHintOpen)) }
-      keyHint("esc", l10n.string(.dispatchHintClose))
+      DispatchKeyHint(key: "↑↓", label: l10n.string(.dispatchHintSelect))
+      DispatchKeyHint(key: "⇥", label: l10n.string(.dispatchHintAgent))
+      if model.selectedItem?.canOpenWeb == true {
+        DispatchKeyHint(key: "⌘↵", label: l10n.string(.dispatchHintOpen))
+      }
+      DispatchKeyHint(key: "esc", label: l10n.string(.dispatchHintClose))
     }
     .font(Font.theme.sectionLabel)
     .foregroundStyle(Color.theme.textMuted)
     .fixedSize()
-  }
-
-  private func keyHint(_ key: String, _ label: String) -> some View {
-    HStack(spacing: Theme.Space.tick) {
-      Text(key).foregroundStyle(Color.theme.textPrimary)
-      Text(label)
-    }
   }
 }
 

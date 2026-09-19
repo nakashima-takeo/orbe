@@ -32,7 +32,7 @@ final class DispatchWorktreeTimeoutTests: OrbeTestCase {
     let done = expectation(description: "prepareDirectory")
     provider.prepareDirectory(for: .issue(number: 44, existingWorktree: nil, existingBranch: false))
     {
-      resolution = $0
+      if case .resolved(let resolved) = $0 { resolution = resolved }
       done.fulfill()
     }
     wait(for: [done], timeout: 20)

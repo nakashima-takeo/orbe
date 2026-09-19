@@ -19,74 +19,94 @@ repository, GPL-3.0-or-later.
 Terminal engine (Contents/MacOS/Orbe, Contents/Resources/{ghostty,terminfo})
 --------------------------------------------------------------------------------
 
-* libghostty — Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors — MIT License
-  Orbe embeds libghostty as its terminal engine. It is statically linked: the
-  build produces libghostty-internal-fat.a (Info.plist BinaryPath), which is
-  compiled into Contents/MacOS/Orbe — no dylib appears in `otool -L`. Parts of
-  Orbe's Swift code are ported from Ghostty's macOS sources. The shell
-  integration scripts (Contents/Resources/ghostty/shell-integration) and the
-  terminfo database (Contents/Resources/terminfo) are bundled as-is.
+* libghostty (Ghostty) — MIT License
+  Orbe's terminal engine, statically linked into Contents/MacOS/Orbe. Parts of
+  Orbe's Swift code are ported from Ghostty's macOS sources. Ghostty's
+  terminfo database and shell integration scripts are bundled under
+  Contents/Resources. The shell integration scripts follow the license stated
+  in each file's header; some are derived from kitty and are under
+  GPL-3.0-or-later, whose full text is identical to Orbe's own LICENSE.
   https://github.com/ghostty-org/ghostty
-  License: licenses/ghostty-LICENSE.txt
+  License: licenses/ghostty-LICENSE.txt, LICENSE (GPL-3.0 text)
 
-  libghostty itself statically links the upstream libraries below, so they are
-  compiled into Contents/MacOS/Orbe as well. They come from Ghostty's build
-  dependencies (vendor/ghostty/build.zig.zon) and are used unmodified. The list
-  below is derived from the shipped binary itself: every archive member in the
-  OSO debug map of Contents/MacOS/Orbe (`nm -a`) is enumerated and attributed.
-  build.zig.zon alone is not a sufficient basis — it declares lazy dependencies
-  (HarfBuzz, for one) that are never linked in the macOS/CoreText configuration.
+  libghostty statically links the third-party components below, so they are
+  compiled into Contents/MacOS/Orbe as well. Copyright holders are as stated
+  in each component's license file.
 
-  - FreeType — Copyright 1996-2002, 2006 by David Turner, Robert Wilhelm, and
-    Werner Lemberg — FreeType License (FTL)
-    https://freetype.org — License: licenses/freetype-FTL.txt
-  - libpng — Copyright (c) 1995-2024 The PNG Reference Library Authors — libpng License
+  - FreeType — FreeType License (FTL) OR GPL-2.0-or-later (used under FTL);
+    its BDF and PCF drivers carry an X Window System-style license, as its
+    LICENSE.TXT states
+    This software is based in part on the work of the FreeType Team.
+    https://freetype.org
+    License: licenses/freetype-LICENSE.txt, licenses/freetype-FTL.txt,
+    licenses/freetype-bdf-README.txt, licenses/freetype-pcf-README.txt
+  - libpng — PNG Reference Library License
     https://github.com/pnggroup/libpng — License: licenses/libpng-LICENSE.txt
-  - zlib — Copyright (C) 1995-2024 Jean-loup Gailly and Mark Adler — zlib License
+  - zlib — zlib License
     https://zlib.net — License: licenses/zlib-LICENSE.txt
-  - Oniguruma — Copyright (c) 2002-2021 K.Kosako and contributors — BSD-2-Clause
-    https://github.com/kkos/oniguruma — License: licenses/oniguruma-LICENSE.txt
-  - simdutf — Copyright 2021 The simdutf authors — Apache-2.0
-    https://github.com/simdutf/simdutf — License: licenses/Apache-2.0.txt
-  - Wuffs — Copyright The Wuffs Authors — Apache-2.0
-    https://github.com/google/wuffs — License: licenses/Apache-2.0.txt
-  - SPIRV-Cross — Copyright Arm Limited and The Khronos Group Inc. — Apache-2.0
-    https://github.com/KhronosGroup/SPIRV-Cross — License: licenses/Apache-2.0.txt
-  - Highway — Copyright Google LLC — Apache-2.0
-    https://github.com/google/highway — License: licenses/Apache-2.0.txt
-  - glslang — Copyright The Khronos Group Inc. and contributors — composite
-    (glslang proper and its bundled parts carry several licenses; see the text)
+  - Oniguruma — BSD-2-Clause
+    https://github.com/kkos/oniguruma — License: licenses/oniguruma-COPYING.txt
+  - simdutf — Apache-2.0 OR MIT (used under Apache-2.0)
+    https://github.com/simdutf/simdutf
+    License: licenses/simdutf-LICENSE-APACHE.txt
+  - Wuffs — MIT OR Apache-2.0 (the license file carries both)
+    https://github.com/google/wuffs — License: licenses/wuffs-LICENSE.txt
+  - SPIRV-Cross — Apache-2.0 OR MIT (used under Apache-2.0); the SPIR-V
+    header it includes is under the Khronos free-use license
+    https://github.com/KhronosGroup/SPIRV-Cross
+    License: licenses/spirv-cross-LICENSE.txt,
+    licenses/spirv-cross-LicenseRef-KhronosFreeUse.txt
+  - Highway — Apache-2.0 OR BSD-3-Clause (used under Apache-2.0)
+    https://github.com/google/highway — License: licenses/highway-LICENSE.txt
+  - glslang — composite (glslang and its bundled parts carry several
+    licenses; see the license file)
     https://github.com/KhronosGroup/glslang — License: licenses/glslang-LICENSE.txt
-  - sentry-native — Copyright (c) 2019 Sentry and individual contributors — MIT License
+  - sentry-native — MIT License
     https://github.com/getsentry/sentry-native — License: licenses/sentry-native-LICENSE.txt
-  - Google Breakpad — Copyright 2006 Google LLC — BSD-3-Clause
-    Compiled in as sentry-native's crash backend on macOS
-    (vendor/ghostty/pkg/sentry). It is a separate work from sentry-native and
-    carries its own license, which requires this notice in binary distributions.
+  - jsmn — MIT License
+    Bundled in sentry-native's source.
+    https://github.com/zserge/jsmn — License: licenses/jsmn-LICENSE.txt
+  - MPack — MIT License
+    Bundled in sentry-native's source.
+    https://github.com/ludocode/mpack — License: licenses/mpack-LICENSE.txt
+  - Google Breakpad — composite (BSD-3-Clause and the licenses of its bundled
+    parts; see the license file)
+    sentry-native's crash backend on macOS. Its license requires this notice
+    in binary distributions.
     https://chromium.googlesource.com/breakpad/breakpad
     License: licenses/breakpad-LICENSE.txt
-  - libxev — Copyright (c) 2023 Mitchell Hashimoto — MIT License
+  - libxev — MIT License
     https://github.com/mitchellh/libxev — License: licenses/libxev-LICENSE.txt
-  - Dear ImGui — Copyright (c) 2014-2025 Omar Cornut — MIT License
-    Compiled in via vendor/ghostty/pkg/dcimgui (imgui v1.92.5-docking). The C
-    bindings built alongside it are generated by dear_bindings v0.17, also MIT;
-    the pinned distribution carries no license file of its own.
+  - z2d — MPL-2.0, with parts under other licenses (see the license file)
+    Used unmodified; its source is available from the upstream repository
+    at the revision pinned by vendor/ghostty/build.zig.zon.
+    https://github.com/vancluever/z2d
+    License: licenses/z2d-LICENSE.txt (notices),
+    licenses/z2d-COPYING.txt (MPL-2.0 text)
+  - zig-objc — MIT License
+    https://github.com/mitchellh/zig-objc — License: licenses/zig-objc-LICENSE.txt
+  - uucode — MIT License; its Unicode data tables are under the Unicode
+    License, and its license file refers to one further license file
+    https://github.com/jacobsandlund/uucode
+    License: licenses/uucode-LICENSE.txt, licenses/uucode-LICENSE_unicode.txt,
+    licenses/uucode-LICENSE_Bjoern_Hoehrmann.txt
+  - Dear ImGui (with C bindings generated by dear_bindings) — MIT License
     https://github.com/ocornut/imgui, https://github.com/dearimgui/dear_bindings
-    License: licenses/imgui-LICENSE.txt
-  - GNU gettext (libintl) — Copyright (C) 1995-2025 Free Software Foundation, Inc.
-    — LGPL-2.1-or-later
-    The only copyleft dependency. Built for macOS by vendor/ghostty/pkg/libintl,
-    which pins gettext 0.24 by URL and hash in its build.zig.zon; that pin is the
-    corresponding source for the libintl objects compiled into
-    Contents/MacOS/Orbe. Orbe itself is GPL-3.0-or-later with full source
-    published, so relinking is possible from the sources named here.
-    https://www.gnu.org/software/gettext/ — License: licenses/LGPL-2.1.txt
+    License: licenses/imgui-LICENSE.txt, licenses/dear_bindings-LICENSE.txt
+  - GNU gettext (libintl) — LGPL-2.1-or-later
+    Built from the unmodified gettext source pinned by
+    vendor/ghostty/pkg/libintl. Orbe itself is GPL-3.0-or-later with full
+    source published, so relinking is possible from the sources named here.
+    https://www.gnu.org/software/gettext/
+    License: licenses/gettext-COPYING.LIB.txt
+  - Zig standard library and compiler_rt — MIT License
+    Compiled in by the Zig toolchain pinned in mise.toml.
+    https://ziglang.org — License: licenses/zig-LICENSE.txt
 
-* bash-preexec — Copyright (c) 2017 Ryan Caloras and contributors (see https://github.com/rcaloras/bash-preexec) — MIT License
-  Bundled via libghostty as
-  Contents/Resources/ghostty/shell-integration/bash/bash-preexec.sh. The file
-  itself carries no license header, so this NOTICE and the bundled full text are
-  its only attribution.
+* bash-preexec — MIT License
+  Bundled via libghostty in Contents/Resources/ghostty/shell-integration. The
+  file carries no license header, so this NOTICE and the bundled license text
+  are its attribution.
   https://github.com/rcaloras/bash-preexec
   License: licenses/bash-preexec-LICENSE.txt
 
@@ -94,19 +114,10 @@ Terminal engine (Contents/MacOS/Orbe, Contents/Resources/{ghostty,terminfo})
 Software update (Contents/Frameworks/Sparkle.framework)
 --------------------------------------------------------------------------------
 
-* Sparkle — Copyright (c) 2006-2013 Andy Matuschak; Copyright (c) 2009-2013
-  Elgato Systems GmbH; Copyright (c) 2011-2014 Kornel Lesiński; Copyright (c)
-  2015-2017 Mayur Pawashe; Copyright (c) 2014 C.W. Betts; Copyright (c) 2014
-  Petroules Corporation; Copyright (c) 2014 Big Nerd Ranch — composite
-  (MIT main license plus the external licenses of bundled components:
-  bsdiff/bspatch (Copyright 2003-2005 Colin Percival, BSD-2-Clause), sais-lite
-  (Copyright (c) 2008-2010 Yuta Mori, MIT), portable ed25519 (Copyright (c)
-  2015 Orson Peters, zlib-style), SUSignatureVerifier.m (Copyright (c) 2011
-  Mark Hamlin, BSD-2-Clause); see the bundled text)
-  Bundled unmodified as Contents/Frameworks/Sparkle.framework (the prebuilt
-  Sparkle-for-Swift-Package-Manager distribution, including its XPC services,
-  Autoupdate, and Updater.app helpers) and linked from Contents/MacOS/Orbe for
-  in-app software updates.
+* Sparkle — composite (MIT License plus the licenses of its bundled parts;
+  see the license file)
+  Bundled unmodified as Contents/Frameworks/Sparkle.framework and linked from
+  Contents/MacOS/Orbe for in-app software updates.
   https://github.com/sparkle-project/Sparkle
   License: licenses/sparkle-LICENSE.txt
 
@@ -114,20 +125,16 @@ Software update (Contents/Frameworks/Sparkle.framework)
 Markdown parsing (Contents/MacOS/Orbe)
 --------------------------------------------------------------------------------
 
-* swift-markdown — Copyright (c) 2021 Apple Inc. and the Swift project authors — Apache-2.0 with Runtime Library Exception
-  Linked into Contents/MacOS/Orbe. The Apache-2.0 NOTICE is bundled alongside
+* swift-markdown — Apache-2.0 with Runtime Library Exception
+  Linked into Contents/MacOS/Orbe. Its Apache-2.0 NOTICE is bundled alongside
   the license text.
   https://github.com/apple/swift-markdown
   License: licenses/swift-markdown-LICENSE.txt, licenses/swift-markdown-NOTICE.txt
 
-* swift-cmark — Copyright (c) 2014, John MacFarlane — BSD-2-Clause — Linked into Contents/MacOS/Orbe
+* swift-cmark — BSD-2-Clause, with MIT-licensed parts (see the license file)
+  Linked into Contents/MacOS/Orbe.
   https://github.com/swiftlang/swift-cmark
   License: licenses/swift-cmark-COPYING.txt
-  The COPYING file is multi-licensed; the compiled src/ additionally includes
-  the following MIT-licensed portions:
-  - houdini_* (src/houdini_href_e.c etc.) — Copyright (c) 2012, Github, Inc. / Vicent Martí — MIT License
-  - buffer.* / chunk.h — Copyright (c) 2012, Github, Inc. — MIT License
-  - utf8.c — Public Software Group e. V., Berlin — MIT License
 
 --------------------------------------------------------------------------------
 Code editor (Contents/MacOS/Orbe, Contents/Resources/TreeSitter*.bundle)
@@ -203,38 +210,49 @@ Code editor (Contents/MacOS/Orbe, Contents/Resources/TreeSitter*.bundle)
     https://github.com/tree-sitter-grammars/tree-sitter-yaml — License: licenses/tree-sitter-yaml-LICENSE.txt
 
 --------------------------------------------------------------------------------
-Fonts (Contents/Resources/*.ttf)
+Fonts (Contents/Resources/*.ttf, and fonts embedded in Contents/MacOS/Orbe)
 --------------------------------------------------------------------------------
 
-* JetBrains Mono Nerd Font — Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono) and Copyright (c) 2014, Ryan L McIntyre (https://ryanlmcintyre.com) — OFL-1.1
-  Bundled as JetBrainsMonoNerdFont-{Regular,Bold,Italic,BoldItalic}.ttf. The
-  Nerd Fonts patch is itself under OFL-1.1 (per the Nerd Fonts LICENSE), and the
-  TTF name table declares both the OFL-1.1 and the JetBrains Mono copyright
-  (UniqueID = JetBrainsMono NF Regular 3.2.1).
+* JetBrains Mono Nerd Font — OFL-1.1
+  Bundled unmodified in Contents/Resources as
+  JetBrainsMonoNerdFont-{Regular,Bold,Italic,BoldItalic}.ttf. The glyphs added
+  by the Nerd Fonts patch come from the icon sets described under Symbols Nerd
+  Font.
   https://github.com/JetBrains/JetBrainsMono, https://github.com/ryanoasis/nerd-fonts
-  License: licenses/OFL-1.1.txt
+  License: licenses/jetbrains-mono-OFL.txt
 
-* JuliaMono — Copyright 2020 - 2026 The JuliaMono Project Authors (https://github.com/cormullion/juliamono) — OFL-1.1
-  Bundled as JuliaMono-Regular.ttf. The copyright follows the TTF name table;
-  the Reserved Font Name "JuliaMono" is declared in the upstream LICENSE.
+* JetBrains Mono — OFL-1.1
+  Embedded unmodified in Contents/MacOS/Orbe by libghostty as its built-in
+  fallback typeface.
+  https://github.com/JetBrains/JetBrainsMono
+  License: licenses/jetbrains-mono-OFL.txt
+
+* Symbols Nerd Font — composite (MIT License plus the licenses of the icon
+  sets it collects)
+  Embedded unmodified in Contents/MacOS/Orbe by libghostty as its symbol
+  fallback. The font collects glyphs from several icon sets, each under its
+  own license; two of them are under CC BY 4.0
+  (https://creativecommons.org/licenses/by/4.0/), which requires attribution:
+  Font Awesome (Fonticons, Inc.) and Codicons (Microsoft). The upstream
+  license audit (license-audit.md in the Nerd Fonts repository) lists all of
+  them.
+  https://github.com/ryanoasis/nerd-fonts
+  License: licenses/nerd-fonts-symbols-only-LICENSE.txt
+
+* JuliaMono — OFL-1.1
+  Bundled unmodified in Contents/Resources as JuliaMono-Regular.ttf.
   https://github.com/cormullion/juliamono
-  License: licenses/OFL-1.1.txt
+  License: licenses/juliamono-LICENSE.txt
 
-* Noto Color Emoji — Copyright 2013 Google Inc. ("Noto is a trademark of
-  Google Inc.", per the TTF name table) — OFL-1.1
-  Bundled as NotoColorEmoji-sbix.ttf: the upstream CBDT/CBLC bitmap font
-  (vendor/ghostty/src/font/res/NotoColorEmoji.ttf) repacked into an sbix table
-  by scripts/convert-noto-emoji-sbix.py so that CoreText can render it. The PNG
-  bitmap data itself is unmodified.
+* Noto Color Emoji — OFL-1.1
+  Bundled in Contents/Resources as NotoColorEmoji-sbix.ttf with its bitmap
+  glyphs repacked, unmodified, from the upstream CBDT/CBLC format into an sbix
+  table so that CoreText can render them.
   https://github.com/googlefonts/noto-emoji
-  License: licenses/OFL-1.1.txt
+  License: licenses/noto-emoji-LICENSE.txt
 
-  OFL-1.1 requires the full license text to be distributed with the fonts;
-  licenses/OFL-1.1.txt satisfies this. JetBrains Mono NF and JuliaMono are copied
-  byte-for-byte; Noto Color Emoji is repacked (container format only) as
-  described above. Of these, only JuliaMono declares a Reserved Font Name
-  ("JuliaMono"). It is bundled unmodified under its own name, so no renaming
-  obligation arises — OFL-1.1 clause 3 constrains Modified Versions only.
+  Fonts that declare a Reserved Font Name are bundled unmodified under their
+  own names.
 
 --------------------------------------------------------------------------------
 Command completion engine (Contents/Resources/completion-engine.js)
@@ -244,29 +262,23 @@ The prebuilt completion engine bundled at completion-engine.js is generated
 from third-party sources (see vendor/completion-engine/ for build inputs and the
 regeneration procedure).
 
-* inshellisense — Microsoft Corporation — MIT License
-  The completion runtime (parser / suggestion / generator / template logic) is a
-  trimmed and modified vendor of inshellisense's `src/runtime/`.
+* inshellisense — MIT License
+  Its completion runtime is vendored in trimmed and modified form.
   https://github.com/microsoft/inshellisense
   License: licenses/inshellisense-LICENSE.txt
 
-* xterm.js — Copyright (c) 2017-2019, The xterm.js authors; Copyright (c) 2014-2016, SourceLair Private Company; Copyright (c) 2012-2013, Christopher Jeffrey — MIT License
-  vendor/completion-engine/src/utils/unicode.ts is a fork (inherited via
-  inshellisense) of xterm.js's addon-unicode11 UnicodeV11.ts and is compiled
-  into the completion-engine.js bundle.
+* xterm.js — MIT License
+  Its Unicode width table is forked (via inshellisense) into the bundle.
   https://github.com/xtermjs/xterm.js
   License: licenses/xterm.js-LICENSE.txt
 
-* @withfig/autocomplete — Hercules Labs Inc. (Fig) — MIT License
-  The curated command specs (git, docker, cargo, … see vendor README) are bundled
-  from @withfig/autocomplete's prebuilt specs.
+* @withfig/autocomplete — MIT License
+  Its prebuilt command specs are bundled.
   https://github.com/withfig/autocomplete
   License: licenses/withfig-autocomplete-LICENSE.txt
 
-* @fig/autocomplete-generators — Copyright (c) 2021 Hercules Labs Inc. (Fig) — MIT License
-  vendor/completion-engine/src/ does not import this package directly, but the
-  prebuilt @withfig/autocomplete specs inline it, so it is pulled into the
-  bundle.
+* @fig/autocomplete-generators — MIT License
+  Inlined into the bundle through the prebuilt @withfig/autocomplete specs.
   https://github.com/withfig/autocomplete-tools
   License: licenses/fig-autocomplete-generators-LICENSE.txt
 
@@ -274,8 +286,8 @@ regeneration procedure).
 Icons
 --------------------------------------------------------------------------------
 
-* GitHub octicons — Copyright (c) 2026 GitHub Inc. — MIT License
-  octicon path data is ported into SwiftUI (Sources/Orbe/Features/Dispatch/GitGlyph.swift)
-  and is compiled into Contents/MacOS/Orbe.
+* GitHub Octicons — MIT License
+  Octicon path data is ported into Orbe's SwiftUI code and compiled into
+  Contents/MacOS/Orbe.
   https://github.com/primer/octicons
   License: licenses/octicons-LICENSE.txt

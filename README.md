@@ -139,7 +139,7 @@ MCP クライアントからも **`orbe-mcp`** を介してタブの起動・テ
 
 ## ソースからビルド
 
-**フル Xcode（Xcode 26 系）・Metal Toolchain・Zig 0.15.2** を用意してください。Command Line Tools だけではビルドできません。ツールの導入・環境確認は[ビルドガイド](docs/guides/build.md)にまとめています。
+**フル Xcode（Xcode 26 系以上）・Metal Toolchain・mise（`brew install mise`）・Zig 0.16.0（`mise install` で導入）** を用意してください。Command Line Tools だけではビルドできません。ツールの導入・環境確認は[ビルドガイド](docs/guides/build.md)にまとめています。
 
 ```bash
 git clone --recurse-submodules https://github.com/nakashima-takeo/orbe.git
