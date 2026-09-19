@@ -12,10 +12,10 @@ import XCTest
 /// 現れない。クリックが別の行へ飛ぶ。打鍵のたびに窓ぶんの構文 query が走って大きな文書で打鍵が重くなる。
 @MainActor
 final class EditorOverviewTests: OrbeTestCase {
-  private let style = EditorStyle.make()
-  private let overview = EditorStyle.overview()
+  let style = EditorStyle.make()
+  let overview = EditorStyle.overview()
 
-  @MainActor private struct Hosted {
+  @MainActor struct Hosted {
     let tab: TerminalTab
     let pane: EditorPaneView
     let document: EditorDocument
@@ -23,34 +23,57 @@ final class EditorOverviewTests: OrbeTestCase {
     var scroll: NSScrollView { document.surface.view.subviews.first as! NSScrollView }
   }
 
-  private func host(_ text: String, height: CGFloat = 400) throws -> Hosted {
+  /// `colored` は色付けの queries を注入する（コメント行の判定を本物の構文木で見るときだけ）。
+  func host(
+    _ text: String, height: CGFloat = 400, name: String = "o-\(UUID().uuidString).txt",
+    colored: Bool = false
+  ) throws -> Hosted {
+    let queries = colored ? Bundle(for: Self.self).bundleURL.deletingLastPathComponent() : nil
     let tab = TerminalTab(
       cwd: try XCTUnwrap(TestIsolation.caseDir).path,
-      editorSurfaces: EditorSurfaces(queriesRoot: nil))
+      editorSurfaces: EditorSurfaces(queriesRoot: queries))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 700, height: height)
     window.appearance = NSAppearance(named: .darkAqua)
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
-    let document = try tab.editor.open(try caseFile("o-\(UUID().uuidString).txt", text))
+    let document = try tab.editor.open(try caseFile(name, text))
     pane.layoutSubtreeIfNeeded()
     pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "viewport が出る")
     return Hosted(tab: tab, pane: pane, document: document, window: window)
   }
 
   /// 俯瞰の描画 1 枚の alpha（0…255）。透明な地に描くので、塗られた画素だけ alpha を持つ。y は上から。
-  private func alpha(_ view: EditorOverviewView, _ x: CGFloat, _ y: CGFloat) throws -> Int {
+  func alpha(_ view: EditorOverviewView, _ x: CGFloat, _ y: CGFloat) throws -> Int {
+    Int(try color(view, x, y).alphaComponent * 255)
+  }
+
+  func color(_ view: EditorOverviewView, _ x: CGFloat, _ y: CGFloat) throws -> NSColor {
     let rep = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
     view.cacheDisplay(in: view.bounds, to: rep)
     let scale = CGFloat(rep.pixelsWide) / view.bounds.width
-    return Int(
-      try XCTUnwrap(rep.colorAt(x: Int(x * scale), y: Int(y * scale))).alphaComponent * 255)
+    return try XCTUnwrap(
+      rep.colorAt(x: Int(x * scale), y: Int(y * scale))?.usingColorSpace(.deviceRGB))
+  }
+
+  func isGreen(_ c: NSColor) -> Bool {
+    c.greenComponent > c.redComponent && c.greenComponent > c.blueComponent
+  }
+  func isBlue(_ c: NSColor) -> Bool {
+    c.blueComponent > c.redComponent && c.blueComponent > c.greenComponent
+  }
+
+  /// ミニマップの行 `line`（0 始まり・窓が滑っていないとき）の矩形の縦の中。
+  func rowY(_ line: Int) -> CGFloat { overview.topInset + CGFloat(line) * overview.pitch + 1 }
+  /// ミニマップの本文の左端から `dx` の x。
+  func rowX(_ view: EditorOverviewView, _ dx: CGFloat) -> CGFloat {
+    view.bounds.minX + 1 + overview.leadingInset + dx
   }
 
   /// n 行（末尾の改行で索引は n + 1 行になる）。
-  private func lines(_ n: Int) -> String { (1...n).map { "line \($0)\n" }.joined() }
+  func lines(_ n: Int) -> String { (1...n).map { "line \($0)\n" }.joined() }
 
   /// 文書比例の写しの 1 行ぶんの高さ（印の列）。
-  private func rowScale(_ hosted: Hosted) -> CGFloat {
+  func rowScale(_ hosted: Hosted) -> CGFloat {
     hosted.pane.overview.bounds.height / CGFloat(hosted.document.lineIndex.lineCount)
   }
 
@@ -152,7 +175,7 @@ final class EditorOverviewTests: OrbeTestCase {
     XCTAssertEqual(try alpha(view, x, 0.5), 0, "先頭行の印は消える")
   }
 
-  /// 追加・変更の行はミニマップの左端 2px と印の列に、それぞれの色で出る。削除の境は出ない。
+  /// 追加・変更の行はミニマップの左端 2px と印の列に、それぞれの色で出る。
   func testGitMarksAppearInTheMinimapEdgeAndTheMarksColumn() throws {
     let hosted = try host(lines(20))
     let view = hosted.pane.overview
@@ -170,6 +193,10 @@ final class EditorOverviewTests: OrbeTestCase {
     XCTAssertTrue(try alpha(view, barX, 4 * scale + 1) > 0, "印の列の行 5")
     XCTAssertTrue(try alpha(view, barX, 9 * scale + 1) > 0, "行 10（baseline に無い＝追加）")
     XCTAssertEqual(try alpha(view, barX, 15 * scale + 1), 0)
+    XCTAssertTrue(isBlue(try color(view, barX, 4 * scale + 1)), "変更は diff.modified")
+    XCTAssertTrue(isGreen(try color(view, barX, 9 * scale + 1)), "追加は diff.added")
+    XCTAssertTrue(isBlue(try color(view, edgeX, rowY(4))), "左端の印も変更の色")
+    XCTAssertTrue(isGreen(try color(view, edgeX, rowY(9))), "左端の印も追加の色")
   }
 
   /// 縮図のキャッシュ: 打鍵は編集の行のチャンクだけ捨て、行が増えれば編集より後ろのチャンクも捨てる。
