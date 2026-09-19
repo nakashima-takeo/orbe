@@ -28,6 +28,12 @@ public protocol TextSurface: AnyObject {
   /// が 1 回先に通る）。置き換え後の選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。
   func replaceAll(with text: String)
 
+  /// 行の印（git ガター）。文書がハンクから作って押す（UTF-16 オフセット）。面は描くだけで規則を持たない。
+  func setLineMarks(_ spans: LineMarkSpans)
+
+  /// 本文の URL が ⌘クリックされた。行き先（外部ブラウザ等）は面を組む側が決める。
+  var onOpenLink: ((URL) -> Void)? { get set }
+
   var delegate: TextSurfaceDelegate? { get set }
 }
 
@@ -38,7 +44,8 @@ public protocol TextSurfaceDelegate: AnyObject {
   func surfaceDidLayoutViewport(_ surface: any TextSurface)
 }
 
-/// 面の見え方。色は名前付き（dynamic）の NSColor を渡し、外観は描画時に解く。
+/// 面の見え方。色は名前付き（dynamic）の NSColor を渡し、外観は描画時に解く。装備の寸法と色もここで渡し、
+/// エンジンは値を持たない。
 public struct TextSurfaceStyle {
   public var font: NSFont
   /// 行の高さ（pt）。フォントの自然な行高に依らず固定する。
@@ -56,11 +63,65 @@ public struct TextSurfaceStyle {
   /// 行番号の右端と本文の間。
   public var gutterTrailingInset: CGFloat
   public var roleColors: [SyntaxRole: NSColor]
+  public var marks: Marks
+  public var decorations: Decorations
+
+  /// git ガター（行番号の右の列）の見え方。色は α 込み。
+  public struct Marks {
+    public var gutterWidth: CGFloat
+    public var barWidth: CGFloat
+    /// 列の左端からバーの左端まで。
+    public var barInset: CGFloat
+    public var barRadius: CGFloat
+    /// 削除の三角（右向き）の一辺。
+    public var triangleSize: CGFloat
+    public var added: NSColor
+    public var modified: NSColor
+    public var removed: NSColor
+
+    public init(
+      gutterWidth: CGFloat, barWidth: CGFloat, barInset: CGFloat, barRadius: CGFloat,
+      triangleSize: CGFloat, added: NSColor, modified: NSColor, removed: NSColor
+    ) {
+      self.gutterWidth = gutterWidth
+      self.barWidth = barWidth
+      self.barInset = barInset
+      self.barRadius = barRadius
+      self.triangleSize = triangleSize
+      self.added = added
+      self.modified = modified
+      self.removed = removed
+    }
+  }
+
+  /// 本文に重なる装備（インデント線・空白の丸点・URL の下線）の見え方。
+  public struct Decorations {
+    public var indentGuideColor: NSColor
+    public var indentGuideWidth: CGFloat
+    public var whitespaceColor: NSColor
+    public var whitespaceDiameter: CGFloat
+    public var linkUnderlineThickness: CGFloat
+    /// ベースラインから下線の上端まで。
+    public var linkUnderlineOffset: CGFloat
+
+    public init(
+      indentGuideColor: NSColor, indentGuideWidth: CGFloat, whitespaceColor: NSColor,
+      whitespaceDiameter: CGFloat, linkUnderlineThickness: CGFloat, linkUnderlineOffset: CGFloat
+    ) {
+      self.indentGuideColor = indentGuideColor
+      self.indentGuideWidth = indentGuideWidth
+      self.whitespaceColor = whitespaceColor
+      self.whitespaceDiameter = whitespaceDiameter
+      self.linkUnderlineThickness = linkUnderlineThickness
+      self.linkUnderlineOffset = linkUnderlineOffset
+    }
+  }
 
   public init(
     font: NSFont, lineHeight: CGFloat, topInset: CGFloat, textColor: NSColor, caretColor: NSColor,
     caretSize: CGSize, gutterFont: NSFont, gutterTextColor: NSColor, gutterWidth: CGFloat,
-    gutterTrailingInset: CGFloat, roleColors: [SyntaxRole: NSColor]
+    gutterTrailingInset: CGFloat, roleColors: [SyntaxRole: NSColor], marks: Marks,
+    decorations: Decorations
   ) {
     self.font = font
     self.lineHeight = lineHeight
@@ -73,5 +134,7 @@ public struct TextSurfaceStyle {
     self.gutterWidth = gutterWidth
     self.gutterTrailingInset = gutterTrailingInset
     self.roleColors = roleColors
+    self.marks = marks
+    self.decorations = decorations
   }
 }

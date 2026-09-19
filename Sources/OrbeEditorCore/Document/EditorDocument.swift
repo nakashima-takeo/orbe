@@ -19,7 +19,7 @@ public enum EditorDocumentError: Error, Equatable {
 ///
 /// ディスクの姿（最後に読んだ／書いたファイルのバイト列のダイジェスト）も持ち、外部変更は監視の通知と保存の直前に
 /// 実ファイルを読み直して比べる（`reconcileWithDisk` / `save`）。baseline（比べる底の本文）を持てば、
-/// 本文との行差分（ハンク）を編集に追従させる。
+/// 本文との行差分（ハンク）を編集に追従させ、行の印（git ガター）として面へ押す。
 @MainActor
 public final class EditorDocument {
   public let url: URL
@@ -155,8 +155,12 @@ public final class EditorDocument {
     surface.applyHighlights(syntax.highlights(in: set, text: text), in: set)
   }
 
+  /// ハンクを作り直し、行の印を面へ押す。印はハンクが同じでも押す——同じ行の中の打鍵でハンクは変わらず
+  /// 区間のオフセットだけが動く。
   private func rebuildHunks() {
-    hunks = baseline.map { LineDiff.hunks(base: $0, current: surface.text) } ?? []
+    let text = surface.text
+    hunks = baseline.map { LineDiff.hunks(base: $0, current: text) } ?? []
+    surface.setLineMarks(LineMarks(hunks: hunks).spans(in: lineIndex, length: text.utf16.count))
   }
 
   /// 同じ runloop ターンに複数届いた編集（複数キャレット等）を 1 回の作り直しに畳む。
