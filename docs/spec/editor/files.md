@@ -1,7 +1,7 @@
 ---
 title: ファイルと git
 description: エディターの根・根のサービスの寿命・監視と通知・status とバッジ・baseline・一覧と新規作成・外部変更
-updated: 2026-09-17
+updated: 2026-09-19
 ---
 
 # ファイルと git
@@ -38,7 +38,7 @@ git dir の中は、objects・reflog・他の worktree の私有状態・submodu
 
 ## 取り直しジョブ
 
-git 管理下の根は、監視の 1 バッチごとに取り直す: status → 関心のあるパスの index の OID → OID が変わったものだけ blob の本文。根ごとに 1 本に直列化し、実行中に要求が来たら「終わったらもう 1 回」に畳んで積まない。古い結果が後から乗らず、index が動けば監視が取り直すので最終的に最新へ収束する（status と baseline が同一時点である保証は持たない——別々の git 起動で読む）。世代を数えて捨てる仕組みは持たない——直列化で足りる。
+git 管理下の根は、監視の 1 バッチごとに取り直す: status → 関心のあるパスの index の OID → OID が変わったものだけ blob の本文。「status が変わった」の通知は status が返った時点で出し、baseline はその後に続く——blob の取得は smudge filter（git-lfs のネットワーク等）で遅くなりうるので、その後ろにバッジを並べない。根ごとに 1 本に直列化し、実行中に要求が来たら「終わったらもう 1 回」に畳んで積まない。古い結果が後から乗らず、index が動けば監視が取り直すので最終的に最新へ収束する（status と baseline が同一時点である保証は持たない——別々の git 起動で読む）。世代を数えて捨てる仕組みは持たない——直列化で足りる。
 
 観測は独立レーンで走る（→ [git](../platform/git.md)）。巨大リポジトリの status が worktree の削除や ref の更新を待たせない。
 
@@ -48,7 +48,7 @@ status はユーザーの設定に左右されない——未追跡の表示・s
 
 ## baseline
 
-開いている文書の baseline は index の blob 本文。`git add` / `git checkout` 等で index の blob が変われば追従し、変わらなければ取り直さない（OID で判定）。作業ツリーの編集では変わらない。未追跡・非 git・index に無い・競合中（stage 0 が無い）・UTF-8 でないファイルは baseline 無し。blob は filter・textconv・外部 diff を通らない生の中身。
+開いている文書の baseline は、index の版を**作業ツリーに出したときの中身**——そのパスの属性で smudge filter と eol 変換を掛けた後の本文（textconv・外部 diff は通らない）。ガターは git の見方を映すものなので、底も git が clean と言う姿に揃える。`git add` / `git checkout` 等で index の blob が変われば追従し、変わらなければ取り直さない（OID で判定）。取り直しの鍵が OID なので、`.gitattributes` や filter 設定の変更は index の blob が変わるまで baseline に映らない。作業ツリーの編集では変わらない。未追跡・非 git・index に無い・競合中（stage 0 が無い）・UTF-8 でないファイルは baseline 無し。smudge の実行コマンドは config 側にしか書けず、信頼できないリポジトリがコードを走らせる面は checkout と同じ。
 
 文書は baseline と本文の行差分（ハンク）を持つ（→ [code](code.md)）。
 
