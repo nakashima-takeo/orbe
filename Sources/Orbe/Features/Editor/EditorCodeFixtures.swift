@@ -51,15 +51,29 @@
 
       """
 
-    /// コミット済みの断片に作業ツリーで起こす変更: 6 行目の下の空行を消す（削除）、`lineCount` の下に 2 行足す
-    /// （追加）、`point` の 2 行を書き換える（変更。1 行は行末にスペース 2 つ＝丸点）。
+    /// コミット済みの断片に作業ツリーで起こす変更: `starts` の下の空行を消す（削除）、`lineCount` の下に 2 行
+    /// 足す（追加）、`point` の 2 行を書き換える（変更。1 行は行末にスペース 2 つ＝丸点）。
     static var edited: String {
-      var lines = sample.components(separatedBy: "\n")
-      lines[15] = "    let row = rowIndex(containing: offset)  // 二分探索で行を引く"
-      lines[16] += "  "
-      lines.insert(contentsOf: ["", "  public var isEmpty: Bool { lineCount == 1 }"], at: 12)
-      lines.remove(at: 6)
-      return lines.joined(separator: "\n")
+      sample
+        .replacingOccurrences(
+          of: "  private var starts: [Int]\n\n", with: "  private var starts: [Int]\n"
+        )
+        .replacingOccurrences(
+          of: "  public var lineCount: Int { starts.count }\n",
+          with: """
+              public var lineCount: Int { starts.count }
+
+              public var isEmpty: Bool { lineCount == 1 }
+
+            """
+        )
+        .replacingOccurrences(
+          of: "    let row = rowIndex(containing: offset)  // 二分探索\n",
+          with: "    let row = rowIndex(containing: offset)  // 二分探索で行を引く\n"
+        )
+        .replacingOccurrences(
+          of: "    return (row, offset - starts[row])\n",
+          with: "    return (row, offset - starts[row])  \n")
     }
 
     @MainActor final class Scene {
@@ -81,28 +95,36 @@
       /// 撮る view（pane をそのまま載せる）。
       var view: some View { CodePane(pane: pane) }
 
-      func git(_ args: [String]) {
-        _ = GitRunner.shared.runSync(args, cwd: directory.path)
-      }
-
       func cleanup() {
         pane.removeFromSuperview()
         try? FileManager.default.removeItem(at: directory)
       }
     }
 
+    struct GitFailure: Error {
+      let arguments: [String]
+      let stderr: String
+    }
+
+    /// git が失敗すれば投げる（握り潰すと `isReady` の待ちが原因を指さずに落ちる）。
     @MainActor static func scene(queriesRoot: URL) throws -> Scene {
       let dir = FileManager.default.temporaryDirectory
         .appendingPathComponent("orbe-editor-code-\(UUID().uuidString)", isDirectory: true)
       try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
       let url = dir.appendingPathComponent("LineIndex.swift")
       try Data(sample.utf8).write(to: url)
-      let git = { (args: [String]) in _ = GitRunner.shared.runSync(args, cwd: dir.path) }
-      git(["init", "-q", "-b", "main"])
-      git(["config", "user.email", "gallery@orbe.dev"])
-      git(["config", "user.name", "gallery"])
-      git(["add", "-A"])
-      git(["commit", "-qm", "gallery"])
+      let git = { (args: [String]) throws in
+        let output = GitRunner.shared.runSync(args, cwd: dir.path)
+        guard output.isSuccess else {
+          throw GitFailure(
+            arguments: args, stderr: String(bytes: output.stderr, encoding: .utf8) ?? "")
+        }
+      }
+      try git(["init", "-q", "-b", "main"])
+      try git(["config", "user.email", "gallery@orbe.dev"])
+      try git(["config", "user.name", "gallery"])
+      try git(["add", "-A"])
+      try git(["commit", "-qm", "gallery"])
       try Data(edited.utf8).write(to: url)
       let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot))
       let document = try tab.editor.open(url)

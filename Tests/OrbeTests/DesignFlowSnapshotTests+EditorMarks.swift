@@ -14,6 +14,7 @@ extension DesignFlowSnapshotTests {
     let document = scene.document
     pumpMain(until: { scene.isReady }, "index 版が届く")
     let opened = document.hunks
+    let git = { (args: [String]) in _ = GitRunner.shared.runSync(args, cwd: scene.directory.path) }
     try flow(
       "editor_marks", size: NSSize(width: 1000, height: 480), render: { scene.view },
       steps: [
@@ -29,14 +30,14 @@ extension DesignFlowSnapshotTests {
           "staged",
           {  // 端末での git add に相当 → index が本文と同じになり印が消える
             try? document.save()
-            scene.git(["add", "LineIndex.swift"])
+            git(["add", "LineIndex.swift"])
             pumpMain(until: { document.hunks.isEmpty }, "git add で印が消える")
           }
         ),
         (
           "reverted_in_index",
           {  // index を元のコミットへ戻す → 本文との差が戻り印が戻る
-            scene.git(["reset", "-q", "HEAD", "--", "LineIndex.swift"])
+            git(["reset", "-q", "HEAD", "--", "LineIndex.swift"])
             pumpMain(until: { !document.hunks.isEmpty }, "index が変われば印が戻る")
           }
         ),
