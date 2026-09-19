@@ -48,7 +48,7 @@ status はユーザーの設定に左右されない——未追跡の表示・s
 
 ## baseline
 
-開いている文書の baseline は、index の版を**作業ツリーに出したときの中身**——そのパスの属性で smudge filter と eol 変換を掛けた後の本文（textconv・外部 diff は通らない）。ガターは git の見方を映すものなので、底も git が clean と言う姿に揃える。`git add` / `git checkout` 等で index の blob が変われば追従し、変わらなければ取り直さない（OID で判定）。取り直しの鍵が OID なので、`.gitattributes` や filter 設定の変更は index の blob が変わるまで baseline に映らない。作業ツリーの編集では変わらない。未追跡・非 git・index に無い・競合中（stage 0 が無い）・UTF-8 でないファイルは baseline 無し。smudge の実行コマンドは config 側にしか書けず、信頼できないリポジトリがコードを走らせる面は checkout と同じ。
+開いている文書の baseline は、index の版を**作業ツリーに出したときの中身**——そのパスの属性で smudge filter と eol 変換を掛けた後の本文（textconv・外部 diff は通らない）。ガターは git の見方を映すものなので、底も git が clean と言う姿に揃える。`git add` / `git checkout` 等で index の blob が変われば追従し、変わらなければ取り直さない（OID で判定）。取り直しの鍵が OID なので、`.gitattributes` や filter 設定の変更は index の blob が変わるまで baseline に映らない。作業ツリーの編集では変わらない。未追跡・非 git・index に無い・競合中（stage 0 が無い）・UTF-8 でないファイルは baseline 無し。smudge の実行コマンドは config 側にしか書けず、信頼できないリポジトリのコードが実行される面は checkout と同じ——きっかけがファイルを開くことである点だけが違う。
 
 文書は baseline と本文の行差分（ハンク）を持つ（→ [code](code.md)）。
 
