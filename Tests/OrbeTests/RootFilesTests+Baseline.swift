@@ -78,6 +78,43 @@ extension RootFilesTests {
     XCTAssertEqual(recorder.baselineChanges, [url])
   }
 
+  /// 同じ OID の取得が上限の回数失敗すれば諦めて取り直さず（恒久失敗で毎バッチ回さない）、index が別の OID へ
+  /// 動けばまた挑む。
+  func testRepeatedBlobFailuresGiveUpUntilTheOIDChanges() throws {
+    let outside = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "orbe-smudge-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: outside) }
+    let tries = outside.appendingPathComponent("tries").path
+    try repo.write(".gitattributes", "*.txt filter=broken\n")
+    XCTAssertTrue(
+      repo.git(["config", "filter.broken.smudge", "echo x >> '\(tries)'; exit 1"]).isSuccess)
+    XCTAssertTrue(repo.git(["config", "filter.broken.clean", "cat"]).isSuccess)
+    XCTAssertTrue(repo.git(["config", "filter.broken.required", "true"]).isSuccess)
+    func count() -> Int {
+      (try? String(contentsOfFile: tries, encoding: .utf8))?.filter { $0 == "x" }.count ?? 0
+    }
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    let url = repo.url("a.txt")
+    files.addObserver(recorder, interest: url)
+    pumpMain(until: { count() >= 1 }, "1 回目の失敗")
+    for n in 2...RootFiles.blobFailureBudget {
+      try repo.write("touch\(n).txt", "\(n)\n")
+      pumpMain(until: { count() >= n }, timeout: 20, "\(n) 回目の失敗")
+    }
+    XCTAssertNil(files.baseline(for: url))
+
+    try repo.write("after.txt", "a\n")
+    pumpMain(until: { files.status?.badge(of: "after.txt") == .untracked }, timeout: 20, "その後の取り直し")
+    XCTAssertEqual(count(), RootFiles.blobFailureBudget, "上限に達した OID は取り直さない")
+    XCTAssertEqual(recorder.baselineChanges, [], "無いものの初回は通知しない")
+
+    try repo.write("a.txt", "two\n")
+    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+    pumpMain(until: { count() > RootFiles.blobFailureBudget }, timeout: 20, "OID が変わればまた挑む")
+  }
+
   /// status の通知は status が返った時点で出る——baseline の取得（smudge filter で遅くなりうる）の後ろに
   /// バッジを並べない。
   func testStatusIsPublishedBeforeBaselinesAreFetched() throws {

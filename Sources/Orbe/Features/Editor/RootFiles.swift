@@ -102,6 +102,12 @@ final class RootFiles {
     let text: String?
   }
 
+  /// blob の取得が git の失敗で落ちた回数（相対パス → その OID と回数）。`blobFailureBudget` 回で諦める。
+  private var blobFailures: [String: (oid: String, count: Int)] = [:]
+  /// 同じ OID を取り直す上限。一時失敗（LFS のネットワーク等）は次の取り直しで回復させ、恒久失敗
+  /// （必須 filter の欠落・打ち切り）を毎バッチ回さない——smudge が監視対象へ書く自走ループも閉じる。
+  static let blobFailureBudget = 3
+
   init(root: String, runner: GitRunner = .shared) {
     self.root = root
     self.runner = runner
@@ -160,6 +166,7 @@ final class RootFiles {
   private func dropUnwantedBaselines() {
     let wanted = Set(interests)
     baselines = baselines.filter { wanted.contains($0.key) }
+    blobFailures = blobFailures.filter { wanted.contains($0.key) }
   }
 
   private func relativePath(of url: URL) -> String? {
@@ -250,12 +257,22 @@ final class RootFiles {
     repo.blob(oid: next.oid, relativePath: next.relativePath) { [weak self] data in
       guard let self else { return }
       var changed = changed
-      // git の失敗（smudge の失敗・打ち切り。一時的でありうる）は記録しない——次の取り直しで同じ OID を
-      // 取り直す。UTF-8 でない中身は恒久なので OID ごと「baseline 無し」を記録する。
+      let path = next.relativePath
+      // git の失敗（smudge の失敗・打ち切り。一時的でありうる）は上限までは記録せず、次の取り直しで同じ OID を
+      // 取り直す。上限に達したら OID ごと「baseline 無し」を焼き、OID が変わるまで諦める。UTF-8 でない中身は
+      // 恒久なので即座に OID ごと「baseline 無し」を記録する。
+      let settled: Baseline?
       if let data {
-        let text = String(data: data, encoding: .utf8)
-        if baselines[next.relativePath]?.text != text { changed.append(next.relativePath) }
-        baselines[next.relativePath] = Baseline(oid: next.oid, text: text)
+        blobFailures[path] = nil
+        settled = Baseline(oid: next.oid, text: String(data: data, encoding: .utf8))
+      } else {
+        let count = (blobFailures[path]?.oid == next.oid ? blobFailures[path]?.count ?? 0 : 0) + 1
+        blobFailures[path] = (next.oid, count)
+        settled = count >= Self.blobFailureBudget ? Baseline(oid: next.oid, text: nil) : nil
+      }
+      if let settled {
+        if baselines[path]?.text != settled.text { changed.append(path) }
+        baselines[path] = settled
       }
       fetchBlobs(pending.dropFirst(), changed: changed)
     }
