@@ -51,6 +51,26 @@
 
       """
 
+    /// タブでインデントした断片（Go）。空白だけの行のインデント線がタブの行の線と揃うこと、長い行の横スクロールを
+    /// flow が撮る。
+    static let tabbed = """
+      package main
+
+      import "fmt"
+
+      func main() {
+      \tfor i := 0; i < 3; i++ {
+      \t\tif i%2 == 0 {
+      \t\t\tfmt.Println("even", i, "https://go.dev/doc/effective_go#for", "keeps the line past the pane edge")
+
+      \t\t\tcontinue
+      \t\t}
+      \t\tfmt.Println("odd", i)
+      \t}
+      }
+
+      """
+
     /// コミット済みの断片に作業ツリーで起こす変更: `starts` の下の空行を消す（削除）、`lineCount` の下に 2 行
     /// 足す（追加）、`point` の 2 行を書き換える（変更。1 行は行末にスペース 2 つ＝丸点）。
     static var edited: String {
@@ -113,6 +133,7 @@
       try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
       let url = dir.appendingPathComponent("LineIndex.swift")
       try Data(sample.utf8).write(to: url)
+      try Data(tabbed.utf8).write(to: dir.appendingPathComponent("main.go"))
       let git = { (args: [String]) throws in
         let output = GitRunner.shared.runSync(args, cwd: dir.path)
         guard output.isSuccess else {
