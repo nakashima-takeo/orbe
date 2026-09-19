@@ -250,7 +250,7 @@ extension DispatchWorktreeClassifierTests {
         ],
         localBranches: [
           GitBranch(
-            name: "feat/x", relativeDate: "1d", worktreePath: "/wt/x",
+            name: "feat/x", relativeDate: "1d",
             upstream: GitUpstream(
               short: "origin/feat/x", ref: "refs/remotes/origin/feat/x", remote: "origin",
               remoteRef: "refs/heads/feat/x", track: track))

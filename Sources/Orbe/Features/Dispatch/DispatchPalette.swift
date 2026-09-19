@@ -4,7 +4,7 @@ import SwiftUI
 /// 解決に要る情報（既存 worktree パス・fork 判定等）を純粋ビルダが焼き込み、実行側は分岐するだけにする。
 enum DispatchAction: Equatable {
   case worktree(path: String)
-  case localBranch(name: String, existingWorktree: String?)
+  case localBranch(name: String)
   /// name は `origin/x`（remote 短縮名）。
   case remoteBranch(name: String, existingWorktree: String?)
   /// existingBranch は `issue/<n>` ブランチだけ（worktree 無しで）既存か（他 case は git ref に紐づくため不要）。

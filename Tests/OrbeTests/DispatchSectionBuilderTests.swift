@@ -15,7 +15,7 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
     let input = DispatchSectionBuilder.Input(
       worktrees: [GitWorktree(path: "/tmp/wt/feat-x", branch: "feat/x", head: "a", isMain: false)],
       remoteBranches: [
-        GitBranch(name: "origin/feat/x", relativeDate: "3h前", worktreePath: nil, upstream: nil)
+        GitBranch(name: "origin/feat/x", relativeDate: "3h前", upstream: nil)
       ],
       pullRequests: [
         GitHubPullRequest(
@@ -40,13 +40,13 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
         GitWorktree(path: "/tmp/wt/plain", branch: "plain", head: "b", isMain: false),
       ],
       localBranches: [
-        GitBranch(name: "feat/local", relativeDate: "1d前", worktreePath: nil, upstream: nil),
-        GitBranch(name: "chore/y", relativeDate: "2d前", worktreePath: nil, upstream: nil),
+        GitBranch(name: "feat/local", relativeDate: "1d前", upstream: nil),
+        GitBranch(name: "chore/y", relativeDate: "2d前", upstream: nil),
       ],
       remoteBranches: [
         GitBranch(
-          name: "origin/feat/remote", relativeDate: "3h前", worktreePath: nil, upstream: nil),
-        GitBranch(name: "origin/nope/z", relativeDate: "4h前", worktreePath: nil, upstream: nil),
+          name: "origin/feat/remote", relativeDate: "3h前", upstream: nil),
+        GitBranch(name: "origin/nope/z", relativeDate: "4h前", upstream: nil),
       ],
       pullRequests: [
         GitHubPullRequest(
@@ -97,19 +97,18 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
     }
     let branches = [
       GitBranch(
-        name: "behind", relativeDate: "1d", worktreePath: nil,
+        name: "behind", relativeDate: "1d",
         upstream: upstream("origin", .counts(ahead: 0, behind: 3))),
       GitBranch(
-        name: "diverged", relativeDate: "1d", worktreePath: nil,
+        name: "diverged", relativeDate: "1d",
         upstream: upstream("origin", .counts(ahead: 1, behind: 2))),
       GitBranch(
-        name: "synced", relativeDate: "1d", worktreePath: nil, upstream: upstream("origin", nil)),
+        name: "synced", relativeDate: "1d", upstream: upstream("origin", nil)),
       GitBranch(
-        name: "gone", relativeDate: "1d", worktreePath: nil, upstream: upstream("origin", .gone)),
+        name: "gone", relativeDate: "1d", upstream: upstream("origin", .gone)),
       GitBranch(
-        name: "fork", relativeDate: "1d", worktreePath: nil,
-        upstream: upstream("fork", .counts(ahead: 0, behind: 3))),
-      GitBranch(name: "local", relativeDate: "1d", worktreePath: nil, upstream: nil),
+        name: "fork", relativeDate: "1d", upstream: upstream("fork", .counts(ahead: 0, behind: 3))),
+      GitBranch(name: "local", relativeDate: "1d", upstream: nil),
     ]
     var input = DispatchSectionBuilder.Input(localBranches: branches)
     XCTAssertEqual(
@@ -135,8 +134,8 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
     let input = DispatchSectionBuilder.Input(
       worktrees: [GitWorktree(path: "/tmp/wt/main", branch: "main", head: "a", isMain: true)],
       localBranches: [
-        GitBranch(name: "main", relativeDate: "1d前", worktreePath: "/tmp/wt/main", upstream: nil),
-        GitBranch(name: "feature", relativeDate: "2d前", worktreePath: nil, upstream: nil),
+        GitBranch(name: "main", relativeDate: "1d前", upstream: nil),
+        GitBranch(name: "feature", relativeDate: "2d前", upstream: nil),
       ])
     let sections = DispatchSectionBuilder.build(input)
     XCTAssertEqual(
@@ -147,11 +146,11 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
   func testRemoteBranchTrackedLocallyIsExcluded() {
     let input = DispatchSectionBuilder.Input(
       localBranches: [
-        GitBranch(name: "feat/x", relativeDate: "1d前", worktreePath: nil, upstream: nil)
+        GitBranch(name: "feat/x", relativeDate: "1d前", upstream: nil)
       ],
       remoteBranches: [
-        GitBranch(name: "origin/feat/x", relativeDate: "3h前", worktreePath: nil, upstream: nil),
-        GitBranch(name: "origin/feat/y", relativeDate: "4h前", worktreePath: nil, upstream: nil),
+        GitBranch(name: "origin/feat/x", relativeDate: "3h前", upstream: nil),
+        GitBranch(name: "origin/feat/y", relativeDate: "4h前", upstream: nil),
       ])
     let sections = DispatchSectionBuilder.build(input)
     XCTAssertEqual(
@@ -163,7 +162,7 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
     let input = DispatchSectionBuilder.Input(
       worktrees: [GitWorktree(path: "/tmp/wt/feat-y", branch: "feat/y", head: "a", isMain: false)],
       remoteBranches: [
-        GitBranch(name: "origin/feat/y", relativeDate: "4h前", worktreePath: nil, upstream: nil)
+        GitBranch(name: "origin/feat/y", relativeDate: "4h前", upstream: nil)
       ])
     let sections = DispatchSectionBuilder.build(input)
     XCTAssertEqual(
@@ -198,7 +197,7 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
       ],
       localBranches: [
         GitBranch(
-          name: "issue/44", relativeDate: "1d前", worktreePath: "/tmp/wt/issue-44", upstream: nil)
+          name: "issue/44", relativeDate: "1d前", upstream: nil)
       ])
     XCTAssertEqual(
       it?.action,
@@ -212,7 +211,7 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
     let it = issueItem(
       worktrees: [],
       localBranches: [
-        GitBranch(name: "issue/44", relativeDate: "1d前", worktreePath: nil, upstream: nil)
+        GitBranch(name: "issue/44", relativeDate: "1d前", upstream: nil)
       ])
     XCTAssertEqual(
       it?.action, .issue(number: 44, existingWorktree: nil, existingBranch: true),

@@ -1,21 +1,55 @@
 import Foundation
 
-/// `git for-each-ref` の `|` 区切り行を `GitBranch` へ落とすパーサ（local / remote）。
+/// `git for-each-ref` の出力を `GitBranch` へ落とすパーサ（local / remote）。
+/// フィールドの並びはここだけが持ち、`--format=` に渡す形式も読む位置もそこから導く——位置で読む形式は、
+/// 片側だけ変えるとエラーにならず別のフィールドとして読まれるため。フィールドは NUL、レコードは行で区切る。
+/// 並べるフィールドは LF も NUL も含みえない（ref 名・remote 名は git が制御文字を禁じ、author 名は
+/// コミットヘッダの 1 行から取る）ので、この区切りで値を取り違えない。名前は短縮表示名ではなく
+/// `refname:lstrip=2` の正確な名前で読む（`refname:short` は同名タグ等があると `heads/x` に化ける）。
 enum BranchParser {
-  /// local: `%(refname:short)|%(committerdate:relative)|%(worktreepath)|%(upstream:short)|%(upstream)`
-  /// `|%(upstream:remotename)|%(upstream:remoteref)|%(upstream:track)`。
+  enum LocalField: String, CaseIterable {
+    case name = "refname:lstrip=2"
+    case relativeDate = "committerdate:relative"
+    case upstreamShort = "upstream:short"
+    case upstreamRef = "upstream"
+    case upstreamRemote = "upstream:remotename"
+    case upstreamRemoteRef = "upstream:remoteref"
+    case upstreamTrack = "upstream:track"
+  }
+
+  enum RemoteField: String, CaseIterable {
+    case name = "refname:lstrip=2"
+    case relativeDate = "committerdate:relative"
+    case author = "authorname"
+  }
+
+  static let localFormat = format(LocalField.self)
+  static let remoteFormat = format(RemoteField.self)
+
   static func parseLocal(_ text: String) -> [GitBranch] {
-    text.split(separator: "\n").compactMap { line in
-      let f = String(line).components(separatedBy: "|")
-      guard f.count >= 2, !f[0].isEmpty else { return nil }
-      func field(_ i: Int) -> String? { f.count > i && !f[i].isEmpty ? f[i] : nil }
-      let upstream = field(3).map { short in
+    records(text, LocalField.self).compactMap { record in
+      guard let name = record[.name] else { return nil }
+      let upstream = record[.upstreamShort].map { short in
         GitUpstream(
-          short: short, ref: field(4) ?? "", remote: field(5) ?? "", remoteRef: field(6) ?? "",
-          track: parseTrack(field(7)))
+          short: short, ref: record[.upstreamRef] ?? "", remote: record[.upstreamRemote] ?? "",
+          remoteRef: record[.upstreamRemoteRef] ?? "", track: parseTrack(record[.upstreamTrack]))
       }
-      return GitBranch(
-        name: f[0], relativeDate: f[1], worktreePath: field(2), upstream: upstream)
+      return GitBranch(name: name, relativeDate: record[.relativeDate] ?? "", upstream: upstream)
+    }
+  }
+
+  /// `*/HEAD`（`origin/HEAD` の symref）はノイズとして除外する。
+  static func parseRemote(_ text: String) -> [GitBranch] {
+    records(text, RemoteField.self).compactMap { record in
+      guard let name = record[.name], !name.hasSuffix("/HEAD") else { return nil }
+      let date = record[.relativeDate] ?? ""
+      let combined: String
+      if let author = record[.author] {
+        combined = date.isEmpty ? author : "\(author) · \(date)"
+      } else {
+        combined = date
+      }
+      return GitBranch(name: name, relativeDate: combined, upstream: nil)
     }
   }
 
@@ -31,24 +65,28 @@ enum BranchParser {
     return Int(text[range.upperBound...].prefix { $0.isNumber }) ?? 0
   }
 
-  /// remote: `%(refname:short)|%(committerdate:relative)|%(authorname)`。
-  /// `refs/remotes/origin/HEAD` の短縮（`origin` 単独）や `*/HEAD` 行はノイズとして除外する。
-  static func parseRemote(_ text: String) -> [GitBranch] {
-    text.split(separator: "\n").compactMap { line -> GitBranch? in
-      let f = String(line).components(separatedBy: "|")
-      guard let name = f.first, !name.isEmpty else { return nil }
-      guard name.contains("/"), !name.hasSuffix("/HEAD") else { return nil }
-      let date = f.count > 1 ? f[1] : ""
-      let author = f.count > 2 ? f[2] : ""
-      let combined: String
-      if author.isEmpty {
-        combined = date
-      } else if date.isEmpty {
-        combined = author
-      } else {
-        combined = "\(author) · \(date)"
-      }
-      return GitBranch(name: name, relativeDate: combined, worktreePath: nil, upstream: nil)
+  private static func format<Field: RawRepresentable & CaseIterable>(_: Field.Type) -> String
+  where Field.RawValue == String {
+    Field.allCases.map { "%(\($0.rawValue))" }.joined(separator: "%00")
+  }
+
+  private static func records<Field: CaseIterable & Equatable>(_ text: String, _: Field.Type)
+    -> [Record<Field>]
+  {
+    text.split(separator: "\n").map {
+      Record(values: $0.split(separator: "\0", omittingEmptySubsequences: false).map(String.init))
+    }
+  }
+
+  /// 1 レコード。列が欠けていても落ちず、欠けた列と空の列はどちらも nil として読む。
+  private struct Record<Field: CaseIterable & Equatable> {
+    let values: [String]
+
+    subscript(_ field: Field) -> String? {
+      guard let i = Array(Field.allCases).firstIndex(of: field), i < values.count,
+        !values[i].isEmpty
+      else { return nil }
+      return values[i]
     }
   }
 }
