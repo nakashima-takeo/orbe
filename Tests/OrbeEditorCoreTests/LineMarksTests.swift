@@ -15,14 +15,13 @@ final class LineMarksTests: XCTestCase {
   /// 追加は old 側 0 件、削除は new 側 0 件で境、両側にあれば変更。
   func testKindsFollowTheHunkShape() {
     let marks = LineMarks(hunks: [hunk(2, 0, 3, 2), hunk(6, 1, 6, 0), hunk(8, 1, 7, 1)])
-    XCTAssertNil(marks.kind(ofLine: 2))
-    XCTAssertEqual(marks.kind(ofLine: 3), .added)
-    XCTAssertEqual(marks.kind(ofLine: 4), .added)
-    XCTAssertNil(marks.kind(ofLine: 5))
+    XCTAssertEqual(
+      marks.runs,
+      [
+        LineMarks.Run(lines: 3..<5, kind: .added), LineMarks.Run(lines: 7..<8, kind: .modified),
+      ])
     XCTAssertEqual(marks.deletionsBelow, [6], "6 行目の下に削除")
-    XCTAssertEqual(marks.kind(ofLine: 7), .modified)
-    XCTAssertFalse(marks.isEmpty)
-    XCTAssertTrue(LineMarks(hunks: []).isEmpty)
+    XCTAssertEqual(LineMarks(hunks: []).runs, [])
   }
 
   /// 面へ渡す区間は改行込みで、削除の境は次の行の行頭。末尾は本文の長さ（末尾の改行の有無で同じ）。

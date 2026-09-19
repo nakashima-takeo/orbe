@@ -4,7 +4,7 @@ import Foundation
 /// （タブ・NBSP は描かない）。単語間の 1 個には何も出ない。
 public enum WhitespaceRuns {
   /// 行内の UTF-16 オフセットの区間（昇順）。行末の CR は行の外として扱う。
-  public static func boundary(in line: Substring) -> [Range<Int>] {
+  public static func runs(in line: Substring) -> [Range<Int>] {
     let units = Array(line.utf16)
     let end = units.last == 0x0D ? units.count - 1 : units.count
     var result: [Range<Int>] = []

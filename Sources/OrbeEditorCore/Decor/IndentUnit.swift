@@ -4,7 +4,7 @@ import Foundation
 /// 2 / 4 / 8 に当たるものの最頻値。同数なら小さい方、候補が無ければ 4。行頭がタブの行は差の計算に入れない
 /// （タブは単位に依らず 1 段）。
 public enum IndentUnit {
-  public static let candidates = [2, 4, 8]
+  private static let candidates = [2, 4, 8]
   public static let fallback = 4
 
   public static func detect(in text: String) -> Int {

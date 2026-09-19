@@ -5,9 +5,9 @@ import OrbeEditorText
 /// エディターの見え方を `Theme` から組む唯一の場所。
 enum EditorStyle {
   /// 印のバーと三角の不透明度（見本 tint(diffAdd, 0.85)）。
-  static let markAlpha: CGFloat = 0.85
+  private static let markAlpha: CGFloat = 0.85
   /// インデント線の塗り（見本 fill(0.06)。light は `Theme.Opacity.editorFillLight` を掛ける）。
-  static let indentGuideAlpha = 0.06
+  private static let indentGuideAlpha: Double = 0.06
 
   static func make() -> TextSurfaceStyle {
     TextSurfaceStyle(
@@ -42,12 +42,12 @@ enum EditorStyle {
         linkUnderlineThickness: 1, linkUnderlineOffset: 3))
   }
 
-  /// 見本の fill(α) を外観で換算した塗り（`EditorInk.fill` の NSColor 版）。
+  /// 見本の fill(α) を外観で換算した塗り（`EditorInk.fill` の NSColor 版。換算は `EditorInk.fillAlpha`）。
   private static func fill(_ alpha: Double) -> NSColor {
     NSColor(name: nil) { appearance in
-      let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-      return Theme.Color.surfaceInk.withAlphaComponent(
-        dark ? alpha : alpha * Theme.Opacity.editorFillLight)
+      Theme.Color.surfaceInk.withAlphaComponent(
+        EditorInk.fillAlpha(
+          alpha, dark: appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua))
     }
   }
 }

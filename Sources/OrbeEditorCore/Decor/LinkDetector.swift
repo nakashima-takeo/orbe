@@ -8,11 +8,6 @@ public enum LinkDetector {
     /// 行内の UTF-16 オフセットの区間。
     public let range: NSRange
     public let url: URL
-
-    public init(range: NSRange, url: URL) {
-      self.range = range
-      self.url = url
-    }
   }
 
   private static let pattern = #/https?://[^\s<>"`]+/#

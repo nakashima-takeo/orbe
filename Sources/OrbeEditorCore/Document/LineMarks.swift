@@ -8,14 +8,15 @@ public struct LineMarks: Equatable, Sendable {
     case modified
   }
 
-  /// 同じ印が続く行の区間（昇順・重ならない）。
+  /// 同じ印が続く行の区間。ハンクが昇順・非重複（`LineDiff` は両側を単調に進める）なので、そこから写した
+  /// run も昇順・非重複。
   public struct Run: Equatable, Sendable {
     public let lines: Range<Int>
     public let kind: Kind
   }
 
   public let runs: [Run]
-  /// 削除がある境。値 n は「n 行目の下」（0 は先頭行の上）。昇順。
+  /// 削除がある境。値 n は「n 行目の下」（0 は先頭行の上）。ハンクの順（昇順）。
   public let deletionsBelow: [Int]
 
   /// 追加（old 側 0 件）はその新しい行、削除（new 側 0 件）はその境、両側にあれば新しい行が変更。
@@ -32,15 +33,8 @@ public struct LineMarks: Equatable, Sendable {
             kind: hunk.oldCount == 0 ? .added : .modified))
       }
     }
-    self.runs = runs.sorted { $0.lines.lowerBound < $1.lines.lowerBound }
-    deletionsBelow = deletions.sorted()
-  }
-
-  public var isEmpty: Bool { runs.isEmpty && deletionsBelow.isEmpty }
-
-  /// 1 始まりの行の印。無ければ nil。
-  public func kind(ofLine line: Int) -> Kind? {
-    runs.first { $0.lines.contains(line) }?.kind
+    self.runs = runs
+    deletionsBelow = deletions
   }
 
   /// 面へ渡す形。行の区間は改行込み（次の行頭まで、末尾なら本文の長さまで）、境は次の行の行頭のオフセット。
@@ -57,7 +51,7 @@ public struct LineMarks: Equatable, Sendable {
         LineMarkSpans.Mark(
           range: NSRange(location: start, length: max(0, stop - start)), kind: run.kind))
     }
-    let deletions = deletionsBelow.filter { $0 >= 0 }.map(end)
+    let deletions = deletionsBelow.map(end)
     return LineMarkSpans(marks: marks, deletions: deletions)
   }
 }

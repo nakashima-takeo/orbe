@@ -72,7 +72,7 @@ final class LineDecorationView: NSView {
   }
 
   private func drawWhitespace(_ line: VisibleLine, geometry: VisibleLines) {
-    let runs = WhitespaceRuns.boundary(in: line.text[...])
+    let runs = WhitespaceRuns.runs(in: line.text[...])
     guard !runs.isEmpty else { return }
     style.whitespaceColor.setFill()
     let diameter = style.whitespaceDiameter

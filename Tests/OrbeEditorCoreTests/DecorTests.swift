@@ -17,10 +17,13 @@ final class DecorTests: XCTestCase {
     XCTAssertEqual(IndentUnit.detect(in: "a\n   b\n      c\n"), 4, "3 の段は候補に無い")
   }
 
+  /// 同数は小さい方。空行・空白だけの行は隣として数えず（飛ばして前後の非空行が対になる）、タブの行は
+  /// その前後の非空行の対も切る。
   func testIndentUnitTiesPreferTheSmallerAndSkipBlankAndTabLines() {
-    XCTAssertEqual(IndentUnit.detect(in: "a\n  b\nc\n    d\n"), 2, "2 と 4 が 1 回ずつなら 2")
-    XCTAssertEqual(IndentUnit.detect(in: "a\n\n    \n    b\n"), 4, "空行・空白だけの行は隣として数えない")
-    XCTAssertEqual(IndentUnit.detect(in: "a\n\tb\n  c\n"), 4, "タブの行はその前後の差に入れない")
+    XCTAssertEqual(IndentUnit.detect(in: "a\n  b\n      c\n"), 2, "2 と 4 が 1 回ずつなら 2")
+    XCTAssertEqual(IndentUnit.detect(in: "      a\n\n    b\n"), 2, "空行を飛ばして 6 と 4 が対（飛ばさなければ 4）")
+    XCTAssertEqual(IndentUnit.detect(in: "  a\n    \n  b\n"), 4, "空白だけの行は隣でない（数えれば 2）")
+    XCTAssertEqual(IndentUnit.detect(in: "a\n\tb\n  c\n"), 4, "タブの行は前後の対を切る（切らなければ 2）")
   }
 
   // MARK: - 段
@@ -51,14 +54,14 @@ final class DecorTests: XCTestCase {
   // MARK: - 空白
 
   func testBoundaryWhitespaceOnly() {
-    XCTAssertEqual(WhitespaceRuns.boundary(in: "a b"), [], "単語間の 1 個には出ない")
-    XCTAssertEqual(WhitespaceRuns.boundary(in: "  a  b c "), [0..<2, 3..<5, 8..<9])
-    XCTAssertEqual(WhitespaceRuns.boundary(in: " a"), [0..<1], "行頭は 1 個でも出る")
-    XCTAssertEqual(WhitespaceRuns.boundary(in: "a \r"), [1..<2], "CR は行の外（行末の 1 個が出る）")
-    XCTAssertEqual(WhitespaceRuns.boundary(in: "\ta\tb"), [], "タブには出ない")
-    XCTAssertEqual(WhitespaceRuns.boundary(in: "a\u{00A0}b"), [], "NBSP には出ない")
-    XCTAssertEqual(WhitespaceRuns.boundary(in: "   "), [0..<3])
-    XCTAssertEqual(WhitespaceRuns.boundary(in: ""), [])
+    XCTAssertEqual(WhitespaceRuns.runs(in: "a b"), [], "単語間の 1 個には出ない")
+    XCTAssertEqual(WhitespaceRuns.runs(in: "  a  b c "), [0..<2, 3..<5, 8..<9])
+    XCTAssertEqual(WhitespaceRuns.runs(in: " a"), [0..<1], "行頭は 1 個でも出る")
+    XCTAssertEqual(WhitespaceRuns.runs(in: "a \r"), [1..<2], "CR は行の外（行末の 1 個が出る）")
+    XCTAssertEqual(WhitespaceRuns.runs(in: "\ta\tb"), [], "タブには出ない")
+    XCTAssertEqual(WhitespaceRuns.runs(in: "a\u{00A0}b"), [], "NBSP には出ない")
+    XCTAssertEqual(WhitespaceRuns.runs(in: "   "), [0..<3])
+    XCTAssertEqual(WhitespaceRuns.runs(in: ""), [])
   }
 
   // MARK: - URL
@@ -82,8 +85,11 @@ final class DecorTests: XCTestCase {
     XCTAssertEqual(urls("https://"), [], "本体が無ければ取らない")
   }
 
+  /// 刈った後の区間も刈った長さになる（下線と ⌘クリックの当たりが句読点まで伸びない）。
   func testTrailingPunctuationAndUnbalancedClosersAreTrimmed() {
     XCTAssertEqual(urls("https://a.b/c."), ["https://a.b/c"])
+    XCTAssertEqual(
+      LinkDetector.links(in: "(https://a.b/c).").map(\.range), [NSRange(location: 1, length: 13)])
     XCTAssertEqual(urls("(https://a.b/c)."), ["https://a.b/c"])
     XCTAssertEqual(
       urls("https://en.wikipedia.org/wiki/Foo_(bar)"), ["https://en.wikipedia.org/wiki/Foo_(bar)"])
