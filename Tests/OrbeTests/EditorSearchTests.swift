@@ -12,16 +12,16 @@ import XCTest
 /// 選択が最初の一致へ飛んで打ち込みが乱れる。Esc の後に焦点が窓に落ちて打鍵が消える。
 @MainActor
 final class EditorSearchTests: OrbeTestCase {
-  private let style = EditorStyle.make()
+  let style = EditorStyle.make()
 
-  private struct Hosted {
+  struct Hosted {
     let tab: TerminalTab
     let pane: EditorPaneView
     let document: EditorDocument
     let window: NSWindow
   }
 
-  private func host(_ text: String, name: String = "s.txt") throws -> Hosted {
+  func host(_ text: String, name: String = "s.txt") throws -> Hosted {
     let tab = TerminalTab(
       cwd: try XCTUnwrap(TestIsolation.caseDir).path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
@@ -37,7 +37,7 @@ final class EditorSearchTests: OrbeTestCase {
   }
 
   /// 件数の観測（バーの model は閉じているので、pane が bar へ写す closure に割り込む）。
-  private func counts(_ pane: EditorPaneView) -> () -> [(Int?, Int)] {
+  func counts(_ pane: EditorPaneView) -> () -> [(Int?, Int)] {
     var seen: [(Int?, Int)] = []
     let forward = pane.search.onCountChange
     pane.search.onCountChange = { selected, total in
@@ -49,6 +49,19 @@ final class EditorSearchTests: OrbeTestCase {
 
   private func row(_ hosted: Hosted, _ offset: Int) -> Int {
     hosted.document.lineIndex.point(at: offset).row
+  }
+
+  /// バー（本文の右上に浮く）の下に入らない行から本文を始めるための空行。地を画素で読むテストが使う。
+  static let belowTheBar = "\n\n\n\n"
+
+  /// 本文の `line` 行目（1 始まり）・`column` 桁目（0 始まり）のセルの中心（pane の座標）。地の有無は字の無いセルで読む。
+  func cellCenter(_ hosted: Hosted, line: Int, column: Int) -> NSPoint {
+    let surface = hosted.document.surface.view
+    let origin = hosted.pane.convert(surface.bounds, from: surface).origin
+    let cell = (" " as NSString).size(withAttributes: [.font: style.font]).width
+    return NSPoint(
+      x: origin.x + style.gutterWidth + style.marks.gutterWidth + (CGFloat(column) + 0.5) * cell,
+      y: origin.y + style.topInset + (CGFloat(line) - 0.5) * style.lineHeight)
   }
 
   func testCommandFOpensTheBarAtTheTopRightOfTheSurfaceAndFocusesTheField() throws {
@@ -172,7 +185,7 @@ final class EditorSearchTests: OrbeTestCase {
 
   /// Esc で閉じると一致の地は消え、選択は残り、焦点はテキスト面へ戻る。
   func testClosingKeepsTheSelectionAndReturnsFocusToTheText() throws {
-    let hosted = try host("x a b y\n")
+    let hosted = try host(Self.belowTheBar + "x a b y\nx a b y\n")
     let pane = hosted.pane
     let document = hosted.document
     pane.showSearch()
@@ -181,23 +194,17 @@ final class EditorSearchTests: OrbeTestCase {
     pumpMain(
       until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true },
       "入力欄に焦点")
-    // 一致の地: "a b" の空白のセル（字が無い）が地の色から変わる。
-    let surface = document.surface.view
-    let origin = pane.convert(surface.bounds, from: surface).origin
-    let cell = (" " as NSString).size(withAttributes: [.font: style.font]).width
-    let x = origin.x + style.gutterWidth + style.marks.gutterWidth + 3.5 * cell
-    let y = origin.y + style.topInset + style.lineHeight / 2
-    let ground = try PaneProbe(pane).rgb(x, y: origin.y + 6 * style.lineHeight)
-    _ = try probe(pane) { try !PaneProbe.same($0.rgb(x, y: y), ground) }
+    // 地は現在でない一致（選択の地に覆われない）の空白のセルで見る。
+    let match = cellCenter(hosted, line: 6, column: 3)
+    let ground = try PaneProbe(pane).rgb(match.x, y: cellCenter(hosted, line: 10, column: 3).y)
+    _ = try probe(pane) { try !PaneProbe.same($0.rgb(match.x, y: match.y), ground) }
 
     bar.onClose?()
     XCTAssertNil(pane.searchBar)
     XCTAssertTrue(hosted.window.firstResponder === document.surface.responder, "焦点はテキスト面へ")
-    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 2, length: 3), "選択は残る")
+    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 6, length: 3), "選択は残る")
     XCTAssertEqual(pane.search.matches, [])
-    // 焦点のテキスト面の選択の地が空白のセルを覆うので、地の判定は選択を外してから。
-    document.surface.selectedRange = NSRange(location: 0, length: 0)
-    _ = try probe(pane) { try PaneProbe.same($0.rgb(x, y: y), ground) }
+    _ = try probe(pane) { try PaneProbe.same($0.rgb(match.x, y: match.y), ground) }
   }
 
   /// 文書を切り替えると同じ needle で新しい文書に敷き直す（ジャンプしない）。文書が無くなればバーは閉じる。
