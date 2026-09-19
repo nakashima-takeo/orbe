@@ -12,25 +12,25 @@ import XCTest
 /// 分からない。⌘クリックが上流の選択と衝突して URL が開かないか、素のクリックで勝手にブラウザが開く。
 @MainActor
 final class EditorLineMarksTests: OrbeTestCase {
-  private let style = EditorStyle.make()
-  private var cell: CGFloat { (" " as NSString).size(withAttributes: [.font: style.font]).width }
+  let style = EditorStyle.make()
+  var cell: CGFloat { (" " as NSString).size(withAttributes: [.font: style.font]).width }
   /// 本文の左端（行番号 50 ＋ 印の列 19）。
-  private var bodyX: CGFloat { style.gutterWidth + style.marks.gutterWidth }
+  var bodyX: CGFloat { style.gutterWidth + style.marks.gutterWidth }
   /// 印のバーの中（列の左 ＋ 左余白 2 ＋ 幅 3 の中央）。
-  private var barX: CGFloat { style.gutterWidth + style.marks.barInset + 1.5 }
-  private func rowMidY(_ line: Int) -> CGFloat {
+  var barX: CGFloat { style.gutterWidth + style.marks.barInset + 1.5 }
+  func rowMidY(_ line: Int) -> CGFloat {
     style.topInset + CGFloat(line - 1) * style.lineHeight + style.lineHeight / 2
   }
 
   /// 黒地の窓に載せた文書の面（装備の色は地との合成で読む）。
-  private struct Hosted {
+  struct Hosted {
     let session: EditorSession
     let document: EditorDocument
     let ground: Ground
     let window: NSWindow
   }
 
-  private func host(_ text: String, size: NSSize = NSSize(width: 400, height: 200)) throws
+  func host(_ text: String, size: NSSize = NSSize(width: 400, height: 200)) throws
     -> Hosted
   {
     let url = try caseFile("marks-\(UUID().uuidString).swift", text)
@@ -56,7 +56,7 @@ final class EditorLineMarksTests: OrbeTestCase {
     return Hosted(session: session, document: document, ground: ground, window: window)
   }
 
-  private final class Ground: NSView {
+  final class Ground: NSView {
     override var isFlipped: Bool { true }
     override func draw(_ dirtyRect: NSRect) {
       NSColor.black.setFill()
@@ -65,7 +65,7 @@ final class EditorLineMarksTests: OrbeTestCase {
   }
 
   /// 描いて色を引く（flipped 座標。y は上から）。
-  private func rgb(_ view: NSView, _ x: CGFloat, _ y: CGFloat) throws -> [Int] {
+  func rgb(_ view: NSView, _ x: CGFloat, _ y: CGFloat) throws -> [Int] {
     let rep = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
     view.cacheDisplay(in: view.bounds, to: rep)
     let scale = CGFloat(rep.pixelsWide) / view.bounds.width
@@ -74,21 +74,51 @@ final class EditorLineMarksTests: OrbeTestCase {
     return [color.redComponent, color.greenComponent, color.blueComponent].map { Int($0 * 255) }
   }
 
-  private func isBlack(_ rgb: [Int]) -> Bool { rgb.allSatisfy { $0 <= 3 } }
+  func isBlack(_ rgb: [Int]) -> Bool { rgb.allSatisfy { $0 <= 3 } }
 
   /// 1px の線は device pixel に揃えて描かれるので、x の前後 1 device pixel も見る。
-  private func hasInk(_ view: NSView, _ x: CGFloat, _ y: CGFloat) throws -> Bool {
+  func hasInk(_ view: NSView, _ x: CGFloat, _ y: CGFloat) throws -> Bool {
     try [x - 0.5, x, x + 0.5].contains { !isBlack(try rgb(view, $0, y)) }
   }
-  private func isGreen(_ c: [Int]) -> Bool { !isBlack(c) && c[1] > c[0] && c[1] > c[2] }
-  private func isBlue(_ c: [Int]) -> Bool { !isBlack(c) && c[2] > c[0] && c[2] > c[1] }
-  private func isRed(_ c: [Int]) -> Bool { !isBlack(c) && c[0] > c[1] && c[0] > c[2] }
+  func isGreen(_ c: [Int]) -> Bool { !isBlack(c) && c[1] > c[0] && c[1] > c[2] }
+  func isBlue(_ c: [Int]) -> Bool { !isBlack(c) && c[2] > c[0] && c[2] > c[1] }
+  func isRed(_ c: [Int]) -> Bool { !isBlack(c) && c[0] > c[1] && c[0] > c[2] }
 
   /// 描き直しは layout の後に載るので、成立まで描いて測り直す。
-  private func waitDrawn(
+  func waitDrawn(
     _ condition: @escaping () throws -> Bool, file: StaticString = #filePath, line: UInt = #line
   ) {
     pumpMain(until: { (try? condition()) ?? false }, timeout: 5, "描かれる", file: file, line: line)
+  }
+
+  /// 黒地に `color` を塗った画素（面の合成の答えを同じ描画経路で取る）。
+  func onBlack(_ color: NSColor) throws -> [Int] {
+    let swatch = Swatch(frame: NSRect(x: 0, y: 0, width: 20, height: 20), color: color)
+    let reference = NSWindow(
+      contentRect: swatch.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    reference.appearance = NSAppearance(named: .darkAqua)
+    reference.contentView = swatch
+    return try rgb(swatch, 10, 10)
+  }
+
+  func matches(_ lhs: [Int], _ rhs: [Int]) -> Bool {
+    zip(lhs, rhs).allSatisfy { abs($0 - $1) <= 2 }
+  }
+
+  /// 黒地に style の色を塗った見本（合成の答えを同じ描画経路で取る）。
+  final class Swatch: NSView {
+    let color: NSColor
+    init(frame: NSRect, color: NSColor) {
+      self.color = color
+      super.init(frame: frame)
+    }
+    required init?(coder: NSCoder) { fatalError("not supported") }
+    override func draw(_ dirtyRect: NSRect) {
+      NSColor.black.setFill()
+      bounds.fill()
+      color.setFill()
+      bounds.fill()
+    }
   }
 
   // MARK: - ガターの印
@@ -121,31 +151,46 @@ final class EditorLineMarksTests: OrbeTestCase {
     document.baseline = "a\nB\nc\nd\n"
     waitDrawn { self.isGreen(try self.rgb(ground, self.barX, self.rowMidY(5))) }
     let bar = try rgb(ground, barX, rowMidY(5))
-    let swatch = Swatch(frame: NSRect(x: 0, y: 0, width: 20, height: 20), color: style.marks.added)
-    let reference = NSWindow(
-      contentRect: swatch.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-    reference.appearance = NSAppearance(named: .darkAqua)
-    reference.contentView = swatch
-    let expected = try rgb(swatch, 10, 10)
-    XCTAssertTrue(
-      zip(bar, expected).allSatisfy { abs($0 - $1) <= 2 },
-      "面の色は style の色（α 込み）そのまま: \(bar) ≈ \(expected)")
+    let expected = try onBlack(style.marks.added)
+    XCTAssertTrue(matches(bar, expected), "面の色は style の色（α 込み）そのまま: \(bar) ≈ \(expected)")
   }
 
-  /// 黒地に style の色を塗った見本（合成の答えを同じ描画経路で取る）。
-  private final class Swatch: NSView {
-    let color: NSColor
-    init(frame: NSRect, color: NSColor) {
-      self.color = color
-      super.init(frame: frame)
+  /// 先頭行の上の削除は、三角を上端から下向きに置く（境の y = 0 に中央合わせすると上半分が切れる）。
+  func testADeletionAboveTheFirstLineIsDrawnFromTheTopEdge() throws {
+    let hosted = try host("a\nb\n")
+    let ground = hosted.ground
+    hosted.document.baseline = "z\na\nb\n"
+    let tip = style.gutterWidth + style.marks.barInset + 2
+    waitDrawn { self.isRed(try self.rgb(ground, tip, self.style.topInset + 3)) }
+    XCTAssertTrue(isBlack(try rgb(ground, tip, style.topInset + 9)), "三角は一辺 6 で終わり、その下は地")
+    XCTAssertTrue(isBlack(try rgb(ground, barX, rowMidY(1))), "1 行目にバーは無い")
+  }
+
+  /// 行番号は幅 50 の中に右寄せで収まり（右余白 8）、その右の印の列（19）は数字に侵されない——桁が増えても
+  /// 数字と印が重ならず、本文はその右端（69）から始まる。
+  func testLineNumbersStayRightAlignedBesideTheMarkColumn() throws {
+    let text = (1...12).map { "line \($0)\n" }.joined()
+    let hosted = try host(text, size: NSSize(width: 400, height: 300))
+    let ground = hosted.ground
+    hosted.document.baseline = text.replacingOccurrences(of: "line 12\n", with: "twelve\n")
+    let y = rowMidY(12)
+    let digitsRight = style.gutterWidth - style.gutterTrailingInset
+    waitDrawn { self.isBlue(try self.rgb(ground, self.barX, y)) }
+    waitDrawn {
+      try stride(from: digitsRight - 12, to: digitsRight, by: 0.5).contains {
+        !self.isBlack(try self.rgb(ground, $0, y))
+      }
     }
-    required init?(coder: NSCoder) { fatalError("not supported") }
-    override func draw(_ dirtyRect: NSRect) {
-      NSColor.black.setFill()
-      bounds.fill()
-      color.setFill()
-      bounds.fill()
+    let clear = stride(from: digitsRight + 1, to: bodyX, by: 0.5).filter {
+      !(style.gutterWidth + 1...style.gutterWidth + 6).contains($0)
     }
+    for x in clear {
+      XCTAssertTrue(isBlack(try rgb(ground, x, y)), "右余白と印の列（バー以外）に数字の字は無い: x=\(x)")
+    }
+    XCTAssertTrue(
+      try stride(from: bodyX, to: bodyX + cell, by: 0.5).contains {
+        !self.isBlack(try self.rgb(ground, $0, y))
+      }, "本文の最初の字は印の列の右端の直後のセルにある")
   }
 
   /// 印は打鍵に追従する（同じ runloop の中で作り直され、次の描画に載る）。
@@ -214,161 +259,4 @@ final class EditorLineMarksTests: OrbeTestCase {
     XCTAssertTrue(try hasInk(ground, guide, rowMidY(3)), "戻れば線も戻る")
   }
 
-  // MARK: - 本文の装備
-
-  /// インデント線は行頭から段の単位ぶんの文字の左端に、段の数だけ立つ（単位は本文から検出）。空行は隣の浅い方。
-  func testIndentGuidesStandAtTheUnitColumns() throws {
-    let hosted = try host("f {\n  a\n    b\n\n    c\n  d\n}\n")
-    let ground = hosted.ground
-    let guide1 = bodyX + 2 * cell
-    let guide2 = bodyX + 4 * cell
-    waitDrawn { try self.hasInk(ground, guide1, self.rowMidY(2)) }
-    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(2)), "1 段の行に段 1 の線")
-    XCTAssertFalse(try hasInk(ground, guide2, rowMidY(2)), "1 段の行に段 2 の線は無い")
-    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(3)))
-    XCTAssertTrue(try hasInk(ground, guide2, rowMidY(3)), "2 段の行に段 2 の線")
-    XCTAssertTrue(try hasInk(ground, guide2, rowMidY(4)), "空行は隣（2 段と 2 段）の浅い方＝2 段")
-    XCTAssertFalse(try hasInk(ground, guide1, rowMidY(1)), "0 段の行には無い")
-    XCTAssertFalse(try hasInk(ground, guide2 - 2, rowMidY(4)), "線の左は地（空行なので丸点も無い）")
-    XCTAssertFalse(try hasInk(ground, guide2 + 2, rowMidY(4)), "線の右は地")
-  }
-
-  /// タブで書かれた文書では、タブの表示幅が検出した単位（スペースの行が無ければ 4 桁）になり、空白だけの行の線
-  /// （桁幅から置く）がタブの行の線と同じ x に立つ（AppKit 既定の 28pt 刻みのままだと段が深いほど開く）。
-  func testTabWidthFollowsTheIndentUnitSoBlankLineGuidesAlign() throws {
-    let hosted = try host("\tif {\n\n\t\tx\n\t}\n")
-    let ground = hosted.ground
-    let guide1 = bodyX + 4 * cell
-    let guide2 = bodyX + 8 * cell
-    waitDrawn { try self.hasInk(ground, guide2, self.rowMidY(3)) }
-    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(1)), "タブの行の段 1 は 4 桁目")
-    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(2)), "空行の線が同じ x に立つ")
-    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(3)))
-    XCTAssertFalse(try hasInk(ground, guide2, rowMidY(2)), "空行は隣の浅い方（1 段）")
-    XCTAssertFalse(try hasInk(ground, bodyX + 56, rowMidY(3)), "AppKit 既定の刻み（2 段目 56pt）には無い")
-  }
-
-  /// CRLF の文書でも段落末は行の外——行末の 1 個のスペースに点が出て、空行のインデント線が隣から続く
-  /// （`"\r\n"` は Character 1 個なので、文字単位で改行を落とすと CR が残って両方消える）。
-  func testCRLFParagraphsKeepTrailingSpaceDotsAndBlankLineGuides() throws {
-    let hosted = try host("  a \r\n\r\n    b\r\n")
-    let ground = hosted.ground
-    let guide = bodyX + 2 * cell
-    waitDrawn { try self.hasInk(ground, guide, self.rowMidY(3)) }
-    XCTAssertFalse(isBlack(try rgb(ground, bodyX + 3.5 * cell, rowMidY(1))), "行末の 1 個に点")
-    XCTAssertTrue(try hasInk(ground, guide, rowMidY(2)), "空行に隣の浅い方（1 段）の線")
-  }
-
-  /// 丸点は行頭・行末・2 個以上の連続スペースのセルの中央に出て、単語間の 1 個には出ない。
-  func testWhitespaceDotsOnlyAtBoundaries() throws {
-    let hosted = try host("a b  c \n")
-    let ground = hosted.ground
-    let center = { (index: Int) in self.bodyX + (CGFloat(index) + 0.5) * self.cell }
-    XCTAssertTrue(isBlack(try rgb(ground, center(1), rowMidY(1))), "単語間の 1 個")
-    XCTAssertFalse(isBlack(try rgb(ground, center(3), rowMidY(1))), "2 個以上の連続")
-    XCTAssertFalse(isBlack(try rgb(ground, center(4), rowMidY(1))))
-    XCTAssertFalse(isBlack(try rgb(ground, center(6), rowMidY(1))), "行末")
-  }
-
-  /// URL の下に、文字と同じ色の 1px の線が行の下部に連続して出る（字の隙間でも切れない）。
-  func testLinkUnderlineRunsBelowTheURL() throws {
-    let hosted = try host("// see https://a.b/c now\n")
-    let ground = hosted.ground
-    let x0 = bodyX + 7 * cell
-    let x1 = bodyX + 20 * cell
-    var underlineY: CGFloat?
-    for y in stride(from: style.topInset + 10, to: style.topInset + style.lineHeight, by: 1) {
-      let xs = stride(from: x0 + 0.5, to: x1, by: cell / 2)
-      if try xs.allSatisfy({ !isBlack(try rgb(ground, $0, y)) }) {
-        underlineY = y
-        break
-      }
-    }
-    XCTAssertNotNil(underlineY, "URL の幅いっぱいの連続した線")
-    XCTAssertTrue(isBlack(try rgb(ground, x0 - cell / 2, try XCTUnwrap(underlineY))), "URL の前には無い")
-    XCTAssertTrue(isBlack(try rgb(ground, x1 + cell / 2, try XCTUnwrap(underlineY))), "URL の後には無い")
-  }
-
-  // MARK: - ⌘クリック
-
-  /// マウスの合成イベント（窓座標）。
-  private func mouse(
-    _ type: NSEvent.EventType, _ point: NSPoint, _ flags: NSEvent.ModifierFlags, in window: NSWindow
-  ) throws -> NSEvent {
-    try XCTUnwrap(
-      NSEvent.mouseEvent(
-        with: type, location: point, modifierFlags: flags, timestamp: 0,
-        windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
-        pressure: 1))
-  }
-
-  /// ⌘クリックだけが URL を渡し、素のクリックはキャレットを置く。URL の外の ⌘クリックは上流に落ちる。
-  /// ⌘に他の修飾が重なれば上流の選択操作（⌘⇧＝選択の延長）に渡す。
-  func testCommandClickOpensTheLinkAndPlainClickPlacesTheCaret() throws {
-    let hosted = try host("see https://a.b/c\n")
-    let document = hosted.document
-    let window = hosted.window
-    var opened: [URL] = []
-    document.surface.onOpenLink = { opened.append($0) }
-    let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
-    let onURL = document.surface.responder.convert(
-      NSPoint(x: bodyX + 8 * cell, y: rowMidY(1) - style.topInset), to: nil)
-    let offURL = document.surface.responder.convert(
-      NSPoint(x: bodyX + 1 * cell, y: rowMidY(1) - style.topInset), to: nil)
-    func click(_ point: NSPoint, _ flags: NSEvent.ModifierFlags) throws {
-      document.surface.responder.mouseDown(
-        with: try mouse(.leftMouseDown, point, flags, in: window))
-      document.surface.responder.mouseUp(with: try mouse(.leftMouseUp, point, flags, in: window))
-    }
-
-    try click(onURL, [.command])
-    XCTAssertEqual(opened.map(\.absoluteString), ["https://a.b/c"])
-
-    try click(onURL, [])
-    XCTAssertEqual(opened.count, 1, "素のクリックは開かない")
-    XCTAssertTrue(
-      (7...9).contains(client.selectedRange().location), "キャレットが置かれる: \(client.selectedRange())")
-
-    try click(offURL, [.command])
-    XCTAssertEqual(opened.count, 1, "URL の外の ⌘クリックは開かない")
-    XCTAssertTrue((0...2).contains(client.selectedRange().location), "上流へ落ちてキャレットが動く")
-
-    try click(onURL, [.command, .shift])
-    XCTAssertEqual(opened.count, 1, "⌘⇧は上流の選択の延長")
-    XCTAssertGreaterThan(client.selectedRange().length, 0, "キャレットから URL の上まで選択が延びる")
-  }
-
-  /// 開くのは離したとき——押した URL の上で離せば開き、押したまま動かして離せば開かず（動きが小さくても
-  /// URL の外で離せば開かない）、その間は選択も伸びない。
-  func testCommandClickOpensOnMouseUpAndDraggingCancels() throws {
-    let hosted = try host("see https://a.b/c\n")
-    let document = hosted.document
-    let window = hosted.window
-    var opened: [URL] = []
-    document.surface.onOpenLink = { opened.append($0) }
-    let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
-    let responder = document.surface.responder
-    let onURL = responder.convert(
-      NSPoint(x: bodyX + 8 * cell, y: rowMidY(1) - style.topInset), to: nil)
-    let before = client.selectedRange()
-
-    responder.mouseDown(with: try mouse(.leftMouseDown, onURL, [.command], in: window))
-    XCTAssertEqual(opened, [], "押しただけでは開かない")
-    responder.mouseUp(with: try mouse(.leftMouseUp, onURL, [.command], in: window))
-    XCTAssertEqual(opened.map(\.absoluteString), ["https://a.b/c"], "離して開く")
-
-    responder.mouseDown(with: try mouse(.leftMouseDown, onURL, [.command], in: window))
-    let away = NSPoint(x: onURL.x - 6 * cell, y: onURL.y)  // "see " の上（URL の外）
-    responder.mouseDragged(with: try mouse(.leftMouseDragged, away, [.command], in: window))
-    responder.mouseUp(with: try mouse(.leftMouseUp, away, [.command], in: window))
-    XCTAssertEqual(opened.count, 1, "ドラッグして外れれば開かない")
-    XCTAssertEqual(client.selectedRange(), before, "その間に選択は伸びない")
-
-    let edge = responder.convert(
-      NSPoint(x: bodyX + 16.8 * cell, y: rowMidY(1) - style.topInset), to: nil)
-    responder.mouseDown(with: try mouse(.leftMouseDown, edge, [.command], in: window))
-    let justOutside = NSPoint(x: edge.x + 2, y: edge.y)
-    responder.mouseUp(with: try mouse(.leftMouseUp, justOutside, [.command], in: window))
-    XCTAssertEqual(opened.count, 1, "動きが 2pt でも URL の外で離せば開かない")
-  }
 }
