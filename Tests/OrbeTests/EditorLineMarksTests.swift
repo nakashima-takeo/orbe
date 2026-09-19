@@ -24,6 +24,7 @@ final class EditorLineMarksTests: OrbeTestCase {
 
   /// 黒地の窓に載せた文書の面（装備の色は地との合成で読む）。
   private struct Hosted {
+    let session: EditorSession
     let document: EditorDocument
     let ground: Ground
     let window: NSWindow
@@ -45,10 +46,14 @@ final class EditorLineMarksTests: OrbeTestCase {
     window.appearance = NSAppearance(named: .darkAqua)
     window.contentView = ground
     ground.layoutSubtreeIfNeeded()
-    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
-    withExtendedLifetime(session) {}
-    return Hosted(document: document, ground: ground, window: window)
+    // 本文の最初の行が描かれるまで待つ（固定で眠らない。overlay の frame は layout と viewport の通知で置かれる）。
+    waitDrawn {
+      try stride(from: self.bodyX, to: self.bodyX + 24 * self.cell, by: 1).contains {
+        !self.isBlack(try self.rgb(ground, $0, self.rowMidY(1)))
+      }
+    }
+    return Hosted(session: session, document: document, ground: ground, window: window)
   }
 
   private final class Ground: NSView {
