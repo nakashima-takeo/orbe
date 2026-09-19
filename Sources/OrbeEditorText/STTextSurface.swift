@@ -245,22 +245,55 @@ extension STTextSurface: @preconcurrency STTextViewDelegate {
 }
 
 /// first responder の出入りを契約へ上げ、URL の ⌘クリックと ⌘押下中の指カーソルを持つ STTextView。上流の
-/// `mouseDown` は shift・control・option を読み ⌘ は読まないので、⌘付きのクリックだけを先取りしても衝突しない。
-/// 当たりは描画と同じ geometry（`VisibleLines`）で解く。
+/// `mouseDown` は shift・control・option を読み ⌘ は読まないので、⌘だけを付けたクリックを先取りしても
+/// 衝突しない（⌘⇧・⌥⌘・⌃⇧⌘ は上流の選択操作に渡す）。当たりは描画と同じ geometry（`VisibleLines`）で解く。
+/// 開くのは mouse-up——押した URL の上で離せば開き、ドラッグして外れれば何もしない（macOS の慣習）。
+/// その間は上流に渡さず、選択を伸ばさない。
 private final class SurfaceTextView: STTextView {
   var onFocusChange: ((Bool) -> Void)?
   var onOpenLink: ((URL) -> Void)?
   var caretSize = CGSize(width: 1, height: 14)
+  /// ⌘で押した URL（離すまで）。
+  private var pendingLink: PendingLink?
+  /// 押してから離すまでにこれ以上動けばドラッグ。
+  private static let clickSlop: CGFloat = 4
+
+  private struct PendingLink {
+    let url: URL
+    let locationInWindow: NSPoint
+  }
 
   override func mouseDown(with event: NSEvent) {
-    if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command),
+    guard (inputContext?.handleEvent(event) ?? false) == false else { return }
+    let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+    if flags.contains(.command), flags.isDisjoint(with: [.shift, .option, .control]),
       event.clickCount == 1,
       let url = VisibleLines(textView: self).link(at: containerPoint(event.locationInWindow))
     {
-      onOpenLink?(url)
+      pendingLink = PendingLink(url: url, locationInWindow: event.locationInWindow)
       return
     }
     super.mouseDown(with: event)
+  }
+
+  override func mouseDragged(with event: NSEvent) {
+    guard pendingLink == nil else { return }
+    super.mouseDragged(with: event)
+  }
+
+  override func mouseUp(with event: NSEvent) {
+    guard let pending = pendingLink else {
+      super.mouseUp(with: event)
+      return
+    }
+    pendingLink = nil
+    let moved = hypot(
+      event.locationInWindow.x - pending.locationInWindow.x,
+      event.locationInWindow.y - pending.locationInWindow.y)
+    guard moved <= Self.clickSlop,
+      VisibleLines(textView: self).link(at: containerPoint(event.locationInWindow)) == pending.url
+    else { return }
+    onOpenLink?(pending.url)
   }
 
   /// 指カーソルは ⌘ を押している間だけ。上流はスクロール・編集でカーソル矩形を捨てないので、面が layout の
