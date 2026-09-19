@@ -53,9 +53,13 @@ extension GitRepo {
     }
   }
 
-  /// blob の中身。filter・textconv・外部 diff を通らない生のバイト列。git が失敗したら nil。
-  func blob(oid: String, completion: @escaping (Data?) -> Void) {
-    runner.run(["cat-file", "blob", oid], cwd: root, lane: .independent) { output in
+  /// blob を作業ツリーに出したときの中身——`relativePath` の属性で smudge filter と eol 変換を掛けた
+  /// バイト列（git が clean と言う姿と同じ底）。smudge の実行コマンドは config 側にしか書けないので、信頼できない
+  /// リポジトリがコードを走らせる面は checkout と同じ。textconv・外部 diff は通らない。git が失敗したら nil。
+  func blob(oid: String, relativePath: String, completion: @escaping (Data?) -> Void) {
+    runner.run(
+      ["cat-file", "--filters", "--path=" + relativePath, oid], cwd: root, lane: .independent
+    ) { output in
       completion(output.isSuccess ? output.stdout : nil)
     }
   }

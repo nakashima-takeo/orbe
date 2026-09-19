@@ -93,7 +93,7 @@ final class GitRepoObserveTests: OrbeTestCase {
     git.status { status in
       XCTAssertNotNil(status)
       git.indexEntries(relativePaths: ["a.txt"]) { entries in
-        git.blob(oid: entries?["a.txt"] ?? "") { data in
+        git.blob(oid: entries?["a.txt"] ?? "", relativePath: "a.txt") { data in
           XCTAssertEqual(data.flatMap { String(data: $0, encoding: .utf8) }, "x\n")
           done.fulfill()
         }
@@ -123,6 +123,31 @@ final class GitRepoObserveTests: OrbeTestCase {
       blob(git, try XCTUnwrap(after)).flatMap { String(data: $0, encoding: .utf8) }, "two\n")
     XCTAssertEqual(try XCTUnwrap(indexEntries(git, [])), [:], "空の問い合わせは空")
     XCTAssertNil(blob(git, "0000000000000000000000000000000000000000"), "無い OID は nil")
+  }
+
+  /// blob は作業ツリーに出したときの中身——`.gitattributes` の eol と smudge filter がパスの属性で掛かる
+  /// （git が clean と言う姿と同じ底）。属性の無いパスでは生の中身。
+  func testBlobIsSmudgedAndEOLConvertedForItsPath() throws {
+    let git = try repo.open()
+    try repo.write(".gitattributes", "*.crlf text eol=crlf\n*.up filter=up\n")
+    XCTAssertTrue(repo.git(["config", "filter.up.smudge", "tr a-z A-Z"]).isSuccess)
+    try repo.write("b.crlf", "one\ntwo\n")
+    try repo.write("c.up", "shout\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    let entries = try XCTUnwrap(indexEntries(git, ["b.crlf", "c.up"]))
+    let crlf = try XCTUnwrap(entries["b.crlf"])
+    let up = try XCTUnwrap(entries["c.up"])
+    XCTAssertEqual(
+      blob(git, crlf, path: "b.crlf").flatMap { String(data: $0, encoding: .utf8) },
+      "one\r\ntwo\r\n",
+      "eol=crlf が掛かる")
+    XCTAssertEqual(
+      blob(git, crlf, path: "plain.txt").flatMap { String(data: $0, encoding: .utf8) },
+      "one\ntwo\n",
+      "属性の無いパスでは生の中身")
+    XCTAssertEqual(
+      blob(git, up, path: "c.up").flatMap { String(data: $0, encoding: .utf8) }, "SHOUT\n",
+      "smudge が掛かる")
   }
 
   /// ファイル名は pathspec として解釈しない——`:` 始まり（magic）・`[` `*`（glob）でもそのファイルの
@@ -171,10 +196,10 @@ final class GitRepoObserveTests: OrbeTestCase {
     return result
   }
 
-  private func blob(_ git: GitRepo, _ oid: String) -> Data? {
+  private func blob(_ git: GitRepo, _ oid: String, path: String = "a.txt") -> Data? {
     var result: Data?
     let done = expectation(description: "cat-file")
-    git.blob(oid: oid) {
+    git.blob(oid: oid, relativePath: path) {
       result = $0
       done.fulfill()
     }

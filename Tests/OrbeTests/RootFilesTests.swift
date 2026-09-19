@@ -205,6 +205,39 @@ final class RootFilesTests: OrbeTestCase {
     XCTAssertNil(files.baseline(for: untracked), "未追跡は baseline 無し")
   }
 
+  /// baseline は index の版を作業ツリーに出した中身——`eol=crlf` のリポジトリで clean なファイルは、作業ツリーの
+  /// バイト列と同じ baseline を持つ（生の blob なら全行が違う）。
+  func testBaselineIsTheCheckedOutFormOfTheIndexVersion() throws {
+    try repo.write(".gitattributes", "*.txt text eol=crlf\n")
+    try repo.write("a.txt", "one\r\ntwo\r\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "crlf"]).isSuccess)
+    XCTAssertEqual(repo.git(["status", "--porcelain"]).stdout.count, 0, "前提: clean")
+
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    let url = repo.url("a.txt")
+    files.addObserver(recorder, interest: url)
+    pumpMain(until: { files.baseline(for: url) != nil }, "初回取得")
+    XCTAssertEqual(files.baseline(for: url), "one\r\ntwo\r\n", "作業ツリーと同じ姿")
+    XCTAssertNil(files.status?.badge(of: "a.txt"))
+  }
+
+  /// status の通知は status が返った時点で出る——baseline の取得（smudge filter で遅くなりうる）の後ろに
+  /// バッジを並べない。
+  func testStatusIsPublishedBeforeBaselinesAreFetched() throws {
+    try repo.write(".gitattributes", "*.txt filter=slow\n")
+    XCTAssertTrue(repo.git(["config", "filter.slow.smudge", "sleep 1; cat"]).isSuccess)
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    let url = repo.url("a.txt")
+    files.addObserver(recorder, interest: url)
+    pumpMain(until: { files.status != nil }, "status")
+    XCTAssertNil(files.baseline(for: url), "smudge が終わる前に status が届く")
+    XCTAssertEqual(recorder.baselineChanges, [])
+    pumpMain(until: { files.baseline(for: url) == "one\n" }, timeout: 20, "その後 baseline が届く")
+  }
+
   /// 観測者が消えれば関心も消える——次に観測者が出入りしたときに刈られ、baseline のキャッシュも捨てる。
   func testADeadObserversInterestIsPruned() throws {
     let files = RootFiles(root: repo.root)

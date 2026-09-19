@@ -1,6 +1,6 @@
 import Foundation
 
-/// 根のサービスからの通知。(a) はデバウンス後すぐ、(b)(c) は取り直しジョブの完了後に届く。
+/// 根のサービスからの通知。(a) はデバウンス後すぐ、(b) は status が返った時点、(c) は取り直しジョブの完了後に届く。
 @MainActor
 protocol RootFilesObserver: AnyObject {
   /// 根の下でファイルが変わった（git dir の中は含まない）。
@@ -20,7 +20,9 @@ protocol RootFilesObserver: AnyObject {
 ///
 /// 観測（status → 関心のあるパスの index の OID → 変わった OID の blob）は根ごとに 1 本のジョブに直列化し、
 /// 実行中に来た要求は「終わったらもう 1 回」に畳む。古い結果が後から乗らない（index が動けば監視が取り直す。
-/// status と baseline は別々の git 起動で読むので同一時点の保証は無い）。
+/// status と baseline は別々の git 起動で読むので同一時点の保証は無い）。status の通知は status が返った時点で
+/// 出す——baseline の取得は smudge filter（git-lfs のネットワーク等）で遅くなりうるので、その後ろにバッジを
+/// 並べない。
 @MainActor
 final class RootFiles {
   struct Entry: Equatable {
@@ -75,7 +77,7 @@ final class RootFiles {
   private var rootWatcher: RepoWatcher?
   /// git dir（gitDir・commonDir）の監視。管理下と分かったときに足す。
   private var gitWatcher: RepoWatcher?
-  /// 関心のある相対パス → index 版。
+  /// 関心のある相対パス → index 版（作業ツリーに出したときの中身）。
   private var baselines: [String: Baseline] = [:]
   private var isRefreshing = false
   private var refreshAgain = false
@@ -207,10 +209,11 @@ final class RootFiles {
     let interests = self.interests
     repo.status { [weak self] status in
       guard let self else { return }
+      publish(status)
       repo.indexEntries(relativePaths: interests) { [weak self] oids in
         guard let self else { return }
         guard let oids else {
-          finish(status: status, changed: [])
+          finish(changed: [])
           return
         }
         var changed: [String] = []
@@ -223,39 +226,40 @@ final class RootFiles {
             baselines[relativePath] = Baseline(oid: nil, text: nil)
           }
         }
-        fetchBlobs(fetch[...], status: status, changed: changed)
+        fetchBlobs(fetch[...], changed: changed)
       }
-    }
-  }
-
-  /// 変わった OID の blob を 1 つずつ取る（並列に投げない）。
-  private func fetchBlobs(
-    _ pending: ArraySlice<(relativePath: String, oid: String)>, status: GitStatus?,
-    changed: [String]
-  ) {
-    guard let repo, let next = pending.first else {
-      finish(status: status, changed: changed)
-      return
-    }
-    repo.blob(oid: next.oid) { [weak self] data in
-      guard let self else { return }
-      let text = data.flatMap { String(data: $0, encoding: .utf8) }
-      var changed = changed
-      if baselines[next.relativePath]?.text != text { changed.append(next.relativePath) }
-      baselines[next.relativePath] = Baseline(oid: next.oid, text: text)
-      fetchBlobs(pending.dropFirst(), status: status, changed: changed)
     }
   }
 
   /// git の一時失敗（`status == nil`）では前の status を保つ——「最後に成功した取り直しの結果」が status の
   /// 意味で、失敗のたびにバッジが消えて戻らないため。
-  private func finish(status: GitStatus?, changed: [String]) {
+  private func publish(_ status: GitStatus?) {
+    guard let status, status != self.status else { return }
+    self.status = status
+    notify { $0.rootFilesStatusDidChange(self) }
+  }
+
+  /// 変わった OID の blob を 1 つずつ取る（並列に投げない）。
+  private func fetchBlobs(
+    _ pending: ArraySlice<(relativePath: String, oid: String)>, changed: [String]
+  ) {
+    guard let repo, let next = pending.first else {
+      finish(changed: changed)
+      return
+    }
+    repo.blob(oid: next.oid, relativePath: next.relativePath) { [weak self] data in
+      guard let self else { return }
+      let text = data.flatMap { String(data: $0, encoding: .utf8) }
+      var changed = changed
+      if baselines[next.relativePath]?.text != text { changed.append(next.relativePath) }
+      baselines[next.relativePath] = Baseline(oid: next.oid, text: text)
+      fetchBlobs(pending.dropFirst(), changed: changed)
+    }
+  }
+
+  private func finish(changed: [String]) {
     // 連鎖の最中に関心が消えたパス（取り始めたときの集合で走り切る）を書き戻さない。
     dropUnwantedBaselines()
-    if let status, status != self.status {
-      self.status = status
-      notify { $0.rootFilesStatusDidChange(self) }
-    }
     for observation in live {
       guard let interest = observation.interest, let relativePath = observation.relativePath,
         changed.contains(relativePath)
