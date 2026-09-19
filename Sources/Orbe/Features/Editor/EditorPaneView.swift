@@ -11,40 +11,236 @@ struct EditorFaceRoot: View {
   }
 }
 
-/// エディター面の AppKit 側の根。地は chrome と同じ veil で塗り、焦点の文書があればそのテキスト面を
-/// 全面に載せ、無ければ空状態（SwiftUI）を見せる。chrome キーは `performKeyEquivalent` で先取りし、
-/// window コマンドはタブ経由で上位へ、⌘S は保存、端末のキーは消し、両面のキーと通常の打鍵は
-/// テキスト面へ流す。空状態では通常の打鍵を飲む——エディター焦点中に端末へ届けない。
+/// エディター面の AppKit 側の根。骨の幾何——レール｜サイドバー（開いているとき）｜列の頭
+/// （ファイルタブ行 → 文書があればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（焦点の
+/// 文書のテキスト面、無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
+///
+/// 骨の状態はセッションの写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれだけを読む。
+/// セッションの変化は `sessionDidChange` 1 本で受け、写し → 面の差し替え → ツリーの追従の順に進める。
+/// ツリーは面が画面に見えている間（窓に付き、隠れていない）だけ根のサービスを握る。
+///
+/// chrome キーは `performKeyEquivalent` で先取りし、window コマンドはタブ経由で上位へ、⌘S は保存、
+/// 端末のキーは消し、両面のキーと通常の打鍵はテキスト面へ流す。空状態では通常の打鍵を飲む——
+/// エディター焦点中に端末へ届けない。
 final class EditorPaneView: NSView {
   weak var tab: TerminalTab?
-  private let host: NSHostingView<EditorFaceRoot>
+  /// 骨の写し（ファイルタブ行・パンくず）。
+  let shell = EditorShellModel()
+  /// エクスプローラーのツリー。根が変われば作り直す。
+  private(set) var tree: FileTree
+  let sideHost: NSHostingView<EditorSideRoot>
+  let headerHost: NSHostingView<EditorHeaderRoot>
+  let emptyHost: NSHostingView<EditorFaceRoot>
   private(set) var document: EditorDocument?
+  /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
+  private(set) var sidebar = EditorSidebarState() {
+    didSet { observeSidebar() }
+  }
+  /// サイドバーと本体の境のドラッグの当たり。
+  let sidebarHandle = SidebarResizeHandle()
+  private var localization = LocalizationStore(language: .systemDefault)
+  private var fontResolver = ChromeFontResolver()
   /// 地の veil。設定パレットで不透明度を変えた直後も追従する（観測して再描画）。
   var translucency: ChromeTranslucency? {
     didSet { observeTranslucency() }
   }
 
-  override init(frame: NSRect) {
-    host = NSHostingView(
-      rootView: EditorFaceRoot(localization: LocalizationStore(language: .systemDefault)))
-    super.init(frame: frame)
+  init(root: String) {
+    tree = FileTree(root: root)
+    sideHost = NSHostingView(
+      rootView: EditorSideRoot(
+        shell: shell, tree: tree, sidebar: sidebar, localization: localization,
+        fontResolver: fontResolver))
+    headerHost = NSHostingView(
+      rootView: EditorHeaderRoot(
+        shell: shell, localization: localization, fontResolver: fontResolver))
+    emptyHost = NSHostingView(rootView: EditorFaceRoot(localization: localization))
+    super.init(frame: .zero)
     wantsLayer = true
     layerContentsRedrawPolicy = .onSetNeedsDisplay
-    // SwiftUI 背景の alpha を窓まで通す（透過時に不透明ラスタで塞がない）。
-    host.wantsLayer = true
-    host.layer?.isOpaque = false
-    host.autoresizingMask = [.width, .height]
-    host.frame = bounds
-    addSubview(host)
+    for host in [sideHost, headerHost, emptyHost] as [NSView] {
+      // SwiftUI 背景の alpha を窓まで通す（透過時に不透明ラスタで塞がない）。
+      host.wantsLayer = true
+      host.layer?.isOpaque = false
+      host.autoresizingMask = []
+      addSubview(host)
+    }
+    sidebarHandle.autoresizingMask = []
+    addSubview(sidebarHandle)
+    sidebarHandle.onDrag = { [weak self] width in self?.resizeSidebar(to: width) }
+    sidebarHandle.onRelease = { [weak self] in self?.sidebar.commit() }
+    wireShell()
+    wireTree()
+    observeSidebar()
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
   override var isFlipped: Bool { true }
 
-  /// 窓の環境（透過・言語）を面へ配る。
-  func configure(translucency: ChromeTranslucency, localization: LocalizationStore) {
+  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態）を面へ配る。別 root は Environment を継承
+  /// しないので root を作り直す。
+  func configure(
+    translucency: ChromeTranslucency, localization: LocalizationStore,
+    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState
+  ) {
     self.translucency = translucency
-    host.rootView = EditorFaceRoot(localization: localization)
+    self.localization = localization
+    self.fontResolver = fontResolver
+    self.sidebar = sidebar
+    installRoots()
+    needsLayout = true
+  }
+
+  private func installRoots() {
+    sideHost.rootView = EditorSideRoot(
+      shell: shell, tree: tree, sidebar: sidebar, localization: localization,
+      fontResolver: fontResolver)
+    headerHost.rootView = EditorHeaderRoot(
+      shell: shell, localization: localization, fontResolver: fontResolver)
+    emptyHost.rootView = EditorFaceRoot(localization: localization)
+  }
+
+  // MARK: - 骨の操作 → セッション
+
+  private func wireShell() {
+    shell.open = { [weak self] url in self?.open(url) }
+    shell.activate = { [weak self] url in
+      guard let self, let tab, let document = tab.editor.documents.first(where: { $0.url == url })
+      else { return }
+      tab.editor.activate(document)
+      tree.reveal(document.url)
+      focusEditor()
+    }
+    shell.requestClose = { [weak self] url in self?.requestClose(url) }
+    shell.revealDirectory = { [weak self] url in self?.tree.revealDirectory(url) }
+    shell.createFile = { [weak self] in self?.beginNew(isDirectory: false) }
+    shell.createDirectory = { [weak self] in self?.beginNew(isDirectory: true) }
+    shell.collapseAll = { [weak self] in self?.tree.collapseAll() }
+    shell.toggleSidebar = { [weak self] in self?.sidebar.toggle() }
+    shell.inlineInputLostFocus = { [weak self] generation in
+      self?.inlineInputLostFocus(generation: generation)
+    }
+    shell.inlineInputMayTakeFocus = { [weak self] in
+      guard let self, let window else { return true }
+      return window.firstResponder === window || window.firstResponder === self
+    }
+  }
+
+  private func wireTree() {
+    tree.onCreated = { [weak self] url in self?.open(url) }
+    tree.onInputEnded = { [weak self] in self?.inlineInputDidEnd() }
+  }
+
+  /// 骨から開く。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）。開けたらその行を
+  /// 選択して焦点を面へ——既に焦点の文書ならセッションは変わらないので、選択はここで明示に移す。
+  private func open(_ url: URL) {
+    guard let tab else { return }
+    let document: EditorDocument
+    do {
+      document = try tab.editor.open(url)
+    } catch {
+      NSSound.beep()
+      return
+    }
+    tree.reveal(document.url)
+    focusEditor()
+  }
+
+  /// ファイルタブの ×。未保存なら確認を sheet で出し、保存／保存しないで閉じる（保存が外部変更で失敗すれば
+  /// 閉じない）。応答が返るまでに文書が消えていれば何もしない。
+  private func requestClose(_ url: URL) {
+    guard let tab, let document = tab.editor.documents.first(where: { $0.url == url }) else {
+      return
+    }
+    guard document.isDirty, let window else {
+      tab.editor.close(document)
+      return
+    }
+    let alert = UnsavedGate.alert(count: 1, language: localization.language)
+    alert.beginSheetModal(for: window) { [weak self, weak document] response in
+      guard let self, let tab = self.tab, let document,
+        tab.editor.documents.contains(where: { $0 === document }),
+        UnsavedGate.proceed(response, discarding: [document])
+      else { return }
+      tab.editor.close(document)
+    }
+  }
+
+  /// 行内入力を出す前に pane 自身を first responder にする——`paneDidFocus(.editor)` が走る経路はテキスト面と
+  /// pane の 2 つしか無く、field editor が直接焦点を取ると分割中の焦点帯と位置ドットが端末を指したままになる。
+  /// 続けて出したときは前の入力欄がここで焦点を手放し、新しい行が「面が持っている」と見て取る。
+  private func beginNew(isDirectory: Bool) {
+    window?.makeFirstResponder(self)
+    tree.beginNew(isDirectory: isDirectory)
+  }
+
+  /// 入力欄が焦点を失った。別の view（端末・テキスト面・面自身）へ移ったなら取り消し＝入力の終わり。窓へ
+  /// 落ちたなら人の操作ではない（容器が行を捨てた）ので、入力は生かしたまま焦点を面が預かる——行が戻れば
+  /// 入力欄が取り直し、預かっている間に面が焦点を外へ明け渡せば `resignFirstResponder` から同じ判定を通る。
+  private func inlineInputLostFocus(generation: Int) {
+    guard let window else { return }
+    let responder = window.firstResponder
+    if responder === window {
+      window.makeFirstResponder(self)
+      return
+    }
+    guard (responder as? NSView)?.isDescendant(of: sideHost) != true else { return }
+    tree.cancelNew(generation)
+  }
+
+  /// 行内入力を預かっている間に焦点を明け渡した。行き先が決まった次のターンに、入力欄と同じ判定へ通す
+  /// （戻った行の入力欄なら残り、面の外なら取り消し）。
+  override func resignFirstResponder() -> Bool {
+    if let generation = tree.newEntry?.generation {
+      DispatchQueue.main.async { [weak self] in self?.inlineInputLostFocus(generation: generation) }
+    }
+    return super.resignFirstResponder()
+  }
+
+  /// 行内入力が終わった（状態が落ちた。Enter・Esc・取り消し・すべて折りたたむ・根を畳む・作成先を畳む・
+  /// サイドバーを閉じる・cd）。焦点がまだ入力欄（骨の host 配下）か面自身（`beginNew` が停めた・預かっている）
+  /// か窓に居れば、その場で面の行き先へ移す。別の view へ移って終わったなら（端末をクリックして抜けた）
+  /// そこに居るので触らない。
+  private func inlineInputDidEnd() {
+    guard let window else { return }
+    let responder = window.firstResponder
+    let strayed =
+      responder === window || responder === self
+      || (responder as? NSView)?.isDescendant(of: sideHost) == true
+    if strayed { window.makeFirstResponder(focusTarget) }
+  }
+
+  private func focusEditor() {
+    window?.makeFirstResponder(focusTarget)
+  }
+
+  // MARK: - セッション → 骨
+
+  /// セッションが変わった。写しを無条件に組み直し、焦点の文書の面を見せ、文書が変わっていればツリーの
+  /// 祖先を開いて選択する。写しを `show` に相乗りさせない——同一文書の未保存・衝突の変化は `show` の
+  /// guard で止まる。
+  func sessionDidChange() {
+    guard let tab else { return }
+    let active = tab.editor.activeDocument
+    let changed = active !== document
+    shell.update(from: tab.editor, root: tree.root)
+    show(active)
+    if changed, let url = active?.url { tree.reveal(url) }
+  }
+
+  /// 根が変わった（cd）。ツリーを作り直し、握っていたなら握り直す。
+  func setRoot(_ root: String) {
+    guard root != tree.root else { return }
+    tree.cancelNew()
+    tree.isLive = false
+    tree = FileTree(root: root)
+    wireTree()
+    updateLiveness()
+    installRoots()
+    if let tab {
+      shell.update(from: tab.editor, root: root)
+      if let url = tab.editor.activeDocument?.url { tree.reveal(url) }
+    }
   }
 
   /// 焦点の文書の面を見せる（nil なら空状態）。前の文書の面は外すだけで、面は文書と一緒に生き続ける。
@@ -57,15 +253,40 @@ final class EditorPaneView: NSView {
     self.document = document
     if let document {
       let view = document.surface.view
-      view.autoresizingMask = [.width, .height]
-      view.frame = bounds
-      addSubview(view)
+      view.autoresizingMask = []
+      view.frame = bodyRect
+      // 境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なる。テキスト面の下に置いて当たりを保つ。
+      addSubview(view, positioned: .below, relativeTo: sidebarHandle)
     }
-    host.isHidden = document != nil
+    emptyHost.isHidden = document != nil
+    needsLayout = true
     if hadFocusInside, window?.firstResponder !== focusTarget {
       window?.makeFirstResponder(focusTarget)
     }
   }
+
+  // MARK: - 可視性（ツリーが根のサービスを握る寿命）
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    updateLiveness()
+  }
+
+  override func viewDidHide() {
+    super.viewDidHide()
+    updateLiveness()
+  }
+
+  override func viewDidUnhide() {
+    super.viewDidUnhide()
+    updateLiveness()
+  }
+
+  private func updateLiveness() {
+    tree.isLive = window != nil && !isHiddenOrHasHiddenAncestor
+  }
+
+  // MARK: - 焦点とキー
 
   /// first responder が自分か配下にあるか。
   private var focusIsInside: Bool {
@@ -78,10 +299,12 @@ final class EditorPaneView: NSView {
 
   override var acceptsFirstResponder: Bool { true }
 
-  /// 空状態の中身は静止しているので、面のどこを押しても面自身が受ける（焦点を取る）。
+  /// 空状態の中身は静止しているので、本体のどこを押しても面自身が受ける（焦点を取る）。骨の host は
+  /// 自分で受ける。
   override func hitTest(_ point: NSPoint) -> NSView? {
     let hit = super.hitTest(point)
-    return document == nil && hit != nil ? self : hit
+    guard document == nil, let hit else { return hit }
+    return hit.isDescendant(of: emptyHost) ? self : hit
   }
 
   override func mouseDown(with event: NSEvent) {
@@ -93,8 +316,8 @@ final class EditorPaneView: NSView {
     return super.becomeFirstResponder()
   }
 
-  /// chrome キーの解決点。first responder が自分か配下のときだけ効く（隠れたタブの pane は subview から
-  /// 外れているが、gate は必ず入れる）。
+  /// chrome キーの解決点。first responder が自分か配下のときだけ効く——隠れたタブの pane も窓に残るので、
+  /// 焦点が自分か配下に無いときは素通しする。
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
     guard focusIsInside, let action = Keybindings.chromeAction(for: event)
     else { return super.performKeyEquivalent(with: event) }
@@ -115,36 +338,32 @@ final class EditorPaneView: NSView {
   /// 空状態で通常の打鍵を飲む（文書があれば打鍵はテキスト面に届き、ここへは来ない）。
   override func keyDown(with event: NSEvent) {}
 
+  /// ⌘S。ディスクが変わっていて失敗したら「上書き／キャンセル」を sheet で出し、上書きで force 保存する。
+  /// force 保存するのは同意した文書——sheet の間もセッションは動く（エージェントの `open_file` が焦点を
+  /// 差し替える）ので、応答時点の焦点ではなく出した時点の文書を束ね、まだ居ることを確かめてから書く
+  /// （`requestClose` と同型）。それ以外の失敗は beep（`open` と同じ理由でエラー面は持たない）。
   private func saveActiveDocument() {
     guard let tab else { return }
     do {
       try tab.editor.saveActive()
+    } catch EditorDocumentError.diskChanged {
+      guard let window, let target = tab.editor.activeDocument else { return }
+      let alert = UnsavedGate.overwriteAlert(language: localization.language)
+      alert.beginSheetModal(for: window) { [weak self, weak target] response in
+        guard let self, let tab = self.tab, let target,
+          tab.editor.documents.contains(where: { $0 === target }),
+          UnsavedGate.shouldOverwrite(response)
+        else { return }
+        do {
+          try target.save(force: true)
+        } catch {
+          NSSound.beep()
+          NSLog("[editor] forced save failed: \(error)")
+        }
+      }
     } catch {
+      NSSound.beep()
       NSLog("[editor] save failed: \(error)")
     }
-  }
-
-  // MARK: - 地
-
-  private func observeTranslucency() {
-    guard let translucency else { return }
-    withObservationTracking {
-      _ = translucency.effectiveOpacity
-    } onChange: { [weak self] in
-      DispatchQueue.main.async {
-        self?.needsDisplay = true
-        self?.observeTranslucency()
-      }
-    }
-  }
-
-  override func viewDidChangeEffectiveAppearance() {
-    super.viewDidChangeEffectiveAppearance()
-    needsDisplay = true
-  }
-
-  override func draw(_ dirtyRect: NSRect) {
-    Theme.Color.bgBase.withAlphaComponent(translucency?.effectiveOpacity ?? 1).setFill()
-    dirtyRect.fill()
   }
 }

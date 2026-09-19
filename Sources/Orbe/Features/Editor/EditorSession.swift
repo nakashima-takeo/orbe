@@ -22,6 +22,24 @@ final class EditorSession {
 
   var hasUnsavedChanges: Bool { documents.contains { $0.isDirty } }
 
+  /// 閉じれば失われる文書（未保存の列）。
+  func documentsToDiscard() -> [EditorDocument] { documents.filter(\.isDirty) }
+
+  /// 永続から戻す。順に開き（読めないパスは黙って落とす）、`active` が残っていればそれを、無ければ先頭を
+  /// 焦点にする。既に居るものは壊さない——materialize より先に制御 API の `open_file` が文書を開いて
+  /// いれば、その焦点を保つ（`activate` / `close` と同じく、居るものを確かめてから触る）。通知は 1 本にまとめる。
+  func restore(paths: [String], active: String) {
+    let saved = onChange
+    onChange = nil
+    defer { onChange = saved }
+    let prior = activeDocument
+    for path in paths { _ = try? open(URL(fileURLWithPath: path)) }
+    guard !documents.isEmpty else { return }
+    let activeURL = URL(fileURLWithPath: active).resolvingSymlinksInPath()
+    activeDocument = prior ?? documents.first { $0.url == activeURL } ?? documents[0]
+    saved?()
+  }
+
   /// ファイルを開いて焦点にする。既に開いていれば焦点を移すだけ（本文は面にあるものが正）。
   /// 文書の識別は symlink を解いた実体のパス——保存は一時ファイルの rename なので、リンクのパスへ書くと
   /// リンク自体が通常ファイルに置き換わり実体へ届かない。同じ実体を別の綴りで開いても文書が割れない。

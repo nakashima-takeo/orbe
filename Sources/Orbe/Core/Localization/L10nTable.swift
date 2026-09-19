@@ -141,6 +141,31 @@ enum L10n {
     .editorEmptySearchProject: ("プロジェクト全体を検索", "Search the whole project"),
     .editorEmptyBackToTerminal: ("ターミナルへ戻る", "Back to terminal"),
 
+    // MARK: Editor 面（骨: エクスプローラー）
+    .editorExplorerTitle: ("エクスプローラー", "Explorer"),
+    .editorNewFile: ("新規ファイル", "New File"),
+    .editorNewFolder: ("新規フォルダ", "New Folder"),
+    .editorCollapseAll: ("すべて折りたたむ", "Collapse All"),
+
+    // MARK: Editor 面（未保存の確認・外部変更の上書き）
+    .editorUnsavedTitle: ("未保存の変更があります", "You have unsaved changes"),
+    .editorUnsavedMessageOne: (
+      "%lld 件の文書に未保存の変更があります。保存しますか？",
+      "%lld document has unsaved changes. Do you want to save it?"
+    ),
+    .editorUnsavedMessageOther: (
+      "%lld 件の文書に未保存の変更があります。保存しますか？",
+      "%lld documents have unsaved changes. Do you want to save them?"
+    ),
+    .editorUnsavedSave: ("保存", "Save"),
+    .editorUnsavedDiscard: ("保存しない", "Don't Save"),
+    .editorOverwriteTitle: ("ディスク上で変更されています", "The file has changed on disk"),
+    .editorOverwriteMessage: (
+      "外で書き換えられた内容を、この文書の本文で上書きしますか？",
+      "Overwrite the changes made outside Orbe with this document's contents?"
+    ),
+    .editorOverwriteConfirm: ("上書き", "Overwrite"),
+
     // MARK: Tab context menu
     .tabMenuResetAgentState: ("エージェント状態をリセット", "Reset Agent State"),
 

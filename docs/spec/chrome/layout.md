@@ -1,7 +1,7 @@
 ---
 title: レイアウト
 description: window の SwiftUI ホスト構成・workspace / タブ / 面 / surface の構造・一方向参照・フォーカス管理・ショートカット・オーバーレイ提示機構
-updated: 2026-09-12
+updated: 2026-09-17
 ---
 
 # レイアウト
@@ -40,11 +40,11 @@ chrome キーは「どの面が所有するか」（window / 端末 / エディ�
 
 ## フォーカス
 
-フォーカスは排他管理。タブ切替・workspace 切替・パレット／ヘルプを閉じたとき・⌘R の確定・制御 API `focus_tab` / `open_file` のいずれでも、そのタブの**焦点の面**（端末 surface か、エディター面の焦点 view——文書があればそのテキスト面、無ければ面自身）へフォーカスが戻る。焦点の面は常に見えている面（→ [editor/faces](../editor/faces.md) の正規形）。面をクリックすると、その面が焦点になりタブの記憶も追従する。パレットで一時的に焦点を失っても面の記憶は残る。
+フォーカスは排他管理。タブ切替・workspace 切替・パレット／ヘルプを閉じたとき・⌘R の確定・制御 API `focus_tab` / `open_file` のいずれでも、そのタブの**焦点の面**（端末 surface か、エディター面の焦点 view——文書があればそのテキスト面、無ければ面自身）へフォーカスが戻る。焦点の面は常に見えている面（→ [editor/faces](../editor/faces.md) の正規形）。面をクリックすると、その面が焦点になりタブの記憶も追従する。エディター面の骨の操作（ファイルを開く・切り替える・新規作成）も焦点をテキスト面へ運び、行内入力は面自身を経由して焦点を取る（→ [editor/shell](../editor/shell.md)）。パレットで一時的に焦点を失っても面の記憶は残る。
 
 ## ショートカット
 
-- Cmd+E エディター面 ⇄ 端末面（→ [editor/faces](../editor/faces.md)）/ Cmd+S エディターの文書を保存（→ [editor/code](../editor/code.md)）/ Cmd+T 新タブ / Cmd+Shift+T 閉じたエージェント パレット（後述）/ Cmd+Shift+[ ] および Cmd+Shift+←→ タブ切替 / Cmd+W タブを閉じる（アクティブ workspace の最後のタブを閉じても 0 タブの空状態でアクティブに残る。ウィンドウは閉じない → [workspace](../platform/workspace.md)）/ Cmd+Shift+A エージェント起動パレット・Cmd+Shift+C デフォルトエージェント起動（→ [agent/launch](../agent/launch.md)）/ Cmd+Shift+S workspace パレット（→ [workspace パレット](../palette/workspace.md)）/ Cmd+, 設定パレット（→ [settings](../palette/settings.md)）/ Cmd+F スクロールバック検索（→ [search](../terminal/search.md)）/ Cmd+R タブリネーム（→ [chrome](chrome.md)）/ Cmd+↑↓ スクロールバック先頭/末尾ジャンプ（→ [terminal/core](../terminal/core.md)）/ Cmd+Shift+E アクティブタブの cwd を GUI エディタで開く / ⌘⌘（Cmd 素タップ×2）Attention パレット（→ [attention](../palette/attention.md)。前面時。背面時はメニューバーのドロップダウン → [menubar](menubar.md)）。
+- Cmd+E エディター面 ⇄ 端末面（→ [editor/faces](../editor/faces.md)）/ Cmd+S エディターの文書を保存（→ [editor/code](../editor/code.md)）/ Cmd+T 新タブ / Cmd+Shift+T 閉じたエージェント パレット（後述）/ Cmd+Shift+[ ] および Cmd+Shift+←→ タブ切替 / Cmd+W タブを閉じる（エディターに未保存の文書があれば確認 → [editor/shell](../editor/shell.md)。アクティブ workspace の最後のタブを閉じても 0 タブの空状態でアクティブに残る。ウィンドウは閉じない → [workspace](../platform/workspace.md)）/ Cmd+Shift+A エージェント起動パレット・Cmd+Shift+C デフォルトエージェント起動（→ [agent/launch](../agent/launch.md)）/ Cmd+Shift+S workspace パレット（→ [workspace パレット](../palette/workspace.md)）/ Cmd+, 設定パレット（→ [settings](../palette/settings.md)）/ Cmd+F スクロールバック検索（→ [search](../terminal/search.md)）/ Cmd+R タブリネーム（→ [chrome](chrome.md)）/ Cmd+↑↓ スクロールバック先頭/末尾ジャンプ（→ [terminal/core](../terminal/core.md)）/ Cmd+Shift+E アクティブタブの cwd を GUI エディタで開く / ⌘⌘（Cmd 素タップ×2）Attention パレット（→ [attention](../palette/attention.md)。前面時。背面時はメニューバーのドロップダウン → [menubar](menubar.md)）。
 - フォント動的ズーム Cmd +/-/0（ghostty binding action）。
 
 **Cmd+Shift+T は「閉じたエージェント」パレットを開く**（→ [closed-agents](../palette/closed-agents.md)）。この workspace で閉じたまま戻っていないエージェントセッションを[寿命ログ](../platform/session-log.md)から一覧し、Enter で 1 件を休眠チケットとして戻して起こす。閉じ方（人のジェスチャ・プロセス終了・制御 API・エージェント自身の終了）を問わず、アプリの再起動をまたいで戻せる。素のシェルタブは対象外——戻してもプロセスもスクロールバックも戻らず、resume を持つ CLI だけが中身ごと戻るため。戻るのは cwd と同一性だけで、明示タイトルは付かず、位置は新規タブと同じ規則——同じ worktree の連が残っていればその右端、無ければ末尾（→ [persistence](../platform/persistence.md)・[chrome](chrome.md) の連）。0 タブの workspace でも開く。

@@ -99,12 +99,17 @@ struct StatusRowView: View {
           .lineLimit(1)
           .layoutPriority(1)
       }
-      if let location = model.location, !location.isEmpty {
-        fontResolver.text(location, base: Theme.Typography.meta)
-          .font(Font.theme.meta)
-          .foregroundStyle(Color.theme.textMuted)
-          .lineLimit(1)
-          .truncationMode(.head)  // パスは末尾側を残す
+      if !model.location.isEmpty {
+        // 断片ごとの Text を 1 本に連結する（省略は全体で 1 回、末尾側を残す）。
+        model.location.map { part in
+          fontResolver.text(part.text, base: Theme.Typography.meta)
+            .foregroundStyle(
+              part.tone == .dim ? Color.theme.textMuted : Color.theme.statusText)
+        }
+        .reduce(Text(verbatim: ""), +)
+        .font(Font.theme.meta)
+        .lineLimit(1)
+        .truncationMode(.head)  // パスは末尾側を残す
       }
 
       Spacer(minLength: Theme.Space.beat)

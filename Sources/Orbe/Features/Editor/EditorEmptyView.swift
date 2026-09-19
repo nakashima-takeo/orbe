@@ -42,12 +42,12 @@ private struct EditorKbd: View {
   let key: String
   @Environment(\.colorScheme) private var scheme
 
-  // 見本の dark 値。light は換算（地 ×0.6 / 枠 ×1.4）。
-  private static let fillAlpha: CGFloat = 0.05
-  private static let borderAlpha: CGFloat = 0.14
+  // 見本の dark 値。light は EditorInk が換算する。
+  private static let fillAlpha: Double = 0.05
+  private static let borderAlpha: Double = 0.14
 
   var body: some View {
-    let dark = scheme == .dark
+    let ink = EditorInk(scheme)
     Text(key)
       .font(Font.theme.editorHint)
       .tracking(Theme.Typography.trackingKey)
@@ -57,15 +57,10 @@ private struct EditorKbd: View {
       .padding(.vertical, 1)
       .padding(.horizontal, 7)
       .padding(Theme.Stroke.hairline)
-      .background(
-        RoundedRectangle(cornerRadius: Theme.Radius.sm)
-          .fill(Color.theme.surfaceInk.opacity(dark ? Self.fillAlpha : Self.fillAlpha * 0.6))
-      )
+      .background(RoundedRectangle(cornerRadius: Theme.Radius.sm).fill(ink.fill(Self.fillAlpha)))
       .overlay(
         RoundedRectangle(cornerRadius: Theme.Radius.sm)
-          .strokeBorder(
-            Color.theme.borderInk.opacity(dark ? Self.borderAlpha : Self.borderAlpha * 1.4),
-            lineWidth: Theme.Stroke.hairline))
+          .strokeBorder(ink.hairline(Self.borderAlpha), lineWidth: Theme.Stroke.hairline))
   }
 }
 

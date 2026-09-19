@@ -70,24 +70,38 @@ struct WorkspaceState: Codable, Equatable {
   }
 }
 
-/// 1 タブの永続表現。cwd・エージェントセッション・明示タイトル・面の配置。
+/// エディターで開いていた文書の列（実体パス）と、その中のアクティブ。位置ではなくパスで指す——復元で読めない
+/// パスを落としても列がずれず、「列があるのにアクティブが無い」という表せない状態を持たない（落ちていれば先頭）。
+struct EditorState: Codable, Equatable {
+  var open: [String]
+  var active: String
+}
+
+/// 1 タブの永続表現。cwd・エージェントセッション・明示タイトル・面の配置・エディターの状態。
 struct TabState: Codable, Equatable {
   var cwd: String
   var agent: AgentSession?
   var explicitTitle: String?
   /// 面の配置。既定（端末だけ）は書かず、読めなければ既定へ落とす（ファイル全体は失わない）。
   var faces: FaceLayout
+  /// 開いていた文書。無ければ書かず、読めなければ nil へ落とす（ファイル全体は失わない）。
+  var editor: EditorState?
 
-  enum CodingKeys: String, CodingKey {
-    case cwd, agent, explicitTitle, faces
+  /// `CaseIterable` は「フィールドを足して encode / decode を忘れる」を検出する seam
+  /// （`WorkspacePersistenceTests` が全キーの往復を見る）。
+  enum CodingKeys: String, CodingKey, CaseIterable {
+    case cwd, agent, explicitTitle, faces, editor
   }
 
-  init(cwd: String, agent: AgentSession?, explicitTitle: String?, faces: FaceLayout = .terminalOnly)
-  {
+  init(
+    cwd: String, agent: AgentSession?, explicitTitle: String?, faces: FaceLayout = .terminalOnly,
+    editor: EditorState? = nil
+  ) {
     self.cwd = cwd
     self.agent = agent
     self.explicitTitle = explicitTitle
     self.faces = faces
+    self.editor = editor
   }
 
   init(from decoder: Decoder) throws {
@@ -96,6 +110,9 @@ struct TabState: Codable, Equatable {
     agent = try c.decodeIfPresent(AgentSession.self, forKey: .agent)
     explicitTitle = try c.decodeIfPresent(String.self, forKey: .explicitTitle)
     faces = ((try? c.decode(FaceLayout.self, forKey: .faces)) ?? .terminalOnly).normalized
+    editor = (try? c.decode(EditorState.self, forKey: .editor)).flatMap {
+      $0.open.isEmpty ? nil : $0
+    }
   }
 
   func encode(to encoder: Encoder) throws {
@@ -104,6 +121,7 @@ struct TabState: Codable, Equatable {
     try c.encodeIfPresent(agent, forKey: .agent)
     try c.encodeIfPresent(explicitTitle, forKey: .explicitTitle)
     if faces != .terminalOnly { try c.encode(faces, forKey: .faces) }
+    if let editor, !editor.open.isEmpty { try c.encode(editor, forKey: .editor) }
   }
 }
 

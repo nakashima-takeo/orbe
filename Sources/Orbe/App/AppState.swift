@@ -18,6 +18,26 @@ struct AppStateFile: Codable, Equatable {
   /// UI 言語（"ja"/"en"）。**nil = 未選択**（初回言語選択画面を出す・描画は OS 言語に追従）、
   /// 非 nil = 確定（その言語で起動し言語画面はスキップ）。設定パレットの言語行が書き替える。
   var preferredLanguage: String?
+  /// エディター面のサイドバーの幅と開閉（アプリ全体で 1 つ）。
+  var editorSidebar: EditorSidebarRecord?
+}
+
+/// エディター面のサイドバーの永続表現。「あるが読めない」（形が違う・値の型が違う）は全 field nil に読む——
+/// この 1 項目のために app-state 全体を落とさず、寛容さはこの型に閉じる（`AppStateFile` は合成のまま）。
+struct EditorSidebarRecord: Codable, Equatable {
+  var width: Double?
+  var isOpen: Bool?
+
+  init(width: Double? = nil, isOpen: Bool? = nil) {
+    self.width = width
+    self.isOpen = isOpen
+  }
+
+  init(from decoder: Decoder) throws {
+    guard let c = try? decoder.container(keyedBy: CodingKeys.self) else { return }
+    width = try? c.decodeIfPresent(Double.self, forKey: .width)
+    isOpen = try? c.decodeIfPresent(Bool.self, forKey: .isOpen)
+  }
 }
 
 /// `app-state.json` のディスク永続（settings.json と並ぶ）。`StateDir.base()/app-state.json`。

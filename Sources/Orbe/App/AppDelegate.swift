@@ -78,12 +78,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     confirmQuitIfNeeded() ? .terminateNow : .terminateCancel
   }
 
-  /// 実行中プロセスがあれば終了前に 1 回だけ確認する（無警告で殺さない）。窓の ✕・⌘Q／メニュー・
+  /// エディターに未保存の文書があれば保存するか確認し（保存が外部変更で失敗すれば終了しない）、実行中
+  /// プロセスがあれば終了前に 1 回だけ確認する（無警告で殺さない）。窓の ✕・⌘Q／メニュー・
   /// アップデートの再起動・ログアウトまで、あらゆる終了がこの 1 箇所を通る。文言は現在言語で引く
   /// （言語ホルダーが立つ前に終了要求が届いたときは OS 追従。文言を引けないことは確認を省く理由にならない）。
   private func confirmQuitIfNeeded() -> Bool {
-    guard ghostty_app_needs_confirm_quit(Ghostty.shared.app) else { return true }
     let language = windowController?.localization.language ?? .systemDefault
+    if let unsaved = windowController?.unsavedDocuments(), !unsaved.isEmpty {
+      let response = MainActor.assumeIsolated {
+        UnsavedGate.alert(count: unsaved.count, language: language).runModal()
+      }
+      guard MainActor.assumeIsolated({ UnsavedGate.proceed(response, discarding: unsaved) }) else {
+        return false
+      }
+    }
+    guard ghostty_app_needs_confirm_quit(Ghostty.shared.app) else { return true }
     let alert = NSAlert()
     alert.messageText = L10n.string(.quitConfirmTitle, language)
     alert.informativeText = L10n.string(.quitConfirmMessage, language)

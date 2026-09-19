@@ -1,5 +1,6 @@
 import AppKit
 import GhosttyKit
+import OrbeEditorCore
 import OrbeSessionLog
 
 /// タブ 1 枚。端末 surface 1 枚（`SurfaceView`）と「タブとしての状態」——制御チャネルの宛先 ID・
@@ -24,10 +25,13 @@ final class TerminalTab {
 
   /// エディター面のセッション（開いた文書の列と焦点の文書）。書き手はタブだけで、外（制御 API）は
   /// `openFile` を通る。エディターの型は UI に閉じた `@MainActor` で、タブはその外（main スレッド規律の
-  /// nonisolated）にいるため、触る点（生成・配線・`openFile`）だけ `MainActor.assumeIsolated` で境を越える。
+  /// nonisolated）にいるため、このプロパティに触る箇所はいずれも `MainActor.assumeIsolated` で境を越える。
   let editor: EditorSession
-  /// 開いた文書の列・焦点の文書・未保存の有無が変わった通知（chrome 更新は上位）。
+  /// 開いた文書の列・焦点の文書・未保存の有無が変わった通知（chrome 更新・永続保存は上位）。
   var onEditorChange: (() -> Void)?
+  /// 未消費の復元状態（開いていた文書）。休眠チケットと同じく materialize で消費する。未消費のまま終了
+  /// しても同じ形で書き戻す（一度も見なかったタブの文書は失われない）。
+  private var pendingEditor: EditorState?
 
   /// このタブが materialize 済み側にある現在状態。現仕様の遷移は false → true のみだが、
   /// 履歴bitではなく、将来の再休眠では false へ戻せる責務として扱う。
@@ -128,8 +132,8 @@ final class TerminalTab {
     resumeSpawn = nil
     faces = .terminalOnly
     editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
-    view = Self.makeView(cwd: cwd, faces: faces)
     groupKey = Self.groupKey(cwd: cwd)
+    view = Self.makeView(cwd: cwd, root: groupKey, faces: faces)
     surface.initialCommand = command
     surface.initialEnv = env
     wireView()
@@ -149,21 +153,22 @@ final class TerminalTab {
     self.resumeSpawn = resumeSpawn
     faces = state.faces.normalized
     editor = MainActor.assumeIsolated { EditorSession(surfaces: .shared) }
-    view = Self.makeView(cwd: state.cwd, faces: faces)
     groupKey = Self.groupKey(cwd: state.cwd)
+    view = Self.makeView(cwd: state.cwd, root: groupKey, faces: faces)
     explicitTitle = state.explicitTitle
+    pendingEditor = state.editor
     if let agent = state.agent { agentSlot = .dormant(agent) }
     wireView()
   }
 
-  private static func makeView(cwd: String, faces: FaceLayout) -> TabFacesView {
+  private static func makeView(cwd: String, root: String, faces: FaceLayout) -> TabFacesView {
     TabFacesView(
       terminal: SurfaceScrollView(surfaceView: SurfaceView(frame: .zero, cwd: cwd)),
-      editor: EditorPaneView(frame: .zero), faces: faces)
+      editor: EditorPaneView(root: root), faces: faces)
   }
 
   /// 両面がタブを知り（事実の通知先）、背の求める配置がタブの状態を通って器へ戻るよう配線する。
-  /// セッションの変化は器（面の中身）へ写してから上位へ 1 本で上げる。
+  /// セッションの変化は器（面の骨と中身）へ写してから上位へ 1 本で上げる。
   private func wireView() {
     surface.tab = self
     view.editor.tab = self
@@ -173,7 +178,7 @@ final class TerminalTab {
     MainActor.assumeIsolated {
       editor.onChange = { [weak self] in
         guard let self else { return }
-        view.editor.show(editor.activeDocument)
+        view.editor.sessionDidChange()
         onEditorChange?()
       }
       editor.onFocus = { [weak self] in self?.paneDidFocus(.editor) }
@@ -203,6 +208,10 @@ final class TerminalTab {
       }
     }
     OrbeRuntimeEnv.inject(into: &surface.initialEnv, tabId: id)
+    if let pending = pendingEditor {
+      pendingEditor = nil
+      MainActor.assumeIsolated { editor.restore(paths: pending.open, active: pending.active) }
+    }
   }
 
   /// エージェント hook の状態報告を slot へ適用する（`report_agent`）。戻り値は state の実変化
@@ -307,6 +316,11 @@ final class TerminalTab {
     setFaces(FaceLayout(editorRatio: faces.editorRatio, focus: face), animated: false)
   }
 
+  /// 閉じれば失われる文書（未保存の列）。閉じる・終了の確認が読む。
+  func unsavedDocuments() -> [EditorDocument] {
+    MainActor.assumeIsolated { editor.documentsToDiscard() }
+  }
+
   /// エディターでファイルを開いて焦点の文書にする（制御 API の入口）。読めない・UTF-8 でないは throw。
   func openFile(_ url: URL) throws {
     _ = try MainActor.assumeIsolated { try editor.open(url) }
@@ -324,9 +338,11 @@ final class TerminalTab {
   }
 
   /// surface が OSC 7 で cwd を報告した（`SurfaceView.currentPwd` の didSet が実変化時だけ呼ぶ）。
+  /// 根が変わればエディター面のツリーも作り直す。
   func pwdChanged() {
     ControlServer.shared.emit(.pwd(tabId: id, path: surface.currentPwd))
     groupKey = Self.groupKey(cwd: cwd)
+    view.editor.setRoot(groupKey)
     onPwdChange?()
   }
 
@@ -337,13 +353,23 @@ final class TerminalTab {
     DispatchQueue.main.async { [weak self] in self?.onClose?(origin) }
   }
 
-  /// このタブの復元単位（cwd・エージェントセッション・明示タイトル・面の配置）。起動時の一括保存
-  /// （WorkspacePersistence）が読み、復元は `TerminalTab(restoring:)` が同じ形を受ける。
-  /// 永続化するのは sessionId が確定している同一性だけ（resume 不能な記録を書かない）。
+  /// このタブの復元単位（cwd・エージェントセッション・明示タイトル・面の配置・開いていた文書）。起動時の
+  /// 一括保存（WorkspacePersistence）が読み、復元は `TerminalTab(restoring:)` が同じ形を受ける。
+  /// 永続化するのは sessionId が確定している同一性だけ（resume 不能な記録を書かない）。文書は開いている
+  /// もの、無ければ未消費の復元状態。
   func tabState() -> TabState {
     TabState(
       cwd: cwd, agent: agentSlot.session.flatMap { $0.sessionId != nil ? $0 : nil },
-      explicitTitle: explicitTitle, faces: faces)
+      explicitTitle: explicitTitle, faces: faces, editor: editorState())
+  }
+
+  private func editorState() -> EditorState? {
+    MainActor.assumeIsolated {
+      let documents = editor.documents
+      guard let first = documents.first else { return pendingEditor }
+      return EditorState(
+        open: documents.map(\.url.path), active: (editor.activeDocument ?? first).url.path)
+    }
   }
 
   deinit {

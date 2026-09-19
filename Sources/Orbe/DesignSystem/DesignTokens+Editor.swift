@@ -12,8 +12,23 @@ extension Theme.Color {
   static let editorGhost = editorDyn(light: 0xd9d3e6, dark: 0x3d3752)
   /// エディター面のアイコン・kbd の文字。dark / light とも kbKeyText と偶然同値だが役割が違うので別トークン。
   static let editorIcon = editorDyn(light: 0x766e8d, dark: 0xa99fb8)
-  /// コードの素の文字（役割を持たない字）。dark / light とも statusText と偶然同値だが役割が違うので別トークン。
-  static let editorCodeText = editorDyn(light: 0x4d4368, dark: 0xcdc7e2)
+  /// エディター面の 2 段目の文字——コードの素文字・ファイル名・タブ題・パンくずの末尾（見本 text2）。
+  /// dark / light とも statusText と偶然同値だが役割が違うので別トークン。
+  static let editorText = editorDyn(light: 0x4d4368, dark: 0xcdc7e2)
+  /// 三次の文字——レールの非選択・パンくずの区切り。`textTertiary` は `textMuted` の別名なので別値を持つ。
+  static let editorTertiary = editorDyn(light: 0xaca4bd, dark: 0x6d667a)
+  /// 変更の黄——M バッジ・外部変更で衝突中のドット。dark は conflict と偶然同値だが light が違い、git 競合でもない。
+  static let editorModified = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)
+  /// 種別チップの色相（見本 palette.ts の hue）。チップの文字色と、その α .16 の地に使う。
+  static let editorHueOrange = editorDyn(light: 0xbf5f2a, dark: 0xd98a5f)
+  static let editorHueBlue = editorDyn(light: 0x3f6fd6, dark: 0x85adff)
+  static let editorHueYellow = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)
+  static let editorHueSky = editorDyn(light: 0x2a7bbd, dark: 0x9cdcfe)
+  static let editorHueViolet = editorDyn(light: 0x645b9c, dark: 0x8a82b8)
+  static let editorHueCyan = editorDyn(light: 0x178c94, dark: 0x4bbfc7)
+  static let editorHueRed = editorDyn(light: 0xd13d3d, dark: 0xd16969)
+  static let editorHueGreen = editorDyn(light: 0x2f9a52, dark: 0x82d894)
+  static let editorHueTeal = editorDyn(light: 0x1a8a76, dark: 0x7fd0c3)
   /// 行番号。textMuted の α .55。
   static let editorLineNumber = editorDynA(light: 0x8d85a3, dark: 0x8b8397, alpha: 0.55)
 
@@ -55,6 +70,60 @@ extension Theme.Typography {
   static let editorLineNumber = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
   /// コード本体の行高（pt。`lineBody` 等の倍率とは単位が違う）。
   static let editorLineHeight: CGFloat = 18
+  /// パネルヘッダーの題（sans 11・tracking 0.5）。
+  static let editorPanelTitle = NSFont.systemFont(ofSize: 11, weight: .regular)
+  /// エクスプローラーのルート行（sans 11 bold・tracking 0.8）。
+  static let editorRootLabel = NSFont.systemFont(ofSize: 11, weight: .bold)
+  /// ツリー行の名前（sans 12.5）。
+  static let editorTreeRow = NSFont.systemFont(ofSize: 12.5, weight: .regular)
+  /// ツリー行の git バッジ（mono 11）。
+  static let editorBadge = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+  /// ファイルタブの題（sans 12）。
+  static let editorFileTab = NSFont.systemFont(ofSize: 12, weight: .regular)
+  /// パンくず（sans 11）。
+  static let editorBreadcrumb = NSFont.systemFont(ofSize: 11, weight: .regular)
+  /// 種別チップのグリフ（mono bold。サイズはチップが決める）。
+  static func editorChip(size: CGFloat) -> NSFont {
+    NSFont.monospacedSystemFont(ofSize: size, weight: .bold)
+  }
+  /// パネルヘッダーの題の字間。
+  static let trackingPanelTitle: CGFloat = 0.5
+  /// ルート行の字間。
+  static let trackingRootLabel: CGFloat = 0.8
+}
+
+extension Theme.Layout {
+  /// 骨の寸法（デザインキャンバス『CmdELayers』Main の値）。レール｜サイドバー｜列の頭（ファイルタブ行 →
+  /// パンくず）。レール・サイドバーの右、ファイルタブ行の下の hairline 1 はこれらの外側に足す。
+  static let editorRail: CGFloat = 36
+  /// レールのアイコン。
+  static let editorRailGlyph: CGFloat = 20
+  /// サイドバーの既定の幅（ドラッグで可変・app-state に記憶）。
+  static let editorSidebar: CGFloat = 240
+  /// サイドバーの幅の下限。
+  static let editorSidebarMinWidth: CGFloat = 160
+  /// 本体（テキスト面）に残す最低幅。サイドバーの幅の上限と、狭い列で表示幅を切り詰める規則が使う。
+  static let editorBodyMinWidth: CGFloat = 160
+  /// サイドバーと本体の境（hairline）に置くドラッグの当たりの幅。
+  static let editorSidebarHandle: CGFloat = 4
+  static let editorFileTabs: CGFloat = 28
+  static let editorBreadcrumb: CGFloat = 20
+  static let editorPanelHeader: CGFloat = 28
+  static let editorRow: CGFloat = 20
+  /// ツリー行・ファイルタブの種別チップ。
+  static let editorChip: CGFloat = 14
+  /// パンくずの末尾のチップ。
+  static let editorChipSmall: CGFloat = 12
+  /// 折りたたみのシェブロン。
+  static let editorChevron: CGFloat = 16
+}
+
+extension Theme.Opacity {
+  /// 見本の半透明面の light 換算。`sunkInk` の沈み面は tabRowBg の比に倣い ×0.3、`surfaceInk` の塗りは
+  /// tabSegBg の比に倣い ×0.6、`borderInk` の hairline は紙面で濃くする ×1.4。
+  static let editorSunkLight: Double = 0.3
+  static let editorFillLight: Double = 0.6
+  static let editorHairlineLight: Double = 1.4
 }
 
 extension Theme.Motion {

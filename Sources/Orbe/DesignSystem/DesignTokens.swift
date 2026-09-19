@@ -143,6 +143,8 @@ enum Theme {
     // （α の組み合わせが多く、1 値 1 トークンでは名前が増殖するため。基色が SSOT）。
     static let surfaceInk = dyn(light: 0x3a3151, dark: 0xffffff)  // カード面の基色
     static let borderInk = dyn(light: 0x6e5aaa, dark: 0xc7b9eb)  // カード罫線・枠の基色
+    // 沈み面（エディター面のレール・サイドバー・タブ行の地）の基色。dark は scrim と同じ暗幕の基色。
+    static let sunkInk = dyn(light: 0x3a3151, dark: 0x0a080e)
     // 入力欄地（最深色の淡い被せ）
     static let inputWash = dynA(light: 0x3a3151, lightA: 0.06, dark: 0x0a080e, darkA: 0.25)
     // 入力欄の枠（borderInk 基調・dark .12 / light .16＝surface1 より濃い）
@@ -259,6 +261,10 @@ enum Theme {
     static let lg: CGFloat = 16  // パネル・オーバーレイ
     static let pill: CGFloat = 999  // カウントピル・トグル
   }
+
+  // MARK: - Layout（chrome の外の面の寸法。chrome 自身は `Chrome`）
+
+  enum Layout {}
 
   // MARK: - Border / Ring
 

@@ -257,6 +257,22 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorEmptySearchProject
   case editorEmptyBackToTerminal
 
+  // MARK: - Editor 面（骨: エクスプローラー）
+  case editorExplorerTitle
+  case editorNewFile
+  case editorNewFolder
+  case editorCollapseAll
+
+  // MARK: - Editor 面（未保存の確認・外部変更の上書き）
+  case editorUnsavedTitle
+  case editorUnsavedMessageOne
+  case editorUnsavedMessageOther
+  case editorUnsavedSave
+  case editorUnsavedDiscard
+  case editorOverwriteTitle
+  case editorOverwriteMessage
+  case editorOverwriteConfirm
+
   // MARK: - Tab context menu（タブ行の右クリック）
   case tabMenuResetAgentState
 
