@@ -12,6 +12,9 @@ public struct LineIndex: Equatable, Sendable {
 
   public var lineCount: Int { starts.count }
 
+  /// 0 始まりの行の先頭オフセット。
+  public func start(ofRow row: Int) -> Int { starts[row] }
+
   /// オフセットが属する行と、行頭からの距離（UTF-16 単位）。
   public func point(at offset: Int) -> (row: Int, column: Int) {
     let row = rowIndex(containing: offset)

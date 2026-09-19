@@ -259,6 +259,7 @@ final class EditorPaneView: NSView {
       addSubview(view, positioned: .below, relativeTo: sidebarHandle)
     }
     emptyHost.isHidden = document != nil
+    applyGround()
     needsLayout = true
     if hadFocusInside, window?.firstResponder !== focusTarget {
       window?.makeFirstResponder(focusTarget)

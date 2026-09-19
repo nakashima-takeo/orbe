@@ -88,10 +88,15 @@ public enum LineDiff {
       newStart: newCount == 0 ? newStart : newStart + 1, newCount: newCount)
   }
 
-  /// 行の中身と、改行で終わっているか。最後の行だけ改行を欠きうる。
+  /// 行の中身と、改行で終わっているか。最後の行だけ改行を欠きうる。行の同一性はバイト列——`String ==` の
+  /// 正準等価（NFC と NFD を同じとみなす）ではなく、git が違うと言う行をここも違うと言う。
   private struct Line: Equatable {
     let body: Substring
     let terminated: Bool
+
+    static func == (lhs: Line, rhs: Line) -> Bool {
+      lhs.terminated == rhs.terminated && lhs.body.utf8.elementsEqual(rhs.body.utf8)
+    }
   }
 
   private static func lines(of text: String) -> [Line] {

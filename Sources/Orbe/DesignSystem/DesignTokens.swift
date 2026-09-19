@@ -51,6 +51,8 @@ enum Theme {
     static let diffRemoved = dyn(
       light: OrbePalette.Chrome.redLight,
       dark: OrbePalette.Chrome.redDark)  // 削除（red・SSOT）
+    // 変更（blue）。editorHueBlue と値だけ同じ独立トークン（片方が動いてももう片方は追随しない）
+    static let diffModified = dyn(light: 0x3f6fd6, dark: 0x85adff)
     static let success = diffAdded  // 成功（green・diffAdded へ収束）
     static let danger = diffRemoved  // エラー（red・diffRemoved へ収束）
     static let conflict = dyn(

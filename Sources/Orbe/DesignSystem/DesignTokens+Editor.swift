@@ -31,6 +31,8 @@ extension Theme.Color {
   static let editorHueTeal = editorDyn(light: 0x1a8a76, dark: 0x7fd0c3)
   /// 行番号。textMuted の α .55。
   static let editorLineNumber = editorDynA(light: 0x8d85a3, dark: 0x8b8397, alpha: 0.55)
+  /// 見せる空白の丸点。textMuted の α .55（editorLineNumber と値だけ同じ独立トークン）。
+  static let editorWhitespace = editorDynA(light: 0x8d85a3, dark: 0x8b8397, alpha: 0.55)
 
   // 構文色。dark は VSCode Dark Modern の実在トークン色（5 色は端末 ANSI と偶然同値だが、端末色は
   // 別レイヤー〔design-system §8〕なので参照しない）。light は見本の値。
@@ -114,6 +116,9 @@ extension Theme.Layout {
   static let editorChip: CGFloat = 14
   /// パンくずの末尾のチップ。
   static let editorChipSmall: CGFloat = 12
+  /// 行番号ガター（右寄せの数字が収まる幅）と、その右の git の印の列。本文は 2 つの右端から始まる。
+  static let editorLineNumberGutter: CGFloat = 50
+  static let editorMarkGutter: CGFloat = 19
   /// 折りたたみのシェブロン。
   static let editorChevron: CGFloat = 16
 }

@@ -16,7 +16,7 @@ hooks・署名がユーザーのシェル環境と同等に動くよう、全呼
 
 - **読み取り** — 並行に走る。
 - **同一リポジトリの ref・作業ツリーを書く操作** — 単独で直列化する。git のロックは待たずに即 fatal するため、順番はアプリ側で作る。
-- **共有チェックアウトと領域が交わらない操作、または結果が古くても取り直せる観測**（clone・worktree 作成・fetch・掃除の分類プローブ・エディターの根の status と index の読み） — 独立レーンで走らせ、直列化のチェーンに載せない。
+- **共有チェックアウトと領域が交わらない操作、または結果が古くても取り直せる観測**（clone・worktree 作成・fetch・掃除の分類プローブ・エディターの根の status・index・blob の読み） — 独立レーンで走らせ、直列化のチェーンに載せない。blob の読みは smudge filter を通すので「領域が交わらない」を git 側では保証できないが、観測なので古くても取り直せる。
 
 3 つ目を分けるのは、直列化がプロセス単位で効くため。時間の上限が無い操作をそこへ置くと、無関係な読み取りまでその完了を待たされる。プローブのように「本数ぶん走り、かつ直後の操作を待たせてはいけない」ものも、呼び出し側の判断でこのレーンへ逃がせる。観測を載せるのは逆の理由——直列化は submit 済みの全ブロックの完了を待つため、巨大リポジトリの status を読み取りレーンに置くと worktree の削除や ref の更新がその完了を待つ。観測は監視が取り直すので、古い結果が返っても害が無い。
 
@@ -36,6 +36,6 @@ hooks・署名がユーザーのシェル環境と同等に動くよう、全呼
 
 worktree の状態を見る `status` には `--no-optional-locks` を渡す。ユーザーが作業中のリポジトリを観測するだけでロックを取らないため。
 
-エディターの根の観測（[editor/files](../editor/files.md)）は 3 つの読みで成る。status は porcelain v2 の NUL 区切り（パスは verbatim）で、見え方を左右するユーザー設定（`status.showUntrackedFiles`・`diff.ignoreSubmodules`）を引数で封じる。index の版は `ls-files -s` の OID で引き、変わったときだけ `cat-file blob` で本文を取る——blob は filter・textconv・外部 diff を通らない生の中身で、信頼できないリポジトリの diff driver を起動しない。問い合わせるファイル名は pathspec として解釈させない（literal を前置し、それを覆す環境変数は全呼び出しから落とす）。
+エディターの根の観測（[editor/files](../editor/files.md)）は 3 つの読みで成る。status は porcelain v2 の NUL 区切り（パスは verbatim）で、見え方を左右するユーザー設定（`status.showUntrackedFiles`・`diff.ignoreSubmodules`）を引数で封じる。index の版は `ls-files -s` の OID で引き、変わったときだけ `cat-file --filters --path=<相対パス>` で本文を取る——そのパスの属性で smudge filter と eol 変換を掛けた、作業ツリーに出したときの姿。smudge の実行コマンドは config 側にしか書けないので、信頼できないリポジトリのコードが実行される面は checkout と同じ（きっかけはファイルを開くこと）。textconv・外部 diff は通らず、diff driver は起動しない。無出力 120 秒の打ち切りは他の呼び出しと同じで、smudge が黙って止まれば git の失敗として扱う（前の baseline を保ち、同じ index 版を上限の回数まで取り直す → [editor/files](../editor/files.md)）。問い合わせるファイル名は pathspec として解釈させない（literal を前置し、それを覆す環境変数は全呼び出しから落とす）。
 
 チェックアウトの解決は toplevel・git dir・common dir の 3 値。linked worktree では git dir が本体側の `worktrees/<name>` を指し、index・HEAD はそこにある（監視の対象）。綴りは git の返すままにする——`git worktree list` の生パスとの等値比較に使うため、正準形と比べる場では比べる側が両辺を揃える。

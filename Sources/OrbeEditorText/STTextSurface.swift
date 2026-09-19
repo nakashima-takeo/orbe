@@ -5,6 +5,11 @@ import STTextView
 /// `TextSurface` の STTextView 実装。スクロールビューにテキストビューを載せ、ガター・rendering
 /// attribute・delegate・焦点・viewport をこの契約へ写す。undo は STTextView が自前で持つ（打鍵を
 /// まとめる coalescing はビュー内部の undo manager にしか無い）。
+///
+/// 行の装備は受動的な overlay 2 枚で描く（ガターの印・本文のインデント線／丸点／URL 下線）。上流に行ごとの
+/// 描画の拡張点が無いので、公開の view と TextKit 2 の API だけで載せる。どちらも寸法は viewport
+/// （文書の全高にすると数万行で巨大な tiled layer になる）で、layout の収束とスクロールのたびに置き直す
+/// ——片方だけでは速いスクロールで印が遅れ、編集で古くなる。
 @MainActor
 final class STTextSurface: NSObject, TextSurface {
   /// 上端の余白を持つ器。スクロールビューの contentInsets は使わない——横に浮くガター（floating
@@ -12,6 +17,10 @@ final class STTextSurface: NSObject, TextSurface {
   private let container = SurfaceContainerView()
   private let scrollView: NSScrollView
   private let textView: SurfaceTextView
+  private let marksView: LineMarksView
+  private let decorationView: LineDecorationView
+  private let groundView = GutterGroundView()
+  private var clipObservers: [NSObjectProtocol] = []
 
   var view: NSView { container }
   var responder: NSView { textView }
@@ -19,12 +28,22 @@ final class STTextSurface: NSObject, TextSurface {
   private(set) var visibleRange = NSRange(location: 0, length: 0)
 
   private let style: TextSurfaceStyle
+  /// 本文から検出したインデントの単位。インデント線の段と、タブの表示幅（単位の桁数）を決める。
+  private var indentUnit = IndentUnit.fallback
+
+  var onOpenLink: ((URL) -> Void)? {
+    get { textView.onOpenLink }
+    set { textView.onOpenLink = newValue }
+  }
 
   init(style: TextSurfaceStyle, text: String) {
     scrollView = SurfaceTextView.scrollableTextView()
     // swiftlint:disable:next force_cast
     textView = scrollView.documentView as! SurfaceTextView
     self.style = style
+    marksView = LineMarksView(textView: textView, style: style.marks)
+    decorationView = LineDecorationView(
+      textView: textView, style: style.decorations, textColor: style.textColor)
     super.init()
     container.addSubview(scrollView)
     // clear にすると gutter も clear になり、NSVisualEffectView の地が敷かれない（器の veil が透ける）。
@@ -42,10 +61,34 @@ final class STTextSurface: NSObject, TextSurface {
       ViewportPlugin { [weak self] range in
         guard let self else { return }
         visibleRange = range.map { NSRange($0, in: self.textView.textContentManager) } ?? NSRange()
+        layoutOverlays()
         delegate?.surfaceDidLayoutViewport(self)
       })
     apply(style)
+    // 本文の overlay は contentView の下（本文・キャレット・選択の下に出る）。ガターの overlay は
+    // ガターの subview で、印の列はガターの右端に錨を置く（上流は桁が増えるとガターを右へ伸ばす）。
+    textView.addSubview(decorationView, positioned: .below, relativeTo: nil)
+    textView.gutterView?.addSubview(groundView, positioned: .below, relativeTo: nil)
+    textView.gutterView?.addSubview(marksView)
+    // overlay の矩形は clip view の矩形の関数——スクロール（bounds）と窓の live resize（frame。上流はその間
+    // layout を止める）の両方で置き直す。
+    scrollView.contentView.postsBoundsChangedNotifications = true
+    scrollView.contentView.postsFrameChangedNotifications = true
+    clipObservers = [NSView.boundsDidChangeNotification, NSView.frameDidChangeNotification].map {
+      NotificationCenter.default.addObserver(
+        forName: $0, object: scrollView.contentView, queue: nil
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.layoutOverlays() }
+      }
+    }
+    indentUnit = IndentUnit.detect(in: text)
+    applyParagraphStyle()
     textView.text = text
+    decorationView.indentUnit = indentUnit
+  }
+
+  deinit {
+    for observer in clipObservers { NotificationCenter.default.removeObserver(observer) }
   }
 
   var text: String { textView.text ?? "" }
@@ -76,6 +119,52 @@ final class STTextSurface: NSObject, TextSurface {
     textView.breakUndoCoalescing()
   }
 
+  func setLineMarks(_ spans: LineMarkSpans) {
+    marksView.spans = spans
+  }
+
+  /// 地は器が本文の下に、`GutterGroundView` がガターの上に敷く（上流のガターは本文の上に浮き、横スクロールで
+  /// 本文がその下を通る——上に地が無いと行番号と字が重なる）。同じ矩形を二度塗らないので透過の濃度が揃う。
+  func setGround(_ color: NSColor) {
+    container.ground = color
+    groundView.color = color
+  }
+
+  /// overlay を viewport の矩形に置き直して描き直す。本文の overlay は frame を可視矩形に、bounds の原点を
+  /// text container 基準の同じ点に置く——x も y も container の座標がそのまま view の座標になり、描く側が座標を
+  /// 手で引かない。ガターの overlay は x が局所（列の右端に錨）、y が文書（上流は行番号を文書の y に置く）。
+  private func layoutOverlays() {
+    let visible = textView.visibleRect
+    let gutterWidth = textView.gutterView?.frame.width ?? 0
+    decorationView.frame = NSRect(
+      x: visible.minX + gutterWidth, y: visible.minY, width: max(0, visible.width - gutterWidth),
+      height: visible.height)
+    decorationView.setBoundsOrigin(NSPoint(x: visible.minX, y: visible.minY))
+    decorationView.needsDisplay = true
+    if let gutter = textView.gutterView {
+      // ガターの地は可視矩形（clip view。テキスト view の高さに依らない）を文書の下端（ガターの高さ）で
+      // 切ったぶん。器はその矩形を塗らない。
+      let clip = scrollView.contentView.bounds
+      let ground = CGRect(x: 0, y: clip.minY, width: gutter.bounds.width, height: clip.height)
+        .intersection(gutter.bounds)
+      groundView.frame = ground
+      container.groundHole = NSRect(
+        x: 0, y: ground.minY - clip.minY + style.topInset, width: ground.width,
+        height: ground.height)
+      marksView.frame = NSRect(
+        x: gutter.bounds.width - style.marks.gutterWidth, y: visible.minY,
+        width: style.marks.gutterWidth, height: visible.height)
+      marksView.setBoundsOrigin(NSPoint(x: 0, y: visible.minY))
+      marksView.needsDisplay = true
+    }
+    // 指カーソルの矩形は ⌘ を押している間だけ張る。上流はスクロール・編集で捨てないので、見える行が変わる
+    // たび（layout の収束と、viewport を動かさない小さなスクロールの両方）に捨て直す（⌘ の押下・解放は
+    // `flagsChanged` が持つ）。
+    if NSEvent.modifierFlags.contains(.command) {
+      textView.window?.invalidateCursorRects(for: textView)
+    }
+  }
+
   /// STTextView の置換は undo 登録と `didChangeTextIn` を 1 回ずつ通す（`text` の代入は undo 登録を
   /// 切るので使わない）。置換後の選択は本文の外を指しうるので、元のキャレット位置を新しい長さに収めて置く。
   ///
@@ -91,14 +180,28 @@ final class STTextSurface: NSObject, TextSurface {
     let caret = textView.textSelection.location
     textView.replaceCharacters(in: textView.textLayoutManager.documentRange, with: text)
     textView.textSelection = NSRange(location: min(caret, length), length: 0)
+    let unit = IndentUnit.detect(in: text)
+    if unit != indentUnit {
+      indentUnit = unit
+      applyParagraphStyle()
+    }
+    decorationView.indentUnit = unit
+  }
+
+  /// 行高の倍率と、タブの表示幅。タブは検出したインデント単位の桁数で刻む——モデル（タブは 1 段）と描画が
+  /// 一致し、空白だけの行の線（桁幅から置く）がタブで書かれた隣の行の線と揃う。上流は既存の本文にも
+  /// 段落スタイルを打ち直す。
+  private func applyParagraphStyle() {
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.lineHeightMultiple = style.lineHeight / Self.naturalLineHeight(of: style.font)
+    paragraph.tabStops = []
+    paragraph.defaultTabInterval = CGFloat(indentUnit) * style.font.cellWidth
+    textView.defaultParagraphStyle = paragraph
   }
 
   private func apply(_ style: TextSurfaceStyle) {
     textView.font = style.font
     textView.textColor = style.textColor
-    let paragraph = NSMutableParagraphStyle()
-    paragraph.lineHeightMultiple = style.lineHeight / Self.naturalLineHeight(of: style.font)
-    textView.defaultParagraphStyle = paragraph
     textView.insertionPointColor = style.caretColor
     textView.caretSize = style.caretSize
     container.topInset = style.topInset
@@ -106,8 +209,10 @@ final class STTextSurface: NSObject, TextSurface {
     if let gutter = textView.gutterView {
       gutter.font = style.gutterFont
       gutter.textColor = style.gutterTextColor
-      gutter.insets = STRulerInsets(leading: 0, trailing: style.gutterTrailingInset)
-      gutter.minimumThickness = style.gutterWidth
+      // 行番号は幅 `gutterWidth` の中に右寄せで収まり、その右に印の列が続く。
+      gutter.insets = STRulerInsets(
+        leading: 0, trailing: style.gutterTrailingInset + style.marks.gutterWidth)
+      gutter.minimumThickness = style.gutterWidth + style.marks.gutterWidth
       gutter.drawSeparator = false
       gutter.highlightSelectedLine = false
     }
@@ -120,30 +225,14 @@ final class STTextSurface: NSObject, TextSurface {
   }
 }
 
-/// 上端の余白を空けてスクロールビューを置く器。器の高さが変わるたびに置き直す（autoresizing は
-/// 起点が .zero だと余白を保てず、面が器より余白の分だけ長くなって最下行が切れる）。
-private final class SurfaceContainerView: NSView {
-  var topInset: CGFloat = 0 {
-    didSet { needsLayout = true }
-  }
-
-  override var isFlipped: Bool { true }
-
-  override func layout() {
-    super.layout()
-    for subview in subviews {
-      subview.frame = NSRect(
-        x: 0, y: topInset, width: bounds.width, height: max(0, bounds.height - topInset))
-    }
-  }
-}
-
 extension STTextSurface: @preconcurrency STTextViewDelegate {
   func textView(
     _ textView: STTextView, didChangeTextIn affectedCharRange: NSTextRange,
     replacementString: String
   ) {
     let range = NSRange(affectedCharRange, in: textView.textContentManager)
+    decorationView.needsDisplay = true
+    marksView.needsDisplay = true
     delegate?.surface(
       self, didChange: TextEdit(range: range, replacementLength: replacementString.utf16.count))
   }
@@ -155,10 +244,86 @@ extension STTextSurface: @preconcurrency STTextViewDelegate {
   }
 }
 
-/// first responder の出入りを契約へ上げるための STTextView。
+/// first responder の出入りを契約へ上げ、URL の ⌘クリックと ⌘押下中の指カーソルを持つ STTextView。上流の
+/// `mouseDown` は shift・control・option を読み ⌘ は読まないので、⌘だけを付けたクリックを先取りしても
+/// 衝突しない（⌘⇧・⌥⌘・⌃⇧⌘ は上流の選択操作に渡す）。当たりは描画と同じ geometry（`VisibleLines`）で解く。
+/// 開くのは mouse-up——押した URL の上で離せば開き、ドラッグして外れれば何もしない（macOS の慣習）。
+/// その間は上流に渡さず、選択を伸ばさない。
 private final class SurfaceTextView: STTextView {
   var onFocusChange: ((Bool) -> Void)?
+  var onOpenLink: ((URL) -> Void)?
   var caretSize = CGSize(width: 1, height: 14)
+  /// ⌘で押した URL（離すまで）。
+  private var pendingLink: PendingLink?
+  /// 押してから離すまでにこれ以上動けばドラッグ。
+  private static let clickSlop: CGFloat = 4
+
+  private struct PendingLink {
+    let url: URL
+    let locationInWindow: NSPoint
+  }
+
+  /// 押している間に view が窓から外れると mouse-up は届かない（文書の切り替えが面を外す）ので、ラッチは
+  /// 次の押下でも解く。input context へは上流と同じく先に通すが、同じイベントを 2 回渡さない（上流に落ちる
+  /// クリックは上流が通す）。
+  override func mouseDown(with event: NSEvent) {
+    pendingLink = nil
+    let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+    if flags.contains(.command), flags.isDisjoint(with: [.shift, .option, .control]),
+      event.clickCount == 1,
+      let url = VisibleLines(textView: self).link(at: containerPoint(event.locationInWindow))
+    {
+      guard (inputContext?.handleEvent(event) ?? false) == false else { return }
+      pendingLink = PendingLink(url: url, locationInWindow: event.locationInWindow)
+      return
+    }
+    super.mouseDown(with: event)
+  }
+
+  override func mouseDragged(with event: NSEvent) {
+    guard pendingLink == nil else { return }
+    super.mouseDragged(with: event)
+  }
+
+  override func mouseUp(with event: NSEvent) {
+    guard let pending = pendingLink else {
+      super.mouseUp(with: event)
+      return
+    }
+    pendingLink = nil
+    let moved = hypot(
+      event.locationInWindow.x - pending.locationInWindow.x,
+      event.locationInWindow.y - pending.locationInWindow.y)
+    guard moved <= Self.clickSlop,
+      VisibleLines(textView: self).link(at: containerPoint(event.locationInWindow)) == pending.url
+    else { return }
+    onOpenLink?(pending.url)
+  }
+
+  /// 指カーソルは ⌘ を押している間だけ。上流はスクロール・編集でカーソル矩形を捨てないので、面が layout の
+  /// たびに捨て直す。
+  override func resetCursorRects() {
+    super.resetCursorRects()
+    guard NSEvent.modifierFlags.contains(.command) else { return }
+    let gutterWidth = gutterView?.frame.width ?? 0
+    let geometry = VisibleLines(textView: self)
+    for line in geometry.lines(in: visibleRect.offsetBy(dx: -gutterWidth, dy: 0)) {
+      for link in geometry.links(in: line) {
+        addCursorRect(link.frame.offsetBy(dx: gutterWidth, dy: 0), cursor: .pointingHand)
+      }
+    }
+  }
+
+  override func flagsChanged(with event: NSEvent) {
+    window?.invalidateCursorRects(for: self)
+    super.flagsChanged(with: event)
+  }
+
+  /// 窓の点を text container 基準へ（本文の矩形はガターの幅ぶん右）。
+  private func containerPoint(_ locationInWindow: NSPoint) -> CGPoint {
+    let point = convert(locationInWindow, from: nil)
+    return CGPoint(x: point.x - (gutterView?.frame.width ?? 0), y: point.y)
+  }
 
   override func becomeFirstResponder() -> Bool {
     let result = super.becomeFirstResponder()

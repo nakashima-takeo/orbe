@@ -1,6 +1,6 @@
 import Foundation
 
-/// 根のサービスからの通知。(a) はデバウンス後すぐ、(b)(c) は取り直しジョブの完了後に届く。
+/// 根のサービスからの通知。(a) はデバウンス後すぐ、(b) は status が返った時点、(c) は取り直しジョブの完了後に届く。
 @MainActor
 protocol RootFilesObserver: AnyObject {
   /// 根の下でファイルが変わった（git dir の中は含まない）。
@@ -20,7 +20,9 @@ protocol RootFilesObserver: AnyObject {
 ///
 /// 観測（status → 関心のあるパスの index の OID → 変わった OID の blob）は根ごとに 1 本のジョブに直列化し、
 /// 実行中に来た要求は「終わったらもう 1 回」に畳む。古い結果が後から乗らない（index が動けば監視が取り直す。
-/// status と baseline は別々の git 起動で読むので同一時点の保証は無い）。
+/// status と baseline は別々の git 起動で読むので同一時点の保証は無い）。status の通知は status が返った時点で
+/// 出す——baseline の取得は smudge filter（git-lfs のネットワーク等）で遅くなりうるので、その後ろにバッジを
+/// 並べない。
 @MainActor
 final class RootFiles {
   struct Entry: Equatable {
@@ -75,7 +77,7 @@ final class RootFiles {
   private var rootWatcher: RepoWatcher?
   /// git dir（gitDir・commonDir）の監視。管理下と分かったときに足す。
   private var gitWatcher: RepoWatcher?
-  /// 関心のある相対パス → index 版。
+  /// 関心のある相対パス → index 版（作業ツリーに出したときの中身）。
   private var baselines: [String: Baseline] = [:]
   private var isRefreshing = false
   private var refreshAgain = false
@@ -99,6 +101,12 @@ final class RootFiles {
     let oid: String?
     let text: String?
   }
+
+  /// blob の取得が git の失敗で落ちた回数（相対パス → その OID と回数）。`blobFailureBudget` 回で諦める。
+  private var blobFailures: [String: (oid: String, count: Int)] = [:]
+  /// 同じ OID を取り直す上限。一時失敗（LFS のネットワーク等）は次の取り直しで回復させ、恒久失敗
+  /// （必須 filter の欠落・打ち切り）を毎バッチ回さない——smudge が監視対象へ書く自走ループも閉じる。
+  static let blobFailureBudget = 3
 
   init(root: String, runner: GitRunner = .shared) {
     self.root = root
@@ -158,6 +166,7 @@ final class RootFiles {
   private func dropUnwantedBaselines() {
     let wanted = Set(interests)
     baselines = baselines.filter { wanted.contains($0.key) }
+    blobFailures = blobFailures.filter { wanted.contains($0.key) }
   }
 
   private func relativePath(of url: URL) -> String? {
@@ -207,10 +216,11 @@ final class RootFiles {
     let interests = self.interests
     repo.status { [weak self] status in
       guard let self else { return }
+      publish(status)
       repo.indexEntries(relativePaths: interests) { [weak self] oids in
         guard let self else { return }
         guard let oids else {
-          finish(status: status, changed: [])
+          finish(changed: [])
           return
         }
         var changed: [String] = []
@@ -223,39 +233,54 @@ final class RootFiles {
             baselines[relativePath] = Baseline(oid: nil, text: nil)
           }
         }
-        fetchBlobs(fetch[...], status: status, changed: changed)
+        fetchBlobs(fetch[...], changed: changed)
       }
-    }
-  }
-
-  /// 変わった OID の blob を 1 つずつ取る（並列に投げない）。
-  private func fetchBlobs(
-    _ pending: ArraySlice<(relativePath: String, oid: String)>, status: GitStatus?,
-    changed: [String]
-  ) {
-    guard let repo, let next = pending.first else {
-      finish(status: status, changed: changed)
-      return
-    }
-    repo.blob(oid: next.oid) { [weak self] data in
-      guard let self else { return }
-      let text = data.flatMap { String(data: $0, encoding: .utf8) }
-      var changed = changed
-      if baselines[next.relativePath]?.text != text { changed.append(next.relativePath) }
-      baselines[next.relativePath] = Baseline(oid: next.oid, text: text)
-      fetchBlobs(pending.dropFirst(), status: status, changed: changed)
     }
   }
 
   /// git の一時失敗（`status == nil`）では前の status を保つ——「最後に成功した取り直しの結果」が status の
   /// 意味で、失敗のたびにバッジが消えて戻らないため。
-  private func finish(status: GitStatus?, changed: [String]) {
+  private func publish(_ status: GitStatus?) {
+    guard let status, status != self.status else { return }
+    self.status = status
+    notify { $0.rootFilesStatusDidChange(self) }
+  }
+
+  /// 変わった OID の blob を 1 つずつ取る（並列に投げない）。
+  private func fetchBlobs(
+    _ pending: ArraySlice<(relativePath: String, oid: String)>, changed: [String]
+  ) {
+    guard let repo, let next = pending.first else {
+      finish(changed: changed)
+      return
+    }
+    repo.blob(oid: next.oid, relativePath: next.relativePath) { [weak self] data in
+      guard let self else { return }
+      var changed = changed
+      let path = next.relativePath
+      // git の失敗（smudge の失敗・打ち切り。一時的でありうる）は上限までは記録せず、次の取り直しで同じ OID を
+      // 取り直す。上限に達したら OID ごと「baseline 無し」を焼き、OID が変わるまで諦める。UTF-8 でない中身は
+      // 恒久なので即座に OID ごと「baseline 無し」を記録する。
+      let settled: Baseline?
+      if let data {
+        blobFailures[path] = nil
+        settled = Baseline(oid: next.oid, text: String(data: data, encoding: .utf8))
+      } else {
+        let count = (blobFailures[path]?.oid == next.oid ? blobFailures[path]?.count ?? 0 : 0) + 1
+        blobFailures[path] = (next.oid, count)
+        settled = count >= Self.blobFailureBudget ? Baseline(oid: next.oid, text: nil) : nil
+      }
+      if let settled {
+        if baselines[path]?.text != settled.text { changed.append(path) }
+        baselines[path] = settled
+      }
+      fetchBlobs(pending.dropFirst(), changed: changed)
+    }
+  }
+
+  private func finish(changed: [String]) {
     // 連鎖の最中に関心が消えたパス（取り始めたときの集合で走り切る）を書き戻さない。
     dropUnwantedBaselines()
-    if let status, status != self.status {
-      self.status = status
-      notify { $0.rootFilesStatusDidChange(self) }
-    }
     for observation in live {
       guard let interest = observation.interest, let relativePath = observation.relativePath,
         changed.contains(relativePath)

@@ -47,6 +47,15 @@ final class LineDiffTests: XCTestCase {
       "CRLF と LF は違う行（正規化しない）")
   }
 
+  /// 行の同一性はバイト列——正準等価（NFC の é と NFD の e + 結合アクセント）は違う行。git と同じ見方。
+  func testLinesCompareAsBytesNotCanonicalEquivalence() {
+    let nfc = "caf\u{E9}\n"
+    let nfd = "cafe\u{301}\n"
+    XCTAssertEqual(nfc, nfd, "前提: String としては等しい")
+    XCTAssertEqual(LineDiff.hunks(base: nfc, current: nfd), [hunk(1, 1, 1, 1)])
+    XCTAssertEqual(LineDiff.hunks(base: nfc, current: nfc), [])
+  }
+
   /// 共通部分を落とした残りが上限を超えると、残り全体を 1 つの変更区間にする（二乗の時間を避ける）。
   /// 残りの中に離れた 2 箇所の変更を置く——Myers なら 2 区間、畳めば 1 区間に割れるので、上限の値・
   /// `<=` の境界・畳む分岐の 3 つがどれも守られる。

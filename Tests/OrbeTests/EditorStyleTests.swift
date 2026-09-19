@@ -30,6 +30,49 @@ final class EditorStyleTests: OrbeTestCase {
     XCTAssertEqual(style.gutterWidth, 50)
     XCTAssertEqual(style.gutterTrailingInset, 8)
     XCTAssertEqual(style.caretSize, CGSize(width: 1.5, height: 14))
+    XCTAssertEqual(style.marks.gutterWidth, 19)
+    XCTAssertEqual(style.marks.barWidth, 3)
+    XCTAssertEqual(style.marks.barInset, 2)
+    XCTAssertEqual(style.marks.barRadius, 1)
+    XCTAssertEqual(style.marks.triangleSize, 6)
+    XCTAssertEqual(style.decorations.indentGuideWidth, 1)
+    XCTAssertEqual(style.decorations.whitespaceDiameter, 2)
+    XCTAssertEqual(style.decorations.linkUnderlineThickness, 1)
+    XCTAssertEqual(style.decorations.linkUnderlineOffset, 3)
+  }
+
+  /// 装備の色——印の 3 色は diff トークンの α .85、インデント線は surfaceInk の .06（light は ×0.6）、丸点は
+  /// text.muted の .55——で、どれも外観で解き直される。
+  func testMarkAndDecorationColorsCarryTheSampleAlphasAndFollowTheAppearance() throws {
+    let style = EditorStyle.make()
+    let marks = [
+      (style.marks.added, Theme.Color.diffAdded), (style.marks.modified, Theme.Color.diffModified),
+      (style.marks.removed, Theme.Color.diffRemoved),
+    ]
+    for (mark, token) in marks {
+      for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+        let resolved = try XCTUnwrap(self.resolved(mark, appearance))
+        let base = try XCTUnwrap(self.resolved(token, appearance))
+        XCTAssertEqual(resolved.alphaComponent, 0.85, accuracy: 0.01)
+        XCTAssertEqual(resolved.redComponent, base.redComponent, accuracy: 0.002)
+        XCTAssertEqual(resolved.greenComponent, base.greenComponent, accuracy: 0.002)
+        XCTAssertEqual(resolved.blueComponent, base.blueComponent, accuracy: 0.002)
+      }
+      XCTAssertNotEqual(
+        try XCTUnwrap(resolved(mark, .darkAqua)), try XCTUnwrap(resolved(mark, .aqua)))
+    }
+    XCTAssertNotEqual(
+      try XCTUnwrap(resolved(style.marks.modified, .darkAqua)),
+      try XCTUnwrap(resolved(style.marks.added, .darkAqua)), "追加と変更は色で区別する")
+    XCTAssertEqual(
+      try XCTUnwrap(resolved(style.decorations.indentGuideColor, .darkAqua)).alphaComponent, 0.06,
+      accuracy: 0.001)
+    XCTAssertEqual(
+      try XCTUnwrap(resolved(style.decorations.indentGuideColor, .aqua)).alphaComponent, 0.036,
+      accuracy: 0.001)
+    XCTAssertEqual(
+      try XCTUnwrap(resolved(style.decorations.whitespaceColor, .darkAqua)).alphaComponent, 0.55,
+      accuracy: 0.01)
   }
 
   /// 8 役割すべてに色があり、同じ外観の中で互いに違い、dark と light で解が変わる。
