@@ -6,7 +6,7 @@ updated: 2026-09-20
 
 # Orbe デザインシステム
 
-> ステータス: v0.10.0 · 2026-09-20
+> ステータス: v0.11.0 · 2026-09-20
 > 値の正（SSOT）: chrome/semantic は `Sources/Orbe/DesignSystem/DesignTokens.swift`（機械可読ミラー `docs/design/tokens.json`）／ 識別色（端末 ANSI 16 色・chrome 共有アンカー）は `Sources/Orbe/DesignSystem/OrbePalette.swift`（端末 conf を生成し、chrome アンカーへ定数を供給）／ worktree 識別色 48 色（24 色相 × 2 トーン）を dark / light 別に持つ表は `Sources/Orbe/DesignSystem/WorktreePalette.swift`（`scripts/gen-worktree-palette.py` が oklch から生成・手で編集しない）。
 > ガラス質感・elevation・glow は `Sources/Orbe/DesignSystem/DesignTokens+Glass.swift` が所有（本書は再定義しない）。
 > エディター面のトークン（`face.*` / `editor.*` / `type.editor*` / `layout.editor*` / `opacity.editor*Light` / `faceSlide` `spineLook` `faceDot`）は `Sources/Orbe/DesignSystem/DesignTokens+Editor.swift` が所有。
@@ -232,7 +232,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
   - **インデント線**: 1px `surfaceInk` .06（light ×0.6）。段ごとに、その段ぶんの空白の直後の文字の左端に立つ（規則は [code](../spec/editor/code.md)）。
   - **空白の丸点**: 直径 2・`editor.whitespace`。行頭・行末・2 個以上の連続スペースだけ。
   - **URL 下線**: 1px・文字と同色・ベースラインの 3 下。⌘押下中だけ指カーソル、⌘クリックで既定ブラウザ。
-  - **ミニマップ**（本体の右。左 1px `borderInk` .07（light ×1.4）の縁、幅 `layout.editorMinimap` 100）: 行は高 2・ピッチ 4・radius 1、左余白 8 ＋ インデント 1 桁 1.1、幅は字数 × 0.55（左余白から 72 まで）、色 `syntax.punctuation` .15、コメント行は `syntax.comment` .40。表示範囲の帯は `editor.text` .07 で列の全幅、上端の余白 6 ぶん先頭行の上へ伸びる。左端 x 1・幅 2 に追加 `diff.added` .9・変更 `diff.modified` .9 の印。
+  - **ミニマップ**（本体の右。左 1px `borderInk` .07（light ×1.4）の縁、幅 `layout.editorMinimap` 100）: 行は高 2・ピッチ 4・radius 1、上余白 6・左余白 8 ＋ インデント 1 桁 1.1、幅は字数 × 0.55（左余白から 72 まで）、色 `syntax.punctuation` .15、コメント行は `syntax.comment` .40。表示範囲の帯は `editor.text` .07 で列の全幅、上端の余白 6 ぶん先頭行の上へ伸びる。左端 x 1・幅 2 に追加 `diff.added` .9・変更 `diff.modified` .9 の印。
   - **スクロール印の列**（ミニマップの右、幅 `layout.editorScrollMarks` 13）: 文書比例の位置に、追加 `diff.added` .8・変更 `diff.modified` .8 の 4px バー（x 2、最小高 2）と、キャレットの行に `text.primary` .7 の 5×2（x 6）。削除の境は出さない。追加と変更は色だけの区別（git ガターと同じ例外）。
   - **検索の一致の地**: `editor.modified` .30・radius 2（見本 SearchPanel のヒットと同じ）。現在の一致はシステムの選択の地が覆う。バーは Search field（§5）そのもので、本文の右上（上・右 12、ミニマップの左）。
 - **Rail**（エディター面の左端 36）: 地 `sunkInk` .22・右 1px `borderInk` .07（light ×1.4）。項目は 36 角・グリフ 20px stroke 1.5。選択は上の例外（サイドバーを閉じている間は無い）、非選択の文字は `editor.tertiary`。
