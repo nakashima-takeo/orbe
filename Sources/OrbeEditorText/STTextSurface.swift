@@ -151,7 +151,9 @@ final class STTextSurface: NSObject, TextSurface {
   }
 
   /// 上流の find と同じ順で着地させる——viewport の外なら relocate → layout（`scrollRangeToVisible` が持つ）、
-  /// それから実際に layout された矩形の中心を clip の中央へ（先頭・末尾で clamp）。推定の文書高は使わない。
+  /// それから実際に layout された矩形の中心を clip の中央へ。着地の y は推定の文書高から割り出さない（末尾の
+  /// clamp だけは `NSClipView` が constrain に使うのと同じ documentView の高さを使う）。横位置は
+  /// `scrollRangeToVisible` がその列を見える位置へ寄せたところを保つ。
   func scrollToCenter(_ offset: Int) {
     let manager = textView.textContentManager
     guard let location = manager.location(manager.documentRange.location, offsetBy: offset) else {
@@ -168,6 +170,10 @@ final class STTextSurface: NSObject, TextSurface {
     let y = min(max(0, frame.midY - clip.bounds.height / 2), limit)
     clip.scroll(to: NSPoint(x: clip.bounds.minX, y: y))
     scrollView.reflectScrolledClipView(clip)
+  }
+
+  func scrollToVisible(_ range: NSRange) {
+    textView.scrollRangeToVisible(range)
   }
 
   /// 地は器が本文の下に、`GutterGroundView` がガターの上に敷く（上流のガターは本文の上に浮き、横スクロールで

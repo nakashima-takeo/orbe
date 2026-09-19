@@ -86,7 +86,7 @@ final class EditorSearchTests: OrbeTestCase {
       hosted.document.surface.selectedRange, NSRange(location: 8, length: 3), "一致が無ければ選択は残る")
   }
 
-  /// Enter / ⇧Enter は次・前へ循環し、見えていない一致は中央へスクロールして見せる。
+  /// バーの Enter / ⇧Enter は次・前へ循環し、見えていない一致は中央へスクロールして見せる。
   func testNextAndPreviousCycleAndRevealOffscreenMatches() throws {
     var lines = (1...100).map { "line \($0)" }
     for n in [10, 60, 90] { lines[n - 1] += " needle" }
@@ -94,11 +94,12 @@ final class EditorSearchTests: OrbeTestCase {
     let pane = hosted.pane
     let document = hosted.document
     pane.showSearch()
-    pane.search.setNeedle("needle")
+    let bar = try XCTUnwrap(pane.searchBar)
+    bar.onNeedleChange?("needle")
     XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 9)
     XCTAssertEqual(document.surface.viewport.firstVisible, 0, "見えている一致ではスクロールしない")
 
-    pane.search.next()
+    bar.onNext?()
     XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 59)
     let visible = document.surface.viewport.visibleLines
     pumpMain(until: { document.surface.viewport.firstVisible > 0 }, "見せる")
@@ -106,14 +107,33 @@ final class EditorSearchTests: OrbeTestCase {
       CGFloat(row(hosted, document.surface.viewport.firstVisible)), 59 - visible / 2, accuracy: 1.5,
       "見えていない一致は中央へ")
 
-    pane.search.next()
+    bar.onNext?()
     XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 89)
-    pane.search.next()
+    bar.onNext?()
     XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 9, "末尾で先頭へ")
-    pane.search.previous()
+    bar.onPrev?()
     XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 89, "先頭で末尾へ")
-    pane.search.previous()
+    bar.onPrev?()
     XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 59)
+  }
+
+  /// 縦に見えていても横に隠れている一致は、横だけ寄せて見せる（縦は動かない）。左端へ戻る一致では横も戻る。
+  func testAMatchHiddenToTheRightIsRevealedByScrollingSideways() throws {
+    let hosted = try host("x" + String(repeating: " ", count: 200) + "needle\nneedle\n")
+    let pane = hosted.pane
+    let document = hosted.document
+    let scroll = try XCTUnwrap(document.surface.view.subviews.first as? NSScrollView)
+    XCTAssertEqual(scroll.contentView.bounds.minX, 0)
+    pane.showSearch()
+    let bar = try XCTUnwrap(pane.searchBar)
+    bar.onNeedleChange?("needle")
+    XCTAssertEqual(document.surface.selectedRange.location, 201)
+    XCTAssertGreaterThan(scroll.contentView.bounds.minX, 0, "横に寄る")
+    XCTAssertEqual(document.surface.viewport.firstVisible, 0, "縦は動かない")
+
+    bar.onNext?()
+    XCTAssertEqual(document.surface.selectedRange.location, 208, "2 行目の先頭")
+    XCTAssertEqual(scroll.contentView.bounds.minX, 0, "左端の一致で横が戻る")
   }
 
   /// 本文を編集すると一致と件数は追従し、選択（キャレット）は動かない。
@@ -168,18 +188,16 @@ final class EditorSearchTests: OrbeTestCase {
     let x = origin.x + style.gutterWidth + style.marks.gutterWidth + 3.5 * cell
     let y = origin.y + style.topInset + style.lineHeight / 2
     let ground = try PaneProbe(pane).rgb(x, y: origin.y + 6 * style.lineHeight)
-    let lit = try probe(pane) { try !PaneProbe.same($0.rgb(x, y: y), ground) }
-    _ = lit
+    _ = try probe(pane) { try !PaneProbe.same($0.rgb(x, y: y), ground) }
 
-    pane.closeSearch()
+    bar.onClose?()
     XCTAssertNil(pane.searchBar)
     XCTAssertTrue(hosted.window.firstResponder === document.surface.responder, "焦点はテキスト面へ")
     XCTAssertEqual(document.surface.selectedRange, NSRange(location: 2, length: 3), "選択は残る")
     XCTAssertEqual(pane.search.matches, [])
     // 焦点のテキスト面の選択の地が空白のセルを覆うので、地の判定は選択を外してから。
     document.surface.selectedRange = NSRange(location: 0, length: 0)
-    let cleared = try probe(pane) { try PaneProbe.same($0.rgb(x, y: y), ground) }
-    _ = cleared
+    _ = try probe(pane) { try PaneProbe.same($0.rgb(x, y: y), ground) }
   }
 
   /// 文書を切り替えると同じ needle で新しい文書に敷き直す（ジャンプしない）。文書が無くなればバーは閉じる。

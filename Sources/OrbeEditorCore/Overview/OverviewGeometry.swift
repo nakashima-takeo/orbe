@@ -41,10 +41,10 @@ public struct OverviewGeometry: Equatable, Sendable {
   /// 行 n（0 始まり）の上端の y（列の座標）。
   public func y(ofLine line: Int) -> CGFloat { CGFloat(line) * pitch - windowOffset }
 
-  /// 表示範囲の帯（列の座標。列に収める）。
+  /// 表示範囲の帯（列の座標。列と文書の終わりに収める——可視行数より短い文書で最後の行の下へ伸びない）。
   public var band: (y: CGFloat, height: CGFloat) {
     let top = firstLine * pitch - windowOffset
-    let bottom = min(top + visibleLines * pitch, height)
+    let bottom = min(top + visibleLines * pitch, height, documentHeight - windowOffset)
     let y = max(0, top)
     return (y, max(0, bottom - y))
   }

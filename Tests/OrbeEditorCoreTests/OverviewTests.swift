@@ -26,6 +26,21 @@ final class OverviewTests: XCTestCase {
       ])
   }
 
+  /// 1 つの comment 区間が複数行に跨れば（ブロックコメント）どの行もコメント行。窓の手前から始まる区間も効く。
+  func testABlockCommentMarksEveryLineItSpans() {
+    let text = "a\n/* b\n c\n d */\ne\n"
+    let index = LineIndex(text: text)
+    let block = NSRange(location: 2, length: 12)
+    let rows = OverviewRows.rows(
+      lines: 0..<index.lineCount, text: text, index: index, tabWidth: 4, commentRanges: [block])
+    XCTAssertEqual(rows.map(\.isComment), [false, true, true, true, false, false])
+    let base = index.start(ofRow: 2)
+    let tail = OverviewRows.rows(
+      lines: 2..<4, text: String(text.utf16.dropFirst(base))!, index: index, tabWidth: 4,
+      commentRanges: [block])
+    XCTAssertEqual(tail.map(\.isComment), [true, true], "窓の手前から始まる区間")
+  }
+
   /// 窓は途中の行から始まってよい。本文は窓の先頭行から渡し、comment 区間は本文全体のオフセット。
   func testRowsAcceptAWindowInTheMiddle() {
     let text = "a\nbb\n  ccc\n// d\n"
@@ -46,6 +61,14 @@ final class OverviewTests: XCTestCase {
   }
 
   // MARK: - 幾何
+
+  /// 可視行数より短い文書では、帯は文書の終わりで止まる。
+  func testBandStopsAtTheEndOfAShortDocument() {
+    let geometry = OverviewGeometry(
+      lineCount: 10, firstLine: 0, visibleLines: 20, pitch: 4, height: 400)
+    XCTAssertEqual(geometry.band.y, 0)
+    XCTAssertEqual(geometry.band.height, 40, "10 行ぶんで止まる")
+  }
 
   /// 収まる文書は窓が 0 で、帯は先頭行 × ピッチから可視行数ぶん。先頭行の隠れ割合まで帯が連続で追う。
   func testShortDocumentDoesNotSlideAndTheBandFollowsFractions() {
@@ -89,5 +112,8 @@ final class OverviewTests: XCTestCase {
     XCTAssertEqual(tail.y + tail.height, 100, "最小高で下端を越えない")
     XCTAssertEqual(
       OverviewGeometry.proportional(lines: 0..<1, of: 0, height: 100, minimum: 2).height, 0)
+    let thin = OverviewGeometry.proportional(lines: 10..<11, of: 1000, height: 200, minimum: 3)
+    XCTAssertEqual(thin.y, 2)
+    XCTAssertEqual(thin.height, 3, "長い文書でも 1 行の印は最小高で残る")
   }
 }

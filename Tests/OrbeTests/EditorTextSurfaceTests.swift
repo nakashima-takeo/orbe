@@ -293,17 +293,47 @@ extension EditorTextSurfaceTests {
           - Int(visible)
       },
       "末尾で止まる")
+    let last = document.surface.viewport
+    XCTAssertEqual(
+      CGFloat(document.lineIndex.point(at: last.firstVisible).row) + last.hiddenFraction,
+      CGFloat(document.lineIndex.lineCount) - visible, accuracy: 0.6, "末尾は文書の下端で止まる")
+  }
+
+  /// 区間を見せる最小のスクロール——縦に見えていれば縦は動かず、横に隠れていれば横だけ寄る。
+  func testScrollToVisibleMovesOnlyAsFarAsNeeded() throws {
+    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
+    let url = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("wide.txt")
+    try Data(("x" + String(repeating: " ", count: 200) + "end\n").utf8).write(to: url)
+    let document = try session.open(url)
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 400, height: 200), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    window.contentView = document.surface.view
+    document.surface.view.frame = try XCTUnwrap(window.contentView).bounds
+    document.surface.view.layoutSubtreeIfNeeded()
+    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    let scroll = try XCTUnwrap(document.surface.view.subviews.first as? NSScrollView)
+    pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "viewport が出る")
+
+    document.surface.scrollToVisible(NSRange(location: 201, length: 3))
+    XCTAssertGreaterThan(scroll.contentView.bounds.minX, 0, "横に寄る")
+    XCTAssertEqual(scroll.contentView.bounds.minY, 0, "縦は動かない")
+    document.surface.scrollToVisible(NSRange(location: 0, length: 1))
+    XCTAssertEqual(scroll.contentView.bounds.minX, 0, "左端へ戻る")
+    withExtendedLifetime(session) {}
   }
 
   func testSelectedRangeIsReadWriteAndChangesReachTheDocument() throws {
-    let tall = try openedTall(3)
+    let tall = try openedTall(100)
     let (document, window) = (tall.document, tall.window)
     var changes = 0
     document.onSelectionChange = { changes += 1 }
-    document.surface.selectedRange = NSRange(location: 7, length: 4)
-    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 7, length: 4))
+    let offscreen = NSRange(location: document.lineIndex.start(ofRow: 80), length: 4)
+    document.surface.selectedRange = offscreen
+    XCTAssertEqual(document.surface.selectedRange, offscreen)
     pumpMain(until: { changes > 0 }, "選択の変化が届く")
-    XCTAssertEqual(document.surface.viewport.firstVisible, 0, "置くだけで見せない")
+    XCTAssertEqual(document.surface.viewport.firstVisible, 0, "置くだけで見せない（可視範囲の外でも）")
+    XCTAssertEqual(document.surface.viewport.hiddenFraction, 0)
     window.makeFirstResponder(document.surface.responder)
     let before = changes
     document.surface.responder.perform(#selector(NSResponder.moveToEndOfDocument(_:)), with: nil)

@@ -110,8 +110,9 @@ final class EditorOverviewTests: OrbeTestCase {
       "末尾へ")
     XCTAssertTrue(try alpha(view, x, view.bounds.height - 2) > 0, "末尾で帯は下端")
     XCTAssertEqual(try alpha(view, x, 1), 0)
-    let lastRow = view.bounds.height - 4 + 1  // 最後の行の矩形（下端 − ピッチ ＋ 行高の中）
-    XCTAssertTrue(try alpha(view, view.bounds.minX + 1 + 8 + 2, lastRow) > 0, "最後の行の縮図が窓に入る")
+    // 最後に描かれる行は L−2（末尾の改行で L−1 は空行）。帯（α .07 ≈ 17）の上に行（α .15）が乗るので濃さで見る。
+    XCTAssertTrue(
+      try alpha(view, view.bounds.minX + 1 + 8 + 2, view.bounds.height - 7) > 40, "最後の行の縮図が窓に入る")
   }
 
   /// ミニマップのクリックでその行が本文の中央に来る。縁と印の列のクリックは何もしない。

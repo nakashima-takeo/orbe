@@ -185,7 +185,7 @@ public final class EditorDocument {
   private func rebuildHunks() {
     let text = surface.text
     hunks = baseline.map { LineDiff.hunks(base: $0, current: text) } ?? []
-    surface.setLineMarks(LineMarks(hunks: hunks).spans(in: lineIndex, length: text.utf16.count))
+    surface.setLineMarks(LineMarks(hunks: hunks).spans(in: lineIndex))
   }
 
   /// 同じ runloop ターンに複数届いた編集（複数キャレット等）を 1 回の作り直しに畳む。

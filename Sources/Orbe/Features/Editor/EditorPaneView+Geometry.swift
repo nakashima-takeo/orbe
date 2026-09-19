@@ -72,11 +72,11 @@ extension EditorPaneView {
       x: body.minX, y: body.minY, width: max(0, body.width - overviewWidth), height: body.height)
   }
 
-  /// 俯瞰の矩形（本体の右端）。
+  /// 俯瞰の矩形（本体の右端。本体より広くはならない）。
   var overviewRect: NSRect {
     let body = bodyRect
-    return NSRect(
-      x: body.maxX - overviewWidth, y: body.minY, width: overviewWidth, height: body.height)
+    let width = min(overviewWidth, body.width)
+    return NSRect(x: body.maxX - width, y: body.minY, width: width, height: body.height)
   }
 
   override func layout() {

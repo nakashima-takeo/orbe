@@ -58,6 +58,9 @@ final class EditorDocumentOverviewTests: XCTestCase {
     let second = document.commentRanges(in: NSRange(location: 8, length: 18))
     XCTAssertEqual(second.count, 1)
     XCTAssertEqual(second[0].location, 18, "窓の外の comment は答えない")
+    let cut = document.commentRanges(in: NSRange(location: 30, length: 4))
+    XCTAssertEqual(cut.count, 1, "窓が区間を切っても、切った窓の中の区間は答える")
+    XCTAssertTrue(NSLocationInRange(30, cut[0]))
     let plain = try open("p.txt", "// not a comment\n").document
     XCTAssertEqual(plain.commentRanges(in: NSRange(location: 0, length: 5)), [], "文法が無ければ空")
   }

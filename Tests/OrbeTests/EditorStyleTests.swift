@@ -109,6 +109,20 @@ final class EditorStyleTests: OrbeTestCase {
     }
     XCTAssertEqual(
       try XCTUnwrap(resolved(overview.border, .aqua)).alphaComponent, 0.098, accuracy: 0.001)
+    let marks = [
+      (overview.minimapAdded, Theme.Color.diffAdded), (overview.marksAdded, Theme.Color.diffAdded),
+      (overview.minimapModified, Theme.Color.diffModified),
+      (overview.marksModified, Theme.Color.diffModified),
+    ]
+    for (mark, token) in marks {
+      for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+        let resolved = try XCTUnwrap(self.resolved(mark, appearance))
+        let base = try XCTUnwrap(self.resolved(token, appearance))
+        XCTAssertEqual(resolved.redComponent, base.redComponent, accuracy: 0.002, "追加は緑・変更は青")
+        XCTAssertEqual(resolved.greenComponent, base.greenComponent, accuracy: 0.002)
+        XCTAssertEqual(resolved.blueComponent, base.blueComponent, accuracy: 0.002)
+      }
+    }
   }
 
   /// 8 役割すべてに色があり、同じ外観の中で互いに違い、dark と light で解が変わる。

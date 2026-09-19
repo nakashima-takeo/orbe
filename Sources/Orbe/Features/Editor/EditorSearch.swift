@@ -63,12 +63,14 @@ final class EditorSearch {
   }
 
   private func refresh() {
-    matches = document.map { TextSearch.matches(of: needle, in: $0.surface.text) } ?? []
+    let text = needle.isEmpty ? nil : document?.surface.text
+    matches = text.map { TextSearch.matches(of: needle, in: $0) } ?? []
     document?.surface.setSearchHighlights(matches)
     pushCount()
   }
 
-  /// 一致を選び、その行が見えていなければ中央へ。
+  /// 一致を選んで見せる——その行が縦に見えていなければ中央へ、見えていれば最小限のスクロールで（横に隠れて
+  /// いれば横だけ寄る）。
   private func reveal(_ index: Int) {
     guard let document else { return }
     let match = matches[index]
@@ -77,9 +79,10 @@ final class EditorSearch {
     let lineIndex = document.lineIndex
     let row = CGFloat(lineIndex.point(at: match.location).row)
     let first = CGFloat(lineIndex.point(at: viewport.firstVisible).row) + viewport.hiddenFraction
-    guard row >= first, row < first + viewport.visibleLines else {
+    if row < first || row >= first + viewport.visibleLines {
       document.surface.scrollToCenter(match.location)
-      return
+    } else {
+      document.surface.scrollToVisible(match)
     }
   }
 

@@ -41,8 +41,8 @@ public struct LineMarks: Equatable, Sendable {
 
   /// 面へ渡す形。行の区間は改行込み（次の行頭まで、末尾なら本文の長さまで）、境は次の行の行頭のオフセット。
   /// 索引に無い行（索引と印が同じ本文から出ている限り起きない）は落とす。
-  func spans(in index: LineIndex, length: Int) -> LineMarkSpans {
-    let end = { (row: Int) in row < index.lineCount ? index.start(ofRow: row) : length }
+  func spans(in index: LineIndex) -> LineMarkSpans {
+    let end = { (row: Int) in row < index.lineCount ? index.start(ofRow: row) : index.length }
     var marks: [LineMarkSpans.Mark] = []
     for run in runs {
       let firstRow = run.lines.lowerBound - 1

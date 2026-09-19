@@ -122,7 +122,7 @@ final class EditorOverviewView: NSView {
     drawCaretMark(document: document, lineCount: geometry.lineCount)
   }
 
-  /// 帯は上の余白ぶん先頭の行の上へ伸びる（見本は列の上端 0 から始まり、最後の行の下端で終わる）。
+  /// 帯は上の余白ぶん先頭の行の上へ伸びる（見本は列の上端 0 から始まる）。下端は最後に見えている行の下端。
   private func drawBand(_ geometry: OverviewGeometry) {
     let band = geometry.band
     guard band.height > 0 else { return }

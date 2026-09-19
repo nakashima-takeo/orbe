@@ -25,10 +25,15 @@ public protocol TextSurface: AnyObject {
   /// そのオフセットの行を可視範囲の中央へスクロールする（先頭・末尾では端で止まる）。選択は動かさない。
   func scrollToCenter(_ offset: Int)
 
+  /// その区間が見えるところまで最小限スクロールする（縦に見えていれば縦は動かず、横に隠れていれば横だけ寄る）。
+  /// 選択は動かさない。
+  func scrollToVisible(_ range: NSRange)
+
   /// 選択（UTF-16）。置いても見せない——見せるのは `scrollToCenter`。
   var selectedRange: NSRange { get set }
 
-  /// ファイル内検索の一致の地。本文と undo に載らない描画で、次に置き直すか空を置くまで残る。
+  /// ファイル内検索の一致の地。本文と undo に載らない描画で、次に置き直すか空を置くまで残る。`ranges` は
+  /// 昇順・重ならないこと（面は二分探索で可視ぶんだけ描く）。
   func setSearchHighlights(_ ranges: [NSRange])
 
   /// インデントの単位（1 段のスペース数）。文書が本文から検出して押し、面はタブの表示幅と装備の段に写す。
