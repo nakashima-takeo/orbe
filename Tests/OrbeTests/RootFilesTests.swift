@@ -223,6 +223,34 @@ final class RootFilesTests: OrbeTestCase {
     XCTAssertNil(files.status?.badge(of: "a.txt"))
   }
 
+  /// blob の取得が git の失敗で落ちても OID は焼き付かず、次の取り直しで取り直す——smudge filter の一時失敗
+  /// （git-lfs のネットワーク等）で、そのファイルのガターが閉じ直すまで無言で死なない。
+  func testATransientBlobFailureIsRetriedOnTheNextRefresh() throws {
+    let allow = repo.dir.appendingPathComponent("smudge-allowed").path
+    let tried = repo.dir.appendingPathComponent("smudge-tried").path
+    try repo.write(".gitattributes", "*.txt filter=flaky\n")
+    XCTAssertTrue(
+      repo.git([
+        "config", "filter.flaky.smudge",
+        "test -e '\(allow)' && cat || { touch '\(tried)'; exit 1; }",
+      ]).isSuccess)
+    XCTAssertTrue(repo.git(["config", "filter.flaky.clean", "cat"]).isSuccess)
+    XCTAssertTrue(repo.git(["config", "filter.flaky.required", "true"]).isSuccess)
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    let url = repo.url("a.txt")
+    files.addObserver(recorder, interest: url)
+    pumpMain(until: { FileManager.default.fileExists(atPath: tried) }, "smudge が 1 回失敗した")
+    pumpMain(until: { files.status != nil })
+    XCTAssertNil(files.baseline(for: url))
+    XCTAssertEqual(recorder.baselineChanges, [])
+
+    try Data().write(to: URL(fileURLWithPath: allow))
+    try repo.write("b.txt", "b\n")
+    pumpMain(until: { files.baseline(for: url) == "one\n" }, timeout: 20, "次の取り直しで取り直す")
+    XCTAssertEqual(recorder.baselineChanges, [url])
+  }
+
   /// status の通知は status が返った時点で出る——baseline の取得（smudge filter で遅くなりうる）の後ろに
   /// バッジを並べない。
   func testStatusIsPublishedBeforeBaselinesAreFetched() throws {

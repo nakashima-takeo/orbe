@@ -249,10 +249,14 @@ final class RootFiles {
     }
     repo.blob(oid: next.oid, relativePath: next.relativePath) { [weak self] data in
       guard let self else { return }
-      let text = data.flatMap { String(data: $0, encoding: .utf8) }
       var changed = changed
-      if baselines[next.relativePath]?.text != text { changed.append(next.relativePath) }
-      baselines[next.relativePath] = Baseline(oid: next.oid, text: text)
+      // git の失敗（smudge の失敗・打ち切り。一時的でありうる）は記録しない——次の取り直しで同じ OID を
+      // 取り直す。UTF-8 でない中身は恒久なので OID ごと「baseline 無し」を記録する。
+      if let data {
+        let text = String(data: data, encoding: .utf8)
+        if baselines[next.relativePath]?.text != text { changed.append(next.relativePath) }
+        baselines[next.relativePath] = Baseline(oid: next.oid, text: text)
+      }
       fetchBlobs(pending.dropFirst(), changed: changed)
     }
   }
