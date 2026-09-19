@@ -55,6 +55,22 @@ extension TerminalTabTests {
     window.orderOut(nil)
   }
 
+  /// 端末焦点の ⌘F は端末面のスクロールバック検索バーを開き、エディター面の検索は開かない。
+  func testCommandFOnTheTerminalOpensTheScrollbackSearchNotTheEditorSearch() throws {
+    let tab = TerminalTab(cwd: "/tmp")
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    window.contentView = tab.view
+    window.makeFirstResponder(tab.surface)
+
+    tab.surface.keyDown(with: .key("f"))
+
+    XCTAssertNotNil(tab.surface.searchBar)
+    XCTAssertNil(tab.view.editor.searchBar)
+    window.orderOut(nil)
+  }
+
   /// first responder が pane の配下に無ければ chrome キーを取らない（隠れたタブの pane が横取りしない）。
   func testEditorPaneIgnoresKeysWhenNotFocused() {
     let tab = TerminalTab(cwd: "/tmp")
