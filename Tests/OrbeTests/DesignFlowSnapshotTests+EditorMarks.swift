@@ -14,8 +14,10 @@ extension DesignFlowSnapshotTests {
     defer { scene.cleanup() }
     let tab = scene.tab
     let go = try tab.editor.open(scene.directory.appendingPathComponent("main.go"))
-    let scroll = { go.surface.view.subviews.first as? NSScrollView }
+    let scroll = try XCTUnwrap(go.surface.view.subviews.first as? NSScrollView)
     let pane = scene.pane
+    let cell = (" " as NSString).size(withAttributes: [.font: EditorStyle.make().font]).width
+    pumpMain(until: { scene.isReady && go.baseline != nil }, "index 版が届く")
     try flow(
       "editor_decor", size: NSSize(width: 1000, height: 480), render: { scene.view },
       steps: [
@@ -23,8 +25,7 @@ extension DesignFlowSnapshotTests {
         (
           "scrolled_right",
           {  // 8 行目の長い行で 20 桁ぶん右へ → 線・点・下線が付いてくる（印はガターに浮いたまま）
-            guard let scroll = scroll() else { return }
-            scroll.contentView.scroll(to: NSPoint(x: 20 * 7.4, y: 0))
+            scroll.contentView.scroll(to: NSPoint(x: 20 * cell, y: 0))
             scroll.reflectScrolledClipView(scroll.contentView)
           }
         ),
@@ -48,6 +49,7 @@ extension DesignFlowSnapshotTests {
     let document = scene.document
     pumpMain(until: { scene.isReady }, "index 版が届く")
     let opened = document.hunks
+    XCTAssertFalse(opened.isEmpty, "fixture の編集が効いている")
     let git = { (args: [String]) in _ = GitRunner.shared.runSync(args, cwd: scene.directory.path) }
     try flow(
       "editor_marks", size: NSSize(width: 1000, height: 480), render: { scene.view },

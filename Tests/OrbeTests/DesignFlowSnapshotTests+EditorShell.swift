@@ -48,7 +48,7 @@ extension DesignFlowSnapshotTests {
 
   /// 幅 360 の列: サイドバーは 162 に切り詰まり、境を引くと描かれている境から追従する（上限へ押し付けても
   /// 記憶 240 は変わらず、左へ引けば 160 で止まる）。
-  func testEditorShellNarrowDrag() throws {
+  func testEditorShellNarrow() throws {
     let scene = try editorScene()
     defer { scene.cleanup() }
     let pane = scene.pane
