@@ -4,7 +4,8 @@ import STTextView
 
 /// ガターの overlay——行番号の右の列に git の印を描く。追加・変更は行の高さの 3px バー（続く行は 1 本に
 /// 繋げる）、削除はその境に右向きの三角。当たりを持たず（`hitTest` は nil）、寸法は viewport で、位置は面が
-/// スクロールと layout のたびに置き直す。
+/// スクロールと layout のたびに置き直す。bounds の y は文書（text container）基準なので、geometry の y を
+/// そのまま描く。
 final class LineMarksView: NSView {
   private weak var textView: STTextView?
   private let style: TextSurfaceStyle.Marks
@@ -30,11 +31,10 @@ final class LineMarksView: NSView {
   override func draw(_ dirtyRect: NSRect) {
     guard let textView, !spans.isEmpty else { return }
     let geometry = VisibleLines(textView: textView)
-    let visible = CGRect(x: 0, y: frame.minY, width: 1, height: bounds.height)
-    let lines = geometry.lines(in: visible)
+    let lines = geometry.lines(in: CGRect(x: 0, y: bounds.minY, width: 1, height: bounds.height))
     guard !lines.isEmpty else { return }
-    drawBars(lines, offset: frame.minY)
-    drawDeletions(lines, offset: frame.minY, length: geometry.documentLength)
+    drawBars(lines)
+    drawDeletions(lines, length: geometry.documentLength)
   }
 
   /// 続く行の同じ印は 1 本のバーに繋げる。
@@ -44,7 +44,7 @@ final class LineMarksView: NSView {
     var maxY: CGFloat
   }
 
-  private func drawBars(_ lines: [VisibleLine], offset: CGFloat) {
+  private func drawBars(_ lines: [VisibleLine]) {
     var bars: [Bar] = []
     for line in lines {
       guard
@@ -64,7 +64,7 @@ final class LineMarksView: NSView {
       color(of: bar.kind).setFill()
       let rect = backingAlignedRect(
         NSRect(
-          x: style.barInset, y: bar.minY - offset, width: style.barWidth,
+          x: style.barInset, y: bar.minY, width: style.barWidth,
           height: bar.maxY - bar.minY),
         options: .alignAllEdgesNearest)
       NSBezierPath(roundedRect: rect, xRadius: style.barRadius, yRadius: style.barRadius).fill()
@@ -73,7 +73,7 @@ final class LineMarksView: NSView {
 
   /// 境の y は次の行の上端。末尾（本文の長さ）は、本文が改行で終われば末尾の空行の上端、終わらなければ
   /// 最後の行の下端。先頭の上（0）は上端から下向きに置く。
-  private func drawDeletions(_ lines: [VisibleLine], offset: CGFloat, length: Int) {
+  private func drawDeletions(_ lines: [VisibleLine], length: Int) {
     style.removed.setFill()
     let size = style.triangleSize
     for boundary in spans.deletions {
@@ -84,7 +84,7 @@ final class LineMarksView: NSView {
           return line.extraRow?.frame.minY ?? line.bodyMaxY
         }).first
       else { continue }
-      let center = y == 0 ? size / 2 : y - offset
+      let center = max(y, size / 2)
       let path = NSBezierPath()
       path.move(to: NSPoint(x: style.barInset, y: center - size / 2))
       path.line(to: NSPoint(x: style.barInset + size, y: center))

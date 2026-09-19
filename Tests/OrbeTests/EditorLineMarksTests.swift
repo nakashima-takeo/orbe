@@ -178,6 +178,37 @@ final class EditorLineMarksTests: OrbeTestCase {
     XCTAssertTrue(isBlack(try rgb(ground, barX, rowMidY(1))))
   }
 
+  /// 横にスクロールしても本文の装備は行に付いてくる（overlay の座標が container 基準のまま置き直される）。
+  /// 長い行で横スクロールが起き、印はガターに浮くので無事な一方、線・点・下線だけが置き去りになる壊れ方を守る。
+  func testDecorationsFollowHorizontalScrolling() throws {
+    let long = String(repeating: "x", count: 100) + "  " + String(repeating: "x", count: 100)
+    let hosted = try host("a\n  b  c \(long)\n    d\n")
+    let ground = hosted.ground
+    let document = hosted.document
+    let scroll = try XCTUnwrap(document.surface.view.subviews.first as? NSScrollView)
+    let guide = bodyX + 2 * cell
+    let dot = bodyX + 3.5 * cell
+    waitDrawn { try self.hasInk(ground, guide, self.rowMidY(3)) }
+    XCTAssertFalse(isBlack(try rgb(ground, dot, rowMidY(2))), "前提: 丸点が見えている")
+
+    let shift = 3 * cell
+    scroll.contentView.scroll(to: NSPoint(x: shift, y: 0))
+    scroll.reflectScrolledClipView(scroll.contentView)
+    waitDrawn { !self.isBlack(try self.rgb(ground, dot - shift, self.rowMidY(2))) }
+    XCTAssertFalse(try hasInk(ground, guide, rowMidY(3)), "線は 3 桁ぶん左（ガターの下）へ動いて見えない")
+    XCTAssertTrue(isBlack(try rgb(ground, dot, rowMidY(2))), "元の位置には点が無い")
+
+    // 100 桁右へ: 1 画面ぶん先の連続スペース（107 桁目）の点が、可視矩形の中に描かれる。
+    scroll.contentView.scroll(to: NSPoint(x: 100 * cell, y: 0))
+    scroll.reflectScrolledClipView(scroll.contentView)
+    waitDrawn { !self.isBlack(try self.rgb(ground, self.bodyX + 7.5 * self.cell, self.rowMidY(2))) }
+    XCTAssertTrue(isBlack(try rgb(ground, dot, rowMidY(3))), "短い行の右は地（線も点も無い）")
+    scroll.contentView.scroll(to: NSPoint(x: 0, y: 0))
+    scroll.reflectScrolledClipView(scroll.contentView)
+    waitDrawn { !self.isBlack(try self.rgb(ground, dot, self.rowMidY(2))) }
+    XCTAssertTrue(try hasInk(ground, guide, rowMidY(3)), "戻れば線も戻る")
+  }
+
   // MARK: - 本文の装備
 
   /// インデント線は行頭から段の単位ぶんの文字の左端に、段の数だけ立つ（単位は本文から検出）。空行は隣の浅い方。

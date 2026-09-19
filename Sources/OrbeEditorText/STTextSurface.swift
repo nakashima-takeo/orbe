@@ -19,7 +19,7 @@ final class STTextSurface: NSObject, TextSurface {
   private let textView: SurfaceTextView
   private let marksView: LineMarksView
   private let decorationView: LineDecorationView
-  private var scrollObserver: NSObjectProtocol?
+  private var clipObservers: [NSObjectProtocol] = []
 
   var view: NSView { container }
   var responder: NSView { textView }
@@ -59,6 +59,11 @@ final class STTextSurface: NSObject, TextSurface {
         guard let self else { return }
         visibleRange = range.map { NSRange($0, in: self.textView.textContentManager) } ?? NSRange()
         layoutOverlays()
+        // 指カーソルの矩形は ⌘ を押している間だけ張る。上流はスクロール・編集で捨てないので、見える行が
+        // 変わる layout の収束で捨て直す（⌘ の押下・解放は `flagsChanged` が持つ）。
+        if NSEvent.modifierFlags.contains(.command) {
+          textView.window?.invalidateCursorRects(for: textView)
+        }
         delegate?.surfaceDidLayoutViewport(self)
       })
     apply(style)
@@ -66,18 +71,23 @@ final class STTextSurface: NSObject, TextSurface {
     // ガターの subview で、印の列はガターの右端に錨を置く（上流は桁が増えるとガターを右へ伸ばす）。
     textView.addSubview(decorationView, positioned: .below, relativeTo: nil)
     textView.gutterView?.addSubview(marksView)
+    // overlay の矩形は clip view の矩形の関数——スクロール（bounds）と窓の live resize（frame。上流はその間
+    // layout を止める）の両方で置き直す。
     scrollView.contentView.postsBoundsChangedNotifications = true
-    scrollObserver = NotificationCenter.default.addObserver(
-      forName: NSView.boundsDidChangeNotification, object: scrollView.contentView, queue: nil
-    ) { [weak self] _ in
-      MainActor.assumeIsolated { self?.layoutOverlays() }
+    scrollView.contentView.postsFrameChangedNotifications = true
+    clipObservers = [NSView.boundsDidChangeNotification, NSView.frameDidChangeNotification].map {
+      NotificationCenter.default.addObserver(
+        forName: $0, object: scrollView.contentView, queue: nil
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.layoutOverlays() }
+      }
     }
     textView.text = text
     decorationView.indentUnit = IndentUnit.detect(in: text)
   }
 
   deinit {
-    if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver) }
+    for observer in clipObservers { NotificationCenter.default.removeObserver(observer) }
   }
 
   var text: String { textView.text ?? "" }
@@ -112,22 +122,24 @@ final class STTextSurface: NSObject, TextSurface {
     marksView.spans = spans
   }
 
-  /// overlay 2 枚を viewport の矩形に置き直して描き直す。ガターの座標は文書の y と同じ（上流は行番号を
-  /// 文書の y に置く）ので、どちらも y は可視矩形の上端。
+  /// overlay 2 枚を viewport の矩形に置き直して描き直す。frame は可視矩形に、bounds の原点は text container
+  /// 基準の同じ点に置く——view の座標がそのまま container の座標になり、描く側が座標を手で引かない
+  /// （横スクロールでも縦スクロールでも同じ式）。ガターの y は文書の y と同じ（上流は行番号を文書の y に置く）。
   private func layoutOverlays() {
     let visible = textView.visibleRect
     let gutterWidth = textView.gutterView?.frame.width ?? 0
     decorationView.frame = NSRect(
-      x: gutterWidth, y: visible.minY, width: max(0, visible.width - gutterWidth),
+      x: visible.minX + gutterWidth, y: visible.minY, width: max(0, visible.width - gutterWidth),
       height: visible.height)
+    decorationView.setBoundsOrigin(NSPoint(x: visible.minX, y: visible.minY))
     decorationView.needsDisplay = true
     if let gutter = textView.gutterView {
       marksView.frame = NSRect(
         x: gutter.bounds.width - style.marks.gutterWidth, y: visible.minY,
         width: style.marks.gutterWidth, height: visible.height)
+      marksView.setBoundsOrigin(NSPoint(x: 0, y: visible.minY))
       marksView.needsDisplay = true
     }
-    textView.window?.invalidateCursorRects(for: textView)
   }
 
   /// STTextView の置換は undo 登録と `didChangeTextIn` を 1 回ずつ通す（`text` の代入は undo 登録を

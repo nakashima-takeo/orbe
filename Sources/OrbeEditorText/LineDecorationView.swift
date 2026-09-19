@@ -5,7 +5,8 @@ import STTextView
 /// 本文の overlay——インデント線・空白の丸点・URL の下線を、テキスト view の `contentView` の下に描く
 /// （上流の本文・キャレット・選択の view は地を塗らないので、下に置けばそれらの下に出る。選択の地は装備を
 /// 覆う）。何を描くかは描く行の文字列から Core の純関数で毎回導き、状態はインデント単位だけ。当たりを持たず、
-/// 寸法は viewport で、位置は面がスクロールと layout のたびに置き直す。
+/// 寸法は viewport で、位置は面がスクロールと layout のたびに置き直す。bounds は text container 基準なので、
+/// geometry の座標をそのまま描く。
 final class LineDecorationView: NSView {
   private weak var textView: STTextView?
   private let style: TextSurfaceStyle.Decorations
@@ -33,8 +34,7 @@ final class LineDecorationView: NSView {
   override func draw(_ dirtyRect: NSRect) {
     guard let textView else { return }
     let geometry = VisibleLines(textView: textView)
-    let visible = CGRect(x: 0, y: frame.minY, width: bounds.width, height: bounds.height)
-    let lines = geometry.lines(in: visible)
+    let lines = geometry.lines(in: bounds)
     guard !lines.isEmpty else { return }
     let cell = (" " as NSString).size(withAttributes: [.font: textView.font]).width
     for line in lines {
@@ -64,7 +64,7 @@ final class LineDecorationView: NSView {
         ? geometry.x(of: boundaries[k], in: row) : CGFloat((k + 1) * indentUnit) * cell
       backingAlignedRect(
         NSRect(
-          x: x, y: line.frame.minY - frame.minY, width: style.indentGuideWidth,
+          x: x, y: line.frame.minY, width: style.indentGuideWidth,
           height: line.bodyMaxY - line.frame.minY),
         options: .alignAllEdgesNearest
       ).fill()
@@ -81,7 +81,7 @@ final class LineDecorationView: NSView {
         guard let row = geometry.row(containing: index, in: line) else { continue }
         let center = CGPoint(
           x: (geometry.x(of: index, in: row) + geometry.x(of: index + 1, in: row)) / 2,
-          y: row.frame.midY - frame.minY)
+          y: row.frame.midY)
         NSBezierPath(
           ovalIn: NSRect(
             x: center.x - diameter / 2, y: center.y - diameter / 2, width: diameter,
@@ -97,7 +97,7 @@ final class LineDecorationView: NSView {
       (link.color ?? textColor).setFill()
       backingAlignedRect(
         NSRect(
-          x: link.frame.minX, y: link.baseline + style.linkUnderlineOffset - frame.minY,
+          x: link.frame.minX, y: link.baseline + style.linkUnderlineOffset,
           width: link.frame.width, height: style.linkUnderlineThickness),
         options: .alignAllEdgesNearest
       ).fill()
