@@ -1,7 +1,7 @@
 ---
 title: Dispatch パレット
 description: ⌘⇧X で開くコマンドパレット。worktree/ブランチ/Issue/PR を実データで列挙し、選んで Enter で「エージェントが起動した状態のタブ」を開く
-updated: 2026-09-17
+updated: 2026-09-20
 ---
 
 # Dispatch パレット（⌘⇧X）
@@ -26,7 +26,7 @@ scrim ＋ ガラスパネル。上端アンカー・窓幅に追随する上限�
 
 パレット提示と同時にデータロードが走る。git（worktree/branch 列挙・数十 ms）は即描画。初回ロードまでは候補行の形をしたスケルトン行を出し、開いた瞬間の空フレームを埋める（[clean](#clean--worktree-の掃除) の選択画面も、分類が 1 行も出ていない間は同じスケルトン行で埋める）。gh（issue/PR 取得・ネット）は前回結果を先に描いて裏で取り直す。git・gh とも子プロセス PATH（[shell-path](../platform/shell-path.md)）でサブプロセス実行し、completion をメインで受ける。
 
-- **git 列挙**: worktree 一覧・local/remote branch 一覧（`refs/remotes/origin/HEAD` 等のノイズ除外。local branch は既存 worktree パスも取得して再利用判定に使う）・デフォルトブランチ。remote branch は即時読みに加え、裏で `git fetch --prune origin` を**独立レーン**で走らせ、成功時に読み直して当該セクションだけ差し替える（失敗時はキャッシュ据え置きで UI 非破壊）。独立レーンにするのは、共有 queue の barrier チェーンに載せると無関係な git 操作までこの数秒の fetch を待たされるため——待つかどうかは実行基盤ではなくパレットが経路ごとに決める。**fetch 後の値に依存する経路——ベースから新しいブランチを切る worktree 作成（Issue の新規・Remote branch 行・PR 行）と、origin を追跡する Local branch 行の Enter——だけは、この fetch が走っている間はその着地を待ってから行う**——待たなければ、提示直後の Enter が fetch 前の古い `refs/remotes/origin/*` から worktree を切り、Local branch 行では速く押した人だけが最新化を選べない。**着地は fetch プロセスの完了ではなく、その後の git 列挙の引き直しまで揃った時点**を指し、ベースの名前（既定ブランチ）も fetch 後に解決した値を使う——fetch は `origin/HEAD` を作ることがあるので、ref の中身だけを待つと、`origin/HEAD` を持たないリポジトリで Issue 新規がフォールバックの固定名を指したまま撃たれる。着地の成否は問わない（失敗したなら手元の origin ref が最良で、gh 取得・分類と同じ「失敗は据え置き」に揃える）。作成の直前に別の fetch は撃たない——同一リポジトリで fetch を並走させると `refs/remotes/origin/*` のロックで片方が落ちる（git はロックを待たず即失敗する）。既存ブランチを checkout するだけの経路（Worktree 行・upstream を持たない／origin 以外を追跡する Local branch 行・Issue の同名ブランチ既存）は fetch で動く値に依存しないので待たない。Local branch 行の同期ピルも着地後の値だけを出す——着地は列挙の引き直しまでを指すので、fetch 前の差が描かれる瞬間は無い。
+- **git 列挙**: worktree 一覧・local/remote branch 一覧（`origin/HEAD` のノイズ除外）・デフォルトブランチ。ブランチがどの worktree で checkout 中かは worktree 一覧だけから取り、checkout 中の local branch は Local branches に出さない（Worktrees 側に出る）。remote branch は即時読みに加え、裏で `git fetch --prune origin` を**独立レーン**で走らせ、成功時に読み直して当該セクションだけ差し替える（失敗時はキャッシュ据え置きで UI 非破壊）。独立レーンにするのは、共有 queue の barrier チェーンに載せると無関係な git 操作までこの数秒の fetch を待たされるため——待つかどうかは実行基盤ではなくパレットが経路ごとに決める。**fetch 後の値に依存する経路——ベースから新しいブランチを切る worktree 作成（Issue の新規・Remote branch 行・PR 行）と、origin を追跡する Local branch 行の Enter——だけは、この fetch が走っている間はその着地を待ってから行う**——待たなければ、提示直後の Enter が fetch 前の古い `refs/remotes/origin/*` から worktree を切り、Local branch 行では速く押した人だけが最新化を選べない。**着地は fetch プロセスの完了ではなく、その後の git 列挙の引き直しまで揃った時点**を指し、ベースの名前（既定ブランチ）も fetch 後に解決した値を使う——fetch は `origin/HEAD` を作ることがあるので、ref の中身だけを待つと、`origin/HEAD` を持たないリポジトリで Issue 新規がフォールバックの固定名を指したまま撃たれる。着地の成否は問わない（失敗したなら手元の origin ref が最良で、gh 取得・分類と同じ「失敗は据え置き」に揃える）。作成の直前に別の fetch は撃たない——同一リポジトリで fetch を並走させると `refs/remotes/origin/*` のロックで片方が落ちる（git はロックを待たず即失敗する）。既存ブランチを checkout するだけの経路（Worktree 行・upstream を持たない／origin 以外を追跡する Local branch 行・Issue の同名ブランチ既存）は fetch で動く値に依存しないので待たない。Local branch 行の同期ピルも着地後の値だけを出す——着地は列挙の引き直しまでを指すので、fetch 前の差が描かれる瞬間は無い。
 - **GitHub 取得**: 可用性を `notGitHub`／`ghMissing`／`ghUnauthed`／`ready` に分類（origin URL が github.com か → ローカルの認証情報の有無）してから `gh issue list`／`gh pr list --json` で取得する。可用性の判定は**ネットに触らない**——疎通不能を「未認証」と誤分類すると、通信できないだけの状態で誘導情報行が出て前回結果が消えるため。ネット待ちはタイムアウトつき（stdout/stderr を並行排出しデッドロックを避ける）。
 - **gh 結果のキャッシュ**: 取得結果はリポジトリ（`git-common-dir`）単位でプロセス内に保持し、次に開いたときは**前回結果を最初の描画フレームから描いた**うえで裏で取り直す（2 回目以降はローディング行を経由しない）。worktree 間で共有され、アプリ終了で消える。取得成功時はセクションをまるごと置換するので、閉じた issue／マージ済み PR は残らない。**取得失敗（オフライン・タイムアウト・非 0 終了・デコード失敗）は差し替えず前回結果を据え置く**（remote branch の裏 fetch と同じ規約）。失敗と「0 件」は取得層で区別され、0 件成功では行が消える。取得結果が前回と等値ならセクションを再構築しない。
 - **フォールバック 3 分岐**: `notGitHub`→Issues/PR 両セクション非表示／`ghMissing`・`ghUnauthed`→Issues に誘導情報行 1 本／`ready`→実データ（0 件セクションは非表示）。
@@ -47,7 +47,7 @@ scrim ＋ ガラスパネル。上端アンカー・窓幅に追随する上限�
 **対象ディレクトリの解決**:
 
 - **Worktree 行**: 既存パスをそのまま使用（非破壊）。
-- **Local branch**: 既存 worktree があれば再利用、無ければ `git worktree add`。origin を追跡する行は fetch の着地を待って判定し、fast-forward できる遅れ（ahead 0・behind > 0）なら作らずに[最新化](#最新化--遅れたブランチを追いつかせてから開く)の選択画面へ入る。それ以外（同期済み・分岐・↑ だけ・`[gone]`・upstream 無し・origin 以外）は即作成。
+- **Local branch**: そのブランチを checkout した worktree を `git worktree add` で作る（行に出るのは worktree の無いブランチだけ）。origin を追跡する行は fetch の着地を待って判定し、fast-forward できる遅れ（ahead 0・behind > 0）なら作らずに[最新化](#最新化--遅れたブランチを追いつかせてから開く)の選択画面へ入る。それ以外（同期済み・分岐・↑ だけ・`[gone]`・upstream 無し・origin 以外）は即作成。
 - **Remote branch**: `origin/<名前>` から、それを upstream として追跡するローカルブランチを作って add。
 - **Issue**: 他行種別と対称で、`issue/<番号>` を既存 worktree／ローカルブランチと突合し 3 分岐（既存 worktree あれば再利用／同名ブランチだけ既存ならそこから追加／どちらも無ければデフォルトブランチ（`origin/HEAD` が解決すれば `origin/<既定>`・解決できなければ固定名 `main`——ローカルの既定ブランチを探しには行かないので、`origin/HEAD` を持たず既定が `main` でないリポジトリでは作成が失敗する）から `-b issue/<番号>` で追加）。行末ノート／フッターも実解決に一致する（既存worktree／checkout → worktree／新規worktree）。
 - **PR（same-repo）**: `origin/<head>` を追跡する head ブランチの worktree を作成/再利用。fork（cross-repo）PR は worktree 化せず、⌘↵ でのブラウザ表示へ誘導する。
