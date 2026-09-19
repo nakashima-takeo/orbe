@@ -6,7 +6,7 @@ updated: 2026-09-19
 
 # git 実行
 
-Orbe が git に触る操作——Dispatch の worktree 作成・掃除（[dispatch](../palette/dispatch.md)）、workspace 作成の clone（[workspace パレット](../palette/workspace.md)）、ブランチ・worktree の一覧、エディターの根の観測（[editor/files](../editor/files.md)）——はすべて `/usr/bin/git` の子プロセスとして走る。それらの起動を 1 箇所に集める基盤が持つ契約をここに置く。個々の面が「どう見せるか」は各面の spec が持ち、ここは「どう走らせるか」だけを持つ。
+Orbe が git に触る操作——Dispatch の worktree 作成・掃除・ブランチの最新化（fetch → fast-forward）（[dispatch](../palette/dispatch.md)）、workspace 作成の clone（[workspace パレット](../palette/workspace.md)）、ブランチ・worktree の一覧、エディターの根の観測（[editor/files](../editor/files.md)）——はすべて `/usr/bin/git` の子プロセスとして走る。それらの起動を 1 箇所に集める基盤が持つ契約をここに置く。個々の面が「どう見せるか」は各面の spec が持ち、ここは「どう走らせるか」だけを持つ。
 
 hooks・署名がユーザーのシェル環境と同等に動くよう、全呼び出しがログインシェル由来の PATH を引き継ぐ（[shell-path](shell-path.md)）。`GIT_TERMINAL_PROMPT=0` を必ず渡す——資格情報の対話プロンプトは GUI からは見えず、待てば無限に待つことになるので、認証が要る操作は待たずに失敗へ落とす。
 
@@ -19,6 +19,8 @@ hooks・署名がユーザーのシェル環境と同等に動くよう、全呼
 - **共有チェックアウトと領域が交わらない操作、または結果が古くても取り直せる観測**（clone・worktree 作成・fetch・掃除の分類プローブ・エディターの根の status・index・blob の読み） — 独立レーンで走らせ、直列化のチェーンに載せない。blob の読みは smudge filter を通すので「領域が交わらない」を git 側では保証できないが、観測なので古くても取り直せる。
 
 3 つ目を分けるのは、直列化がプロセス単位で効くため。時間の上限が無い操作をそこへ置くと、無関係な読み取りまでその完了を待たされる。プローブのように「本数ぶん走り、かつ直後の操作を待たせてはいけない」ものも、呼び出し側の判断でこのレーンへ逃がせる。観測を載せるのは逆の理由——直列化は submit 済みの全ブロックの完了を待つため、巨大リポジトリの status を読み取りレーンに置くと worktree の削除や ref の更新がその完了を待つ。観測は監視が取り直すので、古い結果が返っても害が無い。
+
+1 つの操作が段ごとにレーンを変えることもある。ブランチの最新化は、remote からの fetch（`refs/remotes/*` だけを書く）を独立レーンで、祖先判定を読み取りで、ローカル ref を進める `git fetch .`（`refs/heads/*` を書くがネットに触らず実質即時）を直列レーンで走らせる——ネット待ちのプロセスを直列レーンに置かず、ref の書き込みだけを直列化する。
 
 ## 無応答の打ち切り
 

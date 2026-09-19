@@ -26,7 +26,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/wt-path-template", branch: "ship/wt", upstream: "origin/ship/wt",
-        track: "[gone]",
+        track: .gone,
         closedPR: DispatchCleanPR(number: 120, isMerged: false, base: "main"), openPR: .none,
         status: clean,
         containment: .unmerged(count: 6), operation: .none))
@@ -59,7 +59,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/diff-panel", branch: "fix/diff-panel", upstream: "origin/fix/diff-panel",
-        track: "[gone]",
+        track: .gone,
         openPR: .none, status: GitWorktreeStatusCounts(modified: 2, untracked: 3),
         containment: .patchEquivalent(target: "main"),
         operation: .none))
@@ -75,7 +75,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/mid-rebase", branch: "feat/mid", upstream: "origin/feat/mid",
-        track: "[gone]", openPR: .none, status: clean,
+        track: .gone, openPR: .none, status: clean,
         containment: .patchEquivalent(target: "main"), operation: .inProgress(.rebase)))
     XCTAssertEqual(r.group, .caution, "status が空でも停止中の操作は安全確認を落とす")
     XCTAssertEqual(r.chips, [.inProgress(.rebase), .mergedInto("main")])
@@ -86,7 +86,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     for operation in [GitWorktreeOperation.merge, .cherryPick, .bisect] {
       let r = row(
         DispatchCleanFacts(
-          path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: clean,
+          path: "/wt/x", branch: "feat/x", track: .gone, openPR: .none, status: clean,
           containment: .patchEquivalent(target: "main"),
           operation: .inProgress(operation)))
       XCTAssertEqual(r.chips.first, .inProgress(operation))
@@ -97,7 +97,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   func testUnknownOperationFallsToCaution() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: clean,
+        path: "/wt/x", branch: "feat/x", track: .gone, openPR: .none, status: clean,
         containment: .patchEquivalent(target: "main"),
         operation: .unknown))
     XCTAssertEqual(r.group, .caution)
@@ -108,7 +108,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   func testUnknownStatusFallsToCaution() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: "[gone]", openPR: .none, status: nil,
+        path: "/wt/x", branch: "feat/x", track: .gone, openPR: .none, status: nil,
         containment: .patchEquivalent(target: "main"),
         operation: .none))
     XCTAssertEqual(r.group, .caution)
@@ -120,7 +120,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/render-batching", branch: "perf/render-batching", isPrunable: true,
-        upstream: "origin/perf/render-batching", track: "[gone]",
+        upstream: "origin/perf/render-batching", track: .gone,
         openPR: .none, containment: .patchEquivalent(target: "main")))
     XCTAssertEqual(r.group, .safe)
     XCTAssertEqual(
@@ -132,7 +132,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   func testLockedFallsToCaution() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/held", branch: "feat/held", lockReason: "USB", track: "[gone]", openPR: .none,
+        path: "/wt/held", branch: "feat/held", lockReason: "USB", track: .gone, openPR: .none,
         status: clean,
         containment: .patchEquivalent(target: "main"), operation: .none))
     XCTAssertEqual(r.group, .caution)
@@ -143,7 +143,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   func testUnknownMergeStateFallsToCaution() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: "[gone]",
+        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: .gone,
         openPR: .none, status: clean, containment: nil, operation: .none))
     XCTAssertEqual(r.group, .caution)
     XCTAssertEqual(
@@ -162,7 +162,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     func chips(_ state: String?) -> [CleanChip] {
       row(
         DispatchCleanFacts(
-          path: "/wt/agent-hooks", branch: "feature/agent-hooks", track: "[gone]",
+          path: "/wt/agent-hooks", branch: "feature/agent-hooks", track: .gone,
           openPR: .none, containment: .patchEquivalent(target: "main"),
           occupancy: TabOccupancy(cwd: "/wt/agent-hooks", agentState: state))
       ).chips
@@ -233,7 +233,8 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   func testRemoteAheadIsNotClaimedWhenTheContentIsAlreadyInDefault() {
     let r = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: "[ahead 3]",
+        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x",
+        track: .counts(ahead: 3, behind: 0),
         closedPR: DispatchCleanPR(number: 142, isMerged: true, base: "main"), openPR: .none,
         status: clean,
         containment: .patchEquivalent(target: "main"),
@@ -245,13 +246,15 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
   func testRemoteAheadReadsTheTrackField() {
     let ahead = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: "[ahead 3]",
+        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x",
+        track: .counts(ahead: 3, behind: 0),
         openPR: .none, status: clean, containment: nil))
     XCTAssertEqual(ahead.chips.first, .remoteAhead(3))
 
     let diverged = row(
       DispatchCleanFacts(
-        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: "[ahead 1, behind 2]",
+        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x",
+        track: .counts(ahead: 1, behind: 2),
         openPR: .none, status: clean, containment: nil))
     XCTAssertEqual(diverged.chips.first, .remoteAhead(1))
   }
@@ -282,7 +285,7 @@ final class DispatchWorktreeClassifierTests: OrbeTestCase {
     let r = row(
       DispatchCleanFacts(
         path: "/wt/x", branch: "feat/x", lockReason: "USB", upstream: "origin/feat/x",
-        track: "[gone]",
+        track: .gone,
         openPR: .none, status: GitWorktreeStatusCounts(modified: 1, untracked: 0),
         containment: .unmerged(count: 4),
         operation: .none))

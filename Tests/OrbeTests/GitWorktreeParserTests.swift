@@ -61,27 +61,40 @@ final class GitWorktreeParserTests: OrbeTestCase {
 
   func testLocalBranchFormat() {
     let input =
-      "main|1d前|/Users/x/github/orbe|origin/main|\n"
-      + "feat/x|5d前|||\n"
-      + "feat/gone|2d前||origin/feat/gone|[gone]\n"
-      + "feat/ahead|3d前||origin/feat/ahead|[ahead 1]\n"
+      "main|1d前|/Users/x/github/orbe|origin/main|refs/remotes/origin/main|origin|refs/heads/main|\n"
+      + "feat/x|5d前|||||||\n"
+      + "feat/gone|2d前||origin/feat/gone|refs/remotes/origin/feat/gone|origin|refs/heads/feat/gone"
+      + "|[gone]\n"
+      + "feat/ahead|3d前||origin/feat/ahead|refs/remotes/origin/feat/ahead|origin|refs/heads/feat/ahead"
+      + "|[ahead 1]\n"
+      + "feat/both|4d前||fork/feat/both|refs/remotes/fork/feat/both|fork|refs/heads/feat/both"
+      + "|[ahead 1, behind 2]\n"
+      + "feat/behind|4d前||origin/feat/behind|refs/remotes/origin/feat/behind|origin"
+      + "|refs/heads/feat/behind|[behind 3]\n"
     let branches = BranchParser.parseLocal(input)
-    XCTAssertEqual(branches.count, 4)
+    XCTAssertEqual(branches.count, 6)
     XCTAssertEqual(branches[0].name, "main")
     XCTAssertEqual(branches[0].worktreePath, "/Users/x/github/orbe", "worktreepath 非空を拾う")
-    XCTAssertEqual(branches[0].upstream, "origin/main")
-    XCTAssertNil(branches[0].track, "空 track は nil")
+    XCTAssertEqual(
+      branches[0].upstream,
+      GitUpstream(
+        short: "origin/main", ref: "refs/remotes/origin/main", remote: "origin",
+        remoteRef: "refs/heads/main", track: nil), "空 track は同期済み（nil）")
     XCTAssertNil(branches[1].worktreePath, "空 worktreepath は nil")
     XCTAssertNil(branches[1].upstream)
-    XCTAssertEqual(branches[2].track, "[gone]", "upstream が消えたブランチ＝掃除の推定材料")
-    XCTAssertEqual(branches[3].track, "[ahead 1]")
+    XCTAssertEqual(branches[2].upstream?.track, .gone, "upstream が消えたブランチ＝掃除の推定材料")
+    XCTAssertEqual(branches[3].upstream?.track, .counts(ahead: 1, behind: 0))
+    XCTAssertEqual(branches[4].upstream?.track, .counts(ahead: 1, behind: 2))
+    XCTAssertEqual(branches[4].upstream?.remote, "fork", "remote 名は upstream の事実から取る")
+    XCTAssertEqual(branches[5].upstream?.track, .counts(ahead: 0, behind: 3))
   }
 
   /// 列が欠けた行でも落ちない（インデックス読みのガード）。
   func testLocalBranchWithoutTrackColumn() {
     let branches = BranchParser.parseLocal("main|1d前||origin/main\n")
     XCTAssertEqual(branches.count, 1)
-    XCTAssertNil(branches[0].track)
+    XCTAssertEqual(branches[0].upstream?.short, "origin/main")
+    XCTAssertNil(branches[0].upstream?.track)
   }
 
   func testRemoteBranchExcludesHeadNoise() {

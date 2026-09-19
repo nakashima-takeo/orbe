@@ -18,6 +18,9 @@ enum DispatchSectionBuilder {
     var currentWorktree: String?
     /// clean 行の候補件数（safe 群の件数）。nil は分類レーンが未着地＝バッジを出さない。
     var cleanCandidates: Int?
+    /// 提示時の `fetch --prune` が着地した（列挙が fetch 後の値）。Local branch 行の同期ピルは
+    /// 着地後の値だけを出す——fetch 前の差は古い remote 追跡 ref との差で、事実として嘘になる。
+    var remoteFetchLanded = false
   }
 
   static func build(_ input: Input) -> [DispatchSection] {
@@ -84,6 +87,7 @@ enum DispatchSectionBuilder {
         return DispatchItem(
           glyph: .localBranch, name: branch.name, detail: branch.relativeDate,
           badges: badge(pr), linkedPRNumber: pr,
+          sync: input.remoteFetchLanded ? DispatchBranchSync(branch) : nil,
           action: .localBranch(name: branch.name, existingWorktree: branch.worktreePath),
           footer: .launch(target: branch.name, kind: .checkout))
       }
@@ -233,9 +237,11 @@ enum DispatchSectionBuilder {
         ],
         localBranches: [
           GitBranch(
-            name: "main", relativeDate: "1d ago", worktreePath: nil, upstream: "origin/main"),
+            name: "main", relativeDate: "1d ago", worktreePath: nil,
+            upstream: upstream("main", ahead: 0, behind: 12)),
           GitBranch(
-            name: "perf/render-batching", relativeDate: "5d ago", worktreePath: nil, upstream: nil),
+            name: "perf/render-batching", relativeDate: "5d ago", worktreePath: nil,
+            upstream: upstream("perf/render-batching", ahead: 2, behind: 5)),
         ],
         remoteBranches: [
           GitBranch(
@@ -254,7 +260,16 @@ enum DispatchSectionBuilder {
         githubState: .ready, issuesLoading: false, pullRequestsLoading: false,
         currentWorktree: "\(home)/wt/agent-hooks",
         // clean 行の候補バッジ（design 正典の clean シーンの safe 群と同数）。
-        cleanCandidates: 3)
+        cleanCandidates: 3,
+        // Local branch 行の同期ピル（`↓12` / `↑2 ↓5`）は着地後の値だけ出る。
+        remoteFetchLanded: true)
+    }
+
+    /// origin を追跡する upstream（design 正典の `sync` に対応）。
+    static func upstream(_ name: String, ahead: Int, behind: Int) -> GitUpstream {
+      GitUpstream(
+        short: "origin/\(name)", ref: "refs/remotes/origin/\(name)", remote: "origin",
+        remoteRef: "refs/heads/\(name)", track: .counts(ahead: ahead, behind: behind))
     }
   }
 #endif

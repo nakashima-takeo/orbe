@@ -46,6 +46,7 @@ struct StatusRowView: View {
   @Environment(\.chromeTranslucency) private var translucency
   @Environment(\.agentIconResolver) private var iconResolver
   @Environment(\.localization) private var l10n
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   // 寸法計算（StatusRowView+Metrics）が同じ resolver で幅を測るため internal。
   @Environment(\.chromeFontResolver) var fontResolver
 
@@ -70,16 +71,28 @@ struct StatusRowView: View {
     }
     // 透過時は端末と同濃度の veil を敷く（不透明時は clear＝最背面 BackgroundGlow の glow を透かす現行）。
     .background(translucency.additiveBase)
-    .background(WindowAccessor(model: model))
   }
 
   // MARK: - 上段（TopBar）
 
-  /// 上段テキストの縦中央を信号機ボタン中央へ寄せる量（slot 中央＝headerHeight/2 からのずれ）。
-  /// ずれ幅が行高を食いうるため ±4 に clamp する。
-  private var headerYShift: CGFloat {
-    let shift = (model.closeCenterY ?? Chrome.headerHeight / 2) - Chrome.headerHeight / 2
-    return min(max(shift, -4), 4)
+  /// 上段の左余白と縦シフト。信号機が chrome の上にあれば信号機ぶんの柱を空けて縦中央を close へ寄せ
+  /// （ずれ幅が行高を食いうるため ±4 に clamp）、無ければ通常余白・シフト 0。
+  private var headerLayout: (leading: CGFloat, yShift: CGFloat) {
+    switch model.trafficLights {
+    case .absent:
+      return (Chrome.edgePad, 0)
+    case .over(let centerY):
+      return (Chrome.leftColumn, min(max(centerY - Chrome.headerHeight / 2, -4), 4))
+    }
+  }
+
+  /// 信号機の在否が変わったときの柱の開閉（フルスクリーン遷移の終端で 80⇄16pt 動く）を滑らかにする。
+  /// `over` のまま縦位置だけが動く probe の読み直しはこの拍に乗せず、即座に反映する。
+  /// Reduce Motion では在否の変化も即座に切り替える（状態グリフと同流儀）。
+  private var headerLayoutAnimation: Animation? {
+    guard !reduceMotion else { return nil }
+    let (p1, p2) = Theme.Motion.easing
+    return .timingCurve(p1.x, p1.y, p2.x, p2.y, duration: Theme.Motion.base)
   }
 
   // 左＝現在地（workspace 名→build-id→焦点の面の現在地 の粗→細）、右端＝ステータスストリップ。
@@ -122,10 +135,11 @@ struct StatusRowView: View {
           .onTapGesture { model.onAttentionTap() }
       }
     }
-    .padding(.leading, Chrome.leftColumn)
+    .padding(.leading, headerLayout.leading)
     .padding(.trailing, Chrome.edgePad)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-    .offset(y: headerYShift)
+    .offset(y: headerLayout.yShift)
+    .animation(headerLayoutAnimation, value: model.trafficLights.isOverChrome)
   }
 
   // MARK: - 下段（セグメント形タブ行・全幅）
@@ -294,49 +308,5 @@ private struct WindowDragArea: NSViewRepresentable {
       default: window?.zoom(nil)  // Maximize もしくは未設定（既定の zoom）
       }
     }
-  }
-}
-
-/// 信号機（close ボタン）の位置を読み、`StatusRowModel` へ反映する極小プローブ。
-/// 位置は実窓にしか無い system furniture なので、ここだけ実窓を読む。
-private struct WindowAccessor: NSViewRepresentable {
-  let model: StatusRowModel
-  func makeNSView(context: Context) -> NSView { WindowProbe(model: model) }
-  func updateNSView(_ nsView: NSView, context: Context) { (nsView as? WindowProbe)?.sync() }
-}
-
-private final class WindowProbe: NSView {
-  let model: StatusRowModel
-  init(model: StatusRowModel) {
-    self.model = model
-    super.init(frame: .zero)
-  }
-  required init?(coder: NSCoder) { fatalError("not supported") }
-
-  override func viewDidMoveToWindow() {
-    super.viewDidMoveToWindow()
-    sync()
-  }
-  override func layout() {
-    super.layout()
-    sync()
-  }
-
-  func sync() {
-    let centerY = Self.closeCenterFromTop(in: window)
-    // レイアウト経路から observable を直接触ると更新サイクルと衝突しうるため次の run loop へ逃がす。
-    DispatchQueue.main.async { [model] in
-      if model.closeCenterY != centerY { model.closeCenterY = centerY }
-    }
-  }
-
-  /// close ボタン中央の、contentView 上端からの距離。chrome は contentView 上端に密着するので
-  /// そのまま上段の縦整列に使える。信号機が無い（fullscreen 等）なら nil。
-  private static func closeCenterFromTop(in window: NSWindow?) -> CGFloat? {
-    guard let window, let content = window.contentView,
-      let close = window.standardWindowButton(.closeButton), close.superview != nil
-    else { return nil }
-    let r = close.convert(close.bounds, to: content)
-    return content.isFlipped ? r.midY : content.bounds.height - r.midY
   }
 }

@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import OrbePaths
 import XCTest
 
@@ -102,9 +102,9 @@ enum TestIsolation {
 
   /// テスト 1 件へ専用ディレクトリを配り、隔離の seam をそこへ向け直す。
   ///
-  /// 値の素性（永続 5 種・同梱リソース根・プラグイン実体化先・ghostty user 層・通知音の再生層）に関わらず
-  /// **毎テスト無条件に張り直す**。テストが自分で書き換えても次のテストへ漏れず、戻し忘れが
-  /// 起きえない——申告制を残さないため。`CompletionLearning` だけは `shared` が in-memory へ
+  /// 値の素性（永続 5 種・同梱リソース根・プラグイン実体化先・ghostty user 層・通知音の再生層・
+  /// 端末のクリップボード）に関わらず **毎テスト無条件に張り直す**。テストが自分で書き換えても
+  /// 次のテストへ漏れず、戻し忘れが起きえない——申告制を残さないため。`CompletionLearning` だけは `shared` が in-memory へ
   /// 焼き付ける都合で per-test にできず、`installOnce` の固定のままにする。
   ///
   /// **書き込まれうる先は caseDir の下へ置く。** root 直下に置くと `endCase` の削除に乗らず、
@@ -151,9 +151,15 @@ enum TestIsolation {
     // 子プロセス PATH の probe。張らないと `WindowController` を立てる多数のテストが開発者の
     // 実ログインシェルを起こし、手元の dotfiles で結果が変わる（CI と手元で違う PATH を見る）。
     ShellPATH.shared = ShellPATH(probe: { "/usr/bin:/bin" })
+
+    // 端末のクリップボード。general はシステム全域の実環境で、書けば履歴アプリやユニバーサル
+    // クリップボードへ流れ、落ちたテストは開発者の中身を戻せない。テストごとに一意名の pasteboard へ向ける。
+    Ghostty.pasteboard = NSPasteboard(
+      name: NSPasteboard.Name("dev.orbe.tests.\(root.lastPathComponent).c\(sequence)"))
   }
 
   static func endCase() {
+    Ghostty.pasteboard.releaseGlobally()
     if let dir = caseDir { try? FileManager.default.removeItem(at: dir) }
     previousCaseDir = caseDir
     caseDir = nil

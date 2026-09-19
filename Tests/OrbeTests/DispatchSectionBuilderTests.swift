@@ -85,6 +85,50 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
     }
   }
 
+  // MARK: - 同期ピル
+
+  /// Local branch 行の同期は **origin を追跡し・着地後・差がある**行にだけ乗る。`[gone]`・同期済み・
+  /// 他 remote の upstream・着地前は無印。
+  func testLocalBranchSyncRequiresOriginUpstreamAndLanding() {
+    func upstream(_ remote: String, _ track: GitUpstreamTrack?) -> GitUpstream {
+      GitUpstream(
+        short: "\(remote)/x", ref: "refs/remotes/\(remote)/x", remote: remote,
+        remoteRef: "refs/heads/x", track: track)
+    }
+    let branches = [
+      GitBranch(
+        name: "behind", relativeDate: "1d", worktreePath: nil,
+        upstream: upstream("origin", .counts(ahead: 0, behind: 3))),
+      GitBranch(
+        name: "diverged", relativeDate: "1d", worktreePath: nil,
+        upstream: upstream("origin", .counts(ahead: 1, behind: 2))),
+      GitBranch(
+        name: "synced", relativeDate: "1d", worktreePath: nil, upstream: upstream("origin", nil)),
+      GitBranch(
+        name: "gone", relativeDate: "1d", worktreePath: nil, upstream: upstream("origin", .gone)),
+      GitBranch(
+        name: "fork", relativeDate: "1d", worktreePath: nil,
+        upstream: upstream("fork", .counts(ahead: 0, behind: 3))),
+      GitBranch(name: "local", relativeDate: "1d", worktreePath: nil, upstream: nil),
+    ]
+    var input = DispatchSectionBuilder.Input(localBranches: branches)
+    XCTAssertEqual(
+      section(DispatchSectionBuilder.build(input), "Local branches")?.items.compactMap(\.sync),
+      [], "着地前は全行無印")
+
+    input.remoteFetchLanded = true
+    let items = section(DispatchSectionBuilder.build(input), "Local branches")?.items ?? []
+    let synced = Dictionary(uniqueKeysWithValues: items.map { ($0.name, $0.sync) })
+    XCTAssertEqual(synced["behind"]??.behind, 3)
+    XCTAssertEqual(synced["behind"]??.isFastForwardable, true)
+    XCTAssertEqual(synced["diverged"]??.ahead, 1)
+    XCTAssertEqual(synced["diverged"]??.isFastForwardable, false)
+    XCTAssertNil(synced["synced"] ?? nil, "同期済みは無印")
+    XCTAssertNil(synced["gone"] ?? nil, "[gone] は差の数を持たない")
+    XCTAssertNil(synced["fork"] ?? nil, "信頼しない remote の upstream は無印")
+    XCTAssertNil(synced["local"] ?? nil)
+  }
+
   // MARK: - 重複排除
 
   func testLocalBranchWithWorktreeIsExcluded() {

@@ -134,6 +134,22 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchCleanAgentWaiting
   case dispatchCleanTabOpen
   case dispatchCleanUnverified
+  case dispatchRefreshSection
+  case dispatchRefreshTitle
+  case dispatchRefreshAsIsTitle
+  case dispatchRefreshDesc
+  case dispatchRefreshAsIsDesc
+  case dispatchRefreshBehindOne
+  case dispatchRefreshBehindOther
+  case dispatchRefreshFailedHeader
+  case dispatchRefreshFailedDesc
+  case dispatchRefreshDiverged
+  case dispatchRefreshRetry
+  case dispatchHintRetry
+  case dispatchHintBack
+  case dispatchPrepRefreshed
+  case dispatchPrepAsIs
+  case dispatchRefreshing
 
   // MARK: - Onboarding
   case onboardingBegin
@@ -272,6 +288,21 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorOverwriteTitle
   case editorOverwriteMessage
   case editorOverwriteConfirm
+
+  // MARK: - Link（OSC 8 リンクの確認・ブロック）
+  case linkConfirmTitle
+  case linkConfirmMessage
+  case linkConfirmMessageDefaultApp
+  case linkConfirmOpen
+  case linkBlockedTitle
+  case linkBlockedOK
+  case linkBlockedCopy
+  case linkBlockedMalformed
+  case linkBlockedUnsafeCharacters
+  case linkBlockedInvalidWeb
+  case linkBlockedRemoteFile
+  case linkBlockedInaccessibleFile
+  case linkBlockedUnsafeFile
 
   // MARK: - Tab context menu（タブ行の右クリック）
   case tabMenuResetAgentState

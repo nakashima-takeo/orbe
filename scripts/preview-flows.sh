@@ -8,7 +8,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # 有効な flow 名（= テストメソッドの担当 flow）。snake_case のまま PNG 接頭辞でもある。
-FLOWS="editor_marks editor_decor editor_shell editor_shell_narrow editor_shell_reveal palette_nav palette_drill settings_palette settings_palette_override settings_palette_agent_empty settings_palette_sound onboarding_install completion_scroll workspace_filter workspace_glyph_runs workspace_live_status workspace_rename clean_subline update_states menubar_arrival menubar_arrival_first menubar_dismiss palette_low_window closed_agents"
+FLOWS="editor_marks editor_decor editor_shell editor_shell_narrow editor_shell_reveal palette_nav palette_drill settings_palette settings_palette_override settings_palette_agent_empty settings_palette_sound onboarding_install completion_scroll workspace_filter workspace_glyph_runs workspace_live_status workspace_rename clean_subline refresh update_states menubar_arrival menubar_arrival_first menubar_dismiss palette_low_window closed_agents"
 
 # flow 名 → テストメソッド名（snake_case を test + PascalCase へ）。BSD/GNU 両対応で awk のみで変換。
 to_method() {

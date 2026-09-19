@@ -10,10 +10,10 @@ extension DispatchWorktreeClassifierTests {
     let rows = classify(
       DispatchCleanFacts(path: "/repo", branch: "main", isMain: true, openPR: .none),
       DispatchCleanFacts(
-        path: "/wt/dirty", branch: "a", track: "[gone]",
+        path: "/wt/dirty", branch: "a", track: .gone,
         openPR: .none, status: GitWorktreeStatusCounts(modified: 1, untracked: 0), operation: .none),
       DispatchCleanFacts(
-        path: "/wt/safe", branch: "b", track: "[gone]", openPR: .none, status: clean,
+        path: "/wt/safe", branch: "b", track: .gone, openPR: .none, status: clean,
         containment: .patchEquivalent(target: "main"),
         operation: .none))
     XCTAssertEqual(rows.map(\.name), ["safe", "dirty", "repo"], "safe → caution → inUse の群順")

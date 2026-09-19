@@ -2,18 +2,33 @@ import Foundation
 
 /// `git for-each-ref` の `|` 区切り行を `GitBranch` へ落とすパーサ（local / remote）。
 enum BranchParser {
-  /// local: `%(refname:short)|%(committerdate:relative)|%(worktreepath)|%(upstream:short)|%(upstream:track)`。
+  /// local: `%(refname:short)|%(committerdate:relative)|%(worktreepath)|%(upstream:short)|%(upstream)`
+  /// `|%(upstream:remotename)|%(upstream:remoteref)|%(upstream:track)`。
   static func parseLocal(_ text: String) -> [GitBranch] {
     text.split(separator: "\n").compactMap { line in
       let f = String(line).components(separatedBy: "|")
       guard f.count >= 2, !f[0].isEmpty else { return nil }
+      func field(_ i: Int) -> String? { f.count > i && !f[i].isEmpty ? f[i] : nil }
+      let upstream = field(3).map { short in
+        GitUpstream(
+          short: short, ref: field(4) ?? "", remote: field(5) ?? "", remoteRef: field(6) ?? "",
+          track: parseTrack(field(7)))
+      }
       return GitBranch(
-        name: f[0],
-        relativeDate: f[1],
-        worktreePath: f.count > 2 && !f[2].isEmpty ? f[2] : nil,
-        upstream: f.count > 3 && !f[3].isEmpty ? f[3] : nil,
-        track: f.count > 4 && !f[4].isEmpty ? f[4] : nil)
+        name: f[0], relativeDate: f[1], worktreePath: field(2), upstream: upstream)
     }
+  }
+
+  /// `%(upstream:track)` の書式は固定（空 / `[gone]` / `[ahead N]` / `[behind M]` / `[ahead N, behind M]`）。
+  private static func parseTrack(_ text: String?) -> GitUpstreamTrack? {
+    guard let text else { return nil }
+    if text == "[gone]" { return .gone }
+    return .counts(ahead: count("ahead ", in: text), behind: count("behind ", in: text))
+  }
+
+  private static func count(_ label: String, in text: String) -> Int {
+    guard let range = text.range(of: label) else { return 0 }
+    return Int(text[range.upperBound...].prefix { $0.isNumber }) ?? 0
   }
 
   /// remote: `%(refname:short)|%(committerdate:relative)|%(authorname)`。

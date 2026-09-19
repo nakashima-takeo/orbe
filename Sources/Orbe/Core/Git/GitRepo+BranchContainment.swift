@@ -79,7 +79,7 @@ extension GitRepo {
   /// `isolated` は呼び出し側が決める（`worktreeIsClean` と同じ理由）。この判定は比較先 T 本のとき
   /// worktree 1 本あたり最大 `1 + T×5` 本の git を撒く（到達性 1 本＋unmerged 経路は target ごとに
   /// cherry 系最大 5 本。merged 経路は is-ancestor 最大 T 本）ので、共有 read レーンに置くと直後の
-  /// `addWorktree`(barrier) が全部の完了を待つ。
+  /// `.exclusive`（worktree 削除・ブランチ削除）が barrier で全部の完了を待つ。
   func branchContainment(
     branchOrCommit: String, targets: [String], isolated: Bool = false,
     completion: @escaping (GitBranchContainment?) -> Void
