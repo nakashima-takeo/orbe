@@ -36,7 +36,7 @@ final class LineDecorationView: NSView {
     let geometry = VisibleLines(textView: textView)
     let lines = geometry.lines(in: bounds)
     guard !lines.isEmpty else { return }
-    let cell = (" " as NSString).size(withAttributes: [.font: textView.font]).width
+    let cell = textView.font.cellWidth
     for line in lines {
       drawIndentGuides(line, geometry: geometry, cell: cell)
       drawWhitespace(line, geometry: geometry)

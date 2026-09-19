@@ -245,7 +245,7 @@ final class EditorLineMarksTests: OrbeTestCase {
     XCTAssertTrue(try hasInk(ground, guide1, rowMidY(2)), "空行の線が同じ x に立つ")
     XCTAssertTrue(try hasInk(ground, guide1, rowMidY(3)))
     XCTAssertFalse(try hasInk(ground, guide2, rowMidY(2)), "空行は隣の浅い方（1 段）")
-    XCTAssertFalse(try hasInk(ground, bodyX + 28, rowMidY(2)), "AppKit 既定の 28pt には無い")
+    XCTAssertFalse(try hasInk(ground, bodyX + 56, rowMidY(3)), "AppKit 既定の刻み（2 段目 56pt）には無い")
   }
 
   /// CRLF の文書でも段落末は行の外——行末の 1 個のスペースに点が出て、空行のインデント線が隣から続く
@@ -338,8 +338,9 @@ final class EditorLineMarksTests: OrbeTestCase {
     XCTAssertGreaterThan(client.selectedRange().length, 0, "キャレットから URL の上まで選択が延びる")
   }
 
-  /// 開くのは離したとき——押した URL の上で離せば開き、ドラッグして外れて離せば開かず、選択も伸びない。
-  func testCommandClickOpensOnMouseUpAndDraggingAwayCancels() throws {
+  /// 開くのは離したとき——押した URL の上で離せば開き、押したまま動かして離せば開かず（動きが小さくても
+  /// URL の外で離せば開かない）、その間は選択も伸びない。
+  func testCommandClickOpensOnMouseUpAndDraggingCancels() throws {
     let hosted = try host("see https://a.b/c\n")
     let document = hosted.document
     let window = hosted.window
@@ -357,10 +358,17 @@ final class EditorLineMarksTests: OrbeTestCase {
     XCTAssertEqual(opened.map(\.absoluteString), ["https://a.b/c"], "離して開く")
 
     responder.mouseDown(with: try mouse(.leftMouseDown, onURL, [.command], in: window))
-    let away = NSPoint(x: onURL.x + 30, y: onURL.y)
+    let away = NSPoint(x: onURL.x - 6 * cell, y: onURL.y)  // "see " の上（URL の外）
     responder.mouseDragged(with: try mouse(.leftMouseDragged, away, [.command], in: window))
     responder.mouseUp(with: try mouse(.leftMouseUp, away, [.command], in: window))
     XCTAssertEqual(opened.count, 1, "ドラッグして外れれば開かない")
     XCTAssertEqual(client.selectedRange(), before, "その間に選択は伸びない")
+
+    let edge = responder.convert(
+      NSPoint(x: bodyX + 16.8 * cell, y: rowMidY(1) - style.topInset), to: nil)
+    responder.mouseDown(with: try mouse(.leftMouseDown, edge, [.command], in: window))
+    let justOutside = NSPoint(x: edge.x + 2, y: edge.y)
+    responder.mouseUp(with: try mouse(.leftMouseUp, justOutside, [.command], in: window))
+    XCTAssertEqual(opened.count, 1, "動きが 2pt でも URL の外で離せば開かない")
   }
 }

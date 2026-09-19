@@ -62,11 +62,6 @@ final class STTextSurface: NSObject, TextSurface {
         guard let self else { return }
         visibleRange = range.map { NSRange($0, in: self.textView.textContentManager) } ?? NSRange()
         layoutOverlays()
-        // 指カーソルの矩形は ⌘ を押している間だけ張る。上流はスクロール・編集で捨てないので、見える行が
-        // 変わる layout の収束で捨て直す（⌘ の押下・解放は `flagsChanged` が持つ）。
-        if NSEvent.modifierFlags.contains(.command) {
-          textView.window?.invalidateCursorRects(for: textView)
-        }
         delegate?.surfaceDidLayoutViewport(self)
       })
     apply(style)
@@ -128,14 +123,16 @@ final class STTextSurface: NSObject, TextSurface {
     marksView.spans = spans
   }
 
+  /// 地は器が本文の下に、`GutterGroundView` がガターの上に敷く（上流のガターは本文の上に浮き、横スクロールで
+  /// 本文がその下を通る——上に地が無いと行番号と字が重なる）。同じ矩形を二度塗らないので透過の濃度が揃う。
   func setGround(_ color: NSColor) {
     container.ground = color
     groundView.color = color
   }
 
-  /// overlay 2 枚を viewport の矩形に置き直して描き直す。frame は可視矩形に、bounds の原点は text container
-  /// 基準の同じ点に置く——view の座標がそのまま container の座標になり、描く側が座標を手で引かない
-  /// （横スクロールでも縦スクロールでも同じ式）。ガターの y は文書の y と同じ（上流は行番号を文書の y に置く）。
+  /// overlay を viewport の矩形に置き直して描き直す。本文の overlay は frame を可視矩形に、bounds の原点を
+  /// text container 基準の同じ点に置く——x も y も container の座標がそのまま view の座標になり、描く側が座標を
+  /// 手で引かない。ガターの overlay は x が局所（列の右端に錨）、y が文書（上流は行番号を文書の y に置く）。
   private func layoutOverlays() {
     let visible = textView.visibleRect
     let gutterWidth = textView.gutterView?.frame.width ?? 0
@@ -145,10 +142,11 @@ final class STTextSurface: NSObject, TextSurface {
     decorationView.setBoundsOrigin(NSPoint(x: visible.minX, y: visible.minY))
     decorationView.needsDisplay = true
     if let gutter = textView.gutterView {
-      // ガターの地は clip view の矩形（テキスト view の高さに依らない）とガターの交わり。器はその分を塗らない。
+      // ガターの地は可視矩形（clip view。テキスト view の高さに依らない）を文書の下端（ガターの高さ）で
+      // 切ったぶん。器はその矩形を塗らない。
       let clip = scrollView.contentView.bounds
-      let ground = CGRect(x: 0, y: clip.minY, width: gutter.frame.width, height: clip.height)
-        .intersection(gutter.frame)
+      let ground = CGRect(x: 0, y: clip.minY, width: gutter.bounds.width, height: clip.height)
+        .intersection(gutter.bounds)
       groundView.frame = ground
       container.groundHole = NSRect(
         x: 0, y: ground.minY - clip.minY + style.topInset, width: ground.width,
@@ -158,6 +156,12 @@ final class STTextSurface: NSObject, TextSurface {
         width: style.marks.gutterWidth, height: visible.height)
       marksView.setBoundsOrigin(NSPoint(x: 0, y: visible.minY))
       marksView.needsDisplay = true
+    }
+    // 指カーソルの矩形は ⌘ を押している間だけ張る。上流はスクロール・編集で捨てないので、見える行が変わる
+    // たび（layout の収束と、viewport を動かさない小さなスクロールの両方）に捨て直す（⌘ の押下・解放は
+    // `flagsChanged` が持つ）。
+    if NSEvent.modifierFlags.contains(.command) {
+      textView.window?.invalidateCursorRects(for: textView)
     }
   }
 
@@ -191,8 +195,7 @@ final class STTextSurface: NSObject, TextSurface {
     let paragraph = NSMutableParagraphStyle()
     paragraph.lineHeightMultiple = style.lineHeight / Self.naturalLineHeight(of: style.font)
     paragraph.tabStops = []
-    paragraph.defaultTabInterval =
-      CGFloat(indentUnit) * (" " as NSString).size(withAttributes: [.font: style.font]).width
+    paragraph.defaultTabInterval = CGFloat(indentUnit) * style.font.cellWidth
     textView.defaultParagraphStyle = paragraph
   }
 
@@ -260,13 +263,17 @@ private final class SurfaceTextView: STTextView {
     let locationInWindow: NSPoint
   }
 
+  /// 押している間に view が窓から外れると mouse-up は届かない（文書の切り替えが面を外す）ので、ラッチは
+  /// 次の押下でも解く。input context へは上流と同じく先に通すが、同じイベントを 2 回渡さない（上流に落ちる
+  /// クリックは上流が通す）。
   override func mouseDown(with event: NSEvent) {
-    guard (inputContext?.handleEvent(event) ?? false) == false else { return }
+    pendingLink = nil
     let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
     if flags.contains(.command), flags.isDisjoint(with: [.shift, .option, .control]),
       event.clickCount == 1,
       let url = VisibleLines(textView: self).link(at: containerPoint(event.locationInWindow))
     {
+      guard (inputContext?.handleEvent(event) ?? false) == false else { return }
       pendingLink = PendingLink(url: url, locationInWindow: event.locationInWindow)
       return
     }

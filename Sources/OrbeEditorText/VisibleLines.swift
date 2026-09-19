@@ -2,6 +2,11 @@ import AppKit
 import OrbeEditorCore
 import STTextView
 
+extension NSFont {
+  /// 1 桁の幅（等幅前提。空白の送り）。桁から x を置く側と、タブの刻みを決める側が同じ値を使う。
+  var cellWidth: CGFloat { (" " as NSString).size(withAttributes: [.font: self]).width }
+}
+
 /// 見えている段落 1 つの geometry。座標は text container 基準（テキスト view の本文の矩形＝ガターの右）。
 struct VisibleLine {
   /// 段落の区間（改行込み。UTF-16）。
