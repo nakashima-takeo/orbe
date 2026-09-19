@@ -4,16 +4,11 @@ import AppKit
 /// ガターの下を通っても透けない。当たりを持たず、寸法は viewport で、位置は面が置き直す。
 final class GutterGroundView: NSView {
   var color: NSColor? {
-    didSet { needsDisplay = true }
+    didSet { if color != oldValue { needsDisplay = true } }
   }
 
   override var isFlipped: Bool { true }
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-  override func viewDidChangeEffectiveAppearance() {
-    super.viewDidChangeEffectiveAppearance()
-    needsDisplay = true
-  }
 
   // macOS 14 以降は view が bounds の外も描けるので、地は bounds に切る（オフスクリーン描画では dirtyRect が
   // 親の全域で来て、兄弟の骨を塗り潰す）。
@@ -32,11 +27,11 @@ final class SurfaceContainerView: NSView {
     didSet { needsLayout = true }
   }
   var ground: NSColor? {
-    didSet { needsDisplay = true }
+    didSet { if ground != oldValue { needsDisplay = true } }
   }
-  /// `GutterGroundView` が塗る矩形（器の座標）。
+  /// `GutterGroundView` が塗る矩形（器の座標）。スクロール中は毎イベント代入されるが値は動かない。
   var groundHole = NSRect.zero {
-    didSet { needsDisplay = true }
+    didSet { if groundHole != oldValue { needsDisplay = true } }
   }
 
   override var isFlipped: Bool { true }

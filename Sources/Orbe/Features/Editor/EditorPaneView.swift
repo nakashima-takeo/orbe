@@ -252,7 +252,6 @@ final class EditorPaneView: NSView {
     self.document?.surface.view.removeFromSuperview()
     self.document = document
     if let document {
-      document.surface.setGround(groundColor)
       let view = document.surface.view
       view.autoresizingMask = []
       view.frame = bodyRect
@@ -260,6 +259,7 @@ final class EditorPaneView: NSView {
       addSubview(view, positioned: .below, relativeTo: sidebarHandle)
     }
     emptyHost.isHidden = document != nil
+    applyGround()
     needsLayout = true
     if hadFocusInside, window?.firstResponder !== focusTarget {
       window?.makeFirstResponder(focusTarget)
