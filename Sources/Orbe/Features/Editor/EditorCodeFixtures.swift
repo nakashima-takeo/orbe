@@ -71,6 +71,25 @@
 
       """
 
+    /// 俯瞰がスライドする長さの文書（断片を型名を変えて 8 つ並べたもの。480px の列では 1 画面に収まらない）。
+    static let long = (1...8).map {
+      sample.replacingOccurrences(of: "LineIndex", with: "LineIndex\($0)")
+    }.joined(separator: "\n")
+
+    /// 長い文書に作業ツリーで起こす変更: 4 つ目の型名を書き換える（変更）、各 `lineCount` の下に 1 行足す
+    /// （追加。文書全体に散る）。
+    static var longEdited: String {
+      long
+        .replacingOccurrences(of: "struct LineIndex4:", with: "struct LineIndex4Modified:")
+        .replacingOccurrences(
+          of: "  public var lineCount: Int { starts.count }\n",
+          with: """
+              public var lineCount: Int { starts.count }
+              public var isEmpty: Bool { lineCount == 1 }
+
+            """)
+    }
+
     /// コミット済みの断片に作業ツリーで起こす変更: `starts` の下の空行を消す（削除）、`lineCount` の下に 2 行
     /// 足す（追加）、`point` の 2 行を書き換える（変更。1 行は行末にスペース 2 つ＝丸点）。
     static var edited: String {
@@ -134,6 +153,8 @@
       let url = dir.appendingPathComponent("LineIndex.swift")
       try Data(sample.utf8).write(to: url)
       try Data(tabbed.utf8).write(to: dir.appendingPathComponent("main.go"))
+      let longURL = dir.appendingPathComponent("Long.swift")
+      try Data(long.utf8).write(to: longURL)
       let git = { (args: [String]) throws in
         let output = GitRunner.shared.runSync(args, cwd: dir.path)
         guard output.isSuccess else {
@@ -147,6 +168,7 @@
       try git(["add", "-A"])
       try git(["commit", "-qm", "gallery"])
       try Data(edited.utf8).write(to: url)
+      try Data(longEdited.utf8).write(to: longURL)
       let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot))
       let document = try tab.editor.open(url)
       return Scene(tab: tab, document: document, directory: dir)

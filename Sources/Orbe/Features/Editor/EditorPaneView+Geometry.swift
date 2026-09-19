@@ -52,11 +52,31 @@ extension EditorPaneView {
       + (document != nil ? Theme.Layout.editorBreadcrumb : 0)
   }
 
-  /// 本体（テキスト面か空状態）の矩形。
+  /// 本体（文書があればテキスト面と俯瞰、無ければ空状態）の矩形。
   var bodyRect: NSRect {
     NSRect(
       x: sideWidth, y: headerHeight, width: max(0, bounds.width - sideWidth),
       height: max(0, bounds.height - headerHeight))
+  }
+
+  /// 俯瞰の列の幅（左の hairline ＋ ミニマップ ＋ 印の列）。
+  var overviewWidth: CGFloat {
+    Theme.Stroke.hairline + Theme.Layout.editorMinimap + Theme.Layout.editorScrollMarks
+  }
+
+  /// テキスト面の矩形（本体から右の俯瞰を除いたぶん）。文書が無ければ本体そのもの。
+  var surfaceRect: NSRect {
+    guard document != nil else { return bodyRect }
+    let body = bodyRect
+    return NSRect(
+      x: body.minX, y: body.minY, width: max(0, body.width - overviewWidth), height: body.height)
+  }
+
+  /// 俯瞰の矩形（本体の右端。本体より広くはならない）。
+  var overviewRect: NSRect {
+    let body = bodyRect
+    let width = min(overviewWidth, body.width)
+    return NSRect(x: body.maxX - width, y: body.minY, width: width, height: body.height)
   }
 
   override func layout() {
@@ -66,9 +86,9 @@ extension EditorPaneView {
       x: 0, y: 0, width: min(sideWidth, bounds.width), height: bounds.height)
     headerHost.frame = NSRect(
       x: sideWidth, y: 0, width: max(0, bounds.width - sideWidth), height: headerHeight)
-    let body = bodyRect
-    emptyHost.frame = body
-    document?.surface.view.frame = body
+    emptyHost.frame = bodyRect
+    document?.surface.view.frame = surfaceRect
+    overview.frame = overviewRect
     // 当たりは境を動かせるときだけ（`resizeSidebar` の guard と同じ条件）——動かない列に出すとレールの右 1pt を
     // 覆ってリサイズカーソルだけが出る。
     sidebarHandle.isHidden =
@@ -76,7 +96,7 @@ extension EditorPaneView {
     sidebarHandle.frame = NSRect(
       x: sideWidth - Theme.Stroke.hairline - Theme.Layout.editorSidebarHandle / 2, y: 0,
       width: Theme.Layout.editorSidebarHandle, height: bounds.height)
-    // 地の穴（本体の矩形）は幾何の関数。subview の移動や frame の変更では層は描き直されない。
+    // 地の穴（テキスト面の矩形）は幾何の関数。subview の移動や frame の変更では層は描き直されない。
     needsDisplay = true
   }
 }

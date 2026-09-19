@@ -33,8 +33,8 @@ extension TerminalTabTests {
     window.orderOut(nil)
   }
 
-  /// 端末固有の chrome キー（検索・フォント）は消費して何も起こさず、両面のキー（⌘↑）と通常キーは
-  /// 先取りせずに流す。
+  /// 端末固有の chrome キー（フォント）は消費して何も起こさず、両面のキーのうち ⌘F は面が取り（空状態では何も
+  /// 起きない）、⌘↑ と通常キーは先取りせずに流す。
   func testEditorPaneSwallowsTerminalOnlyKeysAndPassesSharedKeys() {
     let tab = TerminalTab(cwd: "/tmp")
     var received: [WindowCommand] = []
@@ -42,7 +42,8 @@ extension TerminalTabTests {
     let window = hosted(tab)
     let pane = tab.view.editor
 
-    XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")), "⌘F は消費（端末へ届かない）")
+    XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")), "⌘F は面が取る（端末へ届かない）")
+    XCTAssertNil(pane.searchBar, "空状態の ⌘F は何も起きない")
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("+")), "⌘+ は消費")
     XCTAssertFalse(
       pane.performKeyEquivalent(
@@ -51,6 +52,22 @@ extension TerminalTabTests {
     XCTAssertFalse(pane.performKeyEquivalent(with: .key("a", [])), "通常キーは先取りしない")
 
     XCTAssertEqual(received, [], "window コマンドにはならない")
+    window.orderOut(nil)
+  }
+
+  /// 端末焦点の ⌘F は端末面のスクロールバック検索バーを開き、エディター面の検索は開かない。
+  func testCommandFOnTheTerminalOpensTheScrollbackSearchNotTheEditorSearch() throws {
+    let tab = TerminalTab(cwd: "/tmp")
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    window.contentView = tab.view
+    window.makeFirstResponder(tab.surface)
+
+    tab.surface.keyDown(with: .key("f"))
+
+    XCTAssertNotNil(tab.surface.searchBar)
+    XCTAssertNil(tab.view.editor.searchBar)
     window.orderOut(nil)
   }
 

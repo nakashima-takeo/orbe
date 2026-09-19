@@ -18,7 +18,7 @@ final class LineMarksTests: XCTestCase {
     let text = (1...8).map { "\($0)\n" }.joined()
     let index = LineIndex(text: text)
     let spans = LineMarks(hunks: [hunk(2, 0, 3, 2), hunk(6, 1, 6, 0), hunk(8, 1, 7, 1)])
-      .spans(in: index, length: text.utf16.count)
+      .spans(in: index)
     XCTAssertEqual(
       spans.marks,
       [
@@ -26,7 +26,7 @@ final class LineMarksTests: XCTestCase {
         LineMarkSpans.Mark(range: NSRange(location: 12, length: 2), kind: .modified),
       ], "3〜4 行目が追加、7 行目が変更")
     XCTAssertEqual(spans.deletions, [12], "6 行目の下（7 行目の行頭）に削除")
-    XCTAssertTrue(LineMarks(hunks: []).spans(in: index, length: text.utf16.count).isEmpty)
+    XCTAssertTrue(LineMarks(hunks: []).spans(in: index).isEmpty)
   }
 
   /// 面へ渡す区間は改行込みで、削除の境は次の行の行頭。末尾は本文の長さ（末尾の改行の有無で同じ）。
@@ -34,7 +34,7 @@ final class LineMarksTests: XCTestCase {
     let text = "a\nbb\nccc\n"
     let index = LineIndex(text: text)
     let spans = LineMarks(hunks: [hunk(1, 0, 2, 1), hunk(2, 1, 3, 1), hunk(3, 1, 3, 0)])
-      .spans(in: index, length: text.utf16.count)
+      .spans(in: index)
     XCTAssertEqual(
       spans.marks,
       [
@@ -45,11 +45,11 @@ final class LineMarksTests: XCTestCase {
 
     let unterminated = "a\nbb"
     let tail = LineMarks(hunks: [hunk(2, 1, 2, 1), hunk(2, 1, 2, 0)])
-      .spans(in: LineIndex(text: unterminated), length: unterminated.utf16.count)
+      .spans(in: LineIndex(text: unterminated))
     XCTAssertEqual(tail.marks.map(\.range), [NSRange(location: 2, length: 2)], "最後の行は本文の長さまで")
     XCTAssertEqual(tail.deletions, [4])
     XCTAssertEqual(
-      LineMarks(hunks: [hunk(1, 1, 0, 0)]).spans(in: index, length: text.utf16.count).deletions,
+      LineMarks(hunks: [hunk(1, 1, 0, 0)]).spans(in: index).deletions,
       [0],
       "先頭の上は 0")
   }

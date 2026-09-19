@@ -15,8 +15,29 @@ public protocol TextSurface: AnyObject {
   /// `ranges` の既存の色を外し、`spans` を置く。描画属性としてのみ持ち、本文と undo を汚さない。
   func applyHighlights(_ spans: [HighlightSpan], in ranges: IndexSet)
 
-  /// 今見えている本文の区間（viewport のレイアウト後に更新される）。
+  /// 今見えている本文の区間（viewport のレイアウト後に更新される。prefetch の帯を含み「見えている」より広い——
+  /// 色付けの塗り残しの判定用。見えている範囲そのものは `viewport`）。
   var visibleRange: NSRange { get }
+
+  /// 見えている範囲を本文の言葉で（面の pt は出ない）。
+  var viewport: TextViewport { get }
+
+  /// そのオフセットの行を可視範囲の中央へスクロールする（先頭・末尾では端で止まる）。選択は動かさない。
+  func scrollToCenter(_ offset: Int)
+
+  /// その区間が見えるところまで最小限スクロールする（縦に見えていれば縦は動かず、横に隠れていれば横だけ寄る）。
+  /// 選択は動かさない。
+  func scrollToVisible(_ range: NSRange)
+
+  /// 選択（UTF-16）。置いても見せない——見せるのは `scrollToCenter`。
+  var selectedRange: NSRange { get set }
+
+  /// ファイル内検索の一致の地。本文と undo に載らない描画で、次に置き直すか空を置くまで残る。`ranges` は
+  /// 昇順・重ならないこと（面は二分探索で可視ぶんだけ描く）。
+  func setSearchHighlights(_ ranges: [NSRange])
+
+  /// インデントの単位（1 段のスペース数）。文書が本文から検出して押し、面はタブの表示幅と装備の段に写す。
+  func setIndentUnit(_ unit: Int)
 
   /// undo の履歴にここで区切りを置く。続けて打った文字はまとめて戻るが、区切りをまたいでは戻らない
   /// （保存が呼ぶ——⌘Z が保存前の打鍵まで一緒に戻さないため）。
@@ -47,6 +68,26 @@ public protocol TextSurfaceDelegate: AnyObject {
   func surface(_ surface: any TextSurface, didChange edit: TextEdit)
   func surface(_ surface: any TextSurface, focusDidChange focused: Bool)
   func surfaceDidLayoutViewport(_ surface: any TextSurface)
+  /// `viewport` が変わった（スクロール・窓の高さ）。
+  func surfaceDidScroll(_ surface: any TextSurface)
+  func surfaceDidChangeSelection(_ surface: any TextSurface)
+}
+
+/// 見えている範囲を本文の言葉で表したもの。`firstVisible` は先頭に見えている行の行頭オフセット、
+/// `hiddenFraction` はその行が上へ隠れている割合（0…1）、`visibleLines` は可視矩形に入る行数（小数）。
+/// エンジンの推定の文書高に依らず、実際に layout された行の矩形から出る。
+public struct TextViewport: Equatable, Sendable {
+  public var firstVisible: Int
+  public var hiddenFraction: CGFloat
+  public var visibleLines: CGFloat
+
+  public init(firstVisible: Int, hiddenFraction: CGFloat, visibleLines: CGFloat) {
+    self.firstVisible = firstVisible
+    self.hiddenFraction = hiddenFraction
+    self.visibleLines = visibleLines
+  }
+
+  public static let empty = TextViewport(firstVisible: 0, hiddenFraction: 0, visibleLines: 0)
 }
 
 /// 面の見え方。色は名前付き（dynamic）の NSColor を渡し、外観は描画時に解く。装備の寸法と色もここで渡し、
@@ -108,10 +149,14 @@ public struct TextSurfaceStyle {
     public var linkUnderlineThickness: CGFloat
     /// ベースラインから下線の上端まで。
     public var linkUnderlineOffset: CGFloat
+    /// ファイル内検索の一致の地（α 込み）と角。
+    public var searchMatchColor: NSColor
+    public var searchMatchRadius: CGFloat
 
     public init(
       indentGuideColor: NSColor, indentGuideWidth: CGFloat, whitespaceColor: NSColor,
-      whitespaceDiameter: CGFloat, linkUnderlineThickness: CGFloat, linkUnderlineOffset: CGFloat
+      whitespaceDiameter: CGFloat, linkUnderlineThickness: CGFloat, linkUnderlineOffset: CGFloat,
+      searchMatchColor: NSColor, searchMatchRadius: CGFloat
     ) {
       self.indentGuideColor = indentGuideColor
       self.indentGuideWidth = indentGuideWidth
@@ -119,6 +164,8 @@ public struct TextSurfaceStyle {
       self.whitespaceDiameter = whitespaceDiameter
       self.linkUnderlineThickness = linkUnderlineThickness
       self.linkUnderlineOffset = linkUnderlineOffset
+      self.searchMatchColor = searchMatchColor
+      self.searchMatchRadius = searchMatchRadius
     }
   }
 

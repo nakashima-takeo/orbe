@@ -20,6 +20,16 @@ final class FakeTextSurface: TextSurface {
   private(set) var lineMarks = LineMarkSpans.empty
   var onOpenLink: ((URL) -> Void)?
   private(set) var ground: NSColor?
+  /// 見えている範囲（本文の言葉）。テストが置く。
+  var viewport = TextViewport.empty
+  /// `scrollToCenter` に渡されたオフセットと、`scrollToVisible` に渡された区間の履歴。
+  private(set) var centered: [Int] = []
+  private(set) var revealed: [NSRange] = []
+  var selectedRange = NSRange(location: 0, length: 0) {
+    didSet { delegate?.surfaceDidChangeSelection(self) }
+  }
+  private(set) var searchHighlights: [NSRange] = []
+  private(set) var indentUnit = IndentUnit.fallback
 
   init(text: String) {
     storage = NSMutableString(string: text)
@@ -47,8 +57,19 @@ final class FakeTextSurface: TextSurface {
 
   func setGround(_ color: NSColor) { ground = color }
 
+  func scrollToCenter(_ offset: Int) { centered.append(offset) }
+
+  func scrollToVisible(_ range: NSRange) { revealed.append(range) }
+
+  func setSearchHighlights(_ ranges: [NSRange]) { searchHighlights = ranges }
+
+  func setIndentUnit(_ unit: Int) { indentUnit = unit }
+
+  /// 契約の後条件どおり、置き換え後の選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。
   func replaceAll(with text: String) {
+    let caret = selectedRange.location
     replace(NSRange(location: 0, length: length), with: text)
+    selectedRange = NSRange(location: min(caret, length), length: 0)
   }
 
   /// 編集を起こす（人の打鍵に相当）。塗った区間は本物の描画属性と同じく文字に付いて動く——

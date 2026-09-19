@@ -52,7 +52,9 @@ extension L10n {
     .helpShortcutAttentionPalette: (
       "Attention パレット（要対応のタブ）", "Attention palette (tabs needing you)"
     ),
-    .helpShortcutFind: ("スクロールバック検索", "Search scrollback"),
+    .helpShortcutFind: (
+      "検索（端末はスクロールバック・エディターはファイル内）", "Find (scrollback in terminal, in file in editor)"
+    ),
     .helpShortcutScrollTop: ("スクロールバック先頭へ", "Jump to scrollback top"),
     .helpShortcutScrollBottom: ("スクロールバック末尾へ", "Jump to scrollback bottom"),
     .helpShortcutCopy: ("コピー（選択範囲）", "Copy selection"),

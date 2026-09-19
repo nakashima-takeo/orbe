@@ -1,9 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// 端末に重ねるスクロールバック検索バー。
-/// 検索エンジンは libghostty 側（surface の search アクション）。本バーは needle 入力・
-/// 件数表示・次/前ジャンプのトリガを surface へ橋渡しするだけ。
+/// 面に重ねる検索バー——端末のスクロールバック検索とエディターのファイル内検索が共有する。
+/// 検索そのものは呼ぶ側が持つ（端末は libghostty の search アクション、エディターは `EditorSearch`）。
+/// 本バーは needle 入力・件数表示・次/前ジャンプのトリガを呼ぶ側へ渡すだけ。
 ///
 /// 中身は `NSHostingView<SearchField>`（純 SwiftUI）＋ `SearchBarModel`。入力欄は SwiftUI の
 /// `TextField`。次へ＝`onSubmit`（IME 確定の Enter では発火しない）、前へ＝Shift+Return を
@@ -19,6 +19,11 @@ final class SearchBar: NSView {
   var onNext: (() -> Void)? { didSet { model.onNext = onNext } }
   var onPrev: (() -> Void)? { didSet { model.onPrev = onPrev } }
   var onClose: (() -> Void)? { didSet { model.onClose = onClose } }
+  /// 入力欄の文字列。置くのは表示への写しで、検索を起こすのは呼ぶ側（エディターが選択文字列を種にするとき）。
+  var needle: String {
+    get { model.needle }
+    set { model.needle = newValue }
+  }
 
   /// 背景透過・現在言語ホルダー（WindowController 所有）を root へ渡す。透過時は端末上でも veil 濃度を揃え、
   /// 現在言語はプレースホルダ・件数表示を選択言語で描き設定切替に一斉追従させる（別 NSHostingView root ゆえ明示注入）。
@@ -49,7 +54,7 @@ final class SearchBar: NSView {
     model.focusToken &+= 1
   }
 
-  /// ヒット件数表示を更新（selected/total は libghostty の通知由来。負値は nil で渡る）。
+  /// ヒット件数表示を更新（selected/total は呼ぶ側が押す。端末は libghostty の通知由来で、負値は nil で渡る）。
   func updateCount(selected: Int?, total: Int?) {
     if model.needle.isEmpty {
       model.matchTotal = nil  // 未検索＝件数を出さない

@@ -11,7 +11,7 @@ enum ChromeAction {
   case showClosedAgentsPalette  // 閉じたエージェント パレットを開く
   case nextTab
   case prevTab
-  case find  // スクロールバック検索バーを開く
+  case find  // 検索（端末はスクロールバック・エディターはファイル内）
   case switchWorkspace  // workspace コマンドパレットを開く
   case launchDefaultAgent  // デフォルトエージェントを新タブで起動
   case showAgentPalette  // エージェント起動パレットを開く
@@ -86,11 +86,11 @@ extension ChromeAction {
       .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .openEditor, .rename,
       .showSettings, .toggleHelp, .toggleEditorFace:
       return .window
-    case .increaseFontSize, .decreaseFontSize, .resetFontSize, .find:
+    case .increaseFontSize, .decreaseFontSize, .resetFontSize:
       return .terminal
     case .saveDocument:
       return .editor
-    case .scrollToTop, .scrollToBottom:
+    case .find, .scrollToTop, .scrollToBottom:
       return .eachFace
     }
   }
