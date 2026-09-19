@@ -18,7 +18,7 @@ extension DispatchWorktreeBaseTests {
     let provider = try startWithSlowFetch()
     guard
       case .staleBranch(let sync) = try prepare(
-        provider, .localBranch(name: "stale", existingWorktree: nil))
+        provider, .localBranch(name: "stale"))
     else {
       return XCTFail("着地後の値で遅れを返す")
     }
@@ -36,7 +36,7 @@ extension DispatchWorktreeBaseTests {
     let localTip = advanceLocally("stale")
     let provider = try start()
     XCTAssertTrue(pump({ provider.remoteFetchLanded }), "前提: 着地している")
-    let path = try resolve(provider, .localBranch(name: "stale", existingWorktree: nil))
+    let path = try resolve(provider, .localBranch(name: "stale"))
     XCTAssertEqual(head(of: path), localTip)
   }
 

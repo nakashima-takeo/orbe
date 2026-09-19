@@ -2,21 +2,21 @@ import XCTest
 
 @testable import Orbe
 
-/// WorktreeParser（porcelain）と BranchParser（for-each-ref）のフィクスチャテスト。
+/// WorktreeParser（porcelain -z）と BranchParser（for-each-ref）のフィクスチャテスト。
 final class GitWorktreeParserTests: OrbeTestCase {
 
   func testWorktreePorcelain() {
     let input =
-      "worktree /Users/x/github/orbe\n"
-      + "HEAD 1111111111111111111111111111111111111111\n"
-      + "branch refs/heads/main\n\n"
-      + "worktree /Users/x/github/orbe-worktrees/feat-x\n"
-      + "HEAD 2222222222222222222222222222222222222222\n"
-      + "branch refs/heads/feat/x\n\n"
+      "worktree /Users/x/github/orbe\0"
+      + "HEAD 1111111111111111111111111111111111111111\0"
+      + "branch refs/heads/main\0\0"
+      + "worktree /Users/x/github/orbe-worktrees/feat-x\0"
+      + "HEAD 2222222222222222222222222222222222222222\0"
+      + "branch refs/heads/feat/x\0\0"
     let worktrees = WorktreeParser.parse(input)
     XCTAssertEqual(worktrees.count, 2)
     XCTAssertEqual(worktrees[0].path, "/Users/x/github/orbe")
-    XCTAssertEqual(worktrees[0].branch, "main", "refs/heads/ を落とした短縮名")
+    XCTAssertEqual(worktrees[0].branch, "main", "refs/heads/ を除いた正確な名前")
     XCTAssertTrue(worktrees[0].isMain, "先頭が main worktree")
     XCTAssertEqual(worktrees[1].branch, "feat/x")
     XCTAssertFalse(worktrees[1].isMain)
@@ -24,9 +24,9 @@ final class GitWorktreeParserTests: OrbeTestCase {
 
   func testWorktreeDetachedHasNilBranch() {
     let input =
-      "worktree /Users/x/wt/detached\n"
-      + "HEAD 3333333333333333333333333333333333333333\n"
-      + "detached\n\n"
+      "worktree /Users/x/wt/detached\0"
+      + "HEAD 3333333333333333333333333333333333333333\0"
+      + "detached\0\0"
     let worktrees = WorktreeParser.parse(input)
     XCTAssertEqual(worktrees.count, 1)
     XCTAssertNil(worktrees[0].branch)
@@ -35,21 +35,21 @@ final class GitWorktreeParserTests: OrbeTestCase {
   /// worktree の掃除が読む 2 行（`prunable` は実体が消えている・`locked` は理由が付かないこともある）。
   func testWorktreePrunableAndLocked() {
     let input =
-      "worktree /Users/x/github/orbe\n"
-      + "HEAD 1111111111111111111111111111111111111111\n"
-      + "branch refs/heads/main\n\n"
-      + "worktree /Users/x/wt/gone\n"
-      + "HEAD 2222222222222222222222222222222222222222\n"
-      + "branch refs/heads/feat/gone\n"
-      + "prunable gitdir file points to non-existent location\n\n"
-      + "worktree /Users/x/wt/held\n"
-      + "HEAD 3333333333333333333333333333333333333333\n"
-      + "branch refs/heads/feat/held\n"
-      + "locked\n\n"
-      + "worktree /Users/x/wt/held-reason\n"
-      + "HEAD 4444444444444444444444444444444444444444\n"
-      + "detached\n"
-      + "locked USB ドライブ上\n\n"
+      "worktree /Users/x/github/orbe\0"
+      + "HEAD 1111111111111111111111111111111111111111\0"
+      + "branch refs/heads/main\0\0"
+      + "worktree /Users/x/wt/gone\0"
+      + "HEAD 2222222222222222222222222222222222222222\0"
+      + "branch refs/heads/feat/gone\0"
+      + "prunable gitdir file points to non-existent location\0\0"
+      + "worktree /Users/x/wt/held\0"
+      + "HEAD 3333333333333333333333333333333333333333\0"
+      + "branch refs/heads/feat/held\0"
+      + "locked\0\0"
+      + "worktree /Users/x/wt/held-reason\0"
+      + "HEAD 4444444444444444444444444444444444444444\0"
+      + "detached\0"
+      + "locked USB ドライブ上\0\0"
     let worktrees = WorktreeParser.parse(input)
     XCTAssertEqual(worktrees.count, 4)
     XCTAssertFalse(worktrees[0].isPrunable)
@@ -61,26 +61,24 @@ final class GitWorktreeParserTests: OrbeTestCase {
 
   func testLocalBranchFormat() {
     let input =
-      "main|1d前|/Users/x/github/orbe|origin/main|refs/remotes/origin/main|origin|refs/heads/main|\n"
-      + "feat/x|5d前|||||||\n"
-      + "feat/gone|2d前||origin/feat/gone|refs/remotes/origin/feat/gone|origin|refs/heads/feat/gone"
-      + "|[gone]\n"
-      + "feat/ahead|3d前||origin/feat/ahead|refs/remotes/origin/feat/ahead|origin|refs/heads/feat/ahead"
-      + "|[ahead 1]\n"
-      + "feat/both|4d前||fork/feat/both|refs/remotes/fork/feat/both|fork|refs/heads/feat/both"
-      + "|[ahead 1, behind 2]\n"
-      + "feat/behind|4d前||origin/feat/behind|refs/remotes/origin/feat/behind|origin"
-      + "|refs/heads/feat/behind|[behind 3]\n"
+      "main\01d前\0origin/main\0refs/remotes/origin/main\0origin\0refs/heads/main\0\n"
+      + "feat/x\05d前\0\0\0\0\0\n"
+      + "feat/gone\02d前\0origin/feat/gone\0refs/remotes/origin/feat/gone\0origin"
+      + "\0refs/heads/feat/gone\0[gone]\n"
+      + "feat/ahead\03d前\0origin/feat/ahead\0refs/remotes/origin/feat/ahead\0origin"
+      + "\0refs/heads/feat/ahead\0[ahead 1]\n"
+      + "feat/both\04d前\0fork/feat/both\0refs/remotes/fork/feat/both\0fork"
+      + "\0refs/heads/feat/both\0[ahead 1, behind 2]\n"
+      + "feat/behind\04d前\0origin/feat/behind\0refs/remotes/origin/feat/behind\0origin"
+      + "\0refs/heads/feat/behind\0[behind 3]\n"
     let branches = BranchParser.parseLocal(input)
     XCTAssertEqual(branches.count, 6)
     XCTAssertEqual(branches[0].name, "main")
-    XCTAssertEqual(branches[0].worktreePath, "/Users/x/github/orbe", "worktreepath 非空を拾う")
     XCTAssertEqual(
       branches[0].upstream,
       GitUpstream(
         short: "origin/main", ref: "refs/remotes/origin/main", remote: "origin",
         remoteRef: "refs/heads/main", track: nil), "空 track は同期済み（nil）")
-    XCTAssertNil(branches[1].worktreePath, "空 worktreepath は nil")
     XCTAssertNil(branches[1].upstream)
     XCTAssertEqual(branches[2].upstream?.track, .gone, "upstream が消えたブランチ＝掃除の推定材料")
     XCTAssertEqual(branches[3].upstream?.track, .counts(ahead: 1, behind: 0))
@@ -91,7 +89,7 @@ final class GitWorktreeParserTests: OrbeTestCase {
 
   /// 列が欠けた行でも落ちない（インデックス読みのガード）。
   func testLocalBranchWithoutTrackColumn() {
-    let branches = BranchParser.parseLocal("main|1d前||origin/main\n")
+    let branches = BranchParser.parseLocal("main\01d前\0origin/main\n")
     XCTAssertEqual(branches.count, 1)
     XCTAssertEqual(branches[0].upstream?.short, "origin/main")
     XCTAssertNil(branches[0].upstream?.track)
@@ -99,11 +97,10 @@ final class GitWorktreeParserTests: OrbeTestCase {
 
   func testRemoteBranchExcludesHeadNoise() {
     let input =
-      "origin|3h前|taro\n"  // origin/HEAD の短縮（単独名）
-      + "origin/HEAD|3h前|taro\n"  // *//HEAD
-      + "origin/feat/session-restore|3h前|taro\n"
+      "origin/HEAD\03h前\0taro\n"
+      + "origin/feat/session-restore\03h前\0taro\n"
     let branches = BranchParser.parseRemote(input)
-    XCTAssertEqual(branches.map(\.name), ["origin/feat/session-restore"], "HEAD ノイズ 2 行を除外")
+    XCTAssertEqual(branches.map(\.name), ["origin/feat/session-restore"], "*/HEAD ノイズを除外")
     XCTAssertEqual(branches[0].relativeDate, "taro · 3h前", "author · 相対日時")
   }
 }

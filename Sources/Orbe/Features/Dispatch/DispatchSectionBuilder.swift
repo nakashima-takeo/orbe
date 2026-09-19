@@ -77,18 +77,19 @@ enum DispatchSectionBuilder {
       action: .clean, footer: .note(.dispatchCleanListNote))
   }
 
-  /// Local branches（既に worktree があるものは Worktrees に出るので重複排除）。
+  /// Local branches（worktree で checkout 中のものは Worktrees に出るので重複排除）。
   private static func localBranchItems(_ input: Input, _ prByHead: [String: Int]) -> [DispatchItem]
   {
-    input.localBranches
-      .filter { $0.worktreePath == nil }
+    let checkedOut = Set(input.worktrees.compactMap(\.branch))
+    return input.localBranches
+      .filter { !checkedOut.contains($0.name) }
       .map { branch in
         let pr = linkedPR(prByHead, forBranch: branch.name)
         return DispatchItem(
           glyph: .localBranch, name: branch.name, detail: branch.relativeDate,
           badges: badge(pr), linkedPRNumber: pr,
           sync: input.remoteFetchLanded ? DispatchBranchSync(branch) : nil,
-          action: .localBranch(name: branch.name, existingWorktree: branch.worktreePath),
+          action: .localBranch(name: branch.name),
           footer: .launch(target: branch.name, kind: .checkout))
       }
   }
@@ -237,16 +238,15 @@ enum DispatchSectionBuilder {
         ],
         localBranches: [
           GitBranch(
-            name: "main", relativeDate: "1d ago", worktreePath: nil,
+            name: "main", relativeDate: "1d ago",
             upstream: upstream("main", ahead: 0, behind: 12)),
           GitBranch(
-            name: "perf/render-batching", relativeDate: "5d ago", worktreePath: nil,
+            name: "perf/render-batching", relativeDate: "5d ago",
             upstream: upstream("perf/render-batching", ahead: 2, behind: 5)),
         ],
         remoteBranches: [
           GitBranch(
-            name: "origin/feat/session-restore", relativeDate: "taro · 3h ago", worktreePath: nil,
-            upstream: nil)
+            name: "origin/feat/session-restore", relativeDate: "taro · 3h ago", upstream: nil)
         ],
         issues: [
           GitHubIssue(number: 151, title: "Status detection doesn't work inside tmux"),
