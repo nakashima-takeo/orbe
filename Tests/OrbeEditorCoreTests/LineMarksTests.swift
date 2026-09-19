@@ -12,16 +12,21 @@ final class LineMarksTests: XCTestCase {
     LineHunk(oldStart: oldStart, oldCount: oldCount, newStart: newStart, newCount: newCount)
   }
 
-  /// 追加は old 側 0 件、削除は new 側 0 件で境、両側にあれば変更。
+  /// 追加は old 側 0 件でその新しい行、削除は new 側 0 件でその境、両側にあれば変更——面へ渡る区間で観る
+  /// （各行 1 字＋改行の本文なので、n 行目の行頭は 2(n−1)）。
   func testKindsFollowTheHunkShape() {
-    let marks = LineMarks(hunks: [hunk(2, 0, 3, 2), hunk(6, 1, 6, 0), hunk(8, 1, 7, 1)])
+    let text = (1...8).map { "\($0)\n" }.joined()
+    let index = LineIndex(text: text)
+    let spans = LineMarks(hunks: [hunk(2, 0, 3, 2), hunk(6, 1, 6, 0), hunk(8, 1, 7, 1)])
+      .spans(in: index, length: text.utf16.count)
     XCTAssertEqual(
-      marks.runs,
+      spans.marks,
       [
-        LineMarks.Run(lines: 3..<5, kind: .added), LineMarks.Run(lines: 7..<8, kind: .modified),
-      ])
-    XCTAssertEqual(marks.deletionsBelow, [6], "6 行目の下に削除")
-    XCTAssertEqual(LineMarks(hunks: []).runs, [])
+        LineMarkSpans.Mark(range: NSRange(location: 4, length: 4), kind: .added),
+        LineMarkSpans.Mark(range: NSRange(location: 12, length: 2), kind: .modified),
+      ], "3〜4 行目が追加、7 行目が変更")
+    XCTAssertEqual(spans.deletions, [12], "6 行目の下（7 行目の行頭）に削除")
+    XCTAssertTrue(LineMarks(hunks: []).spans(in: index, length: text.utf16.count).isEmpty)
   }
 
   /// 面へ渡す区間は改行込みで、削除の境は次の行の行頭。末尾は本文の長さ（末尾の改行の有無で同じ）。
