@@ -228,6 +228,21 @@ final class EditorLineMarksTests: OrbeTestCase {
     XCTAssertFalse(try hasInk(ground, guide2 + 2, rowMidY(4)), "線の右は地")
   }
 
+  /// タブで書かれた文書では、タブの表示幅が検出した単位（スペースの行が無ければ 4 桁）になり、空白だけの行の線
+  /// （桁幅から置く）がタブの行の線と同じ x に立つ（AppKit 既定の 28pt 刻みのままだと段が深いほど開く）。
+  func testTabWidthFollowsTheIndentUnitSoBlankLineGuidesAlign() throws {
+    let hosted = try host("\tif {\n\n\t\tx\n\t}\n")
+    let ground = hosted.ground
+    let guide1 = bodyX + 4 * cell
+    let guide2 = bodyX + 8 * cell
+    waitDrawn { try self.hasInk(ground, guide2, self.rowMidY(3)) }
+    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(1)), "タブの行の段 1 は 4 桁目")
+    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(2)), "空行の線が同じ x に立つ")
+    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(3)))
+    XCTAssertFalse(try hasInk(ground, guide2, rowMidY(2)), "空行は隣の浅い方（1 段）")
+    XCTAssertFalse(try hasInk(ground, bodyX + 28, rowMidY(2)), "AppKit 既定の 28pt には無い")
+  }
+
   /// CRLF の文書でも段落末は行の外——行末の 1 個のスペースに点が出て、空行のインデント線が隣から続く
   /// （`"\r\n"` は Character 1 個なので、文字単位で改行を落とすと CR が残って両方消える）。
   func testCRLFParagraphsKeepTrailingSpaceDotsAndBlankLineGuides() throws {

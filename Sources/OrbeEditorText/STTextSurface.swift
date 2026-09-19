@@ -27,6 +27,8 @@ final class STTextSurface: NSObject, TextSurface {
   private(set) var visibleRange = NSRange(location: 0, length: 0)
 
   private let style: TextSurfaceStyle
+  /// 本文から検出したインデントの単位。インデント線の段と、タブの表示幅（単位の桁数）を決める。
+  private var indentUnit = IndentUnit.fallback
 
   var onOpenLink: ((URL) -> Void)? {
     get { textView.onOpenLink }
@@ -82,8 +84,10 @@ final class STTextSurface: NSObject, TextSurface {
         MainActor.assumeIsolated { self?.layoutOverlays() }
       }
     }
+    indentUnit = IndentUnit.detect(in: text)
+    applyParagraphStyle()
     textView.text = text
-    decorationView.indentUnit = IndentUnit.detect(in: text)
+    decorationView.indentUnit = indentUnit
   }
 
   deinit {
@@ -157,15 +161,29 @@ final class STTextSurface: NSObject, TextSurface {
     let caret = textView.textSelection.location
     textView.replaceCharacters(in: textView.textLayoutManager.documentRange, with: text)
     textView.textSelection = NSRange(location: min(caret, length), length: 0)
-    decorationView.indentUnit = IndentUnit.detect(in: text)
+    let unit = IndentUnit.detect(in: text)
+    if unit != indentUnit {
+      indentUnit = unit
+      applyParagraphStyle()
+    }
+    decorationView.indentUnit = unit
+  }
+
+  /// 行高の倍率と、タブの表示幅。タブは検出したインデント単位の桁数で刻む——モデル（タブは 1 段）と描画が
+  /// 一致し、空白だけの行の線（桁幅から置く）がタブで書かれた隣の行の線と揃う。上流は既存の本文にも
+  /// 段落スタイルを打ち直す。
+  private func applyParagraphStyle() {
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.lineHeightMultiple = style.lineHeight / Self.naturalLineHeight(of: style.font)
+    paragraph.tabStops = []
+    paragraph.defaultTabInterval =
+      CGFloat(indentUnit) * (" " as NSString).size(withAttributes: [.font: style.font]).width
+    textView.defaultParagraphStyle = paragraph
   }
 
   private func apply(_ style: TextSurfaceStyle) {
     textView.font = style.font
     textView.textColor = style.textColor
-    let paragraph = NSMutableParagraphStyle()
-    paragraph.lineHeightMultiple = style.lineHeight / Self.naturalLineHeight(of: style.font)
-    textView.defaultParagraphStyle = paragraph
     textView.insertionPointColor = style.caretColor
     textView.caretSize = style.caretSize
     container.topInset = style.topInset
