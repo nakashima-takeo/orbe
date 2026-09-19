@@ -117,7 +117,7 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
   }
 
   /// 打ち切った後、**孫プロセスが pipe の書き込み端を握っていても**返る。
-  /// `terminate()` のあと無期限に EOF を待つ実装（既存 `GitHubCLI` の形）だとここで返らない。
+  /// `terminate()` のあと無期限に EOF を待つ実装だとここで返らない。
   func testStoppedRunReturnsWhileGrandchildHoldsThePipes() throws {
     try fixture.installHook("pre-commit", body: fixture.pipeHoldingBody)
     try stageChange()
