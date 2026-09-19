@@ -81,6 +81,24 @@ final class GitRepoDispatchListingTests: OrbeTestCase {
       feat.relativeDate.hasPrefix("Taro|Yamada · "), "author 名全体 · 相対日時: \(feat.relativeDate)")
   }
 
+  /// author 名の末尾の `\r` が行末の LF と 1 文字にまとまると、次の行がその author 名に吸い込まれて消える。
+  /// git CLI の commit は末尾の `\r` を落とすので、コミットオブジェクトを直接書いて作る。
+  func testRemoteBranchAfterAuthorEndingWithCarriageReturnIsNotSwallowed() throws {
+    let tree = git(["rev-parse", "HEAD^{tree}"]).stdoutText
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let newer = try writeCommit(tree: tree, author: "evil\r", date: 1_700_000_000)
+    let older = try writeCommit(tree: tree, author: "t", date: 1_600_000_000)
+    XCTAssertTrue(git(["update-ref", "refs/remotes/origin/newer", newer]).isSuccess)
+    XCTAssertTrue(git(["update-ref", "refs/remotes/origin/older", older]).isSuccess)
+
+    let branches = try listRemoteBranches()
+
+    XCTAssertEqual(branches.map(\.name), ["origin/newer", "origin/older"])
+    XCTAssertTrue(
+      branches[0].relativeDate.hasPrefix("evil\r · "),
+      "author 名全体 · 相対日時: \(branches[0].relativeDate)")
+  }
+
   // MARK: - ヘルパ
 
   private func listWorktrees() throws -> [GitWorktree] {
@@ -123,6 +141,18 @@ final class GitRepoDispatchListingTests: OrbeTestCase {
       encoding: .utf8)
     XCTAssertTrue(gitIn(cwd, ["add", "-A"]).isSuccess)
     XCTAssertTrue(gitIn(cwd, ["commit", "-qm", name]).isSuccess)
+  }
+
+  /// author 名を git CLI の正規化を通さずに持つコミットを書き、その oid を返す。
+  private func writeCommit(tree: String, author: String, date: Int) throws -> String {
+    let file = dir.appendingPathComponent("commit-\(UUID().uuidString)").path
+    let object =
+      "tree \(tree)\n" + "author \(author) <a@example.com> \(date) +0000\n"
+      + "committer c <c@example.com> \(date) +0000\n" + "\nm\n"
+    try object.write(toFile: file, atomically: true, encoding: .utf8)
+    let written = git(["hash-object", "-t", "commit", "-w", file])
+    XCTAssertTrue(written.isSuccess)
+    return written.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   @discardableResult

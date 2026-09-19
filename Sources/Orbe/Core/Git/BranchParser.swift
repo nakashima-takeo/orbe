@@ -7,7 +7,7 @@ import Foundation
 /// コミットヘッダの 1 行から取る）ので、この区切りで値を取り違えない。名前は短縮表示名ではなく
 /// `refname:lstrip=2` の正確な名前で読む（`refname:short` は同名タグ等があると `heads/x` に化ける）。
 enum BranchParser {
-  enum LocalField: String, CaseIterable {
+  private enum LocalField: String, CaseIterable {
     case name = "refname:lstrip=2"
     case relativeDate = "committerdate:relative"
     case upstreamShort = "upstream:short"
@@ -17,7 +17,7 @@ enum BranchParser {
     case upstreamTrack = "upstream:track"
   }
 
-  enum RemoteField: String, CaseIterable {
+  private enum RemoteField: String, CaseIterable {
     case name = "refname:lstrip=2"
     case relativeDate = "committerdate:relative"
     case author = "authorname"
@@ -73,8 +73,12 @@ enum BranchParser {
   private static func records<Field: CaseIterable & Equatable>(_ text: String, _: Field.Type)
     -> [Record<Field>]
   {
-    text.split(separator: "\n").map {
-      Record(values: $0.split(separator: "\0", omittingEmptySubsequences: false).map(String.init))
+    // 行はスカラーで割る。Character で割ると、`\r` で終わる author 名と行末の LF が 1 文字（CR LF）に
+    // まとまり、次のレコードがその列に吸い込まれる。
+    text.unicodeScalars.split(separator: "\n").map {
+      Record(
+        values: Substring($0).split(separator: "\0", omittingEmptySubsequences: false)
+          .map(String.init))
     }
   }
 
