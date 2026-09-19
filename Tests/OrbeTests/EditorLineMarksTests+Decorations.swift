@@ -8,18 +8,23 @@ import XCTest
 extension EditorLineMarksTests {
 
   /// インデント線は行頭から段の単位ぶんの文字の左端に、段の数だけ立つ（単位は本文から検出）。空行は隣の浅い方。
+  /// 線の有無は、その桁が空白か行の外にある位置で読む——字のあるセルの左端は、字の縁の画素が乗るかどうかが
+  /// 倍率と桁で変わり、線の証人にならない。
   func testIndentGuidesStandAtTheUnitColumns() throws {
-    let hosted = try host("f {\n  a\n    b\n\n    c\n  d\n}\n")
+    let hosted = try host("f {\n  a\n    b\n\n      c\n  d\n}\n")
     let ground = hosted.ground
     let guide1 = bodyX + 2 * cell
     let guide2 = bodyX + 4 * cell
-    waitDrawn { try self.hasInk(ground, guide1, self.rowMidY(2)) }
-    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(2)), "1 段の行に段 1 の線")
+    let guide3 = bodyX + 6 * cell
+    waitDrawn { try self.hasInk(ground, guide2, self.rowMidY(5)) }
+    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(3)), "2 段の行に段 1 の線")
+    XCTAssertFalse(try hasInk(ground, guide3, rowMidY(3)), "2 段の行に段 3 の線は無い")
+    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(5)), "3 段の行に段 1 の線")
+    XCTAssertTrue(try hasInk(ground, guide2, rowMidY(5)), "3 段の行に段 2 の線")
     XCTAssertFalse(try hasInk(ground, guide2, rowMidY(2)), "1 段の行に段 2 の線は無い")
-    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(3)))
-    XCTAssertTrue(try hasInk(ground, guide2, rowMidY(3)), "2 段の行に段 2 の線")
-    XCTAssertTrue(try hasInk(ground, guide2, rowMidY(4)), "空行は隣（2 段と 2 段）の浅い方＝2 段")
-    XCTAssertFalse(try hasInk(ground, guide1, rowMidY(1)), "0 段の行には無い")
+    XCTAssertTrue(try hasInk(ground, guide2, rowMidY(4)), "空行は隣（2 段と 3 段）の浅い方＝2 段")
+    XCTAssertFalse(try hasInk(ground, guide3, rowMidY(4)), "空行に段 3 の線は無い")
+    XCTAssertFalse(try hasInk(ground, guide1, rowMidY(7)), "0 段の行には無い")
     XCTAssertFalse(try hasInk(ground, guide2 - 2, rowMidY(4)), "線の左は地（空行なので丸点も無い）")
     XCTAssertFalse(try hasInk(ground, guide2 + 2, rowMidY(4)), "線の右は地")
   }
@@ -31,10 +36,9 @@ extension EditorLineMarksTests {
     let ground = hosted.ground
     let guide1 = bodyX + 4 * cell
     let guide2 = bodyX + 8 * cell
-    waitDrawn { try self.hasInk(ground, guide2, self.rowMidY(3)) }
-    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(1)), "タブの行の段 1 は 4 桁目")
+    waitDrawn { try self.hasInk(ground, guide1, self.rowMidY(3)) }
+    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(3)), "タブの行の段 1 は 4 桁目（2 個目のタブの左端）")
     XCTAssertTrue(try hasInk(ground, guide1, rowMidY(2)), "空行の線が同じ x に立つ")
-    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(3)))
     XCTAssertFalse(try hasInk(ground, guide2, rowMidY(2)), "空行は隣の浅い方（1 段）")
     XCTAssertFalse(try hasInk(ground, bodyX + 56, rowMidY(3)), "AppKit 既定の刻み（2 段目 56pt）には無い")
   }
@@ -42,22 +46,21 @@ extension EditorLineMarksTests {
   /// 本文を丸ごと置き換えると（外部で書き換えられたファイルの差し替え）、インデント単位を検出し直し、線の段と
   /// タブの表示幅がその単位に移る——開いたときの単位のままだと、置き換わった本文の段の途中に線が立つ。
   func testReplacingTheWholeTextRedetectsTheIndentUnitAndTabWidth() throws {
-    let hosted = try host("f {\n    a\n        b\n\tc\n}\n")
+    let hosted = try host("f {\n    a\n        b\n\t\tc\n}\n")
     let ground = hosted.ground
     let col = { (n: Int) in self.bodyX + CGFloat(n) * self.cell }
-    waitDrawn { try self.hasInk(ground, col(8), self.rowMidY(3)) }
-    XCTAssertTrue(try hasInk(ground, col(4), rowMidY(2)), "前提: 単位 4 の段 1 の線")
-    XCTAssertFalse(try hasInk(ground, col(2), rowMidY(2)))
-    XCTAssertTrue(try hasInk(ground, col(4), rowMidY(4)), "前提: タブの幅も 4 桁")
+    waitDrawn { try self.hasInk(ground, col(4), self.rowMidY(3)) }
+    XCTAssertTrue(try hasInk(ground, col(4), rowMidY(3)), "前提: 単位 4 の段 1 の線")
+    XCTAssertFalse(try hasInk(ground, col(2), rowMidY(3)))
+    XCTAssertTrue(try hasInk(ground, col(4), rowMidY(4)), "前提: タブの幅も 4 桁（段 1 の線が 2 個目のタブの左端）")
     XCTAssertFalse(try hasInk(ground, col(2), rowMidY(4)))
 
-    hosted.document.surface.replaceAll(with: "f {\n  a\n    b\n\tc\n}\n")
-    waitDrawn { try self.hasInk(ground, col(2), self.rowMidY(2)) }
+    hosted.document.surface.replaceAll(with: "f {\n  a\n    b\n\t\tc\n}\n")
+    waitDrawn { try self.hasInk(ground, col(2), self.rowMidY(3)) }
     XCTAssertFalse(try hasInk(ground, col(4), rowMidY(2)), "単位 2 の 1 段の行に 4 桁目の線は無い")
-    XCTAssertTrue(try hasInk(ground, col(4), rowMidY(3)), "2 段の行の段 2 は 4 桁目")
-    XCTAssertFalse(try hasInk(ground, col(8), rowMidY(3)))
-    XCTAssertTrue(try hasInk(ground, col(2), rowMidY(4)), "タブの幅が 2 桁に移る")
-    XCTAssertFalse(try hasInk(ground, col(4), rowMidY(4)), "タブの行の字は 2 桁目に収まり、4 桁目は地")
+    XCTAssertFalse(try hasInk(ground, col(8), rowMidY(3)), "2 段の行に 8 桁目の線は無い")
+    XCTAssertTrue(try hasInk(ground, col(2), rowMidY(4)), "タブの幅が 2 桁に移る（段 1 の線が 2 個目のタブの左端）")
+    XCTAssertFalse(try hasInk(ground, col(8), rowMidY(4)), "タブが 4 桁のままなら立つ 8 桁目の線は無い")
   }
 
   /// CRLF の文書でも段落末は行の外——行末の 1 個のスペースに点が出て、空行のインデント線が隣から続く
