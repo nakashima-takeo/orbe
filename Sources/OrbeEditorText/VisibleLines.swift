@@ -73,8 +73,7 @@ struct VisibleLines {
   private func line(of fragment: NSTextLayoutFragment) -> VisibleLine {
     let range = NSRange(fragment.rangeInElement, in: contentManager)
     let frame = fragment.layoutFragmentFrame
-    var text = (fragment.textElement as? NSTextParagraph)?.attributedString.string ?? ""
-    if text.hasSuffix("\n") { text.removeLast() }
+    let text = (fragment.textElement as? NSTextParagraph).map(body(of:)) ?? ""
     let rows = fragment.textLineFragments.map { lineFragment -> VisibleLine.Row in
       let bounds = lineFragment.typographicBounds
       let rowFrame = CGRect(
@@ -110,13 +109,20 @@ struct VisibleLines {
       guard let paragraph = element as? NSTextParagraph,
         let elementRange = element.elementRange, elementRange != anchor
       else { return true }
-      var text = paragraph.attributedString.string
-      if text.hasSuffix("\n") { text.removeLast() }
+      let text = body(of: paragraph)
       guard !IndentGuides.isBlank(text[...]) else { return true }
       found = text
       return false
     }
     return found
+  }
+
+  /// 段落の文字列から末尾の改行をスカラー単位で落とす（CR は行の中身として残す）。`"\r\n"` は Character
+  /// 1 個なので、文字単位の `hasSuffix("\n")` では CRLF の段落を取れない。
+  private func body(of paragraph: NSTextParagraph) -> String {
+    var scalars = paragraph.attributedString.string.unicodeScalars
+    if scalars.last == "\n" { scalars.removeLast() }
+    return String(scalars)
   }
 
   struct LinkRun {

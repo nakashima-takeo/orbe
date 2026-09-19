@@ -228,6 +228,17 @@ final class EditorLineMarksTests: OrbeTestCase {
     XCTAssertFalse(try hasInk(ground, guide2 + 2, rowMidY(4)), "線の右は地")
   }
 
+  /// CRLF の文書でも段落末は行の外——行末の 1 個のスペースに点が出て、空行のインデント線が隣から続く
+  /// （`"\r\n"` は Character 1 個なので、文字単位で改行を落とすと CR が残って両方消える）。
+  func testCRLFParagraphsKeepTrailingSpaceDotsAndBlankLineGuides() throws {
+    let hosted = try host("  a \r\n\r\n    b\r\n")
+    let ground = hosted.ground
+    let guide = bodyX + 2 * cell
+    waitDrawn { try self.hasInk(ground, guide, self.rowMidY(3)) }
+    XCTAssertFalse(isBlack(try rgb(ground, bodyX + 3.5 * cell, rowMidY(1))), "行末の 1 個に点")
+    XCTAssertTrue(try hasInk(ground, guide, rowMidY(2)), "空行に隣の浅い方（1 段）の線")
+  }
+
   /// 丸点は行頭・行末・2 個以上の連続スペースのセルの中央に出て、単語間の 1 個には出ない。
   func testWhitespaceDotsOnlyAtBoundaries() throws {
     let hosted = try host("a b  c \n")
