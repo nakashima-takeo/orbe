@@ -13,8 +13,8 @@ final class EditorSession {
   private var links: [ObjectIdentifier: DocumentLink] = [:]
   /// 列・焦点・未保存の有無・「ディスクが変わった」の有無が変わった。
   var onChange: (() -> Void)?
-  /// 焦点の文書のテキスト面が first responder になった。
-  var onFocus: (() -> Void)?
+  /// 文書のテキスト面が first responder になった／やめた。
+  var onFocusChange: ((Bool) -> Void)?
 
   init(surfaces: EditorSurfaces) {
     self.surfaces = surfaces
@@ -56,7 +56,7 @@ final class EditorSession {
       registry: surfaces.registry)
     document.onDirtyChange = { [weak self] _ in self?.onChange?() }
     document.onDiskChange = { [weak self] _ in self?.onChange?() }
-    document.onFocusChange = { [weak self] focused in if focused { self?.onFocus?() } }
+    document.onFocusChange = { [weak self] focused in self?.onFocusChange?(focused) }
     links[ObjectIdentifier(document)] = DocumentLink(document: document)
     documents.append(document)
     activeDocument = document

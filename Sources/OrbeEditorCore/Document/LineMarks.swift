@@ -1,9 +1,9 @@
 import Foundation
 
 /// ハンクから導く行の印——行ごとの「追加／変更」と「この境の下に削除がある」。行は 1 始まり（`LineHunk`
-/// と同じ数え方）。文書が持ち、行索引でオフセット区間に写してテキスト面へ渡す（→ `LineMarkSpans`）。
+/// と同じ数え方）。文書が持ち、行索引でオフセット区間に写してテキスト面へ渡す（→ `LineMarkSpans`）。俯瞰は
+/// 行の連（`runs`）と削除の境（`deletionsBelow`）をそのまま読む。
 public struct LineMarks: Equatable, Sendable {
-  /// 面へ渡る唯一の型（`LineMarkSpans.Mark.kind`）。他はモジュールの中で閉じる。
   public enum Kind: Equatable, Sendable {
     case added
     case modified
@@ -11,17 +11,18 @@ public struct LineMarks: Equatable, Sendable {
 
   /// 同じ印が続く行の区間。ハンクが昇順・非重複（`LineDiff` は両側を単調に進める）なので、そこから写した
   /// run も昇順・非重複。
-  struct Run: Equatable, Sendable {
-    let lines: Range<Int>
-    let kind: Kind
+  public struct Run: Equatable, Sendable {
+    /// 1 始まりの行の区間。
+    public let lines: Range<Int>
+    public let kind: Kind
   }
 
-  let runs: [Run]
+  public let runs: [Run]
   /// 削除がある境。値 n は「n 行目の下」（0 は先頭行の上）。ハンクの順（昇順）。
-  let deletionsBelow: [Int]
+  public let deletionsBelow: [Int]
 
   /// 追加（old 側 0 件）はその新しい行、削除（new 側 0 件）はその境、両側にあれば新しい行が変更。
-  init(hunks: [LineHunk]) {
+  public init(hunks: [LineHunk]) {
     var runs: [Run] = []
     var deletions: [Int] = []
     for hunk in hunks {
@@ -40,8 +41,8 @@ public struct LineMarks: Equatable, Sendable {
 
   /// 面へ渡す形。行の区間は改行込み（次の行頭まで、末尾なら本文の長さまで）、境は次の行の行頭のオフセット。
   /// 索引に無い行（索引と印が同じ本文から出ている限り起きない）は落とす。
-  func spans(in index: LineIndex, length: Int) -> LineMarkSpans {
-    let end = { (row: Int) in row < index.lineCount ? index.start(ofRow: row) : length }
+  func spans(in index: LineIndex) -> LineMarkSpans {
+    let end = { (row: Int) in row < index.lineCount ? index.start(ofRow: row) : index.length }
     var marks: [LineMarkSpans.Mark] = []
     for run in runs {
       let firstRow = run.lines.lowerBound - 1

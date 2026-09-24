@@ -4,7 +4,8 @@ import AppKit
 /// 文書は面の delegate として編集を受け、色は役割付き区間として面へ渡す（面は役割→色だけを知る）。
 @MainActor
 public protocol TextSurface: AnyObject {
-  /// 器へ載せる view（スクロールを含む全体）。
+  /// 器へ載せる view（スクロールを含む全体）。面の外（俯瞰など）で起きたホイールの出来事をこの view の `scrollWheel`
+  /// へ渡すと、面は自分のスクロールへ渡す。
   var view: NSView { get }
   /// first responder にする view。
   var responder: NSView { get }
@@ -15,8 +16,37 @@ public protocol TextSurface: AnyObject {
   /// `ranges` の既存の色を外し、`spans` を置く。描画属性としてのみ持ち、本文と undo を汚さない。
   func applyHighlights(_ spans: [HighlightSpan], in ranges: IndexSet)
 
-  /// 今見えている本文の区間（viewport のレイアウト後に更新される）。
+  /// 今見えている本文の区間（viewport のレイアウト後に更新される。prefetch の帯を含み「見えている」より広い——
+  /// 色付けの塗り残しの判定用。見えている範囲そのものは `viewport`）。
   var visibleRange: NSRange { get }
+
+  /// 見えている範囲を本文の言葉で（面の pt は出ない）。
+  var viewport: TextViewport { get }
+
+  /// そのオフセットの行を可視範囲の中央へスクロールする（先頭・末尾では端で止まる）。選択は動かさない。
+  func scrollToCenter(_ offset: Int)
+
+  /// `viewport` の逆——行頭オフセット `offset` の行を、その高さの `hiddenFraction`（0…1）ぶん上へ隠して先頭に置く。
+  /// スクロールできる範囲（最終行が最上段に来るまで）の端で止まる。横位置と選択は動かさない。行は `LineIndex` の行
+  /// （本文が改行で終わるときの末尾の空行を含む）。
+  func scroll(toTop offset: Int, hiddenFraction: CGFloat)
+
+  /// その区間が見えるところまで最小限スクロールする（縦に見えていれば縦は動かず、横に隠れていれば横だけ寄る）。
+  /// 選択は動かさない。
+  func scrollToVisible(_ range: NSRange)
+
+  /// 選択（UTF-16）。置いても見せない——見せるのは `scrollToCenter`。
+  var selectedRange: NSRange { get set }
+
+  /// キャレットのオフセット——選択の動く側の端（前へ伸ばした選択なら先頭、それ以外は終わり。選択が空ならその位置）。
+  var caretLocation: Int { get }
+
+  /// 強調の地（種類ごと）。選択の地の上・文字の下に描く。本文と undo に載らない描画で、次に置き直すか空を置くまで
+  /// 残る。`ranges` は昇順・重ならないこと（面は二分探索で可視ぶんだけ描く）。現在の一致の行は行全体にも地が付く。
+  func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind)
+
+  /// インデントの単位（1 段のスペース数）。文書が本文から検出して押し、面はタブの表示幅と装備の段に写す。
+  func setIndentUnit(_ unit: Int)
 
   /// undo の履歴にここで区切りを置く。続けて打った文字はまとめて戻るが、区切りをまたいでは戻らない
   /// （保存が呼ぶ——⌘Z が保存前の打鍵まで一緒に戻さないため）。
@@ -47,6 +77,45 @@ public protocol TextSurfaceDelegate: AnyObject {
   func surface(_ surface: any TextSurface, didChange edit: TextEdit)
   func surface(_ surface: any TextSurface, focusDidChange focused: Bool)
   func surfaceDidLayoutViewport(_ surface: any TextSurface)
+  /// `viewport` が変わった（スクロール・窓の高さ）。
+  func surfaceDidChangeViewport(_ surface: any TextSurface)
+  func surfaceDidChangeSelection(_ surface: any TextSurface)
+}
+
+/// 強調の地の種類。重ね順は下から 選択文字列の出現 → 語の出現 → 検索の一致 → 現在の一致（現在の一致の行全体の地は
+/// それらより下）。
+public enum TextHighlightKind: Sendable {
+  case selectionOccurrence
+  case wordOccurrence
+  case findMatch
+  case currentFindMatch
+}
+
+/// 見えている範囲を本文の言葉で表したもの。`firstVisible` は先頭に見えている行（`LineIndex` の行）の行頭オフセット、
+/// `hiddenFraction` はその行が上へ隠れている割合（0…1）、`visibleLines` は可視矩形に入る行数（小数）、`clipsRight` は
+/// 本文が右にまだ続く（横に隠れている部分がある）か。`hiddenColumns` は左へ隠れている幅、`visibleColumns` は面の
+/// 見えている幅（ガターを含む）で、どちらも半角の桁数（小数）。エンジンの推定の文書高に依らず、実際に layout された行の矩形から出る。
+public struct TextViewport: Equatable, Sendable {
+  public var firstVisible: Int
+  public var hiddenFraction: CGFloat
+  public var visibleLines: CGFloat
+  public var clipsRight: Bool
+  public var hiddenColumns: CGFloat
+  public var visibleColumns: CGFloat
+
+  public init(
+    firstVisible: Int, hiddenFraction: CGFloat, visibleLines: CGFloat, clipsRight: Bool = false,
+    hiddenColumns: CGFloat = 0, visibleColumns: CGFloat = 0
+  ) {
+    self.firstVisible = firstVisible
+    self.hiddenFraction = hiddenFraction
+    self.visibleLines = visibleLines
+    self.clipsRight = clipsRight
+    self.hiddenColumns = hiddenColumns
+    self.visibleColumns = visibleColumns
+  }
+
+  public static let empty = TextViewport(firstVisible: 0, hiddenFraction: 0, visibleLines: 0)
 }
 
 /// 面の見え方。色は名前付き（dynamic）の NSColor を渡し、外観は描画時に解く。装備の寸法と色もここで渡し、
@@ -70,6 +139,7 @@ public struct TextSurfaceStyle {
   public var roleColors: [SyntaxRole: NSColor]
   public var marks: Marks
   public var decorations: Decorations
+  public var highlights: Highlights
 
   /// git ガター（行番号の右の列）の見え方。色は α 込み。
   public struct Marks {
@@ -122,11 +192,34 @@ public struct TextSurfaceStyle {
     }
   }
 
+  /// 強調の地の色（α 込み。行の高さいっぱい・角なしで塗る）。選択文字列の出現は面に焦点が無いときだけ
+  /// `selectionOccurrenceInactive`。現在の一致の行全体は `currentFindLine`。
+  public struct Highlights {
+    public var findMatch: NSColor
+    public var currentFindMatch: NSColor
+    public var currentFindLine: NSColor
+    public var selectionOccurrence: NSColor
+    public var selectionOccurrenceInactive: NSColor
+    public var wordOccurrence: NSColor
+
+    public init(
+      findMatch: NSColor, currentFindMatch: NSColor, currentFindLine: NSColor,
+      selectionOccurrence: NSColor, selectionOccurrenceInactive: NSColor, wordOccurrence: NSColor
+    ) {
+      self.findMatch = findMatch
+      self.currentFindMatch = currentFindMatch
+      self.currentFindLine = currentFindLine
+      self.selectionOccurrence = selectionOccurrence
+      self.selectionOccurrenceInactive = selectionOccurrenceInactive
+      self.wordOccurrence = wordOccurrence
+    }
+  }
+
   public init(
     font: NSFont, lineHeight: CGFloat, topInset: CGFloat, textColor: NSColor, caretColor: NSColor,
     caretSize: CGSize, gutterFont: NSFont, gutterTextColor: NSColor, gutterWidth: CGFloat,
     gutterTrailingInset: CGFloat, roleColors: [SyntaxRole: NSColor], marks: Marks,
-    decorations: Decorations
+    decorations: Decorations, highlights: Highlights
   ) {
     self.font = font
     self.lineHeight = lineHeight
@@ -141,5 +234,6 @@ public struct TextSurfaceStyle {
     self.roleColors = roleColors
     self.marks = marks
     self.decorations = decorations
+    self.highlights = highlights
   }
 }

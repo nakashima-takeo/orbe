@@ -18,6 +18,14 @@ extension NSEvent {
 }
 
 extension NSView {
+  /// この view の座標の点で起きたマウスのイベント（窓に載っていなければ窓番号 0）。
+  func mouseEvent(_ type: NSEvent.EventType, at point: NSPoint) -> NSEvent {
+    NSEvent.mouseEvent(
+      with: type, location: convert(point, to: nil), modifierFlags: [], timestamp: 0,
+      windowNumber: window?.windowNumber ?? 0, context: nil, eventNumber: 0, clickCount: 1,
+      pressure: 1)!
+  }
+
   /// 窓座標で見た中心点。
   var centerInWindow: NSPoint {
     convert(NSPoint(x: bounds.midX, y: bounds.midY), to: nil)

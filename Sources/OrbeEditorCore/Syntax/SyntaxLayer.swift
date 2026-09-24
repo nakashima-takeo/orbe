@@ -6,6 +6,9 @@ import SwiftTreeSitterLayer
 /// 単位は UTF-16（tree-sitter の既定符号化）。バイトはその 2 倍。
 final class SyntaxLayer {
   private let layer: LanguageLayer
+  /// capture 名（成分の列）→ 役割。名前の種類は文法ごとに数十しかないので、表は名前ごとに 1 度だけ引く（塗りも
+  /// ミニマップも capture ごとに引くので、毎回の名前の組み立てと分解を避ける）。
+  private var roles: [[String]: SyntaxRole?] = [:]
 
   init(configuration: LanguageConfiguration, registry: LanguageRegistry) throws {
     layer = try LanguageLayer(
@@ -38,16 +41,33 @@ final class SyntaxLayer {
   /// capture が外にある・capture 自体が集合をまたぐ）。集合で切り、外には 1 文字も触らない——外は
   /// 塗り直さないので、そこにある細かい capture の正しい色を広い capture の色で潰さない。
   func highlights(in set: IndexSet, text: String) -> [HighlightSpan] {
-    guard let ranges = try? layer.highlights(in: set, provider: text.predicateTextProvider) else {
-      return []
-    }
+    highlights(in: set, provider: text.predicateTextProvider)
+  }
+
+  /// 同上。本文は predicate が要る区間だけ `substring` で取る（全文のコピーを要しない——俯瞰が窓のチャンクごとに
+  /// 引くための口）。
+  func highlights(in set: IndexSet, substring: @escaping (NSRange) -> String) -> [HighlightSpan] {
+    highlights(in: set, provider: { range, _ in substring(range) })
+  }
+
+  private func highlights(
+    in set: IndexSet, provider: @escaping SwiftTreeSitter.Predicate.TextProvider
+  ) -> [HighlightSpan] {
+    guard let ranges = try? layer.highlights(in: set, provider: provider) else { return [] }
     return ranges.flatMap { named -> [HighlightSpan] in
-      guard let range = Range(named.range), let role = CaptureRoleMap.role(for: named.name)
+      guard let range = Range(named.range), let role = role(of: named.nameComponents)
       else { return [] }
       return set.intersection(IndexSet(integersIn: range)).rangeView.map {
         HighlightSpan(range: NSRange($0), role: role)
       }
     }
+  }
+
+  private func role(of components: [String]) -> SyntaxRole? {
+    if let role = roles[components] { return role }
+    let role = CaptureRoleMap.role(for: components.joined(separator: "."))
+    roles[components] = role
+    return role
   }
 
   private static func point(at offset: Int, in index: LineIndex) -> Point {

@@ -52,6 +52,15 @@ public final class EditorDocument {
     didSet { if hunks != oldValue { onHunksChange?() } }
   }
   public var onHunksChange: (() -> Void)?
+  /// インデントの単位（1 段のスペース数）。開いたとき、および本文を丸ごと置き換えたときに本文から検出し直し、
+  /// 面へ押す。
+  public private(set) var indentUnit = IndentUnit.fallback
+  /// 面の見えている範囲が変わった（スクロール・窓の高さ）。
+  public var onViewportChange: (() -> Void)?
+  /// 面の選択が変わった。
+  public var onSelectionChange: (() -> Void)?
+  /// 本文が変わった。索引・構文木・色付けの更新の後に届く（構文の事実を読み直してよい）。
+  public var onTextChange: ((TextChange) -> Void)?
   private let syntax: SyntaxLayer?
   /// 最後の編集の後に塗った区間。編集のたびに（変わった区間 ∪ 可視区間）へ置き直す。
   private var fresh = IndexSet()
@@ -95,10 +104,79 @@ public final class EditorDocument {
     syntax = language.flatMap { registry.configuration(for: $0) }
       .flatMap { try? SyntaxLayer(configuration: $0, registry: registry) }
     surface.delegate = self
+    applyIndentUnit(of: text)
     if let syntax {
       highlight(syntax.parseAll(text, lineIndex: lineIndex), text: text)
       fresh = IndexSet(integersIn: 0..<text.utf16.count)
     }
+  }
+
+  /// `range` の中の役割の区間——構文層の区間を後勝ち（tree-sitter の優先順で後のものが上に塗られる、面の色と同じ）で
+  /// 平らにした、重ならない昇順の列。役割の無い字は含まない。文法が無ければ空。窓もキャッシュも持たない——ミニマップが
+  /// チャンクごとに引く。
+  public func roleSpans(in range: NSRange) -> [HighlightSpan] {
+    guard let syntax, range.length > 0 else { return [] }
+    let set = IndexSet(integersIn: range.location..<NSMaxRange(range))
+    let spans = syntax.highlights(in: set) { [surface] in surface.substring(in: $0) }
+    var roles = [SyntaxRole?](repeating: nil, count: range.length)
+    for span in spans {
+      let start = max(span.range.location, range.location) - range.location
+      let end = min(NSMaxRange(span.range), NSMaxRange(range)) - range.location
+      guard start < end else { continue }
+      for offset in start..<end { roles[offset] = span.role }
+    }
+    var result: [HighlightSpan] = []
+    var offset = 0
+    while offset < roles.count {
+      guard let role = roles[offset] else {
+        offset += 1
+        continue
+      }
+      var end = offset + 1
+      while end < roles.count, roles[end] == role { end += 1 }
+      result.append(
+        HighlightSpan(
+          range: NSRange(location: range.location + offset, length: end - offset), role: role))
+      offset = end
+    }
+    return result
+  }
+
+  /// 選択の先頭の位置の語（出現の強調・⌘F の種）。長い行はキャレットの前後の窓だけを読む（→ `Occurrences.wordWindow`）。
+  public func word(at selection: NSRange) -> NSRange? {
+    let row = lineIndex.point(at: selection.location).row
+    let start = lineIndex.start(ofRow: row)
+    var end = lineIndex.end(ofRow: row)
+    let tailStart = max(start, end - 2)
+    for unit in surface.substring(in: NSRange(location: tailStart, length: end - tailStart)).utf16
+      .reversed()
+    {
+      guard unit == 0x0A || unit == 0x0D else { break }
+      end -= 1
+    }
+    let window = Occurrences.wordWindow(
+      caret: selection.location, line: NSRange(location: start, length: end - start))
+    return Occurrences.word(
+      at: selection, text: surface.substring(in: window), textStart: window.location)
+  }
+
+  /// 先頭に見えている行（小数。行 + 隠れ割合）と可視行数（小数）——俯瞰の式の入力。
+  public var viewportLines: (first: CGFloat, visible: CGFloat) {
+    let viewport = surface.viewport
+    let row = CGFloat(lineIndex.point(at: viewport.firstVisible).row)
+    return (row + viewport.hiddenFraction, viewport.visibleLines)
+  }
+
+  /// 先頭行（小数）の位置へスクロールする（`viewport` の逆。行は索引の行数に収める）。
+  public func scroll(toFirstLine line: CGFloat) {
+    let clamped = min(max(0, line), CGFloat(lineIndex.lineCount - 1))
+    let row = Int(floor(clamped))
+    surface.scroll(toTop: lineIndex.start(ofRow: row), hiddenFraction: clamped - CGFloat(row))
+  }
+
+  private func applyIndentUnit(of text: String) {
+    indentUnit = IndentUnit.detect(in: text)
+    surface.setIndentUnit(indentUnit)
   }
 
   /// 面の本文をそのまま UTF-8 で書く（改行・末尾改行は本文のまま。開いたとき BOM があれば付け直す）。
@@ -144,6 +222,7 @@ public final class EditorDocument {
     isReplacingFromDisk = true
     surface.replaceAll(with: onDisk.text)
     isReplacingFromDisk = false
+    applyIndentUnit(of: onDisk.text)
     diskDigest = onDisk.digest
     hasBOM = onDisk.hasBOM
     surface.markUndoBoundary()
@@ -160,7 +239,7 @@ public final class EditorDocument {
   private func rebuildHunks() {
     let text = surface.text
     hunks = baseline.map { LineDiff.hunks(base: $0, current: text) } ?? []
-    surface.setLineMarks(LineMarks(hunks: hunks).spans(in: lineIndex, length: text.utf16.count))
+    surface.setLineMarks(LineMarks(hunks: hunks).spans(in: lineIndex))
   }
 
   /// 同じ runloop ターンに複数届いた編集（複数キャレット等）を 1 回の作り直しに畳む。
@@ -189,12 +268,22 @@ extension EditorDocument: TextSurfaceDelegate {
     lineIndex.apply(edit, replacement: surface.substring(in: edit.newRange))
     if !isReplacingFromDisk { isDirty = true }
     scheduleHunks()
+    var changedRoles = IndexSet(integersIn: edit.newRange.location..<NSMaxRange(edit.newRange))
+    defer { onTextChange?(TextChange(edit: edit, changedRoles: changedRoles)) }
     guard let syntax else { return }
     let text = surface.text
-    var set = syntax.didChange(edit, text: text, old: old, new: lineIndex)
-    set.formUnion(visibleSet)
+    changedRoles = syntax.didChange(edit, text: text, old: old, new: lineIndex)
+    let set = changedRoles.union(visibleSet)
     highlight(set, text: text)
     fresh = set
+  }
+
+  public func surfaceDidChangeViewport(_ surface: any TextSurface) {
+    onViewportChange?()
+  }
+
+  public func surfaceDidChangeSelection(_ surface: any TextSurface) {
+    onSelectionChange?()
   }
 
   public func surface(_ surface: any TextSurface, focusDidChange focused: Bool) {

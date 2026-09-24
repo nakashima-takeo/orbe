@@ -75,6 +75,99 @@ final class EditorStyleTests: OrbeTestCase {
       accuracy: 0.01)
   }
 
+  /// 強調と俯瞰の色は VS Code Dark Modern / Light Modern の値（sRGB・α）。選択文字列の出現は焦点が無いとき α 半分。
+  func testHighlightAndOverviewColorsAreTheVSCodeValues() throws {
+    let highlights = EditorStyle.make().highlights
+    let minimap = EditorStyle.minimap()
+    let scrollbar = EditorStyle.scrollbar()
+    let expected: [Expected] = [
+      .init(highlights.findMatch, dark: (0xea5c00, 0.33), light: (0xea5c00, 0.33)),
+      .init(highlights.currentFindMatch, dark: (0x9e6a03, 1), light: (0xa8ac94, 1)),
+      .init(highlights.currentFindLine, dark: (0xffffff, 0.043), light: (0xfdff00, 0.2)),
+      .init(highlights.selectionOccurrence, dark: (0xadd6ff, 0.15), light: (0xadd6ff, 0.5)),
+      .init(
+        highlights.selectionOccurrenceInactive, dark: (0xadd6ff, 0.075), light: (0xadd6ff, 0.25)),
+      .init(highlights.wordOccurrence, dark: (0x575757, 0.72), light: (0x575757, 0.25)),
+      .init(minimap.slider, dark: (0x797979, 0.2), light: (0x646464, 0.2)),
+      .init(minimap.sliderHover, dark: (0x646464, 0.35), light: (0x646464, 0.35)),
+      .init(minimap.sliderActive, dark: (0xbfbfbf, 0.2), light: (0x000000, 0.3)),
+      .init(minimap.findMatch, dark: (0xea5c00, 0.33), light: (0xea5c00, 0.33)),
+      .init(minimap.wordOccurrence, dark: (0xadd6ff, 0.15), light: (0xadd6ff, 0.5)),
+      .init(scrollbar.slider, dark: (0x797979, 0.4), light: (0x646464, 0.4)),
+      .init(scrollbar.sliderHover, dark: (0x646464, 0.7), light: (0x646464, 0.7)),
+      .init(scrollbar.sliderActive, dark: (0xbfbfbf, 0.4), light: (0x000000, 0.6)),
+      .init(scrollbar.findMatch, dark: (0xd18616, 0.49), light: (0xd18616, 0.49)),
+      .init(scrollbar.wordOccurrence, dark: (0xa0a0a0, 0.8), light: (0xa0a0a0, 0.8)),
+    ]
+    for item in expected {
+      for (appearance, (hex, alpha)) in [
+        (NSAppearance.Name.darkAqua, item.dark), (.aqua, item.light),
+      ] {
+        let got = try XCTUnwrap(resolved(item.color, appearance))
+        XCTAssertEqual(got.redComponent, CGFloat((hex >> 16) & 0xff) / 255, accuracy: 0.003)
+        XCTAssertEqual(got.greenComponent, CGFloat((hex >> 8) & 0xff) / 255, accuracy: 0.003)
+        XCTAssertEqual(got.blueComponent, CGFloat(hex & 0xff) / 255, accuracy: 0.003)
+        XCTAssertEqual(got.alphaComponent, alpha, accuracy: 0.003)
+      }
+    }
+  }
+
+  /// 期待する色（外観ごとの sRGB と α）。
+  struct Expected {
+    let color: NSColor
+    let dark: (Int, CGFloat)
+    let light: (Int, CGFloat)
+
+    init(_ color: NSColor, dark: (Int, CGFloat), light: (Int, CGFloat)) {
+      self.color = color
+      self.dark = dark
+      self.light = light
+    }
+  }
+
+  /// 期待する印の色（元のトークンと α）。
+  struct Mark {
+    let color: NSColor
+    let token: NSColor
+    let alpha: CGFloat
+
+    init(_ color: NSColor, _ token: NSColor, _ alpha: CGFloat) {
+      self.color = color
+      self.token = token
+      self.alpha = alpha
+    }
+  }
+
+  /// 俯瞰の git の印は Orbe の diff.*（ミニマップは α 1、スクロールバーは VS Code の α .6）、キャレットの印はキャレット色
+  /// α .7、スクロールバーの縁は hairline .07（light ×1.4）。
+  func testOverviewGitCaretAndBorderColorsUseTheOrbeTokens() throws {
+    let minimap = EditorStyle.minimap()
+    let scrollbar = EditorStyle.scrollbar()
+    let marks: [Mark] = [
+      .init(minimap.added, Theme.Color.diffAdded, 1),
+      .init(minimap.modified, Theme.Color.diffModified, 1),
+      .init(minimap.removed, Theme.Color.diffRemoved, 1),
+      .init(scrollbar.added, Theme.Color.diffAdded, 0.6),
+      .init(scrollbar.modified, Theme.Color.diffModified, 0.6),
+      .init(scrollbar.removed, Theme.Color.diffRemoved, 0.6),
+      .init(scrollbar.caret, Theme.Color.accentBright, 0.7),
+    ]
+    for item in marks {
+      for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+        let got = try XCTUnwrap(resolved(item.color, appearance))
+        let base = try XCTUnwrap(resolved(item.token, appearance))
+        XCTAssertEqual(got.alphaComponent, item.alpha, accuracy: 0.005)
+        XCTAssertEqual(got.redComponent, base.redComponent, accuracy: 0.002)
+        XCTAssertEqual(got.greenComponent, base.greenComponent, accuracy: 0.002)
+        XCTAssertEqual(got.blueComponent, base.blueComponent, accuracy: 0.002)
+      }
+    }
+    XCTAssertEqual(
+      try XCTUnwrap(resolved(scrollbar.border, .darkAqua)).alphaComponent, 0.07, accuracy: 0.001)
+    XCTAssertEqual(
+      try XCTUnwrap(resolved(scrollbar.border, .aqua)).alphaComponent, 0.098, accuracy: 0.001)
+  }
+
   /// 8 役割すべてに色があり、同じ外観の中で互いに違い、dark と light で解が変わる。
   func testEveryRoleHasADistinctColorThatFollowsTheAppearance() throws {
     let style = EditorStyle.make()

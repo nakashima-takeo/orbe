@@ -34,6 +34,36 @@ extension Theme.Color {
   /// 見せる空白の丸点。textMuted の α .55（editorLineNumber と値だけ同じ独立トークン）。
   static let editorWhitespace = editorDynA(light: 0x8d85a3, dark: 0x8b8397, alpha: 0.55)
 
+  // 俯瞰と強調（VS Code Dark Modern / Light Modern の値。上書きの無いものは VS Code のレジストリの既定）。
+  /// 検索の一致の地（editor.findMatchHighlightBackground）。ミニマップの一致も同じ色。
+  static let editorFindMatch = editorDynA(light: 0xea5c00, dark: 0xea5c00, alpha: 0.33)
+  /// 現在の一致の地（editor.findMatchBackground）。不透明で選択の地の上に描く。
+  static let editorFindMatchCurrent = editorDyn(light: 0xa8ac94, dark: 0x9e6a03)
+  /// 現在の一致の行全体の地（editor.rangeHighlightBackground）。
+  static let editorFindLine = editorDynAB(light: (0xfdff00, 0.2), dark: (0xffffff, 0.043))
+  /// 選択文字列の他の出現の地（editor.selectionHighlightBackground）。面に焦点が無いときは α を半分にする。ミニマップの
+  /// 語の出現も同じ色。
+  static let editorSelectionOccurrence = editorDynAB(light: (0xadd6ff, 0.5), dark: (0xadd6ff, 0.15))
+  /// キャレットの語の出現の地（editor.wordHighlightTextBackground）。
+  static let editorWordOccurrence = editorDynAB(light: (0x575757, 0.25), dark: (0x575757, 0.72))
+  /// ミニマップの帯（minimapSlider.background / hoverBackground / activeBackground）。
+  static let editorMinimapSlider = editorDynAB(light: (0x646464, 0.2), dark: (0x797979, 0.2))
+  static let editorMinimapSliderHover = editorDynAB(light: (0x646464, 0.35), dark: (0x646464, 0.35))
+  static let editorMinimapSliderActive = editorDynAB(light: (0x000000, 0.3), dark: (0xbfbfbf, 0.2))
+  /// スクロールバーのつまみ（scrollbarSlider.background / hoverBackground / activeBackground）。
+  static let editorScrollbarSlider = editorDynAB(light: (0x646464, 0.4), dark: (0x797979, 0.4))
+  static let editorScrollbarSliderHover = editorDynAB(light: (0x646464, 0.7), dark: (0x646464, 0.7))
+  static let editorScrollbarSliderActive = editorDynAB(
+    light: (0x000000, 0.6), dark: (0xbfbfbf, 0.4))
+  /// スクロールバーの印——検索の一致（editorOverviewRuler.findMatchForeground）と語の出現
+  /// （editorOverviewRuler.wordHighlightTextForeground）。
+  static let editorRulerFind = editorDynA(light: 0xd18616, dark: 0xd18616, alpha: 0.49)
+  static let editorRulerOccurrence = editorDynA(light: 0xa0a0a0, dark: 0xa0a0a0, alpha: 0.8)
+  /// 先頭の行が上へ隠れている間の本文の上端の影の色（scrollbar.shadow）。
+  static let editorScrollShadow = editorDyn(light: 0xdddddd, dark: 0x000000)
+  /// 本文が右に続くときのミニマップ左端の影の色（α 込み。ぼかし 6）。
+  static let editorMinimapShadow = editorDynA(light: 0x000000, dark: 0x000000, alpha: 0.08)
+
   // 構文色。dark は VSCode Dark Modern の実在トークン色（5 色は端末 ANSI と偶然同値だが、端末色は
   // 別レイヤー〔design-system §8〕なので参照しない）。light は見本の値。
   static let syntaxKeyword = editorDyn(light: 0x2f63c9, dark: 0x569cd6)
@@ -51,8 +81,13 @@ extension Theme.Color {
   }
 
   private static func editorDynA(light: Int, dark: Int, alpha: CGFloat) -> NSColor {
+    editorDynAB(light: (light, alpha), dark: (dark, alpha))
+  }
+
+  /// 外観ごとに色と α が違う色。
+  private static func editorDynAB(light: (Int, CGFloat), dark: (Int, CGFloat)) -> NSColor {
     NSColor(name: nil) { ap in
-      let hex = ap.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+      let (hex, alpha) = ap.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
       return NSColor(
         srgbRed: CGFloat((hex >> 16) & 0xff) / 255,
         green: CGFloat((hex >> 8) & 0xff) / 255,
@@ -119,6 +154,11 @@ extension Theme.Layout {
   /// 行番号ガター（右寄せの数字が収まる幅）と、その右の git の印の列。本文は 2 つの右端から始まる。
   static let editorLineNumberGutter: CGFloat = 50
   static let editorMarkGutter: CGFloat = 19
+  /// 本体の右端の縦スクロールバー（印を載せる。VS Code の verticalScrollbarSize）。
+  static let editorScrollbar: CGFloat = 14
+  /// ミニマップの幅の上限（字の左のガター込み。VS Code の maxColumn 120 × 1 字 1pt）。幅は本文の幅から計算し、
+  /// 列が狭ければ細くなる。
+  static let editorMinimapMaxWidth: CGFloat = 120
   /// 折りたたみのシェブロン。
   static let editorChevron: CGFloat = 16
 }
@@ -141,4 +181,9 @@ extension Theme.Motion {
   static let spineLook: Double = 0.20
   /// 位置ドットの幅・色の遷移。
   static let faceDot: Double = 0.24
+  /// ミニマップの帯が現れる・消える、スクロールバーのつまみが現れる（VS Code の opacity 100ms linear）。
+  static let editorSliderFadeIn: Double = 0.1
+  /// スクロールバーのつまみが消える（800ms linear）。スクロールが止まってから `editorScrollbarHideDelay` 後に始まる。
+  static let editorScrollbarFadeOut: Double = 0.8
+  static let editorScrollbarHideDelay: Double = 0.5
 }

@@ -181,7 +181,11 @@ final class TerminalTab {
         view.editor.sessionDidChange()
         onEditorChange?()
       }
-      editor.onFocus = { [weak self] in self?.paneDidFocus(.editor) }
+      editor.onFocusChange = { [weak self] focused in
+        guard let self else { return }
+        if focused { paneDidFocus(.editor) }
+        view.editor.focusDidChange()
+      }
     }
   }
 

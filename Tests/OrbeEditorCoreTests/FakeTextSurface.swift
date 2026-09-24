@@ -20,6 +20,15 @@ final class FakeTextSurface: TextSurface {
   private(set) var lineMarks = LineMarkSpans.empty
   var onOpenLink: ((URL) -> Void)?
   private(set) var ground: NSColor?
+  /// 見えている範囲（本文の言葉）。テストが置く。
+  var viewport = TextViewport.empty
+  /// `scroll(toTop:)` の履歴。
+  private(set) var toppedAt: [(offset: Int, hiddenFraction: CGFloat)] = []
+  var selectedRange = NSRange(location: 0, length: 0) {
+    didSet { delegate?.surfaceDidChangeSelection(self) }
+  }
+  var caretLocation: Int { NSMaxRange(selectedRange) }
+  private(set) var indentUnit = IndentUnit.fallback
 
   init(text: String) {
     storage = NSMutableString(string: text)
@@ -47,8 +56,23 @@ final class FakeTextSurface: TextSurface {
 
   func setGround(_ color: NSColor) { ground = color }
 
+  func scrollToCenter(_ offset: Int) {}
+
+  func scrollToVisible(_ range: NSRange) {}
+
+  func scroll(toTop offset: Int, hiddenFraction: CGFloat) {
+    toppedAt.append((offset, hiddenFraction))
+  }
+
+  func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {}
+
+  func setIndentUnit(_ unit: Int) { indentUnit = unit }
+
+  /// 契約の後条件どおり、置き換え後の選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。
   func replaceAll(with text: String) {
+    let caret = selectedRange.location
     replace(NSRange(location: 0, length: length), with: text)
+    selectedRange = NSRange(location: min(caret, length), length: 0)
   }
 
   /// 編集を起こす（人の打鍵に相当）。塗った区間は本物の描画属性と同じく文字に付いて動く——

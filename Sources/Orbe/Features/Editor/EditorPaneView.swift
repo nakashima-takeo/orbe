@@ -13,15 +13,20 @@ struct EditorFaceRoot: View {
 
 /// エディター面の AppKit 側の根。骨の幾何——レール｜サイドバー（開いているとき）｜列の頭
 /// （ファイルタブ行 → 文書があればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（焦点の
-/// 文書のテキスト面、無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
+/// 文書のテキスト面とその右のミニマップ・スクロールバー、無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
+///
+/// 文書の「変わった」（viewport・選択・本文・ハンク・焦点）は pane が 1 つずつ受け、ミニマップ・スクロールバー・影・検索・
+/// 出現の強調へ配る——文書側の closure は単一のまま、扇出はここが持つ。検索の一致と語の出現は pane が束ねて
+/// （`OverviewDecorations`）ミニマップとスクロールバーへ押す。本体の上のポインタは pane の tracking area が見て、
+/// スクロールバーのつまみの見え隠れに使う。
 ///
 /// 骨の状態はセッションの写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれだけを読む。
 /// セッションの変化は `sessionDidChange` 1 本で受け、写し → 面の差し替え → ツリーの追従の順に進める。
 /// ツリーは面が画面に見えている間（窓に付き、隠れていない）だけ根のサービスを握る。
 ///
 /// chrome キーは `performKeyEquivalent` で先取りし、window コマンドはタブ経由で上位へ、⌘S は保存、
-/// 端末のキーは消し、両面のキーと通常の打鍵はテキスト面へ流す。空状態では通常の打鍵を飲む——
-/// エディター焦点中に端末へ届けない。
+/// 端末のキーは消し、両面のキーのうち ⌘F はファイル内検索、残り（⌘↑↓）と通常の打鍵はテキスト面へ流す。
+/// 空状態では通常の打鍵を飲む——エディター焦点中に端末へ届けない。
 final class EditorPaneView: NSView {
   weak var tab: TerminalTab?
   /// 骨の写し（ファイルタブ行・パンくず）。
@@ -32,13 +37,29 @@ final class EditorPaneView: NSView {
   let headerHost: NSHostingView<EditorHeaderRoot>
   let emptyHost: NSHostingView<EditorFaceRoot>
   private(set) var document: EditorDocument?
+  /// 本体の右のミニマップとスクロールバー、本体に重ねる影。焦点の文書に結ぶ。
+  let minimap = EditorMinimapView(style: EditorStyle.minimap())
+  let scrollbar = EditorScrollbarView(style: EditorStyle.scrollbar())
+  let scrollShadow = EditorScrollShadowView(
+    topColor: Theme.Color.editorScrollShadow, edgeColor: Theme.Color.editorMinimapShadow)
+  /// ファイル内検索の状態（pane ごと）。バーは開いている間だけある。
+  let search = EditorSearch()
+  var searchBar: SearchBar?
+  /// 検索バーの右端の制約（右列の幅が本体の幅で変わるので `layout()` が置き直す）。
+  var searchBarTrailing: NSLayoutConstraint?
+  /// 出現の強調の状態（pane ごと）。
+  let occurrences = EditorOccurrences()
+  /// 本体の上のポインタを見る tracking area。
+  var bodyTracking: NSTrackingArea?
+  /// 最後に見たスクロールの状態（変化でつまみを見せる）。文書を結び直すと捨てる。
+  var lastScrollState: ScrollState?
   /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
   private(set) var sidebar = EditorSidebarState() {
     didSet { observeSidebar() }
   }
   /// サイドバーと本体の境のドラッグの当たり。
   let sidebarHandle = SidebarResizeHandle()
-  private var localization = LocalizationStore(language: .systemDefault)
+  private(set) var localization = LocalizationStore(language: .systemDefault)
   private var fontResolver = ChromeFontResolver()
   /// 地の veil。設定パレットで不透明度を変えた直後も追従する（観測して再描画）。
   var translucency: ChromeTranslucency? {
@@ -65,8 +86,19 @@ final class EditorPaneView: NSView {
       host.autoresizingMask = []
       addSubview(host)
     }
+    for view in [minimap, scrollbar, scrollShadow] as [NSView] {
+      view.autoresizingMask = []
+      addSubview(view)
+    }
+    scrollShadow.isHidden = true
     sidebarHandle.autoresizingMask = []
     addSubview(sidebarHandle)
+    search.onCountChange = { [weak self] selected, total, limited in
+      self?.searchBar?.updateCount(selected: selected, total: total, limited: limited)
+    }
+    search.onMatchesChange = { [weak self] in self?.pushOverviewDecorations() }
+    search.onNeedleChange = { [weak self] in self?.syncFindState() }
+    occurrences.onWordOccurrencesChange = { [weak self] in self?.pushOverviewDecorations() }
     sidebarHandle.onDrag = { [weak self] width in self?.resizeSidebar(to: width) }
     sidebarHandle.onRelease = { [weak self] in self?.sidebar.commit() }
     wireShell()
@@ -244,20 +276,34 @@ final class EditorPaneView: NSView {
   }
 
   /// 焦点の文書の面を見せる（nil なら空状態）。前の文書の面は外すだけで、面は文書と一緒に生き続ける。
+  /// 俯瞰と検索を新しい文書に結び直し（検索は同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。
   /// 焦点が面の中にあれば新しい行き先へ移す——判定は前の面を外す前に取る（外した瞬間に AppKit が
   /// first responder を窓へ戻すので、外した後では「中にあった」ことが分からない）。
   func show(_ document: EditorDocument?) {
     guard document !== self.document else { return }
     let hadFocusInside = focusIsInside
-    self.document?.surface.view.removeFromSuperview()
+    if let previous = self.document {
+      previous.surface.view.removeFromSuperview()
+      observe(previous, false)
+    }
     self.document = document
     if let document {
       let view = document.surface.view
       view.autoresizingMask = []
-      view.frame = bodyRect
-      // 境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なる。テキスト面の下に置いて当たりを保つ。
-      addSubview(view, positioned: .below, relativeTo: sidebarHandle)
+      view.frame = surfaceRect
+      // 境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なる。テキスト面は影と俯瞰の下。
+      addSubview(view, positioned: .below, relativeTo: minimap)
+      observe(document, true)
+    } else {
+      closeSearch()
     }
+    lastScrollState = nil
+    minimap.bind(document)
+    scrollbar.bind(document)
+    search.bind(document)
+    occurrences.bind(document)
+    scrollShadow.isHidden = document == nil
+    updateShadow()
     emptyHost.isHidden = document != nil
     applyGround()
     needsLayout = true
@@ -285,86 +331,5 @@ final class EditorPaneView: NSView {
 
   private func updateLiveness() {
     tree.isLive = window != nil && !isHiddenOrHasHiddenAncestor
-  }
-
-  // MARK: - 焦点とキー
-
-  /// first responder が自分か配下にあるか。
-  private var focusIsInside: Bool {
-    guard let responder = window?.firstResponder as? NSView else { return false }
-    return responder === self || responder.isDescendant(of: self)
-  }
-
-  /// 焦点の行き先。文書があればそのテキスト面、無ければ自分。
-  var focusTarget: NSView { document?.surface.responder ?? self }
-
-  override var acceptsFirstResponder: Bool { true }
-
-  /// 空状態の中身は静止しているので、本体のどこを押しても面自身が受ける（焦点を取る）。骨の host は
-  /// 自分で受ける。
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    let hit = super.hitTest(point)
-    guard document == nil, let hit else { return hit }
-    return hit.isDescendant(of: emptyHost) ? self : hit
-  }
-
-  override func mouseDown(with event: NSEvent) {
-    window?.makeFirstResponder(focusTarget)
-  }
-
-  override func becomeFirstResponder() -> Bool {
-    tab?.paneDidFocus(.editor)
-    return super.becomeFirstResponder()
-  }
-
-  /// chrome キーの解決点。first responder が自分か配下のときだけ効く——隠れたタブの pane も窓に残るので、
-  /// 焦点が自分か配下に無いときは素通しする。
-  override func performKeyEquivalent(with event: NSEvent) -> Bool {
-    guard focusIsInside, let action = Keybindings.chromeAction(for: event)
-    else { return super.performKeyEquivalent(with: event) }
-    switch action.owner {
-    case .window:
-      if let command = action.windowCommand { tab?.requestWindowCommand(command) }
-      return true
-    case .editor:
-      saveActiveDocument()
-      return true
-    case .terminal:
-      return true
-    case .eachFace:
-      return super.performKeyEquivalent(with: event)
-    }
-  }
-
-  /// 空状態で通常の打鍵を飲む（文書があれば打鍵はテキスト面に届き、ここへは来ない）。
-  override func keyDown(with event: NSEvent) {}
-
-  /// ⌘S。ディスクが変わっていて失敗したら「上書き／キャンセル」を sheet で出し、上書きで force 保存する。
-  /// force 保存するのは同意した文書——sheet の間もセッションは動く（エージェントの `open_file` が焦点を
-  /// 差し替える）ので、応答時点の焦点ではなく出した時点の文書を束ね、まだ居ることを確かめてから書く
-  /// （`requestClose` と同型）。それ以外の失敗は beep（`open` と同じ理由でエラー面は持たない）。
-  private func saveActiveDocument() {
-    guard let tab else { return }
-    do {
-      try tab.editor.saveActive()
-    } catch EditorDocumentError.diskChanged {
-      guard let window, let target = tab.editor.activeDocument else { return }
-      let alert = UnsavedGate.overwriteAlert(language: localization.language)
-      alert.beginSheetModal(for: window) { [weak self, weak target] response in
-        guard let self, let tab = self.tab, let target,
-          tab.editor.documents.contains(where: { $0 === target }),
-          UnsavedGate.shouldOverwrite(response)
-        else { return }
-        do {
-          try target.save(force: true)
-        } catch {
-          NSSound.beep()
-          NSLog("[editor] forced save failed: \(error)")
-        }
-      }
-    } catch {
-      NSSound.beep()
-      NSLog("[editor] save failed: \(error)")
-    }
   }
 }

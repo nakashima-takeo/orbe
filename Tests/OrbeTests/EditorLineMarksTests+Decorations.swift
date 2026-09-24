@@ -43,8 +43,8 @@ extension EditorLineMarksTests {
     XCTAssertFalse(try hasInk(ground, bodyX + 56, rowMidY(3)), "AppKit 既定の刻み（2 段目 56pt）には無い")
   }
 
-  /// 本文を丸ごと置き換えると（外部で書き換えられたファイルの差し替え）、インデント単位を検出し直し、線の段と
-  /// タブの表示幅がその単位に移る——開いたときの単位のままだと、置き換わった本文の段の途中に線が立つ。
+  /// 外部で書き換えられたファイルの差し替え（本文の丸ごと置き換え）で文書はインデント単位を検出し直して面へ押し、
+  /// 線の段とタブの表示幅がその単位に移る——開いたときの単位のままだと、置き換わった本文の段の途中に線が立つ。
   func testReplacingTheWholeTextRedetectsTheIndentUnitAndTabWidth() throws {
     let hosted = try host("f {\n    a\n        b\n\t\tc\n}\n")
     let ground = hosted.ground
@@ -55,7 +55,9 @@ extension EditorLineMarksTests {
     XCTAssertTrue(try hasInk(ground, col(4), rowMidY(4)), "前提: タブの幅も 4 桁（段 1 の線が 2 個目のタブの左端）")
     XCTAssertFalse(try hasInk(ground, col(2), rowMidY(4)))
 
-    hosted.document.surface.replaceAll(with: "f {\n  a\n    b\n\t\tc\n}\n")
+    try Data("f {\n  a\n    b\n\t\tc\n}\n".utf8).write(to: hosted.document.url)
+    hosted.document.reconcileWithDisk()
+    XCTAssertEqual(hosted.document.indentUnit, 2)
     waitDrawn { try self.hasInk(ground, col(2), self.rowMidY(3)) }
     XCTAssertFalse(try hasInk(ground, col(4), rowMidY(2)), "単位 2 の 1 段の行に 4 桁目の線は無い")
     XCTAssertFalse(try hasInk(ground, col(8), rowMidY(3)), "2 段の行に 8 桁目の線は無い")
