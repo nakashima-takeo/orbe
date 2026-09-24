@@ -84,6 +84,12 @@ final class EditorMinimapView: NSView {
     updateLayout()
   }
 
+  /// 幅が変われば描き直す（描き直しは needsDisplay のときだけなので、幅だけ変わると古い画像が引き伸ばされる）。
+  override func setFrameSize(_ newSize: NSSize) {
+    super.setFrameSize(newSize)
+    needsDisplay = true
+  }
+
   var scale: Int { (window?.backingScaleFactor ?? 1) >= 2 ? 2 : 1 }
 
   /// 配置を出し直す（直前の配置を揺れ止めに使う——VS Code は直前に描いた配置を渡す）。
@@ -106,6 +112,10 @@ final class EditorMinimapView: NSView {
       : slider.isPointerInside ? style.sliderHover : style.slider
     let shown: CGFloat = isSliderShown ? 1 : 0
     guard slider.alphaValue != shown else { return }
+    guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+      slider.alphaValue = shown
+      return
+    }
     NSAnimationContext.runAnimationGroup { context in
       context.duration = Theme.Motion.editorSliderFadeIn
       context.timingFunction = CAMediaTimingFunction(name: .linear)
@@ -159,8 +169,9 @@ final class EditorMinimapView: NSView {
       updateSlider()
       return
     }
-    let line = layout.line(atY: point.y)
-    document.surface.scrollToCenter(document.lineIndex.start(ofRow: line))
+    // その行を中央へ。横位置は動かさない（VS Code のミニマップのクリックは縦だけ寄せる）。
+    let line = CGFloat(layout.line(atY: point.y))
+    document.scroll(toFirstLine: line + 0.5 - document.viewportLines.visible / 2)
   }
 
   override func mouseDragged(with event: NSEvent) {

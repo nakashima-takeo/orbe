@@ -64,9 +64,9 @@ final class EditorScrollbarTests: OrbeTestCase {
     }
     XCTAssertFalse(bar.isThumbShown, "開いた直後は隠れる")
 
-    pane.mouseEntered(with: pane.mouseEvent(.mouseMoved, at: .zero))
+    pane.mouseEntered(with: pane.enterExitEvent(.mouseEntered, area: pane.bodyTracking))
     XCTAssertTrue(bar.isThumbShown, "本体の上では見える")
-    pane.mouseExited(with: pane.mouseEvent(.mouseMoved, at: .zero))
+    pane.mouseExited(with: pane.enterExitEvent(.mouseExited, area: pane.bodyTracking))
     XCTAssertFalse(bar.isThumbShown, "外へ出れば消える")
 
     hosted.document.scroll(toFirstLine: 30)
@@ -82,6 +82,33 @@ final class EditorScrollbarTests: OrbeTestCase {
     XCTAssertTrue(bar.isThumbShown, "ドラッグ中は消えない")
     bar.mouseUp(with: bar.mouseEvent(.leftMouseUp, at: grab))
     XCTAssertFalse(bar.isThumbShown, "離せば消える")
+  }
+
+  /// サイドバーや列の頭の上ではつまみは出ない（SwiftUI の骨は自分の出入りを pane へ流してくる）。
+  func testTheThumbIgnoresEnteringTheSidebar() throws {
+    let hosted = try hostOverview(numberedLines(1000))
+    let pane = hosted.pane
+    let side = NSTrackingArea(
+      rect: pane.sideHost.bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow],
+      owner: pane.sideHost)
+    pane.sideHost.mouseEntered(with: pane.sideHost.enterExitEvent(.mouseEntered, area: side))
+    pane.mouseEntered(with: pane.enterExitEvent(.mouseEntered, area: side))
+    XCTAssertFalse(pane.scrollbar.isThumbShown, "本体の外の出入りでは出ない")
+  }
+
+  /// ドラッグ中の「この行を先頭に」は runloop 1 回に最新の 1 つだけ当たる（遠くへ飛ぶ layout を溜めない）。
+  func testDragScrollsAreCoalescedToTheLatestPerRunLoop() throws {
+    let hosted = try hostOverview(numberedLines(1000))
+    let bar = hosted.pane.scrollbar
+    let geometry = try XCTUnwrap(bar.geometry)
+    let grab = NSPoint(x: 7, y: geometry.sliderPosition + 5)
+    bar.mouseDown(with: bar.mouseEvent(.leftMouseDown, at: grab))
+    bar.mouseDragged(with: bar.mouseEvent(.leftMouseDragged, at: grab.offset(dy: 30)))
+    bar.mouseDragged(with: bar.mouseEvent(.leftMouseDragged, at: grab.offset(dy: 50)))
+    XCTAssertEqual(hosted.firstLine, 0, "その場では当てない")
+    let expected = geometry.firstLine(afterDragging: 50)
+    pumpMain(until: { abs(hosted.firstLine - expected) < 0.05 }, "次の runloop で最新の位置へ")
+    bar.mouseUp(with: bar.mouseEvent(.leftMouseUp, at: grab.offset(dy: 50)))
   }
 
   /// 印: 左レーンに git の追加・変更・削除、全幅にキャレットの行、左端と上端に縁。位置はスクロール全体に対する比例。
@@ -143,7 +170,7 @@ final class EditorScrollbarTests: OrbeTestCase {
       pixels.color(left, CGFloat(span.y1 + span.y2) / 2 / scale).alphaComponent, 0, "左レーンには出ない")
   }
 
-  /// 本文を縦にスクロールしている間は上端の影、本文が右に続くときはミニマップ左の影。
+  /// 先頭の行が上へ隠れている間は上端の影、本文が右に続くときはミニマップ左の影。どちらも本文の上だけに描く。
   func testShadowsFollowTheScrollAndTheWidth() throws {
     let hosted = try hostOverview(numberedLines(100) + String(repeating: "x", count: 400) + "\n")
     let pane = hosted.pane
@@ -152,9 +179,15 @@ final class EditorScrollbarTests: OrbeTestCase {
     pumpMain(until: { pane.scrollShadow.showsTop }, "スクロールすると上端に影")
     hosted.document.scroll(toFirstLine: 99)
     pumpMain(until: { hosted.document.surface.viewport.clipsRight }, "長い行が見える")
-    XCTAssertEqual(
-      pane.scrollShadow.minimapEdge, pane.minimap.frame.minX - pane.scrollShadow.frame.minX,
-      "本文が右に続くときはミニマップ左の影")
+    XCTAssertEqual(pane.scrollShadow.frame.maxX, pane.minimap.frame.minX, "影は本文の上だけ（ミニマップに掛けない）")
+    let edge = try XCTUnwrap(pane.scrollShadow.minimapEdge, "本文が右に続くときはミニマップ左の影")
+    XCTAssertEqual(edge, pane.scrollShadow.bounds.width)
+    hosted.document.scroll(toFirstLine: 3.5)
+    let pixels = try ViewPixels(pane.scrollShadow)
+    XCTAssertGreaterThan(pixels.color(edge - 7, 100).alphaComponent, 0, "6pt の帯の外側（左）に影")
+    XCTAssertEqual(pixels.color(edge - 3, 100).alphaComponent, 0, "帯の中には描かない")
+    XCTAssertGreaterThan(pixels.color(100, 0.5).alphaComponent, 0, "上端の影")
+    XCTAssertEqual(pixels.color(100, 12).alphaComponent, 0, "上端の影は 6pt まで")
     hosted.document.scroll(toFirstLine: 0)
     pumpMain(until: { !pane.scrollShadow.showsTop }, "先頭に戻れば影は消える")
     let narrow = try hostOverview(numberedLines(10))

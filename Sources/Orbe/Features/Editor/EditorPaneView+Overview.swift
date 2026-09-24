@@ -110,11 +110,14 @@ extension EditorPaneView {
     bodyTracking = area
   }
 
+  /// 本体の出入りだけを見る——SwiftUI の骨（サイドバー・列の頭）も自分の出入りを上の pane へ流してくる。
   override func mouseEntered(with event: NSEvent) {
+    guard event.trackingArea === bodyTracking else { return super.mouseEntered(with: event) }
     scrollbar.hovering = true
   }
 
   override func mouseExited(with event: NSEvent) {
+    guard event.trackingArea === bodyTracking else { return super.mouseExited(with: event) }
     scrollbar.hovering = false
   }
 }

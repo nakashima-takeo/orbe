@@ -70,7 +70,7 @@ extension DesignFlowSnapshotTests {
       (
         "scrollbar_track",
         {
-          pane.mouseEntered(with: pane.mouseEvent(.mouseMoved, at: .zero))
+          pane.mouseEntered(with: pane.enterExitEvent(.mouseEntered, area: pane.bodyTracking))
           scrollbar.mouseDown(with: scrollbar.mouseEvent(.leftMouseDown, at: NSPoint(x: 7, y: 300)))
         }
       ),

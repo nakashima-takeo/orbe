@@ -115,9 +115,12 @@ final class EditorMinimapTests: OrbeTestCase {
     XCTAssertFalse(view.isSliderShown, "外へ出れば隠れる")
   }
 
-  /// 帯の外を押すと、その行が本文の中央に来る（ドラッグは続かない）。
+  /// 帯の外を押すと、その行が本文の中央に来る（ドラッグは続かない。横位置は動かさない——VS Code と同じ）。
   func testPressingOutsideTheSliderCentersThatLine() throws {
-    let hosted = try hostOverview(numberedLines(1000))
+    let hosted = try hostOverview(String(repeating: "x", count: 400) + "\n" + numberedLines(1000))
+    let clip = hosted.scroll.contentView
+    clip.scroll(to: NSPoint(x: 300, y: 0))
+    hosted.scroll.reflectScrolledClipView(clip)
     let view = hosted.pane.minimap
     let layout = try XCTUnwrap(view.placement)
     let point = NSPoint(x: 20, y: layout.sliderTop + layout.sliderHeight + 100)
@@ -125,6 +128,7 @@ final class EditorMinimapTests: OrbeTestCase {
     view.mouseDown(with: view.mouseEvent(.leftMouseDown, at: point))
     let visible = hosted.document.viewportLines.visible
     XCTAssertEqual(hosted.firstLine, CGFloat(line) + 0.5 - visible / 2, accuracy: 0.6, "その行が中央")
+    XCTAssertEqual(clip.bounds.minX, 300, "横位置は保つ")
     let after = hosted.firstLine
     view.mouseDragged(with: view.mouseEvent(.leftMouseDragged, at: point.offset(dy: 60)))
     view.mouseUp(with: view.mouseEvent(.leftMouseUp, at: point.offset(dy: 60)))

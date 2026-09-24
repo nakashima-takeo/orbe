@@ -109,11 +109,9 @@ extension EditorPaneView {
     document?.surface.view.frame = surfaceRect
     minimap.frame = minimapRect
     scrollbar.frame = scrollbarRect
-    // 影は本体からスクロールバーを除いた矩形（VS Code の scroll-decoration の幅）。
-    let body = bodyRect
-    scrollShadow.frame = NSRect(
-      x: body.minX, y: body.minY, width: max(0, body.width - scrollbarRect.width),
-      height: body.height)
+    // 影は本文の上だけ（VS Code では不透明のミニマップが上に重なって影を隠す。Orbe のミニマップは地が透けるので、
+    // 影をミニマップに掛けない）。
+    scrollShadow.frame = surfaceRect
     updateShadow()
     searchBarTrailing?.constant = -(rightColumnWidth + Theme.Space.beat)
     // 本体の上のポインタの当たりは本体の矩形（サイドバーの幅で動く）。

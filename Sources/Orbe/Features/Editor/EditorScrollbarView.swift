@@ -114,6 +114,10 @@ final class EditorScrollbarView: NSView {
   private func setThumbShown(_ shown: Bool) {
     guard shown != isThumbShown else { return }
     isThumbShown = shown
+    guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+      thumb.alphaValue = shown ? 1 : 0
+      return
+    }
     NSAnimationContext.runAnimationGroup { context in
       context.duration =
         shown ? Theme.Motion.editorSliderFadeIn : Theme.Motion.editorScrollbarFadeOut

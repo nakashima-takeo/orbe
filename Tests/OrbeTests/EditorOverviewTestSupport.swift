@@ -44,6 +44,16 @@ extension OrbeTestCase {
   func numberedLines(_ n: Int) -> String { (1...n).map { "line \($0)\n" }.joined() }
 }
 
+extension NSView {
+  /// tracking area `area` の出入りの出来事（`trackingArea` がその area を指す）。
+  func enterExitEvent(_ type: NSEvent.EventType, area: NSTrackingArea?) -> NSEvent {
+    NSEvent.enterExitEvent(
+      with: type, location: .zero, modifierFlags: [], timestamp: 0,
+      windowNumber: window?.windowNumber ?? 0, context: nil, eventNumber: 0,
+      trackingNumber: area.map { unsafeBitCast($0, to: Int.self) } ?? 0, userData: nil)!
+  }
+}
+
 /// view を 1 回描いて画素を読む（同じ描画から何か所も読む）。座標は view の pt、y は上から。
 @MainActor
 struct ViewPixels {
