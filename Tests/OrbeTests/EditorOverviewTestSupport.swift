@@ -83,6 +83,18 @@ struct ViewPixels {
     }
     return (peak, sum)
   }
+
+  /// 矩形の中で最も α の高い画素の色（字の色を読む）。
+  func strongest(in rect: NSRect) -> NSColor {
+    var result = NSColor.clear
+    for py in Int(rect.minY * scale)..<Int(rect.maxY * scale) {
+      for px in Int(rect.minX * scale)..<Int(rect.maxX * scale) {
+        let c = rep.colorAt(x: px, y: py)?.usingColorSpace(.sRGB) ?? .clear
+        if c.alphaComponent > result.alphaComponent { result = c }
+      }
+    }
+    return result
+  }
 }
 
 /// 色の見分け（git の印・一致の地）。

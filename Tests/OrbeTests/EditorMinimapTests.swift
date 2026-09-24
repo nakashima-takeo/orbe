@@ -8,8 +8,8 @@ import XCTest
 /// 掴んでドラッグでき、帯の外の押下はその行を中央へ。検索の一致・語の出現・git の印・選択がミニマップに重なる。
 ///
 /// 壊れると何が起きるか。ミニマップが VS Code の密度にならない（字が見えない・行が詰まらない）。帯が掴めない、掴んでも
-/// 本文が付いてこない。帯の外を押すと別の行へ飛ぶ。検索の一致がミニマップに出ない。打鍵のたびに窓ぶんの字を描き直して
-/// 大きな文書で打鍵が重くなる。
+/// 本文が付いてこない。帯の外を押すと別の行へ飛ぶ。検索の一致がミニマップに出ない。長い文書でミニマップが滑ると、字や
+/// 一致の地が別の行の段に出る。字のチャンクの画像は `EditorMinimapTests+Chunks`。
 @MainActor
 final class EditorMinimapTests: OrbeTestCase {
   /// デバイス倍率に依らない、ミニマップの字の左のガター（8 デバイス px）。
@@ -80,16 +80,37 @@ final class EditorMinimapTests: OrbeTestCase {
     pumpMain(
       until: { !hosted.document.roleSpans(in: NSRange(location: 0, length: 6)).isEmpty }, "色付け")
     view.needsDisplay = true
-    let pixels = try ViewPixels(view)
-    let rect = cell(view, row: 0, column: 1)
-    var keyword = NSColor.clear
-    for py in Int(rect.minY * pixels.scale)..<Int(rect.maxY * pixels.scale) {
-      for px in Int(rect.minX * pixels.scale)..<Int(rect.maxX * pixels.scale) {
-        let c = pixels.rep.colorAt(x: px, y: py)?.usingColorSpace(.sRGB) ?? .clear
-        if c.alphaComponent > keyword.alphaComponent { keyword = c }
-      }
-    }
+    let keyword = try ViewPixels(view).strongest(in: cell(view, row: 0, column: 1))
     XCTAssertTrue(Hue.blue(keyword), "struct は keyword の青: \(keyword)")
+  }
+
+  /// 文書がミニマップに収まらず滑っている間も、字と一致の地はその行の段に出る（帯と同じ座標）。行 i は `x` を
+  /// i % 8 + 1 個持つので、字の最後の桁で行を見分ける。
+  func testGlyphsAndMatchesStayOnTheirRowsWhileTheMinimapSlides() throws {
+    let text = (0..<1000).map {
+      [700, 704].contains($0) ? "needle\n" : String(repeating: "x", count: $0 % 8 + 1) + "\n"
+    }.joined()
+    let hosted = try hostOverview(text)
+    let pane = hosted.pane
+    pane.showSearch()
+    pane.search.setNeedle("needle")
+    XCTAssertEqual(pane.search.current, 0, "前提: 行 700 の一致が現在（選択の行には行の地を付けない）")
+    let view = pane.minimap
+    let layout = try XCTUnwrap(view.placement)
+    XCTAssertGreaterThan(layout.startLine, 0, "前提: ミニマップが滑っている")
+    let pixels = try ViewPixels(view)
+    func ink(_ row: Int, _ column: Int) -> CGFloat {
+      pixels.alpha(
+        in: NSRect(x: gutter(view) + CGFloat(column), y: layout.y(ofLine: row), width: 1, height: 2)
+      ).max
+    }
+    for row in [layout.startLine + 1, 690, 697, 710] {
+      XCTAssertGreaterThan(ink(row, row % 8), 0.2, "行 \(row) の最後の字")
+      XCTAssertEqual(ink(row, row % 8 + 1), 0, "行 \(row) の字の後ろは空")
+    }
+    let matchLine = pixels.color(view.bounds.width - 4, layout.y(ofLine: 704) + 1)
+    XCTAssertTrue(Hue.orange(matchLine), "行 704 の一致の行の地: \(matchLine)")
+    XCTAssertFalse(Hue.orange(pixels.color(view.bounds.width - 4, layout.y(ofLine: 703) + 1)))
   }
 
   /// 帯は普段は隠れ、ミニマップの上にポインタがあると現れる。掴んでドラッグすると本文が付いてくる。
@@ -198,57 +219,6 @@ final class EditorMinimapTests: OrbeTestCase {
     XCTAssertTrue(Hue.green(pixels.color(x, 9 * 2 + 1)), "行 10 は追加")
     XCTAssertTrue(Hue.red(pixels.color(x, 14 * 2 + 1)), "削除はその境の上の行（15 行目）")
     XCTAssertEqual(pixels.color(x, 2 * 2 + 1).alphaComponent, 0, "印の無い行")
-  }
-
-  /// 字のチャンク: 打鍵は編集の行のチャンクだけ捨て、行が増えれば編集より後ろのチャンクも捨てる。
-  func testTypingDropsOnlyTheEditedChunkAndNewlinesDropTheChunksAfterIt() throws {
-    let hosted = try hostOverview(numberedLines(300), height: 800)
-    let view = hosted.pane.minimap
-    view.display()
-    let warm = view.cachedChunks
-    XCTAssertTrue(warm.isSuperset(of: [0, 1, 2]), "窓のチャンクを覚えている: \(warm)")
-
-    hosted.document.surface.selectedRange = NSRange(
-      location: hosted.document.lineIndex.start(ofRow: 100), length: 0)
-    hosted.window.makeFirstResponder(hosted.document.surface.responder)
-    hosted.document.surface.responder.keyDown(with: .key("x", []))
-    XCTAssertEqual(warm.subtracting(view.cachedChunks), [1], "行 100 のチャンクだけ捨てる")
-
-    view.display()
-    hosted.document.surface.responder.keyDown(with: .key("\n", []))
-    XCTAssertEqual(view.cachedChunks.filter { $0 >= 1 }, [], "行が増えれば以降を捨てる")
-    XCTAssertTrue(view.cachedChunks.contains(0), "手前は残る")
-  }
-
-  /// 字のチャンクの画像は上限までしか覚えず、超えたら最も長く使っていないものから捨てる——1MB・50 万行の文書を上限の
-  /// 3 倍のチャンクぶん通し、末尾まで飛んでも上限を超えない。最近の窓は残り、最初のチャンクは捨てられている。
-  func testChunkImagesStayWithinTheCapacityAndKeepTheRecentOnes() throws {
-    let hosted = try hostOverview(String(repeating: "x\n", count: 500_000))
-    let view = hosted.pane.minimap
-    let document = hosted.document
-    let capacity = MinimapChunks.capacity
-    func show(_ line: Int) throws -> ClosedRange<Int> {
-      document.scroll(toFirstLine: CGFloat(line))
-      view.display()
-      XCTAssertLessThanOrEqual(view.cachedChunks.count, capacity, "行 \(line)")
-      let lines = try XCTUnwrap(view.placement).lines
-      let chunk = MinimapChunks.lines
-      return (lines.lowerBound / chunk)...((lines.upperBound - 1) / chunk)
-    }
-    var seen = Set<Int>()
-    var recent: ClosedRange<Int>?
-    var line = 0
-    while line < 3 * capacity * MinimapChunks.lines {
-      recent = try show(line)
-      seen.formUnion(view.cachedChunks)
-      line += 150
-    }
-    XCTAssertGreaterThan(seen.count, 2 * capacity, "上限を超える数のチャンクを通った")
-    XCTAssertFalse(view.cachedChunks.contains(0), "最初のチャンクは捨てた")
-    let last = try show(document.lineIndex.lineCount - 1)
-    XCTAssertTrue(Set(last).isSubset(of: view.cachedChunks), "末尾の窓は覚えている")
-    XCTAssertTrue(
-      Set(try XCTUnwrap(recent)).isSubset(of: view.cachedChunks), "直前に見ていた窓は残る")
   }
 
   /// 行を丸ごと選ぶと（改行まで）、その行に選択の行の地が付く（VS Code は範囲の終わりの行まで数える）。
