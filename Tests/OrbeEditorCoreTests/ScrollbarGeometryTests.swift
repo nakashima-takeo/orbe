@@ -59,7 +59,6 @@ final class ScrollbarGeometryTests: XCTestCase {
     XCTAssertEqual(OverviewRuler.lane(.left, width: 14, scale: 1).width, 4)
     XCTAssertEqual(OverviewRuler.lane(.center, width: 14, scale: 1).x, 5)
     XCTAssertEqual(OverviewRuler.lane(.center, width: 14, scale: 1).width, 5)
-    XCTAssertEqual(OverviewRuler.lane(.right, width: 14, scale: 1).x, 10)
     XCTAssertEqual(OverviewRuler.lane(.full, width: 14, scale: 2).width, 27)
     XCTAssertEqual(OverviewRuler.lane(.center, width: 14, scale: 2).width, 9)
   }

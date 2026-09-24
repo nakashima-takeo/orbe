@@ -11,10 +11,9 @@ public struct OverviewRuler: Equatable, Sendable {
   /// 検索の一致がこれを超えると、ruler は近い行をまとめた近似になり、ミニマップには現在の一致だけが出る。
   public static let approximateFindMatchCount = 1000
 
-  public enum Lane: Sendable, CaseIterable {
+  public enum Lane: Sendable {
     case left
     case center
-    case right
     case full
   }
 
@@ -42,7 +41,8 @@ public struct OverviewRuler: Equatable, Sendable {
     self.scale = scale
   }
 
-  /// レーンの x と幅（デバイス px）。幅 `width` pt の左端 1 デバイス px は縁で、残りを 3 等分する。
+  /// レーンの x と幅（デバイス px）。幅 `width` pt の左端 1 デバイス px は縁で、残りを 3 等分する（右の 1/3 は VS Code では
+  /// 診断の印の場所で、Orbe は使わない）。
   public static func lane(_ lane: Lane, width: CGFloat, scale: CGFloat) -> (x: Int, width: Int) {
     let remaining = Int(width * scale) - 1
     let side = remaining / 3
@@ -50,7 +50,6 @@ public struct OverviewRuler: Equatable, Sendable {
     switch lane {
     case .left: return (1, side)
     case .center: return (1 + side, center)
-    case .right: return (1 + side + center, side)
     case .full: return (1, remaining)
     }
   }

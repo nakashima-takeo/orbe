@@ -59,7 +59,7 @@ extension Theme.Color {
   /// （editorOverviewRuler.wordHighlightTextForeground）。
   static let editorRulerFind = editorDynA(light: 0xd18616, dark: 0xd18616, alpha: 0.49)
   static let editorRulerOccurrence = editorDynA(light: 0xa0a0a0, dark: 0xa0a0a0, alpha: 0.8)
-  /// 本文を縦にスクロールしている間の上端の影の色（scrollbar.shadow）。
+  /// 先頭の行が上へ隠れている間の本文の上端の影の色（scrollbar.shadow）。
   static let editorScrollShadow = editorDyn(light: 0xdddddd, dark: 0x000000)
   /// 本文が右に続くときのミニマップ左端の影の色（α 込み。ぼかし 6）。
   static let editorMinimapShadow = editorDynA(light: 0x000000, dark: 0x000000, alpha: 0.08)
@@ -181,7 +181,7 @@ extension Theme.Motion {
   static let spineLook: Double = 0.20
   /// 位置ドットの幅・色の遷移。
   static let faceDot: Double = 0.24
-  /// ミニマップの帯とスクロールバーのつまみが現れる（VS Code の opacity 100ms linear）。
+  /// ミニマップの帯が現れる・消える、スクロールバーのつまみが現れる（VS Code の opacity 100ms linear）。
   static let editorSliderFadeIn: Double = 0.1
   /// スクロールバーのつまみが消える（800ms linear）。スクロールが止まってから `editorScrollbarHideDelay` 後に始まる。
   static let editorScrollbarFadeOut: Double = 0.8

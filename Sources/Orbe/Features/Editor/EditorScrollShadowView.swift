@@ -1,6 +1,6 @@
 import AppKit
 
-/// 本体に重ねる影（受動）——本文を縦にスクロールしている間の上端の影（VS Code `ScrollDecorationViewPart`: 高さ 6、
+/// 本体に重ねる影（受動）——先頭の行が上へ隠れている間の本文の上端の影（VS Code `ScrollDecorationViewPart`: 高さ 6、
 /// `box-shadow: 0 6px 6px -6px inset`）と、本文が右にまだ続くときのミニマップ左端の影（`minimap-shadow-visible`:
 /// ミニマップの左 6 の帯の外側にぼかし 6 の影）。影の濃さは CSS のぼかし（σ = 3 のガウス）を縦・横の勾配で写す。
 final class EditorScrollShadowView: NSView {

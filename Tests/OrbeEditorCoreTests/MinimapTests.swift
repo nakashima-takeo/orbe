@@ -53,8 +53,7 @@ final class MinimapTests: XCTestCase {
 
   func testWidthFollowsTheTextWidthUpToTheMaximum() {
     XCTAssertEqual(
-      MinimapLayout.width(remaining: 631, charWidth: 7, scrollbar: 14, maxWidth: 120),
-      floor((631 - 16) / 8) + 8)
+      MinimapLayout.width(remaining: 631, charWidth: 7, scrollbar: 14, maxWidth: 120), 84)
     XCTAssertEqual(
       MinimapLayout.width(remaining: 1500, charWidth: 7, scrollbar: 14, maxWidth: 120), 120)
     XCTAssertEqual(MinimapLayout.width(remaining: 0, charWidth: 7, scrollbar: 14, maxWidth: 120), 8)
