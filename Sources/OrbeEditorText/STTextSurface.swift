@@ -185,7 +185,7 @@ final class STTextSurface: NSObject, TextSurface {
   /// 行の中心を clip の中央へ置き（`anchor`）、それから列が横に見えるところまで寄せる（縦はもう見えているので動かない）。
   func scrollToCenter(_ offset: Int) {
     let location = min(max(0, offset), length)
-    anchor(location, x: clipView.bounds.minX) { frame in
+    anchor(location) { frame in
       frame.midY - self.clipView.bounds.height / 2
     }
     textView.scrollRangeToVisible(NSRange(location: location, length: 0))
@@ -194,7 +194,7 @@ final class STTextSurface: NSObject, TextSurface {
   /// 行頭の行を、その高さの `hiddenFraction` ぶん隠して先頭へ。横位置は保つ。
   func scroll(toTop offset: Int, hiddenFraction: CGFloat) {
     let fraction = min(max(0, hiddenFraction), 1)
-    anchor(min(max(0, offset), length), x: clipView.bounds.minX) { frame in
+    anchor(min(max(0, offset), length)) { frame in
       frame.minY + fraction * frame.height
     }
   }
@@ -204,7 +204,8 @@ final class STTextSurface: NSObject, TextSurface {
   /// viewport の行片を置いた後に末尾を layout し直すので、画面の行片の view が古い位置に残る（本文と、矩形から描く
   /// 装備・強調の地・クリックの当たりが食い違う）。その行だけを layout して位置を得て（viewport の relocate は重いので
   /// 使わない）、置き直しと layout を行の位置が動かなくなるまで繰り返す（推定が揺れ続けても止まるよう回数に上限を置く）。
-  private func anchor(_ offset: Int, x: CGFloat, y: (CGRect) -> CGFloat) {
+  private func anchor(_ offset: Int, y: (CGRect) -> CGFloat) {
+    let x = clipView.bounds.minX
     let manager = textView.textContentManager
     guard let location = manager.location(manager.documentRange.location, offsetBy: offset)
     else { return }
@@ -286,7 +287,7 @@ final class STTextSurface: NSObject, TextSurface {
     }
     if let current = measureViewport(), current != viewport {
       viewport = current
-      delegate?.surfaceDidScroll(self)
+      delegate?.surfaceDidChangeViewport(self)
     }
   }
 

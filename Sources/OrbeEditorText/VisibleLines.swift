@@ -79,7 +79,7 @@ struct VisibleLines {
 
   /// オフセットを含む行（区間の終わりは次の行が持つ。本文の終わりは最終行）。layout が無ければ nil。
   func line(containing offset: Int) -> LineFrame? {
-    guard let fragment = fragment(containingLineStart: offset) else { return nil }
+    guard let fragment = fragment(containing: offset) else { return nil }
     let fragmentStart = NSRange(fragment.rangeInElement, in: contentManager).location
     return lineFrames(of: fragment, start: fragmentStart).last { $0.start <= offset }
   }
@@ -96,13 +96,13 @@ struct VisibleLines {
 
   /// 最終行（本文が改行で終わるときは末尾の空行）。
   func lastLine() -> LineFrame? {
-    guard let fragment = fragment(containingLineStart: documentLength) else { return nil }
+    guard let fragment = fragment(containing: documentLength) else { return nil }
     let start = NSRange(fragment.rangeInElement, in: contentManager).location
     return lineFrames(of: fragment, start: start).last
   }
 
   /// `offset` を含む layout fragment（本文の終わりは最後の段落の fragment）。
-  private func fragment(containingLineStart offset: Int) -> NSTextLayoutFragment? {
+  private func fragment(containing offset: Int) -> NSTextLayoutFragment? {
     let probe = offset < documentLength ? offset : max(0, documentLength - 1)
     guard
       let location = contentManager.location(layoutManager.documentRange.location, offsetBy: probe)

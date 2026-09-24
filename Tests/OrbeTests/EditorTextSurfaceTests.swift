@@ -184,8 +184,8 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     func surfaceDidLayoutViewport(_ surface: any TextSurface) {
       inner.surfaceDidLayoutViewport(surface)
     }
-    func surfaceDidScroll(_ surface: any TextSurface) {
-      inner.surfaceDidScroll(surface)
+    func surfaceDidChangeViewport(_ surface: any TextSurface) {
+      inner.surfaceDidChangeViewport(surface)
     }
     func surfaceDidChangeSelection(_ surface: any TextSurface) {
       inner.surfaceDidChangeSelection(surface)

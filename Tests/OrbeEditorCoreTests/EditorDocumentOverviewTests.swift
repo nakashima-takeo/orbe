@@ -103,6 +103,23 @@ final class EditorDocumentOverviewTests: XCTestCase {
     XCTAssertEqual(plainChanges.map(\.changedRoles), [IndexSet(integersIn: 1..<3)], "文法が無ければ置換後の区間")
   }
 
+  /// 俯瞰の式が読む「先頭行（小数）」は viewport の行頭オフセットと隠れ割合から、その逆の「この行を先頭に」は整数部の
+  /// 行頭と小数部の割合へ分けて面に渡す（行の範囲に収める）。
+  func testViewportLinesAndScrollToFirstLineMapBetweenLinesAndOffsets() throws {
+    let opened = try open("v.txt", (0..<10).map { "row \($0)\n" }.joined())
+    let (document, surface) = (opened.document, opened.surface)
+    surface.viewport = TextViewport(
+      firstVisible: document.lineIndex.start(ofRow: 3), hiddenFraction: 0.25, visibleLines: 4.5)
+    XCTAssertEqual(document.viewportLines.first, 3.25)
+    XCTAssertEqual(document.viewportLines.visible, 4.5)
+
+    document.scroll(toFirstLine: 7.75)
+    document.scroll(toFirstLine: -3)
+    document.scroll(toFirstLine: 99)
+    XCTAssertEqual(surface.toppedAt.map(\.offset), [document.lineIndex.start(ofRow: 7), 0, document.lineIndex.length])
+    XCTAssertEqual(surface.toppedAt.map(\.hiddenFraction), [0.75, 0, 0], "先頭の前・最終行の先は端に収める")
+  }
+
   func testSelectionAndViewportChangesAreForwarded() throws {
     let opened = try open("s.txt", "abc")
     let (document, surface) = (opened.document, opened.surface)
@@ -111,7 +128,7 @@ final class EditorDocumentOverviewTests: XCTestCase {
     document.onSelectionChange = { selections += 1 }
     document.onViewportChange = { viewports += 1 }
     surface.selectedRange = NSRange(location: 1, length: 1)
-    surface.delegate?.surfaceDidScroll(surface)
+    surface.delegate?.surfaceDidChangeViewport(surface)
     XCTAssertEqual(selections, 1)
     XCTAssertEqual(viewports, 1)
   }

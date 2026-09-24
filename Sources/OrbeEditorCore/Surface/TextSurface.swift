@@ -74,13 +74,13 @@ public protocol TextSurfaceDelegate: AnyObject {
   func surface(_ surface: any TextSurface, focusDidChange focused: Bool)
   func surfaceDidLayoutViewport(_ surface: any TextSurface)
   /// `viewport` が変わった（スクロール・窓の高さ）。
-  func surfaceDidScroll(_ surface: any TextSurface)
+  func surfaceDidChangeViewport(_ surface: any TextSurface)
   func surfaceDidChangeSelection(_ surface: any TextSurface)
 }
 
 /// 強調の地の種類。重ね順は下から 選択文字列の出現 → 語の出現 → 検索の一致 → 現在の一致（現在の一致の行全体の地は
 /// それらより下）。
-public enum TextHighlightKind: CaseIterable, Sendable {
+public enum TextHighlightKind: Sendable {
   case selectionOccurrence
   case wordOccurrence
   case findMatch

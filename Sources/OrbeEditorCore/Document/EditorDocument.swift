@@ -260,7 +260,7 @@ extension EditorDocument: TextSurfaceDelegate {
     fresh = set
   }
 
-  public func surfaceDidScroll(_ surface: any TextSurface) {
+  public func surfaceDidChangeViewport(_ surface: any TextSurface) {
     onViewportChange?()
   }
 
