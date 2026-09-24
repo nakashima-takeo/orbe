@@ -62,6 +62,14 @@ final class SearchBar: NSView {
     model.focusToken &+= 1
   }
 
+  /// 入力欄に焦点があれば文字列を全選択する（焦点がこれから入るなら、入るときに AppKit が全選択する）。
+  func selectNeedle() {
+    guard let editor = window?.firstResponder as? NSTextView, editor.isDescendant(of: self) else {
+      return
+    }
+    editor.selectAll(nil)
+  }
+
   /// ヒット件数表示を更新（selected/total は呼ぶ側が押す。端末は libghostty の通知由来で、負値は nil で渡る）。
   /// `limited` は呼ぶ側が一致を上限で打ち切った（件数を「total+」と見せる）。
   func updateCount(selected: Int?, total: Int?, limited: Bool = false) {

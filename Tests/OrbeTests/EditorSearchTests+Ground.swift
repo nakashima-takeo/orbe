@@ -96,14 +96,16 @@ extension EditorSearchTests {
     _ = try probe(pane) { try !PaneProbe.same($0.rgb(moved.x, y: moved.y), ground) }
   }
 
-  /// 件数の位置は選択から導く——選択がちょうど一致ならその番号、本文をクリックして一致から外れれば位置は無い（バーは
-  /// 「?/N」。VS Code と同じ）。Enter はキャレットの先の一致へ進む。
+  /// 件数の位置は選択から導く——選択がちょうど一致ならその番号、一致でなければ位置は無い（バーは「?/N」）。本文を
+  /// クリックして一致から外れても同じ。Enter はキャレットの先の一致へ進む。
   func testTheCountPositionFollowsTheSelection() throws {
     let hosted = try host("foo bar\nfoo baz\nFOO\n")
     let pane = hosted.pane
     let seen = counts(pane)
     pane.showSearch()
-    pane.search.setNeedle("foo")
+    XCTAssertEqual(pane.search.needle, "foo", "前提: キャレットの語が種")
+    XCTAssertNil(seen().last?.0, "キャレットは一致ではない")
+    pane.search.next()
     XCTAssertEqual(seen().last?.0, 1)
 
     hosted.document.surface.selectedRange = NSRange(location: 12, length: 0)

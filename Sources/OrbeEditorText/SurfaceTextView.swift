@@ -28,6 +28,12 @@ final class SurfaceTextView: STTextView {
     return range.length > 0 && upstream ? range.location : NSMaxRange(range)
   }
 
+  /// Esc（変換中でない。変換中は input context が先に飲む）は面では使わない——上流は補完を開くが、面は補完を持たない。
+  /// 上の responder へ渡し、載せる側が使えるようにする。
+  override func cancelOperation(_ sender: Any?) {
+    nextResponder?.tryToPerform(#selector(cancelOperation(_:)), with: sender)
+  }
+
   /// 押している間に view が窓から外れると mouse-up は届かない（文書の切り替えが面を外す）ので、ラッチは
   /// 次の押下でも解く。input context へは上流と同じく先に通すが、同じイベントを 2 回渡さない（上流に落ちる
   /// クリックは上流が通す）。

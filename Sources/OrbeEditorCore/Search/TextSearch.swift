@@ -1,7 +1,7 @@
 import Foundation
 
-/// ファイル内検索の規則——needle の一致の列と、選択に対する「現在／次／前」。状態を持たず、「現在の一致」は
-/// 常に選択の関数（選択が一致 i と一致すれば i、そうでなければ選択の先頭以降で最初の一致）。
+/// ファイル内検索の規則——needle の一致の列と、位置・選択に対する「現在／次／前」（VS Code `FindModel` と同じ起点）。
+/// 状態を持たず、「現在の一致」は選択とちょうど重なる一致。
 public enum TextSearch {
   /// 一致を集める上限（VS Code の MATCHES_LIMIT）。ここで打ち切り、件数は「上限+」と見せる。
   public static let limit = 19999
@@ -37,27 +37,39 @@ public enum TextSearch {
     return low < matches.count && matches[low] == selection ? low : nil
   }
 
-  /// 選択が一致 i と一致すれば i。そうでなければ選択の先頭以降で最初の一致（無ければ先頭へ循環）。
-  public static func current(in matches: [NSRange], from selection: NSRange) -> Int? {
+  /// 位置 `offset` 以降に始まる最初の一致（無ければ先頭へ循環。VS Code `matchAfterPosition`）。
+  public static func first(in matches: [NSRange], from offset: Int) -> Int? {
     guard !matches.isEmpty else { return nil }
-    if let exact = matches.firstIndex(of: selection) { return exact }
-    return matches.firstIndex { $0.location >= selection.location } ?? 0
+    let index = partition(matches) { $0.location >= offset }
+    return index < matches.count ? index : 0
   }
 
-  /// 選択が一致 i と一致すれば i + 1（末尾で先頭へ循環）、そうでなければ `current`。
+  /// 位置 `offset` までに終わる最後の一致（無ければ末尾へ循環。VS Code `matchBeforePosition`）。
+  public static func last(in matches: [NSRange], upTo offset: Int) -> Int? {
+    guard !matches.isEmpty else { return nil }
+    let index = partition(matches) { NSMaxRange($0) > offset }
+    return index > 0 ? index - 1 : matches.count - 1
+  }
+
+  /// Enter の行き先——選択の終わり以降に始まる最初の一致（VS Code `moveToNextMatch`。選択が一致ならその次、キャレットが
+  /// 一致の中ならその次の一致）。
   public static func next(in matches: [NSRange], from selection: NSRange) -> Int? {
-    guard !matches.isEmpty else { return nil }
-    if let exact = matches.firstIndex(of: selection) { return (exact + 1) % matches.count }
-    return current(in: matches, from: selection)
+    first(in: matches, from: NSMaxRange(selection))
   }
 
-  /// 選択が一致 i と一致すれば i − 1（先頭で末尾へ循環）、そうでなければ選択の先頭より前で最後の一致
-  /// （無ければ末尾へ循環）。
+  /// ⇧Enter の行き先——選択の先頭までに終わる最後の一致（VS Code `moveToPrevMatch`）。
   public static func previous(in matches: [NSRange], from selection: NSRange) -> Int? {
-    guard !matches.isEmpty else { return nil }
-    if let exact = matches.firstIndex(of: selection) {
-      return (exact + matches.count - 1) % matches.count
+    last(in: matches, upTo: selection.location)
+  }
+
+  /// 昇順で重ならない一致の列で、`isAfter` が初めて真になる位置（無ければ件数）。
+  private static func partition(_ matches: [NSRange], _ isAfter: (NSRange) -> Bool) -> Int {
+    var low = 0
+    var high = matches.count
+    while low < high {
+      let mid = (low + high) / 2
+      if isAfter(matches[mid]) { high = mid } else { low = mid + 1 }
     }
-    return matches.lastIndex { $0.location < selection.location } ?? matches.count - 1
+    return low
   }
 }
