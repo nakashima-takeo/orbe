@@ -23,6 +23,8 @@ final class GutterGroundView: NSView {
 /// 起点が .zero だと余白を保てず、面が器より余白の分だけ長くなって最下行が切れる）。面の地はここが本文の下に
 /// 敷く——ガターが本文の上に敷く矩形（`groundHole`）だけを除いて。同じ色を重ねないので透過の濃度が揃う。
 final class SurfaceContainerView: NSView {
+  /// 器へ渡されたホイールの出来事の行き先（面のスクロール）。
+  weak var scrollTarget: NSScrollView?
   var topInset: CGFloat = 0 {
     didSet { needsLayout = true }
   }
@@ -47,6 +49,12 @@ final class SurfaceContainerView: NSView {
       path.windingRule = .evenOdd
     }
     path.fill()
+  }
+
+  /// 面の外（俯瞰など）から渡されたホイールを面のスクロールへ（契約: 載せる側は面の view へ渡すだけでよい）。
+  override func scrollWheel(with event: NSEvent) {
+    guard let scrollTarget else { return super.scrollWheel(with: event) }
+    scrollTarget.scrollWheel(with: event)
   }
 
   override func layout() {

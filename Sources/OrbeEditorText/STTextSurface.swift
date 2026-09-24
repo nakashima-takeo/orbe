@@ -67,6 +67,7 @@ final class STTextSurface: NSObject, TextSurface {
     scrollView.documentView = textView
     clipView.lastLineTop = { [weak self] in self?.lastLineTop }
     container.addSubview(scrollView)
+    container.scrollTarget = scrollView
     // clear にすると gutter も clear になり、NSVisualEffectView の地が敷かれない（器の veil が透ける）。
     textView.backgroundColor = .clear
     // 本文はガターの右端から始める（既定の 5pt の余白を持たない）。

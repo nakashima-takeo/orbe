@@ -143,11 +143,11 @@ final class EditorMinimapView: NSView {
 
   /// 俯瞰の上のホイール／トラックパッドは本文のスクロールへそのまま渡す（右端の列がスクロールの死角にならない）。
   override func scrollWheel(with event: NSEvent) {
-    guard let scroll = document?.surface.responder.enclosingScrollView else {
+    guard let surface = document?.surface else {
       super.scrollWheel(with: event)
       return
     }
-    scroll.scrollWheel(with: event)
+    surface.view.scrollWheel(with: event)
   }
 
   /// 帯の中なら掴んでドラッグを始め、帯の外ならその行を本文の中央へ（ドラッグは続かない）。

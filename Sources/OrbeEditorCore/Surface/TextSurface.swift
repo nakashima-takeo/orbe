@@ -4,7 +4,8 @@ import AppKit
 /// 文書は面の delegate として編集を受け、色は役割付き区間として面へ渡す（面は役割→色だけを知る）。
 @MainActor
 public protocol TextSurface: AnyObject {
-  /// 器へ載せる view（スクロールを含む全体）。
+  /// 器へ載せる view（スクロールを含む全体）。面の外（俯瞰など）で起きたホイールの出来事をこの view の `scrollWheel`
+  /// へ渡すと、面は自分のスクロールへ渡す。
   var view: NSView { get }
   /// first responder にする view。
   var responder: NSView { get }

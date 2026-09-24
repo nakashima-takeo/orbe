@@ -145,11 +145,11 @@ final class EditorScrollbarView: NSView {
   }
 
   override func scrollWheel(with event: NSEvent) {
-    guard let scroll = document?.surface.responder.enclosingScrollView else {
+    guard let surface = document?.surface else {
       super.scrollWheel(with: event)
       return
     }
-    scroll.scrollWheel(with: event)
+    surface.view.scrollWheel(with: event)
   }
 
   /// つまみの中なら掴む。トラックならつまみの中央がそこへ来るよう飛び、飛んだ後の状態を起点に同じ押下でドラッグへ移る。
