@@ -127,7 +127,7 @@ final class EditorMinimapTests: OrbeTestCase {
     XCTAssertEqual(hosted.firstLine, CGFloat(line) + 0.5 - visible / 2, accuracy: 0.6, "その行が中央")
     let after = hosted.firstLine
     view.mouseDragged(with: view.mouseEvent(.leftMouseDragged, at: point.offset(dy: 60)))
-    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    view.mouseUp(with: view.mouseEvent(.leftMouseUp, at: point.offset(dy: 60)))
     XCTAssertEqual(hosted.firstLine, after, "帯の外の押下ではドラッグしない")
   }
 
