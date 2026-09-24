@@ -3,7 +3,8 @@ import OrbeEditorCore
 
 /// ミニマップの字——64 行のチャンクごとに、字形を構文の色で合成した画像を覚えて返す。窓に新しく入ったチャンクだけ組み、
 /// 本文が変われば編集の行と役割が変わった区間のチャンクを捨て、行が増減したときだけ編集の行より後ろも捨てる（1MB の
-/// 文書で打鍵ごとに窓ぶんを組み直さない）。倍率・外観・幅・インデント単位が変われば全部捨てる。
+/// 文書で打鍵ごとに窓ぶんを組み直さない）。窓から外れたチャンクは捨てる。倍率・外観・幅・インデント単位が変われば
+/// 全部捨てる。
 @MainActor
 final class MinimapChunks {
   static let lines = 64
@@ -58,6 +59,13 @@ final class MinimapChunks {
     let first = index.point(at: range.location).row / Self.lines
     let last = index.point(at: max(range.location, NSMaxRange(range) - 1)).row / Self.lines
     for chunk in first...last { images[chunk] = nil }
+  }
+
+  /// 窓のチャンク（と前後 1 つ）だけを残し、外は捨てる。窓の外を持ち続けると、文書を端から端まで通したときにファイルの
+  /// 大きさに比例して画像が溜まる。前後 1 つの余裕は、境目での往復で組み直しを繰り返さないため。
+  func retain(_ chunks: ClosedRange<Int>) {
+    let kept = (chunks.lowerBound - 1)...(chunks.upperBound + 1)
+    images = images.filter { kept.contains($0.key) }
   }
 
   func image(_ chunk: Int, document: EditorDocument, canvas: Canvas) -> CGImage? {

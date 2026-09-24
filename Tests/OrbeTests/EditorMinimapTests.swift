@@ -216,6 +216,21 @@ final class EditorMinimapTests: OrbeTestCase {
     XCTAssertTrue(view.cachedChunks.contains(0), "手前は残る")
   }
 
+  /// 窓から外れたチャンクの画像は捨てる（文書を端から端まで通しても、覚えているのは窓とその前後だけ）。
+  func testChunksOutsideTheWindowAreDropped() throws {
+    let hosted = try hostOverview(numberedLines(3000))
+    let view = hosted.pane.minimap
+    view.display()
+    XCTAssertTrue(view.cachedChunks.contains(0))
+    hosted.document.scroll(toFirstLine: 2990)
+    view.display()
+    let layout = try XCTUnwrap(view.placement)
+    let window = (layout.lines.lowerBound / 64 - 1)...((layout.lines.upperBound - 1) / 64 + 1)
+    XCTAssertFalse(view.cachedChunks.contains(0), "先頭のチャンクは捨てた")
+    XCTAssertTrue(
+      view.cachedChunks.allSatisfy(window.contains), "窓とその前後だけ: \(view.cachedChunks)")
+  }
+
   /// 行を丸ごと選ぶと（改行まで）、その行に選択の行の地が付く（VS Code は範囲の終わりの行まで数える）。
   func testSelectingWholeLinesHighlightsTheirRows() throws {
     let hosted = try hostOverview(numberedLines(20))
