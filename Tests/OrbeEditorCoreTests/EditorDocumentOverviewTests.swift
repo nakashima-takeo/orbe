@@ -135,7 +135,7 @@ final class EditorDocumentOverviewTests: XCTestCase {
     let lineStart = document.lineIndex.start(ofRow: 1)
     XCTAssertEqual(
       document.word(at: NSRange(location: lineStart + 1800, length: 0)),
-      NSRange(location: lineStart + 1300, length: 601), "窓（前 500）の端で切れる")
+      NSRange(location: lineStart + 1301, length: 600), "窓（前 499）の端で切れる")
   }
 
   func testSelectionAndViewportChangesAreForwarded() throws {

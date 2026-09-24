@@ -34,15 +34,16 @@ public enum Occurrences {
     }
   }
 
-  /// 語を探す行の長さの上限（VS Code `getWordAtText` の maxLen）。これより長い行はキャレットの前後半分ずつの窓で探す。
+  /// 語を探す行の長さの上限（VS Code `getWordAtText` の maxLen）。これより長い行はキャレットの周りの窓（`wordWindow`）で探す。
   public static let maxLineLength = 1000
 
-  /// 語を探す窓——行（`line`、改行を除く）が長ければキャレットの前後 `maxLineLength / 2` ずつ（VS Code と同じく、窓の
-  /// 端にかかる語は窓で切れる）。
+  /// 語を探す窓——行（`line`、改行を除く）が長ければ [キャレット − 499, キャレット + 501)（VS Code は 1 始まりの桁の
+  /// 前後 `maxLineLength / 2`。窓の端にかかる語は窓で切れる）。
   public static func wordWindow(caret: Int, line: NSRange) -> NSRange {
     guard line.length > maxLineLength else { return line }
-    let start = max(line.location, caret - maxLineLength / 2)
-    let end = min(NSMaxRange(line), caret + maxLineLength / 2)
+    let column = caret + 1
+    let start = max(line.location, column - maxLineLength / 2)
+    let end = min(NSMaxRange(line), column + maxLineLength / 2)
     return NSRange(location: start, length: max(0, end - start))
   }
 

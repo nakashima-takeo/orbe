@@ -110,13 +110,17 @@ final class OccurrencesTests: XCTestCase {
     XCTAssertEqual(words("１.５"), ["１", "５"], "全角数字は数の語にならない")
   }
 
-  /// 長い行は、キャレットの前後 500 ずつの窓で語を探す（VS Code の maxLen 1000。窓の端の語は窓で切れる）。
+  /// 長い行は [キャレット − 499, キャレット + 501) の窓で語を探す（VS Code の maxLen 1000 を 1 始まりの桁の前後に
+  /// 取る。窓の端の語は窓で切れる）。
   func testLongLinesAreSearchedInAWindowAroundTheCaret() {
     let line = NSRange(location: 10, length: 3000)
     XCTAssertEqual(
-      Occurrences.wordWindow(caret: 2000, line: line), NSRange(location: 1500, length: 1000))
+      Occurrences.wordWindow(caret: 2000, line: line), NSRange(location: 1501, length: 1000))
     XCTAssertEqual(
-      Occurrences.wordWindow(caret: 20, line: line), NSRange(location: 10, length: 510), "行頭で止まる")
+      Occurrences.wordWindow(caret: 20, line: line), NSRange(location: 10, length: 511), "行頭で止まる")
+    XCTAssertEqual(
+      Occurrences.wordWindow(caret: 2900, line: line), NSRange(location: 2401, length: 609),
+      "行末で止まる")
     let short = NSRange(location: 10, length: 1000)
     XCTAssertEqual(Occurrences.wordWindow(caret: 500, line: short), short, "上限以下なら行全体")
   }
