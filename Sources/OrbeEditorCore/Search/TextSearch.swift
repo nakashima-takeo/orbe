@@ -26,6 +26,17 @@ public enum TextSearch {
   /// 一致の列が上限で打ち切られたか（ちょうど上限の件数も打ち切りとして見せる——VS Code と同じ）。
   public static func isLimited(_ matches: [NSRange]) -> Bool { matches.count >= limit }
 
+  /// 選択とちょうど重なる一致（二分探索。一致は昇順）。
+  public static func exact(in matches: [NSRange], selection: NSRange) -> Int? {
+    var low = 0
+    var high = matches.count
+    while low < high {
+      let mid = (low + high) / 2
+      if matches[mid].location < selection.location { low = mid + 1 } else { high = mid }
+    }
+    return low < matches.count && matches[low] == selection ? low : nil
+  }
+
   /// 選択が一致 i と一致すれば i。そうでなければ選択の先頭以降で最初の一致（無ければ先頭へ循環）。
   public static func current(in matches: [NSRange], from selection: NSRange) -> Int? {
     guard !matches.isEmpty else { return nil }

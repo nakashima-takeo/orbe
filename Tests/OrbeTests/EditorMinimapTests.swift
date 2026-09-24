@@ -165,7 +165,7 @@ final class EditorMinimapTests: OrbeTestCase {
     XCTAssertGreaterThan(pane.search.matches.count, 1000)
     XCTAssertTrue(pane.minimap.decorations.approximatesFindMatches)
     hosted.document.surface.selectedRange = NSRange(
-      location: hosted.document.lineIndex.start(ofRow: 50) + 1, length: 0)
+      location: hosted.document.lineIndex.start(ofRow: 50) + 2, length: 1)
     let current = try XCTUnwrap(pane.search.current)
     let row = hosted.document.lineIndex.point(at: pane.search.matches[current].location).row
     let view = pane.minimap

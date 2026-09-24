@@ -211,6 +211,22 @@ final class EditorSearchTests: OrbeTestCase {
     XCTAssertEqual(pane.search.needle, "", "改行をまたぐ選択は種にならない")
   }
 
+  /// 選択が空なら、キャレットの語が種になる（VS Code の seedSearchStringFromSelection の既定）。語の外なら空のまま。
+  func testTheWordAtTheCaretSeedsTheNeedleWhenNothingIsSelected() throws {
+    let hosted = try host("alpha beta\nbeta  \n")
+    let pane = hosted.pane
+    hosted.document.surface.selectedRange = NSRange(location: 7, length: 0)
+    XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
+    XCTAssertEqual(pane.search.needle, "beta")
+    XCTAssertEqual(pane.searchBar?.needle, "beta")
+    XCTAssertEqual(pane.search.matches.count, 2)
+    pane.closeSearch()
+
+    hosted.document.surface.selectedRange = NSRange(location: 16, length: 0)
+    pane.showSearch()
+    XCTAssertEqual(pane.search.needle, "", "語の外（行末の空白）では種が無い")
+  }
+
   /// Esc で閉じると一致の地は消え、選択は残り、焦点はテキスト面へ戻る。閉じた後は、残った選択の文字列の他の出現に
   /// 選択文字列の出現の地が付く（検索バーが同じ文字列を探している間は出ない）。
   func testClosingKeepsTheSelectionAndReturnsFocusToTheText() throws {

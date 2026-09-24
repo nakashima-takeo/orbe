@@ -21,7 +21,13 @@ final class SearchBar: NSView {
   var onClose: (() -> Void)? { didSet { model.onClose = onClose } }
   /// 入力欄の焦点が変わった。
   var onFocusChange: (() -> Void)? { didSet { model.onFocusChange = onFocusChange } }
-  /// 入力欄の文字列。置くのは表示への写しで、検索を起こすのは呼ぶ側（エディターが選択文字列を種にするとき）。
+  /// 位置の無い件数を「?/total」と出す（エディター。現在の一致が無いときの VS Code の表示）。無ければ総数だけ。
+  var showsUnknownPosition: Bool {
+    get { model.showsUnknownPosition }
+    set { model.showsUnknownPosition = newValue }
+  }
+  /// 入力欄の文字列。描画後に置くと入力と同じく `onNeedleChange` が走る。初回描画前に置いた値では走らないので、
+  /// その時点の種は呼ぶ側が検索へ直接渡す（エディターが選択文字列を種にするとき）。
   var needle: String {
     get { model.needle }
     set { model.needle = newValue }
@@ -88,6 +94,8 @@ final class SearchBar: NSView {
   var matchSelected: Int?
   /// 総数が上限で打ち切られている（「total+」と出す）。
   var matchLimited = false
+  /// 位置が無いとき「?/total」と出す。
+  var showsUnknownPosition = false
   /// 一致なし（danger 色）か。
   var countIsNoMatch: Bool { matchTotal == 0 }
   /// facade の `focusField()` がインクリメントする focus トリガ。SwiftUI が監視して `@FocusState` を立てる。
@@ -124,6 +132,7 @@ struct SearchField: View {
     if total == 0 { return localization.string(.searchNoMatch) }
     let shownTotal = model.matchLimited ? "\(total)+" : "\(total)"
     if let selected = model.matchSelected { return "\(selected)/\(shownTotal)" }
+    if model.showsUnknownPosition { return "?/\(shownTotal)" }
     if model.matchLimited { return shownTotal }
     return localization.plural(total, one: .searchMatchesOne, other: .searchMatchesOther)
   }

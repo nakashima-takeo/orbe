@@ -49,8 +49,9 @@ extension EditorSearchTests {
     _ = try probe(pane) { try !PaneProbe.same($0.rgb(scrolled.x, y: scrolled.y), ground) }
   }
 
-  /// 件数の selected は選択から導く。本文でキャレットを動かせば、その先の一致の番号になる。
-  func testTheCountFollowsTheCaretWhenItMovesInTheText() throws {
+  /// 件数の位置は選択から導く——選択がちょうど一致ならその番号、本文をクリックして一致から外れれば位置は無い（バーは
+  /// 「?/N」。VS Code と同じ）。Enter はキャレットの先の一致へ進む。
+  func testTheCountPositionFollowsTheSelection() throws {
     let hosted = try host("foo bar\nfoo baz\nFOO\n")
     let pane = hosted.pane
     let seen = counts(pane)
@@ -59,12 +60,14 @@ extension EditorSearchTests {
     XCTAssertEqual(seen().last?.0, 1)
 
     hosted.document.surface.selectedRange = NSRange(location: 12, length: 0)
-    XCTAssertEqual(seen().last?.0, 3, "キャレットの先の一致")
+    XCTAssertNil(seen().last?.0, "選択が一致から外れれば位置は無い")
     XCTAssertEqual(seen().last?.1, 3)
+    XCTAssertNil(pane.search.current, "現在の一致も無い")
     XCTAssertEqual(pane.search.matches.count, 3, "一致は取り直さない")
 
-    hosted.document.surface.selectedRange = NSRange(location: 19, length: 0)
-    XCTAssertEqual(seen().last?.0, 1, "先に一致が無ければ先頭へ循環")
+    pane.search.next()
+    XCTAssertEqual(seen().last?.0, 3, "Enter はキャレットの先の一致へ")
+    XCTAssertEqual(hosted.document.surface.selectedRange, NSRange(location: 16, length: 3))
   }
 
   /// 件数はバーに届く——一致なしはバーの件数が danger（赤）になり、一致が戻れば赤は消える。

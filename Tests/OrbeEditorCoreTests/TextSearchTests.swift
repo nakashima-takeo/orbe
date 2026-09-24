@@ -50,6 +50,14 @@ final class TextSearchTests: XCTestCase {
       "端に接する挿入は区間を伸ばさない")
   }
 
+  func testExactFindsTheMatchTheSelectionCoversExactly() {
+    let matches = [NSRange(location: 2, length: 3), NSRange(location: 8, length: 3)]
+    XCTAssertEqual(TextSearch.exact(in: matches, selection: NSRange(location: 8, length: 3)), 1)
+    XCTAssertNil(TextSearch.exact(in: matches, selection: NSRange(location: 8, length: 0)))
+    XCTAssertNil(TextSearch.exact(in: matches, selection: NSRange(location: 3, length: 3)))
+    XCTAssertNil(TextSearch.exact(in: [], selection: NSRange(location: 0, length: 0)))
+  }
+
   func testCurrentIsTheSelectionOrTheFirstMatchAtOrAfterIt() {
     let matches = [NSRange(location: 2, length: 1), NSRange(location: 8, length: 1)]
     XCTAssertEqual(TextSearch.current(in: matches, from: NSRange(location: 8, length: 1)), 1)
