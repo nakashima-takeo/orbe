@@ -3,11 +3,15 @@ import OrbeEditorCore
 
 /// ミニマップの字——64 行のチャンクごとに、字形を構文の色で合成した画像を覚えて返す。窓に新しく入ったチャンクだけ組み、
 /// 本文が変われば編集の行と役割が変わった区間のチャンクを捨て、行が増減したときだけ編集の行より後ろも捨てる（1MB の
-/// 文書で打鍵ごとに窓ぶんを組み直さない）。窓から外れたチャンクは捨てる。倍率・外観・幅・インデント単位が変われば
-/// 全部捨てる。
+/// 文書で打鍵ごとに窓ぶんを組み直さない）。覚える数には上限があり、超えたら最も長く使っていないものから捨てる（文書を
+/// 端から端まで通しても、ファイルの大きさに比例して画像が溜まらない）。倍率・外観・幅・インデント単位が変われば全部捨てる。
 @MainActor
 final class MinimapChunks {
   static let lines = 64
+  /// 覚えるチャンクの数の上限。4096 行ぶんで、近くを行き来するドラッグは描き直しなしで済む（これより増やしても速く
+  /// ならなかった）。画像は 1 つ最大 240 × 256 デバイス px（幅 120pt・2x）の RGBA で 240KiB、上限で約 15MiB。窓に入る
+  /// チャンクは高さ 128pt ごとに 1 つなので、1 回の描画のチャンクがこれを超えることはない。
+  static let capacity = 64
 
   /// 描く先の条件（変われば覚えた画像は使えない）。
   struct Canvas: Equatable {
@@ -22,8 +26,15 @@ final class MinimapChunks {
     }
   }
 
+  /// 覚えた画像と、最後に使った順番（大きいほど新しい）。
+  private struct Entry {
+    let image: CGImage
+    var lastUse: Int
+  }
+
   private let style: MinimapStyle
-  private var images: [Int: CGImage] = [:]
+  private var images: [Int: Entry] = [:]
+  private var uses = 0
   private var lineCount = 0
   private var canvas: Canvas?
   private var indentUnit = 0
@@ -61,13 +72,6 @@ final class MinimapChunks {
     for chunk in first...last { images[chunk] = nil }
   }
 
-  /// 窓のチャンク（と前後 1 つ）だけを残し、外は捨てる。窓の外を持ち続けると、文書を端から端まで通したときにファイルの
-  /// 大きさに比例して画像が溜まる。前後 1 つの余裕は、境目での往復で組み直しを繰り返さないため。
-  func retain(_ chunks: ClosedRange<Int>) {
-    let kept = (chunks.lowerBound - 1)...(chunks.upperBound + 1)
-    images = images.filter { kept.contains($0.key) }
-  }
-
   func image(_ chunk: Int, document: EditorDocument, canvas: Canvas) -> CGImage? {
     if canvas != self.canvas || document.indentUnit != indentUnit {
       images.removeAll()
@@ -75,9 +79,18 @@ final class MinimapChunks {
       self.canvas = canvas
       indentUnit = document.indentUnit
     }
-    if let image = images[chunk] { return image }
-    let image = render(chunk, document: document, canvas: canvas)
-    images[chunk] = image
+    uses += 1
+    if let entry = images[chunk] {
+      images[chunk]?.lastUse = uses
+      return entry.image
+    }
+    guard let image = render(chunk, document: document, canvas: canvas) else { return nil }
+    if images.count >= Self.capacity,
+      let oldest = images.min(by: { $0.value.lastUse < $1.value.lastUse })?.key
+    {
+      images[oldest] = nil
+    }
+    images[chunk] = Entry(image: image, lastUse: uses)
     return image
   }
 

@@ -204,7 +204,6 @@ final class EditorMinimapView: NSView {
       appearance: effectiveAppearance)
     let first = layout.lines.lowerBound / MinimapChunks.lines
     let last = (layout.lines.upperBound - 1) / MinimapChunks.lines
-    chunks.retain(first...last)
     context.saveGState()
     context.setAlpha(style.opacity)
     context.interpolationQuality = .none

@@ -220,19 +220,35 @@ final class EditorMinimapTests: OrbeTestCase {
     XCTAssertTrue(view.cachedChunks.contains(0), "手前は残る")
   }
 
-  /// 窓から外れたチャンクの画像は捨てる（文書を端から端まで通しても、覚えているのは窓とその前後だけ）。
-  func testChunksOutsideTheWindowAreDropped() throws {
-    let hosted = try hostOverview(numberedLines(3000))
+  /// 字のチャンクの画像は上限までしか覚えず、超えたら最も長く使っていないものから捨てる——1MB・50 万行の文書を上限の
+  /// 3 倍のチャンクぶん通し、末尾まで飛んでも上限を超えない。最近の窓は残り、最初のチャンクは捨てられている。
+  func testChunkImagesStayWithinTheCapacityAndKeepTheRecentOnes() throws {
+    let hosted = try hostOverview(String(repeating: "x\n", count: 500_000))
     let view = hosted.pane.minimap
-    view.display()
-    XCTAssertTrue(view.cachedChunks.contains(0))
-    hosted.document.scroll(toFirstLine: 2990)
-    view.display()
-    let layout = try XCTUnwrap(view.placement)
-    let window = (layout.lines.lowerBound / 64 - 1)...((layout.lines.upperBound - 1) / 64 + 1)
-    XCTAssertFalse(view.cachedChunks.contains(0), "先頭のチャンクは捨てた")
+    let document = hosted.document
+    let capacity = MinimapChunks.capacity
+    func show(_ line: Int) throws -> ClosedRange<Int> {
+      document.scroll(toFirstLine: CGFloat(line))
+      view.display()
+      XCTAssertLessThanOrEqual(view.cachedChunks.count, capacity, "行 \(line)")
+      let lines = try XCTUnwrap(view.placement).lines
+      let chunk = MinimapChunks.lines
+      return (lines.lowerBound / chunk)...((lines.upperBound - 1) / chunk)
+    }
+    var seen = Set<Int>()
+    var recent: ClosedRange<Int>?
+    var line = 0
+    while line < 3 * capacity * MinimapChunks.lines {
+      recent = try show(line)
+      seen.formUnion(view.cachedChunks)
+      line += 150
+    }
+    XCTAssertGreaterThan(seen.count, 2 * capacity, "上限を超える数のチャンクを通った")
+    XCTAssertFalse(view.cachedChunks.contains(0), "最初のチャンクは捨てた")
+    let last = try show(document.lineIndex.lineCount - 1)
+    XCTAssertTrue(Set(last).isSubset(of: view.cachedChunks), "末尾の窓は覚えている")
     XCTAssertTrue(
-      view.cachedChunks.allSatisfy(window.contains), "窓とその前後だけ: \(view.cachedChunks)")
+      Set(try XCTUnwrap(recent)).isSubset(of: view.cachedChunks), "直前に見ていた窓は残る")
   }
 
   /// 行を丸ごと選ぶと（改行まで）、その行に選択の行の地が付く（VS Code は範囲の終わりの行まで数える）。
