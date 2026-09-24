@@ -5,7 +5,8 @@ import XCTest
 @testable import Orbe
 
 /// 出現の強調——キャレットの語の出現（50ms 後・打鍵で消え次の移動で出直す・焦点で出入り・俯瞰にも出る）と、選択文字列の
-/// 他の出現（即時・本文の変更で 300ms 後に取り直す・俯瞰には出ない・検索バーと重ならない）。時間は差し替えた時計で進める。
+/// 他の出現（選択の変化で即時・俯瞰には出ない・検索バーと重ならない）。どちらも本文に地として出る。時間は差し替えた時計で
+/// 進める。
 ///
 /// 壊れると何が起きるか。打鍵のたびに語の地が点滅する。キャレットを動かしても出ない、端末へ移っても残る。選択の出現が
 /// 検索の一致と二重に出る。本文を直した後に古い位置に地が残る。
@@ -36,22 +37,68 @@ final class EditorOccurrencesTests: OrbeTestCase {
     hosted.document.surface.selectedRange = NSRange(location: location, length: 0)
   }
 
+  /// 本文の行 `row`（0 始まり）・桁 `column` のセルの上端寄り（字の上の、地だけがある所。pane の座標）。
+  func groundPoint(_ hosted: OverviewHost, row: Int, column: Int) -> NSPoint {
+    let style = EditorStyle.make()
+    let surface = hosted.document.surface.view
+    let origin = hosted.pane.convert(surface.bounds, from: surface).origin
+    let cell = (" " as NSString).size(withAttributes: [.font: style.font]).width
+    return NSPoint(
+      x: origin.x + style.gutterWidth + style.marks.gutterWidth + (CGFloat(column) + 0.5) * cell,
+      y: origin.y + style.topInset + CGFloat(row) * style.lineHeight + 1)
+  }
+
+  func groundColor(_ probe: PaneProbe, _ point: NSPoint) throws -> [Int] {
+    try probe.rgb(point.x, y: point.y)
+  }
+
+  /// 語の出現は 50ms 後に本文の地として出て、スクロールバーの中央レーンとミニマップの行にも描かれる。
   func testWordOccurrencesAppearAfterFiftyMillisecondsAndReachTheOverview() throws {
     let clock = Clock()
     let text = " let foo = 1\nfoo + foobar\nbar(foo)\n"
     let hosted = try host(text, clock: clock)
-    let occurrences = hosted.pane.occurrences
+    let pane = hosted.pane
+    let occurrences = pane.occurrences
     caret(hosted, 6)
     XCTAssertEqual(occurrences.wordOccurrences, [], "すぐには出ない")
     XCTAssertEqual(clock.wordDelays.last, 0.05)
+    let occurrence = groundPoint(hosted, row: 1, column: 1)
+    let plain = groundPoint(hosted, row: 1, column: 4)
+    XCTAssertTrue(
+      PaneProbe.same(
+        try groundColor(PaneProbe(pane), occurrence), try groundColor(PaneProbe(pane), plain)),
+      "前提: 出る前は地のまま")
     try XCTUnwrap(clock.word)()
     let expected = [
       NSRange(location: 5, length: 3), NSRange(location: 13, length: 3),
       NSRange(location: 30, length: 3),
     ]
     XCTAssertEqual(occurrences.wordOccurrences, expected, "大小区別・語の境界つき（foobar は含まない）")
-    XCTAssertEqual(hosted.pane.minimap.decorations.wordOccurrences, expected, "ミニマップへ")
-    XCTAssertEqual(hosted.pane.scrollbar.decorations.wordOccurrences, expected, "スクロールバーへ")
+    _ = try probe(pane) {
+      try !PaneProbe.same(self.groundColor($0, occurrence), self.groundColor($0, plain))
+    }
+
+    let bar = pane.scrollbar
+    let scale = hosted.window.backingScaleFactor
+    let ruler = OverviewRuler(
+      lineCount: hosted.document.lineIndex.lineCount,
+      visibleLines: hosted.document.viewportLines.visible, height: bar.bounds.height,
+      scale: scale)
+    let center = OverviewRuler.lane(.center, width: 14, scale: scale)
+    let laneX = (CGFloat(center.x) + CGFloat(center.width) / 2) / scale
+    func markY(_ row: Int) -> CGFloat {
+      let span = ruler.spans([row...row])[0]
+      return CGFloat(span.y1 + span.y2) / 2 / scale
+    }
+    let marks = try ViewPixels(bar)
+    XCTAssertGreaterThan(marks.color(laneX, markY(1)).alphaComponent, 0.5, "スクロールバーの中央レーンに印")
+    XCTAssertEqual(marks.color(laneX, markY(3)).alphaComponent, 0, "出現の無い行には無い")
+
+    let minimap = pane.minimap
+    let rows = try ViewPixels(minimap)
+    XCTAssertGreaterThan(
+      rows.color(minimap.bounds.width - 4, 1 * 2 + 1).alphaComponent, 0, "ミニマップの行の地")
+    XCTAssertEqual(rows.color(minimap.bounds.width - 4, 3 * 2 + 1).alphaComponent, 0)
   }
 
   /// キャレットが出ている範囲の中を動く間は取り直さない。語の外へ出れば消える。
@@ -140,14 +187,22 @@ final class EditorOccurrencesTests: OrbeTestCase {
     let clock = Clock()
     let hosted = try host(" a.b x a.b y A.B\n", clock: clock)
     let pane = hosted.pane
+    let occurrence = groundPoint(hosted, row: 0, column: 8)
+    let plain = groundPoint(hosted, row: 0, column: 5)
     hosted.document.surface.selectedRange = NSRange(location: 1, length: 3)
     XCTAssertEqual(
       pane.occurrences.selectionOccurrences,
       [NSRange(location: 7, length: 3), NSRange(location: 13, length: 3)], "大小無視・自身は除く")
+    _ = try probe(pane) {
+      try !PaneProbe.same(self.groundColor($0, occurrence), self.groundColor($0, plain))
+    }
     clock.word?()
     XCTAssertEqual(pane.minimap.decorations.wordOccurrences, [], "選択が語をはみ出すと語の出現は出ない")
     hosted.document.surface.selectedRange = NSRange(location: 0, length: 0)
     XCTAssertEqual(pane.occurrences.selectionOccurrences, [], "選択が空なら出ない")
+    _ = try probe(pane) {
+      try PaneProbe.same(self.groundColor($0, occurrence), self.groundColor($0, plain))
+    }
   }
 
   /// 本文を変える操作は本文の変化の後に選択の変化を伴うので、選択文字列の出現はそこで取り直される（undo で選択が
