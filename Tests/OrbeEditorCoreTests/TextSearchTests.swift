@@ -19,6 +19,37 @@ final class TextSearchTests: XCTestCase {
     XCTAssertEqual(TextSearch.matches(of: "zz", in: "abc"), [])
   }
 
+  /// 一致は上限（19999）で打ち切り、上限ちょうども打ち切りとして見せる（VS Code の「19999+」）。
+  func testMatchesStopAtTheLimit() {
+    let text = String(repeating: "a", count: 12)
+    XCTAssertEqual(TextSearch.matches(of: "a", in: text, limit: 5).count, 5)
+    XCTAssertEqual(TextSearch.limit, 19999)
+    let many = String(repeating: "ab", count: 20_001)
+    let matches = TextSearch.matches(of: "a", in: many)
+    XCTAssertEqual(matches.count, 19999)
+    XCTAssertTrue(TextSearch.isLimited(matches))
+    XCTAssertFalse(TextSearch.isLimited(Array(matches.prefix(19998))))
+  }
+
+  /// 本文の変更の間、一致は編集に合わせてずれ、編集に掛かる一致は落ちる（取り直すまで地が字からずれない）。
+  func testTrackShiftsRangesAfterTheEditAndDropsTheOnesItTouches() {
+    let ranges = [
+      NSRange(location: 0, length: 2), NSRange(location: 4, length: 2),
+      NSRange(location: 10, length: 2),
+    ]
+    let edit = TextEdit(range: NSRange(location: 5, length: 2), replacementLength: 5)
+    XCTAssertEqual(
+      edit.track(ranges), [NSRange(location: 0, length: 2), NSRange(location: 13, length: 2)])
+    let insert = TextEdit(range: NSRange(location: 2, length: 0), replacementLength: 1)
+    XCTAssertEqual(
+      insert.track(ranges),
+      [
+        NSRange(location: 0, length: 2), NSRange(location: 5, length: 2),
+        NSRange(location: 11, length: 2),
+      ],
+      "端に接する挿入は区間を伸ばさない")
+  }
+
   func testCurrentIsTheSelectionOrTheFirstMatchAtOrAfterIt() {
     let matches = [NSRange(location: 2, length: 1), NSRange(location: 8, length: 1)]
     XCTAssertEqual(TextSearch.current(in: matches, from: NSRange(location: 8, length: 1)), 1)

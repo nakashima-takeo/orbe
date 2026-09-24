@@ -3,7 +3,7 @@ import XCTest
 
 @testable import OrbeEditorCore
 
-/// 文書が俯瞰と検索へ出す口——インデント単位は文書が検出して面へ押す（開いたとき・丸ごと置き換え）、comment 区間は
+/// 文書が俯瞰と検索へ出す口——インデント単位は文書が検出して面へ押す（開いたとき・丸ごと置き換え）、役割の区間は
 /// 構文木から窓ごとに答える、本文・選択・viewport の変化はそれぞれ 1 本の closure で届く（本文は構文木の更新の後）。
 @MainActor
 final class EditorDocumentOverviewTests: XCTestCase {
@@ -50,22 +50,33 @@ final class EditorDocumentOverviewTests: XCTestCase {
     XCTAssertEqual(surface.indentUnit, 4)
   }
 
-  func testCommentRangesAnswerTheCommentRoleInsideTheWindowOnly() throws {
+  /// 役割の区間は構文層の区間を後勝ちで平らにした、重ならない昇順の列で、窓の中だけを答える（ミニマップの字の色）。
+  func testRoleSpansAreFlatNonOverlappingAndInsideTheWindowOnly() throws {
     let text = "// head\nlet a = 1 // tail\n/* block */\n"
     let document = try open("c.swift", text).document
-    let all = document.commentRanges(in: NSRange(location: 0, length: text.utf16.count))
-    XCTAssertEqual(all.map(\.location), [0, 18, 26])
-    let second = document.commentRanges(in: NSRange(location: 8, length: 18))
-    XCTAssertEqual(second.count, 1)
-    XCTAssertEqual(second[0].location, 18, "窓の外の comment は答えない")
-    let cut = document.commentRanges(in: NSRange(location: 30, length: 4))
-    XCTAssertEqual(cut.count, 1, "窓が区間を切っても、切った窓の中の区間は答える")
-    XCTAssertTrue(NSLocationInRange(30, cut[0]))
+    let all = document.roleSpans(in: NSRange(location: 0, length: text.utf16.count))
+    for (previous, next) in zip(all, all.dropFirst()) {
+      XCTAssertLessThanOrEqual(NSMaxRange(previous.range), next.range.location, "重ならず昇順")
+    }
+    XCTAssertEqual(
+      all.filter { $0.role == .comment }.map(\.range),
+      [
+        NSRange(location: 0, length: 7), NSRange(location: 18, length: 7),
+        NSRange(location: 26, length: 11),
+      ])
+    XCTAssertEqual(all.first { $0.role == .keyword }?.range, NSRange(location: 8, length: 3))
+    let second = document.roleSpans(in: NSRange(location: 8, length: 18))
+    XCTAssertTrue(
+      second.allSatisfy { NSLocationInRange($0.range.location, NSRange(location: 8, length: 18)) })
+    XCTAssertEqual(
+      second.filter { $0.role == .comment }.map(\.range), [NSRange(location: 18, length: 7)])
+    let cut = document.roleSpans(in: NSRange(location: 30, length: 4))
+    XCTAssertEqual(cut.map(\.range), [NSRange(location: 30, length: 4)], "窓が区間を切れば窓の中だけ")
     let plain = try open("p.txt", "// not a comment\n").document
-    XCTAssertEqual(plain.commentRanges(in: NSRange(location: 0, length: 5)), [], "文法が無ければ空")
+    XCTAssertEqual(plain.roleSpans(in: NSRange(location: 0, length: 5)), [], "文法が無ければ空")
   }
 
-  /// 本文の通知は構文木の更新の後——通知の中で読む comment 区間が新しい本文を指す。通知は編集と、役割が変わりうる
+  /// 本文の通知は構文木の更新の後——通知の中で読む役割の区間が新しい本文を指す。通知は編集と、役割が変わりうる
   /// 区間（構文木の差分）を運ぶ。
   func testTextChangeArrivesAfterTheSyntaxTreeIsUpdatedAndCarriesTheChangedRegion() throws {
     let opened = try open("t.swift", "let a = 1\n")
@@ -74,7 +85,9 @@ final class EditorDocumentOverviewTests: XCTestCase {
     var changes: [TextChange] = []
     document.onTextChange = { change in
       changes.append(change)
-      seen.append(document.commentRanges(in: NSRange(location: 0, length: 20)))
+      seen.append(
+        document.roleSpans(in: NSRange(location: 0, length: 15)).filter { $0.role == .comment }
+          .map(\.range))
     }
     surface.replace(NSRange(location: 0, length: 0), with: "// c\n")
     XCTAssertEqual(seen, [[NSRange(location: 0, length: 4)]])

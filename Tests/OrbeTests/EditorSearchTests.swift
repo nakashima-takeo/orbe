@@ -40,9 +40,9 @@ final class EditorSearchTests: OrbeTestCase {
   func counts(_ pane: EditorPaneView) -> () -> [(Int?, Int)] {
     var seen: [(Int?, Int)] = []
     let forward = pane.search.onCountChange
-    pane.search.onCountChange = { selected, total in
+    pane.search.onCountChange = { selected, total, limited in
       seen.append((selected, total))
-      forward?(selected, total)
+      forward?(selected, total, limited)
     }
     return { seen }
   }
@@ -160,11 +160,39 @@ final class EditorSearchTests: OrbeTestCase {
     XCTAssertEqual(pane.search.matches.count, 2)
     document.surface.selectedRange = NSRange(location: 5, length: 0)
     hosted.window.makeFirstResponder(document.surface.responder)
+    var refresh: (() -> Void)?
+    pane.search.refreshDelay.schedule = { delay, fire in
+      XCTAssertEqual(delay, 0.1, "本文の変更から 100ms 間引く")
+      refresh = fire
+    }
     for character in " ab" { document.surface.responder.keyDown(with: .key(String(character), [])) }
     XCTAssertEqual(document.surface.text, "ab ab ab\n")
-    XCTAssertEqual(pane.search.matches.count, 3, "一致が追従する")
+    XCTAssertEqual(
+      pane.search.matches, [NSRange(location: 0, length: 2), NSRange(location: 3, length: 2)],
+      "取り直すまでの間、一致は編集に合わせて置いたまま")
+    try XCTUnwrap(refresh)()
+    XCTAssertEqual(pane.search.matches.count, 3, "間引いた後に取り直す")
     XCTAssertEqual(document.surface.selectedRange, NSRange(location: 8, length: 0), "キャレットは打った先のまま")
     pumpMain(until: { seen().last?.1 == 3 }, "件数が追従する")
+  }
+
+  /// 一致は上限（19999）で打ち切り、件数には打ち切ったことが届く（バーは「19999+」と出す）。
+  func testMatchesStopAtTheLimitAndTheCountSaysSo() throws {
+    let hosted = try host(String(repeating: "a", count: 20_500) + "\n")
+    let pane = hosted.pane
+    var limited: [Bool] = []
+    let forward = pane.search.onCountChange
+    pane.search.onCountChange = { selected, total, isLimited in
+      limited.append(isLimited)
+      forward?(selected, total, isLimited)
+    }
+    pane.showSearch()
+    pane.search.setNeedle("a")
+    XCTAssertEqual(pane.search.matches.count, 19999)
+    XCTAssertEqual(limited.last, true)
+    pane.search.setNeedle("aa")
+    XCTAssertEqual(pane.search.matches.count, 10_250)
+    XCTAssertEqual(limited.last, false)
   }
 
   /// ⌘F を押したとき 1 行以内の非空の選択があれば needle に入って即検索される。改行を含む選択は入らない。
@@ -183,7 +211,8 @@ final class EditorSearchTests: OrbeTestCase {
     XCTAssertEqual(pane.search.needle, "", "改行をまたぐ選択は種にならない")
   }
 
-  /// Esc で閉じると一致の地は消え、選択は残り、焦点はテキスト面へ戻る。
+  /// Esc で閉じると一致の地は消え、選択は残り、焦点はテキスト面へ戻る。閉じた後は、残った選択の文字列の他の出現に
+  /// 選択文字列の出現の地が付く（検索バーが同じ文字列を探している間は出ない）。
   func testClosingKeepsTheSelectionAndReturnsFocusToTheText() throws {
     let hosted = try host(Self.belowTheBar + "x a b y\nx a b y\n")
     let pane = hosted.pane
@@ -197,14 +226,17 @@ final class EditorSearchTests: OrbeTestCase {
     // 地は現在でない一致（選択の地に覆われない）の空白のセルで見る。
     let match = cellCenter(hosted, line: 6, column: 3)
     let ground = try PaneProbe(pane).rgb(match.x, y: cellCenter(hosted, line: 10, column: 3).y)
-    _ = try probe(pane) { try !PaneProbe.same($0.rgb(match.x, y: match.y), ground) }
+    let found = try probe(pane) { try !PaneProbe.same($0.rgb(match.x, y: match.y), ground) }
+    let findGround = try found.rgb(match.x, y: match.y)
+    XCTAssertEqual(pane.occurrences.selectionOccurrences, [], "検索バーが同じ文字列を探している間は出ない")
 
     bar.onClose?()
     XCTAssertNil(pane.searchBar)
     XCTAssertTrue(hosted.window.firstResponder === document.surface.responder, "焦点はテキスト面へ")
     XCTAssertEqual(document.surface.selectedRange, NSRange(location: 6, length: 3), "選択は残る")
     XCTAssertEqual(pane.search.matches, [])
-    _ = try probe(pane) { try PaneProbe.same($0.rgb(match.x, y: match.y), ground) }
+    XCTAssertEqual(pane.occurrences.selectionOccurrences, [NSRange(location: 14, length: 3)])
+    _ = try probe(pane) { try !PaneProbe.same($0.rgb(match.x, y: match.y), findGround) }
   }
 
   /// 文書を切り替えると同じ needle で新しい文書に敷き直す（ジャンプしない）。文書が無くなればバーは閉じる。

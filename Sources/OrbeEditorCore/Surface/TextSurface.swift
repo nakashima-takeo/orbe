@@ -25,6 +25,11 @@ public protocol TextSurface: AnyObject {
   /// そのオフセットの行を可視範囲の中央へスクロールする（先頭・末尾では端で止まる）。選択は動かさない。
   func scrollToCenter(_ offset: Int)
 
+  /// `viewport` の逆——行頭オフセット `offset` の行を、その高さの `hiddenFraction`（0…1）ぶん上へ隠して先頭に置く。
+  /// スクロールできる範囲（最終行が最上段に来るまで）の端で止まる。横位置と選択は動かさない。行は `LineIndex` の行
+  /// （本文が改行で終わるときの末尾の空行を含む）。
+  func scroll(toTop offset: Int, hiddenFraction: CGFloat)
+
   /// その区間が見えるところまで最小限スクロールする（縦に見えていれば縦は動かず、横に隠れていれば横だけ寄る）。
   /// 選択は動かさない。
   func scrollToVisible(_ range: NSRange)
@@ -32,9 +37,9 @@ public protocol TextSurface: AnyObject {
   /// 選択（UTF-16）。置いても見せない——見せるのは `scrollToCenter`。
   var selectedRange: NSRange { get set }
 
-  /// ファイル内検索の一致の地。本文と undo に載らない描画で、次に置き直すか空を置くまで残る。`ranges` は
-  /// 昇順・重ならないこと（面は二分探索で可視ぶんだけ描く）。
-  func setSearchHighlights(_ ranges: [NSRange])
+  /// 強調の地（種類ごと）。選択の地の上・文字の下に描く。本文と undo に載らない描画で、次に置き直すか空を置くまで
+  /// 残る。`ranges` は昇順・重ならないこと（面は二分探索で可視ぶんだけ描く）。現在の一致の行は行全体にも地が付く。
+  func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind)
 
   /// インデントの単位（1 段のスペース数）。文書が本文から検出して押し、面はタブの表示幅と装備の段に写す。
   func setIndentUnit(_ unit: Int)
@@ -73,18 +78,31 @@ public protocol TextSurfaceDelegate: AnyObject {
   func surfaceDidChangeSelection(_ surface: any TextSurface)
 }
 
-/// 見えている範囲を本文の言葉で表したもの。`firstVisible` は先頭に見えている行の行頭オフセット、
-/// `hiddenFraction` はその行が上へ隠れている割合（0…1）、`visibleLines` は可視矩形に入る行数（小数）。
-/// エンジンの推定の文書高に依らず、実際に layout された行の矩形から出る。
+/// 強調の地の種類。重ね順は下から 選択文字列の出現 → 語の出現 → 検索の一致 → 現在の一致（現在の一致の行全体の地は
+/// それらより下）。
+public enum TextHighlightKind: CaseIterable, Sendable {
+  case selectionOccurrence
+  case wordOccurrence
+  case findMatch
+  case currentFindMatch
+}
+
+/// 見えている範囲を本文の言葉で表したもの。`firstVisible` は先頭に見えている行（`LineIndex` の行）の行頭オフセット、
+/// `hiddenFraction` はその行が上へ隠れている割合（0…1）、`visibleLines` は可視矩形に入る行数（小数）、`clipsRight` は
+/// 本文が右にまだ続く（横に隠れている部分がある）か。エンジンの推定の文書高に依らず、実際に layout された行の矩形から出る。
 public struct TextViewport: Equatable, Sendable {
   public var firstVisible: Int
   public var hiddenFraction: CGFloat
   public var visibleLines: CGFloat
+  public var clipsRight: Bool
 
-  public init(firstVisible: Int, hiddenFraction: CGFloat, visibleLines: CGFloat) {
+  public init(
+    firstVisible: Int, hiddenFraction: CGFloat, visibleLines: CGFloat, clipsRight: Bool = false
+  ) {
     self.firstVisible = firstVisible
     self.hiddenFraction = hiddenFraction
     self.visibleLines = visibleLines
+    self.clipsRight = clipsRight
   }
 
   public static let empty = TextViewport(firstVisible: 0, hiddenFraction: 0, visibleLines: 0)
@@ -111,6 +129,7 @@ public struct TextSurfaceStyle {
   public var roleColors: [SyntaxRole: NSColor]
   public var marks: Marks
   public var decorations: Decorations
+  public var highlights: Highlights
 
   /// git ガター（行番号の右の列）の見え方。色は α 込み。
   public struct Marks {
@@ -149,14 +168,10 @@ public struct TextSurfaceStyle {
     public var linkUnderlineThickness: CGFloat
     /// ベースラインから下線の上端まで。
     public var linkUnderlineOffset: CGFloat
-    /// ファイル内検索の一致の地（α 込み）と角。
-    public var searchMatchColor: NSColor
-    public var searchMatchRadius: CGFloat
 
     public init(
       indentGuideColor: NSColor, indentGuideWidth: CGFloat, whitespaceColor: NSColor,
-      whitespaceDiameter: CGFloat, linkUnderlineThickness: CGFloat, linkUnderlineOffset: CGFloat,
-      searchMatchColor: NSColor, searchMatchRadius: CGFloat
+      whitespaceDiameter: CGFloat, linkUnderlineThickness: CGFloat, linkUnderlineOffset: CGFloat
     ) {
       self.indentGuideColor = indentGuideColor
       self.indentGuideWidth = indentGuideWidth
@@ -164,8 +179,29 @@ public struct TextSurfaceStyle {
       self.whitespaceDiameter = whitespaceDiameter
       self.linkUnderlineThickness = linkUnderlineThickness
       self.linkUnderlineOffset = linkUnderlineOffset
-      self.searchMatchColor = searchMatchColor
-      self.searchMatchRadius = searchMatchRadius
+    }
+  }
+
+  /// 強調の地の色（α 込み。行の高さいっぱい・角なしで塗る）。選択文字列の出現は面に焦点が無いときだけ
+  /// `selectionOccurrenceInactive`。現在の一致の行全体は `currentFindLine`。
+  public struct Highlights {
+    public var findMatch: NSColor
+    public var currentFindMatch: NSColor
+    public var currentFindLine: NSColor
+    public var selectionOccurrence: NSColor
+    public var selectionOccurrenceInactive: NSColor
+    public var wordOccurrence: NSColor
+
+    public init(
+      findMatch: NSColor, currentFindMatch: NSColor, currentFindLine: NSColor,
+      selectionOccurrence: NSColor, selectionOccurrenceInactive: NSColor, wordOccurrence: NSColor
+    ) {
+      self.findMatch = findMatch
+      self.currentFindMatch = currentFindMatch
+      self.currentFindLine = currentFindLine
+      self.selectionOccurrence = selectionOccurrence
+      self.selectionOccurrenceInactive = selectionOccurrenceInactive
+      self.wordOccurrence = wordOccurrence
     }
   }
 
@@ -173,7 +209,7 @@ public struct TextSurfaceStyle {
     font: NSFont, lineHeight: CGFloat, topInset: CGFloat, textColor: NSColor, caretColor: NSColor,
     caretSize: CGSize, gutterFont: NSFont, gutterTextColor: NSColor, gutterWidth: CGFloat,
     gutterTrailingInset: CGFloat, roleColors: [SyntaxRole: NSColor], marks: Marks,
-    decorations: Decorations
+    decorations: Decorations, highlights: Highlights
   ) {
     self.font = font
     self.lineHeight = lineHeight
@@ -188,5 +224,6 @@ public struct TextSurfaceStyle {
     self.roleColors = roleColors
     self.marks = marks
     self.decorations = decorations
+    self.highlights = highlights
   }
 }

@@ -2,7 +2,7 @@ import Foundation
 
 /// ハンクから導く行の印——行ごとの「追加／変更」と「この境の下に削除がある」。行は 1 始まり（`LineHunk`
 /// と同じ数え方）。文書が持ち、行索引でオフセット区間に写してテキスト面へ渡す（→ `LineMarkSpans`）。俯瞰は
-/// 行の連（`runs`）をそのまま読む。
+/// 行の連（`runs`）と削除の境（`deletionsBelow`）をそのまま読む。
 public struct LineMarks: Equatable, Sendable {
   public enum Kind: Equatable, Sendable {
     case added
@@ -19,7 +19,7 @@ public struct LineMarks: Equatable, Sendable {
 
   public let runs: [Run]
   /// 削除がある境。値 n は「n 行目の下」（0 は先頭行の上）。ハンクの順（昇順）。
-  let deletionsBelow: [Int]
+  public let deletionsBelow: [Int]
 
   /// 追加（old 側 0 件）はその新しい行、削除（new 側 0 件）はその境、両側にあれば新しい行が変更。
   public init(hunks: [LineHunk]) {

@@ -1,4 +1,5 @@
 import AppKit
+import OrbeEditorCore
 
 /// 骨の幾何——レール｜サイドバー（開いているとき。狭い列では表示幅を切り詰める）｜列の頭｜本体——を解き、
 /// `layout()` で host・本体・境の当たりを置く。
@@ -59,23 +60,41 @@ extension EditorPaneView {
       height: max(0, bounds.height - headerHeight))
   }
 
-  /// 俯瞰の列の幅（左の hairline ＋ ミニマップ ＋ 印の列）。
-  var overviewWidth: CGFloat {
-    Theme.Stroke.hairline + Theme.Layout.editorMinimap + Theme.Layout.editorScrollMarks
+  /// ミニマップの幅（VS Code の式。本文の幅から計算し、上限 `editorMinimapMaxWidth`）。
+  var minimapWidth: CGFloat {
+    MinimapLayout.width(
+      remaining: bodyRect.width - Theme.Layout.editorLineNumberGutter
+        - Theme.Layout.editorMarkGutter,
+      charWidth: (" " as NSString).size(withAttributes: [.font: Theme.Typography.editorCode]).width,
+      scrollbar: Theme.Layout.editorScrollbar, maxWidth: Theme.Layout.editorMinimapMaxWidth)
   }
 
-  /// テキスト面の矩形（本体から右の俯瞰を除いたぶん）。文書が無ければ本体そのもの。
+  /// 右列の幅（ミニマップ ＋ スクロールバー）。本体より広くはならない。
+  var rightColumnWidth: CGFloat {
+    min(bodyRect.width, minimapWidth + Theme.Layout.editorScrollbar)
+  }
+
+  /// テキスト面の矩形（本体から右列を除いたぶん）。文書が無ければ本体そのもの。
   var surfaceRect: NSRect {
     guard document != nil else { return bodyRect }
     let body = bodyRect
     return NSRect(
-      x: body.minX, y: body.minY, width: max(0, body.width - overviewWidth), height: body.height)
+      x: body.minX, y: body.minY, width: max(0, body.width - rightColumnWidth), height: body.height)
   }
 
-  /// 俯瞰の矩形（本体の右端。本体より広くはならない）。
-  var overviewRect: NSRect {
+  /// ミニマップの矩形（スクロールバーの左）。
+  var minimapRect: NSRect {
     let body = bodyRect
-    let width = min(overviewWidth, body.width)
+    let scrollbarWidth = min(Theme.Layout.editorScrollbar, body.width)
+    let width = max(0, rightColumnWidth - scrollbarWidth)
+    return NSRect(
+      x: body.maxX - scrollbarWidth - width, y: body.minY, width: width, height: body.height)
+  }
+
+  /// スクロールバーの矩形（本体の右端）。
+  var scrollbarRect: NSRect {
+    let body = bodyRect
+    let width = min(Theme.Layout.editorScrollbar, body.width)
     return NSRect(x: body.maxX - width, y: body.minY, width: width, height: body.height)
   }
 
@@ -88,7 +107,17 @@ extension EditorPaneView {
       x: sideWidth, y: 0, width: max(0, bounds.width - sideWidth), height: headerHeight)
     emptyHost.frame = bodyRect
     document?.surface.view.frame = surfaceRect
-    overview.frame = overviewRect
+    minimap.frame = minimapRect
+    scrollbar.frame = scrollbarRect
+    // 影は本体からスクロールバーを除いた矩形（VS Code の scroll-decoration の幅）。
+    let body = bodyRect
+    scrollShadow.frame = NSRect(
+      x: body.minX, y: body.minY, width: max(0, body.width - scrollbarRect.width),
+      height: body.height)
+    updateShadow()
+    searchBarTrailing?.constant = -(rightColumnWidth + Theme.Space.beat)
+    // 本体の上のポインタの当たりは本体の矩形（サイドバーの幅で動く）。
+    updateTrackingAreas()
     // 当たりは境を動かせるときだけ（`resizeSidebar` の guard と同じ条件）——動かない列に出すとレールの右 1pt を
     // 覆ってリサイズカーソルだけが出る。
     sidebarHandle.isHidden =

@@ -270,7 +270,7 @@ extension EditorTextSurfaceTests {
     XCTAssertEqual(viewport.hiddenFraction, 0.5, accuracy: 0.01, "半分隠れている")
   }
 
-  func testScrollToCenterPutsTheLineInTheMiddleOfTheClipAndClampsAtTheEnds() throws {
+  func testScrollToCenterPutsTheLineInTheMiddleOfTheClipAndClampsAtTheTop() throws {
     let document = try openedTall(100).document
     let visible = document.surface.viewport.visibleLines
     var scrolled = 0
@@ -296,7 +296,7 @@ extension EditorTextSurfaceTests {
     let last = document.surface.viewport
     XCTAssertEqual(
       CGFloat(document.lineIndex.point(at: last.firstVisible).row) + last.hiddenFraction,
-      CGFloat(document.lineIndex.lineCount) - visible, accuracy: 0.6, "末尾は文書の下端で止まる")
+      99.5 - visible / 2, accuracy: 0.6, "最終行を最上段まで送れるので、末尾の行も中央に来る")
   }
 
   /// 区間を見せる最小のスクロール——縦に見えていれば縦は動かず、横に隠れていれば横だけ寄る。

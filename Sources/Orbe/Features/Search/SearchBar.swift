@@ -19,6 +19,8 @@ final class SearchBar: NSView {
   var onNext: (() -> Void)? { didSet { model.onNext = onNext } }
   var onPrev: (() -> Void)? { didSet { model.onPrev = onPrev } }
   var onClose: (() -> Void)? { didSet { model.onClose = onClose } }
+  /// 入力欄の焦点が変わった。
+  var onFocusChange: (() -> Void)? { didSet { model.onFocusChange = onFocusChange } }
   /// 入力欄の文字列。置くのは表示への写しで、検索を起こすのは呼ぶ側（エディターが選択文字列を種にするとき）。
   var needle: String {
     get { model.needle }
@@ -55,7 +57,9 @@ final class SearchBar: NSView {
   }
 
   /// ヒット件数表示を更新（selected/total は呼ぶ側が押す。端末は libghostty の通知由来で、負値は nil で渡る）。
-  func updateCount(selected: Int?, total: Int?) {
+  /// `limited` は呼ぶ側が一致を上限で打ち切った（件数を「total+」と見せる）。
+  func updateCount(selected: Int?, total: Int?, limited: Bool = false) {
+    model.matchLimited = false
     if model.needle.isEmpty {
       model.matchTotal = nil  // 未検索＝件数を出さない
       model.matchSelected = nil
@@ -68,17 +72,22 @@ final class SearchBar: NSView {
     }
     model.matchTotal = total
     model.matchSelected = selected
+    model.matchLimited = limited
   }
 }
 
 /// SearchBar の入力・表示状態を保持する SwiftUI モデル。
 @MainActor @Observable final class SearchBarModel {
   var needle = ""
-  var focused = false
+  var focused = false {
+    didSet { if focused != oldValue { onFocusChange?() } }
+  }
   /// ヒット総数（nil＝未検索で件数非表示・0＝一致なし・>0＝件数）。文言は View が現在言語で描く。
   var matchTotal: Int?
   /// 現在ヒット index（`selected/total` 表示に使う。nil なら総数のみ）。
   var matchSelected: Int?
+  /// 総数が上限で打ち切られている（「total+」と出す）。
+  var matchLimited = false
   /// 一致なし（danger 色）か。
   var countIsNoMatch: Bool { matchTotal == 0 }
   /// facade の `focusField()` がインクリメントする focus トリガ。SwiftUI が監視して `@FocusState` を立てる。
@@ -88,6 +97,7 @@ final class SearchBar: NSView {
   var onNext: (() -> Void)?
   var onPrev: (() -> Void)?
   var onClose: (() -> Void)?
+  var onFocusChange: (() -> Void)?
 
   /// focus かつ非空（＝入力中）のときだけ focus リングを出す（§5.5）。
   var typing: Bool { focused && !needle.isEmpty }
@@ -112,7 +122,9 @@ struct SearchField: View {
   private var countText: String? {
     guard let total = model.matchTotal else { return nil }
     if total == 0 { return localization.string(.searchNoMatch) }
-    if let selected = model.matchSelected { return "\(selected)/\(total)" }
+    let shownTotal = model.matchLimited ? "\(total)+" : "\(total)"
+    if let selected = model.matchSelected { return "\(selected)/\(shownTotal)" }
+    if model.matchLimited { return shownTotal }
     return localization.plural(total, one: .searchMatchesOne, other: .searchMatchesOther)
   }
 

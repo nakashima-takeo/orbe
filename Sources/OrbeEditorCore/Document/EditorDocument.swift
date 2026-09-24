@@ -111,13 +111,49 @@ public final class EditorDocument {
     }
   }
 
-  /// `range` の中の comment 役割の区間（昇順）。文法が無ければ空。窓もキャッシュも持たない——俯瞰が行の縮図を
-  /// 組むときにチャンクごとに引く。
-  public func commentRanges(in range: NSRange) -> [NSRange] {
+  /// `range` の中の役割の区間——構文層の区間を後勝ち（tree-sitter の優先順で後のものが上に塗られる、面の色と同じ）で
+  /// 平らにした、重ならない昇順の列。役割の無い字は含まない。文法が無ければ空。窓もキャッシュも持たない——ミニマップが
+  /// チャンクごとに引く。
+  public func roleSpans(in range: NSRange) -> [HighlightSpan] {
     guard let syntax, range.length > 0 else { return [] }
     let set = IndexSet(integersIn: range.location..<NSMaxRange(range))
-    return syntax.highlights(in: set) { [surface] in surface.substring(in: $0) }
-      .filter { $0.role == .comment }.map(\.range).sorted { $0.location < $1.location }
+    let spans = syntax.highlights(in: set) { [surface] in surface.substring(in: $0) }
+    var roles = [SyntaxRole?](repeating: nil, count: range.length)
+    for span in spans {
+      let start = max(span.range.location, range.location) - range.location
+      let end = min(NSMaxRange(span.range), NSMaxRange(range)) - range.location
+      guard start < end else { continue }
+      for offset in start..<end { roles[offset] = span.role }
+    }
+    var result: [HighlightSpan] = []
+    var offset = 0
+    while offset < roles.count {
+      guard let role = roles[offset] else {
+        offset += 1
+        continue
+      }
+      var end = offset + 1
+      while end < roles.count, roles[end] == role { end += 1 }
+      result.append(
+        HighlightSpan(
+          range: NSRange(location: range.location + offset, length: end - offset), role: role))
+      offset = end
+    }
+    return result
+  }
+
+  /// 先頭に見えている行（小数。行 + 隠れ割合）と可視行数（小数）——俯瞰の式の入力。
+  public var viewportLines: (first: CGFloat, visible: CGFloat) {
+    let viewport = surface.viewport
+    let row = CGFloat(lineIndex.point(at: viewport.firstVisible).row)
+    return (row + viewport.hiddenFraction, viewport.visibleLines)
+  }
+
+  /// 先頭行（小数）の位置へスクロールする（`viewport` の逆。行は索引の行数に収める）。
+  public func scroll(toFirstLine line: CGFloat) {
+    let clamped = min(max(0, line), CGFloat(lineIndex.lineCount - 1))
+    let row = Int(floor(clamped))
+    surface.scroll(toTop: lineIndex.start(ofRow: row), hiddenFraction: clamped - CGFloat(row))
   }
 
   private func applyIndentUnit(of text: String) {

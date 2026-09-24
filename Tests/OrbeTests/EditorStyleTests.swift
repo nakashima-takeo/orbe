@@ -39,17 +39,6 @@ final class EditorStyleTests: OrbeTestCase {
     XCTAssertEqual(style.decorations.whitespaceDiameter, 2)
     XCTAssertEqual(style.decorations.linkUnderlineThickness, 1)
     XCTAssertEqual(style.decorations.linkUnderlineOffset, 3)
-    XCTAssertEqual(style.decorations.searchMatchRadius, 2)
-    let overview = EditorStyle.overview()
-    XCTAssertEqual(overview.minimapWidth, 100)
-    XCTAssertEqual(overview.marksWidth, 13)
-    XCTAssertEqual(overview.rowHeight, 2)
-    XCTAssertEqual(overview.pitch, 4)
-    XCTAssertEqual(overview.columnWidth, 0.55)
-    XCTAssertEqual(overview.indentWidth, 1.1)
-    XCTAssertEqual(overview.maxRowExtent, 72)
-    XCTAssertEqual(overview.topInset, 6)
-    XCTAssertEqual(overview.leadingInset, 8)
   }
 
   /// 装備の色——印の 3 色は diff トークンの α .85、インデント線は surfaceInk の .06（light は ×0.6）、丸点は
@@ -84,45 +73,99 @@ final class EditorStyleTests: OrbeTestCase {
     XCTAssertEqual(
       try XCTUnwrap(resolved(style.decorations.whitespaceColor, .darkAqua)).alphaComponent, 0.55,
       accuracy: 0.01)
-    XCTAssertEqual(
-      try XCTUnwrap(resolved(style.decorations.searchMatchColor, .darkAqua)).alphaComponent, 0.30,
-      accuracy: 0.01)
-    XCTAssertNotEqual(
-      try XCTUnwrap(resolved(style.decorations.searchMatchColor, .darkAqua)),
-      try XCTUnwrap(resolved(style.decorations.searchMatchColor, .aqua)))
   }
 
-  /// 俯瞰の色——帯 .07・行 .15・コメント行 .40・ミニマップの印 .9・印の列 .8・カーソル .7——で、縁は hairline の
-  /// .07（light は ×1.4）。どれも外観で解き直される。
-  func testOverviewColorsCarryTheSampleAlphasAndFollowTheAppearance() throws {
-    let overview = EditorStyle.overview()
-    let expected: [(NSColor, CGFloat)] = [
-      (overview.band, 0.07), (overview.row, 0.15), (overview.commentRow, 0.40),
-      (overview.minimapAdded, 0.9), (overview.minimapModified, 0.9), (overview.marksAdded, 0.8),
-      (overview.marksModified, 0.8), (overview.caret, 0.7), (overview.border, 0.07),
+  /// 強調と俯瞰の色は VS Code Dark Modern / Light Modern の値（sRGB・α）。選択文字列の出現は焦点が無いとき α 半分。
+  func testHighlightAndOverviewColorsAreTheVSCodeValues() throws {
+    let highlights = EditorStyle.make().highlights
+    let minimap = EditorStyle.minimap()
+    let scrollbar = EditorStyle.scrollbar()
+    let expected: [Expected] = [
+      .init(highlights.findMatch, dark: (0xea5c00, 0.33), light: (0xea5c00, 0.33)),
+      .init(highlights.currentFindMatch, dark: (0x9e6a03, 1), light: (0xa8ac94, 1)),
+      .init(highlights.currentFindLine, dark: (0xffffff, 0.043), light: (0xfdff00, 0.2)),
+      .init(highlights.selectionOccurrence, dark: (0xadd6ff, 0.15), light: (0xadd6ff, 0.5)),
+      .init(
+        highlights.selectionOccurrenceInactive, dark: (0xadd6ff, 0.075), light: (0xadd6ff, 0.25)),
+      .init(highlights.wordOccurrence, dark: (0x575757, 0.72), light: (0x575757, 0.25)),
+      .init(minimap.slider, dark: (0x797979, 0.2), light: (0x646464, 0.2)),
+      .init(minimap.sliderHover, dark: (0x646464, 0.35), light: (0x646464, 0.35)),
+      .init(minimap.sliderActive, dark: (0xbfbfbf, 0.2), light: (0x000000, 0.3)),
+      .init(minimap.findMatch, dark: (0xea5c00, 0.33), light: (0xea5c00, 0.33)),
+      .init(minimap.wordOccurrence, dark: (0xadd6ff, 0.15), light: (0xadd6ff, 0.5)),
+      .init(scrollbar.slider, dark: (0x797979, 0.4), light: (0x646464, 0.4)),
+      .init(scrollbar.sliderHover, dark: (0x646464, 0.7), light: (0x646464, 0.7)),
+      .init(scrollbar.sliderActive, dark: (0xbfbfbf, 0.4), light: (0x000000, 0.6)),
+      .init(scrollbar.findMatch, dark: (0xd18616, 0.49), light: (0xd18616, 0.49)),
+      .init(scrollbar.wordOccurrence, dark: (0xa0a0a0, 0.8), light: (0xa0a0a0, 0.8)),
     ]
-    for (color, alpha) in expected {
-      XCTAssertEqual(
-        try XCTUnwrap(resolved(color, .darkAqua)).alphaComponent, alpha, accuracy: 0.005)
-      XCTAssertNotEqual(
-        try XCTUnwrap(resolved(color, .darkAqua)), try XCTUnwrap(resolved(color, .aqua)))
-    }
-    XCTAssertEqual(
-      try XCTUnwrap(resolved(overview.border, .aqua)).alphaComponent, 0.098, accuracy: 0.001)
-    let marks = [
-      (overview.minimapAdded, Theme.Color.diffAdded), (overview.marksAdded, Theme.Color.diffAdded),
-      (overview.minimapModified, Theme.Color.diffModified),
-      (overview.marksModified, Theme.Color.diffModified),
-    ]
-    for (mark, token) in marks {
-      for appearance in [NSAppearance.Name.darkAqua, .aqua] {
-        let resolved = try XCTUnwrap(self.resolved(mark, appearance))
-        let base = try XCTUnwrap(self.resolved(token, appearance))
-        XCTAssertEqual(resolved.redComponent, base.redComponent, accuracy: 0.002, "追加は緑・変更は青")
-        XCTAssertEqual(resolved.greenComponent, base.greenComponent, accuracy: 0.002)
-        XCTAssertEqual(resolved.blueComponent, base.blueComponent, accuracy: 0.002)
+    for item in expected {
+      for (appearance, (hex, alpha)) in [
+        (NSAppearance.Name.darkAqua, item.dark), (.aqua, item.light),
+      ] {
+        let got = try XCTUnwrap(resolved(item.color, appearance))
+        XCTAssertEqual(got.redComponent, CGFloat((hex >> 16) & 0xff) / 255, accuracy: 0.003)
+        XCTAssertEqual(got.greenComponent, CGFloat((hex >> 8) & 0xff) / 255, accuracy: 0.003)
+        XCTAssertEqual(got.blueComponent, CGFloat(hex & 0xff) / 255, accuracy: 0.003)
+        XCTAssertEqual(got.alphaComponent, alpha, accuracy: 0.003)
       }
     }
+  }
+
+  /// 期待する色（外観ごとの sRGB と α）。
+  struct Expected {
+    let color: NSColor
+    let dark: (Int, CGFloat)
+    let light: (Int, CGFloat)
+
+    init(_ color: NSColor, dark: (Int, CGFloat), light: (Int, CGFloat)) {
+      self.color = color
+      self.dark = dark
+      self.light = light
+    }
+  }
+
+  /// 期待する印の色（元のトークンと α）。
+  struct Mark {
+    let color: NSColor
+    let token: NSColor
+    let alpha: CGFloat
+
+    init(_ color: NSColor, _ token: NSColor, _ alpha: CGFloat) {
+      self.color = color
+      self.token = token
+      self.alpha = alpha
+    }
+  }
+
+  /// 俯瞰の git の印は Orbe の diff.*（ミニマップは α 1、スクロールバーは VS Code の α .6）、キャレットの印はキャレット色
+  /// α .7、スクロールバーの縁は hairline .07（light ×1.4）。
+  func testOverviewGitCaretAndBorderColorsUseTheOrbeTokens() throws {
+    let minimap = EditorStyle.minimap()
+    let scrollbar = EditorStyle.scrollbar()
+    let marks: [Mark] = [
+      .init(minimap.added, Theme.Color.diffAdded, 1),
+      .init(minimap.modified, Theme.Color.diffModified, 1),
+      .init(minimap.removed, Theme.Color.diffRemoved, 1),
+      .init(scrollbar.added, Theme.Color.diffAdded, 0.6),
+      .init(scrollbar.modified, Theme.Color.diffModified, 0.6),
+      .init(scrollbar.removed, Theme.Color.diffRemoved, 0.6),
+      .init(scrollbar.caret, Theme.Color.accentBright, 0.7),
+    ]
+    for item in marks {
+      for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+        let got = try XCTUnwrap(resolved(item.color, appearance))
+        let base = try XCTUnwrap(resolved(item.token, appearance))
+        XCTAssertEqual(got.alphaComponent, item.alpha, accuracy: 0.005)
+        XCTAssertEqual(got.redComponent, base.redComponent, accuracy: 0.002)
+        XCTAssertEqual(got.greenComponent, base.greenComponent, accuracy: 0.002)
+        XCTAssertEqual(got.blueComponent, base.blueComponent, accuracy: 0.002)
+      }
+    }
+    XCTAssertEqual(
+      try XCTUnwrap(resolved(scrollbar.border, .darkAqua)).alphaComponent, 0.07, accuracy: 0.001)
+    XCTAssertEqual(
+      try XCTUnwrap(resolved(scrollbar.border, .aqua)).alphaComponent, 0.098, accuracy: 0.001)
   }
 
   /// 8 役割すべてに色があり、同じ外観の中で互いに違い、dark と light で解が変わる。

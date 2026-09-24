@@ -8,8 +8,6 @@ enum EditorStyle {
   private static let markAlpha: CGFloat = 0.85
   /// インデント線の塗り（見本 fill(0.06)。light は `Theme.Opacity.editorFillLight` を掛ける）。
   private static let indentGuideAlpha: Double = 0.06
-  /// ファイル内検索の一致の地（見本 SearchPanel のヒット tint(modified, 0.30)）。
-  private static let searchMatchAlpha: CGFloat = 0.30
 
   static func make() -> TextSurfaceStyle {
     TextSurfaceStyle(
@@ -23,16 +21,7 @@ enum EditorStyle {
       gutterTextColor: Theme.Color.editorLineNumber,
       gutterWidth: Theme.Layout.editorLineNumberGutter,
       gutterTrailingInset: Theme.Space.step,
-      roleColors: [
-        .keyword: Theme.Color.syntaxKeyword,
-        .keywordControl: Theme.Color.syntaxKeywordControl,
-        .type: Theme.Color.syntaxType,
-        .function: Theme.Color.syntaxFunction,
-        .string: Theme.Color.syntaxString,
-        .comment: Theme.Color.syntaxComment,
-        .variable: Theme.Color.syntaxVariable,
-        .punctuation: Theme.Color.syntaxPunctuation,
-      ],
+      roleColors: roleColors,
       marks: TextSurfaceStyle.Marks(
         gutterWidth: Theme.Layout.editorMarkGutter, barWidth: 3, barInset: 2, barRadius: 1,
         triangleSize: 6, added: Theme.Color.diffAdded.withAlphaComponent(markAlpha),
@@ -41,23 +30,50 @@ enum EditorStyle {
       decorations: TextSurfaceStyle.Decorations(
         indentGuideColor: fill(indentGuideAlpha), indentGuideWidth: 1,
         whitespaceColor: Theme.Color.editorWhitespace, whitespaceDiameter: 2,
-        linkUnderlineThickness: 1, linkUnderlineOffset: 3,
-        searchMatchColor: Theme.Color.editorModified.withAlphaComponent(searchMatchAlpha),
-        searchMatchRadius: 2))
+        linkUnderlineThickness: 1, linkUnderlineOffset: 3),
+      highlights: TextSurfaceStyle.Highlights(
+        findMatch: Theme.Color.editorFindMatch,
+        currentFindMatch: Theme.Color.editorFindMatchCurrent,
+        currentFindLine: Theme.Color.editorFindLine,
+        selectionOccurrence: Theme.Color.editorSelectionOccurrence,
+        selectionOccurrenceInactive: scaledAlpha(Theme.Color.editorSelectionOccurrence, 0.5),
+        wordOccurrence: Theme.Color.editorWordOccurrence))
   }
 
-  /// 俯瞰（見本 CodeView.tsx のミニマップと印の列）の見え方。
-  static func overview() -> OverviewStyle {
-    OverviewStyle(
-      minimapWidth: Theme.Layout.editorMinimap, marksWidth: Theme.Layout.editorScrollMarks,
-      border: hairline(0.07), band: Theme.Color.editorText.withAlphaComponent(0.07),
-      row: Theme.Color.syntaxPunctuation.withAlphaComponent(0.15),
-      commentRow: Theme.Color.syntaxComment.withAlphaComponent(0.40),
-      minimapAdded: Theme.Color.diffAdded.withAlphaComponent(0.9),
-      minimapModified: Theme.Color.diffModified.withAlphaComponent(0.9),
-      marksAdded: Theme.Color.diffAdded.withAlphaComponent(0.8),
-      marksModified: Theme.Color.diffModified.withAlphaComponent(0.8),
-      caret: Theme.Color.textPrimary.withAlphaComponent(0.7))
+  /// 役割ごとの文字色（本文とミニマップが共有する）。
+  static let roleColors: [SyntaxRole: NSColor] = [
+    .keyword: Theme.Color.syntaxKeyword,
+    .keywordControl: Theme.Color.syntaxKeywordControl,
+    .type: Theme.Color.syntaxType,
+    .function: Theme.Color.syntaxFunction,
+    .string: Theme.Color.syntaxString,
+    .comment: Theme.Color.syntaxComment,
+    .variable: Theme.Color.syntaxVariable,
+    .punctuation: Theme.Color.syntaxPunctuation,
+  ]
+
+  /// ミニマップの見え方（VS Code の既定。色は Dark Modern / Light Modern、git は Orbe の diff.*）。
+  static func minimap() -> MinimapStyle {
+    MinimapStyle(
+      textColor: Theme.Color.editorText, roleColors: roleColors,
+      slider: Theme.Color.editorMinimapSlider, sliderHover: Theme.Color.editorMinimapSliderHover,
+      sliderActive: Theme.Color.editorMinimapSliderActive,
+      selection: NSColor.selectedTextBackgroundColor, findMatch: Theme.Color.editorFindMatch,
+      wordOccurrence: Theme.Color.editorSelectionOccurrence, added: Theme.Color.diffAdded,
+      modified: Theme.Color.diffModified, removed: Theme.Color.diffRemoved)
+  }
+
+  /// スクロールバーと印の見え方。git の印は diff.* α .6、キャレットの印はキャレット色 α .7（VS Code と同じ α）。
+  static func scrollbar() -> ScrollbarStyle {
+    ScrollbarStyle(
+      border: hairline(0.07), slider: Theme.Color.editorScrollbarSlider,
+      sliderHover: Theme.Color.editorScrollbarSliderHover,
+      sliderActive: Theme.Color.editorScrollbarSliderActive,
+      findMatch: Theme.Color.editorRulerFind, wordOccurrence: Theme.Color.editorRulerOccurrence,
+      added: Theme.Color.diffAdded.withAlphaComponent(0.6),
+      modified: Theme.Color.diffModified.withAlphaComponent(0.6),
+      removed: Theme.Color.diffRemoved.withAlphaComponent(0.6),
+      caret: Theme.Color.accentBright.withAlphaComponent(0.7))
   }
 
   /// 見本の fill(α) を外観で換算した塗り（`EditorInk.fill` の NSColor 版。換算は `EditorInk.fillAlpha`）。
@@ -76,43 +92,52 @@ enum EditorStyle {
     }
   }
 
+  /// 外観ごとの α に `factor` を掛けた色。
+  private static func scaledAlpha(_ color: NSColor, _ factor: CGFloat) -> NSColor {
+    NSColor(name: nil) { appearance in
+      var resolved = color
+      appearance.performAsCurrentDrawingAppearance {
+        resolved = color.usingColorSpace(.sRGB) ?? color
+      }
+      return resolved.withAlphaComponent(resolved.alphaComponent * factor)
+    }
+  }
+
   private static func isDark(_ appearance: NSAppearance) -> Bool {
     appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
   }
 }
 
-/// 俯瞰の見え方。寸法は見本 `CodeView.tsx` の値（行 2・ピッチ 4・桁 0.55・インデント桁 1.1・上限 72・余白 上 6 左 8
-/// 右 4・印の位置）で、色は α 込みの名前付き NSColor（外観は描画時に解く）。
-struct OverviewStyle {
-  let minimapWidth: CGFloat
-  let marksWidth: CGFloat
-  /// ミニマップの行の高さと、行ごとの縦のピッチ。
-  let rowHeight: CGFloat = 2
-  let pitch: CGFloat = 4
-  /// 1 桁の幅と、インデント 1 桁の幅、行の右端の上限（左余白から）。
-  let columnWidth: CGFloat = 0.55
-  let indentWidth: CGFloat = 1.1
-  let maxRowExtent: CGFloat = 72
-  let rowRadius: CGFloat = 1
-  let topInset: CGFloat = 6
-  let leadingInset: CGFloat = 8
-  /// ミニマップ左端の git 印（x・幅）。
-  let minimapMarkX: CGFloat = 1
-  let minimapMarkWidth: CGFloat = 2
-  /// 印の列の追加／変更のバー（x・幅）とカーソルの印（x・幅・高）。
-  let marksBarX: CGFloat = 2
-  let marksBarWidth: CGFloat = 4
-  let caretMarkX: CGFloat = 6
-  let caretMarkWidth: CGFloat = 5
-  let caretMarkHeight: CGFloat = 2
+/// ミニマップの見え方。色は α 込みの名前付き NSColor（外観は描画時に解く）。
+struct MinimapStyle {
+  let textColor: NSColor
+  let roleColors: [SyntaxRole: NSColor]
+  let slider: NSColor
+  let sliderHover: NSColor
+  let sliderActive: NSColor
+  let selection: NSColor
+  let findMatch: NSColor
+  let wordOccurrence: NSColor
+  let added: NSColor
+  let modified: NSColor
+  let removed: NSColor
+  /// 字の明るさの係数（VS Code `MinimapCharRenderer` の soften。dark 12/15・light 50/60）と、全体の不透明度。
+  let darkGlyphRatio: CGFloat = 12.0 / 15
+  let lightGlyphRatio: CGFloat = 50.0 / 60
+  let opacity: CGFloat = 0.9
+}
+
+/// スクロールバー（印を載せる）の見え方。
+struct ScrollbarStyle {
   let border: NSColor
-  let band: NSColor
-  let row: NSColor
-  let commentRow: NSColor
-  let minimapAdded: NSColor
-  let minimapModified: NSColor
-  let marksAdded: NSColor
-  let marksModified: NSColor
+  let slider: NSColor
+  let sliderHover: NSColor
+  let sliderActive: NSColor
+  let findMatch: NSColor
+  let wordOccurrence: NSColor
+  let added: NSColor
+  let modified: NSColor
+  let removed: NSColor
   let caret: NSColor
 }
 

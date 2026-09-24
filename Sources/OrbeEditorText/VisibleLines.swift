@@ -70,6 +70,58 @@ struct VisibleLines {
     return result
   }
 
+  /// 行（`LineIndex` の行。本文が改行で終わるときの末尾の空行を含む）の行頭オフセットと矩形（container 基準）。
+  /// TextKit 2 は末尾の空行を直前の段落の fragment の 2 行目に置くので、段落ではなく行片（`textLineFragments`）で測る。
+  struct LineFrame: Equatable {
+    let start: Int
+    let frame: CGRect
+  }
+
+  /// オフセットを含む行（区間の終わりは次の行が持つ。本文の終わりは最終行）。layout が無ければ nil。
+  func line(containing offset: Int) -> LineFrame? {
+    guard let fragment = fragment(containingLineStart: offset) else { return nil }
+    let fragmentStart = NSRange(fragment.rangeInElement, in: contentManager).location
+    return lineFrames(of: fragment, start: fragmentStart).last { $0.start <= offset }
+  }
+
+  /// y（container 基準）の行。最終行より下なら最終行、先頭より上なら先頭の行。layout が無ければ nil。
+  func line(atY y: CGFloat) -> LineFrame? {
+    guard let fragment = layoutManager.textLayoutFragment(for: CGPoint(x: 0, y: max(0, y))) else {
+      return lastLine()
+    }
+    let start = NSRange(fragment.rangeInElement, in: contentManager).location
+    let lines = lineFrames(of: fragment, start: start)
+    return lines.first { y < $0.frame.maxY } ?? lines.last
+  }
+
+  /// 最終行（本文が改行で終わるときは末尾の空行）。
+  func lastLine() -> LineFrame? {
+    guard let fragment = fragment(containingLineStart: documentLength) else { return nil }
+    let start = NSRange(fragment.rangeInElement, in: contentManager).location
+    return lineFrames(of: fragment, start: start).last
+  }
+
+  /// `offset` を含む layout fragment（本文の終わりは最後の段落の fragment）。
+  private func fragment(containingLineStart offset: Int) -> NSTextLayoutFragment? {
+    let probe = offset < documentLength ? offset : max(0, documentLength - 1)
+    guard
+      let location = contentManager.location(layoutManager.documentRange.location, offsetBy: probe)
+    else { return nil }
+    return layoutManager.textLayoutFragment(for: location)
+  }
+
+  private func lineFrames(of fragment: NSTextLayoutFragment, start: Int) -> [LineFrame] {
+    let origin = fragment.layoutFragmentFrame.origin
+    return fragment.textLineFragments.map { line in
+      let bounds = line.typographicBounds
+      return LineFrame(
+        start: start + line.characterRange.location,
+        frame: CGRect(
+          x: origin.x + bounds.minX, y: origin.y + bounds.minY, width: bounds.width,
+          height: bounds.height))
+    }
+  }
+
   /// 点（container 基準）を含む段落。
   func line(at point: CGPoint) -> VisibleLine? {
     layoutManager.textLayoutFragment(for: point).map(line(of:))

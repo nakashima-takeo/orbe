@@ -22,13 +22,15 @@ final class FakeTextSurface: TextSurface {
   private(set) var ground: NSColor?
   /// 見えている範囲（本文の言葉）。テストが置く。
   var viewport = TextViewport.empty
-  /// `scrollToCenter` に渡されたオフセットと、`scrollToVisible` に渡された区間の履歴。
+  /// `scrollToCenter` に渡されたオフセットと、`scrollToVisible` に渡された区間と、`scroll(toTop:)` の履歴。
   private(set) var centered: [Int] = []
   private(set) var revealed: [NSRange] = []
+  private(set) var toppedAt: [(offset: Int, hiddenFraction: CGFloat)] = []
   var selectedRange = NSRange(location: 0, length: 0) {
     didSet { delegate?.surfaceDidChangeSelection(self) }
   }
-  private(set) var searchHighlights: [NSRange] = []
+  /// 種類ごとに最後に置かれた強調の地。
+  private(set) var highlightRanges: [TextHighlightKind: [NSRange]] = [:]
   private(set) var indentUnit = IndentUnit.fallback
 
   init(text: String) {
@@ -61,7 +63,13 @@ final class FakeTextSurface: TextSurface {
 
   func scrollToVisible(_ range: NSRange) { revealed.append(range) }
 
-  func setSearchHighlights(_ ranges: [NSRange]) { searchHighlights = ranges }
+  func scroll(toTop offset: Int, hiddenFraction: CGFloat) {
+    toppedAt.append((offset, hiddenFraction))
+  }
+
+  func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {
+    highlightRanges[kind] = ranges
+  }
 
   func setIndentUnit(_ unit: Int) { indentUnit = unit }
 

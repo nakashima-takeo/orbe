@@ -6,12 +6,16 @@ import STTextView
 /// attribute・delegate・焦点・viewport をこの契約へ写す。undo は STTextView が自前で持つ（打鍵を
 /// まとめる coalescing はビュー内部の undo manager にしか無い）。
 ///
-/// 行の装備と検索の一致は受動的な overlay 3 枚で描く（ガターの印・本文のインデント線／丸点／URL 下線・一致の地）。
-/// 上流に行ごとの描画の拡張点が無いので、公開の view と TextKit 2 の API だけで載せる。どれも寸法は viewport
+/// 行の装備と強調の地は受動的な overlay 3 枚で描く（ガターの印・本文のインデント線／丸点／URL 下線・強調の地）。
+/// 上流に行ごとの描画の拡張点が無いので、公開の view と TextKit 2 の API だけで載せる——ただし強調の地だけは、選択の地の
+/// 上・文字の下に出すために上流の本文の層の中へ差し込む（公開の口が無い。`installHighlightView`）。どれも寸法は viewport
 /// （文書の全高にすると数万行で巨大な tiled layer になる）で、layout の収束とスクロールのたびに置き直す
 /// ——片方だけでは速いスクロールで印が遅れ、編集で古くなる。
 ///
-/// 縦スクローラーは出さない——位置は面の外の俯瞰（ミニマップの帯と印の列）が担う。横はそのまま。
+/// スクロールビューは面が組む——最終行を最上段までスクロールできる clip（`OverscrollClipView`）を documentView より先に
+/// 据える（上流は documentView が入った時点の clip の bounds 変化を観測する）。縦スクローラーは出さない——位置は面の外の
+/// スクロールバーとミニマップが担う。横はそのままで、様式はオーバーレイに固定する（OS の「常に表示」やマウスの有無で
+/// 本文の下が削られない）。
 @MainActor
 final class STTextSurface: NSObject, TextSurface {
   /// 上端の余白を持つ器。スクロールビューの contentInsets は使わない——横に浮くガター（floating
@@ -21,9 +25,10 @@ final class STTextSurface: NSObject, TextSurface {
   private let textView: SurfaceTextView
   private let marksView: LineMarksView
   private let decorationView: LineDecorationView
-  private let searchView: SearchHighlightView
+  private let highlightView: TextHighlightView
   private let groundView = GutterGroundView()
-  private var clipObservers: [NSObjectProtocol] = []
+  private let clipView = OverscrollClipView()
+  private var observers: [NSObjectProtocol] = []
 
   var view: NSView { container }
   var responder: NSView { textView }
@@ -43,19 +48,25 @@ final class STTextSurface: NSObject, TextSurface {
   }
 
   init(style: TextSurfaceStyle, text: String) {
-    scrollView = SurfaceTextView.scrollableTextView()
-    // swiftlint:disable:next force_cast
-    textView = scrollView.documentView as! SurfaceTextView
+    scrollView = NSScrollView()
+    textView = SurfaceTextView()
     self.style = style
     marksView = LineMarksView(textView: textView, style: style.marks)
     decorationView = LineDecorationView(
       textView: textView, style: style.decorations, textColor: style.textColor)
-    searchView = SearchHighlightView(
-      textView: textView, color: style.decorations.searchMatchColor,
-      radius: style.decorations.searchMatchRadius)
+    highlightView = TextHighlightView(textView: textView, style: style.highlights)
     super.init()
-    container.addSubview(scrollView)
+    // 上流の `scrollableTextView()` の設定を写す（縦スクローラーだけ出さない）。
+    scrollView.contentView = clipView
+    scrollView.clipsToBounds = true
+    scrollView.wantsLayer = true
     scrollView.hasVerticalScroller = false
+    scrollView.hasHorizontalScroller = true
+    scrollView.drawsBackground = false
+    scrollView.scrollerStyle = .overlay
+    scrollView.documentView = textView
+    clipView.lastLineTop = { [weak self] in self?.lastLineTop }
+    container.addSubview(scrollView)
     // clear にすると gutter も clear になり、NSVisualEffectView の地が敷かれない（器の veil が透ける）。
     textView.backgroundColor = .clear
     // 本文はガターの右端から始める（既定の 5pt の余白を持たない）。
@@ -65,6 +76,7 @@ final class STTextSurface: NSObject, TextSurface {
     textView.textDelegate = self
     textView.onFocusChange = { [weak self] focused in
       guard let self else { return }
+      highlightView.isFocused = focused
       delegate?.surface(self, focusDidChange: focused)
     }
     textView.addPlugin(
@@ -75,29 +87,49 @@ final class STTextSurface: NSObject, TextSurface {
         delegate?.surfaceDidLayoutViewport(self)
       })
     apply(style)
-    // 本文の overlay は contentView の下（本文・キャレット・選択の下に出る）。一致の地は装備の上。ガターの
-    // overlay はガターの subview で、印の列はガターの右端に錨を置く（上流は桁が増えるとガターを右へ伸ばす）。
+    // 装備の overlay は本文の層の下（本文・キャレット・選択の下に出る——選択の地が装備を覆う）。強調の地は本文の層の
+    // 中の選択の層の直上。ガターの overlay はガターの subview で、印の列はガターの右端に錨を置く（上流は桁が増えると
+    // ガターを右へ伸ばす）。
     textView.addSubview(decorationView, positioned: .below, relativeTo: nil)
-    textView.addSubview(searchView, positioned: .above, relativeTo: decorationView)
+    installHighlightView()
     textView.gutterView?.addSubview(groundView, positioned: .below, relativeTo: nil)
     textView.gutterView?.addSubview(marksView)
     // overlay の矩形は clip view の矩形の関数——スクロール（bounds）と窓の live resize（frame。上流はその間
     // layout を止める）の両方で置き直す。
-    scrollView.contentView.postsBoundsChangedNotifications = true
-    scrollView.contentView.postsFrameChangedNotifications = true
-    clipObservers = [NSView.boundsDidChangeNotification, NSView.frameDidChangeNotification].map {
-      NotificationCenter.default.addObserver(
-        forName: $0, object: scrollView.contentView, queue: nil
-      ) { [weak self] _ in
-        MainActor.assumeIsolated { self?.layoutOverlays() }
-      }
+    clipView.postsBoundsChangedNotifications = true
+    clipView.postsFrameChangedNotifications = true
+    let relayout: @Sendable (Notification) -> Void = { [weak self] _ in
+      MainActor.assumeIsolated { self?.layoutOverlays() }
     }
+    observers = [NSView.boundsDidChangeNotification, NSView.frameDidChangeNotification].map {
+      NotificationCenter.default.addObserver(
+        forName: $0, object: clipView, queue: nil, using: relayout)
+    }
+    observers.append(
+      NotificationCenter.default.addObserver(
+        forName: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil, queue: nil
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.scrollView.scrollerStyle = .overlay }
+      })
     applyParagraphStyle()
     textView.text = text
   }
 
   deinit {
-    for observer in clipObservers { NotificationCenter.default.removeObserver(observer) }
+    for observer in observers { NotificationCenter.default.removeObserver(observer) }
+  }
+
+  /// 強調の地を上流の本文の層（テキスト view の子のうち、面が置いた overlay 以外の唯一の子）の中の、選択の層（その
+  /// 最初の子）の直上へ差し込む。上流は選択の層の子を layout のたびに空にするので、その中には入れない。上流はキャレットの
+  /// view を同じ層へ足すが並べ替えないので、差し込んだ位置は保たれる。構造が違えば黙って別の位置に置かない。
+  private func installHighlightView() {
+    let content = textView.subviews.filter { $0 !== decorationView }
+    guard content.count == 1, let layer = content.first, let selection = layer.subviews.first
+    else {
+      assertionFailure("STTextView の本文の層の構造が想定と違う: \(textView.subviews)")
+      return
+    }
+    layer.addSubview(highlightView, positioned: .above, relativeTo: selection)
   }
 
   var text: String { textView.text ?? "" }
@@ -132,8 +164,8 @@ final class STTextSurface: NSObject, TextSurface {
     marksView.spans = spans
   }
 
-  func setSearchHighlights(_ ranges: [NSRange]) {
-    searchView.ranges = ranges
+  func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {
+    highlightView.ranges[kind] = ranges
   }
 
   /// タブの表示幅は単位の桁数——モデル（タブは 1 段）と描画が一致し、空白だけの行の線（桁幅から置く）がタブで
@@ -150,26 +182,56 @@ final class STTextSurface: NSObject, TextSurface {
     set { textView.textSelection = newValue }
   }
 
-  /// 上流の find と同じ順で着地させる——viewport の外なら relocate → layout（`scrollRangeToVisible` が持つ）、
-  /// それから実際に layout された矩形の中心を clip の中央へ。着地の y は推定の文書高から割り出さない（末尾の
-  /// clamp だけは `NSClipView` が constrain に使うのと同じ documentView の高さを使う）。横位置は
-  /// `scrollRangeToVisible` がその列を見える位置へ寄せたところを保つ。
+  /// 行の中心を clip の中央へ置き（`anchor`）、それから列が横に見えるところまで寄せる（縦はもう見えているので動かない）。
   func scrollToCenter(_ offset: Int) {
+    let location = min(max(0, offset), length)
+    anchor(location, x: clipView.bounds.minX) { frame in
+      frame.midY - self.clipView.bounds.height / 2
+    }
+    textView.scrollRangeToVisible(NSRange(location: location, length: 0))
+  }
+
+  /// 行頭の行を、その高さの `hiddenFraction` ぶん隠して先頭へ。横位置は保つ。
+  func scroll(toTop offset: Int, hiddenFraction: CGFloat) {
+    let fraction = min(max(0, hiddenFraction), 1)
+    anchor(min(max(0, offset), length), x: clipView.bounds.minX) { frame in
+      frame.minY + fraction * frame.height
+    }
+  }
+
+  /// オフセットの行の矩形から決めた y へ clip を置き、layout を落ち着かせる。TextKit 2 は layout していない行の位置を推定で持ち、
+  /// layout が進むたびに推定を直す——遠くへ飛ぶと、置いた直後の layout で狙った行が動き（先頭の行がずれる）、上流は
+  /// viewport の行片を置いた後に末尾を layout し直すので、画面の行片の view が古い位置に残る（本文と、矩形から描く
+  /// 装備・強調の地・クリックの当たりが食い違う）。その行だけを layout して位置を得て（viewport の relocate は重いので
+  /// 使わない）、置き直しと layout を行の位置が動かなくなるまで繰り返す（推定が揺れ続けても止まるよう回数に上限を置く）。
+  private func anchor(_ offset: Int, x: CGFloat, y: (CGRect) -> CGFloat) {
     let manager = textView.textContentManager
-    guard let location = manager.location(manager.documentRange.location, offsetBy: offset) else {
-      return
+    guard let location = manager.location(manager.documentRange.location, offsetBy: offset)
+    else { return }
+    let layoutManager = textView.textLayoutManager
+    for _ in 0..<Self.anchorPasses {
+      layoutManager.ensureLayout(for: NSTextRange(location: location))
+      layoutManager.ensureLayout(
+        for: NSTextRange(location: layoutManager.documentRange.endLocation))
+      guard let frame = VisibleLines(textView: textView).line(containing: offset)?.frame else {
+        return
+      }
+      let target = min(max(0, y(frame)), clipView.maximumY)
+      guard abs(clipView.bounds.minY - target) > 0.25 || abs(clipView.bounds.minX - x) > 0.25
+      else { return }
+      clipView.scroll(to: NSPoint(x: x, y: target))
+      scrollView.reflectScrolledClipView(clipView)
+      textView.needsLayout = true
+      textView.layoutSubtreeIfNeeded()
     }
-    textView.scrollRangeToVisible(NSRange(location: offset, length: 0))
-    let range = NSTextRange(location: location)
-    textView.textLayoutManager.ensureLayout(for: range)
-    guard let frame = textView.textLayoutManager.textSegmentFrame(in: range, type: .standard) else {
-      return
-    }
-    let clip = scrollView.contentView
-    let limit = max(0, textView.frame.height - clip.bounds.height)
-    let y = min(max(0, frame.midY - clip.bounds.height / 2), limit)
-    clip.scroll(to: NSPoint(x: clip.bounds.minX, y: y))
-    scrollView.reflectScrolledClipView(clip)
+  }
+
+  /// 推定の揺れを落ち着かせる置き直しの上限。
+  private static let anchorPasses = 4
+
+  /// 最終行（末尾の空行を含む）の上端。
+  private var lastLineTop: CGFloat? {
+    VisibleLines(textView: textView).lastLine()?.frame.minY
   }
 
   func scrollToVisible(_ range: NSRange) {
@@ -190,11 +252,14 @@ final class STTextSurface: NSObject, TextSurface {
   private func layoutOverlays() {
     let visible = textView.visibleRect
     let gutterWidth = textView.gutterView?.frame.width ?? 0
-    for overlay in [decorationView, searchView] as [NSView] {
-      overlay.frame = NSRect(
-        x: visible.minX + gutterWidth, y: visible.minY, width: max(0, visible.width - gutterWidth),
-        height: visible.height)
-      overlay.setBoundsOrigin(NSPoint(x: visible.minX, y: visible.minY))
+    let body = NSRect(
+      x: visible.minX, y: visible.minY, width: max(0, visible.width - gutterWidth),
+      height: visible.height)
+    decorationView.frame = body.offsetBy(dx: gutterWidth, dy: 0)
+    // 強調の地は本文の層（container の座標。ガターの右から）の子。
+    highlightView.frame = body
+    for overlay in [decorationView, highlightView] as [NSView] {
+      overlay.setBoundsOrigin(body.origin)
       overlay.needsDisplay = true
     }
     if let gutter = textView.gutterView {
@@ -225,23 +290,20 @@ final class STTextSurface: NSObject, TextSurface {
     }
   }
 
-  /// clip の可視矩形（overscroll の負は 0 に clamp）の上端にある行の矩形から viewport を出す。上端に layout が
-  /// 無ければ nil（次の layout の通知で出し直す）。
+  /// clip の上端にある行の矩形（行片の単位——末尾の空行も 1 行）から viewport を出す。可視行数は clip の高さから
+  /// （上端の overscroll で縮めない）。上端に layout が無ければ nil（次の layout の通知で出し直す）。
   private func measureViewport() -> TextViewport? {
-    var clip = scrollView.contentView.bounds
-    if clip.minY < 0 {
-      clip.size.height = max(0, clip.height + clip.minY)
-      clip.origin.y = 0
-    }
+    let clip = clipView.bounds
     guard clip.height > 0,
-      let fragment = textView.textLayoutManager.textLayoutFragment(
-        for: CGPoint(x: 0, y: clip.minY))
+      let line = VisibleLines(textView: textView).line(atY: max(0, clip.minY))
     else { return nil }
-    let frame = fragment.layoutFragmentFrame
+    let frame = line.frame
     let hidden = frame.height > 0 ? min(max((clip.minY - frame.minY) / frame.height, 0), 1) : 0
+    let pixel = 1 / (textView.window?.backingScaleFactor ?? 1)
     return TextViewport(
-      firstVisible: NSRange(fragment.rangeInElement, in: textView.textContentManager).location,
-      hiddenFraction: hidden, visibleLines: clip.height / style.lineHeight)
+      firstVisible: line.start, hiddenFraction: hidden,
+      visibleLines: clip.height / style.lineHeight,
+      clipsRight: textView.frame.maxX - clip.maxX > pixel)
   }
 
   /// STTextView の置換は undo 登録と `didChangeTextIn` を 1 回ずつ通す（`text` の代入は undo 登録を
@@ -303,7 +365,7 @@ extension STTextSurface: @preconcurrency STTextViewDelegate {
   ) {
     let range = NSRange(affectedCharRange, in: textView.textContentManager)
     decorationView.needsDisplay = true
-    searchView.needsDisplay = true
+    highlightView.needsDisplay = true
     marksView.needsDisplay = true
     delegate?.surface(
       self, didChange: TextEdit(range: range, replacementLength: replacementString.utf16.count))

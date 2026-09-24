@@ -13,10 +13,12 @@ struct EditorFaceRoot: View {
 
 /// エディター面の AppKit 側の根。骨の幾何——レール｜サイドバー（開いているとき）｜列の頭
 /// （ファイルタブ行 → 文書があればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（焦点の
-/// 文書のテキスト面とその右の俯瞰、無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
+/// 文書のテキスト面とその右のミニマップ・スクロールバー、無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
 ///
-/// 文書の「変わった」（viewport・選択・本文・ハンク）は pane が 1 つずつ受け、俯瞰と検索へ配る——文書側の closure は
-/// 単一のまま、扇出はここが持つ。
+/// 文書の「変わった」（viewport・選択・本文・ハンク・焦点）は pane が 1 つずつ受け、ミニマップ・スクロールバー・影・検索・
+/// 出現の強調へ配る——文書側の closure は単一のまま、扇出はここが持つ。検索の一致と語の出現は pane が束ねて
+/// （`OverviewDecorations`）ミニマップとスクロールバーへ押す。本体の上のポインタは pane の tracking area が見て、
+/// スクロールバーのつまみの見え隠れに使う。
 ///
 /// 骨の状態はセッションの写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれだけを読む。
 /// セッションの変化は `sessionDidChange` 1 本で受け、写し → 面の差し替え → ツリーの追従の順に進める。
@@ -35,11 +37,22 @@ final class EditorPaneView: NSView {
   let headerHost: NSHostingView<EditorHeaderRoot>
   let emptyHost: NSHostingView<EditorFaceRoot>
   private(set) var document: EditorDocument?
-  /// 本体の右の俯瞰（ミニマップ・印の列）。焦点の文書に結ぶ。
-  let overview = EditorOverviewView(style: EditorStyle.overview())
+  /// 本体の右のミニマップとスクロールバー、本体に重ねる影。焦点の文書に結ぶ。
+  let minimap = EditorMinimapView(style: EditorStyle.minimap())
+  let scrollbar = EditorScrollbarView(style: EditorStyle.scrollbar())
+  let scrollShadow = EditorScrollShadowView(
+    topColor: Theme.Color.editorScrollShadow, edgeColor: Theme.Color.editorMinimapShadow)
   /// ファイル内検索の状態（pane ごと）。バーは開いている間だけある。
   let search = EditorSearch()
   var searchBar: SearchBar?
+  /// 検索バーの右端の制約（右列の幅が本体の幅で変わるので `layout()` が置き直す）。
+  var searchBarTrailing: NSLayoutConstraint?
+  /// 出現の強調の状態（pane ごと）。
+  let occurrences = EditorOccurrences()
+  /// 本体の上のポインタを見る tracking area。
+  var bodyTracking: NSTrackingArea?
+  /// 最後に見た先頭行（縦のスクロールの検出）。文書を結び直すと捨てる。
+  var lastFirstLine: CGFloat?
   /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
   private(set) var sidebar = EditorSidebarState() {
     didSet { observeSidebar() }
@@ -73,13 +86,19 @@ final class EditorPaneView: NSView {
       host.autoresizingMask = []
       addSubview(host)
     }
-    overview.autoresizingMask = []
-    addSubview(overview)
+    for view in [minimap, scrollbar, scrollShadow] as [NSView] {
+      view.autoresizingMask = []
+      addSubview(view)
+    }
+    scrollShadow.isHidden = true
     sidebarHandle.autoresizingMask = []
     addSubview(sidebarHandle)
-    search.onCountChange = { [weak self] selected, total in
-      self?.searchBar?.updateCount(selected: selected, total: total)
+    search.onCountChange = { [weak self] selected, total, limited in
+      self?.searchBar?.updateCount(selected: selected, total: total, limited: limited)
     }
+    search.onMatchesChange = { [weak self] in self?.pushOverviewDecorations() }
+    search.onNeedleChange = { [weak self] in self?.syncFindState() }
+    occurrences.onWordOccurrencesChange = { [weak self] in self?.pushOverviewDecorations() }
     sidebarHandle.onDrag = { [weak self] width in self?.resizeSidebar(to: width) }
     sidebarHandle.onRelease = { [weak self] in self?.sidebar.commit() }
     wireShell()
@@ -272,38 +291,25 @@ final class EditorPaneView: NSView {
       let view = document.surface.view
       view.autoresizingMask = []
       view.frame = surfaceRect
-      // 境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なる。テキスト面の下に置いて当たりを保つ。
-      addSubview(view, positioned: .below, relativeTo: sidebarHandle)
+      // 境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なる。テキスト面は影の下（影はミニマップにも掛かる）。
+      addSubview(view, positioned: .below, relativeTo: minimap)
       observe(document, true)
     } else {
       closeSearch()
     }
-    overview.bind(document)
+    lastFirstLine = nil
+    minimap.bind(document)
+    scrollbar.bind(document)
     search.bind(document)
+    occurrences.bind(document)
+    scrollShadow.isHidden = document == nil
+    updateShadow()
     emptyHost.isHidden = document != nil
     applyGround()
     needsLayout = true
     if hadFocusInside, window?.firstResponder !== focusTarget {
       window?.makeFirstResponder(focusTarget)
     }
-  }
-
-  /// 文書の「変わった」を俯瞰と検索へ配る（見せている文書だけ）。
-  private func observe(_ document: EditorDocument, _ on: Bool) {
-    document.onViewportChange = on ? { [weak self] in self?.overview.refresh() } : nil
-    document.onHunksChange = on ? { [weak self] in self?.overview.refresh() } : nil
-    document.onSelectionChange =
-      on
-      ? { [weak self] in
-        self?.overview.refresh()
-        self?.search.selectionDidChange()
-      } : nil
-    document.onTextChange =
-      on
-      ? { [weak self] change in
-        self?.overview.textDidChange(change)
-        self?.search.textDidChange()
-      } : nil
   }
 
   // MARK: - 可視性（ツリーが根のサービスを握る寿命）
