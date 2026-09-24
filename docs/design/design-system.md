@@ -1,15 +1,15 @@
 ---
 title: Orbe デザインシステム
 description: 外観の思想・契約を記す自由記述ドキュメント。値の正は DesignSystem/ の Swift、思想・契約の正は本書
-updated: 2026-09-20
+updated: 2026-09-24
 ---
 
 # Orbe デザインシステム
 
-> ステータス: v0.11.0 · 2026-09-20
+> ステータス: v0.12.0 · 2026-09-24
 > 値の正（SSOT）: chrome/semantic は `Sources/Orbe/DesignSystem/DesignTokens.swift`（機械可読ミラー `docs/design/tokens.json`）／ 識別色（端末 ANSI 16 色・chrome 共有アンカー）は `Sources/Orbe/DesignSystem/OrbePalette.swift`（端末 conf を生成し、chrome アンカーへ定数を供給）／ worktree 識別色 48 色（24 色相 × 2 トーン）を dark / light 別に持つ表は `Sources/Orbe/DesignSystem/WorktreePalette.swift`（`scripts/gen-worktree-palette.py` が oklch から生成・手で編集しない）。
 > ガラス質感・elevation・glow は `Sources/Orbe/DesignSystem/DesignTokens+Glass.swift` が所有（本書は再定義しない）。
-> エディター面のトークン（`face.*` / `editor.*` / `type.editor*` / `layout.editor*` / `opacity.editor*Light` / `faceSlide` `spineLook` `faceDot`）は `Sources/Orbe/DesignSystem/DesignTokens+Editor.swift` が所有。
+> エディター面のトークン（`face.*` / `editor.*` / `type.editor*` / `layout.editor*` / `opacity.editor*Light` / `faceSlide` `spineLook` `faceDot` `editorSlider*` `editorScrollbar*`）は `Sources/Orbe/DesignSystem/DesignTokens+Editor.swift` が所有。
 > 本書は思想・契約を記す自由記述ドキュメントで、**思想・契約の正は本書、値の正は上記 Swift**。Orbe の外観の**正**はこのリポジトリの中で閉じている。ただしコード中の一部コメントは、値が決まった経緯の記録として設計見本（リポジトリ外）を引用する——それは出所の記録であって、正ではない。
 
 Orbe は AI コーディングエージェントのためのネイティブ macOS ターミナル。外観は
@@ -86,6 +86,17 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `sunkInk` | 沈み面の基色（dark は scrim と同じ暗幕の基色）。view 側で α を掛ける（レール .22・サイドバー .45・ファイルタブ行 .22。light は ×0.3） | `#0a080e` | `#3a3151` |
 | `editor.lineNumber` | 行番号（`text.muted` の α .55） | `rgba(139,131,151,.55)` | `rgba(141,133,163,.55)` |
 | `editor.whitespace` | 見せる空白の丸点（`text.muted` の α .55） | `rgba(139,131,151,.55)` | `rgba(141,133,163,.55)` |
+| `editor.findMatch` | 検索の一致の地・ミニマップの一致 | `rgba(234,92,0,.33)` | `rgba(234,92,0,.33)` |
+| `editor.findMatchCurrent` | 現在の一致の地（不透明・選択の地の上） | `#9e6a03` | `#a8ac94` |
+| `editor.findLine` | 現在の一致の行全体の地 | `rgba(255,255,255,.043)` | `rgba(253,255,0,.2)` |
+| `editor.selectionOccurrence` | 選択文字列の他の出現の地（面に焦点が無いとき α 半分）・ミニマップの語の出現 | `rgba(173,214,255,.15)` | `rgba(173,214,255,.5)` |
+| `editor.wordOccurrence` | キャレットの語の出現の地 | `rgba(87,87,87,.72)` | `rgba(87,87,87,.25)` |
+| `editor.minimapSlider` / `Hover` / `Active` | ミニマップの帯（普段・帯の上・ドラッグ中） | `rgba(121,121,121,.2)` / `rgba(100,100,100,.35)` / `rgba(191,191,191,.2)` | `rgba(100,100,100,.2)` / `rgba(100,100,100,.35)` / `rgba(0,0,0,.3)` |
+| `editor.scrollbarSlider` / `Hover` / `Active` | スクロールバーのつまみ（普段・つまみの上・ドラッグ中） | `rgba(121,121,121,.4)` / `rgba(100,100,100,.7)` / `rgba(191,191,191,.4)` | `rgba(100,100,100,.4)` / `rgba(100,100,100,.7)` / `rgba(0,0,0,.6)` |
+| `editor.rulerFind` | スクロールバーの印——検索の一致 | `rgba(209,134,22,.49)` | 同 |
+| `editor.rulerOccurrence` | スクロールバーの印——語の出現 | `rgba(160,160,160,.8)` | 同 |
+| `editor.scrollShadow` | 本文を縦にスクロールしている間の上端の影 | `#000000` | `#dddddd` |
+| `editor.minimapShadow` | 本文が右に続くときのミニマップ左端の影 | `rgba(0,0,0,.08)` | 同 |
 | `syntax.keyword` | 構文: キーワード | `#569cd6` | `#2f63c9` |
 | `syntax.keywordControl` | 構文: 制御の流れ（return / if / for / import …） | `#c586c0` | `#a03a98` |
 | `syntax.type` | 構文: 型 | `#4ec9b0` | `#178a72` |
@@ -99,7 +110,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 `accent.focus` ＝ `accent.primary`／ `text.tertiary` ＝ `text.muted`／
 `success` ＝ `diff.added`（green）／ `danger` ＝ `diff.removed`（red）／
 `state.dormant` ＝ `text.muted`／ `surface.0` ＝ `bg.sunken`。
-**値だけが一致する独立トークン**: `face.terminal` ＝ `text.secondary`／ `editor.icon` ＝ `kbKeyText`／ `editor.text` ＝ `statusText`／ `editor.modified` ＝ `editor.hue.yellow`／ `diff.modified` ＝ `editor.hue.blue`／ `editor.whitespace` ＝ `editor.lineNumber`（上の収束と違い SSOT でも互いを参照せず、片方の値が動いてももう片方は追随しない）。`syntax.*` の dark は VSCode Dark Modern の実在トークン色で、5 色が端末の ANSI（§8）と偶然同値だが、端末色は別レイヤーなので参照しない。
+**値だけが一致する独立トークン**: `face.terminal` ＝ `text.secondary`／ `editor.icon` ＝ `kbKeyText`／ `editor.text` ＝ `statusText`／ `editor.modified` ＝ `editor.hue.yellow`／ `diff.modified` ＝ `editor.hue.blue`／ `editor.whitespace` ＝ `editor.lineNumber`（上の収束と違い SSOT でも互いを参照せず、片方の値が動いてももう片方は追随しない）。`syntax.*` の dark は VSCode Dark Modern の実在トークン色で、5 色が端末の ANSI（§8）と偶然同値だが、端末色は別レイヤーなので参照しない。俯瞰と強調の `editor.*`（findMatch〜minimapShadow）は VS Code Dark Modern / Light Modern の値（上書きの無いものは VS Code の既定）で、エディターの使い勝手を VS Code に揃えるために借りる。同じ意味の Orbe トークンがあるもの（git の印・キャレット・縁）は Orbe のトークンに VS Code の α を掛ける。
 `state.done`（完了・緑）と `diff.added`（green）、`state.waiting`（要応答・黄）と `conflict`（ANSI黄）は**別トークンとして分離**（light では偶々同値だが dark では異なる。SSOT は状態色を `StateHue`、ANSI 系を端末アンカーから別々に導く）。
 **反転色（`state.*Inverse`）は対テーマの状態色**＝dark/light の値を入れ替えただけ（選択タブの反転面上でコントラストを確保する仕組み）。
 **light の `tab.activeText` `#f3f0fa` は `bg.base` `#fcfbfe` と別値**（on.accent の流用不可）。
@@ -161,7 +172,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 - **spacing（2/4pt グリッド・穴なし）**: `hair 2 / tick 4 / note 6 / step 8 / beat 12 / bar 16 / span 20 / phrase 24`
 - **radius**: `xs 3`（単独タブの器・＋ボタン）/ `sm 4`（バッジ・キーヒント・タブグループの器）/ `row 8`（リスト行・小コントロール）/ `md 10`（入力・小パネル）/ `card 12`（カード・設定行）/ `lg 16`（パネル・オーバーレイ）/ `pill 999`（カウントピル・トグル）
 - **stroke**: `hairline 1`（罫線・枠）/ `focusRing 2`（フォーカスリング）
-- **layout（エディター面の骨）**: `editorRail 36` / `editorRailGlyph 20`（レールのアイコン）/ `editorSidebar 240`（既定。ドラッグで可変）/ `editorSidebarMinWidth 160` / `editorBodyMinWidth 160`（サイドバーの幅の上限と、狭い列で表示幅を切り詰める規則）/ `editorSidebarHandle 4`（境の当たり）/ `editorFileTabs 28` / `editorBreadcrumb 20`（レール・サイドバーの右、ファイルタブ行の下の hairline 1 はこれらの外側に足す） / `editorPanelHeader 28` / `editorRow 20` / `editorChip 14` / `editorChipSmall 12`（パンくずの末尾）/ `editorChevron 16` / `editorLineNumberGutter 50`（行番号の列。桁が増えれば広がる最小幅）/ `editorMarkGutter 19`（git の印の列）/ `editorMinimap 100`（本体の右の俯瞰のミニマップ。左の hairline 1 は外側）/ `editorScrollMarks 13`（その右のスクロール印の列）。見本の半透明面の light 換算は `opacity.editorSunkLight 0.3` / `editorFillLight 0.6` / `editorHairlineLight 1.4`。
+- **layout（エディター面の骨）**: `editorRail 36` / `editorRailGlyph 20`（レールのアイコン）/ `editorSidebar 240`（既定。ドラッグで可変）/ `editorSidebarMinWidth 160` / `editorBodyMinWidth 160`（サイドバーの幅の上限と、狭い列で表示幅を切り詰める規則）/ `editorSidebarHandle 4`（境の当たり）/ `editorFileTabs 28` / `editorBreadcrumb 20`（レール・サイドバーの右、ファイルタブ行の下の hairline 1 はこれらの外側に足す） / `editorPanelHeader 28` / `editorRow 20` / `editorChip 14` / `editorChipSmall 12`（パンくずの末尾）/ `editorChevron 16` / `editorLineNumberGutter 50`（行番号の列。桁が増えれば広がる最小幅）/ `editorMarkGutter 19`（git の印の列）/ `editorScrollbar 14`（本体の右端の縦スクロールバー）/ `editorMinimapMaxWidth 120`（その左のミニマップの幅の上限。幅は本文の幅から計算する）。見本の半透明面の light 換算は `opacity.editorSunkLight 0.3` / `editorFillLight 0.6` / `editorHairlineLight 1.4`。
 - elevation（面の影）は `DesignTokens+Glass.swift` が所有。本書・`tokens.json` は再定義しない。
 
 ### 2.5 モーション（拍）
@@ -180,6 +191,8 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `faceSlide` | 320ms | 面のスライド（⌘E・背クリック）。イージング `cubic-bezier(0.32, 0.72, 0, 1)` |
 | `spineLook` | 200ms | 背の地の切替（印 ⇄ グリップ） |
 | `faceDot` | 240ms | 位置ドットの幅・色 |
+| `editorSliderFadeIn` | 100ms | ミニマップの帯・スクロールバーのつまみが現れる（linear） |
+| `editorScrollbarFadeOut` | 800ms | つまみが消える（linear）。スクロールが止まって `editorScrollbarHideDelay` 500ms 後に始まる |
 
 > リズム規律: 同種の遷移に別々の時間を使わない。`reduce motion` 環境では遷移は `instant`・ループは停止（スピナーは静的な 3/4 円弧のまま残り、形で working と判別できる）。
 
@@ -232,9 +245,10 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
   - **インデント線**: 1px `surfaceInk` .06（light ×0.6）。段ごとに、その段ぶんの空白の直後の文字の左端に立つ（規則は [code](../spec/editor/code.md)）。
   - **空白の丸点**: 直径 2・`editor.whitespace`。行頭・行末・2 個以上の連続スペースだけ。
   - **URL 下線**: 1px・文字と同色・ベースラインの 3 下。⌘押下中だけ指カーソル、⌘クリックで既定ブラウザ。
-  - **ミニマップ**（本体の右。左 1px `borderInk` .07（light ×1.4）の縁、幅 `layout.editorMinimap` 100）: 行は高 2・ピッチ 4・radius 1、上余白 6・左余白 8 ＋ インデント 1 桁 1.1、幅は字数 × 0.55（左余白から 72 まで）、色 `syntax.punctuation` .15、コメント行は `syntax.comment` .40。表示範囲の帯は `editor.text` .07 で列の全幅、上端の余白 6 ぶん先頭行の上へ伸びる。左端 x 1・幅 2 に追加 `diff.added` .9・変更 `diff.modified` .9 の印。
-  - **スクロール印の列**（ミニマップの右、幅 `layout.editorScrollMarks` 13）: 文書比例の位置に、追加 `diff.added` .8・変更 `diff.modified` .8 の 4px バー（x 2、最小高 2）と、キャレットの行に `text.primary` .7 の 5×2（x 6）。削除の境は出さない。追加と変更は色だけの区別（git ガターと同じ例外）。
-  - **検索の一致の地**: `editor.modified` .30・radius 2（見本 SearchPanel のヒットと同じ）。現在の一致はシステムの選択の地が覆う。バーは Search field（§5）そのもので、本文の右上（上・右 12、ミニマップの左）。
+  - **ミニマップ**（スクロールバーの左。幅は VS Code の式で本文の幅から計算し、最大 `layout.editorMinimapMaxWidth` 120）: 1 行 2pt・1 字 1pt・行の間に隙間なし。字は本文フォントの太字を 1×2（1x）/ 2×4（2x）デバイス px に縮めた字形を構文の色（役割の無い字は `editor.text`）で描き、明るさの係数 dark 12/15・light 50/60、全体の不透明度 .9。字は左 8 デバイス px から。git の印は x 2 デバイス px・幅 2 デバイス px に `diff.added` / `diff.modified` / `diff.removed`。検索の一致は `editor.findMatch`、語の出現は `editor.selectionOccurrence`（範囲とその行の α 半分の地）、選択はシステムの選択色。帯は `editor.minimapSlider`（帯の上 `Hover`・ドラッグ中 `Active`）でミニマップの全幅、普段は隠れホバーで現れる。本文が右に続くときは左端の外にぼかし 6 の影（`editor.minimapShadow`）。
+  - **スクロールバー**（本体の右端、幅 `layout.editorScrollbar` 14）: つまみ `editor.scrollbarSlider`（つまみの上 `Hover`・ドラッグ中 `Active`）、最小の長さ 20。下に印——左 1 デバイス px と上 1 デバイス px の縁（`borderInk` .07・light ×1.4）、残りを 3 レーン: 左に git（`diff.*` α .6）、中央に検索の一致 `editor.rulerFind` と語の出現 `editor.rulerOccurrence`、全幅にキャレット（`accent.bright` α .7・高 2）。印の最小の高さ 6。つまみは印の上に重なる。追加と変更は色だけの区別（git ガターと同じ例外）。
+  - **上端の影**: 先頭の行が上へ隠れている間、本体の上端（幅は本体 − スクロールバー）に `editor.scrollShadow` の内側の影（CSS の `0 6px 6px -6px inset`）。
+  - **強調の地**: 行の高さいっぱい・角なし、選択の地の上・文字の下。下から 現在の一致の行全体 `editor.findLine` → 選択文字列の出現 `editor.selectionOccurrence` → 語の出現 `editor.wordOccurrence` → 検索の一致 `editor.findMatch` → 現在の一致 `editor.findMatchCurrent`（不透明）。一致が 1000 件を超えると検索の一致は現在の一致の行の直上へ回る。バーは Search field（§5）そのもので、本文の右上（上・右 12、ミニマップの左）。
 - **Rail**（エディター面の左端 36）: 地 `sunkInk` .22・右 1px `borderInk` .07（light ×1.4）。項目は 36 角・グリフ 20px stroke 1.5。選択は上の例外（サイドバーを閉じている間は無い）、非選択の文字は `editor.tertiary`。
 - **Explorer**（サイドバー。既定 240・ドラッグで可変）: 地 `sunkInk` .45・右 1px `borderInk` .07。ぼかしは持たない（面内の in-flow 面は窓のブラーに委ねる。§1-6）。パネルヘッダー 28（題 `type.editorPanelTitle`・`text.muted`、右端に 22 角のアイコンボタン: radius 4・hover 地 `surfaceInk` .08 ＋ 文字 `editor.text`、既定の文字 `text.muted`）。ルート行 20（`type.editorRootLabel`・`editor.text`・根の basename を大文字）。ツリー行 20・`type.editorTreeRow`・深さぶんのガイド（幅 8 ＋ 右 1px `borderInk` .08）・ディレクトリはシェブロン 16（`editor.icon`）、ファイルは種別チップ 14。名前の色は git バッジに従う（M `editor.modified` / A・U `diff.added` / C `conflict`、無印は `editor.text`）。バッジは右端 `type.editorBadge`。hover 地 `surfaceInk` .045、選択 `selectionFill`。ディレクトリ行はバッジを持たない。
 - **File tabs**（列の頭 28）: 地 `sunkInk` .22・下 1px `borderInk` .07。タブは padding 横 10・gap 6・`type.editorFileTab`・右 1px `borderInk` .07。チップ 14 ＋ 名前 ＋ 未保存ドット 7（`text.primary`。外部変更で衝突中は `editor.modified`）＋ 右端に × 10（`editor.icon`。幅は常に確保し、hover でだけ見える）。選択は上の例外・文字 `text.primary`、非選択は `text.muted`。溢れは横スクロール（スクローラー非表示）。
