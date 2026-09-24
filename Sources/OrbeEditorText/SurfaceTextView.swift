@@ -83,6 +83,14 @@ final class SurfaceTextView: STTextView {
     return CGPoint(x: point.x - (gutterView?.frame.width ?? 0), y: point.y)
   }
 
+  /// End（fn+→）は最後の 1 画面を見せる。上流は文書の下端へ送り clip の上限で縮まる前提で、最終行を最上段まで送れる
+  /// 範囲では最終行だけが残ってしまう（VS Code も最終行を下端に出すだけ）。上流の relocate と layout は上流に任せる。
+  override func scrollToEndOfDocument(_ sender: Any?) {
+    super.scrollToEndOfDocument(sender)
+    let height = enclosingScrollView?.contentView.bounds.height ?? visibleRect.height
+    scroll(CGPoint(x: visibleRect.minX, y: max(0, frame.maxY - height)))
+  }
+
   override func becomeFirstResponder() -> Bool {
     let result = super.becomeFirstResponder()
     if result { onFocusChange?(true) }

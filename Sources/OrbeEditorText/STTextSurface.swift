@@ -267,8 +267,11 @@ final class STTextSurface: NSObject, TextSurface {
       // ガターの地は可視矩形（clip view。テキスト view の高さに依らない）を文書の下端（ガターの高さ）で
       // 切ったぶん。器はその矩形を塗らない。
       let clip = scrollView.contentView.bounds
-      let ground = CGRect(x: 0, y: clip.minY, width: gutter.bounds.width, height: clip.height)
-        .intersection(gutter.bounds)
+      // 遠くへ飛んだ置き直しの途中はガターの高さが追いついておらず、交わりが無い（null の矩形は無限大の座標）。
+      let visibleGround = CGRect(
+        x: 0, y: clip.minY, width: gutter.bounds.width, height: clip.height
+      ).intersection(gutter.bounds)
+      let ground = visibleGround.isNull ? .zero : visibleGround
       groundView.frame = ground
       container.groundHole = NSRect(
         x: 0, y: ground.minY - clip.minY + style.topInset, width: ground.width,
@@ -285,6 +288,7 @@ final class STTextSurface: NSObject, TextSurface {
     if NSEvent.modifierFlags.contains(.command) {
       textView.window?.invalidateCursorRects(for: textView)
     }
+    clipView.updateBlankArea(gutterWidth: gutterWidth)
     if let current = measureViewport(), current != viewport {
       viewport = current
       delegate?.surfaceDidChangeViewport(self)
@@ -295,7 +299,13 @@ final class STTextSurface: NSObject, TextSurface {
   /// （上端の overscroll で縮めない）。上端に layout が無ければ nil（次の layout の通知で出し直す）。
   private func measureViewport() -> TextViewport? {
     let clip = clipView.bounds
-    guard clip.height > 0,
+    guard clip.height > 0 else { return nil }
+    // 空の文書に TextKit 2 は layout fragment を作らない。行は 1 つ（空行）で、見えている範囲はその先頭。
+    guard length > 0 else {
+      return TextViewport(
+        firstVisible: 0, hiddenFraction: 0, visibleLines: clip.height / style.lineHeight)
+    }
+    guard
       let line = VisibleLines(textView: textView).line(atY: max(0, clip.minY))
     else { return nil }
     let frame = line.frame

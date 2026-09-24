@@ -3,6 +3,7 @@ import XCTest
 
 @testable import Orbe
 @testable import OrbeEditorCore
+@testable import OrbeEditorText
 
 /// エンジンのスクロールと強調の地——最終行を最上段まで送れる範囲・その下の空き地の押下・「この行を先頭に」の着地
 /// （遠くへ飛んでも狙った行に落ち着き、後から動かない）・本文が右に続くか・横スクローラーの様式・強調の地の層の位置。
@@ -115,6 +116,42 @@ final class EditorTextSurfaceScrollTests: OrbeTestCase {
     XCTAssertTrue(try orange(2), "MARK の行（上から 3 行目）に地")
     XCTAssertFalse(try orange(1))
     XCTAssertFalse(try orange(3))
+  }
+
+  /// End は最後の 1 画面を見せる（最終行を最上段まで送れる範囲でも、最終行だけを残さない）。
+  func testEndKeyShowsTheLastScreen() throws {
+    let opened = try open(lines(100))
+    let document = opened.document
+    document.surface.responder.perform(#selector(NSResponder.scrollToEndOfDocument(_:)), with: nil)
+    let expected = CGFloat(document.lineIndex.lineCount) - document.viewportLines.visible
+    pumpMain(until: { abs(self.first(document) - expected) < 0.05 }, "最終行は下端")
+  }
+
+  /// 空の文書にも見えている範囲がある（1 行・先頭）。スクロールした後に全部消しても先頭に戻る。
+  func testAnEmptyDocumentStillReportsAViewport() throws {
+    let empty = try open("")
+    XCTAssertEqual(empty.document.surface.viewport.firstVisible, 0)
+    XCTAssertGreaterThan(empty.document.surface.viewport.visibleLines, 0)
+    XCTAssertFalse(empty.document.surface.viewport.clipsRight)
+
+    let opened = try open(lines(100))
+    opened.document.scroll(toFirstLine: 50)
+    opened.document.surface.replaceAll(with: "")
+    pumpMain(until: { opened.document.surface.viewport.firstVisible == 0 }, "消せば先頭")
+    XCTAssertEqual(opened.document.surface.viewport.hiddenFraction, 0)
+  }
+
+  /// 最終行より下の空き地のうち本文の列は、押せば効くので I ビームの範囲になる（ガターは除く）。
+  func testTheBlankAreaBelowTheLastLineIsTextArea() throws {
+    let opened = try open(lines(100))
+    let clip = try XCTUnwrap(opened.scroll.contentView as? OverscrollClipView)
+    XCTAssertTrue(clip.blankArea.isEmpty, "先頭では空き地が無い")
+    opened.document.scroll(toFirstLine: 95)
+    let style = EditorStyle.make()
+    let documentBottom = try XCTUnwrap(opened.scroll.documentView).frame.maxY
+    XCTAssertEqual(clip.blankArea.minY, documentBottom)
+    XCTAssertEqual(clip.blankArea.maxY, clip.bounds.maxY)
+    XCTAssertEqual(clip.blankArea.minX, style.gutterWidth + style.marks.gutterWidth, accuracy: 0.5)
   }
 
   func testViewportCountsTheTrailingEmptyLineAsALine() throws {

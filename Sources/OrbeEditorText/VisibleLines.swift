@@ -84,10 +84,12 @@ struct VisibleLines {
     return lineFrames(of: fragment, start: fragmentStart).last { $0.start <= offset }
   }
 
-  /// y（container 基準）の行。最終行より下なら最終行、先頭より上なら先頭の行。layout が無ければ nil。
+  /// y（container 基準）の行。最終行より下なら最終行、先頭より上なら先頭の行。その位置に layout が無ければ nil。
   func line(atY y: CGFloat) -> LineFrame? {
     guard let fragment = layoutManager.textLayoutFragment(for: CGPoint(x: 0, y: max(0, y))) else {
-      return lastLine()
+      // 最終行より下（最終行を最上段まで送れる範囲）なら最終行。まだ layout していない位置なら答えない。
+      guard let last = lastLine(), y >= last.frame.minY else { return nil }
+      return last
     }
     let start = NSRange(fragment.rangeInElement, in: contentManager).location
     let lines = lineFrames(of: fragment, start: start)
