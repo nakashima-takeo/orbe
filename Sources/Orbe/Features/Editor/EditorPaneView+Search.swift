@@ -15,7 +15,7 @@ extension EditorPaneView {
     let bar = SearchBar(
       translucency: translucency ?? ChromeTranslucency(), localization: localization)
     bar.onNeedleChange = { [weak self] needle in self?.search.setNeedle(needle) }
-    bar.onFocusChange = { [weak self] in self?.syncFindState() }
+    bar.onFocusChange = { [weak self] in self?.focusDidChange() }
     bar.onNext = { [weak self] in self?.search.next() }
     bar.onPrev = { [weak self] in self?.search.previous() }
     bar.onClose = { [weak self] in self?.closeSearch() }

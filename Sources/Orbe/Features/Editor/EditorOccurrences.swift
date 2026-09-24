@@ -4,15 +4,15 @@ import OrbeEditorCore
 /// 出現の強調の状態（pane ごと）——選択文字列の他の出現と、キャレットの語の出現。規則は Core（`Occurrences`）、面への
 /// 作用は契約（強調の地）だけ。語の出現は俯瞰（スクロールバーの印とミニマップ）にも出るので、変わったら告げる。
 ///
-/// 時間の規則は VS Code と同じ。選択文字列の出現は選択の変化で即時、本文の変更で 300ms 後に取り直す。語の出現は
-/// キャレットの明示的な移動から 50ms 後に出て、打鍵・本文の変更で消え、キャレットが出ている範囲の中を動く間は取り直さない。
+/// 選択文字列の出現は選択の変化で即時に取り直す（本文を変える操作——打鍵・undo・大文字化・丸ごと置き換え——はどれも
+/// 本文の変化の後に選択の変化を伴うので、本文の変化では取り直さない）。語の出現はキャレットの明示的な移動から 50ms 後に
+/// 出て（VS Code と同じ）、打鍵・本文の変更で消え、キャレットが出ている範囲の中を動く間は取り直さない。
 /// 「明示的な移動」は、同じ runloop の中に本文の変更を伴わない選択の変化とする（打鍵は本文の変更と選択の変化が同じ
-/// runloop に来る。エンジンの契約に変化の理由は無い）。焦点がエディター面（テキスト面と検索バー）の外へ出ると語の出現は
-/// 消え、テキスト面へ戻るとキャレットを動かさなくても出直す。
+/// runloop に来る。エンジンの契約に変化の理由は無い）。焦点がテキスト面と検索バーの外へ出ると語の出現は消え、テキスト面へ
+/// 戻るとキャレットを動かさなくても出直す。
 @MainActor
 final class EditorOccurrences {
   static let wordDelay: TimeInterval = 0.05
-  static let selectionDelay: TimeInterval = 0.3
 
   private(set) weak var document: EditorDocument?
   private(set) var selectionOccurrences: [NSRange] = []
@@ -26,7 +26,6 @@ final class EditorOccurrences {
   /// テキスト面に焦点があるか。
   private var surfaceFocused = false
   let wordDelay = EditorDelay()
-  let selectionDelay = EditorDelay()
   /// この runloop に本文の変更があった（打鍵に伴う選択の変化を明示的な移動と見なさない）。
   private var textChangedThisTurn = false
 
@@ -55,17 +54,13 @@ final class EditorOccurrences {
     scheduleWord()
   }
 
-  func textDidChange(_ edit: TextEdit) {
+  func textDidChange() {
     textChangedThisTurn = true
     DispatchQueue.main.async { [weak self] in self?.textChangedThisTurn = false }
     clearWord()
-    setSelectionOccurrences(edit.track(selectionOccurrences))
-    selectionDelay.run(after: Self.selectionDelay) { [weak self] in
-      self?.updateSelectionOccurrences()
-    }
   }
 
-  /// テキスト面の焦点が変わった。`insideFace` は焦点がまだエディター面（検索バーを含む）の中にあるか。
+  /// 焦点が変わった。`surfaceFocused` はテキスト面に焦点があるか、`insideFace` は焦点がテキスト面か検索バーにあるか。
   func focusDidChange(surfaceFocused: Bool, insideFace: Bool) {
     self.surfaceFocused = surfaceFocused
     if surfaceFocused {
@@ -106,17 +101,7 @@ final class EditorOccurrences {
 
   private func updateWord() {
     guard let document, surfaceFocused else { return }
-    let selection = document.surface.selectedRange
-    let index = document.lineIndex
-    let row = index.point(at: selection.location).row
-    var line = NSRange(location: index.start(ofRow: row), length: 0)
-    line.length = index.end(ofRow: row) - line.location
-    var body = Array(document.surface.substring(in: line).utf16)
-    if body.last == 0x0A { body.removeLast() }
-    if body.last == 0x0D { body.removeLast() }
-    let word = Occurrences.word(
-      at: selection, line: String(utf16CodeUnits: body, count: body.count),
-      lineStart: line.location)
+    let word = document.word(at: document.surface.selectedRange)
     wordOccurrences =
       word.map { Occurrences.wordOccurrences(of: $0, in: document.surface.text) } ?? []
     document.surface.setHighlights(wordOccurrences, for: .wordOccurrence)

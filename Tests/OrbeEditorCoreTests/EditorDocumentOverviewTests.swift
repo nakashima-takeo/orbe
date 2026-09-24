@@ -120,6 +120,21 @@ final class EditorDocumentOverviewTests: XCTestCase {
     XCTAssertEqual(surface.toppedAt.map(\.hiddenFraction), [0.75, 0, 0], "先頭の前・最終行の先は端に収める")
   }
 
+  /// 選択の先頭の語は、その行の本文（改行を除く）から、長い行ならキャレットの前後の窓だけを読んで探す。
+  func testWordAtTheSelectionReadsTheLineOrItsWindow() throws {
+    let long = String(repeating: "a", count: 400) + " " + String(repeating: "b", count: 1500)
+    let opened = try open("w.txt", "x yy\r\n" + long + "\n")
+    let document = opened.document
+    XCTAssertEqual(document.word(at: NSRange(location: 3, length: 0)), NSRange(location: 2, length: 2))
+    XCTAssertEqual(
+      document.word(at: NSRange(location: 4, length: 0)), NSRange(location: 2, length: 2),
+      "行末（CRLF の手前）で語の末尾に接する")
+    let lineStart = document.lineIndex.start(ofRow: 1)
+    XCTAssertEqual(
+      document.word(at: NSRange(location: lineStart + 1800, length: 0)),
+      NSRange(location: lineStart + 1300, length: 601), "窓（前 500）の端で切れる")
+  }
+
   func testSelectionAndViewportChangesAreForwarded() throws {
     let opened = try open("s.txt", "abc")
     let (document, surface) = (opened.document, opened.surface)

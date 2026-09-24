@@ -34,23 +34,40 @@ public enum Occurrences {
     }
   }
 
+  /// 語を探す行の長さの上限（VS Code `getWordAtText` の maxLen）。これより長い行はキャレットの前後半分ずつの窓で探す。
+  public static let maxLineLength = 1000
+
+  /// 語を探す窓——行（`line`、改行を除く）が長ければキャレットの前後 `maxLineLength / 2` ずつ（VS Code と同じく、窓の
+  /// 端にかかる語は窓で切れる）。
+  public static func wordWindow(caret: Int, line: NSRange) -> NSRange {
+    guard line.length > maxLineLength else { return line }
+    let start = max(line.location, caret - maxLineLength / 2)
+    let end = min(NSMaxRange(line), caret + maxLineLength / 2)
+    return NSRange(location: start, length: max(0, end - start))
+  }
+
   /// キャレット（または 1 行の選択）の語。選択の先頭の位置の語で、選択はその語の内側かちょうどその語であること。
-  /// 語は行の先頭から見て、選択の先頭を含む（端に接するものも含む）最初の語（VS Code `getWordAtText`）。`line` は選択の
-  /// 先頭の行の本文（改行を除く）、`lineStart` はその行頭のオフセット。
-  public static func word(at selection: NSRange, line: String, lineStart: Int) -> NSRange? {
-    let length = (line as NSString).length
-    let position = selection.location - lineStart
-    guard position >= 0, position <= length, NSMaxRange(selection) - lineStart <= length else {
+  /// 語は窓の先頭から見て、選択の先頭を含む（端に接するものも含む）最初の語（VS Code `getWordAtText`）。`text` は
+  /// 窓（`wordWindow`）の本文、`textStart` はその始まりのオフセット。
+  public static func word(at selection: NSRange, text: String, textStart: Int) -> NSRange? {
+    let length = (text as NSString).length
+    let position = selection.location - textStart
+    guard position >= 0, position <= length, NSMaxRange(selection) - textStart <= length else {
       return nil
     }
-    for match in wordPattern.matches(in: line, range: NSRange(location: 0, length: length)) {
-      let range = match.range
-      if range.location > position { break }
-      guard NSMaxRange(range) >= position else { continue }
-      guard NSMaxRange(range) >= NSMaxRange(selection) - lineStart else { return nil }
-      return NSRange(location: lineStart + range.location, length: range.length)
+    var found: NSRange?
+    wordPattern.enumerateMatches(in: text, range: NSRange(location: 0, length: length)) {
+      match, _, stop in
+      guard let range = match?.range, range.location <= position else {
+        stop.pointee = true
+        return
+      }
+      guard NSMaxRange(range) >= position else { return }
+      stop.pointee = true
+      guard NSMaxRange(range) >= NSMaxRange(selection) - textStart else { return }
+      found = NSRange(location: textStart + range.location, length: range.length)
     }
-    return nil
+    return found
   }
 
   /// 語 `word`（本文の区間）の全出現（大小区別・語の境界つき・自分を含む）。
@@ -73,11 +90,13 @@ public enum Occurrences {
     return result
   }
 
-  /// VS Code の既定の語の正規表現（`DEFAULT_WORD_REGEXP`）。
+  /// VS Code の既定の語の正規表現（`DEFAULT_WORD_REGEXP`）。JS の `\d`・`\w` は ASCII だけに当たる（u フラグ無し）ので、
+  /// Unicode 全体に当たる ICU の `\d`・`\w` は使わず ASCII の文字クラスで書く。
   private static let wordPattern: NSRegularExpression = {
     let escaped = separatorCharacters.map { "\\\($0)" }.joined()
     // swiftlint:disable:next force_try
-    return try! NSRegularExpression(pattern: "(-?\\d*\\.\\d\\w*)|([^\(escaped)\\s]+)")
+    return try! NSRegularExpression(
+      pattern: "(-?[0-9]*\\.[0-9][A-Za-z0-9_]*)|([^\(escaped)\\s]+)")
   }()
 
   /// 区切り（区切り文字・空白・改行）か。

@@ -39,22 +39,24 @@ extension EditorPaneView {
         minimap.textDidChange(change)
         scrollbar.refresh()
         search.textDidChange(change.edit)
-        occurrences.textDidChange(change.edit)
+        occurrences.textDidChange()
       } : nil
   }
 
-  /// テキスト面の焦点が変わった（セッション経由でタブから届く）。焦点の行き先は同じターンの後で決まる（検索バーへ
-  /// 移ったなら面の中に居る）。
-  func surfaceFocusDidChange(_ focused: Bool) {
+  /// テキスト面か検索バーの焦点が変わった（テキスト面はセッション経由でタブから、検索バーはバーから届く）。焦点の行き先は
+  /// 同じターンの後で決まるので、次のターンで今の焦点を読み直す。
+  func focusDidChange() {
     DispatchQueue.main.async { [weak self] in
-      guard let self, document != nil else { return }
-      occurrences.focusDidChange(surfaceFocused: focused, insideFace: focusIsInFace)
+      guard let self, let document else { return }
+      occurrences.focusDidChange(
+        surfaceFocused: window?.firstResponder === document.surface.responder,
+        insideFace: focusIsOnTextOrFindBar)
       syncFindState()
     }
   }
 
-  /// 焦点がエディター面の本文か検索バーにあるか。
-  var focusIsInFace: Bool {
+  /// 焦点が本文か検索バーにあるか。
+  var focusIsOnTextOrFindBar: Bool {
     guard let responder = window?.firstResponder as? NSView else { return false }
     if let document, responder === document.surface.responder { return true }
     if let searchBar, responder.isDescendant(of: searchBar) { return true }

@@ -142,6 +142,24 @@ public final class EditorDocument {
     return result
   }
 
+  /// 選択の先頭の位置の語（出現の強調・⌘F の種）。長い行はキャレットの前後の窓だけを読む（→ `Occurrences.wordWindow`）。
+  public func word(at selection: NSRange) -> NSRange? {
+    let row = lineIndex.point(at: selection.location).row
+    let start = lineIndex.start(ofRow: row)
+    var end = lineIndex.end(ofRow: row)
+    let tailStart = max(start, end - 2)
+    for unit in surface.substring(in: NSRange(location: tailStart, length: end - tailStart)).utf16
+      .reversed()
+    {
+      guard unit == 0x0A || unit == 0x0D else { break }
+      end -= 1
+    }
+    let window = Occurrences.wordWindow(
+      caret: selection.location, line: NSRange(location: start, length: end - start))
+    return Occurrences.word(
+      at: selection, text: surface.substring(in: window), textStart: window.location)
+  }
+
   /// 先頭に見えている行（小数。行 + 隠れ割合）と可視行数（小数）——俯瞰の式の入力。
   public var viewportLines: (first: CGFloat, visible: CGFloat) {
     let viewport = surface.viewport

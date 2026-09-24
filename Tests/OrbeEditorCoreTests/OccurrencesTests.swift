@@ -72,7 +72,7 @@ final class OccurrencesTests: XCTestCase {
     let line = "  let foo_bar = a.b(-1.5e3)"
     func word(_ location: Int, _ length: Int = 0) -> String? {
       Occurrences.word(
-        at: NSRange(location: 100 + location, length: length), line: line, lineStart: 100
+        at: NSRange(location: 100 + location, length: length), text: line, textStart: 100
       )
       .map {
         (line as NSString).substring(with: NSRange(location: $0.location - 100, length: $0.length))
@@ -88,6 +88,37 @@ final class OccurrencesTests: XCTestCase {
     XCTAssertEqual(word(6, 3), "foo_bar", "語の内側の選択")
     XCTAssertEqual(word(6, 7), "foo_bar", "ちょうど 1 語の選択")
     XCTAssertNil(word(6, 9), "語をはみ出す選択")
+  }
+
+  /// 数の語の `\d`・`\w` は JS（VS Code）と同じく ASCII だけ——全角数字や漢字に接しても語の切れ目は VS Code と同じ。
+  func testNumberWordsUseAsciiClassesLikeJavaScript() {
+    func words(_ text: String) -> [String] {
+      let string = text as NSString
+      var ranges: [NSRange] = []
+      for position in 0...string.length {
+        guard
+          let word = Occurrences.word(
+            at: NSRange(location: position, length: 0), text: text, textStart: 0),
+          !ranges.contains(word)
+        else { continue }
+        ranges.append(word)
+      }
+      return ranges.map(string.substring(with:))
+    }
+    XCTAssertEqual(words("0.5秒"), ["0.5", "秒"])
+    XCTAssertEqual(words("3.14π"), ["3.14", "π"])
+    XCTAssertEqual(words("１.５"), ["１", "５"], "全角数字は数の語にならない")
+  }
+
+  /// 長い行は、キャレットの前後 500 ずつの窓で語を探す（VS Code の maxLen 1000。窓の端の語は窓で切れる）。
+  func testLongLinesAreSearchedInAWindowAroundTheCaret() {
+    let line = NSRange(location: 10, length: 3000)
+    XCTAssertEqual(
+      Occurrences.wordWindow(caret: 2000, line: line), NSRange(location: 1500, length: 1000))
+    XCTAssertEqual(
+      Occurrences.wordWindow(caret: 20, line: line), NSRange(location: 10, length: 510), "行頭で止まる")
+    let short = NSRange(location: 10, length: 1000)
+    XCTAssertEqual(Occurrences.wordWindow(caret: 500, line: short), short, "上限以下なら行全体")
   }
 
   func testWordOccurrencesAreCaseSensitiveWithWordBoundaries() {

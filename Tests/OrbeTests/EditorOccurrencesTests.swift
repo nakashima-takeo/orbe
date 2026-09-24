@@ -13,9 +13,7 @@ import XCTest
 final class EditorOccurrencesTests: OrbeTestCase {
   final class Clock {
     var word: (() -> Void)?
-    var selection: (() -> Void)?
     var wordDelays: [TimeInterval] = []
-    var selectionDelays: [TimeInterval] = []
   }
 
   /// 時計を差し替えて、テキスト面に焦点を置いた pane。本文は語の外（行頭の空白）から始める——焦点が入ると先頭の
@@ -26,10 +24,6 @@ final class EditorOccurrencesTests: OrbeTestCase {
     occurrences.wordDelay.schedule = { delay, fire in
       clock.wordDelays.append(delay)
       clock.word = fire
-    }
-    occurrences.selectionDelay.schedule = { delay, fire in
-      clock.selectionDelays.append(delay)
-      clock.selection = fire
     }
     hosted.window.makeFirstResponder(hosted.document.surface.responder)
     pumpMain(until: { clock.word != nil }, "焦点が入ると語の出現を取りに行く")
@@ -93,7 +87,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
     XCTAssertEqual(occurrences.wordOccurrences.count, 1, "明示的な移動で出直す（fxoo は別の語）")
   }
 
-  /// 焦点がエディター面の外へ出ると消え、戻るとキャレットを動かさなくても出直す。検索バーへ移っても消えない。
+  /// 焦点が本文と検索バーの外へ出ると消え、戻るとキャレットを動かさなくても出直す。検索バーへ移っても消えない。
   func testFocusLeavingTheFaceClearsAndReturningBringsThemBack() throws {
     let clock = Clock()
     let hosted = try host(" foo foo\n", clock: clock)
@@ -107,7 +101,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
     pumpMain(
       until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true }, "バーへ")
     RunLoop.main.run(until: Date().addingTimeInterval(0.02))
-    XCTAssertEqual(pane.occurrences.wordOccurrences.count, 2, "検索バーはエディター面の中")
+    XCTAssertEqual(pane.occurrences.wordOccurrences.count, 2, "検索バーへ移っても消えない")
     pane.closeSearch()
 
     let outside = NSTextField(frame: .zero)
@@ -121,7 +115,27 @@ final class EditorOccurrencesTests: OrbeTestCase {
     XCTAssertEqual(pane.occurrences.wordOccurrences.count, 2, "キャレットを動かさなくても出直す")
   }
 
-  /// 選択文字列の他の出現は即時に本文へ出て、俯瞰には出ない。語の出現は、選択が語をはみ出すと消える。
+  /// 検索バーから本文と検索バーの外へ焦点が移っても消える（テキスト面の焦点は変わらない経路）。
+  func testFocusLeavingFromTheFindBarClears() throws {
+    let clock = Clock()
+    let hosted = try host(" foo foo\n", clock: clock)
+    let pane = hosted.pane
+    caret(hosted, 2)
+    try XCTUnwrap(clock.word)()
+    pane.showSearch()
+    let bar = try XCTUnwrap(pane.searchBar)
+    pumpMain(
+      until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true }, "バーへ")
+    RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+    XCTAssertEqual(pane.occurrences.wordOccurrences.count, 2, "前提: バーにいる間は残る")
+    let outside = NSTextField(frame: .zero)
+    hosted.tab.view.addSubview(outside)
+    hosted.window.makeFirstResponder(outside)
+    pumpMain(until: { pane.occurrences.wordOccurrences.isEmpty }, "バーから外へ出れば消える")
+    XCTAssertNotNil(pane.searchBar, "バーは開いたまま")
+  }
+
+  /// 選択文字列の他の出現は即時に本文へ出る。選択が語をはみ出すと語の出現は出ない。
   func testSelectionOccurrencesShowImmediatelyInTheTextOnly() throws {
     let clock = Clock()
     let hosted = try host(" a.b x a.b y A.B\n", clock: clock)
@@ -131,23 +145,43 @@ final class EditorOccurrencesTests: OrbeTestCase {
       pane.occurrences.selectionOccurrences,
       [NSRange(location: 7, length: 3), NSRange(location: 13, length: 3)], "大小無視・自身は除く")
     clock.word?()
-    XCTAssertEqual(pane.minimap.decorations.wordOccurrences, [], "俯瞰には出ない")
+    XCTAssertEqual(pane.minimap.decorations.wordOccurrences, [], "選択が語をはみ出すと語の出現は出ない")
     hosted.document.surface.selectedRange = NSRange(location: 0, length: 0)
     XCTAssertEqual(pane.occurrences.selectionOccurrences, [], "選択が空なら出ない")
   }
 
-  /// 本文を変えると、地は編集に合わせてずれ、300ms 後に取り直す。
-  func testEditingRequeriesSelectionOccurrencesAfterThreeHundredMilliseconds() throws {
+  /// 本文を変える操作は本文の変化の後に選択の変化を伴うので、選択文字列の出現はそこで取り直される（undo で選択が
+  /// 戻ればすぐ出る）。
+  func testSelectionOccurrencesFollowTheSelectionThatComesWithAnEdit() throws {
     let clock = Clock()
     let hosted = try host(" ab ab ab\n", clock: clock)
     let pane = hosted.pane
+    let responder = hosted.document.surface.responder
     hosted.document.surface.selectedRange = NSRange(location: 1, length: 2)
     XCTAssertEqual(pane.occurrences.selectionOccurrences.count, 2)
-    hosted.document.surface.replaceAll(with: " ab ab ab ab\n")
-    hosted.document.surface.selectedRange = NSRange(location: 1, length: 2)
-    XCTAssertEqual(clock.selectionDelays.last, 0.3)
-    try XCTUnwrap(clock.selection)()
-    XCTAssertEqual(pane.occurrences.selectionOccurrences.count, 3, "取り直した")
+    responder.keyDown(with: .key("x", []))
+    XCTAssertEqual(pane.occurrences.selectionOccurrences, [], "選択が消えれば消える")
+    responder.undoManager?.undo()
+    XCTAssertEqual(hosted.document.surface.selectedRange, NSRange(location: 1, length: 2))
+    XCTAssertEqual(pane.occurrences.selectionOccurrences.count, 2, "戻った選択で即座に取り直す")
+    responder.perform(#selector(NSResponder.uppercaseWord(_:)), with: nil)
+    XCTAssertEqual(hosted.document.surface.text, " AB ab ab\n")
+    XCTAssertEqual(
+      pane.occurrences.selectionOccurrences,
+      [NSRange(location: 4, length: 2), NSRange(location: 7, length: 2)], "大文字化の後の選択で取り直す")
+  }
+
+  /// キャレットを動かして 50ms の予約が残っている間に打つと、その予約は出ない（打鍵で消えた地を古い予約が出し直さない）。
+  func testTypingCancelsAPendingWordQuery() throws {
+    let clock = Clock()
+    let hosted = try host(" foo foo\n", clock: clock)
+    var pending: [() -> Void] = []
+    hosted.pane.occurrences.wordDelay.schedule = { _, fire in pending.append(fire) }
+    caret(hosted, 2)
+    XCTAssertEqual(pending.count, 1, "前提: 予約がある")
+    hosted.document.surface.responder.keyDown(with: .key("x", []))
+    for fire in pending { fire() }
+    XCTAssertEqual(hosted.pane.occurrences.wordOccurrences, [], "古い予約は何もしない")
   }
 
   /// 検索バーが同じ文字列を探している間は、選択文字列の出現を出さない（検索の一致と二重にしない）。
