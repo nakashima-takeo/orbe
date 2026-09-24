@@ -56,15 +56,22 @@ public enum MinimapLine {
     return result
   }
 
-  /// 行の中の UTF-16 位置 `index` の左端の桁（装飾の x）。タブは `tabSize` 桁、全角は 2 桁。
-  public static func decorationColumn(_ units: some Collection<UInt16>, at index: Int, tabSize: Int)
-    -> Int
-  {
+  /// 行の各 UTF-16 位置の左端の桁（装飾の x。`units.count + 1` 個）。タブは `tabSize` 桁、全角は 2 桁。`limit` 桁に
+  /// 達したらそこで止める（それより右はミニマップに描けない——VS Code `getXOffsetForPosition` の打ち切り）。
+  public static func decorationColumns(
+    _ units: some Collection<UInt16>, tabSize: Int, limit: Int
+  ) -> [Int] {
+    var result = [0]
     var column = 0
-    for unit in units.prefix(index) {
+    for unit in units {
       column += unit == 0x09 ? tabSize : isFullWidth(unit) ? 2 : 1
+      if column >= limit {
+        result.append(limit)
+        break
+      }
+      result.append(column)
     }
-    return column
+    return result
   }
 
   /// 幅 `canvasWidth` デバイス px・倍率 `scale`（1 字の幅）のミニマップに描ける桁数——字の左端が

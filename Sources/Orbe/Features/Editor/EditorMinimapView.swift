@@ -182,7 +182,7 @@ final class EditorMinimapView: NSView {
       return
     }
     drawText(layout, document: document, context: context)
-    drawDecorations(layout, document: document)
+    drawDecorations(layout, document: document, context: context)
   }
 
   /// 字のチャンクを置く（不透明度 0.9。VS Code の canvas の opacity）。

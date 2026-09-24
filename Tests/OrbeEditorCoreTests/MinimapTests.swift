@@ -43,10 +43,12 @@ final class MinimapTests: XCTestCase {
     XCTAssertTrue((0..<96).contains(MinimapLine.glyph(of: 0x05)))
   }
 
-  func testDecorationColumnsCountTabsAsTheFixedTabSize() {
-    XCTAssertEqual(MinimapLine.decorationColumn(units("a\tb"), at: 2, tabSize: 4), 5)
-    XCTAssertEqual(MinimapLine.decorationColumn(units("あb"), at: 1, tabSize: 4), 2)
-    XCTAssertEqual(MinimapLine.decorationColumn(units("ab"), at: 0, tabSize: 4), 0)
+  func testDecorationColumnsCountTabsAsTheFixedTabSizeAndStopAtTheLimit() {
+    XCTAssertEqual(MinimapLine.decorationColumns(units("a\tb"), tabSize: 4, limit: 100), [0, 1, 5, 6])
+    XCTAssertEqual(MinimapLine.decorationColumns(units("あb"), tabSize: 4, limit: 100), [0, 2, 3])
+    XCTAssertEqual(
+      MinimapLine.decorationColumns(units("abcdef"), tabSize: 4, limit: 3), [0, 1, 2, 3],
+      "描ける桁に達したら読むのを止める")
   }
 
   func testWidthFollowsTheTextWidthUpToTheMaximum() {

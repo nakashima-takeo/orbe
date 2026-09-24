@@ -216,6 +216,19 @@ final class EditorMinimapTests: OrbeTestCase {
     XCTAssertTrue(view.cachedChunks.contains(0), "手前は残る")
   }
 
+  /// 行を丸ごと選ぶと（改行まで）、その行に選択の行の地が付く（VS Code は範囲の終わりの行まで数える）。
+  func testSelectingWholeLinesHighlightsTheirRows() throws {
+    let hosted = try hostOverview(numberedLines(20))
+    let index = hosted.document.lineIndex
+    hosted.document.surface.selectedRange = NSRange(
+      location: index.start(ofRow: 4), length: index.end(ofRow: 4) - index.start(ofRow: 4))
+    let view = hosted.pane.minimap
+    let pixels = try ViewPixels(view)
+    XCTAssertGreaterThan(pixels.color(view.bounds.width - 4, 4 * 2 + 1).alphaComponent, 0, "行 5 の地")
+    XCTAssertEqual(pixels.color(view.bounds.width - 4, 5 * 2 + 1).alphaComponent, 0, "次の行には付かない")
+    XCTAssertEqual(pixels.color(view.bounds.width - 4, 3 * 2 + 1).alphaComponent, 0)
+  }
+
   /// ミニマップとスクロールバーの上のホイールは本文をスクロールする（右端の列がスクロールの死角にならない）。
   func testScrollingOverTheRightColumnScrollsTheText() throws {
     let hosted = try hostOverview(numberedLines(1000))
