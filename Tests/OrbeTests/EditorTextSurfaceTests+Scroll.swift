@@ -149,6 +149,40 @@ final class EditorTextSurfaceScrollTests: OrbeTestCase {
     XCTAssertEqual(opened.scroll.contentView.bounds.height, 196, "横スクローラーが本文の下を削らない")
   }
 
+  /// 長い 1 行でも、強調の地は横に見えている字の分だけ描く——右へ送った先の一致は、見えている窓の中で字に重なる
+  /// （窓の外の一致まで描くと、一致の数 × 行の長さで描画が固まる）。
+  func testHighlightsOnALongLineFollowTheHorizontalScroll() throws {
+    let text = String(repeating: "xxxxxxxxxx", count: 3000) + "\n"
+    let opened = try open(text)
+    let document = opened.document
+    let far = 25_000
+    document.surface.setHighlights(
+      (0..<3000).map { NSRange(location: $0 * 10, length: 5) }, for: .currentFindMatch)
+    let clip = opened.scroll.contentView
+    let style = EditorStyle.make()
+    let cell = (" " as NSString).size(withAttributes: [.font: style.font]).width
+    clip.scroll(to: NSPoint(x: CGFloat(far) * cell, y: 0))
+    opened.scroll.reflectScrolledClipView(clip)
+    document.surface.view.layoutSubtreeIfNeeded()
+    let view = document.surface.view
+    let origin = style.gutterWidth + style.marks.gutterWidth
+    func lit(_ column: Int) throws -> Bool {
+      let x = origin + (CGFloat(column - far) + 0.5) * cell - (clip.bounds.minX - CGFloat(far) * cell)
+      let c = try pixel(view, x, style.topInset + 2)
+      return c.redComponent > 0.5 && c.blueComponent < 0.3
+    }
+    XCTAssertTrue(try lit(far + 2), "窓の中の一致（25000 桁目から 5 字）に地")
+    XCTAssertFalse(try lit(far + 7), "一致の間には地が無い")
+  }
+
+  func pixel(_ view: NSView, _ x: CGFloat, _ y: CGFloat) throws -> NSColor {
+    let rep = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+    view.cacheDisplay(in: view.bounds, to: rep)
+    let scale = CGFloat(rep.pixelsWide) / view.bounds.width
+    return try XCTUnwrap(
+      rep.colorAt(x: Int(x * scale), y: Int(y * scale))?.usingColorSpace(.sRGB))
+  }
+
   /// 強調の地はエンジンの部品の本文の層の中で、選択の層の直上・文字の層の直下に置かれる（部品の版を上げて構造が
   /// 変われば落ちる——並びは選択 < 強調 < 文字）。画素でも、現在の一致の不透明の地が選択の地の上に出る。
   func testHighlightsSitAboveTheSelectionAndBelowTheText() throws {

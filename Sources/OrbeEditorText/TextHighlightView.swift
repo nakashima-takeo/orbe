@@ -39,43 +39,73 @@ final class TextHighlightView: NSView {
     guard let textView, ranges.values.contains(where: { !$0.isEmpty }) else { return }
     let geometry = VisibleLines(textView: textView)
     let lines = geometry.lines(in: bounds)
-    guard let first = lines.first, let last = lines.last else { return }
-    let visible = NSRange(
-      location: first.range.location, length: NSMaxRange(last.range) - first.range.location)
-    let rows = lines.flatMap(\.rows)
+    guard !lines.isEmpty else { return }
+    let windows = visibleWindows(lines, geometry: geometry)
     let findMatches = ranges[.findMatch] ?? []
     let crowded = findMatches.count > OverviewRuler.approximateFindMatchCount
     if let current = ranges[.currentFindMatch]?.first {
-      fillLines(of: current, rows: rows, color: style.currentFindLine)
+      fillLines(of: current, rows: lines.flatMap(\.rows), color: style.currentFindLine)
     }
-    if crowded { fill(findMatches, in: visible, rows: rows, color: style.findMatch) }
+    if crowded { fill(findMatches, in: windows, geometry: geometry, color: style.findMatch) }
     fill(
-      ranges[.selectionOccurrence] ?? [], in: visible, rows: rows,
+      ranges[.selectionOccurrence] ?? [], in: windows, geometry: geometry,
       color: isFocused ? style.selectionOccurrence : style.selectionOccurrenceInactive)
-    fill(ranges[.wordOccurrence] ?? [], in: visible, rows: rows, color: style.wordOccurrence)
-    if !crowded { fill(findMatches, in: visible, rows: rows, color: style.findMatch) }
-    fill(ranges[.currentFindMatch] ?? [], in: visible, rows: rows, color: style.currentFindMatch)
+    fill(
+      ranges[.wordOccurrence] ?? [], in: windows, geometry: geometry, color: style.wordOccurrence)
+    if !crowded { fill(findMatches, in: windows, geometry: geometry, color: style.findMatch) }
+    fill(
+      ranges[.currentFindMatch] ?? [], in: windows, geometry: geometry,
+      color: style.currentFindMatch)
   }
 
-  /// 可視の段落に掛かる区間を、segment の横幅 × 行片の高さで塗る。
+  /// 見えている行片 1 つと、そのうち横に見えている字の区間（本文のオフセット）。
+  private struct Window {
+    let row: VisibleLine.Row
+    let lineStart: Int
+    let range: NSRange
+  }
+
+  /// 見えている字の窓——行片ごとに、bounds の左右の端に掛かる字までの区間。面は折り返さないので、長い 1 行でも描く
+  /// 区間が見えている字の数で頭打ちになる（行全体の一致を描くと、一致の数 × 行の長さで固まる）。
+  private func visibleWindows(_ lines: [VisibleLine], geometry: VisibleLines) -> [Window] {
+    lines.flatMap { line in
+      line.rows.compactMap { row -> Window? in
+        guard !row.isExtra else { return nil }
+        let y = row.lineFragment.typographicBounds.midY
+        let range = row.characterRange
+        let from = max(
+          range.location,
+          row.lineFragment.characterIndex(for: CGPoint(x: bounds.minX - row.frame.minX, y: y)))
+        let to = min(
+          NSMaxRange(range),
+          row.lineFragment.characterIndex(for: CGPoint(x: bounds.maxX - row.frame.minX, y: y)) + 1)
+        guard from < to else { return nil }
+        return Window(
+          row: row, lineStart: line.range.location,
+          range: NSRange(location: line.range.location + from, length: to - from))
+      }
+    }
+  }
+
+  /// 窓に掛かる区間を、窓で切ってから字の左右の端 × 行片の高さで塗る。
   private func fill(
-    _ ranges: [NSRange], in visible: NSRange, rows: [VisibleLine.Row], color: NSColor
+    _ ranges: [NSRange], in windows: [Window], geometry: VisibleLines, color: NSColor
   ) {
-    guard let textView, !ranges.isEmpty else { return }
-    let start = ranges.partitioningIndex { NSMaxRange($0) > visible.location }
-    let manager = textView.textLayoutManager
+    guard !ranges.isEmpty else { return }
     color.setFill()
-    for range in ranges[start...] {
-      guard range.location < NSMaxRange(visible) else { break }
-      guard let textRange = NSTextRange(range, in: textView.textContentManager) else { continue }
-      manager.enumerateTextSegments(in: textRange, type: .standard) { _, rect, _, _ in
-        let row = rows.first { $0.frame.minY <= rect.midY && rect.midY < $0.frame.maxY }
-        let band = row?.frame ?? rect
+    for window in windows {
+      let end = NSMaxRange(window.range)
+      var index = ranges.partitioningIndex { NSMaxRange($0) > window.range.location }
+      while index < ranges.count, ranges[index].location < end {
+        let from = max(ranges[index].location, window.range.location) - window.lineStart
+        let to = min(NSMaxRange(ranges[index]), end) - window.lineStart
+        let x0 = geometry.x(of: from, in: window.row)
+        let x1 = geometry.x(of: to, in: window.row)
         backingAlignedRect(
-          NSRect(x: rect.minX, y: band.minY, width: rect.width, height: band.height),
+          NSRect(x: x0, y: window.row.frame.minY, width: x1 - x0, height: window.row.frame.height),
           options: .alignAllEdgesNearest
         ).fill()
-        return true
+        index += 1
       }
     }
   }
