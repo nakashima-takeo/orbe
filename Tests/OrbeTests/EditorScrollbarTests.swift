@@ -143,7 +143,7 @@ final class EditorScrollbarTests: OrbeTestCase {
     XCTAssertGreaterThan(pixels.color(0.25, 100).alphaComponent, 0, "左端の縁")
   }
 
-  /// 検索の一致はスクロールバーの中央レーンに出る。一致が多いときは近い行をまとめた印になる。
+  /// 検索の一致はスクロールバーの中央レーンに出る。
   func testFindMatchesMarkTheCenterLane() throws {
     let text = (0..<200).map { $0 == 150 ? "the needle\n" : "hay\n" }.joined()
     let hosted = try hostOverview(text)
