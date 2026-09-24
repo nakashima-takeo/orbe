@@ -8,7 +8,7 @@ public enum Occurrences {
   /// 選択文字列の出現を出す選択の長さの上限（UTF-16。VS Code `selectionHighlightMaxLength`）。
   public static let maxSelectionLength = 200
   /// VS Code `USUAL_WORD_SEPARATORS`。
-  public static let separators = Set(separatorCharacters.utf16)
+  private static let separators = Set(separatorCharacters.utf16)
   private static let separatorCharacters = "`~!@#$%^&*()-=+[{]}\\|;:'\",.<>/?"
 
   /// 選択文字列の他の出現（大小無視・語の境界なし）。選択自身と、選択より前に始まって選択と交差する一致は除く。

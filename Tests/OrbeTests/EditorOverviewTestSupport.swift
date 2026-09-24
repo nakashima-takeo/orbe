@@ -42,16 +42,6 @@ extension OrbeTestCase {
 
   /// n 行（末尾の改行で索引は n + 1 行になる）。
   func numberedLines(_ n: Int) -> String { (1...n).map { "line \($0)\n" }.joined() }
-
-  /// view を透明な地に描いた 1 画素（sRGB）。y は上から。
-  func pixel(_ view: NSView, _ x: CGFloat, _ y: CGFloat) throws -> NSColor {
-    let rep = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
-    view.cacheDisplay(in: view.bounds, to: rep)
-    let scale = CGFloat(rep.pixelsWide) / view.bounds.width
-    return try XCTUnwrap(
-      rep.colorAt(x: Int(x * scale), y: Int(y * scale))?.usingColorSpace(.sRGB))
-  }
-
 }
 
 /// view を 1 回描いて画素を読む（同じ描画から何か所も読む）。座標は view の pt、y は上から。

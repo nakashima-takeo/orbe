@@ -9,22 +9,16 @@ final class EditorDelay {
   }
   private var generation = 0
 
-  /// 予約があるか。
-  private(set) var isPending = false
-
   func run(after delay: TimeInterval, _ action: @escaping @MainActor () -> Void) {
     generation += 1
     let current = generation
-    isPending = true
     schedule(delay) { [weak self] in
       guard let self, generation == current else { return }
-      isPending = false
       action()
     }
   }
 
   func cancel() {
     generation += 1
-    isPending = false
   }
 }
