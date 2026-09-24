@@ -204,6 +204,7 @@ final class EditorSearchTests: OrbeTestCase {
     XCTAssertEqual(pane.search.needle, "beta")
     XCTAssertEqual(pane.searchBar?.needle, "beta")
     XCTAssertEqual(pane.search.matches.count, 1)
+    XCTAssertEqual(pane.search.current, 0, "選択がそのまま現在の一致")
     pane.closeSearch()
 
     hosted.document.surface.selectedRange = NSRange(location: 6, length: 10)
@@ -211,7 +212,8 @@ final class EditorSearchTests: OrbeTestCase {
     XCTAssertEqual(pane.search.needle, "", "改行をまたぐ選択は種にならない")
   }
 
-  /// 選択が空なら、キャレットの語が種になる（VS Code の seedSearchStringFromSelection の既定）。語の外なら空のまま。
+  /// 選択が空なら、キャレットの語が種になる（VS Code の seedSearchStringFromSelection の既定）。キャレットは動かず、
+  /// 現在の一致は無い（件数の位置は「?」）。語の外なら空のまま。
   func testTheWordAtTheCaretSeedsTheNeedleWhenNothingIsSelected() throws {
     let hosted = try host("alpha beta\nbeta  \n")
     let pane = hosted.pane
@@ -220,6 +222,8 @@ final class EditorSearchTests: OrbeTestCase {
     XCTAssertEqual(pane.search.needle, "beta")
     XCTAssertEqual(pane.searchBar?.needle, "beta")
     XCTAssertEqual(pane.search.matches.count, 2)
+    XCTAssertEqual(hosted.document.surface.selectedRange, NSRange(location: 7, length: 0))
+    XCTAssertNil(pane.search.current)
     pane.closeSearch()
 
     hosted.document.surface.selectedRange = NSRange(location: 16, length: 0)

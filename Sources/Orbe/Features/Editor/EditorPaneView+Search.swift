@@ -5,8 +5,8 @@ import OrbeEditorCore
 /// 検索の状態は `EditorSearch`、規則は Core。`SurfaceView+Search` と同形。
 extension EditorPaneView {
   /// 検索バーを出す（既にあれば再フォーカス）。種があれば needle に入れて即検索する——1 行以内の非空の選択、選択が
-  /// 空ならキャレットの語（VS Code の seedSearchStringFromSelection の既定）。種は検索へ直接渡し、バーには表示として写す
-  /// （SwiftUI の `onChange` は初回描画前の値では走らない）。文書が無ければ何も起きない。
+  /// 空ならキャレットの語（VS Code の seedSearchStringFromSelection の既定）。選択は動かさない。種は検索へ直接渡し、
+  /// バーには表示として写す（SwiftUI の `onChange` は初回描画前の値では走らない）。文書が無ければ何も起きない。
   func showSearch() {
     guard let document else { return }
     if let bar = searchBar {
@@ -33,7 +33,7 @@ extension EditorPaneView {
     syncFindState()
     if let seed = searchSeed(document) {
       bar.needle = seed
-      search.setNeedle(seed)
+      search.seed(seed)
     }
     bar.focusField()
   }

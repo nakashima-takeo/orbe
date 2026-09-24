@@ -93,7 +93,8 @@ extension DesignFlowSnapshotTests {
     try flow(
       "editor_find", size: NSSize(width: 1000, height: 480), render: { scene.view },
       steps: [
-        ("cmd_f", { pane.showSearch() }),  // 本文の右上（ミニマップの左）にバー
+        ("open", {}),
+        ("cmd_f", { pane.showSearch() }),  // 本文の右上（ミニマップの左）にバー。キャレットの語が種
         (
           "typed",
           {  // needle → 全一致に地、現在の一致は不透明の地とその行の薄い地。ミニマップとスクロールバーの中央レーンにも出る

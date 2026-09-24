@@ -37,15 +37,20 @@ final class EditorSearch {
     refresh()
   }
 
-  /// needle が変わった。一致を取り直し、選択の先頭以降で最初の一致を選んで見せる。
+  /// needle が打ち込まれた。一致を取り直し、選択の先頭以降で最初の一致を選んで見せる（VS Code の cursorMoveOnType）。
   func setNeedle(_ needle: String) {
-    self.needle = needle
-    refresh()
-    onNeedleChange?()
+    seed(needle)
     guard let document,
       let index = TextSearch.current(in: matches, from: document.surface.selectedRange)
     else { return }
     reveal(index)
+  }
+
+  /// ⌘F の種を入れる。一致を取り直すだけで、選択は動かさない（VS Code の開いたときの検索）。
+  func seed(_ needle: String) {
+    self.needle = needle
+    refresh()
+    onNeedleChange?()
   }
 
   func next() {
