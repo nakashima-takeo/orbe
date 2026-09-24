@@ -84,6 +84,60 @@ final class EditorScrollbarTests: OrbeTestCase {
     XCTAssertFalse(bar.isThumbShown, "離せば消える")
   }
 
+  /// つまみは縦のスクロールに限らず、スクロールの状態が変わると現れる——窓の大きさの変化・改行・横スクロール（VS Code
+  /// と同じ）。行の中の打鍵では出ない。
+  func testTheThumbShowsWhenTheScrollStateChanges() throws {
+    let hosted = try hostOverview(String(repeating: "x", count: 400) + "\n" + numberedLines(1000))
+    let bar = hosted.pane.scrollbar
+    let document = hosted.document
+    var hide: (() -> Void)?
+    bar.hideDelay.schedule = { _, fire in hide = fire }
+    func shows(_ label: String, _ change: () -> Void) throws {
+      try XCTUnwrap(hide ?? {})()
+      XCTAssertFalse(bar.isThumbShown, "前提: \(label) の前は隠れている")
+      change()
+      pumpMain(until: { bar.isThumbShown }, label)
+    }
+    XCTAssertFalse(bar.isThumbShown, "開いた直後は隠れる")
+    try shows("窓の高さ") {
+      hosted.window.setContentSize(NSSize(width: 700 + FaceGeometry.spine, height: 300))
+      hosted.window.contentView?.layoutSubtreeIfNeeded()
+    }
+    try shows("窓の幅") {
+      hosted.window.setContentSize(NSSize(width: 600 + FaceGeometry.spine, height: 300))
+      hosted.window.contentView?.layoutSubtreeIfNeeded()
+    }
+    hosted.window.makeFirstResponder(document.surface.responder)
+    document.surface.selectedRange = NSRange(
+      location: document.lineIndex.start(ofRow: 3), length: 0)
+    try shows("改行") { document.surface.responder.keyDown(with: .key("\n", [])) }
+    try shows("横スクロール") {
+      let clip = hosted.scroll.contentView
+      clip.scroll(to: NSPoint(x: 200, y: clip.bounds.minY))
+      hosted.scroll.reflectScrolledClipView(clip)
+    }
+    try XCTUnwrap(hide)()
+    document.surface.responder.keyDown(with: .key("a", []))
+    pumpMain(until: { true }, "打鍵の後の runloop")
+    XCTAssertFalse(bar.isThumbShown, "行の中の打鍵では出ない")
+  }
+
+  /// つまみを押したまま本体の外へ出て離せば、つまみは消える（ドラッグ中も出入りを受ける）。
+  func testReleasingADragOutsideTheBodyHidesTheThumb() throws {
+    let hosted = try hostOverview(numberedLines(1000))
+    let pane = hosted.pane
+    let bar = pane.scrollbar
+    let body = try XCTUnwrap(pane.bodyTracking)
+    XCTAssertTrue(body.options.contains(.enabledDuringMouseDrag), "ドラッグ中も本体の出入りを受ける")
+    pane.mouseEntered(with: pane.enterExitEvent(.mouseEntered, area: body))
+    let grab = NSPoint(x: 7, y: try XCTUnwrap(bar.geometry).sliderPosition + 5)
+    bar.mouseDown(with: bar.mouseEvent(.leftMouseDown, at: grab))
+    pane.mouseExited(with: pane.enterExitEvent(.mouseExited, area: body))
+    XCTAssertTrue(bar.isThumbShown, "ドラッグ中は残る")
+    bar.mouseUp(with: bar.mouseEvent(.leftMouseUp, at: grab.offset(dx: 300)))
+    XCTAssertFalse(bar.isThumbShown, "外で離せば消える")
+  }
+
   /// サイドバーや列の頭の上ではつまみは出ない（SwiftUI の骨は自分の出入りを pane へ流してくる）。
   func testTheThumbIgnoresEnteringTheSidebar() throws {
     let hosted = try hostOverview(numberedLines(1000))
@@ -141,6 +195,36 @@ final class EditorScrollbarTests: OrbeTestCase {
     let caretColor = pixels.color(10, CGFloat(caret.y1 + caret.y2) / 2 / scale)
     XCTAssertGreaterThan(caretColor.alphaComponent, 0.5, "キャレットの行は全幅")
     XCTAssertGreaterThan(pixels.color(0.25, 100).alphaComponent, 0, "左端の縁")
+  }
+
+  /// キャレットの印は選択の動く側の端（キャレット）の行に出る——後ろへ伸ばせば終わりの行、前へ伸ばせば先頭の行。
+  func testTheCaretMarkFollowsTheMovingEndOfTheSelection() throws {
+    let hosted = try hostOverview(numberedLines(200))
+    let document = hosted.document
+    let index = document.lineIndex
+    let bar = hosted.pane.scrollbar
+    let scale = hosted.window.backingScaleFactor
+    let ruler = OverviewRuler(
+      lineCount: index.lineCount, visibleLines: document.viewportLines.visible,
+      height: bar.bounds.height, scale: scale)
+    func marked(_ row: Int) throws -> Bool {
+      let span = ruler.caret(row: row)
+      return try ViewPixels(bar).color(10, CGFloat(span.y1 + span.y2) / 2 / scale).alphaComponent
+        > 0.5
+    }
+    document.surface.selectedRange = NSRange(
+      location: index.start(ofRow: 60), length: index.start(ofRow: 140) - index.start(ofRow: 60))
+    XCTAssertTrue(try marked(140), "後ろへ伸ばした選択は終わりの行")
+    XCTAssertFalse(try marked(60))
+
+    document.surface.selectedRange = NSRange(location: index.start(ofRow: 140), length: 0)
+    for _ in 0..<80 {
+      document.surface.responder.doCommand(
+        by: #selector(NSStandardKeyBindingResponding.moveUpAndModifySelection(_:)))
+    }
+    XCTAssertEqual(document.surface.selectedRange.location, index.start(ofRow: 60), "前提")
+    XCTAssertTrue(try marked(60), "前へ伸ばした選択は先頭の行")
+    XCTAssertFalse(try marked(140))
   }
 
   /// 検索の一致はスクロールバーの中央レーンに出る。

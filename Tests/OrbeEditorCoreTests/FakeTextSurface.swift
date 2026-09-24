@@ -27,6 +27,7 @@ final class FakeTextSurface: TextSurface {
   var selectedRange = NSRange(location: 0, length: 0) {
     didSet { delegate?.surfaceDidChangeSelection(self) }
   }
+  var caretLocation: Int { NSMaxRange(selectedRange) }
   private(set) var indentUnit = IndentUnit.fallback
 
   init(text: String) {

@@ -126,12 +126,16 @@ final class EditorScrollbarView: NSView {
     }
   }
 
+  /// ドラッグ中も出入りを受ける（つまみの上の濃さを外で離したときに戻す）。
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
     if let tracking { removeTrackingArea(tracking) }
     let area = NSTrackingArea(
       rect: .zero,
-      options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect],
+      options: [
+        .mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect,
+        .enabledDuringMouseDrag,
+      ],
       owner: self)
     addTrackingArea(area)
     tracking = area
@@ -213,7 +217,7 @@ final class EditorScrollbarView: NSView {
         fill(x: lane.x, width: lane.width, span: span, scale: scale)
       }
     }
-    let caretRow = index.point(at: document.surface.selectedRange.location).row
+    let caretRow = index.point(at: document.surface.caretLocation).row
     let full = OverviewRuler.lane(.full, width: bounds.width, scale: scale)
     style.caret.setFill()
     fill(x: full.x, width: full.width, span: ruler.caret(row: caretRow), scale: scale)

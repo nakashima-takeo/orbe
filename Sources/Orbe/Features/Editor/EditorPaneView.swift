@@ -51,8 +51,8 @@ final class EditorPaneView: NSView {
   let occurrences = EditorOccurrences()
   /// 本体の上のポインタを見る tracking area。
   var bodyTracking: NSTrackingArea?
-  /// 最後に見た先頭行（縦のスクロールの検出）。文書を結び直すと捨てる。
-  var lastFirstLine: CGFloat?
+  /// 最後に見たスクロールの状態（変化でつまみを見せる）。文書を結び直すと捨てる。
+  var lastScrollState: ScrollState?
   /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
   private(set) var sidebar = EditorSidebarState() {
     didSet { observeSidebar() }
@@ -291,13 +291,13 @@ final class EditorPaneView: NSView {
       let view = document.surface.view
       view.autoresizingMask = []
       view.frame = surfaceRect
-      // 境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なる。テキスト面は影の下（影はミニマップにも掛かる）。
+      // 境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なる。テキスト面は影と俯瞰の下。
       addSubview(view, positioned: .below, relativeTo: minimap)
       observe(document, true)
     } else {
       closeSearch()
     }
-    lastFirstLine = nil
+    lastScrollState = nil
     minimap.bind(document)
     scrollbar.bind(document)
     search.bind(document)

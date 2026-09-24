@@ -123,12 +123,16 @@ final class EditorMinimapView: NSView {
     }
   }
 
+  /// ドラッグ中も出入りを受ける（帯を掴んだまま外で離せば、帯が消える）。
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
     if let tracking { removeTrackingArea(tracking) }
     let area = NSTrackingArea(
       rect: .zero,
-      options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect],
+      options: [
+        .mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect,
+        .enabledDuringMouseDrag,
+      ],
       owner: self)
     addTrackingArea(area)
     tracking = area
@@ -169,9 +173,10 @@ final class EditorMinimapView: NSView {
       updateSlider()
       return
     }
-    // その行を中央へ。横位置は動かさない（VS Code のミニマップのクリックは縦だけ寄せる）。
+    // その行の上端を中央へ（VS Code の revealRange の Center はマウスでは 1 行上まで含めた箱の中央＝行の上端）。
+    // 横位置は動かさない（縦だけ寄せる）。
     let line = CGFloat(layout.line(atY: point.y))
-    document.scroll(toFirstLine: line + 0.5 - document.viewportLines.visible / 2)
+    document.scroll(toFirstLine: line - document.viewportLines.visible / 2)
   }
 
   override func mouseDragged(with event: NSEvent) {

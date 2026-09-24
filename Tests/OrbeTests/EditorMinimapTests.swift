@@ -3,6 +3,7 @@ import OrbeEditorCore
 import XCTest
 
 @testable import Orbe
+@testable import OrbeEditorText
 
 /// 本体の右列——ミニマップ（字の形を 1 行 2pt・1 字 1pt で描く）とスクロールバー 14。ミニマップの帯はホバーで現れ、
 /// 掴んでドラッグでき、帯の外の押下はその行を中央へ。検索の一致・語の出現・git の印・選択がミニマップに重なる。
@@ -136,7 +137,27 @@ final class EditorMinimapTests: OrbeTestCase {
     XCTAssertFalse(view.isSliderShown, "外へ出れば隠れる")
   }
 
-  /// 帯の外を押すと、その行が本文の中央に来る（ドラッグは続かない。横位置は動かさない——VS Code と同じ）。
+  /// 帯を掴んだままミニマップの外へ出て離せば、帯は消える（ドラッグ中も出入りを受ける）。
+  func testReleasingADragOutsideTheMinimapHidesTheSlider() throws {
+    let hosted = try hostOverview(numberedLines(1000))
+    let view = hosted.pane.minimap
+    view.updateTrackingAreas()
+    XCTAssertTrue(
+      view.trackingAreas.contains {
+        $0.owner === view && $0.options.contains(.enabledDuringMouseDrag)
+      },
+      "ドラッグ中も出入りを受ける")
+    let layout = try XCTUnwrap(view.placement)
+    let grab = NSPoint(x: 20, y: layout.sliderTop + layout.sliderHeight / 2)
+    view.mouseEntered(with: view.mouseEvent(.mouseMoved, at: grab))
+    view.mouseDown(with: view.mouseEvent(.leftMouseDown, at: grab))
+    view.mouseExited(with: view.mouseEvent(.mouseMoved, at: grab.offset(dx: -300)))
+    XCTAssertTrue(view.isSliderShown, "ドラッグ中は残る")
+    view.mouseUp(with: view.mouseEvent(.leftMouseUp, at: grab.offset(dx: -300)))
+    XCTAssertFalse(view.isSliderShown, "外で離せば消える")
+  }
+
+  /// 帯の外を押すと、その行の上端が本文の中央に来る（ドラッグは続かない。横位置は動かさない——VS Code と同じ）。
   func testPressingOutsideTheSliderCentersThatLine() throws {
     let hosted = try hostOverview(String(repeating: "x", count: 400) + "\n" + numberedLines(1000))
     let clip = hosted.scroll.contentView
@@ -148,7 +169,8 @@ final class EditorMinimapTests: OrbeTestCase {
     let line = layout.line(atY: point.y)
     view.mouseDown(with: view.mouseEvent(.leftMouseDown, at: point))
     let visible = hosted.document.viewportLines.visible
-    XCTAssertEqual(hosted.firstLine, CGFloat(line) + 0.5 - visible / 2, accuracy: 0.6, "その行が中央")
+    XCTAssertEqual(
+      hosted.firstLine, CGFloat(line) - visible / 2, accuracy: 0.05, "その行の上端が中央（VS Code と同じ）")
     XCTAssertEqual(clip.bounds.minX, 300, "横位置は保つ")
     let after = hosted.firstLine
     view.mouseDragged(with: view.mouseEvent(.leftMouseDragged, at: point.offset(dy: 60)))
@@ -234,19 +256,52 @@ final class EditorMinimapTests: OrbeTestCase {
     XCTAssertEqual(pixels.color(view.bounds.width - 4, 3 * 2 + 1).alphaComponent, 0)
   }
 
-  /// ミニマップとスクロールバーの上のホイールは本文をスクロールする（右端の列がスクロールの死角にならない）。
-  func testScrollingOverTheRightColumnScrollsTheText() throws {
+  /// 複数行の選択は、途中の行を行末（本文の終わり）まで選択の色で塗り、その先は行の薄い地だけ（VS Code
+  /// `renderDecorationOnLine`）。終わりの行は選択の終わりまで。
+  func testMultiLineSelectionFillsTheMiddleRowsUpToTheirEnds() throws {
+    let hosted = try hostOverview(numberedLines(40))
+    let index = hosted.document.lineIndex
+    let view = hosted.pane.minimap
+    let start = index.start(ofRow: 2) + 2
+    let end = index.start(ofRow: 30) + 3
+    XCTAssertGreaterThan(CGFloat(end - index.start(ofRow: 3)), view.bounds.width, "前提: 終わりは幅の外")
+    hosted.document.surface.selectedRange = NSRange(location: start, length: end - start)
+    let pixels = try ViewPixels(view)
+    func alpha(_ row: Int, _ column: CGFloat) -> CGFloat {
+      pixels.color(gutter(view) + column + 0.5, CGFloat(row) * 2 + 1).alphaComponent
+    }
+    let text = alpha(3, 3)
+    let band = alpha(3, 20)
+    XCTAssertGreaterThan(band, 0, "途中の行の本文の先は行の薄い地")
+    XCTAssertLessThan(band, text - 0.2, "選択の色は行末まで: 本文 \(text) / その先 \(band)")
+    XCTAssertGreaterThan(alpha(30, 1), alpha(30, 4) + 0.2, "終わりの行は選択の終わりまで")
+  }
+
+  /// ミニマップとスクロールバーの上のホイールは、面の器を通って本文のスクロールへ届く（右端の列がスクロールの死角に
+  /// ならない）。届いた先のスクロールは AppKit が画面の display link で当てる（画面の無い環境では当たらない）ので、
+  /// 本文のスクロールへ届くまでを見る。
+  func testWheelOverTheRightColumnReachesTheTextScroll() throws {
     let hosted = try hostOverview(numberedLines(1000))
+    let container = try XCTUnwrap(hosted.document.surface.view as? SurfaceContainerView)
+    XCTAssertIdentical(container.scrollTarget, hosted.scroll, "面の器の渡し先は本文のスクロール")
+    let spy = WheelSpy()
+    container.scrollTarget = spy
     for view in [hosted.pane.minimap, hosted.pane.scrollbar] as [NSView] {
-      let before = hosted.scroll.contentView.bounds.minY
       let wheel = try XCTUnwrap(
         CGEvent(
           scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -180, wheel2: 0,
           wheel3: 0))
-      view.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: wheel)))
-      pumpMain(until: { hosted.scroll.contentView.bounds.minY > before }, "本文がスクロールする")
+      let event = try XCTUnwrap(NSEvent(cgEvent: wheel))
+      view.scrollWheel(with: event)
+      XCTAssertIdentical(spy.received.last, event, "\(type(of: view)) のホイール")
     }
   }
+}
+
+/// 届いたホイールを覚えるだけのスクロール。
+private final class WheelSpy: NSScrollView {
+  var received: [NSEvent] = []
+  override func scrollWheel(with event: NSEvent) { received.append(event) }
 }
 
 extension NSPoint {

@@ -38,6 +38,9 @@ public protocol TextSurface: AnyObject {
   /// 選択（UTF-16）。置いても見せない——見せるのは `scrollToCenter`。
   var selectedRange: NSRange { get set }
 
+  /// キャレットのオフセット——選択の動く側の端（前へ伸ばした選択なら先頭、それ以外は終わり。選択が空ならその位置）。
+  var caretLocation: Int { get }
+
   /// 強調の地（種類ごと）。選択の地の上・文字の下に描く。本文と undo に載らない描画で、次に置き直すか空を置くまで
   /// 残る。`ranges` は昇順・重ならないこと（面は二分探索で可視ぶんだけ描く）。現在の一致の行は行全体にも地が付く。
   func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind)
@@ -90,20 +93,26 @@ public enum TextHighlightKind: Sendable {
 
 /// 見えている範囲を本文の言葉で表したもの。`firstVisible` は先頭に見えている行（`LineIndex` の行）の行頭オフセット、
 /// `hiddenFraction` はその行が上へ隠れている割合（0…1）、`visibleLines` は可視矩形に入る行数（小数）、`clipsRight` は
-/// 本文が右にまだ続く（横に隠れている部分がある）か。エンジンの推定の文書高に依らず、実際に layout された行の矩形から出る。
+/// 本文が右にまだ続く（横に隠れている部分がある）か。`hiddenColumns` は左へ隠れている幅、`visibleColumns` は面の
+/// 見えている幅（ガターを含む）で、どちらも半角の桁数（小数）。エンジンの推定の文書高に依らず、実際に layout された行の矩形から出る。
 public struct TextViewport: Equatable, Sendable {
   public var firstVisible: Int
   public var hiddenFraction: CGFloat
   public var visibleLines: CGFloat
   public var clipsRight: Bool
+  public var hiddenColumns: CGFloat
+  public var visibleColumns: CGFloat
 
   public init(
-    firstVisible: Int, hiddenFraction: CGFloat, visibleLines: CGFloat, clipsRight: Bool = false
+    firstVisible: Int, hiddenFraction: CGFloat, visibleLines: CGFloat, clipsRight: Bool = false,
+    hiddenColumns: CGFloat = 0, visibleColumns: CGFloat = 0
   ) {
     self.firstVisible = firstVisible
     self.hiddenFraction = hiddenFraction
     self.visibleLines = visibleLines
     self.clipsRight = clipsRight
+    self.hiddenColumns = hiddenColumns
+    self.visibleColumns = visibleColumns
   }
 
   public static let empty = TextViewport(firstVisible: 0, hiddenFraction: 0, visibleLines: 0)

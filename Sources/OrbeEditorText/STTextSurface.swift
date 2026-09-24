@@ -183,6 +183,8 @@ final class STTextSurface: NSObject, TextSurface {
     set { textView.textSelection = newValue }
   }
 
+  var caretLocation: Int { textView.caretLocation }
+
   /// 行の中心を clip の中央へ置き（`anchor`）、それから列が横に見えるところまで寄せる（縦はもう見えているので動かない）。
   func scrollToCenter(_ offset: Int) {
     let location = min(max(0, offset), length)
@@ -301,21 +303,22 @@ final class STTextSurface: NSObject, TextSurface {
   private func measureViewport() -> TextViewport? {
     let clip = clipView.bounds
     guard clip.height > 0 else { return nil }
+    let cell = style.font.cellWidth
+    var viewport = TextViewport(
+      firstVisible: 0, hiddenFraction: 0, visibleLines: clip.height / style.lineHeight,
+      hiddenColumns: clip.minX / cell, visibleColumns: clip.width / cell)
     // 空の文書に TextKit 2 は layout fragment を作らない。行は 1 つ（空行）で、見えている範囲はその先頭。
-    guard length > 0 else {
-      return TextViewport(
-        firstVisible: 0, hiddenFraction: 0, visibleLines: clip.height / style.lineHeight)
+    guard length > 0 else { return viewport }
+    guard let line = VisibleLines(textView: textView).line(atY: max(0, clip.minY)) else {
+      return nil
     }
-    guard
-      let line = VisibleLines(textView: textView).line(atY: max(0, clip.minY))
-    else { return nil }
     let frame = line.frame
-    let hidden = frame.height > 0 ? min(max((clip.minY - frame.minY) / frame.height, 0), 1) : 0
-    let pixel = 1 / (textView.window?.backingScaleFactor ?? 1)
-    return TextViewport(
-      firstVisible: line.start, hiddenFraction: hidden,
-      visibleLines: clip.height / style.lineHeight,
-      clipsRight: textView.frame.maxX - clip.maxX > pixel)
+    viewport.firstVisible = line.start
+    viewport.hiddenFraction =
+      frame.height > 0 ? min(max((clip.minY - frame.minY) / frame.height, 0), 1) : 0
+    viewport.clipsRight =
+      textView.frame.maxX - clip.maxX > 1 / (textView.window?.backingScaleFactor ?? 1)
+    return viewport
   }
 
   /// STTextView の置換は undo 登録と `didChangeTextIn` を 1 回ずつ通す（`text` の代入は undo 登録を

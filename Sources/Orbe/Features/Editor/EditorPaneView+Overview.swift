@@ -14,7 +14,7 @@ extension EditorPaneView {
         guard let self else { return }
         minimap.refresh()
         scrollbar.refresh()
-        noteScrollPosition()
+        noteScrollState()
         updateShadow()
       } : nil
     document.onHunksChange =
@@ -38,6 +38,7 @@ extension EditorPaneView {
         guard let self else { return }
         minimap.textDidChange(change)
         scrollbar.refresh()
+        noteScrollState()
         search.textDidChange(change.edit)
         occurrences.textDidChange()
       } : nil
@@ -83,14 +84,28 @@ extension EditorPaneView {
     scrollbar.decorations = decorations
   }
 
-  /// 縦のスクロール位置が動いたときだけスクロールバーのつまみを見せる（viewport の最初の測定や窓の高さの変化では
-  /// 出さない——VS Code はスクロールの出来事で現れる）。
-  private func noteScrollPosition() {
+  /// スクロールの状態（縦横の位置・見えている大きさ・行数）が変わればスクロールバーのつまみを見せる——VS Code の
+  /// スクロールの状態が変わったときと同じく、スクロールに限らず窓の大きさの変化・改行・横スクロールでも現れる。
+  /// 文書を結んだ後の最初の測定では出さない。
+  private func noteScrollState() {
     guard let document else { return }
-    let first = document.viewportLines.first
-    defer { lastFirstLine = first }
-    guard let last = lastFirstLine, last != first else { return }
+    let viewport = document.surface.viewport
+    let state = ScrollState(
+      firstLine: document.viewportLines.first, visibleLines: viewport.visibleLines,
+      lineCount: document.lineIndex.lineCount, hiddenColumns: viewport.hiddenColumns,
+      visibleColumns: viewport.visibleColumns)
+    defer { lastScrollState = state }
+    guard let last = lastScrollState, last != state else { return }
     scrollbar.didScroll()
+  }
+
+  /// スクロールの状態（`noteScrollState`）。
+  struct ScrollState: Equatable {
+    let firstLine: CGFloat
+    let visibleLines: CGFloat
+    let lineCount: Int
+    let hiddenColumns: CGFloat
+    let visibleColumns: CGFloat
   }
 
   /// 本体の上端の影（先頭行が隠れている）とミニマップ左の影（本文が右に続く）。
@@ -103,11 +118,14 @@ extension EditorPaneView {
       viewport.clipsRight ? minimap.frame.minX - scrollShadow.frame.minX : nil
   }
 
+  /// ドラッグ中も出入りを受ける（つまみを押したまま本体の外で離せば、つまみが消える）。
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
     if let bodyTracking { removeTrackingArea(bodyTracking) }
     let area = NSTrackingArea(
-      rect: bodyRect, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)
+      rect: bodyRect,
+      options: [.mouseEnteredAndExited, .activeInKeyWindow, .enabledDuringMouseDrag],
+      owner: self)
     addTrackingArea(area)
     bodyTracking = area
   }

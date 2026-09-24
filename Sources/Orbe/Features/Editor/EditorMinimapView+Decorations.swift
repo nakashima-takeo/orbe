@@ -89,7 +89,8 @@ extension EditorMinimapView {
     return ranges[low..<upper]
   }
 
-  /// 区間を行ごとに x（装飾の桁。タブは固定の桁数）で塗る。
+  /// 区間を行ごとに x（装飾の桁。タブは固定の桁数）で塗る。区間の終わりの行より前の行は行末（本文の終わり）まで
+  /// （VS Code `renderDecorationOnLine`）。
   private func fillRanges(
     _ ranges: some Collection<NSRange>, layout: MinimapLayout, columns: DecorationColumns,
     color: NSColor
@@ -97,10 +98,12 @@ extension EditorMinimapView {
     let index = columns.document.lineIndex
     color.setFill()
     for range in ranges where range.length > 0 {
-      for row in Range(rows(of: range, index: index)).clamped(to: layout.lines) {
+      let rows = rows(of: range, index: index)
+      for row in Range(rows).clamped(to: layout.lines) {
         let start = index.start(ofRow: row)
+        let end = row == rows.upperBound ? NSMaxRange(range) - start : columns.length(row: row)
         let x1 = columns.x(row: row, at: max(range.location, start) - start)
-        let x2 = columns.x(row: row, at: NSMaxRange(range) - start)
+        let x2 = columns.x(row: row, at: end)
         NSRect(
           x: x1, y: layout.y(ofLine: row), width: max(0, x2 - x1), height: MinimapLayout.lineHeight
         ).fill()
@@ -141,6 +144,16 @@ private final class DecorationColumns {
     self.document = document
     self.gutter = gutter
     self.width = width
+  }
+
+  /// 行 `row` の本文の長さ（UTF-16、改行を除く）。
+  func length(row: Int) -> Int {
+    let index = document.lineIndex
+    let start = index.start(ofRow: row)
+    let end = index.end(ofRow: row)
+    let tail = document.surface.substring(
+      in: NSRange(location: max(start, end - 2), length: end - max(start, end - 2)))
+    return end - start - tail.utf16.reversed().prefix { $0 == 0x0A || $0 == 0x0D }.count
   }
 
   /// 行 `row` の UTF-16 位置 `index` の x（ミニマップの幅で止まる）。行の本文の終わりより右は本文の終わり。

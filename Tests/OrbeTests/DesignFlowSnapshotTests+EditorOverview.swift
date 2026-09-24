@@ -131,6 +131,15 @@ extension DesignFlowSnapshotTests {
             long.surface.selectedRange = field
           }
         ),
+        (
+          "multi_line_selection",
+          {  // 複数行の選択 → ミニマップは途中の行を行末まで選択の色、その先は行の薄い地、終わりの行は選択の終わりまで
+            let index = long.lineIndex
+            let start = index.start(ofRow: 5) + 6
+            long.surface.selectedRange = NSRange(
+              location: start, length: index.start(ofRow: 20) + 10 - start)
+          }
+        ),
       ])
   }
 }

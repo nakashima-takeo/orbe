@@ -21,6 +21,13 @@ final class SurfaceTextView: STTextView {
     let locationInWindow: NSPoint
   }
 
+  /// キャレット——選択の動く側の端（TextKit 2 は前へ伸ばした選択を upstream の向きで持つ）。
+  var caretLocation: Int {
+    let range = textSelection
+    let upstream = textLayoutManager.textSelections.first?.affinity == .upstream
+    return range.length > 0 && upstream ? range.location : NSMaxRange(range)
+  }
+
   /// 押している間に view が窓から外れると mouse-up は届かない（文書の切り替えが面を外す）ので、ラッチは
   /// 次の押下でも解く。input context へは上流と同じく先に通すが、同じイベントを 2 回渡さない（上流に落ちる
   /// クリックは上流が通す）。
