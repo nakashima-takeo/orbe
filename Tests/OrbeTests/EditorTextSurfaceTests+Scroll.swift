@@ -107,7 +107,7 @@ final class EditorTextSurfaceScrollTests: OrbeTestCase {
     let rep = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
     view.cacheDisplay(in: view.bounds, to: rep)
     let scale = CGFloat(rep.pixelsWide) / view.bounds.width
-    // MARK の 4 字の列を縦に走査し、画素の行ごとに「地（橙）がある」「字（明るい文字色）がある」を読む。
+    // 「MARK」の 4 字の列を縦に走査し、画素の行ごとに「地（橙）がある」「字（明るい文字色）がある」を読む。
     var ground: [Int] = []
     var ink: [Int] = []
     for py in 0..<rep.pixelsHigh {
@@ -124,12 +124,14 @@ final class EditorTextSurfaceScrollTests: OrbeTestCase {
     }
     let top = try XCTUnwrap(ground.first)
     let bottom = try XCTUnwrap(ground.last)
-    XCTAssertEqual(CGFloat(top) / scale, style.topInset + 2 * style.lineHeight, accuracy: 1, "地は 3 行目")
+    XCTAssertEqual(
+      CGFloat(top) / scale, style.topInset + 2 * style.lineHeight, accuracy: 1, "地は 3 行目")
     XCTAssertEqual(CGFloat(bottom - top + 1) / scale, style.lineHeight, accuracy: 1, "地は行の高さ")
     let margin = Int(2 * scale)
     let near = ink.filter { $0 >= top - margin && $0 <= bottom + margin }
     XCTAssertFalse(near.isEmpty, "MARK の字が描かれている")
-    XCTAssertTrue(near.allSatisfy { $0 >= top && $0 <= bottom }, "字は地の中: 地 \(top)...\(bottom) 字 \(near)")
+    XCTAssertTrue(
+      near.allSatisfy { $0 >= top && $0 <= bottom }, "字は地の中: 地 \(top)...\(bottom) 字 \(near)")
   }
 
   /// End は最後の 1 画面を見せる（最終行を最上段まで送れる範囲でも、最終行だけを残さない）。
@@ -218,7 +220,8 @@ final class EditorTextSurfaceScrollTests: OrbeTestCase {
     let view = document.surface.view
     let origin = style.gutterWidth + style.marks.gutterWidth
     func lit(_ column: Int) throws -> Bool {
-      let x = origin + (CGFloat(column - far) + 0.5) * cell - (clip.bounds.minX - CGFloat(far) * cell)
+      let x =
+        origin + (CGFloat(column - far) + 0.5) * cell - (clip.bounds.minX - CGFloat(far) * cell)
       let c = try pixel(view, x, style.topInset + 2)
       return c.redComponent > 0.5 && c.blueComponent < 0.3
     }

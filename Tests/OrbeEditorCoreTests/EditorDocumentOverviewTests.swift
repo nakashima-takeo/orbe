@@ -116,7 +116,9 @@ final class EditorDocumentOverviewTests: XCTestCase {
     document.scroll(toFirstLine: 7.75)
     document.scroll(toFirstLine: -3)
     document.scroll(toFirstLine: 99)
-    XCTAssertEqual(surface.toppedAt.map(\.offset), [document.lineIndex.start(ofRow: 7), 0, document.lineIndex.length])
+    XCTAssertEqual(
+      surface.toppedAt.map(\.offset),
+      [document.lineIndex.start(ofRow: 7), 0, document.lineIndex.length])
     XCTAssertEqual(surface.toppedAt.map(\.hiddenFraction), [0.75, 0, 0], "先頭の前・最終行の先は端に収める")
   }
 
@@ -125,7 +127,8 @@ final class EditorDocumentOverviewTests: XCTestCase {
     let long = String(repeating: "a", count: 400) + " " + String(repeating: "b", count: 1500)
     let opened = try open("w.txt", "x yy\r\n" + long + "\n")
     let document = opened.document
-    XCTAssertEqual(document.word(at: NSRange(location: 3, length: 0)), NSRange(location: 2, length: 2))
+    XCTAssertEqual(
+      document.word(at: NSRange(location: 3, length: 0)), NSRange(location: 2, length: 2))
     XCTAssertEqual(
       document.word(at: NSRange(location: 4, length: 0)), NSRange(location: 2, length: 2),
       "行末（CRLF の手前）で語の末尾に接する")

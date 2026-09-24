@@ -156,7 +156,8 @@ private final class DecorationColumns {
     let start = index.start(ofRow: row)
     let limit = max(0, Int(width - gutter))
     let length = min(index.end(ofRow: row) - start, limit + 2)
-    var units = Array(document.surface.substring(in: NSRange(location: start, length: length)).utf16)
+    var units = Array(
+      document.surface.substring(in: NSRange(location: start, length: length)).utf16)
     if units.count < limit + 2 {
       if units.last == 0x0A { units.removeLast() }
       if units.last == 0x0D { units.removeLast() }

@@ -44,7 +44,8 @@ final class MinimapTests: XCTestCase {
   }
 
   func testDecorationColumnsCountTabsAsTheFixedTabSizeAndStopAtTheLimit() {
-    XCTAssertEqual(MinimapLine.decorationColumns(units("a\tb"), tabSize: 4, limit: 100), [0, 1, 5, 6])
+    XCTAssertEqual(
+      MinimapLine.decorationColumns(units("a\tb"), tabSize: 4, limit: 100), [0, 1, 5, 6])
     XCTAssertEqual(MinimapLine.decorationColumns(units("あb"), tabSize: 4, limit: 100), [0, 2, 3])
     XCTAssertEqual(
       MinimapLine.decorationColumns(units("abcdef"), tabSize: 4, limit: 3), [0, 1, 2, 3],

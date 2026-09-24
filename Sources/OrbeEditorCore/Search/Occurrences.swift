@@ -56,8 +56,10 @@ public enum Occurrences {
       return nil
     }
     var found: NSRange?
-    wordPattern.enumerateMatches(in: text, range: NSRange(location: 0, length: length)) {
-      match, _, stop in
+    func visit(
+      _ match: NSTextCheckingResult?, _: NSRegularExpression.MatchingFlags,
+      _ stop: UnsafeMutablePointer<ObjCBool>
+    ) {
       guard let range = match?.range, range.location <= position else {
         stop.pointee = true
         return
@@ -67,6 +69,8 @@ public enum Occurrences {
       guard NSMaxRange(range) >= NSMaxRange(selection) - textStart else { return }
       found = NSRange(location: textStart + range.location, length: range.length)
     }
+    wordPattern.enumerateMatches(
+      in: text, range: NSRange(location: 0, length: length), using: visit)
     return found
   }
 
