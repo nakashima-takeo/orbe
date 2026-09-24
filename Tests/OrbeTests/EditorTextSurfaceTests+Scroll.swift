@@ -90,8 +90,9 @@ final class EditorTextSurfaceScrollTests: OrbeTestCase {
     }
   }
 
-  /// 遠くへ飛んだ直後も、強調の地は画面の本文の行に重なる（layout の推定が動いて地だけ半行ずれない）。
-  func testHighlightsStayOnTheirLinesAfterAFarJump() throws {
+  /// 遠くへ飛んだ直後も、描いた字は地の中にあり、地は上から 3 行目の行の高さに一致する（layout の推定が動いて、字の
+  /// 行片の view だけが古い位置に残ったり、地が半行ずれたりしない）。
+  func testTextAndHighlightsStayTogetherAfterAFarJump() throws {
     let text = (1...3000).map { $0 == 2400 ? "MARK\n" : "line \($0)\n" }.joined()
     let opened = try open(text)
     let document = opened.document
@@ -101,21 +102,34 @@ final class EditorTextSurfaceScrollTests: OrbeTestCase {
     RunLoop.main.run(until: Date().addingTimeInterval(0.05))
     let view = document.surface.view
     let style = EditorStyle.make()
-    let x = style.gutterWidth + style.marks.gutterWidth + 4
-    // 3 行目（2400 行目）の中ほどに地、2 行目と 4 行目には無い。
+    let cell = (" " as NSString).size(withAttributes: [.font: style.font]).width
+    let left = style.gutterWidth + style.marks.gutterWidth
     let rep = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
     view.cacheDisplay(in: view.bounds, to: rep)
     let scale = CGFloat(rep.pixelsWide) / view.bounds.width
-    // 字の上端より上（行の上から 2pt）で読む——地は行の高さいっぱいに敷かれ、字には掛からない。
-    func orange(_ row: CGFloat) throws -> Bool {
-      let y = style.topInset + row * style.lineHeight + 2
-      let c = try XCTUnwrap(
-        rep.colorAt(x: Int(x * scale), y: Int(y * scale))?.usingColorSpace(.sRGB))
-      return c.redComponent > 0.45 && c.blueComponent < 0.2
+    // MARK の 4 字の列を縦に走査し、画素の行ごとに「地（橙）がある」「字（明るい文字色）がある」を読む。
+    var ground: [Int] = []
+    var ink: [Int] = []
+    for py in 0..<rep.pixelsHigh {
+      var hasGround = false
+      var hasInk = false
+      for px in Int(left * scale)..<Int((left + 4 * cell) * scale) {
+        guard let c = rep.colorAt(x: px, y: py)?.usingColorSpace(.sRGB), c.alphaComponent > 0.5
+        else { continue }
+        if c.redComponent > 0.45, c.blueComponent < 0.2 { hasGround = true }
+        if c.blueComponent > 0.4 { hasInk = true }
+      }
+      if hasGround { ground.append(py) }
+      if hasInk { ink.append(py) }
     }
-    XCTAssertTrue(try orange(2), "MARK の行（上から 3 行目）に地")
-    XCTAssertFalse(try orange(1))
-    XCTAssertFalse(try orange(3))
+    let top = try XCTUnwrap(ground.first)
+    let bottom = try XCTUnwrap(ground.last)
+    XCTAssertEqual(CGFloat(top) / scale, style.topInset + 2 * style.lineHeight, accuracy: 1, "地は 3 行目")
+    XCTAssertEqual(CGFloat(bottom - top + 1) / scale, style.lineHeight, accuracy: 1, "地は行の高さ")
+    let margin = Int(2 * scale)
+    let near = ink.filter { $0 >= top - margin && $0 <= bottom + margin }
+    XCTAssertFalse(near.isEmpty, "MARK の字が描かれている")
+    XCTAssertTrue(near.allSatisfy { $0 >= top && $0 <= bottom }, "字は地の中: 地 \(top)...\(bottom) 字 \(near)")
   }
 
   /// End は最後の 1 画面を見せる（最終行を最上段まで送れる範囲でも、最終行だけを残さない）。
