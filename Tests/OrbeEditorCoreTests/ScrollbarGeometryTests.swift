@@ -46,6 +46,10 @@ final class ScrollbarGeometryTests: XCTestCase {
     let oneX = OverviewRuler(lineCount: 1000, visibleLines: 20.5, height: 400, scale: 1)
     XCTAssertEqual(
       oneX.spans(rows).map { [$0.y1, $0.y2] }, [[0, 6], [38, 54], [192, 198], [388, 394]])
+    XCTAssertEqual(
+      oneX.spans([0...0, 28...28]).map { [$0.y1, $0.y2] }, [[0, 13]], "1 px の隙間（6 と 7）は結ぶ")
+    XCTAssertEqual(
+      oneX.spans([0...0, 29...29]).map { [$0.y1, $0.y2] }, [[0, 6], [8, 14]], "2 px 離れれば別")
     let twoX = OverviewRuler(lineCount: 1000, visibleLines: 20.5, height: 400, scale: 2)
     XCTAssertEqual(
       twoX.spans(rows).map { [$0.y1, $0.y2] }, [[0, 12], [77, 109], [385, 397], [777, 789]])
