@@ -9,6 +9,9 @@ import XCTest
 /// ここが破れると、`|` や改行を含むパスの worktree が別のパスとして出る・そこで checkout 中のブランチの
 /// upstream と track が他の列の値にすり替わって clean の安全確認が事実と食い違う・author 名が途中で
 /// 切れる、が黙って起きる（エラーにはならない）。
+///
+/// remote 一覧（`remote -v`）は、読み違えると行が GitHub のどのリポジトリか決まらず、番号チップと
+/// clean の PR の事実が黙って消える。
 final class GitRepoDispatchListingTests: OrbeTestCase {
   private var dir: URL!
   /// 本体 worktree。追加の worktree はその外（`dir` 直下）に並べる。
@@ -97,6 +100,24 @@ final class GitRepoDispatchListingTests: OrbeTestCase {
     XCTAssertTrue(
       branches[0].relativeDate.hasPrefix("evil\r · "),
       "author 名全体 · 相対日時: \(branches[0].relativeDate)")
+  }
+
+  // MARK: - remote 一覧
+
+  /// remote の台帳の材料は、git が実際に取りに行く fetch の URL（`insteadOf` を展開した後）。push の
+  /// URL が別でもそちらは読まない。`/` を含む remote 名もそのまま名前になる。
+  func testRemotesAreReadAsExpandedFetchURLs() throws {
+    XCTAssertTrue(git(["remote", "add", "origin", "gh:me/r"]).isSuccess)
+    XCTAssertTrue(git(["config", "url.https://github.com/.insteadOf", "gh:"]).isSuccess)
+    XCTAssertTrue(
+      git(["remote", "set-url", "--push", "origin", "git@github.com:elsewhere/x.git"]).isSuccess)
+    XCTAssertTrue(git(["remote", "add", "team/me", "git@github.com:me/r2.git"]).isSuccess)
+
+    let remotes = try collect { repo.remotes(completion: $0) }
+
+    XCTAssertEqual(
+      remotes,
+      ["origin": "https://github.com/me/r", "team/me": "git@github.com:me/r2.git"])
   }
 
   // MARK: - ヘルパ
