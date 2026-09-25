@@ -156,28 +156,31 @@ struct DispatchRow: View {
           .lineLimit(1)
           .fixedSize()
       }
-      fontResolver.text(item.name, base: Theme.Typography.workspaceName)
-        .font(Font.theme.workspaceName)
-        .foregroundStyle(nameColor)
-        .lineLimit(1)
-        .truncationMode(.tail)
-        .layoutPriority(1)
+      // 行は割り当て幅を超えない。縮むのは名前・補足が先で、それでも入らないときだけ右側のノートを切る。
+      DispatchTruncatingSlot(item.name) {
+        fontResolver.text($0, base: Theme.Typography.workspaceName)
+          .font(Font.theme.workspaceName)
+          .foregroundStyle(nameColor)
+      }
+      .layoutPriority(1)
       if let detail = item.detailKey.map({ l10n.string($0) }) ?? item.detail {
-        fontResolver.text(detail, base: Theme.Typography.meta)
-          .font(Font.theme.meta)
-          .foregroundStyle(Color.theme.textMuted)
-          .lineLimit(1)
-          .truncationMode(.tail)
+        DispatchTruncatingSlot(detail) {
+          fontResolver.text($0, base: Theme.Typography.meta)
+            .font(Font.theme.meta)
+            .foregroundStyle(Color.theme.textMuted)
+        }
       }
       if let reviewNote = item.reviewNote {
-        Text(l10n.string(reviewNote.key))
-          .font(Font.theme.sectionLabel)
-          .foregroundStyle(Color.theme.textMuted)
-          .lineLimit(1)
-          .fixedSize()
+        DispatchTruncatingSlot(l10n.string(reviewNote.key)) {
+          Text($0)
+            .font(Font.theme.sectionLabel)
+            .foregroundStyle(Color.theme.textMuted)
+        }
+        .layoutPriority(2)
       }
       Spacer(minLength: Theme.Space.tick)
       trailing
+        .layoutPriority(2)
     }
     .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
     .padding(.vertical, 5)
@@ -246,11 +249,11 @@ struct DispatchRow: View {
             .padding(.leading, Theme.Space.hair)
         }
       } else if let note = item.worktreeNote {
-        Text(l10n.string(note.noteKey))
-          .font(Font.theme.sectionLabel)
-          .foregroundStyle(Color.theme.textMuted)
-          .lineLimit(1)
-          .fixedSize()
+        DispatchTruncatingSlot(l10n.string(note.noteKey)) {
+          Text($0)
+            .font(Font.theme.sectionLabel)
+            .foregroundStyle(Color.theme.textMuted)
+        }
       } else if let sync = item.sync {
         DispatchSyncPills(sync: sync)
       }
@@ -263,5 +266,47 @@ struct DispatchRow: View {
 
   private var nameColor: Color {
     item.isPrimary ? Color.theme.textPrimary : Color.theme.textSecondary
+  }
+}
+
+/// 縮みうる 1 行テキストの枠。末尾省略で読める形になる幅（先頭 1 文字＋…）があれば出し、無ければ
+/// まったく出さない——`Text` は「…」を付ける幅も無いと、先頭の文字を「…」なしで途中まで描いてしまう。
+/// 読める最小幅は、同じ描き方の見本（先頭 1 文字＋…）を見えない形で置いて測る。
+struct DispatchTruncatingSlot<Content: View>: View {
+  let text: String
+  let render: (String) -> Content
+
+  init(_ text: String, @ViewBuilder render: @escaping (String) -> Content) {
+    self.text = text
+    self.render = render
+  }
+
+  var body: some View {
+    TruncatingSlotLayout {
+      render(text).lineLimit(1).truncationMode(.tail)
+      render(String(text.prefix(1)) + "…").lineLimit(1).fixedSize().hidden()
+    }
+    .clipped()
+  }
+}
+
+/// 子 [本体, 見本]。割り当て幅が本体の全幅にも見本の幅にも満たなければ、幅 0 で本体を描かない。
+private struct TruncatingSlotLayout: Layout {
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    guard let content = subviews.first else { return .zero }
+    let fits = content.sizeThatFits(proposal)
+    guard let width = proposal.width, subviews.count == 2 else { return fits }
+    let full = content.sizeThatFits(.unspecified).width
+    let readable = subviews[1].sizeThatFits(.unspecified).width
+    return width >= min(full, readable) ? fits : CGSize(width: 0, height: fits.height)
+  }
+
+  func placeSubviews(
+    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+  ) {
+    for subview in subviews {
+      subview.place(
+        at: bounds.origin, proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
+    }
   }
 }
