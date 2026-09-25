@@ -109,7 +109,7 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
   /// 赤」になる。fetch はテストが門を開けるまで待たせ、作成が返ってから開ける。
   func testLocalBranchWithoutUpstreamDoesNotWaitForTheFetch() throws {
     let provider = try startWithSlowFetch(holdingFetch: true)
-    let path = try resolve(provider, .localBranch(name: "mine", existingWorktree: nil))
+    let path = try resolve(provider, .localBranch(name: "mine"))
     XCTAssertNotEqual(
       localRemoteTip("main"), originTip("main"), "作成が返った時点で fetch はまだ着地していない")
     XCTAssertEqual(head(of: path), oid(["rev-parse", "mine"], cwd: local))

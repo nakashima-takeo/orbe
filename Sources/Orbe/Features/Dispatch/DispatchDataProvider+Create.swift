@@ -29,11 +29,7 @@ extension DispatchDataProvider {
     case .worktree(let path):
       resolved(.ready(path))
 
-    case .localBranch(let name, let existing):
-      if let existing {
-        resolved(.ready(existing))
-        return
-      }
+    case .localBranch(let name):
       resolveLocalBranch(name, completion: completion)
 
     case .remoteBranch(let name, let existing):

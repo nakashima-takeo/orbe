@@ -69,7 +69,7 @@ final class DispatchRefreshRowRenderTests: SnapshotTestCase {
     try XCTUnwrap(
       DispatchBranchSync(
         GitBranch(
-          name: "stale", relativeDate: "1d前", worktreePath: nil,
+          name: "stale", relativeDate: "1d前",
           upstream: GitUpstream(
             short: "origin/stale", ref: "refs/remotes/origin/stale", remote: "origin",
             remoteRef: "refs/heads/stale", track: .counts(ahead: ahead, behind: behind)))))
@@ -78,7 +78,7 @@ final class DispatchRefreshRowRenderTests: SnapshotTestCase {
   private func item(sync: DispatchBranchSync? = nil, badges: [DispatchBadge] = []) -> DispatchItem {
     DispatchItem(
       glyph: .localBranch, name: "stale", detail: "1d前", badges: badges, sync: sync,
-      action: .localBranch(name: "stale", existingWorktree: nil))
+      action: .localBranch(name: "stale"))
   }
 
   private func render(_ item: DispatchItem) throws -> Data {
