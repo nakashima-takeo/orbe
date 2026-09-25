@@ -16,8 +16,9 @@ protocol LineSource: AnyObject {
 /// 基準——面が clip の上端に合わせて置き直すので、本文と同じコマで動く。番号は行索引の行の番号で、行頭が行索引の行頭で
 /// ない段落（単独の `\r` などで TextKit が割った段落）には描かない。
 ///
-/// 番号を押すとその行を選ぶ（VS Code の既定: 押した行を起点に、ドラッグで行単位に伸ばし、本文の上下の外では自動スクロール
-/// で伸び続け、⇧で今の選択の起点から伸ばす。選択の動く側の端はポインタの側）。印の列は押しても何もしない。
+/// 番号を押すとその行を選ぶ（VS Code の既定: 押した行を起点に、ドラッグで行単位に伸ばし、本文の上下の外と行番号の上では
+/// 自動スクロールで伸び続け、⇧で今の選択の元の区間から伸ばす。選択の動く側の端はポインタの側で、選んだ後はそこを見せる）。
+/// 印の列は押しても何もしない。
 final class LineNumbersView: NSView {
   private let textView: SurfaceTextView
   private let style: TextSurfaceStyle
@@ -25,8 +26,8 @@ final class LineNumbersView: NSView {
   weak var source: LineSource?
   /// 押してから離すまでの起点（行の選択が伸びる元の区間）。
   private var anchor: NSRange?
-  /// 最後に列から置いた選択と、そのときの起点（選択がそのままなら ⇧クリックはその起点から伸ばす）。
-  private var lastSelection: (range: NSRange, anchor: NSRange)?
+  /// 最後に列で選んだときの起点（その選択を伸ばしただけなら、⇧クリックはこの区間から伸ばす）。
+  private var lineSelectionStart: NSRange?
 
   init(textView: SurfaceTextView, style: TextSurfaceStyle) {
     self.textView = textView
@@ -151,40 +152,29 @@ final class LineNumbersView: NSView {
     let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
     guard !flags.contains(.control) else { return }
     window?.makeFirstResponder(textView)
-    if flags.contains(.shift) {
-      let selection = textView.textSelection
-      if let last = lastSelection, last.range == selection {
-        anchor = last.anchor
-      } else {
-        let fixed =
-          textView.caretLocation == selection.location ? NSMaxRange(selection) : selection.location
-        anchor = NSRange(location: fixed, length: 0)
-      }
-    } else {
-      anchor = source.range(ofLine: line)
-    }
+    anchor = flags.contains(.shift) ? selectionStart() : source.range(ofLine: line)
     extend(to: line, source)
+    revealCaret()
   }
 
-  /// 本文の上下の外へ出たら、ポインタが止まっていても自動スクロールで伸び続ける（VS Code の
-  /// `TopBottomDragScrolling`）。中へ戻れば止めて、ポインタの行まで伸ばす。
+  /// VS Code の `mouseHandler` と同じく、本文の上下の外へ出たら縦に、行番号の上（本文の左の外）なら横に、ポインタが
+  /// 止まっていても自動スクロールで伸び続ける。本文の上に出れば止めて、ポインタの行まで伸ばして動く側の端を見せる。
   override func mouseDragged(with event: NSEvent) {
     guard anchor != nil, let source else { return }
-    let y = convert(event.locationInWindow, from: nil).y
-    if y < bounds.minY || y > bounds.maxY {
-      edge = Edge(
-        above: y < bounds.minY, distance: y < bounds.minY ? bounds.minY - y : y - bounds.maxY)
-      if clock == nil {
-        lastFrame = nil
-        clock = FrameClock(view: self) { [unowned self] in
-          autoscrollFrame(now: CACurrentMediaTime())
-        }
-      }
-      return
+    let point = convert(event.locationInWindow, from: nil)
+    if point.y < bounds.minY {
+      autoscroll(.above(bounds.minY - point.y))
+    } else if point.y > bounds.maxY {
+      autoscroll(.below(point.y - bounds.maxY))
+    } else if point.x <= bounds.width {
+      autoscroll(.left(bounds.width - point.x, y: point.y))
+      if let line = line(atY: point.y, source) { extend(to: line, source) }
+    } else {
+      stopAutoscroll()
+      guard let line = line(atY: point.y, source) else { return }
+      extend(to: line, source)
+      revealCaret()
     }
-    stopAutoscroll()
-    guard let line = line(atY: y, source) else { return }
-    extend(to: line, source)
   }
 
   override func mouseUp(with event: NSEvent) {
@@ -200,12 +190,59 @@ final class LineNumbersView: NSView {
     stopAutoscroll()
   }
 
+  /// ⇧で伸ばす元の区間（VS Code の `selectionStart`）。列で行を選んだ後に選択を伸ばしただけ（⇧↓ など）なら、その行が
+  /// 元の区間のまま。そうでなければ今の選択から決める——語や段落の単位で選んだ選択（ダブル・トリプルクリック）はその選択
+  /// 全体、それ以外は動かない側の端。
+  private func selectionStart() -> NSRange {
+    let selection = textView.textSelection
+    let caret = textView.caretLocation
+    if let start = lineSelectionStart, Self.selection(from: start, to: caret) == selection {
+      return start
+    }
+    if selection.length > 0,
+      let granularity = textView.textLayoutManager.textSelections.last?.granularity,
+      granularity != .character
+    {
+      return selection
+    }
+    let fixed = caret == selection.location ? NSMaxRange(selection) : selection.location
+    return NSRange(location: fixed, length: 0)
+  }
+
+  /// 元の区間 `start` から `position` まで伸ばした選択（VS Code の `SingleCursorState._computeSelection`）——位置が
+  /// 元の区間の先頭より前なら元の区間の終わりから、そうでなければ先頭から。
+  private static func selection(from start: NSRange, to position: Int) -> NSRange {
+    let fixed = start.length > 0 && position < start.location ? NSMaxRange(start) : start.location
+    return NSRange(location: min(fixed, position), length: abs(position - fixed))
+  }
+
+  /// 起点の区間から `line` まで行単位で選ぶ（VS Code の `cursorMoveCommands.line`）——`line` が起点の行より上ならその
+  /// 行頭まで、下ならその次の行頭まで、同じ行なら起点の終わりまで、動く側の端を動かす。
+  private func extend(to line: Int, _ source: LineSource) {
+    guard let anchor else { return }
+    let anchorLine = source.line(containing: anchor.location)
+    let target = source.range(ofLine: line)
+    let position =
+      line < anchorLine
+      ? target.location : line > anchorLine ? NSMaxRange(target) : NSMaxRange(anchor)
+    let range = Self.selection(from: anchor, to: position)
+    textView.select(range, upstream: position < NSMaxRange(range))
+    lineSelectionStart = anchor
+  }
+
+  /// 動く側の端が見えるところまで最小限スクロールする（VS Code は行の選択の後にカーソルを見せる）。
+  private func revealCaret() {
+    textView.scrollRangeToVisible(NSRange(location: textView.caretLocation, length: 0))
+  }
+
   // MARK: - 自動スクロール
 
-  /// ポインタが本文のどちら側に、どれだけ外れているか。
-  private struct Edge {
-    let above: Bool
-    let distance: CGFloat
+  /// ポインタが本文のどちら側に、どれだけ外れているか。横は行番号の上（本文の左の外）で、`y` はポインタの縦の位置
+  /// （文書の座標）。
+  private enum Edge {
+    case above(CGFloat)
+    case below(CGFloat)
+    case left(CGFloat, y: CGFloat)
   }
 
   private var edge: Edge?
@@ -217,59 +254,65 @@ final class LineNumbersView: NSView {
   /// 自動スクロールが回っているか。
   var isAutoscrolling: Bool { clock != nil }
 
+  private func autoscroll(_ edge: Edge) {
+    self.edge = edge
+    guard clock == nil else { return }
+    lastFrame = nil
+    clock = FrameClock(view: self) { [unowned self] in autoscrollFrame(now: CACurrentMediaTime()) }
+  }
+
   private func stopAutoscroll() {
     clock?.cancel()
     clock = nil
     edge = nil
   }
 
-  /// 前のコマからの経過時間ぶん縦にスクロールし、見えている端の行まで伸ばす。速さ（行/秒）は外れた距離と見えている行数で
-  /// 決まる（VS Code の `_getScrollSpeed`）。
+  /// 前のコマからの経過時間ぶんスクロールし、縦なら見えている端の行まで、横ならポインタの行まで伸ばす。速さは外れた距離と
+  /// 見えている量で決まる（VS Code の `TopBottomDragScrolling` / `LeftRightDragScrolling`）。
   func autoscrollFrame(now: CFTimeInterval) {
     guard let edge, let source, let scrollView = textView.enclosingScrollView else { return }
     defer { lastFrame = now }
     guard let lastFrame else { return }
-    let elapsed = now - lastFrame
-    let lineHeight = style.lineHeight
-    let viewportLines = bounds.height / lineHeight
-    let outside = edge.distance / lineHeight
-    let speed =
-      outside <= 1.5
-      ? max(30, viewportLines * (1 + outside))
-      : outside <= 3
-        ? max(60, viewportLines * (2 + outside)) : max(200, viewportLines * (7 + outside))
-    let delta = speed * CGFloat(elapsed) * lineHeight
-    // `scroll(to:)` はスクロールできる範囲に収めないので、先に clip の制約（上端 0 と最終行を最上段まで）に通す。端に
-    // 着いたら動かず、見えている端の行まで伸ばすだけになる。
+    let elapsed = CGFloat(now - lastFrame)
     let clip = scrollView.contentView
     var proposed = clip.bounds
-    proposed.origin.y += edge.above ? -delta : delta
+    let line: Int?
+    switch edge {
+    case .above(let distance), .below(let distance):
+      let lineHeight = style.lineHeight
+      let delta =
+        Self.speed(outside: distance / lineHeight, visible: bounds.height / lineHeight)
+        * elapsed * lineHeight
+      let above = if case .above = edge { true } else { false }
+      proposed.origin.y += above ? -delta : delta
+      line = nil
+    case .left(let distance, let y):
+      // 全角 1 字（半角 2 桁）を単位に数え、その半分ずつ送る。
+      let fullWidth = 2 * style.font.cellWidth
+      proposed.origin.x -=
+        Self.speed(outside: distance / fullWidth, visible: clip.bounds.width / fullWidth)
+        * elapsed * fullWidth * 0.5
+      line = self.line(atY: y, source)
+    }
+    // `scroll(to:)` はスクロールできる範囲に収めないので、先に clip の制約（上端 0 と最終行を最上段まで、左端 0）に通す。
+    // 端に着いたら動かず、伸ばすだけになる。
     clip.scroll(to: clip.constrainBoundsRect(proposed).origin)
     scrollView.reflectScrolledClipView(clip)
-    guard let line = line(atY: edge.above ? bounds.minY : bounds.maxY - 0.5, source) else { return }
-    extend(to: line, source)
+    let edgeY: CGFloat
+    switch edge {
+    case .above: edgeY = bounds.minY
+    case .below: edgeY = bounds.maxY - 0.5
+    case .left(_, let y): edgeY = y
+    }
+    guard let target = line ?? self.line(atY: edgeY, source) else { return }
+    extend(to: target, source)
   }
 
-  /// 起点の区間から `line` まで行単位で選ぶ——`line` が起点の行より下なら起点の先頭からその行の終わりまで、上ならその
-  /// 行頭から起点の終わりまで（動く側の端は先頭）、同じ行なら起点そのもの（VS Code の `cursorMoveCommands.line`）。
-  private func extend(to line: Int, _ source: LineSource) {
-    guard let anchor else { return }
-    let anchorLine = source.line(containing: anchor.location)
-    let target = source.range(ofLine: line)
-    let range: NSRange
-    let upstream: Bool
-    if line < anchorLine {
-      range = NSRange(location: target.location, length: NSMaxRange(anchor) - target.location)
-      upstream = true
-    } else if line > anchorLine {
-      range = NSRange(location: anchor.location, length: NSMaxRange(target) - anchor.location)
-      upstream = false
-    } else {
-      range = anchor
-      upstream = false
-    }
-    textView.select(range, upstream: upstream)
-    lastSelection = (range, anchor)
+  /// 自動スクロールの速さ（単位/秒）。外れた距離と見えている量をどちらも同じ単位（行・全角の字）で数える。
+  private static func speed(outside: CGFloat, visible: CGFloat) -> CGFloat {
+    outside <= 1.5
+      ? max(30, visible * (1 + outside))
+      : outside <= 3 ? max(60, visible * (2 + outside)) : max(200, visible * (7 + outside))
   }
 
   /// y（文書の座標）の行。最終行より下なら最終行、先頭より上なら先頭の行。

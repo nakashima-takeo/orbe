@@ -8,7 +8,7 @@ import XCTest
 /// 行番号の列で行を選ぶ——クリック・ドラッグ・⇧クリック（VS Code の既定）と、本文の外へ出たときの自動スクロール。
 extension EditorLineNumbersTests {
   /// 列の中の点（x は列の左端から、y は文書の `row` 行目（1 始まり）の中ほど）で起きたマウスの出来事。
-  private func mouse(
+  func mouse(
     _ type: NSEvent.EventType, _ opened: Opened, row: CGFloat, x: CGFloat = 20,
     _ flags: NSEvent.ModifierFlags = []
   ) throws -> NSEvent {
@@ -20,12 +20,12 @@ extension EditorLineNumbersTests {
         clickCount: 1, pressure: 1))
   }
 
-  private func click(_ opened: Opened, row: CGFloat, _ flags: NSEvent.ModifierFlags = []) throws {
+  func click(_ opened: Opened, row: CGFloat, _ flags: NSEvent.ModifierFlags = []) throws {
     opened.column.mouseDown(with: try mouse(.leftMouseDown, opened, row: row, flags))
     opened.column.mouseUp(with: try mouse(.leftMouseUp, opened, row: row, flags))
   }
 
-  private func range(of line: Int, in document: EditorDocument) -> NSRange {
+  func range(of line: Int, in document: EditorDocument) -> NSRange {
     let start = document.lineIndex.start(ofRow: line - 1)
     return NSRange(location: start, length: document.lineIndex.end(ofRow: line - 1) - start)
   }
@@ -69,7 +69,7 @@ extension EditorLineNumbersTests {
 
   /// 自動スクロールのコマを `count` 回、`interval` 秒ごとに進める（テストの窓は画面に出ないので display link は
   /// 回らない。コマの処理を直に呼ぶ）。
-  private func frames(
+  func frames(
     _ column: LineNumbersView, _ count: Int, every interval: CFTimeInterval = 0.1,
     clock: inout CFTimeInterval
   ) {
@@ -127,8 +127,9 @@ extension EditorLineNumbersTests {
     XCTAssertEqual(clip.bounds.minY, stopped, "離した後のコマは何もしない")
   }
 
-  /// 外へ出た後に本文の中へ戻れば自動スクロールは止まり、ポインタの行まで伸ばす。
-  func testReturningInsideStopsTheAutoscroll() throws {
+  /// 外へ出た後に本文の上へ戻れば自動スクロールは止まり、ポインタの行まで伸ばす（行番号の上は本文の左の外なので、戻った
+  /// ことにならない）。
+  func testReturningOverTheTextStopsTheAutoscroll() throws {
     let opened = try open(lines(2000))
     let document = opened.document
     let column = opened.column
@@ -136,12 +137,13 @@ extension EditorLineNumbersTests {
     column.mouseDragged(
       with: try mouse(.leftMouseDragged, opened, row: column.bounds.height / style.lineHeight + 1))
     XCTAssertTrue(column.isAutoscrolling)
-    column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: 5))
-    XCTAssertFalse(column.isAutoscrolling, "中へ戻れば止まる")
+    let overText = column.bounds.width + 30
+    column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: 5, x: overText))
+    XCTAssertFalse(column.isAutoscrolling, "本文の上へ戻れば止まる")
     XCTAssertEqual(
       document.surface.selectedRange,
       NSUnionRange(range(of: 2, in: document), range(of: 5, in: document)))
-    column.mouseUp(with: try mouse(.leftMouseUp, opened, row: 5))
+    column.mouseUp(with: try mouse(.leftMouseUp, opened, row: 5, x: overText))
   }
 
   /// 外へ出したまま面が窓から外れる（文書の切り替え）と、mouse-up は届かないので、外れたところで自動スクロールと選択の
