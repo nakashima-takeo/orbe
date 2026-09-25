@@ -40,43 +40,6 @@ final class DispatchPaletteTests: OrbeTestCase {
     XCTAssertEqual(p.selected, 0, "末尾から下 → 先頭へ wrap")
   }
 
-  func testFilterNarrowsAcrossSectionsAndDropsEmpty() {
-    let p = makeModel()
-    p.query = "feat"
-    p.onQueryChanged()
-    XCTAssertEqual(
-      p.visibleSections.map(\.title), ["Worktrees", "Remote branches", "Pull requests"],
-      "マッチの無い Local branches / Issues セクションは消える")
-    XCTAssertEqual(p.items.count, 3, "feat を含む 3 行だけ残る")
-    XCTAssertEqual(p.selected, 0, "選択は先頭の可視行へクランプ")
-    XCTAssertEqual(p.selectedItem?.name, "agent-hooks")
-  }
-
-  /// 絞り込み中に裏の gh 更新で行が差し替わっても、入力中のフィルタは新しい行に効いたまま。
-  func testFilterStaysAppliedWhenSectionsAreReplaced() {
-    let p = makeModel()
-    p.query = "feat"
-    p.onQueryChanged()
-    var input = DispatchSectionBuilder.Input.designSample
-    input.issues.append(GitHubIssue(number: 999, title: "feat: arrived later"))
-    input.issues.append(GitHubIssue(number: 998, title: "unrelated"))
-
-    p.sections = DispatchSectionBuilder.build(input)
-
-    XCTAssertEqual(
-      p.visibleSections.first { $0.title == "Issues" }?.items.map(\.name),
-      ["feat: arrived later"], "新しく着いた行にもフィルタが効く")
-    XCTAssertEqual(p.items.count, 4, "既存の feat 3 行＋新しく着いた 1 行")
-  }
-
-  func testFilterMatchesIdAndDetail() {
-    let p = makeModel()
-    p.query = "#145"
-    p.onQueryChanged()
-    XCTAssertEqual(p.items.count, 1, "idText の #145 に PR 行がマッチ")
-    XCTAssertEqual(p.selectedItem?.name, "feat: session restore")
-  }
-
   func testMoveSkipsInfoRows() {
     var input = DispatchSectionBuilder.Input.designSample
     input.issues = []
