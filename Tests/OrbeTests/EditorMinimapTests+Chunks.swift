@@ -169,6 +169,37 @@ extension EditorMinimapTests {
       "素の色（素の文字色）から構文の色へ: \(plain) → \(colored)")
   }
 
+  /// 見える範囲が動き続ける間は色付けしない——動くたびに猶予を置き直し、動く前に置いた猶予が明けても素の色のまま。
+  /// 覚えている素の色のチャンクへ戻っただけ（新しく組むチャンクが無い）でも置き直す。
+  func testMovingAgainPostponesTheColoring() throws {
+    let hosted = try hostOverview(
+      String(repeating: "struct S {}\n", count: 3000), height: 800,
+      name: "m-\(UUID().uuidString).swift", colored: true)
+    let view = hosted.pane.minimap
+    var pending: [() -> Void] = []
+    view.colorDelay.schedule = { _, fire in pending.append(fire) }
+    view.display()
+    func show(_ line: CGFloat) throws -> Set<Int> {
+      hosted.document.scroll(toFirstLine: line)
+      hosted.pane.layoutSubtreeIfNeeded()
+      view.display()
+      let lines = try XCTUnwrap(view.placement).lines
+      return Set(
+        (lines.lowerBound / MinimapChunks.lines)...((lines.upperBound - 1) / MinimapChunks.lines))
+    }
+    let back = try show(2000)
+    let away = try show(2600)
+    XCTAssertTrue(view.plainChunks.isSuperset(of: back.union(away)), "前提: どちらも素の色で組んだ")
+    let earlier = pending
+    pending = []
+
+    XCTAssertEqual(try show(2000), back)
+    for fire in earlier { fire() }
+    XCTAssertTrue(view.plainChunks.isSuperset(of: back), "動く前に置いた猶予では色付けしない")
+    while let fire = pending.popLast() { fire() }
+    XCTAssertTrue(view.plainChunks.isDisjoint(with: back), "止まってからの猶予で色付けする")
+  }
+
   /// 見える範囲が変わってから描かれる前に猶予が明けても（面が隠れている間に外から行が増えた、など）、描いたときに素の色で
   /// 組んだチャンクは、猶予を置き直して色付きへ差し替える。
   func testChunksBuiltPlainAfterThePauseStillTurnColored() throws {
