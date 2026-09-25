@@ -110,6 +110,117 @@ final class DispatchGitHubCacheTests: OrbeTestCase {
     XCTAssertNil(entry?.branchPullRequests["feat/z"], "キーが無い＝未取得（0 件ではない）")
   }
 
+  // MARK: - open 一覧の取得
+
+  /// open 一覧は窓ではなく上限までの全件を取る（直近 30 件の窓だと、古い issue / PR は番号やタイトルを
+  /// 打っても候補に出ない）。上限は巨大リポジトリで取得全体が時間上限を越えて失敗しないための安全弁で、
+  /// 緩めると上限超えのリポジトリで 1 件も出なくなり、締めると古いものが出なくなる。
+  func testOpenListsFetchAllUpToTheSafetyLimit() {
+    XCTAssertEqual(
+      GitHubCLI.openIssuesArguments,
+      ["issue", "list", "--state", "open", "--limit", "1000", "--json", "number,title"])
+    XCTAssertEqual(
+      GitHubCLI.openPullRequestsArguments,
+      [
+        "pr", "list", "--state", "open", "--limit", "500", "--json",
+        "number,title,headRefName,reviewDecision,isCrossRepository",
+      ])
+  }
+
+  // MARK: - 一覧取得の合流
+
+  /// gh を叩く代わりに、撃たれた取得の完了口を溜めておき、テストが好きな時に着地させる。
+  private final class PendingFetches<T> {
+    private(set) var completions: [(T?) -> Void] = []
+    var fetch: (@escaping (T?) -> Void) -> Void { { self.completions.append($0) } }
+    func land(_ index: Int, _ result: T?) {
+      guard completions.indices.contains(index) else {
+        return XCTFail("\(index + 1) 本目の取得は撃たれていない")
+      }
+      completions[index](result)
+    }
+  }
+
+  /// 取得中に開き直したパレットは取り直さず、進行中の取得の着地を受け取る。ここが崩れると、巨大
+  /// リポジトリで開き直すたびに十数往復の取得が積み上がり、遅れて着いた古い取得が新しい結果を上書きする。
+  func testRefreshWhileFetchingJoinsTheInFlightFetch() {
+    let cache = DispatchGitHubCache.shared
+    let key = "/join/.git"
+    let pending = PendingFetches<[GitHubIssue]>()
+    var first: [GitHubIssue]?
+    var second: [GitHubIssue]?
+
+    cache.refreshIssues(for: key, fetch: pending.fetch) { first = $0 }
+    cache.refreshIssues(for: key, fetch: pending.fetch) { second = $0 }
+    XCTAssertEqual(pending.completions.count, 1, "取得中の 2 本目は撃たない")
+
+    pending.land(0, [issue(1)])
+    XCTAssertEqual(first, [issue(1)])
+    XCTAssertEqual(second, [issue(1)], "開き直したパレットにも同じ着地が届く")
+    XCTAssertEqual(
+      cache.entry(for: key)?.issues, [issue(1)], "受け手が何もしなくても次回の先描き用に残る")
+  }
+
+  /// 失敗（`nil`）は全受け手へ届く（受け手側の規則で据え置きになる）が、前回結果は消さない。
+  func testFailedFetchReachesEveryReceiverAndKeepsThePreviousResult() {
+    let cache = DispatchGitHubCache.shared
+    let key = "/join-failure/.git"
+    cache.setIssues([issue(1)], for: key)
+    let pending = PendingFetches<[GitHubIssue]>()
+    var landings: [[GitHubIssue]?] = []
+
+    cache.refreshIssues(for: key, fetch: pending.fetch) { landings.append($0) }
+    cache.refreshIssues(for: key, fetch: pending.fetch) { landings.append($0) }
+    pending.land(0, nil)
+
+    XCTAssertEqual(landings.count, 2, "失敗も両方の受け手に届く")
+    XCTAssertTrue(landings.allSatisfy { $0 == nil })
+    XCTAssertEqual(cache.entry(for: key)?.issues, [issue(1)], "失敗は前回結果を消さない")
+  }
+
+  /// 着地した後の取り直しは、終わった取得に吸われず新しい取得として始まる。着地を受けた受け手の中から
+  /// 取り直しても同じ——吸われると、その受け手には何も届かず行がローディングのまま残る。
+  func testRefreshAfterLandingStartsANewFetch() {
+    let cache = DispatchGitHubCache.shared
+    let key = "/join-again/.git"
+    let pending = PendingFetches<[GitHubIssue]>()
+    var reentered: [GitHubIssue]?
+
+    cache.refreshIssues(for: key, fetch: pending.fetch) { _ in
+      cache.refreshIssues(for: key, fetch: pending.fetch) { reentered = $0 }
+    }
+    pending.land(0, [issue(1)])
+    XCTAssertEqual(pending.completions.count, 2, "着地後の取り直しは新しく撃つ")
+
+    pending.land(1, [issue(2)])
+    XCTAssertEqual(reentered, [issue(2)])
+    XCTAssertEqual(cache.entry(for: key)?.issues, [issue(2)], "新しい着地が最新として残る")
+  }
+
+  /// 合流はリポジトリ単位・種別単位に閉じる。issue の取得中でも PR は撃ち、別リポジトリも撃つ——
+  /// 巻き込むと PR の表示が issue の着地を待ち、別リポジトリのパレットに他所の行が届く。
+  func testJoinIsScopedToRepositoryAndKind() {
+    let cache = DispatchGitHubCache.shared
+    let key = "/join-scope/.git"
+    let issues = PendingFetches<[GitHubIssue]>()
+    let pullRequests = PendingFetches<[GitHubPullRequest]>()
+    var landedPullRequests: [GitHubPullRequest]?
+
+    cache.refreshIssues(for: key, fetch: issues.fetch) { _ in }
+    cache.refreshIssues(for: "/join-scope-other/.git", fetch: issues.fetch) { _ in }
+    cache.refreshPullRequests(for: key, fetch: pullRequests.fetch) { landedPullRequests = $0 }
+    XCTAssertEqual(issues.completions.count, 2, "別リポジトリの取得は合流しない")
+    XCTAssertEqual(pullRequests.completions.count, 1, "issue の取得中でも PR は撃つ")
+
+    pullRequests.land(0, [pullRequest(9)])
+    XCTAssertEqual(landedPullRequests, [pullRequest(9)], "PR は issue の着地を待たずに届く")
+    XCTAssertEqual(cache.entry(for: key)?.pullRequests, [pullRequest(9)])
+    XCTAssertNil(cache.entry(for: key)?.issues, "PR の着地は issue を巻き込まない")
+
+    issues.land(0, [])
+    issues.land(1, [])
+  }
+
   // MARK: - ブランチの PR の取得
 
   /// ブランチの PR は一覧の窓ではなく **worktree にあるブランチの名指し**で、`--state all` の
