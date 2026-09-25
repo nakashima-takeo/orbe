@@ -87,24 +87,25 @@ final class GitHubCLI {
   /// open issue 一覧（`openIssueLimit` まで全件・新しい順）。`nil` = 取得失敗（gh 未解決・非 0 終了・
   /// タイムアウト・デコード失敗）で呼び出し側は前回結果を据え置く。`[]` は「0 件」を意味する。
   func issues(cwd: String, completion: @escaping ([GitHubIssue]?) -> Void) {
-    fetch(
-      cwd: cwd,
-      args: [
-        "issue", "list", "--state", "open", "--limit", String(Self.openIssueLimit), "--json",
-        "number,title",
-      ], completion: completion)
+    fetch(cwd: cwd, args: Self.openIssuesArguments, completion: completion)
   }
 
   /// open PR 一覧（`openPullRequestLimit` まで全件・新しい順）。`nil` = 取得失敗（呼び出し側は前回結果を
   /// 据え置く）／`[]` = 0 件。
   func pullRequests(cwd: String, completion: @escaping ([GitHubPullRequest]?) -> Void) {
-    fetch(
-      cwd: cwd,
-      args: [
-        "pr", "list", "--state", "open", "--limit", String(Self.openPullRequestLimit), "--json",
-        "number,title,headRefName,reviewDecision,isCrossRepository",
-      ], completion: completion)
+    fetch(cwd: cwd, args: Self.openPullRequestsArguments, completion: completion)
   }
+
+  /// open issue 一覧の取得引数。
+  static let openIssuesArguments = [
+    "issue", "list", "--state", "open", "--limit", String(openIssueLimit), "--json", "number,title",
+  ]
+
+  /// open PR 一覧の取得引数。
+  static let openPullRequestsArguments = [
+    "pr", "list", "--state", "open", "--limit", String(openPullRequestLimit), "--json",
+    "number,title,headRefName,reviewDecision,isCrossRepository",
+  ]
 
   /// ブランチ名指しの PR 取得引数（open/closed を `--state all` の 1 往復で。作成日時の降順）。
   /// **直近 N 件の一覧窓は使わない**——古くにマージされた PR も、古くから開いたままの PR も、
