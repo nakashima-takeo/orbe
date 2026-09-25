@@ -118,4 +118,69 @@ extension EditorMinimapTests {
     XCTAssertGreaterThan(pixels.alpha(in: cell(view, row: 0, column: 0)).max, 0.2, "新しい文書の字")
     XCTAssertEqual(pixels.alpha(in: cell(view, row: 0, column: 6)).max, 0, "前の文書の字は残らない")
   }
+
+  /// スクロールで新しく見えたチャンクは字の形だけを素の色で先に描き、見える範囲が止まって猶予が明けると、見えている
+  /// チャンクを 1 つずつ（runloop を 1 回ずつ譲って）構文の色へ差し替える。
+  func testScrolledInChunksDrawPlainFirstAndTurnColoredAfterAPause() throws {
+    let text = String(repeating: "struct S {}\n", count: 3000)
+    let hosted = try hostOverview(
+      text, height: 800, name: "p-\(UUID().uuidString).swift", colored: true)
+    let view = hosted.pane.minimap
+    var pending: [(TimeInterval, () -> Void)] = []
+    view.colorDelay.schedule = { delay, fire in pending.append((delay, fire)) }
+    view.display()
+    XCTAssertEqual(view.plainChunks, [], "開いた直後の窓は色付きで描く")
+
+    hosted.document.scroll(toFirstLine: 2000)
+    hosted.pane.layoutSubtreeIfNeeded()
+    view.display()
+    let layout = try XCTUnwrap(view.placement)
+    let row = layout.lines.lowerBound + 10
+    let visible = Set(
+      (layout.lines.lowerBound / MinimapChunks.lines)...((layout.lines.upperBound - 1)
+        / MinimapChunks.lines))
+    XCTAssertEqual(view.plainChunks, visible, "新しく見えたチャンクは素の色")
+    func keyword() throws -> NSColor {
+      try ViewPixels(view).strongest(
+        in: NSRect(x: gutter(view) + 1, y: layout.y(ofLine: row), width: 1, height: 2))
+    }
+    let plain = try keyword()
+    XCTAssertEqual(pending.last?.0, EditorMinimapView.colorPause, "止まってから猶予を置く")
+
+    var steps = 0
+    while let (_, fire) = pending.popLast() {
+      let before = view.plainChunks.count
+      fire()
+      if view.plainChunks.count < before { steps += 1 }
+      XCTAssertGreaterThanOrEqual(view.plainChunks.count, before - 1, "1 回に 1 つずつ")
+    }
+    XCTAssertEqual(steps, visible.count)
+    XCTAssertEqual(view.plainChunks, [])
+    view.display()
+    let colored = try keyword()
+    XCTAssertTrue(Hue.blue(colored), "色付きの struct は keyword の青: \(colored)")
+    XCTAssertGreaterThan(
+      abs(plain.redComponent - colored.redComponent)
+        + abs(plain.greenComponent - colored.greenComponent), 0.2,
+      "素の色（素の文字色）から構文の色へ: \(plain) → \(colored)")
+  }
+
+  /// 打鍵で捨てたチャンクは前のコマでも見えていたので、その場で色付きに描き直す（打っている間に単色へ戻らない）。
+  func testChunksRedrawnAfterTypingStayColored() throws {
+    let hosted = try hostOverview(
+      String(repeating: "struct S {}\n", count: 300), height: 800,
+      name: "t-\(UUID().uuidString).swift", colored: true)
+    let view = hosted.pane.minimap
+    view.colorDelay.schedule = { _, _ in }
+    view.display()
+    let document = hosted.document
+    document.surface.selectedRange = NSRange(
+      location: document.lineIndex.start(ofRow: 100), length: 0)
+    hosted.window.makeFirstResponder(document.surface.responder)
+    document.surface.responder.keyDown(with: .key("x", []))
+    XCTAssertFalse(view.cachedChunks.contains(1), "前提: 行 100 のチャンクを捨てた")
+    view.display()
+    XCTAssertTrue(view.cachedChunks.contains(1))
+    XCTAssertEqual(view.plainChunks, [], "描き直したチャンクは色付き")
+  }
 }

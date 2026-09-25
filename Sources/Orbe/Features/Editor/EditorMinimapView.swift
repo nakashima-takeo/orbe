@@ -6,8 +6,10 @@ import OrbeEditorCore
 /// （行数・viewport・選択・ハンク・役割の区間・インデント単位）。「何をどこに描くか」は Core の純関数（`MinimapLayout` /
 /// `MinimapLine`）で、ここは面の座標とデバイス px に写すだけ。
 ///
-/// 字はチャンクの画像で覚える（`MinimapChunks`）。帯を掴んでドラッグすると本文が追従し、帯の外を押すとその行が本文の
-/// 中央に来る。
+/// 字はチャンクの画像で覚える（`MinimapChunks`）。スクロールで新しく見えたチャンクは字の形だけを素の色で先に描き、
+/// 見える範囲が止まってから少しずつ構文の色へ差し替える（VS Code と同じ——速いドラッグの 1 コマに役割の問い合わせを
+/// 詰め込まない）。前のコマで見えていたチャンクを描き直すとき（打鍵で捨てた・外観や幅が変わった）はその場で色付きに
+/// 描く（打っている間に単色へ戻らない）。帯を掴んでドラッグすると本文が追従し、帯の外を押すとその行が本文の中央に来る。
 final class EditorMinimapView: NSView {
   let style: MinimapStyle
   private(set) weak var document: EditorDocument?
@@ -23,9 +25,19 @@ final class EditorMinimapView: NSView {
   private var drag: (startY: CGFloat, layout: MinimapLayout)?
   private let dragScroll = DragScroll()
   private var tracking: NSTrackingArea?
+  /// 前の描画で見えていたチャンク（結び直した直後は nil）。
+  private var drawnChunks: ClosedRange<Int>?
+  /// 見えているチャンク（配置を出し直すたびに更新。変われば色付けの猶予を置き直す）。
+  private var visibleChunks: ClosedRange<Int>?
+  /// 見える範囲が止まってから素の色のチャンクを色付きへ差し替える予約。
+  let colorDelay = EditorDelay()
+  /// 見える範囲が止まったと見なすまでの猶予。
+  static let colorPause: TimeInterval = 0.1
 
   /// 覚えているチャンク（テストが捨て方を見る）。
   var cachedChunks: Set<Int> { chunks.cached }
+  /// 素の色のまま覚えているチャンク。
+  var plainChunks: Set<Int> { chunks.plain }
   /// 帯が見えているか（ホバー中かドラッグ中で、帯が要る）。
   var isSliderShown: Bool { (hovering || drag != nil) && placement?.sliderNeeded == true }
 
@@ -50,6 +62,9 @@ final class EditorMinimapView: NSView {
     self.document = document
     chunks.reset(lineCount: document?.lineIndex.lineCount ?? 0)
     placement = nil
+    drawnChunks = nil
+    visibleChunks = nil
+    colorDelay.cancel()
     drag = nil
     isHidden = document == nil
     refresh()
@@ -96,10 +111,34 @@ final class EditorMinimapView: NSView {
   private func updateLayout() {
     guard let document else { return }
     let (first, visible) = document.viewportLines
-    placement = MinimapLayout(
+    let layout = MinimapLayout(
       lineCount: document.lineIndex.lineCount, firstLine: first, visibleLines: visible,
       height: bounds.height, previous: placement)
+    placement = layout
     updateSlider()
+    let chunks = Self.chunks(of: layout)
+    if chunks != visibleChunks {
+      visibleChunks = chunks
+      colorDelay.run(after: Self.colorPause) { [weak self] in self?.colorNextChunk() }
+    }
+  }
+
+  /// 配置の行が掛かるチャンク（行が無ければ nil）。
+  private static func chunks(of layout: MinimapLayout) -> ClosedRange<Int>? {
+    guard !layout.lines.isEmpty else { return nil }
+    return
+      (layout.lines.lowerBound / MinimapChunks.lines)...((layout.lines.upperBound - 1)
+      / MinimapChunks.lines)
+  }
+
+  /// 見えている素の色のチャンクを 1 つ色付きにして描き直し、残りは次の runloop へ回す（1 コマに詰め込まない）。
+  private func colorNextChunk() {
+    guard let document, let visible = visibleChunks,
+      let chunk = chunks.plain.filter(visible.contains).min(),
+      chunks.color(chunk, document: document, canvas: canvas)
+    else { return }
+    needsDisplay = true
+    colorDelay.run(after: 0) { [weak self] in self?.colorNextChunk() }
   }
 
   private func updateSlider() {
@@ -201,19 +240,19 @@ final class EditorMinimapView: NSView {
     drawDecorations(layout, document: document, context: context)
   }
 
-  /// 字のチャンクを置く（不透明度 0.9。VS Code の canvas の opacity）。
+  /// 字のチャンクを置く（不透明度 0.9。VS Code の canvas の opacity）。前のコマで見えていなかったチャンクは素の色で組む。
   private func drawText(_ layout: MinimapLayout, document: EditorDocument, context: CGContext) {
-    guard !layout.lines.isEmpty else { return }
-    let canvas = MinimapChunks.Canvas(
-      width: Int(bounds.width * CGFloat(scale)), scale: scale, dark: isDark,
-      appearance: effectiveAppearance)
-    let first = layout.lines.lowerBound / MinimapChunks.lines
-    let last = (layout.lines.upperBound - 1) / MinimapChunks.lines
+    guard let visible = Self.chunks(of: layout) else { return }
+    defer { drawnChunks = visible }
+    let canvas = self.canvas
     context.saveGState()
     context.setAlpha(style.opacity)
     context.interpolationQuality = .none
-    for chunk in first...last {
-      guard let image = chunks.image(chunk, document: document, canvas: canvas) else { continue }
+    for chunk in visible {
+      let colored = drawnChunks?.contains(chunk) ?? true
+      guard
+        let image = chunks.image(chunk, document: document, canvas: canvas, colored: colored)
+      else { continue }
       let y = layout.y(ofLine: chunk * MinimapChunks.lines)
       let height = CGFloat(image.height) / CGFloat(scale)
       // flipped の view へ CGImage を上下そのままに描く。
@@ -225,6 +264,12 @@ final class EditorMinimapView: NSView {
       context.restoreGState()
     }
     context.restoreGState()
+  }
+
+  private var canvas: MinimapChunks.Canvas {
+    MinimapChunks.Canvas(
+      width: Int(bounds.width * CGFloat(scale)), scale: scale, dark: isDark,
+      appearance: effectiveAppearance)
   }
 
   private var isDark: Bool { effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua }
