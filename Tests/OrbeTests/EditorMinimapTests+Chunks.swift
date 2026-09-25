@@ -150,8 +150,12 @@ extension EditorMinimapTests {
     var steps = 0
     while let (_, fire) = pending.popLast() {
       let before = view.plainChunks.count
+      view.displayIfNeeded()
       fire()
-      if view.plainChunks.count < before { steps += 1 }
+      if view.plainChunks.count < before {
+        steps += 1
+        XCTAssertTrue(try XCTUnwrap(view.layer).needsDisplay(), "色を差し替えたら描き直しを頼む")
+      }
       XCTAssertGreaterThanOrEqual(view.plainChunks.count, before - 1, "1 回に 1 つずつ")
     }
     XCTAssertEqual(steps, visible.count)
@@ -163,6 +167,53 @@ extension EditorMinimapTests {
       abs(plain.redComponent - colored.redComponent)
         + abs(plain.greenComponent - colored.greenComponent), 0.2,
       "素の色（素の文字色）から構文の色へ: \(plain) → \(colored)")
+  }
+
+  /// 見える範囲が変わってから描かれる前に猶予が明けても（面が隠れている間に外から行が増えた、など）、描いたときに素の色で
+  /// 組んだチャンクは、猶予を置き直して色付きへ差し替える。
+  func testChunksBuiltPlainAfterThePauseStillTurnColored() throws {
+    let hosted = try hostOverview(
+      String(repeating: "struct S {}\n", count: 3000), height: 800,
+      name: "q-\(UUID().uuidString).swift", colored: true)
+    let view = hosted.pane.minimap
+    var pending: [() -> Void] = []
+    view.colorDelay.schedule = { _, fire in pending.append(fire) }
+    view.display()
+    hosted.document.scroll(toFirstLine: 2000)
+    hosted.pane.layoutSubtreeIfNeeded()
+    while let fire = pending.popLast() { fire() }
+    XCTAssertEqual(view.plainChunks, [], "前提: 描く前に猶予が明けた（素の色はまだ無い）")
+
+    view.display()
+    XCTAssertFalse(view.plainChunks.isEmpty, "描いたときに素の色で組んだ")
+    XCTAssertFalse(pending.isEmpty, "猶予を置き直す")
+    while let fire = pending.popLast() { fire() }
+    XCTAssertEqual(view.plainChunks, [], "色付きへ差し替える")
+  }
+
+  /// 猶予が明けたときにミニマップが窓から外れていても（workspace の切り替え）、組んだときの条件で色付けする——戻ったとき
+  /// 素の色が残らない。
+  func testColoringWhileOutOfTheWindowStillColorsTheChunks() throws {
+    let hosted = try hostOverview(
+      String(repeating: "struct S {}\n", count: 3000), height: 800,
+      name: "w-\(UUID().uuidString).swift", colored: true)
+    let view = hosted.pane.minimap
+    var pending: [() -> Void] = []
+    view.colorDelay.schedule = { _, fire in pending.append(fire) }
+    view.display()
+    hosted.document.scroll(toFirstLine: 2000)
+    hosted.pane.layoutSubtreeIfNeeded()
+    view.display()
+    XCTAssertFalse(view.plainChunks.isEmpty, "前提: 素の色のチャンクがある")
+
+    let pane = hosted.pane
+    view.removeFromSuperview()
+    while let fire = pending.popLast() { fire() }
+    pane.addSubview(view)
+    pane.layoutSubtreeIfNeeded()
+    view.display()
+    while let fire = pending.popLast() { fire() }
+    XCTAssertEqual(view.plainChunks, [], "窓の外でも色付けした")
   }
 
   /// 打鍵で捨てたチャンクは前のコマでも見えていたので、その場で色付きに描き直す（打っている間に単色へ戻らない）。

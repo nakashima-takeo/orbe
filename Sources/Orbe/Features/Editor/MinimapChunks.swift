@@ -77,6 +77,9 @@ final class MinimapChunks {
     for chunk in first...last { images[chunk] = nil }
   }
 
+  /// 覚えているか（素の色のままでも）。
+  func contains(_ chunk: Int) -> Bool { images[chunk] != nil }
+
   /// チャンクの画像。覚えていればそれ（素の色のままでも）を、無ければ `colored` の組み方で組んで覚える。
   func image(_ chunk: Int, document: EditorDocument, canvas: Canvas, colored: Bool) -> CGImage? {
     if canvas != self.canvas || document.indentUnit != indentUnit {
@@ -102,10 +105,12 @@ final class MinimapChunks {
     return image
   }
 
-  /// 素の色で覚えているチャンクを構文の色で組み直す。描く先の条件が変わっていれば何もせず false（次の描画が組み直す）。
-  func color(_ chunk: Int, document: EditorDocument, canvas: Canvas) -> Bool {
-    guard canvas == self.canvas, document.indentUnit == indentUnit,
-      let entry = images[chunk], !entry.colored,
+  /// `chunks` のうち素の色で覚えている最小のチャンクを、組んだときと同じ条件（`canvas`）で構文の色へ組み直す。組み直した
+  /// ら true。条件は今のビューから取らない——窓から外れている間は倍率や幅が変わって見え、戻っても素の色が残る。
+  func colorFirstPlain(in chunks: ClosedRange<Int>, document: EditorDocument) -> Bool {
+    guard let canvas,
+      let chunk = images.filter({ chunks.contains($0.key) && !$0.value.colored }).keys.min(),
+      let entry = images[chunk],
       let image = render(chunk, document: document, canvas: canvas, colored: true)
     else { return false }
     images[chunk] = Entry(image: image, colored: true, lastUse: entry.lastUse)

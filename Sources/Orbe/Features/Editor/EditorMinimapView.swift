@@ -7,7 +7,7 @@ import OrbeEditorCore
 /// `MinimapLine`）で、ここは面の座標とデバイス px に写すだけ。
 ///
 /// 字はチャンクの画像で覚える（`MinimapChunks`）。スクロールで新しく見えたチャンクは字の形だけを素の色で先に描き、
-/// 見える範囲が止まってから少しずつ構文の色へ差し替える（VS Code と同じ——速いドラッグの 1 コマに役割の問い合わせを
+/// 見える範囲が止まってから少しずつ構文の色へ差し替える（速いドラッグの 1 コマに役割の問い合わせを
 /// 詰め込まない）。前のコマで見えていたチャンクを描き直すとき（打鍵で捨てた・外観や幅が変わった）はその場で色付きに
 /// 描く（打っている間に単色へ戻らない）。帯を掴んでドラッグすると本文が追従し、帯の外を押すとその行が本文の中央に来る。
 final class EditorMinimapView: NSView {
@@ -134,8 +134,7 @@ final class EditorMinimapView: NSView {
   /// 見えている素の色のチャンクを 1 つ色付きにして描き直し、残りは次の runloop へ回す（1 コマに詰め込まない）。
   private func colorNextChunk() {
     guard let document, let visible = visibleChunks,
-      let chunk = chunks.plain.filter(visible.contains).min(),
-      chunks.color(chunk, document: document, canvas: canvas)
+      chunks.colorFirstPlain(in: visible, document: document)
     else { return }
     needsDisplay = true
     colorDelay.run(after: 0) { [weak self] in self?.colorNextChunk() }
@@ -240,16 +239,21 @@ final class EditorMinimapView: NSView {
     drawDecorations(layout, document: document, context: context)
   }
 
-  /// 字のチャンクを置く（不透明度 0.9。VS Code の canvas の opacity）。前のコマで見えていなかったチャンクは素の色で組む。
+  /// 字のチャンクを置く（不透明度 0.9。VS Code の canvas の opacity）。前のコマで見えていなかったチャンクは素の色で組み、
+  /// 組んだら色付けの猶予を置き直す（見える範囲が変わった後、描かれる前に猶予が明けていても、素の色を残さない）。
   private func drawText(_ layout: MinimapLayout, document: EditorDocument, context: CGContext) {
     guard let visible = Self.chunks(of: layout) else { return }
     defer { drawnChunks = visible }
-    let canvas = self.canvas
+    let canvas = MinimapChunks.Canvas(
+      width: Int(bounds.width * CGFloat(scale)), scale: scale, dark: isDark,
+      appearance: effectiveAppearance)
     context.saveGState()
     context.setAlpha(style.opacity)
     context.interpolationQuality = .none
+    var builtPlain = false
     for chunk in visible {
       let colored = drawnChunks?.contains(chunk) ?? true
+      if !colored, !chunks.contains(chunk) { builtPlain = true }
       guard
         let image = chunks.image(chunk, document: document, canvas: canvas, colored: colored)
       else { continue }
@@ -264,12 +268,9 @@ final class EditorMinimapView: NSView {
       context.restoreGState()
     }
     context.restoreGState()
-  }
-
-  private var canvas: MinimapChunks.Canvas {
-    MinimapChunks.Canvas(
-      width: Int(bounds.width * CGFloat(scale)), scale: scale, dark: isDark,
-      appearance: effectiveAppearance)
+    if builtPlain {
+      colorDelay.run(after: Self.colorPause) { [weak self] in self?.colorNextChunk() }
+    }
   }
 
   private var isDark: Bool { effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua }
