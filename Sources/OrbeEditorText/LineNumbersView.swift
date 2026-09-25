@@ -147,8 +147,10 @@ final class LineNumbersView: NSView {
     guard point.x < bounds.width - style.marks.gutterWidth, let source,
       let line = line(atY: point.y, source)
     else { return }
-    window?.makeFirstResponder(textView)
+    // ⌃クリックは行を選ばない（VS Code も mac の ⌃クリックを扱わない）。焦点も動かさない。
     let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+    guard !flags.contains(.control) else { return }
+    window?.makeFirstResponder(textView)
     if flags.contains(.shift) {
       let selection = textView.textSelection
       if let last = lastSelection, last.range == selection {
@@ -170,23 +172,32 @@ final class LineNumbersView: NSView {
     guard anchor != nil, let source else { return }
     let y = convert(event.locationInWindow, from: nil).y
     if y < bounds.minY || y > bounds.maxY {
-      let running = edge != nil
       edge = Edge(
         above: y < bounds.minY, distance: y < bounds.minY ? bounds.minY - y : y - bounds.maxY)
-      guard !running else { return }
-      lastTick = now()
-      autoscroll.generation += 1
-      scheduleTick(autoscroll.generation)
+      if clock == nil {
+        lastFrame = nil
+        clock = FrameClock(view: self) { [unowned self] in
+          autoscrollFrame(now: CACurrentMediaTime())
+        }
+      }
       return
     }
-    edge = nil
+    stopAutoscroll()
     guard let line = line(atY: y, source) else { return }
     extend(to: line, source)
   }
 
   override func mouseUp(with event: NSEvent) {
     anchor = nil
-    edge = nil
+    stopAutoscroll()
+  }
+
+  /// 押している間に窓から外れると mouse-up は届かない（文書の切り替えが面を外す）ので、ここで選択の操作を終える。
+  override func viewWillMove(toWindow newWindow: NSWindow?) {
+    super.viewWillMove(toWindow: newWindow)
+    guard newWindow == nil else { return }
+    anchor = nil
+    stopAutoscroll()
   }
 
   // MARK: - 自動スクロール
@@ -197,29 +208,28 @@ final class LineNumbersView: NSView {
     let distance: CGFloat
   }
 
-  private var edge: Edge? {
-    didSet { if edge == nil { autoscroll.generation += 1 } }
-  }
-  private var lastTick: TimeInterval = 0
-  /// 自動スクロールの時計と、次のコマの予約（テストが差し替える）。
-  var now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
-  var autoscroll = FrameTicker()
+  private var edge: Edge?
+  /// 外へ出ている間、コマごとに `autoscrollFrame` を呼ぶ。
+  private var clock: FrameClock?
+  /// 前のコマの時刻（外へ出て最初のコマは時刻を取るだけ）。
+  private var lastFrame: CFTimeInterval?
 
-  private func scheduleTick(_ generation: Int) {
-    autoscroll.schedule { [weak self] in
-      guard let self, autoscroll.generation == generation else { return }
-      tick()
-      scheduleTick(generation)
-    }
+  /// 自動スクロールが回っているか。
+  var isAutoscrolling: Bool { clock != nil }
+
+  private func stopAutoscroll() {
+    clock?.cancel()
+    clock = nil
+    edge = nil
   }
 
   /// 前のコマからの経過時間ぶん縦にスクロールし、見えている端の行まで伸ばす。速さ（行/秒）は外れた距離と見えている行数で
   /// 決まる（VS Code の `_getScrollSpeed`）。
-  private func tick() {
+  func autoscrollFrame(now: CFTimeInterval) {
     guard let edge, let source, let scrollView = textView.enclosingScrollView else { return }
-    let current = now()
-    let elapsed = current - lastTick
-    lastTick = current
+    defer { lastFrame = now }
+    guard let lastFrame else { return }
+    let elapsed = now - lastFrame
     let lineHeight = style.lineHeight
     let viewportLines = bounds.height / lineHeight
     let outside = edge.distance / lineHeight
@@ -270,11 +280,22 @@ final class LineNumbersView: NSView {
   }
 }
 
-/// 次のコマで 1 回走らせる予約。`generation` を進めると、予約済みのものは走らせない側（受け手）が捨てる。
+/// display link 駆動でコマごとに `tick` を呼ぶ。
 @MainActor
-struct FrameTicker {
-  var generation = 0
-  var schedule: (@escaping @MainActor () -> Void) -> Void = { fire in
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 60) { MainActor.assumeIsolated(fire) }
+private final class FrameClock {
+  private var link: CADisplayLink?
+  private let tick: () -> Void
+
+  init(view: NSView, tick: @escaping () -> Void) {
+    self.tick = tick
+    link = view.displayLink(target: self, selector: #selector(step))
+    link?.add(to: .main, forMode: .common)
+  }
+
+  @objc private func step(_ link: CADisplayLink) { tick() }
+
+  func cancel() {
+    link?.invalidate()
+    link = nil
   }
 }

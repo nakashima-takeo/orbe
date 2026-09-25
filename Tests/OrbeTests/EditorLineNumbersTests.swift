@@ -173,31 +173,36 @@ final class EditorLineNumbersTests: OrbeTestCase {
     opened.column.mouseUp(with: try mouse(.leftMouseUp, opened, row: 4))
   }
 
+  /// 自動スクロールのコマを `count` 回、`interval` 秒ごとに進める（テストの窓は画面に出ないので display link は
+  /// 回らない。コマの処理を直に呼ぶ）。
+  private func frames(
+    _ column: LineNumbersView, _ count: Int, every interval: CFTimeInterval = 0.1,
+    clock: inout CFTimeInterval
+  ) {
+    for _ in 0..<count {
+      clock += interval
+      column.autoscrollFrame(now: clock)
+    }
+  }
+
   /// 本文の下の外までドラッグすると、ポインタを止めたままでもコマごとに本文がスクロールし、選択が見えている下端の行まで
   /// 伸び続ける。速さは外れた距離と見えている行数で決まる（VS Code: 1.5 行以内なら max(30, 見えている行数 ×
-  /// (1 + 外れた行数)) 行/秒）。中へ戻るか離せば止まる。
+  /// (1 + 外れた行数)) 行/秒）。離せば止まる。
   func testDraggingBelowTheBodyKeepsScrollingWhileThePointerRests() throws {
     let opened = try open(lines(2000))
     let document = opened.document
     let column = opened.column
     let clip = opened.scroll.contentView
-    var clock: TimeInterval = 0
-    var frames: [() -> Void] = []
-    column.now = { clock }
-    column.autoscroll.schedule = { frames.append($0) }
-    func nextFrame(after seconds: TimeInterval) {
-      clock += seconds
-      let pending = frames
-      frames = []
-      for fire in pending { fire() }
-    }
+    var clock: CFTimeInterval = 0
     column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 2))
     let visibleRows = column.bounds.height / style.lineHeight
     let below = visibleRows + 1
     column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: below))
-    XCTAssertEqual(clip.bounds.minY, 0, "出た瞬間には動かない（次のコマから）")
+    XCTAssertTrue(column.isAutoscrolling)
+    frames(column, 1, clock: &clock)
+    XCTAssertEqual(clip.bounds.minY, 0, "最初のコマは時刻を取るだけ")
 
-    nextFrame(after: 0.1)
+    frames(column, 1, clock: &clock)
     let speed = max(30, visibleRows * (1 + 0.5))
     XCTAssertEqual(clip.bounds.minY, speed * 0.1 * style.lineHeight, accuracy: 0.5)
     func selectedLastRow() -> Int {
@@ -207,15 +212,53 @@ final class EditorLineNumbersTests: OrbeTestCase {
     XCTAssertEqual(selectedLastRow(), bottomRow, "見えている下端の行まで伸びる")
 
     let scrolled = clip.bounds.minY
-    nextFrame(after: 0.1)
-    nextFrame(after: 0.1)
+    frames(column, 2, clock: &clock)
     XCTAssertEqual(clip.bounds.minY, scrolled + 2 * speed * 0.1 * style.lineHeight, accuracy: 0.5)
     XCTAssertGreaterThan(selectedLastRow(), bottomRow, "ポインタが止まっていても伸び続ける")
 
     column.mouseUp(with: try mouse(.leftMouseUp, opened, row: below))
+    XCTAssertFalse(column.isAutoscrolling, "離せば止まる")
     let stopped = clip.bounds.minY
-    nextFrame(after: 0.1)
-    XCTAssertEqual(clip.bounds.minY, stopped, "離せば止まる")
+    frames(column, 1, clock: &clock)
+    XCTAssertEqual(clip.bounds.minY, stopped, "離した後のコマは何もしない")
+  }
+
+  /// 外へ出た後に本文の中へ戻れば自動スクロールは止まり、ポインタの行まで伸ばす。
+  func testReturningInsideStopsTheAutoscroll() throws {
+    let opened = try open(lines(2000))
+    let document = opened.document
+    let column = opened.column
+    column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 2))
+    column.mouseDragged(
+      with: try mouse(.leftMouseDragged, opened, row: column.bounds.height / style.lineHeight + 1))
+    XCTAssertTrue(column.isAutoscrolling)
+    column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: 5))
+    XCTAssertFalse(column.isAutoscrolling, "中へ戻れば止まる")
+    XCTAssertEqual(
+      document.surface.selectedRange,
+      NSUnionRange(range(of: 2, in: document), range(of: 5, in: document)))
+    column.mouseUp(with: try mouse(.leftMouseUp, opened, row: 5))
+  }
+
+  /// 外へ出したまま面が窓から外れる（文書の切り替え）と、mouse-up は届かないので、外れたところで自動スクロールと選択の
+  /// 操作を終える——隠れた文書のスクロールと選択を書き換え続けない。
+  func testLeavingTheWindowStopsTheAutoscroll() throws {
+    let opened = try open(lines(2000))
+    let document = opened.document
+    let column = opened.column
+    let clip = opened.scroll.contentView
+    var clock: CFTimeInterval = 0
+    column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 2))
+    column.mouseDragged(
+      with: try mouse(.leftMouseDragged, opened, row: column.bounds.height / style.lineHeight + 1))
+    frames(column, 2, clock: &clock)
+    let selection = document.surface.selectedRange
+    let scrolled = clip.bounds.minY
+    document.surface.view.removeFromSuperview()
+    XCTAssertFalse(column.isAutoscrolling, "窓から外れれば止まる")
+    frames(column, 2, clock: &clock)
+    XCTAssertEqual(clip.bounds.minY, scrolled)
+    XCTAssertEqual(document.surface.selectedRange, selection)
   }
 
   /// 自動スクロールはスクロールできる範囲で止まる——短い文書で下へ出したまま進めても最終行を最上段より先へ送らず、先頭で
@@ -225,22 +268,11 @@ final class EditorLineNumbersTests: OrbeTestCase {
     let document = opened.document
     let column = opened.column
     let clip = try XCTUnwrap(opened.scroll.contentView as? OverscrollClipView)
-    var clock: TimeInterval = 0
-    var frames: [() -> Void] = []
-    column.now = { clock }
-    column.autoscroll.schedule = { frames.append($0) }
-    func run(_ count: Int) {
-      for _ in 0..<count {
-        clock += 0.1
-        let pending = frames
-        frames = []
-        for fire in pending { fire() }
-      }
-    }
+    var clock: CFTimeInterval = 0
     column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 2))
     let below = column.bounds.height / style.lineHeight + 3
     column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: below))
-    run(10)
+    frames(column, 10, clock: &clock)
     XCTAssertEqual(clip.bounds.minY, clip.maximumY, accuracy: 0.5, "最終行を最上段まで送って止まる")
     XCTAssertEqual(
       NSMaxRange(document.surface.selectedRange), document.lineIndex.length, "最終行まで選ぶ")
@@ -249,10 +281,20 @@ final class EditorLineNumbersTests: OrbeTestCase {
     document.scroll(toFirstLine: 0)
     column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 3))
     column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: -2))
-    run(10)
+    frames(column, 10, clock: &clock)
     XCTAssertEqual(clip.bounds.minY, 0, "上端で止まる")
     XCTAssertEqual(document.surface.selectedRange.location, 0, "先頭の行まで選ぶ")
     column.mouseUp(with: try mouse(.leftMouseUp, opened, row: -2))
+  }
+
+  /// ⌃クリックは行を選ばず、焦点も動かさない（VS Code も mac の ⌃クリックを扱わない）。
+  func testControlClickSelectsNothing() throws {
+    let opened = try open(lines(20))
+    let document = opened.document
+    document.surface.selectedRange = NSRange(location: 1, length: 0)
+    try click(opened, row: 3, .control)
+    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 1, length: 0))
+    XCTAssertFalse(opened.window.firstResponder === document.surface.responder, "焦点は動かない")
   }
 
   /// ⇧クリックは今の選択の起点（動かない側の端）から押した行まで伸ばす。列で選んだ直後なら、その行が起点。
