@@ -229,9 +229,12 @@ final class LineNumbersView: NSView {
       : outside <= 3
         ? max(60, viewportLines * (2 + outside)) : max(200, viewportLines * (7 + outside))
     let delta = speed * CGFloat(elapsed) * lineHeight
+    // `scroll(to:)` はスクロールできる範囲に収めないので、先に clip の制約（上端 0 と最終行を最上段まで）に通す。端に
+    // 着いたら動かず、見えている端の行まで伸ばすだけになる。
     let clip = scrollView.contentView
-    clip.scroll(
-      to: NSPoint(x: clip.bounds.minX, y: clip.bounds.minY + (edge.above ? -delta : delta)))
+    var proposed = clip.bounds
+    proposed.origin.y += edge.above ? -delta : delta
+    clip.scroll(to: clip.constrainBoundsRect(proposed).origin)
     scrollView.reflectScrolledClipView(clip)
     guard let line = line(atY: edge.above ? bounds.minY : bounds.maxY - 0.5, source) else { return }
     extend(to: line, source)

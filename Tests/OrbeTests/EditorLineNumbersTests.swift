@@ -218,6 +218,43 @@ final class EditorLineNumbersTests: OrbeTestCase {
     XCTAssertEqual(clip.bounds.minY, stopped, "離せば止まる")
   }
 
+  /// 自動スクロールはスクロールできる範囲で止まる——短い文書で下へ出したまま進めても最終行を最上段より先へ送らず、先頭で
+  /// 上へ出しても上端より上へ行かない。止まった後も見えている端の行まで選ぶ。
+  func testAutoscrollStopsAtTheEndsOfTheScrollableRange() throws {
+    let opened = try open(lines(30))
+    let document = opened.document
+    let column = opened.column
+    let clip = try XCTUnwrap(opened.scroll.contentView as? OverscrollClipView)
+    var clock: TimeInterval = 0
+    var frames: [() -> Void] = []
+    column.now = { clock }
+    column.autoscroll.schedule = { frames.append($0) }
+    func run(_ count: Int) {
+      for _ in 0..<count {
+        clock += 0.1
+        let pending = frames
+        frames = []
+        for fire in pending { fire() }
+      }
+    }
+    column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 2))
+    let below = column.bounds.height / style.lineHeight + 3
+    column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: below))
+    run(10)
+    XCTAssertEqual(clip.bounds.minY, clip.maximumY, accuracy: 0.5, "最終行を最上段まで送って止まる")
+    XCTAssertEqual(
+      NSMaxRange(document.surface.selectedRange), document.lineIndex.length, "最終行まで選ぶ")
+    column.mouseUp(with: try mouse(.leftMouseUp, opened, row: below))
+
+    document.scroll(toFirstLine: 0)
+    column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 3))
+    column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: -2))
+    run(10)
+    XCTAssertEqual(clip.bounds.minY, 0, "上端で止まる")
+    XCTAssertEqual(document.surface.selectedRange.location, 0, "先頭の行まで選ぶ")
+    column.mouseUp(with: try mouse(.leftMouseUp, opened, row: -2))
+  }
+
   /// ⇧クリックは今の選択の起点（動かない側の端）から押した行まで伸ばす。列で選んだ直後なら、その行が起点。
   func testShiftClickExtendsFromTheSelectionAnchor() throws {
     let opened = try open(lines(20))
