@@ -5,12 +5,12 @@ import XCTest
 
 @testable import Orbe
 
-/// エンジンの色の窓——構文の色は上流が layout した範囲（見えている範囲と先読みの帯）にだけ置き、その中の色は常に文書の
-/// 今の役割と一致する。
+/// エンジンの色の窓——構文の色は見えている行にだけ塗り、上流が layout した範囲（見えている範囲と先読みの帯）の外には
+/// 置かない。見えている字の色は常に文書の今の役割と一致する。先読みの帯はスクロールで見えたときに塗る。
 ///
-/// 壊れると何が起きるか。遠くへ飛んだ先の字が色無しで出る、打鍵で役割の変わった隣の字（呼び出しになった識別子・閉じた
-/// 文字列の後ろ）が古い色のまま残る、undo や外部変更の差し替えの後に古い色が別の字に付く。窓の外に色が溜まれば、打鍵と
-/// スクロールが文書の大きさに比例して重くなる。
+/// 壊れると何が起きるか。遠くへ飛んだ先の字や、スクロールで帯から見えてきた字が色無しで出る。打鍵で役割の変わった隣の字
+/// （呼び出しになった識別子・閉じた文字列の後ろ）が古い色のまま残る、undo や外部変更の差し替えの後に古い色が別の字に付く。
+/// 窓の外に色が溜まる・見えない帯まで塗れば、打鍵とスクロールが重くなる。
 @MainActor
 final class EditorTextSurfaceColorTests: OrbeTestCase {
   private let roleColors = EditorStyle.make().roleColors
@@ -80,14 +80,24 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
     return NSRange(range, in: view.textContentManager)
   }
 
-  /// 窓の中の字はすべて役割どおりの色で、窓の外に色は無い。
+  /// 見えている行の区間（先頭に見えている行から可視行数ぶん）。
+  private func visibleLines(_ document: EditorDocument) -> NSRange {
+    let index = document.lineIndex
+    let (first, visible) = document.viewportLines
+    let last = min(index.lineCount - 1, Int((first + visible).rounded(.up)) - 1)
+    let start = index.start(ofRow: Int(first))
+    return NSRange(location: start, length: index.end(ofRow: last) - start)
+  }
+
+  /// 見えている字はすべて役割どおりの色で、窓の外に色は無い。
   private func assertColorsFollowTheWindow(
     _ document: EditorDocument, _ message: String, file: StaticString = #filePath,
     line: UInt = #line
   ) throws {
     let window = try window(document)
     XCTAssertGreaterThan(window.length, 0, message, file: file, line: line)
-    XCTAssertEqual(try mismatches(document, in: window), [], message, file: file, line: line)
+    XCTAssertEqual(
+      try mismatches(document, in: visibleLines(document)), [], message, file: file, line: line)
     let outside = try colored(document).filter { NSIntersectionRange($0.range, window) != $0.range }
     XCTAssertTrue(
       outside.isEmpty, "\(message): 窓 \(window) の外に色 \(outside.map(\.range))", file: file,
@@ -107,15 +117,6 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
       settle(document)
       try assertColorsFollowTheWindow(document, "\(line) 行目へ")
     }
-  }
-
-  /// 見えている行（先頭に見えている行から可視行数ぶん）の区間。
-  private func visibleLines(_ document: EditorDocument) -> NSRange {
-    let index = document.lineIndex
-    let (first, visible) = document.viewportLines
-    let last = min(index.lineCount - 1, Int(first + visible) + 1)
-    let start = index.start(ofRow: Int(first))
-    return NSRange(location: start, length: index.end(ofRow: last) - start)
   }
 
   /// 打鍵のたび、その呼び出しの中で見えている字の色が編集の後の役割に揃う（layout を待たない）。`compute` の後ろを
@@ -140,12 +141,74 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
     try assertColorsFollowTheWindow(document, "undo の layout の後")
   }
 
-  /// 本文を丸ごと置き換えても、古い色が新しい字に残らず、窓の外にも残らない。
+  /// 先読みの帯は見えるまで塗らない。窓の中の小さなスクロール（上流は layout しない）で帯から見えてきた行は、その
+  /// スクロールの中で塗られ、描き直しを待たずに色付きで描かれる。
+  func testTheBandIsColoredWhenItScrollsIntoView() throws {
+    let (document, _) = try open(source(3000))
+    let view = document.surface.view
+    let visible = visibleLines(document)
+    let band = try window(document)
+    XCTAssertGreaterThan(NSMaxRange(band), NSMaxRange(visible) + 200, "前提: 下に帯がある")
+    let beyond = try colored(document).filter { $0.range.location >= NSMaxRange(visible) }
+    XCTAssertEqual(beyond.map(\.range), [], "帯は見えるまで塗らない")
+    view.displayIfNeeded()
+
+    let clip = try XCTUnwrap(document.surface.responder.enclosingScrollView).contentView
+    let style = EditorStyle.make()
+    clip.scroll(to: NSPoint(x: 0, y: clip.bounds.minY + 3 * style.lineHeight))
+    XCTAssertEqual(try window(document), band, "前提: 窓の中のスクロール")
+    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "スクロールの中で塗る")
+
+    view.layoutSubtreeIfNeeded()
+    view.displayIfNeeded()
+    let shot = try layerShot(view)
+    let cell = (" " as NSString).size(withAttributes: [.font: style.font]).width
+    let left = style.gutterWidth + style.marks.gutterWidth
+    let lastRow =
+      clip.bounds.height - style.lineHeight
+      - (clip.bounds.height.truncatingRemainder(
+        dividingBy: style.lineHeight))
+    let bottomLet = NSRect(
+      x: left, y: style.topInset + lastRow, width: 3 * cell, height: style.lineHeight)
+    XCTAssertGreaterThan(shot.bluest(in: bottomLet), 0.3, "帯から見えてきた行の `let` が keyword の色で描かれる")
+  }
+
+  /// 打鍵の塗り直しは見えている行に閉じ、帯の色は見えたときに塗り直す。先頭の行に `/*` を打つと、帯の先の `*/` まで
+  /// コメントになる（帯の行の役割が変わる）。
+  func testAnEditRepaintsOnlyTheVisibleLinesAndTheBandWhenItComesIntoView() throws {
+    var lines = source(3000).components(separatedBy: "\n")
+    lines[40] = "// */"
+    let (document, _) = try open(lines.joined(separator: "\n"))
+    let clip = try XCTUnwrap(document.surface.responder.enclosingScrollView).contentView
+    let style = EditorStyle.make()
+    clip.scroll(to: NSPoint(x: 0, y: 3 * style.lineHeight))
+    let row = Int(document.viewportLines.first + document.viewportLines.visible) - 1
+    clip.scroll(to: .zero)
+    settle(document)
+    let keyword = NSRange(location: document.lineIndex.start(ofRow: row), length: 3)
+    XCTAssertGreaterThan(keyword.location, NSMaxRange(visibleLines(document)), "前提: 帯の行")
+    XCTAssertEqual(try mismatches(document, in: keyword), [], "前提: 帯の `let` は塗ってある")
+
+    document.surface.selectedRange = NSRange(location: 0, length: 0)
+    document.surface.responder.insertText("/*")
+    settle(document)
+    let shifted = NSRange(location: keyword.location + 2, length: 3)
+    XCTAssertEqual(document.roleSpans(in: shifted).first?.role, .comment, "前提: 帯の行もコメントになる")
+    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "見えている行は塗り直す")
+    XCTAssertEqual(try mismatches(document, in: shifted).count, 3, "帯は塗り直さない（古い色のまま）")
+
+    clip.scroll(to: NSPoint(x: 0, y: 3 * style.lineHeight))
+    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "見えてきた行はコメントの色")
+  }
+
+  /// 本文を丸ごと置き換えても、古い色が新しい字に残らず、窓の外にも残らない。置き換えの後の選択はキャレットの位置へ
+  /// スクロールするので、キャレットを見えている行に置き、行の形を変えない置き換えにする。
   func testReplacingTheWholeTextLeavesNoStaleColors() throws {
     let (document, _) = try open(source(3000))
     document.scroll(toFirstLine: 1200)
     settle(document)
-    document.surface.replaceAll(with: (1...2000).map { "// comment \($0)\n" }.joined())
+    document.surface.selectedRange = NSRange(location: visibleLines(document).location, length: 0)
+    document.surface.replaceAll(with: source(3000).replacingOccurrences(of: "let ", with: "//  "))
     let stale = try colored(document).filter { $0.color != roleColors[.comment] }
     XCTAssertTrue(stale.isEmpty, "置き換えの直後に古い色が残る: \(stale.map(\.range))")
     settle(document)

@@ -90,7 +90,10 @@ final class STTextSurface: NSObject, TextSurface {
     clipView.postsBoundsChangedNotifications = true
     clipView.postsFrameChangedNotifications = true
     let relayout: @Sendable (Notification) -> Void = { [weak self] _ in
-      MainActor.assumeIsolated { self?.layoutOverlays() }
+      MainActor.assumeIsolated {
+        self?.colors.scrollDidChange()
+        self?.layoutOverlays()
+      }
     }
     observers = [NSView.boundsDidChangeNotification, NSView.frameDidChangeNotification].map {
       NotificationCenter.default.addObserver(
