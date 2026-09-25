@@ -16,7 +16,7 @@ struct DispatchCard: View {
   /// カード全体の高さ上限（窓に収める。DispatchOverlay が窓高から算出して渡す）。
   let maxHeight: CGFloat
   @FocusState private var focus: DispatchFocus?
-  /// リスト内容の実測高（ハグ用）。初期は cap にして初回の 0 collapse フラッシュを避ける。
+  /// リスト内容の実測高（ハグ用・上限で切った値）。初期は cap にして初回の 0 collapse フラッシュを避ける。
   @State private var contentHeight: CGFloat = 380
   /// ヘッダ＋フッターの実測高（リスト cap から差し引き、カードが窓を超えないようにする）。
   @State private var chromeHeight: CGFloat = 0
@@ -208,7 +208,8 @@ struct DispatchCard: View {
   private var list: some View {
     ScrollViewReader { proxy in
       ScrollView {
-        VStack(alignment: .leading, spacing: 0) {
+        // 行は見えている分だけ生成する（件数が数百〜千を超えても ↑↓・打鍵の反応を保つ）。
+        LazyVStack(alignment: .leading, spacing: 0) {
           if model.hasLoadedOnce {
             // 行 identity（row.id）＝ scrollTo の宛先。header と item で id 名前空間を分け（"header:"/"item:"）、
             // 見出しの並び位置と item の平坦 index が衝突して scrollTo が空振りするのを防ぐ。
@@ -241,7 +242,10 @@ struct DispatchCard: View {
         .padding(Theme.Space.note)
         .background(
           GeometryReader { geometry in
-            Color.clear.preference(key: DispatchContentHeightKey.self, value: geometry.size.height)
+            // Lazy の内容高は未生成の行を推定で数え、スクロールで行が生成されるたびに動く。上限で切れば
+            // 上限を超える件数では値が止まり、スクロールのたびにカード全体が描き直されない。
+            Color.clear.preference(
+              key: DispatchContentHeightKey.self, value: min(geometry.size.height, listCap))
           }
         )
       }
