@@ -241,7 +241,7 @@ extension WindowController: ControlTarget {
     if let rootPath, rootPath.trimmingCharacters(in: .whitespaces).isEmpty {
       return .failure(ControlError(code: -32602, message: "workspace rootPath is empty"))
     }
-    let root = rootPath ?? store.activeTabCwdOrHome()
+    let root = rootPath ?? store.defaultNewWorkspaceRoot()
     guard let id = createWorkspace(name: name, rootPath: root) else {
       return .failure(ControlError(code: -32602, message: "workspace name is empty"))
     }
