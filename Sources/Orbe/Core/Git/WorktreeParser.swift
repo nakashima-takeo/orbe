@@ -1,20 +1,25 @@
 import Foundation
 
-/// `git worktree list --porcelain` の出力をパースする。
-/// 各チェックアウトは空行で区切られ、`worktree <path>` / `HEAD <oid>` / `branch <ref>` / `detached` /
+/// `git worktree list --porcelain -z` の出力をパースする。
+/// 各行は NUL 終端で、チェックアウトの終わりに空の行（もう 1 つの NUL）が付く。パスは LF を含みうるので、
+/// LF 区切りの `--porcelain` ではなくこの形で読む。
+/// 各チェックアウトは `worktree <path>` / `HEAD <oid>` / `branch <ref>` / `detached` /
 /// `locked [reason]` / `prunable <reason>` を持つ。
 /// 先頭ブロックが本体（main）worktree（git は main を最初に列挙する）。
 enum WorktreeParser {
+  /// 出力の形を決める `git worktree list` のオプション。
+  static let listOptions = ["--porcelain", "-z"]
+
   static func parse(_ text: String) -> [GitWorktree] {
     var out: [GitWorktree] = []
     var isFirst = true
-    for block in text.components(separatedBy: "\n\n") {
+    for block in text.components(separatedBy: "\0\0") {
       var path: String?
       var head = ""
       var branch: String?
       var isPrunable = false
       var lockReason: String?
-      for line in block.split(separator: "\n") {
+      for line in block.split(separator: "\0") {
         if line.hasPrefix("worktree ") {
           path = String(line.dropFirst("worktree ".count))
         } else if line.hasPrefix("HEAD ") {

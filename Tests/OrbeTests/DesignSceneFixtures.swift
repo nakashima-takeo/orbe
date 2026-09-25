@@ -97,12 +97,12 @@ enum DesignSceneFixtures {
     input.localBranches = (0..<10).map {
       GitBranch(
         name: "topic/some-fairly-long-local-branch-\($0)", relativeDate: "\($0)d前",
-        worktreePath: nil, upstream: nil)
+        upstream: nil)
     }
     input.remoteBranches = (0..<4).map {
       GitBranch(
         name: "origin/release/candidate-\($0)", relativeDate: "user\($0) · \($0)h前",
-        worktreePath: nil, upstream: nil)
+        upstream: nil)
     }
     input.issues = (0..<12).map {
       GitHubIssue(number: 200 + $0, title: "実データ由来の長めの issue タイトル その\($0)")

@@ -3,20 +3,19 @@ import Foundation
 // MARK: - Dispatch（worktree/branch 列挙・worktree 作成）
 
 extension GitRepo {
-  /// リンク worktree を含む全チェックアウト（`git worktree list --porcelain`）。
+  /// リンク worktree を含む全チェックアウト（`git worktree list`）。
   func worktrees(completion: @escaping ([GitWorktree]) -> Void) {
-    runner.run(["worktree", "list", "--porcelain"], cwd: root) { output in
+    runner.run(["worktree", "list"] + WorktreeParser.listOptions, cwd: root) { output in
       completion(output.isSuccess ? WorktreeParser.parse(output.stdoutText) : [])
     }
   }
 
-  /// ローカルブランチ（新しい順）。`worktreepath` 付きは既存 worktree 再利用の手がかりになる。
+  /// ローカルブランチ（新しい順）。
   func localBranches(completion: @escaping ([GitBranch]) -> Void) {
     runner.run(
       [
         "for-each-ref", "refs/heads", "--sort=-committerdate",
-        "--format=%(refname:short)|%(committerdate:relative)|%(worktreepath)|%(upstream:short)"
-          + "|%(upstream)|%(upstream:remotename)|%(upstream:remoteref)|%(upstream:track)",
+        "--format=\(BranchParser.localFormat)",
       ], cwd: root
     ) { output in
       completion(output.isSuccess ? BranchParser.parseLocal(output.stdoutText) : [])
@@ -73,7 +72,7 @@ extension GitRepo {
     runner.run(
       [
         "for-each-ref", "refs/remotes", "--sort=-committerdate",
-        "--format=%(refname:short)|%(committerdate:relative)|%(authorname)",
+        "--format=\(BranchParser.remoteFormat)",
       ], cwd: root
     ) { output in
       completion(output.isSuccess ? BranchParser.parseRemote(output.stdoutText) : [])

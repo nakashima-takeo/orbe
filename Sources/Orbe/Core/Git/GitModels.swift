@@ -6,7 +6,7 @@ import Foundation
 struct GitWorktree: Equatable {
   /// worktree の絶対パス。
   let path: String
-  /// チェックアウト中のブランチ（`refs/heads/` を落とした短縮名）。detached なら nil。
+  /// チェックアウト中のブランチ（`refs/heads/` を除いた正確な名前）。detached なら nil。
   let branch: String?
   /// HEAD の oid。
   let head: String
@@ -52,12 +52,10 @@ struct GitUpstream: Equatable {
 
 /// `git for-each-ref` の 1 ブランチ（local / remote 兼用）。
 struct GitBranch: Equatable {
-  /// 短縮名（local は `feat/x`・remote は `origin/feat/x`）。
+  /// `refs/heads/` / `refs/remotes/` を除いた正確な名前（local は `feat/x`・remote は `origin/feat/x`）。
   let name: String
   /// local は相対コミット日時（`1d前`）。remote は `author · 相対日時`。
   let relativeDate: String
-  /// このブランチが既にチェックアウトされている worktree の絶対パス（`worktreepath`）。無ければ nil。
-  let worktreePath: String?
   /// upstream。無ければ nil（remote ブランチは常に nil）。
   let upstream: GitUpstream?
 }
