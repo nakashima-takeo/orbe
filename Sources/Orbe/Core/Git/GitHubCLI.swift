@@ -64,7 +64,8 @@ final class GitHubCLI {
 
   /// 取得可否を判定する。`isGitHub` は `GitRepo.originIsGitHub` の結果を渡す。
   /// 見るのはローカルの事実（gh の有無・認証情報の有無）だけ。今 GitHub に届くかは probe の責務では
-  /// なく、届かなければ `issues`/`pullRequests` が `nil` を返して呼び出し側が前回結果を据え置く。
+  /// なく、届かなければ `openIssues`/`openPullRequests` が `finished(false)` で終わり、
+  /// `DispatchGitHubCache` が届いた範囲と前回の残りを据え置く。
   /// `gh auth token` の stdout はトークンそのものなので `status` しか読まない。
   func probe(cwd: String, isGitHub: Bool, completion: @escaping (GitHubAvailability) -> Void) {
     guard isGitHub else {

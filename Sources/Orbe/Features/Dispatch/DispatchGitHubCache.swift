@@ -14,8 +14,7 @@ import Foundation
 final class DispatchGitHubCache {
   static let shared = DispatchGitHubCache()
 
-  /// `issues` / `pullRequests` は `nil` = 未取得（`[]` は 0 件）。GitHubCLI の境界と同じ区別を
-  /// ここでも保つ。
+  /// `issues` / `pullRequests` は `nil` = 未取得（`[]` は 0 件）。
   struct Entry {
     var issues: [GitHubIssue]?
     var pullRequests: [GitHubPullRequest]?
