@@ -21,6 +21,9 @@ final class DispatchGitHubCache {
     /// head → その head の PR。**キーが無い＝未取得**（`[]` は 0 件）。区別を head 単位に保つ
     /// ——1 本の失敗が、他の head の先描きを消さない。
     var branchPullRequests: [String: [GitHubBranchPR]] = [:]
+    /// remote の URL から読んだ名前 → GitHub が答えた正式名。**キーが無い＝まだ答えを得ていない**
+    /// ——失敗は書かないので、次に開いたときに問い合わせ直す。
+    var repositoryNames: [GitHubRepoName: GitHubRepositoryResolution] = [:]
   }
 
   private var entries: [String: Entry] = [:]
@@ -109,6 +112,13 @@ final class DispatchGitHubCache {
     let numbers = Set(fresh.map(\.number))
     let rest = previous.lastIndex { numbers.contains($0.number) }.map { $0 + 1 } ?? 0
     return fresh + previous[rest...]
+  }
+
+  /// 正式名は remote ごとに問い合わせて届くので、保存も読んだ名前の単位。
+  func setRepositoryName(
+    _ resolution: GitHubRepositoryResolution, for name: GitHubRepoName, key: String
+  ) {
+    entries[key, default: Entry()].repositoryNames[name] = resolution
   }
 
   /// ブランチの PR は head 単位で到着し head 単位で失敗するので、保存も head 単位。

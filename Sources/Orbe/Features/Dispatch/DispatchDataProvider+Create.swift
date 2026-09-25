@@ -13,19 +13,20 @@ extension DispatchDataProvider {
   enum DispatchPrepareOutcome {
     case resolved(DirectoryResolution)
     /// Local branch が upstream より遅れていて fast-forward できる。worktree は作っていない——
-    /// 最新化して作るか、そのまま作るかを選択画面が問う。
-    case staleBranch(DispatchBranchSync)
+    /// 最新化して作るか、そのまま作るかを選択画面が問う。画面はブランチの事実（遅れとブランチの
+    /// 相対日時）だけで組めるので、それを運ぶ。
+    case staleBranch(DispatchBranchSync, relativeDate: String)
   }
 
-  /// 行種別に応じて対象ディレクトリを解決する（必要なら worktree を新規作成する）。
+  /// 行き先に応じて対象ディレクトリを解決する（必要なら worktree を新規作成する）。
   /// 作成は追加のみ（現在の作業ツリーは不可侵）。失敗は Git 層の `GitFailure` を UI 言語へ写して返す。
   /// 既存ディレクトリを返すだけの経路はリポジトリを要さない——非 git（`repo == nil`）を畳むのは
   /// リポジトリが要る作成経路（`createWorktree`）の責務。
   func prepareDirectory(
-    for action: DispatchAction, completion: @escaping (DispatchPrepareOutcome) -> Void
+    for destination: DispatchDestination, completion: @escaping (DispatchPrepareOutcome) -> Void
   ) {
     let resolved = { completion(.resolved($0)) }
-    switch action {
+    switch destination {
     case .worktree(let path):
       resolved(.ready(path))
 
@@ -61,25 +62,6 @@ extension DispatchDataProvider {
           newBranch: GitNewBranch(name: branch, tracksBase: false), completion: resolved)
       }
 
-    case .pullRequest(let number, let headRef, let isCrossRepo, let existing):
-      if let existing {
-        resolved(.ready(existing))
-        return
-      }
-      // fork（cross-repo）PR は head ref がローカルに無く、現 dir を破壊せず隔離 worktree に持ち込む
-      // 汎用手段が無い。安全側に倒し、worktree 化はせず「ブラウザで開く」へ誘導する（残った前提の決着）。
-      if isCrossRepo {
-        resolved(.failed(localization.format(.dispatchErrForkPR, number)))
-        return
-      }
-      createWorktree(
-        at: worktreeDir(forSlug: slug(headRef)), base: .ref("origin/\(headRef)"),
-        newBranch: GitNewBranch(name: headRef, tracksBase: true), completion: resolved)
-
-    case .clean:
-      // clean 行はディレクトリを持たない。決定は `DispatchPaletteModel.activate` がパレット内で畳むため
-      // ここへは届かない——網羅 switch は、行種別が増えたときの分類漏れを検出する役だけを果たす。
-      assertionFailure("clean 行は prepareDirectory を通らない")
     }
   }
 
@@ -98,9 +80,9 @@ extension DispatchDataProvider {
       return
     }
     remoteFetchLanding.notify(queue: .main) {
-      let sync = self.localBranches.first { $0.name == name }.flatMap(DispatchBranchSync.init)
-      if let sync, sync.isFastForwardable {
-        completion(.staleBranch(sync))
+      let landed = self.localBranches.first { $0.name == name }
+      if let landed, let sync = DispatchBranchSync(landed), sync.isFastForwardable {
+        completion(.staleBranch(sync, relativeDate: landed.relativeDate))
       } else {
         create()
       }
@@ -211,10 +193,10 @@ extension DispatchDataProvider {
       return
     }
     switch item.action {
-    case .issue(let number, _, _):
-      GitHubCLI.shared.openIssueWeb(number: number, cwd: repo.root)
-    case .pullRequest(let number, _, _, _):
+    case .pullRequest(let number, _):
       GitHubCLI.shared.openPRWeb(number: number, cwd: repo.root)
+    case .open(.issue(let number, _, _)):
+      GitHubCLI.shared.openIssueWeb(number: number, cwd: repo.root)
     default:
       break
     }

@@ -10,10 +10,12 @@ extension L10n {
     .dispatchWorktreeExisting: ("既存worktree", "existing worktree"),
     .dispatchWorktreeCheckout: ("checkout → worktree", "checkout → worktree"),
     .dispatchWorktreeNew: ("新規worktree", "new worktree"),
+    .dispatchNoteBrowser: ("ブラウザで開く", "open in browser"),
     .dispatchPrepExisting: ("の既存worktreeで", "· existing worktree ·"),
     .dispatchPrepCheckout: ("をcheckoutしたworktreeで", "· checkout worktree ·"),
     .dispatchPrepNew: ("の新規worktreeで", "· new worktree ·"),
     .dispatchLaunchSuffix: ("を新しいタブで起動", "· new tab"),
+    .dispatchBrowseSuffix: ("をブラウザで開く", "· open in browser"),
     .dispatchReviewRequired: ("review待ち", "review pending"),
     .dispatchChangesRequested: ("要修正", "changes requested"),
     .dispatchApproved: ("承認済み", "approved"),
@@ -36,10 +38,6 @@ extension L10n {
     .dispatchHintClose: ("閉じる", "Close"),
     .dispatchErrNotGitRepo: (
       "git リポジトリを解決できませんでした", "Couldn't resolve a git repository"
-    ),
-    .dispatchErrForkPR: (
-      "fork の PR #%lld は worktree 化に未対応です（⌘↵ でブラウザを開けます）",
-      "Fork PR #%lld can't be made into a worktree (⌘↵ to open in browser)"
     ),
     .dispatchCleanSubtitle: (
       "要らなくなった worktree を掃除", "Clean up worktrees you no longer need"

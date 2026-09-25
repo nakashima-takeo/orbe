@@ -22,16 +22,16 @@ enum DispatchRefreshPhase: Equatable {
 /// 一覧モードの旗 `isPreparing` とは別に busy を持つ——「最新化中」と「作成中」を一覧の旗に割ると、
 /// 「そのまま作成」の作成中に選択画面のキーが効いてしまう。
 @Observable final class DispatchRefreshModel {
-  /// 入った行（「そのまま作成」の説明に `detail` を使う）。
-  let item: DispatchItem
   /// 遅れの事実（表示は `upstream.short`、実行は `upstream` の remote / ref）。
   let sync: DispatchBranchSync
+  /// ブランチの相対コミット日時（「そのまま作成」の説明に使う）。
+  let relativeDate: String
   private(set) var choice: DispatchStaleChoice = .refreshed
   private(set) var phase: DispatchRefreshPhase = .choosing
 
-  init(item: DispatchItem, sync: DispatchBranchSync) {
-    self.item = item
+  init(sync: DispatchBranchSync, relativeDate: String) {
     self.sync = sync
+    self.relativeDate = relativeDate
   }
 
   /// 入力を受け付けない相（fetch は中断できないので、中断できる顔をしない）。

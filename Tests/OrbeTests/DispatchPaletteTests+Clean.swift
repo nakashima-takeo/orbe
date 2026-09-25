@@ -13,7 +13,7 @@ extension DispatchPaletteTests {
   func testCleanRowEntersCleanModeInsteadOfExecuting() throws {
     let p = makeModel()
     p.classification = cleanRows()
-    var executed: [DispatchItem] = []
+    var executed: [DispatchDestination] = []
     p.onExecute = { executed.append($0) }
 
     p.activate(at: try XCTUnwrap(p.items.firstIndex { $0.action == .clean }))
@@ -26,7 +26,7 @@ extension DispatchPaletteTests {
   func testCleanRowOpensImmediatelyEvenBeforeClassificationLands() throws {
     let p = makeModel()
     p.classificationPending = true
-    var executed: [DispatchItem] = []
+    var executed: [DispatchDestination] = []
     p.onExecute = { executed.append($0) }
 
     p.activate(at: try XCTUnwrap(p.items.firstIndex { $0.action == .clean }))

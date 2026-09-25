@@ -115,7 +115,8 @@ final class GitHubCLI {
   static func openPullRequestsPageArguments(first: Int, after: String?) -> [String] {
     openListPageArguments(
       connection: "pullRequests",
-      fields: "number title headRefName isCrossRepository reviewDecision", first: first,
+      fields: "number title headRefName headRepository{nameWithOwner} reviewDecision",
+      first: first,
       after: after)
   }
 
@@ -148,13 +149,13 @@ final class GitHubCLI {
   /// PR を返す。
   ///
   /// `--limit 100` は gh が 1 往復で取れる上限。**往復コストは limit に依らない**（実測で 5／30／100
-  /// が同じ）ので、ここを絞る動機が無い一方、絞ると `--head` に混ざる fork の同名ブランチの PR
-  /// （呼び出し側が落とす）で埋まって自リポジトリの PR が窓落ちしうる。上限まで取れば、この
-  /// ブランチの PR が 100 件を超えない限り窓落ちは起きない。
+  /// が同じ）ので、ここを絞る動機が無い一方、絞ると `--head` に混ざる他人の fork の同名ブランチの PR
+  /// （呼び出し側が head のリポジトリで落とす）で埋まって自分の PR が窓落ちしうる。上限まで取れば、
+  /// このブランチ名の PR が 100 件を超えない限り窓落ちは起きない。
   static func branchPRArguments(head: String) -> [String] {
     [
       "pr", "list", "--state", "all", "--head", head, "--limit", "100", "--json",
-      "number,headRefName,state,baseRefName,isCrossRepository",
+      "number,headRefName,state,baseRefName,headRepository",
     ]
   }
 
@@ -186,6 +187,42 @@ final class GitHubCLI {
         }
       }
     }
+  }
+
+  /// リポジトリの正式名を GitHub に問い合わせる（改名後の古い名前からも新しい名前が返る）。`nil` は
+  /// 分からなかった（gh 未解決・打ち切り・存在しない以外のエラー）。メインで返る。
+  func resolveRepository(
+    cwd: String, name: GitHubRepoName,
+    completion: @escaping (GitHubRepositoryResolution?) -> Void
+  ) {
+    queue.async {
+      let resolution = self.resolveGh().flatMap { gh in
+        Self.repositoryResolution(
+          from: self.runSync(gh, Self.resolveRepositoryArguments(name), cwd: cwd).stdout)
+      }
+      DispatchQueue.main.async { completion(resolution) }
+    }
+  }
+
+  /// 正式名の問い合わせ引数。owner と name は `-f`（文字列のまま）で渡す——`-F` は数字だけの名前
+  /// （`gabrielecirulli/2048`）を整数に変えて、GraphQL の型が合わず失敗し続ける。
+  static func resolveRepositoryArguments(_ name: GitHubRepoName) -> [String] {
+    let parts = name.value.split(separator: "/", maxSplits: 1).map(String.init)
+    return [
+      "api", "graphql", "--hostname", "github.com", "-f",
+      "query=query($o:String!,$n:String!){repository(owner:$o,name:$n){nameWithOwner}}",
+      "-f", "o=\(parts.first ?? "")", "-f", "n=\(parts.last ?? "")",
+    ]
+  }
+
+  /// 正式名の問い合わせの出力を読む。gh は部分的なエラー（`NOT_FOUND` 等）でも非 0 で終わるので、
+  /// 終了コードでなく JSON の `data.repository` とエラーの種別で見分ける。
+  static func repositoryResolution(from stdout: Data) -> GitHubRepositoryResolution? {
+    guard let response = try? JSONDecoder().decode(RepositoryResponse.self, from: stdout),
+      let data = response.data
+    else { return nil }
+    if let repository = data.repository { return .found(repository) }
+    return response.errors?.contains { $0.type == "NOT_FOUND" } == true ? .notFound : nil
   }
 
   /// ページの列を回す。次のページがあり、件数が上限未満の間だけ続け、最後のページは残り件数だけ頼む。
@@ -308,4 +345,12 @@ final class GitHubCLI {
       return found
     }
   }
+}
+
+/// 正式名の問い合わせ（`repository(owner:name:){nameWithOwner}`）の出力。
+private struct RepositoryResponse: Decodable {
+  struct Payload: Decodable { let repository: GitHubRepoName? }
+  struct Failure: Decodable { let type: String? }
+  let data: Payload?
+  let errors: [Failure]?
 }

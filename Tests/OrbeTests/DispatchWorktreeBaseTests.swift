@@ -90,15 +90,6 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     XCTAssertEqual(head(of: path), originTip("feat"), "fetch 後の origin/feat が base")
   }
 
-  /// PR 行（same-repo）も head ref から切る経路。
-  func testPullRequestWorktreeIsCutFromTheFetchedHeadRef() throws {
-    let provider = try startWithSlowFetch()
-    let path = try resolve(
-      provider,
-      .pullRequest(number: 7, headRef: "feat", isCrossRepo: false, existingWorktree: nil))
-    XCTAssertEqual(head(of: path), originTip("feat"), "fetch 後の origin/feat が base")
-  }
-
   /// **upstream の無い Local branch の checkout は fetch で動く ref をベースに取らないので待たない。**
   /// ここが待つと、fetch が長引くリポジトリで「手元のブランチを開くだけ」が分単位で止まる
   /// （origin を追跡する行は着地を待つ——分冊 `+Refresh`）。
@@ -130,27 +121,23 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     let remote = try resolve(provider, .remoteBranch(name: "origin/feat", existingWorktree: nil))
     XCTAssertEqual(
       head(of: remote), localRemoteTip("feat"), "Remote branch: 手元の origin/feat から続行")
-    let pullRequest = try resolve(
-      provider,
-      .pullRequest(number: 7, headRef: "topic", isCrossRepo: false, existingWorktree: nil))
-    XCTAssertEqual(
-      head(of: pullRequest), localRemoteTip("topic"), "PR: 手元の origin/topic から続行")
+    let topic = try resolve(provider, .remoteBranch(name: "origin/topic", existingWorktree: nil))
+    XCTAssertEqual(head(of: topic), localRemoteTip("topic"), "手元の origin/topic からも続行")
   }
 
   // MARK: - upstream
 
   /// **`issue/<n>` は upstream を持たない。** `origin/<既定>` を追跡すると `git push` が既定ブランチへ
   /// 向かって拒否され（`push.default=simple`）、upstream が既にあるので `push.autoSetupRemote` も
-  /// 発動しない。remote ref から起こす他の 2 経路は逆に、同名の remote ブランチを追跡する。
+  /// 発動しない。remote ref から起こす経路（Remote branch 行・PR 行の作成）は逆に、同名の remote
+  /// ブランチを追跡する。
   func testIssueBranchHasNoUpstreamWhileRemoteRefBranchesTrackOrigin() throws {
     // 追跡の指定を省くと既定が効いてしまう設定。契約が環境に左右されないことをここで測る。
     XCTAssertTrue(run(["config", "branch.autoSetupMerge", "always"], cwd: local).isSuccess)
     let provider = try start()
     _ = try resolve(provider, .issue(number: 44, existingWorktree: nil, existingBranch: false))
     _ = try resolve(provider, .remoteBranch(name: "origin/feat", existingWorktree: nil))
-    _ = try resolve(
-      provider,
-      .pullRequest(number: 7, headRef: "topic", isCrossRepo: false, existingWorktree: nil))
+    _ = try resolve(provider, .remoteBranch(name: "origin/topic", existingWorktree: nil))
 
     XCTAssertFalse(
       run(["config", "--get", "branch.issue/44.merge"], cwd: local).isSuccess,
@@ -263,19 +250,21 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     try? FileManager.default.removeItem(atPath: fetchGate)
   }
 
-  func resolve(_ provider: DispatchDataProvider, _ action: DispatchAction) throws -> String {
-    let outcome = try prepare(provider, action)
+  func resolve(_ provider: DispatchDataProvider, _ destination: DispatchDestination) throws
+    -> String
+  {
+    let outcome = try prepare(provider, destination)
     guard case .resolved(.ready(let path)) = outcome else {
       throw CreationFailed(detail: String(describing: outcome))
     }
     return path
   }
 
-  func prepare(_ provider: DispatchDataProvider, _ action: DispatchAction) throws
+  func prepare(_ provider: DispatchDataProvider, _ destination: DispatchDestination) throws
     -> DispatchDataProvider.DispatchPrepareOutcome
   {
     var outcome: DispatchDataProvider.DispatchPrepareOutcome?
-    provider.prepareDirectory(for: action) { outcome = $0 }
+    provider.prepareDirectory(for: destination) { outcome = $0 }
     XCTAssertTrue(pump({ outcome != nil }, timeout: 30), "解決が返らない")
     return try XCTUnwrap(outcome)
   }

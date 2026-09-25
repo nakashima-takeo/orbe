@@ -275,11 +275,11 @@ struct DispatchRow: View {
   }
 
   /// 右端に出すノート（件数バッジ・チップ・working リングのある行では出さない）。
-  private var trailingNote: DispatchWorktreeKind? {
+  private var trailingNote: DispatchEnterNote? {
     guard item.candidateCount == nil, item.badges.isEmpty, !item.showsWorkingIndicator else {
       return nil
     }
-    return item.worktreeNote
+    return item.enterNote
   }
 
   private var nameColor: Color {

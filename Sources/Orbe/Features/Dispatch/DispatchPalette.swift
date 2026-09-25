@@ -1,17 +1,33 @@
 import SwiftUI
 
-/// 決定（↵／行タップ）の対象。行種別ごとに対象ディレクトリの解決方法（既存 worktree 再利用／新規作成）が変わる。
-/// 解決に要る情報（既存 worktree パス・fork 判定等）を純粋ビルダが焼き込み、実行側は分岐するだけにする。
-enum DispatchAction: Equatable {
+/// Enter で開く行き先。ディレクトリを解決して（既存 worktree 再利用／新規作成）起動する。解決に要る
+/// 情報（既存 worktree パス等）を純粋ビルダが焼き込み、実行側（`prepareDirectory`）は分岐するだけにする。
+enum DispatchDestination: Equatable {
   case worktree(path: String)
   case localBranch(name: String)
   /// name は `origin/x`（`refs/remotes/` を除いた正確な名前）。
   case remoteBranch(name: String, existingWorktree: String?)
   /// existingBranch は `issue/<n>` ブランチだけ（worktree 無しで）既存か（他 case は git ref に紐づくため不要）。
   case issue(number: Int, existingWorktree: String?, existingBranch: Bool)
-  case pullRequest(number: Int, headRef: String, isCrossRepo: Bool, existingWorktree: String?)
-  /// Worktrees セクション末尾の `clean` 行。決定でパレット内の clean 画面へ入る（ディレクトリを解決しない）。
+}
+
+/// 決定（↵／行タップ）の対象。外（`onExecute`）へ届くのは行き先だけで、ディレクトリを解決しない行為
+/// （ブラウザ・clean 画面）はパレットの中で畳む。
+enum DispatchAction: Equatable {
+  case open(DispatchDestination)
+  /// PR 行。`open` は自分の worktree・ブランチ・origin から作れるときの行き先で、`nil` はブラウザで開く。
+  case pullRequest(number: Int, open: DispatchDestination?)
+  /// Worktrees セクション末尾の `clean` 行。決定でパレット内の clean 画面へ入る。
   case clean
+
+  /// 同じ行か。PR 行は番号で比べる——行き先は fetch の着地や worktree の作成で変わるので、行為の等しさで
+  /// 比べると、データの到着で選択が外れる。
+  func sameRow(as other: DispatchAction) -> Bool {
+    if case .pullRequest(let number, _) = self, case .pullRequest(let otherNumber, _) = other {
+      return number == otherNumber
+    }
+    return self == other
+  }
 }
 
 /// Dispatch パレットの中身。器（カード枠・焦点契約・高さ契約）は共通で、中身だけ切り替わる。
@@ -47,6 +63,19 @@ enum DispatchWorktreeKind: Equatable {
     case .existing: return .dispatchPrepExisting
     case .checkout: return .dispatchPrepCheckout
     case .new: return .dispatchPrepNew
+    }
+  }
+}
+
+/// Enter の動きを先に言う行末ノート（issue/PR 行）。worktree を解決するか、ブラウザで開くか。
+enum DispatchEnterNote: Equatable {
+  case worktree(DispatchWorktreeKind)
+  case browser
+
+  var noteKey: L10nKey {
+    switch self {
+    case .worktree(let kind): return kind.noteKey
+    case .browser: return .dispatchNoteBrowser
     }
   }
 }
@@ -103,7 +132,7 @@ enum DispatchInfoKind: Equatable {
   }
   /// clean 画面の状態。
   let clean = DispatchCleanModel()
-  /// 最新化画面の状態。入るたびに行と遅れの事実から作り直し、出るときに捨てる。
+  /// 最新化画面の状態。入るたびにブランチの事実（遅れと相対日時）から作り直し、出るときに捨てる。
   private(set) var refresh: DispatchRefreshModel?
   /// 初回ロード完了フラグ。provider の初回 rebuild で立つ。false の間はスケルトン行を出す。
   var hasLoadedOnce = false
@@ -151,8 +180,8 @@ enum DispatchInfoKind: Equatable {
   var isPreparing = false
 
   var onDismiss: () -> Void = {}
-  /// プライマリ実行（↵／行タップ）。行の action を解決して agent を起動する。呼ぶのは `activate(at:)` だけ。
-  var onExecute: (DispatchItem) -> Void = { _ in }
+  /// プライマリ実行（↵／行タップ）。行き先を解決して agent を起動する。呼ぶのは `activate(at:)` だけ。
+  var onExecute: (DispatchDestination) -> Void = { _ in }
   /// ⌘↵/「開く」（セカンダリ）。issue/PR／PR に紐づく worktree・branch をブラウザで開く。
   var onOpenWeb: (DispatchItem) -> Void = { _ in }
   /// clean の削除を撃つ（⌘⏎ と失敗分の再試行が共に通る）。中断の札も一緒に渡す。
@@ -168,8 +197,9 @@ enum DispatchInfoKind: Equatable {
   var isBusy: Bool { isPreparing || clean.phase == .deleting || refresh?.isBusy == true }
 
   /// 最新化画面へ入る。Enter の解決経路が「ff できる遅れ」を返したときだけ来る（判定は provider）。
-  func enterRefresh(item: DispatchItem, sync: DispatchBranchSync) {
-    refresh = DispatchRefreshModel(item: item, sync: sync)
+  /// 画面はブランチの事実（遅れと相対日時）だけから組む——どの行から入ったかに依らない。
+  func enterRefresh(sync: DispatchBranchSync, relativeDate: String) {
+    refresh = DispatchRefreshModel(sync: sync, relativeDate: relativeDate)
     mode = .refresh
     focus()
   }
@@ -243,19 +273,20 @@ enum DispatchInfoKind: Equatable {
   func activate() { activate(at: selected) }
 
   /// 決定の唯一の funnel（↵ と行タップが共に通る）。作成中・範囲外・非対話行では実行しない。
-  /// 選択を対象行へ確定してから、同じ行の item をそのまま実行へ渡す（選択更新と実行の対象がずれない）。
-  /// `clean` 行だけはパレット内の画面遷移なので外へ出さない——外（`onExecute`）はディレクトリを解決して
-  /// 起動する仕事だけを持ち、`DispatchAction.clean` が `prepareDirectory` へ届かないことが構造で決まる。
+  /// 選択を対象行へ確定してから、同じ行の行為をそのまま実行する（選択更新と実行の対象がずれない）。
+  /// 外（`onExecute`）へ渡すのは行き先だけ。`clean` 行はパレット内の画面遷移、作れない PR 行は ⌘↵ と
+  /// 同じブラウザ（パレットは閉じない）で、どちらもディレクトリを解決しない。
   func activate(at index: Int) {
     guard !isPreparing else { return }
     let its = items
     guard its.indices.contains(index), its[index].isInteractive else { return }
     selected = index
-    if its[index].action == .clean {
-      enterClean()
-      return
+    switch its[index].action {
+    case .clean: enterClean()
+    case .pullRequest(_, nil): onOpenWeb(its[index])
+    case .open(let destination), .pullRequest(_, let destination?): onExecute(destination)
+    case nil: break
     }
-    onExecute(its[index])
   }
 
   /// 対話行のみを巡回する選択移動（情報/ローディング行は飛ばす・端で wrap）。
@@ -288,12 +319,14 @@ enum DispatchInfoKind: Equatable {
     }
   }
 
-  /// sections 差し替え後の選択復元。差し替え前に選択していた行を `DispatchAction` の同一性で探し直し、
+  /// sections 差し替え後の選択復元。差し替え前に選択していた行を「同じ行か」（`sameRow(as:)`）で探し直し、
   /// 見つかれば index を合わせる（裏の gh 更新で行数が変わっても選択が別の行を指さない）。
   /// 見つからない・元が非対話行なら従来どおり clamp する。
   /// 裏の更新はユーザの意図ではないのでモダリティを奪わない（→ `ModalSelection.restore`）。
   func restoreSelection(matching action: DispatchAction?) {
-    if let action, let index = items.firstIndex(where: { $0.action == action }) {
+    if let action,
+      let index = items.firstIndex(where: { $0.action?.sameRow(as: action) == true })
+    {
       selection.restore(index)
       return
     }

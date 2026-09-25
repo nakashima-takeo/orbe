@@ -114,6 +114,25 @@ extension GitRepo {
     }
   }
 
+  /// remote 名 → fetch の URL（`git remote -v`。`insteadOf` は展開済み）。読めなければ空。
+  func remotes(completion: @escaping ([String: String]) -> Void) {
+    runner.run(["remote", "-v"], cwd: root) { output in
+      completion(output.isSuccess ? GitRepo.parseRemotes(output.stdoutText) : [:])
+    }
+  }
+
+  /// `git remote -v` の `<name>\t<url> (fetch)` 行を読む（push 行は URL が別でも読まない）。
+  static func parseRemotes(_ text: String) -> [String: String] {
+    let suffix = " (fetch)"
+    var remotes: [String: String] = [:]
+    for line in text.split(separator: "\n") where line.hasSuffix(suffix) {
+      let body = line.dropLast(suffix.count)
+      guard let tab = body.firstIndex(of: "\t") else { continue }
+      remotes[String(body[..<tab])] = String(body[body.index(after: tab)...])
+    }
+    return remotes
+  }
+
   /// URL からリポジトリを clone する。clone 前はリポジトリが無いため（`root` を持てず）static で持つ。
   /// `git clone --progress -- <url> <dest>`（cwd は dest の親）。成功なら nil、失敗なら理由。
   /// URL は正規化せず素通し（git が https / ssh / scp-like を native 解釈。`GIT_TERMINAL_PROMPT=0` で

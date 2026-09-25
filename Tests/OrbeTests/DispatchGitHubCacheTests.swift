@@ -7,10 +7,13 @@ import XCTest
 @MainActor
 final class DispatchGitHubCacheTests: OrbeTestCase {
 
+  /// remote を持たない（台帳が確定した）provider。PR セクションは台帳の確定を待たずに行を組む。
   private func makeProvider(_ model: DispatchPaletteModel) -> DispatchDataProvider {
-    DispatchDataProvider(
+    let provider = DispatchDataProvider(
       cwd: "/tmp", model: model, localization: LocalizationStore(language: .ja),
       worktreeTemplate: WorktreePathTemplate.defaultTemplate)
+    provider.remotes = [:]
+    return provider
   }
 
   private func issue(_ number: Int) -> GitHubIssue {
@@ -22,7 +25,7 @@ final class DispatchGitHubCacheTests: OrbeTestCase {
   private func pullRequest(_ number: Int) -> GitHubPullRequest {
     GitHubPullRequest(
       number: number, title: "pr \(number)", headRefName: "feat/\(number)", reviewDecision: nil,
-      isCrossRepository: false)
+      headRepository: GitHubRepoName(nameWithOwner: "o/r"))
   }
 
   private func section(_ model: DispatchPaletteModel, _ title: String) -> DispatchSection? {
@@ -114,7 +117,7 @@ final class DispatchGitHubCacheTests: OrbeTestCase {
     let key = "/branch-prs/.git"
     let pr = GitHubBranchPR(
       number: 7, headRefName: "feat/x", state: "OPEN", baseRefName: "main",
-      isCrossRepository: false)
+      headRepository: GitHubRepoName(nameWithOwner: "o/r"))
     cache.setBranchPullRequests([pr], head: "feat/x", for: key)
     cache.setBranchPullRequests([], head: "feat/y", for: key)
     let entry = cache.entry(for: key)
@@ -344,20 +347,21 @@ final class DispatchGitHubCacheTests: OrbeTestCase {
   /// 1 往復で open / closed の両方を引く。直近 N 件の窓では、窓落ちした PR のぶんだけ
   /// 「マージ済みなのに merged チップが出ない」「レビュー中なのに安全確認を素通りする」が起きる。
   /// `--limit` は gh が 1 往復で取れる上限（100）。往復コストは件数に依らないので、絞ると
-  /// fork（cross-repo）の同名ブランチの PR で埋まって自リポジトリの PR が窓落ちする側にしか働かない。
+  /// 他人の fork の同名ブランチの PR で埋まって自分の PR が窓落ちする側にしか働かない。
+  /// head のリポジトリも取る（worktree と突き合わせるのは head が等しい PR だけ）。
   func testBranchPRFetchNamesTheBranchInsteadOfAWindow() {
     XCTAssertEqual(
       GitHubCLI.branchPRArguments(head: "refactor/phase2-2b"),
       [
         "pr", "list", "--state", "all", "--head", "refactor/phase2-2b", "--limit", "100",
-        "--json", "number,headRefName,state,baseRefName,isCrossRepository",
+        "--json", "number,headRefName,state,baseRefName,headRepository",
       ])
   }
 
   /// 対象は worktree にあるブランチだけ（main worktree は掃除の対象外・detached は PR の head に
   /// なり得ない）。ここが広がると worktree 本数で抑えているプロセス数の前提が崩れる。
   func testBranchPRHeadsTargetNonMainWorktreeBranchesOnly() {
-    let heads = DispatchDataProvider.branchPRHeads(of: [
+    let heads = DispatchDataProvider.worktreeBranches(of: [
       GitWorktree(path: "/repo", branch: "main", head: "a", isMain: true),
       GitWorktree(path: "/wt/x", branch: "refactor/phase2-2b", head: "b", isMain: false),
       GitWorktree(path: "/wt/detached", branch: nil, head: "c", isMain: false),

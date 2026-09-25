@@ -38,6 +38,23 @@ struct DispatchLaunchLine: View {
   }
 }
 
+/// フッターのブラウザで開く説明（`↵ <target> をブラウザで開く`）。色の描き分けは `DispatchLaunchLine` と同じ。
+struct DispatchBrowseLine: View {
+  let target: String
+  @Environment(\.localization) private var l10n
+  @Environment(\.chromeFontResolver) private var fontResolver
+
+  var body: some View {
+    (Text("↵ ").foregroundStyle(Color.theme.textMuted)
+      + fontResolver.text(target, base: Theme.Typography.meta)
+      .foregroundStyle(Color.theme.textPrimary)
+      + Text(" " + l10n.string(.dispatchBrowseSuffix)).foregroundStyle(Color.theme.textMuted))
+      .font(Font.theme.meta)
+      .lineLimit(1)
+      .truncationMode(.tail)
+  }
+}
+
 /// フッター右端のキーヒント 1 つ（キーは textPrimary・ラベルは親の色）。
 struct DispatchKeyHint: View {
   let key: String

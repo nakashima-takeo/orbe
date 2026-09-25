@@ -62,6 +62,62 @@ struct GitBranch: Equatable {
 
 // MARK: - GitHub（gh CLI）
 
+/// GitHub のリポジトリ名（`owner/name`）。GitHub の名前は大小文字を区別しないので小文字で持ち、等値は
+/// その文字列の等値で決まる。
+struct GitHubRepoName: Hashable, Decodable {
+  /// 小文字の `owner/name`。
+  let value: String
+
+  init(nameWithOwner: String) {
+    value = nameWithOwner.lowercased()
+  }
+
+  /// remote の URL から読む。GitHub かどうかは「URL に github.com を含むか」で決め（SSH のホスト別名
+  /// `github.com-work` 等も GitHub として拾う）、`owner/name` はパス（scp 形式は `:` の後ろ）の最後の
+  /// 2 段から `.git` と末尾の `/` を除いて読む。GitHub でない・読めない URL は nil。
+  init?(remoteURL url: String) {
+    guard url.contains("github.com") else { return nil }
+    let path: Substring
+    if let scheme = url.range(of: "://") {
+      let rest = url[scheme.upperBound...]
+      path = rest.firstIndex(of: "/").map { rest[$0...] } ?? ""
+    } else if let colon = url.firstIndex(of: ":") {
+      path = url[url.index(after: colon)...]
+    } else {
+      path = url[...]
+    }
+    let parts = path.split(separator: "/")
+    guard parts.count >= 2 else { return nil }
+    var name = parts[parts.count - 1]
+    if name.hasSuffix(".git") { name = name.dropLast(4) }
+    guard !name.isEmpty else { return nil }
+    self.init(nameWithOwner: "\(parts[parts.count - 2])/\(name)")
+  }
+
+  /// GraphQL / `gh --json` の `{nameWithOwner}` を読む。
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.init(nameWithOwner: try container.decode(String.self, forKey: .nameWithOwner))
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case nameWithOwner
+  }
+}
+
+/// GitHub のどのリポジトリの、どのブランチか。行と PR の同一性の単位。
+struct GitHubBranchRef: Hashable {
+  let repo: GitHubRepoName
+  let branch: String
+}
+
+/// GitHub に問い合わせたリポジトリの正式名（改名後の古い名前からも新しい名前が返る）。
+enum GitHubRepositoryResolution: Equatable {
+  case found(GitHubRepoName)
+  /// そのリポジトリは存在しない（見えない）。
+  case notFound
+}
+
 /// 番号で同一性を持つ GitHub の項目。open 一覧を取り直す途中、前回の一覧との境目を探すのに使う。
 protocol GitHubNumbered {
   var number: Int { get }
@@ -85,7 +141,7 @@ struct GitHubIssue: Decodable, Equatable, GitHubNumbered {
   let title: String
 }
 
-/// `gh pr list --state all --head <branch> --json number,headRefName,state,baseRefName,isCrossRepository`
+/// `gh pr list --state all --head <branch> --json number,headRefName,state,baseRefName,headRepository`
 /// の 1 PR。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見るための
 /// 小さな形で、`GitHubPullRequest`（title 必須）ではこの JSON をデコードできない。
 struct GitHubBranchPR: Decodable, Equatable {
@@ -95,14 +151,15 @@ struct GitHubBranchPR: Decodable, Equatable {
   let state: String
   /// マージ先ブランチ。**表示専用**（安全判定はローカル git の事実だけで閉じる）。
   let baseRefName: String
-  /// head 側のリポジトリが、gh の解決した base リポジトリと別か。`--head` はブランチ名でしか
-  /// 絞れず他人の fork の同名ブランチに立った PR も返るので、突き合わせの足切りに使う。
-  ///
-  /// **「他人の fork か」と厳密には一致しない。** gh は非対話時、base リポジトリを remote 名の
-  /// 優先順（`upstream` > `github` > `origin`）で選ぶ。fork を clone して `upstream` を張った形では
-  /// base が upstream になり、**自分の fork に立てた自分の PR も真になる**——その形では merged
-  /// チップとマージ済みの推定が出なくなる（安全確認は落ちる方向なので、消えて困るものは残る）。
-  let isCrossRepository: Bool
+  /// head 側のリポジトリ。消えていれば nil。
+  let headRepository: GitHubRepoName?
+
+  /// head のリポジトリとブランチ。`--head` はブランチ名でしか絞れず他人の fork の同名ブランチに
+  /// 立った PR も返るので、worktree と突き合わせるのはこれが等しいものだけ。head のリポジトリが
+  /// 消えていれば nil（どの worktree とも等しくならない）。
+  var head: GitHubBranchRef? {
+    headRepository.map { GitHubBranchRef(repo: $0, branch: headRefName) }
+  }
 }
 
 /// open PR 一覧（GraphQL `pullRequests`）の 1 PR。
@@ -112,6 +169,12 @@ struct GitHubPullRequest: Decodable, Equatable, GitHubNumbered {
   let headRefName: String
   /// `REVIEW_REQUIRED` / `APPROVED` / `CHANGES_REQUESTED` / null。
   let reviewDecision: String?
-  /// fork（cross-repo）由来の PR か。head ref がローカルに無いことがある。
-  let isCrossRepository: Bool
+  /// head 側のリポジトリ。消えていれば nil。
+  let headRepository: GitHubRepoName?
+
+  /// head のリポジトリとブランチ（行との同一性）。head のリポジトリが消えていれば nil で、どの行とも
+  /// 等しくならない。
+  var head: GitHubBranchRef? {
+    headRepository.map { GitHubBranchRef(repo: $0, branch: headRefName) }
+  }
 }

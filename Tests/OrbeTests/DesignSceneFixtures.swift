@@ -112,9 +112,10 @@ enum DesignSceneFixtures {
         number: 300 + $0, title: "feat: それなりに長い PR のタイトル \($0)",
         headRefName: "feature/very-long-branch-name-\($0)",
         reviewDecision: $0.isMultiple(of: 2) ? "REVIEW_REQUIRED" : "APPROVED",
-        isCrossRepository: false)
+        headRepository: DispatchSectionBuilder.Input.designRepository)
     }
     input.githubState = .ready
+    input.remoteLedger = DispatchSectionBuilder.Input.designLedger
     let model = dispatchModel(from: input)
     model.selected = model.items.count - 1  // 末尾選択（scroll-to-end 到達の確認）
     return model

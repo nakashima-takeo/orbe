@@ -60,10 +60,12 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchWorktreeExisting
   case dispatchWorktreeCheckout
   case dispatchWorktreeNew
+  case dispatchNoteBrowser
   case dispatchPrepExisting
   case dispatchPrepCheckout
   case dispatchPrepNew
   case dispatchLaunchSuffix
+  case dispatchBrowseSuffix
   case dispatchReviewRequired
   case dispatchChangesRequested
   case dispatchApproved
@@ -77,7 +79,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchHintOpen
   case dispatchHintClose
   case dispatchErrNotGitRepo
-  case dispatchErrForkPR
   case dispatchCleanSubtitle
   case dispatchCleanCandidatesOne
   case dispatchCleanCandidatesOther

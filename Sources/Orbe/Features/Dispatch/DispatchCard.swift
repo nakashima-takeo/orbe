@@ -326,6 +326,8 @@ struct DispatchCard: View {
       case .launch(let target, let kind):
         DispatchLaunchLine(
           target: target, preposition: kind.prepositionKey, agent: model.selectedTargetName)
+      case .browse(let target):
+        DispatchBrowseLine(target: target)
       case .note(let key):
         Text(l10n.string(key)).foregroundStyle(Color.theme.textMuted)
       case nil:
@@ -334,12 +336,17 @@ struct DispatchCard: View {
     }
   }
 
+  /// ブラウザで開く行では ⇥（起動先）と ⌘↵（Enter と同じ）を案内しない——効いても意味の無い操作を
+  /// 並べない。起動先チップと ⇥ キーの働きはそのまま。
   private var keyHints: some View {
-    HStack(spacing: Theme.Space.step + Theme.Space.hair) {
+    let browses = if case .browse = model.selectedItem?.footer { true } else { false }
+    return HStack(spacing: Theme.Space.step + Theme.Space.hair) {
       DispatchKeyHint(key: "↑↓", label: l10n.string(.dispatchHintSelect))
-      DispatchKeyHint(key: "⇥", label: l10n.string(.dispatchHintAgent))
-      if model.selectedItem?.canOpenWeb == true {
-        DispatchKeyHint(key: "⌘↵", label: l10n.string(.dispatchHintOpen))
+      if !browses {
+        DispatchKeyHint(key: "⇥", label: l10n.string(.dispatchHintAgent))
+        if model.selectedItem?.canOpenWeb == true {
+          DispatchKeyHint(key: "⌘↵", label: l10n.string(.dispatchHintOpen))
+        }
       }
       DispatchKeyHint(key: "esc", label: l10n.string(.dispatchHintClose))
     }

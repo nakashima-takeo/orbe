@@ -59,10 +59,11 @@ final class WindowControllerDispatchBaseTests: OrbeTestCase {
     wc.showDispatchPalette()
     let palette = try XCTUnwrap(wc.model.dispatchPalette)
     XCTAssertTrue(
-      pump { palette.items.contains { $0.action == .worktree(path: toplevel) } },
+      pump { palette.items.contains { $0.action == .open(.worktree(path: toplevel)) } },
       "root path のリポジトリの worktree 行が並ぶ")
     palette.selectedTargetIndex = try XCTUnwrap(palette.targets.firstIndex(of: .shell))
-    let row = try XCTUnwrap(palette.items.firstIndex { $0.action == .worktree(path: toplevel) })
+    let row = try XCTUnwrap(
+      palette.items.firstIndex { $0.action == .open(.worktree(path: toplevel)) })
 
     palette.activate(at: row)
 
