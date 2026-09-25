@@ -20,7 +20,8 @@ final class SyntaxColorWindow {
   }
 
   /// layout の後、色を窓に合わせる——窓から外れた部分の色を外し、まだ塗っていない部分を塗る（遠くへ飛べば窓ごと
-  /// 入れ替わる）。
+  /// 入れ替わる）。layout をやり直さない：上流は layout のたびに窓の行片の view をすべて描き直しの対象にし、この通知は
+  /// その layout の中（描く前）に届くので、塗った色は同じコマで描かれる。
   func layoutDidChange(_ range: NSTextRange) {
     let manager = textView.textContentManager
     let window = NSRange(range, in: manager)
@@ -30,7 +31,6 @@ final class SyntaxColorWindow {
     for part in colored.subtracting(window) { uncolor(part, locator) }
     for part in window.subtracting(colored) { color(part, locator) }
     colored = window
-    textView.needsLayout = true
   }
 
   /// 編集の後、窓を丸ごと問い合わせ直して塗る（文書は編集の通知で構文木を更新し終えている）——隣の字の変化で役割が

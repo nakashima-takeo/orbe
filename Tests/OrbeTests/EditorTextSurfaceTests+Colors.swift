@@ -151,4 +151,65 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
     settle(document)
     try assertColorsFollowTheWindow(document, "置き換えの layout の後")
   }
+
+  /// 遠くへ飛んだ先の字は色付きで描かれ、描き直しを待たない（色は layout の中・描く前に置くので、layout をやり直さない。
+  /// 描いた後に色を置いていれば、次の layout まで素の文字色のまま残る）。画素は描き直しを強いない層の写しから読む——
+  /// `cacheDisplay` は全部を描き直すので、描き直し忘れが見えない。
+  func testAFarJumpDrawsTheColors() throws {
+    let (document, window) = try open(source(3000))
+    let view = document.surface.view
+    window.displayIfNeeded()
+    document.scroll(toFirstLine: 2400)
+    let style = EditorStyle.make()
+    let cell = (" " as NSString).size(withAttributes: [.font: style.font]).width
+    let left = style.gutterWidth + style.marks.gutterWidth
+    let deadline = Date().addingTimeInterval(5)
+    var shot = try layerShot(view)
+    while shot.ink(
+      in: NSRect(x: left, y: style.topInset, width: 3 * cell, height: style.lineHeight))
+      == 0, Date() < deadline
+    {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+      shot = try layerShot(view)
+    }
+    // 先頭の行の `let`（keyword の青）の中で、いちばん青みの強い画素。
+    let bluest = shot.bluest(
+      in: NSRect(x: left, y: style.topInset, width: 3 * cell, height: style.lineHeight))
+    XCTAssertGreaterThan(bluest, 0.3, "`let` が keyword の色で描かれている（素の文字色なら青みが出ない）")
+  }
+
+  /// view の層を描き直さずに写す（2 倍）。
+  private func layerShot(_ view: NSView) throws -> LayerShot {
+    let size = view.bounds.size
+    let rep = try XCTUnwrap(
+      NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: Int(size.width * LayerShot.scale),
+        pixelsHigh: Int(size.height * LayerShot.scale), bitsPerSample: 8, samplesPerPixel: 4,
+        hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0,
+        bitsPerPixel: 0))
+    let context = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: rep)).cgContext
+    context.translateBy(x: 0, y: size.height * LayerShot.scale)
+    context.scaleBy(x: LayerShot.scale, y: -LayerShot.scale)
+    try XCTUnwrap(view.layer).render(in: context)
+    return LayerShot(rep: rep)
+  }
+}
+
+private struct LayerShot {
+  static let scale: CGFloat = 2
+  let rep: NSBitmapImageRep
+
+  private func colors(in rect: NSRect) -> [NSColor] {
+    stride(from: rect.minY, to: rect.maxY, by: 0.5).flatMap { y in
+      stride(from: rect.minX, to: rect.maxX, by: 0.5).compactMap { x in
+        rep.colorAt(x: Int(x * Self.scale), y: Int(y * Self.scale))
+      }
+    }
+  }
+
+  func ink(in rect: NSRect) -> CGFloat { colors(in: rect).map(\.alphaComponent).max() ?? 0 }
+
+  func bluest(in rect: NSRect) -> CGFloat {
+    colors(in: rect).map { $0.blueComponent - $0.redComponent }.max() ?? 0
+  }
 }
