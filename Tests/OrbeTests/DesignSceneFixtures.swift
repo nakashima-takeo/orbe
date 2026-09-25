@@ -65,6 +65,22 @@ enum DesignSceneFixtures {
     return dispatchModel(from: input)
   }
 
+  /// 一覧の取得が続いている（届いた行の後ろ、セクション末尾にローディング行）。
+  static func dispatchGrowingModel() -> DispatchPaletteModel {
+    var input = DispatchSectionBuilder.Input.designSample
+    input.issuesFetching = true
+    input.pullRequestsFetching = true
+    return dispatchModel(from: input)
+  }
+
+  /// 取得中の絞り込み（`feat` で Issues は 0 件だが、「まだ届いていない」ので見出しとローディング行が残る）。
+  static func dispatchGrowingFilteredModel() -> DispatchPaletteModel {
+    let model = dispatchGrowingModel()
+    model.query = "feat"
+    model.onQueryChanged()
+    return model
+  }
+
   /// gh 未導入のフォールバック（Issues に誘導情報行 1 本・PR 非表示）。
   static func dispatchGhMissingModel() -> DispatchPaletteModel {
     var input = DispatchSectionBuilder.Input.designSample
@@ -81,6 +97,19 @@ enum DesignSceneFixtures {
     let model = dispatchModel(from: .designSample)
     model.query = "feat"
     model.onQueryChanged()
+    return model
+  }
+
+  /// worktree にできない PR 行（他人の fork の `main` から出た PR）を選んだところ。行末とフッターが
+  /// ブラウザで開くと先に言い、キーヒントから ⇥ と ⌘↵ が外れる（起動先チップは出たまま）。
+  static func dispatchBrowserPullRequestModel() -> DispatchPaletteModel {
+    var input = DispatchSectionBuilder.Input.designSample
+    input.pullRequests.append(
+      GitHubPullRequest(
+        number: 146, title: "fix: tab order from a fork", headRefName: "main",
+        reviewDecision: nil, headRepository: GitHubRepoName(nameWithOwner: "someone/orbe")))
+    let model = dispatchModel(from: input)
+    model.selected = model.items.count - 1
     return model
   }
 

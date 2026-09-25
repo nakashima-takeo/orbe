@@ -20,8 +20,13 @@ extension DesignGallerySnapshotTests {
     try write("dispatch_preparing.png", DesignSceneFixtures.dispatchPreparingModel(), 640, 520)
     try write("dispatch_skeleton.png", DesignSceneFixtures.dispatchSkeletonModel(), 640, 520)
     try write("dispatch_loading.png", DesignSceneFixtures.dispatchLoadingModel(), 640, 520)
+    try write("dispatch_growing.png", DesignSceneFixtures.dispatchGrowingModel(), 640, 520)
+    try write(
+      "dispatch_growing_filtered.png", DesignSceneFixtures.dispatchGrowingFilteredModel(), 640, 520)
     try write("dispatch_gh_missing.png", DesignSceneFixtures.dispatchGhMissingModel(), 640, 520)
     try write("dispatch_filtered.png", DesignSceneFixtures.dispatchFilteredModel(), 640, 520)
+    try write(
+      "dispatch_pr_browser.png", DesignSceneFixtures.dispatchBrowserPullRequestModel(), 640, 520)
     try write("dispatch_many.png", DesignSceneFixtures.dispatchManyModel(), 640, 520)
     try write("dispatch_many_short.png", DesignSceneFixtures.dispatchManyModel(), 640, 360)
     try write("dispatch_narrow.png", DesignSceneFixtures.dispatchManyModel(), 360, 520)
