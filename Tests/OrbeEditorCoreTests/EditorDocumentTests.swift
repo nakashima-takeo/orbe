@@ -97,13 +97,13 @@ final class EditorDocumentTests: XCTestCase {
       Expectation("sample.swift", .keywordControl, "return"),
       Expectation("sample.swift", .type, "LineIndex"),
       Expectation("sample.swift", .comment, "/// 行頭オフセットの索引。"),
-      Expectation("sample.md", .keyword, "Orbe"), Expectation("sample.md", .string, "`open_file`"),
+      Expectation("sample.md", .keyword, "Orbe"), Expectation("sample.md", .string, "open_file"),
       Expectation("sample.json", .string, "\"orbe\""), Expectation("sample.json", .keyword, "true"),
       Expectation("sample.ts", .keyword, "interface"),
       Expectation("sample.ts", .function, "normalize"),
       Expectation("sample.js", .function, "snap"),
       Expectation("sample.js", .comment, "// Snap the spine to the nearest face edge."),
-      Expectation("sample.tsx", .type, "Props"), Expectation("sample.tsx", .keyword, "div"),
+      Expectation("sample.tsx", .type, "Props"), Expectation("sample.tsx", .variable, "div"),
       Expectation("sample.css", .variable, "font-size"),
       Expectation("sample.css", .comment, "/* Code view metrics from the design sample. */"),
       Expectation("sample.html", .keyword, "title"), Expectation("sample.html", .string, "\"app\""),
@@ -133,16 +133,18 @@ final class EditorDocumentTests: XCTestCase {
 
   /// injections: HTML の script / style の中身が JavaScript / CSS として色付く。
   func testInjectionsColorNestedLanguages() throws {
-    let (_, surface) = try open(Queries.samples.appendingPathComponent("sample.html"))
+    let (document, surface) = try open(Queries.samples.appendingPathComponent("sample.html"))
     XCTAssertTrue(surface.texts(of: .function).contains("getElementById"), "script の中の JavaScript")
     XCTAssertTrue(surface.texts(of: .variable).contains("margin"), "style の中の CSS")
+    withExtendedLifetime(document) {}
   }
 
   /// injections: Markdown のコードブロックは囲みが名乗る言語（```swift）として色付く。
   func testMarkdownFencedCodeUsesTheFenceLanguage() throws {
-    let (_, surface) = try open(Queries.samples.appendingPathComponent("sample.md"))
+    let (document, surface) = try open(Queries.samples.appendingPathComponent("sample.md"))
     XCTAssertTrue(surface.texts(of: .keyword).contains("let"), "```swift の中は Swift として塗る")
     XCTAssertTrue(surface.texts(of: .variable).contains("index"), "Markdown だけでは出ない役割")
+    withExtendedLifetime(document) {}
   }
 
   /// 編集すると変わった範囲が塗り直され、編集後の本文に対して色が正しく付く。
@@ -162,109 +164,53 @@ final class EditorDocumentTests: XCTestCase {
     XCTAssertEqual(document.lineIndex.lineCount, 3)
   }
 
-  /// 打鍵で塗るのは塗り直す区間の中だけ——tree-sitter は区間と交差する**マッチ**を返し、その capture は
-  /// 区間の外へはみ出しうる。はみ出しを塗ると外の正しい色が潰れる（Go の `NewLineIndex` が 1 文字の
-  /// 挿入で function 色になる）。全位置へ 1 文字挿入し、塗った区間がすべて塗り直す区間の中に収まり、
-  /// その外の色が動かないことを見る。
-  func testEditingPaintsOnlyInsideTheChangedRanges() throws {
-    let source = try String(contentsOf: Queries.samples.appendingPathComponent("sample.go"))
-    var strays: [String] = []
-    var recolored: [String] = []
-    var narrowEdits = 0
-    for position in 0...source.utf16.count {
-      // 文書は面の delegate を weak で持たれるので、編集の間は生かしておく。
-      let (document, surface) = try open(try temp("edit.go", source))
-      let before = (0..<surface.length).map { surface.role(at: $0) }
-      surface.replace(NSRange(location: position, length: 0), with: "x")
-      XCTAssertEqual(surface.appliedRanges.count, 2, "編集の塗りは 1 回の applyHighlights にまとまる")
-      let painted = try XCTUnwrap(surface.appliedRanges.last)
-      let spans = try XCTUnwrap(surface.appliedSpans.last)
-      if !painted.contains(integersIn: 0..<surface.length) { narrowEdits += 1 }
-      for span in spans where !painted.contains(integersIn: Range(span.range)!) {
-        strays.append("挿入 \(position) → \(span.range) \(span.role)")
-      }
-      for offset in 0..<surface.length where !painted.contains(offset) && offset != position {
-        let old = offset < position ? offset : offset - 1
-        if surface.role(at: offset) != before[old] {
-          recolored.append("挿入 \(position) → offset \(offset)")
+  /// 役割の答えは区間の切り方に依らない——tree-sitter は区間と交差する**マッチ**を返し、その capture は区間の外へ
+  /// はみ出しうる。はみ出しを答えると、面が窓の端で問うたびに外の字の色が変わる（Go の `NewLineIndex` が 1 文字の
+  /// 挿入で function 色になる）。編集の後の本文で、いろいろな位置から切った区間の答えが、全文の答えをその区間で
+  /// 切ったものと一致することを見る。
+  func testRolesDoNotDependOnWhereTheRangeIsCut() throws {
+    for sample in ["sample.go", "sample.sh", "sample.md"] {
+      let (document, surface) = try open(Queries.samples.appendingPathComponent(sample))
+      surface.replace(NSRange(location: surface.length / 2, length: 0), with: "x")
+      let whole = document.roleSpans(in: NSRange(location: 0, length: surface.length))
+      var mismatches: [String] = []
+      for start in stride(from: 0, to: surface.length, by: 7) {
+        let range = NSRange(location: start, length: min(53, surface.length - start))
+        let expected = whole.compactMap { span -> HighlightSpan? in
+          let clipped = NSIntersectionRange(span.range, range)
+          return clipped.length > 0 ? HighlightSpan(range: clipped, role: span.role) : nil
         }
+        if document.roleSpans(in: range) != expected { mismatches.append("\(sample) \(range)") }
       }
+      XCTAssertEqual(mismatches, [], "区間の切り方で答えが変わった")
       withExtendedLifetime(document) {}
     }
-    XCTAssertEqual(strays, [], "塗り直す区間からはみ出して塗った")
-    XCTAssertEqual(recolored, [], "塗り直す区間の外の色が動いた")
-    XCTAssertGreaterThan(narrowEdits, 0, "全文を塗り直す編集ばかりでは外を見ていない")
   }
 
-  /// スクロールで新しく見えた区間を塗るとき、その手前にある画面内の字を潰さない——塗り直す区間が可視
-  /// 区間の真部分集合になるのはこの経路だけで、区間をまたぐ広い capture（文字列）が、区間の外にある
-  /// 細かい capture（文字列の中の `$` と `1`）の色を潰しうる。
-  func testScrollingIntoTheMiddleOfAStringKeepsTheColorsBeforeIt() throws {
-    let (document, surface) = try open(Queries.samples.appendingPathComponent("sample.sh"))
-    let quote = try XCTUnwrap(location(of: "\"$1\"", in: surface))
-    XCTAssertEqual(surface.role(at: quote), .string)
-    XCTAssertEqual(surface.role(at: quote + 1), .punctuation, "前提: `$` は文字列の中の記号")
-    XCTAssertEqual(surface.role(at: quote + 2), .variable, "前提: `1` は文字列の中の変数")
+  /// 区間が文字列の途中から始まっても、その中の細かい役割（`$` と `1`）を文字列の広い capture で潰さない。injection
+  /// でも同じ——Markdown のコードフェンス全体を覆う capture が、フェンスの中の Swift の `let` を潰さない。
+  func testARangeStartingInsideAStringKeepsTheFineRoles() throws {
+    let (shell, shellSurface) = try open(Queries.samples.appendingPathComponent("sample.sh"))
+    let quote = try XCTUnwrap(location(of: "\"$1\"", in: shellSurface))
+    let roles = shell.roleSpans(in: NSRange(location: quote + 1, length: 40))
+    XCTAssertEqual(role(at: quote + 1, in: roles), .punctuation, "`$` は文字列の中の記号")
+    XCTAssertEqual(role(at: quote + 2, in: roles), .variable, "`1` は文字列の中の変数")
+    XCTAssertEqual(role(at: quote + 3, in: roles), .string)
 
-    surface.visibleRange = NSRange(location: 0, length: 4)
-    surface.replace(NSRange(location: 2, length: 0), with: " ")
-    surface.scroll(to: NSRange(location: quote + 3, length: 40))
-
-    XCTAssertEqual(surface.role(at: quote + 2), .punctuation, "`$` の色は動かない")
-    XCTAssertEqual(surface.role(at: quote + 3), .variable, "`1` の色は動かない")
-    XCTAssertEqual(surface.role(at: quote + 4), .string)
-    withExtendedLifetime(document) {}
+    let (markdown, markdownSurface) = try open(Queries.samples.appendingPathComponent("sample.md"))
+    let keyword = try XCTUnwrap(location(of: "let index", in: markdownSurface))
+    let fenced = markdown.roleSpans(in: NSRange(location: keyword + 1, length: 40))
+    XCTAssertEqual(role(at: keyword + 1, in: fenced), .keyword, "`let` の色は区間の端で変わらない")
   }
 
-  /// injection でも同じ——Markdown のコードフェンス全体を覆う capture（文字列）が、フェンスの中の
-  /// Swift の `let`（区間の外）を潰さない。
-  func testScrollingIntoAFencedCodeBlockKeepsTheInnerColorsBeforeIt() throws {
-    let (document, surface) = try open(Queries.samples.appendingPathComponent("sample.md"))
-    let keyword = try XCTUnwrap(location(of: "let index", in: surface))
-    XCTAssertEqual(surface.role(at: keyword), .keyword, "前提: フェンスの中の Swift が色付く")
-
-    surface.visibleRange = NSRange(location: 0, length: 4)
-    surface.replace(NSRange(location: 2, length: 0), with: " ")
-    surface.scroll(to: NSRange(location: keyword + 4, length: 40))
-
-    XCTAssertEqual(surface.role(at: keyword + 1), .keyword, "`let` の色は動かない")
-    withExtendedLifetime(document) {}
+  private func role(at offset: Int, in spans: [HighlightSpan]) -> SyntaxRole? {
+    spans.first { NSLocationInRange(offset, $0.range) }?.role
   }
 
   /// 本文の中の文字列の位置（無ければ nil）。
   private func location(of needle: String, in surface: FakeTextSurface) -> Int? {
     let range = (surface.text as NSString).range(of: needle)
     return range.location == NSNotFound ? nil : range.location
-  }
-
-  /// 編集のたびに見えている区間を塗り直す（木の差分に出ない隣の役割変化を画面に残さない）。
-  /// 見えていない区間は次に見えたとき 1 回だけ塗り、動かなければ塗らない。
-  func testEditsRepaintTheVisibleRangeAndScrollingPaintsStaleRangesOnce() throws {
-    let (document, surface) = try open(Queries.samples.appendingPathComponent("sample.go"))
-    let length = surface.length
-    surface.visibleRange = NSRange(location: 100, length: 80)
-
-    // コメントの中への挿入——構文木の変化はそのコメントに閉じる。
-    let comment = try XCTUnwrap(location(of: "// ", in: surface)) + 2
-    surface.replace(NSRange(location: comment, length: 0), with: " ")
-    let painted = try XCTUnwrap(surface.appliedRanges.last)
-    XCTAssertTrue(painted.contains(integersIn: 100..<180), "編集で可視区間を塗り直す")
-    XCTAssertTrue(painted.contains(comment), "変わった区間も塗る")
-    XCTAssertFalse(painted.contains(length - 1), "見えていない末尾は塗らない")
-
-    let before = surface.appliedRanges.count
-    surface.scroll(to: NSRange(location: 120, length: 40))
-    XCTAssertEqual(surface.appliedRanges.count, before, "塗り済みの中で動いても塗らない")
-
-    surface.scroll(to: NSRange(location: length - 50, length: 200))
-    XCTAssertEqual(surface.appliedRanges.count, before + 1, "初めて見える区間は塗る")
-    let stale = try XCTUnwrap(surface.appliedRanges.last)
-    XCTAssertTrue(stale.contains(integersIn: (length - 50)..<(length + 1)), "本文の長さに収めて塗る")
-    XCTAssertFalse(stale.contains(150), "塗り済みは含めない")
-
-    surface.scroll(to: NSRange(location: length - 50, length: 200))
-    XCTAssertEqual(surface.appliedRanges.count, before + 1, "同じ区間へ戻っても塗らない")
-    withExtendedLifetime(document) {}
   }
 
   func testUnknownLanguageOpensWithoutColors() throws {

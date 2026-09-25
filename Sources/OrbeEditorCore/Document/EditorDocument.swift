@@ -9,13 +9,8 @@ public enum EditorDocumentError: Error, Equatable {
 }
 
 /// 開いたファイル 1 つ。識別（URL）・言語・未保存の有無・行索引・構文層を持ち、本文の正は対になる
-/// テキスト面にある（開いてから閉じるまで 1 対 1）。面の delegate として編集を受け、索引と構文木を
-/// 追従させて塗り直す。
-///
-/// 塗り直す範囲は「構文木が変わった区間 ∪ 今見えている区間」。木の差分だけでは、隣のノードの変化で
-/// 役割が変わるのに自分の区間は変わらない字（呼び出しになった識別子など）が古い色のまま残る。
-/// 見えている区間を毎回塗り直し、見えていない区間は次に見えたときに 1 回だけ塗る（`fresh` が
-/// 「最後の編集の後に塗った区間」を持つ）。塗りは常に塗り直す区間の中に閉じる（→ `SyntaxLayer`）。
+/// テキスト面にある（開いてから閉じるまで 1 対 1）。面の delegate として編集を受けて索引と構文木を追従させ、
+/// 面に問われた区間の役割を答える（色をどこに置くかは面が決める。文書は窓もキャッシュも持たない）。
 ///
 /// ディスクの姿（最後に読んだ／書いたファイルのバイト列のダイジェスト）も持ち、外部変更は監視の通知と保存の直前に
 /// 実ファイルを読み直して比べる（`reconcileWithDisk` / `save`）。baseline（比べる底の本文）を持てば、
@@ -59,11 +54,9 @@ public final class EditorDocument {
   public var onViewportChange: (() -> Void)?
   /// 面の選択が変わった。
   public var onSelectionChange: (() -> Void)?
-  /// 本文が変わった。索引・構文木・色付けの更新の後に届く（構文の事実を読み直してよい）。
+  /// 本文が変わった。索引・構文木の更新の後に届く（構文の事実を読み直してよい）。
   public var onTextChange: ((TextChange) -> Void)?
   private let syntax: SyntaxLayer?
-  /// 最後の編集の後に塗った区間。編集のたびに（変わった区間 ∪ 可視区間）へ置き直す。
-  private var fresh = IndexSet()
   /// 最後に読んだ／書いたファイルのバイト列のダイジェスト（ディスクの姿）。
   private var diskDigest: SHA256Digest
   /// 開いた／差し替えたときにファイルが UTF-8 BOM で始まっていたか。保存で同じように書き戻す。
@@ -105,15 +98,12 @@ public final class EditorDocument {
       .flatMap { try? SyntaxLayer(configuration: $0, registry: registry) }
     surface.delegate = self
     applyIndentUnit(of: text)
-    if let syntax {
-      highlight(syntax.parseAll(text, lineIndex: lineIndex), text: text)
-      fresh = IndexSet(integersIn: 0..<text.utf16.count)
-    }
+    _ = syntax?.parseAll(text, lineIndex: lineIndex)
   }
 
-  /// `range` の中の役割の区間——構文層の区間を後勝ち（tree-sitter の優先順で後のものが上に塗られる、面の色と同じ）で
-  /// 平らにした、重ならない昇順の列。役割の無い字は含まない。文法が無ければ空。窓もキャッシュも持たない——ミニマップが
-  /// チャンクごとに引く。
+  /// `range` の中の役割の区間——構文層の区間を後勝ち（tree-sitter の優先順で後のものが上に塗られる）で平らにした、
+  /// 重ならない昇順の列。役割の無い字は含まない。文法が無ければ空。答えは区間の切り方に依らない（区間の外の字は
+  /// 読まず、区間をまたぐ capture は区間で切る）。面が見えている範囲の色を、ミニマップがチャンクの色を引く。
   public func roleSpans(in range: NSRange) -> [HighlightSpan] {
     guard let syntax, range.length > 0 else { return [] }
     let set = IndexSet(integersIn: range.location..<NSMaxRange(range))
@@ -229,11 +219,6 @@ public final class EditorDocument {
     isDiskChanged = false
   }
 
-  private func highlight(_ set: IndexSet, text: String) {
-    guard let syntax, !set.isEmpty else { return }
-    surface.applyHighlights(syntax.highlights(in: set, text: text), in: set)
-  }
-
   /// ハンクを作り直し、行の印を面へ押す。印はハンクが同じでも押す——同じ行の中の打鍵でハンクは変わらず
   /// 区間のオフセットだけが動く。
   private func rebuildHunks() {
@@ -252,14 +237,6 @@ public final class EditorDocument {
       rebuildHunks()
     }
   }
-
-  /// 今見えている区間（本文の長さに収めたもの）。
-  private var visibleSet: IndexSet {
-    let range = surface.visibleRange
-    let end = min(NSMaxRange(range), surface.text.utf16.count)
-    guard range.location < end else { return IndexSet() }
-    return IndexSet(integersIn: range.location..<end)
-  }
 }
 
 extension EditorDocument: TextSurfaceDelegate {
@@ -271,11 +248,7 @@ extension EditorDocument: TextSurfaceDelegate {
     var changedRoles = IndexSet(integersIn: edit.newRange.location..<NSMaxRange(edit.newRange))
     defer { onTextChange?(TextChange(edit: edit, changedRoles: changedRoles)) }
     guard let syntax else { return }
-    let text = surface.text
-    changedRoles = syntax.didChange(edit, text: text, old: old, new: lineIndex)
-    let set = changedRoles.union(visibleSet)
-    highlight(set, text: text)
-    fresh = set
+    changedRoles = syntax.didChange(edit, text: surface.text, old: old, new: lineIndex)
   }
 
   public func surfaceDidChangeViewport(_ surface: any TextSurface) {
@@ -290,12 +263,7 @@ extension EditorDocument: TextSurfaceDelegate {
     onFocusChange?(focused)
   }
 
-  /// 見える区間が動いた。最後の編集の後にまだ塗っていない部分だけ塗る。
-  public func surfaceDidLayoutViewport(_ surface: any TextSurface) {
-    guard syntax != nil else { return }
-    let stale = visibleSet.subtracting(fresh)
-    guard !stale.isEmpty else { return }
-    highlight(stale, text: surface.text)
-    fresh.formUnion(stale)
+  public func surface(_ surface: any TextSurface, rolesIn range: NSRange) -> [HighlightSpan] {
+    roleSpans(in: range)
   }
 }

@@ -1,7 +1,8 @@
 import AppKit
 
 /// 文字を描き編集を受ける面の、エンジン非依存の契約。本文・undo・選択・スクロールの正は常に面にある。
-/// 文書は面の delegate として編集を受け、色は役割付き区間として面へ渡す（面は役割→色だけを知る）。
+/// 文書は面の delegate として編集を受け、面に問われた区間の役割を答える（面は見えている範囲の色だけを持ち、役割→色
+/// だけを知る）。
 @MainActor
 public protocol TextSurface: AnyObject {
   /// 器へ載せる view（スクロールを含む全体）。面の外（俯瞰など）で起きたホイールの出来事をこの view の `scrollWheel`
@@ -12,13 +13,6 @@ public protocol TextSurface: AnyObject {
 
   var text: String { get }
   func substring(in range: NSRange) -> String
-
-  /// `ranges` の既存の色を外し、`spans` を置く。描画属性としてのみ持ち、本文と undo を汚さない。
-  func applyHighlights(_ spans: [HighlightSpan], in ranges: IndexSet)
-
-  /// 今見えている本文の区間（viewport のレイアウト後に更新される。prefetch の帯を含み「見えている」より広い——
-  /// 色付けの塗り残しの判定用。見えている範囲そのものは `viewport`）。
-  var visibleRange: NSRange { get }
 
   /// 見えている範囲を本文の言葉で（面の pt は出ない）。
   var viewport: TextViewport { get }
@@ -76,10 +70,12 @@ public protocol TextSurface: AnyObject {
 public protocol TextSurfaceDelegate: AnyObject {
   func surface(_ surface: any TextSurface, didChange edit: TextEdit)
   func surface(_ surface: any TextSurface, focusDidChange focused: Bool)
-  func surfaceDidLayoutViewport(_ surface: any TextSurface)
   /// `viewport` が変わった（スクロール・窓の高さ）。
   func surfaceDidChangeViewport(_ surface: any TextSurface)
   func surfaceDidChangeSelection(_ surface: any TextSurface)
+  /// `range` の中の役割の区間（重ならない昇順で、`range` の中に閉じる。役割の無い字は含まない）。面は見えている
+  /// 範囲の色をこれで引く——`didChange` から戻った後は編集の後の役割を答える。
+  func surface(_ surface: any TextSurface, rolesIn range: NSRange) -> [HighlightSpan]
 }
 
 /// 強調の地の種類。重ね順は下から 選択文字列の出現 → 語の出現 → 検索の一致 → 現在の一致（現在の一致の行全体の地は

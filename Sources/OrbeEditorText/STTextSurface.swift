@@ -6,6 +6,8 @@ import STTextView
 /// attribute・delegate・焦点・viewport をこの契約へ写す。undo は STTextView が自前で持つ（打鍵を
 /// まとめる coalescing はビュー内部の undo manager にしか無い）。
 ///
+/// 構文の色は窓（上流が layout した範囲）にだけ置く（→ `SyntaxColorWindow`）。
+///
 /// 行の装備と強調の地は受動的な overlay 3 枚で描く（ガターの印・本文のインデント線／丸点／URL 下線・強調の地）。
 /// 上流に行ごとの描画の拡張点が無いので、公開の view と TextKit 2 の API だけで載せる——ただし強調の地だけは、選択の地の
 /// 上・文字の下に出すために上流の本文の層の中へ差し込む（公開の口が無い。`installHighlightView`）。どれも寸法は viewport
@@ -33,7 +35,7 @@ final class STTextSurface: NSObject, TextSurface {
   var view: NSView { container }
   var responder: NSView { textView }
   weak var delegate: TextSurfaceDelegate?
-  private(set) var visibleRange = NSRange(location: 0, length: 0)
+  private let colors: SyntaxColorWindow
   /// 見えている範囲（本文の言葉）。overlay を置き直すたびに実際の行の矩形から出し直す（上端に layout が無い
   /// 一瞬は前の値を保つ）。
   private(set) var viewport = TextViewport.empty
@@ -55,7 +57,9 @@ final class STTextSurface: NSObject, TextSurface {
     decorationView = LineDecorationView(
       textView: textView, style: style.decorations, textColor: style.textColor)
     highlightView = TextHighlightView(textView: textView, style: style.highlights)
+    colors = SyntaxColorWindow(textView: textView, colors: style.roleColors)
     super.init()
+    colors.roles = { [weak self] in self?.roles(in: $0) ?? [] }
     // 上流の `scrollableTextView()` の設定を写す（縦スクローラーだけ出さない）。
     scrollView.contentView = clipView
     scrollView.clipsToBounds = true
@@ -83,9 +87,8 @@ final class STTextSurface: NSObject, TextSurface {
     textView.addPlugin(
       ViewportPlugin { [weak self] range in
         guard let self else { return }
-        visibleRange = range.map { NSRange($0, in: self.textView.textContentManager) } ?? NSRange()
+        if let range { colors.layoutDidChange(range) }
         layoutOverlays()
-        delegate?.surfaceDidLayoutViewport(self)
       })
     apply(style)
     // 装備の overlay は本文の層の下（本文・キャレット・選択の下に出る——選択の地が装備を覆う）。強調の地は本文の層の
@@ -144,17 +147,8 @@ final class STTextSurface: NSObject, TextSurface {
     return textView.textContentManager.attributedString(in: textRange)?.string ?? ""
   }
 
-  func applyHighlights(_ spans: [HighlightSpan], in ranges: IndexSet) {
-    let length = self.length
-    for range in ranges.rangeView {
-      let clamped = NSRange(range).clamped(to: length)
-      if clamped.length > 0 { textView.removeRenderingAttribute(.foregroundColor, range: clamped) }
-    }
-    for span in spans {
-      let clamped = span.range.clamped(to: length)
-      guard clamped.length > 0, let color = style.roleColors[span.role] else { continue }
-      textView.addRenderingAttributes([.foregroundColor: color], range: clamped)
-    }
+  private func roles(in range: NSRange) -> [HighlightSpan] {
+    delegate?.surface(self, rolesIn: range) ?? []
   }
 
   func markUndoBoundary() {
@@ -379,11 +373,12 @@ extension STTextSurface: @preconcurrency STTextViewDelegate {
     replacementString: String
   ) {
     let range = NSRange(affectedCharRange, in: textView.textContentManager)
+    let edit = TextEdit(range: range, replacementLength: replacementString.utf16.count)
     decorationView.needsDisplay = true
     highlightView.needsDisplay = true
     marksView.needsDisplay = true
-    delegate?.surface(
-      self, didChange: TextEdit(range: range, replacementLength: replacementString.utf16.count))
+    delegate?.surface(self, didChange: edit)
+    colors.textDidChange(edit, near: affectedCharRange.location)
   }
 
   func textViewDidChangeSelection(_ notification: Notification) {

@@ -181,14 +181,14 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     func surface(_ surface: any TextSurface, focusDidChange focused: Bool) {
       inner.surface(surface, focusDidChange: focused)
     }
-    func surfaceDidLayoutViewport(_ surface: any TextSurface) {
-      inner.surfaceDidLayoutViewport(surface)
-    }
     func surfaceDidChangeViewport(_ surface: any TextSurface) {
       inner.surfaceDidChangeViewport(surface)
     }
     func surfaceDidChangeSelection(_ surface: any TextSurface) {
       inner.surfaceDidChangeSelection(surface)
+    }
+    func surface(_ surface: any TextSurface, rolesIn range: NSRange) -> [HighlightSpan] {
+      inner.surface(surface, rolesIn: range)
     }
   }
 
