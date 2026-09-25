@@ -19,8 +19,41 @@ final class EditorScrollPerfTests: OrbeTestCase {
 
   func test200KB() throws { try run(label: "200KB", bytes: 200_000) }
 
-  /// 1200×800 の窓に Swift の文書を開き、速いドラッグ → 打鍵 → ホイール → 打鍵の後の速いドラッグの順に測る。
+  /// 1200×800 の窓に Swift の文書を開いて測る。速いドラッグは開いたばかりの文書で、打鍵・ホイール・打鍵の後の速い
+  /// ドラッグは別に開き直した文書で測る。文書を端から端まで通した後の打鍵も参考に出す（TextKit が段落を覚えるので、
+  /// 開いたばかりの文書より重い）。
   private func run(label: String, bytes: Int) throws {
+    let text = Self.swiftSource(bytes: bytes)
+    let dragged = try open(text)
+    print(
+      "PERF", label, "env", ProcessInfo.processInfo.environment.count, "lines",
+      dragged.document.lineIndex.lineCount, "bytes", dragged.document.lineIndex.length)
+    drag(label, "fast-drag", dragged)
+    report(label, "typing-after-drag (参考)", type(into: dragged))
+    dragged.window.orderOut(nil)
+
+    let typed = try open(text)
+    report(label, "typing", type(into: typed))
+    let clip = try XCTUnwrap(typed.document.surface.responder.enclosingScrollView).contentView
+    let times = (0..<60).map { _ in
+      frame(typed.pane) {
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: clip.bounds.minY + 36))
+        clip.enclosingScrollView?.reflectScrolledClipView(clip)
+      }
+    }
+    report(label, "wheel", times)
+    drag(label, "fast-drag-after-typing", typed)
+    typed.window.orderOut(nil)
+  }
+
+  private struct Opened {
+    let tab: TerminalTab
+    let pane: EditorPaneView
+    let window: NSWindow
+    let document: EditorDocument
+  }
+
+  private func open(_ text: String) throws -> Opened {
     let queries = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let tab = TerminalTab(
       cwd: try XCTUnwrap(TestIsolation.caseDir).path,
@@ -28,25 +61,26 @@ final class EditorScrollPerfTests: OrbeTestCase {
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 1200, height: 800)
     window.appearance = NSAppearance(named: .darkAqua)
-    let document = try tab.editor.open(try caseFile("big.swift", Self.swiftSource(bytes: bytes)))
+    let document = try tab.editor.open(try caseFile("big-\(UUID().uuidString).swift", text))
     pane.layoutSubtreeIfNeeded()
     pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "本文が layout される")
     window.makeFirstResponder(document.surface.responder)
     RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-    let lines = document.lineIndex.lineCount
+    return Opened(tab: tab, pane: pane, window: window, document: document)
+  }
+
+  /// 速いドラッグを 3 回。
+  private func drag(_ label: String, _ name: String, _ opened: Opened) {
+    let rounds = (1...3).map { _ in fastDrag(opened.pane, opened.document) }
     print(
-      "PERF", label, "env", ProcessInfo.processInfo.environment.count, "lines", lines, "bytes",
-      document.lineIndex.length)
+      "PERF", label, name, "updates/s min", String(format: "%.1f", rounds.min() ?? 0), "rounds",
+      rounds.map { String(format: "%.1f", $0) }.joined(separator: " "))
+  }
 
-    let drag = { (name: String) in
-      let rounds = (1...3).map { _ in self.fastDrag(pane, document) }
-      print(
-        "PERF", label, name, "updates/s min", String(format: "%.1f", rounds.min() ?? 0), "rounds",
-        rounds.map { String(format: "%.1f", $0) }.joined(separator: " "))
-    }
-    drag("fast-drag")
-
-    let middle = lines / 3
+  /// 1/3 の位置の行に 30 字打つ。1 字ごとの時間（ms）。
+  private func type(into opened: Opened) -> [Double] {
+    let document = opened.document
+    let middle = document.lineIndex.lineCount / 3
     document.scroll(toFirstLine: CGFloat(middle))
     document.surface.selectedRange = NSRange(
       location: document.lineIndex.start(ofRow: middle + 5) + 4, length: 0)
@@ -54,21 +88,12 @@ final class EditorScrollPerfTests: OrbeTestCase {
     var times: [Double] = []
     for character in "let value = compute(offset) ok" {
       times.append(
-        frame(pane) { document.surface.responder.keyDown(with: .key(String(character), [])) })
+        frame(opened.pane) {
+          document.surface.responder.keyDown(with: .key(String(character), []))
+        })
       RunLoop.main.run(until: Date().addingTimeInterval(0.005))
     }
-    report(label, "typing", times)
-
-    let clip = try XCTUnwrap(document.surface.responder.enclosingScrollView).contentView
-    times = (0..<60).map { _ in
-      frame(pane) {
-        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: clip.bounds.minY + 36))
-        clip.enclosingScrollView?.reflectScrolledClipView(clip)
-      }
-    }
-    report(label, "wheel", times)
-
-    drag("fast-drag-after-typing")
+    return times
   }
 
   /// スクロールバーのつまみを 2 秒で上端から下端まで、8ms ごとにドラッグする。本文の先頭の行が変わった回数を毎秒で返す。
