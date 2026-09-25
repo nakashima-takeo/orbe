@@ -60,8 +60,8 @@ enum DesignSceneFixtures {
     var input = DispatchSectionBuilder.Input.designSample
     input.issues = []
     input.pullRequests = []
-    input.issuesLoading = true
-    input.pullRequestsLoading = true
+    input.issuesFetching = true
+    input.pullRequestsFetching = true
     return dispatchModel(from: input)
   }
 

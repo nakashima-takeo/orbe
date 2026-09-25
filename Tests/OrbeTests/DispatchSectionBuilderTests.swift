@@ -242,7 +242,7 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
 
   func testLoadingShowsLoadingRow() {
     let input = DispatchSectionBuilder.Input(
-      githubState: .ready, issuesLoading: true, pullRequestsLoading: true)
+      githubState: .ready, issuesFetching: true, pullRequestsFetching: true)
     let sections = DispatchSectionBuilder.build(input)
     XCTAssertEqual(section(sections, "Issues")?.items.first?.isLoadingRow, true)
     XCTAssertEqual(section(sections, "Pull requests")?.items.first?.isLoadingRow, true)

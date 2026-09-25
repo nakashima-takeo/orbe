@@ -59,6 +59,7 @@ final class DispatchGitHubCacheTests: OrbeTestCase {
   func testLoadingRowFoldsWhenFetchEndsWithoutAnyList() {
     let model = DispatchPaletteModel()
     let provider = makeProvider(model)
+    provider.rebuild()
     provider.applyFetchedIssues(nil, growing: true)
     XCTAssertEqual(
       section(model, "Issues")?.items.map(\.isLoadingRow), [true], "取得中はローディング行だけ")

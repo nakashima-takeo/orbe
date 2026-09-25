@@ -12,11 +12,10 @@ enum DispatchSectionBuilder {
     var issues: [GitHubIssue] = []
     var pullRequests: [GitHubPullRequest] = []
     var githubState: GitHubAvailability = .ready
-    var issuesLoading = false
-    var pullRequestsLoading = false
-    /// 一覧の取得が続いている（セクション末尾にローディング行を足す）。
-    var issuesGrowing = false
-    var pullRequestsGrowing = false
+    /// 一覧の取得が続いている（セクション末尾にローディング行を足す。値がまだ無ければローディング行
+    /// だけのセクションになる）。
+    var issuesFetching = false
+    var pullRequestsFetching = false
     /// 現在のチェックアウト（repo.root）。一致する worktree を primary（強調）にする。
     var currentWorktree: String?
     /// clean 行の候補件数（safe 群の件数）。nil は分類レーンが未着地＝バッジを出さない。
@@ -37,14 +36,14 @@ enum DispatchSectionBuilder {
     append(&sections, title: "Local branches", items: localBranchItems(input, prByHead))
     append(&sections, title: "Remote branches", items: remoteBranchItems(input, prByHead))
     if let issues = githubSection(
-      title: "Issues", state: input.githubState, loading: input.issuesLoading, carriesInfo: true,
-      items: issueItems(input) + growingRows(input.issuesGrowing))
+      title: "Issues", state: input.githubState, carriesInfo: true,
+      items: issueItems(input) + fetchingRows(input.issuesFetching))
     {
       sections.append(issues)
     }
     if let prs = githubSection(
-      title: "Pull requests", state: input.githubState, loading: input.pullRequestsLoading,
-      carriesInfo: false, items: pullRequestItems(input) + growingRows(input.pullRequestsGrowing))
+      title: "Pull requests", state: input.githubState, carriesInfo: false,
+      items: pullRequestItems(input) + fetchingRows(input.pullRequestsFetching))
     {
       sections.append(prs)
     }
@@ -176,10 +175,9 @@ enum DispatchSectionBuilder {
   }
 
   /// GitHub セクションの分岐: notGitHub→非表示 / gh 不在・未認証→誘導情報行 1 本（Issues のみ）/
-  /// ready→ローディング行 or 実データ（空は非表示）。
+  /// ready→実データ＋取得中のローディング行（空は非表示）。
   private static func githubSection(
-    title: String, state: GitHubAvailability, loading: Bool, carriesInfo: Bool,
-    items: [DispatchItem]
+    title: String, state: GitHubAvailability, carriesInfo: Bool, items: [DispatchItem]
   ) -> DispatchSection? {
     switch state {
     case .notGitHub:
@@ -189,7 +187,6 @@ enum DispatchSectionBuilder {
       let kind: DispatchInfoKind = state == .ghMissing ? .ghMissing : .ghUnauthed
       return DispatchSection(title: title, items: [infoRow(kind)])
     case .ready:
-      if loading { return DispatchSection(title: title, items: [loadingRow()]) }
       return items.isEmpty ? nil : DispatchSection(title: title, items: items)
     }
   }
@@ -200,13 +197,12 @@ enum DispatchSectionBuilder {
   }
 
   /// 一覧の取得が続く間、セクション末尾に置くローディング行（まだ届いていない分があることを示す）。
-  private static func growingRows(_ growing: Bool) -> [DispatchItem] {
-    growing ? [loadingRow()] : []
-  }
-
-  private static func loadingRow() -> DispatchItem {
-    DispatchItem(
-      glyph: nil, name: "", infoKind: .loading, isInteractive: false, isLoadingRow: true)
+  private static func fetchingRows(_ fetching: Bool) -> [DispatchItem] {
+    guard fetching else { return [] }
+    return [
+      DispatchItem(
+        glyph: nil, name: "", infoKind: .loading, isInteractive: false, isLoadingRow: true)
+    ]
   }
 
   private static func reviewNote(_ decision: String?) -> DispatchReviewNote? {
@@ -265,7 +261,7 @@ enum DispatchSectionBuilder {
             number: 145, title: "feat: session restore", headRefName: "feat/session-restore",
             reviewDecision: "REVIEW_REQUIRED", isCrossRepository: false)
         ],
-        githubState: .ready, issuesLoading: false, pullRequestsLoading: false,
+        githubState: .ready,
         currentWorktree: "\(home)/wt/agent-hooks",
         // clean 行の候補バッジ（design 正典の clean シーンの safe 群と同数）。
         cleanCandidates: 3,

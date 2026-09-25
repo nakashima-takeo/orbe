@@ -40,8 +40,8 @@ extension DispatchPaletteTests {
   /// 「まだ届いていない」を見分けられる）。ローディング行は選択の対象にならない。
   func testFilterKeepsGrowingSectionWithZeroHits() {
     var input = DispatchSectionBuilder.Input.designSample
-    input.issuesGrowing = true
-    input.pullRequestsGrowing = true
+    input.issuesFetching = true
+    input.pullRequestsFetching = true
     let p = makeModel(input)
     p.query = "feat"
     p.onQueryChanged()

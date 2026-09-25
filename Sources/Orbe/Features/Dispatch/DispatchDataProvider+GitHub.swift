@@ -5,19 +5,14 @@ import Foundation
 extension DispatchDataProvider {
 
   /// 前回取得した gh 結果をリポジトリ（commonDir）単位で先に積む。最初の rebuild（git 着地時）に
-  /// 既に issue/PR 行が載るので、2 回目以降はローディング行を経由せず前回の行が即出る。
+  /// 既に issue/PR 行が載るので、2 回目以降は前回の行が即出る（末尾のローディング行が、今回の取得が
+  /// まだ届いていないことを示す）。
   /// ここで rebuild は打たない（git 未着の中途半端なリストが一瞬描かれ、かえってちらつく）。
-  /// 取得済みの側だけ載せる——片方が前回失敗していれば、そちらは loading のまま今回の取得を待つ。
+  /// 前回結果の無い側は、ローディング行だけのまま今回の取得を待つ。
   func applyCachedGitHub(_ repo: GitRepo) {
     guard let entry = DispatchGitHubCache.shared.entry(for: repo.commonDir) else { return }
-    if let cached = entry.issues {
-      issues = cached
-      issuesLoading = false
-    }
-    if let cached = entry.pullRequests {
-      pullRequests = cached
-      pullRequestsLoading = false
-    }
+    if let cached = entry.issues { issues = cached }
+    if let cached = entry.pullRequests { pullRequests = cached }
     // 掃除の突き合わせ（PR が OPEN / MERGED か）はここでは積まない——head ごとの状態を組む
     // `branchPRStates` がキャッシュを直接読み、今回の取得が未着地／失敗の head だけを前回結果で
     // 埋める（合成点を 2 つに割ると、着地の順で結果が変わる）。
@@ -31,8 +26,8 @@ extension DispatchDataProvider {
         self.probedGitHubState = state
         self.model?.githubState = state
         guard state == .ready else {
-          self.issuesLoading = false
-          self.pullRequestsLoading = false
+          self.issuesFetching = false
+          self.pullRequestsFetching = false
           self.rebuild()
           return
         }
@@ -135,27 +130,21 @@ extension DispatchDataProvider {
 
   /// 合流点（`DispatchGitHubCache`）が配る一覧の現在値の着地。取得が続く間はページごと、最後に
   /// `growing == false` で 1 回来る。値が無ければ（未取得のまま・失敗）差し替えず据え置く。値も取得中かも
-  /// 前回と等しければ rebuild しない（ちらつかない）。値が無いまま取得が終わったらローディング行を畳む。
-  /// 一覧 2 レーン（issues / open PR）の規則は以下の 2 メソッドが持つ（テストが直接叩く唯一の入口）。
-  /// head 単位で着地するブランチ PR は別の規則で、`applyFetchedBranchPRs` が持つ。
+  /// 前回と等しければ rebuild しない（ちらつかない）。
+  /// 一覧 2 レーン（issues / open PR）の着地の規則は以下の 2 メソッドが、合流と一覧の組み立ては
+  /// `DispatchGitHubCache` が持つ。head 単位で着地するブランチ PR は別の規則で、`applyFetchedBranchPRs` が持つ。
   func applyFetchedIssues(_ fetched: [GitHubIssue]?, growing: Bool) {
-    let loading = issuesLoading && fetched == nil && growing
-    let needsRebuild =
-      loading != issuesLoading || growing != issuesGrowing || (fetched != nil && fetched != issues)
-    issuesLoading = loading
-    issuesGrowing = growing
+    let needsRebuild = growing != issuesFetching || (fetched != nil && fetched != issues)
+    issuesFetching = growing
     if let fetched { issues = fetched }
     if needsRebuild { rebuild() }
   }
 
   /// issues 側（`applyFetchedIssues`）と同じ規則。片方の失敗が他方を巻き込まないよう別々に到着させる。
   func applyFetchedPullRequests(_ fetched: [GitHubPullRequest]?, growing: Bool) {
-    let loading = pullRequestsLoading && fetched == nil && growing
     let needsRebuild =
-      loading != pullRequestsLoading || growing != pullRequestsGrowing
-      || (fetched != nil && fetched != pullRequests)
-    pullRequestsLoading = loading
-    pullRequestsGrowing = growing
+      growing != pullRequestsFetching || (fetched != nil && fetched != pullRequests)
+    pullRequestsFetching = growing
     if let fetched { pullRequests = fetched }
     if needsRebuild { rebuild() }
   }
