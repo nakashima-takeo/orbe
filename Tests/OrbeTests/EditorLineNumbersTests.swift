@@ -173,18 +173,49 @@ final class EditorLineNumbersTests: OrbeTestCase {
     opened.column.mouseUp(with: try mouse(.leftMouseUp, opened, row: 4))
   }
 
-  /// 本文の下の外までドラッグすると本文がスクロールし、選択がその先の行まで伸びる。
-  func testDraggingBelowTheBodyScrollsAndKeepsExtending() throws {
-    let opened = try open(lines(200))
+  /// 本文の下の外までドラッグすると、ポインタを止めたままでもコマごとに本文がスクロールし、選択が見えている下端の行まで
+  /// 伸び続ける。速さは外れた距離と見えている行数で決まる（VS Code: 1.5 行以内なら max(30, 見えている行数 ×
+  /// (1 + 外れた行数)) 行/秒）。中へ戻るか離せば止まる。
+  func testDraggingBelowTheBodyKeepsScrollingWhileThePointerRests() throws {
+    let opened = try open(lines(2000))
     let document = opened.document
+    let column = opened.column
     let clip = opened.scroll.contentView
-    opened.column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 2))
-    let below = (clip.bounds.height / style.lineHeight).rounded(.down) + 4
-    opened.column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: below))
-    XCTAssertGreaterThan(clip.bounds.minY, 0, "本文がスクロールした")
-    let end = NSMaxRange(document.surface.selectedRange)
-    XCTAssertEqual(document.lineIndex.point(at: end).row, Int(below), "ポインタの行まで伸びる")
-    opened.column.mouseUp(with: try mouse(.leftMouseUp, opened, row: below))
+    var clock: TimeInterval = 0
+    var frames: [() -> Void] = []
+    column.now = { clock }
+    column.autoscroll.schedule = { frames.append($0) }
+    func nextFrame(after seconds: TimeInterval) {
+      clock += seconds
+      let pending = frames
+      frames = []
+      for fire in pending { fire() }
+    }
+    column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 2))
+    let visibleRows = column.bounds.height / style.lineHeight
+    let below = visibleRows + 1
+    column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: below))
+    XCTAssertEqual(clip.bounds.minY, 0, "出た瞬間には動かない（次のコマから）")
+
+    nextFrame(after: 0.1)
+    let speed = max(30, visibleRows * (1 + 0.5))
+    XCTAssertEqual(clip.bounds.minY, speed * 0.1 * style.lineHeight, accuracy: 0.5)
+    func selectedLastRow() -> Int {
+      document.lineIndex.point(at: NSMaxRange(document.surface.selectedRange) - 1).row
+    }
+    let bottomRow = Int((clip.bounds.maxY - 0.5) / style.lineHeight)
+    XCTAssertEqual(selectedLastRow(), bottomRow, "見えている下端の行まで伸びる")
+
+    let scrolled = clip.bounds.minY
+    nextFrame(after: 0.1)
+    nextFrame(after: 0.1)
+    XCTAssertEqual(clip.bounds.minY, scrolled + 2 * speed * 0.1 * style.lineHeight, accuracy: 0.5)
+    XCTAssertGreaterThan(selectedLastRow(), bottomRow, "ポインタが止まっていても伸び続ける")
+
+    column.mouseUp(with: try mouse(.leftMouseUp, opened, row: below))
+    let stopped = clip.bounds.minY
+    nextFrame(after: 0.1)
+    XCTAssertEqual(clip.bounds.minY, stopped, "離せば止まる")
   }
 
   /// ⇧クリックは今の選択の起点（動かない側の端）から押した行まで伸ばす。列で選んだ直後なら、その行が起点。

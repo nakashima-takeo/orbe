@@ -16,8 +16,8 @@ protocol LineSource: AnyObject {
 /// 基準——面が clip の上端に合わせて置き直すので、本文と同じコマで動く。番号は行索引の行の番号で、行頭が行索引の行頭で
 /// ない段落（単独の `\r` などで TextKit が割った段落）には描かない。
 ///
-/// 番号を押すとその行を選ぶ（VS Code の既定: 押した行を起点に、ドラッグで行単位に伸ばし、⇧で今の選択の起点から伸ばす。
-/// 選択の動く側の端はポインタの側）。印の列は押しても何もしない。
+/// 番号を押すとその行を選ぶ（VS Code の既定: 押した行を起点に、ドラッグで行単位に伸ばし、本文の上下の外では自動スクロール
+/// で伸び続け、⇧で今の選択の起点から伸ばす。選択の動く側の端はポインタの側）。印の列は押しても何もしない。
 final class LineNumbersView: NSView {
   private let textView: SurfaceTextView
   private let style: TextSurfaceStyle
@@ -164,26 +164,77 @@ final class LineNumbersView: NSView {
     extend(to: line, source)
   }
 
+  /// 本文の上下の外へ出たら、ポインタが止まっていても自動スクロールで伸び続ける（VS Code の
+  /// `TopBottomDragScrolling`）。中へ戻れば止めて、ポインタの行まで伸ばす。
   override func mouseDragged(with event: NSEvent) {
     guard anchor != nil, let source else { return }
-    let point = convert(event.locationInWindow, from: nil)
-    scrollVertically(toward: point.y)
-    guard let line = line(atY: point.y, source) else { return }
+    let y = convert(event.locationInWindow, from: nil).y
+    if y < bounds.minY || y > bounds.maxY {
+      let running = edge != nil
+      edge = Edge(
+        above: y < bounds.minY, distance: y < bounds.minY ? bounds.minY - y : y - bounds.maxY)
+      guard !running else { return }
+      lastTick = now()
+      autoscroll.generation += 1
+      scheduleTick(autoscroll.generation)
+      return
+    }
+    edge = nil
+    guard let line = line(atY: y, source) else { return }
     extend(to: line, source)
-  }
-
-  /// ポインタが列の上下の外にあれば、はみ出した分だけ本文を縦にスクロールする（横は動かさない——選ぶのは行なので）。
-  private func scrollVertically(toward y: CGFloat) {
-    guard let scrollView = textView.enclosingScrollView else { return }
-    let overshoot = y < bounds.minY ? y - bounds.minY : y > bounds.maxY ? y - bounds.maxY : 0
-    guard overshoot != 0 else { return }
-    let clip = scrollView.contentView
-    clip.scroll(to: NSPoint(x: clip.bounds.minX, y: clip.bounds.minY + overshoot))
-    scrollView.reflectScrolledClipView(clip)
   }
 
   override func mouseUp(with event: NSEvent) {
     anchor = nil
+    edge = nil
+  }
+
+  // MARK: - 自動スクロール
+
+  /// ポインタが本文のどちら側に、どれだけ外れているか。
+  private struct Edge {
+    let above: Bool
+    let distance: CGFloat
+  }
+
+  private var edge: Edge? {
+    didSet { if edge == nil { autoscroll.generation += 1 } }
+  }
+  private var lastTick: TimeInterval = 0
+  /// 自動スクロールの時計と、次のコマの予約（テストが差し替える）。
+  var now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+  var autoscroll = FrameTicker()
+
+  private func scheduleTick(_ generation: Int) {
+    autoscroll.schedule { [weak self] in
+      guard let self, autoscroll.generation == generation else { return }
+      tick()
+      scheduleTick(generation)
+    }
+  }
+
+  /// 前のコマからの経過時間ぶん縦にスクロールし、見えている端の行まで伸ばす。速さ（行/秒）は外れた距離と見えている行数で
+  /// 決まる（VS Code の `_getScrollSpeed`）。
+  private func tick() {
+    guard let edge, let source, let scrollView = textView.enclosingScrollView else { return }
+    let current = now()
+    let elapsed = current - lastTick
+    lastTick = current
+    let lineHeight = style.lineHeight
+    let viewportLines = bounds.height / lineHeight
+    let outside = edge.distance / lineHeight
+    let speed =
+      outside <= 1.5
+      ? max(30, viewportLines * (1 + outside))
+      : outside <= 3
+        ? max(60, viewportLines * (2 + outside)) : max(200, viewportLines * (7 + outside))
+    let delta = speed * CGFloat(elapsed) * lineHeight
+    let clip = scrollView.contentView
+    clip.scroll(
+      to: NSPoint(x: clip.bounds.minX, y: clip.bounds.minY + (edge.above ? -delta : delta)))
+    scrollView.reflectScrolledClipView(clip)
+    guard let line = line(atY: edge.above ? bounds.minY : bounds.maxY - 0.5, source) else { return }
+    extend(to: line, source)
   }
 
   /// 起点の区間から `line` まで行単位で選ぶ——`line` が起点の行より下なら起点の先頭からその行の終わりまで、上ならその
@@ -213,5 +264,14 @@ final class LineNumbersView: NSView {
     let geometry = VisibleLines(textView: textView)
     guard geometry.documentLength > 0 else { return 0 }
     return geometry.line(atY: y).map { source.line(containing: $0.start) }
+  }
+}
+
+/// 次のコマで 1 回走らせる予約。`generation` を進めると、予約済みのものは走らせない側（受け手）が捨てる。
+@MainActor
+struct FrameTicker {
+  var generation = 0
+  var schedule: (@escaping @MainActor () -> Void) -> Void = { fire in
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 60) { MainActor.assumeIsolated(fire) }
   }
 }
