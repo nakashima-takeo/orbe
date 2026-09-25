@@ -64,8 +64,25 @@ struct GitBranch: Equatable {
 
 // MARK: - GitHub（gh CLI）
 
-/// `gh issue list --json number,title` の 1 issue。
-struct GitHubIssue: Decodable, Equatable {
+/// 番号で同一性を持つ GitHub の項目。open 一覧を取り直す途中、前回の一覧との境目を探すのに使う。
+protocol GitHubNumbered {
+  var number: Int { get }
+}
+
+/// GraphQL の connection 1 ページ（`nodes` ＋ `pageInfo`）。
+struct GitHubPage<Node: Decodable>: Decodable {
+  struct PageInfo: Decodable {
+    let hasNextPage: Bool
+    /// 次のページの位置。ページが空なら nil。
+    let endCursor: String?
+  }
+
+  let nodes: [Node]
+  let pageInfo: PageInfo
+}
+
+/// open issue 一覧（GraphQL `issues`）の 1 issue。
+struct GitHubIssue: Decodable, Equatable, GitHubNumbered {
   let number: Int
   let title: String
 }
@@ -90,8 +107,8 @@ struct GitHubBranchPR: Decodable, Equatable {
   let isCrossRepository: Bool
 }
 
-/// `gh pr list --json number,title,headRefName,reviewDecision,isCrossRepository` の 1 PR。
-struct GitHubPullRequest: Decodable, Equatable {
+/// open PR 一覧（GraphQL `pullRequests`）の 1 PR。
+struct GitHubPullRequest: Decodable, Equatable, GitHubNumbered {
   let number: Int
   let title: String
   let headRefName: String

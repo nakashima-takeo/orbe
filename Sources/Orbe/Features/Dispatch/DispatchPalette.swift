@@ -226,7 +226,9 @@ enum DispatchInfoKind: Equatable {
       query.isEmpty
       ? sections
       : sections.compactMap { section in
-        let items = section.items.filter { matches($0) }
+        // 取得中の印（ローディング行）は落とさない——ヒット 0 件が「無い」のか「まだ届いていない」のかを
+        // 見分けられるように、見出しごと残す。
+        let items = section.items.filter { $0.isLoadingRow || matches($0) }
         return items.isEmpty ? nil : DispatchSection(title: section.title, items: items)
       }
     items = visibleSections.flatMap(\.items)

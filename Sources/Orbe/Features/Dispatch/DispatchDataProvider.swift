@@ -67,8 +67,12 @@ final class DispatchDataProvider {
   /// 台帳と in-flight を 1 つの値で持つので、二重管理が生まれない。
   /// 書き手は分冊（`DispatchDataProvider+GitHub.swift`）。
   var branchPRFetches: [String: BranchPRState] = [:]
+  /// 一覧の値がまだ 1 度も無い（取得前・初回の取得中）。ローディング行だけのセクションになる。
   var issuesLoading = true
   var pullRequestsLoading = true
+  /// 一覧の取得が続いている（ページが届く途中）。セクション末尾にローディング行を足す。
+  var issuesGrowing = false
+  var pullRequestsGrowing = false
   /// 分類レーンの実測結果（path → 実測）。nil の間は分類そのものが未着地。
   ///
   /// 非 nil でも**全 path が揃っているとは限らない**——prober は main worktree と占有行を省くので
@@ -229,6 +233,7 @@ final class DispatchDataProvider {
         worktrees: worktrees, localBranches: localBranches, remoteBranches: remoteBranches,
         issues: issues, pullRequests: pullRequests, githubState: githubState,
         issuesLoading: issuesLoading, pullRequestsLoading: pullRequestsLoading,
+        issuesGrowing: issuesGrowing, pullRequestsGrowing: pullRequestsGrowing,
         currentWorktree: repo?.root,
         cleanCandidates: rows.map(DispatchWorktreeClassifier.candidateCount),
         remoteFetchLanded: remoteFetchLanded))

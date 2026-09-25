@@ -4,9 +4,10 @@ import Foundation
 /// 前回結果は次に開いたときの先描き（stale-while-revalidate）の元になる。保存先はこの型に閉じており、
 /// ディスク永続へ移す場合もここの中だけを差し替える。
 ///
-/// 一覧取得は数秒かかりうるので、パレットより長生きする。取得の持ち主をパレット 1 回分ではなく
-/// リポジトリ単位のここに置くことで、同じリポジトリ・同じ種別の取得は常に 1 本になる——取得中に
-/// 開き直したパレットは取り直さずその着地を受け取り、古い取得が新しい結果を上書きする順序も生まれない。
+/// open 一覧はページが届くたびに伸び、上限まで取り終えるのに数十秒かかりうるので、取得はパレットより
+/// 長生きする。取得の持ち主をパレット 1 回分ではなくリポジトリ単位のここに置くことで、同じリポジトリ・
+/// 同じ種別の取得は常に 1 本になり、パレットを閉じても上限まで続いてキャッシュが育つ。一覧を組み立てる
+/// のもここだけで、受け手には常にキャッシュの現在値を配る。
 /// キーは `GitRepo.commonDir`（worktree 間で共有される唯一の識別子。issue/PR はリポジトリ全体の話）。
 /// メインスレッド専用（`DispatchDataProvider` の全メソッドと `GitHubCLI` の completion がメインで返る
 /// 契約に乗るため、ロックは張らない）。
@@ -24,9 +25,19 @@ final class DispatchGitHubCache {
   }
 
   private var entries: [String: Entry] = [:]
-  /// 取得中の open 一覧の受け手（種別ごと。キーがあれば取得中）。
-  private var issueWaiters: [String: [([GitHubIssue]?) -> Void]] = [:]
-  private var pullRequestWaiters: [String: [([GitHubPullRequest]?) -> Void]] = [:]
+  /// 進行中の open 一覧の取り直し（種別ごと。キーがあれば取得中）。
+  private var issueRefreshes: [String: Refresh<GitHubIssue>] = [:]
+  private var pullRequestRefreshes: [String: Refresh<GitHubPullRequest>] = [:]
+
+  /// 1 本の取り直しの状態。
+  private struct Refresh<T> {
+    /// 開始時点のキャッシュ。まだ届いていない古い範囲をこれで埋める。
+    let previous: [T]?
+    /// 今回届いた分。
+    var fresh: [T] = []
+    /// 一覧の現在値（`nil` = 未取得）と、取得中かを受け取る受け手。
+    var receivers: [([T]?, Bool) -> Void]
+  }
 
   func entry(for key: String) -> Entry? { entries[key] }
 
@@ -39,45 +50,75 @@ final class DispatchGitHubCache {
     entries[key, default: Entry()].pullRequests = pullRequests
   }
 
-  /// open issue 一覧を取り直し、着地を `landed` へ届ける。同じリポジトリの取得が進行中なら `fetch` は
-  /// 撃たずその着地を待つ。成功はキャッシュへ書いてから届け、失敗（`nil`）は書かずに届ける。
-  /// キャッシュ書き込みは受け手の生死に依らない——受け手（provider）はパレットと同じ寿命で、
-  /// 着地前に閉じられるのが常用経路。受け手が消えたら捨てる作りだと次回の先描きが永遠に温まらない。
+  /// open issue 一覧を取り直し、そのたびの現在値を `updated` へ届ける。`fetch` はページを `page` へ、
+  /// 終わりを `finished`（`true` = 取り終えた／`false` = 途中で失敗）へ渡す取得（`GitHubCLI.openIssues`）。
+  /// 受け手の生死に依らずキャッシュを書くので、パレットを閉じても上限まで取り続ける。
   func refreshIssues(
-    for key: String, fetch: (@escaping ([GitHubIssue]?) -> Void) -> Void,
-    landed: @escaping ([GitHubIssue]?) -> Void
+    for key: String,
+    fetch: (_ page: @escaping ([GitHubIssue]) -> Void, _ finished: @escaping (Bool) -> Void) ->
+      Void,
+    updated: @escaping ([GitHubIssue]?, _ growing: Bool) -> Void
   ) {
-    join(\.issueWaiters, key: key, fetch: fetch, landed: landed) { self.setIssues($0, for: key) }
+    refresh(\.issueRefreshes, \.issues, key: key, fetch: fetch, updated: updated)
   }
 
   /// open PR 一覧の取り直し。規則は `refreshIssues` と同じ（片方の取得が他方を巻き込まないよう種別で分ける）。
   func refreshPullRequests(
-    for key: String, fetch: (@escaping ([GitHubPullRequest]?) -> Void) -> Void,
-    landed: @escaping ([GitHubPullRequest]?) -> Void
+    for key: String,
+    fetch: (_ page: @escaping ([GitHubPullRequest]) -> Void, _ finished: @escaping (Bool) -> Void)
+      -> Void,
+    updated: @escaping ([GitHubPullRequest]?, _ growing: Bool) -> Void
   ) {
-    join(\.pullRequestWaiters, key: key, fetch: fetch, landed: landed) {
-      self.setPullRequests($0, for: key)
-    }
+    refresh(\.pullRequestRefreshes, \.pullRequests, key: key, fetch: fetch, updated: updated)
   }
 
-  /// 合流の規則。進行中なら受け手を足すだけ、でなければ取得を始める。着地は ① 成功ならキャッシュへ
-  /// 書く → ② 受け手の列を取り出して空にする → ③ 配る、の順——受け手の中から同じ種別の取り直しが
-  /// 来ても、キャッシュは着地済みで、取り直しは新しい取得として始まる。
-  private func join<T>(
-    _ waiters: ReferenceWritableKeyPath<DispatchGitHubCache, [String: [(T?) -> Void]]>,
-    key: String, fetch: (@escaping (T?) -> Void) -> Void, landed: @escaping (T?) -> Void,
-    store: @escaping (T) -> Void
+  /// 合流と組み立ての規則。受け手は登録した時点で現在値を 1 回受け取る——取得の途中で合流しても、
+  /// それまでに届いたページを取りこぼさない。同じリポジトリ・種別の取得が進行中なら `fetch` は撃たない。
+  /// - ページ: 今回分に足し、`merge` した一覧をキャッシュへ書いて全員に配る。
+  /// - 完了: 今回分でキャッシュを置き換える。
+  /// - 失敗: キャッシュはそれまでに書いたまま（届いた範囲＋前回の残り）。
+  /// 完了・失敗は ① キャッシュを確定 → ② 受け手の列を取り出して空にする → ③ 配る、の順——受け手の中から
+  /// 同じ種別の取り直しが来ても、それは新しい取得として始まる。
+  private func refresh<T: GitHubNumbered>(
+    _ refreshes: ReferenceWritableKeyPath<DispatchGitHubCache, [String: Refresh<T>]>,
+    _ list: WritableKeyPath<Entry, [T]?>, key: String,
+    fetch: (@escaping ([T]) -> Void, @escaping (Bool) -> Void) -> Void,
+    updated: @escaping ([T]?, Bool) -> Void
   ) {
-    if self[keyPath: waiters][key] != nil {
-      self[keyPath: waiters][key]?.append(landed)
+    let current = entries[key]?[keyPath: list]
+    if self[keyPath: refreshes][key] != nil {
+      self[keyPath: refreshes][key]?.receivers.append(updated)
+      updated(current, true)
       return
     }
-    self[keyPath: waiters][key] = [landed]
-    fetch { result in
-      if let result { store(result) }
-      let receivers = self[keyPath: waiters].removeValue(forKey: key) ?? []
-      for receiver in receivers { receiver(result) }
-    }
+    self[keyPath: refreshes][key] = Refresh(previous: current, receivers: [updated])
+    updated(current, true)
+    fetch(
+      { nodes in
+        guard var refresh = self[keyPath: refreshes][key] else { return }
+        refresh.fresh += nodes
+        self[keyPath: refreshes][key] = refresh
+        let merged = Self.merge(fresh: refresh.fresh, previous: refresh.previous)
+        self.entries[key, default: Entry()][keyPath: list] = merged
+        for receiver in refresh.receivers { receiver(merged, true) }
+      },
+      { succeeded in
+        guard let refresh = self[keyPath: refreshes][key] else { return }
+        if succeeded { self.entries[key, default: Entry()][keyPath: list] = refresh.fresh }
+        self[keyPath: refreshes][key] = nil
+        let settled = self.entries[key]?[keyPath: list]
+        for receiver in refresh.receivers { receiver(settled, false) }
+      })
+  }
+
+  /// 取り直し途中の一覧。今回届いた分の後ろに、前回の一覧のうち「今回分に含まれる要素で前回の並びの
+  /// 一番後ろにあるもの」より後ろをつなぐ（重ならなければ前回を全部つなぐ）。境目は前回の並び順だけで
+  /// 決める——番号が作成順に振られている前提を置くと、移された issue で崩れる。
+  static func merge<T: GitHubNumbered>(fresh: [T], previous: [T]?) -> [T] {
+    guard let previous else { return fresh }
+    let numbers = Set(fresh.map(\.number))
+    let rest = previous.lastIndex { numbers.contains($0.number) }.map { $0 + 1 } ?? 0
+    return fresh + previous[rest...]
   }
 
   /// ブランチの PR は head 単位で到着し head 単位で失敗するので、保存も head 単位。

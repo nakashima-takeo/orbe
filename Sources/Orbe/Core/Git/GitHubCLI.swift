@@ -17,8 +17,9 @@ enum GitHubAvailability: Equatable {
 final class GitHubCLI {
   static let shared = GitHubCLI()
 
-  /// probe と一覧取得のレーン。並行にするのは、issue と PR の一覧が互いの着地を待たないため
-  /// （一覧 1 本が数秒かかりうる）。同じ一覧の二重取得は呼び出し側の合流（`DispatchGitHubCache`）が防ぐ。
+  /// probe と一覧取得のレーン。並行にするのは、issue と PR の一覧が互いを待たないため（一覧 1 本は
+  /// ページを送り終えるまで数十秒スレッドを 1 本ふさぎうる）。同じ一覧の二重取得は呼び出し側の合流
+  /// （`DispatchGitHubCache`）が防ぐ。
   private let queue = DispatchQueue(
     label: "dev.orbe.gh", qos: .userInitiated, attributes: .concurrent)
   /// ブラウザで開く操作の口。取得（`queue`）とは分ける——結果を待たない即時操作なので、
@@ -37,17 +38,16 @@ final class GitHubCLI {
   /// 一度外した結果を焼くと、PATH が整った後も gh が永久に「未導入」のままになる。
   private var cachedGh: String?
 
-  /// gh 呼び出しの時間上限（ネット待ちのハングを引きずらない）。
+  /// gh 呼び出しの時間上限（ネット待ちのハングを引きずらない）。open 一覧では 1 ページごとにかかる。
   private let timeout: TimeInterval = 15
 
-  /// open 一覧の取得上限。巨大リポジトリで取得全体が失敗に倒れないための安全弁。
-  ///
-  /// gh は `--limit` が 100 を超えると 100 件ごとに往復してページングし、1 回の取得は `timeout` の
-  /// 壁時計で打ち切られる。打ち切りは失敗（`nil`）で、行は 1 件も差し替わらない。だから上限は
-  /// `timeout` の半分程度で成功しきる件数に置く（実測: issue 1000 件で約 7.5 秒・PR 500 件で約 8 秒。
-  /// PR は `reviewDecision` の分だけ issue の約 2 倍重い）。`timeout` や取得フィールドを変えたら測り直す。
+  /// open 一覧の上限。開くたびに裏で取り続ける総量の安全弁で、問い合わせの回数（＝レート消費）と、
+  /// 裏で gh が動き続ける時間を抑える。1 ページ `openListPageSize` 件なので issue 10・PR 5 回まで。
+  /// PR はレビュー状態の算出で重く、リポジトリによっては 1 ページ 5 秒前後かかる。
   static let openIssueLimit = 1000
   static let openPullRequestLimit = 500
+  /// 1 ページの件数（GitHub GraphQL の上限）。
+  static let openListPageSize = 100
 
   /// 打ち切り後に EOF を待つ猶予。pipe の書き込み端を握る子孫がいると EOF は来ないことがあり、
   /// **無期限に待つと、待ちそのものが新しいハングになる**（`GitRunner.terminationGrace` と同じ規範）。
@@ -84,28 +84,61 @@ final class GitHubCLI {
 
   // MARK: - 取得
 
-  /// open issue 一覧（`openIssueLimit` まで全件・新しい順）。`nil` = 取得失敗（gh 未解決・非 0 終了・
-  /// タイムアウト・デコード失敗）で呼び出し側は前回結果を据え置く。`[]` は「0 件」を意味する。
-  func issues(cwd: String, completion: @escaping ([GitHubIssue]?) -> Void) {
-    fetch(cwd: cwd, args: Self.openIssuesArguments, completion: completion)
+  /// open issue 一覧を新しい順に `openIssueLimit` まで、ページが届くたびに `page` へ渡す。`finished` は
+  /// 最後に 1 回だけ呼ぶ: `true` = 次のページが無い／上限に達した、`false` = 途中で失敗した（gh 未解決・
+  /// 非 0 終了・1 ページの打ち切り・デコード失敗）。失敗までに渡したページは有効なまま。
+  func openIssues(
+    cwd: String, page: @escaping ([GitHubIssue]) -> Void, finished: @escaping (Bool) -> Void
+  ) {
+    fetchPages(
+      cwd: cwd, limit: Self.openIssueLimit, arguments: Self.openIssuesPageArguments, page: page,
+      finished: finished)
   }
 
-  /// open PR 一覧（`openPullRequestLimit` まで全件・新しい順）。`nil` = 取得失敗（呼び出し側は前回結果を
-  /// 据え置く）／`[]` = 0 件。
-  func pullRequests(cwd: String, completion: @escaping ([GitHubPullRequest]?) -> Void) {
-    fetch(cwd: cwd, args: Self.openPullRequestsArguments, completion: completion)
+  /// open PR 一覧。ページの渡し方と終わり方は `openIssues` と同じ。
+  func openPullRequests(
+    cwd: String, page: @escaping ([GitHubPullRequest]) -> Void,
+    finished: @escaping (Bool) -> Void
+  ) {
+    fetchPages(
+      cwd: cwd, limit: Self.openPullRequestLimit, arguments: Self.openPullRequestsPageArguments,
+      page: page, finished: finished)
   }
 
-  /// open issue 一覧の取得引数。
-  static let openIssuesArguments = [
-    "issue", "list", "--state", "open", "--limit", String(openIssueLimit), "--json", "number,title",
-  ]
+  /// open issue 一覧の 1 ページの問い合わせ引数。`after` は前のページの `endCursor`（初回は nil）。
+  static func openIssuesPageArguments(first: Int, after: String?) -> [String] {
+    openListPageArguments(connection: "issues", fields: "number title", first: first, after: after)
+  }
 
-  /// open PR 一覧の取得引数。
-  static let openPullRequestsArguments = [
-    "pr", "list", "--state", "open", "--limit", String(openPullRequestLimit), "--json",
-    "number,title,headRefName,reviewDecision,isCrossRepository",
-  ]
+  /// open PR 一覧の 1 ページの問い合わせ引数。
+  static func openPullRequestsPageArguments(first: Int, after: String?) -> [String] {
+    openListPageArguments(
+      connection: "pullRequests",
+      fields: "number title headRefName isCrossRepository reviewDecision", first: first,
+      after: after)
+  }
+
+  /// ページの位置（カーソル）はアプリが持ち、1 ページ＝1 回の gh 呼び出しにする——`--paginate` に
+  /// 任せると 1 回の呼び出しが上限までの全ページになり、`timeout` がページ単位で効かなくなる。
+  /// `{owner}` / `{repo}` は gh が作業ディレクトリのリポジトリから埋める。ホストは作業ディレクトリから
+  /// 決まらないので、認証確認（`authProbeArguments`）と同じ github.com を名指しする。
+  private static func openListPageArguments(
+    connection: String, fields: String, first: Int, after: String?
+  ) -> [String] {
+    let query = """
+      query($owner:String!,$name:String!,$first:Int!,$endCursor:String){\
+      repository(owner:$owner,name:$name){\
+      \(connection)(states:OPEN,first:$first,after:$endCursor,\
+      orderBy:{field:CREATED_AT,direction:DESC}){\
+      nodes{\(fields)} pageInfo{hasNextPage endCursor}}}}
+      """
+    var args = [
+      "api", "graphql", "--hostname", "github.com", "-f", "query=\(query)", "-F", "owner={owner}",
+      "-F", "name={repo}", "-F", "first=\(first)",
+    ]
+    if let after { args += ["-f", "endCursor=\(after)"] }
+    return args + ["--jq", ".data.repository.\(connection) | {nodes, pageInfo}"]
+  }
 
   /// ブランチ名指しの PR 取得引数（open/closed を `--state all` の 1 往復で。作成日時の降順）。
   /// **直近 N 件の一覧窓は使わない**——古くにマージされた PR も、古くから開いたままの PR も、
@@ -154,27 +187,44 @@ final class GitHubCLI {
     }
   }
 
-  /// 一覧取得の共通口。失敗は `nil`（空配列に潰さない——空で潰すと呼び出し側のキャッシュを
-  /// 消してしまう）。
-  private func fetch<T: Decodable>(
-    cwd: String, args: [String], completion: @escaping ([T]?) -> Void
+  /// ページの列を回す。次のページがあり、件数が上限未満の間だけ続け、最後のページは残り件数だけ頼む。
+  /// `page` と `finished` はメインへ届いた順に載せる（メインキューへの async は順序を保つ）。
+  private func fetchPages<T: Decodable>(
+    cwd: String, limit: Int, arguments: @escaping (Int, String?) -> [String],
+    page: @escaping ([T]) -> Void, finished: @escaping (Bool) -> Void
   ) {
     queue.async {
       guard let gh = self.resolveGh() else {
-        DispatchQueue.main.async { completion(nil) }
+        DispatchQueue.main.async { finished(false) }
         return
       }
-      let decoded: [T]? = self.fetchSync(gh, args, cwd: cwd)
-      DispatchQueue.main.async { completion(decoded) }
+      var fetched = 0
+      var cursor: String?
+      while true {
+        let first = min(Self.openListPageSize, limit - fetched)
+        guard
+          let result: GitHubPage<T> = self.fetchSync(gh, arguments(first, cursor), cwd: cwd)
+        else {
+          DispatchQueue.main.async { finished(false) }
+          return
+        }
+        fetched += result.nodes.count
+        DispatchQueue.main.async { page(result.nodes) }
+        guard result.pageInfo.hasNextPage, !result.nodes.isEmpty, fetched < limit,
+          let next = result.pageInfo.endCursor
+        else { break }
+        cursor = next
+      }
+      DispatchQueue.main.async { finished(true) }
     }
   }
 
   /// 1 往復を同期で叩いてデコードする。`nil` = 取得失敗（非 0 終了・タイムアウト・デコード失敗）。
   /// ローカル変数だけを触るので、どのレーンから並行に呼んでも安全。
-  private func fetchSync<T: Decodable>(_ gh: String, _ args: [String], cwd: String) -> [T]? {
+  private func fetchSync<T: Decodable>(_ gh: String, _ args: [String], cwd: String) -> T? {
     let out = runSync(gh, args, cwd: cwd)
     guard out.status == 0 else { return nil }
-    return try? JSONDecoder().decode([T].self, from: out.stdout)
+    return try? JSONDecoder().decode(T.self, from: out.stdout)
   }
 
   // MARK: - ブラウザで開く（fire-and-forget）

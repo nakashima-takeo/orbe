@@ -14,6 +14,9 @@ enum DispatchSectionBuilder {
     var githubState: GitHubAvailability = .ready
     var issuesLoading = false
     var pullRequestsLoading = false
+    /// 一覧の取得が続いている（セクション末尾にローディング行を足す）。
+    var issuesGrowing = false
+    var pullRequestsGrowing = false
     /// 現在のチェックアウト（repo.root）。一致する worktree を primary（強調）にする。
     var currentWorktree: String?
     /// clean 行の候補件数（safe 群の件数）。nil は分類レーンが未着地＝バッジを出さない。
@@ -35,13 +38,13 @@ enum DispatchSectionBuilder {
     append(&sections, title: "Remote branches", items: remoteBranchItems(input, prByHead))
     if let issues = githubSection(
       title: "Issues", state: input.githubState, loading: input.issuesLoading, carriesInfo: true,
-      items: issueItems(input))
+      items: issueItems(input) + growingRows(input.issuesGrowing))
     {
       sections.append(issues)
     }
     if let prs = githubSection(
       title: "Pull requests", state: input.githubState, loading: input.pullRequestsLoading,
-      carriesInfo: false, items: pullRequestItems(input))
+      carriesInfo: false, items: pullRequestItems(input) + growingRows(input.pullRequestsGrowing))
     {
       sections.append(prs)
     }
@@ -193,6 +196,11 @@ enum DispatchSectionBuilder {
   /// 情報/ローディング行（文言は種別だけ持ち、View が言語別に引く。name は空）。
   private static func infoRow(_ kind: DispatchInfoKind) -> DispatchItem {
     DispatchItem(glyph: nil, name: "", infoKind: kind, isInteractive: false)
+  }
+
+  /// 一覧の取得が続く間、セクション末尾に置くローディング行（まだ届いていない分があることを示す）。
+  private static func growingRows(_ growing: Bool) -> [DispatchItem] {
+    growing ? [loadingRow()] : []
   }
 
   private static func loadingRow() -> DispatchItem {
