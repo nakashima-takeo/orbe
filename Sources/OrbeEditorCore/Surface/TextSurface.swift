@@ -130,7 +130,8 @@ public struct TextSurfaceStyle {
   public var caretSize: CGSize
   public var gutterFont: NSFont
   public var gutterTextColor: NSColor
-  /// 行番号の列の幅（最大の行番号がこの幅に収まる限り広がらない）。
+  /// 行番号の数字の部分の幅（右の印の列を除く）。最大の行番号と右の余白（`gutterTrailingInset`）がこの幅に収まる
+  /// 限り、列は広がらない。
   public var gutterWidth: CGFloat
   /// 行番号の右端と本文の間。
   public var gutterTrailingInset: CGFloat

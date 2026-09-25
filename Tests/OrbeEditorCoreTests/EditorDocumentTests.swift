@@ -3,7 +3,7 @@ import XCTest
 
 @testable import OrbeEditorCore
 
-/// 文書——開く・編集を追う・保存の往復・未保存の通知・15 言語の色付け・編集後の塗り直し。
+/// 文書——開く・編集を追う・保存の往復・未保存の通知・15 言語の色付け・編集後の役割。
 /// 壊れると保存した内容が本文と違う、色が編集に付いてこない、未保存の印が出ない。
 @MainActor
 final class EditorDocumentTests: XCTestCase {
@@ -147,13 +147,13 @@ final class EditorDocumentTests: XCTestCase {
     withExtendedLifetime(document) {}
   }
 
-  /// 編集すると変わった範囲が塗り直され、編集後の本文に対して色が正しく付く。
+  /// 編集すると構文木が追従し、編集後の本文の役割を答える。
   func testHighlightsFollowEdits() throws {
     let url = try temp("b.swift", "let a = 1\n")
     let (document, surface) = try open(url)
     XCTAssertTrue(surface.texts(of: .keyword).contains("let"))
 
-    // 長さの変わる置換にする——塗り直しが起きなければ、古い区間（0..<3）が新しい本文の "pub" を指す。
+    // 長さの変わる置換にする——構文木が編集に追従しなければ、古い区間（0..<3）の役割が新しい本文の "pub" に出る。
     surface.replace(NSRange(location: 0, length: 3), with: "public var")
     XCTAssertTrue(surface.texts(of: .keyword).contains("public"))
     XCTAssertTrue(surface.texts(of: .keyword).contains("var"))

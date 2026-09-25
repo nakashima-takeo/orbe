@@ -17,12 +17,12 @@ final class SyntaxLayer {
   }
 
   /// 本文全体を初めて解析する。
-  func parseAll(_ text: String, lineIndex: LineIndex) -> IndexSet {
+  func parseAll(_ text: String, lineIndex: LineIndex) {
     let length = text.utf16.count
     let edit = InputEdit(
       startByte: 0, oldEndByte: 0, newEndByte: length * 2, startPoint: .zero, oldEndPoint: .zero,
       newEndPoint: Self.point(at: length, in: lineIndex))
-    return layer.didChangeContent(LanguageLayer.Content(string: text), using: edit)
+    _ = layer.didChangeContent(LanguageLayer.Content(string: text), using: edit)
   }
 
   /// 編集を構文木へ写して再解析し、塗り直すべき区間を返す。`old` は編集前の索引、`new` は編集後。

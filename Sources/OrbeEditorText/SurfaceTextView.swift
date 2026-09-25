@@ -127,11 +127,3 @@ struct ViewportPlugin: STPlugin {
     context.events.onDidLayoutViewport(onLayout)
   }
 }
-
-extension NSRange {
-  func clamped(to length: Int) -> NSRange {
-    let start = min(max(0, location), length)
-    let end = min(max(start, NSMaxRange(self)), length)
-    return NSRange(location: start, length: end - start)
-  }
-}

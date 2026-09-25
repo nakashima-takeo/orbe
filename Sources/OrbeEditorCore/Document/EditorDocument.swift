@@ -98,12 +98,12 @@ public final class EditorDocument {
       .flatMap { try? SyntaxLayer(configuration: $0, registry: registry) }
     surface.delegate = self
     applyIndentUnit(of: text)
-    _ = syntax?.parseAll(text, lineIndex: lineIndex)
+    syntax?.parseAll(text, lineIndex: lineIndex)
   }
 
   /// `range` の中の役割の区間——構文層の区間を後勝ち（tree-sitter の優先順で後のものが上に塗られる）で平らにした、
-  /// 重ならない昇順の列。役割の無い字は含まない。文法が無ければ空。答えは区間の切り方に依らない（区間の外の字は
-  /// 読まず、区間をまたぐ capture は区間で切る）。面が見えている範囲の色を、ミニマップがチャンクの色を引く。
+  /// 重ならない昇順の列。役割の無い字は含まない。文法が無ければ空。答えは区間の切り方に依らない（区間の外の字の
+  /// 役割は答えず、区間をまたぐ capture は区間で切る）。面が見えている範囲の色を、ミニマップがチャンクの色を引く。
   public func roleSpans(in range: NSRange) -> [HighlightSpan] {
     guard let syntax, range.length > 0 else { return [] }
     let set = IndexSet(integersIn: range.location..<NSMaxRange(range))

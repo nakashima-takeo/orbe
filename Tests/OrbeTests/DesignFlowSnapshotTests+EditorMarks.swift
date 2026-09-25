@@ -24,14 +24,14 @@ extension DesignFlowSnapshotTests {
         ("tabs", {}),  // タブ 1 段 = 検出した単位（4 桁）。空白だけの行の線が隣と同じ x
         (
           "scrolled_right",
-          {  // 8 行目の長い行で 20 桁ぶん右へ → 線・点・下線が付いてくる（印はガターに浮いたまま）
+          {  // 8 行目の長い行で 20 桁ぶん右へ → 線・点・下線が付いてくる（印は行番号の列にあって動かない）
             scroll.contentView.scroll(to: NSPoint(x: 20 * cell, y: 0))
             scroll.reflectScrolledClipView(scroll.contentView)
           }
         ),
         (
           "translucent",
-          {  // 透過設定: ガターの地も面の地と同じ濃度の veil になり、本文はその下を通る
+          {  // 透過設定: 地は本体ごと 1 層の veil（行番号の列も同じ濃度）。本文は列の下をくぐらない
             pane.configure(
               translucency: ChromeTranslucency(
                 effectiveOpacity: 0.6, translucent: true, blur: false),
