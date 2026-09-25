@@ -9,13 +9,14 @@ import XCTest
 /// 印の列は押しても何もしない。
 ///
 /// 壊れると何が起きるか。単独の `\r` で割れた段落に余計な番号が付き、番号が行索引（ミニマップ・スクロールバー・検索の
-/// 行）とずれる。10 万行の文書で番号の頭が欠ける。行番号を押しても行を選べない、ドラッグや ⇧クリックの伸び方が VS Code と
-/// 違う、印の列を押したつもりで行が選ばれる。
+/// 行）とずれる。10 万行の文書で番号の頭が欠ける。スクロールしても番号が見えている行に替わらない。行番号を押しても行を
+/// 選べない、ドラッグや ⇧クリックの伸び方が VS Code と違う、印の列を押したつもりで行が選ばれる。列の上でホイールを回しても
+/// 本文が動かない。
 @MainActor
 final class EditorLineNumbersTests: OrbeTestCase {
-  private let style = EditorStyle.make()
+  let style = EditorStyle.make()
 
-  private struct Opened {
+  struct Opened {
     let document: EditorDocument
     let window: NSWindow
     let column: LineNumbersView
@@ -23,7 +24,7 @@ final class EditorLineNumbersTests: OrbeTestCase {
   }
 
   /// `text` を開いた 400×200 の面。
-  private func open(_ text: String) throws -> Opened {
+  func open(_ text: String) throws -> Opened {
     let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
     let url = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent(
       "n-\(UUID().uuidString).txt")
@@ -45,30 +46,7 @@ final class EditorLineNumbersTests: OrbeTestCase {
       scroll: try XCTUnwrap(document.surface.view.subviews.first as? NSScrollView))
   }
 
-  private func lines(_ n: Int) -> String { (1...n).map { "line \($0)\n" }.joined() }
-
-  /// 列の中の点（x は列の左端から、y は文書の `row` 行目（1 始まり）の中ほど）で起きたマウスの出来事。
-  private func mouse(
-    _ type: NSEvent.EventType, _ opened: Opened, row: CGFloat, x: CGFloat = 20,
-    _ flags: NSEvent.ModifierFlags = []
-  ) throws -> NSEvent {
-    let point = NSPoint(x: x, y: (row - 0.5) * style.lineHeight)
-    return try XCTUnwrap(
-      NSEvent.mouseEvent(
-        with: type, location: opened.column.convert(point, to: nil), modifierFlags: flags,
-        timestamp: 0, windowNumber: opened.window.windowNumber, context: nil, eventNumber: 0,
-        clickCount: 1, pressure: 1))
-  }
-
-  private func click(_ opened: Opened, row: CGFloat, _ flags: NSEvent.ModifierFlags = []) throws {
-    opened.column.mouseDown(with: try mouse(.leftMouseDown, opened, row: row, flags))
-    opened.column.mouseUp(with: try mouse(.leftMouseUp, opened, row: row, flags))
-  }
-
-  private func range(of line: Int, in document: EditorDocument) -> NSRange {
-    let start = document.lineIndex.start(ofRow: line - 1)
-    return NSRange(location: start, length: document.lineIndex.end(ofRow: line - 1) - start)
-  }
+  func lines(_ n: Int) -> String { (1...n).map { "line \($0)\n" }.joined() }
 
   /// 列の画素を読み、行ごと（1 始まり）に字が描かれているかを返す。
   private func inkedRows(_ opened: Opened, count: Int) throws -> [Bool] {
@@ -88,6 +66,22 @@ final class EditorLineNumbersTests: OrbeTestCase {
     }
   }
 
+  /// 列の `row` 行目（1 始まり、上から）の数字の字の左端（列の左から。字が無ければ nil）。
+  private func inkLeft(_ opened: Opened, row: Int) throws -> CGFloat? {
+    let view = opened.document.surface.view
+    let rep = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+    view.cacheDisplay(in: view.bounds, to: rep)
+    let scale = CGFloat(rep.pixelsWide) / view.bounds.width
+    let top = style.topInset + CGFloat(row - 1) * style.lineHeight
+    return try stride(from: 0, to: style.gutterWidth, by: 0.5).first { x in
+      try stride(from: top + 2, to: top + style.lineHeight - 2, by: 1).contains { y in
+        let color = try XCTUnwrap(
+          rep.colorAt(x: Int(x * scale), y: Int(y * scale))?.usingColorSpace(.sRGB))
+        return color.alphaComponent > 0.3
+      }
+    }
+  }
+
   /// 番号は行索引の行に 1 つ——単独の `\r` で TextKit が割った段落（行索引では前の行の続き）には描かない。本文が改行で
   /// 終われば末尾の空行にも番号が付く。
   func testNumbersFollowTheLineIndexNotTheParagraphs() throws {
@@ -96,6 +90,26 @@ final class EditorLineNumbersTests: OrbeTestCase {
     XCTAssertEqual(
       try inkedRows(opened, count: 5), [true, false, true, true, false],
       "1（one）・番号なし（two）・2（three）・3（末尾の空行）")
+  }
+
+  /// 空の文書にも 1 行目の番号を描く（TextKit は空の文書に段落を作らない）。
+  func testAnEmptyDocumentShowsLineOne() throws {
+    let opened = try open("")
+    XCTAssertEqual(try inkedRows(opened, count: 2), [true, false])
+  }
+
+  /// 縦にスクロールすると、番号は見えている行の番号に替わる——先頭の「1」（1 桁）が、100 行目を先頭へ送れば「100」
+  /// （3 桁。右寄せなので字の左端が 2 桁ぶん左へ出る）になる。
+  func testNumbersFollowVerticalScrolling() throws {
+    let opened = try open(lines(300))
+    let twoDigitsLeft = style.gutterWidth - style.gutterTrailingInset - digitsWidth("10")
+    let first = try XCTUnwrap(try inkLeft(opened, row: 1), "前提: 先頭の行の番号")
+    XCTAssertGreaterThan(first, twoDigitsLeft, "先頭の行は 1 桁")
+
+    opened.document.scroll(toFirstLine: 99)
+    pumpMain(until: { opened.document.viewportLines.first == 99 }, "100 行目が先頭に来る")
+    let scrolled = try XCTUnwrap(try inkLeft(opened, row: 1), "送った先の番号")
+    XCTAssertLessThan(scrolled, twoDigitsLeft, "先頭の行は 3 桁の 100")
   }
 
   /// 列は最大の行番号が収まる幅——最小の幅に収まる限り広がらず（10 万行の 6 桁も収まる）、桁が増えれば打鍵のその場で
@@ -136,193 +150,32 @@ final class EditorLineNumbersTests: OrbeTestCase {
     return CTLineGetTypographicBounds(line, nil, nil, nil)
   }
 
-  /// 番号を押すとその行を改行まで選び、焦点はテキスト面へ移る。最終行は本文の終わりまで。
-  func testClickingANumberSelectsTheLine() throws {
-    let opened = try open(lines(20))
-    let document = opened.document
-    XCTAssertFalse(opened.window.firstResponder === document.surface.responder)
-    try click(opened, row: 3)
-    XCTAssertEqual(document.surface.selectedRange, range(of: 3, in: document))
-    XCTAssertTrue(opened.window.firstResponder === document.surface.responder, "焦点はテキスト面へ")
-
-    let tail = try open("a\nb")
-    try click(tail, row: 2)
-    XCTAssertEqual(tail.document.surface.selectedRange, NSRange(location: 2, length: 1), "最終行は末尾まで")
-  }
-
-  /// ドラッグは押した行を起点に行単位で伸ばす——下へは起点の行頭からポインタの行の次の行頭まで、上へはポインタの行頭から
-  /// 起点の行の次の行頭まで（動く側の端は先頭）、戻れば起点の行だけ。
-  func testDraggingExtendsByLinesFromThePressedLine() throws {
-    let opened = try open(lines(20))
-    let document = opened.document
-    opened.column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 4))
-    opened.column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: 6))
-    XCTAssertEqual(
-      document.surface.selectedRange,
-      NSUnionRange(range(of: 4, in: document), range(of: 6, in: document)))
-    XCTAssertEqual(document.surface.caretLocation, range(of: 7, in: document).location, "動く側は下端")
-
-    opened.column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: 2))
-    XCTAssertEqual(
-      document.surface.selectedRange,
-      NSUnionRange(range(of: 2, in: document), range(of: 4, in: document)))
-    XCTAssertEqual(document.surface.caretLocation, range(of: 2, in: document).location, "動く側は先頭")
-
-    opened.column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: 4))
-    XCTAssertEqual(document.surface.selectedRange, range(of: 4, in: document))
-    opened.column.mouseUp(with: try mouse(.leftMouseUp, opened, row: 4))
-  }
-
-  /// 自動スクロールのコマを `count` 回、`interval` 秒ごとに進める（テストの窓は画面に出ないので display link は
-  /// 回らない。コマの処理を直に呼ぶ）。
-  private func frames(
-    _ column: LineNumbersView, _ count: Int, every interval: CFTimeInterval = 0.1,
-    clock: inout CFTimeInterval
-  ) {
-    for _ in 0..<count {
-      clock += interval
-      column.autoscrollFrame(now: clock)
+  /// pane に載せても、番号と印の列の上の押下は列が受ける（上に重なる層が当たりを奪えば、番号を押しても行を選べず、印の列の
+  /// 押下が本文へ抜けてキャレットが動く）。
+  func testPressesOverTheColumnInThePaneReachTheColumn() throws {
+    let hosted = try hostOverview(lines(50))
+    let column = try XCTUnwrap(hosted.document.surface.view.subviews.last as? LineNumbersView)
+    let root = try XCTUnwrap(hosted.window.contentView)
+    for x in [20, column.bounds.width - style.marks.gutterWidth / 2] {
+      let point = column.convert(
+        NSPoint(x: x, y: column.bounds.minY + 2.5 * style.lineHeight), to: nil)
+      XCTAssertIdentical(root.hitTest(point), column, "列の x=\(x)")
     }
   }
 
-  /// 本文の下の外までドラッグすると、ポインタを止めたままでもコマごとに本文がスクロールし、選択が見えている下端の行まで
-  /// 伸び続ける。速さは外れた距離と見えている行数で決まる（VS Code: 1.5 行以内なら max(30, 見えている行数 ×
-  /// (1 + 外れた行数)) 行/秒）。離せば止まる。
-  func testDraggingBelowTheBodyKeepsScrollingWhileThePointerRests() throws {
-    let opened = try open(lines(2000))
-    let document = opened.document
-    let column = opened.column
-    let clip = opened.scroll.contentView
-    var clock: CFTimeInterval = 0
-    column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 2))
-    let visibleRows = column.bounds.height / style.lineHeight
-    let below = visibleRows + 1
-    column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: below))
-    XCTAssertTrue(column.isAutoscrolling)
-    frames(column, 1, clock: &clock)
-    XCTAssertEqual(clip.bounds.minY, 0, "最初のコマは時刻を取るだけ")
-
-    frames(column, 1, clock: &clock)
-    let speed = max(30, visibleRows * (1 + 0.5))
-    XCTAssertEqual(clip.bounds.minY, speed * 0.1 * style.lineHeight, accuracy: 0.5)
-    func selectedLastRow() -> Int {
-      document.lineIndex.point(at: NSMaxRange(document.surface.selectedRange) - 1).row
-    }
-    let bottomRow = Int((clip.bounds.maxY - 0.5) / style.lineHeight)
-    XCTAssertEqual(selectedLastRow(), bottomRow, "見えている下端の行まで伸びる")
-
-    let scrolled = clip.bounds.minY
-    frames(column, 2, clock: &clock)
-    XCTAssertEqual(clip.bounds.minY, scrolled + 2 * speed * 0.1 * style.lineHeight, accuracy: 0.5)
-    XCTAssertGreaterThan(selectedLastRow(), bottomRow, "ポインタが止まっていても伸び続ける")
-
-    column.mouseUp(with: try mouse(.leftMouseUp, opened, row: below))
-    XCTAssertFalse(column.isAutoscrolling, "離せば止まる")
-    let stopped = clip.bounds.minY
-    frames(column, 1, clock: &clock)
-    XCTAssertEqual(clip.bounds.minY, stopped, "離した後のコマは何もしない")
-  }
-
-  /// 外へ出た後に本文の中へ戻れば自動スクロールは止まり、ポインタの行まで伸ばす。
-  func testReturningInsideStopsTheAutoscroll() throws {
-    let opened = try open(lines(2000))
-    let document = opened.document
-    let column = opened.column
-    column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 2))
-    column.mouseDragged(
-      with: try mouse(.leftMouseDragged, opened, row: column.bounds.height / style.lineHeight + 1))
-    XCTAssertTrue(column.isAutoscrolling)
-    column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: 5))
-    XCTAssertFalse(column.isAutoscrolling, "中へ戻れば止まる")
-    XCTAssertEqual(
-      document.surface.selectedRange,
-      NSUnionRange(range(of: 2, in: document), range(of: 5, in: document)))
-    column.mouseUp(with: try mouse(.leftMouseUp, opened, row: 5))
-  }
-
-  /// 外へ出したまま面が窓から外れる（文書の切り替え）と、mouse-up は届かないので、外れたところで自動スクロールと選択の
-  /// 操作を終える——隠れた文書のスクロールと選択を書き換え続けない。
-  func testLeavingTheWindowStopsTheAutoscroll() throws {
-    let opened = try open(lines(2000))
-    let document = opened.document
-    let column = opened.column
-    let clip = opened.scroll.contentView
-    var clock: CFTimeInterval = 0
-    column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 2))
-    column.mouseDragged(
-      with: try mouse(.leftMouseDragged, opened, row: column.bounds.height / style.lineHeight + 1))
-    frames(column, 2, clock: &clock)
-    let selection = document.surface.selectedRange
-    let scrolled = clip.bounds.minY
-    document.surface.view.removeFromSuperview()
-    XCTAssertFalse(column.isAutoscrolling, "窓から外れれば止まる")
-    frames(column, 2, clock: &clock)
-    XCTAssertEqual(clip.bounds.minY, scrolled)
-    XCTAssertEqual(document.surface.selectedRange, selection)
-  }
-
-  /// 自動スクロールはスクロールできる範囲で止まる——短い文書で下へ出したまま進めても最終行を最上段より先へ送らず、先頭で
-  /// 上へ出しても上端より上へ行かない。止まった後も見えている端の行まで選ぶ。
-  func testAutoscrollStopsAtTheEndsOfTheScrollableRange() throws {
-    let opened = try open(lines(30))
-    let document = opened.document
-    let column = opened.column
-    let clip = try XCTUnwrap(opened.scroll.contentView as? OverscrollClipView)
-    var clock: CFTimeInterval = 0
-    column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 2))
-    let below = column.bounds.height / style.lineHeight + 3
-    column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: below))
-    frames(column, 10, clock: &clock)
-    XCTAssertEqual(clip.bounds.minY, clip.maximumY, accuracy: 0.5, "最終行を最上段まで送って止まる")
-    XCTAssertEqual(
-      NSMaxRange(document.surface.selectedRange), document.lineIndex.length, "最終行まで選ぶ")
-    column.mouseUp(with: try mouse(.leftMouseUp, opened, row: below))
-
-    document.scroll(toFirstLine: 0)
-    column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 3))
-    column.mouseDragged(with: try mouse(.leftMouseDragged, opened, row: -2))
-    frames(column, 10, clock: &clock)
-    XCTAssertEqual(clip.bounds.minY, 0, "上端で止まる")
-    XCTAssertEqual(document.surface.selectedRange.location, 0, "先頭の行まで選ぶ")
-    column.mouseUp(with: try mouse(.leftMouseUp, opened, row: -2))
-  }
-
-  /// ⌃クリックは行を選ばず、焦点も動かさない（VS Code も mac の ⌃クリックを扱わない）。
-  func testControlClickSelectsNothing() throws {
-    let opened = try open(lines(20))
-    let document = opened.document
-    document.surface.selectedRange = NSRange(location: 1, length: 0)
-    try click(opened, row: 3, .control)
-    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 1, length: 0))
-    XCTAssertFalse(opened.window.firstResponder === document.surface.responder, "焦点は動かない")
-  }
-
-  /// ⇧クリックは今の選択の起点（動かない側の端）から押した行まで伸ばす。列で選んだ直後なら、その行が起点。
-  func testShiftClickExtendsFromTheSelectionAnchor() throws {
-    let opened = try open(lines(20))
-    let document = opened.document
-    let caret = range(of: 3, in: document).location + 2
-    document.surface.selectedRange = NSRange(location: caret, length: 0)
-    try click(opened, row: 6, .shift)
-    XCTAssertEqual(
-      document.surface.selectedRange,
-      NSRange(location: caret, length: NSMaxRange(range(of: 6, in: document)) - caret))
-
-    try click(opened, row: 8)
-    try click(opened, row: 5, .shift)
-    XCTAssertEqual(
-      document.surface.selectedRange,
-      NSUnionRange(range(of: 5, in: document), range(of: 8, in: document)), "起点は選んだ 8 行目")
-  }
-
-  /// 印の列（番号の右）を押しても行は選ばない。
-  func testPressingTheMarkColumnSelectsNothing() throws {
-    let opened = try open(lines(20))
-    let document = opened.document
-    document.surface.selectedRange = NSRange(location: 1, length: 0)
-    let markX = opened.column.bounds.width - style.marks.gutterWidth / 2
-    opened.column.mouseDown(with: try mouse(.leftMouseDown, opened, row: 3, x: markX))
-    opened.column.mouseUp(with: try mouse(.leftMouseUp, opened, row: 3, x: markX))
-    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 1, length: 0))
+  /// 列の上のホイールは本文のスクロールへ届く（列がスクロールの死角にならない）。
+  func testWheelOverTheColumnReachesTheTextScroll() throws {
+    let opened = try open(lines(200))
+    let container = try XCTUnwrap(opened.document.surface.view as? SurfaceContainerView)
+    XCTAssertIdentical(container.scrollTarget, opened.scroll, "前提: 器の渡し先は本文のスクロール")
+    let spy = WheelSpy()
+    container.scrollTarget = spy
+    let wheel = try XCTUnwrap(
+      CGEvent(
+        scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -180, wheel2: 0,
+        wheel3: 0))
+    let event = try XCTUnwrap(NSEvent(cgEvent: wheel))
+    opened.column.scrollWheel(with: event)
+    XCTAssertIdentical(spy.received.last, event)
   }
 }
