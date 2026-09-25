@@ -123,7 +123,5 @@ extension EditorPaneView {
     sidebarHandle.frame = NSRect(
       x: sideWidth - Theme.Stroke.hairline - Theme.Layout.editorSidebarHandle / 2, y: 0,
       width: Theme.Layout.editorSidebarHandle, height: bounds.height)
-    // 地の穴（テキスト面の矩形）は幾何の関数。subview の移動や frame の変更では層は描き直されない。
-    needsDisplay = true
   }
 }

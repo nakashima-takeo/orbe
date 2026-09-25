@@ -299,7 +299,7 @@ final class EditorMinimapTests: OrbeTestCase {
 }
 
 /// 届いたホイールを覚えるだけのスクロール。
-private final class WheelSpy: NSScrollView {
+final class WheelSpy: NSScrollView {
   var received: [NSEvent] = []
   override func scrollWheel(with event: NSEvent) { received.append(event) }
 }

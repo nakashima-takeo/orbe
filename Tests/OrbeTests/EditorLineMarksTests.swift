@@ -4,7 +4,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 本物のテキストエンジンに載る行の装備——ガターの印（3 色・三角）がスクロールと編集に追従する、インデント線・
+/// 本物のテキストエンジンに載る行の装備——git の印（3 色・三角）がスクロールと編集に追従する、インデント線・
 /// 丸点・URL 下線が本文の座標に立つ、⌘クリックだけが URL を開いて素のクリックはキャレットを置く。
 /// 装備は overlay で、テストと静止画が緑でも同期が壊れれば実機で消える（u4 の教訓）ので、位置は画素で見る。
 ///
@@ -121,7 +121,7 @@ final class EditorLineMarksTests: OrbeTestCase {
     }
   }
 
-  // MARK: - ガターの印
+  // MARK: - git の印
 
   /// 追加＝緑・変更＝青のバーがその行に、削除の三角がその境に出て、印の無い行の列は地のまま。バーの色は
   /// 見本の α .85 で地に合成される。
@@ -229,7 +229,7 @@ final class EditorLineMarksTests: OrbeTestCase {
   }
 
   /// 横にスクロールしても本文の装備は行に付いてくる（overlay の座標が container 基準のまま置き直される）。
-  /// 長い行で横スクロールが起き、印はガターに浮くので無事な一方、線・点・下線だけが置き去りになる壊れ方を守る。
+  /// 長い行で横スクロールが起き、印は行番号の列にあるので無事な一方、線・点・下線だけが置き去りになる壊れ方を守る。
   func testDecorationsFollowHorizontalScrolling() throws {
     let long = String(repeating: "x", count: 100) + "  " + String(repeating: "x", count: 100)
     let hosted = try host("a\n  b  c \(long)\n    d\n")
@@ -245,7 +245,7 @@ final class EditorLineMarksTests: OrbeTestCase {
     scroll.contentView.scroll(to: NSPoint(x: shift, y: 0))
     scroll.reflectScrolledClipView(scroll.contentView)
     waitDrawn { !self.isBlack(try self.rgb(ground, dot - shift, self.rowMidY(2))) }
-    XCTAssertFalse(try hasInk(ground, guide, rowMidY(3)), "線は 3 桁ぶん左（ガターの下）へ動いて見えない")
+    XCTAssertFalse(try hasInk(ground, guide, rowMidY(3)), "線は 3 桁ぶん左（本文の左端の外）へ動いて見えない")
     XCTAssertTrue(isBlack(try rgb(ground, dot, rowMidY(2))), "元の位置には点が無い")
 
     // 100 桁右へ: 1 画面ぶん先の連続スペース（107 桁目）の点が、可視矩形の中に描かれる。

@@ -157,17 +157,17 @@ final class EditorTextSurfaceScrollTests: OrbeTestCase {
     XCTAssertEqual(opened.document.surface.viewport.hiddenFraction, 0)
   }
 
-  /// 最終行より下の空き地のうち本文の列は、押せば効くので I ビームの範囲になる（ガターは除く）。
+  /// 最終行より下の空き地は、押せば効くので I ビームの範囲になる（行番号の列はスクロールビューの外）。
   func testTheBlankAreaBelowTheLastLineIsTextArea() throws {
     let opened = try open(lines(100))
     let clip = try XCTUnwrap(opened.scroll.contentView as? OverscrollClipView)
     XCTAssertTrue(clip.blankArea.isEmpty, "先頭では空き地が無い")
     opened.document.scroll(toFirstLine: 95)
-    let style = EditorStyle.make()
     let documentBottom = try XCTUnwrap(opened.scroll.documentView).frame.maxY
     XCTAssertEqual(clip.blankArea.minY, documentBottom)
     XCTAssertEqual(clip.blankArea.maxY, clip.bounds.maxY)
-    XCTAssertEqual(clip.blankArea.minX, style.gutterWidth + style.marks.gutterWidth, accuracy: 0.5)
+    XCTAssertEqual(clip.blankArea.minX, clip.bounds.minX)
+    XCTAssertEqual(clip.blankArea.width, clip.bounds.width)
   }
 
   func testViewportCountsTheTrailingEmptyLineAsALine() throws {
