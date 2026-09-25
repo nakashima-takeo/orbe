@@ -18,4 +18,4 @@ env -i \
   __CFBundleIdentifier=dev.orbe.app.dev XPC_SERVICE_NAME=0 XPC_FLAGS=0x0 \
   ORBE_EDITOR_PERF=1 \
   "$xctest" -XCTest OrbeTests.EditorScrollPerfTests .build/release/OrbeTests.xctest 2>&1 \
-  | grep -E "^PERF|error:|failed" || true
+  | { grep -E "^PERF|error:|failed" || true; }
