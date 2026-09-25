@@ -28,58 +28,46 @@ final class SyntaxColorWindow {
   /// layout をやり直さない：上流は layout のたびに窓の行片の view をすべて描き直しの対象にし、この通知はその layout の
   /// 中（描く前）に届くので、塗った色は同じコマで描かれる。
   func layoutDidChange(_ range: NSTextRange) {
-    let manager = textView.textContentManager
-    let window = NSRange(range, in: manager)
+    let window = NSRange(range, in: textView.textContentManager)
     let inside = IndexSet(integersIn: Range(window) ?? 0..<0)
     let outside = touched.subtracting(inside)
     if !outside.isEmpty {
-      let locator = TextLocator(
-        manager: manager, anchor: range.location, anchorOffset: window.location)
-      for part in outside.rangeView { uncolor(NSRange(part), locator) }
+      for part in outside.rangeView { uncolor(NSRange(part)) }
       touched.formIntersection(inside)
       fresh.formIntersection(inside)
     }
-    guard let (lines, locator) = visibleLines(in: range) else { return }
+    guard let lines = visibleLines(in: range) else { return }
     visible = lines
-    paint(IndexSet(integersIn: Range(lines) ?? 0..<0).subtracting(fresh), locator)
+    paint(IndexSet(integersIn: Range(lines) ?? 0..<0).subtracting(fresh))
   }
 
   /// スクロールした（layout の前）——窓の中で新しく見えた行を塗る（窓の外は続く layout で塗る）。layout は求めない：
   /// 帯の行片の view は、最後の layout で描き直しの対象になったまま、見えるまで描かれない（見えない view は描かない）。
   func scrollDidChange() {
     guard let window = textView.textLayoutManager.textViewportLayoutController.viewportRange,
-      let (lines, locator) = visibleLines(in: window), lines != visible
+      let lines = visibleLines(in: window), lines != visible
     else { return }
     visible = lines
     let stale = IndexSet(integersIn: Range(lines) ?? 0..<0).subtracting(fresh)
     guard !stale.isEmpty else { return }
-    paint(stale, locator)
+    paint(stale)
   }
 
-  /// 編集の後、見えている行を丸ごと問い合わせ直して塗る（文書は編集の通知で構文木を更新し終えている）——隣の字の変化で
-  /// 役割が変わる字（呼び出しでなくなった識別子・引用符の後ろ）を画面に残さない。見えている行は編集に沿って写し、大きな
-  /// 置き換えでも前の 2 倍までに留める（全文を塗らない。正確な見えている行は続く layout が決め、そこで塗り足す）。帯の色は
-  /// 古くなりうるので、見えたときに塗り直す。`anchor` は編集の位置（`edit.range.location`）。
-  func textDidChange(_ edit: TextEdit, near anchor: NSTextLocation) {
-    let manager = textView.textContentManager
-    let length = NSRange(manager.documentRange, in: manager).length
+  /// 編集の後——色の付いた区間を編集に沿って写し、どの色も古いものとして扱う。塗るのは続く layout（上流は編集の後、描く
+  /// 前に必ず layout して通知する）で、見えている行を丸ごと問い合わせ直す——隣の字の変化で役割が変わる字（呼び出しで
+  /// なくなった識別子・引用符の後ろ）を画面に残さない。帯の色は見えたときに塗り直す。
+  func textDidChange(_ edit: TextEdit) {
     touched.remove(integersIn: edit.range.location..<NSMaxRange(edit.range))
     touched.shift(
       startingAt: NSMaxRange(edit.range), by: edit.replacementLength - edit.range.length)
     touched.insert(integersIn: edit.newRange.location..<NSMaxRange(edit.newRange))
     fresh = IndexSet()
-    let moved = visible.tracking(edit).clamped(to: length)
-    visible = NSRange(
-      location: moved.location, length: min(moved.length, max(visible.length * 2, 1)))
-    paint(
-      IndexSet(integersIn: Range(visible) ?? 0..<0),
-      TextLocator(manager: manager, anchor: anchor, anchorOffset: edit.range.location))
     textView.needsLayout = true
   }
 
-  /// 窓の行片のうち見えている行の区間と、その先頭を錨にした写し方。見えている行片が無ければ nil。窓の行片だけを見る——
-  /// 窓の外の位置は推定で、行片の位置と食い違う。
-  private func visibleLines(in window: NSTextRange) -> (NSRange, TextLocator)? {
+  /// 窓の行片のうち見えている行の区間。見えている行片が無ければ nil。窓の行片だけを見る——窓の外の位置は推定で、行片の
+  /// 位置と食い違う。
+  private func visibleLines(in window: NSTextRange) -> NSRange? {
     let rect = textView.visibleRect
     var first: NSTextLocation?
     var last: NSTextLocation?
@@ -97,72 +85,37 @@ final class SyntaxColorWindow {
       }
       return true
     }
-    let manager = textView.textContentManager
     guard let first, let last, let range = NSTextRange(location: first, end: last) else {
       return nil
     }
-    let lines = NSRange(range, in: manager)
-    return (lines, TextLocator(manager: manager, anchor: first, anchorOffset: lines.location))
+    return NSRange(range, in: textView.textContentManager)
   }
 
   /// 区間を今の役割で塗り直す（前の色は外す）。
-  private func paint(_ set: IndexSet, _ locator: TextLocator) {
+  private func paint(_ set: IndexSet) {
     for part in set.rangeView {
       let range = NSRange(part)
-      if touched.intersects(integersIn: part) { uncolor(range, locator) }
-      color(range, locator)
+      if touched.intersects(integersIn: part) { uncolor(range) }
+      color(range)
     }
     touched.formUnion(set)
     fresh.formUnion(set)
   }
 
-  private func color(_ range: NSRange, _ locator: TextLocator) {
+  private func color(_ range: NSRange) {
     guard range.length > 0 else { return }
+    let manager = textView.textContentManager
     let layoutManager = textView.textLayoutManager
     for span in roles(range) {
-      guard let color = colors[span.role], let textRange = locator.range(span.range) else {
-        continue
-      }
+      guard let color = colors[span.role], let textRange = NSTextRange(span.range, in: manager)
+      else { continue }
       layoutManager.addRenderingAttribute(.foregroundColor, value: color, for: textRange)
     }
   }
 
-  private func uncolor(_ range: NSRange, _ locator: TextLocator) {
-    guard range.length > 0, let textRange = locator.range(range) else { return }
+  private func uncolor(_ range: NSRange) {
+    guard range.length > 0, let textRange = NSTextRange(range, in: textView.textContentManager)
+    else { return }
     textView.textLayoutManager.removeRenderingAttribute(.foregroundColor, for: textRange)
-  }
-}
-
-/// 本文のオフセットを TextKit の位置へ、近くの錨からの相対で写す。文書の先頭から数えると（`NSTextRange(_:in:)`）
-/// 1 区間ごとに文書の大きさに比例した手間が掛かり、窓の色の区間が多いほど塗りが重くなる。
-@MainActor
-struct TextLocator {
-  let manager: NSTextContentManager
-  /// 錨の位置と、そのオフセット。
-  let anchor: NSTextLocation
-  let anchorOffset: Int
-
-  func range(_ range: NSRange) -> NSTextRange? {
-    guard let start = manager.location(anchor, offsetBy: range.location - anchorOffset),
-      let end = manager.location(start, offsetBy: range.length)
-    else { return nil }
-    return NSTextRange(location: start, end: end)
-  }
-}
-
-extension NSRange {
-  /// 編集の前の区間を編集の後の本文へ写す。編集より前の端はそのまま、後ろの端は平行移動し、置き換わった部分に掛かる
-  /// 端は、始まりなら置き換えの先頭へ、終わりなら置き換えの末尾へ寄せる。
-  func tracking(_ edit: TextEdit) -> NSRange {
-    let removedEnd = NSMaxRange(edit.range)
-    let delta = edit.replacementLength - edit.range.length
-    let start =
-      location <= edit.range.location
-      ? location : location >= removedEnd ? location + delta : edit.range.location
-    let end = NSMaxRange(self)
-    let movedEnd =
-      end <= edit.range.location
-      ? end : end >= removedEnd ? end + delta : NSMaxRange(edit.newRange)
-    return NSRange(location: start, length: Swift.max(0, movedEnd - start))
   }
 }

@@ -119,26 +119,53 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
     }
   }
 
-  /// 打鍵のたび、その呼び出しの中で見えている字の色が編集の後の役割に揃う（layout を待たない）。`compute` の後ろを
-  /// 消すと呼び出しでなくなり、`"` を打てば行末まで文字列になる——どちらも編集した字の外の役割が変わる。
-  func testAnEditRecolorsTheVisibleTextWithinTheSameCall() throws {
+  /// 打鍵の後、描く前の layout で見えている字の色が編集の後の役割に揃う。`compute` の後ろを消すと呼び出しでなくなり、
+  /// `"` を打てば行末まで文字列になる——どちらも編集した字の外の役割が変わる。
+  func testAnEditRecolorsTheVisibleTextBeforeItIsDrawn() throws {
     let (document, _) = try open(source(200))
+    let view = document.surface.view
     let call = (document.surface.text as NSString).range(of: "(3)")
     document.surface.selectedRange = NSRange(location: call.location, length: 3)
     document.surface.responder.deleteBackward(nil)
-    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "括弧を消した直後")
+    view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "括弧を消した後の layout")
 
     let quote = document.lineIndex.start(ofRow: 5)
     document.surface.selectedRange = NSRange(location: quote, length: 0)
     document.surface.responder.keyDown(with: .key("\"", []))
-    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "引用符を打った直後")
-    settle(document)
+    view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "引用符を打った後の layout")
     try assertColorsFollowTheWindow(document, "layout の後")
 
     document.surface.responder.undoManager?.undo()
-    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "undo の直後")
-    settle(document)
+    view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "undo の後の layout")
     try assertColorsFollowTheWindow(document, "undo の layout の後")
+  }
+
+  /// 打鍵の直後の描画で、役割の変わった字が古い色で出ない。6 行目の頭に `"` を打つと、同じ行の `let` は keyword の青から
+  /// 文字列の色になる。画素は描き直しを強いない層の写しから読む。
+  func testTheFrameAfterAnEditDrawsTheNewColors() throws {
+    let (document, _) = try open(source(200))
+    let view = document.surface.view
+    view.displayIfNeeded()
+    let style = EditorStyle.make()
+    let cell = (" " as NSString).size(withAttributes: [.font: style.font]).width
+    let left = style.gutterWidth + style.marks.gutterWidth
+    let row = NSRect(
+      x: left + cell, y: style.topInset + 5 * style.lineHeight, width: 3 * cell,
+      height: style.lineHeight)
+    let before = try drawnShot(view, inking: row.offsetBy(dx: -cell, dy: 0))
+    XCTAssertGreaterThan(before.bluest(in: row.offsetBy(dx: -cell, dy: 0)), 0.3, "前提: `let` は青")
+
+    document.surface.selectedRange = NSRange(
+      location: document.lineIndex.start(ofRow: 5), length: 0)
+    document.surface.responder.keyDown(with: .key("\"", []))
+    view.layoutSubtreeIfNeeded()
+    view.displayIfNeeded()
+    let shot = try drawnShot(view, inking: row)
+    XCTAssertLessThan(shot.bluest(in: row), 0.1, "keyword の青が残らない")
+    XCTAssertGreaterThan(shot.reddest(in: row), 0.3, "文字列の色で描かれる")
   }
 
   /// 先読みの帯は見えるまで塗らない。窓の中の小さなスクロール（上流は layout しない）で帯から見えてきた行は、その
@@ -171,6 +198,34 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
     let bottomLet = NSRect(
       x: left, y: style.topInset + lastRow, width: 3 * cell, height: style.lineHeight)
     XCTAssertGreaterThan(shot.bluest(in: bottomLet), 0.3, "帯から見えてきた行の `let` が keyword の色で描かれる")
+  }
+
+  /// 塗った行を二度問い合わせない——窓の中のスクロールで問い合わせるのは新しく見えた行だけで、塗り済みの位置へ戻っても
+  /// 問い合わせない。
+  func testScrollingQueriesOnlyTheNewlyVisibleLines() throws {
+    let (document, _) = try open(source(3000))
+    let counter = RolesCounter(inner: document)
+    document.surface.delegate = counter
+    let clip = try XCTUnwrap(document.surface.responder.enclosingScrollView).contentView
+    let style = EditorStyle.make()
+    let before = visibleLines(document)
+    clip.scroll(to: NSPoint(x: 0, y: 3 * style.lineHeight))
+    let after = visibleLines(document)
+    let revealed = NSRange(
+      location: NSMaxRange(before), length: NSMaxRange(after) - NSMaxRange(before))
+    XCTAssertFalse(counter.queried.isEmpty, "新しく見えた行は問い合わせる")
+    XCTAssertTrue(
+      counter.queried.allSatisfy { NSIntersectionRange($0, revealed) == $0 },
+      "問い合わせは新しく見えた行 \(revealed) だけ: \(counter.queried)")
+
+    counter.queried = []
+    clip.scroll(to: .zero)
+    settle(document)
+    XCTAssertEqual(counter.queried, [], "塗り済みの位置へ戻っても問い合わせない")
+    document.surface.responder.needsLayout = true
+    document.surface.view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(counter.queried, [], "layout し直しても塗り済みの行は問い合わせない")
+    withExtendedLifetime(counter) {}
   }
 
   /// 打鍵の塗り直しは見えている行に閉じ、帯の色は見えたときに塗り直す。先頭の行に `/*` を打つと、帯の先の `*/` まで
@@ -209,10 +264,11 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
     settle(document)
     document.surface.selectedRange = NSRange(location: visibleLines(document).location, length: 0)
     document.surface.replaceAll(with: source(3000).replacingOccurrences(of: "let ", with: "//  "))
+    document.surface.view.layoutSubtreeIfNeeded()
+    try assertColorsFollowTheWindow(document, "置き換えの後の layout")
     let stale = try colored(document).filter { $0.color != roleColors[.comment] }
-    XCTAssertTrue(stale.isEmpty, "置き換えの直後に古い色が残る: \(stale.map(\.range))")
-    settle(document)
-    try assertColorsFollowTheWindow(document, "置き換えの layout の後")
+      .filter { NSIntersectionRange($0.range, visibleLines(document)).length > 0 }
+    XCTAssertTrue(stale.isEmpty, "見えている行に古い色が残る: \(stale.map(\.range))")
   }
 
   /// 遠くへ飛んだ先の字は色付きで描かれ、描き直しを待たない（色は layout の中・描く前に置くので、layout をやり直さない。
@@ -239,6 +295,17 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
     let bluest = shot.bluest(
       in: NSRect(x: left, y: style.topInset, width: 3 * cell, height: style.lineHeight))
     XCTAssertGreaterThan(bluest, 0.3, "`let` が keyword の色で描かれている（素の文字色なら青みが出ない）")
+  }
+
+  /// 層に字が描かれるまで待って写す（描画の反映は runloop で来る）。
+  private func drawnShot(_ view: NSView, inking rect: NSRect) throws -> LayerShot {
+    let deadline = Date().addingTimeInterval(5)
+    var shot = try layerShot(view)
+    while shot.ink(in: rect) == 0, Date() < deadline {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+      shot = try layerShot(view)
+    }
+    return shot
   }
 
   /// view の層を描き直さずに写す（2 倍）。
@@ -274,5 +341,40 @@ private struct LayerShot {
 
   func bluest(in rect: NSRect) -> CGFloat {
     colors(in: rect).map { $0.blueComponent - $0.redComponent }.max() ?? 0
+  }
+
+  func reddest(in rect: NSRect) -> CGFloat {
+    colors(in: rect).map { $0.redComponent - $0.blueComponent }.max() ?? 0
+  }
+}
+
+/// 役割の問い合わせを記録する delegate（文書へも流す）。
+@MainActor
+private final class RolesCounter: TextSurfaceDelegate {
+  let inner: EditorDocument
+  var queried: [NSRange] = []
+  init(inner: EditorDocument) { self.inner = inner }
+  func surface(_ surface: any TextSurface, rolesIn range: NSRange) -> [HighlightSpan] {
+    queried.append(range)
+    return inner.surface(surface, rolesIn: range)
+  }
+  func surface(_ surface: any TextSurface, didChange edit: TextEdit) {
+    inner.surface(surface, didChange: edit)
+  }
+  func surface(_ surface: any TextSurface, focusDidChange focused: Bool) {
+    inner.surface(surface, focusDidChange: focused)
+  }
+  func surfaceDidChangeViewport(_ surface: any TextSurface) {
+    inner.surfaceDidChangeViewport(surface)
+  }
+  func surfaceDidChangeSelection(_ surface: any TextSurface) {
+    inner.surfaceDidChangeSelection(surface)
+  }
+  func surfaceLineCount(_ surface: any TextSurface) -> Int { inner.surfaceLineCount(surface) }
+  func surface(_ surface: any TextSurface, lineContaining offset: Int) -> Int {
+    inner.surface(surface, lineContaining: offset)
+  }
+  func surface(_ surface: any TextSurface, rangeOfLine line: Int) -> NSRange {
+    inner.surface(surface, rangeOfLine: line)
   }
 }
