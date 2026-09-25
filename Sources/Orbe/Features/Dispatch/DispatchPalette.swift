@@ -82,7 +82,9 @@ enum DispatchInfoKind: Equatable {
 /// 実データ取得と section 組み立ては `DispatchDataProvider`＋`DispatchSectionBuilder`（外）が担う。
 @Observable final class DispatchPaletteModel {
   /// 実データセクション（provider が rebuild で差し替える）。
-  var sections: [DispatchSection] = []
+  var sections: [DispatchSection] = [] {
+    didSet { refreshVisible() }
+  }
   /// 表示中の画面。器は共通で中身だけ切り替わる。
   private(set) var mode: DispatchMode = .list
   /// 最新の分類結果（provider が rebuild ごとに更新）。nil は分類レーンが未着地。
@@ -133,7 +135,9 @@ enum DispatchInfoKind: Equatable {
   private(set) var focusToken = 0
 
   /// ヘッダ ❯ の絞り込み入力（全セクション横断で行を絞る SSOT）。
-  var query = ""
+  var query = "" {
+    didSet { refreshVisible() }
+  }
   /// ⇥ で巡回する起動先（agent もしくは shell）。default agent 直後に shell をスプライスして持つ。
   var targets: [DispatchTarget] = []
   /// ⇥ で巡回する選択起動先の index。初期は default agent の index。
@@ -209,17 +213,24 @@ enum DispatchInfoKind: Equatable {
   /// キー操作を受けるため focusToken を進めて first responder を確定させる。
   func focus() { focusToken &+= 1 }
 
-  /// query で絞った可視セクション（空になったセクションは落とす）。
-  var visibleSections: [DispatchSection] {
-    guard !query.isEmpty else { return sections }
-    return sections.compactMap { section in
-      let items = section.items.filter { matches($0) }
-      return items.isEmpty ? nil : DispatchSection(title: section.title, items: items)
-    }
-  }
+  /// query で絞った可視セクション（空になったセクションは落とす）。`sections` / `query` の変化時に
+  /// 1 回だけ計算して保持する——1 回の打鍵で何度も読まれるので、読むたびに全行を照合し直すと
+  /// 件数が千を超えたとき打鍵がもたつく。
+  private(set) var visibleSections: [DispatchSection] = []
 
   /// 可視行を平坦化（選択・フッター連動・スクロールの単位）。
-  var items: [DispatchItem] { visibleSections.flatMap(\.items) }
+  private(set) var items: [DispatchItem] = []
+
+  private func refreshVisible() {
+    visibleSections =
+      query.isEmpty
+      ? sections
+      : sections.compactMap { section in
+        let items = section.items.filter { matches($0) }
+        return items.isEmpty ? nil : DispatchSection(title: section.title, items: items)
+      }
+    items = visibleSections.flatMap(\.items)
+  }
 
   /// フッター連動の元（選択中の item）。
   var selectedItem: DispatchItem? {
