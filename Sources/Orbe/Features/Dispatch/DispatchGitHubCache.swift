@@ -41,15 +41,6 @@ final class DispatchGitHubCache {
 
   func entry(for key: String) -> Entry? { entries[key] }
 
-  /// 各レーンは独立に到着し独立に失敗しうるので setter を分ける（片方の失敗が他方を巻き込まない）。
-  func setIssues(_ issues: [GitHubIssue], for key: String) {
-    entries[key, default: Entry()].issues = issues
-  }
-
-  func setPullRequests(_ pullRequests: [GitHubPullRequest], for key: String) {
-    entries[key, default: Entry()].pullRequests = pullRequests
-  }
-
   /// open issue 一覧を取り直し、そのたびの現在値を `updated` へ届ける。`fetch` はページを `page` へ、
   /// 終わりを `finished`（`true` = 取り終えた／`false` = 途中で失敗）へ渡す取得（`GitHubCLI.openIssues`）。
   /// 受け手の生死に依らずキャッシュを書くので、パレットを閉じても上限まで取り続ける。
