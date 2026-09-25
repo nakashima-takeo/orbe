@@ -114,23 +114,30 @@ extension GitRepo {
     }
   }
 
-  /// remote 名 → fetch の URL（`git remote -v`。`insteadOf` は展開済み）。読めなければ空。
-  func remotes(completion: @escaping ([String: String]) -> Void) {
-    runner.run(["remote", "-v"], cwd: root) { output in
-      completion(output.isSuccess ? GitRepo.parseRemotes(output.stdoutText) : [:])
+  /// remote 名 → fetch の URL（`insteadOf` 展開後）。`nil` = 読めなかった（1 本でも URL を読めなければ
+  /// 全体を読めなかったとする——欠けた一覧を「その remote は無い」と読ませない）。
+  ///
+  /// 名前は `git remote`（引数なしは名前だけを 1 行ずつ出す）、URL は remote ごとの
+  /// `git remote get-url`（fetch の最初の URL。`insteadOf` を展開する）で読む。`git remote -v` は人が
+  /// 読む表示で、行末に装飾が付く（部分クローンではフィルタ名 `[blob:none]` が足される）ので、行の
+  /// 形では読まない。remote は通常 1〜3 本で、プロセスが本数ぶん増えても読み取りレーンの数 ms で済む。
+  func remotes(completion: @escaping ([String: String]?) -> Void) {
+    runner.run(["remote"], cwd: root) { listed in
+      guard listed.isSuccess else { return completion(nil) }
+      let names = listed.stdoutText.split(separator: "\n").map(String.init)
+      var urls: [String: String] = [:]
+      var unreadable = false
+      let group = DispatchGroup()
+      for name in names {
+        group.enter()
+        self.runner.run(["remote", "get-url", "--", name], cwd: self.root) { output in
+          let url = output.stdoutText.trimmingCharacters(in: .newlines)
+          if output.isSuccess, !url.isEmpty { urls[name] = url } else { unreadable = true }
+          group.leave()
+        }
+      }
+      group.notify(queue: .main) { completion(unreadable ? nil : urls) }
     }
-  }
-
-  /// `git remote -v` の `<name>\t<url> (fetch)` 行を読む（push 行は URL が別でも読まない）。
-  static func parseRemotes(_ text: String) -> [String: String] {
-    let suffix = " (fetch)"
-    var remotes: [String: String] = [:]
-    for line in text.split(separator: "\n") where line.hasSuffix(suffix) {
-      let body = line.dropLast(suffix.count)
-      guard let tab = body.firstIndex(of: "\t") else { continue }
-      remotes[String(body[..<tab])] = String(body[body.index(after: tab)...])
-    }
-    return remotes
   }
 
   /// URL からリポジトリを clone する。clone 前はリポジトリが無いため（`root` を持てず）static で持つ。

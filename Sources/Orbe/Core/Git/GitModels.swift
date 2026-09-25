@@ -76,7 +76,7 @@ struct GitHubRepoName: Hashable, Decodable {
   /// `github.com-work` 等も GitHub として拾う）、`owner/name` はパス（scp 形式は `:` の後ろ）の最後の
   /// 2 段から `.git` と末尾の `/` を除いて読む。GitHub でない・読めない URL は nil。
   init?(remoteURL url: String) {
-    guard url.contains("github.com") else { return nil }
+    guard Self.isGitHub(remoteURL: url) else { return nil }
     let path: Substring
     if let scheme = url.range(of: "://") {
       let rest = url[scheme.upperBound...]
@@ -92,6 +92,12 @@ struct GitHubRepoName: Hashable, Decodable {
     if name.hasSuffix(".git") { name = name.dropLast(4) }
     guard !name.isEmpty else { return nil }
     self.init(nameWithOwner: "\(parts[parts.count - 2])/\(name)")
+  }
+
+  /// GitHub の remote の URL か（「URL に github.com を含むか」）。GitHub なのに `owner/name` を読めない
+  /// URL を、GitHub でない URL と区別するのに使う。
+  static func isGitHub(remoteURL url: String) -> Bool {
+    url.contains("github.com")
   }
 
   /// GraphQL / `gh --json` の `{nameWithOwner}` を読む。

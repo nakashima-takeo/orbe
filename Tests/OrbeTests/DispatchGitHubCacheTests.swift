@@ -12,7 +12,7 @@ final class DispatchGitHubCacheTests: OrbeTestCase {
     let provider = DispatchDataProvider(
       cwd: "/tmp", model: model, localization: LocalizationStore(language: .ja),
       worktreeTemplate: WorktreePathTemplate.defaultTemplate)
-    provider.remotes = [:]
+    provider.remoteListing = .read([:])
     return provider
   }
 

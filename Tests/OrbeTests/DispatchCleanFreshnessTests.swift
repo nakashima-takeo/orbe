@@ -236,7 +236,7 @@ final class DispatchCleanFreshnessTests: OrbeTestCase {
   /// origin を GitHub の `o/r` とし、その正式名が分かっている（remote の台帳が確定した）状態にする。
   /// 実際の origin は持たせない（fetch や gh が本物の GitHub へ行かないように）。
   private func settleRemoteLedger(_ provider: DispatchDataProvider, _ repo: GitRepo) {
-    provider.remotes = ["origin": "https://github.com/o/r.git"]
+    provider.remoteListing = .read(["origin": "https://github.com/o/r.git"])
     DispatchGitHubCache.shared.setRepositoryName(
       .found(Self.repository), for: Self.repository, key: repo.commonDir)
   }

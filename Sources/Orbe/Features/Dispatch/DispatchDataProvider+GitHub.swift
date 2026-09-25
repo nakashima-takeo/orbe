@@ -54,12 +54,26 @@ extension DispatchDataProvider {
     case failed
   }
 
-  /// remote の台帳（**導出値**。保存しない）。remote の一覧が未着なら未確定。
+  /// remote の一覧の読み取り結果。
+  enum RemoteListing: Equatable {
+    /// remote 名 → fetch の URL。
+    case read([String: String])
+    /// 読めなかった。どの remote が GitHub のどのリポジトリか分からないので、台帳は失敗になる
+    /// （空の一覧として確定させると、どの行も「GitHub の行でない」になり、clean が PR の事実を
+    /// 「確かめて 0 件」と読む）。
+    case unreadable
+  }
+
+  /// remote の台帳（**導出値**。保存しない）。remote の一覧が未着なら未確定、読めなければ失敗。
   var remoteLedger: DispatchRemoteLedger {
-    guard let remotes else { return .pending }
-    return DispatchRemoteLedger(
-      remotes: remotes, resolutions: cachedRepositoryNames,
-      failed: Set(repositoryLookups.filter { $0.value == .failed }.keys))
+    switch remoteListing {
+    case nil: return .pending
+    case .unreadable: return .failed
+    case .read(let remotes):
+      return DispatchRemoteLedger(
+        remotes: remotes, resolutions: cachedRepositoryNames,
+        failed: Set(repositoryLookups.filter { $0.value == .failed }.keys))
+    }
   }
 
   private var cachedRepositoryNames: [GitHubRepoName: GitHubRepositoryResolution] {
@@ -72,7 +86,7 @@ extension DispatchDataProvider {
   /// キャッシュに答えが無く、今回まだ撃っていない名前だけを撃ち、記録は発行の時点で置く。
   /// 1 つずつ撃つのは、1 つの `NOT_FOUND` で他の remote の答えまで失わないため。
   func resolveRemoteRepositories(_ repo: GitRepo) {
-    guard githubReady, let remotes else { return }
+    guard githubReady, case .read(let remotes) = remoteListing else { return }
     let cached = cachedRepositoryNames
     let pending = Set(remotes.values.compactMap(GitHubRepoName.init(remoteURL:)))
       .filter { cached[$0] == nil && repositoryLookups[$0] == nil }

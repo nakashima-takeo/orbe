@@ -13,11 +13,11 @@ import XCTest
 ///   見落として、レビュー中の worktree を安全群に入れる。
 @MainActor
 final class DispatchRemoteLedgerProviderTests: OrbeTestCase {
-  private var dir: URL!
-  private var root: String!
+  var dir: URL!
+  var root: String!
   private var ghDir: URL!
 
-  private let mine = GitHubRepoName(nameWithOwner: "me/r")
+  let mine = GitHubRepoName(nameWithOwner: "me/r")
 
   override func setUpWithError() throws {
     let created = FileManager.default.temporaryDirectory
@@ -88,7 +88,7 @@ final class DispatchRemoteLedgerProviderTests: OrbeTestCase {
     let (model, provider) = makeProvider()
 
     provider.load()
-    XCTAssertTrue(pump({ provider.remotes != nil && model.classification != nil }))
+    XCTAssertTrue(pump({ provider.remoteListing != nil && model.classification != nil }))
     XCTAssertFalse(pump({ !self.calls("R").isEmpty }, timeout: 1), "認証確認が着地するまで撃たない")
 
     try ungate("auth")
@@ -229,19 +229,19 @@ final class DispatchRemoteLedgerProviderTests: OrbeTestCase {
 
 extension DispatchRemoteLedgerProviderTests {
 
-  private func makeProvider() -> (DispatchPaletteModel, DispatchDataProvider) {
+  func makeProvider(cwd: String? = nil) -> (DispatchPaletteModel, DispatchDataProvider) {
     let model = DispatchPaletteModel()
     let provider = DispatchDataProvider(
-      cwd: root, model: model, localization: LocalizationStore(language: .ja),
+      cwd: cwd ?? root, model: model, localization: LocalizationStore(language: .ja),
       worktreeTemplate: WorktreePathTemplate.defaultTemplate, gitHub: GitHubCLI())
     return (model, provider)
   }
 
-  private func addRemote(_ name: String, _ repository: String) {
+  func addRemote(_ name: String, _ repository: String) {
     XCTAssertTrue(git(["remote", "add", name, "https://github.com/\(repository).git"]).isSuccess)
   }
 
-  private func addWorktree(_ name: String, branch: String) throws -> String {
+  func addWorktree(_ name: String, branch: String) throws -> String {
     let path = dir.appendingPathComponent(name).path
     XCTAssertTrue(git(["worktree", "add", "-q", "-b", branch, path]).isSuccess)
     return path
@@ -251,11 +251,11 @@ extension DispatchRemoteLedgerProviderTests {
     model.sections.first { $0.title == title }
   }
 
-  private func item(_ model: DispatchPaletteModel, _ name: String) -> DispatchItem? {
+  func item(_ model: DispatchPaletteModel, _ name: String) -> DispatchItem? {
     section(model, "Worktrees")?.items.first { $0.name == name }
   }
 
-  private func pullRequestRow(_ model: DispatchPaletteModel, _ number: Int) -> DispatchItem? {
+  func pullRequestRow(_ model: DispatchPaletteModel, _ number: Int) -> DispatchItem? {
     section(model, "Pull requests")?.items.first { $0.idText == "#\(number)" }
   }
 
@@ -319,7 +319,7 @@ extension DispatchRemoteLedgerProviderTests {
     ShellPATH.shared = ShellPATH(probe: { "\(path):/usr/bin:/bin" })
   }
 
-  private func answer(_ name: String, found canonical: String) throws {
+  func answer(_ name: String, found canonical: String) throws {
     try write(#"{"data":{"repository":{"nameWithOwner":"\#(canonical)"}}}"#, to: resolveFile(name))
   }
 
@@ -336,7 +336,7 @@ extension DispatchRemoteLedgerProviderTests {
   }
 
   /// open PR 一覧を、この 1 件だけにする。
-  private func servePullRequest(_ number: Int, head: String, from repository: String) throws {
+  func servePullRequest(_ number: Int, head: String, from repository: String) throws {
     let node =
       #"{"number":\#(number),"title":"pr \#(number)","headRefName":"\#(head)","#
       + #""headRepository":{"nameWithOwner":"\#(repository)"},"reviewDecision":null}"#
@@ -345,7 +345,7 @@ extension DispatchRemoteLedgerProviderTests {
       to: ghDir.appendingPathComponent("prs.json").path)
   }
 
-  private func serveBranchPullRequests(_ head: String, _ json: String) throws {
+  func serveBranchPullRequests(_ head: String, _ json: String) throws {
     try write(
       json,
       to: ghDir.appendingPathComponent("branch/\(head.replacingOccurrences(of: "/", with: "_"))")
@@ -374,17 +374,17 @@ extension DispatchRemoteLedgerProviderTests {
   }
 
   @discardableResult
-  private func git(_ args: [String]) -> GitRunner.Output {
+  func git(_ args: [String]) -> GitRunner.Output {
     run(args, in: root)
   }
 
   @discardableResult
-  private func run(_ args: [String], in cwd: String) -> GitRunner.Output {
+  func run(_ args: [String], in cwd: String) -> GitRunner.Output {
     GitRunner.shared.runSync(args, cwd: cwd)
   }
 
   /// main queue を回しながら条件の成立を待つ（provider の completion は main で届く）。
-  private func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
+  func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while !condition(), Date() < deadline {
       RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))

@@ -9,7 +9,8 @@ import Foundation
 enum DispatchRemoteLedger: Equatable {
   /// GitHub の remote に、正式名がまだ分からないもの（問い合わせ中・未発行）がある。
   case pending
-  /// 正式名の問い合わせのどれかが失敗した。
+  /// どの remote が GitHub のどのリポジトリかを決められなかった（正式名の問い合わせの失敗・remote の
+  /// 一覧が読めない・GitHub の URL からリポジトリ名を読めない）。
   case failed
   case settled(Resolved)
 
@@ -73,6 +74,11 @@ enum DispatchRemoteLedger: Equatable {
           hasFailure = true
           continue
         }
+      } else if GitHubRepoName.isGitHub(remoteURL: url) {
+        // GitHub の remote なのにリポジトリ名を読めない。「GitHub の行でない」と確定させると、clean が
+        // その remote を追跡する行の PR の事実を「確かめて 0 件」と読むので、分からないまま失敗にする。
+        hasFailure = true
+        continue
       } else {
         canonical = nil
       }

@@ -52,6 +52,16 @@ final class DispatchRemoteLedgerTests: OrbeTestCase {
       .failed)
   }
 
+  /// GitHub の URL なのにリポジトリ名を読めない remote は、「GitHub の行でない」と確定させず失敗にする
+  /// （確定させると、clean がその remote を追跡する行の PR の事実を「確かめて 0 件」と読む）。
+  func testGitHubURLWithoutARepositoryNameLeavesTheLedgerFailed() {
+    XCTAssertEqual(
+      DispatchRemoteLedger(
+        remotes: ["origin": "git@github.com:me/r.git", "odd": "https://github.com/"],
+        resolutions: [mine: .found(mine)], failed: []),
+      .failed)
+  }
+
   /// URL が改名前の名前のままでも、GitHub が答えた正式名で行の ref が決まる（PR の head と等しくなる）。
   func testRenamedRemoteIsIdentifiedByItsCanonicalName() {
     let old = GitHubRepoName(nameWithOwner: "me/old-name")

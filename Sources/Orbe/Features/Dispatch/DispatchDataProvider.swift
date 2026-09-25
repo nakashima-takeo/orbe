@@ -52,9 +52,9 @@ final class DispatchDataProvider {
   private(set) var localBranches: [GitBranch] = []
   /// 読み手は分冊（`DispatchDataProvider+CleanProbe.swift`）。
   private(set) var remoteBranches: [GitBranch] = []
-  /// remote 名 → URL。`nil` = 未着（remote の台帳は未確定）。書き手は `loadGit`、読み手は分冊
+  /// remote の一覧の読み取り。`nil` = 未着（remote の台帳は未確定）。書き手は `loadGit`、読み手は分冊
   /// （`DispatchDataProvider+GitHub.swift`。台帳と正式名の問い合わせ）。
-  var remotes: [String: String]?
+  var remoteListing: RemoteListing?
   // gh レーンの状態。書き手は分冊（`DispatchDataProvider+GitHub.swift`）、読み手は `rebuild`。
   var issues: [GitHubIssue] = []
   var pullRequests: [GitHubPullRequest] = []
@@ -212,7 +212,7 @@ final class DispatchDataProvider {
     // PR 行とチップが出る）。
     group.enter()
     repo.remotes {
-      self.remotes = $0
+      self.remoteListing = $0.map(RemoteListing.read) ?? .unreadable
       group.leave()
     }
     // 分類（レーン D）は worktree 一覧と既定ブランチが揃ってはじめて叩けるのでここから起動する。
