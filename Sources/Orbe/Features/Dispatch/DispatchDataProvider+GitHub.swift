@@ -36,18 +36,14 @@ extension DispatchDataProvider {
           self.rebuild()
           return
         }
-        // キャッシュ書き込みは `self` の生存判定より前——provider はパレットと同じ寿命で、gh の応答前に
-        // 閉じられるのが常用経路。self が消えたら捨てる作りだと次回の先描きが永遠に温まらない。
-        GitHubCLI.shared.issues(cwd: repo.root, limit: self.ghLimit) { [weak self] fetched in
-          if let fetched { DispatchGitHubCache.shared.setIssues(fetched, for: repo.commonDir) }
-          self?.applyFetchedIssues(fetched)
-        }
-        GitHubCLI.shared.pullRequests(cwd: repo.root, limit: self.ghLimit) { [weak self] fetched in
-          if let fetched {
-            DispatchGitHubCache.shared.setPullRequests(fetched, for: repo.commonDir)
-          }
-          self?.applyFetchedPullRequests(fetched)
-        }
+        DispatchGitHubCache.shared.refreshIssues(
+          for: repo.commonDir,
+          fetch: { GitHubCLI.shared.issues(cwd: repo.root, completion: $0) },
+          landed: { [weak self] in self?.applyFetchedIssues($0) })
+        DispatchGitHubCache.shared.refreshPullRequests(
+          for: repo.commonDir,
+          fetch: { GitHubCLI.shared.pullRequests(cwd: repo.root, completion: $0) },
+          landed: { [weak self] in self?.applyFetchedPullRequests($0) })
         self.loadBranchPullRequests(repo)
       }
     }
@@ -57,7 +53,7 @@ extension DispatchDataProvider {
   /// **worktree にあるブランチの名指し**で引く。直近 N 件の一覧窓では、窓落ちした PR のぶんだけ
   /// 「マージ済みなのに merged チップが出ない」「レビュー中なのに安全確認を素通りする」が起きる——
   /// 対象を worktree のブランチに絞れば件数は worktree 本数で抑えられ、窓の概念そのものが消える。
-  /// パレットの PR 一覧 UI は別（bulk の open 一覧。一覧表示は窓で正当）。
+  /// パレットの PR 一覧（open 一覧）は closed / merged を含まず上限もあるので、掃除の事実はそれに頼らない。
   ///
   /// git レーン（worktree 一覧）と gh レーン（認証確認）の両方が揃ってはじめて引けるので、
   /// **両側の着地点から同じこの入口を叩き、先に来た側は素通りする**（worktree 未着なら対象が
@@ -83,7 +79,8 @@ extension DispatchDataProvider {
     guard !pending.isEmpty else { return }
     for head in pending { branchPRFetches[head] = .fetching }
     GitHubCLI.shared.branchPullRequests(cwd: repo.root, heads: pending) { [weak self] head, prs in
-      // キャッシュ書き込みは `self` の生存判定より前（issues/PR と同じ理由）。
+      // キャッシュ書き込みは `self` の生存判定より前——provider はパレットと同じ寿命で、gh の応答前に
+      // 閉じられるのが常用経路。self が消えたら捨てる作りだと次回の先描きが永遠に温まらない。
       if let prs {
         DispatchGitHubCache.shared.setBranchPullRequests(prs, head: head, for: repo.commonDir)
       }

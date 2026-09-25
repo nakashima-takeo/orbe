@@ -106,9 +106,6 @@ final class DispatchDataProvider {
     return cleanProbes == nil || !probingPaths.isEmpty || states.values.contains(.fetching)
   }
 
-  /// gh 取得の上限件数（issues / open PR の一覧。分冊も読む）。
-  let ghLimit = 30
-
   init(
     cwd: String, model: DispatchPaletteModel, localization: LocalizationStore,
     worktreeTemplate: String, tabOccupancies: [TabOccupancy] = [], runner: GitRunner = .shared

@@ -17,13 +17,16 @@ enum GitHubAvailability: Equatable {
 final class GitHubCLI {
   static let shared = GitHubCLI()
 
-  private let queue = DispatchQueue(label: "dev.orbe.gh", qos: .userInitiated)
-  /// ブラウザで開く操作の口。取得（`queue`）とは分ける——結果を待たない即時操作なので取得と
-  /// 直列化する理由が無く、同じ列に載せると閉じた PR の取得（worktree 本数ぶんの往復）が
-  /// 捌けるまでブラウザが開かない。決定は Enter 一発という前提がそこで崩れる。
+  /// probe と一覧取得のレーン。並行にするのは、issue と PR の一覧が互いの着地を待たないため
+  /// （一覧 1 本が数秒かかりうる）。同じ一覧の二重取得は呼び出し側の合流（`DispatchGitHubCache`）が防ぐ。
+  private let queue = DispatchQueue(
+    label: "dev.orbe.gh", qos: .userInitiated, attributes: .concurrent)
+  /// ブラウザで開く操作の口。取得（`queue`）とは分ける——結果を待たない即時操作なので、
+  /// 取得のレーンに載せると一覧の取得が捌けるまでブラウザが開かない。決定は Enter 一発という
+  /// 前提がそこで崩れる。
   private let webQueue = DispatchQueue(label: "dev.orbe.gh.web", qos: .userInitiated)
-  /// ブランチ PR 取得のレーン。1 往復の取得（`queue`）と分ける——直列に載せると worktree 本数ぶんの
-  /// 往復がそのまま積み上がる（実測 0.75〜1.0 秒/本）。
+  /// ブランチ PR 取得のレーン。本数を `branchFetchConcurrency` で抑えるため、一覧取得（`queue`）とは
+  /// 分ける（1 本あたり実測 0.75〜1.0 秒）。
   private let branchQueue = DispatchQueue(
     label: "dev.orbe.gh.branch", qos: .userInitiated, attributes: .concurrent)
   /// 1 回の発行で並べるレーンの本数。GitHub の secondary rate limit に配慮した控えめな値
@@ -36,6 +39,15 @@ final class GitHubCLI {
 
   /// gh 呼び出しの時間上限（ネット待ちのハングを引きずらない）。
   private let timeout: TimeInterval = 15
+
+  /// open 一覧の取得上限。巨大リポジトリで取得全体が失敗に倒れないための安全弁。
+  ///
+  /// gh は `--limit` が 100 を超えると 100 件ごとに往復してページングし、1 回の取得は `timeout` の
+  /// 壁時計で打ち切られる。打ち切りは失敗（`nil`）で、行は 1 件も差し替わらない。だから上限は
+  /// `timeout` の半分程度で成功しきる件数に置く（実測: issue 1000 件で約 7.5 秒・PR 500 件で約 8 秒。
+  /// PR は `reviewDecision` の分だけ issue の約 2 倍重い）。`timeout` や取得フィールドを変えたら測り直す。
+  static let openIssueLimit = 1000
+  static let openPullRequestLimit = 500
 
   /// 打ち切り後に EOF を待つ猶予。pipe の書き込み端を握る子孫がいると EOF は来ないことがあり、
   /// **無期限に待つと、待ちそのものが新しいハングになる**（`GitRunner.terminationGrace` と同じ規範）。
@@ -72,25 +84,24 @@ final class GitHubCLI {
 
   // MARK: - 取得
 
-  /// open issue 一覧。`nil` = 取得失敗（gh 未解決・非 0 終了・タイムアウト・デコード失敗）で
-  /// 呼び出し側は前回結果を据え置く。`[]` は「0 件」を意味する。
-  func issues(cwd: String, limit: Int, completion: @escaping ([GitHubIssue]?) -> Void) {
+  /// open issue 一覧（`openIssueLimit` まで全件・新しい順）。`nil` = 取得失敗（gh 未解決・非 0 終了・
+  /// タイムアウト・デコード失敗）で呼び出し側は前回結果を据え置く。`[]` は「0 件」を意味する。
+  func issues(cwd: String, completion: @escaping ([GitHubIssue]?) -> Void) {
     fetch(
       cwd: cwd,
       args: [
-        "issue", "list", "--state", "open", "--limit", String(limit), "--json",
+        "issue", "list", "--state", "open", "--limit", String(Self.openIssueLimit), "--json",
         "number,title",
       ], completion: completion)
   }
 
-  /// open PR 一覧。`nil` = 取得失敗（呼び出し側は前回結果を据え置く）／`[]` = 0 件。
-  func pullRequests(
-    cwd: String, limit: Int, completion: @escaping ([GitHubPullRequest]?) -> Void
-  ) {
+  /// open PR 一覧（`openPullRequestLimit` まで全件・新しい順）。`nil` = 取得失敗（呼び出し側は前回結果を
+  /// 据え置く）／`[]` = 0 件。
+  func pullRequests(cwd: String, completion: @escaping ([GitHubPullRequest]?) -> Void) {
     fetch(
       cwd: cwd,
       args: [
-        "pr", "list", "--state", "open", "--limit", String(limit), "--json",
+        "pr", "list", "--state", "open", "--limit", String(Self.openPullRequestLimit), "--json",
         "number,title,headRefName,reviewDecision,isCrossRepository",
       ], completion: completion)
   }
@@ -142,7 +153,7 @@ final class GitHubCLI {
     }
   }
 
-  /// 取得の共通口（1 往復）。失敗は `nil`（空配列に潰さない——空で潰すと呼び出し側のキャッシュを
+  /// 一覧取得の共通口。失敗は `nil`（空配列に潰さない——空で潰すと呼び出し側のキャッシュを
   /// 消してしまう）。
   private func fetch<T: Decodable>(
     cwd: String, args: [String], completion: @escaping ([T]?) -> Void
