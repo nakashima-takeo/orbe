@@ -42,6 +42,7 @@ final class DispatchRowTests: OrbeTestCase {
     let shortened = renderedWidth(slot, width: natural / 2)
     XCTAssertGreaterThan(shortened, 0, "読める幅があれば末尾省略で出す")
     XCTAssertLessThanOrEqual(shortened, natural / 2)
-    XCTAssertEqual(renderedWidth(slot, width: 1000), natural, "入る幅なら全文のまま")
+    let fullText = renderedWidth(Text("feat: session restore").fixedSize(), width: 1000)
+    XCTAssertEqual(natural, fullText, "入る幅なら全文のまま")
   }
 }

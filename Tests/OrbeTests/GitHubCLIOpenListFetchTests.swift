@@ -110,12 +110,19 @@ final class GitHubCLIOpenListFetchTests: OrbeTestCase {
 
   /// 1 ページの問い合わせは GraphQL の connection を新しい順・open だけで引き、位置はアプリが持つ
   /// カーソルで渡す。ホストは認証確認と同じ github.com を名指しする（`gh api` は作業ディレクトリから
-  /// ホストを決めないので、名指ししないと確かめた先と取りに行く先がずれうる）。
+  /// ホストを決めないので、名指ししないと確かめた先と取りに行く先がずれうる）。owner / name は gh が
+  /// 作業ディレクトリのリポジトリで埋める（`-F` の置き換え。`-f` では文字どおり `{owner}` が送られる）。
   func testPageQueryNamesHostCursorAndOrder() throws {
     let firstPage = GitHubCLI.openIssuesPageArguments(first: 100, after: nil)
     let nextPage = GitHubCLI.openPullRequestsPageArguments(first: 40, after: "Y3Vyc29y")
 
     XCTAssertEqual(Array(firstPage.prefix(4)), ["api", "graphql", "--hostname", "github.com"])
+    for page in [firstPage, nextPage] {
+      for field in ["owner={owner}", "name={repo}"] {
+        let index = try XCTUnwrap(page.firstIndex(of: field), "\(field) を渡す")
+        XCTAssertEqual(page[index - 1], "-F", "\(field) の置き換えは -F でだけ効く")
+      }
+    }
     XCTAssertTrue(firstPage.contains("first=100"))
     XCTAssertFalse(firstPage.contains { $0.hasPrefix("endCursor=") }, "初回はカーソルを渡さない")
     XCTAssertEqual(
