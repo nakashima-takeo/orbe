@@ -5,16 +5,16 @@ import XCTest
 /// DispatchSectionBuilder（純粋関数）の相関・重複排除・フォールバック・action ペイロード検証。
 final class DispatchSectionBuilderTests: OrbeTestCase {
 
-  private func section(_ sections: [DispatchSection], _ title: String) -> DispatchSection? {
+  func section(_ sections: [DispatchSection], _ title: String) -> DispatchSection? {
     sections.first { $0.title == title }
   }
 
-  private let origin = GitHubRepoName(nameWithOwner: "o/r")
+  let origin = GitHubRepoName(nameWithOwner: "o/r")
 
   /// origin だけを持つ確定した台帳。
-  private var ledger: DispatchRemoteLedger { .settled(.init(repositories: ["origin": origin])) }
+  var ledger: DispatchRemoteLedger { .settled(.init(repositories: ["origin": origin])) }
 
-  private func pullRequest(
+  func pullRequest(
     _ number: Int, head: String, repo: GitHubRepoName? = nil, reviewDecision: String? = nil
   ) -> GitHubPullRequest {
     GitHubPullRequest(
