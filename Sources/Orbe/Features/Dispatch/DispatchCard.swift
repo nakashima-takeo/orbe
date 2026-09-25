@@ -17,17 +17,17 @@ struct DispatchCard: View {
   let maxHeight: CGFloat
   @FocusState private var focus: DispatchFocus?
   /// リスト内容の実測高（ハグ用・上限で切った値）。初期は cap にして初回の 0 collapse フラッシュを避ける。
-  @State private var contentHeight: CGFloat = 380
+  @State private var contentHeight: CGFloat = Self.listCap
   /// ヘッダ＋フッターの実測高（リスト cap から差し引き、カードが窓を超えないようにする）。
   @State private var chromeHeight: CGFloat = 0
 
   /// リスト部の内容基準の高さ上限（380・コンポーネント局所定数）。
-  private let listCap: CGFloat = 380
+  private static let listCap: CGFloat = 380
 
   /// リスト部の実効高。内容にハグしつつ 380 と「窓 − chrome」の小さい方で頭打ち（超過は内部スクロール）。
   private var listHeight: CGFloat {
     let available = max(0, maxHeight - chromeHeight)
-    return min(contentHeight, min(listCap, available))
+    return min(contentHeight, min(Self.listCap, available))
   }
 
   var body: some View {
@@ -245,7 +245,7 @@ struct DispatchCard: View {
             // Lazy の内容高は未生成の行を推定で数え、スクロールで行が生成されるたびに動く。上限で切れば
             // 上限を超える件数では値が止まり、スクロールのたびにカード全体が描き直されない。
             Color.clear.preference(
-              key: DispatchContentHeightKey.self, value: min(geometry.size.height, listCap))
+              key: DispatchContentHeightKey.self, value: min(geometry.size.height, Self.listCap))
           }
         )
       }
