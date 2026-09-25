@@ -83,8 +83,8 @@ extension WindowController {
   /// 切替パレット末尾の「＋ 新規ワークスペース」。ソース切替（既存フォルダ / git clone）で workspace を
   /// 作る専用フォーム。`name` 非 nil でリンク解除状態の名前を引き継ぐ。dismiss は切替画面（⌘⇧S パレット）へ戻す。
   func showWorkspaceCreate(name: String?) {
-    // パス初期値＝アクティブタブの cwd（`~` 短縮）。clone 先の親も同じ初期値（model init）。
-    let initialPath = (store.activeTabCwdOrHome() as NSString).abbreviatingWithTildeInPath
+    // パス初期値＝新しい workspace の root の既定（`~` 短縮）。clone 先の親も同じ初期値（model init）。
+    let initialPath = (store.defaultNewWorkspaceRoot() as NSString).abbreviatingWithTildeInPath
     let m = WorkspaceCreateModel(path: initialPath, name: name, localization: localization)
     m.onCreate = { [weak self] path, name in
       guard let self else { return }
@@ -114,9 +114,8 @@ extension WindowController {
       defaultCommand: agentLauncher.resolvedDefaultCommand)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
 
-    let cwd = store.activeTabCwdOrHome()
     let provider = DispatchDataProvider(
-      cwd: cwd, model: p, localization: localization,
+      cwd: store.newTabCwd(inWorkspaceAt: activeWorkspace), model: p, localization: localization,
       worktreeTemplate: activeEffectiveSettings()[SettingKeys.worktreeDir],
       tabOccupancies: tabOccupancies())
 
