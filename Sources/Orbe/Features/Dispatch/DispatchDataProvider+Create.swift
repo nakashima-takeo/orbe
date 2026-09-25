@@ -189,14 +189,14 @@ extension DispatchDataProvider {
   func openWeb(for item: DispatchItem) {
     guard let repo else { return }
     if let number = item.linkedPRNumber {
-      GitHubCLI.shared.openPRWeb(number: number, cwd: repo.root)
+      gitHub.openPRWeb(number: number, cwd: repo.root)
       return
     }
     switch item.action {
     case .pullRequest(let number, _):
-      GitHubCLI.shared.openPRWeb(number: number, cwd: repo.root)
+      gitHub.openPRWeb(number: number, cwd: repo.root)
     case .open(.issue(let number, _, _)):
-      GitHubCLI.shared.openIssueWeb(number: number, cwd: repo.root)
+      gitHub.openIssueWeb(number: number, cwd: repo.root)
     default:
       break
     }

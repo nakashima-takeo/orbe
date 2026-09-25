@@ -21,7 +21,7 @@ extension DispatchDataProvider {
   func loadGitHub(_ repo: GitRepo) {
     repo.originIsGitHub { [weak self] isGitHub in
       guard let self else { return }
-      GitHubCLI.shared.probe(cwd: repo.root, isGitHub: isGitHub) { [weak self] state in
+      gitHub.probe(cwd: repo.root, isGitHub: isGitHub) { [weak self] state in
         guard let self else { return }
         self.probedGitHubState = state
         self.model?.githubState = state
@@ -31,13 +31,15 @@ extension DispatchDataProvider {
           self.rebuild()
           return
         }
+        // 取得はパレットを閉じても続くので、provider ではなく実行基盤だけを捕まえる。
+        let gitHub = self.gitHub
         DispatchGitHubCache.shared.refreshIssues(
           for: repo.commonDir,
-          fetch: { GitHubCLI.shared.openIssues(cwd: repo.root, page: $0, finished: $1) },
+          fetch: { gitHub.openIssues(cwd: repo.root, page: $0, finished: $1) },
           updated: { [weak self] in self?.applyFetchedIssues($0, growing: $1) })
         DispatchGitHubCache.shared.refreshPullRequests(
           for: repo.commonDir,
-          fetch: { GitHubCLI.shared.openPullRequests(cwd: repo.root, page: $0, finished: $1) },
+          fetch: { gitHub.openPullRequests(cwd: repo.root, page: $0, finished: $1) },
           updated: { [weak self] in self?.applyFetchedPullRequests($0, growing: $1) })
         self.resolveRemoteRepositories(repo)
         self.loadBranchPullRequests(repo)
@@ -76,7 +78,7 @@ extension DispatchDataProvider {
       .filter { cached[$0] == nil && repositoryLookups[$0] == nil }
     for name in pending {
       repositoryLookups[name] = .fetching
-      GitHubCLI.shared.resolveRepository(cwd: repo.root, name: name) { [weak self] resolution in
+      gitHub.resolveRepository(cwd: repo.root, name: name) { [weak self] resolution in
         // キャッシュ書き込みは `self` の生存判定より前（`loadBranchPullRequests` と同じ理由）。
         if let resolution {
           DispatchGitHubCache.shared.setRepositoryName(resolution, for: name, key: repo.commonDir)
@@ -130,7 +132,7 @@ extension DispatchDataProvider {
     let pending = heads.filter { branchPRFetches[$0] == nil }
     guard !pending.isEmpty else { return }
     for head in pending { branchPRFetches[head] = .fetching }
-    GitHubCLI.shared.branchPullRequests(cwd: repo.root, heads: pending) { [weak self] head, prs in
+    gitHub.branchPullRequests(cwd: repo.root, heads: pending) { [weak self] head, prs in
       // キャッシュ書き込みは `self` の生存判定より前——provider はパレットと同じ寿命で、gh の応答前に
       // 閉じられるのが常用経路。self が消えたら捨てる作りだと次回の先描きが永遠に温まらない。
       if let prs {

@@ -20,6 +20,8 @@ final class DispatchDataProvider {
   /// 読み手は分冊（`DispatchDataProvider+CleanProbe.swift`）。
   let tabOccupancies: [TabOccupancy]
   private let runner: GitRunner
+  /// gh の実行基盤。読み手は分冊（`DispatchDataProvider+GitHub.swift`・`+Create.swift`）。
+  let gitHub: GitHubCLI
   /// 提示時に発行した `fetch --prune` の着地。ベースから新しいブランチを切る作成は、この着地を
   /// 待ってから撃つ（`createWorktree`）。1 回きりのイベントなので台帳ではなく `DispatchGroup` で持つ
   /// ——未着地なら着地後に・着地済み／未発行なら即実行、が `notify` の定義そのもの。
@@ -117,7 +119,8 @@ final class DispatchDataProvider {
 
   init(
     cwd: String, model: DispatchPaletteModel, localization: LocalizationStore,
-    worktreeTemplate: String, tabOccupancies: [TabOccupancy] = [], runner: GitRunner = .shared
+    worktreeTemplate: String, tabOccupancies: [TabOccupancy] = [], runner: GitRunner = .shared,
+    gitHub: GitHubCLI = .shared
   ) {
     self.cwd = cwd
     self.model = model
@@ -125,6 +128,7 @@ final class DispatchDataProvider {
     self.worktreeTemplate = worktreeTemplate
     self.tabOccupancies = tabOccupancies
     self.runner = runner
+    self.gitHub = gitHub
   }
 
   // MARK: - ロード
