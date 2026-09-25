@@ -52,6 +52,23 @@ final class DispatchPaletteTests: OrbeTestCase {
     XCTAssertEqual(p.selectedItem?.name, "agent-hooks")
   }
 
+  /// 絞り込み中に裏の gh 更新で行が差し替わっても、入力中のフィルタは新しい行に効いたまま。
+  func testFilterStaysAppliedWhenSectionsAreReplaced() {
+    let p = makeModel()
+    p.query = "feat"
+    p.onQueryChanged()
+    var input = DispatchSectionBuilder.Input.designSample
+    input.issues.append(GitHubIssue(number: 999, title: "feat: arrived later"))
+    input.issues.append(GitHubIssue(number: 998, title: "unrelated"))
+
+    p.sections = DispatchSectionBuilder.build(input)
+
+    XCTAssertEqual(
+      p.visibleSections.first { $0.title == "Issues" }?.items.map(\.name),
+      ["feat: arrived later"], "新しく着いた行にもフィルタが効く")
+    XCTAssertEqual(p.items.count, 4, "既存の feat 3 行＋新しく着いた 1 行")
+  }
+
   func testFilterMatchesIdAndDetail() {
     let p = makeModel()
     p.query = "#145"
