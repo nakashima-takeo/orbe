@@ -40,8 +40,6 @@ final class FakeTextSurface: TextSurface {
 
   func setLineMarks(_ spans: LineMarkSpans) { lineMarks = spans }
 
-  func setGround(_ color: NSColor) {}
-
   func scrollToCenter(_ offset: Int) {}
 
   func scrollToVisible(_ range: NSRange) {}

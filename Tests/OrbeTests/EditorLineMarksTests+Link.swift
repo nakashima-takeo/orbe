@@ -28,9 +28,9 @@ extension EditorLineMarksTests {
     document.surface.onOpenLink = { opened.append($0) }
     let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
     let onURL = document.surface.responder.convert(
-      NSPoint(x: bodyX + 8 * cell, y: rowMidY(1) - style.topInset), to: nil)
+      NSPoint(x: 8 * cell, y: rowMidY(1) - style.topInset), to: nil)
     let offURL = document.surface.responder.convert(
-      NSPoint(x: bodyX + 1 * cell, y: rowMidY(1) - style.topInset), to: nil)
+      NSPoint(x: 1 * cell, y: rowMidY(1) - style.topInset), to: nil)
     func click(_ point: NSPoint, _ flags: NSEvent.ModifierFlags) throws {
       document.surface.responder.mouseDown(
         with: try mouse(.leftMouseDown, point, flags, in: window))
@@ -65,7 +65,7 @@ extension EditorLineMarksTests {
     let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
     let responder = document.surface.responder
     let onURL = responder.convert(
-      NSPoint(x: bodyX + 8 * cell, y: rowMidY(1) - style.topInset), to: nil)
+      NSPoint(x: 8 * cell, y: rowMidY(1) - style.topInset), to: nil)
     let before = client.selectedRange()
 
     responder.mouseDown(with: try mouse(.leftMouseDown, onURL, [.command], in: window))
@@ -81,7 +81,7 @@ extension EditorLineMarksTests {
     XCTAssertEqual(client.selectedRange(), before, "その間に選択は伸びない")
 
     let edge = responder.convert(
-      NSPoint(x: bodyX + 16.8 * cell, y: rowMidY(1) - style.topInset), to: nil)
+      NSPoint(x: 16.8 * cell, y: rowMidY(1) - style.topInset), to: nil)
     responder.mouseDown(with: try mouse(.leftMouseDown, edge, [.command], in: window))
     let justOutside = NSPoint(x: edge.x + 2, y: edge.y)
     responder.mouseUp(with: try mouse(.leftMouseUp, justOutside, [.command], in: window))

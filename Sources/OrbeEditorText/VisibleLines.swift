@@ -7,7 +7,7 @@ extension NSFont {
   var cellWidth: CGFloat { (" " as NSString).size(withAttributes: [.font: self]).width }
 }
 
-/// 見えている段落 1 つの geometry。座標は text container 基準（テキスト view の本文の矩形＝ガターの右）。
+/// 見えている段落 1 つの geometry。座標は text container 基準（テキスト view の座標と同じ）。
 struct VisibleLine {
   /// 段落の区間（改行込み。UTF-16）。
   let range: NSRange

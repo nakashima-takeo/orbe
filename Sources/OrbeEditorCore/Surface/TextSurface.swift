@@ -58,11 +58,6 @@ public protocol TextSurface: AnyObject {
   /// 本文の URL が ⌘クリックされた。行き先（外部ブラウザ等）は面を組む側が決める。
   var onOpenLink: ((URL) -> Void)? { get set }
 
-  /// 面の地。面はこの色で自分の矩形の地を敷く（透過の veil を二重にしないため、載せる側と分担する）。
-  /// 載せる側の義務: 自分の地と同じ色（透過設定を反映した veil）を渡す／面の矩形には自分の地を描かない／
-  /// 面の矩形が動いたら自分の地を描き直す／設定が変われば渡し直す。
-  func setGround(_ color: NSColor)
-
   var delegate: TextSurfaceDelegate? { get set }
 }
 
@@ -76,6 +71,13 @@ public protocol TextSurfaceDelegate: AnyObject {
   /// `range` の中の役割の区間（重ならない昇順で、`range` の中に閉じる。役割の無い字は含まない）。面は見えている
   /// 範囲の色をこれで引く——`didChange` から戻った後は編集の後の役割を答える。
   func surface(_ surface: any TextSurface, rolesIn range: NSRange) -> [HighlightSpan]
+  /// 行（`LineIndex` の行。本文が改行で終わるときの末尾の空行を含む）の数。面は行番号の列の桁をこれで決める。
+  func surfaceLineCount(_ surface: any TextSurface) -> Int
+  /// オフセットを含む行（0 始まり）。
+  func surface(_ surface: any TextSurface, lineContaining offset: Int) -> Int
+  /// 行の区間——行頭から次の行頭まで（最終行は本文の終わりまで）。面は行頭が行の先頭と一致する段落にだけ番号を描き、
+  /// 行番号の列で選ぶ行もこれで決める。
+  func surface(_ surface: any TextSurface, rangeOfLine line: Int) -> NSRange
 }
 
 /// 強調の地の種類。重ね順は下から 選択文字列の出現 → 語の出現 → 検索の一致 → 現在の一致（現在の一致の行全体の地は
@@ -89,8 +91,8 @@ public enum TextHighlightKind: Sendable {
 
 /// 見えている範囲を本文の言葉で表したもの。`firstVisible` は先頭に見えている行（`LineIndex` の行）の行頭オフセット、
 /// `hiddenFraction` はその行が上へ隠れている割合（0…1）、`visibleLines` は可視矩形に入る行数（小数）、`clipsRight` は
-/// 本文が右にまだ続く（横に隠れている部分がある）か。`hiddenColumns` は左へ隠れている幅、`visibleColumns` は面の
-/// 見えている幅（ガターを含む）で、どちらも半角の桁数（小数）。エンジンの推定の文書高に依らず、実際に layout された行の矩形から出る。
+/// 本文が右にまだ続く（横に隠れている部分がある）か。`hiddenColumns` は左へ隠れている幅、`visibleColumns` は本文の
+/// 見えている幅で、どちらも半角の桁数（小数）。エンジンの推定の文書高に依らず、実際に layout された行の矩形から出る。
 public struct TextViewport: Equatable, Sendable {
   public var firstVisible: Int
   public var hiddenFraction: CGFloat
@@ -128,7 +130,7 @@ public struct TextSurfaceStyle {
   public var caretSize: CGSize
   public var gutterFont: NSFont
   public var gutterTextColor: NSColor
-  /// 行番号ガターの幅（行数がこの幅に収まる限り広がらない）。
+  /// 行番号の列の幅（最大の行番号がこの幅に収まる限り広がらない）。
   public var gutterWidth: CGFloat
   /// 行番号の右端と本文の間。
   public var gutterTrailingInset: CGFloat

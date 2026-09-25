@@ -190,22 +190,37 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     func surface(_ surface: any TextSurface, rolesIn range: NSRange) -> [HighlightSpan] {
       inner.surface(surface, rolesIn: range)
     }
+    func surfaceLineCount(_ surface: any TextSurface) -> Int {
+      inner.surfaceLineCount(surface)
+    }
+    func surface(_ surface: any TextSurface, lineContaining offset: Int) -> Int {
+      inner.surface(surface, lineContaining: offset)
+    }
+    func surface(_ surface: any TextSurface, rangeOfLine line: Int) -> NSRange {
+      inner.surface(surface, rangeOfLine: line)
+    }
   }
 
-  /// 面は器の上端の余白を除いた高さに収まり、器の高さが変わっても収まり続ける（余白の分だけ長いと
-  /// 最下行が常に切れ、余白の帯が素地として露出する）。
+  /// 面は器の上端の余白を除いた高さに収まり、器の大きさが変わっても収まり続ける（余白の分だけ長いと
+  /// 最下行が常に切れ、余白の帯が素地として露出する）。行番号の列が左に、スクロールビューがその右に並ぶ。
   func testSurfaceFitsTheContainerBelowTheTopInset() throws {
     let surface = surfaces.make("x")
     let container = surface.view
-    let inset = EditorStyle.make().topInset
+    let style = EditorStyle.make()
+    let inset = style.topInset
+    let column = style.gutterWidth + style.marks.gutterWidth
     container.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
     container.layoutSubtreeIfNeeded()
     let scroll = try XCTUnwrap(container.subviews.first)
-    XCTAssertEqual(scroll.frame, NSRect(x: 0, y: inset, width: 800, height: 600 - inset))
+    let numbers = try XCTUnwrap(container.subviews.last)
+    XCTAssertEqual(
+      scroll.frame, NSRect(x: column, y: inset, width: 800 - column, height: 600 - inset))
+    XCTAssertEqual(numbers.frame, NSRect(x: 0, y: inset, width: column, height: 600 - inset))
 
     container.frame = NSRect(x: 0, y: 0, width: 500, height: 300)
     container.layoutSubtreeIfNeeded()
-    XCTAssertEqual(scroll.frame, NSRect(x: 0, y: inset, width: 500, height: 300 - inset))
+    XCTAssertEqual(
+      scroll.frame, NSRect(x: column, y: inset, width: 500 - column, height: 300 - inset))
   }
 
   /// 色付けは本文を書き換えないので、色の付いた文書を開いただけでは未保存にならない

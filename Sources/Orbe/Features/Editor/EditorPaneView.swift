@@ -305,7 +305,6 @@ final class EditorPaneView: NSView {
     scrollShadow.isHidden = document == nil
     updateShadow()
     emptyHost.isHidden = document != nil
-    applyGround()
     needsLayout = true
     if hadFocusInside, window?.firstResponder !== focusTarget {
       window?.makeFirstResponder(focusTarget)

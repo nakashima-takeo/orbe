@@ -2,10 +2,9 @@ import AppKit
 import OrbeEditorCore
 import STTextView
 
-/// ガターの overlay——行番号の右の列に git の印を描く。追加・変更は行の高さの 3px バー（続く行は 1 本に
-/// 繋げる）、削除はその境に右向きの三角。当たりを持たず（`hitTest` は nil）、寸法は viewport で、位置は面が
-/// スクロールと layout のたびに置き直す。bounds の y は文書（text container）基準なので、geometry の y を
-/// そのまま描く。
+/// 行番号の列の右端の印の列——git の印を描く。追加・変更は行の高さの 3px バー（続く行は 1 本に繋げる）、削除は
+/// その境に右向きの三角。当たりを持たず（`hitTest` は nil）、寸法は viewport で、位置は行番号の列がスクロールと
+/// layout のたびに置き直す。bounds の y は文書（text container）基準なので、geometry の y をそのまま描く。
 final class LineMarksView: NSView {
   private weak var textView: STTextView?
   private let style: TextSurfaceStyle.Marks

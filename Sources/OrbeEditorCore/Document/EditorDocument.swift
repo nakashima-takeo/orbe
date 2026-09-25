@@ -266,4 +266,17 @@ extension EditorDocument: TextSurfaceDelegate {
   public func surface(_ surface: any TextSurface, rolesIn range: NSRange) -> [HighlightSpan] {
     roleSpans(in: range)
   }
+
+  public func surfaceLineCount(_ surface: any TextSurface) -> Int {
+    lineIndex.lineCount
+  }
+
+  public func surface(_ surface: any TextSurface, lineContaining offset: Int) -> Int {
+    lineIndex.point(at: offset).row
+  }
+
+  public func surface(_ surface: any TextSurface, rangeOfLine line: Int) -> NSRange {
+    let start = lineIndex.start(ofRow: line)
+    return NSRange(location: start, length: lineIndex.end(ofRow: line) - start)
+  }
 }

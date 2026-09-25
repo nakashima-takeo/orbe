@@ -28,6 +28,16 @@ final class SurfaceTextView: STTextView {
     return range.length > 0 && upstream ? range.location : NSMaxRange(range)
   }
 
+  /// 選択を置く。`upstream` なら動く側の端は先頭（前へ伸ばした選択）。
+  func select(_ range: NSRange, upstream: Bool) {
+    guard let textRange = NSTextRange(range, in: textContentManager) else { return }
+    textLayoutManager.textSelections = [
+      NSTextSelection(
+        range: textRange, affinity: upstream ? .upstream : .downstream, granularity: .character)
+    ]
+    needsLayout = true
+  }
+
   /// Esc（変換中でない。変換中は input context が先に飲む）は面では使わない——上流は補完を開くが、面は補完を持たない。
   /// 上の responder へ渡し、載せる側が使えるようにする。
   override func cancelOperation(_ sender: Any?) {
@@ -42,7 +52,7 @@ final class SurfaceTextView: STTextView {
     let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
     if flags.contains(.command), flags.isDisjoint(with: [.shift, .option, .control]),
       event.clickCount == 1,
-      let url = VisibleLines(textView: self).link(at: containerPoint(event.locationInWindow))
+      let url = VisibleLines(textView: self).link(at: convert(event.locationInWindow, from: nil))
     {
       guard (inputContext?.handleEvent(event) ?? false) == false else { return }
       pendingLink = PendingLink(url: url, locationInWindow: event.locationInWindow)
@@ -66,7 +76,8 @@ final class SurfaceTextView: STTextView {
       event.locationInWindow.x - pending.locationInWindow.x,
       event.locationInWindow.y - pending.locationInWindow.y)
     guard moved <= Self.clickSlop,
-      VisibleLines(textView: self).link(at: containerPoint(event.locationInWindow)) == pending.url
+      VisibleLines(textView: self).link(at: convert(event.locationInWindow, from: nil))
+        == pending.url
     else { return }
     onOpenLink?(pending.url)
   }
@@ -76,24 +87,15 @@ final class SurfaceTextView: STTextView {
   override func resetCursorRects() {
     super.resetCursorRects()
     guard NSEvent.modifierFlags.contains(.command) else { return }
-    let gutterWidth = gutterView?.frame.width ?? 0
     let geometry = VisibleLines(textView: self)
-    for line in geometry.lines(in: visibleRect.offsetBy(dx: -gutterWidth, dy: 0)) {
-      for link in geometry.links(in: line) {
-        addCursorRect(link.frame.offsetBy(dx: gutterWidth, dy: 0), cursor: .pointingHand)
-      }
+    for line in geometry.lines(in: visibleRect) {
+      for link in geometry.links(in: line) { addCursorRect(link.frame, cursor: .pointingHand) }
     }
   }
 
   override func flagsChanged(with event: NSEvent) {
     window?.invalidateCursorRects(for: self)
     super.flagsChanged(with: event)
-  }
-
-  /// 窓の点を text container 基準へ（本文の矩形はガターの幅ぶん右）。
-  private func containerPoint(_ locationInWindow: NSPoint) -> CGPoint {
-    let point = convert(locationInWindow, from: nil)
-    return CGPoint(x: point.x - (gutterView?.frame.width ?? 0), y: point.y)
   }
 
   /// End（fn+→）は最後の 1 画面を見せる。上流は文書の下端へ送り clip の上限で縮まる前提で、最終行を最上段まで送れる

@@ -2,17 +2,20 @@ import AppKit
 import OrbeEditorCore
 import STTextView
 
-/// `TextSurface` の STTextView 実装。スクロールビューにテキストビューを載せ、ガター・rendering
+/// `TextSurface` の STTextView 実装。スクロールビューにテキストビューを載せ、行番号の列・rendering
 /// attribute・delegate・焦点・viewport をこの契約へ写す。undo は STTextView が自前で持つ（打鍵を
 /// まとめる coalescing はビュー内部の undo manager にしか無い）。
 ///
-/// 構文の色は窓（上流が layout した範囲）にだけ置く（→ `SyntaxColorWindow`）。
+/// 構文の色は窓（上流が layout した範囲）にだけ置く（→ `SyntaxColorWindow`）。行番号の列は上流のガターを使わず、
+/// スクロールビューの左隣に自前で置く（→ `LineNumbersView`）——上流のガターは画面が動くたびに全部の行番号を作り直し、
+/// 文書の先頭から段落を数える。
 ///
-/// 行の装備と強調の地は受動的な overlay 3 枚で描く（ガターの印・本文のインデント線／丸点／URL 下線・強調の地）。
+/// 行番号の列と、行の装備と強調の地の overlay 2 枚（本文のインデント線／丸点／URL 下線・強調の地）は受動的に描く。
 /// 上流に行ごとの描画の拡張点が無いので、公開の view と TextKit 2 の API だけで載せる——ただし強調の地だけは、選択の地の
 /// 上・文字の下に出すために上流の本文の層の中へ差し込む（公開の口が無い。`installHighlightView`）。どれも寸法は viewport
 /// （文書の全高にすると数万行で巨大な tiled layer になる）で、layout の収束とスクロールのたびに置き直す
-/// ——片方だけでは速いスクロールで印が遅れ、編集で古くなる。
+/// ——片方だけでは速いスクロールで印が遅れ、編集で古くなる。上流は responsive scrolling を使わないので、clip の bounds の
+/// 通知は同期で届き、本文と同じコマで動く。
 ///
 /// スクロールビューは面が組む——最終行を最上段までスクロールできる clip（`OverscrollClipView`）を documentView より先に
 /// 据える（上流は documentView が入った時点の clip の bounds 変化を観測する）。縦スクローラーは出さない——位置は面の外の
@@ -20,15 +23,13 @@ import STTextView
 /// 本文の下が削られない）。
 @MainActor
 final class STTextSurface: NSObject, TextSurface {
-  /// 上端の余白を持つ器。スクロールビューの contentInsets は使わない——横に浮くガター（floating
-  /// subview）が inset を無視して行番号だけ下へずれる（STTextView が FB21059465 として回避している）。
+  /// 上端の余白を空けて行番号の列とスクロールビューを並べる器。
   private let container = SurfaceContainerView()
   private let scrollView: NSScrollView
   private let textView: SurfaceTextView
-  private let marksView: LineMarksView
+  private let numbersView: LineNumbersView
   private let decorationView: LineDecorationView
   private let highlightView: TextHighlightView
-  private let groundView = GutterGroundView()
   private let clipView = OverscrollClipView()
   private var observers: [NSObjectProtocol] = []
 
@@ -53,28 +54,17 @@ final class STTextSurface: NSObject, TextSurface {
     scrollView = NSScrollView()
     textView = SurfaceTextView()
     self.style = style
-    marksView = LineMarksView(textView: textView, style: style.marks)
+    numbersView = LineNumbersView(textView: textView, style: style)
     decorationView = LineDecorationView(
       textView: textView, style: style.decorations, textColor: style.textColor)
     highlightView = TextHighlightView(textView: textView, style: style.highlights)
     colors = SyntaxColorWindow(textView: textView, colors: style.roleColors)
     super.init()
     colors.roles = { [weak self] in self?.roles(in: $0) ?? [] }
-    // 上流の `scrollableTextView()` の設定を写す（縦スクローラーだけ出さない）。
-    scrollView.contentView = clipView
-    scrollView.clipsToBounds = true
-    scrollView.wantsLayer = true
-    scrollView.hasVerticalScroller = false
-    scrollView.hasHorizontalScroller = true
-    scrollView.drawsBackground = false
-    scrollView.scrollerStyle = .overlay
-    scrollView.documentView = textView
-    clipView.lastLineTop = { [weak self] in self?.lastLineTop }
-    container.addSubview(scrollView)
-    container.scrollTarget = scrollView
-    // clear にすると gutter も clear になり、NSVisualEffectView の地が敷かれない（器の veil が透ける）。
+    numbersView.source = self
+    installScrollView()
     textView.backgroundColor = .clear
-    // 本文はガターの右端から始める（既定の 5pt の余白を持たない）。
+    // 本文は行番号の列の右端から始める（既定の 5pt の余白を持たない）。
     textView.textContainer.lineFragmentPadding = 0
     textView.highlightSelectedLine = false
     textView.showsInvisibleCharacters = false
@@ -92,12 +82,9 @@ final class STTextSurface: NSObject, TextSurface {
       })
     apply(style)
     // 装備の overlay は本文の層の下（本文・キャレット・選択の下に出る——選択の地が装備を覆う）。強調の地は本文の層の
-    // 中の選択の層の直上。ガターの overlay はガターの subview で、印の列はガターの右端に錨を置く（上流は桁が増えると
-    // ガターを右へ伸ばす）。
+    // 中の選択の層の直上。
     textView.addSubview(decorationView, positioned: .below, relativeTo: nil)
     installHighlightView()
-    textView.gutterView?.addSubview(groundView, positioned: .below, relativeTo: nil)
-    textView.gutterView?.addSubview(marksView)
     // overlay の矩形は clip view の矩形の関数——スクロール（bounds）と窓の live resize（frame。上流はその間
     // layout を止める）の両方で置き直す。
     clipView.postsBoundsChangedNotifications = true
@@ -121,6 +108,23 @@ final class STTextSurface: NSObject, TextSurface {
 
   deinit {
     for observer in observers { NotificationCenter.default.removeObserver(observer) }
+  }
+
+  /// 上流の `scrollableTextView()` の設定を写し（縦スクローラーだけ出さない）、器に行番号の列と並べる。
+  private func installScrollView() {
+    scrollView.contentView = clipView
+    scrollView.clipsToBounds = true
+    scrollView.wantsLayer = true
+    scrollView.hasVerticalScroller = false
+    scrollView.hasHorizontalScroller = true
+    scrollView.drawsBackground = false
+    scrollView.scrollerStyle = .overlay
+    scrollView.documentView = textView
+    clipView.lastLineTop = { [weak self] in self?.lastLineTop }
+    container.addSubview(scrollView)
+    container.addSubview(numbersView)
+    container.scrollTarget = scrollView
+    container.column = numbersView
   }
 
   /// 強調の地を上流の本文の層（テキスト view の子のうち、面が置いた overlay 以外の唯一の子）の中の、選択の層（その
@@ -156,7 +160,7 @@ final class STTextSurface: NSObject, TextSurface {
   }
 
   func setLineMarks(_ spans: LineMarkSpans) {
-    marksView.spans = spans
+    numbersView.marksView.spans = spans
   }
 
   func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {
@@ -236,56 +240,24 @@ final class STTextSurface: NSObject, TextSurface {
     textView.scrollRangeToVisible(range)
   }
 
-  /// 地は器が本文の下に、`GutterGroundView` がガターの上に敷く（上流のガターは本文の上に浮き、横スクロールで
-  /// 本文がその下を通る——上に地が無いと行番号と字が重なる）。同じ矩形を二度塗らないので透過の濃度が揃う。
-  func setGround(_ color: NSColor) {
-    container.ground = color
-    groundView.color = color
-  }
-
-  /// overlay を viewport の矩形に置き直して描き直し、viewport を出し直して外へ告げる。本文の overlay は frame を
-  /// 可視矩形に、bounds の原点を text container 基準の同じ点に置く——x も y も container の座標がそのまま view の
-  /// 座標になり、描く側が座標を手で引かない。ガターの overlay は x が局所（列の右端に錨）、y が文書（上流は行番号を
-  /// 文書の y に置く）。
+  /// overlay と行番号の列を viewport の矩形に置き直して描き直し、viewport を出し直して外へ告げる。本文の overlay は
+  /// frame を可視矩形に、bounds の原点を text container 基準の同じ点に置く——x も y も container の座標がそのまま view の
+  /// 座標になり、描く側が座標を手で引かない。行番号の列は y だけ文書の座標に合わせる。
   private func layoutOverlays() {
     let visible = textView.visibleRect
-    let gutterWidth = textView.gutterView?.frame.width ?? 0
-    let body = NSRect(
-      x: visible.minX, y: visible.minY, width: max(0, visible.width - gutterWidth),
-      height: visible.height)
-    decorationView.frame = body.offsetBy(dx: gutterWidth, dy: 0)
-    // 強調の地は本文の層（container の座標。ガターの右から）の子。
-    highlightView.frame = body
     for overlay in [decorationView, highlightView] as [NSView] {
-      overlay.setBoundsOrigin(body.origin)
+      overlay.frame = visible
+      overlay.setBoundsOrigin(visible.origin)
       overlay.needsDisplay = true
     }
-    if let gutter = textView.gutterView {
-      // ガターの地は可視矩形（clip view。テキスト view の高さに依らない）を文書の下端（ガターの高さ）で
-      // 切ったぶん。器はその矩形を塗らない。
-      let clip = scrollView.contentView.bounds
-      // 遠くへ飛んだ置き直しの途中はガターの高さが追いついておらず、交わりが無い（null の矩形は無限大の座標）。
-      let visibleGround = CGRect(
-        x: 0, y: clip.minY, width: gutter.bounds.width, height: clip.height
-      ).intersection(gutter.bounds)
-      let ground = visibleGround.isNull ? .zero : visibleGround
-      groundView.frame = ground
-      container.groundHole = NSRect(
-        x: 0, y: ground.minY - clip.minY + style.topInset, width: ground.width,
-        height: ground.height)
-      marksView.frame = NSRect(
-        x: gutter.bounds.width - style.marks.gutterWidth, y: visible.minY,
-        width: style.marks.gutterWidth, height: visible.height)
-      marksView.setBoundsOrigin(NSPoint(x: 0, y: visible.minY))
-      marksView.needsDisplay = true
-    }
+    numbersView.follow(clipView.bounds)
     // 指カーソルの矩形は ⌘ を押している間だけ張る。上流はスクロール・編集で捨てないので、見える行が変わる
     // たび（layout の収束と、viewport を動かさない小さなスクロールの両方）に捨て直す（⌘ の押下・解放は
     // `flagsChanged` が持つ）。
     if NSEvent.modifierFlags.contains(.command) {
       textView.window?.invalidateCursorRects(for: textView)
     }
-    clipView.updateBlankArea(gutterWidth: gutterWidth)
+    clipView.updateBlankArea()
     if let current = measureViewport(), current != viewport {
       viewport = current
       delegate?.surfaceDidChangeViewport(self)
@@ -347,17 +319,6 @@ final class STTextSurface: NSObject, TextSurface {
     textView.insertionPointColor = style.caretColor
     textView.caretSize = style.caretSize
     container.topInset = style.topInset
-    textView.showsLineNumbers = true
-    if let gutter = textView.gutterView {
-      gutter.font = style.gutterFont
-      gutter.textColor = style.gutterTextColor
-      // 行番号は幅 `gutterWidth` の中に右寄せで収まり、その右に印の列が続く。
-      gutter.insets = STRulerInsets(
-        leading: 0, trailing: style.gutterTrailingInset + style.marks.gutterWidth)
-      gutter.minimumThickness = style.gutterWidth + style.marks.gutterWidth
-      gutter.drawSeparator = false
-      gutter.highlightSelectedLine = false
-    }
   }
 
   /// フォントの自然な行高（TextKit が行フラグメントに与える、丸めた高さ）。行高の固定値をこれで割った
@@ -376,9 +337,12 @@ extension STTextSurface: @preconcurrency STTextViewDelegate {
     let edit = TextEdit(range: range, replacementLength: replacementString.utf16.count)
     decorationView.needsDisplay = true
     highlightView.needsDisplay = true
-    marksView.needsDisplay = true
+    numbersView.needsDisplay = true
+    numbersView.marksView.needsDisplay = true
     delegate?.surface(self, didChange: edit)
     colors.textDidChange(edit, near: affectedCharRange.location)
+    // 行数の桁が変われば列の幅が変わる。
+    if numbersView.fittingWidth != numbersView.frame.width { container.needsLayout = true }
   }
 
   func textViewDidChangeSelection(_ notification: Notification) {
@@ -389,5 +353,17 @@ extension STTextSurface: @preconcurrency STTextViewDelegate {
     -> (any STInsertionPointIndicatorProtocol)?
   {
     CaretIndicatorView(frame: frame, size: style.caretSize, color: style.caretColor)
+  }
+}
+
+extension STTextSurface: LineSource {
+  var lineCount: Int { delegate?.surfaceLineCount(self) ?? 1 }
+
+  func line(containing offset: Int) -> Int {
+    delegate?.surface(self, lineContaining: offset) ?? 0
+  }
+
+  func range(ofLine line: Int) -> NSRange {
+    delegate?.surface(self, rangeOfLine: line) ?? NSRange(location: 0, length: length)
   }
 }
