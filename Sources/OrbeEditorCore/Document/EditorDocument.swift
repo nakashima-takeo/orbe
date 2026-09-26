@@ -137,9 +137,9 @@ public final class EditorDocument {
     applyIndentUnit()
   }
 
-  /// 閉じた文書の写しは裏で手放す（大きな木の解放を main で行わない）。
+  /// 閉じた文書の写し・役割の並び・裏の仕事（構文木を含む）は裏で手放す（大きな木の解放を main で行わない）。
   deinit {
-    let released = (text, roles)
+    let released = (text, roles, syntax, analysis)
     DispatchQueue.global(qos: .utility).async { withExtendedLifetime(released) {} }
   }
 
