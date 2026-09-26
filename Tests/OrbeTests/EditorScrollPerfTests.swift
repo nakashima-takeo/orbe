@@ -19,6 +19,29 @@ final class EditorScrollPerfTests: OrbeTestCase {
 
   func test200KB() throws { try run(label: "200KB", bytes: 200_000) }
 
+  /// 打鍵 1 回で文書と Orbe 側が main でする仕事——編集の通知を受けてから、文書と配り先（俯瞰・検索・出現）の処理が
+  /// 戻るまで——を、大きさを変えた文書（64KB / 1MB / 8MB）で並べる。git 管理下（baseline あり）の回も測る。テキスト
+  /// エンジン自身の仕事（TextKit の layout と描画）は含まない（それは `typing`）。
+  func testTypingMainTimeAcrossSizes() throws {
+    for (label, bytes) in [("64KB", 64_000), ("1MB", 1_000_000), ("8MB", 8_000_000)] {
+      let text = Self.swiftSource(bytes: bytes)
+      for tracked in [false, true] {
+        let opened = try open(text)
+        if tracked {
+          opened.document.baseline = text
+          opened.document.waitUntilCaughtUp(timeout: 60)
+        }
+        let timer = EditTimer(inner: opened.document)
+        opened.document.surface.delegate = timer
+        _ = type(into: opened)
+        report(
+          label, tracked ? "typing-main (baseline あり)" : "typing-main", timer.times, digits: 3)
+        opened.document.surface.delegate = opened.document
+        opened.window.orderOut(nil)
+      }
+    }
+  }
+
   /// 1200×800 の窓に Swift の文書を開き、裏の仕事（文書全体の構文色）が追いついてから測る。速いドラッグは開いた
   /// ばかりの文書で、打鍵・ホイール・打鍵の後の速いドラッグは別に開き直した文書で測る。文書を端から端まで通した後の
   /// 打鍵も参考に出す（TextKit が段落を覚えるので、開いたばかりの文書より重い）。
@@ -135,13 +158,15 @@ final class EditorScrollPerfTests: OrbeTestCase {
     return Date().timeIntervalSince(began) * 1000
   }
 
-  private func report(_ label: String, _ name: String, _ times: [Double]) {
+  /// 中央値・p95・最大（ms。`digits` は小数の桁数）。
+  private func report(_ label: String, _ name: String, _ times: [Double], digits: Int = 1) {
     let sorted = times.sorted()
     let median = sorted[sorted.count / 2]
     let p95 = sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))]
+    let format = "%.\(digits)f"
     print(
-      "PERF", label, name, "median", String(format: "%.1f", median), "p95",
-      String(format: "%.1f", p95), "max", String(format: "%.1f", sorted.last ?? 0))
+      "PERF", label, name, "median", String(format: format, median), "p95",
+      String(format: format, p95), "max", String(format: format, sorted.last ?? 0))
   }
 
   /// `bytes` を超えるまで同じ形の宣言を連ねた Swift の本文（1MB で 43,261 行）。
@@ -163,5 +188,39 @@ final class EditorScrollPerfTests: OrbeTestCase {
       text += unit.replacingOccurrences(of: "Item", with: "Item\(k)")
     }
     return text
+  }
+}
+
+/// 編集の通知を文書へ流し、その呼び出しが戻るまでの時間（ms）を記録する delegate。
+@MainActor
+private final class EditTimer: TextSurfaceDelegate {
+  let inner: EditorDocument
+  private(set) var times: [Double] = []
+
+  init(inner: EditorDocument) { self.inner = inner }
+
+  func surface(_ surface: any TextSurface, didChange edit: TextEdit) {
+    let began = DispatchTime.now().uptimeNanoseconds
+    inner.surface(surface, didChange: edit)
+    times.append(Double(DispatchTime.now().uptimeNanoseconds - began) / 1_000_000)
+  }
+  func surface(_ surface: any TextSurface, focusDidChange focused: Bool) {
+    inner.surface(surface, focusDidChange: focused)
+  }
+  func surfaceDidChangeViewport(_ surface: any TextSurface) {
+    inner.surfaceDidChangeViewport(surface)
+  }
+  func surfaceDidChangeSelection(_ surface: any TextSurface) {
+    inner.surfaceDidChangeSelection(surface)
+  }
+  func surface(_ surface: any TextSurface, rolesIn range: NSRange) -> [HighlightSpan] {
+    inner.surface(surface, rolesIn: range)
+  }
+  func surfaceLineCount(_ surface: any TextSurface) -> Int { inner.surfaceLineCount(surface) }
+  func surface(_ surface: any TextSurface, lineContaining offset: Int) -> Int {
+    inner.surface(surface, lineContaining: offset)
+  }
+  func surface(_ surface: any TextSurface, rangeOfLine line: Int) -> NSRange {
+    inner.surface(surface, rangeOfLine: line)
   }
 }
