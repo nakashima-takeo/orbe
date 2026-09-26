@@ -265,4 +265,27 @@ final class EditorOccurrencesTests: OrbeTestCase {
     catchUp(hosted.document)
     XCTAssertEqual(pane.occurrences.selectionOccurrences.count, 2, "バーを閉じれば出る")
   }
+
+  /// 語の出現を頼んだ後、結果が届く前に打鍵で消した問いの結果は、届いても出さない（打鍵のたびに地が点滅しない）。
+  func testAWordQueryAnsweredAfterTypingDoesNotShow() throws {
+    let clock = Clock()
+    let hosted = try host(" foo foo\n", clock: clock)
+    var ask: (() -> Void)?
+    hosted.pane.occurrences.wordDelay.schedule = { _, fire in ask = fire }
+    caret(hosted, 2)
+    try XCTUnwrap(ask)()
+    hosted.document.surface.responder.keyDown(with: .key("x", []))
+    catchUp(hosted.document)
+    XCTAssertEqual(hosted.pane.occurrences.wordOccurrences, [], "打鍵で取り消した問いの結果は出さない")
+  }
+
+  /// 選択文字列の出現を頼んだ後、結果が届く前に選択を畳めば、届いた結果は出さない。
+  func testASelectionQueryAnsweredAfterCollapsingDoesNotShow() throws {
+    let clock = Clock()
+    let hosted = try host(" ab ab ab\n", clock: clock)
+    hosted.document.surface.selectedRange = NSRange(location: 1, length: 2)
+    hosted.document.surface.selectedRange = NSRange(location: 0, length: 0)
+    catchUp(hosted.document)
+    XCTAssertEqual(hosted.pane.occurrences.selectionOccurrences, [], "畳んだ選択の出現は戻らない")
+  }
 }

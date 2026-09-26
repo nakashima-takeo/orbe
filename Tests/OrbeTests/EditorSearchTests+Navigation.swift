@@ -134,4 +134,17 @@ extension EditorSearchTests {
       document.surface.selectedRange, NSRange(location: 13, length: 2),
       "新しい検索語の一致へ（前の検索語なら先頭の aa へ循環する）")
   }
+
+  /// 検索語を打った後、一致が届く前にバーを閉じれば、届いた一致は出さない（閉じた検索の地が戻らない）。
+  func testMatchesAnsweredAfterClosingDoNotShow() throws {
+    let hosted = try host(" ab ab\n")
+    let pane = hosted.pane
+    pane.showSearch()
+    catchUp(pane)
+    XCTAssertEqual(pane.search.needle, "", "前提: 種が無い")
+    pane.search.setNeedle("ab")
+    pane.closeSearch()
+    catchUp(pane)
+    XCTAssertEqual(pane.search.matches, [], "閉じた検索の一致は戻らない")
+  }
 }
