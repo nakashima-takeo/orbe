@@ -247,6 +247,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
     XCTAssertEqual(pending.count, 1, "前提: 予約がある")
     hosted.document.surface.responder.keyDown(with: .key("x", []))
     for fire in pending { fire() }
+    catchUp(hosted.document)
     XCTAssertEqual(hosted.pane.occurrences.wordOccurrences, [], "古い予約は何もしない")
   }
 

@@ -156,6 +156,48 @@ extension EditorSearchTests {
       "最初の一致（0）の前へ循環（前の選択 8 から戻る 5 ではない）")
   }
 
+  /// 一致を待っている間に Enter と ⇧Enter を続けて押すと、届いてから当てるのは最後に押した 1 回ぶんだけ。
+  func testOnlyTheLastStepPressedWhileWaitingIsApplied() throws {
+    let hosted = try host("x ab ab ab\n")
+    let pane = hosted.pane
+    let document = hosted.document
+    pane.showSearch()
+    catchUp(pane)
+    pane.search.setNeedle("b")
+    catchUp(pane)
+    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 3, length: 1), "前提")
+
+    pane.search.setNeedle("ab")
+    pane.search.next()
+    pane.search.previous()
+    catchUp(pane)
+    XCTAssertEqual(
+      document.surface.selectedRange, NSRange(location: 8, length: 2),
+      "最初の一致（2）の前へ循環（Enter も当てれば 2 に戻り、先に押した Enter だけなら 5）")
+  }
+
+  /// 本文を編集して一致を取り直している間（問いは同じ）は待たない——Enter は、ずらした一致に対してその場で進む。
+  func testEnterWhileRefreshingAfterAnEditStepsAtOnceOverTheShiftedMatches() throws {
+    let hosted = try host("ab ab ab\n")
+    let pane = hosted.pane
+    let document = hosted.document
+    pane.showSearch()
+    catchUp(pane)
+    pane.search.setNeedle("ab")
+    catchUp(pane)
+    hosted.window.makeFirstResponder(document.surface.responder)
+    document.surface.selectedRange = NSRange(location: 0, length: 0)
+    var refresh: (() -> Void)?
+    pane.search.refreshDelay.schedule = { _, fire in refresh = fire }
+    document.surface.responder.keyDown(with: .key("z", []))
+    XCTAssertEqual(bodyText(document), "zab ab ab\n", "前提")
+    try XCTUnwrap(refresh)()
+
+    pane.search.next()
+    XCTAssertEqual(
+      document.surface.selectedRange, NSRange(location: 1, length: 2), "取り直しの結果を待たずに、ずらした一致へ")
+  }
+
   /// 一致を待っている間に人が選択を動かせば、届いた一致はその選択を覆さない（後回しの選択と一歩は取り消す）。
   func testMovingTheSelectionWhileWaitingCancelsTheDeferredSelection() throws {
     let hosted = try host("x ab ab\n")
