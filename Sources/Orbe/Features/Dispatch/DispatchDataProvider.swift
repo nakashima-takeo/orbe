@@ -20,6 +20,8 @@ final class DispatchDataProvider {
   /// 読み手は分冊（`DispatchDataProvider+CleanProbe.swift`）。
   let tabOccupancies: [TabOccupancy]
   private let runner: GitRunner
+  /// gh の実行基盤。読み手は分冊（`DispatchDataProvider+GitHub.swift`・`+Create.swift`）。
+  let gitHub: GitHubCLI
   /// 提示時に発行した `fetch --prune` の着地。ベースから新しいブランチを切る作成は、この着地を
   /// 待ってから撃つ（`createWorktree`）。1 回きりのイベントなので台帳ではなく `DispatchGroup` で持つ
   /// ——未着地なら着地後に・着地済み／未発行なら即実行、が `notify` の定義そのもの。
@@ -50,6 +52,9 @@ final class DispatchDataProvider {
   private(set) var localBranches: [GitBranch] = []
   /// 読み手は分冊（`DispatchDataProvider+CleanProbe.swift`）。
   private(set) var remoteBranches: [GitBranch] = []
+  /// remote の一覧の読み取り。`nil` = 未着（remote の台帳は未確定）。書き手は `loadGit`、読み手は分冊
+  /// （`DispatchDataProvider+GitHub.swift`。台帳と正式名の問い合わせ）。
+  var remoteListing: RemoteListing?
   // gh レーンの状態。書き手は分冊（`DispatchDataProvider+GitHub.swift`）、読み手は `rebuild`。
   var issues: [GitHubIssue] = []
   var pullRequests: [GitHubPullRequest] = []
@@ -62,13 +67,19 @@ final class DispatchDataProvider {
   /// ブランチの PR を実際に引ける状態か。取得は git レーン（worktree 一覧）と gh レーン（認証確認）の
   /// 両方が要り、probe 前に発火すると gh 不在の環境で worktree 本数ぶんの失敗プロセスを撒く。
   var githubReady: Bool { probedGitHubState == .ready }
-  /// head → 今回の取得の状態。**記録は発行の時点で置く**（`issuedProbeTargets` と同じ流儀）——
-  /// 着地を待って記録すると、その間に来たもう一方の着地点が同じ head を二重に引く。
-  /// 台帳と in-flight を 1 つの値で持つので、二重管理が生まれない。
+  /// 問い合わせたブランチ名 → 今回の取得の状態（中身は絞る前の生の結果）。**記録は発行の時点で置く**
+  /// （`issuedProbeTargets` と同じ流儀）——着地を待って記録すると、その間に来たもう一方の着地点が
+  /// 同じブランチを二重に引く。台帳と in-flight を 1 つの値で持つので、二重管理が生まれない。
   /// 書き手は分冊（`DispatchDataProvider+GitHub.swift`）。
   var branchPRFetches: [String: BranchPRState] = [:]
-  var issuesLoading = true
-  var pullRequestsLoading = true
+  /// この回に正式名を問い合わせた名前（remote の URL から読んだ名前）。答えはキャッシュが持ち、ここは
+  /// 同じ名前を二重に撃たないための記録。記録は発行の時点で置く。
+  /// 書き手は分冊（`DispatchDataProvider+GitHub.swift`）。
+  var askedRepositories: Set<GitHubRepoName> = []
+  /// 一覧の取得が続いている（取得前・ページが届く途中）。セクション末尾にローディング行を足す
+  /// （値がまだ無ければローディング行だけのセクションになる）。
+  var issuesFetching = true
+  var pullRequestsFetching = true
   /// 分類レーンの実測結果（path → 実測）。nil の間は分類そのものが未着地。
   ///
   /// 非 nil でも**全 path が揃っているとは限らない**——prober は main worktree と占有行を省くので
@@ -106,12 +117,10 @@ final class DispatchDataProvider {
     return cleanProbes == nil || !probingPaths.isEmpty || states.values.contains(.fetching)
   }
 
-  /// gh 取得の上限件数（issues / open PR の一覧。分冊も読む）。
-  let ghLimit = 30
-
   init(
     cwd: String, model: DispatchPaletteModel, localization: LocalizationStore,
-    worktreeTemplate: String, tabOccupancies: [TabOccupancy] = [], runner: GitRunner = .shared
+    worktreeTemplate: String, tabOccupancies: [TabOccupancy] = [], runner: GitRunner = .shared,
+    gitHub: GitHubCLI = .shared
   ) {
     self.cwd = cwd
     self.model = model
@@ -119,6 +128,7 @@ final class DispatchDataProvider {
     self.worktreeTemplate = worktreeTemplate
     self.tabOccupancies = tabOccupancies
     self.runner = runner
+    self.gitHub = gitHub
   }
 
   // MARK: - ロード
@@ -129,8 +139,8 @@ final class DispatchDataProvider {
       guard let repo else {
         // 非 git: 全セクション空（Issues/PR も出さない）。
         self.probedGitHubState = .notGitHub
-        self.issuesLoading = false
-        self.pullRequestsLoading = false
+        self.issuesFetching = false
+        self.pullRequestsFetching = false
         self.rebuild()
         return
       }
@@ -173,7 +183,7 @@ final class DispatchDataProvider {
   /// `classifying` が真のときだけ分類プローブも撃つ——分類の到達性判定は prune 済みの
   /// `refs/remotes/origin/*` を前提にする（prune 前の origin には remote で消えた ref が残っており、
   /// そこからの到達性を根拠にすると「消してもコミットは origin に残る」が偽になる）ので、
-  /// prune より前の呼びには載せない。`landed` は 4 本の read が揃った時点で、**描画（`rebuild`）の前に**
+  /// prune より前の呼びには載せない。`landed` は 5 本の read が揃った時点で、**描画（`rebuild`）の前に**
   /// 1 度だけ呼ばれる——着地の定義は「列挙の引き直しまで」で、着地で立つ旗を読んで描く側と揃える。
   func loadGit(_ repo: GitRepo, classifying: Bool, landed: (() -> Void)? = nil) {
     let group = DispatchGroup()
@@ -198,14 +208,23 @@ final class DispatchDataProvider {
       self.defaultBranchName = $0
       group.leave()
     }
+    // remote の台帳の材料。最初の描画に間に合わせる（前回の正式名があれば、最初のフレームから
+    // PR 行とチップが出る）。
+    group.enter()
+    repo.remotes {
+      self.remoteListing = $0.map(RemoteListing.read) ?? .unreadable
+      group.leave()
+    }
     // 分類（レーン D）は worktree 一覧と既定ブランチが揃ってはじめて叩けるのでここから起動する。
-    // ブランチの PR も worktree 一覧が要る（名指しの取得）ので同じ着地点から叩く——削除で
-    // worktree の顔ぶれが変われば対象も変わる。顔ぶれが同じ回は入口が畳むので、何度叩いても安い。
+    // 正式名の問い合わせは remote の一覧が、ブランチの PR は worktree 一覧が要る（名指しの取得）ので
+    // 同じ着地点から叩く——削除で worktree の顔ぶれが変われば対象も変わる。顔ぶれが同じ回は入口が
+    // 畳むので、何度叩いても安い。
     group.notify(queue: .main) {
       landed?()
       self.rebuild()
       // git の事実（ref の中身）が動いた着地なので全行引き直す。
       if classifying { self.startCleanProbe(repo, .all) }
+      self.resolveRemoteRepositories(repo)
       self.loadBranchPullRequests(repo)
     }
   }
@@ -231,7 +250,8 @@ final class DispatchDataProvider {
       DispatchSectionBuilder.Input(
         worktrees: worktrees, localBranches: localBranches, remoteBranches: remoteBranches,
         issues: issues, pullRequests: pullRequests, githubState: githubState,
-        issuesLoading: issuesLoading, pullRequestsLoading: pullRequestsLoading,
+        issuesFetching: issuesFetching, pullRequestsFetching: pullRequestsFetching,
+        remoteLedger: remoteLedger,
         currentWorktree: repo?.root,
         cleanCandidates: rows.map(DispatchWorktreeClassifier.candidateCount),
         remoteFetchLanded: remoteFetchLanded))

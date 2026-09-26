@@ -58,19 +58,117 @@ struct GitBranch: Equatable {
   let relativeDate: String
   /// upstream。無ければ nil（remote ブランチは常に nil）。
   let upstream: GitUpstream?
+  /// `%(push:remotename)`。git が解決する push 先の remote（`branch.<名前>.pushRemote` →
+  /// `remote.pushDefault` → upstream の remote）で、ローカルブランチを追跡する行は `.`。解決できなければ
+  /// nil（remote ブランチは常に nil）。
+  var pushRemote: String?
 }
 
 // MARK: - GitHub（gh CLI）
 
-/// `gh issue list --json number,title` の 1 issue。
-struct GitHubIssue: Decodable, Equatable {
+/// GitHub のリポジトリ名（`owner/name`）。GitHub の名前は大小文字を区別しないので小文字で持ち、等値は
+/// その文字列の等値で決まる。API から作る口は、owner と名前から（PR の head）と、正式名の問い合わせの
+/// 応答から（`init(nameWithOwner:)`）の 2 つだけ——`Decodable` にしないのは、PR の head を
+/// `nameWithOwner` で読めなくするため（古い gh の `gh pr list --json` は空文字を返すか、キーごと出さない）。
+struct GitHubRepoName: Hashable {
+  /// 小文字の `owner/name`。
+  let value: String
+
+  init(nameWithOwner: String) {
+    value = nameWithOwner.lowercased()
+  }
+
+  /// owner と名前から組む。どちらかが空なら nil。
+  init?(owner: String, name: String) {
+    guard !owner.isEmpty, !name.isEmpty else { return nil }
+    self.init(nameWithOwner: "\(owner)/\(name)")
+  }
+
+  /// remote の URL から読む。GitHub かどうかは `isGitHub(remoteURL:)` で決め、`owner/name` はパス
+  /// （scp 形式は `:` の後ろ）の最後の 2 段から `.git` と末尾の `/` を除いて読む。GitHub でない・読めない
+  /// URL は nil。
+  init?(remoteURL url: String) {
+    guard Self.isGitHub(remoteURL: url) else { return nil }
+    let path: Substring
+    if let scheme = url.range(of: "://") {
+      let rest = url[scheme.upperBound...]
+      path = rest.firstIndex(of: "/").map { rest[$0...] } ?? ""
+    } else if let colon = url.firstIndex(of: ":") {
+      path = url[url.index(after: colon)...]
+    } else {
+      path = url[...]
+    }
+    let parts = path.split(separator: "/")
+    guard parts.count >= 2 else { return nil }
+    var name = parts[parts.count - 1]
+    if name.hasSuffix(".git") { name = name.dropLast(4) }
+    guard !name.isEmpty else { return nil }
+    self.init(nameWithOwner: "\(parts[parts.count - 2])/\(name)")
+  }
+
+  /// GitHub の remote の URL か（「URL に github.com を含むか」。SSH のホスト別名 `github.com-work` 等も
+  /// 拾う）。可用性の判定（`GitRepo.originIsGitHub`）と台帳が共にこの 1 つの規則を読む。
+  static func isGitHub(remoteURL url: String) -> Bool {
+    url.contains("github.com")
+  }
+}
+
+/// GitHub のどのリポジトリの、どのブランチか。行と PR の同一性の単位。
+struct GitHubBranchRef: Hashable {
+  let repo: GitHubRepoName
+  let branch: String
+}
+
+/// GitHub に問い合わせたリポジトリの正式名（改名後の古い名前からも新しい名前が返る）。
+enum GitHubRepositoryResolution: Equatable {
+  case found(GitHubRepoName)
+  /// 正式名を確かめられなかった。GitHub は「存在しない」と「今のアカウントから見えない private」を
+  /// 同じ `NOT_FOUND` で返すので、問い合わせの失敗と区別しない。
+  case unverified
+}
+
+/// PR の head のリポジトリを `headRepositoryOwner{login}` と `headRepository{name}` から読む。
+/// `nameWithOwner` を読まないのは、古い gh の `gh pr list --json` に無い・空文字だから。
+private struct PullRequestHeadRepository: Decodable {
+  struct Owner: Decodable { let login: String? }
+  struct Repository: Decodable { let name: String? }
+
+  let headRepositoryOwner: Owner?
+  let headRepository: Repository?
+
+  /// どちらかが欠けるか空なら nil（head のリポジトリが消えている）。
+  var name: GitHubRepoName? {
+    GitHubRepoName(
+      owner: headRepositoryOwner?.login ?? "", name: headRepository?.name ?? "")
+  }
+}
+
+/// 番号で同一性を持つ GitHub の項目。open 一覧を取り直す途中、前回の一覧との境目を探すのに使う。
+protocol GitHubNumbered {
+  var number: Int { get }
+}
+
+/// GraphQL の connection 1 ページ（`nodes` ＋ `pageInfo`）。
+struct GitHubPage<Node: Decodable>: Decodable {
+  struct PageInfo: Decodable {
+    let hasNextPage: Bool
+    /// 次のページの位置。ページが空なら nil。
+    let endCursor: String?
+  }
+
+  let nodes: [Node]
+  let pageInfo: PageInfo
+}
+
+/// open issue 一覧（GraphQL `issues`）の 1 issue。
+struct GitHubIssue: Decodable, Equatable, GitHubNumbered {
   let number: Int
   let title: String
 }
 
-/// `gh pr list --state all --head <branch> --json number,headRefName,state,baseRefName,isCrossRepository`
-/// の 1 PR。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見るための
-/// 小さな形で、`GitHubPullRequest`（title 必須）ではこの JSON をデコードできない。
+/// `gh pr list --state all --head <branch> --json number,headRefName,state,baseRefName,headRepository,
+/// headRepositoryOwner` の 1 PR。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を
+/// 見るための小さな形で、`GitHubPullRequest`（title 必須）ではこの JSON をデコードできない。
 struct GitHubBranchPR: Decodable, Equatable {
   let number: Int
   let headRefName: String
@@ -78,23 +176,62 @@ struct GitHubBranchPR: Decodable, Equatable {
   let state: String
   /// マージ先ブランチ。**表示専用**（安全判定はローカル git の事実だけで閉じる）。
   let baseRefName: String
-  /// head 側のリポジトリが、gh の解決した base リポジトリと別か。`--head` はブランチ名でしか
-  /// 絞れず他人の fork の同名ブランチに立った PR も返るので、突き合わせの足切りに使う。
-  ///
-  /// **「他人の fork か」と厳密には一致しない。** gh は非対話時、base リポジトリを remote 名の
-  /// 優先順（`upstream` > `github` > `origin`）で選ぶ。fork を clone して `upstream` を張った形では
-  /// base が upstream になり、**自分の fork に立てた自分の PR も真になる**——その形では merged
-  /// チップとマージ済みの推定が出なくなる（安全確認は落ちる方向なので、消えて困るものは残る）。
-  let isCrossRepository: Bool
+  /// head 側のリポジトリ。消えていれば nil。
+  let headRepository: GitHubRepoName?
+
+  /// head のリポジトリとブランチ。`--head` はブランチ名でしか絞れず他人の fork の同名ブランチに
+  /// 立った PR も返るので、worktree と突き合わせるのはこれが等しいものだけ。head のリポジトリが
+  /// 消えていれば nil（どの worktree とも等しくならない）。
+  var head: GitHubBranchRef? {
+    headRepository.map { GitHubBranchRef(repo: $0, branch: headRefName) }
+  }
 }
 
-/// `gh pr list --json number,title,headRefName,reviewDecision,isCrossRepository` の 1 PR。
-struct GitHubPullRequest: Decodable, Equatable {
+/// open PR 一覧（GraphQL `pullRequests`）の 1 PR。
+struct GitHubPullRequest: Decodable, Equatable, GitHubNumbered {
   let number: Int
   let title: String
   let headRefName: String
   /// `REVIEW_REQUIRED` / `APPROVED` / `CHANGES_REQUESTED` / null。
   let reviewDecision: String?
-  /// fork（cross-repo）由来の PR か。head ref がローカルに無いことがある。
-  let isCrossRepository: Bool
+  /// head 側のリポジトリ。消えていれば nil。
+  let headRepository: GitHubRepoName?
+
+  /// head のリポジトリとブランチ（行との同一性）。head のリポジトリが消えていれば nil で、どの行とも
+  /// 等しくならない。
+  var head: GitHubBranchRef? {
+    headRepository.map { GitHubBranchRef(repo: $0, branch: headRefName) }
+  }
+}
+
+extension GitHubBranchPR {
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.init(
+      number: try container.decode(Int.self, forKey: .number),
+      headRefName: try container.decode(String.self, forKey: .headRefName),
+      state: try container.decode(String.self, forKey: .state),
+      baseRefName: try container.decode(String.self, forKey: .baseRefName),
+      headRepository: try PullRequestHeadRepository(from: decoder).name)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case number, headRefName, state, baseRefName
+  }
+}
+
+extension GitHubPullRequest {
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.init(
+      number: try container.decode(Int.self, forKey: .number),
+      title: try container.decode(String.self, forKey: .title),
+      headRefName: try container.decode(String.self, forKey: .headRefName),
+      reviewDecision: try container.decodeIfPresent(String.self, forKey: .reviewDecision),
+      headRepository: try PullRequestHeadRepository(from: decoder).name)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case number, title, headRefName, reviewDecision
+  }
 }

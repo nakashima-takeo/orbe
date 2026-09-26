@@ -132,8 +132,11 @@ final class DispatchBranchNameTests: OrbeTestCase {
 
   private func resolve(_ provider: DispatchDataProvider, _ action: DispatchAction) throws -> String
   {
+    guard case .open(let destination) = action else {
+      throw CreationFailed(detail: "行き先を持たない行: \(action)")
+    }
     var outcome: DispatchDataProvider.DispatchPrepareOutcome?
-    provider.prepareDirectory(for: action) { outcome = $0 }
+    provider.prepareDirectory(for: destination) { outcome = $0 }
     XCTAssertTrue(pump({ outcome != nil }, timeout: 30), "解決が返らない")
     guard case .resolved(.ready(let path)) = try XCTUnwrap(outcome) else {
       throw CreationFailed(detail: String(describing: outcome))

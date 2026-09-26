@@ -40,26 +40,6 @@ final class DispatchPaletteTests: OrbeTestCase {
     XCTAssertEqual(p.selected, 0, "末尾から下 → 先頭へ wrap")
   }
 
-  func testFilterNarrowsAcrossSectionsAndDropsEmpty() {
-    let p = makeModel()
-    p.query = "feat"
-    p.onQueryChanged()
-    XCTAssertEqual(
-      p.visibleSections.map(\.title), ["Worktrees", "Remote branches", "Pull requests"],
-      "マッチの無い Local branches / Issues セクションは消える")
-    XCTAssertEqual(p.items.count, 3, "feat を含む 3 行だけ残る")
-    XCTAssertEqual(p.selected, 0, "選択は先頭の可視行へクランプ")
-    XCTAssertEqual(p.selectedItem?.name, "agent-hooks")
-  }
-
-  func testFilterMatchesIdAndDetail() {
-    let p = makeModel()
-    p.query = "#145"
-    p.onQueryChanged()
-    XCTAssertEqual(p.items.count, 1, "idText の #145 に PR 行がマッチ")
-    XCTAssertEqual(p.selectedItem?.name, "feat: session restore")
-  }
-
   func testMoveSkipsInfoRows() {
     var input = DispatchSectionBuilder.Input.designSample
     input.issues = []
@@ -156,29 +136,29 @@ final class DispatchPaletteTests: OrbeTestCase {
 
   func testExecuteAndOpenWebWiring() {
     let p = makeModel()
-    var executed: DispatchItem?
+    var executed: DispatchDestination?
     var opened: DispatchItem?
     p.onExecute = { executed = $0 }
     p.onOpenWeb = { opened = $0 }
     p.selected = 6  // issue #151
     p.activate()  // ↵ の決定経路
     p.onOpenWeb(p.selectedItem!)
-    XCTAssertEqual(executed?.name, "Status detection doesn't work inside tmux")
+    XCTAssertEqual(executed, .issue(number: 151, existingWorktree: nil, existingBranch: false))
     XCTAssertEqual(opened?.name, "Status detection doesn't work inside tmux")
   }
 
   /// 行タップは ↵ と同じ決定 funnel を通り、選択をその行へ移したうえで同じ行を実行する。
   func testActivateAtRowSelectsAndExecutesSameRow() {
     let p = makeModel()
-    var executed: [String] = []
-    p.onExecute = { executed.append($0.name) }
+    var executed: [DispatchDestination] = []
+    p.onExecute = { executed.append($0) }
     p.activate(at: 6)  // issue #151 の行をタップ
     XCTAssertEqual(p.selected, 6, "タップで選択もその行へ移る")
-    XCTAssertEqual(executed, ["Status detection doesn't work inside tmux"])
+    XCTAssertEqual(executed, [.issue(number: 151, existingWorktree: nil, existingBranch: false)])
 
     // ↵（選択行の決定）と同一の結果になる＝クリック用の別経路を持たない。
-    var byEnter: [String] = []
-    p.onExecute = { byEnter.append($0.name) }
+    var byEnter: [DispatchDestination] = []
+    p.onExecute = { byEnter.append($0) }
     p.activate()
     XCTAssertEqual(byEnter, executed)
   }

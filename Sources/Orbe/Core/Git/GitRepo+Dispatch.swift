@@ -107,10 +107,37 @@ extension GitRepo {
     }
   }
 
-  /// origin の URL が github.com を指すか（gh 不在でも判定できる cheap チェック）。
+  /// origin が GitHub の remote か（gh 不在でも判定できる cheap チェック。規則は台帳と同じ
+  /// `GitHubRepoName.isGitHub(remoteURL:)`）。
   func originIsGitHub(completion: @escaping (Bool) -> Void) {
     runner.run(["remote", "get-url", "origin"], cwd: root) { output in
-      completion(output.isSuccess && output.stdoutText.contains("github.com"))
+      completion(output.isSuccess && GitHubRepoName.isGitHub(remoteURL: output.stdoutText))
+    }
+  }
+
+  /// remote 名 → fetch の URL（`insteadOf` 展開後）。`nil` = 読めなかった（1 本でも URL を読めなければ
+  /// 全体を読めなかったとする——欠けた一覧を「その remote は無い」と読ませない）。
+  ///
+  /// 名前は `git remote`（引数なしは名前だけを 1 行ずつ出す）、URL は remote ごとの
+  /// `git remote get-url`（fetch の最初の URL。`insteadOf` を展開する）で読む。`git remote -v` は人が
+  /// 読む表示で、行末に装飾が付く（部分クローンではフィルタ名 `[blob:none]` が足される）ので、行の
+  /// 形では読まない。remote は通常 1〜3 本で、プロセスが本数ぶん増えても読み取りレーンの数 ms で済む。
+  func remotes(completion: @escaping ([String: String]?) -> Void) {
+    runner.run(["remote"], cwd: root) { listed in
+      guard listed.isSuccess else { return completion(nil) }
+      let names = listed.stdoutText.split(separator: "\n").map(String.init)
+      var urls: [String: String] = [:]
+      var unreadable = false
+      let group = DispatchGroup()
+      for name in names {
+        group.enter()
+        self.runner.run(["remote", "get-url", "--", name], cwd: self.root) { output in
+          let url = output.stdoutText.trimmingCharacters(in: .newlines)
+          if output.isSuccess, !url.isEmpty { urls[name] = url } else { unreadable = true }
+          group.leave()
+        }
+      }
+      group.notify(queue: .main) { completion(unreadable ? nil : urls) }
     }
   }
 

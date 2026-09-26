@@ -11,10 +11,12 @@ enum DispatchWorktreeClassifier {
   struct Input {
     var worktrees: [GitWorktree] = []
     var localBranches: [GitBranch] = []
-    /// head → ブランチ名指しの PR 取得（`--state all --head <branch>`）の状態。open / closed の
-    /// 両方の事実がここから決まる——一覧の窓（直近 N 件）に頼ると、窓落ちした PR のぶんだけ
-    /// 「merged チップが出ない」「レビュー中なのに安全確認を素通りする」が起きる。
-    /// **取得は head 単位で着地する**ので、状態も head 単位で持つ（1 本の失敗を全体へ波及させない）。
+    /// worktree のブランチ（ローカル名）→ ブランチ名指しの PR 取得（`--state all --head <branch>`）の
+    /// 状態。open / closed の両方の事実がここから決まる——一覧の窓（直近 N 件）に頼ると、窓落ちした
+    /// PR のぶんだけ「merged チップが出ない」「レビュー中なのに安全確認を素通りする」が起きる。
+    /// 中身は入口（provider）で worktree の ref（台帳）と head が等しい PR に絞られて届き、gh の並び
+    /// （作成日時の降順）を保つ——先頭一致＝最新の PR。**取得はブランチ単位で着地する**ので、状態も
+    /// ブランチ単位で持つ（1 本の失敗を全体へ波及させない）。
     var branchPRStates: [String: BranchPRState] = [:]
     /// path → 分類レーンの実測。無い worktree は「判定できなかった」として扱う。
     var probes: [String: DispatchCleanProbe] = [:]
@@ -33,13 +35,13 @@ enum DispatchWorktreeClassifier {
         let probe = input.probes[worktree.path]
         let local = worktree.branch.flatMap { branchByName[$0] }
         // detached（branch == nil）は PR の head になり得ないので確認対象が無い＝確かめて 0 件。
-        // 台帳に無い head は安全側（まだ確かめていない）に倒す。
+        // 状態の無いブランチは安全側（まだ確かめていない）に倒す。
         let prState: BranchPRState =
           worktree.branch.map { input.branchPRStates[$0] ?? .fetching } ?? .loaded([])
-        // 取得中／失敗の head では PR を 1 つも事実にしない——知らないことを語らせない。
+        // 取得中／失敗のブランチでは PR を 1 つも事実にしない——知らないことを語らせない。
         let prs: [GitHubBranchPR]
         switch prState {
-        case .loaded(let all): prs = worktree.branch.flatMap { branchPRLookup(all)[$0] } ?? []
+        case .loaded(let loaded): prs = loaded
         case .fetching, .failed: prs = []
         }
         let openPR: CleanOpenPR
@@ -64,33 +66,22 @@ enum DispatchWorktreeClassifier {
       })
   }
 
-  /// PR 突き合わせの前処理（cross-repo 除外 → head ごとにまとめる）。`rows()` と
-  /// `extraContainmentTargets` の両方が読む——**選択規約の分岐を作らない**ための SSOT。
-  ///
-  /// cross-repo の PR は他人の同名ブランチの事実として突き合わせの**前に**除外する
-  /// （`--head` はブランチ名でしか絞れない）。この足切りは落とす方向にしか誤らない——外し損ねた
-  /// 他人の PR で番号を騙るより、自分の PR を落として推定が 1 つ減る方を選ぶ（`isCrossRepository`
-  /// が「他人の fork か」と一致しない形は `GitHubBranchPR` を見る）。gh の並びは作成日時の降順で、
-  /// grouping は要素順を保つ——head ごとの先頭一致＝最新の PR を採る、という意味論がここで決まる。
-  static func branchPRLookup(_ prs: [GitHubBranchPR]) -> [String: [GitHubBranchPR]] {
-    Dictionary(grouping: prs.filter { !$0.isCrossRepository }, by: \.headRefName)
-  }
-
   /// gh ヒント由来の追加比較先（path → `["origin/<base>"]`）。証明はローカルなので、
   /// `origin/<base>` がローカルに実在し（`remoteBranchNames`）、既定のローカル名と異なる場合だけ足す
   /// ——嘘・欠損の base は入口で落ち、残っても cherry の不成立で確認群のままに倒れる。
-  /// PR の選択は `rows()` と同一規約（`branchPRLookup` → 最新の非 OPEN が MERGED のときだけ）。
-  /// 対象は main worktree 以外・ブランチのある worktree（detached は PR の head になり得ない）。
+  /// PR の選択は `rows()` と同一規約（worktree のブランチごとの一覧の、最新の非 OPEN が MERGED のとき
+  /// だけ）で、同じ一覧を読む。対象は main worktree 以外・ブランチのある worktree（detached は PR の
+  /// head になり得ない）。
   static func extraContainmentTargets(
-    worktrees: [GitWorktree], branchPullRequests: [GitHubBranchPR],
+    worktrees: [GitWorktree], branchPullRequests: [String: [GitHubBranchPR]],
     remoteBranchNames: Set<String>, defaultBranch: String
   ) -> [String: [String]] {
-    let lookup = branchPRLookup(branchPullRequests)
     let defaultLocal = label(defaultBranch)
     var out: [String: [String]] = [:]
     for worktree in worktrees where !worktree.isMain {
       guard let branch = worktree.branch,
-        let pr = lookup[branch]?.first(where: { $0.state != "OPEN" }), pr.state == "MERGED",
+        let pr = branchPullRequests[branch]?.first(where: { $0.state != "OPEN" }),
+        pr.state == "MERGED",
         pr.baseRefName != defaultLocal, remoteBranchNames.contains("origin/\(pr.baseRefName)")
       else { continue }
       out[worktree.path] = ["origin/\(pr.baseRefName)"]

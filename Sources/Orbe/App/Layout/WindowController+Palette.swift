@@ -121,9 +121,9 @@ extension WindowController {
 
     // クロージャは兄弟パレット同様 [weak self] のみとし、p/provider は self.model 経由で辿る
     // （p が onExecute を保持するため、p を強参照すると開くたびに自己循環でリークする）。
-    p.onExecute = { [weak self] item in
+    p.onExecute = { [weak self] destination in
       guard let self, let p = self.model.dispatchPalette,
-        let provider = self.model.dispatchProvider, let action = item.action
+        let provider = self.model.dispatchProvider
       else { return }
       // 作成中の再入を弾く（Enter 連打で git worktree add が二重に走るのを防ぐ）。
       guard !p.isPreparing else { return }
@@ -131,21 +131,25 @@ extension WindowController {
       guard let target = p.selectedTarget else { return }
       p.errorMessage = nil
       p.isPreparing = true  // 進捗表示 ON。非同期 worktree 作成の待機中だけフッターにスピナが出る。
-      provider.prepareDirectory(for: action) { [weak self] outcome in
+      provider.prepareDirectory(for: destination) { [weak self] outcome in
         guard let self, let p = self.model.dispatchPalette else { return }
         switch outcome {
         case .resolved(let resolution):
           self.settleDispatch(resolution, target: target)
-        case .staleBranch(let sync):
+        case .staleBranch(let sync, let relativeDate):
           // 作っていない。一覧の旗を下ろして最新化画面へ（以後の busy は画面の相が持つ）。
           p.isPreparing = false
-          p.enterRefresh(item: item, sync: sync)
+          p.enterRefresh(sync: sync, relativeDate: relativeDate)
         }
       }
     }
     p.onOpenWeb = { [weak self] item in
       guard let self, let provider = self.model.dispatchProvider else { return }
       provider.openWeb(for: item)
+    }
+    p.onAwaitRemoteFetch = { [weak self] resume in
+      guard let provider = self?.model.dispatchProvider else { return }
+      provider.remoteFetchLanding.notify(queue: .main, execute: resume)
     }
     wireDispatchClean(p)
     wireDispatchRefresh(p)
@@ -232,8 +236,7 @@ extension WindowController {
         self?.model.dispatchPalette?.settleCleanRun()
       }
     }
-    // 失敗した worktree は解決済みのパスなので `prepareDirectory` を通さない
-    // （`DispatchAction.clean` が解決経路へ届かない構造を崩さない）。
+    // 失敗した worktree は解決済みのパスなので `prepareDirectory` を通さない。
     p.onOpenWorktree = { [weak self] path in
       guard let self, let p = self.model.dispatchPalette, let target = p.selectedTarget else {
         return

@@ -146,8 +146,11 @@ struct DispatchRow: View {
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
+  /// 要素の間隔は HStack の spacing でなく各要素の先頭の余白が運ぶ——縮みきって幅 0 になった枠にも
+  /// HStack は両側に spacing を入れるので、spacing に任せると畳んだ枠の位置で間隔が 2 倍に開く。
   var body: some View {
-    HStack(spacing: Theme.Space.step) {
+    let gap = Theme.Space.step
+    return HStack(spacing: 0) {
       glyphColumn
       if let idText = item.idText {
         Text(idText)
@@ -155,29 +158,33 @@ struct DispatchRow: View {
           .foregroundStyle(Color.theme.diffAdded)
           .lineLimit(1)
           .fixedSize()
+          .padding(.leading, gap)
       }
-      fontResolver.text(item.name, base: Theme.Typography.workspaceName)
-        .font(Font.theme.workspaceName)
-        .foregroundStyle(nameColor)
-        .lineLimit(1)
-        .truncationMode(.tail)
-        .layoutPriority(1)
+      // 行は割り当て幅を超えない。縮むのは名前・補足が先で、それでも入らないときだけ右側のノートを切る。
+      DispatchTruncatingSlot(item.name, leading: gap) {
+        fontResolver.text($0, base: Theme.Typography.workspaceName)
+          .font(Font.theme.workspaceName)
+          .foregroundStyle(nameColor)
+      }
+      .layoutPriority(1)
       if let detail = item.detailKey.map({ l10n.string($0) }) ?? item.detail {
-        fontResolver.text(detail, base: Theme.Typography.meta)
-          .font(Font.theme.meta)
-          .foregroundStyle(Color.theme.textMuted)
-          .lineLimit(1)
-          .truncationMode(.tail)
+        DispatchTruncatingSlot(detail, leading: gap) {
+          fontResolver.text($0, base: Theme.Typography.meta)
+            .font(Font.theme.meta)
+            .foregroundStyle(Color.theme.textMuted)
+        }
       }
       if let reviewNote = item.reviewNote {
-        Text(l10n.string(reviewNote.key))
-          .font(Font.theme.sectionLabel)
-          .foregroundStyle(Color.theme.textMuted)
-          .lineLimit(1)
-          .fixedSize()
+        DispatchTruncatingSlot(l10n.string(reviewNote.key), leading: gap) {
+          Text($0)
+            .font(Font.theme.sectionLabel)
+            .foregroundStyle(Color.theme.textMuted)
+        }
+        .layoutPriority(2)
       }
-      Spacer(minLength: Theme.Space.tick)
+      Spacer(minLength: gap + Theme.Space.tick + gap)
       trailing
+        .layoutPriority(2)
     }
     .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
     .padding(.vertical, 5)
@@ -219,49 +226,123 @@ struct DispatchRow: View {
   /// 右端: worktree/branch はチップ（＋working リング）、issue/PR は muted ノート。issue/PR は末尾に「開く」。
   /// clean 行は候補件数バッジ＋`⏎`（**0 件ならバッジだけ消え、行そのものは残る**）。
   /// Local branch 行は上のどれも無いときだけ同期ピル（`↑N` / `↓N`）。
+  /// ノートと「開く」の間隔はノートが持つ（ノートが縮みきって消えたら、間隔も一緒に消える）。
   private var trailing: some View {
-    HStack(spacing: Theme.Space.tick) {
+    let tick = Theme.Space.tick
+    return HStack(spacing: 0) {
       if let count = item.candidateCount {
-        if count > 0 {
-          Text(
-            l10n.plural(
-              count, one: .dispatchCleanCandidatesOne, other: .dispatchCleanCandidatesOther)
-          )
-          .font(Font.theme.sectionLabel)
-          .foregroundStyle(Color.theme.accentPrimary)
-          .lineLimit(1)
-          .fixedSize()
-          .padding(.horizontal, 7)
-          .padding(.vertical, 1)
-          .background(Capsule().fill(Color.theme.tintAccent))
+        HStack(spacing: tick) {
+          if count > 0 {
+            Text(
+              l10n.plural(
+                count, one: .dispatchCleanCandidatesOne, other: .dispatchCleanCandidatesOther)
+            )
+            .font(Font.theme.sectionLabel)
+            .foregroundStyle(Color.theme.accentPrimary)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 7)
+            .padding(.vertical, 1)
+            .background(Capsule().fill(Color.theme.tintAccent))
+          }
+          Text("⏎")
+            .font(Font.theme.sectionLabel)
+            .foregroundStyle(Color.theme.textMuted)
+            .fixedSize()
         }
-        Text("⏎")
-          .font(Font.theme.sectionLabel)
-          .foregroundStyle(Color.theme.textMuted)
-          .fixedSize()
       } else if !item.badges.isEmpty || item.showsWorkingIndicator {
-        ForEach(item.badges) { badge in DispatchBadgeView(badge: badge) }
-        if item.showsWorkingIndicator {
-          StatusGlyphView(kind: .working, size: 10)
-            .padding(.leading, Theme.Space.hair)
+        HStack(spacing: tick) {
+          ForEach(item.badges) { badge in DispatchBadgeView(badge: badge) }
+          if item.showsWorkingIndicator {
+            StatusGlyphView(kind: .working, size: 10)
+              .padding(.leading, Theme.Space.hair)
+          }
         }
-      } else if let note = item.worktreeNote {
-        Text(l10n.string(note.noteKey))
-          .font(Font.theme.sectionLabel)
-          .foregroundStyle(Color.theme.textMuted)
-          .lineLimit(1)
-          .fixedSize()
+      } else if let note = trailingNote {
+        DispatchTruncatingSlot(l10n.string(note.noteKey), trailing: onOpenWeb == nil ? 0 : tick) {
+          Text($0)
+            .font(Font.theme.sectionLabel)
+            .foregroundStyle(Color.theme.textMuted)
+        }
       } else if let sync = item.sync {
         DispatchSyncPills(sync: sync)
       }
       if let onOpenWeb {
         OpenWebButton(action: onOpenWeb)
-          .padding(.leading, Theme.Space.hair)
+          .padding(.leading, Theme.Space.hair + (trailingNote == nil ? tick : 0))
       }
     }
   }
 
+  /// 右端に出すノート（件数バッジ・チップ・working リングのある行では出さない）。
+  private var trailingNote: DispatchEnterNote? {
+    guard item.candidateCount == nil, item.badges.isEmpty, !item.showsWorkingIndicator else {
+      return nil
+    }
+    return item.enterNote
+  }
+
   private var nameColor: Color {
     item.isPrimary ? Color.theme.textPrimary : Color.theme.textSecondary
+  }
+}
+
+/// 縮みうる 1 行テキストの枠。末尾省略で読める形になる幅（先頭 1 文字＋…）があれば出し、無ければ
+/// まったく出さない——`Text` は「…」を付ける幅も無いと、先頭の文字を「…」なしで途中まで描いてしまう。
+/// 読める最小幅は、同じ描き方の見本（先頭 1 文字＋…）を見えない形で置いて測る。
+/// 前後の余白は出すときだけ幅に足し、出さないときは余白ごと幅 0 になる。
+struct DispatchTruncatingSlot<Content: View>: View {
+  let text: String
+  let leading: CGFloat
+  let trailing: CGFloat
+  let render: (String) -> Content
+
+  init(
+    _ text: String, leading: CGFloat = 0, trailing: CGFloat = 0,
+    @ViewBuilder render: @escaping (String) -> Content
+  ) {
+    self.text = text
+    self.leading = leading
+    self.trailing = trailing
+    self.render = render
+  }
+
+  var body: some View {
+    TruncatingSlotLayout(leading: leading, trailing: trailing) {
+      render(text).lineLimit(1).truncationMode(.tail)
+      render(String(text.prefix(1)) + "…").lineLimit(1).fixedSize().hidden()
+    }
+    .clipped()
+  }
+}
+
+/// 子 [本体, 見本]。余白を除いた幅が本体の全幅にも見本の幅にも満たなければ、余白ごと幅 0 で本体を
+/// 描かない。
+private struct TruncatingSlotLayout: Layout {
+  let leading: CGFloat
+  let trailing: CGFloat
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    guard let content = subviews.first else { return .zero }
+    let insets = leading + trailing
+    let inner = ProposedViewSize(
+      width: proposal.width.map { max(0, $0 - insets) }, height: proposal.height)
+    let fits = content.sizeThatFits(inner)
+    let shown = CGSize(width: fits.width + insets, height: fits.height)
+    guard let width = inner.width, subviews.count == 2 else { return shown }
+    let full = content.sizeThatFits(.unspecified).width
+    let readable = subviews[1].sizeThatFits(.unspecified).width
+    return width >= min(full, readable) ? shown : CGSize(width: 0, height: fits.height)
+  }
+
+  func placeSubviews(
+    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+  ) {
+    let width = max(0, bounds.width - leading - trailing)
+    for subview in subviews {
+      subview.place(
+        at: CGPoint(x: bounds.minX + leading, y: bounds.minY),
+        proposal: ProposedViewSize(width: width, height: bounds.height))
+    }
   }
 }

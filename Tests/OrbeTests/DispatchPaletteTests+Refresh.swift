@@ -34,7 +34,7 @@ extension DispatchPaletteTests {
     let p = makeModel()
     let (item, sync) = try staleMain(p)
     p.selected = try XCTUnwrap(p.items.firstIndex { $0.name == "main" })
-    p.enterRefresh(item: item, sync: sync)
+    p.enterRefresh(sync: sync, relativeDate: item.detail ?? "")
     XCTAssertEqual(p.mode, .refresh)
     XCTAssertEqual(p.refresh?.choice, .refreshed)
     XCTAssertEqual(p.refresh?.phase, .choosing)
@@ -57,14 +57,14 @@ extension DispatchPaletteTests {
     var settled: [(DispatchStaleChoice, DispatchBranchSync)] = []
     p.onSettleStale = { settled.append(($0, $1)) }
 
-    p.enterRefresh(item: item, sync: sync)
+    p.enterRefresh(sync: sync, relativeDate: item.detail ?? "")
     p.confirmRefresh()
     XCTAssertEqual(settled.map(\.0), [.refreshed])
     XCTAssertEqual(settled.first?.1, sync)
     XCTAssertEqual(p.refresh?.phase, .updating)
     XCTAssertTrue(p.isBusy, "最新化中は入力を受け付けない")
 
-    p.enterRefresh(item: item, sync: sync)
+    p.enterRefresh(sync: sync, relativeDate: item.detail ?? "")
     p.moveRefresh(1)
     p.confirmRefresh()
     XCTAssertEqual(settled.map(\.0), [.refreshed, .asIs])
@@ -79,14 +79,14 @@ extension DispatchPaletteTests {
     var settled: [DispatchStaleChoice] = []
     p.onSettleStale = { choice, _ in settled.append(choice) }
 
-    p.enterRefresh(item: item, sync: sync)
+    p.enterRefresh(sync: sync, relativeDate: item.detail ?? "")
     XCTAssertEqual(p.refresh?.choice, .refreshed)
     p.confirmRefresh(.asIs)
     XCTAssertEqual(settled, [.asIs])
     XCTAssertEqual(p.refresh?.choice, .asIs, "タップした行へ選択が移る")
     XCTAssertEqual(p.refresh?.phase, .creating)
 
-    p.enterRefresh(item: item, sync: sync)
+    p.enterRefresh(sync: sync, relativeDate: item.detail ?? "")
     p.moveRefresh(1)
     p.confirmRefresh(.refreshed)
     XCTAssertEqual(settled, [.asIs, .refreshed])
@@ -100,7 +100,7 @@ extension DispatchPaletteTests {
     let (item, sync) = try staleMain(p)
     var count = 0
     p.onSettleStale = { _, _ in count += 1 }
-    p.enterRefresh(item: item, sync: sync)
+    p.enterRefresh(sync: sync, relativeDate: item.detail ?? "")
     p.startRefresh()
     XCTAssertEqual(count, 1)
 
@@ -121,7 +121,7 @@ extension DispatchPaletteTests {
     let (item, sync) = try staleMain(p)
     var settled = 0
     p.onSettleStale = { _, _ in settled += 1 }
-    p.enterRefresh(item: item, sync: sync)
+    p.enterRefresh(sync: sync, relativeDate: item.detail ?? "")
 
     p.hoverRefresh(.asIs)
     XCTAssertEqual(p.refresh?.choice, .refreshed, "実マウス移動前は追従しない")
@@ -140,7 +140,7 @@ extension DispatchPaletteTests {
   func testHoverIsIgnoredWhileBusy() throws {
     let p = makeModel()
     let (item, sync) = try staleMain(p)
-    p.enterRefresh(item: item, sync: sync)
+    p.enterRefresh(sync: sync, relativeDate: item.detail ?? "")
     p.inputModality = .pointer
     p.startRefresh()
     p.hoverRefresh(.asIs)
@@ -157,7 +157,7 @@ extension DispatchPaletteTests {
     let (item, sync) = try staleMain(p)
     var choices: [DispatchStaleChoice] = []
     p.onSettleStale = { choice, _ in choices.append(choice) }
-    p.enterRefresh(item: item, sync: sync)
+    p.enterRefresh(sync: sync, relativeDate: item.detail ?? "")
     p.startRefresh()
     p.refresh?.fail(.fetch(.timedOut))
     XCTAssertEqual(p.refresh?.phase, .failed(.fetch(.timedOut)))
@@ -173,7 +173,7 @@ extension DispatchPaletteTests {
     p.confirmRefresh(.refreshed)
     XCTAssertEqual(choices.count, 3, "行 0 のタップも再試行")
 
-    p.enterRefresh(item: item, sync: sync)
+    p.enterRefresh(sync: sync, relativeDate: item.detail ?? "")
     p.retryRefresh()
     XCTAssertEqual(choices.count, 3, "失敗していなければ r は効かない")
   }
@@ -183,7 +183,7 @@ extension DispatchPaletteTests {
   func testFailedPreparationReturnsToTheListWithTheReason() throws {
     let p = makeModel()
     let (item, sync) = try staleMain(p)
-    p.enterRefresh(item: item, sync: sync)
+    p.enterRefresh(sync: sync, relativeDate: item.detail ?? "")
     p.startRefresh()
     p.refresh?.beginCreating()
     p.failPreparation("fatal: boom")

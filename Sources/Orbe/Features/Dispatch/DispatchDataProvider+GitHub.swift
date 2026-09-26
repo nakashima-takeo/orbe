@@ -5,19 +5,14 @@ import Foundation
 extension DispatchDataProvider {
 
   /// 前回取得した gh 結果をリポジトリ（commonDir）単位で先に積む。最初の rebuild（git 着地時）に
-  /// 既に issue/PR 行が載るので、2 回目以降はローディング行を経由せず前回の行が即出る。
+  /// 既に issue/PR 行が載るので、2 回目以降は前回の行が即出る（末尾のローディング行が、今回の取得が
+  /// まだ届いていないことを示す）。
   /// ここで rebuild は打たない（git 未着の中途半端なリストが一瞬描かれ、かえってちらつく）。
-  /// 取得済みの側だけ載せる——片方が前回失敗していれば、そちらは loading のまま今回の取得を待つ。
+  /// 前回結果の無い側は、ローディング行だけのまま今回の取得を待つ。
   func applyCachedGitHub(_ repo: GitRepo) {
     guard let entry = DispatchGitHubCache.shared.entry(for: repo.commonDir) else { return }
-    if let cached = entry.issues {
-      issues = cached
-      issuesLoading = false
-    }
-    if let cached = entry.pullRequests {
-      pullRequests = cached
-      pullRequestsLoading = false
-    }
+    if let cached = entry.issues { issues = cached }
+    if let cached = entry.pullRequests { pullRequests = cached }
     // 掃除の突き合わせ（PR が OPEN / MERGED か）はここでは積まない——head ごとの状態を組む
     // `branchPRStates` がキャッシュを直接読み、今回の取得が未着地／失敗の head だけを前回結果で
     // 埋める（合成点を 2 つに割ると、着地の順で結果が変わる）。
@@ -26,64 +21,130 @@ extension DispatchDataProvider {
   func loadGitHub(_ repo: GitRepo) {
     repo.originIsGitHub { [weak self] isGitHub in
       guard let self else { return }
-      GitHubCLI.shared.probe(cwd: repo.root, isGitHub: isGitHub) { [weak self] state in
+      gitHub.probe(cwd: repo.root, isGitHub: isGitHub) { [weak self] state in
         guard let self else { return }
         self.probedGitHubState = state
         self.model?.githubState = state
         guard state == .ready else {
-          self.issuesLoading = false
-          self.pullRequestsLoading = false
+          self.issuesFetching = false
+          self.pullRequestsFetching = false
           self.rebuild()
           return
         }
-        // キャッシュ書き込みは `self` の生存判定より前——provider はパレットと同じ寿命で、gh の応答前に
-        // 閉じられるのが常用経路。self が消えたら捨てる作りだと次回の先描きが永遠に温まらない。
-        GitHubCLI.shared.issues(cwd: repo.root, limit: self.ghLimit) { [weak self] fetched in
-          if let fetched { DispatchGitHubCache.shared.setIssues(fetched, for: repo.commonDir) }
-          self?.applyFetchedIssues(fetched)
-        }
-        GitHubCLI.shared.pullRequests(cwd: repo.root, limit: self.ghLimit) { [weak self] fetched in
-          if let fetched {
-            DispatchGitHubCache.shared.setPullRequests(fetched, for: repo.commonDir)
-          }
-          self?.applyFetchedPullRequests(fetched)
-        }
+        // 取得はパレットを閉じても続くので、provider ではなく実行基盤だけを捕まえる。
+        let gitHub = self.gitHub
+        DispatchGitHubCache.shared.refreshIssues(
+          for: repo.commonDir,
+          fetch: { gitHub.openIssues(cwd: repo.root, page: $0, finished: $1) },
+          updated: { [weak self] in self?.applyFetchedIssues($0, growing: $1) })
+        DispatchGitHubCache.shared.refreshPullRequests(
+          for: repo.commonDir,
+          fetch: { gitHub.openPullRequests(cwd: repo.root, page: $0, finished: $1) },
+          updated: { [weak self] in self?.applyFetchedPullRequests($0, growing: $1) })
+        self.resolveRemoteRepositories(repo)
         self.loadBranchPullRequests(repo)
       }
     }
   }
 
-  /// ブランチの PR（`--state all` で open / closed の両方。掃除の安全確認・推定・チップにだけ使う）を、
+  /// remote の一覧の読み取り結果。
+  enum RemoteListing: Equatable {
+    /// remote 名 → fetch の URL。
+    case read([String: String])
+    /// 読めなかった。どの remote が GitHub のどのリポジトリか分からないので、どの行も「確かめられない」
+    /// になる（空の一覧として確定させると、どの行も「GitHub の行でない」になり、clean が PR の事実を
+    /// 「確かめて 0 件」と読む）。
+    case unreadable
+  }
+
+  /// remote の台帳（**導出値**。保存しない）。remote の一覧が未着なら未確定。答えはキャッシュだけから
+  /// 読む——この回に問い直している名前も、前回の答えで先に描く。
+  var remoteLedger: DispatchRemoteLedger {
+    switch remoteListing {
+    case nil: return .pending
+    case .unreadable: return DispatchRemoteLedger(remotes: nil, answers: cachedRepositoryNames)
+    case .read(let remotes):
+      return DispatchRemoteLedger(remotes: remotes, answers: cachedRepositoryNames)
+    }
+  }
+
+  private var cachedRepositoryNames: [GitHubRepoName: GitHubRepositoryResolution] {
+    repo.flatMap { DispatchGitHubCache.shared.entry(for: $0.commonDir)?.repositoryNames } ?? [:]
+  }
+
+  /// GitHub の remote の正式名を問い合わせる（改名前の URL でも、行と PR が同じリポジトリと分かる）。
+  /// git レーン（remote の一覧）と gh レーン（認証確認）の両方が揃ってはじめて撃てるので、両側の
+  /// 着地点から同じこの入口を叩き、先に来た側は素通りする（`loadBranchPullRequests` と同じ形）。
+  /// キャッシュの答えが正式名でなく、この回まだ撃っていない名前だけを撃ち、記録は発行の時点で置く。
+  /// 「確かめられない」答えは、前回の値で先に描いたまま裏で問い直す（`gh auth switch` の後に開き直せば
+  /// 直る）。1 つずつ撃つのは、1 つの `NOT_FOUND` で他の remote の答えまで失わないため。
+  func resolveRemoteRepositories(_ repo: GitRepo) {
+    guard githubReady, case .read(let remotes) = remoteListing else { return }
+    let cached = cachedRepositoryNames
+    let pending = Set(remotes.values.compactMap(GitHubRepoName.init(remoteURL:)))
+      .filter { name in
+        if case .found = cached[name] { return false }
+        return !askedRepositories.contains(name)
+      }
+    for name in pending {
+      askedRepositories.insert(name)
+      gitHub.resolveRepository(cwd: repo.root, name: name) { [weak self] resolution in
+        // キャッシュ書き込みは `self` の生存判定より前（`loadBranchPullRequests` と同じ理由）。
+        let cache = DispatchGitHubCache.shared
+        let previous = cache.entry(for: repo.commonDir)?.repositoryNames[name]
+        cache.setRepositoryName(resolution, for: name, key: repo.commonDir)
+        guard resolution != previous else { return }
+        self?.applyResolvedRepository()
+      }
+    }
+  }
+
+  /// 正式名の答えが変わった着地。行の同一性が変わるので、ブランチの PR を引き、比較先の変わった行の
+  /// 分類を引き直してから描く（`applyFetchedBranchPRs` と同じ順序の理由）。
+  func applyResolvedRepository() {
+    if let repo {
+      loadBranchPullRequests(repo)
+      startCleanProbe(repo, .changedTargets)
+    }
+    rebuild()
+  }
+
+  /// ブランチの PR（`--state all` で open / closed の両方。掃除の安全確認・推定にだけ使う）を、
   /// **worktree にあるブランチの名指し**で引く。直近 N 件の一覧窓では、窓落ちした PR のぶんだけ
   /// 「マージ済みなのに merged チップが出ない」「レビュー中なのに安全確認を素通りする」が起きる——
   /// 対象を worktree のブランチに絞れば件数は worktree 本数で抑えられ、窓の概念そのものが消える。
-  /// パレットの PR 一覧 UI は別（bulk の open 一覧。一覧表示は窓で正当）。
+  /// パレットの PR 一覧（open 一覧）は closed / merged を含まず上限もあるので、掃除の事実はそれに頼らない。
+  /// 名指しするのは、同一性が GitHub のブランチ（`.ref`）になる worktree のローカル名だけ。
   ///
-  /// git レーン（worktree 一覧）と gh レーン（認証確認）の両方が揃ってはじめて引けるので、
-  /// **両側の着地点から同じこの入口を叩き、先に来た側は素通りする**（worktree 未着なら対象が
-  /// 空・probe 未完なら `githubReady` が false）。
+  /// git レーン（worktree 一覧）・gh レーン（認証確認）・remote の台帳の確定がすべて揃ってはじめて
+  /// 引けるので、**各着地点から同じこの入口を叩き、揃う前に来た側は素通りする**。
   ///
-  /// **まだ引いていない head だけを引く。** 着地点が複数ある以上この入口は何度も叩かれるが、
-  /// 引き直しに意味があるのは worktree の顔ぶれが変わったときだけで、同じ head の再取得は
+  /// **まだ引いていないブランチだけを引く。** 着地点が複数ある以上この入口は何度も叩かれるが、
+  /// 引き直しに意味があるのは worktree の顔ぶれが変わったときだけで、同じブランチの再取得は
   /// 往復をまるごと二重に払うだけになる。
   ///
   /// 記録は**発行の時点**で置く（`branchPRFetches[head] = .fetching`）——取得は 1 本あたり 1 秒前後
-  /// かかるので、着地を待って記録すると、その間に来たもう一方の着地点が同じ head を二重に引く。
+  /// かかるので、着地を待って記録すると、その間に来たもう一方の着地点が同じブランチを二重に引く。
   ///
-  /// **取得に失敗した head はセッション中に引き直さない**（`pending` の抽出がここ 1 箇所に閉じて
+  /// **取得に失敗したブランチはセッション中に引き直さない**（`pending` の抽出がここ 1 箇所に閉じて
   /// いるので、方針を変えるならこの 1 行）。パレットは開くたびに provider ごと作り直されるため、
   /// 開き直せば再取得される。
   func loadBranchPullRequests(_ repo: GitRepo) {
-    guard githubReady else { return }
-    let heads = Self.branchPRHeads(of: worktrees)
+    guard githubReady, case .settled(let resolved) = remoteLedger else { return }
+    let identities = DispatchRowIdentities(resolved: resolved, localBranches: localBranches)
+    let heads = Self.worktreeBranches(of: worktrees).filter { branch in
+      if case .ref = identities.local(branch) { return true }
+      return false
+    }
+    let seen = Set(heads)
     // 削除で消えた worktree の残骸を持たない。
-    let alive = Set(heads)
-    branchPRFetches = branchPRFetches.filter { alive.contains($0.key) }
+    branchPRFetches = branchPRFetches.filter { seen.contains($0.key) }
     let pending = heads.filter { branchPRFetches[$0] == nil }
     guard !pending.isEmpty else { return }
     for head in pending { branchPRFetches[head] = .fetching }
-    GitHubCLI.shared.branchPullRequests(cwd: repo.root, heads: pending) { [weak self] head, prs in
-      // キャッシュ書き込みは `self` の生存判定より前（issues/PR と同じ理由）。
+    gitHub.branchPullRequests(cwd: repo.root, heads: pending) { [weak self] head, prs in
+      // キャッシュ書き込みは `self` の生存判定より前——provider はパレットと同じ寿命で、gh の応答前に
+      // 閉じられるのが常用経路。self が消えたら捨てる作りだと次回の先描きが永遠に温まらない。
       if let prs {
         DispatchGitHubCache.shared.setBranchPullRequests(prs, head: head, for: repo.commonDir)
       }
@@ -91,80 +152,97 @@ extension DispatchDataProvider {
     }
   }
 
-  /// 分類器へ渡す head ごとの状態（**導出値**。保存しない）。gh が使えないと**確定**した
-  /// リポジトリは「確かめて 0 件」——確認対象そのものが無いので、行は git の事実だけで判定される
-  /// （従来動作）。今回の取得が未着地／失敗の head は、前回セッションの結果があればそれで確定させる
-  /// （stale-while-revalidate。既存の「取得失敗は据え置き」契約を head 単位に保つ）。
+  /// 分類器へ渡す worktree のブランチ（ローカル名）ごとの状態（**導出値**。保存しない）。中身は
+  /// その worktree の ref と head が等しい PR だけ——他人の fork の同名ブランチの PR は入らない。
+  /// 判定は次の順:
+  /// 1. probe が未完 → 取得中
+  /// 2. gh が使えないと**確定**した → 確かめて 0 件（確認対象そのものが無いので、行は git の事実だけで
+  ///    判定される）
+  /// 3. 台帳が未確定 → 取得中（安全群に入らない）
+  /// 4. 行を確かめられない → 取得失敗（安全群に入らない）
+  /// 5. GitHub の行でない → 確かめて 0 件
+  /// 6. 今回の取得の結果。未着地／失敗のブランチは、前回セッションの結果があればそれで確定させる
+  ///    （stale-while-revalidate。「取得失敗は据え置き」をブランチ単位に保つ）
   var branchPRStates: [String: BranchPRState] {
-    let heads = Self.branchPRHeads(of: worktrees)
-    guard let probed = probedGitHubState else {
-      return Dictionary(uniqueKeysWithValues: heads.map { ($0, BranchPRState.fetching) })
+    let branches = Self.worktreeBranches(of: worktrees)
+    func all(_ state: BranchPRState) -> [String: BranchPRState] {
+      Dictionary(uniqueKeysWithValues: branches.map { ($0, state) })
     }
-    guard probed == .ready else {
-      return Dictionary(uniqueKeysWithValues: heads.map { ($0, BranchPRState.loaded([])) })
-    }
+    guard let probed = probedGitHubState else { return all(.fetching) }
+    guard probed == .ready else { return all(.loaded([])) }
+    guard case .settled(let resolved) = remoteLedger else { return all(.fetching) }
+    let identities = DispatchRowIdentities(resolved: resolved, localBranches: localBranches)
     let cached =
       repo.flatMap { DispatchGitHubCache.shared.entry(for: $0.commonDir)?.branchPullRequests }
       ?? [:]
-    return Dictionary(
-      uniqueKeysWithValues: heads.map { head in
-        switch branchPRFetches[head] {
-        case .loaded(let prs): return (head, .loaded(prs))
-        case .failed: return (head, cached[head].map(BranchPRState.loaded) ?? .failed)
-        case .fetching, nil: return (head, cached[head].map(BranchPRState.loaded) ?? .fetching)
-        }
-      })
+    let states = branches.map { branch -> (String, BranchPRState) in
+      let ref: GitHubBranchRef
+      switch identities.local(branch) {
+      case .unverified: return (branch, .failed)
+      case .notGitHub: return (branch, .loaded([]))
+      case .ref(let identity): ref = identity
+      }
+      let fetched: BranchPRState
+      switch branchPRFetches[ref.branch] {
+      case .loaded(let prs): fetched = .loaded(prs)
+      case .failed: fetched = cached[ref.branch].map(BranchPRState.loaded) ?? .failed
+      case .fetching, nil: fetched = cached[ref.branch].map(BranchPRState.loaded) ?? .fetching
+      }
+      guard case .loaded(let prs) = fetched else { return (branch, fetched) }
+      return (branch, .loaded(prs.filter { $0.head == ref }))
+    }
+    return Dictionary(uniqueKeysWithValues: states)
   }
 
-  /// 着地済みの PR を平坦化したもの（`extraContainmentTargets` の入力）。
-  var landedBranchPRs: [GitHubBranchPR] {
-    branchPRStates.values.flatMap { state -> [GitHubBranchPR] in
-      guard case .loaded(let prs) = state else { return [] }
+  /// 着地済みの PR（worktree のブランチごと・ref で絞った後。`extraContainmentTargets` の入力）。
+  var landedBranchPRs: [String: [GitHubBranchPR]] {
+    branchPRStates.compactMapValues { state in
+      guard case .loaded(let prs) = state else { return nil }
       return prs
     }
   }
 
-  /// ブランチの PR 取得の対象。worktree にあるブランチだけ——main worktree は掃除の対象外、
-  /// detached（`branch == nil`）は PR の head になり得ない。
+  /// ブランチの PR を確かめる worktree のブランチ（ローカル名）。worktree にあるブランチだけ——main
+  /// worktree は掃除の対象外、detached（`branch == nil`）は PR の head になり得ない。
   ///
-  /// **head は一意にして返す。** `git worktree add --force` は同じブランチを 2 本の worktree へ
-  /// 置けるので、worktree の並びをそのまま head の並びにすると同名が 2 度出る。head は「gh へ問う
-  /// 対象の集合」であって worktree の一覧ではないので、重複はここで畳む——問い合わせの二重払いも、
-  /// この並びを辞書へ起こす読み手（`branchPRStates`）も、同時に守られる。
-  static func branchPRHeads(of worktrees: [GitWorktree]) -> [String] {
+  /// **一意にして返す。** `git worktree add --force` は同じブランチを 2 本の worktree へ置けるので、
+  /// worktree の並びをそのままブランチの並びにすると同名が 2 度出る。重複はここで畳む——この並びを
+  /// 辞書へ起こす読み手（`branchPRStates`）が守られる。
+  static func worktreeBranches(of worktrees: [GitWorktree]) -> [String] {
     var seen: Set<String> = []
     return worktrees.filter { !$0.isMain }.compactMap(\.branch).filter { seen.insert($0).inserted }
   }
 
-  /// 取得失敗（nil）は差し替えず据え置く。等値なら rebuild もしない（ちらつかない）。
-  /// 一覧 2 レーン（issues / open PR）の規則は以下の 2 メソッドが持つ（テストが直接叩く唯一の入口）。
-  /// head 単位で着地するブランチ PR は別の規則で、`applyFetchedBranchPRs` が持つ。
-  /// needsRebuild を代入より先に評価するのが要点——キャッシュ未ヒット時は loading==true なので
-  /// 失敗でも必ず rebuild してローディング行を畳む。
-  func applyFetchedIssues(_ fetched: [GitHubIssue]?) {
-    let needsRebuild = issuesLoading || (fetched != nil && fetched != issues)
-    issuesLoading = false
+  /// 合流点（`DispatchGitHubCache`）が配る一覧の現在値の着地。取得が続く間はページごと、最後に
+  /// `growing == false` で 1 回来る。値が無ければ（未取得のまま・失敗）差し替えず据え置く。値も取得中かも
+  /// 前回と等しければ rebuild しない（ちらつかない）。
+  /// 一覧 2 レーン（issues / open PR）の着地の規則は以下の 2 メソッドが、合流と一覧の組み立ては
+  /// `DispatchGitHubCache` が持つ。head 単位で着地するブランチ PR は別の規則で、`applyFetchedBranchPRs` が持つ。
+  func applyFetchedIssues(_ fetched: [GitHubIssue]?, growing: Bool) {
+    let needsRebuild = growing != issuesFetching || (fetched != nil && fetched != issues)
+    issuesFetching = growing
     if let fetched { issues = fetched }
     if needsRebuild { rebuild() }
   }
 
   /// issues 側（`applyFetchedIssues`）と同じ規則。片方の失敗が他方を巻き込まないよう別々に到着させる。
-  func applyFetchedPullRequests(_ fetched: [GitHubPullRequest]?) {
-    let needsRebuild = pullRequestsLoading || (fetched != nil && fetched != pullRequests)
-    pullRequestsLoading = false
+  func applyFetchedPullRequests(_ fetched: [GitHubPullRequest]?, growing: Bool) {
+    let needsRebuild =
+      growing != pullRequestsFetching || (fetched != nil && fetched != pullRequests)
+    pullRequestsFetching = growing
     if let fetched { pullRequests = fetched }
     if needsRebuild { rebuild() }
   }
 
-  /// head 1 本の着地。失敗（nil）もその head に閉じる——1 本の失敗で全体を捨てると、取れた head の
-  /// 事実まで一緒に消える。
+  /// ブランチ 1 本の着地。失敗（nil）もそのブランチに閉じる——1 本の失敗で全体を捨てると、取れた
+  /// ブランチの事実まで一緒に消える。
   ///
   /// gh 着地で merged PR の base が判明したら、**取り込み判定の比較先の顔ぶれが変わった行だけ**
   /// 引き直す（`startCleanProbe` の発行時台帳が差分を判定する）——本再判定の入口はここ 1 点。
   /// **差分プローブを `rebuild()` より先に撃つ**のが要点。描いてから撃つと、比較先が増えた行が
   /// 一瞬「確定」に見え、自動チェックが誤って灯る（しかもその後プローブ着地で分類が変わる）。
   func applyFetchedBranchPRs(head: String, _ fetched: [GitHubBranchPR]?) {
-    // 消えた head（削除された worktree）への遅着は捨てる。
+    // 消えたブランチ（削除された worktree）への遅着は捨てる。
     guard branchPRFetches[head] == .fetching else { return }
     branchPRFetches[head] = fetched.map(BranchPRState.loaded) ?? .failed
     if let repo { startCleanProbe(repo, .changedTargets) }

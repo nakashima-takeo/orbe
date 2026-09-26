@@ -15,10 +15,13 @@ struct DispatchBranchSync: Equatable {
   /// 最新化の選択画面に入る唯一の条件。分岐（↑↓）・↑ だけ・同期済みは即作成。
   var isFastForwardable: Bool { ahead == 0 && behind > 0 }
 
+  /// 鮮度を信頼する remote（提示時に fetch する唯一の remote）。
+  static let trustedRemote = "origin"
+
   /// 信頼する remote を追跡しているか。track は問わない——着地前に「着地を待つべき行か」を決める述語で、
-  /// ピル・選択画面の条件（`init?`）もここを読む。fetch の対象を増やすときに変えるのはここだけ。
+  /// ピル・選択画面の条件（`init?`）もここを読む。
   static func tracksTrustedRemote(_ branch: GitBranch) -> Bool {
-    branch.upstream?.remote == "origin"
+    branch.upstream?.remote == trustedRemote
   }
 
   /// 同期済み（差が無い）・`[gone]`・信頼しない remote の行は nil。
@@ -58,15 +61,15 @@ struct DispatchItem: Identifiable {
   /// 行末チップ（`#142` 等・branch グリフ付き）。
   var badges: [DispatchBadge] = []
   /// worktree/branch 行が紐づく open PR 番号（issue/PR 行では nil）。
-  /// 行末バッジ `#<PR>` と同一の番号（同じ prByHead ルックアップ）を焼く SSOT で、
+  /// 行末バッジ `#<PR>` と同一の番号（同じ `prByRef` ルックアップ）を焼く SSOT で、
   /// 「バッジが出る行 ＝ 開ける行」を構造で保証する。
   var linkedPRNumber: Int?
   /// worktree の working リング（10×10）を右端に出すか。
   var showsWorkingIndicator = false
   /// Local branch 行の upstream との差（右端の `↑N` / `↓N` ピル）。着地前・同期済み・upstream 無しは nil。
   var sync: DispatchBranchSync?
-  /// 右端へ寄せる worktree 解決ノート（issue の新規・PR の checkout 等）。nil で出さない。View が言語別に引く。
-  var worktreeNote: DispatchWorktreeKind?
+  /// 右端へ寄せる Enter の動き（issue の新規・PR の checkout・ブラウザ等）。nil で出さない。View が言語別に引く。
+  var enterNote: DispatchEnterNote?
   /// 情報/ローディング行の種別（文言は View が引く。対話行は nil）。
   var infoKind: DispatchInfoKind?
   /// アクティブ worktree（グリフ=working 色・名前=chromeText）。他行は muted/secondary。
@@ -84,7 +87,7 @@ struct DispatchItem: Identifiable {
   var canOpenWeb: Bool {
     if linkedPRNumber != nil { return true }
     switch action {
-    case .issue, .pullRequest: return true
+    case .open(.issue), .pullRequest: return true
     default: return false
     }
   }
@@ -101,6 +104,8 @@ enum DispatchFooter: Equatable {
   /// 実行説明。`↵ <target> <前置> <agent> を新しいタブで起動` の骨。前置句は worktree 解決種別から、
   /// agent 名は選択中 agent（動的）を、後置句は共通キーを View が言語別に挿す（Japanese 断片の連結を排す）。
   case launch(target: String, kind: DispatchWorktreeKind)
+  /// `↵ <target> をブラウザで開く`（worktree にできない PR 行。Enter は ⌘↵ と同じ）。
+  case browse(target: String)
   /// 注記のみ（実行説明もキーヒントも出さない行）。
   case note(L10nKey)
 }

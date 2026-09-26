@@ -5,8 +5,21 @@ import XCTest
 /// DispatchSectionBuilder（純粋関数）の相関・重複排除・フォールバック・action ペイロード検証。
 final class DispatchSectionBuilderTests: OrbeTestCase {
 
-  private func section(_ sections: [DispatchSection], _ title: String) -> DispatchSection? {
+  func section(_ sections: [DispatchSection], _ title: String) -> DispatchSection? {
     sections.first { $0.title == title }
+  }
+
+  let origin = GitHubRepoName(nameWithOwner: "o/r")
+
+  /// origin だけを持つ確定した台帳。
+  var ledger: DispatchRemoteLedger { .settled(.init(repositories: ["origin": .github(origin)])) }
+
+  func pullRequest(
+    _ number: Int, head: String, repo: GitHubRepoName? = nil, reviewDecision: String? = nil
+  ) -> GitHubPullRequest {
+    GitHubPullRequest(
+      number: number, title: "pr \(number)", headRefName: head, reviewDecision: reviewDecision,
+      headRepository: repo ?? origin)
   }
 
   // MARK: - 相関（PR headRef → branch チップ）
@@ -17,11 +30,7 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
       remoteBranches: [
         GitBranch(name: "origin/feat/x", relativeDate: "3h前", upstream: nil)
       ],
-      pullRequests: [
-        GitHubPullRequest(
-          number: 42, title: "feat: x", headRefName: "feat/x", reviewDecision: nil,
-          isCrossRepository: false)
-      ])
+      pullRequests: [pullRequest(42, head: "feat/x")], remoteLedger: ledger)
     let sections = DispatchSectionBuilder.build(input)
     XCTAssertEqual(
       section(sections, "Worktrees")?.items.first?.badges.map(\.text), ["#42"],
@@ -49,16 +58,9 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
         GitBranch(name: "origin/nope/z", relativeDate: "4h前", upstream: nil),
       ],
       pullRequests: [
-        GitHubPullRequest(
-          number: 42, title: "feat: wt", headRefName: "feat/wt", reviewDecision: nil,
-          isCrossRepository: false),
-        GitHubPullRequest(
-          number: 43, title: "feat: local", headRefName: "feat/local", reviewDecision: nil,
-          isCrossRepository: false),
-        GitHubPullRequest(
-          number: 44, title: "feat: remote", headRefName: "feat/remote", reviewDecision: nil,
-          isCrossRepository: false),
-      ])
+        pullRequest(42, head: "feat/wt"), pullRequest(43, head: "feat/local"),
+        pullRequest(44, head: "feat/remote"),
+      ], remoteLedger: ledger)
     let sections = DispatchSectionBuilder.build(input)
 
     func item(_ title: String, _ name: String) -> DispatchItem? {
@@ -167,7 +169,7 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
     let sections = DispatchSectionBuilder.build(input)
     XCTAssertEqual(
       section(sections, "Remote branches")?.items.first?.action,
-      .remoteBranch(name: "origin/feat/y", existingWorktree: "/tmp/wt/feat-y"),
+      .open(.remoteBranch(name: "origin/feat/y", existingWorktree: "/tmp/wt/feat-y")),
       "対応ローカル worktree があれば action に焼き込み再利用させる")
   }
 
@@ -184,9 +186,9 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
   func testIssueNewWorktreeWhenNoExisting() {
     let it = issueItem(worktrees: [], localBranches: [])
     XCTAssertEqual(
-      it?.action, .issue(number: 44, existingWorktree: nil, existingBranch: false),
+      it?.action, .open(.issue(number: 44, existingWorktree: nil, existingBranch: false)),
       "既存 worktree もブランチも無ければ新規作成パスを焼く")
-    XCTAssertEqual(it?.worktreeNote, .new)
+    XCTAssertEqual(it?.enterNote, .worktree(.new))
     XCTAssertEqual(it?.footer, .launch(target: "#44", kind: .new))
   }
 
@@ -201,9 +203,9 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
       ])
     XCTAssertEqual(
       it?.action,
-      .issue(number: 44, existingWorktree: "/tmp/wt/issue-44", existingBranch: true),
+      .open(.issue(number: 44, existingWorktree: "/tmp/wt/issue-44", existingBranch: true)),
       "既存 worktree があれば再利用パスを焼く（既存ブランチより優先）")
-    XCTAssertEqual(it?.worktreeNote, .existing)
+    XCTAssertEqual(it?.enterNote, .worktree(.existing))
     XCTAssertEqual(it?.footer, .launch(target: "#44", kind: .existing))
   }
 
@@ -214,9 +216,9 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
         GitBranch(name: "issue/44", relativeDate: "1d前", upstream: nil)
       ])
     XCTAssertEqual(
-      it?.action, .issue(number: 44, existingWorktree: nil, existingBranch: true),
+      it?.action, .open(.issue(number: 44, existingWorktree: nil, existingBranch: true)),
       "worktree は無いがブランチだけ既存 → -b 無しで既存ブランチから追加")
-    XCTAssertEqual(it?.worktreeNote, .checkout)
+    XCTAssertEqual(it?.enterNote, .worktree(.checkout))
     XCTAssertEqual(it?.footer, .launch(target: "#44", kind: .checkout))
   }
 
@@ -242,14 +244,14 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
 
   func testLoadingShowsLoadingRow() {
     let input = DispatchSectionBuilder.Input(
-      githubState: .ready, issuesLoading: true, pullRequestsLoading: true)
+      githubState: .ready, issuesFetching: true, pullRequestsFetching: true)
     let sections = DispatchSectionBuilder.build(input)
     XCTAssertEqual(section(sections, "Issues")?.items.first?.isLoadingRow, true)
     XCTAssertEqual(section(sections, "Pull requests")?.items.first?.isLoadingRow, true)
   }
 
   func testReadyButEmptyHidesSections() {
-    let input = DispatchSectionBuilder.Input(githubState: .ready)
+    let input = DispatchSectionBuilder.Input(githubState: .ready, remoteLedger: ledger)
     let sections = DispatchSectionBuilder.build(input)
     XCTAssertNil(section(sections, "Issues"), "ready でも 0 件のセクションは消える")
     XCTAssertNil(section(sections, "Pull requests"))
@@ -266,19 +268,19 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
     let input = DispatchSectionBuilder.Input(
       issues: [GitHubIssue(number: 7, title: "bug")],
       pullRequests: [
-        GitHubPullRequest(
-          number: 9, title: "pr", headRefName: "fork/x", reviewDecision: "REVIEW_REQUIRED",
-          isCrossRepository: true)
+        pullRequest(
+          9, head: "fork/x", repo: GitHubRepoName(nameWithOwner: "someone/r"),
+          reviewDecision: "REVIEW_REQUIRED")
       ],
-      githubState: .ready)
+      githubState: .ready, remoteLedger: ledger)
     let sections = DispatchSectionBuilder.build(input)
     XCTAssertEqual(
       section(sections, "Issues")?.items.first?.action,
-      .issue(number: 7, existingWorktree: nil, existingBranch: false))
+      .open(.issue(number: 7, existingWorktree: nil, existingBranch: false)))
     let pr = section(sections, "Pull requests")?.items.first
-    XCTAssertEqual(
-      pr?.action,
-      .pullRequest(number: 9, headRef: "fork/x", isCrossRepo: true, existingWorktree: nil))
+    XCTAssertEqual(pr?.action, .pullRequest(number: 9, route: .browser), "他人の fork の PR はブラウザで開く")
+    XCTAssertEqual(pr?.enterNote, .browser)
+    XCTAssertEqual(pr?.footer, .browse(target: "#9"))
     XCTAssertEqual(pr?.reviewNote, .reviewRequired, "REVIEW_REQUIRED → reviewRequired")
   }
 }
