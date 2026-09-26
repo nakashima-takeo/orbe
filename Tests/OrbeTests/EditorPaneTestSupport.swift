@@ -25,19 +25,31 @@ extension OrbeTestCase {
     return window
   }
 
-  /// 文書の本文。テキスト面（エンジン）の本文を入力の口（`NSTextInputClient`）から読み、文書の写しと一致することを
-  /// 確かめてから返す——製品の契約に本文を読む口は無いので、写しが面を追えているかはテストがエンジンから読んで見る。
+  /// 文書の本文。テキスト面（エンジン）の本文を入力の口（`NSTextInputClient`）から読み、文書の写しと UTF-16 の単位で
+  /// 一致すること（片割れのサロゲートも含めて）を確かめてから返す——製品の契約に本文を読む口は無いので、写しが面を
+  /// 追えているかはテストがエンジンから読んで見る。
   @MainActor
   func bodyText(
     _ document: EditorDocument, file: StaticString = #filePath, line: UInt = #line
   ) -> String {
+    let engine = engineUnits(document)
+    XCTAssertEqual(
+      Array(document.text.contiguousUnits()), engine, "文書の写しが面の本文と違う", file: file, line: line)
+    return String(decoding: engine, as: UTF16.self)
+  }
+
+  /// テキスト面（エンジン）の本文の UTF-16 の単位。
+  @MainActor
+  func engineUnits(_ document: EditorDocument) -> [UInt16] {
     let client = document.surface.responder as? NSTextInputClient
-    let engine =
-      client?.attributedSubstring(
+    guard
+      let engine = client?.attributedSubstring(
         forProposedRange: NSRange(location: 0, length: Int(Int32.max)), actualRange: nil)?.string
-      ?? ""
-    XCTAssertEqual(document.text.string, engine, "文書の写しが面の本文と違う", file: file, line: line)
-    return engine
+        as NSString?
+    else { return [] }
+    var units = [UInt16](repeating: 0, count: engine.length)
+    engine.getCharacters(&units, range: NSRange(location: 0, length: engine.length))
+    return units
   }
 
   /// 文書の裏の仕事（構文・行差分・検索・出現）が今の版に追いつき、結果を受け取るまで待つ（受け取り箱を見て待つ。時間では

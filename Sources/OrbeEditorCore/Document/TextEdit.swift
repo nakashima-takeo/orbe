@@ -1,16 +1,21 @@
 import Foundation
 
-/// テキスト面で起きた 1 回の置換。`range` は変更前の本文での区間、`replacement` は置換後の文字列で、`replacementLength`
-/// はその長さ（どちらも UTF-16。tree-sitter の既定符号化と一致する）。
+/// テキスト面で起きた 1 回の置換。`range` は変更前の本文での区間、`replacement` は置換後の中身の UTF-16 の単位で、
+/// `replacementLength` はその長さ（tree-sitter の既定符号化と一致する）。中身を Swift の文字列でなく単位で運ぶのは、
+/// 面の本文がサロゲートの対の片割れを持ちうるから（対を割る置換とその undo）——文字列にすると片割れが U+FFFD に化け、
+/// 写しが面の本文からずれる。
 public struct TextEdit: Equatable, Sendable {
   public let range: NSRange
-  public let replacement: String
-  public let replacementLength: Int
+  public let replacement: ContiguousArray<UInt16>
+  public var replacementLength: Int { replacement.count }
 
-  public init(range: NSRange, replacement: String) {
+  public init(range: NSRange, replacement: ContiguousArray<UInt16>) {
     self.range = range
     self.replacement = replacement
-    replacementLength = replacement.utf16.count
+  }
+
+  public init(range: NSRange, replacement: String) {
+    self.init(range: range, replacement: ContiguousArray(replacement.utf16))
   }
 
   /// 置換後の本文での、置き換わった区間。
@@ -33,7 +38,7 @@ public struct TextEdit: Equatable, Sendable {
   /// 単位。サロゲートの対は割らない。
   public func narrowed(replacing old: ContiguousArray<UInt16>) -> TextEdit {
     guard !old.isEmpty, replacementLength > 0 else { return self }
-    let new = ContiguousArray(replacement.utf16)
+    let new = replacement
     let limit = min(old.count, new.count)
     var prefix = 0
     while prefix < limit, old[prefix] == new[prefix] { prefix += 1 }
@@ -46,7 +51,7 @@ public struct TextEdit: Equatable, Sendable {
     guard prefix > 0 || suffix > 0 else { return self }
     return TextEdit(
       range: NSRange(location: range.location + prefix, length: old.count - prefix - suffix),
-      replacement: String(decoding: new[prefix..<(new.count - suffix)], as: UTF16.self))
+      replacement: ContiguousArray(new[prefix..<(new.count - suffix)]))
   }
 
   /// 編集の前の区間の集合を編集の後の本文へ写す。`track` と違い落とさない——編集に掛かる（接する）なら、置換後の区間を

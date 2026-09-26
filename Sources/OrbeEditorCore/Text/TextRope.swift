@@ -212,9 +212,13 @@ public struct TextRope: Sendable {
 
   /// 区間を置き換える。置き換える区間に掛かる塊だけを組み直し、小さくなりすぎた塊は隣と合わせる。
   public mutating func replace(_ range: NSRange, with replacement: String) {
+    replace(range, with: ContiguousArray(replacement.utf16))
+  }
+
+  /// 区間を UTF-16 の単位の列で置き換える（サロゲートの対の片割れもそのまま持つ）。
+  public mutating func replace(_ range: NSRange, with inserted: ContiguousArray<UInt16>) {
     let start = min(max(0, range.location), length)
     let end = min(max(start, NSMaxRange(range)), length)
-    let inserted = ContiguousArray(replacement.utf16)
     guard let (first, firstBefore) = chunk(containing: start) else {
       chunks = SummaryTree(Self.chunked(inserted[...]))
       return

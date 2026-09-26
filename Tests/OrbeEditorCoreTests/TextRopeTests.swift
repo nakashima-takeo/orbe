@@ -83,6 +83,24 @@ final class TextRopeTests: XCTestCase {
     assertMatches(rope, "")
   }
 
+  /// 置換の中身は UTF-16 の単位のまま入る——サロゲートの対の片割れも化けずに残り、戻せば元の対になる。編集の絞り込みも
+  /// 片割れを単位のまま運ぶ。
+  func testReplacingWithUnitsKeepsALoneSurrogate() {
+    var rope = TextRope("a😀b")
+    let lead = ContiguousArray<UInt16>([0xD83D])
+    rope.replace(NSRange(location: 1, length: 1), with: ContiguousArray("x".utf16))
+    XCTAssertEqual(Array(rope.contiguousUnits()), [0x61, 0x78, 0xDE00, 0x62])
+    let undo = TextEdit(range: NSRange(location: 1, length: 1), replacement: lead)
+    rope.replace(undo.range, with: undo.replacement)
+    XCTAssertEqual(Array(rope.contiguousUnits()), Array("a😀b".utf16), "元の対に戻る")
+    XCTAssertEqual(rope.utf8Data(), Data("a😀b".utf8))
+    let whole = TextEdit(
+      range: NSRange(location: 0, length: 3), replacement: ContiguousArray([0x61, 0xD83D, 0x63]))
+    XCTAssertEqual(
+      whole.narrowed(replacing: ContiguousArray([0x61, 0x78, 0x63])).replacement, lead,
+      "片割れを単位のまま運ぶ")
+  }
+
   /// 写しは変わらない——写した後に元を置換しても、写しの本文は写したときのまま。
   func testCopiesAreUnaffectedByLaterEdits() {
     var rope = TextRope(String(repeating: "abc\n", count: 5000))

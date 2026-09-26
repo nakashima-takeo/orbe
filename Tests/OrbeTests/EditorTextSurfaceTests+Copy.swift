@@ -9,22 +9,45 @@ import XCTest
 /// 文書へ届く——通知が 1 つでも漏れれば、以後の色・印・検索・保存が全部ずれる。
 extension EditorTextSurfaceTests {
   /// 乱択の操作（打鍵・改行・削除・選択を置き換える打鍵・複数キャレットの打鍵・大文字化・undo / redo・IME の変換と
-  /// 確定・丸ごと置き換え）の後も、文書の写しは面の本文と同じ。
+  /// 確定・丸ごと置き換え）の後も、文書の写しは面の本文と UTF-16 の単位で同じ。本文に絵文字（サロゲートの対）と CRLF を
+  /// 含め、選択がサロゲートの対を割る置き換えと、その undo も通る（種 5・10 はその経路で写しがずれた）。
   func testTheDocumentCopyFollowsTheSurfaceThroughRandomOperations() throws {
-    let source = (1...40).map { "let value\($0) = compute(\($0)) // 注 \($0)\n" }.joined()
-    let (document, _) = try opened(try file("copy.swift", source))
-    let generator = Lehmer(seed: 17)
-    let operations = try randomOperations(document, generator)
-    for step in 0..<300 {
-      let (name, operation) = operations[generator.next(below: operations.count)]
-      operation()
-      if step % 75 == 74 {
-        document.surface.replaceAll(
-          with: document.text.string.replacingOccurrences(of: "let", with: "var"))
+    for seed: UInt64 in [5, 10, 17] {
+      let source = (1...40).map {
+        "let value\($0) = compute(\($0)) // 注😀 \($0)\($0 % 3 == 0 ? "\r\n" : "\n")"
+      }.joined()
+      let (document, _) = try opened(try file("copy\(seed).swift", source))
+      let generator = Lehmer(seed: seed)
+      let operations = try randomOperations(document, generator)
+      for step in 0..<400 {
+        let (name, operation) = operations[generator.next(below: operations.count)]
+        operation()
+        if step % 75 == 74 {
+          document.surface.replaceAll(
+            with: document.text.string.replacingOccurrences(of: "let", with: "var"))
+        }
+        guard Array(document.text.contiguousUnits()) == engineUnits(document) else {
+          XCTFail("種 \(seed) の \(step) 回目の\(name)で写しが面の本文とずれた")
+          break
+        }
       }
-      XCTAssertEqual(document.text.string, bodyText(document), "\(step) 回目の\(name)")
-      guard document.text.string == bodyText(document) else { return }
     }
+  }
+
+  /// サロゲートの対の片方だけを選んで打ち、undo すると、面の本文は元の絵文字に戻る。写しも同じ単位に戻り、保存したファイルは
+  /// 元のバイト列のまま（片割れを置換の文字列に載せられず、写しが U+FFFD 2 つに化けて保存で絵文字が壊れていた）。
+  func testUndoingAnEditThatSplitASurrogatePairRestoresTheCopyAndTheFile() throws {
+    let url = try file("split.swift", "a😀b\n")
+    let (document, _) = try opened(url)
+    let responder = document.surface.responder
+    document.surface.selectedRange = NSRange(location: 1, length: 1)
+    responder.insertText("x")
+    XCTAssertEqual(Array(document.text.contiguousUnits()), engineUnits(document), "片割れが残った本文")
+    responder.undoManager?.undo()
+    XCTAssertEqual(engineUnits(document), Array("a😀b\n".utf16), "前提: 面は元に戻る")
+    XCTAssertEqual(Array(document.text.contiguousUnits()), engineUnits(document), "写しも元に戻る")
+    try document.save(force: true)
+    XCTAssertEqual(try Data(contentsOf: url), Data("a😀b\n".utf8), "保存したファイルは壊れない")
   }
 
   /// 面を本文の変わる操作で動かす手（名前と操作）。位置は `generator` で選ぶ。
