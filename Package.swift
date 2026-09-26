@@ -97,6 +97,14 @@ let package = Package(
       ],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
+    // テキスト面（`TextSurface`）の Metal 実装。本文を持たず、文書の写しを描画専用のスレッドが 1 コマで描く。公開は面を
+    // 作る関数と、シェーダを先に用意する関数だけ。STTextView に依らないことは target の依存でコンパイラが保証する。main と
+    // 描画スレッドの間で値を渡すので Swift 6 の言語モードで検査する。
+    .target(
+      name: "OrbeEditorEngine",
+      dependencies: ["OrbeEditorCore"],
+      swiftSettings: [.swiftLanguageMode(.v6)]
+    ),
     .executableTarget(
       name: "Orbe",
       dependencies: [
@@ -106,6 +114,7 @@ let package = Package(
         "OrbeSound",
         "OrbeEditorCore",
         "OrbeEditorText",
+        "OrbeEditorEngine",
         .product(name: "Markdown", package: "swift-markdown"),
         .product(name: "Sparkle", package: "Sparkle"),
       ],
@@ -178,6 +187,11 @@ let package = Package(
       name: "OrbeEditorCoreTests",
       dependencies: ["OrbeEditorCore"],
       resources: [.copy("Fixtures")],
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .testTarget(
+      name: "OrbeEditorEngineTests",
+      dependencies: ["OrbeEditorEngine", "OrbeEditorCore"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(

@@ -40,6 +40,16 @@ custom_rules:
     message: "STTextView は Sources/OrbeEditorText からだけ import する（面は makeTextSurface で作る）"
     severity: error
 
+  editor_metal_engine_seam:
+    name: "Metal のテキストエンジンは合成点からだけ使う"
+    included: ".*/Sources/.*\\.swift"
+    excluded: ".*/Sources/(OrbeEditorEngine/.*|Orbe/Features/Editor/EditorStyle\\.swift)"
+    # 面の作り方を決めるのは合成点（EditorSurfaces）1 か所。エンジンを外す時も、そこと target の依存だけで閉じる。
+    regex: "import\\s+(?:\\w+\\s+)?OrbeEditorEngine\\b"
+    match_kinds: [keyword, identifier, typeidentifier]
+    message: "OrbeEditorEngine は Sources/Orbe/Features/Editor/EditorStyle.swift（合成点）からだけ import する"
+    severity: error
+
   editor_syntax_engine_seam:
     name: "tree-sitter は OrbeEditorCore に閉じる"
     included: ".*/Sources/.*\\.swift"
