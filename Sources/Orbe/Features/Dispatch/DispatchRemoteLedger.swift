@@ -109,7 +109,7 @@ enum DispatchRemoteLedger: Equatable {
 /// （`origin/main`）や積み上げ元を指しうるので使わない。ブランチ名がローカル名なのは、既定の
 /// `push.default=simple` では名前の違う upstream へは push できず、push されるのはローカル名だから。
 struct DispatchRowIdentities {
-  let resolved: DispatchRemoteLedger.Resolved
+  private let resolved: DispatchRemoteLedger.Resolved
   /// ローカル名 → ブランチ（同名は先勝ち）。
   private let localBranches: [String: GitBranch]
 
