@@ -22,7 +22,7 @@ final class Renderer {
   static let gpuLimit = 3
   /// 描くものが変わらないコマがこれだけ続いたら刻みを止める。
   static let idleTicksBeforePause = 2
-  /// 止めてから、ジェスチャーの要約を締めるまで（OS の momentum が続くかを見届ける）。
+  /// 止めてから、ジェスチャーの要約を締めるまで（OS の momentum が続くか・main の詰まりが明けるかを見届ける）。
   static let gestureSettle = 0.3
 
   init(device: MTLDevice) {
@@ -170,16 +170,17 @@ final class Renderer {
   private func pause(_ slot: SurfaceSlot, _ clock: FrameClock) {
     guard !clock.isPaused else { return }
     clock.isPaused = true
-    guard let gesture = slot.recorder.gesture else { return }
+    guard slot.recorder.gesture != nil else { return }
     let id = slot.id
+    let drawn = slot.recorder.drawnCount
     DispatchQueue.global().asyncAfter(deadline: .now() + Self.gestureSettle) {
-      RenderThread.shared.perform { $0.flushGesture(id, gesture) }
+      RenderThread.shared.perform { $0.flushGesture(id, ifNothingDrawnSince: drawn) }
     }
   }
 
-  private func flushGesture(_ id: Int, _ gesture: Int) {
-    guard let slot = slots[id], slot.clock?.isPaused == true, slot.recorder.gesture == gesture
-    else { return }
+  /// 止めてから次のコマを描いていなければ、ジェスチャーを締める（main が詰まって刻みが止まっただけなら締めない）。
+  private func flushGesture(_ id: Int, ifNothingDrawnSince drawn: Int) {
+    guard let slot = slots[id], slot.recorder.drawnCount == drawn else { return }
     slot.recorder.flush()
   }
 

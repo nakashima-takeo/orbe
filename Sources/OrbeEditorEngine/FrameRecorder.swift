@@ -76,7 +76,11 @@ final class FrameRecorder {
   var keepsTotals = false
   private(set) var totals = Totals()
 
+  /// 描いたコマの数（止めてから締めるまでに次のコマが来たかを見る）。
+  private(set) var drawnCount = 0
+
   func drew(_ drawn: Drawn) {
+    drawnCount += 1
     if keepsTotals { totals.cpu.append(drawn.cpu) }
     if let current, current.id != drawn.gesture { flush() }
     if drawn.moving || !drawn.events.isEmpty {
