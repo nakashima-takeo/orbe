@@ -25,16 +25,8 @@ public struct SummaryTree<Element: TreeElement>: Sendable {
 
   private var root: Node
 
-  public init() {
-    root = Node(elements: [])
-  }
-
   public init(_ elements: some Collection<Element>) {
     root = Self.build(Array(elements))
-  }
-
-  private init(root: Node) {
-    self.root = root
   }
 
   public var summary: Summary { root.summary }
@@ -44,6 +36,7 @@ public struct SummaryTree<Element: TreeElement>: Sendable {
 
   /// `index` 番目の要素（O(log n)）。
   public subscript(index: Int) -> Element {
+    precondition(index >= 0 && index < count, "番号が木の外")
     var node = root
     var index = index
     while node.height > 0 {
@@ -127,16 +120,12 @@ public struct SummaryTree<Element: TreeElement>: Sendable {
     root = Self.normalized(result)
   }
 
-  public mutating func append(contentsOf elements: some Collection<Element>) {
-    replaceSubrange(count..<count, with: elements)
-  }
-
   // MARK: - 節
 
   /// 木の節。不変条件: 共有されている節（参照が 2 つ以上）は変更しない——変更は `isKnownUniquelyReferenced` で一意と
   /// 確かめた節か、作ったばかりの節にだけ行う。これで、値として写した木（別のスレッドへ渡した写しを含む）から見える節は
   /// 決して変わらず、ロックなしで読める。コンパイラはこの規律を見られないので `@unchecked Sendable` とする。
-  final class Node: @unchecked Sendable {
+  fileprivate final class Node: @unchecked Sendable {
     /// 葉は 0。
     let height: Int
     private(set) var count: Int

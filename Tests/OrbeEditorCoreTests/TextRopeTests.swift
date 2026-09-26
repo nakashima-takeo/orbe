@@ -30,12 +30,24 @@ final class TextRopeTests: XCTestCase {
         rope.lineEnd(row), row + 1 < starts.count ? starts[row + 1] : text.length, file: file,
         line: line)
     }
-    for offset in stride(from: 0, through: text.length, by: max(1, text.length / 97)) {
+    let offsets = stride(from: 0, through: text.length, by: max(1, text.length / 97))
+    for offset in Array(offsets) + [text.length] {
       let row = starts.lastIndex { $0 <= offset }!
       XCTAssertEqual(rope.row(containing: offset), row, "オフセット \(offset)", file: file, line: line)
       XCTAssertEqual(rope.point(at: offset).column, offset - starts[row], file: file, line: line)
     }
     XCTAssertEqual(Array(rope.utf16), Array((text as String).utf16), file: file, line: line)
+    var offset = 0
+    while let chunk = rope.chunkData(at: offset) {
+      offset += chunk.count / 2
+      let last = chunk.withUnsafeBytes { $0.bindMemory(to: UInt16.self).last! }
+      if UTF16.isLeadSurrogate(last), offset < text.length {
+        XCTAssertFalse(
+          UTF16.isTrailSurrogate(text.character(at: offset)), "塊の境 \(offset) でサロゲートの対を割った",
+          file: file, line: line)
+      }
+    }
+    XCTAssertEqual(offset, text.length, "塊を辿ると本文の終わりに着く", file: file, line: line)
   }
 
   /// 乱択の置換（挿入・削除・置換・大きな貼り付け・改行と CRLF とサロゲートを含む）を NSString と同じに追う。

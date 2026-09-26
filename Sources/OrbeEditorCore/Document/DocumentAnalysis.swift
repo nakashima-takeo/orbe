@@ -194,7 +194,7 @@ actor DocumentAnalysis {
 
   private func units(of job: Job) -> ContiguousArray<UInt16> {
     if let flattened, flattened.version == job.version { return flattened.units }
-    let units = job.text.flattenedOffMain()
+    let units = job.text.contiguousUnits()
     flattened = (job.version, units)
     return units
   }

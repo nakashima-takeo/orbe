@@ -120,9 +120,9 @@ public struct TextRope: Sendable {
     }
   }
 
-  /// 本文全体を連続した UTF-16 の列に写す（O(n)）。main の打鍵の経路では使わない——裏の仕事（検索・出現・行差分）が
-  /// 写しを受け取ってから呼ぶ。
-  public func flattenedOffMain() -> ContiguousArray<UInt16> {
+  /// 本文全体を連続した UTF-16 の列に写す（O(n)）。打鍵の経路では呼ばない——使うのは裏の仕事（検索・出現・行差分）と
+  /// 保存。
+  public func contiguousUnits() -> ContiguousArray<UInt16> {
     var result = ContiguousArray<UInt16>()
     result.reserveCapacity(length)
     for chunk in chunks.elements(from: 0) { result.append(contentsOf: chunk.units) }
@@ -131,7 +131,7 @@ public struct TextRope: Sendable {
 
   /// 保存する UTF-8 のバイト列（単独のサロゲートは U+FFFD）。
   public func utf8Data() -> Data {
-    Data(String(decoding: flattenedOffMain(), as: UTF16.self).utf8)
+    Data(String(decoding: contiguousUnits(), as: UTF16.self).utf8)
   }
 
   /// 本文の UTF-16 単位を先頭から読む（塊を順に辿る）。
@@ -194,7 +194,8 @@ public struct TextRope: Sendable {
     return chunks.locate(max(0, offset), by: \.utf16)
   }
 
-  /// 単位の列を、大きさを揃えた `maximumChunk` 以下の塊に分ける。サロゲートの対は塊の境で割らない。
+  /// 単位の列を、大きさを揃えた `maximumChunk` 以下の塊に分ける。サロゲートの対は塊の境で割らず、そのときだけ塊が
+  /// 1 単位超える。
   private static func chunked(_ units: ArraySlice<UInt16>) -> [Chunk] {
     guard !units.isEmpty else { return [] }
     let parts = (units.count + maximumChunk - 1) / maximumChunk
