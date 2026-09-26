@@ -86,7 +86,7 @@ public final class EditorDocument {
   private var pendingHunks: Int?
   /// 区間の列の問いのうち、まだ結果を受け取っていないもの（種類ごとに最新の問いと版）。
   private var pendingRanges: [AnalysisRequest.Kind: (request: AnalysisRequest, version: Int)] = [:]
-  private var hasBeenShown = false
+  private(set) var hasBeenShown = false
   /// 最後に読んだ／書いたファイルのバイト列のダイジェスト（ディスクの姿）。
   private var diskDigest: SHA256Digest
   /// 開いた／差し替えたときにファイルが UTF-8 BOM で始まっていたか。保存で同じように書き戻す。
