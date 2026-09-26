@@ -169,9 +169,9 @@ final class DispatchRemoteLedgerProviderTests: OrbeTestCase {
     try serveBranchPullRequests(
       "feature-x",
       #"[{"number":6,"headRefName":"feature-x","state":"OPEN","baseRefName":"main","#
-        + #""headRepository":{"nameWithOwner":"x/r"}},"#
+        + #""headRepositoryOwner":{"login":"x"},"headRepository":{"name":"r"}},"#
         + #"{"number":5,"headRefName":"feature-x","state":"MERGED","baseRefName":"develop","#
-        + #""headRepository":{"nameWithOwner":"me/r"}}]"#)
+        + #""headRepositoryOwner":{"login":"me"},"headRepository":{"name":"r"}}]"#)
     let (model, provider) = makeProvider()
 
     provider.load()
@@ -337,9 +337,11 @@ extension DispatchRemoteLedgerProviderTests {
 
   /// open PR 一覧を、この 1 件だけにする。
   func servePullRequest(_ number: Int, head: String, from repository: String) throws {
+    let parts = repository.split(separator: "/").map(String.init)
     let node =
       #"{"number":\#(number),"title":"pr \#(number)","headRefName":"\#(head)","#
-      + #""headRepository":{"nameWithOwner":"\#(repository)"},"reviewDecision":null}"#
+      + #""headRepositoryOwner":{"login":"\#(parts[0])"},"headRepository":{"name":"\#(parts[1])"},"#
+      + #""reviewDecision":null}"#
     try write(
       #"{"nodes":[\#(node)],"pageInfo":{"hasNextPage":false,"endCursor":null}}"#,
       to: ghDir.appendingPathComponent("prs.json").path)

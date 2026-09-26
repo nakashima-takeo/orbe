@@ -47,7 +47,8 @@ final class GitHubCLIOpenListFetchTests: OrbeTestCase {
         [ "$i" -gt 1 ] && printf ','
         n=$((offset + i))
         printf '{"number":%d,"title":"t%d",' "$n" "$n"
-        printf '"headRefName":"h%d","headRepository":{"nameWithOwner":"o/r"},' "$n"
+        printf '"headRefName":"h%d","headRepositoryOwner":{"login":"o"},' "$n"
+        printf '"headRepository":{"name":"r"},'
         printf '"reviewDecision":null}'
         i=$((i + 1))
       done
@@ -140,7 +141,8 @@ final class GitHubCLIOpenListFetchTests: OrbeTestCase {
     let prQuery = try XCTUnwrap(nextPage.first { $0.hasPrefix("query=") })
     XCTAssertTrue(
       prQuery.contains(
-        "nodes{number title headRefName headRepository{nameWithOwner} reviewDecision}"),
+        "nodes{number title headRefName headRepositoryOwner{login} headRepository{name}"
+          + " reviewDecision}"),
       "PR 行が描く項目（レビュー状態・行との同一性に使う head のリポジトリを含む）を取る")
   }
 

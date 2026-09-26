@@ -348,13 +348,13 @@ final class DispatchGitHubCacheTests: OrbeTestCase {
   /// 「マージ済みなのに merged チップが出ない」「レビュー中なのに安全確認を素通りする」が起きる。
   /// `--limit` は gh が 1 往復で取れる上限（100）。往復コストは件数に依らないので、絞ると
   /// 他人の fork の同名ブランチの PR で埋まって自分の PR が窓落ちする側にしか働かない。
-  /// head のリポジトリも取る（worktree と突き合わせるのは head が等しい PR だけ）。
+  /// head のリポジトリも owner と名前で取る（worktree と突き合わせるのは head が等しい PR だけ）。
   func testBranchPRFetchNamesTheBranchInsteadOfAWindow() {
     XCTAssertEqual(
       GitHubCLI.branchPRArguments(head: "refactor/phase2-2b"),
       [
         "pr", "list", "--state", "all", "--head", "refactor/phase2-2b", "--limit", "100",
-        "--json", "number,headRefName,state,baseRefName,headRepository",
+        "--json", "number,headRefName,state,baseRefName,headRepository,headRepositoryOwner",
       ])
   }
 

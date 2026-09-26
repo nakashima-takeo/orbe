@@ -63,8 +63,10 @@ struct GitBranch: Equatable {
 // MARK: - GitHub（gh CLI）
 
 /// GitHub のリポジトリ名（`owner/name`）。GitHub の名前は大小文字を区別しないので小文字で持ち、等値は
-/// その文字列の等値で決まる。
-struct GitHubRepoName: Hashable, Decodable {
+/// その文字列の等値で決まる。API から作る口は、owner と名前から（PR の head）と、正式名の問い合わせの
+/// 応答から（`init(nameWithOwner:)`）の 2 つだけ——`Decodable` にしないのは、PR の head を
+/// `nameWithOwner` で読めなくするため（古い gh の `gh pr list --json` は空文字を返すか、キーごと出さない）。
+struct GitHubRepoName: Hashable {
   /// 小文字の `owner/name`。
   let value: String
 
@@ -72,9 +74,15 @@ struct GitHubRepoName: Hashable, Decodable {
     value = nameWithOwner.lowercased()
   }
 
-  /// remote の URL から読む。GitHub かどうかは「URL に github.com を含むか」で決め（SSH のホスト別名
-  /// `github.com-work` 等も GitHub として拾う）、`owner/name` はパス（scp 形式は `:` の後ろ）の最後の
-  /// 2 段から `.git` と末尾の `/` を除いて読む。GitHub でない・読めない URL は nil。
+  /// owner と名前から組む。どちらかが空なら nil。
+  init?(owner: String, name: String) {
+    guard !owner.isEmpty, !name.isEmpty else { return nil }
+    self.init(nameWithOwner: "\(owner)/\(name)")
+  }
+
+  /// remote の URL から読む。GitHub かどうかは `isGitHub(remoteURL:)` で決め、`owner/name` はパス
+  /// （scp 形式は `:` の後ろ）の最後の 2 段から `.git` と末尾の `/` を除いて読む。GitHub でない・読めない
+  /// URL は nil。
   init?(remoteURL url: String) {
     guard Self.isGitHub(remoteURL: url) else { return nil }
     let path: Substring
@@ -94,20 +102,10 @@ struct GitHubRepoName: Hashable, Decodable {
     self.init(nameWithOwner: "\(parts[parts.count - 2])/\(name)")
   }
 
-  /// GitHub の remote の URL か（「URL に github.com を含むか」）。GitHub なのに `owner/name` を読めない
-  /// URL を、GitHub でない URL と区別するのに使う。
+  /// GitHub の remote の URL か（「URL に github.com を含むか」。SSH のホスト別名 `github.com-work` 等も
+  /// 拾う）。可用性の判定（`GitRepo.originIsGitHub`）と台帳が共にこの 1 つの規則を読む。
   static func isGitHub(remoteURL url: String) -> Bool {
     url.contains("github.com")
-  }
-
-  /// GraphQL / `gh --json` の `{nameWithOwner}` を読む。
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    self.init(nameWithOwner: try container.decode(String.self, forKey: .nameWithOwner))
-  }
-
-  private enum CodingKeys: String, CodingKey {
-    case nameWithOwner
   }
 }
 
@@ -122,6 +120,22 @@ enum GitHubRepositoryResolution: Equatable {
   case found(GitHubRepoName)
   /// そのリポジトリは存在しない（見えない）。
   case notFound
+}
+
+/// PR の head のリポジトリを `headRepositoryOwner{login}` と `headRepository{name}` から読む。
+/// `nameWithOwner` を読まないのは、古い gh の `gh pr list --json` に無い・空文字だから。
+private struct PullRequestHeadRepository: Decodable {
+  struct Owner: Decodable { let login: String? }
+  struct Repository: Decodable { let name: String? }
+
+  let headRepositoryOwner: Owner?
+  let headRepository: Repository?
+
+  /// どちらかが欠けるか空なら nil（head のリポジトリが消えている）。
+  var name: GitHubRepoName? {
+    GitHubRepoName(
+      owner: headRepositoryOwner?.login ?? "", name: headRepository?.name ?? "")
+  }
 }
 
 /// 番号で同一性を持つ GitHub の項目。open 一覧を取り直す途中、前回の一覧との境目を探すのに使う。
@@ -147,9 +161,9 @@ struct GitHubIssue: Decodable, Equatable, GitHubNumbered {
   let title: String
 }
 
-/// `gh pr list --state all --head <branch> --json number,headRefName,state,baseRefName,headRepository`
-/// の 1 PR。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見るための
-/// 小さな形で、`GitHubPullRequest`（title 必須）ではこの JSON をデコードできない。
+/// `gh pr list --state all --head <branch> --json number,headRefName,state,baseRefName,headRepository,
+/// headRepositoryOwner` の 1 PR。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を
+/// 見るための小さな形で、`GitHubPullRequest`（title 必須）ではこの JSON をデコードできない。
 struct GitHubBranchPR: Decodable, Equatable {
   let number: Int
   let headRefName: String
@@ -182,5 +196,37 @@ struct GitHubPullRequest: Decodable, Equatable, GitHubNumbered {
   /// 等しくならない。
   var head: GitHubBranchRef? {
     headRepository.map { GitHubBranchRef(repo: $0, branch: headRefName) }
+  }
+}
+
+extension GitHubBranchPR {
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.init(
+      number: try container.decode(Int.self, forKey: .number),
+      headRefName: try container.decode(String.self, forKey: .headRefName),
+      state: try container.decode(String.self, forKey: .state),
+      baseRefName: try container.decode(String.self, forKey: .baseRefName),
+      headRepository: try PullRequestHeadRepository(from: decoder).name)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case number, headRefName, state, baseRefName
+  }
+}
+
+extension GitHubPullRequest {
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.init(
+      number: try container.decode(Int.self, forKey: .number),
+      title: try container.decode(String.self, forKey: .title),
+      headRefName: try container.decode(String.self, forKey: .headRefName),
+      reviewDecision: try container.decodeIfPresent(String.self, forKey: .reviewDecision),
+      headRepository: try PullRequestHeadRepository(from: decoder).name)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case number, title, headRefName, reviewDecision
   }
 }

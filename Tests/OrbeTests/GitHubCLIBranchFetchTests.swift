@@ -32,7 +32,7 @@ final class GitHubCLIBranchFetchTests: OrbeTestCase {
         bad/*) exit 1 ;;
       esac
       printf '[{"number":1,"headRefName":"%s","state":"OPEN","baseRefName":"main",' "$head"
-      printf '"headRepository":{"nameWithOwner":"o/r"}}]'
+      printf '"headRepositoryOwner":{"login":"o"},"headRepository":{"name":"r"}}]'
       """
     let gh = dir.appendingPathComponent("gh").path
     try script.write(toFile: gh, atomically: true, encoding: .utf8)

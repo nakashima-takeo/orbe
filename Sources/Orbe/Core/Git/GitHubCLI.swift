@@ -115,7 +115,8 @@ final class GitHubCLI {
   static func openPullRequestsPageArguments(first: Int, after: String?) -> [String] {
     openListPageArguments(
       connection: "pullRequests",
-      fields: "number title headRefName headRepository{nameWithOwner} reviewDecision",
+      fields:
+        "number title headRefName headRepositoryOwner{login} headRepository{name} reviewDecision",
       first: first,
       after: after)
   }
@@ -155,7 +156,7 @@ final class GitHubCLI {
   static func branchPRArguments(head: String) -> [String] {
     [
       "pr", "list", "--state", "all", "--head", head, "--limit", "100", "--json",
-      "number,headRefName,state,baseRefName,headRepository",
+      "number,headRefName,state,baseRefName,headRepository,headRepositoryOwner",
     ]
   }
 
@@ -221,7 +222,9 @@ final class GitHubCLI {
     guard let response = try? JSONDecoder().decode(RepositoryResponse.self, from: stdout),
       let data = response.data
     else { return nil }
-    if let repository = data.repository { return .found(repository) }
+    if let name = data.repository?.nameWithOwner {
+      return .found(GitHubRepoName(nameWithOwner: name))
+    }
     return response.errors?.contains { $0.type == "NOT_FOUND" } == true ? .notFound : nil
   }
 
@@ -349,7 +352,8 @@ final class GitHubCLI {
 
 /// 正式名の問い合わせ（`repository(owner:name:){nameWithOwner}`）の出力。
 private struct RepositoryResponse: Decodable {
-  struct Payload: Decodable { let repository: GitHubRepoName? }
+  struct Payload: Decodable { let repository: Repository? }
+  struct Repository: Decodable { let nameWithOwner: String }
   struct Failure: Decodable { let type: String? }
   let data: Payload?
   let errors: [Failure]?

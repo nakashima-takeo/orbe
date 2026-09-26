@@ -45,7 +45,7 @@ extension DispatchRemoteLedgerProviderTests {
     try serveBranchPullRequests(
       "feat",
       #"[{"number":1,"headRefName":"feat","state":"OPEN","baseRefName":"main","#
-        + #""headRepository":{"nameWithOwner":"me/r"}}]"#)
+        + #""headRepositoryOwner":{"login":"me"},"headRepository":{"name":"r"}}]"#)
     let (model, provider) = makeProvider(cwd: partial)
 
     provider.load()
