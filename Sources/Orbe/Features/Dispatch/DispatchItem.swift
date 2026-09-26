@@ -15,7 +15,7 @@ struct DispatchBranchSync: Equatable {
   /// 最新化の選択画面に入る唯一の条件。分岐（↑↓）・↑ だけ・同期済みは即作成。
   var isFastForwardable: Bool { ahead == 0 && behind > 0 }
 
-  /// 鮮度を信頼する remote（提示時に fetch する唯一の remote）。fetch の対象を増やすときに変えるのはここだけ。
+  /// 鮮度を信頼する remote（提示時に fetch する唯一の remote）。
   static let trustedRemote = "origin"
 
   /// 信頼する remote を追跡しているか。track は問わない——着地前に「着地を待つべき行か」を決める述語で、
