@@ -25,6 +25,8 @@ final class DecorTests: XCTestCase {
     XCTAssertEqual(
       IndentUnit.detect(in: "      a\n\n    b\n".utf16), 2, "空行を飛ばして 6 と 4 が対（飛ばさなければ 4）")
     XCTAssertEqual(IndentUnit.detect(in: "  a\n    \n  b\n".utf16), 4, "空白だけの行は隣でない（数えれば 2）")
+    XCTAssertEqual(
+      IndentUnit.detect(in: "  a\r\n    \r\n  b\r\n".utf16), 4, "CRLF の空白だけの行も隣でない（数えれば 2）")
     XCTAssertEqual(IndentUnit.detect(in: "a\n\tb\n  c\n".utf16), 4, "タブの行は前後の対を切る（切らなければ 2）")
   }
 

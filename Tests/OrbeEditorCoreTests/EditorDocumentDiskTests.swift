@@ -255,4 +255,17 @@ final class EditorDocumentDiskTests: XCTestCase {
       document.text.substring(all),
       source.replacingOccurrences(of: "value25 = 25", with: "value25 = 99"))
   }
+
+  /// 差し替えの区間を絞っても、サロゲートの対は割らない——絵文字が、対の上位だけ同じもの（😀 → 😃）や下位だけ同じもの
+  /// （😀 → 🈀）に替わっても、文書の写し（保存する中身）は面の本文と同じ。割れば、その字は U+FFFD で保存される。
+  func testReplacingFromDiskKeepsSurrogatePairsWholeInTheCopy() throws {
+    let url = try temp("s.txt", "a😀b\n")
+    let (document, surface) = try open(url)
+    for replacement in ["a😃b\n", "a🈀b\n"] {
+      try Data(replacement.utf8).write(to: url)
+      document.reconcileWithDisk()
+      XCTAssertEqual(surface.text, replacement, "前提: 面は差し替わった")
+      XCTAssertEqual(Array(document.text.utf16), Array(replacement.utf16), "写しの UTF-16 が面と同じ")
+    }
+  }
 }
