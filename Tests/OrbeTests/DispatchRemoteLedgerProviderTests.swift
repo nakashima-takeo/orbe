@@ -125,13 +125,21 @@ final class DispatchRemoteLedgerProviderTests: OrbeTestCase {
     XCTAssertEqual(calls("R"), ["me/r"], "同じ回では問い合わせ直さない")
 
     try answer("me/r", found: "me/r")
+    try gate("auth")
     let (reopened, again) = makeProvider()
     again.load()
+    XCTAssertTrue(pump({ reopened.hasLoadedOnce }))
+    XCTAssertEqual(
+      section(reopened, "Pull requests")?.items.first?.infoKind, .repositoryUnverified,
+      "問い直す前の描画から、覚えた答えで描く（ローディング行で待たせない）")
+    XCTAssertEqual(pullRequestRow(reopened, 1)?.action, .pullRequest(number: 1, route: .browser))
+
+    try ungate("auth")
     XCTAssertTrue(
       pump({
         self.pullRequestRow(reopened, 1)?.action
           == .pullRequest(number: 1, route: .open(.worktree(path: worktree)))
-      }), "開き直すと直る")
+      }), "裏で問い直した正式名が着地すると直る")
     XCTAssertEqual(calls("R"), ["me/r", "me/r"], "確かめられない答えは開き直すと問い直す")
   }
 

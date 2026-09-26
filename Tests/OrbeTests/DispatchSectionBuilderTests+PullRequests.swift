@@ -123,6 +123,69 @@ extension DispatchSectionBuilderTests {
     XCTAssertEqual(section(sections, "Issues")?.items.map(\.idText), ["#5"], "Issues は出る")
   }
 
+  // MARK: - 確かめられない remote
+
+  /// origin 以外の、正式名を確かめられない remote へ push する行だけがチップを持たない（origin の同名
+  /// ブランチの PR とも紐づかない）。他の行と Pull requests は普通に出る。
+  func testRowPushingToAnUnverifiedRemoteAloneStaysUnlinked() {
+    let input = DispatchSectionBuilder.Input(
+      worktrees: [
+        GitWorktree(path: "/wt/a", branch: "a", head: "a", isMain: false),
+        GitWorktree(path: "/wt/b", branch: "b", head: "b", isMain: false),
+      ],
+      localBranches: [local("a", tracking("gone", "a")), local("b", tracking("origin", "b"))],
+      pullRequests: [pullRequest(1, head: "a"), pullRequest(2, head: "b")],
+      remoteLedger: .settled(
+        .init(repositories: ["origin": .github(origin), "gone": .unverified])))
+    let sections = DispatchSectionBuilder.build(input)
+
+    XCTAssertNil(item(sections, "Worktrees", "a")?.linkedPRNumber)
+    XCTAssertEqual(item(sections, "Worktrees", "b")?.linkedPRNumber, 2)
+    XCTAssertEqual(
+      section(sections, "Pull requests")?.items.map(\.idText), ["#1", "#2"],
+      "情報行もローディング行も出ない")
+    XCTAssertEqual(
+      pullRequestRow(input, 1)?.action, .pullRequest(number: 1, route: .browser),
+      "確かめられない行の worktree を開かない")
+    XCTAssertEqual(
+      pullRequestRow(input, 2)?.action,
+      .pullRequest(number: 2, route: .open(.worktree(path: "/wt/b"))))
+  }
+
+  /// origin を確かめられないと、Pull requests の見出しの直下に選べない情報行が 1 行出て、PR 行は
+  /// すべてブラウザで開く。どの行にもチップが付かない——origin 以外で確かめられた remote へ push する
+  /// 行も紐付けない（情報行の「PR はブラウザで開きます」と動きを揃える）。一覧の取得中は末尾に
+  /// ローディング行が付く。
+  func testUnverifiedOriginShowsTheInfoRowAndBrowsesEveryPullRequest() {
+    let input = DispatchSectionBuilder.Input(
+      worktrees: [
+        GitWorktree(path: "/wt/feat", branch: "feat", head: "a", isMain: false),
+        GitWorktree(path: "/wt/side", branch: "side", head: "b", isMain: false),
+      ],
+      localBranches: [local("feat"), local("side", tracking("mine", "side"))],
+      remoteBranches: [remote("mine/x")],
+      pullRequests: [
+        pullRequest(1, head: "feat"), pullRequest(2, head: "side", repo: mine),
+        pullRequest(3, head: "x", repo: mine),
+      ],
+      githubState: .ready, pullRequestsFetching: true,
+      remoteLedger: .settled(.init(repositories: ["origin": .unverified, "mine": .github(mine)])),
+      remoteFetchLanded: true)
+    let sections = DispatchSectionBuilder.build(input)
+
+    XCTAssertEqual(
+      sections.flatMap(\.items).compactMap(\.linkedPRNumber), [], "どの行にもチップが付かない")
+    let rows = section(sections, "Pull requests")?.items ?? []
+    XCTAssertEqual(rows.first?.infoKind, .repositoryUnverified, "見出しの直下に情報行")
+    XCTAssertEqual(rows.first?.isInteractive, false, "情報行は選べない")
+    XCTAssertEqual(rows.last?.isLoadingRow, true, "一覧の取得中はローディング行")
+    XCTAssertEqual(
+      rows.compactMap(\.action),
+      [1, 2, 3].map { .pullRequest(number: $0, route: .browser) }, "PR 行はすべてブラウザで開く")
+    XCTAssertEqual(
+      rows.filter { $0.action != nil }.map(\.enterNote), [.browser, .browser, .browser])
+  }
+
   // MARK: - PR 行の行き先
 
   /// 自分の worktree があれば、それを開く（既存 worktree）。
