@@ -44,5 +44,9 @@ final class DispatchRowTests: OrbeTestCase {
     XCTAssertLessThanOrEqual(shortened, natural / 2)
     let fullText = renderedWidth(Text("feat: session restore").fixedSize(), width: 1000)
     XCTAssertEqual(natural, fullText, "入る幅なら全文のまま")
+
+    let padded = DispatchTruncatingSlot("feat: session restore", leading: 8) { Text($0) }
+    XCTAssertEqual(renderedWidth(padded, width: 1000), natural + 8, "出すときは余白を足す")
+    XCTAssertEqual(renderedWidth(padded, width: 10), 0, "畳むときは余白ごと幅 0")
   }
 }
