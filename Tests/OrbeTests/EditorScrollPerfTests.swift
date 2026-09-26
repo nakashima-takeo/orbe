@@ -57,7 +57,9 @@ final class EditorScrollPerfTests: OrbeTestCase {
 
     let typed = try open(text)
     report(label, "typing", type(into: typed))
-    report(label, "typing-recolor", recolor(into: typed))
+    let recolored = recolor(into: typed)
+    report(label, "typing-recolor", recolored.redraw)
+    report(label, "typing-catch-up (参考)", recolored.catchUp)
     let clip = try XCTUnwrap(typed.document.surface.responder.enclosingScrollView).contentView
     let times = (0..<60).map { _ in
       frame(typed.pane) {
@@ -123,30 +125,35 @@ final class EditorScrollPerfTests: OrbeTestCase {
   }
 
   /// 打鍵の後、裏から役割が届いてから行う描き直し（1 字ごと、ms）——打鍵のコマとは別に main に載る仕事。役割が変わらない
-  /// 打鍵では描き直すものが無い。
-  private func recolor(into opened: Opened) -> [Double] {
+  /// 打鍵では描き直すものが無い。参考に、打鍵から裏の仕事（文書全体の役割）が追いつくまでの時間も返す。
+  private func recolor(into opened: Opened) -> (redraw: [Double], catchUp: [Double]) {
     let document = opened.document
     document.surface.selectedRange = NSRange(
       location: document.text.lineStart(document.text.lineCount / 3 + 7) + 4, length: 0)
     _ = frame(opened.pane) {}
-    var times: [Double] = []
+    var redraw: [Double] = []
+    var catchUp: [Double] = []
     for character in "let value = compute(offset) ok" {
+      let began = Date()
       _ = frame(opened.pane) {
         document.surface.responder.keyDown(with: .key(String(character), []))
       }
-      XCTAssertTrue(document.waitUntilCaughtUp())
-      times.append(frame(opened.pane) {})
+      XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))
+      catchUp.append(Date().timeIntervalSince(began) * 1000)
+      redraw.append(frame(opened.pane) {})
     }
-    return times
+    return (redraw, catchUp)
   }
 
-  /// 一致の多い検索（上限の 19,999 件）を開いたまま、スクロールバーを 30 回描き直す（1 回ごと、ms）。
+  /// 一致の多い検索（1MB で上限の 19,999 件、200KB で約 1.5 万件）を開いたまま、スクロールバーを 30 回描き直す（1 回ごと、
+  /// ms）。
   private func scrollbarDraws(_ opened: Opened) -> [Double] {
     let pane = opened.pane
     pane.showSearch()
     pane.search.setNeedle("e")
     XCTAssertTrue(opened.document.waitUntilCaughtUp(timeout: 60))
-    XCTAssertEqual(pane.search.matches.count, TextSearch.limit, "前提: 上限まで一致する")
+    XCTAssertGreaterThan(
+      pane.search.matches.count, OverviewRuler.approximateFindMatchCount, "前提: 一致が多い")
     let bar = pane.scrollbar
     let times = (0..<30).map { _ in frame(bar) { bar.needsDisplay = true } }
     pane.closeSearch()
