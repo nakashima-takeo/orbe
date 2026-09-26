@@ -29,6 +29,26 @@ public struct TextEdit: Equatable, Sendable {
     }
   }
 
+  /// 置換の前後で変わらない先頭と末尾を落とした編集——本文が実際に変わった最小の区間。`old` は置き換える前の区間の
+  /// 単位。サロゲートの対は割らない。
+  public func narrowed(replacing old: ContiguousArray<UInt16>) -> TextEdit {
+    guard !old.isEmpty, replacementLength > 0 else { return self }
+    let new = ContiguousArray(replacement.utf16)
+    let limit = min(old.count, new.count)
+    var prefix = 0
+    while prefix < limit, old[prefix] == new[prefix] { prefix += 1 }
+    if prefix > 0, UTF16.isLeadSurrogate(old[prefix - 1]) { prefix -= 1 }
+    var suffix = 0
+    while suffix < limit - prefix, old[old.count - 1 - suffix] == new[new.count - 1 - suffix] {
+      suffix += 1
+    }
+    if suffix > 0, UTF16.isTrailSurrogate(old[old.count - suffix]) { suffix -= 1 }
+    guard prefix > 0 || suffix > 0 else { return self }
+    return TextEdit(
+      range: NSRange(location: range.location + prefix, length: old.count - prefix - suffix),
+      replacement: String(decoding: new[prefix..<(new.count - suffix)], as: UTF16.self))
+  }
+
   /// 編集の前の区間の集合を編集の後の本文へ写す。`track` と違い落とさない——編集に掛かる（接する）なら、置換後の区間を
   /// 足す（「まだ作り直していない」「変わった」の集合を、編集に合わせて広げる）。
   public func track(_ set: IndexSet) -> IndexSet {

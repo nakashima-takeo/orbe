@@ -143,36 +143,6 @@ public final class EditorDocument {
     DispatchQueue.global(qos: .utility).async { withExtendedLifetime(released) {} }
   }
 
-  /// 選択の先頭の位置の語（出現の強調・⌘F の種）。長い行はキャレットの前後の窓だけを読む（→ `Occurrences.wordWindow`）。
-  public func word(at selection: NSRange) -> NSRange? {
-    let row = text.row(containing: selection.location)
-    let start = text.lineStart(row)
-    var end = text.lineEnd(row)
-    let tailStart = max(start, end - 2)
-    for unit in text.units(in: NSRange(location: tailStart, length: end - tailStart)).reversed() {
-      guard unit == 0x0A || unit == 0x0D else { break }
-      end -= 1
-    }
-    let window = Occurrences.wordWindow(
-      caret: selection.location, line: NSRange(location: start, length: end - start))
-    return Occurrences.word(
-      at: selection, text: text.substring(window), textStart: window.location)
-  }
-
-  /// 先頭に見えている行（小数。行 + 隠れ割合）と可視行数（小数）——俯瞰の式の入力。
-  public var viewportLines: (first: CGFloat, visible: CGFloat) {
-    let viewport = surface.viewport
-    let row = CGFloat(text.row(containing: viewport.firstVisible))
-    return (row + viewport.hiddenFraction, viewport.visibleLines)
-  }
-
-  /// 先頭行（小数）の位置へスクロールする（`viewport` の逆。行は行の数に収める）。
-  public func scroll(toFirstLine line: CGFloat) {
-    let clamped = min(max(0, line), CGFloat(text.lineCount - 1))
-    let row = Int(floor(clamped))
-    surface.scroll(toTop: text.lineStart(row), hiddenFraction: clamped - CGFloat(row))
-  }
-
   /// 区間の列の問いを裏へ頼む。結果は `onAnalysis` に届く。
   public func analyze(_ request: AnalysisRequest) {
     pendingRanges[request.kind] = (request, version)
@@ -340,7 +310,7 @@ extension EditorDocument: TextSurfaceDelegate {
   /// 面の編集は、置換の前後で変わらない先頭と末尾を落とした最小の区間の編集として写し・役割・構文・配り先へ渡す——外部変更の
   /// 差し替え（全体の置換として届く）でも、変わっていない字は役割を保ち、構文も差分で解析する。
   public func surface(_ surface: any TextSurface, didChange whole: TextEdit) {
-    let edit = narrowed(whole)
+    let edit = whole.narrowed(replacing: text.units(in: whole.range))
     let start = text.point(at: edit.range.location)
     let oldEnd = text.point(at: NSMaxRange(edit.range))
     text.replace(edit.range, with: edit.replacement)
@@ -360,26 +330,6 @@ extension EditorDocument: TextSurfaceDelegate {
     // 届きうる結果が無ければ、写すための記録は要らない（結果が一つも来ない文書で、差し替えの本文が溜まり続けない）。
     if syntax == nil, pendingHunks == nil, pendingRanges.isEmpty { log.discard(through: version) }
     onTextChange?(edit)
-  }
-
-  /// 置換の前後で変わらない先頭と末尾を落とした編集。サロゲートの対は割らない。
-  private func narrowed(_ edit: TextEdit) -> TextEdit {
-    guard edit.range.length > 0, edit.replacementLength > 0 else { return edit }
-    let old = text.units(in: edit.range)
-    let new = ContiguousArray(edit.replacement.utf16)
-    let limit = min(old.count, new.count)
-    var prefix = 0
-    while prefix < limit, old[prefix] == new[prefix] { prefix += 1 }
-    if prefix > 0, UTF16.isLeadSurrogate(old[prefix - 1]) { prefix -= 1 }
-    var suffix = 0
-    while suffix < limit - prefix, old[old.count - 1 - suffix] == new[new.count - 1 - suffix] {
-      suffix += 1
-    }
-    if suffix > 0, UTF16.isTrailSurrogate(old[old.count - suffix]) { suffix -= 1 }
-    guard prefix > 0 || suffix > 0 else { return edit }
-    return TextEdit(
-      range: NSRange(location: edit.range.location + prefix, length: old.count - prefix - suffix),
-      replacement: String(decoding: new[prefix..<(new.count - suffix)], as: UTF16.self))
   }
 
   public func surfaceDidChangeViewport(_ surface: any TextSurface) {
