@@ -8,11 +8,13 @@ import os
 /// 編集をまとめて受け取って全部当ててから 1 回だけ差分解析し（速い打鍵は 1 回に畳まれる）、「構文木が変わった区間 ∪
 /// 編集の区間」に掛かる行を丸ごと「まだ作り直していない」に足す——字の中身で役割が決まる capture（`#match?` など）は、
 /// 構文木が変わらなくても役割が変わるから。作り直しは区画ずつ、見えている範囲を先に進め、区切りごとに役割の並びの写しと役割が
-/// 変わった字を版つきで置く。区切りの間に新しい編集が来ていれば、それを先に当てる。文書を閉じたら、走っている解析を打ち切って
-/// 止まる。
+/// 変わった字を版つきで置く。見えていない範囲は、最後の編集から `quietDelay` 経つまで始めない（打鍵が続く間は見えている範囲
+/// だけを作る）。区切りの間に新しい編集が来ていれば、それを先に当てる。文書を閉じたら、走っている解析を打ち切って止まる。
 actor SyntaxWorker {
   /// 見えている範囲を知らせる前（面を初めて見せる前）に先に作る行の数（高い画面の 1 画面ぶん）。
   static let initialVisibleLines = 120
+  /// 最後の編集から、見えていない範囲の作り直しを始めるまでの待ち。
+  static let quietDelay: DispatchTimeInterval = .milliseconds(250)
 
   private struct Mail: Sendable {
     var text: TextRope
@@ -20,6 +22,14 @@ actor SyntaxWorker {
     var edits: [VersionedEdit] = []
     var visible: NSRange
     var running = false
+    /// 最後に編集を積んだ時刻。
+    var lastEdit = DispatchTime(uptimeNanoseconds: 0)
+    /// 見えていない範囲も待たずに作る（main が文書全体の結果を待っている）。
+    var hurry = false
+    /// 止まったとき、作り直していない範囲が残っていた。
+    var hasStale = false
+    /// 待ちの明けに起こす予約がある。
+    var timerPending = false
   }
 
   private let queue = DispatchSerialQueue(label: "dev.orbe.editor.syntax")
@@ -60,20 +70,26 @@ actor SyntaxWorker {
       mail.edits.append(edit)
       mail.text = text
       mail.version = edit.version
+      mail.lastEdit = .now()
       defer { mail.running = true }
       return !mail.running
     }
     if wake { start() }
   }
 
-  /// 見えている範囲（最新の版のオフセット）。次の区切りから、そこを先に作る。
+  /// 見えている範囲（最新の版のオフセット）。次の区切りから、そこを先に作る——待ちの間に止まっていても、そこは待たずに作る。
   nonisolated func setVisible(_ range: NSRange) {
-    mailbox.withLock { $0.visible = range }
+    wakeIfStale { $0.visible = range }
   }
 
   /// main が結果を同期で待つ間、キューの優先度を上げる（待っている main は優先度を譲らない）。
   nonisolated func boost() {
     queue.async(qos: .userInteractive, flags: .enforceQoS) {}
+  }
+
+  /// 見えていない範囲も待たずに作る（main が文書全体の結果を待つ）。文書全体を作り終えるまで続く。
+  nonisolated func hurry() {
+    wakeIfStale { $0.hurry = true }
   }
 
   /// 文書を閉じた。走っている解析を打ち切り、以後は何もしない。
@@ -85,26 +101,55 @@ actor SyntaxWorker {
     Task.detached(priority: .userInitiated) { [self] in await run() }
   }
 
+  /// 郵便受けを書き換え、作り直していない範囲を残して止まっていれば起こす。
+  private nonisolated func wakeIfStale(_ change: @Sendable (inout Mail) -> Void) {
+    let wake = mailbox.withLock { mail in
+      change(&mail)
+      guard !mail.running, mail.hasStale else { return false }
+      mail.running = true
+      return true
+    }
+    if wake { start() }
+  }
+
+  /// 待ちの明け。
+  private nonisolated func quietElapsed() {
+    wakeIfStale { $0.timerPending = false }
+  }
+
   private func run() {
     while !cancellation.isCancelled {
-      let idle = parsed && stale.isEmpty
-      let batch = mailbox.withLock { mail -> Mail? in
-        guard !mail.edits.isEmpty || !idle else {
-          mail.running = false
-          return nil
-        }
+      let batch = mailbox.withLock { mail -> Mail in
         defer { mail.edits = [] }
         return mail
       }
-      guard let batch else { return }
       absorb(batch)
       guard !layers.isCancelled else { return }
       let shown = lines(covering: batch.visible)
-      if let target = nextTarget(shown: shown) {
+      let quiet = batch.hurry || DispatchTime.now() >= batch.lastEdit + Self.quietDelay
+      if let target = nextTarget(shown: shown, quiet: quiet) {
         rebuild(target, shown: shown)
-      } else if deposited != version {
-        deposit(visibleReady: true)
+        continue
       }
+      if deposited != version { deposit(visibleReady: true) }
+      let hasStale = !stale.isEmpty
+      let wait = mailbox.withLock { mail -> DispatchTime?? in
+        guard mail.edits.isEmpty, mail.visible == batch.visible, mail.hurry == batch.hurry else {
+          return nil
+        }
+        mail.running = false
+        mail.hasStale = hasStale
+        if !hasStale { mail.hurry = false }
+        guard hasStale, !mail.timerPending else { return .some(nil) }
+        mail.timerPending = true
+        return .some(mail.lastEdit + Self.quietDelay)
+      }
+      guard let wait else { continue }
+      if let deadline = wait {
+        let wake: @Sendable () -> Void = { [weak self] in self?.quietElapsed() }
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: deadline, execute: wake)
+      }
+      return
     }
   }
 
@@ -133,11 +178,11 @@ actor SyntaxWorker {
     stale.formUnion(layers.takeInvalidated())
   }
 
-  /// 次に作り直す区画。見えている行に掛かる部分が先。
-  private func nextTarget(shown: NSRange) -> Range<Int>? {
+  /// 次に作り直す区画。見えている行に掛かる部分が先。見えていない部分は待ちが明けてから。
+  private func nextTarget(shown: NSRange, quiet: Bool) -> Range<Int>? {
     let part =
       stale.intersection(IndexSet(integersIn: shown.location..<NSMaxRange(shown))).rangeView.first
-      ?? stale.rangeView.first
+      ?? (quiet ? stale.rangeView.first : nil)
     guard let part else { return nil }
     let block = (part.lowerBound / SyntaxLayers.block + 1) * SyntaxLayers.block
     return part.lowerBound..<min(part.upperBound, block)

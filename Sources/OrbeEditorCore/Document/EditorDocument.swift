@@ -173,9 +173,11 @@ public final class EditorDocument {
   }
 
   /// 裏の仕事（構文・行差分・問い）がすべて今の版に追いつき、その結果を受け取るまで待つ（最大 `timeout`）。追いついたら
-  /// true。時間ではなく受け取り箱を見て待つ——描画やテストが、結果の出揃った状態を決定的に得る口。
+  /// true。時間ではなく受け取り箱を見て待つ——描画やテストが、結果の出揃った状態を決定的に得る口。構文の見えていない範囲も、
+  /// 打鍵が止むのを待たずに作らせる。
   @discardableResult
   public func waitUntilCaughtUp(timeout: TimeInterval = 5) -> Bool {
+    syntax?.hurry()
     syntax?.boost()
     return wait(until: .now() + timeout) { $0.isCaughtUp }
   }
