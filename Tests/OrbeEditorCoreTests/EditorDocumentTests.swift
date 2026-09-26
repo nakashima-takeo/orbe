@@ -182,7 +182,7 @@ final class EditorDocumentTests: XCTestCase {
 
   /// 乱択の編集（字の中身で役割が決まる capture を持つ JS。1 字の削除・置換・コメントや文字列の開閉・改行を含み、
   /// 裏を待たずに続けて打つ回もある）の後、裏で追った役割の並びは、同じ本文を開き直して作ったものと一致する——
-  /// ずらした前の結果の写しと、作り直す範囲の取り方に漏れが無い。
+  /// 作り直す範囲の取り方に漏れが無い。
   func testRolesAfterRandomEditsEqualAFreshlyOpenedDocument() throws {
     var generator = SeededGenerator(seed: 3)
     let line = "const Foo = new Bar(\"x\"); // Baz\nlet v = Foo.qux + `t${Bar}`;\n"

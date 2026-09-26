@@ -98,6 +98,9 @@ final class EditorDocumentOverviewTests: XCTestCase {
     XCTAssertEqual(edits, [TextEdit(range: NSRange(location: 0, length: 0), replacement: "// c\n")])
     XCTAssertEqual(seen.map(\.length), [15])
     XCTAssertEqual(seen.map(\.roles), [15], "役割の並びは本文と同じ長さにずれている")
+    XCTAssertEqual(
+      document.roles.roles(in: NSRange(location: 5, length: 3)).map(\.role), [.keyword],
+      "裏を待たずに、let は前の役割のまま字に付いていく")
 
     XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertEqual(
