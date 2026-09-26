@@ -38,6 +38,7 @@ extension DispatchRemoteLedgerProviderTests {
       pump({
         guard case .loaded = provider.branchPRStates["issue/1257"] else { return false }
         return model.classification?.first { $0.branch == "issue/1257" }?.isReady == true
+          && self.pullRequestRow(model, 7) != nil
       }))
 
     XCTAssertEqual(item(model, "wt-issue")?.linkedPRNumber, 7)
