@@ -275,7 +275,8 @@ final class EditorPaneView: NSView {
     }
   }
 
-  /// 焦点の文書の面を見せる（nil なら空状態）。前の文書の面は外すだけで、面は文書と一緒に生き続ける。
+  /// 焦点の文書の面を見せる（nil なら空状態）。前の文書の面は外すだけで、面は文書と一緒に生き続ける。文書を初めて
+  /// 画面に出すときは、最初の描画に色が間に合うよう文書が上限つきで待つ（→ `prepareDocumentIfVisible`）。
   /// 俯瞰と検索を新しい文書に結び直し（検索は同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。
   /// 焦点が面の中にあれば新しい行き先へ移す——判定は前の面を外す前に取る（外した瞬間に AppKit が
   /// first responder を窓へ戻すので、外した後では「中にあった」ことが分からない）。
@@ -305,6 +306,7 @@ final class EditorPaneView: NSView {
     scrollShadow.isHidden = document == nil
     updateShadow()
     emptyHost.isHidden = document != nil
+    prepareDocumentIfVisible()
     needsLayout = true
     if hadFocusInside, window?.firstResponder !== focusTarget {
       window?.makeFirstResponder(focusTarget)
@@ -330,5 +332,13 @@ final class EditorPaneView: NSView {
 
   private func updateLiveness() {
     tree.isLive = window != nil && !isHiddenOrHasHiddenAncestor
+    prepareDocumentIfVisible()
+  }
+
+  /// 面が画面に見えていれば、結んだ文書を初めて見せる前の上限つきの待ちを通す（2 回目以降は文書が何もしない）。畳まれた
+  /// 面・窓に無い面では待たず、面が見えたときに待つ——端末だけの配置のタブを復元しても main を止めない。
+  private func prepareDocumentIfVisible() {
+    guard let document, window != nil, !isHiddenOrHasHiddenAncestor else { return }
+    document.prepareToShow()
   }
 }

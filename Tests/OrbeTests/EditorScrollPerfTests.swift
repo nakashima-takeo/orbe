@@ -19,21 +19,47 @@ final class EditorScrollPerfTests: OrbeTestCase {
 
   func test200KB() throws { try run(label: "200KB", bytes: 200_000) }
 
-  /// 1200×800 の窓に Swift の文書を開いて測る。速いドラッグは開いたばかりの文書で、打鍵・ホイール・打鍵の後の速い
-  /// ドラッグは別に開き直した文書で測る。文書を端から端まで通した後の打鍵も参考に出す（TextKit が段落を覚えるので、
-  /// 開いたばかりの文書より重い）。
+  /// 打鍵 1 回で文書と Orbe 側が main でする仕事——編集の通知を受けてから、文書と配り先（俯瞰・検索・出現）の処理が
+  /// 戻るまで——を、大きさを変えた文書（64KB / 1MB / 8MB）で並べる。git 管理下（baseline あり）の回も測る。テキスト
+  /// エンジン自身の仕事（TextKit の layout と描画）は含まない（それは `typing`）。
+  func testTypingMainTimeAcrossSizes() throws {
+    for (label, bytes) in [("64KB", 64_000), ("1MB", 1_000_000), ("8MB", 8_000_000)] {
+      let text = Self.swiftSource(bytes: bytes)
+      for tracked in [false, true] {
+        let opened = try open(text)
+        if tracked {
+          opened.document.baseline = text
+          XCTAssertTrue(opened.document.waitUntilCaughtUp(timeout: 60))
+        }
+        let timer = EditTimer(inner: opened.document)
+        opened.document.surface.delegate = timer
+        _ = type(into: opened)
+        report(
+          label, tracked ? "typing-main (baseline あり)" : "typing-main", timer.times, digits: 3)
+        opened.document.surface.delegate = opened.document
+        opened.window.orderOut(nil)
+      }
+    }
+  }
+
+  /// 1200×800 の窓に Swift の文書を開き、裏の仕事（文書全体の構文色）が追いついてから測る。速いドラッグは開いた
+  /// ばかりの文書で、打鍵・ホイール・打鍵の後の速いドラッグは別に開き直した文書で測る。文書を端から端まで通した後の
+  /// 打鍵も参考に出す（TextKit が段落を覚えるので、開いたばかりの文書より重い）。
   private func run(label: String, bytes: Int) throws {
     let text = Self.swiftSource(bytes: bytes)
     let dragged = try open(text)
     print(
       "PERF", label, "env", ProcessInfo.processInfo.environment.count, "lines",
-      dragged.document.lineIndex.lineCount, "bytes", dragged.document.lineIndex.length)
+      dragged.document.text.lineCount, "bytes", dragged.document.text.length)
     drag(label, "fast-drag", dragged)
     report(label, "typing-after-drag (参考)", type(into: dragged))
     dragged.window.orderOut(nil)
 
     let typed = try open(text)
     report(label, "typing", type(into: typed))
+    let recolored = recolor(into: typed)
+    report(label, "typing-recolor", recolored.redraw)
+    report(label, "typing-catch-up (参考)", recolored.catchUp)
     let clip = try XCTUnwrap(typed.document.surface.responder.enclosingScrollView).contentView
     let times = (0..<60).map { _ in
       frame(typed.pane) {
@@ -43,6 +69,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
     }
     report(label, "wheel", times)
     drag(label, "fast-drag-after-typing", typed)
+    report(label, "scrollbar-draw (一致の多い検索)", scrollbarDraws(typed))
     typed.window.orderOut(nil)
   }
 
@@ -64,6 +91,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
     let document = try tab.editor.open(try caseFile("big-\(UUID().uuidString).swift", text))
     pane.layoutSubtreeIfNeeded()
     pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "本文が layout される")
+    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))
     window.makeFirstResponder(document.surface.responder)
     RunLoop.main.run(until: Date().addingTimeInterval(0.3))
     return Opened(tab: tab, pane: pane, window: window, document: document)
@@ -80,10 +108,10 @@ final class EditorScrollPerfTests: OrbeTestCase {
   /// 1/3 の位置の行に 30 字打つ。1 字ごとの時間（ms）。
   private func type(into opened: Opened) -> [Double] {
     let document = opened.document
-    let middle = document.lineIndex.lineCount / 3
+    let middle = document.text.lineCount / 3
     document.scroll(toFirstLine: CGFloat(middle))
     document.surface.selectedRange = NSRange(
-      location: document.lineIndex.start(ofRow: middle + 5) + 4, length: 0)
+      location: document.text.lineStart(middle + 5) + 4, length: 0)
     RunLoop.main.run(until: Date().addingTimeInterval(0.3))
     var times: [Double] = []
     for character in "let value = compute(offset) ok" {
@@ -93,6 +121,42 @@ final class EditorScrollPerfTests: OrbeTestCase {
         })
       RunLoop.main.run(until: Date().addingTimeInterval(0.005))
     }
+    return times
+  }
+
+  /// 打鍵の後、裏から役割が届いてから行う描き直し（1 字ごと、ms）——打鍵のコマとは別に main に載る仕事。役割が変わらない
+  /// 打鍵では描き直すものが無い。参考に、打鍵から裏の仕事（文書全体の役割）が追いつくまでの時間も返す。
+  private func recolor(into opened: Opened) -> (redraw: [Double], catchUp: [Double]) {
+    let document = opened.document
+    document.surface.selectedRange = NSRange(
+      location: document.text.lineStart(document.text.lineCount / 3 + 7) + 4, length: 0)
+    _ = frame(opened.pane) {}
+    var redraw: [Double] = []
+    var catchUp: [Double] = []
+    for character in "let value = compute(offset) ok" {
+      let began = Date()
+      _ = frame(opened.pane) {
+        document.surface.responder.keyDown(with: .key(String(character), []))
+      }
+      XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))
+      catchUp.append(Date().timeIntervalSince(began) * 1000)
+      redraw.append(frame(opened.pane) {})
+    }
+    return (redraw, catchUp)
+  }
+
+  /// 一致の多い検索（1MB で上限の 19,999 件、200KB で約 1.5 万件）を開いたまま、スクロールバーを 30 回描き直す（1 回ごと、
+  /// ms）。
+  private func scrollbarDraws(_ opened: Opened) -> [Double] {
+    let pane = opened.pane
+    pane.showSearch()
+    pane.search.setNeedle("e")
+    XCTAssertTrue(opened.document.waitUntilCaughtUp(timeout: 60))
+    XCTAssertGreaterThan(
+      pane.search.matches.count, OverviewRuler.approximateFindMatchCount, "前提: 一致が多い")
+    let bar = pane.scrollbar
+    let times = (0..<30).map { _ in frame(bar) { bar.needsDisplay = true } }
+    pane.closeSearch()
     return times
   }
 
@@ -126,21 +190,23 @@ final class EditorScrollPerfTests: OrbeTestCase {
   }
 
   /// 操作 1 回を layout と描画まで含めて測る（ms）。
-  private func frame(_ pane: EditorPaneView, _ body: () -> Void) -> Double {
+  private func frame(_ view: NSView, _ body: () -> Void) -> Double {
     let began = Date()
     body()
-    pane.layoutSubtreeIfNeeded()
-    pane.displayIfNeeded()
+    view.layoutSubtreeIfNeeded()
+    view.displayIfNeeded()
     return Date().timeIntervalSince(began) * 1000
   }
 
-  private func report(_ label: String, _ name: String, _ times: [Double]) {
+  /// 中央値・p95・最大（ms。`digits` は小数の桁数）。
+  private func report(_ label: String, _ name: String, _ times: [Double], digits: Int = 1) {
     let sorted = times.sorted()
     let median = sorted[sorted.count / 2]
     let p95 = sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))]
+    let format = "%.\(digits)f"
     print(
-      "PERF", label, name, "median", String(format: "%.1f", median), "p95",
-      String(format: "%.1f", p95), "max", String(format: "%.1f", sorted.last ?? 0))
+      "PERF", label, name, "median", String(format: format, median), "p95",
+      String(format: format, p95), "max", String(format: format, sorted.last ?? 0))
   }
 
   /// `bytes` を超えるまで同じ形の宣言を連ねた Swift の本文（1MB で 43,261 行）。
@@ -162,5 +228,39 @@ final class EditorScrollPerfTests: OrbeTestCase {
       text += unit.replacingOccurrences(of: "Item", with: "Item\(k)")
     }
     return text
+  }
+}
+
+/// 編集の通知を文書へ流し、その呼び出しが戻るまでの時間（ms）を記録する delegate。
+@MainActor
+private final class EditTimer: TextSurfaceDelegate {
+  let inner: EditorDocument
+  private(set) var times: [Double] = []
+
+  init(inner: EditorDocument) { self.inner = inner }
+
+  func surface(_ surface: any TextSurface, didChange edit: TextEdit) {
+    let began = DispatchTime.now().uptimeNanoseconds
+    inner.surface(surface, didChange: edit)
+    times.append(Double(DispatchTime.now().uptimeNanoseconds - began) / 1_000_000)
+  }
+  func surface(_ surface: any TextSurface, focusDidChange focused: Bool) {
+    inner.surface(surface, focusDidChange: focused)
+  }
+  func surfaceDidChangeViewport(_ surface: any TextSurface) {
+    inner.surfaceDidChangeViewport(surface)
+  }
+  func surfaceDidChangeSelection(_ surface: any TextSurface) {
+    inner.surfaceDidChangeSelection(surface)
+  }
+  func surface(_ surface: any TextSurface, rolesIn range: NSRange) -> [HighlightSpan] {
+    inner.surface(surface, rolesIn: range)
+  }
+  func surfaceLineCount(_ surface: any TextSurface) -> Int { inner.surfaceLineCount(surface) }
+  func surface(_ surface: any TextSurface, lineContaining offset: Int) -> Int {
+    inner.surface(surface, lineContaining: offset)
+  }
+  func surface(_ surface: any TextSurface, rangeOfLine line: Int) -> NSRange {
+    inner.surface(surface, rangeOfLine: line)
   }
 }

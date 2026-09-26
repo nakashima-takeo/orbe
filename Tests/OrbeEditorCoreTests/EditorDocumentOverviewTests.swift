@@ -4,7 +4,8 @@ import XCTest
 @testable import OrbeEditorCore
 
 /// 文書が俯瞰と検索へ出す口——インデント単位は文書が検出して面へ押す（開いたとき・丸ごと置き換え）、役割の区間は
-/// 構文木から窓ごとに答える、本文・選択・viewport の変化はそれぞれ 1 本の closure で届く（本文は構文木の更新の後）。
+/// 役割の並びから窓ごとに答える、本文・選択・viewport・裏から届いた役割の変化はそれぞれ 1 本の closure で届く（本文は
+/// 写しの更新の後）。
 @MainActor
 final class EditorDocumentOverviewTests: XCTestCase {
   private let registry = LanguageRegistry(queriesRoot: Queries.root)
@@ -54,7 +55,8 @@ final class EditorDocumentOverviewTests: XCTestCase {
   func testRoleSpansAreFlatNonOverlappingAndInsideTheWindowOnly() throws {
     let text = "// head\nlet a = 1 // tail\n/* block */\n"
     let document = try open("c.swift", text).document
-    let all = document.roleSpans(in: NSRange(location: 0, length: text.utf16.count))
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    let all = document.roles.roles(in: NSRange(location: 0, length: text.utf16.count))
     for (previous, next) in zip(all, all.dropFirst()) {
       XCTAssertLessThanOrEqual(NSMaxRange(previous.range), next.range.location, "重ならず昇順")
     }
@@ -65,42 +67,49 @@ final class EditorDocumentOverviewTests: XCTestCase {
         NSRange(location: 26, length: 11),
       ])
     XCTAssertEqual(all.first { $0.role == .keyword }?.range, NSRange(location: 8, length: 3))
-    let second = document.roleSpans(in: NSRange(location: 8, length: 18))
+    let second = document.roles.roles(in: NSRange(location: 8, length: 18))
     XCTAssertTrue(
       second.allSatisfy { NSLocationInRange($0.range.location, NSRange(location: 8, length: 18)) })
     XCTAssertEqual(
       second.filter { $0.role == .comment }.map(\.range), [NSRange(location: 18, length: 7)])
-    let cut = document.roleSpans(in: NSRange(location: 30, length: 4))
+    let cut = document.roles.roles(in: NSRange(location: 30, length: 4))
     XCTAssertEqual(cut.map(\.range), [NSRange(location: 30, length: 4)], "窓が区間を切れば窓の中だけ")
     let plain = try open("p.txt", "// not a comment\n").document
-    XCTAssertEqual(plain.roleSpans(in: NSRange(location: 0, length: 5)), [], "文法が無ければ空")
+    XCTAssertTrue(plain.waitUntilCaughtUp())
+    XCTAssertEqual(plain.roles.roles(in: NSRange(location: 0, length: 5)), [], "文法が無ければ空")
   }
 
-  /// 本文の通知は構文木の更新の後——通知の中で読む役割の区間が新しい本文を指す。通知は編集と、役割が変わりうる
-  /// 区間（構文木の差分）を運ぶ。
-  func testTextChangeArrivesAfterTheSyntaxTreeIsUpdatedAndCarriesTheChangedRegion() throws {
+  /// 本文の通知は写しの更新の後——通知の中で読む本文と役割の並びは新しい本文の長さで、役割は編集に合わせてずらした前の
+  /// もの（挿した字は隣の連なりを引き継ぐ）。正しい役割は裏から届き、変わった区間が「役割が変わった」で届く。
+  func testTextChangeArrivesAfterTheCopyAndRolesFollowFromTheBackground() throws {
     let opened = try open("t.swift", "let a = 1\n")
     let (document, surface) = (opened.document, opened.surface)
-    var seen: [[NSRange]] = []
-    var changes: [TextChange] = []
-    document.onTextChange = { change in
-      changes.append(change)
-      seen.append(
-        document.roleSpans(in: NSRange(location: 0, length: 15)).filter { $0.role == .comment }
-          .map(\.range))
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    let delivered = surface.changedRoles.count
+    var edits: [TextEdit] = []
+    var seen: [(length: Int, roles: Int)] = []
+    var changedRoles: [IndexSet] = []
+    document.onTextChange = { edit in
+      edits.append(edit)
+      seen.append((document.text.length, document.roles.length))
     }
+    document.onRolesChange = { changedRoles.append($0) }
     surface.replace(NSRange(location: 0, length: 0), with: "// c\n")
-    XCTAssertEqual(seen, [[NSRange(location: 0, length: 4)]])
+    XCTAssertEqual(edits, [TextEdit(range: NSRange(location: 0, length: 0), replacement: "// c\n")])
+    XCTAssertEqual(seen.map(\.length), [15])
+    XCTAssertEqual(seen.map(\.roles), [15], "役割の並びは本文と同じ長さにずれている")
     XCTAssertEqual(
-      changes.map(\.edit), [TextEdit(range: NSRange(location: 0, length: 0), replacementLength: 5)])
-    XCTAssertTrue(changes[0].changedRoles.contains(integersIn: 0..<4), "挿した comment の区間は役割が変わった")
+      document.roles.roles(in: NSRange(location: 5, length: 3)).map(\.role), [.keyword],
+      "裏を待たずに、let は前の役割のまま字に付いていく")
 
-    let plainOpened = try open("p.txt", "abc")
-    let (plain, plainSurface) = (plainOpened.document, plainOpened.surface)
-    var plainChanges: [TextChange] = []
-    plain.onTextChange = { plainChanges.append($0) }
-    plainSurface.replace(NSRange(location: 1, length: 1), with: "xy")
-    XCTAssertEqual(plainChanges.map(\.changedRoles), [IndexSet(integersIn: 1..<3)], "文法が無ければ置換後の区間")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(
+      document.roles.roles(in: NSRange(location: 0, length: 15)).filter { $0.role == .comment }
+        .map(\.range), [NSRange(location: 0, length: 4)])
+    XCTAssertTrue(
+      changedRoles.reduce(IndexSet()) { $0.union($1) }.contains(integersIn: 0..<4),
+      "挿した comment の区間は役割が変わった")
+    XCTAssertEqual(Array(surface.changedRoles.dropFirst(delivered)), changedRoles, "面にも同じ区間が届く")
   }
 
   /// 俯瞰の式が読む「先頭行（小数）」は viewport の行頭オフセットと隠れ割合から、その逆の「この行を先頭に」は整数部の
@@ -109,7 +118,7 @@ final class EditorDocumentOverviewTests: XCTestCase {
     let opened = try open("v.txt", (0..<10).map { "row \($0)\n" }.joined())
     let (document, surface) = (opened.document, opened.surface)
     surface.viewport = TextViewport(
-      firstVisible: document.lineIndex.start(ofRow: 3), hiddenFraction: 0.25, visibleLines: 4.5)
+      firstVisible: document.text.lineStart(3), hiddenFraction: 0.25, visibleLines: 4.5)
     XCTAssertEqual(document.viewportLines.first, 3.25)
     XCTAssertEqual(document.viewportLines.visible, 4.5)
 
@@ -118,7 +127,7 @@ final class EditorDocumentOverviewTests: XCTestCase {
     document.scroll(toFirstLine: 99)
     XCTAssertEqual(
       surface.toppedAt.map(\.offset),
-      [document.lineIndex.start(ofRow: 7), 0, document.lineIndex.length])
+      [document.text.lineStart(7), 0, document.text.length])
     XCTAssertEqual(surface.toppedAt.map(\.hiddenFraction), [0.75, 0, 0], "先頭の前・最終行の先は端に収める")
   }
 
@@ -132,7 +141,7 @@ final class EditorDocumentOverviewTests: XCTestCase {
     XCTAssertEqual(
       document.word(at: NSRange(location: 4, length: 0)), NSRange(location: 2, length: 2),
       "行末（CRLF の手前）で語の末尾に接する")
-    let lineStart = document.lineIndex.start(ofRow: 1)
+    let lineStart = document.text.lineStart(1)
     XCTAssertEqual(
       document.word(at: NSRange(location: lineStart + 1800, length: 0)),
       NSRange(location: lineStart + 1301, length: 600), "窓（前 499）の端で切れる")

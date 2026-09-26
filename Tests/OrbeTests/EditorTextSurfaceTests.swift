@@ -19,14 +19,14 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     EditorSurfaces(queriesRoot: Bundle(for: Self.self).bundleURL.deletingLastPathComponent())
   }
 
-  private func file(_ name: String, _ text: String) throws -> URL {
+  func file(_ name: String, _ text: String) throws -> URL {
     let url = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent(name)
     try Data(text.utf8).write(to: url)
     return url
   }
 
   /// 文書を開き、そのテキスト面を first responder にした窓を返す（打鍵の受け手にする）。
-  private func opened(_ url: URL) throws -> (EditorDocument, NSWindow) {
+  func opened(_ url: URL) throws -> (EditorDocument, NSWindow) {
     let session = EditorSession(surfaces: surfaces)
     let document = try session.open(url)
     let window = NSWindow(
@@ -52,12 +52,12 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     XCTAssertNotNil(document.language)
 
     type("xy", into: document)
-    XCTAssertEqual(document.surface.text, "xylet a = 1\n")
+    XCTAssertEqual(bodyText(document), "xylet a = 1\n")
     XCTAssertTrue(document.isDirty)
-    XCTAssertEqual(document.lineIndex, LineIndex(text: document.surface.text), "索引が本物の編集に追従する")
+    XCTAssertEqual(document.text.lineCount, 2, "写しが本物の編集に追従する")
 
     document.surface.responder.undoManager?.undo()
-    XCTAssertEqual(document.surface.text, "let a = 1\n", "続けた打鍵がまとめて本文ごと戻る")
+    XCTAssertEqual(bodyText(document), "let a = 1\n", "続けた打鍵がまとめて本文ごと戻る")
   }
 
   /// 未保存は「保存の後に編集があったか」——⌘Z で編集前の本文へ戻しても未保存は消えず、消すのは保存だけ。
@@ -69,7 +69,7 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     type("d", into: document)
     XCTAssertTrue(document.isDirty)
     document.surface.responder.undoManager?.undo()
-    XCTAssertEqual(document.surface.text, "abc", "開いたときの本文へ戻った")
+    XCTAssertEqual(bodyText(document), "abc", "開いたときの本文へ戻った")
     XCTAssertTrue(document.isDirty, "本文が同じでも未保存は残る（本文の比較ではない）")
 
     try document.save()
@@ -86,14 +86,14 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     type("ab", into: document)
     try document.save()
     type("cd", into: document)
-    XCTAssertEqual(document.surface.text, "abcd")
+    XCTAssertEqual(bodyText(document), "abcd")
 
     document.surface.responder.undoManager?.undo()
-    XCTAssertEqual(document.surface.text, "ab", "保存の後の打鍵だけが戻る")
+    XCTAssertEqual(bodyText(document), "ab", "保存の後の打鍵だけが戻る")
     XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "ab", "保存した内容はそのまま")
 
     document.surface.responder.undoManager?.undo()
-    XCTAssertEqual(document.surface.text, "", "もう 1 回で保存前の打鍵が戻る")
+    XCTAssertEqual(bodyText(document), "", "もう 1 回で保存前の打鍵が戻る")
   }
 
   /// 本文の丸ごと置き換えは、通常の編集と同じく文書へ 1 回で届き（索引が追従する）、⌘Z で丸ごと戻る。
@@ -106,18 +106,20 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     document.surface.delegate = spy
 
     document.surface.replaceAll(with: "struct S {}\nlet b = 2\n")
-    XCTAssertEqual(document.surface.text, "struct S {}\nlet b = 2\n")
+    XCTAssertEqual(bodyText(document), "struct S {}\nlet b = 2\n")
     XCTAssertEqual(
-      edits, [TextEdit(range: NSRange(location: 0, length: 11), replacementLength: 22)], "全体の置換 1 回"
-    )
-    XCTAssertEqual(document.lineIndex, LineIndex(text: document.surface.text))
+      edits,
+      [
+        TextEdit(range: NSRange(location: 0, length: 11), replacement: "struct S {}\nlet b = 2\n")
+      ], "全体の置換 1 回（置換後の文字列つき）")
+    XCTAssertEqual(document.text.lineCount, 3)
 
     document.surface.markUndoBoundary()
     type("y", into: document)
     document.surface.responder.undoManager?.undo()
-    XCTAssertEqual(document.surface.text, "struct S {}\nlet b = 2\n", "置き換えの後の打鍵だけ戻る")
+    XCTAssertEqual(bodyText(document), "struct S {}\nlet b = 2\n", "置き換えの後の打鍵だけ戻る")
     document.surface.responder.undoManager?.undo()
-    XCTAssertEqual(document.surface.text, "xlet a = 1\n", "置き換えが丸ごと戻る")
+    XCTAssertEqual(bodyText(document), "xlet a = 1\n", "置き換えが丸ごと戻る")
     withExtendedLifetime(spy) {}
   }
 
@@ -132,19 +134,19 @@ final class EditorTextSurfaceTests: OrbeTestCase {
       "かん", selectedRange: NSRange(location: 0, length: 2),
       replacementRange: NSRange(location: NSNotFound, length: 0))
     XCTAssertTrue(client.hasMarkedText())
-    XCTAssertEqual(document.surface.text, "let a = 1\nかん")
+    XCTAssertEqual(bodyText(document), "let a = 1\nかん")
 
     document.surface.replaceAll(with: "short\n")
     XCTAssertFalse(client.hasMarkedText(), "置き換えの前に変換を畳む")
     // 畳めていなければ次の変換操作でプロセスごと落ち、残りのテストの結果が消える。
     guard !client.hasMarkedText() else { return }
-    XCTAssertEqual(document.surface.text, "short\n")
+    XCTAssertEqual(bodyText(document), "short\n")
 
     client.setMarkedText(
       "き", selectedRange: NSRange(location: 0, length: 1),
       replacementRange: NSRange(location: NSNotFound, length: 0))
     client.insertText("き", replacementRange: NSRange(location: NSNotFound, length: 0))
-    XCTAssertEqual(document.surface.text, "short\nき", "次の変換操作は新しい本文の末尾に付く")
+    XCTAssertEqual(bodyText(document), "short\nき", "次の変換操作は新しい本文の末尾に付く")
   }
 
   /// 置き換え後の選択は解け、キャレットは同じオフセットへ戻る（契約は `TextSurface` の doc と code の
@@ -281,7 +283,7 @@ extension EditorTextSurfaceTests {
     scroll.reflectScrolledClipView(scroll.contentView)
     pumpMain(until: { document.surface.viewport.firstVisible > 0 }, "viewport が動く")
     viewport = document.surface.viewport
-    XCTAssertEqual(viewport.firstVisible, document.lineIndex.start(ofRow: 49), "先頭に見えている行の行頭")
+    XCTAssertEqual(viewport.firstVisible, document.text.lineStart(49), "先頭に見えている行の行頭")
     XCTAssertEqual(viewport.hiddenFraction, 0.5, accuracy: 0.01, "半分隠れている")
   }
 
@@ -290,10 +292,10 @@ extension EditorTextSurfaceTests {
     let visible = document.surface.viewport.visibleLines
     var scrolled = 0
     document.onViewportChange = { scrolled += 1 }
-    document.surface.scrollToCenter(document.lineIndex.start(ofRow: 60))
+    document.surface.scrollToCenter(document.text.lineStart(60))
     pumpMain(until: { document.surface.viewport.firstVisible > 0 }, "動く")
     let first =
-      CGFloat(document.lineIndex.point(at: document.surface.viewport.firstVisible).row)
+      CGFloat(document.text.row(containing: document.surface.viewport.firstVisible))
       + document.surface.viewport.hiddenFraction
     XCTAssertEqual(first, 60.5 - visible / 2, accuracy: 0.6, "行 60 の中心が clip の中央")
     XCTAssertGreaterThan(scrolled, 0, "viewport の変化が届く")
@@ -301,16 +303,16 @@ extension EditorTextSurfaceTests {
     document.surface.scrollToCenter(0)
     pumpMain(until: { document.surface.viewport.firstVisible == 0 }, "先頭で止まる")
     XCTAssertEqual(document.surface.viewport.hiddenFraction, 0)
-    document.surface.scrollToCenter(document.lineIndex.start(ofRow: 99))
+    document.surface.scrollToCenter(document.text.lineStart(99))
     pumpMain(
       until: {
-        document.lineIndex.point(at: document.surface.viewport.firstVisible).row >= 99
+        document.text.row(containing: document.surface.viewport.firstVisible) >= 99
           - Int(visible)
       },
       "末尾で止まる")
     let last = document.surface.viewport
     XCTAssertEqual(
-      CGFloat(document.lineIndex.point(at: last.firstVisible).row) + last.hiddenFraction,
+      CGFloat(document.text.row(containing: last.firstVisible)) + last.hiddenFraction,
       99.5 - visible / 2, accuracy: 0.6, "最終行を最上段まで送れるので、末尾の行も中央に来る")
   }
 
@@ -343,7 +345,7 @@ extension EditorTextSurfaceTests {
     let (document, window) = (tall.document, tall.window)
     var changes = 0
     document.onSelectionChange = { changes += 1 }
-    let offscreen = NSRange(location: document.lineIndex.start(ofRow: 80), length: 4)
+    let offscreen = NSRange(location: document.text.lineStart(80), length: 4)
     document.surface.selectedRange = offscreen
     XCTAssertEqual(document.surface.selectedRange, offscreen)
     pumpMain(until: { changes > 0 }, "選択の変化が届く")

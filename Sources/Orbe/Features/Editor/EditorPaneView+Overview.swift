@@ -2,9 +2,9 @@ import AppKit
 import OrbeEditorCore
 
 /// 文書の「変わった」の扇出と、俯瞰（ミニマップ・スクロールバー・影）と出現の強調への配線。文書側の closure は単一の
-/// まま、ここがミニマップ・スクロールバー・影・検索・出現の強調へ配る。検索の一致と語の出現は束ねて
-/// （`OverviewDecorations`）ミニマップとスクロールバーへ押す。本体の上のポインタは pane の tracking area が見て、
-/// スクロールバーのつまみの見え隠れに使う。
+/// まま、ここがミニマップ・スクロールバー・影・検索・出現の強調へ配る（裏から届いた役割と問いの結果も）。検索の一致と
+/// 語の出現は束ねて（`OverviewDecorations`）ミニマップとスクロールバーへ押す。本体の上のポインタは pane の tracking area
+/// が見て、スクロールバーのつまみの見え隠れに使う。
 extension EditorPaneView {
   /// 文書の「変わった」を右列・影・検索・出現の強調へ配る（見せている文書だけ）。
   func observe(_ document: EditorDocument, _ on: Bool) {
@@ -34,13 +34,24 @@ extension EditorPaneView {
       } : nil
     document.onTextChange =
       on
-      ? { [weak self] change in
+      ? { [weak self] edit in
         guard let self else { return }
-        minimap.textDidChange(change)
+        minimap.textDidChange(edit)
         scrollbar.refresh()
         noteScrollState()
-        search.textDidChange(change.edit)
+        search.textDidChange(edit)
         occurrences.textDidChange()
+      } : nil
+    document.onRolesChange = on ? { [weak self] in self?.minimap.rolesDidChange($0) } : nil
+    document.onAnalysis =
+      on
+      ? { [weak self] request, ranges in
+        guard let self else { return }
+        switch request {
+        case .find(let needle): search.didFind(needle, ranges)
+        case .selectionOccurrences: occurrences.didFindSelectionOccurrences(request, ranges)
+        case .wordOccurrences: occurrences.didFindWordOccurrences(request, ranges)
+        }
       } : nil
   }
 
@@ -92,7 +103,7 @@ extension EditorPaneView {
     let viewport = document.surface.viewport
     let state = ScrollState(
       firstLine: document.viewportLines.first, visibleLines: viewport.visibleLines,
-      lineCount: document.lineIndex.lineCount, hiddenColumns: viewport.hiddenColumns,
+      lineCount: document.text.lineCount, hiddenColumns: viewport.hiddenColumns,
       visibleColumns: viewport.visibleColumns)
     defer { lastScrollState = state }
     guard let last = lastScrollState, last != state else { return }

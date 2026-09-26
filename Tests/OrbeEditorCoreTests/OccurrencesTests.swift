@@ -12,7 +12,7 @@ final class OccurrencesTests: XCTestCase {
     let selection = NSRange(location: 4, length: 3)
     XCTAssertEqual(
       Occurrences.selectionOccurrences(
-        of: selection, in: text, findNeedle: nil, findFieldFocused: false),
+        of: selection, in: TextRope(text), findNeedle: nil, findFieldFocused: false),
       [
         NSRange(location: 0, length: 3), NSRange(location: 8, length: 3),
         NSRange(location: 12, length: 3), NSRange(location: 15, length: 3),
@@ -23,11 +23,13 @@ final class OccurrencesTests: XCTestCase {
     let text = "aaaa"
     XCTAssertEqual(
       Occurrences.selectionOccurrences(
-        of: NSRange(location: 1, length: 2), in: text, findNeedle: nil, findFieldFocused: false),
+        of: NSRange(location: 1, length: 2), in: TextRope(text), findNeedle: nil,
+        findFieldFocused: false),
       [NSRange(location: 2, length: 2)], "選択より前に始まって交差する一致（0..<2）は除き、選択の中から始まる一致は残す")
     XCTAssertEqual(
       Occurrences.selectionOccurrences(
-        of: NSRange(location: 0, length: 2), in: "aaaaa", findNeedle: nil, findFieldFocused: false),
+        of: NSRange(location: 0, length: 2), in: TextRope("aaaaa"), findNeedle: nil,
+        findFieldFocused: false),
       [NSRange(location: 2, length: 2)])
   }
 
@@ -35,7 +37,7 @@ final class OccurrencesTests: XCTestCase {
     let text = "ab ab\nab  ab"
     let none = { (range: NSRange) in
       Occurrences.selectionOccurrences(
-        of: range, in: text, findNeedle: nil, findFieldFocused: false)
+        of: range, in: TextRope(text), findNeedle: nil, findFieldFocused: false)
     }
     XCTAssertEqual(none(NSRange(location: 0, length: 0)), [], "空の選択")
     XCTAssertEqual(none(NSRange(location: 3, length: 4)), [], "複数行")
@@ -43,7 +45,7 @@ final class OccurrencesTests: XCTestCase {
     let long = String(repeating: "x", count: 201)
     XCTAssertEqual(
       Occurrences.selectionOccurrences(
-        of: NSRange(location: 0, length: 201), in: long + " " + long, findNeedle: nil,
+        of: NSRange(location: 0, length: 201), in: TextRope(long + " " + long), findNeedle: nil,
         findFieldFocused: false), [], "200 字を超える")
   }
 
@@ -52,19 +54,19 @@ final class OccurrencesTests: XCTestCase {
     let selection = NSRange(location: 0, length: 2)
     XCTAssertEqual(
       Occurrences.selectionOccurrences(
-        of: selection, in: text, findNeedle: "AB", findFieldFocused: false), [],
+        of: selection, in: TextRope(text), findNeedle: "AB", findFieldFocused: false), [],
       "検索バーが同じ文字列（大小無視）を探している")
     XCTAssertEqual(
       Occurrences.selectionOccurrences(
-        of: selection, in: text, findNeedle: "zz", findFieldFocused: true), [],
+        of: selection, in: TextRope(text), findNeedle: "zz", findFieldFocused: true), [],
       "検索語が空でない入力欄に焦点がある")
     XCTAssertEqual(
       Occurrences.selectionOccurrences(
-        of: selection, in: text, findNeedle: "zz", findFieldFocused: false
+        of: selection, in: TextRope(text), findNeedle: "zz", findFieldFocused: false
       ).count, 2)
     XCTAssertEqual(
       Occurrences.selectionOccurrences(
-        of: selection, in: text, findNeedle: "", findFieldFocused: true
+        of: selection, in: TextRope(text), findNeedle: "", findFieldFocused: true
       ).count, 2)
   }
 
@@ -128,7 +130,7 @@ final class OccurrencesTests: XCTestCase {
   func testWordOccurrencesAreCaseSensitiveWithWordBoundaries() {
     let text = "foo foo_x Foo (foo) xfoo foo"
     XCTAssertEqual(
-      Occurrences.wordOccurrences(of: NSRange(location: 0, length: 3), in: text),
+      Occurrences.wordOccurrences(of: NSRange(location: 0, length: 3), in: TextRope(text)),
       [
         NSRange(location: 0, length: 3), NSRange(location: 15, length: 3),
         NSRange(location: 25, length: 3),

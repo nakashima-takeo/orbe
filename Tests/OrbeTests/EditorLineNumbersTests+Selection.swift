@@ -26,8 +26,8 @@ extension EditorLineNumbersTests {
   }
 
   func range(of line: Int, in document: EditorDocument) -> NSRange {
-    let start = document.lineIndex.start(ofRow: line - 1)
-    return NSRange(location: start, length: document.lineIndex.end(ofRow: line - 1) - start)
+    let start = document.text.lineStart(line - 1)
+    return NSRange(location: start, length: document.text.lineEnd(line - 1) - start)
   }
 
   /// 番号を押すとその行を改行まで選び、焦点はテキスト面へ移る。最終行は本文の終わりまで。
@@ -100,7 +100,7 @@ extension EditorLineNumbersTests {
     let speed = max(30, visibleRows * (1 + 0.5))
     XCTAssertEqual(clip.bounds.minY, speed * 0.1 * style.lineHeight, accuracy: 0.5)
     func selectedLastRow() -> Int {
-      document.lineIndex.point(at: NSMaxRange(document.surface.selectedRange) - 1).row
+      document.text.row(containing: NSMaxRange(document.surface.selectedRange) - 1)
     }
     let bottomRow = Int((clip.bounds.maxY - 0.5) / style.lineHeight)
     XCTAssertEqual(selectedLastRow(), bottomRow, "見えている下端の行まで伸びる")
@@ -181,7 +181,7 @@ extension EditorLineNumbersTests {
     frames(column, 10, clock: &clock)
     XCTAssertEqual(clip.bounds.minY, clip.maximumY, accuracy: 0.5, "最終行を最上段まで送って止まる")
     XCTAssertEqual(
-      NSMaxRange(document.surface.selectedRange), document.lineIndex.length, "最終行まで選ぶ")
+      NSMaxRange(document.surface.selectedRange), document.text.length, "最終行まで選ぶ")
     column.mouseUp(with: try mouse(.leftMouseUp, opened, row: below))
 
     document.scroll(toFirstLine: 0)

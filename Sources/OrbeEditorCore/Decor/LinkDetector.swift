@@ -2,7 +2,7 @@ import Foundation
 
 /// 行の中の http(s) URL。`https?://` から空白・`<` `>` `"` `` ` `` の直前までを 1 区間とし、末尾の句読点
 /// （`.` `,` `;` `:` `!` `?` `'`）と、区間内に対応する開き括弧が無い末尾の `)` `]` `}` を刈る。規則は決定論的で
-/// 状態を持たない（URL は行をまたがない）。
+/// 状態を持たない（URL は行をまたがない）。正規表現（`Regex`）は Sendable でないので、読むのは装備を描く main だけ。
 public enum LinkDetector {
   public struct Link: Equatable {
     /// 行内の UTF-16 オフセットの区間。
@@ -10,9 +10,9 @@ public enum LinkDetector {
     public let url: URL
   }
 
-  private static let pattern = #/https?://[^\s<>"`]+/#
+  @MainActor private static let pattern = #/https?://[^\s<>"`]+/#
 
-  public static func links(in line: String) -> [Link] {
+  @MainActor public static func links(in line: String) -> [Link] {
     line.matches(of: pattern).compactMap { match in
       var candidate = Substring(line[match.range])
       trim(&candidate)

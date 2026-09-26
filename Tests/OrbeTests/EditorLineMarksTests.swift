@@ -130,6 +130,7 @@ final class EditorLineMarksTests: OrbeTestCase {
     let document = hosted.document
     let ground = hosted.ground
     document.baseline = "a\nb\nc\nx\ne\n"
+    catchUp(document)
     XCTAssertEqual(document.hunks.count, 2, "2 行目と 4 行目が変更")
     waitDrawn { self.isBlue(try self.rgb(ground, self.barX, self.rowMidY(2))) }
     XCTAssertTrue(isBlue(try rgb(ground, barX, rowMidY(4))))
@@ -139,16 +140,19 @@ final class EditorLineMarksTests: OrbeTestCase {
     XCTAssertTrue(isBlack(try rgb(ground, style.gutterWidth + 6.5, rowMidY(2))), "バーの右も地")
 
     document.baseline = "a\nB\nc\nd\n"
+    catchUp(document)
     waitDrawn { self.isGreen(try self.rgb(ground, self.barX, self.rowMidY(5))) }
     XCTAssertTrue(isBlack(try rgb(ground, barX, rowMidY(2))), "baseline が変われば前の印は消える")
 
     document.baseline = "a\nz\nB\nc\nd\ne\n"
+    catchUp(document)
     waitDrawn { self.isRed(try self.rgb(ground, self.barX, self.rowMidY(2) - 9)) }
     XCTAssertTrue(
       isRed(try rgb(ground, style.gutterWidth + 4, rowMidY(2) - 9)), "三角は境（2 行目の上端）に中央合わせ")
     XCTAssertTrue(isBlack(try rgb(ground, barX, rowMidY(2) + 5)), "三角の下は地（バーではない）")
 
     document.baseline = "a\nB\nc\nd\n"
+    catchUp(document)
     waitDrawn { self.isGreen(try self.rgb(ground, self.barX, self.rowMidY(5))) }
     let bar = try rgb(ground, barX, rowMidY(5))
     let expected = try onBlack(style.marks.added)
@@ -160,6 +164,7 @@ final class EditorLineMarksTests: OrbeTestCase {
     let hosted = try host("a\nb\n")
     let ground = hosted.ground
     hosted.document.baseline = "z\na\nb\n"
+    catchUp(hosted.document)
     let tip = style.gutterWidth + style.marks.barInset + 2
     waitDrawn { self.isRed(try self.rgb(ground, tip, self.style.topInset + 3)) }
     XCTAssertTrue(isBlack(try rgb(ground, tip, style.topInset + 9)), "三角は一辺 6 で終わり、その下は地")
@@ -173,6 +178,7 @@ final class EditorLineMarksTests: OrbeTestCase {
     let hosted = try host(text, size: NSSize(width: 400, height: 300))
     let ground = hosted.ground
     hosted.document.baseline = text.replacingOccurrences(of: "line 12\n", with: "twelve\n")
+    catchUp(hosted.document)
     let y = rowMidY(12)
     let digitsRight = style.gutterWidth - style.gutterTrailingInset
     waitDrawn { self.isBlue(try self.rgb(ground, self.barX, y)) }
@@ -193,18 +199,19 @@ final class EditorLineMarksTests: OrbeTestCase {
       }, "本文の最初の字は印の列の右端の直後のセルにある")
   }
 
-  /// 印は打鍵に追従する（同じ runloop の中で作り直され、次の描画に載る）。
+  /// 印は打鍵に追従する（裏の行差分が追いつけば、その次の描画に載る）。
   func testMarksFollowTyping() throws {
     let hosted = try host("a\nb\nc\n")
     let document = hosted.document
     let ground = hosted.ground
     let window = hosted.window
     document.baseline = "a\nb\nc\n"
+    catchUp(document)
     window.makeFirstResponder(document.surface.responder)
     document.surface.responder.perform(#selector(NSResponder.moveToEndOfDocument(_:)), with: nil)
     document.surface.responder.perform(#selector(NSResponder.moveUp(_:)), with: nil)
     document.surface.responder.keyDown(with: .key("x", []))
-    XCTAssertEqual(document.surface.text, "a\nb\nxc\n")
+    XCTAssertEqual(bodyText(document), "a\nb\nxc\n")
     waitDrawn { self.isBlue(try self.rgb(ground, self.barX, self.rowMidY(3))) }
     XCTAssertTrue(isBlack(try rgb(ground, barX, rowMidY(2))))
   }
@@ -216,6 +223,7 @@ final class EditorLineMarksTests: OrbeTestCase {
     let document = hosted.document
     let ground = hosted.ground
     document.baseline = lines.replacingOccurrences(of: "line 50\n", with: "line fifty\n")
+    catchUp(document)
     let scroll = try XCTUnwrap(document.surface.view.subviews.first as? NSScrollView)
     scroll.contentView.scroll(to: NSPoint(x: 0, y: 49 * style.lineHeight))
     scroll.reflectScrolledClipView(scroll.contentView)

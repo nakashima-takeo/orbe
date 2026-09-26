@@ -16,12 +16,12 @@ extension EditorMinimapView {
       context.endTransparencyLayer()
       context.restoreGState()
     }
-    let index = document.lineIndex
+    let text = document.text
     let columns = DecorationColumns(
       document: document, gutter: CGFloat(MinimapLine.gutter) / CGFloat(scale),
       width: bounds.width)
     let selection = document.surface.selectedRange
-    let selectionRows = rows(of: selection, index: index)
+    let selectionRows = rows(of: selection, text: text)
     var highlighted = Set(Range(selectionRows).clamped(to: layout.lines))
     if selectionRows.count > 1 {
       style.selection.withAlphaComponent(0.5).setFill()
@@ -40,8 +40,8 @@ extension EditorMinimapView {
     ]
     for (ranges, color) in inline {
       color.withAlphaComponent(color.alphaComponent * 0.5).setFill()
-      for range in visible(ranges, layout: layout, index: index) {
-        for row in Range(rows(of: range, index: index)).clamped(to: layout.lines) {
+      for range in visible(ranges, layout: layout, text: text) {
+        for row in Range(rows(of: range, text: text)).clamped(to: layout.lines) {
           guard highlighted.insert(row).inserted else { continue }
           NSRect(
             x: columns.gutter, y: layout.y(ofLine: row), width: bounds.width - columns.gutter,
@@ -53,25 +53,25 @@ extension EditorMinimapView {
     fillRanges([selection], layout: layout, columns: columns, color: style.selection)
     for (ranges, color) in inline.reversed() {
       fillRanges(
-        visible(ranges, layout: layout, index: index), layout: layout, columns: columns,
+        visible(ranges, layout: layout, text: text), layout: layout, columns: columns,
         color: color)
     }
     drawGitMarks(layout, document: document)
   }
 
   /// 区間の行（開始の行から終わりの位置の行まで。VS Code は範囲の終わりの行を含める——行を丸ごと選べば次の行まで）。
-  private func rows(of range: NSRange, index: LineIndex) -> ClosedRange<Int> {
-    let first = index.point(at: range.location).row
-    return first...max(first, index.point(at: NSMaxRange(range)).row)
+  private func rows(of range: NSRange, text: TextRope) -> ClosedRange<Int> {
+    let first = text.row(containing: range.location)
+    return first...max(first, text.row(containing: NSMaxRange(range)))
   }
 
   /// 描く行に掛かる区間だけ（昇順の列を二分探索で切る）。
-  private func visible(_ ranges: [NSRange], layout: MinimapLayout, index: LineIndex) -> ArraySlice<
+  private func visible(_ ranges: [NSRange], layout: MinimapLayout, text: TextRope) -> ArraySlice<
     NSRange
   > {
     guard !ranges.isEmpty else { return [] }
-    let start = index.start(ofRow: layout.lines.lowerBound)
-    let end = index.end(ofRow: layout.lines.upperBound - 1)
+    let start = text.lineStart(layout.lines.lowerBound)
+    let end = text.lineEnd(layout.lines.upperBound - 1)
     var low = 0
     var high = ranges.count
     while low < high {
@@ -95,12 +95,12 @@ extension EditorMinimapView {
     _ ranges: some Collection<NSRange>, layout: MinimapLayout, columns: DecorationColumns,
     color: NSColor
   ) {
-    let index = columns.document.lineIndex
+    let text = columns.document.text
     color.setFill()
     for range in ranges where range.length > 0 {
-      let rows = rows(of: range, index: index)
+      let rows = rows(of: range, text: text)
       for row in Range(rows).clamped(to: layout.lines) {
-        let start = index.start(ofRow: row)
+        let start = text.lineStart(row)
         let end = row == rows.upperBound ? NSMaxRange(range) - start : columns.length(row: row)
         let x1 = columns.x(row: row, at: max(range.location, start) - start)
         let x2 = columns.x(row: row, at: end)
@@ -148,12 +148,12 @@ private final class DecorationColumns {
 
   /// 行 `row` の本文の長さ（UTF-16、改行を除く）。
   func length(row: Int) -> Int {
-    let index = document.lineIndex
-    let start = index.start(ofRow: row)
-    let end = index.end(ofRow: row)
-    let tail = document.surface.substring(
+    let text = document.text
+    let start = text.lineStart(row)
+    let end = text.lineEnd(row)
+    let tail = text.units(
       in: NSRange(location: max(start, end - 2), length: end - max(start, end - 2)))
-    return end - start - tail.utf16.reversed().prefix { $0 == 0x0A || $0 == 0x0D }.count
+    return end - start - tail.reversed().prefix { $0 == 0x0A || $0 == 0x0D }.count
   }
 
   /// 行 `row` の UTF-16 位置 `index` の x（ミニマップの幅で止まる）。行の本文の終わりより右は本文の終わり。
@@ -165,12 +165,11 @@ private final class DecorationColumns {
   }
 
   private func read(_ row: Int) -> [CGFloat] {
-    let index = document.lineIndex
-    let start = index.start(ofRow: row)
+    let text = document.text
+    let start = text.lineStart(row)
     let limit = max(0, Int(width - gutter))
-    let length = min(index.end(ofRow: row) - start, limit + 2)
-    var units = Array(
-      document.surface.substring(in: NSRange(location: start, length: length)).utf16)
+    let length = min(text.lineEnd(row) - start, limit + 2)
+    var units = text.units(in: NSRange(location: start, length: length))
     if units.count < limit + 2 {
       if units.last == 0x0A { units.removeLast() }
       if units.last == 0x0D { units.removeLast() }
