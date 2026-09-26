@@ -6,8 +6,9 @@ import OrbeEditorCore
 /// （行数・viewport・選択・ハンク・役割の区間・インデント単位）。「何をどこに描くか」は Core の純関数（`MinimapLayout` /
 /// `MinimapLine`）で、ここは面の座標とデバイス px に写すだけ。
 ///
-/// 字はチャンクの画像で覚え（`MinimapChunks`）、最初から構文の色で組む（役割は文書の役割の並びを引くだけ）。帯を掴んで
-/// ドラッグすると本文が追従し、帯の外を押すとその行が本文の中央に来る。
+/// 字はチャンクの画像で覚え（`MinimapChunks`）、役割は文書の役割の並びを引くだけで組む（役割がまだ揃っていない区間は素の
+/// 文字色で、役割が届けばそのチャンクを捨てて描き直す）。帯を掴んでドラッグすると本文が追従し、帯の外を押すとその行が本文の
+/// 中央に来る。
 final class EditorMinimapView: NSView {
   let style: MinimapStyle
   private(set) weak var document: EditorDocument?

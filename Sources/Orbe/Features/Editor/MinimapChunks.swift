@@ -1,8 +1,8 @@
 import AppKit
 import OrbeEditorCore
 
-/// ミニマップの字——64 行のチャンクごとに、字形を構文の色で合成した画像を覚えて返す（役割は文書の役割の並びから引くだけ
-/// なので、新しく見えたチャンクも最初から色付きで組む）。窓に新しく入ったチャンクだけ組み、本文が変われば編集の行の
+/// ミニマップの字——64 行のチャンクごとに、字形を構文の色で合成した画像を覚えて返す（役割は文書の役割の並びを引くだけで、
+/// 新しく見えたチャンクもその時点の役割の色で組む。役割がまだ揃っていない区間は素の文字色）。窓に新しく入ったチャンクだけ組み、本文が変われば編集の行の
 /// チャンクを、裏から役割が届けば役割が変わった区間のチャンクを捨て、行が増減したときだけ編集の行より後ろも捨てる（1MB の
 /// 文書で打鍵ごとに窓ぶんを組み直さない）。覚える数には上限があり、超えたら最も長く使っていないものから捨てる（文書を端から
 /// 端まで通しても、ファイルの大きさに比例して画像が溜まらない）。倍率・外観・幅・インデント単位が変われば全部捨てる。
@@ -70,7 +70,8 @@ final class MinimapChunks {
   }
 
   private func drop(covering range: NSRange, text: TextRope) {
-    for chunk in Range(text.rows(of: range)).map({ $0 / Self.lines }) {
+    let rows = text.rows(of: range)
+    for chunk in (rows.lowerBound / Self.lines)...(rows.upperBound / Self.lines) {
       images[chunk] = nil
     }
   }
@@ -121,7 +122,7 @@ final class MinimapChunks {
     var roleIndex = 0
     for row in rows {
       let lineStart = text.lineStart(row)
-      var end = min(text.lineEnd(row), start + units.count) - start
+      var end = text.lineEnd(row) - start
       let from = lineStart - start
       if end > from, units[end - 1] == 0x0A { end -= 1 }
       if end > from, units[end - 1] == 0x0D { end -= 1 }
