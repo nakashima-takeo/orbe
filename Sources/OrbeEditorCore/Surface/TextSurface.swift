@@ -1,9 +1,9 @@
 import AppKit
 
-/// 文字を描き編集を受ける面の、エンジン非依存の契約。本文・undo・選択・スクロールの正は面にあるが、契約に本文を読む口は
-/// 無い——面は編集の通知で置換後の文字列を渡し、本文を読むのは文書の写し（ロープ）だけ。文書は面の delegate として編集を
-/// 受け、面に問われた区間の役割を答え、役割が変わった区間を知らせる（面は見えている範囲の色だけを持ち、役割→色だけを
-/// 知る）。
+/// 文字を描き編集を受ける面の、エンジン非依存の契約。undo・選択・スクロールの正は面にある。契約に面の本文を読む口は
+/// 無い——面は編集の通知で置換後の文字列を渡し、Orbe の中で本文を読むのは文書の写し（ロープ）だけ。文書は面の delegate
+/// として編集を受け、面に問われた区間の役割を答え、役割が変わった区間を知らせる（面は見えている範囲の色だけを持ち、
+/// 役割→色だけを知る）。本文を自分で持たない面は、文書の写し（`surfaceContent`）を引いて描く。
 @MainActor
 public protocol TextSurface: AnyObject {
   /// 器へ載せる view（スクロールを含む全体）。面の外（俯瞰など）で起きたホイールの出来事をこの view の `scrollWheel`
@@ -81,6 +81,24 @@ public protocol TextSurfaceDelegate: AnyObject {
   /// 行の区間——行頭から次の行頭まで（最終行は本文の終わりまで）。面は行頭が行の先頭と一致する段落にだけ番号を描き、
   /// 行番号の列で選ぶ行もこれで決める。
   func surface(_ surface: any TextSurface, rangeOfLine line: Int) -> NSRange
+  /// 文書の写し（本文・役割の並び・版）。本文を持たない面が、結ばれたとき・`rolesDidChange` と `setLineMarks` を
+  /// 受けたとき・自分が出した編集の通知から戻ったときに引いて描く。文書はどの知らせも自分の写しを更新した後に出すので、
+  /// 引いた写しは知らせと同じ版。
+  func surfaceContent(_ surface: any TextSurface) -> SurfaceContent
+}
+
+/// 文書の写し——本文のロープ・役割の並び・版の組。値として写すのは O(1) で、変わらないので、描画のスレッドがロックも
+/// 複写も無しで読める。
+public struct SurfaceContent: Sendable {
+  public let text: TextRope
+  public let roles: RoleRuns
+  public let version: Int
+
+  public init(text: TextRope, roles: RoleRuns, version: Int) {
+    self.text = text
+    self.roles = roles
+    self.version = version
+  }
 }
 
 /// 強調の地の種類。重ね順は下から 選択文字列の出現 → 語の出現 → 検索の一致 → 現在の一致（現在の一致の行全体の地は

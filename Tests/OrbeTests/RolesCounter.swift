@@ -30,4 +30,7 @@ final class RolesCounter: TextSurfaceDelegate {
   func surface(_ surface: any TextSurface, rangeOfLine line: Int) -> NSRange {
     inner.surface(surface, rangeOfLine: line)
   }
+  func surfaceContent(_ surface: any TextSurface) -> SurfaceContent {
+    inner.surfaceContent(surface)
+  }
 }

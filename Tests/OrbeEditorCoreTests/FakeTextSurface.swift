@@ -40,11 +40,25 @@ final class FakeTextSurface: TextSurface {
     return delegate?.surface(self, rolesIn: NSRange(location: 0, length: length)) ?? []
   }
 
-  func rolesDidChange(_ ranges: IndexSet) { changedRoles.append(ranges) }
+  /// 知らせ（役割の変化・行の印）を受けたときに引いた写しと、そのときの面の本文。
+  private(set) var pulled: [(content: SurfaceContent, surfaceText: String)] = []
+
+  private func pull() {
+    guard let delegate else { return }
+    pulled.append((delegate.surfaceContent(self), text))
+  }
+
+  func rolesDidChange(_ ranges: IndexSet) {
+    changedRoles.append(ranges)
+    pull()
+  }
 
   func markUndoBoundary() { undoBoundaries += 1 }
 
-  func setLineMarks(_ spans: LineMarkSpans) { lineMarks = spans }
+  func setLineMarks(_ spans: LineMarkSpans) {
+    lineMarks = spans
+    pull()
+  }
 
   func scrollToCenter(_ offset: Int) {}
 

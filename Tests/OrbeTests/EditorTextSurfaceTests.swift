@@ -201,6 +201,9 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     func surface(_ surface: any TextSurface, rangeOfLine line: Int) -> NSRange {
       inner.surface(surface, rangeOfLine: line)
     }
+    func surfaceContent(_ surface: any TextSurface) -> SurfaceContent {
+      inner.surfaceContent(surface)
+    }
   }
 
   /// 面は器の上端の余白を除いた高さに収まり、器の大きさが変わっても収まり続ける（余白の分だけ長いと
