@@ -187,6 +187,22 @@ struct GitHubBranchPR: Decodable, Equatable {
   }
 }
 
+extension GitHubBranchPR {
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.init(
+      number: try container.decode(Int.self, forKey: .number),
+      headRefName: try container.decode(String.self, forKey: .headRefName),
+      state: try container.decode(String.self, forKey: .state),
+      baseRefName: try container.decode(String.self, forKey: .baseRefName),
+      headRepository: try PullRequestHeadRepository(from: decoder).name)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case number, headRefName, state, baseRefName
+  }
+}
+
 /// open PR 一覧（GraphQL `pullRequests`）の 1 PR。
 struct GitHubPullRequest: Decodable, Equatable, GitHubNumbered {
   let number: Int
@@ -201,22 +217,6 @@ struct GitHubPullRequest: Decodable, Equatable, GitHubNumbered {
   /// 等しくならない。
   var head: GitHubBranchRef? {
     headRepository.map { GitHubBranchRef(repo: $0, branch: headRefName) }
-  }
-}
-
-extension GitHubBranchPR {
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    self.init(
-      number: try container.decode(Int.self, forKey: .number),
-      headRefName: try container.decode(String.self, forKey: .headRefName),
-      state: try container.decode(String.self, forKey: .state),
-      baseRefName: try container.decode(String.self, forKey: .baseRefName),
-      headRepository: try PullRequestHeadRepository(from: decoder).name)
-  }
-
-  private enum CodingKeys: String, CodingKey {
-    case number, headRefName, state, baseRefName
   }
 }
 
