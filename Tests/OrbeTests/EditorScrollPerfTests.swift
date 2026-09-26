@@ -26,7 +26,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
     for (label, bytes) in [("64KB", 64_000), ("1MB", 1_000_000), ("8MB", 8_000_000)] {
       let text = Self.swiftSource(bytes: bytes)
       for tracked in [false, true] {
-        let opened = try open(text)
+        let opened = try openEditor(text)
         if tracked {
           opened.document.baseline = text
           XCTAssertTrue(opened.document.waitUntilCaughtUp(timeout: 60))
@@ -34,7 +34,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
         let timer = EditTimer(inner: opened.document)
         opened.document.surface.delegate = timer
         _ = type(into: opened)
-        report(
+        reportPerf(
           label, tracked ? "typing-main (baseline あり)" : "typing-main", timer.times, digits: 3)
         opened.document.surface.delegate = opened.document
         opened.window.orderOut(nil)
@@ -47,19 +47,19 @@ final class EditorScrollPerfTests: OrbeTestCase {
   /// 打鍵も参考に出す（TextKit が段落を覚えるので、開いたばかりの文書より重い）。
   private func run(label: String, bytes: Int) throws {
     let text = Self.swiftSource(bytes: bytes)
-    let dragged = try open(text)
+    let dragged = try openEditor(text)
     print(
       "PERF", label, "env", ProcessInfo.processInfo.environment.count, "lines",
       dragged.document.text.lineCount, "bytes", dragged.document.text.length)
     drag(label, "fast-drag", dragged)
-    report(label, "typing-after-drag (参考)", type(into: dragged))
+    reportPerf(label, "typing-after-drag (参考)", type(into: dragged))
     dragged.window.orderOut(nil)
 
-    let typed = try open(text)
-    report(label, "typing", type(into: typed))
+    let typed = try openEditor(text)
+    reportPerf(label, "typing", type(into: typed))
     let recolored = recolor(into: typed)
-    report(label, "typing-recolor", recolored.redraw)
-    report(label, "typing-catch-up (参考)", recolored.catchUp)
+    reportPerf(label, "typing-recolor", recolored.redraw)
+    reportPerf(label, "typing-catch-up (参考)", recolored.catchUp)
     let clip = try XCTUnwrap(typed.document.surface.responder.enclosingScrollView).contentView
     let times = (0..<60).map { _ in
       frame(typed.pane) {
@@ -67,38 +67,14 @@ final class EditorScrollPerfTests: OrbeTestCase {
         clip.enclosingScrollView?.reflectScrolledClipView(clip)
       }
     }
-    report(label, "wheel", times)
+    reportPerf(label, "wheel", times)
     drag(label, "fast-drag-after-typing", typed)
-    report(label, "scrollbar-draw (一致の多い検索)", scrollbarDraws(typed))
+    reportPerf(label, "scrollbar-draw (一致の多い検索)", scrollbarDraws(typed))
     typed.window.orderOut(nil)
   }
 
-  private struct Opened {
-    let tab: TerminalTab
-    let pane: EditorPaneView
-    let window: NSWindow
-    let document: EditorDocument
-  }
-
-  private func open(_ text: String) throws -> Opened {
-    let queries = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
-    let tab = TerminalTab(
-      cwd: try XCTUnwrap(TestIsolation.caseDir).path,
-      editorSurfaces: EditorSurfaces(queriesRoot: queries))
-    let pane = tab.view.editor
-    let window = hostEditor(tab, width: 1200, height: 800)
-    window.appearance = NSAppearance(named: .darkAqua)
-    let document = try tab.editor.open(try caseFile("big-\(UUID().uuidString).swift", text))
-    pane.layoutSubtreeIfNeeded()
-    pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "本文が layout される")
-    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))
-    window.makeFirstResponder(document.surface.responder)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-    return Opened(tab: tab, pane: pane, window: window, document: document)
-  }
-
   /// 速いドラッグを 3 回。
-  private func drag(_ label: String, _ name: String, _ opened: Opened) {
+  private func drag(_ label: String, _ name: String, _ opened: OpenedEditor) {
     let rounds = (1...3).map { _ in fastDrag(opened.pane, opened.document) }
     print(
       "PERF", label, name, "updates/s min", String(format: "%.1f", rounds.min() ?? 0), "rounds",
@@ -106,7 +82,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
   }
 
   /// 1/3 の位置の行に 30 字打つ。1 字ごとの時間（ms）。
-  private func type(into opened: Opened) -> [Double] {
+  private func type(into opened: OpenedEditor) -> [Double] {
     let document = opened.document
     let middle = document.text.lineCount / 3
     document.scroll(toFirstLine: CGFloat(middle))
@@ -126,7 +102,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
 
   /// 打鍵の後、裏から役割が届いてから行う描き直し（1 字ごと、ms）——打鍵のコマとは別に main に載る仕事。役割が変わらない
   /// 打鍵では描き直すものが無い。参考に、打鍵から裏の仕事（文書全体の役割）が追いつくまでの時間も返す。
-  private func recolor(into opened: Opened) -> (redraw: [Double], catchUp: [Double]) {
+  private func recolor(into opened: OpenedEditor) -> (redraw: [Double], catchUp: [Double]) {
     let document = opened.document
     document.surface.selectedRange = NSRange(
       location: document.text.lineStart(document.text.lineCount / 3 + 7) + 4, length: 0)
@@ -147,7 +123,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
 
   /// 一致の多い検索（1MB で上限の 19,999 件、200KB で約 1.5 万件）を開いたまま、スクロールバーを 30 回描き直す（1 回ごと、
   /// ms）。
-  private func scrollbarDraws(_ opened: Opened) -> [Double] {
+  private func scrollbarDraws(_ opened: OpenedEditor) -> [Double] {
     let pane = opened.pane
     pane.showSearch()
     pane.search.setNeedle("e")
@@ -198,17 +174,6 @@ final class EditorScrollPerfTests: OrbeTestCase {
     return Date().timeIntervalSince(began) * 1000
   }
 
-  /// 中央値・p95・最大（ms。`digits` は小数の桁数）。
-  private func report(_ label: String, _ name: String, _ times: [Double], digits: Int = 1) {
-    let sorted = times.sorted()
-    let median = sorted[sorted.count / 2]
-    let p95 = sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))]
-    let format = "%.\(digits)f"
-    print(
-      "PERF", label, name, "median", String(format: format, median), "p95",
-      String(format: format, p95), "max", String(format: format, sorted.last ?? 0))
-  }
-
   /// `bytes` を超えるまで同じ形の宣言を連ねた Swift の本文（1MB で 43,261 行）。
   static func swiftSource(bytes: Int) -> String {
     let unit = """
@@ -229,6 +194,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
     }
     return text
   }
+
 }
 
 /// 編集の通知を文書へ流し、その呼び出しが戻るまでの時間（ms）を記録する delegate。

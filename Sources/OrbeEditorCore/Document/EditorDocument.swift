@@ -196,7 +196,8 @@ public final class EditorDocument {
     syntax == nil || (syntaxState.version == version && syntaxState.visibleReady)
   }
 
-  private var isCaughtUp: Bool {
+  /// 受け取った結果で、裏の仕事がすべて今の版に追いついている（待たず、裏を急かさない）。
+  var isCaughtUp: Bool {
     (syntax == nil || (syntaxState.version == version && syntaxState.complete))
       && pendingHunks == nil && pendingRanges.isEmpty
   }
