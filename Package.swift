@@ -62,8 +62,9 @@ let package = Package(
         .unsafeFlags(["-O"], .when(configuration: .debug)),
       ]
     ),
-    // コードエディターの中核（文書・行索引・言語・tree-sitter の色付け・テキスト面の契約）。
+    // コードエディターの中核（文書と本文の写し・言語・tree-sitter の色付け・裏の仕事・テキスト面の契約）。
     // テキストエンジン（STTextView）も Theme / L10n も知らない——境界は target 依存でコンパイラが保証する。
+    // main と裏の仕事の間で本文や結果を渡すので Swift 6 の言語モードで検査する（取り違えがコンパイルエラーで止まる）。
     .target(
       name: "OrbeEditorCore",
       dependencies: [
@@ -84,7 +85,7 @@ let package = Package(
         .product(name: "TreeSitterPython", package: "tree-sitter-python"),
         .product(name: "TreeSitterYAML", package: "tree-sitter-yaml"),
       ],
-      swiftSettings: [.swiftLanguageMode(.v5)]
+      swiftSettings: [.swiftLanguageMode(.v6)]
     ),
     // テキスト面（`TextSurface`）の STTextView 実装。公開は面を作る 1 関数だけで、エンジンの型は外に出さない。
     // エンジンの移行はこの target の差し替え。

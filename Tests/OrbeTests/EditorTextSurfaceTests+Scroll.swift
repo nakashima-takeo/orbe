@@ -49,10 +49,10 @@ final class EditorTextSurfaceScrollTests: OrbeTestCase {
   func testTheLastLineCanBeScrolledToTheTopAndNoFurther() throws {
     let opened = try open(lines(100))
     let document = opened.document
-    let last = document.lineIndex.lineCount - 1
+    let last = document.text.lineCount - 1
     XCTAssertEqual(last, 100, "前提: 末尾の改行の後の空行も行")
     document.scroll(toFirstLine: CGFloat(last))
-    XCTAssertEqual(document.surface.viewport.firstVisible, document.lineIndex.length, "末尾の空行が最上段")
+    XCTAssertEqual(document.surface.viewport.firstVisible, document.text.length, "末尾の空行が最上段")
     XCTAssertEqual(document.surface.viewport.hiddenFraction, 0)
 
     let clip = opened.scroll.contentView
@@ -75,7 +75,7 @@ final class EditorTextSurfaceScrollTests: OrbeTestCase {
     hit.mouseDown(with: .mouse(.leftMouseDown, at: below, in: opened.window))
     hit.mouseUp(with: .mouse(.leftMouseUp, at: below, in: opened.window))
     XCTAssertEqual(
-      document.surface.selectedRange, NSRange(location: document.lineIndex.length, length: 0))
+      document.surface.selectedRange, NSRange(location: document.text.length, length: 0))
   }
 
   /// 「この行をこの割合だけ隠して先頭に」は viewport の逆——遠くへ飛んでも狙った行に落ち着き、後の layout で動かない。
@@ -139,7 +139,7 @@ final class EditorTextSurfaceScrollTests: OrbeTestCase {
     let opened = try open(lines(100))
     let document = opened.document
     document.surface.responder.perform(#selector(NSResponder.scrollToEndOfDocument(_:)), with: nil)
-    let expected = CGFloat(document.lineIndex.lineCount) - document.viewportLines.visible
+    let expected = CGFloat(document.text.lineCount) - document.viewportLines.visible
     pumpMain(until: { abs(self.first(document) - expected) < 0.05 }, "最終行は下端")
   }
 
@@ -174,7 +174,7 @@ final class EditorTextSurfaceScrollTests: OrbeTestCase {
     let opened = try open("abc\ndef\n")
     let document = opened.document
     document.surface.scroll(toTop: 8, hiddenFraction: 0)
-    XCTAssertEqual(document.surface.viewport.firstVisible, 8, "末尾の空行（行索引の最終行）が先頭")
+    XCTAssertEqual(document.surface.viewport.firstVisible, 8, "末尾の空行（文書の最終行）が先頭")
     document.surface.scroll(toTop: 4, hiddenFraction: 0.5)
     XCTAssertEqual(document.surface.viewport.firstVisible, 4)
     XCTAssertEqual(document.surface.viewport.hiddenFraction, 0.5, accuracy: 0.01)

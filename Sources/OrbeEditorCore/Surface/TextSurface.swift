@@ -1,8 +1,9 @@
 import AppKit
 
-/// 文字を描き編集を受ける面の、エンジン非依存の契約。本文・undo・選択・スクロールの正は常に面にある。
-/// 文書は面の delegate として編集を受け、面に問われた区間の役割を答える（面は見えている範囲の色だけを持ち、役割→色
-/// だけを知る）。
+/// 文字を描き編集を受ける面の、エンジン非依存の契約。本文・undo・選択・スクロールの正は面にあるが、契約に本文を読む口は
+/// 無い——面は編集の通知で置換後の文字列を渡し、本文を読むのは文書の写し（ロープ）だけ。文書は面の delegate として編集を
+/// 受け、面に問われた区間の役割を答え、役割が変わった区間を知らせる（面は見えている範囲の色だけを持ち、役割→色だけを
+/// 知る）。
 @MainActor
 public protocol TextSurface: AnyObject {
   /// 器へ載せる view（スクロールを含む全体）。面の外（俯瞰など）で起きたホイールの出来事をこの view の `scrollWheel`
@@ -11,9 +12,6 @@ public protocol TextSurface: AnyObject {
   /// first responder にする view。
   var responder: NSView { get }
 
-  var text: String { get }
-  func substring(in range: NSRange) -> String
-
   /// 見えている範囲を本文の言葉で（面の pt は出ない）。
   var viewport: TextViewport { get }
 
@@ -21,7 +19,7 @@ public protocol TextSurface: AnyObject {
   func scrollToCenter(_ offset: Int)
 
   /// `viewport` の逆——行頭オフセット `offset` の行を、その高さの `hiddenFraction`（0…1）ぶん上へ隠して先頭に置く。
-  /// スクロールできる範囲（最終行が最上段に来るまで）の端で止まる。横位置と選択は動かさない。行は `LineIndex` の行
+  /// スクロールできる範囲（最終行が最上段に来るまで）の端で止まる。横位置と選択は動かさない。行は文書の行
   /// （本文が改行で終わるときの末尾の空行を含む）。
   func scroll(toTop offset: Int, hiddenFraction: CGFloat)
 
@@ -47,10 +45,13 @@ public protocol TextSurface: AnyObject {
   func markUndoBoundary()
 
   /// 本文を丸ごと置き換える編集。通常の編集と同じく undo に載り、`didChange`（範囲 = 全体）を呼び出しから
-  /// 戻るまでに同期で 1 回通す（外部で書き換えられたファイルの差し替えが呼ぶ——行索引・構文木・ハンクが
+  /// 戻るまでに同期で 1 回通す（外部で書き換えられたファイルの差し替えが呼ぶ——文書の写し・構文・ハンクが
   /// 打鍵と同じ経路で追従する）。変換中の IME セッションは置き換える前に畳む（その取り消しの `didChange`
   /// が 1 回先に通る）。置き換え後の選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。
   func replaceAll(with text: String)
+
+  /// 役割が変わった（裏から届いた役割で）。面は見えている行のうち区間に掛かる行を塗り直す。
+  func rolesDidChange(_ ranges: IndexSet)
 
   /// 行の印（git ガター）。文書がハンクから作って押す（UTF-16 オフセット）。面は描くだけで規則を持たない。
   func setLineMarks(_ spans: LineMarkSpans)
@@ -63,15 +64,17 @@ public protocol TextSurface: AnyObject {
 
 @MainActor
 public protocol TextSurfaceDelegate: AnyObject {
+  /// 本文が変わった（置換後の文字列つき）。面の本文のすべての変更がここを 1 回ずつ通る。
   func surface(_ surface: any TextSurface, didChange edit: TextEdit)
   func surface(_ surface: any TextSurface, focusDidChange focused: Bool)
   /// `viewport` が変わった（スクロール・窓の高さ）。
   func surfaceDidChangeViewport(_ surface: any TextSurface)
   func surfaceDidChangeSelection(_ surface: any TextSurface)
   /// `range` の中の役割の区間（重ならない昇順で、`range` の中に閉じる。役割の無い字は含まない）。面は見えている
-  /// 範囲の色をこれで引く——`didChange` から戻った後は編集の後の役割を答える。
+  /// 範囲の色をこれで引く——`didChange` から戻った後は、編集に合わせてずらした役割を答える（裏の結果が届けば
+  /// `rolesDidChange` が来る）。
   func surface(_ surface: any TextSurface, rolesIn range: NSRange) -> [HighlightSpan]
-  /// 行（`LineIndex` の行。本文が改行で終わるときの末尾の空行を含む）の数。面は行番号の列の桁をこれで決める。
+  /// 行（`\n` で割った行。本文が改行で終わるときの末尾の空行を含む）の数。面は行番号の列の桁をこれで決める。
   func surfaceLineCount(_ surface: any TextSurface) -> Int
   /// オフセットを含む行（0 始まり）。
   func surface(_ surface: any TextSurface, lineContaining offset: Int) -> Int
@@ -89,7 +92,7 @@ public enum TextHighlightKind: Sendable {
   case currentFindMatch
 }
 
-/// 見えている範囲を本文の言葉で表したもの。`firstVisible` は先頭に見えている行（`LineIndex` の行）の行頭オフセット、
+/// 見えている範囲を本文の言葉で表したもの。`firstVisible` は先頭に見えている行（文書の行）の行頭オフセット、
 /// `hiddenFraction` はその行が上へ隠れている割合（0…1）、`visibleLines` は可視矩形に入る行数（小数）、`clipsRight` は
 /// 本文が右にまだ続く（横に隠れている部分がある）か。`hiddenColumns` は左へ隠れている幅、`visibleColumns` は本文の
 /// 見えている幅で、どちらも半角の桁数（小数）。エンジンの推定の文書高に依らず、実際に layout された行の矩形から出る。

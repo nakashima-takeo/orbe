@@ -1,8 +1,8 @@
 import AppKit
 import OrbeEditorCore
 
-/// 文字列を持つだけのテキスト面。`replace` が編集を delegate へ流す。色は全文を見えているものとして、そのつど delegate
-/// に問い合わせる。
+/// 文字列を持つだけのテキスト面。`replace` が編集を delegate へ流す。色は全文を見えているものとして、文書の裏の仕事が
+/// 追いつくのを待ってから delegate に問い合わせる。
 @MainActor
 final class FakeTextSurface: TextSurface {
   let view = NSView()
@@ -27,14 +27,20 @@ final class FakeTextSurface: TextSurface {
     storage = NSMutableString(string: text)
   }
 
+  /// 面の本文（契約の外。テストが文書の写しと比べる）。
   var text: String { storage as String }
   var length: Int { storage.length }
   func substring(in range: NSRange) -> String { storage.substring(with: range) }
+  /// 文書から届いた「役割が変わった」の区間。
+  private(set) var changedRoles: [IndexSet] = []
 
-  /// 全文の役割の区間（delegate に問い合わせる）。
+  /// 全文の役割の区間（文書の裏の仕事が追いついてから delegate に問い合わせる）。
   var highlights: [HighlightSpan] {
-    delegate?.surface(self, rolesIn: NSRange(location: 0, length: length)) ?? []
+    (delegate as? EditorDocument)?.waitUntilCaughtUp()
+    return delegate?.surface(self, rolesIn: NSRange(location: 0, length: length)) ?? []
   }
+
+  func rolesDidChange(_ ranges: IndexSet) { changedRoles.append(ranges) }
 
   func markUndoBoundary() { undoBoundaries += 1 }
 
@@ -62,9 +68,7 @@ final class FakeTextSurface: TextSurface {
   /// 編集を起こす（人の打鍵に相当）。
   func replace(_ range: NSRange, with replacement: String) {
     storage.replaceCharacters(in: range, with: replacement)
-    delegate?.surface(
-      self,
-      didChange: TextEdit(range: range, replacementLength: (replacement as NSString).length))
+    delegate?.surface(self, didChange: TextEdit(range: range, replacement: replacement))
   }
 
   func focus(_ focused: Bool) {

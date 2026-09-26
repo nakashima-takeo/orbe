@@ -143,12 +143,3 @@ public struct OverviewDecorations: Equatable, Sendable {
     findMatches.count > OverviewRuler.approximateFindMatchCount
   }
 }
-
-extension LineIndex {
-  /// 区間の行（0 始まり・両端を含む）。空の区間はその位置の行 1 つ。
-  public func rows(of range: NSRange) -> ClosedRange<Int> {
-    let first = point(at: range.location).row
-    let last = range.length > 0 ? point(at: NSMaxRange(range) - 1).row : first
-    return first...max(first, last)
-  }
-}

@@ -5,25 +5,29 @@ import XCTest
 
 /// 装備の規則——インデント単位の検出・段の数と境・見せる空白・行の URL。壊れるとインデント線が違う桁に立つ、
 /// 単語間の 1 個のスペースに点が出る、URL の末尾の句読点までブラウザへ渡る。
+@MainActor
 final class DecorTests: XCTestCase {
   // MARK: - インデント単位
 
   func testIndentUnitIsTheMostFrequentNeighbourDifference() {
-    XCTAssertEqual(IndentUnit.detect(in: "a\n  b\n    c\n  d\ne\n"), 2)
-    XCTAssertEqual(IndentUnit.detect(in: "a\n    b\n        c\n    d\n"), 4)
-    XCTAssertEqual(IndentUnit.detect(in: "a\n        b\na\n        b\n"), 8)
-    XCTAssertEqual(IndentUnit.detect(in: "flat\nflat\n"), 4, "候補が無ければ 4")
-    XCTAssertEqual(IndentUnit.detect(in: ""), 4)
-    XCTAssertEqual(IndentUnit.detect(in: "a\n   b\n      c\n"), 4, "3 の段は候補に無い")
+    XCTAssertEqual(IndentUnit.detect(in: "a\n  b\n    c\n  d\ne\n".utf16), 2)
+    XCTAssertEqual(IndentUnit.detect(in: "a\n    b\n        c\n    d\n".utf16), 4)
+    XCTAssertEqual(IndentUnit.detect(in: "a\n        b\na\n        b\n".utf16), 8)
+    XCTAssertEqual(IndentUnit.detect(in: "flat\nflat\n".utf16), 4, "候補が無ければ 4")
+    XCTAssertEqual(IndentUnit.detect(in: "".utf16), 4)
+    XCTAssertEqual(IndentUnit.detect(in: "a\n   b\n      c\n".utf16), 4, "3 の段は候補に無い")
   }
 
   /// 同数は小さい方。空行・空白だけの行は隣として数えず（飛ばして前後の非空行が対になる）、タブの行は
   /// その前後の非空行の対も切る。
   func testIndentUnitTiesPreferTheSmallerAndSkipBlankAndTabLines() {
-    XCTAssertEqual(IndentUnit.detect(in: "a\n  b\n      c\n"), 2, "2 と 4 が 1 回ずつなら 2")
-    XCTAssertEqual(IndentUnit.detect(in: "      a\n\n    b\n"), 2, "空行を飛ばして 6 と 4 が対（飛ばさなければ 4）")
-    XCTAssertEqual(IndentUnit.detect(in: "  a\n    \n  b\n"), 4, "空白だけの行は隣でない（数えれば 2）")
-    XCTAssertEqual(IndentUnit.detect(in: "a\n\tb\n  c\n"), 4, "タブの行は前後の対を切る（切らなければ 2）")
+    XCTAssertEqual(IndentUnit.detect(in: "a\n  b\n      c\n".utf16), 2, "2 と 4 が 1 回ずつなら 2")
+    XCTAssertEqual(
+      IndentUnit.detect(in: "      a\n\n    b\n".utf16), 2, "空行を飛ばして 6 と 4 が対（飛ばさなければ 4）")
+    XCTAssertEqual(IndentUnit.detect(in: "  a\n    \n  b\n".utf16), 4, "空白だけの行は隣でない（数えれば 2）")
+    XCTAssertEqual(
+      IndentUnit.detect(in: "  a\r\n    \r\n  b\r\n".utf16), 4, "CRLF の空白だけの行も隣でない（数えれば 2）")
+    XCTAssertEqual(IndentUnit.detect(in: "a\n\tb\n  c\n".utf16), 4, "タブの行は前後の対を切る（切らなければ 2）")
   }
 
   // MARK: - 段

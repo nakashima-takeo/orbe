@@ -16,7 +16,7 @@ final class EditorScrollbarTests: OrbeTestCase {
     let bar = hosted.pane.scrollbar
     let (first, visible) = hosted.document.viewportLines
     let expected = ScrollbarGeometry(
-      lineCount: hosted.document.lineIndex.lineCount, firstLine: first, visibleLines: visible,
+      lineCount: hosted.document.text.lineCount, firstLine: first, visibleLines: visible,
       height: bar.bounds.height)
     XCTAssertEqual(bar.geometry, expected)
     XCTAssertEqual(expected.sliderLength, 20, "長い文書では最小の長さ")
@@ -109,7 +109,7 @@ final class EditorScrollbarTests: OrbeTestCase {
     }
     hosted.window.makeFirstResponder(document.surface.responder)
     document.surface.selectedRange = NSRange(
-      location: document.lineIndex.start(ofRow: 3), length: 0)
+      location: document.text.lineStart(3), length: 0)
     try shows("改行") { document.surface.responder.keyDown(with: .key("\n", [])) }
     try shows("横スクロール") {
       let clip = hosted.scroll.contentView
@@ -174,12 +174,12 @@ final class EditorScrollbarTests: OrbeTestCase {
       .replacingOccurrences(of: "line 150\n", with: "line 150\nline gone\n")
     pumpMain(until: { hosted.document.hunks.count == 3 }, "ハンク")
     hosted.document.surface.selectedRange = NSRange(
-      location: hosted.document.lineIndex.start(ofRow: 120), length: 0)
+      location: hosted.document.text.lineStart(120), length: 0)
     let bar = hosted.pane.scrollbar
     let (_, visible) = hosted.document.viewportLines
     let scale = hosted.window.backingScaleFactor
     let ruler = OverviewRuler(
-      lineCount: hosted.document.lineIndex.lineCount, visibleLines: visible,
+      lineCount: hosted.document.text.lineCount, visibleLines: visible,
       height: bar.bounds.height, scale: scale)
     func y(_ row: Int) -> CGFloat {
       let span = ruler.spans([row...row])[0]
@@ -201,11 +201,11 @@ final class EditorScrollbarTests: OrbeTestCase {
   func testTheCaretMarkFollowsTheMovingEndOfTheSelection() throws {
     let hosted = try hostOverview(numberedLines(200))
     let document = hosted.document
-    let index = document.lineIndex
+    let rope = document.text
     let bar = hosted.pane.scrollbar
     let scale = hosted.window.backingScaleFactor
     let ruler = OverviewRuler(
-      lineCount: index.lineCount, visibleLines: document.viewportLines.visible,
+      lineCount: rope.lineCount, visibleLines: document.viewportLines.visible,
       height: bar.bounds.height, scale: scale)
     func marked(_ row: Int) throws -> Bool {
       let span = ruler.caret(row: row)
@@ -213,16 +213,16 @@ final class EditorScrollbarTests: OrbeTestCase {
         > 0.5
     }
     document.surface.selectedRange = NSRange(
-      location: index.start(ofRow: 60), length: index.start(ofRow: 140) - index.start(ofRow: 60))
+      location: rope.lineStart(60), length: rope.lineStart(140) - rope.lineStart(60))
     XCTAssertTrue(try marked(140), "後ろへ伸ばした選択は終わりの行")
     XCTAssertFalse(try marked(60))
 
-    document.surface.selectedRange = NSRange(location: index.start(ofRow: 140), length: 0)
+    document.surface.selectedRange = NSRange(location: rope.lineStart(140), length: 0)
     for _ in 0..<80 {
       document.surface.responder.doCommand(
         by: #selector(NSStandardKeyBindingResponding.moveUpAndModifySelection(_:)))
     }
-    XCTAssertEqual(document.surface.selectedRange.location, index.start(ofRow: 60), "前提")
+    XCTAssertEqual(document.surface.selectedRange.location, rope.lineStart(60), "前提")
     XCTAssertTrue(try marked(60), "前へ伸ばした選択は先頭の行")
     XCTAssertFalse(try marked(140))
   }
@@ -234,6 +234,7 @@ final class EditorScrollbarTests: OrbeTestCase {
     let pane = hosted.pane
     pane.showSearch()
     pane.search.setNeedle("needle")
+    catchUp(hosted.document)
     // キャレットの印とつまみを一致の印から離す（つまみは印の上に重なる）。
     hosted.document.surface.selectedRange = NSRange(location: 0, length: 0)
     hosted.document.scroll(toFirstLine: 0)
@@ -241,7 +242,7 @@ final class EditorScrollbarTests: OrbeTestCase {
     let (_, visible) = hosted.document.viewportLines
     let scale = hosted.window.backingScaleFactor
     let ruler = OverviewRuler(
-      lineCount: hosted.document.lineIndex.lineCount, visibleLines: visible,
+      lineCount: hosted.document.text.lineCount, visibleLines: visible,
       height: bar.bounds.height, scale: scale)
     let span = ruler.spans([150...150])[0]
     let center = OverviewRuler.lane(.center, width: 14, scale: scale)

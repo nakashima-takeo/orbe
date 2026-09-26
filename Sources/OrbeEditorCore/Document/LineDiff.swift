@@ -23,9 +23,12 @@ public enum LineDiff {
   /// 残り全体を 1 つの変更区間にする（Myers は差分の大きさに二乗で効くため、上限で時間を有界にする）。
   public static let maximumComparedLines = 1_000
 
-  public static func hunks(base: String, current: String) -> [LineHunk] {
-    let old = lines(of: base)
-    let new = lines(of: current)
+  /// 本文の写しは、差分を取る間だけ連続した UTF-16 の列に写す（Myers が行を任意の順に引くため。取り終えたら手放す）。
+  public static func hunks(base: String, current: TextRope) -> [LineHunk] {
+    let baseUnits = ContiguousArray(base.utf16)
+    let currentUnits = current.contiguousUnits()
+    let old = lines(of: baseUnits)
+    let new = lines(of: currentUnits)
     let (prefix, suffix) = commonEnds(old, new)
     let oldRest = old[prefix..<(old.count - suffix)]
     let newRest = new[prefix..<(new.count - suffix)]
@@ -88,31 +91,27 @@ public enum LineDiff {
       newStart: newCount == 0 ? newStart : newStart + 1, newCount: newCount)
   }
 
-  /// 行の中身と、改行で終わっているか。最後の行だけ改行を欠きうる。行の同一性はバイト列——`String ==` の
+  /// 行の中身と、改行で終わっているか。最後の行だけ改行を欠きうる。行の同一性は UTF-16 の単位の列——`String ==` の
   /// 正準等価（NFC と NFD を同じとみなす）ではなく、git が違うと言う行をここも違うと言う。
   private struct Line: Equatable {
-    let body: Substring
+    let body: ArraySlice<UInt16>
     let terminated: Bool
 
     static func == (lhs: Line, rhs: Line) -> Bool {
-      lhs.terminated == rhs.terminated && lhs.body.utf8.elementsEqual(rhs.body.utf8)
+      lhs.terminated == rhs.terminated && lhs.body.elementsEqual(rhs.body)
     }
   }
 
-  private static func lines(of text: String) -> [Line] {
+  private static func lines(of units: ContiguousArray<UInt16>) -> [Line] {
     var result: [Line] = []
-    let utf8 = text.utf8
-    var start = utf8.startIndex
-    var index = utf8.startIndex
-    while index < utf8.endIndex {
-      let next = utf8.index(after: index)
-      if utf8[index] == 0x0A {
-        result.append(Line(body: text[start..<index], terminated: true))
-        start = next
-      }
-      index = next
+    var start = 0
+    for (index, unit) in units.enumerated() where unit == 0x0A {
+      result.append(Line(body: ArraySlice(units[start..<index]), terminated: true))
+      start = index + 1
     }
-    if start < utf8.endIndex { result.append(Line(body: text[start...], terminated: false)) }
+    if start < units.count {
+      result.append(Line(body: ArraySlice(units[start...]), terminated: false))
+    }
     return result
   }
 }

@@ -50,9 +50,9 @@ extension EditorPaneView {
   private func searchSeed(_ document: EditorDocument) -> String? {
     let selection = document.surface.selectedRange
     guard selection.length > 0 else {
-      return document.word(at: selection).map(document.surface.substring(in:))
+      return document.word(at: selection).map(document.text.substring)
     }
-    let seed = document.surface.substring(in: selection)
+    let seed = document.text.substring(selection)
     return seed.contains(where: \.isNewline) ? nil : seed
   }
 

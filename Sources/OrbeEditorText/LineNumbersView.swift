@@ -2,7 +2,7 @@ import AppKit
 import OrbeEditorCore
 import STTextView
 
-/// 行番号の列が行について問い合わせる先（面が文書へ取り次ぐ）。行は `LineIndex` の行。
+/// 行番号の列が行について問い合わせる先（面が文書へ取り次ぐ）。行は文書の行（`\n` で割った行）。
 @MainActor
 protocol LineSource: AnyObject {
   var lineCount: Int { get }
@@ -13,7 +13,7 @@ protocol LineSource: AnyObject {
 
 /// 行番号の列。本文の左に並び（スクロールビューの外）、見えている行の番号だけを描いて、その右の印の列に git の印
 /// （`LineMarksView`）を持つ。位置は実際の行片の矩形（`VisibleLines`）から取り、bounds の y は文書（text container）
-/// 基準——面が clip の上端に合わせて置き直すので、本文と同じコマで動く。番号は行索引の行の番号で、行頭が行索引の行頭で
+/// 基準——面が clip の上端に合わせて置き直すので、本文と同じコマで動く。番号は文書の行の番号で、行頭が文書の行頭で
 /// ない段落（単独の `\r` などで TextKit が割った段落）には描かない。
 ///
 /// 番号を押すとその行を選ぶ（VS Code の既定: 押した行を起点に、ドラッグで行単位に伸ばし、本文の上下の外と行番号の上では
@@ -87,7 +87,7 @@ final class LineNumbersView: NSView {
     }
   }
 
-  /// 行頭 `offset` の行の番号を、行片 `row` の縦の中央に揃えて描く（`cell` は番号が受け持つ段落の矩形）。行索引の
+  /// 行頭 `offset` の行の番号を、行片 `row` の縦の中央に揃えて描く（`cell` は番号が受け持つ段落の矩形）。文書の
   /// 行頭でなければ描かない。
   private func drawNumber(
     at offset: Int, row: CGRect, cell: CGRect, _ source: LineSource, _ context: CGContext

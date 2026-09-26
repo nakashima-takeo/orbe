@@ -143,15 +143,24 @@ final class STTextSurface: NSObject, TextSurface {
     layer.addSubview(highlightView, positioned: .above, relativeTo: selection)
   }
 
-  var text: String { textView.text ?? "" }
+  /// 本文の区間の UTF-16 の単位。上流が渡す置換後の文字列は Swift の文字列に写されてサロゲートの対の片割れを U+FFFD に
+  /// 化かすので、編集の中身は本文の記憶（`NSMutableString`。Swift の文字列を経ない）から読む。
+  private func units(in range: NSRange) -> ContiguousArray<UInt16> {
+    guard range.length > 0,
+      let storage = (textView.textContentManager as? NSTextContentStorage)?.textStorage?
+        .mutableString
+    else { return [] }
+    var units = ContiguousArray<UInt16>(repeating: 0, count: range.length)
+    units.withUnsafeMutableBufferPointer { storage.getCharacters($0.baseAddress!, range: range) }
+    return units
+  }
 
   private var length: Int {
     NSRange(textView.textContentManager.documentRange, in: textView.textContentManager).length
   }
 
-  func substring(in range: NSRange) -> String {
-    guard let textRange = NSTextRange(range, in: textView.textContentManager) else { return "" }
-    return textView.textContentManager.attributedString(in: textRange)?.string ?? ""
+  func rolesDidChange(_ ranges: IndexSet) {
+    colors.rolesDidChange(ranges)
   }
 
   private func roles(in range: NSRange) -> [HighlightSpan] {
@@ -337,7 +346,10 @@ extension STTextSurface: @preconcurrency STTextViewDelegate {
     replacementString: String
   ) {
     let range = NSRange(affectedCharRange, in: textView.textContentManager)
-    let edit = TextEdit(range: range, replacementLength: replacementString.utf16.count)
+    let edit = TextEdit(
+      range: range,
+      replacement: units(
+        in: NSRange(location: range.location, length: replacementString.utf16.count)))
     decorationView.needsDisplay = true
     highlightView.needsDisplay = true
     numbersView.needsDisplay = true

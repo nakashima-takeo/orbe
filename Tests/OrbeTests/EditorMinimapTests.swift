@@ -79,7 +79,7 @@ final class EditorMinimapTests: OrbeTestCase {
       "struct S {}\n", name: "c-\(UUID().uuidString).swift", colored: true)
     let view = hosted.pane.minimap
     pumpMain(
-      until: { !hosted.document.roleSpans(in: NSRange(location: 0, length: 6)).isEmpty }, "色付け")
+      until: { !hosted.document.roles.roles(in: NSRange(location: 0, length: 6)).isEmpty }, "色付け")
     view.needsDisplay = true
     let keyword = try ViewPixels(view).strongest(in: cell(view, row: 0, column: 1))
     XCTAssertTrue(Hue.blue(keyword), "struct は keyword の青: \(keyword)")
@@ -95,6 +95,7 @@ final class EditorMinimapTests: OrbeTestCase {
     let pane = hosted.pane
     pane.showSearch()
     pane.search.setNeedle("needle")
+    catchUp(hosted.document)
     XCTAssertEqual(pane.search.current, 0, "前提: 行 700 の一致が現在（選択の行には行の地を付けない）")
     let view = pane.minimap
     let layout = try XCTUnwrap(view.placement)
@@ -186,6 +187,7 @@ final class EditorMinimapTests: OrbeTestCase {
     let pane = hosted.pane
     pane.showSearch()
     pane.search.setNeedle("needle")
+    catchUp(hosted.document)
     XCTAssertEqual(pane.search.current, 0, "前提: 現在の一致（行 12）が選択され、行 20 は選択されていない")
     let view = pane.minimap
     let pixels = try ViewPixels(view)
@@ -205,18 +207,19 @@ final class EditorMinimapTests: OrbeTestCase {
     let pane = hosted.pane
     pane.showSearch()
     pane.search.setNeedle("a")
+    catchUp(hosted.document)
     XCTAssertGreaterThan(pane.search.matches.count, 1000)
     XCTAssertTrue(pane.minimap.decorations.approximatesFindMatches)
     hosted.document.surface.selectedRange = NSRange(
-      location: hosted.document.lineIndex.start(ofRow: 50) + 2, length: 1)
+      location: hosted.document.text.lineStart(50) + 2, length: 1)
     let current = try XCTUnwrap(pane.search.current)
-    let row = hosted.document.lineIndex.point(at: pane.search.matches[current].location).row
+    let row = hosted.document.text.row(containing: pane.search.matches[current].location)
     let view = pane.minimap
     let pixels = try ViewPixels(view)
     XCTAssertTrue(
       Hue.orange(pixels.color(view.bounds.width - 4, CGFloat(row + 5) * 2 + 1)) == false,
       "他の一致の行は出ない")
-    let column = pane.search.matches[current].location - hosted.document.lineIndex.start(ofRow: row)
+    let column = pane.search.matches[current].location - hosted.document.text.lineStart(row)
     let y = CGFloat(row) * 2 + 1
     let currentCell = pixels.color(gutter(view) + CGFloat(column) + 0.5, y)
     let otherCell = pixels.color(gutter(view) + CGFloat(column) + 4.5, y)
@@ -246,9 +249,9 @@ final class EditorMinimapTests: OrbeTestCase {
   /// 行を丸ごと選ぶと（改行まで）、その行に選択の行の地が付く（VS Code は範囲の終わりの行まで数える）。
   func testSelectingWholeLinesHighlightsTheirRows() throws {
     let hosted = try hostOverview(numberedLines(20))
-    let index = hosted.document.lineIndex
+    let rope = hosted.document.text
     hosted.document.surface.selectedRange = NSRange(
-      location: index.start(ofRow: 4), length: index.end(ofRow: 4) - index.start(ofRow: 4))
+      location: rope.lineStart(4), length: rope.lineEnd(4) - rope.lineStart(4))
     let view = hosted.pane.minimap
     let pixels = try ViewPixels(view)
     XCTAssertGreaterThan(pixels.color(view.bounds.width - 4, 4 * 2 + 1).alphaComponent, 0, "行 5 の地")
@@ -260,11 +263,11 @@ final class EditorMinimapTests: OrbeTestCase {
   /// `renderDecorationOnLine`）。終わりの行は選択の終わりまで。
   func testMultiLineSelectionFillsTheMiddleRowsUpToTheirEnds() throws {
     let hosted = try hostOverview(numberedLines(40))
-    let index = hosted.document.lineIndex
+    let rope = hosted.document.text
     let view = hosted.pane.minimap
-    let start = index.start(ofRow: 2) + 2
-    let end = index.start(ofRow: 30) + 3
-    XCTAssertGreaterThan(CGFloat(end - index.start(ofRow: 3)), view.bounds.width, "前提: 終わりは幅の外")
+    let start = rope.lineStart(2) + 2
+    let end = rope.lineStart(30) + 3
+    XCTAssertGreaterThan(CGFloat(end - rope.lineStart(3)), view.bounds.width, "前提: 終わりは幅の外")
     hosted.document.surface.selectedRange = NSRange(location: start, length: end - start)
     let pixels = try ViewPixels(view)
     func alpha(_ row: Int, _ column: CGFloat) -> CGFloat {

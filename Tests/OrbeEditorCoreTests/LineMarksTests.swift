@@ -16,9 +16,9 @@ final class LineMarksTests: XCTestCase {
   /// （各行 1 字＋改行の本文なので、n 行目の行頭は 2(n−1)）。
   func testKindsFollowTheHunkShape() {
     let text = (1...8).map { "\($0)\n" }.joined()
-    let index = LineIndex(text: text)
+    let rope = TextRope(text)
     let spans = LineMarks(hunks: [hunk(2, 0, 3, 2), hunk(6, 1, 6, 0), hunk(8, 1, 7, 1)])
-      .spans(in: index)
+      .spans(in: rope)
     XCTAssertEqual(
       spans.marks,
       [
@@ -26,15 +26,15 @@ final class LineMarksTests: XCTestCase {
         LineMarkSpans.Mark(range: NSRange(location: 12, length: 2), kind: .modified),
       ], "3〜4 行目が追加、7 行目が変更")
     XCTAssertEqual(spans.deletions, [12], "6 行目の下（7 行目の行頭）に削除")
-    XCTAssertTrue(LineMarks(hunks: []).spans(in: index).isEmpty)
+    XCTAssertTrue(LineMarks(hunks: []).spans(in: rope).isEmpty)
   }
 
   /// 面へ渡す区間は改行込みで、削除の境は次の行の行頭。末尾は本文の長さ（末尾の改行の有無で同じ）。
-  func testSpansMapLinesToOffsetsThroughTheLineIndex() {
+  func testSpansMapLinesToOffsetsThroughTheText() {
     let text = "a\nbb\nccc\n"
-    let index = LineIndex(text: text)
+    let rope = TextRope(text)
     let spans = LineMarks(hunks: [hunk(1, 0, 2, 1), hunk(2, 1, 3, 1), hunk(3, 1, 3, 0)])
-      .spans(in: index)
+      .spans(in: rope)
     XCTAssertEqual(
       spans.marks,
       [
@@ -45,17 +45,17 @@ final class LineMarksTests: XCTestCase {
 
     let unterminated = "a\nbb"
     let tail = LineMarks(hunks: [hunk(2, 1, 2, 1), hunk(2, 1, 2, 0)])
-      .spans(in: LineIndex(text: unterminated))
+      .spans(in: TextRope(unterminated))
     XCTAssertEqual(tail.marks.map(\.range), [NSRange(location: 2, length: 2)], "最後の行は本文の長さまで")
     XCTAssertEqual(tail.deletions, [4])
     XCTAssertEqual(
-      LineMarks(hunks: [hunk(1, 1, 0, 0)]).spans(in: index).deletions,
+      LineMarks(hunks: [hunk(1, 1, 0, 0)]).spans(in: rope).deletions,
       [0],
       "先頭の上は 0")
   }
 
-  /// 文書は baseline を置いた瞬間と編集の後に印を面へ押し、同じ行の中の打鍵でも区間が本文に追従する。
-  func testDocumentPushesMarksToTheSurfaceAndKeepsThemInStepWithEdits() async throws {
+  /// 文書はハンクが届いたときと編集の後に印を面へ押し、同じ行の中の打鍵でも区間がその場で本文に追従する。
+  func testDocumentPushesMarksToTheSurfaceAndKeepsThemInStepWithEdits() throws {
     let dir = FileManager.default.temporaryDirectory
       .appendingPathComponent("orbe-marks-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -69,22 +69,24 @@ final class LineMarksTests: XCTestCase {
     XCTAssertTrue(surface.lineMarks.isEmpty)
 
     document.baseline = "a\nc\nd\n"
+    XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertEqual(
       surface.lineMarks.marks,
       [LineMarkSpans.Mark(range: NSRange(location: 2, length: 2), kind: .added)],
-      "baseline を置いた瞬間に押す")
+      "ハンクが届けば押す")
     XCTAssertEqual(surface.lineMarks.deletions, [6], "d の削除は末尾の境")
 
     surface.replace(NSRange(location: 2, length: 0), with: "xx")
-    await Task.yield()
+    XCTAssertEqual(
+      surface.lineMarks.marks.map(\.range), [NSRange(location: 2, length: 4)], "区間は打鍵にその場で追従する")
+    XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertEqual(
       document.hunks,
       [
         LineHunk(oldStart: 1, oldCount: 0, newStart: 2, newCount: 1),
         LineHunk(oldStart: 3, oldCount: 1, newStart: 3, newCount: 0),
       ], "ハンクは同じ")
-    XCTAssertEqual(
-      surface.lineMarks.marks.map(\.range), [NSRange(location: 2, length: 4)], "区間は打鍵に追従する")
+    XCTAssertEqual(surface.lineMarks.marks.map(\.range), [NSRange(location: 2, length: 4)])
 
     document.baseline = nil
     XCTAssertTrue(surface.lineMarks.isEmpty, "baseline が消えれば印も消える")

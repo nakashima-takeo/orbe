@@ -48,7 +48,7 @@ final class EditorSearchTests: OrbeTestCase {
   }
 
   private func row(_ hosted: Hosted, _ offset: Int) -> Int {
-    hosted.document.lineIndex.point(at: offset).row
+    hosted.document.text.row(containing: offset)
   }
 
   /// バー（本文の右上に浮く）の下に入らない行から本文を始めるための空行。地を画素で読むテストが使う。
@@ -68,6 +68,7 @@ final class EditorSearchTests: OrbeTestCase {
     let hosted = try host("foo bar\nfoo baz\nFOO\n")
     let pane = hosted.pane
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
+    catchUp(pane)
     let bar = try XCTUnwrap(pane.searchBar)
     pane.layoutSubtreeIfNeeded()
     XCTAssertEqual(bar.frame.maxX, pane.surfaceRect.maxX - 12, accuracy: 0.5, "俯瞰の左・右 12")
@@ -76,6 +77,7 @@ final class EditorSearchTests: OrbeTestCase {
       until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true },
       "入力欄に焦点")
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")), "表示中の ⌘F は再フォーカスのみ")
+    catchUp(pane)
     XCTAssertTrue(pane.searchBar === bar, "二重生成しない")
   }
 
@@ -86,13 +88,16 @@ final class EditorSearchTests: OrbeTestCase {
     let seen = counts(pane)
     hosted.document.surface.selectedRange = NSRange(location: 4, length: 0)
     pane.showSearch()
+    catchUp(pane)
     pane.search.setNeedle("foo")
+    catchUp(pane)
     XCTAssertEqual(pane.search.matches.map(\.location), [0, 8, 16], "大小無視")
     XCTAssertEqual(
       hosted.document.surface.selectedRange, NSRange(location: 8, length: 3), "キャレット以降で最初")
     pumpMain(until: { seen().last?.0 == 2 }, "件数 2/3")
     XCTAssertEqual(seen().last?.1, 3)
     pane.search.setNeedle("zzz")
+    catchUp(pane)
     XCTAssertEqual(pane.search.matches, [])
     XCTAssertEqual(seen().last?.1, 0, "一致なし")
     XCTAssertEqual(
@@ -107,8 +112,10 @@ final class EditorSearchTests: OrbeTestCase {
     let pane = hosted.pane
     let document = hosted.document
     pane.showSearch()
+    catchUp(pane)
     let bar = try XCTUnwrap(pane.searchBar)
     bar.onNeedleChange?("needle")
+    catchUp(pane)
     XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 9)
     XCTAssertEqual(document.surface.viewport.firstVisible, 0, "見えている一致ではスクロールしない")
 
@@ -138,8 +145,10 @@ final class EditorSearchTests: OrbeTestCase {
     let scroll = try XCTUnwrap(document.surface.view.subviews.first as? NSScrollView)
     XCTAssertEqual(scroll.contentView.bounds.minX, 0)
     pane.showSearch()
+    catchUp(pane)
     let bar = try XCTUnwrap(pane.searchBar)
     bar.onNeedleChange?("needle")
+    catchUp(pane)
     XCTAssertEqual(document.surface.selectedRange.location, 201)
     XCTAssertGreaterThan(scroll.contentView.bounds.minX, 0, "横に寄る")
     XCTAssertEqual(document.surface.viewport.firstVisible, 0, "縦は動かない")
@@ -156,7 +165,9 @@ final class EditorSearchTests: OrbeTestCase {
     let document = hosted.document
     let seen = counts(pane)
     pane.showSearch()
+    catchUp(pane)
     pane.search.setNeedle("ab")
+    catchUp(pane)
     XCTAssertEqual(pane.search.matches.count, 2)
     document.surface.selectedRange = NSRange(location: 5, length: 0)
     hosted.window.makeFirstResponder(document.surface.responder)
@@ -166,11 +177,12 @@ final class EditorSearchTests: OrbeTestCase {
       refresh = fire
     }
     for character in " ab" { document.surface.responder.keyDown(with: .key(String(character), [])) }
-    XCTAssertEqual(document.surface.text, "ab ab ab\n")
+    XCTAssertEqual(bodyText(document), "ab ab ab\n")
     XCTAssertEqual(
       pane.search.matches, [NSRange(location: 0, length: 2), NSRange(location: 3, length: 2)],
       "取り直すまでの間、一致は編集に合わせて置いたまま")
     try XCTUnwrap(refresh)()
+    catchUp(pane)
     XCTAssertEqual(pane.search.matches.count, 3, "間引いた後に取り直す")
     XCTAssertEqual(document.surface.selectedRange, NSRange(location: 8, length: 0), "キャレットは打った先のまま")
     pumpMain(until: { seen().last?.1 == 3 }, "件数が追従する")
@@ -187,10 +199,13 @@ final class EditorSearchTests: OrbeTestCase {
       forward?(selected, total, isLimited)
     }
     pane.showSearch()
+    catchUp(pane)
     pane.search.setNeedle("a")
+    catchUp(pane)
     XCTAssertEqual(pane.search.matches.count, 19999)
     XCTAssertEqual(limited.last, true)
     pane.search.setNeedle("aa")
+    catchUp(pane)
     XCTAssertEqual(pane.search.matches.count, 10_250)
     XCTAssertEqual(limited.last, false)
   }
@@ -201,6 +216,7 @@ final class EditorSearchTests: OrbeTestCase {
     let pane = hosted.pane
     hosted.document.surface.selectedRange = NSRange(location: 6, length: 4)
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
+    catchUp(pane)
     XCTAssertEqual(pane.search.needle, "beta")
     XCTAssertEqual(pane.searchBar?.needle, "beta")
     XCTAssertEqual(pane.search.matches.count, 1)
@@ -209,6 +225,7 @@ final class EditorSearchTests: OrbeTestCase {
 
     hosted.document.surface.selectedRange = NSRange(location: 6, length: 10)
     pane.showSearch()
+    catchUp(pane)
     XCTAssertEqual(pane.search.needle, "", "改行をまたぐ選択は種にならない")
   }
 
@@ -219,6 +236,7 @@ final class EditorSearchTests: OrbeTestCase {
     let pane = hosted.pane
     hosted.document.surface.selectedRange = NSRange(location: 7, length: 0)
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
+    catchUp(pane)
     XCTAssertEqual(pane.search.needle, "beta")
     XCTAssertEqual(pane.searchBar?.needle, "beta")
     XCTAssertEqual(pane.search.matches.count, 2)
@@ -228,6 +246,7 @@ final class EditorSearchTests: OrbeTestCase {
 
     hosted.document.surface.selectedRange = NSRange(location: 16, length: 0)
     pane.showSearch()
+    catchUp(pane)
     XCTAssertEqual(pane.search.needle, "", "語の外（行末の空白）では種が無い")
   }
 
@@ -238,7 +257,9 @@ final class EditorSearchTests: OrbeTestCase {
     let pane = hosted.pane
     let document = hosted.document
     pane.showSearch()
+    catchUp(pane)
     pane.search.setNeedle("a b")
+    catchUp(pane)
     let bar = try XCTUnwrap(pane.searchBar)
     pumpMain(
       until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true },
@@ -251,6 +272,7 @@ final class EditorSearchTests: OrbeTestCase {
     XCTAssertEqual(pane.occurrences.selectionOccurrences, [], "検索バーが同じ文字列を探している間は出ない")
 
     bar.onClose?()
+    catchUp(pane)
     XCTAssertNil(pane.searchBar)
     XCTAssertTrue(hosted.window.firstResponder === document.surface.responder, "焦点はテキスト面へ")
     XCTAssertEqual(document.surface.selectedRange, NSRange(location: 6, length: 3), "選択は残る")
@@ -265,10 +287,13 @@ final class EditorSearchTests: OrbeTestCase {
     let pane = hosted.pane
     let seen = counts(pane)
     pane.showSearch()
+    catchUp(pane)
     pane.search.setNeedle("one")
+    catchUp(pane)
     XCTAssertEqual(pane.search.matches.count, 2)
 
     let other = try hosted.tab.editor.open(try caseFile("t.txt", "one\n"))
+    catchUp(pane)
     XCTAssertTrue(pane.search.document === other)
     XCTAssertEqual(pane.search.matches.count, 1, "新しい文書の一致")
     XCTAssertEqual(other.surface.selectedRange, NSRange(location: 0, length: 0), "選択は動かさない")
@@ -276,6 +301,7 @@ final class EditorSearchTests: OrbeTestCase {
     XCTAssertNotNil(pane.searchBar, "バーは残る")
 
     hosted.tab.editor.close(other)
+    catchUp(pane)
     XCTAssertEqual(pane.search.matches.count, 2, "戻れば元の文書の一致")
     hosted.tab.editor.close(hosted.document)
     XCTAssertNil(pane.searchBar, "文書が無くなればバーは閉じる")

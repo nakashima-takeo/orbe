@@ -4,7 +4,8 @@
 
   /// 骨込みのエディター面の gallery fixture。一時ディレクトリに実在のソース断片（このリポジトリのファイル）を
   /// 写して git リポジトリにし、M / A / U を 1 つずつ作り、文書を 3 つ開く（1 つは未保存）。展示データは作らない。
-  /// status は git の子プロセス後に届くので、撮る側は `warmUp()` の後 `isReady` を待つ。
+  /// status は git の子プロセス後に、色とハンクは文書の裏の仕事の後に届くので、撮る側は `warmUp()` の後 `isReady`
+  /// を待つ。
   enum EditorShellFixtures {
     /// 写すファイル（リポジトリ相対）。
     private static let copied = [
@@ -45,10 +46,11 @@
         warmWindow = window
       }
 
-      /// git バッジが揃った。
+      /// git バッジが揃い、文書の裏の仕事（色・ハンク）が追いついた。
       var isReady: Bool {
         pane.tree.status?.badge(of: "README.md") == .modified
           && pane.tree.status?.badge(of: "docs/spec/editor/shell.md") == .added
+          && tab.editor.documents.allSatisfy { $0.waitUntilCaughtUp(timeout: 0) }
       }
 
       /// 撮る view（pane をそのまま載せる）。
