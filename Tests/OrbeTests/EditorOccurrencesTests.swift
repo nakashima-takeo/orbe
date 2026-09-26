@@ -288,4 +288,23 @@ final class EditorOccurrencesTests: OrbeTestCase {
     catchUp(hosted.document)
     XCTAssertEqual(hosted.pane.occurrences.selectionOccurrences, [], "畳んだ選択の出現は戻らない")
   }
+
+  /// 語 A の出現が出ている間に語 B へ動き、B を頼んでから結果が届く前に A の中へ戻ると、遅れて届いた B の出現は出さず、
+  /// A の出現が残る。
+  func testMovingBackBeforeTheAnswerArrivesKeepsTheCurrentWord() throws {
+    let clock = Clock()
+    let hosted = try host(" foo bar foo\n", clock: clock)
+    let occurrences = hosted.pane.occurrences
+    caret(hosted, 2)
+    try XCTUnwrap(clock.word)()
+    let foo = [NSRange(location: 1, length: 3), NSRange(location: 9, length: 3)]
+    XCTAssertEqual(occurrences.wordOccurrences, foo, "前提: foo の出現")
+    var ask: (() -> Void)?
+    occurrences.wordDelay.schedule = { _, fire in ask = fire }
+    caret(hosted, 6)
+    try XCTUnwrap(ask)()
+    caret(hosted, 2)
+    catchUp(hosted.document)
+    XCTAssertEqual(occurrences.wordOccurrences, foo, "遅れて届いた bar の出現は出さない")
+  }
 }

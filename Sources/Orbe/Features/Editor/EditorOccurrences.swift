@@ -49,6 +49,8 @@ final class EditorOccurrences {
   func selectionDidChange() {
     updateSelectionOccurrences()
     guard surfaceFocused, !textChangedThisTurn else { return }
+    // 明示的な移動で問いは変わる——前の位置の語を頼んでいれば、その結果はもう出さない。
+    wordRequest = nil
     if let caret = document?.surface.selectedRange,
       wordOccurrences.contains(where: {
         $0.location <= caret.location && NSMaxRange(caret) <= NSMaxRange($0)
