@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import os
 
 public enum EditorDocumentError: Error, Equatable {
   case unreadable(URL)
@@ -77,7 +78,7 @@ public final class EditorDocument {
   public var onAnalysis: ((AnalysisRequest, [NSRange]) -> Void)?
 
   private let inbox: AnalysisInbox
-  private let syntax: SyntaxWorker?
+  private var syntax: SyntaxWorker?
   private let analysis: DocumentAnalysis
   /// 最後に受け取った構文の結果の版と、そのとき見えている範囲・全体の作り直しが済んでいたか。
   private var syntaxState = SyntaxProgress(version: 0, visibleReady: false, complete: false)
@@ -137,10 +138,20 @@ public final class EditorDocument {
     applyIndentUnit()
   }
 
-  /// 閉じた文書の写し・役割の並び・裏の仕事（構文木を含む）は裏で手放す（大きな木の解放を main で行わない）。
+  /// 閉じた文書の大きな部品を手放す口（既定は裏で手放す）。テストは手放す時機を差し替える。
+  var releaseParts: @Sendable (OSAllocatedUnfairLock<ReleasedParts?>) -> Void = { parcel in
+    DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = nil } }
+  }
+
+  /// 閉じた文書の写し・役割の並び・構文木を持つ裏の仕事は裏で手放す（大きな木の解放を main で行わない）。裏へ渡す前に
+  /// 文書の欄から外す——欄は deinit の後に main で解放されるので、欄に残すと裏が先に済んだとき最後の解放が main で起きる。
   deinit {
-    let released = (text, roles, syntax, analysis)
-    DispatchQueue.global(qos: .utility).async { withExtendedLifetime(released) {} }
+    let parcel = OSAllocatedUnfairLock<ReleasedParts?>(
+      initialState: ReleasedParts(text: text, roles: roles, syntax: syntax))
+    text = TextRope()
+    roles = RoleRuns(length: 0)
+    syntax = nil
+    releaseParts(parcel)
   }
 
   /// 区間の列の問いを裏へ頼む。結果は `onAnalysis` に届く。
@@ -368,4 +379,12 @@ extension EditorDocument: TextSurfaceDelegate {
     let start = text.lineStart(line)
     return NSRange(location: start, length: text.lineEnd(line) - start)
   }
+}
+
+/// 閉じた文書から手放す大きな部品——本文の写し・役割の並び・構文木を持つ構文の裏の仕事（行差分・検索・出現の裏の仕事は
+/// 依頼の後に本文を覚えず、仕事の間は走っている裏の仕事が自分を持つので、ここに入れない）。
+struct ReleasedParts: Sendable {
+  let text: TextRope
+  let roles: RoleRuns
+  let syntax: SyntaxWorker?
 }

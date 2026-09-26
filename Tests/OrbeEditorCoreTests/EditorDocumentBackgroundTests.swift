@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+import os
 
 @testable import OrbeEditorCore
 
@@ -150,5 +151,25 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     XCTAssertEqual(
       document.roles.roles(in: NSRange(location: 3, length: 3)).map(\.role), [.keyword],
       "2 回目は待たない（裏の comment を受け取らず、ずらした前の色のまま）")
+  }
+
+  /// 閉じた文書の構文木（構文の裏の仕事）は、手放す裏の仕事が最後の参照を落とす——裏へ渡した後の main に参照が残って
+  /// いれば、裏が先に済んだとき（多いコアでは起こりうる）最後の解放が main で起き、大きな木の解放で main が止まる。裏へ
+  /// 渡した部品を裏で落とし切った時点（文書の解放の途中）で、構文の裏の仕事がもう無いことを見る。
+  func testClosingHandsTheLastReferenceOfTheSyntaxTreeToTheBackground() throws {
+    let result = OSAllocatedUnfairLock<(sawWorker: Bool, aliveAfterDrop: Bool)?>(initialState: nil)
+    do {
+      let (document, _) = try open("close.swift", "let a = 1\n")
+      XCTAssertTrue(document.waitUntilCaughtUp())
+      document.releaseParts = { parcel in
+        weak var worker = parcel.withLock { $0?.syntax }
+        let saw = worker != nil
+        DispatchQueue.global().sync { parcel.withLock { $0 = nil } }
+        result.withLock { $0 = (saw, worker != nil) }
+      }
+    }
+    let observed = try XCTUnwrap(result.withLock { $0 }, "前提: 文書が閉じて部品を手放した")
+    XCTAssertTrue(observed.sawWorker, "前提: 構文の裏の仕事を手放す部品に入れた")
+    XCTAssertFalse(observed.aliveAfterDrop, "裏で落とした後に main が構文の裏の仕事を持っていない")
   }
 }
