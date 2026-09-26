@@ -59,17 +59,15 @@ struct GitBranch: Equatable {
   /// upstream。無ければ nil（remote ブランチは常に nil）。
   let upstream: GitUpstream?
   /// `%(push:remotename)`。git が解決する push 先の remote（`branch.<名前>.pushRemote` →
-  /// `remote.pushDefault` → upstream の remote）で、ローカルブランチを追跡する行は `.`。解決できなければ
-  /// nil（remote ブランチは常に nil）。
+  /// `remote.pushDefault` → `branch.<名前>.remote`）で、ローカルブランチを追跡する行は `.`。
+  /// 解決できなければ nil（remote ブランチは常に nil）。
   var pushRemote: String?
 }
 
 // MARK: - GitHub（gh CLI）
 
 /// GitHub のリポジトリ名（`owner/name`）。GitHub の名前は大小文字を区別しないので小文字で持ち、等値は
-/// その文字列の等値で決まる。API から作る口は、owner と名前から（PR の head）と、正式名の問い合わせの
-/// 応答から（`init(nameWithOwner:)`）の 2 つだけ——`Decodable` にしないのは、PR の head を
-/// `nameWithOwner` で読めなくするため（古い gh の `gh pr list --json` は空文字を返すか、キーごと出さない）。
+/// その文字列の等値で決まる。
 struct GitHubRepoName: Hashable {
   /// 小文字の `owner/name`。
   let value: String

@@ -187,7 +187,8 @@ enum DispatchInfoKind: Equatable {
   var githubState: GitHubAvailability = .ready
   /// 実行失敗の一時表示（palette は閉じない）。
   var errorMessage: String?
-  /// prepareDirectory 実行中の進捗表示フラグ（worktree 作成待ち・palette は閉じない）。
+  /// 決定の後、行き先が決まるまでの待ち（着地前の PR 行の fetch の着地待ち・`prepareDirectory` の
+  /// 実行中）の進捗表示フラグ（palette は閉じない）。
   /// true の間はフッターにスピナ＋「作成中…」を出し、入力（Enter 再実行・選択移動・検索）を受け付けない。
   var isPreparing = false
 

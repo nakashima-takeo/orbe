@@ -30,9 +30,9 @@ enum DispatchRemoteLedger: Equatable {
 
   /// 全 remote の答えが揃った台帳。
   struct Resolved: Equatable {
-    /// push 先を持たない行（upstream も push 先の設定も無い・ローカルブランチを追跡する）を push 先と
-    /// みなす remote。fetch を信頼する remote（`DispatchBranchSync.trustedRemote`）とは別の関心で、
-    /// 片方を変えてももう片方は変わらない。
+    /// push 先を持たない行（`branch.<名前>.pushRemote`・`remote.pushDefault`・`branch.<名前>.remote` の
+    /// どれも無い・ローカルブランチを追跡する）を push 先とみなす remote。fetch を信頼する remote
+    /// （`DispatchBranchSync.trustedRemote`）とは別の関心で、片方を変えてももう片方は変わらない。
     static let defaultRemote = "origin"
 
     /// remote 名 → 値。`nil` = remote の一覧を読めなかった（どの問いにも `unverified` を返す）。
@@ -105,9 +105,9 @@ enum DispatchRemoteLedger: Equatable {
 /// （provider の `branchPRStates`）が、同じこの型を通る。
 ///
 /// ローカルブランチは（push 先の remote の正式名, ローカル名）。PR の head は自分が push したブランチ
-/// なので、git が push 先として解決する remote がそのリポジトリになる。upstream（pull する元）は base
-/// （`origin/main`）や積み上げ元を指しうるので使わない。ブランチ名がローカル名なのは、既定の
-/// `push.default=simple` では名前の違う upstream へは push できず、push されるのはローカル名だから。
+/// なので、git が push 先として解決する remote がそのリポジトリになる——base（`origin/main`）や積み上げ元を
+/// 追跡するブランチも、base から出た PR ではなく自分の PR に紐づく。ブランチ名がローカル名なのは、既定の
+/// `push.default=simple` で push されるのがローカル名だから。
 struct DispatchRowIdentities {
   private let resolved: DispatchRemoteLedger.Resolved
   /// ローカル名 → ブランチ（同名は先勝ち）。
