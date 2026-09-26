@@ -35,10 +35,11 @@ final class GitHubPullRequestHeadTests: OrbeTestCase {
 
   /// head のリポジトリが消えた PR（削除された fork）は head を持たず、どの行とも等しくならない。
   func testBranchPRWithoutAHeadRepositoryHasNoHead() throws {
-    XCTAssertNil(try branchPR(headRepository: "null", owner: "null").head)
     XCTAssertNil(
-      try branchPR(headRepository: #"{"id":"","name":""}"#, owner: #"{"id":"","login":""}"#).head,
-      "gh が空の値で埋めて返す形")
+      try branchPR(headRepository: "null", owner: #"{"id":"U_1","login":"me"}"#).head,
+      "fork だけ削除された PR")
+    XCTAssertNil(
+      try branchPR(headRepository: "null", owner: #"{"login":""}"#).head, "作者ごと削除された PR")
   }
 
   /// open 一覧（GraphQL）の PR も、同じ owner と名前から head を読む。
