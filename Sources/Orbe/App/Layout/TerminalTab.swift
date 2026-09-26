@@ -149,10 +149,13 @@ final class TerminalTab {
 
   /// 永続スナップショット（TabState）から起こす。agent 付きなら休眠チケット（`.dormant`）のまま
   /// 起こし、resume 解決は消費時（`recordMaterializationStarted`）まで遅延する。
-  init(restoring state: TabState, resumeSpawn: @escaping ResumeSpawn) {
+  init(
+    restoring state: TabState, resumeSpawn: @escaping ResumeSpawn,
+    editorSurfaces: EditorSurfaces = .shared
+  ) {
     self.resumeSpawn = resumeSpawn
     faces = state.faces.normalized
-    editor = MainActor.assumeIsolated { EditorSession(surfaces: .shared) }
+    editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
     groupKey = Self.groupKey(cwd: state.cwd)
     view = Self.makeView(cwd: state.cwd, root: groupKey, faces: faces)
     explicitTitle = state.explicitTitle

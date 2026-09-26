@@ -165,6 +165,7 @@ enum L10n {
       "Overwrite the changes made outside Orbe with this document's contents?"
     ),
     .editorOverwriteConfirm: ("上書き", "Overwrite"),
+    .editorOmittedCharacters: ("ほか %@字", "%@ more"),
 
     // MARK: Link（OSC 8）
     .linkConfirmTitle: ("端末出力のリンクを開きますか？", "Open Link from Terminal Output?"),

@@ -9,7 +9,8 @@ enum SettingID: CaseIterable {
     defaultAgent, fontFamily, tabTitleFontFamily, emojiFont, agentStateIcons,
     worktreeDir, notificationSound, notificationSoundVolume, notificationSoundEnabled,
     notificationSoundCustomDone, notificationSoundCustomWaiting,
-    notificationSoundCustomWaitingSameAsDone, menuBarNotificationDuration
+    notificationSoundCustomWaitingSameAsDone, menuBarNotificationDuration,
+    editorEngineMetal, editorScrollElastic, editorFontSmoothing
 }
 
 /// unset が固有の意味を持つ項目（fontFamily＝既定チェーン・defaultAgent＝検出先頭）の phantom-typed key。
@@ -44,6 +45,10 @@ enum SettingKeys {
   static let notificationSoundCustomWaitingSameAsDone = DefaultedSettingKey<Bool>(
     .notificationSoundCustomWaitingSameAsDone)
   static let menuBarNotificationDuration = DefaultedSettingKey<Int>(.menuBarNotificationDuration)
+  /// エディターの新しいテキストエンジン（Metal）と、その手触り・見た目の切り替え。文書を開くときに読む。
+  static let editorEngineMetal = DefaultedSettingKey<Bool>(.editorEngineMetal)
+  static let editorScrollElastic = DefaultedSettingKey<Bool>(.editorScrollElastic)
+  static let editorFontSmoothing = DefaultedSettingKey<Bool>(.editorFontSmoothing)
   static let fontFamily = SettingKey<String>(.fontFamily)  // nil＝既定チェーンへ解決
   static let tabTitleFontFamily = SettingKey<String>(.tabTitleFontFamily)  // nil＝システム等幅 11pt
   static let defaultAgent = SettingKey<String>(.defaultAgent)  // nil＝検出先頭へ fallback

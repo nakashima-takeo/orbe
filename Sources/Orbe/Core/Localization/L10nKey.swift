@@ -289,6 +289,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorOverwriteMessage
   case editorOverwriteConfirm
 
+  // MARK: - Editor 面（コード）
+  case editorOmittedCharacters
+
   // MARK: - Link（OSC 8 リンクの確認・ブロック）
   case linkConfirmTitle
   case linkConfirmMessage
@@ -329,6 +332,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsSoundCustomWaitingRow
   case settingsSoundCustomSameAsDone
   case settingsMenuBarNotificationDuration
+  case settingsEditorEngineMetal
+  case settingsEditorScrollElastic
+  case settingsEditorFontSmoothing
   case settingsSecondsValue
   case settingsUnset
   case settingsToggleOn
