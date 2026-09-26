@@ -200,12 +200,12 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
   /// **待つのは「行が組まれたこと」まで。** gh レーンの着地でも描き直しは走って `hasLoadedOnce` が
   /// 立つので、旗だけを待つと列挙前（ブランチ 0 件・既定ブランチ未解決）の provider を掴んだまま
   /// Enter を撃つ回が混ざり、着地を待つ経路が待たずに通る。
-  func start() throws -> DispatchDataProvider {
+  func start(gitHub: GitHubCLI = .shared) throws -> DispatchDataProvider {
     palette = DispatchPaletteModel()
     let provider = DispatchDataProvider(
       cwd: local, model: palette, localization: LocalizationStore(language: .ja),
       // 作成先を一時ディレクトリの中へ落とす（後始末に乗せる）。
-      worktreeTemplate: "{parent}/wt-{slug}")
+      worktreeTemplate: "{parent}/wt-{slug}", gitHub: gitHub)
     provider.load()
     XCTAssertTrue(
       pump({
@@ -221,7 +221,9 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
   ///
   /// `holdingFetch` は眠りを `releaseFetch()` まで続けさせる。着地を待つ側のテストは fetch が自力で
   /// 明ける必要があるので数秒の眠りのまま、待たない側だけが門を使う。
-  func startWithSlowFetch(holdingFetch: Bool = false) throws -> DispatchDataProvider {
+  func startWithSlowFetch(holdingFetch: Bool = false, gitHub: GitHubCLI = .shared) throws
+    -> DispatchDataProvider
+  {
     let wrapper = dir.appendingPathComponent("slow-upload-pack").path
     if holdingFetch {
       try FileManager.default.createDirectory(
@@ -232,7 +234,7 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
       toFile: wrapper, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper)
     XCTAssertTrue(run(["config", "remote.origin.uploadpack", wrapper], cwd: local).isSuccess)
-    let provider = try start()
+    let provider = try start(gitHub: gitHub)
     XCTAssertNotEqual(localRemoteTip("main"), originTip("main"), "前提: まだ fetch が着地していない")
     return provider
   }
@@ -240,7 +242,7 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
   /// fetch を止めている門。消えた時点で `uploadpack` のラッパーが先へ進む。
   private var fetchGate: String { dir.appendingPathComponent("fetch-gate").path }
 
-  private func releaseFetch() {
+  func releaseFetch() {
     try? FileManager.default.removeItem(atPath: fetchGate)
   }
 

@@ -67,6 +67,62 @@ extension DispatchPaletteTests {
     XCTAssertEqual(opened, 0)
   }
 
+  /// fetch の着地前に Enter した PR 行は、「作成中…」のまま着地を待ち（重ねた Enter は撃たない）、
+  /// 着地後に組み直した同じ PR 行の行き先を起動へ渡す。
+  func testPullRequestEnteredBeforeTheFetchLandsRunsItsLandedDestination() throws {
+    let p = makeModel(pullRequestInput(landed: false))
+    var resumes: [() -> Void] = []
+    var executed: [DispatchDestination] = []
+    var opened = 0
+    p.onAwaitRemoteFetch = { resumes.append($0) }
+    p.onExecute = { executed.append($0) }
+    p.onOpenWeb = { _ in opened += 1 }
+
+    p.activate(at: try index(of: 9, in: p))
+    p.activate()
+
+    XCTAssertTrue(p.isPreparing, "作成中のまま待つ")
+    XCTAssertEqual(resumes.count, 1, "重ねた Enter は待ちを重ねない")
+    XCTAssertTrue(executed.isEmpty, "着地前には起動しない")
+
+    p.sections = DispatchSectionBuilder.build(
+      pullRequestInput(remoteBranches: ["origin/other", "origin/feat"]))
+    resumes.forEach { $0() }
+
+    XCTAssertFalse(p.isPreparing)
+    XCTAssertEqual(executed, [.remoteBranch(name: "origin/feat", existingWorktree: nil)])
+    XCTAssertEqual(opened, 0)
+  }
+
+  /// 着地後に作れない（`origin/<head>` が来ない shallow clone 等）・PR 行が消えていたときは、Enter した
+  /// PR をブラウザで開く。赤エラーにせず、パレットは開いたまま。
+  func testPullRequestEnteredBeforeTheFetchLandsBrowsesWhenItCannotBeCreated() throws {
+    var vanished = pullRequestInput()
+    vanished.pullRequests = []
+    let landings = [("origin/<head> が来ない", pullRequestInput()), ("PR 行が消えた", vanished)]
+    for (label, landed) in landings {
+      let p = makeModel(pullRequestInput(landed: false))
+      var resume: (() -> Void)?
+      var executed: [DispatchDestination] = []
+      var opened: [String?] = []
+      var dismissed = 0
+      p.onAwaitRemoteFetch = { resume = $0 }
+      p.onExecute = { executed.append($0) }
+      p.onOpenWeb = { opened.append($0.idText) }
+      p.onDismiss = { dismissed += 1 }
+      p.activate(at: try index(of: 9, in: p))
+
+      p.sections = DispatchSectionBuilder.build(landed)
+      try XCTUnwrap(resume, label)()
+
+      XCTAssertEqual(opened, ["#9"], "\(label): Enter した PR をブラウザで開く")
+      XCTAssertTrue(executed.isEmpty, label)
+      XCTAssertNil(p.errorMessage, "\(label): 赤エラーにしない")
+      XCTAssertFalse(p.isPreparing, label)
+      XCTAssertEqual(dismissed, 0, "\(label): パレットは開いたまま")
+    }
+  }
+
   /// 提示時の fetch が着地すると、PR 行は着地待ちから作成へ変わる。行の並びがずれても、選んでいた
   /// PR 行の選択は保たれる。
   func testSelectionStaysOnThePullRequestWhenItsDestinationChanges() throws {

@@ -229,7 +229,24 @@ extension DispatchSectionBuilderTests {
     XCTAssertEqual(row?.footer, .launch(target: "#1", kind: .checkout))
   }
 
+  /// fetch の着地前は、origin から作れる見込みの PR 行（head が origin のリポジトリにあり、同じ名前の
+  /// ローカルブランチが無い）を、着地を待つ行にして「checkout → worktree」と先に言う。手元に古い
+  /// `origin/<head>` があっても待つ（着地で prune されうる）。
+  func testPullRequestAwaitsTheFetchBeforeItLandsAndPromisesACheckout() {
+    for remoteBranches in [[], [remote("origin/feat")]] {
+      let label = "手元の origin/feat: \(remoteBranches.isEmpty ? "無し" : "有り")"
+      let row = pullRequestRow(
+        DispatchSectionBuilder.Input(
+          remoteBranches: remoteBranches, pullRequests: [pullRequest(1, head: "feat")],
+          remoteLedger: ledger, remoteFetchLanded: false), 1)
+      XCTAssertEqual(row?.action, .pullRequest(number: 1, route: .awaitingFetch), label)
+      XCTAssertEqual(row?.enterNote, .worktree(.checkout), label)
+      XCTAssertEqual(row?.footer, .launch(target: "#1", kind: .checkout), label)
+    }
+  }
+
   /// 手元に作れる元が無い PR は、Enter でブラウザを開く行になり、行末とフッターがそれを先に言う。
+  /// fetch に依らずブラウザになる行（同じ名前の別ブランチ・origin 以外の head）は、着地前でも待たない。
   func testPullRequestThatCannotBeOpenedLocallyBrowses() {
     let cases: [(String, DispatchSectionBuilder.Input)] = [
       (
