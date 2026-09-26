@@ -42,7 +42,7 @@ final class GitHubRepoNameTests: OrbeTestCase {
   }
 
   /// GitHub の名前は大小文字を区別しないので、URL の綴りと GitHub の答えの綴りが違っても同じリポジトリ。
-  func testNamesFromURLAndFromGitHubAreEqualRegardlessOfCase() throws {
+  func testNamesFromURLAndFromGitHubAreEqualRegardlessOfCase() {
     let answered = GitHubRepoName(nameWithOwner: "Owner/Repo")
     XCTAssertEqual(GitHubRepoName(remoteURL: "git@github.com:OWNER/repo.git"), answered)
     XCTAssertEqual(GitHubRepoName(owner: "owner", name: "REPO"), answered)

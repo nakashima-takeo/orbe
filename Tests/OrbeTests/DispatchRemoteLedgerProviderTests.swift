@@ -145,7 +145,7 @@ final class DispatchRemoteLedgerProviderTests: OrbeTestCase {
 
   /// 答え（正式名・確かめられない）はプロセス内に残るので、2 回目に開いたときは gh を待たずに最初の描画
   /// から PR 行とチップが出る。問い直すのは確かめられない答えだけ。
-  func testSecondOpenShowsPullRequestsFromTheFirstFrameWithoutAskingAgain() throws {
+  func testSecondOpenShowsPullRequestsFromTheFirstFrameAndAsksAgainOnlyForUnverified() throws {
     addRemote("origin", "me/r")
     addRemote("upstream", "base/r")
     try answer("me/r", found: "me/r")

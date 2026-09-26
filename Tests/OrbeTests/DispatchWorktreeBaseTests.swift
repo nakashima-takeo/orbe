@@ -219,8 +219,9 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
   /// 作成を撃たないと「待つかどうか」を測れない。遅延は `remote.origin.uploadpack` を眠るラッパーへ
   /// 差し替えて作る（ネットワークも特別な transport も要らない）。
   ///
-  /// `holdingFetch` は眠りを `releaseFetch()` まで続けさせる。着地を待つ側のテストは fetch が自力で
-  /// 明ける必要があるので数秒の眠りのまま、待たない側だけが門を使う。
+  /// `holdingFetch` は眠りを `releaseFetch()` まで続けさせる。着地を待ち切るまで手が戻らないテスト
+  /// （`resolve`・`prepare` の中で着地を待つ等）は fetch が自力で明ける必要があるので数秒の眠りのまま、
+  /// 着地の前と後を分けて測るテストが門を使い、自分で `releaseFetch()` を呼ぶ。
   func startWithSlowFetch(holdingFetch: Bool = false, gitHub: GitHubCLI = .shared) throws
     -> DispatchDataProvider
   {
