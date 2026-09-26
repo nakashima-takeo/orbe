@@ -63,6 +63,24 @@ final class HeadlessDriver: @unchecked Sendable {
 
   func invalidate(_ id: Int) { state.withLock { $0.paused[id] = nil } }
 
+  /// 表示の刻みと同じく時刻どおりに起きるよう、刻みのスレッドを時間制約つきにする（普通の優先度だと
+  /// `mach_wait_until` がタイマーの合体で数 ms 遅れて起き、描画スレッドのせいでない遅れを数えてしまう）。
+  private static func makeRealtime(_ timebase: mach_timebase_info_data_t) {
+    func ticks(_ seconds: Double) -> UInt32 {
+      UInt32(seconds * 1e9 * Double(timebase.denom) / Double(timebase.numer))
+    }
+    var policy = thread_time_constraint_policy_data_t(
+      period: ticks(period), computation: ticks(0.001), constraint: ticks(0.002), preemptible: 1)
+    let count = mach_msg_type_number_t(
+      MemoryLayout<thread_time_constraint_policy_data_t>.size / MemoryLayout<integer_t>.size)
+    _ = withUnsafeMutablePointer(to: &policy) {
+      $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+        thread_policy_set(
+          mach_thread_self(), thread_policy_flavor_t(THREAD_TIME_CONSTRAINT_POLICY), $0, count)
+      }
+    }
+  }
+
   fileprivate func schedulePresent(at time: Double, _ done: @escaping @Sendable (Double?) -> Void) {
     state.withLock { $0.presents.append(Present(at: time, done: done)) }
   }
@@ -70,6 +88,7 @@ final class HeadlessDriver: @unchecked Sendable {
   private func run() {
     var timebase = mach_timebase_info_data_t()
     mach_timebase_info(&timebase)
+    Self.makeRealtime(timebase)
     var tick = (CACurrentMediaTime() / Self.period).rounded(.up) * Self.period
     while true {
       mach_wait_until(UInt64(tick * 1e9) * UInt64(timebase.denom) / UInt64(timebase.numer))

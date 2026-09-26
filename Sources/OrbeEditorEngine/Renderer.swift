@@ -156,10 +156,12 @@ final class Renderer {
       RenderThread.shared.perform { $0.presented(id, frame: frameID, time: time) }
     }
     commands.commit()
+    let committed = CACurrentMediaTime()
     let pixels = Self.pixelSize(material)
     slot.recorder.drew(
       FrameRecorder.Drawn(
-        frame: frameID, target: target, cpu: CACurrentMediaTime() - began, events: frame.events,
+        frame: frameID, target: target, cpu: committed - began, committed: committed,
+        events: frame.events,
         moving: moving, gesture: frame.gesture,
         mismatch: texture.width != pixels.width || texture.height != pixels.height))
     if frame.returning || wasReturning { slot.notify() }

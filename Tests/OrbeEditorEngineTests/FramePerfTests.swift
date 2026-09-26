@@ -8,9 +8,10 @@ import XCTest
 /// 「出たコマ」とみなす。合成した指の出来事を実機の刻み（約 5.7ms）で main の面の入口へ流す。`ORBE_EDITOR_PERF=1` の
 /// ときだけ走る（時間はマシンで変わる）。release で `scripts/perf-editor-frames.sh` が回し、`PERF-FRAMES` の行を出す。
 ///
-/// 関門: 描画スレッドの 1 コマの CPU が p99 2ms 未満、描画スレッド自身が落とすコマ（描くものがあるのに上限で飛ばした・
-/// 予定の刻みに間に合わなかった）が 0（main に負荷を入れても、もう 1 枚の面の画面が詰まっても）、止まっている間の起床が 0。
-/// 指の出来事→画面の遅れと、画面の間隔から見た落ちたコマは記録して示す（main の停止分だけ増えるのは設計上の性質）。
+/// 関門: 描画スレッドの 1 コマの CPU が p99 2ms 未満、描画スレッド自身が落とすコマ（画面に出る予定の刻みの 1ms 前までに
+/// 命令を出し終えられなかったコマ）が 0（main に負荷を入れても）、もう 1 枚の面が画面に出なくなっても刻みごとに描き
+/// 続ける、止まっている間の起床が 0。前のコマの GPU・合成の遅れで飛ばした・遅れて出たコマ（マシンの混みで起きる）と、
+/// 指の出来事→画面の遅れ・画面の間隔から見た落ちたコマは記録して示す（main の停止分だけ増えるのは設計上の性質）。
 @MainActor
 final class FramePerfTests: EngineTestCase {
   private var driver: HeadlessDriver!
@@ -34,19 +35,25 @@ final class FramePerfTests: EngineTestCase {
 
   func test200KB() throws { try measure(label: "200KB", bytes: 200_000) }
 
-  /// 面を 2 枚同時に描き、片方の「画面に出た」を止めても、もう片方は 1 コマも落とさない。
+  /// 面を 2 枚同時に描き、片方の「画面に出た」を止めても、もう片方はドラッグの間の刻みごとに描き続ける（描画スレッドが
+  /// 詰まった面のために待たない）。
   func testOneStuckSurfaceDoesNotStallAnother() throws {
     let text = Self.swiftSource(bytes: 200_000)
     let a = try attach(text)
     let b = try attach(text, holdsPresents: true)
+    reset(a.surface)
     runDrag([a.surface, b.surface], seconds: 2, speed: 2400)
     let totals = self.totals(a.surface)
     let stuck = self.totals(b.surface)
+    let expected = Int(2 / HeadlessDriver.period)
     print(
-      "PERF-FRAMES two-surfaces skipped \(totals.skipped) late \(totals.late) stuck-skipped \(stuck.skipped)"
+      "PERF-FRAMES two-surfaces frames \(totals.cpu.count)/\(expected) late-commits \(totals.lateCommits)"
+        + " skipped \(totals.skipped) late-presents \(totals.latePresents) stuck-skipped \(stuck.skipped)"
     )
     XCTAssertGreaterThan(stuck.skipped, 0, "前提: 詰まった面はコマを飛ばしている")
-    XCTAssertEqual(totals.skipped + totals.late, 0, "詰まっていない面は落とさない")
+    XCTAssertGreaterThanOrEqual(
+      totals.cpu.count, expected * 95 / 100, "詰まっていない面は刻みごとに描き続ける")
+    XCTAssertEqual(totals.lateCommits, 0, "描画スレッドは刻みに間に合う")
   }
 
   private func measure(label: String, bytes: Int) throws {
@@ -194,13 +201,13 @@ final class FramePerfTests: EngineTestCase {
     print(
       "PERF-FRAMES", label, name, "frames", cpu.count, "cpu p50",
       String(format: "%.2f", quantile(0.5)), "p99", String(format: "%.2f", quantile(0.99)),
-      "max", String(format: "%.2f", (cpu.last ?? 0) * 1000), "self-dropped",
-      totals.skipped + totals.late, "(skipped \(totals.skipped) late \(totals.late))")
+      "max", String(format: "%.2f", (cpu.last ?? 0) * 1000), "self-dropped", totals.lateCommits,
+      "/ skipped \(totals.skipped) late-presents \(totals.latePresents)（前のコマの GPU・合成の遅れ）")
     for (index, summary) in summaries.enumerated() {
       print("PERF-FRAMES", label, name, "gesture", index + 1, summary.description)
     }
     XCTAssertLessThan(quantile(0.99), 2, "\(label) \(name): 1 コマの CPU の p99 は 2ms 未満")
-    XCTAssertEqual(totals.skipped + totals.late, 0, "\(label) \(name): 描画スレッド自身は落とさない")
+    XCTAssertEqual(totals.lateCommits, 0, "\(label) \(name): 描画スレッド自身は落とさない")
   }
 
   /// `bytes` を超えるまで同じ形の宣言を連ねた Swift の本文（1MB で 4.3 万行）。

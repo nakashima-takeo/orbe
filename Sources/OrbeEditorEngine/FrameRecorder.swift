@@ -16,6 +16,8 @@ final class FrameRecorder {
     var target: Double
     /// 描画の CPU 時間（秒）。
     var cpu: Double
+    /// 命令を出し終えた時刻。
+    var committed: Double
     /// このコマで初めて入った指の出来事の時刻。
     var events: [Double]
     /// 前のコマから位置が動いたか。
@@ -57,13 +59,19 @@ final class FrameRecorder {
   struct Totals: Sendable {
     /// 描画の CPU 時間（秒）。
     var cpu: [Double] = []
-    /// 描くものがあったのに、上限（画面に出ていないコマ・GPU の空き）で飛ばした回数。
+    /// 描くものがあったのに、上限（画面に出ていないコマ・GPU の空き）で飛ばした回数。前のコマが画面に出るのが
+    /// 遅れたときに起きる。
     var skipped = 0
-    /// 予定の刻みより後に画面に出たコマの数。
-    var late = 0
+    /// 描画スレッドが、画面に出る予定の刻みの 1ms 前までに命令を出し終えられなかったコマの数（描画スレッド自身の遅れ）。
+    var lateCommits = 0
+    /// 命令は間に合ったのに、予定の刻みより後に画面に出たコマの数（GPU や画面の合成の混み）。
+    var latePresents = 0
     /// 締めたジェスチャーの記録。
     var gestures: [Gesture] = []
   }
+
+  /// 命令を出し終えるべき、画面に出る予定の刻みより前の余裕（GPU が描く分）。
+  static let commitMargin = 0.001
 
   private static let log = Logger(
     subsystem: Bundle.main.bundleIdentifier ?? "dev.orbe", category: "editor-frames")
@@ -99,7 +107,13 @@ final class FrameRecorder {
   /// コマが画面に出た（`time` が nil なら出ずに捨てられた）。
   func presented(frame: Int, time: Double?) {
     guard let record = pending.removeValue(forKey: frame), let time else { return }
-    if keepsTotals, time > record.target + period / 2 { totals.late += 1 }
+    if keepsTotals {
+      if record.committed > record.target - Self.commitMargin {
+        totals.lateCommits += 1
+      } else if time > record.target + period / 2 {
+        totals.latePresents += 1
+      }
+    }
     guard current?.id == record.gesture else { return }
     current?.latencies.append(contentsOf: record.events.map { time - $0 })
     if record.moving { current?.presents.append(time) }
