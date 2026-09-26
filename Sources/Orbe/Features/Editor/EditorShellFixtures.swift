@@ -1,11 +1,12 @@
 #if DEBUG
   import AppKit
+  import OrbeEditorCore
   import SwiftUI
 
   /// 骨込みのエディター面の gallery fixture。一時ディレクトリに実在のソース断片（このリポジトリのファイル）を
   /// 写して git リポジトリにし、M / A / U を 1 つずつ作り、文書を 3 つ開く（1 つは未保存）。展示データは作らない。
   /// status は git の子プロセス後に、色とハンクは文書の裏の仕事の後に届くので、撮る側は `warmUp()` の後 `isReady`
-  /// を待つ。
+  /// を待つ。プロジェクト検索はこのリポジトリを実際に探す（`search` の後 `isSearchDone` を待つ）。
   enum EditorShellFixtures {
     /// 写すファイル（リポジトリ相対）。
     private static let copied = [
@@ -52,6 +53,16 @@
           && pane.tree.status?.badge(of: "docs/spec/editor/shell.md") == .added
           && tab.editor.documents.allSatisfy { $0.waitUntilCaughtUp(timeout: 0) }
       }
+
+      /// 検索パネルを出し、問いで実際に検索する（開いている文書は保存前の中身、ほかは git grep）。
+      func search(_ query: SearchQuery) {
+        pane.sidebar.show(.search)
+        pane.projectSearch.restore(query)
+        pane.projectSearch.search()
+      }
+
+      /// 検索が終わった（エラーで始まらなかったときも）。
+      var isSearchDone: Bool { !pane.projectSearch.isSearching }
 
       /// 撮る view（pane をそのまま載せる）。
       var view: some View { ShellPane(pane: pane) }

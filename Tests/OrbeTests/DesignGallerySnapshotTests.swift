@@ -65,6 +65,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     // git の子プロセスの完了（main へ dispatch）を待つ骨の fixture が揃わない。
     try renderEditorSnapshots(dir: dir)
     try renderEditorShellSnapshots(dir: dir)
+    try renderEditorSearchSnapshots(dir: dir)
 
     // SearchBar（empty / typing / no-match / match / overflow）。
     try writePNG(
