@@ -25,7 +25,8 @@ final class DispatchDataProvider {
   /// 提示時に発行した `fetch --prune` の着地。ベースから新しいブランチを切る作成は、この着地を
   /// 待ってから撃つ（`createWorktree`）。1 回きりのイベントなので台帳ではなく `DispatchGroup` で持つ
   /// ——未着地なら着地後に・着地済み／未発行なら即実行、が `notify` の定義そのもの。
-  /// 待つ側は分冊（`DispatchDataProvider+Create.swift`）。
+  /// 待つ側は分冊（`DispatchDataProvider+Create.swift`）と、パレットの着地前の PR 行
+  /// （`awaitRemoteFetchLanding`）。
   ///
   /// **着地は fetch プロセスの完了ではなく、その後の git 列挙の引き直しが揃った時点**——ベース ref の
   /// 中身だけでなく、ベースの名前（`defaultBranchName`）も fetch 後の値になる。fetch は `origin/HEAD`
@@ -176,6 +177,17 @@ final class DispatchDataProvider {
         landing.leave()
       }
     }
+  }
+
+  /// 提示時の fetch の着地を待って、`resume` をメインで呼ぶ（着地済み・未発行なら次のメインのターンで）。
+  /// 待ち手はパレットの着地前の PR 行（`DispatchPaletteModel.onAwaitRemoteFetch` の配線）で、`resume` は
+  /// 組み直した行を読んで行き先を決める。
+  ///
+  /// **`resume` は着地の組み直し（`rebuild`）の後に走る。** 着地の処理は `loadGit` の同じメインのブロックの
+  /// 中で待ちを明けてから組み直し、明けた処理は `notify` がメインへ非同期に積むので、そのブロックが
+  /// 終わってから走る。
+  func awaitRemoteFetchLanding(_ resume: @escaping () -> Void) {
+    remoteFetchLanding.notify(queue: .main, execute: resume)
   }
 
   /// git レーンを引き直す。分冊（`DispatchDataProvider+Clean.swift`）が削除の完了時にも撃つ。

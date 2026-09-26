@@ -18,7 +18,7 @@ extension DispatchWorktreeBaseTests {
     XCTAssertTrue(
       pump({ row().map { self.palette.items[$0].action } == awaiting }), "前提: 着地前の PR 行は着地を待つ行")
     // WindowController と同じ配線。
-    palette.onAwaitRemoteFetch = { provider.remoteFetchLanding.notify(queue: .main, execute: $0) }
+    palette.onAwaitRemoteFetch = { provider.awaitRemoteFetchLanding($0) }
     var executed: [DispatchDestination] = []
     var outcome: DispatchDataProvider.DispatchPrepareOutcome?
     palette.onExecute = { destination in

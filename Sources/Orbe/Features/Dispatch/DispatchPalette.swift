@@ -196,8 +196,9 @@ enum DispatchInfoKind: Equatable {
   var onExecute: (DispatchDestination) -> Void = { _ in }
   /// ⌘↵/「開く」（セカンダリ）。issue/PR／PR に紐づく worktree・branch をブラウザで開く。
   var onOpenWeb: (DispatchItem) -> Void = { _ in }
-  /// 提示時の fetch の着地（provider の `remoteFetchLanding`）を待って、渡した処理をメインで呼ぶ。
-  /// 着地の処理は組み直しの後に待ちを明けるので、呼ばれるのは組み直した行の上。
+  /// 提示時の fetch の着地（provider の `awaitRemoteFetchLanding`）を待って、渡した処理をメインで呼ぶ。
+  /// 明けた処理はメインへ非同期に積まれ、待ちを明けた着地の処理（組み直しを含む）が終わってから走るので、
+  /// 呼ばれるのは組み直した行の上。
   var onAwaitRemoteFetch: (@escaping () -> Void) -> Void = { $0() }
   /// clean の削除を撃つ（⌘⏎ と失敗分の再試行が共に通る）。中断の札も一緒に渡す。
   var onCleanExecute: ([CleanDeleteRequest], CleanRunToken) -> Void = { _, _ in }
