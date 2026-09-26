@@ -112,27 +112,78 @@ extension EditorSearchTests {
   }
 
   /// 検索語を打ち換えた直後（新しい一致が届く前）は前の地と件数が出たままで、その間に押された Enter は、新しい検索語の
-  /// 一致が届いてからその一致に対して行う——前の検索語の一致へ飛ばない。
-  func testEnterRightAfterRetypingGoesToTheNewNeedlesMatch() throws {
-    let hosted = try host("aa - bb\naa - bb\n")
+  /// 一致が届いてから、起点以降の最初の一致を選んだうえでその次へ行う（同期で探したときと同じ行き先）——前の検索語の一致へ
+  /// 飛ばず、届く速さで行き先が変わらない。
+  func testEnterRightAfterRetypingSelectsTheFirstMatchThenStepsFromIt() throws {
+    let hosted = try host(" a x ab ab\n")
+    let pane = hosted.pane
+    let document = hosted.document
+    pane.showSearch()
+    catchUp(pane)
+    pane.search.setNeedle("a")
+    catchUp(pane)
+    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 1, length: 1), "前提")
+
+    pane.search.setNeedle("ab")
+    XCTAssertEqual(pane.search.matches.map(\.location), [1, 5, 8], "届くまでは前の一致を出したまま")
+    pane.search.next()
+    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 1, length: 1), "届く前は動かない")
+    catchUp(pane)
+    XCTAssertEqual(pane.search.matches.map(\.location), [5, 8])
+    XCTAssertEqual(
+      document.surface.selectedRange, NSRange(location: 8, length: 2),
+      "最初の一致（5）の次の一致へ（前の選択 1 から進む 5 ではない）")
+  }
+
+  /// 同じく、届く前の ⇧Enter は、届いてから最初の一致を選んだうえでその前へ行う。
+  func testShiftEnterRightAfterRetypingSelectsTheFirstMatchThenStepsBack() throws {
+    let hosted = try host("ab x ab y ab z\n")
     let pane = hosted.pane
     let document = hosted.document
     document.surface.selectedRange = NSRange(location: 3, length: 0)
     pane.showSearch()
     catchUp(pane)
-    pane.search.setNeedle("aa")
+    document.surface.selectedRange = NSRange(location: 0, length: 0)
+    pane.search.setNeedle("y")
     catchUp(pane)
-    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 8, length: 2), "前提")
+    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 8, length: 1), "前提")
 
-    pane.search.setNeedle("bb")
-    XCTAssertEqual(pane.search.matches.map(\.location), [0, 8], "届くまでは前の一致を出したまま")
-    pane.search.next()
-    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 8, length: 2), "届く前は動かない")
+    pane.search.setNeedle("ab")
+    pane.search.previous()
     catchUp(pane)
-    XCTAssertEqual(pane.search.matches.map(\.location), [5, 13])
     XCTAssertEqual(
-      document.surface.selectedRange, NSRange(location: 13, length: 2),
-      "新しい検索語の一致へ（前の検索語なら先頭の aa へ循環する）")
+      document.surface.selectedRange, NSRange(location: 10, length: 2),
+      "最初の一致（0）の前へ循環（前の選択 8 から戻る 5 ではない）")
+  }
+
+  /// 一致を待っている間に人が選択を動かせば、届いた一致はその選択を覆さない（後回しの選択と一歩は取り消す）。
+  func testMovingTheSelectionWhileWaitingCancelsTheDeferredSelection() throws {
+    let hosted = try host("x ab ab\n")
+    let pane = hosted.pane
+    let document = hosted.document
+    pane.showSearch()
+    catchUp(pane)
+    pane.search.setNeedle("ab")
+    pane.search.next()
+    document.surface.selectedRange = NSRange(location: 1, length: 0)
+    catchUp(pane)
+    XCTAssertEqual(pane.search.matches.map(\.location), [2, 5], "一致は届く")
+    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 1, length: 0), "人の選択はそのまま")
+  }
+
+  /// 検索バーを開いたまま文書を切り替えると、新しい文書の一致が届くまで件数は前のまま（「一致なし」を出さない）。
+  func testSwitchingDocumentsKeepsTheCountUntilTheNewMatchesArrive() throws {
+    let hosted = try host("one two one\n")
+    let pane = hosted.pane
+    pane.showSearch()
+    catchUp(pane)
+    pane.search.setNeedle("one")
+    catchUp(pane)
+    let seen = counts(pane)
+    _ = try hosted.tab.editor.open(try caseFile("t.txt", "one\n"))
+    XCTAssertFalse(seen().contains { $0.1 == 0 }, "届く前に一致なしを出さない: \(seen())")
+    catchUp(pane)
+    XCTAssertEqual(seen().last?.1, 1, "新しい文書の件数")
   }
 
   /// 検索語を打った後、一致が届く前にバーを閉じれば、届いた一致は出さない（閉じた検索の地が戻らない）。

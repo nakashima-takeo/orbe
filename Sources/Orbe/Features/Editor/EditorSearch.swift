@@ -9,16 +9,25 @@ import OrbeEditorCore
 ///
 /// 一致は文書の写しから裏で探す（`EditorDocument.analyze`）。検索語を打ち換えると、新しい検索語の一致が届くまで前の地と
 /// 件数を出したままにし（打つたびに地が消えてちらつかない）、打鍵での最初の一致の選択と、その間に押された Enter・⇧Enter
-/// （最後の 1 回ぶん）は届いてから新しい一致に対して行う——前の検索語の一致へ飛ばない。本文の変更では一致を 100ms 後に
+/// （最後の 1 回ぶん）は届いてから新しい一致に対してその順に行う——前の検索語の一致へ飛ばない。待っている間に人が選択を
+/// 動かせば、その後回しの操作は取り消す（届いた結果が人の選択を覆さない）。文書を切り替えたときも、新しい文書の一致が
+/// 届くまで件数は前のまま（一致があるのに「一致なし」を一瞬出さない）。本文の変更では一致を 100ms 後に
 /// 取り直し（VS Code `FindModel` と同じ間引き）、その間は編集に合わせて一致の区間をずらしておく。問いは同じなので、
 /// 取り直しを待たずにずらした一致で操作できる。一致は俯瞰（ミニマップとスクロールバーの印）にも出るので、変わったら告げる。
 @MainActor
 final class EditorSearch {
   static let refreshDelay: TimeInterval = 0.1
 
-  /// 新しい検索語の一致が届いたときに行う操作。
-  private enum Move {
-    case first
+  /// 一致を待っている間に、届いたら行う操作。
+  private struct Awaiting {
+    /// 起点以降の最初の一致を選ぶ（検索語を打ったとき）。
+    var selectsFirst: Bool
+    /// その後に当てる、最後に押された一歩。
+    var step: Step?
+  }
+
+  /// Enter・⇧Enter の一歩。
+  private enum Step {
     case next
     case previous
   }
@@ -30,8 +39,8 @@ final class EditorSearch {
   private var start = 0
   /// 最後に検索が選んだ一致（それ以外の選択の変化で起点を置き直す）。
   private var revealed: NSRange?
-  /// 一致がまだ届いていない新しい検索語と、届いたときに行う操作。
-  private var awaiting: (needle: String, move: Move?)?
+  /// 今の needle の一致がまだ届いていない間の、届いたら行う操作。
+  private var awaiting: Awaiting?
   /// 件数が変わった（selected は 1 始まり。needle が空なら total 0 で届く。`limited` は上限で打ち切った）。
   var onCountChange: ((_ selected: Int?, _ total: Int, _ limited: Bool) -> Void)?
   /// 一致か現在の一致が変わった（俯瞰へ出し直す）。
@@ -54,8 +63,8 @@ final class EditorSearch {
     start = document?.surface.caretLocation ?? 0
     revealed = nil
     matches = []
-    pushHighlights()
-    search(awaiting: nil)
+    onMatchesChange?()
+    search(selectingFirst: false)
   }
 
   /// needle が打ち込まれた。一致を取り直し、届いたら起点以降に始まる最初の一致を選んで見せる（VS Code の
@@ -63,20 +72,20 @@ final class EditorSearch {
   func setNeedle(_ needle: String) {
     guard needle != self.needle else { return }
     self.needle = needle
-    search(awaiting: .first)
+    search(selectingFirst: true)
     onNeedleChange?()
   }
 
   /// ⌘F の種を入れる。一致を取り直すだけで、選択は動かさない（VS Code の開いたときの検索）。
   func seed(_ needle: String) {
     self.needle = needle
-    search(awaiting: nil)
+    search(selectingFirst: false)
     onNeedleChange?()
   }
 
   func next() {
     guard awaiting == nil else {
-      awaiting?.move = .next
+      awaiting?.step = .next
       return
     }
     guard let document,
@@ -87,7 +96,7 @@ final class EditorSearch {
 
   func previous() {
     guard awaiting == nil else {
-      awaiting?.move = .previous
+      awaiting?.step = .previous
       return
     }
     guard let document,
@@ -112,10 +121,12 @@ final class EditorSearch {
     guard needle == self.needle else { return }
     matches = ranges
     pushHighlights()
-    guard let awaited = awaiting, awaited.needle == needle else { return }
+    guard let awaited = awaiting else { return }
     awaiting = nil
-    switch awaited.move {
-    case .first: if let index = TextSearch.first(in: matches, from: start) { reveal(index) }
+    if awaited.selectsFirst, let index = TextSearch.first(in: matches, from: start) {
+      reveal(index)
+    }
+    switch awaited.step {
     case .next: next()
     case .previous: previous()
     case nil: break
@@ -126,6 +137,8 @@ final class EditorSearch {
     if let document, document.surface.selectedRange != revealed {
       start = document.surface.caretLocation
       revealed = nil
+      awaiting?.selectsFirst = false
+      awaiting?.step = nil
     }
     pushCurrent()
     pushCount()
@@ -143,9 +156,9 @@ final class EditorSearch {
     onNeedleChange?()
   }
 
-  /// 今の needle の一致を頼む。空なら一致を空にする。`move` は、一致が届いたときに行う操作——届くまでは前の一致を
-  /// 出したまま。
-  private func search(awaiting move: Move?) {
+  /// 今の needle の一致を頼む。空なら一致を空にする。届くまでは前の一致と件数を出したままにし、`selectingFirst` なら届いた
+  /// ときに起点以降の最初の一致を選ぶ。
+  private func search(selectingFirst: Bool) {
     refreshDelay.cancel()
     guard let document, !needle.isEmpty else {
       awaiting = nil
@@ -153,7 +166,7 @@ final class EditorSearch {
       pushHighlights()
       return
     }
-    awaiting = (needle, move)
+    awaiting = Awaiting(selectsFirst: selectingFirst, step: nil)
     document.analyze(.find(needle))
   }
 
