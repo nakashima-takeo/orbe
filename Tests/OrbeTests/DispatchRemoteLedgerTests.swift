@@ -87,15 +87,22 @@ final class DispatchRemoteLedgerTests: OrbeTestCase {
   }
 
   /// push 先の remote が GitHub でない行は `notGitHub`、確かめられない行は `unverified`——origin の
-  /// 同名ブランチと読み替えない。
+  /// 同名ブランチと読み替えない。remote として引けない push 先（URL を直接書いた remote・存在しない
+  /// remote）も確かめられない。
   func testLocalBranchOnAnUnusablePushRemoteIsNotReadAsOrigin() {
     let identities = DispatchRowIdentities(
       resolved: settled([
         "origin": .github(mine), "mirror": .notGitHub, "gone": .unverified,
       ]),
-      localBranches: [branch("a", pushRemote: "mirror"), branch("b", pushRemote: "gone")])
+      localBranches: [
+        branch("a", pushRemote: "mirror"), branch("b", pushRemote: "gone"),
+        branch("c", pushRemote: "https://github.com/me/r.git"),
+        branch("d", pushRemote: "removed"),
+      ])
     XCTAssertEqual(identities.local("a"), .notGitHub)
     XCTAssertEqual(identities.local("b"), .unverified)
+    XCTAssertEqual(identities.local("c"), .unverified, "URL を直接書いた remote")
+    XCTAssertEqual(identities.local("d"), .unverified, "存在しない remote")
   }
 
   // MARK: - remote 追跡ブランチの同一性

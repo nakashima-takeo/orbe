@@ -119,14 +119,33 @@ extension DispatchRemoteLedgerProviderTests {
 
   /// open PR 一覧を、この 1 件だけにする。
   func servePullRequest(_ number: Int, head: String, from repository: String) throws {
+    try servePullRequests([pullRequestNode(number, head: head, from: repository)])
+  }
+
+  /// open PR 一覧を、この並び（`pullRequestNode` の出力）にする。
+  func servePullRequests(_ nodes: [String]) throws {
+    try write(
+      #"{"nodes":[\#(nodes.joined(separator: ","))],"#
+        + #""pageInfo":{"hasNextPage":false,"endCursor":null}}"#,
+      to: ghDir.appendingPathComponent("prs.json").path)
+  }
+
+  /// open PR 一覧の 1 件（GraphQL の 1 node）。
+  func pullRequestNode(_ number: Int, head: String, from repository: String) -> String {
     let parts = repository.split(separator: "/").map(String.init)
-    let node =
-      #"{"number":\#(number),"title":"pr \#(number)","headRefName":"\#(head)","#
+    return #"{"number":\#(number),"title":"pr \#(number)","headRefName":"\#(head)","#
       + #""headRepositoryOwner":{"login":"\#(parts[0])"},"headRepository":{"name":"\#(parts[1])"},"#
       + #""reviewDecision":null}"#
-    try write(
-      #"{"nodes":[\#(node)],"pageInfo":{"hasNextPage":false,"endCursor":null}}"#,
-      to: ghDir.appendingPathComponent("prs.json").path)
+  }
+
+  /// ブランチの PR 1 件（`gh pr list --json` の 1 要素）。
+  func branchPR(
+    _ number: Int, head: String, state: String, base: String = "main", from repository: String
+  ) -> String {
+    let parts = repository.split(separator: "/").map(String.init)
+    return #"{"number":\#(number),"headRefName":"\#(head)","state":"\#(state)","#
+      + #""baseRefName":"\#(base)","headRepositoryOwner":{"login":"\#(parts[0])"},"#
+      + #""headRepository":{"name":"\#(parts[1])"}}"#
   }
 
   func serveBranchPullRequests(_ head: String, _ json: String) throws {
