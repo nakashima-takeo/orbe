@@ -112,7 +112,7 @@ extension DispatchWorktreeClassifierTests {
 
   /// **状態の無いブランチは「まだ確かめていない」へ倒す。** ここが「確かめて 0 件」に倒れると、
   /// 取得が着地していないブランチが安全群へ入り、自動チェックまで灯る。
-  func testHeadMissingFromTheLedgerFallsBackToFetching() {
+  func testBranchMissingFromTheStatesFallsBackToFetching() {
     let rows = DispatchWorktreeClassifier.rows(
       DispatchWorktreeClassifier.Input(
         worktrees: [GitWorktree(path: "/wt/x", branch: "feat/x", head: "aaa", isMain: false)],

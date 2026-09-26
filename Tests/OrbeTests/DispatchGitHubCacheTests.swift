@@ -360,7 +360,7 @@ final class DispatchGitHubCacheTests: OrbeTestCase {
 
   /// 対象は worktree にあるブランチだけ（main worktree は掃除の対象外・detached は PR の head に
   /// なり得ない）。ここが広がると worktree 本数で抑えているプロセス数の前提が崩れる。
-  func testBranchPRHeadsTargetNonMainWorktreeBranchesOnly() {
+  func testWorktreeBranchesTargetNonMainWorktreeBranchesOnly() {
     let heads = DispatchDataProvider.worktreeBranches(of: [
       GitWorktree(path: "/repo", branch: "main", head: "a", isMain: true),
       GitWorktree(path: "/wt/x", branch: "refactor/phase2-2b", head: "b", isMain: false),
