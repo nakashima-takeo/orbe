@@ -60,9 +60,25 @@ enum DesignSceneFixtures {
     var input = DispatchSectionBuilder.Input.designSample
     input.issues = []
     input.pullRequests = []
-    input.issuesLoading = true
-    input.pullRequestsLoading = true
+    input.issuesFetching = true
+    input.pullRequestsFetching = true
     return dispatchModel(from: input)
+  }
+
+  /// 一覧の取得が続いている（届いた行の後ろ、セクション末尾にローディング行）。
+  static func dispatchGrowingModel() -> DispatchPaletteModel {
+    var input = DispatchSectionBuilder.Input.designSample
+    input.issuesFetching = true
+    input.pullRequestsFetching = true
+    return dispatchModel(from: input)
+  }
+
+  /// 取得中の絞り込み（`feat` で Issues は 0 件だが、「まだ届いていない」ので見出しとローディング行が残る）。
+  static func dispatchGrowingFilteredModel() -> DispatchPaletteModel {
+    let model = dispatchGrowingModel()
+    model.query = "feat"
+    model.onQueryChanged()
+    return model
   }
 
   /// gh 未導入のフォールバック（Issues に誘導情報行 1 本・PR 非表示）。
@@ -81,6 +97,29 @@ enum DesignSceneFixtures {
     let model = dispatchModel(from: .designSample)
     model.query = "feat"
     model.onQueryChanged()
+    return model
+  }
+
+  /// worktree にできない PR 行（他人の fork の `main` から出た PR）を選んだところ。行末とフッターが
+  /// ブラウザで開くと先に言い、キーヒントから ⇥ と ⌘↵ が外れる（起動先チップは出たまま）。
+  static func dispatchBrowserPullRequestModel() -> DispatchPaletteModel {
+    var input = DispatchSectionBuilder.Input.designSample
+    input.pullRequests.append(
+      GitHubPullRequest(
+        number: 146, title: "fix: tab order from a fork", headRefName: "main",
+        reviewDecision: nil, headRepository: GitHubRepoName(nameWithOwner: "someone/orbe")))
+    let model = dispatchModel(from: input)
+    model.selected = model.items.count - 1
+    return model
+  }
+
+  /// origin の正式名を確かめられない（見えない private・問い合わせの失敗等）。Pull requests の見出しの
+  /// 直下に情報行が 1 行出て、PR 行はブラウザで開く行になり、worktree / branch 行のチップは消える。
+  static func dispatchRepositoryUnverifiedModel() -> DispatchPaletteModel {
+    var input = DispatchSectionBuilder.Input.designSample
+    input.remoteLedger = .settled(.init(repositories: ["origin": .unverified]))
+    let model = dispatchModel(from: input)
+    model.selected = model.items.count - 1
     return model
   }
 
@@ -112,9 +151,10 @@ enum DesignSceneFixtures {
         number: 300 + $0, title: "feat: それなりに長い PR のタイトル \($0)",
         headRefName: "feature/very-long-branch-name-\($0)",
         reviewDecision: $0.isMultiple(of: 2) ? "REVIEW_REQUIRED" : "APPROVED",
-        isCrossRepository: false)
+        headRepository: DispatchSectionBuilder.Input.designRepository)
     }
     input.githubState = .ready
+    input.remoteLedger = DispatchSectionBuilder.Input.designLedger
     let model = dispatchModel(from: input)
     model.selected = model.items.count - 1  // 末尾選択（scroll-to-end 到達の確認）
     return model

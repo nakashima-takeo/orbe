@@ -9,6 +9,9 @@ import XCTest
 /// ここが破れると、`|` や改行を含むパスの worktree が別のパスとして出る・そこで checkout 中のブランチの
 /// upstream と track が他の列の値にすり替わって clean の安全確認が事実と食い違う・author 名が途中で
 /// 切れる、が黙って起きる（エラーにはならない）。
+///
+/// remote 一覧は、読み違えると行が GitHub のどのリポジトリか決まらず、番号チップと clean の PR の事実が
+/// 黙って消える。
 final class GitRepoDispatchListingTests: OrbeTestCase {
   private var dir: URL!
   /// 本体 worktree。追加の worktree はその外（`dir` 直下）に並べる。
@@ -97,6 +100,52 @@ final class GitRepoDispatchListingTests: OrbeTestCase {
     XCTAssertTrue(
       branches[0].relativeDate.hasPrefix("evil\r · "),
       "author 名全体 · 相対日時: \(branches[0].relativeDate)")
+  }
+
+  // MARK: - remote 一覧
+
+  /// remote の台帳の材料は、git が実際に取りに行く fetch の URL（`insteadOf` を展開した後）。push の
+  /// URL が別でもそちらは読まない。`/` を含む remote 名もそのまま名前になる。
+  func testRemotesAreReadAsExpandedFetchURLs() throws {
+    XCTAssertTrue(git(["remote", "add", "origin", "gh:me/r"]).isSuccess)
+    XCTAssertTrue(git(["config", "url.https://github.com/.insteadOf", "gh:"]).isSuccess)
+    XCTAssertTrue(
+      git(["remote", "set-url", "--push", "origin", "git@github.com:elsewhere/x.git"]).isSuccess)
+    XCTAssertTrue(git(["remote", "add", "team/me", "git@github.com:me/r2.git"]).isSuccess)
+
+    let remotes = try collect { repo.remotes(completion: $0) }
+
+    XCTAssertEqual(
+      remotes,
+      ["origin": "https://github.com/me/r", "team/me": "git@github.com:me/r2.git"])
+  }
+
+  /// **部分クローンでも読める。** 人が読む表示（`remote -v`）は部分クローンの fetch 行の末尾にフィルタ名
+  /// （`[blob:none]`）を足すので、表示の行の形で読むと remote が 1 本も読めず、どの行も「GitHub の行で
+  /// ない」と確定して clean が PR の事実を「確かめて 0 件」と読む。
+  func testRemotesOfAPartialCloneAreRead() throws {
+    XCTAssertTrue(git(["config", "uploadpack.allowFilter", "true"]).isSuccess)
+    let partial = dir.appendingPathComponent("partial").path
+    XCTAssertTrue(
+      gitIn(dir.path, ["clone", "-q", "--filter=blob:none", "file://\(root!)", partial]).isSuccess)
+    XCTAssertTrue(
+      gitIn(partial, ["remote", "set-url", "origin", "https://github.com/me/r.git"]).isSuccess)
+    XCTAssertTrue(
+      gitIn(partial, ["remote", "-v"]).stdoutText.contains("(fetch) [blob:none]"),
+      "前提: 表示の fetch 行に部分クローンのフィルタ名が付く")
+    let opened: GitRepo? = try collect { GitRepo.open(cwd: partial, completion: $0) }
+    let partialRepo = try XCTUnwrap(opened)
+
+    let remotes = try collect { partialRepo.remotes(completion: $0) }
+
+    XCTAssertEqual(remotes, ["origin": "https://github.com/me/r.git"])
+  }
+
+  /// remote を持たないリポジトリは「読めた、0 本」（読めなかったとは区別する）。
+  func testRepositoryWithoutRemotesReadsAsEmpty() throws {
+    let remotes = try collect { repo.remotes(completion: $0) }
+
+    XCTAssertEqual(remotes, [:])
   }
 
   // MARK: - ヘルパ

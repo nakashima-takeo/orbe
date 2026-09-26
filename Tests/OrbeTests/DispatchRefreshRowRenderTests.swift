@@ -78,7 +78,7 @@ final class DispatchRefreshRowRenderTests: SnapshotTestCase {
   private func item(sync: DispatchBranchSync? = nil, badges: [DispatchBadge] = []) -> DispatchItem {
     DispatchItem(
       glyph: .localBranch, name: "stale", detail: "1d前", badges: badges, sync: sync,
-      action: .localBranch(name: "stale"))
+      action: .open(.localBranch(name: "stale")))
   }
 
   private func render(_ item: DispatchItem) throws -> Data {
@@ -96,7 +96,7 @@ final class DispatchRefreshRowRenderTests: SnapshotTestCase {
 
   /// 最新化が落ちた直後の画面の行 0（カーソルは「そのまま作成」へ落ちている）。
   private func failedRow(_ failure: GitRefreshFailure) throws -> Data {
-    let model = DispatchRefreshModel(item: item(), sync: try sync(ahead: 0, behind: 3))
+    let model = DispatchRefreshModel(sync: try sync(ahead: 0, behind: 3), relativeDate: "1d前")
     model.beginUpdating()
     model.fail(failure)
     return try XCTUnwrap(

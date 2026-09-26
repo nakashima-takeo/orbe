@@ -15,6 +15,7 @@ enum BranchParser {
     case upstreamRemote = "upstream:remotename"
     case upstreamRemoteRef = "upstream:remoteref"
     case upstreamTrack = "upstream:track"
+    case pushRemote = "push:remotename"
   }
 
   private enum RemoteField: String, CaseIterable {
@@ -34,7 +35,9 @@ enum BranchParser {
           short: short, ref: record[.upstreamRef] ?? "", remote: record[.upstreamRemote] ?? "",
           remoteRef: record[.upstreamRemoteRef] ?? "", track: parseTrack(record[.upstreamTrack]))
       }
-      return GitBranch(name: name, relativeDate: record[.relativeDate] ?? "", upstream: upstream)
+      return GitBranch(
+        name: name, relativeDate: record[.relativeDate] ?? "", upstream: upstream,
+        pushRemote: record[.pushRemote])
     }
   }
 
