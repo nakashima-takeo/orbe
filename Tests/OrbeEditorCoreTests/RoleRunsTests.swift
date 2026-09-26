@@ -70,7 +70,7 @@ final class RoleRunsTests: XCTestCase {
       let location = Int.random(in: 0...reference.count, using: &generator)
       let length = Int.random(in: 0...min(12, reference.count - location), using: &generator)
       if Bool.random(using: &generator) {
-        let inserted = Int.random(in: 0...6, using: &generator)
+        let inserted = Int.random(in: 0...12, using: &generator)
         let role: SyntaxRole?
         if location > 0 {
           role = reference[location - 1]
@@ -86,14 +86,19 @@ final class RoleRunsTests: XCTestCase {
       } else {
         guard length > 0 else { continue }
         let role = roles.randomElement(using: &generator)!
+        var changed = IndexSet()
+        for offset in location..<(location + length) where reference[offset] != role {
+          changed.insert(offset)
+        }
         reference.replaceSubrange(
           location..<(location + length), with: [SyntaxRole?](repeating: role, count: length))
-        runs.replace(
+        let reported = runs.replace(
           NSRange(location: location, length: length),
           with: role.map {
             [HighlightSpan(range: NSRange(location: location, length: length), role: $0)]
           }
             ?? [])
+        XCTAssertEqual(reported, changed, "役割が変わった字だけを返す")
       }
       XCTAssertEqual(perUnit(runs), reference)
     }

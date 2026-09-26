@@ -73,25 +73,29 @@ public struct RoleRuns: Sendable {
     runs.replaceSubrange(window.indices, with: Self.coalesced(local))
   }
 
-  /// `range` の役割を `spans`（`range` の中の役割の区間。重ならない昇順）で置き換える。区間の外の字は変えない。
-  public mutating func replace(_ range: NSRange, with spans: [HighlightSpan]) {
+  /// `range` の役割を `spans`（`range` の中の役割の区間。重ならない昇順）で置き換え、役割が変わった字を返す。区間の外の
+  /// 字は変えない。
+  @discardableResult
+  public mutating func replace(_ range: NSRange, with spans: [HighlightSpan]) -> IndexSet {
     let start = max(0, range.location)
     let end = min(NSMaxRange(range), length)
-    guard start < end else { return }
+    guard start < end else { return IndexSet() }
     let window = window(covering: start, end)
     let (before, after) = Self.pieces(of: window, outside: start, end)
-    var local = before
+    var middle: [Run] = []
     var cursor = start
     for span in spans {
       let from = max(span.range.location, cursor)
       let to = min(NSMaxRange(span.range), end)
       guard from < to else { continue }
-      if from > cursor { local.append(Run(role: nil, length: from - cursor)) }
-      local.append(Run(role: span.role, length: to - from))
+      if from > cursor { middle.append(Run(role: nil, length: from - cursor)) }
+      middle.append(Run(role: span.role, length: to - from))
       cursor = to
     }
-    if end > cursor { local.append(Run(role: nil, length: end - cursor)) }
-    runs.replaceSubrange(window.indices, with: Self.coalesced(local + after))
+    if end > cursor { middle.append(Run(role: nil, length: end - cursor)) }
+    let changed = Self.differences(Self.inside(window, start, end), middle, from: start)
+    runs.replaceSubrange(window.indices, with: Self.coalesced(before + middle + after))
+    return changed
   }
 
   /// `[start, end)`（空なら `start` の位置）に掛かる連なりに、両隣を 1 つずつ足した窓（隣と同じ役割になれば繋ぐため）。
@@ -120,6 +124,35 @@ public struct RoleRuns: Sendable {
       position += run.length
     }
     return (before, after)
+  }
+
+  /// 窓の連なりのうち `[start, end)` の中の部分。
+  private static func inside(_ window: Window, _ start: Int, _ end: Int) -> [Run] {
+    var result: [Run] = []
+    var position = window.start
+    for run in window.runs {
+      let overlap = min(position + run.length, end) - max(position, start)
+      if overlap > 0 { result.append(Run(role: run.role, length: overlap)) }
+      position += run.length
+    }
+    return result
+  }
+
+  /// 同じ長さを覆う 2 つの連なりの列で、役割が違う字（`start` から数える）。
+  private static func differences(_ old: [Run], _ new: [Run], from start: Int) -> IndexSet {
+    var result = IndexSet()
+    var position = start
+    var (i, j, usedOld, usedNew) = (0, 0, 0, 0)
+    while i < old.count, j < new.count {
+      let step = min(old[i].length - usedOld, new[j].length - usedNew)
+      if old[i].role != new[j].role { result.insert(integersIn: position..<(position + step)) }
+      position += step
+      usedOld += step
+      usedNew += step
+      if usedOld == old[i].length { (i, usedOld) = (i + 1, 0) }
+      if usedNew == new[j].length { (j, usedNew) = (j + 1, 0) }
+    }
+    return result
   }
 
   /// 長さ 0 の連なりを落とし、隣り合う同じ役割を繋ぐ。

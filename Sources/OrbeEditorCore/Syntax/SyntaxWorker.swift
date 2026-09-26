@@ -9,7 +9,7 @@ import SwiftTreeSitter
 /// 編集をまとめて受け取って全部当ててから 1 回だけ差分解析し（速い打鍵は 1 回に畳まれる）、「構文木が変わった区間 ∪
 /// 編集の区間」に掛かる行を丸ごと「まだ作り直していない」に足す——字の中身で役割が決まる capture（`#match?` など）は、
 /// 構文木が変わらなくても役割が変わるから。作り直しは見えている範囲を先に、残りを一定量ずつ進め、区切りごとに役割の並びの
-/// 写しと変わった区間を版つきで置く。区切りの間に新しい編集が来ていれば、それを先に当てる。
+/// 写しと役割が変わった字を版つきで置く。区切りの間に新しい編集が来ていれば、それを先に当てる。
 actor SyntaxWorker {
   /// 見えている範囲の外を 1 回に作り直す量（UTF-16）。区切りの間隔が、打鍵の再解析を待たせる上限になる。
   static let step = 16_384
@@ -34,8 +34,10 @@ actor SyntaxWorker {
   private var roles: RoleRuns
   /// まだ作り直していない範囲（`text` の上）。
   private var stale = IndexSet()
-  /// 前に置いてから作り直した範囲（`text` の上）。
+  /// 前に置いてから役割が変わった字（`text` の上）。
   private var changed = IndexSet()
+  /// 最後に結果を置いた版。
+  private var deposited: Int?
   private var parsed = false
 
   init(
@@ -88,7 +90,11 @@ actor SyntaxWorker {
       }
       guard let batch else { return }
       absorb(batch)
-      if !stale.isEmpty { rebuild(visible: batch.visible) }
+      if !stale.isEmpty {
+        rebuild(visible: batch.visible)
+      } else if deposited != version {
+        deposit(visibleReady: true)
+      }
     }
   }
 
@@ -128,14 +134,19 @@ actor SyntaxWorker {
       let part = stale.rangeView.first!
       target = NSRange(location: part.lowerBound, length: min(part.count, Self.step))
     }
-    roles.replace(target, with: layer.roles(in: target, text: text))
+    changed.formUnion(roles.replace(target, with: layer.roles(in: target, text: text)))
     stale.remove(integersIn: target.location..<NSMaxRange(target))
-    changed.insert(integersIn: target.location..<NSMaxRange(target))
+    deposit(visibleReady: !stale.intersects(integersIn: shown.location..<NSMaxRange(shown)))
+  }
+
+  /// 今の版の役割の並びと、前に置いてから役割が変わった字を受け取り箱へ置く。取り込んだ版には必ず 1 つ置く（作り直す
+  /// 範囲が空の版——空の本文や、編集で作り直す範囲が消えた版——でも、文書が追いついたと分かるように）。
+  private func deposit(visibleReady: Bool) {
     let outcome = SyntaxOutcome(
-      version: version, roles: roles, changed: changed,
-      visibleReady: !stale.intersects(integersIn: shown.location..<NSMaxRange(shown)),
+      version: version, roles: roles, changed: changed, visibleReady: visibleReady,
       complete: stale.isEmpty)
     changed = IndexSet()
+    deposited = version
     inbox.deposit { $0.syntax.append(outcome) }
   }
 
@@ -153,7 +164,7 @@ actor SyntaxWorker {
 struct SyntaxOutcome: Sendable {
   let version: Int
   let roles: RoleRuns
-  /// 前の区切りから作り直した範囲（`version` の本文の上）。
+  /// 前の区切りから役割が変わった字（`version` の本文の上）。
   let changed: IndexSet
   /// 見えている範囲の作り直しが済んだ。
   let visibleReady: Bool

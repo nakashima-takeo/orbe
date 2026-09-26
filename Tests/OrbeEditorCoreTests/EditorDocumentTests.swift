@@ -218,6 +218,33 @@ final class EditorDocumentTests: XCTestCase {
     }
   }
 
+  /// 本文が空のコードファイルでも、裏の仕事は今の版の結果を置く——初めて見せるときに上限まで待たず、追いつくのを待つ口が
+  /// 時間切れにならない。全文を消して空になったときも同じ。
+  func testAnEmptyCodeFileCatchesUp() throws {
+    let (empty, _) = try open(try temp("e.swift", ""))
+    XCTAssertTrue(empty.waitUntilCaughtUp(timeout: 1), "空で開いた")
+    let (document, surface) = try open(try temp("f.swift", "let a = 1\n"))
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    surface.replace(NSRange(location: 0, length: surface.length), with: "")
+    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 1), "全文を消して空になった")
+  }
+
+  /// 役割が変わらない打鍵（識別子の途中）では、裏から「役割が変わった」は届かない——面とミニマップが同じ行を塗り直さない。
+  /// 役割が変わる打鍵では、変わった字が届く。
+  func testOnlyEditsThatChangeRolesReportChangedRoles() throws {
+    let (document, surface) = try open(try temp("g.swift", "let abc = 1\n"))
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    let delivered = surface.changedRoles.count
+    surface.replace(NSRange(location: 5, length: 0), with: "x")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(surface.changedRoles.count, delivered, "識別子の途中の打鍵では役割が変わらない")
+    surface.replace(NSRange(location: 0, length: 0), with: "// ")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertTrue(
+      surface.changedRoles.dropFirst(delivered).reduce(IndexSet()) { $0.union($1) }
+        .contains(integersIn: 3..<6), "コメントになった let は役割が変わった")
+  }
+
   /// 役割の答えは区間の切り方に依らない——tree-sitter は区間と交差する**マッチ**を返し、その capture は区間の外へ
   /// はみ出しうる。はみ出しを答えると、裏の仕事が文書を区切りごとに作るたびに区切りの外の字の色が変わる（Go の
   /// `NewLineIndex` が 1 文字の挿入で function 色になる）。編集の後の本文で、いろいろな位置から切った区間の答えが、
