@@ -107,10 +107,11 @@ extension GitRepo {
     }
   }
 
-  /// origin の URL が github.com を指すか（gh 不在でも判定できる cheap チェック）。
+  /// origin が GitHub の remote か（gh 不在でも判定できる cheap チェック。規則は台帳と同じ
+  /// `GitHubRepoName.isGitHub(remoteURL:)`）。
   func originIsGitHub(completion: @escaping (Bool) -> Void) {
     runner.run(["remote", "get-url", "origin"], cwd: root) { output in
-      completion(output.isSuccess && output.stdoutText.contains("github.com"))
+      completion(output.isSuccess && GitHubRepoName.isGitHub(remoteURL: output.stdoutText))
     }
   }
 
