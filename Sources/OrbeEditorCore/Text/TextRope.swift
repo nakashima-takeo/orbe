@@ -83,6 +83,59 @@ public struct TextRope: Sendable {
     return first...max(first, last)
   }
 
+  /// 昇順で重ならない区間の列それぞれの行（`rows(of:)` と同じ答え）。塊を前から 1 度だけ辿り、区間の無い塊は改行数の
+  /// 要約で読み飛ばす（O(辿る塊 + 区間の数)）——検索の一致（上限 2 万件）を描画のたびに行へ写すため。
+  public func rows(ofAscending ranges: [NSRange]) -> [ClosedRange<Int>] {
+    guard let first = ranges.first else { return [] }
+    var cursor = RowCursor(self, from: first.location)
+    return ranges.map { range in
+      let start = cursor.row(at: range.location)
+      let last = range.length > 0 ? cursor.row(at: NSMaxRange(range) - 1) : start
+      return start...max(start, last)
+    }
+  }
+
+  /// 減らないオフセットの列の行を、塊を前から辿って出す。
+  private struct RowCursor {
+    private var chunks: SummaryTree<Chunk>.Elements
+    private var current: Chunk?
+    /// 今の塊の先頭のオフセットと、その前の改行の数。
+    private var chunkStart = 0
+    private var newlinesBefore = 0
+    /// 今の塊の中で数え終えた単位の数と、その中の改行の数。
+    private var scanned = 0
+    private var newlinesScanned = 0
+
+    init(_ rope: TextRope, from offset: Int) {
+      guard let (index, before) = rope.chunk(containing: min(max(0, offset), rope.length)) else {
+        chunks = rope.chunks.elements(from: 0)
+        return
+      }
+      chunks = rope.chunks.elements(from: index)
+      current = chunks.next()
+      chunkStart = before.utf16
+      newlinesBefore = before.newlines
+    }
+
+    mutating func row(at offset: Int) -> Int {
+      guard var chunk = current else { return 0 }
+      while offset >= chunkStart + chunk.units.count, let next = chunks.next() {
+        newlinesBefore += chunk.summary.newlines
+        chunkStart += chunk.units.count
+        chunk = next
+        scanned = 0
+        newlinesScanned = 0
+      }
+      current = chunk
+      let local = min(max(0, offset - chunkStart), chunk.units.count)
+      while scanned < local {
+        if chunk.units[scanned] == 0x0A { newlinesScanned += 1 }
+        scanned += 1
+      }
+      return newlinesBefore + newlinesScanned
+    }
+  }
+
   /// 区間の UTF-16 単位（本文の外は切り詰める）。
   public func units(in range: NSRange) -> ContiguousArray<UInt16> {
     let start = min(max(0, range.location), length)

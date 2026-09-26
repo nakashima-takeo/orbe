@@ -37,6 +37,11 @@ final class TextRopeTests: XCTestCase {
       XCTAssertEqual(rope.point(at: offset).column, offset - starts[row], file: file, line: line)
     }
     XCTAssertEqual(Array(rope.utf16), Array((text as String).utf16), file: file, line: line)
+    let ranges = stride(from: 0, to: text.length, by: max(4, text.length / 211)).enumerated().map {
+      NSRange(location: $0.element, length: min($0.offset % 4, text.length - $0.element))
+    }
+    XCTAssertEqual(
+      rope.rows(ofAscending: ranges), ranges.map(rope.rows(of:)), "昇順の区間の行", file: file, line: line)
     var offset = 0
     while let chunk = rope.chunkData(at: offset) {
       offset += chunk.count / 2

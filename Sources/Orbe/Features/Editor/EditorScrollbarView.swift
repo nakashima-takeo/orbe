@@ -206,7 +206,7 @@ final class EditorScrollbarView: NSView {
       MarkGroup(rows: modified, lane: .left, color: style.modified),
       MarkGroup(rows: removed, lane: .left, color: style.removed),
       MarkGroup(
-        rows: decorations.wordOccurrences.map(text.rows(of:)), lane: .center,
+        rows: text.rows(ofAscending: decorations.wordOccurrences), lane: .center,
         color: style.wordOccurrence),
       MarkGroup(rows: findRows(text: text), lane: .center, color: style.findMatch),
     ]
@@ -228,7 +228,7 @@ final class EditorScrollbarView: NSView {
 
   /// 検索の一致の行。多いときは近い行をまとめた近似に、現在の一致を加える。
   private func findRows(text: TextRope) -> [ClosedRange<Int>] {
-    let rows = decorations.findMatches.map(text.rows(of:))
+    let rows = text.rows(ofAscending: decorations.findMatches)
     guard decorations.approximatesFindMatches else { return rows }
     var result = OverviewRuler.approximate(
       rows, lineCount: text.lineCount, height: bounds.height)
