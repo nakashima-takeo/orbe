@@ -88,11 +88,12 @@ extension DispatchDataProvider {
       }
     for name in pending {
       askedRepositories.insert(name)
+      // 比べる相手は、この provider が描いた値（発行時のキャッシュ）。同じリポジトリを開いた別の provider が
+      // 先に同じ答えを書いていても、この provider の描いた値から変われば反映する。
+      let previous = cached[name]
       gitHub.resolveRepository(cwd: repo.root, name: name) { [weak self] resolution in
         // キャッシュ書き込みは `self` の生存判定より前（`loadBranchPullRequests` と同じ理由）。
-        let cache = DispatchGitHubCache.shared
-        let previous = cache.entry(for: repo.commonDir)?.repositoryNames[name]
-        cache.setRepositoryName(resolution, for: name, key: repo.commonDir)
+        DispatchGitHubCache.shared.setRepositoryName(resolution, for: name, key: repo.commonDir)
         guard resolution != previous else { return }
         self?.applyResolvedRepository()
       }
