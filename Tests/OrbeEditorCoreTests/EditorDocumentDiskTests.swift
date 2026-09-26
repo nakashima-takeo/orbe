@@ -230,4 +230,29 @@ final class EditorDocumentDiskTests: XCTestCase {
     XCTAssertEqual(document.hunks, [])
     XCTAssertEqual(notified, before + 1)
   }
+
+  /// 外部変更の差し替えは全体の置換として届くが、文書は本文が実際に変わった区間だけを編集として扱う——変わっていない字の
+  /// 役割は差し替えの直後（裏を待たずに）も残る。
+  func testReplacingFromDiskKeepsTheRolesOfTheUnchangedText() throws {
+    let source = (1...50).map { "let value\($0) = \($0)\n" }.joined()
+    let url = try temp("r.swift", source)
+    let (document, _) = try open(url)
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    let all = NSRange(location: 0, length: document.text.length)
+    let before = document.roles.roles(in: all)
+    XCTAssertFalse(before.isEmpty, "前提: 色が付いている")
+    var edits: [TextEdit] = []
+    document.onTextChange = { edits.append($0) }
+
+    try Data(source.replacingOccurrences(of: "value25 = 25", with: "value25 = 99").utf8).write(
+      to: url)
+    document.reconcileWithDisk()
+    let changed = (source as NSString).range(of: "25\n", options: .backwards)
+    XCTAssertEqual(edits.map(\.range), [NSRange(location: changed.location, length: 2)], "変わった区間だけ")
+    XCTAssertEqual(document.roles.roles(in: all), before, "差し替えの直後も役割は残る")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(
+      document.text.substring(all),
+      source.replacingOccurrences(of: "value25 = 25", with: "value25 = 99"))
+  }
 }

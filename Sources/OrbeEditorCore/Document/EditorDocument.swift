@@ -69,7 +69,7 @@ public final class EditorDocument {
   public var onViewportChange: (() -> Void)?
   /// 面の選択が変わった。
   public var onSelectionChange: (() -> Void)?
-  /// 本文が変わった。ロープとずらした役割の更新の後に届く。
+  /// 本文が変わった（変わった最小の区間の編集）。ロープとずらした役割の更新の後に届く。
   public var onTextChange: ((TextEdit) -> Void)?
   /// 裏から届いた役割で、役割が変わった区間（今の本文の上）。
   public var onRolesChange: ((IndexSet) -> Void)?
@@ -337,7 +337,10 @@ public final class EditorDocument {
 }
 
 extension EditorDocument: TextSurfaceDelegate {
-  public func surface(_ surface: any TextSurface, didChange edit: TextEdit) {
+  /// 面の編集は、置換の前後で変わらない先頭と末尾を落とした最小の区間の編集として写し・役割・構文・配り先へ渡す——外部変更の
+  /// 差し替え（全体の置換として届く）でも、変わっていない字は役割を保ち、構文も差分で解析する。
+  public func surface(_ surface: any TextSurface, didChange whole: TextEdit) {
+    let edit = narrowed(whole)
     let start = text.point(at: edit.range.location)
     let oldEnd = text.point(at: NSMaxRange(edit.range))
     text.replace(edit.range, with: edit.replacement)
@@ -355,6 +358,26 @@ extension EditorDocument: TextSurfaceDelegate {
       requestHunks()
     }
     onTextChange?(edit)
+  }
+
+  /// 置換の前後で変わらない先頭と末尾を落とした編集。サロゲートの対は割らない。
+  private func narrowed(_ edit: TextEdit) -> TextEdit {
+    guard edit.range.length > 0, edit.replacementLength > 0 else { return edit }
+    let old = text.units(in: edit.range)
+    let new = ContiguousArray(edit.replacement.utf16)
+    let limit = min(old.count, new.count)
+    var prefix = 0
+    while prefix < limit, old[prefix] == new[prefix] { prefix += 1 }
+    if prefix > 0, UTF16.isLeadSurrogate(old[prefix - 1]) { prefix -= 1 }
+    var suffix = 0
+    while suffix < limit - prefix, old[old.count - 1 - suffix] == new[new.count - 1 - suffix] {
+      suffix += 1
+    }
+    if suffix > 0, UTF16.isTrailSurrogate(old[old.count - suffix]) { suffix -= 1 }
+    guard prefix > 0 || suffix > 0 else { return edit }
+    return TextEdit(
+      range: NSRange(location: edit.range.location + prefix, length: old.count - prefix - suffix),
+      replacement: String(decoding: new[prefix..<(new.count - suffix)], as: UTF16.self))
   }
 
   public func surfaceDidChangeViewport(_ surface: any TextSurface) {

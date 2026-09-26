@@ -94,6 +94,29 @@ extension EditorMinimapTests {
       "コメントの色から変わる: \(comment) → \(uncommented)")
   }
 
+  /// 外部変更の差し替え（全体の置換）で 1 行だけ変わったとき、ミニマップは変わった行のチャンクだけを組み直し、他のチャンクの
+  /// 字は色付きのまま残る。
+  func testReplacingTheWholeTextKeepsTheUnchangedChunks() throws {
+    let text = String(repeating: "struct S {}\n", count: 300)
+    let hosted = try hostOverview(
+      text, height: 800, name: "x-\(UUID().uuidString).swift", colored: true)
+    let document = hosted.document
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    let view = hosted.pane.minimap
+    view.display()
+    XCTAssertTrue(view.cachedChunks.isSuperset(of: [0, 1, 2]), "前提: 窓のチャンクを覚えている")
+    let line100 = document.text.lineStart(100)
+    document.surface.replaceAll(
+      with: (text as NSString).replacingCharacters(
+        in: NSRange(location: line100, length: 6), with: "class "))
+    XCTAssertEqual(view.cachedChunks.intersection([0, 1, 2]), [0, 2], "変わった行 100 のチャンクだけ捨てる")
+    view.display()
+    let layout = try XCTUnwrap(view.placement)
+    let keyword = try ViewPixels(view).strongest(
+      in: NSRect(x: gutter(view) + 1, y: layout.y(ofLine: 10), width: 1, height: 2))
+    XCTAssertTrue(Hue.blue(keyword), "変わっていない行の struct は keyword の青のまま: \(keyword)")
+  }
+
   /// 外観を切り替えると、覚えていた字の画像を捨てて新しい外観の色で描き直す。
   func testSwitchingTheAppearanceRedrawsTheGlyphsInItsColors() throws {
     let hosted = try hostOverview("MMMM\n")

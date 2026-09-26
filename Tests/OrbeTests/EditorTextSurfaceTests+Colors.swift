@@ -283,6 +283,35 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
     let stale = try colored(document).filter { $0.color != roleColors[.comment] }
       .filter { NSIntersectionRange($0.range, visibleLines(document)).length > 0 }
     XCTAssertTrue(stale.isEmpty, "見えている行に古い色が残る: \(stale.map(\.range))")
+    settle(document)
+    try assertColorsFollowTheWindow(document, "役割が届いた後")
+    XCTAssertTrue(
+      try colored(document).contains {
+        NSIntersectionRange($0.range, visibleLines(document)).length > 0
+      },
+      "見えている行に色が付いている")
+  }
+
+  /// 外部変更の差し替え（全体の置換）で 1 行だけ変わったとき、変わっていない見えている字の色は、裏から役割が届くのを待たずに
+  /// 差し替えの直後の layout から残る（いったん素の色に戻らない）。
+  func testReplacingTheWholeTextKeepsTheColorsOfTheUnchangedText() throws {
+    let text = source(200)
+    let (document, _) = try open(text)
+    let visible = visibleLines(document)
+    let keywords = try colored(document).filter {
+      $0.color == roleColors[.keyword] && NSIntersectionRange($0.range, visible).length > 0
+    }
+    XCTAssertFalse(keywords.isEmpty, "前提: 見えている `let` が keyword の色")
+    document.surface.replaceAll(
+      with: text.replacingOccurrences(of: "compute(150)", with: "compute(151)"))
+    document.surface.view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "差し替えの直後の layout")
+    let after = try colored(document).filter { $0.color == roleColors[.keyword] }.map(\.range)
+    XCTAssertTrue(
+      keywords.allSatisfy { keyword in
+        after.contains { NSIntersectionRange($0, keyword.range) == keyword.range }
+      },
+      "見えている `let` は keyword の色のまま")
   }
 
   /// 遠くへ飛んだ先の字は色付きで描かれ、描き直しを待たない（色は layout の中・描く前に置くので、layout をやり直さない。
