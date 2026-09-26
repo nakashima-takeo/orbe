@@ -12,7 +12,9 @@ extension DispatchPaletteTests {
 
   private var repository: GitHubRepoName { GitHubRepoName(nameWithOwner: "o/r") }
 
-  private func pullRequestInput(remoteBranches: [String] = []) -> DispatchSectionBuilder.Input {
+  private func pullRequestInput(remoteBranches: [String] = [], landed: Bool = true)
+    -> DispatchSectionBuilder.Input
+  {
     DispatchSectionBuilder.Input(
       remoteBranches: remoteBranches.map {
         GitBranch(name: $0, relativeDate: "3h前", upstream: nil)
@@ -24,7 +26,8 @@ extension DispatchPaletteTests {
           headRepository: repository)
       ],
       githubState: .ready,
-      remoteLedger: .settled(.init(repositories: ["origin": .github(repository)])))
+      remoteLedger: .settled(.init(repositories: ["origin": .github(repository)])),
+      remoteFetchLanded: landed)
   }
 
   private func index(of number: Int, in p: DispatchPaletteModel) throws -> Int {
@@ -64,13 +67,13 @@ extension DispatchPaletteTests {
     XCTAssertEqual(opened, 0)
   }
 
-  /// `origin/<head>` が提示時の fetch の着地で手元に来ると、PR 行はブラウザから作成へ変わる。行の並びが
-  /// ずれても、選んでいた PR 行の選択は保たれる。
+  /// 提示時の fetch が着地すると、PR 行は着地待ちから作成へ変わる。行の並びがずれても、選んでいた
+  /// PR 行の選択は保たれる。
   func testSelectionStaysOnThePullRequestWhenItsDestinationChanges() throws {
-    let p = makeModel(pullRequestInput())
+    let p = makeModel(pullRequestInput(landed: false))
     p.selected = try index(of: 9, in: p)
     XCTAssertEqual(
-      p.selectedItem?.action, .pullRequest(number: 9, route: .browser), "前提: ブラウザ行")
+      p.selectedItem?.action, .pullRequest(number: 9, route: .awaitingFetch), "前提: 着地待ちの行")
 
     let action = p.selectedItem?.action
     p.sections = DispatchSectionBuilder.build(

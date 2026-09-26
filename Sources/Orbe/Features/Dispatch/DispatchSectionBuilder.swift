@@ -24,6 +24,7 @@ enum DispatchSectionBuilder {
     var cleanCandidates: Int?
     /// 提示時の `fetch --prune` が着地した（列挙が fetch 後の値）。Local branch 行の同期ピルは
     /// 着地後の値だけを出す——fetch 前の差は古い remote 追跡 ref との差で、事実として嘘になる。
+    /// PR 行の手順 3（`origin/<head>` から作れるか）も着地後の値で決め、着地前は着地を待つ。
     var remoteFetchLanded = false
   }
 
@@ -215,7 +216,8 @@ enum DispatchSectionBuilder {
   /// 2. 自分のローカルブランチ → Local branch 行と同じ作り方（遅れていれば最新化の選択画面）
   /// 3. `origin/<head>`（同じ名前のローカルブランチが無いとき）→ Remote branch 行と同じ作り方。
   ///    origin に限るのは鮮度のため——作成のベースは提示時の fetch の着地後の値であるべきで、提示時に
-  ///    fetch するのは origin だけ。手元に無い `origin/<head>` は、fetch の着地で現れれば作成に変わる。
+  ///    fetch するのは origin だけ。fetch の着地前は着地を待ち（見込みは checkout）、着地後に手元に
+  ///    無ければブラウザ。
   private static func pullRequestItems(_ input: Input, _ linking: Linking) -> [DispatchItem] {
     let worktreeByRef = firstByRef(
       input.worktrees.compactMap { worktree in
@@ -233,17 +235,19 @@ enum DispatchSectionBuilder {
         pr.head.map { head in
           if let path = worktreeByRef[head] { return .open(.worktree(path: path)) }
           if let name = localBranchByRef[head] { return .open(.localBranch(name: name)) }
+          // 着地前の見込みと着地後の判定は、同じこの述語から作る。
           let base = "\(DispatchBranchSync.trustedRemote)/\(head.branch)"
           guard linking.remote(base) == head, !localNames.contains(head.branch) else {
             return .browser
           }
+          guard input.remoteFetchLanded else { return .awaitingFetch }
           return remoteNames.contains(base)
             ? .open(.remoteBranch(name: base, existingWorktree: nil)) : .browser
         } ?? .browser
       let kind: DispatchWorktreeKind?
       switch route {
       case .open(.worktree): kind = .existing
-      case .open: kind = .checkout
+      case .open, .awaitingFetch: kind = .checkout
       case .browser: kind = nil
       }
       let target = "#\(pr.number)"

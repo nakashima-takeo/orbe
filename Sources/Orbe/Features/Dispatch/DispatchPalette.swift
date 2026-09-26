@@ -17,10 +17,13 @@ enum DispatchPullRequestRoute: Equatable {
   case open(DispatchDestination)
   /// worktree にできない。ブラウザで開く。
   case browser
+  /// 提示時の fetch の着地を待ってから決める（着地前の見込みは checkout）。着地後に組み直したその PR 行の
+  /// 行き先を実行する。
+  case awaitingFetch
 }
 
 /// 決定（↵／行タップ）の対象。外（`onExecute`）へ届くのは行き先だけで、ディレクトリを解決しない行為
-/// （ブラウザ・clean 画面）はパレットの中で畳む。
+/// （ブラウザ・clean 画面・着地待ち）はパレットの中で畳む。
 enum DispatchAction: Equatable {
   case open(DispatchDestination)
   case pullRequest(number: Int, route: DispatchPullRequestRoute)
@@ -193,6 +196,9 @@ enum DispatchInfoKind: Equatable {
   var onExecute: (DispatchDestination) -> Void = { _ in }
   /// ⌘↵/「開く」（セカンダリ）。issue/PR／PR に紐づく worktree・branch をブラウザで開く。
   var onOpenWeb: (DispatchItem) -> Void = { _ in }
+  /// 提示時の fetch の着地（provider の `remoteFetchLanding`）を待って、渡した処理をメインで呼ぶ。
+  /// 着地の処理は組み直しの後に待ちを明けるので、呼ばれるのは組み直した行の上。
+  var onAwaitRemoteFetch: (@escaping () -> Void) -> Void = { $0() }
   /// clean の削除を撃つ（⌘⏎ と失敗分の再試行が共に通る）。中断の札も一緒に渡す。
   var onCleanExecute: ([CleanDeleteRequest], CleanRunToken) -> Void = { _, _ in }
   /// clean の失敗行をタブで開く。パスは解決済み（既存 worktree）なので `prepareDirectory` を通らない。
@@ -284,7 +290,8 @@ enum DispatchInfoKind: Equatable {
   /// 決定の唯一の funnel（↵ と行タップが共に通る）。作成中・範囲外・非対話行では実行しない。
   /// 選択を対象行へ確定してから、同じ行の行為をそのまま実行する（選択更新と実行の対象がずれない）。
   /// 外（`onExecute`）へ渡すのは行き先だけ。`clean` 行はパレット内の画面遷移、作れない PR 行は ⌘↵ と
-  /// 同じブラウザ（パレットは閉じない）で、どちらもディレクトリを解決しない。
+  /// 同じブラウザ（パレットは閉じない）、着地前の PR 行は着地を待ってから決め、どれもディレクトリを
+  /// 解決しない。
   func activate(at index: Int) {
     guard !isPreparing else { return }
     let its = items
@@ -294,6 +301,7 @@ enum DispatchInfoKind: Equatable {
     case .clean: enterClean()
     case .open(let destination), .pullRequest(_, .open(let destination)): onExecute(destination)
     case .pullRequest(_, .browser): onOpenWeb(its[index])
+    case .pullRequest(_, .awaitingFetch): awaitRemoteFetch(its[index])
     case nil: break
     }
   }

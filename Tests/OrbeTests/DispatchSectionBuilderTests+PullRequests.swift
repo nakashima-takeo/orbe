@@ -150,12 +150,14 @@ extension DispatchSectionBuilderTests {
     XCTAssertEqual(row?.footer, .launch(target: "#1", kind: .checkout))
   }
 
-  /// どちらも無く、head と等しい `origin/<head>` が手元にあれば、Remote branch 行と同じくそこから作る。
+  /// どちらも無く、fetch の着地後に head と等しい `origin/<head>` が手元にあれば、Remote branch 行と
+  /// 同じくそこから作る。
   func testPullRequestIsCutFromTheLocalOriginHeadWhenNothingIsCheckedOut() {
     let row = pullRequestRow(
       DispatchSectionBuilder.Input(
         remoteBranches: [remote("origin/feat")],
-        pullRequests: [pullRequest(1, head: "feat")], remoteLedger: ledger), 1)
+        pullRequests: [pullRequest(1, head: "feat")], remoteLedger: ledger,
+        remoteFetchLanded: true), 1)
     XCTAssertEqual(
       row?.action,
       .pullRequest(
@@ -177,9 +179,10 @@ extension DispatchSectionBuilderTests {
             .init(repositories: ["origin": .github(origin), "mine": .github(mine)])))
       ),
       (
-        "origin/<head> が手元に無い（shallow clone 等）",
+        "fetch の着地後も origin/<head> が手元に無い（shallow clone 等）",
         DispatchSectionBuilder.Input(
-          pullRequests: [pullRequest(1, head: "feat")], remoteLedger: ledger)
+          pullRequests: [pullRequest(1, head: "feat")], remoteLedger: ledger,
+          remoteFetchLanded: true)
       ),
       (
         "head が origin 以外の remote にしか無い",

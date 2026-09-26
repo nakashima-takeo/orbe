@@ -147,6 +147,10 @@ extension WindowController {
       guard let self, let provider = self.model.dispatchProvider else { return }
       provider.openWeb(for: item)
     }
+    p.onAwaitRemoteFetch = { [weak self] resume in
+      guard let provider = self?.model.dispatchProvider else { return }
+      provider.remoteFetchLanding.notify(queue: .main, execute: resume)
+    }
     wireDispatchClean(p)
     wireDispatchRefresh(p)
 
