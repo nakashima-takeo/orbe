@@ -41,6 +41,9 @@ final class EditorSearch {
   private var revealed: NSRange?
   /// 今の needle の一致がまだ届いていない間の、届いたら行う操作。
   private var awaiting: Awaiting?
+  /// `matches` が結んだ文書の一致か（文書を切り替えてから新しい一致が届くまでは偽——その間は件数を送らず、前の件数を
+  /// 出したままにする）。
+  private var matchesBelongToDocument = true
   /// 件数が変わった（selected は 1 始まり。needle が空なら total 0 で届く。`limited` は上限で打ち切った）。
   var onCountChange: ((_ selected: Int?, _ total: Int, _ limited: Bool) -> Void)?
   /// 一致か現在の一致が変わった（俯瞰へ出し直す）。
@@ -63,6 +66,7 @@ final class EditorSearch {
     start = document?.surface.caretLocation ?? 0
     revealed = nil
     matches = []
+    matchesBelongToDocument = false
     onMatchesChange?()
     search(selectingFirst: false)
   }
@@ -120,6 +124,7 @@ final class EditorSearch {
   func didFind(_ needle: String, _ ranges: [NSRange]) {
     guard needle == self.needle else { return }
     matches = ranges
+    matchesBelongToDocument = true
     pushHighlights()
     guard let awaited = awaiting else { return }
     awaiting = nil
@@ -149,6 +154,7 @@ final class EditorSearch {
   func close() {
     needle = ""
     matches = []
+    matchesBelongToDocument = true
     awaiting = nil
     refreshDelay.cancel()
     clearHighlights()
@@ -163,6 +169,7 @@ final class EditorSearch {
     guard let document, !needle.isEmpty else {
       awaiting = nil
       matches = []
+      matchesBelongToDocument = true
       pushHighlights()
       return
     }
@@ -203,6 +210,7 @@ final class EditorSearch {
   }
 
   private func pushCount() {
+    guard matchesBelongToDocument else { return }
     onCountChange?(current.map { $0 + 1 }, matches.count, TextSearch.isLimited(matches))
   }
 

@@ -213,7 +213,8 @@ extension EditorSearchTests {
     XCTAssertEqual(document.surface.selectedRange, NSRange(location: 1, length: 0), "人の選択はそのまま")
   }
 
-  /// 検索バーを開いたまま文書を切り替えると、新しい文書の一致が届くまで件数は前のまま（「一致なし」を出さない）。
+  /// 検索バーを開いたまま文書を切り替えると、新しい文書の一致が届くまで件数は前のまま（「一致なし」を出さない）。その間に
+  /// 選択が動いても同じ。
   func testSwitchingDocumentsKeepsTheCountUntilTheNewMatchesArrive() throws {
     let hosted = try host("one two one\n")
     let pane = hosted.pane
@@ -222,8 +223,10 @@ extension EditorSearchTests {
     pane.search.setNeedle("one")
     catchUp(pane)
     let seen = counts(pane)
-    _ = try hosted.tab.editor.open(try caseFile("t.txt", "one\n"))
+    let other = try hosted.tab.editor.open(try caseFile("t.txt", "one\n"))
     XCTAssertFalse(seen().contains { $0.1 == 0 }, "届く前に一致なしを出さない: \(seen())")
+    other.surface.selectedRange = NSRange(location: 2, length: 0)
+    XCTAssertFalse(seen().contains { $0.1 == 0 }, "届く前に選択が動いても一致なしを出さない: \(seen())")
     catchUp(pane)
     XCTAssertEqual(seen().last?.1, 1, "新しい文書の件数")
   }
