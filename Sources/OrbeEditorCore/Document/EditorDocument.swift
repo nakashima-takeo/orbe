@@ -129,9 +129,8 @@ public final class EditorDocument {
     hasBOM = contents.hasBOM
     let inbox = AnalysisInbox()
     self.inbox = inbox
-    syntax = language.flatMap { registry.configuration(for: $0) }.flatMap {
-      try? SyntaxWorker(
-        text: text, version: 0, configuration: $0, registry: registry, inbox: inbox)
+    syntax = language.flatMap { registry.rules(for: $0) }.map {
+      SyntaxWorker(text: text, version: 0, rules: $0, registry: registry, inbox: inbox)
     }
     analysis = DocumentAnalysis(inbox: inbox)
     inbox.setWake { [weak self] in self?.receive() }
@@ -144,9 +143,11 @@ public final class EditorDocument {
     DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = nil } }
   }
 
-  /// 閉じた文書の写し・役割の並び・構文木を持つ裏の仕事は裏で手放す（大きな木の解放を main で行わない）。裏へ渡す前に
-  /// 文書の欄から外す——欄は deinit の後に main で解放されるので、欄に残すと裏が先に済んだとき最後の解放が main で起きる。
+  /// 構文の裏の仕事に走っている解析を打ち切らせ、閉じた文書の写し・役割の並び・構文木を持つ裏の仕事は裏で手放す（大きな
+  /// 木の解放を main で行わない）。裏へ渡す前に文書の欄から外す——欄は deinit の後に main で解放されるので、欄に残すと裏が
+  /// 先に済んだとき最後の解放が main で起きる。
   deinit {
+    syntax?.cancel()
     let parcel = OSAllocatedUnfairLock<ReleasedParts?>(
       initialState: ReleasedParts(text: text, roles: roles, syntax: syntax))
     text = TextRope()

@@ -56,9 +56,10 @@ xcrun -sdk macosx metal --version
   API の正はこのコミットの `vendor/ghostty/include/ghostty.h`（外部契約は [spec/terminal/libghostty.md](../spec/terminal/libghostty.md)）。
 - libghostty は alpha・API 非安定のため、**main 追従ではなく固定 SHA で pin**。アップグレード時はヘッダの型差分を確認。
 - `build-app.sh` は焼く前に `vendor/ghostty` の checkout が pin と一致するか確かめ、未取得かずれていれば関係する SHA（checkout の HEAD・pin）と復旧コマンドを示して止める。共有経路（下の worktree の注意）へ進むのは、linked worktree で submodule が未取得のときだけ。pull・rebase で pin が動いたら `git submodule update --init vendor/ghostty`。
-- swift-tree-sitter は `exact: "0.10.0"`。リポジトリに迷子タグ 0.25.0（0.10.0 より古いコード）があり、`from:` で書くと静かにそちらへ解決される。
+- tree-sitter 本体は `exact: "0.26.11"`（C API を `OrbeEditorCore` から直接呼ぶ）。0.26.12・0.26.13 はエラー回復が退行していて（上流 Issue #5910）、Orbe のソースを連結した 1.2MB の Swift が文書全体で ERROR 1 つに崩れ、色がほぼ消える。0.26.12〜13 で入った query の修正は、同梱の queries の結果を変えない（量化子 `?` / `*` も `(MISSING)` も使っていない）。
+- tree-sitter を上げるときに確かめること: 実在の大きなファイル（Orbe の `Sources` を連結した Swift など）が全体 ERROR に崩れない／同梱の queries（highlights は連結、injections は単独）がすべて組める／誤りの無い見本（16 文法）の構文木と capture の列が前の版と一致する。
+- tree-sitter 0.27 以降は上流の `Package.swift` が無い。上げるときは `lib` の C ソースを取り込む自前の target に移る（`lib/src` を sources・`lib/include` を公開ヘッダにし、`src/lib.c` と `src/unicode` の文書類・`src/wasm` の記号表を除く——0.26.11 の上流 manifest と同じ構成）。
 - 文法のうち javascript 0.23.1 / css 0.23.2 / python 0.23.6 / yaml 0.7.0 は `exact`。これより新しいタグ（javascript / css / python の v0.25.0、yaml の v0.7.1 以降）の `Package.swift` は `sources` を `FileManager.default.fileExists(atPath: "src/scanner.c")` で条件分岐しており、依存として評価されると cwd 相対の判定が false になって scanner.c がリンクされない（ファイル自体は存在する）。上げるときは当該タグの `Package.swift` の `sources` が `fileExists` で分岐していないか確認する——分岐していれば scanner.c を持つ文法は必ずリンクに失敗する。`from:` の文法も上流が同じ manifest へ移れば同じ失敗をする。
-- swift-tree-sitter が引く tree-sitter 本体は 0.25 系。本体 0.27 で `Package.swift` が削除されたので、swift-tree-sitter を上げるときはその依存先も確認する。
 
 ## ビルド手順（Xcode 導入後）
 

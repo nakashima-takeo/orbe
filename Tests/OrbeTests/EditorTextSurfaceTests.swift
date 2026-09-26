@@ -237,7 +237,7 @@ final class EditorTextSurfaceTests: OrbeTestCase {
 
     let language = try XCTUnwrap(document.language)
     XCTAssertNotNil(
-      surfaces.registry.configuration(for: language), "色付けが走る前提（queries が解けている）")
+      surfaces.registry.rules(for: language), "色付けが走る前提（queries が解けている）")
     XCTAssertFalse(document.isDirty)
     XCTAssertFalse(session.hasUnsavedChanges)
   }

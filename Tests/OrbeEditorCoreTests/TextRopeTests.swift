@@ -43,10 +43,9 @@ final class TextRopeTests: XCTestCase {
     XCTAssertEqual(
       rope.rows(ofAscending: ranges), ranges.map(rope.rows(of:)), "昇順の区間の行", file: file, line: line)
     var offset = 0
-    while let chunk = rope.chunkData(at: offset) {
-      offset += chunk.count / 2
-      let last = chunk.withUnsafeBytes { $0.bindMemory(to: UInt16.self).last! }
-      if UTF16.isLeadSurrogate(last), offset < text.length {
+    for chunk in chunks(of: rope) {
+      offset += chunk.count
+      if UTF16.isLeadSurrogate(chunk.last!), offset < text.length {
         XCTAssertFalse(
           UTF16.isTrailSurrogate(text.character(at: offset)), "塊の境 \(offset) でサロゲートの対を割った",
           file: file, line: line)
@@ -126,22 +125,32 @@ final class TextRopeTests: XCTestCase {
     XCTAssertEqual(rope.rows(of: NSRange(location: 3, length: 0)), 1...1)
   }
 
-  /// tree-sitter の読み口は、オフセットからその塊の終わりまでを UTF-16LE で返し、続けて読めば本文全体になる。サロゲートの
+  /// tree-sitter の読み口は、オフセットからその塊の終わりまでをバッファへ写し、続けて読めば本文全体になる。サロゲートの
   /// 対は塊の境で割れない。
   func testChunkReadsCoverTheTextAndKeepSurrogatePairsTogether() {
     let text = String(repeating: "x😀", count: 3000)
     let rope = TextRope(text)
-    var data = Data()
-    var offset = 0
-    while let chunk = rope.chunkData(at: offset) {
+    var units: [UInt16] = []
+    for chunk in chunks(of: rope) {
       XCTAssertFalse(chunk.isEmpty)
-      let units = chunk.withUnsafeBytes { Array($0.bindMemory(to: UInt16.self)) }
-      XCTAssertFalse(UTF16.isLeadSurrogate(units.last!), "塊の終わりで対を割らない")
-      data.append(chunk)
-      offset += chunk.count / 2
+      XCTAssertFalse(UTF16.isLeadSurrogate(chunk.last!), "塊の終わりで対を割らない")
+      units += chunk
     }
-    XCTAssertEqual(String(data: data, encoding: .utf16LittleEndian), text)
+    XCTAssertEqual(String(decoding: units, as: UTF16.self), text)
     XCTAssertEqual(rope.utf8Data(), Data(text.utf8))
+  }
+
+  /// 読み口で先頭から塊を順に読む。
+  private func chunks(of rope: TextRope) -> [[UInt16]] {
+    let buffer = UnsafeMutableBufferPointer<UInt16>.allocate(capacity: TextRope.chunkCapacity)
+    defer { buffer.deallocate() }
+    var result: [[UInt16]] = []
+    var offset = 0
+    while case let count = rope.copyChunk(at: offset, into: buffer), count > 0 {
+      result.append(Array(buffer[..<count]))
+      offset += count
+    }
+    return result
   }
 }
 

@@ -1,18 +1,16 @@
 import Foundation
 import os
-import SwiftTreeSitter
 
-/// 文書 1 つの構文の裏の仕事。構文木（`SyntaxLayer`）を状態に持ち、本文の写しから文書全体の役割の並びを作って受け取り箱
+/// 文書 1 つの構文の裏の仕事。構文の層（`SyntaxLayers`）を状態に持ち、本文の写しから文書全体の役割の並びを作って受け取り箱
 /// へ置く。専用の直列キューを executor にする——構文木は actor の中だけにあり、main からの参照はコンパイラが拒む。
 ///
 /// 文書は編集ごとに、編集（行と桁つき）と最新の写しを郵便受けに積み、止まっていれば起こす。起きた裏の仕事は、郵便受けの
 /// 編集をまとめて受け取って全部当ててから 1 回だけ差分解析し（速い打鍵は 1 回に畳まれる）、「構文木が変わった区間 ∪
 /// 編集の区間」に掛かる行を丸ごと「まだ作り直していない」に足す——字の中身で役割が決まる capture（`#match?` など）は、
-/// 構文木が変わらなくても役割が変わるから。作り直しは見えている範囲を先に、残りを一定量ずつ進め、区切りごとに役割の並びの
-/// 写しと役割が変わった字を版つきで置く。区切りの間に新しい編集が来ていれば、それを先に当てる。
+/// 構文木が変わらなくても役割が変わるから。作り直しは区画ずつ、見えている範囲を先に進め、区切りごとに役割の並びの写しと役割が
+/// 変わった字を版つきで置く。区切りの間に新しい編集が来ていれば、それを先に当てる。文書を閉じたら、走っている解析を打ち切って
+/// 止まる。
 actor SyntaxWorker {
-  /// 見えている範囲の外を 1 回に作り直す量（UTF-16）。区切りの間隔が、打鍵の再解析を待たせる上限になる。
-  static let step = 16_384
   /// 見えている範囲を知らせる前（面を初めて見せる前）に先に作る行の数（高い画面の 1 画面ぶん）。
   static let initialVisibleLines = 120
 
@@ -28,7 +26,8 @@ actor SyntaxWorker {
   nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
   private let mailbox: OSAllocatedUnfairLock<Mail>
   private let inbox: AnalysisInbox
-  private let layer: SyntaxLayer
+  private let cancellation = SyntaxCancellation()
+  private let layers: SyntaxLayers
   private var text: TextRope
   private var version: Int
   private var roles: RoleRuns
@@ -41,10 +40,10 @@ actor SyntaxWorker {
   private var parsed = false
 
   init(
-    text: TextRope, version: Int, configuration: LanguageConfiguration, registry: LanguageRegistry,
+    text: TextRope, version: Int, rules: GrammarRules, registry: LanguageRegistry,
     inbox: AnalysisInbox
-  ) throws {
-    layer = try SyntaxLayer(configuration: configuration, registry: registry)
+  ) {
+    layers = SyntaxLayers(rules: rules, registry: registry, cancellation: cancellation)
     self.text = text
     self.version = version
     self.inbox = inbox
@@ -64,7 +63,7 @@ actor SyntaxWorker {
       defer { mail.running = true }
       return !mail.running
     }
-    if wake { Task.detached(priority: .userInitiated) { [self] in await run() } }
+    if wake { start() }
   }
 
   /// 見えている範囲（最新の版のオフセット）。次の区切りから、そこを先に作る。
@@ -77,8 +76,17 @@ actor SyntaxWorker {
     queue.async(qos: .userInteractive, flags: .enforceQoS) {}
   }
 
+  /// 文書を閉じた。走っている解析を打ち切り、以後は何もしない。
+  nonisolated func cancel() {
+    cancellation.cancel()
+  }
+
+  private nonisolated func start() {
+    Task.detached(priority: .userInitiated) { [self] in await run() }
+  }
+
   private func run() {
-    while true {
+    while !cancellation.isCancelled {
       let idle = parsed && stale.isEmpty
       let batch = mailbox.withLock { mail -> Mail? in
         guard !mail.edits.isEmpty || !idle else {
@@ -90,8 +98,10 @@ actor SyntaxWorker {
       }
       guard let batch else { return }
       absorb(batch)
-      if !stale.isEmpty {
-        rebuild(visible: batch.visible)
+      guard !layers.isCancelled else { return }
+      let shown = lines(covering: batch.visible)
+      if let target = nextTarget(shown: shown) {
+        rebuild(target, shown: shown)
       } else if deposited != version {
         deposit(visibleReady: true)
       }
@@ -103,7 +113,7 @@ actor SyntaxWorker {
     text = batch.text
     guard parsed else {
       version = batch.version
-      layer.parseAll(text)
+      layers.parseAll(text)
       roles = RoleRuns(length: text.length)
       stale = IndexSet(integersIn: 0..<text.length)
       parsed = true
@@ -116,26 +126,30 @@ actor SyntaxWorker {
       changed = record.edit.track(changed)
     }
     version = batch.version
-    for range in layer.didChange(batch.edits, text: text).rangeView {
+    for range in layers.apply(batch.edits, text: text).rangeView {
       let covered = lines(covering: NSRange(range))
       stale.insert(integersIn: covered.location..<NSMaxRange(covered))
     }
+    stale.formUnion(layers.takeInvalidated())
   }
 
-  /// 作り直していない範囲を 1 区切りぶん作り直して置く。見えている行に掛かる部分が先。
-  private func rebuild(visible: NSRange) {
-    let shown = lines(covering: visible)
-    let target: NSRange
-    if let part = stale.intersection(IndexSet(integersIn: shown.location..<NSMaxRange(shown)))
-      .rangeView.first
-    {
-      target = NSRange(part)
-    } else {
-      let part = stale.rangeView.first!
-      target = NSRange(location: part.lowerBound, length: min(part.count, Self.step))
-    }
-    changed.formUnion(roles.replace(target, with: layer.roles(in: target, text: text)))
-    stale.remove(integersIn: target.location..<NSMaxRange(target))
+  /// 次に作り直す区画。見えている行に掛かる部分が先。
+  private func nextTarget(shown: NSRange) -> Range<Int>? {
+    let part =
+      stale.intersection(IndexSet(integersIn: shown.location..<NSMaxRange(shown))).rangeView.first
+      ?? stale.rangeView.first
+    guard let part else { return nil }
+    let block = (part.lowerBound / SyntaxLayers.block + 1) * SyntaxLayers.block
+    return part.lowerBound..<min(part.upperBound, block)
+  }
+
+  /// 区画 1 つを作り直して置く。
+  private func rebuild(_ target: Range<Int>, shown: NSRange) {
+    let spans = layers.roles(in: NSRange(target))
+    guard !layers.isCancelled else { return }
+    stale.formUnion(layers.takeInvalidated())
+    changed.formUnion(roles.replace(NSRange(target), with: spans))
+    stale.remove(integersIn: target)
     deposit(visibleReady: !stale.intersects(integersIn: shown.location..<NSMaxRange(shown)))
   }
 
