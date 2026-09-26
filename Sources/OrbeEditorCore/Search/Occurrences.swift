@@ -15,19 +15,19 @@ public enum Occurrences {
   /// 選択が空・複数行・空白だけ・長すぎるときと、検索バーがその文字列を探しているとき（`findNeedle` と大小無視で同じ、
   /// または `findFieldFocused` で検索語が空でない）は出さない。
   public static func selectionOccurrences(
-    of selection: NSRange, in text: String, findNeedle: String?, findFieldFocused: Bool
+    of selection: NSRange, in text: TextRope, findNeedle: String?, findFieldFocused: Bool,
+    window: Int = TextSearch.scanWindow
   ) -> [NSRange] {
-    let string = text as NSString
     guard selection.length > 0, selection.length <= maxSelectionLength,
-      NSMaxRange(selection) <= string.length
+      NSMaxRange(selection) <= text.length
     else { return [] }
-    let needle = string.substring(with: selection)
+    let needle = text.substring(selection)
     guard !needle.contains(where: \.isNewline), !needle.allSatisfy({ $0 == " " || $0 == "\t" })
     else { return [] }
     if let findNeedle, !findNeedle.isEmpty {
       if findFieldFocused || findNeedle.lowercased() == needle.lowercased() { return [] }
     }
-    return TextSearch.matches(of: needle, in: text, limit: limit).filter { match in
+    return TextSearch.matches(of: needle, in: text, limit: limit, window: window).filter { match in
       if match == selection { return false }
       return
         !(match.location < selection.location && NSIntersectionRange(match, selection).length > 0)
@@ -76,23 +76,17 @@ public enum Occurrences {
   }
 
   /// 語 `word`（本文の区間）の全出現（大小区別・語の境界つき・自分を含む）。
-  public static func wordOccurrences(of word: NSRange, in text: String) -> [NSRange] {
-    let string = text as NSString
-    guard word.length > 0, NSMaxRange(word) <= string.length else { return [] }
-    let needle = string.substring(with: word)
-    var result: [NSRange] = []
-    var cursor = 0
-    while cursor < string.length, result.count < limit {
-      let found = string.range(
-        of: needle, options: [.literal],
-        range: NSRange(location: cursor, length: string.length - cursor))
-      guard found.location != NSNotFound else { break }
-      if isWordBoundary(before: found, in: string), isWordBoundary(after: found, in: string) {
-        result.append(found)
-      }
-      cursor = NSMaxRange(found)
-    }
-    return result
+  public static func wordOccurrences(
+    of word: NSRange, in text: TextRope, window: Int = TextSearch.scanWindow
+  ) -> [NSRange] {
+    guard word.length > 0, NSMaxRange(word) <= text.length else { return [] }
+    let needle = text.substring(word)
+    return TextSearch.scan(
+      text, maximumLength: word.length, limit: limit, window: window,
+      find: { string, range in string.range(of: needle, options: [.literal], range: range) },
+      accept: { string, found in
+        isWordBoundary(before: found, in: string) && isWordBoundary(after: found, in: string)
+      })
   }
 
   /// VS Code の既定の語の正規表現（`DEFAULT_WORD_REGEXP`）。JS の `\d`・`\w` は ASCII だけに当たる（u フラグ無し）ので、

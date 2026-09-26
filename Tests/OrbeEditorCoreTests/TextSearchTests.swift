@@ -8,24 +8,25 @@ import XCTest
 final class TextSearchTests: XCTestCase {
   func testMatchesAreLiteralCaseInsensitiveAndNonOverlapping() {
     XCTAssertEqual(
-      TextSearch.matches(of: "aa", in: "aaaa AA"),
+      TextSearch.matches(of: "aa", in: TextRope("aaaa AA")),
       [
         NSRange(location: 0, length: 2), NSRange(location: 2, length: 2),
         NSRange(location: 5, length: 2),
       ])
     XCTAssertEqual(
-      TextSearch.matches(of: ".", in: "a.b"), [NSRange(location: 1, length: 1)], "正規表現ではない")
-    XCTAssertEqual(TextSearch.matches(of: "", in: "abc"), [])
-    XCTAssertEqual(TextSearch.matches(of: "zz", in: "abc"), [])
+      TextSearch.matches(of: ".", in: TextRope("a.b")), [NSRange(location: 1, length: 1)],
+      "正規表現ではない")
+    XCTAssertEqual(TextSearch.matches(of: "", in: TextRope("abc")), [])
+    XCTAssertEqual(TextSearch.matches(of: "zz", in: TextRope("abc")), [])
   }
 
   /// 一致は上限（19999）で打ち切り、上限ちょうども打ち切りとして見せる（VS Code の「19999+」）。
   func testMatchesStopAtTheLimit() {
     let text = String(repeating: "a", count: 12)
-    XCTAssertEqual(TextSearch.matches(of: "a", in: text, limit: 5).count, 5)
+    XCTAssertEqual(TextSearch.matches(of: "a", in: TextRope(text), limit: 5).count, 5)
     XCTAssertEqual(TextSearch.limit, 19999)
     let many = String(repeating: "ab", count: 20_001)
-    let matches = TextSearch.matches(of: "a", in: many)
+    let matches = TextSearch.matches(of: "a", in: TextRope(many))
     XCTAssertEqual(matches.count, 19999)
     XCTAssertTrue(TextSearch.isLimited(matches))
     XCTAssertFalse(TextSearch.isLimited(Array(matches.prefix(19998))))

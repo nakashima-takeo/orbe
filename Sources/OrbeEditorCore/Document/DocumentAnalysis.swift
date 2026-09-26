@@ -94,7 +94,7 @@ struct RangesOutcome: Sendable {
 
 /// 文書 1 つの、行差分・検索・出現の裏の仕事。写しと問いを受け取り、規則（純関数）を写しに対して回して、結果を版と問い
 /// つきで受け取り箱へ置く。種類ごとに最新の依頼だけを持ち（古い依頼の結果は要らない）、出現を検索・行差分より先に
-/// 片付ける。写しは連続した UTF-16 の列に写してから探す（大小無視の一致の意味を今のまま保つ。main には載らない）。
+/// 片付ける。本文の写しは依頼ごとに読み、何も覚えない（検索と出現は窓ごとに読み、行差分は取る間だけ連続した列に写す）。
 actor DocumentAnalysis {
   private enum Work: Sendable {
     case hunks(baseline: String, generation: Int)
@@ -126,10 +126,6 @@ actor DocumentAnalysis {
   nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
   private let mailbox = OSAllocatedUnfairLock(initialState: Mail())
   private let inbox: AnalysisInbox
-  /// 最後に写した版の連続した本文（検索・出現は NSString、行差分は String で読む）。
-  private var flattened: (version: Int, units: ContiguousArray<UInt16>)?
-  private var nsString: (version: Int, value: NSString)?
-  private var string: (version: Int, value: String)?
 
   init(inbox: AnalysisInbox) {
     self.inbox = inbox
@@ -167,51 +163,27 @@ actor DocumentAnalysis {
     }) {
       switch job.work {
       case .hunks(let baseline, let generation):
-        let hunks = LineDiff.hunks(base: baseline, current: string(of: job))
+        let hunks = LineDiff.hunks(base: baseline, current: job.text)
         let outcome = HunksOutcome(version: job.version, generation: generation, hunks: hunks)
         inbox.deposit { $0.hunks = outcome }
       case .ranges(let request):
         let outcome = RangesOutcome(
-          version: job.version, request: request, ranges: ranges(of: request, in: nsString(of: job))
+          version: job.version, request: request, ranges: ranges(of: request, in: job.text)
         )
         inbox.deposit { $0.ranges[request.kind] = outcome }
       }
     }
   }
 
-  private func ranges(of request: AnalysisRequest, in text: NSString) -> [NSRange] {
+  private func ranges(of request: AnalysisRequest, in text: TextRope) -> [NSRange] {
     switch request {
     case .find(let needle):
-      TextSearch.matches(of: needle, in: text as String)
+      TextSearch.matches(of: needle, in: text)
     case .selectionOccurrences(let selection, let findNeedle, let findFieldFocused):
       Occurrences.selectionOccurrences(
-        of: selection, in: text as String, findNeedle: findNeedle,
-        findFieldFocused: findFieldFocused)
+        of: selection, in: text, findNeedle: findNeedle, findFieldFocused: findFieldFocused)
     case .wordOccurrences(let word):
-      Occurrences.wordOccurrences(of: word, in: text as String)
+      Occurrences.wordOccurrences(of: word, in: text)
     }
-  }
-
-  private func units(of job: Job) -> ContiguousArray<UInt16> {
-    if let flattened, flattened.version == job.version { return flattened.units }
-    let units = job.text.contiguousUnits()
-    flattened = (job.version, units)
-    return units
-  }
-
-  private func nsString(of job: Job) -> NSString {
-    if let nsString, nsString.version == job.version { return nsString.value }
-    let value = units(of: job).withUnsafeBufferPointer { buffer in
-      buffer.baseAddress.map { NSString(characters: $0, length: buffer.count) } ?? ""
-    }
-    nsString = (job.version, value)
-    return value
-  }
-
-  private func string(of job: Job) -> String {
-    if let string, string.version == job.version { return string.value }
-    let value = String(decoding: units(of: job), as: UTF16.self)
-    string = (job.version, value)
-    return value
   }
 }
