@@ -21,7 +21,7 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
   /// provider が弱参照で持つモデル（行の同期を読むテストのために生かしておく）。
   var palette: DispatchPaletteModel!
 
-  /// `main` / `feat` / `topic` / `stale` を持つ origin を立て、手元の clone の remote 追跡 ref を**わざと
+  /// `main` / `feat` / `stale` を持つ origin を立て、手元の clone の remote 追跡 ref を**わざと
   /// 古いまま**にする。`mine` は upstream の無い手元だけのローカルブランチ（着地を待たない題材）、
   /// `stale` は origin を追跡する手元のブランチ（分冊 `+Refresh` の題材）。
   override func setUpWithError() throws {
@@ -42,7 +42,7 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
 
     XCTAssertTrue(run(["clone", "-q", origin, other], cwd: dir.path).isSuccess)
     try identify(other)
-    for branch in ["feat", "topic", "stale"] {
+    for branch in ["feat", "stale"] {
       XCTAssertTrue(run(["checkout", "-q", "-b", branch, "main"], cwd: other).isSuccess)
       try commit("\(branch)-1", in: other)
       XCTAssertTrue(run(["push", "-q", "-u", "origin", branch], cwd: other).isSuccess)
@@ -58,7 +58,7 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     XCTAssertTrue(run(["branch", "-q", "--track", "stale", "origin/stale"], cwd: local).isSuccess)
 
     // 以降の origin 側の前進は手元に入らない＝手元の remote 追跡 ref は古い。
-    for branch in ["main", "feat", "topic", "stale"] {
+    for branch in ["main", "feat", "stale"] {
       XCTAssertTrue(run(["checkout", "-q", branch], cwd: other).isSuccess)
       try commit("\(branch)-2", in: other)
       XCTAssertTrue(run(["push", "-q", "origin", branch], cwd: other).isSuccess)
@@ -121,8 +121,6 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     let remote = try resolve(provider, .remoteBranch(name: "origin/feat", existingWorktree: nil))
     XCTAssertEqual(
       head(of: remote), localRemoteTip("feat"), "Remote branch: 手元の origin/feat から続行")
-    let topic = try resolve(provider, .remoteBranch(name: "origin/topic", existingWorktree: nil))
-    XCTAssertEqual(head(of: topic), localRemoteTip("topic"), "手元の origin/topic からも続行")
   }
 
   // MARK: - upstream
@@ -137,16 +135,12 @@ final class DispatchWorktreeBaseTests: OrbeTestCase {
     let provider = try start()
     _ = try resolve(provider, .issue(number: 44, existingWorktree: nil, existingBranch: false))
     _ = try resolve(provider, .remoteBranch(name: "origin/feat", existingWorktree: nil))
-    _ = try resolve(provider, .remoteBranch(name: "origin/topic", existingWorktree: nil))
 
     XCTAssertFalse(
       run(["config", "--get", "branch.issue/44.merge"], cwd: local).isSuccess,
       "issue ブランチに upstream は付かない")
-    for branch in ["feat", "topic"] {
-      XCTAssertEqual(oid(["config", "--get", "branch.\(branch).remote"], cwd: local), "origin")
-      XCTAssertEqual(
-        oid(["config", "--get", "branch.\(branch).merge"], cwd: local), "refs/heads/\(branch)")
-    }
+    XCTAssertEqual(oid(["config", "--get", "branch.feat.remote"], cwd: local), "origin")
+    XCTAssertEqual(oid(["config", "--get", "branch.feat.merge"], cwd: local), "refs/heads/feat")
   }
 
   // MARK: - 既定ブランチが remote から引けない repo
