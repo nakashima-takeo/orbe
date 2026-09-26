@@ -22,8 +22,6 @@ struct LaidOutLine {
     var width: CGFloat
   }
 
-  init() {}
-
   init(_ shaped: ShapedLine, fonts registry: FontRegistry) {
     for run in shaped.runs {
       let font = registry.id(run.font)
@@ -37,8 +35,9 @@ struct LaidOutLine {
   }
 }
 
-/// 描画スレッドの行の組版のキャッシュ（面ごと）。鍵は行の中身とタブの桁（フォントは面ごとに固定）。上限を越えたら、
-/// 古く使われたものから半分を捨てる。
+/// 描画スレッドの行の組版のキャッシュ（面ごと）。鍵は行の中身とタブの桁（フォントは面ごとに固定）。行の数か、持つ
+/// 単位（行の中身とグリフ）の数が上限を越えたら、古く使われたものから半分を捨てる——長い行ばかりの文書でも覚える量が
+/// 行の長さに比例して膨らまない。
 final class LineLayoutCache {
   private struct Key: Hashable {
     let source: LineShaper.Source
@@ -48,14 +47,16 @@ final class LineLayoutCache {
   private struct Entry {
     let line: LaidOutLine
     var used: UInt64
+    /// 持つ単位の数（行の中身とグリフ）。
+    let weight: Int
   }
 
   static let capacity = 4096
+  static let weightBudget = 2_000_000
 
   private var entries: [Key: Entry] = [:]
   private var clock: UInt64 = 0
-
-  var count: Int { entries.count }
+  private var weight = 0
 
   func line(
     _ source: LineShaper.Source, tabColumns: Int, config: SurfaceConfig, fonts: FontRegistry
@@ -75,15 +76,20 @@ final class LineLayoutCache {
       line.omittedMark = LaidOutLine.OmittedMark(
         fonts: mark.fonts, glyphs: mark.glyphs, xs: mark.xs, width: mark.width)
     }
-    if entries.count >= Self.capacity { evict() }
-    entries[key] = Entry(line: line, used: clock)
+    let entry = Entry(line: line, used: clock, weight: source.head.count + line.glyphs.count)
+    while !entries.isEmpty,
+      entries.count >= Self.capacity || weight + entry.weight > Self.weightBudget
+    {
+      evict()
+    }
+    entries[key] = entry
+    weight += entry.weight
     return line
   }
-
-  func removeAll() { entries.removeAll() }
 
   private func evict() {
     let cut = entries.values.map(\.used).sorted()[entries.count / 2]
     entries = entries.filter { $0.value.used > cut }
+    weight = entries.values.reduce(0) { $0 + $1.weight }
   }
 }

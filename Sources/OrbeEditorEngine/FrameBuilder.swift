@@ -35,9 +35,6 @@ final class FrameBuilder {
   /// 組んだ行のうち最も長い幅（pt。末尾の「ほか N 字」を含む）。
   private(set) var longestLine: CGFloat = 0
 
-  /// 描いた字の数（計測・テストが見る）。
-  var glyphCount: Int { (text + color + gutter).reduce(0) { $0 + $1.count } }
-
   /// GPU の buffer に要る大きさ（配列ごとに 256 バイトに揃える）。
   var byteCount: Int {
     let glyphArrays = text + color + gutter

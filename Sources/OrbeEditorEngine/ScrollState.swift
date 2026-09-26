@@ -346,6 +346,4 @@ final class ScrollBox: Sendable {
   /// 描くものが変わったかを、出来事を引き取らずに見る。
   var revision: Int { state.withLock { $0.revision } }
 
-  /// 指が触れているか、戻りの途中か。
-  var isActive: Bool { state.withLock { $0.physics.isActive } }
 }
