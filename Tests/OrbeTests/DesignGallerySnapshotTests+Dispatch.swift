@@ -27,6 +27,18 @@ extension DesignGallerySnapshotTests {
     try write("dispatch_filtered.png", DesignSceneFixtures.dispatchFilteredModel(), 640, 520)
     try write(
       "dispatch_pr_browser.png", DesignSceneFixtures.dispatchBrowserPullRequestModel(), 640, 520)
+    // origin を確かめられないときの情報行（日英とも幅 640 に 1 行で収まるか）。
+    try write(
+      "dispatch_repo_unverified.png", DesignSceneFixtures.dispatchRepositoryUnverifiedModel(), 640,
+      520)
+    try writePNG(
+      ZStack {
+        BackgroundGlow()
+        DispatchOverlay(model: DesignSceneFixtures.dispatchRepositoryUnverifiedModel())
+      }
+      .frame(width: 640, height: 520)
+      .environment(\.localization, LocalizationStore(language: .en)),
+      size: NSSize(width: 640, height: 520), name: "dispatch_repo_unverified_en.png", dir: dir)
     try write("dispatch_many.png", DesignSceneFixtures.dispatchManyModel(), 640, 520)
     try write("dispatch_many_short.png", DesignSceneFixtures.dispatchManyModel(), 640, 360)
     try write("dispatch_narrow.png", DesignSceneFixtures.dispatchManyModel(), 360, 520)

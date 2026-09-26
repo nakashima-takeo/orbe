@@ -113,6 +113,16 @@ enum DesignSceneFixtures {
     return model
   }
 
+  /// origin の正式名を確かめられない（見えない private・問い合わせの失敗等）。Pull requests の見出しの
+  /// 直下に情報行が 1 行出て、PR 行はブラウザで開く行になり、worktree / branch 行のチップは消える。
+  static func dispatchRepositoryUnverifiedModel() -> DispatchPaletteModel {
+    var input = DispatchSectionBuilder.Input.designSample
+    input.remoteLedger = .settled(.init(repositories: ["origin": .unverified]))
+    let model = dispatchModel(from: input)
+    model.selected = model.items.count - 1
+    return model
+  }
+
   /// 多件数（cap 380 を超え内部スクロールへ回る回帰検証。長い branch 名・PR で狭幅も試す）。
   static func dispatchManyModel() -> DispatchPaletteModel {
     let home = NSHomeDirectory()
