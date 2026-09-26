@@ -83,11 +83,47 @@ final class GitRunner {
   /// 同期実行。呼び出し元スレッドでブロックする（背景キュー・テスト用）。
   /// 1 バイトも出力が無いまま `idleTimeout` が過ぎたら SIGTERM で打ち切り、`timedOut` を立てて返る。
   func runSync(_ args: [String], cwd: String, stdin: Data? = nil) -> Output {
+    execute(args, cwd: cwd, stdin: stdin, environment: [:], state: RunState())
+  }
+
+  /// 流しながら読む実行（独立レーン）。stdout は届いた塊ごとに `onOutput`（裏のスレッド、届いた順）へ渡し、溜めない。
+  /// 終わったら `completion`（裏のスレッド。`stdout` は空）。`environment` は共通の環境に足す変数。返る手の `cancel` で
+  /// SIGTERM で止める（止めた後の `completion` も届く）。無出力の打ち切りと EOF の猶予は `runSync` と同じ。
+  @discardableResult
+  func stream(
+    _ args: [String], cwd: String, environment: [String: String] = [:],
+    onOutput: @escaping (Data) -> Void, completion: @escaping (Output) -> Void
+  ) -> Stream {
+    let state = RunState(onStdout: onOutput)
+    independentQueue.async {
+      completion(self.execute(args, cwd: cwd, stdin: nil, environment: environment, state: state))
+    }
+    return Stream(state: state)
+  }
+
+  /// 流しながら読む実行の手。
+  final class Stream {
+    private let state: RunState
+
+    fileprivate init(state: RunState) {
+      self.state = state
+    }
+
+    /// 止める（SIGTERM）。何度呼んでもよい。
+    func cancel() {
+      state.cancel()
+    }
+  }
+
+  private func execute(
+    _ args: [String], cwd: String, stdin: Data?, environment extra: [String: String],
+    state: RunState
+  ) -> Output {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
     process.arguments = args
     process.currentDirectoryURL = URL(fileURLWithPath: cwd, isDirectory: true)
-    process.environment = Self.environment()
+    process.environment = Self.environment().merging(extra) { _, added in added }
 
     let out = Pipe()
     let err = Pipe()
@@ -96,7 +132,6 @@ final class GitRunner {
     let input: Pipe? = stdin != nil ? Pipe() : nil
     if let input { process.standardInput = input }
 
-    let state = RunState()
     collect(out, into: state, isStdout: true)
     collect(err, into: state, isStdout: false)
     process.terminationHandler = { _ in state.noteExit() }
@@ -128,9 +163,9 @@ final class GitRunner {
       stdout: collected.stdout, stderr: collected.stderr, timedOut: timedOut, exited: exited)
   }
 
-  /// プロセスの終了を待ち、残った出力を汲み出して返る（戻り値＝打ち切ったか）。
-  /// 無出力が `idleTimeout` 続いたら打ち切る。EOF 待ちは終了の前後どちらでも `terminationGrace`
-  /// で有界にし、pipe を握る孫がいても待ち続けない。
+  /// プロセスの終了を待ち、残った出力を汲み出して返る（戻り値＝無出力で打ち切ったか）。
+  /// 無出力が `idleTimeout` 続くか、止められたら（`Stream.cancel`）SIGTERM で切る。EOF 待ちは終了の前後
+  /// どちらでも `terminationGrace` で有界にし、pipe を握る孫がいても待ち続けない。
   ///
   /// 待ちは semaphore で行い、ポーリングしない——`status` は worktree ごとに撒くので、
   /// 数十 ms のポーリング遅延を全 git 呼び出しへ載せるのは退行になる。
@@ -138,6 +173,7 @@ final class GitRunner {
     while true {
       let progress = state.progress()
       if progress.finished { return false }
+      if progress.cancelled, progress.exitedAt == nil { break }
       // 実行が終わったことを決めるのは**子の終了**であって EOF ではない。EOF が来るかは pipe の
       // 書き込み端を握る第三者（hook が背景に残したプロセス）次第で、待ち続けると git ではなく
       // 他人の寿命に縛られる。終了後に残るのはバッファの汲み出しだけなので猶予で有界にする。
@@ -152,6 +188,7 @@ final class GitRunner {
       guard Date() < deadline else { break }
       state.wait(until: deadline)  // 出力が来れば期限が延びるので、目覚めたら測り直す
     }
+    let cancelled = state.progress().cancelled
     // SIGTERM で切る。SIGKILL だと git が `.git/index.lock` と作りかけの clone 先を掃除できない。
     // `Process` は子へ新しいプロセスグループを与えるため、この 1 発は git の子孫（hook・
     // transport helper）にも届く。届かないのはセッションごと抜けた孫（daemon 化した hook の子・
@@ -160,7 +197,7 @@ final class GitRunner {
     // 握られたままなら EOF は二度と来ない。猶予だけ与え、来なければ集めた分を持って返る。
     let grace = Date().addingTimeInterval(Self.terminationGrace)
     while !state.progress().finished, Date() < grace { state.wait(until: grace) }
-    return true
+    return !cancelled
   }
 
   /// pipe の到着を `state` へ流し込む（EOF で読み手を外す）。
@@ -183,21 +220,25 @@ final class GitRunner {
 
   /// 待ち手が 1 回の観測で見る状態。ばらばらに読むと組み合わせが食い違うので、
   /// 1 度のロックで一貫した組として取り出す。
-  private struct RunProgress {
+  fileprivate struct RunProgress {
     /// 終了かつ両 pipe が EOF。
     let finished: Bool
     /// 最後に出力があった時刻（アイドル期限の起点）。
     let lastActivity: Date
     /// 終了を観測した時刻。未終了なら nil。
     let exitedAt: Date?
+    /// 止められた（`Stream.cancel`）。
+    let cancelled: Bool
   }
 
   /// `runSync` 1 回ぶんの共有状態。読み手 2 本（GCD のグローバルキューで発火）・
   /// `terminationHandler`・待ち手が同時に触るので、1 本のロックで束ねる。
   ///
-  /// 起こすのは**状態が変わったとき（EOF・プロセス終了）だけ**。出力の到着は期限を延ばすだけで
+  /// 起こすのは**状態が変わったとき（EOF・プロセス終了・止める）だけ**。出力の到着は期限を延ばすだけで
   /// signal しない——待ち手は期限まで眠っていればよく、起こす必要が無い。
-  private final class RunState {
+  ///
+  /// `onStdout` があれば stdout は溜めずに届いた塊をそのまま渡す（流しながら読む実行）。
+  fileprivate final class RunState {
     private let lock = NSLock()
     private let changed = DispatchSemaphore(value: 0)
     private var stdout = Data()
@@ -205,15 +246,33 @@ final class GitRunner {
     private var openPipes = 2
     private var exitedAt: Date?
     private var lastActivity = Date()
+    private var cancelled = false
+    private let onStdout: ((Data) -> Void)?
+
+    init(onStdout: ((Data) -> Void)? = nil) {
+      self.onStdout = onStdout
+    }
 
     /// プロセスが終了済みか（`terminationStatus` を読んでよいか）。
     var hasExited: Bool { lock.withLock { exitedAt != nil } }
 
+    /// 読み手（pipe ごとに 1 本、到着順に直列）から呼ばれる。`onStdout` はロックの外で呼ぶ。
     func append(_ data: Data, isStdout: Bool) {
+      let forward = isStdout ? onStdout : nil
       lock.withLock {
-        if isStdout { stdout += data } else { stderr += data }
+        if isStdout {
+          if forward == nil { stdout += data }
+        } else {
+          stderr += data
+        }
         lastActivity = Date()
       }
+      forward?(data)
+    }
+
+    func cancel() {
+      lock.withLock { cancelled = true }
+      changed.signal()
     }
 
     func noteEOF() {
@@ -230,7 +289,7 @@ final class GitRunner {
       lock.withLock {
         RunProgress(
           finished: exitedAt != nil && openPipes == 0, lastActivity: lastActivity,
-          exitedAt: exitedAt)
+          exitedAt: exitedAt, cancelled: cancelled)
       }
     }
 
