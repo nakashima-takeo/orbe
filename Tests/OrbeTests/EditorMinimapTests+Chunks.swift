@@ -79,7 +79,9 @@ extension EditorMinimapTests {
     hosted.window.makeFirstResponder(document.surface.responder)
     document.surface.responder.keyDown(with: .key("x", []))
     XCTAssertTrue(view.cachedChunks.contains(1), "打鍵は編集の行のチャンクだけを捨てる")
+    view.display()
     XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertTrue(try XCTUnwrap(view.layer).needsDisplay(), "役割が届いたら描き直しを頼む")
     XCTAssertNotEqual(
       document.roles.roles(in: NSRange(location: far, length: 3)).first?.role, .comment,
       "コメントが解ける")
@@ -146,8 +148,8 @@ extension EditorMinimapTests {
     XCTAssertEqual(pixels.alpha(in: cell(view, row: 0, column: 6)).max, 0, "前の文書の字は残らない")
   }
 
-  /// スクロールで新しく見えたチャンクも、最初の描画から構文の色で描く（素の色の区画は見えない）。
-  func testScrolledInChunksAreColoredFromTheFirstDraw() throws {
+  /// 役割が揃っていれば、スクロールで新しく見えたチャンクもその描画から役割の色で描く。
+  func testScrolledInChunksDrawTheRolesOnTheirFirstDraw() throws {
     let text = String(repeating: "struct S {}\n", count: 3000)
     let hosted = try hostOverview(
       text, height: 800, name: "p-\(UUID().uuidString).swift", colored: true)

@@ -29,7 +29,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
         let opened = try open(text)
         if tracked {
           opened.document.baseline = text
-          opened.document.waitUntilCaughtUp(timeout: 60)
+          XCTAssertTrue(opened.document.waitUntilCaughtUp(timeout: 60))
         }
         let timer = EditTimer(inner: opened.document)
         opened.document.surface.delegate = timer
@@ -57,6 +57,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
 
     let typed = try open(text)
     report(label, "typing", type(into: typed))
+    report(label, "typing-recolor", recolor(into: typed))
     let clip = try XCTUnwrap(typed.document.surface.responder.enclosingScrollView).contentView
     let times = (0..<60).map { _ in
       frame(typed.pane) {
@@ -66,6 +67,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
     }
     report(label, "wheel", times)
     drag(label, "fast-drag-after-typing", typed)
+    report(label, "scrollbar-draw (一致の多い検索)", scrollbarDraws(typed))
     typed.window.orderOut(nil)
   }
 
@@ -87,7 +89,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
     let document = try tab.editor.open(try caseFile("big-\(UUID().uuidString).swift", text))
     pane.layoutSubtreeIfNeeded()
     pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "本文が layout される")
-    document.waitUntilCaughtUp(timeout: 60)
+    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))
     window.makeFirstResponder(document.surface.responder)
     RunLoop.main.run(until: Date().addingTimeInterval(0.3))
     return Opened(tab: tab, pane: pane, window: window, document: document)
@@ -117,6 +119,37 @@ final class EditorScrollPerfTests: OrbeTestCase {
         })
       RunLoop.main.run(until: Date().addingTimeInterval(0.005))
     }
+    return times
+  }
+
+  /// 打鍵の後、裏から役割が届いてから行う描き直し（1 字ごと、ms）——打鍵のコマとは別に main に載る仕事。役割が変わらない
+  /// 打鍵では描き直すものが無い。
+  private func recolor(into opened: Opened) -> [Double] {
+    let document = opened.document
+    document.surface.selectedRange = NSRange(
+      location: document.text.lineStart(document.text.lineCount / 3 + 7) + 4, length: 0)
+    _ = frame(opened.pane) {}
+    var times: [Double] = []
+    for character in "let value = compute(offset) ok" {
+      _ = frame(opened.pane) {
+        document.surface.responder.keyDown(with: .key(String(character), []))
+      }
+      XCTAssertTrue(document.waitUntilCaughtUp())
+      times.append(frame(opened.pane) {})
+    }
+    return times
+  }
+
+  /// 一致の多い検索（上限の 19,999 件）を開いたまま、スクロールバーを 30 回描き直す（1 回ごと、ms）。
+  private func scrollbarDraws(_ opened: Opened) -> [Double] {
+    let pane = opened.pane
+    pane.showSearch()
+    pane.search.setNeedle("e")
+    XCTAssertTrue(opened.document.waitUntilCaughtUp(timeout: 60))
+    XCTAssertEqual(pane.search.matches.count, TextSearch.limit, "前提: 上限まで一致する")
+    let bar = pane.scrollbar
+    let times = (0..<30).map { _ in frame(bar) { bar.needsDisplay = true } }
+    pane.closeSearch()
     return times
   }
 
@@ -150,11 +183,11 @@ final class EditorScrollPerfTests: OrbeTestCase {
   }
 
   /// 操作 1 回を layout と描画まで含めて測る（ms）。
-  private func frame(_ pane: EditorPaneView, _ body: () -> Void) -> Double {
+  private func frame(_ view: NSView, _ body: () -> Void) -> Double {
     let began = Date()
     body()
-    pane.layoutSubtreeIfNeeded()
-    pane.displayIfNeeded()
+    view.layoutSubtreeIfNeeded()
+    view.displayIfNeeded()
     return Date().timeIntervalSince(began) * 1000
   }
 

@@ -28,7 +28,7 @@ extension DesignFlowSnapshotTests {
         step.label,
         {
           step.action()
-          pane.document?.waitUntilCaughtUp()
+          self.catchUp(pane)
         }
       )
     }

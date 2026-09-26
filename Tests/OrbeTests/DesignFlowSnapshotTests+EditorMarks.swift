@@ -70,7 +70,7 @@ extension DesignFlowSnapshotTests {
             try? document.save()
             git(["add", "LineIndex.swift"])
             pumpMain(until: { document.hunks.isEmpty }, "git add で印が消える")
-            document.waitUntilCaughtUp()
+            XCTAssertTrue(document.waitUntilCaughtUp())
           }
         ),
         (
@@ -78,7 +78,7 @@ extension DesignFlowSnapshotTests {
           {  // index を元のコミットへ戻す → 本文との差が戻り印が戻る
             git(["reset", "-q", "HEAD", "--", "LineIndex.swift"])
             pumpMain(until: { !document.hunks.isEmpty }, "index が変われば印が戻る")
-            document.waitUntilCaughtUp()
+            XCTAssertTrue(document.waitUntilCaughtUp())
           }
         ),
       ])

@@ -201,11 +201,11 @@ final class EditorScrollbarTests: OrbeTestCase {
   func testTheCaretMarkFollowsTheMovingEndOfTheSelection() throws {
     let hosted = try hostOverview(numberedLines(200))
     let document = hosted.document
-    let index = document.text
+    let rope = document.text
     let bar = hosted.pane.scrollbar
     let scale = hosted.window.backingScaleFactor
     let ruler = OverviewRuler(
-      lineCount: index.lineCount, visibleLines: document.viewportLines.visible,
+      lineCount: rope.lineCount, visibleLines: document.viewportLines.visible,
       height: bar.bounds.height, scale: scale)
     func marked(_ row: Int) throws -> Bool {
       let span = ruler.caret(row: row)
@@ -213,16 +213,16 @@ final class EditorScrollbarTests: OrbeTestCase {
         > 0.5
     }
     document.surface.selectedRange = NSRange(
-      location: index.lineStart(60), length: index.lineStart(140) - index.lineStart(60))
+      location: rope.lineStart(60), length: rope.lineStart(140) - rope.lineStart(60))
     XCTAssertTrue(try marked(140), "後ろへ伸ばした選択は終わりの行")
     XCTAssertFalse(try marked(60))
 
-    document.surface.selectedRange = NSRange(location: index.lineStart(140), length: 0)
+    document.surface.selectedRange = NSRange(location: rope.lineStart(140), length: 0)
     for _ in 0..<80 {
       document.surface.responder.doCommand(
         by: #selector(NSStandardKeyBindingResponding.moveUpAndModifySelection(_:)))
     }
-    XCTAssertEqual(document.surface.selectedRange.location, index.lineStart(60), "前提")
+    XCTAssertEqual(document.surface.selectedRange.location, rope.lineStart(60), "前提")
     XCTAssertTrue(try marked(60), "前へ伸ばした選択は先頭の行")
     XCTAssertFalse(try marked(140))
   }

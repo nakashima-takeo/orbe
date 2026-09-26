@@ -27,7 +27,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
       clock.wordDelays.append(delay)
       clock.word = {
         fire()
-        document.waitUntilCaughtUp()
+        XCTAssertTrue(document.waitUntilCaughtUp())
       }
     }
     hosted.window.makeFirstResponder(hosted.document.surface.responder)

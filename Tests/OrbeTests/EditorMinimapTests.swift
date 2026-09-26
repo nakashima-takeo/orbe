@@ -249,9 +249,9 @@ final class EditorMinimapTests: OrbeTestCase {
   /// 行を丸ごと選ぶと（改行まで）、その行に選択の行の地が付く（VS Code は範囲の終わりの行まで数える）。
   func testSelectingWholeLinesHighlightsTheirRows() throws {
     let hosted = try hostOverview(numberedLines(20))
-    let index = hosted.document.text
+    let rope = hosted.document.text
     hosted.document.surface.selectedRange = NSRange(
-      location: index.lineStart(4), length: index.lineEnd(4) - index.lineStart(4))
+      location: rope.lineStart(4), length: rope.lineEnd(4) - rope.lineStart(4))
     let view = hosted.pane.minimap
     let pixels = try ViewPixels(view)
     XCTAssertGreaterThan(pixels.color(view.bounds.width - 4, 4 * 2 + 1).alphaComponent, 0, "行 5 の地")
@@ -263,11 +263,11 @@ final class EditorMinimapTests: OrbeTestCase {
   /// `renderDecorationOnLine`）。終わりの行は選択の終わりまで。
   func testMultiLineSelectionFillsTheMiddleRowsUpToTheirEnds() throws {
     let hosted = try hostOverview(numberedLines(40))
-    let index = hosted.document.text
+    let rope = hosted.document.text
     let view = hosted.pane.minimap
-    let start = index.lineStart(2) + 2
-    let end = index.lineStart(30) + 3
-    XCTAssertGreaterThan(CGFloat(end - index.lineStart(3)), view.bounds.width, "前提: 終わりは幅の外")
+    let start = rope.lineStart(2) + 2
+    let end = rope.lineStart(30) + 3
+    XCTAssertGreaterThan(CGFloat(end - rope.lineStart(3)), view.bounds.width, "前提: 終わりは幅の外")
     hosted.document.surface.selectedRange = NSRange(location: start, length: end - start)
     let pixels = try ViewPixels(view)
     func alpha(_ row: Int, _ column: CGFloat) -> CGFloat {

@@ -85,11 +85,11 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
 
   /// 見えている行の区間（先頭に見えている行から可視行数ぶん）。
   private func visibleLines(_ document: EditorDocument) -> NSRange {
-    let index = document.text
+    let rope = document.text
     let (first, visible) = document.viewportLines
-    let last = min(index.lineCount - 1, Int((first + visible).rounded(.up)) - 1)
-    let start = index.lineStart(Int(first))
-    return NSRange(location: start, length: index.lineEnd(last) - start)
+    let last = min(rope.lineCount - 1, Int((first + visible).rounded(.up)) - 1)
+    let start = rope.lineStart(Int(first))
+    return NSRange(location: start, length: rope.lineEnd(last) - start)
   }
 
   /// 見えている字はすべて役割どおりの色で、窓の外に色は無い。
