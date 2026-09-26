@@ -1,7 +1,7 @@
 import Foundation
 import os
-@preconcurrency import SwiftTreeSitter
-@preconcurrency import SwiftTreeSitterLayer
+import SwiftTreeSitter
+import SwiftTreeSitterLayer
 
 /// 文法ごとの `LanguageConfiguration`（パーサ＋queries）を、注入された queries の根から解く。
 /// 根は `.app` なら `Contents/Resources`、`swift build` なら `.build/<config>` で、そこに SwiftPM の

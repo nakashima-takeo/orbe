@@ -1,6 +1,6 @@
 import Foundation
-@preconcurrency import SwiftTreeSitter
-@preconcurrency import SwiftTreeSitterLayer
+import SwiftTreeSitter
+import SwiftTreeSitterLayer
 
 /// 文書 1 つの構文木（injections 込みの `LanguageLayer`）。本文の写し（ロープ）を塊ごとに読んで解析し、編集を追い、
 /// 役割付き区間を発行する。単位は UTF-16（tree-sitter の既定符号化）。バイトはその 2 倍。構文の裏の仕事

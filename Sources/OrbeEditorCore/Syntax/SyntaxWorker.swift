@@ -1,6 +1,6 @@
 import Foundation
 import os
-@preconcurrency import SwiftTreeSitter
+import SwiftTreeSitter
 
 /// 文書 1 つの構文の裏の仕事。構文木（`SyntaxLayer`）を状態に持ち、本文の写しから文書全体の役割の並びを作って受け取り箱
 /// へ置く。専用の直列キューを executor にする——構文木は actor の中だけにあり、main からの参照はコンパイラが拒む。
