@@ -5,10 +5,10 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorText
 
-/// 行番号の列——本文の左に並び、行索引の行の番号を描き、桁が増えれば広がる。番号を押すとその行を選び（VS Code の既定）、
+/// 行番号の列——本文の左に並び、文書の行の番号を描き、桁が増えれば広がる。番号を押すとその行を選び（VS Code の既定）、
 /// 印の列は押しても何もしない。
 ///
-/// 壊れると何が起きるか。単独の `\r` で割れた段落に余計な番号が付き、番号が行索引（ミニマップ・スクロールバー・検索の
+/// 壊れると何が起きるか。単独の `\r` で割れた段落に余計な番号が付き、番号が文書の行（ミニマップ・スクロールバー・検索の
 /// 行）とずれる。10 万行の文書で番号の頭が欠ける。スクロールしても番号が見えている行に替わらない。行番号を押しても行を
 /// 選べない、ドラッグや ⇧クリックの伸び方が VS Code と違う、印の列を押したつもりで行が選ばれる。列の上でホイールを回しても
 /// 本文が動かない。
@@ -82,11 +82,11 @@ final class EditorLineNumbersTests: OrbeTestCase {
     }
   }
 
-  /// 番号は行索引の行に 1 つ——単独の `\r` で TextKit が割った段落（行索引では前の行の続き）には描かない。本文が改行で
+  /// 番号は文書の行に 1 つ——単独の `\r` で TextKit が割った段落（文書の行では前の行の続き）には描かない。本文が改行で
   /// 終われば末尾の空行にも番号が付く。
-  func testNumbersFollowTheLineIndexNotTheParagraphs() throws {
+  func testNumbersFollowTheDocumentLinesNotTheParagraphs() throws {
     let opened = try open("one\rtwo\nthree\n")
-    XCTAssertEqual(opened.document.lineIndex.lineCount, 3, "前提: 行索引は \\r で割らない")
+    XCTAssertEqual(opened.document.text.lineCount, 3, "前提: 文書の行は \\r で割らない")
     XCTAssertEqual(
       try inkedRows(opened, count: 5), [true, false, true, true, false],
       "1（one）・番号なし（two）・2（three）・3（末尾の空行）")
@@ -118,7 +118,7 @@ final class EditorLineNumbersTests: OrbeTestCase {
     let minimum = style.gutterWidth + style.marks.gutterWidth
     let trailing = style.gutterTrailingInset + style.marks.gutterWidth
     let long = try open(lines(99_999))
-    XCTAssertEqual(long.document.lineIndex.lineCount, 100_000)
+    XCTAssertEqual(long.document.text.lineCount, 100_000)
     XCTAssertGreaterThanOrEqual(long.column.frame.width, ceil(digitsWidth("100000")) + trailing)
     XCTAssertEqual(long.column.frame.width, minimum, "6 桁は最小の幅に収まる")
 
@@ -139,7 +139,7 @@ final class EditorLineNumbersTests: OrbeTestCase {
     surface.selectedRange = NSRange(location: 0, length: 0)
     surface.responder.insertText("\n")
     surface.view.layoutSubtreeIfNeeded()
-    XCTAssertEqual(document.lineIndex.lineCount, 1000)
+    XCTAssertEqual(document.text.lineCount, 1000)
     XCTAssertEqual(column.frame.width, ceil(digitsWidth("1000")) + trailing, "4 桁で広がる")
     XCTAssertEqual(scroll.frame.minX, column.frame.width, "本文は列の右から")
   }

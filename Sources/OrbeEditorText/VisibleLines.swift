@@ -70,7 +70,7 @@ struct VisibleLines {
     return result
   }
 
-  /// 行（`LineIndex` の行。本文が改行で終わるときの末尾の空行を含む）の行頭オフセットと矩形（container 基準）。
+  /// 行（文書の行。本文が改行で終わるときの末尾の空行を含む）の行頭オフセットと矩形（container 基準）。
   /// TextKit 2 は末尾の空行を直前の段落の fragment の 2 行目に置くので、段落ではなく行片（`textLineFragments`）で測る。
   struct LineFrame: Equatable {
     let start: Int

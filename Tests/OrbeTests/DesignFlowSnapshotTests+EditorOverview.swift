@@ -13,8 +13,25 @@ extension DesignFlowSnapshotTests {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let scene = try EditorCodeFixtures.scene(queriesRoot: queriesRoot)
     let long = try scene.tab.editor.open(scene.directory.appendingPathComponent("Long.swift"))
-    pumpMain(until: { scene.isReady && long.baseline != nil }, "index 版が届く")
+    pumpMain(
+      until: { scene.isReady && long.baseline != nil && long.waitUntilCaughtUp(timeout: 0) },
+      "index 版が届き、裏の仕事が追いつく")
     return (scene, long)
+  }
+
+  /// 各ステップの後に、見せている文書の裏の仕事（検索・出現・色・ハンク）が追いつくのを待ってから撮る。
+  private func caughtUp(_ pane: EditorPaneView, _ steps: [(label: String, action: () -> Void)])
+    -> [(label: String, action: () -> Void)]
+  {
+    steps.map { step in
+      (
+        step.label,
+        {
+          step.action()
+          pane.document?.waitUntilCaughtUp()
+        }
+      )
+    }
   }
 
   func testEditorOverview() throws {
@@ -22,8 +39,10 @@ extension DesignFlowSnapshotTests {
     defer { scene.cleanup() }
     try flow(
       "editor_overview", size: NSSize(width: 1000, height: 480), render: { scene.view },
-      steps: [("open", {})]  // 帯とつまみは隠れ、印（git・キャレット）は常に見える
-        + minimapSteps(scene.pane) + scrollbarSteps(scene.pane, long))
+      steps: caughtUp(
+        scene.pane,
+        [("open", {})]  // 帯とつまみは隠れ、印（git・キャレット）は常に見える
+          + minimapSteps(scene.pane) + scrollbarSteps(scene.pane, long)))
   }
 
   /// ミニマップ: ホバーで帯が現れる → 帯を掴んで下へ 60pt ドラッグ（本文が追従・ドラッグ中は濃い色）→ 離して帯の外を
@@ -82,7 +101,7 @@ extension DesignFlowSnapshotTests {
           scrollbar.mouseUp(with: scrollbar.mouseEvent(.leftMouseUp, at: NSPoint(x: 7, y: 360)))
         }
       ),
-      ("scroll_end", { long.scroll(toFirstLine: CGFloat(long.lineIndex.lineCount - 1)) }),
+      ("scroll_end", { long.scroll(toFirstLine: CGFloat(long.text.lineCount - 1)) }),
     ]
   }
 
@@ -92,19 +111,21 @@ extension DesignFlowSnapshotTests {
     let pane = scene.pane
     try flow(
       "editor_find", size: NSSize(width: 1000, height: 480), render: { scene.view },
-      steps: [
-        ("open", {}),
-        ("cmd_f", { pane.showSearch() }),  // 本文の右上（ミニマップの左）にバー。キャレットの語が種
-        (
-          "typed",
-          {  // needle → 全一致に地、現在の一致は不透明の地とその行の薄い地。ミニマップとスクロールバーの中央レーンにも出る
-            pane.searchBar?.needle = "starts"
-            pane.search.setNeedle("starts")
-          }
-        ),
-        ("enter", { pane.search.next() }),  // 次の一致へ（現在の一致の印が動く）
-        ("esc", { pane.closeSearch() }),  // 地と俯瞰の一致が消え、選択は残る
-      ])
+      steps: caughtUp(
+        pane,
+        [
+          ("open", {}),
+          ("cmd_f", { pane.showSearch() }),  // 本文の右上（ミニマップの左）にバー。キャレットの語が種
+          (
+            "typed",
+            {  // needle → 全一致に地、現在の一致は不透明の地とその行の薄い地。ミニマップとスクロールバーの中央レーンにも出る
+              pane.searchBar?.needle = "starts"
+              pane.search.setNeedle("starts")
+            }
+          ),
+          ("enter", { pane.search.next() }),  // 次の一致へ（現在の一致の印が動く）
+          ("esc", { pane.closeSearch() }),  // 地と俯瞰の一致が消え、選択は残る
+        ]))
   }
 
   func testEditorOccurrences() throws {
@@ -112,34 +133,36 @@ extension DesignFlowSnapshotTests {
     defer { scene.cleanup() }
     let pane = scene.pane
     pane.occurrences.wordDelay.schedule = { _, fire in fire() }
-    let text = long.surface.text as NSString
+    let text = bodyText(long) as NSString
     let word = text.range(of: "offset")
     let field = text.range(of: ": Int")
     try flow(
       "editor_occurrences", size: NSSize(width: 1000, height: 480), render: { scene.view },
-      steps: [
-        (
-          "caret_on_word",
-          {  // 語の上のキャレット → 同じ語の出現が本文・スクロールバーの中央レーン・ミニマップに出る
-            pane.occurrences.focusDidChange(surfaceFocused: true, insideFace: true)
-            long.surface.selectedRange = NSRange(location: word.location + 2, length: 0)
-          }
-        ),
-        (
-          "selection",
-          {  // 文字列の選択 → 他の出現に本文だけ地が付く（俯瞰には出ない）
-            long.surface.selectedRange = field
-          }
-        ),
-        (
-          "multi_line_selection",
-          {  // 複数行の選択 → ミニマップは途中の行を行末まで選択の色、その先は行の薄い地、終わりの行は選択の終わりまで
-            let index = long.lineIndex
-            let start = index.start(ofRow: 5) + 6
-            long.surface.selectedRange = NSRange(
-              location: start, length: index.start(ofRow: 20) + 10 - start)
-          }
-        ),
-      ])
+      steps: caughtUp(
+        pane,
+        [
+          (
+            "caret_on_word",
+            {  // 語の上のキャレット → 同じ語の出現が本文・スクロールバーの中央レーン・ミニマップに出る
+              pane.occurrences.focusDidChange(surfaceFocused: true, insideFace: true)
+              long.surface.selectedRange = NSRange(location: word.location + 2, length: 0)
+            }
+          ),
+          (
+            "selection",
+            {  // 文字列の選択 → 他の出現に本文だけ地が付く（俯瞰には出ない）
+              long.surface.selectedRange = field
+            }
+          ),
+          (
+            "multi_line_selection",
+            {  // 複数行の選択 → ミニマップは途中の行を行末まで選択の色、その先は行の薄い地、終わりの行は選択の終わりまで
+              let rope = long.text
+              let start = rope.lineStart(5) + 6
+              long.surface.selectedRange = NSRange(
+                location: start, length: rope.lineStart(20) + 10 - start)
+            }
+          ),
+        ]))
   }
 }

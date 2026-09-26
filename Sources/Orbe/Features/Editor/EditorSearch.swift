@@ -7,11 +7,21 @@ import OrbeEditorCore
 /// 行き先は、検索が選んだのではない最後のキャレットから（VS Code `FindModel` の start position）。選択の変化を観測して
 /// 件数と現在の一致の地を導き直す。面への作用は契約（選択・キャレット・中央へ・強調の地）だけ。
 ///
-/// 本文の変更では一致を 100ms 後に取り直し（VS Code `FindModel` と同じ間引き。1MB の文書で打鍵ごとに全文を探さない）、
-/// その間は編集に合わせて一致の区間をずらしておく。一致は俯瞰（ミニマップとスクロールバーの印）にも出るので、変わったら告げる。
+/// 一致は文書の写しから裏で探す（`EditorDocument.analyze`）。検索語を打ち換えると、新しい検索語の一致が届くまで前の地と
+/// 件数を出したままにし（打つたびに地が消えてちらつかない）、打鍵での最初の一致の選択と、その間に押された Enter・⇧Enter
+/// （最後の 1 回ぶん）は届いてから新しい一致に対して行う——前の検索語の一致へ飛ばない。本文の変更では一致を 100ms 後に
+/// 取り直し（VS Code `FindModel` と同じ間引き）、その間は編集に合わせて一致の区間をずらしておく。問いは同じなので、
+/// 取り直しを待たずにずらした一致で操作できる。一致は俯瞰（ミニマップとスクロールバーの印）にも出るので、変わったら告げる。
 @MainActor
 final class EditorSearch {
   static let refreshDelay: TimeInterval = 0.1
+
+  /// 新しい検索語の一致が届いたときに行う操作。
+  private enum Move {
+    case first
+    case next
+    case previous
+  }
 
   private(set) var needle = ""
   private(set) var matches: [NSRange] = []
@@ -20,6 +30,8 @@ final class EditorSearch {
   private var start = 0
   /// 最後に検索が選んだ一致（それ以外の選択の変化で起点を置き直す）。
   private var revealed: NSRange?
+  /// 一致がまだ届いていない新しい検索語と、届いたときに行う操作。
+  private var awaiting: (needle: String, move: Move?)?
   /// 件数が変わった（selected は 1 始まり。needle が空なら total 0 で届く。`limited` は上限で打ち切った）。
   var onCountChange: ((_ selected: Int?, _ total: Int, _ limited: Bool) -> Void)?
   /// 一致か現在の一致が変わった（俯瞰へ出し直す）。
@@ -41,26 +53,32 @@ final class EditorSearch {
     self.document = document
     start = document?.surface.caretLocation ?? 0
     revealed = nil
-    refresh()
+    matches = []
+    pushHighlights()
+    search(awaiting: nil)
   }
 
-  /// needle が打ち込まれた。一致を取り直し、起点以降に始まる最初の一致を選んで見せる（VS Code の cursorMoveOnType）。
-  /// 同じ needle なら何もしない（⌘F の種をバーへ写したときの折り返し）。
+  /// needle が打ち込まれた。一致を取り直し、届いたら起点以降に始まる最初の一致を選んで見せる（VS Code の
+  /// cursorMoveOnType）。同じ needle なら何もしない（⌘F の種をバーへ写したときの折り返し）。
   func setNeedle(_ needle: String) {
     guard needle != self.needle else { return }
-    seed(needle)
-    guard let index = TextSearch.first(in: matches, from: start) else { return }
-    reveal(index)
+    self.needle = needle
+    search(awaiting: .first)
+    onNeedleChange?()
   }
 
   /// ⌘F の種を入れる。一致を取り直すだけで、選択は動かさない（VS Code の開いたときの検索）。
   func seed(_ needle: String) {
     self.needle = needle
-    refresh()
+    search(awaiting: nil)
     onNeedleChange?()
   }
 
   func next() {
+    guard awaiting == nil else {
+      awaiting?.move = .next
+      return
+    }
     guard let document,
       let index = TextSearch.next(in: matches, from: document.surface.selectedRange)
     else { return }
@@ -68,6 +86,10 @@ final class EditorSearch {
   }
 
   func previous() {
+    guard awaiting == nil else {
+      awaiting?.move = .previous
+      return
+    }
     guard let document,
       let index = TextSearch.previous(in: matches, from: document.surface.selectedRange)
     else { return }
@@ -79,7 +101,25 @@ final class EditorSearch {
     guard !needle.isEmpty else { return }
     matches = edit.track(matches)
     pushHighlights()
-    refreshDelay.run(after: Self.refreshDelay) { [weak self] in self?.refresh() }
+    refreshDelay.run(after: Self.refreshDelay) { [weak self] in
+      guard let self, let document, !needle.isEmpty else { return }
+      document.analyze(.find(needle))
+    }
+  }
+
+  /// 文書から一致が届いた（今の本文の上へずらしたもの）。今の needle の一致だけを受ける。
+  func didFind(_ needle: String, _ ranges: [NSRange]) {
+    guard needle == self.needle else { return }
+    matches = ranges
+    pushHighlights()
+    guard let awaited = awaiting, awaited.needle == needle else { return }
+    awaiting = nil
+    switch awaited.move {
+    case .first: if let index = TextSearch.first(in: matches, from: start) { reveal(index) }
+    case .next: next()
+    case .previous: previous()
+    case nil: break
+    }
   }
 
   func selectionDidChange() {
@@ -96,17 +136,25 @@ final class EditorSearch {
   func close() {
     needle = ""
     matches = []
+    awaiting = nil
     refreshDelay.cancel()
     clearHighlights()
     onMatchesChange?()
     onNeedleChange?()
   }
 
-  private func refresh() {
+  /// 今の needle の一致を頼む。空なら一致を空にする。`move` は、一致が届いたときに行う操作——届くまでは前の一致を
+  /// 出したまま。
+  private func search(awaiting move: Move?) {
     refreshDelay.cancel()
-    let text = needle.isEmpty ? nil : document?.surface.text
-    matches = text.map { TextSearch.matches(of: needle, in: $0) } ?? []
-    pushHighlights()
+    guard let document, !needle.isEmpty else {
+      awaiting = nil
+      matches = []
+      pushHighlights()
+      return
+    }
+    awaiting = (needle, move)
+    document.analyze(.find(needle))
   }
 
   private func pushHighlights() {
@@ -133,7 +181,7 @@ final class EditorSearch {
     revealed = match
     document.surface.selectedRange = match
     let (first, visible) = document.viewportLines
-    let row = CGFloat(document.lineIndex.point(at: match.location).row)
+    let row = CGFloat(document.text.row(containing: match.location))
     if row < first || row >= first + visible {
       document.surface.scrollToCenter(match.location)
     } else {

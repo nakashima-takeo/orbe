@@ -18,7 +18,7 @@ extension EditorMinimapTests {
     XCTAssertTrue(warm.isSuperset(of: [0, 1, 2]), "窓のチャンクを覚えている: \(warm)")
 
     hosted.document.surface.selectedRange = NSRange(
-      location: hosted.document.lineIndex.start(ofRow: 100), length: 0)
+      location: hosted.document.text.lineStart(100), length: 0)
     hosted.window.makeFirstResponder(hosted.document.surface.responder)
     hosted.document.surface.responder.keyDown(with: .key("x", []))
     XCTAssertEqual(warm.subtracting(view.cachedChunks), [1], "行 100 のチャンクだけ捨てる")
@@ -54,21 +54,22 @@ extension EditorMinimapTests {
     }
     XCTAssertGreaterThan(seen.count, 2 * capacity, "上限を超える数のチャンクを通った")
     XCTAssertFalse(view.cachedChunks.contains(0), "最初のチャンクは捨てた")
-    let last = try show(document.lineIndex.lineCount - 1)
+    let last = try show(document.text.lineCount - 1)
     XCTAssertTrue(Set(last).isSubset(of: view.cachedChunks), "末尾の窓は覚えている")
     XCTAssertTrue(
       Set(try XCTUnwrap(recent)).isSubset(of: view.cachedChunks), "直前に見ていた窓は残る")
   }
 
-  /// 役割が変わった区間の字は描き直す——ブロックコメントの開きを消すと、編集した行から離れた（別のチャンクの）行も
-  /// コメントの色から外れる。
+  /// 裏から届いた役割が変わった区間の字は描き直す——ブロックコメントの開きを消すと、編集した行から離れた（別のチャンク
+  /// の）行も、役割が届いたときにチャンクを捨ててコメントの色から外れる。
   func testRoleChangesRedrawGlyphsBeyondTheEditedChunk() throws {
     let text = "/*\n" + String(repeating: "abc\n", count: 130) + "*/\n"
     let hosted = try hostOverview(text, name: "r-\(UUID().uuidString).swift", colored: true)
     let document = hosted.document
-    let far = document.lineIndex.start(ofRow: 100)
-    pumpMain(
-      until: { document.roleSpans(in: NSRange(location: far, length: 3)).first?.role == .comment },
+    let far = document.text.lineStart(100)
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(
+      document.roles.roles(in: NSRange(location: far, length: 3)).first?.role, .comment,
       "前提: 行 100 はコメントの中")
     let view = hosted.pane.minimap
     view.display()
@@ -77,9 +78,12 @@ extension EditorMinimapTests {
     document.surface.selectedRange = NSRange(location: 0, length: 2)
     hosted.window.makeFirstResponder(document.surface.responder)
     document.surface.responder.keyDown(with: .key("x", []))
-    pumpMain(
-      until: { document.roleSpans(in: NSRange(location: far, length: 3)).first?.role != .comment },
+    XCTAssertTrue(view.cachedChunks.contains(1), "打鍵は編集の行のチャンクだけを捨てる")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertNotEqual(
+      document.roles.roles(in: NSRange(location: far, length: 3)).first?.role, .comment,
       "コメントが解ける")
+    XCTAssertFalse(view.cachedChunks.contains(1), "役割が届いた区間のチャンクを捨てる")
     view.display()
     let uncommented = try ViewPixels(view).strongest(in: cell(view, row: 100, column: 1))
     XCTAssertGreaterThan(uncommented.alphaComponent, 0.2, "字はある")
@@ -119,150 +123,42 @@ extension EditorMinimapTests {
     XCTAssertEqual(pixels.alpha(in: cell(view, row: 0, column: 6)).max, 0, "前の文書の字は残らない")
   }
 
-  /// スクロールで新しく見えたチャンクは字の形だけを素の色で先に描き、見える範囲が止まって猶予が明けると、見えている
-  /// チャンクを 1 つずつ（runloop を 1 回ずつ譲って）構文の色へ差し替える。
-  func testScrolledInChunksDrawPlainFirstAndTurnColoredAfterAPause() throws {
+  /// スクロールで新しく見えたチャンクも、最初の描画から構文の色で描く（素の色の区画は見えない）。
+  func testScrolledInChunksAreColoredFromTheFirstDraw() throws {
     let text = String(repeating: "struct S {}\n", count: 3000)
     let hosted = try hostOverview(
       text, height: 800, name: "p-\(UUID().uuidString).swift", colored: true)
+    XCTAssertTrue(hosted.document.waitUntilCaughtUp())
     let view = hosted.pane.minimap
-    var pending: [(TimeInterval, () -> Void)] = []
-    view.colorDelay.schedule = { delay, fire in pending.append((delay, fire)) }
     view.display()
-    XCTAssertEqual(view.plainChunks, [], "開いた直後の窓は色付きで描く")
-
     hosted.document.scroll(toFirstLine: 2000)
     hosted.pane.layoutSubtreeIfNeeded()
     view.display()
     let layout = try XCTUnwrap(view.placement)
-    let row = layout.lines.lowerBound + 10
-    let visible = Set(
-      (layout.lines.lowerBound / MinimapChunks.lines)...((layout.lines.upperBound - 1)
-        / MinimapChunks.lines))
-    XCTAssertEqual(view.plainChunks, visible, "新しく見えたチャンクは素の色")
-    func keyword() throws -> NSColor {
-      try ViewPixels(view).strongest(
-        in: NSRect(x: gutter(view) + 1, y: layout.y(ofLine: row), width: 1, height: 2))
-    }
-    let plain = try keyword()
-    XCTAssertEqual(pending.last?.0, EditorMinimapView.colorPause, "止まってから猶予を置く")
-
-    var steps = 0
-    while let (_, fire) = pending.popLast() {
-      let before = view.plainChunks.count
-      view.displayIfNeeded()
-      fire()
-      if view.plainChunks.count < before {
-        steps += 1
-        XCTAssertTrue(try XCTUnwrap(view.layer).needsDisplay(), "色を差し替えたら描き直しを頼む")
-      }
-      XCTAssertGreaterThanOrEqual(view.plainChunks.count, before - 1, "1 回に 1 つずつ")
-    }
-    XCTAssertEqual(steps, visible.count)
-    XCTAssertEqual(view.plainChunks, [])
-    view.display()
-    let colored = try keyword()
-    XCTAssertTrue(Hue.blue(colored), "色付きの struct は keyword の青: \(colored)")
-    XCTAssertGreaterThan(
-      abs(plain.redComponent - colored.redComponent)
-        + abs(plain.greenComponent - colored.greenComponent), 0.2,
-      "素の色（素の文字色）から構文の色へ: \(plain) → \(colored)")
+    let colored = try ViewPixels(view).strongest(
+      in: NSRect(
+        x: gutter(view) + 1, y: layout.y(ofLine: layout.lines.lowerBound + 10), width: 1, height: 2
+      ))
+    XCTAssertTrue(Hue.blue(colored), "新しく見えた struct も keyword の青: \(colored)")
   }
 
-  /// 見える範囲が動き続ける間は色付けしない——動くたびに猶予を置き直し、動く前に置いた猶予が明けても素の色のまま。
-  /// 覚えている素の色のチャンクへ戻っただけ（新しく組むチャンクが無い）でも置き直す。
-  func testMovingAgainPostponesTheColoring() throws {
-    let hosted = try hostOverview(
-      String(repeating: "struct S {}\n", count: 3000), height: 800,
-      name: "m-\(UUID().uuidString).swift", colored: true)
-    let view = hosted.pane.minimap
-    var pending: [() -> Void] = []
-    view.colorDelay.schedule = { _, fire in pending.append(fire) }
-    view.display()
-    func show(_ line: CGFloat) throws -> Set<Int> {
-      hosted.document.scroll(toFirstLine: line)
-      hosted.pane.layoutSubtreeIfNeeded()
-      view.display()
-      let lines = try XCTUnwrap(view.placement).lines
-      return Set(
-        (lines.lowerBound / MinimapChunks.lines)...((lines.upperBound - 1) / MinimapChunks.lines))
-    }
-    let back = try show(2000)
-    let away = try show(2600)
-    XCTAssertTrue(view.plainChunks.isSuperset(of: back.union(away)), "前提: どちらも素の色で組んだ")
-    let earlier = pending
-    pending = []
-
-    XCTAssertEqual(try show(2000), back)
-    for fire in earlier { fire() }
-    XCTAssertTrue(view.plainChunks.isSuperset(of: back), "動く前に置いた猶予では色付けしない")
-    while let fire = pending.popLast() { fire() }
-    XCTAssertTrue(view.plainChunks.isDisjoint(with: back), "止まってからの猶予で色付けする")
-  }
-
-  /// 見える範囲が変わってから描かれる前に猶予が明けても（面が隠れている間に外から行が増えた、など）、描いたときに素の色で
-  /// 組んだチャンクは、猶予を置き直して色付きへ差し替える。
-  func testChunksBuiltPlainAfterThePauseStillTurnColored() throws {
-    let hosted = try hostOverview(
-      String(repeating: "struct S {}\n", count: 3000), height: 800,
-      name: "q-\(UUID().uuidString).swift", colored: true)
-    let view = hosted.pane.minimap
-    var pending: [() -> Void] = []
-    view.colorDelay.schedule = { _, fire in pending.append(fire) }
-    view.display()
-    hosted.document.scroll(toFirstLine: 2000)
-    hosted.pane.layoutSubtreeIfNeeded()
-    while let fire = pending.popLast() { fire() }
-    XCTAssertEqual(view.plainChunks, [], "前提: 描く前に猶予が明けた（素の色はまだ無い）")
-
-    view.display()
-    XCTAssertFalse(view.plainChunks.isEmpty, "描いたときに素の色で組んだ")
-    XCTAssertFalse(pending.isEmpty, "猶予を置き直す")
-    while let fire = pending.popLast() { fire() }
-    XCTAssertEqual(view.plainChunks, [], "色付きへ差し替える")
-  }
-
-  /// 猶予が明けたときにミニマップが窓から外れていても（workspace の切り替え）、組んだときの条件で色付けする——戻ったとき
-  /// 素の色が残らない。
-  func testColoringWhileOutOfTheWindowStillColorsTheChunks() throws {
-    let hosted = try hostOverview(
-      String(repeating: "struct S {}\n", count: 3000), height: 800,
-      name: "w-\(UUID().uuidString).swift", colored: true)
-    let view = hosted.pane.minimap
-    var pending: [() -> Void] = []
-    view.colorDelay.schedule = { _, fire in pending.append(fire) }
-    view.display()
-    hosted.document.scroll(toFirstLine: 2000)
-    hosted.pane.layoutSubtreeIfNeeded()
-    view.display()
-    XCTAssertFalse(view.plainChunks.isEmpty, "前提: 素の色のチャンクがある")
-
-    let pane = hosted.pane
-    view.removeFromSuperview()
-    while let fire = pending.popLast() { fire() }
-    pane.addSubview(view)
-    pane.layoutSubtreeIfNeeded()
-    view.display()
-    while let fire = pending.popLast() { fire() }
-    XCTAssertEqual(view.plainChunks, [], "窓の外でも色付けした")
-  }
-
-  /// 打鍵で捨てたチャンクは前のコマでも見えていたので、その場で色付きに描き直す（打っている間に単色へ戻らない）。
+  /// 打鍵で捨てたチャンクは色付きのまま描き直す（打っている間に単色へ戻らない）。
   func testChunksRedrawnAfterTypingStayColored() throws {
     let hosted = try hostOverview(
       String(repeating: "struct S {}\n", count: 300), height: 800,
       name: "t-\(UUID().uuidString).swift", colored: true)
-    let view = hosted.pane.minimap
-    view.colorDelay.schedule = { _, _ in }
-    view.display()
     let document = hosted.document
-    document.surface.selectedRange = NSRange(
-      location: document.lineIndex.start(ofRow: 100), length: 0)
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    let view = hosted.pane.minimap
+    view.display()
+    document.surface.selectedRange = NSRange(location: document.text.lineStart(100), length: 0)
     hosted.window.makeFirstResponder(document.surface.responder)
     document.surface.responder.keyDown(with: .key("x", []))
     XCTAssertFalse(view.cachedChunks.contains(1), "前提: 行 100 のチャンクを捨てた")
     view.display()
-    XCTAssertTrue(view.cachedChunks.contains(1))
-    XCTAssertEqual(view.plainChunks, [], "描き直したチャンクは色付き")
+    let layout = try XCTUnwrap(view.placement)
+    let keyword = try ViewPixels(view).strongest(
+      in: NSRect(x: gutter(view) + 1, y: layout.y(ofLine: 101), width: 1, height: 2))
+    XCTAssertTrue(Hue.blue(keyword), "描き直したチャンクは色付き: \(keyword)")
   }
 }

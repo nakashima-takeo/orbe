@@ -143,15 +143,12 @@ final class STTextSurface: NSObject, TextSurface {
     layer.addSubview(highlightView, positioned: .above, relativeTo: selection)
   }
 
-  var text: String { textView.text ?? "" }
-
   private var length: Int {
     NSRange(textView.textContentManager.documentRange, in: textView.textContentManager).length
   }
 
-  func substring(in range: NSRange) -> String {
-    guard let textRange = NSTextRange(range, in: textView.textContentManager) else { return "" }
-    return textView.textContentManager.attributedString(in: textRange)?.string ?? ""
+  func rolesDidChange(_ ranges: IndexSet) {
+    colors.rolesDidChange(ranges)
   }
 
   private func roles(in range: NSRange) -> [HighlightSpan] {
@@ -337,7 +334,7 @@ extension STTextSurface: @preconcurrency STTextViewDelegate {
     replacementString: String
   ) {
     let range = NSRange(affectedCharRange, in: textView.textContentManager)
-    let edit = TextEdit(range: range, replacementLength: replacementString.utf16.count)
+    let edit = TextEdit(range: range, replacement: replacementString)
     decorationView.needsDisplay = true
     highlightView.needsDisplay = true
     numbersView.needsDisplay = true

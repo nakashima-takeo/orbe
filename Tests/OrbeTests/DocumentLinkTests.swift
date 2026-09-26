@@ -31,12 +31,12 @@ final class DocumentLinkTests: OrbeTestCase {
     session.onChange = { changes += 1 }
 
     try repo.write("a.txt", "rewritten\n")
-    pumpMain(until: { document.surface.text == "rewritten\n" }, "監視で差し替わる")
+    pumpMain(until: { bodyText(document) == "rewritten\n" }, "監視で差し替わる")
     XCTAssertFalse(document.isDirty)
     XCTAssertFalse(document.isDiskChanged)
     XCTAssertEqual(changes, 0, "未保存も印も変わらないので通知しない")
     document.surface.responder.undoManager?.undo()
-    XCTAssertEqual(document.surface.text, "one\n", "⌘Z で戻せる")
+    XCTAssertEqual(bodyText(document), "one\n", "⌘Z で戻せる")
   }
 
   func testExternalWriteMarksADirtyDocumentAndSaveFailsUntilForced() throws {
@@ -48,7 +48,7 @@ final class DocumentLinkTests: OrbeTestCase {
 
     try repo.write("a.txt", "theirs\n")
     pumpMain(until: { document.isDiskChanged }, "未保存なら印が立つ")
-    XCTAssertEqual(document.surface.text, "mine one\n")
+    XCTAssertEqual(bodyText(document), "mine one\n")
     XCTAssertEqual(changes, 1, "印の変化はセッションの通知に載る")
     XCTAssertThrowsError(try session.saveActive())
     XCTAssertEqual(try String(contentsOf: repo.url("a.txt"), encoding: .utf8), "theirs\n")
@@ -80,7 +80,7 @@ final class DocumentLinkTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     pumpMain(until: { documentB.baseline == "two\n" }, "残った方の baseline は追従する")
     pumpMain(until: { documentB.isDiskChanged }, "未保存なので印が立つ")
-    XCTAssertEqual(documentB.surface.text, "xone\n")
+    XCTAssertEqual(bodyText(documentB), "xone\n")
     XCTAssertEqual(
       documentB.hunks, [LineHunk(oldStart: 1, oldCount: 1, newStart: 1, newCount: 1)],
       "新しい baseline との差分")
@@ -112,7 +112,7 @@ final class DocumentLinkTests: OrbeTestCase {
     let session = session()
     let document = try session.open(url)
     try Data("m\n".utf8).write(to: url)
-    pumpMain(until: { document.surface.text == "m\n" }, "管理外でも外部変更は反映する")
+    pumpMain(until: { bodyText(document) == "m\n" }, "管理外でも外部変更は反映する")
     XCTAssertNil(document.baseline)
     XCTAssertNil(RootFiles.shared(for: GitWorktreeRoot.normalizedPath(outside.path)).repo)
   }

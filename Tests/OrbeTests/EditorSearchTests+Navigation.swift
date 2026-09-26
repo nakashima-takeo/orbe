@@ -19,6 +19,7 @@ extension EditorSearchTests {
     let document = hosted.document
     document.surface.selectedRange = NSRange(location: 1, length: 0)
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
+    catchUp(pane)
     let bar = try XCTUnwrap(pane.searchBar)
     func field() -> NSTextView? {
       (hosted.window.firstResponder as? NSTextView).flatMap { $0.isDescendant(of: bar) ? $0 : nil }
@@ -28,6 +29,7 @@ extension EditorSearchTests {
     hosted.window.makeFirstResponder(document.surface.responder)
     document.surface.selectedRange = NSRange(location: 12, length: 0)
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
+    catchUp(pane)
     XCTAssertEqual(pane.search.needle, "gamma", "キャレットの語で取り直す")
     pumpMain(
       until: {
@@ -39,6 +41,7 @@ extension EditorSearchTests {
     document.surface.selectedRange = NSRange(location: 2, length: 12)
     try XCTUnwrap(field()).setSelectedRange(NSRange(location: 5, length: 0))
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
+    catchUp(pane)
     XCTAssertEqual(pane.search.needle, "gamma", "種が無ければ前の needle")
     XCTAssertEqual(field()?.selectedRange(), NSRange(location: 0, length: 5), "焦点のある入力欄も全選択")
   }
@@ -51,6 +54,7 @@ extension EditorSearchTests {
     let document = hosted.document
     document.surface.selectedRange = NSRange(location: 5, length: 0)
     pane.showSearch()
+    catchUp(pane)
     XCTAssertEqual(pane.search.needle, "foo")
     pane.search.previous()
     XCTAssertEqual(document.surface.selectedRange, NSRange(location: 0, length: 3), "中の一致を飛ばして前へ")
@@ -68,18 +72,24 @@ extension EditorSearchTests {
     let document = hosted.document
     document.surface.selectedRange = NSRange(location: 0, length: 0)
     pane.showSearch()
+    catchUp(pane)
     XCTAssertEqual(pane.search.needle, "", "前提: 種が無い")
     pane.search.setNeedle("a")
+    catchUp(pane)
     XCTAssertEqual(document.surface.selectedRange, NSRange(location: 2, length: 1))
     pane.search.setNeedle("ab")
+    catchUp(pane)
     XCTAssertEqual(document.surface.selectedRange, NSRange(location: 4, length: 2))
     pane.search.setNeedle("a")
+    catchUp(pane)
     XCTAssertEqual(
       document.surface.selectedRange, NSRange(location: 2, length: 1), "開いたときのキャレットから")
 
     document.surface.selectedRange = NSRange(location: 5, length: 0)
     pane.search.setNeedle("ab")
+    catchUp(pane)
     pane.search.setNeedle("a")
+    catchUp(pane)
     XCTAssertEqual(
       document.surface.selectedRange, NSRange(location: 7, length: 1), "本文で動かしたキャレットから")
   }
@@ -89,6 +99,7 @@ extension EditorSearchTests {
     let hosted = try host("one two\n")
     let pane = hosted.pane
     pane.showSearch()
+    catchUp(pane)
     hosted.window.makeFirstResponder(hosted.document.surface.responder)
     let escape = try XCTUnwrap(
       NSEvent.keyEvent(
@@ -98,5 +109,29 @@ extension EditorSearchTests {
     hosted.window.sendEvent(escape)
     XCTAssertNil(pane.searchBar, "閉じる")
     XCTAssertTrue(hosted.window.firstResponder === hosted.document.surface.responder, "焦点は本文のまま")
+  }
+
+  /// 検索語を打ち換えた直後（新しい一致が届く前）は前の地と件数が出たままで、その間に押された Enter は、新しい検索語の
+  /// 一致が届いてからその一致に対して行う——前の検索語の一致へ飛ばない。
+  func testEnterRightAfterRetypingGoesToTheNewNeedlesMatch() throws {
+    let hosted = try host("aa - bb\naa - bb\n")
+    let pane = hosted.pane
+    let document = hosted.document
+    document.surface.selectedRange = NSRange(location: 3, length: 0)
+    pane.showSearch()
+    catchUp(pane)
+    pane.search.setNeedle("aa")
+    catchUp(pane)
+    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 8, length: 2), "前提")
+
+    pane.search.setNeedle("bb")
+    XCTAssertEqual(pane.search.matches.map(\.location), [0, 8], "届くまでは前の一致を出したまま")
+    pane.search.next()
+    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 8, length: 2), "届く前は動かない")
+    catchUp(pane)
+    XCTAssertEqual(pane.search.matches.map(\.location), [5, 13])
+    XCTAssertEqual(
+      document.surface.selectedRange, NSRange(location: 13, length: 2),
+      "新しい検索語の一致へ（前の検索語なら先頭の aa へ循環する）")
   }
 }

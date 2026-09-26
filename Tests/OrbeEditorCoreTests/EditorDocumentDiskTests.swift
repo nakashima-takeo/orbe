@@ -52,7 +52,9 @@ final class EditorDocumentDiskTests: XCTestCase {
     XCTAssertFalse(document.isDiskChanged)
     XCTAssertEqual(diskChanges, [], "印は立たない")
     XCTAssertEqual(surface.undoBoundaries, 1, "差し替えは undo の区切り")
-    XCTAssertEqual(document.lineIndex, LineIndex(text: "new\n"), "索引は差し替えに追従する")
+    XCTAssertEqual(
+      document.text.substring(NSRange(location: 0, length: document.text.length)), "new\n",
+      "写しは差し替えに追従する")
 
     document.reconcileWithDisk()
     XCTAssertEqual(surface.undoBoundaries, 1, "同じ内容なら何もしない")
@@ -198,45 +200,34 @@ final class EditorDocumentDiskTests: XCTestCase {
 
   // MARK: - ハンク
 
-  /// baseline を置けば即時にハンクが出て、編集は同期では作り直さず、連続した編集で作り直しは 1 回。
-  /// baseline を外せば空。
-  func testHunksFollowTheBaselineImmediatelyAndConsecutiveEditsRebuildOnce() throws {
+  /// baseline を置くと裏で行差分を取ってハンクが届く。編集の直後は、編集で増えた行の数だけずらした前のハンクを出し、
+  /// 裏の結果が届くと置き換わる。baseline を外せば即時に空。
+  func testHunksFollowTheBaselineAndEditsThroughTheBackground() throws {
     let (document, surface) = try open(try temp("e.txt", "a\nb\nc\n"))
     XCTAssertEqual(document.hunks, [])
     var notified = 0
     document.onHunksChange = { notified += 1 }
 
     document.baseline = "a\nc\n"
-    XCTAssertEqual(
-      document.hunks, [LineHunk(oldStart: 1, oldCount: 0, newStart: 2, newCount: 1)], "置いた瞬間に出る")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(document.hunks, [LineHunk(oldStart: 1, oldCount: 0, newStart: 2, newCount: 1)])
     XCTAssertEqual(notified, 1)
 
-    surface.replace(NSRange(location: 0, length: 1), with: "A")
-    surface.replace(NSRange(location: 6, length: 0), with: "d\n")
-    XCTAssertEqual(document.hunks.count, 1, "編集の直後はまだ作り直していない")
-    pumpMain(until: { document.hunks.count == 2 })
+    surface.replace(NSRange(location: 0, length: 0), with: "z\n")
+    XCTAssertEqual(
+      document.hunks, [LineHunk(oldStart: 1, oldCount: 0, newStart: 3, newCount: 1)],
+      "編集の直後は、増えた行の数だけずらした前のハンク")
+    XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertEqual(
       document.hunks,
       [
-        LineHunk(oldStart: 1, oldCount: 1, newStart: 1, newCount: 2),
-        LineHunk(oldStart: 2, oldCount: 0, newStart: 4, newCount: 1),
+        LineHunk(oldStart: 0, oldCount: 0, newStart: 1, newCount: 1),
+        LineHunk(oldStart: 1, oldCount: 0, newStart: 3, newCount: 1),
       ])
-    XCTAssertEqual(notified, 2, "2 回の編集で作り直しは 1 回")
 
+    let before = notified
     document.baseline = nil
     XCTAssertEqual(document.hunks, [])
-    XCTAssertEqual(notified, 3)
-  }
-
-  /// runloop を回して条件の成立を待つ（ハンクの作り直しは main へ 1 回だけ積まれる）。
-  private func pumpMain(
-    until condition: () -> Bool, timeout: TimeInterval = 5, file: StaticString = #filePath,
-    line: UInt = #line
-  ) {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
-    }
-    XCTAssertTrue(condition(), "条件が \(timeout) 秒以内に成立しない", file: file, line: line)
+    XCTAssertEqual(notified, before + 1)
   }
 }

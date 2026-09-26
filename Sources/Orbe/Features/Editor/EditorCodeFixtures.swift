@@ -6,7 +6,8 @@
   /// コードビューの gallery / flow fixture。凍結した実コードの断片（`LineIndex` の実装を写したもの）を一時 git
   /// リポジトリにコミットし、作業ツリーで行の挿入・書き換え・削除・行末スペースを起こしてから開く——追加＝緑・
   /// 変更＝青・削除＝赤の三角、インデント線、丸点、URL の下線が 1 枚に写る。中身が動く生きたファイルは写さない
-  /// （絵が安定しない）。baseline は git の子プロセス後に届くので、撮る側は `isReady` を待つ。
+  /// （絵が安定しない）。baseline は git の子プロセス後に、色とハンクは文書の裏の仕事の後に届くので、撮る側は `isReady`
+  /// を待つ。
   enum EditorCodeFixtures {
     static let sample = """
       import Foundation
@@ -128,8 +129,8 @@
         self.directory = directory
       }
 
-      /// index 版が届いて印が揃った。
-      var isReady: Bool { document.baseline != nil }
+      /// index 版が届き、裏の仕事（色・ハンク）が追いついて印が揃った。
+      var isReady: Bool { document.baseline != nil && document.waitUntilCaughtUp(timeout: 0) }
 
       /// 撮る view（pane をそのまま載せる）。
       var view: some View { CodePane(pane: pane) }

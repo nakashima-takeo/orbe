@@ -275,7 +275,8 @@ final class EditorPaneView: NSView {
     }
   }
 
-  /// 焦点の文書の面を見せる（nil なら空状態）。前の文書の面は外すだけで、面は文書と一緒に生き続ける。
+  /// 焦点の文書の面を見せる（nil なら空状態）。前の文書の面は外すだけで、面は文書と一緒に生き続ける。文書を初めて
+  /// 見せるときは、最初の描画に色が間に合うよう文書が上限つきで待つ。
   /// 俯瞰と検索を新しい文書に結び直し（検索は同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。
   /// 焦点が面の中にあれば新しい行き先へ移す——判定は前の面を外す前に取る（外した瞬間に AppKit が
   /// first responder を窓へ戻すので、外した後では「中にあった」ことが分からない）。
@@ -288,6 +289,7 @@ final class EditorPaneView: NSView {
     }
     self.document = document
     if let document {
+      document.prepareToShow()
       let view = document.surface.view
       view.autoresizingMask = []
       view.frame = surfaceRect

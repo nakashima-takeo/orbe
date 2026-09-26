@@ -1,4 +1,5 @@
 import AppKit
+import OrbeEditorCore
 import XCTest
 
 @testable import Orbe
@@ -22,6 +23,35 @@ extension OrbeTestCase {
     tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
     tab.view.layoutSubtreeIfNeeded()
     return window
+  }
+
+  /// 文書の本文。テキスト面（エンジン）の本文を入力の口（`NSTextInputClient`）から読み、文書の写しと一致することを
+  /// 確かめてから返す——製品の契約に本文を読む口は無いので、写しが面を追えているかはテストがエンジンから読んで見る。
+  @MainActor
+  func bodyText(
+    _ document: EditorDocument, file: StaticString = #filePath, line: UInt = #line
+  ) -> String {
+    let client = document.surface.responder as? NSTextInputClient
+    let engine =
+      client?.attributedSubstring(
+        forProposedRange: NSRange(location: 0, length: Int(Int32.max)), actualRange: nil)?.string
+      ?? ""
+    XCTAssertEqual(document.text.string, engine, "文書の写しが面の本文と違う", file: file, line: line)
+    return engine
+  }
+
+  /// 文書の裏の仕事（構文・行差分・検索・出現）が今の版に追いつき、結果を受け取るまで待つ（受け取り箱を見て待つ。時間では
+  /// 待たない）。
+  @MainActor
+  func catchUp(_ document: EditorDocument, file: StaticString = #filePath, line: UInt = #line) {
+    XCTAssertTrue(document.waitUntilCaughtUp(), "裏の仕事が追いつかない", file: file, line: line)
+  }
+
+  /// pane が見せている文書の裏の仕事が追いつくのを待つ（→ `catchUp(_:)`）。
+  @MainActor
+  func catchUp(_ pane: EditorPaneView, file: StaticString = #filePath, line: UInt = #line) {
+    guard let document = pane.document else { return }
+    catchUp(document, file: file, line: line)
   }
 
   /// 面の座標 x（y は中ほど）を窓座標へ。
@@ -83,4 +113,9 @@ struct PaneProbe {
   }
 
   static func same(_ a: [Int], _ b: [Int]) -> Bool { zip(a, b).allSatisfy { abs($0 - $1) <= 2 } }
+}
+
+extension TextRope {
+  /// 本文全体（テストが読む）。
+  var string: String { substring(NSRange(location: 0, length: length)) }
 }

@@ -16,7 +16,9 @@ extension EditorSearchTests {
     let hosted = try host(Self.belowTheBar + "x a b y\nx a b y\nx c d y\n")
     let pane = hosted.pane
     pane.showSearch()
+    catchUp(pane)
     pane.search.setNeedle("a b")
+    catchUp(pane)
     XCTAssertEqual(hosted.document.surface.selectedRange, NSRange(location: 6, length: 3))
     let other = cellCenter(hosted, line: 6, column: 3)
     let unmatched = cellCenter(hosted, line: 7, column: 3)
@@ -26,6 +28,7 @@ extension EditorSearchTests {
       PaneProbe.same(try drawn.rgb(unmatched.x, y: unmatched.y), ground), "一致の無い行は地のまま")
 
     pane.search.setNeedle("c d")
+    catchUp(pane)
     let moved = try probe(pane) { try !PaneProbe.same($0.rgb(unmatched.x, y: unmatched.y), ground) }
     XCTAssertTrue(PaneProbe.same(try moved.rgb(other.x, y: other.y), ground), "前の needle の地は残らない")
   }
@@ -36,7 +39,9 @@ extension EditorSearchTests {
     let hosted = try host(Self.belowTheBar + "x a b y\nx a b y\n")
     let pane = hosted.pane
     pane.showSearch()
+    catchUp(pane)
     pane.search.setNeedle("a b")
+    catchUp(pane)
     XCTAssertEqual(
       hosted.document.surface.selectedRange, NSRange(location: 6, length: 3), "前提: 5 行目の一致が現在")
     // 現在の一致（5 行目）と他の一致（6 行目）の組——一致の中の空白のセルと、行の右の空きのセル。
@@ -66,9 +71,11 @@ extension EditorSearchTests {
     let hosted = try host(source.joined(separator: "\n") + "\n")
     let pane = hosted.pane
     pane.showSearch()
+    catchUp(pane)
     pane.search.setNeedle("a b")
+    catchUp(pane)
     XCTAssertEqual(
-      hosted.document.lineIndex.point(at: hosted.document.surface.selectedRange.location).row, 5)
+      hosted.document.text.row(containing: hosted.document.surface.selectedRange.location), 5)
     let scrolled = cellCenter(hosted, line: 10, column: 3)
     let ground = try PaneProbe(pane).rgb(scrolled.x, y: cellCenter(hosted, line: 12, column: 3).y)
     XCTAssertTrue(PaneProbe.same(try PaneProbe(pane).rgb(scrolled.x, y: scrolled.y), ground))
@@ -85,12 +92,14 @@ extension EditorSearchTests {
     let pane = hosted.pane
     let document = hosted.document
     pane.showSearch()
+    catchUp(pane)
     pane.search.setNeedle("a b")
+    catchUp(pane)
     pane.search.refreshDelay.schedule = { _, _ in }
     document.surface.selectedRange = NSRange(location: 4, length: 0)
     hosted.window.makeFirstResponder(document.surface.responder)
     for character in "zz" { document.surface.responder.keyDown(with: .key(String(character), [])) }
-    XCTAssertEqual(document.surface.text, Self.belowTheBar + "zza b y\n")
+    XCTAssertEqual(bodyText(document), Self.belowTheBar + "zza b y\n")
     let moved = cellCenter(hosted, line: 5, column: 3)
     let ground = try PaneProbe(pane).rgb(moved.x, y: cellCenter(hosted, line: 10, column: 3).y)
     _ = try probe(pane) { try !PaneProbe.same($0.rgb(moved.x, y: moved.y), ground) }
@@ -103,6 +112,7 @@ extension EditorSearchTests {
     let pane = hosted.pane
     let seen = counts(pane)
     pane.showSearch()
+    catchUp(pane)
     XCTAssertEqual(pane.search.needle, "foo", "前提: キャレットの語が種")
     XCTAssertNil(seen().last?.0, "キャレットは一致ではない")
     pane.search.next()
@@ -124,10 +134,12 @@ extension EditorSearchTests {
     let hosted = try host("foo bar\n")
     let pane = hosted.pane
     pane.showSearch()
+    catchUp(pane)
     let bar = try XCTUnwrap(pane.searchBar)
     func type(_ needle: String) {
       bar.needle = needle
       bar.onNeedleChange?(needle)
+      catchUp(pane)
     }
     /// バーの矩形の中に赤い画素があるか（字の縁の有無でなく、件数の字の色を領域で見る）。
     func barHasRed(_ probe: PaneProbe) throws -> Bool {
@@ -151,14 +163,18 @@ extension EditorSearchTests {
     let hosted = try host("one two one\n")
     let pane = hosted.pane
     pane.showSearch()
+    catchUp(pane)
     pane.search.setNeedle("one")
+    catchUp(pane)
     try XCTUnwrap(pane.searchBar).onClose?()
 
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
+    catchUp(pane)
     let bar = try XCTUnwrap(pane.searchBar)
     XCTAssertEqual(bar.needle, "one", "選択（閉じる前の一致）が種になる")
     XCTAssertEqual(pane.search.matches.count, 2)
     bar.onNeedleChange?("two")
+    catchUp(pane)
     XCTAssertEqual(pane.search.matches.map(\.location), [4])
     XCTAssertEqual(hosted.document.surface.selectedRange, NSRange(location: 4, length: 3))
   }
@@ -170,11 +186,13 @@ extension EditorSearchTests {
     let pane = hosted.pane
     let document = hosted.document
     pane.showSearch()
+    catchUp(pane)
     pane.search.setNeedle("foo")
+    catchUp(pane)
     pane.search.next()
     pane.closeSearch()
 
-    XCTAssertEqual(document.surface.text, text)
+    XCTAssertEqual(bodyText(document), text)
     XCTAssertFalse(document.isDirty)
     XCTAssertFalse(hosted.tab.editor.hasUnsavedChanges)
     XCTAssertEqual(document.surface.responder.undoManager?.canUndo, false)

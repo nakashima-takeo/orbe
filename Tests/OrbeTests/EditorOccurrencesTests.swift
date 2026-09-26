@@ -6,7 +6,7 @@ import XCTest
 
 /// 出現の強調——キャレットの語の出現（50ms 後・打鍵で消え次の移動で出直す・焦点で出入り・俯瞰にも出る）と、選択文字列の
 /// 他の出現（選択の変化で即時・俯瞰には出ない・検索バーと重ならない）。どちらも本文に地として出る。時間は差し替えた時計で
-/// 進める。
+/// 進め、出現を探す裏の仕事は追いつくのを待つ。
 ///
 /// 壊れると何が起きるか。打鍵のたびに語の地が点滅する。キャレットを動かしても出ない、端末へ移っても残る。選択の出現が
 /// 検索の一致と二重に出る。本文を直した後に古い位置に地が残る。
@@ -22,9 +22,13 @@ final class EditorOccurrencesTests: OrbeTestCase {
   func host(_ text: String, clock: Clock) throws -> OverviewHost {
     let hosted = try hostOverview(text)
     let occurrences = hosted.pane.occurrences
+    let document = hosted.document
     occurrences.wordDelay.schedule = { delay, fire in
       clock.wordDelays.append(delay)
-      clock.word = fire
+      clock.word = {
+        fire()
+        document.waitUntilCaughtUp()
+      }
     }
     hosted.window.makeFirstResponder(hosted.document.surface.responder)
     pumpMain(until: { clock.word != nil }, "焦点が入ると語の出現を取りに行く")
@@ -81,7 +85,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
     let bar = pane.scrollbar
     let scale = hosted.window.backingScaleFactor
     let ruler = OverviewRuler(
-      lineCount: hosted.document.lineIndex.lineCount,
+      lineCount: hosted.document.text.lineCount,
       visibleLines: hosted.document.viewportLines.visible, height: bar.bounds.height,
       scale: scale)
     let center = OverviewRuler.lane(.center, width: 14, scale: scale)
@@ -144,12 +148,14 @@ final class EditorOccurrencesTests: OrbeTestCase {
     XCTAssertEqual(pane.occurrences.wordOccurrences.count, 2)
 
     pane.showSearch()
+    catchUp(hosted.document)
     let bar = try XCTUnwrap(pane.searchBar)
     pumpMain(
       until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true }, "バーへ")
     RunLoop.main.run(until: Date().addingTimeInterval(0.02))
     XCTAssertEqual(pane.occurrences.wordOccurrences.count, 2, "検索バーへ移っても消えない")
     pane.closeSearch()
+    catchUp(hosted.document)
 
     let outside = NSTextField(frame: .zero)
     hosted.tab.view.addSubview(outside)
@@ -170,6 +176,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
     caret(hosted, 2)
     try XCTUnwrap(clock.word)()
     pane.showSearch()
+    catchUp(hosted.document)
     let bar = try XCTUnwrap(pane.searchBar)
     pumpMain(
       until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true }, "バーへ")
@@ -190,6 +197,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
     let occurrence = groundPoint(hosted, row: 0, column: 8)
     let plain = groundPoint(hosted, row: 0, column: 5)
     hosted.document.surface.selectedRange = NSRange(location: 1, length: 3)
+    catchUp(hosted.document)
     XCTAssertEqual(
       pane.occurrences.selectionOccurrences,
       [NSRange(location: 7, length: 3), NSRange(location: 13, length: 3)], "大小無視・自身は除く")
@@ -213,14 +221,17 @@ final class EditorOccurrencesTests: OrbeTestCase {
     let pane = hosted.pane
     let responder = hosted.document.surface.responder
     hosted.document.surface.selectedRange = NSRange(location: 1, length: 2)
+    catchUp(hosted.document)
     XCTAssertEqual(pane.occurrences.selectionOccurrences.count, 2)
     responder.keyDown(with: .key("x", []))
     XCTAssertEqual(pane.occurrences.selectionOccurrences, [], "選択が消えれば消える")
     responder.undoManager?.undo()
+    catchUp(hosted.document)
     XCTAssertEqual(hosted.document.surface.selectedRange, NSRange(location: 1, length: 2))
     XCTAssertEqual(pane.occurrences.selectionOccurrences.count, 2, "戻った選択で即座に取り直す")
     responder.perform(#selector(NSResponder.uppercaseWord(_:)), with: nil)
-    XCTAssertEqual(hosted.document.surface.text, " AB ab ab\n")
+    catchUp(hosted.document)
+    XCTAssertEqual(bodyText(hosted.document), " AB ab ab\n")
     XCTAssertEqual(
       pane.occurrences.selectionOccurrences,
       [NSRange(location: 4, length: 2), NSRange(location: 7, length: 2)], "大文字化の後の選択で取り直す")
@@ -245,10 +256,13 @@ final class EditorOccurrencesTests: OrbeTestCase {
     let hosted = try host(" ab ab ab\n", clock: clock)
     let pane = hosted.pane
     pane.showSearch()
+    catchUp(hosted.document)
     pane.search.setNeedle("ab")
+    catchUp(hosted.document)
     XCTAssertEqual(hosted.document.surface.selectedRange.length, 2, "前提: 現在の一致が選択される")
     XCTAssertEqual(pane.occurrences.selectionOccurrences, [], "同じ文字列を検索中は出ない")
     pane.closeSearch()
+    catchUp(hosted.document)
     XCTAssertEqual(pane.occurrences.selectionOccurrences.count, 2, "バーを閉じれば出る")
   }
 }

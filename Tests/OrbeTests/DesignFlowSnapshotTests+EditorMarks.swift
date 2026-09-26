@@ -17,7 +17,9 @@ extension DesignFlowSnapshotTests {
     let scroll = try XCTUnwrap(go.surface.view.subviews.first as? NSScrollView)
     let pane = scene.pane
     let cell = (" " as NSString).size(withAttributes: [.font: EditorStyle.make().font]).width
-    pumpMain(until: { scene.isReady && go.baseline != nil }, "index 版が届く")
+    pumpMain(
+      until: { scene.isReady && go.baseline != nil && go.waitUntilCaughtUp(timeout: 0) },
+      "index 版が届き、裏の仕事が追いつく")
     try flow(
       "editor_decor", size: NSSize(width: 1000, height: 480), render: { scene.view },
       steps: [
@@ -59,7 +61,7 @@ extension DesignFlowSnapshotTests {
           "line_inserted",
           {  // 先頭に 1 行挿す → 追加の印が 1 行目に増え、他の印は 1 行下へ
             document.surface.responder.perform(Selector(("insertText:")), with: "// 行の装備\n")
-            pumpMain(until: { document.hunks != opened }, "印が編集に追従する")
+            XCTAssertTrue(document.waitUntilCaughtUp(), "印が編集に追従する")
           }
         ),
         (
@@ -68,6 +70,7 @@ extension DesignFlowSnapshotTests {
             try? document.save()
             git(["add", "LineIndex.swift"])
             pumpMain(until: { document.hunks.isEmpty }, "git add で印が消える")
+            document.waitUntilCaughtUp()
           }
         ),
         (
@@ -75,6 +78,7 @@ extension DesignFlowSnapshotTests {
           {  // index を元のコミットへ戻す → 本文との差が戻り印が戻る
             git(["reset", "-q", "HEAD", "--", "LineIndex.swift"])
             pumpMain(until: { !document.hunks.isEmpty }, "index が変われば印が戻る")
+            document.waitUntilCaughtUp()
           }
         ),
       ])

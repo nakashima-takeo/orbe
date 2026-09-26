@@ -1,14 +1,16 @@
 import Foundation
 
-/// テキスト面で起きた 1 回の置換。`range` は変更前の本文での区間、`replacementLength` は置換後の長さ
-/// （どちらも UTF-16。tree-sitter の既定符号化と一致する）。
+/// テキスト面で起きた 1 回の置換。`range` は変更前の本文での区間、`replacement` は置換後の文字列で、`replacementLength`
+/// はその長さ（どちらも UTF-16。tree-sitter の既定符号化と一致する）。
 public struct TextEdit: Equatable, Sendable {
   public let range: NSRange
+  public let replacement: String
   public let replacementLength: Int
 
-  public init(range: NSRange, replacementLength: Int) {
+  public init(range: NSRange, replacement: String) {
     self.range = range
-    self.replacementLength = replacementLength
+    self.replacement = replacement
+    replacementLength = replacement.utf16.count
   }
 
   /// 置換後の本文での、置き換わった区間。
@@ -26,16 +28,18 @@ public struct TextEdit: Equatable, Sendable {
       return nil
     }
   }
-}
 
-/// 本文が変わった後に文書が告げる「何が変わったか」——編集と、役割が変わりうる区間（構文木の差分。文法が無ければ
-/// 置換後の区間）。オフセットは変わった後の本文のもの。俯瞰が縮図の捨てる範囲を絞るのに使う。
-public struct TextChange: Equatable, Sendable {
-  public let edit: TextEdit
-  public let changedRoles: IndexSet
-
-  public init(edit: TextEdit, changedRoles: IndexSet) {
-    self.edit = edit
-    self.changedRoles = changedRoles
+  /// 編集の前の区間の集合を編集の後の本文へ写す。`track` と違い落とさない——編集に掛かる（接する）なら、置換後の区間を
+  /// 足す（「まだ作り直していない」「変わった」の集合を、編集に合わせて広げる）。
+  public func track(_ set: IndexSet) -> IndexSet {
+    let end = NSMaxRange(range)
+    let touches = set.intersects(integersIn: max(0, range.location - 1)..<(end + 1))
+    var result = set
+    result.remove(integersIn: range.location..<end)
+    result.shift(startingAt: end, by: replacementLength - range.length)
+    if touches, replacementLength > 0 {
+      result.insert(integersIn: range.location..<(range.location + replacementLength))
+    }
+    return result
   }
 }

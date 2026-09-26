@@ -6,7 +6,8 @@ import XCTest
 @testable import Orbe
 
 /// エンジンの色の窓——構文の色は見えている行にだけ塗り、上流が layout した範囲（見えている範囲と先読みの帯）の外には
-/// 置かない。見えている字の色は常に文書の今の役割と一致する。先読みの帯はスクロールで見えたときに塗る。
+/// 置かない。見えている字の色は常に文書の今の役割（打鍵の直後はずらした役割、裏から届けばその役割）と一致する。先読みの
+/// 帯はスクロールで見えたときに塗る。
 ///
 /// 壊れると何が起きるか。遠くへ飛んだ先の字や、スクロールで帯から見えてきた字が色無しで出る。打鍵で役割の変わった隣の字
 /// （呼び出しになった識別子・閉じた文字列の後ろ）が古い色のまま残る、undo や外部変更の差し替えの後に古い色が別の字に付く。
@@ -36,7 +37,9 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
     return (document, window)
   }
 
+  /// 裏から役割が届くのを待ち、layout と描画の周期を回す。
   private func settle(_ document: EditorDocument) {
+    catchUp(document)
     document.surface.view.layoutSubtreeIfNeeded()
     RunLoop.main.run(until: Date().addingTimeInterval(0.05))
     document.surface.view.layoutSubtreeIfNeeded()
@@ -65,7 +68,7 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
   /// 字ごとの色（無ければ nil）が、文書の今の役割の色と一致しない字。
   private func mismatches(_ document: EditorDocument, in range: NSRange) throws -> [Int] {
     let runs = try colored(document)
-    let roles = document.roleSpans(in: range)
+    let roles = document.roles.roles(in: range)
     return (range.location..<NSMaxRange(range)).filter { offset in
       let shown = runs.first { NSLocationInRange(offset, $0.range) }?.color
       let role = roles.first { NSLocationInRange(offset, $0.range) }?.role
@@ -82,11 +85,11 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
 
   /// 見えている行の区間（先頭に見えている行から可視行数ぶん）。
   private func visibleLines(_ document: EditorDocument) -> NSRange {
-    let index = document.lineIndex
+    let index = document.text
     let (first, visible) = document.viewportLines
     let last = min(index.lineCount - 1, Int((first + visible).rounded(.up)) - 1)
-    let start = index.start(ofRow: Int(first))
-    return NSRange(location: start, length: index.end(ofRow: last) - start)
+    let start = index.lineStart(Int(first))
+    return NSRange(location: start, length: index.lineEnd(last) - start)
   }
 
   /// 見えている字はすべて役割どおりの色で、窓の外に色は無い。
@@ -111,7 +114,7 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
   func testColorsStayInsideTheWindowWhileScrolling() throws {
     let (document, _) = try open(source(3000))
     try assertColorsFollowTheWindow(document, "開いた直後")
-    XCTAssertLessThan(try window(document).length, document.lineIndex.length / 10, "全文には塗らない")
+    XCTAssertLessThan(try window(document).length, document.text.length / 10, "全文には塗らない")
     for line: CGFloat in [1500, 1510, 2990, 0] {
       document.scroll(toFirstLine: line)
       settle(document)
@@ -119,33 +122,41 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
     }
   }
 
-  /// 打鍵の後、描く前の layout で見えている字の色が編集の後の役割に揃う。`compute` の後ろを消すと呼び出しでなくなり、
-  /// `"` を打てば行末まで文字列になる——どちらも編集した字の外の役割が変わる。
-  func testAnEditRecolorsTheVisibleTextBeforeItIsDrawn() throws {
+  /// 打鍵の後、描く前の layout で見えている字の色が文書の今の役割（ずらした役割）に揃い、裏から編集の後の役割が届けば
+  /// 見えている字がその色に揃う。`compute` の後ろを消すと呼び出しでなくなり、`"` を打てば行末まで文字列になる——どちらも
+  /// 編集した字の外の役割が変わる。
+  func testAnEditRecolorsTheVisibleTextWhenTheRolesArrive() throws {
     let (document, _) = try open(source(200))
     let view = document.surface.view
-    let call = (document.surface.text as NSString).range(of: "(3)")
+    let call = (bodyText(document) as NSString).range(of: "(3)")
     document.surface.selectedRange = NSRange(location: call.location, length: 3)
     document.surface.responder.deleteBackward(nil)
     view.layoutSubtreeIfNeeded()
-    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "括弧を消した後の layout")
+    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "括弧を消した直後の layout")
+    settle(document)
+    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "括弧を消した後の役割")
 
-    let quote = document.lineIndex.start(ofRow: 5)
+    let quote = document.text.lineStart(5)
     document.surface.selectedRange = NSRange(location: quote, length: 0)
     document.surface.responder.keyDown(with: .key("\"", []))
     view.layoutSubtreeIfNeeded()
-    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "引用符を打った後の layout")
+    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "引用符を打った直後の layout")
+    settle(document)
+    XCTAssertEqual(
+      document.roles.roles(in: NSRange(location: quote + 1, length: 3)).first?.role, .string,
+      "前提: 引用符の後ろは文字列になった")
+    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "引用符を打った後の役割")
     try assertColorsFollowTheWindow(document, "layout の後")
 
     document.surface.responder.undoManager?.undo()
-    view.layoutSubtreeIfNeeded()
-    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "undo の後の layout")
+    settle(document)
+    XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "undo の後の役割")
     try assertColorsFollowTheWindow(document, "undo の layout の後")
   }
 
-  /// 打鍵の直後の描画で、役割の変わった字が古い色で出ない。6 行目の頭に `"` を打つと、同じ行の `let` は keyword の青から
-  /// 文字列の色になる。画素は描き直しを強いない層の写しから読む。
-  func testTheFrameAfterAnEditDrawsTheNewColors() throws {
+  /// 裏から役割が届いた後の描画で、役割の変わった字が古い色で出ない。6 行目の頭に `"` を打つと、同じ行の `let` は
+  /// keyword の青から文字列の色になる。画素は描き直しを強いない層の写しから読む。
+  func testTheFrameAfterTheRolesArriveDrawsTheNewColors() throws {
     let (document, _) = try open(source(200))
     let view = document.surface.view
     view.displayIfNeeded()
@@ -159,8 +170,11 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
     XCTAssertGreaterThan(before.bluest(in: row.offsetBy(dx: -cell, dy: 0)), 0.3, "前提: `let` は青")
 
     document.surface.selectedRange = NSRange(
-      location: document.lineIndex.start(ofRow: 5), length: 0)
+      location: document.text.lineStart(5), length: 0)
     document.surface.responder.keyDown(with: .key("\"", []))
+    view.layoutSubtreeIfNeeded()
+    view.displayIfNeeded()
+    catchUp(document)
     view.layoutSubtreeIfNeeded()
     view.displayIfNeeded()
     let shot = try drawnShot(view, inking: row)
@@ -240,7 +254,7 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
     let row = Int(document.viewportLines.first + document.viewportLines.visible) - 1
     clip.scroll(to: .zero)
     settle(document)
-    let keyword = NSRange(location: document.lineIndex.start(ofRow: row), length: 3)
+    let keyword = NSRange(location: document.text.lineStart(row), length: 3)
     XCTAssertGreaterThan(keyword.location, NSMaxRange(visibleLines(document)), "前提: 帯の行")
     XCTAssertEqual(try mismatches(document, in: keyword), [], "前提: 帯の `let` は塗ってある")
 
@@ -248,7 +262,7 @@ final class EditorTextSurfaceColorTests: OrbeTestCase {
     document.surface.responder.insertText("/*")
     settle(document)
     let shifted = NSRange(location: keyword.location + 2, length: 3)
-    XCTAssertEqual(document.roleSpans(in: shifted).first?.role, .comment, "前提: 帯の行もコメントになる")
+    XCTAssertEqual(document.roles.roles(in: shifted).first?.role, .comment, "前提: 帯の行もコメントになる")
     XCTAssertEqual(try mismatches(document, in: visibleLines(document)), [], "見えている行は塗り直す")
     XCTAssertEqual(try mismatches(document, in: shifted).count, 3, "帯は塗り直さない（古い色のまま）")
 

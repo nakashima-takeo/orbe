@@ -19,15 +19,15 @@ final class EditorScrollPerfTests: OrbeTestCase {
 
   func test200KB() throws { try run(label: "200KB", bytes: 200_000) }
 
-  /// 1200×800 の窓に Swift の文書を開いて測る。速いドラッグは開いたばかりの文書で、打鍵・ホイール・打鍵の後の速い
-  /// ドラッグは別に開き直した文書で測る。文書を端から端まで通した後の打鍵も参考に出す（TextKit が段落を覚えるので、
-  /// 開いたばかりの文書より重い）。
+  /// 1200×800 の窓に Swift の文書を開き、裏の仕事（文書全体の構文色）が追いついてから測る。速いドラッグは開いた
+  /// ばかりの文書で、打鍵・ホイール・打鍵の後の速いドラッグは別に開き直した文書で測る。文書を端から端まで通した後の
+  /// 打鍵も参考に出す（TextKit が段落を覚えるので、開いたばかりの文書より重い）。
   private func run(label: String, bytes: Int) throws {
     let text = Self.swiftSource(bytes: bytes)
     let dragged = try open(text)
     print(
       "PERF", label, "env", ProcessInfo.processInfo.environment.count, "lines",
-      dragged.document.lineIndex.lineCount, "bytes", dragged.document.lineIndex.length)
+      dragged.document.text.lineCount, "bytes", dragged.document.text.length)
     drag(label, "fast-drag", dragged)
     report(label, "typing-after-drag (参考)", type(into: dragged))
     dragged.window.orderOut(nil)
@@ -64,6 +64,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
     let document = try tab.editor.open(try caseFile("big-\(UUID().uuidString).swift", text))
     pane.layoutSubtreeIfNeeded()
     pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "本文が layout される")
+    document.waitUntilCaughtUp(timeout: 60)
     window.makeFirstResponder(document.surface.responder)
     RunLoop.main.run(until: Date().addingTimeInterval(0.3))
     return Opened(tab: tab, pane: pane, window: window, document: document)
@@ -80,10 +81,10 @@ final class EditorScrollPerfTests: OrbeTestCase {
   /// 1/3 の位置の行に 30 字打つ。1 字ごとの時間（ms）。
   private func type(into opened: Opened) -> [Double] {
     let document = opened.document
-    let middle = document.lineIndex.lineCount / 3
+    let middle = document.text.lineCount / 3
     document.scroll(toFirstLine: CGFloat(middle))
     document.surface.selectedRange = NSRange(
-      location: document.lineIndex.start(ofRow: middle + 5) + 4, length: 0)
+      location: document.text.lineStart(middle + 5) + 4, length: 0)
     RunLoop.main.run(until: Date().addingTimeInterval(0.3))
     var times: [Double] = []
     for character in "let value = compute(offset) ok" {

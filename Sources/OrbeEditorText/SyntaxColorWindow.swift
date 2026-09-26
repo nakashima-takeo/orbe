@@ -5,7 +5,8 @@ import STTextView
 /// 構文の色の窓。色は見えている行にだけ塗り、上流が layout した範囲（見えている範囲と上下の先読みの帯）の外の色は外す
 /// ——全文に色を置くと、色を 1 か所変えるたびに文書全体の属性の表が動き、打鍵もスクロールも文書の大きさに比例して重くなる。
 /// 先読みの帯は、スクロールで見えたとき（clip の bounds の通知。描く前に届く）に塗る。
-/// 不変条件: 色は窓の中にしか無く、見えている字の色は常に文書の今の役割と一致する。役割は面の delegate（文書）に問い合わせる。
+/// 不変条件: 色は窓の中にしか無く、見えている字の色は常に文書の今の役割と一致する（打鍵の直後は文書がずらした役割、裏の
+/// 結果が届けばその役割）。役割は面の delegate（文書）に問い合わせる。
 @MainActor
 final class SyntaxColorWindow {
   private let textView: STTextView
@@ -14,7 +15,7 @@ final class SyntaxColorWindow {
   var roles: (NSRange) -> [HighlightSpan] = { _ in [] }
   /// 色が付いているかもしれない区間（窓の外に出れば外す）。
   private var touched = IndexSet()
-  /// 色が文書の今の役割と一致する区間（`touched` の中）。編集で空になる。
+  /// 色が文書の今の役割と一致する区間（`touched` の中）。編集で空になり、裏から役割が届けばその区間が外れる。
   private var fresh = IndexSet()
   /// 最後に見た、見えている行の区間。
   private var visible = NSRange(location: 0, length: 0)
@@ -54,14 +55,23 @@ final class SyntaxColorWindow {
   }
 
   /// 編集の後——色の付いた区間を編集に沿って写し、どの色も古いものとして扱う。塗るのは続く layout（上流は編集の後、描く
-  /// 前に必ず layout して通知する）で、見えている行を丸ごと問い合わせ直す——隣の字の変化で役割が変わる字（呼び出しで
-  /// なくなった識別子・引用符の後ろ）を画面に残さない。帯の色は見えたときに塗り直す。
+  /// 前に必ず layout して通知する）で、見えている行を丸ごと問い合わせ直す（文書が編集に合わせてずらした役割で）。隣の字の
+  /// 変化で役割が変わる字（呼び出しでなくなった識別子・引用符の後ろ）は、裏から役割が届いたとき（`rolesDidChange`）に
+  /// 塗り直す。帯の色は見えたときに塗り直す。
   func textDidChange(_ edit: TextEdit) {
     touched.remove(integersIn: edit.range.location..<NSMaxRange(edit.range))
     touched.shift(
       startingAt: NSMaxRange(edit.range), by: edit.replacementLength - edit.range.length)
     touched.insert(integersIn: edit.newRange.location..<NSMaxRange(edit.newRange))
     fresh = IndexSet()
+    textView.needsLayout = true
+  }
+
+  /// 役割が変わった（裏から届いた）——区間の色を古いものとして扱い、見えている行に掛かれば続く layout で塗り直す。
+  /// 帯の色は見えたときに塗り直す。
+  func rolesDidChange(_ ranges: IndexSet) {
+    fresh.subtract(ranges)
+    guard ranges.intersects(integersIn: Range(visible) ?? 0..<0) else { return }
     textView.needsLayout = true
   }
 

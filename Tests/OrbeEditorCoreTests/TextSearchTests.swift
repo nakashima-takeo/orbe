@@ -37,10 +37,10 @@ final class TextSearchTests: XCTestCase {
       NSRange(location: 0, length: 2), NSRange(location: 4, length: 2),
       NSRange(location: 10, length: 2),
     ]
-    let edit = TextEdit(range: NSRange(location: 5, length: 2), replacementLength: 5)
+    let edit = TextEdit(range: NSRange(location: 5, length: 2), replacement: "12345")
     XCTAssertEqual(
       edit.track(ranges), [NSRange(location: 0, length: 2), NSRange(location: 13, length: 2)])
-    let insert = TextEdit(range: NSRange(location: 2, length: 0), replacementLength: 1)
+    let insert = TextEdit(range: NSRange(location: 2, length: 0), replacement: "x")
     XCTAssertEqual(
       insert.track(ranges),
       [

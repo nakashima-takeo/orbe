@@ -1,12 +1,11 @@
 import AppKit
 import OrbeEditorCore
 
-/// ミニマップの字——64 行のチャンクごとに、字形を合成した画像を覚えて返す。画像は構文の色で組むか、字の形だけを素の
-/// 文字色で組むか（役割を問い合わせない分だけ速い——スクロールで新しく見えたチャンクを先に出し、止まってから色付きへ
-/// 差し替える）。窓に新しく入ったチャンクだけ組み、本文が変われば編集の行と役割が変わった区間のチャンクを捨て、行が増減
-/// したときだけ編集の行より後ろも捨てる（1MB の文書で打鍵ごとに窓ぶんを組み直さない）。覚える数には上限があり、超えたら
-/// 最も長く使っていないものから捨てる（文書を端から端まで通しても、ファイルの大きさに比例して画像が溜まらない）。倍率・
-/// 外観・幅・インデント単位が変われば全部捨てる。
+/// ミニマップの字——64 行のチャンクごとに、字形を構文の色で合成した画像を覚えて返す（役割は文書の役割の並びから引くだけ
+/// なので、新しく見えたチャンクも最初から色付きで組む）。窓に新しく入ったチャンクだけ組み、本文が変われば編集の行の
+/// チャンクを、裏から役割が届けば役割が変わった区間のチャンクを捨て、行が増減したときだけ編集の行より後ろも捨てる（1MB の
+/// 文書で打鍵ごとに窓ぶんを組み直さない）。覚える数には上限があり、超えたら最も長く使っていないものから捨てる（文書を端から
+/// 端まで通しても、ファイルの大きさに比例して画像が溜まらない）。倍率・外観・幅・インデント単位が変われば全部捨てる。
 @MainActor
 final class MinimapChunks {
   static let lines = 64
@@ -28,10 +27,9 @@ final class MinimapChunks {
     }
   }
 
-  /// 覚えた画像と、構文の色で組んだか、最後に使った順番（大きいほど新しい）。
+  /// 覚えた画像と、最後に使った順番（大きいほど新しい）。
   private struct Entry {
     let image: CGImage
-    let colored: Bool
     var lastUse: Int
   }
 
@@ -48,8 +46,6 @@ final class MinimapChunks {
   }
 
   var cached: Set<Int> { Set(images.keys) }
-  /// 素の文字色で組んだまま覚えているチャンク。
-  var plain: Set<Int> { Set(images.filter { !$0.value.colored }.keys) }
 
   /// 文書を結び直した。
   func reset(lineCount: Int) {
@@ -58,30 +54,29 @@ final class MinimapChunks {
   }
 
   /// 本文が変わった。
-  func textDidChange(_ change: TextChange, index: LineIndex) {
-    let editLine = index.point(at: change.edit.range.location).row
-    if index.lineCount != lineCount {
-      lineCount = index.lineCount
+  func textDidChange(_ edit: TextEdit, text: TextRope) {
+    let editLine = text.row(containing: edit.range.location)
+    if text.lineCount != lineCount {
+      lineCount = text.lineCount
       let first = editLine / Self.lines
       images = images.filter { $0.key < first }
     }
-    drop(covering: change.edit.newRange, index: index)
-    for range in change.changedRoles.rangeView {
-      drop(covering: NSRange(range), index: index)
+    drop(covering: edit.newRange, text: text)
+  }
+
+  /// 役割が変わった。
+  func rolesDidChange(_ ranges: IndexSet, text: TextRope) {
+    for range in ranges.rangeView { drop(covering: NSRange(range), text: text) }
+  }
+
+  private func drop(covering range: NSRange, text: TextRope) {
+    for chunk in Range(text.rows(of: range)).map({ $0 / Self.lines }) {
+      images[chunk] = nil
     }
   }
 
-  private func drop(covering range: NSRange, index: LineIndex) {
-    let first = index.point(at: range.location).row / Self.lines
-    let last = index.point(at: max(range.location, NSMaxRange(range) - 1)).row / Self.lines
-    for chunk in first...last { images[chunk] = nil }
-  }
-
-  /// 覚えているか（素の色のままでも）。
-  func contains(_ chunk: Int) -> Bool { images[chunk] != nil }
-
-  /// チャンクの画像。覚えていればそれ（素の色のままでも）を、無ければ `colored` の組み方で組んで覚える。
-  func image(_ chunk: Int, document: EditorDocument, canvas: Canvas, colored: Bool) -> CGImage? {
+  /// チャンクの画像。覚えていればそれを、無ければ組んで覚える。
+  func image(_ chunk: Int, document: EditorDocument, canvas: Canvas) -> CGImage? {
     if canvas != self.canvas || document.indentUnit != indentUnit {
       images.removeAll()
       if canvas.scale != self.canvas?.scale { sheet = nil }
@@ -93,43 +88,26 @@ final class MinimapChunks {
       images[chunk]?.lastUse = uses
       return entry.image
     }
-    guard let image = render(chunk, document: document, canvas: canvas, colored: colored) else {
-      return nil
-    }
+    guard let image = render(chunk, document: document, canvas: canvas) else { return nil }
     if images.count >= Self.capacity,
       let oldest = images.min(by: { $0.value.lastUse < $1.value.lastUse })?.key
     {
       images[oldest] = nil
     }
-    images[chunk] = Entry(image: image, colored: colored, lastUse: uses)
+    images[chunk] = Entry(image: image, lastUse: uses)
     return image
   }
 
-  /// `chunks` のうち素の色で覚えている最小のチャンクを、組んだときと同じ条件（`canvas`）で構文の色へ組み直す。組み直した
-  /// ら true。条件は今のビューから取らない——窓から外れている間は倍率や幅が変わって見え、戻っても素の色が残る。
-  func colorFirstPlain(in chunks: ClosedRange<Int>, document: EditorDocument) -> Bool {
-    guard let canvas,
-      let chunk = images.filter({ chunks.contains($0.key) && !$0.value.colored }).keys.min(),
-      let entry = images[chunk],
-      let image = render(chunk, document: document, canvas: canvas, colored: true)
-    else { return false }
-    images[chunk] = Entry(image: image, colored: true, lastUse: entry.lastUse)
-    return true
-  }
-
-  /// チャンクの字を premultiplied RGBA に合成する。色は役割の色（無ければ・`colored` でなければ素の文字色）、α は字形の
-  /// 明度 × 明るさの係数。
-  private func render(_ chunk: Int, document: EditorDocument, canvas: Canvas, colored: Bool)
-    -> CGImage?
-  {
-    let index = document.lineIndex
+  /// チャンクの字を premultiplied RGBA に合成する。色は役割の色（無ければ素の文字色）、α は字形の明度 × 明るさの係数。
+  private func render(_ chunk: Int, document: EditorDocument, canvas: Canvas) -> CGImage? {
+    let text = document.text
     let firstRow = chunk * Self.lines
-    guard firstRow < index.lineCount else { return nil }
-    let rows = firstRow..<min(firstRow + Self.lines, index.lineCount)
-    let start = index.start(ofRow: rows.lowerBound)
-    let range = NSRange(location: start, length: index.end(ofRow: rows.upperBound - 1) - start)
-    let units = Array(document.surface.substring(in: range).utf16)
-    let roles = colored ? document.roleSpans(in: range) : []
+    guard firstRow < text.lineCount else { return nil }
+    let rows = firstRow..<min(firstRow + Self.lines, text.lineCount)
+    let start = text.lineStart(rows.lowerBound)
+    let range = NSRange(location: start, length: text.lineEnd(rows.upperBound - 1) - start)
+    let units = text.units(in: range)
+    let roles = document.roles.roles(in: range)
     let scale = canvas.scale
     let sheet = self.sheet ?? MinimapCharSheet(scale: scale, font: Theme.Typography.editorCode)
     self.sheet = sheet
@@ -142,8 +120,8 @@ final class MinimapChunks {
     var pixels = [UInt8](repeating: 0, count: width * height * 4)
     var roleIndex = 0
     for row in rows {
-      let lineStart = index.start(ofRow: row)
-      var end = min(index.end(ofRow: row), start + units.count) - start
+      let lineStart = text.lineStart(row)
+      var end = min(text.lineEnd(row), start + units.count) - start
       let from = lineStart - start
       if end > from, units[end - 1] == 0x0A { end -= 1 }
       if end > from, units[end - 1] == 0x0D { end -= 1 }

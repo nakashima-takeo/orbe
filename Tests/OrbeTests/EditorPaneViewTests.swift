@@ -76,7 +76,7 @@ final class EditorPaneViewTests: OrbeTestCase {
     window.makeFirstResponder(second.surface.responder)
 
     first.surface.responder.keyDown(with: .key("X", []))
-    XCTAssertEqual(first.surface.text, "Xone")
+    XCTAssertEqual(bodyText(first), "Xone")
     XCTAssertTrue(pane.document === second, "見せているのは焦点の文書の面")
     XCTAssertNil(first.surface.view.superview, "焦点でない文書の面は外れている")
 
@@ -84,10 +84,10 @@ final class EditorPaneViewTests: OrbeTestCase {
     XCTAssertTrue(pane.document === first)
     XCTAssertTrue(first.surface.view.superview === pane)
     XCTAssertNil(second.surface.view.superview)
-    XCTAssertEqual(first.surface.text, "Xone", "戻っても本文はその文書の面に残っている")
+    XCTAssertEqual(bodyText(first), "Xone", "戻っても本文はその文書の面に残っている")
 
     first.surface.responder.undoManager?.undo()
-    XCTAssertEqual(first.surface.text, "one", "undo 履歴も文書ごとに残っている")
+    XCTAssertEqual(bodyText(first), "one", "undo 履歴も文書ごとに残っている")
     window.orderOut(nil)
   }
 

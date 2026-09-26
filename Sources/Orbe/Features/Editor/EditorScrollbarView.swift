@@ -83,7 +83,7 @@ final class EditorScrollbarView: NSView {
     guard let document else { return }
     let (first, visible) = document.viewportLines
     let geometry = ScrollbarGeometry(
-      lineCount: document.lineIndex.lineCount, firstLine: first, visibleLines: visible,
+      lineCount: document.text.lineCount, firstLine: first, visibleLines: visible,
       height: bounds.height)
     self.geometry = geometry
     thumb.frame = NSRect(
@@ -192,10 +192,10 @@ final class EditorScrollbarView: NSView {
   override func draw(_ dirtyRect: NSRect) {
     guard let document else { return }
     let scale = window?.backingScaleFactor ?? 1
-    let index = document.lineIndex
+    let text = document.text
     let (_, visible) = document.viewportLines
     let ruler = OverviewRuler(
-      lineCount: index.lineCount, visibleLines: visible, height: bounds.height, scale: scale)
+      lineCount: text.lineCount, visibleLines: visible, height: bounds.height, scale: scale)
     let marks = LineMarks(hunks: document.hunks)
     let rows = { (lines: Range<Int>) in (lines.lowerBound - 1)...(lines.upperBound - 2) }
     let added = marks.runs.filter { $0.kind == .added }.map { rows($0.lines) }
@@ -206,9 +206,9 @@ final class EditorScrollbarView: NSView {
       MarkGroup(rows: modified, lane: .left, color: style.modified),
       MarkGroup(rows: removed, lane: .left, color: style.removed),
       MarkGroup(
-        rows: decorations.wordOccurrences.map(index.rows(of:)), lane: .center,
+        rows: decorations.wordOccurrences.map(text.rows(of:)), lane: .center,
         color: style.wordOccurrence),
-      MarkGroup(rows: findRows(index: index), lane: .center, color: style.findMatch),
+      MarkGroup(rows: findRows(text: text), lane: .center, color: style.findMatch),
     ]
     for group in groups where !group.rows.isEmpty {
       let lane = OverviewRuler.lane(group.lane, width: bounds.width, scale: scale)
@@ -217,7 +217,7 @@ final class EditorScrollbarView: NSView {
         fill(x: lane.x, width: lane.width, span: span, scale: scale)
       }
     }
-    let caretRow = index.point(at: document.surface.caretLocation).row
+    let caretRow = text.row(containing: document.surface.caretLocation)
     let full = OverviewRuler.lane(.full, width: bounds.width, scale: scale)
     style.caret.setFill()
     fill(x: full.x, width: full.width, span: ruler.caret(row: caretRow), scale: scale)
@@ -227,13 +227,13 @@ final class EditorScrollbarView: NSView {
   }
 
   /// 検索の一致の行。多いときは近い行をまとめた近似に、現在の一致を加える。
-  private func findRows(index: LineIndex) -> [ClosedRange<Int>] {
-    let rows = decorations.findMatches.map(index.rows(of:))
+  private func findRows(text: TextRope) -> [ClosedRange<Int>] {
+    let rows = decorations.findMatches.map(text.rows(of:))
     guard decorations.approximatesFindMatches else { return rows }
     var result = OverviewRuler.approximate(
-      rows, lineCount: index.lineCount, height: bounds.height)
+      rows, lineCount: text.lineCount, height: bounds.height)
     if let current = decorations.currentFindMatch {
-      result.append(index.rows(of: current))
+      result.append(text.rows(of: current))
       result.sort { $0.lowerBound < $1.lowerBound }
     }
     return result

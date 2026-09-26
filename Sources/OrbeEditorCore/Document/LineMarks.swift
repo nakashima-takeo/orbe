@@ -1,7 +1,7 @@
 import Foundation
 
 /// ハンクから導く行の印——行ごとの「追加／変更」と「この境の下に削除がある」。行は 1 始まり（`LineHunk`
-/// と同じ数え方）。文書が持ち、行索引でオフセット区間に写してテキスト面へ渡す（→ `LineMarkSpans`）。俯瞰は
+/// と同じ数え方）。文書が持ち、本文のロープでオフセット区間に写してテキスト面へ渡す（→ `LineMarkSpans`）。俯瞰は
 /// 行の連（`runs`）と削除の境（`deletionsBelow`）をそのまま読む。
 public struct LineMarks: Equatable, Sendable {
   public enum Kind: Equatable, Sendable {
@@ -40,15 +40,15 @@ public struct LineMarks: Equatable, Sendable {
   }
 
   /// 面へ渡す形。行の区間は改行込み（次の行頭まで、末尾なら本文の長さまで）、境は次の行の行頭のオフセット。
-  /// 索引に無い行（索引と印が同じ本文から出ている限り起きない）は落とす。
-  func spans(in index: LineIndex) -> LineMarkSpans {
-    let end = { (row: Int) in row < index.lineCount ? index.start(ofRow: row) : index.length }
+  /// 本文に無い行（ずらした前のハンクが本文の外を指すとき）は落とす。
+  func spans(in text: TextRope) -> LineMarkSpans {
+    let end = { (row: Int) in row < text.lineCount ? text.lineStart(row) : text.length }
     var marks: [LineMarkSpans.Mark] = []
     for run in runs {
       let firstRow = run.lines.lowerBound - 1
-      guard firstRow >= 0, firstRow < index.lineCount else { continue }
-      let start = index.start(ofRow: firstRow)
-      let stop = end(min(run.lines.upperBound - 1, index.lineCount))
+      guard firstRow >= 0, firstRow < text.lineCount else { continue }
+      let start = text.lineStart(firstRow)
+      let stop = end(min(run.lines.upperBound - 1, text.lineCount))
       marks.append(
         LineMarkSpans.Mark(
           range: NSRange(location: start, length: max(0, stop - start)), kind: run.kind))
