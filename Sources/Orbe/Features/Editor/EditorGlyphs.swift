@@ -32,6 +32,14 @@ enum EditorGlyphs {
     return [(sheet, 1), (behind, 0.8)]
   }
 
+  /// レールの「検索」（24 系・stroke 1.6。見本 SearchIcon）。
+  static let railSearch = Glyph(viewBox: 24, stroke: 1.6) { k in
+    var path = Path(ellipseIn: CGRect(x: 5.5 * k, y: 5.5 * k, width: 11 * k, height: 11 * k))
+    path.move(to: CGPoint(x: 15.5 * k, y: 15.5 * k))
+    path.addLine(to: CGPoint(x: 20 * k, y: 20 * k))
+    return [(path, 1)]
+  }
+
   /// 折りたたみのシェブロン `M6 4.5L10 8l-4 3.5`（stroke 1.3）。開いていると 90° 回す。
   static let chevron = Glyph(viewBox: 16, stroke: 1.3) { k in [(chevronPath(k), 1)] }
 
@@ -94,6 +102,43 @@ enum EditorGlyphs {
     path.addLine(to: p(10.5, 13.5))
     path.move(to: p(7.5, 6.5))
     path.addLine(to: p(11.5, 6.5))
+    return [(path, 1)]
+  }
+
+  /// すべて展開: 重なった 2 枚の角丸に ＋（`collapseAll` の対）。
+  static let expandAll = Glyph(viewBox: 16, stroke: 1.2) { k in
+    var parts = collapseAll.parts(k)
+    var plus = Path()
+    plus.move(to: CGPoint(x: 9.5 * k, y: 4.5 * k))
+    plus.addLine(to: CGPoint(x: 9.5 * k, y: 8.5 * k))
+    parts.append((plus, 1))
+    return parts
+  }
+
+  /// 更新: 開いた円弧と矢じり（見本 RefreshIcon `M13 8a5 5 0 1 1-1.7-3.75` `M13 2.8v2.4h-2.4`）。
+  static let refresh = Glyph(viewBox: 16, stroke: 1.2) { k in
+    var path = Path()
+    path.addArc(
+      center: CGPoint(x: 8 * k, y: 8 * k), radius: 5 * k, startAngle: .degrees(0),
+      endAngle: .degrees(311.35), clockwise: false)
+    path.move(to: CGPoint(x: 13 * k, y: 2.8 * k))
+    path.addLine(to: CGPoint(x: 13 * k, y: 5.2 * k))
+    path.addLine(to: CGPoint(x: 10.6 * k, y: 5.2 * k))
+    return [(path, 1)]
+  }
+
+  /// 停止: 円に四角（見本に無い。検索が 2 秒を超えると更新と入れ替わる）。
+  static let stop = Glyph(viewBox: 16, stroke: 1.2) { k in
+    var path = Path(ellipseIn: CGRect(x: 2.5 * k, y: 2.5 * k, width: 11 * k, height: 11 * k))
+    path.addRect(CGRect(x: 6 * k, y: 6 * k, width: 4 * k, height: 4 * k))
+    return [(path, 1)]
+  }
+
+  /// クリア: 斜線の入った円（見本 ClearIcon）。
+  static let clear = Glyph(viewBox: 16, stroke: 1.2) { k in
+    var path = Path(ellipseIn: CGRect(x: 2.5 * k, y: 2.5 * k, width: 11 * k, height: 11 * k))
+    path.move(to: CGPoint(x: 4.2 * k, y: 4.2 * k))
+    path.addLine(to: CGPoint(x: 11.8 * k, y: 11.8 * k))
     return [(path, 1)]
   }
 

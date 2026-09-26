@@ -1,10 +1,11 @@
 import AppKit
 import OrbeEditorCore
 
-/// 文書の「変わった」の扇出と、俯瞰（ミニマップ・スクロールバー・影）と出現の強調への配線。文書側の closure は単一の
-/// まま、ここがミニマップ・スクロールバー・影・検索・出現の強調へ配る（裏から届いた役割と問いの結果も）。検索の一致と
-/// 語の出現は束ねて（`OverviewDecorations`）ミニマップとスクロールバーへ押す。本体の上のポインタは pane の tracking area
-/// が見て、スクロールバーのつまみの見え隠れに使う。
+/// 文書の「変わった」の扇出と、俯瞰（ミニマップ・スクロールバー・影）と出現の強調・一致の地への配線。文書側の closure は
+/// 単一のまま、ここがミニマップ・スクロールバー・影・検索・出現の強調・プロジェクト検索へ配る（裏から届いた役割と問いの結果
+/// も）。一致の地は 2 つの出どころ（ファイル内検索とプロジェクト検索）の和を面と俯瞰へ押し（`pushFindGround`）、語の
+/// 出現と束ねて（`OverviewDecorations`）ミニマップとスクロールバーへ押す。本体の上のポインタは pane の tracking area が
+/// 見て、スクロールバーのつまみの見え隠れに使う。
 extension EditorPaneView {
   /// 文書の「変わった」を右列・影・検索・出現の強調へ配る（見せている文書だけ）。
   func observe(_ document: EditorDocument, _ on: Bool) {
@@ -41,6 +42,7 @@ extension EditorPaneView {
         noteScrollState()
         search.textDidChange(edit)
         occurrences.textDidChange()
+        if let document = self.document { projectSearch.documentDidEdit(document, edit) }
       } : nil
     document.onRolesChange = on ? { [weak self] in self?.minimap.rolesDidChange($0) } : nil
     document.onAnalysis =
@@ -85,11 +87,34 @@ extension EditorPaneView {
       needle: searchBar == nil ? nil : search.needle, fieldFocused: fieldFocused)
   }
 
-  /// 検索の一致と語の出現を束ねてミニマップとスクロールバーへ。
-  func pushOverviewDecorations() {
-    let find = search.overview
+  /// 一致の地——ファイル内検索（一致と現在の一致）と、検索パネルが見えている間のプロジェクト検索（焦点の文書のまとまりの
+  /// 区間と選んだ一致）の和。どちらも出どころが自分で編集に合わせてずらした区間。
+  var findGround: (matches: [NSRange], current: [NSRange]) {
+    let find = search.ground
+    var matches = find.matches
+    var current = find.current.map { [$0] } ?? []
+    if showsSearchPanel, let document {
+      let project = projectSearch.ground(for: document)
+      matches = RangeUnion.union(matches, project.ranges)
+      if let selected = project.current { current = RangeUnion.union(current, [selected]) }
+    }
+    return (matches, current)
+  }
+
+  /// 一致の地を面と俯瞰へ押す（状態は持たず、2 つの出どころを読み直す）。どちらかの出どころが変わったとき・文書の切替・
+  /// 検索パネルの見え隠れで呼ぶ。
+  func pushFindGround() {
+    let ground = findGround
+    document?.surface.setHighlights(ground.matches, for: .findMatch)
+    document?.surface.setHighlights(ground.current, for: .currentFindMatch)
+    pushOverviewDecorations(ground)
+  }
+
+  /// 一致の地と語の出現を束ねてミニマップとスクロールバーへ。
+  func pushOverviewDecorations(_ ground: (matches: [NSRange], current: [NSRange])? = nil) {
+    let find = ground ?? findGround
     let decorations = OverviewDecorations(
-      findMatches: find.matches, currentFindMatch: find.current,
+      findMatches: find.matches, currentFindMatch: find.current.first,
       wordOccurrences: occurrences.wordOccurrences)
     minimap.decorations = decorations
     scrollbar.decorations = decorations

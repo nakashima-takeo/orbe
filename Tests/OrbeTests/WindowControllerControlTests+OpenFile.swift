@@ -54,7 +54,7 @@ extension WindowControllerControlTests {
           tabs: [
             TabState(
               cwd: dir.path, agent: nil, explicitTitle: nil,
-              editor: EditorState(open: [a.path], active: a.path))
+              editor: EditorState(documents: .init(open: [a.path], active: a.path)))
           ]),
       ])
     let tab = wc.workspaces[1].tabs[0]

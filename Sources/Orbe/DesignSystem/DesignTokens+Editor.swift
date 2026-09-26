@@ -123,6 +123,19 @@ extension Theme.Typography {
   static func editorChip(size: CGFloat) -> NSFont {
     NSFont.monospacedSystemFont(ofSize: size, weight: .bold)
   }
+  /// 検索パネルの入力欄（mono 12）。
+  static let editorSearchField = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+  /// 入力欄の右のオプション（Aa / ab / .*。sans 10）。
+  static let editorSearchOption = NSFont.systemFont(ofSize: 10, weight: .regular)
+  /// 結果のまとまりの見出しのファイル名（sans 12）とディレクトリ（sans 10.5）。
+  static let editorSearchFile = NSFont.systemFont(ofSize: 12, weight: .regular)
+  static let editorSearchDirectory = NSFont.systemFont(ofSize: 10.5, weight: .regular)
+  /// まとまりの件数バッジ（sans 9.5）。
+  static let editorSearchCount = NSFont.systemFont(ofSize: 9.5, weight: .regular)
+  /// 一致の行（mono 11）。
+  static let editorSearchMatch = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+  /// 件数・打ち切り・0 件・エラーの文（sans 11）。
+  static let editorSearchNote = NSFont.systemFont(ofSize: 11, weight: .regular)
   /// パネルヘッダーの題の字間。
   static let trackingPanelTitle: CGFloat = 0.5
   /// ルート行の字間。
@@ -161,6 +174,18 @@ extension Theme.Layout {
   static let editorMinimapMaxWidth: CGFloat = 120
   /// 折りたたみのシェブロン。
   static let editorChevron: CGFloat = 16
+  /// 検索パネル（見本 SearchPanel を u4 で詰めた比率に揃えたもの）。入力欄の高さ・オプションの角・まとまりの見出しと
+  /// 一致の行の高さ・一致の行の左の字下げ・件数バッジ（最小幅×高さ）・見出しのシェブロンの幅。
+  static let editorSearchField: CGFloat = 28
+  static let editorSearchOption: CGFloat = 20
+  static let editorSearchFileRow: CGFloat = 22
+  static let editorSearchMatchRow: CGFloat = 20
+  static let editorSearchMatchIndent: CGFloat = 40
+  static let editorSearchCountWidth: CGFloat = 18
+  static let editorSearchCountHeight: CGFloat = 16
+  static let editorSearchChevron: CGFloat = 10
+  /// 検索中の進捗の細い線。
+  static let editorSearchProgress: CGFloat = 2
 }
 
 extension Theme.Opacity {

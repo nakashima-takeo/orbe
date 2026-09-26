@@ -1,0 +1,281 @@
+import Foundation
+import OrbeEditorCore
+
+/// プロジェクト検索の状態（タブごと。pane が 1 つ持つ）——問い・検索の進み・結果・平らな行・選択・折りたたみ。規則（問いの
+/// 組み立て・行の中の一致・順序・上限）は Core、1 回の検索の裏の仕事は `ProjectSearchRun`。SwiftUI（検索パネル）はこれを
+/// 読み、操作は閉包で pane へ戻る（開く・焦点）。
+///
+/// 打鍵は 300ms 後に検索し、Enter・切替・更新は即時。打鍵の検索では前の結果を消さず、新しい結果が最初に届いたとき（または
+/// 終わったとき）に差し替える。検索を始め直すたびに世代を進め、古い世代の結果は捨てる。開いている文書は保存前の中身を
+/// 探し、結果の鮮度を文書の版で持つ（→ `ProjectSearch+Documents`）。
+@MainActor @Observable
+final class ProjectSearch {
+  static let typingDelay: TimeInterval = 0.3
+  static let progressDelay: TimeInterval = 0.3
+  static let slowAfter: TimeInterval = 2
+
+  enum Phase: Equatable {
+    case idle
+    case searching
+    /// 2 秒を超えた検索（ヘッダーの更新が停止に替わる）。
+    case slow
+    case done
+  }
+
+  /// パネルの中の焦点の置き場（SwiftUI の焦点を写したもの）。
+  enum Area: Equatable {
+    case field
+    case results
+  }
+
+  /// 問い。打鍵・切替は `setPattern` / `toggle` を通す（検索を予約する）。復元は `restore`。
+  private(set) var query = SearchQuery()
+  private(set) var phase = Phase.idle
+  /// 進捗の細い線（打鍵の検索では 300ms 遅れて出す）。
+  private(set) var showsProgress = false
+  /// 問いのエラー。
+  private(set) var error: Failure?
+
+  enum Failure: Equatable {
+    /// ICU が断った正規表現。
+    case invalidPattern
+    /// git grep が断った（stderr の最初の行。PCRE2 だけが断る書き方など）。
+    case git(String)
+  }
+  var results = ProjectSearchResults()
+  /// 折りたたみを映した平らな行（結果か折りたたみが変わるたびに作り直す）。
+  var rows: [Row] = []
+  var selection: RowID?
+  var collapsed: Set<String> = []
+  /// パネルの中の焦点（SwiftUI が書く）。
+  var focusedArea: Area?
+  /// 焦点を入れる要求（来るたびにパネルがその場所へ焦点を移す。入力欄なら全選択）。
+  private(set) var focusRequest: FocusRequest?
+
+  struct FocusRequest: Equatable {
+    let area: Area
+    let serial: Int
+  }
+
+  /// 根（正規形）。
+  @ObservationIgnored private(set) var root: String
+  /// 範囲に入りうる開いている文書（タブのセッションの列）。
+  @ObservationIgnored var documents: () -> [EditorDocument] = { [] }
+  /// 一致を開く（`focusText` ならテキスト面へ焦点を移す）。
+  @ObservationIgnored var onOpen: (RowID, _ focusText: Bool) -> Void = { _, _ in }
+  /// 焦点を取る前に呼ぶ（pane が自分を first responder にして、面の焦点の記憶をエディターへ移す）。
+  @ObservationIgnored var onWillFocus: () -> Void = {}
+  /// 焦点の文書の一致の地が変わりうる（結果・選択・見え隠れ）。
+  @ObservationIgnored var onGroundChange: () -> Void = {}
+  /// 永続する問いが変わった。
+  @ObservationIgnored var onQueryChange: () -> Void = {}
+  @ObservationIgnored let runner: GitRunner
+  @ObservationIgnored let typingDelay = EditorDelay()
+  @ObservationIgnored let progressDelay = EditorDelay()
+  @ObservationIgnored let slowDelay = EditorDelay()
+  @ObservationIgnored var run: ProjectSearchRun?
+  @ObservationIgnored private(set) var compiled: CompiledSearchQuery?
+  @ObservationIgnored var generation = 0
+  /// 打鍵の検索で、次に届いた結果が前の結果を差し替える。
+  @ObservationIgnored private var replacesOnArrival = false
+  /// 開いている文書ごとに、結果が映している版（頼んでまだ届いていない版も含む）。
+  @ObservationIgnored var searchedVersions: [String: Int] = [:]
+  /// 開いている文書ごとの取り直しの予約。
+  @ObservationIgnored var refreshDelays: [String: EditorDelay] = [:]
+  /// 外部変更を聞く根のサービス（面が見えている間だけ握る）。
+  @ObservationIgnored var files: RootFiles?
+  /// 面が見えている間 true。立てると根のサービスを握って外部変更を聞き、結果が映している版を文書の版と比べ直す。
+  @ObservationIgnored var isLive = false {
+    didSet { if isLive != oldValue { liveDidChange() } }
+  }
+  @ObservationIgnored private var focusSerial = 0
+  /// まとまりごとの見出しの行の位置（`results.files` と同じ順）。
+  @ObservationIgnored var fileRowStarts: [Int] = []
+
+  init(root: String, runner: GitRunner = .shared) {
+    self.root = root
+    self.runner = runner
+  }
+
+  var isSearching: Bool { phase == .searching || phase == .slow }
+
+  // MARK: - 問い
+
+  /// 入力欄に打った。300ms 後に検索する（空なら止めて結果を消す）。
+  func setPattern(_ pattern: String) {
+    guard pattern != query.pattern else { return }
+    query.pattern = pattern
+    onQueryChange()
+    guard !pattern.isEmpty else {
+      typingDelay.cancel()
+      clearResults()
+      return
+    }
+    typingDelay.run(after: Self.typingDelay) { [weak self] in self?.search(typed: true) }
+  }
+
+  enum Option {
+    case matchCase
+    case wholeWord
+    case regex
+  }
+
+  /// 切替（Aa / ab / .* と ⌥⌘C / W / R）。即時に検索する。
+  func toggle(_ option: Option) {
+    switch option {
+    case .matchCase: query.matchCase.toggle()
+    case .wholeWord: query.wholeWord.toggle()
+    case .regex: query.isRegex.toggle()
+    }
+    onQueryChange()
+    search()
+  }
+
+  /// 永続から戻す。入力欄に入れるだけで検索しない。
+  func restore(_ query: SearchQuery) {
+    self.query = query
+  }
+
+  /// ⌘⇧F の種。検索語に入れて即時に検索する（正規表現が有効なら字どおりになるようエスケープする）。
+  func seed(_ text: String) {
+    query.pattern = query.isRegex ? NSRegularExpression.escapedPattern(for: text) : text
+    onQueryChange()
+    search()
+  }
+
+  // MARK: - 検索の実行
+
+  /// 今の問いで検索し直す（Enter・切替・更新・根の変化）。`typed` は打鍵の検索（前の結果を届くまで残し、進捗の線を
+  /// 遅らせる）。
+  func search(typed: Bool = false) {
+    typingDelay.cancel()
+    stopRun()
+    generation += 1
+    error = nil
+    guard !query.isEmpty else {
+      clearResults()
+      return
+    }
+    let compiled: CompiledSearchQuery
+    do {
+      compiled = try query.compiled()
+    } catch {
+      clearResults()
+      self.error = .invalidPattern
+      return
+    }
+    self.compiled = compiled
+    replacesOnArrival = typed
+    if !typed { replaceResults() }
+    phase = .searching
+    showsProgress = !typed
+    if typed {
+      progressDelay.run(after: Self.progressDelay) { [weak self] in
+        guard let self, isSearching else { return }
+        showsProgress = true
+      }
+    }
+    slowDelay.run(after: Self.slowAfter) { [weak self] in
+      guard let self, phase == .searching else { return }
+      phase = .slow
+    }
+    let documents = searchableDocuments()
+    searchedVersions = Dictionary(
+      documents.map { ($0.path, $0.version) }, uniquingKeysWith: { first, _ in first })
+    let current = generation
+    let run = ProjectSearchRun(
+      query: compiled, root: root, documents: documents, runner: runner
+    ) { [weak self] batch in self?.receive(batch, generation: current) }
+    self.run = run
+    run.start()
+  }
+
+  /// 検索を止める（停止・Esc）。届いた結果は残る。
+  func stop() {
+    guard isSearching else { return }
+    stopRun()
+    finishPhase()
+  }
+
+  /// ヘッダーのクリア。検索語と結果を消す。
+  func clear() {
+    setPattern("")
+    requestFocus(.field)
+  }
+
+  /// 根が変わった（cd）。止めて結果を捨て、`searchNow` なら今の問いで検索し直す。
+  func setRoot(_ root: String, searchNow: Bool) {
+    guard root != self.root else { return }
+    let wasLive = files != nil
+    isLive = false
+    self.root = root
+    isLive = wasLive
+    typingDelay.cancel()
+    clearResults()
+    if searchNow { search() }
+  }
+
+  private func receive(_ batch: ProjectSearchRun.Batch, generation: Int) {
+    guard generation == self.generation else { return }
+    if replacesOnArrival {
+      replacesOnArrival = false
+      replaceResults()
+    }
+    for file in batch.files { accept(file) }
+    if batch.finished {
+      run = nil
+      error = batch.error.map(Failure.git)
+      finishPhase()
+    }
+    resultsDidChange()
+  }
+
+  private func stopRun() {
+    run?.cancel()
+    run = nil
+  }
+
+  private func finishPhase() {
+    phase = .done
+    showsProgress = false
+    progressDelay.cancel()
+    slowDelay.cancel()
+  }
+
+  /// 結果を空にして新しい検索を受ける（折りたたみ・選択も捨てる。既定は全部開く）。
+  private func replaceResults() {
+    results = ProjectSearchResults()
+    collapsed = []
+    selection = nil
+    resultsDidChange()
+  }
+
+  private func clearResults() {
+    stopRun()
+    generation += 1
+    compiled = nil
+    error = nil
+    phase = .idle
+    showsProgress = false
+    progressDelay.cancel()
+    slowDelay.cancel()
+    for delay in refreshDelays.values { delay.cancel() }
+    refreshDelays = [:]
+    searchedVersions = [:]
+    replaceResults()
+  }
+
+  /// 結果が変わった。平らな行を作り直し、地を押し直させる。
+  func resultsDidChange() {
+    rebuildRows()
+    onGroundChange()
+  }
+
+  // MARK: - 焦点
+
+  func requestFocus(_ area: Area) {
+    onWillFocus()
+    focusSerial += 1
+    focusRequest = FocusRequest(area: area, serial: focusSerial)
+  }
+}

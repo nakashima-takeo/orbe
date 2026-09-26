@@ -53,13 +53,13 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     XCTAssertEqual(pane.shownSidebarWidth, 240, "広がれば記憶の幅に戻る")
     XCTAssertEqual(pane.bodyRect.minX, 37 + 241)
 
-    pane.shell.toggleSidebar()
+    pane.shell.selectPanel(.files)
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertFalse(pane.sidebar.isOpen, "レールの選択中の項目を押すと閉じる")
     XCTAssertEqual(pane.bodyRect.minX, 37, "レールだけ残る")
     XCTAssertEqual(document.surface.view.frame, pane.surfaceRect)
 
-    pane.shell.toggleSidebar()
+    pane.shell.selectPanel(.files)
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertTrue(pane.sidebar.isOpen, "もう一度押すと開く")
     XCTAssertEqual(pane.bodyRect.minX, 37 + 241)
@@ -179,7 +179,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
           return pane.bodyRect.minX == bodyMinX
         }, message)
     }
-    pane.shell.toggleSidebar()
+    pane.shell.selectPanel(.files)
     settled(37, "閉じればレールだけ")
     let closed = try probe(pane) { p in
       try PaneProbe.same(p.rgb(1, y: 18), railGround)
@@ -191,7 +191,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     XCTAssertTrue(
       PaneProbe.same(try closed.rgb(37 + 60), try closed.rgb(pane.bodyRect.midX)), "本体の地が続く")
 
-    pane.shell.toggleSidebar()
+    pane.shell.selectPanel(.files)
     settled(37 + 241, "開けば戻る")
     let reopened = try probe(pane) { p in
       try !PaneProbe.same(p.rgb(1, y: 18), railGround)
@@ -238,9 +238,9 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     settled(37 + 301, "片方で引けばもう片方の面も同じ幅へ")
     try assertSidebarContentFills(otherPane, width: 300)
 
-    otherPane.shell.toggleSidebar()
+    otherPane.shell.selectPanel(.files)
     settled(37, "片方で閉じればもう片方も閉じる")
-    otherPane.shell.toggleSidebar()
+    otherPane.shell.selectPanel(.files)
     settled(37 + 301, "開けば記憶の幅で戻る")
   }
 

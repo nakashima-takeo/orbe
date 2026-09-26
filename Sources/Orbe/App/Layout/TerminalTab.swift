@@ -27,11 +27,11 @@ final class TerminalTab {
   /// `openFile` を通る。エディターの型は UI に閉じた `@MainActor` で、タブはその外（main スレッド規律の
   /// nonisolated）にいるため、このプロパティに触る箇所はいずれも `MainActor.assumeIsolated` で境を越える。
   let editor: EditorSession
-  /// 開いた文書の列・焦点の文書・未保存の有無が変わった通知（chrome 更新・永続保存は上位）。
+  /// 開いた文書の列・焦点の文書・未保存の有無・検索の問いが変わった通知（chrome 更新・永続保存は上位）。
   var onEditorChange: (() -> Void)?
   /// 未消費の復元状態（開いていた文書）。休眠チケットと同じく materialize で消費する。未消費のまま終了
   /// しても同じ形で書き戻す（一度も見なかったタブの文書は失われない）。
-  private var pendingEditor: EditorState?
+  private var pendingDocuments: EditorState.OpenDocuments?
 
   /// このタブが materialize 済み側にある現在状態。現仕様の遷移は false → true のみだが、
   /// 履歴bitではなく、将来の再休眠では false へ戻せる責務として扱う。
@@ -159,9 +159,12 @@ final class TerminalTab {
     groupKey = Self.groupKey(cwd: state.cwd)
     view = Self.makeView(cwd: state.cwd, root: groupKey, faces: faces)
     explicitTitle = state.explicitTitle
-    pendingEditor = state.editor
+    pendingDocuments = state.editor?.documents
     if let agent = state.agent { agentSlot = .dormant(agent) }
     wireView()
+    if let search = state.editor?.search {
+      MainActor.assumeIsolated { view.editor.projectSearch.restore(search) }
+    }
   }
 
   private static func makeView(cwd: String, root: String, faces: FaceLayout) -> TabFacesView {
@@ -215,8 +218,8 @@ final class TerminalTab {
       }
     }
     OrbeRuntimeEnv.inject(into: &surface.initialEnv, tabId: id)
-    if let pending = pendingEditor {
-      pendingEditor = nil
+    if let pending = pendingDocuments {
+      pendingDocuments = nil
       MainActor.assumeIsolated { editor.restore(paths: pending.open, active: pending.active) }
     }
   }
@@ -360,10 +363,10 @@ final class TerminalTab {
     DispatchQueue.main.async { [weak self] in self?.onClose?(origin) }
   }
 
-  /// このタブの復元単位（cwd・エージェントセッション・明示タイトル・面の配置・開いていた文書）。起動時の
+  /// このタブの復元単位（cwd・エージェントセッション・明示タイトル・面の配置・エディターの状態）。起動時の
   /// 一括保存（WorkspacePersistence）が読み、復元は `TerminalTab(restoring:)` が同じ形を受ける。
   /// 永続化するのは sessionId が確定している同一性だけ（resume 不能な記録を書かない）。文書は開いている
-  /// もの、無ければ未消費の復元状態。
+  /// もの、無ければ未消費の復元状態。検索の問いは既定（空・切替なし）でなければ書く。
   func tabState() -> TabState {
     TabState(
       cwd: cwd, agent: agentSlot.session.flatMap { $0.sessionId != nil ? $0 : nil },
@@ -373,9 +376,14 @@ final class TerminalTab {
   private func editorState() -> EditorState? {
     MainActor.assumeIsolated {
       let documents = editor.documents
-      guard let first = documents.first else { return pendingEditor }
-      return EditorState(
-        open: documents.map(\.url.path), active: (editor.activeDocument ?? first).url.path)
+      let open =
+        documents.first.map { first in
+          EditorState.OpenDocuments(
+            open: documents.map(\.url.path), active: (editor.activeDocument ?? first).url.path)
+        } ?? pendingDocuments
+      let query = view.editor.projectSearch.query
+      let state = EditorState(documents: open, search: query == SearchQuery() ? nil : query)
+      return state.isEmpty ? nil : state
     }
   }
 

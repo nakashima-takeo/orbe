@@ -14,12 +14,12 @@ extension WorkspacePersistenceTests {
     let opened = try enc.encode(
       TabState(
         cwd: "/w", agent: nil, explicitTitle: nil,
-        editor: EditorState(open: ["/w/a.swift", "/w/b.md"], active: "/w/b.md")))
+        editor: EditorState(documents: .init(open: ["/w/a.swift", "/w/b.md"], active: "/w/b.md"))))
     XCTAssertEqual(
       String(data: opened, encoding: .utf8),
       #"{"cwd":"/w","editor":{"active":"/w/b.md","open":["/w/a.swift","/w/b.md"]}}"#)
     let empty = try enc.encode(
-      TabState(cwd: "/w", agent: nil, explicitTitle: nil, editor: EditorState(open: [], active: ""))
+      TabState(cwd: "/w", agent: nil, explicitTitle: nil, editor: EditorState())
     )
     XCTAssertEqual(String(data: empty, encoding: .utf8), #"{"cwd":"/w"}"#, "空なら書かない")
   }
@@ -39,7 +39,7 @@ extension WorkspacePersistenceTests {
     XCTAssertNil(tabs[0].editor, "型違いは nil")
     XCTAssertNil(tabs[1].editor, "active 欠落は nil")
     XCTAssertNil(tabs[2].editor, "空の列は nil")
-    XCTAssertEqual(tabs[3].editor, EditorState(open: ["/d/x"], active: "/d/x"))
+    XCTAssertEqual(tabs[3].editor, EditorState(documents: .init(open: ["/d/x"], active: "/d/x")))
   }
 
   /// 全フィールドを非既定にした TabState は、全キーが JSON に現れ、往復で等しい。
@@ -47,7 +47,7 @@ extension WorkspacePersistenceTests {
     let full = TabState(
       cwd: "/w", agent: AgentSession(command: "claude", sessionId: "s-1"), explicitTitle: "t",
       faces: FaceLayout(editorRatio: 0.4, focus: .editor),
-      editor: EditorState(open: ["/w/a"], active: "/w/a"))
+      editor: EditorState(documents: .init(open: ["/w/a"], active: "/w/a")))
     let data = try JSONEncoder().encode(full)
     let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     for key in TabState.CodingKeys.allCases {

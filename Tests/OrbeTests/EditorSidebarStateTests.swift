@@ -20,10 +20,10 @@ final class EditorSidebarStateTests: OrbeTestCase {
     XCTAssertEqual(AppStatePersistence.load()?.editorSidebar, nil, "ドラッグ中は書かない")
     state.commit()
     XCTAssertEqual(
-      AppStatePersistence.load()?.editorSidebar, EditorSidebarRecord(width: 300, isOpen: true))
-    state.toggle()
+      AppStatePersistence.load()?.editorSidebar, EditorSidebarRecord(width: 300, isOpen: true, panel: "files"))
+    state.select(.files)
     XCTAssertEqual(
-      AppStatePersistence.load()?.editorSidebar, EditorSidebarRecord(width: 300, isOpen: false))
+      AppStatePersistence.load()?.editorSidebar, EditorSidebarRecord(width: 300, isOpen: false, panel: "files"))
 
     let reloaded = EditorSidebarState.loaded()
     XCTAssertEqual(reloaded.width, 300)
@@ -60,7 +60,7 @@ final class EditorSidebarStateTests: OrbeTestCase {
   func testUnpersistedStateNeverWrites() {
     let state = EditorSidebarState(width: 200, isOpen: false)
     state.commit()
-    state.toggle()
+    state.select(.files)
     XCTAssertNil(AppStatePersistence.load(), "配られていない既定の状態（テスト・preview）は書かない")
   }
 }

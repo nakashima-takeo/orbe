@@ -36,8 +36,8 @@ final class EditorShellModel {
   @ObservationIgnored var createFile: () -> Void = {}
   @ObservationIgnored var createDirectory: () -> Void = {}
   @ObservationIgnored var collapseAll: () -> Void = {}
-  /// レールの選択中の項目を押した（サイドバーを閉じる／開く）。
-  @ObservationIgnored var toggleSidebar: () -> Void = {}
+  /// レールの項目を押した（出しているパネルなら閉じ、別のパネルならそれへ切り替える）。
+  @ObservationIgnored var selectPanel: (EditorSidebarState.Panel) -> Void = { _ in }
   /// 行内入力の入力欄が焦点を失った（その世代）。別の view へ移ったなら pane が取り消し、窓へ落ちたなら
   /// pane が預かる。
   @ObservationIgnored var inlineInputLostFocus: (Int) -> Void = { _ in }

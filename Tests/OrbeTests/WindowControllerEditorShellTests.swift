@@ -51,10 +51,10 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
     XCTAssertFalse(first.view.editor.sidebar.isOpen, "app-state の記憶で起きる")
     XCTAssertTrue(first.view.editor.sidebar === second.view.editor.sidebar, "アプリ全体で 1 つ")
 
-    second.view.editor.shell.toggleSidebar()
+    second.view.editor.shell.selectPanel(.files)
     XCTAssertTrue(first.view.editor.sidebar.isOpen, "どのタブで開いても全タブに効く")
     XCTAssertEqual(
-      AppStatePersistence.load()?.editorSidebar, EditorSidebarRecord(width: 300, isOpen: true),
+      AppStatePersistence.load()?.editorSidebar, EditorSidebarRecord(width: 300, isOpen: true, panel: "files"),
       "開閉は app-state へ書き戻る")
     XCTAssertEqual(AppStatePersistence.load()?.preferredLanguage, "ja", "他の項目は巻き込まない")
   }
@@ -101,7 +101,7 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
 
     XCTAssertEqual(
       try XCTUnwrap(WorkspacePersistence.load()).workspaces[0].tabs[0].editor,
-      EditorState(open: [a.path], active: a.path))
+      EditorState(documents: .init(open: [a.path], active: a.path)))
   }
 
   /// 保存 → 復元 → 再保存。前面のタブの文書は開かれて焦点の文書が面に載り、一度も起きない背景 workspace の
@@ -111,8 +111,8 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
     let a = try caseFile("repo/a.txt", "a").resolvingSymlinksInPath()
     let b = try caseFile("repo/b.txt", "b").resolvingSymlinksInPath()
     let c = try caseFile("repo/c.txt", "c").resolvingSymlinksInPath()
-    let front = EditorState(open: [a.path, b.path], active: b.path)
-    let dormant = EditorState(open: [c.path], active: c.path)
+    let front = EditorState(documents: .init(open: [a.path, b.path], active: b.path))
+    let dormant = EditorState(documents: .init(open: [c.path], active: c.path))
     let wc = launch([
       WorkspaceState(
         name: "front", rootPath: dir.path, activeTab: 0, tabs: [tab(dir, editor: front)]),

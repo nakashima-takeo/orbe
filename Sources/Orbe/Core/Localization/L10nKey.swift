@@ -279,6 +279,26 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorNewFolder
   case editorCollapseAll
 
+  // MARK: - Editor 面（プロジェクト検索）
+  case editorRailSearch
+  case editorSearchTitle
+  case editorSearchPlaceholder
+  case editorSearchMatchCase
+  case editorSearchWholeWord
+  case editorSearchRegex
+  case editorSearchRefresh
+  case editorSearchStop
+  case editorSearchClear
+  case editorSearchExpandAll
+  case editorSearchSummary
+  case editorSearchFilesOne
+  case editorSearchFilesOther
+  case editorSearchResultsOne
+  case editorSearchResultsOther
+  case editorSearchLimited
+  case editorSearchNoResults
+  case editorSearchInvalidRegex
+
   // MARK: - Editor 面（未保存の確認・外部変更の上書き）
   case editorUnsavedTitle
   case editorUnsavedMessageOne
@@ -449,6 +469,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutOpenEditor
   case helpShortcutToggleEditorFace
   case helpShortcutSaveDocument
+  case helpShortcutFindInProject
   case helpShortcutQuit
   case helpShortcutSwitchWorkspace
   case helpShortcutNewTab

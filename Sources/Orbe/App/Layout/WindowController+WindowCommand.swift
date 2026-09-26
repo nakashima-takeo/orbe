@@ -20,6 +20,7 @@ extension WindowController {
     case .showSettings: showSettingsPalette()
     case .toggleHelp: showHelp()
     case .toggleEditorFace: toggleEditorFace()
+    case .findInProject: findInProject()
     }
   }
 

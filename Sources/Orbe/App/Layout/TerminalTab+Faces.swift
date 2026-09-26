@@ -1,7 +1,17 @@
 import AppKit
 
-/// 面の配置から導く読み口。
+/// 面の配置から導く読み口と、配置を変える操作。
 extension TerminalTab {
+  /// ⌘⇧F。エディターを見せ（隠れていれば全面、見えていれば焦点だけ——`open_file` と同じ規則）、サイドバーを検索パネルで
+  /// 開いて入力欄に焦点を入れる。種は押した時点の焦点で決めるので、配置を変える前に取る。
+  func findInProject() {
+    let pane = view.editor
+    let seed = pane.projectSearchSeed()
+    let ratio = faces.editorRatio == 0 ? 1 : faces.editorRatio
+    setFaces(FaceLayout(editorRatio: ratio, focus: .editor), animated: true)
+    pane.showProjectSearch(seed: seed)
+  }
+
   /// 焦点の面の responder（端末 surface かエディター pane）。配置だけから決まり、幅に依らない。
   var focusTarget: NSView { view.focusTarget }
 

@@ -32,6 +32,7 @@ extension L10n {
     .helpShortcutOpenEditor: ("cwd を GUI エディタで開く", "Open cwd in GUI editor"),
     .helpShortcutToggleEditorFace: ("エディターとターミナルを切替", "Switch editor / terminal"),
     .helpShortcutSaveDocument: ("エディターのファイルを保存", "Save the editor file"),
+    .helpShortcutFindInProject: ("プロジェクト全体を検索", "Search the whole project"),
     .helpShortcutQuit: ("Orbe を終了", "Quit Orbe"),
     .helpShortcutSwitchWorkspace: (
       "ワークスペースを切り替え・作成", "Switch / create workspace"

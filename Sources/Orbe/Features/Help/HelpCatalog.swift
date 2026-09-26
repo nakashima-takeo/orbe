@@ -30,6 +30,7 @@ enum HelpCatalog {
         Row(key: "⌘,", label: .helpShortcutSettings, combo: ["cmd", ","]),
         Row(key: "⌘E", label: .helpShortcutToggleEditorFace, combo: ["cmd", "e"]),
         Row(key: "⌘S", label: .helpShortcutSaveDocument, combo: ["cmd", "s"]),
+        Row(key: "⌘⇧F", label: .helpShortcutFindInProject, combo: ["cmd", "shift", "f"]),
         Row(key: "⌘⇧E", label: .helpShortcutOpenEditor, combo: ["cmd", "shift", "e"]),
         Row(key: "⌘Q", label: .helpShortcutQuit, combo: ["cmd", "q"]),
       ]),

@@ -33,15 +33,18 @@ extension EditorPaneView {
     layoutSubtreeIfNeeded()
   }
 
+  /// サイドバーの幅・開閉・パネルを観測して置き直す。閉じれば行内入力は終わり、検索パネルの見え隠れで一致の地を押し直す。
   func observeSidebar() {
     withObservationTracking {
       _ = sidebar.width
       _ = sidebar.isOpen
+      _ = sidebar.panel
     } onChange: { [weak self] in
       DispatchQueue.main.async {
         guard let self else { return }
         self.needsLayout = true
-        if !self.sidebar.isOpen { self.tree.cancelNew() }  // 閉じれば入力行は消える＝入力の終わり
+        if !self.sidebar.isOpen || self.sidebar.panel != .files { self.tree.cancelNew() }
+        self.pushFindGround()
         self.observeSidebar()
       }
     }

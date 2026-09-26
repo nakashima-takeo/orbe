@@ -47,8 +47,8 @@ final class EditorPaneViewShellTests: OrbeTestCase {
         until: { window.firstResponder === document.surface.responder }, timeout: 5,
         "\(how): 入力欄に居た焦点は面の行き先へ")
     }
-    try endsWhenTheStateDrops("レールで閉じる") { pane.shell.toggleSidebar() }
-    pane.shell.toggleSidebar()
+    try endsWhenTheStateDrops("レールで閉じる") { pane.shell.selectPanel(.files) }
+    pane.shell.selectPanel(.files)
     try endsWhenTheStateDrops("根を畳む") { pane.tree.isRootOpen = false }
     pane.tree.isRootOpen = true
     try endsWhenTheStateDrops("すべて折りたたむ") { pane.shell.collapseAll() }

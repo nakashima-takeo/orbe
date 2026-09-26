@@ -150,4 +150,11 @@ struct ThemeFonts {
   let editorBadge = Font(Theme.Typography.editorBadge as CTFont)
   let editorFileTab = Font(Theme.Typography.editorFileTab as CTFont)
   let editorBreadcrumb = Font(Theme.Typography.editorBreadcrumb as CTFont)
+  let editorSearchField = Font(Theme.Typography.editorSearchField as CTFont)
+  let editorSearchOption = Font(Theme.Typography.editorSearchOption as CTFont)
+  let editorSearchFile = Font(Theme.Typography.editorSearchFile as CTFont)
+  let editorSearchDirectory = Font(Theme.Typography.editorSearchDirectory as CTFont)
+  let editorSearchCount = Font(Theme.Typography.editorSearchCount as CTFont)
+  let editorSearchMatch = Font(Theme.Typography.editorSearchMatch as CTFont)
+  let editorSearchNote = Font(Theme.Typography.editorSearchNote as CTFont)
 }

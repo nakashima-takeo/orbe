@@ -33,8 +33,9 @@ extension EditorPaneView {
   }
 
   /// chrome キーの解決点。first responder が自分か配下のときだけ効く——隠れたタブの pane も窓に残るので、
-  /// 焦点が自分か配下に無いときは素通しする。
+  /// 焦点が自分か配下に無いときは素通しする。検索パネルの中のキーは chrome キーより先に見る。
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    if focusIsInside, handleProjectSearchKey(event) { return true }
     guard focusIsInside, let action = Keybindings.chromeAction(for: event)
     else { return super.performKeyEquivalent(with: event) }
     switch action.owner {

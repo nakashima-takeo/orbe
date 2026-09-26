@@ -147,6 +147,33 @@ enum L10n {
     .editorNewFolder: ("新規フォルダ", "New Folder"),
     .editorCollapseAll: ("すべて折りたたむ", "Collapse All"),
 
+    // MARK: Editor 面（プロジェクト検索）
+    .editorRailSearch: ("検索 (⌘⇧F)", "Search (⌘⇧F)"),
+    .editorSearchTitle: ("検索", "Search"),
+    .editorSearchPlaceholder: ("検索", "Search"),
+    .editorSearchMatchCase: ("大文字と小文字を区別 (⌥⌘C)", "Match Case (⌥⌘C)"),
+    .editorSearchWholeWord: ("単語単位で検索 (⌥⌘W)", "Match Whole Word (⌥⌘W)"),
+    .editorSearchRegex: ("正規表現を使用 (⌥⌘R)", "Use Regular Expression (⌥⌘R)"),
+    .editorSearchRefresh: ("更新", "Refresh"),
+    .editorSearchStop: ("停止", "Stop"),
+    .editorSearchClear: ("クリア", "Clear"),
+    .editorSearchExpandAll: ("すべて展開", "Expand All"),
+    // 件数の文: %1$@ はファイル数の句、%2$@ は結果数の句（日英で語順が違う）。
+    .editorSearchSummary: ("%1$@内に %2$@", "%2$@ in %1$@"),
+    .editorSearchFilesOne: ("%lld ファイル", "%lld file"),
+    .editorSearchFilesOther: ("%lld ファイル", "%lld files"),
+    .editorSearchResultsOne: ("%lld 件の結果", "%lld result"),
+    .editorSearchResultsOther: ("%lld 件の結果", "%lld results"),
+    .editorSearchLimited: (
+      "結果は一部だけです。検索を絞り込んでください。",
+      "Only some of the results are shown. Narrow down your search."
+    ),
+    .editorSearchNoResults: (
+      "結果がありません。除外の設定と .gitignore を確認してください。",
+      "No results found. Review your excludes and your .gitignore files."
+    ),
+    .editorSearchInvalidRegex: ("正規表現が正しくありません。", "Invalid regular expression."),
+
     // MARK: Editor 面（未保存の確認・外部変更の上書き）
     .editorUnsavedTitle: ("未保存の変更があります", "You have unsaved changes"),
     .editorUnsavedMessageOne: (
