@@ -29,9 +29,12 @@ public func makeMetalTextSurface(style: TextSurfaceStyle, options: MetalTextSurf
   return MetalTextSurface(style: style, options: options)
 }
 
-/// 描画スレッドを起こし、シェーダのコンパイルを裏で始める（何度呼んでもよい。装置が無ければ何もしない）。最初の面を
-/// 出すときにコンパイルの待ちを見せないよう、新しい面を使うと決まった時点で呼ぶ。済む前に面が要れば、描くのは済んでから。
+/// Metal の装置を取り、描画スレッドを起こし、シェーダをコンパイルする——どれも裏で行い、呼び手を待たせない（何度呼んで
+/// もよい。装置が無ければ何もしない）。最初の面を出すときにこれらの待ち（合わせて数十 ms）を見せないよう、新しい面を
+/// 使うと決まった時点で呼ぶ。済む前に面が要れば、面を作る・描くのは済んでから。
 public func prepareMetalTextEngine() {
-  guard RenderThread.device != nil else { return }
-  _ = RenderThread.shared
+  DispatchQueue.global(qos: .userInitiated).async {
+    guard RenderThread.device != nil else { return }
+    _ = RenderThread.shared
+  }
 }
