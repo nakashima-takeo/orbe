@@ -58,6 +58,10 @@ struct GitBranch: Equatable {
   let relativeDate: String
   /// upstream。無ければ nil（remote ブランチは常に nil）。
   let upstream: GitUpstream?
+  /// `%(push:remotename)`。git が解決する push 先の remote（`branch.<名前>.pushRemote` →
+  /// `remote.pushDefault` → upstream の remote）で、ローカルブランチを追跡する行は `.`。解決できなければ
+  /// nil（remote ブランチは常に nil）。
+  var pushRemote: String?
 }
 
 // MARK: - GitHub（gh CLI）
@@ -118,8 +122,9 @@ struct GitHubBranchRef: Hashable {
 /// GitHub に問い合わせたリポジトリの正式名（改名後の古い名前からも新しい名前が返る）。
 enum GitHubRepositoryResolution: Equatable {
   case found(GitHubRepoName)
-  /// そのリポジトリは存在しない（見えない）。
-  case notFound
+  /// 正式名を確かめられなかった。GitHub は「存在しない」と「今のアカウントから見えない private」を
+  /// 同じ `NOT_FOUND` で返すので、問い合わせの失敗と区別しない。
+  case unverified
 }
 
 /// PR の head のリポジトリを `headRepositoryOwner{login}` と `headRepository{name}` から読む。

@@ -27,6 +27,10 @@ extension L10n {
       "gh 未認証（gh auth login で issue/PR を表示）",
       "gh not authenticated (gh auth login to show issues/PRs)"
     ),
+    .dispatchRepositoryUnverified: (
+      "GitHub でこのリポジトリを確認できないため、PR はブラウザで開きます",
+      "Can't verify this repository on GitHub, so PRs open in the browser"
+    ),
     .dispatchAgentOpen: ("%@で開く", "open with %@"),
     .dispatchQueryPlaceholder: (
       "worktree / branch / issue を絞り込み", "Filter worktree / branch / issue"

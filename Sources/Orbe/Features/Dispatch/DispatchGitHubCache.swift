@@ -21,8 +21,8 @@ final class DispatchGitHubCache {
     /// head → その head の PR。**キーが無い＝未取得**（`[]` は 0 件）。区別を head 単位に保つ
     /// ——1 本の失敗が、他の head の先描きを消さない。
     var branchPullRequests: [String: [GitHubBranchPR]] = [:]
-    /// remote の URL から読んだ名前 → GitHub が答えた正式名。**キーが無い＝まだ答えを得ていない**
-    /// ——失敗は書かないので、次に開いたときに問い合わせ直す。
+    /// remote の URL から読んだ名前 → GitHub の答え。**キーが無い＝まだ答えを得ていない**。
+    /// `.unverified` も書く——次に開いたときは最初のフレームからその扱いで描き、裏で問い直す。
     var repositoryNames: [GitHubRepoName: GitHubRepositoryResolution] = [:]
   }
 

@@ -24,7 +24,7 @@ extension DispatchPaletteTests {
           headRepository: repository)
       ],
       githubState: .ready,
-      remoteLedger: .settled(.init(repositories: ["origin": repository])))
+      remoteLedger: .settled(.init(repositories: ["origin": .github(repository)])))
   }
 
   private func index(of number: Int, in p: DispatchPaletteModel) throws -> Int {
@@ -69,7 +69,8 @@ extension DispatchPaletteTests {
   func testSelectionStaysOnThePullRequestWhenItsDestinationChanges() throws {
     let p = makeModel(pullRequestInput())
     p.selected = try index(of: 9, in: p)
-    XCTAssertEqual(p.selectedItem?.action, .pullRequest(number: 9, open: nil), "前提: ブラウザ行")
+    XCTAssertEqual(
+      p.selectedItem?.action, .pullRequest(number: 9, route: .browser), "前提: ブラウザ行")
 
     let action = p.selectedItem?.action
     p.sections = DispatchSectionBuilder.build(
@@ -79,6 +80,7 @@ extension DispatchPaletteTests {
     XCTAssertEqual(p.selectedItem?.idText, "#9", "Remote branches が増えて index がずれても PR 行のまま")
     XCTAssertEqual(
       p.selectedItem?.action,
-      .pullRequest(number: 9, open: .remoteBranch(name: "origin/feat", existingWorktree: nil)))
+      .pullRequest(
+        number: 9, route: .open(.remoteBranch(name: "origin/feat", existingWorktree: nil))))
   }
 }

@@ -71,6 +71,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case dispatchApproved
   case dispatchGhMissing
   case dispatchGhUnauthed
+  case dispatchRepositoryUnverified
   case dispatchAgentOpen
   case dispatchQueryPlaceholder
   case dispatchPreparing

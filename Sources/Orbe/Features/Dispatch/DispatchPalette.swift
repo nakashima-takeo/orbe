@@ -11,12 +11,19 @@ enum DispatchDestination: Equatable {
   case issue(number: Int, existingWorktree: String?, existingBranch: Bool)
 }
 
+/// PR 行の Enter の行き先。
+enum DispatchPullRequestRoute: Equatable {
+  /// 自分の worktree・ブランチ・origin から作れるときの行き先。
+  case open(DispatchDestination)
+  /// worktree にできない。ブラウザで開く。
+  case browser
+}
+
 /// 決定（↵／行タップ）の対象。外（`onExecute`）へ届くのは行き先だけで、ディレクトリを解決しない行為
 /// （ブラウザ・clean 画面）はパレットの中で畳む。
 enum DispatchAction: Equatable {
   case open(DispatchDestination)
-  /// PR 行。`open` は自分の worktree・ブランチ・origin から作れるときの行き先で、`nil` はブラウザで開く。
-  case pullRequest(number: Int, open: DispatchDestination?)
+  case pullRequest(number: Int, route: DispatchPullRequestRoute)
   /// Worktrees セクション末尾の `clean` 行。決定でパレット内の clean 画面へ入る。
   case clean
 
@@ -93,15 +100,17 @@ enum DispatchReviewNote: Equatable {
   }
 }
 
-/// 情報行の種別（選択・実行の対象外）。ローディング／gh 誘導。文言は View が言語別に引く。
+/// 情報行の種別（選択・実行の対象外）。ローディング／gh 誘導／origin を確かめられない。文言は View が
+/// 言語別に引く。
 enum DispatchInfoKind: Equatable {
-  case loading, ghMissing, ghUnauthed
+  case loading, ghMissing, ghUnauthed, repositoryUnverified
 
   var key: L10nKey {
     switch self {
     case .loading: return .commonLoading
     case .ghMissing: return .dispatchGhMissing
     case .ghUnauthed: return .dispatchGhUnauthed
+    case .repositoryUnverified: return .dispatchRepositoryUnverified
     }
   }
 }
@@ -283,8 +292,8 @@ enum DispatchInfoKind: Equatable {
     selected = index
     switch its[index].action {
     case .clean: enterClean()
-    case .pullRequest(_, nil): onOpenWeb(its[index])
-    case .open(let destination), .pullRequest(_, let destination?): onExecute(destination)
+    case .open(let destination), .pullRequest(_, .open(let destination)): onExecute(destination)
+    case .pullRequest(_, .browser): onOpenWeb(its[index])
     case nil: break
     }
   }

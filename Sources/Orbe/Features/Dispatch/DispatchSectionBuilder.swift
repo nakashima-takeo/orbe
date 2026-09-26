@@ -16,8 +16,7 @@ enum DispatchSectionBuilder {
     /// だけのセクションになる）。
     var issuesFetching = false
     var pullRequestsFetching = false
-    /// 行が GitHub のどのリポジトリのどのブランチかを決める台帳。確定するまでは、行のチップを付けず、
-    /// PR セクションはローディング行だけになる。
+    /// 行が GitHub のどのリポジトリのどのブランチかを決める台帳（紐付けの入力。`Linking`）。
     var remoteLedger: DispatchRemoteLedger = .pending
     /// 現在のチェックアウト（repo.root）。一致する worktree を primary（強調）にする。
     var currentWorktree: String?
@@ -29,58 +28,71 @@ enum DispatchSectionBuilder {
   }
 
   static func build(_ input: Input) -> [DispatchSection] {
-    let refs = RowRefs(input)
+    let linking = Linking(input)
     // PR の head → number（worktree/branch 行の相関チップに使う）。
     let prByRef = Dictionary(
       input.pullRequests.compactMap { pr in pr.head.map { ($0, pr.number) } },
       uniquingKeysWith: { first, _ in first })
     let linkedPR = { (ref: GitHubBranchRef?) in ref.flatMap { prByRef[$0] } }
     var sections: [DispatchSection] = []
-    append(&sections, title: "Worktrees", items: worktreeItems(input, refs, linkedPR))
-    append(&sections, title: "Local branches", items: localBranchItems(input, refs, linkedPR))
-    append(&sections, title: "Remote branches", items: remoteBranchItems(input, refs, linkedPR))
+    append(&sections, title: "Worktrees", items: worktreeItems(input, linking, linkedPR))
+    append(&sections, title: "Local branches", items: localBranchItems(input, linking, linkedPR))
+    append(&sections, title: "Remote branches", items: remoteBranchItems(input, linking, linkedPR))
     if let issues = githubSection(
       title: "Issues", state: input.githubState, carriesInfo: true,
       items: issueItems(input) + fetchingRows(input.issuesFetching))
     {
       sections.append(issues)
     }
-    // 台帳が確定するまでは PR 行の行き先（既存 worktree か・作れるか）も決まらないので、ローディング行だけ。
-    let settled = refs.ledger != nil
     if let prs = githubSection(
       title: "Pull requests", state: input.githubState, carriesInfo: false,
-      items: (settled ? pullRequestItems(input, refs) : [])
-        + fetchingRows(input.pullRequestsFetching || !settled))
+      items: pullRequestSectionItems(input, linking))
     {
       sections.append(prs)
     }
     return sections
   }
 
-  /// 行の ref（GitHub のどのリポジトリのどのブランチか）を引く口。台帳が確定していなければ、どの行も
-  /// ref を持たない。
-  private struct RowRefs {
-    let ledger: DispatchRemoteLedger.Resolved?
-    let upstreams: [String: GitUpstream?]
+  /// 一覧で行と PR を紐付けるか。台帳から 1 回だけ導く。clean の事実（行ごとの答え）とは別の値で、
+  /// clean は既定 remote を確かめられなくても行ごとに読む。
+  private enum Linking {
+    /// 台帳が未確定。チップを付けず、PR セクションはローディング行だけ。
+    case pending
+    /// 既定 remote（origin）を確かめられない。チップを付けず、PR セクションは情報行と、すべて
+    /// ブラウザで開く PR 行——情報行の「PR はブラウザで開きます」と動きを一致させるため、origin 以外で
+    /// 確かめられた行も紐付けない。
+    case unlinked
+    case linked(DispatchRowIdentities)
 
     init(_ input: Input) {
-      if case .settled(let resolved) = input.remoteLedger {
-        ledger = resolved
-      } else {
-        ledger = nil
+      switch input.remoteLedger {
+      case .pending:
+        self = .pending
+      case .settled(let resolved):
+        self =
+          resolved.defaultRemoteUnverified
+          ? .unlinked
+          : .linked(DispatchRowIdentities(resolved: resolved, localBranches: input.localBranches))
       }
-      upstreams = Dictionary(
-        input.localBranches.map { ($0.name, $0.upstream) }, uniquingKeysWith: { first, _ in first })
     }
 
-    /// ローカルブランチ（worktree のブランチを含む）。detached（nil）は同一性を持たない。
+    /// ローカルブランチ（worktree のブランチを含む）の ref。紐付けないとき・detached（nil）・GitHub の
+    /// ブランチと確かめられない行は nil（チップも行き先も付けない）。
     func local(_ name: String?) -> GitHubBranchRef? {
-      guard let name else { return nil }
-      return ledger?.ref(forLocal: name, upstream: upstreams[name] ?? nil)
+      guard case .linked(let identities) = self, let name else { return nil }
+      return Self.ref(identities.local(name))
     }
 
     func remote(_ name: String) -> GitHubBranchRef? {
-      ledger?.ref(forRemoteBranch: name)
+      guard case .linked(let identities) = self else { return nil }
+      return Self.ref(identities.remote(name))
+    }
+
+    private static func ref(_ identity: DispatchRowIdentity) -> GitHubBranchRef? {
+      switch identity {
+      case .ref(let ref): return ref
+      case .notGitHub, .unverified: return nil
+      }
     }
   }
 
@@ -89,7 +101,7 @@ enum DispatchSectionBuilder {
   /// Worktrees（main 含む全チェックアウト）。現在のチェックアウトは primary で強調する。
   /// 末尾に clean 画面への入口を 1 行置く（**候補 0 件でも行は残り、バッジだけ消える**）。
   private static func worktreeItems(
-    _ input: Input, _ refs: RowRefs, _ linkedPR: (GitHubBranchRef?) -> Int?
+    _ input: Input, _ linking: Linking, _ linkedPR: (GitHubBranchRef?) -> Int?
   ) -> [DispatchItem] {
     guard !input.worktrees.isEmpty else { return [] }
     return input.worktrees.map { worktree in
@@ -97,7 +109,7 @@ enum DispatchSectionBuilder {
       var detail = abbreviate(worktree.path)
       if let branch = worktree.branch { detail += " · \(branch)" }
       let isPrimary = input.currentWorktree == worktree.path
-      let pr = linkedPR(refs.local(worktree.branch))
+      let pr = linkedPR(linking.local(worktree.branch))
       return DispatchItem(
         glyph: .worktree, name: name, detail: detail,
         badges: badge(pr), linkedPRNumber: pr,
@@ -117,13 +129,13 @@ enum DispatchSectionBuilder {
 
   /// Local branches（worktree で checkout 中のものは Worktrees に出るので重複排除）。
   private static func localBranchItems(
-    _ input: Input, _ refs: RowRefs, _ linkedPR: (GitHubBranchRef?) -> Int?
+    _ input: Input, _ linking: Linking, _ linkedPR: (GitHubBranchRef?) -> Int?
   ) -> [DispatchItem] {
     let checkedOut = Set(input.worktrees.compactMap(\.branch))
     return input.localBranches
       .filter { !checkedOut.contains($0.name) }
       .map { branch in
-        let pr = linkedPR(refs.local(branch.name))
+        let pr = linkedPR(linking.local(branch.name))
         return DispatchItem(
           glyph: .localBranch, name: branch.name, detail: branch.relativeDate,
           badges: badge(pr), linkedPRNumber: pr,
@@ -135,13 +147,13 @@ enum DispatchSectionBuilder {
 
   /// Remote branches（ローカル追跡済みは出さない・既存 worktree は action に焼き込む）。
   private static func remoteBranchItems(
-    _ input: Input, _ refs: RowRefs, _ linkedPR: (GitHubBranchRef?) -> Int?
+    _ input: Input, _ linking: Linking, _ linkedPR: (GitHubBranchRef?) -> Int?
   ) -> [DispatchItem] {
     let localNames = Set(input.localBranches.map(\.name))
     return input.remoteBranches.compactMap { branch in
       let local = localName(fromRemote: branch.name)
       guard !localNames.contains(local) else { return nil }
-      let pr = linkedPR(refs.remote(branch.name))
+      let pr = linkedPR(linking.remote(branch.name))
       return DispatchItem(
         glyph: .remoteBranch, name: branch.name, detail: branch.relativeDate,
         badges: badge(pr), linkedPRNumber: pr,
@@ -182,46 +194,64 @@ enum DispatchSectionBuilder {
     return .new
   }
 
-  /// PR 行（台帳が確定しているときだけ組む）。Enter の行き先は、ref が PR の head と等しい既存の物を
-  /// 次の順で引いて決め、どれも無ければブラウザで開く。行末ノートとフッターは同じ行き先から導く（SSOT）。
+  /// Pull requests セクションの行。台帳が未確定の間は、PR 行の行き先（既存 worktree か・作れるか）も
+  /// 決まらないのでローディング行だけ。ローディング行は、一覧の取得中か、台帳が未確定の間だけ出る。
+  private static func pullRequestSectionItems(_ input: Input, _ linking: Linking) -> [DispatchItem]
+  {
+    switch linking {
+    case .pending:
+      return fetchingRows(true)
+    case .unlinked:
+      return [infoRow(.repositoryUnverified)] + pullRequestItems(input, linking)
+        + fetchingRows(input.pullRequestsFetching)
+    case .linked:
+      return pullRequestItems(input, linking) + fetchingRows(input.pullRequestsFetching)
+    }
+  }
+
+  /// PR 行。Enter の行き先は、ref が PR の head と等しい既存の物を次の順で引いて決め、どれも無ければ
+  /// ブラウザで開く。行末ノートとフッターは同じ行き先から導く（SSOT）。
   /// 1. 自分の worktree → それを開く
   /// 2. 自分のローカルブランチ → Local branch 行と同じ作り方（遅れていれば最新化の選択画面）
-  /// 3. 手元の `origin/<head>`（同じ名前のローカルブランチが無いとき）→ Remote branch 行と同じ作り方。
+  /// 3. `origin/<head>`（同じ名前のローカルブランチが無いとき）→ Remote branch 行と同じ作り方。
   ///    origin に限るのは鮮度のため——作成のベースは提示時の fetch の着地後の値であるべきで、提示時に
   ///    fetch するのは origin だけ。手元に無い `origin/<head>` は、fetch の着地で現れれば作成に変わる。
-  private static func pullRequestItems(_ input: Input, _ refs: RowRefs) -> [DispatchItem] {
+  private static func pullRequestItems(_ input: Input, _ linking: Linking) -> [DispatchItem] {
     let worktreeByRef = firstByRef(
       input.worktrees.compactMap { worktree in
-        refs.local(worktree.branch).map { ($0, worktree.path) }
+        linking.local(worktree.branch).map { ($0, worktree.path) }
       })
     let localBranchByRef = firstByRef(
-      input.localBranches.compactMap { branch in refs.local(branch.name).map { ($0, branch.name) } }
-    )
-    let trustedPrefix = DispatchBranchSync.trustedRemote + "/"
-    let createBaseByRef = firstByRef(
-      input.remoteBranches.filter { $0.name.hasPrefix(trustedPrefix) }.compactMap { branch in
-        refs.remote(branch.name).map { ($0, branch.name) }
-      })
-    let localNames = Set(input.localBranches.map(\.name))
-    return input.pullRequests.map { pr in
-      let open: DispatchDestination? = pr.head.flatMap { head in
-        if let path = worktreeByRef[head] { return .worktree(path: path) }
-        if let name = localBranchByRef[head] { return .localBranch(name: name) }
-        if let base = createBaseByRef[head], !localNames.contains(head.branch) {
-          return .remoteBranch(name: base, existingWorktree: nil)
-        }
-        return nil
+      input.localBranches.compactMap { branch in
+        linking.local(branch.name).map { ($0, branch.name) }
       }
-      let kind = open.map { destination -> DispatchWorktreeKind in
-        if case .worktree = destination { return .existing }
-        return .checkout
+    )
+    let localNames = Set(input.localBranches.map(\.name))
+    let remoteNames = Set(input.remoteBranches.map(\.name))
+    return input.pullRequests.map { pr in
+      let route: DispatchPullRequestRoute =
+        pr.head.map { head in
+          if let path = worktreeByRef[head] { return .open(.worktree(path: path)) }
+          if let name = localBranchByRef[head] { return .open(.localBranch(name: name)) }
+          let base = "\(DispatchBranchSync.trustedRemote)/\(head.branch)"
+          guard linking.remote(base) == head, !localNames.contains(head.branch) else {
+            return .browser
+          }
+          return remoteNames.contains(base)
+            ? .open(.remoteBranch(name: base, existingWorktree: nil)) : .browser
+        } ?? .browser
+      let kind: DispatchWorktreeKind?
+      switch route {
+      case .open(.worktree): kind = .existing
+      case .open: kind = .checkout
+      case .browser: kind = nil
       }
       let target = "#\(pr.number)"
       return DispatchItem(
         glyph: .pullRequest, idText: target, name: pr.title,
         reviewNote: reviewNote(pr.reviewDecision),
         enterNote: kind.map(DispatchEnterNote.worktree) ?? .browser,
-        action: .pullRequest(number: pr.number, open: open),
+        action: .pullRequest(number: pr.number, route: route),
         footer: kind.map { .launch(target: target, kind: $0) } ?? .browse(target: target))
     }
   }
@@ -263,7 +293,7 @@ enum DispatchSectionBuilder {
     }
   }
 
-  /// 情報/ローディング行（文言は種別だけ持ち、View が言語別に引く。name は空）。
+  /// 情報行（文言は種別だけ持ち、View が言語別に引く。name は空）。
   private static func infoRow(_ kind: DispatchInfoKind) -> DispatchItem {
     DispatchItem(glyph: nil, name: "", infoKind: kind, isInteractive: false)
   }
@@ -347,7 +377,7 @@ enum DispatchSectionBuilder {
 
     /// origin だけを持つ確定した台帳。
     static var designLedger: DispatchRemoteLedger {
-      .settled(DispatchRemoteLedger.Resolved(repositories: ["origin": designRepository]))
+      .settled(DispatchRemoteLedger.Resolved(repositories: ["origin": .github(designRepository)]))
     }
 
     /// origin を追跡する upstream（design 正典の `sync` に対応）。

@@ -190,17 +190,18 @@ final class GitHubCLI {
     }
   }
 
-  /// リポジトリの正式名を GitHub に問い合わせる（改名後の古い名前からも新しい名前が返る）。`nil` は
-  /// 分からなかった（gh 未解決・打ち切り・存在しない以外のエラー）。メインで返る。
+  /// リポジトリの正式名を GitHub に問い合わせる（改名後の古い名前からも新しい名前が返る）。gh を
+  /// 解決できないときも `.unverified`。メインで返る。
   func resolveRepository(
     cwd: String, name: GitHubRepoName,
-    completion: @escaping (GitHubRepositoryResolution?) -> Void
+    completion: @escaping (GitHubRepositoryResolution) -> Void
   ) {
     queue.async {
-      let resolution = self.resolveGh().flatMap { gh in
-        Self.repositoryResolution(
-          from: self.runSync(gh, Self.resolveRepositoryArguments(name), cwd: cwd).stdout)
-      }
+      let resolution =
+        self.resolveGh().map { gh in
+          Self.repositoryResolution(
+            from: self.runSync(gh, Self.resolveRepositoryArguments(name), cwd: cwd).stdout)
+        } ?? .unverified
       DispatchQueue.main.async { completion(resolution) }
     }
   }
@@ -217,15 +218,12 @@ final class GitHubCLI {
   }
 
   /// 正式名の問い合わせの出力を読む。gh は部分的なエラー（`NOT_FOUND` 等）でも非 0 で終わるので、
-  /// 終了コードでなく JSON の `data.repository` とエラーの種別で見分ける。
-  static func repositoryResolution(from stdout: Data) -> GitHubRepositoryResolution? {
+  /// 終了コードでなく JSON の `data.repository` で見分ける。正式名が無ければ、理由を問わず `.unverified`。
+  static func repositoryResolution(from stdout: Data) -> GitHubRepositoryResolution {
     guard let response = try? JSONDecoder().decode(RepositoryResponse.self, from: stdout),
-      let data = response.data
-    else { return nil }
-    if let name = data.repository?.nameWithOwner {
-      return .found(GitHubRepoName(nameWithOwner: name))
-    }
-    return response.errors?.contains { $0.type == "NOT_FOUND" } == true ? .notFound : nil
+      let name = response.data?.repository?.nameWithOwner
+    else { return .unverified }
+    return .found(GitHubRepoName(nameWithOwner: name))
   }
 
   /// ページの列を回す。次のページがあり、件数が上限未満の間だけ続け、最後のページは残り件数だけ頼む。
@@ -354,7 +352,5 @@ final class GitHubCLI {
 private struct RepositoryResponse: Decodable {
   struct Payload: Decodable { let repository: Repository? }
   struct Repository: Decodable { let nameWithOwner: String }
-  struct Failure: Decodable { let type: String? }
   let data: Payload?
-  let errors: [Failure]?
 }

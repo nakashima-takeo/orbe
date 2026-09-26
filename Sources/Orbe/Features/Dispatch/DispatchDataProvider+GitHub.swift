@@ -47,32 +47,24 @@ extension DispatchDataProvider {
     }
   }
 
-  /// 正式名の問い合わせの状態。答え（見つかった・存在しない）はキャッシュが持つ。
-  enum RepositoryLookup: Equatable {
-    case fetching
-    /// 失敗した。この回は問い合わせ直さない（開き直せば provider ごと作り直されて問い合わせ直す）。
-    case failed
-  }
-
   /// remote の一覧の読み取り結果。
   enum RemoteListing: Equatable {
     /// remote 名 → fetch の URL。
     case read([String: String])
-    /// 読めなかった。どの remote が GitHub のどのリポジトリか分からないので、台帳は失敗になる
-    /// （空の一覧として確定させると、どの行も「GitHub の行でない」になり、clean が PR の事実を
+    /// 読めなかった。どの remote が GitHub のどのリポジトリか分からないので、どの行も「確かめられない」
+    /// になる（空の一覧として確定させると、どの行も「GitHub の行でない」になり、clean が PR の事実を
     /// 「確かめて 0 件」と読む）。
     case unreadable
   }
 
-  /// remote の台帳（**導出値**。保存しない）。remote の一覧が未着なら未確定、読めなければ失敗。
+  /// remote の台帳（**導出値**。保存しない）。remote の一覧が未着なら未確定。答えはキャッシュだけから
+  /// 読む——この回に問い直している名前も、前回の答えで先に描く。
   var remoteLedger: DispatchRemoteLedger {
     switch remoteListing {
     case nil: return .pending
-    case .unreadable: return .failed
+    case .unreadable: return DispatchRemoteLedger(remotes: nil, answers: cachedRepositoryNames)
     case .read(let remotes):
-      return DispatchRemoteLedger(
-        remotes: remotes, resolutions: cachedRepositoryNames,
-        failed: Set(repositoryLookups.filter { $0.value == .failed }.keys))
+      return DispatchRemoteLedger(remotes: remotes, answers: cachedRepositoryNames)
     }
   }
 
@@ -83,30 +75,33 @@ extension DispatchDataProvider {
   /// GitHub の remote の正式名を問い合わせる（改名前の URL でも、行と PR が同じリポジトリと分かる）。
   /// git レーン（remote の一覧）と gh レーン（認証確認）の両方が揃ってはじめて撃てるので、両側の
   /// 着地点から同じこの入口を叩き、先に来た側は素通りする（`loadBranchPullRequests` と同じ形）。
-  /// キャッシュに答えが無く、今回まだ撃っていない名前だけを撃ち、記録は発行の時点で置く。
-  /// 1 つずつ撃つのは、1 つの `NOT_FOUND` で他の remote の答えまで失わないため。
+  /// キャッシュの答えが正式名でなく、この回まだ撃っていない名前だけを撃ち、記録は発行の時点で置く。
+  /// 「確かめられない」答えは、前回の値で先に描いたまま裏で問い直す（`gh auth switch` の後に開き直せば
+  /// 直る）。1 つずつ撃つのは、1 つの `NOT_FOUND` で他の remote の答えまで失わないため。
   func resolveRemoteRepositories(_ repo: GitRepo) {
     guard githubReady, case .read(let remotes) = remoteListing else { return }
     let cached = cachedRepositoryNames
     let pending = Set(remotes.values.compactMap(GitHubRepoName.init(remoteURL:)))
-      .filter { cached[$0] == nil && repositoryLookups[$0] == nil }
+      .filter { name in
+        if case .found = cached[name] { return false }
+        return !askedRepositories.contains(name)
+      }
     for name in pending {
-      repositoryLookups[name] = .fetching
+      askedRepositories.insert(name)
       gitHub.resolveRepository(cwd: repo.root, name: name) { [weak self] resolution in
         // キャッシュ書き込みは `self` の生存判定より前（`loadBranchPullRequests` と同じ理由）。
-        if let resolution {
-          DispatchGitHubCache.shared.setRepositoryName(resolution, for: name, key: repo.commonDir)
-        }
-        self?.applyResolvedRepository(name, resolved: resolution != nil)
+        let cache = DispatchGitHubCache.shared
+        let previous = cache.entry(for: repo.commonDir)?.repositoryNames[name]
+        cache.setRepositoryName(resolution, for: name, key: repo.commonDir)
+        guard resolution != previous else { return }
+        self?.applyResolvedRepository()
       }
     }
   }
 
-  /// 正式名 1 つの着地。台帳が確定すれば行の ref が決まるので、ブランチの PR を引き、比較先の変わった
-  /// 行の分類を引き直してから描く（`applyFetchedBranchPRs` と同じ順序の理由）。
-  func applyResolvedRepository(_ name: GitHubRepoName, resolved: Bool) {
-    guard repositoryLookups[name] == .fetching else { return }
-    repositoryLookups[name] = resolved ? nil : .failed
+  /// 正式名の答えが変わった着地。行の同一性が変わるので、ブランチの PR を引き、比較先の変わった行の
+  /// 分類を引き直してから描く（`applyFetchedBranchPRs` と同じ順序の理由）。
+  func applyResolvedRepository() {
     if let repo {
       loadBranchPullRequests(repo)
       startCleanProbe(repo, .changedTargets)
@@ -119,8 +114,7 @@ extension DispatchDataProvider {
   /// 「マージ済みなのに merged チップが出ない」「レビュー中なのに安全確認を素通りする」が起きる——
   /// 対象を worktree のブランチに絞れば件数は worktree 本数で抑えられ、窓の概念そのものが消える。
   /// パレットの PR 一覧（open 一覧）は closed / merged を含まず上限もあるので、掃除の事実はそれに頼らない。
-  /// 名指しするのは worktree の ref のブランチ名（台帳が決める）で、ローカル名とは限らない——ローカル
-  /// `feat` が `origin/feature-x` を追跡していれば `feature-x` で問う。
+  /// 名指しするのは、同一性が GitHub のブランチ（`.ref`）になる worktree のローカル名だけ。
   ///
   /// git レーン（worktree 一覧）・gh レーン（認証確認）・remote の台帳の確定がすべて揃ってはじめて
   /// 引けるので、**各着地点から同じこの入口を叩き、揃う前に来た側は素通りする**。
@@ -136,11 +130,13 @@ extension DispatchDataProvider {
   /// いるので、方針を変えるならこの 1 行）。パレットは開くたびに provider ごと作り直されるため、
   /// 開き直せば再取得される。
   func loadBranchPullRequests(_ repo: GitRepo) {
-    guard githubReady, case .settled(let ledger) = remoteLedger else { return }
-    let refs = branchPRRefs(ledger)
-    var seen: Set<String> = []
-    let heads = Self.worktreeBranches(of: worktrees).compactMap { refs[$0] ?? nil }.map(\.branch)
-      .filter { seen.insert($0).inserted }
+    guard githubReady, case .settled(let resolved) = remoteLedger else { return }
+    let identities = DispatchRowIdentities(resolved: resolved, localBranches: localBranches)
+    let heads = Self.worktreeBranches(of: worktrees).filter { branch in
+      if case .ref = identities.local(branch) { return true }
+      return false
+    }
+    let seen = Set(heads)
     // 削除で消えた worktree の残骸を持たない。
     branchPRFetches = branchPRFetches.filter { seen.contains($0.key) }
     let pending = heads.filter { branchPRFetches[$0] == nil }
@@ -162,9 +158,10 @@ extension DispatchDataProvider {
   /// 1. probe が未完 → 取得中
   /// 2. gh が使えないと**確定**した → 確かめて 0 件（確認対象そのものが無いので、行は git の事実だけで
   ///    判定される）
-  /// 3. 台帳が未確定 → 取得中、台帳が失敗 → 取得失敗（どちらも安全群に入らない）
-  /// 4. ref が無い（GitHub の行でない）→ 確かめて 0 件
-  /// 5. 今回の取得の結果。未着地／失敗のブランチは、前回セッションの結果があればそれで確定させる
+  /// 3. 台帳が未確定 → 取得中（安全群に入らない）
+  /// 4. 行を確かめられない → 取得失敗（安全群に入らない）
+  /// 5. GitHub の行でない → 確かめて 0 件
+  /// 6. 今回の取得の結果。未着地／失敗のブランチは、前回セッションの結果があればそれで確定させる
   ///    （stale-while-revalidate。「取得失敗は据え置き」をブランチ単位に保つ）
   var branchPRStates: [String: BranchPRState] {
     let branches = Self.worktreeBranches(of: worktrees)
@@ -173,26 +170,28 @@ extension DispatchDataProvider {
     }
     guard let probed = probedGitHubState else { return all(.fetching) }
     guard probed == .ready else { return all(.loaded([])) }
-    let ledger: DispatchRemoteLedger.Resolved
-    switch remoteLedger {
-    case .pending: return all(.fetching)
-    case .failed: return all(.failed)
-    case .settled(let resolved): ledger = resolved
-    }
+    guard case .settled(let resolved) = remoteLedger else { return all(.fetching) }
+    let identities = DispatchRowIdentities(resolved: resolved, localBranches: localBranches)
     let cached =
       repo.flatMap { DispatchGitHubCache.shared.entry(for: $0.commonDir)?.branchPullRequests }
       ?? [:]
-    return branchPRRefs(ledger).mapValues { ref in
-      guard let ref else { return .loaded([]) }
+    let states = branches.map { branch -> (String, BranchPRState) in
+      let ref: GitHubBranchRef
+      switch identities.local(branch) {
+      case .unverified: return (branch, .failed)
+      case .notGitHub: return (branch, .loaded([]))
+      case .ref(let identity): ref = identity
+      }
       let fetched: BranchPRState
       switch branchPRFetches[ref.branch] {
       case .loaded(let prs): fetched = .loaded(prs)
       case .failed: fetched = cached[ref.branch].map(BranchPRState.loaded) ?? .failed
       case .fetching, nil: fetched = cached[ref.branch].map(BranchPRState.loaded) ?? .fetching
       }
-      guard case .loaded(let prs) = fetched else { return fetched }
-      return .loaded(prs.filter { $0.head == ref })
+      guard case .loaded(let prs) = fetched else { return (branch, fetched) }
+      return (branch, .loaded(prs.filter { $0.head == ref }))
     }
+    return Dictionary(uniqueKeysWithValues: states)
   }
 
   /// 着地済みの PR（worktree のブランチごと・ref で絞った後。`extraContainmentTargets` の入力）。
@@ -201,16 +200,6 @@ extension DispatchDataProvider {
       guard case .loaded(let prs) = state else { return nil }
       return prs
     }
-  }
-
-  /// worktree のブランチ（ローカル名）→ その ref。
-  private func branchPRRefs(_ ledger: DispatchRemoteLedger.Resolved) -> [String: GitHubBranchRef?] {
-    let upstreams = Dictionary(
-      localBranches.map { ($0.name, $0.upstream) }, uniquingKeysWith: { first, _ in first })
-    return Dictionary(
-      uniqueKeysWithValues: Self.worktreeBranches(of: worktrees).map { branch in
-        (branch, ledger.ref(forLocal: branch, upstream: upstreams[branch] ?? nil))
-      })
   }
 
   /// ブランチの PR を確かめる worktree のブランチ（ローカル名）。worktree にあるブランチだけ——main

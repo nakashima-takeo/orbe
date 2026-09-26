@@ -6,9 +6,10 @@ import XCTest
 /// 装飾が付くリポジトリ（部分クローン）でも読めることを固定する。
 extension DispatchRemoteLedgerProviderTests {
 
-  /// remote の一覧が読めなければ台帳は失敗（空の一覧として確定させない）。確定させると、どの行も
-  /// 「GitHub の行でない」になり、clean がレビュー中の PR を持つ worktree を「確かめて 0 件」と読む。
-  func testUnreadableRemoteListLeavesTheLedgerFailed() throws {
+  /// remote の一覧が読めなければ、どの行も「確かめられない」（空の一覧として確定させない）。空で確定
+  /// させると、どの行も「GitHub の行でない」になり、clean がレビュー中の PR を持つ worktree を
+  /// 「確かめて 0 件」と読む。
+  func testUnreadableRemoteListLeavesEveryRowUnverified() throws {
     addRemote("origin", "me/r")
     try answer("me/r", found: "me/r")
     _ = try addWorktree("wt-feat", branch: "feat")
@@ -18,7 +19,7 @@ extension DispatchRemoteLedgerProviderTests {
 
     provider.remoteListing = .unreadable
 
-    XCTAssertEqual(provider.remoteLedger, .failed)
+    XCTAssertTrue(originUnverified(provider))
     XCTAssertEqual(provider.branchPRStates["feat"], .failed, "安全群に入らない側に倒れる")
   }
 
@@ -55,7 +56,7 @@ extension DispatchRemoteLedgerProviderTests {
       }))
     XCTAssertEqual(item(model, "wt-feat")?.linkedPRNumber, 1, "worktree にチップが付く")
     XCTAssertEqual(
-      pullRequestRow(model, 1)?.action, .pullRequest(number: 1, open: .worktree(path: worktree)),
-      "PR 行は既存 worktree を開く")
+      pullRequestRow(model, 1)?.action,
+      .pullRequest(number: 1, route: .open(.worktree(path: worktree))), "PR 行は既存 worktree を開く")
   }
 }

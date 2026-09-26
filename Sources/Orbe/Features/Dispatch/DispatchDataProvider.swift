@@ -72,10 +72,10 @@ final class DispatchDataProvider {
   /// 同じブランチを二重に引く。台帳と in-flight を 1 つの値で持つので、二重管理が生まれない。
   /// 書き手は分冊（`DispatchDataProvider+GitHub.swift`）。
   var branchPRFetches: [String: BranchPRState] = [:]
-  /// remote の URL から読んだ名前 → 今回の正式名の問い合わせの状態。答えを得たものはキャッシュへ移し、
-  /// ここからは消える。記録は発行の時点で置く（二重に撃たない）。
+  /// この回に正式名を問い合わせた名前（remote の URL から読んだ名前）。答えはキャッシュが持ち、ここは
+  /// 同じ名前を二重に撃たないための記録。記録は発行の時点で置く。
   /// 書き手は分冊（`DispatchDataProvider+GitHub.swift`）。
-  var repositoryLookups: [GitHubRepoName: RepositoryLookup] = [:]
+  var askedRepositories: Set<GitHubRepoName> = []
   /// 一覧の取得が続いている（取得前・ページが届く途中）。セクション末尾にローディング行を足す
   /// （値がまだ無ければローディング行だけのセクションになる）。
   var issuesFetching = true

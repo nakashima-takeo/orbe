@@ -8,14 +8,14 @@ import XCTest
 /// 壊れると、次のどれかが黙って起きる。
 /// - 問い合わせが揃う前に撃たれて失敗し、PR がローディングのまま、チップも出ないまま固まる。
 /// - 同じ名前を何度も問い合わせる。
-/// - 一時的な失敗がキャッシュに焼かれ、開き直しても直らない。
-/// - clean が他人の fork の PR で行を塞ぐ、または自分の PR（追跡先の名前が違う行・fork の運用）を
+/// - 確かめられない答えが焼かれ、開き直しても直らない。
+/// - clean が他人の fork の PR で行を塞ぐ、または自分の PR（base を追跡する行・fork の運用）を
 ///   見落として、レビュー中の worktree を安全群に入れる。
 @MainActor
 final class DispatchRemoteLedgerProviderTests: OrbeTestCase {
   var dir: URL!
   var root: String!
-  private var ghDir: URL!
+  var ghDir: URL!
 
   let mine = GitHubRepoName(nameWithOwner: "me/r")
 
@@ -72,7 +72,8 @@ final class DispatchRemoteLedgerProviderTests: OrbeTestCase {
     XCTAssertTrue(pump({ self.pullRequestRow(model, 1) != nil }, timeout: 5), "答えの着地で PR 行が出る")
     XCTAssertEqual(item(model, "wt-feat")?.linkedPRNumber, 1)
     XCTAssertEqual(
-      pullRequestRow(model, 1)?.action, .pullRequest(number: 1, open: .worktree(path: worktree)))
+      pullRequestRow(model, 1)?.action,
+      .pullRequest(number: 1, route: .open(.worktree(path: worktree))))
   }
 
   /// 撃つのは remote の一覧と認証確認の両方が揃ってから。GitHub の remote ごとに 1 回だけで、着地前に
@@ -102,17 +103,20 @@ final class DispatchRemoteLedgerProviderTests: OrbeTestCase {
     XCTAssertEqual(calls("R").sorted(), ["base/r", "me/r"])
   }
 
-  /// 問い合わせが失敗したら台帳は失敗のまま（PR はローディング・チップ無し・clean は取得失敗）で、
-  /// その回は問い合わせ直さない。失敗は覚えないので、開き直せば問い合わせ直して直る。
-  func testFailedLookupIsNotRememberedAndIsAskedAgainOnReopen() throws {
+  /// 問い合わせが失敗したら origin は「確かめられない」になり（PR は情報行とブラウザで開く行・チップ無し・
+  /// clean は取得失敗）、その回は問い合わせ直さない。開き直せば裏で問い直して直る。
+  func testUnverifiedLookupIsAskedAgainOnReopen() throws {
     addRemote("origin", "me/r")
     try servePullRequest(1, head: "feat", from: "me/r")
-    _ = try addWorktree("wt-feat", branch: "feat")
+    let worktree = try addWorktree("wt-feat", branch: "feat")
     let (model, provider) = makeProvider()
 
     provider.load()
-    XCTAssertTrue(pump({ provider.remoteLedger == .failed && provider.pullRequests.count == 1 }))
-    XCTAssertEqual(section(model, "Pull requests")?.items.map(\.isLoadingRow), [true])
+    XCTAssertTrue(pump({ self.originUnverified(provider) && provider.pullRequests.count == 1 }))
+    XCTAssertEqual(
+      section(model, "Pull requests")?.items.map(\.infoKind), [.repositoryUnverified, nil],
+      "ローディング行を残さず、情報行と PR 行を出す")
+    XCTAssertEqual(pullRequestRow(model, 1)?.action, .pullRequest(number: 1, route: .browser))
     XCTAssertNil(item(model, "wt-feat")?.linkedPRNumber)
     XCTAssertEqual(provider.branchPRStates["feat"], .failed, "安全群に入らない側に倒れる")
     var relanded = false
@@ -123,12 +127,16 @@ final class DispatchRemoteLedgerProviderTests: OrbeTestCase {
     try answer("me/r", found: "me/r")
     let (reopened, again) = makeProvider()
     again.load()
-    XCTAssertTrue(pump({ self.pullRequestRow(reopened, 1) != nil }), "開き直すと直る")
-    XCTAssertEqual(calls("R"), ["me/r", "me/r"], "失敗は覚えていないので問い合わせ直す")
+    XCTAssertTrue(
+      pump({
+        self.pullRequestRow(reopened, 1)?.action
+          == .pullRequest(number: 1, route: .open(.worktree(path: worktree)))
+      }), "開き直すと直る")
+    XCTAssertEqual(calls("R"), ["me/r", "me/r"], "確かめられない答えは開き直すと問い直す")
   }
 
-  /// 答え（正式名・存在しない）はプロセス内に残るので、2 回目に開いたときは gh を待たずに最初の描画から
-  /// PR 行とチップが出て、問い合わせ直さない。
+  /// 答え（正式名・確かめられない）はプロセス内に残るので、2 回目に開いたときは gh を待たずに最初の描画
+  /// から PR 行とチップが出る。問い直すのは確かめられない答えだけ。
   func testSecondOpenShowsPullRequestsFromTheFirstFrameWithoutAskingAgain() throws {
     addRemote("origin", "me/r")
     addRemote("upstream", "base/r")
@@ -149,28 +157,28 @@ final class DispatchRemoteLedgerProviderTests: OrbeTestCase {
 
     try ungate("auth")
     XCTAssertTrue(pump({ again.githubReady && !again.pullRequestsFetching }))
-    XCTAssertEqual(calls("R").sorted(), ["base/r", "me/r"], "存在しない答えも含めて問い合わせ直さない")
+    XCTAssertTrue(pump({ self.calls("R").count == 3 }))
+    XCTAssertEqual(calls("R").sorted(), ["base/r", "base/r", "me/r"], "正式名の答えは問い合わせ直さない")
   }
 
   // MARK: - clean の PR の事実
 
-  /// clean の PR は worktree の追跡先のブランチ名で問い合わせ、head がその worktree の ref と等しいもの
-  /// だけを事実にする。origin が自分の fork の運用でも自分の PR が残り、他人の fork の同名ブランチの
+  /// clean の PR は worktree のローカル名で問い合わせ、head がその worktree の ref と等しいものだけを
+  /// 事実にする。base（`origin/main`）を追跡する行でも自分の PR が残り、他人の fork の同名ブランチの
   /// レビュー中 PR は行を塞がない。
-  func testCleanPullRequestFactsFollowTheTrackedBranchAndDropOtherForks() throws {
+  func testCleanPullRequestFactsFollowTheLocalBranchAndDropOtherForks() throws {
     addRemote("origin", "me/r")
     addRemote("upstream", "base/r")
     try answer("me/r", found: "me/r")
     try answer("base/r", found: "base/r")
-    XCTAssertTrue(git(["update-ref", "refs/remotes/origin/feature-x", "HEAD"]).isSuccess)
+    XCTAssertTrue(git(["update-ref", "refs/remotes/origin/main", "HEAD"]).isSuccess)
     let worktree = try addWorktree("wt-feat", branch: "feat")
-    XCTAssertTrue(
-      run(["branch", "-q", "--set-upstream-to=origin/feature-x"], in: worktree).isSuccess)
+    XCTAssertTrue(run(["branch", "-q", "--set-upstream-to=origin/main"], in: worktree).isSuccess)
     try serveBranchPullRequests(
-      "feature-x",
-      #"[{"number":6,"headRefName":"feature-x","state":"OPEN","baseRefName":"main","#
+      "feat",
+      #"[{"number":6,"headRefName":"feat","state":"OPEN","baseRefName":"main","#
         + #""headRepositoryOwner":{"login":"x"},"headRepository":{"name":"r"}},"#
-        + #"{"number":5,"headRefName":"feature-x","state":"MERGED","baseRefName":"develop","#
+        + #"{"number":5,"headRefName":"feat","state":"MERGED","baseRefName":"develop","#
         + #""headRepositoryOwner":{"login":"me"},"headRepository":{"name":"r"}}]"#)
     let (model, provider) = makeProvider()
 
@@ -181,12 +189,12 @@ final class DispatchRemoteLedgerProviderTests: OrbeTestCase {
         return model.classification != nil
       }))
 
-    XCTAssertEqual(calls("H"), ["feature-x"], "ローカル名 feat ではなく追跡先の feature-x で問う")
+    XCTAssertEqual(calls("H"), ["feat"], "追跡先の main ではなくローカル名 feat で問う")
     XCTAssertEqual(
       provider.branchPRStates["feat"],
       .loaded([
         GitHubBranchPR(
-          number: 5, headRefName: "feature-x", state: "MERGED", baseRefName: "develop",
+          number: 5, headRefName: "feat", state: "MERGED", baseRefName: "develop",
           headRepository: mine)
       ]))
     let row = try XCTUnwrap(model.classification?.first { $0.branch == "feat" })
@@ -194,7 +202,7 @@ final class DispatchRemoteLedgerProviderTests: OrbeTestCase {
     XCTAssertFalse(row.vocabulary.contains(.openPR(6)), "他人の fork のレビュー中 PR は事実にしない")
   }
 
-  /// GitHub でない remote を追跡する worktree は、PR の事実を「確かめて 0 件」として問い合わせない。
+  /// GitHub でない remote へ push する worktree は、PR の事実を「確かめて 0 件」として問い合わせない。
   func testWorktreeTrackingANonGitHubRemoteHasNoPullRequestsToAsk() throws {
     addRemote("origin", "me/r")
     try answer("me/r", found: "me/r")
@@ -222,176 +230,5 @@ final class DispatchRemoteLedgerProviderTests: OrbeTestCase {
     XCTAssertTrue(pump({ model.classification != nil && !provider.classificationPending }))
     XCTAssertEqual(provider.remoteLedger, .pending, "前提: GitHub の remote の正式名は問い合わせない")
     XCTAssertEqual(provider.branchPRStates["feat"], .loaded([]))
-  }
-}
-
-// MARK: - ヘルパ
-
-extension DispatchRemoteLedgerProviderTests {
-
-  func makeProvider(cwd: String? = nil) -> (DispatchPaletteModel, DispatchDataProvider) {
-    let model = DispatchPaletteModel()
-    let provider = DispatchDataProvider(
-      cwd: cwd ?? root, model: model, localization: LocalizationStore(language: .ja),
-      worktreeTemplate: WorktreePathTemplate.defaultTemplate, gitHub: GitHubCLI())
-    return (model, provider)
-  }
-
-  func addRemote(_ name: String, _ repository: String) {
-    XCTAssertTrue(git(["remote", "add", name, "https://github.com/\(repository).git"]).isSuccess)
-  }
-
-  func addWorktree(_ name: String, branch: String) throws -> String {
-    let path = dir.appendingPathComponent(name).path
-    XCTAssertTrue(git(["worktree", "add", "-q", "-b", branch, path]).isSuccess)
-    return path
-  }
-
-  private func section(_ model: DispatchPaletteModel, _ title: String) -> DispatchSection? {
-    model.sections.first { $0.title == title }
-  }
-
-  func item(_ model: DispatchPaletteModel, _ name: String) -> DispatchItem? {
-    section(model, "Worktrees")?.items.first { $0.name == name }
-  }
-
-  func pullRequestRow(_ model: DispatchPaletteModel, _ number: Int) -> DispatchItem? {
-    section(model, "Pull requests")?.items.first { $0.idText == "#\(number)" }
-  }
-
-  /// 偽 `gh` を PATH に置く。認証確認は通り、正式名は `resolve/<owner>__<name>` の中身を返し（無ければ
-  /// 答えずに落ちる）、open PR 一覧は `prs.json`、ブランチの PR は `branch/<name>` を返す。`<種別>.gate`
-  /// がある間はその問い合わせが着地しない。正式名とブランチの PR の問い合わせは `calls.log` に残す。
-  private func stageGh() throws {
-    ghDir = dir.appendingPathComponent("gh")
-    for sub in ["resolve", "branch"] {
-      try FileManager.default.createDirectory(
-        at: ghDir.appendingPathComponent(sub), withIntermediateDirectories: true)
-    }
-    try write(
-      #"{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":null}}"#,
-      to: ghDir.appendingPathComponent("prs.json").path)
-    let d = ghDir.path
-    let script = """
-      #!/bin/sh
-      D="\(d)"
-      wait_gate() { while [ -e "$D/$1.gate" ]; do sleep 0.05; done; }
-      if [ "$1" = "auth" ]; then wait_gate auth; echo token; exit 0; fi
-      if [ "$1" = "pr" ]; then
-        head=""
-        while [ $# -gt 0 ]; do [ "$1" = "--head" ] && head="$2"; shift; done
-        echo "H $head" >> "$D/calls.log"
-        wait_gate branch
-        f="$D/branch/$(echo "$head" | tr / _)"
-        if [ -e "$f" ]; then cat "$f"; else printf '[]'; fi
-        exit 0
-      fi
-      query=""; o=""; n=""; jq=""
-      while [ $# -gt 0 ]; do
-        case "$1" in
-          -f|-F)
-            case "$2" in query=*) query="${2#query=}" ;; o=*) o="${2#o=}" ;; n=*) n="${2#n=}" ;; esac
-            shift ;;
-          --jq) jq="$2"; shift ;;
-        esac
-        shift
-      done
-      case "$query" in
-        *'repository(owner:$o,'*)
-          echo "R $o/$n" >> "$D/calls.log"
-          wait_gate resolve
-          f="$D/resolve/${o}__${n}"
-          [ -e "$f" ] || exit 1
-          cat "$f"
-          [ -e "$f.exit" ] && exit "$(cat "$f.exit")"
-          exit 0 ;;
-      esac
-      case "$jq" in
-        *pullRequests*) cat "$D/prs.json" ;;
-        *) printf '{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":null}}' ;;
-      esac
-      """
-    let gh = ghDir.appendingPathComponent("gh").path
-    try script.write(toFile: gh, atomically: true, encoding: .utf8)
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: gh)
-    // 戻さない——`OrbeTestCase` が毎テスト `ShellPATH.shared` を張り直す。
-    let path = ghDir.path
-    ShellPATH.shared = ShellPATH(probe: { "\(path):/usr/bin:/bin" })
-  }
-
-  func answer(_ name: String, found canonical: String) throws {
-    try write(#"{"data":{"repository":{"nameWithOwner":"\#(canonical)"}}}"#, to: resolveFile(name))
-  }
-
-  /// 実 gh と同じく、存在しないリポジトリは部分エラーの JSON を出して非 0 で終わる。
-  private func answerNotFound(_ name: String) throws {
-    try write(
-      #"{"data":{"repository":null},"errors":[{"type":"NOT_FOUND","message":"x"}]}"#,
-      to: resolveFile(name))
-    try write("1", to: resolveFile(name) + ".exit")
-  }
-
-  private func resolveFile(_ name: String) -> String {
-    ghDir.appendingPathComponent("resolve/\(name.replacingOccurrences(of: "/", with: "__"))").path
-  }
-
-  /// open PR 一覧を、この 1 件だけにする。
-  func servePullRequest(_ number: Int, head: String, from repository: String) throws {
-    let parts = repository.split(separator: "/").map(String.init)
-    let node =
-      #"{"number":\#(number),"title":"pr \#(number)","headRefName":"\#(head)","#
-      + #""headRepositoryOwner":{"login":"\#(parts[0])"},"headRepository":{"name":"\#(parts[1])"},"#
-      + #""reviewDecision":null}"#
-    try write(
-      #"{"nodes":[\#(node)],"pageInfo":{"hasNextPage":false,"endCursor":null}}"#,
-      to: ghDir.appendingPathComponent("prs.json").path)
-  }
-
-  func serveBranchPullRequests(_ head: String, _ json: String) throws {
-    try write(
-      json,
-      to: ghDir.appendingPathComponent("branch/\(head.replacingOccurrences(of: "/", with: "_"))")
-        .path)
-  }
-
-  private func gate(_ kind: String) throws {
-    try write("", to: ghDir.appendingPathComponent("\(kind).gate").path)
-  }
-
-  private func ungate(_ kind: String) throws {
-    try FileManager.default.removeItem(at: ghDir.appendingPathComponent("\(kind).gate"))
-  }
-
-  /// 偽 `gh` が受けた問い合わせ（`R` = 正式名、`H` = ブランチの PR）の対象を順に返す。
-  private func calls(_ kind: String) -> [String] {
-    let text =
-      (try? String(contentsOf: ghDir.appendingPathComponent("calls.log"), encoding: .utf8)) ?? ""
-    return text.split(separator: "\n").filter { $0.hasPrefix("\(kind) ") }.map {
-      String($0.dropFirst(kind.count + 1))
-    }
-  }
-
-  private func write(_ text: String, to path: String) throws {
-    try text.write(toFile: path, atomically: true, encoding: .utf8)
-  }
-
-  @discardableResult
-  func git(_ args: [String]) -> GitRunner.Output {
-    run(args, in: root)
-  }
-
-  @discardableResult
-  func run(_ args: [String], in cwd: String) -> GitRunner.Output {
-    GitRunner.shared.runSync(args, cwd: cwd)
-  }
-
-  /// main queue を回しながら条件の成立を待つ（provider の completion は main で届く）。
-  func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-      usleep(5_000)
-    }
-    return condition()
   }
 }

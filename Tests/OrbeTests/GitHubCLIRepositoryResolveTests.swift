@@ -2,13 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 正式名の問い合わせ（`GitHubCLI.resolveRepository`）。remote の台帳は、この答えが「正式名」
-/// 「存在しない」「分からなかった」のどれかで確定・失敗を決める。
+/// 正式名の問い合わせ（`GitHubCLI.resolveRepository`）。remote の台帳は、この答えが「正式名」か
+/// 「確かめられない」かで、その remote の値を決める。
 ///
-/// 見分けを誤ると、存在しない remote のせいで台帳が永久に失敗のまま（PR がローディングのまま）になるか、
-/// 一時的な失敗が「GitHub の行でない」と確定してキャッシュに焼かれ、そのリポジトリでは次に開いても
-/// チップが出ず clean が PR の事実を失う。数字だけの名前が文字列で渡らないと、そのリポジトリでは
-/// 問い合わせが失敗し続ける。
+/// 見分けを誤ると、見えない private リポジトリや一時的な失敗が「GitHub の行でない」と読まれ、clean が
+/// PR の事実を「確かめて 0 件」と読むか、正式名が返っているのに確かめられないままになる。数字だけの名前が
+/// 文字列で渡らないと、そのリポジトリでは問い合わせが失敗し続ける。
 final class GitHubCLIRepositoryResolveTests: OrbeTestCase {
   private var dir: URL?
 
@@ -44,28 +43,29 @@ final class GitHubCLIRepositoryResolveTests: OrbeTestCase {
     }
   }
 
-  /// 答えは出力の JSON で見分ける: 正式名（改名後の名前）・存在しない・それ以外は分からなかった。
+  /// 答えは出力の JSON で見分ける: 正式名（改名後の名前）があれば正式名、それ以外（存在しない・見えない・
+  /// その他のエラー・出力の無い失敗）は確かめられない。
   func testAnswerIsReadFromTheResponseBody() {
-    func read(_ text: String) -> GitHubRepositoryResolution? {
+    func read(_ text: String) -> GitHubRepositoryResolution {
       GitHubCLI.repositoryResolution(from: Data(text.utf8))
     }
     XCTAssertEqual(
       read(Output.found), .found(GitHubRepoName(nameWithOwner: "vercel/next.js")), "正式名を返す")
-    XCTAssertEqual(read(Output.notFound), .notFound, "存在しないリポジトリは存在しないと確定")
-    XCTAssertNil(read(Output.invalidVariable), "存在しない以外のエラーは分からなかった")
-    XCTAssertNil(read(""), "出力の無い失敗（起動失敗・打ち切り）は分からなかった")
+    XCTAssertEqual(read(Output.notFound), .unverified, "存在しない（見えない）リポジトリ")
+    XCTAssertEqual(read(Output.invalidVariable), .unverified, "存在しない以外のエラー")
+    XCTAssertEqual(read(""), .unverified, "出力の無い失敗（起動失敗・打ち切り）")
   }
 
-  /// gh は存在しないリポジトリでも非 0 で終わるが、それを「分からなかった」にしない。
-  func testMissingRepositoryIsNotFoundDespiteNonZeroExit() throws {
-    try stageGh(stdout: Output.notFound, exit: 1)
-    XCTAssertEqual(try resolve("o/missing"), .notFound)
+  /// gh は正式名を返しても非 0 で終わることがあるので、終了コードでなく出力で読む。
+  func testCanonicalNameIsReadDespiteNonZeroExit() throws {
+    try stageGh(stdout: Output.found, exit: 1)
+    XCTAssertEqual(try resolve("o/r"), .found(GitHubRepoName(nameWithOwner: "vercel/next.js")))
   }
 
-  /// gh が答えを返さずに落ちたら「分からなかった」（次に開いたとき問い合わせ直せる側）。
-  func testFailureWithoutAnAnswerIsUnknown() throws {
+  /// gh が答えを返さずに落ちたら確かめられない（次に開いたとき問い直す側）。
+  func testFailureWithoutAnAnswerIsUnverified() throws {
     try stageGh(stdout: "", exit: 1)
-    XCTAssertNil(try resolve("o/r"))
+    XCTAssertEqual(try resolve("o/r"), .unverified)
   }
 
   // MARK: - ヘルパ
@@ -87,8 +87,8 @@ final class GitHubCLIRepositoryResolveTests: OrbeTestCase {
     ShellPATH.shared = ShellPATH(probe: { path })
   }
 
-  private func resolve(_ name: String) throws -> GitHubRepositoryResolution? {
-    var answer: GitHubRepositoryResolution??
+  private func resolve(_ name: String) throws -> GitHubRepositoryResolution {
+    var answer: GitHubRepositoryResolution?
     let done = expectation(description: "resolveRepository")
     GitHubCLI().resolveRepository(
       cwd: try XCTUnwrap(dir).path, name: GitHubRepoName(nameWithOwner: name)

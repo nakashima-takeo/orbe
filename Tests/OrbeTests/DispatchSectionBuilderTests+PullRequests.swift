@@ -19,8 +19,9 @@ extension DispatchSectionBuilderTests {
     )
   }
 
+  /// push 先は、git が push 先の設定の無いときに解決するとおり upstream の remote。
   private func local(_ name: String, _ upstream: GitUpstream? = nil) -> GitBranch {
-    GitBranch(name: name, relativeDate: "1d前", upstream: upstream)
+    GitBranch(name: name, relativeDate: "1d前", upstream: upstream, pushRemote: upstream?.remote)
   }
 
   private func remote(_ name: String) -> GitBranch {
@@ -72,12 +73,13 @@ extension DispatchSectionBuilderTests {
     let input = DispatchSectionBuilder.Input(
       localBranches: [local("feat", tracking("origin", "feat"))],
       pullRequests: [pullRequest(1, head: "feat", repo: mine)],
-      remoteLedger: .settled(.init(repositories: ["origin": mine, "upstream": origin])))
+      remoteLedger: .settled(
+        .init(repositories: ["origin": .github(mine), "upstream": .github(origin)])))
     XCTAssertEqual(
       item(DispatchSectionBuilder.build(input), "Local branches", "feat")?.linkedPRNumber, 1)
   }
 
-  /// origin が本家で、自分の fork を別の remote に置く運用: fork を追跡する行には fork の PR が紐づき、
+  /// origin が本家で、自分の fork を別の remote に置く運用: fork へ push する行には fork の PR が紐づき、
   /// 本家の同名ブランチから出た PR は紐づかない。
   func testOwnPullRequestLinksWhenTheForkIsASecondRemote() {
     let input = DispatchSectionBuilder.Input(
@@ -86,40 +88,39 @@ extension DispatchSectionBuilderTests {
       pullRequests: [
         pullRequest(2, head: "feat", repo: origin), pullRequest(1, head: "feat", repo: mine),
       ],
-      remoteLedger: .settled(.init(repositories: ["origin": origin, "mine": mine])))
+      remoteLedger: .settled(
+        .init(repositories: ["origin": .github(origin), "mine": .github(mine)])))
     XCTAssertEqual(
       item(DispatchSectionBuilder.build(input), "Worktrees", "feat")?.linkedPRNumber, 1,
-      "追跡している fork の PR にだけ紐づく")
+      "push 先の fork の PR にだけ紐づく")
   }
 
-  /// ローカル名と追跡先のブランチ名が違う行は、追跡先のブランチから出た PR に紐づく。
-  func testRowTrackingADifferentlyNamedBranchLinksByTheTrackedName() {
+  /// ローカル名と追跡先のブランチ名が違う行は、ローカル名のブランチから出た PR に紐づく（push される
+  /// のはローカル名）。
+  func testRowTrackingADifferentlyNamedBranchLinksByItsLocalName() {
     let input = DispatchSectionBuilder.Input(
       localBranches: [local("feat", tracking("origin", "feature-x"))],
       pullRequests: [pullRequest(4, head: "feat"), pullRequest(3, head: "feature-x")],
       remoteLedger: ledger)
     XCTAssertEqual(
-      item(DispatchSectionBuilder.build(input), "Local branches", "feat")?.linkedPRNumber, 3)
+      item(DispatchSectionBuilder.build(input), "Local branches", "feat")?.linkedPRNumber, 4)
   }
 
-  /// 台帳が確定するまで（問い合わせ中・失敗）は、行のチップを出さず、Pull requests はローディング行
-  /// だけになる。Issues は台帳を待たない。
-  func testUnsettledLedgerShowsNoChipsAndOnlyLoadingForPullRequests() {
-    for unsettled in [DispatchRemoteLedger.pending, .failed] {
-      let input = DispatchSectionBuilder.Input(
-        worktrees: [GitWorktree(path: "/wt/feat", branch: "feat", head: "a", isMain: false)],
-        issues: [GitHubIssue(number: 5, title: "bug")],
-        pullRequests: [pullRequest(1, head: "feat")], githubState: .ready,
-        remoteLedger: unsettled)
-      let sections = DispatchSectionBuilder.build(input)
+  /// 台帳が確定するまでは、行のチップを出さず、Pull requests はローディング行だけになる。Issues は
+  /// 台帳を待たない。
+  func testPendingLedgerShowsNoChipsAndOnlyLoadingForPullRequests() {
+    let input = DispatchSectionBuilder.Input(
+      worktrees: [GitWorktree(path: "/wt/feat", branch: "feat", head: "a", isMain: false)],
+      issues: [GitHubIssue(number: 5, title: "bug")],
+      pullRequests: [pullRequest(1, head: "feat")], githubState: .ready,
+      remoteLedger: .pending)
+    let sections = DispatchSectionBuilder.build(input)
 
-      XCTAssertNil(item(sections, "Worktrees", "feat")?.linkedPRNumber, "\(unsettled): チップを出さない")
-      XCTAssertEqual(
-        section(sections, "Pull requests")?.items.map(\.isLoadingRow), [true],
-        "\(unsettled): PR 行の行き先が決まらないのでローディング行だけ")
-      XCTAssertEqual(
-        section(sections, "Issues")?.items.map(\.idText), ["#5"], "\(unsettled): Issues は出る")
-    }
+    XCTAssertNil(item(sections, "Worktrees", "feat")?.linkedPRNumber, "チップを出さない")
+    XCTAssertEqual(
+      section(sections, "Pull requests")?.items.map(\.isLoadingRow), [true],
+      "PR 行の行き先が決まらないのでローディング行だけ")
+    XCTAssertEqual(section(sections, "Issues")?.items.map(\.idText), ["#5"], "Issues は出る")
   }
 
   // MARK: - PR 行の行き先
@@ -132,7 +133,7 @@ extension DispatchSectionBuilderTests {
         localBranches: [local("feat", tracking("origin", "feat"))],
         remoteBranches: [remote("origin/feat")],
         pullRequests: [pullRequest(1, head: "feat")], remoteLedger: ledger), 1)
-    XCTAssertEqual(row?.action, .pullRequest(number: 1, open: .worktree(path: "/wt/feat")))
+    XCTAssertEqual(row?.action, .pullRequest(number: 1, route: .open(.worktree(path: "/wt/feat"))))
     XCTAssertEqual(row?.enterNote, .worktree(.existing))
     XCTAssertEqual(row?.footer, .launch(target: "#1", kind: .existing))
   }
@@ -144,7 +145,7 @@ extension DispatchSectionBuilderTests {
         localBranches: [local("feat", tracking("origin", "feat"))],
         remoteBranches: [remote("origin/feat")],
         pullRequests: [pullRequest(1, head: "feat")], remoteLedger: ledger), 1)
-    XCTAssertEqual(row?.action, .pullRequest(number: 1, open: .localBranch(name: "feat")))
+    XCTAssertEqual(row?.action, .pullRequest(number: 1, route: .open(.localBranch(name: "feat"))))
     XCTAssertEqual(row?.enterNote, .worktree(.checkout))
     XCTAssertEqual(row?.footer, .launch(target: "#1", kind: .checkout))
   }
@@ -157,7 +158,8 @@ extension DispatchSectionBuilderTests {
         pullRequests: [pullRequest(1, head: "feat")], remoteLedger: ledger), 1)
     XCTAssertEqual(
       row?.action,
-      .pullRequest(number: 1, open: .remoteBranch(name: "origin/feat", existingWorktree: nil)))
+      .pullRequest(
+        number: 1, route: .open(.remoteBranch(name: "origin/feat", existingWorktree: nil))))
     XCTAssertEqual(row?.enterNote, .worktree(.checkout))
     XCTAssertEqual(row?.footer, .launch(target: "#1", kind: .checkout))
   }
@@ -171,7 +173,8 @@ extension DispatchSectionBuilderTests {
           localBranches: [local("feat", tracking("mine", "feat"))],
           remoteBranches: [remote("origin/feat"), remote("mine/feat")],
           pullRequests: [pullRequest(1, head: "feat")],
-          remoteLedger: .settled(.init(repositories: ["origin": origin, "mine": mine])))
+          remoteLedger: .settled(
+            .init(repositories: ["origin": .github(origin), "mine": .github(mine)])))
       ),
       (
         "origin/<head> が手元に無い（shallow clone 等）",
@@ -183,7 +186,8 @@ extension DispatchSectionBuilderTests {
         DispatchSectionBuilder.Input(
           remoteBranches: [remote("mine/feat")],
           pullRequests: [pullRequest(1, head: "feat", repo: mine)],
-          remoteLedger: .settled(.init(repositories: ["origin": origin, "mine": mine])))
+          remoteLedger: .settled(
+            .init(repositories: ["origin": .github(origin), "mine": .github(mine)])))
       ),
       (
         "head のリポジトリが消えている",
@@ -198,7 +202,7 @@ extension DispatchSectionBuilderTests {
     ]
     for (label, input) in cases {
       let row = pullRequestRow(input, 1)
-      XCTAssertEqual(row?.action, .pullRequest(number: 1, open: nil), label)
+      XCTAssertEqual(row?.action, .pullRequest(number: 1, route: .browser), label)
       XCTAssertEqual(row?.enterNote, .browser, label)
       XCTAssertEqual(row?.footer, .browse(target: "#1"), label)
     }

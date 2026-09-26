@@ -12,7 +12,7 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
   let origin = GitHubRepoName(nameWithOwner: "o/r")
 
   /// origin だけを持つ確定した台帳。
-  var ledger: DispatchRemoteLedger { .settled(.init(repositories: ["origin": origin])) }
+  var ledger: DispatchRemoteLedger { .settled(.init(repositories: ["origin": .github(origin)])) }
 
   func pullRequest(
     _ number: Int, head: String, repo: GitHubRepoName? = nil, reviewDecision: String? = nil
@@ -278,7 +278,7 @@ final class DispatchSectionBuilderTests: OrbeTestCase {
       section(sections, "Issues")?.items.first?.action,
       .open(.issue(number: 7, existingWorktree: nil, existingBranch: false)))
     let pr = section(sections, "Pull requests")?.items.first
-    XCTAssertEqual(pr?.action, .pullRequest(number: 9, open: nil), "他人の fork の PR はブラウザで開く")
+    XCTAssertEqual(pr?.action, .pullRequest(number: 9, route: .browser), "他人の fork の PR はブラウザで開く")
     XCTAssertEqual(pr?.enterNote, .browser)
     XCTAssertEqual(pr?.footer, .browse(target: "#9"))
     XCTAssertEqual(pr?.reviewNote, .reviewRequired, "REVIEW_REQUIRED → reviewRequired")

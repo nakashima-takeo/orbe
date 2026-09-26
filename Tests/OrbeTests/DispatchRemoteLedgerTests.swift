@@ -2,30 +2,31 @@ import XCTest
 
 @testable import Orbe
 
-/// remote の台帳（`DispatchRemoteLedger`）。行が「GitHub のどのリポジトリのどのブランチか」を決める
-/// 唯一の置き場で、番号チップ・PR 行の行き先・clean の PR の突き合わせはすべてここを通る。
+/// remote の台帳（`DispatchRemoteLedger`）と、行の同一性を求める口（`DispatchRowIdentities`）。番号チップ・
+/// PR 行の行き先・clean の PR の突き合わせはすべてここを通る。
 ///
 /// 確定の判定が甘いと、正式名が分からないうちに行が「GitHub の行でない」と読まれ、チップが付かないまま
-/// PR 行がブラウザに倒れ、clean ではレビュー中の PR を持つ worktree が安全群に入りうる。ref の求め方が
-/// 狂うと、他人の fork の PR が自分の行に紐づくか、自分の PR が自分の行から外れる。
+/// PR 行がブラウザに倒れ、clean ではレビュー中の PR を持つ worktree が安全群に入りうる。確かめられない
+/// remote を「GitHub でない」と読むと、clean が PR の事実を「確かめて 0 件」と読む。同一性の求め方が狂うと、
+/// 他人の fork の PR が自分の行に紐づくか、自分の PR が自分の行から外れる。
 final class DispatchRemoteLedgerTests: OrbeTestCase {
 
   private let mine = GitHubRepoName(nameWithOwner: "me/r")
   private let base = GitHubRepoName(nameWithOwner: "base/r")
 
-  private func settled(_ repositories: [String: GitHubRepoName?]) -> DispatchRemoteLedger.Resolved {
+  private func settled(_ repositories: [String: DispatchRemoteRepository])
+    -> DispatchRemoteLedger.Resolved
+  {
     DispatchRemoteLedger.Resolved(repositories: repositories)
   }
 
-  private func upstream(_ remote: String, _ branch: String) -> GitUpstream {
-    GitUpstream(
-      short: "\(remote)/\(branch)", ref: "refs/remotes/\(remote)/\(branch)", remote: remote,
-      remoteRef: "refs/heads/\(branch)", track: nil)
+  private func branch(_ name: String, pushRemote: String?) -> GitBranch {
+    GitBranch(name: name, relativeDate: "", upstream: nil, pushRemote: pushRemote)
   }
 
   // MARK: - 確定
 
-  /// GitHub の remote すべてに答え（正式名・存在しない）が揃ったときだけ確定する。GitHub でない
+  /// GitHub の remote すべてに答え（正式名・確かめられない）が揃ったときだけ確定する。GitHub でない
   /// remote は問い合わせないので待たない。
   func testLedgerSettlesOnlyWhenEveryGitHubRemoteHasAnAnswer() {
     let remotes = [
@@ -33,92 +34,86 @@ final class DispatchRemoteLedgerTests: OrbeTestCase {
       "local": "/srv/mirror.git",
     ]
     XCTAssertEqual(
-      DispatchRemoteLedger(remotes: remotes, resolutions: [mine: .found(mine)], failed: []),
+      DispatchRemoteLedger(remotes: remotes, answers: [mine: .found(mine)]),
       .pending, "答えの無い GitHub の remote が残っている間は未確定")
 
     XCTAssertEqual(
-      DispatchRemoteLedger(
-        remotes: remotes, resolutions: [mine: .found(mine), base: .notFound], failed: []),
-      .settled(settled(["origin": mine, "upstream": nil, "local": nil])),
-      "存在しないリポジトリと GitHub でない remote は「GitHub の行でない」で確定する")
+      DispatchRemoteLedger(remotes: remotes, answers: [mine: .found(mine), base: .unverified]),
+      .settled(settled(["origin": .github(mine), "upstream": .unverified, "local": .notGitHub])),
+      "確かめられない remote は「GitHub でない」と分けて確定する")
   }
 
-  /// 問い合わせが失敗した remote があれば、確定ではなく失敗（確定した `nil` と取り違えない）。
-  func testFailedLookupLeavesTheLedgerFailedInsteadOfSettled() {
-    XCTAssertEqual(
-      DispatchRemoteLedger(
-        remotes: ["origin": "git@github.com:me/r.git", "upstream": "https://github.com/base/r"],
-        resolutions: [mine: .found(mine)], failed: [base]),
-      .failed)
-  }
-
-  /// GitHub の URL なのにリポジトリ名を読めない remote は、「GitHub の行でない」と確定させず失敗にする
-  /// （確定させると、clean がその remote を追跡する行の PR の事実を「確かめて 0 件」と読む）。
-  func testGitHubURLWithoutARepositoryNameLeavesTheLedgerFailed() {
+  /// GitHub の URL なのにリポジトリ名を読めない remote は、「GitHub でない」ではなく「確かめられない」。
+  func testGitHubURLWithoutARepositoryNameIsUnverified() {
     XCTAssertEqual(
       DispatchRemoteLedger(
         remotes: ["origin": "git@github.com:me/r.git", "odd": "https://github.com/"],
-        resolutions: [mine: .found(mine)], failed: []),
-      .failed)
+        answers: [mine: .found(mine)]),
+      .settled(settled(["origin": .github(mine), "odd": .unverified])))
   }
 
   /// URL が改名前の名前のままでも、GitHub が答えた正式名で行の ref が決まる（PR の head と等しくなる）。
   func testRenamedRemoteIsIdentifiedByItsCanonicalName() {
     let old = GitHubRepoName(nameWithOwner: "me/old-name")
     let ledger = DispatchRemoteLedger(
-      remotes: ["origin": "https://github.com/me/old-name.git"],
-      resolutions: [old: .found(mine)], failed: [])
+      remotes: ["origin": "https://github.com/me/old-name.git"], answers: [old: .found(mine)])
     guard case .settled(let resolved) = ledger else { return XCTFail("答えが揃えば確定する") }
-    XCTAssertEqual(
-      resolved.ref(forLocal: "feat", upstream: upstream("origin", "feat")),
-      GitHubBranchRef(repo: mine, branch: "feat"))
+    let identities = DispatchRowIdentities(
+      resolved: resolved, localBranches: [branch("feat", pushRemote: "origin")])
+    XCTAssertEqual(identities.local("feat"), .ref(GitHubBranchRef(repo: mine, branch: "feat")))
   }
 
-  // MARK: - ローカルブランチの ref
+  // MARK: - ローカルブランチの同一性
 
-  /// upstream があれば、その remote のリポジトリと remote 側のブランチ名（ローカル名とは限らない）。
-  func testLocalBranchWithUpstreamIsTheUpstreamRepositoryAndBranch() {
-    let ledger = settled(["origin": base, "mine": mine])
+  /// push 先の remote のリポジトリと、ローカル名。
+  func testLocalBranchIsItsPushRemoteRepositoryAndLocalName() {
+    let identities = DispatchRowIdentities(
+      resolved: settled(["origin": .github(base), "mine": .github(mine)]),
+      localBranches: [branch("feat", pushRemote: "mine"), branch("topic", pushRemote: "origin")])
     XCTAssertEqual(
-      ledger.ref(forLocal: "feat", upstream: upstream("mine", "feature-x")),
-      GitHubBranchRef(repo: mine, branch: "feature-x"), "fork の remote を追跡する行は fork のブランチ")
-    XCTAssertEqual(
-      ledger.ref(forLocal: "feat", upstream: upstream("origin", "feature-x")),
-      GitHubBranchRef(repo: base, branch: "feature-x"))
+      identities.local("feat"), .ref(GitHubBranchRef(repo: mine, branch: "feat")),
+      "fork へ push する行は fork のブランチ")
+    XCTAssertEqual(identities.local("topic"), .ref(GitHubBranchRef(repo: base, branch: "topic")))
   }
 
-  /// upstream が無い行と、台帳に無い remote（ローカルブランチを追跡する `.` 等）を追跡する行は、
-  /// origin の同名ブランチとみなす。
-  func testLocalBranchWithoutUsableUpstreamIsOriginsSameNamedBranch() {
-    let ledger = settled(["origin": mine, "upstream": base])
-    let expected = GitHubBranchRef(repo: mine, branch: "feat")
-    XCTAssertEqual(ledger.ref(forLocal: "feat", upstream: nil), expected, "upstream が無い")
+  /// push 先が無い行と、ローカルブランチを追跡する（`.`）行は、origin の同名ブランチとみなす。
+  func testLocalBranchWithoutAPushRemoteIsOriginsSameNamedBranch() {
+    let identities = DispatchRowIdentities(
+      resolved: settled(["origin": .github(mine), "upstream": .github(base)]),
+      localBranches: [branch("feat", pushRemote: nil), branch("stacked", pushRemote: ".")])
+    XCTAssertEqual(identities.local("feat"), .ref(GitHubBranchRef(repo: mine, branch: "feat")))
     XCTAssertEqual(
-      ledger.ref(forLocal: "feat", upstream: upstream(".", "main")), expected, "ローカルブランチを追跡")
+      identities.local("stacked"), .ref(GitHubBranchRef(repo: mine, branch: "stacked")))
   }
 
-  /// 追跡先・既定の remote が GitHub でない（存在しない）行は、どの PR とも等しくならない。
-  func testBranchOnNonGitHubRemoteHasNoRef() {
-    let ledger = settled(["origin": nil, "upstream": base])
-    XCTAssertNil(ledger.ref(forLocal: "feat", upstream: nil), "origin が GitHub でない")
-    XCTAssertNil(
-      settled(["origin": mine, "mirror": nil]).ref(
-        forLocal: "feat", upstream: upstream("mirror", "feat")),
-      "追跡先の remote が GitHub でない行を origin の行と読み替えない")
+  /// push 先の remote が GitHub でない行は `notGitHub`、確かめられない行は `unverified`——origin の
+  /// 同名ブランチと読み替えない。
+  func testLocalBranchOnAnUnusablePushRemoteIsNotReadAsOrigin() {
+    let identities = DispatchRowIdentities(
+      resolved: settled([
+        "origin": .github(mine), "mirror": .notGitHub, "gone": .unverified,
+      ]),
+      localBranches: [branch("a", pushRemote: "mirror"), branch("b", pushRemote: "gone")])
+    XCTAssertEqual(identities.local("a"), .notGitHub)
+    XCTAssertEqual(identities.local("b"), .unverified)
   }
 
-  // MARK: - remote 追跡ブランチの ref
+  // MARK: - remote 追跡ブランチの同一性
 
   /// `<remote>/<branch>` を台帳の remote 名で切り分ける。`/` を含む remote 名は最も長く一致するものを採る。
   func testRemoteBranchIsSplitByTheLongestKnownRemoteName() {
     let team = GitHubRepoName(nameWithOwner: "team/r")
-    let ledger = settled(["origin": base, "team": team, "team/me": mine])
+    let ledger = settled([
+      "origin": .github(base), "team": .github(team), "team/me": .github(mine),
+      "gone": .unverified,
+    ])
     XCTAssertEqual(
-      ledger.ref(forRemoteBranch: "origin/feat/x"), GitHubBranchRef(repo: base, branch: "feat/x"))
+      ledger.remoteBranch("origin/feat/x"), .ref(GitHubBranchRef(repo: base, branch: "feat/x")))
     XCTAssertEqual(
-      ledger.ref(forRemoteBranch: "team/me/feat"), GitHubBranchRef(repo: mine, branch: "feat"))
+      ledger.remoteBranch("team/me/feat"), .ref(GitHubBranchRef(repo: mine, branch: "feat")))
     XCTAssertEqual(
-      ledger.ref(forRemoteBranch: "team/feat"), GitHubBranchRef(repo: team, branch: "feat"))
-    XCTAssertNil(ledger.ref(forRemoteBranch: "unknown/feat"), "台帳に無い remote は同一性を持たない")
+      ledger.remoteBranch("team/feat"), .ref(GitHubBranchRef(repo: team, branch: "feat")))
+    XCTAssertEqual(ledger.remoteBranch("gone/feat"), .unverified)
+    XCTAssertEqual(ledger.remoteBranch("unknown/feat"), .notGitHub, "台帳に無い remote")
   }
 }
