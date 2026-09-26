@@ -9,15 +9,15 @@ extension TreeSummary {
 }
 
 /// 木に載せる要素。要素ごとに要約を持つ。
-public protocol TreeElement: Sendable {
+public protocol TreeElement {
   associatedtype Summary: TreeSummary
   var summary: Summary { get }
 }
 
 /// 要約付きの B 木。葉は要素の列、節は子の列と要約の和を持つ。値として写すのは O(1) で、変更は根から葉までの経路だけを
-/// 写す——写しは変わらないので、別のスレッドへ渡してロックなしで読める。すべての葉は同じ深さにあり、根を除く節の子（葉の
-/// 要素）の数は `minimumFanout...maximumFanout`。
-public struct SummaryTree<Element: TreeElement>: Sendable {
+/// 写す——写しは変わらないので、要素が Sendable なら別のスレッドへ渡してロックなしで読める。すべての葉は同じ深さにあり、
+/// 根を除く節の子（葉の要素）の数は `minimumFanout...maximumFanout`。
+public struct SummaryTree<Element: TreeElement> {
   public typealias Summary = Element.Summary
 
   static var maximumFanout: Int { 16 }
@@ -355,3 +355,41 @@ public struct SummaryTree<Element: TreeElement>: Sendable {
     }
   }
 }
+
+extension SummaryTree {
+  /// 要約で枝を刈りながら、要素を前から訪れる。`enter(before, summary)` が false の部分木（と要素）は読まない——`before`
+  /// はその部分木より前の要素の要約の和。`visit(index, before, element)` が false を返したら止める。
+  public func visit(
+    entering enter: (Summary, Summary) -> Bool, _ visit: (Int, Summary, Element) -> Bool
+  ) {
+    var index = 0
+    var before = Summary.zero
+    _ = Self.visit(root, &index, &before, enter, visit)
+  }
+
+  /// 続けるなら true。
+  private static func visit(
+    _ node: Node, _ index: inout Int, _ before: inout Summary,
+    _ enter: (Summary, Summary) -> Bool, _ visit: (Int, Summary, Element) -> Bool
+  ) -> Bool {
+    if node.height == 0 {
+      for element in node.elements {
+        if enter(before, element.summary), !visit(index, before, element) { return false }
+        before += element.summary
+        index += 1
+      }
+      return true
+    }
+    for child in node.children {
+      if enter(before, child.summary) {
+        if !Self.visit(child, &index, &before, enter, visit) { return false }
+      } else {
+        before += child.summary
+        index += child.count
+      }
+    }
+    return true
+  }
+}
+
+extension SummaryTree: Sendable where Element: Sendable {}
