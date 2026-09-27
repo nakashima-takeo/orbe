@@ -26,10 +26,41 @@ final class LineShaperTests: XCTestCase {
       Array(LineShaper.display(source("a\rb")).units), [0x61, 0x240D, 0x62], "途中の CR は ␍")
   }
 
-  /// C0 の制御文字は U+2400 台、DEL は U+2421、U+2028・U+2029・U+0085 は U+FFFD。タブはそのまま（空ける）。
+  /// C0 の制御文字は U+2400 台、DEL は U+2421、U+2028・U+2029・U+0085・U+FEFF は U+FFFD。タブはそのまま（空ける）。
   func testControlCharactersAreShownAsSymbols() {
-    let units = LineShaper.display(source("\u{0}\u{1b}\t\u{7f}\u{2028}\u{2029}\u{85}")).units
-    XCTAssertEqual(Array(units), [0x2400, 0x241B, 0x09, 0x2421, 0xFFFD, 0xFFFD, 0xFFFD])
+    let line = source("\u{0}\u{1b}\t\u{7f}\u{2028}\u{2029}\u{85}a\u{feff}")
+    let units = LineShaper.display(line).units
+    XCTAssertEqual(
+      Array(units), [0x2400, 0x241B, 0x09, 0x2421, 0xFFFD, 0xFFFD, 0xFFFD, 0x61, 0xFFFD])
+  }
+
+  /// 方向を変える書式文字は `[U+202E]` の箱で見せ、字の並びを変えない（Trojan Source で見た目と実際の順が食い違わない）。
+  /// 箱は 1 単位のまま中身の幅を持ち、中身の字は元の位置を持つ。
+  func testDirectionalFormattingCharactersAreShownAsBoxes() {
+    let formats: [UInt16] = [
+      0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069, 0x200E, 0x200F,
+      0x061C,
+    ]
+    XCTAssertTrue(formats.allSatisfy(LineShaper.isDirectionalFormat))
+    let line = source("ab\u{202E}cd")
+    let shaped = LineShaper.shape(line, font: font, tabWidth: 0)
+    let offsets = shaped.runs.flatMap(\.offsets)
+    XCTAssertEqual(offsets, [0, 1] + Array(repeating: 2, count: 8) + [3, 4], "箱の中身は 8 字")
+    let xs = shaped.runs.flatMap(\.xs)
+    XCTAssertEqual(xs, xs.sorted(), "箱の後ろの字も左から右の順のまま")
+    XCTAssertEqual(shaped.width, cell * 12, accuracy: 0.01)
+    let measured = LineShaper.measure(line, font: font, tabWidth: 0)
+    XCTAssertEqual(measured.x(ofOffset: 3), cell * 10, accuracy: 0.01, "箱は 1 単位で 8 桁")
+  }
+
+  /// 行は常に左から右の段落——右から左の字で始まる行でも、行頭の字が左端に来る（VS Code と同じ）。
+  func testLinesAreLeftToRightParagraphs() {
+    let shaped = LineShaper.shape(source("// שלום x"), font: font, tabWidth: 0)
+    let pairs = shaped.runs.flatMap { zip($0.offsets, $0.xs) }
+    let first = try? XCTUnwrap(pairs.first { $0.0 == 0 })
+    XCTAssertEqual(first?.1 ?? -1, 0, accuracy: 0.01, "行頭の / が左端")
+    let last = pairs.max { $0.1 < $1.1 }
+    XCTAssertEqual(last?.0, 8, "行末の x が右端")
   }
 
   /// タブはインデント単位の桁まで空ける（次のタブ位置へ）。
@@ -46,7 +77,8 @@ final class LineShaperTests: XCTestCase {
     let long = String(repeating: "a", count: 9_999) + "👍🏽" + String(repeating: "b", count: 500_000)
     let line = LineShaper.source(row: 0, in: TextRope(long)).source
     XCTAssertLessThan(line.head.count, 10_100, "先頭しか読まない")
-    let (units, omitted) = LineShaper.display(line)
+    let units = LineShaper.display(line).units
+    let omitted = LineShaper.display(line).omitted
     XCTAssertEqual(units.count, 9_999, "絵文字の書記素を割らずに手前で切る")
     XCTAssertEqual(omitted, long.utf16.count - 9_999)
     let shaped = LineShaper.shape(line, font: font, tabWidth: cell * 4)
