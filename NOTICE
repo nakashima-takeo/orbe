@@ -171,8 +171,10 @@ Code editor (Contents/MacOS/Orbe, Contents/Resources/TreeSitter*.bundle)
   Rules of VS Code's editor are ported into Orbe's Swift code and compiled into
   Contents/MacOS/Orbe: the editing rules of the editor's text surface (word
   classes, word movement and deletion, cursor movement and selection, Tab and
-  indentation columns, undo grouping, letter transposition), the full-width
-  and emoji character tables, the default word separators and word pattern,
+  indentation columns, undo grouping, letter transposition, whole-line copy,
+  cut and paste with an empty selection, the syntax-highlighted HTML copy,
+  drag-and-drop move and copy with the drop indicator), the full-width and
+  emoji character tables, the default word separators and word pattern,
   indentation detection, the drag auto-scroll speed, the minimap (layout, line
   rendering, glyph downsampling), the overview ruler, the scrollbar thumb
   geometry, find (match limits and next/previous positions) and occurrence
