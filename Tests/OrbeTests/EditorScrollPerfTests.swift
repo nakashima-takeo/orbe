@@ -46,12 +46,13 @@ final class EditorScrollPerfTests: OrbeTestCase {
   /// 俯瞰への知らせ）が戻るまでの main のスレッドの CPU 時間。p99 1ms 以下（200KB・1MB、git 管理下、1 万字近い長い行の
   /// 行末）。ライブ変換の IME の呼び出し 1 回も同じ範囲で p99 1ms 以下。壁時計の時間は機械の混み具合で膨らむので参考に
   /// 出すだけにする（利用者が感じる遅れは打鍵→present の関門が見る）。描くのは描画スレッド。プロセスで最初の 1 打鍵
-  /// （入力の仕組みの初期化を含む）だけは数えないので、測る文書を開く前に別の文書で 1 回打つ。
+  /// と最初の変換（入力の仕組みの初期化を含む）は数えないので、測る文書を開く前に別の文書で打つ。
   func testMetalTypingMainTime() throws {
     let metal = EditorEngineChoice(
       metal: true, elasticScroll: true, fontSmoothing: true, language: .ja)
     let warm = try openEditor("warm\n", engine: metal)
     warm.document.surface.responder.keyDown(with: .key("/", []))
+    _ = try compose(into: warm, count: 20)
     warm.window.orderOut(nil)
     let long = String(repeating: "x", count: 9_990) + "\n" + Self.swiftSource(bytes: 20_000)
     for (label, text) in [
@@ -93,13 +94,15 @@ final class EditorScrollPerfTests: OrbeTestCase {
   }
 
   /// ライブ変換を再生し、IME の呼び出し 1 回ごとの main の仕事（ms。main のスレッドの CPU 時間と壁時計の時間）を返す——
-  /// 未確定が 1 打鍵ごとに 1 字伸びて全体が置き換わり、20 字目で確定する、を 3 回。
-  private func compose(into opened: OpenedEditor) throws -> (cpu: [Double], wall: [Double]) {
+  /// 未確定が 1 打鍵ごとに 1 字伸びて全体が置き換わり、20 字目で確定する、を `count` 打鍵ぶん。
+  private func compose(into opened: OpenedEditor, count: Int = 60) throws -> (
+    cpu: [Double], wall: [Double]
+  ) {
     let client = try XCTUnwrap(opened.document.surface.responder as? NSTextInputClient)
     let whole = NSRange(location: NSNotFound, length: 0)
     var cpu: [Double] = []
     var wall: [Double] = []
-    for k in 0..<60 {
+    for k in 0..<count {
       let length = k % 20 + 1
       let reading = String(repeating: "か", count: length)
       let began = (clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID), CACurrentMediaTime())
