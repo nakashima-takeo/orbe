@@ -6,9 +6,10 @@ import os
 /// 組み立て・行の中の一致・順序・上限）は Core、1 回の検索の裏の仕事は `ProjectSearchRun`。SwiftUI（検索パネル）はこれを
 /// 読み、操作は閉包で pane へ戻る（開く・焦点）。
 ///
-/// 打鍵は 300ms 後に検索し、Enter・切替・更新は即時。打鍵の検索では前の結果を消さず、新しい結果が最初に届いたとき（または
-/// 終わったとき）に差し替える。検索を始め直すたびに世代を進め、古い世代の結果は捨てる。開いている文書は保存前の中身を
-/// 探し、結果の鮮度を文書の版で持つ（→ `ProjectSearch+Documents`）。
+/// 打鍵は 300ms 後に検索し、Enter・切替・更新は即時。どの検索でも前の結果は消さず、新しい結果が最初に届いたとき（または
+/// 検索が終わった・止めたとき）に差し替える（VS Code と同じ。切り替えるたびに列がちらつかない）。検索を始め直すたびに
+/// 世代を進め、古い世代の結果は捨てる。開いている文書は保存前の中身を探し、結果の鮮度を文書の版で持つ
+/// （→ `ProjectSearch+Documents`）。
 @MainActor @Observable
 final class ProjectSearch {
   static let typingDelay: TimeInterval = 0.3
@@ -46,7 +47,10 @@ final class ProjectSearch {
   var results = ProjectSearchResults()
   /// 折りたたみを映した平らな行（結果か折りたたみが変わるたびに作り直す）。
   var rows: [Row] = []
-  var selection: RowID?
+  /// 見せる選択（位置で持つ `anchor` から導く。選ぶのは `select`）。変われば地を押し直させる。
+  var selection: RowID? {
+    didSet { if selection != oldValue { onGroundChange() } }
+  }
   var collapsed: Set<String> = []
   /// パネルの中の焦点（SwiftUI が書く）。
   var focusedArea: Area?
@@ -74,11 +78,13 @@ final class ProjectSearch {
   @ObservationIgnored let typingDelay = EditorDelay()
   @ObservationIgnored let progressDelay = EditorDelay()
   @ObservationIgnored let slowDelay = EditorDelay()
-  @ObservationIgnored var run: ProjectSearchRun?
+  @ObservationIgnored private var run: ProjectSearchRun?
   @ObservationIgnored private(set) var compiled: CompiledSearchQuery?
-  @ObservationIgnored var generation = 0
-  /// 打鍵の検索で、次に届いた結果が前の結果を差し替える。
+  @ObservationIgnored private(set) var generation = 0
+  /// 次に届いた結果（か検索の終わり）が前の結果を差し替える。
   @ObservationIgnored private var replacesOnArrival = false
+  /// 選択の実体（→ `ProjectSearch+Rows`）。
+  @ObservationIgnored var anchor: Anchor?
   /// 開いている文書ごとに、結果が映している版（頼んでまだ届いていない版も含む）。
   @ObservationIgnored var searchedVersions: [String: Int] = [:]
   /// 開いている文書ごとの取り直しの予約と、走っている取り直しの取り消しの印。
@@ -97,6 +103,11 @@ final class ProjectSearch {
   init(root: String, runner: GitRunner = .shared) {
     self.root = root
     self.runner = runner
+  }
+
+  /// タブを閉じたら走っている git も止める（裏の仕事はこの型を弱く持つので、止めなければ閉じた後も走り続ける）。
+  deinit {
+    run?.cancel()
   }
 
   var isSearching: Bool { phase == .searching || phase == .slow }
@@ -147,8 +158,7 @@ final class ProjectSearch {
 
   // MARK: - 検索の実行
 
-  /// 今の問いで検索し直す（Enter・切替・更新・根の変化）。`typed` は打鍵の検索（前の結果を届くまで残し、進捗の線を
-  /// 遅らせる）。
+  /// 今の問いで検索し直す（Enter・切替・更新・根の変化）。`typed` は打鍵の検索（進捗の線を遅らせる）。
   func search(typed: Bool = false) {
     typingDelay.cancel()
     stopRun()
@@ -168,8 +178,7 @@ final class ProjectSearch {
       return
     }
     self.compiled = compiled
-    replacesOnArrival = typed
-    if !typed { replaceResults() }
+    replacesOnArrival = true
     phase = .searching
     showsProgress = !typed
     if typed {
@@ -193,11 +202,11 @@ final class ProjectSearch {
     run.start()
   }
 
-  /// 検索を止める（停止・Esc）。届いた結果は残る。
+  /// 検索を止める（停止・Esc）。この検索で届いた結果は残る（まだ 1 つも届いていなければ前の問いの結果を消す）。
   func stop() {
     guard isSearching else { return }
     stopRun()
-    finishPhase()
+    settle(.done)
   }
 
   /// ヘッダーのクリア。検索語と結果を消す。
@@ -228,7 +237,7 @@ final class ProjectSearch {
     if batch.finished {
       run = nil
       error = batch.error.map(Failure.disk)
-      finishPhase()
+      settle(.done)
     }
     resultsDidChange()
   }
@@ -238,8 +247,14 @@ final class ProjectSearch {
     run = nil
   }
 
-  private func finishPhase() {
-    phase = .done
+  /// 検索の進みを終える（終わった・止めた・消した）。差し替えを待っていた前の問いの結果はここで捨てる——残すと前の問いの
+  /// 結果が今の問いの結果として見える。
+  private func settle(_ phase: Phase) {
+    if replacesOnArrival {
+      replacesOnArrival = false
+      replaceResults()
+    }
+    self.phase = phase
     showsProgress = false
     progressDelay.cancel()
     slowDelay.cancel()
@@ -249,7 +264,7 @@ final class ProjectSearch {
   private func replaceResults() {
     results = ProjectSearchResults()
     collapsed = []
-    selection = nil
+    select(nil)
     resultsDidChange()
   }
 
@@ -258,13 +273,11 @@ final class ProjectSearch {
     generation += 1
     compiled = nil
     error = nil
-    phase = .idle
-    showsProgress = false
-    progressDelay.cancel()
-    slowDelay.cancel()
     cancelRefreshes()
     searchedVersions = [:]
+    replacesOnArrival = false
     replaceResults()
+    settle(.idle)
   }
 
   /// 結果が変わった。平らな行を作り直し、地を押し直させる。

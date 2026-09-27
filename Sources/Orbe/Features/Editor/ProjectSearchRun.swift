@@ -94,6 +94,7 @@ final class ProjectSearchRun: @unchecked Sendable {
         SearchFileMatches(
           path: document.path, matches: found.matches,
           document: .init(ranges: found.ranges, version: document.version)))
+      state.withLock { $0.total += found.matches.count }
     }
   }
 
@@ -134,16 +135,17 @@ final class ProjectSearchRun: @unchecked Sendable {
     if let current { deposit(SearchFileMatches(path: current.path, matches: current.matches)) }
   }
 
-  /// まとまりを溜め、80ms 後に main へ渡す予約を 1 つだけ置く。
+  /// まとまりを溜め、80ms 後に main へ渡す予約を 1 つだけ置く。一致 0 のまとまり（一致の無い開いている文書）は予約せず、
+  /// 次か終わりの届けに乗せる——それだけの届けで前の結果を差し替えると、打つたびに列が空になる。
   private func deposit(_ file: SearchFileMatches) {
     let schedule = state.withLock { state -> Bool in
       guard !state.cancelled else { return false }
-      if file.document != nil { state.total += file.count }
       let index = ProjectSearchResults.position(
         of: file.pathKey, in: state.pending.files, from: 0)
       state.pending.files.insert(file, at: index)
-      defer { state.flushScheduled = true }
-      return !state.flushScheduled
+      guard file.count > 0, !state.flushScheduled else { return false }
+      state.flushScheduled = true
+      return true
     }
     guard schedule else { return }
     DispatchQueue.main.asyncAfter(deadline: .now() + Self.batchInterval) { [self] in

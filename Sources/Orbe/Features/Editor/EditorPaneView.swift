@@ -272,15 +272,15 @@ final class EditorPaneView: NSView {
     if changed, let url = active?.url { tree.reveal(url) }
   }
 
-  /// 根が変わった（cd）。ツリーを作り直し、握っていたなら握り直す。プロジェクト検索は結果を捨て、検索パネルが
-  /// 見えていれば今の問いで検索し直す。
+  /// 根が変わった（cd）。ツリーを作り直し、握っていたなら握り直す。プロジェクト検索は結果を捨て、この面の検索パネルが
+  /// 画面に見えていれば今の問いで検索し直す（裏のタブの cd で見えない根を探さない）。
   func setRoot(_ root: String) {
     guard root != tree.root else { return }
     tree.cancelNew()
     tree.isLive = false
     tree = FileTree(root: root)
     wireTree()
-    projectSearch.setRoot(root, searchNow: showsSearchPanel)
+    projectSearch.setRoot(root, searchNow: showsSearchPanel && projectSearch.isLive)
     updateLiveness()
     installRoots()
     if let tab {

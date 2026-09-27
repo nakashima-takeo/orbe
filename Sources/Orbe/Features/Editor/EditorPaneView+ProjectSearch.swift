@@ -79,7 +79,8 @@ extension EditorPaneView {
     }
     tree.reveal(document.url)
     layoutSubtreeIfNeeded()
-    if let range = projectSearch.range(of: id, in: document) {
+    projectSearch.documentDidShow(document)
+    if let range = projectSearch.ground(for: document).current {
       document.surface.selectedRange = range
       document.surface.scrollToCenter(range.location)
       document.surface.scrollToVisible(range)

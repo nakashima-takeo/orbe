@@ -33,29 +33,41 @@ extension ProjectSearch: RootFilesObserver {
   }
 
   /// 届いたまとまりの列（パスの順）を置く。開いている文書のまとまりは、届いた版が今の文書の版と同じときだけ置き、古ければ
-  /// 頼み直す。
+  /// 頼み直す。同じパスは開いている文書が勝つ——ディスクのまとまりのパスを開いていれば置かず、検索の途中で開いた文書なら
+  /// その場で文書から探し直す。
   func accept(_ files: [SearchFileMatches]) {
+    let open = openDocuments()
     var kept: [SearchFileMatches] = []
     kept.reserveCapacity(files.count)
     for file in files {
-      guard let span = file.document, let document = document(at: file.path) else {
+      guard let document = open[file.path] else {
         kept.append(file)
         continue
       }
-      guard span.version == document.version else {
+      if let span = file.document, span.version == document.version {
+        searchedVersions[file.path] = span.version
+        kept.append(file)
+      } else if file.document != nil || searchedVersions[file.path] == nil {
         refresh(file.path)
-        continue
       }
-      searchedVersions[file.path] = span.version
-      kept.append(file)
     }
     results.set(sorted: kept)
+  }
+
+  /// 範囲に入る開いている文書（根からの相対パスごと）。
+  private func openDocuments() -> [String: EditorDocument] {
+    var open: [String: EditorDocument] = [:]
+    for document in documents() {
+      if let path = relativePath(of: document) { open[path] = document }
+    }
+    return open
   }
 
   /// 焦点の文書の本文が変わった。まとまりの区間をずらし、結果に出ていれば 250ms 後に取り直す。行は一致が落ちたとき
   /// だけ作り直す（行が見せるプレビューは取り直すまで変わらない——打鍵のたびに全部の行を作り直さない）。
   func documentDidEdit(_ document: EditorDocument, _ edit: TextEdit) {
     guard let path = relativePath(of: document), let before = results[path]?.count else { return }
+    trackAnchor(path, edit)
     results.track(path, edit, version: document.version)
     if results[path]?.count == before { onGroundChange() } else { resultsDidChange() }
     scheduleRefresh(path)
@@ -74,17 +86,8 @@ extension ProjectSearch: RootFilesObserver {
     }
   }
 
-  /// 一致の文書の区間（ディスクのまとまりなら開いた写しの区間に直してから）。
-  func range(of id: RowID, in document: EditorDocument) -> NSRange? {
-    guard let match = id.match else { return nil }
-    documentDidShow(document)
-    guard let span = results[id.path]?.document, span.version == document.version,
-      match < span.ranges.count
-    else { return nil }
-    return span.ranges[match]
-  }
-
-  /// 焦点の文書に敷く一致の地——そのまとまりの区間と、選んだ一致。区間が今の本文のものでなければ出さない。
+  /// 焦点の文書に敷く一致の地——そのまとまりの区間と、選んだ一致（開いた一致を置く区間でもある）。区間が今の本文の
+  /// ものでなければ出さない。
   func ground(for document: EditorDocument) -> (ranges: [NSRange], current: NSRange?) {
     guard let path = relativePath(of: document), let span = results[path]?.document,
       span.version == document.version
