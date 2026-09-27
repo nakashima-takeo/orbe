@@ -31,6 +31,15 @@ struct TextLine {
       case .chrome(let emoji):
         TitleGlyphs.nsAttributed(text, base: font, emoji: emoji, attributes: Self.drawing)
       }
+    self.init(attributed: attributed, font: font, truncating: truncation)
+  }
+
+  /// 組んだ属性つきの文字列から（字の一部だけ字体や色を変える行）。`font` は省略記号の字体。色の属性を持たない字は、描く
+  /// ときに文脈の塗りから当てる（`contextColor` を付けておく）。
+  init(
+    attributed: NSAttributedString, font: NSFont,
+    truncating truncation: CTLineTruncationType = .end
+  ) {
     line = CTLineCreateWithAttributedString(attributed)
     self.font = font
     self.truncation = truncation
@@ -44,9 +53,11 @@ struct TextLine {
     height = self.ascent + descent.rounded(.up) + leading
   }
 
-  private static let drawing: [NSAttributedString.Key: Any] = [
-    NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true
-  ]
+  /// 色を描くときの文脈の塗りから当てる属性。
+  static let contextColor = NSAttributedString.Key(
+    kCTForegroundColorFromContextAttributeName as String)
+
+  private static let drawing: [NSAttributedString.Key: Any] = [contextColor: true]
 
   /// 字体ごとの省略記号の行（初めて省くときに作る）。
   @MainActor private static var ellipses: [NSFont: CTLine] = [:]

@@ -64,6 +64,25 @@
       /// 検索が終わった（エラーで始まらなかったときも）。
       var isSearchDone: Bool { !pane.projectSearch.isSearching }
 
+      /// アウトラインを開き、焦点の文書（FileTree.swift）のキャレットを `needle` の頭に置く。結果とカーソル追従が揃うのは
+      /// `isOutlineReady` で待つ。
+      func showOutline(caretAt needle: String) {
+        pane.sidebar.show(.files)
+        if !pane.sidebar.isOutlineOpen { pane.sidebar.toggleOutline() }
+        guard let document = pane.document else { return }
+        let location =
+          (document.text.substring(NSRange(location: 0, length: document.text.length))
+          as NSString).range(of: needle).location
+        document.surface.selectedRange = NSRange(location: location, length: 0)
+        document.surface.scrollToCenter(location)
+      }
+
+      /// アウトラインの結果が今の版に揃い、キャレットのシンボルが選ばれた。
+      var isOutlineReady: Bool {
+        guard let document = pane.document, document.wantsOutline else { return false }
+        return document.waitUntilCaughtUp(timeout: 0) && pane.outline.selectedRow != nil
+      }
+
       /// 撮る view（pane をそのまま載せる）。
       var view: some View { ShellPane(pane: pane) }
     }

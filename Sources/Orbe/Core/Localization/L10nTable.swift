@@ -147,6 +147,21 @@ enum L10n {
     .editorNewFile: ("新規ファイル", "New File"),
     .editorNewFolder: ("新規フォルダ", "New Folder"),
     .editorCollapseAll: ("すべて折りたたむ", "Collapse All"),
+    .editorExpandAll: ("すべて展開", "Expand All"),
+
+    // MARK: Editor 面（アウトライン）。文言は VS Code の outlinePane の原文と訳。%@ は文書の名前。
+    .editorOutlineTitle: ("アウトライン", "Outline"),
+    .editorOutlineUnavailable: (
+      "このエディターではアウトラインを表示できません",
+      "The active editor cannot provide outline information."
+    ),
+    .editorOutlineLoading: (
+      "ドキュメント '%@' のシンボルを読み込んでいます…", "Loading document symbols for '%@'..."
+    ),
+    .editorOutlineEmpty: (
+      "ドキュメント '%@' にシンボルが見つかりません", "No symbols found in document '%@'"
+    ),
+    .editorOutlineFilterPlaceholder: ("入力して絞り込み", "Type to filter"),
 
     // MARK: Editor 面（プロジェクト検索）
     .editorRailSearch: ("検索 (⌘⇧F)", "Search (⌘⇧F)"),
@@ -158,7 +173,6 @@ enum L10n {
     .editorSearchRefresh: ("更新", "Refresh"),
     .editorSearchStop: ("停止", "Stop"),
     .editorSearchClear: ("クリア", "Clear"),
-    .editorSearchExpandAll: ("すべて展開", "Expand All"),
     // 件数の文: %1$@ はファイル数の句、%2$@ は結果数の句（日英で語順が違う）。
     .editorSearchSummary: ("%1$@内に %2$@", "%2$@ in %1$@"),
     .editorSearchFilesOne: ("%lld ファイル", "%lld file"),

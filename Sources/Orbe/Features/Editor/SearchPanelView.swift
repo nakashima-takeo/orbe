@@ -74,7 +74,7 @@ private struct SearchPanelHeader: View {
           action: search.toggleCollapseAll)
       } else {
         EditorIconButton(
-          glyph: EditorGlyphs.expandAll, help: l10n.string(.editorSearchExpandAll),
+          glyph: EditorGlyphs.expandAll, help: l10n.string(.editorExpandAll),
           action: search.toggleCollapseAll)
       }
     }

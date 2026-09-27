@@ -136,6 +136,11 @@ extension Theme.Typography {
   static let editorSearchMatch = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
   /// 件数・打ち切り・0 件・エラーの文（sans 11）。
   static let editorSearchNote = NSFont.systemFont(ofSize: 11, weight: .regular)
+  /// サイドバーの区画の見出し（アウトライン。sans 11 bold）。
+  static let editorSectionTitle = NSFont.systemFont(ofSize: 11, weight: .bold)
+  /// アウトラインの行の名前（sans 12.5）と、絞り込みで一致した字（同じ大きさの太字）。
+  static let editorOutlineName = NSFont.systemFont(ofSize: 12.5, weight: .regular)
+  static let editorOutlineMatch = NSFont.systemFont(ofSize: 12.5, weight: .bold)
   /// パネルヘッダーの題の字間。
   static let trackingPanelTitle: CGFloat = 0.5
   /// ルート行の字間。
@@ -185,6 +190,14 @@ extension Theme.Layout {
   static let editorSearchChevron: CGFloat = 10
   /// 検索中の進捗の細い線。
   static let editorSearchProgress: CGFloat = 2
+  /// サイドバーの区画の見出し（アウトライン。見本 SectionHead の 22）。
+  static let editorSectionHeader: CGFloat = 22
+  /// アウトラインの行の左の余白（見出しと同じ）と、深さ 1 段の字下げ（見本の行の左 20 / 36 の差）。行の高さは
+  /// `editorRow`、シェブロンは `editorChevron`、チップは `editorChip`。
+  static let editorOutlineInset: CGFloat = 4
+  static let editorOutlineIndent: CGFloat = 16
+  /// エクスプローラーを 2 段に分けたとき、ツリーとアウトラインの区画がそれぞれ見出しの下に残す最小の高さ（行 3 本）。
+  static let editorSectionMinBody: CGFloat = 60
 }
 
 extension Theme.Opacity {
