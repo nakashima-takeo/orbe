@@ -84,7 +84,8 @@ final class ProjectSearchTests: OrbeTestCase {
     let f = try fixture()
     try f.repo.write("a.txt", "needle on disk\n")
     let document = try f.session.open(f.repo.url("a.txt"))
-    replace(document, NSRange(location: 0, length: document.text.length), with: "x\nneedle unsaved\n")
+    replace(
+      document, NSRange(location: 0, length: document.text.length), with: "x\nneedle unsaved\n")
 
     search(f.search, "needle")
 
@@ -92,7 +93,8 @@ final class ProjectSearchTests: OrbeTestCase {
     XCTAssertEqual(paths(f.search), ["a.txt"], "同じファイルは 1 つ")
     XCTAssertEqual(file.matches.map(\.line), [1])
     XCTAssertEqual(file.matches.first?.preview.after, " unsaved")
-    XCTAssertEqual(file.document, .init(ranges: [NSRange(location: 2, length: 6)], version: document.version))
+    XCTAssertEqual(
+      file.document, .init(ranges: [NSRange(location: 2, length: 6)], version: document.version))
   }
 
   /// ディスクは git（PCRE2）と ICU の両方が一致とする行だけを拾う。両方が同じと見る大小無視（`ärger` と `ÄRGER`）は
@@ -336,5 +338,24 @@ final class ProjectSearchTests: OrbeTestCase {
     XCTAssertEqual(
       f.search.results["open.txt"]?.document?.ranges,
       [NSRange(location: 0, length: 6), NSRange(location: 7, length: 6)])
+  }
+
+  /// 検索の途中で開いた文書は、ディスクの結果が届いた時点で文書から探し直す（同じファイルは開いている文書が勝つ）。
+  func testADocumentOpenedDuringTheSearchIsSearchedFromItsText() throws {
+    let f = try fixture()
+    try f.repo.write("b.txt", "needle\n")
+    let gate = try gate(f)
+
+    f.search.setPattern("needle")
+    f.search.search()
+    pumpMain(until: { GrepGate.isGrepRunning }, "git が走る")
+    let document = try f.session.open(f.repo.url("b.txt"))
+    replace(document, NSRange(location: 0, length: 0), with: "needle ")
+    gate.open()
+
+    pumpMain(until: {
+      f.search.phase == .done && f.search.results["b.txt"]?.document?.version == document.version
+    })
+    XCTAssertEqual(f.search.results["b.txt"]?.count, 2, "保存前の中身で探し直す")
   }
 }
