@@ -37,6 +37,8 @@ struct Box<Element> {
   subscript(index: Int) -> Element { element }
 }
 
+// MARK: - Channel
+
 final class Channel: Emitter {
   typealias Output = Signal
 
@@ -55,6 +57,9 @@ final class Channel: Emitter {
     buffer.removeAll()
   }
 
+  // MARK: Emitting
+  // Not a mark: only MARK comments are symbols.
+
   func emit(_ value: Signal, coalesce: Bool) {
     let last = buffer.last
     func append(_ signal: Signal) {
@@ -68,6 +73,7 @@ final class Channel: Emitter {
     values.forEach { emit($0, coalesce: false) }
   }
 
+  /* MARK: Equality */
   static func == (lhs: Channel, rhs: Channel) -> Bool { lhs === rhs }
 
   class Subscription {

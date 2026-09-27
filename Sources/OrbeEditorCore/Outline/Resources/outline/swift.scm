@@ -1,9 +1,9 @@
 ; 出どころ: tree-sitter-swift（https://github.com/alex-pinkus/tree-sitter-swift）queries/outline.scm
 ;   commit 31d17fe7e818a2048c808b5c6fdc2dc792f4f5b5（tag 0.7.3-with-generated-files）
 ; ライセンス: MIT（Copyright (c) 2021 alex-pinkus）
-; 手直し: VS Code の Swift（sourcekit-lsp の documentSymbol）に合わせて組み直した。宣言の語（class / func / var）を名前から外し、
-;   種類を足し、関数とメソッド・プロパティと変数をパターンで分け、関数の中の変数を外した。enum の case・typealias・
-;   associatedtype・型引数・deinit・macro を足し、subscript を外した（sourcekit-lsp が出さない）。
+; 手直し: VS Code の Swift（sourcekit-lsp の documentSymbol）に合わせて組み直した。宣言の語（class / func / var）と型注釈を
+;   名前から外し、種類を足し、関数とメソッド・プロパティと変数をパターンで分けた。enum の case・typealias・associatedtype・
+;   型引数・macro・トップレベルの変数・`// MARK:` を足した。
 ;   関数・init の名前は語（`init`）か関数名だけを取り、引数ラベルは取り出しの Swift 側が item の直下の parameter から組む。
 
 ; 型
@@ -89,7 +89,8 @@
   "deinit" @name
   (#set! kind "constructor")) @item
 
-; 型の本体のプロパティと、トップレベルの変数。関数の中の変数は出さない。
+; 型の本体のプロパティと、トップレベルの変数。関数の中の変数は出さない。1 つの宣言に並べた名前は、取り出しの Swift 側が
+; 名前ごとに分ける。
 (class_body
   (property_declaration
     name: (pattern) @name) @item
@@ -115,3 +116,11 @@
 (enum_entry
   name: (simple_identifier) @name @item
   (#set! kind "enumMember"))
+
+; `// MARK:`（`/* MARK: */` も）。名前は取り出しの Swift 側が印を外して組む。
+([
+  (comment)
+  (multiline_comment)
+] @item
+  (#match? @item "^[/*\\s]*MARK: ")
+  (#set! kind "module"))

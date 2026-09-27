@@ -1,5 +1,6 @@
 variable defaultCapacity
 variable sharedCache
+variable hitCount
 type Handler
 interface Emitter
   type Output
@@ -18,6 +19,7 @@ struct Box
   property count
   method map(_:)
     type T
+module - Channel
 class Channel
   type Output
   property isOpen
@@ -25,9 +27,11 @@ class Channel
   constructor init(capacity:)
   constructor init()
   constructor deinit
+  module Emitting
   method emit(_:coalesce:)
     function append(_:)
   method emit(_:)
+  module Equality
   method ==(lhs:rhs:)
   class Subscription
     property channel

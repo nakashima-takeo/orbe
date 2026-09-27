@@ -19,7 +19,7 @@ struct OutlineItems {
 
   mutating func items(for match: OutlineMatch) -> [OutlineExtraction.Item] {
     switch grammar {
-    case .swift: return [Self.swiftSelector(match)]
+    case .swift: return swift(match)
     case .go: return [Self.goMethod(match)]
     case .html: return [Self.htmlElement(match)]
     case .css: return Self.cssSelectors(match)
@@ -52,15 +52,23 @@ struct OutlineItems {
       name: name, kind: match.kind, node: 0)
   }
 
-  /// Swift の関数・init・プロトコルの関数・subscript はセレクタの形 `emit(_:coalesce:)`（sourcekit-lsp と同じ）。ラベルは
-  /// 引数の外部名、無ければ内部名。
-  static func swiftSelector(_ match: OutlineMatch) -> OutlineExtraction.Item {
+  // MARK: - Swift
+
+  /// Swift の関数・init・プロトコルの関数はセレクタの形 `emit(_:coalesce:)`（sourcekit-lsp と同じ）。ラベルは引数の外部名、
+  /// 無ければ内部名。1 つの宣言に並べた変数（`var a = 1, b = 2`）は名前ごとに出し、範囲は名前から値まで。`// MARK:` は
+  /// 印を外した字を名前にする。
+  private func swift(_ match: OutlineMatch) -> [OutlineExtraction.Item] {
+    switch Self.nodeType(match.item) {
+    case "function_declaration", "init_declaration", "protocol_function_declaration":
+      return [Self.swiftSelector(match)]
+    case "property_declaration": return Self.swiftBindings(match)
+    case "comment", "multiline_comment": return [Self.swiftMark(match)]
+    default: return [Self.plain(match)]
+    }
+  }
+
+  private static func swiftSelector(_ match: OutlineMatch) -> OutlineExtraction.Item {
     var item = plain(match)
-    let callable: Set = [
-      "function_declaration", "init_declaration", "protocol_function_declaration",
-      "subscript_declaration",
-    ]
-    guard callable.contains(nodeType(match.item)) else { return item }
     var labels = ""
     for child in namedChildren(of: match.item) where nodeType(child) == "parameter" {
       let external = ts_node_child_by_field_name(child, "external_name", 13)
@@ -70,6 +78,37 @@ struct OutlineItems {
       labels += (label.map(match.text) ?? "_") + ":"
     }
     item.name += "(\(labels))"
+    return item
+  }
+
+  /// 名前が 1 つなら宣言全体、複数なら名前ごと（名前から、次の名前の手前の最後の子まで）を範囲にする。
+  private static func swiftBindings(_ match: OutlineMatch) -> [OutlineExtraction.Item] {
+    let children = (0..<ts_node_child_count(match.item)).map { index in
+      (field: ts_node_field_name_for_child(match.item, index).map { String(cString: $0) },
+        node: ts_node_child(match.item, index))
+    }
+    let names = children.indices.filter { children[$0].field == "name" }
+    guard names.count > 1 else { return [plain(match)] }
+    return names.enumerated().map { ordinal, index in
+      let next = ordinal + 1 < names.count ? names[ordinal + 1] : children.count
+      let last = children[index..<next].last { ts_node_is_named($0.node) }!.node
+      let name = children[index].node
+      let bound = ts_node_child_by_field_name(name, "bound_identifier", 16)
+      let nameNode = ts_node_is_null(bound) ? name : bound
+      let start = range(of: name).location
+      return OutlineExtraction.Item(
+        range: NSRange(location: start, length: NSMaxRange(range(of: last)) - start),
+        nameRange: range(of: nameNode), name: collapsed(match.text(nameNode)), kind: match.kind,
+        node: 0)
+    }
+  }
+
+  /// sourcekit-lsp と同じく、両端の `/`・`*`・空白を落とし、`MARK:` の後ろを名前にする（`// MARK: - Foo` は `- Foo`）。
+  private static func swiftMark(_ match: OutlineMatch) -> OutlineExtraction.Item {
+    var item = plain(match)
+    let trimmed = match.text(match.item).trimmingCharacters(
+      in: CharacterSet(charactersIn: "/*").union(.whitespacesAndNewlines))
+    item.name = String(trimmed.dropFirst("MARK:".count)).trimmingCharacters(in: .whitespaces)
     return item
   }
 
