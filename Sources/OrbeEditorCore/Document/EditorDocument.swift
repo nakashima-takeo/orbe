@@ -89,24 +89,6 @@ public final class EditorDocument {
   /// ディスクの内容で本文を差し替えている間は、その編集で未保存を立てない。
   private var isReplacingFromDisk = false
 
-  /// ファイルから読んだ内容。本文のほかに、ディスクの姿と BOM の有無を持つ（文書がそのまま引き継ぐ）。
-  public struct Contents {
-    public let text: String
-    fileprivate let digest: SHA256Digest
-    fileprivate let hasBOM: Bool
-  }
-
-  private static let bom = Data([0xEF, 0xBB, 0xBF])
-
-  /// ファイルを UTF-8 として読む。読めない・UTF-8 でないは throw。先頭の BOM は本文に含めない。
-  public static func read(_ url: URL) throws -> Contents {
-    guard let data = try? Data(contentsOf: url) else { throw EditorDocumentError.unreadable(url) }
-    let hasBOM = data.starts(with: bom)
-    guard let text = String(data: hasBOM ? data.dropFirst(bom.count) : data, encoding: .utf8)
-    else { throw EditorDocumentError.notUTF8(url) }
-    return Contents(text: text, digest: SHA256.hash(data: data), hasBOM: hasBOM)
-  }
-
   /// `surface` は `contents.text` で作った面。ロープは面ではなく読んだ内容から組む。構文の裏の仕事はここで起き、
   /// 全体の解析と先頭の画面ぶんの役割を作り始める（待たない）。
   public convenience init(
