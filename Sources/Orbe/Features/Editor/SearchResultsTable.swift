@@ -33,7 +33,13 @@ final class SearchResultsTableView: NSTableView {
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
-    if window != nil { onWindow() }
+    guard window != nil else { return }
+    onWindow()
+    // 列が出た更新そのものには載せず、次の周回で済ませる。
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      SearchResultRowView.prepare(for: effectiveAppearance)
+    }
   }
 
   // MARK: - 焦点

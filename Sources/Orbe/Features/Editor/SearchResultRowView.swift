@@ -50,7 +50,16 @@ final class SearchResultRowView: NSTableRowView {
     super.init(frame: frame)
     identifier = Self.identifier
   }
+
   required init?(coder: NSCoder) { fatalError("not supported") }
+
+  /// 最初の行を描く前に 1 度だけ要る準備——字体の読み込みと初回の字組み（種別チップの太字の等幅は 1 つで 1ms を超える）・
+  /// 色の解決・線の形。空の表へ最初の結果が入る更新にこれらの初回の費用が重ならないよう、結果の列が出たときに済ませる。
+  static func prepare(for appearance: NSAppearance) {
+    _ = SearchRowColors.of(appearance)
+    _ = chevron
+    TextLine.prepare()
+  }
 
   override var isFlipped: Bool { true }
 
@@ -62,7 +71,7 @@ final class SearchResultRowView: NSTableRowView {
 
   override func drawBackground(in dirtyRect: NSRect) {
     guard isSelected, let context = NSGraphicsContext.current?.cgContext else { return }
-    context.setFillColor(RowColors.of(effectiveAppearance).selection)
+    context.setFillColor(SearchRowColors.of(effectiveAppearance).selection)
     context.fill(bounds)
   }
 
@@ -116,7 +125,7 @@ final class SearchResultRowView: NSTableRowView {
   override func draw(_ dirtyRect: NSRect) {
     super.draw(dirtyRect)
     guard let context = NSGraphicsContext.current?.cgContext else { return }
-    let colors = RowColors.of(effectiveAppearance)
+    let colors = SearchRowColors.of(effectiveAppearance)
     switch content {
     case .file(let file): draw(file, colors, in: context)
     case .match(let match): draw(match, colors, in: context)
@@ -126,7 +135,7 @@ final class SearchResultRowView: NSTableRowView {
 
   /// 見出し 22: シェブロン（畳むと右向き）・種別チップ 14・ファイル名 12・ディレクトリ 10.5 tertiary・右端の件数。間は 6。
   /// 列が狭いときはファイル名を先に取り、ディレクトリは頭を省略して残りに詰める。
-  private func draw(_ file: FileContent, _ colors: RowColors, in context: CGContext) {
+  private func draw(_ file: FileContent, _ colors: SearchRowColors, in context: CGContext) {
     let gap = Theme.Space.note
     var x = Theme.Space.beat
     drawChevron(at: x, open: !file.isCollapsed, colors, in: context)
@@ -159,7 +168,7 @@ final class SearchResultRowView: NSTableRowView {
 
   /// 一致の行 20（左 40・mono 11）: 前 tertiary、ヒット（地 tint(modified, .30) 角 2・文字 primary）、後ろ muted。
   /// 列が狭いときは、前と後ろに省略記号 1 つぶんを残して、後ろ → 前（頭を省略）→ ヒットの順に詰める。
-  private func draw(_ match: MatchContent, _ colors: RowColors, in context: CGContext) {
+  private func draw(_ match: MatchContent, _ colors: SearchRowColors, in context: CGContext) {
     let ellipsis = Self.matchEllipsisWidth
     let x = Theme.Layout.editorSearchMatchIndent
     let room = max(0, bounds.width - Theme.Space.beat - x)
@@ -219,7 +228,9 @@ final class SearchResultRowView: NSTableRowView {
   }()
 
   /// シェブロン（開いていると 90° 回す）。
-  private func drawChevron(at x: CGFloat, open: Bool, _ colors: RowColors, in context: CGContext) {
+  private func drawChevron(
+    at x: CGFloat, open: Bool, _ colors: SearchRowColors, in context: CGContext
+  ) {
     let size = Theme.Layout.editorSearchChevron
     context.saveGState()
     context.translateBy(x: x + size / 2, y: bounds.height / 2)
@@ -234,7 +245,7 @@ final class SearchResultRowView: NSTableRowView {
 
   /// 種別チップ 14（`FileChipView` と同じ規則を AppKit で描く）。
   private func drawChip(
-    _ file: FileContent, at x: CGFloat, _ colors: RowColors, in context: CGContext
+    _ file: FileContent, at x: CGFloat, _ colors: SearchRowColors, in context: CGContext
   ) {
     let size = Theme.Layout.editorChip
     let rect = NSRect(x: x, y: (bounds.height - size) / 2, width: size, height: size)
@@ -243,54 +254,6 @@ final class SearchResultRowView: NSTableRowView {
     file.chipText.draw(
       at: snap(rect.midX - file.chipText.width / 2),
       top: snap(rect.midY - file.chipText.height / 2), chip.text, context)
-  }
-}
-
-/// 行を描く色。動的な色を行ごと・字ごとに解かず、外観（ライト・ダーク）ごとに 1 度だけ解いて使い回す。
-private struct RowColors {
-  let primary: CGColor
-  let secondary: CGColor
-  let muted: CGColor
-  let tertiary: CGColor
-  let selection: CGColor
-  let hit: CGColor
-  let countFill: CGColor
-  private let chips: [FileChip.Hue?: (text: CGColor, ground: CGColor)]
-
-  @MainActor private static var resolved: [Bool: RowColors] = [:]
-
-  @MainActor static func of(_ appearance: NSAppearance) -> RowColors {
-    let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-    if let colors = resolved[dark] { return colors }
-    var colors: RowColors?
-    appearance.performAsCurrentDrawingAppearance { colors = RowColors() }
-    resolved[dark] = colors
-    return colors!
-  }
-
-  private init() {
-    primary = Theme.Color.textPrimary.cgColor
-    secondary = Theme.Color.textSecondary.cgColor
-    muted = Theme.Color.textMuted.cgColor
-    tertiary = Theme.Color.editorTertiary.cgColor
-    selection = Theme.Color.selectionFill.cgColor
-    hit = Theme.Color.editorModified.withAlphaComponent(0.30).cgColor
-    countFill = EditorStyle.fill(0.10).cgColor
-    let hues: [FileChip.Hue] = [.orange, .blue, .yellow, .sky, .violet, .cyan, .red, .green, .teal]
-    var chips: [FileChip.Hue?: (text: CGColor, ground: CGColor)] = [
-      nil: (primary, EditorStyle.fill(FileChipView.groundAlpha).cgColor)
-    ]
-    for hue in hues {
-      chips[hue] = (
-        hue.color.cgColor, hue.color.withAlphaComponent(FileChipView.groundAlpha).cgColor
-      )
-    }
-    self.chips = chips
-  }
-
-  /// 種別チップの字と地（色相が無ければ主文字と淡い塗り）。
-  func chip(_ hue: FileChip.Hue?) -> (text: CGColor, ground: CGColor) {
-    chips[hue] ?? chips[nil]!
   }
 }
 
@@ -328,6 +291,16 @@ private struct TextLine {
   private static let drawing: [NSAttributedString.Key: Any] = [
     NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true
   ]
+
+  /// 行で使う字体をすべて読み込み、1 度ずつ字組みしておく（省略記号の行もここで作られる）。
+  static func prepare() {
+    let chipFonts = Set(
+      ["S", "{}", "TS"].map { FileChip(glyph: $0, hue: nil).fontSize(for: Theme.Layout.editorChip) }
+    ).map { Theme.Typography.editorChip(size: $0) }
+    for font in Array(ellipses.keys) + chipFonts + [Theme.Typography.editorSearchCount] {
+      _ = TextLine("Ag", font)
+    }
+  }
 
   static func ellipsisWidth(_ font: NSFont) -> CGFloat {
     TextLine("…", font).width
