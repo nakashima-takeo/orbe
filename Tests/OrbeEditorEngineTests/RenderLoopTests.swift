@@ -52,7 +52,7 @@ final class RenderLoopTests: EngineTestCase {
     let target = driver.bind(surface.id)
     waitUntilPaused(surface)
     XCTAssertEqual(target.acquired, 0)
-    surface.setIndentUnit(2)
+    surface.setIndentation(Indentation(unit: 2, usesTabs: false))
     waitUntilPaused(surface)
     XCTAssertEqual(target.acquired, 0, "起こされても見えていなければ描かない")
   }
@@ -80,7 +80,7 @@ final class RenderLoopTests: EngineTestCase {
       }
       XCTAssertTrue(stopped, "前提: 描いてから止まっている")
       let before = target.acquired
-      surface.setIndentUnit(before % 2 == 0 ? 2 : 4)
+      surface.setIndentation(Indentation(unit: before % 2 == 0 ? 2 : 4, usesTabs: false))
       let (after, paused) = RenderThread.shared.performAndWait { _ in
         (target.acquired, clock.isPaused)
       }

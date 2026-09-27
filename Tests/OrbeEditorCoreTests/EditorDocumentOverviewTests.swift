@@ -39,16 +39,17 @@ final class EditorDocumentOverviewTests: XCTestCase {
       surface: surface, url: url)
   }
 
-  func testIndentUnitIsDetectedOnOpenAndOnReplaceFromDiskAndPushedToTheSurface() throws {
+  func testIndentationIsDetectedOnOpenAndOnReplaceFromDiskAndPushedToTheSurface() throws {
     let opened = try open("a.swift", "a\n  b\n    c\n  d\n")
     let (document, surface, url) = (opened.document, opened.surface, opened.url)
-    XCTAssertEqual(document.indentUnit, 2)
-    XCTAssertEqual(surface.indentUnit, 2, "開いたとき面へ押す")
+    XCTAssertEqual(document.indentation, Indentation(unit: 2, usesTabs: false))
+    XCTAssertEqual(surface.indentation, document.indentation, "開いたとき面へ押す")
 
-    try Data("a\n    b\n        c\n".utf8).write(to: url)
+    try Data("a\n\tb\n\t\tc\n".utf8).write(to: url)
     document.reconcileWithDisk()
-    XCTAssertEqual(document.indentUnit, 4, "丸ごと置き換えで検出し直す")
-    XCTAssertEqual(surface.indentUnit, 4)
+    XCTAssertEqual(
+      document.indentation, Indentation(unit: 4, usesTabs: true), "丸ごと置き換えで検出し直す")
+    XCTAssertEqual(surface.indentation, document.indentation)
   }
 
   /// 役割の区間は構文層の区間を後勝ちで平らにした、重ならない昇順の列で、窓の中だけを答える（ミニマップの字の色）。

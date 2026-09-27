@@ -37,8 +37,9 @@ public protocol TextSurface: AnyObject {
   /// 残る。`ranges` は昇順・重ならないこと（面は二分探索で可視ぶんだけ描く）。現在の一致の行は行全体にも地が付く。
   func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind)
 
-  /// インデントの単位（1 段のスペース数）。文書が本文から検出して押し、面はタブの表示幅と装備の段に写す。
-  func setIndentUnit(_ unit: Int)
+  /// 字下げの作法（単位とタブか）。文書が本文から検出して押し、面は単位をタブの表示幅と装備の段に写す。編集する面は、
+  /// Tab で入れる字（空白かタブか）と字下げの幅にも使う。
+  func setIndentation(_ indentation: Indentation)
 
   /// undo の履歴にここで区切りを置く。続けて打った文字はまとめて戻るが、区切りをまたいでは戻らない
   /// （保存が呼ぶ——⌘Z が保存前の打鍵まで一緒に戻さないため）。

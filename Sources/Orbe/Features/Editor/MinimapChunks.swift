@@ -78,11 +78,11 @@ final class MinimapChunks {
 
   /// チャンクの画像。覚えていればそれを、無ければ組んで覚える。
   func image(_ chunk: Int, document: EditorDocument, canvas: Canvas) -> CGImage? {
-    if canvas != self.canvas || document.indentUnit != indentUnit {
+    if canvas != self.canvas || document.indentation.unit != indentUnit {
       images.removeAll()
       if canvas.scale != self.canvas?.scale { sheet = nil }
       self.canvas = canvas
-      indentUnit = document.indentUnit
+      indentUnit = document.indentation.unit
     }
     uses += 1
     if let entry = images[chunk] {
@@ -131,7 +131,7 @@ final class MinimapChunks {
       }
       let cells = MinimapLine.cells(
         units[from..<end], lineStart: lineStart, roles: roles[roleIndex...],
-        tabSize: document.indentUnit, columns: columns)
+        tabSize: document.indentation.unit, columns: columns)
       let dy = (row - rows.lowerBound) * lineHeight
       for cell in cells {
         let color = cell.role.flatMap { colors[$0] } ?? colors.text

@@ -57,9 +57,8 @@ public final class EditorDocument {
     didSet { if hunks != oldValue { onHunksChange?() } }
   }
   public var onHunksChange: (() -> Void)?
-  /// インデントの単位（1 段のスペース数）。開いたとき、および本文を丸ごと置き換えたときに本文から検出し直し、
-  /// 面へ押す。
-  public private(set) var indentUnit = IndentUnit.fallback
+  /// 字下げの作法（単位とタブか）。開いたとき、および本文を丸ごと置き換えたときに本文から検出し直し、面へ押す。
+  public private(set) var indentation = Indentation.fallback
   /// 面の見えている範囲が変わった（スクロール・窓の高さ）。
   public var onViewportChange: (() -> Void)?
   /// 面の選択が変わった。
@@ -139,7 +138,7 @@ public final class EditorDocument {
     analysis = DocumentAnalysis(inbox: inbox)
     inbox.setWake { [weak self] in self?.receive() }
     surface.delegate = self
-    applyIndentUnit()
+    applyIndentation()
   }
 
   /// 閉じた文書の大きな部品を手放す口（既定は裏で手放す）。テストは手放す時機を差し替える。
@@ -207,9 +206,9 @@ public final class EditorDocument {
       && pendingHunks == nil && pendingRanges.isEmpty
   }
 
-  private func applyIndentUnit() {
-    indentUnit = IndentUnit.detect(in: text.utf16)
-    surface.setIndentUnit(indentUnit)
+  private func applyIndentation() {
+    indentation = Indentation.detect(in: text.utf16)
+    surface.setIndentation(indentation)
   }
 
   /// 本文をそのまま UTF-8 で書く（改行・末尾改行は本文のまま。開いたとき BOM があれば付け直す）。
@@ -255,7 +254,7 @@ public final class EditorDocument {
     isReplacingFromDisk = true
     surface.replaceAll(with: onDisk.text)
     isReplacingFromDisk = false
-    applyIndentUnit()
+    applyIndentation()
     diskDigest = onDisk.digest
     hasBOM = onDisk.hasBOM
     surface.markUndoBoundary()

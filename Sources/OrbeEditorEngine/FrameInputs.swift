@@ -221,7 +221,7 @@ struct FrameMaterial: Sendable {
   var rowEdits: [RowEdit] = []
   var marks = RowMarks.empty
   var palette: FramePalette?
-  var tabColumns = IndentUnit.fallback
+  var tabColumns = Indentation.fallback.unit
   /// 面の大きさ（pt）と倍率。
   var size = CGSize.zero
   var scale: CGFloat = 2

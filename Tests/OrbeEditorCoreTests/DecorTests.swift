@@ -10,24 +10,34 @@ final class DecorTests: XCTestCase {
   // MARK: - インデント単位
 
   func testIndentUnitIsTheMostFrequentNeighbourDifference() {
-    XCTAssertEqual(IndentUnit.detect(in: "a\n  b\n    c\n  d\ne\n".utf16), 2)
-    XCTAssertEqual(IndentUnit.detect(in: "a\n    b\n        c\n    d\n".utf16), 4)
-    XCTAssertEqual(IndentUnit.detect(in: "a\n        b\na\n        b\n".utf16), 8)
-    XCTAssertEqual(IndentUnit.detect(in: "flat\nflat\n".utf16), 4, "候補が無ければ 4")
-    XCTAssertEqual(IndentUnit.detect(in: "".utf16), 4)
-    XCTAssertEqual(IndentUnit.detect(in: "a\n   b\n      c\n".utf16), 4, "3 の段は候補に無い")
+    XCTAssertEqual(Indentation.detect(in: "a\n  b\n    c\n  d\ne\n".utf16).unit, 2)
+    XCTAssertEqual(Indentation.detect(in: "a\n    b\n        c\n    d\n".utf16).unit, 4)
+    XCTAssertEqual(Indentation.detect(in: "a\n        b\na\n        b\n".utf16).unit, 8)
+    XCTAssertEqual(Indentation.detect(in: "flat\nflat\n".utf16).unit, 4, "候補が無ければ 4")
+    XCTAssertEqual(Indentation.detect(in: "".utf16).unit, 4)
+    XCTAssertEqual(Indentation.detect(in: "a\n   b\n      c\n".utf16).unit, 4, "3 の段は候補に無い")
   }
 
   /// 同数は小さい方。空行・空白だけの行は隣として数えず（飛ばして前後の非空行が対になる）、タブの行は
   /// その前後の非空行の対も切る。
   func testIndentUnitTiesPreferTheSmallerAndSkipBlankAndTabLines() {
-    XCTAssertEqual(IndentUnit.detect(in: "a\n  b\n      c\n".utf16), 2, "2 と 4 が 1 回ずつなら 2")
+    XCTAssertEqual(Indentation.detect(in: "a\n  b\n      c\n".utf16).unit, 2, "2 と 4 が 1 回ずつなら 2")
     XCTAssertEqual(
-      IndentUnit.detect(in: "      a\n\n    b\n".utf16), 2, "空行を飛ばして 6 と 4 が対（飛ばさなければ 4）")
-    XCTAssertEqual(IndentUnit.detect(in: "  a\n    \n  b\n".utf16), 4, "空白だけの行は隣でない（数えれば 2）")
+      Indentation.detect(in: "      a\n\n    b\n".utf16).unit, 2, "空行を飛ばして 6 と 4 が対（飛ばさなければ 4）")
+    XCTAssertEqual(Indentation.detect(in: "  a\n    \n  b\n".utf16).unit, 4, "空白だけの行は隣でない（数えれば 2）")
     XCTAssertEqual(
-      IndentUnit.detect(in: "  a\r\n    \r\n  b\r\n".utf16), 4, "CRLF の空白だけの行も隣でない（数えれば 2）")
-    XCTAssertEqual(IndentUnit.detect(in: "a\n\tb\n  c\n".utf16), 4, "タブの行は前後の対を切る（切らなければ 2）")
+      Indentation.detect(in: "  a\r\n    \r\n  b\r\n".utf16).unit, 4, "CRLF の空白だけの行も隣でない（数えれば 2）")
+    XCTAssertEqual(Indentation.detect(in: "a\n\tb\n  c\n".utf16).unit, 4, "タブの行は前後の対を切る（切らなければ 2）")
+  }
+
+  /// タブかは、行頭の空白にタブを含む行とスペース 2 個以上で始まる行の数の比べ（VS Code の推定）。同数なら空白、
+  /// スペース 1 個の行と空白だけの行は数えない。
+  func testIndentationUsesTabsWhenTabIndentedLinesOutnumberSpaceIndentedOnes() {
+    XCTAssertTrue(Indentation.detect(in: "a\n\tb\n\t\tc\n    d\n".utf16).usesTabs)
+    XCTAssertFalse(Indentation.detect(in: "a\n\tb\n    c\n".utf16).usesTabs, "同数なら空白")
+    XCTAssertTrue(Indentation.detect(in: "a\n\tb\n c\n\t\n".utf16).usesTabs, "1 個のスペースと空白だけの行は数えない")
+    XCTAssertTrue(Indentation.detect(in: "a\n  \tb\n".utf16).usesTabs, "空白の途中のタブも数える")
+    XCTAssertFalse(Indentation.detect(in: "".utf16).usesTabs)
   }
 
   // MARK: - 段

@@ -43,7 +43,7 @@ final class STTextSurface: NSObject, TextSurface {
 
   private let style: TextSurfaceStyle
   /// インデントの単位（文書が検出して押す）。インデント線の段と、タブの表示幅（単位の桁数）を決める。
-  private var indentUnit = IndentUnit.fallback
+  private var indentUnit = Indentation.fallback.unit
 
   var onOpenLink: ((URL) -> Void)? {
     get { textView.onOpenLink }
@@ -181,7 +181,8 @@ final class STTextSurface: NSObject, TextSurface {
 
   /// タブの表示幅は単位の桁数——モデル（タブは 1 段）と描画が一致し、空白だけの行の線（桁幅から置く）がタブで
   /// 書かれた隣の行の線と揃う。
-  func setIndentUnit(_ unit: Int) {
+  func setIndentation(_ indentation: Indentation) {
+    let unit = indentation.unit
     guard unit != indentUnit else { return }
     indentUnit = unit
     applyParagraphStyle()

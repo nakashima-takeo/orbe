@@ -97,8 +97,8 @@ final class MetalTextSurface: TextSurface {
     pullContent(marks: spans)
   }
 
-  func setIndentUnit(_ unit: Int) {
-    material.update { $0.tabColumns = unit }
+  func setIndentation(_ indentation: Indentation) {
+    material.update { $0.tabColumns = indentation.unit }
     wake()
   }
 

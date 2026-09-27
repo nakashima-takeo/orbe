@@ -21,7 +21,7 @@ final class FakeTextSurface: TextSurface {
     didSet { delegate?.surfaceDidChangeSelection(self) }
   }
   var caretLocation: Int { NSMaxRange(selectedRange) }
-  private(set) var indentUnit = IndentUnit.fallback
+  private(set) var indentation = Indentation.fallback
 
   init(text: String) {
     storage = NSMutableString(string: text)
@@ -70,7 +70,7 @@ final class FakeTextSurface: TextSurface {
 
   func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {}
 
-  func setIndentUnit(_ unit: Int) { indentUnit = unit }
+  func setIndentation(_ indentation: Indentation) { self.indentation = indentation }
 
   /// 契約の後条件どおり、置き換え後の選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。
   func replaceAll(with text: String) {

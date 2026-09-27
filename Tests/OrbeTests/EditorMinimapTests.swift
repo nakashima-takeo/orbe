@@ -65,7 +65,7 @@ final class EditorMinimapTests: OrbeTestCase {
     XCTAssertEqual(ink(1, 0), 0, "行頭の空白は描かない")
     XCTAssertEqual(ink(1, 3), 0)
     XCTAssertGreaterThan(ink(1, 4), 0.2, "y は 5 桁目")
-    XCTAssertEqual(hosted.document.indentUnit, 4, "前提: タブ幅は検出したインデント単位")
+    XCTAssertEqual(hosted.document.indentation.unit, 4, "前提: タブ幅は検出したインデント単位")
     XCTAssertEqual(ink(2, 2), 0)
     XCTAssertGreaterThan(ink(2, 4), 0.2, "タブは次のタブ位置（4）まで空ける")
     let heavy = pixels.alpha(in: cell(view, row: 3, column: 0)).sum
