@@ -1,12 +1,5 @@
 import Foundation
 
-/// 行の区間——行頭・行の中身の長さ（改行と行末の `\r` を除く）・次の行頭（最終行なら本文の終わり）。
-struct LineSpan {
-  let start: Int
-  let length: Int
-  let end: Int
-}
-
 /// 昇順の選択の列を、下へ進む行ごとに引く。
 struct SelectionCursor {
   private let selections: [NSRange]
@@ -26,11 +19,13 @@ struct SelectionCursor {
   /// まだ描いていない選択があるか。
   var remaining: Bool { index < selections.count }
 
-  /// 行に掛かる選択（行の終わりの改行まで含む）。
-  mutating func next(in line: LineSpan) -> ArraySlice<NSRange> {
-    while index < selections.count, NSMaxRange(selections[index]) <= line.start { index += 1 }
+  /// 行 `line`（行頭から次の行頭まで。最終行なら本文の終わりまで）に掛かる選択。
+  mutating func next(in line: Range<Int>) -> ArraySlice<NSRange> {
+    while index < selections.count, NSMaxRange(selections[index]) <= line.lowerBound { index += 1 }
     var end = index
-    while end < selections.count, selections[end].location < max(line.end, line.start + 1) {
+    while end < selections.count,
+      selections[end].location < max(line.upperBound, line.lowerBound + 1)
+    {
       end += 1
     }
     return selections[index..<end]
@@ -40,17 +35,17 @@ struct SelectionCursor {
 /// 選択の地とキャレット。どちらの x も、字を描いた行の組版の位置と x の対応（`CaretMap`）から引くので、描いた字と食い違わ
 /// ない。
 extension FrameBuilder {
-  /// 選択と行の交わりを行の高さいっぱいの矩形で塗る。右から左の字を挟めば、論理の選択を見た目の区間ごとに分けて塗る。選択が
-  /// 行の改行を含めば、行の右端から半角 1 字ぶん伸ばす。
+  /// 選択と行の交わりを行の高さいっぱいの矩形で塗る。`content` は行の中身の区間（改行と行末の `\r` を除く）。右から左の
+  /// 字を挟めば、論理の選択を見た目の区間ごとに分けて塗る。選択が行の改行を含めば、行の右端から半角 1 字ぶん伸ばす。
   func drawSelection(
-    _ selection: NSRange, _ line: LaidOutLine, _ span: LineSpan, rowTop: Double, _ c: Context
+    _ selection: NSRange, _ line: LaidOutLine, content: NSRange, rowTop: Double, _ c: Context
   ) {
     guard let carets = line.carets else { return }
     let g = c.g
-    let from = selection.location - span.start
-    let to = NSMaxRange(selection) - span.start
-    var segments = carets.segments(from: from, to: min(to, span.length))
-    if to > span.length { segments.append(line.width...(line.width + c.config.cell)) }
+    let from = selection.location - content.location
+    let to = NSMaxRange(selection) - content.location
+    var segments = carets.segments(from: from, to: min(to, content.length))
+    if to > content.length { segments.append(line.width...(line.width + c.config.cell)) }
     let originX = g.column - g.scrollX
     let bottom = rowTop + g.lineHeight.rounded()
     let ink = c.focused ? c.palette.selection : c.palette.inactiveSelection

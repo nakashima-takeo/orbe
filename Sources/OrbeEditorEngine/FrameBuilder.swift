@@ -122,28 +122,31 @@ final class FrameBuilder {
     let baseline = (Double(config.baseline) * s).rounded()
     let numberFont = fonts.id(config.gutterFont)
     let tabColumns = source.material.tabColumns
-    var selections = SelectionCursor(
-      source.material.caret.selections, from: content.text.lineStart(first))
+    var start = content.text.lineStart(first)
+    var selections = SelectionCursor(source.material.caret.selections, from: start)
     let carets = (source.caretVisible ? source.material.caret.carets : []).map {
       (row: content.text.row(containing: $0), offset: $0)
     }
     for row in first...last {
       let top = g.rowTop(row)
-      let start = content.text.lineStart(row)
-      let span = LineSpan(
-        start: start, length: content.text.contentRange(ofRow: row).length,
-        end: content.text.lineEnd(row))
-      let selected = selections.remaining ? selections.next(in: span) : []
+      let end = content.text.lineEnd(row)
+      let selected = selections.remaining ? selections.next(in: start..<end) : []
       let laid = cache.line(
         row: row, in: content.text, tabColumns: tabColumns, config: config, fonts: fonts,
         carets: !selected.isEmpty || carets.contains { $0.row == row })
-      for selection in selected { drawSelection(selection, laid, span, rowTop: top, c) }
+      if !selected.isEmpty {
+        let lineContent = content.text.contentRange(ofRow: row)
+        for selection in selected {
+          drawSelection(selection, laid, content: lineContent, rowTop: top, c)
+        }
+      }
       for caret in carets where caret.row == row {
         drawCaret(at: caret.offset - start, laid, rowTop: top, c)
       }
       let width = drawText(laid, start: start, roles: content.roles, baseline: top + baseline, c)
       longestLine = max(longestLine, width)
       drawNumber(row + 1, rowTop: top, font: numberFont, c)
+      start = end
     }
     cache.endFrame()
     drawMarks(source.material.marks, rows: first...last, c)
