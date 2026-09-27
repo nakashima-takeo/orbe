@@ -10,7 +10,7 @@ const { Selection } = await load("core/selection.js");
 const { SingleCursorState } = await load("cursorCommon.js");
 const { Range } = await load("core/range.js");
 
-const separators = "`~!@#$%^&*()-=+[{]}\\|;:'\",.<>/?";
+const { USUAL_WORD_SEPARATORS: separators } = await load("core/wordHelper.js");
 const map = getMapForWordSeparators(separators, []);
 const models = [
   ["foo.bar(baz)  qux", "  let x = a->b; // c", "\tif (a == b) {"],
