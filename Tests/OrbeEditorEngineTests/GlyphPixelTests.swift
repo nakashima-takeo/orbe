@@ -15,7 +15,7 @@ final class GlyphPixelTests: EngineTestCase {
   private static let sample = """
     // 日本語のコメントと絵文字 😀👍🏽 fin
     func render(into buffer: inout [String]) -> Int {
-      let greek = "Ωμέγα ∑ √ ≈ ⌘ 한국어 ภาษาไทย"
+      let greek = "Ωμέγα ∑ √ ≈ ⌘ 한국어 ภาษาไทย Q̃ á́ بِ سْ"
       return buffer.count + 42
     }
 
@@ -114,8 +114,8 @@ final class GlyphPixelTests: EngineTestCase {
       let trailing = Double(config.gutterTrailingInset + config.marks.gutterWidth) * s
       r.draw(
         number, x: r.column - trailing - numberWidth,
-        baseline: (rowTop + lineHeight / 2
-          + Double(config.gutterAscent - config.gutterDescent) / 2 * s).rounded(),
+        baseline: rowTop + lineHeight / 2
+          + Double(config.gutterAscent - config.gutterDescent) / 2 * s,
         clip: CGRect(x: 0, y: 0, width: r.column, height: r.height - r.top))
     }
     return try XCTUnwrap(context.makeImage())

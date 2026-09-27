@@ -2,13 +2,14 @@ import CoreText
 import Foundation
 import OrbeEditorCore
 
-/// 1 行を組んだ結果——run ごとのフォント・グリフ・x（pt、行頭から）・元の行の UTF-16 の位置（色を引くため）と、行の幅、
-/// 上限で打ち切って描かない UTF-16 の単位の数。
+/// 1 行を組んだ結果——run ごとのフォント・グリフ・位置（pt、行頭の基線から。y は上が正で、結合文字の記号などだけが
+/// 0 でない）・元の行の UTF-16 の位置（色を引くため）と、行の幅、上限で打ち切って描かない UTF-16 の単位の数。
 struct ShapedLine {
   struct Run {
     let font: CTFont
     let glyphs: [CGGlyph]
     let xs: [CGFloat]
+    let ys: [CGFloat]
     let offsets: [Int]
   }
 
@@ -241,13 +242,15 @@ extension ShapedLine {
             runs.append(
               Run(
                 font: label.font, glyphs: label.glyphs, xs: label.xs.map { $0 + position.x },
-                offsets: Array(repeating: index, count: label.glyphs.count)))
+                ys: label.ys, offsets: Array(repeating: index, count: label.glyphs.count)))
           }
         }
         continue
       }
       runs.append(
-        Run(font: runFont, glyphs: glyphs, xs: positions.map(\.x), offsets: indices))
+        Run(
+          font: runFont, glyphs: glyphs, xs: positions.map(\.x), ys: positions.map(\.y),
+          offsets: indices))
     }
     self.init(
       runs: runs, width: CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)), omitted: omitted)

@@ -10,8 +10,7 @@ extension FrameBuilder {
     let trailing = Double(config.gutterTrailingInset + config.marks.gutterWidth) * g.scale
     let width = Double(config.numberWidth(number).rounded(.up)) * g.scale
     let center = rowTop + g.lineHeight / 2
-    let baseline = (center + Double(config.gutterAscent - config.gutterDescent) / 2 * g.scale)
-      .rounded()
+    let baseline = center + Double(config.gutterAscent - config.gutterDescent) / 2 * g.scale
     var digits: [Int] = []
     var n = number
     repeat {

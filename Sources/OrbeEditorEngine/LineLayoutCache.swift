@@ -9,6 +9,8 @@ struct LaidOutLine {
   var glyphs: [CGGlyph] = []
   /// 行頭からの x（pt）。
   var xs: [Float] = []
+  /// 基線からの y（pt、上が正）。全部 0 の行（ほとんどの行）では空。
+  var ys: [Float] = []
   /// 元の行の UTF-16 の位置。
   var offsets: [Int32] = []
   var width: CGFloat = 0
@@ -24,11 +26,13 @@ struct LaidOutLine {
   }
 
   init(_ shaped: ShapedLine, fonts registry: FontRegistry) {
+    let raised = shaped.runs.contains { $0.ys.contains { $0 != 0 } }
     for run in shaped.runs {
       let font = registry.id(run.font)
       fonts.append(contentsOf: repeatElement(font, count: run.glyphs.count))
       glyphs.append(contentsOf: run.glyphs)
       xs.append(contentsOf: run.xs.map(Float.init))
+      if raised { ys.append(contentsOf: run.ys.map(Float.init)) }
       offsets.append(contentsOf: run.offsets.map { Int32($0) })
     }
     width = shaped.width

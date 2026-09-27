@@ -146,7 +146,8 @@ final class FrameBuilder {
         let role = cursor.role(at: start + Int(line.offsets[i]))
         let ink = role.flatMap { c.palette.roles[$0] } ?? c.palette.text
         let x = originX + Double(line.xs[i]) * g.scale
-        let glyph = Glyph(font: line.fonts[i], glyph: line.glyphs[i], x: x, baseline: baseline)
+        let y = line.ys.isEmpty ? baseline : baseline - Double(line.ys[i]) * g.scale
+        let glyph = Glyph(font: line.fonts[i], glyph: line.glyphs[i], x: x, baseline: y)
         place(glyph, ink, .text, c)
       }
     }
@@ -162,7 +163,7 @@ final class FrameBuilder {
     return line.width + c.config.cell + mark.width
   }
 
-  /// 置くグリフ 1 つ（x・基線は px）。
+  /// 置くグリフ 1 つ（x・基線は px。基線は y が下向きの座標）。
   struct Glyph {
     let font: UInt16
     let glyph: CGGlyph
@@ -170,7 +171,8 @@ final class FrameBuilder {
     let baseline: Double
   }
 
-  /// グリフを置く。横の位置は Core Text と同じく切り捨てで量子化する（誤差で境目を跨がないよう僅かに足す）。
+  /// グリフを置く。横の位置は Core Text と同じく切り捨てで量子化する（誤差で境目を跨がないよう僅かに足す）。縦は
+  /// 装置の画素に揃え、端数は Core Graphics と同じく下向きへ切り上げる。
   func place(_ item: Glyph, _ ink: FrameColor, _ layer: FrameBuilderLayer, _ c: Context) {
     let variants = Double(c.atlas.variants)
     let quantized = (item.x * variants + 1e-3).rounded(.down)
@@ -181,7 +183,8 @@ final class FrameBuilder {
         font: item.font, glyph: item.glyph, variant: variant, dilation: ink.dilation)
     else { return }
     let instance = GlyphInstance(
-      position: SIMD2(Float(whole) + Float(entry.left), Float(item.baseline) - Float(entry.top)),
+      position: SIMD2(
+        Float(whole) + Float(entry.left), Float(item.baseline.rounded(.up)) - Float(entry.top)),
       size: SIMD2(Float(entry.w), Float(entry.h)), uv: SIMD2(Float(entry.u), Float(entry.v)),
       color: entry.isColor ? 0xFFFF_FFFF : ink.packed)
     let page = Int(entry.page)
