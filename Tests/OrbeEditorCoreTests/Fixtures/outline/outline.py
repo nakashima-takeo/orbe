@@ -26,6 +26,10 @@ class Job:
     def is_exhausted(self) -> bool:
         return self.retries >= MAX_RETRIES
 
+    @is_exhausted.setter
+    def is_exhausted(self, value: bool) -> None:
+        self.retries = MAX_RETRIES if value else 0
+
     class Status:
         PENDING = "pending"
         DONE = "done"
@@ -41,6 +45,7 @@ class Queue:
         for job in self._jobs:
             outcome = await worker(job)
             results.append(outcome)
+        results = sorted(results)
 
         def summarize(items):
             total = len(items)

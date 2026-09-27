@@ -4,7 +4,7 @@
 ; 手直し（2026-09）: VS Code の Python（Pylance / pyright の documentSymbol）に合わせて組み直した。宣言の語（class / def / async）を
 ;   名前から外し、種類を足し、クラスの本体の def を method（@property 等は property）に分けた。デコレータの付いた定義は
 ;   デコレータから範囲にした。変数（モジュール・クラス・関数の中の代入と for の変数、全部大文字は constant）・
-;   引数（self / cls / _ を除く）・type 文を足した。
+;   引数（self / cls / _ を除く）・type 文を足した。同じ入れ子の中の同じ名前は、取り出しの Python 側が 1 つにまとめる。
 
 ; クラス
 (decorated_definition

@@ -191,6 +191,17 @@ final class OutlineRulesTests: XCTestCase {
     XCTAssertEqual(try symbol("\"\"", in: symbols).kind, .key, "空のキーの名前は引用符 2 つ")
   }
 
+  /// Markdown の見出しは段で入れ子にし、範囲は次の同じか浅い段の見出しの手前まで（setext も段で並ぶ）。
+  func testMarkdownHeadingsNestByLevel() throws {
+    let source = "Title\n=====\n\n### Deep\n\nText\n\nSection\n-------\n\n# Next ##\n"
+    let outline = try extract(.markdown, source)
+    XCTAssertEqual(
+      outline.symbols.map { String(repeating: "  ", count: $0.depth) + $0.name },
+      ["# Title", "  ### Deep", "  ## Section", "# Next"])
+    XCTAssertEqual(try text(of: "### Deep", in: outline, source: source), "### Deep\n\nText\n\n")
+    XCTAssertEqual(try text(of: "# Next", in: outline, source: source), "# Next ##\n")
+  }
+
   /// 前に続く注釈は項目の範囲に入る。Rust は rust-analyzer と同じく、属性と外側の doc コメントは空行を挟んでも、普通の
   /// コメントは空行を挟まない限り入り、内側の doc コメントでは切れる。TS はクラスの中身の前のデコレータ。
   func testLeadingAnnotationsJoinTheItemsRange() throws {

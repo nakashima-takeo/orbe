@@ -107,7 +107,7 @@ struct OutlineExtraction {
         return item
       }
     }
-    return Self.nest(items, version: version)
+    return Self.nest(naming.finish(items, length: text.length), version: version)
   }
 
   /// `node` の前に続く注釈の頭（UTF-16）。前の兄弟を遡り、注釈の節が続く限り含める。`annotations` は注釈の節 → 空行を

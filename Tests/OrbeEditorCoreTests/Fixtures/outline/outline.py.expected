@@ -10,6 +10,7 @@ class Job
   variable tags
   method __post_init__
   property is_exhausted
+    variable value
   class Status
     constant PENDING
     constant DONE

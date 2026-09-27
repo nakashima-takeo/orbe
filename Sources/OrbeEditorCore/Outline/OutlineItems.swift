@@ -8,6 +8,10 @@ struct OutlineItems {
   private let grammar: Grammar
   /// JSON: 配列の節 → 値の子の頭（昇順）。配列ごとに 1 度だけ数える。
   private var arrayElements: [UInt: [UInt32]] = [:]
+  /// Markdown: 見出しの節 → 段。
+  private var headingLevels: [UInt: Int] = [:]
+  /// Python: 型の付いた宣言（関数・クラスと、注釈の付いた代入・引数）の節。
+  private var typedDeclarations: Set<UInt> = []
 
   init(grammar: Grammar) {
     self.grammar = grammar
@@ -20,7 +24,18 @@ struct OutlineItems {
     case .html: return [Self.htmlElement(match)]
     case .css: return Self.cssSelectors(match)
     case .json: return [jsonArrayElement(match)]
+    case .markdown: return [markdownHeading(match)]
+    case .python: return [python(match)]
     default: return [Self.plain(match)]
+    }
+  }
+
+  /// 全部のシンボルが揃った後の手直し。`length` は本文の長さ（UTF-16）。
+  func finish(_ items: [OutlineExtraction.Item], length: Int) -> [OutlineExtraction.Item] {
+    switch grammar {
+    case .markdown: return nestHeadingsByLevel(items, length: length)
+    case .python: return mergeSameNames(items)
+    default: return items
     }
   }
 
@@ -166,7 +181,118 @@ struct OutlineItems {
     return starts
   }
 
+  // MARK: - Markdown
+
+  /// 見出しの名前は印と見出しの字（`## Usage`。VS Code と同じく setext も段の数の `#`、閉じの `#` は含めない）。段は
+  /// `finish` が入れ子に使う。
+  private mutating func markdownHeading(_ match: OutlineMatch) -> OutlineExtraction.Item {
+    var item = Self.plain(match)
+    let content = Self.joined(match.names, match.text)
+    let level: Int
+    if Self.nodeType(match.item) == "setext_heading" {
+      let underline = Self.namedChildren(of: match.item).last.map(Self.nodeType)
+      level = underline == "setext_h1_underline" ? 1 : 2
+    } else {
+      level = match.contexts.first.map { match.text($0).count } ?? 1
+    }
+    let text = Self.withoutClosingSequence(content)
+    item.name = String(repeating: "#", count: level) + (text.isEmpty ? "" : " " + text)
+    headingLevels[Self.id(match.item)] = level
+    return item
+  }
+
+  /// ATX 見出しの閉じの `#` の並び（前に空白があるもの）を落とす。
+  private static func withoutClosingSequence(_ content: String) -> String {
+    let body = content.trimmingCharacters(in: .whitespaces)
+    let hashes = body.reversed().prefix { $0 == "#" }.count
+    guard hashes > 0 else { return body }
+    let rest = body.dropLast(hashes)
+    guard rest.isEmpty || rest.last!.isWhitespace else { return body }
+    return rest.trimmingCharacters(in: .whitespaces)
+  }
+
+  /// 見出しを段で入れ子にする（VS Code と同じ）——範囲を、次の同じか浅い段の見出しの手前（無ければ本文の終わり）まで
+  /// 伸ばす。範囲の包含で入れ子にする仕組みにそのまま乗る。
+  private func nestHeadingsByLevel(_ items: [OutlineExtraction.Item], length: Int)
+    -> [OutlineExtraction.Item]
+  {
+    let order = items.indices.sorted { items[$0].range.location < items[$1].range.location }
+    var result = items
+    var open: [Int] = []
+    for index in order {
+      let level = headingLevels[items[index].node] ?? 1
+      while let last = open.last, headingLevels[items[last].node] ?? 1 >= level {
+        close(last, at: items[index].range.location)
+        open.removeLast()
+      }
+      open.append(index)
+    }
+    for index in open { close(index, at: length) }
+    return result
+
+    func close(_ index: Int, at end: Int) {
+      let start = result[index].range.location
+      result[index].range = NSRange(location: start, length: max(end, start) - start)
+    }
+  }
+
+  // MARK: - Python
+
+  private mutating func python(_ match: OutlineMatch) -> OutlineExtraction.Item {
+    let item = Self.plain(match)
+    if Self.isTypedPythonDeclaration(match.item) { typedDeclarations.insert(Self.id(match.item)) }
+    return item
+  }
+
+  /// pyright が型の付いた宣言と見るもの。item が名前の節（代入・引数）なら、その親に型の注釈があるか。
+  private static func isTypedPythonDeclaration(_ node: TSNode) -> Bool {
+    switch nodeType(node) {
+    case "function_definition", "class_definition", "decorated_definition": return true
+    case "identifier":
+      let parent = ts_node_parent(node)
+      guard !ts_node_is_null(parent) else { return false }
+      switch nodeType(parent) {
+      case "assignment": return !ts_node_is_null(ts_node_child_by_field_name(parent, "type", 4))
+      case "typed_parameter", "typed_default_parameter": return true
+      default: return false
+      }
+    default: return false
+    }
+  }
+
+  /// 同じ入れ子の中の同じ名前は 1 つにまとめる（pyright の記号表と同じ）。残すのは型の付いた最後の宣言、無ければ最初の
+  /// 宣言で、残さなかったものは部分木ごと落とす。
+  private func mergeSameNames(_ items: [OutlineExtraction.Item]) -> [OutlineExtraction.Item] {
+    struct Scope: Hashable {
+      let parent: Int?
+      let name: String
+    }
+    let arrangement = OutlineExtraction.arrange(items)
+    var kept: [Scope: Int] = [:]
+    for position in arrangement.order.indices {
+      let item = items[arrangement.order[position]]
+      let scope = Scope(parent: arrangement.parents[position], name: item.name)
+      if kept[scope] == nil || typedDeclarations.contains(item.node) { kept[scope] = position }
+    }
+    let keep = Set(kept.values)
+    var result: [OutlineExtraction.Item] = []
+    var position = 0
+    while position < arrangement.order.count {
+      guard keep.contains(position) else {
+        position = arrangement.ends[position]
+        continue
+      }
+      result.append(items[arrangement.order[position]])
+      position += 1
+    }
+    return result
+  }
+
   // MARK: - 節の道具
+
+  private static func id(_ node: TSNode) -> UInt {
+    UInt(bitPattern: node.id)
+  }
 
   private static func range(of node: TSNode) -> NSRange {
     let start = Int(ts_node_start_byte(node)) / 2
