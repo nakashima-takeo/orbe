@@ -27,13 +27,19 @@ extension ProjectSearchTests {
   func match(_ path: String, _ index: Int) -> RowID { RowID(path: path, match: index) }
   func header(_ path: String) -> RowID { RowID(path: path, match: nil) }
 
+  /// 平らな行の同一性を番号の順に。
+  func rowIDs(_ search: ProjectSearch) -> [RowID] {
+    (0..<search.rowCount).map { search.row(at: $0).id }
+  }
+
   func testArrowsMoveTheSelectionWithoutOpening() throws {
     let (search, opened) = try rowsFixture()
     XCTAssertEqual(
-      search.rows.map(\.id),
+      rowIDs(search),
       [
         header("a.txt"), match("a.txt", 0), match("a.txt", 1), header("b.txt"), match("b.txt", 0),
       ])
+    XCTAssertEqual((0..<5).map(search.isFileRow), [true, false, false, true, false])
 
     search.moveSelection(by: 1)
     XCTAssertEqual(search.selection, header("a.txt"), "未選択なら先頭")
@@ -55,10 +61,10 @@ extension ProjectSearchTests {
     XCTAssertEqual(search.selection, header("a.txt"), "一致の ← は親の見出しへ")
     search.moveLeft()
     XCTAssertEqual(
-      search.rows.map(\.id), [header("a.txt"), header("b.txt"), match("b.txt", 0)], "畳む")
+      rowIDs(search), [header("a.txt"), header("b.txt"), match("b.txt", 0)], "畳む")
     XCTAssertEqual(search.selection, header("a.txt"))
     search.moveRight()
-    XCTAssertEqual(search.rows.count, 5, "開く")
+    XCTAssertEqual(search.rowCount, 5, "開く")
     search.moveRight()
     XCTAssertEqual(search.selection, match("a.txt", 0), "開いた見出しの → は最初の一致へ")
   }
@@ -117,8 +123,8 @@ extension ProjectSearchTests {
     let (search, _) = try rowsFixture()
     search.toggleCollapse("a.txt")
     search.toggleCollapseAll()
-    XCTAssertEqual(search.rows.map(\.id), [header("a.txt"), header("b.txt")], "1 つでも開いていれば畳む")
+    XCTAssertEqual(rowIDs(search), [header("a.txt"), header("b.txt")], "1 つでも開いていれば畳む")
     search.toggleCollapseAll()
-    XCTAssertEqual(search.rows.count, 5, "全部畳んでいれば開く")
+    XCTAssertEqual(search.rowCount, 5, "全部畳んでいれば開く")
   }
 }

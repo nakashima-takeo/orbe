@@ -2,7 +2,9 @@ import Foundation
 import OrbeEditorCore
 
 /// 結果の平らな行（まとまりの見出しと一致の 2 種）と、選択・折りたたみ・キーボードの移動。行は結果か折りたたみが変わる
-/// たびに作り直す（エクスプローラーのツリーと同じ組み方）。↑↓ は選択だけを動かして開かない。
+/// たびに数え直し、面は番号で引いて読むだけ（エクスプローラーのツリーと同じ分担）。行は最大で約 2 万になるので、行の列は
+/// 作らず、まとまりの見出しの位置の表から番号で引く——結果が届くたびの手間はまとまりの数に比例し、一致の数に依らない。
+/// ↑↓ は選択だけを動かして開かない。
 ///
 /// 選択は位置で持つ（`Anchor`）——行の番号は編集・取り直し・開いた文書への写し替えで一致が落ちるとずれるので、番号で持つと
 /// 別の一致を指す。選んだ一致が落ちたら、その位置の直前にいる扱いになり（行は選ばない）、F4 / ⇧F4 はそこから次・前へ進む。
@@ -14,7 +16,7 @@ extension ProjectSearch {
     let match: Int?
   }
 
-  enum Row: Identifiable {
+  enum Row {
     case file(SearchFileMatches, isCollapsed: Bool)
     case match(path: String, index: Int, SearchMatch)
 
@@ -46,23 +48,46 @@ extension ProjectSearch {
     }
   }
 
-  func rebuildRows() {
-    var rows: [Row] = []
-    rows.reserveCapacity(results.files.count + results.total)
+  /// 平らな行を数え直す（まとまりの見出しの位置の表と行の数）。
+  func indexRows() {
     var starts: [Int] = []
     starts.reserveCapacity(results.files.count)
+    var count = 0
     for file in results.files {
-      starts.append(rows.count)
-      let isCollapsed = collapsed.contains(file.path)
-      rows.append(.file(file, isCollapsed: isCollapsed))
-      guard !isCollapsed else { continue }
-      for (index, match) in file.matches.enumerated() {
-        rows.append(.match(path: file.path, index: index, match))
-      }
+      starts.append(count)
+      count += collapsed.contains(file.path) ? 1 : 1 + file.count
     }
-    self.rows = rows
     fileRowStarts = starts
+    rowCount = count
+    rowsVersion &+= 1
     reanchor()
+  }
+
+  /// `index` 番目の行（`0..<rowCount`）。
+  func row(at index: Int) -> Row {
+    let file = fileIndex(ofRow: index)
+    let matches = results.files[file]
+    let offset = index - fileRowStarts[file]
+    guard offset > 0 else {
+      return .file(matches, isCollapsed: collapsed.contains(matches.path))
+    }
+    return .match(path: matches.path, index: offset - 1, matches.matches[offset - 1])
+  }
+
+  /// `index` 番目の行がまとまりの見出しか。
+  func isFileRow(_ index: Int) -> Bool {
+    fileRowStarts[fileIndex(ofRow: index)] == index
+  }
+
+  /// `index` 番目の行が属するまとまり（見出しの位置が `index` 以下の最後のもの）。
+  private func fileIndex(ofRow index: Int) -> Int {
+    var low = 0
+    var high = fileRowStarts.count
+    while high - low > 1 {
+      let mid = (low + high) / 2
+      if fileRowStarts[mid] <= index { low = mid } else { high = mid }
+    }
+    return low
   }
 
   /// 行の位置（まとまりの見出しの位置 ＋ 一致の番号。畳まれた一致・無い行は nil）。
@@ -77,13 +102,13 @@ extension ProjectSearch {
 
   func toggleCollapse(_ path: String) {
     if collapsed.contains(path) { collapsed.remove(path) } else { collapsed.insert(path) }
-    rebuildRows()
+    indexRows()
   }
 
   /// ヘッダーの「すべて折りたたむ／すべて展開」。
   func toggleCollapseAll() {
     collapsed = isAnyExpanded ? Set(results.files.map(\.path)) : []
-    rebuildRows()
+    indexRows()
   }
 
   // MARK: - 選択
@@ -219,26 +244,26 @@ extension ProjectSearch {
 
   /// ⌘↓（入力欄から）: 結果へ。未選択なら先頭を選ぶ。
   func focusResults() {
-    guard !rows.isEmpty else { return }
-    if selection == nil { select(rows.first?.id) }
+    guard rowCount > 0 else { return }
+    if selection == nil { select(row(at: 0).id) }
     requestFocus(.results)
   }
 
   /// ⌘↑: 先頭（か未選択）なら入力欄へ戻る。戻ったら true。
   func returnToFieldIfAtTop() -> Bool {
-    guard selection == nil || selection == rows.first?.id else { return false }
+    guard selection == nil || (rowCount > 0 && selection == row(at: 0).id) else { return false }
     requestFocus(.field)
     return true
   }
 
   /// ↑↓: 選択を動かす（開かない）。未選択なら先頭。
   func moveSelection(by delta: Int) {
-    guard !rows.isEmpty else { return }
+    guard rowCount > 0 else { return }
     guard let selection, let index = rowIndex(of: selection) else {
-      select(rows.first?.id)
+      select(row(at: 0).id)
       return
     }
-    select(rows[min(max(0, index + delta), rows.count - 1)].id)
+    select(row(at: min(max(0, index + delta), rowCount - 1)).id)
   }
 
   /// ←: 一致なら親の見出しへ、見出しなら畳む。
@@ -286,7 +311,7 @@ extension ProjectSearch {
     let files = results.files
     guard !files.isEmpty else { return false }
     let target = neighbor(of: anchor, forward: forward, in: files)
-    if collapsed.remove(target.path) != nil { rebuildRows() }
+    if collapsed.remove(target.path) != nil { indexRows() }
     select(target)
     onOpen(target, true)
     return true

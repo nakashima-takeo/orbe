@@ -3,8 +3,8 @@ import OrbeEditorCore
 import os
 
 /// プロジェクト検索の状態（タブごと。pane が 1 つ持つ）——問い・検索の進み・結果・平らな行・選択・折りたたみ。規則（問いの
-/// 組み立て・行の中の一致・順序・上限）は Core、1 回の検索の裏の仕事は `ProjectSearchRun`。SwiftUI（検索パネル）はこれを
-/// 読み、操作は閉包で pane へ戻る（開く・焦点）。
+/// 組み立て・行の中の一致・順序・上限）は Core、1 回の検索の裏の仕事は `ProjectSearchRun`。検索パネル（SwiftUI と結果の列の
+/// NSTableView）はこれを読み、操作は閉包で pane へ戻る（開く・焦点）。
 ///
 /// 打鍵は 300ms 後に検索し、Enter・切替・更新は即時。どの検索でも前の結果は消さず、新しい結果が最初に届いたとき（または
 /// 検索が終わった・止めたとき）に差し替える（VS Code と同じ。切り替えるたびに列がちらつかない）。検索を始め直すたびに
@@ -45,15 +45,17 @@ final class ProjectSearch {
     case disk(GitGrep.Failure)
   }
   var results = ProjectSearchResults()
-  /// 折りたたみを映した平らな行（結果か折りたたみが変わるたびに作り直す）。
-  var rows: [Row] = []
+  /// 折りたたみを映した平らな行の数（行そのものは `row(at:)` で引く）。
+  var rowCount = 0
+  /// 平らな行が変わるたびに進む（結果の列はこれを見て読み直す）。
+  var rowsVersion = 0
   /// 見せる選択（位置で持つ `anchor` から導く。選ぶのは `select`）。変われば地を押し直させる。
   var selection: RowID? {
     didSet { if selection != oldValue { onGroundChange() } }
   }
   var collapsed: Set<String> = []
-  /// パネルの中の焦点（SwiftUI が書く）。
-  var focusedArea: Area?
+  /// パネルの中の焦点（入力欄と結果の列が `focusDidChange` で書く）。
+  private(set) var focusedArea: Area?
   /// 焦点を入れる要求。パネルがその場所へ焦点を移したら消す（入力欄なら全選択）——出来事なので、当てた後に残すと
   /// パネルが次に現れたときに古い要求が焦点を奪う。
   private(set) var focusRequest: Area?
@@ -273,9 +275,9 @@ final class ProjectSearch {
     settle(.idle)
   }
 
-  /// 結果が変わった。平らな行を作り直し、地を押し直させる。
+  /// 結果が変わった。平らな行を数え直し、地を押し直させる。
   func resultsDidChange() {
-    rebuildRows()
+    indexRows()
     onGroundChange()
   }
 
@@ -288,5 +290,20 @@ final class ProjectSearch {
   /// パネルが要求を当てた。
   func focusRequestDidApply() {
     focusRequest = nil
+  }
+
+  /// 入力欄か結果の列の焦点が入った・抜けた。焦点は片方ずつ入れ替わるので、抜けたほうが今の置き場のときだけ消す（入ったほうの
+  /// 知らせが先に届いても上書きしない）。
+  func focusDidChange(_ area: Area, focused: Bool) {
+    if focused {
+      focusedArea = area
+    } else if focusedArea == area {
+      focusedArea = nil
+    }
+  }
+
+  /// パネルが隠れた。焦点の置き場も消える（隠れた view は焦点が抜けたことを知らせない）。
+  func panelDidHide() {
+    focusedArea = nil
   }
 }

@@ -21,8 +21,8 @@ extension DesignGallerySnapshotTests {
     }
 
     run(SearchQuery(pattern: "document", matchCase: true))
-    let second = try XCTUnwrap(search.rows.dropFirst(2).first?.id)
-    search.click(second)
+    XCTAssertGreaterThan(search.rowCount, 2)
+    search.click(search.row(at: 2).id)
     try writePNG(scene.view, size: size, name: "editor_search.png", dir: dir)
 
     run(SearchQuery(pattern: "zzqqxx_nothing"))

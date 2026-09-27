@@ -98,7 +98,7 @@ enum EditorStyle {
   }
 
   /// 見本の fill(α) を外観で換算した塗り（`EditorInk.fill` の NSColor 版。換算は `EditorInk.fillAlpha`）。
-  private static func fill(_ alpha: Double) -> NSColor {
+  static func fill(_ alpha: Double) -> NSColor {
     NSColor(name: nil) { appearance in
       Theme.Color.surfaceInk.withAlphaComponent(
         EditorInk.fillAlpha(alpha, dark: isDark(appearance)))

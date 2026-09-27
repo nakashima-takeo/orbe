@@ -3,10 +3,11 @@ import SwiftUI
 
 /// サイドバー: 検索パネル（見本 SearchPanel を u4 で詰めた比率に揃えたもの）。上から、ヘッダー（題・更新／停止・クリア・
 /// すべて折りたたむ／すべて展開。検索中はその下端に進捗の細い線）→ 入力欄（Aa / ab / .*）→ エラーの文 → 結果の列 → 件数の文
-/// （パネルの下に固定）。状態は `ProjectSearch` だけを読み、焦点は SwiftUI の焦点を `focusedArea` へ写す。
+/// （パネルの下に固定）。状態は `ProjectSearch` だけを読み、入力欄の焦点は SwiftUI の焦点を `focusedArea` へ写す（結果の列の
+/// 焦点は列が自分で写す）。
 struct SearchPanelView: View {
   let search: ProjectSearch
-  @FocusState private var focus: ProjectSearch.Area?
+  @FocusState private var fieldFocused: Bool
   @Environment(\.localization) private var l10n
 
   var body: some View {
@@ -15,7 +16,7 @@ struct SearchPanelView: View {
         .overlay(alignment: .bottom) {
           if search.showsProgress { SearchProgressLine() }
         }
-      ProjectSearchField(search: search, focus: $focus)
+      ProjectSearchField(search: search, focus: $fieldFocused)
       if let error = search.error {
         Text(message(for: error))
           .font(Font.theme.editorSearchNote)
@@ -25,18 +26,19 @@ struct SearchPanelView: View {
           .padding(.horizontal, 12)
           .padding(.bottom, Theme.Space.step)
       }
-      SearchResultsList(search: search, focus: $focus)
+      SearchResultsList(search: search)
       SearchSummary(search: search)
     }
-    .onChange(of: focus) { _, area in search.focusedArea = area }
+    .onChange(of: fieldFocused) { _, focused in search.focusDidChange(.field, focused: focused) }
     .onChange(of: search.focusRequest) { _, _ in applyFocusRequest() }
     .onAppear(perform: applyFocusRequest)
-    .onDisappear { search.focusedArea = nil }
+    .onDisappear(perform: search.panelDidHide)
   }
 
+  /// 入力欄への要求を当てる（結果の列への要求は列が当てる）。
   private func applyFocusRequest() {
-    guard let area = search.focusRequest else { return }
-    focus = area
+    guard search.focusRequest == .field else { return }
+    fieldFocused = true
     search.focusRequestDidApply()
   }
 
@@ -77,7 +79,7 @@ struct SearchPanelView: View {
 /// 入力欄 28: 入力（mono 12）と右端の Aa / ab / .*。焦点があると枠が accent になり角が 5 に（見本 inputBox）。
 private struct ProjectSearchField: View {
   let search: ProjectSearch
-  var focus: FocusState<ProjectSearch.Area?>.Binding
+  var focus: FocusState<Bool>.Binding
   @Environment(\.colorScheme) private var scheme
   @Environment(\.localization) private var l10n
 
@@ -87,7 +89,7 @@ private struct ProjectSearchField: View {
 
   var body: some View {
     let ink = EditorInk(scheme)
-    let focused = focus.wrappedValue == .field
+    let focused = focus.wrappedValue
     HStack(spacing: 6) {
       TextField(
         "", text: Binding(get: { search.query.pattern }, set: search.setPattern),
@@ -99,7 +101,7 @@ private struct ProjectSearchField: View {
       .foregroundStyle(Color.theme.textPrimary)
       .tint(Color.theme.accentPrimary)
       .lineLimit(1)
-      .focused(focus, equals: .field)
+      .focused(focus)
       .onSubmit { search.search() }
       .onKeyPress(.escape) {
         search.stop()

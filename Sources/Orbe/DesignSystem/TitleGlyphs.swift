@@ -68,6 +68,29 @@ enum TitleGlyphs {
     return out
   }
 
+  /// `attributed` の AppKit 版（AppKit で描く面が使う）。割り当ての無い run は `base`、どの run にも `attributes` を付ける。
+  static func nsAttributed(
+    _ title: String, base: NSFont, emoji: NSFont?,
+    attributes: [NSAttributedString.Key: Any]
+  ) -> NSAttributedString {
+    var plain = attributes
+    plain[.font] = base
+    guard needsAssignment(title) else {
+      return NSAttributedString(string: title, attributes: plain)
+    }
+    let out = NSMutableAttributedString()
+    for segment in segments(title) {
+      var run = plain
+      if let font = segment.kind.flatMap({
+        glyphFont(for: $0, size: base.pointSize, emoji: emoji)
+      }) {
+        run[.font] = font
+      }
+      out.append(NSAttributedString(string: segment.text, attributes: run))
+    }
+    return out
+  }
+
   /// `attributed` と同じ割り当てでの描画幅。タブの自然幅計算が描画とずれないための対。
   static func width(_ title: String, base: NSFont, emoji: NSFont?) -> CGFloat {
     segments(title).reduce(0) { acc, segment in
