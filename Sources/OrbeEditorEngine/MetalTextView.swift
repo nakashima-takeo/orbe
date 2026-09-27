@@ -26,8 +26,8 @@ final class MetalTextView: NSView {
   override func makeBackingLayer() -> CALayer {
     let layer = CAMetalLayer()
     layer.device = RenderThread.device
+    // 字の縁は Core Graphics と同じく色空間の値のまま（線形にせず）合成するので、_srgb の形式にしない。
     layer.pixelFormat = .bgra8Unorm
-    layer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
     layer.framebufferOnly = true
     layer.isOpaque = false
     // 描いてから画面に出るまでを短くする（drawable 2 枚）。
@@ -87,17 +87,25 @@ final class MetalTextView: NSView {
     surface?.appearanceDidChange()
   }
 
-  /// 大きさ・倍率・見えているかを drawable と面へ写す。
+  /// 大きさ・倍率・描く色空間・見えているかを drawable と面へ写す。
+  ///
+  /// 描く色空間は窓の色空間（既定は窓が載る画面の色空間）にする。AppKit は今の面をこの色空間で描くので、同じ色空間で色を
+  /// 解き、字の縁を合成し、絵文字を描けば、画面で今の面と同じに見える（別の色空間で描いて層の色合わせに任せると、透ける
+  /// 字の縁と絵文字の色がずれる）。窓が別の色空間の画面へ移れば `viewDidChangeBackingProperties` で描き直す。
   private func stateDidChange() {
     let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+    let space =
+      window?.colorSpace?.cgColorSpace.flatMap { $0.model == .rgb ? $0 : nil }
+      ?? FrameMaterial.defaultSpace
     if let metalLayer {
       metalLayer.contentsScale = scale
+      metalLayer.colorspace = space
       metalLayer.drawableSize = CGSize(
         width: (bounds.width * scale).rounded(), height: (bounds.height * scale).rounded())
     }
     let visible =
       window.map { !isHiddenOrHasHiddenAncestor && $0.occlusionState.contains(.visible) } ?? false
-    surface?.viewStateDidChange(size: bounds.size, scale: scale, visible: visible)
+    surface?.viewStateDidChange(size: bounds.size, scale: scale, space: space, visible: visible)
   }
 
   // MARK: - 撮影

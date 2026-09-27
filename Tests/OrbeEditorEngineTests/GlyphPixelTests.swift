@@ -4,11 +4,12 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 字の見た目——新しい面の本文と行番号が、同じ行を Core Text で描いたものと、字のある画素で最大 1 段（8bit）の差に
-/// 収まる。ASCII・日本語・絵文字・代替フォント・結合文字の記号の字を、1x と 2x、太らせの有無で見る。比べるのは不透明な
-/// 地に描いた絵（透明な面は窓の合成で地と混ざるので、地を塗った画面外の絵で比べる）。字どうしのインクが重なる形（アラビア
-/// 語のつながり・字に接する記号）は、重なる画素が数段ずれうるので見本に含めない。壊れると字が細る・太る・にじむ・位置が
-/// 半画素ずれる・記号が基線に落ちる。
+/// 字の見た目——新しい面の本文と行番号が、同じ行を Core Text で同じ色空間に描いたものと、字のある画素で最大 1 段
+/// （8bit）の差に収まる。ASCII・日本語・絵文字・代替フォント・結合文字の記号の字を、1x と 2x、太らせの有無で見る。比べるのは
+/// 不透明な地に描いた絵（透明な面は窓の合成で地と混ざるので、地を塗った画面外の絵で比べる）。字どうしのインクが重なる形
+/// （アラビア語のつながり・字に接する記号）は、重なる画素が数段ずれうるので見本に含めない。画面の色空間（Display P3）でも
+/// 描き、そこへ Core Text が直に描いたものと揃うことも見る。壊れると字が細る・太る・にじむ・位置が半画素ずれる・記号が
+/// 基線に落ちる・画面で字の縁と絵文字の色が今の面とずれる。
 @MainActor
 final class GlyphPixelTests: EngineTestCase {
   private static let background = MTLClearColor(
@@ -24,26 +25,39 @@ final class GlyphPixelTests: EngineTestCase {
     """
 
   func testGlyphsMatchCoreTextWithinOneLevel() throws {
+    try compareWithCoreText(in: CGColorSpace.sRGB, tolerance: 1)
+  }
+
+  /// 窓の色空間（ここでは Display P3）で描いた字と絵文字が、Core Text がその色空間へ直に描いたものと揃う。太らせの縁は
+  /// 5 段のマスクで近似するので、色の値によっては縁の 1 画素が 2 段ずれる（sRGB の見本の色では 1 段に収まる）。別の色空間で
+  /// 描いてから色を合わせると、本文で 3〜5 段、色付きの絵文字で十数段ずれる。
+  func testGlyphsInTheWindowsColorSpaceMatchCoreTextDrawnThere() throws {
+    try compareWithCoreText(in: CGColorSpace.displayP3, tolerance: 2)
+  }
+
+  private func compareWithCoreText(in spaceName: CFString, tolerance: Int) throws {
+    let space = try XCTUnwrap(CGColorSpace(name: spaceName))
     for scale: CGFloat in [1, 2] {
       for smoothing in [true, false] {
         let options = MetalTextSurfaceOptions(
           elasticScroll: true, fontSmoothing: smoothing, omittedLabel: { "\($0)" })
-        let opened = try open(
-          Self.sample, size: CGSize(width: 600, height: 140), scale: scale, options: options)
+        let size = CGSize(width: 600, height: 140)
+        let opened = try open(Self.sample, size: size, scale: scale, options: options)
+        opened.surface.viewStateDidChange(size: size, scale: scale, space: space, visible: false)
         let id = opened.surface.id
         let metal = try XCTUnwrap(
           RenderThread.shared.performAndWait {
             Transfer(value: $0.snapshot(id, background: Self.background))
           }.value)
         let reference = try coreText(opened, smoothing: smoothing)
-        let name = "\(Int(scale))x-\(smoothing)"
+        let name = "\(spaceName)-\(Int(scale))x-\(smoothing)"
         writePNG(metal, previewURL("glyphs-metal-\(name).png"))
         writePNG(reference, previewURL("glyphs-coretext-\(name).png"))
         let difference = Self.compare(metal, reference)
         print("GLYPHS \(name) ink=\(difference.ink) worst=\(difference.worst)")
         XCTAssertGreaterThan(difference.ink, 500, "前提: 字が描かれている")
         XCTAssertLessThanOrEqual(
-          difference.worst, 1, "\(name): 字のある画素の差は最大 1 段")
+          difference.worst, tolerance, "\(name): 字のある画素の差は最大 \(tolerance) 段")
       }
     }
   }
@@ -51,6 +65,7 @@ final class GlyphPixelTests: EngineTestCase {
   /// 基準を描く座標系（px、原点は左下）と見え方。
   private struct Reference {
     let context: CGContext
+    let space: CGColorSpace
     let config: SurfaceConfig
     let palette: FramePalette
     let scale: Double
@@ -62,7 +77,7 @@ final class GlyphPixelTests: EngineTestCase {
       let c = (0..<4).map {
         CGFloat(($0 == 3 ? 255 : (color.packed >> (8 * UInt32($0))) & 0xFF)) / 255
       }
-      return CGColor(srgbRed: c[0], green: c[1], blue: c[2], alpha: c[3])
+      return CGColor(colorSpace: space, components: c)!
     }
 
     /// `clip` の中に、左上からの位置 `x`・基線 `baseline`（px）で 1 行を描く。
@@ -76,7 +91,8 @@ final class GlyphPixelTests: EngineTestCase {
     }
   }
 
-  /// 同じ行を Core Text で不透明な地に描いた基準。位置の規則は新しい面と同じ（行の上端 + 基線、行番号は右寄せで縦の中央）。
+  /// 同じ行を Core Text で面と同じ色空間の不透明な地に描いた基準。位置の規則は新しい面と同じ（行の上端 + 基線、行番号は
+  /// 右寄せで縦の中央）。
   private func coreText(_ opened: Opened, smoothing: Bool) throws -> CGImage {
     let config = opened.surface.config
     let material = opened.surface.material.read()
@@ -86,11 +102,13 @@ final class GlyphPixelTests: EngineTestCase {
     let context = try XCTUnwrap(
       CGContext(
         data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
-        space: CGColorSpace(name: CGColorSpace.sRGB)!,
+        space: material.space,
         bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
           | CGBitmapInfo.byteOrder32Little.rawValue))
     let bg = Self.background
-    context.setFillColor(CGColor(srgbRed: bg.red, green: bg.green, blue: bg.blue, alpha: 1))
+    context.setFillColor(
+      try XCTUnwrap(
+        CGColor(colorSpace: material.space, components: [bg.red, bg.green, bg.blue, 1])))
     context.fill(CGRect(x: 0, y: 0, width: width, height: height))
     context.setAllowsFontSmoothing(true)
     context.setShouldSmoothFonts(smoothing)
@@ -99,7 +117,8 @@ final class GlyphPixelTests: EngineTestCase {
     context.setAllowsFontSubpixelQuantization(true)
     context.setShouldSubpixelQuantizeFonts(true)
     let r = Reference(
-      context: context, config: config, palette: try XCTUnwrap(material.palette), scale: s,
+      context: context, space: material.space, config: config,
+      palette: try XCTUnwrap(material.palette), scale: s,
       height: Double(height), top: (Double(config.topInset) * s).rounded(),
       column: (Double(config.columnWidth(lineCount: content.text.lineCount)) * s).rounded())
     let lineHeight = Double(config.lineHeight) * s
@@ -162,11 +181,13 @@ final class GlyphPixelTests: EngineTestCase {
     return (worst, ink)
   }
 
+  /// 絵の画素（絵の色空間の値のまま）。
   static func pixels(_ image: CGImage) -> [UInt8] {
     var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
     let context = CGContext(
       data: &bytes, width: image.width, height: image.height, bitsPerComponent: 8,
-      bytesPerRow: image.width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+      bytesPerRow: image.width * 4,
+      space: image.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!,
       bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
         | CGBitmapInfo.byteOrder32Little.rawValue)!
     context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))

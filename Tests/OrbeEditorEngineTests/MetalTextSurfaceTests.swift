@@ -147,6 +147,37 @@ final class MetalTextSurfaceTests: EngineTestCase {
     XCTAssertLessThan(light.max() ?? 255, 128, "ライトに変えると黒い字（灰色の地より暗い）")
   }
 
+  /// 描く色空間は窓の色空間（AppKit が今の面を描く色空間）——層の色合わせの宛先・字の色・撮影の絵がそれに従い、窓の
+  /// 色空間が変われば解き直す。窓に無ければ sRGB。
+  func testDrawsInTheWindowsColorSpace() throws {
+    let surface = try open("let a = 1\n").surface
+    let srgb = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
+    let p3 = try XCTUnwrap(CGColorSpace(name: CGColorSpace.displayP3))
+    XCTAssertEqual(surface.material.read().space, srgb, "窓に無ければ sRGB")
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.contentView = nil }
+    window.colorSpace = .displayP3
+    window.contentView = surface.view
+    XCTAssertEqual((surface.view.layer as? CAMetalLayer)?.colorspace, p3)
+    XCTAssertEqual(surface.material.read().space, p3)
+    let keyword = try XCTUnwrap(surface.material.read().palette?.roles[.keyword]).packed
+    let expected = try XCTUnwrap(
+      NSColor(srgbRed: 0.34, green: 0.61, blue: 0.84, alpha: 1).usingColorSpace(.displayP3))
+    XCTAssertEqual(
+      [0, 8, 16].map { Int((keyword >> $0) & 0xFF) },
+      [expected.redComponent, expected.greenComponent, expected.blueComponent].map {
+        Int(($0 * 255).rounded())
+      }, "字の色は窓の色空間の値")
+    XCTAssertEqual(surface.snapshot()?.colorSpace, p3, "撮影の絵も窓の色空間")
+    // 窓が別の色空間の画面へ移ると AppKit が知らせる（色空間を直に置いただけでは知らせないので、同じ知らせを送る）。
+    window.colorSpace = .sRGB
+    surface.view.viewDidChangeBackingProperties()
+    XCTAssertEqual(surface.material.read().space, srgb, "窓の色空間が変われば解き直す")
+  }
+
   /// 本文が右にまだ続くか——描画スレッドが組んだ行で横の範囲が伸びたら、main の操作を待たずに知らせ直す。右端まで
   /// 送れば続かない。
   func testClipsRightTellsWhetherTheTextContinuesToTheRight() throws {

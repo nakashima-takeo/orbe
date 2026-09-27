@@ -13,7 +13,7 @@ final class Renderer {
   let queue: MTLCommandQueue
   let gate: PipelineGate
   let fonts = FontRegistry()
-  private var atlases: [CGFloat: GlyphAtlas] = [:]
+  private var atlases: [AtlasKey: GlyphAtlas] = [:]
   private var slots: [Int: SurfaceSlot] = [:]
   /// 命令の列ごとの instance の buffer（使用中の印つき）。使用中の数が GPU に出して終わっていない命令の列の数。
   var buffers: [(buffer: MTLBuffer, busy: Bool)] = []
@@ -84,10 +84,16 @@ final class Renderer {
     for id in slots.keys { wake(id) }
   }
 
-  func atlas(scale: CGFloat) -> GlyphAtlas {
-    if let atlas = atlases[scale] { return atlas }
-    let atlas = GlyphAtlas(device: device, scale: scale, fonts: fonts)
-    atlases[scale] = atlas
+  private struct AtlasKey: Hashable {
+    var scale: CGFloat
+    var space: CGColorSpace
+  }
+
+  func atlas(scale: CGFloat, space: CGColorSpace) -> GlyphAtlas {
+    let key = AtlasKey(scale: scale, space: space)
+    if let atlas = atlases[key] { return atlas }
+    let atlas = GlyphAtlas(device: device, scale: scale, space: space, fonts: fonts)
+    atlases[key] = atlas
     return atlas
   }
 
@@ -122,7 +128,7 @@ final class Renderer {
       return
     }
     slot.idleTicks = 0
-    let atlas = atlas(scale: material.scale)
+    let atlas = atlas(scale: material.scale, space: material.space)
     if atlas.isFull, gpuInflight == 0 { atlas.reset() }
     guard slot.unpresented < frameTarget.limit, gpuInflight < Self.gpuLimit, !atlas.isFull,
       let acquired = frameTarget.acquire()

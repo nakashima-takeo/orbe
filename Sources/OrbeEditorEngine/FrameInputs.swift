@@ -3,17 +3,20 @@ import CoreText
 import OrbeEditorCore
 import os
 
-/// 色 1 つ（sRGB、α は乗算していない）と、それで描く字の太らせの段（倍率で決まる）。
+/// 色 1 つ（面の色空間の値、α は乗算していない）と、それで描く字の太らせの段（色空間と倍率で決まる）。
 struct FrameColor: Equatable, Sendable {
   var packed: UInt32
   var dilation: Int
 
-  /// `color` を外観 `appearance` で sRGB に解き、倍率 `scale` で描く字の太らせの段を決める。
+  /// `color` を外観 `appearance` で面の色空間 `space` に解き、倍率 `scale` で描く字の太らせの段を決める。
   @MainActor
-  init(_ color: NSColor, appearance: NSAppearance, fontSmoothing: Bool, scale: CGFloat) {
+  init(
+    _ color: NSColor, appearance: NSAppearance, space: CGColorSpace, fontSmoothing: Bool,
+    scale: CGFloat
+  ) {
     var resolved = color
     appearance.performAsCurrentDrawingAppearance {
-      resolved = color.usingColorSpace(.sRGB) ?? color
+      resolved = NSColorSpace(cgColorSpace: space).flatMap { color.usingColorSpace($0) } ?? color
     }
     let components = [
       resolved.redComponent, resolved.greenComponent, resolved.blueComponent,
@@ -25,7 +28,8 @@ struct FrameColor: Equatable, Sendable {
     dilation =
       fontSmoothing
       ? DilationProbe.level(
-        red: components[0], green: components[1], blue: components[2], scale: scale) : 0
+        red: components[0], green: components[1], blue: components[2], space: space, scale: scale)
+      : 0
   }
 
   init(packed: UInt32, dilation: Int) {
@@ -44,9 +48,13 @@ struct FramePalette: Equatable, Sendable {
   var removed: FrameColor
 
   @MainActor
-  init(style: TextSurfaceStyle, appearance: NSAppearance, fontSmoothing: Bool, scale: CGFloat) {
+  init(
+    style: TextSurfaceStyle, appearance: NSAppearance, space: CGColorSpace, fontSmoothing: Bool,
+    scale: CGFloat
+  ) {
     let resolve = {
-      FrameColor($0, appearance: appearance, fontSmoothing: fontSmoothing, scale: scale)
+      FrameColor(
+        $0, appearance: appearance, space: space, fontSmoothing: fontSmoothing, scale: scale)
     }
     text = resolve(style.textColor)
     roles = style.roleColors.mapValues(resolve)
@@ -217,10 +225,14 @@ struct FrameMaterial: Sendable {
   /// 面の大きさ（pt）と倍率。
   var size = CGSize.zero
   var scale: CGFloat = 2
+  /// 描く色空間。面が載る窓の色空間（AppKit が今の面を描く色空間）で、窓に無ければ sRGB。
+  var space = FrameMaterial.defaultSpace
   /// 面が画面に見えているか（窓にあり、隠れておらず、窓が覆われていない）。
   var visible = false
   /// 何かが変わるたびに進む。
   var revision = 0
+
+  static let defaultSpace = CGColorSpace(name: CGColorSpace.sRGB)!
 
   /// 本文の編集を積む（描画スレッドが長く受け取らなければ、全部の行が変わったことにまとめる）。
   mutating func note(_ edit: RowEdit) {

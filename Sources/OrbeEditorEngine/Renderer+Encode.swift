@@ -95,8 +95,8 @@ extension Renderer {
 
   // MARK: - 撮影
 
-  /// 今の位置の 1 コマを画面外に描いた絵。`background` を与えればその不透明な地に描く（無ければ透明な地）。シェーダの
-  /// コンパイルが済むまで待つ。
+  /// 今の位置の 1 コマを画面外に描いた絵（面が描く色空間の絵）。`background` を与えればその不透明な地に描く（無ければ
+  /// 透明な地）。シェーダのコンパイルが済むまで待つ。
   func snapshot(_ id: Int, background: MTLClearColor? = nil) -> CGImage? {
     guard let slot = slot(id), let pipelines = gate.wait() else { return nil }
     let material = slot.material.take()
@@ -112,7 +112,7 @@ extension Renderer {
     guard let texture = device.makeTexture(descriptor: descriptor),
       let commands = queue.makeCommandBuffer()
     else { return nil }
-    let atlas = atlas(scale: material.scale)
+    let atlas = atlas(scale: material.scale, space: material.space)
     if atlas.isFull { atlas.reset() }
     let built = slot.builder
     built.build(
@@ -138,7 +138,7 @@ extension Renderer {
     guard let provider = CGDataProvider(data: Data(bytes) as CFData) else { return nil }
     return CGImage(
       width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
-      space: CGColorSpace(name: CGColorSpace.sRGB)!,
+      space: material.space,
       bitmapInfo: CGBitmapInfo(
         rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue
           | CGBitmapInfo.byteOrder32Little.rawValue),

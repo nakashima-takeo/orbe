@@ -2,13 +2,14 @@ import CoreGraphics
 import CoreText
 import Metal
 
-/// グリフのアトラス（倍率ごとに 1 つを全部の面で共有する。描画スレッドだけが触る）。Core Text でラスタライズし、Core Text
+/// グリフのアトラス（倍率と色空間の組ごとに 1 つを全部の面で共有する。描画スレッドだけが触る）。Core Text でラスタライズし、Core Text
 /// の描き方を再現する——鍵は（フォント、グリフ、横の少数ピクセル位置、太らせの段）。
 ///
 /// - 横の少数ピクセル位置は Core Text の量子化に合わせる（字の原点を 1x で 1/3px、2x で 1/2px、3x 以上で 1px に切り捨てる）。
 ///   色付きのグリフ（ビットマップ）は Core Graphics が少数位置に置かず、絵の左端を最も近い装置の画素に丸める。
 /// - 太らせ（font smoothing 相当）の段は 0…5（0 は太らせ無し）。字の色と倍率からどの段にするかは `DilationProbe` が決める。
-/// - 色付きのグリフ（絵文字）は RGBA の別の頁に置く。
+/// - 色付きのグリフ（絵文字）は RGBA の別の頁に、面が描く色空間で描いて置く（別の色空間で描いてから写すと、Core Text が
+///   その色空間へ直に描いた絵と色がずれる）。
 /// - 頁が埋まれば頁を足す。上限に当たれば全体を作り直す（追い出しはしない）。
 final class GlyphAtlas {
   struct Entry {
@@ -33,6 +34,7 @@ final class GlyphAtlas {
   static func subpixelVariants(scale: CGFloat) -> Int { scale >= 3 ? 1 : (scale >= 2 ? 2 : 3) }
 
   let scale: CGFloat
+  let space: CGColorSpace
   let variants: Int
   private let fonts: FontRegistry
   private let device: MTLDevice
@@ -44,9 +46,10 @@ final class GlyphAtlas {
   /// 頁が上限まで埋まった。次のコマの前に作り直す。
   private(set) var isFull = false
 
-  init(device: MTLDevice, scale: CGFloat, fonts: FontRegistry) {
+  init(device: MTLDevice, scale: CGFloat, space: CGColorSpace, fonts: FontRegistry) {
     self.device = device
     self.scale = scale
+    self.space = space
     self.fonts = fonts
     variants = Self.subpixelVariants(scale: scale)
   }
@@ -113,8 +116,7 @@ final class GlyphAtlas {
         isColor
         ? CGContext(
           data: buffer.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
-          space: CGColorSpace(name: CGColorSpace.sRGB)!,
-          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+          space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         : CGContext(
           data: buffer.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w,
           space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue)
