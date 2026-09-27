@@ -43,8 +43,10 @@ final class EditorScrollPerfTests: OrbeTestCase {
   }
 
   /// 新しい面（Metal）の打鍵 1 回の main の仕事——キーの出来事を受けてから、面の編集係・文書・Orbe の配り先（検索・出現・
-  /// 俯瞰への知らせ）が戻るまで。p99 1ms 以下（200KB・1MB、git 管理下、1 万字近い長い行の行末）。描くのは描画スレッド。
-  /// プロセスで最初の 1 打鍵（入力の仕組みの初期化を含む）だけは数えないので、測る文書を開く前に別の文書で 1 回打つ。
+  /// 俯瞰への知らせ）が戻るまでの main のスレッドの CPU 時間。p99 1ms 以下（200KB・1MB、git 管理下、1 万字近い長い行の
+  /// 行末）。壁時計の時間は機械の混み具合で膨らむので参考に出すだけにする（利用者が感じる遅れは打鍵→present の関門が
+  /// 見る）。描くのは描画スレッド。プロセスで最初の 1 打鍵（入力の仕組みの初期化を含む）だけは数えないので、測る文書を
+  /// 開く前に別の文書で 1 回打つ。
   func testMetalTypingMainTime() throws {
     let metal = EditorEngineChoice(
       metal: true, elasticScroll: true, fontSmoothing: true, language: .ja)
@@ -64,18 +66,21 @@ final class EditorScrollPerfTests: OrbeTestCase {
       opened.document.surface.selectedRange = NSRange(
         location: label == "long-line" ? 9_990 : opened.document.text.lineStart(row + 5) + 4,
         length: 0)
-      var times: [Double] = []
+      var cpu: [Double] = []
+      var wall: [Double] = []
       for character in String(repeating: "let value = compute(offset) ok ", count: 3) {
-        let began = CACurrentMediaTime()
+        let began = (clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID), CACurrentMediaTime())
         opened.document.surface.responder.keyDown(with: .key(String(character), []))
-        times.append((CACurrentMediaTime() - began) * 1000)
+        cpu.append(Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - began.0) / 1e6)
+        wall.append((CACurrentMediaTime() - began.1) * 1000)
         RunLoop.main.run(until: Date().addingTimeInterval(0.01))
       }
-      reportPerf(label, "metal-typing-main (baseline あり)", times, digits: 3)
-      let sorted = times.sorted()
+      reportPerf(label, "metal-typing-main (baseline あり)", cpu, digits: 3)
+      reportPerf(label, "metal-typing-main-wall (参考)", wall, digits: 3)
+      let sorted = cpu.sorted()
       XCTAssertLessThanOrEqual(
         sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.99))], 1,
-        "\(label): 打鍵 1 回の main の仕事の p99")
+        "\(label): 打鍵 1 回の main のスレッドの CPU 時間の p99")
       opened.window.orderOut(nil)
     }
   }
