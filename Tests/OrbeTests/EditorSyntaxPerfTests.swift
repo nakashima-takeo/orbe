@@ -16,8 +16,9 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
 
   /// 構文の崩れる打鍵の裏の重さ。1MB の Swift と、タグ付きテンプレートを含む 1MB の JS の途中で `let v = f(` の `(` を
   /// 打った 1 回の後の、裏のスレッドの CPU 時間の総和（見えていない範囲の作り直しを含む）・見えている行の色が最終の色に
-  /// なるまで・文書全体が揃うまで。続けて同じ崩れた文書で 30ms おきに 50 打鍵し、打ち続けた間と止んでからの裏の CPU と、
-  /// 最後の打鍵から全体が揃うまでを出す。裏の CPU はプロセスの CPU から main スレッドの CPU を引いたもの。
+  /// なるまで・文書全体が揃うまで（どれも打鍵の前から）。続けて同じ崩れた文書で 30ms おきに 50 打鍵し、打ち続けた間と
+  /// 止んでからの裏の CPU と、その間の構文解析の回数と、最後の打鍵から全体が揃うまでを出す。裏の CPU はプロセスの CPU から
+  /// main スレッドの CPU を引いたもの。
   func testCrumblingKeystroke() throws {
     for (label, ext, text) in [
       ("1MB", "swift", EditorScrollPerfTests.swiftSource(bytes: 1_000_000)),
@@ -44,11 +45,13 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
           length: document.text.lineEnd(first + Int(lines.visible.rounded(.up))) - start)
       }
       let began = CPUClock()
-      document.onRolesChange = { _ in
+      let minimap = document.onRolesChange
+      document.onRolesChange = { changed in
+        minimap?(changed)
         deliveries.append((began.elapsed, document.roles.roles(in: visible())))
       }
-      document.surface.responder.keyDown(with: .key("(", []))
       let typed = began.elapsed
+      document.surface.responder.keyDown(with: .key("(", []))
       XCTAssertTrue(pumpUntilCaughtUp(document))
       let complete = began.elapsed
       let cpu = began.backgroundCPU
@@ -62,7 +65,8 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
         ms(max(0, settled - typed)), "complete", ms(complete - typed), "deliveries",
         deliveries.count)
 
-      document.onRolesChange = nil
+      document.onRolesChange = minimap
+      let parsed = document.syntax?.parseCount ?? 0
       let burst = CPUClock()
       for index in 0..<50 {
         document.surface.responder.keyDown(with: .key(index % 2 == 0 ? "a" : "b", []))
@@ -73,12 +77,14 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
       XCTAssertTrue(pumpUntilCaughtUp(document))
       print(
         "PERF", label, "crumbled-burst(50x30ms) background-cpu typing", ms(typing), "after",
-        ms(burst.backgroundCPU - typing), "last-key-to-complete", ms(burst.elapsed - stopped))
+        ms(burst.backgroundCPU - typing), "parses", (document.syntax?.parseCount ?? 0) - parsed,
+        "last-key-to-complete", ms(burst.elapsed - stopped))
       opened.window.orderOut(nil)
     }
   }
 
-  /// 開いてから文書全体の役割が揃うまで（1MB の Swift・JS・Markdown）。
+  /// 開いてから文書全体の役割が揃うまで（1MB の Swift・JS・Markdown）。開く直前から、急かさずに待って揃うまで——窓と
+  /// ファイルの用意は区間の外。
   func testOpeningUntilComplete() throws {
     for (label, ext, text) in [
       ("1MB", "swift", EditorScrollPerfTests.swiftSource(bytes: 1_000_000)),
@@ -86,23 +92,18 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
       ("1MB-md", "md", Self.markdownSource(bytes: 1_000_000)),
     ] {
       let times = try (0..<3).map { _ -> Double in
+        let host = try editorWindow()
+        let url = try caseFile("big-\(UUID().uuidString).\(ext)", text)
         let clock = CPUClock()
-        let opened = try openEditor(text, extension: ext)
+        let document = try host.tab.editor.open(url)
+        host.pane.layoutSubtreeIfNeeded()
+        XCTAssertTrue(pumpUntilCaughtUp(document))
         let elapsed = clock.elapsed
-        opened.window.orderOut(nil)
+        host.window.orderOut(nil)
         return elapsed
       }
       reportPerf(label, "open-until-complete", times)
     }
-  }
-
-  /// 文書が裏の結果を受け取って今の版に追いつくまで main を回す（裏を急かさない）。
-  private func pumpUntilCaughtUp(_ document: EditorDocument, timeout: TimeInterval = 60) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !document.isCaughtUp, Date() < deadline {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.001))
-    }
-    return document.isCaughtUp
   }
 
   private func ms(_ value: Double) -> String { String(format: "%.1f", value) }

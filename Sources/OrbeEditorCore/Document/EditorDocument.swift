@@ -72,7 +72,7 @@ public final class EditorDocument {
   public var onAnalysis: ((AnalysisRequest, [NSRange]) -> Void)?
 
   private let inbox: AnalysisInbox
-  private var syntax: SyntaxWorker?
+  private(set) var syntax: SyntaxWorker?
   private let analysis: DocumentAnalysis
   /// 最後に受け取った構文の結果の版と、そのとき見えている範囲・全体の作り直しが済んでいたか。
   private var syntaxState = SyntaxProgress(version: 0, visibleReady: false, complete: false)

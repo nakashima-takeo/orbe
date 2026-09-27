@@ -37,6 +37,8 @@ actor SyntaxWorker {
   private let mailbox: OSAllocatedUnfairLock<Mail>
   private let inbox: AnalysisInbox
   private let cancellation = SyntaxCancellation()
+  /// 編集を当てて根を差分で解析した回数（計測が読む）。
+  private let parses = OSAllocatedUnfairLock(initialState: 0)
   private let quietDelay: DispatchTimeInterval
   private let layers: SyntaxLayers
   private var text: TextRope
@@ -97,6 +99,9 @@ actor SyntaxWorker {
     }
     wakeIfStale { $0.hurry = true }
   }
+
+  /// 編集を当てて根を差分で解析した回数。
+  nonisolated var parseCount: Int { parses.withLock { $0 } }
 
   /// 文書を閉じた。走っている解析を打ち切り、以後は何もしない。
   nonisolated func cancel() {
@@ -176,6 +181,7 @@ actor SyntaxWorker {
       changed = record.edit.track(changed)
     }
     version = batch.version
+    parses.withLock { $0 += 1 }
     for range in layers.apply(batch.edits, text: text).rangeView {
       let covered = lines(covering: NSRange(range))
       stale.insert(integersIn: covered.location..<NSMaxRange(covered))

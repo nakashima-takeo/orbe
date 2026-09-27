@@ -194,7 +194,6 @@ final class EditorScrollPerfTests: OrbeTestCase {
     }
     return text
   }
-
 }
 
 /// 編集の通知を文書へ流し、その呼び出しが戻るまでの時間（ms）を記録する delegate。
