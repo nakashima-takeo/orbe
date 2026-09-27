@@ -261,14 +261,13 @@ extension ProjectSearch {
     }
   }
 
-  /// Enter: 見出しなら開閉、一致なら開いてテキスト面へ焦点。
+  /// Enter: 開いてテキスト面へ焦点。見出しならそのまとまりの最後の一致を開く（VS Code と同じ。開閉は ← → と見出しの
+  /// クリック）。
   func activateSelection() {
-    guard let selection else { return }
-    if selection.match == nil {
-      toggleCollapse(selection.path)
-    } else {
-      onOpen(selection, true)
-    }
+    guard let selection, let file = results[selection.path] else { return }
+    let target = selection.match == nil ? RowID(path: file.path, match: file.count - 1) : selection
+    select(target)
+    onOpen(target, true)
   }
 
   /// Esc: 検索中なら止める。そうでなければ選択を外す。
