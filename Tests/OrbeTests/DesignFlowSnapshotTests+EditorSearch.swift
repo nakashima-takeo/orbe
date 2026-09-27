@@ -6,7 +6,8 @@ import XCTest
 
 /// プロジェクト検索の flow（fixture は骨の `EditorShellFixtures`。状態は本物の操作が生む）: 端末焦点から ⌘⇧F → 打鍵
 /// （300ms 後に検索）→ 結果 → ⌘↓ で結果へ → ↓ → Enter（ファイルが開いて一致が選ばれ中央に。橙の地と現在の一致）→
-/// レールでエクスプローラーへ切り替えると地が消える。
+/// レールでエクスプローラーへ切り替えると地が消える → F4 で次の一致（検索パネルが戻り、焦点は本文のまま——入力欄は
+/// 焦点の枠を出さない）。
 extension DesignFlowSnapshotTests {
   func testEditorSearch() throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
@@ -33,6 +34,15 @@ extension DesignFlowSnapshotTests {
         ("down", { search.moveSelection(by: 1) }),
         ("enter_opens", { search.activateSelection() }),
         ("explorer_hides_ground", { pane.selectPanel(.files) }),
+        (
+          "f4_next",
+          {
+            // 撮るたびに pane は撮影用の窓へ載せ替わるので、Enter で本文へ入れた焦点を今の窓で置き直してから押す。
+            pane.window?.makeFirstResponder(pane.focusTarget)
+            let f4 = String(UnicodeScalar(NSEvent.SpecialKey.f4.rawValue)!)
+            XCTAssertTrue(pane.handleStepKey(.key(f4, [])))
+          }
+        ),
       ])
   }
 }
