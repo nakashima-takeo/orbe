@@ -97,9 +97,9 @@ extension MetalTextSurface {
   }
 }
 
-/// main の runloop の 1 周の終わり（待ちに入る前と、runloop を抜けるとき。全部のモード）に、出す前の状態を持つ面を出す。
-/// Core Animation の暗黙の確定と同じ見張り方で、出来事や main の仕事が途切れず「待ちに入る前」が来ない間も、runloop を
-/// 抜けるたびに出す。
+/// main の runloop の 1 周の終わり（待ちに入る前と、runloop を抜けるとき。共通のモード——既定・イベントの追跡・
+/// モーダルのパネル）に、出す前の状態を持つ面を出す。Core Animation の暗黙の確定と同じ見張り方で、出来事や main の
+/// 仕事が途切れず「待ちに入る前」が来ない間も、runloop を抜けるたびに出す。
 @MainActor
 final class FlushScheduler {
   static let shared = FlushScheduler()
