@@ -23,11 +23,13 @@ final class EditorSidebarStateTests: OrbeTestCase {
     state.commit()
     XCTAssertEqual(
       AppStatePersistence.load()?.editorSidebar,
-      EditorSidebarRecord(width: 300, isOpen: true, panel: "files"))
+      EditorSidebarRecord(
+        width: 300, isOpen: true, panel: "files", isOutlineOpen: false, outlineFraction: 0.5))
     state.select(.files)
     XCTAssertEqual(
       AppStatePersistence.load()?.editorSidebar,
-      EditorSidebarRecord(width: 300, isOpen: false, panel: "files"))
+      EditorSidebarRecord(
+        width: 300, isOpen: false, panel: "files", isOutlineOpen: false, outlineFraction: 0.5))
 
     let reloaded = EditorSidebarState.loaded()
     XCTAssertEqual(reloaded.width, 300)
@@ -95,5 +97,29 @@ final class EditorSidebarStateTests: OrbeTestCase {
     XCTAssertEqual(EditorSidebarState.loaded().panel, .files)
     AppStatePersistence.save(AppStateFile(editorSidebar: EditorSidebarRecord(width: 300)))
     XCTAssertEqual(EditorSidebarState.loaded().panel, .files)
+  }
+
+  /// アウトラインの開閉と区画の比も記憶する——既定は閉・半々、見出しで開閉し、境のドラッグの終わりで比を書き戻す。欠落は
+  /// 閉、読めない・範囲外の比は半々へ落とす。
+  func testTheOutlineOpennessAndFractionAreRemembered() throws {
+    let state = EditorSidebarState.loaded()
+    XCTAssertFalse(state.isOutlineOpen, "既定は閉")
+    XCTAssertEqual(state.outlineFraction, 0.5)
+    state.toggleOutline()
+    state.setOutlineFraction(0.7)
+    XCTAssertEqual(AppStatePersistence.load()?.editorSidebar?.outlineFraction, 0.5, "ドラッグ中は書かない")
+    state.commit()
+    let reloaded = EditorSidebarState.loaded()
+    XCTAssertTrue(reloaded.isOutlineOpen)
+    XCTAssertEqual(reloaded.outlineFraction, 0.7, accuracy: 0.0001)
+
+    AppStatePersistence.save(
+      AppStateFile(editorSidebar: EditorSidebarRecord(width: 240, outlineFraction: 3)))
+    let odd = EditorSidebarState.loaded()
+    XCTAssertFalse(odd.isOutlineOpen, "開閉の欠落は閉")
+    XCTAssertEqual(odd.outlineFraction, 0.5, "範囲外の比は既定")
+    try Data(#"{"editorSidebar":{"isOutlineOpen":"yes","outlineFraction":"half"}}"#.utf8).write(
+      to: appStateFile())
+    XCTAssertEqual(AppStatePersistence.load()?.editorSidebar, EditorSidebarRecord(), "読めない欄は nil")
   }
 }

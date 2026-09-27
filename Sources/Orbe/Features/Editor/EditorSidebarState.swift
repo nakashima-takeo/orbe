@@ -1,9 +1,10 @@
 import CoreGraphics
 import Foundation
 
-/// エディター面のサイドバーの幅・開閉・出しているパネル（ファイル／検索）。アプリ全体で 1 つ（タブ・workspace を
-/// またいで同じ）で、app-state に永続する（タブ単位の面の配置とは別）。幅の下限はここで守り、上限（本体に最低幅が
-/// 残る）は面の幅を知る pane が決める。
+/// エディター面のサイドバーの幅・開閉・出しているパネル（ファイル／検索）と、エクスプローラーの下段のアウトラインの
+/// 開閉・区画の比。アプリ全体で 1 つ（タブ・workspace をまたいで同じ）で、app-state に永続する（タブ単位の面の配置とは
+/// 別）。幅の下限はここで守り、上限（本体に最低幅が残る）は面の幅を知る pane が決める。区画の比はパネルの高さに対する
+/// アウトラインの比で持ち（窓の高さが変わっても比は変わらない）、両方の区画の最小の高さはパネルの高さを知る view が守る。
 @MainActor @Observable
 final class EditorSidebarState {
   /// サイドバーのパネル（レールの項目と 1 対 1）。
@@ -15,27 +16,39 @@ final class EditorSidebarState {
   private(set) var width: CGFloat
   private(set) var isOpen: Bool
   private(set) var panel: Panel
+  private(set) var isOutlineOpen: Bool
+  private(set) var outlineFraction: CGFloat
   @ObservationIgnored private let persists: Bool
+
+  /// 区画の比の既定（半々）。
+  static let defaultOutlineFraction: CGFloat = 0.5
 
   init(
     width: CGFloat = Theme.Layout.editorSidebar, isOpen: Bool = true, panel: Panel = .files,
+    isOutlineOpen: Bool = false, outlineFraction: CGFloat = defaultOutlineFraction,
     persists: Bool = false
   ) {
     self.width = Self.clamp(width)
     self.isOpen = isOpen
     self.panel = panel
+    self.isOutlineOpen = isOutlineOpen
+    self.outlineFraction = Self.clampFraction(outlineFraction)
     self.persists = persists
   }
 
   /// app-state から起こす（以後の変更は書き戻す）。読めない・範囲外の幅は既定、開閉の欠落は開、パネルの欠落・未知は
-  /// ファイル。
+  /// ファイル、アウトラインの開閉の欠落は閉、区画の比の欠落・範囲外は既定。
   static func loaded() -> EditorSidebarState {
     let record = AppStatePersistence.load()?.editorSidebar
     let width = record?.width.map { CGFloat($0) }
+    let fraction = record?.outlineFraction.map { CGFloat($0) }
     return EditorSidebarState(
       width: width.flatMap { $0.isFinite && $0 >= Theme.Layout.editorSidebarMinWidth ? $0 : nil }
         ?? Theme.Layout.editorSidebar,
       isOpen: record?.isOpen ?? true, panel: record?.panel.flatMap(Panel.init) ?? .files,
+      isOutlineOpen: record?.isOutlineOpen ?? false,
+      outlineFraction: fraction.flatMap { $0.isFinite && $0 > 0 && $0 < 1 ? $0 : nil }
+        ?? defaultOutlineFraction,
       persists: true)
   }
 
@@ -46,8 +59,21 @@ final class EditorSidebarState {
     self.width = clamped
   }
 
-  /// ドラッグの終わり。幅を書き戻す。
+  /// ドラッグの終わり。幅と区画の比を書き戻す。
   func commit() { save() }
+
+  /// アウトラインの見出しを押した: 開閉する。
+  func toggleOutline() {
+    isOutlineOpen.toggle()
+    save()
+  }
+
+  /// 境のドラッグ中の区画の比（書き戻しは `commit`）。
+  func setOutlineFraction(_ fraction: CGFloat) {
+    let clamped = Self.clampFraction(fraction)
+    guard clamped != outlineFraction else { return }
+    outlineFraction = clamped
+  }
 
   /// レールの項目を押した: 出しているパネルなら閉じ、別のパネルならそれへ切り替える（閉じていれば開く）。
   func select(_ panel: Panel) {
@@ -73,9 +99,16 @@ final class EditorSidebarState {
     return max(Theme.Layout.editorSidebarMinWidth, width.rounded())
   }
 
+  private static func clampFraction(_ fraction: CGFloat) -> CGFloat {
+    guard fraction.isFinite else { return defaultOutlineFraction }
+    return min(1, max(0, fraction))
+  }
+
   private func save() {
     guard persists else { return }
-    let record = EditorSidebarRecord(width: Double(width), isOpen: isOpen, panel: panel.rawValue)
+    let record = EditorSidebarRecord(
+      width: Double(width), isOpen: isOpen, panel: panel.rawValue, isOutlineOpen: isOutlineOpen,
+      outlineFraction: Double(outlineFraction))
     AppStatePersistence.update { $0.editorSidebar = record }
   }
 }
