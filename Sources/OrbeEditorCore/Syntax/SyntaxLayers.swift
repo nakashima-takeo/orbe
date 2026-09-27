@@ -111,10 +111,10 @@ final class SyntaxLayers {
       invalidated.formUnion(injections.drop([placed]))
       return IndexSet()
     }
+    let old = layer.rules.grammar.reusesTrees ? layer.tree : nil
+    if layer.rangesReplaced { old?.prepareToExtend(to: ranges) }
     let outcome = parser.parse(
-      layer.rules.language, ranges: ranges,
-      old: layer.rules.grammar.reusesTrees && !layer.rangesReplaced ? layer.tree : nil, text: text,
-      origin: placed.origin)
+      layer.rules.language, ranges: ranges, old: old, text: text, origin: placed.origin)
     guard case .parsed(let tree) = outcome else {
       if case .rejected = outcome { invalidated.formUnion(injections.drop([placed])) }
       return IndexSet()

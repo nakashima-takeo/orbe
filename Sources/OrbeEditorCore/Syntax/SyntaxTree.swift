@@ -24,6 +24,24 @@ final class SyntaxTree {
     ts_tree_edit(raw, &edit)
   }
 
+  /// 含める範囲を `ranges` に替えて差分解析する前に、前の範囲の終わりで入力の終わりを見た節を解析し直させる——tree-sitter
+  /// は範囲の違いを節の位置と先読みの長さで見るが、最後の範囲の端で入力が終わった節は先読みがそこで止まるので、その後ろに
+  /// 足した範囲の違いと交わらず、読み直さずに使い回される（閉じていない <script> の中身が、足した範囲の </script> まで
+  /// 伸びない）。後ろに足した範囲の分だけ入力の終わりが動いたことを、前の最後の範囲の端での長さ 0 の編集として写す。
+  func prepareToExtend(to ranges: [TSRange]) {
+    var count: UInt32 = 0
+    guard let old = ts_tree_included_ranges(raw, &count) else { return }
+    defer { free(old) }
+    guard count > 0, let last = ranges.last, last.end_byte > old[Int(count) - 1].end_byte else {
+      return
+    }
+    let end = old[Int(count) - 1]
+    edit(
+      TSInputEdit(
+        start_byte: end.end_byte, old_end_byte: end.end_byte, new_end_byte: end.end_byte,
+        start_point: end.end_point, old_end_point: end.end_point, new_end_point: end.end_point))
+  }
+
   /// この木（編集を写したもの）から `new` へ、構文が変わった区間（バイト）。
   func changedRanges(to new: SyntaxTree) -> [Range<Int>] {
     var count: UInt32 = 0
