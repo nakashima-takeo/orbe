@@ -124,6 +124,16 @@ final class SurfaceMouseTests: EngineTestCase {
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 0, length: 32))
   }
 
+  /// 4 回のクリックの全体の選択は、⌘A と同じく位置を動かさない（VS Code の `SelectAll` も見せにいかない）。
+  func testFourClicksSelectAllWithoutScrolling() throws {
+    let opened = try open((0..<3000).map { "row \($0)" }.joined(separator: "\n"))
+    _ = host(opened, size: CGSize(width: 600, height: 400))
+    try click(opened, row: 1, column: 2, clicks: 4)
+    XCTAssertEqual(opened.surface.selectedRange.length, opened.document.text.length)
+    XCTAssertEqual(opened.surface.scroll.peek(at: 0).position.y, 0, "末尾へ飛ばない")
+    XCTAssertEqual(opened.document.viewportLines.first, 0)
+  }
+
   /// ⌃クリックは何もしない（選択も焦点も動かない。右クリックのメニューは面の外の仕事）。行番号の列でも行を選ばない。
   func testControlClickDoesNothing() throws {
     let opened = try open(sample)

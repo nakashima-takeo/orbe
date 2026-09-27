@@ -109,6 +109,7 @@ final class MouseSelection: NSObject {
     let primary = surface.editor.state.cursors.primary
     let shift = flags.contains(.shift)
     let cursor: Cursor
+    var reveal = Reveal.minimal
     if hit.area == .numbers {
       drag = .numbers
       cursor =
@@ -129,9 +130,10 @@ final class MouseSelection: NSObject {
       default:
         drag = nil
         cursor = .selecting(NSRange(location: 0, length: text.length))
+        reveal = .none
       }
     }
-    surface.editor.select(CursorList(cursor), reveal: .minimal)
+    surface.editor.select(CursorList(cursor), reveal: reveal)
   }
 
   func mouseDragged(_ event: NSEvent, in view: NSView) {
