@@ -171,7 +171,8 @@ final class RowListTests: OrbeTestCase {
     list.pageDown(nil)
     list.mouseDown(
       with: NSEvent.mouseEvent(
-        with: .leftMouseDown, location: list.convert(NSPoint(x: 10, y: list.visibleRect.midY), to: nil),
+        with: .leftMouseDown,
+        location: list.convert(NSPoint(x: 10, y: list.visibleRect.midY), to: nil),
         modifierFlags: [], timestamp: 0, windowNumber: hosted.window.windowNumber, context: nil,
         eventNumber: 0, clickCount: 1, pressure: 1)!)
     XCTAssertEqual(hosted.source.outOfRange, 0)

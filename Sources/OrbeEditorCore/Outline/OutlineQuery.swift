@@ -49,6 +49,13 @@ struct OutlineExtraction {
     var node: UInt
   }
 
+  /// 節を取ったパターンと、その節から作ったシンボル。
+  private struct Claim {
+    let pattern: UInt16
+    let node: TSNode
+    let items: [Item]
+  }
+
   let query: OutlineQuery
   let grammar: Grammar
   private let cursor = QueryCursor()
@@ -59,7 +66,7 @@ struct OutlineExtraction {
   ) -> DocumentOutline? {
     // 同じ節を複数のパターンが取ったら、規則に先に書いたパターン（番号の小さい方）が勝つ——マッチの届く順はパターンの
     // 順と限らない。同じパターンが同じ節に重ねて当たれば先に届いた方。
-    var claims: [UInt: (pattern: UInt16, node: TSNode, items: [Item])] = [:]
+    var claims: [UInt: Claim] = [:]
     var order: [UInt] = []
     var annotations: [UInt: Bool] = [:]
     var naming = OutlineItems(grammar: grammar)
@@ -92,7 +99,7 @@ struct OutlineExtraction {
         return made
       }
       if claims[node] == nil { order.append(node) }
-      claims[node] = (match.pattern_index, item, made)
+      claims[node] = Claim(pattern: match.pattern_index, node: item, items: made)
     }
     guard finished else { return nil }
     let items = order.flatMap { node -> [Item] in
