@@ -11,6 +11,17 @@ public struct OutlineFilterResult: Sendable {
   public let matched: [Int]
   /// 一致したシンボルの番号 → 名前の中で一致した字の区間（UTF-16、昇順）。
   public let matches: [Int: [Range<Int>]]
+
+  /// `matched` の中で、番号が `symbol` 以上の最初の位置（無ければ `matched.count`）。二分探索で引く。
+  public func firstMatchPosition(from symbol: Int) -> Int {
+    var low = 0
+    var high = matched.count
+    while low < high {
+      let middle = (low + high) / 2
+      if matched[middle] < symbol { low = middle + 1 } else { high = middle }
+    }
+    return low
+  }
 }
 
 /// アウトライン 1 つに照合をかける（アウトラインの裏の仕事の中だけで使う）。照合は VS Code の tree の絞り込みと同じ

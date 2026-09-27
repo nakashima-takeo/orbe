@@ -360,24 +360,16 @@ final class EditorOutline {
   /// なれば選択は動かさない。どの場合も、選んでいる行が見えていなければ中央へ寄せる（VS Code の tree の絞り込みと同じ）。
   /// 一致は昇順の列から二分探索で引く。
   private func chooseMatch(from current: Int?) {
-    if let matched = filter?.matched, let symbol = nextMatch(from: current, in: matched) {
+    if let filter, let symbol = nextMatch(from: current, in: filter) {
       return choose(symbol, centered: true)
     }
     if let current, rows.row(of: current) != nil { choose(current, centered: true) }
   }
 
   /// `current` 以後の最初の見えている一致（末尾を過ぎれば頭から）。
-  private func nextMatch(from current: Int?, in matched: [Int]) -> Int? {
-    var start = 0
-    if let current {
-      var low = 0
-      var high = matched.count
-      while low < high {
-        let middle = (low + high) / 2
-        if matched[middle] < current { low = middle + 1 } else { high = middle }
-      }
-      start = low
-    }
+  private func nextMatch(from current: Int?, in filter: OutlineFilterResult) -> Int? {
+    let matched = filter.matched
+    let start = current.map(filter.firstMatchPosition(from:)) ?? 0
     for offset in 0..<matched.count {
       let symbol = matched[(start + offset) % matched.count]
       if rows.row(of: symbol) != nil { return symbol }
