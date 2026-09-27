@@ -17,7 +17,7 @@ final class ProjectSearchPaneTests: OrbeTestCase {
     let tab: TerminalTab
     let pane: EditorPaneView
     let window: NSWindow
-    var search: ProjectSearch { pane.projectSearch }
+    @MainActor var search: ProjectSearch { pane.projectSearch }
   }
 
   /// 根 `repo` のタブの面だけを窓に載せる。端末は載せない——端末の shell は起動しないので、その cwd の報告（OSC 7）が面の根を
@@ -53,7 +53,7 @@ final class ProjectSearchPaneTests: OrbeTestCase {
 
   func replace(_ document: EditorDocument, _ range: NSRange, with text: String) {
     document.surface.selectedRange = range
-    document.surface.responder.perform(Selector(("insertText:")), with: text)
+    document.surface.responder.perform(#selector(NSResponder.insertText(_:)), with: text)
   }
 
   /// 選択の行（見せている文書の本文）。

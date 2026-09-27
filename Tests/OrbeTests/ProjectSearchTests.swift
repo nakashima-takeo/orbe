@@ -46,7 +46,7 @@ final class ProjectSearchTests: OrbeTestCase {
   /// 本文の `range` を `text` に置き換える（打鍵と同じ入力の口から）。
   func replace(_ document: EditorDocument, _ range: NSRange, with text: String) {
     document.surface.selectedRange = range
-    document.surface.responder.perform(Selector(("insertText:")), with: text)
+    document.surface.responder.perform(#selector(NSResponder.insertText(_:)), with: text)
   }
 
   /// 条件が `seconds` の間ずっと成り立つ（来てはいけないものが来ないこと）。
