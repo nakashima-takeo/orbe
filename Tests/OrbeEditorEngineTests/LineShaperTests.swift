@@ -41,7 +41,14 @@ final class LineShaperTests: XCTestCase {
       0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069, 0x200E, 0x200F,
       0x061C,
     ]
-    XCTAssertTrue(formats.allSatisfy(LineShaper.isDirectionalFormat))
+    for format in formats {
+      let shaped = LineShaper.shape(
+        source("a" + String(utf16CodeUnits: [format], count: 1) + "b"), font: font, tabWidth: 0)
+      let label = LineShaper.shape(String(format: "[U+%04X]", format), font: font)
+      let boxed = shaped.runs.flatMap { zip($0.offsets, $0.glyphs) }.filter { $0.0 == 1 }
+      XCTAssertEqual(
+        boxed.map(\.1), label.runs.flatMap(\.glyphs), String(format: "U+%04X は箱で見せる", format))
+    }
     let line = source("ab\u{202E}cd")
     let shaped = LineShaper.shape(line, font: font, tabWidth: 0)
     let offsets = shaped.runs.flatMap(\.offsets)
