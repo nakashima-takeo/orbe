@@ -26,18 +26,20 @@ final class SurfaceEditingTests: EngineTestCase {
     XCTAssertTrue(opened.document.isDirty)
   }
 
-  /// テンキーの Clear は選択を消し（選択が無ければ何もしない）、⌃/ は右から左の印と `/` を入れる（NSTextView と同じ）。
+  /// テンキーの Clear（`delete:`）は選択を消し（選択が無ければ何もしない）、⌃/（`insertRightToLeftSlash:`）は右から左の
+  /// 印と `/` を入れる（NSTextView と同じ）。キーからセレクタへ写すのは入力の仕組みで、写すかは入力ソースに依るので
+  /// （NSTextView も同じ）、入力の仕組みが送るのと同じ `doCommand(by:)` でセレクタを送る。
   func testClearAndControlSlashActLikeNSTextView() throws {
     let opened = try open("abc")
     _ = host(opened)
-    let clear = String(UnicodeScalar(NSClearLineFunctionKey)!)
+    let view = opened.surface.textView
     opened.surface.selectedRange = NSRange(location: 1, length: 0)
-    try key(opened, clear, [.numericPad, .function], keyCode: 71)
+    view.doCommand(by: #selector(MetalTextView.delete(_:)))
     XCTAssertEqual(text(opened.document), "abc")
     opened.surface.selectedRange = NSRange(location: 1, length: 1)
-    try key(opened, clear, [.numericPad, .function], keyCode: 71)
+    view.doCommand(by: #selector(MetalTextView.delete(_:)))
     XCTAssertEqual(text(opened.document), "ac")
-    try key(opened, "/", .control, keyCode: 44)
+    view.doCommand(by: #selector(MetalTextView.insertRightToLeftSlash(_:)))
     XCTAssertEqual(text(opened.document), "a\u{200F}/c")
     XCTAssertEqual(opened.surface.caretLocation, 3)
   }
