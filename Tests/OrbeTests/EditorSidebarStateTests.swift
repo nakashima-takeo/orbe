@@ -2,10 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// サイドバーの幅と開閉の記憶——app-state から起こし、下限を守り、ドラッグの終わりと開閉で書き戻す。
-/// 読めない・範囲外の値は既定へ落とし、app-state の他の項目を巻き込まない。
+/// サイドバーの幅・開閉・パネルの記憶——app-state から起こし、下限を守り、ドラッグの終わり・開閉・パネルの切替で書き戻す。
+/// レールの項目は、出しているパネルなら閉じ、別のパネルならそれへ切り替える（閉じていれば開く）。読めない・範囲外・未知の
+/// 値は既定へ落とし、app-state の他の項目を巻き込まない。
 ///
-/// 壊れると何が起きるか。再起動で幅と開閉が戻らない。壊れた幅で app-state 全体が読めなくなり UI 言語まで消える。
+/// 壊れると何が起きるか。再起動で幅と開閉と検索パネルが戻らない。壊れた幅で app-state 全体が読めなくなり UI 言語まで
+/// 消える。レールで検索を押してもファイルのパネルが閉じるだけ。
 @MainActor
 final class EditorSidebarStateTests: OrbeTestCase {
   func testDefaultsWhenNothingIsStored() {
@@ -64,5 +66,34 @@ final class EditorSidebarStateTests: OrbeTestCase {
     state.commit()
     state.select(.files)
     XCTAssertNil(AppStatePersistence.load(), "配られていない既定の状態（テスト・preview）は書かない")
+  }
+
+  func testTheRailSwitchesOrClosesThePanelAndThePanelIsRemembered() {
+    let state = EditorSidebarState.loaded()
+    XCTAssertEqual(state.panel, .files)
+    state.select(.search)
+    XCTAssertEqual(state.panel, .search, "別のパネルへ切り替える")
+    XCTAssertTrue(state.isOpen)
+    XCTAssertEqual(EditorSidebarState.loaded().panel, .search, "再起動でも戻る")
+
+    state.select(.search)
+    XCTAssertFalse(state.isOpen, "出しているパネルを押すと閉じる")
+    state.select(.files)
+    XCTAssertEqual(state.panel, .files)
+    XCTAssertTrue(state.isOpen, "閉じていれば開く")
+
+    state.show(.search)
+    XCTAssertEqual(state.panel, .search)
+    XCTAssertTrue(state.isOpen)
+    state.show(.search)
+    XCTAssertTrue(state.isOpen, "出しているパネルを出しても閉じない（⌘⇧F）")
+  }
+
+  func testAnUnknownOrMissingPanelFallsBackToFiles() {
+    AppStatePersistence.save(
+      AppStateFile(editorSidebar: EditorSidebarRecord(width: 300, isOpen: true, panel: "bogus")))
+    XCTAssertEqual(EditorSidebarState.loaded().panel, .files)
+    AppStatePersistence.save(AppStateFile(editorSidebar: EditorSidebarRecord(width: 300)))
+    XCTAssertEqual(EditorSidebarState.loaded().panel, .files)
   }
 }

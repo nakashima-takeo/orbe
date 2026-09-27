@@ -85,7 +85,8 @@ struct EditorState: Codable, Equatable {
     var active: String
   }
 
-  enum CodingKeys: String, CodingKey {
+  /// `CaseIterable` は TabState と同じ seam（encode / decode を手書きにしたので、足したキーの書き忘れを全キーの往復テストが見る）。
+  enum CodingKeys: String, CodingKey, CaseIterable {
     case open, active, search
   }
 
