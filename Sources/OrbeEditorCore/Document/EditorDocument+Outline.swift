@@ -145,7 +145,7 @@ extension EditorDocument {
     if let outcome = contents.outline, log.edits(since: outcome.outline.version) != nil {
       if pattern.isEmpty || outcome.filter?.pattern == pattern {
         outlineState.shown = outcome.outline
-        outlineState.filter = outcome.filter
+        outlineState.filter = pattern.isEmpty ? nil : outcome.filter
         outlineState.staged = nil
         changed = true
       } else {

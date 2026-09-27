@@ -247,6 +247,34 @@ final class EditorDocumentOutlineTests: XCTestCase {
     XCTAssertEqual(document.outlineFilter?.visible.count, 3, "grab()・Box・grow(by:)")
   }
 
+  /// 絞り込みを空にした後に、前の文字列の絞り込みを添えた結果が届いても、絞り込まずに見せる（空の欄の下で古い文字列の
+  /// 絞り込みが残らない）。
+  func testAResultArrivingAfterTheFilterIsClearedIsNotFiltered() throws {
+    let (document, _) = try open()
+    document.wantsOutline = true
+    document.filterOutline("gr")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    document.filterOutline("")
+
+    let refreshed = OutlineExtraction.nest([], version: document.version)
+    document.receiveOutline(contents(refreshed, filteredBy: "gr"))
+    XCTAssertEqual(document.outline?.token, refreshed.token)
+    XCTAssertNil(document.outlineFilter, "空の文字列の下では絞り込まない")
+    XCTAssertTrue(document.isCaughtUp)
+  }
+
+  private func contents(_ outline: DocumentOutline, filteredBy pattern: String?)
+    -> AnalysisInbox.Contents
+  {
+    var contents = AnalysisInbox.Contents()
+    contents.outline = OutlineOutcome(outline: outline, filter: pattern.map { filter(outline, $0) })
+    return contents
+  }
+
+  private func filter(_ outline: DocumentOutline, _ pattern: String) -> OutlineFilterResult {
+    OutlineFilterResult(pattern: pattern, token: outline.token, visible: [], matches: [:])
+  }
+
   // MARK: - 閉じる
 
   /// 閉じた文書のアウトラインの裏の仕事（結果を持つ）は、手放す裏の仕事が最後の参照を落とす。
