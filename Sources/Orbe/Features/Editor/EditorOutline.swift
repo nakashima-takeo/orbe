@@ -315,13 +315,12 @@ final class EditorOutline {
     clickDelay.run(after: Self.clickDelay) { [weak self] in self?.onJump(symbol, token, .name) }
   }
 
-  /// ダブルクリック: 範囲全体を選び、焦点を本文へ。シェブロンの上は単クリックと同じ。
+  /// ダブルクリック: 範囲全体を選び、焦点を本文へ。子のある行のシェブロンの上は何もしない（1 回目の押下で開閉済み。
+  /// VS Code もダブルクリックでは開閉しない）。
   func doubleClick(row: Int, onChevron: (Int) -> Bool) {
     guard row >= 0, row < rowCount, let outline else { return }
     let symbol = rows.symbol(at: row)
-    guard !onChevron(outline.symbols[symbol].depth) else {
-      return click(row: row) { _ in true }
-    }
+    guard !(rows.hasChildren(symbol) && onChevron(outline.symbols[symbol].depth)) else { return }
     clickDelay.cancel()
     select(row: row)
     onJump(symbol, outline.token, .range)

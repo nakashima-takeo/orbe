@@ -164,7 +164,11 @@ final class EditorOutlinePaneTests: OrbeTestCase {
     XCTAssertEqual(outline.rowCount, 6, "行を押しても開閉しない")
     click(list, row: channel, x: Theme.Layout.editorOutlineInset + 4, count: 1)
     XCTAssertEqual(names(outline), ["Channel", "Box", "  width"], "シェブロンで畳む")
+    click(list, row: channel, x: Theme.Layout.editorOutlineInset + 4, count: 2)
+    XCTAssertEqual(
+      names(outline), ["Channel", "Box", "  width"], "シェブロンのダブルクリックは 1 回だけ開閉する（2 回目で戻さない）")
   }
+
 
   /// ↑↓ は選ぶだけ、← は畳んで親へ、→ は開いて子へ、Space は開閉。
   func testKeysMoveTheSelectionAndFold() throws {
