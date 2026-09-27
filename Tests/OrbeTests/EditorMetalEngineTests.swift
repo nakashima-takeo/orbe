@@ -56,7 +56,7 @@ final class EditorMetalEngineTests: OrbeTestCase {
     XCTAssertTrue(isMetal(document))
     let pane = tab.view.editor
     pane.layoutSubtreeIfNeeded()
-    let bar = pane.scrollbar
+    let bar = pane.appKitOverview.scrollbar
     bar.mouseDown(
       with: bar.mouseEvent(.leftMouseDown, at: NSPoint(x: bar.bounds.midX, y: bar.bounds.maxY - 20))
     )
@@ -104,8 +104,8 @@ final class EditorMetalEngineTests: OrbeTestCase {
     XCTAssertEqual(first + visible / 2, 1500.5, accuracy: 1, "一致の行を中央に見せる")
     XCTAssertEqual(pane.findGround.matches, [match])
     XCTAssertEqual(pane.findGround.current, [match])
-    XCTAssertEqual(pane.scrollbar.decorations.findMatches, [match], "一致の地が俯瞰に出る")
-    XCTAssertEqual(pane.scrollbar.decorations.currentFindMatch, match)
+    XCTAssertEqual(pane.appKitOverview.scrollbar.decorations.findMatches, [match], "一致の地が俯瞰に出る")
+    XCTAssertEqual(pane.appKitOverview.scrollbar.decorations.currentFindMatch, match)
   }
 
   /// 同じ大きさに載せた今の面と新しい面で、同じ中身の文書を開く（窓はテストの終わりに外す）。

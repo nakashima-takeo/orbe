@@ -246,7 +246,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
     XCTAssertTrue(opened.document.waitUntilCaughtUp(timeout: 60))
     XCTAssertGreaterThan(
       pane.search.matches.count, OverviewRuler.approximateFindMatchCount, "前提: 一致が多い")
-    let bar = pane.scrollbar
+    let bar = pane.appKitOverview.scrollbar
     let times = (0..<30).map { _ in frame(bar) { bar.needsDisplay = true } }
     pane.closeSearch()
     return times
@@ -254,7 +254,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
 
   /// スクロールバーのつまみを 2 秒で上端から下端まで、8ms ごとにドラッグする。本文の先頭の行が変わった回数を毎秒で返す。
   private func fastDrag(_ pane: EditorPaneView, _ document: EditorDocument) -> Double {
-    let bar = pane.scrollbar
+    let bar = pane.appKitOverview.scrollbar
     document.scroll(toFirstLine: 0)
     pane.layoutSubtreeIfNeeded()
     RunLoop.main.run(until: Date().addingTimeInterval(0.2))

@@ -73,7 +73,10 @@ extension EditorPaneView {
       height: max(0, bounds.height - headerHeight))
   }
 
-  /// ミニマップの幅（VS Code の式。本文の幅から計算し、上限 `editorMinimapMaxWidth`）。
+  /// 焦点の文書の面が自分で俯瞰を描くなら、その面。
+  var overviewSurface: OverviewDrawingSurface? { document?.surface as? OverviewDrawingSurface }
+
+  /// 今の面の俯瞰のミニマップの幅（VS Code の式。本文の幅から計算し、上限 `editorMinimapMaxWidth`）。
   var minimapWidth: CGFloat {
     MinimapLayout.width(
       remaining: bodyRect.width - Theme.Layout.editorLineNumberGutter
@@ -82,20 +85,23 @@ extension EditorPaneView {
       scrollbar: Theme.Layout.editorScrollbar, maxWidth: Theme.Layout.editorMinimapMaxWidth)
   }
 
-  /// 右列の幅（ミニマップ ＋ スクロールバー）。本体より広くはならない。
+  /// 右列の幅（ミニマップ ＋ スクロールバー）。自分で俯瞰を描く面なら面が答える幅。本体より広くはならない。
   var rightColumnWidth: CGFloat {
-    min(bodyRect.width, minimapWidth + Theme.Layout.editorScrollbar)
+    min(
+      bodyRect.width,
+      overviewSurface?.rightColumnWidth ?? minimapWidth + Theme.Layout.editorScrollbar)
   }
 
-  /// テキスト面の矩形（本体から右列を除いたぶん）。文書が無ければ本体そのもの。
+  /// テキスト面の矩形——自分で俯瞰を描く面なら本体全体、そうでなければ本体から右列を除いたぶん。文書が無ければ本体
+  /// そのもの。
   var surfaceRect: NSRect {
-    guard document != nil else { return bodyRect }
+    guard document != nil, overviewSurface == nil else { return bodyRect }
     let body = bodyRect
     return NSRect(
       x: body.minX, y: body.minY, width: max(0, body.width - rightColumnWidth), height: body.height)
   }
 
-  /// ミニマップの矩形（スクロールバーの左）。
+  /// 今の面の俯瞰のミニマップの矩形（スクロールバーの左）。
   var minimapRect: NSRect {
     let body = bodyRect
     let scrollbarWidth = min(Theme.Layout.editorScrollbar, body.width)
@@ -104,11 +110,17 @@ extension EditorPaneView {
       x: body.maxX - scrollbarWidth - width, y: body.minY, width: width, height: body.height)
   }
 
-  /// スクロールバーの矩形（本体の右端）。
+  /// 今の面の俯瞰のスクロールバーの矩形（本体の右端）。
   var scrollbarRect: NSRect {
     let body = bodyRect
     let width = min(Theme.Layout.editorScrollbar, body.width)
     return NSRect(x: body.maxX - width, y: body.minY, width: width, height: body.height)
+  }
+
+  /// 検索バーの右端を、右列の左 `beat` に置く（右列の幅は本体の幅と、自分で俯瞰を描く面では行番号の列の桁で変わる）。
+  func placeSearchBar() {
+    let constant = -(rightColumnWidth + Theme.Space.beat)
+    if searchBarTrailing?.constant != constant { searchBarTrailing?.constant = constant }
   }
 
   override func layout() {
@@ -120,13 +132,8 @@ extension EditorPaneView {
       x: sideWidth, y: 0, width: max(0, bounds.width - sideWidth), height: headerHeight)
     emptyHost.frame = bodyRect
     document?.surface.view.frame = surfaceRect
-    minimap.frame = minimapRect
-    scrollbar.frame = scrollbarRect
-    // 影は本文の上だけ（VS Code では不透明のミニマップが上に重なって影を隠す。Orbe のミニマップは地が透けるので、
-    // 影をミニマップに掛けない）。
-    scrollShadow.frame = surfaceRect
-    updateShadow()
-    searchBarTrailing?.constant = -(rightColumnWidth + Theme.Space.beat)
+    appKitOverview.layout(surface: surfaceRect, minimap: minimapRect, scrollbar: scrollbarRect)
+    placeSearchBar()
     // 本体の上のポインタの当たりは本体の矩形（サイドバーの幅で動く）。
     updateTrackingAreas()
     // 当たりは境を動かせるときだけ（`resizeSidebar` の guard と同じ条件）——動かない列に出すとレールの右 1pt を

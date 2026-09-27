@@ -82,7 +82,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
       try !PaneProbe.same(self.groundColor($0, occurrence), self.groundColor($0, plain))
     }
 
-    let bar = pane.scrollbar
+    let bar = pane.appKitOverview.scrollbar
     let scale = hosted.window.backingScaleFactor
     let ruler = OverviewRuler(
       lineCount: hosted.document.text.lineCount,
@@ -98,7 +98,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
     XCTAssertGreaterThan(marks.color(laneX, markY(1)).alphaComponent, 0.5, "スクロールバーの中央レーンに印")
     XCTAssertEqual(marks.color(laneX, markY(3)).alphaComponent, 0, "出現の無い行には無い")
 
-    let minimap = pane.minimap
+    let minimap = pane.appKitOverview.minimap
     let rows = try ViewPixels(minimap)
     XCTAssertGreaterThan(
       rows.color(minimap.bounds.width - 4, 1 * 2 + 1).alphaComponent, 0, "ミニマップの行の地")
@@ -205,7 +205,8 @@ final class EditorOccurrencesTests: OrbeTestCase {
       try !PaneProbe.same(self.groundColor($0, occurrence), self.groundColor($0, plain))
     }
     clock.word?()
-    XCTAssertEqual(pane.minimap.decorations.wordOccurrences, [], "選択が語をはみ出すと語の出現は出ない")
+    XCTAssertEqual(
+      pane.appKitOverview.minimap.decorations.wordOccurrences, [], "選択が語をはみ出すと語の出現は出ない")
     hosted.document.surface.selectedRange = NSRange(location: 0, length: 0)
     XCTAssertEqual(pane.occurrences.selectionOccurrences, [], "選択が空なら出ない")
     _ = try probe(pane) {

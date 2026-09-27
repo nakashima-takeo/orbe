@@ -1,35 +1,28 @@
 import AppKit
 import OrbeEditorCore
 
-/// 文書の「変わった」の扇出と、俯瞰（ミニマップ・スクロールバー・影）と出現の強調・一致の地への配線。文書側の closure は
-/// 単一のまま、ここがミニマップ・スクロールバー・影・検索・出現の強調・プロジェクト検索・アウトラインへ配る（裏から届いた
-/// 役割と問いとアウトラインの結果も）。一致の地は 2 つの出どころ（ファイル内検索とプロジェクト検索）の和を面と俯瞰へ押し（`pushFindGround`）、語の
-/// 出現と束ねて（`OverviewDecorations`）ミニマップとスクロールバーへ押す。本体の上のポインタは pane の tracking area が
-/// 見て、スクロールバーのつまみの見え隠れに使う。
+/// 文書の「変わった」の扇出と、俯瞰（今の面の俯瞰の部品）と出現の強調・一致の地への配線。文書側の closure は単一のまま、
+/// ここが今の面の俯瞰・検索・出現の強調・プロジェクト検索・アウトラインへ配る（裏から届いた役割と問いとアウトラインの結果
+/// も）。一致の地は 2 つの出どころ（ファイル内検索とプロジェクト検索）の和を面へ押し（`pushFindGround`）、語の出現と束ねて
+/// （`OverviewDecorations`）今の面の俯瞰へ押す。自分で俯瞰を描く面には面へ押した強調の地だけで足り、右列の幅が変わりうる
+/// とき（見えている範囲・本文）に検索バーを置き直す。
 extension EditorPaneView {
-  /// 文書の「変わった」を右列・影・検索・出現の強調へ配る（見せている文書だけ）。
+  /// 文書の「変わった」を俯瞰・検索・出現の強調へ配る（見せている文書だけ）。
   func observe(_ document: EditorDocument, _ on: Bool) {
     document.onViewportChange =
       on
       ? { [weak self] in
         guard let self else { return }
-        minimap.refresh()
-        scrollbar.refresh()
-        noteScrollState()
-        updateShadow()
+        appKitOverview.viewportDidChange()
+        placeSearchBar()
       } : nil
     document.onHunksChange =
-      on
-      ? { [weak self] in
-        self?.minimap.refresh()
-        self?.scrollbar.refresh()
-      } : nil
+      on ? { [weak self] in self?.appKitOverview.hunksOrSelectionDidChange() } : nil
     document.onSelectionChange =
       on
       ? { [weak self] in
         guard let self else { return }
-        minimap.refresh()
-        scrollbar.refresh()
+        appKitOverview.hunksOrSelectionDidChange()
         search.selectionDidChange()
         occurrences.selectionDidChange()
         outline.caretDidMove()
@@ -38,14 +31,13 @@ extension EditorPaneView {
       on
       ? { [weak self] edits in
         guard let self else { return }
-        minimap.textDidChange(edits)
-        scrollbar.refresh()
-        noteScrollState()
+        appKitOverview.textDidChange(edits)
+        placeSearchBar()
         search.textDidChange(edits)
         occurrences.textDidChange()
         if let document = self.document { projectSearch.documentDidEdit(document, edits) }
       } : nil
-    document.onRolesChange = on ? { [weak self] in self?.minimap.rolesDidChange($0) } : nil
+    document.onRolesChange = on ? { [weak self] in self?.appKitOverview.rolesDidChange($0) } : nil
     document.onOutlineChange = on ? { [weak self] in self?.outline.outlineDidChange() } : nil
     document.onAnalysis =
       on
@@ -103,8 +95,8 @@ extension EditorPaneView {
     return (matches, current)
   }
 
-  /// 一致の地を面と俯瞰へ押す（状態は持たず、2 つの出どころを読み直す）。どちらかの出どころが変わったとき・文書の切替・
-  /// 検索パネルの見え隠れで呼ぶ。
+  /// 一致の地を面と今の面の俯瞰へ押す（状態は持たず、2 つの出どころを読み直す）。どちらかの出どころが変わったとき・文書の
+  /// 切替・検索パネルの見え隠れで呼ぶ。
   func pushFindGround() {
     let ground = findGround
     document?.surface.setHighlights(ground.matches, for: .findMatch)
@@ -112,70 +104,16 @@ extension EditorPaneView {
     pushOverviewDecorations(ground)
   }
 
-  /// 一致の地と語の出現を束ねてミニマップとスクロールバーへ。
+  /// 一致の地と語の出現を束ねて今の面の俯瞰へ。
   func pushOverviewDecorations(_ ground: (matches: [NSRange], current: [NSRange])? = nil) {
     let find = ground ?? findGround
-    let decorations = OverviewDecorations(
+    appKitOverview.decorations = OverviewDecorations(
       findMatches: find.matches, currentFindMatch: find.current.first,
       wordOccurrences: occurrences.wordOccurrences)
-    minimap.decorations = decorations
-    scrollbar.decorations = decorations
   }
 
-  /// スクロールの状態（縦横の位置・見えている大きさ・行数）が変わればスクロールバーのつまみを見せる——VS Code の
-  /// スクロールの状態が変わったときと同じく、スクロールに限らず窓の大きさの変化・改行・横スクロールでも現れる。
-  /// 文書を結んだ後の最初の測定では出さない。
-  private func noteScrollState() {
-    guard let document else { return }
-    let viewport = document.surface.viewport
-    let state = ScrollState(
-      firstLine: document.viewportLines.first, visibleLines: viewport.visibleLines,
-      lineCount: document.text.lineCount, hiddenColumns: viewport.hiddenColumns,
-      visibleColumns: viewport.visibleColumns)
-    defer { lastScrollState = state }
-    guard let last = lastScrollState, last != state else { return }
-    scrollbar.didScroll()
-  }
-
-  /// スクロールの状態（`noteScrollState`）。
-  struct ScrollState: Equatable {
-    let firstLine: CGFloat
-    let visibleLines: CGFloat
-    let lineCount: Int
-    let hiddenColumns: CGFloat
-    let visibleColumns: CGFloat
-  }
-
-  /// 本体の上端の影（先頭行が隠れている）とミニマップ左の影（本文が右に続く）。
-  func updateShadow() {
-    guard let document else { return }
-    let viewport = document.surface.viewport
-    scrollShadow.showsTop =
-      viewport.firstVisible > 0 || viewport.hiddenFraction > 0
-    scrollShadow.minimapEdge =
-      viewport.clipsRight ? minimap.frame.minX - scrollShadow.frame.minX : nil
-  }
-
-  /// ドラッグ中も出入りを受ける（つまみを押したまま本体の外で離せば、つまみが消える）。
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
-    if let bodyTracking { removeTrackingArea(bodyTracking) }
-    let area = NSTrackingArea(
-      rect: bodyRect,
-      options: [.mouseEnteredAndExited, .activeInKeyWindow, .enabledDuringMouseDrag],
-      owner: self)
-    addTrackingArea(area)
-    bodyTracking = area
-  }
-
-  /// 本体の出入りだけを見る——SwiftUI の骨（サイドバー・列の頭）も自分の出入りを上の pane へ流してくる。
-  override func mouseEntered(with event: NSEvent) {
-    guard event.trackingArea === bodyTracking else { return super.mouseEntered(with: event) }
-    scrollbar.hovering = true
-  }
-
-  override func mouseExited(with event: NSEvent) {
-    guard event.trackingArea === bodyTracking else { return super.mouseExited(with: event) }
-    scrollbar.hovering = false
+    appKitOverview.updateTracking(in: self, body: bodyRect)
   }
 }
