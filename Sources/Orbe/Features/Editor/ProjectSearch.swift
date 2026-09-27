@@ -54,13 +54,9 @@ final class ProjectSearch {
   var collapsed: Set<String> = []
   /// パネルの中の焦点（SwiftUI が書く）。
   var focusedArea: Area?
-  /// 焦点を入れる要求（来るたびにパネルがその場所へ焦点を移す。入力欄なら全選択）。
-  private(set) var focusRequest: FocusRequest?
-
-  struct FocusRequest: Equatable {
-    let area: Area
-    let serial: Int
-  }
+  /// 焦点を入れる要求。パネルがその場所へ焦点を移したら消す（入力欄なら全選択）——出来事なので、当てた後に残すと
+  /// パネルが次に現れたときに古い要求が焦点を奪う。
+  private(set) var focusRequest: Area?
 
   /// 根（正規形）。
   @ObservationIgnored private(set) var root: String
@@ -68,8 +64,6 @@ final class ProjectSearch {
   @ObservationIgnored var documents: () -> [EditorDocument] = { [] }
   /// 一致を開く（`focusText` ならテキスト面へ焦点を移す）。
   @ObservationIgnored var onOpen: (RowID, _ focusText: Bool) -> Void = { _, _ in }
-  /// 焦点を取る前に呼ぶ（pane が自分を first responder にして、面の焦点の記憶をエディターへ移す）。
-  @ObservationIgnored var onWillFocus: () -> Void = {}
   /// 焦点の文書の一致の地が変わりうる（結果・選択・見え隠れ）。
   @ObservationIgnored var onGroundChange: () -> Void = {}
   /// 永続する問いが変わった。
@@ -96,7 +90,6 @@ final class ProjectSearch {
   @ObservationIgnored var isLive = false {
     didSet { if isLive != oldValue { liveDidChange() } }
   }
-  @ObservationIgnored private var focusSerial = 0
   /// まとまりごとの見出しの行の位置（`results.files` と同じ順）。
   @ObservationIgnored var fileRowStarts: [Int] = []
 
@@ -289,8 +282,11 @@ final class ProjectSearch {
   // MARK: - 焦点
 
   func requestFocus(_ area: Area) {
-    onWillFocus()
-    focusSerial += 1
-    focusRequest = FocusRequest(area: area, serial: focusSerial)
+    focusRequest = area
+  }
+
+  /// パネルが要求を当てた。
+  func focusRequestDidApply() {
+    focusRequest = nil
   }
 }

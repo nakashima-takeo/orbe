@@ -29,12 +29,15 @@ struct SearchPanelView: View {
       SearchSummary(search: search)
     }
     .onChange(of: focus) { _, area in search.focusedArea = area }
-    .onChange(of: search.focusRequest) { _, request in
-      if let request { focus = request.area }
-    }
-    .onAppear {
-      if let request = search.focusRequest, search.focusedArea == nil { focus = request.area }
-    }
+    .onChange(of: search.focusRequest) { _, _ in applyFocusRequest() }
+    .onAppear(perform: applyFocusRequest)
+    .onDisappear { search.focusedArea = nil }
+  }
+
+  private func applyFocusRequest() {
+    guard let area = search.focusRequest else { return }
+    focus = area
+    search.focusRequestDidApply()
   }
 
   private func message(for error: ProjectSearch.Failure) -> String {

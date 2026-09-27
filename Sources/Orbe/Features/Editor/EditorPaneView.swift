@@ -210,9 +210,9 @@ final class EditorPaneView: NSView {
     }
   }
 
-  /// 行内入力を出す前に pane 自身を first responder にする——`paneDidFocus(.editor)` が走る経路はテキスト面と
-  /// pane の 2 つしか無く、field editor が直接焦点を取ると分割中の焦点帯と位置ドットが端末を指したままになる。
-  /// 続けて出したときは前の入力欄がここで焦点を手放し、新しい行が「面が持っている」と見て取る。
+  /// 行内入力を出す前に pane 自身を first responder にする——入力欄は焦点を面が持っている（窓か面自身）ときだけ取る
+  /// （`inlineInputMayTakeFocus`）。続けて出したときは前の入力欄がここで焦点を手放し、新しい行が「面が持っている」と
+  /// 見て取る。
   private func beginNew(isDirectory: Bool) {
     window?.makeFirstResponder(self)
     tree.beginNew(isDirectory: isDirectory)
@@ -242,10 +242,15 @@ final class EditorPaneView: NSView {
   }
 
   /// 行内入力が終わった（状態が落ちた。Enter・Esc・取り消し・すべて折りたたむ・根を畳む・作成先を畳む・
-  /// サイドバーを閉じる・cd）。焦点がまだ入力欄（骨の host 配下）か面自身（`beginNew` が停めた・預かっている）
-  /// か窓に居れば、その場で面の行き先へ移す。別の view へ移って終わったなら（端末をクリックして抜けた）
-  /// そこに居るので触らない。
+  /// サイドバーを閉じる・cd）。
   private func inlineInputDidEnd() {
+    reclaimSidebarFocus()
+  }
+
+  /// サイドバーの中の焦点が行き場を失った（行内入力が終わった・検索パネルが隠れた）。焦点がまだサイドバー（骨の host
+  /// 配下）か面自身（`beginNew` が停めた・預かっている）か窓に居れば、その場で面の行き先へ移す。別の view へ移って
+  /// 終わったなら（端末をクリックして抜けた）そこに居るので触らない。
+  func reclaimSidebarFocus() {
     guard let window else { return }
     let responder = window.firstResponder
     let strayed =

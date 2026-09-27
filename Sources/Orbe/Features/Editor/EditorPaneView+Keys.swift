@@ -27,11 +27,6 @@ extension EditorPaneView {
     window?.makeFirstResponder(focusTarget)
   }
 
-  override func becomeFirstResponder() -> Bool {
-    tab?.paneDidFocus(.editor)
-    return super.becomeFirstResponder()
-  }
-
   /// chrome キーの解決点。first responder が自分か配下のときだけ効く——隠れたタブの pane も窓に残るので、
   /// 焦点が自分か配下に無いときは素通しする。検索パネルの中のキーは chrome キーより先に見る。
   override func performKeyEquivalent(with event: NSEvent) -> Bool {

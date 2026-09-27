@@ -3,17 +3,12 @@ import Carbon.HIToolbox
 import OrbeEditorCore
 
 /// プロジェクト検索の結線——⌘⇧F とレールで検索パネルを出す・種・結果を開いて一致を選び中央へ・パネルの中のキー
-/// （⌘↓ / ⌘↑・⌥⌘C / W / R）・F4 / ⇧F4。検索パネルの入力欄と結果の列は SwiftUI だが、焦点を取る前に pane 自身を first
-/// responder にする（面の焦点の記憶がエディターへ移る経路は pane とテキスト面の 2 つだけ）。
+/// （⌘↓ / ⌘↑・⌥⌘C / W / R）・F4 / ⇧F4。
 extension EditorPaneView {
   func wireProjectSearch() {
     projectSearch.documents = { [weak self] in self?.tab?.editor.documents ?? [] }
     projectSearch.onOpen = { [weak self] id, focusText in
       self?.openProjectMatch(id, focusText: focusText)
-    }
-    projectSearch.onWillFocus = { [weak self] in
-      guard let self else { return }
-      window?.makeFirstResponder(self)
     }
     projectSearch.onGroundChange = { [weak self] in self?.pushFindGround() }
     projectSearch.onQueryChange = { [weak self] in self?.tab?.onEditorChange?() }

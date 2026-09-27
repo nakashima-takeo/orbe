@@ -181,17 +181,14 @@ final class TerminalTab {
     view.onFacesRequested = { [weak self] faces, animated in
       self?.setFaces(faces, animated: animated)
     }
+    view.onFaceFocused = { [weak self] face in self?.paneDidFocus(face) }
     MainActor.assumeIsolated {
       editor.onChange = { [weak self] in
         guard let self else { return }
         view.editor.sessionDidChange()
         onEditorChange?()
       }
-      editor.onFocusChange = { [weak self] focused in
-        guard let self else { return }
-        if focused { paneDidFocus(.editor) }
-        view.editor.focusDidChange()
-      }
+      editor.onFocusChange = { [weak self] _ in self?.view.editor.focusDidChange() }
     }
   }
 
@@ -319,7 +316,7 @@ final class TerminalTab {
     onFacesChange?()
   }
 
-  /// 面が first responder になった。焦点の記憶を面に追従させる（resign では触らない——パレットで
+  /// first responder が面の配下に入った（器が告げる）。焦点の記憶を面に追従させる（面の外へ出ても触らない——パレットで
   /// 一時的に焦点を失っても面の記憶は残る）。
   func paneDidFocus(_ face: Face) {
     guard faces.focus != face else { return }

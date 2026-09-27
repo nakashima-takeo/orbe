@@ -14,11 +14,13 @@ extension WindowController {
   }
 
   /// タブの配置が変わった。保存を予約し chrome を更新し、そのタブを見ているなら焦点の面へ first
-  /// responder を戻す（面自身が first responder になった通知で来たときは既に合っているので触らない）。
+  /// responder を戻す（first responder が既に焦点の面の配下にあれば——面に入った焦点で記憶が追従したときも、
+  /// サイドバーの入力欄のように面の中の別の場所にあるときも——触らない）。
   func tabFacesDidChange(_ tab: TerminalTab) {
     scheduleSave()
     refreshChrome()
-    guard tab === activeTab, model.overlay == .none, window.firstResponder !== tab.focusTarget
+    guard tab === activeTab, model.overlay == .none,
+      tab.view.face(containing: window.firstResponder) != tab.faces.focus
     else { return }
     window.makeFirstResponder(tab.focusTarget)
   }
