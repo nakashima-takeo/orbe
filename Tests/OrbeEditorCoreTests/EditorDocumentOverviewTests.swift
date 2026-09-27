@@ -40,18 +40,18 @@ final class EditorDocumentOverviewTests: XCTestCase {
   }
 
   func testIndentationAndLineBreakAreDetectedAndPushedToTheSurface() throws {
-    let opened = try open("a.swift", "a\n  b\n    c\n  d\n")
+    let opened = try open("a.swift", "a\r\n  b\r\n    c\r\n  d\r\n")
     let (document, surface, url) = (opened.document, opened.surface, opened.url)
     XCTAssertEqual(document.indentation, Indentation(unit: 2, usesTabs: false))
     XCTAssertEqual(surface.indentation, document.indentation, "開いたとき面へ押す")
-    XCTAssertEqual(surface.lineBreak, .lf, "改行の作法も開いたとき面へ押す")
+    XCTAssertEqual(surface.lineBreak, .crlf, "改行の作法も開いたとき面へ押す")
 
-    try Data("a\r\n\tb\r\n\t\tc\r\n".utf8).write(to: url)
+    try Data("a\n\tb\n\t\tc\n".utf8).write(to: url)
     document.reconcileWithDisk()
     XCTAssertEqual(
       document.indentation, Indentation(unit: 4, usesTabs: true), "丸ごと置き換えで検出し直す")
     XCTAssertEqual(surface.indentation, document.indentation)
-    XCTAssertEqual(surface.lineBreak, .crlf, "改行の作法も検出し直して押す")
+    XCTAssertEqual(surface.lineBreak, .lf, "改行の作法も検出し直して押す")
   }
 
   /// 束は後ろから当たり、配り先には束ごとに 1 回、適用した順の編集（どれもその直前の本文の座標で、変わらない先頭と末尾を

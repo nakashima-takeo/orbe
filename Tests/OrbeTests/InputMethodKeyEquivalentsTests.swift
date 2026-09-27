@@ -80,6 +80,29 @@ final class InputMethodKeyEquivalentsTests: OrbeTestCase {
     XCTAssertEqual(handled(), [.newTab])
   }
 
+  /// 端末の面は窓の根の口に答える——変換中に IME が使った ⌘ キーは根で止まり、使わなければ今の順（⌘T は新しいタブ）で流れる。
+  func testTheRootOffersTheTerminalsCommandKeysToItsInputMethod() {
+    let terminal = SurfaceView(frame: NSRect(x: 0, y: 0, width: 200, height: 100), cwd: "/tmp")
+    let context = FakeInputContext(client: terminal)
+    terminal.textInputContext = context
+    let root = root(firstResponder: terminal)
+    XCTAssertTrue(root.window.firstResponder === terminal, "前提: 端末が焦点")
+    terminal.setMarkedText(
+      "か", selectedRange: NSRange(location: 1, length: 0),
+      replacementRange: NSRange(location: NSNotFound, length: 0))
+    context.onEvent = {
+      $0.setMarkedText(
+        "かn", selectedRange: NSRange(location: 2, length: 0),
+        replacementRange: NSRange(location: NSNotFound, length: 0))
+    }
+    XCTAssertTrue(root.view.performKeyEquivalent(with: .key("t")))
+    XCTAssertEqual(root.handled(), [], "IME が使った ⌘T では新しいタブを開かない")
+    context.onEvent = { $0.doCommand(by: #selector(NSResponder.insertNewline(_:))) }
+    XCTAssertTrue(root.view.performKeyEquivalent(with: .key("t")))
+    XCTAssertEqual(root.handled(), [.newTab], "IME が使わなければ今の順")
+    XCTAssertEqual(context.events, 2)
+  }
+
   /// 端末の面: 変換中でなければ IME へ渡さない。変換中は渡し、渡している間にキー割り当てのコマンドが届けば IME は使わな
   /// かった（端末の今の順へ戻る）。IME が未確定を置き換えるだけなら使った。
   func testTheTerminalOffersOnlyWhileComposing() {

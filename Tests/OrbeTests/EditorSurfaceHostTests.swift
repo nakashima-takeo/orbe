@@ -31,7 +31,14 @@ final class EditorSurfaceHostTests: OrbeTestCase {
     XCTAssertEqual(
       pane.insertionText(forFiles: [inside, URL(fileURLWithPath: "/etc/hosts")]),
       "src/b c.swift /etc/hosts", "根からの相対パス、根の外なら絶対パス、空白区切り")
+    let sibling = URL(fileURLWithPath: dir.path + "x/a.swift")
+    XCTAssertEqual(
+      pane.insertionText(forFiles: [sibling]), sibling.standardizedFileURL.path,
+      "根と名前の頭が同じだけの隣のフォルダは根の外")
     XCTAssertEqual(pane.contextMenu().items.map(\.title), ["カット", "コピー", "ペースト"])
+    XCTAssertEqual(
+      pane.contextMenu().items.map(\.action),
+      [#selector(NSText.cut(_:)), #selector(NSText.copy(_:)), #selector(NSText.paste(_:))])
     XCTAssertTrue(pane.contextMenu().items.allSatisfy { $0.target == nil }, "焦点の面へ届く")
 
     let other = try caseFile("b.txt", "y\n")
@@ -40,8 +47,9 @@ final class EditorSurfaceHostTests: OrbeTestCase {
     XCTAssertEqual(tab.editor.documents.count, 2)
   }
 
-  /// 変換中に pane が解く chrome キーを押すと、走らせる前に変換を確定する。⌘H は確定する道が pane の 1 か所だけ（⌘S は
-  /// 保存の後の undo の区切りでも確定するので、それだけでは区別にならない）。⌘S は見えている本文を保存する——未確定の
+  /// 変換中に pane が解く chrome キーを押すと、走らせる前に変換を確定する。⌘R（タブの名前。タブに依らない window
+  /// コマンドではないので、窓の根でなく pane が解く）は確定する道が pane の 1 か所だけ（⌘S は保存の後の undo の区切りでも
+  /// 確定するので、それだけでは区別にならない）。⌘S は見えている本文を保存する——未確定の
   /// 文字は既に本文にある。
   func testChromeKeysCommitTheCompositionFirst() throws {
     try XCTSkipIf(MTLCreateSystemDefaultDevice() == nil, "Metal の装置が無い環境では今の面で開く")
@@ -58,7 +66,7 @@ final class EditorSurfaceHostTests: OrbeTestCase {
       "あ", selectedRange: NSRange(location: 1, length: 0),
       replacementRange: NSRange(location: NSNotFound, length: 0))
     XCTAssertTrue(client.hasMarkedText())
-    XCTAssertTrue(tab.view.editor.performKeyEquivalent(with: .key("h")))
+    XCTAssertTrue(tab.view.editor.performKeyEquivalent(with: .key("r")))
     XCTAssertFalse(client.hasMarkedText(), "chrome キーを走らせる前に確定する")
     client.setMarkedText(
       "あ", selectedRange: NSRange(location: 1, length: 0),
