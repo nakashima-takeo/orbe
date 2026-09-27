@@ -1,0 +1,20 @@
+{
+  "name": "orbe",
+  "version": "0.8.0",
+  "private": true,
+  "": "empty key",
+  "line\nbreak": 1,
+  "scripts": {
+    "build": "swift build",
+    "test": "swift test"
+  },
+  "keywords": ["editor", "terminal"],
+  "contributors": [
+    { "name": "nakatake", "roles": ["dev", "design"] },
+    { "name": "claude" },
+    [1, 2],
+    null
+  ],
+  "empty": {},
+  "nothing": null
+}
