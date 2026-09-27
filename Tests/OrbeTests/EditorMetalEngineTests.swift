@@ -72,40 +72,52 @@ final class EditorMetalEngineTests: OrbeTestCase {
     pane.closeSearch()
   }
 
-  /// マウスのホイールの目盛りで送る量と、見えている範囲の値（行・隠れている割合・可視行数・右に続くか・桁）が、同じ
-  /// 大きさに載せた今の面と同じ。
-  func testWheelNotchesAndTheViewportMatchTheCurrentSurface() throws {
-    func open(_ engine: EditorEngineChoice) throws -> (EditorDocument, NSWindow) {
+  /// 同じ大きさに載せた今の面と新しい面で、同じ中身の文書を開く（窓はテストの終わりに外す）。
+  private func openBoth() throws -> (current: EditorDocument, new: EditorDocument) {
+    func open(_ engine: EditorEngineChoice) throws -> EditorDocument {
       let tab = TerminalTab(
         cwd: try XCTUnwrap(TestIsolation.caseDir).path,
         editorSurfaces: EditorSurfaces(queriesRoot: nil, engine: { engine }))
       let window = hostEditor(tab, width: 900, height: 500)
+      addTeardownBlock { MainActor.assumeIsolated { window.contentView = nil } }
       let document = try tab.editor.open(try caseFile(UUID().uuidString + ".swift", lines(400)))
       tab.view.editor.layoutSubtreeIfNeeded()
-      return (document, window)
+      return document
     }
-    let (current, currentWindow) = try open(.stTextView)
-    let (new, newWindow) = try open(metal)
-    defer {
-      currentWindow.contentView = nil
-      newWindow.contentView = nil
-    }
+    let current = try open(.stTextView)
+    let new = try open(metal)
     XCTAssertTrue(!isMetal(current) && isMetal(new), "前提: 今の面と新しい面")
+    return (current, new)
+  }
+
+  /// マウスのホイールの 1 目盛りで送る量が、今の面（NSScrollView の行送り）と同じ。今の面はアニメーションで送り、窓を
+  /// 画面に出さないテストでは進み方が定まらないので、今の面の側は行送りの値で見る。
+  func testWheelNotchMatchesTheCurrentSurface() throws {
+    let (current, new) = try openBoth()
+    let lineScroll = try XCTUnwrap(
+      current.surface.view.subviews.first as? NSScrollView, "前提: 今の面は NSScrollView で送る"
+    ).verticalLineScroll
     for notches: Int32 in [1, 3] {
-      for document in [current, new] {
-        document.scroll(toFirstLine: 0)
-        let event = try XCTUnwrap(
-          CGEvent(
-            scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -notches,
-            wheel2: 0, wheel3: 0))
-        document.surface.view.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: event)))
-      }
-      XCTAssertGreaterThan(new.viewportLines.first, 0, "前提: 新しい面が送られた")
-      // 今の面はアニメーションで送るので、同じ位置に落ち着くまで待つ。
-      let deadline = Date().addingTimeInterval(5)
-      while abs(current.viewportLines.first - new.viewportLines.first) > 1e-6, Date() < deadline {
-        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-      }
+      new.scroll(toFirstLine: 0)
+      let event = try XCTUnwrap(
+        CGEvent(
+          scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -notches, wheel2: 0,
+          wheel3: 0))
+      new.surface.view.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: event)))
+      XCTAssertEqual(
+        new.viewportLines.first * EditorStyle.make().lineHeight, lineScroll * CGFloat(notches),
+        accuracy: 1e-6,
+        "\(notches) 目盛り")
+    }
+  }
+
+  /// 見えている範囲の値（行・隠れている割合・可視行数・右に続くか・桁）が、同じ位置へ送った今の面と同じ。
+  func testViewportMatchesTheCurrentSurface() throws {
+    let (current, new) = try openBoth()
+    for line: CGFloat in [0.5, 137.25] {
+      for document in [current, new] { document.scroll(toFirstLine: line) }
+      pumpMain(
+        until: { abs(current.viewportLines.first - line) < 1e-6 }, "前提: 今の面が \(line) 行目へ送られた")
       let a = current.surface.viewport
       let b = new.surface.viewport
       XCTAssertEqual(b.firstVisible, a.firstVisible)
