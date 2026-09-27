@@ -110,7 +110,8 @@ final class MinimapChunks {
     let units = text.units(in: range)
     let roles = document.roles.roles(in: range)
     let scale = canvas.scale
-    let sheet = self.sheet ?? MinimapCharSheet(scale: scale, font: Theme.Typography.editorCode)
+    let sheet =
+      self.sheet ?? MinimapCharSheet(scale: scale, font: Theme.Typography.editorCode as CTFont)
     self.sheet = sheet
     let width = max(1, canvas.width)
     let lineHeight = sheet.glyphHeight

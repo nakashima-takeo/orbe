@@ -1,3 +1,4 @@
+import CoreText
 import Foundation
 import XCTest
 
@@ -41,6 +42,22 @@ final class MinimapTests: XCTestCase {
     XCTAssertEqual(MinimapLine.glyph(of: 0x7E), 94)
     XCTAssertEqual(MinimapLine.glyph(of: 0x3042), (0x3042 - 32 + 96) % 96)
     XCTAssertTrue((0..<96).contains(MinimapLine.glyph(of: 0x05)))
+  }
+
+  /// 字形の表は 1 字 `scale` × `2·scale` デバイス px の明度で、空白は空、最も明るい値は 255 近くに揃う。描画スレッドも読むので、
+  /// 同じフォント・倍率なら何度作っても同じ値。
+  func testCharSheetIsNormalizedAndDeterministic() {
+    let font = CTFontCreateUIFontForLanguage(.userFixedPitch, 12, nil)!
+    for scale in [1, 2] {
+      let sheet = MinimapCharSheet(scale: scale, font: font)
+      XCTAssertEqual(sheet.data.count, MinimapLine.glyphCount * scale * scale * 2)
+      XCTAssertTrue(
+        (0..<scale * 2).allSatisfy { y in
+          (0..<scale).allSatisfy { sheet.value(0, x: $0, y: y) == 0 }
+        }, "空白")
+      XCTAssertGreaterThanOrEqual(sheet.data.max() ?? 0, 254, "最も明るい字は 255 近く")
+      XCTAssertEqual(MinimapCharSheet(scale: scale, font: font).data, sheet.data)
+    }
   }
 
   func testDecorationColumnsCountTabsAsTheFixedTabSizeAndStopAtTheLimit() {
