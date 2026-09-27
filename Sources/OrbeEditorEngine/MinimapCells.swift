@@ -37,8 +37,6 @@ final class MinimapCells {
   private var entries: [Int: Entry] = [:]
   private var key: Key?
   private var clock: UInt64 = 0
-  /// このコマで作ったチャンクの数。
-  private(set) var builtInFrame = 0
 
   init(device: MTLDevice) {
     self.device = device
@@ -62,7 +60,6 @@ final class MinimapCells {
 
   /// コマを始める。条件が変わっていれば全部捨てる。
   func beginFrame(_ key: Key) {
-    builtInFrame = 0
     guard key != self.key else { return }
     entries.removeAll()
     self.key = key
@@ -84,7 +81,6 @@ final class MinimapCells {
       return (entry.buffer, entry.count)
     }
     let cells = Self.cells(index, text: text, roles: roles, key: key ?? Key(columns: 0, tabSize: 4))
-    builtInFrame += 1
     let buffer =
       cells.isEmpty
       ? nil

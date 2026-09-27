@@ -116,8 +116,7 @@ extension MetalTextSurface {
   func position(after transaction: Transaction, cursors: CursorList, _ text: TextRope)
     -> SIMD2<Double>?
   {
-    let now = scroll.peek(at: CACurrentMediaTime(), limits: pending.limits, place: pending.position)
-      .position
+    let now = scrollPosition
     var p = transaction.scrollTo ?? now
     if transaction.reveal != .none {
       let caret = NSRange(location: cursors.primary.position, length: 0)

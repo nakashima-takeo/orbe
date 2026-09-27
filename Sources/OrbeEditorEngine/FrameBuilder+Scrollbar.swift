@@ -299,7 +299,7 @@ extension FrameBuilder {
     let across = ScrollbarGeometry(
       visible: limits.viewport.x, total: limits.viewport.x + limits.maximum.x, position: x,
       trackLength: horizontal.width)
-    if across.isNeeded, limits.maximum.x > 0 {
+    if across.isNeeded {
       let hover =
         pointer.map { horizontal.contains($0) && across.sliderContains($0.x - horizontal.minX) }
         ?? false
