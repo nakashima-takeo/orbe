@@ -51,6 +51,8 @@ public struct OutlineSymbol: Equatable, Sendable {
 public struct DocumentOutline: Sendable {
   public let token: OutlineToken
   public let symbols: [OutlineSymbol]
+  /// 最上位のシンボルの数。
+  public let rootCount: Int
   /// 取り出した本文の版。
   let version: Int
   /// シンボルの範囲（`version` の本文の上）。
@@ -67,8 +69,13 @@ public struct DocumentOutline: Sendable {
     self.nameRanges = nameRanges
     var indices: [OutlineKey: Int] = [:]
     indices.reserveCapacity(symbols.count)
-    for (index, symbol) in symbols.enumerated() { indices[symbol.key] = index }
+    var rootCount = 0
+    for (index, symbol) in symbols.enumerated() {
+      indices[symbol.key] = index
+      if symbol.parent == nil { rootCount += 1 }
+    }
     self.indices = indices
+    self.rootCount = rootCount
   }
 
   /// 鍵のシンボルの番号（この結果に無ければ nil）。

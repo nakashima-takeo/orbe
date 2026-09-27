@@ -101,7 +101,7 @@ extension EditorDocumentOutlineTests {
 
   private func filter(_ outline: DocumentOutline, _ pattern: String) -> OutlineFilterResult {
     OutlineFilterResult(
-      pattern: pattern, token: outline.token, visible: [], matched: [], matches: [:])
+      pattern: pattern, token: outline.token, visible: [], rootCount: 0, matched: [], matches: [:])
   }
 
   /// 文字列を変えたり解いたりして外れた絞り込みも、知らせの後に裏へ渡して手放す（シンボルの数に比例する解放を main で

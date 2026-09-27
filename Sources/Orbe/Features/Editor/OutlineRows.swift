@@ -20,6 +20,9 @@ struct OutlineRows {
   /// `hidden` の先頭から k 個が隠す位置の数（k = 0...hidden.count）。
   private let hiddenBefore: [Int]
   let count: Int
+  /// 最上位の行だけが見えている（子を持つ最上位の行がすべて畳まれている）。最上位の行は畳みで隠れないので、行の数が
+  /// 最上位の数と等しいときに限る。
+  let showsOnlyRoots: Bool
 
   static let empty = OutlineRows(outline: nil, filter: nil, folding: .collapsed([]))
 
@@ -61,6 +64,7 @@ struct OutlineRows {
     self.hidden = hidden
     hiddenBefore = before
     count = baseCount - before.last!
+    showsOnlyRoots = count == filter?.rootCount ?? outline?.rootCount ?? 0
   }
 
   /// 行のシンボルの番号。

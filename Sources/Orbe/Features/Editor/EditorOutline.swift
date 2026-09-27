@@ -59,7 +59,7 @@ final class EditorOutline {
   /// 絞り込みの文字列と、入力欄を出しているか。
   private(set) var filterText = ""
   private(set) var isFilterShown = false
-  /// すべて折りたたんだまま、どれも開いていない（見出しの切り替えが「すべて展開」になる）。
+  /// 子を持つ最上位の行がすべて畳まれている（見出しの切り替えが「すべて展開」になる。VS Code と同じ）。
   private(set) var isAllCollapsed = false
 
   /// 本文へ飛ぶ（シンボルの番号・結果の印・飛び方）。
@@ -168,13 +168,13 @@ final class EditorOutline {
       outline: outline, filter: filter,
       folding: folds.collapseAll
         ? .allExcept(Set(indices)) : .collapsed(indices.filter(outline.hasChildren).sorted()))
-    isAllCollapsed = folds.collapseAll && folds.keys.isEmpty
     if let selection, !rows.includes(selection.symbol) { self.selection = nil }
     publishRows()
   }
 
   private func publishRows() {
     rowCount = rows.count
+    isAllCollapsed = rows.showsOnlyRoots
     rowsVersion &+= 1
   }
 
@@ -234,7 +234,7 @@ final class EditorOutline {
     reindex()
   }
 
-  /// すべて折りたたむ（どれも開いていなければ、すべて展開する）。
+  /// すべて折りたたむ（子を持つ最上位の行がすべて畳まれていれば、すべて展開する）。
   func toggleCollapseAll() {
     guard document != nil else { return }
     currentFolds = isAllCollapsed ? Folds() : Folds(collapseAll: true)

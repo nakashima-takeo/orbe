@@ -58,13 +58,16 @@ final class OutlineRowsTests: OrbeTestCase {
   }
 
   private func check(
-    _ rows: OutlineRows, _ expected: [Int], symbols: Int, file: StaticString = #filePath,
-    line: UInt = #line
+    _ rows: OutlineRows, _ expected: [Int], in outline: DocumentOutline,
+    file: StaticString = #filePath, line: UInt = #line
   ) {
     XCTAssertEqual(rows.count, expected.count, file: file, line: line)
     XCTAssertEqual((0..<rows.count).map(rows.symbol(at:)), expected, file: file, line: line)
+    XCTAssertEqual(
+      rows.showsOnlyRoots, expected.allSatisfy { outline.symbols[$0].parent == nil },
+      "最上位の行だけか", file: file, line: line)
     let positions = Dictionary(uniqueKeysWithValues: expected.enumerated().map { ($1, $0) })
-    for symbol in 0..<symbols {
+    for symbol in 0..<outline.symbols.count {
       XCTAssertEqual(
         rows.row(of: symbol), positions[symbol], "シンボル \(symbol)", file: file, line: line)
     }
@@ -90,21 +93,27 @@ final class OutlineRowsTests: OrbeTestCase {
         }
       }
       let filter = OutlineFilterResult(
-        pattern: "x", token: outline.token, visible: ancestors.sorted(), matched: [], matches: [:])
+        pattern: "x", token: outline.token, visible: ancestors.sorted(),
+        rootCount: ancestors.count { outline.symbols[$0].parent == nil }, matched: [], matches: [:])
 
       check(
         OutlineRows(outline: outline, filter: nil, folding: .collapsed(collapsed.sorted())),
-        naiveRows(outline, visible: nil, collapsed: collapsed.contains), symbols: count)
+        naiveRows(outline, visible: nil, collapsed: collapsed.contains), in: outline)
       check(
         OutlineRows(outline: outline, filter: filter, folding: .collapsed(collapsed.sorted())),
-        naiveRows(outline, visible: ancestors, collapsed: collapsed.contains), symbols: count)
+        naiveRows(outline, visible: ancestors, collapsed: collapsed.contains), in: outline)
       check(
         OutlineRows(outline: outline, filter: nil, folding: .allExcept(collapsed)),
-        naiveRows(outline, visible: nil, collapsed: { !collapsed.contains($0) }), symbols: count)
+        naiveRows(outline, visible: nil, collapsed: { !collapsed.contains($0) }), in: outline)
       check(
         OutlineRows(outline: outline, filter: filter, folding: .allExcept(collapsed)),
-        naiveRows(outline, visible: ancestors, collapsed: { !collapsed.contains($0) }),
-        symbols: count)
+        naiveRows(outline, visible: ancestors, collapsed: { !collapsed.contains($0) }), in: outline)
+
+      let roots = outline.symbols.indices.filter { outline.symbols[$0].parent == nil }
+      for filter in [nil, filter] {
+        let rows = OutlineRows(outline: outline, filter: filter, folding: .collapsed(roots))
+        XCTAssertTrue(rows.showsOnlyRoots, "最上位を 1 つずつ畳めば最上位の行だけ")
+      }
     }
   }
 }

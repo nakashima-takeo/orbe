@@ -6,7 +6,8 @@ import XCTest
 
 /// 畳み——見出しの切り替えで、すべて折りたたむ／すべて展開する。絞り込んでいる間の開閉は、その間だけのもの。
 extension EditorOutlinePaneTests {
-  /// 切り替えはすべて折りたたむ。どれも開いていない間はすべて展開になり、1 つでも開けば次はまたすべて折りたたむ。
+  /// 切り替えはすべて折りたたむ。子を持つ最上位の行がどれも開いていない間はすべて展開になり、1 つでも開けば次はまた
+  /// すべて折りたたむ。
   func testTheHeaderToggleCollapsesAllOrExpandsAll() throws {
     let hosted = try host()
     openOutline(hosted)
@@ -27,6 +28,12 @@ extension EditorOutlinePaneTests {
     outline.toggleCollapseAll()
     XCTAssertEqual(names(outline).count, 6, "すべて展開")
     XCTAssertFalse(outline.isAllCollapsed)
+
+    outline.setExpanded(try XCTUnwrap(outline.row(at: 0).symbol), false)
+    XCTAssertFalse(outline.isAllCollapsed, "前提: Box は開いている")
+    outline.setExpanded(try XCTUnwrap(outline.row(at: 1).symbol), false)
+    XCTAssertEqual(names(outline), ["Channel", "Box"], "前提: 手で 1 つずつ畳んだ")
+    XCTAssertTrue(outline.isAllCollapsed, "手で畳んでも次はすべて展開")
   }
 
   /// 絞り込んでいる間に畳んだ行は、解いた後の畳みに残らない。

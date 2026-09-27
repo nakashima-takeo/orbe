@@ -7,6 +7,8 @@ public struct OutlineFilterResult: Sendable {
   public let token: OutlineToken
   /// 残るシンボルの番号（昇順）。
   public let visible: [Int]
+  /// 残る最上位のシンボルの数。
+  public let rootCount: Int
   /// 一致したシンボルの番号（昇順。祖先として残っただけのものは含まない）。
   public let matched: [Int]
   /// 一致したシンボルの番号 → 名前の中で一致した字の区間（UTF-16、昇順）。
@@ -52,8 +54,9 @@ struct OutlineFilter {
         node = parents[current]
       }
     }
+    let visible = keep.indices.filter { keep[$0] }
     return OutlineFilterResult(
-      pattern: pattern, token: token, visible: keep.indices.filter { keep[$0] }, matched: matched,
-      matches: matches)
+      pattern: pattern, token: token, visible: visible,
+      rootCount: visible.count { parents[$0] == nil }, matched: matched, matches: matches)
   }
 }
