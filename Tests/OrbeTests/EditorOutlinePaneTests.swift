@@ -170,6 +170,32 @@ final class EditorOutlinePaneTests: OrbeTestCase {
   }
 
 
+  /// 本文のスクロール: 画面の外なら上寄せ（上に max(5 行, 高さの 20%) の間）、画面の中なら動かさない、範囲が画面より
+  /// 高ければ先頭を上端に。
+  func testJumpingScrollsNearTopOnlyWhenTheTargetIsOutside() throws {
+    let filler = (0..<120).map { "// line \($0)" }.joined(separator: "\n")
+    let body = (0..<100).map { "  // body \($0)" }.joined(separator: "\n")
+    let text = "func near() {}\n\(filler)\nclass Tall {\n\(body)\n}\n\(filler)\nfunc far() {}\n"
+    let hosted = try host(text, name: "long.swift")
+    openOutline(hosted)
+    let outline = hosted.pane.outline
+    let list = hosted.pane.outlineList.scrollView.list
+    let document = hosted.document
+    let line = { (needle: String) in CGFloat(document.text.row(containing: self.offset(hosted, of: needle))) }
+
+    click(list, row: try row(outline, "near()"), x: 120, count: 1)
+    XCTAssertEqual(document.viewportLines.first, 0, accuracy: 0.01, "画面の中なら動かさない")
+
+    click(list, row: try row(outline, "far()"), x: 120, count: 1)
+    let visible = document.viewportLines.visible
+    XCTAssertEqual(
+      document.viewportLines.first, line("func far") - max(5, visible * 0.2), accuracy: 1,
+      "画面の外なら上寄せ")
+
+    click(list, row: try row(outline, "Tall"), x: 120, count: 2)
+    XCTAssertEqual(document.viewportLines.first, line("class Tall"), accuracy: 0.01, "画面より高い範囲は先頭を上端に")
+  }
+
   /// ↑↓ は選ぶだけ、← は畳んで親へ、→ は開いて子へ、Space は開閉。
   func testKeysMoveTheSelectionAndFold() throws {
     let hosted = try host()
