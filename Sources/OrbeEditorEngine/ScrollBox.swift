@@ -27,6 +27,10 @@ final class ScrollBox: Sendable {
     var pendingEvents: [Double] = []
     /// 最も長い行を測り直す（この版以降の写しを描いたコマの幅で置き直す）。
     var remeasureFrom: Int?
+    /// 最も長い行をまだ一度も測っていない。
+    var unmeasured = true
+    /// 横の範囲の基準を取り直した測定の回数。
+    var baselines = 0
     /// 取引が置く前に見せていた位置と、それを見せ続ける材料の版の上限。
     var held: Held?
   }
@@ -112,22 +116,31 @@ final class ScrollBox: Sendable {
   }
 
   /// 描画スレッドが、版 `version` の写しを描いたコマで組んだ行の最も長い幅を知らせる。測り直しを待っていればその幅に
-  /// 置き直し（範囲に収める）、そうでなければ伸ばすだけ。範囲が変わったら true。
+  /// 置き直し（範囲に収める）、そうでなければ伸ばすだけ。範囲が変わったら true。初めての測定と測り直しで範囲が変われば、
+  /// 基準の取り直しとして数える（`baselines`）。
   func measured(longestLine width: Double, version: Int?) -> Bool {
     state.withLock { s in
       var limits = s.physics.limits
+      var baseline = s.unmeasured
+      s.unmeasured = false
       if let from = s.remeasureFrom, let version, version >= from {
         limits.longestLine = width
         s.remeasureFrom = nil
+        baseline = true
       } else if width > limits.longestLine {
         limits.longestLine = width
       }
       guard limits != s.physics.limits else { return false }
       s.physics.setLimits(limits)
       s.revision += 1
+      if baseline { s.baselines += 1 }
       return true
     }
   }
+
+  /// 横の範囲の基準を取り直した測定（測る前から初めて測った・本文を丸ごと置き換えて測り直した）の回数。増えたコマの横の
+  /// 範囲の変化は、操作によるスクロールの状態の変化ではない（つまみを出さない）。
+  var baselines: Int { state.withLock { $0.baselines } }
 
   /// 描画スレッドがコマの時刻で読む。`material` はこのコマで描く材料の版。このコマで初めて入った出来事を引き取る。
   func frame(at t: Double, material: Int) -> Frame {

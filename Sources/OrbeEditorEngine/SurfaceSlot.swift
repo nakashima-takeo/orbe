@@ -82,7 +82,7 @@ final class SurfaceSlot {
         caretVisible: moment.caretVisible, pixels: target.pixels, atlas: target.atlas,
         config: config,
         minimapCells: minimapCells, rulerRows: rulerRows, motion: motion, time: moment.time,
-        previousPlacement: minimapPlacement),
+        baselines: self.scroll.baselines, previousPlacement: minimapPlacement),
       cache: lines, fonts: fonts)
     minimapPlacement = builder.minimap.placement
     placement.write(builder.minimap.placement)

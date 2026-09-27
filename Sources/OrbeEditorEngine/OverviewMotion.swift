@@ -50,7 +50,8 @@ struct Fade: Equatable {
 /// 「スクロールが止まってから消え始める」は、その時刻に起きて刻みを回す（→ `wakeAt`）。つまみは本体の上にポインタがある
 /// 間とドラッグ中は見え、スクロールの状態（縦横の位置・見えている大きさ・行数・横の範囲）が変わると現れ、変わらなくなって
 /// から `hideDelay` 後に消え始める（ポインタが本体から出た・ドラッグを離したときは、すぐ消え始める）。面を結んだ最初の
-/// コマの状態は変化に数えない。帯はミニマップの上にポインタがある間とドラッグ中に見える。
+/// コマの状態と、横の範囲の基準を取り直した測定（最も長い行を初めて測った・測り直した）による横の範囲の変化は変化に
+/// 数えない。帯はミニマップの上にポインタがある間とドラッグ中に見える。
 final class OverviewMotion {
   /// スクロールの状態（変化でつまみを見せる）。
   struct ScrollState: Equatable {
@@ -63,6 +64,7 @@ final class OverviewMotion {
   }
 
   private var lastState: ScrollState?
+  private var lastBaselines = 0
   private var lastChange = -Double.infinity
   /// ポインタが本体から出た・ドラッグを離した時刻（それより前のスクロールでは、つまみを見せ続けない）。
   private var lastRelease = -Double.infinity
@@ -79,10 +81,16 @@ final class OverviewMotion {
     animating || wakeAt.map { t >= $0 } == true
   }
 
-  /// このコマの時刻 `t`・スクロールの状態・操作の状態から、つまみの濃さを出す。
+  /// このコマの時刻 `t`・スクロールの状態・横の範囲の基準を取り直した測定の回数 `baselines`・操作の状態から、つまみの
+  /// 濃さを出す。
   func thumbOpacity(
-    at t: Double, state: ScrollState, input: OverviewInput, motion: SurfaceConfig.Overview
+    at t: Double, state: ScrollState, baselines: Int, input: OverviewInput,
+    motion: SurfaceConfig.Overview
   ) -> Double {
+    if baselines != lastBaselines {
+      lastBaselines = baselines
+      lastState?.range = state.range
+    }
     if let lastState, lastState != state { lastChange = t }
     lastState = state
     let over = input.hovering

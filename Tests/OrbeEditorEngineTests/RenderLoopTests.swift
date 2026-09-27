@@ -88,6 +88,24 @@ final class RenderLoopTests: EngineTestCase {
     XCTAssertEqual(driver.ticks(surface.id), ticks, "消え始める時刻を過ぎても起きない")
   }
 
+  /// 見えている幅より長い行がある文書を開いても、最初に長さを測ったことによる横の範囲の変化ではつまみを出さない。
+  func testOpeningADocumentWithALongLineDoesNotShowTheThumb() throws {
+    let opened = try open(String(repeating: "x", count: 400) + "\n" + text)
+    let surface = opened.surface
+    surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
+    driver.bind(surface.id)
+    let deadline = Date().addingTimeInterval(5)
+    while !surface.viewport.clipsRight, Date() < deadline {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+    XCTAssertTrue(surface.viewport.clipsRight, "前提: 長さを測った")
+    waitUntilPaused(surface)
+    let id = surface.id
+    let shown = RenderThread.shared.performAndWait { $0.slot(id)?.motion.thumb.shown }
+    XCTAssertEqual(shown, false, "つまみは出ない")
+    XCTAssertNil(blinkWake(surface), "消え始めるのを待って起きない")
+  }
+
   /// 見えていない面（窓に無い・隠れたタブ）は描かずに刻みを止める。
   func testInvisibleSurfaceDoesNotDraw() throws {
     let opened = try open(text)

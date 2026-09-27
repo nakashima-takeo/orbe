@@ -268,7 +268,7 @@ extension FrameBuilder {
       state: OverviewMotion.ScrollState(
         first: lines.first, visible: lines.visible, lineCount: lineCount, x: x,
         width: limits.viewport.x, range: limits.maximum.x),
-      input: input, motion: c.config.overview)
+      baselines: source.baselines, input: input, motion: c.config.overview)
     let pointer = input.pointer
     if let placement = minimap.placement {
       let area = layout.minimap

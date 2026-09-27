@@ -115,6 +115,8 @@ final class FrameBuilder {
     /// 帯とつまみの濃さの時間の動きと、このコマの時刻。
     let motion: OverviewMotion
     let time: Double
+    /// 横の範囲の基準を取り直した測定の回数（`ScrollBox.baselines`）。
+    let baselines: Int
     /// 前のコマのミニマップの配置（揺れ止め）。
     let previousPlacement: MinimapLayout?
   }

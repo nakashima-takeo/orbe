@@ -167,35 +167,61 @@ final class OverviewMotionTests: XCTestCase {
     let m = OverviewMotion()
     let idle = OverviewInput()
     XCTAssertEqual(
-      m.thumbOpacity(at: 0, state: state(0), input: idle, motion: motion), 0, "最初のコマは数えない")
+      m.thumbOpacity(at: 0, state: state(0), baselines: 0, input: idle, motion: motion), 0,
+      "最初のコマは数えない")
     XCTAssertEqual(
-      m.thumbOpacity(at: 1, state: state(5), input: idle, motion: motion), 0, "変わった刻みは 0 から")
+      m.thumbOpacity(at: 1, state: state(5), baselines: 0, input: idle, motion: motion), 0,
+      "変わった刻みは 0 から")
     XCTAssertEqual(
-      m.thumbOpacity(at: 1.05, state: state(5), input: idle, motion: motion), 0.5, accuracy: 1e-9)
+      m.thumbOpacity(at: 1.05, state: state(5), baselines: 0, input: idle, motion: motion), 0.5,
+      accuracy: 1e-9)
     XCTAssertEqual(m.wakeAt ?? 0, 1.5, accuracy: 1e-9, "止まって 500ms 後に起きる")
-    XCTAssertEqual(m.thumbOpacity(at: 1.4, state: state(5), input: idle, motion: motion), 1)
-    XCTAssertFalse(m.animating)
-    XCTAssertEqual(m.thumbOpacity(at: 1.5, state: state(5), input: idle, motion: motion), 1, "消え始め")
     XCTAssertEqual(
-      m.thumbOpacity(at: 1.9, state: state(5), input: idle, motion: motion), 0.5, accuracy: 1e-9)
+      m.thumbOpacity(at: 1.4, state: state(5), baselines: 0, input: idle, motion: motion), 1)
+    XCTAssertFalse(m.animating)
+    XCTAssertEqual(
+      m.thumbOpacity(at: 1.5, state: state(5), baselines: 0, input: idle, motion: motion), 1, "消え始め"
+    )
+    XCTAssertEqual(
+      m.thumbOpacity(at: 1.9, state: state(5), baselines: 0, input: idle, motion: motion), 0.5,
+      accuracy: 1e-9)
     XCTAssertTrue(m.animating)
-    XCTAssertEqual(m.thumbOpacity(at: 2.3, state: state(5), input: idle, motion: motion), 0)
+    XCTAssertEqual(
+      m.thumbOpacity(at: 2.3, state: state(5), baselines: 0, input: idle, motion: motion), 0)
     XCTAssertFalse(m.animating, "消え終われば止まる")
     XCTAssertNil(m.wakeAt, "消え終われば起きない")
+  }
+
+  /// 横の範囲の基準を取り直した測定（初めて測った・測り直した）による範囲の変化はつまみを出さず、それ以外の範囲の変化
+  /// （打鍵で行が伸びた）は出す。
+  func testARebasedRangeDoesNotShowTheThumb() {
+    let m = OverviewMotion()
+    let idle = OverviewInput()
+    var wide = state(0)
+    _ = m.thumbOpacity(at: 0, state: state(0), baselines: 0, input: idle, motion: motion)
+    wide.range = 300
+    _ = m.thumbOpacity(at: 1, state: wide, baselines: 1, input: idle, motion: motion)
+    XCTAssertNil(m.wakeAt, "初めて測った範囲では出ない")
+    wide.range = 400
+    _ = m.thumbOpacity(at: 2, state: wide, baselines: 1, input: idle, motion: motion)
+    XCTAssertNotNil(m.wakeAt, "その後の範囲の変化では出る")
   }
 
   func testHoveringKeepsTheThumbAndLeavingHidesItAtOnce() {
     let m = OverviewMotion()
     var input = OverviewInput()
     input.hovering = true
-    _ = m.thumbOpacity(at: 0, state: state(0), input: input, motion: motion)
-    XCTAssertEqual(m.thumbOpacity(at: 5, state: state(3), input: input, motion: motion), 1)
+    _ = m.thumbOpacity(at: 0, state: state(0), baselines: 0, input: input, motion: motion)
+    XCTAssertEqual(
+      m.thumbOpacity(at: 5, state: state(3), baselines: 0, input: input, motion: motion), 1)
     XCTAssertNil(m.wakeAt, "上にある間は消えない")
     input.hovering = false
     XCTAssertEqual(
-      m.thumbOpacity(at: 5.1, state: state(3), input: input, motion: motion), 1, "出た刻みから消え始める")
+      m.thumbOpacity(at: 5.1, state: state(3), baselines: 0, input: input, motion: motion), 1,
+      "出た刻みから消え始める")
     XCTAssertEqual(
-      m.thumbOpacity(at: 5.5, state: state(3), input: input, motion: motion), 0.5, accuracy: 1e-9)
+      m.thumbOpacity(at: 5.5, state: state(3), baselines: 0, input: input, motion: motion), 0.5,
+      accuracy: 1e-9)
   }
 }
 
