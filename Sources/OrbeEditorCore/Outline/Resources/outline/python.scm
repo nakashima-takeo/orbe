@@ -73,7 +73,7 @@
 ; 変数（全部大文字の名は constant）
 (assignment
   left: (identifier) @name @item
-  (#match? @name "^[A-Z0-9_]*[A-Z][A-Z0-9_]*$")
+  (#match? @name "^[0-9_]*[A-Z][A-Z0-9_]*$")
   (#set! kind "constant"))
 
 (assignment
