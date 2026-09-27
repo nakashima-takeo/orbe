@@ -107,7 +107,8 @@ final class EditorOutline {
     outlineDidChange()
   }
 
-  /// 文書の結果か絞り込みが変わった（か、結び直した）。畳みと選択を新しい結果の番号で引き直し、キャレットへ追従する。
+  /// 文書の結果か絞り込みが変わった（か、結び直した）。畳みを新しい結果の番号で引き直す。結果が変われば（取り直し・結び
+  /// 直し）キャレットへ追従し、絞り込みだけが変われば一致を選ぶ（`chooseMatch`）。
   func outlineDidChange() {
     guard let document, document.supportsOutline else {
       setOutline(nil, filter: nil, status: .unavailable)
@@ -117,14 +118,17 @@ final class EditorOutline {
       setOutline(nil, filter: nil, status: .loading)
       return
     }
-    let previous = selection.flatMap { self.outline?.symbols[$0.symbol].key }
+    let refreshed = outline.token != self.outline?.token
+    let filterChanged = document.outlineFilter?.pattern != filter?.pattern
+    let previous = selection?.symbol
     setOutline(
       outline, filter: document.outlineFilter, status: outline.symbols.isEmpty ? .empty : .ready)
-    if let symbol = previous.flatMap(outline.index(of:)) {
-      selection = Selection(symbol: symbol, serial: selection?.serial ?? 0)
-    }
     reindex()
-    follow()
+    if refreshed {
+      follow()
+    } else if filterChanged {
+      chooseMatch(from: previous)
+    }
   }
 
   private func setOutline(
@@ -333,6 +337,28 @@ final class EditorOutline {
   }
 
   // MARK: - 絞り込み
+
+  /// 絞り込みの文字列が変わった: 選んでいたシンボル `current` が一致ならそれを、そうでなければその後ろの最初の一致
+  /// （見えている行のもの。末尾を過ぎれば頭から）を選び、見えていなければ中央へ寄せる（VS Code の tree の絞り込みと
+  /// 同じ）。祖先として残っただけの行は選ばない。文字列が空になれば選択を動かさない。一致は昇順の列から二分探索で引く。
+  private func chooseMatch(from current: Int?) {
+    guard let matched = filter?.matched, !matched.isEmpty else { return }
+    var start = 0
+    if let current {
+      var low = 0
+      var high = matched.count
+      while low < high {
+        let middle = (low + high) / 2
+        if matched[middle] < current { low = middle + 1 } else { high = middle }
+      }
+      start = low
+    }
+    for offset in 0..<matched.count {
+      let symbol = matched[(start + offset) % matched.count]
+      guard rows.row(of: symbol) != nil else { continue }
+      return choose(symbol, centered: true)
+    }
+  }
 
   /// 入力欄を出す（最初の 1 字は入力欄が受ける）。
   func showFilter() {

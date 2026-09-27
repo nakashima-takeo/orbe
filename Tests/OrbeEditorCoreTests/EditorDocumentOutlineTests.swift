@@ -345,7 +345,8 @@ final class EditorDocumentOutlineTests: XCTestCase {
   }
 
   private func filter(_ outline: DocumentOutline, _ pattern: String) -> OutlineFilterResult {
-    OutlineFilterResult(pattern: pattern, token: outline.token, visible: [], matches: [:])
+    OutlineFilterResult(
+      pattern: pattern, token: outline.token, visible: [], matched: [], matches: [:])
   }
 
   // MARK: - 手放す

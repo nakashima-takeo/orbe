@@ -7,6 +7,8 @@ public struct OutlineFilterResult: Sendable {
   public let token: OutlineToken
   /// 残るシンボルの番号（昇順）。
   public let visible: [Int]
+  /// 一致したシンボルの番号（昇順。祖先として残っただけのものは含まない）。
+  public let matched: [Int]
   /// 一致したシンボルの番号 → 名前の中で一致した字の区間（UTF-16、昇順）。
   public let matches: [Int: [Range<Int>]]
 }
@@ -28,9 +30,11 @@ struct OutlineFilter {
     let scorer = FuzzyScorer(pattern: pattern)
     var keep = [Bool](repeating: false, count: names.count)
     var matches: [Int: [Range<Int>]] = [:]
+    var matched: [Int] = []
     for (index, name) in names.enumerated() {
       guard let ranges = scorer.matches(name) else { continue }
       matches[index] = ranges
+      matched.append(index)
       var node: Int? = index
       while let current = node, !keep[current] {
         keep[current] = true
@@ -38,6 +42,7 @@ struct OutlineFilter {
       }
     }
     return OutlineFilterResult(
-      pattern: pattern, token: token, visible: keep.indices.filter { keep[$0] }, matches: matches)
+      pattern: pattern, token: token, visible: keep.indices.filter { keep[$0] }, matched: matched,
+      matches: matches)
   }
 }

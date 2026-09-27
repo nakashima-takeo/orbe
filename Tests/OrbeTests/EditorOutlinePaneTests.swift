@@ -232,15 +232,54 @@ final class EditorOutlinePaneTests: OrbeTestCase {
     XCTAssertEqual(outline.row(at: 1).matches, [2..<3])
     XCTAssertEqual(outline.row(at: 2).matches, [0..<1])
 
+    XCTAssertEqual(outline.selectedRow, 1, "前提: 最初の一致が選ばれる")
     let editor = try XCTUnwrap(container.field.textField.currentEditor())
     editor.doCommand(by: #selector(NSResponder.moveDown(_:)))
-    editor.doCommand(by: #selector(NSResponder.moveDown(_:)))
-    XCTAssertEqual(outline.selectedRow, 1, "入力欄の ↓ は行を選ぶ")
+    XCTAssertEqual(outline.selectedRow, 2, "入力欄の ↓ は行を選ぶ")
     editor.doCommand(by: #selector(NSResponder.cancelOperation(_:)))
     XCTAssertFalse(outline.isFilterShown)
     catchUp(hosted.document)
     pumpMain(until: { outline.rowCount == 6 }, "Esc で絞り込みを解く")
     XCTAssertTrue(hosted.window.firstResponder === list, "Esc で列へ戻る")
+  }
+
+  /// 打った字で絞り込むと一致した行が選ばれ（祖先として残っただけの行ではなく）、字を足しても一致が選ばれたまま、
+  /// 入力欄の Enter でその一致へ飛ぶ。Esc で解いても選択は残る。
+  func testTypingSelectsAMatchAndEnterJumpsToIt() throws {
+    let hosted = try host()
+    openOutline(hosted)
+    let outline = hosted.pane.outline
+    let container = hosted.pane.outlineList
+    let list = container.scrollView.list
+    hosted.window.makeFirstResponder(list)
+    let selected = { outline.selectedRow.map { outline.row(at: $0).name } }
+
+    list.keyDown(with: .key("f", []))
+    catchUp(hosted.document)
+    pumpMain(until: { self.names(outline) == ["Channel", "  buffer", "  flush()"] }, "絞り込む")
+    XCTAssertEqual(selected(), "buffer", "最初の一致を選ぶ（祖先の Channel ではない）")
+
+    let editor = try XCTUnwrap(container.field.textField.currentEditor())
+    editor.insertText("l")
+    XCTAssertEqual(container.field.text, "fl")
+    catchUp(hosted.document)
+    pumpMain(until: { self.names(outline) == ["Channel", "  flush()"] }, "字を足して絞り込む")
+    XCTAssertEqual(selected(), "flush()", "選んでいた行が落ちれば後ろの一致へ")
+
+    editor.doCommand(by: #selector(NSResponder.cancelOperation(_:)))
+    catchUp(hosted.document)
+    pumpMain(until: { outline.rowCount == 6 }, "Esc で絞り込みを解く")
+    XCTAssertEqual(selected(), "flush()", "解いても選択は残る")
+
+    list.keyDown(with: .key("f", []))
+    catchUp(hosted.document)
+    pumpMain(until: { self.names(outline) == ["Channel", "  buffer", "  flush()"] })
+    XCTAssertEqual(selected(), "flush()", "選んでいた行が一致なら残す")
+    try XCTUnwrap(container.field.textField.currentEditor()).doCommand(
+      by: #selector(NSResponder.insertNewline(_:)))
+    XCTAssertEqual(
+      hosted.document.surface.selectedRange,
+      NSRange(location: offset(hosted, of: "flush"), length: 0), "Enter で一致へ飛ぶ")
   }
 
   /// 取り直しても、同じ名前の道筋にあるシンボルの畳みは残る。

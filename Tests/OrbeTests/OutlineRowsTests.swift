@@ -90,7 +90,7 @@ final class OutlineRowsTests: OrbeTestCase {
         }
       }
       let filter = OutlineFilterResult(
-        pattern: "x", token: outline.token, visible: ancestors.sorted(), matches: [:])
+        pattern: "x", token: outline.token, visible: ancestors.sorted(), matched: [], matches: [:])
 
       check(
         OutlineRows(outline: outline, filter: nil, folding: .collapsed(collapsed.sorted())),
