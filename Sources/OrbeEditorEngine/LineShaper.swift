@@ -108,15 +108,15 @@ enum LineShaper {
   /// 書式文字の箱に描く中身。
   static func boxLabel(_ u: UInt16) -> String { String(format: "[U+%04X]", u) }
 
-  /// `limit` 以下で最も後ろの書記素の境（1 つの書記素が上限を越えるほど長ければ `limit`）。
+  /// `limit` 以下で最も後ろの書記素の境（1 つの書記素が上限を越えるほど長ければ `limit`）。上限の位置の前後だけを見る
+  /// （行頭から書記素を数えると、長い行を組むたびに 10000 字を歩く）。
   private static func graphemeCut(_ head: ContiguousArray<UInt16>) -> Int {
-    var cut = 0
-    for character in String(decoding: head, as: UTF16.self) {
-      let next = cut + character.utf16.count
-      guard next <= limit else { break }
-      cut = next
+    let cluster = head.withUnsafeBufferPointer {
+      let string = CFStringCreateWithCharactersNoCopy(
+        nil, $0.baseAddress, $0.count, kCFAllocatorNull)!
+      return CFStringGetRangeOfComposedCharactersAtIndex(string, limit)
     }
-    return cut > 0 ? cut : limit
+    return cluster.location > 0 ? cluster.location : limit
   }
 
   /// 行を組む。`tabWidth` はタブの刻み（pt）。
