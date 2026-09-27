@@ -67,7 +67,11 @@ final class EditorDocumentOutlineTests: XCTestCase {
     let (document, _) = try open()
     XCTAssertTrue(document.supportsOutline)
     XCTAssertTrue(document.waitUntilCaughtUp())
+    var changes = 0
+    document.onOutlineChange = { changes += 1 }
+    RunLoop.main.run(until: Date().addingTimeInterval(0.2))
     XCTAssertNil(document.outline, "要らない間は取り出さない")
+    XCTAssertEqual(changes, 0)
 
     document.wantsOutline = true
     XCTAssertTrue(document.waitUntilCaughtUp())
@@ -106,8 +110,31 @@ final class EditorDocumentOutlineTests: XCTestCase {
     document.wantsOutline = false
     document.wantsOutline = true
     XCTAssertEqual(document.outline?.token, token, "結果は捨てない")
-    XCTAssertTrue(document.waitUntilCaughtUp())
+    var changes = 0
+    document.onOutlineChange = { changes += 1 }
+    RunLoop.main.run(until: Date().addingTimeInterval(0.2))
     XCTAssertEqual(document.outline?.token, token, "取り直さない")
+    XCTAssertEqual(changes, 0)
+  }
+
+  /// 要らない間の編集が記録で写せるうちに要るへ戻れば、前の結果を今の本文へ写して使い、取り直しも頼む。
+  func testAResultThatCanReachTheCurrentTextIsKeptAndRefreshed() throws {
+    let (document, surface) = try open()
+    document.wantsOutline = true
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    let token = try XCTUnwrap(document.outline?.token)
+    let grow = try index("grow(by:)", in: document)
+
+    document.wantsOutline = false
+    surface.replace(NSRange(location: 0, length: 0), with: "// head\n")
+    document.wantsOutline = true
+    XCTAssertEqual(document.outline?.token, token, "写せる結果は捨てない")
+    let name = try XCTUnwrap(document.outlineNameRange(of: grow, in: token))
+    XCTAssertEqual(surface.substring(in: name), "grow", "飛び先は今の本文の名前")
+
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertNotEqual(document.outline?.token, token, "取り直す")
+    XCTAssertEqual(document.outline?.version, document.version)
   }
 
   /// 要らない間に編集して、今の本文へ写せなくなった結果は、要るようになった時点で捨てる（前の本文の木を見せない）。
@@ -134,8 +161,9 @@ final class EditorDocumentOutlineTests: XCTestCase {
     XCTAssertNil(document.outline)
   }
 
-  /// 打ち切りの印が立った取り出しは、問い合わせの途中で止まって結果を出さない（新しい写しが届いたときの打ち切り）。
-  func testACancelledExtractionStopsWithoutAResult() throws {
+  /// 打ち切りの印が問い合わせの途中で立てば、次のマッチを読まずに止まり、取り出しは結果を出さない（新しい写しが届いた
+  /// ときの打ち切り）。
+  func testACancelledExtractionStopsMidQueryWithoutAResult() throws {
     let rules = try XCTUnwrap(registry.rules(for: SyntaxLanguage.swift))
     let query = try XCTUnwrap(rules.outline)
     let text = TextRope(String(repeating: Self.source, count: 200))
@@ -148,6 +176,18 @@ final class EditorDocumentOutlineTests: XCTestCase {
     XCTAssertEqual(
       extraction.run(tree, text: text, version: 0, cancellation: SyntaxCancellation())?.symbols
         .count, 600, "前提: 打ち切らなければ全部出る")
+
+    let cancellation = SyntaxCancellation()
+    var calls = 0
+    let finished = QueryCursor().matches(
+      of: query.query, in: tree.root, cancellation: cancellation, text: { _ in "" }
+    ) { _ in
+      calls += 1
+      cancellation.cancel()
+    }
+    XCTAssertFalse(finished, "打ち切ったと答える")
+    XCTAssertEqual(calls, 1, "印が立った後のマッチは読まない")
+
     let cancelled = SyntaxCancellation()
     cancelled.cancel()
     XCTAssertNil(extraction.run(tree, text: text, version: 0, cancellation: cancelled))
@@ -245,6 +285,39 @@ final class EditorDocumentOutlineTests: XCTestCase {
     XCTAssertFalse(seen.isEmpty)
     XCTAssertTrue(seen.allSatisfy { $0 }, "どの知らせでも結果と絞り込みが揃っている")
     XCTAssertEqual(document.outlineFilter?.visible.count, 3, "grab()・Box・grow(by:)")
+  }
+
+  /// 取り直しの結果に添えた絞り込みが今の文字列と違えば、揃うまで見せない。今の文字列の絞り込みが届けば揃えて入れ替え、
+  /// 文字列を空にすれば見せていない結果を繰り上げる。今の本文へ写せない結果は捨てる。
+  func testAResultFilteredByAnOldPatternWaitsForTheCurrentFilter() throws {
+    let (document, _) = try open()
+    document.wantsOutline = true
+    document.filterOutline("gr")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    let shown = try XCTUnwrap(document.outline?.token)
+
+    let refreshed = OutlineExtraction.nest([], version: document.version)
+    document.receiveOutline(contents(refreshed, filteredBy: "g"))
+    XCTAssertEqual(document.outline?.token, shown, "古い文字列の絞り込みを添えた結果は見せない")
+    XCTAssertEqual(document.outlineFilter?.pattern, "gr")
+    XCTAssertFalse(document.isCaughtUp)
+
+    var arrived = AnalysisInbox.Contents()
+    arrived.outlineFilter = filter(refreshed, "gr")
+    document.receiveOutline(arrived)
+    XCTAssertEqual(document.outline?.token, refreshed.token, "今の文字列の絞り込みと揃えて入れ替える")
+    XCTAssertEqual(document.outlineFilter?.token, refreshed.token)
+    XCTAssertTrue(document.isCaughtUp)
+
+    let again = OutlineExtraction.nest([], version: document.version)
+    document.receiveOutline(contents(again, filteredBy: "g"))
+    document.filterOutline("")
+    XCTAssertEqual(document.outline?.token, again.token, "空にすれば見せていない結果を繰り上げる")
+    XCTAssertNil(document.outlineFilter)
+
+    let unreachable = OutlineExtraction.nest([], version: document.version + 1)
+    document.receiveOutline(contents(unreachable, filteredBy: nil))
+    XCTAssertEqual(document.outline?.token, again.token, "写せない版の結果は捨てる")
   }
 
   /// 絞り込みを空にした後に、前の文字列の絞り込みを添えた結果が届いても、絞り込まずに見せる（空の欄の下で古い文字列の
