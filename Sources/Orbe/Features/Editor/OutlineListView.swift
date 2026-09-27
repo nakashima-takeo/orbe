@@ -105,7 +105,7 @@ final class OutlineListSource: RowListSource {
   func focusDidChange(_ focused: Bool) {}
 
   /// 修飾の無い（⇧だけは可）文字の打鍵を入力欄へ回す。Space は開閉なので回さない。
-  func shouldTakeTyping(_ event: NSEvent) -> Bool {
+  func takeTyping(_ event: NSEvent) -> Bool {
     let flags = event.modifierFlags.intersection([.command, .control, .option, .function])
     guard flags.isEmpty, event.specialKey == nil, let characters = event.characters,
       !characters.isEmpty, characters != " ",

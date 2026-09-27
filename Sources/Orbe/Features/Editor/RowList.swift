@@ -27,8 +27,8 @@ protocol RowListSource: AnyObject {
   /// 列の焦点が入った・抜けた。
   func focusDidChange(_ focused: Bool)
 
-  /// 列に焦点がある間の打鍵を、キーとして解く前に引き取るか。true なら列はその打鍵に何もしない。
-  func shouldTakeTyping(_ event: NSEvent) -> Bool
+  /// 列に焦点がある間の打鍵を、キーとして解く前に源が引き取って処理する。引き取ったら true（列はその打鍵に何もしない）。
+  func takeTyping(_ event: NSEvent) -> Bool
   /// キーの操作。扱ったら true。扱わなければ、Home / End・PageUp / PageDown は列が送るだけにし、Space は次の
   /// responder へ回す。
   func perform(_ key: RowListKey) -> Bool
@@ -130,7 +130,7 @@ final class RowList<Source: RowListSource>: NSScrollView {
 /// （行ごとの仕事をしない）。行の高さは 1 つ。
 ///
 /// キーは源の操作へ渡す（`RowListKey`）。Home / End・PageUp / PageDown は源が扱わなければ送るだけ。文字の打鍵は解かない
-/// ——解く前に源が引き取るかを問う。押すと焦点を取り、行の番号と行の中の横の位置を源へ渡す。VoiceOver には AX の
+/// ——解く前に源へ渡し、源が引き取れば解かない。押すと焦点を取り、行の番号と行の中の横の位置を源へ渡す。VoiceOver には AX の
 /// リスト（行の総数と、見えている行・選択の行）として見せる。
 final class RowListView<Source: RowListSource>: NSView {
   let source: Source
@@ -287,7 +287,7 @@ final class RowListView<Source: RowListSource>: NSView {
   // MARK: - キー
 
   override func keyDown(with event: NSEvent) {
-    guard !source.shouldTakeTyping(event) else { return }
+    guard !source.takeTyping(event) else { return }
     interpretKeyEvents([event])
   }
 

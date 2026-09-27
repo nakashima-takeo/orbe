@@ -32,7 +32,7 @@ final class SearchResultsSource: RowListSource {
 
   func focusDidChange(_ focused: Bool) { search.focusDidChange(.results, focused: focused) }
 
-  func shouldTakeTyping(_ event: NSEvent) -> Bool { false }
+  func takeTyping(_ event: NSEvent) -> Bool { false }
 
   func perform(_ key: RowListKey) -> Bool {
     switch key {

@@ -36,7 +36,6 @@ final class RowListTests: OrbeTestCase {
       if row >= rowCount { outOfRange += 1 }
       view.show("row \(row)")
     }
-
     func row(of selection: Int) -> Int? { selection < rowCount ? selection : nil }
     func prepareRows(for appearance: NSAppearance) {}
     func focusRequestDidApply() {
@@ -44,7 +43,7 @@ final class RowListTests: OrbeTestCase {
       focusRequestsApplied += 1
     }
     func focusDidChange(_ focused: Bool) { focus.append(focused) }
-    func shouldTakeTyping(_ event: NSEvent) -> Bool {
+    func takeTyping(_ event: NSEvent) -> Bool {
       guard let characters = event.characters, takes.contains(characters) else { return false }
       taken.append(characters)
       return true
@@ -210,10 +209,10 @@ final class RowListTests: OrbeTestCase {
     XCTAssertEqual(list.visibleRect.minY, 0, "源が扱えば列は送らない")
     XCTAssertEqual(hosted.source.keys.suffix(2), [.end, .pageDown])
 
-    hosted.source.takes = ["a"]
+    hosted.source.takes = [" "]
     let performed = hosted.source.keys.count
-    list.keyDown(with: .key("a", []))
-    XCTAssertEqual(hosted.source.taken, ["a"], "源が打鍵を引き取る")
+    list.keyDown(with: .key(" ", []))
+    XCTAssertEqual(hosted.source.taken, [" "], "源が打鍵を引き取る")
     XCTAssertEqual(hosted.source.keys.count, performed, "引き取った打鍵は解かない")
   }
 
