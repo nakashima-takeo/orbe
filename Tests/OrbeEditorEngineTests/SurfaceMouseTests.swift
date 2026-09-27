@@ -134,8 +134,9 @@ final class SurfaceMouseTests: EngineTestCase {
     XCTAssertEqual(opened.document.viewportLines.first, 0)
   }
 
-  /// ⌃クリックは何もしない（選択も焦点も動かない。右クリックのメニューは面の外の仕事）。行番号の列でも行を選ばない。
-  func testControlClickDoesNothing() throws {
+  /// マウスの押下として面へ届いた ⌃クリックは、選択を動かさない（AppKit は、右クリックのメニューがあれば押下を送らずに
+  /// メニューを出す。メニューが無ければ押下が届く）。
+  func testControlClickArrivingAsMouseDownLeavesTheSelection() throws {
     let opened = try open(sample)
     _ = host(opened)
     opened.surface.selectedRange = NSRange(location: 2, length: 0)

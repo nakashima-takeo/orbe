@@ -67,7 +67,7 @@ final class MetalTextView: TextSurfaceInputView {
 
   /// IME が ⌘ キーの間に確定と次の未確定を続けて返しても、描くのは 1 状態だけ。
   override func offerKeyEquivalentToInputMethod(_ event: NSEvent) -> Bool {
-    guard let surface else { return false }
+    guard composing, let surface else { return false }
     var used = false
     surface.transact { used = super.offerKeyEquivalentToInputMethod(event) }
     return used
@@ -194,13 +194,9 @@ final class MetalTextView: TextSurfaceInputView {
     surface?.scrollWheel(event)
   }
 
-  /// ⌃クリックは右クリックのメニュー。変換中はまず IME へ渡す（IME が使わなければ、クリックの入口が変換を確定する）。
+  /// 変換中はまず IME へ渡す（IME が使わなければ、クリックの入口が変換を確定する）。
   override func mouseDown(with event: NSEvent) {
     if composing, inputContext?.handleEvent(event) == true { return }
-    if event.modifierFlags.contains(.control), let menu = menu(for: event) {
-      NSMenu.popUpContextMenu(menu, with: event, for: self)
-      return
-    }
     surface?.transact { pointer.mouseDown(event, in: self) }
   }
 

@@ -37,22 +37,34 @@ extension MetalTextSurface {
       area: area, row: row, offset: text.lineStart(row) + env.geometry.column(atX: x, row: row))
   }
 
-  /// 点の下の字が URL の中なら、その URL。
-  func link(at point: CGPoint) -> URL? {
-    guard let text = material.read().content?.text else { return nil }
-    let p = scroll.peek(at: CACurrentMediaTime()).position
+  /// 点を含む書記素。点が行の字の上でなければ（行番号の列・行末より右・字の無い行・最終行より下の空き地）nil。当たりと
+  /// 同じ組版の行から引くので、右から左の字の並びでも見た目の字に当たる。`position` はスクロールの位置（省けば今の位置）。
+  func character(at point: CGPoint, position: SIMD2<Double>? = nil) -> NSRange? {
+    guard let text = currentContent?.text else { return nil }
+    let p = position ?? scroll.peek(at: CACurrentMediaTime()).position
+    let column = config.columnWidth(lineCount: text.lineCount)
     let y = Double(point.y - config.topInset) + p.y
     let lineHeight = Double(config.lineHeight)
-    guard y >= 0, y < Double(text.lineCount) * lineHeight else { return nil }
+    guard point.x >= column, point.y >= config.topInset, y < Double(text.lineCount) * lineHeight
+    else { return nil }
     let row = Int((y / lineHeight).rounded(.down))
-    let x = CGFloat(Double(point.x - config.columnWidth(lineCount: text.lineCount)) + p.x)
+    let x = CGFloat(Double(point.x - column) + p.x)
     let (source, start) = LineShaper.source(row: row, in: text)
     let stops = lineStops.stops(source, tabWidth: config.tabWidth(columns: indentation.unit))
     guard x < stops.width, let glyph = stops.glyph(atX: x) else { return nil }
-    let column = stops.offsets[glyph]
-    let line = text.substring(
-      NSRange(location: start, length: min(source.length, LineShaper.limit)))
-    return LinkDetector.links(in: line).first { NSLocationInRange(column, $0.range) }?.url
+    return text.grapheme(containing: start + stops.offsets[glyph])
+  }
+
+  /// 点の下の字が URL の中なら、その URL。
+  func link(at point: CGPoint) -> URL? {
+    guard let text = currentContent?.text, let character = character(at: point) else { return nil }
+    let row = text.row(containing: character.location)
+    let start = text.lineStart(row)
+    let length = min(NSMaxRange(text.contentRange(ofRow: row)) - start, LineShaper.limit)
+    let line = text.substring(NSRange(location: start, length: length))
+    return LinkDetector.links(in: line).first {
+      NSLocationInRange(character.location - start, $0.range)
+    }?.url
   }
 }
 
@@ -62,7 +74,8 @@ extension MetalTextSurface {
 /// 続ける（刻みは view の display link）。外へ出たときに伸ばす先は VS Code と同じ——上は見えている上端の行の行頭、下は
 /// 下端の行のポインタの桁（最終行が見えればその行末）、左はポインタの行の行頭、右は行末。⌘だけのクリックが URL に当たれば、
 /// 離したときに開く（動けば開かない。その間は選択が伸びない）。選択の上の 1 回のクリック（⇧・⌘ なし）は本文のドラッグの
-/// 候補で、動かせば文字のドラッグが始まり、動かさずに離せばその位置にキャレットを置く。
+/// 候補で、動かせば文字のドラッグが始まり（押した位置から少しでも動けば——時間の待ちは置かない）、動かさずに離せばその
+/// 位置にキャレットを置く。
 @MainActor
 final class MouseSelection: NSObject {
   weak var surface: MetalTextSurface?
@@ -71,8 +84,8 @@ final class MouseSelection: NSObject {
     case text
     case numbers
     case link(URL, NSPoint)
-    /// 選択の上を押した（本文のドラッグの候補）。離したらキャレットを置く位置。
-    case candidate(Int)
+    /// 選択の字の上を押した（本文のドラッグの候補）。離したらキャレットを置く位置と、押した位置（窓の座標）。
+    case candidate(Int, NSPoint)
   }
 
   private enum Edge {
@@ -89,7 +102,7 @@ final class MouseSelection: NSObject {
   /// 最後のポインタの位置（view の座標）。
   private var point = CGPoint.zero
   private weak var view: NSView?
-  /// 押してから離すまでにこれ以上動けばドラッグ（URL を開かない）。
+  /// 押してからこれ以上動けばドラッグ（URL を開かない・本文のドラッグを始める）。
   private static let clickSlop: CGFloat = 4
 
   func mouseDown(_ event: NSEvent, in view: NSView) {
@@ -113,9 +126,10 @@ final class MouseSelection: NSObject {
     let shift = flags.contains(.shift)
     let selection = primary.selection
     if hit.area == .text, event.clickCount == 1, flags.isDisjoint(with: [.shift, .command]),
-      selection.length > 0, hit.offset >= selection.location, hit.offset <= NSMaxRange(selection)
+      selection.length > 0, hit.offset >= selection.location, hit.offset <= NSMaxRange(selection),
+      surface.character(at: point) != nil
     {
-      drag = .candidate(hit.offset)
+      drag = .candidate(hit.offset, event.locationInWindow)
       return
     }
     let cursor: Cursor
@@ -149,7 +163,8 @@ final class MouseSelection: NSObject {
   func mouseDragged(_ event: NSEvent, in view: NSView) {
     guard let drag, let surface else { return }
     if case .link = drag { return }
-    if case .candidate = drag {
+    if case .candidate(_, let down) = drag {
+      guard Self.moved(event, from: down) > Self.clickSlop else { return }
       self.drag = nil
       surface.textView.beginTextDrag(with: event)
       return
@@ -179,16 +194,20 @@ final class MouseSelection: NSObject {
   func mouseUp(_ event: NSEvent, in view: NSView) {
     stopAutoscroll()
     defer { drag = nil }
-    if case .candidate(let offset) = drag {
+    if case .candidate(let offset, _) = drag {
       surface?.editor.select(CursorList(Cursor(offset)), reveal: .minimal)
       return
     }
     guard case .link(let url, let down) = drag, let surface else { return }
-    let moved = hypot(event.locationInWindow.x - down.x, event.locationInWindow.y - down.y)
-    guard moved <= Self.clickSlop,
+    guard Self.moved(event, from: down) <= Self.clickSlop,
       surface.link(at: view.convert(event.locationInWindow, from: nil)) == url
     else { return }
     surface.host?.openLink(url)
+  }
+
+  /// 押した位置（窓の座標）から動いた距離。
+  private static func moved(_ event: NSEvent, from down: NSPoint) -> CGFloat {
+    hypot(event.locationInWindow.x - down.x, event.locationInWindow.y - down.y)
   }
 
   /// 押している間に窓から外れた（mouse-up が届かない）。
