@@ -155,14 +155,13 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
   /// 今のスクロールの位置（取引の中で置いた位置があればそれ）。
   private var scrollPosition: SIMD2<Double> { surface?.scrollPosition ?? .zero }
 
-  /// 本文の区画（view の座標）。
+  /// 本文の区画から上端の余白を除いたもの（view の座標）。
   private var textArea: NSRect {
     guard let surface else { return .zero }
-    let lineCount = surface.editingEnvironment()?.text.lineCount ?? 1
-    let column = surface.config.columnWidth(lineCount: lineCount)
+    let area = surface.surfaceLayout.text
+    let top = surface.config.topInset
     return NSRect(
-      x: column, y: surface.config.topInset, width: max(0, bounds.width - column),
-      height: max(0, bounds.height - surface.config.topInset))
+      x: area.minX, y: top, width: area.width, height: max(0, area.height - top))
   }
 
   /// 変換中の未確定の横位置（変換中でなければ nil）。

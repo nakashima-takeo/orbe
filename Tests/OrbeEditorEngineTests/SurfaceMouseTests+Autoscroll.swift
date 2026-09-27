@@ -201,14 +201,15 @@ extension SurfaceMouseTests {
     _ = opened.surface.snapshot()
     pump()
     let config = opened.surface.config
-    let column = config.columnWidth(lineCount: opened.document.text.lineCount)
+    let area = opened.surface.surfaceLayout.text
+    let column = area.minX
     let full = 2 * config.cell
-    let step = Double(max(30, (400 - column) / full * 2) * 0.1 * full * 0.5)
+    let step = Double(max(30, area.width / full * 2) * 0.1 * full * 0.5)
     let pointer = try pointer(opened)
     var clock: CFTimeInterval = 10
     let y = point(opened, row: 4, column: 0).y
     try mouse(opened, .leftMouseDown, at: point(opened, row: 2, column: 3))
-    try mouse(opened, .leftMouseDragged, at: CGPoint(x: 400 + full, y: y))
+    try mouse(opened, .leftMouseDragged, at: CGPoint(x: area.maxX + full, y: y))
     frames(pointer, 2, clock: &clock)
     XCTAssertEqual(position(opened).x, step, accuracy: 0.5, "右")
     frames(pointer, 400, clock: &clock)

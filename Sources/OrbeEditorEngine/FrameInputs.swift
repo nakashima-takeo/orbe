@@ -143,6 +143,7 @@ struct SurfaceConfig: @unchecked Sendable {
   let gutterWidth: CGFloat
   let gutterTrailingInset: CGFloat
   let marks: Marks
+  let overview: Overview
   let fontSmoothing: Bool
   /// 打ち切った行の末尾に出す印の文言（打ち切った単位の数から）。
   let omittedLabel: @Sendable (Int) -> String
@@ -170,6 +171,7 @@ struct SurfaceConfig: @unchecked Sendable {
       gutterWidth: style.marks.gutterWidth, barWidth: style.marks.barWidth,
       barInset: style.marks.barInset, barRadius: style.marks.barRadius,
       triangleSize: style.marks.triangleSize)
+    overview = Overview(style.overview)
     self.fontSmoothing = fontSmoothing
     self.omittedLabel = omittedLabel
     cell = Self.advances(of: [0x20], in: font).advances[0]

@@ -44,7 +44,8 @@ final class ScrolledFrameTests: EngineTestCase {
     return Shot(
       bytes: GlyphPixelTests.pixels(image), width: image.width, height: image.height,
       top: Int((config.topInset * 2).rounded()),
-      column: Int((config.columnWidth(lineCount: opened.document.text.lineCount) * 2).rounded()))
+      column: Int((config.columnWidth(lineCount: opened.document.text.lineCount) * 2).rounded()),
+      right: Int((opened.surface.surfaceLayout.text.maxX * 2).rounded()))
   }
 
   /// 縦に送ると、本文・行番号・印が同じ画素の数だけ上へ動く（1 行の高さの倍数でない量でも）。
@@ -73,7 +74,7 @@ final class ScrolledFrameTests: EngineTestCase {
     let gutter = after.pixels(x: 0..<after.column, y: after.top..<after.height)
     XCTAssertGreaterThan(gutter.ink(in: after), 200, "前提: 行番号と印が描かれている")
     XCTAssertEqual(gutter.worstDifference(after, before, dx: 0, dy: 0), 0, "行番号の列は動かない")
-    let body = after.pixels(x: after.column..<after.width - shift, y: after.top..<after.height)
+    let body = after.pixels(x: after.column..<after.right - shift, y: after.top..<after.height)
     XCTAssertGreaterThan(body.ink(in: after), 1_000)
     XCTAssertEqual(body.worstDifference(after, before, dx: shift, dy: 0), 0, "本文は送った量だけ動く")
   }
@@ -84,9 +85,10 @@ private struct Shot {
   let bytes: [UInt8]
   let width: Int
   let height: Int
-  /// 上端の余白と行番号の列の幅（px）。
+  /// 上端の余白と行番号の列の幅と、本文の区画の右端（px）。
   let top: Int
   let column: Int
+  let right: Int
 
   func pixels(x: Range<Int>, y: Range<Int>) -> Region { Region(x: x, y: y) }
 

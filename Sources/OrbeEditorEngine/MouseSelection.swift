@@ -170,8 +170,8 @@ final class MouseSelection: NSObject {
       return
     }
     point = view.convert(event.locationInWindow, from: nil)
-    let column = surface.config.columnWidth(
-      lineCount: surface.editingEnvironment()?.text.lineCount ?? 1)
+    let area = surface.surfaceLayout.text
+    let column = area.minX
     if point.y < surface.config.topInset {
       autoscroll(.above(surface.config.topInset - point.y))
     } else if point.y > view.bounds.height {
@@ -179,8 +179,8 @@ final class MouseSelection: NSObject {
     } else if point.x < column {
       autoscroll(.left(column - point.x))
       extend(to: point, lineEnd: false, reveal: .none)
-    } else if point.x > view.bounds.width {
-      autoscroll(.right(point.x - view.bounds.width))
+    } else if point.x > area.maxX {
+      autoscroll(.right(point.x - area.maxX))
       extend(to: point, lineEnd: true, reveal: .none)
     } else {
       stopAutoscroll()

@@ -62,6 +62,8 @@ final class FrameBuilder {
     let top: Double
     let lineHeight: Double
     let column: Double
+    /// 本文の区画の右端（ミニマップの左端）。
+    let textRight: Double
 
     /// 行の上端の y。
     func rowTop(_ row: Int) -> Double { top + (Double(row) * lineHeight).rounded() - scrollY }
@@ -104,15 +106,17 @@ final class FrameBuilder {
     }
     let s = Double(source.material.scale)
     let lineCount = content.text.lineCount
+    let layout = config.layout(size: source.material.size, lineCount: lineCount)
     let g = Geometry(
       scale: s, width: Double(source.pixels.width), height: Double(source.pixels.height),
       scrollX: (source.position.x * s).rounded(), scrollY: (source.position.y * s).rounded(),
       top: (Double(config.topInset) * s).rounded(), lineHeight: Double(config.lineHeight) * s,
-      column: (Double(config.columnWidth(lineCount: lineCount)) * s).rounded())
+      column: (Double(layout.column) * s).rounded(),
+      textRight: (Double(layout.text.maxX) * s).rounded())
     let c = Context(
       g: g, palette: palette, focused: source.material.caret.focused, atlas: source.atlas,
       config: config)
-    textScissor = Self.scissor(x: g.column, y: g.top, g)
+    textScissor = Self.scissor(x: g.column, y: g.top, width: g.textRight - g.column, g)
     gutterScissor = Self.scissor(x: 0, y: g.top, width: g.column, g)
     guard g.height > g.top else { return }
     let first = max(0, Int((g.scrollY / g.lineHeight).rounded(.down)))
@@ -150,7 +154,7 @@ final class FrameBuilder {
     let g = c.g
     let originX = g.column - g.scrollX
     let leftmost = Float((g.column - originX) / g.scale - Double(c.config.cell) * 4)
-    let rightmost = Float((g.width - originX) / g.scale)
+    let rightmost = Float((g.textRight - originX) / g.scale)
     let from = Self.lowerBound(line.xs, leftmost)
     var to = from
     var low = Int32.max
@@ -177,7 +181,7 @@ final class FrameBuilder {
     let markX = originX + Double(line.width + c.config.cell) * g.scale
     for j in mark.glyphs.indices {
       let x = markX + Double(mark.xs[j]) * g.scale
-      if x > g.width { break }
+      if x > g.textRight { break }
       place(
         Glyph(font: mark.fonts[j], glyph: mark.glyphs[j], x: x, baseline: baseline),
         c.palette.gutterText, .text, c)

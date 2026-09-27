@@ -134,14 +134,18 @@ extension MetalTextSurface {
     return p
   }
 
-  /// 行の数が `lineCount` のときの範囲の値。
+  /// 行の数が `lineCount` のときの範囲の値。見えている大きさは本文の区画から上端の余白を除いたもの。
   func limits(lineCount: Int) -> LimitsUpdate {
-    LimitsUpdate(
+    let text = config.layout(size: size, lineCount: lineCount).text
+    return LimitsUpdate(
       lineCount: lineCount, lineHeight: Double(config.lineHeight),
-      viewport: SIMD2(
-        Double(size.width - config.columnWidth(lineCount: lineCount)),
-        Double(size.height - config.topInset)),
+      viewport: SIMD2(Double(text.width), Double(max(0, text.height - config.topInset))),
       cell: Double(config.cell))
+  }
+
+  /// 今の区画の配置（出す前の写しの行の数で）。
+  var surfaceLayout: SurfaceLayout {
+    config.layout(size: size, lineCount: currentContent?.text.lineCount ?? 1)
   }
 
   /// 見えている範囲を出し直し、変わっていれば文書へ知らせる（同期）。変換中なら IME にも知らせる（候補窓が追従する）。
