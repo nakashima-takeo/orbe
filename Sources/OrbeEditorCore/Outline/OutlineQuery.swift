@@ -43,9 +43,10 @@ struct OutlineExtraction {
   func run(
     _ tree: SyntaxTree, text: TextRope, version: Int, cancellation: SyntaxCancellation
   ) -> DocumentOutline? {
-    var items: [Item] = []
-    var claimed: [UInt: Int] = [:]
-    var serial = 0
+    // 同じ節を複数のパターンが取ったら、規則に先に書いたパターン（番号の小さい方）が勝つ——マッチの届く順はパターンの
+    // 順と限らない。同じパターンが同じ節に重ねて当たれば先に届いた方。
+    var claims: [UInt: (pattern: UInt16, items: [Item])] = [:]
+    var order: [UInt] = []
     let nodeText: (TSNode) -> String = { node in
       let start = Int(ts_node_start_byte(node)) / 2
       return text.substring(
@@ -54,24 +55,25 @@ struct OutlineExtraction {
     let finished = cursor.matches(
       of: query.query, in: tree.root, cancellation: cancellation, text: nodeText
     ) { match in
-      serial += 1
       guard let kind = query.kinds[Int(match.pattern_index)] else { return }
       let captures = UnsafeBufferPointer(start: match.captures, count: Int(match.capture_count))
       guard let item = captures.first(where: { $0.index == query.item })?.node else { return }
       let node = UInt(bitPattern: item.id)
-      if let owner = claimed[node], owner != serial { return }
-      claimed[node] = serial
+      if let claim = claims[node], claim.pattern <= match.pattern_index { return }
       let parts = OutlineMatch(
         item: item, names: captures.filter { $0.index == query.name }.map(\.node),
         contexts: captures.filter { $0.index == query.context }.map(\.node), kind: kind,
         text: nodeText)
-      for var made in OutlineItems.items(for: grammar, parts) {
+      let made = OutlineItems.items(for: grammar, parts).map { made in
+        var made = made
         made.node = node
-        items.append(made)
+        return made
       }
+      if claims[node] == nil { order.append(node) }
+      claims[node] = (match.pattern_index, made)
     }
     guard finished else { return nil }
-    return Self.nest(items, version: version)
+    return Self.nest(order.flatMap { claims[$0]!.items }, version: version)
   }
 
   /// 位置順（開始の昇順・終わりの降順）に並べ、範囲の包含で入れ子にして鍵を付ける。同じ節から出たシンボルは兄弟。

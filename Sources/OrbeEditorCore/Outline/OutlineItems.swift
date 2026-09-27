@@ -54,7 +54,8 @@ enum OutlineItems {
     return item
   }
 
-  /// HTML の要素は `tag#id.class1.class2`（VS Code の HTML と同じ）。属性は開始タグ（か自己終了タグ）から読む。
+  /// HTML の要素は `tag#id.class1.class2`（VS Code の HTML の `nodeToName` と同じ——値のある id・class は空でも印を付け、
+  /// class は空白の連なりで分ける）。属性は開始タグ（か自己終了タグ）から読む。
   static func htmlElement(_ match: OutlineMatch) -> OutlineExtraction.Item {
     var item = plain(match)
     let tag =
@@ -68,24 +69,38 @@ enum OutlineItems {
     var classes = ""
     for attribute in namedChildren(of: tag) where nodeType(attribute) == "attribute" {
       let children = namedChildren(of: attribute)
-      guard let name = children.first(where: { nodeType($0) == "attribute_name" }) else {
-        continue
-      }
-      let value = children.first { nodeType($0) != "attribute_name" }.map { node in
-        nodeType(node) == "quoted_attribute_value"
-          ? namedChildren(of: node).first.map(match.text) ?? "" : match.text(node)
-      }
+      guard let name = children.first(where: { nodeType($0) == "attribute_name" }),
+        let value = children.first(where: { nodeType($0) != "attribute_name" }).map({ node in
+          nodeType(node) == "quoted_attribute_value"
+            ? namedChildren(of: node).first.map(match.text) ?? "" : match.text(node)
+        })
+      else { continue }
       switch match.text(name).lowercased() {
-      case "id":
-        if let value, !value.isEmpty { id = "#" + value }
-      case "class":
-        classes = (value ?? "").split(whereSeparator: \.isWhitespace).map { "." + $0 }.joined()
-      default:
-        continue
+      case "id": id = "#" + value
+      case "class": classes = whitespaceRuns(value).map { "." + $0 }.joined()
+      default: continue
       }
     }
     item.name += id + classes
     return item
+  }
+
+  /// 空白の連なりで分ける（JS の `split(/\s+/)` と同じく、端の空白は空の要素になる）。
+  private static func whitespaceRuns(_ text: String) -> [Substring] {
+    var parts: [Substring] = []
+    var start = text.startIndex
+    var index = text.startIndex
+    while index < text.endIndex {
+      guard text[index].isWhitespace else {
+        index = text.index(after: index)
+        continue
+      }
+      parts.append(text[start..<index])
+      while index < text.endIndex, text[index].isWhitespace { index = text.index(after: index) }
+      start = index
+    }
+    parts.append(text[start...])
+    return parts
   }
 
   /// CSS のカンマで並んだセレクタ（`selectors` の名前つきの子）を、1 つずつ別のシンボル（範囲は同じ規則）にする。
@@ -101,16 +116,19 @@ enum OutlineItems {
     }
   }
 
-  /// JSON の配列の要素は、親の中での番号（0 始まり）を名前にする（VS Code の JSON と同じ）。
+  /// JSON の配列の要素は、親の中での番号（0 始まり。前にある値の数）を名前にする（VS Code の JSON と同じ）。
   static func jsonArrayElement(_ match: OutlineMatch) -> OutlineExtraction.Item {
     var item = plain(match)
     let parent = ts_node_parent(match.item)
     guard match.names.isEmpty, !ts_node_is_null(parent), nodeType(parent) == "array" else {
       return item
     }
-    let siblings = namedChildren(of: parent).filter { nodeType($0) != "comment" }
+    let values: Set = ["object", "array", "string", "number", "true", "false", "null"]
     let start = ts_node_start_byte(match.item)
-    item.name = String(siblings.firstIndex { ts_node_start_byte($0) == start } ?? 0)
+    item.name = String(
+      namedChildren(of: parent).filter {
+        values.contains(nodeType($0)) && ts_node_start_byte($0) < start
+      }.count)
     return item
   }
 
