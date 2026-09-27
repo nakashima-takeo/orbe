@@ -60,10 +60,13 @@ extension EditorOutlinePaneTests {
     pumpMain(until: { self.names(outline) == ["Channel", "  flush()"] }, "字を足して絞り込む")
     XCTAssertEqual(selected(), "flush()", "選んでいた行が落ちれば後ろの一致へ")
 
+    let serial = try XCTUnwrap(outline.selection?.serial)
     editor.doCommand(by: #selector(NSResponder.cancelOperation(_:)))
     catchUp(hosted.document)
     pumpMain(until: { outline.rowCount == 6 }, "Esc で絞り込みを解く")
     XCTAssertEqual(selected(), "flush()", "解いても選択は残る")
+    XCTAssertGreaterThan(
+      try XCTUnwrap(outline.selection?.serial), serial, "選んでいる行を見せ直す（見えていなければ中央へ）")
 
     list.keyDown(with: .key("f", []))
     catchUp(hosted.document)

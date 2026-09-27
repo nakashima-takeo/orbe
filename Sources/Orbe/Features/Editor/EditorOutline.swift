@@ -355,11 +355,19 @@ final class EditorOutline {
 
   // MARK: - 絞り込み
 
-  /// 絞り込みの文字列が変わった: 選んでいたシンボル `current` が一致ならそれを、そうでなければその後ろの最初の一致
-  /// （見えている行のもの。末尾を過ぎれば頭から）を選び、見えていなければ中央へ寄せる（VS Code の tree の絞り込みと
-  /// 同じ）。祖先として残っただけの行は選ばない。文字列が空になれば選択を動かさない。一致は昇順の列から二分探索で引く。
+  /// 絞り込みの文字列が変わった: 空でなければ、選んでいたシンボル `current` が一致ならそれを、そうでなければその後ろの
+  /// 最初の一致（見えている行のもの。末尾を過ぎれば頭から）を選ぶ。祖先として残っただけの行は選ばない。一致が無いか空に
+  /// なれば選択は動かさない。どの場合も、選んでいる行が見えていなければ中央へ寄せる（VS Code の tree の絞り込みと同じ）。
+  /// 一致は昇順の列から二分探索で引く。
   private func chooseMatch(from current: Int?) {
-    guard let matched = filter?.matched, !matched.isEmpty else { return }
+    if let matched = filter?.matched, let symbol = nextMatch(from: current, in: matched) {
+      return choose(symbol, centered: true)
+    }
+    if let current, rows.row(of: current) != nil { choose(current, centered: true) }
+  }
+
+  /// `current` 以後の最初の見えている一致（末尾を過ぎれば頭から）。
+  private func nextMatch(from current: Int?, in matched: [Int]) -> Int? {
     var start = 0
     if let current {
       var low = 0
@@ -372,9 +380,9 @@ final class EditorOutline {
     }
     for offset in 0..<matched.count {
       let symbol = matched[(start + offset) % matched.count]
-      guard rows.row(of: symbol) != nil else { continue }
-      return choose(symbol, centered: true)
+      if rows.row(of: symbol) != nil { return symbol }
     }
+    return nil
   }
 
   /// 入力欄を出す（最初の 1 字は入力欄が受ける）。
