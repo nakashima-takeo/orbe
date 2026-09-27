@@ -301,6 +301,12 @@ final class ProjectSearchTests: OrbeTestCase {
     f.search.setPattern("")
     XCTAssertEqual(f.search.phase, .idle)
     XCTAssertTrue(f.search.results.isEmpty)
+
+    search(f.search, "needle")
+    f.search.clear()
+    XCTAssertEqual(f.search.query.pattern, "", "ヘッダーのクリアは検索語と結果を消す")
+    XCTAssertTrue(f.search.results.isEmpty)
+    XCTAssertEqual(f.search.focusRequest, .field, "入力欄に焦点を戻す")
   }
 
   /// 根が変わると結果を捨て、求められれば新しい根を今の問いで探す。

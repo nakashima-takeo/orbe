@@ -135,6 +135,17 @@ extension ProjectSearchPaneTests {
     XCTAssertTrue(textHasFocus(hosted), "ダブルクリックは本文へ")
   }
 
+  /// レールの「検索」は検索パネルへ切り替えて入力欄に焦点を入れ、出しているときに押すと閉じる。
+  func testTheRailsSearchItemShowsThePanelWithTheFieldFocused() throws {
+    let hosted = try host(["a.txt": "needle\n"])
+    hosted.pane.shell.selectPanel(.search)
+    XCTAssertTrue(hosted.pane.showsSearchPanel)
+    pumpMain(until: { hosted.search.focusedArea == .field }, "入力欄に焦点")
+
+    hosted.pane.shell.selectPanel(.search)
+    XCTAssertFalse(hosted.pane.sidebar.isOpen)
+  }
+
   /// 焦点がパネルにあるままパネルを隠すと、焦点は本文へ戻る。
   func testHidingThePanelReturnsItsFocusToTheText() throws {
     let hosted = try host(["a.txt": "needle\n"])

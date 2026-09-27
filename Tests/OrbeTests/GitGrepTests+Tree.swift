@@ -119,4 +119,20 @@ extension GitGrepTests {
     }
     XCTAssertTrue(reason.hasPrefix("fatal:"), reason)
   }
+
+  /// ディスクの式も開いている文書（ICU）と同じく、単語の境界を Unicode で判定し、`$` を行末の `\r` の前で当てる。
+  func testTheDiskMatchesWordBoundariesAndLineEndsLikeTheOpenDocuments() throws {
+    let repo = try TempGitRepo()
+    addTeardownBlock { repo.cleanup() }
+    try write(repo.root, "crlf.txt", "x foo\r\n")
+    try write(repo.root, "accent.txt", "éfoo x\n")
+    try write(repo.root, "plain.txt", "foo bar\n")
+
+    XCTAssertEqual(
+      try grep(repo.root, SearchQuery(pattern: "foo", wholeWord: true)).paths,
+      ["crlf.txt", "plain.txt"], "`éfoo` の中の `foo` は単語ではない")
+    XCTAssertEqual(
+      try grep(repo.root, SearchQuery(pattern: "foo$", isRegex: true)).paths, ["crlf.txt"],
+      "CRLF の行末にも `$` が当たる")
+  }
 }
