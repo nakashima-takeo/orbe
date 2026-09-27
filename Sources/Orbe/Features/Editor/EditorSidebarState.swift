@@ -21,7 +21,7 @@ final class EditorSidebarState {
   @ObservationIgnored private let persists: Bool
 
   /// 区画の比の既定（半々）。
-  static let defaultOutlineFraction: CGFloat = 0.5
+  nonisolated static let defaultOutlineFraction: CGFloat = 0.5
 
   init(
     width: CGFloat = Theme.Layout.editorSidebar, isOpen: Bool = true, panel: Panel = .files,
