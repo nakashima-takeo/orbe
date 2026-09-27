@@ -47,7 +47,7 @@ final class EditorSidebarState {
         ?? Theme.Layout.editorSidebar,
       isOpen: record?.isOpen ?? true, panel: record?.panel.flatMap(Panel.init) ?? .files,
       isOutlineOpen: record?.isOutlineOpen ?? false,
-      outlineFraction: fraction.flatMap { $0.isFinite && $0 > 0 && $0 < 1 ? $0 : nil }
+      outlineFraction: fraction.flatMap { (0...1).contains($0) ? $0 : nil }
         ?? defaultOutlineFraction,
       persists: true)
   }

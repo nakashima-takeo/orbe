@@ -99,8 +99,8 @@ final class EditorSidebarStateTests: OrbeTestCase {
     XCTAssertEqual(EditorSidebarState.loaded().panel, .files)
   }
 
-  /// アウトラインの開閉と区画の比も記憶する——既定は閉・半々、見出しで開閉し、境のドラッグの終わりで比を書き戻す。欠落は
-  /// 閉、読めない・範囲外の比は半々へ落とす。
+  /// アウトラインの開閉と区画の比も記憶する——既定は閉・半々、見出しで開閉し、境のドラッグの終わりで比を書き戻す（端まで
+  /// 引いた 0・1 も）。欠落は閉、読めない・範囲外の比は半々へ落とす。
   func testTheOutlineOpennessAndFractionAreRemembered() throws {
     let state = EditorSidebarState.loaded()
     XCTAssertFalse(state.isOutlineOpen, "既定は閉")
@@ -112,6 +112,9 @@ final class EditorSidebarStateTests: OrbeTestCase {
     let reloaded = EditorSidebarState.loaded()
     XCTAssertTrue(reloaded.isOutlineOpen)
     XCTAssertEqual(reloaded.outlineFraction, 0.7, accuracy: 0.0001)
+    reloaded.setOutlineFraction(5)
+    reloaded.commit()
+    XCTAssertEqual(EditorSidebarState.loaded().outlineFraction, 1, "端まで引いた比も戻る")
 
     AppStatePersistence.save(
       AppStateFile(editorSidebar: EditorSidebarRecord(width: 240, outlineFraction: 3)))
