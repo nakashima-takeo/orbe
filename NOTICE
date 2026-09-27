@@ -158,6 +158,14 @@ Code editor (Contents/MacOS/Orbe, Contents/Resources/TreeSitter*.bundle)
   https://github.com/krzyzanowskim/CoreTextSwift
   License: licenses/CoreTextSwift-LICENSE.txt
 
+* swift-corelibs-foundation — Copyright (c) Apple Inc. and the Swift project
+  authors — Apache-2.0 with Runtime Library Exception
+  The backward-deletion rule of CoreFoundation's CFString.c
+  (kCFStringBackwardDeletionCluster) is ported into Orbe's Swift code as the
+  editor's Backspace unit and compiled into Contents/MacOS/Orbe.
+  https://github.com/swiftlang/swift-corelibs-foundation
+  License: licenses/swift-corelibs-foundation-LICENSE.txt
+
 * tree-sitter — Copyright (c) 2018 Max Brunsfeld — MIT License
   The parser runtime (lib/src, C). Statically linked into Contents/MacOS/Orbe.
   https://github.com/tree-sitter/tree-sitter

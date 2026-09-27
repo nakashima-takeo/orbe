@@ -51,23 +51,44 @@ extension TextRope {
     offset <= 0 ? 0 : grapheme(containing: offset - 1).location
   }
 
-  /// ⌫ で消す区間の始まり（macOS の後ろ向きの削除の単位）——前の書記素が絵文字の並び（ZWJ・国旗・肌の色・異体字の
-  /// 選択・キーキャップ）か `\r\n` か 1 つの字なら書記素ごと、そうでなければ最後の字だけ（分解した濁点・結合文字・
-  /// ハングルの字母・インドの結合子は 1 つずつ消える）。
+  /// ⌫ で消す区間の始まり（macOS の後ろ向きの削除の単位。NSTextView と同じ）。規則は CoreFoundation の後ろ向きの削除の
+  /// 範囲（swift-corelibs-foundation の `CFString.c`、`_CFStringInlineBufferGetComposedRange` の
+  /// `kCFStringBackwardDeletionCluster`）の移植——前の書記素（OS の合成文字の単位）を後ろから見て、アルメニア文字〜リンブ
+  /// 文字（U+0530–U+194F。インド系・タイ・アラビア・ヘブライなど）の字に当たればその字から消し、結合の記号なら前へ進み、
+  /// それ以外の字に当たれば書記素ごと消す。ハングルの字母は書記素ごと。分解した濁点・アクセント・異体字の選択子・絵文字の
+  /// 並び・国旗・`\r\n` は書記素ごと、インド系の母音記号やアラビア・ヘブライの記号は 1 つずつ消える。
   func backwardDeletionStart(before offset: Int) -> Int {
     guard offset > 0 else { return 0 }
     let cluster = grapheme(containing: offset - 1)
     let units = units(in: NSRange(location: cluster.location, length: offset - cluster.location))
-    let scalars = Array(String(decoding: units, as: UTF16.self).unicodeScalars)
-    guard scalars.count > 1, units != [0x0D, 0x0A], !scalars.contains(where: Self.isEmojiPart)
-    else { return cluster.location }
-    return offset - scalars.last!.utf16.count
+    var start = offset
+    for scalar in String(decoding: units, as: UTF16.self).unicodeScalars.reversed() {
+      start -= scalar.utf16.count
+      if Self.isHangul(scalar) { return cluster.location }
+      if Self.isArmenianToLimbu(scalar) { return start }
+      if !Self.extendsBackward(scalar) { return cluster.location }
+    }
+    return cluster.location
   }
 
-  private static func isEmojiPart(_ scalar: Unicode.Scalar) -> Bool {
-    let properties = scalar.properties
-    return properties.isEmojiPresentation || properties.isEmojiModifier
-      || (0x1F1E6...0x1F1FF).contains(scalar.value)
-      || [0x200D, 0xFE0F, 0x20E3].contains(scalar.value)
+  /// 後ろ向きの削除で前の字と結ばない範囲（CF の同じ規則の範囲）。
+  private static func isArmenianToLimbu(_ scalar: Unicode.Scalar) -> Bool {
+    (0x0530..<0x1950).contains(scalar.value)
+  }
+
+  /// ハングルの字母と音節（CF は後ろ向きの削除でも音節の規則で結ぶ）。
+  private static func isHangul(_ scalar: Unicode.Scalar) -> Bool {
+    (0x1100...0x11FF).contains(scalar.value) || (0xAC00...0xD7A3).contains(scalar.value)
+  }
+
+  /// 前の字と結ぶ字——結合の記号（CF の非基底字）、肌の色、タグ、半角の濁点・半濁点、異体字のタグ。
+  private static func extendsBackward(_ scalar: Unicode.Scalar) -> Bool {
+    switch scalar.properties.generalCategory {
+    case .nonspacingMark, .spacingMark, .enclosingMark: return true
+    default: break
+    }
+    let value = scalar.value
+    return (0x1F3FB...0x1F3FF).contains(value) || (0xE0020...0xE007F).contains(value)
+      || value == 0xFF9E || value == 0xFF9F || value & 0x1F_FFF0 == 0xF870
   }
 }

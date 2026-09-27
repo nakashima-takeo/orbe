@@ -61,12 +61,24 @@ final class EditCommandsTests: XCTestCase {
     XCTAssertEqual(Editing.run(.deleteForward, on: "ab|\r\ncd"), "ab|cd")
   }
 
-  /// ⌫ は macOS の後ろ向きの削除の単位——絵文字の並びと CRLF は丸ごと、分解した結合文字は 1 つずつ。
-  func testBackspaceDeletesByTheMacOSBackwardDeletionUnit() {
-    XCTAssertEqual(Editing.run(.deleteBackward, on: "a👨‍👩‍👧‍👦|"), "a|")
-    XCTAssertEqual(Editing.run(.deleteBackward, on: "🇯🇵🇺🇸|"), "🇯🇵|")
-    XCTAssertEqual(Editing.run(.deleteBackward, on: "e\u{301}|"), "e|", "分解した濁点は 1 つずつ")
-    XCTAssertEqual(Editing.run(.deleteBackward, on: "ab\r\n|cd"), "ab|cd")
+  /// ⌫ は macOS の後ろ向きの削除の単位——窓を出さない NSTextView の ⌫ と同じ範囲を消す。絵文字の並び・国旗・肌の色・
+  /// CRLF・分解した濁点やアクセント・異体字の選択子・ハングルの字母は書記素ごと、インド系・タイ・アラビア・ヘブライの記号は
+  /// 1 つずつ。
+  func testBackspaceDeletesLikeNSTextView() {
+    let samples = [
+      "a👨‍👩‍👧‍👦", "🇯🇵🇺🇸", "a👍🏽", "1\u{FE0F}\u{20E3}", "e\u{301}", "x\u{301}\u{302}", "か\u{3099}",
+      "ﾊﾞ", "\u{1100}\u{1161}\u{11A8}", "가\u{301}", "☺\u{FE0E}", "कि", "क्ष", "กี", "بَ", "שָׁ",
+      "ab\r\n", "abc", "",
+    ]
+    for sample in samples {
+      let view = NSTextView(usingTextLayoutManager: true)
+      view.string = sample
+      view.setSelectedRange(NSRange(location: (sample as NSString).length, length: 0))
+      view.deleteBackward(nil)
+      XCTAssertEqual(
+        Editing.run(.deleteBackward, on: sample + "|"), view.string + "|",
+        "\(sample.unicodeScalars.map { String($0.value, radix: 16) })")
+    }
     XCTAssertEqual(Editing.run(.deleteBackward, on: "|ab"), "|ab", "先頭は何もしない")
     XCTAssertEqual(Editing.run(.deleteBackwardDecomposing, on: "é|"), "e|", "⌃⌫ は前の字を分解して最後だけ")
   }
