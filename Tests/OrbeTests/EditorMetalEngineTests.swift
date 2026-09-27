@@ -81,4 +81,34 @@ final class EditorMetalEngineTests: OrbeTestCase {
     tab.recordMaterializationStarted()
     XCTAssertTrue(isMetal(try XCTUnwrap(tab.editor.activeDocument)))
   }
+
+  /// 設定から面の選択までの本番の配線——`editor-engine-metal` を真にして実効設定を反映すると、新しいタブで開く文書も
+  /// 再起動の復元で開く文書も新しい面になり、偽に戻して開けば今の面になる。壊れると、設定を真にしても全テストが
+  /// 緑のまま今の面で開く（タブへ渡す組成が落ちても既定の組成でコンパイルが通る）。
+  func testTheSettingPicksTheSurfaceThroughTheWindowController() throws {
+    let a = try caseFile("a.swift", lines(5))
+    let b = try caseFile("b.swift", lines(5))
+    let wc = WindowController()
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.editorEngineMetal, true))
+    wc.applyActiveWorkspaceConfig()
+    let opened = try XCTUnwrap(
+      wc.openTab(workspaceIndex: 0, cwd: a.deletingLastPathComponent().path))
+    let tab = try XCTUnwrap(wc.controlResolveTab(opened.tabId))
+    XCTAssertTrue(isMetal(try tab.editor.open(a)), "新しいタブで開く文書は新しい面")
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.editorEngineMetal, false))
+    wc.applyActiveWorkspaceConfig()
+    XCTAssertFalse(isMetal(try tab.editor.open(b)), "偽に戻して開けば今の面")
+
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.editorEngineMetal, true))
+    let state = TabState(
+      cwd: "/tmp", agent: nil, explicitTitle: nil,
+      editor: EditorState(open: [a.path], active: a.path))
+    let file = WorkspacesFile(
+      version: WorkspacePersistence.version, activeWorkspace: 0,
+      workspaces: [WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [state])])
+    try JSONEncoder().encode(file).write(to: workspacesFile())
+    let restored = try XCTUnwrap(WindowController().activeTab)
+    restored.recordMaterializationStarted()
+    XCTAssertTrue(isMetal(try XCTUnwrap(restored.editor.activeDocument)), "復元で開く文書も新しい面")
+  }
 }
