@@ -45,6 +45,39 @@ final class SurfaceDecorTests: EngineTestCase {
     XCTAssertTrue(shot.hasInk(x(opened, 4) + 0.25, rowMidY(2)), "上下の外の 1 段の行から段 1")
   }
 
+  /// タブで書かれた文書では、空白だけの行の線（桁から置く）がタブの行の線（字の位置から置く）と同じ x に立つ——タブの
+  /// 表示幅が検出した単位（スペースの行が無ければ 4 桁）なので。
+  func testTabWidthFollowsTheIndentUnitSoBlankLineGuidesAlign() throws {
+    let opened = try open("\tif {\n\n\t\tx\n\t}\n", name: "a.txt")
+    let shot = try pixelShot(opened)
+    XCTAssertEqual(opened.document.indentation.unit, 4)
+    XCTAssertTrue(shot.hasInk(x(opened, 4) + 0.25, rowMidY(2)), "タブの行の段 1 は 4 桁目")
+    XCTAssertTrue(shot.hasInk(x(opened, 4) + 0.25, rowMidY(1)), "空行の線が同じ x に立つ")
+    XCTAssertFalse(shot.hasInk(x(opened, 8) + 0.25, rowMidY(1)), "空行は隣の浅い方（1 段）")
+  }
+
+  /// CRLF の文書でも行末の `\r` は行の外——行末の 1 個のスペースに点が出て、空行（`\r` だけ）の線が隣から続く。
+  func testCRLFLinesKeepTrailingSpaceDotsAndBlankLineGuides() throws {
+    let opened = try open("  a \r\n\r\n    b\r\n", name: "a.txt")
+    let shot = try pixelShot(opened)
+    XCTAssertEqual(opened.document.indentation.unit, 2)
+    XCTAssertTrue(shot.hasInk(x(opened, 3.5), rowMidY(0)), "行末の 1 個に点")
+    XCTAssertTrue(shot.hasInk(x(opened, 2) + 0.25, rowMidY(1)), "空行に隣の浅い方（1 段）の線")
+  }
+
+  /// コメントの中の URL の下線は、そこの字と同じ comment の役割の色。
+  func testLinkUnderlineInACommentTakesTheCommentColor() throws {
+    let opened = try open("// see https://a.b/c now\n", name: "a.swift")
+    let shot = try pixelShot(opened)
+    let config = opened.surface.config
+    let y = config.topInset + config.baseline + 3 + 0.25
+    let comment = [107, 153, 84]
+    for column: CGFloat in [7.5, 12.5, 18.5] {
+      let ink = shot.rgb(x(opened, column), y)
+      XCTAssertTrue(zip(ink, comment).allSatisfy { abs($0 - $1) <= 1 }, "\(column) 桁: \(ink)")
+    }
+  }
+
   /// 丸点は行頭・行末・2 個以上の連続スペースのセルの中央に出て、単語間の 1 個とタブには出ない。
   func testWhitespaceDotsOnlyAtBoundaries() throws {
     let opened = try open("  a b  c \n\td\n", name: "a.txt")
