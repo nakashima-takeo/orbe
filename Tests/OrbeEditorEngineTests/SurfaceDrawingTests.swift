@@ -15,7 +15,9 @@ final class SurfaceDrawingTests: EngineTestCase {
   private func rgb(_ pixel: [Int]) -> [Int] { Array(pixel.prefix(3)) }
 
   /// 行 `row`・桁 `column`（半角）の、行の上端から 1pt 下の画素（字に掛からない）。
-  private func probe(_ opened: Opened, row: Int, column: CGFloat, dy: CGFloat = 1) -> (x: Int, y: Int) {
+  private func probe(_ opened: Opened, row: Int, column: CGFloat, dy: CGFloat = 1) -> (
+    x: Int, y: Int
+  ) {
     let config = opened.surface.config
     let x = config.columnWidth(lineCount: opened.document.text.lineCount) + column * config.cell
     let y = config.topInset + CGFloat(row) * config.lineHeight + dy
@@ -84,5 +86,36 @@ final class SurfaceDrawingTests: EngineTestCase {
     XCTAssertEqual(box.peek(at: 0).position.y, 300, "main は新しい位置を読む")
     XCTAssertEqual(box.frame(at: 0, material: 7).position.y, 300)
     XCTAssertEqual(box.frame(at: 0, material: 6).position.y, 300, "一度追いついたら持たない")
+  }
+
+  /// 打鍵で組み直すのは変わった行だけ——打鍵はその 1 行、Enter は分かれた 2 行で、見えている他の行は前のコマの組版を
+  /// 使う（色の無い文書で、打鍵の後に役割が届いて描き直すコマを挟まない）。
+  func testTypingReshapesOnlyTheChangedRows() throws {
+    let opened = try open((0..<40).map { "row \($0) text" }.joined(separator: "\n"), name: "a.txt")
+    let surface = opened.surface
+    surface.viewStateDidChange(size: CGSize(width: 600, height: 400), scale: 2, visible: true)
+    let driver = HeadlessDriver()
+    driver.start()
+    defer { driver.stop() }
+    driver.bind(surface.id)
+    func settle() {
+      let deadline = Date().addingTimeInterval(5)
+      repeat {
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+      } while !driver.isPaused(surface.id) && Date() < deadline
+    }
+    func shaped() -> Int {
+      let id = surface.id
+      return RenderThread.shared.performAndWait { $0.slot(id)?.lines.shapedInFrame ?? -1 }
+    }
+    settle()
+    surface.selectedRange = NSRange(location: opened.document.text.lineStart(5) + 3, length: 0)
+    settle()
+    surface.perform(.insert("x"))
+    settle()
+    XCTAssertEqual(shaped(), 1, "打鍵した行だけ")
+    surface.perform(.newline(indents: true))
+    settle()
+    XCTAssertEqual(shaped(), 2, "Enter で分かれた 2 行だけ")
   }
 }

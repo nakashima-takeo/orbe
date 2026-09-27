@@ -31,7 +31,8 @@ extension FramePerfTests {
         medians[name] = median
         print(
           "PERF-FRAMES typing", name, "keystroke→present median", Self.ms(median), "p95",
-          Self.ms(Self.quantile(typing, 0.95)), "max", Self.ms((typing.last ?? 0) * 1000), "/ main p50",
+          Self.ms(Self.quantile(typing, 0.95)), "max", Self.ms((typing.last ?? 0) * 1000),
+          "/ main p50",
           Self.ms(Self.quantile(main, 0.5)), "p99", Self.ms(Self.quantile(main, 0.99)))
         XCTAssertLessThanOrEqual(median, 12.5, "\(name): 打鍵→present の中央値")
         XCTAssertLessThanOrEqual(Self.quantile(typing, 0.95), 17, "\(name): 打鍵→present の p95")
@@ -57,17 +58,24 @@ extension FramePerfTests {
   /// 焦点のある面は、止まっている間は点滅の刻み（1 秒に 2 回）だけ起きる。焦点が無ければ起きない。
   private func measureBlinkWakes(_ surface: MetalTextSurface) throws {
     waitUntilIdle(surface)
-    let before = driver.ticks(surface.id)
+    let before = wakes(surface)
     RunLoop.main.run(until: Date().addingTimeInterval(2))
-    let focused = driver.ticks(surface.id) - before
+    let focused = wakes(surface) - before
     surface.updateFocus(false)
     waitUntilIdle(surface)
-    let idle = driver.ticks(surface.id)
+    let idle = wakes(surface)
     RunLoop.main.run(until: Date().addingTimeInterval(1))
-    let unfocused = driver.ticks(surface.id) - idle
+    let unfocused = wakes(surface) - idle
     print("PERF-FRAMES blink wakes/2s focused", focused, "unfocused/s", unfocused)
-    XCTAssertLessThanOrEqual(focused, 5, "焦点のある面は点滅の刻みだけ起きる")
+    XCTAssertTrue((3...5).contains(focused), "焦点のある面は点滅の刻み（2 秒に 4 回）だけ起きる")
     XCTAssertEqual(unfocused, 0, "焦点の無い面は起きない")
+  }
+
+  /// 描画スレッドが面のために起きた回数——刻みの数と、起こされてその場で描いたコマの数の和（その場で描くコマは刻みの外）。
+  private func wakes(_ surface: MetalTextSurface) -> Int {
+    let id = surface.id
+    let drawn = RenderThread.shared.performAndWait { $0.slot(id)?.recorder.drawnCount ?? 0 }
+    return driver.ticks(id) + drawn
   }
 
   /// 打鍵を別のスレッドから実時間で main へ流す（時刻は流した時刻）。人の打鍵は表示の刻みと揃わないので、間隔に 1 刻み
@@ -110,4 +118,5 @@ extension FramePerfTests {
 
   private static func ms(_ milliseconds: Double) -> String {
     String(format: "%.2fms", milliseconds)
-  }}
+  }
+}
