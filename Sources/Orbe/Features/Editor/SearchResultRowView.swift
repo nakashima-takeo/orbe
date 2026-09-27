@@ -57,6 +57,9 @@ final class SearchResultRowView: NSView {
 
   override init(frame: NSRect) {
     super.init(frame: frame)
+    // 描くのは自分の枠の中だけ。枠の外へ描ける（既定）と、列を送るたびに見える範囲が変わったとして見えている行を
+    // 全部描き直す。
+    clipsToBounds = true
     setAccessibilityElement(true)
     setAccessibilityRole(.row)
   }

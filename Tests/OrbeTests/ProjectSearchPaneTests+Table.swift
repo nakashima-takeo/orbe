@@ -176,4 +176,55 @@ extension ProjectSearchPaneTests {
     })
     XCTAssertTrue(rows.last?.isAccessibilitySelected() == true)
   }
+
+  /// 送ったとき描き直すのは新しく見えた行だけ（端で見え方の変わる行を含めて 2 行まで）。見えたままの行は描き直さない。
+  func testScrollingRedrawsOnlyTheNewlyVisibleRows() throws {
+    let text = (0..<200).map { "needle \($0)" }.joined(separator: "\n") + "\n"
+    let hosted = try host(["a.txt": text])
+    searchAll(hosted, "needle")
+    let list = try list(hosted)
+    pumpMain(until: { list.rowCount == 201 })
+    let scroll = hosted.pane.searchResults
+    let draws = RowDrawCounter()
+    func display() {
+      hosted.window.displayIfNeeded()
+      CATransaction.flush()
+    }
+    func redrawn(scrollingBy step: CGFloat) -> Int {
+      display()
+      let before = draws.count
+      let clip = scroll.contentView
+      clip.scroll(to: NSPoint(x: 0, y: clip.bounds.minY + step))
+      scroll.reflectScrolledClipView(clip)
+      display()
+      return draws.count - before
+    }
+    for _ in 0..<3 {
+      XCTAssertLessThanOrEqual(redrawn(scrollingBy: Theme.Layout.editorSearchRow), 2, "1 行ぶん送る")
+      XCTAssertLessThanOrEqual(redrawn(scrollingBy: 7), 2, "7pt 送る（端で見え方の変わる行まで）")
+    }
+  }
+}
+
+/// 行の view が描いた回数を数える（テストの間だけ `draw(_:)` を包む）。
+@MainActor
+final class RowDrawCounter {
+  private(set) var count = 0
+  nonisolated(unsafe) private static var current: RowDrawCounter?
+  private static var installed = false
+
+  init() {
+    Self.current = self
+    guard !Self.installed else { return }
+    Self.installed = true
+    let selector = #selector(NSView.draw(_:))
+    guard let method = class_getInstanceMethod(SearchResultRowView.self, selector) else { return }
+    typealias Draw = @convention(c) (AnyObject, Selector, NSRect) -> Void
+    let original = unsafeBitCast(method_getImplementation(method), to: Draw.self)
+    let counted: @convention(block) (AnyObject, NSRect) -> Void = { view, rect in
+      MainActor.assumeIsolated { RowDrawCounter.current?.count += 1 }
+      original(view, selector, rect)
+    }
+    method_setImplementation(method, imp_implementationWithBlock(counted))
+  }
 }
