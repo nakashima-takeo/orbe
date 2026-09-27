@@ -34,7 +34,7 @@ private struct OutlineSectionHeader: View {
     HStack(spacing: 0) {
       TreeChevron(open: sidebar.isOutlineOpen)
       Text(l10n.string(.editorOutlineTitle))
-        .font(Font(Theme.Typography.editorSectionTitle as CTFont))
+        .font(Font.theme.editorSectionTitle)
         .foregroundStyle(Color.theme.editorText)
         .lineLimit(1)
       Spacer(minLength: 0)

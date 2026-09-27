@@ -157,4 +157,5 @@ struct ThemeFonts {
   let editorSearchCount = Font(Theme.Typography.editorSearchCount as CTFont)
   let editorSearchMatch = Font(Theme.Typography.editorSearchMatch as CTFont)
   let editorSearchNote = Font(Theme.Typography.editorSearchNote as CTFont)
+  let editorSectionTitle = Font(Theme.Typography.editorSectionTitle as CTFont)
 }
