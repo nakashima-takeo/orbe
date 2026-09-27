@@ -67,6 +67,25 @@ extension SurfaceInputMethodTests {
       NSNotFound, "本文の外")
   }
 
+  /// 文字の矩形と点はスクリーンの座標——窓が画面のどこにあっても、候補窓は字の位置に出る。
+  func testRectsAndPointsAreInScreenCoordinates() throws {
+    let opened = try open("abc\n")
+    let window = host(opened)
+    window.setFrameOrigin(NSPoint(x: 300, y: 200))
+    let client = opened.surface.textView
+    func screen(_ local: CGPoint) -> NSPoint {
+      let inWindow = client.convert(local, to: nil)
+      return NSPoint(x: window.frame.minX + inWindow.x, y: window.frame.minY + inWindow.y)
+    }
+    let config = opened.surface.config
+    let charStart = CGPoint(x: config.columnWidth(lineCount: 2) + config.cell, y: config.topInset)
+    let rect = client.firstRect(
+      forCharacterRange: NSRange(location: 1, length: 1), actualRange: nil)
+    XCTAssertEqual(rect.minX, screen(charStart).x, accuracy: 0.5)
+    XCTAssertEqual(rect.maxY, screen(charStart).y, accuracy: 0.5, "行の上端")
+    XCTAssertEqual(client.characterIndex(for: screen(point(opened, row: 0, column: 1))), 1)
+  }
+
   /// 変換中の未確定の矩形と点の下の字は、描く行と同じ組版の位置で答える（未確定の先頭は変換の前の行から、中は未確定の
   /// 文字列から出しても、普通の字の並びでは描画と揃う）。
   func testMarkedRectsLineUpWithTheDrawnLine() throws {

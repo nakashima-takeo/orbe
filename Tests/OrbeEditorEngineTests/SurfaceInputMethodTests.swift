@@ -31,27 +31,48 @@ final class SurfaceInputMethodTests: EngineTestCase {
     XCTAssertEqual(text(opened.document), "let a = 仮名\n")
   }
 
-  /// 確定した文字は前後の打鍵と同じまとまりに入り、打鍵 1 回で「確定 → 次の未確定」が来ても呼んだ順に反映され、描く材料は
-  /// 1 回だけ置かれる。
+  /// 確定した文字は前後の打鍵と同じまとまりに入り、打鍵 1 回で「確定 → 次の未確定」が来ても呼んだ順に反映され（IME が
+  /// 呼び出しの間に読み返す値も最新）、描く材料は打鍵の後の 1 回だけ置かれる。
   func testCommitJoinsTheTypingAndTheNextCompositionFollowsInOneFrame() throws {
     let opened = try open("")
     _ = host(opened)
-    fakeInputMethod(opened)
+    let context = fakeInputMethod(opened)
     type(opened, "ab")
     replay([.mark("か")], on: opened)
     let revision = opened.surface.material.read().revision
-    opened.surface.transact(reveal: .none) {
-      replay([.insert("か"), .mark("き")], on: opened)
+    context.onEvent = { [self] client in
+      client.insertText("か", replacementRange: IMECall.notFound)
+      assertConsistent(opened, "確定の直後")
+      client.setMarkedText(
+        "き", selectedRange: NSRange(location: 1, length: 0), replacementRange: IMECall.notFound)
+      assertConsistent(opened, "次の未確定の直後")
     }
+    try key(opened, "k")
     XCTAssertEqual(opened.surface.material.read().revision, revision + 1, "描く材料は打鍵の後の 1 回")
     XCTAssertEqual(text(opened.document), "abかき")
     XCTAssertEqual(opened.surface.textView.markedRange(), NSRange(location: 3, length: 1))
+    context.onEvent = nil
     replay([.insert("木")], on: opened)
     XCTAssertEqual(text(opened.document), "abか木")
     let undo = try XCTUnwrap(opened.surface.textView.undoManager)
     undo.undo()
     XCTAssertEqual(text(opened.document), "", "確定は前後の打鍵と同じまとまり")
     assertUndoRoundTrip(opened, first: "", last: "abか木")
+  }
+
+  /// IME が入れる文字列の改行（音声入力の改行など）は文書の作法（CRLF）に揃い、未確定の中の選択は揃えた後の同じ字の位置を
+  /// 指す。
+  func testInputMethodLineBreaksFollowTheDocument() throws {
+    let opened = try open("a\r\n")
+    _ = host(opened)
+    fakeInputMethod(opened)
+    opened.surface.selectedRange = NSRange(location: 1, length: 0)
+    replay([.mark("x\ny", selected: NSRange(location: 3, length: 0))], on: opened)
+    XCTAssertEqual(text(opened.document), "ax\r\ny\r\n")
+    XCTAssertEqual(opened.surface.textView.markedRange(), NSRange(location: 1, length: 4))
+    XCTAssertEqual(opened.surface.textView.selectedRange(), NSRange(location: 5, length: 0), "y の後")
+    replay([.insert("p\nq")], on: opened)
+    XCTAssertEqual(text(opened.document), "ap\r\nq\r\n")
   }
 
   /// 取り消し（空の未確定）で本文が元に戻れば、undo には何も載らない。
