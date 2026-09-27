@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+import os
 
 @testable import OrbeEditorCore
 
@@ -101,5 +102,30 @@ extension EditorDocumentOutlineTests {
   private func filter(_ outline: DocumentOutline, _ pattern: String) -> OutlineFilterResult {
     OutlineFilterResult(
       pattern: pattern, token: outline.token, visible: [], matched: [], matches: [:])
+  }
+
+  /// 文字列を変えたり解いたりして外れた絞り込みも、知らせの後に裏へ渡して手放す（シンボルの数に比例する解放を main で
+  /// 行わない）。
+  func testAReplacedFilterIsHandedToTheBackground() throws {
+    let (document, _) = try open()
+    document.wantsOutline = true
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    let notified = OSAllocatedUnfairLock(initialState: 0)
+    document.onOutlineChange = { notified.withLock { $0 += 1 } }
+    let handed = OSAllocatedUnfairLock(initialState: [(pattern: String, notices: Int)]())
+    document.releaseOutlines = { parcel in
+      let patterns = parcel.withLock { $0?.filters.map(\.pattern) ?? [] }
+      let notices = notified.withLock { $0 }
+      handed.withLock { $0 += patterns.map { ($0, notices) } }
+    }
+
+    document.filterOutline("g")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    document.filterOutline("gr")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    document.filterOutline("")
+    let released = handed.withLock { $0 }
+    XCTAssertEqual(released.map(\.pattern), ["g", "gr"])
+    XCTAssertEqual(released.map(\.notices), [2, 3], "それぞれ外れた知らせの後に渡す")
   }
 }
