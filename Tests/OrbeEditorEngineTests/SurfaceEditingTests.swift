@@ -26,6 +26,47 @@ final class SurfaceEditingTests: EngineTestCase {
     XCTAssertTrue(opened.document.isDirty)
   }
 
+  /// テンキーの Clear は選択を消し（選択が無ければ何もしない）、⌃/ は右から左の印と `/` を入れる（NSTextView と同じ）。
+  func testClearAndControlSlashActLikeNSTextView() throws {
+    let opened = try open("abc")
+    _ = host(opened)
+    let clear = String(UnicodeScalar(NSClearLineFunctionKey)!)
+    opened.surface.selectedRange = NSRange(location: 1, length: 0)
+    try key(opened, clear, [.numericPad, .function], keyCode: 71)
+    XCTAssertEqual(text(opened.document), "abc")
+    opened.surface.selectedRange = NSRange(location: 1, length: 1)
+    try key(opened, clear, [.numericPad, .function], keyCode: 71)
+    XCTAssertEqual(text(opened.document), "ac")
+    try key(opened, "/", .control, keyCode: 44)
+    XCTAssertEqual(text(opened.document), "a\u{200F}/c")
+    XCTAssertEqual(opened.surface.caretLocation, 3)
+  }
+
+  /// macOS の標準のキー割り当ての全セレクタに面が応える（応えなければ警告音）。入力ソースの切り替えと key view の移動は
+  /// 入力システムと窓のもの。
+  func testTheViewAnswersEveryStandardKeyBinding() throws {
+    let url = URL(
+      fileURLWithPath:
+        "/System/Library/Frameworks/AppKit.framework/Resources/StandardKeyBinding.dict")
+    let bindings = try XCTUnwrap(NSDictionary(contentsOf: url) as? [String: Any])
+    var selectors = Set<String>()
+    func collect(_ value: Any) {
+      if let selector = value as? String { selectors.insert(selector) }
+      (value as? [Any])?.forEach(collect)
+      (value as? [String: Any])?.values.forEach(collect)
+    }
+    bindings.values.forEach(collect)
+    let elsewhere: Set = [
+      "cycleToNextInputKeyboardLayout:", "cycleToNextInputScript:", "togglePlatformInputSystem:",
+      "selectNextKeyView:", "selectPreviousKeyView:",
+    ]
+    XCTAssertGreaterThan(selectors.count, 50)
+    let unanswered = selectors.subtracting(elsewhere).filter {
+      !MetalTextView.instancesRespond(to: NSSelectorFromString($0))
+    }
+    XCTAssertEqual(unanswered, [])
+  }
+
   /// ⌘Z は VS Code のまとめ方で戻る——語と直前の空白 1 つがまとまり、Enter の前で切れ、Enter の後に続けて打った字は同じ
   /// まとまり。⌘⇧Z で進み、戻した選択を置く。
   func testUndoGroupsLikeVSCode() throws {

@@ -107,11 +107,15 @@ extension MetalTextView {
   override func insertSingleQuoteIgnoringSubstitution(_ sender: Any?) { run(.insert("'")) }
   override func insertDoubleQuoteIgnoringSubstitution(_ sender: Any?) { run(.insert("\"")) }
   override func indent(_ sender: Any?) { run(.indent) }
+  /// ⌃/——右から左の印（U+200F）と `/`（NSTextView と同じ）。
+  @objc func insertRightToLeftSlash(_ sender: Any?) { run(.insert("\u{200F}/")) }
 
   // MARK: - 削除・キル・入れ替え・大小文字・マーク
 
   override func deleteBackward(_ sender: Any?) { run(.deleteBackward) }
   override func deleteForward(_ sender: Any?) { run(.deleteForward) }
+  /// テンキーの Clear——選択を消す（NSTextView と同じ。選択が無ければ何もしない）。
+  @objc func delete(_ sender: Any?) { run(.deleteSelection) }
   override func deleteBackwardByDecomposingPreviousCharacter(_ sender: Any?) {
     run(.deleteBackwardDecomposing)
   }

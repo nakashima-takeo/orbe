@@ -34,6 +34,8 @@ enum EditCommand: Equatable, Sendable {
   case literalTab
   case deleteBackward, deleteForward, deleteBackwardDecomposing
   case deleteWordBackward, deleteWordForward
+  /// 選択だけを消す（選択が無ければ何もしない）。
+  case deleteSelection
   /// 行頭まで（1 列目なら前の改行）。
   case deleteToLineStart
   /// 行末まで（行末なら改行）。
@@ -114,6 +116,7 @@ enum EditCommands {
     case .deleteBackwardDecomposing: return deleteDecomposing(state, env)
     case .deleteWordBackward: return delete(state, env) { deleteWordLeftRange($0, env.text) }
     case .deleteWordForward: return delete(state, env) { deleteWordRightRange($0, env.text) }
+    case .deleteSelection: return delete(state, env) { $0.selection }
     case .deleteToLineStart: return delete(state, env) { lineStartRange($0, env.text) }
     case .deleteToLineEnd: return delete(state, env) { lineEndRange($0, env.text) }
     case .kill(let forward): return kill(forward: forward, state, env)
