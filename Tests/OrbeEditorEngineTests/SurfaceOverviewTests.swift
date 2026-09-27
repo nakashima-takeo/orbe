@@ -166,3 +166,25 @@ final class OverviewMotionTests: XCTestCase {
       m.thumbOpacity(at: 5.5, state: state(3), input: input, motion: motion), 0.5, accuracy: 1e-9)
   }
 }
+
+/// スクロールバーの印の元——検索の一致を行へ写した結果は、本文の編集でずらして使い回し、写し直すのは区間の列が本当に
+/// 変わったときだけ（打鍵のたびに 19999 件を写し直さない）。
+final class RulerRowsTests: XCTestCase {
+  func testTheRowsAreShiftedByEditsAndRemappedOnlyWhenTheRangesChange() {
+    let rows = RulerRows()
+    var text = TextRope("a x\nb x\nc x\n")
+    var highlights = Highlights()
+    highlights.find = [NSRange(location: 2, length: 1), NSRange(location: 6, length: 1)]
+    XCTAssertEqual(rows.find(highlights, text: text).rows, [0...0, 1...1])
+    XCTAssertEqual(rows.remappedInFrame, 2)
+    let edit = TextEdit(range: NSRange(location: 0, length: 0), replacement: "z\n")
+    rows.receive([RowEdit(edit, in: text, version: 1)])
+    text.replace(edit.range, with: edit.replacement)
+    highlights.find = edit.track(highlights.find)
+    XCTAssertEqual(rows.find(highlights, text: text).rows, [1...1, 2...2], "改行の分だけ下へずらす")
+    XCTAssertEqual(rows.remappedInFrame, 0, "ずらした列と同じなら写し直さない")
+    highlights.find = [NSRange(location: 10, length: 1)]
+    XCTAssertEqual(rows.find(highlights, text: text).rows, [3...3])
+    XCTAssertEqual(rows.remappedInFrame, 1, "検索語を変えれば写し直す")
+  }
+}
