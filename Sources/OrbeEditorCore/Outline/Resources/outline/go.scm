@@ -1,7 +1,7 @@
 ; 出どころ: Zed（https://github.com/zed-industries/zed）crates/grammars/src/go/outline.scm
 ;   commit bda9c0bd43a8d235d82adb01ea5bc875b861ecfc
 ; ライセンス: GPL-3.0-or-later（Zed Industries, Inc.）
-; 手直し: VS Code の Go（gopls の documentSymbol）に合わせて組み直した。宣言の語（type / func / const / var）を名前から外し、
+; 手直し（2026-09）: VS Code の Go（gopls の documentSymbol）に合わせて組み直した。宣言の語（type / func / const / var）を名前から外し、
 ;   種類を足した（struct / interface / それ以外の型は class）。メソッドの名前はレシーバの型とメソッド名。関数の中は出さない。
 ;   const / var と struct のフィールドは、名前が 1 つなら宣言全体、複数なら名前ごとを範囲にした。埋め込みのフィールドと
 ;   interface に埋め込んだ型を足した。

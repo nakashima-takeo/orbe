@@ -1,7 +1,7 @@
 ; 出どころ: Zed（https://github.com/zed-industries/zed）crates/grammars/src/python/outline.scm
 ;   commit bda9c0bd43a8d235d82adb01ea5bc875b861ecfc
 ; ライセンス: GPL-3.0-or-later（Zed Industries, Inc.）
-; 手直し: VS Code の Python（Pylance / pyright の documentSymbol）に合わせて組み直した。宣言の語（class / def / async）を
+; 手直し（2026-09）: VS Code の Python（Pylance / pyright の documentSymbol）に合わせて組み直した。宣言の語（class / def / async）を
 ;   名前から外し、種類を足し、クラスの本体の def を method（@property 等は property）に分けた。デコレータの付いた定義は
 ;   デコレータから範囲にした。変数（モジュール・クラス・関数の中の代入と for の変数、全部大文字は constant）・
 ;   引数（self / cls / _ を除く）・type 文を足した。

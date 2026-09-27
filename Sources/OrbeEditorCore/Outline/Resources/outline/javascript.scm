@@ -1,7 +1,7 @@
 ; 出どころ: Zed（https://github.com/zed-industries/zed）crates/grammars/src/javascript/outline.scm
 ;   commit bda9c0bd43a8d235d82adb01ea5bc875b861ecfc
 ; ライセンス: GPL-3.0-or-later（Zed Industries, Inc.）
-; 手直し: VS Code の JavaScript（tsserver の navtree）に合わせて組み直した。typescript.scm と同じ組み方から TypeScript
+; 手直し（2026-09）: VS Code の JavaScript（tsserver の navtree）に合わせて組み直した。typescript.scm と同じ組み方から TypeScript
 ;   専用の節（interface・enum・type・namespace・abstract・引数のプロパティ）を外し、クラスのフィールドを
 ;   `field_definition` で取った。宣言の語と修飾子を名前から外し、種類を足した。変数は深さを問わず出し、getter / setter・
 ;   `export default`・呼び出しに渡した関数（tsserver の「… callback」）を足した。

@@ -1,7 +1,7 @@
 ; 出どころ: Zed（https://github.com/zed-industries/zed）crates/grammars/src/typescript/outline.scm
 ;   commit bda9c0bd43a8d235d82adb01ea5bc875b861ecfc
 ; ライセンス: GPL-3.0-or-later（Zed Industries, Inc.）
-; 手直し: VS Code の TypeScript（tsserver の navtree）に合わせて組み直した。宣言の語と修飾子を名前から外し、種類を足した。
+; 手直し（2026-09）: VS Code の TypeScript（tsserver の navtree）に合わせて組み直した。宣言の語と修飾子を名前から外し、種類を足した。
 ;   変数は深さを問わず出し（for / catch の変数も）、コンストラクタ・引数のプロパティ・getter / setter・enum の値・
 ;   interface の中身・`export default`・呼び出しに渡した関数（tsserver の「… callback」）を足した。
 ;   テストの呼び出しの取り出しは、呼び出しに渡した関数の一般の規則に置き換えた。
