@@ -194,4 +194,19 @@ final class EditorStyleTests: OrbeTestCase {
     )
     XCTAssertEqual(try XCTUnwrap(resolved(style.textColor, .darkAqua)).alphaComponent, 1)
   }
+
+  /// 打ち切った行の末尾の印の略記——丸めて次の単位に届けば次の単位で出す（「1,000K」「10,000万」にしない）。
+  func testOmittedLabelAbbreviatesAtTheUnitBoundaries() {
+    func en(_ count: Int) -> String { EditorStyle.omittedLabel(count, language: .en) }
+    func ja(_ count: Int) -> String { EditorStyle.omittedLabel(count, language: .ja) }
+    XCTAssertEqual(en(999), "999 more")
+    XCTAssertEqual(en(999_949), "999.9K more")
+    XCTAssertEqual(en(999_950), "1M more")
+    XCTAssertEqual(en(999_999), "1M more")
+    XCTAssertEqual(en(1_000_000), "1M more")
+    XCTAssertEqual(ja(9_999), "ほか \(9_999.formatted(.number.grouping(.automatic)))字")
+    XCTAssertEqual(ja(10_000), "ほか 1万字")
+    XCTAssertEqual(ja(12_345), "ほか 1.2万字")
+    XCTAssertEqual(ja(99_999_999), "ほか 1億字")
+  }
 }

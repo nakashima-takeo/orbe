@@ -41,16 +41,23 @@ enum EditorStyle {
         wordOccurrence: Theme.Color.editorWordOccurrence))
   }
 
-  /// 1 行で描く上限を越えて打ち切った行の末尾の印（「ほか 1.2万字」）。数は 1 万（英語は千）以上を 1 桁の小数で略す。
+  /// 1 行で描く上限を越えて打ち切った行の末尾の印（「ほか 1.2万字」）。数は 1 万（英語は千）以上を 1 桁の小数で略し、
+  /// 丸めて次の単位に届けば次の単位で出す（999,999 は「1,000K」でなく「1M」）。
   static func omittedLabel(_ count: Int, language: Language) -> String {
-    let (unit, suffix): (Double, String) =
+    let ladder: [(unit: Double, suffix: String)] =
       language == .ja
-      ? (count >= 10_000 ? (10_000, "万") : (1, ""))
-      : (count >= 1_000_000 ? (1_000_000, "M") : count >= 1_000 ? (1_000, "K") : (1, ""))
-    let value =
-      unit == 1
-      ? count.formatted(.number.grouping(.automatic))
-      : (Double(count) / unit).formatted(.number.precision(.fractionLength(0...1))) + suffix
+      ? [(10_000, "万"), (100_000_000, "億")] : [(1_000, "K"), (1_000_000, "M"), (1e9, "B")]
+    var value = count.formatted(.number.grouping(.automatic))
+    var index = ladder.lastIndex { Double(count) >= $0.unit }
+    while let i = index {
+      let rounded = (Double(count) / ladder[i].unit * 10).rounded() / 10
+      if i + 1 < ladder.count, rounded * ladder[i].unit >= ladder[i + 1].unit {
+        index = i + 1
+        continue
+      }
+      value = rounded.formatted(.number.precision(.fractionLength(0...1))) + ladder[i].suffix
+      index = nil
+    }
     return L10n.format(.editorOmittedCharacters, language, value)
   }
 
