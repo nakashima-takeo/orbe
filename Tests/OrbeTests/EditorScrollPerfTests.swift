@@ -42,6 +42,49 @@ final class EditorScrollPerfTests: OrbeTestCase {
     }
   }
 
+  /// 新しい面（Metal）の打鍵 1 回の main の仕事——キーの出来事を受けてから、面の編集係・文書・Orbe の配り先（検索・出現・
+  /// 俯瞰への知らせ）が戻るまでの main のスレッドの CPU 時間。p99 1ms 以下（200KB・1MB、git 管理下、1 万字近い長い行の
+  /// 行末）。壁時計の時間は機械の混み具合で膨らむので参考に出すだけにする（利用者が感じる遅れは打鍵→present の関門が
+  /// 見る）。描くのは描画スレッド。プロセスで最初の 1 打鍵（入力の仕組みの初期化を含む）だけは数えないので、測る文書を
+  /// 開く前に別の文書で 1 回打つ。
+  func testMetalTypingMainTime() throws {
+    let metal = EditorEngineChoice(
+      metal: true, elasticScroll: true, fontSmoothing: true, language: .ja)
+    let warm = try openEditor("warm\n", engine: metal)
+    warm.document.surface.responder.keyDown(with: .key("/", []))
+    warm.window.orderOut(nil)
+    let long = String(repeating: "x", count: 9_990) + "\n" + Self.swiftSource(bytes: 20_000)
+    for (label, text) in [
+      ("200KB", Self.swiftSource(bytes: 200_000)), ("1MB", Self.swiftSource(bytes: 1_000_000)),
+      ("long-line", long),
+    ] {
+      let opened = try openEditor(text, engine: metal)
+      opened.document.baseline = text
+      XCTAssertTrue(opened.document.waitUntilCaughtUp(timeout: 60))
+      let row = label == "long-line" ? 0 : opened.document.text.lineCount / 3
+      opened.document.scroll(toFirstLine: CGFloat(row))
+      opened.document.surface.selectedRange = NSRange(
+        location: label == "long-line" ? 9_990 : opened.document.text.lineStart(row + 5) + 4,
+        length: 0)
+      var cpu: [Double] = []
+      var wall: [Double] = []
+      for character in String(repeating: "let value = compute(offset) ok ", count: 3) {
+        let began = (clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID), CACurrentMediaTime())
+        opened.document.surface.responder.keyDown(with: .key(String(character), []))
+        cpu.append(Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - began.0) / 1e6)
+        wall.append((CACurrentMediaTime() - began.1) * 1000)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+      }
+      reportPerf(label, "metal-typing-main (baseline あり)", cpu, digits: 3)
+      reportPerf(label, "metal-typing-main-wall (参考)", wall, digits: 3)
+      let sorted = cpu.sorted()
+      XCTAssertLessThanOrEqual(
+        sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.99))], 1,
+        "\(label): 打鍵 1 回の main のスレッドの CPU 時間の p99")
+      opened.window.orderOut(nil)
+    }
+  }
+
   /// 1200×800 の窓に Swift の文書を開き、裏の仕事（文書全体の構文色）が追いついてから測る。速いドラッグは開いた
   /// ばかりの文書で、打鍵・ホイール・打鍵の後の速いドラッグは別に開き直した文書で測る。文書を端から端まで通した後の
   /// 打鍵も参考に出す（TextKit が段落を覚えるので、開いたばかりの文書より重い）。
@@ -204,9 +247,9 @@ private final class EditTimer: TextSurfaceDelegate {
 
   init(inner: EditorDocument) { self.inner = inner }
 
-  func surface(_ surface: any TextSurface, didChange edit: TextEdit) {
+  func surface(_ surface: any TextSurface, didChange edits: [TextEdit]) {
     let began = DispatchTime.now().uptimeNanoseconds
-    inner.surface(surface, didChange: edit)
+    inner.surface(surface, didChange: edits)
     times.append(Double(DispatchTime.now().uptimeNanoseconds - began) / 1_000_000)
   }
   func surface(_ surface: any TextSurface, focusDidChange focused: Bool) {

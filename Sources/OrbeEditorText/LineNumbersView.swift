@@ -281,7 +281,7 @@ final class LineNumbersView: NSView {
     case .above(let distance), .below(let distance):
       let lineHeight = style.lineHeight
       let delta =
-        Self.speed(outside: distance / lineHeight, visible: bounds.height / lineHeight)
+        DragScrollSpeed.speed(outside: distance / lineHeight, visible: bounds.height / lineHeight)
         * elapsed * lineHeight
       let above = if case .above = edge { true } else { false }
       proposed.origin.y += above ? -delta : delta
@@ -290,7 +290,7 @@ final class LineNumbersView: NSView {
       // 全角 1 字（半角 2 桁）を単位に数え、その半分ずつ送る。
       let fullWidth = 2 * style.font.cellWidth
       proposed.origin.x -=
-        Self.speed(outside: distance / fullWidth, visible: clip.bounds.width / fullWidth)
+        DragScrollSpeed.speed(outside: distance / fullWidth, visible: clip.bounds.width / fullWidth)
         * elapsed * fullWidth * 0.5
       line = self.line(atY: y, source)
     }
@@ -306,13 +306,6 @@ final class LineNumbersView: NSView {
     }
     guard let target = line ?? self.line(atY: edgeY, source) else { return }
     extend(to: target, source)
-  }
-
-  /// 自動スクロールの速さ（単位/秒）。外れた距離と見えている量をどちらも同じ単位（行・全角の字）で数える。
-  private static func speed(outside: CGFloat, visible: CGFloat) -> CGFloat {
-    outside <= 1.5
-      ? max(30, visible * (1 + outside))
-      : outside <= 3 ? max(60, visible * (2 + outside)) : max(200, visible * (7 + outside))
   }
 
   /// y（文書の座標）の行。最終行より下なら最終行、先頭より上なら先頭の行。

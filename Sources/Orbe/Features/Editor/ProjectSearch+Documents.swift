@@ -63,12 +63,14 @@ extension ProjectSearch: RootFilesObserver {
     return open
   }
 
-  /// 焦点の文書の本文が変わった。まとまりの区間をずらし、結果に出ていれば 250ms 後に取り直す。行は一致が落ちたとき
-  /// だけ作り直す（行が見せるプレビューは取り直すまで変わらない——打鍵のたびに全部の行を作り直さない）。
-  func documentDidEdit(_ document: EditorDocument, _ edit: TextEdit) {
+  /// 焦点の文書の本文が変わった（適用した順の編集の列）。まとまりの区間をずらし、結果に出ていれば 250ms 後に取り直す。
+  /// 行は一致が落ちたときだけ作り直す（行が見せるプレビューは取り直すまで変わらない——打鍵のたびに全部の行を作り直さない）。
+  func documentDidEdit(_ document: EditorDocument, _ edits: [VersionedEdit]) {
     guard let path = relativePath(of: document), let before = results[path]?.count else { return }
-    trackAnchor(path, edit)
-    results.track(path, edit, version: document.version)
+    for record in edits {
+      trackAnchor(path, record.edit)
+      results.track(path, record.edit, version: record.version)
+    }
     if results[path]?.count == before { onGroundChange() } else { resultsDidChange() }
     scheduleRefresh(path)
   }

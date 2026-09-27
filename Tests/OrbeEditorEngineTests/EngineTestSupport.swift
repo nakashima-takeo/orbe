@@ -29,6 +29,8 @@ class EngineTestCase: XCTestCase {
     return TextSurfaceStyle(
       font: .monospacedSystemFont(ofSize: 12, weight: .regular), lineHeight: 18, topInset: 4,
       textColor: text, caretColor: .white, caretSize: CGSize(width: 1.5, height: 14),
+      selectionColor: NSColor(srgbRed: 0.15, green: 0.31, blue: 0.47, alpha: 1),
+      inactiveSelectionColor: NSColor(srgbRed: 0.23, green: 0.24, blue: 0.26, alpha: 1),
       gutterFont: .monospacedSystemFont(ofSize: 11, weight: .regular),
       gutterTextColor: NSColor(srgbRed: 0.43, green: 0.46, blue: 0.51, alpha: 1), gutterWidth: 44,
       gutterTrailingInset: 16,

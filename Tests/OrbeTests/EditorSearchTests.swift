@@ -188,6 +188,30 @@ final class EditorSearchTests: OrbeTestCase {
     pumpMain(until: { seen().last?.1 == 3 }, "件数が追従する")
   }
 
+  /// 1 回の操作の編集の列（適用した順・どれもその直前の本文の座標）を順に畳んで一致をずらす——後ろの空白を広げ、前の空白
+  /// を消す束で、一致はどちらの編集にも正しく付いていく。
+  func testMatchesFollowAListOfEditsInTheOrderApplied() throws {
+    let hosted = try host("ab ab ab\n")
+    let pane = hosted.pane
+    pane.showSearch()
+    catchUp(pane)
+    pane.search.setNeedle("ab")
+    catchUp(pane)
+    XCTAssertEqual(pane.search.matches.map(\.location), [0, 3, 6])
+    pane.search.refreshDelay.schedule = { _, _ in }
+    var log = EditLog()
+    let widen = log.append(
+      TextEdit(range: NSRange(location: 5, length: 1), replacement: "   "),
+      start: TextPoint(row: 0, column: 5), oldEnd: TextPoint(row: 0, column: 6),
+      newEnd: TextPoint(row: 0, column: 8))
+    let remove = log.append(
+      TextEdit(range: NSRange(location: 2, length: 1), replacement: ""),
+      start: TextPoint(row: 0, column: 2), oldEnd: TextPoint(row: 0, column: 3),
+      newEnd: TextPoint(row: 0, column: 2))
+    pane.search.textDidChange([widen, remove])
+    XCTAssertEqual(pane.search.matches.map(\.location), [0, 2, 7])
+  }
+
   /// 一致は上限（19999）で打ち切り、件数には打ち切ったことが届く（バーは「19999+」と出す）。
   func testMatchesStopAtTheLimitAndTheCountSaysSo() throws {
     let hosted = try host(String(repeating: "a", count: 20_500) + "\n")

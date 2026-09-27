@@ -2,14 +2,15 @@ import Foundation
 import os
 
 /// 面ごとの記録係（描画スレッドだけ）。各コマの描画の CPU 時間・画面に出た時刻（present）・そのコマに初めて入った指の
-/// 出来事の時刻・drawable の大きさの食い違いを取り、ジェスチャーごとに要約を 1 行、OS のログ（カテゴリ `editor-frames`）へ
-/// 出す。常に動くので軽く保つ——溜めるのはジェスチャー 1 つぶんだけ。
+/// 出来事と打鍵の時刻・drawable の大きさの食い違いを取り、ジェスチャーごと・打鍵の塊ごとに要約を 1 行、OS のログ
+/// （カテゴリ `editor-frames`）へ出す。常に動くので軽く保つ——溜めるのはジェスチャー 1 つ・打鍵の塊 1 つぶんだけ。
 ///
 /// - 出来事→present: 指の出来事の時刻から、その量が初めて入ったコマが画面に出た時刻まで。
 /// - 落ちたコマ: ジェスチャーの間に描いたコマ（描くものが変わった刻みのコマ全部）の、続く 2 つの present の間隔が
 ///   1.5 刻みを越えたもの。変化の無い刻み（止めていた間を含む）を挟んだ間隔は、見せるものが無かった間なので数えない
 ///   ——ただし次のコマに、その変化の無い刻みより前の指の出来事が入っていれば（main が詰まって出来事が遅れた）数える。
 ///   割合は越えた分の時間の合計を、数えた間隔の時間の合計で割ったもの（ms/秒）。
+/// - 打鍵→present: 打鍵の出来事の時刻から、その打鍵が本文に入ったコマが画面に出た時刻まで。打鍵の間が 1 秒空けば塊を区切る。
 final class FrameRecorder {
   /// 描いたコマ 1 つ。
   struct Drawn {
@@ -24,6 +25,8 @@ final class FrameRecorder {
     var committed: Double
     /// このコマで初めて入った指の出来事の時刻。
     var events: [Double]
+    /// このコマで初めて本文に入った打鍵の時刻。
+    var keystrokes: [Double] = []
     /// 前のコマから位置が動いたか（ジェスチャーを始める）。
     var moving: Bool
     var gesture: Int
@@ -81,7 +84,20 @@ final class FrameRecorder {
     var latePresents = 0
     /// 締めたジェスチャーの記録。
     var gestures: [Gesture] = []
+    /// 打鍵→present（秒）。
+    var typing: [Double] = []
   }
+
+  /// 打鍵の塊 1 つぶんの記録。
+  struct Burst: Sendable {
+    var id: Int
+    var latencies: [Double] = []
+    /// 塊の最後の打鍵の時刻。
+    var last: Double
+  }
+
+  /// 打鍵の塊を区切る、打鍵の間の長さ。
+  static let burstGap = 1.0
 
   /// 命令を出し終えるべき、画面に出る予定の刻みより前の余裕（GPU が描く分）。
   static let commitMargin = 0.001
@@ -93,6 +109,8 @@ final class FrameRecorder {
   private var current: Gesture?
   /// 最後に描いてから、変化の無い刻みが初めて来た時刻。
   private var idleSince: Double?
+  private var burst: Burst?
+  private var bursts = 0
   /// 刻みの長さ（秒）。
   var period = 1.0 / 120
   /// 通算の値を溜めるか（計測のときだけ）。
@@ -132,6 +150,7 @@ final class FrameRecorder {
   /// コマが画面に出た（`time` が nil なら出ずに捨てられた）。
   func presented(frame: Int, time: Double?) {
     guard let (record, counts) = pending.removeValue(forKey: frame), let time else { return }
+    for keystroke in record.keystrokes { typed(keystroke, shownAt: time) }
     if keepsTotals {
       if record.committed > record.target - Self.commitMargin {
         totals.lateCommits += 1
@@ -155,6 +174,37 @@ final class FrameRecorder {
 
   /// 今のジェスチャーの番号（締めていなければ）。
   var gesture: Int? { current?.id }
+
+  /// 打鍵が画面に出た。前の打鍵から塊の区切りより空いていれば、前の塊を締めてから数える。
+  private func typed(_ keystroke: Double, shownAt time: Double) {
+    if let burst, keystroke - burst.last > Self.burstGap { flushTyping() }
+    var current = burst ?? Burst(id: bursts + 1, last: keystroke)
+    if burst == nil { bursts += 1 }
+    current.latencies.append(time - keystroke)
+    current.last = max(current.last, keystroke)
+    burst = current
+    if keepsTotals { totals.typing.append(time - keystroke) }
+  }
+
+  /// 最後の打鍵の時刻（塊を締めていなければ）。
+  var lastKeystroke: Double? { burst?.last }
+
+  /// 今の打鍵の塊を締めて要約を出す。
+  func flushTyping() {
+    guard let burst, !burst.latencies.isEmpty else {
+      self.burst = nil
+      return
+    }
+    self.burst = nil
+    let sorted = burst.latencies.sorted()
+    func quantile(_ q: Double) -> Double {
+      sorted[min(sorted.count - 1, Int(Double(sorted.count) * q))] * 1000
+    }
+    let line = String(
+      format: "keystroke→present median %.1fms p95 %.1fms max %.1fms / keys %d", quantile(0.5),
+      quantile(0.95), (sorted.last ?? 0) * 1000, sorted.count)
+    Self.log.log("typing \(burst.id): \(line, privacy: .public)")
+  }
 
   static func summary(_ gesture: Gesture, period: Double) -> Summary? {
     guard !gesture.latencies.isEmpty || gesture.presents.count > 1 else { return nil }

@@ -1,0 +1,373 @@
+import AppKit
+import OrbeEditorCore
+import XCTest
+
+@testable import OrbeEditorEngine
+
+/// 編集の規則（純関数）——語・書記素・行の移動と削除、字下げ、キル、入れ替え、大小文字、マーク。VS Code の既定と同じ意味で、
+/// 語の規則は VS Code を動かした正解（`VSCodeEditCases`）と突き合わせる。壊れると ⌥←→・⌥⌫ が VS Code と違う位置で
+/// 止まる、絵文字や CRLF を割る、Tab が文書の作法と違う字を入れる、⌃K を続けても足されない。
+@MainActor
+final class EditCommandsTests: XCTestCase {
+  private func env(_ text: String) -> EditingEnvironment {
+    Editing.environment(TextRope(text))
+  }
+
+  // MARK: - VS Code との突き合わせ
+
+  /// ⌥←（cursorWordLeft）・⌥→（cursorWordEndRight）・⌥⌫（deleteWordLeft）・⌥⌦（deleteWordRight）・ダブルクリックの語・
+  /// ⌘←（cursorHome）が、VS Code を動かした正解と全位置で一致する。
+  func testWordRulesMatchVSCode() {
+    XCTAssertGreaterThan(VSCodeEditCases.cases.count, 100)
+    for c in VSCodeEditCases.cases {
+      let text = TextRope(c.text)
+      let label = "\(c.text.debugDescription) @\(c.offset)"
+      XCTAssertEqual(EditCommands.wordLeft(from: c.offset, text), c.wordLeft, "⌥← \(label)")
+      XCTAssertEqual(EditCommands.wordRight(from: c.offset, text), c.wordRight, "⌥→ \(label)")
+      let cursor = Cursor(c.offset)
+      let left = EditCommands.deleteWordLeftRange(cursor, text)
+      XCTAssertEqual(Self.bounds(left), Self.nonEmpty(c.deleteLeft), "⌥⌫ \(label)")
+      let right = EditCommands.deleteWordRightRange(cursor, text)
+      XCTAssertEqual(Self.bounds(right), Self.nonEmpty(c.deleteRight), "⌥⌦ \(label)")
+      let word = EditCommands.wordRange(at: c.offset, text)
+      XCTAssertEqual([word.location, NSMaxRange(word)], c.word, "語 \(label)")
+      let home = EditCommands.move(
+        Cursor(c.offset), .home, extending: false, Editing.environment(text))
+      XCTAssertEqual(home.position, c.home, "⌘← \(label)")
+    }
+  }
+
+  private static func bounds(_ range: NSRange?) -> [Int] {
+    range.map { [$0.location, NSMaxRange($0)] } ?? []
+  }
+
+  /// 消さない（空の範囲）なら空。
+  private static func nonEmpty(_ bounds: [Int]) -> [Int] {
+    bounds.count == 2 && bounds[0] == bounds[1] ? [] : bounds
+  }
+
+  // MARK: - 書記素と削除の単位
+
+  /// ←→・⌦ は書記素（UAX #29 の拡張書記素クラスタ。絵文字の ZWJ・国旗・肌の色・結合文字・CRLF）を割らない。
+  func testArrowsAndForwardDeleteMoveByGraphemes() {
+    let family = "👨‍👩‍👧‍👦"
+    XCTAssertEqual(Editing.run(.move(.right, extending: false), on: "|\(family)x"), "\(family)|x")
+    XCTAssertEqual(Editing.run(.move(.left, extending: false), on: "🇯🇵|🇺🇸"), "|🇯🇵🇺🇸")
+    XCTAssertEqual(Editing.run(.deleteForward, on: "|👍🏽a"), "|a")
+    XCTAssertEqual(Editing.run(.move(.right, extending: false), on: "e\u{301}|x"), "e\u{301}x|")
+    XCTAssertEqual(
+      Editing.run(.move(.right, extending: false), on: "ab|\r\ncd"), "ab\r\n|cd", "CRLF は 1 つ")
+    XCTAssertEqual(Editing.run(.move(.left, extending: false), on: "ab\r\n|cd"), "ab|\r\ncd")
+    XCTAssertEqual(Editing.run(.deleteForward, on: "ab|\r\ncd"), "ab|cd")
+  }
+
+  /// ←→・⌦ の境は、書記素の境（Swift の `Character`）であり、窓を出さない NSTextView の ←→ とも一致する——タイ語の
+  /// SARA AM（U+0E33）、インド系の合字と母音記号、絵文字、結合文字、ハングルの字母。⌦ は NSTextView の ⌦（合成文字の
+  /// 単位で SARA AM や合字を割る）ではなく、この境まで消す。CRLF は NSTextView の ← が `\r` と `\n` の間で止まるので、
+  /// VS Code と同じく 1 つとして上で見る。
+  func testGraphemeBoundariesMatchNSTextView() {
+    let words = [
+      "กำลัง", "น้ำ", "ที่นี่", "क्षत्रिय", "हिन्दी", "किताब", "துறை", "বাংলা", "ગુજરાતી", "తెలుగు",
+      "ਪੰਜਾਬੀ", "සිංහල", "👨‍👩‍👧‍👦x", "🇯🇵🇺🇸", "👍🏽a", "1\u{FE0F}\u{20E3}", "e\u{301}\u{323}", "か\u{3099}き",
+      "ﾊﾞｶ", "한국어", "\u{1100}\u{1161}\u{11A8}",
+    ]
+    for word in words {
+      var boundaries = [0]
+      for character in word { boundaries.append(boundaries.last! + character.utf16.count) }
+      let text = TextRope(word)
+      let view = NSTextView(usingTextLayoutManager: true)
+      view.string = word
+      let label = word.unicodeScalars.map { String($0.value, radix: 16) }.joined(separator: " ")
+      for (from, to) in zip(boundaries, boundaries.dropFirst()) {
+        view.setSelectedRange(NSRange(location: from, length: 0))
+        view.moveRight(nil)
+        XCTAssertEqual(view.selectedRange().location, to, "NSTextView → [\(label)] @\(from)")
+        view.setSelectedRange(NSRange(location: to, length: 0))
+        view.moveLeft(nil)
+        XCTAssertEqual(view.selectedRange().location, from, "NSTextView ← [\(label)] @\(to)")
+        XCTAssertEqual(
+          position(after: .move(.right, extending: false), at: from, text), to,
+          "→ [\(label)] @\(from)")
+        XCTAssertEqual(
+          position(after: .move(.left, extending: false), at: to, text), from, "← [\(label)] @\(to)"
+        )
+        let deleted = EditCommands.run(
+          .deleteForward, EditState(cursors: CursorList(Cursor(from))), Editing.environment(text))
+        XCTAssertEqual(
+          deleted.edits.edits.map(\.range), [NSRange(location: from, length: to - from)],
+          "⌦ [\(label)] @\(from)")
+      }
+    }
+  }
+
+  private func position(after command: EditCommand, at offset: Int, _ text: TextRope) -> Int {
+    EditCommands.run(
+      command, EditState(cursors: CursorList(Cursor(offset))), Editing.environment(text)
+    )
+    .state.cursors.primary.position
+  }
+
+  /// 書記素は位置の前後の窓だけで決める——国旗の並びが窓より長くても、並びの頭から 2 字ずつ組む（途中から数えて組がずれない）。
+  func testLongRunsOfFlagsPairFromTheirHead() {
+    let flags = "x" + String(repeating: "🇯🇵", count: 60)
+    let text = TextRope(flags)
+    var position = text.length
+    while position > 1 {
+      let previous = text.previousBoundary(before: position)
+      XCTAssertEqual(position - previous, 4, "@\(position)")
+      position = previous
+    }
+    XCTAssertEqual(text.nextBoundary(after: 1 + 4 * 30), 1 + 4 * 31)
+  }
+
+  /// ⌫ は macOS の後ろ向きの削除の単位——窓を出さない NSTextView の ⌫ と同じ範囲を消す（本文の末尾でも、後ろに字が続く
+  /// 位置でも）。絵文字の並び・国旗・肌の色・CRLF・分解した濁点やアクセント・異体字の選択子・ハングルの字母は書記素ごと、
+  /// インド系・タイ・アラビア・ヘブライの記号は 1 つずつ。
+  func testBackspaceDeletesLikeNSTextView() {
+    let samples = [
+      "a👨‍👩‍👧‍👦", "🇯🇵🇺🇸", "a👍🏽", "1\u{FE0F}\u{20E3}", "e\u{301}", "x\u{301}\u{302}", "か\u{3099}",
+      "ﾊﾞ", "\u{1100}\u{1161}\u{11A8}", "가\u{301}", "☺\u{FE0E}", "कि", "क्ष", "กี", "بَ", "שָׁ",
+      "ab\r\n", "abc", "",
+    ]
+    for sample in samples {
+      for following in ["", "z"] {
+        let view = NSTextView(usingTextLayoutManager: true)
+        view.string = sample + following
+        view.setSelectedRange(NSRange(location: (sample as NSString).length, length: 0))
+        view.deleteBackward(nil)
+        let caret = view.selectedRange().location
+        let expected = (view.string as NSString).replacingCharacters(
+          in: NSRange(location: caret, length: 0), with: "|")
+        XCTAssertEqual(
+          Editing.run(.deleteBackward, on: sample + "|" + following), expected,
+          "\(sample.unicodeScalars.map { String($0.value, radix: 16) }) + \(following)")
+      }
+    }
+    XCTAssertEqual(Editing.run(.deleteBackward, on: "|ab"), "|ab", "先頭は何もしない")
+    XCTAssertEqual(Editing.run(.deleteBackwardDecomposing, on: "é|"), "e|", "⌃⌫ は前の字を分解して最後だけ")
+  }
+
+  /// 行の区切りをまたいで消す削除は `\r\n` を割らない（`\r` だけの行末を残さない）。
+  func testDeletionsAcrossALineBreakKeepCRLFWhole() {
+    let backward: [(String, EditCommand)] = [
+      ("⌫", .deleteBackward), ("⌃⌫", .deleteBackwardDecomposing), ("⌥⌫", .deleteWordBackward),
+      ("⌘⌫", .deleteToLineStart), ("行頭までのキル", .kill(forward: false)),
+    ]
+    for (name, command) in backward {
+      XCTAssertEqual(Editing.run(command, on: "ab\r\n|cd\r\nef"), "ab|cd\r\nef", name)
+    }
+    let forward: [(String, EditCommand)] = [
+      ("⌦", .deleteForward), ("⌥⌦", .deleteWordForward), ("行末まで", .deleteToLineEnd),
+      ("⌃K", .kill(forward: true)),
+    ]
+    for (name, command) in forward {
+      XCTAssertEqual(Editing.run(command, on: "ab|\r\ncd\r\nef"), "ab|cd\r\nef", name)
+    }
+  }
+
+  /// ⌫ が字下げの空白の中なら前のタブ位置まで消す（VS Code の useTabStops）。
+  func testBackspaceInIndentationDeletesToThePreviousTabStop() {
+    XCTAssertEqual(Editing.run(.deleteBackward, on: "      |x"), "    |x")
+    XCTAssertEqual(Editing.run(.deleteBackward, on: "    |x"), "|x")
+    XCTAssertEqual(Editing.run(.deleteBackward, on: "  x  |y"), "  x |y", "字下げの外は 1 字")
+    XCTAssertEqual(Editing.run(.deleteBackward, on: "\t\t|x"), "\t|x")
+  }
+
+  // MARK: - 移動
+
+  /// ↑↓は覚えた x で動く——短い行を越えても元の横位置へ戻る。先頭の行の ↑ は文書の先頭、最終行の ↓ は文書の末尾。
+  func testUpAndDownRememberTheHorizontalPosition() {
+    let down = EditCommand.move(.down, extending: false)
+    let up = EditCommand.move(.up, extending: false)
+    XCTAssertEqual(Editing.run([down, down], on: "abcd|ef\nxy\nabcdef"), "abcdef\nxy\nabcd|ef")
+    XCTAssertEqual(Editing.run([down], on: "abcd|ef\nxy\nabcdef"), "abcdef\nxy|\nabcdef")
+    XCTAssertEqual(Editing.run([up], on: "ab|c\nd"), "|abc\nd")
+    XCTAssertEqual(Editing.run([up, down], on: "ab|c\nd"), "abc\nd|", "先頭へ行っても横位置は覚えている")
+    XCTAssertEqual(Editing.run([down], on: "a\nb|cd"), "a\nbcd|")
+    XCTAssertEqual(
+      Editing.run([.move(.down, extending: false)], on: "a[bc]\nxyz\n"), "abc\nxyz|\n",
+      "選択を畳むときは終わりから動く")
+  }
+
+  /// 右から左の字を含む行でも、↑↓は見た目の横位置で動く——同じ中身の行へは同じ位置に着き、短い行を越えても戻る。
+  func testUpAndDownKeepTheVisualPositionInRightToLeftLines() {
+    let down = EditCommand.move(.down, extending: false)
+    XCTAssertEqual(Editing.run([down], on: "של|ום\nשלום"), "שלום\nשל|ום")
+    XCTAssertEqual(Editing.run([down], on: "مر|حبا\nمرحبا"), "مرحبا\nمر|حبا")
+    XCTAssertEqual(
+      Editing.run([down, down], on: "ab של|ום cd\nx\nab שלום cd"), "ab שלום cd\nx\nab של|ום cd")
+  }
+
+  /// ⌘← は最初の非空白と 1 列目を行き来し、⌃A は 1 列目へ、⌘→ と ⌃E は行末（CRLF の \r の前）へ。
+  func testLineEdges() {
+    XCTAssertEqual(Editing.run(.move(.home, extending: false), on: "  ab|c"), "  |abc")
+    XCTAssertEqual(Editing.run(.move(.home, extending: false), on: "  |abc"), "|  abc")
+    XCTAssertEqual(Editing.run(.move(.lineStart, extending: false), on: "  ab|c"), "|  abc")
+    XCTAssertEqual(Editing.run(.move(.end, extending: false), on: "a|b\r\nc"), "ab|\r\nc")
+    XCTAssertEqual(Editing.run(.move(.lineEnd, extending: true), on: "a|b\nc"), "a[b]\nc")
+  }
+
+  /// 伸ばさない ←→ は選択の端へ畳み、伸ばす移動は動かない側を保つ。
+  func testCollapsingAndExtending() {
+    XCTAssertEqual(Editing.run(.move(.left, extending: false), on: "a[bc]d"), "a|bcd")
+    XCTAssertEqual(Editing.run(.move(.right, extending: false), on: "a[bc]d"), "abc|d")
+    XCTAssertEqual(Editing.run(.move(.right, extending: true), on: "a[bc]d"), "a[bcd]")
+    XCTAssertEqual(Editing.run(.move(.wordLeft, extending: true), on: "foo bar|"), "foo ]bar[")
+  }
+
+  // MARK: - 挿入と字下げ
+
+  /// Enter は今の行の字下げ（キャレットより左の空白）を文書の作法で引き継ぐ。⌥↩ などは字下げしない。
+  func testNewlineKeepsTheIndentation() {
+    XCTAssertEqual(Editing.run(.newline(indents: true), on: "    ab|c"), "    ab\n    |c")
+    XCTAssertEqual(Editing.run(.newline(indents: true), on: "  |  abc"), "  \n  |  abc")
+    XCTAssertEqual(
+      Editing.run(
+        .newline(indents: true), on: "\t  ab|", indentation: .init(unit: 4, usesTabs: false)),
+      "\t  ab\n      |")
+    XCTAssertEqual(
+      Editing.run(
+        .newline(indents: true), on: "      ab|", indentation: .init(unit: 4, usesTabs: true)),
+      "      ab\n\t  |")
+    XCTAssertEqual(Editing.run(.newline(indents: false), on: "    ab|"), "    ab\n|")
+  }
+
+  /// Tab は文書に合わせる——空白の文書では次のタブ位置までの空白、タブの文書ではタブ文字。行をまたぐ選択は字下げ。
+  func testTabFollowsTheDocument() {
+    XCTAssertEqual(Editing.run(.tab, on: "ab|c"), "ab  |c")
+    XCTAssertEqual(
+      Editing.run(.tab, on: "ab|c", indentation: .init(unit: 4, usesTabs: true)), "ab\t|c")
+    XCTAssertEqual(Editing.run(.tab, on: "a[b]c"), "a   |c", "1 行の中の選択は、始まりから次のタブ位置までの空白に置き換える")
+    XCTAssertEqual(Editing.run(.tab, on: "[ab\ncd]\n"), "[    ab\n    cd]\n")
+    XCTAssertEqual(
+      Editing.run(.tab, on: "[ab\ncd]\n", indentation: .init(unit: 4, usesTabs: true)),
+      "[\tab\n\tcd]\n")
+    XCTAssertEqual(Editing.run(.literalTab, on: "a|b"), "a\t|b")
+  }
+
+  /// Tab の空白の数は VS Code の見た目の桁で数える——書記素ごとに進み、全角と絵文字は 2 桁。
+  func testTabCountsVisibleColumnsLikeVSCode() {
+    XCTAssertEqual(Editing.run(.tab, on: "日本|"), "日本    |")
+    XCTAssertEqual(Editing.run(.tab, on: "e\u{301}|"), "e\u{301}   |")
+    XCTAssertEqual(Editing.run(.tab, on: "👨‍👩‍👧|"), "👨‍👩‍👧  |")
+    XCTAssertEqual(Editing.run(.tab, on: "\tx|"), "\tx   |")
+  }
+
+  /// ⇧Tab は字下げを前のタブ位置へ戻す（空白の無い行は飛ばす）。選択の終わりが行頭なら、その行は含めない。
+  func testBacktabOutdents() {
+    XCTAssertEqual(Editing.run(.backtab, on: "      a|b"), "    a|b")
+    XCTAssertEqual(Editing.run(.backtab, on: "[    a\nb\n  c\n]d"), "[a\nb\nc\n]d")
+    XCTAssertEqual(
+      Editing.run(.backtab, on: "\t\ta|", indentation: .init(unit: 4, usesTabs: true)), "\ta|")
+  }
+
+  // MARK: - 行の削除・キル
+
+  /// ⌘⌫ は行頭まで（1 列目なら前の改行）、行末までの削除は行末まで（行末なら改行）。
+  func testDeleteToLineEdges() {
+    XCTAssertEqual(Editing.run(.deleteToLineStart, on: "ab\ncd|ef"), "ab\n|ef")
+    XCTAssertEqual(Editing.run(.deleteToLineStart, on: "ab\n|cd"), "ab|cd")
+    XCTAssertEqual(Editing.run(.deleteToLineStart, on: "ab\nc[d]e"), "ab\n|e", "選択は行頭から")
+    XCTAssertEqual(Editing.run(.deleteToLineEnd, on: "a|bc\nd"), "a|\nd")
+    XCTAssertEqual(Editing.run(.deleteToLineEnd, on: "abc|\r\nd"), "abc|d")
+  }
+
+  /// ⌃K は行末まで（行末なら改行）を消してキルバッファへ入れ、続けた ⌃K は後ろへ足す。⌃Y で入れる。
+  func testKillAppendsWhileRepeatedAndYankInsertsIt() {
+    var (text, state) = Editing.parse("a|bc\ndef\n")
+    var kill = "old"
+    for _ in 0..<3 {
+      let result = EditCommands.run(
+        .kill(forward: true), state, Editing.environment(text, killBuffer: kill))
+      text = result.edits.applied(to: text)
+      state = result.state
+      kill = result.kill ?? kill
+    }
+    XCTAssertEqual(Editing.render(text, state), "a|\n")
+    XCTAssertEqual(kill, "bc\ndef", "続けたキルは足す（前のキルバッファは捨てる）")
+    let yanked = EditCommands.run(.yank, state, Editing.environment(text, killBuffer: kill))
+    XCTAssertEqual(Editing.render(yanked.edits.applied(to: text), yanked.state), "abc\ndef|\n")
+    XCTAssertFalse(yanked.state.lastWasKill)
+  }
+
+  /// 消すものが無いキルはキルバッファを変えず、キルと数えない。何もしなかったコマンドを挟んだ ⌃K は前のキルに足さない。
+  func testKillsThatRemoveNothingKeepTheKillBufferAndBreakTheChain() {
+    let (end, atEnd) = Editing.parse("abc|")
+    let empty = EditCommands.run(
+      .kill(forward: true), atEnd, Editing.environment(end, killBuffer: "old"))
+    XCTAssertNil(empty.kill, "文書の末尾の ⌃K はキルバッファをそのまま")
+    XCTAssertFalse(empty.state.lastWasKill)
+    var (text, state) = Editing.parse("a|bc\ndef\n")
+    var kill = ""
+    for command in [EditCommand.kill(forward: true), .backtab, .deleteToMark, .kill(forward: true)]
+    {
+      let result = EditCommands.run(command, state, Editing.environment(text, killBuffer: kill))
+      text = result.edits.applied(to: text)
+      state = result.state
+      kill = result.kill ?? kill
+    }
+    XCTAssertEqual(kill, "\n", "字下げの無い行の ⇧Tab・マークの無い削除を挟めば、足さずに入れ直す")
+  }
+
+  // MARK: - 入れ替え・大小文字・マーク
+
+  /// ⌃T はキャレットの前後の書記素を入れ替え、行末なら前の 2 つ。
+  func testTranspose() {
+    XCTAssertEqual(Editing.run(.transpose, on: "ab|cd"), "acb|d")
+    XCTAssertEqual(Editing.run(.transpose, on: "abc|"), "acb|")
+    XCTAssertEqual(Editing.run(.transpose, on: "a👍🏽|b"), "ab👍🏽|")
+    XCTAssertEqual(Editing.run(.transpose, on: "|ab"), "|ab")
+    XCTAssertEqual(Editing.run(.transposeWords, on: "foo |bar"), "bar foo|")
+    XCTAssertEqual(Editing.run(.transpose, on: "a[bc]d"), "a[bc]d", "選択があれば何もせず、選択は残る")
+  }
+
+  /// 大小文字は選択か、キャレットに接する語。語の外（空白の上）なら何もせず選択も元のまま。変えた範囲を選ぶ。
+  func testCaseChangesTouchTheWordOrNothing() {
+    XCTAssertEqual(Editing.run(.changeCase(.upper), on: "foo ba|r"), "foo [BAR]")
+    XCTAssertEqual(Editing.run(.changeCase(.capitalize), on: "[hello world]"), "[Hello World]")
+    XCTAssertEqual(Editing.run(.changeCase(.upper), on: "foo  |  bar"), "foo  |  bar")
+    XCTAssertEqual(Editing.run(.changeCase(.lower), on: "a  |  b"), "a  |  b")
+    XCTAssertEqual(Editing.run(.changeCase(.upper), on: "straße|"), "[STRASSE]", "長さが変わる字も変えた範囲を選ぶ")
+  }
+
+  /// マーク——置いた位置から選ぶ・消す（キルバッファへ）・入れ替える。
+  func testMark() {
+    let right = EditCommand.move(.right, extending: false)
+    XCTAssertEqual(Editing.run([.setMark, right, right, .selectToMark], on: "a|bcd"), "a[bc]d")
+    XCTAssertEqual(
+      Editing.run([.setMark, .move(.documentEnd, extending: false), .deleteToMark], on: "a|bcd"),
+      "a|")
+    XCTAssertEqual(
+      Editing.run([.setMark, .move(.documentEnd, extending: false), .swapWithMark], on: "a|bcd"),
+      "a|bcd")
+  }
+
+  // MARK: - 選択
+
+  /// 行の選択は改行まで（単位は行）、語の選択は VS Code の語、全体の選択は先頭から末尾。
+  func testSelectLineWordAndAll() {
+    XCTAssertEqual(Editing.run(.selectLine, on: "ab\nc|d\nef"), "ab\n[cd\n]ef")
+    XCTAssertEqual(Editing.run(.selectWord, on: "foo.ba|r baz"), "foo.[bar] baz")
+    XCTAssertEqual(Editing.run(.selectAll, on: "a|b\ncd"), "[ab\ncd]")
+  }
+
+  /// 長い行（2048 単位を超える）では、語の規則はキャレットの前後の窓だけを読み、窓の端は書記素の境へ広げる——窓の端が
+  /// サロゲートの対の中間に掛かっても、⌥←・⌥⌫ は対を割らない。
+  func testLongLineWindowsDoNotSplitGraphemes() {
+    let text = TextRope(String(repeating: "x😀", count: 1000))
+    let left = EditCommands.wordLeft(from: 1026, text)
+    XCTAssertEqual(text.grapheme(containing: left).location, left, "書記素の境")
+    XCTAssertEqual(left, 1)
+    let removed = EditCommands.deleteWordLeftRange(Cursor(1026), text)
+    XCTAssertEqual(removed?.location, 1)
+  }
+
+  /// 日本語の並びでは OS の語の分割の境でも止まる（記号と空白の規則はそのまま）。
+  func testJapaneseRunsStopAtOSWordBoundaries() {
+    let text = TextRope("日本語のテキストです。ok")
+    XCTAssertEqual(EditCommands.wordRight(from: 0, text), 2)
+    XCTAssertEqual(EditCommands.wordLeft(from: 8, text), 4)
+    XCTAssertEqual(EditCommands.wordRange(at: 5, text), NSRange(location: 4, length: 4))
+    XCTAssertEqual(EditCommands.wordRight(from: 0, TextRope("foo.bar")), 3, "ASCII は区切り文字の規則のまま")
+  }
+}

@@ -20,7 +20,7 @@ import XCTest
 /// 計測では GPU の混みで揺れる）。
 @MainActor
 final class FramePerfTests: EngineTestCase {
-  private var driver: HeadlessDriver!
+  var driver: HeadlessDriver!
   private var load: Timer?
 
   override func setUpWithError() throws {
@@ -112,7 +112,7 @@ final class FramePerfTests: EngineTestCase {
     return median
   }
 
-  private func attach(_ text: String, holdsPresents: Bool = false) throws -> Opened {
+  func attach(_ text: String, holdsPresents: Bool = false) throws -> Opened {
     let opened = try open(text, size: CGSize(width: 800, height: 600), waitForColors: true)
     opened.surface.viewStateDidChange(
       size: CGSize(width: 800, height: 600), scale: 2, visible: true)
@@ -123,7 +123,7 @@ final class FramePerfTests: EngineTestCase {
     return opened
   }
 
-  private func reset(_ surface: MetalTextSurface) {
+  func reset(_ surface: MetalTextSurface) {
     let id = surface.id
     RenderThread.shared.performAndWait { renderer in
       renderer.slot(id)?.recorder.flush()
@@ -131,7 +131,7 @@ final class FramePerfTests: EngineTestCase {
     }
   }
 
-  private func totals(_ surface: MetalTextSurface) -> FrameRecorder.Totals {
+  func totals(_ surface: MetalTextSurface) -> FrameRecorder.Totals {
     let id = surface.id
     return RenderThread.shared.performAndWait { renderer in
       renderer.slot(id)?.recorder.flush()
@@ -229,7 +229,7 @@ final class FramePerfTests: EngineTestCase {
   }
 
   /// 描画スレッドが刻みを止めるまで main を回す。
-  private func waitUntilIdle(_ surface: MetalTextSurface) {
+  func waitUntilIdle(_ surface: MetalTextSurface) {
     let deadline = Date().addingTimeInterval(10)
     while !driver.isPaused(surface.id), Date() < deadline {
       RunLoop.main.run(until: Date().addingTimeInterval(0.01))
@@ -238,7 +238,7 @@ final class FramePerfTests: EngineTestCase {
   }
 
   /// 昇順の秒の列の分位（ms）。
-  private static func quantile(_ sorted: [Double], _ q: Double) -> Double {
+  static func quantile(_ sorted: [Double], _ q: Double) -> Double {
     sorted.isEmpty ? 0 : sorted[min(sorted.count - 1, Int(Double(sorted.count) * q))] * 1000
   }
 

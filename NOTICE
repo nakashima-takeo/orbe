@@ -158,6 +158,29 @@ Code editor (Contents/MacOS/Orbe, Contents/Resources/TreeSitter*.bundle)
   https://github.com/krzyzanowskim/CoreTextSwift
   License: licenses/CoreTextSwift-LICENSE.txt
 
+* swift-corelibs-foundation — Copyright (c) Apple Inc. and the Swift project
+  authors — Apache-2.0 with Runtime Library Exception
+  The backward-deletion rule of CoreFoundation's CFString.c
+  (kCFStringBackwardDeletionCluster) is ported into Orbe's Swift code as the
+  editor's Backspace unit and compiled into Contents/MacOS/Orbe.
+  https://github.com/swiftlang/swift-corelibs-foundation
+  License: licenses/swift-corelibs-foundation-LICENSE.txt
+
+* Visual Studio Code — Copyright (c) 2015 - present Microsoft Corporation —
+  MIT License
+  Rules of VS Code's editor are ported into Orbe's Swift code and compiled into
+  Contents/MacOS/Orbe: the editing rules of the editor's text surface (word
+  classes, word movement and deletion, cursor movement and selection, Tab and
+  indentation columns, undo grouping, letter transposition), the full-width
+  and emoji character tables, the default word separators and word pattern,
+  indentation detection, the drag auto-scroll speed, the minimap (layout, line
+  rendering, glyph downsampling), the overview ruler, the scrollbar thumb
+  geometry, find (match limits and next/previous positions) and occurrence
+  highlighting. The editor's and terminal's default colors take values from
+  VS Code's Dark+, Dark Modern and Light Modern themes.
+  https://github.com/microsoft/vscode
+  License: licenses/vscode-LICENSE.txt
+
 * tree-sitter — Copyright (c) 2018 Max Brunsfeld — MIT License
   The parser runtime (lib/src, C). Statically linked into Contents/MacOS/Orbe.
   https://github.com/tree-sitter/tree-sitter

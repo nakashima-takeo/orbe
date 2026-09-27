@@ -37,14 +37,15 @@ public protocol TextSurface: AnyObject {
   /// 残る。`ranges` は昇順・重ならないこと（面は二分探索で可視ぶんだけ描く）。現在の一致の行は行全体にも地が付く。
   func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind)
 
-  /// インデントの単位（1 段のスペース数）。文書が本文から検出して押し、面はタブの表示幅と装備の段に写す。
-  func setIndentUnit(_ unit: Int)
+  /// 字下げの作法（単位とタブか）。文書が本文から検出して押し、面は単位をタブの表示幅と装備の段に写す。編集する面は、
+  /// Tab で入れる字（空白かタブか）と字下げの幅にも使う。
+  func setIndentation(_ indentation: Indentation)
 
-  /// undo の履歴にここで区切りを置く。続けて打った文字はまとめて戻るが、区切りをまたいでは戻らない
+  /// undo の履歴にここで区切りを置く。打鍵のまとまりは区切りをまたがない
   /// （保存が呼ぶ——⌘Z が保存前の打鍵まで一緒に戻さないため）。
   func markUndoBoundary()
 
-  /// 本文を丸ごと置き換える編集。通常の編集と同じく undo に載り、`didChange`（範囲 = 全体）を呼び出しから
+  /// 本文を丸ごと置き換える編集。通常の編集と同じく undo に載り、`didChange` を呼び出しから
   /// 戻るまでに同期で 1 回通す（外部で書き換えられたファイルの差し替えが呼ぶ——文書の写し・構文・ハンクが
   /// 打鍵と同じ経路で追従する）。変換中の IME セッションは置き換える前に畳む（その取り消しの `didChange`
   /// が 1 回先に通る）。置き換え後の選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。
@@ -64,8 +65,9 @@ public protocol TextSurface: AnyObject {
 
 @MainActor
 public protocol TextSurfaceDelegate: AnyObject {
-  /// 本文が変わった（置換後の文字列つき）。面の本文のすべての変更がここを 1 回ずつ通る。
-  func surface(_ surface: any TextSurface, didChange edit: TextEdit)
+  /// 本文が変わった（置換後の文字列つき）。面の本文のすべての変更がここを通る。1 回の操作の編集を束で渡す——束は重ならない
+  /// 昇順の列で、どの範囲も束の前の本文の座標で書く（VS Code の編集の適用と同じ）。
+  func surface(_ surface: any TextSurface, didChange edits: [TextEdit])
   func surface(_ surface: any TextSurface, focusDidChange focused: Bool)
   /// `viewport` が変わった（スクロール・窓の高さ）。
   func surfaceDidChangeViewport(_ surface: any TextSurface)
@@ -149,6 +151,10 @@ public struct TextSurfaceStyle {
   public var textColor: NSColor
   public var caretColor: NSColor
   public var caretSize: CGSize
+  /// 選択の地の色。焦点が無い面では `inactiveSelectionColor`。本文を自分で描く面が使う（今の面は上流がシステムの選択色で
+  /// 描く）。
+  public var selectionColor: NSColor
+  public var inactiveSelectionColor: NSColor
   public var gutterFont: NSFont
   public var gutterTextColor: NSColor
   /// 行番号の数字の部分の幅（右の印の列を除く）。最大の行番号と右の余白（`gutterTrailingInset`）がこの幅に収まる
@@ -237,9 +243,11 @@ public struct TextSurfaceStyle {
 
   public init(
     font: NSFont, lineHeight: CGFloat, topInset: CGFloat, textColor: NSColor, caretColor: NSColor,
-    caretSize: CGSize, gutterFont: NSFont, gutterTextColor: NSColor, gutterWidth: CGFloat,
-    gutterTrailingInset: CGFloat, roleColors: [SyntaxRole: NSColor], marks: Marks,
-    decorations: Decorations, highlights: Highlights
+    caretSize: CGSize, selectionColor: NSColor, inactiveSelectionColor: NSColor,
+    gutterFont: NSFont, gutterTextColor: NSColor, gutterWidth: CGFloat,
+    gutterTrailingInset: CGFloat,
+    roleColors: [SyntaxRole: NSColor], marks: Marks, decorations: Decorations,
+    highlights: Highlights
   ) {
     self.font = font
     self.lineHeight = lineHeight
@@ -247,6 +255,8 @@ public struct TextSurfaceStyle {
     self.textColor = textColor
     self.caretColor = caretColor
     self.caretSize = caretSize
+    self.selectionColor = selectionColor
+    self.inactiveSelectionColor = inactiveSelectionColor
     self.gutterFont = gutterFont
     self.gutterTextColor = gutterTextColor
     self.gutterWidth = gutterWidth

@@ -56,8 +56,8 @@ final class LineShaperTests: XCTestCase {
     let xs = shaped.runs.flatMap(\.xs)
     XCTAssertEqual(xs, xs.sorted(), "箱の後ろの字も左から右の順のまま")
     XCTAssertEqual(shaped.width, cell * 12, accuracy: 0.01)
-    let measured = LineShaper.measure(line, font: font, tabWidth: 0)
-    XCTAssertEqual(measured.x(ofOffset: 3), cell * 10, accuracy: 0.01, "箱は 1 単位で 8 桁")
+    XCTAssertEqual(x(3, "ab\u{202E}cd", tab: 0), cell * 10, accuracy: 0.01, "箱は 1 単位で 8 桁")
+    XCTAssertEqual(x(2, "ab\u{202E}cd", tab: 0), cell * 2, accuracy: 0.01, "箱の位置は箱の左端")
   }
 
   /// 行は常に左から右の段落——右から左の字で始まる行でも、行頭の字が左端に来る（VS Code と同じ）。
@@ -70,13 +70,77 @@ final class LineShaperTests: XCTestCase {
     XCTAssertEqual(last?.0, 8, "行末の x が右端")
   }
 
+  private func x(_ column: Int, _ string: String, tab: CGFloat) -> CGFloat {
+    LineShaper.shape(source(string), font: font, tabWidth: tab).carets.x(column)
+  }
+
   /// タブはインデント単位の桁まで空ける（次のタブ位置へ）。
   func testTabAdvancesToTheNextIndentStop() {
     let tab = cell * 4
-    let x = LineShaper.measure(source("\tx"), font: font, tabWidth: tab).x(ofOffset: 1)
-    XCTAssertEqual(x, tab, accuracy: 0.01)
-    let after = LineShaper.measure(source("ab\tx"), font: font, tabWidth: tab).x(ofOffset: 3)
-    XCTAssertEqual(after, tab, accuracy: 0.01, "途中のタブも次の刻みまで")
+    XCTAssertEqual(x(1, "\tx", tab: tab), tab, accuracy: 0.01)
+    XCTAssertEqual(x(3, "ab\tx", tab: tab), tab, accuracy: 0.01, "途中のタブも次の刻みまで")
+  }
+
+  /// 位置の x は、その位置以上の元の位置を持つ最初の字の x——書記素の内側は書記素の始まりの後ろの字、行末と描かない部分は
+  /// 行の幅。キャレット・選択の地・クリックの当たりが同じ規則で出る。
+  func testCaretXIsTheFirstGlyphAtOrAfterTheColumn() {
+    let tab = cell * 4
+    XCTAssertEqual(x(0, "ab", tab: tab), 0, accuracy: 0.01)
+    XCTAssertEqual(x(1, "ab", tab: tab), cell, accuracy: 0.01)
+    XCTAssertEqual(x(2, "ab", tab: tab), cell * 2, accuracy: 0.01, "行末は行の幅")
+    XCTAssertGreaterThan(x(4, "👍🏽a", tab: tab), 0)
+    XCTAssertEqual(x(2, "👍🏽a", tab: tab), x(4, "👍🏽a", tab: tab), "書記素の内側は次の字の x")
+    let long = String(repeating: "a", count: 10_050)
+    let shaped = LineShaper.shape(source(long), font: font, tabWidth: tab)
+    XCTAssertEqual(x(10_040, long, tab: tab), shaped.width, accuracy: 0.01, "描かない部分は描いた部分の右端")
+  }
+
+  /// 位置と x の対応は、組んだ行の双方向の対応と同じ——右から左の字を含む行でも、位置のキャレットの x が Core Text
+  /// （`CTLineGetOffsetForStringIndex` の主）と一致する。壊れると、ヘブライ語・アラビア語の行でキャレット・選択の地が字と
+  /// ずれる。
+  func testCaretMapFollowsCoreTextInBidirectionalLines() {
+    var direction = CTWritingDirection.leftToRight
+    let paragraph = withUnsafeBytes(of: &direction) { bytes in
+      let settings = [
+        CTParagraphStyleSetting(
+          spec: .baseWritingDirection, valueSize: MemoryLayout<CTWritingDirection>.size,
+          value: bytes.baseAddress!)
+      ]
+      return CTParagraphStyleCreate(settings, settings.count)
+    }
+    let samples = [
+      "ab שלום cd", "שלום עולם", "ab مرحبا cd", "مرحبا", "abc 123 אבג 456 def", "x😀y", "e\u{301}f",
+    ]
+    for string in samples {
+      let attributed = NSAttributedString(
+        string: string,
+        attributes: [
+          NSAttributedString.Key(kCTFontAttributeName as String): font,
+          NSAttributedString.Key(kCTParagraphStyleAttributeName as String): paragraph,
+        ])
+      let line = CTLineCreateWithAttributedString(attributed)
+      let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+      let map = CaretMap(line, width: width)
+      for offset in 0...(string as NSString).length {
+        let primary = CTLineGetOffsetForStringIndex(line, offset, nil)
+        XCTAssertEqual(map.x(offset), primary, accuracy: 0.01, "\(string) の位置 \(offset)")
+      }
+    }
+  }
+
+  /// 右から左の字を挟む選択は、見た目の区間ごとに分かれる——`ab שלום cd` の ש ל（位置 3〜5）は右から左の並びの右側、
+  /// 並び全体は 1 つの区間、左から右の字だけなら 1 つの区間。
+  func testSelectionSegmentsSplitAroundRightToLeftRuns() {
+    let map = LineShaper.shape(source("ab שלום cd"), font: font, tabWidth: 0).carets
+    XCTAssertGreaterThan(map.x(4), map.x(5), "右から左の並びの中は位置が進むと左へ")
+    let hebrew = map.segments(from: 3, to: 5)
+    XCTAssertEqual(hebrew.count, 1)
+    XCTAssertEqual(hebrew.first?.lowerBound ?? -1, map.x(5), accuracy: 0.01)
+    XCTAssertGreaterThan(hebrew.first?.upperBound ?? 0, map.x(4))
+    let crossing = map.segments(from: 1, to: 5)
+    XCTAssertEqual(crossing.count, 2, "b と空白、ש ל は離れた 2 つの区間")
+    XCTAssertEqual(map.segments(from: 0, to: 2).count, 1)
+    XCTAssertEqual(map.segments(from: 0, to: 10).count, 1, "行全体は 1 つ")
   }
 
   /// 1 行で描くのは 10000 単位まで（書記素の境で切る）。残りは描かず、その数を返す。行の中身は先頭しか読まない。
@@ -90,6 +154,9 @@ final class LineShaperTests: XCTestCase {
     XCTAssertEqual(omitted, long.utf16.count - 9_999)
     let shaped = LineShaper.shape(line, font: font, tabWidth: cell * 4)
     XCTAssertEqual(shaped.omitted, omitted)
+    let thai = String(repeating: "a", count: 9_999) + "กำ" + String(repeating: "b", count: 100)
+    let thaiLine = LineShaper.source(row: 0, in: TextRope(thai)).source
+    XCTAssertEqual(LineShaper.display(thaiLine).units.count, 9_999, "タイ語の SARA AM も書記素ごと")
   }
 
   /// 組んだ字は元の行の位置を持つ（色を役割から引くため）。

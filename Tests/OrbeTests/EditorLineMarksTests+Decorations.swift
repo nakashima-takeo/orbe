@@ -57,7 +57,7 @@ extension EditorLineMarksTests {
 
     try Data("f {\n  a\n    b\n\t\tc\n}\n".utf8).write(to: hosted.document.url)
     hosted.document.reconcileWithDisk()
-    XCTAssertEqual(hosted.document.indentUnit, 2)
+    XCTAssertEqual(hosted.document.indentation.unit, 2)
     waitDrawn { try self.hasInk(ground, col(2), self.rowMidY(3)) }
     XCTAssertFalse(try hasInk(ground, col(4), rowMidY(2)), "単位 2 の 1 段の行に 4 桁目の線は無い")
     XCTAssertFalse(try hasInk(ground, col(8), rowMidY(3)), "2 段の行に 8 桁目の線は無い")

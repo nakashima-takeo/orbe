@@ -242,7 +242,7 @@ final class EditorDocumentDiskTests: XCTestCase {
     let before = document.roles.roles(in: all)
     XCTAssertFalse(before.isEmpty, "前提: 色が付いている")
     var edits: [TextEdit] = []
-    document.onTextChange = { edits.append($0) }
+    document.onTextChange = { edits.append(contentsOf: $0.map(\.edit)) }
 
     try Data(source.replacingOccurrences(of: "value25 = 25", with: "value25 = 99").utf8).write(
       to: url)

@@ -36,7 +36,6 @@ final class MinimapChunks {
   private let style: MinimapStyle
   private var images: [Int: Entry] = [:]
   private var uses = 0
-  private var lineCount = 0
   private var canvas: Canvas?
   private var indentUnit = 0
   private var sheet: MinimapCharSheet?
@@ -48,20 +47,21 @@ final class MinimapChunks {
   var cached: Set<Int> { Set(images.keys) }
 
   /// 文書を結び直した。
-  func reset(lineCount: Int) {
+  func reset() {
     images.removeAll()
-    self.lineCount = lineCount
   }
 
-  /// 本文が変わった。
-  func textDidChange(_ edit: TextEdit, text: TextRope) {
-    let editLine = text.row(containing: edit.range.location)
-    if text.lineCount != lineCount {
-      lineCount = text.lineCount
-      let first = editLine / Self.lines
-      images = images.filter { $0.key < first }
+  /// 本文が変わった（適用した順の編集の列）。編集ごとにその時点の行で、変わった行のチャンクを
+  /// 捨て、行の数が変わればその行から後ろを全部捨てる——残るチャンクは、どの編集の後も中身の行が変わっていない。
+  func textDidChange(_ edits: [VersionedEdit]) {
+    for edit in edits {
+      let first = edit.start.row / Self.lines
+      if edit.newEnd.row != edit.oldEnd.row {
+        images = images.filter { $0.key < first }
+      } else {
+        for chunk in first...(edit.oldEnd.row / Self.lines) { images[chunk] = nil }
+      }
     }
-    drop(covering: edit.newRange, text: text)
   }
 
   /// 役割が変わった。
@@ -78,11 +78,11 @@ final class MinimapChunks {
 
   /// チャンクの画像。覚えていればそれを、無ければ組んで覚える。
   func image(_ chunk: Int, document: EditorDocument, canvas: Canvas) -> CGImage? {
-    if canvas != self.canvas || document.indentUnit != indentUnit {
+    if canvas != self.canvas || document.indentation.unit != indentUnit {
       images.removeAll()
       if canvas.scale != self.canvas?.scale { sheet = nil }
       self.canvas = canvas
-      indentUnit = document.indentUnit
+      indentUnit = document.indentation.unit
     }
     uses += 1
     if let entry = images[chunk] {
@@ -131,7 +131,7 @@ final class MinimapChunks {
       }
       let cells = MinimapLine.cells(
         units[from..<end], lineStart: lineStart, roles: roles[roleIndex...],
-        tabSize: document.indentUnit, columns: columns)
+        tabSize: document.indentation.unit, columns: columns)
       let dy = (row - rows.lowerBound) * lineHeight
       for cell in cells {
         let color = cell.role.flatMap { colors[$0] } ?? colors.text

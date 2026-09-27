@@ -21,7 +21,7 @@ final class FakeTextSurface: TextSurface {
     didSet { delegate?.surfaceDidChangeSelection(self) }
   }
   var caretLocation: Int { NSMaxRange(selectedRange) }
-  private(set) var indentUnit = IndentUnit.fallback
+  private(set) var indentation = Indentation.fallback
 
   init(text: String) {
     storage = NSMutableString(string: text)
@@ -70,7 +70,7 @@ final class FakeTextSurface: TextSurface {
 
   func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {}
 
-  func setIndentUnit(_ unit: Int) { indentUnit = unit }
+  func setIndentation(_ indentation: Indentation) { self.indentation = indentation }
 
   /// 契約の後条件どおり、置き換え後の選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。
   func replaceAll(with text: String) {
@@ -82,7 +82,16 @@ final class FakeTextSurface: TextSurface {
   /// 編集を起こす（人の打鍵に相当）。
   func replace(_ range: NSRange, with replacement: String) {
     storage.replaceCharacters(in: range, with: replacement)
-    delegate?.surface(self, didChange: TextEdit(range: range, replacement: replacement))
+    delegate?.surface(self, didChange: [TextEdit(range: range, replacement: replacement)])
+  }
+
+  /// 編集の束を起こす（1 回の操作が複数の区間を変える）。範囲は束の前の本文の座標。
+  func apply(_ edits: [TextEdit]) {
+    for edit in edits.reversed() {
+      storage.replaceCharacters(
+        in: edit.range, with: String(decoding: edit.replacement, as: UTF16.self))
+    }
+    delegate?.surface(self, didChange: edits)
   }
 
   func focus(_ focused: Bool) {

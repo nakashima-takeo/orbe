@@ -4,9 +4,9 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 新しい面の契約——文書の写しを引いて描く・見えている範囲の通知・main の操作のスクロール・外観に従う色・読むだけ。
-/// 壊れると俯瞰と構文色の見えている範囲が本文とずれる、⌘F の次・前で一致が見えない、印や色や字が古い本文で描かれる、
-/// ライト・ダークを切り替えても字が前の外観の色のまま、打鍵で本文が変わる。
+/// 新しい面の契約——文書の写しを引いて描く・見えている範囲の通知・main の操作のスクロール・外観に従う色。壊れると俯瞰と
+/// 構文色の見えている範囲が本文とずれる、⌘F の次・前で一致が見えない、印や色や字が古い本文で描かれる、ライト・ダークを
+/// 切り替えても字が前の外観の色のまま。
 @MainActor
 final class MetalTextSurfaceTests: EngineTestCase {
   private func lines(_ count: Int, width: Int = 10) -> String {
@@ -49,11 +49,15 @@ final class MetalTextSurfaceTests: EngineTestCase {
     let target = text.lineStart(10) + 280
     opened.surface.scrollToVisible(NSRange(location: target, length: 1))
     XCTAssertEqual(opened.surface.viewport.firstVisible, 0, "縦は見えているので動かない")
-    XCTAssertGreaterThan(opened.surface.viewport.hiddenColumns, 0, "横に寄る")
+    _ = opened.surface.snapshot()
+    pump(
+      until: { opened.surface.viewport.hiddenColumns > 0 },
+      "横は描画スレッドが行を組んで寄せ、見えている範囲を知らせ直す")
     let columns = opened.surface.viewport
     XCTAssertLessThanOrEqual(281, columns.hiddenColumns + columns.visibleColumns + 0.5)
     opened.surface.scrollToVisible(NSRange(location: text.lineStart(80), length: 0))
-    XCTAssertEqual(opened.surface.viewport.hiddenColumns, 0, "行頭へ戻る")
+    _ = opened.surface.snapshot()
+    pump(until: { opened.surface.viewport.hiddenColumns == 0 }, "行頭へ戻る")
     XCTAssertGreaterThan(opened.document.viewportLines.first, 40, "下の行が見えるまで送る")
   }
 
@@ -77,28 +81,6 @@ final class MetalTextSurfaceTests: EngineTestCase {
     opened.surface.view.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: event)))
     XCTAssertEqual(notified, 1)
     XCTAssertEqual(opened.document.viewportLines.first, 5, accuracy: 1e-9)
-  }
-
-  /// 読むだけ——打鍵・クリックで本文は変わらず、落ちない。
-  func testKeysDoNotChangeTheText() throws {
-    let opened = try open("let a = 1\n")
-    let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.borderless],
-      backing: .buffered, defer: false)
-    window.contentView = opened.surface.view
-    window.makeFirstResponder(opened.surface.responder)
-    for key in ["a", "\r", "\u{7f}"] {
-      let event = try XCTUnwrap(
-        NSEvent.keyEvent(
-          with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
-          context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false,
-          keyCode: 0))
-      opened.surface.responder.keyDown(with: event)
-    }
-    XCTAssertFalse(opened.surface.responder.tryToPerform(Selector(("copy:")), with: nil))
-    XCTAssertEqual(opened.document.version, 0)
-    XCTAssertFalse(opened.document.isDirty)
-    window.contentView = nil
   }
 
   /// 本文の丸ごとの置き換え（外部変更の差し替え）は文書へ渡り、戻ったら新しい写しを描く。キャレットは収まる。
@@ -198,8 +180,9 @@ final class MetalTextSurfaceTests: EngineTestCase {
     let opened = try open(wide)
     _ = opened.surface.snapshot()
     opened.surface.scrollToVisible(NSRange(location: 250, length: 0))
+    _ = opened.surface.snapshot()
+    pump(until: { opened.surface.viewport.hiddenColumns > 0 })
     let hidden = opened.surface.viewport.hiddenColumns
-    XCTAssertGreaterThan(hidden, 0)
     opened.surface.replaceAll(with: "y" + wide)
     XCTAssertEqual(opened.surface.viewport.hiddenColumns, hidden, "差し替えただけでは動かない")
     _ = opened.surface.snapshot()
@@ -248,13 +231,4 @@ final class MetalTextSurfaceTests: EngineTestCase {
   }
 
   /// 描画スレッドからの非同期の知らせを受けるまで main を回す（条件が無ければ 1 巡りだけ）。
-  private func pump(
-    until condition: () -> Bool = { true }, _ message: String = "", timeout: TimeInterval = 5
-  ) {
-    let deadline = Date().addingTimeInterval(timeout)
-    repeat {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    } while !condition() && Date() < deadline
-    XCTAssertTrue(condition(), message)
-  }
 }

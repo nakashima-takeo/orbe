@@ -46,7 +46,7 @@ public enum MinimapLine {
         while role < roles.endIndex, NSMaxRange(roles[role].range) <= offset { role += 1 }
         let span = role < roles.endIndex && roles[role].range.location <= offset ? roles[role] : nil
         let glyph = glyph(of: unit)
-        for _ in 0..<(isFullWidth(unit) ? 2 : 1) {
+        for _ in 0..<(CharacterWidth.isFullWidth(UInt32(unit)) ? 2 : 1) {
           guard column < columns else { break }
           result.append(MinimapCell(column: column, glyph: glyph, role: span?.role))
           column += 1
@@ -64,7 +64,7 @@ public enum MinimapLine {
     var result = [0]
     var column = 0
     for unit in units {
-      column += unit == 0x09 ? tabSize : isFullWidth(unit) ? 2 : 1
+      column += unit == 0x09 ? tabSize : CharacterWidth.isFullWidth(UInt32(unit)) ? 2 : 1
       if column >= limit {
         result.append(limit)
         break
@@ -88,9 +88,4 @@ public enum MinimapLine {
     return code >= 0 && code < glyphCount ? code : (code + glyphCount) % glyphCount
   }
 
-  /// VS Code `strings.isFullWidthCharacter`。
-  public static func isFullWidth(_ unit: UInt16) -> Bool {
-    (0x2E80...0xD7AF).contains(unit) || (0xF900...0xFAFF).contains(unit)
-      || (0xFF01...0xFF5E).contains(unit) || (0xFFE0...0xFFE6).contains(unit)
-  }
 }

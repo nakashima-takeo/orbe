@@ -11,7 +11,7 @@ final class LineDecorationView: NSView {
   private weak var textView: STTextView?
   private let style: TextSurfaceStyle.Decorations
   private let textColor: NSColor
-  var indentUnit = IndentUnit.fallback {
+  var indentUnit = Indentation.fallback.unit {
     didSet { needsDisplay = true }
   }
 

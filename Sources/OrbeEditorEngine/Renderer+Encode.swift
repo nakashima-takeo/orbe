@@ -40,7 +40,7 @@ extension Renderer {
     return buffers.count - 1
   }
 
-  /// 下から、本文の字（行番号の列の右だけ）→ 色付きの字 → 行番号 → git の印。
+  /// 下から、選択の地 → 本文の字（行番号の列の右だけ）→ 色付きの字 → 行番号 → git の印 → キャレット。
   func encode(
     _ built: FrameBuilder, buffer: MTLBuffer, into texture: MTLTexture, _ pass: Pass,
     _ commands: MTLCommandBuffer
@@ -79,28 +79,35 @@ extension Renderer {
           type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: items.count)
       }
     }
+    func shapes(_ items: [ShapeInstance]) {
+      guard let start = upload(items) else { return }
+      encoder.setRenderPipelineState(pass.pipelines.shape)
+      encoder.setVertexBuffer(buffer, offset: start, index: 0)
+      encoder.drawPrimitives(
+        type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: items.count)
+    }
     encoder.setScissorRect(built.textScissor)
+    shapes(built.underShapes)
     glyphs(built.text, pass.atlas.monoPages, pass.pipelines.mono)
     glyphs(built.color, pass.atlas.colorPages, pass.pipelines.color)
     encoder.setScissorRect(built.gutterScissor)
     glyphs(built.gutter, pass.atlas.monoPages, pass.pipelines.mono)
-    if let start = upload(built.shapes) {
-      encoder.setRenderPipelineState(pass.pipelines.shape)
-      encoder.setVertexBuffer(buffer, offset: start, index: 0)
-      encoder.drawPrimitives(
-        type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: built.shapes.count)
-    }
+    shapes(built.shapes)
+    encoder.setScissorRect(built.textScissor)
+    shapes(built.overShapes)
     encoder.endEncoding()
   }
 
   // MARK: - 撮影
 
-  /// 今の位置の 1 コマを画面外に描いた絵（面が描く色空間の絵）。`background` を与えればその不透明な地に描く（無ければ
-  /// 透明な地）。シェーダのコンパイルが済むまで待つ。
+  /// 今の位置の 1 コマを画面外に描いた絵（面が描く色空間の絵。キャレットは点滅の位相に依らず、焦点があれば描く——撮影を
+  /// 時刻に依らせない）。`background` を与えればその不透明な地に描く（無ければ透明な地）。シェーダのコンパイルが済むまで
+  /// 待つ。
   func snapshot(_ id: Int, background: MTLClearColor? = nil) -> CGImage? {
     guard let slot = slot(id), let pipelines = gate.wait() else { return nil }
     let material = slot.material.take()
     slot.lines.receive(material.rowEdits)
+    slot.keystrokes += material.keystrokes
     let (width, height) = Self.pixelSize(material)
     guard material.content != nil, material.palette != nil, width > 0, height > 0 else {
       return nil
@@ -114,15 +121,17 @@ extension Renderer {
     else { return nil }
     let atlas = atlas(scale: material.scale, space: material.space)
     if atlas.isFull { atlas.reset() }
+    let revealed = begin(slot, material)
     let built = slot.builder
     built.build(
       FrameBuilder.Source(
         material: material, position: slot.scroll.peek(at: CACurrentMediaTime()).position,
+        caretVisible: material.caret.showsCaret,
         pixels: (width, height), atlas: atlas, config: slot.config), cache: slot.lines, fonts: fonts
     )
-    if slot.scroll.measured(longestLine: built.longestLine, version: material.content?.version) {
-      slot.notify()
-    }
+    let widened = slot.scroll.measured(
+      longestLine: built.longestLine, version: material.content?.version)
+    if widened || revealed { slot.notify() }
     guard
       let buffer = device.makeBuffer(
         length: max(built.byteCount, 256), options: .storageModeShared)

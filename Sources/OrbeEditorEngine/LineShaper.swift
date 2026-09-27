@@ -3,7 +3,7 @@ import Foundation
 import OrbeEditorCore
 
 /// 1 行を組んだ結果——run ごとのフォント・グリフ・位置（pt、行頭の基線から。y は上が正で、結合文字の記号などだけが
-/// 0 でない）・元の行の UTF-16 の位置（色を引くため）と、行の幅、上限で打ち切って描かない UTF-16 の単位の数。
+/// 0 でない）・元の行の UTF-16 の位置（色を引くため）と、行の幅、上限で打ち切って描かない UTF-16 の単位の数、組んだ行。
 struct ShapedLine {
   struct Run {
     let font: CTFont
@@ -16,31 +16,12 @@ struct ShapedLine {
   let runs: [Run]
   let width: CGFloat
   let omitted: Int
+  /// 組んだ行（位置と x の対応を作り、x にいちばん近い位置を引く）。
+  let line: CTLine
+
+  /// 行の中の位置と x の対応（キャレット・選択の地のある行だけが要る——作る手間は行の長さに比例する）。
+  var carets: CaretMap { CaretMap(line, width: width) }
 }
-
-/// main が横の位置を問うために 1 度組んだ行。幅も行の中の位置の x もこの値に問い、同じ行を何度も組まない。`CTLine` を
-/// 持つので、組んだスレッドの外へ出さない。
-struct MeasuredLine {
-  private let line: CTLine
-  /// 描いた単位の数（打ち切った分を除く）。
-  private let displayed: Int
-  let width: CGFloat
-
-  fileprivate init(_ line: CTLine, displayed: Int) {
-    self.line = line
-    self.displayed = displayed
-    width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
-  }
-
-  /// 行の中の位置 `offset`（UTF-16）の字の左端の x（pt）。描かない部分は描いた部分の右端。
-  func x(ofOffset offset: Int) -> CGFloat {
-    guard offset < displayed else { return width }
-    return CTLineGetOffsetForStringIndex(line, max(0, offset), nil)
-  }
-}
-
-@available(*, unavailable)
-extension MeasuredLine: Sendable {}
 
 /// 行の組版の規則（純関数）。描画スレッドと、横の位置が要る main の操作が同じ規則を使う。
 ///
@@ -53,7 +34,7 @@ extension MeasuredLine: Sendable {}
 enum LineShaper {
   static let limit = 10_000
   /// 書記素の境を探すために、上限より余分に読む単位の数。
-  private static let lookahead = 64
+  private static let lookahead = Grapheme.reach
 
   /// 行の中身のうち描きうる先頭（上限と余分まで）と、行の長さ（行末の改行と `\r` を除く）。長い行でも読むのは先頭だけ。
   struct Source: Hashable {
@@ -111,12 +92,10 @@ enum LineShaper {
   /// `limit` 以下で最も後ろの書記素の境（1 つの書記素が上限を越えるほど長ければ `limit`）。上限の位置の前後だけを見る
   /// （行頭から書記素を数えると、長い行を組むたびに 10000 字を歩く）。
   private static func graphemeCut(_ head: ContiguousArray<UInt16>) -> Int {
-    let cluster = head.withUnsafeBufferPointer {
-      let string = CFStringCreateWithCharactersNoCopy(
-        nil, $0.baseAddress, $0.count, kCFAllocatorNull)!
-      return CFStringGetRangeOfComposedCharactersAtIndex(string, limit)
-    }
-    return cluster.location > 0 ? cluster.location : limit
+    let cluster = Grapheme.cluster(
+      containing: limit, count: head.count, unit: { head[$0] }, units: { ContiguousArray(head[$0]) }
+    )
+    return cluster.lowerBound > 0 ? cluster.lowerBound : limit
   }
 
   /// 行を組む。`tabWidth` はタブの刻み（pt）。
@@ -130,14 +109,6 @@ enum LineShaper {
   static func shape(_ string: String, font: CTFont) -> ShapedLine {
     let line = makeLine(ContiguousArray(string.utf16), boxes: [:], font: font, tabWidth: 0)
     return ShapedLine(line, omitted: 0, boxes: [:], font: font)
-  }
-
-  /// 横の位置を問うために行を 1 度組む（main）。
-  static func measure(_ source: Source, font: CTFont, tabWidth: CGFloat) -> MeasuredLine {
-    let shown = display(source)
-    return MeasuredLine(
-      makeLine(shown.units, boxes: shown.boxes, font: font, tabWidth: tabWidth),
-      displayed: shown.units.count)
   }
 
   private static func makeLine(
@@ -253,6 +224,92 @@ extension ShapedLine {
           offsets: indices))
     }
     self.init(
-      runs: runs, width: CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)), omitted: omitted)
+      runs: runs, width: CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)), omitted: omitted,
+      line: line)
+  }
+}
+
+/// 行の中の位置と x の対応。描画スレッド（キャレット・選択の地・横の「見えるところまで」）と main（↑↓の横位置）が同じ
+/// 対応を使うので、キャレット・選択の地の端が描いた字と食い違わない（クリックの当たりは同じ組版の行から Core Text が引く）。組んだ行の双方向の対応
+/// （`CTLineEnumerateCaretOffsets` の字ごとの前と後ろの縁）から作り、右から左の字の並びでも字の見た目の位置に合う。
+struct CaretMap: Sendable {
+  /// 見た目の順（左から右）の run——元の行の区間と、右から左か。
+  struct Run: Sendable {
+    let range: Range<Int>
+    let rightToLeft: Bool
+  }
+
+  /// 位置 i（0...描く単位の数）のキャレットの x。主は i の前の字の後ろの縁（先頭は最初の字の前の縁）、副は i の字の前の
+  /// 縁（末尾は最後の字の後ろの縁）——`CTLineGetOffsetForStringIndex` の主と副。書記素の内側の位置は、次の境の x。
+  private let primary: [Float]
+  private let secondary: [Float]
+  let runs: [Run]
+  let width: CGFloat
+
+  init(_ line: CTLine, width: CGFloat) {
+    let count = CTLineGetStringRange(line).length
+    var leading = [Float](repeating: .nan, count: count)
+    var trailing = [Float](repeating: .nan, count: count)
+    CTLineEnumerateCaretOffsets(line) { offset, index, isLeading, _ in
+      guard index >= 0, index < count else { return }
+      if isLeading { leading[index] = Float(offset) } else { trailing[index] = Float(offset) }
+    }
+    var primary = [Float](repeating: .nan, count: count + 1)
+    var secondary = [Float](repeating: .nan, count: count + 1)
+    for i in 0...count {
+      primary[i] = i == 0 ? (count > 0 ? leading[0] : 0) : trailing[i - 1]
+      secondary[i] = i == count ? (count > 0 ? trailing[count - 1] : 0) : leading[i]
+    }
+    var next = Float(width)
+    for i in stride(from: count, through: 0, by: -1) {
+      if primary[i].isNaN { primary[i] = secondary[i].isNaN ? next : secondary[i] }
+      if secondary[i].isNaN { secondary[i] = primary[i] }
+      next = primary[i]
+    }
+    self.primary = primary
+    self.secondary = secondary
+    runs = (CTLineGetGlyphRuns(line) as? [CTRun] ?? []).map { run in
+      let range = CTRunGetStringRange(run)
+      return Run(
+        range: range.location..<range.location + range.length,
+        rightToLeft: CTRunGetStatus(run).contains(.rightToLeft))
+    }
+    self.width = width
+  }
+
+  /// 描く単位の数（これより後ろの位置は、描いた部分の右端）。
+  var count: Int { primary.count - 1 }
+
+  /// 位置のキャレットの x（主）。
+  func x(_ offset: Int) -> CGFloat {
+    offset > count ? width : CGFloat(primary[max(0, offset)])
+  }
+
+  /// 元の行の区間 `from..<to` を塗る見た目の区間（左から右）。右から左の字を挟めば、論理の 1 区間が見た目では複数に分かれる。
+  func segments(from: Int, to: Int) -> [ClosedRange<CGFloat>] {
+    let from = max(0, from)
+    let to = min(to, count)
+    var result: [ClosedRange<CGFloat>] = []
+    for run in runs {
+      let lower = max(from, run.range.lowerBound)
+      let upper = min(to, run.range.upperBound)
+      guard lower < upper else { continue }
+      let a = CGFloat(secondary[lower])
+      let b = CGFloat(primary[upper])
+      let segment = min(a, b)...max(a, b)
+      if let last = result.last, segment.lowerBound <= last.upperBound {
+        result[result.count - 1] = last.lowerBound...max(last.upperBound, segment.upperBound)
+      } else {
+        result.append(segment)
+      }
+    }
+    return result
+  }
+}
+
+extension ShapedLine {
+  /// 字の元の位置と x の列（run をまたいで並べたもの。x は左から右へ増えていく）。
+  var stops: (offsets: [Int], xs: [CGFloat]) {
+    (runs.flatMap(\.offsets), runs.flatMap(\.xs))
   }
 }

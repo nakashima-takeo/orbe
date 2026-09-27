@@ -31,4 +31,18 @@ extension EditorDocument {
     let row = Int(floor(clamped))
     surface.scroll(toTop: text.lineStart(row), hiddenFraction: clamped - CGFloat(row))
   }
+
+  /// 面の行番号の列が問う行の数・オフセットの行・行の区間（`TextSurfaceDelegate`）。
+  public func surfaceLineCount(_ surface: any TextSurface) -> Int {
+    text.lineCount
+  }
+
+  public func surface(_ surface: any TextSurface, lineContaining offset: Int) -> Int {
+    text.row(containing: offset)
+  }
+
+  public func surface(_ surface: any TextSurface, rangeOfLine line: Int) -> NSRange {
+    let start = text.lineStart(line)
+    return NSRange(location: start, length: text.lineEnd(line) - start)
+  }
 }

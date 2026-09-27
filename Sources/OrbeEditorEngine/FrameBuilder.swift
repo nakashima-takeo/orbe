@@ -20,8 +20,9 @@ struct ShapeInstance {
   var pad: UInt32 = 0
 }
 
-/// 1 コマの中身を組み立てる（描画スレッドだけ。配列は面ごとに使い回す）。下から順に、本文の字と長い行の「ほか N 字」
-/// （行番号の列の右だけ）→ 色付きの字（絵文字など）→ 行番号 → git の印。地は描かない（透明に消し、下の地を透かす）。
+/// 1 コマの中身を組み立てる（描画スレッドだけ。配列は面ごとに使い回す）。下から順に、選択の地 → 本文の字と長い行の
+/// 「ほか N 字」（行番号の列の右だけ）→ 色付きの字（絵文字など）→ 行番号 → git の印 → キャレット。地は描かない（透明
+/// に消し、下の地を透かす）。
 ///
 /// 行の位置は y = 上端の余白 + 行 × 行高で、折り返さない。見えている行だけその場で組版し（キャッシュする）、字の色は
 /// 行ごとに、横に見えている字の区間の役割を役割の並びから引いて決める（長い行でも行全体の役割は引かない）。スクロール量
@@ -31,6 +32,10 @@ final class FrameBuilder {
   private(set) var color: [[GlyphInstance]] = []
   private(set) var gutter: [[GlyphInstance]] = []
   var shapes: [ShapeInstance] = []
+  /// 選択の地（本文の字の下。本文の列に切り取る）。
+  var underShapes: [ShapeInstance] = []
+  /// キャレット（いちばん上。本文の列に切り取る）。
+  var overShapes: [ShapeInstance] = []
   private(set) var textScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
   private(set) var gutterScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
   /// 組んだ行のうち最も長い幅（pt。末尾の「ほか N 字」を含む）。
@@ -42,7 +47,9 @@ final class FrameBuilder {
     let glyphs = glyphArrays.reduce(0) {
       $0 + (($1.count * MemoryLayout<GlyphInstance>.stride + 255) & ~255)
     }
-    return glyphs + ((shapes.count * MemoryLayout<ShapeInstance>.stride + 255) & ~255)
+    return [shapes, underShapes, overShapes].reduce(glyphs) {
+      $0 + (($1.count * MemoryLayout<ShapeInstance>.stride + 255) & ~255)
+    }
   }
 
   /// px の座標系（左上が原点）。
@@ -64,6 +71,8 @@ final class FrameBuilder {
   struct Context {
     let g: Geometry
     let palette: FramePalette
+    /// 面に焦点があるか（選択の地の色）。
+    let focused: Bool
     let atlas: GlyphAtlas
     let config: SurfaceConfig
   }
@@ -72,17 +81,22 @@ final class FrameBuilder {
   struct Source {
     let material: FrameMaterial
     let position: SIMD2<Double>
+    /// このコマでキャレットを描くか（点滅と焦点）。
+    let caretVisible: Bool
     /// 描く先の大きさ（px）。
     let pixels: (width: Int, height: Int)
     let atlas: GlyphAtlas
     let config: SurfaceConfig
   }
 
+  /// コマを組む（組版のキャッシュのコマは呼び手が始めてある——`Renderer.begin`）。
   func build(_ source: Source, cache: LineLayoutCache, fonts: FontRegistry) {
     for i in text.indices { text[i].removeAll(keepingCapacity: true) }
     for i in color.indices { color[i].removeAll(keepingCapacity: true) }
     for i in gutter.indices { gutter[i].removeAll(keepingCapacity: true) }
     shapes.removeAll(keepingCapacity: true)
+    underShapes.removeAll(keepingCapacity: true)
+    overShapes.removeAll(keepingCapacity: true)
     longestLine = 0
     let config = source.config
     guard let content = source.material.content, let palette = source.material.palette else {
@@ -95,7 +109,9 @@ final class FrameBuilder {
       scrollX: (source.position.x * s).rounded(), scrollY: (source.position.y * s).rounded(),
       top: (Double(config.topInset) * s).rounded(), lineHeight: Double(config.lineHeight) * s,
       column: (Double(config.columnWidth(lineCount: lineCount)) * s).rounded())
-    let c = Context(g: g, palette: palette, atlas: source.atlas, config: config)
+    let c = Context(
+      g: g, palette: palette, focused: source.material.caret.focused, atlas: source.atlas,
+      config: config)
     textScissor = Self.scissor(x: g.column, y: g.top, g)
     gutterScissor = Self.scissor(x: 0, y: g.top, width: g.column, g)
     guard g.height > g.top else { return }
@@ -106,15 +122,31 @@ final class FrameBuilder {
     let baseline = (Double(config.baseline) * s).rounded()
     let numberFont = fonts.id(config.gutterFont)
     let tabColumns = source.material.tabColumns
-    cache.beginFrame(version: content.version, tabColumns: tabColumns)
+    var start = content.text.lineStart(first)
+    var selections = SelectionCursor(source.material.caret.selections, from: start)
+    let carets = (source.caretVisible ? source.material.caret.carets : []).map {
+      (row: content.text.row(containing: $0), offset: $0)
+    }
     for row in first...last {
       let top = g.rowTop(row)
+      let end = content.text.lineEnd(row)
+      let selected = selections.remaining ? selections.next(in: start..<end) : []
       let laid = cache.line(
-        row: row, in: content.text, tabColumns: tabColumns, config: config, fonts: fonts)
-      let width = drawText(
-        laid, start: content.text.lineStart(row), roles: content.roles, baseline: top + baseline, c)
+        row: row, in: content.text, tabColumns: tabColumns, config: config, fonts: fonts,
+        carets: !selected.isEmpty || carets.contains { $0.row == row })
+      if !selected.isEmpty {
+        let lineContent = content.text.contentRange(ofRow: row)
+        for selection in selected {
+          drawSelection(selection, laid, content: lineContent, rowTop: top, c)
+        }
+      }
+      for caret in carets where caret.row == row {
+        drawCaret(at: caret.offset - start, laid, rowTop: top, c)
+      }
+      let width = drawText(laid, start: start, roles: content.roles, baseline: top + baseline, c)
       longestLine = max(longestLine, width)
       drawNumber(row + 1, rowTop: top, font: numberFont, c)
+      start = end
     }
     cache.endFrame()
     drawMarks(source.material.marks, rows: first...last, c)
@@ -228,8 +260,8 @@ enum FrameBuilderLayer {
 /// 昇順の役割の区間を、おおむね増えていくオフセットで引く（右から左の字の塊の中のように、前の区間の終わりより前へ戻れば
 /// 二分探索で引き直す）。
 struct RoleCursor {
-  let spans: [HighlightSpan]
-  var index = 0
+  private let spans: [HighlightSpan]
+  private var index = 0
 
   init(spans: [HighlightSpan]) {
     self.spans = spans

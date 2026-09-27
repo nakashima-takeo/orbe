@@ -7,9 +7,6 @@ public enum Occurrences {
   public static let limit = 999
   /// 選択文字列の出現を出す選択の長さの上限（UTF-16。VS Code `selectionHighlightMaxLength`）。
   public static let maxSelectionLength = 200
-  /// VS Code `USUAL_WORD_SEPARATORS`。
-  private static let separators = Set(separatorCharacters.utf16)
-  private static let separatorCharacters = "`~!@#$%^&*()-=+[{]}\\|;:'\",.<>/?"
 
   /// 選択文字列の他の出現（大小無視・語の境界なし）。選択自身と、選択より前に始まって選択と交差する一致は除く。
   /// 選択が空・複数行・空白だけ・長すぎるときと、検索バーがその文字列を探しているとき（`findNeedle` と大小無視で同じ、
@@ -92,7 +89,7 @@ public enum Occurrences {
   /// VS Code の既定の語の正規表現（`DEFAULT_WORD_REGEXP`）。JS の `\d`・`\w` は ASCII だけに当たる（u フラグ無し）ので、
   /// Unicode 全体に当たる ICU の `\d`・`\w` は使わず ASCII の文字クラスで書く。
   private static let wordPattern: NSRegularExpression = {
-    let escaped = separatorCharacters.map { "\\\($0)" }.joined()
+    let escaped = WordSeparators.characters.map { "\\\($0)" }.joined()
     // swiftlint:disable:next force_try
     return try! NSRegularExpression(
       pattern: "(-?[0-9]*\\.[0-9][A-Za-z0-9_]*)|([^\(escaped)\\s]+)")
@@ -100,7 +97,8 @@ public enum Occurrences {
 
   /// 区切り（区切り文字・空白・改行）か。
   private static func isSeparator(_ unit: UInt16) -> Bool {
-    separators.contains(unit) || unit == 0x20 || unit == 0x09 || unit == 0x0A || unit == 0x0D
+    WordSeparators.units.contains(unit) || unit == 0x20 || unit == 0x09 || unit == 0x0A
+      || unit == 0x0D
   }
 
   private static func isWordBoundary(before range: NSRange, in string: NSString) -> Bool {

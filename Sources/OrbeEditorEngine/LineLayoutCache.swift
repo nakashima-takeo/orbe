@@ -17,6 +17,8 @@ struct LaidOutLine {
   /// 打ち切って描かない単位の数と、行末に出す印（打ち切っていなければ nil）。
   var omitted = 0
   var omittedMark: OmittedMark?
+  /// 行の中の位置と x の対応（キャレット・選択の地・横の「見えるところまで」が要る行だけ。要るまで作らない）。
+  var carets: CaretMap?
 
   struct OmittedMark {
     var fonts: [UInt16]
@@ -55,10 +57,10 @@ final class LineLayoutCache {
   }
 
   private struct Entry {
-    let line: LaidOutLine
+    var line: LaidOutLine
     var used: UInt64
-    /// 持つ単位の数（行の中身とグリフ）。
-    let weight: Int
+    /// 持つ単位の数（行の中身・グリフ・キャレットの位置）。
+    var weight: Int
   }
 
   static let capacity = 4096
@@ -92,20 +94,23 @@ final class LineLayoutCache {
     }
     rowsVersion = version
     rowsTabColumns = tabColumns
+    frameRows.removeAll(keepingCapacity: true)
     shapedInFrame = 0
   }
 
-  /// このコマで描く行 `row` の組んだ結果。
+  /// このコマで描く行 `row` の組んだ結果。`carets` なら位置と x の対応も持たせる。
   func line(
-    row: Int, in text: TextRope, tabColumns: Int, config: SurfaceConfig, fonts: FontRegistry
+    row: Int, in text: TextRope, tabColumns: Int, config: SurfaceConfig, fonts: FontRegistry,
+    carets: Bool = false
   ) -> LaidOutLine {
-    let laid =
-      drawnRows[row]
-      ?? line(
+    var laid = drawnRows[row]
+    if laid == nil || (carets && laid?.carets == nil) {
+      laid = line(
         LineShaper.source(row: row, in: text).source, tabColumns: tabColumns, config: config,
-        fonts: fonts)
+        fonts: fonts, carets: carets)
+    }
     frameRows[row] = laid
-    return laid
+    return laid!
   }
 
   /// コマを組み終えた。このコマで描いた行が、次のコマの「前のコマで描いた行」になる。
@@ -128,27 +133,40 @@ final class LineLayoutCache {
     return result
   }
 
-  /// 行の中身 `source` の組んだ結果。
+  /// 行の中身 `source` の組んだ結果。`carets` なら位置と x の対応も持たせる（覚えた結果に無ければ組み直して足す）。
   func line(
-    _ source: LineShaper.Source, tabColumns: Int, config: SurfaceConfig, fonts: FontRegistry
+    _ source: LineShaper.Source, tabColumns: Int, config: SurfaceConfig, fonts: FontRegistry,
+    carets: Bool = false
   ) -> LaidOutLine {
     clock += 1
     let key = Key(source: source, tabColumns: tabColumns)
+    let shape = {
+      LineShaper.shape(source, font: config.font, tabWidth: config.tabWidth(columns: tabColumns))
+    }
     if let index = entries.index(forKey: key) {
       entries.values[index].used = clock
+      if carets, entries.values[index].line.carets == nil {
+        shapedInFrame += 1
+        let map = shape().carets
+        entries.values[index].line.carets = map
+        entries.values[index].weight += map.count
+        weight += map.count
+      }
       return entries.values[index].line
     }
     shapedInFrame += 1
-    var line = LaidOutLine(
-      LineShaper.shape(source, font: config.font, tabWidth: config.tabWidth(columns: tabColumns)),
-      fonts: fonts)
+    let shaped = shape()
+    var line = LaidOutLine(shaped, fonts: fonts)
+    if carets { line.carets = shaped.carets }
     if line.omitted > 0 {
       let mark = LaidOutLine(
         LineShaper.shape(config.omittedLabel(line.omitted), font: config.font), fonts: fonts)
       line.omittedMark = LaidOutLine.OmittedMark(
         fonts: mark.fonts, glyphs: mark.glyphs, xs: mark.xs, width: mark.width)
     }
-    let entry = Entry(line: line, used: clock, weight: source.head.count + line.glyphs.count)
+    let entry = Entry(
+      line: line, used: clock,
+      weight: source.head.count + line.glyphs.count + (line.carets?.count ?? 0))
     while !entries.isEmpty,
       entries.count >= Self.capacity || weight + entry.weight > Self.weightBudget
     {

@@ -176,9 +176,9 @@ final class EditorTextSurfaceTests: OrbeTestCase {
       self.inner = inner
       self.record = record
     }
-    func surface(_ surface: any TextSurface, didChange edit: TextEdit) {
-      record(edit)
-      inner.surface(surface, didChange: edit)
+    func surface(_ surface: any TextSurface, didChange edits: [TextEdit]) {
+      edits.forEach(record)
+      inner.surface(surface, didChange: edits)
     }
     func surface(_ surface: any TextSurface, focusDidChange focused: Bool) {
       inner.surface(surface, focusDidChange: focused)

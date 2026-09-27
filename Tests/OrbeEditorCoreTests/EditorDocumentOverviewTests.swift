@@ -39,16 +39,55 @@ final class EditorDocumentOverviewTests: XCTestCase {
       surface: surface, url: url)
   }
 
-  func testIndentUnitIsDetectedOnOpenAndOnReplaceFromDiskAndPushedToTheSurface() throws {
+  func testIndentationIsDetectedOnOpenAndOnReplaceFromDiskAndPushedToTheSurface() throws {
     let opened = try open("a.swift", "a\n  b\n    c\n  d\n")
     let (document, surface, url) = (opened.document, opened.surface, opened.url)
-    XCTAssertEqual(document.indentUnit, 2)
-    XCTAssertEqual(surface.indentUnit, 2, "開いたとき面へ押す")
+    XCTAssertEqual(document.indentation, Indentation(unit: 2, usesTabs: false))
+    XCTAssertEqual(surface.indentation, document.indentation, "開いたとき面へ押す")
 
-    try Data("a\n    b\n        c\n".utf8).write(to: url)
+    try Data("a\n\tb\n\t\tc\n".utf8).write(to: url)
     document.reconcileWithDisk()
-    XCTAssertEqual(document.indentUnit, 4, "丸ごと置き換えで検出し直す")
-    XCTAssertEqual(surface.indentUnit, 4)
+    XCTAssertEqual(
+      document.indentation, Indentation(unit: 4, usesTabs: true), "丸ごと置き換えで検出し直す")
+    XCTAssertEqual(surface.indentation, document.indentation)
+  }
+
+  /// 束は後ろから当たり、配り先には束ごとに 1 回、適用した順の編集（どれもその直前の本文の座標で、変わらない先頭と末尾を
+  /// 落としたもの）が届く。版は編集 1 つで 1 進む。壊れると、複数の区間を変える操作（字下げの undo など）で写しがずれる、
+  /// 配り先が途中の本文を見る。
+  func testABatchIsAppliedFromTheBackAndReachesReceiversOnce() throws {
+    let opened = try open("b.txt", "aa\nbb\ncc\n")
+    let (document, surface) = (opened.document, opened.surface)
+    document.baseline = "aa\nbb\ncc\n"
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    let pushed = surface.pulled.count
+    var received: [[TextEdit]] = []
+    var lengths: [Int] = []
+    document.onTextChange = {
+      received.append($0.map(\.edit))
+      lengths.append(document.text.length)
+    }
+    surface.apply([
+      TextEdit(range: NSRange(location: 0, length: 0), replacement: "  "),
+      TextEdit(range: NSRange(location: 6, length: 0), replacement: "  "),
+    ])
+    XCTAssertEqual(document.text.substring(NSRange(location: 0, length: 13)), "  aa\nbb\n  cc\n")
+    XCTAssertEqual(document.text.length, surface.length)
+    XCTAssertEqual(document.version, 2)
+    XCTAssertEqual(lengths, [13], "束の途中では知らせない")
+    XCTAssertEqual(surface.pulled.count, pushed + 1, "行の印は束ごとに 1 回押す")
+    XCTAssertEqual(
+      received,
+      [
+        [
+          TextEdit(range: NSRange(location: 6, length: 0), replacement: "  "),
+          TextEdit(range: NSRange(location: 0, length: 0), replacement: "  "),
+        ]
+      ])
+    surface.apply([TextEdit(range: NSRange(location: 0, length: 4), replacement: "  ab")])
+    XCTAssertEqual(
+      received.last, [TextEdit(range: NSRange(location: 3, length: 1), replacement: "b")],
+      "変わらない先頭を落とす")
   }
 
   /// 役割の区間は構文層の区間を後勝ちで平らにした、重ならない昇順の列で、窓の中だけを答える（ミニマップの字の色）。
@@ -79,6 +118,27 @@ final class EditorDocumentOverviewTests: XCTestCase {
     XCTAssertEqual(plain.roles.roles(in: NSRange(location: 0, length: 5)), [], "文法が無ければ空")
   }
 
+  /// 束の中の行の数を変える編集ごとにハンクをずらしても、ハンクの知らせは束ごとに 1 回で、配り先は行ごとの増減が分かる
+  /// 編集の列を受ける。壊れると、複数の区間を変える操作で俯瞰が途中の行数で組み直し、ミニマップの区画が行の増減を
+  /// 取り違える。
+  func testHunksChangeOncePerBatchAndReceiversSeeTheRowsOfEachEdit() throws {
+    let opened = try open("h.txt", "aa\nbb\ncc\n")
+    let (document, surface) = (opened.document, opened.surface)
+    document.baseline = "aa\n"
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertFalse(document.hunks.isEmpty, "前提: ハンクがある")
+    var changes = 0
+    var rows: [[Int]] = []
+    document.onHunksChange = { changes += 1 }
+    document.onTextChange = { rows = $0.map { [$0.start.row, $0.oldEnd.row, $0.newEnd.row] } }
+    surface.apply([
+      TextEdit(range: NSRange(location: 0, length: 0), replacement: "\n"),
+      TextEdit(range: NSRange(location: 5, length: 1), replacement: ""),
+    ])
+    XCTAssertEqual(changes, 1)
+    XCTAssertEqual(rows, [[1, 2, 1], [0, 0, 1]], "後ろの改行を消す編集、前に改行を足す編集の順")
+  }
+
   /// 本文の通知は写しの更新の後——通知の中で読む本文と役割の並びは新しい本文の長さで、役割は編集に合わせてずらした前の
   /// もの（挿した字は隣の連なりを引き継ぐ）。正しい役割は裏から届き、変わった区間が「役割が変わった」で届く。
   func testTextChangeArrivesAfterTheCopyAndRolesFollowFromTheBackground() throws {
@@ -89,8 +149,8 @@ final class EditorDocumentOverviewTests: XCTestCase {
     var edits: [TextEdit] = []
     var seen: [(length: Int, roles: Int)] = []
     var changedRoles: [IndexSet] = []
-    document.onTextChange = { edit in
-      edits.append(edit)
+    document.onTextChange = { batch in
+      edits.append(contentsOf: batch.map(\.edit))
       seen.append((document.text.length, document.roles.length))
     }
     document.onRolesChange = { changedRoles.append($0) }

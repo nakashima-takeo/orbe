@@ -175,7 +175,7 @@ private final class DecorationColumns {
       if units.last == 0x0D { units.removeLast() }
     }
     let line = MinimapLine.decorationColumns(
-      units.prefix(limit + 1), tabSize: document.indentUnit, limit: limit
+      units.prefix(limit + 1), tabSize: document.indentation.unit, limit: limit
     ).map { gutter + CGFloat($0) }
     offsets[row] = line
     return line

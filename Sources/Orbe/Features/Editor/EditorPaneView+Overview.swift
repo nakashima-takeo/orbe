@@ -35,14 +35,14 @@ extension EditorPaneView {
       } : nil
     document.onTextChange =
       on
-      ? { [weak self] edit in
+      ? { [weak self] edits in
         guard let self else { return }
-        minimap.textDidChange(edit)
+        minimap.textDidChange(edits)
         scrollbar.refresh()
         noteScrollState()
-        search.textDidChange(edit)
+        search.textDidChange(edits)
         occurrences.textDidChange()
-        if let document = self.document { projectSearch.documentDidEdit(document, edit) }
+        if let document = self.document { projectSearch.documentDidEdit(document, edits) }
       } : nil
     document.onRolesChange = on ? { [weak self] in self?.minimap.rolesDidChange($0) } : nil
     document.onAnalysis =

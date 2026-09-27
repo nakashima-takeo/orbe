@@ -46,6 +46,9 @@ struct FramePalette: Equatable, Sendable {
   var added: FrameColor
   var modified: FrameColor
   var removed: FrameColor
+  var caret: FrameColor
+  var selection: FrameColor
+  var inactiveSelection: FrameColor
 
   @MainActor
   init(
@@ -57,6 +60,9 @@ struct FramePalette: Equatable, Sendable {
         $0, appearance: appearance, space: space, fontSmoothing: fontSmoothing, scale: scale)
     }
     text = resolve(style.textColor)
+    caret = resolve(style.caretColor)
+    selection = resolve(style.selectionColor)
+    inactiveSelection = resolve(style.inactiveSelectionColor)
     roles = style.roleColors.mapValues(resolve)
     gutterText = resolve(style.gutterTextColor)
     added = resolve(style.marks.added)
@@ -112,6 +118,7 @@ struct SurfaceConfig: @unchecked Sendable {
   let gutterFont: CTFont
   let lineHeight: CGFloat
   let topInset: CGFloat
+  let caretSize: CGSize
   let gutterWidth: CGFloat
   let gutterTrailingInset: CGFloat
   let marks: Marks
@@ -135,6 +142,7 @@ struct SurfaceConfig: @unchecked Sendable {
     gutterFont = style.gutterFont as CTFont
     lineHeight = style.lineHeight
     topInset = style.topInset
+    caretSize = style.caretSize
     gutterWidth = style.gutterWidth
     gutterTrailingInset = style.gutterTrailingInset
     marks = Marks(
@@ -214,14 +222,59 @@ struct RowEdit: Equatable, Sendable {
   }
 }
 
+/// 選択の地とキャレット。main の取引が本文と同じ書き込みで置く。
+struct CaretMaterial: Equatable, Sendable {
+  /// 選択の範囲（昇順）。空の選択は含めない。
+  var selections: [NSRange] = []
+  /// キャレットのオフセット（主が先頭）。
+  var carets: [Int] = []
+  /// 点滅の起点（`CACurrentMediaTime`）。キャレットが動くたびに置き直し、表示から始める。
+  var epoch: Double = 0
+  /// 面に焦点がある（first responder で、窓が key）。無ければキャレットを描かず、選択の地は弱い色。
+  var focused = false
+  /// 点滅させるか（アクセシビリティの「点滅しない挿入ポイント」が有効なら、点滅せず描き続ける）。
+  var blinks = true
+
+  /// 点滅の刻み（表示・非表示それぞれの長さ）。
+  static let blinkInterval = 0.5
+
+  /// 焦点があり、キャレットがある。
+  var showsCaret: Bool { focused && !carets.isEmpty }
+
+  /// 時刻 `t` にキャレットを描くか。
+  func caretVisible(at t: Double) -> Bool {
+    showsCaret
+      && (!blinks || Int((max(0, t - epoch) / Self.blinkInterval).rounded(.down)) % 2 == 0)
+  }
+
+  /// 時刻 `t` の後で次に表示が切り替わる時刻（焦点が無いか点滅しなければ nil——止まっている間は起きない）。
+  func nextBlink(after t: Double) -> Double? {
+    guard showsCaret, blinks else { return nil }
+    let phase = (max(0, t - epoch) / Self.blinkInterval).rounded(.down) + 1
+    return epoch + phase * Self.blinkInterval
+  }
+}
+
+/// 取引が頼んだ横の「見えるところまで」。描画スレッドが区間の行を組んで x を引き、横の位置を寄せる——main は論理の位置
+/// だけを持ち、打鍵のたびに行を組まない。`serial` が進むたびに 1 回だけ解く。
+struct HorizontalReveal: Equatable, Sendable {
+  var range: NSRange
+  var serial: Int
+}
+
 /// 描く材料。main が置き、描画スレッドが表示の刻みごとに最新を読む。
 struct FrameMaterial: Sendable {
   var content: SurfaceContent?
   /// 描画スレッドがまだ受け取っていない本文の編集（古い順）。
   var rowEdits: [RowEdit] = []
+  /// 描画スレッドがまだ受け取っていない打鍵の時刻（その打鍵の取引が入ったコマで打鍵→画面の遅れを測る）。
+  var keystrokes: [Double] = []
   var marks = RowMarks.empty
+  var caret = CaretMaterial()
+  /// まだ解いていないかもしれない横の「見えるところまで」（本文を変えて見せない取引は、古い区間を捨てる）。
+  var reveal: HorizontalReveal?
   var palette: FramePalette?
-  var tabColumns = IndentUnit.fallback
+  var tabColumns = Indentation.fallback.unit
   /// 面の大きさ（pt）と倍率。
   var size = CGSize.zero
   var scale: CGFloat = 2
@@ -240,24 +293,37 @@ struct FrameMaterial: Sendable {
   }
 }
 
-/// 描く材料の箱。鍵の中では値の読み書きだけをする。
+/// 描く材料の箱。鍵の中では値の読み書きだけをする。書くのは main（面の取引）だけで、描画スレッドは読んで引き取るだけ
+/// （版を進めない）——main は次の版を書く前に知れる。
 final class MaterialBox: Sendable {
   private let state = OSAllocatedUnfairLock(initialState: FrameMaterial())
 
-  func update(_ body: @Sendable (inout FrameMaterial) -> Void) {
-    state.withLock {
-      body(&$0)
-      $0.revision += 1
+  /// 今の版。
+  var revision: Int { state.withLock { $0.revision } }
+
+  /// 書き換えて版を進め、進めた後の版を返す。書き換える前の写しは裏で手放す——文書が役割の並びを丸ごと差し替えた後は、
+  /// 箱が古い並びの最後の持ち主になりうる（大きな木の解放を main で行わない）。
+  @discardableResult
+  func update(_ body: @Sendable (inout FrameMaterial) -> Void) -> Int {
+    let (revision, before) = state.withLock { material in
+      let before = material.content
+      body(&material)
+      material.revision += 1
+      return (material.revision, before)
     }
+    let parcel = OSAllocatedUnfairLock(initialState: consume before)
+    DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = nil } }
+    return revision
   }
 
   func read() -> FrameMaterial { state.withLock { $0 } }
 
-  /// 描画スレッドが読み、まだ受け取っていない本文の編集を引き取る。
+  /// 描画スレッドが読み、まだ受け取っていない本文の編集と打鍵を引き取る。
   func take() -> FrameMaterial {
     state.withLock {
       let material = $0
       $0.rowEdits.removeAll()
+      $0.keystrokes.removeAll()
       return material
     }
   }
