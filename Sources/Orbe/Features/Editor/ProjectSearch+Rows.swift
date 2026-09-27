@@ -74,11 +74,6 @@ extension ProjectSearch {
     return .match(path: matches.path, index: offset - 1, matches.matches[offset - 1])
   }
 
-  /// `index` 番目の行がまとまりの見出しか。
-  func isFileRow(_ index: Int) -> Bool {
-    fileRowStarts[fileIndex(ofRow: index)] == index
-  }
-
   /// `index` 番目の行が属するまとまり（見出しの位置が `index` 以下の最後のもの）。
   private func fileIndex(ofRow index: Int) -> Int {
     var low = 0

@@ -39,7 +39,6 @@ extension ProjectSearchTests {
       [
         header("a.txt"), match("a.txt", 0), match("a.txt", 1), header("b.txt"), match("b.txt", 0),
       ])
-    XCTAssertEqual((0..<5).map(search.isFileRow), [true, false, false, true, false])
 
     search.moveSelection(by: 1)
     XCTAssertEqual(search.selection, header("a.txt"), "未選択なら先頭")

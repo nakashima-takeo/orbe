@@ -1,13 +1,9 @@
 import AppKit
 import OrbeEditorCore
 
-/// 結果の 1 行（見出しか一致）。地（選択は selectionFill。焦点の有無で色を変えず、表の選択の強調は使わない）と中身を行の
-/// view が自分で描く（列ごとの view を置かない——行を入れ替えるたびの view と layer の出し入れを半分にする）。文字は CoreText
-/// の行で持ち、中身が変わったときだけ組み直して描き直す。VoiceOver には行の中身の文字列を渡す。
-final class SearchResultRowView: NSTableRowView {
-  static let identifier = NSUserInterfaceItemIdentifier("searchResultRow")
-  static let fileHeight = Theme.Layout.editorSearchFileRow
-  static let matchHeight = Theme.Layout.editorSearchMatchRow
+/// 結果の 1 行（見出しか一致）。地（選択は selectionFill。焦点の有無で色を変えない）と中身を描く。文字は CoreText の行で
+/// 持ち、中身が変わったときだけ組み直して描き直す。VoiceOver には行（AX の row）として、中身の文字列・行の番号・選択を渡す。
+final class SearchResultRowView: NSView {
 
   /// 描いている中身の同一性（同じなら組み直さない）。
   private enum Key: Equatable {
@@ -46,15 +42,29 @@ final class SearchResultRowView: NSTableRowView {
   private static let matchEllipsisWidth = TextLine.ellipsisWidth(
     Theme.Typography.editorSearchMatch)
 
+  /// 描いている行の番号（`SearchResultsListView` が枠を割り当てる）。
+  var row: Int? {
+    didSet { setAccessibilityIndex(row ?? 0) }
+  }
+
+  var isSelected = false {
+    didSet {
+      guard isSelected != oldValue else { return }
+      needsDisplay = true
+      setAccessibilitySelected(isSelected)
+    }
+  }
+
   override init(frame: NSRect) {
     super.init(frame: frame)
-    identifier = Self.identifier
+    setAccessibilityElement(true)
+    setAccessibilityRole(.row)
   }
 
   required init?(coder: NSCoder) { fatalError("not supported") }
 
   /// 最初の行を描く前に 1 度だけ要る準備——字体の読み込みと初回の字組み（種別チップの太字の等幅は 1 つで 1ms を超える）・
-  /// 色の解決・線の形。空の表へ最初の結果が入る更新にこれらの初回の費用が重ならないよう、結果の列が出たときに済ませる。
+  /// 色の解決・線の形。空の列へ最初の結果が入る更新にこれらの初回の費用が重ならないよう、結果の列が出たときに済ませる。
   static func prepare(for appearance: NSAppearance) {
     _ = SearchRowColors.of(appearance)
     _ = chevron
@@ -64,16 +74,6 @@ final class SearchResultRowView: NSTableRowView {
   override var isFlipped: Bool { true }
 
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-  override var isSelected: Bool {
-    didSet { if isSelected != oldValue { needsDisplay = true } }
-  }
-
-  override func drawBackground(in dirtyRect: NSRect) {
-    guard isSelected, let context = NSGraphicsContext.current?.cgContext else { return }
-    context.setFillColor(SearchRowColors.of(effectiveAppearance).selection)
-    context.fill(bounds)
-  }
 
   func show(_ row: ProjectSearch.Row, emoji: NSFont?) {
     let key: Key
@@ -90,16 +90,17 @@ final class SearchResultRowView: NSTableRowView {
     case .file(let file, let isCollapsed):
       let name = (file.path as NSString).lastPathComponent
       let directory = (file.path as NSString).deletingLastPathComponent
-      let chip = FileChip.resolve(URL(fileURLWithPath: file.path))
+      let chip = Self.chip(named: name)
       content = .file(
         FileContent(
           isCollapsed: isCollapsed, chip: chip,
           chipText: TextLine(
             chip.glyph,
             Theme.Typography.editorChip(size: chip.fontSize(for: Theme.Layout.editorChip))),
-          name: TextLine(name, Theme.Typography.editorSearchFile, emoji: emoji),
+          name: TextLine(name, Theme.Typography.editorSearchFile, glyphs: .chrome(emoji: emoji)),
           directory: TextLine(
-            directory, Theme.Typography.editorSearchDirectory, emoji: emoji, truncating: .start),
+            directory, Theme.Typography.editorSearchDirectory, glyphs: .chrome(emoji: emoji),
+            truncating: .start),
           count: TextLine(file.count.formatted(), Theme.Typography.editorSearchCount)))
       setAccessibilityLabel(
         [name, directory, "\(file.count)"].filter { !$0.isEmpty }.joined(separator: ", "))
@@ -122,10 +123,23 @@ final class SearchResultRowView: NSTableRowView {
     needsDisplay = true
   }
 
+  /// 種別チップ（名前ごとに 1 度だけ決める——結果の見出しは同じ種別の名前が並び、行を入れ替えるたびに決め直さない）。
+  private static var chips: [String: FileChip] = [:]
+
+  private static func chip(named name: String) -> FileChip {
+    if let chip = chips[name] { return chip }
+    let chip = FileChip.resolve(URL(fileURLWithPath: name))
+    chips[name] = chip
+    return chip
+  }
+
   override func draw(_ dirtyRect: NSRect) {
-    super.draw(dirtyRect)
     guard let context = NSGraphicsContext.current?.cgContext else { return }
     let colors = SearchRowColors.of(effectiveAppearance)
+    if isSelected {
+      context.setFillColor(colors.selection)
+      context.fill(bounds)
+    }
     switch content {
     case .file(let file): draw(file, colors, in: context)
     case .match(let match): draw(match, colors, in: context)
@@ -133,7 +147,7 @@ final class SearchResultRowView: NSTableRowView {
     }
   }
 
-  /// 見出し 22: シェブロン（畳むと右向き）・種別チップ 14・ファイル名 12・ディレクトリ 10.5 tertiary・右端の件数。間は 6。
+  /// 見出し: シェブロン（畳むと右向き）・種別チップ 14・ファイル名 12・ディレクトリ 10.5 tertiary・右端の件数。間は 6。
   /// 列が狭いときはファイル名を先に取り、ディレクトリは頭を省略して残りに詰める。
   private func draw(_ file: FileContent, _ colors: SearchRowColors, in context: CGContext) {
     let gap = Theme.Space.note
@@ -166,7 +180,7 @@ final class SearchResultRowView: NSTableRowView {
       colors.tertiary, context)
   }
 
-  /// 一致の行 20（左 40・mono 11）: 前 tertiary、ヒット（地 tint(modified, .30) 角 2・文字 primary）、後ろ muted。
+  /// 一致の行（左 40・mono 11）: 前 tertiary、ヒット（地 tint(modified, .30) 角 2・文字 primary）、後ろ muted。
   /// 列が狭いときは、前と後ろに省略記号 1 つぶんを残して、後ろ → 前（頭を省略）→ ヒットの順に詰める。
   private func draw(_ match: MatchContent, _ colors: SearchRowColors, in context: CGContext) {
     let ellipsis = Self.matchEllipsisWidth
@@ -269,12 +283,24 @@ private struct TextLine {
   /// 行の箱の高さ。縦の中央に置くときの箱。
   let height: CGFloat
 
+  /// 字体の割り当て。ユーザー由来の名前（ファイル名・ディレクトリ）は chrome と同じく端末系グリフと絵文字に字体を充て、
+  /// コードのプレビューと記号は基底の字体だけで組む（SwiftUI の Text で描いていたときと同じ）。
+  enum Glyphs {
+    case plain
+    case chrome(emoji: NSFont?)
+  }
+
   init(
-    _ text: String, _ font: NSFont, emoji: NSFont? = nil,
+    _ text: String, _ font: NSFont, glyphs: Glyphs = .plain,
     truncating truncation: CTLineTruncationType = .end
   ) {
-    let attributed = TitleGlyphs.nsAttributed(
-      text, base: font, emoji: emoji, attributes: Self.drawing)
+    let attributed =
+      switch glyphs {
+      case .plain:
+        NSAttributedString(string: text, attributes: Self.drawing.merging([.font: font]) { $1 })
+      case .chrome(let emoji):
+        TitleGlyphs.nsAttributed(text, base: font, emoji: emoji, attributes: Self.drawing)
+      }
     line = CTLineCreateWithAttributedString(attributed)
     self.font = font
     self.truncation = truncation

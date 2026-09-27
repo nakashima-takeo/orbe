@@ -8,6 +8,7 @@ import SwiftUI
 /// 組み直さない）。
 struct SearchPanelView: View {
   let search: ProjectSearch
+  let results: SearchResultsView
   @FocusState private var fieldFocused: Bool
   @Environment(\.localization) private var l10n
 
@@ -24,7 +25,7 @@ struct SearchPanelView: View {
           .padding(.horizontal, 12)
           .padding(.bottom, Theme.Space.step)
       }
-      SearchResultsList(search: search)
+      SearchResultsList(search: search, results: results)
       SearchSummary(search: search)
     }
     .onChange(of: fieldFocused) { _, focused in search.focusDidChange(.field, focused: focused) }

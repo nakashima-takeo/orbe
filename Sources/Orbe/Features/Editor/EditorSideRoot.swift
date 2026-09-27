@@ -7,6 +7,8 @@ struct EditorSideRoot: View {
   let shell: EditorShellModel
   let tree: FileTree
   let search: ProjectSearch
+  /// 検索結果の列（pane が持ち、パネルが隠れても捨てない）。
+  let searchResults: SearchResultsView
   /// 開閉の真実（pane と同じ 1 つ。写しを挟まない）。
   let sidebar: EditorSidebarState
   let localization: LocalizationStore
@@ -21,7 +23,7 @@ struct EditorSideRoot: View {
         if sidebar.isOpen {
           switch sidebar.panel {
           case .files: ExplorerView(shell: shell, tree: tree)
-          case .search: SearchPanelView(search: search)
+          case .search: SearchPanelView(search: search, results: searchResults)
           }
         }
       }

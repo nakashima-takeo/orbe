@@ -52,6 +52,8 @@ final class EditorPaneView: NSView {
   let occurrences = EditorOccurrences()
   /// プロジェクト検索の状態（pane ごと＝タブごと）。
   let projectSearch: ProjectSearch
+  /// 検索結果の列。検索パネルが隠れている間も持ち、出し直すたびに作り直さない。
+  let searchResults: SearchResultsView
   /// 本体の上のポインタを見る tracking area。
   var bodyTracking: NSTrackingArea?
   /// F4 / ⇧F4 を拾うイベントの監視（窓に付いている間だけ）。
@@ -75,9 +77,12 @@ final class EditorPaneView: NSView {
     tree = FileTree(root: root)
     let projectSearch = ProjectSearch(root: root)
     self.projectSearch = projectSearch
+    let searchResults = SearchResultsView(search: projectSearch)
+    self.searchResults = searchResults
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
-        shell: shell, tree: tree, search: projectSearch, sidebar: sidebar,
+        shell: shell, tree: tree, search: projectSearch, searchResults: searchResults,
+        sidebar: sidebar,
         localization: localization, fontResolver: fontResolver))
     headerHost = NSHostingView(
       rootView: EditorHeaderRoot(
@@ -137,7 +142,8 @@ final class EditorPaneView: NSView {
 
   private func installRoots() {
     sideHost.rootView = EditorSideRoot(
-      shell: shell, tree: tree, search: projectSearch, sidebar: sidebar,
+      shell: shell, tree: tree, search: projectSearch, searchResults: searchResults,
+      sidebar: sidebar,
       localization: localization, fontResolver: fontResolver)
     headerHost.rootView = EditorHeaderRoot(
       shell: shell, localization: localization, fontResolver: fontResolver)
