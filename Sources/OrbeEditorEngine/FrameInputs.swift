@@ -257,7 +257,7 @@ struct FrameMaterial: Sendable {
   var content: SurfaceContent?
   /// 描画スレッドがまだ受け取っていない本文の編集（古い順）。
   var rowEdits: [RowEdit] = []
-  /// 描画スレッドがまだ受け取っていない、本文に入った打鍵の時刻（その打鍵が入ったコマで打鍵→画面の遅れを測る）。
+  /// 描画スレッドがまだ受け取っていない打鍵の時刻（その打鍵の取引が入ったコマで打鍵→画面の遅れを測る）。
   var keystrokes: [Double] = []
   var marks = RowMarks.empty
   var caret = CaretMaterial()
@@ -281,9 +281,13 @@ struct FrameMaterial: Sendable {
   }
 }
 
-/// 描く材料の箱。鍵の中では値の読み書きだけをする。
+/// 描く材料の箱。鍵の中では値の読み書きだけをする。書くのは main（面の取引）だけで、描画スレッドは読んで引き取るだけ
+/// （版を進めない）——main は次の版を書く前に知れる。
 final class MaterialBox: Sendable {
   private let state = OSAllocatedUnfairLock(initialState: FrameMaterial())
+
+  /// 今の版。
+  var revision: Int { state.withLock { $0.revision } }
 
   /// 書き換えて版を進め、進めた後の版を返す。
   @discardableResult

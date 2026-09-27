@@ -97,9 +97,9 @@ extension FramePerfTests {
         DispatchQueue.main.async {
           MainActor.assumeIsolated {
             let began = CACurrentMediaTime()
-            target.value.keystroke = stroke
-            target.value.perform(.insert(k % 7 == 6 ? " " : "x"))
-            target.value.keystroke = nil
+            target.value.transact(keystroke: stroke) {
+              target.value.perform(.insert(k % 7 == 6 ? " " : "x"))
+            }
             let spent = CACurrentMediaTime() - began
             durations.withLock { $0.append(spent) }
           }

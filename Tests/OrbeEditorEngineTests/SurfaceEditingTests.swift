@@ -1,6 +1,7 @@
 import AppKit
 import OrbeEditorCore
 import XCTest
+import os
 
 @testable import OrbeEditorEngine
 
@@ -19,7 +20,8 @@ final class SurfaceEditingTests: EngineTestCase {
     try key(opened, "\u{7f}", keyCode: 51)
     XCTAssertEqual(text(opened.document), "let a = 12\n\n")
     XCTAssertEqual(opened.surface.caretLocation, 11)
-    try key(opened, String(UnicodeScalar(NSLeftArrowFunctionKey)!), [.option, .function], keyCode: 123)
+    try key(
+      opened, String(UnicodeScalar(NSLeftArrowFunctionKey)!), [.option, .function], keyCode: 123)
     XCTAssertEqual(opened.surface.caretLocation, 8, "⌥← は前の行の語の始まりへ（VS Code の cursorWordLeft）")
     XCTAssertTrue(opened.document.isDirty)
   }
@@ -114,7 +116,8 @@ final class SurfaceEditingTests: EngineTestCase {
     let undo = try XCTUnwrap(opened.surface.responder.undoManager)
     type(opened, "xyz")
     opened.document.surface(
-      opened.surface, didChange: [TextEdit(range: NSRange(location: 0, length: 1), replacement: "Q")])
+      opened.surface,
+      didChange: [TextEdit(range: NSRange(location: 0, length: 1), replacement: "Q")])
     opened.surface.rolesDidChange(IndexSet())
     undo.undo()
     XCTAssertEqual(text(opened.document), "Qyzabc\n")
@@ -141,6 +144,46 @@ final class SurfaceEditingTests: EngineTestCase {
     XCTAssertEqual(material.revision, before + 1, "写し・行の印・キャレットを 1 回で書く")
     XCTAssertEqual(material.content?.version, opened.document.version)
     XCTAssertEqual(material.caret.carets, [1])
+  }
+
+  /// 1 打鍵は 1 つの取引——セレクタが 2 つ届く ⌥↓（moveForward: と moveToEndOfParagraph:）でも材料の箱へは 1 回だけ
+  /// 書き、途中の位置（1 字進んだだけのキャレット）のコマは出ない。打鍵の時刻は 1 つだけ添える。
+  func testAKeystrokeIsOneTransaction() throws {
+    let opened = try open("abc\ndef\n")
+    _ = host(opened)
+    _ = opened.surface.material.take()
+    let before = opened.surface.material.revision
+    try key(
+      opened, String(UnicodeScalar(NSDownArrowFunctionKey)!), [.option, .function], keyCode: 125)
+    XCTAssertEqual(opened.surface.caretLocation, 3)
+    XCTAssertEqual(opened.surface.material.revision, before + 1)
+    try key(opened, "x")
+    let material = opened.surface.material.take()
+    XCTAssertEqual(material.keystrokes.count, 2, "打鍵ごとに 1 つ（移動の打鍵も打鍵→画面の遅れに数える）")
+    XCTAssertEqual(text(opened.document), "abcx\ndef\n")
+  }
+
+  /// 取引は材料の版を先に決め、見せ方の位置をその版に結んでから材料を書く——材料を書く時点で位置は置いてあり、描画
+  /// スレッドは新しい材料を読むまで前の位置を描く（新しい本文を古い位置で描くコマを出さない）。
+  func testTheScrollIsPlacedBeforeTheMaterialIsWritten() throws {
+    let opened = try open((0..<500).map { "row \($0)" }.joined(separator: "\n"))
+    _ = host(opened, size: CGSize(width: 400, height: 200))
+    let scroll = opened.surface.scroll
+    let revision = opened.surface.material.revision
+    let seen = OSAllocatedUnfairLock<(placed: Double, shown: Double)?>(initialState: nil)
+    opened.surface.transact {
+      opened.surface.perform(.move(.documentEnd, extending: false))
+      opened.surface.write { _ in
+        let placed = scroll.peek(at: 0).position.y
+        let shown = scroll.frame(at: 0, material: revision).position.y
+        seen.withLock { $0 = (placed, shown) }
+      }
+    }
+    let (placed, shown) = try XCTUnwrap(seen.withLock { $0 })
+    XCTAssertGreaterThan(placed, 0, "材料を書く前に、見せ方の位置は置いてある")
+    XCTAssertEqual(shown, 0, "古い材料のコマは前の位置")
+    XCTAssertEqual(opened.surface.material.revision, revision + 1)
+    XCTAssertEqual(scroll.frame(at: 0, material: revision + 1).position.y, placed)
   }
 
   /// 取引は、渡した編集で組版の変わった行を描画スレッドへ知らせる——打鍵ではその行だけ、Enter では 1 行が 2 行に、複数行の

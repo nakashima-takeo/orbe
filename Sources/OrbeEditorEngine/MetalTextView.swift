@@ -158,15 +158,15 @@ final class MetalTextView: NSView {
   }
 
   override func mouseDown(with event: NSEvent) {
-    pointer.mouseDown(event, in: self)
+    surface?.transact { pointer.mouseDown(event, in: self) }
   }
 
   override func mouseDragged(with event: NSEvent) {
-    pointer.mouseDragged(event, in: self)
+    surface?.transact { pointer.mouseDragged(event, in: self) }
   }
 
   override func mouseUp(with event: NSEvent) {
-    pointer.mouseUp(event, in: self)
+    surface?.transact { pointer.mouseUp(event, in: self) }
   }
 
   override func updateTrackingAreas() {
@@ -193,11 +193,10 @@ final class MetalTextView: NSView {
     super.flagsChanged(with: event)
   }
 
-  /// 打鍵を macOS のキー割り当てに通す。打鍵の時刻は、その打鍵が起こした最初の取引が材料へ添える（打鍵→画面の遅れ）。
+  /// 打鍵を macOS のキー割り当てに通す。1 打鍵を 1 つの取引にする——セレクタが 2 つ届く打鍵（⌥↓・⌃O・利用者の
+  /// DefaultKeyBinding の連続セレクタ）も、途中の状態のコマを出さない。打鍵の時刻は取引が材料へ添える（打鍵→画面の遅れ）。
   override func keyDown(with event: NSEvent) {
-    surface?.keystroke = event.timestamp
-    interpretKeyEvents([event])
-    surface?.keystroke = nil
+    surface?.transact(keystroke: event.timestamp) { interpretKeyEvents([event]) }
   }
 
   override func becomeFirstResponder() -> Bool {

@@ -50,7 +50,8 @@ extension MetalTextSurface {
     let stops = lineStops.stops(source, tabWidth: config.tabWidth(columns: indentation.unit))
     guard x < stops.width, let glyph = CaretX.glyph(atX: x, xs: stops.xs) else { return nil }
     let column = stops.offsets[glyph]
-    let line = text.substring(NSRange(location: start, length: min(source.length, LineShaper.limit)))
+    let line = text.substring(
+      NSRange(location: start, length: min(source.length, LineShaper.limit)))
     return LinkDetector.links(in: line).first { NSLocationInRange(column, $0.range) }?.url
   }
 }
@@ -91,7 +92,8 @@ final class MouseSelection: NSObject {
     let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
     guard !flags.contains(.control) else { return }
     point = view.convert(event.locationInWindow, from: nil)
-    guard let hit = surface.hit(point), hit.area != .marks, let text = surface.editingEnvironment()?.text
+    guard let hit = surface.hit(point), hit.area != .marks,
+      let text = surface.editingEnvironment()?.text
     else { return }
     self.view = view
     view.window?.makeFirstResponder(view)
@@ -106,7 +108,8 @@ final class MouseSelection: NSObject {
     let cursor: Cursor
     if hit.area == .numbers {
       drag = .numbers
-      cursor = shift ? EditCommands.extendByLine(primary, toRow: hit.row, text) : Self.line(hit.row, text)
+      cursor =
+        shift ? EditCommands.extendByLine(primary, toRow: hit.row, text) : Self.line(hit.row, text)
     } else {
       drag = .text
       switch event.clickCount {
@@ -117,9 +120,12 @@ final class MouseSelection: NSObject {
           ? EditCommands.extendByWord(primary, to: hit.offset, text)
           : EditCommands.wordSelection(at: hit.offset, text)
       case 3:
-        cursor = shift ? EditCommands.extendByLine(primary, toRow: hit.row, text) : Self.line(hit.row, text)
+        cursor =
+          shift
+          ? EditCommands.extendByLine(primary, toRow: hit.row, text) : Self.line(hit.row, text)
       default:
-        cursor = Cursor(selectionStart: NSRange(location: 0, length: 0), unit: .character, position: text.length)
+        cursor = Cursor(
+          selectionStart: NSRange(location: 0, length: 0), unit: .character, position: text.length)
       }
     }
     surface.editor.select(CursorList(cursor), reveal: .minimal)
@@ -129,7 +135,8 @@ final class MouseSelection: NSObject {
     guard let drag, let surface else { return }
     if case .link = drag { return }
     point = view.convert(event.locationInWindow, from: nil)
-    let column = surface.config.columnWidth(lineCount: surface.editingEnvironment()?.text.lineCount ?? 1)
+    let column = surface.config.columnWidth(
+      lineCount: surface.editingEnvironment()?.text.lineCount ?? 1)
     if point.y < surface.config.topInset {
       autoscroll(.above(surface.config.topInset - point.y))
     } else if point.y > view.bounds.height {
@@ -179,7 +186,8 @@ final class MouseSelection: NSObject {
 
   /// 行を改行まで選ぶ（単位は行）。
   private static func line(_ row: Int, _ text: TextRope) -> Cursor {
-    let range = NSRange(location: text.lineStart(row), length: text.lineEnd(row) - text.lineStart(row))
+    let range = NSRange(
+      location: text.lineStart(row), length: text.lineEnd(row) - text.lineStart(row))
     return Cursor(selectionStart: range, unit: .line, position: NSMaxRange(range))
   }
 
@@ -258,9 +266,6 @@ final class MouseSelection: NSObject {
       target = point
     }
     p = simd_clamp(p, .zero, simd_max(limits.maximum, .zero))
-    surface.transact(reveal: .none) {
-      surface.transaction?.scrollTo = p
-      extend(to: target, position: p, reveal: .none)
-    }
+    surface.transact(scrollTo: p) { extend(to: target, position: p, reveal: .none) }
   }
 }

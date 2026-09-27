@@ -38,7 +38,8 @@ final class SurfaceEditor {
       if result.edits.isEmpty {
         if result.state.cursors != before.cursors { close() }
       } else {
-        record(result.edits, kind: result.undo, from: before.cursors, to: result.state.cursors, env.text)
+        record(
+          result.edits, kind: result.undo, from: before.cursors, to: result.state.cursors, env.text)
       }
       state = result.state
     }
@@ -68,13 +69,14 @@ final class SurfaceEditor {
     let whole = TextEdit(range: NSRange(location: 0, length: current.length), replacement: text)
     let edit = whole.narrowed(replacing: current.units(in: whole.range))
     let caret = min(state.cursors.primary.selection.location, whole.replacementLength)
-    close()
-    surface.transact(reveal: .none, remeasure: true) {
-      record(EditBatch([edit]), kind: .other, from: state.cursors, to: CursorList(Cursor(caret)), current)
+    surface.transact(remeasure: true) {
+      record(
+        EditBatch([edit]), kind: .other, from: state.cursors, to: CursorList(Cursor(caret)), current
+      )
       state = EditState(
-        cursors: CursorList(Cursor(caret)), mark: state.mark.map { min($0, whole.replacementLength) })
+        cursors: CursorList(Cursor(caret)),
+        mark: state.mark.map { min($0, whole.replacementLength) })
     }
-    close()
   }
 
   /// undo の区切り（保存・外部変更の差し替え）。
@@ -99,7 +101,8 @@ final class SurfaceEditor {
     if let open, !starts {
       open.append(batch, result: result, kind: kind, after: after)
     } else {
-      let element = UndoElement(base: text, forward: batch, kind: kind, before: before, after: after)
+      let element = UndoElement(
+        base: text, forward: batch, kind: kind, before: before, after: after)
       open = element
       undoManager.beginUndoGrouping()
       undoManager.registerUndo(withTarget: self) { $0.undo(element) }
@@ -133,7 +136,9 @@ final class SurfaceEditor {
   /// undo・redo の束を、確かめてから同じ道で渡す——束の範囲が今の本文に収まり、置き換える中身が要素の記録と一致すること。
   /// 一致しなければ（あってはならない）本文に触れず、この面の undo を空にして記録を残す（空にするのは undo の手続きから
   /// 戻った後——手続きの中で入れ物を空にすると、入れ物が自分の組を閉じられない）。
-  private func apply(_ batch: EditBatch, expecting contents: [ContiguousArray<UInt16>], restoring cursors: CursorList)
+  private func apply(
+    _ batch: EditBatch, expecting contents: [ContiguousArray<UInt16>], restoring cursors: CursorList
+  )
     -> Bool
   {
     guard let text = surface.editingEnvironment()?.text else { return false }

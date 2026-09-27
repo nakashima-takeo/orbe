@@ -30,15 +30,15 @@ final class MetalTextSurface: TextSurface {
   }
   var onOpenLink: ((URL) -> Void)?
   var viewport = TextViewport.empty
-  /// 面の大きさ（pt）。
+  /// 面の大きさ（pt）・倍率・描く色空間。
   var size = CGSize.zero
+  private var scale: CGFloat = 2
+  private var space = FrameMaterial.defaultSpace
   private(set) var indentation = Indentation.fallback
   /// 面に焦点がある（first responder で、窓が key）。
   private(set) var focused = false
   /// 進行中の取引（→ `transact`）。
   var transaction: Transaction?
-  /// 今扱っている打鍵の出来事の時刻。その打鍵が起こした最初の取引が材料へ添える。
-  var keystroke: Double?
 
   init(style: TextSurfaceStyle, options: MetalTextSurfaceOptions) {
     Self.nextID += 1
@@ -61,7 +61,6 @@ final class MetalTextSurface: TextSurface {
     RenderThread.shared.perform { renderer in
       renderer.attach(id: id, material: material, scroll: scroll, config: config, notify: notify)
     }
-    material.update { $0.caret.carets = [0] }
     appearanceDidChange()
   }
 
@@ -92,8 +91,7 @@ final class MetalTextSurface: TextSurface {
 
   func setIndentation(_ indentation: Indentation) {
     self.indentation = indentation
-    material.update { $0.tabColumns = indentation.unit }
-    wake()
+    write { $0.tabColumns = indentation.unit }
   }
 
   /// 標準のセレクタが写ったコマンドを、面の編集係で行う。
@@ -103,24 +101,14 @@ final class MetalTextSurface: TextSurface {
 
   // MARK: - 写しと材料
 
-  /// 文書の写しを引いて箱に置く（結ばれたとき・役割が変わったとき・行の印を受けたとき）。取引の中なら控えるだけにし、
-  /// 取引の終わりにまとめて置く。
+  /// 文書の写しを引いて箱に置く（結ばれたとき・役割が変わったとき・行の印を受けたとき）。取引の中なら、その取引の終わりに
+  /// まとめて置く。
   private func pullContent(marks spans: LineMarkSpans? = nil) {
     guard let delegate else { return }
-    if transaction != nil {
+    transact {
       transaction?.content = delegate.surfaceContent(self)
       if let spans { transaction?.marks = spans }
-      return
     }
-    let content = delegate.surfaceContent(self)
-    let marks = spans.map { RowMarks($0, in: content.text) }
-    let revision = material.update {
-      $0.content = content
-      if let marks { $0.marks = marks }
-    }
-    updateLimits(heldUntil: revision)
-    wake()
-    refreshViewport()
   }
 
   func rolesDidChange(_ ranges: IndexSet) {
@@ -134,31 +122,30 @@ final class MetalTextSurface: TextSurface {
 
   /// 外観・色空間・倍率で色を解き直して置く。
   func appearanceDidChange() {
-    let current = material.read()
     let palette = FramePalette(
-      style: style, appearance: textView.effectiveAppearance, space: current.space,
-      fontSmoothing: config.fontSmoothing, scale: current.scale)
-    material.update { $0.palette = palette }
-    wake()
+      style: style, appearance: textView.effectiveAppearance, space: space,
+      fontSmoothing: config.fontSmoothing, scale: scale)
+    write { $0.palette = palette }
   }
 
   /// view の大きさ・倍率・描く色空間・見えているかが変わった。
   func viewStateDidChange(
     size: CGSize, scale: CGFloat, space: CGColorSpace = FrameMaterial.defaultSpace, visible: Bool
   ) {
-    self.size = size
-    let current = material.read()
-    let recolored = current.scale != scale || current.space != space
-    material.update {
-      $0.size = size
-      $0.scale = scale
-      $0.space = space
-      $0.visible = visible
+    transact {
+      self.size = size
+      write {
+        $0.size = size
+        $0.scale = scale
+        $0.space = space
+        $0.visible = visible
+      }
+      if scale != self.scale || space != self.space {
+        self.scale = scale
+        self.space = space
+        appearanceDidChange()
+      }
     }
-    if recolored { appearanceDidChange() }
-    updateLimits()
-    wake()
-    refreshViewport()
   }
 
   /// view が窓に載った。view の display link を描画スレッドの run loop に載せる（初めて載ったときだけ）。
@@ -187,13 +174,7 @@ final class MetalTextSurface: TextSurface {
   /// 焦点（first responder で、窓が key）が変わりうる。変われば点滅を表示からやり直し、選択の地の色を替える。
   func updateFocus(_ focused: Bool) {
     guard focused != self.focused else { return }
-    self.focused = focused
-    let now = CACurrentMediaTime()
-    material.update {
-      $0.caret.focused = focused
-      $0.caret.epoch = now
-    }
-    wake()
+    transact { self.focused = focused }
   }
 
   func focusDidChange(_ focused: Bool) {
