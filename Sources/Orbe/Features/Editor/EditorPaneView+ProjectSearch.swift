@@ -54,7 +54,16 @@ extension EditorPaneView {
     sidebar.show(.search)
     if let seed { projectSearch.seed(seed) }
     projectSearch.requestFocus(.field)
+    selectSearchFieldText()
     pushFindGround()
+  }
+
+  /// 入力欄に焦点があれば検索語を全選択する（焦点がこれから入るなら、入るときに AppKit が全選択する）。
+  private func selectSearchFieldText() {
+    guard projectSearch.focusedArea == .field,
+      let editor = window?.firstResponder as? NSTextView, editor.isDescendant(of: sideHost)
+    else { return }
+    editor.selectAll(nil)
   }
 
   /// 一致を開く——文書を開いて見せてから、一致を選択に置き、その行を中央へ（見えていても送る。VS Code と同じ）、横に

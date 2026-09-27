@@ -150,6 +150,21 @@ final class FindInProjectTests: OrbeTestCase {
     XCTAssertEqual(pane.projectSearch.query.pattern, "oo")
   }
 
+  /// 入力欄に焦点があるまま ⌘⇧F を押し直しても、検索語を全選択に戻す（VS Code と同じ。打てば置き換わる）。
+  func testFindInProjectAgainSelectsTheWholePattern() throws {
+    let hosted = try hostWithDocument("foo\n")
+    let (tab, window) = (hosted.tab, hosted.window)
+    tab.findInProject()
+    pumpMain(until: { searchFieldIsFocused(tab.view.editor) }, "入力欄に焦点")
+    let editor = try XCTUnwrap(window.firstResponder as? NSTextView)
+    pumpMain(until: { editor.string == "previous" }, "入力欄に前の検索語")
+    editor.setSelectedRange(NSRange(location: 3, length: 0))
+
+    tab.findInProject()
+    XCTAssertTrue(window.firstResponder === editor, "焦点は入力欄のまま")
+    XCTAssertEqual(editor.selectedRange(), NSRange(location: 0, length: 8))
+  }
+
   /// 焦点が端末か検索パネルにあれば、本文に選択があっても種にしない。
   func testNoSeedFromTheTerminalOrFromTheSearchPanel() throws {
     let hosted = try hostWithDocument("foo\n")
