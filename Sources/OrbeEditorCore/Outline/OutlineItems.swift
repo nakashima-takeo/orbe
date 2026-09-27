@@ -21,7 +21,7 @@ struct OutlineItems {
     switch grammar {
     case .swift: return swift(match)
     case .go: return go(match)
-    case .html: return [Self.htmlElement(match)]
+    case .html: return [htmlElement(match)]
     case .css: return Self.cssSelectors(match)
     case .json: return [jsonArrayElement(match)]
     case .markdown: return [markdownHeading(match)]
@@ -132,53 +132,34 @@ struct OutlineItems {
     return [item]
   }
 
-  /// HTML の要素は `tag#id.class1.class2`（VS Code の HTML の `nodeToName` と同じ——値のある id・class は空でも印を付け、
-  /// class は空白の連なりで分ける）。属性は開始タグ（か自己終了タグ）から読む。
-  static func htmlElement(_ match: OutlineMatch) -> OutlineExtraction.Item {
-    var item = plain(match)
-    let tag =
-      nodeType(match.item) == "self_closing_tag"
-      ? match.item
-      : namedChildren(of: match.item).first {
-        ["start_tag", "self_closing_tag"].contains(nodeType($0))
-      }
+  // MARK: - HTML
+
+  /// HTML の要素は `tag#id.class1.class2`（VS Code の HTML と同じ形）。空の id・class は印を付けない。属性は開始タグか
+  /// 自己終了タグから読む。
+  private func htmlElement(_ match: OutlineMatch) -> OutlineExtraction.Item {
+    var item = Self.plain(match)
+    let tag = Self.namedChildren(of: match.item).first {
+      ["start_tag", "self_closing_tag"].contains(Self.nodeType($0))
+    }
     guard let tag else { return item }
     var id = ""
     var classes = ""
-    for attribute in namedChildren(of: tag) where nodeType(attribute) == "attribute" {
-      let children = namedChildren(of: attribute)
-      guard let name = children.first(where: { nodeType($0) == "attribute_name" }),
-        let value = children.first(where: { nodeType($0) != "attribute_name" }).map({ node in
-          nodeType(node) == "quoted_attribute_value"
-            ? namedChildren(of: node).first.map(match.text) ?? "" : match.text(node)
+    for attribute in Self.namedChildren(of: tag) where Self.nodeType(attribute) == "attribute" {
+      let children = Self.namedChildren(of: attribute)
+      guard let name = children.first(where: { Self.nodeType($0) == "attribute_name" }),
+        let value = children.first(where: { Self.nodeType($0) != "attribute_name" }).map({ node in
+          Self.nodeType(node) == "quoted_attribute_value"
+            ? Self.namedChildren(of: node).first.map(match.text) ?? "" : match.text(node)
         })
       else { continue }
       switch match.text(name).lowercased() {
-      case "id": id = "#" + value
-      case "class": classes = whitespaceRuns(value).map { "." + $0 }.joined()
+      case "id": id = value.isEmpty ? "" : "#" + value
+      case "class": classes = value.split(whereSeparator: \.isWhitespace).map { "." + $0 }.joined()
       default: continue
       }
     }
     item.name += id + classes
     return item
-  }
-
-  /// 空白の連なりで分ける（JS の `split(/\s+/)` と同じく、端の空白は空の要素になる）。
-  private static func whitespaceRuns(_ text: String) -> [Substring] {
-    var parts: [Substring] = []
-    var start = text.startIndex
-    var index = text.startIndex
-    while index < text.endIndex {
-      guard text[index].isWhitespace else {
-        index = text.index(after: index)
-        continue
-      }
-      parts.append(text[start..<index])
-      while index < text.endIndex, text[index].isWhitespace { index = text.index(after: index) }
-      start = index
-    }
-    parts.append(text[start...])
-    return parts
   }
 
   /// CSS のカンマで並んだセレクタ（`selectors` の名前つきの子）を、1 つずつ別のシンボル（範囲は同じ規則）にする。

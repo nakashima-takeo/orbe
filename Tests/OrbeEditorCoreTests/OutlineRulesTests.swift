@@ -149,7 +149,7 @@ final class OutlineRulesTests: XCTestCase {
     XCTAssertEqual(names, ["(*Server).Start", "(Server).Name", "(*List[T]).Push"])
   }
 
-  /// HTML の要素は `tag#id.class1.class2`。引用符の無い値も読み、値のある空の class は `.` だけ残す（VS Code と同じ）。
+  /// HTML の要素は `tag#id.class1.class2`。引用符の無い値も読み、空の id・class と class の端の空白は印にしない。
   func testHTMLElementsAreNamedWithIdAndClasses() throws {
     let symbols = try outline(.html, "outline.html")
     XCTAssertEqual(children(of: "html", in: symbols), ["head", "body.page.dark"])
@@ -158,7 +158,7 @@ final class OutlineRulesTests: XCTestCase {
       ["header#top.site-header.sticky", "main#content", "script"])
     XCTAssertEqual(
       children(of: "html", "body.page.dark", "main#content", in: symbols),
-      ["section.", "custom-card"])
+      ["section", "custom-card", "div.x"])
     XCTAssertEqual(
       children(of: "html", "head", in: symbols), ["meta", "title", "link", "style"],
       "自己終了タグと style も要素")

@@ -10,10 +10,11 @@ element html
         element a.brand
         element img
     element main#content
-      element section.
+      element section
         element h1
         element p
           element br
         element input
       element custom-card
+      element div.x
     element script
