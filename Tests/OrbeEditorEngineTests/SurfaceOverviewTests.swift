@@ -127,6 +127,104 @@ final class SurfaceOverviewTests: EngineTestCase {
     view.draggingExited(drag)
   }
 
+  /// 端を越えた位置（弾性で引っ張っている間）のコマでも、俯瞰（ミニマップの配置・帯・縦横のスクロールバーとつまみ・影）は
+  /// 端の位置のコマと同じで、本文だけが動く——どのコマも俯瞰は同じコマの位置から出て、端を越える間は端を表す。
+  func testTheOverviewStaysAtTheEdgeWhileTheTextIsPastIt() throws {
+    let opened = try hosted(String(rows(400, width: 400).dropLast()))
+    let minimap = opened.surface.surfaceLayout.minimap
+    opened.surface.inputScope {
+      opened.surface.textView.overview.pointerMoved(
+        to: CGPoint(x: minimap.midX, y: 100), inside: true)
+    }
+    let maximum = opened.surface.scrollState().limits.maximum
+    XCTAssertGreaterThan(maximum.x, 0, "前提: 横に続く")
+    let cases: [(past: SIMD2<Double>, edge: SIMD2<Double>)] = [
+      (SIMD2(0, -200), SIMD2(0, 0)), (SIMD2(0, maximum.y + 300), SIMD2(0, maximum.y)),
+      (SIMD2(-150, 0), SIMD2(0, 0)), (SIMD2(maximum.x + 150, 0), SIMD2(maximum.x, 0)),
+    ]
+    for (past, edge) in cases {
+      let beyond = try built(opened, at: past)
+      let atEdge = try built(opened, at: edge)
+      XCTAssertEqual(beyond.overview, atEdge.overview, "\(past) の俯瞰は \(edge) と同じ")
+      XCTAssertNotEqual(beyond.text, atEdge.text, "前提: \(past) の本文は動いている")
+    }
+  }
+
+  /// 引っ張った途中のコマ（指を離す前）を撮ると、俯瞰の列（ミニマップ・縦スクロールバー）は先頭のコマと同じ画素で、本文
+  /// だけが下へずれている。
+  func testAFramePulledPastTheTopShowsTheOverviewAtTheTop() throws {
+    let opened = try hosted(rows(400, width: 400))
+    let layout = opened.surface.surfaceLayout
+    opened.surface.inputScope {
+      opened.surface.textView.overview.pointerMoved(
+        to: CGPoint(x: layout.minimap.midX, y: 100), inside: true)
+    }
+    let rest = try pixelShot(opened)
+    let now = CACurrentMediaTime()
+    opened.surface.scroll(
+      ScrollInput(timestamp: now, delta: SIMD2(0, 0), precise: true, phase: .began))
+    opened.surface.scroll(
+      ScrollInput(timestamp: now + 0.01, delta: SIMD2(0, 200), precise: true, phase: .changed))
+    XCTAssertLessThan(opened.surface.scroll.peek(at: now + 0.01).position.y, 0, "前提: 先頭より上")
+    let pulled = try pixelShot(opened)
+    var overview = 0
+    var body = 0
+    for y in stride(from: CGFloat(1), to: layout.minimap.maxY - 1, by: 1) {
+      for x in stride(from: layout.minimap.minX + 1, to: layout.verticalScrollbar.maxX - 1, by: 1) {
+        overview += pulled.rgb(x, y) == rest.rgb(x, y) ? 0 : 1
+      }
+      for x in stride(from: layout.text.minX + 1, to: layout.text.minX + 200, by: 2) {
+        body += pulled.rgb(x, y) == rest.rgb(x, y) ? 0 : 1
+      }
+    }
+    XCTAssertEqual(overview, 0, "俯瞰の列は先頭のコマと同じ")
+    XCTAssertGreaterThan(body, 100, "前提: 本文はずれている")
+    opened.surface.scroll(
+      ScrollInput(timestamp: now + 0.02, delta: SIMD2(0, 0), precise: true, phase: .ended))
+  }
+
+  /// 組んだコマの俯瞰の図形と配置。
+  private struct BuiltOverview: Equatable {
+    var placement: MinimapLayout?
+    var shapes: [SIMD4<Float>]
+    var colors: [UInt32]
+  }
+
+  /// 組んだコマの俯瞰と、本文の字の位置（比べるため）。
+  private struct Built: Equatable {
+    var overview: BuiltOverview
+    var text: [SIMD2<Float>]
+  }
+
+  /// 面の今の材料で、位置 `position` のコマを別の組み立て役で組む（描かない。面の刻みの状態に触れない）。
+  private func built(_ opened: Opened, at position: SIMD2<Double>) throws -> Built {
+    let id = opened.surface.id
+    opened.surface.flush()
+    return try XCTUnwrap(
+      RenderThread.shared.performAndWait { renderer -> Built? in
+        guard let slot = renderer.slot(id) else { return nil }
+        let material = slot.material.read()
+        guard let content = material.content else { return nil }
+        let builder = FrameBuilder()
+        let cache = LineLayoutCache()
+        cache.beginFrame(version: content.version, tabColumns: material.tabColumns)
+        builder.build(
+          FrameBuilder.Source(
+            material: material, position: position, limits: slot.scroll.peek(at: 0).limits,
+            caretVisible: false, pixels: Renderer.pixelSize(material),
+            atlas: renderer.atlas(scale: material.scale, space: material.space),
+            config: slot.config, minimapCells: slot.minimapCells, rulerRows: slot.rulerRows,
+            motion: OverviewMotion(), time: 0, baselines: 0, previousPlacement: nil),
+          cache: cache, fonts: renderer.fonts)
+        let shapes = builder.overviewShapes + builder.shadowShapes
+        return Built(
+          overview: BuiltOverview(
+            placement: builder.minimap.placement, shapes: shapes.map(\.rect),
+            colors: shapes.map(\.color)),
+          text: builder.text.flatMap { $0.map(\.position) })
+      })
+  }
+
   /// 本体の上にポインタがあるとつまみが見え、ミニマップの上なら帯が見える。俯瞰の上のポインタは矢印。
   func testHoveringShowsTheThumbAndTheSlider() throws {
     let opened = try hosted(rows(2000))
