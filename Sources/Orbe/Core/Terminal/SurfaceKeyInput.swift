@@ -20,6 +20,14 @@ struct SurfaceKeyInput: Equatable {
   /// 載らない入力では参照されない。cf. vendor/ghostty src/input/key.zig（effectiveMods）
   let consumedMods: ghostty_input_mods_e
 
+  /// IME が keyDown の外で確定した文字——キーの無い（libghostty が `Key.unidentified` に落として文字から符号化する）、
+  /// 修飾の無い 1 打。
+  static func committedText(_ text: String) -> SurfaceKeyInput {
+    SurfaceKeyInput(
+      keycode: noKeycode, text: text, unshiftedCodepoint: 0, mods: GHOSTTY_MODS_NONE,
+      consumedMods: GHOSTTY_MODS_NONE)
+  }
+
   /// text を `key.text` に載せてよいか。C0 制御文字（先頭 UTF-8 バイト < 0x20）と DEL（0x7F）は載せず
   /// keycode のみで送り、符号化を libghostty に委ねる。判定集合は libghostty の `isControl`（C0 と DEL）と
   /// 同一。cf. vendor/ghostty src/input/key_encode.zig（isControl）

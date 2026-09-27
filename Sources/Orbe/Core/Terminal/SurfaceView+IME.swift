@@ -34,14 +34,16 @@ extension SurfaceView: NSTextInputClient {
     syncPreedit()
   }
 
+  /// IME の確定。keyDown の中なら keyAction がキーとして送る。keyDown の外（変換中の ⌘ キーを IME へ渡している間の確定・
+  /// 音声入力・文字ビューア）も、打った文字なのでキーの無い・修飾の無い 1 打として送る——貼り付けとして送ると bracketed
+  /// paste に包まれ、端末のアプリが貼り付けとして扱う（上流 Ghostty と同じ。本物の貼り付けは別の道）。
   func insertText(_ string: Any, replacementRange: NSRange) {
     let text = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
     unmarkText()  // 確定したので preedit を消す
     if keyTextAccumulator != nil {
-      keyTextAccumulator?.append(text)  // keyDown 経由は keyAction がキーとして送る
-    } else if let surface = surfacePtr {
-      // keyDown 外（音声入力・ペースト等）。テキストとして直接送る。
-      text.withCString { ghostty_surface_text(surface, $0, UInt(text.utf8.count)) }
+      keyTextAccumulator?.append(text)
+    } else if !text.isEmpty {
+      sendKeyInput(.committedText(text), action: GHOSTTY_ACTION_PRESS, composing: false)
     }
   }
 
