@@ -137,6 +137,12 @@ public final class EditorDocument {
     DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = nil } }
   }
 
+  /// 入れ替えで外れたアウトラインの結果と絞り込みを手放す口（既定は裏で手放す）。テストは手放す時機を差し替える。
+  var releaseOutlines: @Sendable (OSAllocatedUnfairLock<OutlineState.Retired?>) -> Void = {
+    parcel in
+    DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = nil } }
+  }
+
   /// 構文とアウトラインの裏の仕事を打ち切らせ、閉じた文書の写し・役割の並び・構文木・アウトラインは裏で手放す（大きな
   /// 木の解放を main で行わない）。裏へ渡す前に文書の欄から外す——欄は deinit の後に main で解放されるので、欄に残すと裏が
   /// 先に済んだとき最後の解放が main で起きる。

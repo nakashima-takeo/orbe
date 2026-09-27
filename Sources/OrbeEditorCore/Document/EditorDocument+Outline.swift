@@ -1,25 +1,41 @@
 import Foundation
+import os
 
 /// 文書のアウトラインの状態。結果は取り出した版のまま持ち（打鍵のたびにシンボルの位置をずらさない）、位置の問いは文書が
 /// 問いと答えを結果の版と今の版の間で写して答える。
 struct OutlineState {
+  /// 入れ替えや閉じることで外れた結果と絞り込み。解放はシンボルの数に比例するので、main では手放さず裏へ渡す。
+  struct Retired: Sendable {
+    var outlines: [DocumentOutline] = []
+    var filters: [OutlineFilterResult] = []
+
+    var isEmpty: Bool { outlines.isEmpty && filters.isEmpty }
+  }
+
   /// 閉じた文書から裏で手放すもの。
   struct Parts: Sendable {
     let worker: OutlineWorker?
-    let outlines: [DocumentOutline?]
+    let retired: Retired
   }
 
   /// アウトラインの裏の仕事（文法とアウトラインの規則がある言語だけ。閉じたら外す）。
   private(set) var worker: OutlineWorker?
   var wanted = false
-  var shown: DocumentOutline?
-  var filter: OutlineFilterResult?
+  var shown: DocumentOutline? {
+    didSet { if let oldValue { retired.outlines.append(oldValue) } }
+  }
+  var filter: OutlineFilterResult? {
+    didSet { if let oldValue { retired.filters.append(oldValue) } }
+  }
   /// 届いたが、今の文字列の絞り込みが揃うまで見せていない結果。
-  var staged: DocumentOutline?
+  var staged: DocumentOutline? {
+    didSet { if let oldValue { retired.outlines.append(oldValue) } }
+  }
   /// 絞り込みの文字列（空なら絞り込まない）。
   var pattern = ""
   /// 結果を待ち始めた版（それより後の版の結果は、届くまで写せるように記録を持つ）。
   var awaited = 0
+  private var retired = Retired()
 
   init(rules: GrammarRules?, inbox: AnalysisInbox) {
     worker = rules.flatMap { rules in
@@ -41,16 +57,20 @@ struct OutlineState {
       ? filter == nil : filter?.pattern == pattern && filter?.token == shown.token
   }
 
+  /// 外れたものを取り出す（持ち主が裏へ渡す）。
+  mutating func takeRetired() -> Retired {
+    defer { retired = Retired() }
+    return retired
+  }
+
   /// 閉じる。取り出しを打ち切り、大きな部品を外して返す。
   mutating func release() -> Parts {
     worker?.cancel()
-    defer {
-      worker = nil
-      shown = nil
-      staged = nil
-      filter = nil
-    }
-    return Parts(worker: worker, outlines: [shown, staged])
+    shown = nil
+    staged = nil
+    filter = nil
+    defer { worker = nil }
+    return Parts(worker: worker, retired: takeRetired())
   }
 }
 
@@ -71,7 +91,7 @@ extension EditorDocument {
       outlineState.shown = nil
       outlineState.filter = nil
       outlineState.staged = nil
-      onOutlineChange?()
+      outlineDidChange(notify: true)
     }
   }
 
@@ -94,7 +114,7 @@ extension EditorDocument {
     if let staged = outlineState.staged { outlineState.shown = staged }
     outlineState.staged = nil
     outlineState.filter = nil
-    onOutlineChange?()
+    outlineDidChange(notify: true)
   }
 
   /// 今の本文の `offset` を含む最も深いシンボルの番号。`token` が見せている結果と違えば nil。
@@ -163,6 +183,15 @@ extension EditorDocument {
         changed = true
       }
     }
-    if changed { onOutlineChange?() }
+    outlineDidChange(notify: changed)
+  }
+
+  /// 知らせてから、外れた結果と絞り込みを裏で手放す——pane は知らせの中で自分の写しを差し替えるので、知らせの後は
+  /// ここが最後の参照になる。
+  private func outlineDidChange(notify: Bool) {
+    if notify { onOutlineChange?() }
+    let retired = outlineState.takeRetired()
+    guard !retired.isEmpty else { return }
+    releaseOutlines(OSAllocatedUnfairLock(initialState: consume retired))
   }
 }

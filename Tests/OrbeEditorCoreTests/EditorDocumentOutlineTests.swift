@@ -275,6 +275,30 @@ final class EditorDocumentOutlineTests: XCTestCase {
     OutlineFilterResult(pattern: pattern, token: outline.token, visible: [], matches: [:])
   }
 
+  // MARK: - 手放す
+
+  /// 取り直しで外れた前の結果は、知らせの後に裏へ渡して手放す（シンボルの数に比例する解放を main で行わない）。
+  func testARefreshHandsThePreviousOutlineToTheBackground() throws {
+    let (document, surface) = try open(quietDelay: .milliseconds(50))
+    document.wantsOutline = true
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    let previous = try XCTUnwrap(document.outline?.token)
+    let notified = OSAllocatedUnfairLock(initialState: false)
+    document.onOutlineChange = { notified.withLock { $0 = true } }
+    let handed = OSAllocatedUnfairLock(initialState: [(token: OutlineToken, afterNotice: Bool)]())
+    document.releaseOutlines = { parcel in
+      let tokens = parcel.withLock { $0?.outlines.map(\.token) ?? [] }
+      let afterNotice = notified.withLock { $0 }
+      handed.withLock { $0 += tokens.map { ($0, afterNotice) } }
+    }
+
+    surface.replace(NSRange(location: 0, length: 0), with: "func top() {}\n")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    let released = handed.withLock { $0 }
+    XCTAssertEqual(released.map(\.token), [previous])
+    XCTAssertEqual(released.map(\.afterNotice), [true], "知らせの後に渡す")
+  }
+
   // MARK: - 閉じる
 
   /// 閉じた文書のアウトラインの裏の仕事（結果を持つ）は、手放す裏の仕事が最後の参照を落とす。
@@ -287,7 +311,7 @@ final class EditorDocumentOutlineTests: XCTestCase {
       document.releaseParts = { parcel in
         weak var worker = parcel.withLock { $0?.outline.worker }
         let saw =
-          worker != nil && parcel.withLock { $0?.outline.outlines.contains { $0 != nil } == true }
+          worker != nil && parcel.withLock { $0?.outline.retired.outlines.isEmpty == false }
         DispatchQueue.global().sync { parcel.withLock { $0 = nil } }
         result.withLock { $0 = (saw, worker != nil) }
       }
