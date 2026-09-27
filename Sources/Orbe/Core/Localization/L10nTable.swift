@@ -16,6 +16,7 @@ enum L10n {
 
   private static let baseTable: [L10nKey: (ja: String, en: String)] = [
     // MARK: Menu
+    .menuServices: ("サービス", "Services"),
     .menuHide: ("%@を隠す", "Hide %@"),
     .menuHideOthers: ("ほかを隠す", "Hide Others"),
     .menuShowAll: ("すべてを表示", "Show All"),
