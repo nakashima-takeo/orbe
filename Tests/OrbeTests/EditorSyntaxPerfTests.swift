@@ -16,7 +16,8 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
 
   /// 構文の崩れる打鍵の裏の重さ。1MB の Swift と、タグ付きテンプレートを含む 1MB の JS の途中で `let v = f(` の `(` を
   /// 打った 1 回の後の、裏のスレッドの CPU 時間の総和（見えていない範囲の作り直しを含む）・見えている行の色が最終の色に
-  /// なるまで・文書全体が揃うまで（どれも打鍵の前から）。続けて同じ崩れた文書で 30ms おきに 50 打鍵し、打ち続けた間と
+  /// なるまで・文書全体が揃うまで（どれも打鍵の前から）と、同じ打鍵を tree-sitter が差分で解き直す時間（見えている行の色が
+  /// 最終の色になるまでの目標は、この時間 ＋ 15ms）。続けて同じ崩れた文書で 30ms おきに 50 打鍵し、打ち続けた間と
   /// 止んでからの裏の CPU と、その間の構文解析の回数と、最後の打鍵から全体が揃うまでを出す。裏の CPU はプロセスの CPU から
   /// main スレッドの CPU を引いたもの。
   func testCrumblingKeystroke() throws {
@@ -33,6 +34,7 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
         document.surface.responder.keyDown(with: .key(String(character), []))
       }
       XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))
+      let parse = try incrementalParse(of: document, inserting: "(")
       RunLoop.main.run(until: Date().addingTimeInterval(0.5))
 
       var deliveries: [(time: Double, roles: [HighlightSpan])] = []
@@ -63,7 +65,7 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
       print(
         "PERF", label, "crumbling-keystroke background-cpu", ms(cpu), "visible-final",
         ms(max(0, settled - typed)), "complete", ms(complete - typed), "deliveries",
-        deliveries.count)
+        deliveries.count, "incremental-parse", ms(parse))
 
       document.onRolesChange = minimap
       let parsed = document.syntax?.parseCount ?? 0
@@ -107,6 +109,33 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
   }
 
   private func ms(_ value: Double) -> String { String(format: "%.1f", value) }
+
+  /// 文書の本文を解いた構文の層に、キャレットへの `insertion` の挿入を写し、根を差分で解き直す時間（ms）。
+  private func incrementalParse(of document: EditorDocument, inserting insertion: String) throws
+    -> Double
+  {
+    let text = document.text
+    let at = document.surface.selectedRange.location
+    let registry = LanguageRegistry(
+      queriesRoot: Bundle(for: Self.self).bundleURL.deletingLastPathComponent())
+    let layers = SyntaxLayers(
+      rules: try XCTUnwrap(registry.rules(for: try XCTUnwrap(document.language))),
+      registry: registry,
+      cancellation: SyntaxCancellation())
+    layers.parseAll(text)
+    var edited = text
+    edited.replace(NSRange(location: at, length: 0), with: insertion)
+    let point = text.point(at: at)
+    let start = TextPoint(row: point.row, column: point.column)
+    var log = EditLog()
+    let record = log.append(
+      TextEdit(range: NSRange(location: at, length: 0), replacement: insertion), start: start,
+      oldEnd: start,
+      newEnd: TextPoint(row: point.row, column: point.column + insertion.utf16.count))
+    let started = DispatchTime.now().uptimeNanoseconds
+    _ = layers.apply([record], text: edited)
+    return Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
+  }
 
   /// `bytes` を超えるまで、段落・インライン・コードブロックを含む同じ形の節を連ねた Markdown の本文。
   static func markdownSource(bytes: Int) -> String {
