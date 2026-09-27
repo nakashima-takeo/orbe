@@ -68,6 +68,7 @@ final class OutlineNestTests: XCTestCase {
         item("s2", 40, 50, node: 9),
       ], version: 0)
     XCTAssertEqual(outline.deepest(containing: 5), 1)
+    XCTAssertEqual(outline.deepest(containing: 2), 1, "頭の位置も含む")
     XCTAssertEqual(outline.deepest(containing: 10), 1, "終わりの位置も含む")
     XCTAssertEqual(outline.deepest(containing: 11), 0, "子の間は親")
     XCTAssertEqual(outline.deepest(containing: 25), 0)
