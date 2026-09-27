@@ -39,18 +39,22 @@
   (#set! kind "method")) @item
 
 ; トップレベルの const / var。名前が 1 つの宣言は宣言全体、複数なら名前ごと。
+; const_spec は var_spec と違い、2 つ目以降の名前に `name` のフィールドが付かない（文法が並び全体に付けるため）。
+; 複数の名前は「直後に , が続く最初の名前」と「前に名前がある名前」で拾う。
 (source_file
   (const_declaration
     (const_spec
+      .
       name: (identifier) @name @item
-      name: (identifier)))
+      .
+      ","))
   (#set! kind "constant"))
 
 (source_file
   (const_declaration
     (const_spec
-      name: (identifier)
-      name: (identifier) @name @item))
+      (identifier)
+      (identifier) @name @item))
   (#set! kind "constant"))
 
 (source_file

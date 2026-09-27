@@ -152,6 +152,17 @@ final class OutlineRulesTests: XCTestCase {
     XCTAssertEqual(try text(of: "second", in: outline, source: source, nameRange: true), "second")
   }
 
+  /// Go の 1 つの spec に並べた const と var は名前ごとのシンボルで、範囲はその名前だけ。名前が 1 つなら spec 全体。
+  func testGoNamesInOneSpecSpanOnlyTheirName() throws {
+    let source = "package p\n\nconst A, B, C = 1, 2, 3\nconst D = 4\nvar x, y int\n"
+    let outline = try extract(.go, source)
+    XCTAssertEqual(outline.symbols.map(\.name), ["A", "B", "C", "D", "x", "y"])
+    for name in ["A", "B", "C", "x", "y"] {
+      XCTAssertEqual(try text(of: name, in: outline, source: source), name)
+    }
+    XCTAssertEqual(try text(of: "D", in: outline, source: source), "D = 4")
+  }
+
   /// Go のメソッドは `(*Server).Start`（gopls と同じ）。関数はレシーバが無いので名前だけ。
   func testGoMethodsCarryTheirReceiverType() throws {
     let names = try outline(.go, "outline.go").filter { $0.kind == .method && $0.depth == 0 }

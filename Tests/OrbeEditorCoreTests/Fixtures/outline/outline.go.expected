@@ -1,6 +1,11 @@
 constant DefaultPort
 constant StateIdle
 constant StateRunning
+constant MinRetries
+constant MaxRetries
+constant Major
+constant Minor
+constant Patch
 variable ErrClosed
 variable registry
 variable debug

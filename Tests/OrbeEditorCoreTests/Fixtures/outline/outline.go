@@ -10,7 +10,10 @@ const DefaultPort = 8080
 const (
 	StateIdle State = iota
 	StateRunning
+	MinRetries, MaxRetries = 1, 5
 )
+
+const Major, Minor, Patch = 1, 2, 3
 
 var (
 	ErrClosed = errors.New("closed")
