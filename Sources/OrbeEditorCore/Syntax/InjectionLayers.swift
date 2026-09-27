@@ -122,7 +122,7 @@ struct InjectionLayers {
     for placed in doomed {
       let lower = placed.origin
       let upper = placed.origin + placed.layer.extent
-      if lower < upper { removed.insert(integersIn: lower..<upper) }
+      removed.formUnion(placed.whole)
       entries.visit(
         entering: { before, span in before.offset + span.reach >= lower },
         { index, before, entry in

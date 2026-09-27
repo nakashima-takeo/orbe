@@ -117,9 +117,10 @@ final class SyntaxLayers {
         let to = min(placed.origin + (range.upperBound + 1) / 2, text.length)
         if from < to { changed.insert(integersIn: from..<to) }
       }
+    } else if isRoot {
+      changed.insert(integersIn: 0..<text.length)
     } else {
-      let end = isRoot ? text.length : min(placed.origin + layer.extent, text.length)
-      if placed.origin < end { changed.insert(integersIn: placed.origin..<end) }
+      changed = placed.whole.intersection(IndexSet(integersIn: 0..<text.length))
     }
     layer.tree = tree
     layer.needsParse = false

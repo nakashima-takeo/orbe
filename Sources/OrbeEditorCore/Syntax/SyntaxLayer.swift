@@ -116,6 +116,20 @@ struct Placed {
     return (origin + match.lowerBound)..<(origin + match.upperBound)
   }
 
+  /// 層の色が及ぶ全体（本文の上）——束ねない層は原点からマッチの終わりまで、束ねた層は注入の範囲の和（色は注入の範囲の
+  /// 中に切るので、範囲の隙間の色は層で変わらない）。
+  var whole: IndexSet {
+    guard layer.isCombined else {
+      return IndexSet(integersIn: origin..<(origin + layer.extent))
+    }
+    var result = IndexSet()
+    for range in layer.includedRanges {
+      result.insert(
+        integersIn: (origin + Int(range.start_byte) / 2)..<(origin + Int(range.end_byte) / 2))
+    }
+    return result
+  }
+
   /// 区画を層の座標のバイトへ。層が区画より後ろなら nil。
   func bytes(of piece: Range<Int>) -> Range<Int>? {
     let lower = max(piece.lowerBound, origin) - origin
