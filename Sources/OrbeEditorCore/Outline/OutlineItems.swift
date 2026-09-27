@@ -1,18 +1,26 @@
 import Foundation
 import TreeSitter
 
-/// マッチ 1 つ → 0〜n 個のシンボル。既定は 1 マッチ → 1 シンボル（名前は `@context` と `@name` の字）。規則だけでは
-/// VS Code の言語サーバの名付けに届かない言語（Swift・Go・HTML・CSS・JSON）の手直しはここに閉じ、節の種類の知識は規則と
-/// ここにしか無い。
-enum OutlineItems {
-  static func items(for grammar: Grammar, _ match: OutlineMatch) -> [OutlineExtraction.Item] {
+/// 取り出し 1 回ぶんの言語の口。マッチ 1 つ → 0〜n 個のシンボル。既定は 1 マッチ → 1 シンボル（名前は `@context` と
+/// `@name` の字）。規則だけでは VS Code の言語サーバの名付けに届かない言語（Swift・Go・HTML・CSS・JSON）の手直しはここに
+/// 閉じ、節の種類の知識は規則とここにしか無い。
+struct OutlineItems {
+  private let grammar: Grammar
+  /// JSON: 配列の節 → 値の子の頭（昇順）。配列ごとに 1 度だけ数える。
+  private var arrayElements: [UInt: [UInt32]] = [:]
+
+  init(grammar: Grammar) {
+    self.grammar = grammar
+  }
+
+  mutating func items(for match: OutlineMatch) -> [OutlineExtraction.Item] {
     switch grammar {
-    case .swift: return [swiftSelector(match)]
-    case .go: return [goMethod(match)]
-    case .html: return [htmlElement(match)]
-    case .css: return cssSelectors(match)
+    case .swift: return [Self.swiftSelector(match)]
+    case .go: return [Self.goMethod(match)]
+    case .html: return [Self.htmlElement(match)]
+    case .css: return Self.cssSelectors(match)
     case .json: return [jsonArrayElement(match)]
-    default: return [plain(match)]
+    default: return [Self.plain(match)]
     }
   }
 
@@ -126,20 +134,41 @@ enum OutlineItems {
     }
   }
 
-  /// JSON の配列の要素は、親の中での番号（0 始まり。前にある値の数）を名前にする（VS Code の JSON と同じ）。
-  static func jsonArrayElement(_ match: OutlineMatch) -> OutlineExtraction.Item {
-    var item = plain(match)
+  /// JSON の配列の要素は、配列の中での番号（0 始まり。前にある値の数）を名前にする（VS Code の JSON と同じ）。
+  private mutating func jsonArrayElement(_ match: OutlineMatch) -> OutlineExtraction.Item {
+    var item = Self.plain(match)
     let parent = ts_node_parent(match.item)
-    guard match.names.isEmpty, !ts_node_is_null(parent), nodeType(parent) == "array" else {
+    guard match.names.isEmpty, !ts_node_is_null(parent), Self.nodeType(parent) == "array" else {
       return item
     }
-    let values: Set = ["object", "array", "string", "number", "true", "false", "null"]
+    let id = UInt(bitPattern: parent.id)
+    if arrayElements[id] == nil { arrayElements[id] = Self.valueStarts(in: parent) }
+    let starts = arrayElements[id]!
     let start = ts_node_start_byte(match.item)
-    item.name = String(
-      namedChildren(of: parent).filter {
-        values.contains(nodeType($0)) && ts_node_start_byte($0) < start
-      }.count)
+    var low = 0
+    var high = starts.count
+    while low < high {
+      let middle = (low + high) / 2
+      if starts[middle] < start { low = middle + 1 } else { high = middle }
+    }
+    item.name = String(low)
     return item
+  }
+
+  /// 配列の値の子（コメントと ERROR は数えない）の頭を、子を 1 度ずつ辿って並べる。
+  private static func valueStarts(in array: TSNode) -> [UInt32] {
+    let values: Set = ["object", "array", "string", "number", "true", "false", "null"]
+    var starts: [UInt32] = []
+    var cursor = ts_tree_cursor_new(array)
+    defer { ts_tree_cursor_delete(&cursor) }
+    guard ts_tree_cursor_goto_first_child(&cursor) else { return starts }
+    repeat {
+      let child = ts_tree_cursor_current_node(&cursor)
+      if ts_node_is_named(child), values.contains(nodeType(child)) {
+        starts.append(ts_node_start_byte(child))
+      }
+    } while ts_tree_cursor_goto_next_sibling(&cursor)
+    return starts
   }
 
   // MARK: - 節の道具

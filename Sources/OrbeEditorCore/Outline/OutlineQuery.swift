@@ -47,6 +47,7 @@ struct OutlineExtraction {
     // 順と限らない。同じパターンが同じ節に重ねて当たれば先に届いた方。
     var claims: [UInt: (pattern: UInt16, items: [Item])] = [:]
     var order: [UInt] = []
+    var naming = OutlineItems(grammar: grammar)
     let nodeText: (TSNode) -> String = { node in
       let start = Int(ts_node_start_byte(node)) / 2
       return text.substring(
@@ -64,7 +65,7 @@ struct OutlineExtraction {
         item: item, names: captures.filter { $0.index == query.name }.map(\.node),
         contexts: captures.filter { $0.index == query.context }.map(\.node), kind: kind,
         text: nodeText)
-      let made = OutlineItems.items(for: grammar, parts).map { made in
+      let made = naming.items(for: parts).map { made in
         var made = made
         made.node = node
         return made
