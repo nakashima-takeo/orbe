@@ -24,6 +24,10 @@ module impl Shape for Point
   type Output
   constant SIDES
   method area
+struct Ready
+module impl std::future::Future for Ready
+  type Output
+  method poll
 module impl fmt::Display for Wrapper<T>
   method fmt
 module impl !Send for Error

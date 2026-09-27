@@ -54,6 +54,20 @@ impl Shape for Point {
     }
 }
 
+/// A future that is always ready.
+
+#[must_use]
+// Polled once.
+pub struct Ready;
+
+impl std::future::Future for Ready {
+    type Output = ();
+
+    fn poll(self: std::pin::Pin<&mut Self>, _cx: &mut std::task::Context<'_>) -> std::task::Poll<()> {
+        std::task::Poll::Ready(())
+    }
+}
+
 impl<T: fmt::Display> fmt::Display for Wrapper<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)

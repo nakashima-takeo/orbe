@@ -65,13 +65,21 @@
 (function_item
   name: (_) @name
   parameters: (parameters
-    (self_parameter))
+    [
+      (self_parameter)
+      (parameter
+        pattern: (self))
+    ])
   (#set! kind "method")) @item
 
 (function_signature_item
   name: (_) @name
   parameters: (parameters
-    (self_parameter))
+    [
+      (self_parameter)
+      (parameter
+        pattern: (self))
+    ])
   (#set! kind "method")) @item
 
 (function_item
