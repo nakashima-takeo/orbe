@@ -178,8 +178,8 @@ final class GlyphPixelTests: EngineTestCase {
     return attributed
   }
 
-  /// 字のある画素（どちらかが地と違う画素）での最大の差（RGB の段）と、字のある画素の数。
-  /// 字のある画素の最大の差と数。比べるのは左から `right` px まで（その右は俯瞰）。
+  /// 字のある画素（どちらかが地と違う画素）での最大の差（RGB の段）と、字のある画素の数。比べるのは左から `right`
+  /// px まで（その右は俯瞰）。
   static func compare(_ a: CGImage, _ b: CGImage, right: Int) -> (worst: Int, ink: Int) {
     let pa = pixels(a)
     let pb = pixels(b)

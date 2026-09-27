@@ -182,6 +182,7 @@ extension FramePerfTests {
         Self.ms(Self.quantile(typing, 0.5)), "p95", Self.ms(Self.quantile(typing, 0.95)),
         "/ main CPU p99", Self.ms(Self.quantile(main.cpu, 0.99)), "/ remapped in last frame",
         remapped)
+      XCTAssertGreaterThanOrEqual(typing.count, 55, "\(label): 前提: 打鍵が画面に出た")
       XCTAssertLessThanOrEqual(Self.quantile(typing, 0.5), 12.5, "\(label): 打鍵→present の中央値")
       XCTAssertLessThanOrEqual(Self.quantile(typing, 0.95), 17, "\(label): 打鍵→present の p95")
       reset(surface)
