@@ -104,20 +104,24 @@ struct OutlineExtraction {
     }
     var symbols: [OutlineSymbol] = []
     symbols.reserveCapacity(order.count)
-    var ordinals: [String: Int] = [:]
+    var ordinals: [Int: Int] = [:]
     for (index, source) in order.enumerated() {
       let item = items[source]
       let parent = parents[index]
-      let base =
-        (parent.map { symbols[$0].key.path } ?? "") + "\u{1F}" + item.kind.rawValue + "\u{1E}"
-        + item.name
+      var path = Hasher()
+      path.combine(parent.map { symbols[$0].key })
+      path.combine(item.kind)
+      path.combine(item.name)
+      let base = path.finalize()
       let ordinal = ordinals[base, default: 0]
       ordinals[base] = ordinal + 1
+      var key = Hasher()
+      key.combine(base)
+      key.combine(ordinal)
       symbols.append(
         OutlineSymbol(
           name: item.name, kind: item.kind, depth: parent.map { symbols[$0].depth + 1 } ?? 0,
-          parent: parent, subtreeEnd: ends[index],
-          key: OutlineKey(path: ordinal == 0 ? base : base + "\u{1D}\(ordinal)")))
+          parent: parent, subtreeEnd: ends[index], key: OutlineKey(value: key.finalize())))
     }
     return DocumentOutline(
       version: version, symbols: symbols, ranges: order.map { items[$0].range },
