@@ -301,14 +301,19 @@ final class MaterialBox: Sendable {
   /// 今の版。
   var revision: Int { state.withLock { $0.revision } }
 
-  /// 書き換えて版を進め、進めた後の版を返す。
+  /// 書き換えて版を進め、進めた後の版を返す。書き換える前の写しは裏で手放す——文書が役割の並びを丸ごと差し替えた後は、
+  /// 箱が古い並びの最後の持ち主になりうる（大きな木の解放を main で行わない）。
   @discardableResult
   func update(_ body: @Sendable (inout FrameMaterial) -> Void) -> Int {
-    state.withLock {
-      body(&$0)
-      $0.revision += 1
-      return $0.revision
+    let (revision, before) = state.withLock { material in
+      let before = material.content
+      body(&material)
+      material.revision += 1
+      return (material.revision, before)
     }
+    let parcel = OSAllocatedUnfairLock(initialState: consume before)
+    DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = nil } }
+    return revision
   }
 
   func read() -> FrameMaterial { state.withLock { $0 } }
