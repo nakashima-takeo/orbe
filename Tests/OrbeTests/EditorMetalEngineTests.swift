@@ -6,8 +6,9 @@ import XCTest
 @testable import Orbe
 
 /// 新しいテキスト面（Metal）を選んだタブで、エディター面の今の働き——開く・切り替える・閉じる・再起動の復元・
-/// スクロールバーからのスクロール・⌘F の次でのスクロール——が同じように動く。壊れると設定を真にした人の文書が
-/// 開かない・俯瞰で動かない・一致が見えない・復元で今の面に戻る。
+/// スクロールバーからのスクロール・⌘F の次でのスクロール・ホイールの量と見えている範囲・本文の Esc——が今の面と
+/// 同じように動く。壊れると設定を真にした人の文書が開かない・俯瞰で動かない・一致が見えない・復元で今の面に戻る・
+/// ホイールで送る量やミニマップの見えている枠が今の面と違う・Esc で検索のバーが閉じない。
 @MainActor
 final class EditorMetalEngineTests: OrbeTestCase {
   private let metal = EditorEngineChoice(
@@ -71,6 +72,72 @@ final class EditorMetalEngineTests: OrbeTestCase {
     pane.closeSearch()
   }
 
+  /// マウスのホイールの目盛りで送る量と、見えている範囲の値（行・隠れている割合・可視行数・右に続くか・桁）が、同じ
+  /// 大きさに載せた今の面と同じ。
+  func testWheelNotchesAndTheViewportMatchTheCurrentSurface() throws {
+    func open(_ engine: EditorEngineChoice) throws -> (EditorDocument, NSWindow) {
+      let tab = TerminalTab(
+        cwd: try XCTUnwrap(TestIsolation.caseDir).path,
+        editorSurfaces: EditorSurfaces(queriesRoot: nil, engine: { engine }))
+      let window = hostEditor(tab, width: 900, height: 500)
+      let document = try tab.editor.open(try caseFile(UUID().uuidString + ".swift", lines(400)))
+      tab.view.editor.layoutSubtreeIfNeeded()
+      return (document, window)
+    }
+    let (current, currentWindow) = try open(.stTextView)
+    let (new, newWindow) = try open(metal)
+    defer {
+      currentWindow.contentView = nil
+      newWindow.contentView = nil
+    }
+    XCTAssertTrue(!isMetal(current) && isMetal(new), "前提: 今の面と新しい面")
+    for notches: Int32 in [1, 3] {
+      for document in [current, new] {
+        document.scroll(toFirstLine: 0)
+        let event = try XCTUnwrap(
+          CGEvent(
+            scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -notches,
+            wheel2: 0, wheel3: 0))
+        document.surface.view.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: event)))
+      }
+      XCTAssertGreaterThan(new.viewportLines.first, 0, "前提: 新しい面が送られた")
+      // 今の面はアニメーションで送るので、同じ位置に落ち着くまで待つ。
+      let deadline = Date().addingTimeInterval(5)
+      while abs(current.viewportLines.first - new.viewportLines.first) > 1e-6, Date() < deadline {
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+      }
+      let a = current.surface.viewport
+      let b = new.surface.viewport
+      XCTAssertEqual(b.firstVisible, a.firstVisible)
+      XCTAssertEqual(b.hiddenFraction, a.hiddenFraction, accuracy: 1e-6)
+      XCTAssertEqual(b.visibleLines, a.visibleLines, accuracy: 1e-6)
+      XCTAssertEqual(b.clipsRight, a.clipsRight)
+      XCTAssertEqual(b.hiddenColumns, a.hiddenColumns, accuracy: 1e-6)
+      XCTAssertEqual(b.visibleColumns, a.visibleColumns, accuracy: 1e-6)
+    }
+  }
+
+  /// 新しい面の本文に焦点がある間の Esc も、⌘F のバーを閉じる（今の面と同じ）。
+  func testEscapeInTheNewSurfaceClosesTheFindBar() throws {
+    let tab = TerminalTab(cwd: try XCTUnwrap(TestIsolation.caseDir).path, editorSurfaces: surfaces)
+    let window = hostEditor(tab, width: 900, height: 500)
+    defer { window.contentView = nil }
+    let document = try tab.editor.open(try caseFile("a.swift", lines(10)))
+    XCTAssertTrue(isMetal(document))
+    let pane = tab.view.editor
+    pane.showSearch()
+    XCTAssertNotNil(pane.searchBar, "前提: バーが出ている")
+    window.makeFirstResponder(document.surface.responder)
+    let escape = try XCTUnwrap(
+      NSEvent.keyEvent(
+        with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+        windowNumber: window.windowNumber, context: nil, characters: "\u{1b}",
+        charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+    window.sendEvent(escape)
+    XCTAssertNil(pane.searchBar, "閉じる")
+    XCTAssertTrue(window.firstResponder === document.surface.responder, "焦点は本文のまま")
+  }
+
   /// 再起動の復元で開く文書も、タブに渡した組成（新しい面）で開く。
   func testRestoredDocumentsOpenWithTheNewSurface() throws {
     let url = try caseFile("a.swift", lines(5))
@@ -98,6 +165,8 @@ final class EditorMetalEngineTests: OrbeTestCase {
     wc.settingsStore.applyGlobal(SettingChange(SettingKeys.editorEngineMetal, false))
     wc.applyActiveWorkspaceConfig()
     XCTAssertFalse(isMetal(try tab.editor.open(b)), "偽に戻して開けば今の面")
+    XCTAssertTrue(
+      isMetal(try XCTUnwrap(tab.editor.documents.first { $0.url == a })), "開いている文書の面は作り直さない")
 
     wc.settingsStore.applyGlobal(SettingChange(SettingKeys.editorEngineMetal, true))
     let state = TabState(
