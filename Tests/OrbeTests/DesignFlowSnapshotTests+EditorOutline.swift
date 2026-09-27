@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// エクスプローラーの下段のアウトラインの flow（fixture は骨の gallery と同じ `EditorShellFixtures`）。見出しで開く →
-/// キャレットの移動で追従 → シェブロンで畳む → すべて折りたたむ／すべて展開 → 列で打った字から絞り込む → Esc で解く →
+/// キャレットの移動で追従 → すべて折りたたむ／すべて展開 → キーで畳む → 列で打った字から絞り込む → Esc で解く →
 /// 境のドラッグ、を本物の操作で撮る。列の焦点と送りの位置を保つため、面を付けた窓の中でそのまま描く。
 extension DesignFlowSnapshotTests {
   func testEditorOutline() throws {
@@ -34,6 +34,8 @@ extension DesignFlowSnapshotTests {
         }
       ),
       ("follow_caret", { caret("func collapseAll()") }),
+      ("collapse_all", { outline.toggleCollapseAll() }),
+      ("expand_all", { outline.toggleCollapseAll() }),
       (
         "collapse_class",
         {
@@ -43,8 +45,6 @@ extension DesignFlowSnapshotTests {
             with: .key(String(UnicodeScalar(NSEvent.SpecialKey.leftArrow.rawValue)!), []))
         }
       ),
-      ("collapse_all", { outline.toggleCollapseAll() }),
-      ("expand_all", { outline.toggleCollapseAll() }),
       (
         "filter_typed",
         {
