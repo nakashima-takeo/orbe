@@ -1,29 +1,43 @@
 import Foundation
 import TreeSitter
 
-/// outline の問い合わせ（Orbe の規則 `outline/<文法>.scm`）。capture は `@item`（シンボルの節）・`@name`（名前）・
-/// `@context`（名前の前に付ける字）、種類はパターンごとの `#set! kind`。種類の無いパターンは何も出さない。
+/// outline の問い合わせ（Orbe の規則 `outline/<文法>.scm`）。capture は次のとおりで、種類はパターンごとの `#set! kind`。
+/// 種類の無いパターンは注釈だけを取る（シンボルは出さない）。
+/// - `@item`: シンボルの節。範囲の包含で入れ子にする
+/// - `@name`: 名前（複数なら位置順に連ねる）。`@context`: 名前の前に付ける字
+/// - `@target`: 飛び先の節（無ければ名前の範囲）
+/// - `@annotation`: item の前に続けば範囲に含める節（属性・デコレータ・doc コメント）。空行を挟んでも続く
+/// - `@annotation.adjacent`: 同じく含める節（普通のコメント）。ただし空行を挟めば切れる
 final class OutlineQuery: Sendable {
   let query: SyntaxQuery
   let item: UInt32
   let name: UInt32?
   let context: UInt32?
+  let target: UInt32?
+  let annotation: UInt32?
+  let adjacentAnnotation: UInt32?
   /// パターンごとの種類。
   let kinds: [OutlineKind?]
 
   /// `@item` が無ければ nil。
   init?(_ query: SyntaxQuery) {
-    guard let item = query.captureNames.firstIndex(of: "item") else { return nil }
+    let names = query.captureNames
+    guard let item = names.firstIndex(of: "item") else { return nil }
+    let index: (String) -> UInt32? = { name in names.firstIndex(of: name).map { UInt32($0) } }
     self.query = query
     self.item = UInt32(item)
-    name = query.captureNames.firstIndex(of: "name").map { UInt32($0) }
-    context = query.captureNames.firstIndex(of: "context").map { UInt32($0) }
+    name = index("name")
+    context = index("context")
+    target = index("target")
+    annotation = index("annotation")
+    adjacentAnnotation = index("annotation.adjacent")
     kinds = query.settings.map { $0["kind"].flatMap(OutlineKind.init(rawValue:)) }
   }
 }
 
 /// 根の構文木 1 本からアウトラインを取り出す。問い合わせを木全体に 1 回かけ、マッチごとに言語の口（`OutlineItems`）で
-/// シンボルを作り、`@item` の節の範囲の包含で入れ子にする。cursor を持つので、使う裏の仕事の中だけで使う。
+/// シンボルを作り、注釈の分だけ範囲を前へ広げ、`@item` の節の範囲の包含で入れ子にする。cursor を持つので、使う裏の仕事の
+/// 中だけで使う。
 struct OutlineExtraction {
   /// 取り出したシンボル 1 つ（入れ子にする前）。位置は UTF-16。
   struct Item {
@@ -45,8 +59,9 @@ struct OutlineExtraction {
   ) -> DocumentOutline? {
     // 同じ節を複数のパターンが取ったら、規則に先に書いたパターン（番号の小さい方）が勝つ——マッチの届く順はパターンの
     // 順と限らない。同じパターンが同じ節に重ねて当たれば先に届いた方。
-    var claims: [UInt: (pattern: UInt16, items: [Item])] = [:]
+    var claims: [UInt: (pattern: UInt16, node: TSNode, items: [Item])] = [:]
     var order: [UInt] = []
+    var annotations: [UInt: Bool] = [:]
     var naming = OutlineItems(grammar: grammar)
     let nodeText: (TSNode) -> String = { node in
       let start = Int(ts_node_start_byte(node)) / 2
@@ -56,14 +71,20 @@ struct OutlineExtraction {
     let finished = cursor.matches(
       of: query.query, in: tree.root, cancellation: cancellation, text: nodeText
     ) { match in
-      guard let kind = query.kinds[Int(match.pattern_index)] else { return }
       let captures = UnsafeBufferPointer(start: match.captures, count: Int(match.capture_count))
-      guard let item = captures.first(where: { $0.index == query.item })?.node else { return }
+      for capture in captures
+      where capture.index == query.annotation || capture.index == query.adjacentAnnotation {
+        annotations[UInt(bitPattern: capture.node.id)] = capture.index == query.annotation
+      }
+      guard let kind = query.kinds[Int(match.pattern_index)],
+        let item = captures.first(where: { $0.index == query.item })?.node
+      else { return }
       let node = UInt(bitPattern: item.id)
       if let claim = claims[node], claim.pattern <= match.pattern_index { return }
       let parts = OutlineMatch(
         item: item, names: captures.filter { $0.index == query.name }.map(\.node),
-        contexts: captures.filter { $0.index == query.context }.map(\.node), kind: kind,
+        contexts: captures.filter { $0.index == query.context }.map(\.node),
+        targets: captures.filter { $0.index == query.target }.map(\.node), kind: kind,
         text: nodeText)
       let made = naming.items(for: parts).map { made in
         var made = made
@@ -71,14 +92,56 @@ struct OutlineExtraction {
         return made
       }
       if claims[node] == nil { order.append(node) }
-      claims[node] = (match.pattern_index, made)
+      claims[node] = (match.pattern_index, item, made)
     }
     guard finished else { return nil }
-    return Self.nest(order.flatMap { claims[$0]!.items }, version: version)
+    let items = order.flatMap { node -> [Item] in
+      let claim = claims[node]!
+      guard !annotations.isEmpty else { return claim.items }
+      let start = Self.annotatedStart(of: claim.node, annotations: annotations)
+      return claim.items.map { item in
+        var item = item
+        if start < item.range.location {
+          item.range = NSRange(location: start, length: NSMaxRange(item.range) - start)
+        }
+        return item
+      }
+    }
+    return Self.nest(items, version: version)
   }
 
-  /// 位置順（開始の昇順・終わりの降順）に並べ、範囲の包含で入れ子にして鍵を付ける。同じ節から出たシンボルは兄弟。
-  static func nest(_ items: [Item], version: Int) -> DocumentOutline {
+  /// `node` の前に続く注釈の頭（UTF-16）。前の兄弟を遡り、注釈の節が続く限り含める。`annotations` は注釈の節 → 空行を
+  /// 挟んでも続くか。
+  private static func annotatedStart(of node: TSNode, annotations: [UInt: Bool]) -> Int {
+    var head = node
+    var previous = ts_node_prev_sibling(head)
+    while !ts_node_is_null(previous),
+      let acrossBlankLines = annotations[UInt(bitPattern: previous.id)]
+    {
+      if !acrossBlankLines, blankLine(between: previous, and: head) { break }
+      head = previous
+      previous = ts_node_prev_sibling(head)
+    }
+    return Int(ts_node_start_byte(head)) / 2
+  }
+
+  /// `earlier` の終わりと `later` の頭の間に空行があるか（`earlier` が行末の改行まで含む節でも同じに数える）。
+  private static func blankLine(between earlier: TSNode, and later: TSNode) -> Bool {
+    let end = ts_node_end_point(earlier)
+    let includesBreak = end.column == 0 && ts_node_end_byte(earlier) > ts_node_start_byte(earlier)
+    return Int(ts_node_start_point(later).row) - Int(end.row) + (includesBreak ? 1 : 0) >= 2
+  }
+
+  /// シンボルの並べ方と親子。`order` は位置順（開始の昇順・終わりの降順）に並べた `items` の番号、`parents` と `ends`
+  /// （部分木の終わり）はその並びの上の位置。
+  struct Arrangement {
+    let order: [Int]
+    let parents: [Int?]
+    let ends: [Int]
+  }
+
+  /// 位置順に並べ、範囲の包含で親子を決める。同じ節から出たシンボルは兄弟。
+  static func arrange(_ items: [Item]) -> Arrangement {
     let order = items.indices.sorted { lhs, rhs in
       let a = items[lhs].range
       let b = items[rhs].range
@@ -103,6 +166,15 @@ struct OutlineExtraction {
       parents.append(stack.last)
       stack.append(index)
     }
+    return Arrangement(order: order, parents: parents, ends: ends)
+  }
+
+  /// 位置順に並べ、範囲の包含で入れ子にして鍵を付ける。同じ節から出たシンボルは兄弟。
+  static func nest(_ items: [Item], version: Int) -> DocumentOutline {
+    let arrangement = arrange(items)
+    let order = arrangement.order
+    let parents = arrangement.parents
+    let ends = arrangement.ends
     var symbols: [OutlineSymbol] = []
     symbols.reserveCapacity(order.count)
     var ordinals: [Int: Int] = [:]
@@ -135,6 +207,7 @@ struct OutlineMatch {
   let item: TSNode
   let names: [TSNode]
   let contexts: [TSNode]
+  let targets: [TSNode]
   let kind: OutlineKind
   let text: (TSNode) -> String
 }

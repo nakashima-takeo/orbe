@@ -34,7 +34,7 @@
   receiver: (parameter_list
     (parameter_declaration
       type: (_) @name))
-  name: (_) @name
+  name: (_) @name @target
   (#set! kind "method")) @item
 
 ; トップレベルの const / var。名前が 1 つの宣言は宣言全体、複数なら名前ごと。

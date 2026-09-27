@@ -25,6 +25,7 @@ class Service
     property level
   property label
   method stop
+  method reset
   method start
     variable started
     variable attempt

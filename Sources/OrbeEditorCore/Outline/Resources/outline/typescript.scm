@@ -5,7 +5,7 @@
 ;   種類を足した。変数は深さを問わず出し（for / catch の変数も）、コンストラクタ・引数のプロパティ・getter / setter・enum の
 ;   値・interface の中身・`export default`・呼び出しに渡した関数（tsserver の「… callback」）を足した。テストの呼び出し
 ;   （`describe` / `test.each` / `it.skipIf` など）の取り出しは、呼び出しと、呼んだ結果の呼び出しに渡した関数の一般の規則に
-;   置き換えた。TSX もこの規則を使う。
+;   置き換えた。クラスの中身の前のデコレータを中身の範囲に含めた（tsserver と同じ）。TSX もこの規則を使う。
 
 ; 型と名前空間
 (class_declaration
@@ -128,6 +128,10 @@
       (function_expression)
     ] @item)
   (#set! kind "function"))
+
+; クラスの中身の前のデコレータは、中身の範囲に含める
+(class_body
+  (decorator) @annotation)
 
 ; クラスの中身
 (class_body

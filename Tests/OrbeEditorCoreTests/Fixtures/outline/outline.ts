@@ -45,6 +45,9 @@ export abstract class Service extends EventEmitter {
 
   abstract stop(): void;
 
+  @logged()
+  reset(): void {}
+
   async start(options: Options): Promise<void> {
     const started = Date.now();
     for (let attempt = 0; attempt < retries; attempt++) {

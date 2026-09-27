@@ -1,4 +1,5 @@
 import Foundation
+import TreeSitter
 import XCTest
 
 @testable import OrbeEditorCore
@@ -25,22 +26,34 @@ final class OutlineRulesTests: XCTestCase {
 
   /// 見本を解いて、規則を根の木に 1 回かけた結果。
   private func outline(_ language: SyntaxLanguage, _ file: String) throws -> [OutlineSymbol] {
+    try extract(
+      language,
+      String(contentsOf: Queries.outlines.appendingPathComponent(file), encoding: .utf8)
+    ).symbols
+  }
+
+  /// 本文を解いて、規則を根の木に 1 回かけた結果。
+  private func extract(_ language: SyntaxLanguage, _ source: String) throws -> DocumentOutline {
     let rules = try XCTUnwrap(registry.rules(for: language), "\(language) の文法が読めない")
     let query = try XCTUnwrap(rules.outline, "\(language) の規則が組めない")
-    let text = TextRope(
-      try String(contentsOf: Queries.outlines.appendingPathComponent(file), encoding: .utf8))
+    let text = TextRope(source)
     let parser = SyntaxParser(cancellation: SyntaxCancellation())
     guard
       case .parsed(let tree) = parser.parse(
         rules.language, ranges: [], old: nil, text: text, origin: 0)
-    else {
-      XCTFail("前提: \(file) を解析できる")
-      return []
-    }
+    else { throw XCTSkip("前提: 解析できる") }
     let extraction = OutlineExtraction(query: query, grammar: language.grammar)
     return try XCTUnwrap(
-      extraction.run(tree, text: text, version: 0, cancellation: SyntaxCancellation())
-    ).symbols
+      extraction.run(tree, text: text, version: 0, cancellation: SyntaxCancellation()))
+  }
+
+  /// 名前のシンボルの範囲（か名前の範囲）が占める字。
+  private func text(
+    of name: String, in outline: DocumentOutline, source: String, nameRange: Bool = false
+  ) throws -> String {
+    let index = try XCTUnwrap(outline.symbols.firstIndex { $0.name == name }, "\(name) が無い")
+    return (source as NSString).substring(
+      with: nameRange ? outline.nameRanges[index] : outline.ranges[index])
   }
 
   private func lines(_ symbols: [OutlineSymbol]) -> [String] {
@@ -69,13 +82,26 @@ final class OutlineRulesTests: XCTestCase {
 
   // MARK: - 規則が組める
 
-  /// 15 言語すべてで規則が同梱物から読めて今の文法の版で組め、どのパターンも語彙の中の種類を持つ。
+  /// 15 言語すべてで規則が同梱物から読めて今の文法の版で組め、シンボルを出すパターン（`@item` を取る）はどれも語彙の中の
+  /// 種類を持つ。`@item` を取らないパターンは注釈だけを取る。
   func testEveryLanguageHasARuleThatCompilesWithAKindForEveryPattern() throws {
     for language in SyntaxLanguage.allCases {
       let query = try XCTUnwrap(registry.rules(for: language)?.outline, "\(language) の規則が組めない")
       XCTAssertFalse(query.kinds.isEmpty, "\(language)")
       for (pattern, kind) in query.kinds.enumerated() {
-        XCTAssertNotNil(kind, "\(language) のパターン \(pattern) に種類が無い（綴りの誤り）")
+        let captures = { (capture: UInt32?) in
+          capture.map {
+            ts_query_capture_quantifier_for_id(query.query.raw, UInt32(pattern), $0)
+              != TSQuantifierZero
+          } ?? false
+        }
+        if captures(query.item) {
+          XCTAssertNotNil(kind, "\(language) のパターン \(pattern) に種類が無い（綴りの誤り）")
+        } else {
+          XCTAssertTrue(
+            captures(query.annotation) || captures(query.adjacentAnnotation),
+            "\(language) のパターン \(pattern) が何も取らない")
+        }
       }
     }
     XCTAssertEqual(Set(Self.samples.map(\.0)), Set(SyntaxLanguage.allCases), "前提: 見本が全言語ある")
@@ -163,6 +189,32 @@ final class OutlineRulesTests: XCTestCase {
     XCTAssertEqual(children(of: "contributors", "0", "roles", in: symbols), ["0", "1"])
     XCTAssertEqual(children(of: "keywords", in: symbols), ["0", "1"])
     XCTAssertEqual(try symbol("\"\"", in: symbols).kind, .key, "空のキーの名前は引用符 2 つ")
+  }
+
+  /// 前に続く注釈は項目の範囲に入る。Rust は rust-analyzer と同じく、属性と外側の doc コメントは空行を挟んでも、普通の
+  /// コメントは空行を挟まない限り入り、内側の doc コメントでは切れる。TS はクラスの中身の前のデコレータ。
+  func testLeadingAnnotationsJoinTheItemsRange() throws {
+    let rust = "//! crate\n\n/// Doc.\n\n#[derive(Debug)]\n// plain\nstruct A;\n\n// far\n\nfn f() {}\n"
+    let rustOutline = try extract(.rust, rust)
+    XCTAssertEqual(
+      try text(of: "A", in: rustOutline, source: rust),
+      "/// Doc.\n\n#[derive(Debug)]\n// plain\nstruct A;")
+    XCTAssertEqual(try text(of: "f", in: rustOutline, source: rust), "fn f() {}")
+
+    let script = "class C {\n  x = 1;\n  @logged()\n  m() {}\n}\n"
+    XCTAssertEqual(
+      try text(of: "m", in: try extract(.typescript, script), source: script), "@logged()\n  m() {}")
+  }
+
+  /// 飛び先は名前の字の上。Go のメソッドはメソッド名、Rust の impl は対象の型（言語サーバと同じ）。
+  func testTheJumpTargetIsTheNameTheServersPointAt() throws {
+    let go = "package p\n\nfunc (s *Server) Start() {}\n"
+    XCTAssertEqual(
+      try text(of: "(*Server).Start", in: try extract(.go, go), source: go, nameRange: true), "Start")
+    let rust = "impl Display for Point {}\n"
+    XCTAssertEqual(
+      try text(of: "impl Display for Point", in: try extract(.rust, rust), source: rust, nameRange: true),
+      "Point")
   }
 
   // MARK: - 同じ節の重複

@@ -24,22 +24,17 @@ struct OutlineItems {
     }
   }
 
-  /// `@context` と `@name` を連ねた名前（節の間にすき間があれば空白 1 つ）と、それが占める範囲。名前の節が無ければ
-  /// 名前は空で、範囲は item の頭。
+  /// `@context` と `@name` を連ねた名前（節の間にすき間があれば空白 1 つ）。名前の範囲は `@target` の節、無ければ名前の
+  /// 節が占める範囲。名前の節も無ければ名前は空で、範囲は item の頭。
   static func plain(_ match: OutlineMatch) -> OutlineExtraction.Item {
-    let parts = match.contexts + match.names
     let range = range(of: match.item)
-    let nameRange =
-      parts.isEmpty
-      ? NSRange(location: range.location, length: 0)
-      : NSRange(
-        location: parts.map { self.range(of: $0).location }.min()!,
-        length: parts.map { NSMaxRange(self.range(of: $0)) }.max()!
-          - parts.map { self.range(of: $0).location }.min()!)
     let name = [joined(match.contexts, match.text), joined(match.names, match.text)]
       .filter { !$0.isEmpty }.joined(separator: " ")
     return OutlineExtraction.Item(
-      range: range, nameRange: nameRange, name: name, kind: match.kind, node: 0)
+      range: range,
+      nameRange: span(match.targets.isEmpty ? match.contexts + match.names : match.targets)
+        ?? NSRange(location: range.location, length: 0),
+      name: name, kind: match.kind, node: 0)
   }
 
   /// Swift の関数・init・プロトコルの関数・subscript はセレクタの形 `emit(_:coalesce:)`（sourcekit-lsp と同じ）。ラベルは
@@ -176,6 +171,13 @@ struct OutlineItems {
   private static func range(of node: TSNode) -> NSRange {
     let start = Int(ts_node_start_byte(node)) / 2
     return NSRange(location: start, length: Int(ts_node_end_byte(node)) / 2 - start)
+  }
+
+  /// 節の列が占める範囲（頭の最小から終わりの最大）。空なら nil。
+  private static func span(_ nodes: [TSNode]) -> NSRange? {
+    guard !nodes.isEmpty else { return nil }
+    let start = nodes.map { range(of: $0).location }.min()!
+    return NSRange(location: start, length: nodes.map { NSMaxRange(range(of: $0)) }.max()! - start)
   }
 
   private static func nodeType(_ node: TSNode) -> String {
