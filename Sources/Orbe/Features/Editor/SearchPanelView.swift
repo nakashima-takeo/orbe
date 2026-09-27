@@ -179,26 +179,57 @@ private struct SearchOption: View {
   }
 }
 
-/// 検索中の進捗の細い線（見本に無い。VS Code のビューの上端の線）——accent の短い帯が左から右へ流れ続ける。
-private struct SearchProgressLine: View {
-  private static let period: Double = 1.2
-  private static let segment: CGFloat = 0.3
+/// 検索中の進捗の細い線（見本に無い。VS Code のビューの上端の線）——accent の短い帯が左から右へ流れ続ける。帯の動きは
+/// Core Animation に任せる——SwiftUI の時刻で毎フレーム描くと、検索の間ずっと main が毎フレームパネルを組み直し、結果の
+/// 差し込みや打鍵を待たせる。
+private struct SearchProgressLine: NSViewRepresentable {
+  func makeNSView(context: Context) -> SearchProgressLineView { SearchProgressLineView() }
+  func updateNSView(_ view: SearchProgressLineView, context: Context) {}
 
-  var body: some View {
-    TimelineView(.animation) { context in
-      GeometryReader { geometry in
-        let phase =
-          context.date.timeIntervalSinceReferenceDate
-          .truncatingRemainder(dividingBy: Self.period) / Self.period
-        let width = geometry.size.width * Self.segment
-        Rectangle()
-          .fill(Color.theme.accentPrimary)
-          .frame(width: width)
-          .offset(x: (geometry.size.width + width) * phase - width)
-      }
+  func sizeThatFits(
+    _ proposal: ProposedViewSize, nsView: SearchProgressLineView, context: Context
+  ) -> CGSize? {
+    CGSize(width: proposal.width ?? 0, height: Theme.Layout.editorSearchProgress)
+  }
+}
+
+private final class SearchProgressLineView: NSView {
+  private static let period: CFTimeInterval = 1.2
+  private static let segment: CGFloat = 0.3
+  private let bar = CALayer()
+  private var animatedWidth: CGFloat?
+
+  init() {
+    super.init(frame: .zero)
+    wantsLayer = true
+    layer?.masksToBounds = true
+    layer?.addSublayer(bar)
+  }
+  required init?(coder: NSCoder) { fatalError("not supported") }
+
+  override var wantsUpdateLayer: Bool { true }
+
+  override func updateLayer() {
+    effectiveAppearance.performAsCurrentDrawingAppearance {
+      bar.backgroundColor = Theme.Color.accentPrimary.cgColor
     }
-    .frame(height: Theme.Layout.editorSearchProgress)
-    .clipped()
+  }
+
+  override func layout() {
+    super.layout()
+    guard bounds.width != animatedWidth else { return }
+    animatedWidth = bounds.width
+    let width = bounds.width * Self.segment
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    bar.frame = CGRect(x: -width, y: 0, width: width, height: bounds.height)
+    CATransaction.commit()
+    let flow = CABasicAnimation(keyPath: "position.x")
+    flow.fromValue = -width / 2
+    flow.toValue = bounds.width + width / 2
+    flow.duration = Self.period
+    flow.repeatCount = .infinity
+    bar.add(flow, forKey: "flow")
   }
 }
 
