@@ -116,7 +116,9 @@ extension Renderer {
         material: material, position: slot.scroll.peek(at: CACurrentMediaTime()).position,
         pixels: (width, height), atlas: atlas, config: slot.config), cache: slot.lines, fonts: fonts
     )
-    if built.longestLine > 0 { slot.scroll.noteLine(width: built.longestLine) }
+    if slot.scroll.measured(longestLine: built.longestLine, version: material.content?.version) {
+      slot.notify()
+    }
     guard
       let buffer = device.makeBuffer(
         length: max(built.byteCount, 256), options: .storageModeShared)

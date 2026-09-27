@@ -110,6 +110,38 @@ final class MetalTextSurfaceTests: EngineTestCase {
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 4, length: 0))
   }
 
+  /// 本文が右にまだ続くか——描画スレッドが組んだ行で横の範囲が伸びたら、main の操作を待たずに知らせ直す。右端まで
+  /// 送れば続かない。
+  func testClipsRightTellsWhetherTheTextContinuesToTheRight() throws {
+    let narrow = try open("short\n")
+    _ = narrow.surface.snapshot()
+    pump()
+    XCTAssertFalse(narrow.surface.viewport.clipsRight)
+    let wide = try open(String(repeating: "x", count: 300) + "\n")
+    _ = wide.surface.snapshot()
+    pump(until: { wide.surface.viewport.clipsRight }, "組んだ行で範囲が伸びれば知らせ直す")
+    wide.surface.scroll(ScrollInput(timestamp: 0, delta: SIMD2(-10_000, 0), precise: false))
+    XCTAssertFalse(wide.surface.viewport.clipsRight, "右端まで送れば続かない")
+  }
+
+  /// 外部変更の差し替えで、右へ送った横の位置は保つ——最も長い行は新しい写しを描いたコマで測り直し、その範囲に収める。
+  func testReplaceAllKeepsTheHorizontalPositionUntilRemeasured() throws {
+    let wide = String(repeating: "x", count: 300) + "\n"
+    let opened = try open(wide)
+    _ = opened.surface.snapshot()
+    opened.surface.scrollToVisible(NSRange(location: 250, length: 0))
+    let hidden = opened.surface.viewport.hiddenColumns
+    XCTAssertGreaterThan(hidden, 0)
+    opened.surface.replaceAll(with: "y" + wide)
+    XCTAssertEqual(opened.surface.viewport.hiddenColumns, hidden, "差し替えただけでは動かない")
+    _ = opened.surface.snapshot()
+    pump()
+    XCTAssertEqual(opened.surface.viewport.hiddenColumns, hidden, "測り直しても範囲の中なら保つ")
+    opened.surface.replaceAll(with: "short\n")
+    _ = opened.surface.snapshot()
+    pump(until: { opened.surface.viewport.hiddenColumns == 0 }, "短くなれば新しい範囲に収める")
+  }
+
   /// 行の印はオフセットで届き、引いた写しで行へ写す（区間の最後の字の行まで。削除は次の行の上端）。
   func testLineMarksAreMappedToRows() throws {
     let opened = try open("a\nb\nc\nd\n", waitForColors: false)
@@ -128,5 +160,16 @@ final class MetalTextSurfaceTests: EngineTestCase {
     opened = nil
     _ = RenderThread.shared.performAndWait { _ in true }
     XCTAssertNil(material.read().content)
+  }
+
+  /// 描画スレッドからの非同期の知らせを受けるまで main を回す（条件が無ければ 1 巡りだけ）。
+  private func pump(
+    until condition: () -> Bool = { true }, _ message: String = "", timeout: TimeInterval = 5
+  ) {
+    let deadline = Date().addingTimeInterval(timeout)
+    repeat {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    } while !condition() && Date() < deadline
+    XCTAssertTrue(condition(), message)
   }
 }

@@ -310,6 +310,8 @@ final class ScrollBox: Sendable {
     var revision = 0
     var gesture = 0
     var pendingEvents: [Double] = []
+    /// 最も長い行を測り直す（この版以降の写しを描いたコマの幅で置き直す）。
+    var remeasureFrom: Int?
   }
 
   private let state: OSAllocatedUnfairLock<State>
@@ -348,12 +350,29 @@ final class ScrollBox: Sendable {
 
   /// 見たことのある最も長い行を伸ばす（縮めない）。
   func noteLine(width: Double) {
+    _ = measured(longestLine: width, version: nil)
+  }
+
+  /// 本文を丸ごと置き換えた。最も長い行を、版 `version` 以降の写しを描いたコマで測り直す（それまで横の位置は保つ）。
+  func remeasure(from version: Int) {
+    state.withLock { $0.remeasureFrom = version }
+  }
+
+  /// 描画スレッドが、版 `version` の写しを描いたコマで組んだ行の最も長い幅を知らせる。測り直しを待っていればその幅に
+  /// 置き直し（範囲に収める）、そうでなければ伸ばすだけ。範囲が変わったら true。
+  func measured(longestLine width: Double, version: Int?) -> Bool {
     state.withLock { s in
-      guard width > s.physics.limits.longestLine else { return }
       var limits = s.physics.limits
-      limits.longestLine = width
+      if let from = s.remeasureFrom, let version, version >= from {
+        limits.longestLine = width
+        s.remeasureFrom = nil
+      } else if width > limits.longestLine {
+        limits.longestLine = width
+      }
+      guard limits != s.physics.limits else { return false }
       s.physics.setLimits(limits)
       s.revision += 1
+      return true
     }
   }
 

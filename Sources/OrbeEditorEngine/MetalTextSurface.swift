@@ -67,10 +67,12 @@ final class MetalTextSurface: TextSurface {
 
   // MARK: - 写しと材料
 
-  /// 文書の写しを引いて箱に置く（結ばれたとき・役割が変わったとき・自分が出した編集から戻ったとき）。
-  private func pullContent(marks spans: LineMarkSpans? = nil) {
+  /// 文書の写しを引いて箱に置く（結ばれたとき・役割が変わったとき・自分が出した編集から戻ったとき）。`remeasure` なら
+  /// 最も長い行をこの写しで測り直す。
+  private func pullContent(marks spans: LineMarkSpans? = nil, remeasure: Bool = false) {
     guard let delegate else { return }
     let content = delegate.surfaceContent(self)
+    if remeasure { scroll.remeasure(from: content.version) }
     let marks = spans.map { RowMarks($0, in: content.text) }
     material.update {
       $0.content = content
@@ -99,7 +101,8 @@ final class MetalTextSurface: TextSurface {
 
   func markUndoBoundary() {}
 
-  /// 本文を丸ごと置き換える編集を文書へ渡し、戻ったら写しを引く。最も長い行は測り直す。
+  /// 本文を丸ごと置き換える編集を文書へ渡し、戻ったら写しを引く。最も長い行は、新しい写しを描いたコマで測り直す
+  /// （横の位置はそれまで保ち、新しい幅の範囲に収める）。
   func replaceAll(with text: String) {
     guard let delegate, let content = material.read().content else { return }
     let caret = selectedRange.location
@@ -107,8 +110,7 @@ final class MetalTextSurface: TextSurface {
       self,
       didChange: TextEdit(
         range: NSRange(location: 0, length: content.text.length), replacement: text))
-    scroll.updateLimits { $0.longestLine = 0 }
-    pullContent()
+    pullContent(remeasure: true)
     let length = material.read().content?.text.length ?? 0
     selectedRange = NSRange(location: min(caret, length), length: 0)
   }
@@ -184,7 +186,7 @@ final class MetalTextSurface: TextSurface {
     refreshViewport()
   }
 
-  /// 描画スレッドだけが進める動き（端への戻り）で位置が変わった。
+  /// 描画スレッドだけが変える位置と範囲（端への戻り・組んだ行で伸びた横の範囲）が変わった。
   private func scrollDidAdvance() {
     refreshViewport()
   }

@@ -130,7 +130,8 @@ final class Renderer {
       FrameBuilder.Source(
         material: material, position: frame.position, pixels: (texture.width, texture.height),
         atlas: pass.atlas, config: slot.config), cache: slot.lines, fonts: fonts)
-    if slot.builder.longestLine > 0 { slot.scroll.noteLine(width: slot.builder.longestLine) }
+    let widened = slot.scroll.measured(
+      longestLine: slot.builder.longestLine, version: material.content?.version)
     guard let commands = queue.makeCommandBuffer(),
       let bufferIndex = encode(slot.builder, into: texture, pass, commands)
     else {
@@ -164,7 +165,7 @@ final class Renderer {
         events: frame.events,
         moving: moving, gesture: frame.gesture,
         mismatch: texture.width != pixels.width || texture.height != pixels.height))
-    if frame.returning || wasReturning { slot.notify() }
+    if frame.returning || wasReturning || widened { slot.notify() }
   }
 
   var gpuInflight: Int { buffers.filter(\.busy).count }
@@ -219,7 +220,8 @@ final class SurfaceSlot {
   let material: MaterialBox
   let scroll: ScrollBox
   let config: SurfaceConfig
-  /// 描画スレッドだけが進める動き（端への戻り）で位置が変わったことを main へ知らせる（非同期）。
+  /// 描画スレッドだけが変える位置と範囲（端への戻り・組んだ行で伸びた横の範囲）が変わったことを main へ知らせる
+  /// （非同期）。
   let notify: @Sendable () -> Void
   var target: FrameTarget?
   var clock: FrameClock?
