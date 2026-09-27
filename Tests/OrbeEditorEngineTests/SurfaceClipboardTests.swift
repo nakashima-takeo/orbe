@@ -63,7 +63,8 @@ final class SurfaceClipboardTests: EngineTestCase {
     opened.surface.selectedRange = NSRange(location: 0, length: 9)
     opened.surface.textView.copy(nil)
     let html = try XCTUnwrap(board.string(forType: .html))
-    XCTAssertTrue(html.hasPrefix("<div style=\"color: #cccccc;background-color: #1f1f1f;"), html)
+    let head = "<meta charset='utf-8'><div style=\"color: #cccccc;background-color: #1f1f1f;"
+    XCTAssertTrue(html.hasPrefix(head), html)
     XCTAssertTrue(html.contains("white-space: pre;"))
     XCTAssertTrue(html.contains("<span style=\"color: #579cd6;\">let</span>"), html)
     let plain = try open("plain words\n", name: "a.txt")
@@ -88,7 +89,7 @@ final class SurfaceClipboardTests: EngineTestCase {
     XCTAssertEqual(text(opened.document), "ax\r\ny\r\nz\r\n\r\nb\r\n")
   }
 
-  /// Finder でコピーしたファイルを貼ると、載せる側が決めたパスの文字列が入る。
+  /// Finder でコピーしたファイルを貼ると、載せる側が決めたパスの文字列が入る（Finder が平文で載せる名前より先に読む）。
   func testPastingFinderFilesInsertsTheirPaths() throws {
     let opened = try open("\n")
     _ = host(opened)
@@ -99,6 +100,7 @@ final class SurfaceClipboardTests: EngineTestCase {
     board.writeObjects([
       URL(fileURLWithPath: "/tmp/a.txt") as NSURL, URL(fileURLWithPath: "/tmp/b c.md") as NSURL,
     ])
+    board.setString("a.txt", forType: .string)
     opened.surface.textView.paste(nil)
     XCTAssertEqual(text(opened.document), "a.txt b c.md\n")
   }
@@ -203,5 +205,139 @@ final class SurfaceClipboardTests: EngineTestCase {
     let top = Int((config.topInset * 2).rounded())
     XCTAssertEqual(pixel(image, x: x, y: top + 1), [255, 255, 255, 255], "点")
     XCTAssertEqual(pixel(image, x: x, y: top + 5)[3], 0, "間")
+  }
+
+  /// 色付きの HTML は文字コードを添えるので、Cocoa のリッチテキストの貼り先が日本語を化けずに読む。
+  func testColoredHTMLKeepsNonASCIIText() throws {
+    let source = "// 日本語のコメント é\nlet a = 1\n"
+    let opened = try open(source)
+    _ = host(opened)
+    let board = privatePasteboard(opened)
+    opened.surface.selectedRange = NSRange(location: 0, length: (source as NSString).length - 1)
+    opened.surface.textView.copy(nil)
+    let html = try XCTUnwrap(board.string(forType: .html))
+    let read = try NSAttributedString(
+      data: Data(html.utf8), options: [.documentType: NSAttributedString.DocumentType.html],
+      documentAttributes: nil)
+    XCTAssertEqual(read.string.trimmingCharacters(in: .newlines), "// 日本語のコメント é\nlet a = 1")
+  }
+
+  /// 選択のある ⌘X は選択だけを消す。CRLF の文書の、改行の無い最終行の空の ⌘C は CRLF を足す。HTML は 64KB 未満だけ。
+  func testCutCopyEdgesAndTheHTMLLimit() throws {
+    let opened = try open("a\r\nlast")
+    _ = host(opened)
+    let board = privatePasteboard(opened)
+    let view = opened.surface.textView
+    opened.surface.selectedRange = NSRange(location: 4, length: 0)
+    view.copy(nil)
+    XCTAssertEqual(board.string(forType: .string), "last\r\n", "最終行に足す改行は文書の作法")
+    opened.surface.selectedRange = NSRange(location: 3, length: 2)
+    view.cut(nil)
+    XCTAssertEqual(board.string(forType: .string), "la")
+    XCTAssertEqual(text(opened.document), "a\r\nst", "選択だけを消す")
+
+    let style = HTMLCopy.Style(
+      text: "#000000", background: "#ffffff", roles: [:], fontFamily: "monospace", fontSize: 12,
+      lineHeight: 18)
+    let long = TextRope(String(repeating: "x", count: HTMLCopy.limit))
+    var roles = RoleRuns(length: long.length)
+    _ = roles.replace(
+      NSRange(location: 0, length: long.length),
+      with: [HighlightSpan(range: NSRange(location: 0, length: long.length), role: .keyword)])
+    func html(_ length: Int) -> String? {
+      HTMLCopy.html(long, NSRange(location: 0, length: length), roles: roles, style: style)
+    }
+    XCTAssertNotNil(html(HTMLCopy.limit - 1))
+    XCTAssertNil(html(HTMLCopy.limit), "64KB 以上は組まない")
+  }
+
+  /// 右クリックは選択の終わりの端（行末まで選んだ選択の右の余白を含む）でも選択を保つ。
+  func testContextMenuKeepsTheSelectionAtItsEnd() throws {
+    let opened = try open("abc def\n")
+    let window = host(opened)
+    opened.surface.host = RecordingHost()
+    let view = opened.surface.textView
+    for column: CGFloat in [6.5, 12] {
+      opened.surface.selectedRange = NSRange(location: 4, length: 3)
+      let event = try XCTUnwrap(
+        NSEvent.mouseEvent(
+          with: .rightMouseDown,
+          location: view.convert(point(opened, row: 0, column: column), to: nil),
+          modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil,
+          eventNumber: 0, clickCount: 1, pressure: 1))
+      _ = view.menu(for: event)
+      XCTAssertEqual(
+        opened.surface.selectedRange, NSRange(location: 4, length: 3), "桁 \(column) でも保つ")
+    }
+  }
+
+  /// 選択の上を押して少し（4pt 以下）ぶれても、離せばその位置にキャレットを置く（文字のドラッグにならない）。
+  func testASmallWobbleOnTheSelectionStillPlacesTheCaret() throws {
+    let opened = try open("abc def\n")
+    _ = host(opened)
+    opened.surface.selectedRange = NSRange(location: 0, length: 7)
+    let down = point(opened, row: 0, column: 2)
+    try mouse(opened, .leftMouseDown, at: down)
+    try mouse(opened, .leftMouseDragged, at: CGPoint(x: down.x + 2, y: down.y + 1))
+    try mouse(opened, .leftMouseUp, at: CGPoint(x: down.x + 2, y: down.y + 1))
+    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 2, length: 0))
+  }
+
+  /// 選択が行末まで届いていても、行末より右の空き地を押せば文字のドラッグの候補にならず、新しい選択が始まる。
+  func testPressingRightOfTheLineEndStartsANewSelection() throws {
+    let opened = try open("abc def\nnext\n")
+    _ = host(opened)
+    opened.surface.selectedRange = NSRange(location: 4, length: 3)
+    try mouse(opened, .leftMouseDown, at: point(opened, row: 0, column: 12))
+    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 7, length: 0), "押した所にキャレット")
+    try mouse(opened, .leftMouseDragged, at: point(opened, row: 0, column: 1))
+    try mouse(opened, .leftMouseUp, at: point(opened, row: 0, column: 1))
+    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 1, length: 6), "ドラッグで選択が伸びる")
+  }
+
+  /// 落とすときの判断——ファイルは開き（⇧ ならパス）、この面のドラッグは移動（コピーならコピー）で選択の中（両端を含む）へは
+  /// 落とさず、コピーの端なら隣へ写し、他の送り手の文字はコピーで入れる。
+  func testDropRules() {
+    let files = [URL(fileURLWithPath: "/tmp/a.txt")]
+    let dragged = NSRange(location: 4, length: 3)
+    func plan(
+      _ offset: Int?, files: [URL]? = nil, string: String? = "s", dragged: NSRange? = nil,
+      copying: Bool = false, shift: Bool = false, opensFiles: Bool = true
+    ) -> DropPlan {
+      DropRules.plan(
+        DropSituation(
+          offset: offset, files: files, string: string, dragged: dragged, copying: copying,
+          shift: shift, opensFiles: opensFiles))
+    }
+    XCTAssertEqual(plan(nil), DropPlan(), "本文の外")
+    XCTAssertEqual(plan(2, files: files), DropPlan(operation: .copy, action: .open(files)))
+    XCTAssertEqual(
+      plan(2, files: files, shift: true),
+      DropPlan(operation: .copy, indicator: 2, action: .insertPaths(files, at: 2)))
+    XCTAssertEqual(plan(2, files: files, opensFiles: false), DropPlan(), "載せる側がいなければ受けない")
+    XCTAssertEqual(plan(2, string: nil), DropPlan(), "平文もファイルも無い")
+    XCTAssertEqual(
+      plan(2), DropPlan(operation: .copy, indicator: 2, action: .insert("s", at: 2, moving: nil)),
+      "他の送り手はコピー")
+    XCTAssertEqual(
+      plan(0, dragged: dragged),
+      DropPlan(operation: .move, indicator: 0, action: .insert("s", at: 0, moving: dragged)))
+    for inside in [4, 5, 7] {
+      XCTAssertEqual(plan(inside, dragged: dragged), DropPlan(), "選択の中へは移さない（\(inside)）")
+    }
+    XCTAssertEqual(plan(5, dragged: dragged, copying: true), DropPlan(), "コピーでも内側へは写さない")
+    XCTAssertEqual(
+      plan(7, dragged: dragged, copying: true),
+      DropPlan(operation: .copy, indicator: 7, action: .insert("s", at: 7, moving: nil)),
+      "コピーで端なら隣へ写す")
+  }
+
+  /// ドラッグの途中で本文が丸ごと差し替わったら、運んでいる範囲を手放す（古い位置を消す移動にしない）。
+  func testReplacingFromDiskDropsTheDraggedRange() throws {
+    let opened = try open("abc def\n")
+    _ = host(opened)
+    opened.surface.textView.draggedRange = NSRange(location: 0, length: 3)
+    opened.surface.replaceAll(with: "xyz\n")
+    XCTAssertNil(opened.surface.textView.draggedRange)
   }
 }

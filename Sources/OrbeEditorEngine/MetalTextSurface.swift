@@ -92,8 +92,10 @@ final class MetalTextSurface: TextSurface {
     editor.finishComposition(.commit)
   }
 
-  /// 本文の丸ごとの置き換え（外部変更の差し替え）。通常の編集と同じく undo に載る。
+  /// 本文の丸ごとの置き換え（外部変更の差し替え）。通常の編集と同じく undo に載る。この面から始めた本文のドラッグの途中
+  /// なら、運んでいる範囲は古い本文の位置なので手放し、以後はコピーとして落とす（元の字は消さない）。
   func replaceAll(with text: String) {
+    textView.draggedRange = nil
     editor.replaceAll(with: text)
   }
 

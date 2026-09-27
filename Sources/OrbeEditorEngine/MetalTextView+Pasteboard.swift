@@ -5,34 +5,38 @@ import OrbeEditorCore
 /// 確定してから動く。
 extension MetalTextView {
   /// 行ごと写した印（Orbe の型。中身は空）。
-  static let entireLineType = NSPasteboard.PasteboardType("com.orbe.editor.line")
+  static let entireLineType = NSPasteboard.PasteboardType("dev.orbe.editor.line")
 
   // MARK: - コピー・カット・ペースト
 
-  /// 選択を写す。選択が空ならキャレットの行を写し、行ごと写した印を付ける。色の付く文書で選択 1 つ・64KB 未満なら、
-  /// 構文色付きの HTML も載せる。
+  /// 選択を写す。選択が空ならキャレットの行を写し、行ごと写した印を付ける。色の付く文書で、写したものが本文の 1 つの範囲
+  /// （選択 1 つか、選択が空のときの 1 行）で 64KB 未満なら、構文色付きの HTML も載せる。
   @objc func copy(_ sender: Any?) {
     writeCopy()
   }
 
   /// 写してから消す。選択が空なら行を消す。
   @objc func cut(_ sender: Any?) {
-    writeCopy()
-    surface?.perform(.cut)
+    surface?.transact {
+      writeCopy()
+      surface?.perform(.cut)
+    }
   }
 
   /// 平文を貼る（Finder でコピーしたファイルならパス）。改行は文書の作法へ揃え、行ごと写した文字列は条件が揃えば行の上へ
   /// 入れる。RTF と HTML は読まない。
   @objc func paste(_ sender: Any?) {
     guard let surface else { return }
-    surface.editor.finishComposition(.commit)
-    if let host = surface.host, let urls = fileURLs(on: pasteboard) {
-      surface.perform(.paste(host.insertionText(forFiles: urls), entireLine: false))
-      return
+    surface.transact {
+      surface.editor.finishComposition(.commit)
+      if let host = surface.host, let urls = fileURLs(on: pasteboard) {
+        surface.perform(.paste(host.insertionText(forFiles: urls), entireLine: false))
+        return
+      }
+      guard let string = pasteboard.string(forType: .string) else { return }
+      surface.perform(
+        .paste(string, entireLine: pasteboard.availableType(from: [Self.entireLineType]) != nil))
     }
-    guard let string = pasteboard.string(forType: .string) else { return }
-    surface.perform(
-      .paste(string, entireLine: pasteboard.availableType(from: [Self.entireLineType]) != nil))
   }
 
   /// ペーストと同じ（書式を持たないので揃える書式が無い）。
@@ -60,7 +64,9 @@ extension MetalTextView {
     pasteboard.declareTypes(types, owner: nil)
     pasteboard.setString(copied.text, forType: .string)
     if copied.entireLine { pasteboard.setData(Data(), forType: Self.entireLineType) }
-    if let html { pasteboard.setString(html, forType: .html) }
+    // 文字コードの指定が無いと、Cocoa のリッチテキストの貼り先は HTML を UTF-8 でなく読んで化ける（Chromium と同じく、
+    // 書く側で前に置く）。
+    if let html { pasteboard.setString("<meta charset='utf-8'>" + html, forType: .html) }
   }
 
   /// ペーストボードのファイルの URL（無ければ nil）。
@@ -90,15 +96,18 @@ extension MetalTextView {
   // MARK: - 右クリック
 
   /// 右クリック・⌃クリックのメニュー（中身と文言は載せる側が組む）。先に変換を確定し、焦点を取る。選択の外で押せば
-  /// キャレットをそこへ動かし、選択の中なら選択を保つ。
+  /// キャレットをそこへ動かし、選択の中（両端を含む）なら選択を保つ。
   override func menu(for event: NSEvent) -> NSMenu? {
     guard let surface, let host = surface.host else { return nil }
-    surface.editor.finishComposition(.commit)
-    window?.makeFirstResponder(self)
-    let point = convert(event.locationInWindow, from: nil)
-    if let hit = surface.hit(point), hit.area == .text {
+    surface.transact {
+      surface.editor.finishComposition(.commit)
+      window?.makeFirstResponder(self)
+      let point = convert(event.locationInWindow, from: nil)
+      guard let hit = surface.hit(point), hit.area == .text else { return }
       let selection = surface.editor.state.cursors.primary.selection
-      let inside = selection.length > 0 && NSLocationInRange(hit.offset, selection)
+      let inside =
+        selection.length > 0 && hit.offset >= selection.location
+        && hit.offset <= NSMaxRange(selection)
       if !inside { surface.editor.select(CursorList(Cursor(hit.offset)), reveal: .none) }
     }
     let menu = host.contextMenu()

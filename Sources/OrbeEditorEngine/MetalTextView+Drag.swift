@@ -78,13 +78,19 @@ extension MetalTextView: NSDraggingSource {
     return draggingUpdated(sender)
   }
 
-  /// 落とす位置の印を置き、端の帯の中なら自動でスクロールする（AppKit が周期で呼ぶ）。
+  /// 落とす位置の印を置き、端の帯の中なら自動でスクロールする（AppKit が周期で呼ぶ）。スクロールと印は 1 つの取引で置き、
+  /// 当たりは取引の中で置いた位置で取る。
   override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-    let point = convert(sender.draggingLocation, from: nil)
-    autoscrollDrop(at: point)
-    let drop = dropPlan(sender)
-    showDrop(drop.indicator)
-    return drop.operation
+    guard let surface else { return [] }
+    var operation: NSDragOperation = []
+    surface.transact {
+      let point = convert(sender.draggingLocation, from: nil)
+      autoscrollDrop(at: point)
+      let drop = dropPlan(sender)
+      showDrop(drop.indicator)
+      operation = drop.operation
+    }
+    return operation
   }
 
   override func draggingExited(_ sender: NSDraggingInfo?) {
@@ -95,60 +101,48 @@ extension MetalTextView: NSDraggingSource {
     showDrop(nil)
   }
 
+  /// 落とす。ファイルを開くのは別の文書へ焦点を移すので、印を消してから載せる側へ渡す。
   override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-    let drop = dropPlan(sender)
-    showDrop(nil)
-    guard let surface, let action = drop.action else { return false }
-    window?.makeFirstResponder(self)
+    guard let surface, let action = dropPlan(sender).action else {
+      showDrop(nil)
+      return false
+    }
     switch action {
     case .open(let urls):
+      showDrop(nil)
       surface.host?.openFiles(urls)
+    case .insertPaths(let urls, let offset):
+      guard let host = surface.host else { return false }
+      insertDrop(host.insertionText(forFiles: urls), at: offset, moving: nil)
     case .insert(let string, let offset, let moving):
-      surface.perform(.drop(string, at: offset, moving: moving))
+      insertDrop(string, at: offset, moving: moving)
     }
     return true
   }
 
-  /// 落としたときにすること。
-  private enum DropAction {
-    case open([URL])
-    case insert(String, at: Int, moving: NSRange?)
+  /// 印を消す・焦点を取る・入れるを 1 つの取引で行う。
+  private func insertDrop(_ string: String, at offset: Int, moving: NSRange?) {
+    guard let surface else { return }
+    surface.transact {
+      showDrop(nil)
+      window?.makeFirstResponder(self)
+      surface.perform(.drop(string, at: offset, moving: moving))
+    }
   }
 
-  /// 落とすときの操作・印・すること。
-  private struct DropPlan {
-    var operation: NSDragOperation = []
-    var indicator: Int?
-    var action: DropAction?
-  }
-
+  /// 板と修飾と当たりを読んで、落とすときの判断（`DropRules`）に渡す。
   private func dropPlan(_ info: NSDraggingInfo) -> DropPlan {
-    guard let surface, let hit = surface.hit(convert(info.draggingLocation, from: nil)) else {
-      return DropPlan()
-    }
+    guard let surface else { return DropPlan() }
+    let point = convert(info.draggingLocation, from: nil)
     let board = info.draggingPasteboard
-    if let urls = fileURLs(on: board) {
-      guard let host = surface.host else { return DropPlan() }
-      guard NSEvent.modifierFlags.contains(.shift) else {
-        return DropPlan(operation: .copy, action: .open(urls))
-      }
-      return DropPlan(
-        operation: .copy, indicator: hit.offset,
-        action: .insert(host.insertionText(forFiles: urls), at: hit.offset, moving: nil))
-    }
-    guard let string = board.string(forType: .string) else { return DropPlan() }
-    guard (info.draggingSource as? MetalTextView) === self, let dragged = draggedRange else {
-      return DropPlan(
-        operation: .copy, indicator: hit.offset,
-        action: .insert(string, at: hit.offset, moving: nil))
-    }
-    let copy = !info.draggingSourceOperationMask.contains(.move)
-    let edge = hit.offset == dragged.location || hit.offset == NSMaxRange(dragged)
-    let inside = hit.offset >= dragged.location && hit.offset <= NSMaxRange(dragged)
-    guard !inside || (copy && edge) else { return DropPlan() }
-    return DropPlan(
-      operation: copy ? .copy : .move, indicator: hit.offset,
-      action: .insert(string, at: hit.offset, moving: copy ? nil : dragged))
+    let own = (info.draggingSource as? MetalTextView) === self
+    return DropRules.plan(
+      DropSituation(
+        offset: surface.hit(point, position: surface.scrollPosition)?.offset,
+        files: fileURLs(on: board), string: board.string(forType: .string),
+        dragged: own ? draggedRange : nil,
+        copying: !info.draggingSourceOperationMask.contains(.move),
+        shift: NSEvent.modifierFlags.contains(.shift), opensFiles: surface.host != nil))
   }
 
   private func showDrop(_ offset: Int?) {
