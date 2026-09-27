@@ -98,7 +98,7 @@ final class SurfaceEditor {
 
   // MARK: - 変換（IME の入口）
 
-  /// 未確定の文字を置く。`replacement`（文書の座標。NSNotFound なら未確定、無ければ選択）を `string` で置き換え、変換を
+  /// 未確定の文字を置く。`replacement`（文書の座標。指していなければ未確定、無ければ選択）を `string` で置き換え、変換を
   /// 始めるか続ける。`selected` は `string` の中の選択、`appearance` の範囲は `string` の先頭から。空の文字列は IME 自身の
   /// 取り消しで、未確定を消した今の本文のまま変換を終える（NSTextView と同じく、再変換で置き換えた元の字は戻さない）。
   func setMarkedText(
@@ -119,24 +119,26 @@ final class SurfaceEditor {
     }
   }
 
-  /// 確定の文字を入れる。変換中なら `replacement`（NSNotFound なら未確定）を置き換えて確定で終え、そうでなければ打鍵
-  /// （`replacement` があれば、本文に収めたその範囲の置き換え）。
+  /// 確定の文字を入れる。変換中なら `replacement`（指していなければ未確定）を置き換えて確定で終え、そうでなければ打鍵
+  /// （`replacement` が本文の範囲を指していれば、その範囲の置き換え）。範囲を指した置き換えの後の選択は NSTextView と同じ
+  /// （`CompositionRules.selection`。変換中は IME の選択に当てる）。
   func insertText(_ string: String, replacement: NSRange) {
     guard !discarding else { return }
-    guard composition != nil else {
-      guard replacement.location != NSNotFound else {
+    guard let composing = composition else {
+      guard let length = surface.textLength else { return }
+      guard let range = CompositionRules.replacement(replacement, length: length) else {
         if !string.isEmpty { perform(.insert(string)) }
         return
       }
-      guard let length = surface.textLength else { return }
-      let range = CompositionRules.target(
-        replacement, marked: nil, selection: state.cursors.primary.selection, length: length)
       return perform(.replace(range, string))
     }
     guard let text = surface.editingEnvironment()?.text else { return }
-    let target = target(replacement, in: text)
+    let edit = TextEdit(range: target(replacement, in: text), replacement: string)
     surface.transact(reveal: .minimal) {
-      compose(TextEdit(range: target, replacement: string), text)
+      if compose(edit, text) {
+        state.cursors = CursorList(
+          .selecting(CompositionRules.selection(composing.selection, after: edit)))
+      }
       end(.commit)
     }
   }
@@ -164,13 +166,14 @@ final class SurfaceEditor {
   }
 
   /// 変換の中の変化 1 つを文書へ渡し（undo には積まない）、変換の状態へ合成する。主のカーソルは未確定の末尾。本文が
-  /// 変わらない呼び出し（文節の選び直し）は文書へ渡さない。
-  private func compose(_ edit: TextEdit, _ text: TextRope) {
+  /// 変わらない呼び出し（文節の選び直し）は文書へ渡さない。文書が受けなければ何も変えず false。
+  @discardableResult
+  private func compose(_ edit: TextEdit, _ text: TextRope) -> Bool {
     let batch = EditBatch([edit])
     let committed = CompositionRules.replacesCommitted(
       edit.range, marked: composition?.range, selection: state.cursors.primary.selection)
     let noop = text.units(in: edit.range) == edit.replacement
-    guard let result = noop ? text : surface.deliver(batch) else { return }
+    guard let result = noop ? text : surface.deliver(batch) else { return false }
     var current =
       composition
       ?? Composition(
@@ -184,6 +187,7 @@ final class SurfaceEditor {
     composition = current
     state = EditState(
       cursors: CursorList(Cursor(NSMaxRange(edit.newRange))), mark: state.mark.map(batch.map))
+    return true
   }
 
   /// 変換を終える。確定なら変換の中の変化の正味を 1 回だけ undo に記録する。取り消しなら変換が無かったことにする——正味の

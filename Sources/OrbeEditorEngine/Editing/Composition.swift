@@ -55,14 +55,20 @@ struct Composition {
 
 /// 変換の規則（純関数）。IME の呼び出しの範囲を文書の座標に解き、変換の終わりの正味の変化と undo の種類を決める。
 enum CompositionRules {
-  /// 置き換える範囲。`replacement` は文書の座標で、NSNotFound なら未確定（無ければ選択）。本文の外へはみ出す分は切る。
+  /// 置き換える範囲。`replacement` は文書の座標で、指していなければ未確定（無ければ選択）。
   static func target(
     _ replacement: NSRange, marked: NSRange?, selection: NSRange, length: Int
   ) -> NSRange {
-    guard replacement.location != NSNotFound else { return marked ?? selection }
-    let start = min(max(0, replacement.location), length)
-    let end = min(max(start, replacement.location + max(0, replacement.length)), length)
-    return NSRange(location: start, length: end - start)
+    self.replacement(replacement, length: length) ?? marked ?? selection
+  }
+
+  /// IME が指した置き換えの範囲。NSNotFound と、本文（未確定を含む）に収まらない範囲は指していないもの（nil）——
+  /// NSTextView と同じく無視する。
+  static func replacement(_ range: NSRange, length: Int) -> NSRange? {
+    guard range.location != NSNotFound, range.location >= 0, range.length >= 0,
+      range.length <= length - range.location
+    else { return nil }
+    return range
   }
 
   /// 未確定の中の選択を文書の座標にしたもの。`selected` は入れた文字列の先頭からの位置で、文字列の中に収める。
@@ -70,6 +76,21 @@ enum CompositionRules {
     let start = min(max(0, selected.location == NSNotFound ? length : selected.location), length)
     let end = min(start + max(0, selected.length), length)
     return NSRange(location: location + start, length: end - start)
+  }
+
+  /// IME が範囲を指して確定の文字を入れた後の選択（NSTextView と同じ）。置き換えが選択より前なら選択をずらし、後ろなら
+  /// 保ち、重なれば入れた文字の終わりのキャレット。選択の終わりに接する置き換えは後ろ、キャレットから始まる置き換えは
+  /// 重なる。
+  static func selection(_ selection: NSRange, after edit: TextEdit) -> NSRange {
+    let range = edit.range
+    if selection.location >= NSMaxRange(range) {
+      return NSRange(
+        location: selection.location + edit.replacementLength - range.length,
+        length: selection.length)
+    }
+    let end = NSMaxRange(selection)
+    if end < range.location || (selection.length > 0 && end == range.location) { return selection }
+    return NSRange(location: NSMaxRange(edit.newRange), length: 0)
   }
 
   /// 置き換えの範囲が確定済みの文字に掛かるか（未確定の範囲そのものか、始まる前の選択なら掛からない）。

@@ -82,6 +82,21 @@ extension EditCommands {
     edit(state, env, undo: undo) { Replacement($0.selection, string) }
   }
 
+  /// `range` を `string` に置き換える（IME が範囲を指して入れた確定）。どのカーソルも NSTextView と同じく、置き換えと重なら
+  /// なければ選択を写して保ち、重なれば入れた文字の終わりへ置く（`CompositionRules.selection`）。
+  static func replace(_ range: NSRange, with string: String, _ state: EditState) -> CommandResult {
+    let edit = TextEdit(range: range, replacement: string)
+    var cursors = state.cursors.map {
+      Cursor.selecting(
+        CompositionRules.selection($0.selection, after: edit), reversed: $0.isReversed)
+    }
+    cursors.normalize()
+    let batch = EditBatch([edit])
+    return CommandResult(
+      state: EditState(cursors: cursors, mark: state.mark.map(batch.map)), edits: batch,
+      undo: .other)
+  }
+
   /// 打鍵。空白 1 つは空白の打鍵、それ以外は字の打鍵。
   static func type(_ string: String, _ state: EditState, _ env: EditingEnvironment)
     -> CommandResult

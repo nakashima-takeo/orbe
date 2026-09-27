@@ -216,15 +216,24 @@ extension SurfaceInputMethodTests {
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 1, length: 2))
   }
 
-  /// 変換の外で本文の外を指した確定は、本文に収めた範囲を置き換える（キャレットと undo が本文とずれない）。
-  func testInsertTextClampsTheReplacementRange() throws {
+  /// 本文に収まらない範囲を指した確定は、範囲を無視して打鍵と同じに入れる（NSTextView と同じ）——キャレットの位置に入り、
+  /// 前の打鍵とまとまる。
+  func testInsertTextIgnoresAReplacementRangeOutsideTheText() throws {
     let opened = try open("0123456789")
     _ = host(opened)
     fakeInputMethod(opened)
-    replay([.insert("x", replacement: NSRange(location: 12, length: 0))], on: opened)
-    XCTAssertEqual(text(opened.document), "0123456789x")
-    XCTAssertEqual(opened.surface.caretLocation, 11)
-    try XCTUnwrap(opened.surface.textView.undoManager).undo()
+    opened.surface.selectedRange = NSRange(location: 5, length: 0)
+    type(opened, "a")
+    replay(
+      [
+        .insert("x", replacement: NSRange(location: 12, length: 0)),
+        .insert("y", replacement: NSRange(location: 9, length: 5)),
+      ], on: opened)
+    XCTAssertEqual(text(opened.document), "01234axy56789")
+    XCTAssertEqual(opened.surface.caretLocation, 8)
+    let undo = try XCTUnwrap(opened.surface.textView.undoManager)
+    undo.undo()
     XCTAssertEqual(text(opened.document), "0123456789")
+    XCTAssertFalse(undo.canUndo)
   }
 }

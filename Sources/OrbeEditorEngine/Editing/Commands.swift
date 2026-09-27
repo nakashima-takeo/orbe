@@ -47,7 +47,8 @@ enum EditCommand: Equatable, Sendable {
   case changeCase(CaseChange)
   case setMark, selectToMark, deleteToMark, swapWithMark
   case centerSelection
-  /// `range` を置き換える（IME が変換の外で範囲を指して入れた——長押しのアクセントなど）。前後で区切る。
+  /// `range` を置き換える（IME が変換の外で範囲を指して入れた——長押しのアクセントなど）。選択は NSTextView と同じく、
+  /// 置き換えと重ならなければ保つ。前後で区切る。
   case replace(NSRange, String)
   /// 貼る（改行は文書の作法へ揃える）。`entireLine` は行ごと写した印——選択が空で文字列の改行が末尾の 1 つだけなら、
   /// キャレットの行の上に行として入れる。前後で区切る。
@@ -140,10 +141,7 @@ enum EditCommands {
     case .centerSelection:
       return CommandResult(
         state: EditState(cursors: state.cursors, mark: state.mark), reveal: .center)
-    case .replace(let range, let string):
-      return edit(state, env, undo: .other) {
-        $0 == state.cursors.primary ? Replacement(range, string) : nil
-      }
+    case .replace(let range, let string): return replace(range, with: string, state)
     case .paste(let string, let entireLine):
       return paste(string, entireLine: entireLine, state, env)
     case .cut: return cut(state, env)
