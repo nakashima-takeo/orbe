@@ -10,7 +10,7 @@ import XCTest
 /// 追従が違う行を光らせる。
 final class OutlineRowsTests: OrbeTestCase {
   /// 乱数で作った木（先行順）。
-  private func randomOutline(_ generator: inout SystemRandomNumberGenerator, count: Int)
+  private func randomOutline(_ generator: inout SeededGenerator, count: Int)
     -> DocumentOutline
   {
     var items: [OutlineExtraction.Item] = []
@@ -73,7 +73,7 @@ final class OutlineRowsTests: OrbeTestCase {
   /// 畳んだシンボル（入れ子で畳んだものも）と絞り込みの有無のどの組み合わせでも、素朴に辿った列と同じ行になり、行 ↔ シンボル
   /// が互いに逆になる。
   func testRowsMatchANaiveWalkUnderFoldingAndFiltering() {
-    var generator = SystemRandomNumberGenerator()
+    var generator = SeededGenerator(seed: 11)
     for _ in 0..<40 {
       let outline = randomOutline(&generator, count: 60)
       let count = outline.symbols.count
@@ -106,5 +106,17 @@ final class OutlineRowsTests: OrbeTestCase {
         naiveRows(outline, visible: ancestors, collapsed: { !collapsed.contains($0) }),
         symbols: count)
     }
+  }
+}
+
+/// 再現できる乱数（テストの乱択を毎回同じにする。OrbeEditorCoreTests の同名のものと同じ）。
+private struct SeededGenerator: RandomNumberGenerator {
+  private var state: UInt64
+
+  init(seed: UInt64) { state = seed }
+
+  mutating func next() -> UInt64 {
+    state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+    return state
   }
 }
