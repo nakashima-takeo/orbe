@@ -114,4 +114,38 @@ extension EditorOutlinePaneTests {
     catchUp(hosted.document)
     pumpMain(until: { self.names(outline) == ["Channel", "Box", "  width"] }, "解けば元の畳みに戻る")
   }
+
+  /// 選んでいたシンボルより後ろに一致が無ければ、頭から最初の一致を選ぶ。
+  func testTheMatchAfterTheSelectionWrapsToTheFirst() throws {
+    let hosted = try host()
+    openOutline(hosted)
+    let outline = hosted.pane.outline
+    outline.select(row: try row(outline, "width"))
+
+    outline.setFilterText("b")
+    catchUp(hosted.document)
+    pumpMain(until: { self.names(outline) == ["Channel", "  buffer", "Box"] }, "絞り込む")
+    XCTAssertEqual(outline.selectedRow.map { outline.row(at: $0).name }, "buffer")
+  }
+
+  /// 別の文書へ移ると絞り込みは解け、戻っても前の文書は絞り込まれていない（VS Code と同じ）。
+  func testSwitchingDocumentsClearsTheFilter() throws {
+    let hosted = try host()
+    openOutline(hosted)
+    let outline = hosted.pane.outline
+    outline.setFilterText("f")
+    catchUp(hosted.document)
+    pumpMain(until: { self.names(outline) == ["Channel", "  buffer", "  flush()"] }, "絞り込む")
+
+    let other = try hosted.tab.editor.open(try caseFile("other.swift", "func only() {}\n"))
+    catchUp(other)
+    pumpMain(until: { self.names(outline) == ["only()"] }, "移った先は絞り込まない")
+    XCTAssertEqual(outline.filterText, "")
+    XCTAssertFalse(outline.isFilterShown)
+
+    let back = try hosted.tab.editor.open(hosted.document.url)
+    XCTAssertTrue(back === hosted.document, "前提: 前の文書へ戻る")
+    catchUp(hosted.document)
+    pumpMain(until: { outline.rowCount == 6 }, "戻った文書も絞り込まない")
+  }
 }
