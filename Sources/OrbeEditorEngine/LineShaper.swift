@@ -18,30 +18,6 @@ struct ShapedLine {
   let omitted: Int
 }
 
-/// main が横の位置を問うために 1 度組んだ行。幅も行の中の位置の x もこの値に問い、同じ行を何度も組まない。`CTLine` を
-/// 持つので、組んだスレッドの外へ出さない。
-struct MeasuredLine {
-  private let line: CTLine
-  /// 描いた単位の数（打ち切った分を除く）。
-  private let displayed: Int
-  let width: CGFloat
-
-  fileprivate init(_ line: CTLine, displayed: Int) {
-    self.line = line
-    self.displayed = displayed
-    width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
-  }
-
-  /// 行の中の位置 `offset`（UTF-16）の字の左端の x（pt）。描かない部分は描いた部分の右端。
-  func x(ofOffset offset: Int) -> CGFloat {
-    guard offset < displayed else { return width }
-    return CTLineGetOffsetForStringIndex(line, max(0, offset), nil)
-  }
-}
-
-@available(*, unavailable)
-extension MeasuredLine: Sendable {}
-
 /// 行の組版の規則（純関数）。描画スレッドと、横の位置が要る main の操作が同じ規則を使う。
 ///
 /// 行は文書の行（`\n` で割った行）の中身で、見せ方は VS Code の既定（`renderControlCharacters`）と同じ——行末の `\r` は
@@ -130,14 +106,6 @@ enum LineShaper {
   static func shape(_ string: String, font: CTFont) -> ShapedLine {
     let line = makeLine(ContiguousArray(string.utf16), boxes: [:], font: font, tabWidth: 0)
     return ShapedLine(line, omitted: 0, boxes: [:], font: font)
-  }
-
-  /// 横の位置を問うために行を 1 度組む（main）。
-  static func measure(_ source: Source, font: CTFont, tabWidth: CGFloat) -> MeasuredLine {
-    let shown = display(source)
-    return MeasuredLine(
-      makeLine(shown.units, boxes: shown.boxes, font: font, tabWidth: tabWidth),
-      displayed: shown.units.count)
   }
 
   private static func makeLine(
@@ -254,5 +222,40 @@ extension ShapedLine {
     }
     self.init(
       runs: runs, width: CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)), omitted: omitted)
+  }
+}
+
+/// 行の中の位置の x の規則。描画スレッド（組版のキャッシュの行のキャレットと選択の地）と main（↑↓・クリック・見えるところへ）
+/// が同じ規則を使うので、クリックの当たり・キャレット・選択の地の端が描いた字と食い違わない——位置以上の元の位置を持つ最初の
+/// 字の x、無ければ行の幅（打ち切って描かない部分は描いた部分の右端）。字の元の位置は左から右へ増えていく。
+enum CaretX {
+  static func x<O: BinaryInteger, X: BinaryFloatingPoint>(
+    ofColumn column: Int, offsets: [O], xs: [X], width: CGFloat
+  ) -> CGFloat {
+    var low = 0
+    var high = offsets.count
+    while low < high {
+      let mid = (low + high) / 2
+      if Int(offsets[mid]) < column { low = mid + 1 } else { high = mid }
+    }
+    return low < xs.count ? CGFloat(xs[low]) : width
+  }
+
+  /// x 以下にある最後の字の番号（どの字より左なら nil）。
+  static func glyph<X: BinaryFloatingPoint>(atX x: CGFloat, xs: [X]) -> Int? {
+    var low = 0
+    var high = xs.count
+    while low < high {
+      let mid = (low + high) / 2
+      if CGFloat(xs[mid]) <= x { low = mid + 1 } else { high = mid }
+    }
+    return low > 0 ? low - 1 : nil
+  }
+}
+
+extension ShapedLine {
+  /// 字の元の位置と x の列（run をまたいで並べたもの）。
+  var stops: (offsets: [Int], xs: [CGFloat]) {
+    (runs.flatMap(\.offsets), runs.flatMap(\.xs))
   }
 }

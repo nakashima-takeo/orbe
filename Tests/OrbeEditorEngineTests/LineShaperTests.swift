@@ -56,8 +56,8 @@ final class LineShaperTests: XCTestCase {
     let xs = shaped.runs.flatMap(\.xs)
     XCTAssertEqual(xs, xs.sorted(), "箱の後ろの字も左から右の順のまま")
     XCTAssertEqual(shaped.width, cell * 12, accuracy: 0.01)
-    let measured = LineShaper.measure(line, font: font, tabWidth: 0)
-    XCTAssertEqual(measured.x(ofOffset: 3), cell * 10, accuracy: 0.01, "箱は 1 単位で 8 桁")
+    XCTAssertEqual(x(3, "ab\u{202E}cd", tab: 0), cell * 10, accuracy: 0.01, "箱は 1 単位で 8 桁")
+    XCTAssertEqual(x(2, "ab\u{202E}cd", tab: 0), cell * 2, accuracy: 0.01, "箱の位置は箱の左端")
   }
 
   /// 行は常に左から右の段落——右から左の字で始まる行でも、行頭の字が左端に来る（VS Code と同じ）。
@@ -70,13 +70,31 @@ final class LineShaperTests: XCTestCase {
     XCTAssertEqual(last?.0, 8, "行末の x が右端")
   }
 
+  private func x(_ column: Int, _ string: String, tab: CGFloat) -> CGFloat {
+    let shaped = LineShaper.shape(source(string), font: font, tabWidth: tab)
+    let (offsets, xs) = shaped.stops
+    return CaretX.x(ofColumn: column, offsets: offsets, xs: xs, width: shaped.width)
+  }
+
   /// タブはインデント単位の桁まで空ける（次のタブ位置へ）。
   func testTabAdvancesToTheNextIndentStop() {
     let tab = cell * 4
-    let x = LineShaper.measure(source("\tx"), font: font, tabWidth: tab).x(ofOffset: 1)
-    XCTAssertEqual(x, tab, accuracy: 0.01)
-    let after = LineShaper.measure(source("ab\tx"), font: font, tabWidth: tab).x(ofOffset: 3)
-    XCTAssertEqual(after, tab, accuracy: 0.01, "途中のタブも次の刻みまで")
+    XCTAssertEqual(x(1, "\tx", tab: tab), tab, accuracy: 0.01)
+    XCTAssertEqual(x(3, "ab\tx", tab: tab), tab, accuracy: 0.01, "途中のタブも次の刻みまで")
+  }
+
+  /// 位置の x は、その位置以上の元の位置を持つ最初の字の x——書記素の内側は書記素の始まりの後ろの字、行末と描かない部分は
+  /// 行の幅。キャレット・選択の地・クリックの当たりが同じ規則で出る。
+  func testCaretXIsTheFirstGlyphAtOrAfterTheColumn() {
+    let tab = cell * 4
+    XCTAssertEqual(x(0, "ab", tab: tab), 0, accuracy: 0.01)
+    XCTAssertEqual(x(1, "ab", tab: tab), cell, accuracy: 0.01)
+    XCTAssertEqual(x(2, "ab", tab: tab), cell * 2, accuracy: 0.01, "行末は行の幅")
+    XCTAssertGreaterThan(x(4, "👍🏽a", tab: tab), 0)
+    XCTAssertEqual(x(2, "👍🏽a", tab: tab), x(4, "👍🏽a", tab: tab), "書記素の内側は次の字の x")
+    let long = String(repeating: "a", count: 10_050)
+    let shaped = LineShaper.shape(source(long), font: font, tabWidth: tab)
+    XCTAssertEqual(x(10_040, long, tab: tab), shaped.width, accuracy: 0.01, "描かない部分は描いた部分の右端")
   }
 
   /// 1 行で描くのは 10000 単位まで（書記素の境で切る）。残りは描かず、その数を返す。行の中身は先頭しか読まない。

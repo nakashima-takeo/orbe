@@ -237,12 +237,15 @@ final class MetalTextSurface: TextSurface {
       p.y = bottom - visible.y
     }
     let (source, start) = LineShaper.source(row: rows.lowerBound, in: text)
-    let line = LineShaper.measure(
-      source, font: config.font, tabWidth: config.tabWidth(columns: material.read().tabColumns))
-    scroll.noteLine(width: Double(line.width))
-    let x0 = Double(line.x(ofOffset: range.location - start))
-    let x1 =
-      rows.lowerBound == rows.upperBound ? Double(line.x(ofOffset: NSMaxRange(range) - start)) : x0
+    let tabWidth = config.tabWidth(columns: material.read().tabColumns)
+    let shaped = LineShaper.shape(source, font: config.font, tabWidth: tabWidth)
+    scroll.noteLine(width: Double(shaped.width))
+    let (offsets, xs) = shaped.stops
+    let x = { (offset: Int) in
+      Double(CaretX.x(ofColumn: offset - start, offsets: offsets, xs: xs, width: shaped.width))
+    }
+    let x0 = x(range.location)
+    let x1 = rows.lowerBound == rows.upperBound ? x(NSMaxRange(range)) : x0
     if x0 < p.x || x1 - x0 > visible.x {
       p.x = x0
     } else if x1 > p.x + visible.x {
