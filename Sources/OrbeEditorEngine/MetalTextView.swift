@@ -12,7 +12,7 @@ final class MetalTextView: NSView {
   weak var surface: MetalTextSurface? {
     didSet { pointer.surface = surface }
   }
-  private var windowObservers: [NSObjectProtocol] = []
+  private var observers: [NSObjectProtocol] = []
   let pointer = MouseSelection()
 
   init() {
@@ -58,12 +58,12 @@ final class MetalTextView: NSView {
     stateDidChange()
   }
 
-  /// 窓の覆われ方（見えているか）と key の出入り（焦点）を見る。押している間に窓から外れると mouse-up は届かない（文書の
-  /// 切り替えが面を外す）ので、ここでマウスの操作を終える。
+  /// 窓の覆われ方（見えているか）と key の出入り（焦点）、システムの色の変化（アクセント色が選択の色を変える）を見る。押して
+  /// いる間に窓から外れると mouse-up は届かない（文書の切り替えが面を外す）ので、ここでマウスの操作を終える。
   override func viewWillMove(toWindow newWindow: NSWindow?) {
     super.viewWillMove(toWindow: newWindow)
-    for observer in windowObservers { NotificationCenter.default.removeObserver(observer) }
-    windowObservers = []
+    for observer in observers { NotificationCenter.default.removeObserver(observer) }
+    observers = []
     guard let newWindow else {
       pointer.cancel()
       return
@@ -78,10 +78,16 @@ final class MetalTextView: NSView {
         self?.focusStateDidChange()
       }
     }
-    windowObservers = names.map {
+    observers = names.map {
       NotificationCenter.default.addObserver(
         forName: $0, object: newWindow, queue: nil, using: changed)
     }
+    observers.append(
+      NotificationCenter.default.addObserver(
+        forName: NSColor.systemColorsDidChangeNotification, object: nil, queue: nil
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.surface?.appearanceDidChange() }
+      })
   }
 
   override func viewDidMoveToWindow() {
