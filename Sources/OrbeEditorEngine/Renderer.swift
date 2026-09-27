@@ -4,8 +4,8 @@ import QuartzCore
 
 /// 1 コマを組み立てて Metal へ符号化し、画面（または画面外）へ出す。描画スレッドだけが触る。
 ///
-/// キャレットの点滅は時刻から決める。描くものが変わらなければ刻みを止め、焦点のある面は次に表示が切り替わる時刻にだけ
-/// run loop のタイマーで自分を起こす（点滅だけが変わったコマの後は、すぐ止める）。
+/// キャレットの点滅は時刻から決める。描くものが変わらなければ刻みを止め、焦点のある面は、次に表示が切り替わった後の最初の
+/// 刻みの半刻み前にだけ run loop のタイマーで自分を起こし、その場でその刻みへ描いてすぐ止める（点滅 1 回で 1 回だけ起きる）。
 ///
 /// どの面のためにも待たない——面ごとに「画面に出ていないコマ」を数え、上限の面はそのコマを飛ばす（`nextDrawable` は
 /// 実際には待たない）。GPU の空きも待たずに数える。飛ばしたコマは、画面に出た知らせを受けた時点で次の刻みを待たずに描く。
@@ -115,7 +115,7 @@ final class Renderer {
       return
     }
     guard let pipelines = gate.ready else {
-      pause(slot, clock, blinking: nil)
+      pause(slot, clock)
       return
     }
     // 刻みの長さは最初の呼び出しまで分からず、画面を移れば変わる。
@@ -127,18 +127,18 @@ final class Renderer {
     guard material.visible, material.content != nil, material.palette != nil,
       material.size.width > 0, material.size.height > 0
     else {
-      pause(slot, clock, blinking: nil)
+      pause(slot, clock)
       return
     }
     let caretVisible = material.caret.caretVisible(at: target)
-    let moved =
+    let changed =
       material.revision != slot.drawnMaterial || slot.scroll.revision != slot.drawnScroll
       || slot.returning || slot.atlasDirty
-    guard moved || caretVisible != slot.drawnCaretVisible else {
+    guard changed || caretVisible != slot.drawnCaretVisible else {
       slot.recorder.idle(at: CACurrentMediaTime())
       slot.idleTicks += 1
       if slot.idleTicks >= Self.idleTicksBeforePause {
-        pause(slot, clock, blinking: material.caret)
+        pause(slot, clock, blinking: material.caret, after: target)
       }
       return
     }
@@ -153,7 +153,7 @@ final class Renderer {
       return
     }
     draw(slot, material, into: acquired, at: target, Pass(pipelines: pipelines, atlas: atlas))
-    if !moved { pause(slot, clock, blinking: material.caret) }
+    if !changed { pause(slot, clock, blinking: material.caret, after: target) }
   }
 
   /// 描くと決めたコマを組み立てて出す。
@@ -251,11 +251,17 @@ final class Renderer {
     RenderThread.adopt(framePeriod: period)
   }
 
-  /// 刻みを止める。`blinking` のキャレットが点滅していれば、次に表示が切り替わる時刻に起きるタイマーを置く。
-  private func pause(_ slot: SurfaceSlot, _ clock: FrameClock, blinking caret: CaretMaterial?) {
-    if slot.blinkTimer == nil, let next = caret?.nextBlink(after: CACurrentMediaTime()) {
+  /// 刻みを止める。`blinking` のキャレットが点滅していれば、`drawn`（最後に描いた、または描かないと決めたコマの予定時刻）の
+  /// 後で表示が切り替わってから最初の刻みの、半刻み前に起きるタイマーを置く——起きたその場で、その刻みへ切り替わった表示を
+  /// 描ける（刻みを再開して、タイマーと刻みの 2 回起きることがない）。
+  private func pause(
+    _ slot: SurfaceSlot, _ clock: FrameClock, blinking caret: CaretMaterial? = nil,
+    after drawn: Double = 0
+  ) {
+    if slot.blinkTimer == nil, let next = caret?.nextBlink(after: drawn) {
       let id = slot.id
-      let fire = CFAbsoluteTimeGetCurrent() + max(0, next - CACurrentMediaTime())
+      let wake = clock.nextTarget(after: next) - clock.period / 2
+      let fire = CFAbsoluteTimeGetCurrent() + max(0, wake - CACurrentMediaTime())
       let timer = CFRunLoopTimerCreateWithHandler(nil, fire, 0, 0, 0) { _ in
         RenderThread.shared.onThread { $0.wake(id) }
       }

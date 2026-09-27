@@ -105,7 +105,8 @@ extension MetalTextSurface {
       selections: cursors.all.map(\.selection).filter { $0.length > 0 }.sorted {
         $0.location < $1.location
       },
-      carets: cursors.all.map(\.position), epoch: CACurrentMediaTime(), focused: focused)
+      carets: cursors.all.map(\.position), epoch: CACurrentMediaTime(), focused: focused,
+      blinks: caretBlinks)
     let content = finished.content
     let marks = finished.marks.flatMap { spans in text.map { RowMarks(spans, in: $0) } }
     let rowEdits = finished.rowEdits

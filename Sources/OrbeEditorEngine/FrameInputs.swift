@@ -232,6 +232,8 @@ struct CaretMaterial: Equatable, Sendable {
   var epoch: Double = 0
   /// 面に焦点がある（first responder で、窓が key）。無ければキャレットを描かず、選択の地は弱い色。
   var focused = false
+  /// 点滅させるか（アクセシビリティの「点滅しない挿入ポイント」が有効なら、点滅せず描き続ける）。
+  var blinks = true
 
   /// 点滅の刻み（表示・非表示それぞれの長さ）。
   static let blinkInterval = 0.5
@@ -241,12 +243,13 @@ struct CaretMaterial: Equatable, Sendable {
 
   /// 時刻 `t` にキャレットを描くか。
   func caretVisible(at t: Double) -> Bool {
-    showsCaret && Int((max(0, t - epoch) / Self.blinkInterval).rounded(.down)) % 2 == 0
+    showsCaret
+      && (!blinks || Int((max(0, t - epoch) / Self.blinkInterval).rounded(.down)) % 2 == 0)
   }
 
-  /// 時刻 `t` の後で次に表示が切り替わる時刻（焦点が無ければ nil）。
+  /// 時刻 `t` の後で次に表示が切り替わる時刻（焦点が無いか点滅しなければ nil——止まっている間は起きない）。
   func nextBlink(after t: Double) -> Double? {
-    guard showsCaret else { return nil }
+    guard showsCaret, blinks else { return nil }
     let phase = (max(0, t - epoch) / Self.blinkInterval).rounded(.down) + 1
     return epoch + phase * Self.blinkInterval
   }

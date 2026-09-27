@@ -58,7 +58,8 @@ final class MetalTextView: NSView {
     stateDidChange()
   }
 
-  /// 窓の覆われ方（見えているか）と key の出入り（焦点）、システムの色の変化（アクセント色が選択の色を変える）を見る。押して
+  /// 窓の覆われ方（見えているか）と key の出入り（焦点）、システムの色の変化（アクセント色が選択の色を変える）、点滅しない
+  /// 挿入ポイントの設定を見る。押して
   /// いる間に窓から外れると mouse-up は届かない（文書の切り替えが面を外す）ので、ここでマウスの操作を終える。
   override func viewWillMove(toWindow newWindow: NSWindow?) {
     super.viewWillMove(toWindow: newWindow)
@@ -88,6 +89,14 @@ final class MetalTextView: NSView {
       ) { [weak self] _ in
         MainActor.assumeIsolated { self?.surface?.appearanceDidChange() }
       })
+    if let blinking = CaretBlinking.didChangeNotification {
+      let changed: @Sendable (Notification) -> Void = { [weak self] _ in
+        MainActor.assumeIsolated { self?.surface?.setCaretBlinks(CaretBlinking.systemPreference) }
+      }
+      observers.append(
+        NotificationCenter.default.addObserver(
+          forName: blinking, object: nil, queue: .main, using: changed))
+    }
   }
 
   override func viewDidMoveToWindow() {

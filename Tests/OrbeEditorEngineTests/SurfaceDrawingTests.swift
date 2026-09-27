@@ -100,6 +100,22 @@ final class SurfaceDrawingTests: EngineTestCase {
     XCTAssertNil(caret.nextBlink(after: 10.2))
   }
 
+  /// 点滅は動くたびに表示からやり直す——打鍵・移動で点滅の起点が進み、スクロールだけの操作では変わらない。
+  func testTheBlinkRestartsOnlyWhenTheCaretMoves() throws {
+    let opened = try open((0..<100).map { "row \($0)" }.joined(separator: "\n"))
+    _ = host(opened, size: CGSize(width: 400, height: 120))
+    opened.surface.updateFocus(true)
+    let epoch = { opened.surface.material.read().caret.epoch }
+    let focused = epoch()
+    opened.surface.perform(.insert("x"))
+    let typed = epoch()
+    XCTAssertGreaterThan(typed, focused, "打鍵")
+    opened.surface.scrollLines(3)
+    XCTAssertEqual(epoch(), typed, "スクロールだけでは変わらない")
+    opened.surface.perform(.move(.right, extending: false))
+    XCTAssertGreaterThan(epoch(), typed, "移動")
+  }
+
   /// 取引が置いた位置は、その版の材料を読んだコマから使う（スクロールだけが先に動いたコマを出さない）。
   func testPlacedPositionWaitsForTheMaterialRevision() {
     let box = ScrollBox(elastic: false)

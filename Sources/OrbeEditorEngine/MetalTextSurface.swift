@@ -1,3 +1,4 @@
+import Accessibility
 import AppKit
 import OrbeEditorCore
 import QuartzCore
@@ -37,6 +38,8 @@ final class MetalTextSurface: TextSurface {
   private(set) var indentation = Indentation.fallback
   /// 面に焦点がある（first responder で、窓が key）。
   private(set) var focused = false
+  /// キャレットを点滅させるか（→ `setCaretBlinks`）。
+  private(set) var caretBlinks = CaretBlinking.systemPreference
   /// 進行中の取引（→ `transact`）。
   var transaction: Transaction?
   /// 描画スレッドへ頼んだ横の「見えるところまで」の通し番号。
@@ -179,6 +182,13 @@ final class MetalTextSurface: TextSurface {
     transact { self.focused = focused }
   }
 
+  /// キャレットを点滅させるか（アクセシビリティの「点滅しない挿入ポイント」の設定が変わった）。点滅しなければ、止まって
+  /// いる間の描画スレッドの起床は 0。
+  func setCaretBlinks(_ blinks: Bool) {
+    guard blinks != caretBlinks else { return }
+    transact { caretBlinks = blinks }
+  }
+
   func focusDidChange(_ focused: Bool) {
     delegate?.surface(self, focusDidChange: focused)
   }
@@ -187,5 +197,24 @@ final class MetalTextSurface: TextSurface {
   func snapshot() -> CGImage? {
     let id = id
     return RenderThread.shared.performAndWait { Transfer(value: $0.snapshot(id)) }.value
+  }
+}
+
+/// アクセシビリティの「点滅しない挿入ポイント」（macOS 15 以降）。独自のキャレットを描くアプリはこれに従う。
+enum CaretBlinking {
+  /// キャレットを点滅させるか。
+  @MainActor static var systemPreference: Bool {
+    if #available(macOS 15, *) {
+      return !AccessibilitySettings.prefersNonBlinkingTextInsertionIndicator
+    }
+    return true
+  }
+
+  /// 設定が変わった知らせ（macOS 15 より前は無い）。
+  static var didChangeNotification: Notification.Name? {
+    if #available(macOS 15, *) {
+      return AccessibilitySettings.prefersNonBlinkingTextInsertionIndicatorDidChangeNotification
+    }
+    return nil
   }
 }

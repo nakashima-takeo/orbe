@@ -89,6 +89,53 @@ final class RenderLoopTests: EngineTestCase {
     }
   }
 
+  /// 焦点のある面は、止まっている間、次に点滅が切り替わってから最初の刻みの半刻み前にだけ起きるタイマーを置く（起きたら
+  /// その刻みへ描いてすぐ止まる——点滅 1 回で 1 回だけ起きる）。焦点が無い・見えていない・点滅しない（アクセシビリティの
+  /// 「点滅しない挿入ポイント」）面は置かない。
+  func testOnlyFocusedVisibleBlinkingSurfacesWakeForTheBlink() throws {
+    let opened = try open(text)
+    let surface = opened.surface
+    surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
+    surface.updateFocus(true)
+    driver.bind(surface.id)
+    waitUntilPaused(surface)
+    let fire = try XCTUnwrap(blinkWake(surface), "焦点のある面はタイマーを置く")
+    let period = HeadlessDriver.period
+    let target = fire + period / 2
+    XCTAssertEqual(
+      target / period, (target / period).rounded(), accuracy: 0.05, "刻みの半刻み前に起きる")
+    let caret = surface.material.read().caret
+    XCTAssertNotEqual(
+      caret.caretVisible(at: target), caret.caretVisible(at: target - period),
+      "起きて描く刻みは、点滅が切り替わってから最初の刻み")
+
+    surface.setCaretBlinks(false)
+    waitUntilPaused(surface)
+    XCTAssertNil(blinkWake(surface), "点滅しなければ置かない")
+    XCTAssertTrue(surface.material.read().caret.caretVisible(at: target), "描き続ける")
+    surface.setCaretBlinks(true)
+    waitUntilPaused(surface)
+    XCTAssertNotNil(blinkWake(surface))
+
+    surface.updateFocus(false)
+    waitUntilPaused(surface)
+    XCTAssertNil(blinkWake(surface), "焦点が無ければ置かない")
+    surface.updateFocus(true)
+    surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: false)
+    waitUntilPaused(surface)
+    XCTAssertNil(blinkWake(surface), "見えていなければ置かない")
+  }
+
+  /// 点滅のタイマーが起きる時刻（`CACurrentMediaTime` の時計。置いていなければ nil）。
+  private func blinkWake(_ surface: MetalTextSurface) -> Double? {
+    let id = surface.id
+    return RenderThread.shared.performAndWait { renderer in
+      renderer.slot(id)?.blinkTimer.map {
+        CFRunLoopTimerGetNextFireDate($0) - CFAbsoluteTimeGetCurrent() + CACurrentMediaTime()
+      }
+    }
+  }
+
   /// 刻みで描いたコマが組んだ行で横の範囲を伸ばせば、main の操作を待たずに見えている範囲を知らせ直す（本文が右に
   /// まだ続く）。
   func testAFrameThatWidensTheRangeTellsTheViewport() throws {
