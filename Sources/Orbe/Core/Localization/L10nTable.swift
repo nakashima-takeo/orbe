@@ -149,7 +149,8 @@ enum L10n {
     .editorCollapseAll: ("すべて折りたたむ", "Collapse All"),
     .editorExpandAll: ("すべて展開", "Expand All"),
 
-    // MARK: Editor 面（アウトライン）。文言は VS Code の outlinePane の原文と訳。%@ は文書の名前。
+    // MARK: Editor 面（アウトライン）。%@ は文書の名前。
+    // 英語は VS Code の原文（outlinePane の 3 文と、tree の絞り込み欄の Type to filter）、日本語は Orbe の訳。
     .editorOutlineTitle: ("アウトライン", "Outline"),
     .editorOutlineUnavailable: (
       "このエディターではアウトラインを表示できません",

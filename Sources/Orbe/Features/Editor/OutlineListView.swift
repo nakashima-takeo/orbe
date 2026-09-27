@@ -29,7 +29,7 @@ final class OutlineListView: NSView {
   override var isFlipped: Bool { true }
 
   /// 入力欄を出しているかと字（model の写し）を置き直す。欄で打っている間は欄の字が model を先に書くので、違うのは
-  /// model から変わったとき（畳んだ・文書を替えた）だけ。
+  /// model から変わったとき（Esc で解いた・文書を替えた）だけ。
   func update(filterShown: Bool, text: String) {
     if field.text != text { field.text = text }
     guard filterShown == field.isHidden else { return }
