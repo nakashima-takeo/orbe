@@ -191,6 +191,14 @@ final class OutlineRulesTests: XCTestCase {
     XCTAssertEqual(try symbol("\"\"", in: symbols).kind, .key, "空のキーの名前は引用符 2 つ")
   }
 
+  /// JSON のキーはエスケープをほどいた値（改行は `↵`）。空白だけのキーは引用符で囲む。
+  func testJSONKeysAreUnescaped() throws {
+    let names = try outline(.json, "outline.json").filter { $0.depth == 0 }.map(\.name)
+    XCTAssertTrue(names.contains("line↵break"))
+    XCTAssertTrue(names.contains("say \"hi\"!"))
+    XCTAssertTrue(names.contains("\"  \""), "空白だけのキー")
+  }
+
   /// Markdown の見出しは段で入れ子にし、範囲は次の同じか浅い段の見出しの手前まで（setext も段で並ぶ）。
   func testMarkdownHeadingsNestByLevel() throws {
     let source = "Title\n=====\n\n### Deep\n\nText\n\nSection\n-------\n\n# Next ##\n"

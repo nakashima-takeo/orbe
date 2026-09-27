@@ -1,9 +1,9 @@
 import Foundation
 import TreeSitter
 
-/// 取り出し 1 回ぶんの言語の口。マッチ 1 つ → 0〜n 個のシンボル。既定は 1 マッチ → 1 シンボル（名前は `@context` と
-/// `@name` の字）。規則だけでは VS Code の言語サーバの名付けに届かない言語（Swift・Go・HTML・CSS・JSON）の手直しはここに
-/// 閉じ、節の種類の知識は規則とここにしか無い。
+/// 取り出し 1 回ぶんの言語の口。マッチ 1 つ → 0〜n 個のシンボル（`items`）と、全部が揃った後の手直し（`finish`）。既定は
+/// 1 マッチ → 1 シンボル（名前は `@context` と `@name` の字）で、手直しは無い。規則だけでは VS Code の言語サーバの名付け・
+/// 入れ子に届かない言語の手直しはここに閉じ、節の種類の知識は規則とここにしか無い。
 struct OutlineItems {
   private let grammar: Grammar
   /// JSON: 配列の節 → 値の子の頭（昇順）。配列ごとに 1 度だけ数える。
@@ -12,6 +12,8 @@ struct OutlineItems {
   private var headingLevels: [UInt: Int] = [:]
   /// Python: 型の付いた宣言（関数・クラスと、注釈の付いた代入・引数）の節。
   private var typedDeclarations: Set<UInt> = []
+  /// Dockerfile: ファイルの頭のパーサーディレクティブの節（初めて問われたときに数える）。
+  private var directives: Set<UInt>?
 
   init(grammar: Grammar) {
     self.grammar = grammar
@@ -22,10 +24,11 @@ struct OutlineItems {
     case .swift: return swift(match)
     case .go: return go(match)
     case .html: return [htmlElement(match)]
-    case .css: return Self.cssSelectors(match)
-    case .json: return [jsonArrayElement(match)]
+    case .css: return css(match)
+    case .json: return [json(match)]
     case .markdown: return [markdownHeading(match)]
     case .python: return [python(match)]
+    case .dockerfile: return dockerfile(match)
     default: return [Self.plain(match)]
     }
   }
@@ -162,22 +165,40 @@ struct OutlineItems {
     return item
   }
 
-  /// CSS のカンマで並んだセレクタ（`selectors` の名前つきの子）を、1 つずつ別のシンボル（範囲は同じ規則）にする。
-  static func cssSelectors(_ match: OutlineMatch) -> [OutlineExtraction.Item] {
+  // MARK: - CSS
+
+  /// カンマで並んだセレクタ（`selectors` の名前つきの子）は 1 つずつ別のシンボル（範囲は同じ規則）にする。`@keyframes` は
+  /// 接頭辞の付いたもの（`@-webkit-keyframes`）も `@keyframes 名前`（VS Code の CSS と同じ）。
+  private func css(_ match: OutlineMatch) -> [OutlineExtraction.Item] {
+    if Self.nodeType(match.item) == "keyframes_statement" {
+      var item = Self.plain(match)
+      item.name = "@keyframes " + item.name
+      return [item]
+    }
     guard match.names.count == 1, let selectors = match.names.first,
-      nodeType(selectors) == "selectors"
-    else { return [plain(match)] }
-    let range = range(of: match.item)
-    return namedChildren(of: selectors).filter { nodeType($0) != "comment" }.map { selector in
+      Self.nodeType(selectors) == "selectors"
+    else { return [Self.plain(match)] }
+    let range = Self.range(of: match.item)
+    return Self.namedChildren(of: selectors).filter { Self.nodeType($0) != "comment" }.map {
+      selector in
       OutlineExtraction.Item(
-        range: range, nameRange: self.range(of: selector), name: collapsed(match.text(selector)),
-        kind: match.kind, node: 0)
+        range: range, nameRange: Self.range(of: selector),
+        name: Self.collapsed(match.text(selector)), kind: match.kind, node: 0)
     }
   }
 
-  /// JSON の配列の要素は、配列の中での番号（0 始まり。前にある値の数）を名前にする（VS Code の JSON と同じ）。
-  private mutating func jsonArrayElement(_ match: OutlineMatch) -> OutlineExtraction.Item {
+  // MARK: - JSON
+
+  /// オブジェクトのキーはエスケープをほどいた値（改行は `↵`。空白だけか空なら引用符で囲む。VS Code の JSON と同じ）。
+  /// 配列の要素は、配列の中での番号（0 始まり。前にある値の数）を名前にする。
+  private mutating func json(_ match: OutlineMatch) -> OutlineExtraction.Item {
     var item = Self.plain(match)
+    if let key = match.names.first, Self.nodeType(match.item) == "pair" {
+      let value = Self.unescapedJSON(match.text(key)).replacingOccurrences(of: "\n", with: "↵")
+      item.name = value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        ? "\"\(value)\"" : value
+      return item
+    }
     let parent = ts_node_parent(match.item)
     guard match.names.isEmpty, !ts_node_is_null(parent), Self.nodeType(parent) == "array" else {
       return item
@@ -210,6 +231,43 @@ struct OutlineItems {
       }
     } while ts_tree_cursor_goto_next_sibling(&cursor)
     return starts
+  }
+
+  /// JSON の文字列の字（引用符を含む）のエスケープをほどいた値。読めないエスケープは字のまま残す。
+  private static func unescapedJSON(_ literal: String) -> String {
+    var units = Array(literal.utf16)
+    if units.first == 0x22 { units.removeFirst() }
+    if units.last == 0x22 { units.removeLast() }
+    var result: [UInt16] = []
+    result.reserveCapacity(units.count)
+    var index = 0
+    while index < units.count {
+      let unit = units[index]
+      index += 1
+      guard unit == 0x5C, index < units.count else {
+        result.append(unit)
+        continue
+      }
+      let escaped = units[index]
+      index += 1
+      switch escaped {
+      case 0x22, 0x5C, 0x2F: result.append(escaped)
+      case 0x62: result.append(0x08)
+      case 0x66: result.append(0x0C)
+      case 0x6E: result.append(0x0A)
+      case 0x72: result.append(0x0D)
+      case 0x74: result.append(0x09)
+      case 0x75
+      where index + 4 <= units.count
+        && UInt16(String(utf16CodeUnits: Array(units[index..<index + 4]), count: 4), radix: 16)
+          != nil:
+        result.append(
+          UInt16(String(utf16CodeUnits: Array(units[index..<index + 4]), count: 4), radix: 16)!)
+        index += 4
+      default: result.append(contentsOf: [unit, escaped])
+      }
+    }
+    return String(utf16CodeUnits: result, count: result.count)
   }
 
   // MARK: - Markdown
@@ -317,6 +375,49 @@ struct OutlineItems {
       position += 1
     }
     return result
+  }
+
+  // MARK: - Dockerfile
+
+  /// 命令と、ファイルの頭のパーサーディレクティブ（`# syntax=…`。名前はディレクティブの名。VS Code の Dockerfile と同じ）。
+  /// ディレクティブは 1 行目から空行を挟まずに続く `# 名前=値` のコメントだけで、それより後ろはただのコメント。
+  private mutating func dockerfile(_ match: OutlineMatch) -> [OutlineExtraction.Item] {
+    guard Self.nodeType(match.item) == "comment" else { return [Self.plain(match)] }
+    if directives == nil {
+      directives = Self.leadingDirectives(in: ts_node_parent(match.item), text: match.text)
+    }
+    guard directives!.contains(Self.id(match.item)),
+      let name = Self.directiveName(match.text(match.item))
+    else { return [] }
+    var item = Self.plain(match)
+    item.name = name
+    return [item]
+  }
+
+  /// ファイルの頭から続くディレクティブのコメントの節。
+  private static func leadingDirectives(in file: TSNode, text: (TSNode) -> String) -> Set<UInt> {
+    var found: Set<UInt> = []
+    var cursor = ts_tree_cursor_new(file)
+    defer { ts_tree_cursor_delete(&cursor) }
+    guard ts_tree_cursor_goto_first_child(&cursor) else { return found }
+    repeat {
+      let child = ts_tree_cursor_current_node(&cursor)
+      guard nodeType(child) == "comment", Int(ts_node_start_point(child).row) == found.count,
+        directiveName(text(child)) != nil
+      else { break }
+      found.insert(id(child))
+    } while ts_tree_cursor_goto_next_sibling(&cursor)
+    return found
+  }
+
+  /// `# 名前=値` の名前（名前は英字で始まる英数字）。形が違えば nil。
+  private static func directiveName(_ comment: String) -> String? {
+    let body = comment.dropFirst().drop { $0 == " " || $0 == "\t" }
+    let name = body.prefix { $0.isASCII && ($0.isLetter || $0.isNumber) }
+    guard let first = name.first, first.isLetter,
+      body.dropFirst(name.count).drop(while: { $0 == " " || $0 == "\t" }).first == "="
+    else { return nil }
+    return String(name)
   }
 
   // MARK: - 節の道具

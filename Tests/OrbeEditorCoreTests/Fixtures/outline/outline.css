@@ -43,6 +43,10 @@ html > main {
   src: url(inter.woff2);
 }
 
+.a, /* note */ .b {
+  margin: 0;
+}
+
 a:not(.external, .internal) {
   text-decoration: none;
 }

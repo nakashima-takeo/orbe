@@ -10,5 +10,7 @@ module @media screen and (min-width: 600px), print
 selector .grid
 selector @keyframes fade-in
 selector @font-face
+selector .a
+selector .b
 selector a:not(.external, .internal)
-selector @-webkit-keyframes spin
+selector @keyframes spin

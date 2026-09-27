@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+# check=skip=JSONArgsRecommended
 ARG SWIFT_VERSION=6.0
 
 FROM swift:${SWIFT_VERSION} AS build
@@ -9,6 +10,7 @@ RUN swift package resolve \
 COPY . .
 run swift build -c release
 
+# escape=` is only a directive at the top
 FROM ubuntu:24.04
 LABEL org.opencontainers.image.title="orbe"
 ENV PATH=/app/bin:$PATH \

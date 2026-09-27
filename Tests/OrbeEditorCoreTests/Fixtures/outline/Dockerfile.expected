@@ -1,3 +1,5 @@
+property syntax
+property check
 instruction ARG
 instruction FROM
 instruction WORKDIR

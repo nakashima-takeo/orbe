@@ -2,7 +2,9 @@ key name
 key version
 key private
 key ""
-key line\nbreak
+key line↵break
+key say "hi"!
+key "  "
 key scripts
   key build
   key test
