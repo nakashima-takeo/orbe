@@ -1,0 +1,34 @@
+constant MAX_RETRIES
+variable default_timeout
+variable _registry
+variable host
+variable port
+type JobId
+class Job
+  variable name
+  variable retries
+  variable tags
+  method __post_init__
+  property is_exhausted
+  class Status
+    constant PENDING
+    constant DONE
+class Queue
+  method __init__
+    variable jobs
+    variable limit
+    variable options
+  method run
+    variable worker
+    variable results
+    variable job
+    variable outcome
+    function summarize
+      variable items
+      variable total
+  method empty
+function register
+  variable name
+  variable job
+function main
+  variable queue

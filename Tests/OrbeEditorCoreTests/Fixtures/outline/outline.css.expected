@@ -1,0 +1,14 @@
+selector :root
+selector body
+selector html > main
+selector .card .title
+selector .card:hover::before
+selector #app [data-state="open"]
+module @media screen and (min-width: 600px), print
+  selector .card
+    selector &:focus
+selector .grid
+selector @keyframes fade-in
+selector @font-face
+selector a:not(.external, .internal)
+selector @-webkit-keyframes spin

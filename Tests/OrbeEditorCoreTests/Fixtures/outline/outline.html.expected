@@ -1,0 +1,19 @@
+element html
+  element head
+    element meta
+    element title
+    element link
+    element style
+  element body.page.dark
+    element header#top.site-header.sticky
+      element nav
+        element a.brand
+        element img
+    element main#content
+      element section.
+        element h1
+        element p
+          element br
+        element input
+      element custom-card
+    element script

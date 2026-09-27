@@ -1,0 +1,41 @@
+variable defaultCapacity
+variable sharedCache
+type Handler
+interface Emitter
+  type Output
+  property isOpen
+  method emit(_:coalesce:)
+  constructor init(capacity:)
+enum Signal
+  enumMember start
+  enumMember value
+  enumMember stop
+  enumMember reset
+  property isTerminal
+struct Box
+  type Element
+  property element
+  property count
+  method map(_:)
+    type T
+class Channel
+  type Output
+  property isOpen
+  property buffer
+  constructor init(capacity:)
+  constructor init()
+  constructor deinit
+  method emit(_:coalesce:)
+    function append(_:)
+  method emit(_:)
+  method ==(lhs:rhs:)
+  class Subscription
+    property channel
+    method cancel()
+module Channel
+  property description
+  method close(reason:_:)
+class Counter
+  property value
+  method increment(by:)
+function makeChannel(capacity:)

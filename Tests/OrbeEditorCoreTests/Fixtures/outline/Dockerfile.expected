@@ -1,0 +1,17 @@
+instruction ARG
+instruction FROM
+instruction WORKDIR
+instruction COPY
+instruction RUN
+instruction COPY
+instruction run
+instruction FROM
+instruction LABEL
+instruction ENV
+instruction COPY
+instruction ONBUILD
+instruction HEALTHCHECK
+instruction EXPOSE
+instruction USER
+instruction ENTRYPOINT
+instruction CMD

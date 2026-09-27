@@ -1,0 +1,5 @@
+function log
+function build
+  function compile
+function test_all
+function deploy::remote

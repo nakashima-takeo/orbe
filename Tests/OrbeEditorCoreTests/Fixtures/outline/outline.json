@@ -10,6 +10,7 @@
   },
   "keywords": ["editor", "terminal"],
   "contributors": [
+    // the maintainer comes first
     { "name": "nakatake", "roles": ["dev", "design"] },
     { "name": "claude" },
     [1, 2],

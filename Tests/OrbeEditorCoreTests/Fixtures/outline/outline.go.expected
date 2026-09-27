@@ -1,0 +1,27 @@
+constant DefaultPort
+constant StateIdle
+constant StateRunning
+variable ErrClosed
+variable registry
+variable debug
+variable verbose
+class State
+class Handler
+struct Server
+  property Addr
+  property handler
+  property opts
+    property Timeout
+    property Retries
+  property Server
+  property A
+  property B
+interface Store
+  method Get
+  method Put
+  property Closer
+function New
+method (*Server).Start
+method (Server).Name
+method (*List[T]).Push
+function init
