@@ -36,15 +36,18 @@ extension EditorMinimapTests {
     let view = hosted.pane.minimap
     view.display()
     XCTAssertTrue(view.cachedChunks.isSuperset(of: [0, 1, 2, 3]), "前提: \(view.cachedChunks)")
+    let text = hosted.document.text
+    let newline = text.lineStart(101) - 1
+    let column = newline - text.lineStart(100)
     var log = EditLog()
     let add = log.append(
-      TextEdit(range: NSRange(location: 0, length: 0), replacement: "\n"),
+      TextEdit(range: NSRange(location: text.lineStart(250), length: 0), replacement: "\n"),
       start: TextPoint(row: 250, column: 0), oldEnd: TextPoint(row: 250, column: 0),
       newEnd: TextPoint(row: 251, column: 0))
     let join = log.append(
-      TextEdit(range: NSRange(location: 0, length: 1), replacement: ""),
-      start: TextPoint(row: 100, column: 3), oldEnd: TextPoint(row: 101, column: 0),
-      newEnd: TextPoint(row: 100, column: 3))
+      TextEdit(range: NSRange(location: newline, length: 1), replacement: ""),
+      start: TextPoint(row: 100, column: column), oldEnd: TextPoint(row: 101, column: 0),
+      newEnd: TextPoint(row: 100, column: column))
     view.textDidChange([add, join])
     XCTAssertEqual(view.cachedChunks.intersection([0, 1, 2, 3]), [0], "行 100 から後ろは 1 行ずれた")
   }
