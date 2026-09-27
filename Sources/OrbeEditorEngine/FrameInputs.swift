@@ -151,14 +151,13 @@ struct RowEdit: Equatable, Sendable {
   var inserted: Int
   var version: Int
   var rolesOnly = false
-  /// 本文の編集の区間（編集前の本文の座標）と置き換えの長さ。行へ写した区間を編集でずらして使い回すのに使う（全部の行が
-  /// 変わった・役割だけが変わったなら nil）。
-  var text: (range: NSRange, replacementLength: Int)?
+  /// 本文の編集。行へ写した区間を編集でずらして使い回すのに使う（全部の行が変わった・役割だけが変わったなら nil）。
+  var text: TextChange?
 
-  static func == (lhs: RowEdit, rhs: RowEdit) -> Bool {
-    lhs.rows == rhs.rows && lhs.inserted == rhs.inserted && lhs.version == rhs.version
-      && lhs.rolesOnly == rhs.rolesOnly && lhs.text?.range == rhs.text?.range
-      && lhs.text?.replacementLength == rhs.text?.replacementLength
+  /// 本文の編集の区間（編集前の本文の座標）と置き換えの長さ。
+  struct TextChange: Equatable, Sendable {
+    var range: NSRange
+    var replacementLength: Int
   }
 
   /// 全部の行が変わった。
@@ -180,7 +179,7 @@ struct RowEdit: Equatable, Sendable {
     rows = first..<last + 1
     inserted = edit.replacement.reduce(1) { $1 == 0x0A ? $0 + 1 : $0 }
     self.version = version
-    self.text = (edit.range, edit.replacementLength)
+    self.text = TextChange(range: edit.range, replacementLength: edit.replacementLength)
   }
 }
 

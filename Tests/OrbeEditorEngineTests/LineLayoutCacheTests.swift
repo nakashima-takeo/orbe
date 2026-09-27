@@ -63,13 +63,14 @@ final class LineLayoutCacheTests: XCTestCase {
     let edit = RowEdit(
       TextEdit(range: NSRange(location: 2, length: 2), replacement: "x\ny\nz\n"), in: text,
       version: 5)
-    XCTAssertEqual([edit.rows, edit.inserted, edit.version] as [AnyHashable], [1..<3, 4, 5])
-    XCTAssertEqual(edit.text?.range, NSRange(location: 2, length: 2), "区間と置き換えの長さも持つ")
-    XCTAssertEqual(edit.text?.replacementLength, 6)
+    var expected = RowEdit(rows: 1..<3, inserted: 4, version: 5)
+    expected.text = RowEdit.TextChange(range: NSRange(location: 2, length: 2), replacementLength: 6)
+    XCTAssertEqual(edit, expected, "区間と置き換えの長さも持つ")
     let typed = RowEdit(
       TextEdit(range: NSRange(location: 2, length: 0), replacement: "q"), in: text, version: 6)
-    XCTAssertEqual(
-      [typed.rows, typed.inserted, typed.version] as [AnyHashable], [1..<2, 1, 6], "行の中の打鍵はその行だけ")
+    expected = RowEdit(rows: 1..<2, inserted: 1, version: 6)
+    expected.text = RowEdit.TextChange(range: NSRange(location: 2, length: 0), replacementLength: 1)
+    XCTAssertEqual(typed, expected, "行の中の打鍵はその行だけ")
   }
 
   /// 右から左の字の塊の中ではオフセットが減っていく——最後の区間を過ぎてから前の区間へ戻っても色を引ける。

@@ -56,11 +56,12 @@ final class RulerRows {
   /// （`TextEdit.track` と同じ規則）。全部の行が変わった編集では覚えたものを捨てる。
   private static func shift(_ mapped: inout Mapped, by edit: RowEdit) {
     guard !mapped.ranges.isEmpty else { return }
-    guard let (range, replacement) = edit.text else {
+    guard let change = edit.text else {
       mapped = Mapped(revision: -1, generation: mapped.generation + 1)
       return
     }
-    let delta = replacement - range.length
+    let range = change.range
+    let delta = change.replacementLength - range.length
     let rowDelta = edit.inserted - edit.rows.count
     var ranges: [NSRange] = []
     var rows: [ClosedRange<Int>] = []
