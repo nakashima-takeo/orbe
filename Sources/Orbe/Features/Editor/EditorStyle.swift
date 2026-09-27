@@ -223,3 +223,6 @@ struct EditorSurfaces {
   /// 今の面で開く組成。queries は `.app` の同梱物（`BundledResources.root` 直下の資源バンドル）から解く。
   static let shared = EditorSurfaces(queriesRoot: BundledResources.root)
 }
+
+/// 新しい面の view は、変換中の ⌘ キーを IME へ先に渡す窓の根の口に答える。
+extension TextSurfaceInputView: InputMethodKeyEquivalents {}

@@ -70,8 +70,11 @@ extension SurfaceView: NSTextInputClient {
   }
 
   /// interpretKeyEvents 経由の Enter・Backspace 等は keyAction が生キーとして送るので、
-  /// ここでは何もしない（未実装アクションの NSBeep も抑制する）。
-  override func doCommand(by selector: Selector) {}
+  /// ここでは何もしない（未実装アクションの NSBeep も抑制する）。⌘ キーを IME へ渡している間に届けば、IME が使わなかった
+  /// 印だけを残す。
+  override func doCommand(by selector: Selector) {
+    if offeringKeyEquivalent { commandArrivedWhileOffering = true }
+  }
 
   /// markedText の現状を libghostty に preedit として反映する（ghostty が下線付きで描画）。
   func syncPreedit() {
@@ -82,5 +85,19 @@ extension SurfaceView: NSTextInputClient {
     } else {
       ghostty_surface_preedit(surface, nil, 0)
     }
+  }
+}
+
+// MARK: - 変換中の ⌘ キー
+
+extension SurfaceView: InputMethodKeyEquivalents {
+  /// 変換中なら ⌘ キーをまず IME へ渡す。渡している間にキー割り当てのコマンドが届かなければ、IME が使った。
+  func offerKeyEquivalentToInputMethod(_ event: NSEvent) -> Bool {
+    guard hasMarkedText(), let context = inputContext else { return false }
+    offeringKeyEquivalent = true
+    commandArrivedWhileOffering = false
+    defer { offeringKeyEquivalent = false }
+    _ = context.handleEvent(event)
+    return !commandArrivedWhileOffering
   }
 }
