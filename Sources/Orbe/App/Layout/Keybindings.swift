@@ -12,6 +12,7 @@ enum ChromeAction {
   case nextTab
   case prevTab
   case find  // 検索（端末はスクロールバック・エディターはファイル内）
+  case findInProject  // プロジェクト全体を検索（エディターの検索パネル）
   case switchWorkspace  // workspace コマンドパレットを開く
   case launchDefaultAgent  // デフォルトエージェントを新タブで起動
   case showAgentPalette  // エージェント起動パレットを開く
@@ -42,6 +43,7 @@ enum WindowCommand {
   case showSettings
   case toggleHelp
   case toggleEditorFace
+  case findInProject
 }
 
 extension ChromeAction {
@@ -64,6 +66,7 @@ extension ChromeAction {
     case .showSettings: return .showSettings
     case .toggleHelp: return .toggleHelp
     case .toggleEditorFace: return .toggleEditorFace
+    case .findInProject: return .findInProject
     case .increaseFontSize, .decreaseFontSize, .resetFontSize, .find,
       .scrollToTop, .scrollToBottom, .saveDocument:
       return nil
@@ -84,7 +87,7 @@ extension ChromeAction {
     switch self {
     case .newTab, .closeTab, .showClosedAgentsPalette, .nextTab, .prevTab, .switchWorkspace,
       .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .openEditor, .rename,
-      .showSettings, .toggleHelp, .toggleEditorFace:
+      .showSettings, .toggleHelp, .toggleEditorFace, .findInProject:
       return .window
     case .increaseFontSize, .decreaseFontSize, .resetFontSize:
       return .terminal
@@ -105,7 +108,8 @@ extension WindowCommand {
     case .newTab, .showClosedAgentsPalette, .switchWorkspace,
       .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings, .toggleHelp:
       return true
-    case .nextTab, .prevTab, .openEditor, .renameTab, .closeTab, .toggleEditorFace:
+    case .nextTab, .prevTab, .openEditor, .renameTab, .closeTab, .toggleEditorFace,
+      .findInProject:
       return false
     }
   }
@@ -139,6 +143,7 @@ enum Keybindings {
     case ",": return .showSettings  // Cmd+,
     case "e": return .toggleEditorFace  // Cmd+E
     case "f": return .find  // Cmd+F
+    case "F": return .findInProject  // Cmd+Shift+F
     case "r": return .rename  // Cmd+R
     case "s": return .saveDocument  // Cmd+S
     case "w": return .closeTab  // Cmd+W

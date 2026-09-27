@@ -16,13 +16,14 @@ struct EditorFaceRoot: View {
 /// 文書のテキスト面とその右のミニマップ・スクロールバー、無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
 ///
 /// 文書の「変わった」（viewport・選択・本文・ハンク・焦点）は pane が 1 つずつ受け、ミニマップ・スクロールバー・影・検索・
-/// 出現の強調へ配る——文書側の closure は単一のまま、扇出はここが持つ。検索の一致と語の出現は pane が束ねて
+/// 出現の強調・プロジェクト検索へ配る——文書側の closure は単一のまま、扇出はここが持つ。一致の地は、ファイル内検索と
+/// プロジェクト検索の 2 つの出どころの和を pane が面と俯瞰へ押す（`pushFindGround`）。語の出現も束ねて
 /// （`OverviewDecorations`）ミニマップとスクロールバーへ押す。本体の上のポインタは pane の tracking area が見て、
 /// スクロールバーのつまみの見え隠れに使う。
 ///
 /// 骨の状態はセッションの写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれだけを読む。
 /// セッションの変化は `sessionDidChange` 1 本で受け、写し → 面の差し替え → ツリーの追従の順に進める。
-/// ツリーは面が画面に見えている間（窓に付き、隠れていない）だけ根のサービスを握る。
+/// ツリーとプロジェクト検索は面が画面に見えている間（窓に付き、隠れていない）だけ根のサービスを握る。
 ///
 /// chrome キーは `performKeyEquivalent` で先取りし、window コマンドはタブ経由で上位へ、⌘S は保存、
 /// 端末のキーは消し、両面のキーのうち ⌘F はファイル内検索、残り（⌘↑↓）と通常の打鍵はテキスト面へ流す。
@@ -49,8 +50,14 @@ final class EditorPaneView: NSView {
   var searchBarTrailing: NSLayoutConstraint?
   /// 出現の強調の状態（pane ごと）。
   let occurrences = EditorOccurrences()
+  /// プロジェクト検索の状態（pane ごと＝タブごと）。
+  let projectSearch: ProjectSearch
+  /// 検索結果の列。検索パネルが隠れている間も持ち、出し直すたびに作り直さない。
+  let searchResults: SearchResultsView
   /// 本体の上のポインタを見る tracking area。
   var bodyTracking: NSTrackingArea?
+  /// F4 / ⇧F4 を拾うイベントの監視（窓に付いている間だけ）。
+  var stepKeyMonitor: Any?
   /// 最後に見たスクロールの状態（変化でつまみを見せる）。文書を結び直すと捨てる。
   var lastScrollState: ScrollState?
   /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
@@ -68,10 +75,15 @@ final class EditorPaneView: NSView {
 
   init(root: String) {
     tree = FileTree(root: root)
+    let projectSearch = ProjectSearch(root: root)
+    self.projectSearch = projectSearch
+    let searchResults = SearchResultsView(search: projectSearch)
+    self.searchResults = searchResults
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
-        shell: shell, tree: tree, sidebar: sidebar, localization: localization,
-        fontResolver: fontResolver))
+        shell: shell, tree: tree, search: projectSearch, searchResults: searchResults,
+        sidebar: sidebar,
+        localization: localization, fontResolver: fontResolver))
     headerHost = NSHostingView(
       rootView: EditorHeaderRoot(
         shell: shell, localization: localization, fontResolver: fontResolver))
@@ -96,16 +108,21 @@ final class EditorPaneView: NSView {
     search.onCountChange = { [weak self] selected, total, limited in
       self?.searchBar?.updateCount(selected: selected, total: total, limited: limited)
     }
-    search.onMatchesChange = { [weak self] in self?.pushOverviewDecorations() }
+    search.onMatchesChange = { [weak self] in self?.pushFindGround() }
     search.onNeedleChange = { [weak self] in self?.syncFindState() }
     occurrences.onWordOccurrencesChange = { [weak self] in self?.pushOverviewDecorations() }
     sidebarHandle.onDrag = { [weak self] width in self?.resizeSidebar(to: width) }
     sidebarHandle.onRelease = { [weak self] in self?.sidebar.commit() }
     wireShell()
     wireTree()
+    wireProjectSearch()
     observeSidebar()
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
+
+  deinit {
+    stepKeyMonitor.map(NSEvent.removeMonitor)
+  }
 
   override var isFlipped: Bool { true }
 
@@ -125,8 +142,9 @@ final class EditorPaneView: NSView {
 
   private func installRoots() {
     sideHost.rootView = EditorSideRoot(
-      shell: shell, tree: tree, sidebar: sidebar, localization: localization,
-      fontResolver: fontResolver)
+      shell: shell, tree: tree, search: projectSearch, searchResults: searchResults,
+      sidebar: sidebar,
+      localization: localization, fontResolver: fontResolver)
     headerHost.rootView = EditorHeaderRoot(
       shell: shell, localization: localization, fontResolver: fontResolver)
     emptyHost.rootView = EditorFaceRoot(localization: localization)
@@ -148,7 +166,7 @@ final class EditorPaneView: NSView {
     shell.createFile = { [weak self] in self?.beginNew(isDirectory: false) }
     shell.createDirectory = { [weak self] in self?.beginNew(isDirectory: true) }
     shell.collapseAll = { [weak self] in self?.tree.collapseAll() }
-    shell.toggleSidebar = { [weak self] in self?.sidebar.toggle() }
+    shell.selectPanel = { [weak self] panel in self?.selectPanel(panel) }
     shell.inlineInputLostFocus = { [weak self] generation in
       self?.inlineInputLostFocus(generation: generation)
     }
@@ -198,9 +216,9 @@ final class EditorPaneView: NSView {
     }
   }
 
-  /// 行内入力を出す前に pane 自身を first responder にする——`paneDidFocus(.editor)` が走る経路はテキスト面と
-  /// pane の 2 つしか無く、field editor が直接焦点を取ると分割中の焦点帯と位置ドットが端末を指したままになる。
-  /// 続けて出したときは前の入力欄がここで焦点を手放し、新しい行が「面が持っている」と見て取る。
+  /// 行内入力を出す前に pane 自身を first responder にする——入力欄は焦点を面が持っている（窓か面自身）ときだけ取る
+  /// （`inlineInputMayTakeFocus`）。続けて出したときは前の入力欄がここで焦点を手放し、新しい行が「面が持っている」と
+  /// 見て取る。
   private func beginNew(isDirectory: Bool) {
     window?.makeFirstResponder(self)
     tree.beginNew(isDirectory: isDirectory)
@@ -230,10 +248,15 @@ final class EditorPaneView: NSView {
   }
 
   /// 行内入力が終わった（状態が落ちた。Enter・Esc・取り消し・すべて折りたたむ・根を畳む・作成先を畳む・
-  /// サイドバーを閉じる・cd）。焦点がまだ入力欄（骨の host 配下）か面自身（`beginNew` が停めた・預かっている）
-  /// か窓に居れば、その場で面の行き先へ移す。別の view へ移って終わったなら（端末をクリックして抜けた）
-  /// そこに居るので触らない。
+  /// サイドバーを閉じる・cd）。
   private func inlineInputDidEnd() {
+    reclaimSidebarFocus()
+  }
+
+  /// サイドバーの中の焦点が行き場を失った（行内入力が終わった・検索パネルが隠れた）。焦点がまだサイドバー（骨の host
+  /// 配下）か面自身（`beginNew` が停めた・預かっている）か窓に居れば、その場で面の行き先へ移す。別の view へ移って
+  /// 終わったなら（端末をクリックして抜けた）そこに居るので触らない。
+  func reclaimSidebarFocus() {
     guard let window else { return }
     let responder = window.firstResponder
     let strayed =
@@ -260,13 +283,15 @@ final class EditorPaneView: NSView {
     if changed, let url = active?.url { tree.reveal(url) }
   }
 
-  /// 根が変わった（cd）。ツリーを作り直し、握っていたなら握り直す。
+  /// 根が変わった（cd）。ツリーを作り直し、握っていたなら握り直す。プロジェクト検索は結果を捨て、この面の検索パネルが
+  /// 画面に見えていれば今の問いで検索し直す（裏のタブの cd で見えない根を探さない）。
   func setRoot(_ root: String) {
     guard root != tree.root else { return }
     tree.cancelNew()
     tree.isLive = false
     tree = FileTree(root: root)
     wireTree()
+    projectSearch.setRoot(root, searchNow: showsSearchPanel && projectSearch.isLive)
     updateLiveness()
     installRoots()
     if let tab {
@@ -277,15 +302,19 @@ final class EditorPaneView: NSView {
 
   /// 焦点の文書の面を見せる（nil なら空状態）。前の文書の面は外すだけで、面は文書と一緒に生き続ける。文書を初めて
   /// 画面に出すときは、最初の描画に色が間に合うよう文書が上限つきで待つ（→ `prepareDocumentIfVisible`）。
-  /// 俯瞰と検索を新しい文書に結び直し（検索は同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。
-  /// 焦点が面の中にあれば新しい行き先へ移す——判定は前の面を外す前に取る（外した瞬間に AppKit が
-  /// first responder を窓へ戻すので、外した後では「中にあった」ことが分からない）。
+  /// 俯瞰と検索を新しい文書に結び直し（検索は同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。前の文書の
+  /// 一致の地は消し、新しい文書に 2 つの出どころの和を敷く。
+  /// 焦点が面の中（サイドバーを除く）にあれば新しい行き先へ移す——判定は前の面を外す前に取る（外した瞬間に AppKit が
+  /// first responder を窓へ戻すので、外した後では「中にあった」ことが分からない）。サイドバーの焦点（検索結果・行内
+  /// 入力）は面を外しても残るので動かさない。
   func show(_ document: EditorDocument?) {
     guard document !== self.document else { return }
-    let hadFocusInside = focusIsInside
+    let hadFocusInside = focusIsInside && !focusIsInSidebar
     if let previous = self.document {
       previous.surface.view.removeFromSuperview()
       observe(previous, false)
+      previous.surface.setHighlights([], for: .findMatch)
+      previous.surface.setHighlights([], for: .currentFindMatch)
     }
     self.document = document
     if let document {
@@ -303,6 +332,8 @@ final class EditorPaneView: NSView {
     scrollbar.bind(document)
     search.bind(document)
     occurrences.bind(document)
+    if let document { projectSearch.documentDidShow(document) }
+    pushFindGround()
     scrollShadow.isHidden = document == nil
     updateShadow()
     emptyHost.isHidden = document != nil
@@ -318,6 +349,7 @@ final class EditorPaneView: NSView {
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
     updateLiveness()
+    updateStepKeyMonitor()
   }
 
   override func viewDidHide() {
@@ -331,7 +363,9 @@ final class EditorPaneView: NSView {
   }
 
   private func updateLiveness() {
-    tree.isLive = window != nil && !isHiddenOrHasHiddenAncestor
+    let live = window != nil && !isHiddenOrHasHiddenAncestor
+    tree.isLive = live
+    projectSearch.isLive = live
     prepareDocumentIfVisible()
   }
 

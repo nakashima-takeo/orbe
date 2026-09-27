@@ -38,7 +38,7 @@ final class EditorPaneViewHeaderTests: OrbeTestCase {
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 400)
     defer { window.orderOut(nil) }
-    pane.shell.toggleSidebar()  // 列を本体だけにして溢れを作る（本体 363）
+    pane.shell.selectPanel(.files)  // 列を本体だけにして溢れを作る（本体 363）
     let documents = try (0..<8).map { index in
       try tab.editor.open(try caseFile("a-long-file-name-\(index).swift", "x"))
     }

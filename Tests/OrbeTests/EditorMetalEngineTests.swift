@@ -6,9 +6,10 @@ import XCTest
 @testable import Orbe
 
 /// 新しいテキスト面（Metal）を選んだタブで、エディター面の今の働き——開く・切り替える・閉じる・再起動の復元・
-/// スクロールバーからのスクロール・⌘F の次でのスクロール・ホイールの量と見えている範囲・本文の Esc——が今の面と
-/// 同じように動く。壊れると設定を真にした人の文書が開かない・俯瞰で動かない・一致が見えない・復元で今の面に戻る・
-/// ホイールで送る量やミニマップの見えている枠が今の面と違う・Esc で検索のバーが閉じない。
+/// スクロールバーからのスクロール・⌘F の次でのスクロール・プロジェクト検索の一致を開く・ホイールの量と見えている範囲・
+/// 本文の Esc——が今の面と同じように動く。壊れると設定を真にした人の文書が開かない・俯瞰で動かない・一致が見えない・
+/// 検索パネルから押した一致が選ばれず中央に来ない・復元で今の面に戻る・ホイールで送る量やミニマップの見えている枠が
+/// 今の面と違う・Esc で検索のバーが閉じない。
 @MainActor
 final class EditorMetalEngineTests: OrbeTestCase {
   private let metal = EditorEngineChoice(
@@ -70,6 +71,41 @@ final class EditorMetalEngineTests: OrbeTestCase {
     let (first, visible) = document.viewportLines
     XCTAssertEqual(first + visible / 2, 1500.5, accuracy: 1, "一致の行を中央に見せる")
     pane.closeSearch()
+  }
+
+  /// プロジェクト検索の一致を押すと、新しい面で開いて一致を選び、その行を中央に見せ、一致の地と現在の一致が俯瞰に出る。
+  /// 端末は載せない——shell の cwd の報告が検索の根を動かさない。
+  func testProjectSearchOpensAndCentersTheMatchInTheNewSurface() throws {
+    let repo = try TempGitRepo(name: "orbe-metal-search")
+    defer { repo.cleanup() }
+    let content = lines(2000)
+    try repo.write("a.swift", content)
+    let tab = TerminalTab(cwd: repo.root, editorSurfaces: surfaces)
+    let pane = tab.view.editor
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 900, height: 500), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    window.contentView = pane
+    defer { window.contentView = nil }
+    pane.layoutSubtreeIfNeeded()
+    let search = pane.projectSearch
+    pane.showProjectSearch(seed: nil)
+    search.setPattern("value1500 ")
+    search.search()
+    pumpMain(until: { search.phase == .done }, "検索が終わる")
+
+    search.click(ProjectSearch.RowID(path: "a.swift", match: 0))
+
+    let document = try XCTUnwrap(pane.document)
+    XCTAssertTrue(isMetal(document))
+    let match = (content as NSString).range(of: "value1500 ")
+    XCTAssertEqual(document.surface.selectedRange, match, "一致を選ぶ")
+    let (first, visible) = document.viewportLines
+    XCTAssertEqual(first + visible / 2, 1500.5, accuracy: 1, "一致の行を中央に見せる")
+    XCTAssertEqual(pane.findGround.matches, [match])
+    XCTAssertEqual(pane.findGround.current, [match])
+    XCTAssertEqual(pane.scrollbar.decorations.findMatches, [match], "一致の地が俯瞰に出る")
+    XCTAssertEqual(pane.scrollbar.decorations.currentFindMatch, match)
   }
 
   /// 同じ大きさに載せた今の面と新しい面で、同じ中身の文書を開く（窓はテストの終わりに外す）。
@@ -155,7 +191,7 @@ final class EditorMetalEngineTests: OrbeTestCase {
     let url = try caseFile("a.swift", lines(5))
     let state = TabState(
       cwd: "/tmp", agent: nil, explicitTitle: nil,
-      editor: EditorState(open: [url.path], active: url.path))
+      editor: EditorState(documents: .init(open: [url.path], active: url.path)))
     let tab = TerminalTab(restoring: state, resumeSpawn: { _ in nil }, editorSurfaces: surfaces)
     tab.recordMaterializationStarted()
     XCTAssertTrue(isMetal(try XCTUnwrap(tab.editor.activeDocument)))
@@ -183,7 +219,7 @@ final class EditorMetalEngineTests: OrbeTestCase {
     wc.settingsStore.applyGlobal(SettingChange(SettingKeys.editorEngineMetal, true))
     let state = TabState(
       cwd: "/tmp", agent: nil, explicitTitle: nil,
-      editor: EditorState(open: [a.path], active: a.path))
+      editor: EditorState(documents: .init(open: [a.path], active: a.path)))
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [WorkspaceState(name: "main", rootPath: "/tmp", activeTab: 0, tabs: [state])])

@@ -51,18 +51,18 @@ struct FileChip: Equatable {
   }
 }
 
-extension ThemeColors {
-  func editorHue(_ hue: FileChip.Hue) -> Color {
-    switch hue {
-    case .orange: return editorHueOrange
-    case .blue: return editorHueBlue
-    case .yellow: return editorHueYellow
-    case .sky: return editorHueSky
-    case .violet: return editorHueViolet
-    case .cyan: return editorHueCyan
-    case .red: return editorHueRed
-    case .green: return editorHueGreen
-    case .teal: return editorHueTeal
+extension FileChip.Hue {
+  var color: NSColor {
+    switch self {
+    case .orange: return Theme.Color.editorHueOrange
+    case .blue: return Theme.Color.editorHueBlue
+    case .yellow: return Theme.Color.editorHueYellow
+    case .sky: return Theme.Color.editorHueSky
+    case .violet: return Theme.Color.editorHueViolet
+    case .cyan: return Theme.Color.editorHueCyan
+    case .red: return Theme.Color.editorHueRed
+    case .green: return Theme.Color.editorHueGreen
+    case .teal: return Theme.Color.editorHueTeal
     }
   }
 }
@@ -74,11 +74,11 @@ struct FileChipView: View {
   var size: CGFloat = Theme.Layout.editorChip
   @Environment(\.colorScheme) private var scheme
 
-  private static let groundAlpha: Double = 0.16
+  static let groundAlpha: Double = 0.16
 
   var body: some View {
     let small = size < Theme.Layout.editorChip
-    let color = chip.hue.map { Color.theme.editorHue($0) } ?? Color.theme.textPrimary
+    let color = chip.hue.map { Color(nsColor: $0.color) } ?? Color.theme.textPrimary
     let ground =
       chip.hue == nil ? EditorInk(scheme).fill(Self.groundAlpha) : color.opacity(Self.groundAlpha)
     Text(chip.glyph)

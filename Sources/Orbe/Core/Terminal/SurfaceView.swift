@@ -274,7 +274,6 @@ final class SurfaceView: NSView {
 
   override func becomeFirstResponder() -> Bool {
     setSurfaceFocus(true)
-    tab?.paneDidFocus(.terminal)
     return super.becomeFirstResponder()
   }
   override func resignFirstResponder() -> Bool {

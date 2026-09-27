@@ -30,9 +30,20 @@ final class TabFacesView: NSView {
   var onProjectionChange: (() -> Void)?
   /// 背のクリック／離したときに求める配置。タブが正規化して状態に置き、`set` で戻す。
   var onFacesRequested: ((FaceLayout, _ animated: Bool) -> Void)?
+  /// 窓の first responder が面の配下に入った（面の焦点の記憶はここからだけ導く）。
+  var onFaceFocused: ((Face) -> Void)?
+  private var responderObservation: NSKeyValueObservation?
 
   /// 焦点の面の responder（エディターは文書があればそのテキスト面、無ければ pane）。
   var focusTarget: NSView { faces.focus == .editor ? editor.focusTarget : terminal.surfaceView }
+
+  /// `responder` がどちらの面の配下か（面の外なら nil）。
+  func face(containing responder: NSResponder?) -> Face? {
+    guard let view = responder as? NSView else { return nil }
+    if view.isDescendant(of: editor) { return .editor }
+    if view.isDescendant(of: terminal) { return .terminal }
+    return nil
+  }
 
   /// 相互作用の状態。幅に依らない形で持ち、`layout()` が新しい幅へ写す。
   private enum Interaction {
@@ -73,6 +84,18 @@ final class TabFacesView: NSView {
   required init?(coder: NSCoder) { fatalError("not supported") }
 
   deinit { clock?.cancel() }
+
+  /// 窓の first responder を見張り、面の配下に入ったら告げる——焦点がどの経路で入っても（テキスト面・端末・pane・
+  /// サイドバーの SwiftUI の入力欄）同じ 1 か所で面の記憶が追従する。面の外（パレット・窓）へ出ても記憶は残す。
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    responderObservation = window?.observe(\.firstResponder) { [weak self] window, _ in
+      MainActor.assumeIsolated {
+        guard let self, let face = self.face(containing: window.firstResponder) else { return }
+        self.onFaceFocused?(face)
+      }
+    }
+  }
 
   /// 背の操作を器の状態へ結ぶ。init の外に置き、閉包が読む `faces` を常に鏡（プロパティ）にする。
   private func wireSpine() {

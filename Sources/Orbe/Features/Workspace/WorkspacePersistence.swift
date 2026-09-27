@@ -1,4 +1,5 @@
 import Foundation
+import OrbeEditorCore
 
 /// workspace 構成のディスク永続（自前 JSON）。
 /// 保存先は `StateDir.base()/workspaces.json`（既定は `~/Library/Application Support/<bundle-id>/`）。
@@ -70,11 +71,51 @@ struct WorkspaceState: Codable, Equatable {
   }
 }
 
-/// エディターで開いていた文書の列（実体パス）と、その中のアクティブ。位置ではなくパスで指す——復元で読めない
-/// パスを落としても列がずれず、「列があるのにアクティブが無い」という表せない状態を持たない（落ちていれば先頭）。
+/// タブのエディターの状態——開いていた文書と、プロジェクト検索の問い（検索語と 3 つの切替。結果は持たない）。文書が無く
+/// 問いが既定なら空で、書かない。JSON は 1 段（`open` / `active` / `search`）で、既定の問いは書かず、読めない項目はその
+/// 項目だけを落とす（既定へ）。
 struct EditorState: Codable, Equatable {
-  var open: [String]
-  var active: String
+  var documents: OpenDocuments?
+  var search: SearchQuery
+
+  /// 開いていた文書の列（実体パス）と、その中のアクティブ。位置ではなくパスで指す——復元で読めないパスを落としても列が
+  /// ずれず、「列があるのにアクティブが無い」という表せない状態を持たない（落ちていれば先頭）。
+  struct OpenDocuments: Equatable {
+    var open: [String]
+    var active: String
+  }
+
+  /// `CaseIterable` は TabState と同じ seam（encode / decode を手書きにしたので、足したキーの書き忘れを全キーの往復テストが見る）。
+  enum CodingKeys: String, CodingKey, CaseIterable {
+    case open, active, search
+  }
+
+  init(documents: OpenDocuments? = nil, search: SearchQuery = SearchQuery()) {
+    self.documents = documents
+    self.search = search
+  }
+
+  /// 空（書くものが無い）か。
+  var isEmpty: Bool { documents == nil && search == SearchQuery() }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    if let open = try? c.decode([String].self, forKey: .open), !open.isEmpty,
+      let active = try? c.decode(String.self, forKey: .active)
+    {
+      documents = OpenDocuments(open: open, active: active)
+    }
+    search = (try? c.decodeIfPresent(SearchQuery.self, forKey: .search)) ?? SearchQuery()
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    if let documents {
+      try c.encode(documents.open, forKey: .open)
+      try c.encode(documents.active, forKey: .active)
+    }
+    if search != SearchQuery() { try c.encode(search, forKey: .search) }
+  }
 }
 
 /// 1 タブの永続表現。cwd・エージェントセッション・明示タイトル・面の配置・エディターの状態。
@@ -84,7 +125,7 @@ struct TabState: Codable, Equatable {
   var explicitTitle: String?
   /// 面の配置。既定（端末だけ）は書かず、読めなければ既定へ落とす（ファイル全体は失わない）。
   var faces: FaceLayout
-  /// 開いていた文書。無ければ書かず、読めなければ nil へ落とす（ファイル全体は失わない）。
+  /// エディターの状態（開いていた文書・検索の問い）。無ければ書かず、読めなければ nil へ落とす（ファイル全体は失わない）。
   var editor: EditorState?
 
   /// `CaseIterable` は「フィールドを足して encode / decode を忘れる」を検出する seam
@@ -110,9 +151,7 @@ struct TabState: Codable, Equatable {
     agent = try c.decodeIfPresent(AgentSession.self, forKey: .agent)
     explicitTitle = try c.decodeIfPresent(String.self, forKey: .explicitTitle)
     faces = ((try? c.decode(FaceLayout.self, forKey: .faces)) ?? .terminalOnly).normalized
-    editor = (try? c.decode(EditorState.self, forKey: .editor)).flatMap {
-      $0.open.isEmpty ? nil : $0
-    }
+    editor = (try? c.decode(EditorState.self, forKey: .editor)).flatMap { $0.isEmpty ? nil : $0 }
   }
 
   func encode(to encoder: Encoder) throws {
@@ -121,7 +160,7 @@ struct TabState: Codable, Equatable {
     try c.encodeIfPresent(agent, forKey: .agent)
     try c.encodeIfPresent(explicitTitle, forKey: .explicitTitle)
     if faces != .terminalOnly { try c.encode(faces, forKey: .faces) }
-    if let editor, !editor.open.isEmpty { try c.encode(editor, forKey: .editor) }
+    if let editor, !editor.isEmpty { try c.encode(editor, forKey: .editor) }
   }
 }
 

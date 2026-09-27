@@ -1,11 +1,13 @@
+import OrbeEditorCore
 import XCTest
 
 @testable import Orbe
 
 /// タブの復元単位とエディターの状態——開いている文書はそのまま書き、復元した状態は materialize で消費して開き、
-/// 未消費のまま保存すれば同じ形で書き戻す。
+/// 未消費のまま保存すれば同じ形で書き戻す。検索の問いは復元で入力欄に戻り（探さない）、変えれば書き戻す。
 ///
-/// 壊れると何が起きるか。一度も見なかったタブの文書が終了で失われる。復元で読めないファイルが復元を止める。
+/// 壊れると何が起きるか。一度も見なかったタブの文書が終了で失われる。復元で読めないファイルが復元を止める。再起動で
+/// タブの検索語と切替が消える、復元のたびに根の全体を探す。
 @MainActor
 final class TerminalTabEditorTests: OrbeTestCase {
   private func file(_ name: String) throws -> URL {
@@ -21,14 +23,15 @@ final class TerminalTabEditorTests: OrbeTestCase {
     let b = try tab.editor.open(try file("b.txt"))
     tab.editor.activate(a)
     XCTAssertEqual(
-      tab.tabState().editor, EditorState(open: [a.url.path, b.url.path], active: a.url.path))
+      tab.tabState().editor,
+      EditorState(documents: .init(open: [a.url.path, b.url.path], active: a.url.path)))
   }
 
   func testRestoredStateIsKeptUntilMaterializationAndThenOpened() throws {
     let a = try file("a.txt")
     let state = TabState(
       cwd: "/tmp", agent: nil, explicitTitle: nil,
-      editor: EditorState(open: [a.path, "/nonexistent/z.txt"], active: a.path))
+      editor: EditorState(documents: .init(open: [a.path, "/nonexistent/z.txt"], active: a.path)))
     let tab = TerminalTab(restoring: state, resumeSpawn: { _ in nil })
     XCTAssertTrue(tab.editor.documents.isEmpty, "復元時は開かない")
     XCTAssertEqual(tab.tabState().editor, state.editor, "未消費のまま同じ形で書き戻す")
@@ -40,9 +43,30 @@ final class TerminalTabEditorTests: OrbeTestCase {
     XCTAssertEqual(tab.editor.activeDocument?.url, a)
     XCTAssertEqual(changes, 1)
     XCTAssertEqual(
-      tab.tabState().editor, EditorState(open: [a.path], active: a.path), "以後は開いている文書を書く")
+      tab.tabState().editor, EditorState(documents: .init(open: [a.path], active: a.path)),
+      "以後は開いている文書を書く")
 
     tab.editor.close(try XCTUnwrap(tab.editor.activeDocument))
     XCTAssertNil(tab.tabState().editor, "全部閉じれば消費済みの状態は戻らない")
+  }
+
+  func testTheSearchQueryIsRestoredWithoutSearchingAndWrittenBack() throws {
+    let query = SearchQuery(pattern: "needle", wholeWord: true)
+    let tab = TerminalTab(
+      restoring: TabState(
+        cwd: "/tmp", agent: nil, explicitTitle: nil, editor: EditorState(search: query)),
+      resumeSpawn: { _ in nil })
+    let search = tab.view.editor.projectSearch
+    XCTAssertEqual(search.query, query, "入力欄に戻る")
+    XCTAssertEqual(search.phase, .idle, "復元では探さない")
+    XCTAssertEqual(tab.tabState().editor, EditorState(search: query))
+
+    var changes = 0
+    tab.onEditorChange = { changes += 1 }
+    search.toggle(.matchCase)
+    XCTAssertEqual(changes, 1, "問いの変化は保存のきっかけ")
+    XCTAssertEqual(
+      tab.tabState().editor?.search,
+      SearchQuery(pattern: "needle", matchCase: true, wholeWord: true))
   }
 }

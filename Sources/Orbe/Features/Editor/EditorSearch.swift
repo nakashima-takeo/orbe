@@ -5,7 +5,8 @@ import OrbeEditorCore
 /// ちょうど一致のどれかならそれ、そうでなければ無い（本文をクリック・打鍵して選択が一致から外れれば現在の地は消え、
 /// 件数の位置は「?」）。Enter・⇧Enter の行き先は Core の規則（`TextSearch.next` / `previous`）。検索語を打つたびの
 /// 行き先は、検索が選んだのではない最後のキャレットから（VS Code `FindModel` の start position）。選択の変化を観測して
-/// 件数と現在の一致の地を導き直す。面への作用は契約（選択・キャレット・中央へ・強調の地）だけ。
+/// 件数と現在の一致を導き直す。面への作用は契約（選択・キャレット・中央へ）だけで、一致の地は pane がプロジェクト検索の
+/// 一致との和にして面へ押す（面の「一致の地」の口は 1 つ）——ここは一致か現在の一致が変わったことを告げる。
 ///
 /// 一致は文書の写しから裏で探す（`EditorDocument.analyze`）。検索語を打ち換えると、新しい検索語の一致が届くまで前の地と
 /// 件数を出したままにし（打つたびに地が消えてちらつかない）、打鍵での最初の一致の選択と、その間に押された Enter・⇧Enter
@@ -13,7 +14,7 @@ import OrbeEditorCore
 /// 動かせば、その後回しの操作は取り消す（届いた結果が人の選択を覆さない）。文書を切り替えたときも、新しい文書の一致が
 /// 届くまで件数は前のまま（一致があるのに「一致なし」を一瞬出さない）。本文の変更では一致を 100ms 後に
 /// 取り直し（VS Code `FindModel` と同じ間引き）、その間は編集に合わせて一致の区間をずらしておく。問いは同じなので、
-/// 取り直しを待たずにずらした一致で操作できる。一致は俯瞰（ミニマップとスクロールバーの印）にも出るので、変わったら告げる。
+/// 取り直しを待たずにずらした一致で操作できる。
 @MainActor
 final class EditorSearch {
   static let refreshDelay: TimeInterval = 0.1
@@ -46,7 +47,7 @@ final class EditorSearch {
   private var matchesBelongToDocument = true
   /// 件数が変わった（selected は 1 始まり。needle が空なら total 0 で届く。`limited` は上限で打ち切った）。
   var onCountChange: ((_ selected: Int?, _ total: Int, _ limited: Bool) -> Void)?
-  /// 一致か現在の一致が変わった（俯瞰へ出し直す）。
+  /// 一致か現在の一致が変わった（pane が地と俯瞰を押し直す）。
   var onMatchesChange: (() -> Void)?
   /// needle が変わった（開閉を含む。出現の強調が検索と重ならないように）。
   var onNeedleChange: (() -> Void)?
@@ -58,10 +59,9 @@ final class EditorSearch {
     return TextSearch.exact(in: matches, selection: selection)
   }
 
-  /// 文書を結び直す。前の文書の地を消し、新しい文書に同じ needle で敷き直す（ジャンプしない）。
+  /// 文書を結び直す。新しい文書に同じ needle で敷き直す（ジャンプしない）。
   func bind(_ document: EditorDocument?) {
     guard document !== self.document else { return }
-    clearHighlights()
     self.document = document
     start = document?.surface.caretLocation ?? 0
     revealed = nil
@@ -113,7 +113,7 @@ final class EditorSearch {
   func textDidChange(_ edit: TextEdit) {
     guard !needle.isEmpty else { return }
     matches = edit.track(matches)
-    pushHighlights()
+    publish()
     refreshDelay.run(after: Self.refreshDelay) { [weak self] in
       guard let self, let document, !needle.isEmpty else { return }
       document.analyze(.find(needle))
@@ -125,7 +125,7 @@ final class EditorSearch {
     guard needle == self.needle else { return }
     matches = ranges
     matchesBelongToDocument = true
-    pushHighlights()
+    publish()
     guard let awaited = awaiting else { return }
     awaiting = nil
     if awaited.selectsFirst, let index = TextSearch.first(in: matches, from: start) {
@@ -145,19 +145,16 @@ final class EditorSearch {
       awaiting?.selectsFirst = false
       awaiting?.step = nil
     }
-    pushCurrent()
-    pushCount()
-    onMatchesChange?()
+    publish()
   }
 
-  /// バーが閉じた。地を消す（選択は残る）。
+  /// バーが閉じた。一致を捨てる（地が消え、選択は残る）。
   func close() {
     needle = ""
     matches = []
     matchesBelongToDocument = true
     awaiting = nil
     refreshDelay.cancel()
-    clearHighlights()
     onMatchesChange?()
     onNeedleChange?()
   }
@@ -170,27 +167,17 @@ final class EditorSearch {
       awaiting = nil
       matches = []
       matchesBelongToDocument = true
-      pushHighlights()
+      publish()
       return
     }
     awaiting = Awaiting(selectsFirst: selectingFirst, step: nil)
     document.analyze(.find(needle))
   }
 
-  private func pushHighlights() {
-    document?.surface.setHighlights(matches, for: .findMatch)
-    pushCurrent()
+  /// 件数を送り、一致が変わったことを告げる。
+  private func publish() {
     pushCount()
     onMatchesChange?()
-  }
-
-  private func pushCurrent() {
-    document?.surface.setHighlights(current.map { [matches[$0]] } ?? [], for: .currentFindMatch)
-  }
-
-  private func clearHighlights() {
-    document?.surface.setHighlights([], for: .findMatch)
-    document?.surface.setHighlights([], for: .currentFindMatch)
   }
 
   /// 一致を選んで見せる——その行が縦に見えていなければ中央へ、見えていれば最小限のスクロールで（横に隠れて
@@ -214,8 +201,8 @@ final class EditorSearch {
     onCountChange?(current.map { $0 + 1 }, matches.count, TextSearch.isLimited(matches))
   }
 
-  /// 俯瞰へ出す一致（現在の一致を含む）。
-  var overview: (matches: [NSRange], current: NSRange?) {
+  /// 一致の地に出す一致と現在の一致。
+  var ground: (matches: [NSRange], current: NSRange?) {
     (matches, current.map { matches[$0] })
   }
 }

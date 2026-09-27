@@ -1,7 +1,7 @@
 ---
 title: workspace 永続
 description: 構成（workspace・タブ・cwd・エージェントセッション）の JSON 保存と起動時復元・エージェント resume・デバウンス保存
-updated: 2026-09-17
+updated: 2026-09-27
 ---
 
 # workspace 永続
@@ -12,7 +12,7 @@ updated: 2026-09-17
 
 ## workspaces.json — 構成の永続
 
-保存するもの: workspace 名・root path・各 workspace の設定上書き（[workspace](workspace.md)・[settings](../palette/settings.md)）・最終使用時刻（`WorkspacePalette` の MRU 並べ替え用）・アクティブ workspace・ウィンドウサイズ／各 workspace のタブ群と active タブ／各タブの cwd・エージェントセッション・明示タイトル（[chrome](../chrome/chrome.md)）・面の配置（エディター幅の割合と焦点の面 → [editor/faces](../editor/faces.md)。既定＝端末だけのときは書かない）・エディターで開いていた文書（実体パスの列とアクティブの実体パス → [editor/shell](../editor/shell.md)。1 つも無ければ書かない）。
+保存するもの: workspace 名・root path・各 workspace の設定上書き（[workspace](workspace.md)・[settings](../palette/settings.md)）・最終使用時刻（`WorkspacePalette` の MRU 並べ替え用）・アクティブ workspace・ウィンドウサイズ／各 workspace のタブ群と active タブ／各タブの cwd・エージェントセッション・明示タイトル（[chrome](../chrome/chrome.md)）・面の配置（エディター幅の割合と焦点の面 → [editor/faces](../editor/faces.md)。既定＝端末だけのときは書かない）・エディターの状態（開いていた文書の実体パスの列とアクティブの実体パス → [editor/shell](../editor/shell.md)、プロジェクト検索の検索語と 3 つの切替 → [editor/search](../editor/search.md)。文書が 1 つも無く問いが既定なら書かない。検索の結果は書かない）。
 
 ### 復元の挙動
 
@@ -31,7 +31,7 @@ updated: 2026-09-17
 
 ### 互換と破損時の退避
 
-現行形式は version 4 で、タブは `{cwd, agent?, explicitTitle?, faces?, editor?}` の平坦な形。旧形式（version 2 / 3。タブが分割ツリーを持つ）は移行専用の経路が一度だけ読み、分割ツリーの葉を深さ優先順に 1 葉 = 1 タブへ展開する——明示タイトルは先頭の葉に付け、active タブは旧 active タブの先頭葉へ写し、cwd の無い葉は workspace の root path で起こす。次回保存で version 4 へ置き換わる（workspace 一覧・cwd・エージェントセッション・workspace 別設定を失わない。失うのは配置と分割比だけ）。旧 camelCase の設定上書きもこの経路だけが読む。後から足したフィールドは**欠落**を許容する。「あるが読めない」を既定へ落とすのはタブの面の配置（`faces`。読めなければ端末だけへ、割合が範囲外なら 0…1 へ丸めて焦点を正規形へ寄せる）・開いていた文書（`editor`。読めなければ無しへ）と設定層（`settingsOverride`）の 3 つだけで、そのほか——タブ本体（`cwd`・エージェントセッション）・`explicitTitle`・`lastUsedAt`・`windowSize`・workspace の名前や index——はファイル全体の fallback へ落ちて**全 workspace を失う**。optional で後から足したフィールドも、既定へ落とす decode を自分で書かない限りこちら側になる。設定層（global・workspace 上書きとも）は現行形式なら読めない 1 キーだけを落として残りを活かし、値ごと読めなければ上書き無し（global 継承）へ落ちる——1 項目の異常で層ごと消さないため。旧 camelCase の読みは global 移行・workspace 上書きとも all-or-nothing で、そこでは範囲外の `theme` が既定値として層に載る。値域を持つ項目は、範囲外の値を**最寄りの端へ丸めて**層に載せる——読出には拒否を返す先が無く、既定へ落とすと「大きくしたい／小さくしたい」という書き手の意図まで捨てるため。丸めは書き込み経路の検証と同じ値域を関門 1 つで共有する。
+現行形式は version 4 で、タブは `{cwd, agent?, explicitTitle?, faces?, editor?}` の平坦な形。旧形式（version 2 / 3。タブが分割ツリーを持つ）は移行専用の経路が一度だけ読み、分割ツリーの葉を深さ優先順に 1 葉 = 1 タブへ展開する——明示タイトルは先頭の葉に付け、active タブは旧 active タブの先頭葉へ写し、cwd の無い葉は workspace の root path で起こす。次回保存で version 4 へ置き換わる（workspace 一覧・cwd・エージェントセッション・workspace 別設定を失わない。失うのは配置と分割比だけ）。旧 camelCase の設定上書きもこの経路だけが読む。後から足したフィールドは**欠落**を許容する。「あるが読めない」を既定へ落とすのはタブの面の配置（`faces`。読めなければ端末だけへ、割合が範囲外なら 0…1 へ丸めて焦点を正規形へ寄せる）・エディターの状態（`editor`。文書の列とアクティブ、検索の問いの 2 つをそれぞれ独立に扱い、読めない方だけを無しへ。問いの中の読めない項目は既定へ）と設定層（`settingsOverride`）の 3 つだけで、そのほか——タブ本体（`cwd`・エージェントセッション）・`explicitTitle`・`lastUsedAt`・`windowSize`・workspace の名前や index——はファイル全体の fallback へ落ちて**全 workspace を失う**。optional で後から足したフィールドも、既定へ落とす decode を自分で書かない限りこちら側になる。設定層（global・workspace 上書きとも）は現行形式なら読めない 1 キーだけを落として残りを活かし、値ごと読めなければ上書き無し（global 継承）へ落ちる——1 項目の異常で層ごと消さないため。旧 camelCase の読みは global 移行・workspace 上書きとも all-or-nothing で、そこでは範囲外の `theme` が既定値として層に載る。値域を持つ項目は、範囲外の値を**最寄りの端へ丸めて**層に載せる——読出には拒否を返す先が無く、既定へ落とすと「大きくしたい／小さくしたい」という書き手の意図まで捨てるため。丸めは書き込み経路の検証と同じ値域を関門 1 つで共有する。
 
 壊れている・非互換バージョン・空 JSON は既定の単一 workspace で fallback する。このとき**原本が在るのに使えなかった**場合（読めない・構造破損・非互換バージョン）は、fallback する前に原本を同じディレクトリの `workspaces-broken-<日時>.json` へ退避する——直後の既定起動が打つ保存が原本を潰すため。退避物は最新 1 件だけ残す。退避できなかった原本が原位置に残っている間は、そのセッションはその場所へ書かない（保全できていない原本を潰さないため）。ファイル不在（初回起動）と空 JSON は失う構成が無いので退避しない。
 
@@ -39,7 +39,7 @@ updated: 2026-09-17
 
 - **`settings.json`** … ユーザー設定（global 層）。in-memory SSOT が保持し、変更は即 save する。未知 key（将来の項目・撤去済みの項目）は無視して読む。
 - **`sounds/`** … 取り込んだカスタム通知音（48kHz モノラルの WAV・[agent/sound](../agent/sound.md)）。設定値がファイル名で指す実体で、取り込みごとに一意な名前で書く（同名の上書きが起きないので、鳴っている最中の差し替えでも壊れない）。参照されなくなったファイルは回収される。
-- **`app-state.json`** … ユーザー設定でない内部簿記（エージェントプラグインを導入できたか・最後に登録できたエージェントプラグイン名〔[agent/plugin-package](../agent/plugin-package.md)〕・旧補完方式〔managed block〕の導入済みフラグ・ログインシェル由来の PATH のキャッシュ〔[shell-path](shell-path.md)〕・UI 言語・エディター面のサイドバーの幅と開閉〔[editor/shell](../editor/shell.md)。アプリ全体で 1 つ。ドラッグの終わりと開閉で書き、読めない・下限未満の幅は既定へ、開閉の欠落は開へ落とす（他の項目は巻き込まない）〕）。全項目 optional。
+- **`app-state.json`** … ユーザー設定でない内部簿記（エージェントプラグインを導入できたか・最後に登録できたエージェントプラグイン名〔[agent/plugin-package](../agent/plugin-package.md)〕・旧補完方式〔managed block〕の導入済みフラグ・ログインシェル由来の PATH のキャッシュ〔[shell-path](shell-path.md)〕・UI 言語・エディター面のサイドバーの幅と開閉と出しているパネル〔[editor/shell](../editor/shell.md)。アプリ全体で 1 つ。ドラッグの終わりと開閉・パネルの切替で書き、読めない・下限未満の幅は既定へ、開閉の欠落は開へ、パネルの欠落・未知はファイルへ落とす（他の項目は巻き込まない）〕）。全項目 optional。
 
 2 ファイルに分けているのは「ユーザーが決めた値」と「アプリが勝手に覚えた値」を混ぜないため。旧形式（両者が同居した 1 枚）は起動時に無損失で分割移行する（旧ファイル全体が読めたときだけ変換する all-or-nothing。読めなければ既定へ fallback）。app-state.json へは全体上書きでなく**マージ**で書く——旧形式が語彙として持たない項目（UI 言語・登録できたエージェントプラグイン名）も、旧形式が語彙としては持つがその 1 ファイルには書かれていない項目（ログインシェル PATH のキャッシュ等）も移行が巻き戻さず、中断した移行からの再移行が冪等になる。
 

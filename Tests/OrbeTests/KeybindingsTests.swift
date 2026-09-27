@@ -43,6 +43,7 @@ final class KeybindingsTests: OrbeTestCase {
     XCTAssertNil(Keybindings.chromeAction(for: arrow(.rightArrow)))
     XCTAssertNil(Keybindings.chromeAction(for: arrow(.leftArrow)))
     XCTAssertEqual(Keybindings.chromeAction(for: .key("f")), .find)
+    XCTAssertEqual(Keybindings.chromeAction(for: .key("F", [.command, .shift])), .findInProject)
   }
 
   /// ⌘S はエディターが所有する（端末焦点では ghostty へ素通しし、エディター焦点では保存）。
@@ -54,7 +55,9 @@ final class KeybindingsTests: OrbeTestCase {
 
   /// 所有面の分類: window コマンドを持つものは `.window`、フォントは端末固有、⌘F と ⌘↑↓ は両面。
   func testOwnerClassification() {
-    for action in [ChromeAction.closeTab, .toggleEditorFace, .rename, .switchWorkspace] {
+    for action in [
+      ChromeAction.closeTab, .toggleEditorFace, .rename, .switchWorkspace, .findInProject,
+    ] {
       XCTAssertEqual(action.owner, .window, "\(action)")
       XCTAssertNotNil(action.windowCommand, "\(action)")
     }
@@ -146,7 +149,7 @@ final class KeybindingsTests: OrbeTestCase {
   }
 
   /// `ChromeAction.windowCommand`（面の経路・window レベル経路が共有する単一ソース mapping）を網羅固定する。
-  /// window 系14アクションは対応する WindowCommand へ、surface ローカル6アクションは nil へ写す。
+  /// window 系15アクションは対応する WindowCommand へ、surface ローカル6アクションは nil へ写す。
   /// この分類が回帰すると 0タブ配信の可否（availableWithoutTabs）とキー振り分け全体がズレる。
   func testWindowCommandMappingIsExhaustive() {
     let mapped: [(ChromeAction, WindowCommand)] = [
@@ -164,6 +167,7 @@ final class KeybindingsTests: OrbeTestCase {
       (.showSettings, .showSettings),
       (.toggleHelp, .toggleHelp),
       (.toggleEditorFace, .toggleEditorFace),
+      (.findInProject, .findInProject),
     ]
     for (action, command) in mapped {
       XCTAssertEqual(action.windowCommand, command, "\(action) は window コマンド \(command) へ写す")
@@ -179,7 +183,7 @@ final class KeybindingsTests: OrbeTestCase {
   }
 
   /// `WindowCommand.availableWithoutTabs`（0タブでも window レベルで配信してよいか）の分類を網羅固定する。
-  /// タブ非依存8コマンドのみ true、content 依存6コマンドは false。この分類が回帰すると
+  /// タブ非依存8コマンドのみ true、content 依存7コマンドは false。この分類が回帰すると
   /// 0タブで効くべきキーが死ぬ／効くべきでない content 依存キーが暴発する。
   func testAvailableWithoutTabsClassification() {
     let available: [WindowCommand] = [
@@ -190,7 +194,7 @@ final class KeybindingsTests: OrbeTestCase {
       XCTAssertTrue(command.availableWithoutTabs, "\(command) はタブ非依存ゆえ 0タブでも配信する")
     }
     let requiresTabs: [WindowCommand] = [
-      .nextTab, .prevTab, .openEditor, .renameTab, .closeTab, .toggleEditorFace,
+      .nextTab, .prevTab, .openEditor, .renameTab, .closeTab, .toggleEditorFace, .findInProject,
     ]
     for command in requiresTabs {
       XCTAssertFalse(

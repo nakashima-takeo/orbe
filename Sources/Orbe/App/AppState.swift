@@ -18,7 +18,7 @@ struct AppStateFile: Codable, Equatable {
   /// UI 言語（"ja"/"en"）。**nil = 未選択**（初回言語選択画面を出す・描画は OS 言語に追従）、
   /// 非 nil = 確定（その言語で起動し言語画面はスキップ）。設定パレットの言語行が書き替える。
   var preferredLanguage: String?
-  /// エディター面のサイドバーの幅と開閉（アプリ全体で 1 つ）。
+  /// エディター面のサイドバーの幅・開閉・パネル（アプリ全体で 1 つ）。
   var editorSidebar: EditorSidebarRecord?
 }
 
@@ -27,16 +27,20 @@ struct AppStateFile: Codable, Equatable {
 struct EditorSidebarRecord: Codable, Equatable {
   var width: Double?
   var isOpen: Bool?
+  /// 出しているパネル（`EditorSidebarState.Panel` の rawValue）。
+  var panel: String?
 
-  init(width: Double? = nil, isOpen: Bool? = nil) {
+  init(width: Double? = nil, isOpen: Bool? = nil, panel: String? = nil) {
     self.width = width
     self.isOpen = isOpen
+    self.panel = panel
   }
 
   init(from decoder: Decoder) throws {
     guard let c = try? decoder.container(keyedBy: CodingKeys.self) else { return }
     width = try? c.decodeIfPresent(Double.self, forKey: .width)
     isOpen = try? c.decodeIfPresent(Bool.self, forKey: .isOpen)
+    panel = try? c.decodeIfPresent(String.self, forKey: .panel)
   }
 }
 

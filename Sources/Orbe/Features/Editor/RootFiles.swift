@@ -1,4 +1,5 @@
 import Foundation
+import OrbeEditorCore
 
 /// 根のサービスからの通知。(a) はデバウンス後すぐ、(b) は status が返った時点、(c) は取り直しジョブの完了後に届く。
 @MainActor
@@ -296,7 +297,7 @@ final class RootFiles {
 
   // MARK: - 一覧と新規作成
 
-  /// ディレクトリの中身（`.git` を除く。ドットファイルは含む）。名前順（大小無視）。
+  /// ディレクトリの中身（`.git` を除く。ドットファイルは含む）。名前順（`FileNameOrder`——検索結果と同じ比べ方）。
   /// 種別は 1 件ずつ属性辞書（`attributesOfItem`。owner / group の名前解決まで走る）で取ると数千件で
   /// main が止まるので、resource value で取る。URL は呼び手の綴り（正準形）で組み直す——一覧が返す URL は
   /// 実パス（`/private/…`）になる。
@@ -313,7 +314,7 @@ final class RootFiles {
         name: name, url: directory.appendingPathComponent(name, isDirectory: isDirectory),
         isDirectory: isDirectory)
     }
-    .sorted { $0.name.caseInsensitiveCompare($1.name) == .orderedAscending }
+    .sorted { FileNameOrder.precedes($0.name, $1.name) }
   }
 
   /// 空ファイルを作る。既に在れば失敗。中間ディレクトリは作らない。

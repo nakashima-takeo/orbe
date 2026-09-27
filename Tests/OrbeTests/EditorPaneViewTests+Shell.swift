@@ -47,8 +47,8 @@ final class EditorPaneViewShellTests: OrbeTestCase {
         until: { window.firstResponder === document.surface.responder }, timeout: 5,
         "\(how): 入力欄に居た焦点は面の行き先へ")
     }
-    try endsWhenTheStateDrops("レールで閉じる") { pane.shell.toggleSidebar() }
-    pane.shell.toggleSidebar()
+    try endsWhenTheStateDrops("レールで閉じる") { pane.shell.selectPanel(.files) }
+    pane.shell.selectPanel(.files)
     try endsWhenTheStateDrops("根を畳む") { pane.tree.isRootOpen = false }
     pane.tree.isRootOpen = true
     try endsWhenTheStateDrops("すべて折りたたむ") { pane.shell.collapseAll() }
@@ -124,32 +124,40 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertFalse(tabs === pane, "タブ行の帯は host が受ける")
   }
 
-  /// ツリーは pane が窓に付いて隠れていない間だけ握る——祖先（面の clip・タブの器）が隠れても降りる。
-  func testTreeHoldsTheRootServiceOnlyWhileVisible() throws {
+  /// ツリーとプロジェクト検索は pane が窓に付いて隠れていない間だけ根のサービスを握る——祖先（面の clip・タブの器）が隠れても
+  /// 降りる。
+  func testTreeAndProjectSearchHoldTheRootServiceOnlyWhileVisible() throws {
     let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     XCTAssertFalse(pane.tree.isLive, "窓に付く前は握らない")
+    XCTAssertFalse(pane.projectSearch.isLive)
 
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
     XCTAssertTrue(pane.tree.isLive, "窓に付いて見えていれば握る")
+    XCTAssertTrue(pane.projectSearch.isLive)
 
     tab.setFaces(.terminalOnly, animated: false)
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertTrue(pane.isHiddenOrHasHiddenAncestor, "前提: 幅 0 の面は隠れる")
     XCTAssertFalse(pane.tree.isLive, "面が隠れれば離す（祖先の hidden でも viewDidHide が届く）")
+    XCTAssertFalse(pane.projectSearch.isLive)
 
     tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertTrue(pane.tree.isLive, "戻れば握り直す")
+    XCTAssertTrue(pane.projectSearch.isLive)
 
     tab.view.isHidden = true
     XCTAssertFalse(pane.tree.isLive, "タブの器が隠れても離す")
+    XCTAssertFalse(pane.projectSearch.isLive)
     tab.view.isHidden = false
     XCTAssertTrue(pane.tree.isLive)
+    XCTAssertTrue(pane.projectSearch.isLive)
 
     tab.view.removeFromSuperview()
     XCTAssertFalse(pane.tree.isLive, "窓から外れれば離す")
+    XCTAssertFalse(pane.projectSearch.isLive)
   }
 
   /// cd で根が変われば新しい根のツリーになり、握っていたなら握り直す。
