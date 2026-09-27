@@ -8,7 +8,7 @@ import SwiftUI
 /// 組み直さない）。
 struct SearchPanelView: View {
   let search: ProjectSearch
-  let results: SearchResultsView
+  let results: RowList<SearchResultsSource>
   @FocusState private var fieldFocused: Bool
   @Environment(\.localization) private var l10n
 

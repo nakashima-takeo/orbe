@@ -12,13 +12,14 @@ import XCTest
 /// 壊れると何が起きるか。列に焦点があっても ↑↓ が効かない、選択が画面の外へ出て見失う。新しい結果が届いても前の結果の
 /// 行が残る、パネルを出し直すたびに列が作り直されて重い。VoiceOver が行を読めない、何行中の何行目か分からない。
 extension ProjectSearchPaneTests {
-  func list(_ hosted: Hosted) throws -> SearchResultsListView {
+  func list(_ hosted: Hosted) throws -> RowListView<SearchResultsSource> {
     pumpMain(until: { hosted.pane.searchResults.window != nil }, "結果の列が出る")
     return hosted.pane.searchResults.list
   }
 
   /// 行 `row` を描いている行の view（見えていなければ nil）。
-  private func rowView(_ list: SearchResultsListView, _ row: Int) -> SearchResultRowView? {
+  private func rowView(_ list: RowListView<SearchResultsSource>, _ row: Int) -> SearchResultRowView?
+  {
     list.subviews.lazy.compactMap { $0 as? SearchResultRowView }
       .first { $0.row == row && !$0.isHidden }
   }
@@ -27,7 +28,7 @@ extension ProjectSearchPaneTests {
     .key(String(UnicodeScalar(special.rawValue)!), [])
   }
 
-  private func click(_ list: SearchResultsListView, row: Int, count: Int) {
+  private func click(_ list: RowListView<SearchResultsSource>, row: Int, count: Int) {
     let point = NSPoint(x: 20, y: (CGFloat(row) + 0.5) * Theme.Layout.editorSearchRow)
     let event = NSEvent.mouseEvent(
       with: .leftMouseDown, location: list.convert(point, to: nil), modifierFlags: [],

@@ -8,7 +8,7 @@ struct EditorSideRoot: View {
   let tree: FileTree
   let search: ProjectSearch
   /// 検索結果の列（pane が持ち、パネルが隠れても捨てない）。
-  let searchResults: SearchResultsView
+  let searchResults: RowList<SearchResultsSource>
   /// 開閉の真実（pane と同じ 1 つ。写しを挟まない）。
   let sidebar: EditorSidebarState
   let localization: LocalizationStore
