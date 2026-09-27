@@ -4,10 +4,9 @@ import os
 /// 文法ごとの規則（`GrammarRules`: 文法と highlights・injections・outline の問い合わせ）を、注入された queries の根から
 /// 組む。根は `.app` なら `Contents/Resources`、`swift build` なら `.build/<config>` で、そこに SwiftPM の資源バンドル
 /// `<bundleName>.bundle` が並ぶ。色の queries は文法のパッケージのバンドル、アウトラインの規則は Orbe のバンドル
-/// （`outlineBundleName`）の `outline/<文法>.scm`。根が nil・バンドル不在・queries が読めないときは nil＝色無し（アウトラインの
-/// 規則だけが無ければアウトライン無し）で、失敗として扱わない。結果は
-/// キャッシュする。複数の文書の構文の裏の仕事から同時に引かれるので、キャッシュは lock で守る（初めて使う文法はその場で
-/// 組む）。
+/// （`outlineBundleName`）の `outline/` にある `Grammar.outlineFile`。根が nil・バンドル不在・queries が読めないときは
+/// nil＝色無し（アウトラインの規則だけが無ければアウトライン無し）で、失敗として扱わない。結果はキャッシュする。複数の文書の
+/// 構文の裏の仕事から同時に引かれるので、キャッシュは lock で守る（初めて使う文法はその場で組む）。
 public final class LanguageRegistry: Sendable {
   private let queriesRoot: URL?
   private let cache = OSAllocatedUnfairLock(initialState: [Grammar: GrammarRules?]())
@@ -67,7 +66,7 @@ public final class LanguageRegistry: Sendable {
   }
 
   private func outlineURL(for grammar: Grammar) -> URL? {
-    resource("\(grammar.rawValue).scm", directory: "outline", bundle: Self.outlineBundleName)
+    resource(grammar.outlineFile, directory: "outline", bundle: Self.outlineBundleName)
   }
 
   /// バンドル内のファイル。SwiftPM は `<bundle>/<dir>`、Xcode は `Contents/Resources/<dir>`。

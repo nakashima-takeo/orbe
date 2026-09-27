@@ -189,8 +189,8 @@ Contents/Resources/Orbe_OrbeEditorCore.bundle)
 * Zed — Copyright Zed Industries, Inc. — GPL-3.0-or-later (crates/grammars)
   and Apache-2.0 (extensions/html)
   The outline queries (outline.scm) for CSS, Go, JavaScript, JSON, Markdown,
-  Python, Rust, TSX, TypeScript and YAML (from crates/grammars) and for HTML
-  (from extensions/html), adapted by Orbe, are bundled as
+  Python, Rust, TypeScript (also used for TSX) and YAML (from crates/grammars)
+  and for HTML (from extensions/html), adapted by Orbe, are bundled as
   Contents/Resources/Orbe_OrbeEditorCore.bundle/outline/*.scm.
   https://github.com/zed-industries/zed
   License: licenses/zed-LICENSE-GPL.txt, licenses/zed-LICENSE-APACHE.txt
