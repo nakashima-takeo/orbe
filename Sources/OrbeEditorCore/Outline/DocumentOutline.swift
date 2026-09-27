@@ -88,13 +88,13 @@ public struct DocumentOutline: Sendable {
       let middle = (low + high) / 2
       if ranges[middle].location <= offset { low = middle + 1 } else { high = middle }
     }
-    var candidate: Int? = low - 1
-    while let index = candidate, index >= 0 {
+    var candidate: Int? = low > 0 ? low - 1 : nil
+    while let index = candidate {
       let range = ranges[index]
       if offset <= NSMaxRange(range) { break }
       candidate = symbols[index].parent
     }
-    guard var found = candidate, found >= 0 else { return nil }
+    guard var found = candidate else { return nil }
     while found > 0, ranges[found - 1] == ranges[found],
       symbols[found - 1].depth == symbols[found].depth
     {
