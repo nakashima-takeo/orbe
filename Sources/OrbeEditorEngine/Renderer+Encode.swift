@@ -167,11 +167,12 @@ extension Renderer {
       }
     }
     if let layer = pass.minimapLayer, !minimap.decorations.isEmpty {
-      let alpha = UInt32((Float(MinimapCharSheet.opacity) * 255).rounded())
       let quad = GlyphInstance(
         position: SIMD2(rect.x, rect.y), size: SIMD2(Float(layer.width), Float(layer.height)),
-        uv: SIMD2(0, 0), color: 0x00FF_FFFF | alpha << 24)
-      instances.glyphs([[quad]], [layer], pass.pipelines.color, encoder)
+        uv: SIMD2(0, 0), color: 0xFFFF_FFFF)
+      var opacity = Float(MinimapCharSheet.opacity)
+      encoder.setFragmentBytes(&opacity, length: MemoryLayout<Float>.size, index: 0)
+      instances.glyphs([[quad]], [layer], pass.pipelines.layer, encoder)
     }
   }
 

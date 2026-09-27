@@ -33,6 +33,13 @@ enum Shaders {
       return atlas.sample(s, in.uv) * in.color.a;
     }
 
+    // 画面外に描いた 1 枚を、組の不透明度で重ねる（不透明度は 8bit に丸めない）。
+    fragment float4 layer_fragment(GlyphOut in [[stage_in]], texture2d<float> layer [[texture(0)]],
+                                   constant float& opacity [[buffer(0)]]) {
+      constexpr sampler s(coord::pixel, filter::nearest);
+      return layer.sample(s, in.uv) * opacity;
+    }
+
     struct Shape { float4 rect; uint color; float radius; uint kind; uint pad; };
     struct ShapeOut {
       float4 position [[position]];
@@ -101,9 +108,11 @@ enum Shaders {
                                      constant uint* colors [[buffer(1)]]) {
       constexpr sampler s(coord::pixel, filter::nearest);
       float value = round(sheet.sample(s, in.uv).r * 255.0);
-      float a = floor(value * u.ratio + 0.001) / 255.0 * u.opacity;
+      float a = floor(value * u.ratio + 0.001);
       float4 color = unpack_unorm4x8_to_float(colors[in.role]);
-      return float4(color.rgb * a, a);
+      // 今の面は字を 8bit の乗算済みの絵に合成してから（色 × α を切り捨て）不透明度を掛けて描く。同じ段で丸める。
+      float4 premultiplied = float4(floor(color.rgb * a + 0.001), a);
+      return round(premultiplied * u.opacity) / 255.0;
     }
     """
 }
