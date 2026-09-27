@@ -58,12 +58,15 @@ public enum LinkDetector {
 
   /// 末尾を、句読点でも対応の無い閉じ括弧でもなくなるまで刈る。
   private static func trim(_ candidate: inout Substring) {
+    var unmatched: [Character: Int] = [:]
+    for (closer, opener) in closers {
+      unmatched[closer] = candidate.reduce(0) { $0 + ($1 == closer ? 1 : $1 == opener ? -1 : 0) }
+    }
     while let last = candidate.last {
       if punctuation.contains(last) {
         candidate.removeLast()
-      } else if let opener = closers[last],
-        candidate.filter({ $0 == opener }).count < candidate.filter({ $0 == last }).count
-      {
+      } else if let count = unmatched[last], count > 0 {
+        unmatched[last] = count - 1
         candidate.removeLast()
       } else {
         return
