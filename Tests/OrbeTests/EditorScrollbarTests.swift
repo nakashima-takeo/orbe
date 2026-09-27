@@ -30,7 +30,7 @@ final class EditorScrollbarTests: OrbeTestCase {
     bar.mouseDown(with: bar.mouseEvent(.leftMouseDown, at: grab))
     bar.mouseDragged(with: bar.mouseEvent(.leftMouseDragged, at: grab.offset(dy: 120)))
     bar.mouseUp(with: bar.mouseEvent(.leftMouseUp, at: grab.offset(dy: 120)))
-    XCTAssertEqual(hosted.firstLine, geometry.firstLine(afterDragging: 120), accuracy: 0.05)
+    XCTAssertEqual(hosted.firstLine, geometry.position(afterDragging: 120), accuracy: 0.05)
   }
 
   /// トラックを押すとつまみの中央がそこへ来るよう飛び、同じ押下のままドラッグを続けられる（起点は飛んだ後の状態）。
@@ -41,14 +41,14 @@ final class EditorScrollbarTests: OrbeTestCase {
     let press = NSPoint(x: 7, y: 250)
     bar.mouseDown(with: bar.mouseEvent(.leftMouseDown, at: press))
     XCTAssertEqual(
-      hosted.firstLine, before.firstLine(centeringSliderAt: 250), accuracy: 0.05, "押した位置へ")
+      hosted.firstLine, before.position(centeringSliderAt: 250), accuracy: 0.05, "押した位置へ")
     let jumped = try XCTUnwrap(bar.geometry)
     XCTAssertEqual(
       jumped.sliderPosition + jumped.sliderLength / 2, 250, accuracy: 1, "つまみの中央が押した位置")
     bar.mouseDragged(with: bar.mouseEvent(.leftMouseDragged, at: press.offset(dy: -40)))
     bar.mouseUp(with: bar.mouseEvent(.leftMouseUp, at: press.offset(dy: -40)))
     XCTAssertEqual(
-      hosted.firstLine, jumped.firstLine(afterDragging: -40), accuracy: 0.05, "そのままドラッグ")
+      hosted.firstLine, jumped.position(afterDragging: -40), accuracy: 0.05, "そのままドラッグ")
   }
 
   /// つまみは開いた直後は隠れ、本体の上にポインタがある間とドラッグ中は見え、スクロールで現れて 500ms 後に消える。
@@ -160,7 +160,7 @@ final class EditorScrollbarTests: OrbeTestCase {
     bar.mouseDragged(with: bar.mouseEvent(.leftMouseDragged, at: grab.offset(dy: 30)))
     bar.mouseDragged(with: bar.mouseEvent(.leftMouseDragged, at: grab.offset(dy: 50)))
     XCTAssertEqual(hosted.firstLine, 0, "その場では当てない")
-    let expected = geometry.firstLine(afterDragging: 50)
+    let expected = geometry.position(afterDragging: 50)
     pumpMain(until: { abs(hosted.firstLine - expected) < 0.05 }, "次の runloop で最新の位置へ")
     bar.mouseUp(with: bar.mouseEvent(.leftMouseUp, at: grab.offset(dy: 50)))
   }

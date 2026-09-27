@@ -143,7 +143,7 @@ final class EditorScrollbarView: NSView {
 
   override func mouseMoved(with event: NSEvent) {
     let y = convert(event.locationInWindow, from: nil).y
-    thumb.isPointerInside = geometry?.sliderContains(y: y) == true
+    thumb.isPointerInside = geometry?.sliderContains(y) == true
     updateThumbColor()
   }
 
@@ -164,8 +164,8 @@ final class EditorScrollbarView: NSView {
   override func mouseDown(with event: NSEvent) {
     guard let document, var geometry, geometry.isNeeded else { return }
     let y = convert(event.locationInWindow, from: nil).y
-    if !geometry.sliderContains(y: y) {
-      document.scroll(toFirstLine: geometry.firstLine(centeringSliderAt: y))
+    if !geometry.sliderContains(y) {
+      document.scroll(toFirstLine: geometry.position(centeringSliderAt: y))
       updateGeometry()
       geometry = self.geometry ?? geometry
     }
@@ -178,7 +178,7 @@ final class EditorScrollbarView: NSView {
     guard let document, let drag else { return }
     let y = convert(event.locationInWindow, from: nil).y
     dragScroll.scroll(
-      document, toFirstLine: drag.geometry.firstLine(afterDragging: y - drag.startY))
+      document, toFirstLine: drag.geometry.position(afterDragging: y - drag.startY))
   }
 
   override func mouseUp(with event: NSEvent) {

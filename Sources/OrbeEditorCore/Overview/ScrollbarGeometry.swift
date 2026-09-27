@@ -1,60 +1,69 @@
 import Foundation
 
-/// 縦スクロールバーのつまみ——長さ・位置と、ドラッグ・トラックの押下から先頭行への写像。VS Code `ScrollbarState`
-/// （矢印なし、対のスクロールバー 0）を行の単位へ移したもの。スクロール全体は「最終行を最上段まで送れる」ぶんを含み
-/// `行数 + max(0, 表示行数 − 1)` 行。
+/// スクロールバーのつまみ——長さ・位置と、ドラッグ・トラックの押下から位置への写像。VS Code `ScrollbarState`（矢印なし）を
+/// 向きに依らない形で移したもの。量（見えている量・全体の量・位置）は同じ単位ならどの単位でもよく（縦は行、横は pt）、
+/// つまみの長さと位置はトラックの pt。
 public struct ScrollbarGeometry: Equatable, Sendable {
   /// つまみの最小の長さ（pt。掴めるように）。
   public static let minimumSliderLength: CGFloat = 20
 
-  public let firstLine: CGFloat
-  public let visibleLines: CGFloat
-  /// スクロール全体の行数。
-  public let scrollLines: CGFloat
+  /// 位置（見えている先頭）。
+  public let position: CGFloat
+  /// 見えている量。
+  public let visible: CGFloat
+  /// スクロール全体の量。
+  public let total: CGFloat
   /// つまみが要るか（スクロールできる）。
   public let isNeeded: Bool
   public let sliderLength: CGFloat
   public let sliderPosition: CGFloat
-  /// 先頭行 1 行あたりのつまみの動き（pt / 行）。
+  /// 位置の 1 単位あたりのつまみの動き（pt / 単位）。
   private let ratio: CGFloat
 
-  public init(lineCount: Int, firstLine: CGFloat, visibleLines: CGFloat, height: CGFloat) {
-    let scrollLines = CGFloat(max(1, lineCount)) + max(0, visibleLines - 1)
-    self.firstLine = firstLine
-    self.visibleLines = visibleLines
-    self.scrollLines = scrollLines
-    isNeeded = scrollLines > visibleLines && height > 0
+  public init(visible: CGFloat, total: CGFloat, position: CGFloat, trackLength: CGFloat) {
+    self.position = position
+    self.visible = visible
+    self.total = total
+    isNeeded = total > visible && trackLength > 0
     guard isNeeded else {
-      sliderLength = max(0, height)
+      sliderLength = max(0, trackLength)
       sliderPosition = 0
       ratio = 0
       return
     }
-    let length = max(Self.minimumSliderLength, floor(height * visibleLines / scrollLines)).rounded()
+    let length = max(Self.minimumSliderLength, floor(trackLength * visible / total)).rounded()
     sliderLength = length
-    ratio = (height - length) / (scrollLines - visibleLines)
-    sliderPosition = (firstLine * ratio).rounded()
+    ratio = (trackLength - length) / (total - visible)
+    sliderPosition = (position * ratio).rounded()
   }
 
-  /// 先頭行の上限（最終行が最上段）。
-  public var maxFirstLine: CGFloat { max(0, scrollLines - visibleLines) }
-
-  public func sliderContains(y: CGFloat) -> Bool {
-    isNeeded && y >= sliderPosition && y < sliderPosition + sliderLength
+  /// 縦——行の単位。スクロール全体は「最終行を最上段まで送れる」ぶんを含み `行数 + max(0, 表示行数 − 1)` 行。
+  public init(lineCount: Int, firstLine: CGFloat, visibleLines: CGFloat, height: CGFloat) {
+    self.init(
+      visible: visibleLines, total: CGFloat(max(1, lineCount)) + max(0, visibleLines - 1),
+      position: firstLine, trackLength: height)
   }
 
-  /// つまみを `delta` pt 動かしたときの先頭行（この状態を起点にする）。
-  public func firstLine(afterDragging delta: CGFloat) -> CGFloat {
+  /// 位置の上限。
+  public var maxPosition: CGFloat { max(0, total - visible) }
+
+  /// トラックの座標 `at` がつまみの上か。
+  public func sliderContains(_ at: CGFloat) -> Bool {
+    isNeeded && at >= sliderPosition && at < sliderPosition + sliderLength
+  }
+
+  /// つまみを `delta` pt 動かしたときの位置（この状態を起点にする）。
+  public func position(afterDragging delta: CGFloat) -> CGFloat {
     clamp((sliderPosition + delta) / ratio)
   }
 
-  /// トラックの y につまみの中央が来る先頭行。
-  public func firstLine(centeringSliderAt y: CGFloat) -> CGFloat {
-    clamp((y - sliderLength / 2) / ratio)
+  /// トラックの座標 `at` につまみの中央が来る位置。
+  public func position(centeringSliderAt at: CGFloat) -> CGFloat {
+    clamp((at - sliderLength / 2) / ratio)
   }
 
-  private func clamp(_ line: CGFloat) -> CGFloat {
+  private func clamp(_ value: CGFloat) -> CGFloat {
     guard isNeeded, ratio > 0 else { return 0 }
-    return min(max(0, line), maxFirstLine)
+    return min(max(0, value), maxPosition)
   }
 }
