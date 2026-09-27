@@ -36,6 +36,8 @@ final class FrameBuilder {
   var decorShapes: [ShapeInstance] = []
   /// 選択の地（本文の字の下。本文の列に切り取る）。
   var underShapes: [ShapeInstance] = []
+  /// 強調の地（選択の地の上・字の下。本文の列に切り取る）。
+  var highlightShapes: [ShapeInstance] = []
   /// キャレット（いちばん上。本文の列に切り取る）。
   var overShapes: [ShapeInstance] = []
   private(set) var textScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
@@ -49,7 +51,7 @@ final class FrameBuilder {
     let glyphs = glyphArrays.reduce(0) {
       $0 + (($1.count * MemoryLayout<GlyphInstance>.stride + 255) & ~255)
     }
-    return [shapes, decorShapes, underShapes, overShapes].reduce(glyphs) {
+    return [shapes, decorShapes, underShapes, highlightShapes, overShapes].reduce(glyphs) {
       $0 + (($1.count * MemoryLayout<ShapeInstance>.stride + 255) & ~255)
     }
   }
@@ -105,6 +107,7 @@ final class FrameBuilder {
     shapes.removeAll(keepingCapacity: true)
     decorShapes.removeAll(keepingCapacity: true)
     underShapes.removeAll(keepingCapacity: true)
+    highlightShapes.removeAll(keepingCapacity: true)
     overShapes.removeAll(keepingCapacity: true)
     longestLine = 0
     let config = source.config
@@ -141,6 +144,7 @@ final class FrameBuilder {
       let visible = visibleGlyphs(item.laid, c)
       drawDecor(item, level: levels[index], rowTop: top, window: visible.offsets, c)
       drawOverlays(item.overlay, item.laid, rowTop: top, c)
+      drawHighlights(item, source.material.highlights, rowTop: top, window: visible.offsets, c)
       let width = drawText(item.laid, visible, start: item.start, baseline: top + baseline, c)
       longestLine = max(longestLine, width)
       drawNumber(item.row + 1, rowTop: top, font: numberFont, c)
@@ -157,13 +161,19 @@ final class FrameBuilder {
     var start = text.lineStart(rows.lowerBound)
     var overlays = CaretOverlays(
       source.material, caretVisible: source.caretVisible, text: text, from: start)
+    let highlights = source.material.highlights
     for row in rows {
       let end = text.lineEnd(row)
       let overlay = overlays.next(row: row, line: start..<end)
+      let highlighted = highlights.touches(start..<max(end, start + 1))
       let laid = cache.line(
         row: row, in: text, tabColumns: source.material.tabColumns, config: source.config,
-        fonts: fonts, carets: overlay.needsCarets, decor: true)
-      result.append(RowInFrame(row: row, start: start, laid: laid, overlay: overlay))
+        fonts: fonts, carets: overlay.needsCarets || highlighted, decor: true)
+      result.append(
+        RowInFrame(
+          row: row, start: start, end: end,
+          contentEnd: highlighted ? NSMaxRange(text.contentRange(ofRow: row)) : end, laid: laid,
+          overlay: overlay))
       start = end
     }
     cache.endFrame()
@@ -173,8 +183,10 @@ final class FrameBuilder {
   /// このコマで描く行 1 つ。
   struct RowInFrame {
     let row: Int
-    /// 行頭のオフセット。
+    /// 行頭・次の行頭・行の中身の終わり（改行と行末の `\r` の前。強調の地の掛かる行だけ）のオフセット。
     let start: Int
+    let end: Int
+    let contentEnd: Int
     let laid: LaidOutLine
     let overlay: RowOverlays
   }

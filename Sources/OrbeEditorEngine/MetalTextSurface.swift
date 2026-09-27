@@ -10,7 +10,7 @@ import simd
 /// （`viewport` の計算・編集の規則・行の印の行への写像）は出す前の状態か箱から読む。
 ///
 /// 編集は面の編集係（`SurfaceEditor`）が持ち、1 回の操作を 1 つの取引にする（→ `transact`）。IME の変換も同じ道で文書に
-/// 入る。強調の地・装備・アクセシビリティはまだ持たない（強調の地は値を受け取るだけで描かない）。
+/// 入る。アクセシビリティはまだ持たない。
 @MainActor
 final class MetalTextSurface: TextSurface {
   private static var nextID = 0
@@ -45,6 +45,8 @@ final class MetalTextSurface: TextSurface {
   var transaction: Transaction?
   /// 出す前の状態（→ `flush`）。
   var pending = Pending()
+  /// 押された強調の地（同じ列の押し直しを書かない）。
+  private var highlights = Highlights()
   /// 面自身の入力の処理の入れ子の深さ（→ `inputScope`）。
   var inputDepth = 0
   /// 描画スレッドへ頼んだ横の「見えるところまで」の通し番号。
@@ -103,7 +105,12 @@ final class MetalTextSurface: TextSurface {
     editor.replaceAll(with: text)
   }
 
-  func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {}
+  /// 強調の地を材料に置く（同じ区間の列を押し直されても書かない）。
+  func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {
+    guard highlights[kind] != ranges else { return }
+    highlights[kind] = ranges
+    write { $0.highlights[kind] = ranges }
+  }
 
   func setIndentation(_ indentation: Indentation) {
     self.indentation = indentation
