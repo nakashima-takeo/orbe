@@ -42,6 +42,29 @@ final class GrepGate {
     return pgrep.terminationStatus == 0
   }
 
+  /// このテストプロセスが起こした git grep の優先度（`ps` の pri。QoS で決まる——既定 31・utility 20）。走っていなければ nil。
+  static var grepPriority: Int? {
+    let pgrep = Process()
+    pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+    pgrep.arguments = ["-P", String(getpid()), "-f", "grep --no-index"]
+    let pids = Pipe()
+    pgrep.standardOutput = pids
+    guard (try? pgrep.run()) != nil else { return nil }
+    pgrep.waitUntilExit()
+    let pid = String(bytes: pids.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+      .split(separator: "\n").first
+    guard let pid else { return nil }
+    let ps = Process()
+    ps.executableURL = URL(fileURLWithPath: "/bin/ps")
+    ps.arguments = ["-o", "pri=", "-p", String(pid)]
+    let out = Pipe()
+    ps.standardOutput = out
+    guard (try? ps.run()) != nil else { return nil }
+    ps.waitUntilExit()
+    return String(bytes: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+      .flatMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+  }
+
   /// 門で待っている git を通す（着くまで待ってから）。
   func open(timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) {
     let deadline = Date().addingTimeInterval(timeout)

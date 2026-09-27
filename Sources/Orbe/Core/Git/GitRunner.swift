@@ -97,21 +97,26 @@ final class GitRunner {
   /// 1 バイトも出力が無いまま `idleTimeout` が過ぎたら SIGTERM で打ち切り、`timedOut` を立てて返る。
   func runSync(_ args: [String], cwd: String, stdin: Data? = nil) -> Output {
     execute(
-      args, cwd: cwd, stdin: stdin, environment: [:], state: RunState(idleTimeout: idleTimeout))
+      args, cwd: cwd, stdin: stdin, launch: Launch(), state: RunState(idleTimeout: idleTimeout))
   }
 
   /// 流しながら読む実行（独立レーン）。stdout は届いた塊ごとに `onOutput`（裏のスレッド、届いた順）へ渡し、溜めない。
   /// 終わったら `completion`（裏のスレッド。`stdout` は空）。`environment` は共通の環境に足す変数。返る手の `cancel` で
   /// SIGTERM で止める（止めた後の `completion` も届く）。EOF の猶予は `runSync` と同じだが、無出力では打ち切らない——
   /// 一致の無い間は何も出さない grep のような実行を黙って切らないため、寿命は止める側が持つ。`onOutput` は終わったら
-  /// 手放す（呼び出し側が手を持ち、閉包が呼び出し側を掴んでも輪にならない）。
+  /// 手放す（呼び出し側が手を持ち、閉包が呼び出し側を掴んでも輪にならない）。`qualityOfService` は git のプロセスの QoS。
   func stream(
     _ args: [String], cwd: String, environment: [String: String] = [:],
+    qualityOfService: QualityOfService = .default,
     onOutput: @escaping (Data) -> Void, completion: @escaping (Output) -> Void
   ) -> Stream {
     let state = RunState(idleTimeout: nil, onStdout: onOutput)
     independentQueue.async {
-      completion(self.execute(args, cwd: cwd, stdin: nil, environment: environment, state: state))
+      completion(
+        self.execute(
+          args, cwd: cwd, stdin: nil,
+          launch: Launch(environment: environment, qualityOfService: qualityOfService),
+          state: state))
     }
     return Stream(state: state)
   }
@@ -130,16 +135,22 @@ final class GitRunner {
     }
   }
 
+  /// git の起こし方——共通の環境に足す変数と、プロセスの QoS。
+  private struct Launch {
+    var environment: [String: String] = [:]
+    var qualityOfService: QualityOfService = .default
+  }
+
   private func execute(
-    _ args: [String], cwd: String, stdin: Data?, environment extra: [String: String],
-    state: RunState
+    _ args: [String], cwd: String, stdin: Data?, launch: Launch, state: RunState
   ) -> Output {
     defer { state.releaseOutput() }
     let process = Process()
+    process.qualityOfService = launch.qualityOfService
     process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
     process.arguments = args
     process.currentDirectoryURL = URL(fileURLWithPath: cwd, isDirectory: true)
-    process.environment = Self.environment().merging(extra) { _, added in added }
+    process.environment = Self.environment().merging(launch.environment) { _, added in added }
 
     let out = Pipe()
     let err = Pipe()

@@ -219,6 +219,20 @@ final class ProjectSearchTests: OrbeTestCase {
     pumpMain(until: { !GrepGate.isGrepRunning }, "止めた git は終わる")
   }
 
+  /// 検索の git は main より低い優先度（utility）で走る——全コアで並走する git が、打鍵や結果の差し込みと CPU を取り合わない。
+  func testTheSearchsGitRunsBelowTheDefaultPriority() throws {
+    let f = try fixture()
+    try f.repo.write("a.txt", "needle\n")
+    let gate = try gate(f)
+    f.search.setPattern("needle")
+    f.search.search()
+    pumpMain(until: { GrepGate.isGrepRunning }, "git が走る")
+    let priority = try XCTUnwrap(GrepGate.grepPriority)
+    XCTAssertLessThan(priority, 31, "既定の QoS（pri 31）より低い")
+    gate.open()
+    pumpMain(until: { f.search.phase == .done })
+  }
+
   /// タブを閉じる（検索の状態が解放される）と、走っている git も止まる。
   func testClosingTheTabStopsItsGit() throws {
     let f = try fixture()

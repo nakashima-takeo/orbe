@@ -65,6 +65,8 @@ final class ProjectSearchRun: @unchecked Sendable {
       let skipped = Set(documents.map(\.path))
       let handle = runner.stream(
         GitGrep.arguments(pattern: query.pcre), cwd: root, environment: GitGrep.environment,
+        // 全コアで並走する git が main と CPU を取り合わないよう、main より低い QoS で起こす（混んだ機械では検索が遅くなる）。
+        qualityOfService: .utility,
         onOutput: { [self] data in receive(data, skipping: skipped) },
         completion: { [self] output in
           flushCurrent()
