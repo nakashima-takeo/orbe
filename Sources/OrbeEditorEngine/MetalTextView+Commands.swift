@@ -164,13 +164,17 @@ extension MetalTextView {
   /// Edit メニューの `undo:` が窓の既定の入れ物へ行かず面へ届くための中継。変換中（IME が ⌘Z を使わなかった）は変換を
   /// 取り消すだけで、undo の履歴に触れない。
   @objc func undo(_ sender: Any?) {
-    guard !composing else { return cancelComposition() }
-    undoManager?.undo()
+    surface?.inputScope {
+      guard !composing else { return cancelComposition() }
+      undoManager?.undo()
+    }
   }
 
   @objc func redo(_ sender: Any?) {
-    guard !composing else { return cancelComposition() }
-    undoManager?.redo()
+    surface?.inputScope {
+      guard !composing else { return cancelComposition() }
+      undoManager?.redo()
+    }
   }
 
   private func cancelComposition() {

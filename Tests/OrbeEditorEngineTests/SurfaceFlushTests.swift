@@ -51,6 +51,40 @@ final class SurfaceFlushTests: EngineTestCase {
     XCTAssertEqual(surface.material.read().caret.carets, [1])
   }
 
+  /// 面自身の入力（マウス・メニューのコマンド・サービス・打鍵の外の IME・undo・落とすドラッグ）は、どれも処理の終わりに
+  /// 出す——入口を抜けた時点で出していない変化が残らない。
+  func testEachInputOfTheSurfaceIsFlushedAtTheEndOfItsHandling() throws {
+    let opened = try open("abc def\nghi\n")
+    _ = host(opened)
+    let surface = opened.surface
+    let view = surface.textView
+    let board = privatePasteboard(opened)
+    fakeInputMethod(opened)
+    surface.flush()
+    func flushed(_ label: String, _ input: () throws -> Void) rethrows {
+      try input()
+      XCTAssertTrue(surface.pending.isEmpty, label)
+    }
+    try flushed("押す") { try mouse(opened, .leftMouseDown, at: point(opened, row: 0, column: 1)) }
+    try flushed("ドラッグ") {
+      try mouse(opened, .leftMouseDragged, at: point(opened, row: 0, column: 5))
+    }
+    try flushed("離す") { try mouse(opened, .leftMouseUp, at: point(opened, row: 0, column: 5)) }
+    flushed("カット") { view.cut(nil) }
+    board.clearContents()
+    board.setString("zz", forType: .string)
+    flushed("サービスの返し") { _ = view.readSelection(from: board) }
+    flushed("変換") { replay([.mark("か")], on: opened) }
+    flushed("変換中の undo") { view.undo(nil) }
+    flushed("undo") { view.undo(nil) }
+    flushed("redo") { view.redo(nil) }
+    let drag = FakeDraggingInfo(
+      at: view.convert(point(opened, row: 1, column: 1), to: nil), pasteboard: board,
+      operations: .copy)
+    flushed("落とすドラッグ") { _ = view.draggingUpdated(drag) }
+    flushed("外れる") { view.draggingExited(drag) }
+  }
+
   /// 置いてまだ出していない位置は、その後の指の出来事より前のことなので先に出る——指の量は置いた位置に足される。
   func testAPlacedPositionIsFlushedBeforeAFingerEvent() throws {
     let opened = try open(rows(500), size: CGSize(width: 400, height: 184))

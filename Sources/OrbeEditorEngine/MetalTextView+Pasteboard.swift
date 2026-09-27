@@ -138,7 +138,7 @@ extension MetalTextView: @preconcurrency NSServicesMenuRequestor {
     guard let surface, types.contains(.string), let text = surface.currentContent?.text else {
       return false
     }
-    surface.editor.finishComposition(.commit)
+    surface.inputScope { surface.editor.finishComposition(.commit) }
     let selection = surface.editor.state.cursors.primary.selection
     guard selection.length > 0 else { return false }
     pboard.declareTypes([.string], owner: nil)
@@ -148,7 +148,7 @@ extension MetalTextView: @preconcurrency NSServicesMenuRequestor {
   /// サービスが返した平文で選択を置き換える（前後で区切る）。
   func readSelection(from pboard: NSPasteboard) -> Bool {
     guard let surface, let string = pboard.string(forType: .string) else { return false }
-    surface.perform(.paste(string, entireLine: false))
+    surface.inputScope { surface.perform(.paste(string, entireLine: false)) }
     return true
   }
 }
