@@ -58,6 +58,9 @@ extension Renderer {
     func upload<T>(_ items: [T]) -> Int? {
       guard !items.isEmpty else { return nil }
       let start = offset
+      precondition(
+        start + items.count * MemoryLayout<T>.stride <= buffer.length,
+        "instance の buffer が足りない（byteCount と描く層の並びが食い違っている）")
       items.withUnsafeBytes {
         buffer.contents().advanced(by: start).copyMemory(from: $0.baseAddress!, byteCount: $0.count)
       }

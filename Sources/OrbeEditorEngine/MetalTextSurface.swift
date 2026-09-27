@@ -142,11 +142,10 @@ final class MetalTextSurface: TextSurface {
     let link = Transfer(
       value: view.displayLink(
         target: DisplayLinkTarget(id: id), selector: #selector(DisplayLinkTarget.step(_:))))
-    let target = Transfer(value: layer)
+    let target = LayerTarget(layer: layer)
     let id = id
     RenderThread.shared.perform { renderer in
-      renderer.bind(
-        id, target: LayerTarget(layer: target.value), clock: DisplayLinkClock(link: link.value))
+      renderer.bind(id, target: target, clock: DisplayLinkClock(link: link.value))
     }
   }
 

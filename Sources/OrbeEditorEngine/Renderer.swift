@@ -59,7 +59,6 @@ final class Renderer {
     slot.clock?.invalidate()
     slot.target = target
     slot.clock = clock
-    slot.recorder.period = clock.period
     clock.isPaused = false
   }
 
@@ -87,9 +86,15 @@ final class Renderer {
 
   /// 刻みごとに呼ばれる。`target` はこのコマが画面に出る予定の時刻。
   func tick(_ id: Int, target: Double) {
-    guard let slot = slots[id], let clock = slot.clock, let frameTarget = slot.target,
-      let pipelines = gate.ready
-    else { return }
+    guard let slot = slots[id], let clock = slot.clock, let frameTarget = slot.target else {
+      return
+    }
+    guard let pipelines = gate.ready else {
+      pause(slot, clock)
+      return
+    }
+    // 刻みの長さは最初の呼び出しまで分からず、画面を移れば変わる。
+    slot.recorder.period = clock.period
     let material = slot.material.read()
     guard material.visible, material.content != nil, material.palette != nil,
       material.size.width > 0, material.size.height > 0

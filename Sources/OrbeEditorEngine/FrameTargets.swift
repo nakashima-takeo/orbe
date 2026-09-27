@@ -27,7 +27,11 @@ protocol FrameClock: AnyObject {
 
 /// 画面の drawable へ出す。drawable は 2 枚で、画面に出ていないコマは 1 つまで——画面に出ている 1 枚の他に空きが
 /// あるときだけ取るので、`nextDrawable` は実際には待たない。
-final class LayerTarget: FrameTarget {
+///
+/// 層は main と共有する（main で作って描画スレッドへ渡す）。main は view の大きさと倍率の変化で `drawableSize`・
+/// `contentsScale` だけを書き、描画スレッドは drawable を取る（`nextDrawable`・`maximumDrawableCount` を読む）だけ。
+/// `CAMetalLayer` はこの分担をスレッドをまたいで扱える。
+final class LayerTarget: FrameTarget, @unchecked Sendable {
   private let layer: CAMetalLayer
 
   init(layer: CAMetalLayer) {

@@ -15,6 +15,10 @@ final class MetalTextView: NSView {
     super.init(frame: .zero)
     wantsLayer = true
     layerContentsRedrawPolicy = .never
+    // 大きさが変わった直後のコマは伸ばさず左上寄せで出し（AppKit が反転を考えて層の contentsGravity へ写す）、縮んだ
+    // ときの古い大きな drawable を面の外（隣のミニマップ・ペイン）へはみ出させない。
+    layerContentsPlacement = .topLeft
+    clipsToBounds = true
   }
 
   required init?(coder: NSCoder) { fatalError("not supported") }
@@ -26,9 +30,8 @@ final class MetalTextView: NSView {
     layer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
     layer.framebufferOnly = true
     layer.isOpaque = false
-    // 描いてから画面に出るまでを短くする（drawable 2 枚）。大きさが変わった直後のコマは伸ばさず左上寄せで出す。
+    // 描いてから画面に出るまでを短くする（drawable 2 枚）。
     layer.maximumDrawableCount = 2
-    layer.contentsGravity = .topLeft
     layer.needsDisplayOnBoundsChange = false
     return layer
   }

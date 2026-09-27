@@ -77,7 +77,7 @@ final class RenderThread: @unchecked Sendable {
   }
 }
 
-/// スレッドをまたいで一度だけ渡す値（渡した側はもう触らない）。
+/// スレッドをまたいで一度だけ渡す値（渡した側はもう触らない）。main と共有し続けるもの（面の層）には使わない。
 struct Transfer<Value>: @unchecked Sendable {
   let value: Value
 }
@@ -113,11 +113,23 @@ final class PipelineGate: Sendable {
     return ready
   }
 
+  private static let log = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "dev.orbe", category: "editor-render")
+
+  /// コンパイルに失敗したら、Metal のエラー文（どこが悪いか）をログに出す（起きないはずの状態なので debug では止める）。
   private static func compile(_ device: MTLDevice) -> Pipelines? {
-    guard let library = try? device.makeLibrary(source: Shaders.source, options: nil) else {
+    do {
+      return try makePipelines(device)
+    } catch {
+      log.fault("シェーダのコンパイルに失敗した: \(String(describing: error), privacy: .public)")
+      assertionFailure("シェーダのコンパイルに失敗した: \(error)")
       return nil
     }
-    func pipeline(_ vertex: String, _ fragment: String) -> MTLRenderPipelineState? {
+  }
+
+  private static func makePipelines(_ device: MTLDevice) throws -> Pipelines {
+    let library = try device.makeLibrary(source: Shaders.source, options: nil)
+    func pipeline(_ vertex: String, _ fragment: String) throws -> MTLRenderPipelineState {
       let descriptor = MTLRenderPipelineDescriptor()
       descriptor.vertexFunction = library.makeFunction(name: vertex)
       descriptor.fragmentFunction = library.makeFunction(name: fragment)
@@ -128,12 +140,11 @@ final class PipelineGate: Sendable {
       attachment.destinationRGBBlendFactor = .oneMinusSourceAlpha
       attachment.sourceAlphaBlendFactor = .one
       attachment.destinationAlphaBlendFactor = .oneMinusSourceAlpha
-      return try? device.makeRenderPipelineState(descriptor: descriptor)
+      return try device.makeRenderPipelineState(descriptor: descriptor)
     }
-    guard let mono = pipeline("glyph_vertex", "mono_fragment"),
-      let color = pipeline("glyph_vertex", "color_fragment"),
-      let shape = pipeline("shape_vertex", "shape_fragment")
-    else { return nil }
-    return Pipelines(mono: mono, color: color, shape: shape)
+    return Pipelines(
+      mono: try pipeline("glyph_vertex", "mono_fragment"),
+      color: try pipeline("glyph_vertex", "color_fragment"),
+      shape: try pipeline("shape_vertex", "shape_fragment"))
   }
 }

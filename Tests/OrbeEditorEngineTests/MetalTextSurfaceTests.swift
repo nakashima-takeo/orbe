@@ -152,13 +152,20 @@ final class MetalTextSurfaceTests: EngineTestCase {
     XCTAssertEqual(marks.deletions, [RowMarks.Deletion(row: 3, atBottom: false)])
   }
 
-  /// 面が閉じたら、描画スレッドが写しの最後の参照を手放す（大きな木の解放を main で行わない）。
+  /// 面が閉じたら、描画スレッドが写しの最後の参照と面ごとの持ち物を手放す（大きな木の解放を main で行わない）——
+  /// 描画スレッドが塞がっている間に閉じても、main では写しが残っている。
   func testClosingReleasesTheContentOnTheRenderThread() throws {
     var opened: Opened? = try open("let a = 1\n")
+    let id = try XCTUnwrap(opened?.surface.id)
     let material = try XCTUnwrap(opened?.surface.material)
     XCTAssertNotNil(material.read().content)
+    let blocked = DispatchSemaphore(value: 0)
+    RenderThread.shared.perform { _ in blocked.wait() }
     opened = nil
-    _ = RenderThread.shared.performAndWait { _ in true }
+    XCTAssertNotNil(material.read().content, "main では手放さない")
+    blocked.signal()
+    let slot = RenderThread.shared.performAndWait { $0.slot(id) == nil }
+    XCTAssertTrue(slot, "描画スレッドが面の持ち物を捨てる")
     XCTAssertNil(material.read().content)
   }
 
