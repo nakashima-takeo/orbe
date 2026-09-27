@@ -49,11 +49,6 @@ final class EditorSidebarState {
   /// ドラッグの終わり。幅を書き戻す。
   func commit() { save() }
 
-  func toggle() {
-    isOpen.toggle()
-    save()
-  }
-
   /// レールの項目を押した: 出しているパネルなら閉じ、別のパネルならそれへ切り替える（閉じていれば開く）。
   func select(_ panel: Panel) {
     if isOpen, self.panel == panel {

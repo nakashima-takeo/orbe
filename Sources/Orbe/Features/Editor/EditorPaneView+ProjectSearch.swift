@@ -1,5 +1,4 @@
 import AppKit
-import Carbon.HIToolbox
 import OrbeEditorCore
 
 /// プロジェクト検索の結線——⌘⇧F とレールで検索パネルを出す・種・結果を開いて一致を選び中央へ・パネルの中のキー
@@ -11,7 +10,6 @@ extension EditorPaneView {
       self?.openProjectMatch(id, focusText: focusText)
     }
     projectSearch.onGroundChange = { [weak self] in self?.pushFindGround() }
-    projectSearch.onQueryChange = { [weak self] in self?.tab?.onEditorChange?() }
   }
 
   /// 検索パネルが見えている（サイドバーが開いていて、検索のパネルを出している）。
@@ -106,7 +104,7 @@ extension EditorPaneView {
   /// 隠れていれば出す。扱ったら true。
   func handleStepKey(_ event: NSEvent) -> Bool {
     let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
-    guard event.keyCode == UInt16(kVK_F4), flags.isSubset(of: [.shift]), focusIsInside,
+    guard event.specialKey == .f4, flags.isSubset(of: [.shift]), focusIsInside,
       projectSearch.step(forward: flags.isEmpty)
     else { return false }
     sidebar.show(.search)

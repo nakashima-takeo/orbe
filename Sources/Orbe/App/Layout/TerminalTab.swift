@@ -188,6 +188,7 @@ final class TerminalTab {
         view.editor.sessionDidChange()
         onEditorChange?()
       }
+      view.editor.projectSearch.onQueryChange = { [weak self] in self?.onEditorChange?() }
       editor.onFocusChange = { [weak self] _ in self?.view.editor.focusDidChange() }
     }
   }
