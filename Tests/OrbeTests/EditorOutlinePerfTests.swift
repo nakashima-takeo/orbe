@@ -14,9 +14,11 @@ final class EditorOutlinePerfTests: OrbeTestCase {
       ProcessInfo.processInfo.environment["ORBE_EDITOR_PERF"] == "1", "ORBE_EDITOR_PERF=1 で走る")
   }
 
-  /// 1MB の Swift で、アウトラインを開いたときと閉じたときの打鍵 1 回の main の仕事（`typing-main` と同じ区間）。
+  /// 1MB の Swift で、アウトラインを開いたときと閉じたときの打鍵 1 回の main の仕事（`typing-main` と同じ区間）。開いても
+  /// 中央値が閉じたときの 1.5 倍を超えない（文書の大きさ・シンボルの数に比例する仕事が打鍵に乗らない）。
   func testTypingMainTimeWithTheOutlineOpen() throws {
     let text = EditorScrollPerfTests.swiftSource(bytes: 1_000_000)
+    var medians: [Bool: Double] = [:]
     for open in [false, true] {
       let opened = try openEditor(text)
       if open { try openOutline(opened) }
@@ -34,9 +36,13 @@ final class EditorOutlinePerfTests: OrbeTestCase {
       }
       reportPerf(
         "1MB", open ? "typing-main (アウトラインを開いて)" : "typing-main", timer.times, digits: 3)
+      medians[open] = timer.times.sorted()[timer.times.count / 2]
       opened.document.surface.delegate = opened.document
       opened.window.orderOut(nil)
     }
+    let closed = try XCTUnwrap(medians[false])
+    XCTAssertLessThanOrEqual(
+      try XCTUnwrap(medians[true]), closed * 1.5, "開いても打鍵 1 回の main の仕事の中央値が変わらない")
   }
 
   /// 1MB の Swift の途中で構文の崩れる打鍵（`let v = f` の後の `(`）をしたとき、打鍵から見えている行の色が最終の色に
@@ -90,7 +96,9 @@ final class EditorOutlinePerfTests: OrbeTestCase {
   /// 大きな文書（1MB の Swift・800KB と 5MB の package-lock.json 相当・要素の多い配列の JSON・深い入れ子の JSON）で、
   /// アウトラインの main の仕事——結果の受け取り（開いたときと、編集して取り直したとき）・カーソル追従 1 回・開閉 1 回・
   /// すべて折りたたむ／展開・絞り込みの打鍵 1 回とその結果の受け取り・列の 1 行送りと 1 画面送り。どれも面の layout と
-  /// 描画まで——と、開いてから結果が届くまでの裏の時間。
+  /// 描画まで——と、開いてから結果が届くまでの裏の時間。main の仕事は main のスレッドの CPU 時間で数え、どれも p95 が
+  /// 1 コマの予算（8ms）以内。開いてから結果が届くまでは、深い入れ子の他は 1MB あたり 1 秒以内（要素の数の 2 乗の仕事が
+  /// 無い）。深い入れ子は、問い合わせが深さの 2 乗になる上流の性質を受け入れて値を出すだけ。
   func testOutlineMainWorkOnLargeDocuments() throws {
     for (label, ext, text) in [
       ("1MB-swift", "swift", EditorScrollPerfTests.swiftSource(bytes: 1_000_000)),
@@ -107,14 +115,16 @@ final class EditorOutlinePerfTests: OrbeTestCase {
       document.onOutlineChange = {
         received.append(self.frame(opened.pane) { forward?() })
       }
-      let began = Date()
-      try openOutline(opened)
-      let extraction = Date().timeIntervalSince(began) * 1000
+      let extraction = try openOutline(opened) * 1000
       let symbols = document.outline?.symbols.count ?? 0
       print(
         "PERF", label, "outline-extract (開いてから結果まで・裏)", String(format: "%.1f", extraction),
         "symbols", symbols, "rows", outline.rowCount)
-      reportPerf(label, "outline-receive", received, digits: 3)
+      if label != "deep-json" {
+        XCTAssertLessThanOrEqual(
+          extraction, Double(text.utf8.count) / 1000, "\(label): 開いてから結果まで 1MB あたり 1 秒以内")
+      }
+      report(label, "outline-receive", received)
 
       received = []
       for index in 0..<3 {
@@ -123,7 +133,7 @@ final class EditorOutlinePerfTests: OrbeTestCase {
         document.surface.responder.keyDown(with: .key(" ", []))
         XCTAssertTrue(pumpUntilCaughtUp(document))
       }
-      reportPerf(label, "outline-refresh-receive (編集して取り直した結果)", received, digits: 3)
+      report(label, "outline-refresh-receive (編集して取り直した結果)", received)
 
       let length = document.text.length
       let follows = (0..<30).map { index in
@@ -132,7 +142,7 @@ final class EditorOutlinePerfTests: OrbeTestCase {
         _ = frame(opened.pane) {}
         return frame(opened.pane) { outline.follow() }
       }
-      reportPerf(label, "outline-follow", follows, digits: 3)
+      report(label, "outline-follow", follows)
 
       reportFolding(label, opened)
 
@@ -142,8 +152,8 @@ final class EditorOutlinePerfTests: OrbeTestCase {
         typed.append(frame(opened.pane) { outline.setFilterText(prefix) })
         XCTAssertTrue(pumpUntilCaughtUp(document))
       }
-      reportPerf(label, "outline-filter-keystroke", typed, digits: 3)
-      reportPerf(label, "outline-filter-receive", received, digits: 3)
+      report(label, "outline-filter-keystroke", typed)
+      report(label, "outline-filter-receive", received)
       outline.clearFilter()
       XCTAssertTrue(pumpUntilCaughtUp(document))
 
@@ -168,9 +178,9 @@ final class EditorOutlinePerfTests: OrbeTestCase {
       opened.pane.outlineList.scrollView.list.rowCount, outline.rowCount,
       "前提: 描画までの区間に列の読み直しが入っている")
     outline.setExpanded(parents[0].symbol, true)
-    reportPerf(label, "outline-toggle", toggles, digits: 3)
+    report(label, "outline-toggle", toggles)
     let all = (0..<6).map { _ in frame(opened.pane) { outline.toggleCollapseAll() } }
-    reportPerf(label, "outline-collapse-all", all, digits: 3)
+    report(label, "outline-collapse-all", all)
   }
 
   /// 列の 1 行送りと 1 画面送り（描画まで）。
@@ -183,31 +193,46 @@ final class EditorOutlinePerfTests: OrbeTestCase {
         list.scrollView.reflectScrolledClipView(clip)
       }
     }
-    reportPerf(label, "outline-scroll-row", rowStep, digits: 3)
+    report(label, "outline-scroll-row", rowStep)
     let pageStep = (0..<30).map { _ in
       frame(opened.pane) {
         clip.scroll(to: NSPoint(x: 0, y: clip.bounds.minY + clip.bounds.height))
         list.scrollView.reflectScrolledClipView(clip)
       }
     }
-    reportPerf(label, "outline-scroll-page", pageStep, digits: 3)
+    report(label, "outline-scroll-page", pageStep)
   }
 
-  /// サイドバーをエクスプローラーで開き、アウトラインを開いて、結果が揃うまで待つ（裏を急かさない）。
-  private func openOutline(_ opened: OpenedEditor) throws {
+  /// サイドバーをエクスプローラーで開き、アウトラインを開いて、結果が揃うまで待つ（裏を急かさない）。開いてから結果が
+  /// 揃うまでの秒を返す。
+  @discardableResult
+  private func openOutline(_ opened: OpenedEditor) throws -> TimeInterval {
+    let began = Date()
     let sidebar = opened.pane.sidebar
     if !sidebar.isOpen || sidebar.panel != .files { sidebar.select(.files) }
     if !sidebar.isOutlineOpen { sidebar.toggleOutline() }
     pumpMain(until: { opened.document.wantsOutline }, "アウトラインが要ると告げる")
     XCTAssertTrue(pumpUntilCaughtUp(opened.document))
+    let elapsed = Date().timeIntervalSince(began)
     opened.pane.layoutSubtreeIfNeeded()
     RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+    return elapsed
   }
 
+  /// 値を出し、p95 が 1 コマの予算（8ms）以内であることを見る。
+  private func report(_ label: String, _ name: String, _ times: [Double]) {
+    reportPerf(label, name, times, digits: 3)
+    let sorted = times.sorted()
+    XCTAssertLessThanOrEqual(
+      sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))], 8,
+      "\(label): \(name) の main のスレッドの CPU 時間の p95")
+  }
+
+  /// `body` の main のスレッドの CPU 時間（ms）。
   private static func measure(_ body: () -> Void) -> Double {
-    let began = DispatchTime.now().uptimeNanoseconds
+    let began = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
     body()
-    return Double(DispatchTime.now().uptimeNanoseconds - began) / 1_000_000
+    return Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - began) / 1_000_000
   }
 
   private func frame(_ view: NSView, _ body: () -> Void) -> Double {
