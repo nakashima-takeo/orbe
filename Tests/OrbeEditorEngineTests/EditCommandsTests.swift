@@ -61,9 +61,9 @@ final class EditCommandsTests: XCTestCase {
     XCTAssertEqual(Editing.run(.deleteForward, on: "ab|\r\ncd"), "ab|cd")
   }
 
-  /// ⌫ は macOS の後ろ向きの削除の単位——窓を出さない NSTextView の ⌫ と同じ範囲を消す。絵文字の並び・国旗・肌の色・
-  /// CRLF・分解した濁点やアクセント・異体字の選択子・ハングルの字母は書記素ごと、インド系・タイ・アラビア・ヘブライの記号は
-  /// 1 つずつ。
+  /// ⌫ は macOS の後ろ向きの削除の単位——窓を出さない NSTextView の ⌫ と同じ範囲を消す（本文の末尾でも、後ろに字が続く
+  /// 位置でも）。絵文字の並び・国旗・肌の色・CRLF・分解した濁点やアクセント・異体字の選択子・ハングルの字母は書記素ごと、
+  /// インド系・タイ・アラビア・ヘブライの記号は 1 つずつ。
   func testBackspaceDeletesLikeNSTextView() {
     let samples = [
       "a👨‍👩‍👧‍👦", "🇯🇵🇺🇸", "a👍🏽", "1\u{FE0F}\u{20E3}", "e\u{301}", "x\u{301}\u{302}", "か\u{3099}",
@@ -71,13 +71,18 @@ final class EditCommandsTests: XCTestCase {
       "ab\r\n", "abc", "",
     ]
     for sample in samples {
-      let view = NSTextView(usingTextLayoutManager: true)
-      view.string = sample
-      view.setSelectedRange(NSRange(location: (sample as NSString).length, length: 0))
-      view.deleteBackward(nil)
-      XCTAssertEqual(
-        Editing.run(.deleteBackward, on: sample + "|"), view.string + "|",
-        "\(sample.unicodeScalars.map { String($0.value, radix: 16) })")
+      for following in ["", "z"] {
+        let view = NSTextView(usingTextLayoutManager: true)
+        view.string = sample + following
+        view.setSelectedRange(NSRange(location: (sample as NSString).length, length: 0))
+        view.deleteBackward(nil)
+        let caret = view.selectedRange().location
+        let expected = (view.string as NSString).replacingCharacters(
+          in: NSRange(location: caret, length: 0), with: "|")
+        XCTAssertEqual(
+          Editing.run(.deleteBackward, on: sample + "|" + following), expected,
+          "\(sample.unicodeScalars.map { String($0.value, radix: 16) }) + \(following)")
+      }
     }
     XCTAssertEqual(Editing.run(.deleteBackward, on: "|ab"), "|ab", "先頭は何もしない")
     XCTAssertEqual(Editing.run(.deleteBackwardDecomposing, on: "é|"), "e|", "⌃⌫ は前の字を分解して最後だけ")
@@ -105,6 +110,15 @@ final class EditCommandsTests: XCTestCase {
     XCTAssertEqual(
       Editing.run([.move(.down, extending: false)], on: "a[bc]\nxyz\n"), "abc\nxyz|\n",
       "選択を畳むときは終わりから動く")
+  }
+
+  /// 右から左の字を含む行でも、↑↓は見た目の横位置で動く——同じ中身の行へは同じ位置に着き、短い行を越えても戻る。
+  func testUpAndDownKeepTheVisualPositionInRightToLeftLines() {
+    let down = EditCommand.move(.down, extending: false)
+    XCTAssertEqual(Editing.run([down], on: "של|ום\nשלום"), "שלום\nשל|ום")
+    XCTAssertEqual(Editing.run([down], on: "مر|حبا\nمرحبا"), "مرحبا\nمر|حبا")
+    XCTAssertEqual(
+      Editing.run([down, down], on: "ab של|ום cd\nx\nab שלום cd"), "ab שלום cd\nx\nab של|ום cd")
   }
 
   /// ⌘← は最初の非空白と 1 列目を行き来し、⌃A は 1 列目へ、⌘→ と ⌃E は行末（CRLF の \r の前）へ。
