@@ -20,14 +20,21 @@ final class ProjectSearchPaneTests: OrbeTestCase {
     var search: ProjectSearch { pane.projectSearch }
   }
 
+  /// 根 `repo` のタブの面だけを窓に載せる。端末は載せない——端末の shell は起動しないので、その cwd の報告（OSC 7）が面の根を
+  /// 動かさない（検索は根に依る）。
   func host(_ files: [String: String]) throws -> Hosted {
     let repo = try TempGitRepo(name: "orbe-search-pane")
     addTeardownBlock { repo.cleanup() }
     for (path, text) in files { try repo.write(path, text) }
     let tab = TerminalTab(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let window = hostEditor(tab, width: 900)
+    let pane = tab.view.editor
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    window.contentView = pane
+    pane.layoutSubtreeIfNeeded()
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
-    return Hosted(repo: repo, tab: tab, pane: tab.view.editor, window: window)
+    return Hosted(repo: repo, tab: tab, pane: pane, window: window)
   }
 
   /// 検索パネルを出して即時に検索し、終わるまで待つ。
