@@ -8,7 +8,8 @@ import QuartzCore
 ///
 /// 出来事の入口。キーは `interpretKeyEvents` で IME と macOS のキー割り当て（利用者の DefaultKeyBinding を含む）に通し、
 /// IME の呼び出しは面の編集係の IME の入口へ（→ `MetalTextView+Input`）、届いた標準のセレクタは編集のコマンドへ写す
-/// （→ `MetalTextView+Commands`）。マウスは `MouseSelection` が持ち、変換中はまず IME へ渡す。
+/// （→ `MetalTextView+Commands`）。マウスは `MouseSelection` が持ち、変換中はまず IME へ渡す。クリップボード・サービス・
+/// 右クリックは `MetalTextView+Pasteboard`、ドラッグ＆ドロップは `MetalTextView+Drag`。
 final class MetalTextView: TextSurfaceInputView {
   weak var surface: MetalTextSurface? {
     didSet { pointer.surface = surface }
@@ -17,6 +18,14 @@ final class MetalTextView: TextSurfaceInputView {
   let pointer = MouseSelection()
   /// 入力の仕組みとの窓口（面が持つ）。テストは偽の IME に差し替える。
   lazy var textInputContext: NSTextInputContext? = NSTextInputContext(client: self)
+  /// 写す・貼るペーストボード（既定は一般）。テストは名前つきの専用のものに差し替える。
+  var pasteboard = NSPasteboard.general
+  /// この面から始めた本文のドラッグで運んでいる範囲（ドラッグの間だけ）。
+  var draggedRange: NSRange?
+  /// ドラッグ中の自動スクロールの前の刻みの時刻。
+  var dropScrollTime: CFTimeInterval?
+  /// サービスに平文を送り・受けられると、アプリで 1 回だけ届け出た。
+  @MainActor private static var registeredServices = false
 
   init() {
     super.init(frame: .zero)
@@ -26,6 +35,11 @@ final class MetalTextView: TextSurfaceInputView {
     // ときの古い大きな drawable を面の外（隣のミニマップ・ペイン）へはみ出させない。
     layerContentsPlacement = .topLeft
     clipsToBounds = true
+    registerForDraggedTypes([.string, .fileURL])
+    if !Self.registeredServices {
+      Self.registeredServices = true
+      NSApp?.registerServicesMenuSendTypes([.string], returnTypes: [.string])
+    }
   }
 
   required init?(coder: NSCoder) { fatalError("not supported") }
@@ -180,9 +194,13 @@ final class MetalTextView: TextSurfaceInputView {
     surface?.scrollWheel(event)
   }
 
-  /// 変換中はまず IME へ渡す（IME が使わなければ、クリックの入口が変換を確定する）。
+  /// ⌃クリックは右クリックのメニュー。変換中はまず IME へ渡す（IME が使わなければ、クリックの入口が変換を確定する）。
   override func mouseDown(with event: NSEvent) {
     if composing, inputContext?.handleEvent(event) == true { return }
+    if event.modifierFlags.contains(.control), let menu = menu(for: event) {
+      NSMenu.popUpContextMenu(menu, with: event, for: self)
+      return
+    }
     surface?.transact { pointer.mouseDown(event, in: self) }
   }
 

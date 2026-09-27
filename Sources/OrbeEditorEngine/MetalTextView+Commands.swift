@@ -176,11 +176,14 @@ extension MetalTextView {
 }
 
 extension MetalTextView: NSMenuItemValidation {
-  /// 変換中の取り消す・やり直すは、変換の取り消しとしていつも有効。
+  /// 変換中の取り消す・やり直すは、変換の取り消しとしていつも有効。コピー・カットはいつも有効（選択が空なら行を写す）。
+  /// ペーストは平文かファイルがあるときだけ。
   func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
     switch menuItem.action {
     case #selector(undo(_:))?: return composing || (undoManager?.canUndo ?? false)
     case #selector(redo(_:))?: return composing || (undoManager?.canRedo ?? false)
+    case #selector(copy(_:))?, #selector(cut(_:))?: return true
+    case #selector(paste(_:))?, #selector(pasteAsPlainText(_:))?: return canPaste
     default: return responds(to: menuItem.action)
     }
   }

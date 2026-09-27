@@ -16,6 +16,7 @@ enum EditorStyle {
       lineHeight: Theme.Typography.editorLineHeight,
       topInset: Theme.Space.tick,
       textColor: Theme.Color.editorText,
+      backgroundColor: Theme.Color.bgBase,
       caretColor: Theme.Color.accentBright,
       caretSize: CGSize(width: 1.5, height: 14),
       selectionColor: .selectedTextBackgroundColor,

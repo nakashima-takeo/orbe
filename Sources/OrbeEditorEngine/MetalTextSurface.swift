@@ -134,6 +134,29 @@ final class MetalTextSurface: TextSurface {
     pullContent(marks: spans)
   }
 
+  /// 色付きで写す HTML の見え方（今の外観で sRGB に解いた色。HTML の色は sRGB）。
+  func htmlStyle() -> HTMLCopy.Style {
+    let appearance = textView.effectiveAppearance
+    let hex = { (color: NSColor) -> String in
+      let packed = FrameColor(
+        color, appearance: appearance, space: FrameMaterial.defaultSpace, fontSmoothing: false,
+        scale: 1
+      ).packed
+      return String(
+        format: "#%02x%02x%02x", packed & 0xFF, (packed >> 8) & 0xFF, (packed >> 16) & 0xFF)
+    }
+    // システムの等幅（名前が「.」で始まる内部の名前）は、貼る先の WebKit が解く `ui-monospace` で書く。
+    let family = CTFontCopyFamilyName(config.font) as String
+    return HTMLCopy.Style(
+      text: hex(style.textColor), background: hex(style.backgroundColor),
+      roles: style.roleColors.mapValues(hex),
+      fontFamily: family.hasPrefix(".") ? "ui-monospace, monospace" : "'\(family)', monospace",
+      fontSize: CTFontGetSize(config.font), lineHeight: config.lineHeight)
+  }
+
+  /// 本文の色（ドラッグの像）。
+  var textColor: NSColor { style.textColor }
+
   /// 外観・色空間・倍率で色を解き直して置く。
   func appearanceDidChange() {
     let palette = FramePalette(

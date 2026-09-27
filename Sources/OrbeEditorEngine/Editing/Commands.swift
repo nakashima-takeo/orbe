@@ -49,6 +49,14 @@ enum EditCommand: Equatable, Sendable {
   case centerSelection
   /// `range` を置き換える（IME が変換の外で範囲を指して入れた——長押しのアクセントなど）。前後で区切る。
   case replace(NSRange, String)
+  /// 貼る（改行は文書の作法へ揃える）。`entireLine` は行ごと写した印——選択が空で文字列の改行が末尾の 1 つだけなら、
+  /// キャレットの行の上に行として入れる。前後で区切る。
+  case paste(String, entireLine: Bool)
+  /// 切り取る——選択を消す。選択が空なら行を消す（改行まで。最終行なら前の行の改行から）。
+  case cut
+  /// 落とした文字列を `offset` に入れて選ぶ（改行は文書の作法へ揃える）。`moving` があればその範囲を消す（同じ面の中の
+  /// 移動。消すことと入れることは 1 つの束）。
+  case drop(String, at: Int, moving: NSRange?)
 }
 
 /// 見せ方——コマンドの後にスクロールをどう置くか。
@@ -136,6 +144,11 @@ enum EditCommands {
       return edit(state, env, undo: .other) {
         $0 == state.cursors.primary ? Replacement(range, string) : nil
       }
+    case .paste(let string, let entireLine):
+      return paste(string, entireLine: entireLine, state, env)
+    case .cut: return cut(state, env)
+    case .drop(let string, let offset, let moving):
+      return drop(string, at: offset, moving: moving, state, env)
     }
   }
 

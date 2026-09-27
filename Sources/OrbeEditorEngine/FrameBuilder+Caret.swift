@@ -33,13 +33,14 @@ struct SelectionCursor {
   }
 }
 
-/// 1 コマで行に重ねるもの——選択の地・変換中の文字・キャレット。上の行から下へ、行ごとに引く。
+/// 1 コマで行に重ねるもの——選択の地・変換中の文字・キャレット・落とす位置の印。上の行から下へ、行ごとに引く。
 struct CaretOverlays {
   private let text: TextRope
   private var selections: SelectionCursor
   private let carets: [(row: Int, offset: Int)]
   private let marked: MarkedMaterial?
   private let markedRows: ClosedRange<Int>?
+  private let drop: (row: Int, offset: Int)?
 
   /// 行頭 `start` の行から下へ引く。キャレットは点滅で見えているコマだけ。
   init(_ material: FrameMaterial, caretVisible: Bool, text: TextRope, from start: Int) {
@@ -50,6 +51,7 @@ struct CaretOverlays {
     }
     marked = material.caret.marked
     markedRows = marked.map { text.rows(of: $0.range) }
+    drop = material.drop.map { (row: text.row(containing: $0), offset: $0) }
   }
 
   /// 行 `row`（行頭から次の行頭までの区間 `line`。最終行なら本文の終わりまで）に重ねるもの。
@@ -60,26 +62,30 @@ struct CaretOverlays {
       content: selected.isEmpty && marked == nil ? nil : text.contentRange(ofRow: row),
       selections: selected,
       carets: carets.filter { $0.row == row }.map { $0.offset - line.lowerBound },
-      marked: marked)
+      marked: marked,
+      drop: drop?.row == row ? drop.map { $0.offset - line.lowerBound } : nil)
   }
 }
 
-/// 1 行に重ねるもの。キャレットは行の中の位置。
+/// 1 行に重ねるもの。キャレットと落とす位置は行の中の位置。
 struct RowOverlays {
   /// 行の中身の区間（改行と行末の `\r` を除く）。選択か変換中の文字が掛かる行だけ。
   let content: NSRange?
   let selections: [NSRange]
   let carets: [Int]
   let marked: MarkedMaterial?
+  let drop: Int?
 
   /// 位置と x の対応（組版の `CaretMap`）が要るか。
-  var needsCarets: Bool { !selections.isEmpty || !carets.isEmpty || marked != nil }
+  var needsCarets: Bool {
+    !selections.isEmpty || !carets.isEmpty || marked != nil || drop != nil
+  }
 }
 
 /// 選択の地とキャレット。どちらの x も、字を描いた行の組版の位置と x の対応（`CaretMap`）から引くので、描いた字と食い違わ
 /// ない。
 extension FrameBuilder {
-  /// 行に重ねるものを描く（地は字の下、下線・キャレットは字の上の層へ積む）。
+  /// 行に重ねるものを描く（地は字の下、下線・キャレット・印は字の上の層へ積む）。
   func drawOverlays(_ overlay: RowOverlays, _ line: LaidOutLine, rowTop: Double, _ c: Context) {
     if let content = overlay.content {
       for selection in overlay.selections {
@@ -90,6 +96,7 @@ extension FrameBuilder {
       }
     }
     for column in overlay.carets { drawCaret(at: column, line, rowTop: rowTop, c) }
+    if let column = overlay.drop { drawDropIndicator(at: column, line, rowTop: rowTop, c) }
   }
 
   /// 選択と行の交わりを行の高さいっぱいの矩形で塗る。`content` は行の中身の区間（改行と行末の `\r` を除く）。右から左の
@@ -148,7 +155,7 @@ extension FrameBuilder {
   }
 }
 
-/// 変換中の文字。本文と同じ 1 コマに描く。
+/// 変換中の文字と落とす位置の印。どれも本文と同じ 1 コマに描く。
 extension FrameBuilder {
   /// 変換中の文字を行に描く。文節ごとに角の丸い下線（IME が選んでいる文節は本文の色、他は灰色。太さは同じで、文節の境を
   /// 少し空ける）。属性の無い文字列は既定の未確定の地で塗る。IME が下線や地の色を指定したら従う。
@@ -203,6 +210,22 @@ extension FrameBuilder {
         (originX + Double($0.lowerBound) * c.g.scale).rounded(),
         (originX + Double($0.upperBound) * c.g.scale).rounded()
       )
+    }
+  }
+
+  /// 落とす位置の印——その位置に 2pt 幅の点線（VS Code の `dnd-target`）。色はキャレットの色。
+  func drawDropIndicator(at column: Int, _ line: LaidOutLine, rowTop: Double, _ c: Context) {
+    guard let carets = line.carets else { return }
+    let g = c.g
+    let dot = max(1, (2 * g.scale).rounded())
+    let x = (g.column - g.scrollX + Double(carets.x(column)) * g.scale).rounded() - dot / 2
+    var y = rowTop
+    while y < rowTop + g.lineHeight {
+      overShapes.append(
+        ShapeInstance(
+          rect: SIMD4(Float(x), Float(y), Float(dot), Float(min(dot, rowTop + g.lineHeight - y))),
+          color: c.palette.caret.packed, radius: 0, kind: 0))
+      y += dot * 2
     }
   }
 }

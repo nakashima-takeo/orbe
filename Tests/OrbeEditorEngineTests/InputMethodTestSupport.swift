@@ -107,4 +107,12 @@ extension EngineTestCase {
     while undo.canRedo { undo.redo() }
     XCTAssertEqual(text(opened.document), last, "redo を尽くすと最後の本文", file: file, line: line)
   }
+
+  /// 名前つきの専用のペーストボード（一般のペーストボードに触れない）。テストの終わりに手放す。
+  func privatePasteboard(_ opened: Opened) -> NSPasteboard {
+    let board = NSPasteboard(name: NSPasteboard.Name("dev.orbe.test.\(UUID().uuidString)"))
+    opened.surface.textView.pasteboard = board
+    addTeardownBlock { board.releaseGlobally() }
+    return board
+  }
 }

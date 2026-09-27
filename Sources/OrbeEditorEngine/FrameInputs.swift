@@ -302,6 +302,8 @@ struct FrameMaterial: Sendable {
   var caret = CaretMaterial()
   /// まだ解いていないかもしれない横の「見えるところまで」（本文を変えて見せない取引は、古い区間を捨てる）。
   var reveal: HorizontalReveal?
+  /// ドラッグで落とす位置の印（ドラッグの間だけ）。
+  var drop: Int?
   var palette: FramePalette?
   var tabColumns = Indentation.fallback.unit
   /// 面の大きさ（pt）と倍率。

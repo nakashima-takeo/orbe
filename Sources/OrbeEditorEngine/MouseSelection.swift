@@ -60,8 +60,9 @@ extension MetalTextSurface {
 /// 単位を保って伸ばす（VS Code の `SelectionStartKind`）。4 回以上のクリックの全体はドラッグで縮めない。行番号の列は行の
 /// 単位。ドラッグが本文の上下左右の外へ出ると、ポインタが止まっていても VS Code の速さの式で自動スクロールし、選択が伸び
 /// 続ける（刻みは view の display link）。外へ出たときに伸ばす先は VS Code と同じ——上は見えている上端の行の行頭、下は
-/// 下端の行のポインタの桁（最終行が見えればその行末）、左はポインタの行の行頭、右は行末。⌘だけのクリックが URL に当たれば、離したときに開く（動けば開かない。
-/// その間は選択が伸びない）。
+/// 下端の行のポインタの桁（最終行が見えればその行末）、左はポインタの行の行頭、右は行末。⌘だけのクリックが URL に当たれば、
+/// 離したときに開く（動けば開かない。その間は選択が伸びない）。選択の上の 1 回のクリック（⇧・⌘ なし）は本文のドラッグの
+/// 候補で、動かせば文字のドラッグが始まり、動かさずに離せばその位置にキャレットを置く。
 @MainActor
 final class MouseSelection: NSObject {
   weak var surface: MetalTextSurface?
@@ -70,6 +71,8 @@ final class MouseSelection: NSObject {
     case text
     case numbers
     case link(URL, NSPoint)
+    /// 選択の上を押した（本文のドラッグの候補）。離したらキャレットを置く位置。
+    case candidate(Int)
   }
 
   private enum Edge {
@@ -108,6 +111,13 @@ final class MouseSelection: NSObject {
     }
     let primary = surface.editor.state.cursors.primary
     let shift = flags.contains(.shift)
+    let selection = primary.selection
+    if hit.area == .text, event.clickCount == 1, flags.isDisjoint(with: [.shift, .command]),
+      selection.length > 0, hit.offset >= selection.location, hit.offset <= NSMaxRange(selection)
+    {
+      drag = .candidate(hit.offset)
+      return
+    }
     let cursor: Cursor
     var reveal = Reveal.minimal
     if hit.area == .numbers {
@@ -139,6 +149,11 @@ final class MouseSelection: NSObject {
   func mouseDragged(_ event: NSEvent, in view: NSView) {
     guard let drag, let surface else { return }
     if case .link = drag { return }
+    if case .candidate = drag {
+      self.drag = nil
+      surface.textView.beginTextDrag(with: event)
+      return
+    }
     point = view.convert(event.locationInWindow, from: nil)
     let column = surface.config.columnWidth(
       lineCount: surface.editingEnvironment()?.text.lineCount ?? 1)
@@ -164,6 +179,10 @@ final class MouseSelection: NSObject {
   func mouseUp(_ event: NSEvent, in view: NSView) {
     stopAutoscroll()
     defer { drag = nil }
+    if case .candidate(let offset) = drag {
+      surface?.editor.select(CursorList(Cursor(offset)), reveal: .minimal)
+      return
+    }
     guard case .link(let url, let down) = drag, let surface else { return }
     let moved = hypot(event.locationInWindow.x - down.x, event.locationInWindow.y - down.y)
     guard moved <= Self.clickSlop,

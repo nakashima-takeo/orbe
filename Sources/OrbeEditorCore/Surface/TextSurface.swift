@@ -169,6 +169,8 @@ public struct TextSurfaceStyle {
   public var topInset: CGFloat
   /// 役割を持たない文字の色。
   public var textColor: NSColor
+  /// 本文の地の不透明な色。面は地を描かず下を透かす。色付きで書き出す（コピーの HTML）ときの地に使う。
+  public var backgroundColor: NSColor
   public var caretColor: NSColor
   public var caretSize: CGSize
   /// 選択の地の色。焦点が無い面では `inactiveSelectionColor`。本文を自分で描く面が使う（今の面は上流がシステムの選択色で
@@ -262,10 +264,10 @@ public struct TextSurfaceStyle {
   }
 
   public init(
-    font: NSFont, lineHeight: CGFloat, topInset: CGFloat, textColor: NSColor, caretColor: NSColor,
-    caretSize: CGSize, selectionColor: NSColor, inactiveSelectionColor: NSColor,
-    gutterFont: NSFont, gutterTextColor: NSColor, gutterWidth: CGFloat,
-    gutterTrailingInset: CGFloat,
+    font: NSFont, lineHeight: CGFloat, topInset: CGFloat, textColor: NSColor,
+    backgroundColor: NSColor, caretColor: NSColor, caretSize: CGSize, selectionColor: NSColor,
+    inactiveSelectionColor: NSColor, gutterFont: NSFont, gutterTextColor: NSColor,
+    gutterWidth: CGFloat, gutterTrailingInset: CGFloat,
     roleColors: [SyntaxRole: NSColor], marks: Marks, decorations: Decorations,
     highlights: Highlights
   ) {
@@ -273,6 +275,7 @@ public struct TextSurfaceStyle {
     self.lineHeight = lineHeight
     self.topInset = topInset
     self.textColor = textColor
+    self.backgroundColor = backgroundColor
     self.caretColor = caretColor
     self.caretSize = caretSize
     self.selectionColor = selectionColor
