@@ -197,7 +197,7 @@ let package = Package(
     ),
     .testTarget(
       name: "OrbeTests",
-      dependencies: ["Orbe", "OrbeEditorCore", "OrbeEditorText"],
+      dependencies: ["Orbe", "OrbeEditorCore", "OrbeEditorText", "OrbeEditorEngine"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
