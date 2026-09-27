@@ -26,7 +26,8 @@ extension SurfaceMouseTests {
 
   /// ドラッグが本文の下へ出ると、ポインタが止まっていても外れた距離と見えている行数で決まる速さ（VS Code: 1.5 行以内なら
   /// max(30, 見えている行数 × (1 + 外れた行数)) 行/秒、3 行より外なら max(200, 見えている行数 × (7 + 外れた行数)) 行/秒）
-  /// で自動スクロールし、選択が見えている下端の行の行末まで伸び続ける。本文の上へ戻るか離せば止まる。
+  /// で自動スクロールし、選択が見えている下端の行のポインタの桁（行より右なら行末）まで伸び続ける。本文の上へ戻るか離せば
+  /// 止まる。
   func testDraggingBelowTheTextAutoscrollsAndExtends() throws {
     let opened = try open((0..<500).map { "row \($0)" }.joined(separator: "\n"))
     _ = host(opened, size: CGSize(width: 600, height: 400))
@@ -44,7 +45,8 @@ extension SurfaceMouseTests {
     let (first, visible) = opened.document.viewportLines
     let bottom = Int((first + visible - 0.01).rounded(.down))
     XCTAssertEqual(
-      opened.surface.caretLocation, NSMaxRange(text.contentRange(ofRow: bottom)), "下端の行の行末")
+      opened.surface.caretLocation, NSMaxRange(text.contentRange(ofRow: bottom)),
+      "ポインタが行より右なら、下端の行の行末")
     XCTAssertEqual(opened.surface.selectedRange.location, text.lineStart(1) + 1)
     try mouse(opened, .leftMouseDragged, at: CGPoint(x: 200, y: 400 + 5 * config.lineHeight))
     let before = position(opened).y
@@ -80,6 +82,35 @@ extension SurfaceMouseTests {
       start - position(opened).y, Double(max(30, visibleRows * 2) * 0.1 * config.lineHeight),
       accuracy: 0.5)
     try mouse(opened, .leftMouseUp, at: CGPoint(x: 200, y: config.topInset - config.lineHeight))
+  }
+
+  /// 下の外へ出ると、最終行が見えるまでは見えている下端の行のポインタの桁まで伸び（VS Code の `TopBottomDragScrolling`）、
+  /// 最終行が見えればその行末まで伸びる。
+  func testDraggingBelowFollowsThePointerColumnUntilTheLastLine() throws {
+    let opened = try open(
+      (0..<40).map { "row \($0) " + String(repeating: "x", count: 40) }.joined(separator: "\n"))
+    _ = host(opened, size: CGSize(width: 600, height: 400))
+    let config = opened.surface.config
+    let pointer = try pointer(opened)
+    var clock: CFTimeInterval = 10
+    let x = point(opened, row: 0, column: 5).x
+    try mouse(opened, .leftMouseDown, at: point(opened, row: 1, column: 1))
+    try mouse(opened, .leftMouseDragged, at: CGPoint(x: x, y: 400 + config.lineHeight))
+    frames(pointer, 2, clock: &clock)
+    let text = opened.document.text
+    let (first, visible) = opened.document.viewportLines
+    let bottom = Int((first + visible - 0.01).rounded(.down))
+    XCTAssertLessThan(bottom, text.lineCount - 1)
+    XCTAssertEqual(opened.surface.caretLocation, text.lineStart(bottom) + 5, "下端の行のポインタの桁")
+    var lastVisible = false
+    for _ in 0..<50 where !lastVisible {
+      frames(pointer, 1, clock: &clock)
+      let (first, visible) = opened.document.viewportLines
+      lastVisible = Int((first + visible - 0.01).rounded(.down)) >= text.lineCount - 1
+    }
+    XCTAssertTrue(lastVisible)
+    XCTAssertEqual(opened.surface.caretLocation, text.length, "最終行が見えればその行末")
+    try mouse(opened, .leftMouseUp, at: CGPoint(x: x, y: 400 + config.lineHeight))
   }
 
   /// 下の外へ出したままでも、スクロールできる範囲の端（最終行が最上段）で止まり、本文の終わりまで選ぶ。
