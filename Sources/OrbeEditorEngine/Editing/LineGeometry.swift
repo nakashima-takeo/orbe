@@ -11,7 +11,8 @@ protocol LineGeometry {
 }
 
 /// 組んだ行の字の位置を覚える入れ物（main。面ごと）。鍵は行の中身とタブの刻みで、本文の版に依らない——打鍵の前後で変わら
-/// ない行は組み直さない。
+/// ない行は組み直さない。main が問う行は少ない（キャレットの行・↑↓の先・ポインタの下）ので、少しだけ覚え、溢れたら最も
+/// 古く使われた 1 つを捨てる（打鍵のたびに変わる長い行の古い結果を、1 つずつ手放す）。
 final class LineStopsCache {
   struct Stops {
     let offsets: [Int]
@@ -24,8 +25,9 @@ final class LineStopsCache {
     let tabWidth: CGFloat
   }
 
-  static let capacity = 64
-  private var entries: [Key: Stops] = [:]
+  static let capacity = 16
+  private var entries: [Key: (stops: Stops, used: UInt64)] = [:]
+  private var clock: UInt64 = 0
   private let font: CTFont
 
   init(font: CTFont) {
@@ -33,13 +35,21 @@ final class LineStopsCache {
   }
 
   func stops(_ source: LineShaper.Source, tabWidth: CGFloat) -> Stops {
+    clock += 1
     let key = Key(source: source, tabWidth: tabWidth)
-    if let stops = entries[key] { return stops }
+    if let index = entries.index(forKey: key) {
+      entries.values[index].used = clock
+      return entries.values[index].stops
+    }
     let shaped = LineShaper.shape(source, font: font, tabWidth: tabWidth)
     let (offsets, xs) = shaped.stops
     let stops = Stops(offsets: offsets, xs: xs, width: shaped.width)
-    if entries.count >= Self.capacity { entries.removeAll(keepingCapacity: true) }
-    entries[key] = stops
+    if entries.count >= Self.capacity,
+      let oldest = entries.min(by: { $0.value.used < $1.value.used })
+    {
+      entries.removeValue(forKey: oldest.key)
+    }
+    entries[key] = (stops, clock)
     return stops
   }
 }
