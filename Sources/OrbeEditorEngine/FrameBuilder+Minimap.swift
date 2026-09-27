@@ -51,23 +51,23 @@ extension FrameBuilder {
     _ layout: SurfaceLayout, lines: (first: CGFloat, visible: CGFloat), _ source: Source,
     _ content: SurfaceContent, _ c: Context
   ) {
-    minimap.reset()
     let material = source.material
     let cells = source.minimapCells
     let g = c.g
     let area = layout.minimap
-    guard area.width > 0, area.height > 0 else { return }
+    let s = g.scale
+    let width = (Double(area.width) * s).rounded()
+    guard width > 0, area.height > 0 else { return }
     let text = content.text
     let placement = MinimapLayout(
       lineCount: text.lineCount, firstLine: lines.first, visibleLines: lines.visible,
       height: area.height, previous: source.previousPlacement)
     minimap.placement = placement
-    let s = g.scale
     let scale = s >= 2 ? 2 : 1
     let factor = Float(s) / Float(scale)
     minimap.scale = scale
     let x = (Double(area.minX) * s).rounded()
-    minimap.rect = SIMD4(Float(x), 0, Float((Double(area.width) * s).rounded()), Float(g.height))
+    minimap.rect = SIMD4(Float(x), 0, Float(width), Float(g.height))
     let canvas = Int(area.width * CGFloat(scale))
     cells.beginFrame(
       MinimapCells.Key(
