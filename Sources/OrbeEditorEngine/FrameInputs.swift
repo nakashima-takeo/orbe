@@ -105,7 +105,6 @@ struct SurfaceConfig: @unchecked Sendable {
   let gutterTrailingInset: CGFloat
   let marks: Marks
   let fontSmoothing: Bool
-  let elasticScroll: Bool
   /// 打ち切った行の末尾に出す印の文言（打ち切った単位の数から）。
   let omittedLabel: @Sendable (Int) -> String
   /// 1 桁の幅（空白の送り）。
@@ -119,8 +118,7 @@ struct SurfaceConfig: @unchecked Sendable {
   let digitAdvances: [CGFloat]
 
   init(
-    style: TextSurfaceStyle, fontSmoothing: Bool, elasticScroll: Bool,
-    omittedLabel: @escaping @Sendable (Int) -> String
+    style: TextSurfaceStyle, fontSmoothing: Bool, omittedLabel: @escaping @Sendable (Int) -> String
   ) {
     font = style.font as CTFont
     gutterFont = style.gutterFont as CTFont
@@ -133,7 +131,6 @@ struct SurfaceConfig: @unchecked Sendable {
       barInset: style.marks.barInset, barRadius: style.marks.barRadius,
       triangleSize: style.marks.triangleSize)
     self.fontSmoothing = fontSmoothing
-    self.elasticScroll = elasticScroll
     self.omittedLabel = omittedLabel
     cell = Self.advances(of: [0x20], in: font).advances[0]
     ascent = CTFontGetAscent(font)

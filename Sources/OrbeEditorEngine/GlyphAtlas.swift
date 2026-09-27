@@ -40,8 +40,6 @@ final class GlyphAtlas {
   private var entries: [UInt64: Entry] = [:]
   /// 頁が上限まで埋まった。次のコマの前に作り直す。
   private(set) var isFull = false
-  /// 作り直した回数（描いた絵の鍵に入れる）。
-  private(set) var generation = 0
 
   init(device: MTLDevice, scale: CGFloat, fonts: FontRegistry) {
     self.device = device
@@ -56,7 +54,6 @@ final class GlyphAtlas {
     monoPackers = monoPackers.map { ShelfPacker(size: $0.size) }
     colorPackers = colorPackers.map { ShelfPacker(size: $0.size) }
     isFull = false
-    generation += 1
   }
 
   func entry(font: UInt16, glyph: CGGlyph, variant: Int, dilation: Int) -> Entry? {

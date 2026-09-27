@@ -41,8 +41,7 @@ final class MetalTextSurface: TextSurface {
     id = Self.nextID
     self.style = style
     config = SurfaceConfig(
-      style: style, fontSmoothing: options.fontSmoothing, elasticScroll: options.elasticScroll,
-      omittedLabel: options.omittedLabel)
+      style: style, fontSmoothing: options.fontSmoothing, omittedLabel: options.omittedLabel)
     scroll = ScrollBox(elastic: options.elasticScroll)
     textView.surface = self
     let id = id
@@ -205,9 +204,8 @@ final class MetalTextSurface: TextSurface {
     let location = min(max(0, offset), text.length)
     let row = text.row(containing: location)
     let lineHeight = Double(config.lineHeight)
-    let visible = Double(size.height - config.topInset)
-    let now = scroll.peek(at: CACurrentMediaTime()).position
-    place(SIMD2(now.x, Double(row) * lineHeight + lineHeight / 2 - visible / 2))
+    let (now, limits) = scroll.peek(at: CACurrentMediaTime())
+    place(SIMD2(now.x, Double(row) * lineHeight + lineHeight / 2 - limits.viewport.y / 2))
     scrollToVisible(NSRange(location: location, length: 0))
   }
 
@@ -217,10 +215,9 @@ final class MetalTextSurface: TextSurface {
     let text = content.text
     let rows = text.rows(of: range)
     let lineHeight = Double(config.lineHeight)
-    let visible = SIMD2(
-      Double(size.width - config.columnWidth(lineCount: text.lineCount)),
-      Double(size.height - config.topInset))
-    var p = scroll.peek(at: CACurrentMediaTime()).position
+    let (now, limits) = scroll.peek(at: CACurrentMediaTime())
+    let visible = limits.viewport
+    var p = now
     let top = Double(rows.lowerBound) * lineHeight
     let bottom = Double(rows.upperBound + 1) * lineHeight
     if top < p.y || bottom - top > visible.y {

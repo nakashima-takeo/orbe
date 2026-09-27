@@ -31,13 +31,11 @@ final class HeadlessDriver: @unchecked Sendable {
   }
 
   private let state = OSAllocatedUnfairLock(initialState: State())
-  private var thread: Thread?
 
   func start() {
     let thread = Thread { [self] in run() }
     thread.qualityOfService = .userInteractive
     thread.start()
-    self.thread = thread
   }
 
   func stop() {
