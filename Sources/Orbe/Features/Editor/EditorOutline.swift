@@ -7,7 +7,8 @@ import OrbeEditorCore
 ///
 /// main の仕事は見えている行と畳んだ数にだけ比例する——行はシンボルの番号から二分探索で引き（`OutlineRows`）、結果を
 /// 受け取るときと開閉のときは、畳んだシンボルの鍵を結果の「鍵 → 番号」の表で引き直すだけ。畳みは文書ごとにアプリの実行中
-/// だけ持つ（VS Code と同じく永続しない）。選択はシンボルの番号 1 つで、カーソル追従と ↑↓ が同じ 1 つを動かす。
+/// だけ持つ（VS Code と同じく永続しない）。絞り込んでいる間は、全部を開いた状態から始まるその間だけの畳みを使い、解けば
+/// 文書の畳みへ戻る（VS Code と同じ）。選択はシンボルの番号 1 つで、カーソル追従と ↑↓ が同じ 1 つを動かす。
 @MainActor @Observable
 final class EditorOutline {
   /// 見せるもの。
@@ -71,6 +72,8 @@ final class EditorOutline {
   @ObservationIgnored private var filter: OutlineFilterResult?
   @ObservationIgnored private(set) var rows = OutlineRows.empty
   @ObservationIgnored private var folds: [URL: Folds] = [:]
+  /// 絞り込んでいる間だけの畳み（絞り込んでいなければ nil）。
+  @ObservationIgnored private var filterFolds: Folds?
   @ObservationIgnored private var selectionSerial = 0
 
   /// 文書ごとの畳み。すべて折りたたんだ後は、開いたものを覚える。
@@ -136,6 +139,7 @@ final class EditorOutline {
   ) {
     let token = self.outline?.token
     self.outline = outline
+    if (filter == nil) != (self.filter == nil) { filterFolds = filter == nil ? nil : Folds() }
     self.filter = filter
     if outline?.token != token { selection = nil }
     if status != self.status { self.status = status }
@@ -158,7 +162,7 @@ final class EditorOutline {
       publishRows()
       return
     }
-    let folds = folds[document.url] ?? Folds()
+    let folds = currentFolds
     let indices = folds.keys.compactMap(outline.index(of:))
     rows = OutlineRows(
       outline: outline, filter: filter,
@@ -200,26 +204,40 @@ final class EditorOutline {
 
   // MARK: - 畳み
 
+  /// 今の畳み（絞り込んでいる間はその間だけの畳み、それ以外は文書の畳み）。
+  private var currentFolds: Folds {
+    get { filterFolds ?? document.flatMap { folds[$0.url] } ?? Folds() }
+    set {
+      if filterFolds != nil {
+        filterFolds = newValue
+      } else if let document {
+        folds[document.url] = newValue
+      }
+    }
+  }
+
   private func isCollapsed(_ symbol: Int) -> Bool {
-    guard let outline, let document else { return false }
-    let folds = folds[document.url] ?? Folds()
+    guard let outline else { return false }
+    let folds = currentFolds
     return folds.collapseAll != folds.keys.contains(outline.symbols[symbol].key)
   }
 
   /// シンボルを開く・畳む。
   func setExpanded(_ symbol: Int, _ expanded: Bool) {
-    guard let outline, let document, isCollapsed(symbol) == expanded else { return }
-    var folds = folds[document.url] ?? Folds()
+    guard let outline, document != nil, isCollapsed(symbol) == expanded else { return }
     let key = outline.symbols[symbol].key
-    if folds.keys.contains(key) { folds.keys.remove(key) } else { folds.keys.insert(key) }
-    self.folds[document.url] = folds
+    if currentFolds.keys.contains(key) {
+      currentFolds.keys.remove(key)
+    } else {
+      currentFolds.keys.insert(key)
+    }
     reindex()
   }
 
   /// すべて折りたたむ（どれも開いていなければ、すべて展開する）。
   func toggleCollapseAll() {
-    guard let document else { return }
-    folds[document.url] = isAllCollapsed ? Folds() : Folds(collapseAll: true)
+    guard document != nil else { return }
+    currentFolds = isAllCollapsed ? Folds() : Folds(collapseAll: true)
     reindex()
     if let symbol = selection?.symbol, rows.row(of: symbol) != nil {
       choose(symbol, centered: false)

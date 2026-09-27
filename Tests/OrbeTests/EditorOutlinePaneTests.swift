@@ -282,6 +282,27 @@ final class EditorOutlinePaneTests: OrbeTestCase {
       NSRange(location: offset(hosted, of: "flush"), length: 0), "Enter で一致へ飛ぶ")
   }
 
+  /// 絞り込んでいる間は全部を開いた状態から始まる別の畳みを使い、畳んだ親の下の一致も見える。解けば元の畳みに戻る。
+  func testFilteringOpensFoldsOnlyWhileFiltering() throws {
+    let hosted = try host()
+    openOutline(hosted)
+    let outline = hosted.pane.outline
+    let container = hosted.pane.outlineList
+    let list = container.scrollView.list
+    outline.setExpanded(try XCTUnwrap(outline.row(at: 0).symbol), false)
+    XCTAssertEqual(names(outline), ["Channel", "Box", "  width"], "前提: Channel を畳む")
+    hosted.window.makeFirstResponder(list)
+
+    list.keyDown(with: .key("f", []))
+    catchUp(hosted.document)
+    pumpMain(
+      until: { self.names(outline) == ["Channel", "  buffer", "  flush()"] }, "畳んだ親の下の一致も見える")
+    try XCTUnwrap(container.field.textField.currentEditor()).doCommand(
+      by: #selector(NSResponder.cancelOperation(_:)))
+    catchUp(hosted.document)
+    pumpMain(until: { self.names(outline) == ["Channel", "Box", "  width"] }, "解けば元の畳みに戻る")
+  }
+
   /// 取り直しても、同じ名前の道筋にあるシンボルの畳みは残る。
   func testFoldsSurviveARefresh() throws {
     let hosted = try host()
