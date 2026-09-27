@@ -38,6 +38,23 @@ enum IMECall {
   case unmark
 
   static let notFound = NSRange(location: NSNotFound, length: 0)
+
+  /// この呼び出しを受け手へ送る（範囲の無い `selected` は文字列の末尾）。
+  @MainActor
+  func send(to client: NSTextInputClient) {
+    switch self {
+    case .mark(let string, let selected, let replacement):
+      client.setMarkedText(
+        string, selectedRange: selected ?? NSRange(location: string.utf16.count, length: 0),
+        replacementRange: replacement)
+    case .markAttributed(let string, let selected):
+      client.setMarkedText(string, selectedRange: selected, replacementRange: IMECall.notFound)
+    case .insert(let string, let replacement):
+      client.insertText(string, replacementRange: replacement)
+    case .unmark:
+      client.unmarkText()
+    }
+  }
 }
 
 @MainActor
@@ -57,18 +74,7 @@ extension EngineTestCase {
   ) {
     let client = opened.surface.textView
     for (index, call) in calls.enumerated() {
-      switch call {
-      case .mark(let string, let selected, let replacement):
-        client.setMarkedText(
-          string, selectedRange: selected ?? NSRange(location: string.utf16.count, length: 0),
-          replacementRange: replacement)
-      case .markAttributed(let string, let selected):
-        client.setMarkedText(string, selectedRange: selected, replacementRange: IMECall.notFound)
-      case .insert(let string, let replacement):
-        client.insertText(string, replacementRange: replacement)
-      case .unmark:
-        client.unmarkText()
-      }
+      call.send(to: client)
       assertConsistent(opened, "呼び出し \(index)（\(call)）の後", file: file, line: line)
     }
   }

@@ -88,11 +88,12 @@ enum CompositionRules {
       })
   }
 
-  /// 変換の終わりに記録する undo の種類。挿入 1 つだけなら打鍵と同じ分類、確定済みの文字を置き換えたなら前後で区切る。
+  /// 変換の終わりに記録する undo の種類。確定済みの文字を置き換えない変化 1 つ（挿入と、変換を始めた選択の置き換え）は
+  /// 打鍵と同じ分類（NSTextView と同じく、選択の上の打鍵と同じまとまり）、確定済みの文字を置き換えたなら前後で区切る。
   static func undoKind(_ net: EditBatch, replacesCommitted: Bool) -> UndoKind {
-    guard !replacesCommitted, net.edits.count == 1, let edit = net.edits.first,
-      edit.range.length == 0
-    else { return .other }
+    guard !replacesCommitted, net.edits.count == 1, let edit = net.edits.first else {
+      return .other
+    }
     return edit.replacement == ContiguousArray(" ".utf16) ? .typing(.firstSpace) : .typing(.other)
   }
 }
