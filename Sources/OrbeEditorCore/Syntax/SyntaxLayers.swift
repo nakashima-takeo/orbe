@@ -39,6 +39,9 @@ final class SyntaxLayers {
     root = SyntaxLayer(rules: rules, depth: 0, parent: nil, isCombined: false, parts: [])
   }
 
+  /// 根と注入の層（根、束ねない層を開始位置の順、束ねた層の順）。
+  var allLayers: [Placed] { [placedRoot] + injections.all }
+
   private var placedRoot: Placed { Placed(layer: root, origin: 0, row: 0) }
 
   /// 本文全体を初めて解析する。
@@ -94,7 +97,7 @@ final class SyntaxLayers {
   /// いない範囲へ足す。誤りの有無が変わった層は、枠の掛け方が変わるので層の全体を変わったとする。解析できない層（含める
   /// 範囲が空・拒まれた）は子孫ごと外す。
   @discardableResult
-  private func parse(_ placed: Placed) -> IndexSet {
+  private func parse(_ placed: Placed, reusingTree: Bool = true) -> IndexSet {
     let layer = placed.layer
     guard !isCancelled, layer.needsParse || layer.tree == nil else { return IndexSet() }
     let isRoot = layer === root
@@ -105,7 +108,8 @@ final class SyntaxLayers {
     }
     let outcome = parser.parse(
       layer.rules.language, ranges: ranges,
-      old: layer.rules.grammar.reusesTrees ? layer.tree : nil, text: text, origin: placed.origin)
+      old: reusingTree && layer.rules.grammar.reusesTrees ? layer.tree : nil, text: text,
+      origin: placed.origin)
     guard case .parsed(let tree) = outcome else {
       if case .rejected = outcome { invalidated.formUnion(injections.drop([placed])) }
       return IndexSet()
@@ -130,17 +134,25 @@ final class SyntaxLayers {
 
   // MARK: - 注入の問い直し
 
-  /// 区画の中で、深さの順に各層の注入を問い直す。深さごとに、マッチが区画に掛かる子の層をまとめて外し、各層の注入を問い
-  /// 直して、言語と注入の範囲が同じ子は木と孫を持ったまま戻す。戻らなかった子は子孫ごと外す。
+  /// 区画の中で、深さの順に各層の注入を問い直す。深さごとに、マッチが区画に掛かる子の層をまとめて外し、区画と交わる層と
+  /// 外した子の親の注入を問い直して、言語と注入の範囲が同じ子は木と孫を持ったまま戻す。戻らなかった子は子孫ごと外す。外した
+  /// 子の親は、区画と交わらなくても問い直す——束ねた層の節は部分の隙間をまたげるので、親の部分が無い区画に子のマッチが
+  /// 掛かることがある。そこで親に問わないと、子を戻せずに外し、隣の区画で作り直すのを繰り返す。
   private func resolveInjections(in piece: Range<Int>) {
     var parents = [placedRoot]
     for depth in 0..<Self.maximumDepth {
       var taken: [RestoreKey: [Placed]] = [:]
+      var asked = parents
       for child in injections.uncombined(atDepth: depth + 1, touching: piece).reversed() {
         injections.remove(at: child.index)
         taken[RestoreKey(child.placed), default: []].append(child.placed)
+        if let parent = child.placed.layer.parent, parent.isCombined,
+          !asked.contains(where: { $0.layer === parent })
+        {
+          asked.append(Placed(layer: parent, origin: 0, row: 0))
+        }
       }
-      for parent in parents where parent.layer.rules.injections != nil {
+      for parent in asked where parent.layer.rules.injections != nil {
         parse(parent)
         guard !isCancelled else { return }
         if !parent.layer.detached, parent.layer.tree != nil {
@@ -173,14 +185,17 @@ final class SyntaxLayers {
         injections.insert(old)
       } else {
         injections.insert(candidate)
+        invalidated.formUnion(candidate.whole)
       }
     }
     resolveCombined(of: parent.layer, in: piece, found: combinedParts)
   }
 
   /// 束ねる層の、区画に掛かるマッチの部分を差し替える。部分が変わった層はその場で解析し直す——束ねた層では、区画の部分が
-  /// 消えると区画の外の構文が変わり、その層がもう区画と交わらないこともあるので、変わった区間をここで足す。部分が空に
-  /// なった層は外す。
+  /// 消えると区画の外の構文が変わり、その層がもう区画と交わらないこともあるので、変わった区間をここで足す。解析し直すとき
+  /// は前の木を使わない——含める範囲が編集を写したものと違うと、tree-sitter は範囲の端で入力の終わりを見た節（閉じていない
+  /// 要素など）を、後ろに足した範囲の先まで読み直さずに使い回し、同じ範囲を新しく解いた木と食い違う（範囲の違いを字の
+  /// 位置と先読みの長さで見るので、範囲の隙間を飛んだ先を見ない）。部分が空になった層は外す。
   private func resolveCombined(
     of parent: SyntaxLayer, in piece: Range<Int>, found: [Grammar: [InjectionPart]]
   ) {
@@ -196,7 +211,7 @@ final class SyntaxLayers {
       } else if !InjectionPart.same(parts, before) {
         layer.parts = parts
         layer.needsParse = true
-        parse(Placed(layer: layer, origin: 0, row: 0))
+        parse(Placed(layer: layer, origin: 0, row: 0), reusingTree: false)
       }
     }
     if !emptied.isEmpty { invalidated.formUnion(injections.drop(emptied)) }

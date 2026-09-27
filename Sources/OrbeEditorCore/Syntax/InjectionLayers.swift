@@ -26,6 +26,18 @@ struct InjectionLayers {
     return result
   }
 
+  /// すべての層（束ねない層は開始位置の順、その後に束ねた層）。
+  var all: [Placed] {
+    var result: [Placed] = []
+    entries.visit(
+      entering: { _, _ in true },
+      { _, before, entry in
+        result.append(Placed(entry, before))
+        return true
+      })
+    return result + combined.map { Placed(layer: $0, origin: 0, row: 0) }
+  }
+
   /// 深さ `depth` の束ねない層のうち、マッチが区画に掛かるもの（開始位置の順）。
   func uncombined(atDepth depth: Int, touching piece: Range<Int>) -> [(index: Int, placed: Placed)]
   {
@@ -75,29 +87,41 @@ struct InjectionLayers {
   }
 
   /// 編集 1 つを写す。束ねた層と、編集に掛かる束ねない層の木へは層の座標で写し、後ろの層は原点をずらす。原点をまたぐ編集
-  /// （原点が行頭でなくなる）は、その層を子孫ごと外す。外した範囲（編集の前の本文の上）を返す。
+  /// （原点が行頭でなくなる）と、マッチを丸ごと消す編集（層を生んだ節が消える）は、その層を子孫ごと外す——空になった
+  /// マッチは、文書の末尾にあるとどの区画にも掛からず、問い直しで外れない。束ねた層は丸ごと消えた部分を除き、部分が全部
+  /// 消えたら外す。外した範囲（編集の前の本文の上）を返す。
   mutating func apply(_ record: VersionedEdit) -> IndexSet {
     let start = record.edit.range.location
     let end = NSMaxRange(record.edit.range)
+    func erased(_ match: Range<Int>) -> Bool {
+      start < end && start <= match.lowerBound && match.upperBound <= end
+    }
+    var doomed: [Placed] = []
+    for layer in combined where layer.parts.allSatisfy({ erased($0.match) }) {
+      doomed.append(Placed(layer: layer, origin: 0, row: 0))
+    }
+    entries.visit(
+      entering: { before, span in before.offset + span.reach >= start },
+      { _, before, entry in
+        let placed = Placed(entry, before)
+        guard placed.origin <= end else { return false }
+        if placed.origin > start || erased(placed.globalMatch) { doomed.append(placed) }
+        return true
+      })
+    let removed = doomed.isEmpty ? IndexSet() : drop(doomed)
     for layer in combined where start <= layer.extent {
+      layer.parts.removeAll { erased($0.match) }
       layer.edit(TSInputEdit(record, origin: 0, row: 0))
     }
     var touched: [(index: Int, placed: Placed)] = []
-    var spanned: [Placed] = []
     entries.visit(
       entering: { before, span in before.offset + span.reach >= start },
       { index, before, entry in
         let placed = Placed(entry, before)
-        guard placed.origin <= end else { return false }
-        if placed.origin > start {
-          spanned.append(placed)
-        } else if placed.origin + entry.extent >= start {
-          touched.append((index, placed))
-        }
+        guard placed.origin <= start else { return false }
+        touched.append((index, placed))
         return true
       })
-    // 外すのは原点をずらす前（外す層の子孫は原点より後ろにあり、編集に掛かる層より後ろに並ぶので、その番号は動かない）。
-    let removed = spanned.isEmpty ? IndexSet() : drop(spanned)
     let (next, _) = entries.locate(end, by: \.offset)
     if next < entries.count {
       var entry = entries[next]
