@@ -169,6 +169,24 @@ final class EditorOutlinePaneTests: OrbeTestCase {
       names(outline), ["Channel", "Box", "  width"], "シェブロンのダブルクリックは 1 回だけ開閉する（2 回目で戻さない）")
   }
 
+  /// 単クリックの後、飛ぶ前に来たダブルクリックは、保留中の飛びを取り消す（範囲全体の選択が名前の頭へ潰れない）。
+  func testADoubleClickCancelsThePendingJumpOfTheSingleClick() throws {
+    let hosted = try host()
+    openOutline(hosted)
+    let outline = hosted.pane.outline
+    var pending: [@MainActor () -> Void] = []
+    outline.clickDelay.schedule = { _, fire in pending.append(fire) }
+    let list = hosted.pane.outlineList.scrollView.list
+    let emit = try row(outline, "emit(_:coalesce:)")
+
+    click(list, row: emit, x: 120, count: 1)
+    click(list, row: emit, x: 120, count: 2)
+    XCTAssertFalse(pending.isEmpty, "前提: 単クリックの飛びが保留されている")
+    pending.forEach { $0() }
+    let range = hosted.document.surface.selectedRange
+    XCTAssertEqual(range.location, offset(hosted, of: "func emit"))
+    XCTAssertTrue(hosted.document.text.substring(range).hasSuffix("}"), "範囲全体のまま")
+  }
 
   /// 本文のスクロール: 画面の外なら上寄せ（上に max(5 行, 高さの 20%) の間）、画面の中なら動かさない、範囲が画面より
   /// 高ければ先頭を上端に。
