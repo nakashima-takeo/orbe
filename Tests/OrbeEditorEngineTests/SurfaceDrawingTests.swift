@@ -132,8 +132,8 @@ final class SurfaceDrawingTests: EngineTestCase {
     XCTAssertEqual(box.frame(at: 0, material: 6).position.y, 300, "一度追いついたら持たない")
   }
 
-  /// 打鍵で組み直すのは変わった行だけ——打鍵はその 1 行、Enter は分かれた 2 行で、見えている他の行は前のコマの組版を
-  /// 使う（色の無い文書で、打鍵の後に役割が届いて描き直すコマを挟まない）。
+  /// 打鍵で組み直すのは変わった行だけ——打鍵はその 1 行、Enter は分かれた 2 行、複数行の字下げは字下げした行で、見えて
+  /// いる他の行は前のコマの組版を使う（色の無い文書で、打鍵の後に役割が届いて描き直すコマを挟まない）。
   func testTypingReshapesOnlyTheChangedRows() throws {
     let opened = try open((0..<40).map { "row \($0) text" }.joined(separator: "\n"), name: "a.txt")
     let surface = opened.surface
@@ -161,5 +161,12 @@ final class SurfaceDrawingTests: EngineTestCase {
     surface.perform(.newline(indents: true))
     settle()
     XCTAssertEqual(shaped(), 2, "Enter で分かれた 2 行だけ")
+    let text = opened.document.text
+    surface.selectedRange = NSRange(
+      location: text.lineStart(10), length: text.lineStart(12) + 3 - text.lineStart(10))
+    settle()
+    surface.perform(.tab)
+    settle()
+    XCTAssertEqual(shaped(), 3, "字下げした 3 行だけ")
   }
 }

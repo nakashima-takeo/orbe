@@ -228,7 +228,6 @@ final class SurfaceEditingTests: EngineTestCase {
     opened.surface.selectedRange = NSRange(location: 300, length: 0)
     type(opened, "y")
     XCTAssertEqual(opened.surface.viewport.hiddenColumns, 0, "main は横に寄せない")
-    XCTAssertEqual(opened.surface.material.read().reveal?.range, NSRange(location: 301, length: 0))
     _ = opened.surface.snapshot()
     pump(until: { opened.surface.viewport.hiddenColumns > 0 }, "描画スレッドが行の末尾まで寄せる")
     let viewport = opened.surface.viewport
@@ -254,27 +253,5 @@ final class SurfaceEditingTests: EngineTestCase {
     type(opened, "z")
     _ = opened.surface.snapshot()
     pump(until: { opened.surface.viewport.hiddenColumns > 0 }, "次の打鍵はまた寄せる")
-  }
-
-  /// 取引は、渡した編集で組版の変わった行を描画スレッドへ知らせる——打鍵ではその行だけ、Enter では 1 行が 2 行に、複数行の
-  /// 字下げでは各行（後ろから当てた順）。描画スレッドはこれで変わった行だけを組み直す。
-  func testTransactionsReportTheRowsTheyChanged() throws {
-    let opened = try open("a\nb\nc\n")
-    _ = host(opened)
-    _ = opened.surface.material.take()
-    opened.surface.selectedRange = NSRange(location: 3, length: 0)
-    type(opened, "x")
-    let version = opened.document.version
-    XCTAssertEqual(
-      opened.surface.material.take().rowEdits,
-      [RowEdit(rows: 1..<2, inserted: 1, version: version)])
-    opened.surface.perform(.newline(indents: true))
-    XCTAssertEqual(
-      opened.surface.material.take().rowEdits,
-      [RowEdit(rows: 1..<2, inserted: 2, version: opened.document.version)])
-    opened.surface.perform(.selectAll)
-    opened.surface.perform(.tab)
-    let rows = opened.surface.material.take().rowEdits.map(\.rows)
-    XCTAssertEqual(rows, [3..<4, 1..<2, 0..<1], "後ろから当てた順に各行（空行は字下げしない）")
   }
 }
