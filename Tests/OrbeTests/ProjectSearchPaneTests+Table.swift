@@ -146,6 +146,9 @@ extension ProjectSearchPaneTests {
       until: {
         list.visibleRect.contains(NSPoint(x: 1, y: 60.5 * Theme.Layout.editorSearchRow))
       }, "選んだ行が見えるところまで送る")
+    XCTAssertEqual(
+      list.visibleRect.maxY, 61 * Theme.Layout.editorSearchRow, accuracy: 0.5,
+      "最小限に送る（中央へ寄せない）")
   }
 
   /// VoiceOver には行の総数を持つリストとして、見えている行を上から順に（中身の文字列・何行目か）見せ、選択を伝える。
