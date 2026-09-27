@@ -66,13 +66,14 @@ enum Editing {
   /// コマンドを順に当て、最後の本文と状態を書いたもの。
   static func run(
     _ commands: [EditCommand], on marked: String, indentation: Indentation = .fallback,
-    killBuffer: String = ""
+    lineBreak: LineBreak = .lf, killBuffer: String = ""
   ) -> String {
     var (text, state) = parse(marked)
     var kill = killBuffer
     for command in commands {
       let result = EditCommands.run(
-        command, state, environment(text, indentation: indentation, killBuffer: kill))
+        command, state,
+        environment(text, indentation: indentation, lineBreak: lineBreak, killBuffer: kill))
       text = result.edits.applied(to: text)
       state = result.state
       if let killed = result.kill { kill = killed }
@@ -82,8 +83,10 @@ enum Editing {
 
   static func run(
     _ command: EditCommand, on marked: String, indentation: Indentation = .fallback,
-    killBuffer: String = ""
+    lineBreak: LineBreak = .lf, killBuffer: String = ""
   ) -> String {
-    run([command], on: marked, indentation: indentation, killBuffer: killBuffer)
+    run(
+      [command], on: marked, indentation: indentation, lineBreak: lineBreak,
+      killBuffer: killBuffer)
   }
 }

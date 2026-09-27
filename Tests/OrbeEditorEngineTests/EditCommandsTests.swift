@@ -232,6 +232,14 @@ final class EditCommandsTests: XCTestCase {
     XCTAssertEqual(Editing.run(.newline(indents: false), on: "    ab|"), "    ab\n|")
   }
 
+  /// 改行は文書の作法（CRLF）で入る——字下げを引き継ぐ Enter も、引き継がない改行も。
+  func testNewlineFollowsTheDocumentLineBreak() {
+    XCTAssertEqual(
+      Editing.run(.newline(indents: true), on: "  ab|", lineBreak: .crlf), "  ab\r\n  |")
+    XCTAssertEqual(
+      Editing.run(.newline(indents: false), on: "  ab|", lineBreak: .crlf), "  ab\r\n|")
+  }
+
   /// Tab は文書に合わせる——空白の文書では次のタブ位置までの空白、タブの文書ではタブ文字。行をまたぐ選択は字下げ。
   func testTabFollowsTheDocument() {
     XCTAssertEqual(Editing.run(.tab, on: "ab|c"), "ab  |c")
