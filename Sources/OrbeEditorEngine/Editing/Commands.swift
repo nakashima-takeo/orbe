@@ -91,7 +91,8 @@ enum EditCommands {
       let cursor = Cursor(
         selectionStart: NSRange(location: 0, length: 0), unit: .character,
         position: env.text.length)
-      return CommandResult(state: EditState(cursors: CursorList(cursor), mark: state.mark), reveal: .none)
+      return CommandResult(
+        state: EditState(cursors: CursorList(cursor), mark: state.mark), reveal: .none)
     case .selectLine: return select(state, env) { lineSelection($0, env.text) }
     case .selectWord: return select(state, env) { wordSelection(at: $0.position, env.text) }
     case .insert(let string): return type(string, state, env)
@@ -115,7 +116,8 @@ enum EditCommands {
     case .setMark, .selectToMark, .deleteToMark, .swapWithMark:
       return mark(command, state, env)
     case .centerSelection:
-      return CommandResult(state: EditState(cursors: state.cursors, mark: state.mark), reveal: .center)
+      return CommandResult(
+        state: EditState(cursors: state.cursors, mark: state.mark), reveal: .center)
     }
   }
 

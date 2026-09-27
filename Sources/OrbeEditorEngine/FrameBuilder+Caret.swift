@@ -48,7 +48,8 @@ extension FrameBuilder {
     let x0 = from == 0 ? 0 : line.x(ofColumn: from)
     let x1 =
       NSMaxRange(selection) > span.start + span.length
-      ? line.x(ofColumn: span.length) + c.config.cell : line.x(ofColumn: NSMaxRange(selection) - span.start)
+      ? line.x(ofColumn: span.length) + c.config.cell
+      : line.x(ofColumn: NSMaxRange(selection) - span.start)
     guard x1 > x0 else { return }
     let originX = g.column - g.scrollX
     let left = (originX + Double(x0) * g.scale).rounded()

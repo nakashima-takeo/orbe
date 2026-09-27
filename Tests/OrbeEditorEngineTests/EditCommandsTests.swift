@@ -31,7 +31,8 @@ final class EditCommandsTests: XCTestCase {
       XCTAssertEqual(Self.bounds(right), Self.nonEmpty(c.deleteRight), "⌥⌦ \(label)")
       let word = EditCommands.wordRange(at: c.offset, text)
       XCTAssertEqual([word.location, NSMaxRange(word)], c.word, "語 \(label)")
-      let home = EditCommands.move(Cursor(c.offset), .home, extending: false, Editing.environment(text))
+      let home = EditCommands.move(
+        Cursor(c.offset), .home, extending: false, Editing.environment(text))
       XCTAssertEqual(home.position, c.home, "⌘← \(label)")
     }
   }
@@ -54,7 +55,8 @@ final class EditCommandsTests: XCTestCase {
     XCTAssertEqual(Editing.run(.move(.left, extending: false), on: "🇯🇵|🇺🇸"), "|🇯🇵🇺🇸")
     XCTAssertEqual(Editing.run(.deleteForward, on: "|👍🏽a"), "|a")
     XCTAssertEqual(Editing.run(.move(.right, extending: false), on: "e\u{301}|x"), "e\u{301}x|")
-    XCTAssertEqual(Editing.run(.move(.right, extending: false), on: "ab|\r\ncd"), "ab\r\n|cd", "CRLF は 1 つ")
+    XCTAssertEqual(
+      Editing.run(.move(.right, extending: false), on: "ab|\r\ncd"), "ab\r\n|cd", "CRLF は 1 つ")
     XCTAssertEqual(Editing.run(.move(.left, extending: false), on: "ab\r\n|cd"), "ab|\r\ncd")
     XCTAssertEqual(Editing.run(.deleteForward, on: "ab|\r\ncd"), "ab|cd")
   }
@@ -117,10 +119,12 @@ final class EditCommandsTests: XCTestCase {
     XCTAssertEqual(Editing.run(.newline(indents: true), on: "    ab|c"), "    ab\n    |c")
     XCTAssertEqual(Editing.run(.newline(indents: true), on: "  |  abc"), "  \n  |  abc")
     XCTAssertEqual(
-      Editing.run(.newline(indents: true), on: "\t  ab|", indentation: .init(unit: 4, usesTabs: false)),
+      Editing.run(
+        .newline(indents: true), on: "\t  ab|", indentation: .init(unit: 4, usesTabs: false)),
       "\t  ab\n      |")
     XCTAssertEqual(
-      Editing.run(.newline(indents: true), on: "      ab|", indentation: .init(unit: 4, usesTabs: true)),
+      Editing.run(
+        .newline(indents: true), on: "      ab|", indentation: .init(unit: 4, usesTabs: true)),
       "      ab\n\t  |")
     XCTAssertEqual(Editing.run(.newline(indents: false), on: "    ab|"), "    ab\n|")
   }
@@ -128,7 +132,8 @@ final class EditCommandsTests: XCTestCase {
   /// Tab は文書に合わせる——空白の文書では次のタブ位置までの空白、タブの文書ではタブ文字。行をまたぐ選択は字下げ。
   func testTabFollowsTheDocument() {
     XCTAssertEqual(Editing.run(.tab, on: "ab|c"), "ab  |c")
-    XCTAssertEqual(Editing.run(.tab, on: "ab|c", indentation: .init(unit: 4, usesTabs: true)), "ab\t|c")
+    XCTAssertEqual(
+      Editing.run(.tab, on: "ab|c", indentation: .init(unit: 4, usesTabs: true)), "ab\t|c")
     XCTAssertEqual(Editing.run(.tab, on: "a[b]c"), "a   |c", "1 行の中の選択は、始まりから次のタブ位置までの空白に置き換える")
     XCTAssertEqual(Editing.run(.tab, on: "[ab\ncd]\n"), "[    ab\n    cd]\n")
     XCTAssertEqual(
@@ -141,7 +146,8 @@ final class EditCommandsTests: XCTestCase {
   func testBacktabOutdents() {
     XCTAssertEqual(Editing.run(.backtab, on: "      a|b"), "    a|b")
     XCTAssertEqual(Editing.run(.backtab, on: "[    a\nb\n  c\n]d"), "[a\nb\nc\n]d")
-    XCTAssertEqual(Editing.run(.backtab, on: "\t\ta|", indentation: .init(unit: 4, usesTabs: true)), "\ta|")
+    XCTAssertEqual(
+      Editing.run(.backtab, on: "\t\ta|", indentation: .init(unit: 4, usesTabs: true)), "\ta|")
   }
 
   // MARK: - 行の削除・キル
@@ -198,9 +204,11 @@ final class EditCommandsTests: XCTestCase {
     let right = EditCommand.move(.right, extending: false)
     XCTAssertEqual(Editing.run([.setMark, right, right, .selectToMark], on: "a|bcd"), "a[bc]d")
     XCTAssertEqual(
-      Editing.run([.setMark, .move(.documentEnd, extending: false), .deleteToMark], on: "a|bcd"), "a|")
+      Editing.run([.setMark, .move(.documentEnd, extending: false), .deleteToMark], on: "a|bcd"),
+      "a|")
     XCTAssertEqual(
-      Editing.run([.setMark, .move(.documentEnd, extending: false), .swapWithMark], on: "a|bcd"), "a|bcd")
+      Editing.run([.setMark, .move(.documentEnd, extending: false), .swapWithMark], on: "a|bcd"),
+      "a|bcd")
   }
 
   // MARK: - 選択

@@ -137,7 +137,9 @@ final class Renderer {
     guard moved || caretVisible != slot.drawnCaretVisible else {
       slot.recorder.idle(at: CACurrentMediaTime())
       slot.idleTicks += 1
-      if slot.idleTicks >= Self.idleTicksBeforePause { pause(slot, clock, blinking: material.caret) }
+      if slot.idleTicks >= Self.idleTicksBeforePause {
+        pause(slot, clock, blinking: material.caret)
+      }
       return
     }
     slot.idleTicks = 0

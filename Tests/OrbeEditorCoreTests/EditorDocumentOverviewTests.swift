@@ -78,10 +78,12 @@ final class EditorDocumentOverviewTests: XCTestCase {
     XCTAssertEqual(surface.pulled.count, pushed + 1, "行の印は束ごとに 1 回押す")
     XCTAssertEqual(
       received,
-      [[
-        TextEdit(range: NSRange(location: 6, length: 0), replacement: "  "),
-        TextEdit(range: NSRange(location: 0, length: 0), replacement: "  "),
-      ]])
+      [
+        [
+          TextEdit(range: NSRange(location: 6, length: 0), replacement: "  "),
+          TextEdit(range: NSRange(location: 0, length: 0), replacement: "  "),
+        ]
+      ])
     surface.apply([TextEdit(range: NSRange(location: 0, length: 4), replacement: "  ab")])
     XCTAssertEqual(
       received.last, [TextEdit(range: NSRange(location: 3, length: 1), replacement: "b")],

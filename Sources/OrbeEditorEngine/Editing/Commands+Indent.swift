@@ -4,7 +4,8 @@ import OrbeEditorCore
 /// 字下げの桁の計算（VS Code の `CursorColumns` と `normalizeIndentation`）。タブの幅は字下げの単位。
 enum Indenting {
   /// 行頭から `column` までの見た目の桁（タブは次のタブ位置まで）。
-  static func visibleColumn(_ units: some Collection<UInt16>, upTo column: Int, tabSize: Int) -> Int {
+  static func visibleColumn(_ units: some Collection<UInt16>, upTo column: Int, tabSize: Int) -> Int
+  {
     var visible = 0
     for unit in units.prefix(column) {
       visible = unit == 0x09 ? visible + tabSize - visible % tabSize : visible + 1
@@ -13,7 +14,8 @@ enum Indenting {
   }
 
   /// 見た目の桁 `visible` にいちばん近い位置（VS Code の `columnFromVisibleColumn`）。
-  static func column(_ units: some Collection<UInt16>, atVisible visible: Int, tabSize: Int) -> Int {
+  static func column(_ units: some Collection<UInt16>, atVisible visible: Int, tabSize: Int) -> Int
+  {
     guard visible > 0 else { return 0 }
     var before = 0
     for (index, unit) in units.enumerated() {
@@ -109,7 +111,8 @@ extension EditCommands {
       }
       let inIndent = selection.location <= (Self.firstNonWhitespace(ofRow: row, text) ?? .max)
       let kept = batch.map(lineStart) + selection.location - lineStart
-      let start = inIndent ? min(batch.map(selection.location), kept) : batch.map(selection.location)
+      let start =
+        inIndent ? min(batch.map(selection.location), kept) : batch.map(selection.location)
       let end = batch.map(NSMaxRange(selection))
       return Cursor.selecting(
         NSRange(location: start, length: max(0, end - start)), reversed: cursor.isReversed)

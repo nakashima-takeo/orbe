@@ -10,7 +10,9 @@ final class EditBatchTests: XCTestCase {
     TextEdit(range: NSRange(location: location, length: length), replacement: text)
   }
 
-  private func string(_ rope: TextRope) -> String { rope.substring(NSRange(location: 0, length: rope.length)) }
+  private func string(_ rope: TextRope) -> String {
+    rope.substring(NSRange(location: 0, length: rope.length))
+  }
 
   func testInverseRestoresTheText() {
     let text = TextRope("abcdef")
@@ -24,9 +26,11 @@ final class EditBatchTests: XCTestCase {
   func testComposedBatchesEqualSequentialApplication() {
     var generator = SystemRandomNumberGenerator()
     for _ in 0..<500 {
-      let initial = TextRope(String((0..<Int.random(in: 0...20, using: &generator)).map { _ in
-        "ab \n".randomElement(using: &generator)!
-      }))
+      let initial = TextRope(
+        String(
+          (0..<Int.random(in: 0...20, using: &generator)).map { _ in
+            "ab \n".randomElement(using: &generator)!
+          }))
       var text = initial
       var composed = EditBatch.empty
       for _ in 0..<Int.random(in: 1...6, using: &generator) {
@@ -60,7 +64,8 @@ final class EditBatchTests: XCTestCase {
       let start = Int.random(in: cursor...text.length, using: &generator)
       let length = Int.random(in: 0...min(3, text.length - start), using: &generator)
       let replacement = String(repeating: "Z", count: Int.random(in: 0...3, using: &generator))
-      edits.append(TextEdit(range: NSRange(location: start, length: length), replacement: replacement))
+      edits.append(
+        TextEdit(range: NSRange(location: start, length: length), replacement: replacement))
       cursor = start + length + 1
     }
     return EditBatch(edits)

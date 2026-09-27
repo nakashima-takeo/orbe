@@ -66,7 +66,9 @@ extension EngineTestCase {
       y: config.topInset + (CGFloat(row) + 0.5) * config.lineHeight)
   }
 
-  func click(_ opened: Opened, row: Int, column: CGFloat, clicks: Int = 1, flags: NSEvent.ModifierFlags = [])
+  func click(
+    _ opened: Opened, row: Int, column: CGFloat, clicks: Int = 1, flags: NSEvent.ModifierFlags = []
+  )
     throws
   {
     let at = point(opened, row: row, column: column)

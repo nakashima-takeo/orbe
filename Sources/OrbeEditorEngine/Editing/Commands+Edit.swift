@@ -44,7 +44,9 @@ extension EditCommands {
     planned.sort { $0.replacement.range.location < $1.replacement.range.location }
     var accepted: [(index: Int, replacement: Replacement)] = []
     for item in planned {
-      if let last = accepted.last, item.replacement.range.location < NSMaxRange(last.replacement.range) {
+      if let last = accepted.last,
+        item.replacement.range.location < NSMaxRange(last.replacement.range)
+      {
         continue
       }
       accepted.append(item)
@@ -177,7 +179,8 @@ extension EditCommands {
     let units = line.words.units
     let lastNonWhitespace = units[..<local].lastIndex { $0 != 0x20 && $0 != 0x09 } ?? -1
     if lastNonWhitespace + 1 < local - 1 {
-      return NSRange(location: line.start + lastNonWhitespace + 1, length: local - lastNonWhitespace - 1)
+      return NSRange(
+        location: line.start + lastNonWhitespace + 1, length: local - lastNonWhitespace - 1)
     }
     let start = line.words.previousWord(before: local)?.start ?? 0
     return NSRange(location: line.start + start, length: local - start)

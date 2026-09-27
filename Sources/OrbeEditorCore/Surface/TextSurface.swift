@@ -244,7 +244,8 @@ public struct TextSurfaceStyle {
   public init(
     font: NSFont, lineHeight: CGFloat, topInset: CGFloat, textColor: NSColor, caretColor: NSColor,
     caretSize: CGSize, selectionColor: NSColor, inactiveSelectionColor: NSColor,
-    gutterFont: NSFont, gutterTextColor: NSColor, gutterWidth: CGFloat, gutterTrailingInset: CGFloat,
+    gutterFont: NSFont, gutterTextColor: NSColor, gutterWidth: CGFloat,
+    gutterTrailingInset: CGFloat,
     roleColors: [SyntaxRole: NSColor], marks: Marks, decorations: Decorations,
     highlights: Highlights
   ) {

@@ -67,6 +67,7 @@ extension TextRope {
   private static func isEmojiPart(_ scalar: Unicode.Scalar) -> Bool {
     let properties = scalar.properties
     return properties.isEmojiPresentation || properties.isEmojiModifier
-      || (0x1F1E6...0x1F1FF).contains(scalar.value) || [0x200D, 0xFE0F, 0x20E3].contains(scalar.value)
+      || (0x1F1E6...0x1F1FF).contains(scalar.value)
+      || [0x200D, 0xFE0F, 0x20E3].contains(scalar.value)
   }
 }

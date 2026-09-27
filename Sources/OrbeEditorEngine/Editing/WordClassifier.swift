@@ -50,7 +50,8 @@ struct LineWords {
     while index >= 0 {
       let cls = wordClass(at: index)
       if let segment, index == segment.lowerBound {
-        return Word(start: segment.lowerBound, end: segment.upperBound, kind: .regular, nextClass: cls)
+        return Word(
+          start: segment.lowerBound, end: segment.upperBound, kind: .regular, nextClass: cls)
       }
       switch (cls, kind) {
       case (.regular, .separator?), (.separator, .regular?), (.whitespace, _?):
@@ -65,7 +66,9 @@ struct LineWords {
       }
       index -= 1
     }
-    return kind.map { Word(start: 0, end: endOfWord($0, from: 0), kind: $0, nextClass: .whitespace) }
+    return kind.map {
+      Word(start: 0, end: endOfWord($0, from: 0), kind: $0, nextClass: .whitespace)
+    }
   }
 
   /// `column` 以降で始まる（`column` を含む）語（VS Code の `_doFindNextWordOnLine`）。
@@ -76,7 +79,8 @@ struct LineWords {
     while index < units.count {
       let cls = wordClass(at: index)
       if let segment, index == segment.lowerBound {
-        return Word(start: segment.lowerBound, end: segment.upperBound, kind: .regular, nextClass: cls)
+        return Word(
+          start: segment.lowerBound, end: segment.upperBound, kind: .regular, nextClass: cls)
       }
       switch (cls, kind) {
       case (.regular, .separator?), (.separator, .regular?), (.whitespace, _?):
@@ -92,7 +96,9 @@ struct LineWords {
       index += 1
     }
     return kind.map {
-      Word(start: startOfWord($0, from: units.count - 1), end: units.count, kind: $0, nextClass: .whitespace)
+      Word(
+        start: startOfWord($0, from: units.count - 1), end: units.count, kind: $0,
+        nextClass: .whitespace)
     }
   }
 
@@ -165,7 +171,8 @@ struct LineWords {
       CFStringCreateWithCharacters(nil, $0.baseAddress! + run.lowerBound, run.count)!
     }
     let tokenizer = CFStringTokenizerCreate(
-      nil, string, CFRange(location: 0, length: run.count), kCFStringTokenizerUnitWord, locale as CFLocale)
+      nil, string, CFRange(location: 0, length: run.count), kCFStringTokenizerUnitWord,
+      locale as CFLocale)
     var result: [Range<Int>] = []
     while CFStringTokenizerAdvanceToNextToken(tokenizer) != [] {
       let range = CFStringTokenizerGetCurrentTokenRange(tokenizer)

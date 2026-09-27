@@ -97,7 +97,8 @@ public enum Occurrences {
 
   /// 区切り（区切り文字・空白・改行）か。
   private static func isSeparator(_ unit: UInt16) -> Bool {
-    WordSeparators.units.contains(unit) || unit == 0x20 || unit == 0x09 || unit == 0x0A || unit == 0x0D
+    WordSeparators.units.contains(unit) || unit == 0x20 || unit == 0x09 || unit == 0x0A
+      || unit == 0x0D
   }
 
   private static func isWordBoundary(before range: NSRange, in string: NSString) -> Bool {

@@ -30,11 +30,13 @@ final class SurfaceMouseTests: EngineTestCase {
     _ = host(opened)
     try mouse(opened, .leftMouseDown, at: point(opened, row: 1, column: 9), clicks: 2)
     try mouse(opened, .leftMouseDragged, at: point(opened, row: 0, column: 5), clicks: 2)
-    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 4, length: 25 - 4), "上へ伸ばすと語の始まりまで")
+    XCTAssertEqual(
+      opened.surface.selectedRange, NSRange(location: 4, length: 25 - 4), "上へ伸ばすと語の始まりまで")
     XCTAssertEqual(opened.surface.caretLocation, 4)
     try mouse(opened, .leftMouseUp, at: point(opened, row: 0, column: 5), clicks: 2)
     try click(opened, row: 2, column: 3, flags: .shift)
-    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 22, length: 31 - 22), "⇧クリックも語の単位で、元の語から")
+    XCTAssertEqual(
+      opened.surface.selectedRange, NSRange(location: 22, length: 31 - 22), "⇧クリックも語の単位で、元の語から")
   }
 
   /// 最終行より下の空き地を押すとキャレットは末尾へ。遠くへ飛んだ直後でも、ポインタの下の行に当たる。

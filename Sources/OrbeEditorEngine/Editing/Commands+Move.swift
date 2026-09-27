@@ -189,7 +189,9 @@ extension EditCommands {
     let column = line.local(offset - text.lineStart(row))
     var bounds = NSRange(location: offset, length: 0)
     for word in [line.words.previousWord(before: column), line.words.nextWord(from: column)] {
-      guard let word, word.kind == .regular, word.start < column, column < word.end else { continue }
+      guard let word, word.kind == .regular, word.start < column, column < word.end else {
+        continue
+      }
       bounds = NSRange(location: line.start + word.start, length: word.end - word.start)
       break
     }
