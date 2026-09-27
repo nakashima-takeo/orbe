@@ -24,6 +24,14 @@ final class GlyphPixelTests: EngineTestCase {
 
     """
 
+  /// 字だけを見る見え方（装備は透明に描く——基準の Core Text の行は装備を持たない）。
+  private static var glyphsOnly: TextSurfaceStyle {
+    var style = EngineTestCase.style()
+    style.decorations.indentGuideColor = .clear
+    style.decorations.whitespaceColor = .clear
+    return style
+  }
+
   func testGlyphsMatchCoreTextWithinOneLevel() throws {
     try compareWithCoreText(in: CGColorSpace.sRGB, tolerance: 1)
   }
@@ -42,7 +50,8 @@ final class GlyphPixelTests: EngineTestCase {
         let options = MetalTextSurfaceOptions(
           elasticScroll: true, fontSmoothing: smoothing, omittedLabel: { "\($0)" })
         let size = CGSize(width: 600, height: 140)
-        let opened = try open(Self.sample, size: size, scale: scale, options: options)
+        let opened = try open(
+          Self.sample, size: size, scale: scale, options: options, style: Self.glyphsOnly)
         opened.surface.viewStateDidChange(size: size, scale: scale, space: space, visible: false)
         let id = opened.surface.id
         opened.surface.flush()
@@ -73,6 +82,8 @@ final class GlyphPixelTests: EngineTestCase {
     let height: Double
     let top: Double
     let column: Double
+    /// 本文の区画の右端（面は俯瞰の左で本文を切る）。
+    let textRight: Double
 
     func color(_ color: FrameColor) -> CGColor {
       let c = (0..<4).map {
@@ -121,7 +132,8 @@ final class GlyphPixelTests: EngineTestCase {
       context: context, space: material.space, config: config,
       palette: try XCTUnwrap(material.palette), scale: s,
       height: Double(height), top: (Double(config.topInset) * s).rounded(),
-      column: (Double(config.columnWidth(lineCount: content.text.lineCount)) * s).rounded())
+      column: (Double(config.columnWidth(lineCount: content.text.lineCount)) * s).rounded(),
+      textRight: (Double(opened.surface.surfaceLayout.text.maxX) * s).rounded())
     let lineHeight = Double(config.lineHeight) * s
     for row in 0..<content.text.lineCount {
       let rowTop = r.top + (Double(row) * lineHeight).rounded()
@@ -129,7 +141,7 @@ final class GlyphPixelTests: EngineTestCase {
       r.draw(
         line(row, content, r), x: r.column,
         baseline: rowTop + (Double(config.baseline) * s).rounded(),
-        clip: CGRect(x: r.column, y: 0, width: Double(width) - r.column, height: r.height - r.top))
+        clip: CGRect(x: r.column, y: 0, width: r.textRight - r.column, height: r.height - r.top))
       let number = NSAttributedString(
         string: "\(row + 1)",
         attributes: [

@@ -64,6 +64,8 @@ struct FramePalette: Equatable, Sendable {
   /// 無い未確定の文字の地（NSTextView の既定の `markedTextAttributes`）。IME が選んでいる文節の下線は本文の色。
   var markedUnderline: FrameColor
   var markedBackground: FrameColor
+  var indentGuide: FrameColor
+  var whitespace: FrameColor
 
   /// NSTextView の既定の未確定の地（外観で解く動的な色）。
   @MainActor private static let markedBackgroundColor =
@@ -89,6 +91,8 @@ struct FramePalette: Equatable, Sendable {
     removed = resolve(style.marks.removed)
     markedUnderline = resolve(.tertiaryLabelColor)
     markedBackground = resolve(Self.markedBackgroundColor)
+    indentGuide = resolve(style.decorations.indentGuideColor)
+    whitespace = resolve(style.decorations.whitespaceColor)
   }
 }
 
@@ -127,6 +131,14 @@ struct RowMarks: Equatable, Sendable {
 
 /// 面を作るときに決まり、閉じるまで変わらない見え方。フォントは不変で、Core Text はスレッドをまたいだ利用を保証する。
 struct SurfaceConfig: @unchecked Sendable {
+  /// 装備の寸法。
+  struct Decorations: Sendable {
+    var indentGuideWidth: CGFloat
+    var whitespaceDiameter: CGFloat
+    var linkUnderlineThickness: CGFloat
+    var linkUnderlineOffset: CGFloat
+  }
+
   struct Marks: Sendable {
     var gutterWidth: CGFloat
     var barWidth: CGFloat
@@ -143,6 +155,7 @@ struct SurfaceConfig: @unchecked Sendable {
   let gutterWidth: CGFloat
   let gutterTrailingInset: CGFloat
   let marks: Marks
+  let decorations: Decorations
   let overview: Overview
   let fontSmoothing: Bool
   /// 打ち切った行の末尾に出す印の文言（打ち切った単位の数から）。
@@ -171,6 +184,11 @@ struct SurfaceConfig: @unchecked Sendable {
       gutterWidth: style.marks.gutterWidth, barWidth: style.marks.barWidth,
       barInset: style.marks.barInset, barRadius: style.marks.barRadius,
       triangleSize: style.marks.triangleSize)
+    decorations = Decorations(
+      indentGuideWidth: style.decorations.indentGuideWidth,
+      whitespaceDiameter: style.decorations.whitespaceDiameter,
+      linkUnderlineThickness: style.decorations.linkUnderlineThickness,
+      linkUnderlineOffset: style.decorations.linkUnderlineOffset)
     overview = Overview(style.overview)
     self.fontSmoothing = fontSmoothing
     self.omittedLabel = omittedLabel

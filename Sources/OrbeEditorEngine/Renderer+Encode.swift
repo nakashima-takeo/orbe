@@ -40,7 +40,7 @@ extension Renderer {
     return buffers.count - 1
   }
 
-  /// 下から、選択の地 → 本文の字（行番号の列の右だけ）→ 色付きの字 → 行番号 → git の印 → キャレット。
+  /// 下から、行の装備 → 選択の地 → 本文の字（行番号の列の右だけ）→ 色付きの字 → 行番号 → git の印 → キャレット。
   func encode(
     _ built: FrameBuilder, buffer: MTLBuffer, into texture: MTLTexture, _ pass: Pass,
     _ commands: MTLCommandBuffer
@@ -87,6 +87,7 @@ extension Renderer {
         type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: items.count)
     }
     encoder.setScissorRect(built.textScissor)
+    shapes(built.decorShapes)
     shapes(built.underShapes)
     glyphs(built.text, pass.atlas.monoPages, pass.pipelines.mono)
     glyphs(built.color, pass.atlas.colorPages, pass.pipelines.color)

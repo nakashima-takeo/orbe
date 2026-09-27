@@ -1,4 +1,5 @@
 import AppKit
+import Metal
 import OrbeEditorCore
 import XCTest
 
@@ -140,5 +141,35 @@ extension MetalTextSurface {
   var drawn: FrameMaterial {
     flush()
     return material.read()
+  }
+}
+
+/// 撮った絵（不透明な地に描いた 2x の 1 コマ）を pt で引く。
+struct PixelShot {
+  let bytes: [UInt8]
+  let width: Int
+  let height: Int
+
+  /// (x, y) pt の画素の RGB（sRGB の 0…255）。
+  func rgb(_ x: CGFloat, _ y: CGFloat) -> [Int] {
+    let i = (Int(y * 2) * width + Int(x * 2)) * 4
+    return [Int(bytes[i + 2]), Int(bytes[i + 1]), Int(bytes[i])]
+  }
+
+  /// 地（黒）から離れた色か。
+  func hasInk(_ x: CGFloat, _ y: CGFloat) -> Bool { rgb(x, y).contains { $0 >= 12 } }
+}
+
+@MainActor
+extension EngineTestCase {
+  /// 出す前の状態を出し、黒い不透明な地に今の位置の 1 コマを描いて撮る。
+  func pixelShot(_ opened: Opened) throws -> PixelShot {
+    let id = opened.surface.id
+    let black = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+    opened.surface.flush()
+    let image = try XCTUnwrap(
+      RenderThread.shared.performAndWait { Transfer(value: $0.snapshot(id, background: black)) }
+        .value)
+    return PixelShot(bytes: GlyphPixelTests.pixels(image), width: image.width, height: image.height)
   }
 }

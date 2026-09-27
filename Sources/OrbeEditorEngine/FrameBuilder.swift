@@ -32,6 +32,8 @@ final class FrameBuilder {
   private(set) var color: [[GlyphInstance]] = []
   private(set) var gutter: [[GlyphInstance]] = []
   var shapes: [ShapeInstance] = []
+  /// 行の装備（インデント線・空白の丸点・URL の下線。選択の地の下。本文の列に切り取る）。
+  var decorShapes: [ShapeInstance] = []
   /// 選択の地（本文の字の下。本文の列に切り取る）。
   var underShapes: [ShapeInstance] = []
   /// キャレット（いちばん上。本文の列に切り取る）。
@@ -47,7 +49,7 @@ final class FrameBuilder {
     let glyphs = glyphArrays.reduce(0) {
       $0 + (($1.count * MemoryLayout<GlyphInstance>.stride + 255) & ~255)
     }
-    return [shapes, underShapes, overShapes].reduce(glyphs) {
+    return [shapes, decorShapes, underShapes, overShapes].reduce(glyphs) {
       $0 + (($1.count * MemoryLayout<ShapeInstance>.stride + 255) & ~255)
     }
   }
@@ -77,6 +79,10 @@ final class FrameBuilder {
     let focused: Bool
     let atlas: GlyphAtlas
     let config: SurfaceConfig
+    /// タブの桁（インデントの単位）。
+    let tabColumns: Int
+    /// 役割の並び（字と下線の色）。
+    let roles: RoleRuns
   }
 
   /// 1 コマを組む元。
@@ -97,6 +103,7 @@ final class FrameBuilder {
     for i in color.indices { color[i].removeAll(keepingCapacity: true) }
     for i in gutter.indices { gutter[i].removeAll(keepingCapacity: true) }
     shapes.removeAll(keepingCapacity: true)
+    decorShapes.removeAll(keepingCapacity: true)
     underShapes.removeAll(keepingCapacity: true)
     overShapes.removeAll(keepingCapacity: true)
     longestLine = 0
@@ -113,9 +120,10 @@ final class FrameBuilder {
       top: (Double(config.topInset) * s).rounded(), lineHeight: Double(config.lineHeight) * s,
       column: (Double(layout.column) * s).rounded(),
       textRight: (Double(layout.text.maxX) * s).rounded())
+    let tabColumns = source.material.tabColumns
     let c = Context(
       g: g, palette: palette, focused: source.material.caret.focused, atlas: source.atlas,
-      config: config)
+      config: config, tabColumns: tabColumns, roles: content.roles)
     textScissor = Self.scissor(x: g.column, y: g.top, width: g.textRight - g.column, g)
     gutterScissor = Self.scissor(x: 0, y: g.top, width: g.column, g)
     guard g.height > g.top else { return }
@@ -125,32 +133,60 @@ final class FrameBuilder {
     guard first <= last else { return }
     let baseline = (Double(config.baseline) * s).rounded()
     let numberFont = fonts.id(config.gutterFont)
-    let tabColumns = source.material.tabColumns
-    var start = content.text.lineStart(first)
-    var overlays = CaretOverlays(
-      source.material, caretVisible: source.caretVisible, text: content.text, from: start)
-    for row in first...last {
-      let top = g.rowTop(row)
-      let end = content.text.lineEnd(row)
-      let overlay = overlays.next(row: row, line: start..<end)
-      let laid = cache.line(
-        row: row, in: content.text, tabColumns: tabColumns, config: config, fonts: fonts,
-        carets: overlay.needsCarets)
-      drawOverlays(overlay, laid, rowTop: top, c)
-      let width = drawText(laid, start: start, roles: content.roles, baseline: top + baseline, c)
+    let rows = layRows(first...last, source, text: content.text, cache: cache, fonts: fonts)
+    let levels = Self.indentLevels(
+      rows.map(\.laid), first: first, text: content.text, unit: tabColumns)
+    for (index, item) in rows.enumerated() {
+      let top = g.rowTop(item.row)
+      let visible = visibleGlyphs(item.laid, c)
+      drawDecor(item, level: levels[index], rowTop: top, window: visible.offsets, c)
+      drawOverlays(item.overlay, item.laid, rowTop: top, c)
+      let width = drawText(item.laid, visible, start: item.start, baseline: top + baseline, c)
       longestLine = max(longestLine, width)
-      drawNumber(row + 1, rowTop: top, font: numberFont, c)
-      start = end
+      drawNumber(item.row + 1, rowTop: top, font: numberFont, c)
     }
-    cache.endFrame()
     drawMarks(source.material.marks, rows: first...last, c)
   }
 
-  /// 行の字を置き、行の幅（末尾の印を含む、pt）を返す。行番号の列の下に隠れる字と右端の外の字は置かず、役割も置く字の
-  /// 区間だけ引く。
-  private func drawText(
-    _ line: LaidOutLine, start: Int, roles: RoleRuns, baseline: Double, _ c: Context
-  ) -> CGFloat {
+  /// 見えている行を組む（組版のキャッシュのコマはここで終える）。
+  private func layRows(
+    _ rows: ClosedRange<Int>, _ source: Source, text: TextRope, cache: LineLayoutCache,
+    fonts: FontRegistry
+  ) -> [RowInFrame] {
+    var result: [RowInFrame] = []
+    var start = text.lineStart(rows.lowerBound)
+    var overlays = CaretOverlays(
+      source.material, caretVisible: source.caretVisible, text: text, from: start)
+    for row in rows {
+      let end = text.lineEnd(row)
+      let overlay = overlays.next(row: row, line: start..<end)
+      let laid = cache.line(
+        row: row, in: text, tabColumns: source.material.tabColumns, config: source.config,
+        fonts: fonts, carets: overlay.needsCarets, decor: true)
+      result.append(RowInFrame(row: row, start: start, laid: laid, overlay: overlay))
+      start = end
+    }
+    cache.endFrame()
+    return result
+  }
+
+  /// このコマで描く行 1 つ。
+  struct RowInFrame {
+    let row: Int
+    /// 行頭のオフセット。
+    let start: Int
+    let laid: LaidOutLine
+    let overlay: RowOverlays
+  }
+
+  /// 横に見えている字——グリフの番号の区間と、その字の行内の位置の範囲（見えている字が無ければ nil）。行番号の列の下に
+  /// 隠れる字（左に 4 桁の余裕を残す）と本文の区画の右の外の字は含めない。
+  struct VisibleGlyphs {
+    let glyphs: Range<Int>
+    let offsets: ClosedRange<Int>?
+  }
+
+  func visibleGlyphs(_ line: LaidOutLine, _ c: Context) -> VisibleGlyphs {
     let g = c.g
     let originX = g.column - g.scrollX
     let leftmost = Float((g.column - originX) / g.scale - Double(c.config.cell) * 4)
@@ -164,11 +200,21 @@ final class FrameBuilder {
       high = max(high, line.offsets[to])
       to += 1
     }
-    if from < to {
+    return VisibleGlyphs(glyphs: from..<to, offsets: from < to ? Int(low)...Int(high) : nil)
+  }
+
+  /// 行の字を置き、行の幅（末尾の印を含む、pt）を返す。置くのは横に見えている字だけで、役割もその字の区間だけ引く。
+  private func drawText(
+    _ line: LaidOutLine, _ visible: VisibleGlyphs, start: Int, baseline: Double, _ c: Context
+  ) -> CGFloat {
+    let g = c.g
+    let originX = g.column - g.scrollX
+    if let offsets = visible.offsets {
       var cursor = RoleCursor(
-        spans: roles.roles(
-          in: NSRange(location: start + Int(low), length: Int(high - low) + 1)))
-      for i in from..<to {
+        spans: c.roles.roles(
+          in: NSRange(
+            location: start + offsets.lowerBound, length: offsets.count)))
+      for i in visible.glyphs {
         let role = cursor.role(at: start + Int(line.offsets[i]))
         let ink = role.flatMap { c.palette.roles[$0] } ?? c.palette.text
         let x = originX + Double(line.xs[i]) * g.scale
