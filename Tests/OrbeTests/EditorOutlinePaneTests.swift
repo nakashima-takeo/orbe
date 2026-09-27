@@ -1,4 +1,5 @@
 import AppKit
+import Metal
 import OrbeEditorCore
 import XCTest
 
@@ -37,11 +38,14 @@ final class EditorOutlinePaneTests: OrbeTestCase {
     let document: EditorDocument
   }
 
-  func host(_ text: String = source, name: String = "channel.swift") throws -> Hosted {
+  func host(
+    _ text: String = source, name: String = "channel.swift",
+    engine: EditorEngineChoice = .stTextView
+  ) throws -> Hosted {
     let queries = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let tab = TerminalTab(
       cwd: try XCTUnwrap(TestIsolation.caseDir).path,
-      editorSurfaces: EditorSurfaces(queriesRoot: queries))
+      editorSurfaces: EditorSurfaces(queriesRoot: queries, engine: { engine }))
     let window = hostEditor(tab, width: 1000, height: 600)
     let document = try tab.editor.open(try caseFile(name, text))
     let pane = tab.view.editor
@@ -125,6 +129,15 @@ final class EditorOutlinePaneTests: OrbeTestCase {
     pumpMain(until: { hosted.pane.outline.status == .unavailable })
   }
 
+  /// シンボルの無い文書は、その文書の名前で「見つからない」という文言になる。
+  func testADocumentWithoutSymbolsSaysSo() throws {
+    let hosted = try host("// nothing to outline\n", name: "empty.swift")
+    hosted.pane.sidebar.toggleOutline()
+    catchUp(hosted.document)
+    pumpMain(until: { hosted.pane.outline.status == .empty }, "シンボルが無い")
+    XCTAssertEqual(hosted.pane.outline.documentName, "empty.swift")
+  }
+
   // MARK: - 操作
 
   /// 単クリックは名前の頭へキャレットを置いて焦点を列に残し、ダブルクリックは範囲全体を選んで本文へ、Enter は名前の頭へ
@@ -189,12 +202,24 @@ final class EditorOutlinePaneTests: OrbeTestCase {
   }
 
   /// 本文のスクロール: 画面の外なら上寄せ（上に max(5 行, 高さの 20%) の間）、画面の中なら動かさない、範囲が画面より
-  /// 高ければ先頭を上端に。
+  /// 高ければ先頭を上端に。今の面でも新しい面（Metal）でも同じ所に着く。
   func testJumpingScrollsNearTopOnlyWhenTheTargetIsOutside() throws {
+    try assertJumpingScrollsNearTop(engine: .stTextView)
+    try XCTSkipIf(MTLCreateSystemDefaultDevice() == nil, "Metal の装置が無い環境では新しい面を開けない")
+    try assertJumpingScrollsNearTop(
+      engine: EditorEngineChoice(
+        metal: true, elasticScroll: true, fontSmoothing: true, language: .ja))
+  }
+
+  private func assertJumpingScrollsNearTop(engine: EditorEngineChoice) throws {
     let filler = (0..<120).map { "// line \($0)" }.joined(separator: "\n")
     let body = (0..<100).map { "  // body \($0)" }.joined(separator: "\n")
     let text = "func near() {}\n\(filler)\nclass Tall {\n\(body)\n}\n\(filler)\nfunc far() {}\n"
-    let hosted = try host(text, name: "long.swift")
+    let hosted = try host(text, name: "long-\(engine.metal).swift", engine: engine)
+    XCTAssertEqual(
+      String(describing: type(of: hosted.document.surface)) == "MetalTextSurface", engine.metal,
+      "前提: 選んだ面で開く")
+    let face = engine.metal ? "Metal" : "STTextView"
     openOutline(hosted)
     let outline = hosted.pane.outline
     let list = hosted.pane.outlineList.scrollView.list
@@ -204,17 +229,17 @@ final class EditorOutlinePaneTests: OrbeTestCase {
     }
 
     click(list, row: try row(outline, "near()"), x: 120, count: 1)
-    XCTAssertEqual(document.viewportLines.first, 0, accuracy: 0.01, "画面の中なら動かさない")
+    XCTAssertEqual(document.viewportLines.first, 0, accuracy: 0.01, "\(face): 画面の中なら動かさない")
 
     click(list, row: try row(outline, "far()"), x: 120, count: 1)
     let visible = document.viewportLines.visible
     XCTAssertEqual(
       document.viewportLines.first, line("func far") - max(5, visible * 0.2), accuracy: 1,
-      "画面の外なら上寄せ")
+      "\(face): 画面の外なら上寄せ")
 
     click(list, row: try row(outline, "Tall"), x: 120, count: 2)
     XCTAssertEqual(
-      document.viewportLines.first, line("class Tall"), accuracy: 0.01, "画面より高い範囲は先頭を上端に")
+      document.viewportLines.first, line("class Tall"), accuracy: 0.01, "\(face): 画面より高い範囲は先頭を上端に")
   }
 
   /// ↑↓ は選ぶだけ、← は畳んで親へ、→ は開いて子へ、Space は開閉。
