@@ -142,6 +142,16 @@ final class OutlineRulesTests: XCTestCase {
     XCTAssertEqual(close.parent.map { symbols[$0].kind }, .module)
   }
 
+  /// Swift の 1 つの宣言に並べた変数は名前ごとのシンボルで、範囲はその名前から値まで（キャレットが 2 つ目の値にあれば
+  /// 2 つ目が光る）。
+  func testSwiftBindingsInOneDeclarationSpanTheirOwnNameAndValue() throws {
+    let source = "var first = 1, second: Int = 2\n"
+    let outline = try extract(.swift, source)
+    XCTAssertEqual(try text(of: "first", in: outline, source: source), "first = 1")
+    XCTAssertEqual(try text(of: "second", in: outline, source: source), "second: Int = 2")
+    XCTAssertEqual(try text(of: "second", in: outline, source: source, nameRange: true), "second")
+  }
+
   /// Go のメソッドは `(*Server).Start`（gopls と同じ）。関数はレシーバが無いので名前だけ。
   func testGoMethodsCarryTheirReceiverType() throws {
     let names = try outline(.go, "outline.go").filter { $0.kind == .method && $0.depth == 0 }

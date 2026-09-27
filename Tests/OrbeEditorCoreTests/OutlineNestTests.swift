@@ -60,6 +60,18 @@ final class OutlineNestTests: XCTestCase {
     XCTAssertNil(before.index(of: otherKind.symbols[0].key), "種類が違えば別のシンボル")
   }
 
+  /// 同じ名前と種類でも、親の道筋が違えば別のシンボル（別の型へ移したメソッドは、前の型での開閉を引き継がない）。
+  func testTheSameNameUnderAnotherParentIsAnotherSymbol() {
+    let before = OutlineExtraction.nest(
+      [item("A", 0, 30, kind: .class), item("f", 2, 10), item("B", 40, 50, kind: .class)],
+      version: 0)
+    let after = OutlineExtraction.nest(
+      [item("A", 0, 30, kind: .class), item("B", 40, 50, kind: .class), item("f", 42, 48)],
+      version: 0)
+    let moved = before.symbols[1].key
+    XCTAssertNil(after.index(of: moved))
+  }
+
   /// 位置を含む最も深いシンボル。範囲の終わりの位置も含む。同じ範囲の兄弟なら先頭のもの。どれにも入らなければ nil。
   func testTheDeepestSymbolContainingAnOffset() {
     let outline = OutlineExtraction.nest(
