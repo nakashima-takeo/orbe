@@ -137,7 +137,8 @@ Markdown parsing (Contents/MacOS/Orbe)
   License: licenses/swift-cmark-COPYING.txt
 
 --------------------------------------------------------------------------------
-Code editor (Contents/MacOS/Orbe, Contents/Resources/TreeSitter*.bundle)
+Code editor (Contents/MacOS/Orbe, Contents/Resources/TreeSitter*.bundle,
+Contents/Resources/Orbe_OrbeEditorCore.bundle)
 --------------------------------------------------------------------------------
 
 * STTextView — Copyright Marcin Krzyżanowski — GPL-3.0 (dual-licensed with a
@@ -177,11 +178,28 @@ Code editor (Contents/MacOS/Orbe, Contents/Resources/TreeSitter*.bundle)
   emoji character tables, the default word separators and word pattern,
   indentation detection, the drag auto-scroll speed, the minimap (layout, line
   rendering, glyph downsampling), the overview ruler, the scrollbar thumb
-  geometry, find (match limits and next/previous positions) and occurrence
-  highlighting. The editor's and terminal's default colors take values from
-  VS Code's Dark+, Dark Modern and Light Modern themes.
+  geometry, find (match limits and next/previous positions), occurrence
+  highlighting, and the fuzzy matching of the tree type-to-filter (fuzzyScore
+  and createMatches in src/vs/base/common/filters.ts) as the outline's filter.
+  The editor's and terminal's default colors take values from VS Code's Dark+,
+  Dark Modern and Light Modern themes.
   https://github.com/microsoft/vscode
   License: licenses/vscode-LICENSE.txt
+
+* Zed — Copyright Zed Industries, Inc. — GPL-3.0-or-later (crates/grammars)
+  and Apache-2.0 (extensions/html)
+  The outline queries (outline.scm) for CSS, Go, JavaScript, JSON, Markdown,
+  Python, Rust, TypeScript (also used for TSX) and YAML (from crates/grammars)
+  and for HTML (from extensions/html), adapted by Orbe, are bundled as
+  Contents/Resources/Orbe_OrbeEditorCore.bundle/Contents/Resources/outline/*.scm.
+  https://github.com/zed-industries/zed
+  License: licenses/zed-LICENSE-GPL.txt, licenses/zed-LICENSE-APACHE.txt
+
+* zed-extensions/toml — Copyright 2022-2025 Zed Industries, Inc. — Apache-2.0
+  The TOML outline query, adapted by Orbe, bundled as
+  Contents/Resources/Orbe_OrbeEditorCore.bundle/Contents/Resources/outline/toml.scm.
+  https://github.com/zed-extensions/toml
+  License: licenses/zed-extensions-toml-LICENSE.txt
 
 * tree-sitter — Copyright (c) 2018 Max Brunsfeld — MIT License
   The parser runtime (lib/src, C). Statically linked into Contents/MacOS/Orbe.
@@ -221,6 +239,8 @@ Code editor (Contents/MacOS/Orbe, Contents/Resources/TreeSitter*.bundle)
     https://github.com/tree-sitter/tree-sitter-rust — License: licenses/tree-sitter-rust-LICENSE.txt
   - tree-sitter-swift — Copyright (c) 2021 alex-pinkus — MIT License
     https://github.com/alex-pinkus/tree-sitter-swift — License: licenses/tree-sitter-swift-LICENSE.txt
+    Its queries/outline.scm, adapted by Orbe, is also bundled as
+    Contents/Resources/Orbe_OrbeEditorCore.bundle/Contents/Resources/outline/swift.scm.
   - tree-sitter-toml — Copyright (c) Ika <ikatyang@gmail.com> — MIT License
     https://github.com/tree-sitter-grammars/tree-sitter-toml — License: licenses/tree-sitter-toml-LICENSE.txt
   - tree-sitter-typescript (TypeScript and TSX grammars) — Copyright (c) 2017 Max Brunsfeld — MIT License

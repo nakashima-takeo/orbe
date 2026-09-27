@@ -84,6 +84,8 @@ let package = Package(
         .product(name: "TreeSitterPython", package: "tree-sitter-python"),
         .product(name: "TreeSitterYAML", package: "tree-sitter-yaml"),
       ],
+      // アウトラインの規則（言語ごとの `outline/<文法>.scm`）。`LanguageRegistry` が queries の根から読む。
+      resources: [.copy("Outline/Resources/outline")],
       swiftSettings: [.swiftLanguageMode(.v6)]
     ),
     // テキスト面（`TextSurface`）の STTextView 実装。公開は面を作る 1 関数だけで、エンジンの型は外に出さない。

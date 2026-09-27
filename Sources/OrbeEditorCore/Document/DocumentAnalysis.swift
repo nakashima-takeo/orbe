@@ -34,6 +34,8 @@ final class AnalysisInbox: Sendable {
     var syntax: [SyntaxOutcome] = []
     var hunks: HunksOutcome?
     var ranges: [AnalysisRequest.Kind: RangesOutcome] = [:]
+    var outline: OutlineOutcome?
+    var outlineFilter: OutlineFilterResult?
   }
 
   private struct State: Sendable {

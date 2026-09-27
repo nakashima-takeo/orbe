@@ -314,7 +314,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
 
 /// 編集の通知を文書へ流し、その呼び出しが戻るまでの時間（ms）を記録する delegate。
 @MainActor
-private final class EditTimer: TextSurfaceDelegate {
+final class EditTimer: TextSurfaceDelegate {
   let inner: EditorDocument
   private(set) var times: [Double] = []
 

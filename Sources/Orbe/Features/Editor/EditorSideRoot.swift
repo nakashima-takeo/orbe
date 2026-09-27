@@ -8,7 +8,10 @@ struct EditorSideRoot: View {
   let tree: FileTree
   let search: ProjectSearch
   /// 検索結果の列（pane が持ち、パネルが隠れても捨てない）。
-  let searchResults: SearchResultsView
+  let searchResults: RowList<SearchResultsSource>
+  let outline: EditorOutline
+  /// アウトラインの行の列（pane が持ち、閉じても捨てない）。
+  let outlineList: OutlineListView
   /// 開閉の真実（pane と同じ 1 つ。写しを挟まない）。
   let sidebar: EditorSidebarState
   let localization: LocalizationStore
@@ -22,7 +25,10 @@ struct EditorSideRoot: View {
         RailView(selection: sidebar.isOpen ? sidebar.panel : nil, onSelect: shell.selectPanel)
         if sidebar.isOpen {
           switch sidebar.panel {
-          case .files: ExplorerView(shell: shell, tree: tree)
+          case .files:
+            ExplorerView(
+              shell: shell, tree: tree, outline: outline, outlineList: outlineList,
+              sidebar: sidebar)
           case .search: SearchPanelView(search: search, results: searchResults)
           }
         }
@@ -126,37 +132,80 @@ struct EditorPanelHeader<Tools: View>: View {
   }
 }
 
-/// サイドバー: エクスプローラー（ヘッダー・ルート行・ツリー）。
+/// サイドバー: エクスプローラー。上の区画（ヘッダー・ルート行・ツリー）と下の区画（アウトライン）の縦 2 段。アウトラインが
+/// 閉じている間は見出しだけが下端に残り、ツリーが残りを全部取る。開いている間はパネルの高さに対する比で分け、境を
+/// ドラッグできる（両方の区画に最小の高さを残す）。
 struct ExplorerView: View {
   let shell: EditorShellModel
   let tree: FileTree
+  let outline: EditorOutline
+  let outlineList: OutlineListView
+  let sidebar: EditorSidebarState
   @Environment(\.localization) private var l10n
 
   var body: some View {
     EditorSidebarPanel {
-      header
-      rootRow
-      ScrollViewReader { proxy in
-        ScrollView(.vertical) {
-          LazyVStack(spacing: 0) {
-            ForEach(tree.rows) { row in
-              if case .input(let isDirectory, let generation) = row.kind {
-                InlineInputRow(
-                  row: row, isDirectory: isDirectory, generation: generation, tree: tree,
-                  shell: shell)
-              } else {
-                TreeRowView(row: row, tree: tree, shell: shell)
+      GeometryReader { geometry in
+        let height = geometry.size.height
+        let outlineHeight = self.outlineHeight(in: height)
+        VStack(spacing: 0) {
+          VStack(spacing: 0) {
+            header
+            rootRow
+            treeRows
+          }
+          .frame(height: max(0, height - outlineHeight), alignment: .top)
+          OutlineSectionView(outline: outline, list: outlineList, sidebar: sidebar)
+            .frame(height: outlineHeight, alignment: .top)
+            .overlay(alignment: .top) {
+              if sidebar.isOutlineOpen {
+                SectionResizeHandle(
+                  grab: { self.outlineHeight(in: height) },
+                  drag: { sidebar.setOutlineFraction($0 / max(1, height)) },
+                  release: sidebar.commit
+                )
+                .frame(height: Theme.Layout.editorSidebarHandle)
+                .offset(y: -Theme.Layout.editorSidebarHandle / 2)
               }
+            }
+        }
+      }
+    }
+  }
+
+  /// アウトラインの区画の高さ（上の hairline 込み）。閉じていれば見出しだけ。開いていれば比で分け、下の区画に見出しと
+  /// 列の上の間と行 3 本、上の区画にヘッダー・ルート行と行 3 本を残す（足りなければ下を優先して見出しは必ず残す）。
+  private func outlineHeight(in height: CGFloat) -> CGFloat {
+    let head = Theme.Stroke.hairline + Theme.Layout.editorSectionHeader
+    guard sidebar.isOutlineOpen else { return head }
+    let minimum = head + Theme.Layout.editorOutlineListTop + Theme.Layout.editorSectionMinBody
+    let maximum =
+      height - Theme.Layout.editorPanelHeader - Theme.Layout.editorRow
+      - Theme.Layout.editorSectionMinBody
+    return max(head, min(max(minimum, (height * sidebar.outlineFraction).rounded()), maximum))
+  }
+
+  private var treeRows: some View {
+    ScrollViewReader { proxy in
+      ScrollView(.vertical) {
+        LazyVStack(spacing: 0) {
+          ForEach(tree.rows) { row in
+            if case .input(let isDirectory, let generation) = row.kind {
+              InlineInputRow(
+                row: row, isDirectory: isDirectory, generation: generation, tree: tree,
+                shell: shell)
+            } else {
+              TreeRowView(row: row, tree: tree, shell: shell)
             }
           }
         }
-        // 行は遅延で生まれる（可視域外の行は無い）ので、入力行と選択行は可視位置へ送る。
-        .onChange(of: tree.newEntry?.generation) { _, _ in
-          if let entry = tree.newEntry { proxy.scrollTo(FileTree.inputRowID(entry)) }
-        }
-        .onChange(of: tree.selected) { _, path in
-          if let path { proxy.scrollTo(path) }
-        }
+      }
+      // 行は遅延で生まれる（可視域外の行は無い）ので、入力行と選択行は可視位置へ送る。
+      .onChange(of: tree.newEntry?.generation) { _, _ in
+        if let entry = tree.newEntry { proxy.scrollTo(FileTree.inputRowID(entry)) }
+      }
+      .onChange(of: tree.selected) { _, path in
+        if let path { proxy.scrollTo(path) }
       }
     }
   }

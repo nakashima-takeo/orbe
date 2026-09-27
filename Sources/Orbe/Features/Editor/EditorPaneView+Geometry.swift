@@ -33,22 +33,27 @@ extension EditorPaneView {
     layoutSubtreeIfNeeded()
   }
 
-  /// サイドバーの幅・開閉・パネルを観測して置き直す。閉じれば行内入力は終わり、検索パネルの見え隠れで一致の地を押し直す。
-  /// この面の検索パネルにあった焦点は、パネルが隠れたら面の行き先へ戻す（サイドバーはアプリ全体で 1 つなので、全タブの面が
-  /// 同時に受ける——焦点を持っていた面だけが動く）。
+  /// サイドバーの幅・開閉・パネルとアウトラインの開閉を観測して置き直す。閉じれば行内入力は終わり、検索パネルの見え隠れで
+  /// 一致の地を押し直し、アウトラインの見え隠れを焦点の文書へ告げる。この面の検索パネル・アウトラインにあった焦点は、それが
+  /// 隠れたら面の行き先へ戻す（サイドバーはアプリ全体で 1 つなので、全タブの面が同時に受ける——焦点を持っていた面だけが
+  /// 動く）。
   func observeSidebar() {
     withObservationTracking {
       _ = sidebar.width
       _ = sidebar.isOpen
       _ = sidebar.panel
+      _ = sidebar.isOutlineOpen
     } onChange: { [weak self] in
-      // 変わる直前に呼ばれるので、焦点が検索パネルにあったかはここで取る。
+      // 変わる直前に呼ばれるので、焦点が検索パネル・アウトラインにあったかはここで取る。
       let hadPanelFocus = MainActor.assumeIsolated { self?.focusIsInSearchPanel == true }
+      let hadOutlineFocus = MainActor.assumeIsolated { self?.focusIsInOutline == true }
       DispatchQueue.main.async {
         guard let self else { return }
         self.needsLayout = true
         if !self.sidebar.isOpen || self.sidebar.panel != .files { self.tree.cancelNew() }
         if hadPanelFocus, !self.showsSearchPanel { self.reclaimSidebarFocus() }
+        if hadOutlineFocus, !self.showsOutline { self.reclaimSidebarFocus() }
+        self.updateOutlineWant()
         self.pushFindGround()
         self.observeSidebar()
       }

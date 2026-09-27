@@ -114,4 +114,5 @@ final class FakeTextSurface: TextSurface {
 enum Queries {
   static let root = Bundle(for: FakeTextSurface.self).bundleURL.deletingLastPathComponent()
   static let samples = Bundle.module.resourceURL!.appendingPathComponent("Fixtures/samples")
+  static let outlines = Bundle.module.resourceURL!.appendingPathComponent("Fixtures/outline")
 }

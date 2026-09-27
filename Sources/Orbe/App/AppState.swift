@@ -29,11 +29,20 @@ struct EditorSidebarRecord: Codable, Equatable {
   var isOpen: Bool?
   /// 出しているパネル（`EditorSidebarState.Panel` の rawValue）。
   var panel: String?
+  /// エクスプローラーの下段のアウトラインを開いているか。
+  var isOutlineOpen: Bool?
+  /// アウトラインが開いているときの、パネルの高さに対するアウトラインの区画の比。
+  var outlineFraction: Double?
 
-  init(width: Double? = nil, isOpen: Bool? = nil, panel: String? = nil) {
+  init(
+    width: Double? = nil, isOpen: Bool? = nil, panel: String? = nil, isOutlineOpen: Bool? = nil,
+    outlineFraction: Double? = nil
+  ) {
     self.width = width
     self.isOpen = isOpen
     self.panel = panel
+    self.isOutlineOpen = isOutlineOpen
+    self.outlineFraction = outlineFraction
   }
 
   init(from decoder: Decoder) throws {
@@ -41,6 +50,8 @@ struct EditorSidebarRecord: Codable, Equatable {
     width = try? c.decodeIfPresent(Double.self, forKey: .width)
     isOpen = try? c.decodeIfPresent(Bool.self, forKey: .isOpen)
     panel = try? c.decodeIfPresent(String.self, forKey: .panel)
+    isOutlineOpen = try? c.decodeIfPresent(Bool.self, forKey: .isOutlineOpen)
+    outlineFraction = try? c.decodeIfPresent(Double.self, forKey: .outlineFraction)
   }
 }
 

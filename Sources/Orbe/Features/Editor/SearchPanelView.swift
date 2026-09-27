@@ -8,7 +8,7 @@ import SwiftUI
 /// 組み直さない）。
 struct SearchPanelView: View {
   let search: ProjectSearch
-  let results: SearchResultsView
+  let results: RowList<SearchResultsSource>
   @FocusState private var fieldFocused: Bool
   @Environment(\.localization) private var l10n
 
@@ -74,7 +74,7 @@ private struct SearchPanelHeader: View {
           action: search.toggleCollapseAll)
       } else {
         EditorIconButton(
-          glyph: EditorGlyphs.expandAll, help: l10n.string(.editorSearchExpandAll),
+          glyph: EditorGlyphs.expandAll, help: l10n.string(.editorExpandAll),
           action: search.toggleCollapseAll)
       }
     }

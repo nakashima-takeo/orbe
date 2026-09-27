@@ -1,0 +1,23 @@
+key title
+key "quoted key"
+key site.url
+module package
+  key name
+  key version
+  key authors
+module package.metadata
+  key docs
+    key features
+    key all
+module dependencies
+  key serde
+    key version
+    key features
+  key tokio
+module bin
+  key name
+  key path
+module bin
+  key name
+module "target".'cfg(unix)'
+  key libc

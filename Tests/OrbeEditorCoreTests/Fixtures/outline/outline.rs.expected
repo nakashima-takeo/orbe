@@ -1,0 +1,42 @@
+constant MAX_DEPTH
+constant GREETING
+type Result
+struct Point
+  property x
+  property y
+struct Wrapper
+enum Error
+  enumMember NotFound
+  enumMember Invalid
+    property line
+    property reason
+  enumMember Io
+interface Shape
+  type Output
+  constant SIDES
+  method area
+  function name
+module impl Point
+  function new
+  method distance
+    function square
+module impl Shape for Point
+  type Output
+  constant SIDES
+  method area
+struct Ready
+module impl std::future::Future for Ready
+  type Output
+  method poll
+module impl fmt::Display for Wrapper<T>
+  method fmt
+module impl !Send for Error
+module registry
+  struct Registry
+    property items
+  function global
+function point
+struct Bits
+  property int
+  property float
+function main

@@ -34,6 +34,31 @@ public struct TextEdit: Equatable, Sendable {
     }
   }
 
+  /// 編集に掛かった位置を寄せる側。
+  public enum Bias: Sendable {
+    /// 編集の頭へ（区間の終わりを写すとき——区間は縮む側へ）。
+    case before
+    /// 置き換えた字の後ろへ（区間の頭を写すとき）。
+    case after
+  }
+
+  /// 編集の前の位置を編集の後の本文へ写す。編集より前はそのまま、後ろは平行移動し、置き換えた区間の中（両端を含む）は
+  /// `bias` の側へ寄せる。区間を落とさないので、区間の中の 1 字を直しても区間は消えずに伸び縮みする。
+  public func map(_ offset: Int, bias: Bias) -> Int {
+    if offset < range.location { return offset }
+    if offset > NSMaxRange(range) { return offset + replacementLength - range.length }
+    return bias == .before ? range.location : range.location + replacementLength
+  }
+
+  /// 編集の後の位置を編集の前の本文へ戻す。置き換えた字の中の位置は編集の頭へ寄せる。
+  public func unmap(_ offset: Int) -> Int {
+    if offset < range.location { return offset }
+    if offset >= range.location + replacementLength {
+      return offset - replacementLength + range.length
+    }
+    return range.location
+  }
+
   /// 置換の前後で変わらない先頭と末尾を落とした編集——本文が実際に変わった最小の区間。`old` は置き換える前の区間の
   /// 単位。サロゲートの対は割らない。
   public func narrowed(replacing old: ContiguousArray<UInt16>) -> TextEdit {

@@ -2,8 +2,8 @@ import AppKit
 import OrbeEditorCore
 
 /// 文書の「変わった」の扇出と、俯瞰（ミニマップ・スクロールバー・影）と出現の強調・一致の地への配線。文書側の closure は
-/// 単一のまま、ここがミニマップ・スクロールバー・影・検索・出現の強調・プロジェクト検索へ配る（裏から届いた役割と問いの結果
-/// も）。一致の地は 2 つの出どころ（ファイル内検索とプロジェクト検索）の和を面と俯瞰へ押し（`pushFindGround`）、語の
+/// 単一のまま、ここがミニマップ・スクロールバー・影・検索・出現の強調・プロジェクト検索・アウトラインへ配る（裏から届いた
+/// 役割と問いとアウトラインの結果も）。一致の地は 2 つの出どころ（ファイル内検索とプロジェクト検索）の和を面と俯瞰へ押し（`pushFindGround`）、語の
 /// 出現と束ねて（`OverviewDecorations`）ミニマップとスクロールバーへ押す。本体の上のポインタは pane の tracking area が
 /// 見て、スクロールバーのつまみの見え隠れに使う。
 extension EditorPaneView {
@@ -32,6 +32,7 @@ extension EditorPaneView {
         scrollbar.refresh()
         search.selectionDidChange()
         occurrences.selectionDidChange()
+        outline.caretDidMove()
       } : nil
     document.onTextChange =
       on
@@ -45,6 +46,7 @@ extension EditorPaneView {
         if let document = self.document { projectSearch.documentDidEdit(document, edits) }
       } : nil
     document.onRolesChange = on ? { [weak self] in self?.minimap.rolesDidChange($0) } : nil
+    document.onOutlineChange = on ? { [weak self] in self?.outline.outlineDidChange() } : nil
     document.onAnalysis =
       on
       ? { [weak self] request, ranges in
