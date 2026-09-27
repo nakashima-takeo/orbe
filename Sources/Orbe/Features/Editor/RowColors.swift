@@ -31,7 +31,6 @@ struct RowColors {
     text = Theme.Color.editorText.cgColor
     tertiary = Theme.Color.editorTertiary.cgColor
     selection = Theme.Color.selectionFill.cgColor
-    let hues: [FileChip.Hue] = [.orange, .blue, .yellow, .sky, .violet, .cyan, .red, .green, .teal]
     var chips: [ChipTint: (text: CGColor, ground: CGColor)] = [
       .mono: (primary, EditorStyle.fill(FileChipView.groundAlpha).cgColor),
       .accent: (
@@ -39,7 +38,7 @@ struct RowColors {
         Theme.Color.accentPrimary.withAlphaComponent(Self.accentGroundAlpha).cgColor
       ),
     ]
-    for hue in hues {
+    for hue in FileChip.Hue.allCases {
       chips[.hue(hue)] = (
         hue.color.cgColor, hue.color.withAlphaComponent(FileChipView.groundAlpha).cgColor
       )

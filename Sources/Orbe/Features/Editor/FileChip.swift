@@ -7,7 +7,7 @@ import SwiftUI
 /// 言語は `SyntaxLanguage.detect`（15 言語）で決め、未知は拡張子の頭文字を大文字にした mono（拡張子が
 /// 無ければ `·`）。見本（editor/data.ts）は swift / md / json の 3 種だけなので、残りは色相表を暫定で割り当てる。
 struct FileChip: Equatable {
-  enum Hue: Equatable {
+  enum Hue: Equatable, CaseIterable {
     case orange, blue, yellow, sky, violet, cyan, red, green, teal
   }
 
