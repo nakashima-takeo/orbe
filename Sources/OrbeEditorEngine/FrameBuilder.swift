@@ -129,17 +129,15 @@ final class FrameBuilder {
     }
     for row in first...last {
       let top = g.rowTop(row)
-      let laid = cache.line(
-        row: row, in: content.text, tabColumns: tabColumns, config: config, fonts: fonts)
       let start = content.text.lineStart(row)
-      if selections.remaining {
-        let span = LineSpan(
-          start: start, length: content.text.contentRange(ofRow: row).length,
-          end: content.text.lineEnd(row))
-        for selection in selections.next(in: span) {
-          drawSelection(selection, laid, span, rowTop: top, c)
-        }
-      }
+      let span = LineSpan(
+        start: start, length: content.text.contentRange(ofRow: row).length,
+        end: content.text.lineEnd(row))
+      let selected = selections.remaining ? selections.next(in: span) : []
+      let laid = cache.line(
+        row: row, in: content.text, tabColumns: tabColumns, config: config, fonts: fonts,
+        carets: !selected.isEmpty || carets.contains { $0.row == row })
+      for selection in selected { drawSelection(selection, laid, span, rowTop: top, c) }
       for caret in carets where caret.row == row {
         drawCaret(at: caret.offset - start, laid, rowTop: top, c)
       }

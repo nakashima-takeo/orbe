@@ -3,8 +3,7 @@ import Foundation
 import OrbeEditorCore
 
 /// 1 行を組んだ結果——run ごとのフォント・グリフ・位置（pt、行頭の基線から。y は上が正で、結合文字の記号などだけが
-/// 0 でない）・元の行の UTF-16 の位置（色を引くため）と、行の幅、上限で打ち切って描かない UTF-16 の単位の数、行の中の
-/// 位置と x の対応。
+/// 0 でない）・元の行の UTF-16 の位置（色を引くため）と、行の幅、上限で打ち切って描かない UTF-16 の単位の数、組んだ行。
 struct ShapedLine {
   struct Run {
     let font: CTFont
@@ -17,9 +16,11 @@ struct ShapedLine {
   let runs: [Run]
   let width: CGFloat
   let omitted: Int
-  let carets: CaretMap
-  /// 組んだ行（x にいちばん近い位置を引く）。
+  /// 組んだ行（位置と x の対応を作り、x にいちばん近い位置を引く）。
   let line: CTLine
+
+  /// 行の中の位置と x の対応（キャレット・選択の地のある行だけが要る——作る手間は行の長さに比例する）。
+  var carets: CaretMap { CaretMap(line, width: width) }
 }
 
 /// 行の組版の規則（純関数）。描画スレッドと、横の位置が要る main の操作が同じ規則を使う。
@@ -224,9 +225,9 @@ extension ShapedLine {
           font: runFont, glyphs: glyphs, xs: positions.map(\.x), ys: positions.map(\.y),
           offsets: indices))
     }
-    let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
     self.init(
-      runs: runs, width: width, omitted: omitted, carets: CaretMap(line, width: width), line: line)
+      runs: runs, width: CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)), omitted: omitted,
+      line: line)
   }
 }
 

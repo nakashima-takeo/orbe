@@ -45,10 +45,11 @@ extension FrameBuilder {
   func drawSelection(
     _ selection: NSRange, _ line: LaidOutLine, _ span: LineSpan, rowTop: Double, _ c: Context
   ) {
+    guard let carets = line.carets else { return }
     let g = c.g
     let from = selection.location - span.start
     let to = NSMaxRange(selection) - span.start
-    var segments = line.carets.segments(from: from, to: min(to, span.length))
+    var segments = carets.segments(from: from, to: min(to, span.length))
     if to > span.length { segments.append(line.width...(line.width + c.config.cell)) }
     let originX = g.column - g.scrollX
     let bottom = rowTop + g.lineHeight.rounded()
@@ -81,9 +82,10 @@ extension FrameBuilder {
 
   /// キャレット——見え方の幅と高さで、行の中で縦に中央へ置き、x は装置の画素に揃える。
   func drawCaret(at column: Int, _ line: LaidOutLine, rowTop: Double, _ c: Context) {
+    guard let carets = line.carets else { return }
     let g = c.g
     let size = c.config.caretSize
-    let x = (g.column - g.scrollX + Double(line.carets.x(column)) * g.scale).rounded()
+    let x = (g.column - g.scrollX + Double(carets.x(column)) * g.scale).rounded()
     let width = max(1, (Double(size.width) * g.scale).rounded())
     let height = (Double(size.height) * g.scale).rounded()
     let top = (rowTop + (g.lineHeight - height) / 2).rounded()

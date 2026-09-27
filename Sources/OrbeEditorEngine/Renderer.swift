@@ -235,9 +235,11 @@ final class Renderer {
     let row = text.row(containing: location)
     let start = text.lineStart(row)
     let line = slot.lines.line(
-      row: row, in: text, tabColumns: material.tabColumns, config: slot.config, fonts: fonts)
-    let x0 = Double(line.carets.x(location - start))
-    let x1 = text.row(containing: end) == row ? Double(line.carets.x(end - start)) : x0
+      row: row, in: text, tabColumns: material.tabColumns, config: slot.config, fonts: fonts,
+      carets: true)
+    guard let carets = line.carets else { return false }
+    let x0 = Double(carets.x(location - start))
+    let x1 = text.row(containing: end) == row ? Double(carets.x(end - start)) : x0
     return slot.scroll.reveal(min(x0, x1)...max(x0, x1), lineWidth: Double(line.width))
   }
 
