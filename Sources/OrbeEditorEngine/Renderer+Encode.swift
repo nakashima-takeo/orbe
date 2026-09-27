@@ -107,6 +107,7 @@ extension Renderer {
     guard let slot = slot(id), let pipelines = gate.wait() else { return nil }
     let material = slot.material.take()
     slot.lines.receive(material.rowEdits)
+    slot.keystrokes += material.keystrokes
     let (width, height) = Self.pixelSize(material)
     guard material.content != nil, material.palette != nil, width > 0, height > 0 else {
       return nil
