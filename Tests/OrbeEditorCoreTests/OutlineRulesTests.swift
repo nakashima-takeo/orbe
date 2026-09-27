@@ -213,7 +213,8 @@ final class OutlineRulesTests: XCTestCase {
   /// 前に続く注釈は項目の範囲に入る。Rust は rust-analyzer と同じく、属性と外側の doc コメントは空行を挟んでも、普通の
   /// コメントは空行を挟まない限り入り、内側の doc コメントでは切れる。TS はクラスの中身の前のデコレータ。
   func testLeadingAnnotationsJoinTheItemsRange() throws {
-    let rust = "//! crate\n\n/// Doc.\n\n#[derive(Debug)]\n// plain\nstruct A;\n\n// far\n\nfn f() {}\n"
+    let rust =
+      "//! crate\n\n/// Doc.\n\n#[derive(Debug)]\n// plain\nstruct A;\n\n// far\n\nfn f() {}\n"
     let rustOutline = try extract(.rust, rust)
     XCTAssertEqual(
       try text(of: "A", in: rustOutline, source: rust),
@@ -222,17 +223,20 @@ final class OutlineRulesTests: XCTestCase {
 
     let script = "class C {\n  x = 1;\n  @logged()\n  m() {}\n}\n"
     XCTAssertEqual(
-      try text(of: "m", in: try extract(.typescript, script), source: script), "@logged()\n  m() {}")
+      try text(of: "m", in: try extract(.typescript, script), source: script), "@logged()\n  m() {}"
+    )
   }
 
   /// 飛び先は名前の字の上。Go のメソッドはメソッド名、Rust の impl は対象の型（言語サーバと同じ）。
   func testTheJumpTargetIsTheNameTheServersPointAt() throws {
     let go = "package p\n\nfunc (s *Server) Start() {}\n"
     XCTAssertEqual(
-      try text(of: "(*Server).Start", in: try extract(.go, go), source: go, nameRange: true), "Start")
+      try text(of: "(*Server).Start", in: try extract(.go, go), source: go, nameRange: true),
+      "Start")
     let rust = "impl Display for Point {}\n"
     XCTAssertEqual(
-      try text(of: "impl Display for Point", in: try extract(.rust, rust), source: rust, nameRange: true),
+      try text(
+        of: "impl Display for Point", in: try extract(.rust, rust), source: rust, nameRange: true),
       "Point")
   }
 

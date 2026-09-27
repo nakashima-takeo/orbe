@@ -87,8 +87,10 @@ struct OutlineItems {
   /// 名前が 1 つなら宣言全体、複数なら名前ごと（名前から、次の名前の手前の最後の子まで）を範囲にする。
   private static func swiftBindings(_ match: OutlineMatch) -> [OutlineExtraction.Item] {
     let children = (0..<ts_node_child_count(match.item)).map { index in
-      (field: ts_node_field_name_for_child(match.item, index).map { String(cString: $0) },
-        node: ts_node_child(match.item, index))
+      (
+        field: ts_node_field_name_for_child(match.item, index).map { String(cString: $0) },
+        node: ts_node_child(match.item, index)
+      )
     }
     let names = children.indices.filter { children[$0].field == "name" }
     guard names.count > 1 else { return [plain(match)] }
@@ -195,7 +197,8 @@ struct OutlineItems {
     var item = Self.plain(match)
     if let key = match.names.first, Self.nodeType(match.item) == "pair" {
       let value = Self.unescapedJSON(match.text(key)).replacingOccurrences(of: "\n", with: "↵")
-      item.name = value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      item.name =
+        value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         ? "\"\(value)\"" : value
       return item
     }
