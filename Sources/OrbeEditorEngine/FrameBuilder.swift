@@ -194,7 +194,7 @@ final class FrameBuilder {
       let highlighted = highlights.touches(start..<max(end, start + 1))
       let laid = cache.line(
         row: row, in: text, tabColumns: source.material.tabColumns, config: source.config,
-        fonts: fonts, carets: overlay.needsCarets || highlighted, decor: true)
+        fonts: fonts, carets: overlay.needsCarets || highlighted)
       result.append(
         RowInFrame(
           row: row, start: start, end: end,

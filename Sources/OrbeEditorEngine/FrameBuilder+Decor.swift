@@ -36,7 +36,7 @@ extension FrameBuilder {
   ) {
     let line = row.laid
     let start = row.start
-    guard let decor = line.decor else { return }
+    let decor = line.decor
     let g = c.g
     let originX = g.column - g.scrollX
     let s = g.scale
@@ -98,7 +98,7 @@ extension FrameBuilder {
   static func indentLevels(
     _ laid: [LaidOutLine], first: Int, text: TextRope, unit: Int
   ) -> [Int] {
-    let levels = laid.map { $0.decor.map { $0.blank ? nil : $0.boundaries.count } ?? 0 }
+    let levels = laid.map { $0.decor.blank ? nil : $0.decor.boundaries.count }
     guard levels.contains(where: { $0 == nil }) else { return levels.map { $0 ?? 0 } }
     var above: [Int?] = []
     var previous = nonBlankLevel(from: first - 1, step: -1, text: text, unit: unit)
