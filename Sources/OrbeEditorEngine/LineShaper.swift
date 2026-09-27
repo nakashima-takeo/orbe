@@ -34,7 +34,7 @@ struct ShapedLine {
 enum LineShaper {
   static let limit = 10_000
   /// 書記素の境を探すために、上限より余分に読む単位の数。
-  private static let lookahead = 64
+  private static let lookahead = Grapheme.reach
 
   /// 行の中身のうち描きうる先頭（上限と余分まで）と、行の長さ（行末の改行と `\r` を除く）。長い行でも読むのは先頭だけ。
   struct Source: Hashable {
@@ -92,12 +92,10 @@ enum LineShaper {
   /// `limit` 以下で最も後ろの書記素の境（1 つの書記素が上限を越えるほど長ければ `limit`）。上限の位置の前後だけを見る
   /// （行頭から書記素を数えると、長い行を組むたびに 10000 字を歩く）。
   private static func graphemeCut(_ head: ContiguousArray<UInt16>) -> Int {
-    let cluster = head.withUnsafeBufferPointer {
-      let string = CFStringCreateWithCharactersNoCopy(
-        nil, $0.baseAddress, $0.count, kCFAllocatorNull)!
-      return CFStringGetRangeOfComposedCharactersAtIndex(string, limit)
-    }
-    return cluster.location > 0 ? cluster.location : limit
+    let cluster = Grapheme.cluster(
+      containing: limit, count: head.count, unit: { head[$0] }, units: { ContiguousArray(head[$0]) }
+    )
+    return cluster.lowerBound > 0 ? cluster.lowerBound : limit
   }
 
   /// 行を組む。`tabWidth` はタブの刻み（pt）。

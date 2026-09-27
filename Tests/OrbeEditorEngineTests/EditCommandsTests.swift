@@ -48,7 +48,7 @@ final class EditCommandsTests: XCTestCase {
 
   // MARK: - 書記素と削除の単位
 
-  /// ←→・⌦ は書記素（絵文字の ZWJ・国旗・肌の色・結合文字・CRLF）を割らない。
+  /// ←→・⌦ は書記素（UAX #29 の拡張書記素クラスタ。絵文字の ZWJ・国旗・肌の色・結合文字・CRLF）を割らない。
   func testArrowsAndForwardDeleteMoveByGraphemes() {
     let family = "👨‍👩‍👧‍👦"
     XCTAssertEqual(Editing.run(.move(.right, extending: false), on: "|\(family)x"), "\(family)|x")
@@ -59,6 +59,65 @@ final class EditCommandsTests: XCTestCase {
       Editing.run(.move(.right, extending: false), on: "ab|\r\ncd"), "ab\r\n|cd", "CRLF は 1 つ")
     XCTAssertEqual(Editing.run(.move(.left, extending: false), on: "ab\r\n|cd"), "ab|\r\ncd")
     XCTAssertEqual(Editing.run(.deleteForward, on: "ab|\r\ncd"), "ab|cd")
+  }
+
+  /// ←→・⌦ の境は、書記素の境（Swift の `Character`）であり、窓を出さない NSTextView の ←→ とも一致する——タイ語の
+  /// SARA AM（U+0E33）、インド系の合字と母音記号、絵文字、結合文字、ハングルの字母。⌦ は NSTextView の ⌦（合成文字の
+  /// 単位で SARA AM や合字を割る）ではなく、この境まで消す。CRLF は NSTextView の ← が `\r` と `\n` の間で止まるので、
+  /// VS Code と同じく 1 つとして上で見る。
+  func testGraphemeBoundariesMatchNSTextView() {
+    let words = [
+      "กำลัง", "น้ำ", "ที่นี่", "क्षत्रिय", "हिन्दी", "किताब", "துறை", "বাংলা", "ગુજરાતી", "తెలుగు",
+      "ਪੰਜਾਬੀ", "සිංහල", "👨‍👩‍👧‍👦x", "🇯🇵🇺🇸", "👍🏽a", "1\u{FE0F}\u{20E3}", "e\u{301}\u{323}", "か\u{3099}き",
+      "ﾊﾞｶ", "한국어", "\u{1100}\u{1161}\u{11A8}",
+    ]
+    for word in words {
+      var boundaries = [0]
+      for character in word { boundaries.append(boundaries.last! + character.utf16.count) }
+      let text = TextRope(word)
+      let view = NSTextView(usingTextLayoutManager: true)
+      view.string = word
+      let label = word.unicodeScalars.map { String($0.value, radix: 16) }.joined(separator: " ")
+      for (from, to) in zip(boundaries, boundaries.dropFirst()) {
+        view.setSelectedRange(NSRange(location: from, length: 0))
+        view.moveRight(nil)
+        XCTAssertEqual(view.selectedRange().location, to, "NSTextView → [\(label)] @\(from)")
+        view.setSelectedRange(NSRange(location: to, length: 0))
+        view.moveLeft(nil)
+        XCTAssertEqual(view.selectedRange().location, from, "NSTextView ← [\(label)] @\(to)")
+        XCTAssertEqual(
+          position(after: .move(.right, extending: false), at: from, text), to,
+          "→ [\(label)] @\(from)")
+        XCTAssertEqual(
+          position(after: .move(.left, extending: false), at: to, text), from, "← [\(label)] @\(to)"
+        )
+        let deleted = EditCommands.run(
+          .deleteForward, EditState(cursors: CursorList(Cursor(from))), Editing.environment(text))
+        XCTAssertEqual(
+          deleted.edits.edits.map(\.range), [NSRange(location: from, length: to - from)],
+          "⌦ [\(label)] @\(from)")
+      }
+    }
+  }
+
+  private func position(after command: EditCommand, at offset: Int, _ text: TextRope) -> Int {
+    EditCommands.run(
+      command, EditState(cursors: CursorList(Cursor(offset))), Editing.environment(text)
+    )
+    .state.cursors.primary.position
+  }
+
+  /// 書記素は位置の前後の窓だけで決める——国旗の並びが窓より長くても、並びの頭から 2 字ずつ組む（途中から数えて組がずれない）。
+  func testLongRunsOfFlagsPairFromTheirHead() {
+    let flags = "x" + String(repeating: "🇯🇵", count: 60)
+    let text = TextRope(flags)
+    var position = text.length
+    while position > 1 {
+      let previous = text.previousBoundary(before: position)
+      XCTAssertEqual(position - previous, 4, "@\(position)")
+      position = previous
+    }
+    XCTAssertEqual(text.nextBoundary(after: 1 + 4 * 30), 1 + 4 * 31)
   }
 
   /// ⌫ は macOS の後ろ向きの削除の単位——窓を出さない NSTextView の ⌫ と同じ範囲を消す（本文の末尾でも、後ろに字が続く

@@ -2,9 +2,9 @@ import CoreFoundation
 import Foundation
 import OrbeEditorCore
 
-/// 編集の規則が本文の写しに問う、行と書記素の境。どれも位置の前後の小さな窓だけを読み、文書の大きさに依らない。
+/// 編集の規則が本文の写しに問う、行と書記素と削除の単位の境。どれも位置の前後の小さな窓だけを読み、文書の大きさに依らない。
 extension TextRope {
-  /// 書記素の境を探すために、位置の前後それぞれに読む単位の数。
+  /// 合成文字の区間を探すために、位置の前後それぞれに読む単位の数。
   private static let clusterWindow = 64
 
   /// 行の中身の区間（行末の改行と、その前の `\r` を除く）。
@@ -21,8 +21,17 @@ extension TextRope {
     return units(in: NSRange(location: offset, length: 1)).first
   }
 
-  /// `offset` を含む書記素（OS の合成文字の単位）の区間。行末の `\r\n` は 1 つとして扱う。
+  /// `offset` を含む書記素（UAX #29 の拡張書記素クラスタ。`\r\n` は 1 つ）の区間。
   func grapheme(containing offset: Int) -> NSRange {
+    let range = Grapheme.cluster(
+      containing: offset, count: length, unit: { unit(at: $0) ?? 0 },
+      units: { units(in: NSRange($0)) })
+    return NSRange(range)
+  }
+
+  /// `offset` を含む OS の合成文字の単位（CoreFoundation の合成文字の区間。行末の `\r\n` は 1 つ）。後ろ向きの削除が
+  /// 前の字を切り出す単位で、書記素とはタイ語の SARA AM などで違う。
+  private func composedCharacter(containing offset: Int) -> NSRange {
     guard offset >= 0, offset < length else { return NSRange(location: offset, length: 0) }
     let start = max(0, offset - Self.clusterWindow)
     let window = units(
@@ -53,13 +62,13 @@ extension TextRope {
 
   /// ⌫ で消す区間の始まり（macOS の後ろ向きの削除の単位。NSTextView と同じ）。規則は CoreFoundation の後ろ向きの削除の
   /// 範囲（swift-corelibs-foundation の `CFString.c`、`_CFStringInlineBufferGetComposedRange` の
-  /// `kCFStringBackwardDeletionCluster`）の移植——前の書記素（OS の合成文字の単位）を後ろから見て、アルメニア文字〜リンブ
+  /// `kCFStringBackwardDeletionCluster`）の移植——前の合成文字の単位を後ろから見て、アルメニア文字〜リンブ
   /// 文字（U+0530–U+194F。インド系・タイ・アラビア・ヘブライなど）の字に当たればその字から消し、結合の記号なら前へ進み、
   /// それ以外の字に当たれば書記素ごと消す。ハングルの字母は書記素ごと。分解した濁点・アクセント・異体字の選択子・絵文字の
   /// 並び・国旗・`\r\n` は書記素ごと、インド系の母音記号やアラビア・ヘブライの記号は 1 つずつ消える。
   func backwardDeletionStart(before offset: Int) -> Int {
     guard offset > 0 else { return 0 }
-    let cluster = grapheme(containing: offset - 1)
+    let cluster = composedCharacter(containing: offset - 1)
     let units = units(in: NSRange(location: cluster.location, length: offset - cluster.location))
     var start = offset
     for scalar in String(decoding: units, as: UTF16.self).unicodeScalars.reversed() {

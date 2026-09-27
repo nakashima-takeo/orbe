@@ -154,6 +154,9 @@ final class LineShaperTests: XCTestCase {
     XCTAssertEqual(omitted, long.utf16.count - 9_999)
     let shaped = LineShaper.shape(line, font: font, tabWidth: cell * 4)
     XCTAssertEqual(shaped.omitted, omitted)
+    let thai = String(repeating: "a", count: 9_999) + "กำ" + String(repeating: "b", count: 100)
+    let thaiLine = LineShaper.source(row: 0, in: TextRope(thai)).source
+    XCTAssertEqual(LineShaper.display(thaiLine).units.count, 9_999, "タイ語の SARA AM も書記素ごと")
   }
 
   /// 組んだ字は元の行の位置を持つ（色を役割から引くため）。
