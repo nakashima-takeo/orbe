@@ -1,6 +1,7 @@
 import AppKit
 import OrbeEditorCore
 import XCTest
+import os
 
 @testable import Orbe
 
@@ -12,8 +13,14 @@ import XCTest
 ///   OS のログ（カテゴリ `editor-frames`）へジェスチャーごとに出す。
 /// - 今の面（STTextView）: 非公開の `_automateLiveScroll` で NSScrollView の本物のスクロールの経路を回す（計測の道具
 ///   だけで使う）。数字は xctrace の hitches で読む。
+///
+/// スクロールを動かしている区間（新しい面は合成の出来事を流している間、今の面は `_automateLiveScroll` の間）を
+/// os_signpost の interval `scrolling` で trace に記録し、スクリプトはその区間の hitches だけを区間の長さで割る。
 @MainActor
 final class EditorPresentPerfTests: OrbeTestCase {
+  private static let signposter = OSSignposter(
+    subsystem: "dev.orbe.perf", category: "editor-present")
+
   override func setUpWithError() throws {
     try super.setUpWithError()
     try XCTSkipUnless(
@@ -26,24 +33,22 @@ final class EditorPresentPerfTests: OrbeTestCase {
   func testMetalSurface() throws {
     let (window, document) = try show(metal: true)
     defer { window.orderOut(nil) }
-    print("PRESENT metal start", CACurrentMediaTime())
     drag(document.surface.view, seconds: 3, speed: 2400)
     RunLoop.main.run(until: Date().addingTimeInterval(1))
     for _ in 0..<3 {
       flick(document.surface.view, peak: 6000)
       RunLoop.main.run(until: Date().addingTimeInterval(2.5))
     }
-    print("PRESENT metal end", CACurrentMediaTime())
   }
 
   func testCurrentSurface() throws {
     let (window, document) = try show(metal: false)
     defer { window.orderOut(nil) }
     let scrollView = try XCTUnwrap(document.surface.responder.enclosingScrollView)
-    print("PRESENT current start", CACurrentMediaTime())
+    let scrolling = Self.signposter.beginInterval("scrolling")
     scrollView.perform(Selector(("_automateLiveScroll")))
     RunLoop.main.run(until: Date().addingTimeInterval(12))
-    print("PRESENT current end", CACurrentMediaTime())
+    Self.signposter.endInterval("scrolling", scrolling)
   }
 
   /// 1200×800 の窓を画面に出し（activate しない）、1MB の Swift の文書を開く。
@@ -106,8 +111,10 @@ final class EditorPresentPerfTests: OrbeTestCase {
     var dy: Double
   }
 
-  /// 出来事を別のスレッドから実時間で main の面の入口へ流す。時刻は流した時刻。
+  /// 出来事を別のスレッドから実時間で main の面の入口へ流す。時刻は流した時刻。流している間をスクロールの区間とする。
   private func feed(_ view: NSView, _ events: [Planned]) {
+    let scrolling = Self.signposter.beginInterval("scrolling")
+    defer { Self.signposter.endInterval("scrolling", scrolling) }
     let done = DispatchSemaphore(value: 0)
     let target = UncheckedView(view: view)
     let thread = Thread {
