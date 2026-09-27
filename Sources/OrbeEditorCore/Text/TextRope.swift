@@ -24,11 +24,29 @@ public struct TextRope: Sendable {
 
   struct Chunk: TreeElement {
     let units: ContiguousArray<UInt16>
+    /// 塊の中の `\n` の位置（昇順）。行とオフセットの変換で塊を読み直さない。
+    let newlines: ContiguousArray<UInt16>
     let summary: Summary
 
     init(_ units: ContiguousArray<UInt16>) {
       self.units = units
-      summary = Summary(utf16: units.count, newlines: units.reduce(0) { $0 + ($1 == 0x0A ? 1 : 0) })
+      var newlines = ContiguousArray<UInt16>()
+      for (position, unit) in units.enumerated() where unit == 0x0A {
+        newlines.append(UInt16(position))
+      }
+      self.newlines = newlines
+      summary = Summary(utf16: units.count, newlines: newlines.count)
+    }
+
+    /// 塊の中で `local` より前にある `\n` の数。
+    func newlines(before local: Int) -> Int {
+      var low = 0
+      var high = newlines.count
+      while low < high {
+        let mid = (low + high) / 2
+        if Int(newlines[mid]) < local { low = mid + 1 } else { high = mid }
+      }
+      return low
     }
   }
 
@@ -49,12 +67,7 @@ public struct TextRope: Sendable {
     guard row > 0 else { return 0 }
     guard row < lineCount else { return length }
     let (index, before) = chunks.locate(row - 1, by: \.newlines)
-    var remaining = row - before.newlines
-    for (position, unit) in chunks[index].units.enumerated() where unit == 0x0A {
-      remaining -= 1
-      if remaining == 0 { return before.utf16 + position + 1 }
-    }
-    return length
+    return before.utf16 + Int(chunks[index].newlines[row - 1 - before.newlines]) + 1
   }
 
   /// 0 始まりの行の終わり（次の行頭。最後の行なら本文の長さ）。
@@ -66,8 +79,7 @@ public struct TextRope: Sendable {
   public func row(containing offset: Int) -> Int {
     let offset = min(max(0, offset), length)
     guard let (index, before) = chunk(containing: offset) else { return 0 }
-    let local = offset - before.utf16
-    return before.newlines + chunks[index].units[..<local].reduce(0) { $0 + ($1 == 0x0A ? 1 : 0) }
+    return before.newlines + chunks[index].newlines(before: offset - before.utf16)
   }
 
   /// オフセットが属する行と、行頭からの距離（UTF-16 単位）。

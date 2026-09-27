@@ -24,7 +24,7 @@ public enum MinimapLine {
 
   /// 行の字の列。`units` は行の本文（改行を除く）、`lineStart` はその行頭のオフセット、`roles` は行に掛かる役割の区間
   /// （昇順・重ならない。本文全体のオフセット）。`columns` 桁目以降は描かない（`columns(canvasWidth:scale:)`）。
-  public static func cells(
+  @inlinable public static func cells(
     _ units: some Collection<UInt16>, lineStart: Int, roles: ArraySlice<HighlightSpan>,
     tabSize: Int, columns: Int
   ) -> [MinimapCell] {
@@ -58,7 +58,7 @@ public enum MinimapLine {
 
   /// 行の各 UTF-16 位置の左端の桁（装飾の x。`units.count + 1` 個）。タブは `tabSize` 桁、全角は 2 桁。`limit` 桁に
   /// 達したらそこで止める（それより右はミニマップに描けない——VS Code `getXOffsetForPosition` の打ち切り）。
-  public static func decorationColumns(
+  @inlinable public static func decorationColumns(
     _ units: some Collection<UInt16>, tabSize: Int, limit: Int
   ) -> [Int] {
     var result = [0]
@@ -83,7 +83,7 @@ public enum MinimapLine {
 
   /// 字形の番号。ASCII 32…126 は `code − 32`、ほかは任意の ASCII の字形で代える（VS Code と同じ
   /// `(code − 32 + 96) % 96`）。
-  public static func glyph(of unit: UInt16) -> Int {
+  @inlinable public static func glyph(of unit: UInt16) -> Int {
     let code = Int(unit) - 32
     return code >= 0 && code < glyphCount ? code : (code + glyphCount) % glyphCount
   }
