@@ -30,9 +30,9 @@ final class RenderLoopTests: EngineTestCase {
     let opened = try open(text)
     let surface = opened.surface
     surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
-    driver.bind(surface.id)
+    let target = driver.bind(surface.id)
     waitUntilPaused(surface)
-    let first = drawn(surface)
+    let first = target.acquired
     XCTAssertGreaterThan(first, 0, "結んだら描く")
     let ticks = driver.ticks(surface.id)
     RunLoop.main.run(until: Date().addingTimeInterval(0.2))
@@ -41,19 +41,19 @@ final class RenderLoopTests: EngineTestCase {
     surface.scroll(
       ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(0, -1), precise: false))
     waitUntilPaused(surface)
-    XCTAssertEqual(drawn(surface), first + 1, "変わったコマだけ描く")
+    XCTAssertEqual(target.acquired, first + 1, "変わったコマだけ描く")
   }
 
   /// 見えていない面（窓に無い・隠れたタブ）は描かずに刻みを止める。
   func testInvisibleSurfaceDoesNotDraw() throws {
     let opened = try open(text)
     let surface = opened.surface
-    driver.bind(surface.id)
+    let target = driver.bind(surface.id)
     waitUntilPaused(surface)
-    XCTAssertEqual(drawn(surface), 0)
+    XCTAssertEqual(target.acquired, 0)
     surface.setIndentUnit(2)
     waitUntilPaused(surface)
-    XCTAssertEqual(drawn(surface), 0, "起こされても見えていなければ描かない")
+    XCTAssertEqual(target.acquired, 0, "起こされても見えていなければ描かない")
   }
 
   /// 止まっていた面を起こしたら、次に画面に出る刻みまでに描き終えられる限り、刻みを待たずにその場で 1 コマ描く。残りが
@@ -64,26 +64,24 @@ final class RenderLoopTests: EngineTestCase {
     surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
     for (lead, drawsAtOnce) in [(0.005, true), (0.001, false)] {
       let id = surface.id
-      let driver = driver!
-      RenderThread.shared.perform { renderer in
-        renderer.bind(
-          id, target: OffscreenTarget(device: renderer.device, driver: driver, holds: false),
-          clock: ManualClock(lead: lead))
-      }
+      let clock = ManualClock(lead: lead)
+      let target = OffscreenTarget(
+        device: try XCTUnwrap(RenderThread.device), driver: driver, holds: false)
+      RenderThread.shared.perform { $0.bind(id, target: target, clock: clock) }
       // 手で刻んで、描いてから止まるまで進める（描いたコマが画面に出るのも待つ）。
       var stopped = false
       for _ in 0..<50 where !stopped {
         RunLoop.main.run(until: Date().addingTimeInterval(0.02))
         stopped = RenderThread.shared.performAndWait { renderer in
           renderer.tick(id, target: CACurrentMediaTime() + lead)
-          return renderer.slot(id)?.clock?.isPaused == true && renderer.slot(id)?.unpresented == 0
+          return clock.isPaused && target.acquired == target.settled
         }
       }
       XCTAssertTrue(stopped, "前提: 描いてから止まっている")
-      let before = drawn(surface)
+      let before = target.acquired
       surface.setIndentUnit(before % 2 == 0 ? 2 : 4)
-      let (after, paused) = RenderThread.shared.performAndWait {
-        ($0.slot(id)?.recorder.drawnCount ?? -1, $0.slot(id)?.clock?.isPaused ?? true)
+      let (after, paused) = RenderThread.shared.performAndWait { _ in
+        (target.acquired, clock.isPaused)
       }
       XCTAssertEqual(after, drawsAtOnce ? before + 1 : before, "残り \(lead)s")
       XCTAssertFalse(paused, "刻みは再開する")
@@ -105,11 +103,6 @@ final class RenderLoopTests: EngineTestCase {
     XCTAssertTrue(surface.viewport.clipsRight)
   }
 
-  private func drawn(_ surface: MetalTextSurface) -> Int {
-    let id = surface.id
-    return RenderThread.shared.performAndWait { $0.slot(id)?.recorder.drawnCount ?? -1 }
-  }
-
   private func waitUntilPaused(_ surface: MetalTextSurface) {
     let deadline = Date().addingTimeInterval(5)
     repeat {
@@ -119,8 +112,8 @@ final class RenderLoopTests: EngineTestCase {
   }
 }
 
-/// 自分では刻まない刻み。次に画面に出る刻みは、いつ問われても `lead` 秒後。
-private final class ManualClock: FrameClock {
+/// 自分では刻まない刻み。次に画面に出る刻みは、いつ問われても `lead` 秒後。止める・再開するは描画スレッドだけが書く。
+private final class ManualClock: FrameClock, @unchecked Sendable {
   private let lead: Double
   var isPaused = false
   let period = 1.0 / 120

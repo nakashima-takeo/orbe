@@ -42,15 +42,17 @@ final class HeadlessDriver: @unchecked Sendable {
     state.withLock { $0.running = false }
   }
 
-  /// 面に画面外の出し先と刻みを結ぶ。`holdsPresents` なら、その面のコマは画面に出ない（出た知らせが来ない）。
-  func bind(_ id: Int, holdsPresents: Bool = false) {
+  /// 面に画面外の出し先と刻みを結び、その出し先を返す。`holdsPresents` なら、その面のコマは画面に出ない（出た知らせが
+  /// 来ない）。
+  @discardableResult
+  func bind(_ id: Int, holdsPresents: Bool = false) -> OffscreenTarget {
     let clock = VirtualClock(id: id, driver: self)
+    let target = OffscreenTarget(device: RenderThread.device!, driver: self, holds: holdsPresents)
     state.withLock { $0.paused[id] = false }
     RenderThread.shared.perform { renderer in
-      renderer.bind(
-        id, target: OffscreenTarget(device: renderer.device, driver: self, holds: holdsPresents),
-        clock: clock)
+      renderer.bind(id, target: target, clock: clock)
     }
+    return target
   }
 
   func ticks(_ id: Int) -> Int { state.withLock { $0.ticks[id] ?? 0 } }
@@ -132,12 +134,19 @@ final class VirtualClock: FrameClock {
   func invalidate() { driver.invalidate(id) }
 }
 
-/// 画面外のテクスチャ 3 枚へ出す。画面に出ていないコマは drawable 2 枚の画面と同じく 1 つまで。
-final class OffscreenTarget: FrameTarget {
+/// 画面外のテクスチャ 3 枚へ出す。画面に出ていないコマは drawable 2 枚の画面と同じく 1 つまで。描く先を取った回数
+/// （描いたコマの数）と、そのうち画面に出た（出ずに捨てられた）数を数える。
+final class OffscreenTarget: FrameTarget, @unchecked Sendable {
   private let textures: [MTLTexture]
   private let driver: HeadlessDriver
   private let holds: Bool
   private var next = 0
+  private let counts = OSAllocatedUnfairLock(initialState: (acquired: 0, settled: 0))
+
+  /// 描く先を取った回数（描いたコマの数）。
+  var acquired: Int { counts.withLock { $0.acquired } }
+  /// 取った描く先のうち、画面に出た（出ずに捨てられた）数。
+  var settled: Int { counts.withLock { $0.settled } }
 
   init(device: MTLDevice, driver: HeadlessDriver, holds: Bool) {
     let descriptor = MTLTextureDescriptor.texture2DDescriptor(
@@ -154,9 +163,15 @@ final class OffscreenTarget: FrameTarget {
   func acquire() -> AcquiredFrame? {
     let texture = textures[next % textures.count]
     next += 1
+    counts.withLock { $0.acquired += 1 }
     let driver = driver
     let holds = holds
-    return AcquiredFrame(texture: texture) { commands, done in
+    let counts = counts
+    return AcquiredFrame(texture: texture) { commands, shown in
+      let done: @Sendable (Double?) -> Void = { time in
+        counts.withLock { $0.settled += 1 }
+        shown(time)
+      }
       commands.addCompletedHandler { commands in
         guard !holds else { return }
         // エラーで終わった命令の列は描き終えた時刻を持たない（0）。画面に出なかったコマとして知らせる。
