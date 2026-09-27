@@ -29,7 +29,7 @@ extension WindowController {
   /// タブ起床時に走る（`TerminalTab.recordMaterializationStarted`）。ここは resolver を渡すだけ。
   private func makeTab(from state: TabState) -> TerminalTab {
     let resume: TerminalTab.ResumeSpawn = { [agentLauncher] in agentLauncher.resumeSpawn(for: $0) }
-    return wire(TerminalTab(restoring: state, resumeSpawn: resume))
+    return wire(TerminalTab(restoring: state, resumeSpawn: resume, editorSurfaces: editorSurfaces))
   }
 
   /// 休眠チケット 1 枚を workspace へ足す。`restore_sessions` と ⇧⌘T が共有する復元単位。

@@ -1,7 +1,7 @@
 ---
 title: テストアーキテクチャ
 description: Orbe のテストが従う層構成・横断方針・各層の責務
-updated: 2026-09-26
+updated: 2026-09-27
 ---
 
 # テストアーキテクチャ
@@ -30,7 +30,7 @@ updated: 2026-09-26
 
 **ランナーは XCTest 一本。** Swift 6.3 では swift-testing との相互運用が `none` で、両者でアサーションヘルパを共有すると失敗が黙殺される。Swift 6.4 で相互運用が既定 `limited` になった時点で再検討する。
 
-**隔離は単一ハーネスが立てる。** state dir・全 override・ghostty の設定探索先を 1 箇所で立て、テストごとの申告制にしない（対象は `Tests/OrbeTests`。他 6 ターゲットは `Orbe` 以外のモジュール内部を測るだけで、隔離の要る対象を持たない）。申告制は張り忘れが 1 本でも残れば破れる（`GuiConfig` の override を張らないテストが 1 本あれば、`Config.load()` が前回実行の設定を読み戻す）。書き込まれうる先は全て per-test ディレクトリの下に置き、配り直しの削除に乗せる（向き先だけ張り直しても中身は消えない）。唯一 `CompletionLearning` だけは `shared` が初回タッチで in-memory へ焼くため per-test にできず、プロセス級固定＝学習状態がテスト間で持ち越されるので、書いたテストが自分で消す。実環境を汚さないことは `scripts/verify-test-isolation.sh`（手動・CI 非搭載）で実証する。
+**隔離は単一ハーネスが立てる。** state dir・全 override・ghostty の設定探索先を 1 箇所で立て、テストごとの申告制にしない（対象は `Tests/OrbeTests`。他 7 ターゲットは `Orbe` 以外のモジュール内部を測るだけで、隔離の要る対象を持たない）。申告制は張り忘れが 1 本でも残れば破れる（`GuiConfig` の override を張らないテストが 1 本あれば、`Config.load()` が前回実行の設定を読み戻す）。書き込まれうる先は全て per-test ディレクトリの下に置き、配り直しの削除に乗せる（向き先だけ張り直しても中身は消えない）。唯一 `CompletionLearning` だけは `shared` が初回タッチで in-memory へ焼くため per-test にできず、プロセス級固定＝学習状態がテスト間で持ち越されるので、書いたテストが自分で消す。実環境を汚さないことは `scripts/verify-test-isolation.sh`（手動・CI 非搭載）で実証する。
 
 **テストクラスの doc は「壊れると何が起きるか」を書く。** 何を測るかはテスト名が言う。doc が言うのは、その assert が落ちたとき利用者に何が起きるか——それが無いと、後から読む人はテストを弱めてよいか判断できず、直すより消す方へ倒れる。
 
@@ -62,7 +62,7 @@ updated: 2026-09-26
 - **起動と差し替え**: Foundation のみ。依存は引数で受ける
 - **データ**: 不要（値を直接組む）
 - **実行**: CI 全量
-- **配置**: `Tests/OrbeTests/<型名>Tests.swift`。大きい対象は `<型名>Tests+<話題>.swift` に分割。`Orbe` 以外のターゲットのモジュール内部シンボルを測るものだけは当該ターゲット（`OrbePathsTests` / `OrbeReportTests` / `OrbeSessionLogTests` / `OrbeSoundTests` / `OrbeSoundCliTests` / `OrbeEditorCoreTests`）に置く——`OrbeTestCase` は `OrbeTests` の中にあり他ターゲットからは継承できないので、隔離が要る対象をそちらへ置かない
+- **配置**: `Tests/OrbeTests/<型名>Tests.swift`。大きい対象は `<型名>Tests+<話題>.swift` に分割。`Orbe` 以外のターゲットのモジュール内部シンボルを測るものだけは当該ターゲット（`OrbePathsTests` / `OrbeReportTests` / `OrbeSessionLogTests` / `OrbeSoundTests` / `OrbeSoundCliTests` / `OrbeEditorCoreTests` / `OrbeEditorEngineTests`）に置く——`OrbeTestCase` は `OrbeTests` の中にあり他ターゲットからは継承できないので、隔離が要る対象をそちらへ置かない
 
 ### L2 プロセス内結合
 
@@ -108,6 +108,7 @@ updated: 2026-09-26
 - **データ**: `DesignSceneFixtures` と Sources 側の `*Fixtures.swift`。stub で外枠だけ描かず、本物のデータを本物のビューに流す
 - **実行**: CI 全量
 - **ツール**: 比較・許容差・記録モード・差分出力は swift-snapshot-testing（`precision` ＋ `perceptualPrecision`）
+- **例外**: 新しいテキスト面（Metal）の字と git の印は、ゴールデン画像でなく別の方式で見る——`GlyphPixelTests` が、同じ行を Core Text で不透明な地に描いた基準と字のある画素で 1 段以内か（1x・2x、太らせの有無）を、`MetalLineMarksTests` が撮影した画素で印の色と位置を確かめ、`ScrolledFrameTests` がスクロールの前後の絵を画素で突き合わせて本文・行番号・印がそろって動くことを確かめる（通常の `swift test`。Metal の装置が無ければ skip）
 
 ### L7 生成物
 
@@ -123,5 +124,6 @@ updated: 2026-09-26
 - **`.app` の起動経路と `AppDelegate` の配線**（`ControlServer.start` を実際に呼ぶのはここだけ）→ `sandbox-run` スキルで、リリース時と `.app` 構成を変えたときに人が回す
 - **性能の実行時間**（起動時間・大量タブ時の応答）。SLO が定義されていない状態で時間を測ると、マシン差で flaky になるだけで回帰検知にならない。コードに書かれた境界値は L1 が固める
   - 例外はエディターのスクロールと打鍵で、目標値を持ち、手元の release で `scripts/perf-editor.sh`（実アプリと同じ小さな環境変数で `EditorScrollPerfTests` を回す。通常の `swift test` と CI では skip）が測る——1MB・4.3 万行 / 200KB の Swift で、スクロールバーの速いドラッグの追従が 35 / 45 回/秒以上（3 回の最小。打鍵の後も）、ホイール 1 回の p95 が 16.7ms 以下、打鍵 1 回の中央値が 8 / 4ms 以下。1MB の速いドラッグ（30 回/秒前後）はテキストエンジン（TextKit 2 の layout と描画）の天井として受け入れ済み。打鍵 1 回で文書と Orbe 側が main でする仕事（編集の通知を受けてから配り先が戻るまで。`typing-main`）は、64KB / 1MB / 8MB で中央値がほぼ同じ（文書の大きさに比例して増えない）こと——git 管理下（baseline あり）でも同じ。打鍵の後に役割が届いてからの描き直し（`typing-recolor`）と、一致の多い検索（上限の件数）を開いたままのスクロールバーの描画（`scrollbar-draw`）も並べて出す。測る前に、文書の裏の仕事（文書全体の構文色）が追いつくのを待つ
+  - 新しいテキスト面（Metal）のコマは、完了条件を「指の出来事→画面に出た時刻（present）」と「落ちたコマ」で書き、3 段で測る。①面の中の記録係が常に動き、ジェスチャーごとの要約を OS のログ（カテゴリ `editor-frames`）へ出す。②窓を出さない自動の計測を実装の関門にする——`scripts/perf-editor-frames.sh`（release で `FramePerfTests` を回す。通常の `swift test` と CI では skip）が、画面外に 120Hz で描き GPU が描き終えた刻み（命令の列の GPU の終わりの時刻を次の刻みに切り上げたもの）を「出たコマ」とみなして、合成した指の出来事（約 5.7ms ごと。一定の速さのドラッグ・momentum 付きのはじき・端への引っ張りと離した後の戻り）を 1MB・200KB の Swift と、12000 字の行が 300 行並ぶ文書に流す。関門は、描画スレッドの 1 コマの CPU が p99 2ms 未満・描画スレッド自身が落とすコマ（画面に出る予定の刻みの 1ms 前までに命令を出し終えられなかったコマ）が 0（main に 33ms ごと 25ms の負荷を入れても）・もう 1 枚の面が画面に出なくなっても刻みごとに描き続ける・1MB と 200KB で差が無い（1 コマの CPU の中央値が 2 倍以内）・止まっている間の描画スレッドの起床が 0 で、他のビルドやテストが走って混んだ機械のままでも毎回通す。長い行の文書は、行を組版しなかったコマの CPU が p99 2ms 未満と、全部のコマの CPU が p99 1 刻み未満を関門にし、描画スレッド自身が落とすコマは記録して示す（初めて見える行の組版は行の長さに比例する割り切りで、長い行を数行まとめて組むコマは刻みに間に合わないことがある）。前のコマの GPU・画面の合成の遅れで飛ばした・遅れて出たコマ（マシンの混み——画面ロック中の動く壁紙など——で起きる）、指の出来事→present、画面の間隔から見た落ちたコマは記録して示し、関門にしない（main の停止分だけ増えるのは設計上の性質）。刻みを打つスレッドは時間制約つきにする（普通の優先度だとタイマーの合体で数 ms 遅れて起き、描画スレッドのせいでない遅れを数える）。③画面に出す計測は `scripts/perf-editor-present.sh`（窓を画面に出し、xctrace の Animation Hitches を取る。今の面の基準値は非公開の `_automateLiveScroll` で本物のスクロールの経路を回して同じ xctrace で取る。コマ落ちの割合は、テストが os_signpost で記録したスクロールを動かしている区間——新しい面は合成の出来事を流している間、今の面は `_automateLiveScroll` の間——の中の hitches を区間の長さで割る。xctrace は起こすプロセスへ親の環境を渡すので、perf-editor.sh と同じ小さな環境の下で xctrace ごと起こし、最初にそれを確かめる）で、実機のトラックパッドで人が並べて見る場の結果を正とする——1MB で指のイベント→present の中央値 31ms 以下・p95 40ms 以下、動いている間のコマ落ちの時間の割合が 5ms/秒 未満。記録係の規則（落ちたコマの数え方・振り分け・分位）と刻みの止め方・再開・描画スレッドの時間制約は L1（`FrameRecorderTests`・`RenderLoopTests`）が固める
 - **TCC 権限が絡む分岐の実環境挙動**（アクセシビリティ・入力監視）。分岐そのものは注入点を作って L1 で固める
 - **dev / release 2 チャネル併存時の state・socket 分離**

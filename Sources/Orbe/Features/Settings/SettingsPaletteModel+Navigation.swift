@@ -22,6 +22,8 @@ extension SettingsPaletteModel {
       // root に行を持たず、カスタム設定サブの中でだけ編集される（`SettingsRegistry.nonRootIDs`）
       // ——潜る先は「行の ↵ が開くファイル選択」であってサブパレットではない。
       return .root
+    case .editorEngineMetal, .editorScrollElastic, .editorFontSmoothing:
+      return .root  // パレットに行を持たない（`SettingsRegistry.nonRootIDs`）
     }
   }
 

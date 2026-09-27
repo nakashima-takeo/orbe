@@ -9,9 +9,10 @@ public enum EditorDocumentError: Error, Equatable {
   case diskChanged(URL)
 }
 
-/// 開いたファイル 1 つ。識別（URL）・言語・未保存の有無と、本文の写し（ロープ）・版・役割の並びを持つ。本文の正は対になる
-/// テキスト面にあり（開いてから閉じるまで 1 対 1）、文書は面の delegate として編集（置換後の文字列つき）を受けてロープを
-/// 追う。本文を読むのはこのロープだけ——面の契約に本文を読む口は無い。
+/// 開いたファイル 1 つ。識別（URL）・言語・未保存の有無と、本文の写し（ロープ）・版・役割の並びを持つ。テキスト面とは
+/// 開いてから閉じるまで 1 対 1 で、文書は面の delegate として編集（置換後の文字列つき）を受けてロープを追う。本文を読むのは
+/// このロープだけ——面の契約に本文を読む口は無い。本文を自分で持つ面（STTextView）では本文の正は面にあり、持たない面では
+/// このロープが正で、面は写し（`surfaceContent`）を引いて描く。
 ///
 /// 構文色・行差分（ハンク）・検索・出現は、ロープの写し（版つき）から裏の仕事が作る。打鍵 1 回で main がするのは、ロープの
 /// 置換・役割の並びのずらし・裏への依頼だけで、文書の大きさに依らない。裏の結果は受け取り箱に置かれ、main は今の版の結果なら
@@ -378,6 +379,10 @@ extension EditorDocument: TextSurfaceDelegate {
   public func surface(_ surface: any TextSurface, rangeOfLine line: Int) -> NSRange {
     let start = text.lineStart(line)
     return NSRange(location: start, length: text.lineEnd(line) - start)
+  }
+
+  public func surfaceContent(_ surface: any TextSurface) -> SurfaceContent {
+    SurfaceContent(text: text, roles: roles, version: version)
   }
 }
 

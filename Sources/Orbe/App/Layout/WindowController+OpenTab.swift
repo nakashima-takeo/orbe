@@ -22,7 +22,8 @@ extension WindowController {
   ) -> OpenedTab? {
     guard workspaces.indices.contains(workspaceIndex) else { return nil }
     let initialCwd = cwd ?? store.newTabCwd(inWorkspaceAt: workspaceIndex)
-    let tab = wire(TerminalTab(cwd: initialCwd, command: command, env: env))
+    let tab = wire(
+      TerminalTab(cwd: initialCwd, command: command, env: env, editorSurfaces: editorSurfaces))
     let index = store.insertTab(tab, intoWorkspaceAt: workspaceIndex)  // 背景 WS はここで active も新タブへ
     if workspaceIndex == activeWorkspace {
       select(index)  // surface を起こす（mount）

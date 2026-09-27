@@ -146,8 +146,11 @@
       let stderr: String
     }
 
-    /// git が失敗すれば投げる（握り潰すと `isReady` の待ちが原因を指さずに落ちる）。
-    @MainActor static func scene(queriesRoot: URL) throws -> Scene {
+    /// git が失敗すれば投げる（握り潰すと `isReady` の待ちが原因を指さずに落ちる）。`engine` は文書を開くテキスト
+    /// エンジンの選び方。
+    @MainActor static func scene(
+      queriesRoot: URL, engine: EditorEngineChoice = .stTextView
+    ) throws -> Scene {
       let dir = FileManager.default.temporaryDirectory
         .appendingPathComponent("orbe-editor-code-\(UUID().uuidString)", isDirectory: true)
       try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -170,7 +173,9 @@
       try git(["commit", "-qm", "gallery"])
       try Data(edited.utf8).write(to: url)
       try Data(longEdited.utf8).write(to: longURL)
-      let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot))
+      let tab = TerminalTab(
+        cwd: dir.path,
+        editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot, engine: { engine }))
       let document = try tab.editor.open(url)
       return Scene(tab: tab, document: document, directory: dir)
     }

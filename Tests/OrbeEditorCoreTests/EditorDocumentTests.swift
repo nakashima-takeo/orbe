@@ -54,6 +54,27 @@ final class EditorDocumentTests: XCTestCase {
     }
   }
 
+  // MARK: - 写し
+
+  /// 本文を持たない面は、知らせ（役割の変化・行の印）を受けたときに文書の写しを引いて描く。文書はどの知らせも写しを
+  /// 更新した後に出すので、引いた写しは面の本文と同じで、版は文書の今の版。壊れると新しい面が 1 つ前の本文で印や色を描く。
+  func testContentPulledOnNoticesIsCurrent() throws {
+    let url = try temp("a.swift", "let a = 1\nlet b = 2\n")
+    let (document, surface) = try open(url)
+    document.baseline = "let a = 1\nlet b = 2\n"
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    surface.replace(NSRange(location: 0, length: 0), with: "// x\n")
+    surface.replace(NSRange(location: 5, length: 0), with: "let c = 3\n")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertFalse(surface.pulled.isEmpty, "前提: 知らせが届いた")
+    for (content, surfaceText) in surface.pulled {
+      XCTAssertEqual(
+        content.text.substring(NSRange(location: 0, length: content.text.length)), surfaceText)
+      XCTAssertEqual(content.roles.length, content.text.length)
+    }
+    XCTAssertEqual(document.surfaceContent(surface).version, document.version)
+  }
+
   // MARK: - 編集と保存
 
   func testEditThenSaveRoundTripsPreservingLineEndings() throws {
