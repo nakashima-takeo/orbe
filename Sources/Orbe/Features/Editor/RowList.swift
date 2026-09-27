@@ -12,7 +12,8 @@ protocol RowListSource: AnyObject {
   var rowCount: Int { get }
   /// 枠を 1 つ作る。列は見えている行の数＋1 本まで作って使い回す。
   func makeRowView() -> RowView
-  /// 枠 `view` に行 `row` の中身を写す。見えている行を読み直すたびに呼ぶので、中身が前と同じなら描き直さない。
+  /// 枠 `view` に行 `row` の中身を写す。列は並べるたび（送るたびを含む）に見えている全行について呼ぶので、中身が
+  /// 前と同じなら描き直さない。
   /// `emoji` は chrome の絵文字の字体（ユーザー由来の名前に充てる）。
   func show(_ row: Int, in view: RowView, emoji: NSFont?)
   /// 選択 `selection` の行の番号（今の行に無ければ nil）。
