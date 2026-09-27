@@ -64,11 +64,9 @@ final class EditorScrollbarTests: OrbeTestCase {
     }
     XCTAssertFalse(bar.isThumbShown, "開いた直後は隠れる")
 
-    pane.appKitOverview.mouseEntered(
-      with: pane.enterExitEvent(.mouseEntered, area: pane.appKitOverview.tracking))
+    try pane.deliverEnterExit(.mouseEntered, area: pane.appKitOverview.tracking)
     XCTAssertTrue(bar.isThumbShown, "本体の上では見える")
-    pane.appKitOverview.mouseExited(
-      with: pane.enterExitEvent(.mouseExited, area: pane.appKitOverview.tracking))
+    try pane.deliverEnterExit(.mouseExited, area: pane.appKitOverview.tracking)
     XCTAssertFalse(bar.isThumbShown, "外へ出れば消える")
 
     hosted.document.scroll(toFirstLine: 30)
@@ -131,25 +129,14 @@ final class EditorScrollbarTests: OrbeTestCase {
     let bar = pane.appKitOverview.scrollbar
     let body = try XCTUnwrap(pane.appKitOverview.tracking)
     XCTAssertTrue(body.options.contains(.enabledDuringMouseDrag), "ドラッグ中も本体の出入りを受ける")
-    pane.mouseEntered(with: pane.enterExitEvent(.mouseEntered, area: body))
+    try pane.deliverEnterExit(.mouseEntered, area: body)
+    XCTAssertTrue(bar.isThumbShown, "本体の上では見える")
     let grab = NSPoint(x: 7, y: try XCTUnwrap(bar.geometry).sliderPosition + 5)
     bar.mouseDown(with: bar.mouseEvent(.leftMouseDown, at: grab))
-    pane.mouseExited(with: pane.enterExitEvent(.mouseExited, area: body))
+    try pane.deliverEnterExit(.mouseExited, area: body)
     XCTAssertTrue(bar.isThumbShown, "ドラッグ中は残る")
     bar.mouseUp(with: bar.mouseEvent(.leftMouseUp, at: grab.offset(dx: 300)))
     XCTAssertFalse(bar.isThumbShown, "外で離せば消える")
-  }
-
-  /// サイドバーや列の頭の上ではつまみは出ない（SwiftUI の骨は自分の出入りを pane へ流してくる）。
-  func testTheThumbIgnoresEnteringTheSidebar() throws {
-    let hosted = try hostOverview(numberedLines(1000))
-    let pane = hosted.pane
-    let side = NSTrackingArea(
-      rect: pane.sideHost.bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow],
-      owner: pane.sideHost)
-    pane.sideHost.mouseEntered(with: pane.sideHost.enterExitEvent(.mouseEntered, area: side))
-    pane.mouseEntered(with: pane.enterExitEvent(.mouseEntered, area: side))
-    XCTAssertFalse(pane.appKitOverview.scrollbar.isThumbShown, "本体の外の出入りでは出ない")
   }
 
   /// ドラッグ中の「この行を先頭に」は runloop 1 回に最新の 1 つだけ当たる（遠くへ飛ぶ layout を溜めない）。

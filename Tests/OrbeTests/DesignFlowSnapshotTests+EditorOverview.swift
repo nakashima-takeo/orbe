@@ -89,8 +89,7 @@ extension DesignFlowSnapshotTests {
       (
         "scrollbar_track",
         {
-          pane.appKitOverview.mouseEntered(
-            with: pane.enterExitEvent(.mouseEntered, area: pane.appKitOverview.tracking))
+          try? pane.deliverEnterExit(.mouseEntered, area: pane.appKitOverview.tracking)
           scrollbar.mouseDown(with: scrollbar.mouseEvent(.leftMouseDown, at: NSPoint(x: 7, y: 300)))
         }
       ),

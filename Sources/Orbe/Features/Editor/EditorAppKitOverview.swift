@@ -98,11 +98,12 @@ final class EditorAppKitOverview: NSObject {
     tracking = area
   }
 
-  @objc func mouseEntered(with event: NSEvent) {
+  /// 見張りの owner として、AppKit から ObjC のセレクタ `mouseEntered:`・`mouseExited:` で届く。
+  @objc(mouseEntered:) func mouseEntered(with event: NSEvent) {
     scrollbar.hovering = true
   }
 
-  @objc func mouseExited(with event: NSEvent) {
+  @objc(mouseExited:) func mouseExited(with event: NSEvent) {
     scrollbar.hovering = false
   }
 

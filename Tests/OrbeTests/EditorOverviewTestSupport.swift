@@ -52,6 +52,19 @@ extension NSView {
       windowNumber: window?.windowNumber ?? 0, context: nil, eventNumber: 0,
       trackingNumber: area.map { unsafeBitCast($0, to: Int.self) } ?? 0, userData: nil)!
   }
+
+  /// tracking area `area` の出入りを、AppKit と同じ道（owner へ ObjC のセレクタ `mouseEntered:`・`mouseExited:`）で
+  /// 届ける。
+  func deliverEnterExit(_ type: NSEvent.EventType, area: NSTrackingArea?) throws {
+    let area = try XCTUnwrap(area)
+    let selector =
+      type == .mouseEntered
+      ? #selector(NSResponder.mouseEntered(with:)) : #selector(NSResponder.mouseExited(with:))
+    let owner = try XCTUnwrap(area.owner as? NSObject)
+    XCTAssertTrue(owner.responds(to: selector), "owner が \(selector) を受ける")
+    guard owner.responds(to: selector) else { return }
+    owner.perform(selector, with: enterExitEvent(type, area: area))
+  }
 }
 
 /// view を 1 回描いて画素を読む（同じ描画から何か所も読む）。座標は view の pt、y は上から。
