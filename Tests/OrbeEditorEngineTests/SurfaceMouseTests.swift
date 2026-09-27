@@ -114,21 +114,134 @@ final class SurfaceMouseTests: EngineTestCase {
     }
   }
 
-  /// ドラッグが本文の下へ出ると、ポインタが止まっていても自動スクロールし、選択が見えている下端の行まで伸び続ける。
+  /// 4 回以上のクリックの全体は、その後のドラッグで縮まない（VS Code と同じ）。
+  func testFourClicksSelectAllAndDraggingKeepsIt() throws {
+    let opened = try open(sample)
+    _ = host(opened)
+    try mouse(opened, .leftMouseDown, at: point(opened, row: 1, column: 5), clicks: 4)
+    try mouse(opened, .leftMouseDragged, at: point(opened, row: 1, column: 7), clicks: 4)
+    try mouse(opened, .leftMouseUp, at: point(opened, row: 1, column: 7), clicks: 4)
+    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 0, length: 32))
+  }
+
+  /// ⌃クリックは何もしない（選択も焦点も動かない。右クリックのメニューは面の外の仕事）。
+  func testControlClickDoesNothing() throws {
+    let opened = try open(sample)
+    _ = host(opened)
+    opened.surface.selectedRange = NSRange(location: 2, length: 0)
+    try click(opened, row: 1, column: 5, flags: .control)
+    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 2, length: 0))
+  }
+
+  private func pointer(_ opened: Opened) throws -> MouseSelection {
+    try XCTUnwrap((opened.surface.responder as? MetalTextView)?.pointer)
+  }
+
+  /// 自動スクロールのコマを `count` 回、0.1 秒ごとに進める（窓は画面に出ないので display link は回らない）。
+  private func frames(_ pointer: MouseSelection, _ count: Int, clock: inout CFTimeInterval) {
+    for _ in 0..<count {
+      clock += 0.1
+      pointer.frame(now: clock)
+    }
+  }
+
+  private func position(_ opened: Opened) -> SIMD2<Double> {
+    opened.surface.scroll.peek(at: 0).position
+  }
+
+  /// ドラッグが本文の下へ出ると、ポインタが止まっていても外れた距離と見えている行数で決まる速さ（VS Code: 1.5 行以内なら
+  /// max(30, 見えている行数 × (1 + 外れた行数)) 行/秒、3 行より外なら max(200, 見えている行数 × (7 + 外れた行数)) 行/秒）
+  /// で自動スクロールし、選択が見えている下端の行の行末まで伸び続ける。本文の上へ戻るか離せば止まる。
   func testDraggingBelowTheTextAutoscrollsAndExtends() throws {
     let opened = try open((0..<500).map { "row \($0)" }.joined(separator: "\n"))
     _ = host(opened, size: CGSize(width: 600, height: 400))
+    let config = opened.surface.config
+    let pointer = try pointer(opened)
+    var clock: CFTimeInterval = 10
+    try mouse(opened, .leftMouseDown, at: point(opened, row: 1, column: 1))
+    try mouse(opened, .leftMouseDragged, at: CGPoint(x: 200, y: 400 + config.lineHeight))
+    XCTAssertTrue(pointer.isAutoscrolling)
+    frames(pointer, 2, clock: &clock)
+    let visibleRows = (400 - config.topInset) / config.lineHeight
+    let near = max(30, visibleRows * 2) * 0.1 * config.lineHeight
+    XCTAssertEqual(position(opened).y, Double(near), accuracy: 0.5, "最初のコマは時刻を取るだけ")
+    let text = opened.document.text
+    let (first, visible) = opened.document.viewportLines
+    let bottom = Int((first + visible - 0.01).rounded(.down))
+    XCTAssertEqual(
+      opened.surface.caretLocation, NSMaxRange(text.contentRange(ofRow: bottom)), "下端の行の行末")
+    XCTAssertEqual(opened.surface.selectedRange.location, text.lineStart(1) + 1)
+    try mouse(opened, .leftMouseDragged, at: CGPoint(x: 200, y: 400 + 5 * config.lineHeight))
+    let before = position(opened).y
+    frames(pointer, 1, clock: &clock)
+    XCTAssertEqual(
+      position(opened).y - before, Double(max(200, visibleRows * 12) * 0.1 * config.lineHeight),
+      accuracy: 0.5, "遠くへ外すほど速い")
+    try mouse(opened, .leftMouseDragged, at: point(opened, row: 3, column: 1))
+    XCTAssertFalse(pointer.isAutoscrolling, "本文の上へ戻れば止まる")
+    try mouse(opened, .leftMouseDragged, at: CGPoint(x: 200, y: 400 + config.lineHeight))
+    try mouse(opened, .leftMouseUp, at: CGPoint(x: 200, y: 400 + config.lineHeight))
+    XCTAssertFalse(pointer.isAutoscrolling, "離せば止まる")
+    let stopped = position(opened)
+    frames(pointer, 1, clock: &clock)
+    XCTAssertEqual(position(opened), stopped, "離した後のコマは何もしない")
+  }
+
+  /// 上の外へ出ると上へ送り、見えている上端の行の行頭（ポインタの x に依らず）まで伸びる。スクロールできる範囲の端で止まり、
+  /// 文書の先頭まで選ぶ。
+  func testDraggingAboveTheTextReachesTheLineStart() throws {
+    let opened = try open((0..<500).map { "row \($0) text" }.joined(separator: "\n"))
+    _ = host(opened, size: CGSize(width: 600, height: 400))
+    opened.document.scroll(toFirstLine: 3)
+    let pointer = try pointer(opened)
+    var clock: CFTimeInterval = 10
+    try mouse(opened, .leftMouseDown, at: point(opened, row: 5, column: 4))
+    try mouse(opened, .leftMouseDragged, at: CGPoint(x: 300, y: -20))
+    frames(pointer, 10, clock: &clock)
+    XCTAssertEqual(position(opened).y, 0, "上端で止まる")
+    XCTAssertEqual(opened.surface.selectedRange.location, 0, "先頭の行の行頭まで選ぶ")
+    try mouse(opened, .leftMouseUp, at: CGPoint(x: 300, y: -20))
+  }
+
+  /// 左右の外（行番号の列の上・面の右の外）へ出ると横に送り、左はポインタの行の行頭、右は行末まで伸びる。
+  func testDraggingSidewaysAutoscrollsHorizontally() throws {
+    let long = String(repeating: "x", count: 400)
+    let opened = try open((0..<20).map { _ in long }.joined(separator: "\n"))
+    _ = host(opened, size: CGSize(width: 400, height: 300))
+    _ = opened.surface.snapshot()
+    pump()
+    let pointer = try pointer(opened)
+    var clock: CFTimeInterval = 10
+    let text = opened.document.text
+    try mouse(opened, .leftMouseDown, at: point(opened, row: 2, column: 3))
+    try mouse(opened, .leftMouseDragged, at: CGPoint(x: 460, y: point(opened, row: 4, column: 0).y))
+    XCTAssertTrue(pointer.isAutoscrolling)
+    XCTAssertEqual(opened.surface.caretLocation, NSMaxRange(text.contentRange(ofRow: 4)), "右は行末")
+    frames(pointer, 3, clock: &clock)
+    let right = position(opened).x
+    XCTAssertGreaterThan(right, 0, "右へ送る")
+    try mouse(opened, .leftMouseDragged, at: CGPoint(x: 8, y: point(opened, row: 1, column: 0).y))
+    XCTAssertEqual(opened.surface.caretLocation, text.lineStart(1), "左は行頭")
+    frames(pointer, 2, clock: &clock)
+    XCTAssertLessThan(position(opened).x, right, "左へ送る")
+    try mouse(opened, .leftMouseUp, at: CGPoint(x: 8, y: point(opened, row: 1, column: 0).y))
+  }
+
+  /// 押したまま面が窓から外れると（文書の切り替え）、mouse-up は届かないので、そこで自動スクロールと選択の操作を終える。
+  func testLeavingTheWindowStopsTheAutoscroll() throws {
+    let opened = try open((0..<500).map { "row \($0)" }.joined(separator: "\n"))
+    let window = host(opened, size: CGSize(width: 600, height: 400))
+    let pointer = try pointer(opened)
+    var clock: CFTimeInterval = 10
     try mouse(opened, .leftMouseDown, at: point(opened, row: 1, column: 1))
     try mouse(opened, .leftMouseDragged, at: CGPoint(x: 200, y: 460))
-    let pointer = (opened.surface.responder as? MetalTextView)?.pointer
-    pointer?.frame(now: 10)
-    pointer?.frame(now: 10.5)
-    pointer?.frame(now: 11)
-    let (first, visible) = opened.document.viewportLines
-    XCTAssertGreaterThan(first, 20, "0.5 秒ごとに外れた距離に応じた速さで送る")
-    let caretRow = CGFloat(opened.document.text.row(containing: opened.surface.caretLocation))
-    XCTAssertEqual(caretRow, (first + visible - 0.01).rounded(.down), accuracy: 1, "見えている下端の行まで伸びる")
-    XCTAssertEqual(opened.surface.selectedRange.location, opened.document.text.lineStart(1) + 1)
-    try mouse(opened, .leftMouseUp, at: CGPoint(x: 200, y: 460))
+    frames(pointer, 2, clock: &clock)
+    let selection = opened.surface.selectedRange
+    let scrolled = position(opened)
+    window.contentView = nil
+    XCTAssertFalse(pointer.isAutoscrolling, "窓から外れれば止まる")
+    frames(pointer, 2, clock: &clock)
+    XCTAssertEqual(position(opened), scrolled)
+    XCTAssertEqual(opened.surface.selectedRange, selection)
   }
 }

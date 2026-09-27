@@ -57,9 +57,11 @@ extension MetalTextSurface {
 }
 
 /// マウスの選択の状態機械——クリックの回数で単位（文字・語・行・全体）を決め、その後のドラッグと ⇧クリックは起点の範囲と
-/// 単位を保って伸ばす（VS Code の `SelectionStartKind`）。行番号の列は行の単位。ドラッグが本文の上下・左の外へ出ると、
-/// ポインタが止まっていても VS Code の速さの式で自動スクロールし、選択が伸び続ける（刻みは view の display link）。
-/// ⌘だけのクリックが URL に当たれば、離したときに開く（動けば開かない。その間は選択が伸びない）。
+/// 単位を保って伸ばす（VS Code の `SelectionStartKind`）。4 回以上のクリックの全体はドラッグで縮めない。行番号の列は行の
+/// 単位。ドラッグが本文の上下左右の外へ出ると、ポインタが止まっていても VS Code の速さの式で自動スクロールし、選択が伸び
+/// 続ける（刻みは view の display link）。外へ出たときに伸ばす先は VS Code と同じ——上は見えている上端の行の行頭、下は
+/// 下端の行の行末、左はポインタの行の行頭、右は行末。⌘だけのクリックが URL に当たれば、離したときに開く（動けば開かない。
+/// その間は選択が伸びない）。
 @MainActor
 final class MouseSelection: NSObject {
   weak var surface: MetalTextSurface?
@@ -74,6 +76,7 @@ final class MouseSelection: NSObject {
     case above(CGFloat)
     case below(CGFloat)
     case left(CGFloat)
+    case right(CGFloat)
   }
 
   private var drag: Drag?
@@ -124,6 +127,7 @@ final class MouseSelection: NSObject {
           shift
           ? EditCommands.extendByLine(primary, toRow: hit.row, text) : Self.line(hit.row, text)
       default:
+        drag = nil
         cursor = .selecting(NSRange(location: 0, length: text.length))
       }
     }
@@ -142,12 +146,18 @@ final class MouseSelection: NSObject {
       autoscroll(.below(point.y - view.bounds.height))
     } else if point.x < column {
       autoscroll(.left(column - point.x))
-      extend(to: point, reveal: .none)
+      extend(to: point, lineEnd: false, reveal: .none)
+    } else if point.x > view.bounds.width {
+      autoscroll(.right(point.x - view.bounds.width))
+      extend(to: point, lineEnd: true, reveal: .none)
     } else {
       stopAutoscroll()
       extend(to: point, reveal: .minimal)
     }
   }
+
+  /// 自動スクロールが回っているか。
+  var isAutoscrolling: Bool { link != nil }
 
   func mouseUp(_ event: NSEvent, in view: NSView) {
     stopAutoscroll()
@@ -199,10 +209,17 @@ final class MouseSelection: NSObject {
     }
   }
 
-  private func extend(to point: CGPoint, position: SIMD2<Double>? = nil, reveal: Reveal) {
-    guard let surface, let drag, let text = surface.editingEnvironment()?.text,
-      let hit = surface.hit(point, position: position)
+  /// 点の下まで伸ばす。`lineEnd` を与えれば、点の行の行末（true）か行頭（false）まで。
+  private func extend(
+    to point: CGPoint, position: SIMD2<Double>? = nil, lineEnd: Bool? = nil, reveal: Reveal
+  ) {
+    guard let surface, let drag, let text = surface.currentContent?.text,
+      var hit = surface.hit(point, position: position)
     else { return }
+    if let lineEnd {
+      let content = text.contentRange(ofRow: hit.row)
+      hit.offset = lineEnd ? NSMaxRange(content) : content.location
+    }
     let primary = surface.editor.state.cursors.primary
     let cursor: Cursor
     if case .numbers = drag {
@@ -234,8 +251,8 @@ final class MouseSelection: NSObject {
     frame(now: CACurrentMediaTime())
   }
 
-  /// 前のコマからの経過時間ぶんスクロールし、縦なら見えている端の行まで、横ならポインタの行まで伸ばす。スクロールと選択は
-  /// 1 つの取引で置く。
+  /// 前のコマからの経過時間ぶんスクロールし、縦なら見えている端の行（上は行頭、下は行末）まで、横ならポインタの行（左は
+  /// 行頭、右は行末）まで伸ばす。スクロールと選択は 1 つの取引で置く。
   func frame(now: CFTimeInterval) {
     guard let edge, let surface, let view else { return }
     defer { lastFrame = now }
@@ -244,7 +261,15 @@ final class MouseSelection: NSObject {
     let (position, limits) = surface.scroll.peek(at: now)
     var p = position
     let lineHeight = surface.config.lineHeight
+    let fullWidth = 2 * surface.config.cell
+    let horizontal = { (distance: CGFloat) in
+      Double(
+        DragScrollSpeed.speed(
+          outside: distance / fullWidth, visible: CGFloat(limits.viewport.x) / fullWidth)
+          * elapsed * fullWidth * 0.5)
+    }
     let target: CGPoint
+    let lineEnd: Bool
     switch edge {
     case .above(let distance), .below(let distance):
       let visible = view.bounds.height - surface.config.topInset
@@ -253,18 +278,20 @@ final class MouseSelection: NSObject {
         * elapsed * lineHeight
       let above = if case .above = edge { true } else { false }
       p.y += Double(above ? -delta : delta)
-      target = CGPoint(
-        x: max(point.x, view.bounds.width - CGFloat(limits.viewport.x)),
-        y: above ? surface.config.topInset : view.bounds.height - 0.5)
+      target = CGPoint(x: point.x, y: above ? surface.config.topInset : view.bounds.height - 0.5)
+      lineEnd = !above
     case .left(let distance):
-      let fullWidth = 2 * surface.config.cell
-      let visible = CGFloat(limits.viewport.x)
-      p.x -= Double(
-        DragScrollSpeed.speed(outside: distance / fullWidth, visible: visible / fullWidth)
-          * elapsed * fullWidth * 0.5)
+      p.x -= horizontal(distance)
       target = point
+      lineEnd = false
+    case .right(let distance):
+      p.x += horizontal(distance)
+      target = point
+      lineEnd = true
     }
     p = simd_clamp(p, .zero, simd_max(limits.maximum, .zero))
-    surface.transact(scrollTo: p) { extend(to: target, position: p, reveal: .none) }
+    surface.transact(scrollTo: p) {
+      extend(to: target, position: p, lineEnd: lineEnd, reveal: .none)
+    }
   }
 }
