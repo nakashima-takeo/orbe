@@ -18,6 +18,8 @@ final class FrameRecorder {
     var target: Double
     /// 描画の CPU 時間（秒）。
     var cpu: Double
+    /// このコマで行を組版した（初めて見える行があった）。
+    var shaped: Bool
     /// 命令を出し終えた時刻。
     var committed: Double
     /// このコマで初めて入った指の出来事の時刻。
@@ -68,6 +70,8 @@ final class FrameRecorder {
   struct Totals: Sendable {
     /// 描画の CPU 時間（秒）。
     var cpu: [Double] = []
+    /// そのうち、行を組版しなかったコマの CPU 時間（秒）。
+    var steadyCPU: [Double] = []
     /// 描くものがあったのに、上限（画面に出ていないコマ・GPU の空き）で飛ばした回数。前のコマが画面に出るのが
     /// 遅れたときに起きる。
     var skipped = 0
@@ -100,7 +104,10 @@ final class FrameRecorder {
 
   func drew(_ drawn: Drawn) {
     drawnCount += 1
-    if keepsTotals { totals.cpu.append(drawn.cpu) }
+    if keepsTotals {
+      totals.cpu.append(drawn.cpu)
+      if !drawn.shaped { totals.steadyCPU.append(drawn.cpu) }
+    }
     if let current, current.id != drawn.gesture { flush() }
     if current == nil, drawn.moving || !drawn.events.isEmpty {
       current = Gesture(id: drawn.gesture)

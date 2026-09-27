@@ -176,8 +176,8 @@ final class Renderer {
     let pixels = Self.pixelSize(material)
     slot.recorder.drew(
       FrameRecorder.Drawn(
-        frame: frameID, target: target, cpu: committed - began, committed: committed,
-        events: frame.events,
+        frame: frameID, target: target, cpu: committed - began,
+        shaped: slot.lines.shapedInFrame > 0, committed: committed, events: frame.events,
         moving: moving, gesture: frame.gesture,
         mismatch: texture.width != pixels.width || texture.height != pixels.height))
     if frame.returning || wasReturning || widened { slot.notify() }

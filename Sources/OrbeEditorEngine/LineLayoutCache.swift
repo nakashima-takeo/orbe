@@ -70,6 +70,8 @@ final class LineLayoutCache {
   var count: Int { entries.count }
   private(set) var weight = 0
 
+  /// このコマで組版した（どちらの段にも無かった）行の数。
+  private(set) var shapedInFrame = 0
   private var drawnRows: [Int: LaidOutLine] = [:]
   private var frameRows: [Int: LaidOutLine] = [:]
   private var rowsVersion: Int?
@@ -90,6 +92,7 @@ final class LineLayoutCache {
     }
     rowsVersion = version
     rowsTabColumns = tabColumns
+    shapedInFrame = 0
   }
 
   /// このコマで描く行 `row` の組んだ結果。
@@ -135,6 +138,7 @@ final class LineLayoutCache {
       entries.values[index].used = clock
       return entries.values[index].line
     }
+    shapedInFrame += 1
     var line = LaidOutLine(
       LineShaper.shape(source, font: config.font, tabWidth: config.tabWidth(columns: tabColumns)),
       fonts: fonts)

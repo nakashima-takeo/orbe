@@ -5,8 +5,8 @@ import os
 @testable import OrbeEditorEngine
 
 /// 窓を出さない計測の刻み。専用のスレッドが実際の表示の刻み（120Hz）で起き、止められていない面の 1 コマを描画スレッドへ
-/// 頼む。画面外のテクスチャの「画面に出た」は、GPU が描き終えた時刻を次の刻みに切り上げた時刻で、その刻みが来たときに
-/// 知らせる（画面と同じく、出る前に次のコマを描かせない）。
+/// 頼む。画面外のテクスチャの「画面に出た」は、GPU が描き終えた時刻（命令の列の `gpuEndTime`。完了の知らせが届いた
+/// 時刻ではない）を次の刻みに切り上げた時刻で、その刻みが来たときに知らせる（画面と同じく、出る前に次のコマを描かせない）。
 final class HeadlessDriver: @unchecked Sendable {
   static let period = 1.0 / 120
 
@@ -126,7 +126,7 @@ final class VirtualClock: FrameClock {
   var period: Double { HeadlessDriver.period }
 
   func nextTarget(after now: Double) -> Double {
-    ((now / period).rounded(.up) + 1) * period
+    ((now / period).rounded(.down) + 1) * period
   }
 
   func invalidate() { driver.invalidate(id) }
@@ -157,10 +157,15 @@ final class OffscreenTarget: FrameTarget {
     let driver = driver
     let holds = holds
     return AcquiredFrame(texture: texture) { commands, done in
-      commands.addCompletedHandler { _ in
+      commands.addCompletedHandler { commands in
         guard !holds else { return }
+        // エラーで終わった命令の列は描き終えた時刻を持たない（0）。画面に出なかったコマとして知らせる。
+        guard commands.status == .completed, commands.gpuEndTime > 0 else {
+          done(nil)
+          return
+        }
         let period = HeadlessDriver.period
-        driver.schedulePresent(at: (CACurrentMediaTime() / period).rounded(.up) * period, done)
+        driver.schedulePresent(at: (commands.gpuEndTime / period).rounded(.up) * period, done)
       }
     }
   }

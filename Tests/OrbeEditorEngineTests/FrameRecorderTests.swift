@@ -21,7 +21,8 @@ final class FrameRecorderTests: XCTestCase {
     moving: Bool = true, gesture: Int = 1
   ) -> FrameRecorder.Drawn {
     FrameRecorder.Drawn(
-      frame: frame, target: target, cpu: 0.0005, committed: committed, events: events,
+      frame: frame, target: target, cpu: 0.0005, shaped: false, committed: committed,
+      events: events,
       moving: moving, gesture: gesture, mismatch: false)
   }
 
