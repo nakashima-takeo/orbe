@@ -37,28 +37,45 @@ struct SelectionCursor {
   }
 }
 
-/// 選択の地とキャレット。どちらの x も、字を描いた行の組版から引く（`CaretX`）ので、描いた字と食い違わない。
+/// 選択の地とキャレット。どちらの x も、字を描いた行の組版の位置と x の対応（`CaretMap`）から引くので、描いた字と食い違わ
+/// ない。
 extension FrameBuilder {
-  /// 選択と行の交わりを行の高さいっぱいの矩形で塗る。選択が行の改行を含めば、行末から半角 1 字ぶん伸ばす。
+  /// 選択と行の交わりを行の高さいっぱいの矩形で塗る。右から左の字を挟めば、論理の選択を見た目の区間ごとに分けて塗る。選択が
+  /// 行の改行を含めば、行の右端から半角 1 字ぶん伸ばす。
   func drawSelection(
     _ selection: NSRange, _ line: LaidOutLine, _ span: LineSpan, rowTop: Double, _ c: Context
   ) {
     let g = c.g
-    let from = max(0, selection.location - span.start)
-    let x0 = from == 0 ? 0 : line.x(ofColumn: from)
-    let x1 =
-      NSMaxRange(selection) > span.start + span.length
-      ? line.x(ofColumn: span.length) + c.config.cell
-      : line.x(ofColumn: NSMaxRange(selection) - span.start)
-    guard x1 > x0 else { return }
+    let from = selection.location - span.start
+    let to = NSMaxRange(selection) - span.start
+    var segments = line.carets.segments(from: from, to: min(to, span.length))
+    if to > span.length { segments.append(line.width...(line.width + c.config.cell)) }
     let originX = g.column - g.scrollX
-    let left = (originX + Double(x0) * g.scale).rounded()
-    let right = (originX + Double(x1) * g.scale).rounded()
     let bottom = rowTop + g.lineHeight.rounded()
     let ink = c.focused ? c.palette.selection : c.palette.inactiveSelection
+    var painted: ClosedRange<Double>?
+    for segment in segments.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+      let left = (originX + Double(segment.lowerBound) * g.scale).rounded()
+      let right = (originX + Double(segment.upperBound) * g.scale).rounded()
+      if let last = painted, left <= last.upperBound {
+        painted = last.lowerBound...max(last.upperBound, right)
+        continue
+      }
+      if let last = painted { paintSelection(last, rowTop: rowTop, bottom: bottom, ink) }
+      painted = left...right
+    }
+    if let last = painted { paintSelection(last, rowTop: rowTop, bottom: bottom, ink) }
+  }
+
+  private func paintSelection(
+    _ x: ClosedRange<Double>, rowTop: Double, bottom: Double, _ ink: FrameColor
+  ) {
+    guard x.upperBound > x.lowerBound else { return }
     underShapes.append(
       ShapeInstance(
-        rect: SIMD4(Float(left), Float(rowTop), Float(right - left), Float(bottom - rowTop)),
+        rect: SIMD4(
+          Float(x.lowerBound), Float(rowTop), Float(x.upperBound - x.lowerBound),
+          Float(bottom - rowTop)),
         color: ink.packed, radius: 0, kind: 0))
   }
 
@@ -66,7 +83,7 @@ extension FrameBuilder {
   func drawCaret(at column: Int, _ line: LaidOutLine, rowTop: Double, _ c: Context) {
     let g = c.g
     let size = c.config.caretSize
-    let x = (g.column - g.scrollX + Double(line.x(ofColumn: column)) * g.scale).rounded()
+    let x = (g.column - g.scrollX + Double(line.carets.x(column)) * g.scale).rounded()
     let width = max(1, (Double(size.width) * g.scale).rounded())
     let height = (Double(size.height) * g.scale).rounded()
     let top = (rowTop + (g.lineHeight - height) / 2).rounded()
@@ -74,12 +91,5 @@ extension FrameBuilder {
       ShapeInstance(
         rect: SIMD4(Float(x), Float(top), Float(width), Float(height)),
         color: c.palette.caret.packed, radius: 0, kind: 0))
-  }
-}
-
-extension LaidOutLine {
-  /// 行の中の位置の x（pt）。
-  func x(ofColumn column: Int) -> CGFloat {
-    CaretX.x(ofColumn: column, offsets: offsets, xs: xs, width: width)
   }
 }

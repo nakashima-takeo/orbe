@@ -17,6 +17,8 @@ struct LaidOutLine {
   /// 打ち切って描かない単位の数と、行末に出す印（打ち切っていなければ nil）。
   var omitted = 0
   var omittedMark: OmittedMark?
+  /// 行の中の位置と x の対応（キャレット・選択の地）。
+  let carets: CaretMap
 
   struct OmittedMark {
     var fonts: [UInt16]
@@ -37,6 +39,7 @@ struct LaidOutLine {
     }
     width = shaped.width
     omitted = shaped.omitted
+    carets = shaped.carets
   }
 }
 
@@ -57,7 +60,7 @@ final class LineLayoutCache {
   private struct Entry {
     let line: LaidOutLine
     var used: UInt64
-    /// 持つ単位の数（行の中身とグリフ）。
+    /// 持つ単位の数（行の中身・グリフ・キャレットの位置）。
     let weight: Int
   }
 
@@ -148,7 +151,8 @@ final class LineLayoutCache {
       line.omittedMark = LaidOutLine.OmittedMark(
         fonts: mark.fonts, glyphs: mark.glyphs, xs: mark.xs, width: mark.width)
     }
-    let entry = Entry(line: line, used: clock, weight: source.head.count + line.glyphs.count)
+    let entry = Entry(
+      line: line, used: clock, weight: source.head.count + line.glyphs.count + line.carets.count)
     while !entries.isEmpty,
       entries.count >= Self.capacity || weight + entry.weight > Self.weightBudget
     {

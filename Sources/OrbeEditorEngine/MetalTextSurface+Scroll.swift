@@ -126,11 +126,7 @@ extension MetalTextSurface {
     let (source, lineStart) = LineShaper.source(row: rows.lowerBound, in: text)
     let stops = lineStops.stops(source, tabWidth: config.tabWidth(columns: indentation.unit))
     scroll.noteLine(width: Double(stops.width))
-    let x = { (offset: Int) in
-      Double(
-        CaretX.x(
-          ofColumn: offset - lineStart, offsets: stops.offsets, xs: stops.xs, width: stops.width))
-    }
+    let x = { (offset: Int) in Double(stops.carets.x(offset - lineStart)) }
     let x0 = x(range.location)
     let x1 = rows.lowerBound == rows.upperBound ? x(NSMaxRange(range)) : x0
     if x0 < p.x || x1 - x0 > area.x {

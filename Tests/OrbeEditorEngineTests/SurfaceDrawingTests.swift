@@ -59,6 +59,34 @@ final class SurfaceDrawingTests: EngineTestCase {
     XCTAssertEqual(pixel(unfocused, x: x, y: at.y)[3], 0, "焦点が無ければ描かない")
   }
 
+  /// 右から左の字を含む行でも、キャレットは位置の字の見た目の縁に描き、選択の地は見た目の区間ごとに塗る——`ab שלום cd` の
+  /// ש ל（位置 3〜5）を選べば、右から左の並びの右側だけが塗られ、左側の ו ם は塗られない。
+  func testCaretAndSelectionFollowRightToLeftCharacters() throws {
+    let opened = try open("ab שלום cd\nمرحبا\n")
+    _ = host(opened, size: CGSize(width: 400, height: 80))
+    opened.surface.updateFocus(true)
+    let config = opened.surface.config
+    let column = config.columnWidth(lineCount: opened.document.text.lineCount)
+    let px = { (x: CGFloat) in Int(((column + x) * 2).rounded()) }
+    for (row, offset) in [(0, 5), (1, 2)] {
+      opened.surface.selectedRange = NSRange(
+        location: opened.document.text.lineStart(row) + offset, length: 0)
+      let image = try XCTUnwrap(opened.surface.snapshot())
+      let y = Int(((config.topInset + (CGFloat(row) + 0.5) * config.lineHeight) * 2).rounded())
+      XCTAssertEqual(
+        pixel(image, x: px(caretX(opened, row: row, offset: offset)) + 1, y: y),
+        [255, 255, 255, 255],
+        "行 \(row) の位置 \(offset) のキャレット")
+    }
+    opened.surface.selectedRange = NSRange(location: 3, length: 2)
+    let image = try XCTUnwrap(opened.surface.snapshot())
+    let top = Int(((config.topInset + 1) * 2).rounded())
+    let selected = (caretX(opened, row: 0, offset: 4) + caretX(opened, row: 0, offset: 5)) / 2
+    XCTAssertEqual(rgb(pixel(image, x: px(selected), y: top)), selection, "ל の上")
+    let unselected = (caretX(opened, row: 0, offset: 6) + caretX(opened, row: 0, offset: 7)) / 2
+    XCTAssertEqual(pixel(image, x: px(unselected), y: top)[3], 0, "ם の上は塗らない")
+  }
+
   /// 点滅は起点から 500ms の偶数区間で表示し、次に切り替わる時刻だけ起きる。焦点が無ければ描かず、起きない。
   func testBlinkPhase() {
     var caret = CaretMaterial(selections: [], carets: [3], epoch: 10, focused: true)

@@ -71,9 +71,7 @@ final class LineShaperTests: XCTestCase {
   }
 
   private func x(_ column: Int, _ string: String, tab: CGFloat) -> CGFloat {
-    let shaped = LineShaper.shape(source(string), font: font, tabWidth: tab)
-    let (offsets, xs) = shaped.stops
-    return CaretX.x(ofColumn: column, offsets: offsets, xs: xs, width: shaped.width)
+    LineShaper.shape(source(string), font: font, tabWidth: tab).carets.x(column)
   }
 
   /// タブはインデント単位の桁まで空ける（次のタブ位置へ）。
@@ -95,6 +93,54 @@ final class LineShaperTests: XCTestCase {
     let long = String(repeating: "a", count: 10_050)
     let shaped = LineShaper.shape(source(long), font: font, tabWidth: tab)
     XCTAssertEqual(x(10_040, long, tab: tab), shaped.width, accuracy: 0.01, "描かない部分は描いた部分の右端")
+  }
+
+  /// 位置と x の対応は、組んだ行の双方向の対応と同じ——右から左の字を含む行でも、位置のキャレットの x が Core Text
+  /// （`CTLineGetOffsetForStringIndex` の主）と一致する。壊れると、ヘブライ語・アラビア語の行でキャレット・選択の地が字と
+  /// ずれる。
+  func testCaretMapFollowsCoreTextInBidirectionalLines() {
+    var direction = CTWritingDirection.leftToRight
+    let paragraph = withUnsafeBytes(of: &direction) { bytes in
+      let settings = [
+        CTParagraphStyleSetting(
+          spec: .baseWritingDirection, valueSize: MemoryLayout<CTWritingDirection>.size,
+          value: bytes.baseAddress!)
+      ]
+      return CTParagraphStyleCreate(settings, settings.count)
+    }
+    let samples = [
+      "ab שלום cd", "שלום עולם", "ab مرحبا cd", "مرحبا", "abc 123 אבג 456 def", "x😀y", "e\u{301}f",
+    ]
+    for string in samples {
+      let attributed = NSAttributedString(
+        string: string,
+        attributes: [
+          NSAttributedString.Key(kCTFontAttributeName as String): font,
+          NSAttributedString.Key(kCTParagraphStyleAttributeName as String): paragraph,
+        ])
+      let line = CTLineCreateWithAttributedString(attributed)
+      let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+      let map = CaretMap(line, width: width)
+      for offset in 0...(string as NSString).length {
+        let primary = CTLineGetOffsetForStringIndex(line, offset, nil)
+        XCTAssertEqual(map.x(offset), primary, accuracy: 0.01, "\(string) の位置 \(offset)")
+      }
+    }
+  }
+
+  /// 右から左の字を挟む選択は、見た目の区間ごとに分かれる——`ab שלום cd` の ש ל（位置 3〜5）は右から左の並びの右側、
+  /// 並び全体は 1 つの区間、左から右の字だけなら 1 つの区間。
+  func testSelectionSegmentsSplitAroundRightToLeftRuns() {
+    let map = LineShaper.shape(source("ab שלום cd"), font: font, tabWidth: 0).carets
+    XCTAssertGreaterThan(map.x(4), map.x(5), "右から左の並びの中は位置が進むと左へ")
+    let hebrew = map.segments(from: 3, to: 5)
+    XCTAssertEqual(hebrew.count, 1)
+    XCTAssertEqual(hebrew.first?.lowerBound ?? -1, map.x(5), accuracy: 0.01)
+    XCTAssertGreaterThan(hebrew.first?.upperBound ?? 0, map.x(4))
+    let crossing = map.segments(from: 1, to: 5)
+    XCTAssertEqual(crossing.count, 2, "b と空白、ש ל は離れた 2 つの区間")
+    XCTAssertEqual(map.segments(from: 0, to: 2).count, 1)
+    XCTAssertEqual(map.segments(from: 0, to: 10).count, 1, "行全体は 1 つ")
   }
 
   /// 1 行で描くのは 10000 単位まで（書記素の境で切る）。残りは描かず、その数を返す。行の中身は先頭しか読まない。

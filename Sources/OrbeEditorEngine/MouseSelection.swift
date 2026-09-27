@@ -48,7 +48,7 @@ extension MetalTextSurface {
     let x = CGFloat(Double(point.x - config.columnWidth(lineCount: text.lineCount)) + p.x)
     let (source, start) = LineShaper.source(row: row, in: text)
     let stops = lineStops.stops(source, tabWidth: config.tabWidth(columns: indentation.unit))
-    guard x < stops.width, let glyph = CaretX.glyph(atX: x, xs: stops.xs) else { return nil }
+    guard x < stops.width, let glyph = stops.glyph(atX: x) else { return nil }
     let column = stops.offsets[glyph]
     let line = text.substring(
       NSRange(location: start, length: min(source.length, LineShaper.limit)))

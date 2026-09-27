@@ -15,9 +15,23 @@ protocol LineGeometry {
 /// 古く使われた 1 つを捨てる（打鍵のたびに変わる長い行の古い結果を、1 つずつ手放す）。
 final class LineStopsCache {
   struct Stops {
+    /// 字の元の位置と x（左から右へ増えていく）。
     let offsets: [Int]
     let xs: [CGFloat]
     let width: CGFloat
+    let carets: CaretMap
+    let line: CTLine
+
+    /// x 以下にある最後の字の番号（どの字より左なら nil）。
+    func glyph(atX x: CGFloat) -> Int? {
+      var low = 0
+      var high = xs.count
+      while low < high {
+        let mid = (low + high) / 2
+        if xs[mid] <= x { low = mid + 1 } else { high = mid }
+      }
+      return low > 0 ? low - 1 : nil
+    }
   }
 
   private struct Key: Hashable {
@@ -43,7 +57,8 @@ final class LineStopsCache {
     }
     let shaped = LineShaper.shape(source, font: font, tabWidth: tabWidth)
     let (offsets, xs) = shaped.stops
-    let stops = Stops(offsets: offsets, xs: xs, width: shaped.width)
+    let stops = Stops(
+      offsets: offsets, xs: xs, width: shaped.width, carets: shaped.carets, line: shaped.line)
     if entries.count >= Self.capacity,
       let oldest = entries.min(by: { $0.value.used < $1.value.used })
     {
@@ -54,27 +69,29 @@ final class LineStopsCache {
   }
 }
 
-/// 描画と同じ組版の規則（`LineShaper` と `CaretX`）で答える、本文の写しの行の横位置。
+/// 描画と同じ組版の規則（`LineShaper` と `CaretMap`）で答える、本文の写しの行の横位置。
 struct ShapedLineGeometry: LineGeometry {
   let text: TextRope
   let cache: LineStopsCache
   let tabWidth: CGFloat
 
   func x(ofColumn column: Int, row: Int) -> CGFloat {
-    let stops = cache.stops(LineShaper.source(row: row, in: text).source, tabWidth: tabWidth)
-    return CaretX.x(ofColumn: column, offsets: stops.offsets, xs: stops.xs, width: stops.width)
+    cache.stops(LineShaper.source(row: row, in: text).source, tabWidth: tabWidth).carets.x(column)
   }
 
+  /// x にいちばん近い位置（`CTLineGetStringIndexForPosition`。右から左の字の並びでも見た目に合う）を、書記素の境へ寄せる
+  /// （組版の字の単位と OS の書記素が違えば、x の近い方の端）。行の左より左は行頭、右より右は描かない部分を含めた行の終わり。
   func column(atX x: CGFloat, row: Int) -> Int {
     let (source, start) = LineShaper.source(row: row, in: text)
     let stops = cache.stops(source, tabWidth: tabWidth)
-    guard x > 0, let glyph = CaretX.glyph(atX: x, xs: stops.xs) else { return 0 }
-    guard x < stops.width else { return source.length }
-    let cluster = text.grapheme(containing: start + stops.offsets[glyph])
+    let carets = stops.carets
+    guard x >= 0 else { return 0 }
+    guard x <= carets.width else { return source.length }
+    let column = max(0, CTLineGetStringIndexForPosition(stops.line, CGPoint(x: x, y: 0)))
+    let cluster = text.grapheme(containing: start + column)
+    guard cluster.location < start + column else { return column }
     let left = cluster.location - start
     let right = min(NSMaxRange(cluster) - start, source.length)
-    let leftX = CaretX.x(ofColumn: left, offsets: stops.offsets, xs: stops.xs, width: stops.width)
-    let rightX = CaretX.x(ofColumn: right, offsets: stops.offsets, xs: stops.xs, width: stops.width)
-    return x - leftX <= rightX - x ? left : right
+    return abs(x - carets.x(left)) <= abs(carets.x(right) - x) ? left : right
   }
 }

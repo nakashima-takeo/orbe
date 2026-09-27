@@ -96,6 +96,24 @@ final class SurfaceMouseTests: EngineTestCase {
     XCTAssertEqual(opened.surface.caretLocation, 10)
   }
 
+  /// 右から左の字を含む行でも、押した字の見た目の位置にキャレットが置かれる（ヘブライ語・アラビア語・混在の行）。右から
+  /// 左の並びの中では、字の右の縁が字の前。
+  func testClicksLandOnRightToLeftCharacters() throws {
+    let opened = try open("ab שלום cd\nمرحبا\nאבג 12\n")
+    _ = host(opened)
+    let config = opened.surface.config
+    let column = config.columnWidth(lineCount: opened.document.text.lineCount)
+    for (row, offset) in [(0, 4), (0, 6), (1, 2), (2, 1)] {
+      let x = caretX(opened, row: row, offset: offset)
+      let y = config.topInset + (CGFloat(row) + 0.5) * config.lineHeight
+      try mouse(opened, .leftMouseDown, at: CGPoint(x: column + x - 1, y: y))
+      try mouse(opened, .leftMouseUp, at: CGPoint(x: column + x - 1, y: y))
+      XCTAssertEqual(
+        opened.surface.caretLocation, opened.document.text.lineStart(row) + offset,
+        "行 \(row) の位置 \(offset) の字の右の縁のすぐ左")
+    }
+  }
+
   /// ドラッグが本文の下へ出ると、ポインタが止まっていても自動スクロールし、選択が見えている下端の行まで伸び続ける。
   func testDraggingBelowTheTextAutoscrollsAndExtends() throws {
     let opened = try open((0..<500).map { "row \($0)" }.joined(separator: "\n"))

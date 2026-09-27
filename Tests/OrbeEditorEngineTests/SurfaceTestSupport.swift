@@ -66,6 +66,14 @@ extension EngineTestCase {
       y: config.topInset + (CGFloat(row) + 0.5) * config.lineHeight)
   }
 
+  /// 行 `row` の位置 `offset`（行頭から）のキャレットの x（pt。行頭から）——面と同じ組版の規則で組んだ行から。
+  func caretX(_ opened: Opened, row: Int, offset: Int) -> CGFloat {
+    let config = opened.surface.config
+    let source = LineShaper.source(row: row, in: opened.document.text).source
+    let tab = config.tabWidth(columns: opened.document.indentation.unit)
+    return LineShaper.shape(source, font: config.font, tabWidth: tab).carets.x(offset)
+  }
+
   func click(
     _ opened: Opened, row: Int, column: CGFloat, clicks: Int = 1, flags: NSEvent.ModifierFlags = []
   )
