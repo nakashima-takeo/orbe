@@ -152,16 +152,18 @@ extension EditCommands {
   }
 
   /// ⌃⌫（macOS の `deleteBackwardByDecomposingPreviousCharacter`）——前の字を分解し、最後の結合文字だけを消す（分解
-  /// できない字はそのまま消す）。
+  /// できない字と改行（`\r\n` を割らない）はそのまま消す）。
   static func deleteDecomposing(_ state: EditState, _ env: EditingEnvironment) -> CommandResult {
     edit(state, env, undo: .deletingLeft) { cursor in
       guard cursor.selection.length == 0 else { return Replacement(cursor.selection, "") }
       guard cursor.position > 0 else { return nil }
       let cluster = env.text.grapheme(containing: cursor.position - 1)
       let range = NSRange(location: cluster.location, length: cursor.position - cluster.location)
-      let decomposed = env.text.substring(range).decomposedStringWithCanonicalMapping
-      let scalars = decomposed.unicodeScalars
-      guard scalars.count > 1 else { return Replacement(range, "") }
+      let character = env.text.substring(range)
+      let scalars = character.decomposedStringWithCanonicalMapping.unicodeScalars
+      guard scalars.count > 1, !character.allSatisfy(\.isNewline) else {
+        return Replacement(range, "")
+      }
       var kept = String.UnicodeScalarView()
       kept.append(contentsOf: scalars.dropLast())
       return Replacement(range, String(kept))

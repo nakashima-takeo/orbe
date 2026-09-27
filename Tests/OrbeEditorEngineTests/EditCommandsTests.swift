@@ -147,6 +147,24 @@ final class EditCommandsTests: XCTestCase {
     XCTAssertEqual(Editing.run(.deleteBackwardDecomposing, on: "é|"), "e|", "⌃⌫ は前の字を分解して最後だけ")
   }
 
+  /// 行の区切りをまたいで消す削除は `\r\n` を割らない（`\r` だけの行末を残さない）。
+  func testDeletionsAcrossALineBreakKeepCRLFWhole() {
+    let backward: [(String, EditCommand)] = [
+      ("⌫", .deleteBackward), ("⌃⌫", .deleteBackwardDecomposing), ("⌥⌫", .deleteWordBackward),
+      ("⌘⌫", .deleteToLineStart), ("行頭までのキル", .kill(forward: false)),
+    ]
+    for (name, command) in backward {
+      XCTAssertEqual(Editing.run(command, on: "ab\r\n|cd\r\nef"), "ab|cd\r\nef", name)
+    }
+    let forward: [(String, EditCommand)] = [
+      ("⌦", .deleteForward), ("⌥⌦", .deleteWordForward), ("行末まで", .deleteToLineEnd),
+      ("⌃K", .kill(forward: true)),
+    ]
+    for (name, command) in forward {
+      XCTAssertEqual(Editing.run(command, on: "ab|\r\ncd\r\nef"), "ab|cd\r\nef", name)
+    }
+  }
+
   /// ⌫ が字下げの空白の中なら前のタブ位置まで消す（VS Code の useTabStops）。
   func testBackspaceInIndentationDeletesToThePreviousTabStop() {
     XCTAssertEqual(Editing.run(.deleteBackward, on: "      |x"), "    |x")
