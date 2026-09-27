@@ -4,7 +4,8 @@ import SwiftUI
 /// サイドバー: 検索パネル（見本 SearchPanel を u4 で詰めた比率に揃えたもの）。上から、ヘッダー（題・更新／停止・クリア・
 /// すべて折りたたむ／すべて展開。検索中はその下端に進捗の細い線）→ 入力欄（Aa / ab / .*）→ エラーの文 → 結果の列 → 件数の文
 /// （パネルの下に固定）。状態は `ProjectSearch` だけを読み、入力欄の焦点は SwiftUI の焦点を `focusedArea` へ写す（結果の列の
-/// 焦点は列が自分で写す）。
+/// 焦点は列が自分で写す）。部分ごとに別の view にして、読む値が変わった部分だけを組み直す（結果が届くたびに入力欄まで
+/// 組み直さない）。
 struct SearchPanelView: View {
   let search: ProjectSearch
   @FocusState private var fieldFocused: Bool
@@ -12,10 +13,7 @@ struct SearchPanelView: View {
 
   var body: some View {
     EditorSidebarPanel {
-      header
-        .overlay(alignment: .bottom) {
-          if search.showsProgress { SearchProgressLine() }
-        }
+      SearchPanelHeader(search: search)
       ProjectSearchField(search: search, focus: $fieldFocused)
       if let error = search.error {
         Text(message(for: error))
@@ -49,9 +47,15 @@ struct SearchPanelView: View {
     case .disk(.refused(let line)): line
     }
   }
+}
 
-  /// 右端のツール: 更新（2 秒を超えた検索では停止）・クリア・すべて折りたたむ／すべて展開。
-  private var header: some View {
+/// ヘッダー: 題と右端のツール（更新（2 秒を超えた検索では停止）・クリア・すべて折りたたむ／すべて展開）。検索中は下端に
+/// 進捗の細い線。
+private struct SearchPanelHeader: View {
+  let search: ProjectSearch
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
     EditorPanelHeader(title: l10n.string(.editorSearchTitle)) {
       if search.phase == .slow {
         EditorIconButton(
@@ -72,6 +76,9 @@ struct SearchPanelView: View {
           glyph: EditorGlyphs.expandAll, help: l10n.string(.editorSearchExpandAll),
           action: search.toggleCollapseAll)
       }
+    }
+    .overlay(alignment: .bottom) {
+      if search.showsProgress { SearchProgressLine() }
     }
   }
 }
