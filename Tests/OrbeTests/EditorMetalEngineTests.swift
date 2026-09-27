@@ -186,6 +186,46 @@ final class EditorMetalEngineTests: OrbeTestCase {
     XCTAssertTrue(window.firstResponder === document.surface.responder, "焦点は本文のまま")
   }
 
+  /// 新しい面は 1 回の操作の編集を束で文書へ渡す。検索の一致は、その束（複数行の字下げ）とその undo を編集ごとに畳んで、
+  /// 取り直しを待たずに本文の一致の位置に付いていく。壊れると、字下げや ⌘Z の後に一致の地が本文とずれて見える。
+  func testSearchMatchesFollowTheBatchesOfTheNewSurface() throws {
+    let tab = TerminalTab(cwd: try XCTUnwrap(TestIsolation.caseDir).path, editorSurfaces: surfaces)
+    let window = hostEditor(tab, width: 900, height: 500)
+    defer { window.contentView = nil }
+    let document = try tab.editor.open(try caseFile("a.swift", lines(30)))
+    XCTAssertTrue(isMetal(document))
+    let pane = tab.view.editor
+    pane.layoutSubtreeIfNeeded()
+    pane.showSearch()
+    pane.search.setNeedle("value")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(pane.search.matches.count, 30, "前提")
+    pane.search.refreshDelay.schedule = { _, _ in }
+    let responder = document.surface.responder
+    responder.selectAll(nil)
+    responder.insertTab(nil)
+    let text = { document.text.substring(NSRange(location: 0, length: document.text.length)) }
+    XCTAssertTrue(text().hasPrefix("    let value0"), "前提: 各行を字下げした")
+    XCTAssertEqual(pane.search.matches, occurrences(of: "value", in: text()))
+    try XCTUnwrap(responder.undoManager).undo()
+    XCTAssertEqual(text(), lines(30), "前提: 戻した")
+    XCTAssertEqual(pane.search.matches, occurrences(of: "value", in: text()))
+  }
+
+  private func occurrences(of needle: String, in text: String) -> [NSRange] {
+    let text = text as NSString
+    var found: [NSRange] = []
+    var from = 0
+    while case let range = text.range(
+      of: needle, range: NSRange(location: from, length: text.length - from)),
+      range.location != NSNotFound
+    {
+      found.append(range)
+      from = NSMaxRange(range)
+    }
+    return found
+  }
+
   /// 再起動の復元で開く文書も、タブに渡した組成（新しい面）で開く。
   func testRestoredDocumentsOpenWithTheNewSurface() throws {
     let url = try caseFile("a.swift", lines(5))
