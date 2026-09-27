@@ -67,13 +67,14 @@ class EngineTestCase: XCTestCase {
   /// `text` を `name` のファイルとして開き、新しい面を結んで `size` の大きさを与える（窓には載せない）。
   func open(
     _ text: String, name: String = "a.swift", size: CGSize = CGSize(width: 800, height: 600),
-    scale: CGFloat = 2, options: MetalTextSurfaceOptions = options, waitForColors: Bool = true
+    scale: CGFloat = 2, options: MetalTextSurfaceOptions = options,
+    style: TextSurfaceStyle? = nil, waitForColors: Bool = true
   ) throws -> Opened {
     let url = root.appendingPathComponent(UUID().uuidString).appendingPathComponent(name)
     try FileManager.default.createDirectory(
       at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     try Data(text.utf8).write(to: url)
-    let surface = MetalTextSurface(style: Self.style(), options: options)
+    let surface = MetalTextSurface(style: style ?? Self.style(), options: options)
     let document = EditorDocument(
       url: url, contents: try EditorDocument.read(url), surface: surface,
       registry: Self.registry)

@@ -4,8 +4,9 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 新しい面の契約——文書の写しを引いて描く・見えている範囲の通知・main の操作のスクロール・読むだけ。壊れると俯瞰と
-/// 構文色の見えている範囲が本文とずれる、⌘F の次・前で一致が見えない、印や色が古い本文で描かれる、打鍵で本文が変わる。
+/// 新しい面の契約——文書の写しを引いて描く・見えている範囲の通知・main の操作のスクロール・外観に従う色・読むだけ。
+/// 壊れると俯瞰と構文色の見えている範囲が本文とずれる、⌘F の次・前で一致が見えない、印や色や字が古い本文で描かれる、
+/// ライト・ダークを切り替えても字が前の外観の色のまま、打鍵で本文が変わる。
 @MainActor
 final class MetalTextSurfaceTests: EngineTestCase {
   private func lines(_ count: Int, width: Int = 10) -> String {
@@ -110,6 +111,42 @@ final class MetalTextSurfaceTests: EngineTestCase {
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 4, length: 0))
   }
 
+  /// 外部変更の差し替えの後は、新しい本文をその本文で開いたときと同じ絵で描く（前の本文の行の組版を持ち越さない）。
+  func testReplaceAllDrawsTheNewTextAsAFreshOpenDoes() throws {
+    let old = (0..<30).map { "let value\($0) = \($0)" }
+    var new = old
+    new[3] = "let changed = \"three\""
+    new.insert(contentsOf: ["// inserted", "// lines"], at: 10)
+    new.remove(at: 20)
+    let opened = try open(old.joined(separator: "\n") + "\n", size: CGSize(width: 400, height: 300))
+    _ = opened.surface.snapshot()
+    opened.surface.replaceAll(with: new.joined(separator: "\n") + "\n")
+    XCTAssertTrue(opened.document.waitUntilCaughtUp())
+    let fresh = try open(new.joined(separator: "\n") + "\n", size: CGSize(width: 400, height: 300))
+    let replaced = try shoot(opened).bytes
+    XCTAssertTrue(replaced == (try shoot(fresh).bytes), "開き直したのと同じ絵")
+  }
+
+  /// 外観（ライト・ダーク）が変われば、字の色を新しい外観で解き直して描く。
+  func testAppearanceChangeRecolorsTheText() throws {
+    var style = Self.style()
+    style.textColor = NSColor(name: nil) {
+      $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .white : .black
+    }
+    let opened = try open("value value value\n", name: "a.txt", style: style)
+    let column = Int(opened.surface.config.columnWidth(lineCount: 2) * 2)
+    func textInk() throws -> [UInt8] {
+      let (bytes, width) = try shoot(opened)
+      return stride(from: 0, to: bytes.count, by: 4).filter { ($0 / 4) % width >= column }
+        .map { bytes[$0 + 1] }.filter { $0 != 128 }
+    }
+    XCTAssertGreaterThan(try textInk().max() ?? 0, 200, "ダークでは白い字")
+    opened.surface.view.appearance = NSAppearance(named: .aqua)
+    let light = try textInk()
+    XCTAssertFalse(light.isEmpty)
+    XCTAssertLessThan(light.max() ?? 255, 128, "ライトに変えると黒い字（灰色の地より暗い）")
+  }
+
   /// 本文が右にまだ続くか——描画スレッドが組んだ行で横の範囲が伸びたら、main の操作を待たずに知らせ直す。右端まで
   /// 送れば続かない。
   func testClipsRightTellsWhetherTheTextContinuesToTheRight() throws {
@@ -167,6 +204,16 @@ final class MetalTextSurfaceTests: EngineTestCase {
     let slot = RenderThread.shared.performAndWait { $0.slot(id) == nil }
     XCTAssertTrue(slot, "描画スレッドが面の持ち物を捨てる")
     XCTAssertNil(material.read().content)
+  }
+
+  /// 灰色の地に描いた今の位置の 1 コマの画素（BGRA）と幅（px）。
+  private func shoot(_ opened: Opened) throws -> (bytes: [UInt8], width: Int) {
+    let id = opened.surface.id
+    let gray = MTLClearColor(red: 128.0 / 255, green: 128.0 / 255, blue: 128.0 / 255, alpha: 1)
+    let image = try XCTUnwrap(
+      RenderThread.shared.performAndWait { Transfer(value: $0.snapshot(id, background: gray)) }
+        .value)
+    return (GlyphPixelTests.pixels(image), image.width)
   }
 
   /// 描画スレッドからの非同期の知らせを受けるまで main を回す（条件が無ければ 1 巡りだけ）。
