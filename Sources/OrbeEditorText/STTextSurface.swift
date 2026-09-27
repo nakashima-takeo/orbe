@@ -169,6 +169,17 @@ final class STTextSurface: NSObject, TextSurface {
     textView.breakUndoCoalescing()
   }
 
+  /// 上流は未確定の文字を本文に置いたまま undo の外で持ち、確定を `insertText` で受ける（未確定の文字を消してから入れ直し、
+  /// undo に載せる）。IME の確定と同じ道を通し、IME には変換を捨てさせる（上流の `unmarkText` は未確定の文字を消すだけ）。
+  func commitMarkedText() {
+    guard textView.hasMarkedText() else { return }
+    let marked =
+      textView.attributedSubstring(forProposedRange: textView.markedRange(), actualRange: nil)?
+      .string ?? ""
+    textView.insertText(marked, replacementRange: NSRange(location: NSNotFound, length: 0))
+    textView.inputContext?.discardMarkedText()
+  }
+
   /// 改行の作法は受けて使わない（改行と貼り付けは上流の振る舞いのまま）。
   func setLineBreak(_ lineBreak: LineBreak) {}
 

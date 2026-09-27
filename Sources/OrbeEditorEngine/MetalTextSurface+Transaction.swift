@@ -25,9 +25,10 @@ struct Transaction {
   var remeasure = false
   /// 取引を起こした打鍵の出来事の時刻（打鍵→画面の遅れを、本文と同じ書き込みで材料へ添える）。
   var keystroke: Double?
-  /// 取引の前のカーソルの列と焦点。
+  /// 取引の前のカーソルの列と焦点と、変換中だったか。
   let cursors: CursorList
   let focused: Bool
+  let composing: Bool
   /// 本文を変えたか。
   var edited = false
 }
@@ -54,13 +55,17 @@ extension MetalTextSurface {
 
   /// 取引の中で `body` を行う。取引の中から呼ばれれば同じ取引に入り（見せ方・位置・打鍵の時刻は後から頼んだものが勝ち、測り
   /// 直しは足し合わせる）、そうでなければ取引を開き、終わりに 1 回だけ確定する。`body` の間に文書から届く知らせ（行の印・
-  /// 役割の変化）と材料への書き込みは控えるだけにする。
+  /// 役割の変化）と材料への書き込みは控えるだけにする。打鍵の中の IME の呼び出しは打鍵の取引に入り、描くのは打鍵の後の
+  /// 1 状態だけ。
   func transact(
     reveal: Reveal = .none, of range: NSRange? = nil, scrollTo: SIMD2<Double>? = nil,
     remeasure: Bool = false, keystroke: Double? = nil, _ body: () -> Void = {}
   ) {
     let opens = transaction == nil
-    if opens { transaction = Transaction(cursors: editor.state.cursors, focused: focused) }
+    if opens {
+      transaction = Transaction(
+        cursors: editor.state.cursors, focused: focused, composing: editor.isComposing)
+    }
     if reveal != .none {
       transaction?.reveal = reveal
       transaction?.revealing = range
@@ -100,14 +105,11 @@ extension MetalTextSurface {
   /// 描くコマも、古い本文を新しい位置で描くコマも出ない）。それから描画スレッドを起こし、選択と見えている範囲を知らせる。
   private func commit(_ finished: Transaction) {
     let cursors = editor.state.cursors
-    let restarts = finished.edited || cursors != finished.cursors || focused != finished.focused
+    let composing = editor.isComposing || finished.composing
+    let restarts =
+      finished.edited || cursors != finished.cursors || focused != finished.focused || composing
     let text = finished.content?.text ?? material.read().content?.text
-    let caret = CaretMaterial(
-      selections: cursors.all.map(\.selection).filter { $0.length > 0 }.sorted {
-        $0.location < $1.location
-      },
-      carets: cursors.all.map(\.position), epoch: CACurrentMediaTime(), focused: focused,
-      blinks: caretBlinks)
+    let caret = caretMaterial(cursors)
     let content = finished.content
     let marks = finished.marks.flatMap { spans in text.map { RowMarks(spans, in: $0) } }
     let rowEdits = finished.rowEdits
@@ -138,9 +140,49 @@ extension MetalTextSurface {
     }
     precondition(written == revision, "描く材料の箱を書くのは main の取引だけ")
     wake()
-    if cursors.primary.selection != finished.cursors.primary.selection {
-      delegate?.surfaceDidChangeSelection(self)
-    }
+    announce(
+      selectionChanged: cursors.primary.selection != finished.cursors.primary.selection,
+      composing: composing)
+  }
+
+  /// 確定した取引を知らせる——選択（変わったとき）・見えている範囲・変換中なら文字の座標。
+  private func announce(selectionChanged: Bool, composing: Bool) {
+    if selectionChanged { delegate?.surfaceDidChangeSelection(self) }
     refreshViewport()
+    if composing { inputMethodCoordinatesDidChange() }
+  }
+
+  /// 選択の地・キャレット・変換中の文字。変換中のキャレットは IME の注目位置（文節を選んでいる間は無し）。
+  private func caretMaterial(_ cursors: CursorList) -> CaretMaterial {
+    let composition = editor.composition
+    return CaretMaterial(
+      selections: cursors.all.map(\.selection).filter { $0.length > 0 }.sorted {
+        $0.location < $1.location
+      },
+      carets: composition.map { $0.selection.length == 0 ? [$0.selection.location] : [] }
+        ?? cursors.all.map(\.position),
+      epoch: CACurrentMediaTime(), focused: focused, blinks: caretBlinks,
+      marked: composition.map { MarkedMaterial(range: $0.range, appearance: $0.appearance) })
+  }
+
+  /// 変換の文字の座標が変わった（候補窓・音声入力の印を追従させる）。知らせると IME がその場で座標を読み返すので、変換中
+  /// と変換の終わりだけ知らせる（普通の打鍵の道で行を組まない）。
+  func inputMethodCoordinatesDidChange() {
+    guard let context = textView.inputContext else { return }
+    context.invalidateCharacterCoordinates()
+    if #available(macOS 15.4, *) { context.textInputClientDidUpdateSelection() }
+  }
+}
+
+extension MarkedAppearance {
+  /// 文節の範囲を `offset` だけずらしたもの（入れた文字列の先頭から → 文書の座標）。
+  func shifted(by offset: Int) -> MarkedAppearance {
+    var shifted = self
+    shifted.clauses = clauses.map {
+      var clause = $0
+      clause.range.location += offset
+      return clause
+    }
+    return shifted
   }
 }

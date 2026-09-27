@@ -9,8 +9,8 @@ import simd
 /// 組版も描画も描画スレッドが行う。写しは自分の欄に持たず、要るとき（`viewport` の計算・編集の規則・行の印の行への写像）は
 /// 箱から読む。
 ///
-/// 編集は面の編集係（`SurfaceEditor`）が持ち、1 回の操作を 1 つの取引にする（→ `transact`）。IME・コピー・ペースト・
-/// 強調の地・装備・アクセシビリティはまだ持たない（強調の地は値を受け取るだけで描かない）。
+/// 編集は面の編集係（`SurfaceEditor`）が持ち、1 回の操作を 1 つの取引にする（→ `transact`）。IME の変換も同じ道で文書に
+/// 入る。強調の地・装備・アクセシビリティはまだ持たない（強調の地は値を受け取るだけで描かない）。
 @MainActor
 final class MetalTextSurface: TextSurface {
   private static var nextID = 0
@@ -86,6 +86,10 @@ final class MetalTextSurface: TextSurface {
 
   func markUndoBoundary() {
     editor.markBoundary()
+  }
+
+  func commitMarkedText() {
+    editor.finishComposition(.commit)
   }
 
   /// 本文の丸ごとの置き換え（外部変更の差し替え）。通常の編集と同じく undo に載る。

@@ -91,9 +91,7 @@ extension MetalTextView {
   // MARK: - 挿入
 
   override func insertText(_ insertString: Any) {
-    let string = (insertString as? NSAttributedString)?.string ?? insertString as? String ?? ""
-    guard !string.isEmpty else { return }
-    run(.insert(string))
+    insertText(insertString, replacementRange: NSRange(location: NSNotFound, length: 0))
   }
 
   override func insertNewline(_ sender: Any?) { run(.newline(indents: true)) }
@@ -138,8 +136,10 @@ extension MetalTextView {
 
   // MARK: - 何もしない・上へ渡す
 
-  /// Esc（変換中でない）は面では使わず、上の responder へ渡す（載せる側が検索バーを閉じるのに使う）。
+  /// Esc は面では使わず、上の responder へ渡す（載せる側が検索バーを閉じるのに使う）。変換中（IME が使わなかった）は何も
+  /// しない。
   override func cancelOperation(_ sender: Any?) {
+    guard !composing else { return }
     nextResponder?.tryToPerform(#selector(cancelOperation(_:)), with: sender)
   }
 
@@ -158,16 +158,29 @@ extension MetalTextView {
   /// 面の undo の入れ物。Edit メニューの ⌘Z / ⌘⇧Z の有効・無効と、`undoManager` を読む部品がこれを見る。
   override var undoManager: UndoManager? { surface?.editor.undoManager }
 
-  /// Edit メニューの `undo:` が窓の既定の入れ物へ行かず面へ届くための中継。
-  @objc func undo(_ sender: Any?) { undoManager?.undo() }
-  @objc func redo(_ sender: Any?) { undoManager?.redo() }
+  /// Edit メニューの `undo:` が窓の既定の入れ物へ行かず面へ届くための中継。変換中（IME が ⌘Z を使わなかった）は変換を
+  /// 取り消すだけで、undo の履歴に触れない。
+  @objc func undo(_ sender: Any?) {
+    guard !composing else { return cancelComposition() }
+    undoManager?.undo()
+  }
+
+  @objc func redo(_ sender: Any?) {
+    guard !composing else { return cancelComposition() }
+    undoManager?.redo()
+  }
+
+  private func cancelComposition() {
+    surface?.editor.finishComposition(.cancel)
+  }
 }
 
 extension MetalTextView: NSMenuItemValidation {
+  /// 変換中の取り消す・やり直すは、変換の取り消しとしていつも有効。
   func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
     switch menuItem.action {
-    case #selector(undo(_:))?: return undoManager?.canUndo ?? false
-    case #selector(redo(_:))?: return undoManager?.canRedo ?? false
+    case #selector(undo(_:))?: return composing || (undoManager?.canUndo ?? false)
+    case #selector(redo(_:))?: return composing || (undoManager?.canRedo ?? false)
     default: return responds(to: menuItem.action)
     }
   }

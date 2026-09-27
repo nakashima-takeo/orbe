@@ -75,6 +75,8 @@ final class FakeTextSurface: TextSurface {
 
   func setLineBreak(_ lineBreak: LineBreak) { self.lineBreak = lineBreak }
 
+  func commitMarkedText() {}
+
   /// 契約の後条件どおり、置き換え後の選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。
   func replaceAll(with text: String) {
     let caret = selectedRange.location

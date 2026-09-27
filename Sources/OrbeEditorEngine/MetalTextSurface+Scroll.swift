@@ -5,8 +5,15 @@ import simd
 
 /// スクロール——指の出来事、main の操作（先頭に・中央へ・見えるところへ）、取引の見せ方、スクロールだけのキー。
 extension MetalTextSurface {
+  /// 指のスクロールの始まりと終わりを IME にも知らせる（候補窓・音声入力の印をスクロールの間は隠し、終わりで置き直す）。
   func scrollWheel(_ event: NSEvent) {
+    let context = textView.inputContext
+    if event.phase == .began { context?.textInputClientWillStartScrollingOrZooming() }
     scroll(ScrollInput(event))
+    if event.phase == .ended || event.phase == .cancelled {
+      context?.invalidateCharacterCoordinates()
+      context?.textInputClientDidEndScrollingOrZooming()
+    }
   }
 
   /// スクロールの出来事を箱に書き、描画スレッドを起こし、見えている範囲をその場で知らせる。
@@ -140,13 +147,16 @@ extension MetalTextSurface {
     }
   }
 
-  /// 見えている範囲を出し直し、変わっていれば文書へ知らせる（同期）。
+  /// 見えている範囲を出し直し、変わっていれば文書へ知らせる（同期）。変換中なら IME にも知らせる（候補窓が追従する）。
   func refreshViewport() {
     let (position, limits) = scroll.peek(at: CACurrentMediaTime())
     guard let current = measureViewport(position: position, limits: limits), current != viewport
     else { return }
     viewport = current
     delegate?.surfaceDidChangeViewport(self)
+    guard editor.isComposing, let context = textView.inputContext else { return }
+    context.invalidateCharacterCoordinates()
+    if #available(macOS 15.4, *) { context.textInputClientDidScroll() }
   }
 
   /// 見えている範囲。行は y = 行 × 行高で並び、端を越えて見せている分は端で数える。見えている高さが無ければ nil。
