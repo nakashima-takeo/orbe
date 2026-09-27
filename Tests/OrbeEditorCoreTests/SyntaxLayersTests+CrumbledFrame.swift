@@ -7,9 +7,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。崩れた大きな文書で、同じ字の色が作り直しの履歴で変わる。誤りの無い大きな文書（区画をいくつも
 /// またぐコメントや文字列を持つ JSON など）で色が落ちる。どちらも色の乱択を素通りする。
-final class SyntaxCrumbledFrameTests: XCTestCase {
-  private let registry = LanguageRegistry(queriesRoot: Queries.root)
-
+extension SyntaxLayersTests {
   /// 誤りを含む木では、字の色はその字の区画の枠で決まり、区間の切り方に依らない。約 80K 字の Swift（閉じない `f(` と、
   /// 区画をいくつもまたぐコメント）で、区画の格子と揃わない区間の答えを、全体の答えをその区間で切ったものと比べる。
   func testCrumbledRolesDoNotDependOnWhereTheRangeIsCut() throws {

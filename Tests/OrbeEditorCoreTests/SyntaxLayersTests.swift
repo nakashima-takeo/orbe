@@ -12,7 +12,7 @@ import XCTest
 /// 壊れると何が起きるか。Markdown のコードブロック・HTML の script・JS のタグ付きテンプレートを編集した後、開き直すまで
 /// 誤った色が残る。フェンスに言語名を書き足しても中身に色が付かない。裏の仕事が止まらず 1 コアを使い続ける。
 final class SyntaxLayersTests: XCTestCase {
-  private let registry = LanguageRegistry(queriesRoot: Queries.root)
+  let registry = LanguageRegistry(queriesRoot: Queries.root)
 
   // MARK: - 乱択
 
