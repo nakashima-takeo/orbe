@@ -124,6 +124,9 @@ extension EditorPaneView {
   }
 
   override func layout() {
+    // 面の大きさが右列の幅を決め、検索バーの制約はその幅から置く——制約は super.layout() が当てるので、その前に置く。
+    document?.surface.view.frame = surfaceRect
+    placeSearchBar()
     super.layout()
     let sideWidth = self.sideWidth
     sideHost.frame = NSRect(
@@ -131,9 +134,7 @@ extension EditorPaneView {
     headerHost.frame = NSRect(
       x: sideWidth, y: 0, width: max(0, bounds.width - sideWidth), height: headerHeight)
     emptyHost.frame = bodyRect
-    document?.surface.view.frame = surfaceRect
     appKitOverview.layout(surface: surfaceRect, minimap: minimapRect, scrollbar: scrollbarRect)
-    placeSearchBar()
     // 本体の上のポインタの当たりは本体の矩形（サイドバーの幅で動く）。
     updateTrackingAreas()
     // 当たりは境を動かせるときだけ（`resizeSidebar` の guard と同じ条件）——動かない列に出すとレールの右 1pt を

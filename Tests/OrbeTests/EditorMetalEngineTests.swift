@@ -164,6 +164,26 @@ final class EditorMetalEngineTests: OrbeTestCase {
     }
   }
 
+  /// 検索バーは、面が答える右列の幅から、ミニマップの左 12・本体の上端から 12 に浮く。窓の幅が変われば追従する。
+  func testTheFindBarFloatsLeftOfTheSurfacesOwnRightColumn() throws {
+    let tab = TerminalTab(cwd: try XCTUnwrap(TestIsolation.caseDir).path, editorSurfaces: surfaces)
+    let window = hostEditor(tab, width: 900, height: 500)
+    defer { window.contentView = nil }
+    let document = try tab.editor.open(try caseFile("a.swift", lines(2000)))
+    let pane = tab.view.editor
+    pane.showSearch()
+    let surface = try XCTUnwrap(document.surface as? OverviewDrawingSurface)
+    for width: CGFloat in [900, 700] {
+      window.setContentSize(NSSize(width: width, height: 500))
+      pane.layoutSubtreeIfNeeded()
+      let bar = try XCTUnwrap(pane.searchBar)
+      XCTAssertEqual(
+        bar.frame.maxX, pane.bounds.maxX - surface.rightColumnWidth - 12, accuracy: 0.5)
+      XCTAssertEqual(bar.frame.minY, pane.bodyRect.minY + 12, accuracy: 0.5)
+    }
+    pane.closeSearch()
+  }
+
   /// 新しい面の本文に焦点がある間の Esc も、⌘F のバーを閉じる（今の面と同じ）。
   func testEscapeInTheNewSurfaceClosesTheFindBar() throws {
     let tab = TerminalTab(cwd: try XCTUnwrap(TestIsolation.caseDir).path, editorSurfaces: surfaces)
