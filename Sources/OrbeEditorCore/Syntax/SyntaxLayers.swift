@@ -51,7 +51,9 @@ final class SyntaxLayers {
   }
 
   /// 編集（古い順）を構文木へ写し、根を 1 回だけ差分で解析する。根の構文木が変わった区間と編集の区間（どちらも `text`
-  /// の上）を返す。削除の編集の区間は、消した位置の前後の 1 字ずつ（消した位置の行を作り直す範囲に入れるため）。
+  /// の上）を返す。削除の編集の区間は、消した位置の前後の 1 字ずつ（消した位置の行を作り直す範囲に入れるため）。編集で
+  /// 部分が丸ごと消えた束ねた層もここで解析し直す——消えた部分はもうどの区画にも掛からないので、残りの部分の構文の変化は
+  /// 問い直しでは見つからない。
   func apply(_ edits: some Collection<VersionedEdit>, text: TextRope) -> IndexSet {
     self.text = text
     var edited = IndexSet()
@@ -65,6 +67,9 @@ final class SyntaxLayers {
           ? location..<(location + edit.replacementLength) : max(0, location - 1)..<(location + 1))
       root.edit(TSInputEdit(record, origin: 0, row: 0))
       invalidated.formUnion(edit.track(injections.apply(record)))
+    }
+    for layer in injections.combined where layer.rangesReplaced {
+      parse(Placed(layer: layer, origin: 0, row: 0))
     }
     return edited.union(parse(placedRoot))
   }
@@ -97,7 +102,7 @@ final class SyntaxLayers {
   /// いない範囲へ足す。誤りの有無が変わった層は、枠の掛け方が変わるので層の全体を変わったとする。解析できない層（含める
   /// 範囲が空・拒まれた）は子孫ごと外す。
   @discardableResult
-  private func parse(_ placed: Placed, reusingTree: Bool = true) -> IndexSet {
+  private func parse(_ placed: Placed) -> IndexSet {
     let layer = placed.layer
     guard !isCancelled, layer.needsParse || layer.tree == nil else { return IndexSet() }
     let isRoot = layer === root
@@ -108,7 +113,7 @@ final class SyntaxLayers {
     }
     let outcome = parser.parse(
       layer.rules.language, ranges: ranges,
-      old: reusingTree && layer.rules.grammar.reusesTrees ? layer.tree : nil, text: text,
+      old: layer.rules.grammar.reusesTrees && !layer.rangesReplaced ? layer.tree : nil, text: text,
       origin: placed.origin)
     guard case .parsed(let tree) = outcome else {
       if case .rejected = outcome { invalidated.formUnion(injections.drop([placed])) }
@@ -128,6 +133,7 @@ final class SyntaxLayers {
     }
     layer.tree = tree
     layer.needsParse = false
+    layer.rangesReplaced = false
     if !isRoot { invalidated.formUnion(changed) }
     return changed
   }
@@ -192,10 +198,8 @@ final class SyntaxLayers {
   }
 
   /// 束ねる層の、区画に掛かるマッチの部分を差し替える。部分が変わった層はその場で解析し直す——束ねた層では、区画の部分が
-  /// 消えると区画の外の構文が変わり、その層がもう区画と交わらないこともあるので、変わった区間をここで足す。解析し直すとき
-  /// は前の木を使わない——含める範囲が編集を写したものと違うと、tree-sitter は範囲の端で入力の終わりを見た節（閉じていない
-  /// 要素など）を、後ろに足した範囲の先まで読み直さずに使い回し、同じ範囲を新しく解いた木と食い違う（範囲の違いを字の
-  /// 位置と先読みの長さで見るので、範囲の隙間を飛んだ先を見ない）。部分が空になった層は外す。
+  /// 消えると区画の外の構文が変わり、その層がもう区画と交わらないこともあるので、変わった区間をここで足す。部分が空に
+  /// なった層は外す。
   private func resolveCombined(
     of parent: SyntaxLayer, in piece: Range<Int>, found: [Grammar: [InjectionPart]]
   ) {
@@ -211,7 +215,8 @@ final class SyntaxLayers {
       } else if !InjectionPart.same(parts, before) {
         layer.parts = parts
         layer.needsParse = true
-        parse(Placed(layer: layer, origin: 0, row: 0), reusingTree: false)
+        layer.rangesReplaced = true
+        parse(Placed(layer: layer, origin: 0, row: 0))
       }
     }
     if !emptied.isEmpty { invalidated.formUnion(injections.drop(emptied)) }

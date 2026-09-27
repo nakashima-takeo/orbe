@@ -110,7 +110,9 @@ struct InjectionLayers {
       })
     let removed = doomed.isEmpty ? IndexSet() : drop(doomed)
     for layer in combined where start <= layer.extent {
+      let count = layer.parts.count
       layer.parts.removeAll { erased($0.match) }
+      if layer.parts.count < count { layer.rangesReplaced = true }
       layer.edit(TSInputEdit(record, origin: 0, row: 0))
     }
     var touched: [(index: Int, placed: Placed)] = []

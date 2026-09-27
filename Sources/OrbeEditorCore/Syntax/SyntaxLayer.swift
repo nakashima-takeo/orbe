@@ -13,6 +13,11 @@ final class SyntaxLayer {
   var parts: [InjectionPart]
   var tree: SyntaxTree?
   var needsParse = true
+  /// 含める範囲を、編集の写し以外で変えた（部分を足した・除いた）。次の解析は前の木を使わない——含める範囲が編集を写した
+  /// ものと違うと、tree-sitter は範囲の端で入力の終わりを見た節（閉じていない要素など）や消えた範囲の節を、読み直さずに
+  /// 使い回し、同じ範囲を新しく解いた木と食い違う（範囲の違いを字の位置と先読みの長さで見るので、範囲の隙間を飛んだ先を
+  /// 見ない）。
+  var rangesReplaced = false
   /// 並びから外した。
   var detached = false
 

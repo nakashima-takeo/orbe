@@ -162,6 +162,8 @@ final class SyntaxLayersTests: XCTestCase {
       "const a = html`<div>${v}</div>`;\n"
       + "const b = html`<style>p { color: blue; }</style><script>let y = 1;</script>`;\n"
     let unclosed = "const a = html`<p>x</p><script>let y = 1;`;\nconst b = 1;\n"
+    let split =
+      "const a = html`<style>`;\nconst b = 1;\nconst c = html`p { color: red; }</style>`;\n"
     let cases = [
       EditCase("js の言語名を消す", .markdown, markdown, "js\nconst", 2, ""),
       EditCase("js → py に替える", .markdown, markdown, "js\nconst", 2, "py"),
@@ -182,6 +184,9 @@ final class SyntaxLayersTests: XCTestCase {
       EditCase(
         "閉じていない script の後ろに、束ねた html の部分を足す", .javascript, unclosed, "const b = 1;", 12,
         "const c = html`let z = 2;</script>`;"),
+      EditCase(
+        "束ねた html の部分を行ごと消すと、離れた残りの部分の構文が変わる", .javascript, split,
+        "const a = html`<style>`;\n", 25, ""),
     ]
     for edit in cases {
       let rules = try XCTUnwrap(registry.rules(for: edit.language))
