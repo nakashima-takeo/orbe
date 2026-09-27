@@ -145,25 +145,29 @@ final class SurfaceDrawingTests: EngineTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.01))
       } while !driver.isPaused(surface.id) && Date() < deadline
     }
-    func shaped() -> Int {
+    // 行の数が変わればつまみが現れて消えるまで描き続けるので、組版した行は合計の増分で数える。
+    func total() -> Int {
       let id = surface.id
-      return RenderThread.shared.performAndWait { $0.slot(id)?.lines.shapedInFrame ?? -1 }
+      return RenderThread.shared.performAndWait { $0.slot(id)?.lines.shapedTotal ?? -1 }
+    }
+    func shaped(by action: () -> Void) -> Int {
+      let before = total()
+      action()
+      surface.flush()
+      settle()
+      return total() - before
     }
     settle()
     surface.selectedRange = NSRange(location: opened.document.text.lineStart(5) + 3, length: 0)
+    surface.flush()
     settle()
-    surface.perform(.insert("x"))
-    settle()
-    XCTAssertEqual(shaped(), 1, "打鍵した行だけ")
-    surface.perform(.newline(indents: true))
-    settle()
-    XCTAssertEqual(shaped(), 2, "Enter で分かれた 2 行だけ")
+    XCTAssertEqual(shaped { surface.perform(.insert("x")) }, 1, "打鍵した行だけ")
+    XCTAssertEqual(shaped { surface.perform(.newline(indents: true)) }, 2, "Enter で分かれた 2 行だけ")
     let text = opened.document.text
     surface.selectedRange = NSRange(
       location: text.lineStart(10), length: text.lineStart(12) + 3 - text.lineStart(10))
+    surface.flush()
     settle()
-    surface.perform(.tab)
-    settle()
-    XCTAssertEqual(shaped(), 3, "字下げした 3 行だけ")
+    XCTAssertEqual(shaped { surface.perform(.tab) }, 3, "字下げした 3 行だけ")
   }
 }

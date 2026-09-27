@@ -3,9 +3,10 @@ import OrbeEditorCore
 import QuartzCore
 import simd
 
-/// 面の上の場所——行番号の数字の列・git の印の列・本文（最終行より下の空き地を含む）。
+/// 面の上の場所——行番号の数字の列・git の印の列・本文（最終行より下の空き地を含む）・俯瞰（ミニマップと縦横の
+/// スクロールバー）。
 enum PointerArea {
-  case numbers, marks, text
+  case numbers, marks, text, overview
 }
 
 /// view の点を本文の言葉にしたもの。
@@ -25,7 +26,9 @@ extension MetalTextSurface {
     let p = position ?? scrollPosition
     let column = config.columnWidth(lineCount: text.lineCount)
     let area: PointerArea =
-      point.x < column - config.marks.gutterWidth ? .numbers : point.x < column ? .marks : .text
+      textView.overview.area(at: point) != nil
+      ? .overview
+      : point.x < column - config.marks.gutterWidth ? .numbers : point.x < column ? .marks : .text
     let y = Double(point.y - config.topInset) + p.y
     let lineHeight = Double(config.lineHeight)
     guard y < Double(text.lineCount) * lineHeight else {
@@ -111,7 +114,7 @@ final class MouseSelection: NSObject {
     let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
     guard !flags.contains(.control) else { return }
     point = view.convert(event.locationInWindow, from: nil)
-    guard let hit = surface.hit(point), hit.area != .marks,
+    guard let hit = surface.hit(point), hit.area != .marks, hit.area != .overview,
       let text = surface.editingEnvironment()?.text
     else { return }
     self.view = view

@@ -6,7 +6,7 @@ import XCTest
 @testable import Orbe
 
 /// 新しいテキスト面（Metal）を選んだタブで、エディター面の今の働き——開く・切り替える・閉じる・再起動の復元・
-/// スクロールバーからのスクロール・⌘F の次でのスクロール・プロジェクト検索の一致を開く・ホイールの量と見えている範囲・
+/// 面が自分で描くスクロールバーからのスクロール・⌘F の次でのスクロール・プロジェクト検索の一致を開く・ホイールの量と見えている範囲・
 /// 本文の Esc——が今の面と同じように動く。壊れると設定を真にした人の文書が開かない・俯瞰で動かない・一致が見えない・
 /// 検索パネルから押した一致が選ばれず中央に来ない・復元で今の面に戻る・ホイールで送る量やミニマップの見えている枠が
 /// 今の面と違う・Esc で検索のバーが閉じない。
@@ -56,12 +56,12 @@ final class EditorMetalEngineTests: OrbeTestCase {
     XCTAssertTrue(isMetal(document))
     let pane = tab.view.editor
     pane.layoutSubtreeIfNeeded()
-    let bar = pane.appKitOverview.scrollbar
-    bar.mouseDown(
-      with: bar.mouseEvent(.leftMouseDown, at: NSPoint(x: bar.bounds.midX, y: bar.bounds.maxY - 20))
-    )
-    bar.mouseUp(
-      with: bar.mouseEvent(.leftMouseUp, at: NSPoint(x: bar.bounds.midX, y: bar.bounds.maxY - 20)))
+    let view = document.surface.view
+    XCTAssertEqual(view.frame, pane.bodyRect, "自分で俯瞰を描く面は本体全体を覆う")
+    XCTAssertTrue(pane.appKitOverview.minimap.isHidden, "今の面の俯瞰は出さない")
+    let track = NSPoint(x: view.bounds.maxX - 7, y: view.bounds.maxY - 20)
+    view.mouseDown(with: view.mouseEvent(.leftMouseDown, at: track))
+    view.mouseUp(with: view.mouseEvent(.leftMouseUp, at: track))
     XCTAssertGreaterThan(document.viewportLines.first, 1_000, "トラックを押した位置へ飛ぶ")
 
     pane.showSearch()
@@ -73,7 +73,8 @@ final class EditorMetalEngineTests: OrbeTestCase {
     pane.closeSearch()
   }
 
-  /// プロジェクト検索の一致を押すと、新しい面で開いて一致を選び、その行を中央に見せ、一致の地と現在の一致が俯瞰に出る。
+  /// プロジェクト検索の一致を押すと、新しい面で開いて一致を選び、その行を中央に見せ、一致の地と現在の一致を面へ押す（面は
+  /// 押された地から本文と俯瞰を描く）。
   /// 端末は載せない——shell の cwd の報告が検索の根を動かさない。
   func testProjectSearchOpensAndCentersTheMatchInTheNewSurface() throws {
     let repo = try TempGitRepo(name: "orbe-metal-search")
@@ -104,8 +105,6 @@ final class EditorMetalEngineTests: OrbeTestCase {
     XCTAssertEqual(first + visible / 2, 1500.5, accuracy: 1, "一致の行を中央に見せる")
     XCTAssertEqual(pane.findGround.matches, [match])
     XCTAssertEqual(pane.findGround.current, [match])
-    XCTAssertEqual(pane.appKitOverview.scrollbar.decorations.findMatches, [match], "一致の地が俯瞰に出る")
-    XCTAssertEqual(pane.appKitOverview.scrollbar.decorations.currentFindMatch, match)
   }
 
   /// 同じ大きさに載せた今の面と新しい面で、同じ中身の文書を開く（窓はテストの終わりに外す）。

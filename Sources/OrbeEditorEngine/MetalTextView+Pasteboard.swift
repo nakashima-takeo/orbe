@@ -98,7 +98,9 @@ extension MetalTextView {
   /// 右クリック・⌃クリックのメニュー（中身と文言は載せる側が組む）。先に変換を確定し、焦点を取る。選択の外で押せば
   /// キャレットをそこへ動かし、選択の中（両端を含む）なら選択を保つ。
   override func menu(for event: NSEvent) -> NSMenu? {
-    guard let surface, let host = surface.host else { return nil }
+    guard let surface, let host = surface.host,
+      overview.area(at: convert(event.locationInWindow, from: nil)) == nil
+    else { return nil }
     surface.input {
       surface.editor.finishComposition(.commit)
       window?.makeFirstResponder(self)

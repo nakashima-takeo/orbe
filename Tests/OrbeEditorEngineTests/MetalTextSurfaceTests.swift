@@ -117,10 +117,13 @@ final class MetalTextSurfaceTests: EngineTestCase {
     }
     let opened = try open("value value value\n", name: "a.txt", style: style)
     let column = Int(opened.surface.config.columnWidth(lineCount: 2) * 2)
+    let right = Int(opened.surface.surfaceLayout.text.maxX * 2)
     func textInk() throws -> [UInt8] {
       let (bytes, width) = try shoot(opened)
-      return stride(from: 0, to: bytes.count, by: 4).filter { ($0 / 4) % width >= column }
-        .map { bytes[$0 + 1] }.filter { $0 != 128 }
+      return stride(from: 0, to: bytes.count, by: 4).filter {
+        ($0 / 4) % width >= column && ($0 / 4) % width < right
+      }
+      .map { bytes[$0 + 1] }.filter { $0 != 128 }
     }
     XCTAssertGreaterThan(try textInk().max() ?? 0, 200, "ダークでは白い字")
     opened.surface.view.appearance = NSAppearance(named: .aqua)

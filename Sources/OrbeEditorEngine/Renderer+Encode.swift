@@ -130,7 +130,12 @@ extension Renderer {
     instances.shapes(built.shapes, encoder, pass)
     encoder.setScissorRect(built.textScissor)
     instances.shapes(built.overShapes, encoder, pass)
+    let whole = MTLScissorRect(x: 0, y: 0, width: texture.width, height: texture.height)
+    encoder.setScissorRect(whole)
+    instances.shapes(built.shadowShapes, encoder, pass)
     encodeMinimap(built.minimap, instances, encoder, pass, texture)
+    encoder.setScissorRect(whole)
+    instances.shapes(built.overviewShapes, encoder, pass)
     encoder.endEncoding()
   }
 
@@ -250,7 +255,8 @@ extension Renderer {
     let built = slot.builder
     slot.build(
       material, scroll: slot.scroll.peek(at: CACurrentMediaTime()),
-      caretVisible: material.caret.showsCaret, target: ((width, height), atlas), fonts: fonts)
+      moment: (material.caret.showsCaret, CACurrentMediaTime()), target: ((width, height), atlas),
+      fonts: fonts)
     let widened = slot.scroll.measured(
       longestLine: built.longestLine, version: material.content?.version)
     if widened || revealed { slot.notify() }

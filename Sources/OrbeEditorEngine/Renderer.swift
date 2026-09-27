@@ -133,7 +133,7 @@ final class Renderer {
     let caretVisible = material.caret.caretVisible(at: target)
     let changed =
       material.revision != slot.drawnMaterial || slot.scroll.revision != slot.drawnScroll
-      || slot.returning || slot.atlasDirty
+      || slot.returning || slot.atlasDirty || slot.motion.due(at: target)
     guard changed || caretVisible != slot.drawnCaretVisible else {
       slot.recorder.idle(at: CACurrentMediaTime())
       slot.idleTicks += 1
@@ -167,7 +167,7 @@ final class Renderer {
     let frame = slot.scroll.frame(at: target, material: material.revision)
     let texture = acquired.texture
     slot.build(
-      material, scroll: (frame.position, frame.limits), caretVisible: caretVisible,
+      material, scroll: (frame.position, frame.limits), moment: (caretVisible, target),
       target: ((texture.width, texture.height), pass.atlas), fonts: fonts)
     let widened = slot.scroll.measured(
       longestLine: slot.builder.longestLine, version: material.content?.version)
@@ -252,14 +252,17 @@ final class Renderer {
     RenderThread.adopt(framePeriod: period)
   }
 
-  /// 刻みを止める。`blinking` のキャレットが点滅していれば、`drawn`（最後に描いた、または描かないと決めたコマの予定時刻）の
-  /// 後で表示が切り替わってから最初の刻みの、半刻み前に起きるタイマーを置く——起きたその場で、その刻みへ切り替わった表示を
-  /// 描ける（刻みを再開して、タイマーと刻みの 2 回起きることがない）。
+  /// 刻みを止める。`blinking` のキャレットが点滅していれば `drawn`（最後に描いた、または描かないと決めたコマの予定時刻）の
+  /// 後で表示が切り替わる時刻に、つまみが消え始めるのを待っていればその時刻に、そのうち早い方から最初の刻みの、半刻み前に
+  /// 起きるタイマーを置く——起きたその場で、その刻みへ切り替わった表示を描ける（刻みを再開して、タイマーと刻みの 2 回起きる
+  /// ことがない）。
   private func pause(
     _ slot: SurfaceSlot, _ clock: FrameClock, blinking caret: CaretMaterial? = nil,
     after drawn: Double = 0
   ) {
-    if slot.blinkTimer == nil, let next = caret?.nextBlink(after: drawn) {
+    let blink = caret?.nextBlink(after: drawn)
+    let next = [blink, slot.motion.wakeAt].compactMap { $0 }.min()
+    if slot.blinkTimer == nil, let next {
       let id = slot.id
       let wake = clock.nextTarget(after: next) - clock.period / 2
       let fire = CFAbsoluteTimeGetCurrent() + max(0, wake - CACurrentMediaTime())

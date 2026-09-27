@@ -3,10 +3,17 @@ import OrbeEditorCore
 
 /// 強調の地——Orbe が押した区間（種類ごとに昇順・重ならない。本文のオフセット）。
 struct Highlights: Equatable, Sendable {
-  var find: [NSRange] = []
+  var find: [NSRange] = [] {
+    didSet { findRevision += 1 }
+  }
   var current: [NSRange] = []
   var selection: [NSRange] = []
-  var word: [NSRange] = []
+  var word: [NSRange] = [] {
+    didSet { wordRevision += 1 }
+  }
+  /// 検索の一致・語の出現を置き直した回数（描画スレッドが、変わらない列を刻みごとに比べ直さない）。
+  private(set) var findRevision = 0
+  private(set) var wordRevision = 0
 
   subscript(kind: TextHighlightKind) -> [NSRange] {
     get {

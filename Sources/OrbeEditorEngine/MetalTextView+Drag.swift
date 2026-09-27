@@ -85,6 +85,7 @@ extension MetalTextView: NSDraggingSource {
     var operation: NSDragOperation = []
     surface.input {
       let point = convert(sender.draggingLocation, from: nil)
+      guard overview.area(at: point) == nil else { return showDrop(nil) }
       autoscrollDrop(at: point)
       let drop = dropPlan(sender)
       showDrop(drop.indicator)
@@ -110,7 +111,9 @@ extension MetalTextView: NSDraggingSource {
   }
 
   private func performDrop(_ sender: NSDraggingInfo) -> Bool {
-    guard let surface, let action = dropPlan(sender).action else {
+    guard let surface, overview.area(at: convert(sender.draggingLocation, from: nil)) == nil,
+      let action = dropPlan(sender).action
+    else {
       showDrop(nil)
       return false
     }

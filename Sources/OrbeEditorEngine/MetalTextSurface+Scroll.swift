@@ -39,6 +39,32 @@ extension MetalTextSurface {
     place(SIMD2(scrollPosition.x, (Double(row) + fraction) * Double(config.lineHeight)))
   }
 
+  /// 先頭に見えている行（小数。行 + 隠れている割合）と見えている行数——俯瞰の式の入力。取引の中で置いた位置も当てた
+  /// 今の位置から出す（トラックを押して飛んだ直後の同じ押下の中でも、飛んだ後の値）。
+  var viewportLines: (first: CGFloat, visible: CGFloat) {
+    let (position, limits) = scrollState()
+    guard let text = currentContent?.text,
+      let current = measureViewport(position: position, limits: limits)
+    else { return (0, 0) }
+    return (
+      CGFloat(text.row(containing: current.firstVisible)) + current.hiddenFraction,
+      current.visibleLines
+    )
+  }
+
+  /// 先頭行（小数）の位置へ置く（`viewportLines` の逆。行は行の数に収める。横位置は動かさない）。
+  func scroll(toFirstLine line: CGFloat) {
+    guard let text = currentContent?.text else { return }
+    let clamped = min(max(0, line), CGFloat(text.lineCount - 1))
+    let row = Int(floor(clamped))
+    scroll(toTop: text.lineStart(row), hiddenFraction: clamped - CGFloat(row))
+  }
+
+  /// 横の位置を置く（縦は動かさない）。
+  func scroll(toX x: CGFloat) {
+    place(SIMD2(Double(x), scrollPosition.y))
+  }
+
   /// 行を見えている高さの中央へ置き、それから列が横に見えるところまで寄せる（横は描画スレッドが行を組んで寄せる）。
   func scrollToCenter(_ offset: Int) {
     transact(reveal: .center, of: NSRange(location: offset, length: 0))

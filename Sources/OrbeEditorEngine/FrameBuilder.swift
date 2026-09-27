@@ -46,6 +46,12 @@ final class FrameBuilder {
   private(set) var longestLine: CGFloat = 0
   /// このコマのミニマップ。
   var minimap = MinimapFrame()
+  /// 影（上端・ミニマップの左。ミニマップの下）と、俯瞰の図形（ミニマップの帯・縦横のスクロールバーと印。ミニマップの
+  /// 上）。
+  var shadowShapes: [ShapeInstance] = []
+  var overviewShapes: [ShapeInstance] = []
+  /// スクロールバーの印の縦の区間（元が変わったときだけ作り直す）。
+  var rulerSpans = RulerSpans()
 
   /// GPU の buffer に要る大きさ（配列ごとに 256 バイトに揃える）。
   var byteCount: Int {
@@ -53,10 +59,13 @@ final class FrameBuilder {
     let glyphs = glyphArrays.reduce(0) {
       $0 + (($1.count * MemoryLayout<GlyphInstance>.stride + 255) & ~255)
     }
-    return [shapes, decorShapes, underShapes, highlightShapes, overShapes, minimap.decorations]
-      .reduce(glyphs + ((MemoryLayout<GlyphInstance>.stride + 255) & ~255)) {
-        $0 + (($1.count * MemoryLayout<ShapeInstance>.stride + 255) & ~255)
-      }
+    return [
+      shapes, decorShapes, underShapes, highlightShapes, overShapes, minimap.decorations,
+      shadowShapes, overviewShapes,
+    ]
+    .reduce(glyphs + ((MemoryLayout<GlyphInstance>.stride + 255) & ~255)) {
+      $0 + (($1.count * MemoryLayout<ShapeInstance>.stride + 255) & ~255)
+    }
   }
 
   /// px の座標系（左上が原点）。
@@ -103,6 +112,10 @@ final class FrameBuilder {
     let atlas: GlyphAtlas
     let config: SurfaceConfig
     let minimapCells: MinimapCells
+    let rulerRows: RulerRows
+    /// 帯とつまみの濃さの時間の動きと、このコマの時刻。
+    let motion: OverviewMotion
+    let time: Double
     /// 前のコマのミニマップの配置（揺れ止め）。
     let previousPlacement: MinimapLayout?
   }
@@ -116,6 +129,8 @@ final class FrameBuilder {
     decorShapes.removeAll(keepingCapacity: true)
     underShapes.removeAll(keepingCapacity: true)
     highlightShapes.removeAll(keepingCapacity: true)
+    shadowShapes.removeAll(keepingCapacity: true)
+    overviewShapes.removeAll(keepingCapacity: true)
     overShapes.removeAll(keepingCapacity: true)
     longestLine = 0
     minimap.reset()
@@ -138,9 +153,11 @@ final class FrameBuilder {
       config: config, tabColumns: tabColumns, roles: content.roles)
     textScissor = Self.scissor(x: g.column, y: g.top, width: g.textRight - g.column, g)
     gutterScissor = Self.scissor(x: 0, y: g.top, width: g.column, g)
-    buildMinimap(
-      layout, lines: Self.viewportLines(source, lineCount: lineCount, config: config), source,
-      content, c)
+    let lines = Self.viewportLines(source, lineCount: lineCount, config: config)
+    buildMinimap(layout, lines: lines, source, content, c)
+    drawShadows(layout, lines: lines, clipsRight: Self.clipsRight(source), c)
+    drawVerticalScrollbar(layout, lines: lines, source, content, c)
+    drawSliders(layout, lines: lines, source, lineCount: lineCount, c)
     guard g.height > g.top else { return }
     let first = max(0, Int((g.scrollY / g.lineHeight).rounded(.down)))
     let last = min(
@@ -203,6 +220,12 @@ final class FrameBuilder {
     let row = min(Int((y / lineHeight).rounded(.down)), max(0, lineCount - 1))
     let hidden = min(max((y - Double(row) * lineHeight) / lineHeight, 0), 1)
     return (CGFloat(Double(row) + hidden), CGFloat(limits.viewport.y / lineHeight))
+  }
+
+  /// 本文が右にまだ続く（横に隠れている部分がある）か——見えている範囲の通知と同じ判定。
+  static func clipsRight(_ source: Source) -> Bool {
+    let maximum = source.limits.maximum.x
+    return min(max(0, source.position.x), maximum) < maximum - 0.5 / Double(source.material.scale)
   }
 
   /// このコマで描く行 1 つ。

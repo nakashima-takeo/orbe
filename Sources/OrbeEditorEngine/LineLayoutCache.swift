@@ -75,8 +75,11 @@ final class LineLayoutCache {
   var count: Int { entries.count }
   private(set) var weight = 0
 
-  /// このコマで組版した（どちらの段にも無かった）行の数。
-  private(set) var shapedInFrame = 0
+  /// このコマで組版した（どちらの段にも無かった）行の数と、面を結んでからの合計。
+  private(set) var shapedInFrame = 0 {
+    didSet { if shapedInFrame > oldValue { shapedTotal += shapedInFrame - oldValue } }
+  }
+  private(set) var shapedTotal = 0
   private var drawnRows: [Int: LaidOutLine] = [:]
   private var frameRows: [Int: LaidOutLine] = [:]
   private var rowsVersion: Int?

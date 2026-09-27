@@ -18,6 +18,8 @@ final class SurfaceSlot {
   var clock: FrameClock?
   let lines = LineLayoutCache()
   let minimapCells: MinimapCells
+  let rulerRows = RulerRows()
+  let motion = OverviewMotion()
   /// 最後に描いたミニマップの配置（次のコマの揺れ止め）。
   var minimapPlacement: MinimapLayout?
   /// ミニマップの字形の表（倍率ごと）と、装飾を組として描く画面外の 1 枚。
@@ -62,21 +64,25 @@ final class SurfaceSlot {
   func receive(_ material: FrameMaterial) {
     lines.receive(material.rowEdits)
     minimapCells.receive(material.rowEdits)
+    rulerRows.receive(material.rowEdits)
     keystrokes += material.keystrokes
   }
 
-  /// 1 コマを組み、描いたミニマップの配置を覚えて main へ渡す。`scroll` はこのコマの位置とその範囲、`target` は描く先の
+  /// 1 コマを組み、描いたミニマップの配置を覚えて main へ渡す。`scroll` はこのコマの位置とその範囲、`moment` はこのコマで
+  /// キャレットを描くかとコマの時刻、`target` は描く先の
   /// 大きさ（px）とアトラス。
   func build(
     _ material: FrameMaterial, scroll: (position: SIMD2<Double>, limits: ScrollPhysics.Limits),
-    caretVisible: Bool, target: (pixels: (width: Int, height: Int), atlas: GlyphAtlas),
-    fonts: FontRegistry
+    moment: (caretVisible: Bool, time: Double),
+    target: (pixels: (width: Int, height: Int), atlas: GlyphAtlas), fonts: FontRegistry
   ) {
     builder.build(
       FrameBuilder.Source(
         material: material, position: scroll.position, limits: scroll.limits,
-        caretVisible: caretVisible, pixels: target.pixels, atlas: target.atlas, config: config,
-        minimapCells: minimapCells, previousPlacement: minimapPlacement),
+        caretVisible: moment.caretVisible, pixels: target.pixels, atlas: target.atlas,
+        config: config,
+        minimapCells: minimapCells, rulerRows: rulerRows, motion: motion, time: moment.time,
+        previousPlacement: minimapPlacement),
       cache: lines, fonts: fonts)
     minimapPlacement = builder.minimap.placement
     placement.write(builder.minimap.placement)

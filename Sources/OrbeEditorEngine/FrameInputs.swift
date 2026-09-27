@@ -151,6 +151,15 @@ struct RowEdit: Equatable, Sendable {
   var inserted: Int
   var version: Int
   var rolesOnly = false
+  /// 本文の編集の区間（編集前の本文の座標）と置き換えの長さ。行へ写した区間を編集でずらして使い回すのに使う（全部の行が
+  /// 変わった・役割だけが変わったなら nil）。
+  var text: (range: NSRange, replacementLength: Int)?
+
+  static func == (lhs: RowEdit, rhs: RowEdit) -> Bool {
+    lhs.rows == rhs.rows && lhs.inserted == rhs.inserted && lhs.version == rhs.version
+      && lhs.rolesOnly == rhs.rolesOnly && lhs.text?.range == rhs.text?.range
+      && lhs.text?.replacementLength == rhs.text?.replacementLength
+  }
 
   /// 全部の行が変わった。
   static func all(version: Int) -> RowEdit {
@@ -171,6 +180,7 @@ struct RowEdit: Equatable, Sendable {
     rows = first..<last + 1
     inserted = edit.replacement.reduce(1) { $1 == 0x0A ? $0 + 1 : $0 }
     self.version = version
+    self.text = (edit.range, edit.replacementLength)
   }
 }
 
@@ -237,6 +247,8 @@ struct FrameMaterial: Sendable {
   var drop: Int?
   /// 強調の地（Orbe が押した区間）。
   var highlights = Highlights()
+  /// 俯瞰の操作の状態。
+  var overview = OverviewInput()
   var palette: FramePalette?
   var tabColumns = Indentation.fallback.unit
   /// 面の大きさ（pt）と倍率。
