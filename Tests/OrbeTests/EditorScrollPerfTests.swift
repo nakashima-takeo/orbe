@@ -42,6 +42,41 @@ final class EditorScrollPerfTests: OrbeTestCase {
     }
   }
 
+  /// 新しい面（Metal）の打鍵 1 回の main の仕事——キーの出来事を受けてから、面の編集係・文書・Orbe の配り先（検索・出現・
+  /// 俯瞰への知らせ）が戻るまで。p99 1ms 以下（200KB・1MB、git 管理下、1 万字近い長い行の行末）。描くのは描画スレッド。
+  func testMetalTypingMainTime() throws {
+    let metal = EditorEngineChoice(
+      metal: true, elasticScroll: true, fontSmoothing: true, language: .ja)
+    let long = String(repeating: "x", count: 9_990) + "\n" + Self.swiftSource(bytes: 20_000)
+    for (label, text) in [
+      ("200KB", Self.swiftSource(bytes: 200_000)), ("1MB", Self.swiftSource(bytes: 1_000_000)),
+      ("long-line", long),
+    ] {
+      let opened = try openEditor(text, engine: metal)
+      opened.document.baseline = text
+      XCTAssertTrue(opened.document.waitUntilCaughtUp(timeout: 60))
+      let row = label == "long-line" ? 0 : opened.document.text.lineCount / 3
+      opened.document.scroll(toFirstLine: CGFloat(row))
+      opened.document.surface.selectedRange = NSRange(
+        location: label == "long-line" ? 9_990 : opened.document.text.lineStart(row + 5) + 4,
+        length: 0)
+      RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+      var times: [Double] = []
+      for character in String(repeating: "let value = compute(offset) ok ", count: 3) {
+        let began = CACurrentMediaTime()
+        opened.document.surface.responder.keyDown(with: .key(String(character), []))
+        times.append((CACurrentMediaTime() - began) * 1000)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+      }
+      reportPerf(label, "metal-typing-main (baseline あり)", times, digits: 3)
+      let sorted = times.sorted()
+      XCTAssertLessThanOrEqual(
+        sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.99))], 1,
+        "\(label): 打鍵 1 回の main の仕事の p99")
+      opened.window.orderOut(nil)
+    }
+  }
+
   /// 1200×800 の窓に Swift の文書を開き、裏の仕事（文書全体の構文色）が追いついてから測る。速いドラッグは開いた
   /// ばかりの文書で、打鍵・ホイール・打鍵の後の速いドラッグは別に開き直した文書で測る。文書を端から端まで通した後の
   /// 打鍵も参考に出す（TextKit が段落を覚えるので、開いたばかりの文書より重い）。

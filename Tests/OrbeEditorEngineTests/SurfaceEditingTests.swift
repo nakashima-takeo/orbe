@@ -1,0 +1,167 @@
+import AppKit
+import OrbeEditorCore
+import XCTest
+
+@testable import OrbeEditorEngine
+
+/// 新しい面の編集と undo——打鍵・キー・⌘Z / ⌘⇧Z が文書の写しと undo に正しく載る。壊れると打鍵が文書に届かない、⌘Z の
+/// まとまりが VS Code と違う、保存や外部変更の前の打鍵まで戻る、遠くの undo で本文が空になる、配り先が古い選択を読む。
+@MainActor
+final class SurfaceEditingTests: EngineTestCase {
+  /// 打鍵・Enter・⌫ は macOS のキー割り当てを通って文書に届く。
+  func testKeysEditTheDocument() throws {
+    let opened = try open("let a = 1\n")
+    _ = host(opened)
+    opened.surface.selectedRange = NSRange(location: 9, length: 0)
+    try key(opened, "2")
+    try key(opened, "\r", keyCode: 36)
+    try key(opened, "x")
+    try key(opened, "\u{7f}", keyCode: 51)
+    XCTAssertEqual(text(opened.document), "let a = 12\n\n")
+    XCTAssertEqual(opened.surface.caretLocation, 11)
+    try key(opened, String(UnicodeScalar(NSLeftArrowFunctionKey)!), [.option, .function], keyCode: 123)
+    XCTAssertEqual(opened.surface.caretLocation, 8, "⌥← は前の行の語の始まりへ（VS Code の cursorWordLeft）")
+    XCTAssertTrue(opened.document.isDirty)
+  }
+
+  /// ⌘Z は VS Code のまとめ方で戻る——語と直前の空白 1 つがまとまり、Enter の前で切れ、Enter の後に続けて打った字は同じ
+  /// まとまり。⌘⇧Z で進み、戻した選択を置く。
+  func testUndoGroupsLikeVSCode() throws {
+    let opened = try open("")
+    _ = host(opened)
+    let undo = try XCTUnwrap(opened.surface.responder.undoManager)
+    type(opened, "abc def")
+    opened.surface.perform(.newline(indents: true))
+    type(opened, "gh")
+    undo.undo()
+    XCTAssertEqual(text(opened.document), "abc def")
+    undo.undo()
+    XCTAssertEqual(text(opened.document), "abc")
+    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 3, length: 0))
+    undo.undo()
+    XCTAssertEqual(text(opened.document), "")
+    XCTAssertFalse(undo.canUndo)
+    undo.redo()
+    undo.redo()
+    XCTAssertEqual(text(opened.document), "abc def")
+    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 7, length: 0))
+    type(opened, "!")
+    XCTAssertFalse(undo.canRedo, "新しい編集で redo は消える")
+  }
+
+  /// カーソルの移動と保存は undo の区切り。未保存の印は ⌘Z で戻しても消えない。
+  func testMovesAndSavesBreakTheUndoGroup() throws {
+    let opened = try open("")
+    _ = host(opened)
+    let undo = try XCTUnwrap(opened.surface.responder.undoManager)
+    type(opened, "ab")
+    opened.surface.perform(.move(.left, extending: false))
+    type(opened, "X")
+    undo.undo()
+    XCTAssertEqual(text(opened.document), "ab")
+    type(opened, "Y")
+    try opened.document.save()
+    type(opened, "Z")
+    undo.undo()
+    XCTAssertEqual(text(opened.document), "aYb")
+    XCTAssertTrue(opened.document.isDirty, "保存の後の編集を戻しても未保存のまま")
+  }
+
+  /// 外部変更の差し替えも undo に載り、前後で区切る。
+  func testReplacingFromDiskIsUndoable() throws {
+    let opened = try open("one\ntwo\n")
+    _ = host(opened)
+    let undo = try XCTUnwrap(opened.surface.responder.undoManager)
+    opened.surface.selectedRange = NSRange(location: 3, length: 0)
+    type(opened, "!")
+    try Data("one\ntwo\nthree\n".utf8).write(to: opened.document.url)
+    try opened.document.save(force: true)
+    try Data("one\n2\nthree\n".utf8).write(to: opened.document.url)
+    opened.document.reconcileWithDisk()
+    XCTAssertEqual(text(opened.document), "one\n2\nthree\n")
+    XCTAssertEqual(opened.surface.selectedRange.length, 0, "差し替えの後は選択が解ける")
+    undo.undo()
+    XCTAssertEqual(text(opened.document), "one!\ntwo\n", "差し替えだけが戻る")
+    undo.undo()
+    XCTAssertEqual(text(opened.document), "one\ntwo\n")
+  }
+
+  /// 遠くの行を編集した後にスクロールして戻り undo しても、本文は空にならず、その編集だけが戻る。
+  func testUndoFarAwayRestoresOnlyThatEdit() throws {
+    let original = (0..<3000).map { "line \($0)" }.joined(separator: "\n") + "\n"
+    let opened = try open(original)
+    _ = host(opened)
+    let undo = try XCTUnwrap(opened.surface.responder.undoManager)
+    let far = opened.document.text.lineStart(2500)
+    opened.surface.selectedRange = NSRange(location: far, length: 0)
+    type(opened, "far")
+    opened.document.scroll(toFirstLine: 0)
+    opened.surface.selectedRange = NSRange(location: 2, length: 0)
+    type(opened, "near")
+    undo.undo()
+    XCTAssertEqual(opened.document.viewportLines.first, 0, accuracy: 1, "近くの undo は動かない")
+    undo.undo()
+    XCTAssertEqual(text(opened.document), original)
+    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: far, length: 0))
+    let (first, visible) = opened.document.viewportLines
+    XCTAssertTrue(first <= 2500 && 2500 < first + visible, "戻した場所が見える")
+  }
+
+  /// undo の要素が本文と一致しなければ（あってはならない）、本文に触れず、その面の undo を空にする。
+  func testMismatchedUndoClearsTheHistoryWithoutTouchingTheText() throws {
+    let opened = try open("abc\n")
+    _ = host(opened)
+    let undo = try XCTUnwrap(opened.surface.responder.undoManager)
+    type(opened, "xyz")
+    opened.document.surface(
+      opened.surface, didChange: [TextEdit(range: NSRange(location: 0, length: 1), replacement: "Q")])
+    opened.surface.rolesDidChange(IndexSet())
+    undo.undo()
+    XCTAssertEqual(text(opened.document), "Qyzabc\n")
+    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    XCTAssertFalse(undo.canUndo)
+  }
+
+  /// 本文の通知と選択の通知は、この順で届く（配り先は新しい本文で選択を読む）。取引 1 回で材料の箱へは 1 回だけ書く——
+  /// 新しい本文と新しいキャレットが同じ版に入る。
+  func testATransactionWritesOnceAndNotifiesTextThenSelection() throws {
+    let opened = try open("let a = 1\n", waitForColors: true)
+    _ = host(opened)
+    opened.document.baseline = "let a = 1\n"
+    XCTAssertTrue(opened.document.waitUntilCaughtUp())
+    var order: [String] = []
+    opened.document.onTextChange = { _ in order.append("text") }
+    opened.document.onSelectionChange = {
+      order.append("selection \(opened.surface.caretLocation) \(opened.document.text.length)")
+    }
+    let before = opened.surface.material.read().revision
+    type(opened, "x")
+    XCTAssertEqual(order, ["text", "selection 1 11"])
+    let material = opened.surface.material.read()
+    XCTAssertEqual(material.revision, before + 1, "写し・行の印・キャレットを 1 回で書く")
+    XCTAssertEqual(material.content?.version, opened.document.version)
+    XCTAssertEqual(material.caret.carets, [1])
+  }
+
+  /// 取引は、渡した編集で組版の変わった行を描画スレッドへ知らせる——打鍵ではその行だけ、Enter では 1 行が 2 行に、複数行の
+  /// 字下げでは各行（後ろから当てた順）。描画スレッドはこれで変わった行だけを組み直す。
+  func testTransactionsReportTheRowsTheyChanged() throws {
+    let opened = try open("a\nb\nc\n")
+    _ = host(opened)
+    _ = opened.surface.material.take()
+    opened.surface.selectedRange = NSRange(location: 3, length: 0)
+    type(opened, "x")
+    let version = opened.document.version
+    XCTAssertEqual(
+      opened.surface.material.take().rowEdits,
+      [RowEdit(rows: 1..<2, inserted: 1, version: version)])
+    opened.surface.perform(.newline(indents: true))
+    XCTAssertEqual(
+      opened.surface.material.take().rowEdits,
+      [RowEdit(rows: 1..<2, inserted: 2, version: opened.document.version)])
+    opened.surface.perform(.selectAll)
+    opened.surface.perform(.tab)
+    let rows = opened.surface.material.take().rowEdits.map(\.rows)
+    XCTAssertEqual(rows, [3..<4, 1..<2, 0..<1], "後ろから当てた順に各行（空行は字下げしない）")
+  }
+}

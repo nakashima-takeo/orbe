@@ -20,10 +20,12 @@ struct EditorWindow {
 }
 
 extension OrbeTestCase {
-  /// 1200×800 の窓に文書を開き、裏の仕事（文書全体の構文色）が追いつくのを待つ。
+  /// 1200×800 の窓に文書を `engine` の面で開き、裏の仕事（文書全体の構文色）が追いつくのを待つ。
   @MainActor
-  func openEditor(_ text: String, extension ext: String = "swift") throws -> OpenedEditor {
-    let host = try editorWindow()
+  func openEditor(
+    _ text: String, extension ext: String = "swift", engine: EditorEngineChoice = .stTextView
+  ) throws -> OpenedEditor {
+    let host = try editorWindow(engine: engine)
     let document = try host.tab.editor.open(try caseFile("big-\(UUID().uuidString).\(ext)", text))
     host.pane.layoutSubtreeIfNeeded()
     pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "本文が layout される")
@@ -35,11 +37,11 @@ extension OrbeTestCase {
 
   /// 文書を開く前の、1200×800 の窓とタブ。
   @MainActor
-  func editorWindow() throws -> EditorWindow {
+  func editorWindow(engine: EditorEngineChoice = .stTextView) throws -> EditorWindow {
     let queries = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let tab = TerminalTab(
       cwd: try XCTUnwrap(TestIsolation.caseDir).path,
-      editorSurfaces: EditorSurfaces(queriesRoot: queries))
+      editorSurfaces: EditorSurfaces(queriesRoot: queries, engine: { engine }))
     let window = hostEditor(tab, width: 1200, height: 800)
     window.appearance = NSAppearance(named: .darkAqua)
     return EditorWindow(tab: tab, pane: tab.view.editor, window: window)

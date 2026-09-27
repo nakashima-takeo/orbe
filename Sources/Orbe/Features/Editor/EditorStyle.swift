@@ -18,6 +18,8 @@ enum EditorStyle {
       textColor: Theme.Color.editorText,
       caretColor: Theme.Color.accentBright,
       caretSize: CGSize(width: 1.5, height: 14),
+      selectionColor: .selectedTextBackgroundColor,
+      inactiveSelectionColor: .unemphasizedSelectedTextBackgroundColor,
       gutterFont: Theme.Typography.editorLineNumber,
       gutterTextColor: Theme.Color.editorLineNumber,
       gutterWidth: Theme.Layout.editorLineNumberGutter,

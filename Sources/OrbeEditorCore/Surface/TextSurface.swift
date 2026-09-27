@@ -151,6 +151,10 @@ public struct TextSurfaceStyle {
   public var textColor: NSColor
   public var caretColor: NSColor
   public var caretSize: CGSize
+  /// 選択の地の色。焦点が無い面では `inactiveSelectionColor`。本文を自分で描く面が使う（今の面は上流がシステムの選択色で
+  /// 描く）。
+  public var selectionColor: NSColor
+  public var inactiveSelectionColor: NSColor
   public var gutterFont: NSFont
   public var gutterTextColor: NSColor
   /// 行番号の数字の部分の幅（右の印の列を除く）。最大の行番号と右の余白（`gutterTrailingInset`）がこの幅に収まる
@@ -239,9 +243,10 @@ public struct TextSurfaceStyle {
 
   public init(
     font: NSFont, lineHeight: CGFloat, topInset: CGFloat, textColor: NSColor, caretColor: NSColor,
-    caretSize: CGSize, gutterFont: NSFont, gutterTextColor: NSColor, gutterWidth: CGFloat,
-    gutterTrailingInset: CGFloat, roleColors: [SyntaxRole: NSColor], marks: Marks,
-    decorations: Decorations, highlights: Highlights
+    caretSize: CGSize, selectionColor: NSColor, inactiveSelectionColor: NSColor,
+    gutterFont: NSFont, gutterTextColor: NSColor, gutterWidth: CGFloat, gutterTrailingInset: CGFloat,
+    roleColors: [SyntaxRole: NSColor], marks: Marks, decorations: Decorations,
+    highlights: Highlights
   ) {
     self.font = font
     self.lineHeight = lineHeight
@@ -249,6 +254,8 @@ public struct TextSurfaceStyle {
     self.textColor = textColor
     self.caretColor = caretColor
     self.caretSize = caretSize
+    self.selectionColor = selectionColor
+    self.inactiveSelectionColor = inactiveSelectionColor
     self.gutterFont = gutterFont
     self.gutterTextColor = gutterTextColor
     self.gutterWidth = gutterWidth

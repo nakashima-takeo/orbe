@@ -4,6 +4,9 @@ import QuartzCore
 
 /// 1 コマを組み立てて Metal へ符号化し、画面（または画面外）へ出す。描画スレッドだけが触る。
 ///
+/// キャレットの点滅は時刻から決める。描くものが変わらなければ刻みを止め、焦点のある面は次に表示が切り替わる時刻にだけ
+/// run loop のタイマーで自分を起こす（点滅だけが変わったコマの後は、すぐ止める）。
+///
 /// どの面のためにも待たない——面ごとに「画面に出ていないコマ」を数え、上限の面はそのコマを飛ばす（`nextDrawable` は
 /// 実際には待たない）。GPU の空きも待たずに数える。飛ばしたコマは、画面に出た知らせを受けた時点で次の刻みを待たずに描く。
 /// 位置は描く直前にコマの予定時刻で読む（指の出来事をできるだけ新しく入れる）。描くものが変わらないコマが続いたら、
@@ -51,8 +54,10 @@ final class Renderer {
   /// 面が閉じた。刻みを外し、組版のキャッシュと写しの最後の参照をここ（描画スレッド）で手放す。
   func detach(_ id: Int) {
     guard let slot = slots.removeValue(forKey: id) else { return }
+    slot.blinkTimer.map { CFRunLoopTimerInvalidate($0) }
     slot.clock?.invalidate()
     slot.recorder.flush()
+    slot.recorder.flushTyping()
     _ = slot.material.clear()
   }
 
@@ -67,10 +72,13 @@ final class Renderer {
     clock.isPaused = false
   }
 
-  /// 箱に何かが書かれた。止めていた刻みを再開し、次に画面に出る刻みまでに描き終えられるなら、刻みを待たずにその場で
-  /// 1 コマ描く（止まっていた面の最初の変化が、次の刻みまでの待ちのぶん遅れない）。刻みが走っている間は次の刻みに任せる。
+  /// 箱に何かが書かれた（または点滅が切り替わる）。止めていた刻みを再開し、次に画面に出る刻みまでに描き終えられるなら、
+  /// 刻みを待たずにその場で 1 コマ描く（止まっていた面の最初の変化が、次の刻みまでの待ちのぶん遅れない）。刻みが走っている
+  /// 間は次の刻みに任せる。
   func wake(_ id: Int) {
     guard let slot = slots[id] else { return }
+    slot.blinkTimer.map { CFRunLoopTimerInvalidate($0) }
+    slot.blinkTimer = nil
     slot.idleTicks = 0
     guard let clock = slot.clock, clock.isPaused else { return }
     clock.isPaused = false
@@ -107,7 +115,7 @@ final class Renderer {
       return
     }
     guard let pipelines = gate.ready else {
-      pause(slot, clock)
+      pause(slot, clock, blinking: nil)
       return
     }
     // 刻みの長さは最初の呼び出しまで分からず、画面を移れば変わる。
@@ -115,19 +123,21 @@ final class Renderer {
     adoptFramePeriod()
     let material = slot.material.take()
     slot.lines.receive(material.rowEdits)
+    slot.keystrokes += material.keystrokes
     guard material.visible, material.content != nil, material.palette != nil,
       material.size.width > 0, material.size.height > 0
     else {
-      pause(slot, clock)
+      pause(slot, clock, blinking: nil)
       return
     }
-    let changed =
+    let caretVisible = material.caret.caretVisible(at: target)
+    let moved =
       material.revision != slot.drawnMaterial || slot.scroll.revision != slot.drawnScroll
       || slot.returning || slot.atlasDirty
-    guard changed else {
+    guard moved || caretVisible != slot.drawnCaretVisible else {
       slot.recorder.idle(at: CACurrentMediaTime())
       slot.idleTicks += 1
-      if slot.idleTicks >= Self.idleTicksBeforePause { pause(slot, clock) }
+      if slot.idleTicks >= Self.idleTicksBeforePause { pause(slot, clock, blinking: material.caret) }
       return
     }
     slot.idleTicks = 0
@@ -141,6 +151,7 @@ final class Renderer {
       return
     }
     draw(slot, material, into: acquired, at: target, Pass(pipelines: pipelines, atlas: atlas))
+    if !moved { pause(slot, clock, blinking: material.caret) }
   }
 
   /// 描くと決めたコマを組み立てて出す。
@@ -149,12 +160,14 @@ final class Renderer {
     _ pass: Pass
   ) {
     let began = CACurrentMediaTime()
-    let frame = slot.scroll.frame(at: target)
+    let caretVisible = material.caret.caretVisible(at: target)
+    let frame = slot.scroll.frame(at: target, material: material.revision)
     let texture = acquired.texture
     slot.builder.build(
       FrameBuilder.Source(
-        material: material, position: frame.position, pixels: (texture.width, texture.height),
-        atlas: pass.atlas, config: slot.config), cache: slot.lines, fonts: fonts)
+        material: material, position: frame.position, caretVisible: caretVisible,
+        pixels: (texture.width, texture.height), atlas: pass.atlas, config: slot.config),
+      cache: slot.lines, fonts: fonts)
     let widened = slot.scroll.measured(
       longestLine: slot.builder.longestLine, version: material.content?.version)
     guard let commands = queue.makeCommandBuffer(),
@@ -171,6 +184,9 @@ final class Renderer {
     let wasReturning = slot.returning
     slot.drawnMaterial = material.revision
     slot.drawnScroll = frame.revision
+    slot.drawnCaretVisible = caretVisible
+    let keystrokes = slot.keystrokes
+    slot.keystrokes.removeAll(keepingCapacity: true)
     slot.drawnPosition = frame.position
     slot.returning = frame.returning
     slot.atlasDirty = pass.atlas.isFull
@@ -187,9 +203,20 @@ final class Renderer {
       FrameRecorder.Drawn(
         frame: frameID, target: target, cpu: committed - began,
         shaped: slot.lines.shapedInFrame > 0, committed: committed, events: frame.events,
-        moving: moving, gesture: frame.gesture,
+        keystrokes: keystrokes, moving: moving, gesture: frame.gesture,
         mismatch: texture.width != pixels.width || texture.height != pixels.height))
     if frame.returning || wasReturning || widened { slot.notify() }
+    if let last = keystrokes.max() { scheduleTypingFlush(slot.id, after: last) }
+  }
+
+  /// 打鍵の塊の区切りの長さだけ次の打鍵が無ければ、塊を締める。
+  private func scheduleTypingFlush(_ id: Int, after keystroke: Double) {
+    DispatchQueue.global().asyncAfter(deadline: .now() + FrameRecorder.burstGap + 0.1) {
+      RenderThread.shared.perform { renderer in
+        guard let slot = renderer.slot(id), slot.recorder.lastKeystroke == keystroke else { return }
+        slot.recorder.flushTyping()
+      }
+    }
   }
 
   var gpuInflight: Int { buffers.filter(\.busy).count }
@@ -202,7 +229,17 @@ final class Renderer {
     RenderThread.adopt(framePeriod: period)
   }
 
-  private func pause(_ slot: SurfaceSlot, _ clock: FrameClock) {
+  /// 刻みを止める。`blinking` のキャレットが点滅していれば、次に表示が切り替わる時刻に起きるタイマーを置く。
+  private func pause(_ slot: SurfaceSlot, _ clock: FrameClock, blinking caret: CaretMaterial?) {
+    if slot.blinkTimer == nil, let next = caret?.nextBlink(after: CACurrentMediaTime()) {
+      let id = slot.id
+      let fire = CFAbsoluteTimeGetCurrent() + max(0, next - CACurrentMediaTime())
+      let timer = CFRunLoopTimerCreateWithHandler(nil, fire, 0, 0, 0) { _ in
+        RenderThread.shared.onThread { $0.wake(id) }
+      }
+      CFRunLoopAddTimer(CFRunLoopGetCurrent(), timer, .defaultMode)
+      slot.blinkTimer = timer
+    }
     guard !clock.isPaused else { return }
     clock.isPaused = true
     guard slot.recorder.gesture != nil else { return }
@@ -266,8 +303,13 @@ final class SurfaceSlot {
   var drawnScroll = -1
   var drawnPosition: SIMD2<Double>?
   var returning = false
+  var drawnCaretVisible = false
   /// アトラスが埋まって字を落としたコマを描いた（作り直してもう一度描く）。
   var atlasDirty = false
+  /// 読んだ材料に入っていて、まだ描いていない打鍵の時刻。
+  var keystrokes: [Double] = []
+  /// 次に点滅が切り替わる時刻に起きるタイマー（止めている間だけ）。
+  var blinkTimer: CFRunLoopTimer?
 
   init(
     id: Int, material: MaterialBox, scroll: ScrollBox, config: SurfaceConfig,

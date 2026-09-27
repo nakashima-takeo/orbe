@@ -4,11 +4,12 @@ import QuartzCore
 import simd
 
 /// `TextSurface` の Metal 実装（main 側）。本文を持たず、文書の写し（本文・役割・版）を契約の口（`surfaceContent`）で
-/// 引いて描く側。main がするのは「出来事をスクロールの状態の箱に書く」「写しと見え方を描く材料の箱に置く」だけで、組版も
-/// 描画も描画スレッドが行う。写しは自分の欄に持たず、要るとき（`viewport` の計算・行の印の行への写像）は箱から読む。
+/// 引いて描く側。main がするのは「出来事をスクロールの状態の箱に書く」「写し・選択・見え方を描く材料の箱に置く」だけで、
+/// 組版も描画も描画スレッドが行う。写しは自分の欄に持たず、要るとき（`viewport` の計算・編集の規則・行の印の行への写像）は
+/// 箱から読む。
 ///
-/// 今は読むだけ——打鍵・選択の描画・キャレット・IME・⌘クリック・強調の地・コピー・アクセシビリティは持たない。選択と強調は
-/// 値を受け取るだけで描かない。
+/// 編集は面の編集係（`SurfaceEditor`）が持ち、1 回の操作を 1 つの取引にする（→ `transact`）。IME・コピー・ペースト・
+/// 強調の地・装備・アクセシビリティはまだ持たない（強調の地は値を受け取るだけで描かない）。
 @MainActor
 final class MetalTextSurface: TextSurface {
   private static var nextID = 0
@@ -18,7 +19,9 @@ final class MetalTextSurface: TextSurface {
   let material = MaterialBox()
   let scroll: ScrollBox
   private let style: TextSurfaceStyle
-  private let textView = MetalTextView()
+  let textView = MetalTextView()
+  private(set) lazy var editor = SurfaceEditor(surface: self)
+  let lineStops: LineStopsCache
 
   var view: NSView { textView }
   var responder: NSView { textView }
@@ -26,15 +29,16 @@ final class MetalTextSurface: TextSurface {
     didSet { pullContent() }
   }
   var onOpenLink: ((URL) -> Void)?
-  private(set) var viewport = TextViewport.empty
-  var selectedRange = NSRange(location: 0, length: 0) {
-    didSet {
-      if selectedRange != oldValue { delegate?.surfaceDidChangeSelection(self) }
-    }
-  }
-  var caretLocation: Int { NSMaxRange(selectedRange) }
+  var viewport = TextViewport.empty
   /// 面の大きさ（pt）。
-  private var size = CGSize.zero
+  var size = CGSize.zero
+  private(set) var indentation = Indentation.fallback
+  /// 面に焦点がある（first responder で、窓が key）。
+  private(set) var focused = false
+  /// 進行中の取引（→ `transact`）。
+  var transaction: Transaction?
+  /// 今扱っている打鍵の出来事の時刻。その打鍵が起こした最初の取引が材料へ添える。
+  var keystroke: Double?
 
   init(style: TextSurfaceStyle, options: MetalTextSurfaceOptions) {
     Self.nextID += 1
@@ -43,6 +47,7 @@ final class MetalTextSurface: TextSurface {
     config = SurfaceConfig(
       style: style, fontSmoothing: options.fontSmoothing, omittedLabel: options.omittedLabel)
     scroll = ScrollBox(elastic: options.elasticScroll)
+    lineStops = LineStopsCache(font: config.font)
     textView.surface = self
     let id = id
     let material = material
@@ -56,6 +61,7 @@ final class MetalTextSurface: TextSurface {
     RenderThread.shared.perform { renderer in
       renderer.attach(id: id, material: material, scroll: scroll, config: config, notify: notify)
     }
+    material.update { $0.caret.carets = [0] }
     appearanceDidChange()
   }
 
@@ -64,26 +70,55 @@ final class MetalTextSurface: TextSurface {
     RenderThread.shared.perform { $0.detach(id) }
   }
 
+  // MARK: - 選択と編集（契約）
+
+  var selectedRange: NSRange {
+    get { editor.state.cursors.primary.selection }
+    set { editor.setSelection(newValue) }
+  }
+
+  var caretLocation: Int { editor.state.cursors.primary.position }
+
+  func markUndoBoundary() {
+    editor.markBoundary()
+  }
+
+  /// 本文の丸ごとの置き換え（外部変更の差し替え）。通常の編集と同じく undo に載る。
+  func replaceAll(with text: String) {
+    editor.replaceAll(with: text)
+  }
+
+  func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {}
+
+  func setIndentation(_ indentation: Indentation) {
+    self.indentation = indentation
+    material.update { $0.tabColumns = indentation.unit }
+    wake()
+  }
+
+  /// 標準のセレクタが写ったコマンドを、面の編集係で行う。
+  func perform(_ command: EditCommand) {
+    editor.perform(command)
+  }
+
   // MARK: - 写しと材料
 
-  /// 文書の写しを引いて箱に置く（結ばれたとき・役割が変わったとき・自分が出した編集から戻ったとき）。`edited` は自分が
-  /// 出した編集とその前の本文（組版が変わった行を描画スレッドへ知らせる）。`remeasure` なら最も長い行をこの写しで
-  /// 測り直す。
-  private func pullContent(
-    marks spans: LineMarkSpans? = nil, edited: (edit: TextEdit, before: TextRope)? = nil,
-    remeasure: Bool = false
-  ) {
+  /// 文書の写しを引いて箱に置く（結ばれたとき・役割が変わったとき・行の印を受けたとき）。取引の中なら控えるだけにし、
+  /// 取引の終わりにまとめて置く。
+  private func pullContent(marks spans: LineMarkSpans? = nil) {
     guard let delegate else { return }
+    if transaction != nil {
+      transaction?.content = delegate.surfaceContent(self)
+      if let spans { transaction?.marks = spans }
+      return
+    }
     let content = delegate.surfaceContent(self)
-    if remeasure { scroll.remeasure(from: content.version) }
     let marks = spans.map { RowMarks($0, in: content.text) }
-    let rowEdit = edited.map { RowEdit($0.edit, in: $0.before, version: content.version) }
-    material.update {
+    let revision = material.update {
       $0.content = content
       if let marks { $0.marks = marks }
-      if let rowEdit { $0.note(rowEdit) }
     }
-    updateLimits()
+    updateLimits(heldUntil: revision)
     wake()
     refreshViewport()
   }
@@ -95,27 +130,6 @@ final class MetalTextSurface: TextSurface {
   /// 印は文書がオフセットで押してくる。引いた写しで行へ写してから箱に置く。
   func setLineMarks(_ spans: LineMarkSpans) {
     pullContent(marks: spans)
-  }
-
-  func setIndentation(_ indentation: Indentation) {
-    material.update { $0.tabColumns = indentation.unit }
-    wake()
-  }
-
-  func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {}
-
-  func markUndoBoundary() {}
-
-  /// 本文を丸ごと置き換える編集を文書へ渡し、戻ったら写しを引く。最も長い行は、新しい写しを描いたコマで測り直す
-  /// （横の位置はそれまで保ち、新しい幅の範囲に収める）。
-  func replaceAll(with text: String) {
-    guard let delegate, let content = material.read().content else { return }
-    let caret = selectedRange.location
-    let edit = TextEdit(range: NSRange(location: 0, length: content.text.length), replacement: text)
-    delegate.surface(self, didChange: [edit])
-    pullContent(edited: (edit, content.text), remeasure: true)
-    let length = material.read().content?.text.length ?? 0
-    selectedRange = NSRange(location: min(caret, length), length: 0)
   }
 
   /// 外観・色空間・倍率で色を解き直して置く。
@@ -163,133 +177,24 @@ final class MetalTextSurface: TextSurface {
 
   private var hasDisplayLink = false
 
-  private func wake() {
+  func wake() {
     let id = id
     RenderThread.shared.perform { $0.wake(id) }
   }
 
-  private func updateLimits() {
-    let lineCount = material.read().content?.text.lineCount ?? 1
-    let viewport = SIMD2(
-      Double(size.width - config.columnWidth(lineCount: lineCount)),
-      Double(size.height - config.topInset))
-    let lineHeight = Double(config.lineHeight)
-    let cell = Double(config.cell)
-    scroll.updateLimits {
-      $0.lineCount = lineCount
-      $0.lineHeight = lineHeight
-      $0.viewport = viewport
-      $0.cell = cell
-    }
-  }
-
-  // MARK: - スクロール
-
-  func scrollWheel(_ event: NSEvent) {
-    scroll(ScrollInput(event))
-  }
-
-  /// スクロールの出来事を箱に書き、描画スレッドを起こし、見えている範囲をその場で知らせる。
-  func scroll(_ input: ScrollInput) {
-    guard scroll.apply(input) else { return }
-    wake()
-    refreshViewport()
-  }
-
-  /// 描画スレッドだけが変える位置と範囲（端への戻り・組んだ行で伸びた横の範囲）が変わった。
-  private func scrollDidAdvance() {
-    refreshViewport()
-  }
-
-  func scroll(toTop offset: Int, hiddenFraction: CGFloat) {
-    guard let text = material.read().content?.text else { return }
-    let row = text.row(containing: offset)
-    let fraction = Double(min(max(0, hiddenFraction), 1))
-    let now = scroll.peek(at: CACurrentMediaTime()).position
-    place(SIMD2(now.x, (Double(row) + fraction) * Double(config.lineHeight)))
-  }
-
-  /// 行を見えている高さの中央へ置き、それから列が横に見えるところまで寄せる。
-  func scrollToCenter(_ offset: Int) {
-    guard let text = material.read().content?.text else { return }
-    let location = min(max(0, offset), text.length)
-    let row = text.row(containing: location)
-    let lineHeight = Double(config.lineHeight)
-    let (now, limits) = scroll.peek(at: CACurrentMediaTime())
-    place(SIMD2(now.x, Double(row) * lineHeight + lineHeight / 2 - limits.viewport.y / 2))
-    scrollToVisible(NSRange(location: location, length: 0))
-  }
-
-  /// 区間が見えるところまで最小限スクロールする（縦に見えていれば縦は動かず、横に隠れていれば横だけ寄る）。
-  func scrollToVisible(_ range: NSRange) {
-    guard let content = material.read().content else { return }
-    let text = content.text
-    let rows = text.rows(of: range)
-    let lineHeight = Double(config.lineHeight)
-    let (now, limits) = scroll.peek(at: CACurrentMediaTime())
-    let visible = limits.viewport
-    var p = now
-    let top = Double(rows.lowerBound) * lineHeight
-    let bottom = Double(rows.upperBound + 1) * lineHeight
-    if top < p.y || bottom - top > visible.y {
-      p.y = top
-    } else if bottom > p.y + visible.y {
-      p.y = bottom - visible.y
-    }
-    let (source, start) = LineShaper.source(row: rows.lowerBound, in: text)
-    let tabWidth = config.tabWidth(columns: material.read().tabColumns)
-    let shaped = LineShaper.shape(source, font: config.font, tabWidth: tabWidth)
-    scroll.noteLine(width: Double(shaped.width))
-    let (offsets, xs) = shaped.stops
-    let x = { (offset: Int) in
-      Double(CaretX.x(ofColumn: offset - start, offsets: offsets, xs: xs, width: shaped.width))
-    }
-    let x0 = x(range.location)
-    let x1 = rows.lowerBound == rows.upperBound ? x(NSMaxRange(range)) : x0
-    if x0 < p.x || x1 - x0 > visible.x {
-      p.x = x0
-    } else if x1 > p.x + visible.x {
-      p.x = x1 - visible.x
-    }
-    place(p)
-  }
-
-  /// その場で位置を置く（アニメーションしない）。
-  private func place(_ p: SIMD2<Double>) {
-    scroll.place(p)
-    wake()
-    refreshViewport()
-  }
-
-  /// 見えている範囲を出し直し、変わっていれば文書へ知らせる（同期）。
-  private func refreshViewport() {
-    let (position, limits) = scroll.peek(at: CACurrentMediaTime())
-    guard let current = measureViewport(position: position, limits: limits), current != viewport
-    else { return }
-    viewport = current
-    delegate?.surfaceDidChangeViewport(self)
-  }
-
-  /// 見えている範囲。行は y = 行 × 行高で並び、端を越えて見せている分は端で数える。見えている高さが無ければ nil。
-  private func measureViewport(position: SIMD2<Double>, limits: ScrollPhysics.Limits)
-    -> TextViewport?
-  {
-    guard limits.viewport.y > 0, let text = material.read().content?.text else { return nil }
-    let lineHeight = limits.lineHeight
-    let maximum = limits.maximum
-    let x = min(max(0, position.x), maximum.x)
-    let y = min(max(0, position.y), maximum.y)
-    let row = min(Int((y / lineHeight).rounded(.down)), text.lineCount - 1)
-    let hidden = min(max((y - Double(row) * lineHeight) / lineHeight, 0), 1)
-    let cell = Double(config.cell)
-    return TextViewport(
-      firstVisible: text.lineStart(row), hiddenFraction: CGFloat(hidden),
-      visibleLines: CGFloat(limits.viewport.y / lineHeight),
-      clipsRight: x < maximum.x - 0.5 / Double(textView.window?.backingScaleFactor ?? 2),
-      hiddenColumns: CGFloat(x / cell), visibleColumns: CGFloat(max(0, limits.viewport.x) / cell))
-  }
-
   // MARK: - 焦点と撮影
+
+  /// 焦点（first responder で、窓が key）が変わりうる。変われば点滅を表示からやり直し、選択の地の色を替える。
+  func updateFocus(_ focused: Bool) {
+    guard focused != self.focused else { return }
+    self.focused = focused
+    let now = CACurrentMediaTime()
+    material.update {
+      $0.caret.focused = focused
+      $0.caret.epoch = now
+    }
+    wake()
+  }
 
   func focusDidChange(_ focused: Bool) {
     delegate?.surface(self, focusDidChange: focused)

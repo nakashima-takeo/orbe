@@ -6,10 +6,14 @@ import QuartzCore
 /// `cacheDisplay`（gallery・flow の撮影）では `draw(_:)` が呼ばれるので、描画スレッドが同じ 1 コマを画面外に描いた絵を
 /// 描く——撮り方を変えずに新しい面を撮れる。
 ///
-/// スクロールの出来事の入口で、焦点を取れる。打鍵・クリックは本文を変えない（読むだけ）。
+/// 出来事の入口。キーは `interpretKeyEvents` で macOS のキー割り当て（利用者の DefaultKeyBinding を含む）に通し、届いた
+/// 標準のセレクタを編集のコマンドへ写す（→ `MetalTextView+Commands`）。マウスは `MouseSelection` が持つ。
 final class MetalTextView: NSView {
-  weak var surface: MetalTextSurface?
-  private var occlusionObserver: NSObjectProtocol?
+  weak var surface: MetalTextSurface? {
+    didSet { pointer.surface = surface }
+  }
+  private var windowObservers: [NSObjectProtocol] = []
+  let pointer = MouseSelection()
 
   init() {
     super.init(frame: .zero)
@@ -54,15 +58,29 @@ final class MetalTextView: NSView {
     stateDidChange()
   }
 
+  /// 窓の覆われ方（見えているか）と key の出入り（焦点）を見る。押している間に窓から外れると mouse-up は届かない（文書の
+  /// 切り替えが面を外す）ので、ここでマウスの操作を終える。
   override func viewWillMove(toWindow newWindow: NSWindow?) {
     super.viewWillMove(toWindow: newWindow)
-    if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
-    occlusionObserver = nil
-    guard let newWindow else { return }
-    occlusionObserver = NotificationCenter.default.addObserver(
-      forName: NSWindow.didChangeOcclusionStateNotification, object: newWindow, queue: nil
-    ) { [weak self] _ in
-      MainActor.assumeIsolated { self?.stateDidChange() }
+    for observer in windowObservers { NotificationCenter.default.removeObserver(observer) }
+    windowObservers = []
+    guard let newWindow else {
+      pointer.cancel()
+      return
+    }
+    let names: [Notification.Name] = [
+      NSWindow.didChangeOcclusionStateNotification, NSWindow.didBecomeKeyNotification,
+      NSWindow.didResignKeyNotification,
+    ]
+    let changed: @Sendable (Notification) -> Void = { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.stateDidChange()
+        self?.focusStateDidChange()
+      }
+    }
+    windowObservers = names.map {
+      NotificationCenter.default.addObserver(
+        forName: $0, object: newWindow, queue: nil, using: changed)
     }
   }
 
@@ -70,6 +88,16 @@ final class MetalTextView: NSView {
     super.viewDidMoveToWindow()
     if window != nil { surface?.attachDisplayLink(to: self) }
     stateDidChange()
+    focusStateDidChange()
+  }
+
+  /// 焦点（first responder で、窓が key）を面へ写す。
+  func focusStateDidChange() {
+    guard let window else {
+      surface?.updateFocus(false)
+      return
+    }
+    surface?.updateFocus(window.firstResponder === self && window.isKeyWindow)
   }
 
   override func viewDidHide() {
@@ -124,30 +152,63 @@ final class MetalTextView: NSView {
   }
 
   override func mouseDown(with event: NSEvent) {
-    window?.makeFirstResponder(self)
+    pointer.mouseDown(event, in: self)
   }
 
-  /// 打鍵は本文を変えない。Esc（`cancelOperation`）だけは上の responder へ渡し、載せる側が使えるようにする。
+  override func mouseDragged(with event: NSEvent) {
+    pointer.mouseDragged(event, in: self)
+  }
+
+  override func mouseUp(with event: NSEvent) {
+    pointer.mouseUp(event, in: self)
+  }
+
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    for area in trackingAreas where area.owner === self { removeTrackingArea(area) }
+    addTrackingArea(
+      NSTrackingArea(
+        rect: .zero, options: [.cursorUpdate, .mouseMoved, .activeInKeyWindow, .inVisibleRect],
+        owner: self))
+  }
+
+  override func cursorUpdate(with event: NSEvent) {
+    pointer.updateCursor(at: event.locationInWindow, flags: event.modifierFlags, in: self)
+  }
+
+  override func mouseMoved(with event: NSEvent) {
+    pointer.updateCursor(at: event.locationInWindow, flags: event.modifierFlags, in: self)
+  }
+
+  override func flagsChanged(with event: NSEvent) {
+    guard let window else { return super.flagsChanged(with: event) }
+    pointer.updateCursor(
+      at: window.mouseLocationOutsideOfEventStream, flags: event.modifierFlags, in: self)
+    super.flagsChanged(with: event)
+  }
+
+  /// 打鍵を macOS のキー割り当てに通す。打鍵の時刻は、その打鍵が起こした最初の取引が材料へ添える（打鍵→画面の遅れ）。
   override func keyDown(with event: NSEvent) {
+    surface?.keystroke = event.timestamp
     interpretKeyEvents([event])
-  }
-
-  override func insertText(_ insertString: Any) {}
-
-  override func doCommand(by selector: Selector) {
-    guard selector == #selector(cancelOperation(_:)) else { return }
-    nextResponder?.tryToPerform(selector, with: nil)
+    surface?.keystroke = nil
   }
 
   override func becomeFirstResponder() -> Bool {
     let result = super.becomeFirstResponder()
-    if result { surface?.focusDidChange(true) }
+    if result {
+      surface?.focusDidChange(true)
+      focusStateDidChange()
+    }
     return result
   }
 
   override func resignFirstResponder() -> Bool {
     let result = super.resignFirstResponder()
-    if result { surface?.focusDidChange(false) }
+    if result {
+      surface?.focusDidChange(false)
+      surface?.updateFocus(false)
+    }
     return result
   }
 }
