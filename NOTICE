@@ -191,13 +191,13 @@ Contents/Resources/Orbe_OrbeEditorCore.bundle)
   The outline queries (outline.scm) for CSS, Go, JavaScript, JSON, Markdown,
   Python, Rust, TypeScript (also used for TSX) and YAML (from crates/grammars)
   and for HTML (from extensions/html), adapted by Orbe, are bundled as
-  Contents/Resources/Orbe_OrbeEditorCore.bundle/outline/*.scm.
+  Contents/Resources/Orbe_OrbeEditorCore.bundle/Contents/Resources/outline/*.scm.
   https://github.com/zed-industries/zed
   License: licenses/zed-LICENSE-GPL.txt, licenses/zed-LICENSE-APACHE.txt
 
 * zed-extensions/toml — Copyright 2022-2025 Zed Industries, Inc. — Apache-2.0
   The TOML outline query, adapted by Orbe, bundled as
-  Contents/Resources/Orbe_OrbeEditorCore.bundle/outline/toml.scm.
+  Contents/Resources/Orbe_OrbeEditorCore.bundle/Contents/Resources/outline/toml.scm.
   https://github.com/zed-extensions/toml
   License: licenses/zed-extensions-toml-LICENSE.txt
 
@@ -240,7 +240,7 @@ Contents/Resources/Orbe_OrbeEditorCore.bundle)
   - tree-sitter-swift — Copyright (c) 2021 alex-pinkus — MIT License
     https://github.com/alex-pinkus/tree-sitter-swift — License: licenses/tree-sitter-swift-LICENSE.txt
     Its queries/outline.scm, adapted by Orbe, is also bundled as
-    Contents/Resources/Orbe_OrbeEditorCore.bundle/outline/swift.scm.
+    Contents/Resources/Orbe_OrbeEditorCore.bundle/Contents/Resources/outline/swift.scm.
   - tree-sitter-toml — Copyright (c) Ika <ikatyang@gmail.com> — MIT License
     https://github.com/tree-sitter-grammars/tree-sitter-toml — License: licenses/tree-sitter-toml-LICENSE.txt
   - tree-sitter-typescript (TypeScript and TSX grammars) — Copyright (c) 2017 Max Brunsfeld — MIT License
