@@ -8,7 +8,7 @@ import XCTest
 /// 壊れると何が起きるか。再起動で開いていたファイルが戻らない。1 タブの editor の破損で全 workspace の復元が
 /// 消える。新しいフィールドが片方だけに書かれて黙って落ちる。
 extension WorkspacePersistenceTests {
-  func testTabStateWritesEditorOnlyWhenDocumentsAreOpen() throws {
+  func testTabStateWritesEditorOnlyWhenItHasState() throws {
     let enc = JSONEncoder()
     enc.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
     let opened = try enc.encode(

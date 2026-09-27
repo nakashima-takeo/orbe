@@ -71,11 +71,12 @@ struct WorkspaceState: Codable, Equatable {
   }
 }
 
-/// タブのエディターの状態——開いていた文書と、プロジェクト検索の問い（検索語と 3 つの切替。結果は持たない）。どちらも
-/// 無ければ書かない。JSON は 1 段（`open` / `active` / `search`）で、読めない項目はその項目だけを落とす。
+/// タブのエディターの状態——開いていた文書と、プロジェクト検索の問い（検索語と 3 つの切替。結果は持たない）。文書が無く
+/// 問いが既定なら空で、書かない。JSON は 1 段（`open` / `active` / `search`）で、既定の問いは書かず、読めない項目はその
+/// 項目だけを落とす（既定へ）。
 struct EditorState: Codable, Equatable {
   var documents: OpenDocuments?
-  var search: SearchQuery?
+  var search: SearchQuery
 
   /// 開いていた文書の列（実体パス）と、その中のアクティブ。位置ではなくパスで指す——復元で読めないパスを落としても列が
   /// ずれず、「列があるのにアクティブが無い」という表せない状態を持たない（落ちていれば先頭）。
@@ -88,13 +89,13 @@ struct EditorState: Codable, Equatable {
     case open, active, search
   }
 
-  init(documents: OpenDocuments? = nil, search: SearchQuery? = nil) {
+  init(documents: OpenDocuments? = nil, search: SearchQuery = SearchQuery()) {
     self.documents = documents
     self.search = search
   }
 
   /// 空（書くものが無い）か。
-  var isEmpty: Bool { documents == nil && search == nil }
+  var isEmpty: Bool { documents == nil && search == SearchQuery() }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -103,7 +104,7 @@ struct EditorState: Codable, Equatable {
     {
       documents = OpenDocuments(open: open, active: active)
     }
-    search = try? c.decodeIfPresent(SearchQuery.self, forKey: .search)
+    search = (try? c.decodeIfPresent(SearchQuery.self, forKey: .search)) ?? SearchQuery()
   }
 
   func encode(to encoder: Encoder) throws {
@@ -112,7 +113,7 @@ struct EditorState: Codable, Equatable {
       try c.encode(documents.open, forKey: .open)
       try c.encode(documents.active, forKey: .active)
     }
-    try c.encodeIfPresent(search, forKey: .search)
+    if search != SearchQuery() { try c.encode(search, forKey: .search) }
   }
 }
 

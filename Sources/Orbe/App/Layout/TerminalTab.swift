@@ -162,8 +162,8 @@ final class TerminalTab {
     pendingDocuments = state.editor?.documents
     if let agent = state.agent { agentSlot = .dormant(agent) }
     wireView()
-    if let search = state.editor?.search {
-      MainActor.assumeIsolated { view.editor.projectSearch.restore(search) }
+    if let editor = state.editor {
+      MainActor.assumeIsolated { view.editor.projectSearch.restore(editor.search) }
     }
   }
 
@@ -364,7 +364,7 @@ final class TerminalTab {
   /// このタブの復元単位（cwd・エージェントセッション・明示タイトル・面の配置・エディターの状態）。起動時の
   /// 一括保存（WorkspacePersistence）が読み、復元は `TerminalTab(restoring:)` が同じ形を受ける。
   /// 永続化するのは sessionId が確定している同一性だけ（resume 不能な記録を書かない）。文書は開いている
-  /// もの、無ければ未消費の復元状態。検索の問いは既定（空・切替なし）でなければ書く。
+  /// もの、無ければ未消費の復元状態。
   func tabState() -> TabState {
     TabState(
       cwd: cwd, agent: agentSlot.session.flatMap { $0.sessionId != nil ? $0 : nil },
@@ -379,8 +379,7 @@ final class TerminalTab {
           EditorState.OpenDocuments(
             open: documents.map(\.url.path), active: (editor.activeDocument ?? first).url.path)
         } ?? pendingDocuments
-      let query = view.editor.projectSearch.query
-      let state = EditorState(documents: open, search: query == SearchQuery() ? nil : query)
+      let state = EditorState(documents: open, search: view.editor.projectSearch.query)
       return state.isEmpty ? nil : state
     }
   }
