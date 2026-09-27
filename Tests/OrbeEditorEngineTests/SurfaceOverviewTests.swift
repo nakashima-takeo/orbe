@@ -225,6 +225,46 @@ final class SurfaceOverviewTests: EngineTestCase {
       })
   }
 
+  /// 俯瞰の区画の上で当たるのは焦点を取らない子 view で（押しても窓は焦点を面へ移さない）、押下とドラッグは面の俯瞰へ
+  /// 届く。本文の上は面の view が当たる。ポインタの形とホバーは今までどおり面の view の見張り（俯瞰の上も覆う）が決める
+  /// ——子 view は見張りを持たず、俯瞰の上の当たりは矢印の区画。
+  func testTheOverviewIsPressedWithoutTakingTheFocus() throws {
+    let opened = try hosted(rows(400, width: 400))
+    let view = opened.surface.textView
+    let layout = opened.surface.surfaceLayout
+    let hit = { (point: CGPoint) in view.hitTest(view.convert(point, to: view.superview)) }
+    let areas = [
+      CGPoint(x: layout.minimap.midX, y: 300), CGPoint(x: layout.verticalScrollbar.midX, y: 300),
+      CGPoint(x: layout.horizontalScrollbar.minX + 100, y: layout.horizontalScrollbar.midY),
+    ]
+    for point in areas {
+      let target = try XCTUnwrap(hit(point), "\(point)")
+      XCTAssertTrue(target !== view && target.isDescendant(of: view), "\(point) は子 view が当たる")
+      XCTAssertFalse(target.acceptsFirstResponder, "\(point) を押しても焦点を取らない")
+      XCTAssertTrue(target.trackingAreas.isEmpty, "子 view は見張りを持たない")
+      XCTAssertEqual(opened.surface.hit(point)?.area, .overview, "\(point) のポインタは矢印")
+    }
+    view.updateTrackingAreas()
+    let watch = try XCTUnwrap(view.trackingAreas.first { $0.owner === view })
+    XCTAssertTrue(
+      watch.options.isSuperset(of: [
+        .inVisibleRect, .cursorUpdate, .mouseMoved, .mouseEnteredAndExited,
+      ]),
+      "面の view の見張りが俯瞰の上も覆う")
+    XCTAssertTrue(hit(CGPoint(x: layout.text.minX + 50, y: 100)) === view, "本文の上は面の view")
+
+    let target = try XCTUnwrap(hit(areas[1]))
+    let before = opened.surface.viewportLines.first
+    let event = try XCTUnwrap(
+      NSEvent.mouseEvent(
+        with: .leftMouseDown, location: view.convert(areas[1], to: nil), modifierFlags: [],
+        timestamp: CACurrentMediaTime(), windowNumber: view.window?.windowNumber ?? 0,
+        context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+    target.mouseDown(with: event)
+    XCTAssertGreaterThan(opened.surface.viewportLines.first, before, "トラックの押下が俯瞰へ届く")
+    target.mouseUp(with: event)
+  }
+
   /// 本体の上にポインタがあるとつまみが見え、ミニマップの上なら帯が見える。俯瞰の上のポインタは矢印。
   func testHoveringShowsTheThumbAndTheSlider() throws {
     let opened = try hosted(rows(2000))

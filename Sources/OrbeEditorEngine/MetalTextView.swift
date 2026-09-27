@@ -42,6 +42,9 @@ final class MetalTextView: TextSurfaceInputView {
     // ときの古い大きな drawable を面の外（隣のミニマップ・ペイン）へはみ出させない。
     layerContentsPlacement = .topLeft
     clipsToBounds = true
+    let overviewHits = OverviewHitView()
+    overviewHits.autoresizingMask = [.width, .height]
+    addSubview(overviewHits)
     registerForDraggedTypes([.string, .fileURL])
     if !Self.registeredServices {
       Self.registeredServices = true
@@ -211,7 +214,7 @@ final class MetalTextView: TextSurfaceInputView {
   }
 
   /// 変換中はまず IME へ渡す（IME が使わなければ、クリックの入口が変換を確定する）。俯瞰の上の押下は俯瞰が受ける
-  /// （テキストの選択・ドラッグ＆ドロップは始まらない）。
+  /// （テキストの選択・ドラッグ＆ドロップは始まらない。窓からは焦点を取らない子 `OverviewHitView` を経て届く）。
   override func mouseDown(with event: NSEvent) {
     if composing, inputContext?.handleEvent(event) == true { return }
     let point = convert(event.locationInWindow, from: nil)
