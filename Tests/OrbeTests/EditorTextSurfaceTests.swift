@@ -149,6 +149,22 @@ final class EditorTextSurfaceTests: OrbeTestCase {
     XCTAssertEqual(bodyText(document), "short\nき", "次の変換操作は新しい本文の末尾に付く")
   }
 
+  /// pane が chrome キーの前に呼ぶ変換の確定——未確定の文字が本文に 1 回だけ確定として残り、1 回の undo で戻る（上流の
+  /// `insertText` が未確定を消してから入れ直す内部に依存しているので、ここで固定する）。
+  func testCommitMarkedTextKeepsTheCompositionOnceAsOneUndo() throws {
+    let (document, _) = try opened(try file("g.txt", "ab\n"))
+    let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
+    document.surface.selectedRange = NSRange(location: 2, length: 0)
+    client.setMarkedText(
+      "かな", selectedRange: NSRange(location: 2, length: 0),
+      replacementRange: NSRange(location: NSNotFound, length: 0))
+    document.surface.commitMarkedText()
+    XCTAssertFalse(client.hasMarkedText())
+    XCTAssertEqual(bodyText(document), "abかな\n")
+    document.surface.responder.undoManager?.undo()
+    XCTAssertEqual(bodyText(document), "ab\n")
+  }
+
   /// 置き換え後の選択は解け、キャレットは同じオフセットへ戻る（契約は `TextSurface` の doc と code の
   /// 「テキストエンジンの境界」）。本文が短くなる側は TextKit の丸めと結果が一致するので、ここでは clamp の
   /// 有無を判別できない。

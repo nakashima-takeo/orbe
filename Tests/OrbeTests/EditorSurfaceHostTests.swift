@@ -40,8 +40,9 @@ final class EditorSurfaceHostTests: OrbeTestCase {
     XCTAssertEqual(tab.editor.documents.count, 2)
   }
 
-  /// 変換中に chrome キー（⌘S）を押すと、先に変換を確定してから保存する——未確定の文字は既に本文にあるので、見えている
-  /// 本文が保存される。
+  /// 変換中に pane が解く chrome キーを押すと、走らせる前に変換を確定する。⌘H は確定する道が pane の 1 か所だけ（⌘S は
+  /// 保存の後の undo の区切りでも確定するので、それだけでは区別にならない）。⌘S は見えている本文を保存する——未確定の
+  /// 文字は既に本文にある。
   func testChromeKeysCommitTheCompositionFirst() throws {
     try XCTSkipIf(MTLCreateSystemDefaultDevice() == nil, "Metal の装置が無い環境では今の面で開く")
     let tab = TerminalTab(
@@ -56,6 +57,12 @@ final class EditorSurfaceHostTests: OrbeTestCase {
     client.setMarkedText(
       "あ", selectedRange: NSRange(location: 1, length: 0),
       replacementRange: NSRange(location: NSNotFound, length: 0))
+    XCTAssertTrue(client.hasMarkedText())
+    XCTAssertTrue(tab.view.editor.performKeyEquivalent(with: .key("h")))
+    XCTAssertFalse(client.hasMarkedText(), "chrome キーを走らせる前に確定する")
+    client.setMarkedText(
+      "あ", selectedRange: NSRange(location: 1, length: 0),
+      replacementRange: NSRange(location: 0, length: 1))
     XCTAssertTrue(client.hasMarkedText())
     XCTAssertTrue(tab.view.editor.performKeyEquivalent(with: .key("s")))
     XCTAssertFalse(client.hasMarkedText(), "保存の前に確定する")
