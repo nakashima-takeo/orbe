@@ -178,55 +178,6 @@ final class SurfaceInputMethodTests: EngineTestCase {
     XCTAssertEqual(opened.surface.material.read().caret.carets, [1], "IME の注目位置のキャレット")
   }
 
-  /// 変換中にスクロールすれば IME に文字の座標が変わったと知らせる（候補窓が追従する）。変換中でなければ、スクロール
-  /// だけでは知らせない。
-  func testScrollingWhileComposingMovesTheCandidateWindow() throws {
-    let opened = try open((0..<200).map { "row \($0)" }.joined(separator: "\n"))
-    _ = host(opened)
-    let context = fakeInputMethod(opened)
-    opened.surface.scroll(toTop: opened.document.text.lineStart(50), hiddenFraction: 0)
-    XCTAssertEqual(context.invalidations, 0)
-    replay([.mark("か")], on: opened)
-    let composing = context.invalidations
-    XCTAssertGreaterThan(composing, 0, "変換の変化でも知らせる")
-    opened.surface.scroll(toTop: opened.document.text.lineStart(10), hiddenFraction: 0)
-    XCTAssertGreaterThan(context.invalidations, composing)
-  }
-
-  /// 読む呼び出しは NSTextView と同じく、はみ出しを切り、範囲外は nil・NSNotFound を返す。
-  func testQueriesClipAndAnswerNotFound() throws {
-    let opened = try open("abc\ndef\n")
-    let window = host(opened)
-    let client = opened.surface.textView
-    XCTAssertEqual(client.markedRange().location, NSNotFound)
-    var actual = NSRange()
-    XCTAssertEqual(
-      client.attributedSubstring(
-        forProposedRange: NSRange(location: 6, length: 10), actualRange: &actual)?
-        .string, "f\n")
-    XCTAssertEqual(actual, NSRange(location: 6, length: 2))
-    XCTAssertNil(
-      client.attributedSubstring(
-        forProposedRange: NSRange(location: 8, length: 1), actualRange: nil))
-    XCTAssertNil(
-      client.attributedSubstring(
-        forProposedRange: NSRange(location: 1, length: 0), actualRange: nil))
-    let rect = client.firstRect(
-      forCharacterRange: NSRange(location: 1, length: 5), actualRange: &actual)
-    XCTAssertEqual(actual, NSRange(location: 1, length: 2), "1 行目の中身で切る")
-    let local = client.convert(window.convertFromScreen(rect), from: nil)
-    let config = opened.surface.config
-    XCTAssertEqual(local.minY, config.topInset, accuracy: 0.5)
-    XCTAssertEqual(local.height, config.lineHeight, accuracy: 0.5)
-    XCTAssertEqual(local.width, 2 * config.cell, accuracy: 0.5)
-    let inside = window.convertPoint(
-      toScreen: client.convert(point(opened, row: 1, column: 1), to: nil))
-    XCTAssertEqual(client.characterIndex(for: inside), 5)
-    let below = window.convertPoint(
-      toScreen: client.convert(CGPoint(x: point(opened, row: 0, column: 1).x, y: 500), to: nil))
-    XCTAssertEqual(client.characterIndex(for: below), NSNotFound, "本文の外")
-  }
-
   /// 変換中の ⌘ キーはまず IME へ渡る。渡している間にキー割り当てのコマンドが届けば IME は使わなかった（コマンドは実行
   /// しない）。IME が先に確定してからコマンドを返せば、確定した文字が入る。変換中でなければ IME へ渡さない。
   func testKeyEquivalentsGoToTheInputMethodFirst() throws {

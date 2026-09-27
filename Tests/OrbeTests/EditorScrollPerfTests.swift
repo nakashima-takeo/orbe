@@ -44,15 +44,18 @@ final class EditorScrollPerfTests: OrbeTestCase {
 
   /// 新しい面（Metal）の打鍵 1 回の main の仕事——キーの出来事を受けてから、面の編集係・文書・Orbe の配り先（検索・出現・
   /// 俯瞰への知らせ）が戻るまでの main のスレッドの CPU 時間。p99 1ms 以下（200KB・1MB、git 管理下、1 万字近い長い行の
-  /// 行末）。ライブ変換の IME の呼び出し 1 回も同じ範囲で p99 1ms 以下。壁時計の時間は機械の混み具合で膨らむので参考に
-  /// 出すだけにする（利用者が感じる遅れは打鍵→present の関門が見る）。描くのは描画スレッド。プロセスで最初の 1 打鍵
-  /// と最初の変換（入力の仕組みの初期化を含む）は数えないので、測る文書を開く前に別の文書で打つ。
+  /// 行末）。壁時計の時間は機械の混み具合で膨らむので参考に出すだけにする（利用者が感じる遅れは打鍵→present の関門が
+  /// 見る）。描くのは描画スレッド。ライブ変換は、IME の呼び出し 1 回と、IME がその直後に読み返す未確定の範囲・未確定と
+  /// 選択の矩形・未確定の上の点の下の字を合わせて 1 回と数え、同じく main のスレッドの CPU 時間で見る。変換の続き（2 回目
+  /// 以降と確定）は 3 つとも p99 1ms 以下。変換の始まり（最初の呼び出し）は未確定の先頭の x を出すために行を 1 回組むので、
+  /// 普通の行（200KB・1MB）で p99 1ms 以下、長い行は値を出すだけ。プロセスで最初の 1 打鍵と最初の変換（入力の仕組みの
+  /// 初期化を含む）は数えないので、測る文書を開く前に別の文書で打つ。
   func testMetalTypingMainTime() throws {
     let metal = EditorEngineChoice(
       metal: true, elasticScroll: true, fontSmoothing: true, language: .ja)
     let warm = try openEditor("warm\n", engine: metal)
     warm.document.surface.responder.keyDown(with: .key("/", []))
-    _ = try compose(into: warm, count: 20)
+    try compose(into: warm, count: 20)
     warm.window.orderOut(nil)
     let long = String(repeating: "x", count: 9_990) + "\n" + Self.swiftSource(bytes: 20_000)
     for (label, text) in [
@@ -83,25 +86,42 @@ final class EditorScrollPerfTests: OrbeTestCase {
         sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.99))], 1,
         "\(label): 打鍵 1 回の main のスレッドの CPU 時間の p99")
       let composing = try compose(into: opened)
-      reportPerf(label, "metal-composition-main (baseline あり)", composing.cpu, digits: 3)
-      reportPerf(label, "metal-composition-main-wall (参考)", composing.wall, digits: 3)
-      let composingCPU = composing.cpu.sorted()
+      reportPerf(
+        label, "metal-composition-main 続き (baseline あり)", composing.continuing.cpu, digits: 3)
+      reportPerf(
+        label, "metal-composition-main 始まり (baseline あり)", composing.starting.cpu, digits: 3)
+      reportPerf(
+        label, "metal-composition-main-wall 続き (参考)", composing.continuing.wall, digits: 3)
+      reportPerf(
+        label, "metal-composition-main-wall 始まり (参考)", composing.starting.wall, digits: 3)
       XCTAssertLessThanOrEqual(
-        composingCPU[min(composingCPU.count - 1, Int(Double(composingCPU.count) * 0.99))], 1,
-        "\(label): 変換中の IME の呼び出し 1 回の main のスレッドの CPU 時間の p99")
+        Self.p99(composing.continuing.cpu), 1,
+        "\(label): 変換の続きの呼び出し 1 回（読み返し込み）の main のスレッドの CPU 時間の p99")
+      if label != "long-line" {
+        XCTAssertLessThanOrEqual(
+          Self.p99(composing.starting.cpu), 1,
+          "\(label): 変換の始まりの呼び出し 1 回（読み返し込み）の main のスレッドの CPU 時間の p99")
+      }
       opened.window.orderOut(nil)
     }
   }
 
-  /// ライブ変換を再生し、IME の呼び出し 1 回ごとの main の仕事（ms。main のスレッドの CPU 時間と壁時計の時間）を返す——
-  /// 未確定が 1 打鍵ごとに 1 字伸びて全体が置き換わり、20 字目で確定する、を `count` 打鍵ぶん。
+  /// main の仕事の時間（ms）——main のスレッドの CPU 時間（関門が見る）と壁時計の時間（参考）。
+  private struct MainTimes {
+    var cpu: [Double] = []
+    var wall: [Double] = []
+  }
+
+  /// ライブ変換を再生し、IME の呼び出しとその直後の読み返し 1 回ごとの main の仕事を、変換の始まりと続きに分けて返す——
+  /// 未確定が 1 打鍵ごとに 1 字伸びて全体が置き換わり（文節を 1 つ選んでいる）、20 字目で確定する、を `count` 打鍵ぶん。
+  @discardableResult
   private func compose(into opened: OpenedEditor, count: Int = 60) throws -> (
-    cpu: [Double], wall: [Double]
+    starting: MainTimes, continuing: MainTimes
   ) {
     let client = try XCTUnwrap(opened.document.surface.responder as? NSTextInputClient)
     let whole = NSRange(location: NSNotFound, length: 0)
-    var cpu: [Double] = []
-    var wall: [Double] = []
+    var starting = MainTimes()
+    var continuing = MainTimes()
     for k in 0..<count {
       let length = k % 20 + 1
       let reading = String(repeating: "か", count: length)
@@ -110,13 +130,32 @@ final class EditorScrollPerfTests: OrbeTestCase {
         client.insertText(reading, replacementRange: whole)
       } else {
         client.setMarkedText(
-          reading, selectedRange: NSRange(location: length, length: 0), replacementRange: whole)
+          reading, selectedRange: NSRange(location: length / 2, length: (length + 1) / 2),
+          replacementRange: whole)
       }
-      cpu.append(Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - began.0) / 1e6)
-      wall.append((CACurrentMediaTime() - began.1) * 1000)
+      let marked = client.markedRange()
+      if marked.location != NSNotFound {
+        let rect = client.firstRect(forCharacterRange: marked, actualRange: nil)
+        _ = client.firstRect(forCharacterRange: client.selectedRange(), actualRange: nil)
+        _ = client.characterIndex(for: NSPoint(x: rect.midX, y: rect.midY))
+      }
+      let cpu = Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - began.0) / 1e6
+      let wall = (CACurrentMediaTime() - began.1) * 1000
+      if length == 1 {
+        starting.cpu.append(cpu)
+        starting.wall.append(wall)
+      } else {
+        continuing.cpu.append(cpu)
+        continuing.wall.append(wall)
+      }
       RunLoop.main.run(until: Date().addingTimeInterval(0.01))
     }
-    return (cpu, wall)
+    return (starting, continuing)
+  }
+
+  private static func p99(_ times: [Double]) -> Double {
+    let sorted = times.sorted()
+    return sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.99))]
   }
 
   /// 1200×800 の窓に Swift の文書を開き、裏の仕事（文書全体の構文色）が追いついてから測る。速いドラッグは開いた

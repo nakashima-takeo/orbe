@@ -62,7 +62,8 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     ]
   }
 
-  /// 範囲の 1 行目の矩形（スクリーン座標）。範囲は 1 行目の中身の終わりで切り、本文の外なら末尾の幅 0。
+  /// 範囲の 1 行目の矩形（スクリーン座標）。範囲は 1 行目の中身の終わりで切り、本文の外なら末尾の幅 0。変換中の未確定の
+  /// 中は `MarkedLineGeometry` で答える（長い行でも打鍵ごとに行を組まない）。
   func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
     guard let surface, let env = surface.editingEnvironment(), let window else { return .zero }
     let text = env.text
@@ -73,15 +74,17 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
       max(location, location + max(0, range.length)), NSMaxRange(text.contentRange(ofRow: row)))
     let clipped = NSRange(location: location, length: max(0, end - location))
     actualRange?.pointee = clipped
-    return window.convertToScreen(convert(textRect(clipped, row: row, env), to: nil))
+    return window.convertToScreen(
+      convert(textRect(clipped, row: row, env, marked: markedLine), to: nil))
   }
 
+  /// 点を含む字の位置（字の上でなければ NSNotFound——行末より右・字の無い行・本文の外。macOS 26 の NSTextView と同じ）。
   func characterIndex(for point: NSPoint) -> Int {
     guard let surface, let window else { return NSNotFound }
     let local = convert(window.convertPoint(fromScreen: point), from: nil)
-    guard bounds.contains(local), let hit = surface.hit(local), hit.area == .text, isOnText(local)
-    else { return NSNotFound }
-    return hit.offset
+    guard bounds.contains(local) else { return NSNotFound }
+    if let marked = markedCharacter(at: local) { return marked }
+    return surface.character(at: local, position: scrollPosition)?.location ?? NSNotFound
   }
 
   func baselineDeltaForCharacter(at anIndex: Int) -> CGFloat {
@@ -95,21 +98,20 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
 
   func drawsVerticallyForCharacter(at charIndex: Int) -> Bool { false }
 
-  /// 点の下の字の左端から右端までのうち、点までの割合。
+  /// 点を含む字（`characterIndex(for:)` と同じ字）の左端から右端までのうち、点までの割合。
   func fractionOfDistanceThroughGlyph(for point: NSPoint) -> CGFloat {
     guard let surface, let env = surface.editingEnvironment(), let window else { return 0 }
     let local = convert(window.convertPoint(fromScreen: point), from: nil)
-    guard let hit = surface.hit(local), hit.area == .text else { return 0 }
+    let p = scrollPosition
+    guard let cluster = surface.character(at: local, position: p) else { return 0 }
     let text = env.text
-    let start = text.lineStart(hit.row)
-    let x =
-      local.x - surface.config.columnWidth(lineCount: text.lineCount) + CGFloat(scrollPosition.x)
-    let inside =
-      x < env.geometry.x(ofColumn: hit.offset - start, row: hit.row) ? hit.offset - 1 : hit.offset
-    guard inside >= start, inside < NSMaxRange(text.contentRange(ofRow: hit.row)) else { return 0 }
-    let cluster = text.grapheme(containing: inside)
-    let x0 = env.geometry.x(ofColumn: cluster.location - start, row: hit.row)
-    let x1 = env.geometry.x(ofColumn: NSMaxRange(cluster) - start, row: hit.row)
+    let row = text.row(containing: cluster.location)
+    let start = text.lineStart(row)
+    let x = local.x - surface.config.columnWidth(lineCount: text.lineCount) + CGFloat(p.x)
+    let ends = [cluster.location, NSMaxRange(cluster)].map {
+      env.geometry.x(ofColumn: $0 - start, row: row)
+    }
+    let (x0, x1) = (ends.min() ?? 0, ends.max() ?? 0)
     return x1 > x0 ? min(max((x - x0) / (x1 - x0), 0), 1) : 0
   }
 
@@ -123,13 +125,15 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     let bottom = top + Int((Double(bounds.height) / Double(surface.config.lineHeight)).rounded(.up))
     let first = min(max(rows.lowerBound, top), rows.upperBound)
     let last = max(min(rows.upperBound, bottom), first)
+    let marked = markedLine
     var union = NSRect.null
     for row in first...last {
       let content = text.contentRange(ofRow: row)
       let start = max(selection.location, text.lineStart(row))
       let end = min(NSMaxRange(selection), NSMaxRange(content))
       union = union.union(
-        textRect(NSRange(location: start, length: max(0, end - start)), row: row, env))
+        textRect(
+          NSRange(location: start, length: max(0, end - start)), row: row, env, marked: marked))
     }
     let visible = union.intersection(textArea)
     return window.convertToScreen(convert(visible.isNull ? union : visible, to: nil))
@@ -156,25 +160,50 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
       height: max(0, bounds.height - surface.config.topInset))
   }
 
-  /// 1 行の中の範囲の矩形（view の座標。行の高さいっぱい）。
-  private func textRect(_ range: NSRange, row: Int, _ env: EditingEnvironment) -> NSRect {
+  /// 変換中の未確定の横位置（変換中でなければ nil）。
+  private var markedLine: MarkedLineGeometry? {
+    guard let surface, let composition = editor?.composition,
+      let text = surface.currentContent?.text
+    else { return nil }
+    return MarkedLineGeometry(
+      composition, text: text, cache: surface.lineStops,
+      tabWidth: surface.config.tabWidth(columns: surface.indentation.unit))
+  }
+
+  /// 点を含む未確定の字の位置（点が未確定の字の上でなければ nil）。
+  private func markedCharacter(at point: CGPoint) -> Int? {
+    guard let surface, let marked = markedLine, let text = surface.currentContent?.text else {
+      return nil
+    }
+    let config = surface.config
+    let p = scrollPosition
+    let column = config.columnWidth(lineCount: text.lineCount)
+    let y = Double(point.y - config.topInset) + p.y
+    guard point.x >= column, point.y >= config.topInset,
+      Int((y / Double(config.lineHeight)).rounded(.down)) == marked.row,
+      let offset = marked.offset(containingX: point.x - column + CGFloat(p.x))
+    else { return nil }
+    return text.grapheme(containing: offset).location
+  }
+
+  /// 1 行の中の範囲の矩形（view の座標。行の高さいっぱい）。未確定の行の未確定の中の端は `marked` で出す。
+  private func textRect(
+    _ range: NSRange, row: Int, _ env: EditingEnvironment, marked: MarkedLineGeometry?
+  ) -> NSRect {
     guard let surface else { return .zero }
     let start = env.text.lineStart(row)
-    let x0 = env.geometry.x(ofColumn: range.location - start, row: row)
-    let x1 = env.geometry.x(ofColumn: NSMaxRange(range) - start, row: row)
+    let onMarked = marked?.row == row ? marked : nil
+    let x0 =
+      onMarked?.x(of: range.location) ?? env.geometry.x(ofColumn: range.location - start, row: row)
+    let x1 =
+      onMarked?.x(of: NSMaxRange(range))
+      ?? env.geometry.x(ofColumn: NSMaxRange(range) - start, row: row)
     let p = scrollPosition
     let config = surface.config
     return NSRect(
       x: config.columnWidth(lineCount: env.text.lineCount) + x0 - CGFloat(p.x),
       y: config.topInset + CGFloat(row) * config.lineHeight - CGFloat(p.y), width: x1 - x0,
       height: config.lineHeight)
-  }
-
-  /// 点が本文の行の上か（最終行より下の空き地でない）。
-  private func isOnText(_ point: CGPoint) -> Bool {
-    guard let surface, let text = surface.editingEnvironment()?.text else { return false }
-    let y = Double(point.y - surface.config.topInset) + scrollPosition.y
-    return y >= 0 && y < Double(text.lineCount) * Double(surface.config.lineHeight)
   }
 
   // MARK: - 未確定の文字
