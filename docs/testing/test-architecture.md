@@ -108,7 +108,7 @@ updated: 2026-09-27
 - **データ**: `DesignSceneFixtures` と Sources 側の `*Fixtures.swift`。stub で外枠だけ描かず、本物のデータを本物のビューに流す
 - **実行**: CI 全量
 - **ツール**: 比較・許容差・記録モード・差分出力は swift-snapshot-testing（`precision` ＋ `perceptualPrecision`）
-- **例外**: 新しいテキスト面（Metal）の字と git の印は、ゴールデン画像でなく別の方式で見る——`GlyphPixelTests` が、同じ行を Core Text で不透明な地に描いた基準と字のある画素で 1 段以内か（1x・2x、太らせの有無）を、`MetalLineMarksTests` が撮影した画素で印の色と位置を確かめる（通常の `swift test`。Metal の装置が無ければ skip）
+- **例外**: 新しいテキスト面（Metal）の字と git の印は、ゴールデン画像でなく別の方式で見る——`GlyphPixelTests` が、同じ行を Core Text で不透明な地に描いた基準と字のある画素で 1 段以内か（1x・2x、太らせの有無）を、`MetalLineMarksTests` が撮影した画素で印の色と位置を確かめ、`ScrolledFrameTests` がスクロールの前後の絵を画素で突き合わせて本文・行番号・印がそろって動くことを確かめる（通常の `swift test`。Metal の装置が無ければ skip）
 
 ### L7 生成物
 
