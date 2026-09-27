@@ -196,6 +196,8 @@ extension Theme.Layout {
   /// `editorRow`、シェブロンは `editorChevron`、チップは `editorChip`。
   static let editorOutlineInset: CGFloat = 4
   static let editorOutlineIndent: CGFloat = 16
+  /// アウトラインの見出しと行の列の間。
+  static let editorOutlineListTop: CGFloat = 2
   /// エクスプローラーを 2 段に分けたとき、ツリーとアウトラインの区画がそれぞれ見出しの下に残す最小の高さ（行 3 本）。
   static let editorSectionMinBody: CGFloat = 60
 }

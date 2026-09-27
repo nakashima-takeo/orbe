@@ -173,12 +173,12 @@ struct ExplorerView: View {
     }
   }
 
-  /// アウトラインの区画の高さ（上の hairline 込み）。閉じていれば見出しだけ。開いていれば比で分け、下の区画に見出しと行 3 本、
-  /// 上の区画にヘッダー・ルート行と行 3 本を残す（足りなければ下を優先して見出しは必ず残す）。
+  /// アウトラインの区画の高さ（上の hairline 込み）。閉じていれば見出しだけ。開いていれば比で分け、下の区画に見出しと
+  /// 列の上の間と行 3 本、上の区画にヘッダー・ルート行と行 3 本を残す（足りなければ下を優先して見出しは必ず残す）。
   private func outlineHeight(in height: CGFloat) -> CGFloat {
     let head = Theme.Stroke.hairline + Theme.Layout.editorSectionHeader
     guard sidebar.isOutlineOpen else { return head }
-    let minimum = head + Theme.Layout.editorSectionMinBody
+    let minimum = head + Theme.Layout.editorOutlineListTop + Theme.Layout.editorSectionMinBody
     let maximum =
       height - Theme.Layout.editorPanelHeader - Theme.Layout.editorRow
       - Theme.Layout.editorSectionMinBody

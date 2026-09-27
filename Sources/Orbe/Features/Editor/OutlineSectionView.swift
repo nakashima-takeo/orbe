@@ -72,7 +72,7 @@ private struct OutlineSectionBody: View {
         list: list, rowsVersion: outline.rowsVersion, selection: outline.selection,
         filterShown: outline.isFilterShown, filterText: outline.filterText
       )
-      .padding(.top, 2)
+      .padding(.top, Theme.Layout.editorOutlineListTop)
     case .loading:
       if outline.showsLoading {
         message(l10n.format(.editorOutlineLoading, outline.documentName))
