@@ -4,8 +4,9 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 刻みの止め方と再開（電池を守る規則）。窓を出さない刻み（`HeadlessDriver`）で本物の描画スレッドを回す。壊れると、
-/// 新しい面が 1 コマ目で固まる、止まっている間や隠れたタブで描き続けて CPU と電池を使う。
+/// 刻みの止め方と再開（電池を守る規則）と、刻みで描いたコマから main への知らせ。窓を出さない刻み（`HeadlessDriver`）
+/// で本物の描画スレッドを回す。壊れると、新しい面が 1 コマ目で固まる、止まっている間や隠れたタブで描き続けて CPU と
+/// 電池を使う、右にまだ本文が続くのに俯瞰の右の影が出ない。
 @MainActor
 final class RenderLoopTests: EngineTestCase {
   private var driver: HeadlessDriver!
@@ -87,6 +88,21 @@ final class RenderLoopTests: EngineTestCase {
       XCTAssertEqual(after, drawsAtOnce ? before + 1 : before, "残り \(lead)s")
       XCTAssertFalse(paused, "刻みは再開する")
     }
+  }
+
+  /// 刻みで描いたコマが組んだ行で横の範囲を伸ばせば、main の操作を待たずに見えている範囲を知らせ直す（本文が右に
+  /// まだ続く）。
+  func testAFrameThatWidensTheRangeTellsTheViewport() throws {
+    let opened = try open(String(repeating: "x", count: 300) + "\n")
+    let surface = opened.surface
+    XCTAssertFalse(surface.viewport.clipsRight, "前提: 行を組むまでは横の範囲に入らない")
+    surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
+    driver.bind(surface.id)
+    let deadline = Date().addingTimeInterval(5)
+    while !surface.viewport.clipsRight, Date() < deadline {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+    XCTAssertTrue(surface.viewport.clipsRight)
   }
 
   private func drawn(_ surface: MetalTextSurface) -> Int {
