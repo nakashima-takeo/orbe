@@ -186,6 +186,21 @@ final class SurfaceEditingTests: EngineTestCase {
     XCTAssertEqual(scroll.frame(at: 0, material: revision + 1).position.y, placed)
   }
 
+  /// 打鍵の後の横の「見えるところまで」は、行を組む描画スレッドが解く——main は論理の位置だけを材料に添え、描画スレッドが
+  /// キャレットの行を組んで横へ寄せ、見えている範囲を知らせ直す。
+  func testTypingRevealsTheCaretHorizontallyOnTheRenderThread() throws {
+    let opened = try open(String(repeating: "x", count: 300) + "\n")
+    _ = host(opened, size: CGSize(width: 400, height: 120))
+    opened.surface.selectedRange = NSRange(location: 300, length: 0)
+    type(opened, "y")
+    XCTAssertEqual(opened.surface.viewport.hiddenColumns, 0, "main は横に寄せない")
+    XCTAssertEqual(opened.surface.material.read().reveal?.range, NSRange(location: 301, length: 0))
+    _ = opened.surface.snapshot()
+    pump(until: { opened.surface.viewport.hiddenColumns > 0 }, "描画スレッドが行の末尾まで寄せる")
+    let viewport = opened.surface.viewport
+    XCTAssertGreaterThanOrEqual(viewport.hiddenColumns + viewport.visibleColumns + 0.5, 301)
+  }
+
   /// 取引は、渡した編集で組版の変わった行を描画スレッドへ知らせる——打鍵ではその行だけ、Enter では 1 行が 2 行に、複数行の
   /// 字下げでは各行（後ろから当てた順）。描画スレッドはこれで変わった行だけを組み直す。
   func testTransactionsReportTheRowsTheyChanged() throws {

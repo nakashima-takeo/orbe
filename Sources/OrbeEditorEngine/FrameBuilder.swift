@@ -88,6 +88,7 @@ final class FrameBuilder {
     let config: SurfaceConfig
   }
 
+  /// コマを組む（組版のキャッシュのコマは呼び手が始めてある——`Renderer.begin`）。
   func build(_ source: Source, cache: LineLayoutCache, fonts: FontRegistry) {
     for i in text.indices { text[i].removeAll(keepingCapacity: true) }
     for i in color.indices { color[i].removeAll(keepingCapacity: true) }
@@ -120,7 +121,6 @@ final class FrameBuilder {
     let baseline = (Double(config.baseline) * s).rounded()
     let numberFont = fonts.id(config.gutterFont)
     let tabColumns = source.material.tabColumns
-    cache.beginFrame(version: content.version, tabColumns: tabColumns)
     var selections = SelectionCursor(
       source.material.caret.selections, from: content.text.lineStart(first))
     let carets = (source.caretVisible ? source.material.caret.carets : []).map {

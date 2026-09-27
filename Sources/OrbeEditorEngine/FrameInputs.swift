@@ -252,6 +252,13 @@ struct CaretMaterial: Equatable, Sendable {
   }
 }
 
+/// 取引が頼んだ横の「見えるところまで」。描画スレッドが区間の行を組んで x を引き、横の位置を寄せる——main は論理の位置
+/// だけを持ち、打鍵のたびに行を組まない。`serial` が進むたびに 1 回だけ解く。
+struct HorizontalReveal: Equatable, Sendable {
+  var range: NSRange
+  var serial: Int
+}
+
 /// 描く材料。main が置き、描画スレッドが表示の刻みごとに最新を読む。
 struct FrameMaterial: Sendable {
   var content: SurfaceContent?
@@ -261,6 +268,8 @@ struct FrameMaterial: Sendable {
   var keystrokes: [Double] = []
   var marks = RowMarks.empty
   var caret = CaretMaterial()
+  /// まだ解いていないかもしれない横の「見えるところまで」（本文を変えて見せない取引は、古い区間を捨てる）。
+  var reveal: HorizontalReveal?
   var palette: FramePalette?
   var tabColumns = Indentation.fallback.unit
   /// 面の大きさ（pt）と倍率。

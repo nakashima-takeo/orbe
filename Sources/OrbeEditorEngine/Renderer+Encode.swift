@@ -120,6 +120,7 @@ extension Renderer {
     else { return nil }
     let atlas = atlas(scale: material.scale, space: material.space)
     if atlas.isFull { atlas.reset() }
+    let revealed = begin(slot, material)
     let built = slot.builder
     built.build(
       FrameBuilder.Source(
@@ -127,9 +128,9 @@ extension Renderer {
         caretVisible: material.caret.showsCaret,
         pixels: (width, height), atlas: atlas, config: slot.config), cache: slot.lines, fonts: fonts
     )
-    if slot.scroll.measured(longestLine: built.longestLine, version: material.content?.version) {
-      slot.notify()
-    }
+    let widened = slot.scroll.measured(
+      longestLine: built.longestLine, version: material.content?.version)
+    if widened || revealed { slot.notify() }
     guard
       let buffer = device.makeBuffer(
         length: max(built.byteCount, 256), options: .storageModeShared)

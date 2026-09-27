@@ -49,11 +49,15 @@ final class MetalTextSurfaceTests: EngineTestCase {
     let target = text.lineStart(10) + 280
     opened.surface.scrollToVisible(NSRange(location: target, length: 1))
     XCTAssertEqual(opened.surface.viewport.firstVisible, 0, "縦は見えているので動かない")
-    XCTAssertGreaterThan(opened.surface.viewport.hiddenColumns, 0, "横に寄る")
+    _ = opened.surface.snapshot()
+    pump(
+      until: { opened.surface.viewport.hiddenColumns > 0 },
+      "横は描画スレッドが行を組んで寄せ、見えている範囲を知らせ直す")
     let columns = opened.surface.viewport
     XCTAssertLessThanOrEqual(281, columns.hiddenColumns + columns.visibleColumns + 0.5)
     opened.surface.scrollToVisible(NSRange(location: text.lineStart(80), length: 0))
-    XCTAssertEqual(opened.surface.viewport.hiddenColumns, 0, "行頭へ戻る")
+    _ = opened.surface.snapshot()
+    pump(until: { opened.surface.viewport.hiddenColumns == 0 }, "行頭へ戻る")
     XCTAssertGreaterThan(opened.document.viewportLines.first, 40, "下の行が見えるまで送る")
   }
 
@@ -176,8 +180,9 @@ final class MetalTextSurfaceTests: EngineTestCase {
     let opened = try open(wide)
     _ = opened.surface.snapshot()
     opened.surface.scrollToVisible(NSRange(location: 250, length: 0))
+    _ = opened.surface.snapshot()
+    pump(until: { opened.surface.viewport.hiddenColumns > 0 })
     let hidden = opened.surface.viewport.hiddenColumns
-    XCTAssertGreaterThan(hidden, 0)
     opened.surface.replaceAll(with: "y" + wide)
     XCTAssertEqual(opened.surface.viewport.hiddenColumns, hidden, "差し替えただけでは動かない")
     _ = opened.surface.snapshot()
@@ -226,13 +231,4 @@ final class MetalTextSurfaceTests: EngineTestCase {
   }
 
   /// 描画スレッドからの非同期の知らせを受けるまで main を回す（条件が無ければ 1 巡りだけ）。
-  private func pump(
-    until condition: () -> Bool = { true }, _ message: String = "", timeout: TimeInterval = 5
-  ) {
-    let deadline = Date().addingTimeInterval(timeout)
-    repeat {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    } while !condition() && Date() < deadline
-    XCTAssertTrue(condition(), message)
-  }
 }

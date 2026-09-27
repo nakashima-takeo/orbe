@@ -39,6 +39,8 @@ final class MetalTextSurface: TextSurface {
   private(set) var focused = false
   /// 進行中の取引（→ `transact`）。
   var transaction: Transaction?
+  /// 描画スレッドへ頼んだ横の「見えるところまで」の通し番号。
+  var revealSerial = 0
 
   init(style: TextSurfaceStyle, options: MetalTextSurfaceOptions) {
     Self.nextID += 1

@@ -163,6 +163,7 @@ final class Renderer {
   ) {
     let began = CACurrentMediaTime()
     let caretVisible = material.caret.caretVisible(at: target)
+    let revealed = begin(slot, material)
     let frame = slot.scroll.frame(at: target, material: material.revision)
     let texture = acquired.texture
     slot.builder.build(
@@ -207,7 +208,7 @@ final class Renderer {
         shaped: slot.lines.shapedInFrame > 0, committed: committed, events: frame.events,
         keystrokes: keystrokes, moving: moving, gesture: frame.gesture,
         mismatch: texture.width != pixels.width || texture.height != pixels.height))
-    if frame.returning || wasReturning || widened { slot.notify() }
+    if frame.returning || wasReturning || widened || revealed { slot.notify() }
     if let last = keystrokes.max() { scheduleTypingFlush(slot.id, after: last) }
   }
 
@@ -219,6 +220,25 @@ final class Renderer {
         slot.recorder.flushTyping()
       }
     }
+  }
+
+  /// コマを組み始める。取引が頼んだ横の「見えるところまで」がまだなら、区間の行を組んで x を引き、横の位置を寄せる（位置か
+  /// 範囲が変わったら true）。区間の行はこのコマで描く行なので、組んだ結果はそのまま描くのに使う。
+  func begin(_ slot: SurfaceSlot, _ material: FrameMaterial) -> Bool {
+    guard let content = material.content else { return false }
+    slot.lines.beginFrame(version: content.version, tabColumns: material.tabColumns)
+    guard let reveal = material.reveal, reveal.serial != slot.revealed else { return false }
+    slot.revealed = reveal.serial
+    let text = content.text
+    let location = min(max(0, reveal.range.location), text.length)
+    let end = min(max(location, NSMaxRange(reveal.range)), text.length)
+    let row = text.row(containing: location)
+    let start = text.lineStart(row)
+    let line = slot.lines.line(
+      row: row, in: text, tabColumns: material.tabColumns, config: slot.config, fonts: fonts)
+    let x0 = Double(line.carets.x(location - start))
+    let x1 = text.row(containing: end) == row ? Double(line.carets.x(end - start)) : x0
+    return slot.scroll.reveal(min(x0, x1)...max(x0, x1), lineWidth: Double(line.width))
   }
 
   var gpuInflight: Int { buffers.filter(\.busy).count }
@@ -312,6 +332,8 @@ final class SurfaceSlot {
   var keystrokes: [Double] = []
   /// 次に点滅が切り替わる時刻に起きるタイマー（止めている間だけ）。
   var blinkTimer: CFRunLoopTimer?
+  /// 解いた横の「見えるところまで」の通し番号。
+  var revealed = 0
 
   init(
     id: Int, material: MaterialBox, scroll: ScrollBox, config: SurfaceConfig,

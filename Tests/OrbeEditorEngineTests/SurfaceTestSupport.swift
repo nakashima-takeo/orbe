@@ -84,6 +84,17 @@ extension EngineTestCase {
     try mouse(opened, .leftMouseUp, at: at, clicks: clicks, flags: flags)
   }
 
+  /// main の run loop を回し、`condition` が成り立つまで待つ（描画スレッドからの知らせを受ける）。
+  func pump(
+    until condition: () -> Bool = { true }, _ message: String = "", timeout: TimeInterval = 5
+  ) {
+    let deadline = Date().addingTimeInterval(timeout)
+    repeat {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    } while !condition() && Date() < deadline
+    XCTAssertTrue(condition(), message)
+  }
+
   func text(_ document: EditorDocument) -> String {
     document.text.substring(NSRange(location: 0, length: document.text.length))
   }

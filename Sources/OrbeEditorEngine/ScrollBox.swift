@@ -79,9 +79,28 @@ final class ScrollBox: Sendable {
     s.held = Held(position: position, until: max(s.held?.until ?? material, material))
   }
 
-  /// 見たことのある最も長い行を伸ばす（縮めない）。
-  func noteLine(width: Double) {
-    _ = measured(longestLine: width, version: nil)
+  /// 描画スレッドが、取引の頼んだ区間を組んだ行の x（`x`）が横に見えるところまで最小限動かす。`lineWidth` はその行の幅
+  /// で、範囲を伸ばす（縮めない）。位置か範囲が変わったら true。
+  func reveal(_ x: ClosedRange<Double>, lineWidth: Double) -> Bool {
+    state.withLock { s in
+      var limits = s.physics.limits
+      if lineWidth > limits.longestLine { limits.longestLine = lineWidth }
+      let widened = limits != s.physics.limits
+      if widened { s.physics.setLimits(limits) }
+      let area = limits.viewport.x
+      var p = s.physics.shown(at: CACurrentMediaTime())
+      let before = p.x
+      if x.lowerBound < p.x || x.upperBound - x.lowerBound > area {
+        p.x = x.lowerBound
+      } else if x.upperBound > p.x + area {
+        p.x = x.upperBound - area
+      }
+      let moved = p.x != before
+      if moved { s.physics.place(p) }
+      guard widened || moved else { return false }
+      s.revision += 1
+      return true
+    }
   }
 
   /// 本文を丸ごと置き換えた。最も長い行を、版 `version` 以降の写しを描いたコマで測り直す（それまで横の位置は保つ）。

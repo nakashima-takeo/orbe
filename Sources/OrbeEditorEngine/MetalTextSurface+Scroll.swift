@@ -28,12 +28,13 @@ extension MetalTextSurface {
     place(SIMD2(scrollPosition.x, (Double(row) + fraction) * Double(config.lineHeight)))
   }
 
-  /// 行を見えている高さの中央へ置き、それから列が横に見えるところまで寄せる。
+  /// 行を見えている高さの中央へ置き、それから列が横に見えるところまで寄せる（横は描画スレッドが行を組んで寄せる）。
   func scrollToCenter(_ offset: Int) {
     transact(reveal: .center, of: NSRange(location: offset, length: 0))
   }
 
-  /// 区間が見えるところまで最小限スクロールする（縦に見えていれば縦は動かず、横に隠れていれば横だけ寄る）。
+  /// 区間が見えるところまで最小限スクロールする（縦に見えていれば縦は動かず、横に隠れていれば横だけ寄る。横は描画スレッドが
+  /// 行を組んで寄せ、動けば見えている範囲を知らせ直す）。
   func scrollToVisible(_ range: NSRange) {
     transact(reveal: .minimal, of: range)
   }
@@ -105,34 +106,22 @@ extension MetalTextSurface {
     return SIMD2(p.x, Double(row) * lineHeight + lineHeight / 2 - height / 2)
   }
 
-  /// 区間が見えるところまで最小限動かした位置。横の位置は描画と同じ組版の規則で出す。
+  /// 区間の行が縦に見えるところまで最小限動かした位置（横は描画スレッドが行を組んで寄せる）。
   private func visible(_ range: NSRange, _ text: TextRope, from start: SIMD2<Double>)
     -> SIMD2<Double>
   {
-    let range = NSRange(
-      location: min(max(0, range.location), text.length),
-      length: min(max(0, range.length), text.length - min(max(0, range.location), text.length)))
-    let rows = text.rows(of: range)
+    let location = min(max(0, range.location), text.length)
+    let end = min(max(location, NSMaxRange(range)), text.length)
+    let rows = text.rows(of: NSRange(location: location, length: end - location))
     let lineHeight = Double(config.lineHeight)
-    let area = scroll.peek(at: CACurrentMediaTime()).limits.viewport
+    let height = scroll.peek(at: CACurrentMediaTime()).limits.viewport.y
     var p = start
     let top = Double(rows.lowerBound) * lineHeight
     let bottom = Double(rows.upperBound + 1) * lineHeight
-    if top < p.y || bottom - top > area.y {
+    if top < p.y || bottom - top > height {
       p.y = top
-    } else if bottom > p.y + area.y {
-      p.y = bottom - area.y
-    }
-    let (source, lineStart) = LineShaper.source(row: rows.lowerBound, in: text)
-    let stops = lineStops.stops(source, tabWidth: config.tabWidth(columns: indentation.unit))
-    scroll.noteLine(width: Double(stops.width))
-    let x = { (offset: Int) in Double(stops.carets.x(offset - lineStart)) }
-    let x0 = x(range.location)
-    let x1 = rows.lowerBound == rows.upperBound ? x(NSMaxRange(range)) : x0
-    if x0 < p.x || x1 - x0 > area.x {
-      p.x = x0
-    } else if x1 > p.x + area.x {
-      p.x = x1 - area.x
+    } else if bottom > p.y + height {
+      p.y = bottom - height
     }
     return p
   }

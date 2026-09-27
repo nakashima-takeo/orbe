@@ -94,8 +94,8 @@ extension MetalTextSurface {
     return content.text
   }
 
-  /// 取引を確定する。材料の版を先に決め、行の数の上限と見せ方の位置をその版に結んでスクロールの箱へ置いてから、材料を 1 回
-  /// で書く——描画スレッドは、新しい材料を読むまで前の位置を描き、読んだコマから新しい位置を描く（新しい本文を古い位置で
+  /// 取引を確定する。材料の版を先に決め、行の数の上限と見せ方の縦の位置をその版に結んでスクロールの箱へ置いてから、材料を
+  /// 1 回で書く（横の「見えるところまで」は材料に添え、行を組む描画スレッドが解く）——描画スレッドは、新しい材料を読むまで前の位置を描き、読んだコマから新しい位置を描く（新しい本文を古い位置で
   /// 描くコマも、古い本文を新しい位置で描くコマも出ない）。それから描画スレッドを起こし、選択と見えている範囲を知らせる。
   private func commit(_ finished: Transaction) {
     let cursors = editor.state.cursors
@@ -111,6 +111,12 @@ extension MetalTextSurface {
     let rowEdits = finished.rowEdits
     let writes = finished.writes
     let stroke = finished.keystroke
+    if finished.reveal != .none { revealSerial += 1 }
+    let caretRange = NSRange(location: cursors.primary.position, length: 0)
+    let reveal =
+      finished.reveal == .none
+      ? nil : HorizontalReveal(range: finished.revealing ?? caretRange, serial: revealSerial)
+    let edited = finished.edited
     let revision = material.revision + 1
     if finished.remeasure, let content { scroll.remeasure(from: content.version) }
     updateLimits(lineCount: text?.lineCount ?? 1, heldUntil: revision)
@@ -123,6 +129,7 @@ extension MetalTextSurface {
       if let marks { $0.marks = marks }
       for edit in rowEdits { $0.note(edit) }
       if let stroke { $0.keystrokes.append(stroke) }
+      if reveal != nil || edited { $0.reveal = reveal }
       let epoch = restarts ? caret.epoch : $0.caret.epoch
       $0.caret = caret
       $0.caret.epoch = epoch

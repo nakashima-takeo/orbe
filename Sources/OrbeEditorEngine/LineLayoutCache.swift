@@ -95,6 +95,7 @@ final class LineLayoutCache {
     }
     rowsVersion = version
     rowsTabColumns = tabColumns
+    frameRows.removeAll(keepingCapacity: true)
     shapedInFrame = 0
   }
 
