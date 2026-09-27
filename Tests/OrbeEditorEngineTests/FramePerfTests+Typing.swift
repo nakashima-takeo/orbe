@@ -26,8 +26,13 @@ extension FramePerfTests {
 
   /// ライブ変換の打鍵——未確定が 1 打鍵ごとに 1 字伸びて全体が置き換わり、20 字で確定する、を繰り返す。関門は打鍵と同じ
   /// （打鍵→present の中央値 12.5ms・p95 17ms、IME の呼び出し 1 回の main のスレッドの CPU 時間 p99 1ms（壁時計は参考）、
-  /// 1MB と 200KB で差が無い）。
+  /// 1MB と 200KB で差が無い）。ここの面は窓に載せないので、main の仕事は IME の呼び出しそのもの（面の編集係と文書）
+  /// だけ——IME が呼び出しの直後に読み返す文字の矩形と点の下の字を含めた main の仕事は、窓に載せた面で
+  /// `EditorScrollPerfTests` が測る。プロセスで最初の変換（入力の仕組みと文字列の橋渡しの初期化）は数えないので、測る文書を
+  /// 開く前に別の文書で変換する。
   func testComposition() throws {
+    let warm = try attach("warm\n")
+    for k in 0..<20 { Self.compose(warm.surface, k) }
     try measureStrokes("composition", Self.compose)
   }
 
@@ -43,9 +48,6 @@ extension FramePerfTests {
       opened.surface.selectedRange = NSRange(
         location: opened.document.text.lineStart(middle) + 4, length: 0)
       opened.surface.scrollToCenter(opened.surface.caretLocation)
-      // 面で最初の呼び出し（入力の仕組みとの窓口と、文字列の橋渡しの初期化）は数えない。
-      stroke(opened.surface, 0)
-      stroke(opened.surface, 19)
       waitUntilIdle(opened.surface)
       for interval in [0.1, 1.0 / 30] {
         let name = "\(label) \(Int((interval * 1000).rounded()))ms"
