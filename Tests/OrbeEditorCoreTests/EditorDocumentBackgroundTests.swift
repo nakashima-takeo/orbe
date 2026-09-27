@@ -124,6 +124,50 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     }
   }
 
+  // MARK: - 構文の層の出入り
+
+  /// 注入の層の出入り（フェンスに言語名を書き足す・替える、束ねた層の部分が消える）の後、裏の仕事は層の中身の行まで
+  /// 作り直す——作り直す範囲は編集の行だけでなく、出入りした層・構文の変わった層の範囲（編集から離れた行も）に及ぶ。
+  func testInjectionLayersComingAndGoingAreRebuilt() throws {
+    let markdown = "# T\n\n```\ndef f(x):\n    return 1\n```\n\n```js\nconst Foo = 1; // c\n```\n"
+    let tagged =
+      "const b = html`<style>p { color: blue; }</style><script>let y = 1;</script>`;\nlet z = 2;\n"
+    let split =
+      "const a = html`<style>`;\nconst b = 1;\nconst c = html`p { color: red; }</style>`;\n"
+    for (name, file, source, anchor, removed, inserted) in [
+      ("言語なし → python", "a.md", markdown, "```\ndef", 3, "```python"),
+      ("js → py", "b.md", markdown, "js\nconst", 2, "py"),
+      ("開きのフェンスを消す", "c.md", markdown, "```js", 5, ""),
+      ("束ねた html の部分が消える", "d.js", tagged, "html`<style>", 0, "x"),
+      ("束ねた html の部分を行ごと消すと、離れた残りの部分の構文が変わる", "e.js", split, "const a", 25, ""),
+    ] {
+      let (document, surface) = try open(file, source)
+      XCTAssertTrue(document.waitUntilCaughtUp(), name)
+      let at = (source as NSString).range(of: anchor).location
+      surface.replace(NSRange(location: at, length: removed), with: inserted)
+      XCTAssertTrue(document.waitUntilCaughtUp(), name)
+      let (fresh, _) = try open("fresh-" + file, surface.text)
+      XCTAssertTrue(fresh.waitUntilCaughtUp(), name)
+      XCTAssertEqual(perUnit(document), perUnit(fresh), name)
+    }
+  }
+
+  /// 構文木が誤りを含まなくなれば、その構文木の範囲を丸ごと作り直す——誤りを含む間に枠で落ちた、余白を超える構文（区画
+  /// をいくつもまたぐコメント）の色が、誤りから遠い編集していない行にも戻る。
+  func testFixingTheLastErrorRestoresColorsDroppedByTheFrame() throws {
+    let comment = "/*\n" + String(repeating: "note\n", count: 30_000) + "*/\n"
+    let source = "let = 1\n" + comment + "let b = 2\n"
+    let (document, surface) = try open("crumbled.swift", source)
+    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
+    let middle = document.text.lineStart(15_000)
+    XCTAssertNotEqual(role(ofRow: 15_000, in: document), .comment, "前提: 誤りを含む間は枠で落ちる")
+
+    surface.replace(NSRange(location: 4, length: 0), with: "a ")
+    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
+    XCTAssertEqual(
+      document.roles.roles(in: NSRange(location: middle, length: 4)).map(\.role), [.comment])
+  }
+
   /// 字ごとの役割（本文全体）。
   private func perUnit(_ document: EditorDocument) -> [SyntaxRole?] {
     var result = [SyntaxRole?](repeating: nil, count: document.text.length)
