@@ -221,6 +221,17 @@ final class SyntaxLayersTests: XCTestCase {
     fresh.settle()
     XCTAssertEqual(tracker.compare(with: fresh), .same)
   }
+
+  // MARK: - 補助
+
+  /// 本文を新しく解いた構文の層。
+  func parsed(_ source: String, _ language: SyntaxLanguage) throws -> SyntaxLayers {
+    let layers = SyntaxLayers(
+      rules: try XCTUnwrap(registry.rules(for: language)), registry: registry,
+      cancellation: SyntaxCancellation())
+    layers.parseAll(TextRope(source))
+    return layers
+  }
 }
 
 /// 決まった編集 1 つ——本文の `anchor` の位置から `removed` 字を `inserted` に置き換える。

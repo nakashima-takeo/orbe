@@ -43,12 +43,4 @@ extension SyntaxLayersTests {
     XCTAssertEqual(
       layers.roles(in: NSRange(location: middle, length: 4)).map(\.role), [.comment])
   }
-
-  private func parsed(_ source: String, _ language: SyntaxLanguage) throws -> SyntaxLayers {
-    let layers = SyntaxLayers(
-      rules: try XCTUnwrap(registry.rules(for: language)), registry: registry,
-      cancellation: SyntaxCancellation())
-    layers.parseAll(TextRope(source))
-    return layers
-  }
 }
