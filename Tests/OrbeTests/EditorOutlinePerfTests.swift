@@ -96,8 +96,8 @@ final class EditorOutlinePerfTests: OrbeTestCase {
   /// 大きな文書（1MB の Swift・800KB と 5MB の package-lock.json 相当・要素の多い配列の JSON・深い入れ子の JSON）で、
   /// アウトラインの main の仕事——結果の受け取り（開いたときと、編集して取り直したとき）・カーソル追従 1 回・開閉 1 回・
   /// すべて折りたたむ／展開・絞り込みの打鍵 1 回とその結果の受け取り・列の 1 行送りと 1 画面送り。どれも面の layout と
-  /// 描画まで——と、開いてから結果が届くまでの裏の時間。main の仕事は main のスレッドの CPU 時間で数え、どれも p95 が
-  /// 1 コマの予算（8ms）以内。開いてから結果が届くまでは、深い入れ子の他は 1MB あたり 1 秒以内（要素の数の 2 乗の仕事が
+  /// 描画まで——と、開いてから結果が届くまでの裏の時間。main の仕事（数え方は docs/testing/test-architecture.md）は、
+  /// どれも p95 が 1 コマの予算（8ms）以内。開いてから結果が届くまでは、深い入れ子の他は 1MB あたり 1 秒以内（要素の数の 2 乗の仕事が
   /// 無い）。深い入れ子は、問い合わせが深さの 2 乗になる上流の性質を受け入れて値を出すだけ。
   func testOutlineMainWorkOnLargeDocuments() throws {
     for (label, ext, text) in [
