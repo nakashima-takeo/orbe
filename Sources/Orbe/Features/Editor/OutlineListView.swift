@@ -135,16 +135,11 @@ final class OutlineListSource: RowListSource {
   }
 
   func click(_ row: Int, x: CGFloat) {
-    outline.click(
-      row: row, onChevron: OutlineRowView.isOnChevron(x, depth: outline.row(at: row).depth))
+    outline.click(row: row) { OutlineRowView.isOnChevron(x, depth: $0) }
   }
 
   func doubleClick(_ row: Int, x: CGFloat) {
-    let depth = outline.row(at: row).depth
-    guard !OutlineRowView.isOnChevron(x, depth: depth) else {
-      return outline.click(row: row, onChevron: true)
-    }
-    outline.doubleClick(row: row)
+    outline.doubleClick(row: row) { OutlineRowView.isOnChevron(x, depth: $0) }
   }
 
   func select(_ row: Int) { outline.select(row: row) }

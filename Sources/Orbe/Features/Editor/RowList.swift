@@ -8,7 +8,7 @@ protocol RowListSource: AnyObject {
   /// 選択の同一性（行の番号がずれても同じ選択を指す値）。
   associatedtype Selection: Hashable
 
-  /// 行の数。
+  /// 行の数。列は行を問う上限にもこの今の値を使う（行の数は列が読み直すより先に変わりうる）。
   var rowCount: Int { get }
   /// 枠を 1 つ作る。列は見えている行の数＋1 本まで作って使い回す。
   func makeRowView() -> RowView
@@ -136,6 +136,7 @@ final class RowListView<Source: RowListSource>: NSView {
   let source: Source
   let rowHeight: CGFloat
   var emoji: NSFont?
+  /// 列の高さを決めた行の数（`reloadRows` で源から写す）。行を問う上限は源の今の行の数。
   private(set) var rowCount = 0
   private var slots: [Source.RowView] = []
 
@@ -196,7 +197,7 @@ final class RowListView<Source: RowListSource>: NSView {
       slots.append(slot)
     }
     let first = max(0, Int(visible.minY / rowHeight))
-    let last = min(rowCount, Int((visible.maxY / rowHeight).rounded(.up)))
+    let last = min(source.rowCount, Int((visible.maxY / rowHeight).rounded(.up)))
     var shown = Set<Int>()
     for row in first..<max(first, last) {
       let index = row % slots.count
@@ -246,7 +247,7 @@ final class RowListView<Source: RowListSource>: NSView {
 
   private func row(at point: NSPoint) -> Int? {
     let row = Int(point.y / rowHeight)
-    return point.y >= 0 && row < rowCount ? row : nil
+    return point.y >= 0 && row < source.rowCount ? row : nil
   }
 
   // MARK: - 焦点
@@ -348,5 +349,5 @@ final class RowListView<Source: RowListSource>: NSView {
     source.select(row)
   }
 
-  override func accessibilityRowCount() -> Int { rowCount }
+  override func accessibilityRowCount() -> Int { source.rowCount }
 }

@@ -28,9 +28,15 @@ final class RowListTests: OrbeTestCase {
     private(set) var selected: [Int] = []
     private(set) var focus: [Bool] = []
     private(set) var focusRequestsApplied = 0
+    /// 今の行の数の外の行を問われた回数。
+    private(set) var outOfRange = 0
 
     func makeRowView() -> Row { Row(frame: .zero) }
-    func show(_ row: Int, in view: Row, emoji: NSFont?) { view.show("row \(row)") }
+    func show(_ row: Int, in view: Row, emoji: NSFont?) {
+      if row >= rowCount { outOfRange += 1 }
+      view.show("row \(row)")
+    }
+
     func row(of selection: Int) -> Int? { selection < rowCount ? selection : nil }
     func prepareRows(for appearance: NSAppearance) {}
     func focusRequestDidApply() {
@@ -47,7 +53,10 @@ final class RowListTests: OrbeTestCase {
       keys.append(key)
       return handles.contains(key)
     }
-    func click(_ row: Int, x: CGFloat) { clicks.append("click \(row) x\(Int(x))") }
+    func click(_ row: Int, x: CGFloat) {
+      if row >= rowCount { outOfRange += 1 }
+      clicks.append("click \(row) x\(Int(x))")
+    }
     func doubleClick(_ row: Int, x: CGFloat) { clicks.append("double \(row) x\(Int(x))") }
     func select(_ row: Int) { selected.append(row) }
   }
@@ -151,6 +160,23 @@ final class RowListTests: OrbeTestCase {
     hosted.rows.update(
       rowsVersion: 1, selection: nil, reveal: .nearest, emoji: nil, wantsFocus: false)
     XCTAssertEqual(list.rowCount, 3, "版が同じなら読み直さない")
+  }
+
+  /// 源の行が減ってから列が読み直すまでの間に送る・押しても、源の今の行の数の外の行は問わない（イベントは SwiftUI の
+  /// 更新より先に届きうる）。
+  func testRowsOutsideTheSourcesCurrentCountAreNeverAsked() {
+    let hosted = host()
+    let list = hosted.list
+    hosted.source.rowCount = 2
+    scroll(hosted, by: rowHeight)
+    list.pageDown(nil)
+    list.mouseDown(
+      with: NSEvent.mouseEvent(
+        with: .leftMouseDown, location: list.convert(NSPoint(x: 10, y: list.visibleRect.midY), to: nil),
+        modifierFlags: [], timestamp: 0, windowNumber: hosted.window.windowNumber, context: nil,
+        eventNumber: 0, clickCount: 1, pressure: 1)!)
+    XCTAssertEqual(hosted.source.outOfRange, 0)
+    XCTAssertEqual(list.accessibilityRowCount(), 2)
   }
 
   // MARK: - キー

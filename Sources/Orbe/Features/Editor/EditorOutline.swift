@@ -279,11 +279,12 @@ final class EditorOutline {
     select(row: last ? rowCount - 1 : 0)
   }
 
-  /// 単クリック: シェブロンの上なら開閉し、それ以外は選んで、ダブルクリックを待ってから名前へ飛ぶ（焦点は残る）。
-  func click(row: Int, onChevron: Bool) {
+  /// 単クリック: 子のある行のシェブロンの上（`onChevron` が行の深さで答える）なら開閉し、それ以外は選んで、ダブル
+  /// クリックを待ってから名前へ飛ぶ（焦点は残る）。
+  func click(row: Int, onChevron: (Int) -> Bool) {
     guard row >= 0, row < rowCount, let outline else { return }
     let symbol = rows.symbol(at: row)
-    if onChevron, rows.hasChildren(symbol) {
+    if rows.hasChildren(symbol), onChevron(outline.symbols[symbol].depth) {
       setExpanded(symbol, isCollapsed(symbol))
       return
     }
@@ -292,12 +293,16 @@ final class EditorOutline {
     clickDelay.run(after: Self.clickDelay) { [weak self] in self?.onJump(symbol, token, .name) }
   }
 
-  /// ダブルクリック: 範囲全体を選び、焦点を本文へ。
-  func doubleClick(row: Int) {
+  /// ダブルクリック: 範囲全体を選び、焦点を本文へ。シェブロンの上は単クリックと同じ。
+  func doubleClick(row: Int, onChevron: (Int) -> Bool) {
     guard row >= 0, row < rowCount, let outline else { return }
+    let symbol = rows.symbol(at: row)
+    guard !onChevron(outline.symbols[symbol].depth) else {
+      return click(row: row) { _ in true }
+    }
     clickDelay.cancel()
     select(row: row)
-    onJump(rows.symbol(at: row), outline.token, .range)
+    onJump(symbol, outline.token, .range)
   }
 
   // MARK: - カーソル追従
