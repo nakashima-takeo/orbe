@@ -149,7 +149,7 @@
     /// git が失敗すれば投げる（握り潰すと `isReady` の待ちが原因を指さずに落ちる）。`engine` は文書を開くテキスト
     /// エンジンの選び方。
     @MainActor static func scene(
-      queriesRoot: URL, engine: EditorEngineChoice = .current
+      queriesRoot: URL, engine: EditorEngineChoice = .stTextView
     ) throws -> Scene {
       let dir = FileManager.default.temporaryDirectory
         .appendingPathComponent("orbe-editor-code-\(UUID().uuidString)", isDirectory: true)

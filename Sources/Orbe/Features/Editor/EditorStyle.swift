@@ -164,7 +164,7 @@ struct EditorEngineChoice {
   var language: Language
 
   /// 今の面（STTextView）。テストと fixture の既定。
-  static let current = EditorEngineChoice(
+  static let stTextView = EditorEngineChoice(
     metal: false, elasticScroll: true, fontSmoothing: true, language: .systemDefault)
 }
 
@@ -188,7 +188,7 @@ struct EditorSurfaces {
 
   /// 本物の面を、指定の根の queries で組む。どちらのエンジンで作るかは、文書を開く時点で `engine` を読んで決める
   /// （開いている文書の面は作り直さない）。URL の ⌘クリックは既定ブラウザへ（行き先を決めるのはエンジンでなくここ）。
-  init(queriesRoot: URL?, engine: @escaping @MainActor () -> EditorEngineChoice = { .current }) {
+  init(queriesRoot: URL?, engine: @escaping @MainActor () -> EditorEngineChoice = { .stTextView }) {
     self.init(
       registry: LanguageRegistry(queriesRoot: queriesRoot),
       make: { text in
