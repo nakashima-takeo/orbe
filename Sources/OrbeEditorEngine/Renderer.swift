@@ -138,7 +138,7 @@ final class Renderer {
       slot.recorder.idle(at: CACurrentMediaTime())
       slot.idleTicks += 1
       if slot.idleTicks >= Self.idleTicksBeforePause {
-        pause(slot, clock, blinking: material.caret, after: target)
+        pause(slot, clock, blinking: material.caret, after: target, fading: slot.motion.wakeAt)
       }
       return
     }
@@ -153,7 +153,9 @@ final class Renderer {
       return
     }
     draw(slot, material, into: acquired, at: target, Pass(pipelines: pipelines, atlas: atlas))
-    if !changed { pause(slot, clock, blinking: material.caret, after: target) }
+    if !changed {
+      pause(slot, clock, blinking: material.caret, after: target, fading: slot.motion.wakeAt)
+    }
   }
 
   /// 描くと決めたコマを組み立てて出す。
@@ -253,15 +255,16 @@ final class Renderer {
   }
 
   /// 刻みを止める。`blinking` のキャレットが点滅していれば `drawn`（最後に描いた、または描かないと決めたコマの予定時刻）の
-  /// 後で表示が切り替わる時刻に、つまみが消え始めるのを待っていればその時刻に、そのうち早い方から最初の刻みの、半刻み前に
-  /// 起きるタイマーを置く——起きたその場で、その刻みへ切り替わった表示を描ける（刻みを再開して、タイマーと刻みの 2 回起きる
-  /// ことがない）。
+  /// 後で表示が切り替わる時刻と、`fading`（つまみが消え始める時刻）の早い方から最初の刻みの、半刻み前に起きるタイマーを
+  /// 置く——起きたその場で、その刻みへ切り替わった表示を描ける（刻みを再開して、タイマーと刻みの 2 回起きることがない）。
+  /// 両方を渡すのは見えていて描き終えた面だけ（`fading` はコマを組むときにしか進まないので、描かない面へ渡すと過ぎた
+  /// 時刻で起き続ける）。
   private func pause(
     _ slot: SurfaceSlot, _ clock: FrameClock, blinking caret: CaretMaterial? = nil,
-    after drawn: Double = 0
+    after drawn: Double = 0, fading: Double? = nil
   ) {
     let blink = caret?.nextBlink(after: drawn)
-    let next = [blink, slot.motion.wakeAt].compactMap { $0 }.min()
+    let next = [blink, fading].compactMap { $0 }.min()
     if slot.blinkTimer == nil, let next {
       let id = slot.id
       let wake = clock.nextTarget(after: next) - clock.period / 2

@@ -67,6 +67,27 @@ final class RenderLoopTests: EngineTestCase {
     XCTAssertEqual(driver.ticks(surface.id), ticks, "消え終わった後は起きない")
   }
 
+  /// スクロールの直後（つまみが消え始める前）に隠れた面は、消え始める時刻に起きるタイマーを置かず、刻みも来ない。
+  func testHidingRightAfterScrollingDoesNotWakeForTheFade() throws {
+    let opened = try open(text)
+    let surface = opened.surface
+    surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
+    driver.bind(surface.id)
+    waitUntilPaused(surface)
+    surface.scroll(
+      ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(0, -1), precise: false))
+    waitUntilPaused(surface)
+    XCTAssertNotNil(blinkWake(surface), "前提: つまみが消え始める時刻に起きるタイマー")
+    surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: false)
+    surface.flush()
+    waitUntilPaused(surface)
+    XCTAssertNil(blinkWake(surface), "隠れた面はタイマーを置かない")
+    RunLoop.main.run(until: Date().addingTimeInterval(0.7))
+    let ticks = driver.ticks(surface.id)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+    XCTAssertEqual(driver.ticks(surface.id), ticks, "消え始める時刻を過ぎても起きない")
+  }
+
   /// 見えていない面（窓に無い・隠れたタブ）は描かずに刻みを止める。
   func testInvisibleSurfaceDoesNotDraw() throws {
     let opened = try open(text)

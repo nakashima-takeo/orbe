@@ -42,7 +42,7 @@ final class SurfaceSlot {
   var atlasDirty = false
   /// 読んだ材料に入っていて、まだ描いていない打鍵の時刻。
   var keystrokes: [Double] = []
-  /// 次に点滅が切り替わる時刻に起きるタイマー（止めている間だけ）。
+  /// 次に点滅が切り替わる時刻か、つまみが消え始める時刻の早い方に起きるタイマー（止めている間だけ）。
   var blinkTimer: CFRunLoopTimer?
   /// 解いた横の「見えるところまで」の通し番号。
   var revealed = 0
