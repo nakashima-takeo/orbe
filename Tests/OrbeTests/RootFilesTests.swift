@@ -184,6 +184,8 @@ final class RootFilesTests: OrbeTestCase {
     try repo.write(".hidden", "h\n")
     try files.createDirectory(at: dir.appendingPathComponent("Sub"))
     try files.createFile(at: dir.appendingPathComponent("b.txt"))
+    try repo.write("f10.txt", "")
+    try repo.write("F2.txt", "")
     try FileManager.default.createSymbolicLink(
       at: dir.appendingPathComponent("link"), withDestinationURL: dir.appendingPathComponent("Sub"))
 
@@ -193,10 +195,12 @@ final class RootFilesTests: OrbeTestCase {
 
     let entries = try files.entries(of: dir)
     XCTAssertEqual(
-      entries.map(\.name), [".hidden", "a.txt", "b.txt", "broken", "link", "Sub"],
-      "名前順（大小無視）・.git は出ない")
+      entries.map(\.name),
+      [".hidden", "a.txt", "b.txt", "broken", "F2.txt", "f10.txt", "link", "Sub"],
+      "名前順（大小無視・数は数として比べる）・.git は出ない")
     XCTAssertEqual(
-      entries.map(\.isDirectory), [false, false, false, false, false, true], "symlink は辿らない")
+      entries.map(\.isDirectory), [false, false, false, false, false, false, false, true],
+      "symlink は辿らない")
     XCTAssertEqual(
       entries.map(\.url.path), entries.map { dir.appendingPathComponent($0.name).path })
     XCTAssertEqual(try Data(contentsOf: dir.appendingPathComponent("b.txt")), Data(), "空ファイル")
