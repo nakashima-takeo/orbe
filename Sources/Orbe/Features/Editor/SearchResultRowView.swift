@@ -41,8 +41,6 @@ final class SearchResultRowView: NSTableRowView {
   private var emoji: NSFont?
   private var content: Content?
 
-  private static let countFill = EditorStyle.fill(0.10)
-  private static let hitFill = Theme.Color.editorModified.withAlphaComponent(0.30)
   private static let hitRadius: CGFloat = 2
   private static let countPadding: CGFloat = 5
   private static let matchEllipsisWidth = TextLine.ellipsisWidth(
@@ -63,9 +61,9 @@ final class SearchResultRowView: NSTableRowView {
   }
 
   override func drawBackground(in dirtyRect: NSRect) {
-    guard isSelected else { return }
-    Theme.Color.selectionFill.setFill()
-    bounds.fill()
+    guard isSelected, let context = NSGraphicsContext.current?.cgContext else { return }
+    context.setFillColor(RowColors.of(effectiveAppearance).selection)
+    context.fill(bounds)
   }
 
   func show(_ row: ProjectSearch.Row, emoji: NSFont?) {
@@ -89,16 +87,11 @@ final class SearchResultRowView: NSTableRowView {
           isCollapsed: isCollapsed, chip: chip,
           chipText: TextLine(
             chip.glyph,
-            Theme.Typography.editorChip(size: chip.fontSize(for: Theme.Layout.editorChip)),
-            chip.hue?.color ?? Theme.Color.textPrimary),
-          name: TextLine(
-            name, Theme.Typography.editorSearchFile, Theme.Color.textPrimary, emoji: emoji),
+            Theme.Typography.editorChip(size: chip.fontSize(for: Theme.Layout.editorChip))),
+          name: TextLine(name, Theme.Typography.editorSearchFile, emoji: emoji),
           directory: TextLine(
-            directory, Theme.Typography.editorSearchDirectory, Theme.Color.editorTertiary,
-            emoji: emoji),
-          count: TextLine(
-            file.count.formatted(), Theme.Typography.editorSearchCount,
-            Theme.Color.textSecondary)))
+            directory, Theme.Typography.editorSearchDirectory, emoji: emoji, truncating: .start),
+          count: TextLine(file.count.formatted(), Theme.Typography.editorSearchCount)))
       setAccessibilityLabel(
         [name, directory, "\(file.count)"].filter { !$0.isEmpty }.joined(separator: ", "))
     case .match(_, _, let match):
@@ -111,10 +104,10 @@ final class SearchResultRowView: NSTableRowView {
       let beforeSpaces = String(preview.before[bodyEnd...])
       content = .match(
         MatchContent(
-          before: TextLine(beforeBody, font, Theme.Color.editorTertiary),
-          beforeGap: TextLine(beforeSpaces, font, Theme.Color.editorTertiary).width,
-          match: TextLine(preview.match, font, Theme.Color.textPrimary),
-          after: TextLine(preview.after, font, Theme.Color.textMuted)))
+          before: TextLine(beforeBody, font, truncating: .start),
+          beforeGap: TextLine(beforeSpaces, font).width,
+          match: TextLine(preview.match, font),
+          after: TextLine(preview.after, font)))
       setAccessibilityLabel(preview.before + preview.match + preview.after)
     }
     needsDisplay = true
@@ -123,21 +116,22 @@ final class SearchResultRowView: NSTableRowView {
   override func draw(_ dirtyRect: NSRect) {
     super.draw(dirtyRect)
     guard let context = NSGraphicsContext.current?.cgContext else { return }
+    let colors = RowColors.of(effectiveAppearance)
     switch content {
-    case .file(let file): draw(file, in: context)
-    case .match(let match): draw(match, in: context)
+    case .file(let file): draw(file, colors, in: context)
+    case .match(let match): draw(match, colors, in: context)
     case nil: break
     }
   }
 
   /// 見出し 22: シェブロン（畳むと右向き）・種別チップ 14・ファイル名 12・ディレクトリ 10.5 tertiary・右端の件数。間は 6。
   /// 列が狭いときはファイル名を先に取り、ディレクトリは頭を省略して残りに詰める。
-  private func draw(_ file: FileContent, in context: CGContext) {
+  private func draw(_ file: FileContent, _ colors: RowColors, in context: CGContext) {
     let gap = Theme.Space.note
     var x = Theme.Space.beat
-    drawChevron(at: x, open: !file.isCollapsed, in: context)
+    drawChevron(at: x, open: !file.isCollapsed, colors, in: context)
     x += Theme.Layout.editorSearchChevron + gap
-    drawChip(file, at: x, in: context)
+    drawChip(file, at: x, colors, in: context)
     x += Theme.Layout.editorChip + gap
 
     let badgeWidth = max(
@@ -146,25 +140,26 @@ final class SearchResultRowView: NSTableRowView {
     let badge = NSRect(
       x: bounds.width - Theme.Space.beat - badgeWidth, y: snap((bounds.height - badgeHeight) / 2),
       width: badgeWidth, height: badgeHeight)
-    Self.countFill.setFill()
-    NSBezierPath(roundedRect: badge, xRadius: badgeHeight / 2, yRadius: badgeHeight / 2).fill()
+    fill(badge, radius: badgeHeight / 2, colors.countFill, context)
     file.count.draw(
       at: snap(badge.midX - file.count.width / 2), top: snap(badge.midY - file.count.height / 2),
-      context)
+      colors.secondary, context)
 
     // 名前とディレクトリの間、ディレクトリと件数の間（伸びる余白の両側）にも間を置く。
     let limit = badge.minX - gap * 2
     let nameWidth = min(snap(file.name.width, .up), max(0, limit - x))
-    file.name.draw(at: x, top: top(file.name), width: nameWidth, truncating: .end, context)
+    file.name.draw(
+      at: x, top: top(file.name), width: nameWidth, colors.primary, context)
     x += nameWidth + gap
     let directoryWidth = min(snap(file.directory.width, .up), limit - x)
     file.directory.draw(
-      at: x, top: top(file.directory), width: directoryWidth, truncating: .start, context)
+      at: x, top: top(file.directory), width: directoryWidth,
+      colors.tertiary, context)
   }
 
   /// 一致の行 20（左 40・mono 11）: 前 tertiary、ヒット（地 tint(modified, .30) 角 2・文字 primary）、後ろ muted。
   /// 列が狭いときは、前と後ろに省略記号 1 つぶんを残して、後ろ → 前（頭を省略）→ ヒットの順に詰める。
-  private func draw(_ match: MatchContent, in context: CGContext) {
+  private func draw(_ match: MatchContent, _ colors: RowColors, in context: CGContext) {
     let ellipsis = Self.matchEllipsisWidth
     let x = Theme.Layout.editorSearchMatchIndent
     let room = max(0, bounds.width - Theme.Space.beat - x)
@@ -177,8 +172,8 @@ final class SearchResultRowView: NSTableRowView {
 
     let top = top(match.match)
     var beforeUsed = beforeWidth
-    if let body = match.before.fitted(beforeWidth - match.beforeGap, truncating: .start) {
-      match.before.draw(body, at: x, top: top, context)
+    if let body = match.before.fitted(beforeWidth - match.beforeGap) {
+      match.before.draw(body, at: x, top: top, colors.tertiary, context)
       // 頭を省いた前は省いた後の幅だけを取り、余りは後ろへ回す（SwiftUI の Text と同じ）。
       beforeUsed = snap(TextLine.width(of: body) + match.beforeGap, .up)
     }
@@ -187,10 +182,18 @@ final class SearchResultRowView: NSTableRowView {
     let hitRight = hitLeft + matchWidth
     let hit = NSRect(
       x: hitLeft, y: top, width: hitRight - hitLeft, height: snap(match.match.height))
-    Self.hitFill.setFill()
-    NSBezierPath(roundedRect: hit, xRadius: Self.hitRadius, yRadius: Self.hitRadius).fill()
-    match.match.draw(at: hitLeft, top: top, width: matchWidth, truncating: .end, context)
-    match.after.draw(at: hitRight, top: top, width: afterWidth, truncating: .end, context)
+    fill(hit, radius: Self.hitRadius, colors.hit, context)
+    match.match.draw(
+      at: hitLeft, top: top, width: matchWidth, colors.primary, context)
+    match.after.draw(
+      at: hitRight, top: top, width: afterWidth, colors.muted, context)
+  }
+
+  private func fill(_ rect: NSRect, radius: CGFloat, _ color: CGColor, _ context: CGContext) {
+    context.setFillColor(color)
+    context.addPath(
+      CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil))
+    context.fillPath()
   }
 
   /// 装置の画素へ揃える（SwiftUI が view の枠を揃えるのと同じ。字と地が半画素ずれない）。
@@ -216,13 +219,13 @@ final class SearchResultRowView: NSTableRowView {
   }()
 
   /// シェブロン（開いていると 90° 回す）。
-  private func drawChevron(at x: CGFloat, open: Bool, in context: CGContext) {
+  private func drawChevron(at x: CGFloat, open: Bool, _ colors: RowColors, in context: CGContext) {
     let size = Theme.Layout.editorSearchChevron
     context.saveGState()
     context.translateBy(x: x + size / 2, y: bounds.height / 2)
     if open { context.rotate(by: .pi / 2) }
     context.translateBy(x: -size / 2, y: -size / 2)
-    context.setStrokeColor(Theme.Color.textMuted.cgColor)
+    context.setStrokeColor(colors.muted)
     context.setLineWidth(Self.chevron.lineWidth)
     context.addPath(Self.chevron.path)
     context.strokePath()
@@ -230,37 +233,88 @@ final class SearchResultRowView: NSTableRowView {
   }
 
   /// 種別チップ 14（`FileChipView` と同じ規則を AppKit で描く）。
-  private func drawChip(_ file: FileContent, at x: CGFloat, in context: CGContext) {
+  private func drawChip(
+    _ file: FileContent, at x: CGFloat, _ colors: RowColors, in context: CGContext
+  ) {
     let size = Theme.Layout.editorChip
     let rect = NSRect(x: x, y: (bounds.height - size) / 2, width: size, height: size)
-    let ground =
-      file.chip.hue.map { $0.color.withAlphaComponent(FileChipView.groundAlpha) }
-      ?? EditorStyle.fill(FileChipView.groundAlpha)
-    ground.setFill()
-    NSBezierPath(roundedRect: rect, xRadius: Theme.Radius.xs, yRadius: Theme.Radius.xs).fill()
+    let chip = colors.chip(file.chip.hue)
+    fill(rect, radius: Theme.Radius.xs, chip.ground, context)
     file.chipText.draw(
       at: snap(rect.midX - file.chipText.width / 2),
-      top: snap(rect.midY - file.chipText.height / 2), context)
+      top: snap(rect.midY - file.chipText.height / 2), chip.text, context)
   }
 }
 
-/// 1 行の文字列（CoreText の行と寸法）。色は描くときに文脈の塗りから当てる（外観で解ける動的な色のまま持つ）。
+/// 行を描く色。動的な色を行ごと・字ごとに解かず、外観（ライト・ダーク）ごとに 1 度だけ解いて使い回す。
+private struct RowColors {
+  let primary: CGColor
+  let secondary: CGColor
+  let muted: CGColor
+  let tertiary: CGColor
+  let selection: CGColor
+  let hit: CGColor
+  let countFill: CGColor
+  private let chips: [FileChip.Hue?: (text: CGColor, ground: CGColor)]
+
+  @MainActor private static var resolved: [Bool: RowColors] = [:]
+
+  @MainActor static func of(_ appearance: NSAppearance) -> RowColors {
+    let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    if let colors = resolved[dark] { return colors }
+    var colors: RowColors?
+    appearance.performAsCurrentDrawingAppearance { colors = RowColors() }
+    resolved[dark] = colors
+    return colors!
+  }
+
+  private init() {
+    primary = Theme.Color.textPrimary.cgColor
+    secondary = Theme.Color.textSecondary.cgColor
+    muted = Theme.Color.textMuted.cgColor
+    tertiary = Theme.Color.editorTertiary.cgColor
+    selection = Theme.Color.selectionFill.cgColor
+    hit = Theme.Color.editorModified.withAlphaComponent(0.30).cgColor
+    countFill = EditorStyle.fill(0.10).cgColor
+    let hues: [FileChip.Hue] = [.orange, .blue, .yellow, .sky, .violet, .cyan, .red, .green, .teal]
+    var chips: [FileChip.Hue?: (text: CGColor, ground: CGColor)] = [
+      nil: (primary, EditorStyle.fill(FileChipView.groundAlpha).cgColor)
+    ]
+    for hue in hues {
+      chips[hue] = (
+        hue.color.cgColor, hue.color.withAlphaComponent(FileChipView.groundAlpha).cgColor
+      )
+    }
+    self.chips = chips
+  }
+
+  /// 種別チップの字と地（色相が無ければ主文字と淡い塗り）。
+  func chip(_ hue: FileChip.Hue?) -> (text: CGColor, ground: CGColor) {
+    chips[hue] ?? chips[nil]!
+  }
+}
+
+/// 1 行の文字列（CoreText の行と寸法）。色は描くときに文脈の塗りから当てる。
 private struct TextLine {
   let line: CTLine
   let font: NSFont
-  let color: NSColor
+  /// 幅に収まらないときに省く側。
+  let truncation: CTLineTruncationType
   let width: CGFloat
   /// 箱の上端から基線まで。
   let ascent: CGFloat
   /// 行の箱の高さ。縦の中央に置くときの箱。
   let height: CGFloat
 
-  init(_ text: String, _ font: NSFont, _ color: NSColor, emoji: NSFont? = nil) {
+  init(
+    _ text: String, _ font: NSFont, emoji: NSFont? = nil,
+    truncating truncation: CTLineTruncationType = .end
+  ) {
     let attributed = TitleGlyphs.nsAttributed(
       text, base: font, emoji: emoji, attributes: Self.drawing)
     line = CTLineCreateWithAttributedString(attributed)
     self.font = font
-    self.color = color
+    self.truncation = truncation
     var ascent: CGFloat = 0
     var descent: CGFloat = 0
     var leading: CGFloat = 0
@@ -276,7 +330,7 @@ private struct TextLine {
   ]
 
   static func ellipsisWidth(_ font: NSFont) -> CGFloat {
-    TextLine("…", font, .clear).width
+    TextLine("…", font).width
   }
 
   /// 省略記号の行（省くことのある字体ごと）。
@@ -296,30 +350,31 @@ private struct TextLine {
     CTLineGetTypographicBounds(line, nil, nil, nil)
   }
 
-  /// 幅 `width` に収めた行（溢れは `truncating` の側を省略記号で省く。何も入らなければ nil）。
-  func fitted(_ width: CGFloat, truncating: CTLineTruncationType) -> CTLine? {
+  /// 幅 `width` に収めた行（溢れは `truncation` の側を省略記号で省く。何も入らなければ nil）。
+  func fitted(_ width: CGFloat) -> CTLine? {
     guard width > 0 else { return nil }
     guard self.width > width else { return line }
-    return CTLineCreateTruncatedLine(line, Double(width), truncating, Self.ellipses[font])
+    return CTLineCreateTruncatedLine(line, Double(width), truncation, Self.ellipses[font])
   }
 
   /// 幅 `width` に収めて描く。
   func draw(
-    at x: CGFloat, top: CGFloat, width: CGFloat, truncating: CTLineTruncationType,
-    _ context: CGContext
+    at x: CGFloat, top: CGFloat, width: CGFloat, _ color: CGColor, _ context: CGContext
   ) {
-    if let fitted = fitted(width, truncating: truncating) { draw(fitted, at: x, top: top, context) }
+    if let fitted = fitted(width) {
+      draw(fitted, at: x, top: top, color, context)
+    }
   }
 
   /// 省かずに描く。
-  func draw(at x: CGFloat, top: CGFloat, _ context: CGContext) {
-    draw(line, at: x, top: top, context)
+  func draw(at x: CGFloat, top: CGFloat, _ color: CGColor, _ context: CGContext) {
+    draw(line, at: x, top: top, color, context)
   }
 
   /// この文字列の行（か、それを省いた行）を、上端 `top` の箱に描く。
-  func draw(_ line: CTLine, at x: CGFloat, top: CGFloat, _ context: CGContext) {
+  func draw(_ line: CTLine, at x: CGFloat, top: CGFloat, _ color: CGColor, _ context: CGContext) {
     context.saveGState()
-    context.setFillColor(color.cgColor)
+    context.setFillColor(color)
     // 反転した view の座標（y が下向き）で字を正立させる。
     context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
     context.textPosition = CGPoint(x: x, y: top + ascent)
