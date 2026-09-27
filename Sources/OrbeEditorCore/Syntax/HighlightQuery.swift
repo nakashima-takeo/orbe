@@ -121,7 +121,7 @@ final class SyntaxQuery: @unchecked Sendable {
 /// 述語 1 つ。名指した capture（名指しが無ければマッチの全 capture）の字がどれも条件を満たすこと。`#is-not?`・`#offset!`・
 /// 知らない述語は常に通す。
 private struct QueryPredicate: Sendable {
-  enum Test: @unchecked Sendable {
+  enum Test: Sendable {
     /// 字が並べた文字列のどれとも等しい（否定なら、どれとも等しくない）。文字列が無ければ常に通す（capture どうしの比較）。
     case equals([String], Bool)
     case matches(NSRegularExpression, Bool)
@@ -251,7 +251,7 @@ extension QueryCursor {
     guard let tree = layer.tree,
       var bounds = placed.bytes(of: piece).map({ QueryBounds(range: $0) })
     else { return }
-    if layer.crumbled {
+    if tree.hasError {
       let block = piece.lowerBound / SyntaxLayers.block * SyntaxLayers.block
       let lower = max(0, block - SyntaxLayers.margin - placed.origin)
       let upper = max(lower, block + SyntaxLayers.block + SyntaxLayers.margin - placed.origin)

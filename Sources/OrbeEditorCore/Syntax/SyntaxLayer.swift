@@ -13,8 +13,6 @@ final class SyntaxLayer {
   var parts: [InjectionPart]
   var tree: SyntaxTree?
   var needsParse = true
-  /// 構文木が誤りを含む（色の問い合わせに枠を掛ける）。
-  var crumbled = false
   /// 並びから外した。
   var detached = false
 
@@ -147,19 +145,19 @@ struct Injection {
   let rules: GrammarRules
   let parent: Placed
   let combined: Bool
-  let matchStart: Int
+  let matchStartByte: Int
   let matchStartPoint: TSPoint
-  let matchEnd: Int
+  let matchEndByte: Int
   let ranges: [TSRange]
 
   /// マッチの範囲（本文の上）。
   var globalMatch: Range<Int> {
-    (parent.origin + matchStart / 2)..<(parent.origin + matchEnd / 2)
+    (parent.origin + matchStartByte / 2)..<(parent.origin + matchEndByte / 2)
   }
 
   /// 束ねない層として置いたもの。原点はマッチの始まりの行頭。
   func placed() -> Placed {
-    let originByte = matchStart - Int(matchStartPoint.column)
+    let originByte = matchStartByte - Int(matchStartPoint.column)
     let originRow = matchStartPoint.row
     let ranges = ranges.map { range in
       TSRange(
@@ -170,7 +168,8 @@ struct Injection {
         end_byte: range.end_byte - UInt32(originByte))
     }
     let part = InjectionPart(
-      match: ((matchStart - originByte) / 2)..<((matchEnd - originByte) / 2), ranges: ranges)
+      match: ((matchStartByte - originByte) / 2)..<((matchEndByte - originByte) / 2), ranges: ranges
+    )
     let layer = SyntaxLayer(
       rules: rules, depth: parent.layer.depth + 1, parent: parent.layer, isCombined: false,
       parts: [part])

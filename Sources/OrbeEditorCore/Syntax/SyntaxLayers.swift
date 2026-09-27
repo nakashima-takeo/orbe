@@ -30,8 +30,8 @@ final class SyntaxLayers {
   private var text = TextRope()
   /// 作り直していない範囲に足す区間（本文の上）——注入の層の出入りと、注入の層の構文木が変わった区間。
   private var invalidated = IndexSet()
-  /// 文書を閉じて解析を打ち切った。以後は何もしない。
-  private(set) var isCancelled = false
+  /// 文書を閉じた。以後は何もしない。
+  var isCancelled: Bool { parser.cancellation.isCancelled }
 
   init(rules: GrammarRules, registry: LanguageRegistry, cancellation: SyntaxCancellation) {
     self.registry = registry
@@ -107,7 +107,6 @@ final class SyntaxLayers {
       layer.rules.language, ranges: ranges,
       old: layer.rules.grammar.reusesTrees ? layer.tree : nil, text: text, origin: placed.origin)
     guard case .parsed(let tree) = outcome else {
-      if case .cancelled = outcome { isCancelled = true }
       if case .rejected = outcome { invalidated.formUnion(injections.drop([placed])) }
       return IndexSet()
     }
@@ -123,7 +122,6 @@ final class SyntaxLayers {
       if placed.origin < end { changed.insert(integersIn: placed.origin..<end) }
     }
     layer.tree = tree
-    layer.crumbled = tree.hasError
     layer.needsParse = false
     if !isRoot { invalidated.formUnion(changed) }
     return changed
@@ -252,9 +250,9 @@ final class SyntaxLayers {
     guard !ranges.isEmpty else { return nil }
     return Injection(
       rules: rules, parent: parent, combined: pattern.combined,
-      matchStart: Int(ts_node_start_byte(first.node)),
+      matchStartByte: Int(ts_node_start_byte(first.node)),
       matchStartPoint: ts_node_start_point(first.node),
-      matchEnd: captures.map { Int(ts_node_end_byte($0.node)) }.max() ?? 0, ranges: ranges)
+      matchEndByte: captures.map { Int(ts_node_end_byte($0.node)) }.max() ?? 0, ranges: ranges)
   }
 
   private func rules(forInjection name: String) -> GrammarRules? {
