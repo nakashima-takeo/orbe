@@ -64,6 +64,9 @@ final class RowList<Source: RowListSource>: NSScrollView {
   private var rowsVersion: Int?
   /// 最後に写した選択。選択が変わったときだけ、その行を見せる（行の番号がずれただけ・列が出ただけでは送らない）。
   private var selection: Source.Selection?
+  /// 大きさが決まる前に選択が変わったときの見せ方。大きさの無い列で送ると、後で大きさが付いても送った位置が残るので、
+  /// 大きさが付いた最初の `tile` で当てる。
+  private var pendingReveal: (selection: Source.Selection, how: RowListReveal)?
 
   init(source: Source, rowHeight: CGFloat) {
     list = RowListView(source: source, rowHeight: rowHeight)
@@ -92,7 +95,14 @@ final class RowList<Source: RowListSource>: NSScrollView {
     list.selectedRow = selection.flatMap { list.source.row(of: $0) }
     if selection != self.selection {
       self.selection = selection
-      if let row = list.selectedRow { list.reveal(row, reveal) }
+      pendingReveal = nil
+      if let selection, let row = list.selectedRow {
+        if contentSize.height > 0 {
+          list.reveal(row, reveal)
+        } else {
+          pendingReveal = (selection, reveal)
+        }
+      }
     }
     if wantsFocus {
       // 焦点を移すと載せている SwiftUI の焦点も変わるので、この更新の外で当てる。
@@ -104,6 +114,9 @@ final class RowList<Source: RowListSource>: NSScrollView {
     super.tile()
     list.fitWidth(to: contentSize.width)
     list.layoutRows()
+    guard contentSize.height > 0, let pending = pendingReveal else { return }
+    pendingReveal = nil
+    if let row = list.source.row(of: pending.selection) { list.reveal(row, pending.how) }
   }
 
   override func reflectScrolledClipView(_ clipView: NSClipView) {

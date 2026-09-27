@@ -231,6 +231,25 @@ final class RowListTests: OrbeTestCase {
     XCTAssertEqual(list.visibleRect.minY, 0)
   }
 
+  /// 大きさが決まる前（SwiftUI の最初の更新）に変わった選択は、大きさが付いてから見せる——大きさの無いまま送った位置が
+  /// 残ると、選択の行が上端で半分隠れる。
+  func testASelectionRevealedBeforeTheListHasASizeIsShownOnceItDoes() {
+    for (selection, check) in [(50, "中央へ"), (0, "先頭の行は欠けない")] {
+      let source = Source()
+      let rows = RowList(source: source, rowHeight: rowHeight)
+      rows.update(
+        rowsVersion: 0, selection: selection, reveal: .center, emoji: nil, wantsFocus: false)
+      rows.frame = NSRect(x: 0, y: 0, width: 200, height: 100)
+      rows.tile()
+      if selection == 0 {
+        XCTAssertEqual(rows.list.visibleRect.minY, 0, check)
+      } else {
+        XCTAssertEqual(
+          rows.list.visibleRect.midY, (CGFloat(selection) + 0.5) * rowHeight, accuracy: 0.5, check)
+      }
+    }
+  }
+
   /// 選択の行を写し、選択が変わったときだけ、渡されたやり方で見せる。同じ選択のまま行がずれても・版が変わっても送らない。
   func testTheSelectionIsMirroredAndRevealedOnlyWhenItChanges() {
     let hosted = host()
