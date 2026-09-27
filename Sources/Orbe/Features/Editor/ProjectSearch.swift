@@ -1,5 +1,6 @@
 import Foundation
 import OrbeEditorCore
+import os
 
 /// プロジェクト検索の状態（タブごと。pane が 1 つ持つ）——問い・検索の進み・結果・平らな行・選択・折りたたみ。規則（問いの
 /// 組み立て・行の中の一致・順序・上限）は Core、1 回の検索の裏の仕事は `ProjectSearchRun`。SwiftUI（検索パネル）はこれを
@@ -80,8 +81,9 @@ final class ProjectSearch {
   @ObservationIgnored private var replacesOnArrival = false
   /// 開いている文書ごとに、結果が映している版（頼んでまだ届いていない版も含む）。
   @ObservationIgnored var searchedVersions: [String: Int] = [:]
-  /// 開いている文書ごとの取り直しの予約。
+  /// 開いている文書ごとの取り直しの予約と、走っている取り直しの取り消しの印。
   @ObservationIgnored var refreshDelays: [String: EditorDelay] = [:]
+  @ObservationIgnored var refreshCancels: [String: OSAllocatedUnfairLock<Bool>] = [:]
   /// 外部変更を聞く根のサービス（面が見えている間だけ握る）。
   @ObservationIgnored var files: RootFiles?
   /// 面が見えている間 true。立てると根のサービスを握って外部変更を聞き、結果が映している版を文書の版と比べ直す。
@@ -138,7 +140,7 @@ final class ProjectSearch {
 
   /// ⌘⇧F の種。検索語に入れて即時に検索する（正規表現が有効なら字どおりになるようエスケープする）。
   func seed(_ text: String) {
-    query.pattern = query.isRegex ? NSRegularExpression.escapedPattern(for: text) : text
+    query.pattern = query.isRegex ? SearchQuery.escaped(text) : text
     onQueryChange()
     search()
   }
@@ -150,6 +152,7 @@ final class ProjectSearch {
   func search(typed: Bool = false) {
     typingDelay.cancel()
     stopRun()
+    cancelRefreshes()
     generation += 1
     error = nil
     guard !query.isEmpty else {
@@ -259,8 +262,7 @@ final class ProjectSearch {
     showsProgress = false
     progressDelay.cancel()
     slowDelay.cancel()
-    for delay in refreshDelays.values { delay.cancel() }
-    refreshDelays = [:]
+    cancelRefreshes()
     searchedVersions = [:]
     replaceResults()
   }

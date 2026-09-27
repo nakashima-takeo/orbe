@@ -2,19 +2,36 @@ import Foundation
 
 /// 1 行の中の一致と、本文の写しを行ごとに探す規則。行は `\n` で割り、行末の `\r` は見せる本文（プレビュー）から外すが、
 /// 一致は外す前の行に当てる。一致は重ならない順で、長さ 0 の一致は数えない。
+///
+/// 取り消し（`isCancelled`）は 1 行の照合の途中でも見る——利用者の正規表現は 1 行で指数時間に落ちうる（git の PCRE2 が
+/// 速く返した行でも ICU は落ちうる）。取り消されたら nil。
 public enum LineMatches {
   /// 行の中の一致（UTF-16）。
-  public static func ranges(of regex: NSRegularExpression, in line: NSString) -> [NSRange] {
-    regex.matches(in: line as String, range: NSRange(location: 0, length: line.length))
-      .map(\.range)
-      .filter { $0.length > 0 }
+  public static func ranges(
+    of regex: NSRegularExpression, in line: NSString, isCancelled: () -> Bool = { false }
+  ) -> [NSRange]? {
+    var found: [NSRange] = []
+    var cancelled = false
+    regex.enumerateMatches(
+      in: line as String, options: [.reportProgress],
+      range: NSRange(location: 0, length: line.length)
+    ) { result, _, stop in
+      if let range = result?.range {
+        if range.length > 0 { found.append(range) }
+      } else if isCancelled() {
+        cancelled = true
+        stop.pointee = true
+      }
+    }
+    return cancelled ? nil : found
   }
 
   /// 行 `row`（0 始まり）の一致。`limit` 件まで。
   public static func matches(
-    of regex: NSRegularExpression, inLine line: NSString, row: Int, limit: Int = .max
-  ) -> [SearchMatch] {
-    let found = ranges(of: regex, in: line)
+    of regex: NSRegularExpression, inLine line: NSString, row: Int, limit: Int = .max,
+    isCancelled: () -> Bool = { false }
+  ) -> [SearchMatch]? {
+    guard let found = ranges(of: regex, in: line, isCancelled: isCancelled) else { return nil }
     guard !found.isEmpty else { return [] }
     let shown = displayed(line)
     return found.prefix(limit).map { range in
@@ -26,8 +43,7 @@ public enum LineMatches {
     }
   }
 
-  /// 本文の写しを行ごとに探す。一致と、その文書の区間（同じ順）を `limit` 件まで。`isCancelled` が真になれば
-  /// そこで止めて nil（裏の仕事の取り消し）。
+  /// 本文の写しを行ごとに探す。一致と、その文書の区間（同じ順）を `limit` 件まで。取り消されたら nil。
   public static func search(
     _ text: TextRope, _ regex: NSRegularExpression, limit: Int,
     isCancelled: () -> Bool = { false }
@@ -38,21 +54,26 @@ public enum LineMatches {
     var row = 0
     var lineStart = 0
     var offset = 0
-    func flush() {
+    /// 今の行を探す。取り消されたら false。
+    func flush() -> Bool {
       let string = line.withUnsafeBufferPointer { buffer in
         buffer.baseAddress.map { NSString(characters: $0, length: buffer.count) } ?? ""
       }
-      for match in Self.matches(
-        of: regex, inLine: string, row: row, limit: limit - matches.count)
-      {
+      guard
+        let found = Self.matches(
+          of: regex, inLine: string, row: row, limit: limit - matches.count,
+          isCancelled: isCancelled)
+      else { return false }
+      for match in found {
         matches.append(match)
         ranges.append(
           NSRange(location: lineStart + match.column.location, length: match.column.length))
       }
+      return true
     }
     for unit in text.utf16 {
       if unit == 0x0A {
-        flush()
+        guard flush() else { return nil }
         guard matches.count < limit else { break }
         if row % 256 == 0, isCancelled() { return nil }
         line.removeAll(keepingCapacity: true)
@@ -63,7 +84,7 @@ public enum LineMatches {
       }
       offset += 1
     }
-    if matches.count < limit, offset == text.length { flush() }
+    if matches.count < limit, !flush() { return nil }
     return isCancelled() ? nil : (matches, ranges)
   }
 

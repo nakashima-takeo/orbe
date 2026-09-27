@@ -1,5 +1,6 @@
 import Foundation
 import OrbeEditorCore
+import os
 
 /// 開いている文書——保存前の中身を探し、結果の鮮度を文書の版で持つ。範囲に入る開いている文書ごとに「結果が映している版」
 /// （`searchedVersions`。頼んでまだ届いていない版を含む）を持ち、届いた結果の版が今の文書の版より古ければ捨ててその場で
@@ -96,29 +97,42 @@ extension ProjectSearch: RootFilesObserver {
     delay.run(after: Self.refreshDelay) { [weak self] in self?.refresh(path) }
   }
 
-  /// 開いている文書 1 つを今の写しで探し直す（裏で）。届いたら `accept` が版を見る。
+  /// 開いている文書 1 つを今の写しで探し直す（裏で）。同じ文書の前の取り直しは止める。届いたら `accept` が版を見る。
   func refresh(_ path: String) {
     refreshDelays[path]?.cancel()
+    refreshCancels[path]?.withLock { $0 = true }
     guard let compiled, let document = document(at: path) else { return }
     let text = document.text
     let version = document.version
     let current = generation
+    let cancelled = OSAllocatedUnfairLock(initialState: false)
+    refreshCancels[path] = cancelled
     searchedVersions[path] = version
     DispatchQueue.global(qos: .userInitiated).async { [weak self] in
       guard
-        let found = LineMatches.search(text, compiled.regex, limit: ProjectSearchResults.limit)
+        let found = LineMatches.search(
+          text, compiled.regex, limit: ProjectSearchResults.limit,
+          isCancelled: { cancelled.withLock { $0 } })
       else { return }
       let file = SearchFileMatches(
         path: path, matches: found.matches,
         document: .init(ranges: found.ranges, version: version))
       DispatchQueue.main.async {
         MainActor.assumeIsolated {
-          guard let self, current == self.generation else { return }
+          guard let self, current == self.generation, !cancelled.withLock({ $0 }) else { return }
           self.accept(file)
           self.resultsDidChange()
         }
       }
     }
+  }
+
+  /// 取り直しの予約と、走っている取り直しを止める（検索し直す・結果を消す）。
+  func cancelRefreshes() {
+    for delay in refreshDelays.values { delay.cancel() }
+    refreshDelays = [:]
+    for cancelled in refreshCancels.values { cancelled.withLock { $0 = true } }
+    refreshCancels = [:]
   }
 
   /// 映している版が文書の版と違う開いている文書を取り直す。

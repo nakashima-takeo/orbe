@@ -44,11 +44,11 @@ public struct SearchQuery: Equatable, Sendable, Codable {
     }
     if !matchCase { source = "(?i)" + source }
     guard let regex = try? NSRegularExpression(pattern: source) else { throw Invalid() }
-    return CompiledSearchQuery(regex: regex, pcre: "(*UCP)" + source)
+    return CompiledSearchQuery(regex: regex, pcre: "(*UCP)(*ANYCRLF)" + source)
   }
 
   /// 正規表現の特殊文字だけを `\` で字どおりにする（ICU と PCRE2 のどちらでも「英数字以外の前の `\` は字そのもの」）。
-  static func escaped(_ literal: String) -> String {
+  public static func escaped(_ literal: String) -> String {
     var out = ""
     for scalar in literal.unicodeScalars {
       if specials.contains(scalar) { out.append("\\") }
@@ -58,19 +58,17 @@ public struct SearchQuery: Equatable, Sendable, Codable {
   }
 
   private static let specials = Set("\\^$.|?*+()[]{}".unicodeScalars)
-  // swiftlint:disable:next force_try
-  private static let wordScalar = try! NSRegularExpression(pattern: "^\\w$")
 
-  /// ICU の `\w` の字か（検索語の先頭・末尾に単語の境界を足すかの判定。VS Code `createRegExp` と同じ規則を Unicode で）。
+  /// 検索語の先頭・末尾に単語の境界を足すかの判定——ASCII の英数字と `_` だけ（VS Code `createRegExp` は JS の ASCII の
+  /// `\B` で判定する）。足した境界そのものは両エンジンとも Unicode で判定する。
   static func isWordScalar(_ scalar: Unicode.Scalar) -> Bool {
-    let string = String(Character(scalar)) as NSString
-    return wordScalar.firstMatch(
-      in: string as String, range: NSRange(location: 0, length: string.length)) != nil
+    scalar == "_" || ("a"..."z").contains(scalar) || ("A"..."Z").contains(scalar)
+      || ("0"..."9").contains(scalar)
   }
 }
 
 /// 組み立てた問い。`regex` は開いている文書と行の中の位置を取る ICU の式、`pcre` は git grep `-P` に渡す式（`\w` `\b` を
-/// Unicode に固定する `(*UCP)` 付き）。
+/// Unicode に固定する `(*UCP)` と、`$` を行末の `\r` の前でも当てる `(*ANYCRLF)` 付き——どちらも ICU の既定に揃える）。
 public struct CompiledSearchQuery: Sendable {
   public let regex: NSRegularExpression
   public let pcre: String

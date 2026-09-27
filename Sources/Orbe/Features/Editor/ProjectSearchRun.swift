@@ -102,8 +102,11 @@ final class ProjectSearchRun: @unchecked Sendable {
     for line in lines where !skipped.contains(line.path) {
       let room = state.withLock { ProjectSearchResults.limit - $0.total }
       guard room > 0 else { break }
-      let matches = LineMatches.matches(
-        of: query.regex, inLine: line.text as NSString, row: line.number - 1, limit: room)
+      guard
+        let matches = LineMatches.matches(
+          of: query.regex, inLine: line.text as NSString, row: line.number - 1, limit: room,
+          isCancelled: { [self] in isCancelled })
+      else { return }
       guard !matches.isEmpty else { continue }
       let finished = state.withLock { state -> (path: String, matches: [SearchMatch])? in
         state.total += matches.count
