@@ -44,6 +44,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
 
   /// 新しい面（Metal）の打鍵 1 回の main の仕事——キーの出来事を受けてから、面の編集係・文書・Orbe の配り先（検索・出現・
   /// 俯瞰への知らせ）が戻るまで。p99 1ms 以下（200KB・1MB、git 管理下、1 万字近い長い行の行末）。描くのは描画スレッド。
+  /// 最初の 1 打鍵は数えない（プロセスで最初の打鍵は入力の仕組みの初期化を含む）。
   func testMetalTypingMainTime() throws {
     let metal = EditorEngineChoice(
       metal: true, elasticScroll: true, fontSmoothing: true, language: .ja)
@@ -60,6 +61,7 @@ final class EditorScrollPerfTests: OrbeTestCase {
       opened.document.surface.selectedRange = NSRange(
         location: label == "long-line" ? 9_990 : opened.document.text.lineStart(row + 5) + 4,
         length: 0)
+      opened.document.surface.responder.keyDown(with: .key("/", []))
       RunLoop.main.run(until: Date().addingTimeInterval(0.3))
       var times: [Double] = []
       for character in String(repeating: "let value = compute(offset) ok ", count: 3) {
