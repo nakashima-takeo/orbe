@@ -5,7 +5,7 @@
 /// 1 つの絞り込み文字列から作り、名前ごとに `matches(_:)` を呼ぶ。行列と語のバッファを使い回すので、1 本のスレッドで使う。
 ///
 /// 小文字化は Swift の `lowercaseMapping`（`lowercased()` と同じ）で、JS の `toLowerCase` と違い語末の Σ を ς にしない。
-public final class FuzzyScorer {
+final class FuzzyScorer {
   private static let maxLength = 128
   private static let rowStride = maxLength + 1
 
@@ -35,7 +35,7 @@ public final class FuzzyScorer {
 
   private static let noScore = Int32.min
 
-  public init(pattern text: String) {
+  init(pattern text: String) {
     let maxLength = Self.maxLength
     pattern = .allocate(capacity: maxLength)
     patternLow = .allocate(capacity: maxLength)
@@ -71,7 +71,7 @@ public final class FuzzyScorer {
 
   /// `word` の一致した字の区間（UTF-16 の単位、昇順、隣り合う字はつなぐ）。一致しなければ nil。絞り込み文字列が空なら、
   /// tree と同じく一致で区間なし。
-  public func matches(_ word: String) -> [Range<Int>]? {
+  func matches(_ word: String) -> [Range<Int>]? {
     guard patternLength > 0 else { return [] }
     load(word)
     guard let count = score() else { return nil }
