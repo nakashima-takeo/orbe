@@ -29,7 +29,7 @@ final class MetalTextSurface: TextSurface {
   weak var delegate: TextSurfaceDelegate? {
     didSet { pullContent() }
   }
-  var onOpenLink: ((URL) -> Void)?
+  weak var host: TextSurfaceHost?
   var viewport = TextViewport.empty
   /// 面の大きさ（pt）・倍率・描く色空間。
   var size = CGSize.zero

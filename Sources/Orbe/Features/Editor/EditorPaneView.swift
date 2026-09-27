@@ -117,6 +117,7 @@ final class EditorPaneView: NSView {
     wireTree()
     wireProjectSearch()
     observeSidebar()
+    registerForDraggedTypes([.fileURL])
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
@@ -183,7 +184,7 @@ final class EditorPaneView: NSView {
 
   /// 骨から開く。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）。開けたらその行を
   /// 選択して焦点を面へ——既に焦点の文書ならセッションは変わらないので、選択はここで明示に移す。
-  private func open(_ url: URL) {
+  func open(_ url: URL) {
     guard let tab else { return }
     let document: EditorDocument
     do {
@@ -318,6 +319,7 @@ final class EditorPaneView: NSView {
     }
     self.document = document
     if let document {
+      document.surface.host = self
       let view = document.surface.view
       view.autoresizingMask = []
       view.frame = surfaceRect

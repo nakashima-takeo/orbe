@@ -12,7 +12,7 @@ final class FakeTextSurface: TextSurface {
   private(set) var undoBoundaries = 0
   /// 最後に押された行の印。
   private(set) var lineMarks = LineMarkSpans.empty
-  var onOpenLink: ((URL) -> Void)?
+  weak var host: TextSurfaceHost?
   /// 見えている範囲（本文の言葉）。テストが置く。
   var viewport = TextViewport.empty
   /// `scroll(toTop:)` の履歴。

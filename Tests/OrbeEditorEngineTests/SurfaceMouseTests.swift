@@ -79,20 +79,20 @@ final class SurfaceMouseTests: EngineTestCase {
   func testCommandClickOpensALinkOnRelease() throws {
     let opened = try open("see https://example.com/a now\n")
     _ = host(opened)
-    var opens: [URL] = []
-    opened.surface.onOpenLink = { opens.append($0) }
+    let host = RecordingHost()
+    opened.surface.host = host
     let on = point(opened, row: 0, column: 10)
     try mouse(opened, .leftMouseDown, at: on, flags: .command)
     try mouse(opened, .leftMouseUp, at: on, flags: .command)
-    XCTAssertEqual(opens, [URL(string: "https://example.com/a")!])
+    XCTAssertEqual(host.links, [URL(string: "https://example.com/a")!])
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 0, length: 0), "選択は動かない")
     try mouse(opened, .leftMouseDown, at: on, flags: .command)
     try mouse(opened, .leftMouseDragged, at: point(opened, row: 0, column: 20), flags: .command)
     try mouse(opened, .leftMouseUp, at: point(opened, row: 0, column: 20), flags: .command)
-    XCTAssertEqual(opens.count, 1, "動かして離せば開かない")
+    XCTAssertEqual(host.links.count, 1, "動かして離せば開かない")
     XCTAssertEqual(opened.surface.selectedRange.length, 0, "その間は選択が伸びない")
     try click(opened, row: 0, column: 10)
-    XCTAssertEqual(opens.count, 1, "素のクリックはキャレットを置くだけ")
+    XCTAssertEqual(host.links.count, 1, "素のクリックはキャレットを置くだけ")
     XCTAssertEqual(opened.surface.caretLocation, 10)
   }
 

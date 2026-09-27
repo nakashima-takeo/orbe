@@ -24,8 +24,8 @@ extension EditorLineMarksTests {
     let hosted = try host("see https://a.b/c\n")
     let document = hosted.document
     let window = hosted.window
-    var opened: [URL] = []
-    document.surface.onOpenLink = { opened.append($0) }
+    let links = LinkRecorder()
+    document.surface.host = links
     let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
     let onURL = document.surface.responder.convert(
       NSPoint(x: 8 * cell, y: rowMidY(1) - style.topInset), to: nil)
@@ -38,19 +38,19 @@ extension EditorLineMarksTests {
     }
 
     try click(onURL, [.command])
-    XCTAssertEqual(opened.map(\.absoluteString), ["https://a.b/c"])
+    XCTAssertEqual(links.opened.map(\.absoluteString), ["https://a.b/c"])
 
     try click(onURL, [])
-    XCTAssertEqual(opened.count, 1, "素のクリックは開かない")
+    XCTAssertEqual(links.opened.count, 1, "素のクリックは開かない")
     XCTAssertTrue(
       (7...9).contains(client.selectedRange().location), "キャレットが置かれる: \(client.selectedRange())")
 
     try click(offURL, [.command])
-    XCTAssertEqual(opened.count, 1, "URL の外の ⌘クリックは開かない")
+    XCTAssertEqual(links.opened.count, 1, "URL の外の ⌘クリックは開かない")
     XCTAssertTrue((0...2).contains(client.selectedRange().location), "上流へ落ちてキャレットが動く")
 
     try click(onURL, [.command, .shift])
-    XCTAssertEqual(opened.count, 1, "⌘⇧は上流の選択の延長")
+    XCTAssertEqual(links.opened.count, 1, "⌘⇧は上流の選択の延長")
     XCTAssertGreaterThan(client.selectedRange().length, 0, "キャレットから URL の上まで選択が延びる")
   }
 
@@ -60,8 +60,8 @@ extension EditorLineMarksTests {
     let hosted = try host("see https://a.b/c\n")
     let document = hosted.document
     let window = hosted.window
-    var opened: [URL] = []
-    document.surface.onOpenLink = { opened.append($0) }
+    let links = LinkRecorder()
+    document.surface.host = links
     let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
     let responder = document.surface.responder
     let onURL = responder.convert(
@@ -69,15 +69,15 @@ extension EditorLineMarksTests {
     let before = client.selectedRange()
 
     responder.mouseDown(with: try mouse(.leftMouseDown, onURL, [.command], in: window))
-    XCTAssertEqual(opened, [], "押しただけでは開かない")
+    XCTAssertEqual(links.opened, [], "押しただけでは開かない")
     responder.mouseUp(with: try mouse(.leftMouseUp, onURL, [.command], in: window))
-    XCTAssertEqual(opened.map(\.absoluteString), ["https://a.b/c"], "離して開く")
+    XCTAssertEqual(links.opened.map(\.absoluteString), ["https://a.b/c"], "離して開く")
 
     responder.mouseDown(with: try mouse(.leftMouseDown, onURL, [.command], in: window))
     let away = NSPoint(x: onURL.x - 6 * cell, y: onURL.y)  // "see " の上（URL の外）
     responder.mouseDragged(with: try mouse(.leftMouseDragged, away, [.command], in: window))
     responder.mouseUp(with: try mouse(.leftMouseUp, away, [.command], in: window))
-    XCTAssertEqual(opened.count, 1, "ドラッグして外れれば開かない")
+    XCTAssertEqual(links.opened.count, 1, "ドラッグして外れれば開かない")
     XCTAssertEqual(client.selectedRange(), before, "その間に選択は伸びない")
 
     let edge = responder.convert(
@@ -85,6 +85,16 @@ extension EditorLineMarksTests {
     responder.mouseDown(with: try mouse(.leftMouseDown, edge, [.command], in: window))
     let justOutside = NSPoint(x: edge.x + 2, y: edge.y)
     responder.mouseUp(with: try mouse(.leftMouseUp, justOutside, [.command], in: window))
-    XCTAssertEqual(opened.count, 1, "動きが 2pt でも URL の外で離せば開かない")
+    XCTAssertEqual(links.opened.count, 1, "動きが 2pt でも URL の外で離せば開かない")
   }
+}
+
+/// URL の ⌘クリックの行き先を記録する、面を載せる側の偽物（面は弱く持つので、テストが持っておく）。
+@MainActor
+private final class LinkRecorder: TextSurfaceHost {
+  private(set) var opened: [URL] = []
+  func openFiles(_ urls: [URL]) {}
+  func insertionText(forFiles urls: [URL]) -> String { "" }
+  func contextMenu() -> NSMenu { NSMenu() }
+  func openLink(_ url: URL) { opened.append(url) }
 }

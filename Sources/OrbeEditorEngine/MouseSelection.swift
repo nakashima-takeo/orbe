@@ -169,7 +169,7 @@ final class MouseSelection: NSObject {
     guard moved <= Self.clickSlop,
       surface.link(at: view.convert(event.locationInWindow, from: nil)) == url
     else { return }
-    surface.onOpenLink?(url)
+    surface.host?.openLink(url)
   }
 
   /// 押している間に窓から外れた（mouse-up が届かない）。

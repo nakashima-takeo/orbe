@@ -196,7 +196,7 @@ struct EditorSurfaces {
   }
 
   /// 本物の面を、指定の根の queries で組む。どちらのエンジンで作るかは、文書を開く時点で `engine` を読んで決める
-  /// （開いている文書の面は作り直さない）。URL の ⌘クリックは既定ブラウザへ（行き先を決めるのはエンジンでなくここ）。
+  /// （開いている文書の面は作り直さない）。
   init(queriesRoot: URL?, engine: @escaping @MainActor () -> EditorEngineChoice = { .stTextView }) {
     self.init(
       registry: LanguageRegistry(queriesRoot: queriesRoot),
@@ -212,9 +212,7 @@ struct EditorSurfaces {
               omittedLabel: { [language = choice.language] in
                 EditorStyle.omittedLabel($0, language: language)
               })) : nil
-        let surface = metal ?? makeTextSurface(style: style, text: text)
-        surface.onOpenLink = { NSWorkspace.shared.open($0) }
-        return surface
+        return metal ?? makeTextSurface(style: style, text: text)
       },
       prepare: {
         if engine().metal { prepareMetalTextEngine() }

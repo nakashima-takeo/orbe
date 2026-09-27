@@ -60,10 +60,23 @@ public protocol TextSurface: AnyObject {
   /// 行の印（git ガター）。文書がハンクから作って押す（UTF-16 オフセット）。面は描くだけで規則を持たない。
   func setLineMarks(_ spans: LineMarkSpans)
 
-  /// 本文の URL が ⌘クリックされた。行き先（外部ブラウザ等）は面を組む側が決める。
-  var onOpenLink: ((URL) -> Void)? { get set }
+  /// 面を載せる側（弱い参照）。面が本文の外のこと（ファイルを開く・パスの文字列・右クリックのメニュー・URL）を問う口。
+  var host: TextSurfaceHost? { get set }
 
   var delegate: TextSurfaceDelegate? { get set }
+}
+
+/// 面を載せる側——開くこと・根・言語は載せる側の関心で、面は知らない。面はそれらをこの口で問う。
+@MainActor
+public protocol TextSurfaceHost: AnyObject {
+  /// ファイルを開く（Finder から本文へ落とされた）。
+  func openFiles(_ urls: [URL])
+  /// ファイルのパスを本文に入れる文字列（⇧ を押して落とされた・Finder でコピーしたファイルを貼った）。
+  func insertionText(forFiles urls: [URL]) -> String
+  /// 右クリックのメニュー。項目は target を持たず、焦点の面へ届く。
+  func contextMenu() -> NSMenu
+  /// 本文の URL が ⌘クリックされた。
+  func openLink(_ url: URL)
 }
 
 @MainActor

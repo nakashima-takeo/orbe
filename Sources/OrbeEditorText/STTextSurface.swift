@@ -45,10 +45,7 @@ final class STTextSurface: NSObject, TextSurface {
   /// インデントの単位（文書が検出して押す）。インデント線の段と、タブの表示幅（単位の桁数）を決める。
   private var indentUnit = Indentation.fallback.unit
 
-  var onOpenLink: ((URL) -> Void)? {
-    get { textView.onOpenLink }
-    set { textView.onOpenLink = newValue }
-  }
+  weak var host: TextSurfaceHost?
 
   init(style: TextSurfaceStyle, text: String) {
     scrollView = NSScrollView()
@@ -69,6 +66,7 @@ final class STTextSurface: NSObject, TextSurface {
     textView.highlightSelectedLine = false
     textView.showsInvisibleCharacters = false
     textView.textDelegate = self
+    textView.onOpenLink = { [weak self] in self?.host?.openLink($0) }
     textView.onFocusChange = { [weak self] focused in
       guard let self else { return }
       highlightView.isFocused = focused
