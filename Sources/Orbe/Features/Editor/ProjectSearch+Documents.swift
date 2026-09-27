@@ -32,18 +32,24 @@ extension ProjectSearch: RootFilesObserver {
     documents().first { relativePath(of: $0) == path }
   }
 
-  /// 届いたまとまりを置く。開いている文書のまとまりは、届いた版が今の文書の版と同じときだけ置き、古ければ頼み直す。
-  func accept(_ file: SearchFileMatches) {
-    guard let span = file.document, let document = document(at: file.path) else {
-      results.set(file)
-      return
+  /// 届いたまとまりの列（パスの順）を置く。開いている文書のまとまりは、届いた版が今の文書の版と同じときだけ置き、古ければ
+  /// 頼み直す。
+  func accept(_ files: [SearchFileMatches]) {
+    var kept: [SearchFileMatches] = []
+    kept.reserveCapacity(files.count)
+    for file in files {
+      guard let span = file.document, let document = document(at: file.path) else {
+        kept.append(file)
+        continue
+      }
+      guard span.version == document.version else {
+        refresh(file.path)
+        continue
+      }
+      searchedVersions[file.path] = span.version
+      kept.append(file)
     }
-    guard span.version == document.version else {
-      refresh(file.path)
-      return
-    }
-    searchedVersions[file.path] = span.version
-    results.set(file)
+    results.set(sorted: kept)
   }
 
   /// 焦点の文書の本文が変わった。まとまりの区間をずらし、結果に出ていれば 250ms 後に取り直す。行は一致が落ちたとき
@@ -120,7 +126,7 @@ extension ProjectSearch: RootFilesObserver {
       DispatchQueue.main.async {
         MainActor.assumeIsolated {
           guard let self, current == self.generation, !cancelled.withLock({ $0 }) else { return }
-          self.accept(file)
+          self.accept([file])
           self.resultsDidChange()
         }
       }

@@ -4,8 +4,9 @@ import os
 
 /// プロジェクト検索 1 回ぶんの裏の仕事。開いている文書の写しを先に探し（保存前の中身）、続けて git grep を流しながら読んで
 /// ディスクのファイルを探す（開いている文書のパスの行は捨てる）。git は一致した行を送り、その行の中の一致の位置は同じ問いの
-/// ICU の式が取る（ICU で 1 つも取れない行は結果にしない）。結果はファイルごとのまとまりで、main へは 80ms ごとにまとめて
-/// 渡し、終わりはすぐ渡す。一致の総数が上限に達したら git を止めて終える。止める（`cancel`）と以後は何も渡さない。
+/// ICU の式が取る（ICU で 1 つも取れない行は結果にしない）。結果はファイルごとのまとまりで、裏でパスの順に並べておき、main へは
+/// 80ms ごとにまとめて渡し、終わりはすぐ渡す（main は並んだ列を併合するだけ）。一致の総数が上限に達したら git を止めて
+/// 終える。止める（`cancel`）と以後は何も渡さない。
 /// 状態はロックの中にだけあり、`GitRunner` はスレッドをまたいで使う前提の型なので、裏のスレッドへ渡してよい。
 final class ProjectSearchRun: @unchecked Sendable {
   /// 探す開いている文書（根からの相対パス・写し・版）。
@@ -15,7 +16,7 @@ final class ProjectSearchRun: @unchecked Sendable {
     let version: Int
   }
 
-  /// main へ渡す 1 回ぶん。`finished` なら最後で、`error` はディスク側が始められなかった・断った理由。
+  /// main へ渡す 1 回ぶん。`files` はパスの順。`finished` なら最後で、`error` はディスク側が始められなかった・断った理由。
   struct Batch: Sendable {
     var files: [SearchFileMatches] = []
     var finished = false
@@ -138,7 +139,9 @@ final class ProjectSearchRun: @unchecked Sendable {
     let schedule = state.withLock { state -> Bool in
       guard !state.cancelled else { return false }
       if file.document != nil { state.total += file.count }
-      state.pending.files.append(file)
+      let index = ProjectSearchResults.position(
+        of: file.pathKey, in: state.pending.files, from: 0)
+      state.pending.files.insert(file, at: index)
       defer { state.flushScheduled = true }
       return !state.flushScheduled
     }

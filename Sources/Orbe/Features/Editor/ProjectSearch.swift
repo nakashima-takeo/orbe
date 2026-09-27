@@ -224,7 +224,7 @@ final class ProjectSearch {
       replacesOnArrival = false
       replaceResults()
     }
-    for file in batch.files { accept(file) }
+    accept(batch.files)
     if batch.finished {
       run = nil
       error = batch.error.map(Failure.disk)
