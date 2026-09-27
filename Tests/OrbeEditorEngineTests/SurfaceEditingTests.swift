@@ -69,6 +69,23 @@ final class SurfaceEditingTests: EngineTestCase {
     XCTAssertTrue(opened.document.isDirty, "保存の後の編集を戻しても未保存のまま")
   }
 
+  /// 中身を変えない編集（大文字の語の大文字化・同じ字での上書き）は文書へ渡さない——版も未保存の印も進まず、undo も積まない。
+  func testEditsThatChangeNothingLeaveNoTrace() throws {
+    let opened = try open("ABC abc\n")
+    _ = host(opened)
+    let undo = try XCTUnwrap(opened.surface.responder.undoManager)
+    let version = opened.document.version
+    opened.surface.selectedRange = NSRange(location: 0, length: 3)
+    opened.surface.perform(.changeCase(.upper))
+    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 0, length: 3), "変えた範囲を選ぶ")
+    opened.surface.selectedRange = NSRange(location: 4, length: 1)
+    type(opened, "a")
+    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 5, length: 0))
+    XCTAssertEqual(opened.document.version, version)
+    XCTAssertFalse(opened.document.isDirty)
+    XCTAssertFalse(undo.canUndo)
+  }
+
   /// 外部変更の差し替えも undo に載り、前後で区切る。
   func testReplacingFromDiskIsUndoable() throws {
     let opened = try open("one\ntwo\n")

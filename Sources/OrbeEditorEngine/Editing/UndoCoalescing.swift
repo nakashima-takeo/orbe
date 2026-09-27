@@ -26,12 +26,12 @@ enum UndoCoalescing {
   }
 
   /// 直前の種類 `previous`（無ければ要素が開いていない）の後に `next` を積むとき、新しい要素を始めるか。`joinsLines` は
-  /// 削除が行を結合するか、`editCount` は束の編集の数。
+  /// 削除が行を結合するか。
   static func startsNewElement(
-    after previous: UndoKind?, _ next: UndoKind, joinsLines: Bool, editCount: Int
+    after previous: UndoKind?, _ next: UndoKind, joinsLines: Bool
   ) -> Bool {
     guard let previous, previous != .other, next != .other, next != .newline else { return true }
-    if joinsLines || editCount > 1 { return true }
+    if joinsLines { return true }
     switch (previous, next) {
     case (.deletingLeft, .deletingLeft), (.deletingRight, .deletingRight):
       return false

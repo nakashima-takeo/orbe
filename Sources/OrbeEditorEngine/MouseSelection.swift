@@ -124,8 +124,7 @@ final class MouseSelection: NSObject {
           shift
           ? EditCommands.extendByLine(primary, toRow: hit.row, text) : Self.line(hit.row, text)
       default:
-        cursor = Cursor(
-          selectionStart: NSRange(location: 0, length: 0), unit: .character, position: text.length)
+        cursor = .selecting(NSRange(location: 0, length: text.length))
       }
     }
     surface.editor.select(CursorList(cursor), reveal: .minimal)

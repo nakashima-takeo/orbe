@@ -221,7 +221,8 @@ extension EditCommands {
   }
 }
 
-/// 語の規則が読む 1 行の窓。長い行ではキャレットの前後だけを読む（窓の端に掛かる語は窓で切れる）。
+/// 語の規則が読む 1 行の窓。長い行ではキャレットの前後だけを読む（窓の端に掛かる語は窓で切れる）。窓の端は外側の書記素の
+/// 境へ広げ、窓の中の位置が書記素を割らない。
 struct LineWindow {
   static let maxLength = 2048
   /// 窓の始まり（本文のオフセット）。
@@ -235,7 +236,12 @@ struct LineWindow {
     var range = content
     if content.length > Self.maxLength {
       let from = min(max(0, column - Self.maxLength / 2), content.length - Self.maxLength)
-      range = NSRange(location: content.location + from, length: Self.maxLength)
+      let lower = text.grapheme(containing: content.location + from).location
+      let end = content.location + from + Self.maxLength
+      let upper =
+        end < NSMaxRange(content)
+        ? min(NSMaxRange(text.grapheme(containing: end - 1)), NSMaxRange(content)) : end
+      range = NSRange(location: lower, length: upper - lower)
     }
     start = range.location
     skipped = range.location - content.location

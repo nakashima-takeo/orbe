@@ -81,16 +81,24 @@ struct CommandResult {
 /// 編集の規則の入口（純関数）。本文の写し・編集の状態・環境から、編集の束・新しい状態・undo の種類・見せ方を返す。
 /// AppKit・Metal に依らないので、窓も装置も無しに VS Code と突き合わせられる。
 enum EditCommands {
+  /// コマンドを実行する。「直前がキルだったか」はここ 1 か所で決める——キルバッファへ何かを入れたコマンドだけがキル（何も
+  /// しなかったキルやマークへの削除は数えない）。
   static func run(_ command: EditCommand, _ state: EditState, _ env: EditingEnvironment)
     -> CommandResult
   {
+    var result = result(of: command, state, env)
+    result.state.lastWasKill = result.kill != nil
+    return result
+  }
+
+  private static func result(
+    of command: EditCommand, _ state: EditState, _ env: EditingEnvironment
+  ) -> CommandResult {
     switch command {
     case .move(let movement, let extending):
       return move(movement, extending: extending, state, env)
     case .selectAll:
-      let cursor = Cursor(
-        selectionStart: NSRange(location: 0, length: 0), unit: .character,
-        position: env.text.length)
+      let cursor = Cursor.selecting(NSRange(location: 0, length: env.text.length))
       return CommandResult(
         state: EditState(cursors: CursorList(cursor), mark: state.mark), reveal: .none)
     case .selectLine: return select(state, env) { lineSelection($0, env.text) }

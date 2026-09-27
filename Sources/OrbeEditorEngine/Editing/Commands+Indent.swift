@@ -1,29 +1,48 @@
 import Foundation
 import OrbeEditorCore
 
-/// 字下げの桁の計算（VS Code の `CursorColumns` と `normalizeIndentation`）。タブの幅は字下げの単位。
+/// 字下げの桁の計算（VS Code の `CursorColumns` と `normalizeIndentation`）。見た目の桁は書記素ごとに進み、タブは次の
+/// タブ位置まで、全角と絵文字は 2 桁（VS Code と同じ等幅の数え方）。タブの幅は字下げの単位。
 enum Indenting {
-  /// 行頭から `column` までの見た目の桁（タブは次のタブ位置まで）。
-  static func visibleColumn(_ units: some Collection<UInt16>, upTo column: Int, tabSize: Int) -> Int
+  /// 行頭から `column` までの見た目の桁。
+  static func visibleColumn(_ units: some Collection<UInt16>, upTo column: Int, tabSize: Int)
+    -> Int
   {
     var visible = 0
-    for unit in units.prefix(column) {
-      visible = unit == 0x09 ? visible + tabSize - visible % tabSize : visible + 1
+    for (_, codePoint) in graphemes(units.prefix(column)) {
+      visible = next(visible, codePoint, tabSize)
     }
     return visible
   }
 
   /// 見た目の桁 `visible` にいちばん近い位置（VS Code の `columnFromVisibleColumn`）。
-  static func column(_ units: some Collection<UInt16>, atVisible visible: Int, tabSize: Int) -> Int
+  static func column(_ units: some Collection<UInt16>, atVisible visible: Int, tabSize: Int)
+    -> Int
   {
     guard visible > 0 else { return 0 }
     var before = 0
-    for (index, unit) in units.enumerated() {
-      let after = unit == 0x09 ? before + tabSize - before % tabSize : before + 1
-      if after >= visible { return after - visible < visible - before ? index + 1 : index }
+    var offset = 0
+    for (length, codePoint) in graphemes(units) {
+      let after = next(before, codePoint, tabSize)
+      if after >= visible { return after - visible < visible - before ? offset + length : offset }
       before = after
+      offset += length
     }
     return units.count
+  }
+
+  /// 書記素ごとの単位の数と最初の符号位置。
+  private static func graphemes(_ units: some Collection<UInt16>) -> [(
+    length: Int, codePoint: UInt32
+  )] {
+    String(decoding: units, as: UTF16.self).map {
+      ($0.utf16.count, $0.unicodeScalars.first?.value ?? 0)
+    }
+  }
+
+  private static func next(_ visible: Int, _ codePoint: UInt32, _ tabSize: Int) -> Int {
+    codePoint == 0x09
+      ? visible + tabSize - visible % tabSize : visible + CharacterWidth.columns(codePoint)
   }
 
   /// ⌫ が字下げの空白の中（最初の空白でない字まで）で消す先——前のタブ位置の位置。字下げの外や行頭なら nil。

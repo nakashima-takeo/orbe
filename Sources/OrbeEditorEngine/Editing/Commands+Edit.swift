@@ -29,8 +29,9 @@ struct Replacement {
 
 /// 挿入と削除の規則。
 extension EditCommands {
-  /// カーソルごとの置換（nil は変えない）を束にし、置換の後のカーソルを置く。重なる置換は前のものを残す。変えないカーソルと
-  /// マークは束に合わせてずらす。
+  /// カーソルごとの置換（nil は変えない）を束にし、置換の後のカーソルを置く。重なる置換は前のものを残す。どのカーソルも変え
+  /// なければ、状態はそのまま（選択も undo のまとまりも保つ）。変えないカーソルは選択の両端を束に合わせてずらし（単位は文字
+  /// に戻し、覚えた横位置は忘れる——VS Code が編集の後にカーソルを選択から置き直すのと同じ）、マークもずらす。
   static func edit(
     _ state: EditState, _ env: EditingEnvironment, undo: UndoKind,
     _ replace: (Cursor) -> Replacement?
@@ -53,7 +54,12 @@ extension EditCommands {
     }
     let batch = EditBatch(
       accepted.map { TextEdit(range: $0.replacement.range, replacement: $0.replacement.text) })
-    var result = cursors.map { Cursor(batch.map($0.position)) }
+    guard !batch.isEmpty else { return CommandResult(state: state) }
+    var result = cursors.map { cursor in
+      Cursor(
+        selectionStart: NSRange(location: batch.map(cursor.anchor), length: 0), unit: .character,
+        position: batch.map(cursor.position))
+    }
     var delta = 0
     for item in accepted {
       let replacement = item.replacement

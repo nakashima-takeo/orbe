@@ -154,6 +154,14 @@ final class EditCommandsTests: XCTestCase {
     XCTAssertEqual(Editing.run(.literalTab, on: "a|b"), "a\t|b")
   }
 
+  /// Tab の空白の数は VS Code の見た目の桁で数える——書記素ごとに進み、全角と絵文字は 2 桁。
+  func testTabCountsVisibleColumnsLikeVSCode() {
+    XCTAssertEqual(Editing.run(.tab, on: "日本|"), "日本    |")
+    XCTAssertEqual(Editing.run(.tab, on: "e\u{301}|"), "e\u{301}   |")
+    XCTAssertEqual(Editing.run(.tab, on: "👨‍👩‍👧|"), "👨‍👩‍👧  |")
+    XCTAssertEqual(Editing.run(.tab, on: "\tx|"), "\tx   |")
+  }
+
   /// ⇧Tab は字下げを前のタブ位置へ戻す（空白の無い行は飛ばす）。選択の終わりが行頭なら、その行は含めない。
   func testBacktabOutdents() {
     XCTAssertEqual(Editing.run(.backtab, on: "      a|b"), "    a|b")
@@ -191,6 +199,25 @@ final class EditCommandsTests: XCTestCase {
     XCTAssertFalse(yanked.state.lastWasKill)
   }
 
+  /// 消すものが無いキルはキルバッファを変えず、キルと数えない。何もしなかったコマンドを挟んだ ⌃K は前のキルに足さない。
+  func testKillsThatRemoveNothingKeepTheKillBufferAndBreakTheChain() {
+    let (end, atEnd) = Editing.parse("abc|")
+    let empty = EditCommands.run(
+      .kill(forward: true), atEnd, Editing.environment(end, killBuffer: "old"))
+    XCTAssertNil(empty.kill, "文書の末尾の ⌃K はキルバッファをそのまま")
+    XCTAssertFalse(empty.state.lastWasKill)
+    var (text, state) = Editing.parse("a|bc\ndef\n")
+    var kill = ""
+    for command in [EditCommand.kill(forward: true), .backtab, .deleteToMark, .kill(forward: true)]
+    {
+      let result = EditCommands.run(command, state, Editing.environment(text, killBuffer: kill))
+      text = result.edits.applied(to: text)
+      state = result.state
+      kill = result.kill ?? kill
+    }
+    XCTAssertEqual(kill, "\n", "字下げの無い行の ⇧Tab・マークの無い削除を挟めば、足さずに入れ直す")
+  }
+
   // MARK: - 入れ替え・大小文字・マーク
 
   /// ⌃T はキャレットの前後の書記素を入れ替え、行末なら前の 2 つ。
@@ -200,6 +227,7 @@ final class EditCommandsTests: XCTestCase {
     XCTAssertEqual(Editing.run(.transpose, on: "a👍🏽|b"), "ab👍🏽|")
     XCTAssertEqual(Editing.run(.transpose, on: "|ab"), "|ab")
     XCTAssertEqual(Editing.run(.transposeWords, on: "foo |bar"), "bar foo|")
+    XCTAssertEqual(Editing.run(.transpose, on: "a[bc]d"), "a[bc]d", "選択があれば何もせず、選択は残る")
   }
 
   /// 大小文字は選択か、キャレットに接する語。語の外（空白の上）なら何もせず選択も元のまま。変えた範囲を選ぶ。
@@ -230,6 +258,17 @@ final class EditCommandsTests: XCTestCase {
     XCTAssertEqual(Editing.run(.selectLine, on: "ab\nc|d\nef"), "ab\n[cd\n]ef")
     XCTAssertEqual(Editing.run(.selectWord, on: "foo.ba|r baz"), "foo.[bar] baz")
     XCTAssertEqual(Editing.run(.selectAll, on: "a|b\ncd"), "[ab\ncd]")
+  }
+
+  /// 長い行（2048 単位を超える）では、語の規則はキャレットの前後の窓だけを読み、窓の端は書記素の境へ広げる——窓の端が
+  /// サロゲートの対の中間に掛かっても、⌥←・⌥⌫ は対を割らない。
+  func testLongLineWindowsDoNotSplitGraphemes() {
+    let text = TextRope(String(repeating: "x😀", count: 1000))
+    let left = EditCommands.wordLeft(from: 1026, text)
+    XCTAssertEqual(text.grapheme(containing: left).location, left, "書記素の境")
+    XCTAssertEqual(left, 1)
+    let removed = EditCommands.deleteWordLeftRange(Cursor(1026), text)
+    XCTAssertEqual(removed?.location, 1)
   }
 
   /// 日本語の並びでは OS の語の分割の境でも止まる（記号と空白の規則はそのまま）。

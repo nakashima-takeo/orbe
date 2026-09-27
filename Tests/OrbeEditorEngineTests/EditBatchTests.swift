@@ -24,7 +24,7 @@ final class EditBatchTests: XCTestCase {
 
   /// 続けて当てた束を 1 つに合成しても、当てた結果は同じ（打鍵のまとまり・⌫ の連続・離れた 2 か所）。
   func testComposedBatchesEqualSequentialApplication() {
-    var generator = SystemRandomNumberGenerator()
+    var generator = SplitMix(seed: 0x5eed)
     for _ in 0..<500 {
       let initial = TextRope(
         String(
@@ -55,7 +55,7 @@ final class EditBatchTests: XCTestCase {
   }
 
   private static func randomBatch(
-    in text: TextRope, _ generator: inout SystemRandomNumberGenerator
+    in text: TextRope, _ generator: inout SplitMix
   ) -> EditBatch {
     var edits: [TextEdit] = []
     var cursor = 0
@@ -78,8 +78,7 @@ final class EditBatchTests: XCTestCase {
   func testCoalescingFollowsVSCode() {
     func starts(_ previous: UndoKind?, _ next: UndoKind, joins: Bool = false) -> Bool {
       UndoCoalescing.startsNewElement(
-        after: previous, UndoCoalescing.resolve(next, after: previous), joinsLines: joins,
-        editCount: 1)
+        after: previous, UndoCoalescing.resolve(next, after: previous), joinsLines: joins)
     }
     XCTAssertFalse(starts(.typing(.other), .typing(.other)))
     XCTAssertTrue(starts(.typing(.other), .typing(.firstSpace)), "語の後の空白で切る")
@@ -97,9 +96,16 @@ final class EditBatchTests: XCTestCase {
     XCTAssertEqual(
       UndoCoalescing.resolve(.typing(.firstSpace), after: .typing(.firstSpace)),
       .typing(.consecutiveSpace))
-    XCTAssertTrue(
-      UndoCoalescing.startsNewElement(
-        after: .typing(.other), .typing(.other), joinsLines: false, editCount: 2),
-      "複数の編集を持つ束は切る")
+  }
+
+  /// 束の中の位置は、置き換わった区間の中なら置換の終わりへ寄せる（区間の外はずらす）——置換の中の同じ距離に写すと、中身の
+  /// 変わった置換（⌃T・大小文字）で位置がサロゲートの対の中間に落ちうる。
+  func testMapMovesPositionsInsideAReplacementToItsEnd() {
+    let batch = EditBatch([edit(0, 3, "😀a"), edit(5, 1, "")])
+    XCTAssertEqual(batch.map(0), 0, "区間の始まりは動かない")
+    XCTAssertEqual(batch.map(1), 3, "区間の中は置換の終わり")
+    XCTAssertEqual(batch.map(3), 3, "区間の終わりは置換の終わり")
+    XCTAssertEqual(batch.map(4), 4)
+    XCTAssertEqual(batch.map(7), 6, "後ろはずれる")
   }
 }

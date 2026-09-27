@@ -38,16 +38,14 @@ struct EditBatch: Equatable, Sendable {
       })
   }
 
-  /// 束の前の位置を束の後へ写す。置き換わった区間の中は、置換の中の同じ距離（収まらなければ置換の終わり）。
+  /// 束の前の位置を束の後へ写す。置き換わった区間の中は置換の終わり（中身の変わった置換の中で、書記素を割る位置に落とさ
+  /// ない）。区間の始まりは動かない。
   func map(_ offset: Int) -> Int {
     var delta = 0
     for edit in edits {
       if offset <= edit.range.location { break }
-      if offset >= NSMaxRange(edit.range) {
-        delta += edit.replacementLength - edit.range.length
-        continue
-      }
-      return edit.range.location + delta + min(offset - edit.range.location, edit.replacementLength)
+      delta += edit.replacementLength - edit.range.length
+      if offset < NSMaxRange(edit.range) { return NSMaxRange(edit.range) + delta }
     }
     return offset + delta
   }

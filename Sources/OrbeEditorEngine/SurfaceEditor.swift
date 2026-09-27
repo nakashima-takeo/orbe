@@ -35,12 +35,8 @@ final class SurfaceEditor {
     let before = state
     let result = EditCommands.run(command, before, env)
     surface.transact(reveal: result.reveal) {
-      if result.edits.isEmpty {
-        if result.state.cursors != before.cursors { close() }
-      } else {
-        record(
-          result.edits, kind: result.undo, from: before.cursors, to: result.state.cursors, env.text)
-      }
+      record(
+        result.edits, kind: result.undo, from: before.cursors, to: result.state.cursors, env.text)
       state = result.state
     }
     if let kill = result.kill { KillBuffer.contents = kill }
@@ -86,16 +82,22 @@ final class SurfaceEditor {
 
   // MARK: - undo
 
-  /// 束を文書へ渡し、undo に積む（まとまりが続けば開いている要素に合成する）。
+  /// 束を文書へ渡し、undo に積む（まとまりが続けば開いている要素に合成する）。中身を変えない編集（同じ字での上書き・大文字の
+  /// 語の大文字化・空のヤンク）は落とし、何も残らなければ選択だけの変化にする——版も未保存の印も進めず、効き目の無い undo
+  /// を積まない。
   private func record(
-    _ batch: EditBatch, kind proposed: UndoKind, from before: CursorList, to after: CursorList,
+    _ edits: EditBatch, kind proposed: UndoKind, from before: CursorList, to after: CursorList,
     _ text: TextRope
   ) {
+    let batch = EditBatch(edits.edits.filter { text.units(in: $0.range) != $0.replacement })
+    guard !batch.isEmpty else {
+      if after != before { close() }
+      return
+    }
     let kind = UndoCoalescing.resolve(proposed, after: open?.kind)
     let removed = batch.edits.contains { text.units(in: $0.range).contains(0x0A) }
     let joins = removed && (kind == .deletingLeft || kind == .deletingRight)
-    let starts = UndoCoalescing.startsNewElement(
-      after: open?.kind, kind, joinsLines: joins, editCount: batch.edits.count)
+    let starts = UndoCoalescing.startsNewElement(after: open?.kind, kind, joinsLines: joins)
     if starts { close() }
     guard let result = surface.deliver(batch) else { return }
     if let open, !starts {

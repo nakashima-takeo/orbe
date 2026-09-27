@@ -4,7 +4,7 @@ import OrbeEditorCore
 /// キル・入れ替え・大小文字・マークの規則（macOS の NSTextView の意味。入れ替えは VS Code の `transposeLetters`）。
 extension EditCommands {
   /// ⌃K（前へ：行末まで、行末なら改行）と行頭までのキル（後ろへ：1 列目なら前の改行）。選択があれば選択。消した文字列は
-  /// キルバッファへ入れ、キルが続けば前へは後ろに、後ろへは前に足す。
+  /// キルバッファへ入れ、キルが続けば前へは後ろに、後ろへは前に足す。消すものが無ければキルバッファはそのまま。
   static func kill(forward: Bool, _ state: EditState, _ env: EditingEnvironment) -> CommandResult {
     let text = env.text
     let range = { (cursor: Cursor) -> NSRange? in
@@ -13,10 +13,11 @@ extension EditCommands {
     }
     var result = delete(state, env, range)
     let killed = state.cursors.all.compactMap(range).map(text.substring).joined(separator: "\n")
-    result.kill =
-      state.lastWasKill
-      ? (forward ? env.killBuffer + killed : killed + env.killBuffer) : killed
-    result.state.lastWasKill = true
+    if !killed.isEmpty {
+      result.kill =
+        state.lastWasKill
+        ? (forward ? env.killBuffer + killed : killed + env.killBuffer) : killed
+    }
     return result
   }
 
@@ -80,7 +81,7 @@ extension EditCommands {
       else { return nil }
       return range
     }
-    var result = edit(state, env, undo: .other) { cursor in
+    return edit(state, env, undo: .other) { cursor in
       guard let range = target(cursor) else { return nil }
       let original = text.substring(range)
       let changed: String
@@ -91,8 +92,6 @@ extension EditCommands {
       }
       return Replacement(range, changed, caret: .selectInserted)
     }
-    if result.edits.isEmpty { result.state.cursors = state.cursors }
-    return result
   }
 
   /// マーク（macOS の `setMark:` / `selectToMark:` / `deleteToMark:` / `swapWithMark:`。面ごと）。
@@ -104,7 +103,6 @@ extension EditCommands {
     case .setMark:
       var next = state
       next.mark = caret
-      next.lastWasKill = false
       return CommandResult(state: next, reveal: .none)
     case .selectToMark:
       guard let mark = state.mark else { return CommandResult(state: state, reveal: .none) }
@@ -118,8 +116,7 @@ extension EditCommands {
       guard let mark = state.mark else { return CommandResult(state: state, reveal: .none) }
       let range = NSRange(location: min(mark, caret), length: abs(mark - caret))
       var result = delete(state, env) { _ in range }
-      result.kill = env.text.substring(range)
-      result.state.lastWasKill = true
+      if range.length > 0 { result.kill = env.text.substring(range) }
       return result
     }
   }
