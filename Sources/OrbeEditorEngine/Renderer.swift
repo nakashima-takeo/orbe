@@ -107,6 +107,7 @@ final class Renderer {
       material.revision != slot.drawnMaterial || slot.scroll.revision != slot.drawnScroll
       || slot.returning || slot.atlasDirty
     guard changed else {
+      slot.recorder.idle(at: CACurrentMediaTime())
       slot.idleTicks += 1
       if slot.idleTicks >= Self.idleTicksBeforePause { pause(slot, clock) }
       return
@@ -148,8 +149,7 @@ final class Renderer {
     let frameID = frameCounter
     let id = slot.id
     slot.unpresented += 1
-    let moving =
-      slot.drawnPosition.map { !Self.samePixel($0, frame.position, material.scale) } ?? true
+    let moving = slot.drawnPosition != frame.position
     let wasReturning = slot.returning
     slot.drawnMaterial = material.revision
     slot.drawnScroll = frame.revision
@@ -214,10 +214,6 @@ final class Renderer {
     )
   }
 
-  private static func samePixel(_ a: SIMD2<Double>, _ b: SIMD2<Double>, _ scale: CGFloat) -> Bool {
-    let s = Double(scale)
-    return (a * s).rounded(.toNearestOrAwayFromZero) == (b * s).rounded(.toNearestOrAwayFromZero)
-  }
 }
 
 /// 面 1 つぶんの描画スレッドの持ち物。

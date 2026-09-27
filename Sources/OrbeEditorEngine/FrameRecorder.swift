@@ -6,8 +6,10 @@ import os
 /// 出す。常に動くので軽く保つ——溜めるのはジェスチャー 1 つぶんだけ。
 ///
 /// - 出来事→present: 指の出来事の時刻から、その量が初めて入ったコマが画面に出た時刻まで。
-/// - 落ちたコマ: 位置が動いている間に、続く 2 つの present の間隔が 1.5 刻みを越えたもの。割合は越えた分の時間の合計を
-///   経過時間で割ったもの（ms/秒）。
+/// - 落ちたコマ: ジェスチャーの間に描いたコマ（描くものが変わった刻みのコマ全部）の、続く 2 つの present の間隔が
+///   1.5 刻みを越えたもの。変化の無い刻み（止めていた間を含む）を挟んだ間隔は、見せるものが無かった間なので数えない
+///   ——ただし次のコマに、その変化の無い刻みより前の指の出来事が入っていれば（main が詰まって出来事が遅れた）数える。
+///   割合は越えた分の時間の合計を、数えた間隔の時間の合計で割ったもの（ms/秒）。
 final class FrameRecorder {
   /// 描いたコマ 1 つ。
   struct Drawn {
@@ -20,7 +22,7 @@ final class FrameRecorder {
     var committed: Double
     /// このコマで初めて入った指の出来事の時刻。
     var events: [Double]
-    /// 前のコマから位置が動いたか。
+    /// 前のコマから位置が動いたか（ジェスチャーを始める）。
     var moving: Bool
     var gesture: Int
     /// drawable の大きさが view の大きさ × 倍率と食い違っていた（伸びた絵の兆し）。
@@ -31,9 +33,16 @@ final class FrameRecorder {
   struct Gesture: Equatable, Sendable {
     var id: Int
     var latencies: [Double] = []
-    /// 位置が動いたコマが画面に出た時刻。
-    var presents: [Double] = []
+    /// 描いたコマが画面に出た時刻（出た順）。
+    var presents: [Present] = []
     var mismatches = 0
+  }
+
+  /// 画面に出たコマ 1 つ。
+  struct Present: Equatable, Sendable {
+    var time: Double
+    /// 前のコマとの間隔を落ちたコマとして数えるか（変化の無い刻みを挟めば、出来事が遅れていたときだけ数える）。
+    var counts: Bool
   }
 
   /// 要約（ms）。
@@ -76,8 +85,10 @@ final class FrameRecorder {
   private static let log = Logger(
     subsystem: Bundle.main.bundleIdentifier ?? "dev.orbe", category: "editor-frames")
 
-  private var pending: [Int: Drawn] = [:]
+  private var pending: [Int: (drawn: Drawn, counts: Bool)] = [:]
   private var current: Gesture?
+  /// 最後に描いてから、変化の無い刻みが初めて来た時刻。
+  private var idleSince: Double?
   /// 刻みの長さ（秒）。
   var period = 1.0 / 120
   /// 通算の値を溜めるか（計測のときだけ）。
@@ -91,11 +102,18 @@ final class FrameRecorder {
     drawnCount += 1
     if keepsTotals { totals.cpu.append(drawn.cpu) }
     if let current, current.id != drawn.gesture { flush() }
-    if drawn.moving || !drawn.events.isEmpty {
-      if current == nil { current = Gesture(id: drawn.gesture) }
-      if drawn.mismatch { current?.mismatches += 1 }
+    if current == nil, drawn.moving || !drawn.events.isEmpty {
+      current = Gesture(id: drawn.gesture)
     }
-    pending[drawn.frame] = drawn
+    if drawn.mismatch, current != nil { current?.mismatches += 1 }
+    let counts = idleSince.map { idle in drawn.events.contains { $0 < idle } } ?? true
+    pending[drawn.frame] = (drawn, counts)
+    idleSince = nil
+  }
+
+  /// 描くものが変わらない刻みが来た（`time` はその刻みが材料と位置を読んだ時刻）。
+  func idle(at time: Double) {
+    if idleSince == nil { idleSince = time }
   }
 
   func resetTotals() { totals = Totals() }
@@ -106,7 +124,7 @@ final class FrameRecorder {
 
   /// コマが画面に出た（`time` が nil なら出ずに捨てられた）。
   func presented(frame: Int, time: Double?) {
-    guard let record = pending.removeValue(forKey: frame), let time else { return }
+    guard let (record, counts) = pending.removeValue(forKey: frame), let time else { return }
     if keepsTotals {
       if record.committed > record.target - Self.commitMargin {
         totals.lateCommits += 1
@@ -116,7 +134,7 @@ final class FrameRecorder {
     }
     guard current?.id == record.gesture else { return }
     current?.latencies.append(contentsOf: record.events.map { time - $0 })
-    if record.moving { current?.presents.append(time) }
+    current?.presents.append(Present(time: time, counts: counts))
   }
 
   /// 今のジェスチャーを締めて要約を出す。
@@ -138,14 +156,17 @@ final class FrameRecorder {
       latencies.isEmpty
         ? 0 : latencies[min(latencies.count - 1, Int(Double(latencies.count) * q))] * 1000
     }
-    let presents = gesture.presents.sorted()
+    let presents = gesture.presents
     var drops = 0
     var dropped = 0.0
-    for (a, b) in zip(presents, presents.dropFirst()) where b - a > 1.5 * period {
+    var span = 0.0
+    for (a, b) in zip(presents, presents.dropFirst()) where b.counts {
+      let interval = b.time - a.time
+      span += interval
+      guard interval > 1.5 * period else { continue }
       drops += 1
-      dropped += b - a - period
+      dropped += interval - period
     }
-    let span = (presents.last ?? 0) - (presents.first ?? 0)
     return Summary(
       latencyMedian: quantile(0.5), latencyP95: quantile(0.95),
       latencyMax: (latencies.last ?? 0) * 1000, frames: presents.count, drops: drops,
