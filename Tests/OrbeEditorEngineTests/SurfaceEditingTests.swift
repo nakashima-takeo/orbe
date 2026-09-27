@@ -164,20 +164,37 @@ final class SurfaceEditingTests: EngineTestCase {
   }
 
   /// 1 打鍵は 1 つの取引——セレクタが 2 つ届く ⌥↓（moveForward: と moveToEndOfParagraph:）でも材料の箱へは 1 回だけ
-  /// 書き、途中の位置（1 字進んだだけのキャレット）のコマは出ない。打鍵の時刻は 1 つだけ添える。
+  /// 書き、途中の位置（1 字進んだだけのキャレット）のコマは出ない。打鍵の時刻は出来事の時刻を 1 つだけ添える。
   func testAKeystrokeIsOneTransaction() throws {
     let opened = try open("abc\ndef\n")
     _ = host(opened)
     _ = opened.surface.material.take()
     let before = opened.surface.material.revision
+    let down: TimeInterval = 100
     try key(
-      opened, String(UnicodeScalar(NSDownArrowFunctionKey)!), [.option, .function], keyCode: 125)
+      opened, String(UnicodeScalar(NSDownArrowFunctionKey)!), [.option, .function], keyCode: 125,
+      timestamp: down)
     XCTAssertEqual(opened.surface.caretLocation, 3)
     XCTAssertEqual(opened.surface.material.revision, before + 1)
-    try key(opened, "x")
+    let typed: TimeInterval = 100.25
+    try key(opened, "x", timestamp: typed)
     let material = opened.surface.material.take()
-    XCTAssertEqual(material.keystrokes.count, 2, "打鍵ごとに 1 つ（移動の打鍵も打鍵→画面の遅れに数える）")
+    XCTAssertEqual(material.keystrokes, [down, typed], "打鍵ごとに出来事の時刻（移動の打鍵も打鍵→画面の遅れに数える）")
     XCTAssertEqual(text(opened.document), "abcx\ndef\n")
+  }
+
+  /// 編集の後に移動が続く打鍵（⌃O は insertNewlineIgnoringFieldEditor: と moveBackward:）も 1 つの取引——後のセレクタは
+  /// 同じ打鍵で変わった本文の上で動き、材料の箱へは 1 回だけ書く（改行だけ入ってキャレットが次の行にあるコマは出ない）。
+  func testAKeystrokeThatEditsThenMovesIsOneTransaction() throws {
+    let opened = try open("abc\n")
+    _ = host(opened)
+    opened.surface.selectedRange = NSRange(location: 2, length: 0)
+    let before = opened.surface.material.revision
+    try key(opened, "o", .control, keyCode: 31)
+    XCTAssertEqual(text(opened.document), "ab\nc\n")
+    XCTAssertEqual(opened.surface.caretLocation, 2, "改行の前に残る")
+    XCTAssertEqual(opened.surface.material.revision, before + 1)
+    XCTAssertEqual(opened.surface.material.read().caret.carets, [2])
   }
 
   /// 取引は材料の版を先に決め、見せ方の位置をその版に結んでから材料を書く——材料を書く時点で位置は置いてあり、描画

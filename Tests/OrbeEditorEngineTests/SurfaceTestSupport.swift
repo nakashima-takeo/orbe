@@ -23,11 +23,13 @@ extension EngineTestCase {
 
   /// 打鍵（macOS のキー割り当てを通る）。`characters` は字、または矢印などの機能キーの字（`NSUpArrowFunctionKey` など）。
   func key(
-    _ opened: Opened, _ characters: String, _ flags: NSEvent.ModifierFlags = [], keyCode: UInt16 = 0
+    _ opened: Opened, _ characters: String, _ flags: NSEvent.ModifierFlags = [],
+    keyCode: UInt16 = 0,
+    timestamp: TimeInterval = CACurrentMediaTime()
   ) throws {
     let event = try XCTUnwrap(
       NSEvent.keyEvent(
-        with: .keyDown, location: .zero, modifierFlags: flags, timestamp: CACurrentMediaTime(),
+        with: .keyDown, location: .zero, modifierFlags: flags, timestamp: timestamp,
         windowNumber: opened.surface.view.window?.windowNumber ?? 0, context: nil,
         characters: characters, charactersIgnoringModifiers: characters, isARepeat: false,
         keyCode: keyCode))
