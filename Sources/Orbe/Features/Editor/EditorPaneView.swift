@@ -326,7 +326,7 @@ final class EditorPaneView: NSView {
     } else {
       closeSearch()
     }
-    appKitOverview.bind(document?.surface is OverviewDrawingSurface ? nil : document)
+    appKitOverview.bind(overviewSurface == nil ? document : nil)
     search.bind(document)
     occurrences.bind(document)
     if let document { projectSearch.documentDidShow(document) }

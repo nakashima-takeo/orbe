@@ -164,7 +164,8 @@ public struct TextViewport: Equatable, Sendable {
 @MainActor
 public protocol OverviewDrawingSurface: TextSurface {
   /// 右列（ミニマップ＋縦スクロールバー）の幅（pt）。本文の座標ではなく view の配置の事実で、view の幅と行番号の列の桁で
-  /// 変わる（変わりうるのは大きさ・見えている範囲・本文が変わったとき）。載せる側が浮かべる部品を置くためだけに使う。
+  /// 変わる。載せる側は大きさを変えたときと見えている範囲の知らせで読み直す（本文の変化の知らせの中では変化の前の幅を
+  /// 答える）。載せる側が浮かべる部品を置くためだけに使う。
   var rightColumnWidth: CGFloat { get }
 }
 
