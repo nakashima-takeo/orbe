@@ -33,8 +33,8 @@ struct ShapedLine {
 /// 同じ）。1 行で描くのは `limit` 単位まで（書記素の境で切る）で、残りは描かない。
 enum LineShaper {
   static let limit = 10_000
-  /// 書記素の境を探すために、上限より余分に読む単位の数。
-  private static let lookahead = Grapheme.reach
+  /// 描きうる先頭として読む単位の数（書記素の境を探すために、上限より余分に読む）。
+  static let headLimit = limit + Grapheme.reach
 
   /// 行の中身のうち描きうる先頭（上限と余分まで）と、行の長さ（行末の改行と `\r` を除く）。長い行でも読むのは先頭だけ。
   struct Source: Hashable {
@@ -48,7 +48,7 @@ enum LineShaper {
     var end = row + 1 < text.lineCount ? text.lineStart(row + 1) - 1 : text.length
     if end > start, text.units(in: NSRange(location: end - 1, length: 1)).first == 0x0D { end -= 1 }
     let head = text.units(
-      in: NSRange(location: start, length: min(end - start, limit + lookahead)))
+      in: NSRange(location: start, length: min(end - start, headLimit)))
     return (Source(head: head, length: end - start), start)
   }
 

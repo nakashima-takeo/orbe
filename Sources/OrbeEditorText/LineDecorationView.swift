@@ -37,25 +37,34 @@ final class LineDecorationView: NSView {
     let lines = geometry.lines(in: bounds)
     guard !lines.isEmpty else { return }
     let cell = textView.font.cellWidth
-    for line in lines {
-      drawIndentGuides(line, geometry: geometry, cell: cell)
+    for (line, level) in zip(lines, indentLevels(lines, geometry: geometry)) {
+      drawIndentGuides(line, level: level, geometry: geometry, cell: cell)
       drawWhitespace(line, geometry: geometry)
       drawLinks(line, geometry: geometry)
     }
   }
 
+  /// 見えている段落（続いた並び）のインデント線の段の数。空白だけの段落の規則は `IndentGuides.levels` で、並びの外の
+  /// 非空行は端の段落が空白だけのときだけ探す。
+  private func indentLevels(_ lines: [VisibleLine], geometry: VisibleLines) -> [Int] {
+    let level = { (text: String) in
+      IndentGuides.boundaries(of: text[...], unit: self.indentUnit).count
+    }
+    let own = lines.map { IndentGuides.isBlank($0.text[...]) ? nil : level($0.text) }
+    let outside = { (line: VisibleLine?, forward: Bool) -> Int? in
+      guard let line, IndentGuides.isBlank(line.text[...]) else { return nil }
+      return geometry.neighbourNonBlank(of: line, forward: forward).map(level)
+    }
+    return IndentGuides.levels(
+      own, above: outside(lines.first, false), below: outside(lines.last, true))
+  }
+
   /// 段 k の線は行頭から k 単位ぶんの空白の直後の文字の左端に立つ。空白だけの行は隣の非空行の浅い方の段まで、
   /// 桁幅から求めた位置に立つ。
-  private func drawIndentGuides(_ line: VisibleLine, geometry: VisibleLines, cell: CGFloat) {
-    let text = line.text[...]
-    let boundaries = IndentGuides.boundaries(of: text, unit: indentUnit)
-    let level =
-      IndentGuides.isBlank(text)
-      ? IndentGuides.level(
-        of: text, unit: indentUnit,
-        previousNonBlank: geometry.neighbourNonBlank(of: line, forward: false)?[...],
-        nextNonBlank: geometry.neighbourNonBlank(of: line, forward: true)?[...])
-      : boundaries.count
+  private func drawIndentGuides(
+    _ line: VisibleLine, level: Int, geometry: VisibleLines, cell: CGFloat
+  ) {
+    let boundaries = IndentGuides.boundaries(of: line.text[...], unit: indentUnit)
     guard level > 0, let row = line.rows.first else { return }
     style.indentGuideColor.setFill()
     for k in 0..<level {

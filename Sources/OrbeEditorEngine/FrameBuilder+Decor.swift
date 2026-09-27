@@ -93,46 +93,119 @@ extension FrameBuilder {
     }
   }
 
-  /// 見えている行（`laid` は `first` 行目から順）のインデント線の段の数。空白だけの行は前後の非空行の浅い方（片側が
-  /// 無ければ 0）で、見えている範囲の外の非空行は上下の端から 1 回ずつ探す（空行の並びで共有する）。
-  static func indentLevels(
-    _ laid: [LaidOutLine], first: Int, text: TextRope, unit: Int
-  ) -> [Int] {
+  /// 見えている行（`laid` は `first` 行目から順）のインデント線の段の数。規則は `IndentGuides.levels` で、見えている
+  /// 範囲の外の非空行の段は、端の行が空白だけのときだけ、覚えた空行の塊から引く。
+  func indentLevels(_ laid: [LaidOutLine], first: Int, content: SurfaceContent, unit: Int) -> [Int]
+  {
     let levels = laid.map { $0.decor.blank ? nil : $0.decor.boundaries.count }
-    guard levels.contains(where: { $0 == nil }) else { return levels.map { $0 ?? 0 } }
-    var above: [Int?] = []
-    var previous = nonBlankLevel(from: first - 1, step: -1, text: text, unit: unit)
-    for level in levels {
-      above.append(previous)
-      if let level { previous = level }
+    let edge = { (index: Int?, row: Int) -> BlankBlocks.Around? in
+      guard let index, levels[index] == nil else { return nil }
+      return self.blankBlocks.around(row, in: content.text, version: content.version, unit: unit)
     }
-    var below = [Int?](repeating: nil, count: levels.count)
-    var next = nonBlankLevel(from: first + levels.count, step: 1, text: text, unit: unit)
-    for index in levels.indices.reversed() {
-      below[index] = next
-      if let level = levels[index] { next = level }
-    }
-    return levels.indices.map { index in
-      if let level = levels[index] { return level }
-      guard let up = above[index], let down = below[index] else { return 0 }
-      return min(up, down)
-    }
+    let top = edge(levels.indices.first, first)
+    let bottom = edge(levels.indices.last, first + levels.count - 1)
+    return IndentGuides.levels(levels, above: top?.above, below: bottom?.below)
+  }
+}
+
+/// 空白だけの行（`LineDecor.blank` と同じ判定——行の中身が描きうる先頭に収まり、スペース・タブ・CR だけ）の塊の端と、
+/// その上下の外の非空行の段を、本文の版とインデントの単位ごとに覚える（最近の 2 つ）。空行が長く続く文書でも、塊を
+/// 歩くのは版が変わったときだけで、歩くときも単位を塊ごとに読む。
+final class BlankBlocks {
+  /// 塊の上下の外で最も近い非空行の段（無ければ nil）。
+  struct Around {
+    var above: Int?
+    var below: Int?
   }
 
-  /// `row` から `step` の向きへ最初の空白だけでない行の段の数（無ければ nil）。行頭の空白だけを読む。
-  private static func nonBlankLevel(from row: Int, step: Int, text: TextRope, unit: Int) -> Int? {
-    var row = row
-    while row >= 0, row < text.lineCount {
-      let start = text.lineStart(row)
-      let end = text.lineEnd(row)
-      let units = text.units(in: NSRange(location: start, length: min(end - start, 4096)))
-      let first = units.firstIndex { $0 != 0x20 && $0 != 0x09 && $0 != 0x0D && $0 != 0x0A }
-      if first != nil || units.count < end - start {
-        let leading = String(decoding: units[..<(first ?? units.count)], as: UTF16.self)
-        return IndentGuides.boundaries(of: (leading + "x")[...], unit: unit).count
-      }
-      row += step
+  private struct Block {
+    var rows: ClosedRange<Int>
+    var around: Around
+  }
+
+  private var version: Int?
+  private var unit: Int?
+  private var blocks: [Block] = []
+  /// 1 回に読む単位の数。
+  private static let stride = 4096
+
+  /// 空白だけの行 `row` を含む塊の、上下の外の非空行の段。
+  func around(_ row: Int, in text: TextRope, version: Int, unit: Int) -> Around {
+    if version != self.version || unit != self.unit {
+      blocks.removeAll()
+      self.version = version
+      self.unit = unit
     }
-    return nil
+    if let block = blocks.first(where: { $0.rows.contains(row) }) { return block.around }
+    let above = Self.nonBlankAbove(row, in: text)
+    let below = Self.nonBlankBelow(row, in: text)
+    let level = { (row: Int) in
+      let head = LineShaper.source(row: row, in: text).source.head
+      return IndentGuides.boundaries(of: String(decoding: head, as: UTF16.self)[...], unit: unit)
+        .count
+    }
+    let block = Block(
+      rows: (above.map { $0 + 1 } ?? 0)...(below.map { $0 - 1 } ?? text.lineCount - 1),
+      around: Around(above: above.map(level), below: below.map(level)))
+    blocks = [block] + blocks.prefix(1)
+    return block.around
+  }
+
+  /// 空白だけの中身の長さ `length`（行末の改行と `\r` を除く）が描きうる先頭に収まる——収まらない行は空白だけの行と
+  /// 見なさない（`LineDecor.blank` と同じ）。
+  private static func fits(_ length: Int) -> Bool { length <= LineShaper.headLimit }
+
+  /// 空白だけの行 `row` より下で最も近い、空白だけでない行（無ければ nil）。
+  private static func nonBlankBelow(_ row: Int, in text: TextRope) -> Int? {
+    var current = row + 1
+    guard current < text.lineCount else { return nil }
+    var offset = text.lineStart(current)
+    var lineStart = offset
+    var previous: UInt16 = 0
+    while offset < text.length {
+      for unit in text.units(in: NSRange(location: offset, length: stride)) {
+        if unit == 0x0A {
+          let length = offset - lineStart - (offset > lineStart && previous == 0x0D ? 1 : 0)
+          guard fits(length) else { return current }
+          current += 1
+          lineStart = offset + 1
+        } else if !IndentGuides.isBlank(unit: unit) {
+          return current
+        }
+        previous = unit
+        offset += 1
+      }
+    }
+    let length = offset - lineStart - (offset > lineStart && previous == 0x0D ? 1 : 0)
+    return fits(length) ? nil : current
+  }
+
+  /// 空白だけの行 `row` より上で最も近い、空白だけでない行（無ければ nil）。
+  private static func nonBlankAbove(_ row: Int, in text: TextRope) -> Int? {
+    var current = row - 1
+    guard current >= 0 else { return nil }
+    var lineEnd = text.lineStart(row) - 1
+    var offset = lineEnd
+    var last: UInt16?
+    while true {
+      let from = max(0, offset - stride)
+      let units = text.units(in: NSRange(location: from, length: offset - from))
+      for unit in units.reversed() {
+        offset -= 1
+        if unit == 0x0A {
+          let length = lineEnd - offset - 1 - (last == 0x0D ? 1 : 0)
+          guard fits(length) else { return current }
+          current -= 1
+          lineEnd = offset
+          last = nil
+        } else if !IndentGuides.isBlank(unit: unit) {
+          return current
+        } else if last == nil {
+          last = unit
+        }
+      }
+      guard offset > 0 else { break }
+    }
+    return fits(lineEnd - (last == 0x0D ? 1 : 0)) ? nil : current
   }
 }

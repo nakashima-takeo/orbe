@@ -62,20 +62,19 @@ final class DecorTests: XCTestCase {
     XCTAssertEqual(IndentGuides.boundaries(of: "  \tx", unit: 4), [3], "タブは次の段の境まで")
     XCTAssertEqual(IndentGuides.boundaries(of: "x", unit: 4), [])
     XCTAssertEqual(IndentGuides.boundaries(of: "", unit: 4), [])
-    XCTAssertEqual(
-      IndentGuides.level(of: "    x", unit: 2, previousNonBlank: nil, nextNonBlank: nil), 2)
+    XCTAssertTrue(IndentGuides.isBlank("  \t\r"), "スペース・タブ・CR だけの行は空白だけの行")
+    XCTAssertFalse(IndentGuides.isBlank("  x"))
   }
 
+  /// 空白だけの行は前後の非空行の浅い方——並びの中の非空行でも、並びの外の段でも。片側が無ければ 0。
   func testBlankLinesTakeTheShallowerNeighbour() {
-    XCTAssertEqual(
-      IndentGuides.level(of: "", unit: 2, previousNonBlank: "    a", nextNonBlank: "  b"), 1)
-    XCTAssertEqual(
-      IndentGuides.level(of: "  \r", unit: 2, previousNonBlank: "  a", nextNonBlank: "      b"), 1,
-      "空白だけの行も空行")
-    XCTAssertEqual(
-      IndentGuides.level(of: "", unit: 2, previousNonBlank: "    a", nextNonBlank: nil), 0)
-    XCTAssertEqual(
-      IndentGuides.level(of: "", unit: 2, previousNonBlank: nil, nextNonBlank: "  a"), 0)
+    XCTAssertEqual(IndentGuides.levels([2, nil, nil, 1], above: nil, below: nil), [2, 1, 1, 1])
+    XCTAssertEqual(IndentGuides.levels([nil, 3], above: 2, below: nil), [2, 3], "上は並びの外")
+    XCTAssertEqual(IndentGuides.levels([1, nil], above: nil, below: 4), [1, 1], "下は並びの外")
+    XCTAssertEqual(IndentGuides.levels([nil, nil], above: 2, below: 3), [2, 2], "全部が空行")
+    XCTAssertEqual(IndentGuides.levels([nil, 2], above: nil, below: nil), [0, 2], "上に非空行が無い")
+    XCTAssertEqual(IndentGuides.levels([2, nil], above: 5, below: nil), [2, 0], "下に非空行が無い")
+    XCTAssertEqual(IndentGuides.levels([], above: 1, below: 1), [])
   }
 
   // MARK: - 空白

@@ -49,6 +49,8 @@ final class FrameBuilder {
   var overviewShapes: [ShapeInstance] = []
   /// スクロールバーの印の縦の区間（元が変わったときだけ作り直す）。
   var rulerSpans = RulerSpans()
+  /// インデント線の段を決める空行の塊（版が変わったときだけ歩く）。
+  let blankBlocks = BlankBlocks()
 
   /// GPU の buffer に要る大きさ（配列ごとに 256 バイトに揃える）。
   var byteCount: Int {
@@ -163,8 +165,7 @@ final class FrameBuilder {
     let baseline = (Double(config.baseline) * s).rounded()
     let numberFont = fonts.id(config.gutterFont)
     let rows = layRows(first...last, source, text: content.text, cache: cache, fonts: fonts)
-    let levels = Self.indentLevels(
-      rows.map(\.laid), first: first, text: content.text, unit: tabColumns)
+    let levels = indentLevels(rows.map(\.laid), first: first, content: content, unit: tabColumns)
     for (index, item) in rows.enumerated() {
       let top = g.rowTop(item.row)
       let visible = visibleGlyphs(item.laid, c)

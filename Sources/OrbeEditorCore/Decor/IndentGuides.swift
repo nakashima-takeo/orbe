@@ -22,19 +22,33 @@ public enum IndentGuides {
     return result
   }
 
-  /// 段の数。空白だけの行は隣の非空行の浅い方。
-  public static func level(
-    of line: Substring, unit: Int, previousNonBlank: Substring?, nextNonBlank: Substring?
-  ) -> Int {
-    guard isBlank(line) else { return boundaries(of: line, unit: unit).count }
-    guard let previousNonBlank, let nextNonBlank else { return 0 }
-    return min(
-      boundaries(of: previousNonBlank, unit: unit).count,
-      boundaries(of: nextNonBlank, unit: unit).count)
+  /// 続いた行の並びの、各行の線の段の数。`levels` は行ごとの段（空白だけの行は nil）、`above`・`below` は並びの外で
+  /// 前後に最も近い非空行の段（無ければ nil）。空白だけの行は前後の非空行の浅い方で、片側が無ければ 0。
+  public static func levels(_ levels: [Int?], above: Int?, below: Int?) -> [Int] {
+    var following = [Int?](repeating: nil, count: levels.count)
+    var next = below
+    for index in levels.indices.reversed() {
+      following[index] = next
+      if let level = levels[index] { next = level }
+    }
+    var previous = above
+    return levels.indices.map { index in
+      if let level = levels[index] {
+        previous = level
+        return level
+      }
+      guard let up = previous, let down = following[index] else { return 0 }
+      return min(up, down)
+    }
   }
 
   /// 空白（スペース・タブ・CR）だけの行。
   public static func isBlank(_ line: Substring) -> Bool {
-    line.utf8.allSatisfy { $0 == 0x20 || $0 == 0x09 || $0 == 0x0D }
+    line.utf16.allSatisfy(isBlank(unit:))
+  }
+
+  /// 空白だけの行を成す UTF-16 単位（スペース・タブ・CR）。
+  public static func isBlank(unit: UInt16) -> Bool {
+    unit == 0x20 || unit == 0x09 || unit == 0x0D
   }
 }
