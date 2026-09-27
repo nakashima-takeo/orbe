@@ -53,6 +53,8 @@ final class OutlineListView: NSView {
     guard let window, window.makeFirstResponder(field.textField),
       let editor = field.textField.currentEditor()
     else { return }
+    // 焦点を得た入力欄は字を全部選ぶので、キャレットを末尾に置いてから渡す（打った字で絞り込みを置き換えない）。
+    editor.selectedRange = NSRange(location: (editor.string as NSString).length, length: 0)
     editor.keyDown(with: event)
   }
 

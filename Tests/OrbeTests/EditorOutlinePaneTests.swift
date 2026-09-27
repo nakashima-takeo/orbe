@@ -330,6 +330,21 @@ final class EditorOutlinePaneTests: OrbeTestCase {
       NSRange(location: offset(hosted, of: "flush"), length: 0), "Enter で一致へ飛ぶ")
   }
 
+  /// 絞り込み中に列から打った字は、入力欄の字の後ろに足す（焦点を得た入力欄の全選択で置き換えない）。
+  func testTypingInTheListWhileFilteringAppendsToTheFilter() throws {
+    let hosted = try host()
+    openOutline(hosted)
+    let container = hosted.pane.outlineList
+    let list = container.scrollView.list
+    hosted.window.makeFirstResponder(list)
+    list.keyDown(with: .key("f", []))
+    XCTAssertEqual(container.field.text, "f")
+
+    hosted.window.makeFirstResponder(list)
+    list.keyDown(with: .key("l", []))
+    XCTAssertEqual(container.field.text, "fl")
+  }
+
   /// 絞り込んでいる間は全部を開いた状態から始まる別の畳みを使い、畳んだ親の下の一致も見える。解けば元の畳みに戻る。
   func testFilteringOpensFoldsOnlyWhileFiltering() throws {
     let hosted = try host()
