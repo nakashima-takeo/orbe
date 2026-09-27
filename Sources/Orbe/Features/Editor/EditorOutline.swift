@@ -157,7 +157,7 @@ final class EditorOutline {
 
   /// 見えている行を数え直す（畳んだ鍵を今の結果の番号へ引き直す）。
   private func reindex() {
-    guard let outline, let document else {
+    guard let outline, document != nil else {
       rows = .empty
       publishRows()
       return

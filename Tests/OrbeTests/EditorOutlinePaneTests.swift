@@ -13,7 +13,7 @@ import XCTest
 /// 本文へ奪われて ↑↓ で渡り歩けない・違う行へ飛ぶ。キャレットを動かしても光る行が変わらない。打った最初の字が落ちる。
 @MainActor
 final class EditorOutlinePaneTests: OrbeTestCase {
-  static let source = """
+  nonisolated static let source = """
     // header
     class Channel {
       var buffer = 0

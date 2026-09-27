@@ -15,7 +15,7 @@ final class EditorDocumentOutlineTests: XCTestCase {
   private let registry = LanguageRegistry(queriesRoot: Queries.root)
   private var root: URL!
 
-  private static let source = """
+  private nonisolated static let source = """
     class Box {
       var width = 1
       func grow(by amount: Int) {
@@ -283,7 +283,7 @@ final class EditorDocumentOutlineTests: XCTestCase {
       document.wantsOutline = true
       XCTAssertTrue(document.waitUntilCaughtUp())
       document.releaseParts = { parcel in
-        weak var worker = parcel.withLock { $0?.outline.worker }
+        weak let worker = parcel.withLock { $0?.outline.worker }
         let saw =
           worker != nil && parcel.withLock { $0?.outline.retired.outlines.isEmpty == false }
         DispatchQueue.global().sync { parcel.withLock { $0 = nil } }
