@@ -16,6 +16,11 @@ final class SyntaxTree {
 
   var root: TSNode { ts_tree_root_node(raw) }
 
+  /// 別のスレッドで読むための写し（`ts_tree_copy`。部分木を共有し、この木に後から編集を当てても写しは変わらない）。
+  func copy() -> TreeCopy {
+    TreeCopy(tree: SyntaxTree(ts_tree_copy(raw)))
+  }
+
   /// 構文の誤り（ERROR・MISSING）を含むか。
   var hasError: Bool { ts_node_has_error(root) }
 
@@ -53,7 +58,13 @@ final class SyntaxTree {
   }
 }
 
-/// 文書を閉じた印。閉じた文書の構文の裏の仕事は、走っている解析を打ち切って止まる。
+/// 構文木の写し。持ち主は 1 つだけで、持ち主が自分のスレッドで読み、手放す。
+struct TreeCopy: @unchecked Sendable {
+  let tree: SyntaxTree
+}
+
+/// 打ち切りの印。構文の裏の仕事では文書を閉じた印で、走っている解析を打ち切って止まる。アウトラインの裏の仕事では
+/// 取り出し 1 回ごとの印で、新しい写しが届くか文書を閉じたら、走っている問い合わせを打ち切る。
 final class SyntaxCancellation: Sendable {
   private let cancelled = OSAllocatedUnfairLock(initialState: false)
 

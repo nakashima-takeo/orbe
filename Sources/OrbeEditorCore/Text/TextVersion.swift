@@ -78,6 +78,16 @@ public struct EditLog: Sendable {
     return edits[(version - oldest)...]
   }
 
+  /// 版 `version` の本文の位置を今の版へ写す（`TextEdit.map`）。記録を既に捨てた版なら nil。
+  public func map(_ offset: Int, from version: Int, bias: TextEdit.Bias) -> Int? {
+    edits(since: version)?.reduce(offset) { $1.edit.map($0, bias: bias) }
+  }
+
+  /// 今の版の位置を版 `version` の本文へ戻す（`TextEdit.unmap`）。記録を既に捨てた版なら nil。
+  public func unmap(_ offset: Int, to version: Int) -> Int? {
+    edits(since: version)?.reversed().reduce(offset) { $1.edit.unmap($0) }
+  }
+
   /// 版 `version` までの編集を捨てる（その版より古い結果をもう待たない）。
   public mutating func discard(through version: Int) {
     let oldest = self.version - edits.count
