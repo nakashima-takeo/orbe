@@ -162,14 +162,17 @@ struct PixelShot {
 
 @MainActor
 extension EngineTestCase {
-  /// 出す前の状態を出し、黒い不透明な地に今の位置の 1 コマを描いて撮る。
-  func pixelShot(_ opened: Opened) throws -> PixelShot {
+  /// 出す前の状態を出し、不透明な地（既定は黒）に今の位置の 1 コマを描いて撮る。
+  func pixelShot(
+    _ opened: Opened, background: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+  ) throws -> PixelShot {
     let id = opened.surface.id
-    let black = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
     opened.surface.flush()
     let image = try XCTUnwrap(
-      RenderThread.shared.performAndWait { Transfer(value: $0.snapshot(id, background: black)) }
-        .value)
+      RenderThread.shared.performAndWait {
+        Transfer(value: $0.snapshot(id, background: background))
+      }
+      .value)
     return PixelShot(bytes: GlyphPixelTests.pixels(image), width: image.width, height: image.height)
   }
 }
