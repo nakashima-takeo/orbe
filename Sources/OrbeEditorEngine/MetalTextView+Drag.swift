@@ -79,14 +79,20 @@ extension MetalTextView: NSDraggingSource {
   }
 
   /// 落とす位置の印を置き、端の帯の中なら自動でスクロールする（AppKit が周期で呼ぶ）。スクロールと印は 1 つの取引で置き、
-  /// 当たりは取引の中で置いた位置で取る。
+  /// 当たりは取引の中で置いた位置で取る。右列（ミニマップと縦スクロールバー）の上は本文の外として扱い、送らず、戻ったとき
+  /// 上にいた時間ぶん跳ばない。本文に重なる横スクロールバーの上は、落とさないが帯の中なら送る。
   override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
     guard let surface else { return [] }
     var operation: NSDragOperation = []
     surface.input {
       let point = convert(sender.draggingLocation, from: nil)
-      guard overview.area(at: point) == nil else { return showDrop(nil) }
-      autoscrollDrop(at: point)
+      let area = overview.area(at: point)
+      if area == .minimap || area == .vertical {
+        dropScrollTime = nil
+      } else {
+        autoscrollDrop(at: point)
+      }
+      guard area == nil else { return showDrop(nil) }
       let drop = dropPlan(sender)
       showDrop(drop.indicator)
       operation = drop.operation

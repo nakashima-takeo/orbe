@@ -95,6 +95,38 @@ final class SurfaceOverviewTests: EngineTestCase {
       "横に続かなければ横スクロールバーは無い（本文として押せる）")
   }
 
+  /// 落とすドラッグは、本文に重なる下端の横スクロールバーの上でも帯の中なら自動でスクロールし、右列の上では送らず、右列
+  /// から帯へ戻った最初の出来事は時刻を取るだけ（右列の上にいた時間ぶん跳ばない）。
+  func testDropAutoscrollRunsOverTheHorizontalBarButNotOverTheRightColumn() throws {
+    let opened = try hosted(rows(400, width: 400))
+    let view = opened.surface.textView
+    let layout = opened.surface.surfaceLayout
+    let board = NSPasteboard(name: NSPasteboard.Name("dev.orbe.test.\(UUID().uuidString)"))
+    addTeardownBlock { board.releaseGlobally() }
+    board.clearContents()
+    board.setString("x", forType: .string)
+    let bar = layout.horizontalScrollbar
+    let onBar = CGPoint(x: bar.minX + 100, y: bar.midY)
+    XCTAssertEqual(view.overview.area(at: onBar), .horizontal, "前提: 下端の帯の中の横スクロールバー")
+    let drag = FakeDraggingInfo(at: view.convert(onBar, to: nil), pasteboard: board)
+    _ = view.draggingEntered(drag)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    _ = view.draggingUpdated(drag)
+    XCTAssertGreaterThan(opened.surface.scrollPosition.y, 0, "横スクロールバーの上でも送る")
+
+    drag.draggingLocation = view.convert(
+      CGPoint(x: layout.minimap.midX, y: bar.midY), to: nil)
+    let before = opened.surface.scrollPosition.y
+    _ = view.draggingUpdated(drag)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+    _ = view.draggingUpdated(drag)
+    XCTAssertEqual(opened.surface.scrollPosition.y, before, "右列の上では送らない")
+    drag.draggingLocation = view.convert(onBar, to: nil)
+    _ = view.draggingUpdated(drag)
+    XCTAssertEqual(opened.surface.scrollPosition.y, before, "戻った最初の出来事は時刻を取るだけ")
+    view.draggingExited(drag)
+  }
+
   /// 本体の上にポインタがあるとつまみが見え、ミニマップの上なら帯が見える。俯瞰の上のポインタは矢印。
   func testHoveringShowsTheThumbAndTheSlider() throws {
     let opened = try hosted(rows(2000))
