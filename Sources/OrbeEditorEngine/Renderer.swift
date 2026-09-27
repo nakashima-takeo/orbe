@@ -1,6 +1,8 @@
 import AppKit
 import Metal
+import OrbeEditorCore
 import QuartzCore
+import os
 
 /// 1 コマを組み立てて Metal へ符号化し、画面（または画面外）へ出す。描画スレッドだけが触る。
 ///
@@ -44,11 +46,10 @@ final class Renderer {
   // MARK: - 面の出入り
 
   func attach(
-    id: Int, material: MaterialBox, scroll: ScrollBox, config: SurfaceConfig,
-    notify: @escaping @Sendable () -> Void
+    id: Int, boxes: SurfaceBoxes, config: SurfaceConfig, notify: @escaping @Sendable () -> Void
   ) {
     slots[id] = SurfaceSlot(
-      id: id, material: material, scroll: scroll, config: config, notify: notify)
+      id: id, boxes: boxes, config: config, device: device, notify: notify)
   }
 
   /// 面が閉じた。刻みを外し、組版のキャッシュと写しの最後の参照をここ（描画スレッド）で手放す。
@@ -122,8 +123,7 @@ final class Renderer {
     slot.recorder.period = clock.period
     adoptFramePeriod()
     let material = slot.material.take()
-    slot.lines.receive(material.rowEdits)
-    slot.keystrokes += material.keystrokes
+    slot.receive(material)
     guard material.visible, material.content != nil, material.palette != nil,
       material.size.width > 0, material.size.height > 0
     else {
@@ -166,15 +166,14 @@ final class Renderer {
     let revealed = begin(slot, material)
     let frame = slot.scroll.frame(at: target, material: material.revision)
     let texture = acquired.texture
-    slot.builder.build(
-      FrameBuilder.Source(
-        material: material, position: frame.position, caretVisible: caretVisible,
-        pixels: (texture.width, texture.height), atlas: pass.atlas, config: slot.config),
-      cache: slot.lines, fonts: fonts)
+    slot.build(
+      material, scroll: (frame.position, frame.limits), caretVisible: caretVisible,
+      target: ((texture.width, texture.height), pass.atlas), fonts: fonts)
     let widened = slot.scroll.measured(
       longestLine: slot.builder.longestLine, version: material.content?.version)
     guard let commands = queue.makeCommandBuffer(),
-      let bufferIndex = encode(slot.builder, into: texture, pass, commands)
+      let bufferIndex = encode(
+        slot.builder, into: texture, minimapPass(slot, material, pass), commands)
     else {
       slot.owed = true
       return
@@ -307,50 +306,4 @@ final class Renderer {
     )
   }
 
-}
-
-/// 面 1 つぶんの描画スレッドの持ち物。
-final class SurfaceSlot {
-  let id: Int
-  let material: MaterialBox
-  let scroll: ScrollBox
-  let config: SurfaceConfig
-  /// 描画スレッドだけが変える位置と範囲（端への戻り・組んだ行で伸びた横の範囲）が変わったことを main へ知らせる
-  /// （非同期）。
-  let notify: @Sendable () -> Void
-  var target: FrameTarget?
-  var clock: FrameClock?
-  let lines = LineLayoutCache()
-  let builder = FrameBuilder()
-  let recorder = FrameRecorder()
-  /// 出したコマのうち、まだ画面に出ていない（present も破棄もされていない）数。
-  var unpresented = 0
-  /// 上限で飛ばしたコマがある（画面に出たら次の刻みを待たずに描く）。
-  var owed = false
-  var idleTicks = 0
-  /// 最後に描いたコマの材料・スクロールの版と位置。
-  var drawnMaterial = -1
-  var drawnScroll = -1
-  var drawnPosition: SIMD2<Double>?
-  var returning = false
-  var drawnCaretVisible = false
-  /// アトラスが埋まって字を落としたコマを描いた（作り直してもう一度描く）。
-  var atlasDirty = false
-  /// 読んだ材料に入っていて、まだ描いていない打鍵の時刻。
-  var keystrokes: [Double] = []
-  /// 次に点滅が切り替わる時刻に起きるタイマー（止めている間だけ）。
-  var blinkTimer: CFRunLoopTimer?
-  /// 解いた横の「見えるところまで」の通し番号。
-  var revealed = 0
-
-  init(
-    id: Int, material: MaterialBox, scroll: ScrollBox, config: SurfaceConfig,
-    notify: @escaping @Sendable () -> Void
-  ) {
-    self.id = id
-    self.material = material
-    self.scroll = scroll
-    self.config = config
-    self.notify = notify
-  }
 }

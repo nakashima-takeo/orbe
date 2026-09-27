@@ -70,6 +70,7 @@ struct FramePalette: Equatable, Sendable {
   var selectionOccurrence: FrameColor
   var selectionOccurrenceInactive: FrameColor
   var wordOccurrence: FrameColor
+  var overview: OverviewPalette
 
   /// NSTextView の既定の未確定の地（外観で解く動的な色）。
   @MainActor private static let markedBackgroundColor =
@@ -103,5 +104,77 @@ struct FramePalette: Equatable, Sendable {
     selectionOccurrence = resolve(style.highlights.selectionOccurrence)
     selectionOccurrenceInactive = resolve(style.highlights.selectionOccurrenceInactive)
     wordOccurrence = resolve(style.highlights.wordOccurrence)
+    overview = OverviewPalette(style.overview, appearance: appearance, space: space)
+  }
+}
+
+/// 俯瞰の色（字を描かない図形の色なので、字の太らせの段は測らない）。α を半分にした色は、ミニマップの行の薄い地。
+struct OverviewPalette: Equatable, Sendable {
+  /// 外観が暗いか（ミニマップの字の明るさの係数）。
+  var dark: Bool
+  var minimapSlider: FrameColor
+  var minimapSliderHover: FrameColor
+  var minimapSliderActive: FrameColor
+  var minimapSelection: FrameColor
+  var minimapSelectionRow: FrameColor
+  var minimapFind: FrameColor
+  var minimapFindRow: FrameColor
+  var minimapWord: FrameColor
+  var minimapWordRow: FrameColor
+  var minimapAdded: FrameColor
+  var minimapModified: FrameColor
+  var minimapRemoved: FrameColor
+  var slider: FrameColor
+  var sliderHover: FrameColor
+  var sliderActive: FrameColor
+  var border: FrameColor
+  var rulerFind: FrameColor
+  var rulerWord: FrameColor
+  var rulerAdded: FrameColor
+  var rulerModified: FrameColor
+  var rulerRemoved: FrameColor
+  var rulerCaret: FrameColor
+  var topShadow: FrameColor
+  var minimapShadow: FrameColor
+
+  @MainActor
+  init(_ style: TextSurfaceStyle.Overview, appearance: NSAppearance, space: CGColorSpace) {
+    let resolve = {
+      FrameColor($0, appearance: appearance, space: space, fontSmoothing: false, scale: 1)
+    }
+    let half = { (color: NSColor) -> FrameColor in
+      var alpha: CGFloat = 1
+      appearance.performAsCurrentDrawingAppearance {
+        alpha = (color.usingColorSpace(.sRGB) ?? color).alphaComponent
+      }
+      return resolve(color.withAlphaComponent(alpha * 0.5))
+    }
+    dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    let minimap = style.minimap
+    minimapSlider = resolve(minimap.slider)
+    minimapSliderHover = resolve(minimap.sliderHover)
+    minimapSliderActive = resolve(minimap.sliderActive)
+    minimapSelection = resolve(minimap.selection)
+    minimapSelectionRow = half(minimap.selection)
+    minimapFind = resolve(minimap.findMatch)
+    minimapFindRow = half(minimap.findMatch)
+    minimapWord = resolve(minimap.wordOccurrence)
+    minimapWordRow = half(minimap.wordOccurrence)
+    minimapAdded = resolve(minimap.added)
+    minimapModified = resolve(minimap.modified)
+    minimapRemoved = resolve(minimap.removed)
+    let scrollbar = style.scrollbar
+    slider = resolve(scrollbar.slider)
+    sliderHover = resolve(scrollbar.sliderHover)
+    sliderActive = resolve(scrollbar.sliderActive)
+    border = resolve(scrollbar.border)
+    rulerFind = resolve(scrollbar.findMatch)
+    rulerWord = resolve(scrollbar.wordOccurrence)
+    rulerAdded = resolve(scrollbar.added)
+    rulerModified = resolve(scrollbar.modified)
+    rulerRemoved = resolve(scrollbar.removed)
+    rulerCaret = resolve(scrollbar.caret)
+    topShadow = resolve(style.topShadow)
+    minimapShadow = resolve(style.minimapShadow)
   }
 }

@@ -56,7 +56,7 @@ final class ScrolledFrameTests: EngineTestCase {
     opened.surface.scroll(toTop: text.lineStart(1), hiddenFraction: 0.5)
     let after = try shoot(opened)
     let shift = 27 * 2
-    let region = after.pixels(x: 0..<after.width, y: after.top..<after.height - shift)
+    let region = after.pixels(x: 0..<after.right, y: after.top..<after.height - shift)
     XCTAssertGreaterThan(region.ink(in: after), 1_000, "前提: 字と印が描かれている")
     let worst = region.worstDifference(after, before, dx: 0, dy: shift)
     XCTAssertEqual(worst, 0, "送った量だけ 3 つがそろって動く")

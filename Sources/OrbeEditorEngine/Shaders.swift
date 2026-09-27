@@ -75,5 +75,35 @@ enum Shaders {
       float a = clamp(0.5 - d, 0.0, 1.0) * in.color.a;
       return float4(in.color.rgb * a, a);
     }
+
+    // ミニマップの字: 字形の表の明度 × 明るさの係数（切り捨て）を α にした役割の色、全体に不透明度。
+    struct MinimapCell { uint packed; uint role; };
+    struct MinimapUniforms { float2 origin; float2 cell; float2 glyph; float ratio; float opacity; };
+    struct MinimapOut { float4 position [[position]]; float2 uv; uint role [[flat]]; };
+
+    vertex MinimapOut minimap_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
+                                     const device MinimapCell* cells [[buffer(0)]],
+                                     constant float2& viewport [[buffer(1)]],
+                                     constant MinimapUniforms& u [[buffer(2)]]) {
+      MinimapCell c = cells[iid];
+      float2 corner = float2(vid & 1, vid >> 1);
+      float2 at = float2(float(c.packed & 0xFFFFu), float((c.packed >> 16) & 0xFFu));
+      float2 px = u.origin + (at + corner) * u.cell;
+      MinimapOut out;
+      out.position = float4(px.x / viewport.x * 2 - 1, 1 - px.y / viewport.y * 2, 0, 1);
+      out.uv = float2(float(c.packed >> 24) * u.glyph.x, 0) + corner * u.glyph;
+      out.role = c.role;
+      return out;
+    }
+
+    fragment float4 minimap_fragment(MinimapOut in [[stage_in]], texture2d<float> sheet [[texture(0)]],
+                                     constant MinimapUniforms& u [[buffer(0)]],
+                                     constant uint* colors [[buffer(1)]]) {
+      constexpr sampler s(coord::pixel, filter::nearest);
+      float value = round(sheet.sample(s, in.uv).r * 255.0);
+      float a = floor(value * u.ratio + 0.001) / 255.0 * u.opacity;
+      float4 color = unpack_unorm4x8_to_float(colors[in.role]);
+      return float4(color.rgb * a, a);
+    }
     """
 }

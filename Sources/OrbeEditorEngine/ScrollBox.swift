@@ -10,6 +10,8 @@ final class ScrollBox: Sendable {
   /// 描画スレッドがコマの時刻で読んだもの。
   struct Frame: Sendable {
     var position: SIMD2<Double>
+    /// その位置の範囲（見せ続けている前の位置には、そのときの範囲）。
+    var limits: ScrollPhysics.Limits
     /// 描画スレッドだけが進める動き（戻り）の途中か。
     var returning: Bool
     /// このコマで初めて入った指の出来事の時刻。
@@ -31,6 +33,7 @@ final class ScrollBox: Sendable {
 
   private struct Held {
     var position: SIMD2<Double>
+    var limits: ScrollPhysics.Limits
     var until: Int
   }
 
@@ -74,7 +77,9 @@ final class ScrollBox: Sendable {
   private static func hold(_ s: inout State, until material: Int?) {
     guard let material else { return }
     let position = s.held?.position ?? s.physics.shown(at: CACurrentMediaTime())
-    s.held = Held(position: position, until: max(s.held?.until ?? material, material))
+    let limits = s.held?.limits ?? s.physics.limits
+    s.held = Held(
+      position: position, limits: limits, until: max(s.held?.until ?? material, material))
   }
 
   /// 描画スレッドが、取引の頼んだ区間を組んだ行の x（`x`）が横に見えるところまで最小限動かす。`lineWidth` はその行の幅
@@ -131,11 +136,17 @@ final class ScrollBox: Sendable {
       let events = s.pendingEvents
       s.pendingEvents.removeAll(keepingCapacity: true)
       var position = s.physics.shown(at: t)
+      var limits = s.physics.limits
       if let held = s.held {
-        if material >= held.until { s.held = nil } else { position = held.position }
+        if material >= held.until {
+          s.held = nil
+        } else {
+          position = held.position
+          limits = held.limits
+        }
       }
       return Frame(
-        position: position, returning: s.physics.isReturning, events: events,
+        position: position, limits: limits, returning: s.physics.isReturning, events: events,
         gesture: s.gesture, revision: s.revision)
     }
   }

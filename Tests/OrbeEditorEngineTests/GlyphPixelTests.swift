@@ -63,7 +63,8 @@ final class GlyphPixelTests: EngineTestCase {
         let name = "\(spaceName)-\(Int(scale))x-\(smoothing)"
         writePNG(metal, previewURL("glyphs-metal-\(name).png"))
         writePNG(reference, previewURL("glyphs-coretext-\(name).png"))
-        let difference = Self.compare(metal, reference)
+        let right = Int((opened.surface.surfaceLayout.text.maxX * scale).rounded())
+        let difference = Self.compare(metal, reference, right: right)
         print("GLYPHS \(name) ink=\(difference.ink) worst=\(difference.worst)")
         XCTAssertGreaterThan(difference.ink, 500, "前提: 字が描かれている")
         XCTAssertLessThanOrEqual(
@@ -178,13 +179,14 @@ final class GlyphPixelTests: EngineTestCase {
   }
 
   /// 字のある画素（どちらかが地と違う画素）での最大の差（RGB の段）と、字のある画素の数。
-  static func compare(_ a: CGImage, _ b: CGImage) -> (worst: Int, ink: Int) {
+  /// 字のある画素の最大の差と数。比べるのは左から `right` px まで（その右は俯瞰）。
+  static func compare(_ a: CGImage, _ b: CGImage, right: Int) -> (worst: Int, ink: Int) {
     let pa = pixels(a)
     let pb = pixels(b)
     let bg = UInt8((background.blue * 255).rounded())
     var worst = 0
     var ink = 0
-    for i in stride(from: 0, to: min(pa.count, pb.count), by: 4) {
+    for i in stride(from: 0, to: min(pa.count, pb.count), by: 4) where (i / 4) % a.width < right {
       let isInk = (0..<3).contains { pa[i + $0] != bg || pb[i + $0] != bg }
       guard isInk else { continue }
       ink += 1

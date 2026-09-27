@@ -142,22 +142,26 @@ struct SurfaceConfig: @unchecked Sendable {
   var baseline: CGFloat { (lineHeight - (ascent + descent)) / 2 + ascent }
 }
 
-/// 本文の編集で組版の変わった行——編集前の行 `rows` が編集後の `inserted` 行に置き換わり、後ろの行はずれる。`version`
-/// は編集後の写しの版。
+/// 変わった行——本文の編集では編集前の行 `rows` が編集後の `inserted` 行に置き換わり、後ろの行はずれる。役割だけが変わった
+/// 行（`rolesOnly`）は中身も行の数も同じで色だけが変わる（組版は捨てず、色を覚えたもの——ミニマップの字——だけを捨てる）。
+/// 本文の編集と役割の変化は、届いた順に 1 本の列に積む（前後して届いても、行のずれを順に当てれば正しい行を捨てる）。
+/// `version` は変わった後の写しの版。
 struct RowEdit: Equatable, Sendable {
   var rows: Range<Int>
   var inserted: Int
   var version: Int
+  var rolesOnly = false
 
   /// 全部の行が変わった。
   static func all(version: Int) -> RowEdit {
     RowEdit(rows: 0..<Int.max, inserted: 0, version: version)
   }
 
-  init(rows: Range<Int>, inserted: Int, version: Int) {
+  init(rows: Range<Int>, inserted: Int, version: Int, rolesOnly: Bool = false) {
     self.rows = rows
     self.inserted = inserted
     self.version = version
+    self.rolesOnly = rolesOnly
   }
 
   /// 編集前の本文 `text` への編集 `edit`。置き換えた区間の始まりの行から終わりの行までが、置き換えの中身の行に変わる。

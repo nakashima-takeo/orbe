@@ -19,6 +19,8 @@ final class MetalTextSurface: TextSurface {
   let config: SurfaceConfig
   let material = MaterialBox()
   let scroll: ScrollBox
+  /// 最後に描いたミニマップの配置（描画スレッドが書く）。
+  let placementBox = MinimapPlacementBox()
   private let style: TextSurfaceStyle
   let textView = MetalTextView()
   private(set) lazy var editor = SurfaceEditor(surface: self)
@@ -64,6 +66,7 @@ final class MetalTextSurface: TextSurface {
     let id = id
     let material = material
     let scroll = scroll
+    let placement = placementBox
     let config = config
     let notify: @Sendable () -> Void = { [weak self] in
       DispatchQueue.main.async {
@@ -71,7 +74,9 @@ final class MetalTextSurface: TextSurface {
       }
     }
     RenderThread.shared.perform { renderer in
-      renderer.attach(id: id, material: material, scroll: scroll, config: config, notify: notify)
+      renderer.attach(
+        id: id, boxes: SurfaceBoxes(material: material, scroll: scroll, placement: placement),
+        config: config, notify: notify)
     }
     appearanceDidChange()
   }
@@ -138,8 +143,20 @@ final class MetalTextSurface: TextSurface {
     }
   }
 
+  /// 役割が変わった。写しを引き、変わった区間をその写しの行へ写して、本文の編集と同じ列に「色だけ変わった行」として積む。
   func rolesDidChange(_ ranges: IndexSet) {
-    pullContent()
+    guard let delegate else { return }
+    transact {
+      let content = delegate.surfaceContent(self)
+      transaction?.content = content
+      let text = content.text
+      transaction?.rowEdits += ranges.rangeView.map { range in
+        let rows = text.rows(of: NSRange(range))
+        return RowEdit(
+          rows: rows.lowerBound..<rows.upperBound + 1, inserted: rows.count,
+          version: content.version, rolesOnly: true)
+      }
+    }
   }
 
   /// 印は文書がオフセットで押してくる。引いた写しで行へ写してから箱に置く。

@@ -44,6 +44,8 @@ final class FrameBuilder {
   private(set) var gutterScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
   /// 組んだ行のうち最も長い幅（pt。末尾の「ほか N 字」を含む）。
   private(set) var longestLine: CGFloat = 0
+  /// このコマのミニマップ。
+  var minimap = MinimapFrame()
 
   /// GPU の buffer に要る大きさ（配列ごとに 256 バイトに揃える）。
   var byteCount: Int {
@@ -51,9 +53,10 @@ final class FrameBuilder {
     let glyphs = glyphArrays.reduce(0) {
       $0 + (($1.count * MemoryLayout<GlyphInstance>.stride + 255) & ~255)
     }
-    return [shapes, decorShapes, underShapes, highlightShapes, overShapes].reduce(glyphs) {
-      $0 + (($1.count * MemoryLayout<ShapeInstance>.stride + 255) & ~255)
-    }
+    return [shapes, decorShapes, underShapes, highlightShapes, overShapes, minimap.decorations]
+      .reduce(glyphs + ((MemoryLayout<GlyphInstance>.stride + 255) & ~255)) {
+        $0 + (($1.count * MemoryLayout<ShapeInstance>.stride + 255) & ~255)
+      }
   }
 
   /// px の座標系（左上が原点）。
@@ -91,12 +94,17 @@ final class FrameBuilder {
   struct Source {
     let material: FrameMaterial
     let position: SIMD2<Double>
+    /// その位置の範囲（俯瞰は端を越えている間も端の位置を表す）。
+    let limits: ScrollPhysics.Limits
     /// このコマでキャレットを描くか（点滅と焦点）。
     let caretVisible: Bool
     /// 描く先の大きさ（px）。
     let pixels: (width: Int, height: Int)
     let atlas: GlyphAtlas
     let config: SurfaceConfig
+    let minimapCells: MinimapCells
+    /// 前のコマのミニマップの配置（揺れ止め）。
+    let previousPlacement: MinimapLayout?
   }
 
   /// コマを組む（組版のキャッシュのコマは呼び手が始めてある——`Renderer.begin`）。
@@ -110,6 +118,7 @@ final class FrameBuilder {
     highlightShapes.removeAll(keepingCapacity: true)
     overShapes.removeAll(keepingCapacity: true)
     longestLine = 0
+    minimap.reset()
     let config = source.config
     guard let content = source.material.content, let palette = source.material.palette else {
       return
@@ -129,6 +138,9 @@ final class FrameBuilder {
       config: config, tabColumns: tabColumns, roles: content.roles)
     textScissor = Self.scissor(x: g.column, y: g.top, width: g.textRight - g.column, g)
     gutterScissor = Self.scissor(x: 0, y: g.top, width: g.column, g)
+    buildMinimap(
+      layout, lines: Self.viewportLines(source, lineCount: lineCount, config: config), source,
+      content, c)
     guard g.height > g.top else { return }
     let first = max(0, Int((g.scrollY / g.lineHeight).rounded(.down)))
     let last = min(
@@ -178,6 +190,19 @@ final class FrameBuilder {
     }
     cache.endFrame()
     return result
+  }
+
+  /// 先頭に見えている行（小数。行 + 隠れている割合）と見えている行数——見えている範囲の通知と同じ意味の値で、端を越えて
+  /// 見せている間は端で数える（俯瞰は端の位置を表す）。
+  static func viewportLines(_ source: Source, lineCount: Int, config: SurfaceConfig) -> (
+    first: CGFloat, visible: CGFloat
+  ) {
+    let limits = source.limits
+    let lineHeight = Double(config.lineHeight)
+    let y = min(max(0, source.position.y), limits.maximum.y)
+    let row = min(Int((y / lineHeight).rounded(.down)), max(0, lineCount - 1))
+    let hidden = min(max((y - Double(row) * lineHeight) / lineHeight, 0), 1)
+    return (CGFloat(Double(row) + hidden), CGFloat(limits.viewport.y / lineHeight))
   }
 
   /// このコマで描く行 1 つ。

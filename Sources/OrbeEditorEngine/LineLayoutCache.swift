@@ -84,7 +84,7 @@ final class LineLayoutCache {
 
   /// 本文の編集を受け取る（前のコマで描いた行のうち、変わった行を捨てて後ろをずらす）。
   func receive(_ edits: [RowEdit]) {
-    for edit in edits {
+    for edit in edits where !edit.rolesOnly {
       drawnRows = Self.shifted(drawnRows, by: edit)
       rowsVersion = edit.version
     }
