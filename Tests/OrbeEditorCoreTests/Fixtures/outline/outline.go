@@ -41,8 +41,14 @@ type Store[K comparable, V any] interface {
 }
 
 func New(addr string) *Server {
+	type local struct{ a int }
+	tests := []struct {
+		name string
+		want int
+	}{}
+	_ = tests
 	s := &Server{Addr: addr}
-	helper := func() {}
+	helper := func() { type inner struct{ b int } }
 	helper()
 	return s
 }

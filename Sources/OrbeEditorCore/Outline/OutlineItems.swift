@@ -20,7 +20,7 @@ struct OutlineItems {
   mutating func items(for match: OutlineMatch) -> [OutlineExtraction.Item] {
     switch grammar {
     case .swift: return swift(match)
-    case .go: return [Self.goMethod(match)]
+    case .go: return go(match)
     case .html: return [Self.htmlElement(match)]
     case .css: return Self.cssSelectors(match)
     case .json: return [jsonArrayElement(match)]
@@ -112,13 +112,24 @@ struct OutlineItems {
     return item
   }
 
-  /// Go のメソッドは `(*Server).Start`（gopls と同じ）。レシーバの型と名前は規則が `@name` に取る。
-  static func goMethod(_ match: OutlineMatch) -> OutlineExtraction.Item {
-    var item = plain(match)
-    guard nodeType(match.item) == "method_declaration", match.names.count == 2 else { return item }
+  // MARK: - Go
+
+  /// gopls と同じく、関数の中（本体・引数の無名の型）は出さない。メソッドの名前は `(*Server).Start`。レシーバの型と名前は
+  /// 規則が `@name` に取る。
+  private func go(_ match: OutlineMatch) -> [OutlineExtraction.Item] {
+    let functions: Set = ["function_declaration", "method_declaration", "func_literal"]
+    var ancestor = ts_node_parent(match.item)
+    while !ts_node_is_null(ancestor) {
+      if functions.contains(Self.nodeType(ancestor)) { return [] }
+      ancestor = ts_node_parent(ancestor)
+    }
+    var item = Self.plain(match)
+    guard Self.nodeType(match.item) == "method_declaration", match.names.count == 2 else {
+      return [item]
+    }
     let names = match.names.sorted { ts_node_start_byte($0) < ts_node_start_byte($1) }
-    item.name = "(\(collapsed(match.text(names[0])))).\(match.text(names[1]))"
-    return item
+    item.name = "(\(Self.collapsed(match.text(names[0])))).\(match.text(names[1]))"
+    return [item]
   }
 
   /// HTML の要素は `tag#id.class1.class2`（VS Code の HTML の `nodeToName` と同じ——値のある id・class は空でも印を付け、
