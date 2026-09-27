@@ -29,6 +29,26 @@ extension EditorMinimapTests {
     XCTAssertTrue(view.cachedChunks.contains(0), "手前は残る")
   }
 
+  /// 行の数が差し引きで変わらない束（後ろで改行を足し、前で改行を消す）でも、行がずれた間のチャンクを捨てる——編集の列
+  /// を順に、その時点の行で畳む。
+  func testABatchWhoseLineCountNetsToZeroDropsTheShiftedChunks() throws {
+    let hosted = try hostOverview(numberedLines(300), height: 800)
+    let view = hosted.pane.minimap
+    view.display()
+    XCTAssertTrue(view.cachedChunks.isSuperset(of: [0, 1, 2, 3]), "前提: \(view.cachedChunks)")
+    var log = EditLog()
+    let add = log.append(
+      TextEdit(range: NSRange(location: 0, length: 0), replacement: "\n"),
+      start: TextPoint(row: 250, column: 0), oldEnd: TextPoint(row: 250, column: 0),
+      newEnd: TextPoint(row: 251, column: 0))
+    let join = log.append(
+      TextEdit(range: NSRange(location: 0, length: 1), replacement: ""),
+      start: TextPoint(row: 100, column: 3), oldEnd: TextPoint(row: 101, column: 0),
+      newEnd: TextPoint(row: 100, column: 3))
+    view.textDidChange([add, join])
+    XCTAssertEqual(view.cachedChunks.intersection([0, 1, 2, 3]), [0], "行 100 から後ろは 1 行ずれた")
+  }
+
   /// 字のチャンクの画像は上限までしか覚えず、超えたら最も長く使っていないものから捨てる——1MB・50 万行の文書を上限の
   /// 3 倍のチャンクぶん通し、末尾まで飛んでも上限を超えない。最近の窓は残り、最初のチャンクは捨てられている。
   func testChunkImagesStayWithinTheCapacityAndKeepTheRecentOnes() throws {

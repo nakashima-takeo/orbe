@@ -5,8 +5,9 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 乱択の操作列——打鍵・削除・移動・字下げ・大小文字・キル・マウスの選択・外からの選択・undo / redo を何千手流しても、
-/// 文書の写し・面の写し・選択とキャレットがどの時点でも本文の範囲に収まり、undo を尽くすと元の本文、redo を尽くすと最後の
-/// 本文に戻る。壊れると「ある並びの操作でだけ」本文や選択がずれる。
+/// 文書の写し・面の写し・選択とキャレットがどの時点でも本文の範囲に収まり、配り先が編集の列を順に畳んだ本文（行の増減
+/// つき）が文書の本文と一致し続け、undo を尽くすと元の本文、redo を尽くすと履歴の先端の本文に戻る。壊れると「ある並びの
+/// 操作でだけ」本文や選択がずれる、検索の一致やミニマップが本文からずれる。
 @MainActor
 final class SurfaceFuzzTests: EngineTestCase {
   private static let commands: [EditCommand] = [
@@ -33,7 +34,20 @@ final class SurfaceFuzzTests: EngineTestCase {
     let window = host(opened)
     defer { window.contentView = nil }
     let undo = try XCTUnwrap(opened.surface.responder.undoManager)
+    let shadow = NSMutableString(string: original)
+    opened.document.onTextChange = { edits in
+      for record in edits {
+        let edit = record.edit
+        XCTAssertEqual(Self.row(of: edit.range.location, in: shadow), record.start.row)
+        XCTAssertEqual(Self.row(of: NSMaxRange(edit.range), in: shadow), record.oldEnd.row)
+        shadow.replaceCharacters(
+          in: edit.range,
+          with: String(utf16CodeUnits: Array(edit.replacement), count: edit.replacementLength))
+        XCTAssertEqual(Self.row(of: NSMaxRange(edit.newRange), in: shadow), record.newEnd.row)
+      }
+    }
     var generator = SplitMix(seed: seed)
+    var tip = original
     for step in 0..<steps {
       switch Int.random(in: 0..<20, using: &generator) {
       case 0:
@@ -54,13 +68,20 @@ final class SurfaceFuzzTests: EngineTestCase {
         opened.surface.perform(Self.commands.randomElement(using: &generator)!)
       }
       try check(opened, "seed \(seed) step \(step)")
+      XCTAssertEqual(shadow as String, text(opened.document), "seed \(seed) step \(step): 配り先の畳み")
+      if !undo.canRedo { tip = text(opened.document) }
     }
-    while undo.canRedo { undo.redo() }
-    let final = text(opened.document)
     while undo.canUndo { undo.undo() }
     XCTAssertEqual(text(opened.document), original, "seed \(seed): undo を尽くすと元の本文")
     while undo.canRedo { undo.redo() }
-    XCTAssertEqual(text(opened.document), final, "seed \(seed): redo を尽くすと最後の本文")
+    XCTAssertEqual(text(opened.document), tip, "seed \(seed): redo を尽くすと履歴の先端の本文")
+  }
+
+  /// 位置の行（0 始まり）。
+  private static func row(of offset: Int, in text: NSString) -> Int {
+    var row = 0
+    for i in 0..<offset where text.character(at: i) == 0x0A { row += 1 }
+    return row
   }
 
   private func check(_ opened: Opened, _ step: String) throws {

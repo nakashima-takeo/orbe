@@ -64,7 +64,7 @@ final class EditorDocumentOverviewTests: XCTestCase {
     var received: [[TextEdit]] = []
     var lengths: [Int] = []
     document.onTextChange = {
-      received.append($0)
+      received.append($0.map(\.edit))
       lengths.append(document.text.length)
     }
     surface.apply([
@@ -118,6 +118,27 @@ final class EditorDocumentOverviewTests: XCTestCase {
     XCTAssertEqual(plain.roles.roles(in: NSRange(location: 0, length: 5)), [], "文法が無ければ空")
   }
 
+  /// 束の中の行の数を変える編集ごとにハンクをずらしても、ハンクの知らせは束ごとに 1 回で、配り先は行ごとの増減が分かる
+  /// 編集の列を受ける。壊れると、複数の区間を変える操作で俯瞰が途中の行数で組み直し、ミニマップの区画が行の増減を
+  /// 取り違える。
+  func testHunksChangeOncePerBatchAndReceiversSeeTheRowsOfEachEdit() throws {
+    let opened = try open("h.txt", "aa\nbb\ncc\n")
+    let (document, surface) = (opened.document, opened.surface)
+    document.baseline = "aa\n"
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertFalse(document.hunks.isEmpty, "前提: ハンクがある")
+    var changes = 0
+    var rows: [[Int]] = []
+    document.onHunksChange = { changes += 1 }
+    document.onTextChange = { rows = $0.map { [$0.start.row, $0.oldEnd.row, $0.newEnd.row] } }
+    surface.apply([
+      TextEdit(range: NSRange(location: 0, length: 0), replacement: "\n"),
+      TextEdit(range: NSRange(location: 5, length: 1), replacement: ""),
+    ])
+    XCTAssertEqual(changes, 1)
+    XCTAssertEqual(rows, [[1, 2, 1], [0, 0, 1]], "後ろの改行を消す編集、前に改行を足す編集の順")
+  }
+
   /// 本文の通知は写しの更新の後——通知の中で読む本文と役割の並びは新しい本文の長さで、役割は編集に合わせてずらした前の
   /// もの（挿した字は隣の連なりを引き継ぐ）。正しい役割は裏から届き、変わった区間が「役割が変わった」で届く。
   func testTextChangeArrivesAfterTheCopyAndRolesFollowFromTheBackground() throws {
@@ -129,7 +150,7 @@ final class EditorDocumentOverviewTests: XCTestCase {
     var seen: [(length: Int, roles: Int)] = []
     var changedRoles: [IndexSet] = []
     document.onTextChange = { batch in
-      edits.append(contentsOf: batch)
+      edits.append(contentsOf: batch.map(\.edit))
       seen.append((document.text.length, document.roles.length))
     }
     document.onRolesChange = { changedRoles.append($0) }

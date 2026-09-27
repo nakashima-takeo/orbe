@@ -63,9 +63,9 @@ public final class EditorDocument {
   public var onViewportChange: (() -> Void)?
   /// 面の選択が変わった。
   public var onSelectionChange: (() -> Void)?
-  /// 本文が変わった。面の編集の束ごとに 1 回、適用した順の編集の列（どれもその直前の本文の座標）で、写しと役割の更新の後に
-  /// 届く——受け手は列を順に畳めば、束の途中の本文を見ずに今の本文へ追いつく。
-  public var onTextChange: (([TextEdit]) -> Void)?
+  /// 本文が変わった。面の編集の束ごとに 1 回、適用した順の編集の列（どれもその直前の本文の座標で、行の増減が分かる行と桁
+  /// つき）で、写しと役割の更新の後に届く——受け手は列を順に畳めば、束の途中の本文を見ずに今の本文へ追いつく。
+  public var onTextChange: (([VersionedEdit]) -> Void)?
   /// 裏から届いた役割で、役割が変わった区間（今の本文の上）。
   public var onRolesChange: ((IndexSet) -> Void)?
   /// 区間の列の問い（`analyze`）の結果（今の本文の上へずらしたもの）。問いが今と違うかは受け手が見る。
@@ -334,14 +334,15 @@ extension EditorDocument: TextSurfaceDelegate {
   /// 行差分の依頼・配り先への知らせは束ごとに 1 回。
   public func surface(_ surface: any TextSurface, didChange edits: [TextEdit]) {
     guard !edits.isEmpty else { return }
-    var applied: [TextEdit] = []
+    var applied: [VersionedEdit] = []
     applied.reserveCapacity(edits.count)
+    var tracked = hunks
     for whole in edits.reversed() {
-      let edit = whole.narrowed(replacing: text.units(in: whole.range))
-      let record = apply(edit)
-      if baseline != nil { hunks = record.track(hunks) }
-      applied.append(edit)
+      let record = apply(whole.narrowed(replacing: text.units(in: whole.range)))
+      if baseline != nil { tracked = record.track(tracked) }
+      applied.append(record)
     }
+    hunks = tracked
     if !isReplacingFromDisk { isDirty = true }
     if baseline != nil {
       pushLineMarks()

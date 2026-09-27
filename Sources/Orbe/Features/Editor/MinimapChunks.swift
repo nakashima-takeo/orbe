@@ -36,7 +36,6 @@ final class MinimapChunks {
   private let style: MinimapStyle
   private var images: [Int: Entry] = [:]
   private var uses = 0
-  private var lineCount = 0
   private var canvas: Canvas?
   private var indentUnit = 0
   private var sheet: MinimapCharSheet?
@@ -48,27 +47,21 @@ final class MinimapChunks {
   var cached: Set<Int> { Set(images.keys) }
 
   /// 文書を結び直した。
-  func reset(lineCount: Int) {
+  func reset() {
     images.removeAll()
-    self.lineCount = lineCount
   }
 
-  /// 本文が変わった（適用した順の編集の列。`text` は列を当て終えた本文）。変わった区間（消しただけなら、その位置の 1 単位）を
-  /// 列の順に今の本文の上へ畳んでから、その行のチャンクを捨てる。行の数が変われば、最初に変わった行から後ろを全部捨てる。
-  func textDidChange(_ edits: [TextEdit], text: TextRope) {
-    let changed = edits.reduce(IndexSet()) { set, edit in
-      var set = edit.track(set)
-      let start = edit.range.location
-      set.insert(integersIn: start..<max(NSMaxRange(edit.newRange), start + 1))
-      return set
+  /// 本文が変わった（適用した順の編集の列）。編集ごとにその時点の行で、変わった行のチャンクを
+  /// 捨て、行の数が変わればその行から後ろを全部捨てる——残るチャンクは、どの編集の後も中身の行が変わっていない。
+  func textDidChange(_ edits: [VersionedEdit]) {
+    for edit in edits {
+      let first = edit.start.row / Self.lines
+      if edit.newEnd.row != edit.oldEnd.row {
+        images = images.filter { $0.key < first }
+      } else {
+        for chunk in first...(edit.oldEnd.row / Self.lines) { images[chunk] = nil }
+      }
     }
-    guard let first = changed.first else { return }
-    if text.lineCount != lineCount {
-      lineCount = text.lineCount
-      let chunk = text.row(containing: first) / Self.lines
-      images = images.filter { $0.key < chunk }
-    }
-    for range in changed.rangeView { drop(covering: NSRange(range), text: text) }
   }
 
   /// 役割が変わった。

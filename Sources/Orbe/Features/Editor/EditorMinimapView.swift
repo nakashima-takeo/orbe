@@ -49,7 +49,7 @@ final class EditorMinimapView: NSView {
   /// 焦点の文書に結ぶ（nil なら隠す）。
   func bind(_ document: EditorDocument?) {
     self.document = document
-    chunks.reset(lineCount: document?.text.lineCount ?? 0)
+    chunks.reset()
     placement = nil
     drag = nil
     isHidden = document == nil
@@ -63,9 +63,8 @@ final class EditorMinimapView: NSView {
   }
 
   /// 本文が変わった。変わった行のチャンクを捨てる（→ `MinimapChunks`）。
-  func textDidChange(_ edits: [TextEdit]) {
-    guard let document else { return }
-    chunks.textDidChange(edits, text: document.text)
+  func textDidChange(_ edits: [VersionedEdit]) {
+    chunks.textDidChange(edits)
     refresh()
   }
 
