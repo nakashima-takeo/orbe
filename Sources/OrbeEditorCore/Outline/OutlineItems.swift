@@ -2,12 +2,13 @@ import Foundation
 import TreeSitter
 
 /// マッチ 1 つ → 0〜n 個のシンボル。既定は 1 マッチ → 1 シンボル（名前は `@context` と `@name` の字）。規則だけでは
-/// VS Code の言語サーバの名付けに届かない言語（Swift・HTML・CSS・JSON）の手直しはここに閉じ、節の種類の知識は規則と
+/// VS Code の言語サーバの名付けに届かない言語（Swift・Go・HTML・CSS・JSON）の手直しはここに閉じ、節の種類の知識は規則と
 /// ここにしか無い。
 enum OutlineItems {
   static func items(for grammar: Grammar, _ match: OutlineMatch) -> [OutlineExtraction.Item] {
     switch grammar {
     case .swift: return [swiftSelector(match)]
+    case .go: return [goMethod(match)]
     case .html: return [htmlElement(match)]
     case .css: return cssSelectors(match)
     case .json: return [jsonArrayElement(match)]
@@ -51,6 +52,15 @@ enum OutlineItems {
       labels += (label.map(match.text) ?? "_") + ":"
     }
     item.name += "(\(labels))"
+    return item
+  }
+
+  /// Go のメソッドは `(*Server).Start`（gopls と同じ）。レシーバの型と名前は規則が `@name` に取る。
+  static func goMethod(_ match: OutlineMatch) -> OutlineExtraction.Item {
+    var item = plain(match)
+    guard nodeType(match.item) == "method_declaration", match.names.count == 2 else { return item }
+    let names = match.names.sorted { ts_node_start_byte($0) < ts_node_start_byte($1) }
+    item.name = "(\(collapsed(match.text(names[0])))).\(match.text(names[1]))"
     return item
   }
 
