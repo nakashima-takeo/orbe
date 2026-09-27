@@ -15,11 +15,11 @@ final class ProjectSearchRun: @unchecked Sendable {
     let version: Int
   }
 
-  /// main へ渡す 1 回ぶん。`finished` なら最後で、`error` は git が断った理由。
+  /// main へ渡す 1 回ぶん。`finished` なら最後で、`error` はディスク側が始められなかった・断った理由。
   struct Batch: Sendable {
     var files: [SearchFileMatches] = []
     var finished = false
-    var error: String?
+    var error: GitGrep.Failure?
   }
 
   static let batchInterval: TimeInterval = 0.08
@@ -67,8 +67,7 @@ final class ProjectSearchRun: @unchecked Sendable {
         onOutput: { [self] data in receive(data, skipping: skipped) },
         completion: { [self] output in
           flushCurrent()
-          let limited = state.withLock { $0.stoppedAtLimit }
-          finish(error: limited ? nil : GitGrep.failure(of: output))
+          finish(error: GitGrep.failure(of: output))
         })
       stream.withLock { $0 = handle }
       if isCancelled { handle.cancel() }
@@ -146,11 +145,11 @@ final class ProjectSearchRun: @unchecked Sendable {
     }
   }
 
-  private func finish(error: String?) {
+  private func finish(error: GitGrep.Failure?) {
     DispatchQueue.main.async { [self] in flush(finished: true, error: error) }
   }
 
-  private func flush(finished: Bool, error: String?) {
+  private func flush(finished: Bool, error: GitGrep.Failure?) {
     let batch = state.withLock { state -> Batch? in
       guard !state.cancelled else { return nil }
       var batch = state.pending

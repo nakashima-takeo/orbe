@@ -39,8 +39,8 @@ final class ProjectSearch {
   enum Failure: Equatable {
     /// ICU が断った正規表現。
     case invalidPattern
-    /// git grep が断った（stderr の最初の行。PCRE2 だけが断る書き方など）。
-    case git(String)
+    /// ディスク側（git grep）が始められなかった・断った。
+    case disk(GitGrep.Failure)
   }
   var results = ProjectSearchResults()
   /// 折りたたみを映した平らな行（結果か折りたたみが変わるたびに作り直す）。
@@ -224,7 +224,7 @@ final class ProjectSearch {
     for file in batch.files { accept(file) }
     if batch.finished {
       run = nil
-      error = batch.error.map(Failure.git)
+      error = batch.error.map(Failure.disk)
       finishPhase()
     }
     resultsDidChange()

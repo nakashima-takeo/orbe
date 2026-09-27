@@ -18,7 +18,7 @@ enum GitGrep {
   static func arguments(pattern: String) -> [String] {
     [
       "grep", "--no-index", "--exclude-standard", "-z", "-n", "--no-column", "-I", "--no-color",
-      "--no-textconv", "-P", "-e", pattern, "--", ".",
+      "--no-full-name", "--no-textconv", "-P", "-e", pattern, "--", ".",
     ]
       + excludedDirectories.map { ":(exclude,glob)**/\($0)/**" }
       + excludedFiles.map { ":(exclude,glob)**/\($0)" }
@@ -34,7 +34,8 @@ enum GitGrep {
       || excludedExtensions.contains((name as NSString).pathExtension)
   }
 
-  /// 一致した 1 行。`number` は 1 始まり、`text` は改行を除いた行（`\r` は残る）。
+  /// 一致した 1 行。`number` は 1 始まり、`text` は改行を除いた行（`\r` は残る。1 行目の先頭の BOM は外す——開いた文書と
+  /// 同じ本文にして、行の中の位置を揃える）。
   struct Line: Equatable {
     let path: String
     let number: Int
@@ -45,9 +46,12 @@ enum GitGrep {
   /// 含みうる（区切りは NUL で読む）。本文の UTF-8 でないバイトは置換文字で読む。
   struct Parser {
     private var pending = Data()
+    private static let bom = Data([0xEF, 0xBB, 0xBF])
 
     mutating func feed(_ data: Data) -> [Line] {
       pending.append(data)
+      // 持ち越した記録は、その終わりの `\n` が届くまで完結しない。長い 1 行の途中の塊で読み直さない。
+      guard data.contains(0x0A) else { return [] }
       var lines: [Line] = []
       var start = pending.startIndex
       while let pathEnd = pending[start...].firstIndex(of: 0),
@@ -55,10 +59,11 @@ enum GitGrep {
         let textEnd = pending[(numberEnd + 1)...].firstIndex(of: 0x0A)
       {
         let number = Int(Self.decode(pending[(pathEnd + 1)..<numberEnd])) ?? 0
+        var text = pending[(numberEnd + 1)..<textEnd]
+        if number == 1, text.starts(with: Self.bom) { text = text.dropFirst(Self.bom.count) }
         lines.append(
-          Line(
-            path: Self.decode(pending[start..<pathEnd]), number: number,
-            text: Self.decode(pending[(numberEnd + 1)..<textEnd])))
+          Line(path: Self.decode(pending[start..<pathEnd]), number: number, text: Self.decode(text))
+        )
         start = textEnd + 1
       }
       pending = Data(pending[start...])
@@ -73,10 +78,23 @@ enum GitGrep {
     }
   }
 
-  /// 終了の読み: 0 は一致あり、1 は一致なし、それ以外は stderr の最初の行を問いのエラーとして出す。
-  static func failure(of output: GitRunner.Output) -> String? {
-    guard output.exited, output.status != 0, output.status != 1 else { return nil }
-    let first = output.stderrText.split(separator: "\n").first.map(String.init)
-    return first ?? "git grep \(output.status)"
+  /// grep が断った理由。
+  enum Failure: Equatable, Sendable {
+    /// git を起動できなかった（根が消えた等）。
+    case couldNotStart
+    /// git が断った（stderr の最初の行。PCRE2 だけが断る書き方など）。
+    case refused(String)
+  }
+
+  /// 終わりの読み: 止めたなら無し。git が終わったなら 0 は一致あり、1 は一致なし、それ以外は stderr の最初の行。
+  static func failure(of output: GitRunner.Output) -> Failure? {
+    switch output.ending {
+    case .cancelled: return nil
+    case .launchFailed: return .couldNotStart
+    case .completed, .timedOut:
+      guard output.status != 0, output.status != 1 else { return nil }
+      let first = output.stderrText.split(separator: "\n").first.map(String.init)
+      return .refused(first ?? "git grep \(output.status)")
+    }
   }
 }

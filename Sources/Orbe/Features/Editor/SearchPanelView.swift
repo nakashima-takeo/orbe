@@ -40,7 +40,8 @@ struct SearchPanelView: View {
   private func message(for error: ProjectSearch.Failure) -> String {
     switch error {
     case .invalidPattern: l10n.string(.editorSearchInvalidRegex)
-    case .git(let line): line
+    case .disk(.couldNotStart): l10n.string(.editorSearchCouldNotStart)
+    case .disk(.refused(let line)): line
     }
   }
 

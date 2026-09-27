@@ -173,6 +173,7 @@ enum L10n {
       "No results found. Review your excludes and your .gitignore files."
     ),
     .editorSearchInvalidRegex: ("正規表現が正しくありません。", "Invalid regular expression."),
+    .editorSearchCouldNotStart: ("検索を始められませんでした。", "Could not start the search."),
 
     // MARK: Editor 面（未保存の確認・外部変更の上書き）
     .editorUnsavedTitle: ("未保存の変更があります", "You have unsaved changes"),

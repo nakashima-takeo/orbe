@@ -298,6 +298,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorSearchLimited
   case editorSearchNoResults
   case editorSearchInvalidRegex
+  case editorSearchCouldNotStart
 
   // MARK: - Editor 面（未保存の確認・外部変更の上書き）
   case editorUnsavedTitle
