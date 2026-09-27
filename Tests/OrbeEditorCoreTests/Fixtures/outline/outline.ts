@@ -86,6 +86,9 @@ describe("Service", () => {
   it("starts", async () => {
     const service = createService();
   });
+  it.skipIf(isCI)("stops", () => {
+    const stopped = true;
+  });
 });
 
 const routes = {

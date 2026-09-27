@@ -43,6 +43,8 @@ class default
 function describe "Service"
   function it "starts"
     variable service
+  function it.skipIf "stops"
+    variable stopped
 variable routes
   method home
   property user

@@ -41,6 +41,10 @@ app.get("/health", (req, res) => {
   res.json(body);
 });
 
+test.each([[1, 2]])("adds %i", (a, b) => {
+  const sum = a + b;
+});
+
 app.listen(PORT, function onListen() {
   started = true;
 });

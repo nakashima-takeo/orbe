@@ -4,7 +4,8 @@
 ; 手直し（2026-09）: VS Code の JavaScript（tsserver の navtree）に合わせて組み直した。typescript.scm と同じ組み方から TypeScript
 ;   専用の節（interface・enum・type・namespace・abstract・引数のプロパティ）を外し、クラスのフィールドを
 ;   `field_definition` で取った。宣言の語と修飾子を名前から外し、種類を足した。変数は深さを問わず出し、getter / setter・
-;   `export default`・呼び出しに渡した関数（tsserver の「… callback」）を足した。
+;   `export default`・呼び出しに渡した関数（tsserver の「… callback」）を足した。テストの呼び出し（`describe` / `test.each` /
+;   `it.skipIf` など）の取り出しは、呼び出しと、呼んだ結果の呼び出しに渡した関数の一般の規則に置き換えた。
 
 ; 型
 (class_declaration
@@ -64,6 +65,35 @@
     (identifier)
     (member_expression)
   ] @name
+  arguments: (arguments
+    [
+      (arrow_function)
+      (function_expression)
+    ] @item)
+  (#set! kind "function"))
+
+; 呼んだ結果の関数に渡した関数（`test.each(table)("name", fn)`・`it.skipIf(c)("name", fn)`）。名は内側の呼ぶ式と文字列。
+(call_expression
+  function: (call_expression
+    function: [
+      (identifier)
+      (member_expression)
+    ] @name)
+  arguments: (arguments
+    .
+    (string) @name
+    [
+      (arrow_function)
+      (function_expression)
+    ] @item)
+  (#set! kind "function"))
+
+(call_expression
+  function: (call_expression
+    function: [
+      (identifier)
+      (member_expression)
+    ] @name)
   arguments: (arguments
     [
       (arrow_function)

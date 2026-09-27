@@ -19,6 +19,8 @@ function app.get "/health"
   variable body
     property ok
     property uptime
+function test.each "adds %i"
+  variable sum
 function onListen
 variable handlers
   method create
