@@ -22,7 +22,7 @@ extension MetalTextSurface {
   func hit(_ point: CGPoint, position: SIMD2<Double>? = nil) -> PointerHit? {
     guard let env = editingEnvironment() else { return nil }
     let text = env.text
-    let p = position ?? scroll.peek(at: CACurrentMediaTime()).position
+    let p = position ?? scrollPosition
     let column = config.columnWidth(lineCount: text.lineCount)
     let area: PointerArea =
       point.x < column - config.marks.gutterWidth ? .numbers : point.x < column ? .marks : .text
@@ -41,7 +41,7 @@ extension MetalTextSurface {
   /// 同じ組版の行から引くので、右から左の字の並びでも見た目の字に当たる。`position` はスクロールの位置（省けば今の位置）。
   func character(at point: CGPoint, position: SIMD2<Double>? = nil) -> NSRange? {
     guard let text = currentContent?.text else { return nil }
-    let p = position ?? scroll.peek(at: CACurrentMediaTime()).position
+    let p = position ?? scrollPosition
     let column = config.columnWidth(lineCount: text.lineCount)
     let y = Double(point.y - config.topInset) + p.y
     let lineHeight = Double(config.lineHeight)
@@ -298,7 +298,7 @@ final class MouseSelection: NSObject {
     defer { lastFrame = now }
     guard let lastFrame else { return }
     let elapsed = CGFloat(now - lastFrame)
-    let (position, limits) = surface.scroll.peek(at: now)
+    let (position, limits) = surface.scrollState(at: now)
     var p = position
     let lineHeight = surface.config.lineHeight
     let fullWidth = 2 * surface.config.cell
@@ -338,8 +338,10 @@ final class MouseSelection: NSObject {
       target = point
       lineEnd = true
     }
-    surface.transact(scrollTo: p) {
-      extend(to: target, position: p, lineEnd: lineEnd, reveal: .none)
+    surface.inputScope {
+      surface.transact(scrollTo: p) {
+        extend(to: target, position: p, lineEnd: lineEnd, reveal: .none)
+      }
     }
   }
 }

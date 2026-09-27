@@ -83,7 +83,7 @@ extension MetalTextView: NSDraggingSource {
   override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
     guard let surface else { return [] }
     var operation: NSDragOperation = []
-    surface.transact {
+    surface.input {
       let point = convert(sender.draggingLocation, from: nil)
       autoscrollDrop(at: point)
       let drop = dropPlan(sender)
@@ -94,15 +94,22 @@ extension MetalTextView: NSDraggingSource {
   }
 
   override func draggingExited(_ sender: NSDraggingInfo?) {
-    showDrop(nil)
+    surface?.inputScope { showDrop(nil) }
   }
 
   override func concludeDragOperation(_ sender: NSDraggingInfo?) {
-    showDrop(nil)
+    surface?.inputScope { showDrop(nil) }
   }
 
   /// 落とす。ファイルを開くのは別の文書へ焦点を移すので、印を消してから載せる側へ渡す。
   override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+    guard let surface else { return false }
+    var performed = false
+    surface.inputScope { performed = performDrop(sender) }
+    return performed
+  }
+
+  private func performDrop(_ sender: NSDraggingInfo) -> Bool {
     guard let surface, let action = dropPlan(sender).action else {
       showDrop(nil)
       return false
@@ -123,7 +130,7 @@ extension MetalTextView: NSDraggingSource {
   /// 印を消す・焦点を取る・入れるを 1 つの取引で行う。
   private func insertDrop(_ string: String, at offset: Int, moving: NSRange?) {
     guard let surface else { return }
-    surface.transact {
+    surface.input {
       showDrop(nil)
       window?.makeFirstResponder(self)
       surface.perform(.drop(string, at: offset, moving: moving))
@@ -146,7 +153,8 @@ extension MetalTextView: NSDraggingSource {
   }
 
   private func showDrop(_ offset: Int?) {
-    guard let surface, surface.material.read().drop != offset else { return }
+    guard let surface, shownDrop != offset else { return }
+    shownDrop = offset
     surface.write { $0.drop = offset }
   }
 
@@ -166,7 +174,7 @@ extension MetalTextView: NSDraggingSource {
       return
     }
     guard let last = dropScrollTime else { return }
-    let (position, limits) = surface.scroll.peek(at: now)
+    let (position, limits) = surface.scrollState(at: now)
     let visible = (bounds.height - config.topInset) / band
     let speed = DragScrollSpeed.speed(outside: min(abs(depth), band) / band, visible: visible)
     var p = position

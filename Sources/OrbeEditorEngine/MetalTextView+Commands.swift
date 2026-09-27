@@ -5,8 +5,9 @@ import AppKit
 /// セレクタは編集の状態に触れず、面がスクロールの位置を置く。表に無いセレクタは AppKit の既定（responder chain で探し、
 /// 無ければ警告音）。
 extension MetalTextView {
+  /// コマンドは面自身の入力（打鍵の中で届けば打鍵の処理の終わり、メニューから届けばその場で出す）。
   private func run(_ command: EditCommand) {
-    surface?.perform(command)
+    surface?.inputScope { surface?.perform(command) }
   }
 
   private func move(_ movement: Movement, _ extending: Bool = false) {
@@ -71,14 +72,16 @@ extension MetalTextView {
 
   // MARK: - スクロールだけ
 
-  override func scrollPageUp(_ sender: Any?) { surface?.scrollPages(-1) }
-  override func scrollPageDown(_ sender: Any?) { surface?.scrollPages(1) }
-  override func scrollLineUp(_ sender: Any?) { surface?.scrollLines(-1) }
-  override func scrollLineDown(_ sender: Any?) { surface?.scrollLines(1) }
+  override func scrollPageUp(_ sender: Any?) { surface?.inputScope { surface?.scrollPages(-1) } }
+  override func scrollPageDown(_ sender: Any?) { surface?.inputScope { surface?.scrollPages(1) } }
+  override func scrollLineUp(_ sender: Any?) { surface?.inputScope { surface?.scrollLines(-1) } }
+  override func scrollLineDown(_ sender: Any?) { surface?.inputScope { surface?.scrollLines(1) } }
   override func scrollToBeginningOfDocument(_ sender: Any?) {
-    surface?.scrollToDocumentEdge(end: false)
+    surface?.inputScope { surface?.scrollToDocumentEdge(end: false) }
   }
-  override func scrollToEndOfDocument(_ sender: Any?) { surface?.scrollToDocumentEdge(end: true) }
+  override func scrollToEndOfDocument(_ sender: Any?) {
+    surface?.inputScope { surface?.scrollToDocumentEdge(end: true) }
+  }
   override func centerSelectionInVisibleArea(_ sender: Any?) { run(.centerSelection) }
 
   // MARK: - 選択

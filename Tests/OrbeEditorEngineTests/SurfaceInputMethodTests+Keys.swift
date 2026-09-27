@@ -54,9 +54,9 @@ extension SurfaceInputMethodTests {
         with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: 0,
         context: nil, characters: "j", charactersIgnoringModifiers: "j", isARepeat: false,
         keyCode: 38))
-    var revision = opened.surface.material.read().revision
+    var revision = opened.surface.drawn.revision
     XCTAssertFalse(view.offerKeyEquivalentToInputMethod(key))
-    XCTAssertEqual(opened.surface.material.read().revision, revision, "変換中でなければ触れない")
+    XCTAssertEqual(opened.surface.drawn.revision, revision, "変換中でなければ触れない")
 
     replay([.mark("か")], on: opened)
     context.onEvent = {
@@ -64,10 +64,10 @@ extension SurfaceInputMethodTests {
       $0.setMarkedText(
         "き", selectedRange: NSRange(location: 1, length: 0), replacementRange: IMECall.notFound)
     }
-    revision = opened.surface.material.read().revision
+    revision = opened.surface.drawn.revision
     XCTAssertTrue(view.offerKeyEquivalentToInputMethod(key))
     XCTAssertEqual(text(opened.document), "かきab\n")
-    XCTAssertEqual(opened.surface.material.read().revision, revision + 1, "描く材料は 1 回")
+    XCTAssertEqual(opened.surface.drawn.revision, revision + 1, "描く材料は 1 回")
   }
 }
 

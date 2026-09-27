@@ -29,12 +29,13 @@ final class ScrolledFrameTests: EngineTestCase {
     let opened = try open(Self.text, size: CGSize(width: 500, height: 300))
     opened.document.baseline = Self.baseline
     XCTAssertTrue(opened.document.waitUntilCaughtUp())
-    XCTAssertFalse(opened.surface.material.read().marks.bars.isEmpty, "前提: 印が届いている")
+    XCTAssertFalse(opened.surface.drawn.marks.bars.isEmpty, "前提: 印が届いている")
     return opened
   }
 
   private func shoot(_ opened: Opened) throws -> Shot {
     let id = opened.surface.id
+    opened.surface.flush()
     let image = try XCTUnwrap(
       RenderThread.shared.performAndWait {
         Transfer(value: $0.snapshot(id, background: Self.background))

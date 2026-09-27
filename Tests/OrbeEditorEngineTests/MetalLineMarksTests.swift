@@ -27,6 +27,7 @@ final class MetalLineMarksTests: EngineTestCase {
   private func shoot(_ opened: Opened) throws -> Shot {
     let id = opened.surface.id
     let black = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+    opened.surface.flush()
     let image = try XCTUnwrap(
       RenderThread.shared.performAndWait { Transfer(value: $0.snapshot(id, background: black)) }
         .value)

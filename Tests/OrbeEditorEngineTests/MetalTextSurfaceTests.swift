@@ -17,7 +17,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
   /// 結ばれたとき・役割が届いたときに写しを引き、その版は文書の版。
   func testPullsTheDocumentsContent() throws {
     let opened = try open("let a = 1\nlet b = \"s\"\n")
-    let content = try XCTUnwrap(opened.surface.material.read().content)
+    let content = try XCTUnwrap(opened.surface.drawn.content)
     XCTAssertEqual(content.version, opened.document.version)
     XCTAssertEqual(content.text.length, opened.document.text.length)
     XCTAssertFalse(content.roles.roles(in: NSRange(location: 0, length: 20)).isEmpty, "役割が届いている")
@@ -89,7 +89,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
     opened.surface.selectedRange = NSRange(location: 9, length: 0)
     opened.surface.replaceAll(with: "abc\n")
     XCTAssertEqual(opened.document.text.substring(NSRange(location: 0, length: 4)), "abc\n")
-    XCTAssertEqual(opened.surface.material.read().content?.version, opened.document.version)
+    XCTAssertEqual(opened.surface.drawn.content?.version, opened.document.version)
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 4, length: 0))
   }
 
@@ -135,7 +135,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
     let surface = try open("let a = 1\n").surface
     let srgb = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
     let p3 = try XCTUnwrap(CGColorSpace(name: CGColorSpace.displayP3))
-    XCTAssertEqual(surface.material.read().space, srgb, "窓に無ければ sRGB")
+    XCTAssertEqual(surface.drawn.space, srgb, "窓に無ければ sRGB")
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.borderless],
       backing: .buffered, defer: false)
@@ -144,8 +144,8 @@ final class MetalTextSurfaceTests: EngineTestCase {
     window.colorSpace = .displayP3
     window.contentView = surface.view
     XCTAssertEqual((surface.view.layer as? CAMetalLayer)?.colorspace, p3)
-    XCTAssertEqual(surface.material.read().space, p3)
-    let keyword = try XCTUnwrap(surface.material.read().palette?.roles[.keyword]).packed
+    XCTAssertEqual(surface.drawn.space, p3)
+    let keyword = try XCTUnwrap(surface.drawn.palette?.roles[.keyword]).packed
     let expected = try XCTUnwrap(
       NSColor(srgbRed: 0.34, green: 0.61, blue: 0.84, alpha: 1).usingColorSpace(.displayP3))
     XCTAssertEqual(
@@ -157,7 +157,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
     // 窓が別の色空間の画面へ移ると AppKit が知らせる（色空間を直に置いただけでは知らせないので、同じ知らせを送る）。
     window.colorSpace = .sRGB
     surface.view.viewDidChangeBackingProperties()
-    XCTAssertEqual(surface.material.read().space, srgb, "窓の色空間が変われば解き直す")
+    XCTAssertEqual(surface.drawn.space, srgb, "窓の色空間が変われば解き直す")
   }
 
   /// 本文が右にまだ続くか——描画スレッドが組んだ行で横の範囲が伸びたら、main の操作を待たずに知らせ直す。右端まで
@@ -198,7 +198,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
     let opened = try open("a\nb\nc\nd\n", waitForColors: false)
     opened.document.baseline = "a\nX\nc\nq\nd\n"
     XCTAssertTrue(opened.document.waitUntilCaughtUp())
-    let marks = opened.surface.material.read().marks
+    let marks = opened.surface.drawn.marks
     XCTAssertEqual(marks.bars, [RowMarks.Bar(rows: 1...1, kind: .modified)])
     XCTAssertEqual(marks.deletions, [RowMarks.Deletion(row: 3, atBottom: false)])
   }
@@ -207,6 +207,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
   /// 描画スレッドが塞がっている間に閉じても、main では写しが残っている。
   func testClosingReleasesTheContentOnTheRenderThread() throws {
     var opened: Opened? = try open("let a = 1\n")
+    opened?.surface.flush()
     let id = try XCTUnwrap(opened?.surface.id)
     let material = try XCTUnwrap(opened?.surface.material)
     XCTAssertNotNil(material.read().content)
@@ -224,6 +225,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
   private func shoot(_ opened: Opened) throws -> (bytes: [UInt8], width: Int) {
     let id = opened.surface.id
     let gray = MTLClearColor(red: 128.0 / 255, green: 128.0 / 255, blue: 128.0 / 255, alpha: 1)
+    opened.surface.flush()
     let image = try XCTUnwrap(
       RenderThread.shared.performAndWait { Transfer(value: $0.snapshot(id, background: gray)) }
         .value)

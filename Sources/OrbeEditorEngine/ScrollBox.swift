@@ -4,7 +4,7 @@ import simd
 
 /// スクロールの状態の箱。main が出来事を書き、描画スレッドがコマの時刻で位置を読む。鍵の中では値の読み書きだけをする。
 ///
-/// 面の編集係の取引が置く位置と範囲には、描く材料の箱の版を添える。描画スレッドは、読んだ材料の版がそれに追いつくまで前の
+/// 面の出す 1 か所が置く位置と範囲には、描く材料の箱の版を添える。描画スレッドは、読んだ材料の版がそれに追いつくまで前の
 /// 位置を描く——スクロールだけが先に動いたコマ（新しい位置に古い本文）を出さない。指の出来事は版を添えずにその場で当てる。
 final class ScrollBox: Sendable {
   /// 描画スレッドがコマの時刻で読んだもの。
@@ -60,12 +60,10 @@ final class ScrollBox: Sendable {
     }
   }
 
-  func updateLimits(
-    heldUntil material: Int? = nil, _ body: @Sendable (inout ScrollPhysics.Limits) -> Void
-  ) {
+  func updateLimits(_ update: LimitsUpdate, heldUntil material: Int? = nil) {
     state.withLock { s in
       var limits = s.physics.limits
-      body(&limits)
+      update.apply(to: &limits)
       guard limits != s.physics.limits else { return }
       Self.hold(&s, until: material)
       s.physics.setLimits(limits)
@@ -142,9 +140,25 @@ final class ScrollBox: Sendable {
     }
   }
 
-  /// 出来事を引き取らずに、今の位置を読む（main の問い合わせ・撮影）。
+  /// 出来事を引き取らずに、今の位置を読む（撮影）。
   func peek(at t: Double) -> (position: SIMD2<Double>, limits: ScrollPhysics.Limits) {
     state.withLock { s in (s.physics.shown(at: t), s.physics.limits) }
+  }
+
+  /// まだ置いていない範囲 `update` と位置 `place` を当てたときに見せる位置と範囲（箱は書き換えない。main の読み取り）。
+  func peek(at t: Double, limits update: LimitsUpdate?, place: SIMD2<Double>?) -> (
+    position: SIMD2<Double>, limits: ScrollPhysics.Limits
+  ) {
+    state.withLock { s in
+      var physics = s.physics
+      if let update {
+        var limits = physics.limits
+        update.apply(to: &limits)
+        if limits != physics.limits { physics.setLimits(limits) }
+      }
+      if let place { physics.place(place) }
+      return (physics.shown(at: t), physics.limits)
+    }
   }
 
   /// 描くものが変わったかを、出来事を引き取らずに見る。

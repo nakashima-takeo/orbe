@@ -16,11 +16,15 @@ extension MetalTextSurface {
     }
   }
 
-  /// スクロールの出来事を箱に書き、描画スレッドを起こし、見えている範囲をその場で知らせる。
+  /// スクロールの出来事（面自身の入力）をその場で箱の物理へ当て、見えている範囲をその場で知らせ、処理の終わりで出す。
+  /// 先に置いてまだ出していない位置と範囲があれば、出来事より前のことなので先に出す。
   func scroll(_ input: ScrollInput) {
-    guard scroll.apply(input) else { return }
-    wake()
-    refreshViewport()
+    inputScope {
+      if pending.position != nil || pending.limits != nil { flush() }
+      guard scroll.apply(input) else { return }
+      pending.wakes = true
+      refreshViewport()
+    }
   }
 
   /// 描画スレッドだけが変える位置と範囲（端への戻り・組んだ行で伸びた横の範囲）が変わった。
@@ -50,8 +54,7 @@ extension MetalTextSurface {
 
   /// PageUp・PageDown——見えている高さから 1 行を残した量ずつ。
   func scrollPages(_ pages: Int) {
-    let visible =
-      scroll.peek(at: CACurrentMediaTime()).limits.viewport.y - Double(config.lineHeight)
+    let visible = scrollState().limits.viewport.y - Double(config.lineHeight)
     scrollBy(Double(pages) * max(Double(config.lineHeight), visible))
   }
 
@@ -63,8 +66,7 @@ extension MetalTextSurface {
   func scrollToDocumentEdge(end: Bool) {
     guard let text = currentContent?.text else { return }
     let bottom =
-      Double(text.lineCount) * Double(config.lineHeight)
-      - scroll.peek(at: CACurrentMediaTime()).limits.viewport.y
+      Double(text.lineCount) * Double(config.lineHeight) - scrollState().limits.viewport.y
     place(SIMD2(scrollPosition.x, end ? max(0, bottom) : 0))
   }
 
@@ -78,10 +80,8 @@ extension MetalTextSurface {
     transact(scrollTo: p)
   }
 
-  /// 今の位置（取引の中で置いた位置があればそれ）。
-  var scrollPosition: SIMD2<Double> {
-    transaction?.scrollTo ?? scroll.peek(at: CACurrentMediaTime()).position
-  }
+  /// 今の位置（取引の中で置いた位置・まだ出していない位置を当てたもの）。
+  var scrollPosition: SIMD2<Double> { scrollState().position }
 
   // MARK: - 位置の計算
 
@@ -90,7 +90,8 @@ extension MetalTextSurface {
   func position(after transaction: Transaction, cursors: CursorList, _ text: TextRope)
     -> SIMD2<Double>?
   {
-    let now = scroll.peek(at: CACurrentMediaTime()).position
+    let now = scroll.peek(at: CACurrentMediaTime(), limits: pending.limits, place: pending.position)
+      .position
     var p = transaction.scrollTo ?? now
     if transaction.reveal != .none {
       let caret = NSRange(location: cursors.primary.position, length: 0)
@@ -109,7 +110,7 @@ extension MetalTextSurface {
   private func centered(_ offset: Int, _ text: TextRope, from p: SIMD2<Double>) -> SIMD2<Double> {
     let row = text.row(containing: min(max(0, offset), text.length))
     let lineHeight = Double(config.lineHeight)
-    let height = scroll.peek(at: CACurrentMediaTime()).limits.viewport.y
+    let height = scrollState().limits.viewport.y
     return SIMD2(p.x, Double(row) * lineHeight + lineHeight / 2 - height / 2)
   }
 
@@ -121,7 +122,7 @@ extension MetalTextSurface {
     let end = min(max(location, NSMaxRange(range)), text.length)
     let rows = text.rows(of: NSRange(location: location, length: end - location))
     let lineHeight = Double(config.lineHeight)
-    let height = scroll.peek(at: CACurrentMediaTime()).limits.viewport.y
+    let height = scrollState().limits.viewport.y
     var p = start
     let top = Double(rows.lowerBound) * lineHeight
     let bottom = Double(rows.upperBound + 1) * lineHeight
@@ -133,23 +134,19 @@ extension MetalTextSurface {
     return p
   }
 
-  func updateLimits(lineCount: Int, heldUntil revision: Int? = nil) {
-    let viewport = SIMD2(
-      Double(size.width - config.columnWidth(lineCount: lineCount)),
-      Double(size.height - config.topInset))
-    let lineHeight = Double(config.lineHeight)
-    let cell = Double(config.cell)
-    scroll.updateLimits(heldUntil: revision) {
-      $0.lineCount = lineCount
-      $0.lineHeight = lineHeight
-      $0.viewport = viewport
-      $0.cell = cell
-    }
+  /// 行の数が `lineCount` のときの範囲の値。
+  func limits(lineCount: Int) -> LimitsUpdate {
+    LimitsUpdate(
+      lineCount: lineCount, lineHeight: Double(config.lineHeight),
+      viewport: SIMD2(
+        Double(size.width - config.columnWidth(lineCount: lineCount)),
+        Double(size.height - config.topInset)),
+      cell: Double(config.cell))
   }
 
   /// 見えている範囲を出し直し、変わっていれば文書へ知らせる（同期）。変換中なら IME にも知らせる（候補窓が追従する）。
   func refreshViewport() {
-    let (position, limits) = scroll.peek(at: CACurrentMediaTime())
+    let (position, limits) = scrollState()
     guard let current = measureViewport(position: position, limits: limits), current != viewport
     else { return }
     viewport = current
@@ -163,7 +160,7 @@ extension MetalTextSurface {
   private func measureViewport(position: SIMD2<Double>, limits: ScrollPhysics.Limits)
     -> TextViewport?
   {
-    guard limits.viewport.y > 0, let text = material.read().content?.text else { return nil }
+    guard limits.viewport.y > 0, let text = currentContent?.text else { return nil }
     let lineHeight = limits.lineHeight
     let maximum = limits.maximum
     let x = min(max(0, position.x), maximum.x)

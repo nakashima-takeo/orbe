@@ -3,10 +3,10 @@ import OrbeEditorCore
 import QuartzCore
 import simd
 
-/// 面の取引——入力の出来事 1 つ（打鍵・マウスの出来事・IME の呼び出しの一連）で箱へ置くものを、取引の終わりに 1 回の書き込み
-/// で確定する。描画スレッドは刻みごとに箱を読むので、出来事の途中で何度も書くと「新しい本文に古いキャレット」「スクロール
-/// だけ先に動いた」コマが出る。出来事の中で呼ばれたコマンドは同じ取引に入り、外側の取引が 1 回だけ確定する（編集の状態と
-/// 文書はその場で変わる——出来事の中で続く呼び出しは、それを読み返せる）。
+/// 面の取引——入力の出来事 1 つ（打鍵・マウスの出来事・IME の呼び出しの一連）で起きたことを、取引の終わりに 1 回だけ確定し、
+/// 出す前の状態（→ `Pending`）に積む。出来事の中で呼ばれたコマンドは同じ取引に入り、外側の取引が 1 回だけ確定する（編集の
+/// 状態と文書はその場で変わる——出来事の中で続く呼び出しは、それを読み返せる）。箱へ書いて描画スレッドを起こすのは確定の
+/// その場ではなく、出す 1 か所（→ `flush`）。
 struct Transaction {
   /// 取引の中で引いた文書の写し（引かなければ nil）。
   var content: SurfaceContent?
@@ -34,8 +34,10 @@ struct Transaction {
 }
 
 extension MetalTextSurface {
-  /// 今の写し（取引の中なら、取引が引いた最新の写し）。
-  var currentContent: SurfaceContent? { transaction?.content ?? material.read().content }
+  /// 今の写し（取引が引いた最新の写し、無ければまだ出していない写し、無ければ出した写し）。
+  var currentContent: SurfaceContent? {
+    transaction?.content ?? pending.content ?? material.read().content
+  }
 
   /// 今の写しの長さ。
   var textLength: Int? { currentContent?.text.length }
@@ -54,9 +56,9 @@ extension MetalTextSurface {
   }
 
   /// 取引の中で `body` を行う。取引の中から呼ばれれば同じ取引に入り（見せ方・位置・打鍵の時刻は後から頼んだものが勝ち、測り
-  /// 直しは足し合わせる）、そうでなければ取引を開き、終わりに 1 回だけ確定する。`body` の間に文書から届く知らせ（行の印・
-  /// 役割の変化）と材料への書き込みは控えるだけにする。打鍵の中の IME の呼び出しは打鍵の取引に入り、描くのは打鍵の後の
-  /// 1 状態だけ。
+  /// 直しは足し合わせる）、そうでなければ取引を開き、終わりに 1 回だけ確定して出す前の状態に積む。`body` の間に文書から
+  /// 届く知らせ（行の印・役割の変化）と材料への書き込みは控えるだけにする。打鍵の中の IME の呼び出しは打鍵の取引に入り、
+  /// 描くのは打鍵の後の 1 状態だけ。
   func transact(
     reveal: Reveal = .none, of range: NSRange? = nil, scrollTo: SIMD2<Double>? = nil,
     remeasure: Bool = false, keystroke: Double? = nil, _ body: () -> Void = {}
@@ -100,15 +102,15 @@ extension MetalTextSurface {
     return content.text
   }
 
-  /// 取引を確定する。材料の版を先に決め、行の数の上限と見せ方の縦の位置をその版に結んでスクロールの箱へ置いてから、材料を
-  /// 1 回で書く（横の「見えるところまで」は材料に添え、行を組む描画スレッドが解く）——描画スレッドは、新しい材料を読むまで前の位置を描き、読んだコマから新しい位置を描く（新しい本文を古い位置で
-  /// 描くコマも、古い本文を新しい位置で描くコマも出ない）。それから描画スレッドを起こし、選択と見えている範囲を知らせる。
+  /// 取引を確定する——行の数の上限・見せ方の縦の位置・材料の書き込み（写し・行の印・変わった行・カーソル・打鍵の時刻・
+  /// 横の「見えるところまで」）を出す前の状態に積み、選択と見えている範囲を知らせる。箱へは出す 1 か所（`flush`）が
+  /// 位置を先・材料を後の順で 1 回で書く。
   private func commit(_ finished: Transaction) {
     let cursors = editor.state.cursors
     let composing = editor.isComposing || finished.composing
     let restarts =
       finished.edited || cursors != finished.cursors || focused != finished.focused || composing
-    let text = finished.content?.text ?? material.read().content?.text
+    let text = finished.content?.text ?? currentContent?.text
     let caret = caretMaterial(cursors)
     let content = finished.content
     let marks = finished.marks.flatMap { spans in text.map { RowMarks(spans, in: $0) } }
@@ -121,25 +123,24 @@ extension MetalTextSurface {
       finished.reveal == .none
       ? nil : HorizontalReveal(range: finished.revealing ?? caretRange, serial: revealSerial)
     let edited = finished.edited
-    let revision = material.revision + 1
-    if finished.remeasure, let content { scroll.remeasure(from: content.version) }
-    updateLimits(lineCount: text?.lineCount ?? 1, heldUntil: revision)
+    if finished.remeasure, let content { pending.remeasure = content.version }
+    pending.limits = limits(lineCount: text?.lineCount ?? 1)
     if let text, let p = position(after: finished, cursors: cursors, text) {
-      scroll.place(p, heldUntil: revision)
+      pending.position = p
     }
-    let written = material.update {
-      for write in writes { write(&$0) }
-      if let content { $0.content = content }
-      if let marks { $0.marks = marks }
-      for edit in rowEdits { $0.note(edit) }
-      if let stroke { $0.keystrokes.append(stroke) }
-      if reveal != nil || edited { $0.reveal = reveal }
-      let epoch = restarts ? caret.epoch : $0.caret.epoch
-      $0.caret = caret
-      $0.caret.epoch = epoch
+    if let content { pending.content = content }
+    pending.writes.append { material in
+      for write in writes { write(&material) }
+      if let content { material.content = content }
+      if let marks { material.marks = marks }
+      for edit in rowEdits { material.note(edit) }
+      if let stroke { material.keystrokes.append(stroke) }
+      if reveal != nil || edited { material.reveal = reveal }
+      let epoch = restarts ? caret.epoch : material.caret.epoch
+      material.caret = caret
+      material.caret.epoch = epoch
     }
-    precondition(written == revision, "描く材料の箱を書くのは main の取引だけ")
-    wake()
+    flushLater()
     announce(
       selectionChanged: cursors.primary.selection != finished.cursors.primary.selection,
       composing: composing)

@@ -39,7 +39,7 @@ final class SurfaceInputMethodTests: EngineTestCase {
     let context = fakeInputMethod(opened)
     type(opened, "ab")
     replay([.mark("か")], on: opened)
-    let revision = opened.surface.material.read().revision
+    let revision = opened.surface.drawn.revision
     context.onEvent = { [self] client in
       client.insertText("か", replacementRange: IMECall.notFound)
       assertConsistent(opened, "確定の直後")
@@ -48,7 +48,7 @@ final class SurfaceInputMethodTests: EngineTestCase {
       assertConsistent(opened, "次の未確定の直後")
     }
     try key(opened, "k")
-    XCTAssertEqual(opened.surface.material.read().revision, revision + 1, "描く材料は打鍵の後の 1 回")
+    XCTAssertEqual(opened.surface.drawn.revision, revision + 1, "描く材料は打鍵の後の 1 回")
     XCTAssertEqual(text(opened.document), "abかき")
     XCTAssertEqual(opened.surface.textView.markedRange(), NSRange(location: 3, length: 1))
     context.onEvent = nil
@@ -194,9 +194,9 @@ final class SurfaceInputMethodTests: EngineTestCase {
     replay([.mark("かなかな", selected: NSRange(location: 0, length: 2))], on: opened)
     XCTAssertEqual(opened.surface.textView.selectedRange(), NSRange(location: 0, length: 2))
     XCTAssertEqual(notified, [NSRange(location: 4, length: 0)])
-    XCTAssertEqual(opened.surface.material.read().caret.carets, [], "文節を選んでいる間は主のキャレットを描かない")
+    XCTAssertEqual(opened.surface.drawn.caret.carets, [], "文節を選んでいる間は主のキャレットを描かない")
     replay([.mark("かなかな", selected: NSRange(location: 1, length: 0))], on: opened)
-    XCTAssertEqual(opened.surface.material.read().caret.carets, [1], "IME の注目位置のキャレット")
+    XCTAssertEqual(opened.surface.drawn.caret.carets, [1], "IME の注目位置のキャレット")
   }
 
   /// 変換中の ⌘ キーはまず IME へ渡る。渡している間にキー割り当てのコマンドが届けば IME は使わなかった（コマンドは実行

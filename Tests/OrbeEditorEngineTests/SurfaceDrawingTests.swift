@@ -105,7 +105,7 @@ final class SurfaceDrawingTests: EngineTestCase {
     let opened = try open((0..<100).map { "row \($0)" }.joined(separator: "\n"))
     _ = host(opened, size: CGSize(width: 400, height: 120))
     opened.surface.updateFocus(true)
-    let epoch = { opened.surface.material.read().caret.epoch }
+    let epoch = { opened.surface.drawn.caret.epoch }
     let focused = epoch()
     opened.surface.perform(.insert("x"))
     let typed = epoch()
@@ -119,11 +119,8 @@ final class SurfaceDrawingTests: EngineTestCase {
   /// 取引が置いた位置は、その版の材料を読んだコマから使う（スクロールだけが先に動いたコマを出さない）。
   func testPlacedPositionWaitsForTheMaterialRevision() {
     let box = ScrollBox(elastic: false)
-    box.updateLimits {
-      $0.lineCount = 1000
-      $0.lineHeight = 10
-      $0.viewport = SIMD2(100, 100)
-    }
+    box.updateLimits(
+      LimitsUpdate(lineCount: 1000, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7))
     box.place(SIMD2(0, 50))
     box.place(SIMD2(0, 300), heldUntil: 7)
     XCTAssertEqual(box.frame(at: 0, material: 6).position.y, 50, "古い材料のコマは前の位置")

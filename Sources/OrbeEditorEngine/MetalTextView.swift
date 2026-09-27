@@ -24,6 +24,8 @@ final class MetalTextView: TextSurfaceInputView {
   var draggedRange: NSRange?
   /// ドラッグ中の自動スクロールの前の刻みの時刻。
   var dropScrollTime: CFTimeInterval?
+  /// 置いた落とす位置の印。
+  var shownDrop: Int?
   /// サービスに平文を送り・受けられると、アプリで 1 回だけ届け出た。
   @MainActor private static var registeredServices = false
 
@@ -69,7 +71,7 @@ final class MetalTextView: TextSurfaceInputView {
   override func offerKeyEquivalentToInputMethod(_ event: NSEvent) -> Bool {
     guard composing, let surface else { return false }
     var used = false
-    surface.transact { used = super.offerKeyEquivalentToInputMethod(event) }
+    surface.input { used = super.offerKeyEquivalentToInputMethod(event) }
     return used
   }
 
@@ -197,17 +199,17 @@ final class MetalTextView: TextSurfaceInputView {
   /// 変換中はまず IME へ渡す（IME が使わなければ、クリックの入口が変換を確定する）。
   override func mouseDown(with event: NSEvent) {
     if composing, inputContext?.handleEvent(event) == true { return }
-    surface?.transact { pointer.mouseDown(event, in: self) }
+    surface?.input { pointer.mouseDown(event, in: self) }
   }
 
   override func mouseDragged(with event: NSEvent) {
     if composing, inputContext?.handleEvent(event) == true { return }
-    surface?.transact { pointer.mouseDragged(event, in: self) }
+    surface?.input { pointer.mouseDragged(event, in: self) }
   }
 
   override func mouseUp(with event: NSEvent) {
     if composing, inputContext?.handleEvent(event) == true { return }
-    surface?.transact { pointer.mouseUp(event, in: self) }
+    surface?.input { pointer.mouseUp(event, in: self) }
   }
 
   override func updateTrackingAreas() {
@@ -234,11 +236,11 @@ final class MetalTextView: TextSurfaceInputView {
     super.flagsChanged(with: event)
   }
 
-  /// 打鍵を IME と macOS のキー割り当てに通す。1 打鍵を 1 つの取引にする——セレクタが 2 つ届く打鍵（⌥↓・⌃O・利用者の
+  /// 打鍵を IME と macOS のキー割り当てに通す。1 打鍵を 1 つの取引にし、処理の終わりで出す——セレクタが 2 つ届く打鍵（⌥↓・⌃O・利用者の
   /// DefaultKeyBinding の連続セレクタ）も、IME が「確定 → 次の未確定」を続けて呼ぶ打鍵も、呼び出しごとの状態はその場で
   /// 更新し、描くのは打鍵の後の 1 状態だけ。打鍵の時刻は取引が材料へ添える（打鍵→画面の遅れ）。
   override func keyDown(with event: NSEvent) {
-    surface?.transact(keystroke: event.timestamp) { interpretKeyEvents([event]) }
+    surface?.input(keystroke: event.timestamp) { interpretKeyEvents([event]) }
   }
 
   override func becomeFirstResponder() -> Bool {

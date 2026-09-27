@@ -45,6 +45,7 @@ final class GlyphPixelTests: EngineTestCase {
         let opened = try open(Self.sample, size: size, scale: scale, options: options)
         opened.surface.viewStateDidChange(size: size, scale: scale, space: space, visible: false)
         let id = opened.surface.id
+        opened.surface.flush()
         let metal = try XCTUnwrap(
           RenderThread.shared.performAndWait {
             Transfer(value: $0.snapshot(id, background: Self.background))
@@ -95,7 +96,7 @@ final class GlyphPixelTests: EngineTestCase {
   /// 右寄せで縦の中央）。
   private func coreText(_ opened: Opened, smoothing: Bool) throws -> CGImage {
     let config = opened.surface.config
-    let material = opened.surface.material.read()
+    let material = opened.surface.drawn
     let content = try XCTUnwrap(material.content)
     let s = Double(material.scale)
     let (width, height) = Renderer.pixelSize(material)

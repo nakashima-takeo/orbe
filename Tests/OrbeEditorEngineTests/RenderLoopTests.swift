@@ -81,6 +81,7 @@ final class RenderLoopTests: EngineTestCase {
       XCTAssertTrue(stopped, "前提: 描いてから止まっている")
       let before = target.acquired
       surface.setIndentation(Indentation(unit: before % 2 == 0 ? 2 : 4, usesTabs: false))
+      surface.flush()
       let (after, paused) = RenderThread.shared.performAndWait { _ in
         (target.acquired, clock.isPaused)
       }
@@ -104,7 +105,7 @@ final class RenderLoopTests: EngineTestCase {
     let target = fire + period / 2
     XCTAssertEqual(
       target / period, (target / period).rounded(), accuracy: 0.05, "刻みの半刻み前に起きる")
-    let caret = surface.material.read().caret
+    let caret = surface.drawn.caret
     XCTAssertNotEqual(
       caret.caretVisible(at: target), caret.caretVisible(at: target - period),
       "起きて描く刻みは、点滅が切り替わってから最初の刻み")
@@ -112,7 +113,7 @@ final class RenderLoopTests: EngineTestCase {
     surface.setCaretBlinks(false)
     waitUntilPaused(surface)
     XCTAssertNil(blinkWake(surface), "点滅しなければ置かない")
-    XCTAssertTrue(surface.material.read().caret.caretVisible(at: target), "描き続ける")
+    XCTAssertTrue(surface.drawn.caret.caretVisible(at: target), "描き続ける")
     surface.setCaretBlinks(true)
     waitUntilPaused(surface)
     XCTAssertNotNil(blinkWake(surface))

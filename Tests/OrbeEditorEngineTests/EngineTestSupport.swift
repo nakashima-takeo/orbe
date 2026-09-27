@@ -134,3 +134,11 @@ class EngineTestCase: XCTestCase {
     try? rep.representation(using: .png, properties: [:])?.write(to: url)
   }
 }
+
+extension MetalTextSurface {
+  /// 描画スレッドが見る材料——出す前の状態をその場で出してから読む（テストが描画スレッドへ問う前に出す）。
+  var drawn: FrameMaterial {
+    flush()
+    return material.read()
+  }
+}
