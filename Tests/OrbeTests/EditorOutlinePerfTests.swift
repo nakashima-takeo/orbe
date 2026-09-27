@@ -87,14 +87,17 @@ final class EditorOutlinePerfTests: OrbeTestCase {
     }
   }
 
-  /// 大きな文書（1MB の Swift・800KB と 5MB の package-lock.json 相当）で、アウトラインの main の仕事——結果の受け取り・
-  /// カーソル追従 1 回・開閉 1 回・すべて折りたたむ／展開・絞り込みの打鍵 1 回とその結果の受け取り・列の 1 行送りと
-  /// 1 画面送り。どれも面の layout と描画まで——と、開いてから結果が届くまでの裏の時間。
+  /// 大きな文書（1MB の Swift・800KB と 5MB の package-lock.json 相当・要素の多い配列の JSON・深い入れ子の JSON）で、
+  /// アウトラインの main の仕事——結果の受け取り（開いたときと、編集して取り直したとき）・カーソル追従 1 回・開閉 1 回・
+  /// すべて折りたたむ／展開・絞り込みの打鍵 1 回とその結果の受け取り・列の 1 行送りと 1 画面送り。どれも面の layout と
+  /// 描画まで——と、開いてから結果が届くまでの裏の時間。
   func testOutlineMainWorkOnLargeDocuments() throws {
     for (label, ext, text) in [
       ("1MB-swift", "swift", EditorScrollPerfTests.swiftSource(bytes: 1_000_000)),
       ("800KB-json", "json", Self.packageLock(bytes: 800_000)),
       ("5MB-json", "json", Self.packageLock(bytes: 5_000_000)),
+      ("2MB-array-json", "json", Self.recordArray(bytes: 2_000_000)),
+      ("deep-json", "json", Self.nestedArrays(depth: 1_000)),
     ] {
       let opened = try openEditor(text, extension: ext)
       let document = opened.document
@@ -112,6 +115,15 @@ final class EditorOutlinePerfTests: OrbeTestCase {
         "PERF", label, "outline-extract (開いてから結果まで・裏)", String(format: "%.1f", extraction),
         "symbols", symbols, "rows", outline.rowCount)
       reportPerf(label, "outline-receive", received, digits: 3)
+
+      received = []
+      for index in 0..<3 {
+        document.surface.selectedRange = NSRange(
+          location: document.text.lineStart(1 + index), length: 0)
+        document.surface.responder.keyDown(with: .key(" ", []))
+        XCTAssertTrue(pumpUntilCaughtUp(document))
+      }
+      reportPerf(label, "outline-refresh-receive (編集して取り直した結果)", received, digits: 3)
 
       let length = document.text.length
       let follows = (0..<30).map { index in
@@ -198,6 +210,25 @@ final class EditorOutlinePerfTests: OrbeTestCase {
       view.layoutSubtreeIfNeeded()
       view.displayIfNeeded()
     }
+  }
+
+  /// `bytes` を超えるまでレコードを連ねた配列の JSON（データの書き出し・API の fixture 相当。要素ごとに 4 つのキーと
+  /// 3 要素の配列）。
+  static func recordArray(bytes: Int) -> String {
+    var text = "[\n"
+    var k = 0
+    while text.utf8.count < bytes {
+      if k > 0 { text += ",\n" }
+      text +=
+        "  {\"id\": \(k), \"name\": \"item-\(k)\", \"score\": \(k % 100), \"tags\": [\"a\", \"b\", \"c\"]}"
+      k += 1
+    }
+    return text + "\n]\n"
+  }
+
+  /// 配列を `depth` 段入れ子にした JSON（各段に値 1 つ）。
+  static func nestedArrays(depth: Int) -> String {
+    String(repeating: "[1,\n", count: depth) + String(repeating: "]", count: depth) + "\n"
   }
 
   /// `bytes` を超えるまでパッケージを連ねた package-lock.json 相当の本文（1 つに 8〜9 個のキー）。
