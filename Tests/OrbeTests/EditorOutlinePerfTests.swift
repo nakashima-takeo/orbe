@@ -134,21 +134,7 @@ final class EditorOutlinePerfTests: OrbeTestCase {
       }
       reportPerf(label, "outline-follow", follows, digits: 3)
 
-      let parents = (0..<min(outline.rowCount, 400)).map(outline.row(at:)).filter(\.hasChildren)
-      let toggles = parents.prefix(30).flatMap { row in
-        [
-          frame(opened.pane) { outline.setExpanded(row.symbol, false) },
-          frame(opened.pane) { outline.setExpanded(row.symbol, true) },
-        ]
-      }
-      _ = frame(opened.pane) { outline.setExpanded(parents[0].symbol, false) }
-      XCTAssertEqual(
-        opened.pane.outlineList.scrollView.list.rowCount, outline.rowCount,
-        "前提: 描画までの区間に列の読み直しが入っている")
-      outline.setExpanded(parents[0].symbol, true)
-      reportPerf(label, "outline-toggle", toggles, digits: 3)
-      let all = (0..<6).map { _ in frame(opened.pane) { outline.toggleCollapseAll() } }
-      reportPerf(label, "outline-collapse-all", all, digits: 3)
+      reportFolding(label, opened)
 
       received = []
       var typed: [Double] = []
@@ -165,6 +151,26 @@ final class EditorOutlinePerfTests: OrbeTestCase {
       document.onOutlineChange = forward
       opened.window.orderOut(nil)
     }
+  }
+
+  /// 開閉 1 回と、すべて折りたたむ／展開（描画まで）。
+  private func reportFolding(_ label: String, _ opened: OpenedEditor) {
+    let outline = opened.pane.outline
+    let parents = (0..<min(outline.rowCount, 400)).map(outline.row(at:)).filter(\.hasChildren)
+    let toggles = parents.prefix(30).flatMap { row in
+      [
+        frame(opened.pane) { outline.setExpanded(row.symbol, false) },
+        frame(opened.pane) { outline.setExpanded(row.symbol, true) },
+      ]
+    }
+    _ = frame(opened.pane) { outline.setExpanded(parents[0].symbol, false) }
+    XCTAssertEqual(
+      opened.pane.outlineList.scrollView.list.rowCount, outline.rowCount,
+      "前提: 描画までの区間に列の読み直しが入っている")
+    outline.setExpanded(parents[0].symbol, true)
+    reportPerf(label, "outline-toggle", toggles, digits: 3)
+    let all = (0..<6).map { _ in frame(opened.pane) { outline.toggleCollapseAll() } }
+    reportPerf(label, "outline-collapse-all", all, digits: 3)
   }
 
   /// 列の 1 行送りと 1 画面送り（描画まで）。
