@@ -67,10 +67,11 @@ final class DisplayLinkClock: FrameClock {
 
   var period: Double { link.duration > 0 ? link.duration : 1.0 / 120 }
 
+  /// 止めていた間も最後の刻みから同じ間隔で数える（最初の呼び出しの前は刻みを知らないので 1 刻み後）。
   func nextTarget(after now: Double) -> Double {
-    var target = link.targetTimestamp
-    while target <= now { target += period }
-    return target
+    let last = link.targetTimestamp
+    guard last > 0 else { return now + period }
+    return last > now ? last : last + ((now - last) / period).rounded(.down) * period + period
   }
 
   func invalidate() { link.invalidate() }

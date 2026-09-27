@@ -7,7 +7,7 @@ import QuartzCore
 /// どの面のためにも待たない——面ごとに「画面に出ていないコマ」を数え、上限の面はそのコマを飛ばす（`nextDrawable` は
 /// 実際には待たない）。GPU の空きも待たずに数える。飛ばしたコマは、画面に出た知らせを受けた時点で次の刻みを待たずに描く。
 /// 位置は描く直前にコマの予定時刻で読む（指の出来事をできるだけ新しく入れる）。描くものが変わらないコマが続いたら、
-/// その面の刻みを止める。
+/// その面の刻みを止め、箱に書かれて起こされたら、その場で 1 コマ描いてから刻みに戻る。
 final class Renderer {
   let device: MTLDevice
   let queue: MTLCommandQueue
@@ -22,6 +22,9 @@ final class Renderer {
   static let gpuLimit = 3
   /// 描くものが変わらないコマがこれだけ続いたら刻みを止める。
   static let idleTicksBeforePause = 2
+  /// 起こされてその場で描くのに要る、次に画面に出る刻みまでの残り（命令を出し終える余裕 1ms と、1 コマの CPU の上限
+  /// 1ms）。足りなければ次の刻みで描く。
+  static let wakeBudget = 0.002
   /// 止めてから、ジェスチャーの要約を締めるまで（OS の momentum が続くか・main の詰まりが明けるかを見届ける）。
   static let gestureSettle = 0.3
 
@@ -62,11 +65,17 @@ final class Renderer {
     clock.isPaused = false
   }
 
-  /// 箱に何かが書かれた。止めていた刻みを再開する。
+  /// 箱に何かが書かれた。止めていた刻みを再開し、次に画面に出る刻みまでに描き終えられるなら、刻みを待たずにその場で
+  /// 1 コマ描く（止まっていた面の最初の変化が、次の刻みまでの待ちのぶん遅れない）。刻みが走っている間は次の刻みに任せる。
   func wake(_ id: Int) {
     guard let slot = slots[id] else { return }
     slot.idleTicks = 0
-    slot.clock?.isPaused = false
+    guard let clock = slot.clock, clock.isPaused else { return }
+    clock.isPaused = false
+    let now = CACurrentMediaTime()
+    let target = clock.nextTarget(after: now)
+    guard target - now > Self.wakeBudget else { return }
+    tick(id, target: target)
   }
 
   func slot(_ id: Int) -> SurfaceSlot? { slots[id] }
