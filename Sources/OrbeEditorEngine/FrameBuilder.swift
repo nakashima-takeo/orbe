@@ -20,9 +20,7 @@ struct ShapeInstance {
   var pad: UInt32 = 0
 }
 
-/// 1 コマの中身を組み立てる（描画スレッドだけ。配列は面ごとに使い回す）。下から順に、選択の地・未確定の文字の地 → 本文の字
-/// と長い行の「ほか N 字」（行番号の列の右だけ）→ 色付きの字（絵文字など）→ 行番号 → git の印 → 未確定の文字の下線・
-/// キャレット・落とす位置の印。地は描かない（透明に消し、下の地を透かす）。
+/// 1 コマの中身を組み立てる（描画スレッドだけ。配列は面ごとに使い回す）。重ねる順は `Renderer.encode` が持つ。
 ///
 /// 行の位置は y = 上端の余白 + 行 × 行高で、折り返さない。見えている行だけその場で組版し（キャッシュする）、字の色は
 /// 行ごとに、横に見えている字の区間の役割を役割の並びから引いて決める（長い行でも行全体の役割は引かない）。スクロール量
@@ -32,13 +30,13 @@ final class FrameBuilder {
   private(set) var color: [[GlyphInstance]] = []
   private(set) var gutter: [[GlyphInstance]] = []
   var shapes: [ShapeInstance] = []
-  /// 行の装備（インデント線・空白の丸点・URL の下線。選択の地の下。本文の列に切り取る）。
+  /// 行の装備（インデント線・空白の丸点・URL の下線。本文の列に切り取る）。
   var decorShapes: [ShapeInstance] = []
-  /// 選択の地（本文の字の下。本文の列に切り取る）。
+  /// 選択の地と未確定の文字の地（本文の列に切り取る）。
   var underShapes: [ShapeInstance] = []
-  /// 強調の地（選択の地の上・字の下。本文の列に切り取る）。
+  /// 強調の地（本文の列に切り取る）。
   var highlightShapes: [ShapeInstance] = []
-  /// キャレット（いちばん上。本文の列に切り取る）。
+  /// 未確定の文字の下線・キャレット・落とす位置の印（本文の列に切り取る）。
   var overShapes: [ShapeInstance] = []
   private(set) var textScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
   private(set) var gutterScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
@@ -46,8 +44,7 @@ final class FrameBuilder {
   private(set) var longestLine: CGFloat = 0
   /// このコマのミニマップ。
   var minimap = MinimapFrame()
-  /// 影（上端・ミニマップの左。ミニマップの下）と、俯瞰の図形（ミニマップの帯・縦横のスクロールバーと印。ミニマップの
-  /// 上）。
+  /// 影（上端・ミニマップの左）と、俯瞰の図形（ミニマップの帯・縦横のスクロールバーと印）。
   var shadowShapes: [ShapeInstance] = []
   var overviewShapes: [ShapeInstance] = []
   /// スクロールバーの印の縦の区間（元が変わったときだけ作り直す）。
