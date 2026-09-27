@@ -235,6 +235,27 @@ final class SurfaceEditingTests: EngineTestCase {
     XCTAssertGreaterThanOrEqual(viewport.hiddenColumns + viewport.visibleColumns + 0.5, 301)
   }
 
+  /// 描画スレッドは頼まれた横の「見えるところまで」を 1 度だけ解く——寄せた後に人が横へ戻せば、次のコマも戻したまま
+  /// （同じ頼みで寄せ直さない）。次の打鍵はまた寄せる。
+  func testTheHorizontalRevealIsSolvedOnce() throws {
+    let opened = try open(String(repeating: "x", count: 300) + "\n")
+    _ = host(opened, size: CGSize(width: 400, height: 120))
+    opened.surface.selectedRange = NSRange(location: 300, length: 0)
+    type(opened, "y")
+    _ = opened.surface.snapshot()
+    pump(until: { opened.surface.viewport.hiddenColumns > 0 }, "前提: 行の末尾まで寄せる")
+    opened.surface.scroll(
+      ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(100_000, 0), precise: true))
+    XCTAssertEqual(opened.surface.viewport.hiddenColumns, 0, "前提: 人が行頭へ戻した")
+    _ = opened.surface.snapshot()
+    pump()
+    _ = opened.surface.snapshot()
+    XCTAssertEqual(opened.surface.viewport.hiddenColumns, 0, "戻したまま")
+    type(opened, "z")
+    _ = opened.surface.snapshot()
+    pump(until: { opened.surface.viewport.hiddenColumns > 0 }, "次の打鍵はまた寄せる")
+  }
+
   /// 取引は、渡した編集で組版の変わった行を描画スレッドへ知らせる——打鍵ではその行だけ、Enter では 1 行が 2 行に、複数行の
   /// 字下げでは各行（後ろから当てた順）。描画スレッドはこれで変わった行だけを組み直す。
   func testTransactionsReportTheRowsTheyChanged() throws {
