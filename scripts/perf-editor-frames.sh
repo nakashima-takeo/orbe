@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 新しいテキスト面（Metal）のコマを測る——実装の関門。release のテスト用ビルドを作り、FramePerfTests（1MB・200KB で、
-# 窓を出さず画面外に 120Hz で描き、合成した指の出来事を約 5.7ms ごとに流す。main への負荷の有り無し・詰まった面の隣・
-# 止まっている間の起床）を回して PERF-FRAMES の行を出す。環境変数は .app を Finder から起こしたときと同じに絞る
-# （perf-editor.sh と同じ理由）。目標は docs/testing/test-architecture.md。
+# 新しいテキスト面（Metal）のコマと打鍵を測る——実装の関門。release のテスト用ビルドを作り、FramePerfTests（1MB・200KB
+# で、窓を出さず画面外に 120Hz で描き、合成した指の出来事を約 5.7ms ごとに、合成の打鍵を 100ms と 33ms の間隔で流す。
+# main への負荷の有り無し・詰まった面の隣・止まっている間の起床・長い行）を回して PERF-FRAMES の行を出す。環境変数は
+# .app を Finder から起こしたときと同じに絞る（perf-editor.sh と同じ理由）。目標は docs/testing/test-architecture.md。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
