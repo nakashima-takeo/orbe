@@ -90,21 +90,22 @@ extension EditCommands {
       with: string, undo: string == " " ? .typing(.firstSpace) : .typing(.other), state, env)
   }
 
-  /// 改行（VS Code の Enter の `autoIndent: keep` 相当）——字下げを引き継ぐなら、今の行の行頭の空白のうちキャレットより左を
-  /// 文書の作法に揃えて続ける。
+  /// 改行（VS Code の Enter の `autoIndent: keep` 相当）。改行は文書の作法（LF か CRLF）で、字下げを引き継ぐなら、今の行の
+  /// 行頭の空白のうちキャレットより左を文書の作法に揃えて続ける。
   static func newline(indents: Bool, _ state: EditState, _ env: EditingEnvironment)
     -> CommandResult
   {
     edit(state, env, undo: .newline) { cursor in
       let selection = cursor.selection
-      guard indents else { return Replacement(selection, "\n") }
+      let lineBreak = env.lineBreak.string
+      guard indents else { return Replacement(selection, lineBreak) }
       let text = env.text
       let row = text.row(containing: selection.location)
       let start = text.lineStart(row)
       let leading = text.units(in: NSRange(location: start, length: selection.location - start))
         .prefix { $0 == 0x20 || $0 == 0x09 }
       return Replacement(
-        selection, "\n" + Indenting.normalize(Array(leading), env.indentation))
+        selection, lineBreak + Indenting.normalize(Array(leading), env.indentation))
     }
   }
 

@@ -48,7 +48,8 @@ extension MetalTextSurface {
       text: text,
       geometry: ShapedLineGeometry(
         text: text, cache: lineStops, tabWidth: config.tabWidth(columns: indentation.unit)),
-      pageLines: max(1, lines - 2), indentation: indentation, killBuffer: KillBuffer.contents)
+      pageLines: max(1, lines - 2), indentation: indentation, lineBreak: lineBreak,
+      killBuffer: KillBuffer.contents)
   }
 
   /// 取引の中で `body` を行う。取引の中から呼ばれれば同じ取引に入り（見せ方・位置・打鍵の時刻は後から頼んだものが勝ち、測り

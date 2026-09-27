@@ -67,6 +67,7 @@ struct EditingEnvironment {
   /// ページ送りの行の数（VS Code の `pageSize`——見えている行の数 − 2、1 以上）。
   let pageLines: Int
   let indentation: Indentation
+  let lineBreak: LineBreak
   let killBuffer: String
 }
 

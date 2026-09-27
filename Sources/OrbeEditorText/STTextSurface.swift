@@ -171,6 +171,9 @@ final class STTextSurface: NSObject, TextSurface {
     textView.breakUndoCoalescing()
   }
 
+  /// 改行の作法は受けて使わない（改行と貼り付けは上流の振る舞いのまま）。
+  func setLineBreak(_ lineBreak: LineBreak) {}
+
   func setLineMarks(_ spans: LineMarkSpans) {
     numbersView.marksView.spans = spans
   }

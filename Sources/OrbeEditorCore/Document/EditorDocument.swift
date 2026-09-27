@@ -139,7 +139,7 @@ public final class EditorDocument {
     analysis = DocumentAnalysis(inbox: inbox)
     inbox.setWake { [weak self] in self?.receive() }
     surface.delegate = self
-    applyIndentation()
+    applyConventions()
   }
 
   /// 閉じた文書の大きな部品を手放す口（既定は裏で手放す）。テストは手放す時機を差し替える。
@@ -207,9 +207,11 @@ public final class EditorDocument {
       && pendingHunks == nil && pendingRanges.isEmpty
   }
 
-  private func applyIndentation() {
+  /// 本文の作法（字下げ・改行）を検出し直して面へ押す。
+  private func applyConventions() {
     indentation = Indentation.detect(in: text.utf16)
     surface.setIndentation(indentation)
+    surface.setLineBreak(LineBreak.detect(in: text.utf16))
   }
 
   /// 本文をそのまま UTF-8 で書く（改行・末尾改行は本文のまま。開いたとき BOM があれば付け直す）。
@@ -255,7 +257,7 @@ public final class EditorDocument {
     isReplacingFromDisk = true
     surface.replaceAll(with: onDisk.text)
     isReplacingFromDisk = false
-    applyIndentation()
+    applyConventions()
     diskDigest = onDisk.digest
     hasBOM = onDisk.hasBOM
     surface.markUndoBoundary()

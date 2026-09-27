@@ -36,6 +36,7 @@ final class MetalTextSurface: TextSurface {
   private var scale: CGFloat = 2
   private var space = FrameMaterial.defaultSpace
   private(set) var indentation = Indentation.fallback
+  private(set) var lineBreak = LineBreak.lf
   /// 面に焦点がある（first responder で、窓が key）。
   private(set) var focused = false
   /// キャレットを点滅させるか（→ `setCaretBlinks`）。
@@ -97,6 +98,10 @@ final class MetalTextSurface: TextSurface {
   func setIndentation(_ indentation: Indentation) {
     self.indentation = indentation
     write { $0.tabColumns = indentation.unit }
+  }
+
+  func setLineBreak(_ lineBreak: LineBreak) {
+    self.lineBreak = lineBreak
   }
 
   /// 標準のセレクタが写ったコマンドを、面の編集係で行う。

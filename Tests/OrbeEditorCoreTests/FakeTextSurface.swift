@@ -22,6 +22,7 @@ final class FakeTextSurface: TextSurface {
   }
   var caretLocation: Int { NSMaxRange(selectedRange) }
   private(set) var indentation = Indentation.fallback
+  private(set) var lineBreak = LineBreak.lf
 
   init(text: String) {
     storage = NSMutableString(string: text)
@@ -71,6 +72,8 @@ final class FakeTextSurface: TextSurface {
   func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {}
 
   func setIndentation(_ indentation: Indentation) { self.indentation = indentation }
+
+  func setLineBreak(_ lineBreak: LineBreak) { self.lineBreak = lineBreak }
 
   /// 契約の後条件どおり、置き換え後の選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。
   func replaceAll(with text: String) {

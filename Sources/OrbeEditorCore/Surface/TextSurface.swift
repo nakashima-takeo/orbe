@@ -41,6 +41,9 @@ public protocol TextSurface: AnyObject {
   /// Tab で入れる字（空白かタブか）と字下げの幅にも使う。
   func setIndentation(_ indentation: Indentation)
 
+  /// 改行の作法。文書が本文から検出して押す。編集する面は、Enter で入れる改行と、貼る・落とす文字列の改行に使う。
+  func setLineBreak(_ lineBreak: LineBreak)
+
   /// undo の履歴にここで区切りを置く。打鍵のまとまりは区切りをまたがない
   /// （保存が呼ぶ——⌘Z が保存前の打鍵まで一緒に戻さないため）。
   func markUndoBoundary()

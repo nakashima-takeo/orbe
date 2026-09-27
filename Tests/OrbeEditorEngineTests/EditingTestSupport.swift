@@ -53,14 +53,14 @@ enum Editing {
   }
 
   static func environment(
-    _ text: TextRope, indentation: Indentation = .fallback, pageLines: Int = 10,
-    killBuffer: String = ""
+    _ text: TextRope, indentation: Indentation = .fallback, lineBreak: LineBreak = .lf,
+    pageLines: Int = 10, killBuffer: String = ""
   ) -> EditingEnvironment {
     EditingEnvironment(
       text: text,
       geometry: ShapedLineGeometry(
         text: text, cache: cache, tabWidth: CGFloat(indentation.unit) * cell),
-      pageLines: pageLines, indentation: indentation, killBuffer: killBuffer)
+      pageLines: pageLines, indentation: indentation, lineBreak: lineBreak, killBuffer: killBuffer)
   }
 
   /// コマンドを順に当て、最後の本文と状態を書いたもの。
