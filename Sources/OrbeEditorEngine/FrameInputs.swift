@@ -175,9 +175,39 @@ struct SurfaceConfig: @unchecked Sendable {
   var baseline: CGFloat { (lineHeight - (ascent + descent)) / 2 + ascent }
 }
 
+/// 本文の編集で組版の変わった行——編集前の行 `rows` が編集後の `inserted` 行に置き換わり、後ろの行はずれる。`version`
+/// は編集後の写しの版。
+struct RowEdit: Equatable, Sendable {
+  var rows: Range<Int>
+  var inserted: Int
+  var version: Int
+
+  /// 全部の行が変わった。
+  static func all(version: Int) -> RowEdit {
+    RowEdit(rows: 0..<Int.max, inserted: 0, version: version)
+  }
+
+  init(rows: Range<Int>, inserted: Int, version: Int) {
+    self.rows = rows
+    self.inserted = inserted
+    self.version = version
+  }
+
+  /// 編集前の本文 `text` への編集 `edit`。置き換えた区間の始まりの行から終わりの行までが、置き換えの中身の行に変わる。
+  init(_ edit: TextEdit, in text: TextRope, version: Int) {
+    let first = text.row(containing: edit.range.location)
+    let last = text.row(containing: NSMaxRange(edit.range))
+    rows = first..<last + 1
+    inserted = edit.replacement.reduce(1) { $1 == 0x0A ? $0 + 1 : $0 }
+    self.version = version
+  }
+}
+
 /// 描く材料。main が置き、描画スレッドが表示の刻みごとに最新を読む。
 struct FrameMaterial: Sendable {
   var content: SurfaceContent?
+  /// 描画スレッドがまだ受け取っていない本文の編集（古い順）。
+  var rowEdits: [RowEdit] = []
   var marks = RowMarks.empty
   var palette: FramePalette?
   var tabColumns = IndentUnit.fallback
@@ -188,6 +218,11 @@ struct FrameMaterial: Sendable {
   var visible = false
   /// 何かが変わるたびに進む。
   var revision = 0
+
+  /// 本文の編集を積む（描画スレッドが長く受け取らなければ、全部の行が変わったことにまとめる）。
+  mutating func note(_ edit: RowEdit) {
+    rowEdits = rowEdits.count < 64 ? rowEdits + [edit] : [.all(version: edit.version)]
+  }
 }
 
 /// 描く材料の箱。鍵の中では値の読み書きだけをする。
@@ -202,6 +237,15 @@ final class MaterialBox: Sendable {
   }
 
   func read() -> FrameMaterial { state.withLock { $0 } }
+
+  /// 描画スレッドが読み、まだ受け取っていない本文の編集を引き取る。
+  func take() -> FrameMaterial {
+    state.withLock {
+      let material = $0
+      $0.rowEdits.removeAll()
+      return material
+    }
+  }
 
   /// 中身を空にする（面を閉じたとき描画スレッドで呼び、写しの最後の解放をそこで行う）。
   func clear() -> FrameMaterial {

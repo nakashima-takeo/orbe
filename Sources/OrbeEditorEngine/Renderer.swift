@@ -95,7 +95,8 @@ final class Renderer {
     }
     // 刻みの長さは最初の呼び出しまで分からず、画面を移れば変わる。
     slot.recorder.period = clock.period
-    let material = slot.material.read()
+    let material = slot.material.take()
+    slot.lines.receive(material.rowEdits)
     guard material.visible, material.content != nil, material.palette != nil,
       material.size.width > 0, material.size.height > 0
     else {

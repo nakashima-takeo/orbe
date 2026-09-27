@@ -24,7 +24,8 @@ struct ShapeInstance {
 /// （行番号の列の右だけ）→ 色付きの字（絵文字など）→ 行番号 → git の印。地は描かない（透明に消し、下の地を透かす）。
 ///
 /// 行の位置は y = 上端の余白 + 行 × 行高で、折り返さない。見えている行だけその場で組版し（キャッシュする）、字の色は
-/// 行ごとに役割の並びから区間の役割を引いて決める。スクロール量は装置の画素に揃える（字がにじまない）。
+/// 行ごとに、横に見えている字の区間の役割を役割の並びから引いて決める（長い行でも行全体の役割は引かない）。スクロール量
+/// は装置の画素に揃える（字がにじまない）。
 final class FrameBuilder {
   private(set) var text: [[GlyphInstance]] = []
   private(set) var color: [[GlyphInstance]] = []
@@ -104,37 +105,50 @@ final class FrameBuilder {
     guard first <= last else { return }
     let baseline = (Double(config.baseline) * s).rounded()
     let numberFont = fonts.id(config.gutterFont)
+    let tabColumns = source.material.tabColumns
+    cache.beginFrame(version: content.version, tabColumns: tabColumns)
     for row in first...last {
       let top = g.rowTop(row)
-      let (line, start) = LineShaper.source(row: row, in: content.text)
       let laid = cache.line(
-        line, tabColumns: source.material.tabColumns, config: config, fonts: fonts)
-      let spans = content.roles.roles(
-        in: NSRange(location: start, length: line.length - laid.omitted))
-      let width = drawText(laid, start: start, spans: spans, baseline: top + baseline, c)
+        row: row, in: content.text, tabColumns: tabColumns, config: config, fonts: fonts)
+      let width = drawText(
+        laid, start: content.text.lineStart(row), roles: content.roles, baseline: top + baseline, c)
       longestLine = max(longestLine, width)
       drawNumber(row + 1, rowTop: top, font: numberFont, c)
     }
+    cache.endFrame()
     drawMarks(source.material.marks, rows: first...last, c)
   }
 
-  /// 行の字を置き、行の幅（末尾の印を含む、pt）を返す。行番号の列の下に隠れる字と右端の外の字は置かない。
+  /// 行の字を置き、行の幅（末尾の印を含む、pt）を返す。行番号の列の下に隠れる字と右端の外の字は置かず、役割も置く字の
+  /// 区間だけ引く。
   private func drawText(
-    _ line: LaidOutLine, start: Int, spans: [HighlightSpan], baseline: Double, _ c: Context
+    _ line: LaidOutLine, start: Int, roles: RoleRuns, baseline: Double, _ c: Context
   ) -> CGFloat {
     let g = c.g
     let originX = g.column - g.scrollX
     let leftmost = Float((g.column - originX) / g.scale - Double(c.config.cell) * 4)
-    var cursor = RoleCursor(spans: spans)
-    var i = Self.lowerBound(line.xs, leftmost)
-    while i < line.glyphs.count {
-      let x = originX + Double(line.xs[i]) * g.scale
-      if x > g.width { break }
-      let role = cursor.role(at: start + Int(line.offsets[i]))
-      let ink = role.flatMap { c.palette.roles[$0] } ?? c.palette.text
-      place(
-        Glyph(font: line.fonts[i], glyph: line.glyphs[i], x: x, baseline: baseline), ink, .text, c)
-      i += 1
+    let rightmost = Float((g.width - originX) / g.scale)
+    let from = Self.lowerBound(line.xs, leftmost)
+    var to = from
+    var low = Int32.max
+    var high = Int32.min
+    while to < line.glyphs.count, line.xs[to] <= rightmost {
+      low = min(low, line.offsets[to])
+      high = max(high, line.offsets[to])
+      to += 1
+    }
+    if from < to {
+      var cursor = RoleCursor(
+        spans: roles.roles(
+          in: NSRange(location: start + Int(low), length: Int(high - low) + 1)))
+      for i in from..<to {
+        let role = cursor.role(at: start + Int(line.offsets[i]))
+        let ink = role.flatMap { c.palette.roles[$0] } ?? c.palette.text
+        let x = originX + Double(line.xs[i]) * g.scale
+        let glyph = Glyph(font: line.fonts[i], glyph: line.glyphs[i], x: x, baseline: baseline)
+        place(glyph, ink, .text, c)
+      }
     }
     guard let mark = line.omittedMark else { return line.width }
     let markX = originX + Double(line.width + c.config.cell) * g.scale
@@ -212,8 +226,9 @@ enum FrameBuilderLayer {
   case text, gutter
 }
 
-/// 昇順の役割の区間を、増えていくオフセットで引く（戻れば二分探索で引き直す）。
-private struct RoleCursor {
+/// 昇順の役割の区間を、おおむね増えていくオフセットで引く（右から左の字の塊の中のように、前の区間の終わりより前へ戻れば
+/// 二分探索で引き直す）。
+struct RoleCursor {
   let spans: [HighlightSpan]
   var index = 0
 
@@ -223,7 +238,7 @@ private struct RoleCursor {
 
   mutating func role(at offset: Int) -> SyntaxRole? {
     guard !spans.isEmpty else { return nil }
-    if index < spans.count, offset < spans[index].range.location, index > 0 {
+    if index > 0, offset < NSMaxRange(spans[index - 1].range) {
       var low = 0
       var high = spans.count
       while low < high {

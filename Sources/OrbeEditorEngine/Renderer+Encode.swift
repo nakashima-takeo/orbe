@@ -99,7 +99,8 @@ extension Renderer {
   /// コンパイルが済むまで待つ。
   func snapshot(_ id: Int, background: MTLClearColor? = nil) -> CGImage? {
     guard let slot = slot(id), let pipelines = gate.wait() else { return nil }
-    let material = slot.material.read()
+    let material = slot.material.take()
+    slot.lines.receive(material.rowEdits)
     let (width, height) = Self.pixelSize(material)
     guard material.content != nil, material.palette != nil, width > 0, height > 0 else {
       return nil
