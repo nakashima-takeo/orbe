@@ -39,10 +39,9 @@ final class EditorPaneView: NSView {
   let emptyHost: NSHostingView<EditorFaceRoot>
   private(set) var document: EditorDocument?
   /// 本体の右のミニマップとスクロールバー、本体に重ねる影。焦点の文書に結ぶ。
-  let minimap = EditorMinimapView(style: EditorStyle.minimap())
-  let scrollbar = EditorScrollbarView(style: EditorStyle.scrollbar())
-  let scrollShadow = EditorScrollShadowView(
-    topColor: Theme.Color.editorScrollShadow, edgeColor: Theme.Color.editorMinimapShadow)
+  let minimap = EditorMinimapView(style: EditorStyle.make())
+  let scrollbar = EditorScrollbarView(style: EditorStyle.make().overview)
+  let scrollShadow = EditorScrollShadowView(style: EditorStyle.make().overview)
   /// ファイル内検索の状態（pane ごと）。バーは開いている間だけある。
   let search = EditorSearch()
   var searchBar: SearchBar?

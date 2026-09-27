@@ -55,7 +55,36 @@ class EngineTestCase: XCTestCase {
         whitespaceDiameter: 2, linkUnderlineThickness: 1, linkUnderlineOffset: 3),
       highlights: .init(
         findMatch: .yellow, currentFindMatch: .orange, currentFindLine: .gray,
-        selectionOccurrence: .gray, selectionOccurrenceInactive: .gray, wordOccurrence: .gray))
+        selectionOccurrence: .gray, selectionOccurrenceInactive: .gray, wordOccurrence: .gray),
+      overview: overviewStyle())
+  }
+
+  /// 見本の俯瞰の見え方（寸法は Orbe の既定。色は外観に依らない固定値）。
+  static func overviewStyle() -> TextSurfaceStyle.Overview {
+    let gray = { (white: CGFloat, alpha: CGFloat) in
+      NSColor(srgbRed: white, green: white, blue: white, alpha: alpha)
+    }
+    return TextSurfaceStyle.Overview(
+      minimap: .init(
+        maxWidth: 120, slider: gray(0.47, 0.2), sliderHover: gray(0.39, 0.35),
+        sliderActive: gray(0.75, 0.2),
+        selection: NSColor(srgbRed: 0.15, green: 0.31, blue: 0.47, alpha: 1),
+        findMatch: NSColor(srgbRed: 0.92, green: 0.36, blue: 0, alpha: 0.33),
+        wordOccurrence: NSColor(srgbRed: 0.68, green: 0.84, blue: 1, alpha: 0.15),
+        added: NSColor(srgbRed: 0.2, green: 0.8, blue: 0.4, alpha: 1),
+        modified: NSColor(srgbRed: 0.3, green: 0.5, blue: 0.9, alpha: 1),
+        removed: NSColor(srgbRed: 0.9, green: 0.3, blue: 0.3, alpha: 1)),
+      scrollbar: .init(
+        width: 14, horizontalHeight: 12, slider: gray(0.47, 0.4), sliderHover: gray(0.39, 0.7),
+        sliderActive: gray(0.75, 0.4), border: gray(1, 0.07),
+        findMatch: NSColor(srgbRed: 0.82, green: 0.53, blue: 0.09, alpha: 0.49),
+        wordOccurrence: gray(0.63, 0.8),
+        added: NSColor(srgbRed: 0.2, green: 0.8, blue: 0.4, alpha: 0.6),
+        modified: NSColor(srgbRed: 0.3, green: 0.5, blue: 0.9, alpha: 0.6),
+        removed: NSColor(srgbRed: 0.9, green: 0.3, blue: 0.3, alpha: 0.6),
+        caret: gray(1, 0.7)),
+      topShadow: gray(0, 1), minimapShadow: gray(0, 0.08), fadeIn: 0.1, fadeOut: 0.8,
+      hideDelay: 0.5)
   }
 
   nonisolated static let options = MetalTextSurfaceOptions(

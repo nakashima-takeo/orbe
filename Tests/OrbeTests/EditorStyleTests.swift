@@ -78,8 +78,8 @@ final class EditorStyleTests: OrbeTestCase {
   /// 強調と俯瞰の色は VS Code Dark Modern / Light Modern の値（sRGB・α）。選択文字列の出現は焦点が無いとき α 半分。
   func testHighlightAndOverviewColorsAreTheVSCodeValues() throws {
     let highlights = EditorStyle.make().highlights
-    let minimap = EditorStyle.minimap()
-    let scrollbar = EditorStyle.scrollbar()
+    let minimap = EditorStyle.make().overview.minimap
+    let scrollbar = EditorStyle.make().overview.scrollbar
     let expected: [Expected] = [
       .init(highlights.findMatch, dark: (0xea5c00, 0.33), light: (0xea5c00, 0.33)),
       .init(highlights.currentFindMatch, dark: (0x9e6a03, 1), light: (0xa8ac94, 1)),
@@ -112,6 +112,18 @@ final class EditorStyleTests: OrbeTestCase {
     }
   }
 
+  /// 俯瞰の寸法と時間は VS Code の既定——縦スクロールバー 14・横 12・ミニマップの幅の上限 120、帯とつまみが 100ms で
+  /// 現れ、つまみは止まって 500ms 後に 800ms で消える。
+  func testOverviewDimensionsAndTimesAreTheVSCodeDefaults() {
+    let overview = EditorStyle.make().overview
+    XCTAssertEqual(overview.scrollbar.width, 14)
+    XCTAssertEqual(overview.scrollbar.horizontalHeight, 12)
+    XCTAssertEqual(overview.minimap.maxWidth, 120)
+    XCTAssertEqual(overview.fadeIn, 0.1)
+    XCTAssertEqual(overview.fadeOut, 0.8)
+    XCTAssertEqual(overview.hideDelay, 0.5)
+  }
+
   /// 期待する色（外観ごとの sRGB と α）。
   struct Expected {
     let color: NSColor
@@ -141,8 +153,8 @@ final class EditorStyleTests: OrbeTestCase {
   /// 俯瞰の git の印は Orbe の diff.*（ミニマップは α 1、スクロールバーは VS Code の α .6）、キャレットの印はキャレット色
   /// α .7、スクロールバーの縁は hairline .07（light ×1.4）。
   func testOverviewGitCaretAndBorderColorsUseTheOrbeTokens() throws {
-    let minimap = EditorStyle.minimap()
-    let scrollbar = EditorStyle.scrollbar()
+    let minimap = EditorStyle.make().overview.minimap
+    let scrollbar = EditorStyle.make().overview.scrollbar
     let marks: [Mark] = [
       .init(minimap.added, Theme.Color.diffAdded, 1),
       .init(minimap.modified, Theme.Color.diffModified, 1),

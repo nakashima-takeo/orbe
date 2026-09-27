@@ -9,7 +9,9 @@ import OrbeEditorCore
 /// つまみは本体にポインタがある間とドラッグ中は見え、スクロールすると現れて、止まってから 500ms 後に 800ms かけて消える
 /// （VS Code の `ScrollableElement`）。印は常に見える。
 final class EditorScrollbarView: NSView {
-  private let style: ScrollbarStyle
+  private let style: TextSurfaceStyle.Scrollbar
+  /// 現れる・消える時間。
+  private let motion: TextSurfaceStyle.Overview
   private(set) weak var document: EditorDocument?
   /// 検索の一致と語の出現（pane が束ねて押す）。
   var decorations = OverviewDecorations.empty {
@@ -32,14 +34,15 @@ final class EditorScrollbarView: NSView {
   private let dragScroll = DragScroll()
   private var tracking: NSTrackingArea?
 
-  init(style: ScrollbarStyle) {
-    self.style = style
+  init(style: TextSurfaceStyle.Overview) {
+    self.style = style.scrollbar
+    motion = style
     super.init(frame: .zero)
     wantsLayer = true
     layerContentsRedrawPolicy = .onSetNeedsDisplay
     isHidden = true
     thumb.alphaValue = 0
-    thumb.color = style.slider
+    thumb.color = style.scrollbar.slider
     addSubview(thumb)
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
@@ -103,7 +106,7 @@ final class EditorScrollbarView: NSView {
       hideDelay.cancel()
       return
     }
-    hideDelay.run(after: Theme.Motion.editorScrollbarHideDelay) { [weak self] in self?.hide() }
+    hideDelay.run(after: motion.hideDelay) { [weak self] in self?.hide() }
   }
 
   private func hide() {
@@ -120,7 +123,7 @@ final class EditorScrollbarView: NSView {
     }
     NSAnimationContext.runAnimationGroup { context in
       context.duration =
-        shown ? Theme.Motion.editorSliderFadeIn : Theme.Motion.editorScrollbarFadeOut
+        shown ? motion.fadeIn : motion.fadeOut
       context.timingFunction = CAMediaTimingFunction(name: .linear)
       thumb.animator().alphaValue = shown ? 1 : 0
     }
