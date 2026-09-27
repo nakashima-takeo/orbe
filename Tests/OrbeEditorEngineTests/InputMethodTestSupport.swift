@@ -8,6 +8,8 @@ import XCTest
 final class FakeInputContext: NSTextInputContext {
   /// 出来事を受けたときに IME がすること（受け手を渡す）。
   var onEvent: ((NSTextInputClient) -> Void)?
+  /// 変換を捨てさせられたときに IME が同期で返すこと（受け手を渡す）。
+  var onDiscard: ((NSTextInputClient) -> Void)?
   /// `handleEvent` の戻り値（IME が出来事を使ったか）。
   var consumes = false
   private(set) var events = 0
@@ -20,7 +22,10 @@ final class FakeInputContext: NSTextInputContext {
     return consumes
   }
 
-  override func discardMarkedText() { discards += 1 }
+  override func discardMarkedText() {
+    discards += 1
+    onDiscard?(client)
+  }
 
   override func invalidateCharacterCoordinates() { invalidations += 1 }
 }

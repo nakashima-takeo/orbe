@@ -1,7 +1,8 @@
 import Foundation
 import OrbeEditorCore
 
-/// 変換の文節 1 つ——範囲（文書の座標）と、IME が変換の対象として選んでいるか、IME が指定した下線と地の色（sRGB）。
+/// 変換の文節 1 つ——範囲（view が IME の文字列から作るときは文字列の先頭から、編集係が持つ間は文書の座標）と、IME が
+/// 変換の対象として選んでいるか、IME が指定した下線と地の色（sRGB）。
 struct MarkedClause: Equatable, Sendable {
   var range: NSRange
   var active: Bool
@@ -15,7 +16,21 @@ struct MarkedAppearance: Equatable, Sendable {
   var filled = false
 }
 
-/// 変換の終え方——確定（未確定の文字を残す）と、取り消し（未確定の文字を消す）。
+extension MarkedAppearance {
+  /// 文節の範囲を `offset` だけずらしたもの（入れた文字列の先頭から → 文書の座標）。
+  func shifted(by offset: Int) -> MarkedAppearance {
+    var shifted = self
+    shifted.clauses = clauses.map {
+      var clause = $0
+      clause.range.location += offset
+      return clause
+    }
+    return shifted
+  }
+}
+
+/// 変換の終え方——確定（今の本文のまま終え、正味の変化を undo に載せる）と、取り消し（変換が無かったことにする。undo には
+/// 触れない）。
 enum CompositionEnd {
   case commit, cancel
 }

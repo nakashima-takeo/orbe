@@ -39,27 +39,29 @@ final class SurfaceEditor {
 
   // MARK: - 操作（IME 以外の入口）
 
-  /// コマンド 1 回を 1 つの取引で行う。
+  /// コマンド 1 回を 1 つの取引で行う（変換の確定も同じ取引に入る）。
   func perform(_ command: EditCommand) {
-    finishComposition(.commit)
-    guard let env = surface.editingEnvironment() else { return }
-    let before = state
-    let result = EditCommands.run(command, before, env)
-    surface.transact(reveal: result.reveal) {
-      record(
-        result.edits, kind: result.undo, from: before.cursors, to: result.state.cursors, env.text)
-      state = result.state
+    surface.transact {
+      finishComposition(.commit)
+      guard let env = surface.editingEnvironment() else { return }
+      let before = state
+      let result = EditCommands.run(command, before, env)
+      surface.transact(reveal: result.reveal) {
+        record(
+          result.edits, kind: result.undo, from: before.cursors, to: result.state.cursors, env.text)
+        state = result.state
+      }
+      if let kill = result.kill { KillBuffer.contents = kill }
     }
-    if let kill = result.kill { KillBuffer.contents = kill }
   }
 
   /// カーソルの列を直接置く（マウス・行番号の列）。編集を伴わないので undo のまとまりを切る。
   func select(_ cursors: CursorList, reveal: Reveal) {
-    finishComposition(.commit)
-    guard let length = surface.textLength else { return }
-    var cursors = cursors.map { $0.clamped(to: length) }
-    cursors.normalize()
     surface.transact(reveal: reveal) {
+      finishComposition(.commit)
+      guard let length = surface.textLength else { return }
+      var cursors = cursors.map { $0.clamped(to: length) }
+      cursors.normalize()
       if cursors != state.cursors { close() }
       state = EditState(cursors: cursors, mark: state.mark)
     }
@@ -73,12 +75,12 @@ final class SurfaceEditor {
   /// 本文を丸ごと置き換える（外部変更の差し替え）。変わらない先頭と末尾を落とした 1 つの編集として undo に載り、前後で
   /// まとまりを切る。選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。変換中なら先に取り消す。
   func replaceAll(with text: String) {
-    finishComposition(.cancel)
-    guard let current = surface.editingEnvironment()?.text else { return }
-    let whole = TextEdit(range: NSRange(location: 0, length: current.length), replacement: text)
-    let edit = whole.narrowed(replacing: current.units(in: whole.range))
-    let caret = min(state.cursors.primary.selection.location, whole.replacementLength)
     surface.transact(remeasure: true) {
+      finishComposition(.cancel)
+      guard let current = surface.editingEnvironment()?.text else { return }
+      let whole = TextEdit(range: NSRange(location: 0, length: current.length), replacement: text)
+      let edit = whole.narrowed(replacing: current.units(in: whole.range))
+      let caret = min(state.cursors.primary.selection.location, whole.replacementLength)
       record(
         EditBatch([edit]), kind: .other, from: state.cursors, to: CursorList(Cursor(caret)), current
       )
@@ -97,7 +99,8 @@ final class SurfaceEditor {
   // MARK: - 変換（IME の入口）
 
   /// 未確定の文字を置く。`replacement`（文書の座標。NSNotFound なら未確定、無ければ選択）を `string` で置き換え、変換を
-  /// 始めるか続ける。`selected` は `string` の中の選択、`appearance` の範囲は `string` の先頭から。空の文字列は取り消し。
+  /// 始めるか続ける。`selected` は `string` の中の選択、`appearance` の範囲は `string` の先頭から。空の文字列は IME 自身の
+  /// 取り消しで、未確定を消した今の本文のまま変換を終える（NSTextView と同じく、再変換で置き換えた元の字は戻さない）。
   func setMarkedText(
     _ string: String, selected: NSRange, replacement: NSRange, appearance: MarkedAppearance
   ) {
@@ -107,24 +110,30 @@ final class SurfaceEditor {
     let target = target(replacement, in: text)
     surface.transact(reveal: .minimal) {
       compose(TextEdit(range: target, replacement: units), text)
+      if units.isEmpty { return end(.commit) }
       guard var current = composition else { return }
       current.selection = CompositionRules.innerSelection(
         selected, at: target.location, length: units.count)
       current.appearance = appearance.shifted(by: target.location)
       composition = current
     }
-    if units.isEmpty { end(.commit) }
   }
 
   /// 確定の文字を入れる。変換中なら `replacement`（NSNotFound なら未確定）を置き換えて確定で終え、そうでなければ打鍵
-  /// （`replacement` があればその範囲の置き換え）。
+  /// （`replacement` があれば、本文に収めたその範囲の置き換え）。
   func insertText(_ string: String, replacement: NSRange) {
     guard !discarding else { return }
-    guard composition != nil, let text = surface.editingEnvironment()?.text else {
-      guard !string.isEmpty || replacement.location != NSNotFound else { return }
-      perform(replacement.location == NSNotFound ? .insert(string) : .replace(replacement, string))
-      return
+    guard composition != nil else {
+      guard replacement.location != NSNotFound else {
+        if !string.isEmpty { perform(.insert(string)) }
+        return
+      }
+      guard let length = surface.textLength else { return }
+      let range = CompositionRules.target(
+        replacement, marked: nil, selection: state.cursors.primary.selection, length: length)
+      return perform(.replace(range, string))
     }
+    guard let text = surface.editingEnvironment()?.text else { return }
     let target = target(replacement, in: text)
     surface.transact(reveal: .minimal) {
       compose(TextEdit(range: target, replacement: string), text)
@@ -177,20 +186,24 @@ final class SurfaceEditor {
       cursors: CursorList(Cursor(NSMaxRange(edit.newRange))), mark: state.mark.map(batch.map))
   }
 
-  /// 変換を終える。取り消しなら未確定の文字を消す。変換の中の変化の正味を 1 回だけ undo に記録する。
+  /// 変換を終える。確定なら変換の中の変化の正味を 1 回だけ undo に記録する。取り消しなら変換が無かったことにする——正味の
+  /// 変化の逆を文書へ渡し（再変換で置き換えた元の字も戻る）、カーソルを変換の前へ戻し、undo には触れない。
   private func end(_ how: CompositionEnd) {
     guard let finished = composition else { return }
-    surface.transact(reveal: .minimal) {
-      if how == .cancel, finished.range.length > 0, let text = surface.editingEnvironment()?.text {
-        compose(TextEdit(range: finished.range, replacement: ""), text)
-      }
-      guard let ended = composition else { return }
+    surface.transact {
       composition = nil
-      let net = CompositionRules.net(ended.changes, before: ended.textBefore)
-      guard !net.isEmpty else { return }
-      register(
-        net, kind: CompositionRules.undoKind(net, replacesCommitted: ended.replacesCommitted),
-        from: ended.cursorsBefore, to: state.cursors, base: ended.textBefore)
+      let net = CompositionRules.net(finished.changes, before: finished.textBefore)
+      switch how {
+      case .commit:
+        guard !net.isEmpty else { return }
+        register(
+          net, kind: CompositionRules.undoKind(net, replacesCommitted: finished.replacesCommitted),
+          from: finished.cursorsBefore, to: state.cursors, base: finished.textBefore)
+      case .cancel:
+        let backward = net.inverse(of: finished.textBefore)
+        guard backward.isEmpty || surface.deliver(backward) != nil else { return }
+        state = EditState(cursors: finished.cursorsBefore, mark: state.mark.map(backward.map))
+      }
     }
   }
 

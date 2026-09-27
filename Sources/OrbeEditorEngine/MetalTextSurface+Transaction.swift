@@ -172,16 +172,3 @@ extension MetalTextSurface {
     textView.inputContext?.invalidateCharacterCoordinates()
   }
 }
-
-extension MarkedAppearance {
-  /// 文節の範囲を `offset` だけずらしたもの（入れた文字列の先頭から → 文書の座標）。
-  func shifted(by offset: Int) -> MarkedAppearance {
-    var shifted = self
-    shifted.clauses = clauses.map {
-      var clause = $0
-      clause.range.location += offset
-      return clause
-    }
-    return shifted
-  }
-}
