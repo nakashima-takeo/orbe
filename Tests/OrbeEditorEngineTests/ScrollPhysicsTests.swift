@@ -69,7 +69,26 @@ final class ScrollPhysicsTests: XCTestCase {
     XCTAssertEqual(p.shown(at: 1.01).y, 40)
   }
 
-  /// 弾性が有効なら、端を越えた量は 1/20 に縮めて見せ、離すと x0·e^(−τ/0.08) で端へ戻る。
+  /// 横が主なら縦の小さな量を捨て、横だけ動く（トラックパッドで長い行を横に送れる）。
+  func testHorizontalPredominantAxisMovesOnlyX() {
+    var p = physics()
+    p.apply(finger(1.0, 0, .began))
+    p.apply(finger(1.005, -2, dx: -20))
+    p.apply(finger(1.010, -3, dx: -20))
+    XCTAssertEqual(p.shown(at: 1.01), SIMD2(40, 0))
+  }
+
+  /// 主な軸の累積は 120ms で減衰する——横に大きく動かした後でも、間をおいて縦に動かせば縦が主になる。
+  func testPredominantAxisSwitchesOnceTheAccumulationDecays() {
+    var p = physics()
+    p.apply(finger(1.0, 0, .began))
+    p.apply(finger(1.005, 0, dx: -200))
+    p.apply(finger(1.605, -100, dx: -5))
+    XCTAssertEqual(p.shown(at: 1.605), SIMD2(200, 100))
+  }
+
+  /// 弾性が有効なら、端を越えた量は 1/20 に縮めて見せ、端の外で指を離すと x0·e^(−τ/0.08) で端へ戻る（指の速さは
+  /// 持ち越さない）。続く momentum は捨てる。
   func testElasticOverscrollAndReturn() {
     var p = physics()
     p.apply(finger(1.0, 0, .began))
@@ -77,10 +96,36 @@ final class ScrollPhysicsTests: XCTestCase {
     XCTAssertEqual(p.shown(at: 1.01).y, -10, accuracy: 1e-9, "上端を 200 越えて 10 だけ見せる")
     p.apply(finger(1.02, 0, .ended))
     XCTAssertTrue(p.isReturning)
+    XCTAssertFalse(p.apply(momentum(1.03, 40, .began)), "端の外で離した後の momentum は捨てる")
     XCTAssertEqual(p.shown(at: 1.02 + 0.08).y, -10 * exp(-1), accuracy: 1e-9)
     p.settle(at: 2.0)
     XCTAssertFalse(p.isActive, "戻りきれば止まる")
     XCTAssertEqual(p.shown(at: 2.0).y, 0)
+  }
+
+  /// momentum が端を越えたら、その時点の速さで伸びてから戻り始め（(x0 + 0.31·v·τ)·e^(−τ/0.08)）、残りの momentum は
+  /// 次に指が触れるまで捨てる——はじいて端に当てても、momentum が尽きるまで端の外に留まらない。
+  func testMomentumPastTheEdgeReturnsAtOnce() {
+    var p = physics()
+    p.apply(finger(1.0, 0, .began))
+    p.apply(finger(1.01, -20))
+    p.apply(finger(1.02, 0, .ended))
+    p.apply(momentum(1.03, 15, .began))
+    p.apply(momentum(1.04, 15))
+    XCTAssertTrue(p.isReturning, "端を越えた時点で戻り始める")
+    XCTAssertFalse(p.apply(momentum(1.05, 15)), "残りの momentum は捨てる")
+    let v = -15 / 0.01
+    XCTAssertEqual(
+      p.shown(at: 1.04 + 0.08).y, (-0.5 + 0.31 * v * 0.08) * exp(-1), accuracy: 1e-9,
+      "越えた向きの速さで伸びてから戻る")
+    p.settle(at: 2.0)
+    XCTAssertEqual(p.shown(at: 2.0).y, 0)
+    XCTAssertFalse(p.isActive)
+    p.apply(finger(2.1, 0, .began))
+    p.apply(finger(2.11, -18))
+    p.apply(finger(2.12, 0, .ended))
+    p.apply(momentum(2.13, -10, .began))
+    XCTAssertEqual(p.shown(at: 2.13).y, 28, "指が触れた後の momentum はまた当てる")
   }
 
   /// 戻りの途中に指が触れたら、そこで止まる。離せば続きから戻る。

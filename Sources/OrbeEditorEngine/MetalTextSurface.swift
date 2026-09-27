@@ -179,7 +179,7 @@ final class MetalTextSurface: TextSurface {
 
   /// スクロールの出来事を箱に書き、描画スレッドを起こし、見えている範囲をその場で知らせる。
   func scroll(_ input: ScrollInput) {
-    guard scroll.apply(input) != nil else { return }
+    guard scroll.apply(input) else { return }
     wake()
     refreshViewport()
   }
