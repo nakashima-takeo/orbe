@@ -181,7 +181,8 @@ private struct SearchProgressLine: View {
   var body: some View {
     TimelineView(.animation) { context in
       GeometryReader { geometry in
-        let phase = context.date.timeIntervalSinceReferenceDate
+        let phase =
+          context.date.timeIntervalSinceReferenceDate
           .truncatingRemainder(dividingBy: Self.period) / Self.period
         let width = geometry.size.width * Self.segment
         Rectangle()

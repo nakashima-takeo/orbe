@@ -132,30 +132,30 @@ struct ExplorerView: View {
 
   var body: some View {
     EditorSidebarPanel {
-        header
-        rootRow
-        ScrollViewReader { proxy in
-          ScrollView(.vertical) {
-            LazyVStack(spacing: 0) {
-              ForEach(tree.rows) { row in
-                if case .input(let isDirectory, let generation) = row.kind {
-                  InlineInputRow(
-                    row: row, isDirectory: isDirectory, generation: generation, tree: tree,
-                    shell: shell)
-                } else {
-                  TreeRowView(row: row, tree: tree, shell: shell)
-                }
+      header
+      rootRow
+      ScrollViewReader { proxy in
+        ScrollView(.vertical) {
+          LazyVStack(spacing: 0) {
+            ForEach(tree.rows) { row in
+              if case .input(let isDirectory, let generation) = row.kind {
+                InlineInputRow(
+                  row: row, isDirectory: isDirectory, generation: generation, tree: tree,
+                  shell: shell)
+              } else {
+                TreeRowView(row: row, tree: tree, shell: shell)
               }
             }
           }
-          // 行は遅延で生まれる（可視域外の行は無い）ので、入力行と選択行は可視位置へ送る。
-          .onChange(of: tree.newEntry?.generation) { _, _ in
-            if let entry = tree.newEntry { proxy.scrollTo(FileTree.inputRowID(entry)) }
-          }
-          .onChange(of: tree.selected) { _, path in
-            if let path { proxy.scrollTo(path) }
-          }
         }
+        // 行は遅延で生まれる（可視域外の行は無い）ので、入力行と選択行は可視位置へ送る。
+        .onChange(of: tree.newEntry?.generation) { _, _ in
+          if let entry = tree.newEntry { proxy.scrollTo(FileTree.inputRowID(entry)) }
+        }
+        .onChange(of: tree.selected) { _, path in
+          if let path { proxy.scrollTo(path) }
+        }
+      }
     }
   }
 

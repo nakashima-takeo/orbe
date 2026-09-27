@@ -21,7 +21,8 @@ final class TerminalTabEditorTests: OrbeTestCase {
     let b = try tab.editor.open(try file("b.txt"))
     tab.editor.activate(a)
     XCTAssertEqual(
-      tab.tabState().editor, EditorState(documents: .init(open: [a.url.path, b.url.path], active: a.url.path)))
+      tab.tabState().editor,
+      EditorState(documents: .init(open: [a.url.path, b.url.path], active: a.url.path)))
   }
 
   func testRestoredStateIsKeptUntilMaterializationAndThenOpened() throws {
@@ -40,7 +41,8 @@ final class TerminalTabEditorTests: OrbeTestCase {
     XCTAssertEqual(tab.editor.activeDocument?.url, a)
     XCTAssertEqual(changes, 1)
     XCTAssertEqual(
-      tab.tabState().editor, EditorState(documents: .init(open: [a.path], active: a.path)), "以後は開いている文書を書く")
+      tab.tabState().editor, EditorState(documents: .init(open: [a.path], active: a.path)),
+      "以後は開いている文書を書く")
 
     tab.editor.close(try XCTUnwrap(tab.editor.activeDocument))
     XCTAssertNil(tab.tabState().editor, "全部閉じれば消費済みの状態は戻らない")

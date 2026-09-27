@@ -20,10 +20,12 @@ final class EditorSidebarStateTests: OrbeTestCase {
     XCTAssertEqual(AppStatePersistence.load()?.editorSidebar, nil, "ドラッグ中は書かない")
     state.commit()
     XCTAssertEqual(
-      AppStatePersistence.load()?.editorSidebar, EditorSidebarRecord(width: 300, isOpen: true, panel: "files"))
+      AppStatePersistence.load()?.editorSidebar,
+      EditorSidebarRecord(width: 300, isOpen: true, panel: "files"))
     state.select(.files)
     XCTAssertEqual(
-      AppStatePersistence.load()?.editorSidebar, EditorSidebarRecord(width: 300, isOpen: false, panel: "files"))
+      AppStatePersistence.load()?.editorSidebar,
+      EditorSidebarRecord(width: 300, isOpen: false, panel: "files"))
 
     let reloaded = EditorSidebarState.loaded()
     XCTAssertEqual(reloaded.width, 300)

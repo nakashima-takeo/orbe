@@ -6,7 +6,9 @@ import Foundation
 /// 出力の形に効く設定（`grep.*`・`color.*`）は引数で明示して、ユーザーの git 設定に形を変えさせない。
 enum GitGrep {
   /// 既定の除外（VS Code の `search.exclude` と `files.exclude` の既定）。ディレクトリは配下ごと、ファイルは名前で。
-  static let excludedDirectories = ["node_modules", "bower_components", ".git", ".svn", ".hg", ".jj"]
+  static let excludedDirectories = [
+    "node_modules", "bower_components", ".git", ".svn", ".hg", ".jj",
+  ]
   static let excludedFiles = [".DS_Store", "Thumbs.db"]
   static let excludedExtensions = ["code-search"]
 
