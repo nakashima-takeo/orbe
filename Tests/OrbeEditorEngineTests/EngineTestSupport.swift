@@ -28,7 +28,8 @@ class EngineTestCase: XCTestCase {
     let text = NSColor(srgbRed: 0.8, green: 0.8, blue: 0.8, alpha: 1)
     return TextSurfaceStyle(
       font: .monospacedSystemFont(ofSize: 12, weight: .regular), lineHeight: 18, topInset: 4,
-      textColor: text, caretColor: .white, caretSize: CGSize(width: 1.5, height: 14),
+      textColor: text, backgroundColor: NSColor(srgbRed: 0.12, green: 0.12, blue: 0.12, alpha: 1),
+      caretColor: .white, caretSize: CGSize(width: 1.5, height: 14),
       selectionColor: NSColor(srgbRed: 0.15, green: 0.31, blue: 0.47, alpha: 1),
       inactiveSelectionColor: NSColor(srgbRed: 0.23, green: 0.24, blue: 0.26, alpha: 1),
       gutterFont: .monospacedSystemFont(ofSize: 11, weight: .regular),

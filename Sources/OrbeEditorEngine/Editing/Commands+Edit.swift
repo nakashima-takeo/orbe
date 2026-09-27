@@ -82,6 +82,21 @@ extension EditCommands {
     edit(state, env, undo: undo) { Replacement($0.selection, string) }
   }
 
+  /// `range` を `string` に置き換える（IME が範囲を指して入れた確定）。どのカーソルも NSTextView と同じく、置き換えと重なら
+  /// なければ選択を写して保ち、重なれば入れた文字の終わりへ置く（`CompositionRules.selection`）。
+  static func replace(_ range: NSRange, with string: String, _ state: EditState) -> CommandResult {
+    let edit = TextEdit(range: range, replacement: string)
+    var cursors = state.cursors.map {
+      Cursor.selecting(
+        CompositionRules.selection($0.selection, after: edit), reversed: $0.isReversed)
+    }
+    cursors.normalize()
+    let batch = EditBatch([edit])
+    return CommandResult(
+      state: EditState(cursors: cursors, mark: state.mark.map(batch.map)), edits: batch,
+      undo: .other)
+  }
+
   /// 打鍵。空白 1 つは空白の打鍵、それ以外は字の打鍵。
   static func type(_ string: String, _ state: EditState, _ env: EditingEnvironment)
     -> CommandResult
@@ -90,21 +105,22 @@ extension EditCommands {
       with: string, undo: string == " " ? .typing(.firstSpace) : .typing(.other), state, env)
   }
 
-  /// 改行（VS Code の Enter の `autoIndent: keep` 相当）——字下げを引き継ぐなら、今の行の行頭の空白のうちキャレットより左を
-  /// 文書の作法に揃えて続ける。
+  /// 改行（VS Code の Enter の `autoIndent: keep` 相当）。改行は文書の作法（LF か CRLF）で、字下げを引き継ぐなら、今の行の
+  /// 行頭の空白のうちキャレットより左を文書の作法に揃えて続ける。
   static func newline(indents: Bool, _ state: EditState, _ env: EditingEnvironment)
     -> CommandResult
   {
     edit(state, env, undo: .newline) { cursor in
       let selection = cursor.selection
-      guard indents else { return Replacement(selection, "\n") }
+      let lineBreak = env.lineBreak.string
+      guard indents else { return Replacement(selection, lineBreak) }
       let text = env.text
       let row = text.row(containing: selection.location)
       let start = text.lineStart(row)
       let leading = text.units(in: NSRange(location: start, length: selection.location - start))
         .prefix { $0 == 0x20 || $0 == 0x09 }
       return Replacement(
-        selection, "\n" + Indenting.normalize(Array(leading), env.indentation))
+        selection, lineBreak + Indenting.normalize(Array(leading), env.indentation))
     }
   }
 

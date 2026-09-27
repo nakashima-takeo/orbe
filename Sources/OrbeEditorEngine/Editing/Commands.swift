@@ -47,6 +47,17 @@ enum EditCommand: Equatable, Sendable {
   case changeCase(CaseChange)
   case setMark, selectToMark, deleteToMark, swapWithMark
   case centerSelection
+  /// `range` を置き換える（IME が変換の外で範囲を指して入れた——長押しのアクセントなど）。選択は NSTextView と同じく、
+  /// 置き換えと重ならなければ保つ。前後で区切る。
+  case replace(NSRange, String)
+  /// 貼る（改行は文書の作法へ揃える）。`entireLine` は行ごと写した印——選択が空で文字列の改行が末尾の 1 つだけなら、
+  /// キャレットの行の上に行として入れる。前後で区切る。
+  case paste(String, entireLine: Bool)
+  /// 切り取る——選択を消す。選択が空なら行を消す（改行まで。最終行なら前の行の改行から）。
+  case cut
+  /// 落とした文字列を `offset` に入れて選ぶ（改行は文書の作法へ揃える）。`moving` があればその範囲を消す（同じ面の中の
+  /// 移動。消すことと入れることは 1 つの束）。
+  case drop(String, at: Int, moving: NSRange?)
 }
 
 /// 見せ方——コマンドの後にスクロールをどう置くか。
@@ -67,6 +78,7 @@ struct EditingEnvironment {
   /// ページ送りの行の数（VS Code の `pageSize`——見えている行の数 − 2、1 以上）。
   let pageLines: Int
   let indentation: Indentation
+  let lineBreak: LineBreak
   let killBuffer: String
 }
 
@@ -129,6 +141,12 @@ enum EditCommands {
     case .centerSelection:
       return CommandResult(
         state: EditState(cursors: state.cursors, mark: state.mark), reveal: .center)
+    case .replace(let range, let string): return replace(range, with: string, state)
+    case .paste(let string, let entireLine):
+      return paste(string, entireLine: entireLine, state, env)
+    case .cut: return cut(state, env)
+    case .drop(let string, let offset, let moving):
+      return drop(string, at: offset, moving: moving, state, env)
     }
   }
 

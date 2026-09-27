@@ -95,3 +95,43 @@ struct ShapedLineGeometry: LineGeometry {
     return abs(x - carets.x(left)) <= abs(carets.x(right) - x) ? left : right
   }
 }
+
+/// 変換中の未確定の文字の横位置（IME が問う文字の矩形と点の下の字）。未確定の先頭の x は変換の前の本文の行から出す——変換中は
+/// 未確定より前の中身が変わらないので、中身を鍵に覚えた組版に当たり、行を組むのは変換ごとに 1 回。未確定の中は、その x に
+/// 未確定の文字列だけを組んだ x を足す（打鍵ごとに組むのは未確定の長さだけ）。境目の字詰め・合字・右から左の字・タブの
+/// 位置で描画とわずかにずれうるが、候補窓の位置には効かない。
+struct MarkedLineGeometry {
+  /// 未確定のうち、先頭の行にある部分（文書の座標）。
+  let range: NSRange
+  let row: Int
+  private let anchor: CGFloat
+  private let stops: LineStopsCache.Stops
+
+  /// 未確定の先頭より前の中身が変換の前のままでなければ（IME が未確定の内側を指して先頭が後ろへずれた）nil。
+  init?(_ composition: Composition, text: TextRope, cache: LineStopsCache, tabWidth: CGFloat) {
+    let marked = composition.range
+    guard marked.location <= composition.changes.edits.first?.range.location ?? marked.location
+    else { return nil }
+    row = text.row(containing: marked.location)
+    let start = text.lineStart(row)
+    let end = min(NSMaxRange(marked), NSMaxRange(text.contentRange(ofRow: row)))
+    range = NSRange(location: marked.location, length: max(0, end - marked.location))
+    anchor = ShapedLineGeometry(text: composition.textBefore, cache: cache, tabWidth: tabWidth)
+      .x(ofColumn: marked.location - start, row: row)
+    let units = text.units(in: range)
+    stops = cache.stops(LineShaper.Source(head: units, length: units.count), tabWidth: tabWidth)
+  }
+
+  /// 未確定の中（両端を含む）の位置の x（行頭から）。外なら nil。
+  func x(of offset: Int) -> CGFloat? {
+    guard offset >= range.location, offset <= NSMaxRange(range) else { return nil }
+    return anchor + stops.carets.x(offset - range.location)
+  }
+
+  /// x（行頭から）を含む未確定の字の位置。未確定の字の上でなければ nil。
+  func offset(containingX x: CGFloat) -> Int? {
+    guard x >= anchor, x - anchor < stops.width, let glyph = stops.glyph(atX: x - anchor)
+    else { return nil }
+    return range.location + stops.offsets[glyph]
+  }
+}

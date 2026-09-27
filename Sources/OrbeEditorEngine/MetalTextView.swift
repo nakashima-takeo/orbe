@@ -6,14 +6,26 @@ import QuartzCore
 /// `cacheDisplay`（gallery・flow の撮影）では `draw(_:)` が呼ばれるので、描画スレッドが同じ 1 コマを画面外に描いた絵を
 /// 描く——撮り方を変えずに新しい面を撮れる。
 ///
-/// 出来事の入口。キーは `interpretKeyEvents` で macOS のキー割り当て（利用者の DefaultKeyBinding を含む）に通し、届いた
-/// 標準のセレクタを編集のコマンドへ写す（→ `MetalTextView+Commands`）。マウスは `MouseSelection` が持つ。
-final class MetalTextView: NSView {
+/// 出来事の入口。キーは `interpretKeyEvents` で IME と macOS のキー割り当て（利用者の DefaultKeyBinding を含む）に通し、
+/// IME の呼び出しは面の編集係の IME の入口へ（→ `MetalTextView+Input`）、届いた標準のセレクタは編集のコマンドへ写す
+/// （→ `MetalTextView+Commands`）。マウスは `MouseSelection` が持ち、変換中はまず IME へ渡す。クリップボード・サービス・
+/// 右クリックは `MetalTextView+Pasteboard`、ドラッグ＆ドロップは `MetalTextView+Drag`。
+final class MetalTextView: TextSurfaceInputView {
   weak var surface: MetalTextSurface? {
     didSet { pointer.surface = surface }
   }
   private var observers: [NSObjectProtocol] = []
   let pointer = MouseSelection()
+  /// 入力の仕組みとの窓口（面が持つ）。テストは偽の IME に差し替える。
+  lazy var textInputContext: NSTextInputContext? = NSTextInputContext(client: self)
+  /// 写す・貼るペーストボード（既定は一般）。テストは名前つきの専用のものに差し替える。
+  var pasteboard = NSPasteboard.general
+  /// この面から始めた本文のドラッグで運んでいる範囲（ドラッグの間だけ）。
+  var draggedRange: NSRange?
+  /// ドラッグ中の自動スクロールの前の刻みの時刻。
+  var dropScrollTime: CFTimeInterval?
+  /// サービスに平文を送り・受けられると、アプリで 1 回だけ届け出た。
+  @MainActor private static var registeredServices = false
 
   init() {
     super.init(frame: .zero)
@@ -23,6 +35,11 @@ final class MetalTextView: NSView {
     // ときの古い大きな drawable を面の外（隣のミニマップ・ペイン）へはみ出させない。
     layerContentsPlacement = .topLeft
     clipsToBounds = true
+    registerForDraggedTypes([.string, .fileURL])
+    if !Self.registeredServices {
+      Self.registeredServices = true
+      NSApp?.registerServicesMenuSendTypes([.string], returnTypes: [.string])
+    }
   }
 
   required init?(coder: NSCoder) { fatalError("not supported") }
@@ -45,6 +62,16 @@ final class MetalTextView: NSView {
   override var isFlipped: Bool { true }
   override var isOpaque: Bool { false }
   override var acceptsFirstResponder: Bool { true }
+  override var inputContext: NSTextInputContext? { textInputContext }
+  override var composing: Bool { surface?.editor.isComposing ?? false }
+
+  /// IME が ⌘ キーの間に確定と次の未確定を続けて返しても、描くのは 1 状態だけ。
+  override func offerKeyEquivalentToInputMethod(_ event: NSEvent) -> Bool {
+    guard composing, let surface else { return false }
+    var used = false
+    surface.transact { used = super.offerKeyEquivalentToInputMethod(event) }
+    return used
+  }
 
   // MARK: - 大きさ・倍率・見えているか
 
@@ -67,6 +94,7 @@ final class MetalTextView: NSView {
     observers = []
     guard let newWindow else {
       pointer.cancel()
+      surface?.editor.finishComposition(.commit)
       return
     }
     let names: [Notification.Name] = [
@@ -166,15 +194,19 @@ final class MetalTextView: NSView {
     surface?.scrollWheel(event)
   }
 
+  /// 変換中はまず IME へ渡す（IME が使わなければ、クリックの入口が変換を確定する）。
   override func mouseDown(with event: NSEvent) {
+    if composing, inputContext?.handleEvent(event) == true { return }
     surface?.transact { pointer.mouseDown(event, in: self) }
   }
 
   override func mouseDragged(with event: NSEvent) {
+    if composing, inputContext?.handleEvent(event) == true { return }
     surface?.transact { pointer.mouseDragged(event, in: self) }
   }
 
   override func mouseUp(with event: NSEvent) {
+    if composing, inputContext?.handleEvent(event) == true { return }
     surface?.transact { pointer.mouseUp(event, in: self) }
   }
 
@@ -202,8 +234,9 @@ final class MetalTextView: NSView {
     super.flagsChanged(with: event)
   }
 
-  /// 打鍵を macOS のキー割り当てに通す。1 打鍵を 1 つの取引にする——セレクタが 2 つ届く打鍵（⌥↓・⌃O・利用者の
-  /// DefaultKeyBinding の連続セレクタ）も、途中の状態のコマを出さない。打鍵の時刻は取引が材料へ添える（打鍵→画面の遅れ）。
+  /// 打鍵を IME と macOS のキー割り当てに通す。1 打鍵を 1 つの取引にする——セレクタが 2 つ届く打鍵（⌥↓・⌃O・利用者の
+  /// DefaultKeyBinding の連続セレクタ）も、IME が「確定 → 次の未確定」を続けて呼ぶ打鍵も、呼び出しごとの状態はその場で
+  /// 更新し、描くのは打鍵の後の 1 状態だけ。打鍵の時刻は取引が材料へ添える（打鍵→画面の遅れ）。
   override func keyDown(with event: NSEvent) {
     surface?.transact(keystroke: event.timestamp) { interpretKeyEvents([event]) }
   }
@@ -217,7 +250,9 @@ final class MetalTextView: NSView {
     return result
   }
 
+  /// 焦点を失う前に変換を確定する（窓が key でなくなるだけなら変換は続く）。
   override func resignFirstResponder() -> Bool {
+    surface?.editor.finishComposition(.commit)
     let result = super.resignFirstResponder()
     if result {
       surface?.focusDidChange(false)

@@ -340,4 +340,10 @@ final class SurfaceView: NSView {
   var markedText = NSMutableAttributedString()
   /// keyDown 中だけ非 nil。interpretKeyEvents が呼ぶ insertText の確定文字を貯める。
   var keyTextAccumulator: [String]?
+  /// 変換中の ⌘ キーを IME へ渡している最中か、その間にキー割り当てのコマンドが届いたか（`InputMethodKeyEquivalents`）。
+  var offeringKeyEquivalent = false
+  var commandArrivedWhileOffering = false
+  /// 入力の仕組みとの窓口。テストは偽の IME に差し替える。
+  lazy var textInputContext: NSTextInputContext? = NSTextInputContext(client: self)
+  override var inputContext: NSTextInputContext? { textInputContext }
 }

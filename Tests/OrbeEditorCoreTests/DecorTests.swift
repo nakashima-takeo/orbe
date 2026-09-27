@@ -42,6 +42,19 @@ final class DecorTests: XCTestCase {
 
   // MARK: - 段
 
+  /// 改行の作法は CRLF と LF の多い方（同数と改行の無い本文は LF）。揃えるときは `\r\n`・`\r`・`\n` のどれも作法の改行に
+  /// する。
+  func testLineBreakIsTheMajorityAndNormalizesEveryBreak() {
+    func detect(_ text: String) -> LineBreak { LineBreak.detect(in: text.utf16) }
+    XCTAssertEqual(detect("a\r\nb\r\nc\n"), .crlf)
+    XCTAssertEqual(detect("a\r\nb\nc\n"), .lf)
+    XCTAssertEqual(detect("a\r\nb\n"), .lf, "同数は LF")
+    XCTAssertEqual(detect("abc"), .lf, "改行の無い本文は LF")
+    XCTAssertEqual(LineBreak.crlf.normalize("a\nb\r\nc\rd"), "a\r\nb\r\nc\r\nd")
+    XCTAssertEqual(LineBreak.lf.normalize("a\r\nb\rc\n"), "a\nb\nc\n")
+    XCTAssertEqual(LineBreak.lf.normalize("🇯🇵\r\n"), "🇯🇵\n", "書記素を割らない")
+  }
+
   func testIndentGuideBoundariesAndLevels() {
     XCTAssertEqual(IndentGuides.boundaries(of: "    x", unit: 2), [2, 4])
     XCTAssertEqual(IndentGuides.boundaries(of: "     x", unit: 2), [2, 4], "端数は段にならない")

@@ -41,9 +41,16 @@ public protocol TextSurface: AnyObject {
   /// Tab で入れる字（空白かタブか）と字下げの幅にも使う。
   func setIndentation(_ indentation: Indentation)
 
+  /// 改行の作法。文書が本文から検出して押す。編集する面は、Enter で入れる改行と、貼る・落とす文字列の改行に使う。
+  func setLineBreak(_ lineBreak: LineBreak)
+
   /// undo の履歴にここで区切りを置く。打鍵のまとまりは区切りをまたがない
   /// （保存が呼ぶ——⌘Z が保存前の打鍵まで一緒に戻さないため）。
   func markUndoBoundary()
+
+  /// 変換中の IME の文字を確定する（変換中でなければ何もしない）。未確定の文字は既に本文にあるので、本文は変わらない
+  /// ——変換の状態と IME の状態を揃える。載せる側が、面の外へ焦点や読み取りが移るコマンドを走らせる前に呼ぶ。
+  func commitMarkedText()
 
   /// 本文を丸ごと置き換える編集。通常の編集と同じく undo に載り、`didChange` を呼び出しから
   /// 戻るまでに同期で 1 回通す（外部で書き換えられたファイルの差し替えが呼ぶ——文書の写し・構文・ハンクが
@@ -57,10 +64,23 @@ public protocol TextSurface: AnyObject {
   /// 行の印（git ガター）。文書がハンクから作って押す（UTF-16 オフセット）。面は描くだけで規則を持たない。
   func setLineMarks(_ spans: LineMarkSpans)
 
-  /// 本文の URL が ⌘クリックされた。行き先（外部ブラウザ等）は面を組む側が決める。
-  var onOpenLink: ((URL) -> Void)? { get set }
+  /// 面を載せる側（弱い参照）。面が本文の外のこと（ファイルを開く・パスの文字列・右クリックのメニュー・URL）を問う口。
+  var host: TextSurfaceHost? { get set }
 
   var delegate: TextSurfaceDelegate? { get set }
+}
+
+/// 面を載せる側——開くこと・根・言語は載せる側の関心で、面は知らない。面はそれらをこの口で問う。
+@MainActor
+public protocol TextSurfaceHost: AnyObject {
+  /// ファイルを開く（Finder から本文へ落とされた）。
+  func openFiles(_ urls: [URL])
+  /// ファイルのパスを本文に入れる文字列（⇧ を押して落とされた・Finder でコピーしたファイルを貼った）。
+  func insertionText(forFiles urls: [URL]) -> String
+  /// 右クリックのメニュー。項目は target を持たず、焦点の面へ届く。
+  func contextMenu() -> NSMenu
+  /// 本文の URL が ⌘クリックされた。
+  func openLink(_ url: URL)
 }
 
 @MainActor
@@ -149,6 +169,8 @@ public struct TextSurfaceStyle {
   public var topInset: CGFloat
   /// 役割を持たない文字の色。
   public var textColor: NSColor
+  /// 本文の地の不透明な色。面は地を描かず下を透かす。色付きで書き出す（コピーの HTML）ときの地に使う。
+  public var backgroundColor: NSColor
   public var caretColor: NSColor
   public var caretSize: CGSize
   /// 選択の地の色。焦点が無い面では `inactiveSelectionColor`。本文を自分で描く面が使う（今の面は上流がシステムの選択色で
@@ -242,10 +264,10 @@ public struct TextSurfaceStyle {
   }
 
   public init(
-    font: NSFont, lineHeight: CGFloat, topInset: CGFloat, textColor: NSColor, caretColor: NSColor,
-    caretSize: CGSize, selectionColor: NSColor, inactiveSelectionColor: NSColor,
-    gutterFont: NSFont, gutterTextColor: NSColor, gutterWidth: CGFloat,
-    gutterTrailingInset: CGFloat,
+    font: NSFont, lineHeight: CGFloat, topInset: CGFloat, textColor: NSColor,
+    backgroundColor: NSColor, caretColor: NSColor, caretSize: CGSize, selectionColor: NSColor,
+    inactiveSelectionColor: NSColor, gutterFont: NSFont, gutterTextColor: NSColor,
+    gutterWidth: CGFloat, gutterTrailingInset: CGFloat,
     roleColors: [SyntaxRole: NSColor], marks: Marks, decorations: Decorations,
     highlights: Highlights
   ) {
@@ -253,6 +275,7 @@ public struct TextSurfaceStyle {
     self.lineHeight = lineHeight
     self.topInset = topInset
     self.textColor = textColor
+    self.backgroundColor = backgroundColor
     self.caretColor = caretColor
     self.caretSize = caretSize
     self.selectionColor = selectionColor

@@ -20,9 +20,9 @@ struct ShapeInstance {
   var pad: UInt32 = 0
 }
 
-/// 1 コマの中身を組み立てる（描画スレッドだけ。配列は面ごとに使い回す）。下から順に、選択の地 → 本文の字と長い行の
-/// 「ほか N 字」（行番号の列の右だけ）→ 色付きの字（絵文字など）→ 行番号 → git の印 → キャレット。地は描かない（透明
-/// に消し、下の地を透かす）。
+/// 1 コマの中身を組み立てる（描画スレッドだけ。配列は面ごとに使い回す）。下から順に、選択の地・未確定の文字の地 → 本文の字
+/// と長い行の「ほか N 字」（行番号の列の右だけ）→ 色付きの字（絵文字など）→ 行番号 → git の印 → 未確定の文字の下線・
+/// キャレット・落とす位置の印。地は描かない（透明に消し、下の地を透かす）。
 ///
 /// 行の位置は y = 上端の余白 + 行 × 行高で、折り返さない。見えている行だけその場で組版し（キャッシュする）、字の色は
 /// 行ごとに、横に見えている字の区間の役割を役割の並びから引いて決める（長い行でも行全体の役割は引かない）。スクロール量
@@ -123,26 +123,16 @@ final class FrameBuilder {
     let numberFont = fonts.id(config.gutterFont)
     let tabColumns = source.material.tabColumns
     var start = content.text.lineStart(first)
-    var selections = SelectionCursor(source.material.caret.selections, from: start)
-    let carets = (source.caretVisible ? source.material.caret.carets : []).map {
-      (row: content.text.row(containing: $0), offset: $0)
-    }
+    var overlays = CaretOverlays(
+      source.material, caretVisible: source.caretVisible, text: content.text, from: start)
     for row in first...last {
       let top = g.rowTop(row)
       let end = content.text.lineEnd(row)
-      let selected = selections.remaining ? selections.next(in: start..<end) : []
+      let overlay = overlays.next(row: row, line: start..<end)
       let laid = cache.line(
         row: row, in: content.text, tabColumns: tabColumns, config: config, fonts: fonts,
-        carets: !selected.isEmpty || carets.contains { $0.row == row })
-      if !selected.isEmpty {
-        let lineContent = content.text.contentRange(ofRow: row)
-        for selection in selected {
-          drawSelection(selection, laid, content: lineContent, rowTop: top, c)
-        }
-      }
-      for caret in carets where caret.row == row {
-        drawCaret(at: caret.offset - start, laid, rowTop: top, c)
-      }
+        carets: overlay.needsCarets)
+      drawOverlays(overlay, laid, rowTop: top, c)
       let width = drawText(laid, start: start, roles: content.roles, baseline: top + baseline, c)
       longestLine = max(longestLine, width)
       drawNumber(row + 1, rowTop: top, font: numberFont, c)

@@ -9,8 +9,8 @@ import simd
 /// 組版も描画も描画スレッドが行う。写しは自分の欄に持たず、要るとき（`viewport` の計算・編集の規則・行の印の行への写像）は
 /// 箱から読む。
 ///
-/// 編集は面の編集係（`SurfaceEditor`）が持ち、1 回の操作を 1 つの取引にする（→ `transact`）。IME・コピー・ペースト・
-/// 強調の地・装備・アクセシビリティはまだ持たない（強調の地は値を受け取るだけで描かない）。
+/// 編集は面の編集係（`SurfaceEditor`）が持ち、1 回の操作を 1 つの取引にする（→ `transact`）。IME の変換も同じ道で文書に
+/// 入る。強調の地・装備・アクセシビリティはまだ持たない（強調の地は値を受け取るだけで描かない）。
 @MainActor
 final class MetalTextSurface: TextSurface {
   private static var nextID = 0
@@ -29,13 +29,14 @@ final class MetalTextSurface: TextSurface {
   weak var delegate: TextSurfaceDelegate? {
     didSet { pullContent() }
   }
-  var onOpenLink: ((URL) -> Void)?
+  weak var host: TextSurfaceHost?
   var viewport = TextViewport.empty
   /// 面の大きさ（pt）・倍率・描く色空間。
   var size = CGSize.zero
   private var scale: CGFloat = 2
   private var space = FrameMaterial.defaultSpace
   private(set) var indentation = Indentation.fallback
+  private(set) var lineBreak = LineBreak.lf
   /// 面に焦点がある（first responder で、窓が key）。
   private(set) var focused = false
   /// キャレットを点滅させるか（→ `setCaretBlinks`）。
@@ -87,8 +88,14 @@ final class MetalTextSurface: TextSurface {
     editor.markBoundary()
   }
 
-  /// 本文の丸ごとの置き換え（外部変更の差し替え）。通常の編集と同じく undo に載る。
+  func commitMarkedText() {
+    editor.finishComposition(.commit)
+  }
+
+  /// 本文の丸ごとの置き換え（外部変更の差し替え）。通常の編集と同じく undo に載る。この面から始めた本文のドラッグの途中
+  /// なら、運んでいる範囲は古い本文の位置なので手放し、以後はコピーとして落とす（元の字は消さない）。
   func replaceAll(with text: String) {
+    textView.draggedRange = nil
     editor.replaceAll(with: text)
   }
 
@@ -97,6 +104,10 @@ final class MetalTextSurface: TextSurface {
   func setIndentation(_ indentation: Indentation) {
     self.indentation = indentation
     write { $0.tabColumns = indentation.unit }
+  }
+
+  func setLineBreak(_ lineBreak: LineBreak) {
+    self.lineBreak = lineBreak
   }
 
   /// 標準のセレクタが写ったコマンドを、面の編集係で行う。
@@ -124,6 +135,29 @@ final class MetalTextSurface: TextSurface {
   func setLineMarks(_ spans: LineMarkSpans) {
     pullContent(marks: spans)
   }
+
+  /// 色付きで写す HTML の見え方（今の外観で sRGB に解いた色。HTML の色は sRGB）。
+  func htmlStyle() -> HTMLCopy.Style {
+    let appearance = textView.effectiveAppearance
+    let hex = { (color: NSColor) -> String in
+      let packed = FrameColor(
+        color, appearance: appearance, space: FrameMaterial.defaultSpace, fontSmoothing: false,
+        scale: 1
+      ).packed
+      return String(
+        format: "#%02x%02x%02x", packed & 0xFF, (packed >> 8) & 0xFF, (packed >> 16) & 0xFF)
+    }
+    // システムの等幅（名前が「.」で始まる内部の名前）は、貼る先の WebKit が解く `ui-monospace` で書く。
+    let family = CTFontCopyFamilyName(config.font) as String
+    return HTMLCopy.Style(
+      text: hex(style.textColor), background: hex(style.backgroundColor),
+      roles: style.roleColors.mapValues(hex),
+      fontFamily: family.hasPrefix(".") ? "ui-monospace, monospace" : "'\(family)', monospace",
+      fontSize: CTFontGetSize(config.font), lineHeight: config.lineHeight)
+  }
+
+  /// 本文の色（ドラッグの像）。
+  var textColor: NSColor { style.textColor }
 
   /// 外観・色空間・倍率で色を解き直して置く。
   func appearanceDidChange() {

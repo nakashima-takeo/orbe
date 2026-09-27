@@ -13,6 +13,7 @@ import Foundation
 enum L10nKey: String, CaseIterable, Sendable {
   // swiftlint:disable:previous type_body_length
   // MARK: - Menu（AppKit メインメニュー）
+  case menuServices
   case menuHide
   case menuHideOthers
   case menuShowAll

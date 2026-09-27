@@ -36,6 +36,17 @@ struct FrameColor: Equatable, Sendable {
     self.packed = packed
     self.dilation = dilation
   }
+
+  /// 外観に依らない色（IME が指定した色）を sRGB に詰めたもの。
+  static func pack(_ color: NSColor) -> UInt32 {
+    let resolved = color.usingColorSpace(.sRGB) ?? color
+    return [
+      resolved.redComponent, resolved.greenComponent, resolved.blueComponent,
+      resolved.alphaComponent,
+    ].enumerated().reduce(UInt32(0)) {
+      $0 | UInt32((min(max($1.element, 0), 1) * 255).rounded()) << (8 * UInt32($1.offset))
+    }
+  }
 }
 
 /// 面の外観で解いた色の組。外観か倍率が変われば main が解き直して置く。
@@ -49,6 +60,14 @@ struct FramePalette: Equatable, Sendable {
   var caret: FrameColor
   var selection: FrameColor
   var inactiveSelection: FrameColor
+  /// 変換中の文字の見た目（OS の文字入力の見た目で、見え方の契約には出さない）——IME が選んでいない文節の下線と、属性の
+  /// 無い未確定の文字の地（NSTextView の既定の `markedTextAttributes`）。IME が選んでいる文節の下線は本文の色。
+  var markedUnderline: FrameColor
+  var markedBackground: FrameColor
+
+  /// NSTextView の既定の未確定の地（外観で解く動的な色）。
+  @MainActor private static let markedBackgroundColor =
+    NSTextView().markedTextAttributes?[.backgroundColor] as? NSColor ?? .systemYellow
 
   @MainActor
   init(
@@ -68,6 +87,8 @@ struct FramePalette: Equatable, Sendable {
     added = resolve(style.marks.added)
     modified = resolve(style.marks.modified)
     removed = resolve(style.marks.removed)
+    markedUnderline = resolve(.tertiaryLabelColor)
+    markedBackground = resolve(Self.markedBackgroundColor)
   }
 }
 
@@ -234,6 +255,8 @@ struct CaretMaterial: Equatable, Sendable {
   var focused = false
   /// 点滅させるか（アクセシビリティの「点滅しない挿入ポイント」が有効なら、点滅せず描き続ける）。
   var blinks = true
+  /// 変換中の文字（変換中でなければ nil）。変換中のキャレットは IME の注目位置で、主のキャレットではない。
+  var marked: MarkedMaterial?
 
   /// 点滅の刻み（表示・非表示それぞれの長さ）。
   static let blinkInterval = 0.5
@@ -262,6 +285,12 @@ struct HorizontalReveal: Equatable, Sendable {
   var serial: Int
 }
 
+/// 変換中の文字——未確定の範囲と見た目。
+struct MarkedMaterial: Equatable, Sendable {
+  var range: NSRange
+  var appearance: MarkedAppearance
+}
+
 /// 描く材料。main が置き、描画スレッドが表示の刻みごとに最新を読む。
 struct FrameMaterial: Sendable {
   var content: SurfaceContent?
@@ -273,6 +302,8 @@ struct FrameMaterial: Sendable {
   var caret = CaretMaterial()
   /// まだ解いていないかもしれない横の「見えるところまで」（本文を変えて見せない取引は、古い区間を捨てる）。
   var reveal: HorizontalReveal?
+  /// ドラッグで落とす位置の印（ドラッグの間だけ）。
+  var drop: Int?
   var palette: FramePalette?
   var tabColumns = Indentation.fallback.unit
   /// 面の大きさ（pt）と倍率。

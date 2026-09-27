@@ -63,7 +63,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // 表示名は Info.plist（＝ビルド時のチャネルが導出した値）から取る。ここを固定にすると
     // Orbe Dev のメニューだけ「Orbeを終了」と名乗り、共存時の見分けが最も目に付く場所で崩れる。
     let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Orbe"
-    NSApp.mainMenu = MainMenu.build(appName: appName, language: language)
+    let main = MainMenu.build(appName: appName, language: language)
+    NSApp.mainMenu = main
+    NSApp.servicesMenu = MainMenu.servicesMenu(of: main)
   }
 
   /// App メニュー「更新を確認…」（target=nil の responder chain 配送でここへ届く）。
