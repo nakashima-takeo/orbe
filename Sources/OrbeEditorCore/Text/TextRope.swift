@@ -114,9 +114,6 @@ public struct TextRope: Sendable {
     /// 今の塊の先頭のオフセットと、その前の改行の数。
     private var chunkStart = 0
     private var newlinesBefore = 0
-    /// 今の塊の中で数え終えた単位の数と、その中の改行の数。
-    private var scanned = 0
-    private var newlinesScanned = 0
 
     init(_ rope: TextRope, from offset: Int) {
       guard let (index, before) = rope.chunk(containing: min(max(0, offset), rope.length)) else {
@@ -135,16 +132,10 @@ public struct TextRope: Sendable {
         newlinesBefore += chunk.summary.newlines
         chunkStart += chunk.units.count
         chunk = next
-        scanned = 0
-        newlinesScanned = 0
       }
       current = chunk
       let local = min(max(0, offset - chunkStart), chunk.units.count)
-      while scanned < local {
-        if chunk.units[scanned] == 0x0A { newlinesScanned += 1 }
-        scanned += 1
-      }
-      return newlinesBefore + newlinesScanned
+      return newlinesBefore + chunk.newlines(before: local)
     }
   }
 

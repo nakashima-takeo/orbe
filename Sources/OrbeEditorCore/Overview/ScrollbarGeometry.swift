@@ -47,9 +47,9 @@ public struct ScrollbarGeometry: Equatable, Sendable {
   /// 位置の上限。
   public var maxPosition: CGFloat { max(0, total - visible) }
 
-  /// トラックの座標 `at` がつまみの上か。
-  public func sliderContains(_ at: CGFloat) -> Bool {
-    isNeeded && at >= sliderPosition && at < sliderPosition + sliderLength
+  /// トラックの座標 `coordinate` がつまみの上か。
+  public func sliderContains(_ coordinate: CGFloat) -> Bool {
+    isNeeded && coordinate >= sliderPosition && coordinate < sliderPosition + sliderLength
   }
 
   /// つまみを `delta` pt 動かしたときの位置（この状態を起点にする）。
@@ -57,9 +57,9 @@ public struct ScrollbarGeometry: Equatable, Sendable {
     clamp((sliderPosition + delta) / ratio)
   }
 
-  /// トラックの座標 `at` につまみの中央が来る位置。
-  public func position(centeringSliderAt at: CGFloat) -> CGFloat {
-    clamp((at - sliderLength / 2) / ratio)
+  /// トラックの座標 `coordinate` につまみの中央が来る位置。
+  public func position(centeringSliderAt coordinate: CGFloat) -> CGFloat {
+    clamp((coordinate - sliderLength / 2) / ratio)
   }
 
   private func clamp(_ value: CGFloat) -> CGFloat {

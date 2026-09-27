@@ -11,7 +11,7 @@ public struct MinimapCharSheet: Sendable {
   /// 1 字の幅（デバイス px）。高さはその 2 倍。
   public let scale: Int
   /// 字ごとの明度（`glyph * scale * 2·scale` から行優先）。
-  public let data: [UInt8]
+  let data: [UInt8]
 
   private static let sampledWidth = 10
   private static let sampledHeight = 16
