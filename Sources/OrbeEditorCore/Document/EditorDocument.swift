@@ -109,8 +109,18 @@ public final class EditorDocument {
 
   /// `surface` は `contents.text` で作った面。ロープは面ではなく読んだ内容から組む。構文の裏の仕事はここで起き、
   /// 全体の解析と先頭の画面ぶんの役割を作り始める（待たない）。
-  public init(
+  public convenience init(
     url: URL, contents: Contents, surface: any TextSurface, registry: LanguageRegistry
+  ) {
+    self.init(
+      url: url, contents: contents, surface: surface, registry: registry,
+      quietDelay: SyntaxWorker.quietDelay)
+  }
+
+  /// `quietDelay` は、最後の編集から構文の見えていない範囲を作り始めるまでの待ち（テストが差し替える）。
+  init(
+    url: URL, contents: Contents, surface: any TextSurface, registry: LanguageRegistry,
+    quietDelay: DispatchTimeInterval
   ) {
     self.url = url
     self.surface = surface
@@ -123,7 +133,8 @@ public final class EditorDocument {
     let inbox = AnalysisInbox()
     self.inbox = inbox
     syntax = language.flatMap { registry.rules(for: $0) }.map {
-      SyntaxWorker(text: text, version: 0, rules: $0, registry: registry, inbox: inbox)
+      SyntaxWorker(
+        text: text, version: 0, rules: $0, registry: registry, inbox: inbox, quietDelay: quietDelay)
     }
     analysis = DocumentAnalysis(inbox: inbox)
     inbox.setWake { [weak self] in self?.receive() }
@@ -166,11 +177,12 @@ public final class EditorDocument {
   }
 
   /// 裏の仕事（構文・行差分・問い）がすべて今の版に追いつき、その結果を受け取るまで待つ（最大 `timeout`）。追いついたら
-  /// true。時間ではなく受け取り箱を見て待つ——描画やテストが、結果の出揃った状態を決定的に得る口。構文の見えていない範囲も、
-  /// 打鍵が止むのを待たずに作らせる。
+  /// true。時間ではなく受け取り箱を見て待つ——描画やテストが、結果の出揃った状態を決定的に得る口。待つ間だけ、構文の
+  /// 見えていない範囲も打鍵が止むのを待たずに作らせる。
   @discardableResult
   public func waitUntilCaughtUp(timeout: TimeInterval = 5) -> Bool {
-    syntax?.hurry()
+    syntax?.setHurry(true)
+    defer { syntax?.setHurry(false) }
     syntax?.boost()
     return wait(until: .now() + timeout) { $0.isCaughtUp }
   }
@@ -185,7 +197,7 @@ public final class EditorDocument {
     return done(self)
   }
 
-  private var isFirstColorReady: Bool {
+  var isFirstColorReady: Bool {
     syntax == nil || (syntaxState.version == version && syntaxState.visibleReady)
   }
 

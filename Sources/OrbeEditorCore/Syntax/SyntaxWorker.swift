@@ -9,11 +9,11 @@ import os
 /// 編集の区間」に掛かる行を丸ごと「まだ作り直していない」に足す——字の中身で役割が決まる capture（`#match?` など）は、
 /// 構文木が変わらなくても役割が変わるから。作り直しは区画ずつ、見えている範囲を先に進め、区切りごとに役割の並びの写しと役割が
 /// 変わった字を版つきで置く。見えていない範囲は、最後の編集から `quietDelay` 経つまで始めない（打鍵が続く間は見えている範囲
-/// だけを作る）。区切りの間に新しい編集が来ていれば、それを先に当てる。文書を閉じたら、走っている解析を打ち切って止まる。
+/// だけを作る。開いてから編集が無ければ待たない）。区切りの間に新しい編集が来ていれば、それを先に当てる。文書を閉じたら、走っている解析を打ち切って止まる。
 actor SyntaxWorker {
   /// 見えている範囲を知らせる前（面を初めて見せる前）に先に作る行の数（高い画面の 1 画面ぶん）。
   static let initialVisibleLines = 120
-  /// 最後の編集から、見えていない範囲の作り直しを始めるまでの待ち。
+  /// 最後の編集から、見えていない範囲の作り直しを始めるまでの待ち（既定）。
   static let quietDelay: DispatchTimeInterval = .milliseconds(250)
 
   private struct Mail: Sendable {
@@ -22,9 +22,9 @@ actor SyntaxWorker {
     var edits: [VersionedEdit] = []
     var visible: NSRange
     var running = false
-    /// 最後に編集を積んだ時刻。
-    var lastEdit = DispatchTime(uptimeNanoseconds: 0)
-    /// 見えていない範囲も待たずに作る（main が文書全体の結果を待っている）。
+    /// 見えていない範囲の作り直しを始めてよくなる時刻（最後の編集 ＋ 待ち）。編集がまだ無ければ nil（待たない）。
+    var quietAt: DispatchTime?
+    /// 見えていない範囲も待たずに作る（main が文書全体の結果を同期で待っている）。
     var hurry = false
     /// 止まったとき、作り直していない範囲が残っていた。
     var hasStale = false
@@ -37,6 +37,7 @@ actor SyntaxWorker {
   private let mailbox: OSAllocatedUnfairLock<Mail>
   private let inbox: AnalysisInbox
   private let cancellation = SyntaxCancellation()
+  private let quietDelay: DispatchTimeInterval
   private let layers: SyntaxLayers
   private var text: TextRope
   private var version: Int
@@ -51,8 +52,9 @@ actor SyntaxWorker {
 
   init(
     text: TextRope, version: Int, rules: GrammarRules, registry: LanguageRegistry,
-    inbox: AnalysisInbox
+    inbox: AnalysisInbox, quietDelay: DispatchTimeInterval = SyntaxWorker.quietDelay
   ) {
+    self.quietDelay = quietDelay
     layers = SyntaxLayers(rules: rules, registry: registry, cancellation: cancellation)
     self.text = text
     self.version = version
@@ -70,7 +72,7 @@ actor SyntaxWorker {
       mail.edits.append(edit)
       mail.text = text
       mail.version = edit.version
-      mail.lastEdit = .now()
+      mail.quietAt = .now() + quietDelay
       defer { mail.running = true }
       return !mail.running
     }
@@ -87,8 +89,12 @@ actor SyntaxWorker {
     queue.async(qos: .userInteractive, flags: .enforceQoS) {}
   }
 
-  /// 見えていない範囲も待たずに作る（main が文書全体の結果を待つ）。文書全体を作り終えるまで続く。
-  nonisolated func hurry() {
+  /// true の間、見えていない範囲も待たずに作る。main が文書全体の結果を同期で待つ間だけ立てる。
+  nonisolated func setHurry(_ hurry: Bool) {
+    guard hurry else {
+      mailbox.withLock { $0.hurry = false }
+      return
+    }
     wakeIfStale { $0.hurry = true }
   }
 
@@ -126,7 +132,7 @@ actor SyntaxWorker {
       absorb(batch)
       guard !layers.isCancelled else { return }
       let shown = lines(covering: batch.visible)
-      let quiet = batch.hurry || DispatchTime.now() >= batch.lastEdit + Self.quietDelay
+      let quiet = batch.hurry || batch.quietAt.map { DispatchTime.now() >= $0 } ?? true
       if let target = nextTarget(shown: shown, quiet: quiet) {
         rebuild(target, shown: shown)
         continue
@@ -139,10 +145,9 @@ actor SyntaxWorker {
         }
         mail.running = false
         mail.hasStale = hasStale
-        if !hasStale { mail.hurry = false }
-        guard hasStale, !mail.timerPending else { return .some(nil) }
+        guard hasStale, !mail.timerPending, let quietAt = mail.quietAt else { return .some(nil) }
         mail.timerPending = true
-        return .some(mail.lastEdit + Self.quietDelay)
+        return .some(quietAt)
       }
       guard let wait else { continue }
       if let deadline = wait {
