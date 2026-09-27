@@ -72,5 +72,21 @@ final class SummaryTreeTests: XCTestCase {
       XCTAssertEqual(found.index, expected, "和 \(position) を含む要素", file: file, line: line)
       XCTAssertEqual(found.before.sum, sums[expected], file: file, line: line)
     }
+    let start = Int.random(in: 0..<reference.count, using: &generator)
+    var indices: [Int] = []
+    var before: [Int] = []
+    var values: [Int] = []
+    tree.visit(
+      entering: { before, span in before.count + span.count > start },
+      { index, sum, item in
+        indices.append(index)
+        before.append(sum.sum)
+        values.append(item.value)
+        return indices.count < 200
+      })
+    let last = min(reference.count, start + 200)
+    XCTAssertEqual(indices, Array(start..<last), "枝を刈って訪れた番号", file: file, line: line)
+    XCTAssertEqual(before, Array(sums[start..<last]), "訪れた要素の前の和", file: file, line: line)
+    XCTAssertEqual(values, Array(reference[start..<last]), "false で止まる", file: file, line: line)
   }
 }

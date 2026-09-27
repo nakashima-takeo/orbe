@@ -26,13 +26,17 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     try super.tearDownWithError()
   }
 
-  private func open(_ name: String, _ text: String) throws -> (EditorDocument, FakeTextSurface) {
+  private func open(
+    _ name: String, _ text: String, quietDelay: DispatchTimeInterval = SyntaxWorker.quietDelay
+  ) throws -> (EditorDocument, FakeTextSurface) {
     let url = root.appendingPathComponent(name)
     try Data(text.utf8).write(to: url)
     let contents = try EditorDocument.read(url)
     let surface = FakeTextSurface(text: contents.text)
     return (
-      EditorDocument(url: url, contents: contents, surface: surface, registry: registry), surface
+      EditorDocument(
+        url: url, contents: contents, surface: surface, registry: registry, quietDelay: quietDelay),
+      surface
     )
   }
 
@@ -120,6 +124,50 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     }
   }
 
+  // MARK: - 構文の層の出入り
+
+  /// 注入の層の出入り（フェンスに言語名を書き足す・替える、束ねた層の部分が消える）の後、裏の仕事は層の中身の行まで
+  /// 作り直す——作り直す範囲は編集の行だけでなく、出入りした層・構文の変わった層の範囲（編集から離れた行も）に及ぶ。
+  func testInjectionLayersComingAndGoingAreRebuilt() throws {
+    let markdown = "# T\n\n```\ndef f(x):\n    return 1\n```\n\n```js\nconst Foo = 1; // c\n```\n"
+    let tagged =
+      "const b = html`<style>p { color: blue; }</style><script>let y = 1;</script>`;\nlet z = 2;\n"
+    let split =
+      "const a = html`<style>`;\nconst b = 1;\nconst c = html`p { color: red; }</style>`;\n"
+    for (name, file, source, anchor, removed, inserted) in [
+      ("言語なし → python", "a.md", markdown, "```\ndef", 3, "```python"),
+      ("js → py", "b.md", markdown, "js\nconst", 2, "py"),
+      ("開きのフェンスを消す", "c.md", markdown, "```js", 5, ""),
+      ("束ねた html の部分が消える", "d.js", tagged, "html`<style>", 0, "x"),
+      ("束ねた html の部分を行ごと消すと、離れた残りの部分の構文が変わる", "e.js", split, "const a", 25, ""),
+    ] {
+      let (document, surface) = try open(file, source)
+      XCTAssertTrue(document.waitUntilCaughtUp(), name)
+      let at = (source as NSString).range(of: anchor).location
+      surface.replace(NSRange(location: at, length: removed), with: inserted)
+      XCTAssertTrue(document.waitUntilCaughtUp(), name)
+      let (fresh, _) = try open("fresh-" + file, surface.text)
+      XCTAssertTrue(fresh.waitUntilCaughtUp(), name)
+      XCTAssertEqual(perUnit(document), perUnit(fresh), name)
+    }
+  }
+
+  /// 構文木が誤りを含まなくなれば、その構文木の範囲を丸ごと作り直す——誤りを含む間に枠で落ちた、余白を超える構文（区画
+  /// をいくつもまたぐコメント）の色が、誤りから遠い編集していない行にも戻る。
+  func testFixingTheLastErrorRestoresColorsDroppedByTheFrame() throws {
+    let comment = "/*\n" + String(repeating: "note\n", count: 30_000) + "*/\n"
+    let source = "let = 1\n" + comment + "let b = 2\n"
+    let (document, surface) = try open("crumbled.swift", source)
+    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
+    let middle = document.text.lineStart(15_000)
+    XCTAssertNotEqual(role(ofRow: 15_000, in: document), .comment, "前提: 誤りを含む間は枠で落ちる")
+
+    surface.replace(NSRange(location: 4, length: 0), with: "a ")
+    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
+    XCTAssertEqual(
+      document.roles.roles(in: NSRange(location: middle, length: 4)).map(\.role), [.comment])
+  }
+
   /// 字ごとの役割（本文全体）。
   private func perUnit(_ document: EditorDocument) -> [SyntaxRole?] {
     var result = [SyntaxRole?](repeating: nil, count: document.text.length)
@@ -151,6 +199,74 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     XCTAssertEqual(
       document.roles.roles(in: NSRange(location: 3, length: 3)).map(\.role), [.keyword],
       "2 回目は待たない（裏の comment を受け取らず、ずらした前の色のまま）")
+  }
+
+  // MARK: - 打鍵が止むまで
+
+  /// 開きのバッククォート（4 字目）を消すと、後ろの 3000 行がテンプレート文字列からコードに変わる JS。
+  private static let template =
+    "x = `\n" + String(repeating: "const Foo = new Bar(\"x\"); // Baz\n", count: 3000) + "`;\n"
+
+  /// 開いてから一度も編集しない文書も、急かさずに文書全体の役割が揃う——編集が無ければ打鍵の止むのを待たない。
+  func testAnOpenedDocumentCompletesWithoutHurrying() throws {
+    let (document, _) = try open("opened.js", Self.template)
+    XCTAssertTrue(pump(document, timeout: 30) { $0.isCaughtUp })
+    XCTAssertEqual(role(ofRow: 2900, in: document), .string, "末尾の行まで作った")
+  }
+
+  /// 打鍵が続く間（待ちが明けるまで）は見えている行だけを作り直し、見えていない行は前の色をずらしたまま持つ。スクロール
+  /// で見えた行は待たずに作る。結果を同期で待つ口は、待つ間だけ急かす——待った後の打鍵の群れは急かされない。
+  func testWhileTypingOnlyTheVisibleLinesAreRebuilt() throws {
+    let (document, surface) = try open("typing.js", Self.template, quietDelay: .seconds(3600))
+    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
+    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
+    show(row: 0, of: surface)
+
+    surface.replace(NSRange(location: 4, length: 1), with: "")
+    XCTAssertTrue(pump(document) { $0.isFirstColorReady })
+    RunLoop.main.run(until: Date() + 0.2)
+    XCTAssertEqual(role(ofRow: 2, in: document), .keyword, "見えている行は作り直した")
+    XCTAssertEqual(role(ofRow: 2500, in: document), .string, "見えていない行は前の色のまま")
+    XCTAssertFalse(document.isCaughtUp)
+
+    show(row: 2500, of: surface)
+    XCTAssertTrue(pump(document) { self.role(ofRow: 2500, in: $0) == .keyword }, "見えた行は待たずに作る")
+    XCTAssertEqual(role(ofRow: 1500, in: document), .string, "見えていない行は前の色のまま")
+
+    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30), "待つ口は打鍵の止むのを待たずに揃える")
+    XCTAssertEqual(role(ofRow: 1500, in: document), .keyword)
+  }
+
+  /// 打鍵が止んで待ちが明ければ、急かさなくても文書全体を作り直す。
+  func testTheRestIsRebuiltWithoutHurryingOnceTypingStops() throws {
+    let (document, surface) = try open("quiet.js", Self.template, quietDelay: .milliseconds(10))
+    XCTAssertTrue(pump(document, timeout: 30) { $0.isCaughtUp })
+    show(row: 0, of: surface)
+    surface.replace(NSRange(location: 4, length: 1), with: "")
+    XCTAssertTrue(pump(document, timeout: 30) { $0.isCaughtUp })
+    XCTAssertEqual(role(ofRow: 2500, in: document), .keyword)
+  }
+
+  /// 急かさずに main を回して、`done` が成り立つか期限が来るまで待つ。
+  private func pump(
+    _ document: EditorDocument, timeout: TimeInterval = 5, _ done: (EditorDocument) -> Bool
+  ) -> Bool {
+    let deadline = Date() + timeout
+    while !done(document), Date() < deadline { RunLoop.main.run(until: Date() + 0.005) }
+    return done(document)
+  }
+
+  /// 面の見えている範囲を、行 `row` から 10 行にする。
+  private func show(row: Int, of surface: FakeTextSurface) {
+    let document = try? XCTUnwrap(surface.delegate as? EditorDocument)
+    surface.viewport = TextViewport(
+      firstVisible: document?.text.lineStart(row) ?? 0, hiddenFraction: 0, visibleLines: 10)
+    surface.delegate?.surfaceDidChangeViewport(surface)
+  }
+
+  /// 行の先頭の字の役割。
+  private func role(ofRow row: Int, in document: EditorDocument) -> SyntaxRole? {
+    document.roles.roles(in: NSRange(location: document.text.lineStart(row), length: 1)).first?.role
   }
 
   /// 閉じた文書の構文木（構文の裏の仕事）は、手放す裏の仕事が最後の参照を落とす——裏へ渡した後の main に参照が残って

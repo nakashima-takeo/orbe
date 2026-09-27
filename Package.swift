@@ -11,9 +11,9 @@ let package = Package(
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
     // コードエディターのテキストエンジン（TextKit 2 の自前ビュー・ガター・rendering attribute）。GPLv3。
     .package(url: "https://github.com/krzyzanowskim/STTextView", from: "2.4.1"),
-    // tree-sitter の Swift 束縛（ランタイム同梱・LanguageLayer による injections 込みの色付け）。
-    // `from:` は迷子タグ 0.25.0（0.10.0 より古い）を掴むので exact で固定する（docs/guides/build.md）。
-    .package(url: "https://github.com/tree-sitter/swift-tree-sitter", exact: "0.10.0"),
+    // tree-sitter 本体（C API を OrbeEditorCore から直接呼ぶ）。0.26.12 以降はエラー回復が退行して大きな Swift が
+    // 全体 ERROR に崩れるので exact で固定する（docs/guides/build.md）。
+    .package(url: "https://github.com/tree-sitter/tree-sitter", exact: "0.26.11"),
     // 文法 14 パッケージ（16 パーサ）。exact の 4 つは、新しいタグの manifest が scanner.c を cwd 相対の
     // fileExists で条件付きにしていて依存として評価すると落ち、リンクに失敗するため導入前タグへ固定
     // （docs/guides/build.md）。
@@ -68,8 +68,7 @@ let package = Package(
     .target(
       name: "OrbeEditorCore",
       dependencies: [
-        .product(name: "SwiftTreeSitter", package: "swift-tree-sitter"),
-        .product(name: "SwiftTreeSitterLayer", package: "swift-tree-sitter"),
+        .product(name: "TreeSitter", package: "tree-sitter"),
         .product(name: "TreeSitterJSON", package: "tree-sitter-json"),
         .product(name: "TreeSitterTypeScript", package: "tree-sitter-typescript"),
         .product(name: "TreeSitterHTML", package: "tree-sitter-html"),

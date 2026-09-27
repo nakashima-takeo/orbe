@@ -158,13 +158,7 @@ Code editor (Contents/MacOS/Orbe, Contents/Resources/TreeSitter*.bundle)
   https://github.com/krzyzanowskim/CoreTextSwift
   License: licenses/CoreTextSwift-LICENSE.txt
 
-* swift-tree-sitter — Copyright (c) 2021, Chime — BSD-3-Clause
-  Swift bindings for tree-sitter (SwiftTreeSitter, SwiftTreeSitterLayer).
-  Linked into Contents/MacOS/Orbe.
-  https://github.com/tree-sitter/swift-tree-sitter
-  License: licenses/swift-tree-sitter-LICENSE.txt
-
-* tree-sitter — Copyright (c) 2018-2024 Max Brunsfeld — MIT License
+* tree-sitter — Copyright (c) 2018 Max Brunsfeld — MIT License
   The parser runtime (lib/src, C). Statically linked into Contents/MacOS/Orbe.
   https://github.com/tree-sitter/tree-sitter
   License: licenses/tree-sitter-LICENSE.txt

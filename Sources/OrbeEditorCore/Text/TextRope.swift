@@ -163,14 +163,22 @@ public struct TextRope: Sendable {
     }
   }
 
-  /// `offset` から、それを含む塊の終わりまでの UTF-16LE のバイト列（tree-sitter の読み口）。本文の終わりなら nil。
-  public func chunkData(at offset: Int) -> Data? {
+  /// 塊 1 つが持ちうる単位の数の上限（サロゲートの対を割らないときの 1 単位を含む）。
+  static let chunkCapacity = maximumChunk + 1
+
+  /// `offset` から、それを含む塊の終わりまでの単位を `buffer` の先頭へ写し、写した数を返す（`buffer` に収まる分だけ。
+  /// 本文の終わりなら 0）。tree-sitter の読み口——読むたびに確保せず、同じバッファを使い回す。
+  func copyChunk(at offset: Int, into buffer: UnsafeMutableBufferPointer<UInt16>) -> Int {
     guard offset >= 0, offset < length, let (index, before) = chunk(containing: offset) else {
-      return nil
+      return 0
     }
-    return chunks[index].units[(offset - before.utf16)...].withUnsafeBufferPointer {
-      Data(buffer: $0)
+    let units = chunks[index].units
+    let start = offset - before.utf16
+    let count = min(units.count - start, buffer.count)
+    units.withUnsafeBufferPointer { source in
+      _ = buffer.initialize(fromContentsOf: source[start..<(start + count)])
     }
+    return count
   }
 
   /// 本文全体を連続した UTF-16 の列に写す（O(n)）。打鍵の経路では呼ばない——使うのは裏の仕事（検索・出現・行差分）と

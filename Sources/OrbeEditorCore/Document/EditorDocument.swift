@@ -2,13 +2,6 @@ import CryptoKit
 import Foundation
 import os
 
-public enum EditorDocumentError: Error, Equatable {
-  case unreadable(URL)
-  case notUTF8(URL)
-  /// ディスクの内容が最後に読んだ／書いたものと違う。force でない保存はディスクに触れずこれで返る。
-  case diskChanged(URL)
-}
-
 /// 開いたファイル 1 つ。識別（URL）・言語・未保存の有無と、本文の写し（ロープ）・版・役割の並びを持つ。テキスト面とは
 /// 開いてから閉じるまで 1 対 1 で、文書は面の delegate として編集（置換後の文字列つき）を受けてロープを追う。本文を読むのは
 /// このロープだけ——面の契約に本文を読む口は無い。本文を自分で持つ面（STTextView）では本文の正は面にあり、持たない面では
@@ -79,7 +72,7 @@ public final class EditorDocument {
   public var onAnalysis: ((AnalysisRequest, [NSRange]) -> Void)?
 
   private let inbox: AnalysisInbox
-  private var syntax: SyntaxWorker?
+  private(set) var syntax: SyntaxWorker?
   private let analysis: DocumentAnalysis
   /// 最後に受け取った構文の結果の版と、そのとき見えている範囲・全体の作り直しが済んでいたか。
   private var syntaxState = SyntaxProgress(version: 0, visibleReady: false, complete: false)
@@ -116,8 +109,18 @@ public final class EditorDocument {
 
   /// `surface` は `contents.text` で作った面。ロープは面ではなく読んだ内容から組む。構文の裏の仕事はここで起き、
   /// 全体の解析と先頭の画面ぶんの役割を作り始める（待たない）。
-  public init(
+  public convenience init(
     url: URL, contents: Contents, surface: any TextSurface, registry: LanguageRegistry
+  ) {
+    self.init(
+      url: url, contents: contents, surface: surface, registry: registry,
+      quietDelay: SyntaxWorker.quietDelay)
+  }
+
+  /// `quietDelay` は、最後の編集から構文の見えていない範囲を作り始めるまでの待ち（テストが差し替える）。
+  init(
+    url: URL, contents: Contents, surface: any TextSurface, registry: LanguageRegistry,
+    quietDelay: DispatchTimeInterval
   ) {
     self.url = url
     self.surface = surface
@@ -129,9 +132,9 @@ public final class EditorDocument {
     hasBOM = contents.hasBOM
     let inbox = AnalysisInbox()
     self.inbox = inbox
-    syntax = language.flatMap { registry.configuration(for: $0) }.flatMap {
-      try? SyntaxWorker(
-        text: text, version: 0, configuration: $0, registry: registry, inbox: inbox)
+    syntax = language.flatMap { registry.rules(for: $0) }.map {
+      SyntaxWorker(
+        text: text, version: 0, rules: $0, registry: registry, inbox: inbox, quietDelay: quietDelay)
     }
     analysis = DocumentAnalysis(inbox: inbox)
     inbox.setWake { [weak self] in self?.receive() }
@@ -144,9 +147,11 @@ public final class EditorDocument {
     DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = nil } }
   }
 
-  /// 閉じた文書の写し・役割の並び・構文木を持つ裏の仕事は裏で手放す（大きな木の解放を main で行わない）。裏へ渡す前に
-  /// 文書の欄から外す——欄は deinit の後に main で解放されるので、欄に残すと裏が先に済んだとき最後の解放が main で起きる。
+  /// 構文の裏の仕事に走っている解析を打ち切らせ、閉じた文書の写し・役割の並び・構文木を持つ裏の仕事は裏で手放す（大きな
+  /// 木の解放を main で行わない）。裏へ渡す前に文書の欄から外す——欄は deinit の後に main で解放されるので、欄に残すと裏が
+  /// 先に済んだとき最後の解放が main で起きる。
   deinit {
+    syntax?.cancel()
     let parcel = OSAllocatedUnfairLock<ReleasedParts?>(
       initialState: ReleasedParts(text: text, roles: roles, syntax: syntax))
     text = TextRope()
@@ -172,9 +177,12 @@ public final class EditorDocument {
   }
 
   /// 裏の仕事（構文・行差分・問い）がすべて今の版に追いつき、その結果を受け取るまで待つ（最大 `timeout`）。追いついたら
-  /// true。時間ではなく受け取り箱を見て待つ——描画やテストが、結果の出揃った状態を決定的に得る口。
+  /// true。時間ではなく受け取り箱を見て待つ——描画やテストが、結果の出揃った状態を決定的に得る口。待つ間だけ、構文の
+  /// 見えていない範囲も打鍵が止むのを待たずに作らせる。
   @discardableResult
   public func waitUntilCaughtUp(timeout: TimeInterval = 5) -> Bool {
+    syntax?.setHurry(true)
+    defer { syntax?.setHurry(false) }
     syntax?.boost()
     return wait(until: .now() + timeout) { $0.isCaughtUp }
   }
@@ -189,11 +197,12 @@ public final class EditorDocument {
     return done(self)
   }
 
-  private var isFirstColorReady: Bool {
+  var isFirstColorReady: Bool {
     syntax == nil || (syntaxState.version == version && syntaxState.visibleReady)
   }
 
-  private var isCaughtUp: Bool {
+  /// 受け取った結果で、裏の仕事がすべて今の版に追いついている（待たず、裏を急かさない）。
+  var isCaughtUp: Bool {
     (syntax == nil || (syntaxState.version == version && syntaxState.complete))
       && pendingHunks == nil && pendingRanges.isEmpty
   }
@@ -384,12 +393,4 @@ extension EditorDocument: TextSurfaceDelegate {
   public func surfaceContent(_ surface: any TextSurface) -> SurfaceContent {
     SurfaceContent(text: text, roles: roles, version: version)
   }
-}
-
-/// 閉じた文書から手放す大きな部品——本文の写し・役割の並び・構文木を持つ構文の裏の仕事（行差分・検索・出現の裏の仕事は
-/// 依頼の後に本文を覚えず、仕事の間は走っている裏の仕事が自分を持つので、ここに入れない）。
-struct ReleasedParts: Sendable {
-  let text: TextRope
-  let roles: RoleRuns
-  let syntax: SyntaxWorker?
 }

@@ -273,7 +273,7 @@ final class EditorDocumentTests: XCTestCase {
   func testRolesDoNotDependOnWhereTheRangeIsCut() throws {
     for sample in ["sample.go", "sample.sh", "sample.md"] {
       let (layer, text) = try parsed(sample, inserting: "x")
-      let whole = layer.roles(in: NSRange(location: 0, length: text.length), text: text)
+      let whole = layer.roles(in: NSRange(location: 0, length: text.length))
       var mismatches: [String] = []
       for start in stride(from: 0, to: text.length, by: 7) {
         let range = NSRange(location: start, length: min(53, text.length - start))
@@ -281,7 +281,7 @@ final class EditorDocumentTests: XCTestCase {
           let clipped = NSIntersectionRange(span.range, range)
           return clipped.length > 0 ? HighlightSpan(range: clipped, role: span.role) : nil
         }
-        if layer.roles(in: range, text: text) != expected {
+        if layer.roles(in: range) != expected {
           mismatches.append("\(sample) \(range)")
         }
       }
@@ -294,25 +294,26 @@ final class EditorDocumentTests: XCTestCase {
   func testARangeStartingInsideAStringKeepsTheFineRoles() throws {
     let (shell, shellText) = try parsed("sample.sh")
     let quote = try XCTUnwrap(location(of: "\"$1\"", in: shellText))
-    let roles = shell.roles(in: NSRange(location: quote + 1, length: 40), text: shellText)
+    let roles = shell.roles(in: NSRange(location: quote + 1, length: 40))
     XCTAssertEqual(role(at: quote + 1, in: roles), .punctuation, "`$` は文字列の中の記号")
     XCTAssertEqual(role(at: quote + 2, in: roles), .variable, "`1` は文字列の中の変数")
     XCTAssertEqual(role(at: quote + 3, in: roles), .string)
 
     let (markdown, markdownText) = try parsed("sample.md")
     let keyword = try XCTUnwrap(location(of: "let index", in: markdownText))
-    let fenced = markdown.roles(in: NSRange(location: keyword + 1, length: 40), text: markdownText)
+    let fenced = markdown.roles(in: NSRange(location: keyword + 1, length: 40))
     XCTAssertEqual(role(at: keyword + 1, in: fenced), .keyword, "`let` の色は区間の端で変わらない")
   }
 
   /// 見本を構文層で解析する（`inserting` があれば真ん中に挿入して差分解析した後）。
   private func parsed(_ sample: String, inserting insertion: String? = nil) throws -> (
-    SyntaxLayer, TextRope
+    SyntaxLayers, TextRope
   ) {
     let url = Queries.samples.appendingPathComponent(sample)
     let language = try XCTUnwrap(SyntaxLanguage.detect(url: url))
-    let layer = try SyntaxLayer(
-      configuration: try XCTUnwrap(registry.configuration(for: language)), registry: registry)
+    let layer = SyntaxLayers(
+      rules: try XCTUnwrap(registry.rules(for: language)), registry: registry,
+      cancellation: SyntaxCancellation())
     var text = TextRope(try String(contentsOf: url, encoding: .utf8))
     layer.parseAll(text)
     guard let insertion else { return (layer, text) }
@@ -325,7 +326,7 @@ final class EditorDocumentTests: XCTestCase {
       TextEdit(range: NSRange(location: at, length: 0), replacement: insertion), start: start,
       oldEnd: start,
       newEnd: TextPoint(row: point.row, column: point.column + insertion.utf16.count))
-    _ = layer.didChange([edit], text: text)
+    _ = layer.apply([edit], text: text)
     return (layer, text)
   }
 

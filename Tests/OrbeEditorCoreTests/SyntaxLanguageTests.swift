@@ -30,21 +30,20 @@ final class SyntaxLanguageTests: XCTestCase {
   func testEveryGrammarResolvesFromBuildProducts() {
     let registry = LanguageRegistry(queriesRoot: Queries.root)
     for grammar in Grammar.allCases {
-      let configuration = registry.configuration(for: grammar)
-      XCTAssertNotNil(configuration, "\(grammar) の queries が解けない（\(Queries.root.path)）")
-      XCTAssertNotNil(configuration?.queries[.highlights], "\(grammar) に highlights が無い")
+      let rules = registry.rules(for: grammar)
+      XCTAssertNotNil(rules, "\(grammar) の queries が解けない（\(Queries.root.path)）")
       if grammar.injectionFile != nil {
-        XCTAssertNotNil(configuration?.queries[.injections], "\(grammar) に injections が無い")
+        XCTAssertNotNil(rules?.injections, "\(grammar) に injections が無い")
       }
     }
-    XCTAssertNotNil(registry.languageProvider("markdown_inline"))
-    XCTAssertNotNil(registry.languageProvider("ts"))
-    XCTAssertNil(registry.languageProvider("regex"), "持たない言語は nil（injection は無視される）")
+    XCTAssertNotNil(registry.rules(forInjection: "markdown_inline"))
+    XCTAssertNotNil(registry.rules(forInjection: "ts"))
+    XCTAssertNil(registry.rules(forInjection: "regex"), "持たない言語は nil（injection は無視される）")
   }
 
   func testMissingRootMeansNoColors() {
-    XCTAssertNil(LanguageRegistry(queriesRoot: nil).configuration(for: SyntaxLanguage.swift))
+    XCTAssertNil(LanguageRegistry(queriesRoot: nil).rules(for: SyntaxLanguage.swift))
     let empty = FileManager.default.temporaryDirectory.appendingPathComponent("orbe-no-queries")
-    XCTAssertNil(LanguageRegistry(queriesRoot: empty).configuration(for: SyntaxLanguage.swift))
+    XCTAssertNil(LanguageRegistry(queriesRoot: empty).rules(for: SyntaxLanguage.swift))
   }
 }

@@ -54,7 +54,7 @@ custom_rules:
     name: "tree-sitter は OrbeEditorCore に閉じる"
     included: ".*/Sources/.*\\.swift"
     excluded: ".*/Sources/OrbeEditorCore/.*"
-    regex: "import\\s+(?:\\w+\\s+)?(?:SwiftTreeSitter\\w*|TreeSitter\\w*)\\b"
+    regex: "import\\s+(?:\\w+\\s+)?TreeSitter\\w*\\b"
     match_kinds: [keyword, identifier, typeidentifier]
     message: "tree-sitter は Sources/OrbeEditorCore からだけ import する（色は役割付き区間で受け取る）"
     severity: error

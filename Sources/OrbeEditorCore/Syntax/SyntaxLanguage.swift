@@ -1,5 +1,4 @@
 import Foundation
-import SwiftTreeSitter
 import TreeSitterBash
 import TreeSitterCSS
 import TreeSitterDockerfile
@@ -97,26 +96,31 @@ enum Grammar: String, CaseIterable, Sendable {
     }
   }
 
-  var language: Language {
+  var language: LanguagePointer {
     switch self {
-    case .swift: return Language(tree_sitter_swift())
-    case .markdown: return Language(tree_sitter_markdown())
-    case .markdownInline: return Language(tree_sitter_markdown_inline())
-    case .json: return Language(tree_sitter_json())
-    case .typescript: return Language(tree_sitter_typescript())
-    case .javascript: return Language(tree_sitter_javascript())
-    case .tsx: return Language(tree_sitter_tsx())
-    case .css: return Language(tree_sitter_css())
-    case .html: return Language(tree_sitter_html())
-    case .python: return Language(tree_sitter_python())
-    case .go: return Language(tree_sitter_go())
-    case .rust: return Language(tree_sitter_rust())
-    case .yaml: return Language(tree_sitter_yaml())
-    case .toml: return Language(tree_sitter_toml())
-    case .bash: return Language(tree_sitter_bash())
-    case .dockerfile: return Language(tree_sitter_dockerfile())
+    case .swift: return LanguagePointer(tree_sitter_swift())
+    case .markdown: return LanguagePointer(tree_sitter_markdown())
+    case .markdownInline: return LanguagePointer(tree_sitter_markdown_inline())
+    case .json: return LanguagePointer(tree_sitter_json())
+    case .typescript: return LanguagePointer(tree_sitter_typescript())
+    case .javascript: return LanguagePointer(tree_sitter_javascript())
+    case .tsx: return LanguagePointer(tree_sitter_tsx())
+    case .css: return LanguagePointer(tree_sitter_css())
+    case .html: return LanguagePointer(tree_sitter_html())
+    case .python: return LanguagePointer(tree_sitter_python())
+    case .go: return LanguagePointer(tree_sitter_go())
+    case .rust: return LanguagePointer(tree_sitter_rust())
+    case .yaml: return LanguagePointer(tree_sitter_yaml())
+    case .toml: return LanguagePointer(tree_sitter_toml())
+    case .bash: return LanguagePointer(tree_sitter_bash())
+    case .dockerfile: return LanguagePointer(tree_sitter_dockerfile())
     }
   }
+
+  /// 差分解析に前の木を使ってよいか。Markdown の inline は、前の木を使うと同じ本文を新しく解いた木と食い違う（上流の文法の
+  /// 性質で、乱択の編集の 1 割強）ので、毎回新しく解く——注入の層は段落ほどの大きさで、構文が変わった区間は前の木と比べて
+  /// 出す。
+  var reusesTrees: Bool { self != .markdownInline }
 
   /// SwiftPM が queries を写す資源バンドルの名前（`<パッケージ名>_<ターゲット名>`）。
   var bundleName: String {
@@ -183,5 +187,14 @@ enum Grammar: String, CaseIterable, Sendable {
       return QueryFile(grammar: self, name: "injections.scm")
     case .json, .css, .python, .go, .yaml, .toml, .bash, .dockerfile: return nil
     }
+  }
+}
+
+/// 文法の `TSLanguage` を指す値。文法の表は静的で書き換わらないので、どのスレッドから読んでもよい。
+struct LanguagePointer: @unchecked Sendable {
+  let raw: OpaquePointer
+
+  init(_ raw: OpaquePointer) {
+    self.raw = raw
   }
 }

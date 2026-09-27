@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # エディターの性能を測る: release のテスト用ビルドを作り、EditorScrollPerfTests（1MB・200KB のスクロールと打鍵、
-# 64KB・1MB・8MB の打鍵 1 回の main の仕事）を回して PERF の行を出す。
+# 64KB・1MB・8MB の打鍵 1 回の main の仕事）と EditorSyntaxPerfTests（構文の崩れる打鍵の裏の重さ、開いてから全体の
+# 色が揃うまで）を回して PERF の行を出す。
 # 環境変数は .app を Finder から起こしたときと同じ 13 個に絞る——テキストエンジン（STTextView）は描画の経路で環境変数を
 # 読み直すので、環境の大きい shell からそのまま測ると実アプリより遅く出る（`swift test` も十数個足すので、xctest を
 # 直に起こす）。目標は docs/testing/test-architecture.md。
@@ -18,5 +19,5 @@ env -i \
   SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-}" OSLogRateLimit=64 COMMAND_MODE=unix2003 \
   __CFBundleIdentifier=dev.orbe.app.dev XPC_SERVICE_NAME=0 XPC_FLAGS=0x0 \
   ORBE_EDITOR_PERF=1 \
-  "$xctest" -XCTest OrbeTests.EditorScrollPerfTests .build/release/OrbeTests.xctest 2>&1 \
+  "$xctest" -XCTest OrbeTests.EditorScrollPerfTests,OrbeTests.EditorSyntaxPerfTests .build/release/OrbeTests.xctest 2>&1 \
   | { grep -E "^PERF|error:|failed" || true; }
