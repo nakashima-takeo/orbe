@@ -17,6 +17,30 @@ struct ShapedLine {
   let omitted: Int
 }
 
+/// main が横の位置を問うために 1 度組んだ行。幅も行の中の位置の x もこの値に問い、同じ行を何度も組まない。`CTLine` を
+/// 持つので、組んだスレッドの外へ出さない。
+struct MeasuredLine {
+  private let line: CTLine
+  /// 描いた単位の数（打ち切った分を除く）。
+  private let displayed: Int
+  let width: CGFloat
+
+  fileprivate init(_ line: CTLine, displayed: Int) {
+    self.line = line
+    self.displayed = displayed
+    width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+  }
+
+  /// 行の中の位置 `offset`（UTF-16）の字の左端の x（pt）。描かない部分は描いた部分の右端。
+  func x(ofOffset offset: Int) -> CGFloat {
+    guard offset < displayed else { return width }
+    return CTLineGetOffsetForStringIndex(line, max(0, offset), nil)
+  }
+}
+
+@available(*, unavailable)
+extension MeasuredLine: Sendable {}
+
 /// 行の組版の規則（純関数）。描画スレッドと、横の位置が要る main の操作が同じ規則を使う。
 ///
 /// 行は文書の行（`\n` で割った行）の中身で、見せ方は VS Code の既定（`renderControlCharacters`）と同じ——行末の `\r` は
@@ -83,15 +107,10 @@ enum LineShaper {
     ShapedLine(makeLine(ContiguousArray(string.utf16), font: font, tabWidth: 0), omitted: 0)
   }
 
-  /// 行の中の位置 `offset`（UTF-16）の字の左端の x（pt）。描かない部分は描いた部分の右端。
-  static func x(ofOffset offset: Int, in source: Source, font: CTFont, tabWidth: CGFloat) -> CGFloat
-  {
+  /// 横の位置を問うために行を 1 度組む（main）。
+  static func measure(_ source: Source, font: CTFont, tabWidth: CGFloat) -> MeasuredLine {
     let (units, _) = display(source)
-    let line = makeLine(units, font: font, tabWidth: tabWidth)
-    guard offset < units.count else {
-      return CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
-    }
-    return CTLineGetOffsetForStringIndex(line, max(0, offset), nil)
+    return MeasuredLine(makeLine(units, font: font, tabWidth: tabWidth), displayed: units.count)
   }
 
   private static func makeLine(

@@ -35,9 +35,9 @@ final class LineShaperTests: XCTestCase {
   /// タブはインデント単位の桁まで空ける（次のタブ位置へ）。
   func testTabAdvancesToTheNextIndentStop() {
     let tab = cell * 4
-    let x = LineShaper.x(ofOffset: 1, in: source("\tx"), font: font, tabWidth: tab)
+    let x = LineShaper.measure(source("\tx"), font: font, tabWidth: tab).x(ofOffset: 1)
     XCTAssertEqual(x, tab, accuracy: 0.01)
-    let after = LineShaper.x(ofOffset: 3, in: source("ab\tx"), font: font, tabWidth: tab)
+    let after = LineShaper.measure(source("ab\tx"), font: font, tabWidth: tab).x(ofOffset: 3)
     XCTAssertEqual(after, tab, accuracy: 0.01, "途中のタブも次の刻みまで")
   }
 
