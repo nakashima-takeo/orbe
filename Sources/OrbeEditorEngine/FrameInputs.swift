@@ -3,14 +3,14 @@ import CoreText
 import OrbeEditorCore
 import os
 
-/// 色 1 つ（sRGB、α は乗算していない）と、それで描く字の太らせの段。
+/// 色 1 つ（sRGB、α は乗算していない）と、それで描く字の太らせの段（倍率で決まる）。
 struct FrameColor: Equatable, Sendable {
   var packed: UInt32
   var dilation: Int
 
-  /// `color` を外観 `appearance` で sRGB に解く。
+  /// `color` を外観 `appearance` で sRGB に解き、倍率 `scale` で描く字の太らせの段を決める。
   @MainActor
-  init(_ color: NSColor, appearance: NSAppearance, fontSmoothing: Bool) {
+  init(_ color: NSColor, appearance: NSAppearance, fontSmoothing: Bool, scale: CGFloat) {
     var resolved = color
     appearance.performAsCurrentDrawingAppearance {
       resolved = color.usingColorSpace(.sRGB) ?? color
@@ -24,7 +24,8 @@ struct FrameColor: Equatable, Sendable {
     }
     dilation =
       fontSmoothing
-      ? DilationProbe.level(red: components[0], green: components[1], blue: components[2]) : 0
+      ? DilationProbe.level(
+        red: components[0], green: components[1], blue: components[2], scale: scale) : 0
   }
 
   init(packed: UInt32, dilation: Int) {
@@ -33,7 +34,7 @@ struct FrameColor: Equatable, Sendable {
   }
 }
 
-/// 面の外観で解いた色の組。外観が変われば main が解き直して置く。
+/// 面の外観で解いた色の組。外観か倍率が変われば main が解き直して置く。
 struct FramePalette: Equatable, Sendable {
   var text: FrameColor
   var roles: [SyntaxRole: FrameColor]
@@ -43,8 +44,10 @@ struct FramePalette: Equatable, Sendable {
   var removed: FrameColor
 
   @MainActor
-  init(style: TextSurfaceStyle, appearance: NSAppearance, fontSmoothing: Bool) {
-    let resolve = { FrameColor($0, appearance: appearance, fontSmoothing: fontSmoothing) }
+  init(style: TextSurfaceStyle, appearance: NSAppearance, fontSmoothing: Bool, scale: CGFloat) {
+    let resolve = {
+      FrameColor($0, appearance: appearance, fontSmoothing: fontSmoothing, scale: scale)
+    }
     text = resolve(style.textColor)
     roles = style.roleColors.mapValues(resolve)
     gutterText = resolve(style.gutterTextColor)

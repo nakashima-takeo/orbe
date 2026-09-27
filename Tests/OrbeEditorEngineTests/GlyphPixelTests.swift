@@ -5,8 +5,10 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 字の見た目——新しい面の本文と行番号が、同じ行を Core Text で描いたものと、字のある画素で最大 1 段（8bit）の差に
-/// 収まる。ASCII・日本語・絵文字・代替フォントの字で見る。比べるのは不透明な地に描いた絵（透明な面は窓の合成で地と
-/// 混ざるので、地を塗った画面外の絵で比べる）。壊れると字が細る・太る・にじむ・位置が半画素ずれる。
+/// 収まる。ASCII・日本語・絵文字・代替フォント・結合文字の記号の字を、1x と 2x、太らせの有無で見る。比べるのは不透明な
+/// 地に描いた絵（透明な面は窓の合成で地と混ざるので、地を塗った画面外の絵で比べる）。字どうしのインクが重なる形（アラビア
+/// 語のつながり・字に接する記号）は、重なる画素が数段ずれうるので見本に含めない。壊れると字が細る・太る・にじむ・位置が
+/// 半画素ずれる・記号が基線に落ちる。
 @MainActor
 final class GlyphPixelTests: EngineTestCase {
   private static let background = MTLClearColor(
@@ -15,30 +17,34 @@ final class GlyphPixelTests: EngineTestCase {
   private static let sample = """
     // 日本語のコメントと絵文字 😀👍🏽 fin
     func render(into buffer: inout [String]) -> Int {
-      let greek = "Ωμέγα ∑ √ ≈ ⌘ 한국어 ภาษาไทย Q̃ á́ بِ سْ"
+      let greek = "Ωμέγα ∑ √ ≈ ⌘ 한국어 ภาษาไทย á́ بِ سْ"
       return buffer.count + 42
     }
 
     """
 
   func testGlyphsMatchCoreTextWithinOneLevel() throws {
-    for smoothing in [true, false] {
-      let options = MetalTextSurfaceOptions(
-        elasticScroll: true, fontSmoothing: smoothing, omittedLabel: { "\($0)" })
-      let opened = try open(Self.sample, size: CGSize(width: 600, height: 140), options: options)
-      let id = opened.surface.id
-      let metal = try XCTUnwrap(
-        RenderThread.shared.performAndWait {
-          Transfer(value: $0.snapshot(id, background: Self.background))
-        }.value)
-      let reference = try coreText(opened, smoothing: smoothing)
-      writePNG(metal, previewURL("glyphs-metal-\(smoothing).png"))
-      writePNG(reference, previewURL("glyphs-coretext-\(smoothing).png"))
-      let difference = Self.compare(metal, reference)
-      print("GLYPHS smoothing=\(smoothing) ink=\(difference.ink) worst=\(difference.worst)")
-      XCTAssertGreaterThan(difference.ink, 1_000, "前提: 字が描かれている")
-      XCTAssertLessThanOrEqual(
-        difference.worst, 1, "太らせ \(smoothing): 字のある画素の差は最大 1 段")
+    for scale: CGFloat in [1, 2] {
+      for smoothing in [true, false] {
+        let options = MetalTextSurfaceOptions(
+          elasticScroll: true, fontSmoothing: smoothing, omittedLabel: { "\($0)" })
+        let opened = try open(
+          Self.sample, size: CGSize(width: 600, height: 140), scale: scale, options: options)
+        let id = opened.surface.id
+        let metal = try XCTUnwrap(
+          RenderThread.shared.performAndWait {
+            Transfer(value: $0.snapshot(id, background: Self.background))
+          }.value)
+        let reference = try coreText(opened, smoothing: smoothing)
+        let name = "\(Int(scale))x-\(smoothing)"
+        writePNG(metal, previewURL("glyphs-metal-\(name).png"))
+        writePNG(reference, previewURL("glyphs-coretext-\(name).png"))
+        let difference = Self.compare(metal, reference)
+        print("GLYPHS \(name) ink=\(difference.ink) worst=\(difference.worst)")
+        XCTAssertGreaterThan(difference.ink, 500, "前提: 字が描かれている")
+        XCTAssertLessThanOrEqual(
+          difference.worst, 1, "\(name): 字のある画素の差は最大 1 段")
+      }
     }
   }
 

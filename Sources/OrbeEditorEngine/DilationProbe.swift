@@ -2,31 +2,40 @@ import CoreGraphics
 import CoreText
 import os
 
-/// 字の色から、アトラスで使う太らせの段（0…4）を実測で決める。
+/// 字の色から、アトラスで使う太らせの段（0…5）を実測で決める。
 ///
 /// Core Graphics は font smoothing で字を太らせる量を字の色から何段かに分けて選ぶが、その分け方は公開されておらず、
 /// 明るさの単純な丸めとは一致しない（明るさの近い 2 色が別の段になる）。そこで、その色で Core Text が不透明な地に描いた
-/// 字と、アトラスが段ごとに描く字（明るさだけのマスクで、塗りの明るさ＝段 × 0.25 に太らせを選ばせ、sRGB のまま地と
-/// 合成したもの）を小さな絵で比べ、最も近い段を使う。段 0 は太らせ無し。色ごとに 1 回だけ測って覚える。
+/// 字と、アトラスが段ごとに描く字（明るさだけのマスクで、塗りの明るさに太らせを選ばせ、sRGB のまま地と合成したもの）を
+/// 小さな絵で比べ、最も近い段を使う。段 0 は太らせ無し。太らせの量は倍率でも変わるので（1x は 2x より段が 1 つ多い）、
+/// 色と倍率の組ごとに 1 回だけ測って覚える。
 enum DilationProbe {
-  private static let cache = OSAllocatedUnfairLock<[UInt32: Int]>(initialState: [:])
+  /// 段 1…5 のマスクを描く塗りの明るさ。Core Graphics が塗りの明るさで選ぶ太らせの区切り（おおよそ 0.32・0.58・
+  /// 0.78・0.94）の間の値で、段ごとに違う太らせを選ばせる。
+  private static let fills: [CGFloat] = [0.16, 0.45, 0.68, 0.86, 0.97]
+
+  /// 段 `level` のマスクを描く塗りの明るさ（段 0 は太らせないので nil）。
+  static func fill(level: Int) -> CGFloat? { level > 0 ? fills[level - 1] : nil }
+
+  private static let cache = OSAllocatedUnfairLock<[UInt64: Int]>(initialState: [:])
   private static let width = 160
   private static let height = 36
   private static let sample = "mwgWa@"
 
-  static func level(red: Float, green: Float, blue: Float) -> Int {
-    let key = [red, green, blue].enumerated().reduce(UInt32(0)) {
-      $0 | UInt32(($1.element * 255).rounded()) << (8 * UInt32($1.offset))
+  static func level(red: Float, green: Float, blue: Float, scale: CGFloat) -> Int {
+    let rgb = [red, green, blue].enumerated().reduce(UInt64(0)) {
+      $0 | UInt64(($1.element * 255).rounded()) << (8 * UInt64($1.offset))
     }
+    let key = rgb | UInt64((scale * 16).rounded()) << 24
     if let level = cache.withLock({ $0[key] }) { return level }
     let color = [red, green, blue].map { Double($0) }
     // 地は字と反対の明るさにする（差が最も出る）。
     let luminance = 0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2]
     let ground = luminance > 0.5 ? 0.0 : 1.0
-    let reference = drawReference(color, ground: ground)
-    let level = (0...4).min {
-      error(reference, mask(level: $0), color, ground)
-        < error(reference, mask(level: $1), color, ground)
+    let reference = drawReference(color, ground: ground, scale: scale)
+    let level = (0...fills.count).min {
+      error(reference, mask(level: $0, scale: scale), color, ground)
+        < error(reference, mask(level: $1, scale: scale), color, ground)
     }!
     cache.withLock { $0[key] = level }
     return level
@@ -42,7 +51,7 @@ enum DilationProbe {
   }
 
   /// Core Text がその色で不透明な地に描いた字（BGRA）。
-  private static func drawReference(_ color: [Double], ground: Double) -> [UInt8] {
+  private static func drawReference(_ color: [Double], ground: Double, scale: CGFloat) -> [UInt8] {
     var bytes = [UInt8](repeating: 0, count: width * height * 4)
     bytes.withUnsafeMutableBytes { buffer in
       guard
@@ -56,7 +65,7 @@ enum DilationProbe {
       context.fill(CGRect(x: 0, y: 0, width: width, height: height))
       context.setAllowsFontSmoothing(true)
       context.setShouldSmoothFonts(true)
-      context.scaleBy(x: 2, y: 2)
+      context.scaleBy(x: scale, y: scale)
       context.textPosition = CGPoint(x: 3, y: 5)
       CTLineDraw(
         line(CGColor(srgbRed: color[0], green: color[1], blue: color[2], alpha: 1)), context)
@@ -65,7 +74,7 @@ enum DilationProbe {
   }
 
   /// アトラスが段 `level` で描く字のマスク。
-  private static func mask(level: Int) -> [UInt8] {
+  private static func mask(level: Int, scale: CGFloat) -> [UInt8] {
     var bytes = [UInt8](repeating: 0, count: width * height)
     bytes.withUnsafeMutableBytes { buffer in
       guard
@@ -76,9 +85,9 @@ enum DilationProbe {
       else { return }
       context.setAllowsFontSmoothing(level > 0)
       context.setShouldSmoothFonts(level > 0)
-      context.scaleBy(x: 2, y: 2)
+      context.scaleBy(x: scale, y: scale)
       context.textPosition = CGPoint(x: 3, y: 5)
-      CTLineDraw(line(CGColor(gray: CGFloat(level) * 0.25, alpha: 1)), context)
+      CTLineDraw(line(CGColor(gray: fill(level: level) ?? 0, alpha: 1)), context)
     }
     return bytes
   }

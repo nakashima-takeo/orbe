@@ -6,7 +6,8 @@ import Metal
 /// の描き方を再現する——鍵は（フォント、グリフ、横の少数ピクセル位置、太らせの段）。
 ///
 /// - 横の少数ピクセル位置は Core Text の量子化に合わせる（字の原点を 1x で 1/3px、2x で 1/2px、3x 以上で 1px に切り捨てる）。
-/// - 太らせ（font smoothing 相当）は 5 段（0 は太らせ無し）。字の色からどの段にするかは `DilationProbe` が決める。
+///   色付きのグリフ（ビットマップ）は Core Graphics が少数位置に置かず、絵の左端を最も近い装置の画素に丸める。
+/// - 太らせ（font smoothing 相当）の段は 0…5（0 は太らせ無し）。字の色と倍率からどの段にするかは `DilationProbe` が決める。
 /// - 色付きのグリフ（絵文字）は RGBA の別の頁に置く。
 /// - 頁が埋まれば頁を足す。上限に当たれば全体を作り直す（追い出しはしない）。
 final class GlyphAtlas {
@@ -21,6 +22,8 @@ final class GlyphAtlas {
     var top: Int16
     var page: UInt8
     var isColor: Bool
+    /// 字の原点から絵の左端まで（px、丸める前）。色付きのグリフの置き方に使う。
+    var bearing: Float
   }
 
   static let monoPageSize = 2048
@@ -56,7 +59,25 @@ final class GlyphAtlas {
     isFull = false
   }
 
-  func entry(font: UInt16, glyph: CGGlyph, variant: Int, dilation: Int) -> Entry? {
+  /// 字の原点 `x`（px）に置くグリフの項目と、項目の `left` を足す整数の原点。頁が埋まって置けなければ nil。
+  func glyph(font: UInt16, glyph: CGGlyph, x: Double, dilation: Int) -> (Entry, pen: Double)? {
+    if fonts.font(font).isColor {
+      guard let entry = entry(font: font, glyph: glyph, variant: 0, dilation: 0) else { return nil }
+      let bearing = Double(entry.bearing)
+      return (entry, (x + bearing).rounded() - bearing.rounded())
+    }
+    let n = Double(variants)
+    // 誤差で境目を跨がないよう僅かに足す。
+    let quantized = (x * n + 1e-3).rounded(.down)
+    let whole = (quantized / n).rounded(.down)
+    let variant = Int(quantized - whole * n)
+    guard let entry = entry(font: font, glyph: glyph, variant: variant, dilation: dilation) else {
+      return nil
+    }
+    return (entry, whole)
+  }
+
+  private func entry(font: UInt16, glyph: CGGlyph, variant: Int, dilation: Int) -> Entry? {
     let dilation = fonts.font(font).isColor ? 0 : dilation
     let key =
       UInt64(font) << 40 | UInt64(glyph) << 8 | UInt64(variant) << 4 | UInt64(dilation)
@@ -70,7 +91,8 @@ final class GlyphAtlas {
   /// 描くものが無いグリフは空の項目。頁が埋まって置けなければ nil（その字はこのコマに出ない）。
   private func rasterize(font id: UInt16, glyph: CGGlyph, variant: Int, dilation: Int) -> Entry? {
     let (font, isColor) = fonts.font(id)
-    let empty = Entry(u: 0, v: 0, w: 0, h: 0, left: 0, top: 0, page: 0, isColor: false)
+    let empty = Entry(
+      u: 0, v: 0, w: 0, h: 0, left: 0, top: 0, page: 0, isColor: false, bearing: 0)
     var glyph = glyph
     var rect = CGRect.zero
     CTFontGetBoundingRectsForGlyphs(font, .horizontal, &glyph, &rect, 1)
@@ -101,13 +123,14 @@ final class GlyphAtlas {
       context.setShouldAntialias(true)
       context.setAllowsFontSubpixelPositioning(true)
       context.setShouldSubpixelPositionFonts(true)
-      context.setAllowsFontSubpixelQuantization(false)
-      context.setShouldSubpixelQuantizeFonts(false)
-      if dilation > 0 {
+      // 置く位置は量子化の区切りの始まりなので、Core Text 自身に量子化させて同じ区切りの字形を描かせる。
+      context.setAllowsFontSubpixelQuantization(true)
+      context.setShouldSubpixelQuantizeFonts(true)
+      if let fill = DilationProbe.fill(level: dilation) {
         // 字の色の明るさに応じた太らせを Core Graphics にさせる（塗りの明るさで段が決まる）。
         context.setAllowsFontSmoothing(true)
         context.setShouldSmoothFonts(true)
-        context.setFillColor(gray: CGFloat(dilation) * 0.25, alpha: 1)
+        context.setFillColor(gray: fill, alpha: 1)
       } else {
         context.setShouldSmoothFonts(false)
         context.setFillColor(gray: 0, alpha: 1)
@@ -125,7 +148,7 @@ final class GlyphAtlas {
       bytesPerRow: w * bytesPerPixel)
     return Entry(
       u: Int16(slot.x), v: Int16(slot.y), w: Int16(w), h: Int16(h), left: Int16(x0),
-      top: Int16(y1), page: UInt8(slot.page), isColor: isColor)
+      top: Int16(y1), page: UInt8(slot.page), isColor: isColor, bearing: Float(rect.minX * scale))
   }
 
   /// 頁の中の置き場所。

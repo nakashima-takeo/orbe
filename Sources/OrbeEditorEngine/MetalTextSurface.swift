@@ -118,10 +118,11 @@ final class MetalTextSurface: TextSurface {
     selectedRange = NSRange(location: min(caret, length), length: 0)
   }
 
-  /// 外観で色を解き直して置く。
+  /// 外観と倍率で色を解き直して置く。
   func appearanceDidChange() {
     let palette = FramePalette(
-      style: style, appearance: textView.effectiveAppearance, fontSmoothing: config.fontSmoothing)
+      style: style, appearance: textView.effectiveAppearance, fontSmoothing: config.fontSmoothing,
+      scale: material.read().scale)
     material.update { $0.palette = palette }
     wake()
   }
@@ -129,11 +130,13 @@ final class MetalTextSurface: TextSurface {
   /// view の大きさ・倍率・見えているかが変わった。
   func viewStateDidChange(size: CGSize, scale: CGFloat, visible: Bool) {
     self.size = size
+    let rescaled = material.read().scale != scale
     material.update {
       $0.size = size
       $0.scale = scale
       $0.visible = visible
     }
+    if rescaled { appearanceDidChange() }
     updateLimits()
     wake()
     refreshViewport()

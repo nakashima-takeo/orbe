@@ -171,20 +171,16 @@ final class FrameBuilder {
     let baseline: Double
   }
 
-  /// グリフを置く。横の位置は Core Text と同じく切り捨てで量子化する（誤差で境目を跨がないよう僅かに足す）。縦は
-  /// 装置の画素に揃え、端数は Core Graphics と同じく下向きへ切り上げる。
+  /// グリフを置く。横の置き方はアトラスが Core Graphics と同じに決める。縦は装置の画素に揃え、端数は Core Graphics と
+  /// 同じく下向きへ切り上げる。
   func place(_ item: Glyph, _ ink: FrameColor, _ layer: FrameBuilderLayer, _ c: Context) {
-    let variants = Double(c.atlas.variants)
-    let quantized = (item.x * variants + 1e-3).rounded(.down)
-    let whole = (quantized / variants).rounded(.down)
-    let variant = Int(quantized - whole * variants)
     guard
-      let entry = c.atlas.entry(
-        font: item.font, glyph: item.glyph, variant: variant, dilation: ink.dilation)
+      let (entry, pen) = c.atlas.glyph(
+        font: item.font, glyph: item.glyph, x: item.x, dilation: ink.dilation)
     else { return }
     let instance = GlyphInstance(
       position: SIMD2(
-        Float(whole) + Float(entry.left), Float(item.baseline.rounded(.up)) - Float(entry.top)),
+        Float(pen) + Float(entry.left), Float(item.baseline.rounded(.up)) - Float(entry.top)),
       size: SIMD2(Float(entry.w), Float(entry.h)), uv: SIMD2(Float(entry.u), Float(entry.v)),
       color: entry.isColor ? 0xFFFF_FFFF : ink.packed)
     let page = Int(entry.page)
