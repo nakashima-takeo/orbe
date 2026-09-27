@@ -53,15 +53,22 @@ final class MinimapChunks {
     self.lineCount = lineCount
   }
 
-  /// 本文が変わった。
-  func textDidChange(_ edit: TextEdit, text: TextRope) {
-    let editLine = text.row(containing: edit.range.location)
+  /// 本文が変わった（適用した順の編集の列。`text` は列を当て終えた本文）。変わった区間（消しただけなら、その位置の 1 単位）を
+  /// 列の順に今の本文の上へ畳んでから、その行のチャンクを捨てる。行の数が変われば、最初に変わった行から後ろを全部捨てる。
+  func textDidChange(_ edits: [TextEdit], text: TextRope) {
+    let changed = edits.reduce(IndexSet()) { set, edit in
+      var set = edit.track(set)
+      let start = edit.range.location
+      set.insert(integersIn: start..<max(NSMaxRange(edit.newRange), start + 1))
+      return set
+    }
+    guard let first = changed.first else { return }
     if text.lineCount != lineCount {
       lineCount = text.lineCount
-      let first = editLine / Self.lines
-      images = images.filter { $0.key < first }
+      let chunk = text.row(containing: first) / Self.lines
+      images = images.filter { $0.key < chunk }
     }
-    drop(covering: edit.newRange, text: text)
+    for range in changed.rangeView { drop(covering: NSRange(range), text: text) }
   }
 
   /// 役割が変わった。

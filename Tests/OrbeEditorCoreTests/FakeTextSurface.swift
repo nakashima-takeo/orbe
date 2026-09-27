@@ -82,7 +82,16 @@ final class FakeTextSurface: TextSurface {
   /// 編集を起こす（人の打鍵に相当）。
   func replace(_ range: NSRange, with replacement: String) {
     storage.replaceCharacters(in: range, with: replacement)
-    delegate?.surface(self, didChange: TextEdit(range: range, replacement: replacement))
+    delegate?.surface(self, didChange: [TextEdit(range: range, replacement: replacement)])
+  }
+
+  /// 編集の束を起こす（1 回の操作が複数の区間を変える）。範囲は束の前の本文の座標。
+  func apply(_ edits: [TextEdit]) {
+    for edit in edits.reversed() {
+      storage.replaceCharacters(
+        in: edit.range, with: String(decoding: edit.replacement, as: UTF16.self))
+    }
+    delegate?.surface(self, didChange: edits)
   }
 
   func focus(_ focused: Bool) {

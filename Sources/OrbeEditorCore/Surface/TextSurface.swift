@@ -65,8 +65,9 @@ public protocol TextSurface: AnyObject {
 
 @MainActor
 public protocol TextSurfaceDelegate: AnyObject {
-  /// 本文が変わった（置換後の文字列つき）。面の本文のすべての変更がここを 1 回ずつ通る。
-  func surface(_ surface: any TextSurface, didChange edit: TextEdit)
+  /// 本文が変わった（置換後の文字列つき）。面の本文のすべての変更がここを通る。1 回の操作の編集を束で渡す——束は重ならない
+  /// 昇順の列で、どの範囲も束の前の本文の座標で書く（VS Code の編集の適用と同じ）。
+  func surface(_ surface: any TextSurface, didChange edits: [TextEdit])
   func surface(_ surface: any TextSurface, focusDidChange focused: Bool)
   /// `viewport` が変わった（スクロール・窓の高さ）。
   func surfaceDidChangeViewport(_ surface: any TextSurface)

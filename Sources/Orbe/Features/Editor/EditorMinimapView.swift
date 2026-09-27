@@ -63,9 +63,9 @@ final class EditorMinimapView: NSView {
   }
 
   /// 本文が変わった。変わった行のチャンクを捨てる（→ `MinimapChunks`）。
-  func textDidChange(_ edit: TextEdit) {
+  func textDidChange(_ edits: [TextEdit]) {
     guard let document else { return }
-    chunks.textDidChange(edit, text: document.text)
+    chunks.textDidChange(edits, text: document.text)
     refresh()
   }
 

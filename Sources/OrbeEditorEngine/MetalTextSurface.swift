@@ -112,7 +112,7 @@ final class MetalTextSurface: TextSurface {
     guard let delegate, let content = material.read().content else { return }
     let caret = selectedRange.location
     let edit = TextEdit(range: NSRange(location: 0, length: content.text.length), replacement: text)
-    delegate.surface(self, didChange: edit)
+    delegate.surface(self, didChange: [edit])
     pullContent(edited: (edit, content.text), remeasure: true)
     let length = material.read().content?.text.length ?? 0
     selectedRange = NSRange(location: min(caret, length), length: 0)

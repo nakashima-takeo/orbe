@@ -204,9 +204,9 @@ private final class EditTimer: TextSurfaceDelegate {
 
   init(inner: EditorDocument) { self.inner = inner }
 
-  func surface(_ surface: any TextSurface, didChange edit: TextEdit) {
+  func surface(_ surface: any TextSurface, didChange edits: [TextEdit]) {
     let began = DispatchTime.now().uptimeNanoseconds
-    inner.surface(surface, didChange: edit)
+    inner.surface(surface, didChange: edits)
     times.append(Double(DispatchTime.now().uptimeNanoseconds - began) / 1_000_000)
   }
   func surface(_ surface: any TextSurface, focusDidChange focused: Bool) {

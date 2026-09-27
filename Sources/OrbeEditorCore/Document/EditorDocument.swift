@@ -63,8 +63,9 @@ public final class EditorDocument {
   public var onViewportChange: (() -> Void)?
   /// 面の選択が変わった。
   public var onSelectionChange: (() -> Void)?
-  /// 本文が変わった（変わった最小の区間の編集）。ロープとずらした役割の更新の後に届く。
-  public var onTextChange: ((TextEdit) -> Void)?
+  /// 本文が変わった。面の編集の束ごとに 1 回、適用した順の編集の列（どれもその直前の本文の座標）で、写しと役割の更新の後に
+  /// 届く——受け手は列を順に畳めば、束の途中の本文を見ずに今の本文へ追いつく。
+  public var onTextChange: (([TextEdit]) -> Void)?
   /// 裏から届いた役割で、役割が変わった区間（今の本文の上）。
   public var onRolesChange: ((IndexSet) -> Void)?
   /// 区間の列の問い（`analyze`）の結果（今の本文の上へずらしたもの）。問いが今と違うかは受け手が見る。
@@ -327,10 +328,31 @@ public final class EditorDocument {
 }
 
 extension EditorDocument: TextSurfaceDelegate {
-  /// 面の編集は、置換の前後で変わらない先頭と末尾を落とした最小の区間の編集として写し・役割・構文・配り先へ渡す——外部変更の
-  /// 差し替え（全体の置換として届く）でも、変わっていない字は役割を保ち、構文も差分で解析する。
-  public func surface(_ surface: any TextSurface, didChange whole: TextEdit) {
-    let edit = whole.narrowed(replacing: text.units(in: whole.range))
+  /// 面の編集の束を後ろから 1 つずつ当てる——束の範囲は束の前の座標なので、後ろから当てればどれもその直前の本文の座標のまま
+  /// 使える（座標の変換はここ 1 か所）。どの編集も、変わらない先頭と末尾を落とした最小の区間として写し・役割・構文・配り先へ
+  /// 渡す（外部変更の差し替えでも、変わっていない字は役割を保ち、構文も差分で解析する）。版は編集 1 つで 1 進み、行の印・
+  /// 行差分の依頼・配り先への知らせは束ごとに 1 回。
+  public func surface(_ surface: any TextSurface, didChange edits: [TextEdit]) {
+    guard !edits.isEmpty else { return }
+    var applied: [TextEdit] = []
+    applied.reserveCapacity(edits.count)
+    for whole in edits.reversed() {
+      let edit = whole.narrowed(replacing: text.units(in: whole.range))
+      let record = apply(edit)
+      if baseline != nil { hunks = record.track(hunks) }
+      applied.append(edit)
+    }
+    if !isReplacingFromDisk { isDirty = true }
+    if baseline != nil {
+      pushLineMarks()
+      requestHunks()
+    }
+    // 届きうる結果が無ければ、写すための記録は要らない（結果が一つも来ない文書で、差し替えの本文が溜まり続けない）。
+    if syntax == nil, pendingHunks == nil, pendingRanges.isEmpty { log.discard(through: version) }
+    onTextChange?(applied)
+  }
+
+  private func apply(_ edit: TextEdit) -> VersionedEdit {
     let start = text.point(at: edit.range.location)
     let oldEnd = text.point(at: NSMaxRange(edit.range))
     text.replace(edit.range, with: edit.replacement)
@@ -341,15 +363,7 @@ extension EditorDocument: TextSurfaceDelegate {
       newEnd: TextPoint(row: newEnd.row, column: newEnd.column))
     roles.apply(edit)
     syntax?.post(record, text: text)
-    if !isReplacingFromDisk { isDirty = true }
-    if baseline != nil {
-      hunks = record.track(hunks)
-      pushLineMarks()
-      requestHunks()
-    }
-    // 届きうる結果が無ければ、写すための記録は要らない（結果が一つも来ない文書で、差し替えの本文が溜まり続けない）。
-    if syntax == nil, pendingHunks == nil, pendingRanges.isEmpty { log.discard(through: version) }
-    onTextChange?(edit)
+    return record
   }
 
   public func surfaceDidChangeViewport(_ surface: any TextSurface) {
@@ -374,19 +388,6 @@ extension EditorDocument: TextSurfaceDelegate {
 
   public func surface(_ surface: any TextSurface, rolesIn range: NSRange) -> [HighlightSpan] {
     roles.roles(in: range)
-  }
-
-  public func surfaceLineCount(_ surface: any TextSurface) -> Int {
-    text.lineCount
-  }
-
-  public func surface(_ surface: any TextSurface, lineContaining offset: Int) -> Int {
-    text.row(containing: offset)
-  }
-
-  public func surface(_ surface: any TextSurface, rangeOfLine line: Int) -> NSRange {
-    let start = text.lineStart(line)
-    return NSRange(location: start, length: text.lineEnd(line) - start)
   }
 
   public func surfaceContent(_ surface: any TextSurface) -> SurfaceContent {

@@ -11,8 +11,8 @@ final class RolesCounter: TextSurfaceDelegate {
     queried.append(range)
     return inner.surface(surface, rolesIn: range)
   }
-  func surface(_ surface: any TextSurface, didChange edit: TextEdit) {
-    inner.surface(surface, didChange: edit)
+  func surface(_ surface: any TextSurface, didChange edits: [TextEdit]) {
+    inner.surface(surface, didChange: edits)
   }
   func surface(_ surface: any TextSurface, focusDidChange focused: Bool) {
     inner.surface(surface, focusDidChange: focused)

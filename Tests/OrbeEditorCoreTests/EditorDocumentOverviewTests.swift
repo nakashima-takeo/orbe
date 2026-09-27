@@ -52,6 +52,42 @@ final class EditorDocumentOverviewTests: XCTestCase {
     XCTAssertEqual(surface.indentation, document.indentation)
   }
 
+  /// 束は後ろから当たり、配り先には束ごとに 1 回、適用した順の編集（どれもその直前の本文の座標で、変わらない先頭と末尾を
+  /// 落としたもの）が届く。版は編集 1 つで 1 進む。壊れると、複数の区間を変える操作（字下げの undo など）で写しがずれる、
+  /// 配り先が途中の本文を見る。
+  func testABatchIsAppliedFromTheBackAndReachesReceiversOnce() throws {
+    let opened = try open("b.txt", "aa\nbb\ncc\n")
+    let (document, surface) = (opened.document, opened.surface)
+    document.baseline = "aa\nbb\ncc\n"
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    let pushed = surface.pulled.count
+    var received: [[TextEdit]] = []
+    var lengths: [Int] = []
+    document.onTextChange = {
+      received.append($0)
+      lengths.append(document.text.length)
+    }
+    surface.apply([
+      TextEdit(range: NSRange(location: 0, length: 0), replacement: "  "),
+      TextEdit(range: NSRange(location: 6, length: 0), replacement: "  "),
+    ])
+    XCTAssertEqual(document.text.substring(NSRange(location: 0, length: 13)), "  aa\nbb\n  cc\n")
+    XCTAssertEqual(document.text.length, surface.length)
+    XCTAssertEqual(document.version, 2)
+    XCTAssertEqual(lengths, [13], "束の途中では知らせない")
+    XCTAssertEqual(surface.pulled.count, pushed + 1, "行の印は束ごとに 1 回押す")
+    XCTAssertEqual(
+      received,
+      [[
+        TextEdit(range: NSRange(location: 6, length: 0), replacement: "  "),
+        TextEdit(range: NSRange(location: 0, length: 0), replacement: "  "),
+      ]])
+    surface.apply([TextEdit(range: NSRange(location: 0, length: 4), replacement: "  ab")])
+    XCTAssertEqual(
+      received.last, [TextEdit(range: NSRange(location: 3, length: 1), replacement: "b")],
+      "変わらない先頭を落とす")
+  }
+
   /// 役割の区間は構文層の区間を後勝ちで平らにした、重ならない昇順の列で、窓の中だけを答える（ミニマップの字の色）。
   func testRoleSpansAreFlatNonOverlappingAndInsideTheWindowOnly() throws {
     let text = "// head\nlet a = 1 // tail\n/* block */\n"
@@ -90,8 +126,8 @@ final class EditorDocumentOverviewTests: XCTestCase {
     var edits: [TextEdit] = []
     var seen: [(length: Int, roles: Int)] = []
     var changedRoles: [IndexSet] = []
-    document.onTextChange = { edit in
-      edits.append(edit)
+    document.onTextChange = { batch in
+      edits.append(contentsOf: batch)
       seen.append((document.text.length, document.roles.length))
     }
     document.onRolesChange = { changedRoles.append($0) }

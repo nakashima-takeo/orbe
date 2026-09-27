@@ -355,7 +355,7 @@ extension STTextSurface: @preconcurrency STTextViewDelegate {
     highlightView.needsDisplay = true
     numbersView.needsDisplay = true
     numbersView.marksView.needsDisplay = true
-    delegate?.surface(self, didChange: edit)
+    delegate?.surface(self, didChange: [edit])
     colors.textDidChange(edit)
     // 行数の桁が変われば列の幅が変わる。
     if numbersView.fittingWidth != numbersView.frame.width { container.needsLayout = true }
