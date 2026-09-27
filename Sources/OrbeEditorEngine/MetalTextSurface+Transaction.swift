@@ -165,12 +165,11 @@ extension MetalTextSurface {
       marked: composition.map { MarkedMaterial(range: $0.range, appearance: $0.appearance) })
   }
 
-  /// 変換の文字の座標が変わった（候補窓・音声入力の印を追従させる）。知らせると IME がその場で座標を読み返すので、変換中
-  /// と変換の終わりだけ知らせる（普通の打鍵の道で行を組まない）。
+  /// 変換の文字の座標が変わった（候補窓を追従させる）。変換中と変換の終わりだけ知らせる。選択の変化の知らせ
+  /// （`textInputClientDidUpdateSelection`）は出さない——Writing Tools の印のための知らせで、受けた仕組みがその場で選択の
+  /// 矩形を読み返し、長い行では打鍵のたびに main で行を組むことになる（Writing Tools は面で切ってある）。
   func inputMethodCoordinatesDidChange() {
-    guard let context = textView.inputContext else { return }
-    context.invalidateCharacterCoordinates()
-    if #available(macOS 15.4, *) { context.textInputClientDidUpdateSelection() }
+    textView.inputContext?.invalidateCharacterCoordinates()
   }
 }
 
