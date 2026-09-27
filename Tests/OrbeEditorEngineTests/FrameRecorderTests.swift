@@ -83,6 +83,21 @@ final class FrameRecorderTests: XCTestCase {
     XCTAssertEqual(summary.droppedPerSecond, 3.0 / 4 * 1000, accuracy: 1e-9)
   }
 
+  /// ジェスチャーの間は、位置の変わらないコマ（役割が届いて描き直しただけなど）も描いたコマとして並びに入る——刻みごとに
+  /// 描いていれば、動いたコマの間が空いても落ちていない。
+  func testFramesThatDoNotMoveStayInTheGestureSequence() throws {
+    let r = recorder()
+    for (i, moving) in [true, false, true, false, true].enumerated() {
+      r.drew(drawn(i, events: moving ? [Double(i) * period - 0.01] : [], moving: moving))
+      r.presented(frame: i, time: Double(i) * period)
+    }
+    r.flush()
+    let gesture = try XCTUnwrap(r.totals.gestures.first)
+    let summary = try XCTUnwrap(FrameRecorder.summary(gesture, period: period))
+    XCTAssertEqual(summary.frames, 5)
+    XCTAssertEqual(summary.drops, 0)
+  }
+
   /// 出来事→present の分位（中央値・p95・最大、ms）。
   func testLatencyQuantiles() throws {
     let r = recorder()
