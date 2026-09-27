@@ -8,6 +8,8 @@ import os
 ///
 /// main と描画スレッドの間は、面ごとの 2 つの箱（描く材料・スクロールの状態）だけで結ぶ。描画スレッドは main を待たない
 /// （main への知らせは非同期だけ）。main が描画スレッドの仕事の完了を待つのは撮影（`performAndWait`）だけ。
+///
+/// 描画スレッドは、最初のコマから表示の刻みに合わせた時間制約つきのスレッドになる（`adopt(framePeriod:)`）。
 final class RenderThread: @unchecked Sendable {
   /// 既定の Metal の装置。取れない環境（装置の無い仮想マシンなど）では nil で、新しい面は作らない。
   static let device: MTLDevice? = MTLCreateSystemDefaultDevice()
@@ -64,6 +66,42 @@ final class RenderThread: @unchecked Sendable {
     done.wait()
     return result.withLock { $0! }
   }
+
+  /// 1 コマの計算の見込み（秒）。行を組まないコマの CPU の関門（p99）と同じ値。
+  static let frameComputation = 0.002
+
+  /// 描画スレッド（呼んだスレッド）を、表示の刻み `period`（秒）に合わせた時間制約つきのスレッドにする。
+  ///
+  /// 表示の刻みごとに起き、画面に出る予定の刻みの `FrameRecorder.commitMargin` 前までに 1 コマの命令を出し終える仕事
+  /// なので、Mach の時間制約つきの方針で「刻み `period` ごとに `frameComputation` の計算を、起きてから
+  /// `period − commitMargin` 以内に」と申告する。優先度（QoS）だけのスレッドは、混んだ機械で同じ優先度の他の仕事に
+  /// 1 刻み近く待たされて起き（そのコマは刻みに間に合わない）、遅いコアや低い周波数に載る（1 コマの CPU が数倍に揺れる）。
+  /// 時間制約つきのスレッドは普通の優先度の仕事より先に起き、刻みと締め切りが性能の制御に渡る。
+  static func adopt(framePeriod period: Double) {
+    var timebase = mach_timebase_info_data_t()
+    mach_timebase_info(&timebase)
+    func ticks(_ seconds: Double) -> UInt32 {
+      UInt32(seconds * 1e9 * Double(timebase.denom) / Double(timebase.numer))
+    }
+    let constraint = max(period - FrameRecorder.commitMargin, frameComputation)
+    var policy = thread_time_constraint_policy_data_t(
+      period: ticks(period), computation: ticks(frameComputation), constraint: ticks(constraint),
+      preemptible: 1)
+    let count = mach_msg_type_number_t(
+      MemoryLayout<thread_time_constraint_policy_data_t>.size / MemoryLayout<integer_t>.size)
+    let result = withUnsafeMutablePointer(to: &policy) {
+      $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+        thread_policy_set(
+          mach_thread_self(), thread_policy_flavor_t(THREAD_TIME_CONSTRAINT_POLICY), $0, count)
+      }
+    }
+    if result != KERN_SUCCESS {
+      log.fault("描画スレッドを時間制約つきにできなかった: \(result, privacy: .public)")
+    }
+  }
+
+  private static let log = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "dev.orbe", category: "editor-render")
 
   /// 描画スレッドの上で呼ばれる口（display link の呼び出し）から、持ち物を使う。
   func onThread(_ body: (Renderer) -> Void) {

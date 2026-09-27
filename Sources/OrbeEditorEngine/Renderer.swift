@@ -18,6 +18,8 @@ final class Renderer {
   /// 命令の列ごとの instance の buffer（使用中の印つき）。使用中の数が GPU に出して終わっていない命令の列の数。
   var buffers: [(buffer: MTLBuffer, busy: Bool)] = []
   private var frameCounter = 0
+  /// 描画スレッドの時間制約に申告した表示の刻み（秒）。
+  private var framePeriod: Double?
   /// GPU に出して終わっていない命令の列の上限。
   static let gpuLimit = 3
   /// 描くものが変わらないコマがこれだけ続いたら刻みを止める。
@@ -110,6 +112,7 @@ final class Renderer {
     }
     // 刻みの長さは最初の呼び出しまで分からず、画面を移れば変わる。
     slot.recorder.period = clock.period
+    adoptFramePeriod()
     let material = slot.material.take()
     slot.lines.receive(material.rowEdits)
     guard material.visible, material.content != nil, material.palette != nil,
@@ -190,6 +193,14 @@ final class Renderer {
   }
 
   var gpuInflight: Int { buffers.filter(\.busy).count }
+
+  /// 描画スレッドの時間制約を、結ばれた面の最も短い刻みに合わせる（変わったときだけ申告し直す）。
+  private func adoptFramePeriod() {
+    guard let period = slots.values.compactMap({ $0.clock?.period }).min(), period != framePeriod
+    else { return }
+    framePeriod = period
+    RenderThread.adopt(framePeriod: period)
+  }
 
   private func pause(_ slot: SurfaceSlot, _ clock: FrameClock) {
     guard !clock.isPaused else { return }

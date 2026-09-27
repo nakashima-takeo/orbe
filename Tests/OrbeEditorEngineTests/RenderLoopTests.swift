@@ -4,9 +4,10 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 刻みの止め方と再開（電池を守る規則）と、刻みで描いたコマから main への知らせ。窓を出さない刻み（`HeadlessDriver`）
-/// で本物の描画スレッドを回す。壊れると、新しい面が 1 コマ目で固まる、止まっている間や隠れたタブで描き続けて CPU と
-/// 電池を使う、右にまだ本文が続くのに俯瞰の右の影が出ない。
+/// 刻みの止め方と再開（電池を守る規則）と、刻みで描いたコマから main への知らせ、描画スレッドの時間制約。窓を出さない
+/// 刻み（`HeadlessDriver`）で本物の描画スレッドを回す。壊れると、新しい面が 1 コマ目で固まる、止まっている間や隠れた
+/// タブで描き続けて CPU と電池を使う、右にまだ本文が続くのに俯瞰の右の影が出ない、混んだ機械で描画スレッドが遅れて
+/// 起きたり遅いコアに載ったりしてコマが落ちる。
 @MainActor
 final class RenderLoopTests: EngineTestCase {
   private var driver: HeadlessDriver!
@@ -101,6 +102,53 @@ final class RenderLoopTests: EngineTestCase {
       RunLoop.main.run(until: Date().addingTimeInterval(0.01))
     }
     XCTAssertTrue(surface.viewport.clipsRight)
+  }
+
+  /// 描いた面の刻みに合わせて、描画スレッドは時間制約つきのスレッドになる——刻みごとに 1 コマの計算を、画面に出る予定の
+  /// 刻みの余裕の前までに。
+  func testTheRenderThreadRunsUnderTheFramesTimeConstraint() throws {
+    let surface = try open(text).surface
+    surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
+    driver.bind(surface.id)
+    waitUntilPaused(surface)
+    let policy = try XCTUnwrap(
+      RenderThread.shared.performAndWait { _ in Self.timeConstraint() }, "時間制約つき")
+    XCTAssertEqual(policy.period, HeadlessDriver.period, accuracy: 1e-6)
+    // 計算は、核が制約の半分まで引き上げて持つ。
+    XCTAssertGreaterThanOrEqual(policy.computation, RenderThread.frameComputation - 1e-6)
+    XCTAssertEqual(
+      policy.constraint, HeadlessDriver.period - FrameRecorder.commitMargin, accuracy: 1e-6)
+  }
+
+  /// スレッドの時間制約（秒）。
+  private struct TimeConstraint {
+    var period: Double
+    var computation: Double
+    var constraint: Double
+  }
+
+  /// 呼んだスレッドの時間制約。時間制約つきでなければ nil。
+  private nonisolated static func timeConstraint() -> TimeConstraint? {
+    var policy = thread_time_constraint_policy_data_t()
+    var count = mach_msg_type_number_t(
+      MemoryLayout<thread_time_constraint_policy_data_t>.size / MemoryLayout<integer_t>.size)
+    var isDefault: boolean_t = 0
+    let result = withUnsafeMutablePointer(to: &policy) {
+      $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+        thread_policy_get(
+          mach_thread_self(), thread_policy_flavor_t(THREAD_TIME_CONSTRAINT_POLICY), $0, &count,
+          &isDefault)
+      }
+    }
+    guard result == KERN_SUCCESS, isDefault == 0 else { return nil }
+    var timebase = mach_timebase_info_data_t()
+    mach_timebase_info(&timebase)
+    func seconds(_ ticks: UInt32) -> Double {
+      Double(ticks) * Double(timebase.numer) / Double(timebase.denom) / 1e9
+    }
+    return TimeConstraint(
+      period: seconds(policy.period), computation: seconds(policy.computation),
+      constraint: seconds(policy.constraint))
   }
 
   private func waitUntilPaused(_ surface: MetalTextSurface) {
