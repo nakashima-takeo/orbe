@@ -237,9 +237,12 @@ final class EditorLineMarksTests: OrbeTestCase {
 
   /// 横にスクロールしても本文の装備は行に付いてくる。長い行で横スクロールが起き、印は行番号の列にあるので無事な
   /// 一方、線・点・下線だけが置き去りになる壊れ方を守る。
+  ///
+  /// 線を見る位置（2 桁目の左端）は、3 桁送った後も両隣が空白のセル（点はセルの中央）になるよう、3 行目を 8 字の字下げに
+  /// する——隣が字だと、1x の画面では字の縁の画素が見る幅（±0.5pt）にかかる。
   func testDecorationsFollowHorizontalScrolling() throws {
     let long = String(repeating: "x", count: 100) + "  " + String(repeating: "x", count: 100)
-    let hosted = try host("a\n  b  c \(long)\n    d\n")
+    let hosted = try host("a\n  b  c \(long)\n        d\n")
     let ground = hosted.ground
     let document = hosted.document
     let surface = try engine(document)
@@ -250,9 +253,13 @@ final class EditorLineMarksTests: OrbeTestCase {
 
     let shift = 3 * cell
     surface.scroll(toX: shift)
-    waitDrawn { !self.isBlack(try self.rgb(ground, dot - shift, self.rowMidY(2))) }
-    XCTAssertFalse(try hasInk(ground, guide, rowMidY(3)), "線は 3 桁ぶん左（本文の左端の外）へ動いて見えない")
-    XCTAssertTrue(isBlack(try rgb(ground, dot, rowMidY(2))), "元の位置には点が無い")
+    XCTAssertEqual(surface.scrollPosition.x, shift, accuracy: 1e-9, "前提: 横の範囲が測られていて、3 桁送れた")
+    // 送った後の絵だけが満たす: 3 桁目の点は 0 桁目の位置へ来て、元の位置は空く（送る前は両方に点がある）。
+    waitDrawn {
+      try !self.isBlack(self.rgb(ground, dot - shift, self.rowMidY(2)))
+        && self.isBlack(self.rgb(ground, dot, self.rowMidY(2)))
+    }
+    XCTAssertFalse(try hasInk(ground, guide, rowMidY(3)), "線は 3 桁ぶん左へ動き、元の位置は空く")
 
     // 100 桁右へ: 1 画面ぶん先の連続スペース（107 桁目）の点が、可視矩形の中に描かれる。
     surface.scroll(toX: 100 * cell)
