@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 新しいテキスト面の語の規則の正解を VS Code で作る。monaco-editor（VS Code のエディターの核を esm にしたもの）を一時の
+# テキスト面の語の規則の正解を VS Code で作る。monaco-editor（VS Code のエディターの核を esm にしたもの）を一時の
 # 場所へ取り、scripts/vscode-edit-cases.mjs を deno で動かして Tests/OrbeEditorEngineTests/VSCodeEditCases.swift を書き直す。
 set -euo pipefail
 cd "$(dirname "$0")/.."

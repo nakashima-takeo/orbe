@@ -1,4 +1,4 @@
-// 新しいテキスト面の語の規則（⌥←→・⌥⌫⌦・ダブルクリックの語・⌘←）の正解を、VS Code の同じコード（monaco-editor の
+// テキスト面の語の規則（⌥←→・⌥⌫⌦・ダブルクリックの語・⌘←）の正解を、VS Code の同じコード（monaco-editor の
 // esm）を動かして作り、Swift のテストの表として標準出力へ書く。scripts/gen-vscode-edit-cases.sh から呼ぶ。
 const base = Deno.env.get("MONACO");
 const load = (path) => import(`${base}/esm/vs/editor/common/${path}`);
