@@ -148,7 +148,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
     window.contentView = surface.view
     XCTAssertEqual((surface.view.layer as? CAMetalLayer)?.colorspace, p3)
     XCTAssertEqual(surface.drawn.space, p3)
-    let keyword = try XCTUnwrap(surface.drawn.palette?.roles[.keyword]).packed
+    let keyword = try XCTUnwrap(surface.drawn.palette?.ink(.keyword)).packed
     let expected = try XCTUnwrap(
       NSColor(srgbRed: 0.34, green: 0.61, blue: 0.84, alpha: 1).usingColorSpace(.displayP3))
     XCTAssertEqual(

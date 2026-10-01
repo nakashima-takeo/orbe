@@ -171,13 +171,14 @@ final class FrameBuilder {
     let numberFont = fonts.id(config.gutterFont)
     let rows = layRows(first...last, source, text: content.text, cache: cache, fonts: fonts)
     let levels = indentLevels(rows.map(\.laid), first: first, content: content, unit: tabColumns)
+    var roles = content.roles.cursor(from: rows.first?.start ?? 0)
     for (index, item) in rows.enumerated() {
       let top = g.rowTop(item.row)
       let visible = visibleGlyphs(item.laid, c)
       drawDecor(item, level: levels[index], rowTop: top, window: visible.offsets, c)
       drawOverlays(item.overlay, item.laid, rowTop: top, c)
       drawHighlights(item, source.material.highlights, rowTop: top, window: visible.offsets, c)
-      let width = drawText(item.laid, visible, start: item.start, baseline: top + baseline, c)
+      let width = drawText(item, visible, baseline: top + baseline, roles: &roles, c)
       longestLine = max(longestLine, width)
       drawNumber(item.row + 1, rowTop: top, font: numberFont, c)
     }
@@ -266,20 +267,26 @@ final class FrameBuilder {
     return VisibleGlyphs(glyphs: from..<to, offsets: from < to ? Int(low)...Int(high) : nil)
   }
 
-  /// 行の字を置き、行の幅（末尾の印を含む、pt）を返す。置くのは横に見えている字だけで、役割もその字の区間だけ引く。
+  /// 行の字を置き、行の幅（末尾の印を含む、pt）を返す。置くのは横に見えている字だけで、役割は見えている行を通して 1 つの
+  /// 読み口で引き、色は役割の連なりを出たときだけ引く。
   private func drawText(
-    _ line: LaidOutLine, _ visible: VisibleGlyphs, start: Int, baseline: Double, _ c: Context
+    _ row: RowInFrame, _ visible: VisibleGlyphs, baseline: Double, roles: inout RoleRuns.Cursor,
+    _ c: Context
   ) -> CGFloat {
+    let line = row.laid
+    let start = row.start
     let g = c.g
     let originX = g.column - g.scrollX
     if let offsets = visible.offsets {
-      var cursor = RoleCursor(
-        spans: c.roles.roles(
-          in: NSRange(
-            location: start + offsets.lowerBound, length: offsets.count)))
+      var run = 0..<0
+      var ink = c.palette.text
       for i in visible.glyphs {
-        let role = cursor.role(at: start + Int(line.offsets[i]))
-        let ink = role.flatMap { c.palette.roles[$0] } ?? c.palette.text
+        let offset = start + Int(line.offsets[i])
+        if !run.contains(offset) {
+          let found = roles.run(at: offset)
+          run = found.range
+          ink = c.palette.ink(found.role)
+        }
         let x = originX + Double(line.xs[i]) * g.scale
         let y = line.ys.isEmpty ? baseline : baseline - Double(line.ys[i]) * g.scale
         let glyph = Glyph(font: line.fonts[i], glyph: line.glyphs[i], x: x, baseline: y)
@@ -358,31 +365,4 @@ final class FrameBuilder {
 /// グリフを置く層（本文の切り取りか、行番号の列の切り取りか）。
 enum FrameBuilderLayer {
   case text, gutter
-}
-
-/// 昇順の役割の区間を、おおむね増えていくオフセットで引く（右から左の字の塊の中のように、前の区間の終わりより前へ戻れば
-/// 二分探索で引き直す）。
-struct RoleCursor {
-  private let spans: [HighlightSpan]
-  private var index = 0
-
-  init(spans: [HighlightSpan]) {
-    self.spans = spans
-  }
-
-  mutating func role(at offset: Int) -> SyntaxRole? {
-    guard !spans.isEmpty else { return nil }
-    if index > 0, offset < NSMaxRange(spans[index - 1].range) {
-      var low = 0
-      var high = spans.count
-      while low < high {
-        let mid = (low + high) / 2
-        if NSMaxRange(spans[mid].range) <= offset { low = mid + 1 } else { high = mid }
-      }
-      index = low
-    }
-    while index < spans.count, NSMaxRange(spans[index].range) <= offset { index += 1 }
-    guard index < spans.count, spans[index].range.location <= offset else { return nil }
-    return spans[index].role
-  }
 }

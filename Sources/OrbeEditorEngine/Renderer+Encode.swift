@@ -207,7 +207,7 @@ extension Renderer {
     }
     pass.minimapColors =
       [palette.text.packed]
-      + SyntaxRole.allCases.map { (palette.roles[$0] ?? palette.text).packed }
+      + palette.roles.map(\.packed)
     return pass
   }
 

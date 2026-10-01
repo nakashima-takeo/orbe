@@ -101,18 +101,4 @@ final class LineLayoutCacheTests: XCTestCase {
       }
     }
   }
-
-  /// 右から左の字の塊の中ではオフセットが減っていく——最後の区間を過ぎてから前の区間へ戻っても色を引ける。
-  func testRoleCursorFindsSpansWhenOffsetsGoBackwards() {
-    var cursor = RoleCursor(spans: [
-      HighlightSpan(range: NSRange(location: 0, length: 3), role: .keyword),
-      HighlightSpan(range: NSRange(location: 12, length: 1), role: .type),
-    ])
-    let offsets = Array(0...7) + [16, 15, 14, 13, 12, 11, 10, 9, 8, 17]
-    let roles = offsets.map { cursor.role(at: $0) }
-    XCTAssertEqual(roles.prefix(3), [.keyword, .keyword, .keyword])
-    XCTAssertEqual(roles[offsets.firstIndex(of: 12)!], .type, "戻った先の区間の色")
-    XCTAssertNil(roles[offsets.firstIndex(of: 13)!])
-    XCTAssertNil(roles[offsets.firstIndex(of: 11)!])
-  }
 }

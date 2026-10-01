@@ -50,7 +50,8 @@ struct FrameColor: Equatable, Sendable {
 /// 面の外観で解いた色の組。外観か倍率が変われば main が解き直して置く。
 struct FramePalette: Equatable, Sendable {
   var text: FrameColor
-  var roles: [SyntaxRole: FrameColor]
+  /// 役割の字の色（`SyntaxRole` の番号で引く。色の無い役割は本文の色）。
+  var roles: [FrameColor]
   var gutterText: FrameColor
   var added: FrameColor
   var modified: FrameColor
@@ -72,6 +73,9 @@ struct FramePalette: Equatable, Sendable {
   var wordOccurrence: FrameColor
   var overview: OverviewPalette
 
+  /// 役割 `role` の字の色（役割が無ければ本文の色）。
+  func ink(_ role: SyntaxRole?) -> FrameColor { role.map { roles[$0.rawValue] } ?? text }
+
   /// NSTextView の既定の未確定の地（外観で解く動的な色）。
   @MainActor private static let markedBackgroundColor =
     NSTextView().markedTextAttributes?[.backgroundColor] as? NSColor ?? .systemYellow
@@ -89,7 +93,8 @@ struct FramePalette: Equatable, Sendable {
     caret = resolve(style.caretColor)
     selection = resolve(style.selectionColor)
     inactiveSelection = resolve(style.inactiveSelectionColor)
-    roles = style.roleColors.mapValues(resolve)
+    let text = text
+    roles = SyntaxRole.allCases.map { style.roleColors[$0].map(resolve) ?? text }
     gutterText = resolve(style.gutterTextColor)
     added = resolve(style.marks.added)
     modified = resolve(style.marks.modified)

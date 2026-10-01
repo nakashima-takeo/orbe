@@ -21,14 +21,13 @@ enum HTMLCopy {
   /// `range` の HTML。長すぎるか、範囲に役割が無ければ nil。
   static func html(_ text: TextRope, _ range: NSRange, roles: RoleRuns, style: Style) -> String? {
     guard range.length > 0, range.length < limit else { return nil }
-    let spans = roles.roles(in: range)
-    guard !spans.isEmpty else { return nil }
+    guard !roles.roles(in: range).isEmpty else { return nil }
     let size = Self.number(style.fontSize)
     var html =
       "<div style=\"color: \(style.text);background-color: \(style.background);"
       + "font-family: \(escape(style.fontFamily));font-weight: normal;"
       + "font-size: \(size)px;line-height: \(Self.number(style.lineHeight))px;white-space: pre;\">"
-    var cursor = RoleCursor(spans: spans)
+    var cursor = roles.cursor(from: range.location)
     let rows = text.rows(of: range)
     for row in rows {
       let content = text.contentRange(ofRow: row)

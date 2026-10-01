@@ -83,7 +83,7 @@ extension FrameBuilder {
     for link in decor.links
     where NSMaxRange(link) > window.lowerBound && link.location <= window.upperBound {
       let role = c.roles.roles(in: NSRange(location: start + link.location, length: 1)).first?.role
-      let ink = role.flatMap { c.palette.roles[$0] } ?? c.palette.text
+      let ink = c.palette.ink(role)
       let left = (originX + Double(carets.x(link.location)) * s).rounded()
       let right = (originX + Double(carets.x(NSMaxRange(link))) * s).rounded()
       decorShapes.append(

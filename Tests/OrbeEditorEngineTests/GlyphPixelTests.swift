@@ -170,7 +170,7 @@ final class GlyphPixelTests: EngineTestCase {
         .init(kCTForegroundColorAttributeName as String): r.color(r.palette.text),
       ])
     for span in content.roles.roles(in: NSRange(location: start, length: source.length)) {
-      guard let color = r.palette.roles[span.role] else { continue }
+      let color = r.palette.ink(span.role)
       attributed.addAttribute(
         .init(kCTForegroundColorAttributeName as String), value: r.color(color),
         range: NSRange(location: span.range.location - start, length: span.range.length))
