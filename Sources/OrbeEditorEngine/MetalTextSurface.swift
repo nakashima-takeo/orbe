@@ -10,7 +10,7 @@ import simd
 /// （`viewport` の計算・編集の規則・行の印の行への写像）は出す前の状態か箱から読む。
 ///
 /// 編集は面の編集係（`SurfaceEditor`）が持ち、1 回の操作を 1 つの取引にする（→ `transact`）。IME の変換も同じ道で文書に
-/// 入る。アクセシビリティはまだ持たない。
+/// 入る。アクセシビリティは持たない。
 @MainActor
 final class MetalTextSurface: TextSurface {
   private static var nextID = 0

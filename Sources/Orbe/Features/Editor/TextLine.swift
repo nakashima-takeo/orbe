@@ -47,7 +47,7 @@ struct TextLine {
     var descent: CGFloat = 0
     var leading: CGFloat = 0
     width = CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
-    // 行の箱は TextKit（SwiftUI の Text）と同じ丸め——基線は ascent を丸めた位置、高さはそこへ descent の切り上げを足す。
+    // 行の箱は SwiftUI の Text と同じ丸め——基線は ascent を丸めた位置、高さはそこへ descent の切り上げを足す。
     // 字の位置が SwiftUI で描いていた他の面の字と半画素ずれない。
     self.ascent = ascent.rounded()
     height = self.ascent + descent.rounded(.up) + leading

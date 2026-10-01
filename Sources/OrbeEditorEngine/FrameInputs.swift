@@ -249,7 +249,7 @@ struct FrameMaterial: Sendable {
   /// 面の大きさ（pt）と倍率。
   var size = CGSize.zero
   var scale: CGFloat = 2
-  /// 描く色空間。面が載る窓の色空間（AppKit が今の面を描く色空間）で、窓に無ければ sRGB。
+  /// 描く色空間。面が載る窓の色空間（AppKit が窓の view を描く色空間）で、窓に無ければ sRGB。
   var space = FrameMaterial.defaultSpace
   /// 面が画面に見えているか（窓にあり、隠れておらず、窓が覆われていない）。
   var visible = false

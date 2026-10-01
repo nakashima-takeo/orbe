@@ -148,8 +148,7 @@ extension FrameBuilder {
     }
   }
 
-  /// 影の縁から `distance` pt の濃さ——`0.5·erfc(d / (σ√2))`（σ 3）を長さ `length` に 9 点で置いた折れ線（今の面の勾配と
-  /// 同じ近似）。
+  /// 影の縁から `distance` pt の濃さ——`0.5·erfc(d / (σ√2))`（σ 3）を長さ `length` に 9 点で置いた折れ線。
   static func shadowStrength(_ distance: Double, length: Double) -> Double {
     let t = min(max(distance / length, 0), 1) * 8
     let k = min(Int(t), 7)

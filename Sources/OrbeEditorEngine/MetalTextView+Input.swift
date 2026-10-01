@@ -275,7 +275,7 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
 
 // swiftlint:disable unused_setter_value
 /// 自動修正・スペル・引用符とダッシュの置換・テキストの置換・データとリンクの検出・補完・予測入力・数式の補完・
-/// Writing Tools は、新しい面では働かない（コードを書く面なので）。AppKit の型は書き換えられる値として宣言するが、面は
+/// Writing Tools は、面では働かない（コードを書く面なので）。AppKit の型は書き換えられる値として宣言するが、面は
 /// 常に切る（書かれても受けない）。
 extension MetalTextView: @preconcurrency NSTextInputTraits {
   var autocorrectionType: NSTextInputTraitType {

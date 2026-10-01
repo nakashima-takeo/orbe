@@ -1,10 +1,10 @@
 import AppKit
 import QuartzCore
 
-/// 新しい面の view。`CAMetalLayer` を裏打ちの層に持つ layer-backed の view で、描き直しの方針は `.never`——画面には層の
+/// 面の view。`CAMetalLayer` を裏打ちの層に持つ layer-backed の view で、描き直しの方針は `.never`——画面には層の
 /// 中身（描画スレッドが出した drawable）だけが出て、AppKit はライブリサイズ中も含めて `draw(_:)` を呼ばない。
 /// `cacheDisplay`（gallery・flow の撮影）では `draw(_:)` が呼ばれるので、描画スレッドが同じ 1 コマを画面外に描いた絵を
-/// 描く——撮り方を変えずに新しい面を撮れる。
+/// 描く——AppKit の view と同じ撮り方で面を撮れる。
 ///
 /// 出来事の入口。キーは `interpretKeyEvents` で IME と macOS のキー割り当て（利用者の DefaultKeyBinding を含む）に通し、
 /// IME の呼び出しは面の編集係の IME の入口へ（→ `MetalTextView+Input`）、届いた標準のセレクタは編集のコマンドへ写す
@@ -179,9 +179,9 @@ final class MetalTextView: TextSurfaceInputView {
 
   /// 大きさ・倍率・描く色空間・見えているかを drawable と面へ写す。
   ///
-  /// 描く色空間は窓の色空間（既定は窓が載る画面の色空間）にする。AppKit は今の面をこの色空間で描くので、同じ色空間で色を
-  /// 解き、字の縁を合成し、絵文字を描けば、画面で今の面と同じに見える（別の色空間で描いて層の色合わせに任せると、透ける
-  /// 字の縁と絵文字の色がずれる）。窓が別の色空間の画面へ移れば `viewDidChangeBackingProperties` で描き直す。
+  /// 描く色空間は窓の色空間（既定は窓が載る画面の色空間）にする。AppKit は窓の view をこの色空間で描くので、同じ色空間で
+  /// 色を解き、字の縁を合成し、絵文字を描けば、画面で AppKit の描く字と同じに見える（別の色空間で描いて層の色合わせに
+  /// 任せると、透ける字の縁と絵文字の色がずれる）。窓が別の色空間の画面へ移れば `viewDidChangeBackingProperties` で描き直す。
   private func stateDidChange() {
     let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
     let space =
