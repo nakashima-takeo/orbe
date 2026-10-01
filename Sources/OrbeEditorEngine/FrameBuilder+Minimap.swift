@@ -88,7 +88,9 @@ extension FrameBuilder {
         let top = Double(placement.y(ofLine: index * MinimapCells.lines)) * s
         minimap.chunks.append(MinimapChunk(cells: chunk.cells, top: Float(top)))
       }
-      return chunk.heads
+      return MinimapRows.Piece(
+        heads: chunk.heads,
+        shift: text.lineStart(index * MinimapCells.lines) - chunk.heads.starts[0])
     }
     var decorations = MinimapDecorations(
       placement: placement, material: material, palette: c.palette.overview,
@@ -226,39 +228,49 @@ private struct MinimapDecorations {
 }
 
 /// ミニマップに描くチャンクの行の頭（`MinimapCells`）——装飾の区間の行と、行の中の位置の x（pt。VS Code の
-/// `lineOffsetMap`）をここから引く（チャンクの外の位置だけロープを引く）。
+/// `lineOffsetMap`）をここから引く（チャンクの外の位置だけロープを引く）。覚えたまとまりは、前の行で字の数が変わる編集の
+/// 後も中身は正しいが、行頭のオフセットは作った版のままなので、今の本文のまとまりの頭へずらして読む。
 private struct MinimapRows {
+  /// まとまり 1 つ——行の頭と、覚えた行頭を今の本文の行頭へずらす量。
+  struct Piece {
+    let heads: LineHeads
+    let shift: Int
+
+    /// `index` 番目の行の、今の本文での行頭（`index` が行の数なら最後の行の終わり）。
+    func start(_ index: Int) -> Int { heads.starts[index] + shift }
+  }
+
   let text: TextRope
-  /// 続くチャンクの行の頭と、最初の行。
-  let chunks: [LineHeads]
+  /// 続くまとまりと、最初の行。
+  let chunks: [Piece]
   let first: Int
   let tabSize: Int
   /// 字の左のガター（pt）と、描ける桁の数（x はここで止まる。行の頭はこれより 2 単位以上長く読んである）。
   let gutter: CGFloat
   let limit: Int
 
-  private func locate(_ row: Int) -> (heads: LineHeads, index: Int) {
+  private func locate(_ row: Int) -> (piece: Piece, index: Int) {
     let local = row - first
     return (chunks[local / MinimapCells.lines], local % MinimapCells.lines)
   }
 
   /// オフセット `offset` を含む行（`TextRope.row(containing:)` と同じ答え）。
   func row(containing offset: Int) -> Int {
-    guard let head = chunks.first?.starts.first, let tail = chunks.last?.starts.last,
-      offset >= head, offset < tail
+    guard let head = chunks.first, let tail = chunks.last, offset >= head.start(0),
+      offset < tail.start(tail.heads.starts.count - 1)
     else { return text.row(containing: offset) }
     var chunk = 0
     var high = chunks.count - 1
     while chunk < high {
       let mid = (chunk + high + 1) / 2
-      if chunks[mid].starts[0] <= offset { chunk = mid } else { high = mid - 1 }
+      if chunks[mid].start(0) <= offset { chunk = mid } else { high = mid - 1 }
     }
-    let starts = chunks[chunk].starts
+    let piece = chunks[chunk]
     var low = 0
-    high = starts.count - 2
+    high = piece.heads.starts.count - 2
     while low < high {
       let mid = (low + high + 1) / 2
-      if starts[mid] <= offset { low = mid } else { high = mid - 1 }
+      if piece.start(mid) <= offset { low = mid } else { high = mid - 1 }
     }
     return first + chunk * MinimapCells.lines + low
   }
@@ -271,16 +283,16 @@ private struct MinimapRows {
 
   /// 行 `row` の行頭のオフセット。
   func lineStart(_ row: Int) -> Int {
-    let (heads, index) = locate(row)
-    return heads.starts[index]
+    let (piece, index) = locate(row)
+    return piece.start(index)
   }
 
   /// 行 `row` の本文の長さ（UTF-16、改行を除く）。頭が行の終わりに届かない長い行は頭の長さ——描ける桁を越えるので、
   /// x はどちらでも幅で止まる。
   func length(row: Int) -> Int {
-    let (heads, index) = locate(row)
-    var head = heads.head(index)
-    guard heads.isComplete(index) else { return head.count }
+    let (piece, index) = locate(row)
+    var head = piece.heads.head(index)
+    guard piece.heads.isComplete(index) else { return head.count }
     if head.last == 0x0A { head = head.dropLast() }
     if head.last == 0x0D { head = head.dropLast() }
     return head.count
@@ -290,8 +302,8 @@ private struct MinimapRows {
   func visible(_ ranges: [NSRange], lines: Range<Int>) -> ArraySlice<NSRange> {
     guard !ranges.isEmpty else { return [] }
     let start = lineStart(lines.lowerBound)
-    let (heads, index) = locate(lines.upperBound - 1)
-    let end = heads.starts[index + 1]
+    let (piece, index) = locate(lines.upperBound - 1)
+    let end = piece.start(index + 1)
     var low = 0
     var high = ranges.count
     while low < high {
@@ -314,9 +326,9 @@ private struct MinimapRows {
   func x(row: Int, at index: Int, width: CGFloat) -> CGFloat {
     guard index > 0 else { return gutter }
     guard gutter + CGFloat(index) < width else { return width }
-    let (heads, line) = locate(row)
+    let (piece, line) = locate(row)
     var column = 0
-    for unit in heads.head(line).prefix(min(index, length(row: row))) {
+    for unit in piece.heads.head(line).prefix(min(index, length(row: row))) {
       column += MinimapLine.decorationWidth(of: unit, tabSize: tabSize)
       if column >= limit { return gutter + CGFloat(limit) }
     }

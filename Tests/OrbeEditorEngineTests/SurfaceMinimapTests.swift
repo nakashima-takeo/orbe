@@ -100,6 +100,51 @@ final class SurfaceMinimapTests: EngineTestCase {
       "役割の変わった行のチャンク")
   }
 
+  /// 前の行で字の数が変わる打鍵（行の数は変わらない）の後も、その後ろの覚えたまとまりの上の装飾は今の本文の位置に出る——
+  /// 同じ本文・選択・一致で新しく開いた面と同じ装飾になる。
+  func testDecorationsFollowTheTextAfterAnEditThatKeepsTheLineCount() throws {
+    func matches(_ text: String) -> [NSRange] {
+      let string = text as NSString
+      var result: [NSRange] = []
+      var from = 0
+      while case let found = string.range(
+        of: "text", range: NSRange(location: from, length: string.length - from)),
+        found.location != NSNotFound
+      {
+        result.append(found)
+        from = NSMaxRange(found)
+      }
+      return result
+    }
+    func decorations(_ surface: MetalTextSurface) -> [SIMD4<Float>] {
+      let id = surface.id
+      return RenderThread.shared.performAndWait { renderer in
+        (renderer.slot(id)?.builder.minimap.decorations ?? []).map(\.rect)
+      }
+    }
+    for inserted in ["x", String(repeating: "x", count: 20)] {
+      let original = rows(400)
+      let edited = try open(original, size: CGSize(width: 800, height: 600))
+      edited.surface.setHighlights(matches(original), for: .findMatch)
+      _ = edited.surface.snapshot()
+      let id = edited.surface.id
+      let cached = RenderThread.shared.performAndWait { $0.slot(id)?.minimapCells.cached ?? [] }
+      XCTAssertTrue(cached.contains(1), "前提: 打つ行より後ろのまとまりを覚えている")
+      edited.surface.selectedRange = NSRange(location: edited.document.text.lineStart(5), length: 0)
+      edited.surface.perform(.insert(inserted))
+      let text = edited.document.text.substring(
+        NSRange(location: 0, length: edited.document.text.length))
+      edited.surface.setHighlights(matches(text), for: .findMatch)
+      _ = edited.surface.snapshot()
+      let fresh = try open(text, size: CGSize(width: 800, height: 600))
+      fresh.surface.selectedRange = edited.surface.selectedRange
+      fresh.surface.setHighlights(matches(text), for: .findMatch)
+      _ = fresh.surface.snapshot()
+      XCTAssertEqual(
+        decorations(edited.surface), decorations(fresh.surface), "\(inserted.count) 字を打った後")
+    }
+  }
+
   /// ミニマップが動いた向きの先（同じ向きに 1〜2 倍動いた先まで）のまとまりのうち、覚えていないものを動く向きの近い方から
   /// 上限まで先に作る。
   func testPrefetchBuildsTheChunksAheadInTheDirectionOfMotion() {

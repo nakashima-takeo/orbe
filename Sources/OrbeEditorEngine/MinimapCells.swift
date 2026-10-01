@@ -30,7 +30,8 @@ final class MinimapCells {
     var tabSize: Int
   }
 
-  /// チャンク 1 つ——行の頭と字の列。
+  /// チャンク 1 つ——行の頭と字の列。行の頭のオフセットは作った版のもの（前の行で字の数が変わる編集の後も中身と行頭どうしの
+  /// 差は正しいので、使い手が今の本文のまとまりの頭へずらして読む）。
   struct Chunk {
     let heads: LineHeads
     let cells: [MinimapCellInstance]
