@@ -9,8 +9,6 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-markdown.git", from: "0.6.0"),
     // アプリ内アップデート（appcast + EdDSA 署名検証 + 終了時適用）。UI は自前（SPUUserDriver 実装）。
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
-    // コードエディターのテキストエンジン（TextKit 2 の自前ビュー・ガター・rendering attribute）。GPLv3。
-    .package(url: "https://github.com/krzyzanowskim/STTextView", from: "2.4.1"),
     // tree-sitter 本体（C API を OrbeEditorCore から直接呼ぶ）。0.26.12 以降はエラー回復が退行して大きな Swift が
     // 全体 ERROR に崩れるので exact で固定する（docs/guides/build.md）。
     .package(url: "https://github.com/tree-sitter/tree-sitter", exact: "0.26.11"),
@@ -63,7 +61,7 @@ let package = Package(
       ]
     ),
     // コードエディターの中核（文書と本文の写し・言語・tree-sitter の色付け・裏の仕事・テキスト面の契約）。
-    // テキストエンジン（STTextView）も Theme / L10n も知らない——境界は target 依存でコンパイラが保証する。
+    // テキストエンジンも Theme / L10n も知らない——境界は target 依存でコンパイラが保証する。
     // main と裏の仕事の間で本文や結果を渡すので Swift 6 の言語モードで検査する（取り違えがコンパイルエラーで止まる）。
     .target(
       name: "OrbeEditorCore",
@@ -88,19 +86,8 @@ let package = Package(
       resources: [.copy("Outline/Resources/outline")],
       swiftSettings: [.swiftLanguageMode(.v6)]
     ),
-    // テキスト面（`TextSurface`）の STTextView 実装。公開は面を作る 1 関数だけで、エンジンの型は外に出さない。
-    // エンジンの移行はこの target の差し替え。
-    .target(
-      name: "OrbeEditorText",
-      dependencies: [
-        "OrbeEditorCore",
-        .product(name: "STTextView", package: "STTextView"),
-      ],
-      swiftSettings: [.swiftLanguageMode(.v5)]
-    ),
     // テキスト面（`TextSurface`）の Metal 実装。本文を持たず、文書の写しを描画専用のスレッドが 1 コマで描く。公開は面を
-    // 作る関数と、シェーダを先に用意する関数だけ。STTextView に依らないことは target の依存でコンパイラが保証する。main と
-    // 描画スレッドの間で値を渡すので Swift 6 の言語モードで検査する。
+    // 作る関数と、シェーダを先に用意する関数だけ。main と描画スレッドの間で値を渡すので Swift 6 の言語モードで検査する。
     .target(
       name: "OrbeEditorEngine",
       dependencies: ["OrbeEditorCore"],
@@ -114,7 +101,6 @@ let package = Package(
         "OrbeSessionLog",
         "OrbeSound",
         "OrbeEditorCore",
-        "OrbeEditorText",
         "OrbeEditorEngine",
         .product(name: "Markdown", package: "swift-markdown"),
         .product(name: "Sparkle", package: "Sparkle"),
@@ -197,7 +183,7 @@ let package = Package(
     ),
     .testTarget(
       name: "OrbeTests",
-      dependencies: ["Orbe", "OrbeEditorCore", "OrbeEditorText", "OrbeEditorEngine"],
+      dependencies: ["Orbe", "OrbeEditorCore", "OrbeEditorEngine"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
