@@ -26,7 +26,8 @@ final class RenderLoopTests: EngineTestCase {
   /// 同じ幅の行（描くたびに横の範囲が伸びて描き直すことが無い）。
   private let text = (0..<200).map { String(format: "line %03d", $0) }.joined(separator: "\n")
 
-  /// 見えている面は描いてから止まり、止まっている間は刻みが来ない。材料が変われば 1 コマだけ描いて、また止まる。
+  /// 見えている面は描いてから止まり、止まっている間は刻みが来ない。材料が変われば 1 コマだけ描いて、また止まる（スクロール
+  /// の状態は変わらないので、つまみは現れない）。
   func testDrawsOnceAfterAChangeAndStopsAgain() throws {
     let opened = try open(text)
     let surface = opened.surface
@@ -39,10 +40,70 @@ final class RenderLoopTests: EngineTestCase {
     RunLoop.main.run(until: Date().addingTimeInterval(0.2))
     XCTAssertEqual(driver.ticks(surface.id), ticks, "止まっている間は刻みが来ない")
 
+    surface.setIndentation(Indentation(unit: 2, usesTabs: false))
+    surface.flush()
+    waitUntilPaused(surface)
+    XCTAssertEqual(target.acquired, first + 1, "変わったコマだけ描く")
+  }
+
+  /// スクロールするとつまみが現れ、止まって消え始める時刻にだけ起きて消え、消え終わったら起きない。
+  func testTheThumbFadesAfterScrollingAndThenTheLoopStops() throws {
+    let opened = try open(text)
+    let surface = opened.surface
+    surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
+    driver.bind(surface.id)
+    waitUntilPaused(surface)
     surface.scroll(
       ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(0, -1), precise: false))
     waitUntilPaused(surface)
-    XCTAssertEqual(target.acquired, first + 1, "変わったコマだけ描く")
+    XCTAssertNotNil(blinkWake(surface), "つまみが消え始める時刻に起きるタイマー")
+    let deadline = Date().addingTimeInterval(3)
+    repeat {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    } while (blinkWake(surface) != nil || !driver.isPaused(surface.id)) && Date() < deadline
+    XCTAssertNil(blinkWake(surface), "消え終わったらタイマーは無い")
+    let ticks = driver.ticks(surface.id)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+    XCTAssertEqual(driver.ticks(surface.id), ticks, "消え終わった後は起きない")
+  }
+
+  /// スクロールの直後（つまみが消え始める前）に隠れた面は、消え始める時刻に起きるタイマーを置かず、刻みも来ない。
+  func testHidingRightAfterScrollingDoesNotWakeForTheFade() throws {
+    let opened = try open(text)
+    let surface = opened.surface
+    surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
+    driver.bind(surface.id)
+    waitUntilPaused(surface)
+    surface.scroll(
+      ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(0, -1), precise: false))
+    waitUntilPaused(surface)
+    XCTAssertNotNil(blinkWake(surface), "前提: つまみが消え始める時刻に起きるタイマー")
+    surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: false)
+    surface.flush()
+    waitUntilPaused(surface)
+    XCTAssertNil(blinkWake(surface), "隠れた面はタイマーを置かない")
+    RunLoop.main.run(until: Date().addingTimeInterval(0.7))
+    let ticks = driver.ticks(surface.id)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+    XCTAssertEqual(driver.ticks(surface.id), ticks, "消え始める時刻を過ぎても起きない")
+  }
+
+  /// 見えている幅より長い行がある文書を開いても、最初に長さを測ったことによる横の範囲の変化ではつまみを出さない。
+  func testOpeningADocumentWithALongLineDoesNotShowTheThumb() throws {
+    let opened = try open(String(repeating: "x", count: 400) + "\n" + text)
+    let surface = opened.surface
+    surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
+    driver.bind(surface.id)
+    let deadline = Date().addingTimeInterval(5)
+    while !surface.viewport.clipsRight, Date() < deadline {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+    XCTAssertTrue(surface.viewport.clipsRight, "前提: 長さを測った")
+    waitUntilPaused(surface)
+    let id = surface.id
+    let shown = RenderThread.shared.performAndWait { $0.slot(id)?.motion.thumb.shown }
+    XCTAssertEqual(shown, false, "つまみは出ない")
+    XCTAssertNil(blinkWake(surface), "消え始めるのを待って起きない")
   }
 
   /// 見えていない面（窓に無い・隠れたタブ）は描かずに刻みを止める。
@@ -81,6 +142,7 @@ final class RenderLoopTests: EngineTestCase {
       XCTAssertTrue(stopped, "前提: 描いてから止まっている")
       let before = target.acquired
       surface.setIndentation(Indentation(unit: before % 2 == 0 ? 2 : 4, usesTabs: false))
+      surface.flush()
       let (after, paused) = RenderThread.shared.performAndWait { _ in
         (target.acquired, clock.isPaused)
       }
@@ -104,7 +166,7 @@ final class RenderLoopTests: EngineTestCase {
     let target = fire + period / 2
     XCTAssertEqual(
       target / period, (target / period).rounded(), accuracy: 0.05, "刻みの半刻み前に起きる")
-    let caret = surface.material.read().caret
+    let caret = surface.drawn.caret
     XCTAssertNotEqual(
       caret.caretVisible(at: target), caret.caretVisible(at: target - period),
       "起きて描く刻みは、点滅が切り替わってから最初の刻み")
@@ -112,7 +174,7 @@ final class RenderLoopTests: EngineTestCase {
     surface.setCaretBlinks(false)
     waitUntilPaused(surface)
     XCTAssertNil(blinkWake(surface), "点滅しなければ置かない")
-    XCTAssertTrue(surface.material.read().caret.caretVisible(at: target), "描き続ける")
+    XCTAssertTrue(surface.drawn.caret.caretVisible(at: target), "描き続ける")
     surface.setCaretBlinks(true)
     waitUntilPaused(surface)
     XCTAssertNotNil(blinkWake(surface))

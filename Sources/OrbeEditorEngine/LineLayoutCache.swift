@@ -14,20 +14,36 @@ struct LaidOutLine {
   /// 元の行の UTF-16 の位置。
   var offsets: [Int32] = []
   var width: CGFloat = 0
+  /// 行の中身の長さ（UTF-16。改行と行末の `\r` を除く——`LineShaper.Source.length`）。
+  var length: Int
   /// 打ち切って描かない単位の数と、行末に出す印（打ち切っていなければ nil）。
   var omitted = 0
   var omittedMark: OmittedMark?
-  /// 行の中の位置と x の対応（キャレット・選択の地・横の「見えるところまで」が要る行だけ。要るまで作らない）。
+  /// 行の中の位置と x の対応（キャレット・選択の地・強調の地・装備・横の「見えるところまで」が要る行だけ。要るまで
+  /// 作らない）。
   var carets: CaretMap?
+  /// 行の装備の素。
+  var decor: LineDecor
 
   struct OmittedMark {
-    var fonts: [UInt16]
-    var glyphs: [CGGlyph]
-    var xs: [Float]
+    var fonts: [UInt16] = []
+    var glyphs: [CGGlyph] = []
+    var xs: [Float] = []
     var width: CGFloat
+
+    init(_ shaped: ShapedLine, fonts registry: FontRegistry) {
+      for run in shaped.runs {
+        fonts.append(contentsOf: repeatElement(registry.id(run.font), count: run.glyphs.count))
+        glyphs.append(contentsOf: run.glyphs)
+        xs.append(contentsOf: run.xs.map(Float.init))
+      }
+      width = shaped.width
+    }
   }
 
-  init(_ shaped: ShapedLine, fonts registry: FontRegistry) {
+  init(_ shaped: ShapedLine, length: Int, fonts registry: FontRegistry, decor: LineDecor) {
+    self.length = length
+    self.decor = decor
     let raised = shaped.runs.contains { $0.ys.contains { $0 != 0 } }
     for run in shaped.runs {
       let font = registry.id(run.font)
@@ -72,8 +88,11 @@ final class LineLayoutCache {
   var count: Int { entries.count }
   private(set) var weight = 0
 
-  /// このコマで組版した（どちらの段にも無かった）行の数。
-  private(set) var shapedInFrame = 0
+  /// このコマで組版した（どちらの段にも無かった）行の数と、面を結んでからの合計。
+  private(set) var shapedInFrame = 0 {
+    didSet { if shapedInFrame > oldValue { shapedTotal += shapedInFrame - oldValue } }
+  }
+  private(set) var shapedTotal = 0
   private var drawnRows: [Int: LaidOutLine] = [:]
   private var frameRows: [Int: LaidOutLine] = [:]
   private var rowsVersion: Int?
@@ -81,7 +100,7 @@ final class LineLayoutCache {
 
   /// 本文の編集を受け取る（前のコマで描いた行のうち、変わった行を捨てて後ろをずらす）。
   func receive(_ edits: [RowEdit]) {
-    for edit in edits {
+    for edit in edits where !edit.rolesOnly {
       drawnRows = Self.shifted(drawnRows, by: edit)
       rowsVersion = edit.version
     }
@@ -98,16 +117,15 @@ final class LineLayoutCache {
     shapedInFrame = 0
   }
 
-  /// このコマで描く行 `row` の組んだ結果。`carets` なら位置と x の対応も持たせる。
+  /// このコマで描く行 `row` の組んだ結果。前のコマで描いた行に無ければ、行の中身 `source` を読んで引く。`carets` なら
+  /// 位置と x の対応も持たせる。
   func line(
-    row: Int, in text: TextRope, tabColumns: Int, config: SurfaceConfig, fonts: FontRegistry,
-    carets: Bool = false
+    row: Int, source: () -> LineShaper.Source, tabColumns: Int, config: SurfaceConfig,
+    fonts: FontRegistry, carets: Bool = false
   ) -> LaidOutLine {
     var laid = drawnRows[row]
     if laid == nil || (carets && laid?.carets == nil) {
-      laid = line(
-        LineShaper.source(row: row, in: text).source, tabColumns: tabColumns, config: config,
-        fonts: fonts, carets: carets)
+      laid = line(source(), tabColumns: tabColumns, config: config, fonts: fonts, carets: carets)
     }
     frameRows[row] = laid
     return laid!
@@ -133,7 +151,8 @@ final class LineLayoutCache {
     return result
   }
 
-  /// 行の中身 `source` の組んだ結果。`carets` なら位置と x の対応も持たせる（覚えた結果に無ければ組み直して足す）。
+  /// 行の中身 `source` の組んだ結果と装備の素。`carets` なら位置と x の対応も持たせる（覚えた結果に無ければ作って
+  /// 足す）。装備があれば、位置と x の対応は組んだときに作る。
   func line(
     _ source: LineShaper.Source, tabColumns: Int, config: SurfaceConfig, fonts: FontRegistry,
     carets: Bool = false
@@ -156,17 +175,17 @@ final class LineLayoutCache {
     }
     shapedInFrame += 1
     let shaped = shape()
-    var line = LaidOutLine(shaped, fonts: fonts)
-    if carets { line.carets = shaped.carets }
+    var line = LaidOutLine(
+      shaped, length: source.length, fonts: fonts, decor: LineDecor(source, unit: tabColumns))
+    if carets || line.decor.needsCarets { line.carets = shaped.carets }
     if line.omitted > 0 {
-      let mark = LaidOutLine(
-        LineShaper.shape(config.omittedLabel(line.omitted), font: config.font), fonts: fonts)
       line.omittedMark = LaidOutLine.OmittedMark(
-        fonts: mark.fonts, glyphs: mark.glyphs, xs: mark.xs, width: mark.width)
+        LineShaper.shape(config.omittedLabel(line.omitted), font: config.font), fonts: fonts)
     }
     let entry = Entry(
       line: line, used: clock,
-      weight: source.head.count + line.glyphs.count + (line.carets?.count ?? 0))
+      weight: source.head.count + line.glyphs.count + (line.carets?.count ?? 0)
+        + line.decor.weight)
     while !entries.isEmpty,
       entries.count >= Self.capacity || weight + entry.weight > Self.weightBudget
     {

@@ -63,23 +63,42 @@ final class LineLayoutCacheTests: XCTestCase {
     let edit = RowEdit(
       TextEdit(range: NSRange(location: 2, length: 2), replacement: "x\ny\nz\n"), in: text,
       version: 5)
-    XCTAssertEqual(edit, RowEdit(rows: 1..<3, inserted: 4, version: 5))
+    var expected = RowEdit(rows: 1..<3, inserted: 4, version: 5)
+    expected.text = RowEdit.TextChange(range: NSRange(location: 2, length: 2), replacementLength: 6)
+    XCTAssertEqual(edit, expected, "区間と置き換えの長さも持つ")
     let typed = RowEdit(
       TextEdit(range: NSRange(location: 2, length: 0), replacement: "q"), in: text, version: 6)
-    XCTAssertEqual(typed, RowEdit(rows: 1..<2, inserted: 1, version: 6), "行の中の打鍵はその行だけ")
+    expected = RowEdit(rows: 1..<2, inserted: 1, version: 6)
+    expected.text = RowEdit.TextChange(range: NSRange(location: 2, length: 0), replacementLength: 1)
+    XCTAssertEqual(typed, expected, "行の中の打鍵はその行だけ")
   }
 
-  /// 右から左の字の塊の中ではオフセットが減っていく——最後の区間を過ぎてから前の区間へ戻っても色を引ける。
-  func testRoleCursorFindsSpansWhenOffsetsGoBackwards() {
-    var cursor = RoleCursor(spans: [
-      HighlightSpan(range: NSRange(location: 0, length: 3), role: .keyword),
-      HighlightSpan(range: NSRange(location: 12, length: 1), role: .type),
-    ])
-    let offsets = Array(0...7) + [16, 15, 14, 13, 12, 11, 10, 9, 8, 17]
-    let roles = offsets.map { cursor.role(at: $0) }
-    XCTAssertEqual(roles.prefix(3), [.keyword, .keyword, .keyword])
-    XCTAssertEqual(roles[offsets.firstIndex(of: 12)!], .type, "戻った先の区間の色")
-    XCTAssertNil(roles[offsets.firstIndex(of: 13)!])
-    XCTAssertNil(roles[offsets.firstIndex(of: 11)!])
+  /// 空行の塊の上下の外の非空行の段は、行ごとに `LineShaper.source` と `LineDecor` の判定で歩いた答えと同じ（CR だけ・
+  /// タブ・描きうる先頭に収まらない空白だけの行を含む）。同じ版では覚えた塊から引く。
+  func testBlankBlocksAgreeWithWalkingRowByRow() {
+    let long = String(repeating: " ", count: LineShaper.headLimit + 1)
+    let edge = String(repeating: " ", count: LineShaper.headLimit)
+    let pieces = [
+      "", "  ", "\t", " \r", "\r", "x", "  y", "\t\tz", "    w", long, edge, edge + "\r",
+    ]
+    var generator = SystemRandomNumberGenerator()
+    for trial in 0..<60 {
+      let count = Int.random(in: 1...20, using: &generator)
+      let lines = (0..<count).map { _ in pieces.randomElement(using: &generator)! }
+      let text = TextRope(lines.joined(separator: "\n") + (Bool.random() ? "\n" : ""))
+      let shown = lines.map { $0.count > 8 ? "空白×\($0.count)" : $0 }
+      let blocks = BlankBlocks()
+      let decor = (0..<text.lineCount).map {
+        LineDecor(LineShaper.source(row: $0, in: text).source, unit: 2)
+      }
+      for row in 0..<text.lineCount where decor[row].blank {
+        let above = (0..<row).last { !decor[$0].blank }.map { decor[$0].boundaries.count }
+        let below = (row + 1..<text.lineCount).first { !decor[$0].blank }
+          .map { decor[$0].boundaries.count }
+        let around = blocks.around(row, in: text, version: trial, unit: 2)
+        XCTAssertEqual(around.above, above, "\(shown) の行 \(row) の上")
+        XCTAssertEqual(around.below, below, "\(shown) の行 \(row) の下")
+      }
+    }
   }
 }

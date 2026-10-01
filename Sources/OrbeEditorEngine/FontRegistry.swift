@@ -16,4 +16,7 @@ final class FontRegistry {
   }
 
   func font(_ id: UInt16) -> (font: CTFont, isColor: Bool) { fonts[Int(id)] }
+
+  /// 色付きのグリフのフォントか（字ごとに引くので、フォントを持ち出さない）。
+  func isColor(_ id: UInt16) -> Bool { fonts[Int(id)].isColor }
 }

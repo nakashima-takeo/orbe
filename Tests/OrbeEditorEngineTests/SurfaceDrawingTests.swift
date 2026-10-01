@@ -105,7 +105,7 @@ final class SurfaceDrawingTests: EngineTestCase {
     let opened = try open((0..<100).map { "row \($0)" }.joined(separator: "\n"))
     _ = host(opened, size: CGSize(width: 400, height: 120))
     opened.surface.updateFocus(true)
-    let epoch = { opened.surface.material.read().caret.epoch }
+    let epoch = { opened.surface.drawn.caret.epoch }
     let focused = epoch()
     opened.surface.perform(.insert("x"))
     let typed = epoch()
@@ -119,17 +119,37 @@ final class SurfaceDrawingTests: EngineTestCase {
   /// 取引が置いた位置は、その版の材料を読んだコマから使う（スクロールだけが先に動いたコマを出さない）。
   func testPlacedPositionWaitsForTheMaterialRevision() {
     let box = ScrollBox(elastic: false)
-    box.updateLimits {
-      $0.lineCount = 1000
-      $0.lineHeight = 10
-      $0.viewport = SIMD2(100, 100)
-    }
+    box.updateLimits(
+      LimitsUpdate(lineCount: 1000, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7))
     box.place(SIMD2(0, 50))
-    box.place(SIMD2(0, 300), heldUntil: 7)
+    box.place(SIMD2(0, 300), forMaterial: 7)
     XCTAssertEqual(box.frame(at: 0, material: 6).position.y, 50, "古い材料のコマは前の位置")
     XCTAssertEqual(box.peek(at: 0).position.y, 300, "main は新しい位置を読む")
     XCTAssertEqual(box.frame(at: 0, material: 7).position.y, 300)
     XCTAssertEqual(box.frame(at: 0, material: 6).position.y, 300, "一度追いついたら持たない")
+  }
+
+  /// 版を続けて置けば、どの版の材料にもその版に組む位置を返す——版 8 を置いた後でも、版 7 の材料のコマは版 7 で置いた
+  /// 位置を描く（最初の版より前の位置ではない）。範囲と位置を同じ版で続けて置けば、その版より前の材料には両方を置く前の
+  /// ものを組む。描画スレッドが引き取った版より前の組は手放す。
+  func testEachMaterialRevisionTakesThePositionPlacedWithIt() {
+    let box = ScrollBox(elastic: false)
+    box.updateLimits(
+      LimitsUpdate(lineCount: 1000, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7))
+    box.place(SIMD2(0, 50))
+    box.updateLimits(
+      LimitsUpdate(lineCount: 2000, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7),
+      forMaterial: 7)
+    box.place(SIMD2(0, 300), forMaterial: 7)
+    box.place(SIMD2(0, 900), forMaterial: 8)
+    XCTAssertEqual(box.frame(at: 0, material: 6).position.y, 50)
+    XCTAssertEqual(box.frame(at: 0, material: 6).limits.lineCount, 1000, "置く前の範囲")
+    XCTAssertEqual(box.frame(at: 0, material: 7).position.y, 300, "版 8 を置いた後も版 7 の位置")
+    XCTAssertEqual(box.frame(at: 0, material: 7).limits.lineCount, 2000)
+    XCTAssertEqual(box.frame(at: 0, material: 8).position.y, 900)
+    box.place(SIMD2(0, 400), forMaterial: 9)
+    box.taken(material: 9)
+    XCTAssertEqual(box.frame(at: 0, material: 8).position.y, 400, "引き取った版より前の組は手放す")
   }
 
   /// 打鍵で組み直すのは変わった行だけ——打鍵はその 1 行、Enter は分かれた 2 行、複数行の字下げは字下げした行で、見えて
@@ -148,25 +168,29 @@ final class SurfaceDrawingTests: EngineTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.01))
       } while !driver.isPaused(surface.id) && Date() < deadline
     }
-    func shaped() -> Int {
+    // 行の数が変わればつまみが現れて消えるまで描き続けるので、組版した行は合計の増分で数える。
+    func total() -> Int {
       let id = surface.id
-      return RenderThread.shared.performAndWait { $0.slot(id)?.lines.shapedInFrame ?? -1 }
+      return RenderThread.shared.performAndWait { $0.slot(id)?.lines.shapedTotal ?? -1 }
+    }
+    func shaped(by action: () -> Void) -> Int {
+      let before = total()
+      action()
+      surface.flush()
+      settle()
+      return total() - before
     }
     settle()
     surface.selectedRange = NSRange(location: opened.document.text.lineStart(5) + 3, length: 0)
+    surface.flush()
     settle()
-    surface.perform(.insert("x"))
-    settle()
-    XCTAssertEqual(shaped(), 1, "打鍵した行だけ")
-    surface.perform(.newline(indents: true))
-    settle()
-    XCTAssertEqual(shaped(), 2, "Enter で分かれた 2 行だけ")
+    XCTAssertEqual(shaped { surface.perform(.insert("x")) }, 1, "打鍵した行だけ")
+    XCTAssertEqual(shaped { surface.perform(.newline(indents: true)) }, 2, "Enter で分かれた 2 行だけ")
     let text = opened.document.text
     surface.selectedRange = NSRange(
       location: text.lineStart(10), length: text.lineStart(12) + 3 - text.lineStart(10))
+    surface.flush()
     settle()
-    surface.perform(.tab)
-    settle()
-    XCTAssertEqual(shaped(), 3, "字下げした 3 行だけ")
+    XCTAssertEqual(shaped { surface.perform(.tab) }, 3, "字下げした 3 行だけ")
   }
 }

@@ -2,7 +2,7 @@
 /// 2 桁、それ以外は 1 桁。
 public enum CharacterWidth {
   /// 全角（CJK・かな・ハングルの音節・全角の記号）。
-  public static func isFullWidth(_ codePoint: UInt32) -> Bool {
+  @inlinable public static func isFullWidth(_ codePoint: UInt32) -> Bool {
     (0x2E80...0xD7AF).contains(codePoint) || (0xF900...0xFAFF).contains(codePoint)
       || (0xFF01...0xFF5E).contains(codePoint) || (0xFFE0...0xFFE6).contains(codePoint)
   }

@@ -174,6 +174,8 @@ extension Theme.Layout {
   static let editorMarkGutter: CGFloat = 19
   /// 本体の右端の縦スクロールバー（印を載せる。VS Code の verticalScrollbarSize）。
   static let editorScrollbar: CGFloat = 14
+  /// 本文の区画の下端の横スクロールバーの高さ（新しいテキスト面。VS Code の horizontalScrollbarSize）。
+  static let editorHorizontalScrollbar: CGFloat = 12
   /// ミニマップの幅の上限（字の左のガター込み。VS Code の maxColumn 120 × 1 字 1pt）。幅は本文の幅から計算し、
   /// 列が狭ければ細くなる。
   static let editorMinimapMaxWidth: CGFloat = 120

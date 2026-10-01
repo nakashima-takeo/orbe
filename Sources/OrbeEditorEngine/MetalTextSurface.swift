@@ -5,12 +5,12 @@ import QuartzCore
 import simd
 
 /// `TextSurface` の Metal 実装（main 側）。本文を持たず、文書の写し（本文・役割・版）を契約の口（`surfaceContent`）で
-/// 引いて描く側。main がするのは「出来事をスクロールの状態の箱に書く」「写し・選択・見え方を描く材料の箱に置く」だけで、
-/// 組版も描画も描画スレッドが行う。写しは自分の欄に持たず、要るとき（`viewport` の計算・編集の規則・行の印の行への写像）は
-/// 箱から読む。
+/// 引いて描く側。main がするのは「出来事をスクロールの状態の箱に書く」「写し・選択・見え方を出す前の状態に積み、出す
+/// 1 か所（`flush`）で描く材料の箱に置く」だけで、組版も描画も描画スレッドが行う。写しは自分の欄に持たず、要るとき
+/// （`viewport` の計算・編集の規則・行の印の行への写像）は出す前の状態か箱から読む。
 ///
 /// 編集は面の編集係（`SurfaceEditor`）が持ち、1 回の操作を 1 つの取引にする（→ `transact`）。IME の変換も同じ道で文書に
-/// 入る。強調の地・装備・アクセシビリティはまだ持たない（強調の地は値を受け取るだけで描かない）。
+/// 入る。アクセシビリティはまだ持たない。
 @MainActor
 final class MetalTextSurface: TextSurface {
   private static var nextID = 0
@@ -19,6 +19,8 @@ final class MetalTextSurface: TextSurface {
   let config: SurfaceConfig
   let material = MaterialBox()
   let scroll: ScrollBox
+  /// 最後に描いたミニマップの配置（描画スレッドが書く）。
+  let placementBox = MinimapPlacementBox()
   private let style: TextSurfaceStyle
   let textView = MetalTextView()
   private(set) lazy var editor = SurfaceEditor(surface: self)
@@ -43,6 +45,12 @@ final class MetalTextSurface: TextSurface {
   private(set) var caretBlinks = CaretBlinking.systemPreference
   /// 進行中の取引（→ `transact`）。
   var transaction: Transaction?
+  /// 出す前の状態（→ `flush`）。
+  var pending = Pending()
+  /// 押された強調の地（同じ列の押し直しを書かない）。
+  private var highlights = Highlights()
+  /// 面自身の入力の処理の入れ子の深さ（→ `inputScope`）。
+  var inputDepth = 0
   /// 描画スレッドへ頼んだ横の「見えるところまで」の通し番号。
   var revealSerial = 0
 
@@ -58,6 +66,7 @@ final class MetalTextSurface: TextSurface {
     let id = id
     let material = material
     let scroll = scroll
+    let placement = placementBox
     let config = config
     let notify: @Sendable () -> Void = { [weak self] in
       DispatchQueue.main.async {
@@ -65,7 +74,9 @@ final class MetalTextSurface: TextSurface {
       }
     }
     RenderThread.shared.perform { renderer in
-      renderer.attach(id: id, material: material, scroll: scroll, config: config, notify: notify)
+      renderer.attach(
+        id: id, boxes: SurfaceBoxes(material: material, scroll: scroll, placement: placement),
+        config: config, notify: notify)
     }
     appearanceDidChange()
   }
@@ -99,7 +110,12 @@ final class MetalTextSurface: TextSurface {
     editor.replaceAll(with: text)
   }
 
-  func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {}
+  /// 強調の地を材料に置く（同じ区間の列を押し直されても書かない）。
+  func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {
+    guard highlights[kind] != ranges else { return }
+    highlights[kind] = ranges
+    write { $0.highlights[kind] = ranges }
+  }
 
   func setIndentation(_ indentation: Indentation) {
     self.indentation = indentation
@@ -127,8 +143,20 @@ final class MetalTextSurface: TextSurface {
     }
   }
 
+  /// 役割が変わった。写しを引き、変わった区間をその写しの行へ写して、本文の編集と同じ列に「色だけ変わった行」として積む。
   func rolesDidChange(_ ranges: IndexSet) {
-    pullContent()
+    guard let delegate else { return }
+    transact {
+      let content = delegate.surfaceContent(self)
+      transaction?.content = content
+      let text = content.text
+      transaction?.rowEdits += ranges.rangeView.map { range in
+        let rows = text.rows(of: NSRange(range))
+        return RowEdit(
+          rows: rows.lowerBound..<rows.upperBound + 1, inserted: rows.count,
+          version: content.version, rolesOnly: true)
+      }
+    }
   }
 
   /// 印は文書がオフセットで押してくる。引いた写しで行へ写してから箱に置く。
@@ -227,8 +255,9 @@ final class MetalTextSurface: TextSurface {
     delegate?.surface(self, focusDidChange: focused)
   }
 
-  /// 今の位置の 1 コマを画面外に描いた絵（撮影）。描画スレッドの仕事の完了を待つ。
+  /// 今の位置の 1 コマを画面外に描いた絵（撮影）。出す前の状態をその場で出し、描画スレッドの仕事の完了を待つ。
   func snapshot() -> CGImage? {
+    flush()
     let id = id
     return RenderThread.shared.performAndWait { Transfer(value: $0.snapshot(id)) }.value
   }

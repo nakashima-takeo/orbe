@@ -21,7 +21,7 @@ import XCTest
 @MainActor
 final class FramePerfTests: EngineTestCase {
   var driver: HeadlessDriver!
-  private var load: Timer?
+  var load: Timer?
 
   override func setUpWithError() throws {
     try super.setUpWithError()
@@ -52,6 +52,12 @@ final class FramePerfTests: EngineTestCase {
       frameLimit: HeadlessDriver.period * 1000, gatesLateCommits: false)
   }
 
+  /// 改行だけが 100 万行続く 1MB の文書。見えている端の行が空行の塊の中にあっても、インデント線の段を決めるために
+  /// 塊をコマごとに歩かない。
+  func testBlankLines() throws {
+    _ = try measure(label: "blank-lines", text: String(repeating: "\n", count: 1_000_000))
+  }
+
   /// 面を 2 枚同時に描き、片方の「画面に出た」を止めても、もう片方はドラッグの間の刻みごとに描き続ける（描画スレッドが
   /// 詰まった面のために待たない）。
   func testOneStuckSurfaceDoesNotStallAnother() throws {
@@ -76,10 +82,13 @@ final class FramePerfTests: EngineTestCase {
   /// ドラッグとはじき、端への引っ張りを、main への負荷の有り無しで回して関門にかける。`frameLimit` は全部のコマの CPU の
   /// p99 の上限（ms。行を組版しなかったコマは常に 2ms）、`gatesLateCommits` は描画スレッド自身が落とすコマ 0 を関門に
   /// するか。負荷なしのドラッグとはじきの 1 コマの CPU の中央値（ms）を返す。
-  private func measure(
-    label: String, text: String, frameLimit: Double = 2, gatesLateCommits: Bool = true
+  func measure(
+    label: String, text: String, frameLimit: Double = 2, gatesLateCommits: Bool = true,
+    prepare: (Opened) -> Void = { _ in }
   ) throws -> Double {
     let opened = try attach(text)
+    prepare(opened)
+    waitUntilIdle(opened.surface)
     let surface = opened.surface
     print("PERF-FRAMES", label, "lines", opened.document.text.lineCount)
     var median = 0.0
@@ -140,7 +149,7 @@ final class FramePerfTests: EngineTestCase {
   }
 
   /// main で 33ms ごとに 25ms 回り続ける（構文解析などの重さを模す）。
-  private func startLoad() {
+  func startLoad() {
     let timer = Timer(timeInterval: 0.033, repeats: true) { _ in
       let end = CACurrentMediaTime() + 0.025
       while CACurrentMediaTime() < end {}
@@ -150,7 +159,7 @@ final class FramePerfTests: EngineTestCase {
   }
 
   /// 合成する指の出来事 1 つ（`at` は流し始めからの秒）。
-  private struct Planned: Sendable {
+  struct Planned: Sendable {
     var at: Double
     var phase: ScrollInput.Phase = .none
     var momentum: ScrollInput.Phase = .none
@@ -158,7 +167,7 @@ final class FramePerfTests: EngineTestCase {
   }
 
   /// 指を一定の速さ（pt/秒、下へ）で動かし続ける。出来事は別のスレッドが実機の刻みで main へ流す。
-  private func runDrag(_ surfaces: [MetalTextSurface], seconds: Double, speed: Double) {
+  func runDrag(_ surfaces: [MetalTextSurface], seconds: Double, speed: Double) {
     let step = 0.0057
     var inputs = [Planned(at: 0, phase: .began)]
     for k in 1...Int(seconds / step) {
@@ -169,7 +178,7 @@ final class FramePerfTests: EngineTestCase {
   }
 
   /// はじく: 80ms で速さを上げて離し、OS の momentum の出来事（1 回ごとに 0.95 倍で落ちる列）が続く。
-  private func runFlick(_ surface: MetalTextSurface, peak: Double) {
+  func runFlick(_ surface: MetalTextSurface, peak: Double) {
     let step = 0.0057
     var inputs = [Planned(at: 0, phase: .began)]
     let ramp = Int(0.08 / step)
@@ -192,7 +201,7 @@ final class FramePerfTests: EngineTestCase {
   }
 
   /// 先頭で指を下へ動かし続けて端の外へ引っ張り（見せるのは 1/20）、離す。戻りは描画スレッドだけが進める。
-  private func runPull(_ surface: MetalTextSurface) {
+  func runPull(_ surface: MetalTextSurface) {
     let step = 0.0057
     var inputs = [Planned(at: 0, phase: .began)]
     for k in 1...Int(0.4 / step) {
@@ -204,7 +213,7 @@ final class FramePerfTests: EngineTestCase {
 
   /// 出来事を別のスレッドから実時間で main へ流し、流し終えるまで main を回す。時刻は流した時刻（実機の出来事の時刻に
   /// 相当）。
-  private func feed(_ surfaces: [MetalTextSurface], _ inputs: [Planned]) {
+  func feed(_ surfaces: [MetalTextSurface], _ inputs: [Planned]) {
     let done = DispatchSemaphore(value: 0)
     let targets = surfaces.map { Transfer(value: $0) }
     let thread = Thread {
@@ -228,10 +237,17 @@ final class FramePerfTests: EngineTestCase {
     RunLoop.main.run(until: Date().addingTimeInterval(0.1))
   }
 
-  /// 描画スレッドが刻みを止めるまで main を回す。
+  /// 描画スレッドが刻みを止め、つまみが消え終わるまで main を回す（スクロールで現れたつまみは、止まって 500ms 後に消え
+  /// 始めて 800ms で消える——その間に起きるのは止まっている間の起床ではない）。
   func waitUntilIdle(_ surface: MetalTextSurface) {
     let deadline = Date().addingTimeInterval(10)
-    while !driver.isPaused(surface.id), Date() < deadline {
+    let id = surface.id
+    let fading = {
+      RenderThread.shared.performAndWait { renderer in
+        renderer.slot(id).map { $0.motion.animating || $0.motion.wakeAt != nil } ?? false
+      }
+    }
+    while !driver.isPaused(surface.id) || fading(), Date() < deadline {
       RunLoop.main.run(until: Date().addingTimeInterval(0.01))
     }
     RunLoop.main.run(until: Date().addingTimeInterval(0.4))
@@ -242,7 +258,7 @@ final class FramePerfTests: EngineTestCase {
     sorted.isEmpty ? 0 : sorted[min(sorted.count - 1, Int(Double(sorted.count) * q))] * 1000
   }
 
-  private func report(
+  func report(
     _ label: String, _ name: String, _ totals: FrameRecorder.Totals, frameLimit: Double = 2,
     gatesLateCommits: Bool = true
   ) {

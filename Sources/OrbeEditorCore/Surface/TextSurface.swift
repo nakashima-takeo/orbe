@@ -159,7 +159,17 @@ public struct TextViewport: Equatable, Sendable {
   public static let empty = TextViewport(firstVisible: 0, hiddenFraction: 0, visibleLines: 0)
 }
 
-/// 面の見え方。色は名前付き（dynamic）の NSColor を渡し、外観は描画時に解く。装備の寸法と色もここで渡し、
+/// 自分で俯瞰（ミニマップ・縦横のスクロールバーと印・影）を描く面。載せる側は俯瞰の部品を出さず、面の上に浮かべる
+/// 部品（検索バー）を右列の幅から置く。
+@MainActor
+public protocol OverviewDrawingSurface: TextSurface {
+  /// 右列（ミニマップ＋縦スクロールバー）の幅（pt）。本文の座標ではなく view の配置の事実で、view の幅と行番号の列の桁で
+  /// 変わる。載せる側は大きさを変えたときと見えている範囲の知らせで読み直す（本文の変化の知らせの中では変化の前の幅を
+  /// 答える）。載せる側が浮かべる部品を置くためだけに使う。
+  var rightColumnWidth: CGFloat { get }
+}
+
+/// 面の見え方。色は名前付き（dynamic）の NSColor を渡し、外観は描画時に解く。装備と俯瞰の寸法と色もここで渡し、
 /// エンジンは値を持たない。
 public struct TextSurfaceStyle {
   public var font: NSFont
@@ -188,6 +198,7 @@ public struct TextSurfaceStyle {
   public var marks: Marks
   public var decorations: Decorations
   public var highlights: Highlights
+  public var overview: Overview
 
   /// git ガター（行番号の右の列）の見え方。色は α 込み。
   public struct Marks {
@@ -263,13 +274,107 @@ public struct TextSurfaceStyle {
     }
   }
 
+  /// 俯瞰の見え方——寸法・色（α 込み）・帯とつまみの現れる・消える時間。字の明るさの係数と全体の不透明度は VS Code の
+  /// 規則で、見え方ではない（→ `MinimapCharSheet`）。
+  public struct Overview {
+    public var minimap: Minimap
+    public var scrollbar: Scrollbar
+    /// 先頭の行が上へ隠れている間の本文の上端の影と、本文が右に続くときのミニマップの左端の影の色。
+    public var topShadow: NSColor
+    public var minimapShadow: NSColor
+    /// 帯とつまみが現れる時間・つまみが消える時間・スクロールが止まってからつまみが消え始めるまで（秒）。
+    public var fadeIn: Double
+    public var fadeOut: Double
+    public var hideDelay: Double
+
+    public init(
+      minimap: Minimap, scrollbar: Scrollbar, topShadow: NSColor, minimapShadow: NSColor,
+      fadeIn: Double, fadeOut: Double, hideDelay: Double
+    ) {
+      self.minimap = minimap
+      self.scrollbar = scrollbar
+      self.topShadow = topShadow
+      self.minimapShadow = minimapShadow
+      self.fadeIn = fadeIn
+      self.fadeOut = fadeOut
+      self.hideDelay = hideDelay
+    }
+  }
+
+  /// ミニマップ——幅の上限と、帯（普段・帯の上・ドラッグ中）・選択・検索の一致・語の出現・git の印の色。
+  public struct Minimap {
+    public var maxWidth: CGFloat
+    public var slider: NSColor
+    public var sliderHover: NSColor
+    public var sliderActive: NSColor
+    public var selection: NSColor
+    public var findMatch: NSColor
+    public var wordOccurrence: NSColor
+    public var added: NSColor
+    public var modified: NSColor
+    public var removed: NSColor
+
+    public init(
+      maxWidth: CGFloat, slider: NSColor, sliderHover: NSColor, sliderActive: NSColor,
+      selection: NSColor, findMatch: NSColor, wordOccurrence: NSColor, added: NSColor,
+      modified: NSColor, removed: NSColor
+    ) {
+      self.maxWidth = maxWidth
+      self.slider = slider
+      self.sliderHover = sliderHover
+      self.sliderActive = sliderActive
+      self.selection = selection
+      self.findMatch = findMatch
+      self.wordOccurrence = wordOccurrence
+      self.added = added
+      self.modified = modified
+      self.removed = removed
+    }
+  }
+
+  /// スクロールバー——縦の幅・横の高さと、つまみ（普段・つまみの上・ドラッグ中）・印（縁・検索の一致・語の出現・git・
+  /// キャレット）の色。
+  public struct Scrollbar {
+    public var width: CGFloat
+    public var horizontalHeight: CGFloat
+    public var slider: NSColor
+    public var sliderHover: NSColor
+    public var sliderActive: NSColor
+    public var border: NSColor
+    public var findMatch: NSColor
+    public var wordOccurrence: NSColor
+    public var added: NSColor
+    public var modified: NSColor
+    public var removed: NSColor
+    public var caret: NSColor
+
+    public init(
+      width: CGFloat, horizontalHeight: CGFloat, slider: NSColor, sliderHover: NSColor,
+      sliderActive: NSColor, border: NSColor, findMatch: NSColor, wordOccurrence: NSColor,
+      added: NSColor, modified: NSColor, removed: NSColor, caret: NSColor
+    ) {
+      self.width = width
+      self.horizontalHeight = horizontalHeight
+      self.slider = slider
+      self.sliderHover = sliderHover
+      self.sliderActive = sliderActive
+      self.border = border
+      self.findMatch = findMatch
+      self.wordOccurrence = wordOccurrence
+      self.added = added
+      self.modified = modified
+      self.removed = removed
+      self.caret = caret
+    }
+  }
+
   public init(
     font: NSFont, lineHeight: CGFloat, topInset: CGFloat, textColor: NSColor,
     backgroundColor: NSColor, caretColor: NSColor, caretSize: CGSize, selectionColor: NSColor,
     inactiveSelectionColor: NSColor, gutterFont: NSFont, gutterTextColor: NSColor,
     gutterWidth: CGFloat, gutterTrailingInset: CGFloat,
     roleColors: [SyntaxRole: NSColor], marks: Marks, decorations: Decorations,
-    highlights: Highlights
+    highlights: Highlights, overview: Overview
   ) {
     self.font = font
     self.lineHeight = lineHeight
@@ -288,5 +393,6 @@ public struct TextSurfaceStyle {
     self.marks = marks
     self.decorations = decorations
     self.highlights = highlights
+    self.overview = overview
   }
 }

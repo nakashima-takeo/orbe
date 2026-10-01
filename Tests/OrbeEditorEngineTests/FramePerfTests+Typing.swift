@@ -120,7 +120,7 @@ extension FramePerfTests {
   /// 打鍵を別のスレッドから実時間で main へ流す（時刻は流した時刻）。人の打鍵は表示の刻みと揃わないので、間隔に 1 刻み
   /// までの揺らぎを足す（揺らぎが無いと、打鍵が刻みに対していつも同じ位相に来て、遅れが位相で決まってしまう）。打鍵 1 回
   /// ぶんの main の仕事（秒）を、main のスレッドの CPU 時間と壁時計の時間でそれぞれ昇順に返す。
-  private func typeKeys(
+  func typeKeys(
     _ surface: MetalTextSurface, count: Int, interval: Double,
     stroke: @escaping @MainActor (MetalTextSurface, Int) -> Void
   ) -> (cpu: [Double], wall: [Double]) {
@@ -139,7 +139,7 @@ extension FramePerfTests {
         DispatchQueue.main.async {
           MainActor.assumeIsolated {
             let began = (clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID), CACurrentMediaTime())
-            target.value.transact(keystroke: time) { stroke(target.value, k) }
+            target.value.input(keystroke: time) { stroke(target.value, k) }
             let cpu = Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - began.0) / 1e9
             let wall = CACurrentMediaTime() - began.1
             durations.withLock { $0.append((cpu, wall)) }
@@ -158,7 +158,7 @@ extension FramePerfTests {
     return (measured.map(\.cpu).sorted(), measured.map(\.wall).sorted())
   }
 
-  private static func ms(_ milliseconds: Double) -> String {
+  static func ms(_ milliseconds: Double) -> String {
     String(format: "%.2fms", milliseconds)
   }
 }

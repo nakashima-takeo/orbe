@@ -14,6 +14,8 @@ enum DilationProbe {
   /// 段 1…5 のマスクを描く塗りの明るさ。Core Graphics が塗りの明るさで選ぶ太らせの区切り（おおよそ 0.32・0.58・
   /// 0.78・0.94）の間の値で、段ごとに違う太らせを選ばせる。
   private static let fills: [CGFloat] = [0.16, 0.45, 0.68, 0.86, 0.97]
+  /// 段の数（0 は太らせ無し）。
+  static var levels: Int { fills.count + 1 }
 
   /// 段 `level` のマスクを描く塗りの明るさ（段 0 は太らせないので nil）。
   static func fill(level: Int) -> CGFloat? { level > 0 ? fills[level - 1] : nil }

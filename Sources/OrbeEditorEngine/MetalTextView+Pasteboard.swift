@@ -12,12 +12,12 @@ extension MetalTextView {
   /// 選択を写す。選択が空ならキャレットの行を写し、行ごと写した印を付ける。色の付く文書で、写したものが本文の 1 つの範囲
   /// （選択 1 つか、選択が空のときの 1 行）で 64KB 未満なら、構文色付きの HTML も載せる。
   @objc func copy(_ sender: Any?) {
-    writeCopy()
+    surface?.inputScope { writeCopy() }
   }
 
   /// 写してから消す。選択が空なら行を消す。
   @objc func cut(_ sender: Any?) {
-    surface?.transact {
+    surface?.input {
       writeCopy()
       surface?.perform(.cut)
     }
@@ -27,7 +27,7 @@ extension MetalTextView {
   /// 入れる。RTF と HTML は読まない。
   @objc func paste(_ sender: Any?) {
     guard let surface else { return }
-    surface.transact {
+    surface.input {
       surface.editor.finishComposition(.commit)
       if let host = surface.host, let urls = fileURLs(on: pasteboard) {
         surface.perform(.paste(host.insertionText(forFiles: urls), entireLine: false))
@@ -98,8 +98,10 @@ extension MetalTextView {
   /// 右クリック・⌃クリックのメニュー（中身と文言は載せる側が組む）。先に変換を確定し、焦点を取る。選択の外で押せば
   /// キャレットをそこへ動かし、選択の中（両端を含む）なら選択を保つ。
   override func menu(for event: NSEvent) -> NSMenu? {
-    guard let surface, let host = surface.host else { return nil }
-    surface.transact {
+    guard let surface, let host = surface.host,
+      overview.area(at: convert(event.locationInWindow, from: nil)) == nil
+    else { return nil }
+    surface.input {
       surface.editor.finishComposition(.commit)
       window?.makeFirstResponder(self)
       let point = convert(event.locationInWindow, from: nil)
@@ -136,7 +138,7 @@ extension MetalTextView: @preconcurrency NSServicesMenuRequestor {
     guard let surface, types.contains(.string), let text = surface.currentContent?.text else {
       return false
     }
-    surface.editor.finishComposition(.commit)
+    surface.inputScope { surface.editor.finishComposition(.commit) }
     let selection = surface.editor.state.cursors.primary.selection
     guard selection.length > 0 else { return false }
     pboard.declareTypes([.string], owner: nil)
@@ -146,7 +148,7 @@ extension MetalTextView: @preconcurrency NSServicesMenuRequestor {
   /// サービスが返した平文で選択を置き換える（前後で区切る）。
   func readSelection(from pboard: NSPasteboard) -> Bool {
     guard let surface, let string = pboard.string(forType: .string) else { return false }
-    surface.perform(.paste(string, entireLine: false))
+    surface.inputScope { surface.perform(.paste(string, entireLine: false)) }
     return true
   }
 }

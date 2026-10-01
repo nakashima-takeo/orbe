@@ -79,13 +79,20 @@ extension MetalTextView: NSDraggingSource {
   }
 
   /// 落とす位置の印を置き、端の帯の中なら自動でスクロールする（AppKit が周期で呼ぶ）。スクロールと印は 1 つの取引で置き、
-  /// 当たりは取引の中で置いた位置で取る。
+  /// 当たりは取引の中で置いた位置で取る。右列（ミニマップと縦スクロールバー）の上は本文の外として扱い、送らず、戻ったとき
+  /// 上にいた時間ぶん跳ばない。本文に重なる横スクロールバーの上は、落とさないが帯の中なら送る。
   override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
     guard let surface else { return [] }
     var operation: NSDragOperation = []
-    surface.transact {
+    surface.input {
       let point = convert(sender.draggingLocation, from: nil)
-      autoscrollDrop(at: point)
+      let area = overview.area(at: point)
+      if area == .minimap || area == .vertical {
+        dropScrollTime = nil
+      } else {
+        autoscrollDrop(at: point)
+      }
+      guard area == nil else { return showDrop(nil) }
       let drop = dropPlan(sender)
       showDrop(drop.indicator)
       operation = drop.operation
@@ -94,16 +101,25 @@ extension MetalTextView: NSDraggingSource {
   }
 
   override func draggingExited(_ sender: NSDraggingInfo?) {
-    showDrop(nil)
+    surface?.inputScope { showDrop(nil) }
   }
 
   override func concludeDragOperation(_ sender: NSDraggingInfo?) {
-    showDrop(nil)
+    surface?.inputScope { showDrop(nil) }
   }
 
   /// 落とす。ファイルを開くのは別の文書へ焦点を移すので、印を消してから載せる側へ渡す。
   override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-    guard let surface, let action = dropPlan(sender).action else {
+    guard let surface else { return false }
+    var performed = false
+    surface.inputScope { performed = performDrop(sender) }
+    return performed
+  }
+
+  private func performDrop(_ sender: NSDraggingInfo) -> Bool {
+    guard let surface, overview.area(at: convert(sender.draggingLocation, from: nil)) == nil,
+      let action = dropPlan(sender).action
+    else {
       showDrop(nil)
       return false
     }
@@ -123,7 +139,7 @@ extension MetalTextView: NSDraggingSource {
   /// 印を消す・焦点を取る・入れるを 1 つの取引で行う。
   private func insertDrop(_ string: String, at offset: Int, moving: NSRange?) {
     guard let surface else { return }
-    surface.transact {
+    surface.input {
       showDrop(nil)
       window?.makeFirstResponder(self)
       surface.perform(.drop(string, at: offset, moving: moving))
@@ -146,7 +162,8 @@ extension MetalTextView: NSDraggingSource {
   }
 
   private func showDrop(_ offset: Int?) {
-    guard let surface, surface.material.read().drop != offset else { return }
+    guard let surface, shownDrop != offset else { return }
+    shownDrop = offset
     surface.write { $0.drop = offset }
   }
 
@@ -166,7 +183,7 @@ extension MetalTextView: NSDraggingSource {
       return
     }
     guard let last = dropScrollTime else { return }
-    let (position, limits) = surface.scroll.peek(at: now)
+    let (position, limits) = surface.scrollState(at: now)
     let visible = (bounds.height - config.topInset) / band
     let speed = DragScrollSpeed.speed(outside: min(abs(depth), band) / band, visible: visible)
     var p = position

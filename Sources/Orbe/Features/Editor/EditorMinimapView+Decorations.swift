@@ -10,7 +10,7 @@ extension EditorMinimapView {
   ) {
     guard !layout.lines.isEmpty else { return }
     context.saveGState()
-    context.setAlpha(style.opacity)
+    context.setAlpha(MinimapCharSheet.opacity)
     context.beginTransparencyLayer(auxiliaryInfo: nil)
     defer {
       context.endTransparencyLayer()

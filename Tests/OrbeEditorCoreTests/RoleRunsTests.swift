@@ -42,6 +42,32 @@ final class RoleRunsTests: XCTestCase {
       ])
   }
 
+  /// 読み口は字ごとの役割と同じ答えを返す——増えていくオフセットでも、右から左の字の塊の中のように戻っても、本文の外でも。
+  func testCursorMatchesTheRolesWhetherOffsetsGoForwardOrBack() {
+    let runs = runs([span(0, 3, .keyword), span(5, 2, .type), span(12, 1, .string)], length: 16)
+    let expected = perUnit(runs)
+    let offsets = Array(0...7) + [15, 14, 13, 12, 11, 10, 9, 8] + [2, 6, 12, 16, 20]
+    var cursor = runs.cursor(from: 0)
+    for offset in offsets {
+      XCTAssertEqual(
+        cursor.role(at: offset), offset < expected.count ? expected[offset] : nil, "オフセット \(offset)"
+      )
+    }
+    var late = runs.cursor(from: 6)
+    XCTAssertEqual(late.role(at: 6), .type, "途中から始める")
+    XCTAssertEqual(late.role(at: 1), .keyword, "始めた位置より前へ戻る")
+    let many = self.runs(
+      (0..<200).map { span($0 * 3, 1, $0.isMultiple(of: 2) ? .keyword : .string) }, length: 600)
+    let expectedMany = perUnit(many)
+    var far = many.cursor(from: 0)
+    for offset in [0, 3, 450, 451, 453, 9, 599] {
+      XCTAssertEqual(far.role(at: offset), expectedMany[offset], "遠くへ飛んだ先 \(offset)")
+    }
+    var ranged = runs.cursor(from: 0)
+    XCTAssertEqual(ranged.run(at: 6).range, 5..<7, "連なりの区間")
+    XCTAssertEqual(ranged.run(at: 9).role, nil)
+  }
+
   /// 挿入は挿入点を含む連なりを伸ばす——語の終わりに打てば前の語の色を引き継ぎ（境は前の連なり）、先頭の挿入は後ろの
   /// 連なりを伸ばす。削除は縮め、消えた連なりの両隣が同じ役割なら繋がる。
   func testEditsExtendTheRunBeforeTheInsertionAndShrinkOnDeletion() {

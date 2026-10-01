@@ -33,15 +33,17 @@ final class MinimapChunks {
     var lastUse: Int
   }
 
-  private let style: MinimapStyle
+  private let textColor: NSColor
+  private let roleColors: [SyntaxRole: NSColor]
   private var images: [Int: Entry] = [:]
   private var uses = 0
   private var canvas: Canvas?
   private var indentUnit = 0
   private var sheet: MinimapCharSheet?
 
-  init(style: MinimapStyle) {
-    self.style = style
+  init(style: TextSurfaceStyle) {
+    textColor = style.textColor
+    roleColors = style.roleColors
   }
 
   var cached: Set<Int> { Set(images.keys) }
@@ -110,14 +112,15 @@ final class MinimapChunks {
     let units = text.units(in: range)
     let roles = document.roles.roles(in: range)
     let scale = canvas.scale
-    let sheet = self.sheet ?? MinimapCharSheet(scale: scale, font: Theme.Typography.editorCode)
+    let sheet =
+      self.sheet ?? MinimapCharSheet(scale: scale, font: Theme.Typography.editorCode as CTFont)
     self.sheet = sheet
     let width = max(1, canvas.width)
     let lineHeight = sheet.glyphHeight
     let height = Self.lines * lineHeight
     let columns = MinimapLine.columns(canvasWidth: canvas.width, scale: scale)
     let colors = resolvedColors(canvas.appearance)
-    let ratio = canvas.dark ? style.darkGlyphRatio : style.lightGlyphRatio
+    let ratio = MinimapCharSheet.glyphRatio(dark: canvas.dark)
     var pixels = [UInt8](repeating: 0, count: width * height * 4)
     var roleIndex = 0
     for row in rows {
@@ -179,8 +182,8 @@ final class MinimapChunks {
         let c = color.usingColorSpace(.sRGB) ?? color
         return RGB(r: c.redComponent, g: c.greenComponent, b: c.blueComponent)
       }
-      text = rgb(style.textColor)
-      for (role, color) in style.roleColors { roles[role] = rgb(color) }
+      text = rgb(textColor)
+      for (role, color) in roleColors { roles[role] = rgb(color) }
     }
     return Colors(text: text, roles: roles)
   }

@@ -42,6 +42,24 @@ final class TextRopeTests: XCTestCase {
     }
     XCTAssertEqual(
       rope.rows(ofAscending: ranges), ranges.map(rope.rows(of:)), "昇順の区間の行", file: file, line: line)
+    let count = starts.count
+    for rows in [0..<count, (count / 3)..<(count / 2 + 1), (count - 1)..<(count + 2)] {
+      XCTAssertEqual(
+        rope.lineStarts(rows), (rows.lowerBound...rows.upperBound).map(rope.lineStart),
+        "行 \(rows) の行頭", file: file, line: line)
+      for limit in [0, 3, 2000] {
+        let heads = rope.lineHeads(rows, limit: limit)
+        for (index, row) in rows.enumerated() {
+          let start = rope.lineStart(row)
+          let length = rope.lineEnd(row) - start
+          XCTAssertEqual(
+            Array(heads.head(index)),
+            Array(rope.units(in: NSRange(location: start, length: min(length, limit)))),
+            "行 \(row) の頭 \(limit) 単位", file: file, line: line)
+          XCTAssertEqual(heads.isComplete(index), length <= limit, file: file, line: line)
+        }
+      }
+    }
     var offset = 0
     for chunk in chunks(of: rope) {
       offset += chunk.count

@@ -13,7 +13,7 @@ import XCTest
 final class EditorScrollbarTests: OrbeTestCase {
   func testThumbFollowsTheScrollbarGeometry() throws {
     let hosted = try hostOverview(numberedLines(1000))
-    let bar = hosted.pane.scrollbar
+    let bar = hosted.pane.appKitOverview.scrollbar
     let (first, visible) = hosted.document.viewportLines
     let expected = ScrollbarGeometry(
       lineCount: hosted.document.text.lineCount, firstLine: first, visibleLines: visible,
@@ -24,38 +24,38 @@ final class EditorScrollbarTests: OrbeTestCase {
 
   func testDraggingTheThumbScrollsTheText() throws {
     let hosted = try hostOverview(numberedLines(1000))
-    let bar = hosted.pane.scrollbar
+    let bar = hosted.pane.appKitOverview.scrollbar
     let geometry = try XCTUnwrap(bar.geometry)
     let grab = NSPoint(x: 7, y: geometry.sliderPosition + 5)
     bar.mouseDown(with: bar.mouseEvent(.leftMouseDown, at: grab))
     bar.mouseDragged(with: bar.mouseEvent(.leftMouseDragged, at: grab.offset(dy: 120)))
     bar.mouseUp(with: bar.mouseEvent(.leftMouseUp, at: grab.offset(dy: 120)))
-    XCTAssertEqual(hosted.firstLine, geometry.firstLine(afterDragging: 120), accuracy: 0.05)
+    XCTAssertEqual(hosted.firstLine, geometry.position(afterDragging: 120), accuracy: 0.05)
   }
 
   /// トラックを押すとつまみの中央がそこへ来るよう飛び、同じ押下のままドラッグを続けられる（起点は飛んだ後の状態）。
   func testPressingTheTrackJumpsThereAndKeepsDragging() throws {
     let hosted = try hostOverview(numberedLines(1000))
-    let bar = hosted.pane.scrollbar
+    let bar = hosted.pane.appKitOverview.scrollbar
     let before = try XCTUnwrap(bar.geometry)
     let press = NSPoint(x: 7, y: 250)
     bar.mouseDown(with: bar.mouseEvent(.leftMouseDown, at: press))
     XCTAssertEqual(
-      hosted.firstLine, before.firstLine(centeringSliderAt: 250), accuracy: 0.05, "押した位置へ")
+      hosted.firstLine, before.position(centeringSliderAt: 250), accuracy: 0.05, "押した位置へ")
     let jumped = try XCTUnwrap(bar.geometry)
     XCTAssertEqual(
       jumped.sliderPosition + jumped.sliderLength / 2, 250, accuracy: 1, "つまみの中央が押した位置")
     bar.mouseDragged(with: bar.mouseEvent(.leftMouseDragged, at: press.offset(dy: -40)))
     bar.mouseUp(with: bar.mouseEvent(.leftMouseUp, at: press.offset(dy: -40)))
     XCTAssertEqual(
-      hosted.firstLine, jumped.firstLine(afterDragging: -40), accuracy: 0.05, "そのままドラッグ")
+      hosted.firstLine, jumped.position(afterDragging: -40), accuracy: 0.05, "そのままドラッグ")
   }
 
   /// つまみは開いた直後は隠れ、本体の上にポインタがある間とドラッグ中は見え、スクロールで現れて 500ms 後に消える。
   func testTheThumbShowsWhileHoveringOrDraggingAndHidesAfterScrolling() throws {
     let hosted = try hostOverview(numberedLines(1000))
     let pane = hosted.pane
-    let bar = pane.scrollbar
+    let bar = pane.appKitOverview.scrollbar
     var hide: (() -> Void)?
     var delays: [TimeInterval] = []
     bar.hideDelay.schedule = { delay, fire in
@@ -64,9 +64,9 @@ final class EditorScrollbarTests: OrbeTestCase {
     }
     XCTAssertFalse(bar.isThumbShown, "開いた直後は隠れる")
 
-    pane.mouseEntered(with: pane.enterExitEvent(.mouseEntered, area: pane.bodyTracking))
+    try pane.deliverEnterExit(.mouseEntered, area: pane.appKitOverview.tracking)
     XCTAssertTrue(bar.isThumbShown, "本体の上では見える")
-    pane.mouseExited(with: pane.enterExitEvent(.mouseExited, area: pane.bodyTracking))
+    try pane.deliverEnterExit(.mouseExited, area: pane.appKitOverview.tracking)
     XCTAssertFalse(bar.isThumbShown, "外へ出れば消える")
 
     hosted.document.scroll(toFirstLine: 30)
@@ -88,7 +88,7 @@ final class EditorScrollbarTests: OrbeTestCase {
   /// と同じ）。行の中の打鍵では出ない。
   func testTheThumbShowsWhenTheScrollStateChanges() throws {
     let hosted = try hostOverview(String(repeating: "x", count: 400) + "\n" + numberedLines(1000))
-    let bar = hosted.pane.scrollbar
+    let bar = hosted.pane.appKitOverview.scrollbar
     let document = hosted.document
     var hide: (() -> Void)?
     bar.hideDelay.schedule = { _, fire in hide = fire }
@@ -126,41 +126,30 @@ final class EditorScrollbarTests: OrbeTestCase {
   func testReleasingADragOutsideTheBodyHidesTheThumb() throws {
     let hosted = try hostOverview(numberedLines(1000))
     let pane = hosted.pane
-    let bar = pane.scrollbar
-    let body = try XCTUnwrap(pane.bodyTracking)
+    let bar = pane.appKitOverview.scrollbar
+    let body = try XCTUnwrap(pane.appKitOverview.tracking)
     XCTAssertTrue(body.options.contains(.enabledDuringMouseDrag), "ドラッグ中も本体の出入りを受ける")
-    pane.mouseEntered(with: pane.enterExitEvent(.mouseEntered, area: body))
+    try pane.deliverEnterExit(.mouseEntered, area: body)
+    XCTAssertTrue(bar.isThumbShown, "本体の上では見える")
     let grab = NSPoint(x: 7, y: try XCTUnwrap(bar.geometry).sliderPosition + 5)
     bar.mouseDown(with: bar.mouseEvent(.leftMouseDown, at: grab))
-    pane.mouseExited(with: pane.enterExitEvent(.mouseExited, area: body))
+    try pane.deliverEnterExit(.mouseExited, area: body)
     XCTAssertTrue(bar.isThumbShown, "ドラッグ中は残る")
     bar.mouseUp(with: bar.mouseEvent(.leftMouseUp, at: grab.offset(dx: 300)))
     XCTAssertFalse(bar.isThumbShown, "外で離せば消える")
   }
 
-  /// サイドバーや列の頭の上ではつまみは出ない（SwiftUI の骨は自分の出入りを pane へ流してくる）。
-  func testTheThumbIgnoresEnteringTheSidebar() throws {
-    let hosted = try hostOverview(numberedLines(1000))
-    let pane = hosted.pane
-    let side = NSTrackingArea(
-      rect: pane.sideHost.bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow],
-      owner: pane.sideHost)
-    pane.sideHost.mouseEntered(with: pane.sideHost.enterExitEvent(.mouseEntered, area: side))
-    pane.mouseEntered(with: pane.enterExitEvent(.mouseEntered, area: side))
-    XCTAssertFalse(pane.scrollbar.isThumbShown, "本体の外の出入りでは出ない")
-  }
-
   /// ドラッグ中の「この行を先頭に」は runloop 1 回に最新の 1 つだけ当たる（遠くへ飛ぶ layout を溜めない）。
   func testDragScrollsAreCoalescedToTheLatestPerRunLoop() throws {
     let hosted = try hostOverview(numberedLines(1000))
-    let bar = hosted.pane.scrollbar
+    let bar = hosted.pane.appKitOverview.scrollbar
     let geometry = try XCTUnwrap(bar.geometry)
     let grab = NSPoint(x: 7, y: geometry.sliderPosition + 5)
     bar.mouseDown(with: bar.mouseEvent(.leftMouseDown, at: grab))
     bar.mouseDragged(with: bar.mouseEvent(.leftMouseDragged, at: grab.offset(dy: 30)))
     bar.mouseDragged(with: bar.mouseEvent(.leftMouseDragged, at: grab.offset(dy: 50)))
     XCTAssertEqual(hosted.firstLine, 0, "その場では当てない")
-    let expected = geometry.firstLine(afterDragging: 50)
+    let expected = geometry.position(afterDragging: 50)
     pumpMain(until: { abs(hosted.firstLine - expected) < 0.05 }, "次の runloop で最新の位置へ")
     bar.mouseUp(with: bar.mouseEvent(.leftMouseUp, at: grab.offset(dy: 50)))
   }
@@ -175,7 +164,7 @@ final class EditorScrollbarTests: OrbeTestCase {
     pumpMain(until: { hosted.document.hunks.count == 3 }, "ハンク")
     hosted.document.surface.selectedRange = NSRange(
       location: hosted.document.text.lineStart(120), length: 0)
-    let bar = hosted.pane.scrollbar
+    let bar = hosted.pane.appKitOverview.scrollbar
     let (_, visible) = hosted.document.viewportLines
     let scale = hosted.window.backingScaleFactor
     let ruler = OverviewRuler(
@@ -202,7 +191,7 @@ final class EditorScrollbarTests: OrbeTestCase {
     let hosted = try hostOverview(numberedLines(200))
     let document = hosted.document
     let rope = document.text
-    let bar = hosted.pane.scrollbar
+    let bar = hosted.pane.appKitOverview.scrollbar
     let scale = hosted.window.backingScaleFactor
     let ruler = OverviewRuler(
       lineCount: rope.lineCount, visibleLines: document.viewportLines.visible,
@@ -238,7 +227,7 @@ final class EditorScrollbarTests: OrbeTestCase {
     // キャレットの印とつまみを一致の印から離す（つまみは印の上に重なる）。
     hosted.document.surface.selectedRange = NSRange(location: 0, length: 0)
     hosted.document.scroll(toFirstLine: 0)
-    let bar = pane.scrollbar
+    let bar = pane.appKitOverview.scrollbar
     let (_, visible) = hosted.document.viewportLines
     let scale = hosted.window.backingScaleFactor
     let ruler = OverviewRuler(
@@ -259,23 +248,25 @@ final class EditorScrollbarTests: OrbeTestCase {
   func testShadowsFollowTheScrollAndTheWidth() throws {
     let hosted = try hostOverview(numberedLines(100) + String(repeating: "x", count: 400) + "\n")
     let pane = hosted.pane
-    XCTAssertFalse(pane.scrollShadow.showsTop, "先頭では影が無い")
+    XCTAssertFalse(pane.appKitOverview.shadow.showsTop, "先頭では影が無い")
     hosted.document.scroll(toFirstLine: 3.5)
-    pumpMain(until: { pane.scrollShadow.showsTop }, "スクロールすると上端に影")
+    pumpMain(until: { pane.appKitOverview.shadow.showsTop }, "スクロールすると上端に影")
     hosted.document.scroll(toFirstLine: 99)
     pumpMain(until: { hosted.document.surface.viewport.clipsRight }, "長い行が見える")
-    XCTAssertEqual(pane.scrollShadow.frame.maxX, pane.minimap.frame.minX, "影は本文の上だけ（ミニマップに掛けない）")
-    let edge = try XCTUnwrap(pane.scrollShadow.minimapEdge, "本文が右に続くときはミニマップ左の影")
-    XCTAssertEqual(edge, pane.scrollShadow.bounds.width)
+    XCTAssertEqual(
+      pane.appKitOverview.shadow.frame.maxX, pane.appKitOverview.minimap.frame.minX,
+      "影は本文の上だけ（ミニマップに掛けない）")
+    let edge = try XCTUnwrap(pane.appKitOverview.shadow.minimapEdge, "本文が右に続くときはミニマップ左の影")
+    XCTAssertEqual(edge, pane.appKitOverview.shadow.bounds.width)
     hosted.document.scroll(toFirstLine: 3.5)
-    let pixels = try ViewPixels(pane.scrollShadow)
+    let pixels = try ViewPixels(pane.appKitOverview.shadow)
     XCTAssertGreaterThan(pixels.color(edge - 7, 100).alphaComponent, 0, "6pt の帯の外側（左）に影")
     XCTAssertEqual(pixels.color(edge - 3, 100).alphaComponent, 0, "帯の中には描かない")
     XCTAssertGreaterThan(pixels.color(100, 0.5).alphaComponent, 0, "上端の影")
     XCTAssertEqual(pixels.color(100, 12).alphaComponent, 0, "上端の影は 6pt まで")
     hosted.document.scroll(toFirstLine: 0)
-    pumpMain(until: { !pane.scrollShadow.showsTop }, "先頭に戻れば影は消える")
+    pumpMain(until: { !pane.appKitOverview.shadow.showsTop }, "先頭に戻れば影は消える")
     let narrow = try hostOverview(numberedLines(10))
-    XCTAssertNil(narrow.pane.scrollShadow.minimapEdge, "右に続かなければ左の影は無い")
+    XCTAssertNil(narrow.pane.appKitOverview.shadow.minimapEdge, "右に続かなければ左の影は無い")
   }
 }

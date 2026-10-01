@@ -311,12 +311,16 @@ public struct SummaryTree<Element: TreeElement> {
 
   // MARK: - 前向きの読み
 
-  /// 葉までの経路を積んで、要素を前向きに返す。
+  /// 葉までの経路を積んで、要素を前向きに返す。今の葉の要素は手元に持ち、葉を移るときだけ経路を辿る。
   public struct Elements: Sequence, IteratorProtocol {
+    /// 葉より上の経路（節と、次に降りる子の番号）。
     private var stack: [(node: Node, next: Int)] = []
+    private var leaf: [Element] = []
+    private var position = 0
 
     fileprivate init(root: Node, from index: Int) {
       guard index < root.count else { return }
+      stack.reserveCapacity(root.height)
       var node = root
       var index = index
       while node.height > 0 {
@@ -329,29 +333,28 @@ public struct SummaryTree<Element: TreeElement> {
           index -= child.count
         }
       }
-      stack.append((node, index))
+      leaf = node.elements
+      position = index
     }
 
     public mutating func next() -> Element? {
-      while let top = stack.last {
-        if top.node.height == 0 {
-          if top.next < top.node.elements.count {
-            stack[stack.count - 1].next += 1
-            return top.node.elements[top.next]
-          }
-        } else if top.next < top.node.children.count {
+      while position >= leaf.count {
+        guard let top = stack.last else { return nil }
+        if top.next < top.node.children.count {
           stack[stack.count - 1].next += 1
           var node = top.node.children[top.next]
           while node.height > 0 {
             stack.append((node, 1))
             node = node.children[0]
           }
-          stack.append((node, 0))
-          continue
+          leaf = node.elements
+          position = 0
+        } else {
+          stack.removeLast()
         }
-        stack.removeLast()
       }
-      return nil
+      position += 1
+      return leaf[position - 1]
     }
   }
 }

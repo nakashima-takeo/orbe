@@ -21,6 +21,21 @@ extension EngineTestCase {
     return window
   }
 
+  /// 窓に載せて描き終えた、帯とつまみが時間を掛けずに現れる（動きを減らす設定）面。
+  func hosted(_ text: String, size: CGSize = CGSize(width: 800, height: 400)) throws -> Opened {
+    let opened = try open(text, size: size)
+    _ = host(opened, size: size)
+    opened.surface.inputScope { opened.surface.textView.overview.setReduceMotion(true) }
+    _ = opened.surface.snapshot()
+    return opened
+  }
+
+  /// `count` 行の本文。行 i は「row i 」と `width` 個の x。
+  func rows(_ count: Int, width: Int = 10) -> String {
+    (0..<count).map { "row \($0) " + String(repeating: "x", count: width) }.joined(separator: "\n")
+      + "\n"
+  }
+
   /// 打鍵（macOS のキー割り当てを通る）。`characters` は字、または矢印などの機能キーの字（`NSUpArrowFunctionKey` など）。
   func key(
     _ opened: Opened, _ characters: String, _ flags: NSEvent.ModifierFlags = [],

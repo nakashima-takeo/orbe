@@ -197,10 +197,10 @@ final class SurfaceEditingTests: EngineTestCase {
     opened.document.onSelectionChange = {
       order.append("selection \(opened.surface.caretLocation) \(opened.document.text.length)")
     }
-    let before = opened.surface.material.read().revision
+    let before = opened.surface.drawn.revision
     type(opened, "x")
     XCTAssertEqual(order, ["text", "selection 1 11"])
-    let material = opened.surface.material.read()
+    let material = opened.surface.drawn
     XCTAssertEqual(material.revision, before + 1, "写し・行の印・キャレットを 1 回で書く")
     XCTAssertEqual(material.content?.version, opened.document.version)
     XCTAssertEqual(material.caret.carets, [1])
@@ -211,6 +211,7 @@ final class SurfaceEditingTests: EngineTestCase {
   func testAKeystrokeIsOneTransaction() throws {
     let opened = try open("abc\ndef\n")
     _ = host(opened)
+    opened.surface.flush()
     _ = opened.surface.material.take()
     let before = opened.surface.material.revision
     let down: TimeInterval = 100
@@ -232,21 +233,21 @@ final class SurfaceEditingTests: EngineTestCase {
     let opened = try open("abc\n")
     _ = host(opened)
     opened.surface.selectedRange = NSRange(location: 2, length: 0)
-    let before = opened.surface.material.revision
+    let before = opened.surface.drawn.revision
     try key(opened, "o", .control, keyCode: 31)
     XCTAssertEqual(text(opened.document), "ab\nc\n")
     XCTAssertEqual(opened.surface.caretLocation, 2, "改行の前に残る")
     XCTAssertEqual(opened.surface.material.revision, before + 1)
-    XCTAssertEqual(opened.surface.material.read().caret.carets, [2])
+    XCTAssertEqual(opened.surface.drawn.caret.carets, [2])
   }
 
-  /// 取引は材料の版を先に決め、見せ方の位置をその版に結んでから材料を書く——材料を書く時点で位置は置いてあり、描画
-  /// スレッドは新しい材料を読むまで前の位置を描く（新しい本文を古い位置で描くコマを出さない）。
+  /// 出す 1 か所は材料の版を先に決め、見せ方の位置をその版に結んでから材料を書く——材料を書く時点で位置は置いてあり、
+  /// 描画スレッドは新しい材料を読むまで前の位置を描く（新しい本文を古い位置で描くコマを出さない）。
   func testTheScrollIsPlacedBeforeTheMaterialIsWritten() throws {
     let opened = try open((0..<500).map { "row \($0)" }.joined(separator: "\n"))
     _ = host(opened, size: CGSize(width: 400, height: 200))
     let scroll = opened.surface.scroll
-    let revision = opened.surface.material.revision
+    let revision = opened.surface.drawn.revision
     let seen = OSAllocatedUnfairLock<(placed: Double, shown: Double)?>(initialState: nil)
     opened.surface.transact {
       opened.surface.perform(.move(.documentEnd, extending: false))
@@ -256,6 +257,8 @@ final class SurfaceEditingTests: EngineTestCase {
         seen.withLock { $0 = (placed, shown) }
       }
     }
+    XCTAssertNil(seen.withLock { $0 }, "取引の確定では箱へ書かない")
+    opened.surface.flush()
     let (placed, shown) = try XCTUnwrap(seen.withLock { $0 })
     XCTAssertGreaterThan(placed, 0, "材料を書く前に、見せ方の位置は置いてある")
     XCTAssertEqual(shown, 0, "古い材料のコマは前の位置")

@@ -3,9 +3,10 @@ import OrbeEditorCore
 import QuartzCore
 import simd
 
-/// 面の上の場所——行番号の数字の列・git の印の列・本文（最終行より下の空き地を含む）。
+/// 面の上の場所——行番号の数字の列・git の印の列・本文（最終行より下の空き地を含む）・俯瞰（ミニマップと縦横の
+/// スクロールバー）。
 enum PointerArea {
-  case numbers, marks, text
+  case numbers, marks, text, overview
 }
 
 /// view の点を本文の言葉にしたもの。
@@ -22,10 +23,12 @@ extension MetalTextSurface {
   func hit(_ point: CGPoint, position: SIMD2<Double>? = nil) -> PointerHit? {
     guard let env = editingEnvironment() else { return nil }
     let text = env.text
-    let p = position ?? scroll.peek(at: CACurrentMediaTime()).position
+    let p = position ?? scrollPosition
     let column = config.columnWidth(lineCount: text.lineCount)
     let area: PointerArea =
-      point.x < column - config.marks.gutterWidth ? .numbers : point.x < column ? .marks : .text
+      textView.overview.area(at: point) != nil
+      ? .overview
+      : point.x < column - config.marks.gutterWidth ? .numbers : point.x < column ? .marks : .text
     let y = Double(point.y - config.topInset) + p.y
     let lineHeight = Double(config.lineHeight)
     guard y < Double(text.lineCount) * lineHeight else {
@@ -41,7 +44,7 @@ extension MetalTextSurface {
   /// 同じ組版の行から引くので、右から左の字の並びでも見た目の字に当たる。`position` はスクロールの位置（省けば今の位置）。
   func character(at point: CGPoint, position: SIMD2<Double>? = nil) -> NSRange? {
     guard let text = currentContent?.text else { return nil }
-    let p = position ?? scroll.peek(at: CACurrentMediaTime()).position
+    let p = position ?? scrollPosition
     let column = config.columnWidth(lineCount: text.lineCount)
     let y = Double(point.y - config.topInset) + p.y
     let lineHeight = Double(config.lineHeight)
@@ -111,7 +114,7 @@ final class MouseSelection: NSObject {
     let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
     guard !flags.contains(.control) else { return }
     point = view.convert(event.locationInWindow, from: nil)
-    guard let hit = surface.hit(point), hit.area != .marks,
+    guard let hit = surface.hit(point), hit.area != .marks, hit.area != .overview,
       let text = surface.editingEnvironment()?.text
     else { return }
     self.view = view
@@ -170,8 +173,8 @@ final class MouseSelection: NSObject {
       return
     }
     point = view.convert(event.locationInWindow, from: nil)
-    let column = surface.config.columnWidth(
-      lineCount: surface.editingEnvironment()?.text.lineCount ?? 1)
+    let area = surface.surfaceLayout.text
+    let column = area.minX
     if point.y < surface.config.topInset {
       autoscroll(.above(surface.config.topInset - point.y))
     } else if point.y > view.bounds.height {
@@ -179,8 +182,8 @@ final class MouseSelection: NSObject {
     } else if point.x < column {
       autoscroll(.left(column - point.x))
       extend(to: point, lineEnd: false, reveal: .none)
-    } else if point.x > view.bounds.width {
-      autoscroll(.right(point.x - view.bounds.width))
+    } else if point.x > area.maxX {
+      autoscroll(.right(point.x - area.maxX))
       extend(to: point, lineEnd: true, reveal: .none)
     } else {
       stopAutoscroll()
@@ -298,7 +301,7 @@ final class MouseSelection: NSObject {
     defer { lastFrame = now }
     guard let lastFrame else { return }
     let elapsed = CGFloat(now - lastFrame)
-    let (position, limits) = surface.scroll.peek(at: now)
+    let (position, limits) = surface.scrollState(at: now)
     var p = position
     let lineHeight = surface.config.lineHeight
     let fullWidth = 2 * surface.config.cell
@@ -338,8 +341,10 @@ final class MouseSelection: NSObject {
       target = point
       lineEnd = true
     }
-    surface.transact(scrollTo: p) {
-      extend(to: target, position: p, lineEnd: lineEnd, reveal: .none)
+    surface.inputScope {
+      surface.transact(scrollTo: p) {
+        extend(to: target, position: p, lineEnd: lineEnd, reveal: .none)
+      }
     }
   }
 }

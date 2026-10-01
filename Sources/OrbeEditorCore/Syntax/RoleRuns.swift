@@ -35,6 +35,49 @@ public struct RoleRuns: Sendable {
 
   public var length: Int { runs.summary.value }
 
+  /// オフセット `offset` から役割を引く読み口（区間の列を作らない）。
+  public func cursor(from offset: Int) -> Cursor { Cursor(runs, from: offset) }
+
+  /// オフセットの役割を、連なりを辿って引く（→ `cursor(from:)`）。近い先へは前へ辿り、戻ったとき（右から左の字の塊の
+  /// 中）と遠い先（長い行の見えていない部分を飛ばす）へは木を引き直す——1 回に辿る連なりは `walk` 個まで。
+  public struct Cursor {
+    static let walk = 16
+
+    private let tree: SummaryTree<Run>
+    private var runs: SummaryTree<Run>.Elements
+    private var run: Run?
+    private var runStart: Int
+
+    fileprivate init(_ tree: SummaryTree<Run>, from offset: Int) {
+      let (index, before) = tree.locate(max(0, offset), by: \.value)
+      self.tree = tree
+      runs = tree.elements(from: index)
+      run = runs.next()
+      runStart = before.value
+    }
+
+    /// `offset` の字の役割（役割の無い字と本文の外は nil）。
+    public mutating func role(at offset: Int) -> SyntaxRole? { run(at: offset).role }
+
+    /// `offset` の字を含む連なり——役割と区間（本文の外は役割なしの、その先の全部）。区間の中の字は同じ役割なので、
+    /// 引き手は区間を出るまで引き直さなくてよい。
+    public mutating func run(at offset: Int) -> (role: SyntaxRole?, range: Range<Int>) {
+      if offset < runStart { self = Cursor(tree, from: offset) }
+      var steps = 0
+      while let current = run, offset >= runStart + current.length {
+        guard steps < Self.walk else {
+          self = Cursor(tree, from: offset)
+          break
+        }
+        runStart += current.length
+        run = runs.next()
+        steps += 1
+      }
+      guard let current = run else { return (nil, max(runStart, offset)..<Int.max) }
+      return (current.role, runStart..<(runStart + current.length))
+    }
+  }
+
   /// `range` の中の役割の区間——重ならない昇順で、`range` の中に閉じる。役割の無い字は含まない。
   public func roles(in range: NSRange) -> [HighlightSpan] {
     let start = max(0, range.location)

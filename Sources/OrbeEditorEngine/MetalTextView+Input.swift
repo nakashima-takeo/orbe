@@ -7,10 +7,13 @@ import OrbeEditorCore
 extension MetalTextView: @preconcurrency NSTextInputClient {
   private var editor: SurfaceEditor? { surface?.editor }
 
+  /// IME の呼び出しは面自身の入力（打鍵の中なら打鍵の処理の終わり、候補窓のクリックなど打鍵の外ならその場で出す）。
   func insertText(_ string: Any, replacementRange: NSRange) {
     guard let surface else { return }
     let plain = (string as? NSAttributedString)?.string ?? string as? String ?? ""
-    surface.editor.insertText(surface.lineBreak.normalize(plain), replacement: replacementRange)
+    surface.inputScope {
+      surface.editor.insertText(surface.lineBreak.normalize(plain), replacement: replacementRange)
+    }
   }
 
   func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
@@ -19,13 +22,15 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
       string as? NSAttributedString ?? NSAttributedString(string: string as? String ?? "")
     let (marked, selected) = Self.normalize(
       attributed, selected: selectedRange, to: surface.lineBreak)
-    surface.editor.setMarkedText(
-      marked.string, selected: selected, replacement: replacementRange,
-      appearance: Self.appearance(of: marked, selected: selected))
+    surface.inputScope {
+      surface.editor.setMarkedText(
+        marked.string, selected: selected, replacement: replacementRange,
+        appearance: Self.appearance(of: marked, selected: selected))
+    }
   }
 
   func unmarkText() {
-    editor?.unmarkText()
+    surface?.inputScope { editor?.unmarkText() }
   }
 
   func selectedRange() -> NSRange {
@@ -150,14 +155,13 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
   /// 今のスクロールの位置（取引の中で置いた位置があればそれ）。
   private var scrollPosition: SIMD2<Double> { surface?.scrollPosition ?? .zero }
 
-  /// 本文の区画（view の座標）。
+  /// 本文の区画から上端の余白を除いたもの（view の座標）。
   private var textArea: NSRect {
     guard let surface else { return .zero }
-    let lineCount = surface.editingEnvironment()?.text.lineCount ?? 1
-    let column = surface.config.columnWidth(lineCount: lineCount)
+    let area = surface.surfaceLayout.text
+    let top = surface.config.topInset
     return NSRect(
-      x: column, y: surface.config.topInset, width: max(0, bounds.width - column),
-      height: max(0, bounds.height - surface.config.topInset))
+      x: area.minX, y: top, width: area.width, height: max(0, area.height - top))
   }
 
   /// 変換中の未確定の横位置（変換中でなければ nil）。

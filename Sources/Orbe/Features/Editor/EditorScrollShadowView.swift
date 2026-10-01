@@ -1,4 +1,5 @@
 import AppKit
+import OrbeEditorCore
 
 /// 本体に重ねる影（受動）——先頭の行が上へ隠れている間の本文の上端の影（VS Code `ScrollDecorationViewPart`: 高さ 6、
 /// `box-shadow: 0 6px 6px -6px inset`）と、本文が右にまだ続くときのミニマップ左端の影（`minimap-shadow-visible`:
@@ -18,9 +19,9 @@ final class EditorScrollShadowView: NSView {
   /// 影の厚み（CSS の 6px）。
   private static let depth: CGFloat = 6
 
-  init(topColor: NSColor, edgeColor: NSColor) {
-    self.topColor = topColor
-    self.edgeColor = edgeColor
+  init(style: TextSurfaceStyle.Overview) {
+    topColor = style.topShadow
+    edgeColor = style.minimapShadow
     super.init(frame: .zero)
   }
   required init?(coder: NSCoder) { fatalError("not supported") }

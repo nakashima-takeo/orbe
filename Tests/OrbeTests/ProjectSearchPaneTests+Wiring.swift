@@ -35,7 +35,7 @@ extension ProjectSearchPaneTests {
     XCTAssertEqual(hosted.pane.findGround.matches, project)
     hosted.search.select(RowID(path: "a.txt", match: 1))
     XCTAssertEqual(hosted.pane.findGround.current, [NSRange(location: 9, length: 6)], "選んだ一致が現在の一致")
-    XCTAssertEqual(hosted.pane.minimap.decorations.findMatches, project, "俯瞰にも出る")
+    XCTAssertEqual(hosted.pane.appKitOverview.minimap.decorations.findMatches, project, "俯瞰にも出る")
 
     hosted.pane.showSearch()
     catchUp(hosted.pane)
@@ -50,7 +50,11 @@ extension ProjectSearchPaneTests {
 
     hosted.pane.sidebar.select(.files)
     pumpMain(
-      until: { hosted.pane.minimap.decorations.findMatches == [NSRange(location: 7, length: 1)] },
+      until: {
+        hosted.pane.appKitOverview.minimap.decorations.findMatches == [
+          NSRange(location: 7, length: 1)
+        ]
+      },
       "パネルを隠すとプロジェクト検索の地は消え、⌘F の地は残る")
     XCTAssertEqual(hosted.pane.findGround.matches, [NSRange(location: 7, length: 1)])
   }

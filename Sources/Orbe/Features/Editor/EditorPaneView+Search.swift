@@ -30,14 +30,14 @@ extension EditorPaneView {
     bar.onPrev = { [weak self] in self?.search.previous() }
     bar.onClose = { [weak self] in self?.closeSearch() }
     addSubview(bar)
-    let trailing = bar.trailingAnchor.constraint(
-      equalTo: trailingAnchor, constant: -(rightColumnWidth + Theme.Space.beat))
+    let trailing = bar.trailingAnchor.constraint(equalTo: trailingAnchor)
     NSLayoutConstraint.activate([
       trailing,
       bar.topAnchor.constraint(equalTo: topAnchor, constant: headerHeight + Theme.Space.beat),
     ])
     searchBar = bar
     searchBarTrailing = trailing
+    placeSearchBar()
     syncFindState()
     if let seed {
       bar.needle = seed

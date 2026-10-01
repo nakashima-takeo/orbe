@@ -18,9 +18,17 @@ struct ShapedLine {
   let omitted: Int
   /// 組んだ行（位置と x の対応を作り、x にいちばん近い位置を引く）。
   let line: CTLine
+  /// 等幅のフォントで組んだ、描く単位がどれも ASCII の字かタブで、単位ごとに 1 つのグリフが左から順に並んだ行（minified の
+  /// 1 行の多く）。
+  let simple: Bool
 
-  /// 行の中の位置と x の対応（キャレット・選択の地のある行だけが要る——作る手間は行の長さに比例する）。
-  var carets: CaretMap { CaretMap(line, width: width) }
+  /// 行の中の位置と x の対応（キャレット・選択の地・強調の地・装備のある行だけが要る——作る手間は行の長さに比例する）。
+  /// 単純な行はグリフの位置から作る（Core Text に縁を数えさせると 1 万字の行で数 ms かかる）。等幅のフォントの ASCII の
+  /// 字は合字も詰めも持たないので、字の縁はグリフの位置と送りに一致し、Core Text の答えと同じになる。面のフォントは
+  /// 面を載せる側が等幅のシステムフォントに固定しているが、等幅でないフォントで組んだ行は Core Text に数えさせる。
+  var carets: CaretMap {
+    simple ? CaretMap(ascii: runs.flatMap(\.xs), width: width) : CaretMap(line, width: width)
+  }
 }
 
 /// 行の組版の規則（純関数）。描画スレッドと、横の位置が要る main の操作が同じ規則を使う。
@@ -33,8 +41,8 @@ struct ShapedLine {
 /// 同じ）。1 行で描くのは `limit` 単位まで（書記素の境で切る）で、残りは描かない。
 enum LineShaper {
   static let limit = 10_000
-  /// 書記素の境を探すために、上限より余分に読む単位の数。
-  private static let lookahead = Grapheme.reach
+  /// 描きうる先頭として読む単位の数（書記素の境を探すために、上限より余分に読む）。
+  static let headLimit = limit + Grapheme.reach
 
   /// 行の中身のうち描きうる先頭（上限と余分まで）と、行の長さ（行末の改行と `\r` を除く）。長い行でも読むのは先頭だけ。
   struct Source: Hashable {
@@ -45,11 +53,21 @@ enum LineShaper {
   /// 文書の行 `row` の中身と行頭のオフセット。
   static func source(row: Int, in text: TextRope) -> (source: Source, start: Int) {
     let start = text.lineStart(row)
-    var end = row + 1 < text.lineCount ? text.lineStart(row + 1) - 1 : text.length
-    if end > start, text.units(in: NSRange(location: end - 1, length: 1)).first == 0x0D { end -= 1 }
-    let head = text.units(
-      in: NSRange(location: start, length: min(end - start, limit + lookahead)))
-    return (Source(head: head, length: end - start), start)
+    let next = row + 1 < text.lineCount ? text.lineStart(row + 1) : nil
+    return (source(start: start, next: next, in: text), start)
+  }
+
+  /// 行頭 `start` から次の行頭 `next`（最後の行なら nil）までの行の中身。読むのは描きうる先頭と、それより長い行だけ
+  /// 行末の 1 単位（`\r` か）。
+  static func source(start: Int, next: Int?, in text: TextRope) -> Source {
+    let end = next.map { $0 - 1 } ?? text.length
+    var head = text.units(in: NSRange(location: start, length: min(end - start, headLimit + 1)))
+    let last =
+      head.count == end - start
+      ? head.last : text.units(in: NSRange(location: end - 1, length: 1)).first
+    let length = end - start - (last == 0x0D ? 1 : 0)
+    if head.count > min(length, headLimit) { head.removeLast(head.count - min(length, headLimit)) }
+    return Source(head: head, length: length)
   }
 
   /// 描く単位の列（上限を書記素の境で切り、制御文字を記号に置き換えたもの）と、打ち切って描かない単位の数と、箱で
@@ -102,13 +120,27 @@ enum LineShaper {
   static func shape(_ source: Source, font: CTFont, tabWidth: CGFloat) -> ShapedLine {
     let shown = display(source)
     let line = makeLine(shown.units, boxes: shown.boxes, font: font, tabWidth: tabWidth)
-    return ShapedLine(line, omitted: shown.omitted, boxes: shown.boxes, font: font)
+    return ShapedLine(
+      line, omitted: shown.omitted, boxes: shown.boxes, font: font,
+      ascii: isMonospaced(font) && isASCII(shown.units))
+  }
+
+  /// 等幅のフォント。
+  private static func isMonospaced(_ font: CTFont) -> Bool {
+    CTFontGetSymbolicTraits(font).contains(.traitMonoSpace)
+  }
+
+  /// どの単位も ASCII の字（U+0020…U+007E）かタブ。
+  private static func isASCII(_ units: ContiguousArray<UInt16>) -> Bool {
+    units.allSatisfy { $0 == 0x09 || (0x20...0x7E).contains($0) }
   }
 
   /// 文字列を 1 行として組む（打ち切った行の末尾の印・書式文字の箱の中身）。
   static func shape(_ string: String, font: CTFont) -> ShapedLine {
-    let line = makeLine(ContiguousArray(string.utf16), boxes: [:], font: font, tabWidth: 0)
-    return ShapedLine(line, omitted: 0, boxes: [:], font: font)
+    let units = ContiguousArray(string.utf16)
+    let line = makeLine(units, boxes: [:], font: font, tabWidth: 0)
+    return ShapedLine(
+      line, omitted: 0, boxes: [:], font: font, ascii: isMonospaced(font) && isASCII(units))
   }
 
   private static func makeLine(
@@ -184,8 +216,11 @@ enum LineShaper {
 }
 
 extension ShapedLine {
-  /// 組んだ行から写す。書式文字の箱（`boxes`）の位置には、箱の中身の字を同じ元の位置で置く。
-  fileprivate init(_ line: CTLine, omitted: Int, boxes: [Int: UInt16], font: CTFont) {
+  /// 組んだ行から写す。書式文字の箱（`boxes`）の位置には、箱の中身の字を同じ元の位置で置く。`ascii` は等幅のフォントで
+  /// 組み、描く単位がどれも ASCII の字かタブか。
+  fileprivate init(
+    _ line: CTLine, omitted: Int, boxes: [Int: UInt16], font: CTFont, ascii: Bool
+  ) {
     var runs: [Run] = []
     for run in CTLineGetGlyphRuns(line) as? [CTRun] ?? [] {
       let count = CTRunGetGlyphCount(run)
@@ -223,9 +258,13 @@ extension ShapedLine {
           font: runFont, glyphs: glyphs, xs: positions.map(\.x), ys: positions.map(\.y),
           offsets: indices))
     }
+    let offsets = runs.lazy.flatMap(\.offsets)
+    let ordered =
+      offsets.count == CTLineGetStringRange(line).length
+      && zip(offsets, 0...).allSatisfy { $0 == $1 }
     self.init(
       runs: runs, width: CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)), omitted: omitted,
-      line: line)
+      line: line, simple: ascii && ordered)
   }
 }
 
@@ -274,6 +313,17 @@ struct CaretMap: Sendable {
         range: range.location..<range.location + range.length,
         rightToLeft: CTRunGetStatus(run).contains(.rightToLeft))
     }
+    self.width = width
+  }
+
+  /// 単純な行（`ShapedLine.simple`——等幅のフォントで、ASCII の字かタブが単位ごとに 1 つのグリフで左から並ぶ）の対応を、
+  /// グリフの x から作る。字 i の前の縁は i のグリフの x、後ろの縁は次のグリフの x（最後の字は行の幅）で、Core Text の縁と
+  /// 同じ。
+  init(ascii xs: [CGFloat], width: CGFloat) {
+    let edges = xs.map(Float.init) + [Float(width)]
+    primary = edges
+    secondary = edges
+    runs = xs.isEmpty ? [] : [Run(range: 0..<xs.count, rightToLeft: false)]
     self.width = width
   }
 

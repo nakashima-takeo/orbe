@@ -13,13 +13,13 @@ struct EditorFaceRoot: View {
 
 /// エディター面の AppKit 側の根。骨の幾何——レール｜サイドバー（開いているとき）｜列の頭
 /// （ファイルタブ行 → 文書があればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（焦点の
-/// 文書のテキスト面とその右のミニマップ・スクロールバー、無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
+/// 文書のテキスト面。自分で俯瞰を描く面なら本体全体、そうでなければその右に今の面の俯瞰、無ければ空状態の root）を frame
+/// で置く。地は chrome と同じ veil。
 ///
 /// 文書の「変わった」（viewport・選択・本文・ハンク・焦点）は pane が 1 つずつ受け、ミニマップ・スクロールバー・影・検索・
 /// 出現の強調・プロジェクト検索へ配る——文書側の closure は単一のまま、扇出はここが持つ。一致の地は、ファイル内検索と
-/// プロジェクト検索の 2 つの出どころの和を pane が面と俯瞰へ押す（`pushFindGround`）。語の出現も束ねて
-/// （`OverviewDecorations`）ミニマップとスクロールバーへ押す。本体の上のポインタは pane の tracking area が見て、
-/// スクロールバーのつまみの見え隠れに使う。
+/// プロジェクト検索の 2 つの出どころの和を pane が面と今の面の俯瞰へ押す（`pushFindGround`）。語の出現も束ねて
+/// （`OverviewDecorations`）今の面の俯瞰へ押す。自分で俯瞰を描く面は、面へ押した強調の地から俯瞰も描く。
 ///
 /// 骨の状態はセッションの写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれだけを読む。
 /// セッションの変化は `sessionDidChange` 1 本で受け、写し → 面の差し替え → ツリーの追従の順に進める。
@@ -38,11 +38,8 @@ final class EditorPaneView: NSView {
   let headerHost: NSHostingView<EditorHeaderRoot>
   let emptyHost: NSHostingView<EditorFaceRoot>
   private(set) var document: EditorDocument?
-  /// 本体の右のミニマップとスクロールバー、本体に重ねる影。焦点の文書に結ぶ。
-  let minimap = EditorMinimapView(style: EditorStyle.minimap())
-  let scrollbar = EditorScrollbarView(style: EditorStyle.scrollbar())
-  let scrollShadow = EditorScrollShadowView(
-    topColor: Theme.Color.editorScrollShadow, edgeColor: Theme.Color.editorMinimapShadow)
+  /// 今の面の俯瞰（本体の右のミニマップとスクロールバー、本体に重ねる影）。自分で俯瞰を描く面の文書では結ばない。
+  let appKitOverview = EditorAppKitOverview(style: EditorStyle.make())
   /// ファイル内検索の状態（pane ごと）。バーは開いている間だけある。
   let search = EditorSearch()
   var searchBar: SearchBar?
@@ -57,12 +54,8 @@ final class EditorPaneView: NSView {
   /// アウトラインの状態（pane ごと）と、その行の列（絞り込みの欄つき。閉じている間も持つ）。
   let outline = EditorOutline()
   let outlineList: OutlineListView
-  /// 本体の上のポインタを見る tracking area。
-  var bodyTracking: NSTrackingArea?
   /// F4 / ⇧F4 を拾うイベントの監視（窓に付いている間だけ）。
   var stepKeyMonitor: Any?
-  /// 最後に見たスクロールの状態（変化でつまみを見せる）。文書を結び直すと捨てる。
-  var lastScrollState: ScrollState?
   /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
   private(set) var sidebar = EditorSidebarState() {
     didSet { observeSidebar() }
@@ -104,11 +97,7 @@ final class EditorPaneView: NSView {
       host.autoresizingMask = []
       addSubview(host)
     }
-    for view in [minimap, scrollbar, scrollShadow] as [NSView] {
-      view.autoresizingMask = []
-      addSubview(view)
-    }
-    scrollShadow.isHidden = true
+    appKitOverview.install(in: self)
     sidebarHandle.autoresizingMask = []
     addSubview(sidebarHandle)
     search.onCountChange = { [weak self] selected, total, limited in
@@ -332,22 +321,18 @@ final class EditorPaneView: NSView {
       view.autoresizingMask = []
       view.frame = surfaceRect
       // 境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なる。テキスト面は影と俯瞰の下。
-      addSubview(view, positioned: .below, relativeTo: minimap)
+      addSubview(view, positioned: .below, relativeTo: appKitOverview.minimap)
       observe(document, true)
     } else {
       closeSearch()
     }
-    lastScrollState = nil
-    minimap.bind(document)
-    scrollbar.bind(document)
+    appKitOverview.bind(overviewSurface == nil ? document : nil)
     search.bind(document)
     occurrences.bind(document)
     if let document { projectSearch.documentDidShow(document) }
     outline.bind(document)
     updateOutlineWant()
     pushFindGround()
-    scrollShadow.isHidden = document == nil
-    updateShadow()
     emptyHost.isHidden = document != nil
     prepareDocumentIfVisible()
     needsLayout = true

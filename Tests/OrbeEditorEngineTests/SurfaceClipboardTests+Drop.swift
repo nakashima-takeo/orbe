@@ -17,15 +17,15 @@ extension SurfaceClipboardTests {
       at: view.convert(point(opened, row: 1, column: 1), to: nil),
       pasteboard: try dragBoard(string: "x\ny"), operations: .copy)
     XCTAssertEqual(view.draggingEntered(drag), .copy)
-    XCTAssertEqual(opened.surface.material.read().drop, 5, "落とす位置の印")
+    XCTAssertEqual(opened.surface.drawn.drop, 5, "落とす位置の印")
     view.draggingExited(drag)
-    XCTAssertNil(opened.surface.material.read().drop, "外れたら消す")
+    XCTAssertNil(opened.surface.drawn.drop, "外れたら消す")
     _ = view.draggingUpdated(drag)
     XCTAssertTrue(view.performDragOperation(drag))
     view.concludeDragOperation(drag)
     XCTAssertEqual(text(opened.document), "ab\r\ncx\r\nyd\r\n")
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 5, length: 4), "落とした文字列を選ぶ")
-    XCTAssertNil(opened.surface.material.read().drop)
+    XCTAssertNil(opened.surface.drawn.drop)
   }
 
   /// この面から運んだ文字は移動で、1 回の undo で戻る。送り手が移動を許さない（⌥）ならコピーで、元の字を残す。
@@ -78,7 +78,7 @@ extension SurfaceClipboardTests {
       at: view.convert(point(opened, row: 0, column: 1), to: nil), pasteboard: board,
       operations: .copy)
     XCTAssertEqual(view.draggingUpdated(drop), .copy)
-    XCTAssertNil(opened.surface.material.read().drop)
+    XCTAssertNil(opened.surface.drawn.drop)
     XCTAssertTrue(view.performDragOperation(drop))
     XCTAssertEqual(hostSide.openedFiles, [[file]])
     XCTAssertEqual(text(opened.document), "abc\n")

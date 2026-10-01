@@ -148,10 +148,10 @@ final class SurfaceFuzzTests: EngineTestCase {
 
   private func check(_ opened: Opened, _ step: String) throws {
     let length = opened.document.text.length
-    let content = try XCTUnwrap(opened.surface.material.read().content)
+    let content = try XCTUnwrap(opened.surface.drawn.content)
     XCTAssertEqual(content.version, opened.document.version, "\(step): 面の写しは文書と同じ版")
     XCTAssertEqual(content.text.length, length)
-    let caret = opened.surface.material.read().caret
+    let caret = opened.surface.drawn.caret
     for cursor in opened.surface.editor.state.cursors.all {
       XCTAssertLessThanOrEqual(NSMaxRange(cursor.selection), length, "\(step)")
       XCTAssertLessThanOrEqual(NSMaxRange(cursor.selectionStart), length, "\(step)")

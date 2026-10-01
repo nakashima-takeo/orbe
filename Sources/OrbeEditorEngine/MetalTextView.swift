@@ -12,10 +12,15 @@ import QuartzCore
 /// 右クリックは `MetalTextView+Pasteboard`、ドラッグ＆ドロップは `MetalTextView+Drag`。
 final class MetalTextView: TextSurfaceInputView {
   weak var surface: MetalTextSurface? {
-    didSet { pointer.surface = surface }
+    didSet {
+      pointer.surface = surface
+      overview.surface = surface
+    }
   }
   private var observers: [NSObjectProtocol] = []
   let pointer = MouseSelection()
+  /// 俯瞰の押下・ドラッグ・ホバー。
+  let overview = OverviewPointer()
   /// 入力の仕組みとの窓口（面が持つ）。テストは偽の IME に差し替える。
   lazy var textInputContext: NSTextInputContext? = NSTextInputContext(client: self)
   /// 写す・貼るペーストボード（既定は一般）。テストは名前つきの専用のものに差し替える。
@@ -24,6 +29,8 @@ final class MetalTextView: TextSurfaceInputView {
   var draggedRange: NSRange?
   /// ドラッグ中の自動スクロールの前の刻みの時刻。
   var dropScrollTime: CFTimeInterval?
+  /// 置いた落とす位置の印。
+  var shownDrop: Int?
   /// サービスに平文を送り・受けられると、アプリで 1 回だけ届け出た。
   @MainActor private static var registeredServices = false
 
@@ -35,6 +42,9 @@ final class MetalTextView: TextSurfaceInputView {
     // ときの古い大きな drawable を面の外（隣のミニマップ・ペイン）へはみ出させない。
     layerContentsPlacement = .topLeft
     clipsToBounds = true
+    let overviewHits = OverviewHitView()
+    overviewHits.autoresizingMask = [.width, .height]
+    addSubview(overviewHits)
     registerForDraggedTypes([.string, .fileURL])
     if !Self.registeredServices {
       Self.registeredServices = true
@@ -69,7 +79,7 @@ final class MetalTextView: TextSurfaceInputView {
   override func offerKeyEquivalentToInputMethod(_ event: NSEvent) -> Bool {
     guard composing, let surface else { return false }
     var used = false
-    surface.transact { used = super.offerKeyEquivalentToInputMethod(event) }
+    surface.input { used = super.offerKeyEquivalentToInputMethod(event) }
     return used
   }
 
@@ -94,6 +104,7 @@ final class MetalTextView: TextSurfaceInputView {
     observers = []
     guard let newWindow else {
       pointer.cancel()
+      surface?.inputScope { overview.cancel() }
       surface?.editor.finishComposition(.commit)
       return
     }
@@ -117,6 +128,13 @@ final class MetalTextView: TextSurfaceInputView {
       ) { [weak self] _ in
         MainActor.assumeIsolated { self?.surface?.appearanceDidChange() }
       })
+    observers.append(
+      NSWorkspace.shared.notificationCenter.addObserver(
+        forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.reduceMotionDidChange() }
+      })
     if let blinking = CaretBlinking.didChangeNotification {
       let changed: @Sendable (Notification) -> Void = { [weak self] _ in
         MainActor.assumeIsolated { self?.surface?.setCaretBlinks(CaretBlinking.systemPreference) }
@@ -130,6 +148,7 @@ final class MetalTextView: TextSurfaceInputView {
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
     if window != nil { surface?.attachDisplayLink(to: self) }
+    reduceMotionDidChange()
     stateDidChange()
     focusStateDidChange()
   }
@@ -194,28 +213,47 @@ final class MetalTextView: TextSurfaceInputView {
     surface?.scrollWheel(event)
   }
 
-  /// 変換中はまず IME へ渡す（IME が使わなければ、クリックの入口が変換を確定する）。
+  /// 変換中はまず IME へ渡す（IME が使わなければ、クリックの入口が変換を確定する）。俯瞰の上の押下は俯瞰が受ける
+  /// （テキストの選択・ドラッグ＆ドロップは始まらない。窓からは焦点を取らない子 `OverviewHitView` を経て届く）。
   override func mouseDown(with event: NSEvent) {
     if composing, inputContext?.handleEvent(event) == true { return }
-    surface?.transact { pointer.mouseDown(event, in: self) }
+    let point = convert(event.locationInWindow, from: nil)
+    surface?.input {
+      if overview.mouseDown(at: point) { return }
+      pointer.mouseDown(event, in: self)
+    }
   }
 
   override func mouseDragged(with event: NSEvent) {
     if composing, inputContext?.handleEvent(event) == true { return }
-    surface?.transact { pointer.mouseDragged(event, in: self) }
+    let point = convert(event.locationInWindow, from: nil)
+    surface?.input {
+      if overview.mouseDragged(to: point) { return }
+      pointer.mouseDragged(event, in: self)
+    }
   }
 
   override func mouseUp(with event: NSEvent) {
     if composing, inputContext?.handleEvent(event) == true { return }
-    surface?.transact { pointer.mouseUp(event, in: self) }
+    let point = convert(event.locationInWindow, from: nil)
+    surface?.input {
+      if overview.mouseUp(at: point) { return }
+      pointer.mouseUp(event, in: self)
+    }
   }
 
+  /// ポインタの形と、本体の上のポインタ（つまみの見え隠れと帯・つまみの濃さ）。ドラッグ中も出入りを受ける——つまみを
+  /// 押したまま本体の外で離せば、つまみが消える。
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
     for area in trackingAreas where area.owner === self { removeTrackingArea(area) }
     addTrackingArea(
       NSTrackingArea(
-        rect: .zero, options: [.cursorUpdate, .mouseMoved, .activeInKeyWindow, .inVisibleRect],
+        rect: .zero,
+        options: [
+          .cursorUpdate, .mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect,
+          .enabledDuringMouseDrag,
+        ],
         owner: self))
   }
 
@@ -225,6 +263,26 @@ final class MetalTextView: TextSurfaceInputView {
 
   override func mouseMoved(with event: NSEvent) {
     pointer.updateCursor(at: event.locationInWindow, flags: event.modifierFlags, in: self)
+    hover(event, inside: true)
+  }
+
+  override func mouseEntered(with event: NSEvent) {
+    hover(event, inside: true)
+  }
+
+  override func mouseExited(with event: NSEvent) {
+    hover(event, inside: false)
+  }
+
+  private func hover(_ event: NSEvent, inside: Bool) {
+    let point = convert(event.locationInWindow, from: nil)
+    surface?.inputScope { overview.pointerMoved(to: point, inside: inside) }
+  }
+
+  /// 動きを減らす設定を俯瞰へ写す。
+  private func reduceMotionDidChange() {
+    let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    surface?.inputScope { overview.setReduceMotion(reduce) }
   }
 
   override func flagsChanged(with event: NSEvent) {
@@ -234,11 +292,11 @@ final class MetalTextView: TextSurfaceInputView {
     super.flagsChanged(with: event)
   }
 
-  /// 打鍵を IME と macOS のキー割り当てに通す。1 打鍵を 1 つの取引にする——セレクタが 2 つ届く打鍵（⌥↓・⌃O・利用者の
+  /// 打鍵を IME と macOS のキー割り当てに通す。1 打鍵を 1 つの取引にし、処理の終わりで出す——セレクタが 2 つ届く打鍵（⌥↓・⌃O・利用者の
   /// DefaultKeyBinding の連続セレクタ）も、IME が「確定 → 次の未確定」を続けて呼ぶ打鍵も、呼び出しごとの状態はその場で
   /// 更新し、描くのは打鍵の後の 1 状態だけ。打鍵の時刻は取引が材料へ添える（打鍵→画面の遅れ）。
   override func keyDown(with event: NSEvent) {
-    surface?.transact(keystroke: event.timestamp) { interpretKeyEvents([event]) }
+    surface?.input(keystroke: event.timestamp) { interpretKeyEvents([event]) }
   }
 
   override func becomeFirstResponder() -> Bool {

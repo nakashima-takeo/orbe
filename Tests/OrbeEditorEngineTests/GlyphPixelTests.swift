@@ -24,6 +24,14 @@ final class GlyphPixelTests: EngineTestCase {
 
     """
 
+  /// 字だけを見る見え方（装備は透明に描く——基準の Core Text の行は装備を持たない）。
+  private static var glyphsOnly: TextSurfaceStyle {
+    var style = EngineTestCase.style()
+    style.decorations.indentGuideColor = .clear
+    style.decorations.whitespaceColor = .clear
+    return style
+  }
+
   func testGlyphsMatchCoreTextWithinOneLevel() throws {
     try compareWithCoreText(in: CGColorSpace.sRGB, tolerance: 1)
   }
@@ -42,9 +50,11 @@ final class GlyphPixelTests: EngineTestCase {
         let options = MetalTextSurfaceOptions(
           elasticScroll: true, fontSmoothing: smoothing, omittedLabel: { "\($0)" })
         let size = CGSize(width: 600, height: 140)
-        let opened = try open(Self.sample, size: size, scale: scale, options: options)
+        let opened = try open(
+          Self.sample, size: size, scale: scale, options: options, style: Self.glyphsOnly)
         opened.surface.viewStateDidChange(size: size, scale: scale, space: space, visible: false)
         let id = opened.surface.id
+        opened.surface.flush()
         let metal = try XCTUnwrap(
           RenderThread.shared.performAndWait {
             Transfer(value: $0.snapshot(id, background: Self.background))
@@ -53,7 +63,8 @@ final class GlyphPixelTests: EngineTestCase {
         let name = "\(spaceName)-\(Int(scale))x-\(smoothing)"
         writePNG(metal, previewURL("glyphs-metal-\(name).png"))
         writePNG(reference, previewURL("glyphs-coretext-\(name).png"))
-        let difference = Self.compare(metal, reference)
+        let right = Int((opened.surface.surfaceLayout.text.maxX * scale).rounded())
+        let difference = Self.compare(metal, reference, right: right)
         print("GLYPHS \(name) ink=\(difference.ink) worst=\(difference.worst)")
         XCTAssertGreaterThan(difference.ink, 500, "前提: 字が描かれている")
         XCTAssertLessThanOrEqual(
@@ -72,6 +83,8 @@ final class GlyphPixelTests: EngineTestCase {
     let height: Double
     let top: Double
     let column: Double
+    /// 本文の区画の右端（面は俯瞰の左で本文を切る）。
+    let textRight: Double
 
     func color(_ color: FrameColor) -> CGColor {
       let c = (0..<4).map {
@@ -95,7 +108,7 @@ final class GlyphPixelTests: EngineTestCase {
   /// 右寄せで縦の中央）。
   private func coreText(_ opened: Opened, smoothing: Bool) throws -> CGImage {
     let config = opened.surface.config
-    let material = opened.surface.material.read()
+    let material = opened.surface.drawn
     let content = try XCTUnwrap(material.content)
     let s = Double(material.scale)
     let (width, height) = Renderer.pixelSize(material)
@@ -120,7 +133,8 @@ final class GlyphPixelTests: EngineTestCase {
       context: context, space: material.space, config: config,
       palette: try XCTUnwrap(material.palette), scale: s,
       height: Double(height), top: (Double(config.topInset) * s).rounded(),
-      column: (Double(config.columnWidth(lineCount: content.text.lineCount)) * s).rounded())
+      column: (Double(config.columnWidth(lineCount: content.text.lineCount)) * s).rounded(),
+      textRight: (Double(opened.surface.surfaceLayout.text.maxX) * s).rounded())
     let lineHeight = Double(config.lineHeight) * s
     for row in 0..<content.text.lineCount {
       let rowTop = r.top + (Double(row) * lineHeight).rounded()
@@ -128,7 +142,7 @@ final class GlyphPixelTests: EngineTestCase {
       r.draw(
         line(row, content, r), x: r.column,
         baseline: rowTop + (Double(config.baseline) * s).rounded(),
-        clip: CGRect(x: r.column, y: 0, width: Double(width) - r.column, height: r.height - r.top))
+        clip: CGRect(x: r.column, y: 0, width: r.textRight - r.column, height: r.height - r.top))
       let number = NSAttributedString(
         string: "\(row + 1)",
         attributes: [
@@ -156,7 +170,7 @@ final class GlyphPixelTests: EngineTestCase {
         .init(kCTForegroundColorAttributeName as String): r.color(r.palette.text),
       ])
     for span in content.roles.roles(in: NSRange(location: start, length: source.length)) {
-      guard let color = r.palette.roles[span.role] else { continue }
+      let color = r.palette.ink(span.role)
       attributed.addAttribute(
         .init(kCTForegroundColorAttributeName as String), value: r.color(color),
         range: NSRange(location: span.range.location - start, length: span.range.length))
@@ -164,14 +178,15 @@ final class GlyphPixelTests: EngineTestCase {
     return attributed
   }
 
-  /// 字のある画素（どちらかが地と違う画素）での最大の差（RGB の段）と、字のある画素の数。
-  static func compare(_ a: CGImage, _ b: CGImage) -> (worst: Int, ink: Int) {
+  /// 字のある画素（どちらかが地と違う画素）での最大の差（RGB の段）と、字のある画素の数。比べるのは左から `right`
+  /// px まで（その右は俯瞰）。
+  static func compare(_ a: CGImage, _ b: CGImage, right: Int) -> (worst: Int, ink: Int) {
     let pa = pixels(a)
     let pb = pixels(b)
     let bg = UInt8((background.blue * 255).rounded())
     var worst = 0
     var ink = 0
-    for i in stride(from: 0, to: min(pa.count, pb.count), by: 4) {
+    for i in stride(from: 0, to: min(pa.count, pb.count), by: 4) where (i / 4) % a.width < right {
       let isInk = (0..<3).contains { pa[i + $0] != bg || pb[i + $0] != bg }
       guard isInk else { continue }
       ink += 1

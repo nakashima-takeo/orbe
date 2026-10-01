@@ -142,11 +142,11 @@ extension SurfaceInputMethodTests {
       board.declareTypes([.string], owner: nil)
       board.setString("z", forType: .string)
       replay([.mark("か")], on: opened)
-      let revision = opened.surface.material.read().revision
+      let revision = opened.surface.drawn.revision
       let discards = context.discards
       try body()
       XCTAssertFalse(view.hasMarkedText(), message)
-      XCTAssertEqual(opened.surface.material.read().revision, revision + 1, message)
+      XCTAssertEqual(opened.surface.drawn.revision, revision + 1, message)
       XCTAssertEqual(context.discards, discards + (notifies ? 1 : 0), "\(message): IME に知らせる")
     }
     once("コピー") { view.copy(nil) }

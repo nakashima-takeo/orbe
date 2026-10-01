@@ -10,7 +10,8 @@ import OrbeEditorCore
 /// 文字色で、役割が届けばそのチャンクを捨てて描き直す）。帯を掴んでドラッグすると本文が追従し、帯の外を押すとその行が本文の
 /// 中央に来る。
 final class EditorMinimapView: NSView {
-  let style: MinimapStyle
+  let style: TextSurfaceStyle.Minimap
+  private let fadeIn: Double
   private(set) weak var document: EditorDocument?
   /// 検索の一致と語の出現（pane が束ねて押す）。
   var decorations = OverviewDecorations.empty {
@@ -30,8 +31,9 @@ final class EditorMinimapView: NSView {
   /// 帯が見えているか（ホバー中かドラッグ中で、帯が要る）。
   var isSliderShown: Bool { (hovering || drag != nil) && placement?.sliderNeeded == true }
 
-  init(style: MinimapStyle) {
-    self.style = style
+  init(style: TextSurfaceStyle) {
+    self.style = style.overview.minimap
+    fadeIn = style.overview.fadeIn
     chunks = MinimapChunks(style: style)
     super.init(frame: .zero)
     wantsLayer = true
@@ -133,7 +135,7 @@ final class EditorMinimapView: NSView {
       return
     }
     NSAnimationContext.runAnimationGroup { context in
-      context.duration = Theme.Motion.editorSliderFadeIn
+      context.duration = fadeIn
       context.timingFunction = CAMediaTimingFunction(name: .linear)
       slider.animator().alphaValue = shown
     }
@@ -224,7 +226,7 @@ final class EditorMinimapView: NSView {
       width: Int(bounds.width * CGFloat(scale)), scale: scale, dark: isDark,
       appearance: effectiveAppearance)
     context.saveGState()
-    context.setAlpha(style.opacity)
+    context.setAlpha(MinimapCharSheet.opacity)
     context.interpolationQuality = .none
     for chunk in visible {
       guard let image = chunks.image(chunk, document: document, canvas: canvas) else { continue }

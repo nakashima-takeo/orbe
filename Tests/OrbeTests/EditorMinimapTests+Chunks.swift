@@ -12,7 +12,7 @@ extension EditorMinimapTests {
   /// 字のチャンク: 打鍵は編集の行のチャンクだけ捨て、行が増えれば編集より後ろのチャンクも捨てる。
   func testTypingDropsOnlyTheEditedChunkAndNewlinesDropTheChunksAfterIt() throws {
     let hosted = try hostOverview(numberedLines(300), height: 800)
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     view.display()
     let warm = view.cachedChunks
     XCTAssertTrue(warm.isSuperset(of: [0, 1, 2]), "窓のチャンクを覚えている: \(warm)")
@@ -33,7 +33,7 @@ extension EditorMinimapTests {
   /// を順に、その時点の行で畳む。
   func testABatchWhoseLineCountNetsToZeroDropsTheShiftedChunks() throws {
     let hosted = try hostOverview(numberedLines(300), height: 800)
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     view.display()
     XCTAssertTrue(view.cachedChunks.isSuperset(of: [0, 1, 2, 3]), "前提: \(view.cachedChunks)")
     let text = hosted.document.text
@@ -56,7 +56,7 @@ extension EditorMinimapTests {
   /// 3 倍のチャンクぶん通し、末尾まで飛んでも上限を超えない。最近の窓は残り、最初のチャンクは捨てられている。
   func testChunkImagesStayWithinTheCapacityAndKeepTheRecentOnes() throws {
     let hosted = try hostOverview(String(repeating: "x\n", count: 500_000))
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     let document = hosted.document
     let capacity = MinimapChunks.capacity
     func show(_ line: Int) throws -> ClosedRange<Int> {
@@ -94,7 +94,7 @@ extension EditorMinimapTests {
     XCTAssertEqual(
       document.roles.roles(in: NSRange(location: far, length: 3)).first?.role, .comment,
       "前提: 行 100 はコメントの中")
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     view.display()
     let comment = try ViewPixels(view).strongest(in: cell(view, row: 100, column: 1))
 
@@ -127,7 +127,7 @@ extension EditorMinimapTests {
       text, height: 800, name: "x-\(UUID().uuidString).swift", colored: true)
     let document = hosted.document
     XCTAssertTrue(document.waitUntilCaughtUp())
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     view.display()
     XCTAssertTrue(view.cachedChunks.isSuperset(of: [0, 1, 2]), "前提: 窓のチャンクを覚えている")
     let line100 = document.text.lineStart(100)
@@ -145,7 +145,7 @@ extension EditorMinimapTests {
   /// 外観を切り替えると、覚えていた字の画像を捨てて新しい外観の色で描き直す。
   func testSwitchingTheAppearanceRedrawsTheGlyphsInItsColors() throws {
     let hosted = try hostOverview("MMMM\n")
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     view.display()
     let dark = try ViewPixels(view).strongest(in: cell(view, row: 0, column: 1))
     hosted.window.appearance = NSAppearance(named: .aqua)
@@ -160,7 +160,7 @@ extension EditorMinimapTests {
   /// 文書を切り替えると、ミニマップは新しい文書の字を描く（前の文書の字の画像を使い回さない）。
   func testSwitchingDocumentsDrawsTheNewDocument() throws {
     let hosted = try hostOverview("xxxxxxxx\n")
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     view.display()
     XCTAssertGreaterThan(try ViewPixels(view).alpha(in: cell(view, row: 0, column: 6)).max, 0.2)
 
@@ -177,7 +177,7 @@ extension EditorMinimapTests {
     let hosted = try hostOverview(
       text, height: 800, name: "p-\(UUID().uuidString).swift", colored: true)
     XCTAssertTrue(hosted.document.waitUntilCaughtUp())
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     view.display()
     hosted.document.scroll(toFirstLine: 2000)
     hosted.pane.layoutSubtreeIfNeeded()
@@ -197,7 +197,7 @@ extension EditorMinimapTests {
       name: "t-\(UUID().uuidString).swift", colored: true)
     let document = hosted.document
     XCTAssertTrue(document.waitUntilCaughtUp())
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     view.display()
     document.surface.selectedRange = NSRange(location: document.text.lineStart(100), length: 0)
     hosted.window.makeFirstResponder(document.surface.responder)

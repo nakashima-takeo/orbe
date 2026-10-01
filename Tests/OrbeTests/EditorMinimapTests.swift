@@ -27,36 +27,36 @@ final class EditorMinimapTests: OrbeTestCase {
     let hosted = try hostOverview(numberedLines(10))
     let pane = hosted.pane
     let body = pane.bodyRect
-    XCTAssertEqual(pane.scrollbar.frame.width, 14)
-    XCTAssertEqual(pane.scrollbar.frame.maxX, body.maxX)
-    XCTAssertEqual(pane.minimap.frame.maxX, pane.scrollbar.frame.minX)
+    XCTAssertEqual(pane.appKitOverview.scrollbar.frame.width, 14)
+    XCTAssertEqual(pane.appKitOverview.scrollbar.frame.maxX, body.maxX)
+    XCTAssertEqual(pane.appKitOverview.minimap.frame.maxX, pane.appKitOverview.scrollbar.frame.minX)
     let cell = (" " as NSString).size(withAttributes: [.font: Theme.Typography.editorCode]).width
     XCTAssertEqual(
-      pane.minimap.frame.width,
+      pane.appKitOverview.minimap.frame.width,
       MinimapLayout.width(
         remaining: body.width - 69, charWidth: cell, scrollbar: 14, maxWidth: 120))
-    XCTAssertLessThan(pane.minimap.frame.width, 120, "狭い列ではミニマップも細くなる")
-    XCTAssertEqual(pane.surfaceRect.maxX, pane.minimap.frame.minX)
-    XCTAssertFalse(pane.minimap.isHidden)
-    XCTAssertFalse(pane.scrollbar.isHidden)
+    XCTAssertLessThan(pane.appKitOverview.minimap.frame.width, 120, "狭い列ではミニマップも細くなる")
+    XCTAssertEqual(pane.surfaceRect.maxX, pane.appKitOverview.minimap.frame.minX)
+    XCTAssertFalse(pane.appKitOverview.minimap.isHidden)
+    XCTAssertFalse(pane.appKitOverview.scrollbar.isHidden)
 
     hosted.tab.editor.close(hosted.document)
     pane.layoutSubtreeIfNeeded()
-    XCTAssertTrue(pane.minimap.isHidden, "文書が無ければ隠れる")
-    XCTAssertTrue(pane.scrollbar.isHidden)
+    XCTAssertTrue(pane.appKitOverview.minimap.isHidden, "文書が無ければ隠れる")
+    XCTAssertTrue(pane.appKitOverview.scrollbar.isHidden)
     XCTAssertEqual(pane.surfaceRect, pane.bodyRect)
   }
 
   func testTheMinimapWidthStopsAtTheMaximum() throws {
     let hosted = try hostOverview(numberedLines(10), width: 2400)
-    XCTAssertEqual(hosted.pane.minimap.frame.width, 120)
+    XCTAssertEqual(hosted.pane.appKitOverview.minimap.frame.width, 120)
   }
 
   /// 字は 1 字 1 桁・1 行 2pt で、空白は描かずに桁だけ進み、タブは次のタブ位置まで空ける。字の形は字ごとに違う
   /// （矩形の縮図ではない）。
   func testGlyphsTakeOneColumnPerCharacterAndKeepTheirShape() throws {
     let hosted = try hostOverview("x\n    y\nab\tz\nM.\n")
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     let pixels = try ViewPixels(view)
     func ink(_ row: Int, _ column: Int) -> CGFloat {
       pixels.alpha(in: cell(view, row: row, column: column)).max
@@ -77,7 +77,7 @@ final class EditorMinimapTests: OrbeTestCase {
   func testGlyphsTakeTheColorOfTheirRole() throws {
     let hosted = try hostOverview(
       "struct S {}\n", name: "c-\(UUID().uuidString).swift", colored: true)
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     pumpMain(
       until: { !hosted.document.roles.roles(in: NSRange(location: 0, length: 6)).isEmpty }, "色付け")
     view.needsDisplay = true
@@ -97,7 +97,7 @@ final class EditorMinimapTests: OrbeTestCase {
     pane.search.setNeedle("needle")
     catchUp(hosted.document)
     XCTAssertEqual(pane.search.current, 0, "前提: 行 700 の一致が現在（選択の行には行の地を付けない）")
-    let view = pane.minimap
+    let view = pane.appKitOverview.minimap
     let layout = try XCTUnwrap(view.placement)
     XCTAssertGreaterThan(layout.startLine, 0, "前提: ミニマップが滑っている")
     let pixels = try ViewPixels(view)
@@ -118,7 +118,7 @@ final class EditorMinimapTests: OrbeTestCase {
   /// 帯は普段は隠れ、ミニマップの上にポインタがあると現れる。掴んでドラッグすると本文が付いてくる。
   func testTheSliderShowsOnHoverAndDraggingItScrollsTheText() throws {
     let hosted = try hostOverview(numberedLines(1000))
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     XCTAssertFalse(view.isSliderShown, "普段は隠れる")
     let layout = try XCTUnwrap(view.placement)
     let grab = NSPoint(x: 20, y: layout.sliderTop + layout.sliderHeight / 2)
@@ -141,7 +141,7 @@ final class EditorMinimapTests: OrbeTestCase {
   /// 帯を掴んだままミニマップの外へ出て離せば、帯は消える（ドラッグ中も出入りを受ける）。
   func testReleasingADragOutsideTheMinimapHidesTheSlider() throws {
     let hosted = try hostOverview(numberedLines(1000))
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     view.updateTrackingAreas()
     XCTAssertTrue(
       view.trackingAreas.contains {
@@ -164,7 +164,7 @@ final class EditorMinimapTests: OrbeTestCase {
     let clip = hosted.scroll.contentView
     clip.scroll(to: NSPoint(x: 300, y: 0))
     hosted.scroll.reflectScrolledClipView(clip)
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     let layout = try XCTUnwrap(view.placement)
     let point = NSPoint(x: 20, y: layout.sliderTop + layout.sliderHeight + 100)
     let line = layout.line(atY: point.y)
@@ -189,7 +189,7 @@ final class EditorMinimapTests: OrbeTestCase {
     pane.search.setNeedle("needle")
     catchUp(hosted.document)
     XCTAssertEqual(pane.search.current, 0, "前提: 現在の一致（行 12）が選択され、行 20 は選択されていない")
-    let view = pane.minimap
+    let view = pane.appKitOverview.minimap
     let pixels = try ViewPixels(view)
     let lineGround = pixels.color(view.bounds.width - 4, 20 * 2 + 1)
     XCTAssertTrue(Hue.orange(lineGround), "一致の行の薄い地: \(lineGround)")
@@ -209,12 +209,12 @@ final class EditorMinimapTests: OrbeTestCase {
     pane.search.setNeedle("a")
     catchUp(hosted.document)
     XCTAssertGreaterThan(pane.search.matches.count, 1000)
-    XCTAssertTrue(pane.minimap.decorations.approximatesFindMatches)
+    XCTAssertTrue(pane.appKitOverview.minimap.decorations.approximatesFindMatches)
     hosted.document.surface.selectedRange = NSRange(
       location: hosted.document.text.lineStart(50) + 2, length: 1)
     let current = try XCTUnwrap(pane.search.current)
     let row = hosted.document.text.row(containing: pane.search.matches[current].location)
-    let view = pane.minimap
+    let view = pane.appKitOverview.minimap
     let pixels = try ViewPixels(view)
     XCTAssertTrue(
       Hue.orange(pixels.color(view.bounds.width - 4, CGFloat(row + 5) * 2 + 1)) == false,
@@ -236,7 +236,7 @@ final class EditorMinimapTests: OrbeTestCase {
       .replacingOccurrences(of: "line 10\n", with: "")
       .replacingOccurrences(of: "line 15\n", with: "line 15\nline gone\n")
     pumpMain(until: { hosted.document.hunks.count == 3 }, "ハンク")
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     let scale: CGFloat = (view.window?.backingScaleFactor ?? 1) >= 2 ? 2 : 1
     let x = 3 / scale
     let pixels = try ViewPixels(view)
@@ -252,7 +252,7 @@ final class EditorMinimapTests: OrbeTestCase {
     let rope = hosted.document.text
     hosted.document.surface.selectedRange = NSRange(
       location: rope.lineStart(4), length: rope.lineEnd(4) - rope.lineStart(4))
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     let pixels = try ViewPixels(view)
     XCTAssertGreaterThan(pixels.color(view.bounds.width - 4, 4 * 2 + 1).alphaComponent, 0, "行 5 の地")
     XCTAssertEqual(pixels.color(view.bounds.width - 4, 5 * 2 + 1).alphaComponent, 0, "次の行には付かない")
@@ -264,7 +264,7 @@ final class EditorMinimapTests: OrbeTestCase {
   func testMultiLineSelectionFillsTheMiddleRowsUpToTheirEnds() throws {
     let hosted = try hostOverview(numberedLines(40))
     let rope = hosted.document.text
-    let view = hosted.pane.minimap
+    let view = hosted.pane.appKitOverview.minimap
     let start = rope.lineStart(2) + 2
     let end = rope.lineStart(30) + 3
     XCTAssertGreaterThan(CGFloat(end - rope.lineStart(3)), view.bounds.width, "前提: 終わりは幅の外")
@@ -289,7 +289,9 @@ final class EditorMinimapTests: OrbeTestCase {
     XCTAssertIdentical(container.scrollTarget, hosted.scroll, "面の器の渡し先は本文のスクロール")
     let spy = WheelSpy()
     container.scrollTarget = spy
-    for view in [hosted.pane.minimap, hosted.pane.scrollbar] as [NSView] {
+    for view in [hosted.pane.appKitOverview.minimap, hosted.pane.appKitOverview.scrollbar]
+      as [NSView]
+    {
       let wheel = try XCTUnwrap(
         CGEvent(
           scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -180, wheel2: 0,

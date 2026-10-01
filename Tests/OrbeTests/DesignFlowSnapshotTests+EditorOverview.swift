@@ -34,6 +34,24 @@ extension DesignFlowSnapshotTests {
     }
   }
 
+  /// `caughtUp` に加え、手順の後に語の出現の遅れ（50ms）を越えて 150ms 待ってから撮る——新しい面の flow（`*_metal`）と
+  /// 同じ時点を撮り、画素で比べられるようにする。
+  private func settled(_ pane: EditorPaneView, _ steps: [(label: String, action: () -> Void)])
+    -> [(label: String, action: () -> Void)]
+  {
+    caughtUp(
+      pane,
+      steps.map { step in
+        (
+          step.label,
+          {
+            step.action()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+          }
+        )
+      })
+  }
+
   func testEditorOverview() throws {
     let (scene, long) = try longScene()
     defer { scene.cleanup() }
@@ -48,7 +66,7 @@ extension DesignFlowSnapshotTests {
   /// ミニマップ: ホバーで帯が現れる → 帯を掴んで下へ 60pt ドラッグ（本文が追従・ドラッグ中は濃い色）→ 離して帯の外を
   /// 押す（その行が本文の中央に来る）。
   private func minimapSteps(_ pane: EditorPaneView) -> [(label: String, action: () -> Void)] {
-    let minimap = pane.minimap
+    let minimap = pane.appKitOverview.minimap
     func sliderMid() -> NSPoint {
       let layout = minimap.placement!
       return NSPoint(x: minimap.bounds.midX, y: layout.sliderTop + layout.sliderHeight / 2)
@@ -84,12 +102,12 @@ extension DesignFlowSnapshotTests {
   private func scrollbarSteps(_ pane: EditorPaneView, _ long: EditorDocument)
     -> [(label: String, action: () -> Void)]
   {
-    let scrollbar = pane.scrollbar
+    let scrollbar = pane.appKitOverview.scrollbar
     return [
       (
         "scrollbar_track",
         {
-          pane.mouseEntered(with: pane.enterExitEvent(.mouseEntered, area: pane.bodyTracking))
+          try? pane.deliverEnterExit(.mouseEntered, area: pane.appKitOverview.tracking)
           scrollbar.mouseDown(with: scrollbar.mouseEvent(.leftMouseDown, at: NSPoint(x: 7, y: 300)))
         }
       ),
@@ -111,7 +129,7 @@ extension DesignFlowSnapshotTests {
     let pane = scene.pane
     try flow(
       "editor_find", size: NSSize(width: 1000, height: 480), render: { scene.view },
-      steps: caughtUp(
+      steps: settled(
         pane,
         [
           ("open", {}),

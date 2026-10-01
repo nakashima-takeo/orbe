@@ -15,30 +15,44 @@ final class ScrollbarGeometryTests: XCTestCase {
     XCTAssertTrue(top.isNeeded)
     XCTAssertEqual(top.sliderLength, 20, "最小の長さ")
     XCTAssertEqual(top.sliderPosition, 0)
-    XCTAssertEqual(top.firstLine(afterDragging: 10), 29.38888888888889, accuracy: pixel)
-    XCTAssertEqual(top.firstLine(centeringSliderAt: 200), 558.2777777777778, accuracy: pixel)
+    XCTAssertEqual(top.position(afterDragging: 10), 29.38888888888889, accuracy: pixel)
+    XCTAssertEqual(top.position(centeringSliderAt: 200), 558.2777777777778, accuracy: pixel)
     let mid = ScrollbarGeometry(lineCount: 1000, firstLine: 400.25, visibleLines: 20, height: 360)
     XCTAssertEqual(mid.sliderPosition, 136)
-    XCTAssertEqual(mid.firstLine(afterDragging: 10), 429, accuracy: pixel)
+    XCTAssertEqual(mid.position(afterDragging: 10), 429, accuracy: pixel)
     let end = ScrollbarGeometry(lineCount: 1000, firstLine: 999, visibleLines: 20, height: 360)
     XCTAssertEqual(end.sliderPosition, 340, "最終行が最上段でつまみは下端")
-    XCTAssertEqual(end.maxFirstLine, 999)
-    XCTAssertEqual(end.firstLine(afterDragging: 50), 999, "上限で止まる")
-    XCTAssertEqual(top.firstLine(afterDragging: -50), 0, "下限で止まる")
+    XCTAssertEqual(end.maxPosition, 999)
+    XCTAssertEqual(end.position(afterDragging: 50), 999, "上限で止まる")
+    XCTAssertEqual(top.position(afterDragging: -50), 0, "下限で止まる")
   }
 
   func testShortDocumentsCanStillScrollTheLastLineToTheTop() {
     let short = ScrollbarGeometry(lineCount: 5, firstLine: 0, visibleLines: 20, height: 360)
     XCTAssertTrue(short.isNeeded)
     XCTAssertEqual(short.sliderLength, 300)
-    XCTAssertEqual(short.firstLine(afterDragging: 10), 0.6666666666666666, accuracy: pixel)
-    XCTAssertEqual(short.firstLine(centeringSliderAt: 200), 3.3333333333333335, accuracy: pixel)
+    XCTAssertEqual(short.position(afterDragging: 10), 0.6666666666666666, accuracy: pixel)
+    XCTAssertEqual(short.position(centeringSliderAt: 200), 3.3333333333333335, accuracy: pixel)
     let mid = ScrollbarGeometry(lineCount: 60, firstLine: 10, visibleLines: 20.5, height: 369)
     XCTAssertEqual(mid.sliderLength, 95)
     XCTAssertEqual(mid.sliderPosition, 46)
-    XCTAssertEqual(mid.firstLine(afterDragging: 10), 12.055555555555555, accuracy: pixel)
+    XCTAssertEqual(mid.position(afterDragging: 10), 12.055555555555555, accuracy: pixel)
     XCTAssertFalse(
       ScrollbarGeometry(lineCount: 1, firstLine: 0, visibleLines: 20, height: 360).isNeeded)
+  }
+
+  /// 横は pt の単位で同じ式——見えている幅・全体の幅・左の位置・トラックの長さ（VS Code の横の `ScrollbarState`）。
+  func testHorizontalUsesTheSameMappingInPoints() {
+    let bar = ScrollbarGeometry(visible: 500, total: 1500, position: 250, trackLength: 500)
+    XCTAssertTrue(bar.isNeeded)
+    XCTAssertEqual(bar.sliderLength, 166)
+    XCTAssertEqual(bar.sliderPosition, 84)
+    XCTAssertEqual(bar.maxPosition, 1000)
+    XCTAssertEqual(bar.position(afterDragging: 10), 281.437125748503, accuracy: 1e-9)
+    XCTAssertEqual(bar.position(centeringSliderAt: 500), 1000, "上限で止まる")
+    XCTAssertFalse(
+      ScrollbarGeometry(visible: 500, total: 500, position: 0, trackLength: 500).isNeeded,
+      "全部見えていれば出さない")
   }
 
   func testRulerMapsRowsProportionallyWithAMinimumHeightAndMergesNeighbours() {

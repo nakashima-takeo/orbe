@@ -3,95 +3,6 @@ import CoreText
 import OrbeEditorCore
 import os
 
-/// 色 1 つ（面の色空間の値、α は乗算していない）と、それで描く字の太らせの段（色空間と倍率で決まる）。
-struct FrameColor: Equatable, Sendable {
-  var packed: UInt32
-  var dilation: Int
-
-  /// `color` を外観 `appearance` で面の色空間 `space` に解き、倍率 `scale` で描く字の太らせの段を決める。
-  @MainActor
-  init(
-    _ color: NSColor, appearance: NSAppearance, space: CGColorSpace, fontSmoothing: Bool,
-    scale: CGFloat
-  ) {
-    var resolved = color
-    appearance.performAsCurrentDrawingAppearance {
-      resolved = NSColorSpace(cgColorSpace: space).flatMap { color.usingColorSpace($0) } ?? color
-    }
-    let components = [
-      resolved.redComponent, resolved.greenComponent, resolved.blueComponent,
-      resolved.alphaComponent,
-    ].map { Float(min(max($0, 0), 1)) }
-    packed = components.enumerated().reduce(UInt32(0)) {
-      $0 | UInt32(($1.element * 255).rounded()) << (8 * UInt32($1.offset))
-    }
-    dilation =
-      fontSmoothing
-      ? DilationProbe.level(
-        red: components[0], green: components[1], blue: components[2], space: space, scale: scale)
-      : 0
-  }
-
-  init(packed: UInt32, dilation: Int) {
-    self.packed = packed
-    self.dilation = dilation
-  }
-
-  /// 外観に依らない色（IME が指定した色）を sRGB に詰めたもの。
-  static func pack(_ color: NSColor) -> UInt32 {
-    let resolved = color.usingColorSpace(.sRGB) ?? color
-    return [
-      resolved.redComponent, resolved.greenComponent, resolved.blueComponent,
-      resolved.alphaComponent,
-    ].enumerated().reduce(UInt32(0)) {
-      $0 | UInt32((min(max($1.element, 0), 1) * 255).rounded()) << (8 * UInt32($1.offset))
-    }
-  }
-}
-
-/// 面の外観で解いた色の組。外観か倍率が変われば main が解き直して置く。
-struct FramePalette: Equatable, Sendable {
-  var text: FrameColor
-  var roles: [SyntaxRole: FrameColor]
-  var gutterText: FrameColor
-  var added: FrameColor
-  var modified: FrameColor
-  var removed: FrameColor
-  var caret: FrameColor
-  var selection: FrameColor
-  var inactiveSelection: FrameColor
-  /// 変換中の文字の見た目（OS の文字入力の見た目で、見え方の契約には出さない）——IME が選んでいない文節の下線と、属性の
-  /// 無い未確定の文字の地（NSTextView の既定の `markedTextAttributes`）。IME が選んでいる文節の下線は本文の色。
-  var markedUnderline: FrameColor
-  var markedBackground: FrameColor
-
-  /// NSTextView の既定の未確定の地（外観で解く動的な色）。
-  @MainActor private static let markedBackgroundColor =
-    NSTextView().markedTextAttributes?[.backgroundColor] as? NSColor ?? .systemYellow
-
-  @MainActor
-  init(
-    style: TextSurfaceStyle, appearance: NSAppearance, space: CGColorSpace, fontSmoothing: Bool,
-    scale: CGFloat
-  ) {
-    let resolve = {
-      FrameColor(
-        $0, appearance: appearance, space: space, fontSmoothing: fontSmoothing, scale: scale)
-    }
-    text = resolve(style.textColor)
-    caret = resolve(style.caretColor)
-    selection = resolve(style.selectionColor)
-    inactiveSelection = resolve(style.inactiveSelectionColor)
-    roles = style.roleColors.mapValues(resolve)
-    gutterText = resolve(style.gutterTextColor)
-    added = resolve(style.marks.added)
-    modified = resolve(style.marks.modified)
-    removed = resolve(style.marks.removed)
-    markedUnderline = resolve(.tertiaryLabelColor)
-    markedBackground = resolve(Self.markedBackgroundColor)
-  }
-}
-
 /// 行の印（git ガター）を行に写したもの。面が印を受け取ったときに、引いた写しで写す。
 struct RowMarks: Equatable, Sendable {
   struct Bar: Equatable, Sendable {
@@ -127,6 +38,14 @@ struct RowMarks: Equatable, Sendable {
 
 /// 面を作るときに決まり、閉じるまで変わらない見え方。フォントは不変で、Core Text はスレッドをまたいだ利用を保証する。
 struct SurfaceConfig: @unchecked Sendable {
+  /// 装備の寸法。
+  struct Decorations: Sendable {
+    var indentGuideWidth: CGFloat
+    var whitespaceDiameter: CGFloat
+    var linkUnderlineThickness: CGFloat
+    var linkUnderlineOffset: CGFloat
+  }
+
   struct Marks: Sendable {
     var gutterWidth: CGFloat
     var barWidth: CGFloat
@@ -143,6 +62,8 @@ struct SurfaceConfig: @unchecked Sendable {
   let gutterWidth: CGFloat
   let gutterTrailingInset: CGFloat
   let marks: Marks
+  let decorations: Decorations
+  let overview: Overview
   let fontSmoothing: Bool
   /// 打ち切った行の末尾に出す印の文言（打ち切った単位の数から）。
   let omittedLabel: @Sendable (Int) -> String
@@ -170,6 +91,12 @@ struct SurfaceConfig: @unchecked Sendable {
       gutterWidth: style.marks.gutterWidth, barWidth: style.marks.barWidth,
       barInset: style.marks.barInset, barRadius: style.marks.barRadius,
       triangleSize: style.marks.triangleSize)
+    decorations = Decorations(
+      indentGuideWidth: style.decorations.indentGuideWidth,
+      whitespaceDiameter: style.decorations.whitespaceDiameter,
+      linkUnderlineThickness: style.decorations.linkUnderlineThickness,
+      linkUnderlineOffset: style.decorations.linkUnderlineOffset)
+    overview = Overview(style.overview)
     self.fontSmoothing = fontSmoothing
     self.omittedLabel = omittedLabel
     cell = Self.advances(of: [0x20], in: font).advances[0]
@@ -215,22 +142,34 @@ struct SurfaceConfig: @unchecked Sendable {
   var baseline: CGFloat { (lineHeight - (ascent + descent)) / 2 + ascent }
 }
 
-/// 本文の編集で組版の変わった行——編集前の行 `rows` が編集後の `inserted` 行に置き換わり、後ろの行はずれる。`version`
-/// は編集後の写しの版。
+/// 変わった行——本文の編集では編集前の行 `rows` が編集後の `inserted` 行に置き換わり、後ろの行はずれる。役割だけが変わった
+/// 行（`rolesOnly`）は中身も行の数も同じで色だけが変わる（組版は捨てず、色を覚えたもの——ミニマップの字——だけを捨てる）。
+/// 本文の編集と役割の変化は、届いた順に 1 本の列に積む（前後して届いても、行のずれを順に当てれば正しい行を捨てる）。
+/// `version` は変わった後の写しの版。
 struct RowEdit: Equatable, Sendable {
   var rows: Range<Int>
   var inserted: Int
   var version: Int
+  var rolesOnly = false
+  /// 本文の編集。行へ写した区間を編集でずらして使い回すのに使う（全部の行が変わった・役割だけが変わったなら nil）。
+  var text: TextChange?
+
+  /// 本文の編集の区間（編集前の本文の座標）と置き換えの長さ。
+  struct TextChange: Equatable, Sendable {
+    var range: NSRange
+    var replacementLength: Int
+  }
 
   /// 全部の行が変わった。
   static func all(version: Int) -> RowEdit {
     RowEdit(rows: 0..<Int.max, inserted: 0, version: version)
   }
 
-  init(rows: Range<Int>, inserted: Int, version: Int) {
+  init(rows: Range<Int>, inserted: Int, version: Int, rolesOnly: Bool = false) {
     self.rows = rows
     self.inserted = inserted
     self.version = version
+    self.rolesOnly = rolesOnly
   }
 
   /// 編集前の本文 `text` への編集 `edit`。置き換えた区間の始まりの行から終わりの行までが、置き換えの中身の行に変わる。
@@ -240,6 +179,7 @@ struct RowEdit: Equatable, Sendable {
     rows = first..<last + 1
     inserted = edit.replacement.reduce(1) { $1 == 0x0A ? $0 + 1 : $0 }
     self.version = version
+    self.text = TextChange(range: edit.range, replacementLength: edit.replacementLength)
   }
 }
 
@@ -304,6 +244,10 @@ struct FrameMaterial: Sendable {
   var reveal: HorizontalReveal?
   /// ドラッグで落とす位置の印（ドラッグの間だけ）。
   var drop: Int?
+  /// 強調の地（Orbe が押した区間）。
+  var highlights = Highlights()
+  /// 俯瞰の操作の状態。
+  var overview = OverviewInput()
   var palette: FramePalette?
   var tabColumns = Indentation.fallback.unit
   /// 面の大きさ（pt）と倍率。

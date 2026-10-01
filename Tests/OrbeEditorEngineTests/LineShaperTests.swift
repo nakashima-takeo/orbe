@@ -26,6 +26,18 @@ final class LineShaperTests: XCTestCase {
       Array(LineShaper.display(source("a\rb")).units), [0x61, 0x240D, 0x62], "途中の CR は ␍")
   }
 
+  /// 描きうる先頭より長い行も、長さは行末の `\r` と改行を除いた中身で、読むのは描きうる先頭だけ（最後の行の行末の `\r` も
+  /// 除く）。
+  func testLongLineLengthExcludesTheTrailingCarriageReturn() {
+    let long = String(repeating: "x", count: LineShaper.headLimit + 5)
+    let text = TextRope(long + "\r\n" + long + "\n" + long + "\r")
+    for row in 0..<3 {
+      let line = LineShaper.source(row: row, in: text).source
+      XCTAssertEqual(line.length, LineShaper.headLimit + 5, "行 \(row) の長さ")
+      XCTAssertEqual(line.head.count, LineShaper.headLimit, "行 \(row) の読む先頭")
+    }
+  }
+
   /// C0 の制御文字は U+2400 台、DEL は U+2421、U+2028・U+2029・U+0085・U+FEFF は U+FFFD。タブはそのまま（空ける）。
   func testControlCharactersAreShownAsSymbols() {
     let line = source("\u{0}\u{1b}\t\u{7f}\u{2028}\u{2029}\u{85}a\u{feff}")
@@ -126,6 +138,39 @@ final class LineShaperTests: XCTestCase {
         XCTAssertEqual(map.x(offset), primary, accuracy: 0.01, "\(string) の位置 \(offset)")
       }
     }
+  }
+
+  /// 等幅のフォントの ASCII の字とタブだけの行は位置と x の対応をグリフの位置から作り、その答えは Core Text に縁を数えさせたものと同じ
+  /// ——主と副の x と、区間の見た目の区間（打ち切った行の描かない部分も）。ASCII でない字を含む行は Core Text に数えさせる。
+  func testASCIILinesBuildTheCaretMapFromGlyphsWithTheSameAnswer() {
+    let tab = cell * 4
+    let samples = [
+      "", "a", "let x = [1, 2]  // note ", "\tif x {\t\ty }", "    indented", "a  b   c\t",
+      String(repeating: "\"item\", 7, ", count: 900), String(repeating: "a", count: 10_050),
+    ]
+    for string in samples {
+      let shaped = LineShaper.shape(source(string), font: font, tabWidth: tab)
+      XCTAssertTrue(shaped.simple, "前提: 単純な行 \(string.prefix(20))")
+      let fast = shaped.carets
+      let reference = CaretMap(shaped.line, width: shaped.width)
+      XCTAssertEqual(fast.count, reference.count)
+      for offset in 0...fast.count {
+        XCTAssertEqual(fast.x(offset), reference.x(offset), "\(string.prefix(20)) の位置 \(offset)")
+      }
+      for (from, to) in [(0, fast.count), (1, 3), (2, 2), (fast.count / 2, fast.count)] {
+        XCTAssertEqual(
+          fast.segments(from: from, to: to), reference.segments(from: from, to: to),
+          "\(string.prefix(20)) の \(from)..<\(to)")
+      }
+    }
+    for string in ["é", "a😀", "ab שלום"] {
+      XCTAssertFalse(
+        LineShaper.shape(source(string), font: font, tabWidth: tab).simple, "\(string.prefix(8))")
+    }
+    let proportional = NSFont.systemFont(ofSize: 12) as CTFont
+    XCTAssertFalse(
+      LineShaper.shape(source("let x = 1"), font: proportional, tabWidth: tab).simple,
+      "等幅でないフォントは Core Text に数えさせる")
   }
 
   /// 右から左の字を挟む選択は、見た目の区間ごとに分かれる——`ab שלום cd` の ש ל（位置 3〜5）は右から左の並びの右側、

@@ -1,6 +1,8 @@
 import AppKit
 import Metal
+import OrbeEditorCore
 import QuartzCore
+import os
 
 /// 1 コマを組み立てて Metal へ符号化し、画面（または画面外）へ出す。描画スレッドだけが触る。
 ///
@@ -10,7 +12,8 @@ import QuartzCore
 /// どの面のためにも待たない——面ごとに「画面に出ていないコマ」を数え、上限の面はそのコマを飛ばす（`nextDrawable` は
 /// 実際には待たない）。GPU の空きも待たずに数える。飛ばしたコマは、画面に出た知らせを受けた時点で次の刻みを待たずに描く。
 /// 位置は描く直前にコマの予定時刻で読む（指の出来事をできるだけ新しく入れる）。描くものが変わらないコマが続いたら、
-/// その面の刻みを止め、箱に書かれて起こされたら、その場で 1 コマ描いてから刻みに戻る。
+/// その面の刻みを止め、箱に書かれて起こされたら、その場で 1 コマ描いてから刻みに戻る。コマを出した後、ミニマップが
+/// 動いていれば次のコマが要りそうなまとまりを作っておく（`MinimapCells.prefetch`）。
 final class Renderer {
   let device: MTLDevice
   let queue: MTLCommandQueue
@@ -44,11 +47,9 @@ final class Renderer {
   // MARK: - 面の出入り
 
   func attach(
-    id: Int, material: MaterialBox, scroll: ScrollBox, config: SurfaceConfig,
-    notify: @escaping @Sendable () -> Void
+    id: Int, boxes: SurfaceBoxes, config: SurfaceConfig, notify: @escaping @Sendable () -> Void
   ) {
-    slots[id] = SurfaceSlot(
-      id: id, material: material, scroll: scroll, config: config, notify: notify)
+    slots[id] = SurfaceSlot(id: id, boxes: boxes, config: config, notify: notify)
   }
 
   /// 面が閉じた。刻みを外し、組版のキャッシュと写しの最後の参照をここ（描画スレッド）で手放す。
@@ -122,8 +123,7 @@ final class Renderer {
     slot.recorder.period = clock.period
     adoptFramePeriod()
     let material = slot.material.take()
-    slot.lines.receive(material.rowEdits)
-    slot.keystrokes += material.keystrokes
+    slot.receive(material)
     guard material.visible, material.content != nil, material.palette != nil,
       material.size.width > 0, material.size.height > 0
     else {
@@ -133,12 +133,12 @@ final class Renderer {
     let caretVisible = material.caret.caretVisible(at: target)
     let changed =
       material.revision != slot.drawnMaterial || slot.scroll.revision != slot.drawnScroll
-      || slot.returning || slot.atlasDirty
+      || slot.returning || slot.atlasDirty || slot.motion.due(at: target)
     guard changed || caretVisible != slot.drawnCaretVisible else {
       slot.recorder.idle(at: CACurrentMediaTime())
       slot.idleTicks += 1
       if slot.idleTicks >= Self.idleTicksBeforePause {
-        pause(slot, clock, blinking: material.caret, after: target)
+        pause(slot, clock, blinking: material.caret, after: target, fading: slot.motion.wakeAt)
       }
       return
     }
@@ -153,7 +153,9 @@ final class Renderer {
       return
     }
     draw(slot, material, into: acquired, at: target, Pass(pipelines: pipelines, atlas: atlas))
-    if !changed { pause(slot, clock, blinking: material.caret, after: target) }
+    if !changed {
+      pause(slot, clock, blinking: material.caret, after: target, fading: slot.motion.wakeAt)
+    }
   }
 
   /// 描くと決めたコマを組み立てて出す。
@@ -166,15 +168,14 @@ final class Renderer {
     let revealed = begin(slot, material)
     let frame = slot.scroll.frame(at: target, material: material.revision)
     let texture = acquired.texture
-    slot.builder.build(
-      FrameBuilder.Source(
-        material: material, position: frame.position, caretVisible: caretVisible,
-        pixels: (texture.width, texture.height), atlas: pass.atlas, config: slot.config),
-      cache: slot.lines, fonts: fonts)
+    slot.build(
+      material, scroll: (frame.position, frame.limits), moment: (caretVisible, target),
+      target: ((texture.width, texture.height), pass.atlas), fonts: fonts)
     let widened = slot.scroll.measured(
       longestLine: slot.builder.longestLine, version: material.content?.version)
     guard let commands = queue.makeCommandBuffer(),
-      let bufferIndex = encode(slot.builder, into: texture, pass, commands)
+      let bufferIndex = encode(
+        slot.builder, into: texture, minimapPass(slot, material, pass), commands)
     else {
       slot.owed = true
       return
@@ -210,6 +211,7 @@ final class Renderer {
         mismatch: texture.width != pixels.width || texture.height != pixels.height))
     if frame.returning || wasReturning || widened || revealed { slot.notify() }
     if let last = keystrokes.max() { scheduleTypingFlush(slot.id, after: last) }
+    slot.prefetchMinimap(material)
   }
 
   /// 打鍵の塊の区切りの長さだけ次の打鍵が無ければ、塊を締める。
@@ -235,8 +237,8 @@ final class Renderer {
     let row = text.row(containing: location)
     let start = text.lineStart(row)
     let line = slot.lines.line(
-      row: row, in: text, tabColumns: material.tabColumns, config: slot.config, fonts: fonts,
-      carets: true)
+      row: row, source: { LineShaper.source(row: row, in: text).source },
+      tabColumns: material.tabColumns, config: slot.config, fonts: fonts, carets: true)
     guard let carets = line.carets else { return false }
     let x0 = Double(carets.x(location - start))
     let x1 = text.row(containing: end) == row ? Double(carets.x(end - start)) : x0
@@ -253,14 +255,18 @@ final class Renderer {
     RenderThread.adopt(framePeriod: period)
   }
 
-  /// 刻みを止める。`blinking` のキャレットが点滅していれば、`drawn`（最後に描いた、または描かないと決めたコマの予定時刻）の
-  /// 後で表示が切り替わってから最初の刻みの、半刻み前に起きるタイマーを置く——起きたその場で、その刻みへ切り替わった表示を
-  /// 描ける（刻みを再開して、タイマーと刻みの 2 回起きることがない）。
+  /// 刻みを止める。`blinking` のキャレットが点滅していれば `drawn`（最後に描いた、または描かないと決めたコマの予定時刻）の
+  /// 後で表示が切り替わる時刻と、`fading`（つまみが消え始める時刻）の早い方から最初の刻みの、半刻み前に起きるタイマーを
+  /// 置く——起きたその場で、その刻みへ切り替わった表示を描ける（刻みを再開して、タイマーと刻みの 2 回起きることがない）。
+  /// 両方を渡すのは見えていて描き終えた面だけ（`fading` はコマを組むときにしか進まないので、描かない面へ渡すと過ぎた
+  /// 時刻で起き続ける）。
   private func pause(
     _ slot: SurfaceSlot, _ clock: FrameClock, blinking caret: CaretMaterial? = nil,
-    after drawn: Double = 0
+    after drawn: Double = 0, fading: Double? = nil
   ) {
-    if slot.blinkTimer == nil, let next = caret?.nextBlink(after: drawn) {
+    let blink = caret?.nextBlink(after: drawn)
+    let next = [blink, fading].compactMap { $0 }.min()
+    if slot.blinkTimer == nil, let next {
       let id = slot.id
       let wake = clock.nextTarget(after: next) - clock.period / 2
       let fire = CFAbsoluteTimeGetCurrent() + max(0, wake - CACurrentMediaTime())
@@ -307,50 +313,4 @@ final class Renderer {
     )
   }
 
-}
-
-/// 面 1 つぶんの描画スレッドの持ち物。
-final class SurfaceSlot {
-  let id: Int
-  let material: MaterialBox
-  let scroll: ScrollBox
-  let config: SurfaceConfig
-  /// 描画スレッドだけが変える位置と範囲（端への戻り・組んだ行で伸びた横の範囲）が変わったことを main へ知らせる
-  /// （非同期）。
-  let notify: @Sendable () -> Void
-  var target: FrameTarget?
-  var clock: FrameClock?
-  let lines = LineLayoutCache()
-  let builder = FrameBuilder()
-  let recorder = FrameRecorder()
-  /// 出したコマのうち、まだ画面に出ていない（present も破棄もされていない）数。
-  var unpresented = 0
-  /// 上限で飛ばしたコマがある（画面に出たら次の刻みを待たずに描く）。
-  var owed = false
-  var idleTicks = 0
-  /// 最後に描いたコマの材料・スクロールの版と位置。
-  var drawnMaterial = -1
-  var drawnScroll = -1
-  var drawnPosition: SIMD2<Double>?
-  var returning = false
-  var drawnCaretVisible = false
-  /// アトラスが埋まって字を落としたコマを描いた（作り直してもう一度描く）。
-  var atlasDirty = false
-  /// 読んだ材料に入っていて、まだ描いていない打鍵の時刻。
-  var keystrokes: [Double] = []
-  /// 次に点滅が切り替わる時刻に起きるタイマー（止めている間だけ）。
-  var blinkTimer: CFRunLoopTimer?
-  /// 解いた横の「見えるところまで」の通し番号。
-  var revealed = 0
-
-  init(
-    id: Int, material: MaterialBox, scroll: ScrollBox, config: SurfaceConfig,
-    notify: @escaping @Sendable () -> Void
-  ) {
-    self.id = id
-    self.material = material
-    self.scroll = scroll
-    self.config = config
-    self.notify = notify
-  }
 }
