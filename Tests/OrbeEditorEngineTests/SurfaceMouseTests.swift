@@ -53,8 +53,8 @@ final class SurfaceMouseTests: EngineTestCase {
     XCTAssertEqual(long.surface.caretLocation, long.document.text.lineStart(4000) + 4)
   }
 
-  /// 行番号の列を押すと行を改行まで選び、ドラッグは行の単位で伸びる。⇧↓ で伸ばした後の ⇧クリックは元の行から。
-  /// git の印の列は何もしない。
+  /// 行番号の列を押すと行を改行まで選び、ドラッグは行の単位で伸びる。⇧↓ で伸ばした後に上の行を ⇧クリックすると、元の行
+  /// から伸びる（元の行は選択に残る）。git の印の列は何もしない。
   func testGutterSelectsLines() throws {
     let opened = try open(sample)
     _ = host(opened)
@@ -63,16 +63,18 @@ final class SurfaceMouseTests: EngineTestCase {
     try mouse(opened, .leftMouseDragged, at: gutter(2))
     try mouse(opened, .leftMouseUp, at: gutter(2))
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 14, length: 32 - 14))
-    try mouse(opened, .leftMouseDown, at: gutter(0))
-    try mouse(opened, .leftMouseUp, at: gutter(0))
+    try mouse(opened, .leftMouseDown, at: gutter(1))
+    try mouse(opened, .leftMouseUp, at: gutter(1))
     opened.surface.perform(.move(.down, extending: true))
-    try mouse(opened, .leftMouseDown, at: gutter(2), flags: .shift)
-    try mouse(opened, .leftMouseUp, at: gutter(2), flags: .shift)
-    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 0, length: 32), "元の行（0）から")
+    XCTAssertEqual(opened.surface.selectedRange.location, 14, "前提: 1 行目から下へ伸びた")
+    try mouse(opened, .leftMouseDown, at: gutter(0), flags: .shift)
+    try mouse(opened, .leftMouseUp, at: gutter(0), flags: .shift)
+    XCTAssertEqual(
+      opened.surface.selectedRange, NSRange(location: 0, length: 26), "元の行（1）が選択に残る")
     let marks = CGPoint(
       x: opened.surface.config.columnWidth(lineCount: 4) - 3, y: gutter(1).y)
     try mouse(opened, .leftMouseDown, at: marks)
-    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 0, length: 32), "印の列は何もしない")
+    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 0, length: 26), "印の列は何もしない")
   }
 
   /// ⌘だけのクリックは URL を離したときに開き、動かして離せば開かない（その間は選択も伸びない）。

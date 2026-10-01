@@ -37,10 +37,11 @@ extension MetalTextSurfaceTests {
     XCTAssertEqual(opened.surface.caretLocation, 0)
   }
 
-  /// 本文の変わっていない行の役割だけが裏から変わっても（離れた行で開いたブロックコメント）、見えている行を新しい色で
-  /// 描き直す——開き直したのと同じ絵。
+  /// 本文の変わっていない行の役割だけが裏から変わっても（離れた閉じの手前で開いたブロックコメント）、見えている行を
+  /// 新しい色で描き直す——開き直したのと同じ絵。
   func testRowsWhoseRolesAloneChangeAreRedrawn() throws {
-    let lines = (0..<30).map { "let value\($0) = \($0)" }
+    var lines = (0..<30).map { "let value\($0) = \($0)" }
+    lines[20] = "// */"
     let opened = try open(
       lines.joined(separator: "\n") + "\n", size: CGSize(width: 400, height: 300))
     _ = try pixelShot(opened)
@@ -48,6 +49,10 @@ extension MetalTextSurfaceTests {
     opened.surface.perform(.insert("/*"))
     _ = try pixelShot(opened)
     XCTAssertTrue(opened.document.waitUntilCaughtUp())
+    let untouched = NSRange(location: opened.document.text.lineStart(5), length: 3)
+    XCTAssertEqual(
+      opened.document.roles.roles(in: untouched).map(\.role), [.comment],
+      "前提: 本文の変わらない行がコメントの役割になった")
     opened.surface.selectedRange = NSRange(location: 0, length: 0)
     var edited = lines
     edited[2] = "/*" + edited[2]

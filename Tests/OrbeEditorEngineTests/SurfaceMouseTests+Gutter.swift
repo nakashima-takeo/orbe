@@ -98,7 +98,9 @@ extension SurfaceMouseTests {
       .joined(separator: "\n") + "\n"
     let opened = try open(long, size: CGSize(width: 600, height: 300))
     _ = host(opened, size: CGSize(width: 600, height: 300))
+    _ = opened.surface.snapshot()
     opened.surface.scroll(toX: 200)
+    XCTAssertEqual(opened.surface.scrollPosition.x, 200, "前提: 横へ送った")
     _ = opened.surface.snapshot()
     let lineHeight = Double(opened.surface.config.lineHeight)
     let lastVisible =
