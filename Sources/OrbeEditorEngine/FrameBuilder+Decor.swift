@@ -10,13 +10,16 @@ struct LineDecor: Sendable {
   var whitespace: [Range<Int>]
   var links: [NSRange]
 
-  /// 読むのは描きうる先頭（`LineShaper.Source`）。対の片割れは U+FFFD（1 単位）に読むので、位置はずれない。
+  /// 読むのは描きうる先頭（`LineShaper.Source`）の UTF-16 単位で、URL を含みうる行だけ字に直して読む（対の片割れは
+  /// U+FFFD（1 単位）に読むので、位置はずれない）。
   init(_ source: LineShaper.Source, unit: Int) {
-    let line = String(decoding: source.head, as: UTF16.self)
-    boundaries = IndentGuides.boundaries(of: line[...], unit: unit)
-    blank = source.head.count == source.length && IndentGuides.isBlank(line[...])
-    whitespace = WhitespaceRuns.runs(in: line[...])
-    links = LinkDetector.links(in: line).map(\.range)
+    let line = source.head
+    boundaries = IndentGuides.boundaries(of: line, unit: unit)
+    blank = line.count == source.length && IndentGuides.isBlank(line)
+    whitespace = WhitespaceRuns.runs(in: line)
+    links =
+      LinkDetector.mayContainLinks(line)
+      ? LinkDetector.links(in: String(decoding: line, as: UTF16.self)).map(\.range) : []
   }
 
   /// 字の位置の x が要る（段の境の線・丸点・下線のどれかがある）。
@@ -141,7 +144,7 @@ final class BlankBlocks {
     let below = Self.nonBlankBelow(row, in: text)
     let level = { (row: Int) in
       let head = LineShaper.source(row: row, in: text).source.head
-      return IndentGuides.boundaries(of: String(decoding: head, as: UTF16.self)[...], unit: unit)
+      return IndentGuides.boundaries(of: head, unit: unit)
         .count
     }
     let block = Block(

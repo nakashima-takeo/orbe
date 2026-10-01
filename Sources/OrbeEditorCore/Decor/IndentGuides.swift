@@ -3,14 +3,14 @@ import Foundation
 /// 行のインデントの段。行頭の空白を桁で数え、`unit` 桁ごとに 1 段（スペースは 1 桁、タブは次の段の境まで）。
 /// 端数は段にならない。空白だけの行は前後の非空行の浅い方まで線が続く（片側が無ければ 0）。
 public enum IndentGuides {
-  /// 行頭の空白が成す段の境（行内の UTF-16 オフセット）。`boundaries[k - 1]` は段 k の線が立つ文字の位置で、
+  /// 行頭の空白が成す段の境（行の UTF-16 単位 `line` の中のオフセット）。`boundaries[k - 1]` は段 k の線が立つ文字の位置で、
   /// その直前までが k 段ぶんの空白。
-  public static func boundaries(of line: Substring, unit: Int) -> [Int] {
+  @inlinable public static func boundaries(of line: some Sequence<UInt16>, unit: Int) -> [Int] {
     guard unit > 0 else { return [] }
     var result: [Int] = []
     var column = 0
     var offset = 0
-    for unitValue in line.utf16 {
+    for unitValue in line {
       switch unitValue {
       case 0x20: column += 1
       case 0x09: column += unit - column % unit
@@ -42,13 +42,13 @@ public enum IndentGuides {
     }
   }
 
-  /// 空白（スペース・タブ・CR）だけの行。
-  public static func isBlank(_ line: Substring) -> Bool {
-    line.utf16.allSatisfy(isBlank(unit:))
+  /// 空白（スペース・タブ・CR）だけの行（行の UTF-16 単位 `line`）。
+  @inlinable public static func isBlank(_ line: some Sequence<UInt16>) -> Bool {
+    line.allSatisfy(isBlank(unit:))
   }
 
   /// 空白だけの行を成す UTF-16 単位（スペース・タブ・CR）。
-  public static func isBlank(unit: UInt16) -> Bool {
+  @inlinable public static func isBlank(unit: UInt16) -> Bool {
     unit == 0x20 || unit == 0x09 || unit == 0x0D
   }
 }

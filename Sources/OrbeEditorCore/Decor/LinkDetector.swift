@@ -11,6 +11,21 @@ public enum LinkDetector {
     public let url: URL
   }
 
+  /// 行の UTF-16 単位 `line` が URL の始まり（`://`）を含みうるか。含まなければ `links` は空——字を読む前に単位だけで
+  /// 見分ける（長い行の大半は URL を持たない）。
+  @inlinable public static func mayContainLinks(_ line: some Sequence<UInt16>) -> Bool {
+    var matched = 0
+    for unit in line {
+      switch (matched, unit) {
+      case (_, 0x3A): matched = 1
+      case (1, 0x2F): matched = 2
+      case (2, 0x2F): return true
+      default: matched = 0
+      }
+    }
+    return false
+  }
+
   public static func links(in line: String) -> [Link] {
     var result: [Link] = []
     var index = line.startIndex

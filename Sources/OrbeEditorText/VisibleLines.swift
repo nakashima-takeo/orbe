@@ -169,7 +169,7 @@ struct VisibleLines {
         let elementRange = element.elementRange, elementRange != anchor
       else { return true }
       let text = body(of: paragraph)
-      guard !IndentGuides.isBlank(text[...]) else { return true }
+      guard !IndentGuides.isBlank(text.utf16) else { return true }
       found = text
       return false
     }

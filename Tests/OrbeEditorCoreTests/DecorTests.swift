@@ -56,14 +56,14 @@ final class DecorTests: XCTestCase {
   }
 
   func testIndentGuideBoundariesAndLevels() {
-    XCTAssertEqual(IndentGuides.boundaries(of: "    x", unit: 2), [2, 4])
-    XCTAssertEqual(IndentGuides.boundaries(of: "     x", unit: 2), [2, 4], "端数は段にならない")
-    XCTAssertEqual(IndentGuides.boundaries(of: "\t\tx", unit: 4), [1, 2], "タブは 1 段")
-    XCTAssertEqual(IndentGuides.boundaries(of: "  \tx", unit: 4), [3], "タブは次の段の境まで")
-    XCTAssertEqual(IndentGuides.boundaries(of: "x", unit: 4), [])
-    XCTAssertEqual(IndentGuides.boundaries(of: "", unit: 4), [])
-    XCTAssertTrue(IndentGuides.isBlank("  \t\r"), "スペース・タブ・CR だけの行は空白だけの行")
-    XCTAssertFalse(IndentGuides.isBlank("  x"))
+    XCTAssertEqual(IndentGuides.boundaries(of: "    x".utf16, unit: 2), [2, 4])
+    XCTAssertEqual(IndentGuides.boundaries(of: "     x".utf16, unit: 2), [2, 4], "端数は段にならない")
+    XCTAssertEqual(IndentGuides.boundaries(of: "\t\tx".utf16, unit: 4), [1, 2], "タブは 1 段")
+    XCTAssertEqual(IndentGuides.boundaries(of: "  \tx".utf16, unit: 4), [3], "タブは次の段の境まで")
+    XCTAssertEqual(IndentGuides.boundaries(of: "x".utf16, unit: 4), [])
+    XCTAssertEqual(IndentGuides.boundaries(of: "".utf16, unit: 4), [])
+    XCTAssertTrue(IndentGuides.isBlank("  \t\r".utf16), "スペース・タブ・CR だけの行は空白だけの行")
+    XCTAssertFalse(IndentGuides.isBlank("  x".utf16))
   }
 
   /// 空白だけの行は前後の非空行の浅い方——並びの中の非空行でも、並びの外の段でも。片側が無ければ 0。
@@ -80,14 +80,17 @@ final class DecorTests: XCTestCase {
   // MARK: - 空白
 
   func testBoundaryWhitespaceOnly() {
-    XCTAssertEqual(WhitespaceRuns.runs(in: "a b"), [], "単語間の 1 個には出ない")
-    XCTAssertEqual(WhitespaceRuns.runs(in: "  a  b c "), [0..<2, 3..<5, 8..<9])
-    XCTAssertEqual(WhitespaceRuns.runs(in: " a"), [0..<1], "行頭は 1 個でも出る")
-    XCTAssertEqual(WhitespaceRuns.runs(in: "a \r"), [1..<2], "CR は行の外（行末の 1 個が出る）")
-    XCTAssertEqual(WhitespaceRuns.runs(in: "\ta\tb"), [], "タブには出ない")
-    XCTAssertEqual(WhitespaceRuns.runs(in: "a\u{00A0}b"), [], "NBSP には出ない")
-    XCTAssertEqual(WhitespaceRuns.runs(in: "   "), [0..<3])
-    XCTAssertEqual(WhitespaceRuns.runs(in: ""), [])
+    XCTAssertEqual(WhitespaceRuns.runs(in: "a b".utf16), [], "単語間の 1 個には出ない")
+    XCTAssertEqual(WhitespaceRuns.runs(in: "  a  b c ".utf16), [0..<2, 3..<5, 8..<9])
+    XCTAssertEqual(WhitespaceRuns.runs(in: " a".utf16), [0..<1], "行頭は 1 個でも出る")
+    XCTAssertEqual(WhitespaceRuns.runs(in: "a \r".utf16), [1..<2], "CR は行の外（行末の 1 個が出る）")
+    XCTAssertEqual(WhitespaceRuns.runs(in: "\ta\tb".utf16), [], "タブには出ない")
+    XCTAssertEqual(WhitespaceRuns.runs(in: "a\u{00A0}b".utf16), [], "NBSP には出ない")
+    XCTAssertEqual(WhitespaceRuns.runs(in: "   ".utf16), [0..<3])
+    XCTAssertEqual(WhitespaceRuns.runs(in: "".utf16), [])
+    XCTAssertEqual(WhitespaceRuns.runs(in: "a \rb".utf16), [], "途中の CR の前の 1 個は単語間")
+    XCTAssertEqual(WhitespaceRuns.runs(in: " \r".utf16), [0..<1])
+    XCTAssertEqual(WhitespaceRuns.runs(in: "a  b \r".utf16), [1..<3, 4..<5])
   }
 
   // MARK: - URL
@@ -109,6 +112,18 @@ final class DecorTests: XCTestCase {
       ])
     XCTAssertEqual(urls("ftp://a.b example.com www.x.y"), [], "http(s) 以外・bare domain は取らない")
     XCTAssertEqual(urls("https://"), [], "本体が無ければ取らない")
+  }
+
+  /// `://` を含まない行は URL を持たない——字を読まずに単位だけで見分ける口と、字を読む規則の答えが揃う。
+  func testLinesWithoutASchemeSeparatorHaveNoLinks() {
+    for line in [
+      "see https://example.com/a and http://x.y", "https:/a.b", "a :// b", "http:/ /x", "x:/", "",
+      "日本語 https://a.b/c 😀",
+    ] {
+      let may = LinkDetector.mayContainLinks(line.utf16)
+      XCTAssertEqual(may, line.contains("://"), line)
+      if !may { XCTAssertEqual(urls(line), [], line) }
+    }
   }
 
   /// 刈った後の区間も刈った長さになる（下線と ⌘クリックの当たりが句読点まで伸びない）。

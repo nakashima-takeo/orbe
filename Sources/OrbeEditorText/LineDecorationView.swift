@@ -48,11 +48,11 @@ final class LineDecorationView: NSView {
   /// 非空行は端の段落が空白だけのときだけ探す。
   private func indentLevels(_ lines: [VisibleLine], geometry: VisibleLines) -> [Int] {
     let level = { (text: String) in
-      IndentGuides.boundaries(of: text[...], unit: self.indentUnit).count
+      IndentGuides.boundaries(of: text.utf16, unit: self.indentUnit).count
     }
-    let own = lines.map { IndentGuides.isBlank($0.text[...]) ? nil : level($0.text) }
+    let own = lines.map { IndentGuides.isBlank($0.text.utf16) ? nil : level($0.text) }
     let outside = { (line: VisibleLine?, forward: Bool) -> Int? in
-      guard let line, IndentGuides.isBlank(line.text[...]) else { return nil }
+      guard let line, IndentGuides.isBlank(line.text.utf16) else { return nil }
       return geometry.neighbourNonBlank(of: line, forward: forward).map(level)
     }
     return IndentGuides.levels(
@@ -64,7 +64,7 @@ final class LineDecorationView: NSView {
   private func drawIndentGuides(
     _ line: VisibleLine, level: Int, geometry: VisibleLines, cell: CGFloat
   ) {
-    let boundaries = IndentGuides.boundaries(of: line.text[...], unit: indentUnit)
+    let boundaries = IndentGuides.boundaries(of: line.text.utf16, unit: indentUnit)
     guard level > 0, let row = line.rows.first else { return }
     style.indentGuideColor.setFill()
     for k in 0..<level {
@@ -81,7 +81,7 @@ final class LineDecorationView: NSView {
   }
 
   private func drawWhitespace(_ line: VisibleLine, geometry: VisibleLines) {
-    let runs = WhitespaceRuns.runs(in: line.text[...])
+    let runs = WhitespaceRuns.runs(in: line.text.utf16)
     guard !runs.isEmpty else { return }
     style.whitespaceColor.setFill()
     let diameter = style.whitespaceDiameter
