@@ -16,13 +16,15 @@ extension MetalTextSurface {
     }
   }
 
-  /// スクロールの出来事（面自身の入力）をその場で箱の物理へ当て、見えている範囲をその場で知らせ、処理の終わりで出す。
-  /// 先に置いてまだ出していない位置と範囲があれば、出来事より前のことなので先に出す。
+  /// スクロールの出来事（面自身の入力）をその場で箱の物理へ当てて描画スレッドを起こし、見えている範囲をその場で知らせ、
+  /// それへの反応は処理の終わりで出す。当てた位置は当てた時点で描画スレッドから見えるので、起こすのを処理の終わりまで
+  /// 待たない（待つと、main が詰まった後にまとめて届いた出来事の分だけ、起こされたコマが組む行が増える）。先に置いて
+  /// まだ出していない位置と範囲があれば、出来事より前のことなので先に出す。
   func scroll(_ input: ScrollInput) {
     inputScope {
       if pending.position != nil || pending.limits != nil { flush() }
       guard scroll.apply(input) else { return }
-      pending.wakes = true
+      wake()
       refreshViewport()
     }
   }

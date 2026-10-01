@@ -16,15 +16,8 @@ struct Pending {
   var position: SIMD2<Double>?
   /// 最も長い行をこの版以降の写しで測り直す。
   var remeasure: Int?
-  /// 指の出来事で箱の位置が動いた（描画スレッドを起こすだけ）。
-  var wakes = false
 
-  var isEmpty: Bool {
-    writes.isEmpty && limits == nil && position == nil && remeasure == nil && !wakes
-  }
-
-  /// 箱の版を進めずに起こすだけで足りる。
-  var wakesOnly: Bool { writes.isEmpty && limits == nil && position == nil && remeasure == nil }
+  var isEmpty: Bool { writes.isEmpty && limits == nil && position == nil && remeasure == nil }
 }
 
 /// 取引が置く範囲の値（描画スレッドが組んだ行で伸ばす最も長い行の幅は含まない）。
@@ -74,10 +67,6 @@ extension MetalTextSurface {
     guard !pending.isEmpty else { return }
     let out = pending
     pending = Pending()
-    guard !out.wakesOnly else {
-      wake()
-      return
-    }
     let revision = material.revision + 1
     if let from = out.remeasure { scroll.remeasure(from: from) }
     if let limits = out.limits { scroll.updateLimits(limits, heldUntil: revision) }
