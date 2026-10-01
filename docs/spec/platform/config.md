@@ -1,7 +1,7 @@
 ---
 title: 設定
 description: キュレート既定 → user 設定 → GUI 生成 conf の後勝ち 3 層読み込みと、テーマ（Auto/Dark/Light 外観スイッチ）によるライト/ダーク決定
-updated: 2026-10-02
+updated: 2026-09-18
 ---
 
 # 設定
