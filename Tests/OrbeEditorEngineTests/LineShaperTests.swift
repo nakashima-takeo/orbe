@@ -140,6 +140,35 @@ final class LineShaperTests: XCTestCase {
     }
   }
 
+  /// ASCII の字とタブだけの行は位置と x の対応をグリフの位置から作り、その答えは Core Text に縁を数えさせたものと同じ
+  /// ——主と副の x と、区間の見た目の区間（打ち切った行の描かない部分も）。ASCII でない字を含む行は Core Text に数えさせる。
+  func testASCIILinesBuildTheCaretMapFromGlyphsWithTheSameAnswer() {
+    let tab = cell * 4
+    let samples = [
+      "", "a", "let x = [1, 2]  // note ", "\tif x {\t\ty }", "    indented", "a  b   c\t",
+      String(repeating: "\"item\", 7, ", count: 900), String(repeating: "a", count: 10_050),
+    ]
+    for string in samples {
+      let shaped = LineShaper.shape(source(string), font: font, tabWidth: tab)
+      XCTAssertTrue(shaped.simple, "前提: 単純な行 \(string.prefix(20))")
+      let fast = shaped.carets
+      let reference = CaretMap(shaped.line, width: shaped.width)
+      XCTAssertEqual(fast.count, reference.count)
+      for offset in 0...fast.count {
+        XCTAssertEqual(fast.x(offset), reference.x(offset), "\(string.prefix(20)) の位置 \(offset)")
+      }
+      for (from, to) in [(0, fast.count), (1, 3), (2, 2), (fast.count / 2, fast.count)] {
+        XCTAssertEqual(
+          fast.segments(from: from, to: to), reference.segments(from: from, to: to),
+          "\(string.prefix(20)) の \(from)..<\(to)")
+      }
+    }
+    for string in ["é", "a😀", "ab שלום"] {
+      XCTAssertFalse(
+        LineShaper.shape(source(string), font: font, tabWidth: tab).simple, "\(string.prefix(8))")
+    }
+  }
+
   /// 右から左の字を挟む選択は、見た目の区間ごとに分かれる——`ab שלום cd` の ש ל（位置 3〜5）は右から左の並びの右側、
   /// 並び全体は 1 つの区間、左から右の字だけなら 1 つの区間。
   func testSelectionSegmentsSplitAroundRightToLeftRuns() {
