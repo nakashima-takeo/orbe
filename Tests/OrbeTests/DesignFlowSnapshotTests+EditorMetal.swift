@@ -157,7 +157,9 @@ extension DesignFlowSnapshotTests {
               let at = NSPoint(x: layout().minimap.minX + 30, y: 30)
               view.mouseDown(with: view.mouseEvent(.leftMouseDown, at: at))
               view.mouseUp(with: view.mouseEvent(.leftMouseUp, at: at))
-              surface.inputScope { pointer.pointerMoved(to: NSPoint(x: -1, y: -1), inside: false) }
+              // 今の面の flow と同じく、ポインタはミニマップから出て本体の上に残る（帯は消え、つまみは見えたまま）。
+              let body = NSPoint(x: layout().text.midX, y: 30)
+              surface.inputScope { pointer.pointerMoved(to: body, inside: true) }
             }
           ),
           (
