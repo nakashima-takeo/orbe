@@ -5,7 +5,8 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 新しい面の縦スクロールバーの印と影（今の面の俯瞰と同じ規則）。壊れると git の変更・検索の一致・語の出現・キャレットの
-/// 位置がスクロールバーに出ない・違うレーンに出る、上に隠れた行があるのに影が出ない（無いのに出る）。
+/// 位置がスクロールバーに出ない・違うレーンに出る、上に隠れた行や右に続く本文があるのに影が出ない（無いのに出る）、影が
+/// ミニマップに掛かる。
 @MainActor
 final class SurfaceOverviewMarksTests: EngineTestCase {
   private static let white = MTLClearColor(red: 1, green: 1, blue: 1, alpha: 1)
@@ -65,5 +66,26 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     opened.surface.scroll(toFirstLine: 10)
     let scrolled = try pixelShot(opened, background: Self.white).rgb(x, 0.25)
     XCTAssertLessThan(scrolled[0], 200, "先頭が隠れていれば出る: \(scrolled)")
+  }
+
+  /// ミニマップの左の影は本文が右に続く間だけ、ミニマップの左 6pt の帯の外側（左）に、本文の上だけに出る。
+  func testTheMinimapShadowShowsOnlyWhileTheTextContinuesToTheRight() throws {
+    let opened = try open(
+      String(repeating: "x", count: 400) + String(repeating: "\n", count: 60),
+      size: CGSize(width: 800, height: 400))
+    _ = opened.surface.snapshot()
+    pump(until: { opened.surface.viewport.clipsRight }, "前提: 長い行の長さを測った")
+    let edge = opened.surface.surfaceLayout.minimap.minX
+    let y: CGFloat = 200
+    let shot = try pixelShot(opened, background: Self.white)
+    let outside = shot.rgb(edge - 7, y)
+    XCTAssertLessThan(outside[0], 250, "帯の外側に影: \(outside)")
+    XCTAssertEqual(shot.rgb(edge - 3, y), [255, 255, 255], "帯の中には描かない")
+    XCTAssertEqual(shot.rgb(edge + 0.5, y), [255, 255, 255], "ミニマップに掛けない")
+    opened.surface.scroll(toX: opened.surface.scrollState().limits.maximum.x)
+    XCTAssertFalse(opened.surface.viewport.clipsRight, "前提: 右端まで送った")
+    XCTAssertEqual(
+      try pixelShot(opened, background: Self.white).rgb(edge - 7, y), [255, 255, 255],
+      "右に続かなければ無い")
   }
 }
