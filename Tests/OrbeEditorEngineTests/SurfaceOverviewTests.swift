@@ -66,21 +66,28 @@ final class SurfaceOverviewTests: EngineTestCase {
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 0, length: 0), "俯瞰の上では選ばない")
   }
 
-  /// 横に続く本文があるときだけ横スクロールバーがあり、トラックの押下とドラッグで横に動く（縦は動かない）。
+  /// 横に続く本文があるときだけ横スクロールバーがあり、トラックを押すとつまみの中央がそこへ飛び、そのままドラッグで横に
+  /// 動く（縦は動かない）。
   func testTheHorizontalScrollbarMovesSideways() throws {
-    let opened = try hosted(rows(40, width: 400))
+    let opened = try hosted(rows(10, width: 400))
     let bar = opened.surface.surfaceLayout.horizontalScrollbar
-    let (position, limits) = opened.surface.scrollState()
-    XCTAssertGreaterThan(limits.maximum.x, 0, "前提: 横に続く")
-    let before = ScrollbarGeometry(
-      visible: limits.viewport.x, total: limits.viewport.x + limits.maximum.x,
-      position: position.x, trackLength: bar.width)
+    XCTAssertGreaterThan(opened.surface.scrollState().limits.maximum.x, 0, "前提: 横に続く")
+    let thumbCenter = { () throws -> CGFloat? in
+      let shot = try self.pixelShot(opened)
+      let inked = stride(from: bar.minX, to: bar.maxX, by: 0.5).filter {
+        shot.hasInk($0, bar.midY)
+      }
+      guard let first = inked.first, let last = inked.last else { return nil }
+      return (first + last + 0.5) / 2 - bar.minX
+    }
     let at = CGPoint(x: bar.minX + 300, y: bar.midY)
     try mouse(opened, .leftMouseDown, at: at)
-    XCTAssertEqual(
-      opened.surface.scrollPosition.x, before.position(centeringSliderAt: 300), accuracy: 1e-6)
-    XCTAssertEqual(opened.surface.scrollPosition.y, 0)
-    try mouse(opened, .leftMouseUp, at: at)
+    XCTAssertEqual(try XCTUnwrap(thumbCenter()), 300, accuracy: 1, "つまみの中央が押した所へ飛ぶ")
+    XCTAssertGreaterThan(opened.surface.scrollPosition.x, 0)
+    try mouse(opened, .leftMouseDragged, at: CGPoint(x: at.x + 50, y: at.y))
+    XCTAssertEqual(try XCTUnwrap(thumbCenter()), 350, accuracy: 1, "そのままドラッグで付いてくる")
+    XCTAssertEqual(opened.surface.scrollPosition.y, 0, "縦は動かない")
+    try mouse(opened, .leftMouseUp, at: CGPoint(x: at.x + 50, y: at.y))
     let short = try hosted(rows(40))
     let area = short.surface.surfaceLayout.horizontalScrollbar
     XCTAssertNil(
