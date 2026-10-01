@@ -288,6 +288,8 @@ final class SurfaceOverviewTests: EngineTestCase {
     }
     let left = try pixelShot(opened)
     XCTAssertEqual(thumbColor(left), [0, 0, 0], "本体から出ると消える（動きを減らす設定では時間を掛けない）")
+    let after = try XCTUnwrap(opened.surface.placementBox.read())
+    XCTAssertFalse(left.hasInk(layout.minimap.maxX - 2, after.sliderTop + 1), "帯も消える")
   }
 }
 
