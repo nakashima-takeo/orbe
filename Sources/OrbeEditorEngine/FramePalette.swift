@@ -31,17 +31,6 @@ struct FrameColor: Equatable, Sendable {
       resolved.alphaComponent,
     ].map { Float(min(max($0, 0), 1)) }
   }
-
-  /// 外観に依らない色（IME が指定した色）を sRGB に詰めたもの。
-  static func pack(_ color: NSColor) -> UInt32 {
-    let resolved = color.usingColorSpace(.sRGB) ?? color
-    return [
-      resolved.redComponent, resolved.greenComponent, resolved.blueComponent,
-      resolved.alphaComponent,
-    ].enumerated().reduce(UInt32(0)) {
-      $0 | UInt32((min(max($1.element, 0), 1) * 255).rounded()) << (8 * UInt32($1.offset))
-    }
-  }
 }
 
 /// 字のインクの色——色と、それで描く字の太らせの段（Core Graphics の font smoothing 相当。字の色の明るさ・色空間・

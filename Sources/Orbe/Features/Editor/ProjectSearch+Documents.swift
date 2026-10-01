@@ -7,7 +7,8 @@ import os
 /// 今の写しで頼み直す（検索の最中に編集しても、その文書の結果は消えない）。
 ///
 /// 取り直しのきっかけは 2 つ——焦点の文書の打鍵（pane が本文の変化を渡す）と外部変更（根のサービスの観測者として）。どちらも
-/// 250ms 後に、結果に出ているその文書だけを取り直す。面が見えたときと文書が焦点に来たときは、映している版と文書の版を比べ直す。
+/// 250ms 後に、結果に出ているその文書だけを取り直す。面が見えたときと文書が焦点に来たときは、映している版と文書の版を比べ直す
+/// （文書を見せたときは区間の字も今の本文と照合する）。
 /// 焦点の文書の編集では、まとまりの区間を自分でずらす（取り直しまでの間の地と「押して開く」が同じ区間を使う）。
 extension ProjectSearch: RootFilesObserver {
   static let refreshDelay: TimeInterval = 0.25
@@ -76,14 +77,20 @@ extension ProjectSearch: RootFilesObserver {
   }
 
   /// 文書を見せた（焦点に来た・開いた）。ディスクのまとまりしか無ければ開いた写しの区間に直し、映している版が古ければ
-  /// 取り直す。
+  /// 取り直す。版が同じでも区間の字を今の本文と照合する——ディスクの結果は探した後に外で書き換わることがあり、閉じて開き直した
+  /// 文書は版を 0 から数え直すので、版だけでは区間が今の本文のものか分からない。字の違う一致は落として（無関係な字を選ばない・
+  /// 地を敷かない）その文書を取り直す。字が合えばその場の区間をそのまま使う（開いた直後に一致を選んで中央へ送れる）。
   func documentDidShow(_ document: EditorDocument) {
     guard let path = relativePath(of: document), let file = results[path] else { return }
     if file.document == nil {
-      results.attach(path, to: document.text, version: document.version)
+      let dropped = results.attach(path, to: document.text, version: document.version)
       searchedVersions[path] = document.version
       resultsDidChange()
+      if dropped { refresh(path) }
     } else if searchedVersions[path] != document.version {
+      refresh(path)
+    } else if results.dropDisagreeing(path, with: document.text) {
+      resultsDidChange()
       refresh(path)
     }
   }

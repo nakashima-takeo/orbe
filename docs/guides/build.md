@@ -1,7 +1,7 @@
 ---
 title: ビルド手順
 description: libghostty の自前ビルドから Orbe.app の生成・起動まで。前提ツール・チャネル・lint / format
-updated: 2026-09-19
+updated: 2026-10-02
 ---
 
 # ビルド手順
@@ -60,6 +60,7 @@ xcrun -sdk macosx metal --version
 - tree-sitter を上げるときに確かめること: 実在の大きなファイル（Orbe の `Sources` を連結した Swift など）を UTF-16 で解析して（Orbe の入力。tree-sitter の CLI は UTF-8 で解くので、UTF-16 だけの崩れを見逃す）全体 ERROR に崩れない／同梱の queries（highlights は連結、injections は単独）がすべて組める／誤りの無い見本（16 文法）の構文木と capture の列が前の版と一致する。
 - tree-sitter 0.27 以降は上流の `Package.swift` が無い。上げるときは `lib` の C ソースを取り込む自前の target に移る（sources は `lib/src/lib.c` の 1 本、公開ヘッダは `lib/include`——上流の CMake と同じ組み方。0.27.0 の `lib/src` には wasm 用の C（`src/wasm-stdlib`）があり、`lib/src` を丸ごと sources にするとそれまで拾ってネイティブでは組めない）。
 - 文法のうち javascript 0.23.1 / css 0.23.2 / python 0.23.6 / yaml 0.7.0 は `exact`。これより新しいタグ（javascript / css / python の v0.25.0、yaml の v0.7.1 以降）の `Package.swift` は `sources` を `FileManager.default.fileExists(atPath: "src/scanner.c")` で条件分岐しており、依存として評価されると cwd 相対の判定が false になって scanner.c がリンクされない（ファイル自体は存在する）。上げるときは当該タグの `Package.swift` の `sources` が `fileExists` で分岐していないか確認する——分岐していれば scanner.c を持つ文法は必ずリンクに失敗する。`from:` の文法も上流が同じ manifest へ移れば同じ失敗をする。
+- swift 0.7.3-with-generated-files も `exact`。生成済みの `src/parser.c` を持つのは `-with-generated-files` の付いたタグだけで（素のタグ `0.7.3` の `src/` には無い）、SemVer ではこれはプレリリースなので素のタグより古い版になる。`from:` にすると parser.c の無いタグに解決されてビルドが落ちる。上げるときも `-with-generated-files` の付いたタグを `exact` で指す。
 
 ## ビルド手順（Xcode 導入後）
 

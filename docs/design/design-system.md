@@ -9,7 +9,7 @@ updated: 2026-10-02
 > ステータス: v0.12.0 · 2026-09-24
 > 値の正（SSOT）: chrome/semantic は `Sources/Orbe/DesignSystem/DesignTokens.swift`（機械可読ミラー `docs/design/tokens.json`）／ 識別色（端末 ANSI 16 色・chrome 共有アンカー）は `Sources/Orbe/DesignSystem/OrbePalette.swift`（端末 conf を生成し、chrome アンカーへ定数を供給）／ worktree 識別色 48 色（24 色相 × 2 トーン）を dark / light 別に持つ表は `Sources/Orbe/DesignSystem/WorktreePalette.swift`（`scripts/gen-worktree-palette.py` が oklch から生成・手で編集しない）。
 > ガラス質感・elevation・glow は `Sources/Orbe/DesignSystem/DesignTokens+Glass.swift` が所有（本書は再定義しない）。
-> エディター面のトークン（`face.*` / `editor.*` / `type.editor*` / `layout.editor*` / `opacity.editor*Light` / `faceSlide` `spineLook` `faceDot` `editorSlider*` `editorScrollbar*`）は `Sources/Orbe/DesignSystem/DesignTokens+Editor.swift` が所有。
+> エディター面のトークン（`face.*` / `editor.*` / `syntax.*` / `type.editor*` / `layout.editor*` / `opacity.editor*Light` / `faceSlide` `spineLook` `faceDot` `editorSlider*` `editorScrollbar*`）は `Sources/Orbe/DesignSystem/DesignTokens+Editor.swift` が所有。
 > 本書は思想・契約を記す自由記述ドキュメントで、**思想・契約の正は本書、値の正は上記 Swift**。Orbe の外観の**正**はこのリポジトリの中で閉じている。ただしコード中の一部コメントは、値が決まった経緯の記録として設計見本（リポジトリ外）を引用する——それは出所の記録であって、正ではない。
 
 Orbe は AI コーディングエージェントのためのネイティブ macOS ターミナル。外観は
@@ -110,7 +110,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 `accent.focus` ＝ `accent.primary`／ `text.tertiary` ＝ `text.muted`／
 `success` ＝ `diff.added`（green）／ `danger` ＝ `diff.removed`（red）／
 `state.dormant` ＝ `text.muted`／ `surface.0` ＝ `bg.sunken`。
-**値だけが一致する独立トークン**: `face.terminal` ＝ `text.secondary`／ `editor.icon` ＝ `kbKeyText`／ `editor.text` ＝ `statusText`／ `editor.modified` ＝ `editor.hue.yellow`／ `diff.modified` ＝ `editor.hue.blue`／ `editor.whitespace` ＝ `editor.lineNumber`（上の収束と違い SSOT でも互いを参照せず、片方の値が動いてももう片方は追随しない）。`syntax.*` の dark は VSCode Dark Modern の実在トークン色で、5 色が端末の ANSI（§8）と偶然同値だが、端末色は別レイヤーなので参照しない。俯瞰と強調の `editor.*`（findMatch〜minimapShadow）は VS Code Dark Modern / Light Modern の値（上書きの無いものは VS Code の既定）で、エディターの使い勝手を VS Code に揃えるために借りる。同じ意味の Orbe トークンがあるもの（git の印・キャレット・縁）はそれを使い、git の印とキャレットには VS Code の α を掛ける。
+**値だけが一致する独立トークン**: `face.terminal` ＝ `text.secondary`／ `editor.icon` ＝ `kbKeyText`／ `editor.text` ＝ `statusText`／ `editor.modified` ＝ `editor.hue.yellow`／ `diff.modified` ＝ `editor.hue.blue`／ `editor.whitespace` ＝ `editor.lineNumber`／ `editor.hue.sky` ＝ `syntax.variable`（上の収束と違い SSOT でも互いを参照せず、片方の値が動いてももう片方は追随しない）。`syntax.*` の dark は VSCode Dark Modern の実在トークン色で、5 色が端末の ANSI（§8）と偶然同値だが、端末色は別レイヤーなので参照しない。俯瞰と強調の `editor.*`（findMatch〜minimapShadow）は VS Code Dark Modern / Light Modern の値（上書きの無いものは VS Code の既定）で、エディターの使い勝手を VS Code に揃えるために借りる。同じ意味の Orbe トークンがあるもの（git の印・キャレット・縁）はそれを使い、git の印とキャレットには VS Code の α を掛ける。
 `state.done`（完了・緑）と `diff.added`（green）、`state.waiting`（要応答・黄）と `conflict`（ANSI黄）は**別トークンとして分離**（light では偶々同値だが dark では異なる。SSOT は状態色を `StateHue`、ANSI 系を端末アンカーから別々に導く）。
 **反転色（`state.*Inverse`）は対テーマの状態色**＝dark/light の値を入れ替えただけ（選択タブの反転面上でコントラストを確保する仕組み）。
 **light の `tab.activeText` `#f3f0fa` は `bg.base` `#fcfbfe` と別値**（on.accent の流用不可）。
@@ -170,6 +170,9 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `type.editorSearchCount` | 9.5 / regular / sans | 見出しの件数バッジ |
 | `type.editorSearchMatch` | 11 / regular / mono | 一致の行 |
 | `type.editorSearchNote` | 11 / regular / sans | 件数・打ち切り・0 件・エラーの文 |
+| `type.editorSectionTitle` | 11 / bold / sans | サイドバーの区画の見出し（アウトライン） |
+| `type.editorOutlineName` | 12.5 / regular / sans | アウトラインの行の名前 |
+| `type.editorOutlineMatch` | 12.5 / bold / sans | アウトラインの絞り込みで一致した字 |
 | `type.editorChip` | 16 で 10 / 9 / 8 / bold / mono | 種別チップのグリフ（字数で決め、14 / 12 へは比例して丸める） |
 
 **tracking / line-height スカラ**（NSFont では表せず、使用側で `.tracking()` / lineSpacing 換算）:
@@ -179,7 +182,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 - **spacing（2/4pt グリッド・穴なし）**: `hair 2 / tick 4 / note 6 / step 8 / beat 12 / bar 16 / span 20 / phrase 24`
 - **radius**: `xs 3`（単独タブの器・＋ボタン）/ `sm 4`（バッジ・キーヒント・タブグループの器）/ `row 8`（リスト行・小コントロール）/ `md 10`（入力・小パネル）/ `card 12`（カード・設定行）/ `lg 16`（パネル・オーバーレイ）/ `pill 999`（カウントピル・トグル）
 - **stroke**: `hairline 1`（罫線・枠）/ `focusRing 2`（フォーカスリング）
-- **layout（エディター面の骨）**: `editorRail 36` / `editorRailGlyph 20`（レールのアイコン）/ `editorSidebar 240`（既定。ドラッグで可変）/ `editorSidebarMinWidth 160` / `editorBodyMinWidth 160`（サイドバーの幅の上限と、狭い列で表示幅を切り詰める規則）/ `editorSidebarHandle 4`（境の当たり）/ `editorFileTabs 28` / `editorBreadcrumb 20`（レール・サイドバーの右、ファイルタブ行の下の hairline 1 はこれらの外側に足す） / `editorPanelHeader 28` / `editorRow 20` / `editorChip 14` / `editorChipSmall 12`（パンくずの末尾）/ `editorChevron 16` / `editorLineNumberGutter 50`（行番号の列。桁が増えれば広がる最小幅）/ `editorMarkGutter 19`（git の印の列）/ `editorScrollbar 14`（本体の右端の縦スクロールバー）/ `editorHorizontalScrollbar 12`（本文の区画の下端の横スクロールバー）/ `editorMinimapMaxWidth 120`（その左のミニマップの幅の上限。幅は本文の幅から計算する）。検索パネル: `editorSearchField 28`（入力欄）/ `editorSearchOption 20`（オプションの角）/ `editorSearchRow 20`（結果の行。まとまりの見出しも一致も同じ）/ `editorSearchMatchIndent 40`（一致の行の左）/ `editorSearchCountWidth 18`・`editorSearchCountHeight 16`（件数バッジ）/ `editorSearchChevron 10`（見出しのシェブロン）/ `editorSearchProgress 2`（検索中の線）。見本の半透明面の light 換算は `opacity.editorSunkLight 0.3` / `editorFillLight 0.6` / `editorHairlineLight 1.4`。
+- **layout（エディター面の骨）**: `editorRail 36` / `editorRailGlyph 20`（レールのアイコン）/ `editorSidebar 240`（既定。ドラッグで可変）/ `editorSidebarMinWidth 160` / `editorBodyMinWidth 160`（サイドバーの幅の上限と、狭い列で表示幅を切り詰める規則）/ `editorSidebarHandle 4`（境の当たり）/ `editorFileTabs 28` / `editorBreadcrumb 20`（レール・サイドバーの右、ファイルタブ行の下の hairline 1 はこれらの外側に足す） / `editorPanelHeader 28` / `editorRow 20` / `editorChip 14` / `editorChipSmall 12`（パンくずの末尾）/ `editorChevron 16` / `editorLineNumberGutter 50`（行番号の列。桁が増えれば広がる最小幅）/ `editorMarkGutter 19`（git の印の列）/ `editorScrollbar 14`（本体の右端の縦スクロールバー）/ `editorHorizontalScrollbar 12`（本文の区画の下端の横スクロールバー）/ `editorMinimapMaxWidth 120`（その左のミニマップの幅の上限。幅は本文の幅から計算する）。検索パネル: `editorSearchField 28`（入力欄）/ `editorSearchOption 20`（オプションの角）/ `editorSearchRow 20`（結果の行。まとまりの見出しも一致も同じ）/ `editorSearchMatchIndent 40`（一致の行の左）/ `editorSearchCountWidth 18`・`editorSearchCountHeight 16`（件数バッジ）/ `editorSearchChevron 10`（見出しのシェブロン）/ `editorSearchProgress 2`（検索中の線）。アウトライン: `editorSectionHeader 22`（区画の見出し）/ `editorOutlineInset 4`（行の左の余白）/ `editorOutlineIndent 16`（深さ 1 段の字下げ）/ `editorOutlineListTop 2`（見出しと行の列の間）/ `editorSectionMinBody 60`（エクスプローラーを 2 段に分けたとき、各区画が見出しの下に残す最小の高さ）。見本の半透明面の light 換算は `opacity.editorSunkLight 0.3` / `editorFillLight 0.6` / `editorHairlineLight 1.4`。
 - elevation（面の影）は `DesignTokens+Glass.swift` が所有。本書・`tokens.json` は再定義しない。
 
 ### 2.5 モーション（拍）

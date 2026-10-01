@@ -193,7 +193,7 @@ extension EditorSearchTests {
 
     XCTAssertEqual(bodyText(document), text)
     XCTAssertFalse(document.isDirty)
-    XCTAssertFalse(hosted.tab.editor.hasUnsavedChanges)
+    XCTAssertTrue(hosted.tab.editor.documentsToDiscard().isEmpty)
     XCTAssertEqual(document.surface.responder.undoManager?.canUndo, false)
   }
 }

@@ -141,16 +141,20 @@ Code editor (Contents/MacOS/Orbe, Contents/Resources/TreeSitter*.bundle,
 Contents/Resources/Orbe_OrbeEditorCore.bundle)
 --------------------------------------------------------------------------------
 
-* swift-corelibs-foundation — Copyright (c) Apple Inc. and the Swift project
-  authors — Apache-2.0 with Runtime Library Exception
-  The backward-deletion rule of CoreFoundation's CFString.c
-  (kCFStringBackwardDeletionCluster) is ported into Orbe's Swift code as the
-  editor's Backspace unit and compiled into Contents/MacOS/Orbe.
+Copyright holders are as stated in each component's license file. Where a
+component's license file carries no copyright line, its entry names the
+holder instead, so that the attribution is not lost.
+
+* swift-corelibs-foundation — Apache-2.0 with Runtime Library Exception
+  Copyright (c) Apple Inc. and the Swift project authors (named here because
+  the license file carries no copyright line).
+  CoreFoundation's backward-deletion cluster rule for strings is ported into
+  Orbe's Swift code as the editor's Backspace unit and compiled into
+  Contents/MacOS/Orbe.
   https://github.com/swiftlang/swift-corelibs-foundation
   License: licenses/swift-corelibs-foundation-LICENSE.txt
 
-* Visual Studio Code — Copyright (c) 2015 - present Microsoft Corporation —
-  MIT License
+* Visual Studio Code — MIT License
   Rules of VS Code's editor are ported into Orbe's Swift code and compiled into
   Contents/MacOS/Orbe: the editing rules of the editor's text surface (word
   classes, word movement and deletion, cursor movement and selection, Tab and
@@ -161,73 +165,77 @@ Contents/Resources/Orbe_OrbeEditorCore.bundle)
   indentation detection, the drag auto-scroll speed, the minimap (layout, line
   rendering, glyph downsampling), the overview ruler, the scrollbar thumb
   geometry, find (match limits and next/previous positions), occurrence
-  highlighting, and the fuzzy matching of the tree type-to-filter (fuzzyScore
-  and createMatches in src/vs/base/common/filters.ts) as the outline's filter.
+  highlighting, project search (result line preview, result limit, default
+  excludes), file name ordering, and the fuzzy matching of the tree
+  type-to-filter as the outline's filter.
   The editor's and terminal's default colors take values from VS Code's Dark+,
   Dark Modern and Light Modern themes.
   https://github.com/microsoft/vscode
   License: licenses/vscode-LICENSE.txt
 
-* Zed — Copyright Zed Industries, Inc. — GPL-3.0-or-later (crates/grammars)
-  and Apache-2.0 (extensions/html)
-  The outline queries (outline.scm) for CSS, Go, JavaScript, JSON, Markdown,
-  Python, Rust, TypeScript (also used for TSX) and YAML (from crates/grammars)
-  and for HTML (from extensions/html), adapted by Orbe, are bundled as
-  Contents/Resources/Orbe_OrbeEditorCore.bundle/Contents/Resources/outline/*.scm.
+* Zed — GPL-3.0-or-later (its grammar outline queries) and Apache-2.0 (its
+  HTML extension)
+  Copyright Zed Industries, Inc. (named here because the GPL license file
+  carries no copyright line).
+  The outline queries for CSS, Go, JavaScript, JSON, Markdown, Python, Rust,
+  TypeScript (also used for TSX) and YAML, and the HTML extension's outline
+  query, adapted by Orbe, are bundled under
+  Contents/Resources/Orbe_OrbeEditorCore.bundle.
   https://github.com/zed-industries/zed
   License: licenses/zed-LICENSE-GPL.txt, licenses/zed-LICENSE-APACHE.txt
 
-* zed-extensions/toml — Copyright 2022-2025 Zed Industries, Inc. — Apache-2.0
-  The TOML outline query, adapted by Orbe, bundled as
-  Contents/Resources/Orbe_OrbeEditorCore.bundle/Contents/Resources/outline/toml.scm.
+* zed-extensions/toml — Apache-2.0
+  Copyright 2022-2025 Zed Industries, Inc. (named here because the license
+  file carries no copyright line).
+  The TOML outline query, adapted by Orbe, is bundled under
+  Contents/Resources/Orbe_OrbeEditorCore.bundle.
   https://github.com/zed-extensions/toml
   License: licenses/zed-extensions-toml-LICENSE.txt
 
-* tree-sitter — Copyright (c) 2018 Max Brunsfeld — MIT License
-  The parser runtime (lib/src, C). Statically linked into Contents/MacOS/Orbe.
+* tree-sitter — MIT License
+  The parser runtime (C). Statically linked into Contents/MacOS/Orbe.
   https://github.com/tree-sitter/tree-sitter
   License: licenses/tree-sitter-LICENSE.txt
-  The compiled lib/src additionally includes the following ICU-derived headers
-  (lib/src/unicode/utf8.h, utf16.h, umachine.h; per lib/src/unicode/README.md),
-  whose macros are expanded into the lexer and query code:
-  - ICU (International Components for Unicode) — Copyright © 1991-2019 Unicode, Inc. — Unicode License (ICU 58 and later)
+  The runtime additionally includes ICU-derived Unicode headers, whose macros
+  are expanded into the lexer and query code:
+  - ICU (International Components for Unicode) — Unicode License (ICU 58 and later)
     https://github.com/unicode-org/icu
     License: licenses/tree-sitter-unicode-LICENSE.txt
 
   The grammars below are each a separate work under their own MIT license.
-  Their generated parsers (src/parser.c and, where present, src/scanner.c) are
-  statically linked into Contents/MacOS/Orbe, and their query files
-  (queries/*.scm) are bundled verbatim as Contents/Resources/TreeSitter*.bundle.
+  Their generated parsers (and external scanners, where present) are
+  statically linked into Contents/MacOS/Orbe, and their query files are
+  bundled verbatim as Contents/Resources/TreeSitter*.bundle.
 
-  - tree-sitter-bash — Copyright (c) 2017 Max Brunsfeld — MIT License
+  - tree-sitter-bash — MIT License
     https://github.com/tree-sitter/tree-sitter-bash — License: licenses/tree-sitter-bash-LICENSE.txt
-  - tree-sitter-css — Copyright (c) 2018 Max Brunsfeld — MIT License
+  - tree-sitter-css — MIT License
     https://github.com/tree-sitter/tree-sitter-css — License: licenses/tree-sitter-css-LICENSE.txt
-  - tree-sitter-dockerfile — Copyright (c) 2021 Camden Cheek — MIT License
+  - tree-sitter-dockerfile — MIT License
     https://github.com/camdencheek/tree-sitter-dockerfile — License: licenses/tree-sitter-dockerfile-LICENSE.txt
-  - tree-sitter-go — Copyright (c) 2014 Max Brunsfeld — MIT License
+  - tree-sitter-go — MIT License
     https://github.com/tree-sitter/tree-sitter-go — License: licenses/tree-sitter-go-LICENSE.txt
-  - tree-sitter-html — Copyright (c) 2014 Max Brunsfeld — MIT License
+  - tree-sitter-html — MIT License
     https://github.com/tree-sitter/tree-sitter-html — License: licenses/tree-sitter-html-LICENSE.txt
-  - tree-sitter-javascript — Copyright (c) 2014 Max Brunsfeld — MIT License
+  - tree-sitter-javascript — MIT License
     https://github.com/tree-sitter/tree-sitter-javascript — License: licenses/tree-sitter-javascript-LICENSE.txt
-  - tree-sitter-json — Copyright (c) 2014 Max Brunsfeld — MIT License
+  - tree-sitter-json — MIT License
     https://github.com/tree-sitter/tree-sitter-json — License: licenses/tree-sitter-json-LICENSE.txt
-  - tree-sitter-markdown (block and inline grammars) — Copyright (c) 2021 Matthias Deiml — MIT License
+  - tree-sitter-markdown (block and inline grammars) — MIT License
     https://github.com/tree-sitter-grammars/tree-sitter-markdown — License: licenses/tree-sitter-markdown-LICENSE.txt
-  - tree-sitter-python — Copyright (c) 2016 Max Brunsfeld — MIT License
+  - tree-sitter-python — MIT License
     https://github.com/tree-sitter/tree-sitter-python — License: licenses/tree-sitter-python-LICENSE.txt
-  - tree-sitter-rust — Copyright (c) 2017 Maxim Sokolov — MIT License
+  - tree-sitter-rust — MIT License
     https://github.com/tree-sitter/tree-sitter-rust — License: licenses/tree-sitter-rust-LICENSE.txt
-  - tree-sitter-swift — Copyright (c) 2021 alex-pinkus — MIT License
+  - tree-sitter-swift — MIT License
     https://github.com/alex-pinkus/tree-sitter-swift — License: licenses/tree-sitter-swift-LICENSE.txt
-    Its queries/outline.scm, adapted by Orbe, is also bundled as
-    Contents/Resources/Orbe_OrbeEditorCore.bundle/Contents/Resources/outline/swift.scm.
-  - tree-sitter-toml — Copyright (c) Ika <ikatyang@gmail.com> — MIT License
+    Its outline query, adapted by Orbe, is also bundled under
+    Contents/Resources/Orbe_OrbeEditorCore.bundle.
+  - tree-sitter-toml — MIT License
     https://github.com/tree-sitter-grammars/tree-sitter-toml — License: licenses/tree-sitter-toml-LICENSE.txt
-  - tree-sitter-typescript (TypeScript and TSX grammars) — Copyright (c) 2017 Max Brunsfeld — MIT License
+  - tree-sitter-typescript (TypeScript and TSX grammars) — MIT License
     https://github.com/tree-sitter/tree-sitter-typescript — License: licenses/tree-sitter-typescript-LICENSE.txt
-  - tree-sitter-yaml — Copyright (c) 2024 tree-sitter-grammars contributors; Copyright (c) 2019-2021 Ika — MIT License
+  - tree-sitter-yaml — MIT License
     https://github.com/tree-sitter-grammars/tree-sitter-yaml — License: licenses/tree-sitter-yaml-LICENSE.txt
 
 --------------------------------------------------------------------------------

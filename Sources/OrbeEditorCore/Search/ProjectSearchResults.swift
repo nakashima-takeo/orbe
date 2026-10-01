@@ -11,6 +11,14 @@ public struct SearchMatch: Equatable, Sendable {
     self.column = column
     self.preview = preview
   }
+
+  /// 本文 `text` の区間 `range` の字が、探した字（プレビューの一致。長い一致は頭だけを持つ）と同じか。
+  func agrees(with text: TextRope, at range: NSRange) -> Bool {
+    let searched = preview.match.utf16
+    guard searched.count <= range.length, NSMaxRange(range) <= text.length else { return false }
+    return text.substring(NSRange(location: range.location, length: searched.count)).utf16
+      .elementsEqual(searched)
+  }
 }
 
 /// 1 ファイルの一致のまとまり。`path` は根からの相対パス。出どころがディスク（git）なら `document` は nil、開いている
@@ -58,20 +66,41 @@ public struct SearchFileMatches: Equatable, Sendable {
     self.document = document
   }
 
-  /// ディスクのまとまりを、開いた文書の区間に直す（行頭のオフセット ＋ 行の中の位置。本文の外へ出る一致は落とす）。
-  public mutating func attach(to text: TextRope, version: Int) {
+  /// ディスクのまとまりを、開いた文書の区間に直す（行頭のオフセット ＋ 行の中の位置）。本文の外へ出る一致と、区間の字が
+  /// 探した字と違う一致（探した後にファイルが変わった）は落とす。落とした一致があれば true。
+  public mutating func attach(to text: TextRope, version: Int) -> Bool {
     var ranges: [NSRange] = []
     var kept: [SearchMatch] = []
     for match in matches where match.line < text.lineCount {
       let start = text.lineStart(match.line)
       let range = NSRange(
         location: start + match.column.location, length: match.column.length)
-      guard NSMaxRange(range) <= text.lineEnd(match.line) else { continue }
+      guard NSMaxRange(range) <= text.lineEnd(match.line), match.agrees(with: text, at: range)
+      else { continue }
       ranges.append(range)
       kept.append(match)
     }
+    let dropped = kept.count < matches.count
     matches = kept
     document = DocumentSpan(ranges: ranges, version: version)
+    return dropped
+  }
+
+  /// 開いている文書の区間のうち、字が探した字と違う一致を落とす（区間の版が同じでも本文が違いうる——閉じて開き直した文書は
+  /// 版を 0 から数え直す）。落とした一致があれば true。
+  public mutating func dropDisagreeing(with text: TextRope) -> Bool {
+    guard var document else { return false }
+    var ranges: [NSRange] = []
+    var kept: [SearchMatch] = []
+    for (range, match) in zip(document.ranges, matches) where match.agrees(with: text, at: range) {
+      ranges.append(range)
+      kept.append(match)
+    }
+    guard kept.count < matches.count else { return false }
+    document.ranges = ranges
+    matches = kept
+    self.document = document
+    return true
   }
 
   fileprivate mutating func truncate(to count: Int) {
@@ -163,13 +192,27 @@ public struct ProjectSearchResults: Equatable, Sendable {
     if files[index].count == 0 { files.remove(at: index) }
   }
 
-  /// ディスクのまとまりを、開いた文書の区間に直す。
-  public mutating func attach(_ path: String, to text: TextRope, version: Int) {
-    guard let index = index(of: path) else { return }
+  /// ディスクのまとまりを、開いた文書の区間に直す（→ `SearchFileMatches.attach`）。落とした一致があれば true。
+  @discardableResult
+  public mutating func attach(_ path: String, to text: TextRope, version: Int) -> Bool {
+    update(path) { $0.attach(to: text, version: version) }
+  }
+
+  /// 開いている文書のまとまりから、字が本文と違う一致を落とす（→ `SearchFileMatches.dropDisagreeing`）。落とした一致が
+  /// あれば true。
+  public mutating func dropDisagreeing(_ path: String, with text: TextRope) -> Bool {
+    update(path) { $0.dropDisagreeing(with: text) }
+  }
+
+  /// まとまり 1 つを変え、総数を合わせる（一致が無くなれば消す）。
+  private mutating func update(_ path: String, _ change: (inout SearchFileMatches) -> Bool) -> Bool
+  {
+    guard let index = index(of: path) else { return false }
     total -= files[index].count
-    files[index].attach(to: text, version: version)
+    let changed = change(&files[index])
     total += files[index].count
     if files[index].count == 0 { files.remove(at: index) }
+    return changed
   }
 
   /// パスの順に並んだ `files` の `from` 以降で、`key` のパスが並ぶ位置（二分探索）。

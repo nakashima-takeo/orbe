@@ -1,8 +1,7 @@
 import Foundation
 
 /// ハンクから導く行の印——行ごとの「追加／変更」と「この境の下に削除がある」。行は 1 始まり（`LineHunk`
-/// と同じ数え方）。文書が持ち、本文のロープでオフセット区間に写してテキスト面へ渡す（→ `LineMarkSpans`）。俯瞰は
-/// 行の連（`runs`）と削除の境（`deletionsBelow`）をそのまま読む。
+/// と同じ数え方）。文書が持ち、本文のロープでオフセット区間に写してテキスト面へ渡す（→ `LineMarkSpans`）。
 public struct LineMarks: Equatable, Sendable {
   public enum Kind: Equatable, Sendable {
     case added
@@ -11,18 +10,18 @@ public struct LineMarks: Equatable, Sendable {
 
   /// 同じ印が続く行の区間。ハンクが昇順・非重複（`LineDiff` は両側を単調に進める）なので、そこから写した
   /// run も昇順・非重複。
-  public struct Run: Equatable, Sendable {
+  struct Run: Equatable, Sendable {
     /// 1 始まりの行の区間。
-    public let lines: Range<Int>
-    public let kind: Kind
+    let lines: Range<Int>
+    let kind: Kind
   }
 
-  public let runs: [Run]
+  let runs: [Run]
   /// 削除がある境。値 n は「n 行目の下」（0 は先頭行の上）。ハンクの順（昇順）。
-  public let deletionsBelow: [Int]
+  let deletionsBelow: [Int]
 
   /// 追加（old 側 0 件）はその新しい行、削除（new 側 0 件）はその境、両側にあれば新しい行が変更。
-  public init(hunks: [LineHunk]) {
+  init(hunks: [LineHunk]) {
     var runs: [Run] = []
     var deletions: [Int] = []
     for hunk in hunks {

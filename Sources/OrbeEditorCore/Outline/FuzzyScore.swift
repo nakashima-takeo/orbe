@@ -312,7 +312,7 @@ final class FuzzyScorer {
       0x5D, 0x7B, 0x7D:
       return true
     default:
-      return Self.isEmojiImprecise(code)
+      return CharacterWidth.isEmoji(code)
     }
   }
 
@@ -320,14 +320,5 @@ final class FuzzyScorer {
     guard index >= 0, index < wordLowStored else { return false }
     let code = wordLow[index]
     return code == 0x20 || code == 0x09
-  }
-
-  /// VS Code src/vs/base/common/strings.ts の `isEmojiImprecise`。
-  private static func isEmojiImprecise(_ code: UInt32) -> Bool {
-    (0x1F1E6...0x1F1FF).contains(code) || code == 8986 || code == 8987 || code == 9200
-      || code == 9203 || (9728...10175).contains(code) || code == 11088 || code == 11093
-      || (127744...128591).contains(code) || (128640...128764).contains(code)
-      || (128992...129008).contains(code) || (129280...129535).contains(code)
-      || (129648...129782).contains(code)
   }
 }

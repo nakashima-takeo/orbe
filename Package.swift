@@ -12,9 +12,11 @@ let package = Package(
     // tree-sitter 本体（C API を OrbeEditorCore から直接呼ぶ）。0.26.12 以降はエラー回復が退行して大きな Swift が
     // 全体 ERROR に崩れるので exact で固定する（docs/guides/build.md）。
     .package(url: "https://github.com/tree-sitter/tree-sitter", exact: "0.26.11"),
-    // 文法 14 パッケージ（16 パーサ）。exact の 4 つは、新しいタグの manifest が scanner.c を cwd 相対の
-    // fileExists で条件付きにしていて依存として評価すると落ち、リンクに失敗するため導入前タグへ固定
-    // （docs/guides/build.md）。
+    // 文法 14 パッケージ（16 パーサ）。javascript / css / python / yaml の exact は、新しいタグの manifest が
+    // scanner.c を cwd 相対の fileExists で条件付きにしていて依存として評価すると落ち、リンクに失敗するため
+    // 導入前タグへ固定。swift の exact は、生成済みの parser.c を持つのが `-with-generated-files` タグだけで、
+    // SemVer ではプレリリース扱い（素のタグ 0.7.3 の方が新しい）なので、`from:` だと parser.c の無いタグに
+    // 解決されるため（docs/guides/build.md）。
     .package(url: "https://github.com/tree-sitter/tree-sitter-json", from: "0.24.8"),
     .package(url: "https://github.com/tree-sitter/tree-sitter-typescript", from: "0.23.2"),
     .package(url: "https://github.com/tree-sitter/tree-sitter-html", from: "0.23.2"),

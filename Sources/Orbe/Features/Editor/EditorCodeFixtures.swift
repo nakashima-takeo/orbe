@@ -141,12 +141,7 @@
       }
     }
 
-    struct GitFailure: Error {
-      let arguments: [String]
-      let stderr: String
-    }
-
-    /// git が失敗すれば投げる（握り潰すと `isReady` の待ちが原因を指さずに落ちる）。
+    /// git が失敗すれば投げる（→ `FixtureGit`）。
     @MainActor static func scene(queriesRoot: URL) throws -> Scene {
       let dir = FileManager.default.temporaryDirectory
         .appendingPathComponent("orbe-editor-code-\(UUID().uuidString)", isDirectory: true)
@@ -156,13 +151,7 @@
       try Data(tabbed.utf8).write(to: dir.appendingPathComponent("main.go"))
       let longURL = dir.appendingPathComponent("Long.swift")
       try Data(long.utf8).write(to: longURL)
-      let git = { (args: [String]) throws in
-        let output = GitRunner.shared.runSync(args, cwd: dir.path)
-        guard output.isSuccess else {
-          throw GitFailure(
-            arguments: args, stderr: String(bytes: output.stderr, encoding: .utf8) ?? "")
-        }
-      }
+      let git = FixtureGit(directory: dir)
       try git(["init", "-q", "-b", "main"])
       try git(["config", "user.email", "gallery@orbe.dev"])
       try git(["config", "user.name", "gallery"])

@@ -35,7 +35,7 @@ protocol ControlTarget: AnyObject {
   /// 指定タブ（TerminalTab.id）を閉じる（close_tab）。カスケードは GUI（Cmd+W）と一致。未解決は -32004。
   func controlCloseTab(tabId: Int) -> Result<Any, ControlError>
   /// 指定タブのエディターでファイルを開き、エディター面を見せてそのタブへフォーカスする（open_file）。
-  /// 未解決は -32004、開けない（読めない・UTF-8 でない）は -32000。
+  /// 未解決は -32004、開けない（読めない・UTF-8 でない・Metal の装置が無くテキスト面を作れない）は -32000。
   func controlOpenFile(tabId: Int, path: String) -> Result<Any, ControlError>
   /// 全設定項目の実効値・由来 scope・型・値域（domain）を列挙する（config CLI 用・読み取り専用）。
   /// workspaceId 指定でその WS の上書きを重ねる（未指定はアクティブ WS）。未知 id は -32004。

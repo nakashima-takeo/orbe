@@ -70,11 +70,7 @@ struct OutlineExtraction {
     var order: [UInt] = []
     var annotations: [UInt: Bool] = [:]
     var naming = OutlineItems(grammar: grammar)
-    let nodeText: (TSNode) -> String = { node in
-      let start = Int(ts_node_start_byte(node)) / 2
-      return text.substring(
-        NSRange(location: start, length: Int(ts_node_end_byte(node)) / 2 - start))
-    }
+    let nodeText: (TSNode) -> String = { text.substring(OutlineItems.range(of: $0)) }
     let finished = cursor.matches(
       of: query.query, in: tree.root, cancellation: cancellation, text: nodeText
     ) { match in

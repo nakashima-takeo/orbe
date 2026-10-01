@@ -23,9 +23,9 @@ final class TerminalTab {
   /// 面の配置が変わった通知（永続保存・chrome 更新・焦点の追従は上位）。
   var onFacesChange: (() -> Void)?
 
-  /// エディター面のセッション（開いた文書の列と焦点の文書）。書き手はタブだけで、外（制御 API）は
-  /// `openFile` を通る。エディターの型は UI に閉じた `@MainActor` で、タブはその外（main スレッド規律の
-  /// nonisolated）にいるため、このプロパティに触る箇所はいずれも `MainActor.assumeIsolated` で境を越える。
+  /// エディター面のセッション（開いた文書の列と焦点の文書）。書き手はタブとその pane（`EditorPaneView`）で、
+  /// 外（制御 API）は `openFile` を通る。エディターの型は UI に閉じた `@MainActor` で、タブはその外（main スレッド規律の
+  /// nonisolated）にいるため、タブの中でこのプロパティに触る箇所はいずれも `MainActor.assumeIsolated` で境を越える。
   let editor: EditorSession
   /// 開いた文書の列・焦点の文書・未保存の有無・検索の問いが変わった通知（chrome 更新・永続保存は上位）。
   var onEditorChange: (() -> Void)?
@@ -189,7 +189,7 @@ final class TerminalTab {
         onEditorChange?()
       }
       view.editor.projectSearch.onQueryChange = { [weak self] in self?.onEditorChange?() }
-      editor.onFocusChange = { [weak self] _ in self?.view.editor.focusDidChange() }
+      editor.onFocusChange = { [weak self] in self?.view.editor.focusDidChange() }
     }
   }
 
@@ -329,7 +329,7 @@ final class TerminalTab {
     MainActor.assumeIsolated { editor.documentsToDiscard() }
   }
 
-  /// エディターでファイルを開いて焦点の文書にする（制御 API の入口）。読めない・UTF-8 でないは throw。
+  /// エディターでファイルを開いて焦点の文書にする（制御 API の入口）。読めない・UTF-8 でない・テキスト面を作れない（Metal の装置が無い）は throw。
   func openFile(_ url: URL) throws {
     _ = try MainActor.assumeIsolated { try editor.open(url) }
   }

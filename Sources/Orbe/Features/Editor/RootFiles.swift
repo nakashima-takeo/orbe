@@ -13,7 +13,7 @@ protocol RootFilesObserver: AnyObject {
 }
 
 /// 根（`GitWorktreeRoot.root(of:)` の値）1 つにつき 1 つの、監視・git 状態・一覧・新規作成・baseline を担う
-/// サービス。握る者（文書の結線・面のツリー）がいる間だけ生き、離されれば監視が止まる。
+/// サービス。握る者（文書の結線・面のツリー・プロジェクト検索）がいる間だけ生き、離されれば監視が止まる。
 ///
 /// git 管理下かどうかはここで決める: 根に `.git` があれば `GitRepo` を開き、git の綴りを正規形に揃えて根と
 /// 一致したときだけ管理下（status・baseline・git dir の監視を持つ）。`GitRepo.root` との突き合わせは
