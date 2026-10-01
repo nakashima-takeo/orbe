@@ -84,8 +84,8 @@ final class GlyphAtlas {
     return (entry, whole)
   }
 
+  /// 色付きのフォントの項目は太らせの段 0 で引く（呼び手が決める）。
   private func entry(font: UInt16, glyph: CGGlyph, variant: Int, dilation: Int) -> Entry? {
-    let dilation = fonts.isColor(font) ? 0 : dilation
     let table = (Int(font) * variants + variant) * DilationProbe.levels + dilation
     let index = Int(glyph)
     if table < tables.count, index < tables[table].count, tables[table][index] > 0 {
