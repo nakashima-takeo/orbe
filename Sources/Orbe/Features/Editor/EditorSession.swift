@@ -2,7 +2,7 @@ import Foundation
 import OrbeEditorCore
 
 /// タブ 1 枚が持つ、開いた文書の列と焦点の文書。文書 1 つにテキスト面 1 つを対で持ち（開いてから
-/// 閉じるまで）、切り替えは「どの文書の面を見せるか」を変えるだけなので undo・選択・スクロール・IME は
+/// 閉じるまで）、切り替えは「どの文書の面を見せるか」を変えるだけなので undo・選択・スクロールは
 /// 文書ごとに残る。変化は `onChange` 1 本でタブへ上がる。
 @MainActor
 final class EditorSession {

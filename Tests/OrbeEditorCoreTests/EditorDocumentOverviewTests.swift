@@ -92,7 +92,7 @@ final class EditorDocumentOverviewTests: XCTestCase {
       "変わらない先頭を落とす")
   }
 
-  /// 役割の区間は構文層の区間を後勝ちで平らにした、重ならない昇順の列で、窓の中だけを答える（ミニマップの字の色）。
+  /// 役割の区間は構文層の区間を後勝ちで平らにした、重ならない昇順の列で、窓の中だけを答える。
   func testRoleSpansAreFlatNonOverlappingAndInsideTheWindowOnly() throws {
     let text = "// head\nlet a = 1 // tail\n/* block */\n"
     let document = try open("c.swift", text).document
@@ -121,8 +121,7 @@ final class EditorDocumentOverviewTests: XCTestCase {
   }
 
   /// 束の中の行の数を変える編集ごとにハンクをずらしても、行の印は束ごとに 1 回押し、配り先は行ごとの増減が分かる
-  /// 編集の列を受ける。壊れると、複数の区間を変える操作で面が途中の行数の印を描き、配り先（検索の一致のずらし）が行の
-  /// 増減を取り違える。
+  /// 編集の列を受ける。壊れると、複数の区間を変える操作で面が途中の行数の印を描き、配り先が行の増減を取り違える。
   func testLineMarksArePushedOncePerBatchAndReceiversSeeTheRowsOfEachEdit() throws {
     let opened = try open("h.txt", "aa\nbb\ncc\n")
     let (document, surface) = (opened.document, opened.surface)
