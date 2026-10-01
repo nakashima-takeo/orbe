@@ -58,11 +58,14 @@ final class FrameBuilder {
     let glyphs = glyphArrays.reduce(0) {
       $0 + (($1.count * MemoryLayout<GlyphInstance>.stride + 255) & ~255)
     }
+    let cells = minimap.chunks.reduce(0) {
+      $0 + (($1.cells.count * MemoryLayout<MinimapCellInstance>.stride + 255) & ~255)
+    }
     return [
       shapes, decorShapes, underShapes, highlightShapes, overShapes, minimap.decorations,
       shadowShapes, overviewShapes,
     ]
-    .reduce(glyphs + ((MemoryLayout<GlyphInstance>.stride + 255) & ~255)) {
+    .reduce(glyphs + cells + ((MemoryLayout<GlyphInstance>.stride + 255) & ~255)) {
       $0 + (($1.count * MemoryLayout<ShapeInstance>.stride + 255) & ~255)
     }
   }

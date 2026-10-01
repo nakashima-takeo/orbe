@@ -12,7 +12,8 @@ import os
 /// どの面のためにも待たない——面ごとに「画面に出ていないコマ」を数え、上限の面はそのコマを飛ばす（`nextDrawable` は
 /// 実際には待たない）。GPU の空きも待たずに数える。飛ばしたコマは、画面に出た知らせを受けた時点で次の刻みを待たずに描く。
 /// 位置は描く直前にコマの予定時刻で読む（指の出来事をできるだけ新しく入れる）。描くものが変わらないコマが続いたら、
-/// その面の刻みを止め、箱に書かれて起こされたら、その場で 1 コマ描いてから刻みに戻る。
+/// その面の刻みを止め、箱に書かれて起こされたら、その場で 1 コマ描いてから刻みに戻る。コマを出した後、ミニマップが
+/// 動いていれば次のコマが要りそうなまとまりを作っておく（`MinimapCells.prefetch`）。
 final class Renderer {
   let device: MTLDevice
   let queue: MTLCommandQueue
@@ -48,8 +49,7 @@ final class Renderer {
   func attach(
     id: Int, boxes: SurfaceBoxes, config: SurfaceConfig, notify: @escaping @Sendable () -> Void
   ) {
-    slots[id] = SurfaceSlot(
-      id: id, boxes: boxes, config: config, device: device, notify: notify)
+    slots[id] = SurfaceSlot(id: id, boxes: boxes, config: config, notify: notify)
   }
 
   /// 面が閉じた。刻みを外し、組版のキャッシュと写しの最後の参照をここ（描画スレッド）で手放す。
@@ -211,6 +211,7 @@ final class Renderer {
         mismatch: texture.width != pixels.width || texture.height != pixels.height))
     if frame.returning || wasReturning || widened || revealed { slot.notify() }
     if let last = keystrokes.max() { scheduleTypingFlush(slot.id, after: last) }
+    slot.prefetchMinimap(material)
   }
 
   /// 打鍵の塊の区切りの長さだけ次の打鍵が無ければ、塊を締める。

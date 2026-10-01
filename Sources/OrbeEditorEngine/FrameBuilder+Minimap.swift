@@ -1,7 +1,7 @@
-import Metal
+import Foundation
 import OrbeEditorCore
 
-/// 1 コマのミニマップ——字のチャンク（GPU の buffer と上端の y）・装飾（画面外の 1 枚に描いて組として不透明度 .9 で重ねる）
+/// 1 コマのミニマップ——字のチャンク（字の列と上端の y）・装飾（画面外の 1 枚に描いて組として不透明度 .9 で重ねる）
 /// ・帯。配置は Core の `MinimapLayout`（前のコマの配置で揺れ止め）で、字は描画スレッドが覚えた列（`MinimapCells`）。
 struct MinimapFrame {
   /// ミニマップの矩形（px）。
@@ -25,10 +25,9 @@ struct MinimapFrame {
   }
 }
 
-/// 描くチャンク 1 つ——字の列の buffer・字の数・上端の y（px）。
+/// 描くチャンク 1 つ——字の列と上端の y（px）。
 struct MinimapChunk {
-  let buffer: MTLBuffer
-  let count: Int
+  let cells: [MinimapCellInstance]
   let top: Float
 }
 
@@ -69,9 +68,11 @@ extension FrameBuilder {
     let x = (Double(area.minX) * s).rounded()
     minimap.rect = SIMD4(Float(x), 0, Float(width), Float(g.height))
     let canvas = Int(area.width * CGFloat(scale))
+    let columns = MinimapLine.columns(canvasWidth: canvas, scale: scale)
+    let gutter = CGFloat(MinimapLine.gutter) / CGFloat(scale)
+    let limit = max(0, Int(area.width - gutter))
     cells.beginFrame(
-      MinimapCells.Key(
-        columns: MinimapLine.columns(canvasWidth: canvas, scale: scale), tabSize: c.tabColumns))
+      MinimapCells.Key(columns: columns, heads: max(columns, limit) + 2, tabSize: c.tabColumns))
     minimap.uniforms = MinimapUniforms(
       origin: SIMD2(Float(x) + Float(MinimapLine.gutter) * factor, 0),
       cell: SIMD2(Float(scale) * factor, Float(2 * scale) * factor),
@@ -81,14 +82,19 @@ extension FrameBuilder {
     guard !placement.lines.isEmpty else { return }
     let firstChunk = placement.lines.lowerBound / MinimapCells.lines
     let lastChunk = (placement.lines.upperBound - 1) / MinimapCells.lines
-    for index in firstChunk...lastChunk {
+    let chunks = (firstChunk...lastChunk).map { index in
       let chunk = cells.chunk(index, text: text, roles: content.roles)
-      guard let buffer = chunk.buffer else { continue }
-      let top = Double(placement.y(ofLine: index * MinimapCells.lines)) * s
-      minimap.chunks.append(MinimapChunk(buffer: buffer, count: chunk.count, top: Float(top)))
+      if !chunk.cells.isEmpty {
+        let top = Double(placement.y(ofLine: index * MinimapCells.lines)) * s
+        minimap.chunks.append(MinimapChunk(cells: chunk.cells, top: Float(top)))
+      }
+      return chunk.heads
     }
     var decorations = MinimapDecorations(
-      placement: placement, text: text, material: material, palette: c.palette.overview,
+      placement: placement, material: material, palette: c.palette.overview,
+      rows: MinimapRows(
+        text: text, chunks: chunks, first: firstChunk * MinimapCells.lines,
+        tabSize: c.tabColumns, gutter: gutter, limit: limit),
       width: area.width, scale: CGFloat(scale), pixel: s)
     decorations.draw()
     minimap.decorations = decorations.shapes
@@ -97,17 +103,17 @@ extension FrameBuilder {
 
 /// ミニマップの装飾——選択・検索の一致・語の出現・git の印（VS Code `InnerMinimap.renderDecorations`）。描く順は、選択の
 /// 行の地 → 一致・語の出現の行の地 → 選択の範囲 → 語の出現・一致の範囲 → git の印。一致が多いときは現在の一致だけを
-/// 出す。座標はミニマップの左上を原点にした px（組として画面外の 1 枚に描く）。
+/// 出す。座標はミニマップの左上を原点にした px（組として画面外の 1 枚に描く）。区間の行と x は、覚えたチャンクの行の頭
+/// （`MinimapRows`）から引く。
 private struct MinimapDecorations {
   let placement: MinimapLayout
-  let text: TextRope
   let material: FrameMaterial
   let palette: OverviewPalette
-  /// ミニマップの幅（pt）と、ミニマップの倍率・装置の倍率。
+  /// 描く行の頭と、ミニマップの幅（pt）・ミニマップの倍率・装置の倍率。
+  let rows: MinimapRows
   let width: CGFloat
   let scale: CGFloat
   let pixel: Double
-  private var columns: DecorationColumns
   /// 組んだ図形。
   private(set) var shapes: [ShapeInstance] = []
 
@@ -118,35 +124,20 @@ private struct MinimapDecorations {
     let row: FrameColor
   }
 
-  init(
-    placement: MinimapLayout, text: TextRope, material: FrameMaterial, palette: OverviewPalette,
-    width: CGFloat, scale: CGFloat, pixel: Double
-  ) {
-    self.placement = placement
-    self.text = text
-    self.material = material
-    self.palette = palette
-    self.width = width
-    self.scale = scale
-    self.pixel = pixel
-    columns = DecorationColumns(
-      text: text, tabSize: material.tabColumns, gutter: CGFloat(MinimapLine.gutter) / scale,
-      width: width)
-  }
-
   mutating func draw() {
-    let gutter = columns.gutter
+    let gutter = rows.gutter
     let caret = material.caret
     let selections =
       caret.selections.isEmpty
       ? caret.carets.prefix(1).map { NSRange(location: $0, length: 0) } : caret.selections
-    var highlighted = Set<Int>()
+    var highlighted = [Bool](repeating: false, count: placement.lines.count)
+    let first = placement.lines.lowerBound
     for selection in selections {
-      let rows = rows(of: selection)
-      highlighted.formUnion(Range(rows).clamped(to: placement.lines))
-      guard rows.count > 1 else { continue }
-      let top = placement.y(ofLine: rows.lowerBound)
-      let bottom = placement.y(ofLine: rows.upperBound)
+      let span = rows.rows(of: selection)
+      for row in Range(span).clamped(to: placement.lines) { highlighted[row - first] = true }
+      guard span.count > 1 else { continue }
+      let top = placement.y(ofLine: span.lowerBound)
+      let bottom = placement.y(ofLine: span.upperBound)
       fill(
         x: gutter, y: top, width: width - gutter, height: bottom - top, palette.minimapSelectionRow)
     }
@@ -162,9 +153,10 @@ private struct MinimapDecorations {
       Inline(ranges: highlights.word, color: palette.minimapWord, row: palette.minimapWordRow),
     ]
     for item in inline {
-      for range in visible(item.ranges) {
-        for row in Range(rows(of: range)).clamped(to: placement.lines) {
-          guard highlighted.insert(row).inserted else { continue }
+      for range in rows.visible(item.ranges, lines: placement.lines) {
+        for row in Range(rows.rows(of: range)).clamped(to: placement.lines)
+        where !highlighted[row - first] {
+          highlighted[row - first] = true
           fill(
             x: gutter, y: placement.y(ofLine: row), width: width - gutter,
             height: MinimapLayout.lineHeight, item.row)
@@ -172,48 +164,22 @@ private struct MinimapDecorations {
       }
     }
     for selection in selections { fillRanges([selection], palette.minimapSelection) }
-    for item in inline.reversed() { fillRanges(visible(item.ranges), item.color) }
-    drawGitMarks()
-  }
-
-  /// 区間の行（開始の行から終わりの位置の行まで。VS Code は範囲の終わりの行を含める——行を丸ごと選べば次の行まで）。
-  private func rows(of range: NSRange) -> ClosedRange<Int> {
-    let first = text.row(containing: range.location)
-    return first...max(first, text.row(containing: NSMaxRange(range)))
-  }
-
-  /// 描く行に掛かる区間だけ（昇順の列を二分探索で切る）。
-  private func visible(_ ranges: [NSRange]) -> ArraySlice<NSRange> {
-    guard !ranges.isEmpty, !placement.lines.isEmpty else { return [] }
-    let start = text.lineStart(placement.lines.lowerBound)
-    let end = text.lineEnd(placement.lines.upperBound - 1)
-    var low = 0
-    var high = ranges.count
-    while low < high {
-      let mid = (low + high) / 2
-      if NSMaxRange(ranges[mid]) > start
-        || (ranges[mid].length == 0 && ranges[mid].location >= start)
-      {
-        high = mid
-      } else {
-        low = mid + 1
-      }
+    for item in inline.reversed() {
+      fillRanges(rows.visible(item.ranges, lines: placement.lines), item.color)
     }
-    var upper = low
-    while upper < ranges.count, ranges[upper].location <= end { upper += 1 }
-    return ranges[low..<upper]
+    drawGitMarks()
   }
 
   /// 区間を行ごとに x（装飾の桁。タブは固定の桁数）で塗る。区間の終わりの行より前の行は行末（本文の終わり）まで
   /// （VS Code `renderDecorationOnLine`）。
   private mutating func fillRanges(_ ranges: some Collection<NSRange>, _ color: FrameColor) {
     for range in ranges where range.length > 0 {
-      let rows = rows(of: range)
-      for row in Range(rows).clamped(to: placement.lines) {
-        let start = text.lineStart(row)
-        let end = row == rows.upperBound ? NSMaxRange(range) - start : columns.length(row: row)
-        let x1 = columns.x(row: row, at: max(range.location, start) - start)
-        let x2 = columns.x(row: row, at: end)
+      let span = rows.rows(of: range)
+      for row in Range(span).clamped(to: placement.lines) {
+        let start = rows.lineStart(row)
+        let end = row == span.upperBound ? NSMaxRange(range) - start : rows.length(row: row)
+        let x1 = rows.x(row: row, at: max(range.location, start) - start, width: width)
+        let x2 = rows.x(row: row, at: end, width: width)
         fill(
           x: x1, y: placement.y(ofLine: row), width: max(0, x2 - x1),
           height: MinimapLayout.lineHeight, color)
@@ -259,52 +225,101 @@ private struct MinimapDecorations {
   }
 }
 
-/// 1 コマの中で、行ごとの「UTF-16 位置 → 装飾の x（pt）」を 1 度だけ作って共有する（VS Code の `lineOffsetMap`）。読むのは
-/// 行の本文（改行を除く）のうち、ミニマップの幅に入る桁までの頭だけ。
-private struct DecorationColumns {
+/// ミニマップに描くチャンクの行の頭（`MinimapCells`）——装飾の区間の行と、行の中の位置の x（pt。VS Code の
+/// `lineOffsetMap`）をここから引く（チャンクの外の位置だけロープを引く）。
+private struct MinimapRows {
   let text: TextRope
+  /// 続くチャンクの行の頭と、最初の行。
+  let chunks: [LineHeads]
+  let first: Int
   let tabSize: Int
+  /// 字の左のガター（pt）と、描ける桁の数（x はここで止まる。行の頭はこれより 2 単位以上長く読んである）。
   let gutter: CGFloat
-  let width: CGFloat
-  private var offsets: [Int: [CGFloat]] = [:]
+  let limit: Int
 
-  init(text: TextRope, tabSize: Int, gutter: CGFloat, width: CGFloat) {
-    self.text = text
-    self.tabSize = tabSize
-    self.gutter = gutter
-    self.width = width
+  private func locate(_ row: Int) -> (heads: LineHeads, index: Int) {
+    let local = row - first
+    return (chunks[local / MinimapCells.lines], local % MinimapCells.lines)
   }
 
-  /// 行 `row` の本文の長さ（UTF-16、改行を除く）。
+  /// オフセット `offset` を含む行（`TextRope.row(containing:)` と同じ答え）。
+  func row(containing offset: Int) -> Int {
+    guard let head = chunks.first?.starts.first, let tail = chunks.last?.starts.last,
+      offset >= head, offset < tail
+    else { return text.row(containing: offset) }
+    var chunk = 0
+    var high = chunks.count - 1
+    while chunk < high {
+      let mid = (chunk + high + 1) / 2
+      if chunks[mid].starts[0] <= offset { chunk = mid } else { high = mid - 1 }
+    }
+    let starts = chunks[chunk].starts
+    var low = 0
+    high = starts.count - 2
+    while low < high {
+      let mid = (low + high + 1) / 2
+      if starts[mid] <= offset { low = mid } else { high = mid - 1 }
+    }
+    return first + chunk * MinimapCells.lines + low
+  }
+
+  /// 区間の行（開始の行から終わりの位置の行まで。VS Code は範囲の終わりの行を含める——行を丸ごと選べば次の行まで）。
+  func rows(of range: NSRange) -> ClosedRange<Int> {
+    let first = row(containing: range.location)
+    return first...max(first, row(containing: NSMaxRange(range)))
+  }
+
+  /// 行 `row` の行頭のオフセット。
+  func lineStart(_ row: Int) -> Int {
+    let (heads, index) = locate(row)
+    return heads.starts[index]
+  }
+
+  /// 行 `row` の本文の長さ（UTF-16、改行を除く）。頭が行の終わりに届かない長い行は頭の長さ——描ける桁を越えるので、
+  /// x はどちらでも幅で止まる。
   func length(row: Int) -> Int {
-    let start = text.lineStart(row)
-    let end = text.lineEnd(row)
-    let tail = text.units(
-      in: NSRange(location: max(start, end - 2), length: end - max(start, end - 2)))
-    return end - start - tail.reversed().prefix { $0 == 0x0A || $0 == 0x0D }.count
+    let (heads, index) = locate(row)
+    var head = heads.head(index)
+    guard heads.isComplete(index) else { return head.count }
+    if head.last == 0x0A { head = head.dropLast() }
+    if head.last == 0x0D { head = head.dropLast() }
+    return head.count
   }
 
-  /// 行 `row` の UTF-16 位置 `index` の x（ミニマップの幅で止まる）。行の本文の終わりより右は本文の終わり。
-  mutating func x(row: Int, at index: Int) -> CGFloat {
+  /// 昇順の列のうち、描く行 `lines` に掛かる区間（二分探索で切る）。
+  func visible(_ ranges: [NSRange], lines: Range<Int>) -> ArraySlice<NSRange> {
+    guard !ranges.isEmpty else { return [] }
+    let start = lineStart(lines.lowerBound)
+    let (heads, index) = locate(lines.upperBound - 1)
+    let end = heads.starts[index + 1]
+    var low = 0
+    var high = ranges.count
+    while low < high {
+      let mid = (low + high) / 2
+      if NSMaxRange(ranges[mid]) > start
+        || (ranges[mid].length == 0 && ranges[mid].location >= start)
+      {
+        high = mid
+      } else {
+        low = mid + 1
+      }
+    }
+    var upper = low
+    while upper < ranges.count, ranges[upper].location <= end { upper += 1 }
+    return ranges[low..<upper]
+  }
+
+  /// 行 `row` の UTF-16 位置 `index` の x（ミニマップの幅 `width` で止まる——`MinimapLine.decorationColumns`）。行の
+  /// 本文の終わりより右は本文の終わり。
+  func x(row: Int, at index: Int, width: CGFloat) -> CGFloat {
     guard index > 0 else { return gutter }
     guard gutter + CGFloat(index) < width else { return width }
-    let line = offsets[row] ?? read(row)
-    return index < line.count ? line[index] : line[line.count - 1]
-  }
-
-  private mutating func read(_ row: Int) -> [CGFloat] {
-    let start = text.lineStart(row)
-    let limit = max(0, Int(width - gutter))
-    let length = min(text.lineEnd(row) - start, limit + 2)
-    var units = text.units(in: NSRange(location: start, length: length))
-    if units.count < limit + 2 {
-      if units.last == 0x0A { units.removeLast() }
-      if units.last == 0x0D { units.removeLast() }
+    let (heads, line) = locate(row)
+    var column = 0
+    for unit in heads.head(line).prefix(min(index, length(row: row))) {
+      column += MinimapLine.decorationWidth(of: unit, tabSize: tabSize)
+      if column >= limit { return gutter + CGFloat(limit) }
     }
-    let line = MinimapLine.decorationColumns(
-      units.prefix(limit + 1), tabSize: tabSize, limit: limit
-    ).map { gutter + CGFloat($0) }
-    offsets[row] = line
-    return line
+    return gutter + CGFloat(column)
   }
 }

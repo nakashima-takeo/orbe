@@ -100,6 +100,29 @@ final class SurfaceMinimapTests: EngineTestCase {
       "役割の変わった行のチャンク")
   }
 
+  /// ミニマップが動いた向きの先（同じ向きに 1〜2 倍動いた先まで）のまとまりのうち、覚えていないものを動く向きの近い方から
+  /// 上限まで先に作る。
+  func testPrefetchBuildsTheChunksAheadInTheDirectionOfMotion() {
+    let text = TextRope(String(repeating: "x\n", count: MinimapCells.lines * 40))
+    let roles = RoleRuns(length: text.length)
+    let down = MinimapCells()
+    down.beginFrame(MinimapCells.Key(columns: 10, heads: 12, tabSize: 4))
+    for index in 0...4 { _ = down.chunk(index, text: text, roles: roles) }
+    down.prefetch(0..<300, motion: 128, text: text, roles: roles)
+    XCTAssertEqual(down.cached, Set(0...8), "描いた 0…4 の先の 5…8（2 倍動いた先まで）")
+    let up = MinimapCells()
+    up.beginFrame(MinimapCells.Key(columns: 10, heads: 12, tabSize: 4))
+    for index in 15...20 { _ = up.chunk(index, text: text, roles: roles) }
+    up.prefetch(1000..<1300, motion: -128, text: text, roles: roles)
+    XCTAssertEqual(up.cached, Set(11...20), "上へ動けば上の 14…11")
+    let far = MinimapCells()
+    far.beginFrame(MinimapCells.Key(columns: 10, heads: 12, tabSize: 4))
+    far.prefetch(0..<300, motion: 1000, text: text, roles: roles)
+    XCTAssertEqual(
+      far.cached.count, MinimapCells.prefetchLimit, "大きく動いても作るのは上限まで")
+    XCTAssertEqual(far.cached.min(), 1000 / MinimapCells.lines, "近い方から")
+  }
+
   /// 字の列は上限のチャンク数までしか覚えない——上限の 3 倍のチャンクを先頭から末尾まで通しても上限を超えず、最後に描いた
   /// チャンクは残り、最初に描いたチャンクは捨てられている。
   func testTheChunksStayWithinTheCapacity() throws {

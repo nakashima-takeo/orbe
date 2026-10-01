@@ -17,14 +17,14 @@ struct Pass {
 
 /// 命令の列 1 つの instance の buffer に、描く層の順に詰めていく（層ごとに 256 バイトに揃える）。
 final class InstanceWriter {
-  private let buffer: MTLBuffer
+  let buffer: MTLBuffer
   private var offset = 0
 
   init(buffer: MTLBuffer) {
     self.buffer = buffer
   }
 
-  private func upload<T>(_ items: [T]) -> Int? {
+  func upload<T>(_ items: [T]) -> Int? {
     guard !items.isEmpty else { return nil }
     let start = offset
     precondition(
@@ -160,13 +160,14 @@ extension Renderer {
       encoder.setFragmentBytes(
         &colors, length: MemoryLayout<UInt32>.stride * colors.count, index: 1)
       for chunk in minimap.chunks {
+        guard let start = instances.upload(chunk.cells) else { continue }
         var uniforms = minimap.uniforms
         uniforms.origin.y = chunk.top
-        encoder.setVertexBuffer(chunk.buffer, offset: 0, index: 0)
+        encoder.setVertexBuffer(instances.buffer, offset: start, index: 0)
         encoder.setVertexBytes(&uniforms, length: MemoryLayout<MinimapUniforms>.stride, index: 2)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<MinimapUniforms>.stride, index: 0)
         encoder.drawPrimitives(
-          type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: chunk.count)
+          type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: chunk.cells.count)
       }
     }
     if let layer = pass.minimapLayer, !minimap.decorations.isEmpty {

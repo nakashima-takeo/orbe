@@ -17,11 +17,12 @@ final class SurfaceSlot {
   var target: FrameTarget?
   var clock: FrameClock?
   let lines = LineLayoutCache()
-  let minimapCells: MinimapCells
+  let minimapCells = MinimapCells()
   let rulerRows = RulerRows()
   let motion = OverviewMotion()
-  /// 最後に描いたミニマップの配置（次のコマの揺れ止め）。
+  /// 最後に描いたミニマップの配置（次のコマの揺れ止め）と、その前のコマからミニマップの描き始めの行が動いた数。
   var minimapPlacement: MinimapLayout?
+  private var minimapMotion = 0
   /// ミニマップの字形の表（倍率ごと）と、装飾を組として描く画面外の 1 枚。
   var minimapSheet: (scale: Int, texture: MTLTexture)?
   var minimapLayer: MTLTexture?
@@ -48,7 +49,7 @@ final class SurfaceSlot {
   var revealed = 0
 
   init(
-    id: Int, boxes: SurfaceBoxes, config: SurfaceConfig, device: MTLDevice,
+    id: Int, boxes: SurfaceBoxes, config: SurfaceConfig,
     notify: @escaping @Sendable () -> Void
   ) {
     self.id = id
@@ -56,7 +57,6 @@ final class SurfaceSlot {
     scroll = boxes.scroll
     placement = boxes.placement
     self.config = config
-    minimapCells = MinimapCells(device: device)
     self.notify = notify
   }
 
@@ -84,8 +84,22 @@ final class SurfaceSlot {
         minimapCells: minimapCells, rulerRows: rulerRows, motion: motion, time: moment.time,
         baselines: self.scroll.baselines, previousPlacement: minimapPlacement),
       cache: lines, fonts: fonts)
+    if let previous = minimapPlacement, let placement = builder.minimap.placement {
+      minimapMotion = placement.startLine - previous.startLine
+    }
     minimapPlacement = builder.minimap.placement
     placement.write(builder.minimap.placement)
+  }
+}
+
+extension SurfaceSlot {
+  /// コマを出した後で、ミニマップが動いた向きに、次のコマが要りそうなチャンクを先に作る（→
+  /// `MinimapCells.prefetch`）。
+  func prefetchMinimap(_ material: FrameMaterial) {
+    guard minimapMotion != 0, let content = material.content, let placement = minimapPlacement
+    else { return }
+    minimapCells.prefetch(
+      placement.lines, motion: minimapMotion, text: content.text, roles: content.roles)
   }
 }
 
