@@ -87,7 +87,8 @@
       var view: some View { ShellPane(pane: pane) }
     }
 
-    /// 骨込みの面。gallery が dark / light・広い幅・狭い幅（サイドバーが切り詰まる）を撮る。
+    /// 骨込みの面。gallery が dark / light・広い幅・狭い幅（サイドバーが切り詰まる）を撮る。git が失敗すれば投げる
+    /// （→ `FixtureGit`）。
     @MainActor static func scene(queriesRoot: URL) throws -> Scene {
       let repoRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -100,12 +101,12 @@
           at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
         try FileManager.default.copyItem(at: repoRoot.appendingPathComponent(relative), to: dest)
       }
-      let git = { (args: [String]) in _ = GitRunner.shared.runSync(args, cwd: dir.path) }
-      git(["init", "-q", "-b", "main"])
-      git(["config", "user.email", "gallery@orbe.dev"])
-      git(["config", "user.name", "gallery"])
-      git(["add", "-A"])
-      git(["commit", "-qm", "gallery"])
+      let git = FixtureGit(directory: dir)
+      try git(["init", "-q", "-b", "main"])
+      try git(["config", "user.email", "gallery@orbe.dev"])
+      try git(["config", "user.name", "gallery"])
+      try git(["add", "-A"])
+      try git(["commit", "-qm", "gallery"])
       // M: README を書き換える / A: shell.md を足して add / U: notes.txt を未追跡で置く。
       let readme = dir.appendingPathComponent("README.md")
       try (try String(contentsOf: readme, encoding: .utf8) + "\n<!-- gallery -->\n")
@@ -113,7 +114,7 @@
       try "# 面の骨\n".write(
         to: dir.appendingPathComponent("docs/spec/editor/shell.md"), atomically: true,
         encoding: .utf8)
-      git(["add", "docs/spec/editor/shell.md"])
+      try git(["add", "docs/spec/editor/shell.md"])
       try "todo\n".write(
         to: dir.appendingPathComponent("notes.txt"), atomically: true, encoding: .utf8)
 
