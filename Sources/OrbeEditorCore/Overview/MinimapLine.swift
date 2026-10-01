@@ -29,10 +29,25 @@ public enum MinimapLine {
     tabSize: Int, columns: Int
   ) -> [MinimapCell] {
     var result: [MinimapCell] = []
+    var role = roles.startIndex
+    forEachCell(units, tabSize: tabSize, columns: columns) { column, glyph, index in
+      let offset = lineStart + index
+      while role < roles.endIndex, NSMaxRange(roles[role].range) <= offset { role += 1 }
+      let span = role < roles.endIndex && roles[role].range.location <= offset ? roles[role] : nil
+      result.append(MinimapCell(column: column, glyph: glyph, role: span?.role))
+    }
+    return result
+  }
+
+  /// 行の字を、列を作らずに左から順に `body`（桁・字形の番号・行の中の UTF-16 位置）へ渡す（`cells` の字の置き方）。
+  @inlinable public static func forEachCell(
+    _ units: some Collection<UInt16>, tabSize: Int, columns: Int,
+    _ body: (_ column: Int, _ glyph: Int, _ index: Int) -> Void
+  ) {
     var column = 0
     var tabsDelta = 0
-    var role = roles.startIndex
-    for (index, unit) in units.enumerated() {
+    var index = 0
+    for unit in units {
       guard column < columns else { break }
       switch unit {
       case 0x09:
@@ -42,18 +57,15 @@ public enum MinimapLine {
       case 0x20:
         column += 1
       default:
-        let offset = lineStart + index
-        while role < roles.endIndex, NSMaxRange(roles[role].range) <= offset { role += 1 }
-        let span = role < roles.endIndex && roles[role].range.location <= offset ? roles[role] : nil
         let glyph = glyph(of: unit)
         for _ in 0..<(CharacterWidth.isFullWidth(UInt32(unit)) ? 2 : 1) {
           guard column < columns else { break }
-          result.append(MinimapCell(column: column, glyph: glyph, role: span?.role))
+          body(column, glyph, index)
           column += 1
         }
       }
+      index += 1
     }
-    return result
   }
 
   /// 行の各 UTF-16 位置の左端の桁（装飾の x。`units.count + 1` 個）。タブは `tabSize` 桁、全角は 2 桁。`limit` 桁に
@@ -64,7 +76,7 @@ public enum MinimapLine {
     var result = [0]
     var column = 0
     for unit in units {
-      column += unit == 0x09 ? tabSize : CharacterWidth.isFullWidth(UInt32(unit)) ? 2 : 1
+      column += decorationWidth(of: unit, tabSize: tabSize)
       if column >= limit {
         result.append(limit)
         break
@@ -72,6 +84,11 @@ public enum MinimapLine {
       result.append(column)
     }
     return result
+  }
+
+  /// `decorationColumns` で字 1 つが進める桁（タブは `tabSize` 桁、全角は 2 桁）。
+  @inlinable public static func decorationWidth(of unit: UInt16, tabSize: Int) -> Int {
+    unit == 0x09 ? tabSize : CharacterWidth.isFullWidth(UInt32(unit)) ? 2 : 1
   }
 
   /// 幅 `canvasWidth` デバイス px・倍率 `scale`（1 字の幅）のミニマップに描ける桁数——字の左端が
