@@ -335,7 +335,7 @@ final class EditorPaneView: NSView {
     }
   }
 
-  // MARK: - 可視性（ツリーが根のサービスを握る寿命）
+  // MARK: - 可視性（ツリーとプロジェクト検索が根のサービスを握る寿命）
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
