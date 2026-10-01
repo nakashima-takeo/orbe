@@ -75,8 +75,9 @@ final class RenderThread: @unchecked Sendable {
   /// 表示の刻みごとに起き、画面に出る予定の刻みの `FrameRecorder.commitMargin` 前までに 1 コマの命令を出し終える仕事
   /// なので、Mach の時間制約つきの方針で「刻み `period` ごとに `frameComputation` の計算を、起きてから
   /// `period − commitMargin` 以内に」と申告する。優先度（QoS）だけのスレッドは、混んだ機械で同じ優先度の他の仕事に
-  /// 1 刻み近く待たされて起き（そのコマは刻みに間に合わない）、遅いコアや低い周波数に載る（1 コマの CPU が数倍に揺れる）。
-  /// 時間制約つきのスレッドは普通の優先度の仕事より先に起き、刻みと締め切りが性能の制御に渡る。
+  /// 1 刻み近く待たされて起きる（そのコマは刻みに間に合わない）。時間制約つきのスレッドは普通の優先度の仕事より先に
+  /// 起き、刻みと締め切りが性能の制御に渡る。どのコアに載るかは OS が決め、コマの多くは効率コアで動く（申告の計算の量
+  /// では変わらない）。
   static func adopt(framePeriod period: Double) {
     var timebase = mach_timebase_info_data_t()
     mach_timebase_info(&timebase)
