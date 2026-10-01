@@ -123,4 +123,32 @@ final class ProjectSearchResultsTests: XCTestCase {
         ranges: [NSRange(location: 1, length: 2), NSRange(location: 5, length: 3)], version: 7))
     XCTAssertEqual(results.total, 2)
   }
+
+  /// 区間の字は探した字（プレビューの一致）と照合する。ディスクのまとまりを直すとき・開いている文書のまとまりを見せるとき、
+  /// 字の違う一致は落とし、長くて頭だけを持つ一致は頭で照合する。壊れると、探した後にファイルが変わったとき無関係な字を
+  /// 一致として選ぶ。
+  func testMatchesWhoseTextNoLongerAgreesAreDropped() {
+    let found = { (line: Int, column: Int, text: String) in
+      SearchMatch(
+        line: line, column: NSRange(location: column, length: text.utf16.count),
+        preview: SearchPreview(
+          line: text as NSString, match: NSRange(location: 0, length: text.utf16.count)))
+    }
+    let long = String(repeating: "n", count: 300)
+    var results = ProjectSearchResults()
+    results.set(
+      SearchFileMatches(
+        path: "a", matches: [found(0, 0, "needle"), found(0, 9, "needle"), found(1, 0, long)]))
+    let dropped = results.attach("a", to: TextRope("needle a zzzzzz\n" + long + "\n"), version: 0)
+    XCTAssertTrue(dropped)
+    XCTAssertEqual(
+      results["a"]?.document?.ranges,
+      [NSRange(location: 0, length: 6), NSRange(location: 16, length: 300)], "長い一致は頭で照合する")
+    XCTAssertEqual(results.total, 2)
+
+    XCTAssertFalse(results.dropDisagreeing("a", with: TextRope("needle a zzzzzz\n" + long + "\n")))
+    XCTAssertTrue(results.dropDisagreeing("a", with: TextRope("xxxxxx a zzzzzz\n" + long + "\n")))
+    XCTAssertEqual(results["a"]?.document?.ranges, [NSRange(location: 16, length: 300)])
+    XCTAssertEqual(results.total, 1)
+  }
 }

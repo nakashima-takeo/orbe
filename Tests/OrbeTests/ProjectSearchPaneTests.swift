@@ -126,6 +126,58 @@ final class ProjectSearchPaneTests: OrbeTestCase {
     XCTAssertEqual(hosted.pane.document?.surface.selectedRange, NSRange(location: 11, length: 6))
   }
 
+  /// 検索の後・開く前に外で書き換わったファイルを結果から開くと、今の本文と字の違う一致は落とし（無関係な字を選ばない・
+  /// 地を敷かない）、その文書を探し直す。字の合う一致はそのまま使える。
+  func testOpeningADiskResultRewrittenOutsideDropsTheStaleMatchesAndSearchesAgain() throws {
+    let hosted = try host(["b.txt": "x\nneedle a needle b\n"])
+    searchAll(hosted, "needle")
+    XCTAssertNil(hosted.search.results["b.txt"]?.document, "前提: ディスクの結果")
+    try hosted.repo.write("b.txt", "x\nneedle a zzzzzz b\nneedle\n")
+
+    hosted.search.click(ProjectSearch.RowID(path: "b.txt", match: 1))
+
+    let document = try XCTUnwrap(hosted.pane.document)
+    XCTAssertEqual(document.url, hosted.repo.url("b.txt"))
+    XCTAssertEqual(document.surface.selectedRange.length, 0, "字の違う一致を選ばない")
+    XCTAssertNil(hosted.search.selection, "落ちた一致の行は選ばない")
+    XCTAssertEqual(
+      hosted.search.results["b.txt"]?.document?.ranges, [NSRange(location: 2, length: 6)],
+      "字の合う一致は残る")
+    XCTAssertEqual(hosted.pane.findGround.matches, [NSRange(location: 2, length: 6)])
+    pumpMain(
+      until: {
+        hosted.search.results["b.txt"]?.document?.ranges
+          == [NSRange(location: 2, length: 6), NSRange(location: 20, length: 6)]
+      }, "今の本文で探し直す")
+  }
+
+  /// 結果に出ている未編集の文書を閉じ、外で書き換わってから開き直す（版は 0 から数え直し）と、閉じた文書の本文で取った区間を
+  /// 今の本文と照合し、字の違う一致を落として探し直す。
+  func testReopeningAnUneditedDocumentRewrittenOutsideDropsTheStaleMatches() throws {
+    let hosted = try host(["a.txt": "x\nneedle a needle b\n"])
+    let closed = try open(hosted, "a.txt")
+    searchAll(hosted, "needle")
+    XCTAssertEqual(hosted.search.results["a.txt"]?.document?.version, 0, "前提: 文書の結果")
+    hosted.tab.editor.close(closed)
+    try hosted.repo.write("a.txt", "x\nneedle a zzzzzz b\nneedle\n")
+
+    hosted.search.click(ProjectSearch.RowID(path: "a.txt", match: 1))
+
+    let document = try XCTUnwrap(hosted.pane.document)
+    XCTAssertFalse(document === closed, "前提: 開き直した文書")
+    XCTAssertEqual(document.version, 0, "前提: 版は 0 から")
+    XCTAssertEqual(document.surface.selectedRange.length, 0, "字の違う一致を選ばない")
+    XCTAssertEqual(
+      hosted.search.results["a.txt"]?.document?.ranges, [NSRange(location: 2, length: 6)],
+      "字の合う一致は残る")
+    XCTAssertEqual(hosted.pane.findGround.matches, [NSRange(location: 2, length: 6)])
+    pumpMain(
+      until: {
+        hosted.search.results["a.txt"]?.document?.ranges
+          == [NSRange(location: 2, length: 6), NSRange(location: 20, length: 6)]
+      }, "今の本文で探し直す")
+  }
+
   // MARK: - 開いている文書の探し直し
 
   /// 焦点の文書を編集すると、一致の位置はすぐ編集に合わせてずれ、少し後にその文書だけ探し直す（一致 0 なら消える）。
