@@ -87,7 +87,8 @@ let package = Package(
       swiftSettings: [.swiftLanguageMode(.v6)]
     ),
     // テキスト面（`TextSurface`）の Metal 実装。本文を持たず、文書の写しを描画専用のスレッドが 1 コマで描く。公開は面を
-    // 作る関数と、シェーダを先に用意する関数だけ。main と描画スレッドの間で値を渡すので Swift 6 の言語モードで検査する。
+    // 作る関数・描く用意を裏で始める関数・面の view の型（変換中の ⌘ キーを IME へ先に渡す口。窓のキーの層の口への準拠は
+    // 合成点が宣言する）だけ。main と描画スレッドの間で値を渡すので Swift 6 の言語モードで検査する。
     .target(
       name: "OrbeEditorEngine",
       dependencies: ["OrbeEditorCore"],
