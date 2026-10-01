@@ -25,16 +25,25 @@ final class SurfaceOverviewTests: EngineTestCase {
     return opened
   }
 
-  /// ミニマップの帯の外を押すとその行の上端が本文の中央に来て、横位置は動かない。
+  /// ミニマップの帯の外を押すとその行の上端が本文の中央に来て、横位置は動かない。押したままドラッグしても本文は動かない
+  /// （帯を掴んだのではない）。
   func testPressingTheMinimapOutsideTheSliderCentersThatLine() throws {
-    let opened = try hosted(rows(2000))
+    let opened = try hosted(rows(2000, width: 400))
+    opened.surface.scroll(toX: 300)
+    XCTAssertEqual(opened.surface.scrollPosition.x, 300, "前提: 横へ送った")
     let area = opened.surface.surfaceLayout.minimap
-    try mouse(opened, .leftMouseDown, at: CGPoint(x: area.midX, y: 300))
-    try mouse(opened, .leftMouseUp, at: CGPoint(x: area.midX, y: 300))
     let placement = try XCTUnwrap(opened.surface.placementBox.read())
-    let line = CGFloat(placement.line(atY: 300))
+    let press = CGPoint(x: area.midX, y: 300)
+    XCTAssertFalse(placement.sliderContains(y: press.y - area.minY), "前提: 帯の外")
+    try mouse(opened, .leftMouseDown, at: press)
     let lines = opened.surface.viewportLines
-    XCTAssertEqual(lines.first + lines.visible / 2, line, accuracy: 1e-6)
+    XCTAssertEqual(
+      lines.first + lines.visible / 2, CGFloat(placement.line(atY: press.y - area.minY)),
+      accuracy: 1e-6)
+    XCTAssertEqual(opened.surface.scrollPosition.x, 300, "横位置は動かない")
+    try mouse(opened, .leftMouseDragged, at: CGPoint(x: press.x, y: press.y + 60))
+    try mouse(opened, .leftMouseUp, at: CGPoint(x: press.x, y: press.y + 60))
+    XCTAssertEqual(opened.surface.viewportLines.first, lines.first, "続くドラッグでは動かない")
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 0, length: 0), "選択は動かない")
   }
 
