@@ -1,7 +1,6 @@
 import AppKit
 import OrbeEditorCore
 import OrbeEditorEngine
-import OrbeEditorText
 
 /// エディターの見え方を `Theme` から組む唯一の場所。
 enum EditorStyle {
@@ -78,8 +77,7 @@ enum EditorStyle {
   ]
 
   /// 俯瞰の見え方（VS Code の既定。色は Dark Modern / Light Modern、git は Orbe の diff.*——ミニマップは α 1、スクロール
-  /// バーの印は VS Code と同じ α .6。キャレットの印はキャレット色 α .7）。新しい面が自分で描くときも、今の面の俯瞰の部品も
-  /// この値から組む。
+  /// バーの印は VS Code と同じ α .6。キャレットの印はキャレット色 α .7）。
   private static func overview() -> TextSurfaceStyle.Overview {
     TextSurfaceStyle.Overview(
       minimap: TextSurfaceStyle.Minimap(
@@ -145,30 +143,23 @@ enum EditorStyle {
   }
 }
 
-/// 文書を開く時点のテキストエンジンの選び方（隠れた設定 3 つと UI の言語から）。
-struct EditorEngineChoice {
-  /// 新しい面（Metal）で開く。Metal の装置が取れなければ今の面で開く。
-  var metal: Bool
-  var elasticScroll: Bool
-  var fontSmoothing: Bool
-  var language: Language
-
-  /// 今の面（STTextView）。テストと fixture の既定。
-  static let stTextView = EditorEngineChoice(
-    metal: false, elasticScroll: true, fontSmoothing: true, language: .systemDefault)
+/// テキスト面を作れず、文書を開けない（Metal の装置が取れない）。
+enum EditorSurfaceError: Error, Equatable {
+  case noMetalDevice
 }
 
-/// セッションが文書を開くときに使う、queries の所在と面の作り方。テキストエンジン（OrbeEditorText・
-/// OrbeEditorEngine）と合成する唯一の場所。テストは fake の面を作るものを渡せる。
+/// セッションが文書を開くときに使う、queries の所在と面の作り方。テキストエンジン（OrbeEditorEngine）と合成する唯一の
+/// 場所。テストは fake の面を作るものを渡せる。
 struct EditorSurfaces {
   let registry: LanguageRegistry
-  let make: @MainActor (String) -> any TextSurface
-  /// 新しい面を使うと決まっていれば、描画のスレッドとシェーダを裏で先に用意する（実効設定を反映するたびに呼ばれる）
-  /// ——最初の面を出すときにシェーダのコンパイルの待ちを見せない。
+  /// 面を作る。作れなければ nil（文書は開けない）。
+  let make: @MainActor () -> (any TextSurface)?
+  /// 描画のスレッドとシェーダを裏で先に用意する（エディター面が初めて見えたときに呼ばれる。何度呼んでもよい）——最初の
+  /// 面を出すときにシェーダのコンパイルの待ちを見せない。
   let prepare: @MainActor () -> Void
 
   init(
-    registry: LanguageRegistry, make: @escaping @MainActor (String) -> any TextSurface,
+    registry: LanguageRegistry, make: @escaping @MainActor () -> (any TextSurface)?,
     prepare: @escaping @MainActor () -> Void = {}
   ) {
     self.registry = registry
@@ -176,33 +167,27 @@ struct EditorSurfaces {
     self.prepare = prepare
   }
 
-  /// 本物の面を、指定の根の queries で組む。どちらのエンジンで作るかは、文書を開く時点で `engine` を読んで決める
-  /// （開いている文書の面は作り直さない）。
-  init(queriesRoot: URL?, engine: @escaping @MainActor () -> EditorEngineChoice = { .stTextView }) {
+  /// 本物の面を、指定の根の queries で組む。打ち切った行の印の文言は、面を作る時点の UI の言語（`language`）で決まる。
+  init(
+    queriesRoot: URL?, language: @escaping @MainActor () -> Language = { .systemDefault }
+  ) {
     self.init(
       registry: LanguageRegistry(queriesRoot: queriesRoot),
-      make: { text in
-        let choice = engine()
-        let style = EditorStyle.make()
-        let metal =
-          choice.metal
-          ? makeMetalTextSurface(
-            style: style,
-            options: MetalTextSurfaceOptions(
-              elasticScroll: choice.elasticScroll, fontSmoothing: choice.fontSmoothing,
-              omittedLabel: { [language = choice.language] in
-                EditorStyle.omittedLabel($0, language: language)
-              })) : nil
-        return metal ?? makeTextSurface(style: style, text: text)
+      make: {
+        makeMetalTextSurface(
+          style: EditorStyle.make(),
+          options: MetalTextSurfaceOptions(
+            elasticScroll: true, fontSmoothing: true,
+            omittedLabel: { [language = language()] in
+              EditorStyle.omittedLabel($0, language: language)
+            }))
       },
-      prepare: {
-        if engine().metal { prepareMetalTextEngine() }
-      })
+      prepare: prepareMetalTextEngine)
   }
 
-  /// 今の面で開く組成。queries は `.app` の同梱物（`BundledResources.root` 直下の資源バンドル）から解く。
+  /// queries は `.app` の同梱物（`BundledResources.root` 直下の資源バンドル）から解く。
   static let shared = EditorSurfaces(queriesRoot: BundledResources.root)
 }
 
-/// 新しい面の view は、変換中の ⌘ キーを IME へ先に渡す窓の根の口に答える。
+/// テキスト面の view は、変換中の ⌘ キーを IME へ先に渡す窓の根の口に答える。
 extension TextSurfaceInputView: InputMethodKeyEquivalents {}

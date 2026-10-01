@@ -145,6 +145,8 @@ extension WindowController: ControlTarget {
       try tab.openFile(url)
     } catch EditorDocumentError.notUTF8 {
       return .failure(ControlError(code: -32000, message: "not UTF-8: \(url.path)"))
+    } catch EditorSurfaceError.noMetalDevice {
+      return .failure(ControlError(code: -32000, message: "no Metal device: \(url.path)"))
     } catch {
       return .failure(ControlError(code: -32000, message: "cannot read: \(url.path)"))
     }

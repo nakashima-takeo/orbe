@@ -359,11 +359,14 @@ final class EditorPaneView: NSView {
     updateLiveness()
   }
 
+  /// 面が画面に見えているか（窓に付き、隠れていない）が変わりうる。見えていれば、テキスト面を描く用意も裏で始める（端末
+  /// だけを使う間は払わない）。
   private func updateLiveness() {
     let live = window != nil && !isHiddenOrHasHiddenAncestor
     tree.isLive = live
     projectSearch.isLive = live
     updateOutlineWant()
+    if live { tab?.editor.prepareSurfaces() }
     prepareDocumentIfVisible()
   }
 

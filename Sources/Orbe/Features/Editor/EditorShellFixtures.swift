@@ -117,7 +117,8 @@
       try "todo\n".write(
         to: dir.appendingPathComponent("notes.txt"), atomically: true, encoding: .utf8)
 
-      let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot))
+      let tab = TerminalTab(
+        cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot, language: { .ja }))
       let readmeDocument = try tab.editor.open(readme)
       readmeDocument.surface.responder.perform(Selector(("insertText:")), with: "# ")
       _ = try tab.editor.open(dir.appendingPathComponent("docs/design/tokens.json"))

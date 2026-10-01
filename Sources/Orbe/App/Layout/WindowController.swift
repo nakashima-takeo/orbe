@@ -66,10 +66,10 @@ final class WindowController: NSObject, NSWindowDelegate {
   // メモリに持ち、タブの同一性の遷移（wire の onIdentityTransition）を積む。復元（restore）より先に
   // 出来ていることが要る——復元タブの起床が opened を書く。
   let sessionLog = AgentSessionLog()
-  // タブのエディターが文書を開くときの面の作り方。どちらのテキストエンジンで作るかは、開く時点の実効設定で決まる。
+  // タブのエディターが文書を開くときの面の作り方。打ち切った行の印の文言は、面を作る時点の UI の言語で決まる。
   private(set) lazy var editorSurfaces = EditorSurfaces(
     queriesRoot: BundledResources.root,
-    engine: { [weak self] in self?.editorEngineChoice() ?? .stTextView })
+    language: { [weak self] in self?.localization.language ?? .systemDefault })
 
   // 読みは store へ転送する（制御チャネル・chrome・パレット・永続・テストが多数の箇所で読むため、
   // 従来の可視性（internal）を保って読み site を無改変にする）。所有と全ミューテーションは store。

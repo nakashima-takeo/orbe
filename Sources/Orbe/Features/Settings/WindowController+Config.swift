@@ -32,15 +32,5 @@ extension WindowController {
     NSApp.appearance = settings[SettingKeys.theme].appearance
     GuiConfig.regenerate(from: settings)
     scheduleConfigReload()
-    MainActor.assumeIsolated { editorSurfaces.prepare() }
-  }
-
-  /// 文書を開く時点のテキストエンジンの選び方（アクティブ workspace の実効設定と UI の言語）。
-  func editorEngineChoice() -> EditorEngineChoice {
-    let settings = activeEffectiveSettings()
-    return EditorEngineChoice(
-      metal: settings[SettingKeys.editorEngineMetal],
-      elasticScroll: settings[SettingKeys.editorScrollElastic],
-      fontSmoothing: settings[SettingKeys.editorFontSmoothing], language: localization.language)
   }
 }
