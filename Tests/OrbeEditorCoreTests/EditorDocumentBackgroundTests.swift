@@ -110,12 +110,12 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     let template = (tick + 1)..<(source.utf16.count - 2)
     XCTAssertTrue(before[template].allSatisfy { $0 != nil }, "前提: テンプレート文字列の中は全部色付き")
     before.remove(at: tick)
-    var delivered: [[SyntaxRole?]] = []
-    document.onRolesChange = { _ in delivered.append(self.perUnit(document)) }
+    let pulled = surface.pulled.count
 
     surface.replace(NSRange(location: tick, length: 1), with: "")
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
 
+    let delivered = surface.pulled.dropFirst(pulled).map { perUnit($0.content.roles) }
     let after = perUnit(document)
     XCTAssertGreaterThan(delivered.count, 1, "前提: 作り直しの途中の結果が届いた")
     for (index, roles) in delivered.enumerated() {
@@ -170,8 +170,12 @@ final class EditorDocumentBackgroundTests: XCTestCase {
 
   /// 字ごとの役割（本文全体）。
   private func perUnit(_ document: EditorDocument) -> [SyntaxRole?] {
-    var result = [SyntaxRole?](repeating: nil, count: document.text.length)
-    for span in document.roles.roles(in: NSRange(location: 0, length: document.text.length)) {
+    perUnit(document.roles)
+  }
+
+  private func perUnit(_ roles: RoleRuns) -> [SyntaxRole?] {
+    var result = [SyntaxRole?](repeating: nil, count: roles.length)
+    for span in roles.roles(in: NSRange(location: 0, length: roles.length)) {
       for offset in span.range.location..<NSMaxRange(span.range) { result[offset] = span.role }
     }
     return result
@@ -260,7 +264,7 @@ final class EditorDocumentBackgroundTests: XCTestCase {
   private func show(row: Int, of surface: FakeTextSurface) {
     let document = try? XCTUnwrap(surface.delegate as? EditorDocument)
     surface.viewport = TextViewport(
-      firstVisible: document?.text.lineStart(row) ?? 0, hiddenFraction: 0, visibleLines: 10)
+      firstVisible: document?.text.lineStart(row) ?? 0, visibleLines: 10)
     surface.delegate?.surfaceDidChangeViewport(surface)
   }
 

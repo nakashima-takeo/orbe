@@ -95,10 +95,10 @@ final class RenderLoopTests: EngineTestCase {
     surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
     driver.bind(surface.id)
     let deadline = Date().addingTimeInterval(5)
-    while !surface.viewport.clipsRight, Date() < deadline {
+    while !surface.clipsRight, Date() < deadline {
       RunLoop.main.run(until: Date().addingTimeInterval(0.01))
     }
-    XCTAssertTrue(surface.viewport.clipsRight, "前提: 長さを測った")
+    XCTAssertTrue(surface.clipsRight, "前提: 長さを測った")
     waitUntilPaused(surface)
     let id = surface.id
     let shown = RenderThread.shared.performAndWait { $0.slot(id)?.motion.thumb.shown }
@@ -203,14 +203,14 @@ final class RenderLoopTests: EngineTestCase {
   func testAFrameThatWidensTheRangeTellsTheViewport() throws {
     let opened = try open(String(repeating: "x", count: 300) + "\n")
     let surface = opened.surface
-    XCTAssertFalse(surface.viewport.clipsRight, "前提: 行を組むまでは横の範囲に入らない")
+    XCTAssertFalse(surface.clipsRight, "前提: 行を組むまでは横の範囲に入らない")
     surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
     driver.bind(surface.id)
     let deadline = Date().addingTimeInterval(5)
-    while !surface.viewport.clipsRight, Date() < deadline {
+    while !surface.clipsRight, Date() < deadline {
       RunLoop.main.run(until: Date().addingTimeInterval(0.01))
     }
-    XCTAssertTrue(surface.viewport.clipsRight)
+    XCTAssertTrue(surface.clipsRight)
   }
 
   /// 描いた面の刻みに合わせて、描画スレッドは時間制約つきのスレッドになる——刻みごとに 1 コマの計算を、画面に出る予定の

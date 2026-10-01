@@ -118,7 +118,7 @@ final class SurfaceDrawingTests: EngineTestCase {
 
   /// 取引が置いた位置は、その版の材料を読んだコマから使う（スクロールだけが先に動いたコマを出さない）。
   func testPlacedPositionWaitsForTheMaterialRevision() {
-    let box = ScrollBox(elastic: false)
+    let box = ScrollBox()
     box.updateLimits(
       LimitsUpdate(lineCount: 1000, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7))
     box.place(SIMD2(0, 50))
@@ -133,7 +133,7 @@ final class SurfaceDrawingTests: EngineTestCase {
   /// 位置を描く（最初の版より前の位置ではない）。範囲と位置を同じ版で続けて置けば、その版より前の材料には両方を置く前の
   /// ものを組む。描画スレッドが引き取った版より前の組は手放す。
   func testEachMaterialRevisionTakesThePositionPlacedWithIt() {
-    let box = ScrollBox(elastic: false)
+    let box = ScrollBox()
     box.updateLimits(
       LimitsUpdate(lineCount: 1000, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7))
     box.place(SIMD2(0, 50))

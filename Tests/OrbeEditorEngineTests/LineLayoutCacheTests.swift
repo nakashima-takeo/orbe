@@ -8,8 +8,7 @@ import XCTest
 /// 黙って膨らむ、編集の後に古い行の組版で描く、右から左の字を含む行で構文色が抜ける。
 @MainActor
 final class LineLayoutCacheTests: XCTestCase {
-  private let config = SurfaceConfig(
-    style: EngineTestCase.style(), fontSmoothing: true, omittedLabel: { "+\($0)" })
+  private let config = SurfaceConfig(style: EngineTestCase.style(), omittedLabel: { "+\($0)" })
   private let fonts = FontRegistry()
 
   private func source(_ string: String) -> LineShaper.Source {

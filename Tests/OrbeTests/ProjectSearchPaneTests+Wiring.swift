@@ -3,6 +3,7 @@ import OrbeEditorCore
 import XCTest
 
 @testable import Orbe
+@testable import OrbeEditorEngine
 
 /// 面の結線——一致の地は検索パネルが見えている間だけ ⌘F の一致との和で本文と俯瞰に出る、パネルの中のキー（⌥⌘C / W / R・
 /// ⌘↓ / ⌘↑）、エディター面の F4 / ⇧F4、開き方と焦点（シングルクリックは結果に残り、ダブルクリックは本文へ、一致は中央へ）、
@@ -27,6 +28,13 @@ extension ProjectSearchPaneTests {
 
   // MARK: - 一致の地
 
+  /// pane が焦点の文書の面へ押した一致の地（出す前の状態を出してから読む）。
+  func pushedFindGround(_ hosted: Hosted) -> [NSRange] {
+    guard let surface = hosted.pane.document?.surface as? MetalTextSurface else { return [] }
+    surface.flush()
+    return surface.material.read().highlights[.findMatch]
+  }
+
   func testTheProjectMatchesJoinTheFindGroundOnlyWhileThePanelIsShown() throws {
     let hosted = try host(["a.txt": "needle x needle\n"])
     _ = try open(hosted, "a.txt")
@@ -35,7 +43,7 @@ extension ProjectSearchPaneTests {
     XCTAssertEqual(hosted.pane.findGround.matches, project)
     hosted.search.select(RowID(path: "a.txt", match: 1))
     XCTAssertEqual(hosted.pane.findGround.current, [NSRange(location: 9, length: 6)], "選んだ一致が現在の一致")
-    XCTAssertEqual(hosted.pane.appKitOverview.minimap.decorations.findMatches, project, "俯瞰にも出る")
+    XCTAssertEqual(pushedFindGround(hosted), project, "面へ押す（面は本文と俯瞰に描く）")
 
     hosted.pane.showSearch()
     catchUp(hosted.pane)
@@ -50,11 +58,7 @@ extension ProjectSearchPaneTests {
 
     hosted.pane.sidebar.select(.files)
     pumpMain(
-      until: {
-        hosted.pane.appKitOverview.minimap.decorations.findMatches == [
-          NSRange(location: 7, length: 1)
-        ]
-      },
+      until: { pushedFindGround(hosted) == [NSRange(location: 7, length: 1)] },
       "パネルを隠すとプロジェクト検索の地は消え、⌘F の地は残る")
     XCTAssertEqual(hosted.pane.findGround.matches, [NSRange(location: 7, length: 1)])
   }
@@ -128,9 +132,10 @@ extension ProjectSearchPaneTests {
       let document = try XCTUnwrap(hosted.pane.document)
       XCTAssertEqual(document.surface.selectedRange.length, 6, "一致が選択される")
       XCTAssertEqual(document.text.row(containing: document.surface.selectedRange.location), line)
-      let viewport = document.viewportLines
+      let viewport = document.surface.viewport
+      let first = CGFloat(document.text.row(containing: viewport.firstVisible))
       XCTAssertEqual(
-        viewport.first + viewport.visible / 2, CGFloat(line) + 0.5, accuracy: 1,
+        first + viewport.visibleLines / 2, CGFloat(line) + 0.5, accuracy: 1,
         "一致の行が中央へ（見えていても）")
       XCTAssertTrue(hosted.pane.focusIsInSidebar, "シングルクリックは焦点を結果に残す")
     }

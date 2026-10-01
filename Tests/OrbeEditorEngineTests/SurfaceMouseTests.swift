@@ -47,7 +47,7 @@ final class SurfaceMouseTests: EngineTestCase {
     XCTAssertEqual(opened.surface.caretLocation, 32)
     let long = try open((0..<5000).map { "row \($0)" }.joined(separator: "\n"))
     _ = host(long)
-    long.document.scroll(toFirstLine: 4000)
+    long.surface.scroll(toFirstLine: 4000)
     try click(long, row: 0, column: 4)
     XCTAssertEqual(long.document.text.row(containing: long.surface.caretLocation), 4000)
     XCTAssertEqual(long.surface.caretLocation, long.document.text.lineStart(4000) + 4)
@@ -131,7 +131,7 @@ final class SurfaceMouseTests: EngineTestCase {
     try click(opened, row: 1, column: 2, clicks: 4)
     XCTAssertEqual(opened.surface.selectedRange.length, opened.document.text.length)
     XCTAssertEqual(opened.surface.scroll.peek(at: 0).position.y, 0, "末尾へ飛ばない")
-    XCTAssertEqual(opened.document.viewportLines.first, 0)
+    XCTAssertEqual(opened.surface.viewportLines.first, 0)
   }
 
   /// マウスの押下として面へ届いた ⌃クリックは、選択を動かさない（AppKit は、右クリックのメニューがあれば押下を送らずに

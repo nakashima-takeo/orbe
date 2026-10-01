@@ -4,12 +4,12 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 字の見た目——新しい面の本文と行番号が、同じ行を Core Text で同じ色空間に描いたものと、字のある画素で最大 1 段
-/// （8bit）の差に収まる。ASCII・日本語・絵文字・代替フォント・結合文字の記号の字を、1x と 2x、太らせの有無で見る。比べるのは
+/// 字の見た目——面の本文と行番号が、同じ行を Core Text で同じ色空間に（font smoothing つきで）描いたものと、字のある画素で
+/// 最大 1 段（8bit）の差に収まる。ASCII・日本語・絵文字・代替フォント・結合文字の記号の字を、1x と 2x で見る。比べるのは
 /// 不透明な地に描いた絵（透明な面は窓の合成で地と混ざるので、地を塗った画面外の絵で比べる）。字どうしのインクが重なる形
 /// （アラビア語のつながり・字に接する記号）は、重なる画素が数段ずれうるので見本に含めない。画面の色空間（Display P3）でも
 /// 描き、そこへ Core Text が直に描いたものと揃うことも見る。壊れると字が細る・太る・にじむ・位置が半画素ずれる・記号が
-/// 基線に落ちる・画面で字の縁と絵文字の色が今の面とずれる。
+/// 基線に落ちる・画面で字の縁と絵文字の色が AppKit の描く字とずれる。
 @MainActor
 final class GlyphPixelTests: EngineTestCase {
   private static let background = MTLClearColor(
@@ -46,30 +46,25 @@ final class GlyphPixelTests: EngineTestCase {
   private func compareWithCoreText(in spaceName: CFString, tolerance: Int) throws {
     let space = try XCTUnwrap(CGColorSpace(name: spaceName))
     for scale: CGFloat in [1, 2] {
-      for smoothing in [true, false] {
-        let options = MetalTextSurfaceOptions(
-          elasticScroll: true, fontSmoothing: smoothing, omittedLabel: { "\($0)" })
-        let size = CGSize(width: 600, height: 140)
-        let opened = try open(
-          Self.sample, size: size, scale: scale, options: options, style: Self.glyphsOnly)
-        opened.surface.viewStateDidChange(size: size, scale: scale, space: space, visible: false)
-        let id = opened.surface.id
-        opened.surface.flush()
-        let metal = try XCTUnwrap(
-          RenderThread.shared.performAndWait {
-            Transfer(value: $0.snapshot(id, background: Self.background))
-          }.value)
-        let reference = try coreText(opened, smoothing: smoothing)
-        let name = "\(spaceName)-\(Int(scale))x-\(smoothing)"
-        writePNG(metal, previewURL("glyphs-metal-\(name).png"))
-        writePNG(reference, previewURL("glyphs-coretext-\(name).png"))
-        let right = Int((opened.surface.surfaceLayout.text.maxX * scale).rounded())
-        let difference = Self.compare(metal, reference, right: right)
-        print("GLYPHS \(name) ink=\(difference.ink) worst=\(difference.worst)")
-        XCTAssertGreaterThan(difference.ink, 500, "前提: 字が描かれている")
-        XCTAssertLessThanOrEqual(
-          difference.worst, tolerance, "\(name): 字のある画素の差は最大 \(tolerance) 段")
-      }
+      let size = CGSize(width: 600, height: 140)
+      let opened = try open(Self.sample, size: size, scale: scale, style: Self.glyphsOnly)
+      opened.surface.viewStateDidChange(size: size, scale: scale, space: space, visible: false)
+      let id = opened.surface.id
+      opened.surface.flush()
+      let metal = try XCTUnwrap(
+        RenderThread.shared.performAndWait {
+          Transfer(value: $0.snapshot(id, background: Self.background))
+        }.value)
+      let reference = try coreText(opened)
+      let name = "\(spaceName)-\(Int(scale))x"
+      writePNG(metal, previewURL("glyphs-metal-\(name).png"))
+      writePNG(reference, previewURL("glyphs-coretext-\(name).png"))
+      let right = Int((opened.surface.surfaceLayout.text.maxX * scale).rounded())
+      let difference = Self.compare(metal, reference, right: right)
+      print("GLYPHS \(name) ink=\(difference.ink) worst=\(difference.worst)")
+      XCTAssertGreaterThan(difference.ink, 500, "前提: 字が描かれている")
+      XCTAssertLessThanOrEqual(
+        difference.worst, tolerance, "\(name): 字のある画素の差は最大 \(tolerance) 段")
     }
   }
 
@@ -104,9 +99,9 @@ final class GlyphPixelTests: EngineTestCase {
     }
   }
 
-  /// 同じ行を Core Text で面と同じ色空間の不透明な地に描いた基準。位置の規則は新しい面と同じ（行の上端 + 基線、行番号は
+  /// 同じ行を Core Text で面と同じ色空間の不透明な地に描いた基準。位置の規則は面と同じ（行の上端 + 基線、行番号は
   /// 右寄せで縦の中央）。
-  private func coreText(_ opened: Opened, smoothing: Bool) throws -> CGImage {
+  private func coreText(_ opened: Opened) throws -> CGImage {
     let config = opened.surface.config
     let material = opened.surface.drawn
     let content = try XCTUnwrap(material.content)
@@ -124,7 +119,7 @@ final class GlyphPixelTests: EngineTestCase {
         CGColor(colorSpace: material.space, components: [bg.red, bg.green, bg.blue, 1])))
     context.fill(CGRect(x: 0, y: 0, width: width, height: height))
     context.setAllowsFontSmoothing(true)
-    context.setShouldSmoothFonts(smoothing)
+    context.setShouldSmoothFonts(true)
     context.setAllowsFontSubpixelPositioning(true)
     context.setShouldSubpixelPositionFonts(true)
     context.setAllowsFontSubpixelQuantization(true)
@@ -147,7 +142,7 @@ final class GlyphPixelTests: EngineTestCase {
         string: "\(row + 1)",
         attributes: [
           .init(kCTFontAttributeName as String): config.gutterFont,
-          .init(kCTForegroundColorAttributeName as String): r.color(r.palette.gutterText),
+          .init(kCTForegroundColorAttributeName as String): r.color(r.palette.gutterText.color),
         ])
       let numberWidth = Double(config.numberWidth(row + 1).rounded(.up)) * s
       let trailing = Double(config.gutterTrailingInset + config.marks.gutterWidth) * s
@@ -167,12 +162,12 @@ final class GlyphPixelTests: EngineTestCase {
       string: content.text.substring(NSRange(location: start, length: source.length)),
       attributes: [
         .init(kCTFontAttributeName as String): r.config.font,
-        .init(kCTForegroundColorAttributeName as String): r.color(r.palette.text),
+        .init(kCTForegroundColorAttributeName as String): r.color(r.palette.text.color),
       ])
     for span in content.roles.roles(in: NSRange(location: start, length: source.length)) {
       let color = r.palette.ink(span.role)
       attributed.addAttribute(
-        .init(kCTForegroundColorAttributeName as String), value: r.color(color),
+        .init(kCTForegroundColorAttributeName as String), value: r.color(color.color),
         range: NSRange(location: span.range.location - start, length: span.range.length))
     }
     return attributed

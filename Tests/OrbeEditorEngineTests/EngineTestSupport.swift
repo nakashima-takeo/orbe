@@ -88,9 +88,6 @@ class EngineTestCase: XCTestCase {
       hideDelay: 0.5)
   }
 
-  nonisolated static let options = MetalTextSurfaceOptions(
-    elasticScroll: true, fontSmoothing: true, omittedLabel: { "+\($0)" })
-
   /// 開いた文書と、それに結んだ新しい面。
   struct Opened {
     let document: EditorDocument
@@ -100,14 +97,13 @@ class EngineTestCase: XCTestCase {
   /// `text` を `name` のファイルとして開き、新しい面を結んで `size` の大きさを与える（窓には載せない）。
   func open(
     _ text: String, name: String = "a.swift", size: CGSize = CGSize(width: 800, height: 600),
-    scale: CGFloat = 2, options: MetalTextSurfaceOptions = options,
-    style: TextSurfaceStyle? = nil, waitForColors: Bool = true
+    scale: CGFloat = 2, style: TextSurfaceStyle? = nil, waitForColors: Bool = true
   ) throws -> Opened {
     let url = root.appendingPathComponent(UUID().uuidString).appendingPathComponent(name)
     try FileManager.default.createDirectory(
       at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     try Data(text.utf8).write(to: url)
-    let surface = MetalTextSurface(style: style ?? Self.style(), options: options)
+    let surface = MetalTextSurface(style: style ?? Self.style(), omittedLabel: { "+\($0)" })
     let document = EditorDocument(
       url: url, contents: try EditorDocument.read(url), surface: surface,
       registry: Self.registry)
@@ -174,5 +170,25 @@ extension EngineTestCase {
       }
       .value)
     return PixelShot(bytes: GlyphPixelTests.pixels(image), width: image.width, height: image.height)
+  }
+}
+
+/// 横のスクロールの観察（テストだけ）——見せている位置と範囲から読む。
+extension MetalTextSurface {
+  /// 左へ隠れている幅（半角の桁数）。
+  var hiddenColumns: CGFloat {
+    let (position, limits) = scrollState()
+    return CGFloat(min(max(0, position.x), limits.maximum.x) / Double(config.cell))
+  }
+
+  /// 本文の見えている幅（半角の桁数）。
+  var visibleColumns: CGFloat {
+    CGFloat(max(0, scrollState().limits.viewport.x) / Double(config.cell))
+  }
+
+  /// 本文が右にまだ続く（横の位置が範囲の右端より左にある）。
+  var clipsRight: Bool {
+    let (position, limits) = scrollState()
+    return min(max(0, position.x), limits.maximum.x) < limits.maximum.x - 0.25
   }
 }

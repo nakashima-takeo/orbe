@@ -3,13 +3,14 @@ import OrbeEditorCore
 import XCTest
 
 @testable import Orbe
+@testable import OrbeEditorEngine
 
-/// 本物のテキストエンジンに載る行の装備——git の印（3 色・三角）がスクロールと編集に追従する、インデント線・
-/// 丸点・URL 下線が本文の座標に立つ、⌘クリックだけが URL を開いて素のクリックはキャレットを置く。
-/// 装備は overlay で、テストと静止画が緑でも同期が壊れれば実機で消える（u4 の教訓）ので、位置は画素で見る。
+/// セッションが開いた本物のテキスト面に載る行の装備——git の印（3 色・三角）がスクロールと編集に追従する、
+/// インデント線・丸点・URL 下線が本文の座標に立つ、⌘クリックだけが URL を開いて素のクリックはキャレットを置く。位置は
+/// 画素で見る。
 ///
 /// 壊れると何が起きるか。印がスクロールで置き去りになり別の行に見える。打鍵しても印が動かず、どの行を変えたか
-/// 分からない。⌘クリックが上流の選択と衝突して URL が開かないか、素のクリックで勝手にブラウザが開く。
+/// 分からない。⌘クリックが選択と衝突して URL が開かないか、素のクリックで勝手にブラウザが開く。
 @MainActor
 final class EditorLineMarksTests: OrbeTestCase {
   let style = EditorStyle.make()
@@ -47,7 +48,7 @@ final class EditorLineMarksTests: OrbeTestCase {
     window.contentView = ground
     ground.layoutSubtreeIfNeeded()
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
-    // 本文の最初の行が描かれるまで待つ（固定で眠らない。overlay の frame は layout と viewport の通知で置かれる）。
+    // 本文の最初の行が描かれるまで待つ（固定で眠らない）。
     waitDrawn {
       try stride(from: self.bodyX, to: self.bodyX + 24 * self.cell, by: 1).contains {
         !self.isBlack(try self.rgb(ground, $0, self.rowMidY(1)))
@@ -216,7 +217,7 @@ final class EditorLineMarksTests: OrbeTestCase {
     XCTAssertTrue(isBlack(try rgb(ground, barX, rowMidY(2))))
   }
 
-  /// スクロールしても印は行に付いてくる（viewport の overlay が clip view の bounds に置き直される）。
+  /// スクロールしても印は行に付いてくる。
   func testMarksFollowScrolling() throws {
     let lines = (1...100).map { "line \($0)\n" }.joined()
     let hosted = try host(lines)
@@ -224,45 +225,40 @@ final class EditorLineMarksTests: OrbeTestCase {
     let ground = hosted.ground
     document.baseline = lines.replacingOccurrences(of: "line 50\n", with: "line fifty\n")
     catchUp(document)
-    let scroll = try XCTUnwrap(document.surface.view.subviews.first as? NSScrollView)
-    scroll.contentView.scroll(to: NSPoint(x: 0, y: 49 * style.lineHeight))
-    scroll.reflectScrolledClipView(scroll.contentView)
+    let surface = try engine(document)
+    surface.scroll(toFirstLine: 49)
     waitDrawn { self.isBlue(try self.rgb(ground, self.barX, self.rowMidY(1))) }
     XCTAssertTrue(isBlack(try rgb(ground, barX, rowMidY(2))))
 
-    scroll.contentView.scroll(to: NSPoint(x: 0, y: 48 * style.lineHeight))
-    scroll.reflectScrolledClipView(scroll.contentView)
+    surface.scroll(toFirstLine: 48)
     waitDrawn { self.isBlue(try self.rgb(ground, self.barX, self.rowMidY(2))) }
     XCTAssertTrue(isBlack(try rgb(ground, barX, rowMidY(1))))
   }
 
-  /// 横にスクロールしても本文の装備は行に付いてくる（overlay の座標が container 基準のまま置き直される）。
-  /// 長い行で横スクロールが起き、印は行番号の列にあるので無事な一方、線・点・下線だけが置き去りになる壊れ方を守る。
+  /// 横にスクロールしても本文の装備は行に付いてくる。長い行で横スクロールが起き、印は行番号の列にあるので無事な
+  /// 一方、線・点・下線だけが置き去りになる壊れ方を守る。
   func testDecorationsFollowHorizontalScrolling() throws {
     let long = String(repeating: "x", count: 100) + "  " + String(repeating: "x", count: 100)
     let hosted = try host("a\n  b  c \(long)\n    d\n")
     let ground = hosted.ground
     let document = hosted.document
-    let scroll = try XCTUnwrap(document.surface.view.subviews.first as? NSScrollView)
+    let surface = try engine(document)
     let guide = bodyX + 2 * cell
     let dot = bodyX + 3.5 * cell
     waitDrawn { try self.hasInk(ground, guide, self.rowMidY(3)) }
     XCTAssertFalse(isBlack(try rgb(ground, dot, rowMidY(2))), "前提: 丸点が見えている")
 
     let shift = 3 * cell
-    scroll.contentView.scroll(to: NSPoint(x: shift, y: 0))
-    scroll.reflectScrolledClipView(scroll.contentView)
+    surface.scroll(toX: shift)
     waitDrawn { !self.isBlack(try self.rgb(ground, dot - shift, self.rowMidY(2))) }
     XCTAssertFalse(try hasInk(ground, guide, rowMidY(3)), "線は 3 桁ぶん左（本文の左端の外）へ動いて見えない")
     XCTAssertTrue(isBlack(try rgb(ground, dot, rowMidY(2))), "元の位置には点が無い")
 
     // 100 桁右へ: 1 画面ぶん先の連続スペース（107 桁目）の点が、可視矩形の中に描かれる。
-    scroll.contentView.scroll(to: NSPoint(x: 100 * cell, y: 0))
-    scroll.reflectScrolledClipView(scroll.contentView)
+    surface.scroll(toX: 100 * cell)
     waitDrawn { !self.isBlack(try self.rgb(ground, self.bodyX + 7.5 * self.cell, self.rowMidY(2))) }
     XCTAssertTrue(isBlack(try rgb(ground, dot, rowMidY(3))), "短い行の右は地（線も点も無い）")
-    scroll.contentView.scroll(to: NSPoint(x: 0, y: 0))
-    scroll.reflectScrolledClipView(scroll.contentView)
+    surface.scroll(toX: 0)
     waitDrawn { !self.isBlack(try self.rgb(ground, dot, self.rowMidY(2))) }
     XCTAssertTrue(try hasInk(ground, guide, rowMidY(3)), "戻れば線も戻る")
   }

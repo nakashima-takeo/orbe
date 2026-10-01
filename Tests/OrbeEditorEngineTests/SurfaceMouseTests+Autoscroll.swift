@@ -42,7 +42,7 @@ extension SurfaceMouseTests {
     let near = max(30, visibleRows * 2) * 0.1 * config.lineHeight
     XCTAssertEqual(position(opened).y, Double(near), accuracy: 0.5, "最初のコマは時刻を取るだけ")
     let text = opened.document.text
-    let (first, visible) = opened.document.viewportLines
+    let (first, visible) = opened.surface.viewportLines
     let bottom = Int((first + visible - 0.01).rounded(.down))
     XCTAssertEqual(
       opened.surface.caretLocation, NSMaxRange(text.contentRange(ofRow: bottom)),
@@ -68,7 +68,7 @@ extension SurfaceMouseTests {
   func testDraggingAboveTheTextAutoscrollsAtTheSameSpeed() throws {
     let opened = try open((0..<500).map { "row \($0)" }.joined(separator: "\n"))
     _ = host(opened, size: CGSize(width: 600, height: 400))
-    opened.document.scroll(toFirstLine: 200)
+    opened.surface.scroll(toFirstLine: 200)
     let config = opened.surface.config
     let pointer = try pointer(opened)
     var clock: CFTimeInterval = 10
@@ -98,14 +98,14 @@ extension SurfaceMouseTests {
     try mouse(opened, .leftMouseDragged, at: CGPoint(x: x, y: 400 + config.lineHeight))
     frames(pointer, 2, clock: &clock)
     let text = opened.document.text
-    let (first, visible) = opened.document.viewportLines
+    let (first, visible) = opened.surface.viewportLines
     let bottom = Int((first + visible - 0.01).rounded(.down))
     XCTAssertLessThan(bottom, text.lineCount - 1)
     XCTAssertEqual(opened.surface.caretLocation, text.lineStart(bottom) + 5, "下端の行のポインタの桁")
     var lastVisible = false
     for _ in 0..<50 where !lastVisible {
       frames(pointer, 1, clock: &clock)
-      let (first, visible) = opened.document.viewportLines
+      let (first, visible) = opened.surface.viewportLines
       lastVisible = Int((first + visible - 0.01).rounded(.down)) >= text.lineCount - 1
     }
     XCTAssertTrue(lastVisible)
@@ -125,7 +125,7 @@ extension SurfaceMouseTests {
     frames(pointer, 20, clock: &clock)
     let (at, limits) = opened.surface.scroll.peek(at: 0)
     XCTAssertEqual(at.y, limits.maximum.y, accuracy: 0.5, "最終行を最上段まで送って止まる")
-    XCTAssertEqual(opened.document.viewportLines.first, 29, accuracy: 0.5)
+    XCTAssertEqual(opened.surface.viewportLines.first, 29, accuracy: 0.5)
     XCTAssertEqual(NSMaxRange(opened.surface.selectedRange), opened.document.text.length, "終わりまで")
     try mouse(opened, .leftMouseUp, at: CGPoint(x: 200, y: 400 + 4 * config.lineHeight))
   }
@@ -143,7 +143,7 @@ extension SurfaceMouseTests {
     frames(pointer, 3, clock: &clock)
     XCTAssertGreaterThan(position(opened).y, 0)
     let text = opened.document.text
-    let (first, visible) = opened.document.viewportLines
+    let (first, visible) = opened.surface.viewportLines
     let bottom = Int((first + visible - 0.01).rounded(.down))
     XCTAssertEqual(
       opened.surface.selectedRange,
@@ -157,7 +157,7 @@ extension SurfaceMouseTests {
   func testDraggingAboveTheTextReachesTheLineStart() throws {
     let opened = try open((0..<500).map { "row \($0) text" }.joined(separator: "\n"))
     _ = host(opened, size: CGSize(width: 600, height: 400))
-    opened.document.scroll(toFirstLine: 3)
+    opened.surface.scroll(toFirstLine: 3)
     let pointer = try pointer(opened)
     var clock: CFTimeInterval = 10
     try mouse(opened, .leftMouseDown, at: point(opened, row: 5, column: 4))

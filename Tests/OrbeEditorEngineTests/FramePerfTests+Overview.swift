@@ -77,7 +77,7 @@ extension FramePerfTests {
     for loaded in [false, true] {
       let name = loaded ? "main-load" : "no-load"
       if loaded { startLoad() }
-      surface.scroll(toTop: 0, hiddenFraction: 0)
+      surface.scroll(toFirstLine: 0)
       waitUntilIdle(surface)
       let layout = surface.surfaceLayout
       let placement = try XCTUnwrap(surface.placementBox.read())
@@ -87,7 +87,7 @@ extension FramePerfTests {
       drag(surface, from: slider, to: CGPoint(x: slider.x, y: layout.minimap.maxY), seconds: 2)
       waitUntilIdle(surface)
       report(label, "\(name) minimap-drag", totals(surface))
-      surface.scroll(toTop: 0, hiddenFraction: 0)
+      surface.scroll(toFirstLine: 0)
       waitUntilIdle(surface)
       let thumb = CGPoint(x: layout.verticalScrollbar.midX, y: 10)
       reset(surface)
@@ -160,7 +160,7 @@ extension FramePerfTests {
       let middle = opened.document.text.lineCount / 2
       surface.selectedRange = NSRange(
         location: opened.document.text.lineStart(middle) + 4, length: 0)
-      surface.scrollToCenter(surface.caretLocation)
+      surface.reveal(NSRange(location: surface.caretLocation, length: 0), policy: .center)
       waitUntilIdle(surface)
       let matches = MatchBox(surface.drawn.highlights.find)
       reset(surface)
@@ -220,7 +220,7 @@ extension FramePerfTests {
       let match = matches[(k * 613) % matches.count]
       let called = CACurrentMediaTime()
       surface.selectedRange = match
-      surface.scrollToCenter(match.location)
+      surface.reveal(NSRange(location: match.location, length: 0), policy: .center)
       surface.setHighlights([match], for: .currentFindMatch)
       let deadline = Date().addingTimeInterval(2)
       var drawn = false

@@ -76,7 +76,7 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
       String(repeating: "x", count: 400) + String(repeating: "\n", count: 60),
       size: CGSize(width: 800, height: 400), style: style)
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.viewport.clipsRight }, "前提: 長い行の長さを測った")
+    pump(until: { opened.surface.clipsRight }, "前提: 長い行の長さを測った")
     let edge = opened.surface.surfaceLayout.minimap.minX
     let y: CGFloat = 200
     let shot = try pixelShot(opened, background: Self.white)
@@ -85,7 +85,7 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     XCTAssertEqual(shot.rgb(edge - 3, y), [255, 255, 255], "帯の中には描かない")
     XCTAssertEqual(shot.rgb(edge + 0.5, y), [255, 255, 255], "ミニマップに掛けない")
     opened.surface.scroll(toX: opened.surface.scrollState().limits.maximum.x)
-    XCTAssertFalse(opened.surface.viewport.clipsRight, "前提: 右端まで送った")
+    XCTAssertFalse(opened.surface.clipsRight, "前提: 右端まで送った")
     XCTAssertEqual(
       try pixelShot(opened, background: Self.white).rgb(edge - 7, y), [255, 255, 255],
       "右に続かなければ無い")

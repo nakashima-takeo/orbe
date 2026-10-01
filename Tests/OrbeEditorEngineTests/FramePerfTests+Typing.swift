@@ -47,7 +47,8 @@ extension FramePerfTests {
       let middle = opened.document.text.lineCount / 2
       opened.surface.selectedRange = NSRange(
         location: opened.document.text.lineStart(middle) + 4, length: 0)
-      opened.surface.scrollToCenter(opened.surface.caretLocation)
+      opened.surface.reveal(
+        NSRange(location: opened.surface.caretLocation, length: 0), policy: .center)
       waitUntilIdle(opened.surface)
       for interval in [0.1, 1.0 / 30] {
         let name = "\(label) \(Int((interval * 1000).rounded()))ms"

@@ -21,12 +21,12 @@ final class SurfaceFlushTests: EngineTestCase {
     let before = surface.drawn.revision
     let target = opened.document.text.lineStart(300)
     surface.selectedRange = NSRange(location: target, length: 3)
-    surface.scrollToCenter(target)
+    surface.reveal(NSRange(location: target, length: 0), policy: .center)
     XCTAssertEqual(surface.material.revision, before, "並びの途中では箱へ書かない")
     XCTAssertEqual(surface.selectedRange, NSRange(location: target, length: 3))
-    let first = opened.document.viewportLines.first
+    let first = opened.surface.viewportLines.first
     XCTAssertEqual(
-      first + opened.document.viewportLines.visible / 2, 300.5, accuracy: 1, "読み取りは今の値")
+      first + opened.surface.viewportLines.visible / 2, 300.5, accuracy: 1, "読み取りは今の値")
     RunLoop.main.run(until: Date())
     XCTAssertEqual(surface.material.revision, before + 1, "周の終わりに 1 回だけ書く")
     let material = surface.material.read()
@@ -96,7 +96,7 @@ final class SurfaceFlushTests: EngineTestCase {
     let start = surface.scroll.frame(at: 0, material: surface.material.revision).position.y
     func jump(to row: Int) -> Double {
       surface.selectedRange = NSRange(location: text.lineStart(row), length: 3)
-      surface.scrollToCenter(text.lineStart(row))
+      surface.reveal(NSRange(location: text.lineStart(row), length: 0), policy: .center)
       let y = surface.scrollState().position.y
       RunLoop.main.run(until: Date())
       return y
@@ -123,7 +123,7 @@ final class SurfaceFlushTests: EngineTestCase {
     let surface = opened.surface
     surface.flush()
     let lineHeight = Double(surface.config.lineHeight)
-    surface.scroll(toTop: opened.document.text.lineStart(100), hiddenFraction: 0)
+    surface.scroll(toFirstLine: 100)
     surface.scroll(
       ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(0, -30), precise: true))
     XCTAssertEqual(surface.scroll.peek(at: CACurrentMediaTime()).position.y, 100 * lineHeight + 30)

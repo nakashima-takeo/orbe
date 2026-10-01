@@ -4,7 +4,7 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 新しい面の契約——文書の写しを引いて描く・見えている範囲の通知・main の操作のスクロール・外観に従う色。壊れると俯瞰と
+/// 面の契約——文書の写しを引いて描く・見えている範囲の通知・区間を見せるスクロール・外観に従う色。壊れると俯瞰と
 /// 構文色の見えている範囲が本文とずれる、⌘F の次・前で一致が見えない、印や色や字が古い本文で描かれる、ライト・ダークを
 /// 切り替えても字が前の外観の色のまま。
 @MainActor
@@ -23,49 +23,48 @@ final class MetalTextSurfaceTests: EngineTestCase {
     XCTAssertFalse(content.roles.roles(in: NSRange(location: 0, length: 20)).isEmpty, "役割が届いている")
   }
 
-  /// `scroll(toTop:)` と `viewport` は互いに逆——先頭の行・隠れている割合・可視行数を今の面と同じ意味で返す。
-  func testViewportIsTheInverseOfScrollToTop() throws {
+  /// 見えている範囲は、先頭に見えている行（一部が上へ隠れていてもその行）の行頭と、上端の余白を除いた高さに入る行数。
+  func testViewportIsTheFirstVisibleLineAndTheVisibleLineCount() throws {
     let opened = try open(lines(300), size: CGSize(width: 800, height: 604))
     let text = opened.document.text
-    opened.surface.scroll(toTop: text.lineStart(50), hiddenFraction: 0.25)
+    opened.surface.scroll(toFirstLine: 50.25)
     let viewport = opened.surface.viewport
     XCTAssertEqual(viewport.firstVisible, text.lineStart(50))
-    XCTAssertEqual(viewport.hiddenFraction, 0.25, accuracy: 1e-9)
     XCTAssertEqual(viewport.visibleLines, 600.0 / 18, accuracy: 1e-9, "上端の余白を除いた高さ")
-    XCTAssertEqual(opened.document.viewportLines.first, 50.25, accuracy: 1e-9)
+    XCTAssertEqual(opened.surface.viewportLines.first, 50.25, accuracy: 1e-9)
   }
 
   /// 最終行が最上段に来るまで送れ、それより先は止まる。
   func testScrollsUntilTheLastLineIsAtTheTop() throws {
     let opened = try open(lines(100), size: CGSize(width: 800, height: 604))
-    opened.document.scroll(toFirstLine: 1_000)
-    XCTAssertEqual(opened.document.viewportLines.first, 100, accuracy: 1e-9, "末尾の空行が最上段")
+    opened.surface.scroll(toFirstLine: 1_000)
+    XCTAssertEqual(opened.surface.viewportLines.first, 100, accuracy: 1e-9, "末尾の空行が最上段")
   }
 
-  /// 見えるところまで最小限スクロールする——縦に見えていれば縦は動かず、横に隠れていれば横だけ寄る。
-  func testScrollToVisibleMovesMinimally() throws {
+  /// 最小限で見せる——縦に見えていれば縦は動かず、横に隠れていれば横だけ寄る。
+  func testRevealMinimallyMovesOnlyAsFarAsNeeded() throws {
     let opened = try open(lines(100, width: 300), size: CGSize(width: 800, height: 604))
     let text = opened.document.text
     let target = text.lineStart(10) + 280
-    opened.surface.scrollToVisible(NSRange(location: target, length: 1))
+    opened.surface.reveal(NSRange(location: target, length: 1), policy: .minimal)
     XCTAssertEqual(opened.surface.viewport.firstVisible, 0, "縦は見えているので動かない")
     _ = opened.surface.snapshot()
     pump(
-      until: { opened.surface.viewport.hiddenColumns > 0 },
-      "横は描画スレッドが行を組んで寄せ、見えている範囲を知らせ直す")
-    let columns = opened.surface.viewport
+      until: { opened.surface.hiddenColumns > 0 }, "横は描画スレッドが行を組んで寄せる")
+    let columns = opened.surface
     XCTAssertLessThanOrEqual(281, columns.hiddenColumns + columns.visibleColumns + 0.5)
-    opened.surface.scrollToVisible(NSRange(location: text.lineStart(80), length: 0))
+    opened.surface.reveal(NSRange(location: text.lineStart(80), length: 0), policy: .minimal)
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.viewport.hiddenColumns == 0 }, "行頭へ戻る")
-    XCTAssertGreaterThan(opened.document.viewportLines.first, 40, "下の行が見えるまで送る")
+    pump(until: { opened.surface.hiddenColumns == 0 }, "行頭へ戻る")
+    XCTAssertGreaterThan(opened.surface.viewportLines.first, 40, "下の行が見えるまで送る")
   }
 
-  /// 行を見えている高さの中央へ置く（アニメーションしない）。
-  func testScrollToCenterPlacesTheLineInTheMiddle() throws {
+  /// 中央へ見せる——行を見えている高さの中央へ置く（アニメーションしない）。
+  func testRevealCenterPlacesTheLineInTheMiddle() throws {
     let opened = try open(lines(300), size: CGSize(width: 800, height: 604))
-    opened.surface.scrollToCenter(opened.document.text.lineStart(150))
-    let (first, visible) = opened.document.viewportLines
+    opened.surface.reveal(
+      NSRange(location: opened.document.text.lineStart(150), length: 0), policy: .center)
+    let (first, visible) = opened.surface.viewportLines
     XCTAssertEqual(first + visible / 2, 150.5, accuracy: 0.01)
   }
 
@@ -80,7 +79,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
         wheel3: 0))
     opened.surface.view.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: event)))
     XCTAssertEqual(notified, 1)
-    XCTAssertEqual(opened.document.viewportLines.first, 5, accuracy: 1e-9)
+    XCTAssertEqual(opened.surface.viewportLines.first, 5, accuracy: 1e-9)
   }
 
   /// 本文の丸ごとの置き換え（外部変更の差し替え）は文書へ渡り、戻ったら新しい写しを描く。キャレットは収まる。
@@ -148,7 +147,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
     window.contentView = surface.view
     XCTAssertEqual((surface.view.layer as? CAMetalLayer)?.colorspace, p3)
     XCTAssertEqual(surface.drawn.space, p3)
-    let keyword = try XCTUnwrap(surface.drawn.palette?.ink(.keyword)).packed
+    let keyword = try XCTUnwrap(surface.drawn.palette?.ink(.keyword)).color.packed
     let expected = try XCTUnwrap(
       NSColor(srgbRed: 0.34, green: 0.61, blue: 0.84, alpha: 1).usingColorSpace(.displayP3))
     XCTAssertEqual(
@@ -169,12 +168,12 @@ final class MetalTextSurfaceTests: EngineTestCase {
     let narrow = try open("short\n")
     _ = narrow.surface.snapshot()
     pump()
-    XCTAssertFalse(narrow.surface.viewport.clipsRight)
+    XCTAssertFalse(narrow.surface.clipsRight)
     let wide = try open(String(repeating: "x", count: 300) + "\n")
     _ = wide.surface.snapshot()
-    pump(until: { wide.surface.viewport.clipsRight }, "組んだ行で範囲が伸びれば知らせ直す")
+    pump(until: { wide.surface.clipsRight }, "組んだ行で範囲が伸びれば知らせ直す")
     wide.surface.scroll(ScrollInput(timestamp: 0, delta: SIMD2(-10_000, 0), precise: false))
-    XCTAssertFalse(wide.surface.viewport.clipsRight, "右端まで送れば続かない")
+    XCTAssertFalse(wide.surface.clipsRight, "右端まで送れば続かない")
   }
 
   /// 外部変更の差し替えで、右へ送った横の位置は保つ——最も長い行は新しい写しを描いたコマで測り直し、その範囲に収める。
@@ -182,18 +181,18 @@ final class MetalTextSurfaceTests: EngineTestCase {
     let wide = String(repeating: "x", count: 300) + "\n"
     let opened = try open(wide)
     _ = opened.surface.snapshot()
-    opened.surface.scrollToVisible(NSRange(location: 250, length: 0))
+    opened.surface.reveal(NSRange(location: 250, length: 0), policy: .minimal)
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.viewport.hiddenColumns > 0 })
-    let hidden = opened.surface.viewport.hiddenColumns
+    pump(until: { opened.surface.hiddenColumns > 0 })
+    let hidden = opened.surface.hiddenColumns
     opened.surface.replaceAll(with: "y" + wide)
-    XCTAssertEqual(opened.surface.viewport.hiddenColumns, hidden, "差し替えただけでは動かない")
+    XCTAssertEqual(opened.surface.hiddenColumns, hidden, "差し替えただけでは動かない")
     _ = opened.surface.snapshot()
     pump()
-    XCTAssertEqual(opened.surface.viewport.hiddenColumns, hidden, "測り直しても範囲の中なら保つ")
+    XCTAssertEqual(opened.surface.hiddenColumns, hidden, "測り直しても範囲の中なら保つ")
     opened.surface.replaceAll(with: "short\n")
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.viewport.hiddenColumns == 0 }, "短くなれば新しい範囲に収める")
+    pump(until: { opened.surface.hiddenColumns == 0 }, "短くなれば新しい範囲に収める")
   }
 
   /// 行の印はオフセットで届き、引いた写しで行へ写す（区間の最後の字の行まで。削除は次の行の上端）。

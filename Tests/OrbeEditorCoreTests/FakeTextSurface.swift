@@ -2,7 +2,7 @@ import AppKit
 import OrbeEditorCore
 
 /// 文字列を持つだけのテキスト面。`replace` が編集を delegate へ流す。色は全文を見えているものとして、文書の裏の仕事が
-/// 追いつくのを待ってから delegate に問い合わせる。
+/// 追いつくのを待ってから、文書の写し（`surfaceContent`）の役割の並びで読む。
 @MainActor
 final class FakeTextSurface: TextSurface {
   let view = NSView()
@@ -10,13 +10,15 @@ final class FakeTextSurface: TextSurface {
   private(set) var storage: NSMutableString
   weak var delegate: TextSurfaceDelegate?
   private(set) var undoBoundaries = 0
-  /// 最後に押された行の印。
+  /// 最後に押された行の印と、押された回数。
   private(set) var lineMarks = LineMarkSpans.empty
+  private(set) var lineMarkPushes = 0
   weak var host: TextSurfaceHost?
   /// 見えている範囲（本文の言葉）。テストが置く。
   var viewport = TextViewport.empty
-  /// `scroll(toTop:)` の履歴。
-  private(set) var toppedAt: [(offset: Int, hiddenFraction: CGFloat)] = []
+  var rightColumnWidth: CGFloat = 0
+  /// `reveal` の履歴。
+  private(set) var revealed: [(range: NSRange, policy: TextReveal)] = []
   var selectedRange = NSRange(location: 0, length: 0) {
     didSet { delegate?.surfaceDidChangeSelection(self) }
   }
@@ -35,10 +37,11 @@ final class FakeTextSurface: TextSurface {
   /// 文書から届いた「役割が変わった」の区間。
   private(set) var changedRoles: [IndexSet] = []
 
-  /// 全文の役割の区間（文書の裏の仕事が追いついてから delegate に問い合わせる）。
+  /// 全文の役割の区間（文書の裏の仕事が追いついてから写しを引いて読む）。
   var highlights: [HighlightSpan] {
     (delegate as? EditorDocument)?.waitUntilCaughtUp()
-    return delegate?.surface(self, rolesIn: NSRange(location: 0, length: length)) ?? []
+    return delegate?.surfaceContent(self).roles.roles(in: NSRange(location: 0, length: length))
+      ?? []
   }
 
   /// 知らせ（役割の変化・行の印）を受けたときに引いた写しと、そのときの面の本文。
@@ -58,15 +61,12 @@ final class FakeTextSurface: TextSurface {
 
   func setLineMarks(_ spans: LineMarkSpans) {
     lineMarks = spans
+    lineMarkPushes += 1
     pull()
   }
 
-  func scrollToCenter(_ offset: Int) {}
-
-  func scrollToVisible(_ range: NSRange) {}
-
-  func scroll(toTop offset: Int, hiddenFraction: CGFloat) {
-    toppedAt.append((offset, hiddenFraction))
+  func reveal(_ range: NSRange, policy: TextReveal) {
+    revealed.append((range, policy))
   }
 
   func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {}

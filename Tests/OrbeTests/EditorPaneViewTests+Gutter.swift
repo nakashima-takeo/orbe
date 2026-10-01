@@ -2,6 +2,7 @@ import AppKit
 import XCTest
 
 @testable import Orbe
+@testable import OrbeEditorEngine
 
 /// 面の地と行番号の列——地は pane が全面を 1 層で塗り、面は地を持たない。行番号の列は本文の横に並び、横スクロールで
 /// 本文がその下をくぐらない。列の地も本体の地と同じ濃度で（透過設定の veil が二重にならない）、文書の出入り・
@@ -94,11 +95,9 @@ final class EditorPaneViewGutterTests: OrbeTestCase {
       same(try before.rgba(origin.x + gutter - 5, rowY), try ground(before)), "印の列は面の地の色")
     XCTAssertEqual(try ground(before)[3], 255, "不透明")
 
-    let scroll = try XCTUnwrap(surface.subviews.first as? NSScrollView)
     let glyphBefore = try before.rgba(firstGlyph, rowY)
     let cell = (" " as NSString).size(withAttributes: [.font: style.font]).width
-    scroll.contentView.scroll(to: NSPoint(x: 37 * cell, y: 0))
-    scroll.reflectScrolledClipView(scroll.contentView)
+    try engine(document).scroll(toX: 37 * cell)
     // 描き直しは runloop で来るので、本文が動いて列の画素が元どおりになるまで待つ（本文が列に入れば戻らない）。
     let after = try layer(
       of: pane,

@@ -40,7 +40,7 @@ final class SurfaceDecorTests: EngineTestCase {
     let blank = String(repeating: "\n", count: 60)
     let opened = try open(
       "f {\n    a" + blank + "    b\n}\n", name: "a.txt", size: CGSize(width: 400, height: 200))
-    opened.surface.scroll(toTop: opened.document.text.lineStart(20), hiddenFraction: 0)
+    opened.surface.scroll(toFirstLine: 20)
     let shot = try pixelShot(opened)
     XCTAssertTrue(shot.hasInk(x(opened, 4) + 0.25, rowMidY(2)), "上下の外の 1 段の行から段 1")
   }

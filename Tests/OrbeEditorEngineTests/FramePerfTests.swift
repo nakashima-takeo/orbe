@@ -102,7 +102,7 @@ final class FramePerfTests: EngineTestCase {
       let scrolled = totals(surface)
       report(label, name, scrolled, frameLimit: frameLimit, gatesLateCommits: gatesLateCommits)
       if !loaded { median = Self.quantile(scrolled.cpu.sorted(), 0.5) }
-      surface.scroll(toTop: 0, hiddenFraction: 0)
+      surface.scroll(toFirstLine: 0)
       waitUntilIdle(surface)
       reset(surface)
       runPull(surface)

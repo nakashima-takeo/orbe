@@ -53,7 +53,7 @@ final class ScrolledFrameTests: EngineTestCase {
     let opened = try openMarked()
     let before = try shoot(opened)
     let text = opened.document.text
-    opened.surface.scroll(toTop: text.lineStart(1), hiddenFraction: 0.5)
+    opened.surface.scroll(toFirstLine: 1.5)
     let after = try shoot(opened)
     let shift = 27 * 2
     // 上端の影（6pt）は送った後だけに出て、ミニマップの左の影（12pt）は動かないので比べない。
@@ -69,7 +69,7 @@ final class ScrolledFrameTests: EngineTestCase {
     let before = try shoot(opened)
     opened.surface.scroll(ScrollInput(timestamp: 0, delta: SIMD2(-3, 0), precise: false))
     XCTAssertEqual(
-      opened.surface.viewport.hiddenColumns * opened.surface.config.cell, 30, accuracy: 1e-6)
+      opened.surface.hiddenColumns * opened.surface.config.cell, 30, accuracy: 1e-6)
     let after = try shoot(opened)
     let shift = 30 * 2
     let gutter = after.pixels(x: 0..<after.column, y: after.top..<after.height)

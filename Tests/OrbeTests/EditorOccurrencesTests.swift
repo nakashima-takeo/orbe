@@ -4,8 +4,9 @@ import XCTest
 
 @testable import Orbe
 
-/// 出現の強調——キャレットの語の出現（50ms 後・打鍵で消え次の移動で出直す・焦点で出入り・俯瞰にも出る）と、選択文字列の
-/// 他の出現（選択の変化で即時・俯瞰には出ない・検索バーと重ならない）。どちらも本文に地として出る。時間は差し替えた時計で
+/// 出現の強調——キャレットの語の出現（50ms 後・打鍵で消え次の移動で出直す・焦点で出入り）と、選択文字列の他の出現
+/// （選択の変化で即時・検索バーと重ならない）。どちらも強調の地として面へ押し、本文に地として出る（俯瞰の印は面が同じ
+/// 地から描く）。時間は差し替えた時計で
 /// 進め、出現を探す裏の仕事は追いつくのを待つ。
 ///
 /// 壊れると何が起きるか。打鍵のたびに語の地が点滅する。キャレットを動かしても出ない、端末へ移っても残る。選択の出現が
@@ -17,10 +18,28 @@ final class EditorOccurrencesTests: OrbeTestCase {
     var wordDelays: [TimeInterval] = []
   }
 
-  /// 時計を差し替えて、テキスト面に焦点を置いた pane。本文は語の外（行頭の空白）から始める——焦点が入ると先頭の
-  /// キャレットで語の出現を取りに行くので、語の上から始めるとその語の地が残る。
-  func host(_ text: String, clock: Clock) throws -> OverviewHost {
-    let hosted = try hostOverview(text)
+  struct Hosted {
+    let tab: TerminalTab
+    let pane: EditorPaneView
+    let document: EditorDocument
+    let window: NSWindow
+  }
+
+  /// 時計を差し替えて、テキスト面に焦点を置いた pane（暗い外観の窓に載せる）。本文は語の外（行頭の空白）から始める
+  /// ——焦点が入ると先頭のキャレットで語の出現を取りに行くので、語の上から始めるとその語の地が残る。
+  func host(_ text: String, clock: Clock) throws -> Hosted {
+    let tab = TerminalTab(
+      cwd: try XCTUnwrap(TestIsolation.caseDir).path,
+      editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.view.editor
+    let window = hostEditor(tab, width: 700, height: 400)
+    window.appearance = NSAppearance(named: .darkAqua)
+    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    let file = try caseFile("o-\(UUID().uuidString).txt", text)
+    let hosted = Hosted(
+      tab: tab, pane: pane, document: try tab.editor.open(file), window: window)
+    pane.layoutSubtreeIfNeeded()
+    pumpMain(until: { hosted.document.surface.viewport.visibleLines > 0 }, "viewport が出る")
     let occurrences = hosted.pane.occurrences
     let document = hosted.document
     occurrences.wordDelay.schedule = { delay, fire in
@@ -37,12 +56,12 @@ final class EditorOccurrencesTests: OrbeTestCase {
     return hosted
   }
 
-  func caret(_ hosted: OverviewHost, _ location: Int) {
+  func caret(_ hosted: Hosted, _ location: Int) {
     hosted.document.surface.selectedRange = NSRange(location: location, length: 0)
   }
 
   /// 本文の行 `row`（0 始まり）・桁 `column` のセルの上端寄り（字の上の、地だけがある所。pane の座標）。
-  func groundPoint(_ hosted: OverviewHost, row: Int, column: Int) -> NSPoint {
+  func groundPoint(_ hosted: Hosted, row: Int, column: Int) -> NSPoint {
     let style = EditorStyle.make()
     let surface = hosted.document.surface.view
     let origin = hosted.pane.convert(surface.bounds, from: surface).origin
@@ -56,8 +75,8 @@ final class EditorOccurrencesTests: OrbeTestCase {
     try probe.rgb(point.x, y: point.y)
   }
 
-  /// 語の出現は 50ms 後に本文の地として出て、スクロールバーの中央レーンとミニマップの行にも描かれる。
-  func testWordOccurrencesAppearAfterFiftyMillisecondsAndReachTheOverview() throws {
+  /// 語の出現は 50ms 後に本文の地として出る。
+  func testWordOccurrencesAppearAfterFiftyMilliseconds() throws {
     let clock = Clock()
     let text = " let foo = 1\nfoo + foobar\nbar(foo)\n"
     let hosted = try host(text, clock: clock)
@@ -81,28 +100,6 @@ final class EditorOccurrencesTests: OrbeTestCase {
     _ = try probe(pane) {
       try !PaneProbe.same(self.groundColor($0, occurrence), self.groundColor($0, plain))
     }
-
-    let bar = pane.appKitOverview.scrollbar
-    let scale = hosted.window.backingScaleFactor
-    let ruler = OverviewRuler(
-      lineCount: hosted.document.text.lineCount,
-      visibleLines: hosted.document.viewportLines.visible, height: bar.bounds.height,
-      scale: scale)
-    let center = OverviewRuler.lane(.center, width: 14, scale: scale)
-    let laneX = (CGFloat(center.x) + CGFloat(center.width) / 2) / scale
-    func markY(_ row: Int) -> CGFloat {
-      let span = ruler.spans([row...row])[0]
-      return CGFloat(span.y1 + span.y2) / 2 / scale
-    }
-    let marks = try ViewPixels(bar)
-    XCTAssertGreaterThan(marks.color(laneX, markY(1)).alphaComponent, 0.5, "スクロールバーの中央レーンに印")
-    XCTAssertEqual(marks.color(laneX, markY(3)).alphaComponent, 0, "出現の無い行には無い")
-
-    let minimap = pane.appKitOverview.minimap
-    let rows = try ViewPixels(minimap)
-    XCTAssertGreaterThan(
-      rows.color(minimap.bounds.width - 4, 1 * 2 + 1).alphaComponent, 0, "ミニマップの行の地")
-    XCTAssertEqual(rows.color(minimap.bounds.width - 4, 3 * 2 + 1).alphaComponent, 0)
   }
 
   /// キャレットが出ている範囲の中を動く間は取り直さない。語の外へ出れば消える。
@@ -205,8 +202,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
       try !PaneProbe.same(self.groundColor($0, occurrence), self.groundColor($0, plain))
     }
     clock.word?()
-    XCTAssertEqual(
-      pane.appKitOverview.minimap.decorations.wordOccurrences, [], "選択が語をはみ出すと語の出現は出ない")
+    XCTAssertEqual(pane.occurrences.wordOccurrences, [], "選択が語をはみ出すと語の出現は出ない")
     hosted.document.surface.selectedRange = NSRange(location: 0, length: 0)
     XCTAssertEqual(pane.occurrences.selectionOccurrences, [], "選択が空なら出ない")
     _ = try probe(pane) {
