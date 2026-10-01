@@ -180,7 +180,7 @@ extension FrameBuilder {
     for clause in marked.appearance.clauses {
       let ink =
         clause.underline
-          ?? (clause.active ? c.palette.text.color : c.palette.markedUnderline).packed
+        ?? (clause.active ? c.palette.text.color : c.palette.markedUnderline).packed
       for (x0, x1) in extents(clause.range, carets, content, c) {
         if let background = clause.background {
           underShapes.append(
