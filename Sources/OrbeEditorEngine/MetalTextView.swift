@@ -39,7 +39,7 @@ final class MetalTextView: TextSurfaceInputView {
     wantsLayer = true
     layerContentsRedrawPolicy = .never
     // 大きさが変わった直後のコマは伸ばさず左上寄せで出し（AppKit が反転を考えて層の contentsGravity へ写す）、縮んだ
-    // ときの古い大きな drawable を面の外（隣のミニマップ・ペイン）へはみ出させない。
+    // ときの古い大きな drawable を面の外（隣のペイン）へはみ出させない。
     layerContentsPlacement = .topLeft
     clipsToBounds = true
     let overviewHits = OverviewHitView()

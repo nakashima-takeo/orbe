@@ -47,7 +47,7 @@ final class EditorSearch {
   private var matchesBelongToDocument = true
   /// 件数が変わった（selected は 1 始まり。needle が空なら total 0 で届く。`limited` は上限で打ち切った）。
   var onCountChange: ((_ selected: Int?, _ total: Int, _ limited: Bool) -> Void)?
-  /// 一致か現在の一致が変わった（pane が地と俯瞰を押し直す）。
+  /// 一致か現在の一致が変わった（pane が地を押し直す）。
   var onMatchesChange: (() -> Void)?
   /// needle が変わった（開閉を含む。出現の強調が検索と重ならないように）。
   var onNeedleChange: (() -> Void)?

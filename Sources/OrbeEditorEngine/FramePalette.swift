@@ -11,10 +11,6 @@ struct FrameColor: Equatable, Sendable {
     self.init(components: Self.components(color, appearance: appearance, space: space))
   }
 
-  init(packed: UInt32) {
-    self.packed = packed
-  }
-
   fileprivate init(components: [Float]) {
     packed = components.enumerated().reduce(UInt32(0)) {
       $0 | UInt32(($1.element * 255).rounded()) << (8 * UInt32($1.offset))
@@ -61,11 +57,6 @@ struct InkColor: Equatable, Sendable {
     self.color = FrameColor(components: components)
     dilation = DilationProbe.level(
       red: components[0], green: components[1], blue: components[2], space: space, scale: scale)
-  }
-
-  init(color: FrameColor, dilation: Int) {
-    self.color = color
-    self.dilation = dilation
   }
 }
 

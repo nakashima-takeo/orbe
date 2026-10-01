@@ -6,8 +6,7 @@ import AppKit
 /// 描く（役割→色だけを知る）。
 @MainActor
 public protocol TextSurface: AnyObject {
-  /// 器へ載せる view（スクロールを含む全体）。面の外（俯瞰など）で起きたホイールの出来事をこの view の `scrollWheel`
-  /// へ渡すと、面は自分のスクロールへ渡す。
+  /// 器へ載せる view（スクロールを含む全体）。
   var view: NSView { get }
   /// first responder にする view。
   var responder: NSView { get }
@@ -21,8 +20,9 @@ public protocol TextSurface: AnyObject {
   /// 変化の前の幅を答える）。
   var rightColumnWidth: CGFloat { get }
 
-  /// 区間を見せる——縦は方針 `policy` で、横は区間が見えるところまで最小限にスクロールする（スクロールできる範囲の端で
-  /// 止まる）。判定は面の最新の位置（まだ描いていない位置を含む）で行う。選択は動かさない。
+  /// 区間を見せる——縦は方針 `policy` で、横は区間が見えるところまで最小限にスクロールする（区間が 1 行の中なら区間の
+  /// 両端、行をまたぐなら先頭。スクロールできる範囲の端で止まる）。判定は面の最新の位置（まだ描いていない位置を含む）で
+  /// 行う。選択は動かさない。
   func reveal(_ range: NSRange, policy: TextReveal)
 
   /// 選択（UTF-16）。置いても見せない——見せるのは `reveal`。
@@ -56,7 +56,7 @@ public protocol TextSurface: AnyObject {
   /// が 1 回先に通る）。置き換え後の選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。
   func replaceAll(with text: String)
 
-  /// 役割が変わった（裏から届いた役割で）。面は見えている行のうち区間に掛かる行を塗り直す。
+  /// 役割が変わった（裏から届いた役割で）。面は区間に掛かる行を描き直す。
   func rolesDidChange(_ ranges: IndexSet)
 
   /// 行の印（git ガター）。文書がハンクから作って押す（UTF-16 オフセット）。面は描くだけで規則を持たない。
