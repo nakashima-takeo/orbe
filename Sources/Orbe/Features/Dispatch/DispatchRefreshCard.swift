@@ -185,7 +185,7 @@ struct DispatchRefreshRow: View {
       }
       return l10n.format(.dispatchRefreshDesc, model.sync.upstream.short)
     case .asIs:
-      return l10n.format(.dispatchRefreshAsIsDesc, model.sync.name, model.item.detail ?? "")
+      return l10n.format(.dispatchRefreshAsIsDesc, model.sync.name, model.relativeDate)
     }
   }
 

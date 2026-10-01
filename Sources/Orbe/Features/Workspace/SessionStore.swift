@@ -79,11 +79,11 @@ final class SessionStore {
   /// アクティブ workspace のアクティブタブの実効 cwd。0タブは nil。
   func activeTabCwd() -> String? { tabCwd(inWorkspaceAt: activeWorkspace) }
 
-  /// 「今ユーザーが居る場所」——まだどの workspace にも属していないもの（これから作る workspace の
-  /// root）の既定。アクティブタブの cwd、0タブならホーム。0タブで現 workspace の rootPath へ落とさない
-  /// のは、無関係な別 workspace の root が新 workspace の root として黙って提案されるため
-  /// （workspace 内で開くタブの場所を決める `newTabCwd(inWorkspaceAt:)` とはここが違う）。
-  func activeTabCwdOrHome() -> String {
+  /// 新しい workspace の root の既定——まだどの workspace にも属していない場所。アクティブタブの cwd、
+  /// 0タブならホーム。0タブで現 workspace の rootPath へ落とさないのは、無関係な別 workspace の root が
+  /// 新 workspace の root として黙って提案されるため（workspace 内で開くタブの場所を決める
+  /// `newTabCwd(inWorkspaceAt:)` とはここが違う）。
+  func defaultNewWorkspaceRoot() -> String {
     activeTabCwd() ?? FileManager.default.homeDirectoryForCurrentUser.path
   }
 
@@ -101,10 +101,11 @@ final class SessionStore {
     Set(allTabs().compactMap { $0.tab.agentSlot.session?.sessionId })
   }
 
-  /// 指定 workspace での新規タブ起動の初期 cwd（GUI・エージェント起動・制御 API のすべてが
-  /// `openTab` 越しにここを通る）。
+  /// 指定 workspace での新規タブ起動の初期 cwd。GUI・エージェント起動・制御 API は `openTab` 越しに
+  /// ここを通り、Dispatch もリポジトリを探す基点として読む（Dispatch は workspace 内に新タブを開く面
+  /// なので、新タブの開始地点を基点にする）。
   /// 当該 workspace のアクティブタブの cwd を継ぎ、タブ不在（0タブ）はその workspace の rootPath
-  /// へ落とす——開くタブはその workspace のものだから（`activeTabCwdOrHome()` とはここが違う）。
+  /// へ落とす——開くタブはその workspace のものだから（`defaultNewWorkspaceRoot()` とはここが違う）。
   /// nil を surface へ渡すと ghostty がホームへ解決してしまうため、ここで必ず確定させる。
   /// workspace index の妥当性は呼び出し側が保証する。
   func newTabCwd(inWorkspaceAt i: Int) -> String {

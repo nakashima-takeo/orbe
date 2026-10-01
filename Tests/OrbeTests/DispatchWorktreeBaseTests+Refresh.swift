@@ -17,8 +17,8 @@ extension DispatchWorktreeBaseTests {
   func testStaleLocalBranchIsReportedAfterTheFetchLands() throws {
     let provider = try startWithSlowFetch()
     guard
-      case .staleBranch(let sync) = try prepare(
-        provider, .localBranch(name: "stale", existingWorktree: nil))
+      case .staleBranch(let sync, let relativeDate) = try prepare(
+        provider, .localBranch(name: "stale"))
     else {
       return XCTFail("着地後の値で遅れを返す")
     }
@@ -26,6 +26,7 @@ extension DispatchWorktreeBaseTests {
     XCTAssertEqual(sync.upstream.short, "origin/stale")
     XCTAssertEqual(sync.ahead, 0)
     XCTAssertEqual(sync.behind, 1)
+    XCTAssertFalse(relativeDate.isEmpty, "最新化の画面が「そのまま作成」に出すブランチの相対日時")
     XCTAssertFalse(
       FileManager.default.fileExists(atPath: dir.appendingPathComponent("wt-stale").path),
       "問うだけで作らない")
@@ -36,7 +37,7 @@ extension DispatchWorktreeBaseTests {
     let localTip = advanceLocally("stale")
     let provider = try start()
     XCTAssertTrue(pump({ provider.remoteFetchLanded }), "前提: 着地している")
-    let path = try resolve(provider, .localBranch(name: "stale", existingWorktree: nil))
+    let path = try resolve(provider, .localBranch(name: "stale"))
     XCTAssertEqual(head(of: path), localTip)
   }
 
