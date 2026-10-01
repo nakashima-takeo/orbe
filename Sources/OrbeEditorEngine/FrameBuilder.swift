@@ -315,7 +315,7 @@ final class FrameBuilder {
 
   /// グリフを置く。横の置き方はアトラスが Core Graphics と同じに決める。縦は装置の画素に揃え、端数は Core Graphics と
   /// 同じく下向きへ切り上げる。
-  func place(_ item: Glyph, _ ink: FrameColor, _ layer: FrameBuilderLayer, _ c: Context) {
+  func place(_ item: Glyph, _ ink: InkColor, _ layer: FrameBuilderLayer, _ c: Context) {
     guard
       let (entry, pen) = c.atlas.glyph(
         font: item.font, glyph: item.glyph, x: item.x, dilation: ink.dilation)
@@ -324,7 +324,7 @@ final class FrameBuilder {
       position: SIMD2(
         Float(pen) + Float(entry.left), Float(item.baseline.rounded(.up)) - Float(entry.top)),
       size: SIMD2(Float(entry.w), Float(entry.h)), uv: SIMD2(Float(entry.u), Float(entry.v)),
-      color: entry.isColor ? 0xFFFF_FFFF : ink.packed)
+      color: entry.isColor ? 0xFFFF_FFFF : ink.color.packed)
     let page = Int(entry.page)
     if entry.isColor {
       Self.append(instance, to: &color, page: page)

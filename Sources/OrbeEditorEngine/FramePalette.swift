@@ -1,38 +1,39 @@
 import AppKit
 import OrbeEditorCore
 
-/// 色 1 つ（面の色空間の値、α は乗算していない）と、それで描く字の太らせの段（色空間と倍率で決まる）。
+/// 色 1 つ（面の色空間の値、α は乗算していない）。
 struct FrameColor: Equatable, Sendable {
   var packed: UInt32
-  var dilation: Int
 
-  /// `color` を外観 `appearance` で面の色空間 `space` に解き、倍率 `scale` で描く字の太らせの段を決める。
+  /// `color` を外観 `appearance` で面の色空間 `space` に解く。
   @MainActor
-  init(
-    _ color: NSColor, appearance: NSAppearance, space: CGColorSpace, fontSmoothing: Bool,
-    scale: CGFloat
-  ) {
+  init(_ color: NSColor, appearance: NSAppearance, space: CGColorSpace) {
+    self.init(components: Self.components(color, appearance: appearance, space: space))
+  }
+
+  init(packed: UInt32) {
+    self.packed = packed
+  }
+
+  fileprivate init(components: [Float]) {
+    packed = components.enumerated().reduce(UInt32(0)) {
+      $0 | UInt32(($1.element * 255).rounded()) << (8 * UInt32($1.offset))
+    }
+  }
+
+  /// `color` を外観 `appearance` で面の色空間 `space` に解いた成分（RGBA、0…1）。
+  @MainActor
+  fileprivate static func components(
+    _ color: NSColor, appearance: NSAppearance, space: CGColorSpace
+  ) -> [Float] {
     var resolved = color
     appearance.performAsCurrentDrawingAppearance {
       resolved = NSColorSpace(cgColorSpace: space).flatMap { color.usingColorSpace($0) } ?? color
     }
-    let components = [
+    return [
       resolved.redComponent, resolved.greenComponent, resolved.blueComponent,
       resolved.alphaComponent,
     ].map { Float(min(max($0, 0), 1)) }
-    packed = components.enumerated().reduce(UInt32(0)) {
-      $0 | UInt32(($1.element * 255).rounded()) << (8 * UInt32($1.offset))
-    }
-    dilation =
-      fontSmoothing
-      ? DilationProbe.level(
-        red: components[0], green: components[1], blue: components[2], space: space, scale: scale)
-      : 0
-  }
-
-  init(packed: UInt32, dilation: Int) {
-    self.packed = packed
-    self.dilation = dilation
   }
 
   /// 外観に依らない色（IME が指定した色）を sRGB に詰めたもの。
@@ -47,12 +48,33 @@ struct FrameColor: Equatable, Sendable {
   }
 }
 
+/// 字のインクの色——色と、それで描く字の太らせの段（Core Graphics の font smoothing 相当。字の色の明るさ・色空間・
+/// 倍率で決まる）。
+struct InkColor: Equatable, Sendable {
+  var color: FrameColor
+  var dilation: Int
+
+  /// `color` を外観 `appearance` で面の色空間 `space` に解き、倍率 `scale` で描く字の太らせの段を決める。
+  @MainActor
+  init(_ color: NSColor, appearance: NSAppearance, space: CGColorSpace, scale: CGFloat) {
+    let components = FrameColor.components(color, appearance: appearance, space: space)
+    self.color = FrameColor(components: components)
+    dilation = DilationProbe.level(
+      red: components[0], green: components[1], blue: components[2], space: space, scale: scale)
+  }
+
+  init(color: FrameColor, dilation: Int) {
+    self.color = color
+    self.dilation = dilation
+  }
+}
+
 /// 面の外観で解いた色の組。外観か倍率が変われば main が解き直して置く。
 struct FramePalette: Equatable, Sendable {
-  var text: FrameColor
+  var text: InkColor
   /// 役割の字の色（`SyntaxRole` の番号で引く。色の無い役割は本文の色）。
-  var roles: [FrameColor]
-  var gutterText: FrameColor
+  var roles: [InkColor]
+  var gutterText: InkColor
   var added: FrameColor
   var modified: FrameColor
   var removed: FrameColor
@@ -74,28 +96,23 @@ struct FramePalette: Equatable, Sendable {
   var overview: OverviewPalette
 
   /// 役割 `role` の字の色（役割が無ければ本文の色）。
-  func ink(_ role: SyntaxRole?) -> FrameColor { role.map { roles[$0.rawValue] } ?? text }
+  func ink(_ role: SyntaxRole?) -> InkColor { role.map { roles[$0.rawValue] } ?? text }
 
   /// NSTextView の既定の未確定の地（外観で解く動的な色）。
   @MainActor private static let markedBackgroundColor =
     NSTextView().markedTextAttributes?[.backgroundColor] as? NSColor ?? .systemYellow
 
   @MainActor
-  init(
-    style: TextSurfaceStyle, appearance: NSAppearance, space: CGColorSpace, fontSmoothing: Bool,
-    scale: CGFloat
-  ) {
-    let resolve = {
-      FrameColor(
-        $0, appearance: appearance, space: space, fontSmoothing: fontSmoothing, scale: scale)
-    }
-    text = resolve(style.textColor)
+  init(style: TextSurfaceStyle, appearance: NSAppearance, space: CGColorSpace, scale: CGFloat) {
+    let resolve = { FrameColor($0, appearance: appearance, space: space) }
+    let ink = { InkColor($0, appearance: appearance, space: space, scale: scale) }
+    text = ink(style.textColor)
     caret = resolve(style.caretColor)
     selection = resolve(style.selectionColor)
     inactiveSelection = resolve(style.inactiveSelectionColor)
     let text = text
-    roles = SyntaxRole.allCases.map { style.roleColors[$0].map(resolve) ?? text }
-    gutterText = resolve(style.gutterTextColor)
+    roles = SyntaxRole.allCases.map { style.roleColors[$0].map(ink) ?? text }
+    gutterText = ink(style.gutterTextColor)
     added = resolve(style.marks.added)
     modified = resolve(style.marks.modified)
     removed = resolve(style.marks.removed)
@@ -113,7 +130,7 @@ struct FramePalette: Equatable, Sendable {
   }
 }
 
-/// 俯瞰の色（字を描かない図形の色なので、字の太らせの段は測らない）。α を半分にした色は、ミニマップの行の薄い地。
+/// 俯瞰の色。α を半分にした色は、ミニマップの行の薄い地。
 struct OverviewPalette: Equatable, Sendable {
   /// 外観が暗いか（ミニマップの字の明るさの係数）。
   var dark: Bool
@@ -144,9 +161,7 @@ struct OverviewPalette: Equatable, Sendable {
 
   @MainActor
   init(_ style: TextSurfaceStyle.Overview, appearance: NSAppearance, space: CGColorSpace) {
-    let resolve = {
-      FrameColor($0, appearance: appearance, space: space, fontSmoothing: false, scale: 1)
-    }
+    let resolve = { FrameColor($0, appearance: appearance, space: space) }
     let half = { (color: NSColor) -> FrameColor in
       var alpha: CGFloat = 1
       appearance.performAsCurrentDrawingAppearance {

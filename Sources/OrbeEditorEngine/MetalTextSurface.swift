@@ -54,13 +54,12 @@ final class MetalTextSurface: TextSurface {
   /// 描画スレッドへ頼んだ横の「見えるところまで」の通し番号。
   var revealSerial = 0
 
-  init(style: TextSurfaceStyle, options: MetalTextSurfaceOptions) {
+  init(style: TextSurfaceStyle, omittedLabel: @escaping @Sendable (Int) -> String) {
     Self.nextID += 1
     id = Self.nextID
     self.style = style
-    config = SurfaceConfig(
-      style: style, fontSmoothing: options.fontSmoothing, omittedLabel: options.omittedLabel)
-    scroll = ScrollBox(elastic: options.elasticScroll)
+    config = SurfaceConfig(style: style, omittedLabel: omittedLabel)
+    scroll = ScrollBox()
     lineStops = LineStopsCache(font: config.font)
     textView.surface = self
     let id = id
@@ -168,10 +167,8 @@ final class MetalTextSurface: TextSurface {
   func htmlStyle() -> HTMLCopy.Style {
     let appearance = textView.effectiveAppearance
     let hex = { (color: NSColor) -> String in
-      let packed = FrameColor(
-        color, appearance: appearance, space: FrameMaterial.defaultSpace, fontSmoothing: false,
-        scale: 1
-      ).packed
+      let packed = FrameColor(color, appearance: appearance, space: FrameMaterial.defaultSpace)
+        .packed
       return String(
         format: "#%02x%02x%02x", packed & 0xFF, (packed >> 8) & 0xFF, (packed >> 16) & 0xFF)
     }
@@ -190,8 +187,7 @@ final class MetalTextSurface: TextSurface {
   /// 外観・色空間・倍率で色を解き直して置く。
   func appearanceDidChange() {
     let palette = FramePalette(
-      style: style, appearance: textView.effectiveAppearance, space: space,
-      fontSmoothing: config.fontSmoothing, scale: scale)
+      style: style, appearance: textView.effectiveAppearance, space: space, scale: scale)
     write { $0.palette = palette }
   }
 

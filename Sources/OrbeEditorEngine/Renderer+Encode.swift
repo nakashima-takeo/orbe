@@ -206,8 +206,8 @@ extension Renderer {
       pass.minimapLayer = slot.minimapLayer
     }
     pass.minimapColors =
-      [palette.text.packed]
-      + palette.roles.map(\.packed)
+      [palette.text.color.packed]
+      + palette.roles.map(\.color.packed)
     return pass
   }
 

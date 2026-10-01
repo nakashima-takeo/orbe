@@ -176,11 +176,9 @@ struct EditorSurfaces {
       make: {
         makeMetalTextSurface(
           style: EditorStyle.make(),
-          options: MetalTextSurfaceOptions(
-            elasticScroll: true, fontSmoothing: true,
-            omittedLabel: { [language = language()] in
-              EditorStyle.omittedLabel($0, language: language)
-            }))
+          omittedLabel: { [language = language()] in
+            EditorStyle.omittedLabel($0, language: language)
+          })
       },
       prepare: prepareMetalTextEngine)
   }
