@@ -361,9 +361,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsSoundCustomWaitingRow
   case settingsSoundCustomSameAsDone
   case settingsMenuBarNotificationDuration
-  case settingsEditorEngineMetal
-  case settingsEditorScrollElastic
-  case settingsEditorFontSmoothing
   case settingsSecondsValue
   case settingsUnset
   case settingsToggleOn

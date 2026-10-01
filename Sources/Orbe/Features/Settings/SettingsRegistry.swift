@@ -138,8 +138,7 @@ enum SettingsRegistry {
   /// agent-state-icons〔gui.conf 非経由〕→ worktree-dir〔同〕→
   /// notification-sound〔同〕→ notification-sound-volume〔同〕→ notification-sound-enabled〔同〕→
   /// notification-sound-custom-done / -waiting / -waiting-same-as-done〔いずれも同〕→
-  /// menubar-notification-duration〔同〕→ editor-engine-metal / editor-scroll-elastic /
-  /// editor-font-smoothing〔いずれも同〕）。
+  /// menubar-notification-duration〔同〕）。
   /// `rootOrder`（表示順）とは別物——混同すると gui.conf のバイト順が崩れる。
   static let all: [SettingDescriptor] = [
     SettingDescriptor(
@@ -323,21 +322,6 @@ enum SettingsRegistry {
       defaultValue: { .int(40) }, domain: .intRange(5...180, step: 5, unit: "s"),
       guiConf: nil,  // gui.conf 非経由（メニューバー chrome の尺で libghostty 設定ではない）
       display: secondsLabel, unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .editorEngineMetal, key: "editor-engine-metal", labelKey: .settingsEditorEngineMetal,
-      activation: .toggle, defaultValue: { .bool(false) }, domain: .toggle,
-      guiConf: nil,  // gui.conf 非経由（文書を開くときに合成点が読む）
-      display: boolLabel, unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .editorScrollElastic, key: "editor-scroll-elastic",
-      labelKey: .settingsEditorScrollElastic, activation: .toggle, defaultValue: { .bool(true) },
-      domain: .toggle, guiConf: nil,  // gui.conf 非経由（同上）
-      display: boolLabel, unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .editorFontSmoothing, key: "editor-font-smoothing",
-      labelKey: .settingsEditorFontSmoothing, activation: .toggle, defaultValue: { .bool(true) },
-      domain: .toggle, guiConf: nil,  // gui.conf 非経由（同上）
-      display: boolLabel, unsetPlaceholderKey: nil),
   ]
 
   /// 取り込み済み音源の実体（`sounds/` 配下のファイル）を指す項目。参照集合 GC の契機判定が読む。
@@ -346,14 +330,11 @@ enum SettingsRegistry {
   static let customSoundSourceIDs = Set(SettingKeys.customSoundSources.map(\.id))
 
   /// root に**行を持たない**項目（`rootOrder` 非掲載）。カスタム音源の 3 件は通知音サブのさらに
-  /// 奥（カスタム設定サブ）でだけ編集され、root には「通知音」の 1 行として畳まれて出る。エディターの
-  /// エンジンの切り替え 3 件は `orb config` と制御 API からだけ書く（朝の判定と新しいエンジンへの移行が
-  /// 済めば消す一時の口なので、製品のパレットに出さない）
+  /// 奥（カスタム設定サブ）でだけ編集され、root には「通知音」の 1 行として畳まれて出る
   /// ——`all ⊇ rootOrder` であって等しくはない、という不変条件をこの集合が明示する。
   static let nonRootIDs: Set<SettingID> = [
     .notificationSoundCustomDone, .notificationSoundCustomWaiting,
-    .notificationSoundCustomWaitingSameAsDone, .editorEngineMetal, .editorScrollElastic,
-    .editorFontSmoothing,
+    .notificationSoundCustomWaitingSameAsDone,
   ]
 
   /// パレット root の表示順（fontSize → backgroundOpacity → backgroundBlur → cursorStyleBlink →
