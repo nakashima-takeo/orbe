@@ -11,12 +11,18 @@ import XCTest
 final class MinimapTests: XCTestCase {
   private func units(_ text: String) -> [UInt16] { Array(text.utf16) }
 
-  /// 行の字を桁・字形・行の中の位置の列で集める。
-  private func cells(_ text: String, columns: Int = 100) -> [(column: Int, glyph: Int, index: Int)]
-  {
-    var result: [(column: Int, glyph: Int, index: Int)] = []
+  /// 描く字 1 つ——桁・字形の番号・行の中の UTF-16 位置。
+  private struct Cell {
+    let column: Int
+    let glyph: Int
+    let index: Int
+  }
+
+  /// 行の字を左から集める。
+  private func cells(_ text: String, columns: Int = 100) -> [Cell] {
+    var result: [Cell] = []
     MinimapLine.forEachCell(units(text), tabSize: 4, columns: columns) {
-      result.append(($0, $1, $2))
+      result.append(Cell(column: $0, glyph: $1, index: $2))
     }
     return result
   }
