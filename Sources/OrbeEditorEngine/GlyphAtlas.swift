@@ -42,7 +42,10 @@ final class GlyphAtlas {
   private(set) var colorPages: [MTLTexture] = []
   private var monoPackers: [ShelfPacker] = []
   private var colorPackers: [ShelfPacker] = []
-  private var entries: [UInt64: Entry] = [:]
+  /// 作った項目と、（フォント・横の少数ピクセル位置・太らせの段）ごとにグリフの番号で引くその番号 + 1（0 は未作成）——
+  /// 字ごとに辞書を引かない。
+  private var entries: [Entry] = []
+  private var tables: [[Int32]] = []
   /// 頁が上限まで埋まった。次のコマの前に作り直す。
   private(set) var isFull = false
 
@@ -57,6 +60,7 @@ final class GlyphAtlas {
   /// 頁を空にして作り直す（頁の texture は使い回す）。
   func reset() {
     entries.removeAll()
+    tables.removeAll()
     monoPackers = monoPackers.map { ShelfPacker(size: $0.size) }
     colorPackers = colorPackers.map { ShelfPacker(size: $0.size) }
     isFull = false
@@ -64,7 +68,7 @@ final class GlyphAtlas {
 
   /// 字の原点 `x`（px）に置くグリフの項目と、項目の `left` を足す整数の原点。頁が埋まって置けなければ nil。
   func glyph(font: UInt16, glyph: CGGlyph, x: Double, dilation: Int) -> (Entry, pen: Double)? {
-    if fonts.font(font).isColor {
+    if fonts.isColor(font) {
       guard let entry = entry(font: font, glyph: glyph, variant: 0, dilation: 0) else { return nil }
       let bearing = Double(entry.bearing)
       return (entry, (x + bearing).rounded() - bearing.rounded())
@@ -81,13 +85,24 @@ final class GlyphAtlas {
   }
 
   private func entry(font: UInt16, glyph: CGGlyph, variant: Int, dilation: Int) -> Entry? {
-    let dilation = fonts.font(font).isColor ? 0 : dilation
-    let key =
-      UInt64(font) << 40 | UInt64(glyph) << 8 | UInt64(variant) << 4 | UInt64(dilation)
-    if let entry = entries[key] { return entry.w == 0 ? nil : entry }
+    let dilation = fonts.isColor(font) ? 0 : dilation
+    let table = (Int(font) * variants + variant) * DilationProbe.levels + dilation
+    let index = Int(glyph)
+    if table < tables.count, index < tables[table].count, tables[table][index] > 0 {
+      let entry = entries[Int(tables[table][index]) - 1]
+      return entry.w == 0 ? nil : entry
+    }
     guard let entry = rasterize(font: font, glyph: glyph, variant: variant, dilation: dilation)
     else { return nil }
-    entries[key] = entry
+    if table >= tables.count {
+      tables.append(contentsOf: repeatElement([], count: table + 1 - tables.count))
+    }
+    if index >= tables[table].count {
+      let count = min(Int(CGGlyph.max) + 1, max(index + 1, tables[table].count * 2))
+      tables[table].append(contentsOf: repeatElement(0, count: count - tables[table].count))
+    }
+    entries.append(entry)
+    tables[table][index] = Int32(entries.count)
     return entry.w == 0 ? nil : entry
   }
 
