@@ -317,6 +317,7 @@ public struct SummaryTree<Element: TreeElement> {
 
     fileprivate init(root: Node, from index: Int) {
       guard index < root.count else { return }
+      stack.reserveCapacity(root.height + 1)
       var node = root
       var index = index
       while node.height > 0 {

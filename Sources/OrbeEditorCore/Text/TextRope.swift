@@ -157,6 +157,72 @@ public struct TextRope: Sendable {
     return result
   }
 
+  /// 連続する行 `rows` の行頭のオフセット（`rows.count + 1` 個。最後は最後の行の終わり）。改行の位置を塊から引き、塊を
+  /// 移るときだけ木を引く——長い行が続いても、行の間の本文は読まない。
+  public func lineStarts(_ rows: Range<Int>) -> [Int] {
+    var result: [Int] = []
+    result.reserveCapacity(rows.count + 1)
+    var row = rows.lowerBound
+    if row <= 0 {
+      result.append(0)
+      row = 1
+    }
+    var chunk: Chunk?
+    var chunkStart = 0
+    var newlinesBefore = 0
+    while row <= rows.upperBound, row < lineCount {
+      let newline = row - 1
+      if chunk.map({ newline - newlinesBefore >= $0.newlines.count }) ?? true {
+        let (index, before) = chunks.locate(newline, by: \.newlines)
+        chunk = chunks[index]
+        chunkStart = before.utf16
+        newlinesBefore = before.newlines
+      }
+      result.append(chunkStart + Int(chunk!.newlines[newline - newlinesBefore]) + 1)
+      row += 1
+    }
+    while row <= rows.upperBound {
+      result.append(length)
+      row += 1
+    }
+    return result
+  }
+
+  /// 連続する行 `rows` の頭——行頭のオフセット（`lineStarts`）と、それぞれの行の先頭 `limit` 単位（行末の改行を含みうる）
+  /// を 1 つの列に続けたもの。長い行が続いても読むのは頭だけ。
+  public func lineHeads(_ rows: Range<Int>, limit: Int) -> LineHeads {
+    let starts = lineStarts(rows)
+    var units = ContiguousArray<UInt16>()
+    units.reserveCapacity(min(starts[rows.count] - starts[0], rows.count * limit))
+    var bounds = [0]
+    bounds.reserveCapacity(starts.count)
+    var index = 0
+    var chunkStart = 0
+    var piece: Chunk?
+    for row in 0..<rows.count {
+      var from = starts[row]
+      let to = min(starts[row + 1], from + limit)
+      while from < to {
+        if piece.map({ from >= chunkStart + $0.units.count }) ?? true {
+          if let current = piece, from == chunkStart + current.units.count {
+            index += 1
+            chunkStart = from
+          } else if let (found, before) = chunk(containing: from) {
+            index = found
+            chunkStart = before.utf16
+          }
+          piece = chunks[index]
+        }
+        guard let current = piece else { break }
+        let end = min(to - chunkStart, current.units.count)
+        units.append(contentsOf: current.units[(from - chunkStart)..<end])
+        from = chunkStart + end
+      }
+      bounds.append(units.count)
+    }
+    return LineHeads(starts: starts, units: units, bounds: bounds)
+  }
+
   /// 区間の文字列。単独のサロゲートもそのまま保つ（NSString と同じ）。
   public func substring(_ range: NSRange) -> String {
     let units = units(in: range)
@@ -282,5 +348,26 @@ public struct TextRope: Sendable {
       start = cut
     }
     return result
+  }
+}
+
+/// 連続する行の頭（`TextRope.lineHeads`）。
+public struct LineHeads: Sendable {
+  /// 行頭のオフセット（行の数 + 1 個。最後は最後の行の終わり）。
+  public let starts: [Int]
+  let units: ContiguousArray<UInt16>
+  let bounds: [Int]
+
+  /// 読んだ単位の数（全部の行の頭の長さの和）。
+  public var unitCount: Int { units.count }
+
+  /// `index` 番目の行の頭。
+  public func head(_ index: Int) -> ArraySlice<UInt16> {
+    units[bounds[index]..<bounds[index + 1]]
+  }
+
+  /// `index` 番目の行の頭が行の終わり（改行を含む）まで届いているか。
+  public func isComplete(_ index: Int) -> Bool {
+    bounds[index + 1] - bounds[index] == starts[index + 1] - starts[index]
   }
 }
