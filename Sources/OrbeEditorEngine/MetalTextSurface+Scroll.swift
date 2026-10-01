@@ -39,11 +39,7 @@ extension MetalTextSurface {
   var viewportLines: (first: CGFloat, visible: CGFloat) {
     let (position, limits) = scrollState()
     guard limits.viewport.y > 0, let text = currentContent?.text else { return (0, 0) }
-    let lineHeight = limits.lineHeight
-    let y = min(max(0, position.y), limits.maximum.y)
-    let row = min(Int((y / lineHeight).rounded(.down)), text.lineCount - 1)
-    let hidden = min(max((y - Double(row) * lineHeight) / lineHeight, 0), 1)
-    return (CGFloat(Double(row) + hidden), CGFloat(limits.viewport.y / lineHeight))
+    return limits.viewportLines(at: position, lineCount: text.lineCount)
   }
 
   /// 先頭行（小数）の位置へ置く（`viewportLines` の逆。行は行の数に収める。横位置は動かさない）。
@@ -167,9 +163,9 @@ extension MetalTextSurface {
     -> TextViewport?
   {
     guard limits.viewport.y > 0, let text = currentContent?.text else { return nil }
-    let y = min(max(0, position.y), limits.maximum.y)
-    let row = min(Int((y / limits.lineHeight).rounded(.down)), text.lineCount - 1)
+    let row = limits.firstVisible(at: position, lineCount: text.lineCount).row
     return TextViewport(
-      firstVisible: text.lineStart(row), visibleLines: CGFloat(limits.viewport.y / limits.lineHeight))
+      firstVisible: text.lineStart(row),
+      visibleLines: CGFloat(limits.viewport.y / limits.lineHeight))
   }
 }

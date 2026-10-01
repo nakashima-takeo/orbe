@@ -157,7 +157,7 @@ final class FrameBuilder {
       config: config, tabColumns: tabColumns, roles: content.roles)
     textScissor = Self.scissor(x: g.column, y: g.top, width: g.textRight - g.column, g)
     gutterScissor = Self.scissor(x: 0, y: g.top, width: g.column, g)
-    let lines = Self.viewportLines(source, lineCount: lineCount, config: config)
+    let lines = source.limits.viewportLines(at: source.position, lineCount: lineCount)
     buildMinimap(layout, lines: lines, source, content, c)
     drawShadows(layout, lines: lines, clipsRight: Self.clipsRight(source), c)
     drawVerticalScrollbar(layout, lines: lines, source, content, c)
@@ -214,20 +214,7 @@ final class FrameBuilder {
     return result
   }
 
-  /// 先頭に見えている行（小数。行 + 隠れている割合）と見えている行数——見えている範囲の通知と同じ意味の値で、端を越えて
-  /// 見せている間は端で数える（俯瞰は端の位置を表す）。
-  static func viewportLines(_ source: Source, lineCount: Int, config: SurfaceConfig) -> (
-    first: CGFloat, visible: CGFloat
-  ) {
-    let limits = source.limits
-    let lineHeight = Double(config.lineHeight)
-    let y = min(max(0, source.position.y), limits.maximum.y)
-    let row = min(Int((y / lineHeight).rounded(.down)), max(0, lineCount - 1))
-    let hidden = min(max((y - Double(row) * lineHeight) / lineHeight, 0), 1)
-    return (CGFloat(Double(row) + hidden), CGFloat(limits.viewport.y / lineHeight))
-  }
-
-  /// 本文が右にまだ続く（横に隠れている部分がある）か——見えている範囲の通知と同じ判定。
+  /// 本文が右にまだ続く（横に隠れている部分がある）か。
   static func clipsRight(_ source: Source) -> Bool {
     let maximum = source.limits.maximum.x
     return min(max(0, source.position.x), maximum) < maximum - 0.5 / Double(source.material.scale)

@@ -81,6 +81,22 @@ struct ScrollPhysics: Sendable {
         max(0, longestLine + ScrollPhysics.trailingColumns * cell - viewport.x),
         max(0, Double(lineCount - 1) * lineHeight))
     }
+
+    /// 位置 `position` で先頭に見えている行（`lineCount` 行の文書の行）と、その行が上へ隠れている割合（0…1）。端を越えて
+    /// 見せている分は端で数える（俯瞰と見えている範囲は端の位置を表す）。
+    func firstVisible(at position: SIMD2<Double>, lineCount: Int) -> (row: Int, hidden: Double) {
+      let y = min(max(0, position.y), maximum.y)
+      let row = min(Int((y / lineHeight).rounded(.down)), max(0, lineCount - 1))
+      return (row, min(max((y - Double(row) * lineHeight) / lineHeight, 0), 1))
+    }
+
+    /// 位置 `position` で先頭に見えている行（小数。行 + 隠れている割合）と見えている行数——俯瞰の式の入力。
+    func viewportLines(at position: SIMD2<Double>, lineCount: Int) -> (
+      first: CGFloat, visible: CGFloat
+    ) {
+      let (row, hidden) = firstVisible(at: position, lineCount: lineCount)
+      return (CGFloat(Double(row) + hidden), CGFloat(viewport.y / lineHeight))
+    }
   }
 
   static let stiffness = 20.0
