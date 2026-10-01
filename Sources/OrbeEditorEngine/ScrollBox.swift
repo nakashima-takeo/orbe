@@ -4,8 +4,10 @@ import simd
 
 /// スクロールの状態の箱。main が出来事を書き、描画スレッドがコマの時刻で位置を読む。鍵の中では値の読み書きだけをする。
 ///
-/// 面の出す 1 か所が置く位置と範囲には、描く材料の箱の版を添える。描画スレッドは、読んだ材料の版がそれに追いつくまで前の
-/// 位置を描く——スクロールだけが先に動いたコマ（新しい位置に古い本文）を出さない。指の出来事は版を添えずにその場で当てる。
+/// 面の出す 1 か所が置く位置と範囲には、描く材料の箱の版を添える。箱は、版 V を置く直前に見せていた位置と範囲を「V より
+/// 前の材料に組む位置」として版ごとに残し、描画スレッドは引き取った材料の版に組む位置を描く——材料を引き取ってから位置を
+/// 読むまでに次の版が置かれても、引き取った版の位置で描く（新しい本文に古い位置・古い本文に新しい位置のコマを出さない）。
+/// 指の出来事は版を添えずにその場で当てる（いちばん新しい版の材料に組む位置が動く）。
 final class ScrollBox: Sendable {
   /// 描画スレッドがコマの時刻で読んだもの。
   struct Frame: Sendable {
@@ -31,14 +33,15 @@ final class ScrollBox: Sendable {
     var unmeasured = true
     /// 横の範囲の基準を取り直した測定の回数。
     var baselines = 0
-    /// 取引が置く前に見せていた位置と、それを見せ続ける材料の版の上限。
-    var held: Held?
+    /// 材料の版ごとに組む位置（版の昇順。描画スレッドがまだ引き取っていない版の分だけ）。
+    var pairs: [Pair] = []
   }
 
-  private struct Held {
+  /// 版 `version` を置く直前に見せていた位置と範囲——`version` より前の材料に組む。
+  private struct Pair {
     var position: SIMD2<Double>
     var limits: ScrollPhysics.Limits
-    var until: Int
+    var version: Int
   }
 
   private let state: OSAllocatedUnfairLock<State>
@@ -58,32 +61,40 @@ final class ScrollBox: Sendable {
     }
   }
 
-  /// その場で位置を置く。`material` を添えれば、描画スレッドはその版の材料を読むまで前の位置を描く。
-  func place(_ p: SIMD2<Double>, heldUntil material: Int? = nil) {
+  /// その場で位置を置く。`material` を添えれば、それより前の版の材料のコマは置く前の位置を描く。
+  func place(_ p: SIMD2<Double>, forMaterial material: Int? = nil) {
     state.withLock { s in
-      Self.hold(&s, until: material)
+      Self.pair(&s, before: material)
       s.physics.place(p)
       s.revision += 1
     }
   }
 
-  func updateLimits(_ update: LimitsUpdate, heldUntil material: Int? = nil) {
+  func updateLimits(_ update: LimitsUpdate, forMaterial material: Int? = nil) {
     state.withLock { s in
       var limits = s.physics.limits
       update.apply(to: &limits)
       guard limits != s.physics.limits else { return }
-      Self.hold(&s, until: material)
+      Self.pair(&s, before: material)
       s.physics.setLimits(limits)
       s.revision += 1
     }
   }
 
-  private static func hold(_ s: inout State, until material: Int?) {
-    guard let material else { return }
-    let position = s.held?.position ?? s.physics.shown(at: CACurrentMediaTime())
-    let limits = s.held?.limits ?? s.physics.limits
-    s.held = Held(
-      position: position, limits: limits, until: max(s.held?.until ?? material, material))
+  /// 版 `material` を置く直前の位置と範囲を、その版より前の材料に組む位置として残す（同じ版で範囲と位置を続けて置けば、
+  /// 最初に置く前のものだけ）。
+  private static func pair(_ s: inout State, before material: Int?) {
+    guard let material, s.pairs.last?.version != material else { return }
+    s.pairs.append(
+      Pair(
+        position: s.physics.shown(at: CACurrentMediaTime()), limits: s.physics.limits,
+        version: material))
+  }
+
+  /// 描画スレッドが版 `material` の材料を引き取った。それ以前の版に組む位置はもう要らない（後のコマはこれより新しい材料を
+  /// 引き取る）。
+  func taken(material: Int) {
+    state.withLock { s in s.pairs.removeAll { $0.version <= material } }
   }
 
   /// 描画スレッドが、取引の頼んだ区間を組んだ行の x（`x`）が横に見えるところまで最小限動かす。`lineWidth` はその行の幅
@@ -148,15 +159,12 @@ final class ScrollBox: Sendable {
       s.physics.settle(at: t)
       let events = s.pendingEvents
       s.pendingEvents.removeAll(keepingCapacity: true)
+      s.pairs.removeAll { $0.version <= material }
       var position = s.physics.shown(at: t)
       var limits = s.physics.limits
-      if let held = s.held {
-        if material >= held.until {
-          s.held = nil
-        } else {
-          position = held.position
-          limits = held.limits
-        }
+      if let pair = s.pairs.first {
+        position = pair.position
+        limits = pair.limits
       }
       return Frame(
         position: position, limits: limits, returning: s.physics.isReturning, events: events,

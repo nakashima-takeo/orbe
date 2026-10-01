@@ -85,6 +85,38 @@ final class SurfaceFlushTests: EngineTestCase {
     flushed("外れる") { view.draggingExited(drag) }
   }
 
+  /// 描画スレッドが版 N の材料を引き取ってから位置を読むまでに main が次の版を出しても、コマは版 N に組む位置で描く——
+  /// 次の一致へ続けて飛んだとき、新しい選択に古い位置（一致が見えないコマ）も、古い選択に新しい位置も出ない。窓に
+  /// 載せない面は描画スレッドが刻まないので、引き取りと位置の読みの間に次の版を出す並びを決定論的に作れる。
+  func testAFrameDrawsThePositionPairedWithTheMaterialItTook() throws {
+    let opened = try open(rows(500), size: CGSize(width: 400, height: 184))
+    let surface = opened.surface
+    let text = opened.document.text
+    surface.flush()
+    let start = surface.scroll.frame(at: 0, material: surface.material.revision).position.y
+    func jump(to row: Int) -> Double {
+      surface.selectedRange = NSRange(location: text.lineStart(row), length: 3)
+      surface.scrollToCenter(text.lineStart(row))
+      let y = surface.scrollState().position.y
+      RunLoop.main.run(until: Date())
+      return y
+    }
+    let first = jump(to: 200)
+    let taken = surface.material.read()
+    XCTAssertEqual(taken.caret.selections.first?.location, text.lineStart(200), "前提: 版 N は 200 行")
+    let second = jump(to: 400)
+    XCTAssertNotEqual(first, second, "前提: 飛んだ先が違う")
+    XCTAssertEqual(
+      surface.scroll.frame(at: 0, material: taken.revision - 1).position.y, start,
+      "版 N より前の材料は飛ぶ前の位置")
+    XCTAssertEqual(
+      surface.scroll.frame(at: 0, material: taken.revision).position.y, first,
+      "版 N の材料は 200 行を中央に見せる位置")
+    XCTAssertEqual(
+      surface.scroll.frame(at: 0, material: surface.material.revision).position.y, second,
+      "版 N+1 の材料は 400 行を中央に見せる位置")
+  }
+
   /// 置いてまだ出していない位置は、その後の指の出来事より前のことなので先に出る——指の量は置いた位置に足される。
   func testAPlacedPositionIsFlushedBeforeAFingerEvent() throws {
     let opened = try open(rows(500), size: CGSize(width: 400, height: 184))

@@ -59,9 +59,10 @@ extension MetalTextSurface {
     FlushScheduler.shared.schedule(self)
   }
 
-  /// 出す。手順の順番は約束——① 版 N（今の材料の版 + 1）を先に決め、② 版 N を添えて位置と範囲をスクロールの箱へ置き、
-  /// ③ 材料の箱へ 1 回書き（版 N になる）、④ 描画スレッドを 1 回起こす。描画スレッドは材料の版が N に追いつくまで前の位置を
-  /// 描くので、位置を先・材料を後の順でなければ「新しい位置に古い本文」のコマが出る。出す前の状態が空なら何もしない。
+  /// 出す。手順の順番は約束——① 版 N（今の材料の版 + 1）を先に決め、② 版 N を添えて位置と範囲をスクロールの箱へ置き
+  /// （箱は置く前の位置を N より前の材料に組んで残す）、③ 材料の箱へ 1 回書き（版 N になる）、④ 描画スレッドを 1 回起こす。
+  /// 描画スレッドは引き取った材料の版に組む位置を描くので、位置を先・材料を後の順でなければ「新しい位置に古い本文」の
+  /// コマが出る。出す前の状態が空なら何もしない。
   func flush() {
     FlushScheduler.shared.cancel(self)
     guard !pending.isEmpty else { return }
@@ -69,8 +70,8 @@ extension MetalTextSurface {
     pending = Pending()
     let revision = material.revision + 1
     if let from = out.remeasure { scroll.remeasure(from: from) }
-    if let limits = out.limits { scroll.updateLimits(limits, heldUntil: revision) }
-    if let p = out.position { scroll.place(p, heldUntil: revision) }
+    if let limits = out.limits { scroll.updateLimits(limits, forMaterial: revision) }
+    if let p = out.position { scroll.place(p, forMaterial: revision) }
     let written = material.update { material in
       for write in out.writes { write(&material) }
     }

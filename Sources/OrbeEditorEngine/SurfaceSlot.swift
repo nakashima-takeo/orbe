@@ -60,8 +60,9 @@ final class SurfaceSlot {
     self.notify = notify
   }
 
-  /// 引き取った材料の、まだ受け取っていない変わった行と打鍵を受け取る。
+  /// 引き取った材料の、まだ受け取っていない変わった行と打鍵を受け取り、それより前の版に組む位置を手放す。
   func receive(_ material: FrameMaterial) {
+    scroll.taken(material: material.revision)
     lines.receive(material.rowEdits)
     minimapCells.receive(material.rowEdits)
     rulerRows.receive(material.rowEdits)

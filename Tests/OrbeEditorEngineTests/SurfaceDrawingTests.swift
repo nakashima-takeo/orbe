@@ -122,11 +122,34 @@ final class SurfaceDrawingTests: EngineTestCase {
     box.updateLimits(
       LimitsUpdate(lineCount: 1000, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7))
     box.place(SIMD2(0, 50))
-    box.place(SIMD2(0, 300), heldUntil: 7)
+    box.place(SIMD2(0, 300), forMaterial: 7)
     XCTAssertEqual(box.frame(at: 0, material: 6).position.y, 50, "古い材料のコマは前の位置")
     XCTAssertEqual(box.peek(at: 0).position.y, 300, "main は新しい位置を読む")
     XCTAssertEqual(box.frame(at: 0, material: 7).position.y, 300)
     XCTAssertEqual(box.frame(at: 0, material: 6).position.y, 300, "一度追いついたら持たない")
+  }
+
+  /// 版を続けて置けば、どの版の材料にもその版に組む位置を返す——版 8 を置いた後でも、版 7 の材料のコマは版 7 で置いた
+  /// 位置を描く（最初の版より前の位置ではない）。範囲と位置を同じ版で続けて置けば、その版より前の材料には両方を置く前の
+  /// ものを組む。描画スレッドが引き取った版より前の組は手放す。
+  func testEachMaterialRevisionTakesThePositionPlacedWithIt() {
+    let box = ScrollBox(elastic: false)
+    box.updateLimits(
+      LimitsUpdate(lineCount: 1000, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7))
+    box.place(SIMD2(0, 50))
+    box.updateLimits(
+      LimitsUpdate(lineCount: 2000, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7),
+      forMaterial: 7)
+    box.place(SIMD2(0, 300), forMaterial: 7)
+    box.place(SIMD2(0, 900), forMaterial: 8)
+    XCTAssertEqual(box.frame(at: 0, material: 6).position.y, 50)
+    XCTAssertEqual(box.frame(at: 0, material: 6).limits.lineCount, 1000, "置く前の範囲")
+    XCTAssertEqual(box.frame(at: 0, material: 7).position.y, 300, "版 8 を置いた後も版 7 の位置")
+    XCTAssertEqual(box.frame(at: 0, material: 7).limits.lineCount, 2000)
+    XCTAssertEqual(box.frame(at: 0, material: 8).position.y, 900)
+    box.place(SIMD2(0, 400), forMaterial: 9)
+    box.taken(material: 9)
+    XCTAssertEqual(box.frame(at: 0, material: 8).position.y, 400, "引き取った版より前の組は手放す")
   }
 
   /// 打鍵で組み直すのは変わった行だけ——打鍵はその 1 行、Enter は分かれた 2 行、複数行の字下げは字下げした行で、見えて
