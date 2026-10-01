@@ -83,9 +83,9 @@ public struct TextRope: Sendable {
   }
 
   /// オフセットが属する行と、行頭からの距離（UTF-16 単位）。
-  public func point(at offset: Int) -> (row: Int, column: Int) {
+  public func point(at offset: Int) -> TextPoint {
     let row = row(containing: offset)
-    return (row, offset - lineStart(row))
+    return TextPoint(row: row, column: offset - lineStart(row))
   }
 
   /// 区間の行（0 始まり・両端を含む）。空の区間はその位置の行 1 つ。

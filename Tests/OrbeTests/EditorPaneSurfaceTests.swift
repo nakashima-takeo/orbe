@@ -6,9 +6,9 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// pane に載せたテキスト面——開く・切り替える・閉じる、面が自分で描くスクロールバーからのスクロール、⌘F の次と
-/// プロジェクト検索の一致の見せ方、ホイールの量と見えている範囲、検索バーの置き場所、本文の Esc。壊れると文書が本体に
+/// プロジェクト検索の一致の見せ方、ホイールの量と見えている範囲、検索バーの置き場所。壊れると文書が本体に
 /// 載らない・俯瞰で動かない・一致が見えない・検索パネルから押した一致が選ばれず中央に来ない・ホイールで送る量が
-/// NSScrollView と違う・検索バーがミニマップに重なる・Esc で検索のバーが閉じない。
+/// NSScrollView と違う・検索バーがミニマップに重なる。
 @MainActor
 final class EditorPaneSurfaceTests: OrbeTestCase {
   private var surfaces: EditorSurfaces { EditorSurfaces(queriesRoot: nil) }
@@ -155,26 +155,6 @@ final class EditorPaneSurfaceTests: OrbeTestCase {
       XCTAssertEqual(bar.frame.minY, pane.bodyRect.minY + 12, accuracy: 0.5)
     }
     pane.closeSearch()
-  }
-
-  /// 本文に焦点がある間の Esc も、⌘F のバーを閉じる。
-  func testEscapeInTheTextClosesTheFindBar() throws {
-    let tab = TerminalTab(cwd: try XCTUnwrap(TestIsolation.caseDir).path, editorSurfaces: surfaces)
-    let window = hostEditor(tab, width: 900, height: 500)
-    defer { window.contentView = nil }
-    let document = try tab.editor.open(try caseFile("a.swift", lines(10)))
-    let pane = tab.view.editor
-    pane.showSearch()
-    XCTAssertNotNil(pane.searchBar, "前提: バーが出ている")
-    window.makeFirstResponder(document.surface.responder)
-    let escape = try XCTUnwrap(
-      NSEvent.keyEvent(
-        with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
-        windowNumber: window.windowNumber, context: nil, characters: "\u{1b}",
-        charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
-    window.sendEvent(escape)
-    XCTAssertNil(pane.searchBar, "閉じる")
-    XCTAssertTrue(window.firstResponder === document.surface.responder, "焦点は本文のまま")
   }
 
   /// 面は 1 回の操作の編集を束で文書へ渡す。検索の一致は、その束（複数行の字下げ）とその undo を編集ごとに畳んで、

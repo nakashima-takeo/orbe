@@ -349,10 +349,7 @@ extension EditorDocument: TextSurfaceDelegate {
     let oldEnd = text.point(at: NSMaxRange(edit.range))
     text.replace(edit.range, with: edit.replacement)
     let newEnd = text.point(at: NSMaxRange(edit.newRange))
-    let record = log.append(
-      edit, start: TextPoint(row: start.row, column: start.column),
-      oldEnd: TextPoint(row: oldEnd.row, column: oldEnd.column),
-      newEnd: TextPoint(row: newEnd.row, column: newEnd.column))
+    let record = log.append(edit, start: start, oldEnd: oldEnd, newEnd: newEnd)
     roles.apply(edit)
     syntax?.post(record, text: text)
     return record

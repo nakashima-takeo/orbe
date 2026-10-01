@@ -39,19 +39,14 @@ final class EditorPresentPerfTests: OrbeTestCase {
 
   /// 1200×800 の窓を画面に出し（activate しない）、1MB の Swift の文書を開く。
   private func show() throws -> (NSWindow, EditorDocument) {
-    let queries = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
-    let tab = TerminalTab(
-      cwd: try XCTUnwrap(TestIsolation.caseDir).path,
-      editorSurfaces: EditorSurfaces(queriesRoot: queries))
-    let window = hostEditor(tab, width: 1200, height: 800)
-    window.appearance = NSAppearance(named: .darkAqua)
-    window.orderFrontRegardless()
-    let document = try tab.editor.open(
+    let host = try editorWindow()
+    host.window.orderFrontRegardless()
+    let document = try host.tab.editor.open(
       try caseFile("big.swift", EditorTypingPerfTests.swiftSource(bytes: 1_000_000)))
-    tab.view.editor.layoutSubtreeIfNeeded()
+    host.pane.layoutSubtreeIfNeeded()
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))
     RunLoop.main.run(until: Date().addingTimeInterval(1))
-    return (window, document)
+    return (host.window, document)
   }
 
   /// 指を一定の速さ（pt/秒、下へ）で動かし続ける。

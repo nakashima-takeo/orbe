@@ -112,13 +112,12 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
     layers.parseAll(text)
     var edited = text
     edited.replace(NSRange(location: at, length: 0), with: insertion)
-    let point = text.point(at: at)
-    let start = TextPoint(row: point.row, column: point.column)
+    let start = text.point(at: at)
     var log = EditLog()
     let record = log.append(
       TextEdit(range: NSRange(location: at, length: 0), replacement: insertion), start: start,
       oldEnd: start,
-      newEnd: TextPoint(row: point.row, column: point.column + insertion.utf16.count))
+      newEnd: TextPoint(row: start.row, column: start.column + insertion.utf16.count))
     let started = DispatchTime.now().uptimeNanoseconds
     _ = layers.apply([record], text: edited)
     return Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
