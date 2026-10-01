@@ -140,7 +140,7 @@ final class LineShaperTests: XCTestCase {
     }
   }
 
-  /// ASCII の字とタブだけの行は位置と x の対応をグリフの位置から作り、その答えは Core Text に縁を数えさせたものと同じ
+  /// 等幅のフォントの ASCII の字とタブだけの行は位置と x の対応をグリフの位置から作り、その答えは Core Text に縁を数えさせたものと同じ
   /// ——主と副の x と、区間の見た目の区間（打ち切った行の描かない部分も）。ASCII でない字を含む行は Core Text に数えさせる。
   func testASCIILinesBuildTheCaretMapFromGlyphsWithTheSameAnswer() {
     let tab = cell * 4
@@ -167,6 +167,10 @@ final class LineShaperTests: XCTestCase {
       XCTAssertFalse(
         LineShaper.shape(source(string), font: font, tabWidth: tab).simple, "\(string.prefix(8))")
     }
+    let proportional = NSFont.systemFont(ofSize: 12) as CTFont
+    XCTAssertFalse(
+      LineShaper.shape(source("let x = 1"), font: proportional, tabWidth: tab).simple,
+      "等幅でないフォントは Core Text に数えさせる")
   }
 
   /// 右から左の字を挟む選択は、見た目の区間ごとに分かれる——`ab שלום cd` の ש ל（位置 3〜5）は右から左の並びの右側、

@@ -18,11 +18,14 @@ struct ShapedLine {
   let omitted: Int
   /// 組んだ行（位置と x の対応を作り、x にいちばん近い位置を引く）。
   let line: CTLine
-  /// 描く単位がどれも ASCII の字かタブで、単位ごとに 1 つのグリフが左から順に並んだ行（minified の 1 行の多く）。
+  /// 等幅のフォントで組んだ、描く単位がどれも ASCII の字かタブで、単位ごとに 1 つのグリフが左から順に並んだ行（minified の
+  /// 1 行の多く）。
   let simple: Bool
 
   /// 行の中の位置と x の対応（キャレット・選択の地・強調の地・装備のある行だけが要る——作る手間は行の長さに比例する）。
-  /// 単純な行はグリフの位置から作る（Core Text に縁を数えさせると 1 万字の行で数 ms かかる。答えは同じ）。
+  /// 単純な行はグリフの位置から作る（Core Text に縁を数えさせると 1 万字の行で数 ms かかる）。等幅のフォントの ASCII の
+  /// 字は合字も詰めも持たないので、字の縁はグリフの位置と送りに一致し、Core Text の答えと同じになる。面のフォントは
+  /// 面を載せる側が等幅のシステムフォントに固定しているが、等幅でないフォントで組んだ行は Core Text に数えさせる。
   var carets: CaretMap {
     simple ? CaretMap(ascii: runs.flatMap(\.xs), width: width) : CaretMap(line, width: width)
   }
@@ -118,7 +121,13 @@ enum LineShaper {
     let shown = display(source)
     let line = makeLine(shown.units, boxes: shown.boxes, font: font, tabWidth: tabWidth)
     return ShapedLine(
-      line, omitted: shown.omitted, boxes: shown.boxes, font: font, ascii: isASCII(shown.units))
+      line, omitted: shown.omitted, boxes: shown.boxes, font: font,
+      ascii: isMonospaced(font) && isASCII(shown.units))
+  }
+
+  /// 等幅のフォント。
+  private static func isMonospaced(_ font: CTFont) -> Bool {
+    CTFontGetSymbolicTraits(font).contains(.traitMonoSpace)
   }
 
   /// どの単位も ASCII の字（U+0020…U+007E）かタブ。
@@ -130,7 +139,8 @@ enum LineShaper {
   static func shape(_ string: String, font: CTFont) -> ShapedLine {
     let units = ContiguousArray(string.utf16)
     let line = makeLine(units, boxes: [:], font: font, tabWidth: 0)
-    return ShapedLine(line, omitted: 0, boxes: [:], font: font, ascii: isASCII(units))
+    return ShapedLine(
+      line, omitted: 0, boxes: [:], font: font, ascii: isMonospaced(font) && isASCII(units))
   }
 
   private static func makeLine(
@@ -206,8 +216,8 @@ enum LineShaper {
 }
 
 extension ShapedLine {
-  /// 組んだ行から写す。書式文字の箱（`boxes`）の位置には、箱の中身の字を同じ元の位置で置く。`ascii` は描く単位がどれも
-  /// ASCII の字かタブか。
+  /// 組んだ行から写す。書式文字の箱（`boxes`）の位置には、箱の中身の字を同じ元の位置で置く。`ascii` は等幅のフォントで
+  /// 組み、描く単位がどれも ASCII の字かタブか。
   fileprivate init(
     _ line: CTLine, omitted: Int, boxes: [Int: UInt16], font: CTFont, ascii: Bool
   ) {
@@ -306,8 +316,9 @@ struct CaretMap: Sendable {
     self.width = width
   }
 
-  /// 単純な行（`ShapedLine.simple`——ASCII の字かタブが単位ごとに 1 つのグリフで左から並ぶ）の対応を、グリフの x から
-  /// 作る。字 i の前の縁は i のグリフの x、後ろの縁は次のグリフの x（最後の字は行の幅）で、Core Text の縁と同じ。
+  /// 単純な行（`ShapedLine.simple`——等幅のフォントで、ASCII の字かタブが単位ごとに 1 つのグリフで左から並ぶ）の対応を、
+  /// グリフの x から作る。字 i の前の縁は i のグリフの x、後ろの縁は次のグリフの x（最後の字は行の幅）で、Core Text の縁と
+  /// 同じ。
   init(ascii xs: [CGFloat], width: CGFloat) {
     let edges = xs.map(Float.init) + [Float(width)]
     primary = edges
