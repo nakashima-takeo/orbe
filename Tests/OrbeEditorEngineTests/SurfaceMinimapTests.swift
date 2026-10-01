@@ -7,7 +7,7 @@ import XCTest
 /// 新しい面のミニマップ——字の形を構文の色で GPU に描き、装飾（選択・検索の一致・語の出現・git の印）を重ね、描いた配置を
 /// main へ渡す。字の列はチャンクごとに覚え、変わった行のチャンクだけ捨てる。壊れるとミニマップが空・字が構文の色でない・
 /// 滑っている間に字や一致が別の行に出る・一致や出現や git の印や選択がミニマップに出ない・打鍵のたびに全部組み直す・色だけ
-/// 変わった行が古い色のまま・押下が描いた配置と違う行を指す。
+/// 変わった行が古い色のまま・長い文書を通すと覚えた字の列が溜まり続ける・押下が描いた配置と違う行を指す。
 @MainActor
 final class SurfaceMinimapTests: EngineTestCase {
   private func rows(_ count: Int) -> String {
@@ -98,6 +98,26 @@ final class SurfaceMinimapTests: EngineTestCase {
     XCTAssertEqual(
       drop([RowEdit(rows: 10..<130, inserted: 120, version: 2, rolesOnly: true)]), [],
       "役割の変わった行のチャンク")
+  }
+
+  /// 字の列は上限のチャンク数までしか覚えない——上限の 3 倍のチャンクを先頭から末尾まで通しても上限を超えず、最後に描いた
+  /// チャンクは残り、最初に描いたチャンクは捨てられている。
+  func testTheChunksStayWithinTheCapacity() throws {
+    let chunks = MinimapCells.capacity * 3
+    let opened = try open(
+      String(repeating: "x\n", count: chunks * MinimapCells.lines),
+      size: CGSize(width: 800, height: 1200), waitForColors: false)
+    let surface = opened.surface
+    for line in stride(from: 0, through: chunks * MinimapCells.lines, by: 500) {
+      surface.scroll(toFirstLine: CGFloat(line))
+      _ = surface.snapshot()
+    }
+    let id = surface.id
+    let kept = RenderThread.shared.performAndWait { $0.slot(id)?.minimapCells.cached ?? [] }
+    XCTAssertLessThanOrEqual(kept.count, MinimapCells.capacity)
+    let placement = try XCTUnwrap(surface.placementBox.read())
+    XCTAssertTrue(kept.contains(placement.startLine / MinimapCells.lines), "最後に描いたチャンクは残る")
+    XCTAssertFalse(kept.contains(0), "最初に描いたチャンクは捨てられている")
   }
 
   /// 字は役割の色で描く（keyword は keyword の色、記号は本文の色）。
