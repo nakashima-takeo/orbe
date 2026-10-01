@@ -35,16 +35,15 @@ extension MetalTextSurface {
   }
 
   /// 先頭に見えている行（小数。行 + 隠れている割合）と見えている行数——俯瞰の式の入力。取引の中で置いた位置も当てた
-  /// 今の位置から出す（トラックを押して飛んだ直後の同じ押下の中でも、飛んだ後の値）。
+  /// 今の位置から出す（トラックを押して飛んだ直後の同じ押下の中でも、飛んだ後の値）。端を越えて見せている分は端で数える。
   var viewportLines: (first: CGFloat, visible: CGFloat) {
     let (position, limits) = scrollState()
-    guard let text = currentContent?.text,
-      let current = measureViewport(position: position, limits: limits)
-    else { return (0, 0) }
-    return (
-      CGFloat(text.row(containing: current.firstVisible)) + current.hiddenFraction,
-      current.visibleLines
-    )
+    guard limits.viewport.y > 0, let text = currentContent?.text else { return (0, 0) }
+    let lineHeight = limits.lineHeight
+    let y = min(max(0, position.y), limits.maximum.y)
+    let row = min(Int((y / lineHeight).rounded(.down)), text.lineCount - 1)
+    let hidden = min(max((y - Double(row) * lineHeight) / lineHeight, 0), 1)
+    return (CGFloat(Double(row) + hidden), CGFloat(limits.viewport.y / lineHeight))
   }
 
   /// 先頭行（小数）の位置へ置く（`viewportLines` の逆。行は行の数に収める。横位置は動かさない）。
@@ -141,13 +140,23 @@ extension MetalTextSurface {
     config.layout(size: size, lineCount: currentContent?.text.lineCount ?? 1)
   }
 
-  /// 見えている範囲を出し直し、変わっていれば文書へ知らせる（同期）。変換中なら IME にも知らせる（候補窓が追従する）。
+  /// 見えている範囲を出し直し、変わっていれば文書へ知らせる（同期）。本文が動いていれば、変換中の IME にも知らせる
+  /// （候補窓が追従する）。
   func refreshViewport() {
     let (position, limits) = scrollState()
-    guard let current = measureViewport(position: position, limits: limits), current != viewport
-    else { return }
-    viewport = current
-    delegate?.surfaceDidChangeViewport(self)
+    if let current = measureViewport(position: position, limits: limits), current != viewport {
+      viewport = current
+      delegate?.surfaceDidChangeViewport(self)
+    }
+    inputMethodScrollDidChange(position)
+  }
+
+  /// 見せている位置（端を越えて見せている分を含む）が前回から動いたら、変換中の IME へ文字の座標が変わったと知らせる。
+  /// 見えている範囲の値では足りない——横だけの動き（キャレットへの横の寄せ・横ホイール・横の弾性の戻り）は先頭行も
+  /// 行数も変えない。
+  private func inputMethodScrollDidChange(_ position: SIMD2<Double>) {
+    guard position != inputMethodPosition else { return }
+    inputMethodPosition = position
     guard editor.isComposing, let context = textView.inputContext else { return }
     context.invalidateCharacterCoordinates()
     if #available(macOS 15.4, *) { context.textInputClientDidScroll() }
@@ -158,17 +167,9 @@ extension MetalTextSurface {
     -> TextViewport?
   {
     guard limits.viewport.y > 0, let text = currentContent?.text else { return nil }
-    let lineHeight = limits.lineHeight
-    let maximum = limits.maximum
-    let x = min(max(0, position.x), maximum.x)
-    let y = min(max(0, position.y), maximum.y)
-    let row = min(Int((y / lineHeight).rounded(.down)), text.lineCount - 1)
-    let hidden = min(max((y - Double(row) * lineHeight) / lineHeight, 0), 1)
-    let cell = Double(config.cell)
+    let y = min(max(0, position.y), limits.maximum.y)
+    let row = min(Int((y / limits.lineHeight).rounded(.down)), text.lineCount - 1)
     return TextViewport(
-      firstVisible: text.lineStart(row), hiddenFraction: CGFloat(hidden),
-      visibleLines: CGFloat(limits.viewport.y / lineHeight),
-      clipsRight: x < maximum.x - 0.5 / Double(textView.window?.backingScaleFactor ?? 2),
-      hiddenColumns: CGFloat(x / cell), visibleColumns: CGFloat(max(0, limits.viewport.x) / cell))
+      firstVisible: text.lineStart(row), visibleLines: CGFloat(limits.viewport.y / limits.lineHeight))
   }
 }

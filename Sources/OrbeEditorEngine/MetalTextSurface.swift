@@ -53,6 +53,8 @@ final class MetalTextSurface: TextSurface {
   var inputDepth = 0
   /// 描画スレッドへ頼んだ横の「見えるところまで」の通し番号。
   var revealSerial = 0
+  /// 変換中の IME へ最後に知らせた、見せている位置（→ `refreshViewport`）。
+  var inputMethodPosition = SIMD2<Double>(0, 0)
 
   init(style: TextSurfaceStyle, omittedLabel: @escaping @Sendable (Int) -> String) {
     Self.nextID += 1

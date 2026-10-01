@@ -1,6 +1,6 @@
 import Foundation
 
-/// 文書の写しの行から答える、俯瞰と検索のための問い合わせ。
+/// 文書の写しの行から答える、検索と出現のための問い合わせ。
 extension EditorDocument {
   /// 選択の先頭の位置の語（出現の強調・⌘F の種）。長い行はキャレットの前後の窓だけを読む（→ `Occurrences.wordWindow`）。
   public func word(at selection: NSRange) -> NSRange? {
@@ -16,19 +16,5 @@ extension EditorDocument {
       caret: selection.location, line: NSRange(location: start, length: end - start))
     return Occurrences.word(
       at: selection, text: text.substring(window), textStart: window.location)
-  }
-
-  /// 面の行番号の列が問う行の数・オフセットの行・行の区間（`TextSurfaceDelegate`）。
-  public func surfaceLineCount(_ surface: any TextSurface) -> Int {
-    text.lineCount
-  }
-
-  public func surface(_ surface: any TextSurface, lineContaining offset: Int) -> Int {
-    text.row(containing: offset)
-  }
-
-  public func surface(_ surface: any TextSurface, rangeOfLine line: Int) -> NSRange {
-    let start = text.lineStart(line)
-    return NSRange(location: start, length: text.lineEnd(line) - start)
   }
 }

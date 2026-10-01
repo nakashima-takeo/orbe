@@ -3,14 +3,13 @@ import Foundation
 import os
 
 /// 開いたファイル 1 つ。識別（URL）・言語・未保存の有無と、本文の写し（ロープ）・版・役割の並びを持つ。テキスト面とは
-/// 開いてから閉じるまで 1 対 1 で、文書は面の delegate として編集（置換後の文字列つき）を受けてロープを追う。本文を読むのは
-/// このロープだけ——面の契約に本文を読む口は無い。本文を自分で持つ面（STTextView）では本文の正は面にあり、持たない面では
-/// このロープが正で、面は写し（`surfaceContent`）を引いて描く。
+/// 開いてから閉じるまで 1 対 1 で、文書は面の delegate として編集（置換後の文字列つき）を受けてロープを追う。本文の正は
+/// このロープで、面は写し（`surfaceContent`）を引いて描く——面の契約に本文を読む口は無い。
 ///
 /// 構文色・行差分（ハンク）・検索・出現は、ロープの写し（版つき）から裏の仕事が作る。打鍵 1 回で main がするのは、ロープの
 /// 置換・役割の並びのずらし・裏への依頼だけで、文書の大きさに依らない。裏の結果は受け取り箱に置かれ、main は今の版の結果なら
-/// そのまま、古い版の結果はその後の編集でずらして使う（字から離れない）。役割は面に問われた区間を並びから引くだけ（色を
-/// どこに置くかは面が決める。文書は窓もキャッシュも持たない）。
+/// そのまま、古い版の結果はその後の編集でずらして使う（字から離れない）。面は役割の並びを写しごと引く（色をどこに置くかは
+/// 面が決める）。
 ///
 /// ディスクの姿（最後に読んだ／書いたファイルのバイト列のダイジェスト）も持ち、外部変更は監視の通知と保存の直前に
 /// 実ファイルを読み直して比べる（`reconcileWithDisk` / `save`）。baseline（比べる底の本文）を持てば、本文との行差分を
@@ -23,7 +22,7 @@ public final class EditorDocument {
   public let url: URL
   public let language: SyntaxLanguage?
   public let surface: any TextSurface
-  /// 本文の写し。面の本文と常に同じ。
+  /// 本文の写し。面はこれを引いて描く。
   public private(set) var text: TextRope
   /// 文書全体の役割の並び。裏の最新の結果を、その後の編集に合わせてずらしたもの。
   public private(set) var roles: RoleRuns
@@ -53,10 +52,7 @@ public final class EditorDocument {
     }
   }
   /// baseline と本文の行差分。編集の直後はずらした前のハンクで、裏の結果が届くと置き換わる。
-  public private(set) var hunks: [LineHunk] = [] {
-    didSet { if hunks != oldValue { onHunksChange?() } }
-  }
-  public var onHunksChange: (() -> Void)?
+  public private(set) var hunks: [LineHunk] = []
   /// 字下げの作法（単位とタブか）。開いたとき、および本文を丸ごと置き換えたときに本文から検出し直し、面へ押す。
   public private(set) var indentation = Indentation.fallback
   /// 面の見えている範囲が変わった（スクロール・窓の高さ）。
@@ -66,8 +62,6 @@ public final class EditorDocument {
   /// 本文が変わった。面の編集の束ごとに 1 回、適用した順の編集の列（どれもその直前の本文の座標で、行の増減が分かる行と桁
   /// つき）で、写しと役割の更新の後に届く——受け手は列を順に畳めば、束の途中の本文を見ずに今の本文へ追いつく。
   public var onTextChange: (([VersionedEdit]) -> Void)?
-  /// 裏から届いた役割で、役割が変わった区間（今の本文の上）。
-  public var onRolesChange: ((IndexSet) -> Void)?
   /// 区間の列の問い（`analyze`）の結果（今の本文の上へずらしたもの）。問いが今と違うかは受け手が見る。
   public var onAnalysis: ((AnalysisRequest, [NSRange]) -> Void)?
   /// アウトライン（`outline`）か、その絞り込み（`outlineFilter`）が変わった。
@@ -93,7 +87,7 @@ public final class EditorDocument {
   /// ディスクの内容で本文を差し替えている間は、その編集で未保存を立てない。
   private var isReplacingFromDisk = false
 
-  /// `surface` は `contents.text` で作った面。ロープは面ではなく読んだ内容から組む。構文の裏の仕事はここで起き、
+  /// `surface` は、まだ文書と結ばれていない面。ロープは読んだ内容から組み、面は結ばれたときに写しを引く。構文の裏の仕事はここで起き、
   /// 全体の解析と先頭の画面ぶんの役割を作り始める（待たない）。
   public convenience init(
     url: URL, contents: Contents, surface: any TextSurface, registry: LanguageRegistry
@@ -309,10 +303,7 @@ public final class EditorDocument {
     }
     receiveOutline(contents)
     discardSettledEdits()
-    if !changedRoles.isEmpty {
-      surface.rolesDidChange(changedRoles)
-      onRolesChange?(changedRoles)
-    }
+    if !changedRoles.isEmpty { surface.rolesDidChange(changedRoles) }
   }
 
   /// 結果を待っている版のうち最も古いものまでの編集を捨てる。構文の裏の仕事は、最後に受け取った版より後ろのどの版の結果も
@@ -385,10 +376,6 @@ extension EditorDocument: TextSurfaceDelegate {
 
   public func surface(_ surface: any TextSurface, focusDidChange focused: Bool) {
     onFocusChange?(focused)
-  }
-
-  public func surface(_ surface: any TextSurface, rolesIn range: NSRange) -> [HighlightSpan] {
-    roles.roles(in: range)
   }
 
   public func surfaceContent(_ surface: any TextSurface) -> SurfaceContent {
