@@ -14,7 +14,7 @@ extension DesignFlowSnapshotTests {
     defer { scene.cleanup() }
     let go = try scene.tab.editor.open(scene.directory.appendingPathComponent("main.go"))
     let pane = scene.pane
-    let surface = try surface(go)
+    let surface = try engine(go)
     pumpMain(
       until: { scene.isReady && go.baseline != nil && go.waitUntilCaughtUp(timeout: 0) },
       "index 版が届き、裏の仕事が追いつく")

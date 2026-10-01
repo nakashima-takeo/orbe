@@ -21,10 +21,6 @@ extension DesignFlowSnapshotTests {
     return try EditorCodeFixtures.scene(queriesRoot: queriesRoot)
   }
 
-  func surface(_ document: EditorDocument) throws -> MetalTextSurface {
-    try XCTUnwrap(document.surface as? MetalTextSurface)
-  }
-
   /// 1 つの窓に載せたまま、手順ごとに撮る（名前と置き場は `flow` と同じ）。
   func hostedFlow(
     _ name: String, _ scene: EditorCodeFixtures.Scene,
@@ -89,7 +85,7 @@ extension DesignFlowSnapshotTests {
   func testEditorOverview() throws {
     let (scene, long) = try longScene()
     defer { scene.cleanup() }
-    let surface = try surface(long)
+    let surface = try engine(long)
     let view = surface.view
     let pointer = surface.textView.overview
     let layout = { surface.surfaceLayout }

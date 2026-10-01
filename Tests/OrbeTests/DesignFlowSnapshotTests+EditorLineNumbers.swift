@@ -10,7 +10,7 @@ extension DesignFlowSnapshotTests {
   func testEditorLineSelect() throws {
     let scene = try codeScene()
     defer { scene.cleanup() }
-    let surface = try surface(scene.document)
+    let surface = try engine(scene.document)
     let view = surface.view
     let config = surface.config
     pumpMain(until: { scene.isReady }, "index 版が届く")

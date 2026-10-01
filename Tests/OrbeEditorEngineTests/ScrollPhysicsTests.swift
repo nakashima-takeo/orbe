@@ -87,7 +87,7 @@ final class ScrollPhysicsTests: XCTestCase {
     XCTAssertEqual(p.shown(at: 1.605), SIMD2(200, 100))
   }
 
-  /// 弾性が有効なら、端を越えた量は 1/20 に縮めて見せ、端の外で指を離すと x0·e^(−τ/0.08) で端へ戻る（指の速さは
+  /// 端を越えた量は 1/20 に縮めて見せ、端の外で指を離すと x0·e^(−τ/0.08) で端へ戻る（指の速さは
   /// 持ち越さない）。続く momentum は捨てる。
   func testElasticOverscrollAndReturn() {
     var p = physics()

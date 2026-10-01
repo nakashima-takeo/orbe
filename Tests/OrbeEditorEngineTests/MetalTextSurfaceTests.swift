@@ -162,7 +162,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
     XCTAssertEqual(surface.drawn.space, srgb, "窓の色空間が変われば解き直す")
   }
 
-  /// 本文が右にまだ続くか——描画スレッドが組んだ行で横の範囲が伸びたら、main の操作を待たずに知らせ直す。右端まで
+  /// 本文が右にまだ続くか——描画スレッドが組んだ行で横の範囲が伸びたら、main の操作を待たずに続くと読める。右端まで
   /// 送れば続かない。
   func testClipsRightTellsWhetherTheTextContinuesToTheRight() throws {
     let narrow = try open("short\n")
@@ -171,7 +171,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
     XCTAssertFalse(narrow.surface.clipsRight)
     let wide = try open(String(repeating: "x", count: 300) + "\n")
     _ = wide.surface.snapshot()
-    pump(until: { wide.surface.clipsRight }, "組んだ行で範囲が伸びれば知らせ直す")
+    pump(until: { wide.surface.clipsRight }, "組んだ行で範囲が伸びれば続く")
     wide.surface.scroll(ScrollInput(timestamp: 0, delta: SIMD2(-10_000, 0), precise: false))
     XCTAssertFalse(wide.surface.clipsRight, "右端まで送れば続かない")
   }

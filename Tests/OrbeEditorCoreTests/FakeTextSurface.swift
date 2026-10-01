@@ -17,8 +17,6 @@ final class FakeTextSurface: TextSurface {
   /// 見えている範囲（本文の言葉）。テストが置く。
   var viewport = TextViewport.empty
   var rightColumnWidth: CGFloat = 0
-  /// `reveal` の履歴。
-  private(set) var revealed: [(range: NSRange, policy: TextReveal)] = []
   var selectedRange = NSRange(location: 0, length: 0) {
     didSet { delegate?.surfaceDidChangeSelection(self) }
   }
@@ -65,9 +63,7 @@ final class FakeTextSurface: TextSurface {
     pull()
   }
 
-  func reveal(_ range: NSRange, policy: TextReveal) {
-    revealed.append((range, policy))
-  }
+  func reveal(_ range: NSRange, policy: TextReveal) {}
 
   func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {}
 

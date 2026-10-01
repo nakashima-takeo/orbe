@@ -19,10 +19,6 @@ final class EditorPaneSurfaceTests: OrbeTestCase {
     return (CGFloat(document.text.row(containing: viewport.firstVisible)), viewport.visibleLines)
   }
 
-  private func metal(_ document: EditorDocument) throws -> MetalTextSurface {
-    try XCTUnwrap(document.surface as? MetalTextSurface)
-  }
-
   private func lines(_ count: Int) -> String {
     (0..<count).map { "let value\($0) = \($0)" }.joined(separator: "\n") + "\n"
   }
@@ -105,7 +101,7 @@ final class EditorPaneSurfaceTests: OrbeTestCase {
     defer { window.contentView = nil }
     let document = try tab.editor.open(try caseFile("a.swift", lines(400)))
     tab.view.editor.layoutSubtreeIfNeeded()
-    let surface = try metal(document)
+    let surface = try engine(document)
     let lineScroll = NSScrollView().verticalLineScroll
     for notches: Int32 in [1, 3] {
       surface.scroll(toFirstLine: 0)
@@ -129,7 +125,7 @@ final class EditorPaneSurfaceTests: OrbeTestCase {
     let document = try tab.editor.open(try caseFile("a.swift", lines(400)))
     let pane = tab.view.editor
     pane.layoutSubtreeIfNeeded()
-    let surface = try metal(document)
+    let surface = try engine(document)
     let style = EditorStyle.make()
     for line: CGFloat in [0.5, 137.25] {
       surface.scroll(toFirstLine: line)

@@ -198,9 +198,9 @@ final class RenderLoopTests: EngineTestCase {
     }
   }
 
-  /// 刻みで描いたコマが組んだ行で横の範囲を伸ばせば、main の操作を待たずに見えている範囲を知らせ直す（本文が右に
+  /// 刻みで描いたコマが組んだ行で横の範囲を伸ばす——main の操作を待たずに、main から読む範囲に入る（本文が右に
   /// まだ続く）。
-  func testAFrameThatWidensTheRangeTellsTheViewport() throws {
+  func testAFrameWidensTheHorizontalRange() throws {
     let opened = try open(String(repeating: "x", count: 300) + "\n")
     let surface = opened.surface
     XCTAssertFalse(surface.clipsRight, "前提: 行を組むまでは横の範囲に入らない")
