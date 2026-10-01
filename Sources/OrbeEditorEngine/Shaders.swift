@@ -110,7 +110,7 @@ enum Shaders {
       float value = round(sheet.sample(s, in.uv).r * 255.0);
       float a = floor(value * u.ratio + 0.001);
       float4 color = unpack_unorm4x8_to_float(colors[in.role]);
-      // 今の面は字を 8bit の乗算済みの絵に合成してから（色 × α を切り捨て）不透明度を掛けて描く。同じ段で丸める。
+      // 字を 8bit の乗算済みの絵に合成してから（色 × α を切り捨て）不透明度を掛ける段で丸める。
       float4 premultiplied = float4(floor(color.rgb * a + 0.001), a);
       return round(premultiplied * u.opacity) / 255.0;
     }

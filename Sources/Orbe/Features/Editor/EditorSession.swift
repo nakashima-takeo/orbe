@@ -40,7 +40,8 @@ final class EditorSession {
     saved?()
   }
 
-  /// ファイルを開いて焦点にする。既に開いていれば焦点を移すだけ（本文は面にあるものが正）。
+  /// ファイルを開いて焦点にする。既に開いていれば焦点を移すだけ。読めない・UTF-8 でなければ文書のエラー、テキスト面を
+  /// 作れなければ `EditorSurfaceError.noMetalDevice` で失敗し、列は変わらない。
   /// 文書の識別は symlink を解いた実体のパス——保存は一時ファイルの rename なので、リンクのパスへ書くと
   /// リンク自体が通常ファイルに置き換わり実体へ届かない。同じ実体を別の綴りで開いても文書が割れない。
   @discardableResult
@@ -51,9 +52,9 @@ final class EditorSession {
       return existing
     }
     let contents = try EditorDocument.read(url)
+    guard let surface = surfaces.make() else { throw EditorSurfaceError.noMetalDevice }
     let document = EditorDocument(
-      url: url, contents: contents, surface: surfaces.make(contents.text),
-      registry: surfaces.registry)
+      url: url, contents: contents, surface: surface, registry: surfaces.registry)
     document.onDirtyChange = { [weak self] _ in self?.onChange?() }
     document.onDiskChange = { [weak self] _ in self?.onChange?() }
     document.onFocusChange = { [weak self] focused in self?.onFocusChange?(focused) }
@@ -62,6 +63,11 @@ final class EditorSession {
     activeDocument = document
     onChange?()
     return document
+  }
+
+  /// テキスト面を描く用意を裏で始める（エディター面が初めて見えたとき。何度呼んでもよい）。
+  func prepareSurfaces() {
+    surfaces.prepare()
   }
 
   func activate(_ document: EditorDocument) {

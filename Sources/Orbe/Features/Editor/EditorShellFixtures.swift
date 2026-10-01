@@ -74,7 +74,7 @@
           (document.text.substring(NSRange(location: 0, length: document.text.length))
           as NSString).range(of: needle).location
         document.surface.selectedRange = NSRange(location: location, length: 0)
-        document.surface.scrollToCenter(location)
+        document.surface.reveal(NSRange(location: location, length: 0), policy: .center)
       }
 
       /// アウトラインの結果が今の版に揃い、キャレットのシンボルが選ばれた。
@@ -117,7 +117,8 @@
       try "todo\n".write(
         to: dir.appendingPathComponent("notes.txt"), atomically: true, encoding: .utf8)
 
-      let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot))
+      let tab = TerminalTab(
+        cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot, language: { .ja }))
       let readmeDocument = try tab.editor.open(readme)
       readmeDocument.surface.responder.perform(Selector(("insertText:")), with: "# ")
       _ = try tab.editor.open(dir.appendingPathComponent("docs/design/tokens.json"))

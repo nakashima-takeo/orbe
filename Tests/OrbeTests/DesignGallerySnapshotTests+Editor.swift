@@ -19,15 +19,6 @@ extension DesignGallerySnapshotTests {
     // サイドバー 240 ＋ レール 36 ＋ 行番号の列 69 の右、俯瞰（ミニマップとスクロールバー）の左に本文。最長行は右端で切れる。
     try writePNG(
       code.view, size: NSSize(width: 1000, height: 480), name: "editor_code.png", dir: dir)
-    // 同じ場面を新しい面（Metal）で。今の面の絵と画素で比べる（→ scripts/compare-editor-engines.py）。
-    let metal = try EditorCodeFixtures.scene(
-      queriesRoot: queriesRoot,
-      engine: EditorEngineChoice(
-        metal: true, elasticScroll: true, fontSmoothing: true, language: .ja))
-    defer { metal.cleanup() }
-    pumpMain(until: { metal.isReady }, "新しい面でも index 版が届いて印が揃う")
-    try writePNG(
-      metal.view, size: NSSize(width: 1000, height: 480), name: "editor_code_metal.png", dir: dir)
 
     let rowStage = NSSize(width: 640, height: 520)
     let cases: [(String, FaceGeometry.FaceDots)] = [

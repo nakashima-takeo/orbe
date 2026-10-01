@@ -5,7 +5,7 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 刻みの止め方と再開（電池を守る規則）と、刻みで描いたコマから main への知らせ、描画スレッドの時間制約。窓を出さない
-/// 刻み（`HeadlessDriver`）で本物の描画スレッドを回す。壊れると、新しい面が 1 コマ目で固まる、止まっている間や隠れた
+/// 刻み（`HeadlessDriver`）で本物の描画スレッドを回す。壊れると、面が 1 コマ目で固まる、止まっている間や隠れた
 /// タブで描き続けて CPU と電池を使う、右にまだ本文が続くのに俯瞰の右の影が出ない、混んだ機械で描画スレッドが遅れて
 /// 起きたり遅いコアに載ったりしてコマが落ちる。
 @MainActor
@@ -95,10 +95,10 @@ final class RenderLoopTests: EngineTestCase {
     surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
     driver.bind(surface.id)
     let deadline = Date().addingTimeInterval(5)
-    while !surface.viewport.clipsRight, Date() < deadline {
+    while !surface.clipsRight, Date() < deadline {
       RunLoop.main.run(until: Date().addingTimeInterval(0.01))
     }
-    XCTAssertTrue(surface.viewport.clipsRight, "前提: 長さを測った")
+    XCTAssertTrue(surface.clipsRight, "前提: 長さを測った")
     waitUntilPaused(surface)
     let id = surface.id
     let shown = RenderThread.shared.performAndWait { $0.slot(id)?.motion.thumb.shown }
@@ -198,19 +198,19 @@ final class RenderLoopTests: EngineTestCase {
     }
   }
 
-  /// 刻みで描いたコマが組んだ行で横の範囲を伸ばせば、main の操作を待たずに見えている範囲を知らせ直す（本文が右に
+  /// 刻みで描いたコマが組んだ行で横の範囲を伸ばす——main の操作を待たずに、main から読む範囲に入る（本文が右に
   /// まだ続く）。
-  func testAFrameThatWidensTheRangeTellsTheViewport() throws {
+  func testAFrameWidensTheHorizontalRange() throws {
     let opened = try open(String(repeating: "x", count: 300) + "\n")
     let surface = opened.surface
-    XCTAssertFalse(surface.viewport.clipsRight, "前提: 行を組むまでは横の範囲に入らない")
+    XCTAssertFalse(surface.clipsRight, "前提: 行を組むまでは横の範囲に入らない")
     surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
     driver.bind(surface.id)
     let deadline = Date().addingTimeInterval(5)
-    while !surface.viewport.clipsRight, Date() < deadline {
+    while !surface.clipsRight, Date() < deadline {
       RunLoop.main.run(until: Date().addingTimeInterval(0.01))
     }
-    XCTAssertTrue(surface.viewport.clipsRight)
+    XCTAssertTrue(surface.clipsRight)
   }
 
   /// 描いた面の刻みに合わせて、描画スレッドは時間制約つきのスレッドになる——刻みごとに 1 コマの計算を、画面に出る予定の

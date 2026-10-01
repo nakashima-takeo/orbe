@@ -4,7 +4,7 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 新しい面の git の印を画素で見る（今の面の `EditorLineMarksTests` と同じ観点）。壊れると印の色・位置が違う、続く行の
+/// 面の git の印を画素で見る（pane に載せた面の `EditorLineMarksTests` と同じ観点）。壊れると印の色・位置が違う、続く行の
 /// バーが行ごとに途切れる、先頭行の上の削除の三角が切れる、行番号が印の列に入る。
 @MainActor
 final class MetalLineMarksTests: EngineTestCase {

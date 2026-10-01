@@ -5,7 +5,7 @@ import os
 
 @testable import OrbeEditorEngine
 
-/// 新しい面の編集と undo——打鍵・キー・⌘Z / ⌘⇧Z が文書の写しと undo に正しく載る。壊れると打鍵が文書に届かない、⌘Z の
+/// 面の編集と undo——打鍵・キー・⌘Z / ⌘⇧Z が文書の写しと undo に正しく載る。壊れると打鍵が文書に届かない、⌘Z の
 /// まとまりが VS Code と違う、保存や外部変更の前の打鍵まで戻る、遠くの undo で本文が空になる、配り先が古い選択を読む。
 @MainActor
 final class SurfaceEditingTests: EngineTestCase {
@@ -157,15 +157,15 @@ final class SurfaceEditingTests: EngineTestCase {
     let far = opened.document.text.lineStart(2500)
     opened.surface.selectedRange = NSRange(location: far, length: 0)
     type(opened, "far")
-    opened.document.scroll(toFirstLine: 0)
+    opened.surface.scroll(toFirstLine: 0)
     opened.surface.selectedRange = NSRange(location: 2, length: 0)
     type(opened, "near")
     undo.undo()
-    XCTAssertEqual(opened.document.viewportLines.first, 0, accuracy: 1, "近くの undo は動かない")
+    XCTAssertEqual(opened.surface.viewportLines.first, 0, accuracy: 1, "近くの undo は動かない")
     undo.undo()
     XCTAssertEqual(text(opened.document), original)
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: far, length: 0))
-    let (first, visible) = opened.document.viewportLines
+    let (first, visible) = opened.surface.viewportLines
     XCTAssertTrue(first <= 2500 && 2500 < first + visible, "戻した場所が見える")
   }
 
@@ -267,17 +267,17 @@ final class SurfaceEditingTests: EngineTestCase {
   }
 
   /// 打鍵の後の横の「見えるところまで」は、行を組む描画スレッドが解く——main は論理の位置だけを材料に添え、描画スレッドが
-  /// キャレットの行を組んで横へ寄せ、見えている範囲を知らせ直す。
+  /// キャレットの行を組んで横へ寄せる。
   func testTypingRevealsTheCaretHorizontallyOnTheRenderThread() throws {
     let opened = try open(String(repeating: "x", count: 300) + "\n")
     _ = host(opened, size: CGSize(width: 400, height: 120))
     opened.surface.selectedRange = NSRange(location: 300, length: 0)
     type(opened, "y")
-    XCTAssertEqual(opened.surface.viewport.hiddenColumns, 0, "main は横に寄せない")
+    XCTAssertEqual(opened.surface.hiddenColumns, 0, "main は横に寄せない")
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.viewport.hiddenColumns > 0 }, "描画スレッドが行の末尾まで寄せる")
-    let viewport = opened.surface.viewport
-    XCTAssertGreaterThanOrEqual(viewport.hiddenColumns + viewport.visibleColumns + 0.5, 301)
+    pump(until: { opened.surface.hiddenColumns > 0 }, "描画スレッドが行の末尾まで寄せる")
+    let surface = opened.surface
+    XCTAssertGreaterThanOrEqual(surface.hiddenColumns + surface.visibleColumns + 0.5, 301)
   }
 
   /// 描画スレッドは頼まれた横の「見えるところまで」を 1 度だけ解く——寄せた後に人が横へ戻せば、次のコマも戻したまま
@@ -288,16 +288,16 @@ final class SurfaceEditingTests: EngineTestCase {
     opened.surface.selectedRange = NSRange(location: 300, length: 0)
     type(opened, "y")
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.viewport.hiddenColumns > 0 }, "前提: 行の末尾まで寄せる")
+    pump(until: { opened.surface.hiddenColumns > 0 }, "前提: 行の末尾まで寄せる")
     opened.surface.scroll(
       ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(100_000, 0), precise: true))
-    XCTAssertEqual(opened.surface.viewport.hiddenColumns, 0, "前提: 人が行頭へ戻した")
+    XCTAssertEqual(opened.surface.hiddenColumns, 0, "前提: 人が行頭へ戻した")
     _ = opened.surface.snapshot()
     pump()
     _ = opened.surface.snapshot()
-    XCTAssertEqual(opened.surface.viewport.hiddenColumns, 0, "戻したまま")
+    XCTAssertEqual(opened.surface.hiddenColumns, 0, "戻したまま")
     type(opened, "z")
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.viewport.hiddenColumns > 0 }, "次の打鍵はまた寄せる")
+    pump(until: { opened.surface.hiddenColumns > 0 }, "次の打鍵はまた寄せる")
   }
 }

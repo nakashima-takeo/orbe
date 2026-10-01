@@ -3,9 +3,9 @@ import XCTest
 
 @testable import OrbeEditorCore
 
-/// 文書が俯瞰と検索へ出す口——インデント単位は文書が検出して面へ押す（開いたとき・丸ごと置き換え）、役割の区間は
-/// 役割の並びから窓ごとに答える、本文・選択・viewport・裏から届いた役割の変化はそれぞれ 1 本の closure で届く（本文は
-/// 写しの更新の後）。
+/// 文書が面と配り先へ出すもの——インデント単位と改行の作法は文書が検出して面へ押す（開いたとき・丸ごと置き換え）、役割の
+/// 区間は役割の並びから窓ごとに答える、本文・選択・viewport の変化はそれぞれ 1 本の closure で届き（本文は写しの更新の
+/// 後）、裏から届いた役割の変化は面へ届く。
 @MainActor
 final class EditorDocumentOverviewTests: XCTestCase {
   private let registry = LanguageRegistry(queriesRoot: Queries.root)
@@ -120,29 +120,28 @@ final class EditorDocumentOverviewTests: XCTestCase {
     XCTAssertEqual(plain.roles.roles(in: NSRange(location: 0, length: 5)), [], "文法が無ければ空")
   }
 
-  /// 束の中の行の数を変える編集ごとにハンクをずらしても、ハンクの知らせは束ごとに 1 回で、配り先は行ごとの増減が分かる
-  /// 編集の列を受ける。壊れると、複数の区間を変える操作で俯瞰が途中の行数で組み直し、ミニマップの区画が行の増減を
-  /// 取り違える。
-  func testHunksChangeOncePerBatchAndReceiversSeeTheRowsOfEachEdit() throws {
+  /// 束の中の行の数を変える編集ごとにハンクをずらしても、行の印は束ごとに 1 回押し、配り先は行ごとの増減が分かる
+  /// 編集の列を受ける。壊れると、複数の区間を変える操作で面が途中の行数の印を描き、配り先（検索の一致のずらし）が行の
+  /// 増減を取り違える。
+  func testLineMarksArePushedOncePerBatchAndReceiversSeeTheRowsOfEachEdit() throws {
     let opened = try open("h.txt", "aa\nbb\ncc\n")
     let (document, surface) = (opened.document, opened.surface)
     document.baseline = "aa\n"
     XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertFalse(document.hunks.isEmpty, "前提: ハンクがある")
-    var changes = 0
+    let pushes = surface.lineMarkPushes
     var rows: [[Int]] = []
-    document.onHunksChange = { changes += 1 }
     document.onTextChange = { rows = $0.map { [$0.start.row, $0.oldEnd.row, $0.newEnd.row] } }
     surface.apply([
       TextEdit(range: NSRange(location: 0, length: 0), replacement: "\n"),
       TextEdit(range: NSRange(location: 5, length: 1), replacement: ""),
     ])
-    XCTAssertEqual(changes, 1)
+    XCTAssertEqual(surface.lineMarkPushes, pushes + 1)
     XCTAssertEqual(rows, [[1, 2, 1], [0, 0, 1]], "後ろの改行を消す編集、前に改行を足す編集の順")
   }
 
   /// 本文の通知は写しの更新の後——通知の中で読む本文と役割の並びは新しい本文の長さで、役割は編集に合わせてずらした前の
-  /// もの（挿した字は隣の連なりを引き継ぐ）。正しい役割は裏から届き、変わった区間が「役割が変わった」で届く。
+  /// もの（挿した字は隣の連なりを引き継ぐ）。正しい役割は裏から届き、変わった区間が面へ「役割が変わった」で届く。
   func testTextChangeArrivesAfterTheCopyAndRolesFollowFromTheBackground() throws {
     let opened = try open("t.swift", "let a = 1\n")
     let (document, surface) = (opened.document, opened.surface)
@@ -150,12 +149,10 @@ final class EditorDocumentOverviewTests: XCTestCase {
     let delivered = surface.changedRoles.count
     var edits: [TextEdit] = []
     var seen: [(length: Int, roles: Int)] = []
-    var changedRoles: [IndexSet] = []
     document.onTextChange = { batch in
       edits.append(contentsOf: batch.map(\.edit))
       seen.append((document.text.length, document.roles.length))
     }
-    document.onRolesChange = { changedRoles.append($0) }
     surface.replace(NSRange(location: 0, length: 0), with: "// c\n")
     XCTAssertEqual(edits, [TextEdit(range: NSRange(location: 0, length: 0), replacement: "// c\n")])
     XCTAssertEqual(seen.map(\.length), [15])
@@ -168,29 +165,13 @@ final class EditorDocumentOverviewTests: XCTestCase {
     XCTAssertEqual(
       document.roles.roles(in: NSRange(location: 0, length: 15)).filter { $0.role == .comment }
         .map(\.range), [NSRange(location: 0, length: 4)])
+    let changedRoles = surface.changedRoles.dropFirst(delivered)
     XCTAssertTrue(
       changedRoles.reduce(IndexSet()) { $0.union($1) }.contains(integersIn: 0..<4),
       "挿した comment の区間は役割が変わった")
-    XCTAssertEqual(Array(surface.changedRoles.dropFirst(delivered)), changedRoles, "面にも同じ区間が届く")
-  }
-
-  /// 俯瞰の式が読む「先頭行（小数）」は viewport の行頭オフセットと隠れ割合から、その逆の「この行を先頭に」は整数部の
-  /// 行頭と小数部の割合へ分けて面に渡す（行の範囲に収める）。
-  func testViewportLinesAndScrollToFirstLineMapBetweenLinesAndOffsets() throws {
-    let opened = try open("v.txt", (0..<10).map { "row \($0)\n" }.joined())
-    let (document, surface) = (opened.document, opened.surface)
-    surface.viewport = TextViewport(
-      firstVisible: document.text.lineStart(3), hiddenFraction: 0.25, visibleLines: 4.5)
-    XCTAssertEqual(document.viewportLines.first, 3.25)
-    XCTAssertEqual(document.viewportLines.visible, 4.5)
-
-    document.scroll(toFirstLine: 7.75)
-    document.scroll(toFirstLine: -3)
-    document.scroll(toFirstLine: 99)
     XCTAssertEqual(
-      surface.toppedAt.map(\.offset),
-      [document.text.lineStart(7), 0, document.text.length])
-    XCTAssertEqual(surface.toppedAt.map(\.hiddenFraction), [0.75, 0, 0], "先頭の前・最終行の先は端に収める")
+      surface.pulled.last?.content.roles.roles(in: NSRange(location: 0, length: 15)),
+      document.roles.roles(in: NSRange(location: 0, length: 15)), "面は知らせで同じ版の役割を引く")
   }
 
   /// 選択の先頭の語は、その行の本文（改行を除く）から、長い行ならキャレットの前後の窓だけを読んで探す。

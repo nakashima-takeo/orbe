@@ -4,8 +4,8 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 新しい面の強調の地——選択の地の上・字の下に、行の高さいっぱい・角なしで、今の面と同じ重ね順で描く。壊れると一致の地が
-/// 選択に隠れる・字を覆う・現在の一致が見分けられない・一致が多いときの重ね順が今の面と違う。
+/// 面の強調の地——選択の地の上・字の下に、行の高さいっぱい・角なしで、決まった重ね順で描く。壊れると一致の地が
+/// 選択に隠れる・字を覆う・現在の一致が見分けられない・一致が多いときの重ね順が崩れる。
 @MainActor
 final class SurfaceHighlightTests: EngineTestCase {
   private static let red = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)
@@ -53,6 +53,31 @@ final class SurfaceHighlightTests: EngineTestCase {
     let beyond = config.columnWidth(lineCount: 3) + 30 * config.cell
     XCTAssertEqual(shot.rgb(beyond, config.topInset + 1), [0, 0, 128], "現在の一致の行全体（本文の区画の幅）")
     XCTAssertEqual(at(1, 1.5), [0, 0, 0], "他の行には無い")
+  }
+
+  /// 長い行を横に送った後も、一致の地は字に付いて動き、見えている窓の中の一致にだけ出る（一致の間には出ない）。
+  func testGroundsOnALongLineFollowTheHorizontalScroll() throws {
+    let line = String(repeating: "ab" + String(repeating: "x", count: 18), count: 30)
+    let opened = try open(line + "\n", name: "a.txt", style: style)
+    _ = host(opened)
+    opened.surface.setHighlights(
+      (0..<30).map { NSRange(location: $0 * 20, length: 2) }, for: .findMatch)
+    _ = try pixelShot(opened)
+    let config = opened.surface.config
+    opened.surface.scroll(toX: 100 * config.cell)
+    XCTAssertEqual(opened.surface.scrollPosition.x, 100 * config.cell, "前提: 横へ 100 桁送った")
+    let shot = try pixelShot(opened)
+    let at = { (column: CGFloat) in
+      shot.rgb(
+        self.probe(opened, row: 0, column: column - 100).0,
+        self.probe(opened, row: 0, column: column - 100).1)
+    }
+    XCTAssertEqual(at(100.5), [255, 0, 0], "窓の左端の一致")
+    XCTAssertEqual(at(121), [255, 0, 0], "窓の中の一致")
+    XCTAssertEqual(at(110.5), [0, 0, 0], "一致の間には無い")
+    XCTAssertEqual(at(130.5), [0, 0, 0])
+    let column = config.columnWidth(lineCount: opened.document.text.lineCount)
+    XCTAssertEqual(shot.rgb(column - 2, config.topInset + 1), [0, 0, 0], "行番号の列の下へくぐらない")
   }
 
   /// 検索の一致が多い（1000 件を超える）ときは、検索の一致が選択文字列の出現と語の出現の下へ回る。焦点が無いとき、選択文字列

@@ -3,6 +3,7 @@ import OrbeEditorCore
 import XCTest
 
 @testable import Orbe
+@testable import OrbeEditorEngine
 
 /// ファイル内検索——⌘F で本文の右上にバーが出て入力欄に焦点、needle で全一致に地・キャレット以降の一致を選んで
 /// 見せ、Enter / ⇧Enter で循環、本文の編集で一致は追従して選択は動かず、文書の切替は同じ needle で敷き直し、
@@ -71,8 +72,10 @@ final class EditorSearchTests: OrbeTestCase {
     catchUp(pane)
     let bar = try XCTUnwrap(pane.searchBar)
     pane.layoutSubtreeIfNeeded()
-    XCTAssertEqual(bar.frame.maxX, pane.surfaceRect.maxX - 12, accuracy: 0.5, "俯瞰の左・右 12")
-    XCTAssertEqual(bar.frame.minY, pane.surfaceRect.minY + 12, accuracy: 0.5, "上 12")
+    XCTAssertEqual(
+      bar.frame.maxX, pane.bodyRect.maxX - pane.rightColumnWidth - 12, accuracy: 0.5,
+      "右列（ミニマップとスクロールバー）の左・右 12")
+    XCTAssertEqual(bar.frame.minY, pane.bodyRect.minY + 12, accuracy: 0.5, "上 12")
     pumpMain(
       until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true },
       "入力欄に焦点")
@@ -142,20 +145,25 @@ final class EditorSearchTests: OrbeTestCase {
     let hosted = try host("x" + String(repeating: " ", count: 200) + "needle\nneedle\n")
     let pane = hosted.pane
     let document = hosted.document
-    let scroll = try XCTUnwrap(document.surface.view.subviews.first as? NSScrollView)
-    XCTAssertEqual(scroll.contentView.bounds.minX, 0)
+    let surface = try engine(document)
+    // 横は描画スレッドが区間の行を組んで寄せる——撮影はその場で出してコマを組む。
+    let x = { () -> Double in
+      _ = surface.snapshot()
+      return surface.scrollPosition.x
+    }
+    XCTAssertEqual(x(), 0)
     pane.showSearch()
     catchUp(pane)
     let bar = try XCTUnwrap(pane.searchBar)
     bar.onNeedleChange?("needle")
     catchUp(pane)
     XCTAssertEqual(document.surface.selectedRange.location, 201)
-    XCTAssertGreaterThan(scroll.contentView.bounds.minX, 0, "横に寄る")
+    XCTAssertGreaterThan(x(), 0, "横に寄る")
     XCTAssertEqual(document.surface.viewport.firstVisible, 0, "縦は動かない")
 
     bar.onNext?()
     XCTAssertEqual(document.surface.selectedRange.location, 208, "2 行目の先頭")
-    XCTAssertEqual(scroll.contentView.bounds.minX, 0, "左端の一致で横が戻る")
+    XCTAssertEqual(x(), 0, "左端の一致で横が戻る")
   }
 
   /// 本文を編集すると一致と件数は追従し、選択（キャレット）は動かない。

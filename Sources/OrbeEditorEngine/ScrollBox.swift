@@ -46,8 +46,8 @@ final class ScrollBox: Sendable {
 
   private let state: OSAllocatedUnfairLock<State>
 
-  init(elastic: Bool) {
-    state = OSAllocatedUnfairLock(initialState: State(physics: ScrollPhysics(elastic: elastic)))
+  init() {
+    state = OSAllocatedUnfairLock(initialState: State(physics: ScrollPhysics()))
   }
 
   /// 出来事を当てる。見えている位置が変わりうるなら true。

@@ -4,7 +4,8 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorCore
 
-/// エディターの計測（`EditorScrollPerfTests`・`EditorSyntaxPerfTests`）が文書を開く窓と、時間の出し方。
+/// エディターの計測（`EditorTypingPerfTests`・`EditorSyntaxPerfTests`・`EditorOutlinePerfTests`）が文書を開く窓と、時間の
+/// 出し方。
 struct OpenedEditor {
   let tab: TerminalTab
   let pane: EditorPaneView
@@ -20,15 +21,13 @@ struct EditorWindow {
 }
 
 extension OrbeTestCase {
-  /// 1200×800 の窓に文書を `engine` の面で開き、裏の仕事（文書全体の構文色）が追いつくのを待つ。
+  /// 1200×800 の窓に文書を開き、裏の仕事（文書全体の構文色）が追いつくのを待つ。
   @MainActor
-  func openEditor(
-    _ text: String, extension ext: String = "swift", engine: EditorEngineChoice = .stTextView
-  ) throws -> OpenedEditor {
-    let host = try editorWindow(engine: engine)
+  func openEditor(_ text: String, extension ext: String = "swift") throws -> OpenedEditor {
+    let host = try editorWindow()
     let document = try host.tab.editor.open(try caseFile("big-\(UUID().uuidString).\(ext)", text))
     host.pane.layoutSubtreeIfNeeded()
-    pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "本文が layout される")
+    pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "面が大きさを持つ")
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))
     host.window.makeFirstResponder(document.surface.responder)
     RunLoop.main.run(until: Date().addingTimeInterval(0.3))
@@ -37,11 +36,11 @@ extension OrbeTestCase {
 
   /// 文書を開く前の、1200×800 の窓とタブ。
   @MainActor
-  func editorWindow(engine: EditorEngineChoice = .stTextView) throws -> EditorWindow {
+  func editorWindow() throws -> EditorWindow {
     let queries = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let tab = TerminalTab(
       cwd: try XCTUnwrap(TestIsolation.caseDir).path,
-      editorSurfaces: EditorSurfaces(queriesRoot: queries, engine: { engine }))
+      editorSurfaces: EditorSurfaces(queriesRoot: queries))
     let window = hostEditor(tab, width: 1200, height: 800)
     window.appearance = NSAppearance(named: .darkAqua)
     return EditorWindow(tab: tab, pane: tab.view.editor, window: window)
@@ -66,5 +65,37 @@ extension OrbeTestCase {
     print(
       "PERF", label, name, "median", String(format: format, median), "p95",
       String(format: format, p95), "max", String(format: format, sorted.last ?? 0))
+  }
+}
+
+extension EditorDocument {
+  /// 面の見えている行の区間（先頭に見えている行から、見えている行の数を切り上げた行の終わりまで）。
+  var visibleRange: NSRange {
+    let viewport = surface.viewport
+    let first = text.row(containing: viewport.firstVisible)
+    let start = text.lineStart(first)
+    return NSRange(
+      location: start, length: text.lineEnd(first + Int(viewport.visibleLines.rounded(.up))) - start
+    )
+  }
+
+  /// 打鍵 `typed` の後、裏の仕事が追いつくまで main を回し、裏から届いた結果で見えている行の役割が変わるたびに時刻（ms、
+  /// `since` から）とその役割を記録する（打鍵がその場でずらした役割から数える。裏を急かさない——本番と同じ経路）。
+  func visibleRoleChanges(
+    after typed: () -> Void, since start: UInt64, timeout: TimeInterval = 60
+  ) -> [(time: Double, roles: [HighlightSpan])] {
+    typed()
+    var last = roles.roles(in: visibleRange)
+    var changes: [(time: Double, roles: [HighlightSpan])] = []
+    let deadline = Date().addingTimeInterval(timeout)
+    repeat {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.001))
+      let now = roles.roles(in: visibleRange)
+      if now != last {
+        changes.append((Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000, now))
+        last = now
+      }
+    } while !isCaughtUp && Date() < deadline
+    return changes
   }
 }

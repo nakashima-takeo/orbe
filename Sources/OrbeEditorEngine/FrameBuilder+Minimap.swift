@@ -321,7 +321,8 @@ private struct MinimapRows {
     return ranges[low..<upper]
   }
 
-  /// 行 `row` の UTF-16 位置 `index` の x（ミニマップの幅 `width` で止まる——`MinimapLine.decorationColumns`）。行の
+  /// 行 `row` の UTF-16 位置 `index` の x（ミニマップの幅 `width` と描ける桁で止まる——VS Code `getXOffsetForPosition` の
+  /// 打ち切り）。行の
   /// 本文の終わりより右は本文の終わり。
   func x(row: Int, at index: Int, width: CGFloat) -> CGFloat {
     guard index > 0 else { return gutter }

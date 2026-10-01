@@ -95,7 +95,7 @@ extension Renderer {
   /// 切り取って 行番号 → git の印、本文の列に切り取って 未確定の文字の下線・キャレット・落とす位置の印、面の全体で 影（上端・
   /// ミニマップの左）→ ミニマップ（字 → 装飾）→ 俯瞰の図形（縦スクロールバーの印 → 縁 → ミニマップの帯・縦横の
   /// つまみ）。地は描かない（透明に消し、下の地を透かす）。ミニマップの装飾は先に画面外の 1 枚に描き、組として不透明度
-  /// .9 で重ねる（重なる装飾の合成が今の面の透明の層と同じになる）。
+  /// .9 で重ねる（重なる装飾が組として 1 回だけ透ける）。
   func encode(
     _ built: FrameBuilder, buffer: MTLBuffer, into texture: MTLTexture, _ pass: Pass,
     _ commands: MTLCommandBuffer
@@ -206,8 +206,8 @@ extension Renderer {
       pass.minimapLayer = slot.minimapLayer
     }
     pass.minimapColors =
-      [palette.text.packed]
-      + palette.roles.map(\.packed)
+      [palette.text.color.packed]
+      + palette.roles.map(\.color.packed)
     return pass
   }
 

@@ -15,7 +15,6 @@ extension SettingsRegistryTests {
         .worktreeDir, .notificationSound, .notificationSoundVolume,
         .notificationSoundEnabled, .notificationSoundCustomDone, .notificationSoundCustomWaiting,
         .notificationSoundCustomWaitingSameAsDone, .menuBarNotificationDuration,
-        .editorEngineMetal, .editorScrollElastic, .editorFontSmoothing,
       ])
   }
 
@@ -41,9 +40,8 @@ extension SettingsRegistryTests {
       SettingsRegistry.nonRootIDs,
       [
         .notificationSoundCustomDone, .notificationSoundCustomWaiting,
-        .notificationSoundCustomWaitingSameAsDone, .editorEngineMetal, .editorScrollElastic,
-        .editorFontSmoothing,
-      ], "root に出さないのは、カスタム設定サブでだけ編集する音源 3 件とエディターのエンジンの切り替え 3 件だけ")
+        .notificationSoundCustomWaitingSameAsDone,
+      ], "root に出さないのは、カスタム設定サブでだけ編集する音源 3 件だけ")
     XCTAssertEqual(
       Set(SettingsRegistry.rootOrder.map(\.id)), allIDs.subtracting(SettingsRegistry.nonRootIDs),
       "rootOrder は非掲載を除く全 case をちょうど覆う")

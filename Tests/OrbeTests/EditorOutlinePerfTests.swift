@@ -17,7 +17,7 @@ final class EditorOutlinePerfTests: OrbeTestCase {
   /// 1MB の Swift で、アウトラインを開いたときと閉じたときの打鍵 1 回の main の仕事（`typing-main` と同じ区間）。開いても
   /// 中央値が閉じたときの 1.5 倍を超えない（文書の大きさ・シンボルの数に比例する仕事が打鍵に乗らない）。
   func testTypingMainTimeWithTheOutlineOpen() throws {
-    let text = EditorScrollPerfTests.swiftSource(bytes: 1_000_000)
+    let text = EditorTypingPerfTests.swiftSource(bytes: 1_000_000)
     var medians: [Bool: Double] = [:]
     for open in [false, true] {
       let opened = try openEditor(text)
@@ -25,10 +25,10 @@ final class EditorOutlinePerfTests: OrbeTestCase {
       let timer = EditTimer(inner: opened.document)
       opened.document.surface.delegate = timer
       let document = opened.document
-      let middle = document.text.lineCount / 3
-      document.scroll(toFirstLine: CGFloat(middle))
-      document.surface.selectedRange = NSRange(
-        location: document.text.lineStart(middle + 5) + 4, length: 0)
+      let caret = NSRange(
+        location: document.text.lineStart(document.text.lineCount / 3 + 5) + 4, length: 0)
+      document.surface.selectedRange = caret
+      document.surface.reveal(caret, policy: .center)
       RunLoop.main.run(until: Date().addingTimeInterval(0.3))
       for character in "let value = compute(offset) ok" {
         document.surface.responder.keyDown(with: .key(String(character), []))
@@ -49,46 +49,32 @@ final class EditorOutlinePerfTests: OrbeTestCase {
   /// なるまで（`crumbling-keystroke` の `visible-final` と同じ区間）を、アウトラインを開いたときと閉じたときで並べる——
   /// 取り出しは専用の裏の仕事なので、見えている行の色を待たせない。
   func testVisibleColorsDoNotWaitForTheOutline() throws {
-    let text = EditorScrollPerfTests.swiftSource(bytes: 1_000_000)
+    let text = EditorTypingPerfTests.swiftSource(bytes: 1_000_000)
     for open in [false, true] {
       let opened = try openEditor(text)
       if open { try openOutline(opened) }
       let document = opened.document
       let middle = document.text.lineCount / 2
-      document.scroll(toFirstLine: CGFloat(middle - 10))
-      document.surface.selectedRange = NSRange(location: document.text.lineStart(middle), length: 0)
+      let caret = NSRange(location: document.text.lineStart(middle), length: 0)
+      document.surface.selectedRange = caret
+      document.surface.reveal(caret, policy: .center)
       for character in "let v = f" {
         document.surface.responder.keyDown(with: .key(String(character), []))
       }
       XCTAssertTrue(pumpUntilCaughtUp(document))
       RunLoop.main.run(until: Date().addingTimeInterval(0.5))
-      let visible = { () -> NSRange in
-        let lines = document.viewportLines
-        let first = Int(lines.first)
-        let start = document.text.lineStart(first)
-        return NSRange(
-          location: start,
-          length: document.text.lineEnd(first + Int(lines.visible.rounded(.up))) - start)
-      }
-      var deliveries: [(time: Double, roles: [HighlightSpan])] = []
-      let began = DispatchTime.now().uptimeNanoseconds
-      let elapsed = { Double(DispatchTime.now().uptimeNanoseconds - began) / 1_000_000 }
-      let minimap = document.onRolesChange
-      document.onRolesChange = { changed in
-        minimap?(changed)
-        deliveries.append((elapsed(), document.roles.roles(in: visible())))
-      }
-      document.surface.responder.keyDown(with: .key("(", []))
-      XCTAssertTrue(pumpUntilCaughtUp(document))
-      let final = document.roles.roles(in: visible())
+      let changes = document.visibleRoleChanges(
+        after: { document.surface.responder.keyDown(with: .key("(", [])) },
+        since: DispatchTime.now().uptimeNanoseconds)
+      XCTAssertTrue(document.isCaughtUp)
+      let final = document.roles.roles(in: document.visibleRange)
       let settled =
-        deliveries.first { delivery in
-          deliveries.drop { $0.time < delivery.time }.allSatisfy { $0.roles == final }
+        changes.first { change in
+          changes.drop { $0.time < change.time }.allSatisfy { $0.roles == final }
         }?.time ?? 0
       print(
         "PERF", "1MB", open ? "visible-final (アウトラインを開いて)" : "visible-final",
         String(format: "%.1f", settled))
-      document.onRolesChange = minimap
       opened.window.orderOut(nil)
     }
   }
@@ -101,7 +87,7 @@ final class EditorOutlinePerfTests: OrbeTestCase {
   /// 無い）。深い入れ子は、問い合わせが深さの 2 乗になる上流の性質を受け入れて値を出すだけ。
   func testOutlineMainWorkOnLargeDocuments() throws {
     for (label, ext, text) in [
-      ("1MB-swift", "swift", EditorScrollPerfTests.swiftSource(bytes: 1_000_000)),
+      ("1MB-swift", "swift", EditorTypingPerfTests.swiftSource(bytes: 1_000_000)),
       ("800KB-json", "json", Self.packageLock(bytes: 800_000)),
       ("5MB-json", "json", Self.packageLock(bytes: 5_000_000)),
       ("2MB-array-json", "json", Self.recordArray(bytes: 2_000_000)),

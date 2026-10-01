@@ -4,8 +4,8 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 新しい面の俯瞰の操作——ミニマップの帯のドラッグ・帯の外の押下、縦横のスクロールバーのつまみとトラック、ホバーで
-/// 現れる帯とつまみ、俯瞰の上のポインタ（今の面の俯瞰と同じ規則）。壊れると帯を掴めない・押した行が中央に来ない・
+/// 面の俯瞰の操作——ミニマップの帯のドラッグ・帯の外の押下、縦横のスクロールバーのつまみとトラック、ホバーで
+/// 現れる帯とつまみ、俯瞰の上のポインタ（VS Code と同じ規則）。壊れると帯を掴めない・押した行が中央に来ない・
 /// トラックを押しても飛ばない・横に動かない・俯瞰の上で文字が選ばれる。
 @MainActor
 final class SurfaceOverviewTests: EngineTestCase {
@@ -288,6 +288,8 @@ final class SurfaceOverviewTests: EngineTestCase {
     }
     let left = try pixelShot(opened)
     XCTAssertEqual(thumbColor(left), [0, 0, 0], "本体から出ると消える（動きを減らす設定では時間を掛けない）")
+    let after = try XCTUnwrap(opened.surface.placementBox.read())
+    XCTAssertFalse(left.hasInk(layout.minimap.maxX - 2, after.sliderTop + 1), "帯も消える")
   }
 }
 

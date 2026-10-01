@@ -141,24 +141,6 @@ Code editor (Contents/MacOS/Orbe, Contents/Resources/TreeSitter*.bundle,
 Contents/Resources/Orbe_OrbeEditorCore.bundle)
 --------------------------------------------------------------------------------
 
-* STTextView — Copyright Marcin Krzyżanowski — GPL-3.0 (dual-licensed with a
-  commercial license; Orbe uses it under the GPL-3.0 terms, which its own
-  GPL-3.0-or-later grant satisfies)
-  The text engine of the editor face (TextKit 2 view, gutter, rendering
-  attributes). Linked into Contents/MacOS/Orbe.
-  https://github.com/krzyzanowskim/STTextView
-  License: licenses/STTextView-LICENSE.txt
-
-* STTextKitPlus — Copyright (c) Marcin Krzyżanowski — BSD-3-Clause
-  TextKit 2 helpers pulled in by STTextView. Linked into Contents/MacOS/Orbe.
-  https://github.com/krzyzanowskim/STTextKitPlus
-  License: licenses/STTextKitPlus-LICENSE.txt
-
-* CoreTextSwift — Copyright (c) 2020-2023 Marcin Krzyzanowski — MIT License
-  CoreText helpers pulled in by STTextView. Linked into Contents/MacOS/Orbe.
-  https://github.com/krzyzanowskim/CoreTextSwift
-  License: licenses/CoreTextSwift-LICENSE.txt
-
 * swift-corelibs-foundation — Copyright (c) Apple Inc. and the Swift project
   authors — Apache-2.0 with Runtime Library Exception
   The backward-deletion rule of CoreFoundation's CFString.c

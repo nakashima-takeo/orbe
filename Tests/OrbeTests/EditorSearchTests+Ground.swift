@@ -3,6 +3,7 @@ import OrbeEditorCore
 import XCTest
 
 @testable import Orbe
+@testable import OrbeEditorEngine
 
 /// ファイル内検索の、バーの外に現れる結果——全一致の地と現在の一致の地（編集の間も字に付く）、選択から導く件数、閉じた後の
 /// 開き直し、文書を汚さないこと。
@@ -80,9 +81,7 @@ extension EditorSearchTests {
     let ground = try PaneProbe(pane).rgb(scrolled.x, y: cellCenter(hosted, line: 12, column: 3).y)
     XCTAssertTrue(PaneProbe.same(try PaneProbe(pane).rgb(scrolled.x, y: scrolled.y), ground))
 
-    let scroll = try XCTUnwrap(hosted.document.surface.view.subviews.first as? NSScrollView)
-    scroll.contentView.scroll(to: NSPoint(x: 0, y: style.lineHeight * 20))
-    scroll.reflectScrolledClipView(scroll.contentView)
+    try engine(hosted.document).scroll(toFirstLine: 20)
     _ = try probe(pane) { try !PaneProbe.same($0.rgb(scrolled.x, y: scrolled.y), ground) }
   }
 

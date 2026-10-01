@@ -92,7 +92,7 @@ extension FrameBuilder {
       decorShapes.append(
         ShapeInstance(
           rect: SIMD4(Float(left), Float(top), Float(right - left), Float(thickness)),
-          color: ink.packed, radius: 0, kind: 0))
+          color: ink.color.packed, radius: 0, kind: 0))
     }
   }
 

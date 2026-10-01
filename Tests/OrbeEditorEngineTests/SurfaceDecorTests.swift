@@ -4,7 +4,7 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 新しい面の行の装備——インデント線・空白の丸点・URL の下線（規則は今の面と同じ Core の純関数）。壊れると線が段の途中に
+/// 面の行の装備——インデント線・空白の丸点・URL の下線（規則は Core の純関数）。壊れると線が段の途中に
 /// 立つ・空行の線が途切れる・単語間の空白に点が出る・下線が URL からずれる・選択が装備を覆わない。
 @MainActor
 final class SurfaceDecorTests: EngineTestCase {
@@ -40,7 +40,7 @@ final class SurfaceDecorTests: EngineTestCase {
     let blank = String(repeating: "\n", count: 60)
     let opened = try open(
       "f {\n    a" + blank + "    b\n}\n", name: "a.txt", size: CGSize(width: 400, height: 200))
-    opened.surface.scroll(toTop: opened.document.text.lineStart(20), hiddenFraction: 0)
+    opened.surface.scroll(toFirstLine: 20)
     let shot = try pixelShot(opened)
     XCTAssertTrue(shot.hasInk(x(opened, 4) + 0.25, rowMidY(2)), "上下の外の 1 段の行から段 1")
   }

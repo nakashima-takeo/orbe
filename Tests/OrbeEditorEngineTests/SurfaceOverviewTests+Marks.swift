@@ -4,7 +4,7 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 新しい面の縦スクロールバーの印と縁と影（今の面の俯瞰と同じ規則）。壊れると git の変更・検索の一致・語の出現・キャレットの
+/// 面の縦スクロールバーの印と縁と影（VS Code と同じ規則）。壊れると git の変更・検索の一致・語の出現・キャレットの
 /// 位置がスクロールバーに出ない・違うレーンに出る、前へ伸ばした選択でキャレットの印が動かない側の端に出る、縁が無い、
 /// 上に隠れた行や右に続く本文があるのに影が出ない（無いのに出る）、影がミニマップに掛かる。
 @MainActor
@@ -76,7 +76,7 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
       String(repeating: "x", count: 400) + String(repeating: "\n", count: 60),
       size: CGSize(width: 800, height: 400), style: style)
     _ = opened.surface.snapshot()
-    pump(until: { opened.surface.viewport.clipsRight }, "前提: 長い行の長さを測った")
+    pump(until: { opened.surface.clipsRight }, "前提: 長い行の長さを測った")
     let edge = opened.surface.surfaceLayout.minimap.minX
     let y: CGFloat = 200
     let shot = try pixelShot(opened, background: Self.white)
@@ -85,7 +85,7 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     XCTAssertEqual(shot.rgb(edge - 3, y), [255, 255, 255], "帯の中には描かない")
     XCTAssertEqual(shot.rgb(edge + 0.5, y), [255, 255, 255], "ミニマップに掛けない")
     opened.surface.scroll(toX: opened.surface.scrollState().limits.maximum.x)
-    XCTAssertFalse(opened.surface.viewport.clipsRight, "前提: 右端まで送った")
+    XCTAssertFalse(opened.surface.clipsRight, "前提: 右端まで送った")
     XCTAssertEqual(
       try pixelShot(opened, background: Self.white).rgb(edge - 7, y), [255, 255, 255],
       "右に続かなければ無い")

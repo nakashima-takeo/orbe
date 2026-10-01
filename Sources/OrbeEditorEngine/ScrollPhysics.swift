@@ -59,10 +59,10 @@ extension ScrollInput.Phase {
 /// - 指の出来事（トラックパッド）の量は 1 倍でその場で位置に足す。OS の momentum の出来事も同じ経路を通り、補間・予測・
 ///   自前の慣性は持たない。
 /// - 動かす軸は、120ms で減衰する縦横の量の累積の大きい方だけ（主でない軸の量は捨てる）。
-/// - 弾性が有効なら、端を越えた量は 1/20 に縮めて見せる。指を離したとき端を越えていれば、そこから端へ戻る。OS の
-///   momentum が端を越えたら、その時点で戻り始め、残りの momentum は次に指が触れるまで捨てる（WebKit・AppKit の形）。
-///   戻りは端からのずれ `x0` と戻り始めの速さ `v`（指を離したときは 0）から `x(τ) = (x0 + 0.31·v·τ)·e^(−τ/0.08)`
-///   （AppKit と同じ式）。戻りの途中に指が触れたらそこで止まる。無効なら端で止める。
+/// - 端を越えた量は 1/20 に縮めて見せる。指を離したとき端を越えていれば、そこから端へ戻る。OS の momentum が端を
+///   越えたら、その時点で戻り始め、残りの momentum は次に指が触れるまで捨てる（WebKit・AppKit の形）。戻りは端からの
+///   ずれ `x0` と戻り始めの速さ `v`（指を離したときは 0）から `x(τ) = (x0 + 0.31·v·τ)·e^(−τ/0.08)`（AppKit と同じ
+///   式）。戻りの途中に指が触れたらそこで止まる。
 /// - マウスのホイールは 1 目盛り（量 1）を 10pt として、その場で当てる（NSScrollView の行送りと同じ）。
 struct ScrollPhysics: Sendable {
   /// 範囲を決める値。縦は最終行が最上段に来るまで、横は見たことのある最も長い行の右端から 5 桁先まで。
@@ -80,6 +80,22 @@ struct ScrollPhysics: Sendable {
       SIMD2(
         max(0, longestLine + ScrollPhysics.trailingColumns * cell - viewport.x),
         max(0, Double(lineCount - 1) * lineHeight))
+    }
+
+    /// 位置 `position` で先頭に見えている行（`lineCount` 行の文書の行）と、その行が上へ隠れている割合（0…1）。端を越えて
+    /// 見せている分は端で数える（俯瞰と見えている範囲は端の位置を表す）。
+    func firstVisible(at position: SIMD2<Double>, lineCount: Int) -> (row: Int, hidden: Double) {
+      let y = min(max(0, position.y), maximum.y)
+      let row = min(Int((y / lineHeight).rounded(.down)), max(0, lineCount - 1))
+      return (row, min(max((y - Double(row) * lineHeight) / lineHeight, 0), 1))
+    }
+
+    /// 位置 `position` で先頭に見えている行（小数。行 + 隠れている割合）と見えている行数——俯瞰の式の入力。
+    func viewportLines(at position: SIMD2<Double>, lineCount: Int) -> (
+      first: CGFloat, visible: CGFloat
+    ) {
+      let (row, hidden) = firstVisible(at: position, lineCount: lineCount)
+      return (CGFloat(Double(row) + hidden), CGFloat(viewport.y / lineHeight))
     }
   }
 
@@ -102,7 +118,6 @@ struct ScrollPhysics: Sendable {
   }
 
   var limits = Limits()
-  let elastic: Bool
   private var mode = Mode.idle
   /// idle のときの位置、tracking のときの弾性を掛ける前の位置。
   private var raw = SIMD2<Double>(0, 0)
@@ -112,10 +127,6 @@ struct ScrollPhysics: Sendable {
   private var velocity = SIMD2<Double>(0, 0)
   /// momentum が端を越えたか、端の外で指を離した。次に指が触れるまで momentum の出来事を捨てる。
   private var ignoresMomentum = false
-
-  init(elastic: Bool) {
-    self.elastic = elastic
-  }
 
   var maximum: SIMD2<Double> { limits.maximum }
 
@@ -176,7 +187,7 @@ struct ScrollPhysics: Sendable {
       case .began, .changed:
         if case .tracking = mode {} else { startTracking(at: t) }
         guard drag(input) else { return false }
-        if elastic, edge(of: raw.x, axis: 0) != nil || edge(of: raw.y, axis: 1) != nil {
+        if edge(of: raw.x, axis: 0) != nil || edge(of: raw.y, axis: 1) != nil {
           startReturning(at: t, velocity: velocity)
         }
         return true
@@ -241,7 +252,6 @@ struct ScrollPhysics: Sendable {
     guard d != .zero else { return false }
     raw -= d
     if maximum.x <= 0 { raw.x = 0 }
-    if !elastic { raw = clamp(raw) }
     return true
   }
 
@@ -283,11 +293,11 @@ struct ScrollPhysics: Sendable {
 
   private func rubber(_ x: Double, axis a: Int) -> Double {
     guard let e = edge(of: x, axis: a) else { return x }
-    return elastic ? e + (x - e) / Self.stiffness : e
+    return e + (x - e) / Self.stiffness
   }
 
   private func unrubber(_ x: Double, axis a: Int) -> Double {
     guard let e = edge(of: x, axis: a) else { return x }
-    return elastic ? e + (x - e) * Self.stiffness : e
+    return e + (x - e) * Self.stiffness
   }
 }

@@ -157,7 +157,7 @@ final class FrameBuilder {
       config: config, tabColumns: tabColumns, roles: content.roles)
     textScissor = Self.scissor(x: g.column, y: g.top, width: g.textRight - g.column, g)
     gutterScissor = Self.scissor(x: 0, y: g.top, width: g.column, g)
-    let lines = Self.viewportLines(source, lineCount: lineCount, config: config)
+    let lines = source.limits.viewportLines(at: source.position, lineCount: lineCount)
     buildMinimap(layout, lines: lines, source, content, c)
     drawShadows(layout, lines: lines, clipsRight: Self.clipsRight(source), c)
     drawVerticalScrollbar(layout, lines: lines, source, content, c)
@@ -214,20 +214,7 @@ final class FrameBuilder {
     return result
   }
 
-  /// 先頭に見えている行（小数。行 + 隠れている割合）と見えている行数——見えている範囲の通知と同じ意味の値で、端を越えて
-  /// 見せている間は端で数える（俯瞰は端の位置を表す）。
-  static func viewportLines(_ source: Source, lineCount: Int, config: SurfaceConfig) -> (
-    first: CGFloat, visible: CGFloat
-  ) {
-    let limits = source.limits
-    let lineHeight = Double(config.lineHeight)
-    let y = min(max(0, source.position.y), limits.maximum.y)
-    let row = min(Int((y / lineHeight).rounded(.down)), max(0, lineCount - 1))
-    let hidden = min(max((y - Double(row) * lineHeight) / lineHeight, 0), 1)
-    return (CGFloat(Double(row) + hidden), CGFloat(limits.viewport.y / lineHeight))
-  }
-
-  /// 本文が右にまだ続く（横に隠れている部分がある）か——見えている範囲の通知と同じ判定。
+  /// 本文が右にまだ続く（横に隠れている部分がある）か。
   static func clipsRight(_ source: Source) -> Bool {
     let maximum = source.limits.maximum.x
     return min(max(0, source.position.x), maximum) < maximum - 0.5 / Double(source.material.scale)
@@ -315,7 +302,7 @@ final class FrameBuilder {
 
   /// グリフを置く。横の置き方はアトラスが Core Graphics と同じに決める。縦は装置の画素に揃え、端数は Core Graphics と
   /// 同じく下向きへ切り上げる。
-  func place(_ item: Glyph, _ ink: FrameColor, _ layer: FrameBuilderLayer, _ c: Context) {
+  func place(_ item: Glyph, _ ink: InkColor, _ layer: FrameBuilderLayer, _ c: Context) {
     guard
       let (entry, pen) = c.atlas.glyph(
         font: item.font, glyph: item.glyph, x: item.x, dilation: ink.dilation)
@@ -324,7 +311,7 @@ final class FrameBuilder {
       position: SIMD2(
         Float(pen) + Float(entry.left), Float(item.baseline.rounded(.up)) - Float(entry.top)),
       size: SIMD2(Float(entry.w), Float(entry.h)), uv: SIMD2(Float(entry.u), Float(entry.v)),
-      color: entry.isColor ? 0xFFFF_FFFF : ink.packed)
+      color: entry.isColor ? 0xFFFF_FFFF : ink.color.packed)
     let page = Int(entry.page)
     if entry.isColor {
       Self.append(instance, to: &color, page: page)

@@ -2,12 +2,11 @@ import AppKit
 
 /// 文字を描き編集を受ける面の、エンジン非依存の契約。undo・選択・スクロールの正は面にある。契約に面の本文を読む口は
 /// 無い——面は編集の通知で置換後の文字列を渡し、Orbe の中で本文を読むのは文書の写し（ロープ）だけ。文書は面の delegate
-/// として編集を受け、面に問われた区間の役割を答え、役割が変わった区間を知らせる（面は見えている範囲の色だけを持ち、
-/// 役割→色だけを知る）。本文を自分で持たない面は、文書の写し（`surfaceContent`）を引いて描く。
+/// として編集を受け、役割が変わった区間と行の印を知らせる。面は本文を持たず、文書の写し（`surfaceContent`）を引いて
+/// 描く（役割→色だけを知る）。
 @MainActor
 public protocol TextSurface: AnyObject {
-  /// 器へ載せる view（スクロールを含む全体）。面の外（俯瞰など）で起きたホイールの出来事をこの view の `scrollWheel`
-  /// へ渡すと、面は自分のスクロールへ渡す。
+  /// 器へ載せる view（スクロールを含む全体）。
   var view: NSView { get }
   /// first responder にする view。
   var responder: NSView { get }
@@ -15,19 +14,18 @@ public protocol TextSurface: AnyObject {
   /// 見えている範囲を本文の言葉で（面の pt は出ない）。
   var viewport: TextViewport { get }
 
-  /// そのオフセットの行を可視範囲の中央へスクロールする（先頭・末尾では端で止まる）。選択は動かさない。
-  func scrollToCenter(_ offset: Int)
+  /// 右列（ミニマップ＋縦スクロールバー）の幅（pt）。面は俯瞰（ミニマップ・縦横のスクロールバーと印・影）を自分で描き、
+  /// 載せる側は面の上に浮かべる部品（検索バー）をこの幅から置く。本文の座標ではなく view の配置の事実で、view の幅と
+  /// 行番号の列の桁で変わる。載せる側は大きさを変えたときと見えている範囲の知らせで読み直す（本文の変化の知らせの中では
+  /// 変化の前の幅を答える）。
+  var rightColumnWidth: CGFloat { get }
 
-  /// `viewport` の逆——行頭オフセット `offset` の行を、その高さの `hiddenFraction`（0…1）ぶん上へ隠して先頭に置く。
-  /// スクロールできる範囲（最終行が最上段に来るまで）の端で止まる。横位置と選択は動かさない。行は文書の行
-  /// （本文が改行で終わるときの末尾の空行を含む）。
-  func scroll(toTop offset: Int, hiddenFraction: CGFloat)
+  /// 区間を見せる——縦は方針 `policy` で、横は区間が見えるところまで最小限にスクロールする（区間が 1 行の中なら区間の
+  /// 両端、行をまたぐなら先頭。スクロールできる範囲の端で止まる）。判定は面の最新の位置（まだ描いていない位置を含む）で
+  /// 行う。選択は動かさない。
+  func reveal(_ range: NSRange, policy: TextReveal)
 
-  /// その区間が見えるところまで最小限スクロールする（縦に見えていれば縦は動かず、横に隠れていれば横だけ寄る）。
-  /// 選択は動かさない。
-  func scrollToVisible(_ range: NSRange)
-
-  /// 選択（UTF-16）。置いても見せない——見せるのは `scrollToCenter`。
+  /// 選択（UTF-16）。置いても見せない——見せるのは `reveal`。
   var selectedRange: NSRange { get set }
 
   /// キャレットのオフセット——選択の動く側の端（前へ伸ばした選択なら先頭、それ以外は終わり。選択が空ならその位置）。
@@ -58,7 +56,7 @@ public protocol TextSurface: AnyObject {
   /// が 1 回先に通る）。置き換え後の選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。
   func replaceAll(with text: String)
 
-  /// 役割が変わった（裏から届いた役割で）。面は見えている行のうち区間に掛かる行を塗り直す。
+  /// 役割が変わった（裏から届いた役割で）。面は区間に掛かる行を描き直す。
   func rolesDidChange(_ ranges: IndexSet)
 
   /// 行の印（git ガター）。文書がハンクから作って押す（UTF-16 オフセット）。面は描くだけで規則を持たない。
@@ -92,19 +90,8 @@ public protocol TextSurfaceDelegate: AnyObject {
   /// `viewport` が変わった（スクロール・窓の高さ）。
   func surfaceDidChangeViewport(_ surface: any TextSurface)
   func surfaceDidChangeSelection(_ surface: any TextSurface)
-  /// `range` の中の役割の区間（重ならない昇順で、`range` の中に閉じる。役割の無い字は含まない）。面は見えている
-  /// 範囲の色をこれで引く——`didChange` から戻った後は、編集に合わせてずらした役割を答える（裏の結果が届けば
-  /// `rolesDidChange` が来る）。
-  func surface(_ surface: any TextSurface, rolesIn range: NSRange) -> [HighlightSpan]
-  /// 行（`\n` で割った行。本文が改行で終わるときの末尾の空行を含む）の数。面は行番号の列の桁をこれで決める。
-  func surfaceLineCount(_ surface: any TextSurface) -> Int
-  /// オフセットを含む行（0 始まり）。
-  func surface(_ surface: any TextSurface, lineContaining offset: Int) -> Int
-  /// 行の区間——行頭から次の行頭まで（最終行は本文の終わりまで）。面は行頭が行の先頭と一致する段落にだけ番号を描き、
-  /// 行番号の列で選ぶ行もこれで決める。
-  func surface(_ surface: any TextSurface, rangeOfLine line: Int) -> NSRange
-  /// 文書の写し（本文・役割の並び・版）。本文を持たない面が、結ばれたとき・`rolesDidChange` と `setLineMarks` を
-  /// 受けたとき・自分が出した編集の通知から戻ったときに引いて描く。文書はどの知らせも自分の写しを更新した後に出すので、
+  /// 文書の写し（本文・役割の並び・版）。面が、結ばれたとき・`rolesDidChange` と `setLineMarks` を受けたとき・自分が
+  /// 出した編集の通知から戻ったときに引いて描く。文書はどの知らせも自分の写しを更新した後に出すので、
   /// 引いた写しは知らせと同じ版。
   func surfaceContent(_ surface: any TextSurface) -> SurfaceContent
 }
@@ -133,40 +120,17 @@ public enum TextHighlightKind: Sendable {
 }
 
 /// 見えている範囲を本文の言葉で表したもの。`firstVisible` は先頭に見えている行（文書の行）の行頭オフセット、
-/// `hiddenFraction` はその行が上へ隠れている割合（0…1）、`visibleLines` は可視矩形に入る行数（小数）、`clipsRight` は
-/// 本文が右にまだ続く（横に隠れている部分がある）か。`hiddenColumns` は左へ隠れている幅、`visibleColumns` は本文の
-/// 見えている幅で、どちらも半角の桁数（小数）。エンジンの推定の文書高に依らず、実際に layout された行の矩形から出る。
+/// `visibleLines` は見えている高さに入る行数（小数）。文書の構文が、見えている行を先に解くのに使う。
 public struct TextViewport: Equatable, Sendable {
   public var firstVisible: Int
-  public var hiddenFraction: CGFloat
   public var visibleLines: CGFloat
-  public var clipsRight: Bool
-  public var hiddenColumns: CGFloat
-  public var visibleColumns: CGFloat
 
-  public init(
-    firstVisible: Int, hiddenFraction: CGFloat, visibleLines: CGFloat, clipsRight: Bool = false,
-    hiddenColumns: CGFloat = 0, visibleColumns: CGFloat = 0
-  ) {
+  public init(firstVisible: Int, visibleLines: CGFloat) {
     self.firstVisible = firstVisible
-    self.hiddenFraction = hiddenFraction
     self.visibleLines = visibleLines
-    self.clipsRight = clipsRight
-    self.hiddenColumns = hiddenColumns
-    self.visibleColumns = visibleColumns
   }
 
-  public static let empty = TextViewport(firstVisible: 0, hiddenFraction: 0, visibleLines: 0)
-}
-
-/// 自分で俯瞰（ミニマップ・縦横のスクロールバーと印・影）を描く面。載せる側は俯瞰の部品を出さず、面の上に浮かべる
-/// 部品（検索バー）を右列の幅から置く。
-@MainActor
-public protocol OverviewDrawingSurface: TextSurface {
-  /// 右列（ミニマップ＋縦スクロールバー）の幅（pt）。本文の座標ではなく view の配置の事実で、view の幅と行番号の列の桁で
-  /// 変わる。載せる側は大きさを変えたときと見えている範囲の知らせで読み直す（本文の変化の知らせの中では変化の前の幅を
-  /// 答える）。載せる側が浮かべる部品を置くためだけに使う。
-  var rightColumnWidth: CGFloat { get }
+  public static let empty = TextViewport(firstVisible: 0, visibleLines: 0)
 }
 
 /// 面の見え方。色は名前付き（dynamic）の NSColor を渡し、外観は描画時に解く。装備と俯瞰の寸法と色もここで渡し、
@@ -183,8 +147,7 @@ public struct TextSurfaceStyle {
   public var backgroundColor: NSColor
   public var caretColor: NSColor
   public var caretSize: CGSize
-  /// 選択の地の色。焦点が無い面では `inactiveSelectionColor`。本文を自分で描く面が使う（今の面は上流がシステムの選択色で
-  /// 描く）。
+  /// 選択の地の色。焦点が無い面では `inactiveSelectionColor`。
   public var selectionColor: NSColor
   public var inactiveSelectionColor: NSColor
   public var gutterFont: NSFont

@@ -4,11 +4,11 @@ import XCTest
 
 /// スクロールの規則を、合成した出来事で固定する。壊れると指に付いてこない（量が遅れる・補間される）、はじいた後に位置が
 /// 跳ぶ、縦に動かしている間に横へ流れる、端で引っかかる・戻らない、最終行を最上段まで送れない、マウスのホイールの量が
-/// 今の面と違う。
+/// NSScrollView と違う。
 final class ScrollPhysicsTests: XCTestCase {
   /// 100 行・行高 18・本文の見えている大きさ 400×300・最も長い行 1000pt・桁 7pt。
-  private func physics(elastic: Bool = true) -> ScrollPhysics {
-    var physics = ScrollPhysics(elastic: elastic)
+  private func physics() -> ScrollPhysics {
+    var physics = ScrollPhysics()
     physics.setLimits(
       ScrollPhysics.Limits(
         lineCount: 100, lineHeight: 18, viewport: SIMD2(400, 300), longestLine: 1000, cell: 7))
@@ -87,7 +87,7 @@ final class ScrollPhysicsTests: XCTestCase {
     XCTAssertEqual(p.shown(at: 1.605), SIMD2(200, 100))
   }
 
-  /// 弾性が有効なら、端を越えた量は 1/20 に縮めて見せ、端の外で指を離すと x0·e^(−τ/0.08) で端へ戻る（指の速さは
+  /// 端を越えた量は 1/20 に縮めて見せ、端の外で指を離すと x0·e^(−τ/0.08) で端へ戻る（指の速さは
   /// 持ち越さない）。続く momentum は捨てる。
   func testElasticOverscrollAndReturn() {
     var p = physics()
@@ -141,20 +141,8 @@ final class ScrollPhysicsTests: XCTestCase {
     XCTAssertTrue(p.isReturning)
   }
 
-  /// 弾性が無効なら端で止まり、越えた量は溜めない（向きを変えればすぐ動く）。
-  func testWithoutElasticityStopsAtTheEdge() {
-    var p = physics(elastic: false)
-    p.apply(finger(1.0, 0, .began))
-    p.apply(finger(1.01, 200))
-    XCTAssertEqual(p.shown(at: 1.01).y, 0)
-    p.apply(finger(1.02, -18))
-    XCTAssertEqual(p.shown(at: 1.02).y, 18)
-    p.apply(finger(1.03, 0, .ended))
-    XCTAssertFalse(p.isReturning)
-  }
-
-  /// マウスのホイールの 1 目盛り（量 1）は 10pt——今の面（NSScrollView の行送り）と同じ。
-  func testWheelNotchMatchesTheCurrentSurface() {
+  /// マウスのホイールの 1 目盛り（量 1）は 10pt——NSScrollView の行送りと同じ。
+  func testWheelNotchMatchesNSScrollView() {
     var p = physics()
     p.apply(ScrollInput(timestamp: 1, delta: SIMD2(0, -1), precise: false))
     XCTAssertEqual(p.shown(at: 1).y, 10)

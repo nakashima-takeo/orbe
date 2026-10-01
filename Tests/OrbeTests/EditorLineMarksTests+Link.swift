@@ -18,8 +18,8 @@ extension EditorLineMarksTests {
         pressure: 1))
   }
 
-  /// ⌘クリックだけが URL を渡し、素のクリックはキャレットを置く。URL の外の ⌘クリックは上流に落ちる。
-  /// ⌘に他の修飾が重なれば上流の選択操作（⌘⇧＝選択の延長）に渡す。
+  /// ⌘クリックだけが URL を渡し、素のクリックはキャレットを置く。URL の外の ⌘クリックはキャレットを置く。
+  /// ⌘に他の修飾が重なれば選択の操作（⌘⇧＝選択の延長）になる。
   func testCommandClickOpensTheLinkAndPlainClickPlacesTheCaret() throws {
     let hosted = try host("see https://a.b/c\n")
     let document = hosted.document
@@ -28,9 +28,9 @@ extension EditorLineMarksTests {
     document.surface.host = links
     let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
     let onURL = document.surface.responder.convert(
-      NSPoint(x: 8 * cell, y: rowMidY(1) - style.topInset), to: nil)
+      NSPoint(x: bodyX + 8 * cell, y: rowMidY(1)), to: nil)
     let offURL = document.surface.responder.convert(
-      NSPoint(x: 1 * cell, y: rowMidY(1) - style.topInset), to: nil)
+      NSPoint(x: bodyX + 1 * cell, y: rowMidY(1)), to: nil)
     func click(_ point: NSPoint, _ flags: NSEvent.ModifierFlags) throws {
       document.surface.responder.mouseDown(
         with: try mouse(.leftMouseDown, point, flags, in: window))
@@ -47,10 +47,10 @@ extension EditorLineMarksTests {
 
     try click(offURL, [.command])
     XCTAssertEqual(links.opened.count, 1, "URL の外の ⌘クリックは開かない")
-    XCTAssertTrue((0...2).contains(client.selectedRange().location), "上流へ落ちてキャレットが動く")
+    XCTAssertTrue((0...2).contains(client.selectedRange().location), "キャレットが動く")
 
     try click(onURL, [.command, .shift])
-    XCTAssertEqual(links.opened.count, 1, "⌘⇧は上流の選択の延長")
+    XCTAssertEqual(links.opened.count, 1, "⌘⇧は選択の延長")
     XCTAssertGreaterThan(client.selectedRange().length, 0, "キャレットから URL の上まで選択が延びる")
   }
 
@@ -65,7 +65,7 @@ extension EditorLineMarksTests {
     let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
     let responder = document.surface.responder
     let onURL = responder.convert(
-      NSPoint(x: 8 * cell, y: rowMidY(1) - style.topInset), to: nil)
+      NSPoint(x: bodyX + 8 * cell, y: rowMidY(1)), to: nil)
     let before = client.selectedRange()
 
     responder.mouseDown(with: try mouse(.leftMouseDown, onURL, [.command], in: window))
@@ -81,7 +81,7 @@ extension EditorLineMarksTests {
     XCTAssertEqual(client.selectedRange(), before, "その間に選択は伸びない")
 
     let edge = responder.convert(
-      NSPoint(x: 16.8 * cell, y: rowMidY(1) - style.topInset), to: nil)
+      NSPoint(x: bodyX + 16.8 * cell, y: rowMidY(1)), to: nil)
     responder.mouseDown(with: try mouse(.leftMouseDown, edge, [.command], in: window))
     let justOutside = NSPoint(x: edge.x + 2, y: edge.y)
     responder.mouseUp(with: try mouse(.leftMouseUp, justOutside, [.command], in: window))

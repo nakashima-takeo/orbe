@@ -1,7 +1,7 @@
 import CoreGraphics
 
 /// 選択のドラッグが本文の外へ出たときの自動スクロールの速さ（VS Code の `TopBottomDragScrolling` /
-/// `LeftRightDragScrolling`）。両方のテキスト面が同じ式を使う。
+/// `LeftRightDragScrolling`）。
 public enum DragScrollSpeed {
   /// 速さ（単位/秒）。外れた距離 `outside` と見えている量 `visible` を、どちらも同じ単位（縦は行・横は全角の字）で数える。
   public static func speed(outside: CGFloat, visible: CGFloat) -> CGFloat {

@@ -200,18 +200,17 @@ final class EditorDocumentDiskTests: XCTestCase {
 
   // MARK: - ハンク
 
-  /// baseline を置くと裏で行差分を取ってハンクが届く。編集の直後は、編集で増えた行の数だけずらした前のハンクを出し、
-  /// 裏の結果が届くと置き換わる。baseline を外せば即時に空。
+  /// baseline を置くと裏で行差分を取ってハンクが届き、行の印として面へ押す。編集の直後は、編集で増えた行の数だけずらした
+  /// 前のハンクを出し、裏の結果が届くと置き換わる。baseline を外せば即時に空で、空の印を押す。
   func testHunksFollowTheBaselineAndEditsThroughTheBackground() throws {
     let (document, surface) = try open(try temp("e.txt", "a\nb\nc\n"))
     XCTAssertEqual(document.hunks, [])
-    var notified = 0
-    document.onHunksChange = { notified += 1 }
+    let pushes = surface.lineMarkPushes
 
     document.baseline = "a\nc\n"
     XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertEqual(document.hunks, [LineHunk(oldStart: 1, oldCount: 0, newStart: 2, newCount: 1)])
-    XCTAssertEqual(notified, 1)
+    XCTAssertEqual(surface.lineMarkPushes, pushes + 1)
 
     surface.replace(NSRange(location: 0, length: 0), with: "z\n")
     XCTAssertEqual(
@@ -225,10 +224,11 @@ final class EditorDocumentDiskTests: XCTestCase {
         LineHunk(oldStart: 1, oldCount: 0, newStart: 3, newCount: 1),
       ])
 
-    let before = notified
+    let before = surface.lineMarkPushes
     document.baseline = nil
     XCTAssertEqual(document.hunks, [])
-    XCTAssertEqual(notified, before + 1)
+    XCTAssertEqual(surface.lineMarkPushes, before + 1)
+    XCTAssertEqual(surface.lineMarks, .empty)
   }
 
   /// 外部変更の差し替えは全体の置換として届くが、文書は本文が実際に変わった区間だけを編集として扱う——変わっていない字の

@@ -53,7 +53,11 @@ final class ProjectSearchPaneTests: OrbeTestCase {
 
   func replace(_ document: EditorDocument, _ range: NSRange, with text: String) {
     document.surface.selectedRange = range
-    document.surface.responder.perform(#selector(NSResponder.insertText(_:)), with: text)
+    if text.isEmpty {
+      document.surface.responder.deleteBackward(nil)
+    } else {
+      document.surface.responder.perform(#selector(NSResponder.insertText(_:)), with: text)
+    }
   }
 
   /// 選択の行（見せている文書の本文）。

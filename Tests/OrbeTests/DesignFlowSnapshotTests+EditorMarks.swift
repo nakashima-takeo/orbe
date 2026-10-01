@@ -2,6 +2,7 @@ import SwiftUI
 import XCTest
 
 @testable import Orbe
+@testable import OrbeEditorEngine
 
 /// 行の装備の flow（fixture は gallery と同じ `EditorCodeFixtures`）。印が git の状態と編集に追従する過程——
 /// 開く（3 種の印）→ 行頭に 1 行挿す（追加の印が増える）→ `git add`（印が消える）→ 作業ツリーを書き戻す
@@ -9,26 +10,23 @@ import XCTest
 /// 線と点と下線を撮る。
 extension DesignFlowSnapshotTests {
   func testEditorDecor() throws {
-    let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
-    let scene = try EditorCodeFixtures.scene(queriesRoot: queriesRoot)
+    let scene = try codeScene()
     defer { scene.cleanup() }
-    let tab = scene.tab
-    let go = try tab.editor.open(scene.directory.appendingPathComponent("main.go"))
-    let scroll = try XCTUnwrap(go.surface.view.subviews.first as? NSScrollView)
+    let go = try scene.tab.editor.open(scene.directory.appendingPathComponent("main.go"))
     let pane = scene.pane
-    let cell = (" " as NSString).size(withAttributes: [.font: EditorStyle.make().font]).width
+    let surface = try engine(go)
     pumpMain(
       until: { scene.isReady && go.baseline != nil && go.waitUntilCaughtUp(timeout: 0) },
       "index 版が届き、裏の仕事が追いつく")
-    try flow(
-      "editor_decor", size: NSSize(width: 1000, height: 480), render: { scene.view },
+    try hostedFlow(
+      "editor_decor", scene,
       steps: [
         ("tabs", {}),  // タブ 1 段 = 検出した単位（4 桁）。空白だけの行の線が隣と同じ x
         (
           "scrolled_right",
           {  // 8 行目の長い行で 20 桁ぶん右へ → 線・点・下線が付いてくる（印は行番号の列にあって動かない）
-            scroll.contentView.scroll(to: NSPoint(x: 20 * cell, y: 0))
-            scroll.reflectScrolledClipView(scroll.contentView)
+            surface.scroll(toX: 20 * surface.config.cell)
+            self.settleFades(pane)
           }
         ),
         (
@@ -45,8 +43,7 @@ extension DesignFlowSnapshotTests {
   }
 
   func testEditorMarks() throws {
-    let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
-    let scene = try EditorCodeFixtures.scene(queriesRoot: queriesRoot)
+    let scene = try codeScene()
     defer { scene.cleanup() }
     let document = scene.document
     pumpMain(until: { scene.isReady }, "index 版が届く")

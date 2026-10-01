@@ -5,7 +5,7 @@ import os
 
 @testable import OrbeEditorEngine
 
-/// 新しい面の打鍵とライブ変換の計測（`FramePerfTests` と同じ場で、`ORBE_EDITOR_PERF=1` のときだけ走る）。
+/// 面の打鍵とライブ変換の計測（`FramePerfTests` と同じ場で、`ORBE_EDITOR_PERF=1` のときだけ走る）。
 extension FramePerfTests {
   /// 打鍵→画面に出たとみなす時刻（本文が入ったコマが出た刻み）が中央値 12.5ms・p95 17ms 以下で、1MB と 200KB で差が
   /// 無い（打鍵の間隔 100ms と 33ms）。打鍵 1 回の main の仕事（面の編集係と文書。main のスレッドの CPU 時間で、壁時計は
@@ -28,8 +28,8 @@ extension FramePerfTests {
   /// （打鍵→present の中央値 12.5ms・p95 17ms、IME の呼び出し 1 回の main のスレッドの CPU 時間 p99 1ms（壁時計は参考）、
   /// 1MB と 200KB で差が無い）。ここの面は窓に載せないので、main の仕事は IME の呼び出しそのもの（面の編集係と文書）
   /// だけ——IME が呼び出しの直後に読み返す文字の矩形と点の下の字を含めた main の仕事は、窓に載せた面で
-  /// `EditorScrollPerfTests` が測る。プロセスで最初の変換（入力の仕組みと文字列の橋渡しの初期化）は数えないので、測る文書を
-  /// 開く前に別の文書で変換する。
+  /// `EditorTypingPerfTests` の `composition-main` が測る。プロセスで最初の変換（入力の仕組みと文字列の橋渡しの初期化）は
+  /// 数えないので、測る文書を開く前に別の文書で変換する。
   func testComposition() throws {
     let warm = try attach("warm\n")
     for k in 0..<20 { Self.compose(warm.surface, k) }
@@ -47,7 +47,8 @@ extension FramePerfTests {
       let middle = opened.document.text.lineCount / 2
       opened.surface.selectedRange = NSRange(
         location: opened.document.text.lineStart(middle) + 4, length: 0)
-      opened.surface.scrollToCenter(opened.surface.caretLocation)
+      opened.surface.reveal(
+        NSRange(location: opened.surface.caretLocation, length: 0), policy: .center)
       waitUntilIdle(opened.surface)
       for interval in [0.1, 1.0 / 30] {
         let name = "\(label) \(Int((interval * 1000).rounded()))ms"

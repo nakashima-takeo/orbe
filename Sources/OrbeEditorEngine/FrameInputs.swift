@@ -64,7 +64,6 @@ struct SurfaceConfig: @unchecked Sendable {
   let marks: Marks
   let decorations: Decorations
   let overview: Overview
-  let fontSmoothing: Bool
   /// 打ち切った行の末尾に出す印の文言（打ち切った単位の数から）。
   let omittedLabel: @Sendable (Int) -> String
   /// 1 桁の幅（空白の送り）。
@@ -77,9 +76,7 @@ struct SurfaceConfig: @unchecked Sendable {
   let digitGlyphs: [CGGlyph]
   let digitAdvances: [CGFloat]
 
-  init(
-    style: TextSurfaceStyle, fontSmoothing: Bool, omittedLabel: @escaping @Sendable (Int) -> String
-  ) {
+  init(style: TextSurfaceStyle, omittedLabel: @escaping @Sendable (Int) -> String) {
     font = style.font as CTFont
     gutterFont = style.gutterFont as CTFont
     lineHeight = style.lineHeight
@@ -97,7 +94,6 @@ struct SurfaceConfig: @unchecked Sendable {
       linkUnderlineThickness: style.decorations.linkUnderlineThickness,
       linkUnderlineOffset: style.decorations.linkUnderlineOffset)
     overview = Overview(style.overview)
-    self.fontSmoothing = fontSmoothing
     self.omittedLabel = omittedLabel
     cell = Self.advances(of: [0x20], in: font).advances[0]
     ascent = CTFontGetAscent(font)
@@ -253,7 +249,7 @@ struct FrameMaterial: Sendable {
   /// 面の大きさ（pt）と倍率。
   var size = CGSize.zero
   var scale: CGFloat = 2
-  /// 描く色空間。面が載る窓の色空間（AppKit が今の面を描く色空間）で、窓に無ければ sRGB。
+  /// 描く色空間。面が載る窓の色空間（AppKit が窓の view を描く色空間）で、窓に無ければ sRGB。
   var space = FrameMaterial.defaultSpace
   /// 面が画面に見えているか（窓にあり、隠れておらず、窓が覆われていない）。
   var visible = false

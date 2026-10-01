@@ -10,7 +10,7 @@ import simd
 /// （`viewport` の計算・編集の規則・行の印の行への写像）は出す前の状態か箱から読む。
 ///
 /// 編集は面の編集係（`SurfaceEditor`）が持ち、1 回の操作を 1 つの取引にする（→ `transact`）。IME の変換も同じ道で文書に
-/// 入る。アクセシビリティはまだ持たない。
+/// 入る。アクセシビリティは持たない。
 @MainActor
 final class MetalTextSurface: TextSurface {
   private static var nextID = 0
@@ -53,14 +53,16 @@ final class MetalTextSurface: TextSurface {
   var inputDepth = 0
   /// 描画スレッドへ頼んだ横の「見えるところまで」の通し番号。
   var revealSerial = 0
+  /// 前回の `refreshViewport` で見た、見せている位置（端を越えて見せている分を含む）。変換中かどうかに依らず
+  /// 更新し、動いたら変換中の IME へ知らせる（→ `inputMethodScrollDidChange`）。
+  var inputMethodPosition = SIMD2<Double>(0, 0)
 
-  init(style: TextSurfaceStyle, options: MetalTextSurfaceOptions) {
+  init(style: TextSurfaceStyle, omittedLabel: @escaping @Sendable (Int) -> String) {
     Self.nextID += 1
     id = Self.nextID
     self.style = style
-    config = SurfaceConfig(
-      style: style, fontSmoothing: options.fontSmoothing, omittedLabel: options.omittedLabel)
-    scroll = ScrollBox(elastic: options.elasticScroll)
+    config = SurfaceConfig(style: style, omittedLabel: omittedLabel)
+    scroll = ScrollBox()
     lineStops = LineStopsCache(font: config.font)
     textView.surface = self
     let id = id
@@ -168,10 +170,8 @@ final class MetalTextSurface: TextSurface {
   func htmlStyle() -> HTMLCopy.Style {
     let appearance = textView.effectiveAppearance
     let hex = { (color: NSColor) -> String in
-      let packed = FrameColor(
-        color, appearance: appearance, space: FrameMaterial.defaultSpace, fontSmoothing: false,
-        scale: 1
-      ).packed
+      let packed = FrameColor(color, appearance: appearance, space: FrameMaterial.defaultSpace)
+        .packed
       return String(
         format: "#%02x%02x%02x", packed & 0xFF, (packed >> 8) & 0xFF, (packed >> 16) & 0xFF)
     }
@@ -190,8 +190,7 @@ final class MetalTextSurface: TextSurface {
   /// 外観・色空間・倍率で色を解き直して置く。
   func appearanceDidChange() {
     let palette = FramePalette(
-      style: style, appearance: textView.effectiveAppearance, space: space,
-      fontSmoothing: config.fontSmoothing, scale: scale)
+      style: style, appearance: textView.effectiveAppearance, space: space, scale: scale)
     write { $0.palette = palette }
   }
 

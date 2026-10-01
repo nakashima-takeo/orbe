@@ -4,7 +4,7 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 新しい面のマウス——クリックの回数で単位（文字・語・行・全体）が決まり、その後のドラッグと ⇧クリックは単位と起点の範囲を
+/// 面のマウス——クリックの回数で単位（文字・語・行・全体）が決まり、その後のドラッグと ⇧クリックは単位と起点の範囲を
 /// 保って伸びる。行番号の列は行の単位、URL の ⌘クリックは離したときに開く。壊れると、クリックした字とキャレットの位置が
 /// 違う、ダブルクリックのドラッグが字の単位で伸びる、遠くへ飛んだ直後のクリックが別の行に当たる、ドラッグで URL が開く。
 @MainActor
@@ -47,14 +47,14 @@ final class SurfaceMouseTests: EngineTestCase {
     XCTAssertEqual(opened.surface.caretLocation, 32)
     let long = try open((0..<5000).map { "row \($0)" }.joined(separator: "\n"))
     _ = host(long)
-    long.document.scroll(toFirstLine: 4000)
+    long.surface.scroll(toFirstLine: 4000)
     try click(long, row: 0, column: 4)
     XCTAssertEqual(long.document.text.row(containing: long.surface.caretLocation), 4000)
     XCTAssertEqual(long.surface.caretLocation, long.document.text.lineStart(4000) + 4)
   }
 
-  /// 行番号の列を押すと行を改行まで選び、ドラッグは行の単位で伸びる。⇧↓ で伸ばした後の ⇧クリックは元の行から。
-  /// git の印の列は何もしない。
+  /// 行番号の列を押すと行を改行まで選び、ドラッグは行の単位で伸びる。⇧↓ で伸ばした後に上の行を ⇧クリックすると、元の行
+  /// から伸びる（元の行は選択に残る）。git の印の列は何もしない。
   func testGutterSelectsLines() throws {
     let opened = try open(sample)
     _ = host(opened)
@@ -63,16 +63,18 @@ final class SurfaceMouseTests: EngineTestCase {
     try mouse(opened, .leftMouseDragged, at: gutter(2))
     try mouse(opened, .leftMouseUp, at: gutter(2))
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 14, length: 32 - 14))
-    try mouse(opened, .leftMouseDown, at: gutter(0))
-    try mouse(opened, .leftMouseUp, at: gutter(0))
+    try mouse(opened, .leftMouseDown, at: gutter(1))
+    try mouse(opened, .leftMouseUp, at: gutter(1))
     opened.surface.perform(.move(.down, extending: true))
-    try mouse(opened, .leftMouseDown, at: gutter(2), flags: .shift)
-    try mouse(opened, .leftMouseUp, at: gutter(2), flags: .shift)
-    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 0, length: 32), "元の行（0）から")
+    XCTAssertEqual(opened.surface.selectedRange.location, 14, "前提: 1 行目から下へ伸びた")
+    try mouse(opened, .leftMouseDown, at: gutter(0), flags: .shift)
+    try mouse(opened, .leftMouseUp, at: gutter(0), flags: .shift)
+    XCTAssertEqual(
+      opened.surface.selectedRange, NSRange(location: 0, length: 26), "元の行（1）が選択に残る")
     let marks = CGPoint(
       x: opened.surface.config.columnWidth(lineCount: 4) - 3, y: gutter(1).y)
     try mouse(opened, .leftMouseDown, at: marks)
-    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 0, length: 32), "印の列は何もしない")
+    XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 0, length: 26), "印の列は何もしない")
   }
 
   /// ⌘だけのクリックは URL を離したときに開き、動かして離せば開かない（その間は選択も伸びない）。
@@ -131,7 +133,7 @@ final class SurfaceMouseTests: EngineTestCase {
     try click(opened, row: 1, column: 2, clicks: 4)
     XCTAssertEqual(opened.surface.selectedRange.length, opened.document.text.length)
     XCTAssertEqual(opened.surface.scroll.peek(at: 0).position.y, 0, "末尾へ飛ばない")
-    XCTAssertEqual(opened.document.viewportLines.first, 0)
+    XCTAssertEqual(opened.surface.viewportLines.first, 0)
   }
 
   /// マウスの押下として面へ届いた ⌃クリックは、選択を動かさない（AppKit は、右クリックのメニューがあれば押下を送らずに

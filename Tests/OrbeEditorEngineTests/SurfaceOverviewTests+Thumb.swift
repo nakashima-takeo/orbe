@@ -4,9 +4,9 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 新しい面の縦横のつまみの見え隠れ（今の面の俯瞰と同じ規則）。壊れると窓の大きさ・改行・横スクロールでつまみが現れない、
-/// 行の中の打鍵のたびにつまみが現れる、横に続く本文があるのに横のつまみが無い（無いのに出る）、つまみを掴んで本体の外で
-/// 離してもつまみが残る。
+/// 面の縦横のつまみとミニマップの帯の見え隠れ（VS Code と同じ規則）。壊れると窓の大きさ・改行・横スクロールでつまみが
+/// 現れない、行の中の打鍵のたびにつまみが現れる、横に続く本文があるのに横のつまみが無い（無いのに出る）、つまみや帯を
+/// 掴んで外で離しても残る、帯を掴んで外へ出た途端に消える。
 @MainActor
 final class SurfaceThumbTests: EngineTestCase {
   /// 縦のつまみの上端近くの画素（キャレットの印より下）。
@@ -70,6 +70,38 @@ final class SurfaceThumbTests: EngineTestCase {
     XCTAssertTrue(try shown())
     try mouse(opened, .leftMouseUp, at: CGPoint(x: outside.x, y: 80))
     XCTAssertFalse(try shown(), "外で離せば、動いた直後でもすぐ消える")
+  }
+
+  /// ミニマップの帯を押したまま外へ出ても、ドラッグ中は見え続け、外で離せば消える。
+  func testReleasingASliderDragOutsideTheMinimapHidesTheSlider() throws {
+    let opened = try hosted(rows(2000))
+    let view = opened.surface.textView
+    let minimap = opened.surface.surfaceLayout.minimap
+    let placement = try XCTUnwrap(opened.surface.placementBox.read())
+    let grab = CGPoint(x: minimap.maxX - 4, y: placement.sliderTop + placement.sliderHeight / 2)
+    let outside = CGPoint(x: -50, y: grab.y)
+    let crossing = { (type: NSEvent.EventType, point: CGPoint) throws -> NSEvent in
+      try XCTUnwrap(
+        NSEvent.enterExitEvent(
+          with: type, location: view.convert(point, to: nil), modifierFlags: [],
+          timestamp: CACurrentMediaTime(), windowNumber: view.window?.windowNumber ?? 0,
+          context: nil, eventNumber: 0, trackingNumber: 0, userData: nil))
+    }
+    let shown = { () throws -> Bool in
+      let shot = try self.pixelShot(opened)
+      let slider = try XCTUnwrap(opened.surface.placementBox.read())
+      return shot.hasInk(minimap.maxX - 2, slider.sliderTop + 1)
+    }
+    XCTAssertFalse(try shown(), "前提: 普段は隠れる")
+    view.mouseEntered(with: try crossing(.mouseEntered, grab))
+    opened.surface.inputScope { view.overview.pointerMoved(to: grab, inside: true) }
+    try mouse(opened, .leftMouseDown, at: grab)
+    XCTAssertTrue(try shown(), "掴むと見える")
+    view.mouseExited(with: try crossing(.mouseExited, outside))
+    try mouse(opened, .leftMouseDragged, at: outside)
+    XCTAssertTrue(try shown(), "ドラッグ中は外でも見える")
+    try mouse(opened, .leftMouseUp, at: outside)
+    XCTAssertFalse(try shown(), "外で離せば消える")
   }
 
   /// 横に続く本文があるときだけ、本文の区画の下端に横のつまみが出て、その位置が横の位置を表す。

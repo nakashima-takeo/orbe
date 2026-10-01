@@ -21,12 +21,12 @@ final class SurfaceFlushTests: EngineTestCase {
     let before = surface.drawn.revision
     let target = opened.document.text.lineStart(300)
     surface.selectedRange = NSRange(location: target, length: 3)
-    surface.scrollToCenter(target)
+    surface.reveal(NSRange(location: target, length: 0), policy: .center)
     XCTAssertEqual(surface.material.revision, before, "並びの途中では箱へ書かない")
     XCTAssertEqual(surface.selectedRange, NSRange(location: target, length: 3))
-    let first = opened.document.viewportLines.first
+    let first = opened.surface.viewportLines.first
     XCTAssertEqual(
-      first + opened.document.viewportLines.visible / 2, 300.5, accuracy: 1, "読み取りは今の値")
+      first + opened.surface.viewportLines.visible / 2, 300.5, accuracy: 1, "読み取りは今の値")
     RunLoop.main.run(until: Date())
     XCTAssertEqual(surface.material.revision, before + 1, "周の終わりに 1 回だけ書く")
     let material = surface.material.read()
@@ -96,7 +96,7 @@ final class SurfaceFlushTests: EngineTestCase {
     let start = surface.scroll.frame(at: 0, material: surface.material.revision).position.y
     func jump(to row: Int) -> Double {
       surface.selectedRange = NSRange(location: text.lineStart(row), length: 3)
-      surface.scrollToCenter(text.lineStart(row))
+      surface.reveal(NSRange(location: text.lineStart(row), length: 0), policy: .center)
       let y = surface.scrollState().position.y
       RunLoop.main.run(until: Date())
       return y
@@ -123,10 +123,34 @@ final class SurfaceFlushTests: EngineTestCase {
     let surface = opened.surface
     surface.flush()
     let lineHeight = Double(surface.config.lineHeight)
-    surface.scroll(toTop: opened.document.text.lineStart(100), hiddenFraction: 0)
+    surface.scroll(toFirstLine: 100)
     surface.scroll(
       ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(0, -30), precise: true))
     XCTAssertEqual(surface.scroll.peek(at: CACurrentMediaTime()).position.y, 100 * lineHeight + 30)
     XCTAssertTrue(surface.pending.isEmpty, "指の出来事の処理の終わりに出している")
+  }
+
+  /// 見せる区間がもう見えている取引は、位置を置き直さない——端を越えて引っ張っている間に打っても、見せている位置は端へ
+  /// 収められない。引っ張る量は、見せている位置が行高との往復で 1ulp ずれるものを選ぶ（置き直せば端へ跳ぶ）。
+  func testATransactionShowingAVisibleCaretKeepsTheOverscrolledPosition() throws {
+    let opened = try open(rows(50), size: CGSize(width: 400, height: 184))
+    let surface = opened.surface
+    surface.flush()
+    let lineHeight = Double(surface.config.lineHeight)
+    let pull = try XCTUnwrap(
+      (1...2000).map { Double($0) * 0.37 }.first {
+        let shown = -$0 / ScrollPhysics.stiffness
+        return shown / lineHeight * lineHeight != shown
+      }, "前提: 往復で 1ulp ずれる位置がある")
+    let now = CACurrentMediaTime()
+    surface.scroll(ScrollInput(timestamp: now, delta: .zero, precise: true, phase: .began))
+    surface.scroll(
+      ScrollInput(timestamp: now + 0.01, delta: SIMD2(0, pull), precise: true, phase: .changed))
+    let pulled = surface.scroll.peek(at: now + 0.01).position.y
+    XCTAssertLessThan(pulled, 0, "前提: 先頭より上へ引っ張っている")
+    surface.perform(.insert("x"))
+    surface.flush()
+    XCTAssertEqual(opened.document.text.length, rows(50).utf16.count + 1, "前提: 打った")
+    XCTAssertEqual(surface.scroll.peek(at: now + 0.01).position.y, pulled, "引っ張っている位置のまま")
   }
 }

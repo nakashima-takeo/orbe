@@ -5,7 +5,7 @@ import os
 
 @testable import OrbeEditorEngine
 
-/// 装備・強調・俯瞰が見えている新しい面の計測（`FramePerfTests` と同じ場で、`ORBE_EDITOR_PERF=1` のときだけ走る）。
+/// 装備・強調・俯瞰が見えている面の計測（`FramePerfTests` と同じ場で、`ORBE_EDITOR_PERF=1` のときだけ走る）。
 /// 検索の一致 19999 件・語の出現・選択文字列の出現・現在の一致を置き、インデント線と空白の点とミニマップとスクロールバーの
 /// 印が見えている 1MB・200KB で、指のドラッグ・はじき・端への引っ張り、ミニマップの帯の端から端へのドラッグ、縦の
 /// つまみのドラッグを流す。関門は本文だけのときと同じ（1 コマの CPU の p99 2ms 未満・描画スレッド自身が落とすコマ 0・
@@ -77,7 +77,7 @@ extension FramePerfTests {
     for loaded in [false, true] {
       let name = loaded ? "main-load" : "no-load"
       if loaded { startLoad() }
-      surface.scroll(toTop: 0, hiddenFraction: 0)
+      surface.scroll(toFirstLine: 0)
       waitUntilIdle(surface)
       let layout = surface.surfaceLayout
       let placement = try XCTUnwrap(surface.placementBox.read())
@@ -87,7 +87,7 @@ extension FramePerfTests {
       drag(surface, from: slider, to: CGPoint(x: slider.x, y: layout.minimap.maxY), seconds: 2)
       waitUntilIdle(surface)
       report(label, "\(name) minimap-drag", totals(surface))
-      surface.scroll(toTop: 0, hiddenFraction: 0)
+      surface.scroll(toFirstLine: 0)
       waitUntilIdle(surface)
       let thumb = CGPoint(x: layout.verticalScrollbar.midX, y: 10)
       reset(surface)
@@ -160,7 +160,7 @@ extension FramePerfTests {
       let middle = opened.document.text.lineCount / 2
       surface.selectedRange = NSRange(
         location: opened.document.text.lineStart(middle) + 4, length: 0)
-      surface.scrollToCenter(surface.caretLocation)
+      surface.reveal(NSRange(location: surface.caretLocation, length: 0), policy: .center)
       waitUntilIdle(surface)
       let matches = MatchBox(surface.drawn.highlights.find)
       reset(surface)
@@ -220,7 +220,7 @@ extension FramePerfTests {
       let match = matches[(k * 613) % matches.count]
       let called = CACurrentMediaTime()
       surface.selectedRange = match
-      surface.scrollToCenter(match.location)
+      surface.reveal(NSRange(location: match.location, length: 0), policy: .center)
       surface.setHighlights([match], for: .currentFindMatch)
       let deadline = Date().addingTimeInterval(2)
       var drawn = false

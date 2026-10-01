@@ -22,14 +22,15 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
   /// main スレッドの CPU を引いたもの。
   func testCrumblingKeystroke() throws {
     for (label, ext, text) in [
-      ("1MB", "swift", EditorScrollPerfTests.swiftSource(bytes: 1_000_000)),
+      ("1MB", "swift", EditorTypingPerfTests.swiftSource(bytes: 1_000_000)),
       ("1MB-js", "js", Self.taggedTemplateSource(bytes: 1_000_000)),
     ] {
       let opened = try openEditor(text, extension: ext)
       let document = opened.document
       let middle = document.text.lineCount / 2
-      document.scroll(toFirstLine: CGFloat(middle - 10))
-      document.surface.selectedRange = NSRange(location: document.text.lineStart(middle), length: 0)
+      let caret = NSRange(location: document.text.lineStart(middle), length: 0)
+      document.surface.selectedRange = caret
+      document.surface.reveal(caret, policy: .center)
       for character in "let v = f" {
         document.surface.responder.keyDown(with: .key(String(character), []))
       }
@@ -37,37 +38,23 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
       let parse = try incrementalParse(of: document, inserting: "(")
       RunLoop.main.run(until: Date().addingTimeInterval(0.5))
 
-      var deliveries: [(time: Double, roles: [HighlightSpan])] = []
-      let visible = { () -> NSRange in
-        let lines = document.viewportLines
-        let first = Int(lines.first)
-        let start = document.text.lineStart(first)
-        return NSRange(
-          location: start,
-          length: document.text.lineEnd(first + Int(lines.visible.rounded(.up))) - start)
-      }
       let began = CPUClock()
-      let minimap = document.onRolesChange
-      document.onRolesChange = { changed in
-        minimap?(changed)
-        deliveries.append((began.elapsed, document.roles.roles(in: visible())))
-      }
-      let typed = began.elapsed
-      document.surface.responder.keyDown(with: .key("(", []))
-      XCTAssertTrue(pumpUntilCaughtUp(document))
+      let start = DispatchTime.now().uptimeNanoseconds
+      let changes = document.visibleRoleChanges(
+        after: { document.surface.responder.keyDown(with: .key("(", [])) }, since: start)
+      XCTAssertTrue(document.isCaughtUp)
       let complete = began.elapsed
       let cpu = began.backgroundCPU
-      let final = document.roles.roles(in: visible())
+      let final = document.roles.roles(in: document.visibleRange)
       let settled =
-        deliveries.first { delivery in
-          deliveries.drop { $0.time < delivery.time }.allSatisfy { $0.roles == final }
-        }?.time ?? typed
+        changes.first { change in
+          changes.drop { $0.time < change.time }.allSatisfy { $0.roles == final }
+        }?.time ?? 0
       print(
         "PERF", label, "crumbling-keystroke background-cpu", ms(cpu), "visible-final",
-        ms(max(0, settled - typed)), "complete", ms(complete - typed), "deliveries",
-        deliveries.count, "incremental-parse", ms(parse))
+        ms(settled), "complete", ms(complete), "visible-changes", changes.count,
+        "incremental-parse", ms(parse))
 
-      document.onRolesChange = minimap
       let parsed = document.syntax?.parseCount ?? 0
       let burst = CPUClock()
       for index in 0..<50 {
@@ -89,7 +76,7 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
   /// ファイルの用意は区間の外。
   func testOpeningUntilComplete() throws {
     for (label, ext, text) in [
-      ("1MB", "swift", EditorScrollPerfTests.swiftSource(bytes: 1_000_000)),
+      ("1MB", "swift", EditorTypingPerfTests.swiftSource(bytes: 1_000_000)),
       ("1MB-js", "js", Self.taggedTemplateSource(bytes: 1_000_000)),
       ("1MB-md", "md", Self.markdownSource(bytes: 1_000_000)),
     ] {

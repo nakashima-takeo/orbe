@@ -9,13 +9,9 @@ import os
 /// `scripts/perf-editor-present.sh` が xctrace（Animation Hitches）の下で起こす。窓は画面に出すがアプリは activate
 /// しない。
 ///
-/// - 新しい面: 1MB の文書に合成した指の出来事を実機の刻み（約 5.7ms）で流す。出来事→present と落ちたコマは面の記録係が
-///   OS のログ（カテゴリ `editor-frames`）へジェスチャーごとに出す。
-/// - 今の面（STTextView）: 非公開の `_automateLiveScroll` で NSScrollView の本物のスクロールの経路を回す（計測の道具
-///   だけで使う）。数字は xctrace の hitches で読む。
-///
-/// スクロールを動かしている区間（新しい面は合成の出来事を流している間、今の面は `_automateLiveScroll` の間）を
-/// os_signpost の interval `scrolling` で trace に記録し、スクリプトはその区間の hitches だけを区間の長さで割る。
+/// 1MB の文書に合成した指の出来事を実機の刻み（約 5.7ms）で流す。出来事→present と落ちたコマは面の記録係が OS のログ
+/// （カテゴリ `editor-frames`）へジェスチャーごとに出す。合成の出来事を流している区間を os_signpost の interval
+/// `scrolling` で trace に記録し、スクリプトはその区間の hitches だけを区間の長さで割る。
 @MainActor
 final class EditorPresentPerfTests: OrbeTestCase {
   private static let signposter = OSSignposter(
@@ -30,8 +26,8 @@ final class EditorPresentPerfTests: OrbeTestCase {
     NSApplication.shared.setActivationPolicy(.accessory)
   }
 
-  func testMetalSurface() throws {
-    let (window, document) = try show(metal: true)
+  func testScrolling() throws {
+    let (window, document) = try show()
     defer { window.orderOut(nil) }
     drag(document.surface.view, seconds: 3, speed: 2400)
     RunLoop.main.run(until: Date().addingTimeInterval(1))
@@ -41,29 +37,17 @@ final class EditorPresentPerfTests: OrbeTestCase {
     }
   }
 
-  func testCurrentSurface() throws {
-    let (window, document) = try show(metal: false)
-    defer { window.orderOut(nil) }
-    let scrollView = try XCTUnwrap(document.surface.responder.enclosingScrollView)
-    let scrolling = Self.signposter.beginInterval("scrolling")
-    scrollView.perform(Selector(("_automateLiveScroll")))
-    RunLoop.main.run(until: Date().addingTimeInterval(12))
-    Self.signposter.endInterval("scrolling", scrolling)
-  }
-
   /// 1200×800 の窓を画面に出し（activate しない）、1MB の Swift の文書を開く。
-  private func show(metal: Bool) throws -> (NSWindow, EditorDocument) {
+  private func show() throws -> (NSWindow, EditorDocument) {
     let queries = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
-    let choice = EditorEngineChoice(
-      metal: metal, elasticScroll: true, fontSmoothing: true, language: .ja)
     let tab = TerminalTab(
       cwd: try XCTUnwrap(TestIsolation.caseDir).path,
-      editorSurfaces: EditorSurfaces(queriesRoot: queries, engine: { choice }))
+      editorSurfaces: EditorSurfaces(queriesRoot: queries))
     let window = hostEditor(tab, width: 1200, height: 800)
     window.appearance = NSAppearance(named: .darkAqua)
     window.orderFrontRegardless()
     let document = try tab.editor.open(
-      try caseFile("big.swift", EditorScrollPerfTests.swiftSource(bytes: 1_000_000)))
+      try caseFile("big.swift", EditorTypingPerfTests.swiftSource(bytes: 1_000_000)))
     tab.view.editor.layoutSubtreeIfNeeded()
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))
     RunLoop.main.run(until: Date().addingTimeInterval(1))

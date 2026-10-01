@@ -120,26 +120,3 @@ public struct OverviewRuler: Equatable, Sendable {
     return result
   }
 }
-
-/// 俯瞰（ミニマップとスクロールバーの印）へ出す、検索と出現の強調。区間は本文のオフセット（昇順・重ならない）。
-/// git の変更とキャレットは文書から直接読むので含まない。
-public struct OverviewDecorations: Equatable, Sendable {
-  public var findMatches: [NSRange]
-  public var currentFindMatch: NSRange?
-  public var wordOccurrences: [NSRange]
-
-  public init(
-    findMatches: [NSRange] = [], currentFindMatch: NSRange? = nil, wordOccurrences: [NSRange] = []
-  ) {
-    self.findMatches = findMatches
-    self.currentFindMatch = currentFindMatch
-    self.wordOccurrences = wordOccurrences
-  }
-
-  public static let empty = OverviewDecorations()
-
-  /// 検索の一致が多く、ruler は近似・ミニマップは現在の一致だけになる。
-  public var approximatesFindMatches: Bool {
-    findMatches.count > OverviewRuler.approximateFindMatchCount
-  }
-}

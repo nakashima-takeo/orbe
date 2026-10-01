@@ -57,7 +57,7 @@ final class EditorDocumentTests: XCTestCase {
   // MARK: - 写し
 
   /// 本文を持たない面は、知らせ（役割の変化・行の印）を受けたときに文書の写しを引いて描く。文書はどの知らせも写しを
-  /// 更新した後に出すので、引いた写しは面の本文と同じで、版は文書の今の版。壊れると新しい面が 1 つ前の本文で印や色を描く。
+  /// 更新した後に出すので、引いた写しは面の本文と同じで、版は文書の今の版。壊れると面が 1 つ前の本文で印や色を描く。
   func testContentPulledOnNoticesIsCurrent() throws {
     let url = try temp("a.swift", "let a = 1\nlet b = 2\n")
     let (document, surface) = try open(url)

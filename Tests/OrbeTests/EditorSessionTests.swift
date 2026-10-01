@@ -4,8 +4,8 @@ import XCTest
 
 @testable import Orbe
 
-/// セッション——開く・同じファイルは焦点だけ・閉じると隣へ・未保存の有無・通知は 1 本。
-/// 面は本物（STTextView）を queries 無しで作る（色は要らない）。
+/// セッション——開く・同じファイルは焦点だけ・閉じると隣へ・未保存の有無・通知は 1 本・面を作れなければ開けない。
+/// 面は本物を queries 無しで作る（色は要らない）。
 ///
 /// 壊れると何が起きるか。同じファイルが 2 度開かれると undo と本文が 2 つに割れる。閉じたとき焦点が
 /// 消えた文書に残ると器が外した面を指す。未保存の変化が通知に載らないと u4 のファイルタブに印が出ない。
@@ -54,6 +54,26 @@ final class EditorSessionTests: OrbeTestCase {
     XCTAssertTrue(session.activeDocument === docB, "焦点の文書を閉じれば隣へ")
     session.close(docB)
     XCTAssertNil(session.activeDocument)
+  }
+
+  /// テキスト面を作れない（Metal の装置が取れない）環境では、読めるファイルも開けない——読めないファイルと同じく
+  /// エラーで返り、列・焦点・通知は変わらない。読めないファイルは面を作る前に読めないと返る。
+  func testWithoutASurfaceNothingOpens() throws {
+    let session = EditorSession(
+      surfaces: EditorSurfaces(registry: LanguageRegistry(queriesRoot: nil), make: { nil }))
+    let a = try file("a.txt", "a")
+    let count = try notifications(session) {
+      XCTAssertThrowsError(try session.open(a)) {
+        XCTAssertEqual($0 as? EditorSurfaceError, .noMetalDevice)
+      }
+    }
+    XCTAssertEqual(count, 0)
+    XCTAssertTrue(session.documents.isEmpty)
+    XCTAssertNil(session.activeDocument)
+    let missing = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("missing.txt")
+    XCTAssertThrowsError(try session.open(missing)) {
+      XCTAssertNotNil($0 as? EditorDocumentError, "読めないファイルは読めないと返る")
+    }
   }
 
   func testUnsavedChangesAreNotified() throws {

@@ -11,7 +11,7 @@ import os
 ///
 /// 描画スレッドは、最初のコマから表示の刻みに合わせた時間制約つきのスレッドになる（`adopt(framePeriod:)`）。
 final class RenderThread: @unchecked Sendable {
-  /// 既定の Metal の装置。取れない環境（装置の無い仮想マシンなど）では nil で、新しい面は作らない。
+  /// 既定の Metal の装置。取れない環境（装置の無い仮想マシンなど）では nil で、面は作らない。
   static let device: MTLDevice? = MTLCreateSystemDefaultDevice()
 
   /// 初めて触れたときにスレッドを起こし、シェーダのコンパイルを裏で始める。

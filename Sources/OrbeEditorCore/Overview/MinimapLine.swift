@@ -1,18 +1,5 @@
 import Foundation
 
-/// ミニマップに描く字 1 つ——桁（ガターの右から 0 始まり）・字形の番号・役割（無ければ素の文字色）。
-public struct MinimapCell: Equatable, Sendable {
-  public let column: Int
-  public let glyph: Int
-  public let role: SyntaxRole?
-
-  public init(column: Int, glyph: Int, role: SyntaxRole?) {
-    self.column = column
-    self.glyph = glyph
-    self.role = role
-  }
-}
-
 /// ミニマップの行 1 つを字の列にする規則（VS Code `InnerMinimap._renderLine` / `getXOffsetForPosition` / `getCharIndex`）。
 /// 字は 1 字 1 桁、全角は 2 桁、空白は描かずに 1 桁進む。タブは字と装飾で数え方が違う——字は次のタブ位置まで空け、
 /// 装飾（選択・一致）の x はタブを固定の `tabSize` 桁と数える（VS Code がそう描く）。単位は UTF-16。
@@ -22,24 +9,8 @@ public enum MinimapLine {
   /// 字の左のガター（デバイス px）。
   public static let gutter = 8
 
-  /// 行の字の列。`units` は行の本文（改行を除く）、`lineStart` はその行頭のオフセット、`roles` は行に掛かる役割の区間
-  /// （昇順・重ならない。本文全体のオフセット）。`columns` 桁目以降は描かない（`columns(canvasWidth:scale:)`）。
-  @inlinable public static func cells(
-    _ units: some Collection<UInt16>, lineStart: Int, roles: ArraySlice<HighlightSpan>,
-    tabSize: Int, columns: Int
-  ) -> [MinimapCell] {
-    var result: [MinimapCell] = []
-    var role = roles.startIndex
-    forEachCell(units, tabSize: tabSize, columns: columns) { column, glyph, index in
-      let offset = lineStart + index
-      while role < roles.endIndex, NSMaxRange(roles[role].range) <= offset { role += 1 }
-      let span = role < roles.endIndex && roles[role].range.location <= offset ? roles[role] : nil
-      result.append(MinimapCell(column: column, glyph: glyph, role: span?.role))
-    }
-    return result
-  }
-
-  /// 行の字を、列を作らずに左から順に `body`（桁・字形の番号・行の中の UTF-16 位置）へ渡す（`cells` の字の置き方）。
+  /// 行の字を左から順に `body`（桁・字形の番号・行の中の UTF-16 位置）へ渡す。`units` は行の本文（改行を除く）で、
+  /// `columns` 桁目以降は描かない（`columns(canvasWidth:scale:)`）。
   @inlinable public static func forEachCell(
     _ units: some Collection<UInt16>, tabSize: Int, columns: Int,
     _ body: (_ column: Int, _ glyph: Int, _ index: Int) -> Void
@@ -68,25 +39,7 @@ public enum MinimapLine {
     }
   }
 
-  /// 行の各 UTF-16 位置の左端の桁（装飾の x。`units.count + 1` 個）。タブは `tabSize` 桁、全角は 2 桁。`limit` 桁に
-  /// 達したらそこで止める（それより右はミニマップに描けない——VS Code `getXOffsetForPosition` の打ち切り）。
-  @inlinable public static func decorationColumns(
-    _ units: some Collection<UInt16>, tabSize: Int, limit: Int
-  ) -> [Int] {
-    var result = [0]
-    var column = 0
-    for unit in units {
-      column += decorationWidth(of: unit, tabSize: tabSize)
-      if column >= limit {
-        result.append(limit)
-        break
-      }
-      result.append(column)
-    }
-    return result
-  }
-
-  /// `decorationColumns` で字 1 つが進める桁（タブは `tabSize` 桁、全角は 2 桁）。
+  /// 装飾（選択・一致）の x で字 1 つが進める桁（タブは `tabSize` 桁、全角は 2 桁）。
   @inlinable public static func decorationWidth(of unit: UInt16, tabSize: Int) -> Int {
     unit == 0x09 ? tabSize : CharacterWidth.isFullWidth(UInt32(unit)) ? 2 : 1
   }

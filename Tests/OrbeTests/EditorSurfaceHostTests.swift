@@ -1,5 +1,4 @@
 import AppKit
-import Metal
 import OrbeEditorCore
 import XCTest
 
@@ -10,12 +9,6 @@ import XCTest
 /// ⇧ドロップや Finder のコピーで絶対パスしか入らない、右クリックの文言が英語のまま、変換中の ⌘S で IME が未確定を持ち続ける。
 @MainActor
 final class EditorSurfaceHostTests: OrbeTestCase {
-  private var metalSurfaces: EditorSurfaces {
-    let choice = EditorEngineChoice(
-      metal: true, elasticScroll: true, fontSmoothing: true, language: .ja)
-    return EditorSurfaces(queriesRoot: nil, engine: { choice })
-  }
-
   func testThePaneAnswersTheSurface() throws {
     let dir = try XCTUnwrap(TestIsolation.caseDir)
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
@@ -52,14 +45,14 @@ final class EditorSurfaceHostTests: OrbeTestCase {
   /// 確定するので、それだけでは区別にならない）。⌘S は見えている本文を保存する——未確定の
   /// 文字は既に本文にある。
   func testChromeKeysCommitTheCompositionFirst() throws {
-    try XCTSkipIf(MTLCreateSystemDefaultDevice() == nil, "Metal の装置が無い環境では今の面で開く")
     let tab = TerminalTab(
-      cwd: try XCTUnwrap(TestIsolation.caseDir).path, editorSurfaces: metalSurfaces)
+      cwd: try XCTUnwrap(TestIsolation.caseDir).path,
+      editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 700)
     defer { window.contentView = nil }
     let url = try caseFile("a.swift", "let a = 1\n")
     let document = try tab.editor.open(url)
-    XCTAssertTrue(document.surface.responder is InputMethodKeyEquivalents, "新しい面は窓の根の口に答える")
+    XCTAssertTrue(document.surface.responder is InputMethodKeyEquivalents, "面の view は窓の根の口に答える")
     window.makeFirstResponder(document.surface.responder)
     let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
     client.setMarkedText(
