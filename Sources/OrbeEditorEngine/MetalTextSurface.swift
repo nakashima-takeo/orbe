@@ -36,7 +36,7 @@ final class MetalTextSurface: TextSurface {
   /// 面の大きさ（pt）・倍率・描く色空間。
   var size = CGSize.zero
   private var scale: CGFloat = 2
-  private var space = FrameMaterial.defaultSpace
+  private(set) var space = FrameMaterial.defaultSpace
   private(set) var indentation = Indentation.fallback
   private(set) var lineBreak = LineBreak.lf
   /// 面に焦点がある（first responder で、窓が key）。

@@ -2,7 +2,7 @@ import Foundation
 import OrbeEditorCore
 
 /// 変換の文節 1 つ——範囲（view が IME の文字列から作るときは文字列の先頭から、編集係が持つ間は文書の座標）と、IME が
-/// 変換の対象として選んでいるか、IME が指定した下線と地の色（sRGB）。
+/// 変換の対象として選んでいるか、IME が指定した下線と地の色（面の描く色空間に解いた値）。
 struct MarkedClause: Equatable, Sendable {
   var range: NSRange
   var active: Bool

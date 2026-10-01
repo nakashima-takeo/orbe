@@ -258,8 +258,11 @@ final class SurfaceInputMethodTests: EngineTestCase {
   /// 属性の無い未確定の文字は地で塗り、文節の属性があれば IME が選んでいる文節（太い下線）とそれ以外に分け、透明な下線の
   /// 色は指定が無いものとする。
   func testMarkedAppearanceFollowsTheAttributes() {
+    let aqua = NSAppearance(named: .aqua)!
+    let srgb = FrameMaterial.defaultSpace
     let plain = MetalTextView.appearance(
-      of: NSAttributedString(string: "かな"), selected: NSRange(location: 2, length: 0))
+      of: NSAttributedString(string: "かな"), selected: NSRange(location: 2, length: 0),
+      appearance: aqua, space: srgb)
     XCTAssertEqual(plain, MarkedAppearance(clauses: [], filled: true))
     let clauses = NSMutableAttributedString(string: "漢字変換")
     clauses.addAttributes(
@@ -271,7 +274,7 @@ final class SurfaceInputMethodTests: EngineTestCase {
       [.markedClauseSegment: 1, .underlineStyle: NSUnderlineStyle.single.rawValue],
       range: NSRange(location: 2, length: 2))
     let appearance = MetalTextView.appearance(
-      of: clauses, selected: NSRange(location: 0, length: 2))
+      of: clauses, selected: NSRange(location: 0, length: 2), appearance: aqua, space: srgb)
     XCTAssertEqual(
       appearance.clauses.map(\.range),
       [NSRange(location: 0, length: 2), NSRange(location: 2, length: 2)])

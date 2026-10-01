@@ -49,4 +49,34 @@ extension SurfaceInputMethodTests {
       Array(pixel(plain, x: (x(1) + x(2)) / 2, y: underline).prefix(3)), [204, 204, 204],
       "選んでいない字には本文の色の下線を引かない")
   }
+
+  /// IME が指定した色も、他の色と同じく面の描く色空間（窓の色空間）に解く。壊れると P3 の窓で、変換中の文節の下線と地が
+  /// 指定より鮮やかにずれて描かれる。
+  func testTheInputMethodsColorsAreResolvedInTheWindowsColorSpace() throws {
+    let opened = try open("\n")
+    let window = host(opened, size: CGSize(width: 400, height: 80))
+    window.colorSpace = .displayP3
+    opened.surface.view.viewDidChangeBackingProperties()
+    XCTAssertEqual(opened.surface.drawn.space, CGColorSpace(name: CGColorSpace.displayP3), "前提: P3")
+    fakeInputMethod(opened)
+    let red = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)
+    let blue = NSColor(srgbRed: 0, green: 0, blue: 1, alpha: 1)
+    let clauses = NSMutableAttributedString(string: "aa")
+    clauses.addAttributes(
+      [
+        .markedClauseSegment: 0, .underlineStyle: NSUnderlineStyle.thick.rawValue,
+        .underlineColor: red, .backgroundColor: blue,
+      ], range: NSRange(location: 0, length: 2))
+    replay([.markAttributed(clauses, selected: NSRange(location: 0, length: 2))], on: opened)
+    let clause = try XCTUnwrap(opened.surface.drawn.caret.marked?.appearance.clauses.first)
+    let bytes = { (packed: UInt32?) in [0, 8, 16].map { Int(((packed ?? 0) >> $0) & 0xFF) } }
+    let p3 = { (color: NSColor) in
+      let converted = color.usingColorSpace(.displayP3)!
+      return [converted.redComponent, converted.greenComponent, converted.blueComponent].map {
+        Int(($0 * 255).rounded())
+      }
+    }
+    XCTAssertEqual(bytes(clause.underline), p3(red), "下線は窓の色空間の値")
+    XCTAssertEqual(bytes(clause.background), p3(blue), "地は窓の色空間の値")
+  }
 }

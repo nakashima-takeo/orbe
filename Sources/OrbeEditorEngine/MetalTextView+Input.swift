@@ -25,7 +25,8 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     surface.inputScope {
       surface.editor.setMarkedText(
         marked.string, selected: selected, replacement: replacementRange,
-        appearance: Self.appearance(of: marked, selected: selected))
+        appearance: Self.appearance(
+          of: marked, selected: selected, appearance: effectiveAppearance, space: surface.space))
     }
   }
 
@@ -238,8 +239,14 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
   }
 
   /// 未確定の文字の見た目。下線・文節・地の属性があれば文節の列（IME が選んでいるのは太い下線の文節）、無ければ地で塗り、
-  /// 中の選択に長さがあればそこを選んでいる文節にする。下線の色が透明なら指定が無いものとする。
-  static func appearance(of string: NSAttributedString, selected: NSRange) -> MarkedAppearance {
+  /// 中の選択に長さがあればそこを選んでいる文節にする。下線の色が透明なら指定が無いものとする。IME が指定した色は、他の
+  /// 色と同じく外観 `appearance` で面の描く色空間 `space` に解く。
+  static func appearance(
+    of string: NSAttributedString, selected: NSRange, appearance: NSAppearance, space: CGColorSpace
+  ) -> MarkedAppearance {
+    let resolve = { (color: NSColor) in
+      FrameColor(color, appearance: appearance, space: space).packed
+    }
     var clauses: [MarkedClause] = []
     let whole = NSRange(location: 0, length: string.length)
     string.enumerateAttributes(in: whole) { attributes, range, _ in
@@ -249,12 +256,12 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
           || attributes[.backgroundColor] != nil
       else { return }
       let underline = (attributes[.underlineColor] as? NSColor).flatMap {
-        $0.alphaComponent > 0 ? FrameColor.pack($0) : nil
+        $0.alphaComponent > 0 ? resolve($0) : nil
       }
       let clause = MarkedClause(
         range: range, active: (style ?? 0) & 0xFF >= NSUnderlineStyle.thick.rawValue,
         underline: underline,
-        background: (attributes[.backgroundColor] as? NSColor).map(FrameColor.pack))
+        background: (attributes[.backgroundColor] as? NSColor).map(resolve))
       if let last = clauses.last, NSMaxRange(last.range) == range.location,
         last.active == clause.active,
         last.underline == clause.underline, last.background == clause.background,
