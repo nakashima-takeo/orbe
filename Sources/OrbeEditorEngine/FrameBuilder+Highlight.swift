@@ -38,22 +38,31 @@ struct Highlights: Equatable, Sendable {
   /// （VS Code の zIndex の組が変わる）。
   var crowded: Bool { find.count > OverviewRuler.approximateFindMatchCount }
 
-  /// 本文の区間 `window` に掛かる区間があるか。
+  /// 本文の区間 `window` に掛かる区間があるか（掛かる最初の候補だけを見る——一致の多い長い行でも行の一致を数えない）。
   func touches(_ window: Range<Int>) -> Bool {
-    [find, current, selection, word].contains { !Self.slice($0, window).isEmpty }
+    [find, current, selection, word].contains {
+      let first = Self.first($0, endingAfter: window.lowerBound)
+      return first < $0.count && $0[first].location < window.upperBound
+    }
   }
 
   /// 昇順の列 `ranges` のうち、本文の区間 `window` に掛かるもの（二分探索で切る。長い行でも一致の数 × 行の長さにしない）。
   static func slice(_ ranges: [NSRange], _ window: Range<Int>) -> ArraySlice<NSRange> {
+    let low = first(ranges, endingAfter: window.lowerBound)
+    var end = low
+    while end < ranges.count, ranges[end].location < window.upperBound { end += 1 }
+    return ranges[low..<end]
+  }
+
+  /// 昇順の列 `ranges` で、終わりが `offset` より後ろの最初の区間の番号（二分探索）。
+  private static func first(_ ranges: [NSRange], endingAfter offset: Int) -> Int {
     var low = 0
     var high = ranges.count
     while low < high {
       let mid = (low + high) / 2
-      if NSMaxRange(ranges[mid]) <= window.lowerBound { low = mid + 1 } else { high = mid }
+      if NSMaxRange(ranges[mid]) <= offset { low = mid + 1 } else { high = mid }
     }
-    var end = low
-    while end < ranges.count, ranges[end].location < window.upperBound { end += 1 }
-    return ranges[low..<end]
+    return low
   }
 }
 
