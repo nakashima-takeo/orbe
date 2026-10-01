@@ -34,6 +34,24 @@ extension DesignFlowSnapshotTests {
     }
   }
 
+  /// `caughtUp` に加え、手順の後に語の出現の遅れ（50ms）を越えて 150ms 待ってから撮る——新しい面の flow（`*_metal`）と
+  /// 同じ時点を撮り、画素で比べられるようにする。
+  private func settled(_ pane: EditorPaneView, _ steps: [(label: String, action: () -> Void)])
+    -> [(label: String, action: () -> Void)]
+  {
+    caughtUp(
+      pane,
+      steps.map { step in
+        (
+          step.label,
+          {
+            step.action()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+          }
+        )
+      })
+  }
+
   func testEditorOverview() throws {
     let (scene, long) = try longScene()
     defer { scene.cleanup() }
@@ -111,7 +129,7 @@ extension DesignFlowSnapshotTests {
     let pane = scene.pane
     try flow(
       "editor_find", size: NSSize(width: 1000, height: 480), render: { scene.view },
-      steps: caughtUp(
+      steps: settled(
         pane,
         [
           ("open", {}),
