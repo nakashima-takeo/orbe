@@ -13,13 +13,33 @@ extension SurfaceInputMethodTests {
     let opened = try open((0..<200).map { "row \($0)" }.joined(separator: "\n"))
     _ = host(opened)
     let context = fakeInputMethod(opened)
-    opened.surface.scroll(toTop: opened.document.text.lineStart(50), hiddenFraction: 0)
+    opened.surface.scroll(toFirstLine: 50)
     XCTAssertEqual(context.invalidations, 0)
     replay([.mark("か")], on: opened)
     let composing = context.invalidations
     XCTAssertGreaterThan(composing, 0, "変換の変化でも知らせる")
-    opened.surface.scroll(toTop: opened.document.text.lineStart(10), hiddenFraction: 0)
+    opened.surface.scroll(toFirstLine: 10)
     XCTAssertGreaterThan(context.invalidations, composing)
+  }
+
+  /// 変換中に本文が横だけに動いても知らせる——描画スレッドがキャレットへ横に寄せたとき（main の取引の後に動く）と、
+  /// 横のホイール。どちらも先頭の行も行数も変えない。
+  func testHorizontalOnlyScrollingWhileComposingMovesTheCandidateWindow() throws {
+    let opened = try open(String(repeating: "x", count: 300) + "\n")
+    _ = host(opened, size: CGSize(width: 400, height: 120))
+    let context = fakeInputMethod(opened)
+    opened.surface.selectedRange = NSRange(location: 300, length: 0)
+    XCTAssertEqual(opened.surface.hiddenColumns, 0, "前提: 行頭が見えている")
+    replay([.mark("か")], on: opened)
+    let marked = context.invalidations
+    let viewport = opened.surface.viewport
+    _ = opened.surface.snapshot()
+    pump(until: { opened.surface.hiddenColumns > 0 }, "前提: 描画スレッドがキャレットへ横に寄せる")
+    pump(until: { context.invalidations > marked }, "横に寄せたら知らせる")
+    XCTAssertEqual(opened.surface.viewport, viewport, "前提: 見えている範囲は変わらない")
+    let revealed = context.invalidations
+    opened.surface.scroll(ScrollInput(timestamp: 0, delta: SIMD2(3, 0), precise: false))
+    XCTAssertGreaterThan(context.invalidations, revealed, "横のホイールでも知らせる")
   }
 
   /// 読む呼び出しは NSTextView と同じく、はみ出しを切り、範囲外は nil・NSNotFound を返す。
