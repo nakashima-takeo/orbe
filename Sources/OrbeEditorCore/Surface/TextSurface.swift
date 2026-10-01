@@ -15,6 +15,12 @@ public protocol TextSurface: AnyObject {
   /// 見えている範囲を本文の言葉で（面の pt は出ない）。
   var viewport: TextViewport { get }
 
+  /// 右列（ミニマップ＋縦スクロールバー）の幅（pt）。面は俯瞰（ミニマップ・縦横のスクロールバーと印・影）を自分で描き、
+  /// 載せる側は面の上に浮かべる部品（検索バー）をこの幅から置く。本文の座標ではなく view の配置の事実で、view の幅と
+  /// 行番号の列の桁で変わる。載せる側は大きさを変えたときと見えている範囲の知らせで読み直す（本文の変化の知らせの中では
+  /// 変化の前の幅を答える）。
+  var rightColumnWidth: CGFloat { get }
+
   /// そのオフセットの行を可視範囲の中央へスクロールする（先頭・末尾では端で止まる）。選択は動かさない。
   func scrollToCenter(_ offset: Int)
 
@@ -157,16 +163,6 @@ public struct TextViewport: Equatable, Sendable {
   }
 
   public static let empty = TextViewport(firstVisible: 0, hiddenFraction: 0, visibleLines: 0)
-}
-
-/// 自分で俯瞰（ミニマップ・縦横のスクロールバーと印・影）を描く面。載せる側は俯瞰の部品を出さず、面の上に浮かべる
-/// 部品（検索バー）を右列の幅から置く。
-@MainActor
-public protocol OverviewDrawingSurface: TextSurface {
-  /// 右列（ミニマップ＋縦スクロールバー）の幅（pt）。本文の座標ではなく view の配置の事実で、view の幅と行番号の列の桁で
-  /// 変わる。載せる側は大きさを変えたときと見えている範囲の知らせで読み直す（本文の変化の知らせの中では変化の前の幅を
-  /// 答える）。載せる側が浮かべる部品を置くためだけに使う。
-  var rightColumnWidth: CGFloat { get }
 }
 
 /// 面の見え方。色は名前付き（dynamic）の NSColor を渡し、外観は描画時に解く。装備と俯瞰の寸法と色もここで渡し、

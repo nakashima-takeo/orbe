@@ -66,58 +66,19 @@ extension EditorPaneView {
       + (document != nil ? Theme.Layout.editorBreadcrumb : 0)
   }
 
-  /// 本体（文書があればテキスト面と俯瞰、無ければ空状態）の矩形。
+  /// 本体（文書があればテキスト面、無ければ空状態）の矩形。
   var bodyRect: NSRect {
     NSRect(
       x: sideWidth, y: headerHeight, width: max(0, bounds.width - sideWidth),
       height: max(0, bounds.height - headerHeight))
   }
 
-  /// 焦点の文書の面が自分で俯瞰を描くなら、その面。
-  var overviewSurface: OverviewDrawingSurface? { document?.surface as? OverviewDrawingSurface }
-
-  /// 今の面の俯瞰のミニマップの幅（VS Code の式。本文の幅から計算し、上限 `editorMinimapMaxWidth`）。
-  var minimapWidth: CGFloat {
-    MinimapLayout.width(
-      remaining: bodyRect.width - Theme.Layout.editorLineNumberGutter
-        - Theme.Layout.editorMarkGutter,
-      charWidth: (" " as NSString).size(withAttributes: [.font: Theme.Typography.editorCode]).width,
-      scrollbar: Theme.Layout.editorScrollbar, maxWidth: Theme.Layout.editorMinimapMaxWidth)
-  }
-
-  /// 右列の幅（ミニマップ ＋ スクロールバー）。自分で俯瞰を描く面なら面が答える幅。本体より広くはならない。
+  /// 焦点の文書の面の右列（ミニマップ ＋ 縦スクロールバー）の幅。本体より広くはならない。文書が無ければ 0。
   var rightColumnWidth: CGFloat {
-    min(
-      bodyRect.width,
-      overviewSurface?.rightColumnWidth ?? minimapWidth + Theme.Layout.editorScrollbar)
+    min(bodyRect.width, document?.surface.rightColumnWidth ?? 0)
   }
 
-  /// テキスト面の矩形——自分で俯瞰を描く面なら本体全体、そうでなければ本体から右列を除いたぶん。文書が無ければ本体
-  /// そのもの。
-  var surfaceRect: NSRect {
-    guard document != nil, overviewSurface == nil else { return bodyRect }
-    let body = bodyRect
-    return NSRect(
-      x: body.minX, y: body.minY, width: max(0, body.width - rightColumnWidth), height: body.height)
-  }
-
-  /// 今の面の俯瞰のミニマップの矩形（スクロールバーの左）。
-  var minimapRect: NSRect {
-    let body = bodyRect
-    let scrollbarWidth = min(Theme.Layout.editorScrollbar, body.width)
-    let width = max(0, rightColumnWidth - scrollbarWidth)
-    return NSRect(
-      x: body.maxX - scrollbarWidth - width, y: body.minY, width: width, height: body.height)
-  }
-
-  /// 今の面の俯瞰のスクロールバーの矩形（本体の右端）。
-  var scrollbarRect: NSRect {
-    let body = bodyRect
-    let width = min(Theme.Layout.editorScrollbar, body.width)
-    return NSRect(x: body.maxX - width, y: body.minY, width: width, height: body.height)
-  }
-
-  /// 検索バーの右端を、右列の左 `beat` に置く（右列の幅は本体の幅と、自分で俯瞰を描く面では行番号の列の桁で変わる）。
+  /// 検索バーの右端を、右列の左 `beat` に置く（右列の幅は本体の幅と行番号の列の桁で変わる）。
   func placeSearchBar() {
     let constant = -(rightColumnWidth + Theme.Space.beat)
     if searchBarTrailing?.constant != constant { searchBarTrailing?.constant = constant }
@@ -125,7 +86,7 @@ extension EditorPaneView {
 
   override func layout() {
     // 面の大きさが右列の幅を決め、検索バーの制約はその幅から置く——制約は super.layout() が当てるので、その前に置く。
-    document?.surface.view.frame = surfaceRect
+    document?.surface.view.frame = bodyRect
     placeSearchBar()
     super.layout()
     let sideWidth = self.sideWidth
@@ -134,9 +95,6 @@ extension EditorPaneView {
     headerHost.frame = NSRect(
       x: sideWidth, y: 0, width: max(0, bounds.width - sideWidth), height: headerHeight)
     emptyHost.frame = bodyRect
-    appKitOverview.layout(surface: surfaceRect, minimap: minimapRect, scrollbar: scrollbarRect)
-    // 本体の上のポインタの当たりは本体の矩形（サイドバーの幅で動く）。
-    updateTrackingAreas()
     // 当たりは境を動かせるときだけ（`resizeSidebar` の guard と同じ条件）——動かない列に出すとレールの右 1pt を
     // 覆ってリサイズカーソルだけが出る。
     sidebarHandle.isHidden =

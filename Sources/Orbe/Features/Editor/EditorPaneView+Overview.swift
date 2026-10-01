@@ -1,29 +1,18 @@
 import AppKit
 import OrbeEditorCore
 
-/// 文書の「変わった」の扇出と、俯瞰（今の面の俯瞰の部品）と出現の強調・一致の地への配線。文書側の closure は単一のまま、
-/// 文書の「変わった」の扇出と、俯瞰（今の面の俯瞰の部品）と出現の強調・一致の地への配線。文書側の closure は単一のまま、
-/// ここが今の面の俯瞰・検索・出現の強調・プロジェクト検索・アウトラインへ配る（裏から届いた役割と問いとアウトラインの結果
-/// も）。一致の地は 2 つの出どころ（ファイル内検索とプロジェクト検索）の和を面へ押し（`pushFindGround`）、語の出現と束ねて
-/// （`OverviewDecorations`）今の面の俯瞰へ押す。自分で俯瞰を描く面には面へ押した強調の地だけで足り、見えている範囲が
-/// 変わったとき（行番号の列の桁で右列の幅が変わるときも出る）に検索バーを置き直す。
+/// 文書の「変わった」の扇出と、出現の強調・一致の地への配線。文書側の closure は単一のまま、ここが検索・出現の強調・
+/// プロジェクト検索・アウトラインへ配る（裏から届いた問いとアウトラインの結果も）。一致の地は 2 つの出どころ（ファイル内
+/// 検索とプロジェクト検索）の和を面へ押す（`pushFindGround`）。見えている範囲が変わったとき（行番号の列の桁で右列の幅が
+/// 変わるときも出る）に検索バーを置き直す。
 extension EditorPaneView {
-  /// 文書の「変わった」を俯瞰・検索・出現の強調へ配る（見せている文書だけ）。
+  /// 文書の「変わった」を検索・出現の強調・プロジェクト検索・アウトラインへ配る（見せている文書だけ）。
   func observe(_ document: EditorDocument, _ on: Bool) {
-    document.onViewportChange =
-      on
-      ? { [weak self] in
-        guard let self else { return }
-        appKitOverview.viewportDidChange()
-        placeSearchBar()
-      } : nil
-    document.onHunksChange =
-      on ? { [weak self] in self?.appKitOverview.hunksOrSelectionDidChange() } : nil
+    document.onViewportChange = on ? { [weak self] in self?.placeSearchBar() } : nil
     document.onSelectionChange =
       on
       ? { [weak self] in
         guard let self else { return }
-        appKitOverview.hunksOrSelectionDidChange()
         search.selectionDidChange()
         occurrences.selectionDidChange()
         outline.caretDidMove()
@@ -32,12 +21,10 @@ extension EditorPaneView {
       on
       ? { [weak self] edits in
         guard let self else { return }
-        appKitOverview.textDidChange(edits)
         search.textDidChange(edits)
         occurrences.textDidChange()
         if let document = self.document { projectSearch.documentDidEdit(document, edits) }
       } : nil
-    document.onRolesChange = on ? { [weak self] in self?.appKitOverview.rolesDidChange($0) } : nil
     document.onOutlineChange = on ? { [weak self] in self?.outline.outlineDidChange() } : nil
     document.onAnalysis =
       on
@@ -95,25 +82,11 @@ extension EditorPaneView {
     return (matches, current)
   }
 
-  /// 一致の地を面と今の面の俯瞰へ押す（状態は持たず、2 つの出どころを読み直す）。どちらかの出どころが変わったとき・文書の
-  /// 切替・検索パネルの見え隠れで呼ぶ。
+  /// 一致の地を面へ押す（状態は持たず、2 つの出どころを読み直す）。どちらかの出どころが変わったとき・文書の切替・
+  /// 検索パネルの見え隠れで呼ぶ。
   func pushFindGround() {
     let ground = findGround
     document?.surface.setHighlights(ground.matches, for: .findMatch)
     document?.surface.setHighlights(ground.current, for: .currentFindMatch)
-    pushOverviewDecorations(ground)
-  }
-
-  /// 一致の地と語の出現を束ねて今の面の俯瞰へ。
-  func pushOverviewDecorations(_ ground: (matches: [NSRange], current: [NSRange])? = nil) {
-    let find = ground ?? findGround
-    appKitOverview.decorations = OverviewDecorations(
-      findMatches: find.matches, currentFindMatch: find.current.first,
-      wordOccurrences: occurrences.wordOccurrences)
-  }
-
-  override func updateTrackingAreas() {
-    super.updateTrackingAreas()
-    appKitOverview.updateTracking(in: self, body: bodyRect)
   }
 }

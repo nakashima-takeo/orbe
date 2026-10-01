@@ -81,6 +81,6 @@ extension SurfaceConfig {
   }
 }
 
-extension MetalTextSurface: OverviewDrawingSurface {
+extension MetalTextSurface {
   var rightColumnWidth: CGFloat { surfaceLayout.rightColumnWidth }
 }

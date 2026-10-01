@@ -13,13 +13,12 @@ struct EditorFaceRoot: View {
 
 /// エディター面の AppKit 側の根。骨の幾何——レール｜サイドバー（開いているとき）｜列の頭
 /// （ファイルタブ行 → 文書があればパンくず）｜本体——を `layout()` が解き、SwiftUI の root 2 枚（左列・列の頭）と本体（焦点の
-/// 文書のテキスト面。自分で俯瞰を描く面なら本体全体、そうでなければその右に今の面の俯瞰、無ければ空状態の root）を frame
-/// で置く。地は chrome と同じ veil。
+/// 文書のテキスト面。無ければ空状態の root）を frame で置く。地は chrome と同じ veil。
 ///
-/// 文書の「変わった」（viewport・選択・本文・ハンク・焦点）は pane が 1 つずつ受け、ミニマップ・スクロールバー・影・検索・
-/// 出現の強調・プロジェクト検索へ配る——文書側の closure は単一のまま、扇出はここが持つ。一致の地は、ファイル内検索と
-/// プロジェクト検索の 2 つの出どころの和を pane が面と今の面の俯瞰へ押す（`pushFindGround`）。語の出現も束ねて
-/// （`OverviewDecorations`）今の面の俯瞰へ押す。自分で俯瞰を描く面は、面へ押した強調の地から俯瞰も描く。
+/// 文書の「変わった」（viewport・選択・本文・焦点）は pane が 1 つずつ受け、検索・出現の強調・プロジェクト検索・
+/// アウトラインへ配る——文書側の closure は単一のまま、扇出はここが持つ。一致の地は、ファイル内検索とプロジェクト検索の
+/// 2 つの出どころの和を pane が面へ押す（`pushFindGround`）。俯瞰（ミニマップ・スクロールバーと印・影）は面が、押された
+/// 強調の地から自分で描く。
 ///
 /// 骨の状態はセッションの写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれだけを読む。
 /// セッションの変化は `sessionDidChange` 1 本で受け、写し → 面の差し替え → ツリーの追従の順に進める。
@@ -38,8 +37,6 @@ final class EditorPaneView: NSView {
   let headerHost: NSHostingView<EditorHeaderRoot>
   let emptyHost: NSHostingView<EditorFaceRoot>
   private(set) var document: EditorDocument?
-  /// 今の面の俯瞰（本体の右のミニマップとスクロールバー、本体に重ねる影）。自分で俯瞰を描く面の文書では結ばない。
-  let appKitOverview = EditorAppKitOverview(style: EditorStyle.make())
   /// ファイル内検索の状態（pane ごと）。バーは開いている間だけある。
   let search = EditorSearch()
   var searchBar: SearchBar?
@@ -97,7 +94,6 @@ final class EditorPaneView: NSView {
       host.autoresizingMask = []
       addSubview(host)
     }
-    appKitOverview.install(in: self)
     sidebarHandle.autoresizingMask = []
     addSubview(sidebarHandle)
     search.onCountChange = { [weak self] selected, total, limited in
@@ -105,7 +101,6 @@ final class EditorPaneView: NSView {
     }
     search.onMatchesChange = { [weak self] in self?.pushFindGround() }
     search.onNeedleChange = { [weak self] in self?.syncFindState() }
-    occurrences.onWordOccurrencesChange = { [weak self] in self?.pushOverviewDecorations() }
     sidebarHandle.onDrag = { [weak self] width in self?.resizeSidebar(to: width) }
     sidebarHandle.onRelease = { [weak self] in self?.sidebar.commit() }
     wireShell()
@@ -299,7 +294,7 @@ final class EditorPaneView: NSView {
 
   /// 焦点の文書の面を見せる（nil なら空状態）。前の文書の面は外すだけで、面は文書と一緒に生き続ける。文書を初めて
   /// 画面に出すときは、最初の描画に色が間に合うよう文書が上限つきで待つ（→ `prepareDocumentIfVisible`）。
-  /// 俯瞰と検索を新しい文書に結び直し（検索は同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。前の文書の
+  /// 検索を新しい文書に結び直し（同じ needle で敷き直すだけ）、文書が無くなればバーは閉じる。前の文書の
   /// 一致の地は消し、新しい文書に 2 つの出どころの和を敷く。
   /// 焦点が面の中（サイドバーを除く）にあれば新しい行き先へ移す——判定は前の面を外す前に取る（外した瞬間に AppKit が
   /// first responder を窓へ戻すので、外した後では「中にあった」ことが分からない）。サイドバーの焦点（検索結果・行内
@@ -319,14 +314,13 @@ final class EditorPaneView: NSView {
       document.surface.host = self
       let view = document.surface.view
       view.autoresizingMask = []
-      view.frame = surfaceRect
-      // 境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なる。テキスト面は影と俯瞰の下。
-      addSubview(view, positioned: .below, relativeTo: appKitOverview.minimap)
+      view.frame = bodyRect
+      // 境の当たり（hairline を跨ぐ 4pt）の右 1pt は本体と重なるので、テキスト面はその下。検索バーは後から足すので面の上。
+      addSubview(view, positioned: .below, relativeTo: sidebarHandle)
       observe(document, true)
     } else {
       closeSearch()
     }
-    appKitOverview.bind(overviewSurface == nil ? document : nil)
     search.bind(document)
     occurrences.bind(document)
     if let document { projectSearch.documentDidShow(document) }
