@@ -1,7 +1,7 @@
 ---
 title: Orbe デザインシステム
 description: 外観の思想・契約を記す自由記述ドキュメント。値の正は DesignSystem/ の Swift、思想・契約の正は本書
-updated: 2026-09-27
+updated: 2026-10-02
 ---
 
 # Orbe デザインシステム
@@ -179,7 +179,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 - **spacing（2/4pt グリッド・穴なし）**: `hair 2 / tick 4 / note 6 / step 8 / beat 12 / bar 16 / span 20 / phrase 24`
 - **radius**: `xs 3`（単独タブの器・＋ボタン）/ `sm 4`（バッジ・キーヒント・タブグループの器）/ `row 8`（リスト行・小コントロール）/ `md 10`（入力・小パネル）/ `card 12`（カード・設定行）/ `lg 16`（パネル・オーバーレイ）/ `pill 999`（カウントピル・トグル）
 - **stroke**: `hairline 1`（罫線・枠）/ `focusRing 2`（フォーカスリング）
-- **layout（エディター面の骨）**: `editorRail 36` / `editorRailGlyph 20`（レールのアイコン）/ `editorSidebar 240`（既定。ドラッグで可変）/ `editorSidebarMinWidth 160` / `editorBodyMinWidth 160`（サイドバーの幅の上限と、狭い列で表示幅を切り詰める規則）/ `editorSidebarHandle 4`（境の当たり）/ `editorFileTabs 28` / `editorBreadcrumb 20`（レール・サイドバーの右、ファイルタブ行の下の hairline 1 はこれらの外側に足す） / `editorPanelHeader 28` / `editorRow 20` / `editorChip 14` / `editorChipSmall 12`（パンくずの末尾）/ `editorChevron 16` / `editorLineNumberGutter 50`（行番号の列。桁が増えれば広がる最小幅）/ `editorMarkGutter 19`（git の印の列）/ `editorScrollbar 14`（本体の右端の縦スクロールバー）/ `editorHorizontalScrollbar 12`（新しいテキスト面の本文の区画の下端の横スクロールバー）/ `editorMinimapMaxWidth 120`（その左のミニマップの幅の上限。幅は本文の幅から計算する）。検索パネル: `editorSearchField 28`（入力欄）/ `editorSearchOption 20`（オプションの角）/ `editorSearchRow 20`（結果の行。まとまりの見出しも一致も同じ）/ `editorSearchMatchIndent 40`（一致の行の左）/ `editorSearchCountWidth 18`・`editorSearchCountHeight 16`（件数バッジ）/ `editorSearchChevron 10`（見出しのシェブロン）/ `editorSearchProgress 2`（検索中の線）。見本の半透明面の light 換算は `opacity.editorSunkLight 0.3` / `editorFillLight 0.6` / `editorHairlineLight 1.4`。
+- **layout（エディター面の骨）**: `editorRail 36` / `editorRailGlyph 20`（レールのアイコン）/ `editorSidebar 240`（既定。ドラッグで可変）/ `editorSidebarMinWidth 160` / `editorBodyMinWidth 160`（サイドバーの幅の上限と、狭い列で表示幅を切り詰める規則）/ `editorSidebarHandle 4`（境の当たり）/ `editorFileTabs 28` / `editorBreadcrumb 20`（レール・サイドバーの右、ファイルタブ行の下の hairline 1 はこれらの外側に足す） / `editorPanelHeader 28` / `editorRow 20` / `editorChip 14` / `editorChipSmall 12`（パンくずの末尾）/ `editorChevron 16` / `editorLineNumberGutter 50`（行番号の列。桁が増えれば広がる最小幅）/ `editorMarkGutter 19`（git の印の列）/ `editorScrollbar 14`（本体の右端の縦スクロールバー）/ `editorHorizontalScrollbar 12`（本文の区画の下端の横スクロールバー）/ `editorMinimapMaxWidth 120`（その左のミニマップの幅の上限。幅は本文の幅から計算する）。検索パネル: `editorSearchField 28`（入力欄）/ `editorSearchOption 20`（オプションの角）/ `editorSearchRow 20`（結果の行。まとまりの見出しも一致も同じ）/ `editorSearchMatchIndent 40`（一致の行の左）/ `editorSearchCountWidth 18`・`editorSearchCountHeight 16`（件数バッジ）/ `editorSearchChevron 10`（見出しのシェブロン）/ `editorSearchProgress 2`（検索中の線）。見本の半透明面の light 換算は `opacity.editorSunkLight 0.3` / `editorFillLight 0.6` / `editorHairlineLight 1.4`。
 - elevation（面の影）は `DesignTokens+Glass.swift` が所有。本書・`tokens.json` は再定義しない。
 
 ### 2.5 モーション（拍）
@@ -247,13 +247,13 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 - **Search field**: 外枠＝`bg.sunken`＋1px `surface.1`＋radius `md`。focus＝リング `accent.focus`。no-match＝`danger`。件数＝`captionDigit`。
 - **Focus / active tab**: アクティブタブの端末は 2px 内側リング `accent.focus`。カーソル点滅と併走。
 - **Onboarding**: waiting＝`text.muted`。installing＝スピナー（`accent.primary`）。done＝`✓` `success`。failed＝`✗` `danger`＋再試行 secondary。skipped＝`text.muted`・取り消し線。
-- **Code view**（エディター面の文書）: 見本 `CodeView.tsx` の値をそのまま持つ。ただし俯瞰（ミニマップ・スクロールバー・上端の影）と強調の地は見本から外れ、寸法は VS Code の既定、色は VS Code Dark Modern / Light Modern の値（§2.1）。本文 `type.editorCode`・行高 `line.editorCode` 18・上余白 4・素の文字 `editor.text`・役割ごとに `syntax.*`。行番号ガター幅 50・右寄せ・右余白 8・`type.editorLineNumber`・`editor.lineNumber`、その右に git ガター 19、本文は 2 つの右端（最小 69。行番号の桁が増えれば広がる）から始まる。キャレット `accent.bright` 1.5×14。テキスト選択の地はシステムの選択色（テキストエンジンに差し替え口が無い）。地は面の veil（`bg.base` × 実効不透明度）。
+- **Code view**（エディター面の文書）: 見本 `CodeView.tsx` の値をそのまま持つ。ただし俯瞰（ミニマップ・スクロールバー・上端の影）と強調の地は見本から外れ、寸法は VS Code の既定、色は VS Code Dark Modern / Light Modern の値（§2.1）。本文 `type.editorCode`・行高 `line.editorCode` 18・上余白 4・素の文字 `editor.text`・役割ごとに `syntax.*`。行番号ガター幅 50・右寄せ・右余白 8・`type.editorLineNumber`・`editor.lineNumber`、その右に git ガター 19、本文は 2 つの右端（最小 69。行番号の桁が増えれば広がる）から始まる。キャレット `accent.bright` 1.5×14。テキスト選択の地はシステムの選択色（焦点が無ければ弱い選択色）。地は面の veil（`bg.base` × 実効不透明度）。
   - **git ガター**: 追加の行に `diff.added`、変更の行に `diff.modified` の 3px バー（列の左から 2・radius 1・α .85。続く行のバーは 1 本に繋がる）。削除はその境に `diff.removed`（α .85）の右向き三角 6×6 を中央合わせ（先頭行の上は上端から）。**追加と変更は色だけの区別**（形が同じ）——§3 の例外で、本文そのものが一次情報でガターは補助だから。削除は形も違う。
   - **インデント線**: 1px `surfaceInk` .06（light ×0.6）。段ごとに、その段ぶんの空白の直後の文字の左端に立つ（規則は [code](../spec/editor/code.md)）。
   - **空白の丸点**: 直径 2・`editor.whitespace`。行頭・行末・2 個以上の連続スペースだけ。
   - **URL 下線**: 1px・文字と同色・ベースラインの 3 下。⌘押下中だけ指カーソル、⌘クリックで既定ブラウザ。
   - **ミニマップ**（スクロールバーの左。幅は VS Code の式で本文の幅から計算し、最大 `layout.editorMinimapMaxWidth` 120）: 1 行 2pt・1 字 1pt・行の間に隙間なし。字は本文フォントを太字の trait にした字形（システムの等幅では Semibold）を 1×2（1x）/ 2×4（2x）デバイス px に縮めたものを構文の色（役割の無い字は `editor.text`）で描き、明るさの係数 dark 12/15・light 50/60。字は左 8 デバイス px から。字と装飾（git の印・一致・語の出現・選択）の全体に不透明度 .9。git の印は x 2 デバイス px・幅 2 デバイス px に `diff.added` / `diff.modified` / `diff.removed`。検索の一致は `editor.findMatch`、語の出現は `editor.selectionOccurrence`（範囲とその行の α 半分の地）、選択はシステムの選択色。帯は `editor.minimapSlider`（帯の上 `Hover`・ドラッグ中 `Active`）でミニマップの全幅、普段は隠れホバーで現れる。本文が右に続くときは左端の外にぼかし 6 の影（`editor.minimapShadow`）。
-  - **横スクロールバー**（新しいテキスト面だけ。本文の区画の下端に重なる、高さ `layout.editorHorizontalScrollbar` 12、行番号の列の右からミニマップの左まで）: 横に続く本文があるときだけ出る。つまみは縦と同じ `editor.scrollbarSlider`（上 `Hover`・ドラッグ中 `Active`）で最小の長さ 20、現れ方と消え方も縦と同じ。印は持たない。
+  - **横スクロールバー**（本文の区画の下端に重なる、高さ `layout.editorHorizontalScrollbar` 12、行番号の列の右からミニマップの左まで）: 横に続く本文があるときだけ出る。つまみは縦と同じ `editor.scrollbarSlider`（上 `Hover`・ドラッグ中 `Active`）で最小の長さ 20、現れ方と消え方も縦と同じ。印は持たない。
   - **スクロールバー**（本体の右端、幅 `layout.editorScrollbar` 14）: つまみ `editor.scrollbarSlider`（つまみの上 `Hover`・ドラッグ中 `Active`）、最小の長さ 20。下に印——左 1 デバイス px と上 1 デバイス px の縁（`borderInk` .07・light ×1.4）、残りを 3 レーン: 左に git（`diff.*` α .6）、中央に検索の一致 `editor.rulerFind` と語の出現 `editor.rulerOccurrence`、全幅にキャレット（`accent.bright` α .7・高 2）。印の最小の高さ 6。つまみは印の上に重なる。追加と変更は色だけの区別（git ガターと同じ例外）。
   - **上端の影**: 先頭の行が上へ隠れている間、本文の上端（本文の幅。ミニマップには掛けない）に `editor.scrollShadow` の内側の影（CSS の `0 6px 6px -6px inset`）。
   - **強調の地**: 行の高さいっぱい・角なし、選択の地の上・文字の下。下から 現在の一致の行全体 `editor.findLine` → 選択文字列の出現 `editor.selectionOccurrence` → 語の出現 `editor.wordOccurrence` → 検索の一致 `editor.findMatch` → 現在の一致 `editor.findMatchCurrent`（不透明）。一致が 1000 件を超えると検索の一致は現在の一致の行の直上へ回る。バーは Search field（§5）そのもので、本文の右上（上・右 12、ミニマップの左）。
