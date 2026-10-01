@@ -11,28 +11,31 @@ import XCTest
 final class MinimapTests: XCTestCase {
   private func units(_ text: String) -> [UInt16] { Array(text.utf16) }
 
-  func testCellsSkipBlanksExpandTabsToTheNextStopAndDoubleFullWidth() {
-    let cells = MinimapLine.cells(
-      units("a b\tc"), lineStart: 0, roles: [], tabSize: 4, columns: 100)
-    XCTAssertEqual(cells.map(\.column), [0, 2, 4], "空白は描かず 1 桁、タブは次のタブ位置まで")
-    XCTAssertEqual(cells.map(\.glyph), [65, 66, 67])
-    let wide = MinimapLine.cells(units("あx"), lineStart: 0, roles: [], tabSize: 4, columns: 100)
-    XCTAssertEqual(wide.map(\.column), [0, 1, 2], "全角は 2 セル")
-    XCTAssertEqual(wide[0].glyph, wide[1].glyph)
-    let afterWide = MinimapLine.cells(
-      units("あ\tx"), lineStart: 0, roles: [], tabSize: 4, columns: 100)
-    XCTAssertEqual(afterWide.last?.column, 5, "タブの送りは UTF-16 の位置で数える（VS Code と同じく全角は数え直さない）")
+  /// 行の字を桁・字形・行の中の位置の列で集める。
+  private func cells(_ text: String, columns: Int = 100) -> [(column: Int, glyph: Int, index: Int)]
+  {
+    var result: [(column: Int, glyph: Int, index: Int)] = []
+    MinimapLine.forEachCell(units(text), tabSize: 4, columns: columns) {
+      result.append(($0, $1, $2))
+    }
+    return result
   }
 
-  func testCellsStopAtTheDrawableColumnsAndCarryTheRole() {
-    let roles = [
-      HighlightSpan(range: NSRange(location: 10, length: 3), role: .keyword),
-      HighlightSpan(range: NSRange(location: 14, length: 1), role: .string),
-    ]
-    let cells = MinimapLine.cells(
-      units("let x = 1"), lineStart: 10, roles: roles[...], tabSize: 4, columns: 5)
-    XCTAssertEqual(cells.map(\.column), [0, 1, 2, 4])
-    XCTAssertEqual(cells.map(\.role), [.keyword, .keyword, .keyword, .string])
+  func testCellsSkipBlanksExpandTabsToTheNextStopAndDoubleFullWidth() {
+    let plain = cells("a b\tc")
+    XCTAssertEqual(plain.map(\.column), [0, 2, 4], "空白は描かず 1 桁、タブは次のタブ位置まで")
+    XCTAssertEqual(plain.map(\.glyph), [65, 66, 67])
+    XCTAssertEqual(plain.map(\.index), [0, 2, 4], "行の中の UTF-16 位置")
+    let wide = cells("あx")
+    XCTAssertEqual(wide.map(\.column), [0, 1, 2], "全角は 2 セル")
+    XCTAssertEqual(wide[0].glyph, wide[1].glyph)
+    XCTAssertEqual(
+      cells("あ\tx").last?.column, 5, "タブの送りは UTF-16 の位置で数える（VS Code と同じく全角は数え直さない）")
+  }
+
+  func testCellsStopAtTheDrawableColumns() {
+    XCTAssertEqual(cells("let x = 1", columns: 5).map(\.column), [0, 1, 2, 4])
+    XCTAssertEqual(cells("abあ", columns: 3).map(\.column), [0, 1, 2], "全角の 2 桁目は描ける桁で切れる")
     XCTAssertEqual(MinimapLine.columns(canvasWidth: 120, scale: 1), 112, "幅 120pt・1x")
     XCTAssertEqual(MinimapLine.columns(canvasWidth: 240, scale: 2), 116, "幅 120pt・2x")
   }
@@ -60,13 +63,10 @@ final class MinimapTests: XCTestCase {
     }
   }
 
-  func testDecorationColumnsCountTabsAsTheFixedTabSizeAndStopAtTheLimit() {
+  /// 装飾の x はタブを固定の `tabSize` 桁と数え（字の置き方と違う）、全角は 2 桁。
+  func testDecorationWidthsCountTabsAsTheFixedTabSize() {
     XCTAssertEqual(
-      MinimapLine.decorationColumns(units("a\tb"), tabSize: 4, limit: 100), [0, 1, 5, 6])
-    XCTAssertEqual(MinimapLine.decorationColumns(units("あb"), tabSize: 4, limit: 100), [0, 2, 3])
-    XCTAssertEqual(
-      MinimapLine.decorationColumns(units("abcdef"), tabSize: 4, limit: 3), [0, 1, 2, 3],
-      "描ける桁に達したら読むのを止める")
+      units("a\tあ").map { MinimapLine.decorationWidth(of: $0, tabSize: 4) }, [1, 4, 2])
   }
 
   func testWidthFollowsTheTextWidthUpToTheMaximum() {
