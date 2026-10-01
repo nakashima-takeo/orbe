@@ -9,22 +9,6 @@ import XCTest
 /// トラックを押しても飛ばない・横に動かない・俯瞰の上で文字が選ばれる。
 @MainActor
 final class SurfaceOverviewTests: EngineTestCase {
-  private func rows(_ count: Int, width: Int = 10) -> String {
-    (0..<count).map { "row \($0) " + String(repeating: "x", count: width) }.joined(separator: "\n")
-      + "\n"
-  }
-
-  /// 描き終えた状態で、帯とつまみが時間を掛けずに現れる（動きを減らす設定）面。
-  private func hosted(_ text: String, size: CGSize = CGSize(width: 800, height: 400)) throws
-    -> Opened
-  {
-    let opened = try open(text, size: size)
-    _ = host(opened, size: size)
-    opened.surface.inputScope { opened.surface.textView.overview.setReduceMotion(true) }
-    _ = opened.surface.snapshot()
-    return opened
-  }
-
   /// ミニマップの帯の外を押すとその行の上端が本文の中央に来て、横位置は動かない。押したままドラッグしても本文は動かない
   /// （帯を掴んだのではない）。
   func testPressingTheMinimapOutsideTheSliderCentersThatLine() throws {
