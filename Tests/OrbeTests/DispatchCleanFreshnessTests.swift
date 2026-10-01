@@ -111,7 +111,7 @@ final class DispatchCleanFreshnessTests: OrbeTestCase {
       [
         GitHubBranchPR(
           number: 5, headRefName: "feat/x", state: "MERGED", baseRefName: "develop",
-          isCrossRepository: false)
+          headRepository: Self.repository)
       ])
     XCTAssertTrue(provider.probingPaths.isEmpty, "gh 着地は prune 前にプローブを撃たない")
     XCTAssertNil(model.classification)
@@ -169,16 +169,17 @@ final class DispatchCleanFreshnessTests: OrbeTestCase {
       "gh が使えないと確定したら確認対象そのものが無い")
 
     provider.probedGitHubState = .ready
+    settleRemoteLedger(provider, repo)
     provider.branchPRFetches = ["feat/x": .fetching, "feat/y": .fetching]
     let pr = GitHubBranchPR(
       number: 9, headRefName: "feat/x", state: "OPEN", baseRefName: "main",
-      isCrossRepository: false)
+      headRepository: Self.repository)
     provider.applyFetchedBranchPRs(head: "feat/x", [pr])
     provider.applyFetchedBranchPRs(head: "feat/y", nil)
 
     XCTAssertEqual(provider.branchPRStates["feat/x"], .loaded([pr]))
     XCTAssertEqual(provider.branchPRStates["feat/y"], .failed, "落ちた head だけが失敗として残る")
-    XCTAssertEqual(provider.landedBranchPRs, [pr], "着地した事実は失敗に巻き込まれない")
+    XCTAssertEqual(provider.landedBranchPRs, ["feat/x": [pr]], "着地した事実は失敗に巻き込まれない")
 
     DispatchGitHubCache.shared.setBranchPullRequests([], head: "feat/y", for: repo.commonDir)
     XCTAssertEqual(
@@ -208,7 +209,8 @@ final class DispatchCleanFreshnessTests: OrbeTestCase {
     XCTAssertEqual(
       provider.worktrees.filter { $0.branch == "feat/x" }.count, 2, "前提: 同じ head の worktree が 2 本")
     XCTAssertEqual(
-      DispatchDataProvider.branchPRHeads(of: provider.worktrees), ["feat/x"], "問う head は 1 つに畳む")
+      DispatchDataProvider.worktreeBranches(of: provider.worktrees), ["feat/x"],
+      "問うブランチは 1 つに畳む")
     XCTAssertEqual(provider.branchPRStates.count, 1)
   }
 
@@ -222,12 +224,22 @@ final class DispatchCleanFreshnessTests: OrbeTestCase {
 
     let pr = GitHubBranchPR(
       number: 3, headRefName: "feat/gone", state: "OPEN", baseRefName: "main",
-      isCrossRepository: false)
+      headRepository: Self.repository)
     provider.applyFetchedBranchPRs(head: "feat/gone", [pr])
     XCTAssertNil(provider.branchPRFetches["feat/gone"], "発行していない head の着地は記録しない")
   }
 
   // MARK: - ヘルパ
+
+  private static let repository = GitHubRepoName(nameWithOwner: "o/r")
+
+  /// origin を GitHub の `o/r` とし、その正式名が分かっている（remote の台帳が確定した）状態にする。
+  /// 実際の origin は持たせない（fetch や gh が本物の GitHub へ行かないように）。
+  private func settleRemoteLedger(_ provider: DispatchDataProvider, _ repo: GitRepo) {
+    provider.remoteListing = .read(["origin": "https://github.com/o/r.git"])
+    DispatchGitHubCache.shared.setRepositoryName(
+      .found(Self.repository), for: Self.repository, key: repo.commonDir)
+  }
 
   private func makeProvider(_ model: DispatchPaletteModel) -> DispatchDataProvider {
     DispatchDataProvider(

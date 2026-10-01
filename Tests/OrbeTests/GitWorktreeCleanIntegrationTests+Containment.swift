@@ -280,7 +280,7 @@ extension GitWorktreeCleanIntegrationTests {
     XCTAssertTrue(git(["worktree", "add", "-q", wt, "feat/gf"]).isSuccess)
     let pr = GitHubBranchPR(
       number: 7, headRefName: "feat/gf", state: "MERGED", baseRefName: "develop",
-      isCrossRepository: false)
+      headRepository: GitHubRepoName(nameWithOwner: "o/r"))
 
     var worktrees: [GitWorktree] = []
     let listed = expectation(description: "worktrees")
@@ -292,7 +292,7 @@ extension GitWorktreeCleanIntegrationTests {
     let path = try XCTUnwrap(worktrees.first { $0.branch == "feat/gf" }?.path)
 
     let extra = DispatchWorktreeClassifier.extraContainmentTargets(
-      worktrees: worktrees, branchPullRequests: [pr],
+      worktrees: worktrees, branchPullRequests: ["feat/gf": [pr]],
       remoteBranchNames: ["origin/main", "origin/develop"], defaultBranch: "origin/main")
     XCTAssertEqual(extra[path], ["origin/develop"], "gh ヒントが比較先 1 本になる")
 

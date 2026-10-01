@@ -29,12 +29,12 @@ extension DesignSceneFixtures {
   }
 
   /// designSample の遅れた `main` 行を選んで最新化画面へ入る（判定は provider の仕事なので、
-  /// fixture は行の同期をそのまま渡す）。
+  /// fixture は行の同期と相対日時をそのまま渡す）。
   static func enterStaleMain(_ model: DispatchPaletteModel) {
     guard let index = model.items.firstIndex(where: { $0.sync?.isFastForwardable == true }),
       let sync = model.items[index].sync
     else { return }
     model.selected = index
-    model.enterRefresh(item: model.items[index], sync: sync)
+    model.enterRefresh(sync: sync, relativeDate: model.items[index].detail ?? "")
   }
 }

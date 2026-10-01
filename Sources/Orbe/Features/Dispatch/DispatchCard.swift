@@ -16,18 +16,18 @@ struct DispatchCard: View {
   /// カード全体の高さ上限（窓に収める。DispatchOverlay が窓高から算出して渡す）。
   let maxHeight: CGFloat
   @FocusState private var focus: DispatchFocus?
-  /// リスト内容の実測高（ハグ用）。初期は cap にして初回の 0 collapse フラッシュを避ける。
-  @State private var contentHeight: CGFloat = 380
+  /// リスト内容の実測高（ハグ用・上限で切った値）。初期は cap にして初回の 0 collapse フラッシュを避ける。
+  @State private var contentHeight: CGFloat = Self.listCap
   /// ヘッダ＋フッターの実測高（リスト cap から差し引き、カードが窓を超えないようにする）。
   @State private var chromeHeight: CGFloat = 0
 
   /// リスト部の内容基準の高さ上限（380・コンポーネント局所定数）。
-  private let listCap: CGFloat = 380
+  private static let listCap: CGFloat = 380
 
   /// リスト部の実効高。内容にハグしつつ 380 と「窓 − chrome」の小さい方で頭打ち（超過は内部スクロール）。
   private var listHeight: CGFloat {
     let available = max(0, maxHeight - chromeHeight)
-    return min(contentHeight, min(listCap, available))
+    return min(contentHeight, min(Self.listCap, available))
   }
 
   var body: some View {
@@ -208,7 +208,8 @@ struct DispatchCard: View {
   private var list: some View {
     ScrollViewReader { proxy in
       ScrollView {
-        VStack(alignment: .leading, spacing: 0) {
+        // 行は見えている分だけ生成する（件数が数百〜千を超えても ↑↓・打鍵の反応を保つ）。
+        LazyVStack(alignment: .leading, spacing: 0) {
           if model.hasLoadedOnce {
             // 行 identity（row.id）＝ scrollTo の宛先。header と item で id 名前空間を分け（"header:"/"item:"）、
             // 見出しの並び位置と item の平坦 index が衝突して scrollTo が空振りするのを防ぐ。
@@ -241,7 +242,10 @@ struct DispatchCard: View {
         .padding(Theme.Space.note)
         .background(
           GeometryReader { geometry in
-            Color.clear.preference(key: DispatchContentHeightKey.self, value: geometry.size.height)
+            // Lazy の内容高は未生成の行を推定で数え、スクロールで行が生成されるたびに動く。上限で切れば
+            // 上限を超える件数では値が止まり、スクロールのたびにカード全体が描き直されない。
+            Color.clear.preference(
+              key: DispatchContentHeightKey.self, value: min(geometry.size.height, Self.listCap))
           }
         )
       }
@@ -322,6 +326,8 @@ struct DispatchCard: View {
       case .launch(let target, let kind):
         DispatchLaunchLine(
           target: target, preposition: kind.prepositionKey, agent: model.selectedTargetName)
+      case .browse(let target):
+        DispatchBrowseLine(target: target)
       case .note(let key):
         Text(l10n.string(key)).foregroundStyle(Color.theme.textMuted)
       case nil:
@@ -330,12 +336,17 @@ struct DispatchCard: View {
     }
   }
 
+  /// ブラウザで開く行では ⇥（起動先）と ⌘↵（Enter と同じ）を案内しない——効いても意味の無い操作を
+  /// 並べない。起動先チップと ⇥ キーの働きはそのまま。
   private var keyHints: some View {
-    HStack(spacing: Theme.Space.step + Theme.Space.hair) {
+    let browses = if case .browse = model.selectedItem?.footer { true } else { false }
+    return HStack(spacing: Theme.Space.step + Theme.Space.hair) {
       DispatchKeyHint(key: "↑↓", label: l10n.string(.dispatchHintSelect))
-      DispatchKeyHint(key: "⇥", label: l10n.string(.dispatchHintAgent))
-      if model.selectedItem?.canOpenWeb == true {
-        DispatchKeyHint(key: "⌘↵", label: l10n.string(.dispatchHintOpen))
+      if !browses {
+        DispatchKeyHint(key: "⇥", label: l10n.string(.dispatchHintAgent))
+        if model.selectedItem?.canOpenWeb == true {
+          DispatchKeyHint(key: "⌘↵", label: l10n.string(.dispatchHintOpen))
+        }
       }
       DispatchKeyHint(key: "esc", label: l10n.string(.dispatchHintClose))
     }
