@@ -5,7 +5,7 @@ import os
 
 @testable import OrbeEditorEngine
 
-/// 新しい面の編集と undo——打鍵・キー・⌘Z / ⌘⇧Z が文書の写しと undo に正しく載る。壊れると打鍵が文書に届かない、⌘Z の
+/// 面の編集と undo——打鍵・キー・⌘Z / ⌘⇧Z が文書の写しと undo に正しく載る。壊れると打鍵が文書に届かない、⌘Z の
 /// まとまりが VS Code と違う、保存や外部変更の前の打鍵まで戻る、遠くの undo で本文が空になる、配り先が古い選択を読む。
 @MainActor
 final class SurfaceEditingTests: EngineTestCase {

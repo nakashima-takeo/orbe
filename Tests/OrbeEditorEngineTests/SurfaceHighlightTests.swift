@@ -4,8 +4,8 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 新しい面の強調の地——選択の地の上・字の下に、行の高さいっぱい・角なしで、今の面と同じ重ね順で描く。壊れると一致の地が
-/// 選択に隠れる・字を覆う・現在の一致が見分けられない・一致が多いときの重ね順が今の面と違う。
+/// 面の強調の地——選択の地の上・字の下に、行の高さいっぱい・角なしで、決まった重ね順で描く。壊れると一致の地が
+/// 選択に隠れる・字を覆う・現在の一致が見分けられない・一致が多いときの重ね順が崩れる。
 @MainActor
 final class SurfaceHighlightTests: EngineTestCase {
   private static let red = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)

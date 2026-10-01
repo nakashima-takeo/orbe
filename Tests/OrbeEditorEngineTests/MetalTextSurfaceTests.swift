@@ -131,7 +131,7 @@ final class MetalTextSurfaceTests: EngineTestCase {
     XCTAssertLessThan(light.max() ?? 255, 128, "ライトに変えると黒い字（灰色の地より暗い）")
   }
 
-  /// 描く色空間は窓の色空間（AppKit が今の面を描く色空間）——層の色合わせの宛先・字の色・撮影の絵がそれに従い、窓の
+  /// 描く色空間は窓の色空間（AppKit が窓の view を描く色空間）——層の色合わせの宛先・字の色・撮影の絵がそれに従い、窓の
   /// 色空間が変われば解き直す。窓に無ければ sRGB。
   func testDrawsInTheWindowsColorSpace() throws {
     let surface = try open("let a = 1\n").surface

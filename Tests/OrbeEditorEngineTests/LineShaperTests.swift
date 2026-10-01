@@ -4,7 +4,7 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 行の見せ方の規則。壊れると CRLF の行末に記号が出る、タブの幅が今の面とずれる、制御文字が見えない（または行が
+/// 行の見せ方の規則。壊れると CRLF の行末に記号が出る、タブの幅がインデントの単位とずれる、制御文字が見えない（または行が
 /// 崩れる）、minified の 1 行が 1 コマの手間を行の長さに比例させる。
 final class LineShaperTests: XCTestCase {
   private let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular) as CTFont

@@ -5,7 +5,7 @@ import os
 
 @testable import OrbeEditorEngine
 
-/// 新しい面の打鍵とライブ変換の計測（`FramePerfTests` と同じ場で、`ORBE_EDITOR_PERF=1` のときだけ走る）。
+/// 面の打鍵とライブ変換の計測（`FramePerfTests` と同じ場で、`ORBE_EDITOR_PERF=1` のときだけ走る）。
 extension FramePerfTests {
   /// 打鍵→画面に出たとみなす時刻（本文が入ったコマが出た刻み）が中央値 12.5ms・p95 17ms 以下で、1MB と 200KB で差が
   /// 無い（打鍵の間隔 100ms と 33ms）。打鍵 1 回の main の仕事（面の編集係と文書。main のスレッドの CPU 時間で、壁時計は

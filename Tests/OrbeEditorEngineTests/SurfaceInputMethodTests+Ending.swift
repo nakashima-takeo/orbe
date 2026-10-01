@@ -177,7 +177,7 @@ extension SurfaceInputMethodTests {
     once("IME 自身の取り消し", notifies: false) { replay([.mark("")], on: opened) }
   }
 
-  /// 文書を切り替えて面が窓から外れると、変換を確定して IME に知らせる（新しい面は変換を文書ごとに残さない）。
+  /// 文書を切り替えて面が窓から外れると、変換を確定して IME に知らせる（変換は文書ごとに残さない）。
   func testLeavingTheWindowCommitsTheComposition() throws {
     let opened = try open("ab\n")
     let window = host(opened)

@@ -4,7 +4,7 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 新しい面の行の装備——インデント線・空白の丸点・URL の下線（規則は今の面と同じ Core の純関数）。壊れると線が段の途中に
+/// 面の行の装備——インデント線・空白の丸点・URL の下線（規則は Core の純関数）。壊れると線が段の途中に
 /// 立つ・空行の線が途切れる・単語間の空白に点が出る・下線が URL からずれる・選択が装備を覆わない。
 @MainActor
 final class SurfaceDecorTests: EngineTestCase {

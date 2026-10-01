@@ -5,7 +5,7 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 新しい面のテストの足場。本物の文書（`EditorDocument`）に新しい面を結び、窓に載せずに大きさと倍率を与える。
+/// 面のテストの足場。本物の文書（`EditorDocument`）に面を結び、窓に載せずに大きさと倍率を与える。
 @MainActor
 class EngineTestCase: XCTestCase {
   /// テスト 1 件の作業ディレクトリ。
@@ -13,7 +13,7 @@ class EngineTestCase: XCTestCase {
 
   override func setUpWithError() throws {
     try super.setUpWithError()
-    try XCTSkipIf(RenderThread.device == nil, "Metal の装置が無い環境では新しい面を作らない")
+    try XCTSkipIf(RenderThread.device == nil, "Metal の装置が無い環境では面を作らない")
     root = FileManager.default.temporaryDirectory
       .appendingPathComponent("orbe-engine-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -88,13 +88,13 @@ class EngineTestCase: XCTestCase {
       hideDelay: 0.5)
   }
 
-  /// 開いた文書と、それに結んだ新しい面。
+  /// 開いた文書と、それに結んだ面。
   struct Opened {
     let document: EditorDocument
     let surface: MetalTextSurface
   }
 
-  /// `text` を `name` のファイルとして開き、新しい面を結んで `size` の大きさを与える（窓には載せない）。
+  /// `text` を `name` のファイルとして開き、面を結んで `size` の大きさを与える（窓には載せない）。
   func open(
     _ text: String, name: String = "a.swift", size: CGSize = CGSize(width: 800, height: 600),
     scale: CGFloat = 2, style: TextSurfaceStyle? = nil, waitForColors: Bool = true
