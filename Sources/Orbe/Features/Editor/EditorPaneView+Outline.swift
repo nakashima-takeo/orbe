@@ -25,9 +25,8 @@ extension EditorPaneView {
     (window?.firstResponder as? NSView)?.isDescendant(of: outlineList) == true
   }
 
-  /// シンボルへ飛ぶ——名前の頭（ダブルクリックは範囲全体）を選び、画面の外なら上寄せ（上に max(5 行, 高さの 20%) の間。
-  /// 範囲が画面より高ければ先頭を上端）で見せ、画面の中なら縦は動かさない（VS Code の
-  /// revealRangeNearTopIfOutsideViewport）。横は隠れていれば寄せる。Enter と
+  /// シンボルへ飛ぶ——名前の頭（ダブルクリックは範囲全体）を選び、画面の外なら上寄せで見せ、画面の中なら縦は動かさない
+  /// （`TextReveal.nearTopIfOutside`。VS Code の revealRangeNearTopIfOutsideViewport）。横は隠れていれば寄せる。Enter と
   /// ダブルクリックは焦点を本文へ移し、単クリックは焦点をアウトラインに残す。結果の印が今の結果と違えば何もしない（次の
   /// 結果で列が作り直される）。
   func jumpToSymbol(_ symbol: Int, token: OutlineToken, jump: EditorOutline.Jump) {
@@ -42,24 +41,7 @@ extension EditorPaneView {
     }
     layoutSubtreeIfNeeded()
     document.surface.selectedRange = target
-    revealNearTop(target, in: document)
-    // 横だけを寄せる（長さ 0 にして、縦の位置を面ごとの見せ方と奪い合わない）。
-    document.surface.scrollToVisible(NSRange(location: target.location, length: 0))
+    document.surface.reveal(target, policy: .nearTopIfOutside)
     if jump != .name { window?.makeFirstResponder(document.surface.responder) }
-  }
-
-  /// 区間が画面より高ければ先頭の行を上端に置く。そうでなく縦に見えていなければ、先頭の行を上から max(5 行, 高さの 20%)
-  /// 下に置く（区間の終わりが下へ押し出されない範囲で）。見えていれば動かさない。
-  private func revealNearTop(_ range: NSRange, in document: EditorDocument) {
-    let (first, visible) = document.viewportLines
-    let start = CGFloat(document.text.row(containing: range.location))
-    let end = CGFloat(document.text.row(containing: NSMaxRange(range)))
-    if end + 1 - start > visible {
-      document.scroll(toFirstLine: start)
-      return
-    }
-    guard start < first || end + 1 > first + visible else { return }
-    let gap = max(5, visible * 0.2)
-    document.scroll(toFirstLine: max(end + 1 - visible, start - gap))
   }
 }

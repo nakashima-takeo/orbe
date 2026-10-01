@@ -84,8 +84,7 @@ extension EditorPaneView {
     projectSearch.documentDidShow(document)
     if let range = projectSearch.ground(for: document).current {
       document.surface.selectedRange = range
-      document.surface.scrollToCenter(range.location)
-      document.surface.scrollToVisible(range)
+      document.surface.reveal(range, policy: .center)
     }
     if focusText {
       window?.makeFirstResponder(document.surface.responder)

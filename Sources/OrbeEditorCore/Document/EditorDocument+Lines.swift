@@ -18,20 +18,6 @@ extension EditorDocument {
       at: selection, text: text.substring(window), textStart: window.location)
   }
 
-  /// 先頭に見えている行（小数。行 + 隠れ割合）と可視行数（小数）——俯瞰の式の入力。
-  public var viewportLines: (first: CGFloat, visible: CGFloat) {
-    let viewport = surface.viewport
-    let row = CGFloat(text.row(containing: viewport.firstVisible))
-    return (row + viewport.hiddenFraction, viewport.visibleLines)
-  }
-
-  /// 先頭行（小数）の位置へスクロールする（`viewport` の逆。行は行の数に収める）。
-  public func scroll(toFirstLine line: CGFloat) {
-    let clamped = min(max(0, line), CGFloat(text.lineCount - 1))
-    let row = Int(floor(clamped))
-    surface.scroll(toTop: text.lineStart(row), hiddenFraction: clamped - CGFloat(row))
-  }
-
   /// 面の行番号の列が問う行の数・オフセットの行・行の区間（`TextSurfaceDelegate`）。
   public func surfaceLineCount(_ surface: any TextSurface) -> Int {
     text.lineCount

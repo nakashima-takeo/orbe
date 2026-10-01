@@ -187,13 +187,7 @@ final class EditorSearch {
     let match = matches[index]
     revealed = match
     document.surface.selectedRange = match
-    let (first, visible) = document.viewportLines
-    let row = CGFloat(document.text.row(containing: match.location))
-    if row < first || row >= first + visible {
-      document.surface.scrollToCenter(match.location)
-    } else {
-      document.surface.scrollToVisible(match)
-    }
+    document.surface.reveal(match, policy: .centerIfOutside)
   }
 
   private func pushCount() {

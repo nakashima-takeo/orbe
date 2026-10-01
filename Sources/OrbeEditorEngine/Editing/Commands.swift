@@ -60,15 +60,18 @@ enum EditCommand: Equatable, Sendable {
   case drop(String, at: Int, moving: NSRange?)
 }
 
-/// 見せ方——コマンドの後にスクロールをどう置くか。
+/// 見せ方——取引の後にスクロールをどう置くか。
 enum Reveal: Equatable, Sendable {
   case none
-  /// 主のキャレットが見えるところまで最小限。
-  case minimal
-  /// 主のキャレットの行を中央へ。
-  case center
+  /// 区間（無ければ主のキャレット）を方針どおりに見せる。
+  case showing(TextReveal)
   /// 行の数だけ送ってから、キャレットが見えるところまで最小限。
   case page(Int)
+
+  /// 主のキャレットが見えるところまで最小限。
+  static let minimal = Reveal.showing(.minimal)
+  /// 主のキャレットの行を中央へ。
+  static let center = Reveal.showing(.center)
 }
 
 /// コマンドの読む環境。本文を読むのは写しだけ。

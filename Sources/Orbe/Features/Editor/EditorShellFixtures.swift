@@ -74,7 +74,7 @@
           (document.text.substring(NSRange(location: 0, length: document.text.length))
           as NSString).range(of: needle).location
         document.surface.selectedRange = NSRange(location: location, length: 0)
-        document.surface.scrollToCenter(location)
+        document.surface.reveal(NSRange(location: location, length: 0), policy: .center)
       }
 
       /// アウトラインの結果が今の版に揃い、キャレットのシンボルが選ばれた。

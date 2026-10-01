@@ -21,19 +21,11 @@ public protocol TextSurface: AnyObject {
   /// 変化の前の幅を答える）。
   var rightColumnWidth: CGFloat { get }
 
-  /// そのオフセットの行を可視範囲の中央へスクロールする（先頭・末尾では端で止まる）。選択は動かさない。
-  func scrollToCenter(_ offset: Int)
+  /// 区間を見せる——縦は方針 `policy` で、横は区間が見えるところまで最小限にスクロールする（スクロールできる範囲の端で
+  /// 止まる）。判定は面の最新の位置（まだ描いていない位置を含む）で行う。選択は動かさない。
+  func reveal(_ range: NSRange, policy: TextReveal)
 
-  /// `viewport` の逆——行頭オフセット `offset` の行を、その高さの `hiddenFraction`（0…1）ぶん上へ隠して先頭に置く。
-  /// スクロールできる範囲（最終行が最上段に来るまで）の端で止まる。横位置と選択は動かさない。行は文書の行
-  /// （本文が改行で終わるときの末尾の空行を含む）。
-  func scroll(toTop offset: Int, hiddenFraction: CGFloat)
-
-  /// その区間が見えるところまで最小限スクロールする（縦に見えていれば縦は動かず、横に隠れていれば横だけ寄る）。
-  /// 選択は動かさない。
-  func scrollToVisible(_ range: NSRange)
-
-  /// 選択（UTF-16）。置いても見せない——見せるのは `scrollToCenter`。
+  /// 選択（UTF-16）。置いても見せない——見せるのは `reveal`。
   var selectedRange: NSRange { get set }
 
   /// キャレットのオフセット——選択の動く側の端（前へ伸ばした選択なら先頭、それ以外は終わり。選択が空ならその位置）。
