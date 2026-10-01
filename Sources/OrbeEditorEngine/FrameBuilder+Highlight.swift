@@ -88,7 +88,7 @@ extension FrameBuilder {
     for (ranges, ink) in layers {
       for range in Highlights.slice(ranges, visible) {
         let from = max(range.location, row.start) - row.start
-        let to = min(NSMaxRange(range), row.contentEnd) - row.start
+        let to = min(NSMaxRange(range) - row.start, row.laid.length)
         guard to > from else { continue }
         for segment in carets.segments(from: from, to: to) {
           let left = (originX + Double(segment.lowerBound) * g.scale).rounded()

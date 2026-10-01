@@ -26,6 +26,18 @@ final class LineShaperTests: XCTestCase {
       Array(LineShaper.display(source("a\rb")).units), [0x61, 0x240D, 0x62], "途中の CR は ␍")
   }
 
+  /// 描きうる先頭より長い行も、長さは行末の `\r` と改行を除いた中身で、読むのは描きうる先頭だけ（最後の行の行末の `\r` も
+  /// 除く）。
+  func testLongLineLengthExcludesTheTrailingCarriageReturn() {
+    let long = String(repeating: "x", count: LineShaper.headLimit + 5)
+    let text = TextRope(long + "\r\n" + long + "\n" + long + "\r")
+    for row in 0..<3 {
+      let line = LineShaper.source(row: row, in: text).source
+      XCTAssertEqual(line.length, LineShaper.headLimit + 5, "行 \(row) の長さ")
+      XCTAssertEqual(line.head.count, LineShaper.headLimit, "行 \(row) の読む先頭")
+    }
+  }
+
   /// C0 の制御文字は U+2400 台、DEL は U+2421、U+2028・U+2029・U+0085・U+FEFF は U+FFFD。タブはそのまま（空ける）。
   func testControlCharactersAreShownAsSymbols() {
     let line = source("\u{0}\u{1b}\t\u{7f}\u{2028}\u{2029}\u{85}a\u{feff}")

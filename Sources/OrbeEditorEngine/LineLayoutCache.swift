@@ -14,6 +14,8 @@ struct LaidOutLine {
   /// 元の行の UTF-16 の位置。
   var offsets: [Int32] = []
   var width: CGFloat = 0
+  /// 行の中身の長さ（UTF-16。改行と行末の `\r` を除く——`LineShaper.Source.length`）。
+  var length: Int
   /// 打ち切って描かない単位の数と、行末に出す印（打ち切っていなければ nil）。
   var omitted = 0
   var omittedMark: OmittedMark?
@@ -39,7 +41,8 @@ struct LaidOutLine {
     }
   }
 
-  init(_ shaped: ShapedLine, fonts registry: FontRegistry, decor: LineDecor) {
+  init(_ shaped: ShapedLine, length: Int, fonts registry: FontRegistry, decor: LineDecor) {
+    self.length = length
     self.decor = decor
     let raised = shaped.runs.contains { $0.ys.contains { $0 != 0 } }
     for run in shaped.runs {
@@ -114,16 +117,15 @@ final class LineLayoutCache {
     shapedInFrame = 0
   }
 
-  /// このコマで描く行 `row` の組んだ結果。`carets` なら位置と x の対応も持たせる。
+  /// このコマで描く行 `row` の組んだ結果。前のコマで描いた行に無ければ、行の中身 `source` を読んで引く。`carets` なら
+  /// 位置と x の対応も持たせる。
   func line(
-    row: Int, in text: TextRope, tabColumns: Int, config: SurfaceConfig, fonts: FontRegistry,
-    carets: Bool = false
+    row: Int, source: () -> LineShaper.Source, tabColumns: Int, config: SurfaceConfig,
+    fonts: FontRegistry, carets: Bool = false
   ) -> LaidOutLine {
     var laid = drawnRows[row]
     if laid == nil || (carets && laid?.carets == nil) {
-      laid = line(
-        LineShaper.source(row: row, in: text).source, tabColumns: tabColumns, config: config,
-        fonts: fonts, carets: carets)
+      laid = line(source(), tabColumns: tabColumns, config: config, fonts: fonts, carets: carets)
     }
     frameRows[row] = laid
     return laid!
@@ -173,7 +175,8 @@ final class LineLayoutCache {
     }
     shapedInFrame += 1
     let shaped = shape()
-    var line = LaidOutLine(shaped, fonts: fonts, decor: LineDecor(source, unit: tabColumns))
+    var line = LaidOutLine(
+      shaped, length: source.length, fonts: fonts, decor: LineDecor(source, unit: tabColumns))
     if carets || line.decor.needsCarets { line.carets = shaped.carets }
     if line.omitted > 0 {
       line.omittedMark = LaidOutLine.OmittedMark(

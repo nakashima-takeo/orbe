@@ -184,29 +184,30 @@ final class FrameBuilder {
     drawMarks(source.material.marks, rows: first...last, c)
   }
 
-  /// 見えている行を組む（組版のキャッシュのコマはここで終える）。
+  /// 見えている行を組む（組版のキャッシュのコマはここで終える）。行頭はロープを 1 度辿って引き、前のコマで描いていない
+  /// 行だけ中身を読む。
   private func layRows(
     _ rows: ClosedRange<Int>, _ source: Source, text: TextRope, cache: LineLayoutCache,
     fonts: FontRegistry
   ) -> [RowInFrame] {
     var result: [RowInFrame] = []
-    var start = text.lineStart(rows.lowerBound)
+    result.reserveCapacity(rows.count)
+    let starts = text.lineStarts(rows.lowerBound..<(rows.upperBound + 1))
     var overlays = CaretOverlays(
-      source.material, caretVisible: source.caretVisible, text: text, from: start)
+      source.material, caretVisible: source.caretVisible, text: text, from: starts[0])
     let highlights = source.material.highlights
-    for row in rows {
-      let end = text.lineEnd(row)
+    let lastRow = text.lineCount - 1
+    for (index, row) in rows.enumerated() {
+      let start = starts[index]
+      let end = starts[index + 1]
       let overlay = overlays.next(row: row, line: start..<end)
       let highlighted = highlights.touches(start..<max(end, start + 1))
       let laid = cache.line(
-        row: row, in: text, tabColumns: source.material.tabColumns, config: source.config,
-        fonts: fonts, carets: overlay.needsCarets || highlighted)
-      result.append(
-        RowInFrame(
-          row: row, start: start, end: end,
-          contentEnd: highlighted ? NSMaxRange(text.contentRange(ofRow: row)) : end, laid: laid,
-          overlay: overlay))
-      start = end
+        row: row,
+        source: { LineShaper.source(start: start, next: row < lastRow ? end : nil, in: text) },
+        tabColumns: source.material.tabColumns, config: source.config, fonts: fonts,
+        carets: overlay.needsCarets || highlighted)
+      result.append(RowInFrame(row: row, start: start, end: end, laid: laid, overlay: overlay))
     }
     cache.endFrame()
     return result
@@ -234,10 +235,9 @@ final class FrameBuilder {
   /// このコマで描く行 1 つ。
   struct RowInFrame {
     let row: Int
-    /// 行頭・次の行頭・行の中身の終わり（改行と行末の `\r` の前。強調の地の掛かる行だけ）のオフセット。
+    /// 行頭と次の行頭のオフセット。
     let start: Int
     let end: Int
-    let contentEnd: Int
     let laid: LaidOutLine
     let overlay: RowOverlays
   }

@@ -237,8 +237,8 @@ final class Renderer {
     let row = text.row(containing: location)
     let start = text.lineStart(row)
     let line = slot.lines.line(
-      row: row, in: text, tabColumns: material.tabColumns, config: slot.config, fonts: fonts,
-      carets: true)
+      row: row, source: { LineShaper.source(row: row, in: text).source },
+      tabColumns: material.tabColumns, config: slot.config, fonts: fonts, carets: true)
     guard let carets = line.carets else { return false }
     let x0 = Double(carets.x(location - start))
     let x1 = text.row(containing: end) == row ? Double(carets.x(end - start)) : x0

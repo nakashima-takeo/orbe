@@ -45,11 +45,21 @@ enum LineShaper {
   /// 文書の行 `row` の中身と行頭のオフセット。
   static func source(row: Int, in text: TextRope) -> (source: Source, start: Int) {
     let start = text.lineStart(row)
-    var end = row + 1 < text.lineCount ? text.lineStart(row + 1) - 1 : text.length
-    if end > start, text.units(in: NSRange(location: end - 1, length: 1)).first == 0x0D { end -= 1 }
-    let head = text.units(
-      in: NSRange(location: start, length: min(end - start, headLimit)))
-    return (Source(head: head, length: end - start), start)
+    let next = row + 1 < text.lineCount ? text.lineStart(row + 1) : nil
+    return (source(start: start, next: next, in: text), start)
+  }
+
+  /// 行頭 `start` から次の行頭 `next`（最後の行なら nil）までの行の中身。読むのは描きうる先頭と、それより長い行だけ
+  /// 行末の 1 単位（`\r` か）。
+  static func source(start: Int, next: Int?, in text: TextRope) -> Source {
+    let end = next.map { $0 - 1 } ?? text.length
+    var head = text.units(in: NSRange(location: start, length: min(end - start, headLimit + 1)))
+    let last =
+      head.count == end - start
+      ? head.last : text.units(in: NSRange(location: end - 1, length: 1)).first
+    let length = end - start - (last == 0x0D ? 1 : 0)
+    if head.count > min(length, headLimit) { head.removeLast(head.count - min(length, headLimit)) }
+    return Source(head: head, length: length)
   }
 
   /// 描く単位の列（上限を書記素の境で切り、制御文字を記号に置き換えたもの）と、打ち切って描かない単位の数と、箱で
