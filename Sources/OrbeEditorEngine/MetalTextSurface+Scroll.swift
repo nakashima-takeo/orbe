@@ -115,10 +115,13 @@ extension MetalTextSurface {
     let location = min(max(0, range.location), text.length)
     let end = min(max(location, NSMaxRange(range)), text.length)
     let lineHeight = Double(config.lineHeight)
+    let current = p.y / lineHeight
     let first = policy.firstLine(
       showing: text.rows(of: NSRange(location: location, length: end - location)),
-      first: p.y / lineHeight, visible: scrollState().limits.viewport.y / lineHeight)
-    p.y = first * lineHeight
+      first: current, visible: scrollState().limits.viewport.y / lineHeight)
+    // 方針が動かさないときは今の先頭をそのまま返すので、置き直さない（行高との往復で 1ulp ずれた位置を置くと、端を越えて
+    // 見せている間の位置が端へ収められる）。
+    if first != current { p.y = first * lineHeight }
     return p == now ? nil : p
   }
 
