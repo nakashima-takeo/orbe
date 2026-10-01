@@ -24,9 +24,6 @@ final class OverviewPointer {
   /// 材料に書いた操作の状態。
   private var input = OverviewInput()
 
-  /// ドラッグ中か。
-  var isDragging: Bool { drag != nil }
-
   /// 点（view の座標、pt）の上の俯瞰の区画。横スクロールバーは横に続く本文があるときだけ。
   func area(at point: CGPoint) -> Area? {
     guard let surface else { return nil }

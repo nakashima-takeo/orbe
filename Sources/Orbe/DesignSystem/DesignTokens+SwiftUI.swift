@@ -95,15 +95,6 @@ struct ThemeColors {
   let editorText = Color(nsColor: Theme.Color.editorText)
   let editorTertiary = Color(nsColor: Theme.Color.editorTertiary)
   let editorModified = Color(nsColor: Theme.Color.editorModified)
-  let editorHueOrange = Color(nsColor: Theme.Color.editorHueOrange)
-  let editorHueBlue = Color(nsColor: Theme.Color.editorHueBlue)
-  let editorHueYellow = Color(nsColor: Theme.Color.editorHueYellow)
-  let editorHueSky = Color(nsColor: Theme.Color.editorHueSky)
-  let editorHueViolet = Color(nsColor: Theme.Color.editorHueViolet)
-  let editorHueCyan = Color(nsColor: Theme.Color.editorHueCyan)
-  let editorHueRed = Color(nsColor: Theme.Color.editorHueRed)
-  let editorHueGreen = Color(nsColor: Theme.Color.editorHueGreen)
-  let editorHueTeal = Color(nsColor: Theme.Color.editorHueTeal)
 }
 
 extension Font {
@@ -152,10 +143,6 @@ struct ThemeFonts {
   let editorBreadcrumb = Font(Theme.Typography.editorBreadcrumb as CTFont)
   let editorSearchField = Font(Theme.Typography.editorSearchField as CTFont)
   let editorSearchOption = Font(Theme.Typography.editorSearchOption as CTFont)
-  let editorSearchFile = Font(Theme.Typography.editorSearchFile as CTFont)
-  let editorSearchDirectory = Font(Theme.Typography.editorSearchDirectory as CTFont)
-  let editorSearchCount = Font(Theme.Typography.editorSearchCount as CTFont)
-  let editorSearchMatch = Font(Theme.Typography.editorSearchMatch as CTFont)
   let editorSearchNote = Font(Theme.Typography.editorSearchNote as CTFont)
   let editorSectionTitle = Font(Theme.Typography.editorSectionTitle as CTFont)
 }

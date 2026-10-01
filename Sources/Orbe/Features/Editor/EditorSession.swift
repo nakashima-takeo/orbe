@@ -14,13 +14,11 @@ final class EditorSession {
   /// 列・焦点・未保存の有無・「ディスクが変わった」の有無が変わった。
   var onChange: (() -> Void)?
   /// 文書のテキスト面が first responder になった／やめた。
-  var onFocusChange: ((Bool) -> Void)?
+  var onFocusChange: (() -> Void)?
 
   init(surfaces: EditorSurfaces) {
     self.surfaces = surfaces
   }
-
-  var hasUnsavedChanges: Bool { documents.contains { $0.isDirty } }
 
   /// 閉じれば失われる文書（未保存の列）。
   func documentsToDiscard() -> [EditorDocument] { documents.filter(\.isDirty) }
@@ -57,7 +55,7 @@ final class EditorSession {
       url: url, contents: contents, surface: surface, registry: surfaces.registry)
     document.onDirtyChange = { [weak self] _ in self?.onChange?() }
     document.onDiskChange = { [weak self] _ in self?.onChange?() }
-    document.onFocusChange = { [weak self] focused in self?.onFocusChange?(focused) }
+    document.onFocusChange = { [weak self] _ in self?.onFocusChange?() }
     links[ObjectIdentifier(document)] = DocumentLink(document: document)
     documents.append(document)
     activeDocument = document

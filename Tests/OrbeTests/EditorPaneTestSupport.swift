@@ -126,8 +126,3 @@ struct PaneProbe {
 
   static func same(_ a: [Int], _ b: [Int]) -> Bool { zip(a, b).allSatisfy { abs($0 - $1) <= 2 } }
 }
-
-extension TextRope {
-  /// 本文全体（テストが読む）。
-  var string: String { substring(NSRange(location: 0, length: length)) }
-}

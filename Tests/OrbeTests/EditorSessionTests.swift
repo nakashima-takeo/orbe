@@ -83,14 +83,14 @@ final class EditorSessionTests: OrbeTestCase {
     var changes = 0
     session.onChange = { changes += 1 }
 
-    XCTAssertFalse(session.hasUnsavedChanges)
+    XCTAssertTrue(session.documentsToDiscard().isEmpty)
     document.surface.responder.perform(Selector(("insertText:")), with: "!")
     XCTAssertTrue(document.isDirty)
-    XCTAssertTrue(session.hasUnsavedChanges)
+    XCTAssertFalse(session.documentsToDiscard().isEmpty)
     XCTAssertEqual(changes, 1)
 
     try session.saveActive()
-    XCTAssertFalse(session.hasUnsavedChanges)
+    XCTAssertTrue(session.documentsToDiscard().isEmpty)
     XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "!hello")
     XCTAssertEqual(changes, 2)
   }
