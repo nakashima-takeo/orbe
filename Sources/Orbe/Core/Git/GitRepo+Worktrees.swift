@@ -168,17 +168,19 @@ extension GitRepo {
     }
   }
 
-  /// name が新しいブランチの名前として有効か（`git check-ref-format --branch`。終了コードで判定）。
-  /// 規則を手元へ写さず git に問うのは、写すと git の版の違いでずれるため。
+  /// name が新しいブランチの名前としてそのまま使えるか（`git check-ref-format --branch`）。成功し、かつ
+  /// 出力が入力と完全に一致するときだけ有効とする。規則を手元へ写さず git に問うのは、写すと git の版の
+  /// 違いでずれるため。出力まで見るのは、リポジトリの中では `@{-N}` などの展開形が別のブランチ名へ
+  /// 展開されて成功するから——終了コードだけで有効とすると、表示した名前と別名のブランチを作る。
   ///
-  /// 独立レーン: ref もファイルも読まない軽い問いで、打鍵ごとに撃つ。共有 queue に載せると、作成や
-  /// 削除の barrier の後ろで待たされる。リポジトリを要さない（cwd は git の起動場所にだけ使う）。
+  /// 独立レーン: 軽い問いで、打鍵ごとに撃つ。共有 queue に載せると、作成や削除の barrier の後ろで
+  /// 待たされる。リポジトリの外でも答える（展開形は展開できずに失敗する）。
   static func checkBranchName(
     _ name: String, cwd: String, runner: GitRunner = .shared,
     completion: @escaping (Bool) -> Void
   ) {
     runner.run(["check-ref-format", "--branch", name], cwd: cwd, lane: .independent) {
-      completion($0.isSuccess)
+      completion($0.isSuccess && $0.stdoutText.trimmingCharacters(in: .newlines) == name)
     }
   }
 
