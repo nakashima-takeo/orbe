@@ -351,9 +351,15 @@ extension WindowController {
     statusModel.editFocusToken &+= 1  // 描画後に field editor へ first responder
   }
 
-  /// インライン改名を畳み、アクティブタブへ first responder を戻す（パレット dismiss と同じ規則）。
+  /// インライン改名を畳み、焦点をその時点の前面へ戻す（`reconfirmFocusNextTick` と同じ分岐）。overlay が
+  /// 無ければアクティブタブへ、あればその入力欄へ——改名中に「＋」や Attention でパレットを開くと、改名欄の
+  /// blur がここへ来る。タブへ戻すとパレットが見えているのに打鍵が端末へ流れる。
   func endTabRename() {
     statusModel.editingIndex = nil
-    focusActiveTab()
+    if model.overlay == .none {
+      focusActiveTab()
+    } else {
+      model.focusCurrentOverlayField()
+    }
   }
 }
