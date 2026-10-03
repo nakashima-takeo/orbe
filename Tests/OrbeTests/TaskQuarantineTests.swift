@@ -64,6 +64,11 @@ final class TaskQuarantineTests: OrbeTestCase {
       #"{"version":1,"nextId":2,"tasks":[\#(taskJSON(id: 2))]}"#, "採番位置と矛盾する ID")
   }
 
+  /// 空の一覧でも、1 未満の採番位置からは 1 から振る ID を振れない（振れば次の起動で自分のファイルを弾く）。
+  func testNextIdBelowOneIsQuarantinedEvenWithNoTasks() throws {
+    try assertQuarantined(#"{"version":1,"nextId":0,"tasks":[]}"#, "1 未満の採番位置")
+  }
+
   func testMissingFileStartsEmptyWithoutQuarantine() throws {
     XCTAssertNil(TaskPersistence.load())
 
