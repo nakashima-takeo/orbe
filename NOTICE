@@ -201,6 +201,8 @@ holder instead, so that the attribution is not lost.
     https://github.com/tree-sitter/tree-sitter-json — License: licenses/tree-sitter-json-LICENSE.txt
   - tree-sitter-markdown (block and inline grammars) — MIT License
     https://github.com/tree-sitter-grammars/tree-sitter-markdown — License: licenses/tree-sitter-markdown-LICENSE.txt
+    Its inline injections query, adapted by Orbe, is also bundled under
+    Contents/Resources/Orbe_OrbeEditorCore.bundle.
   - tree-sitter-python — MIT License
     https://github.com/tree-sitter/tree-sitter-python — License: licenses/tree-sitter-python-LICENSE.txt
   - tree-sitter-rust — MIT License

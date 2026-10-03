@@ -16,18 +16,18 @@ final class SyntaxLayersTests: XCTestCase {
 
   // MARK: - 乱択
 
-  /// Markdown（見出し・インライン・強調・HTML・引用・言語つきと言語なしのフェンス）。フェンスの言語名を 1 字ずつ書き足す・
-  /// 替える編集を含む。
+  /// Markdown（見出し・インライン・強調・段落の中と外の HTML・引用・言語つきと言語なしのフェンス）。フェンスの言語名を
+  /// 1 字ずつ書き足す・替える編集を含む。
   func testMarkdownFollowsRandomEdits() throws {
     let unit =
-      "# Title\n\nSome *em* and `code` <b>b</b> text.\n> quote `q`\n> more *x*\n\n```js\n"
+      "# Title\n\nSome *em* and `code` <b>b</b> <kbd>⌘</kbd> text.\n> quote `q`\n> more *x*\n\n```js\n"
       + "const a = `x${1}`; // c\n```\n\n```\ndef f():\n    return 1\n```\n\n```swift\nlet v = 1\n```\n\n"
       + "- item **b**\n  cont\n\n<div>\nhtml\n</div>\n\n"
     try fuzz(
       .markdown, unit: unit,
       pieces: [
         "```", "```\n", "```js\n", "```py\n", "p", "y", "py", "thon", "js", "rust", "`", "#", "*",
-        "<b>", "</b>", "> ", "\n", "\n\n", "x", "<div>", "---\n",
+        "<b>", "</b>", "<kbd>", "</kbd>", "<script>", "> ", "\n", "\n\n", "x", "<div>", "---\n",
       ])
   }
 
@@ -315,6 +315,11 @@ final class Tracker {
       stale.remove(integersIn: target)
     }
     XCTFail("作り直しが止まらない")
+  }
+
+  /// 追って作った役割の並びの、`offset` 字目の役割。
+  func role(at offset: Int) -> SyntaxRole? {
+    roles.roles(in: NSRange(location: offset, length: 1)).first?.role
   }
 
   /// 役割と層の集合を `fresh`（同じ本文を新しく解いたもの）と比べる。両方にある層の構文木は、新しく解いた木が誤りを含まな

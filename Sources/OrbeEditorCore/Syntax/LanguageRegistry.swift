@@ -3,12 +3,16 @@ import os
 
 /// 文法ごとの色付けの規則（`GrammarRules`: 文法と highlights・injections の問い合わせ）を、注入された queries の根から
 /// 組む。根は `.app` なら `Contents/Resources`、`swift build` なら `.build/<config>` で、そこに SwiftPM の資源バンドル
-/// `<bundleName>.bundle` が並ぶ。根が nil・バンドル不在・queries が読めないときは nil＝色無しで、失敗として扱わない。結果は
+/// `<bundleName>.bundle` が並ぶ。queries は文法のパッケージのバンドル、上流の代わりに Orbe が持つものは Orbe のバンドル
+/// （`orbeBundleName`）にある。根が nil・バンドル不在・queries が読めないときは nil＝色無しで、失敗として扱わない。結果は
 /// キャッシュする。複数の文書の構文の裏の仕事から同時に引かれるので、キャッシュは lock で守る（初めて使う文法はその場で
 /// 組む）。
 public final class LanguageRegistry: Sendable {
   private let queriesRoot: URL?
   private let cache = OSAllocatedUnfairLock(initialState: [Grammar: GrammarRules?]())
+
+  /// Orbe 自身の資源バンドルの名前（SwiftPM の `<パッケージ名>_<ターゲット名>`）。
+  static let orbeBundleName = "Orbe_OrbeEditorCore"
 
   public init(queriesRoot: URL?) {
     self.queriesRoot = queriesRoot
@@ -55,10 +59,10 @@ public final class LanguageRegistry: Sendable {
   /// バンドル内の queries の所在。SwiftPM は `<bundle>/queries`、Xcode は `Contents/Resources/queries`。
   private func url(of file: Grammar.QueryFile) -> URL? {
     guard let root = queriesRoot else { return nil }
-    let bundle = root.appendingPathComponent("\(file.grammar.bundleName).bundle", isDirectory: true)
+    let bundle = root.appendingPathComponent("\(file.bundle).bundle", isDirectory: true)
     for dir in ["queries", "Contents/Resources/queries"] {
       let url = bundle.appendingPathComponent(dir, isDirectory: true).appendingPathComponent(
-        file.name)
+        file.path)
       if FileManager.default.isReadableFile(atPath: url.path) { return url }
     }
     return nil

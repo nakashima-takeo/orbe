@@ -47,7 +47,7 @@ extension SyntaxLayersTests {
   }
 
   /// 文書全体の役割のうち、本文の `needle` の最初の字の役割。
-  private func role(of needle: String, in source: String, _ layers: SyntaxLayers) -> SyntaxRole? {
+  func role(of needle: String, in source: String, _ layers: SyntaxLayers) -> SyntaxRole? {
     let at = (source as NSString).range(of: needle).location
     XCTAssertNotEqual(at, NSNotFound, "前提: 本文に \(needle) がある")
     return layers.roles(in: NSRange(location: 0, length: source.utf16.count))

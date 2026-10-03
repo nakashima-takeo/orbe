@@ -84,6 +84,8 @@ let package = Package(
         .product(name: "TreeSitterPython", package: "tree-sitter-python"),
         .product(name: "TreeSitterYAML", package: "tree-sitter-yaml"),
       ],
+      // 上流の代わりに持つ queries（`queries/<文法>/<ファイル>`）。`LanguageRegistry` が queries の根から読む。
+      resources: [.copy("Syntax/Resources/queries")],
       swiftSettings: [.swiftLanguageMode(.v6)]
     ),
     // テキスト面（`TextSurface`）の Metal 実装。本文を持たず、文書の写しを描画専用のスレッドが 1 コマで描く。公開は面を

@@ -173,6 +173,14 @@ if [ "$QUERY_BUNDLES" != "16" ]; then
   echo "エラー: tree-sitter の queries バンドルが 16 個でない ($QUERY_BUNDLES)。swift build -c release が全文法を焼いたか確認せよ" >&2
   exit 1
 fi
+# 上流の代わりに持つ queries（queries/<文法>/<ファイル>）は Orbe 自身の資源バンドル。無ければ色が黙って欠けたまま
+# 出荷されるので、ここで落とす。
+cp -R "$ROOT/.build/release/Orbe_OrbeEditorCore.bundle" "$APP/Contents/Resources/"
+ORBE_QUERIES="$(find "$APP/Contents/Resources/Orbe_OrbeEditorCore.bundle" -path '*/queries/*.scm' | wc -l | tr -d ' ')"
+if [ "$ORBE_QUERIES" != "1" ]; then
+  echo "エラー: Orbe の queries が 1 個でない ($ORBE_QUERIES)。swift build -c release が Orbe_OrbeEditorCore.bundle を焼いたか確認せよ" >&2
+  exit 1
+fi
 # アプリアイコン: Icon Composer の app/Orbe.icon を actool でコンパイルし、
 # Assets.car（macOS 26+ の light/dark 外観切替）と Orbe.icns（macOS 14–25 フォールバック）を
 # 同時生成して Resources へ出力する。Info.plist は CFBundleIconName=Orbe で参照する。

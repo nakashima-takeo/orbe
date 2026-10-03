@@ -144,10 +144,22 @@ enum Grammar: String, CaseIterable, Sendable {
     }
   }
 
-  /// queries ファイル 1 つの所在（どの文法のバンドルの、どのファイルか）。
+  /// queries ファイル 1 つの所在——資源バンドルの名前と、その `queries/` の中のパス。
   struct QueryFile: Hashable {
-    let grammar: Grammar
-    let name: String
+    let bundle: String
+    let path: String
+
+    /// 文法のパッケージが持つ上流の queries。
+    init(grammar: Grammar, name: String) {
+      bundle = grammar.bundleName
+      path = name
+    }
+
+    /// Orbe が上流の代わりに持つ queries（`<文法>/<ファイル>`）。
+    init(orbe path: String) {
+      bundle = LanguageRegistry.orbeBundleName
+      self.path = path
+    }
   }
 
   /// highlights を組むファイルの列（上流の `tree-sitter.json` どおり）。JavaScript は本体・JSX・引数の
@@ -178,12 +190,15 @@ enum Grammar: String, CaseIterable, Sendable {
     }
   }
 
-  /// injections を持つ文法はその所在。TypeScript / TSX は JavaScript のものを借りる（上流どおり）。
+  /// injections を持つ文法はその所在。TypeScript / TSX は JavaScript のものを借りる（上流どおり）。Markdown の inline は
+  /// Orbe のもの（段落の中の HTML のタグを束ねる）。
   var injectionFile: QueryFile? {
     switch self {
     case .typescript, .tsx, .javascript:
       return QueryFile(grammar: .javascript, name: "injections.scm")
-    case .markdown, .markdownInline, .html, .rust, .swift:
+    case .markdownInline:
+      return QueryFile(orbe: "markdown_inline/injections.scm")
+    case .markdown, .html, .rust, .swift:
       return QueryFile(grammar: self, name: "injections.scm")
     case .json, .css, .python, .go, .yaml, .toml, .bash, .dockerfile: return nil
     }
