@@ -11,7 +11,7 @@ enum WorktreePaletteSectionBuilder {
     var remoteBranches: [GitBranch] = []
     /// worktree の欄の見出しに添えるリポジトリ名（本体 worktree の basename）。
     var repositoryName = ""
-    /// 現在のチェックアウト（repo.root）。一致する worktree に「現在」の札を付ける。
+    /// 今の worktree のパス（`worktrees` の中の値そのもの）。一致する worktree に「現在」の札を付ける。
     var currentWorktree: String?
     /// clean 行の候補件数（safe 群の件数）。nil は分類レーンが未着地＝バッジを出さない。
     var cleanCandidates: Int?

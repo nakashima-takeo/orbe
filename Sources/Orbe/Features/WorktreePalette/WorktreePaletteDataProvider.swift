@@ -266,7 +266,7 @@ final class WorktreePaletteDataProvider {
       WorktreePaletteSectionBuilder.Input(
         worktrees: worktrees, localBranches: localBranches, remoteBranches: remoteBranches,
         repositoryName: (worktreeBase as NSString).lastPathComponent,
-        currentWorktree: repo?.root,
+        currentWorktree: currentWorktree?.path,
         cleanCandidates: rows.map(WorktreeCleanClassifier.candidateCount),
         remoteFetchLanded: remoteFetchLanded))
     model.restoreSelection(matching: selectedAction)
@@ -278,7 +278,16 @@ final class WorktreePaletteDataProvider {
     return WorktreeBaseFacts(
       previous: previousBase.flatMap { known.contains($0) ? $0 : nil },
       defaultBranch: defaultBranchName,
-      current: worktrees.first { $0.path == repo?.root }?.branch)
+      current: currentWorktree?.branch)
+  }
+
+  /// 今の worktree（cwd の属するチェックアウト）。`rev-parse --show-toplevel` は実パスを返すが、
+  /// `git worktree list` は登録時のパス（symlink 経由のこともある）をそのまま返すので、文字列ではなく
+  /// タブ占有の突き合わせと同じ正準形（`GitWorktreeRoot.normalizedPath`）で比べる。
+  private var currentWorktree: GitWorktree? {
+    guard let root = repo?.root else { return nil }
+    let key = GitWorktreeRoot.normalizedPath(root)
+    return worktrees.first { GitWorktreeRoot.normalizedPath($0.path) == key }
   }
 
   /// ベースを選ぶ画面の候補。ローカルブランチ（checkout 中のものを含む）の後にリモートブランチを、
