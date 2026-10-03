@@ -41,6 +41,7 @@ final class MetalTextSurface: TextSurface {
   private(set) var lineBreak = LineBreak.lf
   /// 面に焦点がある（first responder で、窓が key）。
   private(set) var focused = false
+  private var linkPointer: CGPoint?
   /// キャレットを点滅させるか（→ `setCaretBlinks`）。
   private(set) var caretBlinks = CaretBlinking.systemPreference
   /// 進行中の取引（→ `transact`）。
@@ -236,6 +237,13 @@ final class MetalTextSurface: TextSurface {
   }
 
   // MARK: - 焦点と撮影
+
+  /// ⌘ を押している間の、本文の上のポインタの位置（押していない・本文の外なら nil）。
+  func setLinkPointer(_ point: CGPoint?) {
+    guard point != linkPointer else { return }
+    linkPointer = point
+    inputScope { write { $0.linkPointer = point } }
+  }
 
   /// 焦点（first responder で、窓が key）が変わりうる。変われば点滅を表示からやり直し、選択の地の色を替える。
   func updateFocus(_ focused: Bool) {

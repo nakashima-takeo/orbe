@@ -219,15 +219,19 @@ final class MouseSelection: NSObject {
     drag = nil
   }
 
-  /// ポインタの形——行番号と印の列は矢印、本文は I ビーム、⌘ を押して URL の上なら指（面に焦点があるとき）。スクロールで
-  /// URL の矩形が動くので、矩形は登録せずその場の当たりで決める。
-  func updateCursor(at windowPoint: NSPoint, flags: NSEvent.ModifierFlags, in view: NSView) {
+  /// ポインタの形と URL の下線——行番号と印の列は矢印、本文は I ビーム、⌘ を押して URL の上なら指（面に焦点があるとき）。
+  /// ⌘ を押している間は本文の上のポインタの位置を面へ渡し、下線はその位置の下の URL に描画スレッドがそのコマの配置で
+  /// 引く。スクロールで URL の矩形が動くので、矩形は登録せずその場の当たりで決める。
+  func updatePointer(at windowPoint: NSPoint, flags: NSEvent.ModifierFlags, in view: NSView) {
     guard let surface else { return }
     let point = view.convert(windowPoint, from: nil)
-    guard view.bounds.contains(point), let hit = surface.hit(point) else { return }
+    let hit = view.bounds.contains(point) ? surface.hit(point) : nil
+    let armed = flags.contains(.command) && hit?.area == .text
+    surface.setLinkPointer(armed ? point : nil)
+    guard let hit else { return }
     if hit.area != .text {
       NSCursor.arrow.set()
-    } else if flags.contains(.command), surface.focused, surface.link(at: point) != nil {
+    } else if armed, surface.focused, surface.link(at: point) != nil {
       NSCursor.pointingHand.set()
     } else {
       NSCursor.iBeam.set()

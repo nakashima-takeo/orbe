@@ -242,6 +242,9 @@ struct FrameMaterial: Sendable {
   var highlights = Highlights()
   /// 俯瞰の操作の状態。
   var overview = OverviewInput()
+  /// ⌘ を押している間の、本文の上のポインタの位置（面の view の座標、pt）。描画スレッドがそのコマの配置で下の URL に
+  /// 下線を引く（スクロールで URL がポインタの下から外れれば引かない）。
+  var linkPointer: CGPoint?
   var palette: FramePalette?
   var tabColumns = Indentation.fallback.unit
   /// 面の大きさ（pt）と倍率。

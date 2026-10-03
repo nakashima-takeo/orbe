@@ -6,7 +6,7 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// セッションが開いた本物のテキスト面に載る行の装備——git の印（3 色・三角）がスクロールと編集に追従する、
-/// 丸点・URL 下線が本文の座標に立つ、⌘クリックだけが URL を開いて素のクリックはキャレットを置く。位置は
+/// 丸点・⌘ で乗せた URL の下線が本文の座標に立つ、⌘クリックだけが URL を開いて素のクリックはキャレットを置く。位置は
 /// 画素で見る。
 ///
 /// 壊れると何が起きるか。印がスクロールで置き去りになり別の行に見える。打鍵しても印が動かず、どの行を変えたか
@@ -236,7 +236,7 @@ final class EditorLineMarksTests: OrbeTestCase {
   }
 
   /// 横にスクロールしても本文の装備は行に付いてくる。長い行で横スクロールが起き、印は行番号の列にあるので無事な
-  /// 一方、点・下線だけが置き去りになる壊れ方を守る。
+  /// 一方、点だけが置き去りになる壊れ方を守る。
   func testDecorationsFollowHorizontalScrolling() throws {
     let long = String(repeating: "x", count: 100) + "  " + String(repeating: "x", count: 100)
     let hosted = try host("a\n  b  c \(long)\n")

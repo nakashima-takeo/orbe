@@ -3,8 +3,9 @@ import OrbeEditorCore
 import XCTest
 
 @testable import Orbe
+@testable import OrbeEditorEngine
 
-/// 本文の装備——タブ幅・丸点・URL 下線。
+/// 本文の装備——タブ幅・丸点・⌘ で乗せた URL の下線。
 extension EditorLineMarksTests {
 
   /// タブの表示幅は文書が検出した単位（ここではスペースの行から 2 桁）——2 個のタブの後の字は 4 桁目に立つ（AppKit
@@ -58,9 +59,9 @@ extension EditorLineMarksTests {
     XCTAssertFalse(isBlack(try rgb(ground, center(6), rowMidY(1))), "行末")
   }
 
-  /// URL の下に、文字と同じ色（コメントの中なら comment の色）の 1px の線が行の下部に連続して出る（字の
-  /// 隙間でも切れない）。
-  func testLinkUnderlineRunsBelowTheURLInTheTextsColor() throws {
+  /// ⌘ を押して URL の上にポインタを乗せると、URL の下に文字と同じ色（コメントの中なら comment の色）の 1px の線が
+  /// 行の下部に連続して出る（字の隙間でも切れない）。普段は出ない。
+  func testLinkUnderlineRunsBelowTheCommandHoveredURLInTheTextsColor() throws {
     let hosted = try host("// see https://a.b/c now\n")
     let ground = hosted.ground
     let x0 = bodyX + 7 * cell
@@ -74,6 +75,13 @@ extension EditorLineMarksTests {
       }
       return nil
     }
+    XCTAssertNil(try underlineY(), "普段は下線が無い")
+    let surface = try engine(hosted.document)
+    surface.updateFocus(true)
+    let view = surface.view
+    surface.textView.pointer.updatePointer(
+      at: view.convert(NSPoint(x: x0 + 3 * cell, y: rowMidY(1)), to: nil), flags: .command,
+      in: view)
     waitDrawn {
       guard let y = try underlineY() else { return false }
       return self.matches(try self.rgb(ground, x0 + self.cell, y), comment)

@@ -24,7 +24,7 @@ struct LineDecor: Sendable {
   var weight: Int { 1 + whitespace.count + links.count }
 }
 
-/// 行の装備——空白の丸点・URL の下線。選択の地・強調の地・字より下に描く（選択の地が装備を覆う）。位置は字を
+/// 行の装備——空白の丸点と、⌘ を押したポインタの下の URL の下線。選択の地・強調の地・字より下に描く（選択の地が装備を覆う）。位置は字を
 /// 描いた行の組版から引く。
 extension FrameBuilder {
   /// 行 1 つぶんの装備を描く。`window` は横に見えている字の位置（長い行でも、見えていない丸点と下線は描かない）。
@@ -56,17 +56,21 @@ extension FrameBuilder {
     let top = (baseline + Double(c.config.decorations.linkUnderlineOffset) * s).rounded()
     let thickness = max(
       1, (Double(c.config.decorations.linkUnderlineThickness) * s).rounded())
+    guard let pointer = c.linkPointer, pointer.y >= rowTop, pointer.y < rowTop + g.lineHeight
+    else { return }
     for link in decor.links
     where NSMaxRange(link) > window.lowerBound && link.location <= window.upperBound {
+      let left = originX + Double(carets.x(link.location)) * s
+      let right = originX + Double(carets.x(NSMaxRange(link))) * s
+      guard pointer.x >= left, pointer.x < right else { continue }
       let role = c.roles.roles(in: NSRange(location: start + link.location, length: 1)).first?.role
-      let ink = c.palette.ink(role)
-      let left = (originX + Double(carets.x(link.location)) * s).rounded()
-      let right = (originX + Double(carets.x(NSMaxRange(link))) * s).rounded()
       decorShapes.append(
         ShapeInstance(
-          rect: SIMD4(Float(left), Float(top), Float(right - left), Float(thickness)),
-          color: ink.color.packed, radius: 0, kind: 0))
+          rect: SIMD4(
+            Float(left.rounded()), Float(top), Float(right.rounded() - left.rounded()),
+            Float(thickness)),
+          color: c.palette.ink(role).color.packed, radius: 0, kind: 0))
+      return
     }
   }
-
 }

@@ -4,8 +4,8 @@ import XCTest
 @testable import Orbe
 
 /// エディター面の gallery（見本 `editor/EmptyView.tsx`・`CodeView.tsx`・`Chrome.tsx` の位置ドット突合用）。
-/// 空状態（dark / light）・コードビュー（dark / light。一時 git リポジトリの中身で 3 種の印・丸点・
-/// URL 下線）と、タブ行右端の位置ドット 3 態（端末のみ・分割で端末焦点・エディターのみ）。
+/// 空状態（dark / light）・コードビュー（dark / light。一時 git リポジトリの中身で 3 種の印・丸点）と、
+/// タブ行右端の位置ドット 3 態（端末のみ・分割で端末焦点・エディターのみ）。
 extension DesignGallerySnapshotTests {
   func renderEditorSnapshots(dir: URL) throws {
     let stage = NSSize(width: 640, height: 480)

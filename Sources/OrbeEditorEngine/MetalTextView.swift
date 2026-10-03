@@ -258,11 +258,11 @@ final class MetalTextView: TextSurfaceInputView {
   }
 
   override func cursorUpdate(with event: NSEvent) {
-    pointer.updateCursor(at: event.locationInWindow, flags: event.modifierFlags, in: self)
+    pointer.updatePointer(at: event.locationInWindow, flags: event.modifierFlags, in: self)
   }
 
   override func mouseMoved(with event: NSEvent) {
-    pointer.updateCursor(at: event.locationInWindow, flags: event.modifierFlags, in: self)
+    pointer.updatePointer(at: event.locationInWindow, flags: event.modifierFlags, in: self)
     hover(event, inside: true)
   }
 
@@ -271,6 +271,7 @@ final class MetalTextView: TextSurfaceInputView {
   }
 
   override func mouseExited(with event: NSEvent) {
+    surface?.setLinkPointer(nil)
     hover(event, inside: false)
   }
 
@@ -287,7 +288,7 @@ final class MetalTextView: TextSurfaceInputView {
 
   override func flagsChanged(with event: NSEvent) {
     guard let window else { return super.flagsChanged(with: event) }
-    pointer.updateCursor(
+    pointer.updatePointer(
       at: window.mouseLocationOutsideOfEventStream, flags: event.modifierFlags, in: self)
     super.flagsChanged(with: event)
   }

@@ -97,6 +97,8 @@ final class FrameBuilder {
     let tabColumns: Int
     /// 役割の並び（字と下線の色）。
     let roles: RoleRuns
+    /// ⌘ を押している間の本文の上のポインタ（px）。焦点が無ければ nil。
+    let linkPointer: SIMD2<Double>?
   }
 
   /// 1 コマを組む元。
@@ -150,9 +152,12 @@ final class FrameBuilder {
       column: (Double(layout.column) * s).rounded(),
       textRight: (Double(layout.text.maxX) * s).rounded())
     let tabColumns = source.material.tabColumns
+    let focused = source.material.caret.focused
     let c = Context(
-      g: g, palette: palette, focused: source.material.caret.focused, atlas: source.atlas,
-      config: config, tabColumns: tabColumns, roles: content.roles)
+      g: g, palette: palette, focused: focused, atlas: source.atlas, config: config,
+      tabColumns: tabColumns, roles: content.roles,
+      linkPointer: focused
+        ? source.material.linkPointer.map { SIMD2(Double($0.x) * s, Double($0.y) * s) } : nil)
     textScissor = Self.scissor(x: g.column, y: g.top, width: g.textRight - g.column, g)
     gutterScissor = Self.scissor(x: 0, y: g.top, width: g.column, g)
     let lines = source.limits.viewportLines(at: source.position, lineCount: lineCount)
