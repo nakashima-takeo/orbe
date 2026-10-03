@@ -22,10 +22,6 @@ final class GitHubCLI {
   /// （`GitHubCache`）が防ぐ。
   private let queue = DispatchQueue(
     label: "dev.orbe.gh", qos: .userInitiated, attributes: .concurrent)
-  /// ブラウザで開く操作の口。取得（`queue`）とは分ける——結果を待たない即時操作なので、
-  /// 取得のレーンに載せると一覧の取得が捌けるまでブラウザが開かない。決定は Enter 一発という
-  /// 前提がそこで崩れる。
-  private let webQueue = DispatchQueue(label: "dev.orbe.gh.web", qos: .userInitiated)
   /// ブランチ PR 取得のレーン。本数を `branchFetchConcurrency` で抑えるため、一覧取得（`queue`）とは
   /// 分ける（1 本あたり実測 0.75〜1.0 秒）。
   private let branchQueue = DispatchQueue(
@@ -264,18 +260,6 @@ final class GitHubCLI {
     let out = runSync(gh, args, cwd: cwd)
     guard out.status == 0 else { return nil }
     return try? JSONDecoder().decode(T.self, from: out.stdout)
-  }
-
-  // MARK: - ブラウザで開く（fire-and-forget）
-
-  func openIssueWeb(number: Int, cwd: String) { openWeb("issue", number: number, cwd: cwd) }
-  func openPRWeb(number: Int, cwd: String) { openWeb("pr", number: number, cwd: cwd) }
-
-  private func openWeb(_ kind: String, number: Int, cwd: String) {
-    webQueue.async {
-      guard let gh = self.resolveGh() else { return }
-      _ = self.runSync(gh, [kind, "view", String(number), "--web"], cwd: cwd)
-    }
   }
 
   // MARK: - 実行基盤

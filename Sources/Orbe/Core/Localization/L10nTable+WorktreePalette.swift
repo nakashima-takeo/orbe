@@ -10,27 +10,10 @@ extension L10n {
     .worktreePaletteWorktreeExisting: ("既存worktree", "existing worktree"),
     .worktreePaletteWorktreeCheckout: ("checkout → worktree", "checkout → worktree"),
     .worktreePaletteWorktreeNew: ("新規worktree", "new worktree"),
-    .worktreePaletteNoteBrowser: ("ブラウザで開く", "open in browser"),
     .worktreePalettePrepExisting: ("の既存worktreeで", "· existing worktree ·"),
     .worktreePalettePrepCheckout: ("をcheckoutしたworktreeで", "· checkout worktree ·"),
     .worktreePalettePrepNew: ("の新規worktreeで", "· new worktree ·"),
     .worktreePaletteLaunchSuffix: ("を新しいタブで起動", "· new tab"),
-    .worktreePaletteBrowseSuffix: ("をブラウザで開く", "· open in browser"),
-    .worktreePaletteReviewRequired: ("review待ち", "review pending"),
-    .worktreePaletteChangesRequested: ("要修正", "changes requested"),
-    .worktreePaletteApproved: ("承認済み", "approved"),
-    .worktreePaletteGhMissing: (
-      "gh CLI 未導入（brew install gh で issue/PR を表示）",
-      "gh CLI not installed (brew install gh to show issues/PRs)"
-    ),
-    .worktreePaletteGhUnauthed: (
-      "gh 未認証（gh auth login で issue/PR を表示）",
-      "gh not authenticated (gh auth login to show issues/PRs)"
-    ),
-    .worktreePaletteRepositoryUnverified: (
-      "GitHub でこのリポジトリを確認できないため、PR はブラウザで開きます",
-      "Can't verify this repository on GitHub, so PRs open in the browser"
-    ),
     .worktreePaletteAgentOpen: ("%@で開く", "open with %@"),
     .worktreePaletteQueryPlaceholder: (
       "worktree / branch / issue を絞り込み", "Filter worktree / branch / issue"
@@ -38,7 +21,6 @@ extension L10n {
     .worktreePalettePreparing: ("作成中…", "Preparing…"),
     .worktreePaletteHintSelect: ("選択", "Select"),
     .worktreePaletteHintAgent: ("agent変更", "Change agent"),
-    .worktreePaletteHintOpen: ("開く", "Open"),
     .worktreePaletteHintClose: ("閉じる", "Close"),
     .worktreePaletteErrNotGitRepo: (
       "git リポジトリを解決できませんでした", "Couldn't resolve a git repository"

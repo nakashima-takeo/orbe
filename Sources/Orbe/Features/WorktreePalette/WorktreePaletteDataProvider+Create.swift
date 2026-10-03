@@ -10,7 +10,7 @@ extension WorktreePaletteDataProvider {
   }
 
   /// Enter の解決の結末。解決したか、作らずにユーザーへ問うか。
-  enum WorktreePalettePrepareOutcome {
+  enum PrepareOutcome {
     case resolved(DirectoryResolution)
     /// Local branch が upstream より遅れていて fast-forward できる。worktree は作っていない——
     /// 最新化して作るか、そのまま作るかを選択画面が問う。画面はブランチの事実（遅れとブランチの
@@ -24,7 +24,7 @@ extension WorktreePaletteDataProvider {
   /// リポジトリが要る作成経路（`createWorktree`）の責務。
   func prepareDirectory(
     for destination: WorktreePaletteDestination,
-    completion: @escaping (WorktreePalettePrepareOutcome) -> Void
+    completion: @escaping (PrepareOutcome) -> Void
   ) {
     let resolved = { completion(.resolved($0)) }
     switch destination {
@@ -44,25 +44,13 @@ extension WorktreePaletteDataProvider {
         at: worktreeDir(forSlug: slug(local)), base: .ref(name),
         newBranch: GitNewBranch(name: local, tracksBase: true), completion: resolved)
 
-    case .issue(let number, let existing, let branchExists):
-      if let existing {
-        resolved(.ready(existing))
-        return
-      }
-      let branch = "issue/\(number)"
-      let path = worktreeDir(forSlug: slug(branch))
-      if branchExists {
-        // 既存ブランチから worktree 追加（-b を外す）＝ git worktree add <path> issue/<n>。
-        createWorktree(at: path, base: .ref(branch), newBranch: nil, completion: resolved)
-      } else {
-        // 新規: git worktree add -b issue/<n> --no-track <path> <default>。既定ブランチを upstream に
-        // 持つと `git push` が既定ブランチへ向かって拒否され、`push.autoSetupRemote` も（upstream が
-        // 既にあるため）発動しない。upstream 無しなら git が正しい `--set-upstream` へ導く。
-        createWorktree(
-          at: path, base: .defaultBranch,
-          newBranch: GitNewBranch(name: branch, tracksBase: false), completion: resolved)
-      }
-
+    case .newBranch(let name, let base):
+      // upstream を付けない: ベースを upstream に持つと `git push` がベースへ向かって拒否され、
+      // `push.autoSetupRemote` も（upstream が既にあるため）発動しない。upstream 無しなら git が正しい
+      // `--set-upstream` へ導く。
+      createWorktree(
+        at: worktreeDir(forSlug: slug(name)), base: base,
+        newBranch: GitNewBranch(name: name, tracksBase: false), completion: resolved)
     }
   }
 
@@ -71,7 +59,7 @@ extension WorktreePaletteDataProvider {
   /// fast-forward できる遅れなら作らずに問い、それ以外（同期済み・分岐・↑ だけ・`[gone]`）は今どおり作る。
   /// upstream が無い／信頼しない remote の行は fetch で動く値に依存しないので待たない。
   private func resolveLocalBranch(
-    _ name: String, completion: @escaping (WorktreePalettePrepareOutcome) -> Void
+    _ name: String, completion: @escaping (PrepareOutcome) -> Void
   ) {
     let create = { self.createLocalBranchWorktree(name: name) { completion(.resolved($0)) } }
     guard let branch = localBranches.first(where: { $0.name == name }),
@@ -121,14 +109,6 @@ extension WorktreePaletteDataProvider {
         self.createLocalBranchWorktree(name: sync.name) { completion(.success($0)) }
       }
     }
-  }
-
-  /// 作成のベース。既定ブランチは**参照ではなく意図**として持ち、名前の解決を作成の直前まで遅らせる
-  /// ——提示時に読んだ名前を捕まえると、着地を待つあいだに fetch が `origin/HEAD` を作っても
-  /// （git の `followRemoteHEAD` 既定）フォールバックの固定名のまま撃ってしまう。
-  private enum WorktreeBase {
-    case ref(String)
-    case defaultBranch
   }
 
   private func name(of base: WorktreeBase) -> String {
@@ -183,24 +163,6 @@ extension WorktreePaletteDataProvider {
     // 着地の成否は問わない——fetch が落ちたなら手元の `refs/remotes/origin/*` が最良で、worktree パレットの
     // 他経路（分類の引き直し）と同じ「失敗は据え置き」に揃える。
     remoteFetchLanding.notify(queue: .main, execute: add)
-  }
-
-  /// issue/PR／PR に紐づく worktree・branch をブラウザで開く（fire-and-forget）。
-  /// `linkedPRNumber` を最優先で見ることで「PR に紐づく行は PR を開く」を構造化する。
-  func openWeb(for item: WorktreePaletteItem) {
-    guard let repo else { return }
-    if let number = item.linkedPRNumber {
-      gitHub.openPRWeb(number: number, cwd: repo.root)
-      return
-    }
-    switch item.action {
-    case .pullRequest(let number, _):
-      gitHub.openPRWeb(number: number, cwd: repo.root)
-    case .open(.issue(let number, _, _)):
-      gitHub.openIssueWeb(number: number, cwd: repo.root)
-    default:
-      break
-    }
   }
 
   // MARK: - パス導出

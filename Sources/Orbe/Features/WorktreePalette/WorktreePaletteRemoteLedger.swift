@@ -101,8 +101,8 @@ enum WorktreePaletteRemoteLedger: Equatable {
   }
 }
 
-/// 行の同一性を求める唯一の口。チップ・PR 行の行き先（`WorktreePaletteSectionBuilder`）と clean の PR の事実
-/// （provider の `branchPRStates`）が、同じこの型を通る。
+/// 行の同一性を求める唯一の口。clean の PR の事実（provider の `branchPRStates`）とブランチの PR の
+/// 問い合わせ先（`loadBranchPullRequests`）が、同じこの型を通る。
 ///
 /// ローカルブランチは（push 先の remote の正式名, ローカル名）。PR の head は自分が push したブランチ
 /// なので、git が push 先として解決する remote がそのリポジトリになる——base（`origin/main`）や積み上げ元を

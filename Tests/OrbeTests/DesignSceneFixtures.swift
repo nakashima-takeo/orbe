@@ -35,7 +35,7 @@ enum DesignSceneFixtures {
   }
 
   /// worktree パレットシーンの WorktreePaletteModel（実データ形の決定的サンプル・原典 worktree パレット対応）。
-  /// live git/gh は叩かず `WorktreePaletteSectionBuilder` に mock 入力を通す。
+  /// live git は叩かず `WorktreePaletteSectionBuilder` に mock 入力を通す。
   static func worktreePaletteModel() -> WorktreePaletteModel {
     worktreePaletteModel(from: .designSample)
   }
@@ -55,43 +55,6 @@ enum DesignSceneFixtures {
     return model
   }
 
-  /// gh 到着前のプログレッシブ表示（Issues/PR がローディング行）。
-  static func worktreePaletteLoadingModel() -> WorktreePaletteModel {
-    var input = WorktreePaletteSectionBuilder.Input.designSample
-    input.issues = []
-    input.pullRequests = []
-    input.issuesFetching = true
-    input.pullRequestsFetching = true
-    return worktreePaletteModel(from: input)
-  }
-
-  /// 一覧の取得が続いている（届いた行の後ろ、セクション末尾にローディング行）。
-  static func worktreePaletteGrowingModel() -> WorktreePaletteModel {
-    var input = WorktreePaletteSectionBuilder.Input.designSample
-    input.issuesFetching = true
-    input.pullRequestsFetching = true
-    return worktreePaletteModel(from: input)
-  }
-
-  /// 取得中の絞り込み（`feat` で Issues は 0 件だが、「まだ届いていない」ので見出しとローディング行が残る）。
-  static func worktreePaletteGrowingFilteredModel() -> WorktreePaletteModel {
-    let model = worktreePaletteGrowingModel()
-    model.query = "feat"
-    model.onQueryChanged()
-    return model
-  }
-
-  /// gh 未導入のフォールバック（Issues に誘導情報行 1 本・PR 非表示）。
-  static func worktreePaletteGhMissingModel() -> WorktreePaletteModel {
-    var input = WorktreePaletteSectionBuilder.Input.designSample
-    input.issues = []
-    input.pullRequests = []
-    input.githubState = .ghMissing
-    let model = worktreePaletteModel(from: input)
-    model.githubState = .ghMissing
-    return model
-  }
-
   /// 絞り込み中（`feat` で横断フィルタ・空セクションが消える）。
   static func worktreePaletteFilteredModel() -> WorktreePaletteModel {
     let model = worktreePaletteModel(from: .designSample)
@@ -100,30 +63,7 @@ enum DesignSceneFixtures {
     return model
   }
 
-  /// worktree にできない PR 行（他人の fork の `main` から出た PR）を選んだところ。行末とフッターが
-  /// ブラウザで開くと先に言い、キーヒントから ⇥ と ⌘↵ が外れる（起動先チップは出たまま）。
-  static func worktreePaletteBrowserPullRequestModel() -> WorktreePaletteModel {
-    var input = WorktreePaletteSectionBuilder.Input.designSample
-    input.pullRequests.append(
-      GitHubPullRequest(
-        number: 146, title: "fix: tab order from a fork", headRefName: "main",
-        reviewDecision: nil, headRepository: GitHubRepoName(nameWithOwner: "someone/orbe")))
-    let model = worktreePaletteModel(from: input)
-    model.selected = model.items.count - 1
-    return model
-  }
-
-  /// origin の正式名を確かめられない（見えない private・問い合わせの失敗等）。Pull requests の見出しの
-  /// 直下に情報行が 1 行出て、PR 行はブラウザで開く行になり、worktree / branch 行のチップは消える。
-  static func worktreePaletteRepositoryUnverifiedModel() -> WorktreePaletteModel {
-    var input = WorktreePaletteSectionBuilder.Input.designSample
-    input.remoteLedger = .settled(.init(repositories: ["origin": .unverified]))
-    let model = worktreePaletteModel(from: input)
-    model.selected = model.items.count - 1
-    return model
-  }
-
-  /// 多件数（cap 380 を超え内部スクロールへ回る回帰検証。長い branch 名・PR で狭幅も試す）。
+  /// 多件数（cap 380 を超え内部スクロールへ回る回帰検証。長い branch 名で狭幅も試す）。
   static func worktreePaletteManyModel() -> WorktreePaletteModel {
     let home = NSHomeDirectory()
     var input = WorktreePaletteSectionBuilder.Input()
@@ -143,18 +83,6 @@ enum DesignSceneFixtures {
         name: "origin/release/candidate-\($0)", relativeDate: "user\($0) · \($0)h前",
         upstream: nil)
     }
-    input.issues = (0..<12).map {
-      GitHubIssue(number: 200 + $0, title: "実データ由来の長めの issue タイトル その\($0)")
-    }
-    input.pullRequests = (0..<6).map {
-      GitHubPullRequest(
-        number: 300 + $0, title: "feat: それなりに長い PR のタイトル \($0)",
-        headRefName: "feature/very-long-branch-name-\($0)",
-        reviewDecision: $0.isMultiple(of: 2) ? "REVIEW_REQUIRED" : "APPROVED",
-        headRepository: WorktreePaletteSectionBuilder.Input.designRepository)
-    }
-    input.githubState = .ready
-    input.remoteLedger = WorktreePaletteSectionBuilder.Input.designLedger
     let model = worktreePaletteModel(from: input)
     model.selected = model.items.count - 1  // 末尾選択（scroll-to-end 到達の確認）
     return model

@@ -30,8 +30,7 @@ final class WorktreeCreateTimeoutTests: OrbeTestCase {
 
     var resolution: WorktreePaletteDataProvider.DirectoryResolution?
     let done = expectation(description: "prepareDirectory")
-    provider.prepareDirectory(for: .issue(number: 44, existingWorktree: nil, existingBranch: false))
-    {
+    provider.prepareDirectory(for: .newBranch(name: "issue/44", base: .defaultBranch)) {
       if case .resolved(let resolved) = $0 { resolution = resolved }
       done.fulfill()
     }

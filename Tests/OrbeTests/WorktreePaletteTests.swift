@@ -16,7 +16,6 @@ final class WorktreePaletteTests: OrbeTestCase {
   ) -> WorktreePaletteModel {
     let model = WorktreePaletteModel()
     model.setTargets(agents: agents, defaultCommand: "claude")
-    model.githubState = input.githubState
     model.sections = WorktreePaletteSectionBuilder.build(input)
     model.clampSelection()
     return model
@@ -24,8 +23,8 @@ final class WorktreePaletteTests: OrbeTestCase {
 
   func testSampleShape() {
     let p = makeModel()
-    XCTAssertEqual(p.sections.count, 5, "Worktrees/Local/Remote/Issues/PR の 5 セクション")
-    XCTAssertEqual(p.items.count, 9, "対話行は全 9 行（worktree 2 ＋ clean 行 ＋ branch 3 ＋ issue 2 ＋ PR）")
+    XCTAssertEqual(p.sections.count, 3, "Worktrees/Local/Remote の 3 セクション")
+    XCTAssertEqual(p.items.count, 6, "全 6 行（worktree 2 ＋ clean 行 ＋ branch 3）")
     XCTAssertEqual(p.selected, 0)
     XCTAssertEqual(p.selectedItem?.name, "agent-hooks", "初期選択は先頭 worktree")
     XCTAssertTrue(p.selectedItem?.isPrimary ?? false, "先頭 worktree はアクティブ（強調）")
@@ -34,41 +33,10 @@ final class WorktreePaletteTests: OrbeTestCase {
   func testMoveWrapsAcrossSections() {
     let p = makeModel()
     p.move(-1)
-    XCTAssertEqual(p.selected, 8, "先頭で上 → 末尾へ wrap")
-    XCTAssertEqual(p.selectedItem?.name, "feat: session restore", "末尾は PR 行")
+    XCTAssertEqual(p.selected, 5, "先頭で上 → 末尾へ wrap")
+    XCTAssertEqual(p.selectedItem?.name, "origin/feat/session-restore", "末尾は remote branch 行")
     p.move(1)
     XCTAssertEqual(p.selected, 0, "末尾から下 → 先頭へ wrap")
-  }
-
-  func testMoveSkipsInfoRows() {
-    var input = WorktreePaletteSectionBuilder.Input.designSample
-    input.issues = []
-    input.pullRequests = []
-    input.githubState = .ghMissing
-    let p = makeModel(input)
-    // 対話行 6（worktree2＋clean＋local2＋remote1）＋Issues 誘導情報行 1。
-    XCTAssertEqual(p.items.count, 7)
-    XCTAssertFalse(p.items.last?.isInteractive ?? true, "末尾は非対話の誘導情報行")
-    p.selected = 5  // 末尾の対話行（remote）
-    p.move(1)
-    XCTAssertEqual(p.selected, 0, "情報行を飛ばして先頭へ wrap")
-    XCTAssertTrue(p.selectedItem?.isInteractive ?? false)
-  }
-
-  func testJumpSkipsInfoRows() {
-    var input = WorktreePaletteSectionBuilder.Input.designSample
-    input.issues = []
-    input.pullRequests = []
-    input.githubState = .ghMissing
-    let p = makeModel(input)
-    XCTAssertEqual(p.items.count, 7)
-    XCTAssertFalse(p.items.last?.isInteractive ?? true, "末尾は非対話の誘導情報行")
-    p.jump(1)
-    XCTAssertEqual(p.selected, 5, "⌘↓＝情報行を飛ばして末尾の対話行へ")
-    XCTAssertTrue(p.selectedItem?.isInteractive ?? false)
-    p.jump(-1)
-    XCTAssertEqual(p.selected, 0, "⌘↑＝先頭の対話行へ")
-    XCTAssertTrue(p.selectedItem?.isInteractive ?? false)
   }
 
   func testCycleTarget() {
@@ -115,67 +83,20 @@ final class WorktreePaletteTests: OrbeTestCase {
     XCTAssertEqual(p.selectedTargetName, "codex", "default 不在なら先頭 agent へフォールバック")
   }
 
-  func testCanOpenWebOnlyForIssueAndPR() {
-    let p = makeModel()
-    let byName = Dictionary(p.items.map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
-    XCTAssertEqual(
-      byName["Status detection doesn't work inside tmux"]?.canOpenWeb, true, "issue は開ける")
-    XCTAssertEqual(byName["feat: session restore"]?.canOpenWeb, true, "PR は開ける")
-    XCTAssertEqual(byName["agent-hooks"]?.canOpenWeb, false, "worktree は開けない")
-    XCTAssertEqual(byName["main"]?.canOpenWeb, false, "branch は開けない")
-  }
-
-  func testCanOpenWebForPRLinkedBranch() {
-    let p = makeModel()
-    let byName = Dictionary(p.items.map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
-    // designSample の remote branch origin/feat/session-restore は PR #145 に紐づく。
-    let linked = byName["origin/feat/session-restore"]
-    XCTAssertEqual(linked?.linkedPRNumber, 145)
-    XCTAssertEqual(linked?.canOpenWeb, true, "PR に紐づく remote branch 行は開ける")
-  }
-
-  func testExecuteAndOpenWebWiring() {
-    let p = makeModel()
-    var executed: WorktreePaletteDestination?
-    var opened: WorktreePaletteItem?
-    p.onExecute = { executed = $0 }
-    p.onOpenWeb = { opened = $0 }
-    p.selected = 6  // issue #151
-    p.activate()  // ↵ の決定経路
-    p.onOpenWeb(p.selectedItem!)
-    XCTAssertEqual(executed, .issue(number: 151, existingWorktree: nil, existingBranch: false))
-    XCTAssertEqual(opened?.name, "Status detection doesn't work inside tmux")
-  }
-
   /// 行タップは ↵ と同じ決定 funnel を通り、選択をその行へ移したうえで同じ行を実行する。
   func testActivateAtRowSelectsAndExecutesSameRow() {
     let p = makeModel()
     var executed: [WorktreePaletteDestination] = []
     p.onExecute = { executed.append($0) }
-    p.activate(at: 6)  // issue #151 の行をタップ
-    XCTAssertEqual(p.selected, 6, "タップで選択もその行へ移る")
-    XCTAssertEqual(executed, [.issue(number: 151, existingWorktree: nil, existingBranch: false)])
+    p.activate(at: 3)  // Local branch main の行をタップ
+    XCTAssertEqual(p.selected, 3, "タップで選択もその行へ移る")
+    XCTAssertEqual(executed, [.localBranch(name: "main")])
 
     // ↵（選択行の決定）と同一の結果になる＝クリック用の別経路を持たない。
     var byEnter: [WorktreePaletteDestination] = []
     p.onExecute = { byEnter.append($0) }
     p.activate()
     XCTAssertEqual(byEnter, executed)
-  }
-
-  /// 非対話行（gh 誘導情報・ローディング）のタップでは実行しない。
-  func testActivateIgnoresNonInteractiveRow() {
-    var input = WorktreePaletteSectionBuilder.Input.designSample
-    input.issues = []
-    input.pullRequests = []
-    input.githubState = .ghMissing
-    let p = makeModel(input)
-    var executed = 0
-    p.onExecute = { _ in executed += 1 }
-    XCTAssertFalse(p.items.last?.isInteractive ?? true)
-    p.activate(at: p.items.count - 1)
-    XCTAssertEqual(executed, 0, "情報行は決定の対象外")
-    XCTAssertEqual(p.selected, 0, "選択も動かさない")
   }
 
   /// 作成中（worktree 作成待ち）はタップの重複実行を弾く。Enter 連打ガードと同じ関門を通る。
@@ -249,7 +170,7 @@ final class WorktreePaletteTests: OrbeTestCase {
     XCTAssertEqual(p.selected, 0, "打鍵後は実マウス移動があるまで追従しない")
   }
 
-  // MARK: - 選択復元（裏の gh 更新による sections 差し替え）
+  // MARK: - 選択復元（裏の git 列挙の引き直しによる sections 差し替え）
 
   /// provider の rebuild と同じ手順（選択 action を控える → sections 差し替え → 復元）。
   private func rebuild(_ p: WorktreePaletteModel, with input: WorktreePaletteSectionBuilder.Input) {
@@ -258,44 +179,29 @@ final class WorktreePaletteTests: OrbeTestCase {
     p.restoreSelection(matching: action)
   }
 
-  /// Issues が増えて index がずれても、選択は同じ issue 行に追従する。
+  /// ブランチが増えて index がずれても、選択は同じ行に追従する。
   func testRestoreSelectionFollowsRowAcrossIndexShift() {
     let p = makeModel()
-    p.selected = 7
-    XCTAssertEqual(p.selectedItem?.name, "Tab drag order isn't persisted")
+    p.selected = 4
+    XCTAssertEqual(p.selectedItem?.name, "perf/render-batching")
     p.inputModality = .pointer
     var input = WorktreePaletteSectionBuilder.Input.designSample
-    input.issues.insert(GitHubIssue(number: 160, title: "New issue"), at: 0)
+    input.localBranches.insert(GitBranch(name: "new", relativeDate: "now", upstream: nil), at: 0)
     rebuild(p, with: input)
-    XCTAssertEqual(p.selected, 8, "行が 1 本増えた分だけ index がずれても同じ行を指す")
-    XCTAssertEqual(p.selectedItem?.name, "Tab drag order isn't persisted")
+    XCTAssertEqual(p.selected, 5, "行が 1 本増えた分だけ index がずれても同じ行を指す")
+    XCTAssertEqual(p.selectedItem?.name, "perf/render-batching")
     XCTAssertEqual(p.inputModality, .pointer, "index がずれても裏の更新はモダリティを奪わない")
   }
 
-  /// 選択していた行が差し替えで消えたら clamp（範囲内の対話行）に落ちる。
+  /// 選択していた行が差し替えで消えたら clamp（範囲内）に落ちる。
   func testRestoreSelectionClampsWhenRowDisappears() {
     let p = makeModel()
-    p.selected = 8
-    XCTAssertEqual(p.selectedItem?.name, "feat: session restore", "末尾の PR 行")
+    p.selected = 5
+    XCTAssertEqual(p.selectedItem?.name, "origin/feat/session-restore", "末尾の remote branch 行")
     var input = WorktreePaletteSectionBuilder.Input.designSample
-    input.pullRequests = []
+    input.remoteBranches = []
     rebuild(p, with: input)
-    XCTAssertEqual(p.selected, 7, "消えた行の代わりに範囲内の末尾へ clamp")
-    XCTAssertTrue(p.selectedItem?.isInteractive ?? false)
-  }
-
-  /// 非対話行を選んでいた（action == nil）ときは従来どおり clamp する。
-  func testRestoreSelectionClampsForNonInteractiveRow() {
-    var input = WorktreePaletteSectionBuilder.Input.designSample
-    input.issues = []
-    input.pullRequests = []
-    input.githubState = .ghMissing
-    let p = makeModel(input)
-    p.selected = 6
-    XCTAssertNil(p.selectedItem?.action, "誘導情報行は action を持たない")
-    rebuild(p, with: input)
-    XCTAssertEqual(p.selected, 0, "非対話行のままにせず先頭の対話行へ clamp")
-    XCTAssertTrue(p.selectedItem?.isInteractive ?? false)
+    XCTAssertEqual(p.selected, 4, "消えた行の代わりに範囲内の末尾へ clamp")
   }
 
   /// index が変わらない復元では代入せず、ホバー追従（`.pointer`）を殺さない。
@@ -307,17 +213,10 @@ final class WorktreePaletteTests: OrbeTestCase {
     XCTAssertEqual(p.inputModality, .pointer, "裏の更新はモダリティを奪わない")
   }
 
-  /// 非対話行（gh 誘導情報・ローディング）と範囲外・作成中では追従しない。
-  func testHoverIgnoresNonInteractiveAndBlockedStates() {
-    var input = WorktreePaletteSectionBuilder.Input.designSample
-    input.issues = []
-    input.pullRequests = []
-    input.githubState = .ghMissing
-    let p = makeModel(input)
+  /// 範囲外・作成中では追従しない。
+  func testHoverIgnoresBlockedStates() {
+    let p = makeModel()
     p.inputModality = .pointer
-    XCTAssertFalse(p.items.last?.isInteractive ?? true, "末尾は非対話の誘導情報行")
-    p.hoverSelect(p.items.count - 1)
-    XCTAssertEqual(p.selected, 0, "情報行はホバー追従の対象外")
     p.hoverSelect(99)
     XCTAssertEqual(p.selected, 0, "範囲外は no-op")
     p.isPreparing = true

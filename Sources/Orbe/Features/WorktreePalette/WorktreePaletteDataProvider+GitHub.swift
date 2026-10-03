@@ -1,22 +1,9 @@
 import Foundation
 
-/// gh レーンの取得と着地。probe（可否判定）→ 取得（issues / open PR 一覧 / ブランチの PR）→
-/// 着地の規則（失敗は据え置き・等値は再描画しない）までを持ち、描画は本体の `rebuild()` へ流す。
+/// gh レーンの取得と着地。probe（可否判定）→ 取得（remote の正式名・ブランチの PR）→
+/// 着地の規則（失敗は据え置き）までを持ち、描画は本体の `rebuild()` へ流す。gh の結果は clean の
+/// 判定材料にだけ使う。
 extension WorktreePaletteDataProvider {
-
-  /// 前回取得した gh 結果をリポジトリ（commonDir）単位で先に積む。最初の rebuild（git 着地時）に
-  /// 既に issue/PR 行が載るので、2 回目以降は前回の行が即出る（末尾のローディング行が、今回の取得が
-  /// まだ届いていないことを示す）。
-  /// ここで rebuild は打たない（git 未着の中途半端なリストが一瞬描かれ、かえってちらつく）。
-  /// 前回結果の無い側は、ローディング行だけのまま今回の取得を待つ。
-  func applyCachedGitHub(_ repo: GitRepo) {
-    guard let entry = GitHubCache.shared.entry(for: repo.commonDir) else { return }
-    if let cached = entry.issues { issues = cached }
-    if let cached = entry.pullRequests { pullRequests = cached }
-    // 掃除の突き合わせ（PR が OPEN / MERGED か）はここでは積まない——head ごとの状態を組む
-    // `branchPRStates` がキャッシュを直接読み、今回の取得が未着地／失敗の head だけを前回結果で
-    // 埋める（合成点を 2 つに割ると、着地の順で結果が変わる）。
-  }
 
   func loadGitHub(_ repo: GitRepo) {
     repo.originIsGitHub { [weak self] isGitHub in
@@ -24,23 +11,10 @@ extension WorktreePaletteDataProvider {
       gitHub.probe(cwd: repo.root, isGitHub: isGitHub) { [weak self] state in
         guard let self else { return }
         self.probedGitHubState = state
-        self.model?.githubState = state
         guard state == .ready else {
-          self.issuesFetching = false
-          self.pullRequestsFetching = false
           self.rebuild()
           return
         }
-        // 取得はパレットを閉じても続くので、provider ではなく実行基盤だけを捕まえる。
-        let gitHub = self.gitHub
-        GitHubCache.shared.refreshIssues(
-          for: repo.commonDir,
-          fetch: { gitHub.openIssues(cwd: repo.root, page: $0, finished: $1) },
-          updated: { [weak self] in self?.applyFetchedIssues($0, growing: $1) })
-        GitHubCache.shared.refreshPullRequests(
-          for: repo.commonDir,
-          fetch: { gitHub.openPullRequests(cwd: repo.root, page: $0, finished: $1) },
-          updated: { [weak self] in self?.applyFetchedPullRequests($0, growing: $1) })
         self.resolveRemoteRepositories(repo)
         self.loadBranchPullRequests(repo)
       }
@@ -115,7 +89,6 @@ extension WorktreePaletteDataProvider {
   /// **worktree にあるブランチの名指し**で引く。直近 N 件の一覧窓では、窓落ちした PR のぶんだけ
   /// 「マージ済みなのに merged チップが出ない」「レビュー中なのに安全確認を素通りする」が起きる——
   /// 対象を worktree のブランチに絞れば件数は worktree 本数で抑えられ、窓の概念そのものが消える。
-  /// パレットの PR 一覧（open 一覧）は closed / merged を含まず上限もあるので、掃除の事実はそれに頼らない。
   /// 名指しするのは、同一性が GitHub のブランチ（`.ref`）になる worktree のローカル名だけ。
   ///
   /// git レーン（worktree 一覧）・gh レーン（認証確認）・remote の台帳の確定がすべて揃ってはじめて
@@ -213,27 +186,6 @@ extension WorktreePaletteDataProvider {
   static func worktreeBranches(of worktrees: [GitWorktree]) -> [String] {
     var seen: Set<String> = []
     return worktrees.filter { !$0.isMain }.compactMap(\.branch).filter { seen.insert($0).inserted }
-  }
-
-  /// 合流点（`GitHubCache`）が配る一覧の現在値の着地。取得が続く間はページごと、最後に
-  /// `growing == false` で 1 回来る。値が無ければ（未取得のまま・失敗）差し替えず据え置く。値も取得中かも
-  /// 前回と等しければ rebuild しない（ちらつかない）。
-  /// 一覧 2 レーン（issues / open PR）の着地の規則は以下の 2 メソッドが、合流と一覧の組み立ては
-  /// `GitHubCache` が持つ。head 単位で着地するブランチ PR は別の規則で、`applyFetchedBranchPRs` が持つ。
-  func applyFetchedIssues(_ fetched: [GitHubIssue]?, growing: Bool) {
-    let needsRebuild = growing != issuesFetching || (fetched != nil && fetched != issues)
-    issuesFetching = growing
-    if let fetched { issues = fetched }
-    if needsRebuild { rebuild() }
-  }
-
-  /// issues 側（`applyFetchedIssues`）と同じ規則。片方の失敗が他方を巻き込まないよう別々に到着させる。
-  func applyFetchedPullRequests(_ fetched: [GitHubPullRequest]?, growing: Bool) {
-    let needsRebuild =
-      growing != pullRequestsFetching || (fetched != nil && fetched != pullRequests)
-    pullRequestsFetching = growing
-    if let fetched { pullRequests = fetched }
-    if needsRebuild { rebuild() }
   }
 
   /// ブランチ 1 本の着地。失敗（nil）もそのブランチに閉じる——1 本の失敗で全体を捨てると、取れた

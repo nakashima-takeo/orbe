@@ -136,7 +136,7 @@ final class WorktreePaletteBranchNameTests: OrbeTestCase {
     guard case .open(let destination) = action else {
       throw CreationFailed(detail: "行き先を持たない行: \(action)")
     }
-    var outcome: WorktreePaletteDataProvider.WorktreePalettePrepareOutcome?
+    var outcome: WorktreePaletteDataProvider.PrepareOutcome?
     provider.prepareDirectory(for: destination) { outcome = $0 }
     XCTAssertTrue(pump({ outcome != nil }, timeout: 30), "解決が返らない")
     guard case .resolved(.ready(let path)) = try XCTUnwrap(outcome) else {

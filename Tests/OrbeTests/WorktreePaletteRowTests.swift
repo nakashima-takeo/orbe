@@ -5,7 +5,7 @@ import XCTest
 
 /// worktree パレットの行（`WorktreePaletteRow`）の幅の契約。
 ///
-/// リストは行を個別に測るので、行が割り当て幅を越えると、その行だけがカードからはみ出して「開く」の
+/// リストは行を個別に測るので、行が割り当て幅を越えると、その行だけがカードからはみ出して右端の印の
 /// 位置がそろわなくなる。縮みきった文字が 1 文字だけの欠片で残ると、「…」の無い読めない字が出る。
 @MainActor
 final class WorktreePaletteRowTests: OrbeTestCase {
@@ -15,19 +15,16 @@ final class WorktreePaletteRowTests: OrbeTestCase {
     NSHostingController(rootView: view).sizeThatFits(in: NSSize(width: width, height: 40)).width
   }
 
-  private func pullRequestRow() throws -> WorktreePaletteItem {
+  private func remoteBranchRow() throws -> WorktreePaletteItem {
     let sections = WorktreePaletteSectionBuilder.build(.designSample)
-    return try XCTUnwrap(sections.first { $0.title == "Pull requests" }?.items.first)
+    return try XCTUnwrap(sections.first { $0.title == "Remote branches" }?.items.first)
   }
 
-  /// 固定幅の部品（番号・レビュー状態・checkout → worktree・開く）の合計にも満たない幅でも、行は
-  /// 割り当て幅を越えない（狭い窓でカードからはみ出さない）。
+  /// 名前と補足の合計にも満たない幅でも、行は割り当て幅を越えない（狭い窓でカードからはみ出さない）。
   func testRowNeverExceedsTheAllottedWidth() throws {
-    let item = try pullRequestRow()
-    XCTAssertNotNil(item.reviewNote, "前提: レビュー状態の付いた PR 行")
     let row = WorktreePaletteRow(
-      item: item, selected: false, onTap: {}, onHoverEnter: {}, onOpenWeb: {})
-    let allotted: CGFloat = 200
+      item: try remoteBranchRow(), selected: false, onTap: {}, onHoverEnter: {})
+    let allotted: CGFloat = 120
 
     XCTAssertLessThanOrEqual(renderedWidth(row, width: allotted), allotted)
   }

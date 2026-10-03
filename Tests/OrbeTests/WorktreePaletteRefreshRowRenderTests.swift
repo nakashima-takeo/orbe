@@ -39,17 +39,6 @@ final class WorktreePaletteRefreshRowRenderTests: SnapshotTestCase {
       "両側あるときだけ 2 枚——0 の側が空のピルを占めていない")
   }
 
-  /// **番号チップが立つ行には同期ピルを重ねない**（右クラスタの優先順: 候補件数 → チップ → ノート → 同期）。
-  /// Enter の判定は表示と独立なので、この行でも遅れていれば選択画面に入る。
-  func testSyncPillYieldsToThePullRequestBadge() throws {
-    let sync = try sync(ahead: 0, behind: 3)
-    let badges = [WorktreePaletteBadge(text: "#142")]
-    XCTAssertNotEqual(try render(item(sync: sync)), try render(item()), "前提: ピルは画に出る")
-    XCTAssertEqual(
-      try render(item(sync: sync, badges: badges)), try render(item(badges: badges)),
-      "チップの隣に同期ピルまで並べている")
-  }
-
   /// 失敗した「最新化して作成」の行が**理由を名乗る**。理由が消えると、失敗画面は ✕ だけになって
   /// 何を直せば再試行が通るのか分からなくなる。
   func testFailedRefreshRowDrawsTheReason() throws {
@@ -75,19 +64,18 @@ final class WorktreePaletteRefreshRowRenderTests: SnapshotTestCase {
             remoteRef: "refs/heads/stale", track: .counts(ahead: ahead, behind: behind)))))
   }
 
-  private func item(sync: WorktreePaletteBranchSync? = nil, badges: [WorktreePaletteBadge] = [])
-    -> WorktreePaletteItem
-  {
+  private func item(sync: WorktreePaletteBranchSync? = nil) -> WorktreePaletteItem {
     WorktreePaletteItem(
-      glyph: .localBranch, name: "stale", detail: "1d前", badges: badges, sync: sync,
-      action: .open(.localBranch(name: "stale")))
+      glyph: .localBranch, name: "stale", detail: "1d前", sync: sync,
+      action: .open(.localBranch(name: "stale")),
+      footer: .launch(target: "stale", kind: .checkout))
   }
 
   private func render(_ item: WorktreePaletteItem) throws -> Data {
     try XCTUnwrap(
       renderPNG(
         WorktreePaletteRow(
-          item: item, selected: false, onTap: {}, onHoverEnter: {}, onOpenWeb: nil),
+          item: item, selected: false, onTap: {}, onHoverEnter: {}),
         size: size, dark: true))
   }
 

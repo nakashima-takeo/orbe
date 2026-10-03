@@ -1,7 +1,7 @@
 import Foundation
 
-/// worktree パレットの非同期オーケストレータ。git（local・即時）を先に描き、gh（ネット）を追従で差し替える
-/// プログレッシブ表示を駆動し、Enter 実行の対象ディレクトリ解決（既存 worktree 再利用／新規作成）も担う。
+/// worktree パレットの非同期オーケストレータ。git（local・即時）で一覧を描き、gh（ネット）は clean の
+/// 判定材料（ブランチの PR）として追従させ、Enter 実行の対象ディレクトリ解決（既存 worktree 再利用／新規作成）も担う。
 /// section 組み立ては純粋な `WorktreePaletteSectionBuilder`、実データ取得は `GitRepo`/`GitHubCLI` に委ねる。
 /// 全メソッドはメインスレッドで呼ばれ、`GitRepo`/`GitHubCLI` の completion もメインで返る（`GitRunner` 契約）。
 final class WorktreePaletteDataProvider {
@@ -25,13 +25,12 @@ final class WorktreePaletteDataProvider {
   /// 提示時に発行した `fetch --prune` の着地。ベースから新しいブランチを切る作成は、この着地を
   /// 待ってから撃つ（`createWorktree`）。1 回きりのイベントなので台帳ではなく `DispatchGroup` で持つ
   /// ——未着地なら着地後に・着地済み／未発行なら即実行、が `notify` の定義そのもの。
-  /// 待つ側は分冊（`WorktreePaletteDataProvider+Create.swift`）と、パレットの着地前の PR 行
-  /// （`awaitRemoteFetchLanding`）。
+  /// 待つ側は分冊（`WorktreePaletteDataProvider+Create.swift`）。
   ///
   /// **着地は fetch プロセスの完了ではなく、その後の git 列挙の引き直しが揃った時点**——ベース ref の
   /// 中身だけでなく、ベースの名前（`defaultBranchName`）も fetch 後の値になる。fetch は `origin/HEAD`
   /// を作ることがある（git の `followRemoteHEAD` 既定）ので、中身だけ待つと `origin/HEAD` を持たない
-  /// repo で Issue 新規がフォールバックの固定名を指したまま撃たれる。
+  /// repo で既定ブランチからの新規がフォールバックの固定名を指したまま撃たれる。
   let remoteFetchLanding = DispatchGroup()
   /// `remoteFetchLanding` が明けた（列挙が fetch 後の値になった）。着地と同じ点で立てる——fetch の
   /// 完了ハンドラで立てると、引き直しの前に別レーンの着地が `rebuild` を呼び、fetch 前の値で
@@ -56,9 +55,6 @@ final class WorktreePaletteDataProvider {
   /// remote の一覧の読み取り。`nil` = 未着（remote の台帳は未確定）。書き手は `loadGit`、読み手は分冊
   /// （`WorktreePaletteDataProvider+GitHub.swift`。台帳と正式名の問い合わせ）。
   var remoteListing: RemoteListing?
-  // gh レーンの状態。書き手は分冊（`WorktreePaletteDataProvider+GitHub.swift`）、読み手は `rebuild`。
-  var issues: [GitHubIssue] = []
-  var pullRequests: [GitHubPullRequest] = []
   /// probe の結果。`nil` = probe 未完。可用性を Optional で持つことで「まだ確かめていない」と
   /// 「確かめて取得可」を 1 つの値で区別する（両者を潰すと、確認前の状態が「gh 確認済み」を
   /// 名乗ってしまう）。
@@ -77,10 +73,6 @@ final class WorktreePaletteDataProvider {
   /// 同じ名前を二重に撃たないための記録。記録は発行の時点で置く。
   /// 書き手は分冊（`WorktreePaletteDataProvider+GitHub.swift`）。
   var askedRepositories: Set<GitHubRepoName> = []
-  /// 一覧の取得が続いている（取得前・ページが届く途中）。セクション末尾にローディング行を足す
-  /// （値がまだ無ければローディング行だけのセクションになる）。
-  var issuesFetching = true
-  var pullRequestsFetching = true
   /// 分類レーンの実測結果（path → 実測）。nil の間は分類そのものが未着地。
   ///
   /// 非 nil でも**全 path が揃っているとは限らない**——prober は main worktree と占有行を省くので
@@ -138,15 +130,12 @@ final class WorktreePaletteDataProvider {
     GitRepo.open(cwd: cwd, runner: runner) { [weak self] repo in
       guard let self else { return }
       guard let repo else {
-        // 非 git: 全セクション空（Issues/PR も出さない）。
+        // 非 git: 全セクション空。
         self.probedGitHubState = .notGitHub
-        self.issuesFetching = false
-        self.pullRequestsFetching = false
         self.rebuild()
         return
       }
       self.repo = repo
-      self.applyCachedGitHub(repo)
       // prune 前なので分類は撃たない（一覧の worktree / branch 行だけ先に描く）。
       self.loadGit(repo, classifying: false)
       self.loadGitHub(repo)
@@ -179,17 +168,6 @@ final class WorktreePaletteDataProvider {
     }
   }
 
-  /// 提示時の fetch の着地を待って、`resume` をメインで呼ぶ（着地済み・未発行なら次のメインのターンで）。
-  /// 待ち手はパレットの着地前の PR 行（`WorktreePaletteModel.onAwaitRemoteFetch` の配線）で、`resume` は
-  /// 組み直した行を読んで行き先を決める。
-  ///
-  /// **`resume` は着地の組み直し（`rebuild`）の後に走る。** 着地の処理は `loadGit` の同じメインのブロックの
-  /// 中で待ちを明けてから組み直し、明けた処理は `notify` がメインへ非同期に積むので、そのブロックが
-  /// 終わってから走る。
-  func awaitRemoteFetchLanding(_ resume: @escaping () -> Void) {
-    remoteFetchLanding.notify(queue: .main, execute: resume)
-  }
-
   /// git レーンを引き直す。分冊（`WorktreePaletteDataProvider+Clean.swift`）が削除の完了時にも撃つ。
   ///
   /// `classifying` が真のときだけ分類プローブも撃つ——分類の到達性判定は prune 済みの
@@ -220,8 +198,7 @@ final class WorktreePaletteDataProvider {
       self.defaultBranchName = $0
       group.leave()
     }
-    // remote の台帳の材料。最初の描画に間に合わせる（前回の正式名があれば、最初のフレームから
-    // PR 行とチップが出る）。
+    // remote の台帳の材料（clean のブランチの PR を引く前提）。
     group.enter()
     repo.remotes {
       self.remoteListing = $0.map(RemoteListing.read) ?? .unreadable
@@ -261,9 +238,6 @@ final class WorktreePaletteDataProvider {
     model.sections = WorktreePaletteSectionBuilder.build(
       WorktreePaletteSectionBuilder.Input(
         worktrees: worktrees, localBranches: localBranches, remoteBranches: remoteBranches,
-        issues: issues, pullRequests: pullRequests, githubState: githubState,
-        issuesFetching: issuesFetching, pullRequestsFetching: pullRequestsFetching,
-        remoteLedger: remoteLedger,
         currentWorktree: repo?.root,
         cleanCandidates: rows.map(WorktreeCleanClassifier.candidateCount),
         remoteFetchLanded: remoteFetchLanded))

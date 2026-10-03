@@ -17,33 +17,7 @@ extension DesignGallerySnapshotTests {
     try write(
       "worktree_palette_skeleton.png", DesignSceneFixtures.worktreePaletteSkeletonModel())
     try write(
-      "worktree_palette_loading.png", DesignSceneFixtures.worktreePaletteLoadingModel())
-    try write(
-      "worktree_palette_growing.png", DesignSceneFixtures.worktreePaletteGrowingModel())
-    try write(
-      "worktree_palette_growing_filtered.png",
-      DesignSceneFixtures.worktreePaletteGrowingFilteredModel())
-    try write(
-      "worktree_palette_gh_missing.png", DesignSceneFixtures.worktreePaletteGhMissingModel())
-    try write(
       "worktree_palette_filtered.png", DesignSceneFixtures.worktreePaletteFilteredModel())
-    try write(
-      "worktree_palette_pr_browser.png",
-      DesignSceneFixtures.worktreePaletteBrowserPullRequestModel())
-    // origin を確かめられないときの情報行（日英とも幅 640 に 1 行で収まるか）。
-    try write(
-      "worktree_palette_repo_unverified.png",
-      DesignSceneFixtures.worktreePaletteRepositoryUnverifiedModel())
-    try writePNG(
-      ZStack {
-        BackgroundGlow()
-        WorktreePaletteOverlay(
-          model: DesignSceneFixtures.worktreePaletteRepositoryUnverifiedModel())
-      }
-      .frame(width: 640, height: 520)
-      .environment(\.localization, LocalizationStore(language: .en)),
-      size: NSSize(width: 640, height: 520), name: "worktree_palette_repo_unverified_en.png",
-      dir: dir)
     try write("worktree_palette_many.png", DesignSceneFixtures.worktreePaletteManyModel())
     try write(
       "worktree_palette_many_short.png", DesignSceneFixtures.worktreePaletteManyModel(), 640, 360)

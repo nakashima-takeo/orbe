@@ -2,19 +2,9 @@ import XCTest
 
 @testable import Orbe
 
-/// gh 着地の規則（`WorktreePaletteDataProvider.applyFetched*`）と、open 一覧の合流点・保存先
-/// （`GitHubCache`）の検証。gh は叩かず、ページや終わりを手で着地させて判定する。
+/// open 一覧の合流点・保存先（`GitHubCache`）の検証。gh は叩かず、ページや終わりを手で着地させて判定する。
 @MainActor
 final class GitHubCacheTests: OrbeTestCase {
-
-  /// remote を持たない（台帳が確定した）provider。PR セクションは台帳の確定を待たずに行を組む。
-  private func makeProvider(_ model: WorktreePaletteModel) -> WorktreePaletteDataProvider {
-    let provider = WorktreePaletteDataProvider(
-      cwd: "/tmp", model: model, localization: LocalizationStore(language: .ja),
-      worktreeTemplate: WorktreePathTemplate.defaultTemplate)
-    provider.remoteListing = .read([:])
-    return provider
-  }
 
   private func issue(_ number: Int) -> GitHubIssue {
     GitHubIssue(number: number, title: "issue \(number)")
@@ -28,85 +18,8 @@ final class GitHubCacheTests: OrbeTestCase {
       headRepository: GitHubRepoName(nameWithOwner: "o/r"))
   }
 
-  private func section(_ model: WorktreePaletteModel, _ title: String) -> WorktreePaletteSection? {
-    model.sections.first { $0.title == title }
-  }
-
-  private func issueTitles(_ model: WorktreePaletteModel) -> [String] {
-    section(model, "Issues")?.items.filter(\.isInteractive).map(\.name) ?? []
-  }
-
   /// 合流点はリポジトリ単位でプロセス全域に残るので、テストごとに別のリポジトリとして扱う。
   private func freshKey() -> String { "/\(UUID().uuidString)/.git" }
-
-  // MARK: - 着地の規則
-
-  /// 値が無い着地（未取得のまま・失敗）は前回結果を差し替えず、再描画も起こさない。
-  func testFetchFailureKeepsPreviousResultWithoutRebuild() {
-    let model = WorktreePaletteModel()
-    let provider = makeProvider(model)
-    provider.applyFetchedIssues([issue(1)], growing: false)
-    XCTAssertEqual(issueTitles(model), ["issue 1"])
-
-    model.sections = []  // 以降の rebuild を検出するための目印
-    provider.applyFetchedIssues(nil, growing: false)
-    XCTAssertTrue(model.sections.isEmpty, "値の無い着地は rebuild を打たない")
-
-    // PR 側はまだ loading なので rebuild が走る。そこに issue 行が残っていれば据え置きの証明。
-    provider.applyFetchedPullRequests(nil, growing: false)
-    XCTAssertEqual(issueTitles(model), ["issue 1"], "値の無い着地でも前回の issue 行は消えない")
-  }
-
-  /// 前回結果が無いまま取得が続く間はローディング行を出し続け、値が無いまま取得が終わったら畳む
-  /// （ローディング行が残り続けない）。
-  func testLoadingRowFoldsWhenFetchEndsWithoutAnyList() {
-    let model = WorktreePaletteModel()
-    let provider = makeProvider(model)
-    provider.rebuild()
-    provider.applyFetchedIssues(nil, growing: true)
-    XCTAssertEqual(
-      section(model, "Issues")?.items.map(\.isLoadingRow), [true], "取得中はローディング行だけ")
-
-    provider.applyFetchedIssues(nil, growing: false)
-    XCTAssertNil(section(model, "Issues"), "値が無いまま終わったらローディング行を畳む")
-  }
-
-  /// 値も取得中かも前回と等しければ再描画しない（ページが届くたびにちらつかない）。
-  func testEqualResultDoesNotRebuild() {
-    let model = WorktreePaletteModel()
-    let provider = makeProvider(model)
-    provider.applyFetchedIssues([issue(1)], growing: true)
-    model.sections = []
-    provider.applyFetchedIssues([issue(1)], growing: true)
-    XCTAssertTrue(model.sections.isEmpty, "等値の着地は rebuild を打たない")
-  }
-
-  /// 成功した 0 件（`[]`）は値の無い着地（`nil`）と違い、前回結果を消す（閉じた issue が残らない）。
-  func testEmptySuccessClearsPreviousResult() {
-    let model = WorktreePaletteModel()
-    let provider = makeProvider(model)
-    provider.applyFetchedIssues([issue(1)], growing: false)
-    provider.applyFetchedIssues([], growing: false)
-    XCTAssertTrue(issueTitles(model).isEmpty, "0 件の成功は行を消す")
-  }
-
-  /// 取得が続く間は、届いた行の後ろ（セクション末尾）にローディング行を置き、取り終えたら外す。
-  /// 絞り込みで 0 件になったとき、「無い」のか「まだ届いていない」のかを見分ける印になる。
-  func testGrowingListShowsLoadingRowAtSectionEnd() {
-    let model = WorktreePaletteModel()
-    let provider = makeProvider(model)
-    provider.applyFetchedIssues(issues(2, 1), growing: true)
-    provider.applyFetchedPullRequests([pullRequest(9)], growing: true)
-    XCTAssertEqual(section(model, "Issues")?.items.map(\.isLoadingRow), [false, false, true])
-    XCTAssertEqual(section(model, "Pull requests")?.items.map(\.isLoadingRow), [false, true])
-
-    provider.applyFetchedIssues(issues(2, 1), growing: false)
-    XCTAssertEqual(
-      section(model, "Issues")?.items.map(\.isLoadingRow), [false, false],
-      "一覧が同じでも、取り終えたらローディング行を外す")
-    XCTAssertEqual(
-      section(model, "Pull requests")?.items.last?.isLoadingRow, true, "PR は取得中のまま")
-  }
 
   // MARK: - 保存先
 

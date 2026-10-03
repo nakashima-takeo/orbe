@@ -7,37 +7,24 @@ enum WorktreePaletteDestination: Equatable {
   case localBranch(name: String)
   /// name は `origin/x`（`refs/remotes/` を除いた正確な名前）。
   case remoteBranch(name: String, existingWorktree: String?)
-  /// existingBranch は `issue/<n>` ブランチだけ（worktree 無しで）既存か（他 case は git ref に紐づくため不要）。
-  case issue(number: Int, existingWorktree: String?, existingBranch: Bool)
+  /// base から name の新しいブランチ（upstream なし）を切り、その worktree を作る。
+  case newBranch(name: String, base: WorktreeBase)
 }
 
-/// PR 行の Enter の行き先。
-enum WorktreePalettePullRequestRoute: Equatable {
-  /// 自分の worktree・ブランチ・origin から作れるときの行き先。
-  case open(WorktreePaletteDestination)
-  /// worktree にできない。ブラウザで開く。
-  case browser
-  /// 提示時の fetch の着地を待ってから決める（着地前の見込みは checkout）。着地後に組み直したその PR 行の
-  /// 行き先を実行する。
-  case awaitingFetch
+/// 新しいブランチを切るベース。既定ブランチは**参照ではなく意図**として持ち、名前の解決を作成の直前まで
+/// 遅らせる——提示時に読んだ名前を捕まえると、着地を待つあいだに fetch が `origin/HEAD` を作っても
+/// （git の `followRemoteHEAD` 既定）フォールバックの固定名のまま撃ってしまう。
+enum WorktreeBase: Equatable {
+  case ref(String)
+  case defaultBranch
 }
 
 /// 決定（↵／行タップ）の対象。外（`onExecute`）へ届くのは行き先だけで、ディレクトリを解決しない行為
-/// （ブラウザ・clean 画面・着地待ち）はパレットの中で畳む。
+/// （clean 画面）はパレットの中で畳む。
 enum WorktreePaletteAction: Equatable {
   case open(WorktreePaletteDestination)
-  case pullRequest(number: Int, route: WorktreePalettePullRequestRoute)
   /// Worktrees セクション末尾の `clean` 行。決定でパレット内の clean 画面へ入る。
   case clean
-
-  /// 同じ行か。PR 行は番号で比べる——行き先は fetch の着地や worktree の作成で変わるので、行為の等しさで
-  /// 比べると、データの到着で選択が外れる。
-  func sameRow(as other: WorktreePaletteAction) -> Bool {
-    if case .pullRequest(let number, _) = self, case .pullRequest(let otherNumber, _) = other {
-      return number == otherNumber
-    }
-    return self == other
-  }
 }
 
 /// worktree パレットの中身。器（カード枠・焦点契約・高さ契約）は共通で、中身だけ切り替わる。
@@ -77,49 +64,8 @@ enum WorktreeOpenKind: Equatable {
   }
 }
 
-/// Enter の動きを先に言う行末ノート（issue/PR 行）。worktree を解決するか、ブラウザで開くか。
-enum WorktreePaletteEnterNote: Equatable {
-  case worktree(WorktreeOpenKind)
-  case browser
-
-  var noteKey: L10nKey {
-    switch self {
-    case .worktree(let kind): return kind.noteKey
-    case .browser: return .worktreePaletteNoteBrowser
-    }
-  }
-}
-
-/// PR のレビュー状態（名前直後の muted note を言語別に引く）。
-enum WorktreePaletteReviewNote: Equatable {
-  case reviewRequired, changesRequested, approved
-
-  var key: L10nKey {
-    switch self {
-    case .reviewRequired: return .worktreePaletteReviewRequired
-    case .changesRequested: return .worktreePaletteChangesRequested
-    case .approved: return .worktreePaletteApproved
-    }
-  }
-}
-
-/// 情報行の種別（選択・実行の対象外）。ローディング／gh 誘導／origin を確かめられない。文言は View が
-/// 言語別に引く。
-enum WorktreePaletteInfoKind: Equatable {
-  case loading, ghMissing, ghUnauthed, repositoryUnverified
-
-  var key: L10nKey {
-    switch self {
-    case .loading: return .commonLoading
-    case .ghMissing: return .worktreePaletteGhMissing
-    case .ghUnauthed: return .worktreePaletteGhUnauthed
-    case .repositoryUnverified: return .worktreePaletteRepositoryUnverified
-    }
-  }
-}
-
-/// ⌘⇧X で開く worktree パレットの表示状態（@Observable）。実データ（worktree/branch/issue/PR）を
-/// セクションに持ち、フィルタ・⇥ 起動先切替・決定（↵／行タップ）/⌘↵ 開くの意図をクロージャで外へ配線する。
+/// ⌘⇧X で開く worktree パレットの表示状態（@Observable）。実データ（worktree/branch）を
+/// セクションに持ち、フィルタ・⇥ 起動先切替・決定（↵／行タップ）の意図をクロージャで外へ配線する。
 /// 実データ取得と section 組み立ては `WorktreePaletteDataProvider`＋`WorktreePaletteSectionBuilder`（外）が担う。
 @Observable final class WorktreePaletteModel {
   /// 実データセクション（provider が rebuild で差し替える）。
@@ -165,11 +111,9 @@ enum WorktreePaletteInfoKind: Equatable {
   }
 
   /// ホバー開始による選択追従。実マウス移動後（`.pointer`）だけ効き、決定（`onExecute`）は呼ばない。
-  /// 関門は決定（`activate(at:)`）と同じ——作成中・範囲外・非対話行では選択を動かさない。
+  /// 関門は決定（`activate(at:)`）と同じ——作成中・範囲外では選択を動かさない。
   func hoverSelect(_ index: Int) {
-    guard !isPreparing else { return }
-    let its = items
-    guard its.indices.contains(index), its[index].isInteractive else { return }
+    guard !isPreparing, items.indices.contains(index) else { return }
     selection.hoverSelect(index)
   }
   /// focus トリガ。`focus()` だけが進め、SwiftUI が監視して `@FocusState` を立てる。
@@ -183,24 +127,15 @@ enum WorktreePaletteInfoKind: Equatable {
   var targets: [WorktreePaletteTarget] = []
   /// ⇥ で巡回する選択起動先の index。初期は default agent の index。
   var selectedTargetIndex = 0
-  /// Issues/PR セクションのフォールバック分岐（情報行/非表示の判断は builder が消費する）。
-  var githubState: GitHubAvailability = .ready
   /// 実行失敗の一時表示（palette は閉じない）。
   var errorMessage: String?
-  /// 決定の後、行き先が決まるまでの待ち（着地前の PR 行の fetch の着地待ち・`prepareDirectory` の
-  /// 実行中）の進捗表示フラグ（palette は閉じない）。
+  /// 決定の後、行き先が決まるまでの待ち（`prepareDirectory` の実行中）の進捗表示フラグ（palette は閉じない）。
   /// true の間はフッターにスピナ＋「作成中…」を出し、入力（Enter 再実行・選択移動・検索）を受け付けない。
   var isPreparing = false
 
   var onDismiss: () -> Void = {}
   /// プライマリ実行（↵／行タップ）。行き先を解決して agent を起動する。呼ぶのは `activate(at:)` だけ。
   var onExecute: (WorktreePaletteDestination) -> Void = { _ in }
-  /// ⌘↵/「開く」（セカンダリ）。issue/PR／PR に紐づく worktree・branch をブラウザで開く。
-  var onOpenWeb: (WorktreePaletteItem) -> Void = { _ in }
-  /// 提示時の fetch の着地（provider の `awaitRemoteFetchLanding`）を待って、渡した処理をメインで呼ぶ。
-  /// 明けた処理はメインへ非同期に積まれ、待ちを明けた着地の処理（組み直しを含む）が終わってから走るので、
-  /// 呼ばれるのは組み直した行の上。
-  var onAwaitRemoteFetch: (@escaping () -> Void) -> Void = { $0() }
   /// clean の削除を撃つ（⌘⏎ と失敗分の再試行が共に通る）。中断の札も一緒に渡す。
   var onCleanExecute: ([CleanDeleteRequest], CleanRunToken) -> Void = { _, _ in }
   /// clean の失敗行をタブで開く。パスは解決済み（既存 worktree）なので `prepareDirectory` を通らない。
@@ -273,9 +208,7 @@ enum WorktreePaletteInfoKind: Equatable {
       query.isEmpty
       ? sections
       : sections.compactMap { section in
-        // 取得中の印（ローディング行）は落とさない——ヒット 0 件が「無い」のか「まだ届いていない」のかを
-        // 見分けられるように、見出しごと残す。
-        let items = section.items.filter { $0.isLoadingRow || matches($0) }
+        let items = section.items.filter(matches)
         return items.isEmpty ? nil : WorktreePaletteSection(title: section.title, items: items)
       }
     items = visibleSections.flatMap(\.items)
@@ -289,62 +222,42 @@ enum WorktreePaletteInfoKind: Equatable {
   /// ↵ による決定。選択行を対象に唯一の決定 funnel（`activate(at:)`）へ入る。
   func activate() { activate(at: selected) }
 
-  /// 決定の唯一の funnel（↵ と行タップが共に通る）。作成中・範囲外・非対話行では実行しない。
+  /// 決定の唯一の funnel（↵ と行タップが共に通る）。作成中・範囲外では実行しない。
   /// 選択を対象行へ確定してから、同じ行の行為をそのまま実行する（選択更新と実行の対象がずれない）。
-  /// 外（`onExecute`）へ渡すのは行き先だけ。`clean` 行はパレット内の画面遷移、作れない PR 行は ⌘↵ と
-  /// 同じブラウザ（パレットは閉じない）、着地前の PR 行は着地を待ってから決め、どれもディレクトリを
-  /// 解決しない。
+  /// 外（`onExecute`）へ渡すのは行き先だけ。`clean` 行はパレット内の画面遷移で、ディレクトリを解決しない。
   func activate(at index: Int) {
-    guard !isPreparing else { return }
-    let its = items
-    guard its.indices.contains(index), its[index].isInteractive else { return }
+    guard !isPreparing, items.indices.contains(index) else { return }
     selected = index
-    switch its[index].action {
+    switch items[index].action {
     case .clean: enterClean()
-    case .open(let destination), .pullRequest(_, .open(let destination)): onExecute(destination)
-    case .pullRequest(_, .browser): onOpenWeb(its[index])
-    case .pullRequest(_, .awaitingFetch): awaitRemoteFetch(its[index])
-    case nil: break
+    case .open(let destination): onExecute(destination)
     }
   }
 
-  /// 対話行のみを巡回する選択移動（情報/ローディング行は飛ばす・端で wrap）。
+  /// 行を巡回する選択移動（端で wrap）。
   func move(_ direction: Int) {
-    let its = items
-    guard its.contains(where: \.isInteractive) else { return }
-    var i = selected
-    repeat { i = (i + direction + its.count) % its.count } while !its[i].isInteractive
-    selected = i
+    guard !items.isEmpty else { return }
+    selected = (selected + direction + items.count) % items.count
   }
 
-  /// 対話行の先頭/末尾へジャンプ（d<0=先頭・d>=0=末尾。非対話行は除外・空は no-op）。
+  /// 先頭/末尾へジャンプ（d<0=先頭・d>=0=末尾。空は no-op）。
   func jump(_ d: Int) {
-    let its = items
-    let i = d < 0 ? its.firstIndex(where: \.isInteractive) : its.lastIndex(where: \.isInteractive)
-    guard let i else { return }
-    selected = i
+    guard !items.isEmpty else { return }
+    selected = d < 0 ? 0 : items.count - 1
   }
 
-  /// query 変化後・sections 差し替え後に選択を可視の対話行へ収める。
+  /// query 変化後・sections 差し替え後に選択を可視の行へ収める。
   func clampSelection() {
-    let its = items
-    guard !its.isEmpty else {
-      selected = 0
-      return
-    }
-    if selected >= its.count { selected = its.count - 1 }
-    if !its[selected].isInteractive {
-      selected = its.firstIndex(where: \.isInteractive) ?? 0
-    }
+    selected = min(selected, max(items.count - 1, 0))
   }
 
-  /// sections 差し替え後の選択復元。差し替え前に選択していた行を「同じ行か」（`sameRow(as:)`）で探し直し、
+  /// sections 差し替え後の選択復元。差し替え前に選択していた行を同じ行為で探し直し、
   /// 見つかれば index を合わせる（裏の gh 更新で行数が変わっても選択が別の行を指さない）。
-  /// 見つからない・元が非対話行なら従来どおり clamp する。
+  /// 見つからなければ clamp する。
   /// 裏の更新はユーザの意図ではないのでモダリティを奪わない（→ `ModalSelection.restore`）。
   func restoreSelection(matching action: WorktreePaletteAction?) {
     if let action,
-      let index = items.firstIndex(where: { $0.action?.sameRow(as: action) == true })
+      let index = items.firstIndex(where: { $0.action == action })
     {
       selection.restore(index)
       return
@@ -352,10 +265,9 @@ enum WorktreePaletteInfoKind: Equatable {
     clampSelection()
   }
 
-  /// 入力欄から query が変わった。選択を先頭の可視対話行へ戻す。
+  /// 入力欄から query が変わった。選択を先頭の可視行へ戻す。
   func onQueryChanged() {
     selected = 0
-    clampSelection()
   }
 
   /// 検出済み agent から巡回対象を組む。default agent の直後に shell をスプライスし、初期選択は
@@ -389,8 +301,7 @@ enum WorktreePaletteInfoKind: Equatable {
   }
 
   private func matches(_ item: WorktreePaletteItem) -> Bool {
-    guard item.isInteractive else { return false }
-    let fields = [item.name, item.idText, item.detail].compactMap { $0 } + item.aliases
+    let fields = [item.name, item.detail].compactMap { $0 } + item.aliases
     return fields.contains { $0.localizedCaseInsensitiveContains(query) }
   }
 }

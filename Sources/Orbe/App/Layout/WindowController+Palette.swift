@@ -100,9 +100,9 @@ extension WindowController {
     reconfirmFocusNextTick()  // 切替パレット→作成フォーム等の遷移で去りゆくカードの teardown に勝つ
   }
 
-  /// Cmd+Shift+X。worktree パレット（worktree/branch/issue/PR から起動）を開く。
-  /// git（即時）→gh（追従）のプログレッシブ表示・フィルタ・⇥ 起動先切替（agent/shell）・Enter 実行
-  /// （worktree 解決＋新タブ起動）・⌘↵ でブラウザ表示までを配線する。
+  /// Cmd+Shift+X。worktree パレット（worktree/branch から起動）を開く。
+  /// git の一覧・フィルタ・⇥ 起動先切替（agent/shell）・Enter 実行（worktree 解決＋新タブ起動）・
+  /// clean・最新化を配線する。
   func showWorktreePalette() {
     if model.overlay == .worktreePalette {
       model.worktreePalette?.focus()
@@ -142,14 +142,6 @@ extension WindowController {
           p.enterRefresh(sync: sync, relativeDate: relativeDate)
         }
       }
-    }
-    p.onOpenWeb = { [weak self] item in
-      guard let self, let provider = self.model.worktreePaletteProvider else { return }
-      provider.openWeb(for: item)
-    }
-    p.onAwaitRemoteFetch = { [weak self] resume in
-      guard let provider = self?.model.worktreePaletteProvider else { return }
-      provider.awaitRemoteFetchLanding(resume)
     }
     wireWorktreeClean(p)
     wireWorktreePaletteRefresh(p)

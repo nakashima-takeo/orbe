@@ -6,7 +6,7 @@ import XCTest
 /// clean の PR の事実をその台帳で絞る経路。実 git の一時リポジトリと偽の `gh` で、本物の着地経路を通す。
 ///
 /// 壊れると、次のどれかが黙って起きる。
-/// - 問い合わせが揃う前に撃たれて失敗し、PR がローディングのまま、チップも出ないまま固まる。
+/// - 問い合わせが揃う前に撃たれて失敗し、clean の PR の事実が取得中のまま固まる。
 /// - 同じ名前を何度も問い合わせる。
 /// - 確かめられない答えが焼かれ、開き直しても直らない。
 /// - clean が他人の fork の PR で行を塞ぐ、または自分の PR（base を追跡する行・fork の運用）を
@@ -43,37 +43,31 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
 
   // MARK: - 正式名の問い合わせ
 
-  /// 正式名が分かるまでは PR 行の行き先もチップも決まらないのでローディング行だけ。答えが着地したら
-  /// PR 行とチップが出る。origin の URL が改名前の名前でも、正式名で PR の head と同じと分かる。
-  func testPullRequestsWaitForTheCanonicalNameThenLinkRows() throws {
+  /// 正式名が分かるまでは行の同一性が決まらないので、clean の PR の事実は取得中のまま。答えが着地したら
+  /// 事実が揃う。origin の URL が改名前の名前でも、正式名で PR の head と同じと分かる。
+  func testCleanFactsWaitForTheCanonicalNameThenLinkRows() throws {
     addRemote("origin", "me/old-name")
     try answer("me/old-name", found: "me/r")
-    try servePullRequest(1, head: "feat", from: "me/r")
-    let worktree = try addWorktree("wt-feat", branch: "feat")
+    _ = try addWorktree("wt-feat", branch: "feat")
+    try serveBranchPullRequests(
+      "feat", "[\(branchPR(1, head: "feat", state: "OPEN", from: "me/r"))]")
     try gate("resolve")
-    // ブランチの PR の着地による描き直しに頼らず、答えの着地そのもので描き直すことを見る。
-    try gate("branch")
     let (model, provider) = makeProvider()
 
     provider.load()
     XCTAssertTrue(
       pump({
-        self.calls("R").contains("me/old-name") && provider.pullRequests.count == 1
-          && !provider.pullRequestsFetching && !provider.issuesFetching
-          && model.classification != nil && provider.probingPaths.isEmpty
-      }), "前提: 一覧と分類は着地し、正式名の問い合わせだけが着地していない")
-    XCTAssertEqual(
-      section(model, "Pull requests")?.items.map(\.isLoadingRow), [true], "PR 行を出さずローディング行だけ")
-    XCTAssertNil(item(model, "wt-feat")?.linkedPRNumber, "チップを出さない")
+        self.calls("R").contains("me/old-name") && model.classification != nil
+          && provider.probingPaths.isEmpty
+      }), "前提: 分類は着地し、正式名の問い合わせだけが着地していない")
     XCTAssertEqual(provider.branchPRStates["feat"], .fetching, "clean の PR の事実はまだ分からない")
+    XCTAssertEqual(calls("H"), [], "同一性が決まるまでブランチの PR を問わない")
 
     try ungate("resolve")
-    // ブランチの PR の問い合わせが打ち切り（15 秒）で着地して描き直すより前に出ること。
-    XCTAssertTrue(pump({ self.pullRequestRow(model, 1) != nil }, timeout: 5), "答えの着地で PR 行が出る")
-    XCTAssertEqual(item(model, "wt-feat")?.linkedPRNumber, 1)
-    XCTAssertEqual(
-      pullRequestRow(model, 1)?.action,
-      .pullRequest(number: 1, route: .open(.worktree(path: worktree))))
+    let open = GitHubBranchPR(
+      number: 1, headRefName: "feat", state: "OPEN", baseRefName: "main", headRepository: mine)
+    XCTAssertTrue(
+      pump({ provider.branchPRStates["feat"] == .loaded([open]) }), "答えの着地で自分の PR が事実になる")
   }
 
   /// 撃つのは remote の一覧と認証確認の両方が揃ってから。GitHub の remote ごとに 1 回だけで、着地前に
@@ -103,21 +97,17 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
     XCTAssertEqual(calls("R").sorted(), ["base/r", "me/r"])
   }
 
-  /// 問い合わせが失敗したら origin は「確かめられない」になり（PR は情報行とブラウザで開く行・チップ無し・
-  /// clean は取得失敗）、その回は問い合わせ直さない。開き直せば裏で問い直して直る。
+  /// 問い合わせが失敗したら origin は「確かめられない」になり（clean は取得失敗）、その回は問い合わせ
+  /// 直さない。開き直せば裏で問い直して直る。
   func testUnverifiedLookupIsAskedAgainOnReopen() throws {
     addRemote("origin", "me/r")
-    try servePullRequest(1, head: "feat", from: "me/r")
-    let worktree = try addWorktree("wt-feat", branch: "feat")
-    let (model, provider) = makeProvider()
+    _ = try addWorktree("wt-feat", branch: "feat")
+    try serveBranchPullRequests(
+      "feat", "[\(branchPR(1, head: "feat", state: "OPEN", from: "me/r"))]")
+    let (_, provider) = makeProvider()
 
     provider.load()
-    XCTAssertTrue(pump({ self.originUnverified(provider) && provider.pullRequests.count == 1 }))
-    XCTAssertEqual(
-      section(model, "Pull requests")?.items.map(\.infoKind), [.repositoryUnverified, nil],
-      "ローディング行を残さず、情報行と PR 行を出す")
-    XCTAssertEqual(pullRequestRow(model, 1)?.action, .pullRequest(number: 1, route: .browser))
-    XCTAssertNil(item(model, "wt-feat")?.linkedPRNumber)
+    XCTAssertTrue(pump({ self.originUnverified(provider) }))
     XCTAssertEqual(provider.branchPRStates["feat"], .failed, "安全群に入らない側に倒れる")
     var relanded = false
     provider.loadGit(try XCTUnwrap(provider.repo), classifying: false) { relanded = true }
@@ -129,42 +119,38 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
     let (reopened, again) = makeProvider()
     again.load()
     XCTAssertTrue(pump({ reopened.hasLoadedOnce }))
-    XCTAssertEqual(
-      section(reopened, "Pull requests")?.items.first?.infoKind, .repositoryUnverified,
-      "問い直す前の描画から、覚えた答えで描く（ローディング行で待たせない）")
-    XCTAssertEqual(pullRequestRow(reopened, 1)?.action, .pullRequest(number: 1, route: .browser))
+    XCTAssertTrue(originUnverified(again), "問い直す前の台帳から、覚えた答えで読む")
 
     try ungate("auth")
+    let open = GitHubBranchPR(
+      number: 1, headRefName: "feat", state: "OPEN", baseRefName: "main", headRepository: mine)
     XCTAssertTrue(
-      pump({
-        self.pullRequestRow(reopened, 1)?.action
-          == .pullRequest(number: 1, route: .open(.worktree(path: worktree)))
-      }), "裏で問い直した正式名が着地すると直る")
+      pump({ again.branchPRStates["feat"] == .loaded([open]) }), "裏で問い直した正式名が着地すると直る")
     XCTAssertEqual(calls("R"), ["me/r", "me/r"], "確かめられない答えは開き直すと問い直す")
   }
 
   /// 答え（正式名・確かめられない）はプロセス内に残るので、2 回目に開いたときは gh を待たずに最初の描画
-  /// から PR 行とチップが出る。問い直すのは確かめられない答えだけ。
-  func testSecondOpenShowsPullRequestsFromTheFirstFrameAndAsksAgainOnlyForUnverified() throws {
+  /// から台帳が確定している。問い直すのは確かめられない答えだけ。
+  func testSecondOpenSettlesTheLedgerFromTheFirstFrameAndAsksAgainOnlyForUnverified() throws {
     addRemote("origin", "me/r")
     addRemote("upstream", "base/r")
     try answer("me/r", found: "me/r")
     try answerNotFound("base/r")
-    try servePullRequest(1, head: "feat", from: "me/r")
     _ = try addWorktree("wt-feat", branch: "feat")
-    let (first, provider) = makeProvider()
+    let (_, provider) = makeProvider()
     provider.load()
-    XCTAssertTrue(pump({ self.pullRequestRow(first, 1) != nil }), "前提: 1 回目で答えが揃う")
+    XCTAssertTrue(pump({ self.calls("R").count == 2 && provider.remoteLedger != .pending }))
+    XCTAssertTrue(pump({ !self.originUnverified(provider) }), "前提: 1 回目で origin の答えが揃う")
 
     try gate("auth")
     let (model, again) = makeProvider()
     again.load()
     XCTAssertTrue(pump({ model.hasLoadedOnce }))
-    XCTAssertNotNil(pullRequestRow(model, 1), "認証確認より前の描画から PR 行が出る")
-    XCTAssertEqual(item(model, "wt-feat")?.linkedPRNumber, 1)
+    XCTAssertNotEqual(again.remoteLedger, .pending, "認証確認より前の描画から台帳が確定している")
+    XCTAssertFalse(originUnverified(again))
 
     try ungate("auth")
-    XCTAssertTrue(pump({ again.githubReady && !again.pullRequestsFetching }))
+    XCTAssertTrue(pump({ again.githubReady }))
     XCTAssertTrue(pump({ self.calls("R").count == 3 }))
     XCTAssertEqual(calls("R").sorted(), ["base/r", "base/r", "me/r"], "正式名の答えは問い合わせ直さない")
   }

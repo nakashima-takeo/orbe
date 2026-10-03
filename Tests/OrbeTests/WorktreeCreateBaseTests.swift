@@ -4,11 +4,11 @@ import XCTest
 
 /// 新規ブランチを切る worktree 作成の**ベースの鮮度と upstream**（`WorktreePaletteDataProvider`）。
 /// 実 git の一時リポジトリ（bare origin ＋ 2 つの clone）で、提示時に走る `fetch --prune` の着地を
-/// 待ってから作ること・`issue/<n>` に upstream が付かないことを固定する。
+/// 待ってから作ること・新しいブランチに upstream が付かないことを固定する。
 ///
 /// ここが破れると、パレットを開いてすぐ Enter した worktree が GitHub でマージ済みの変更を含まない
-/// 古いベースから切られ、その上でエージェントが仕事を始める。upstream が破れると `issue/<n>` で
-/// `git push` が既定ブランチへ向かって拒否される。
+/// 古いベースから切られ、その上でエージェントが仕事を始める。upstream が破れると新しいブランチで
+/// `git push` がベースへ向かって拒否される。
 ///
 /// 遅い fetch は `remote.origin.uploadpack` を眠るラッパーへ差し替えて作る（ネットワーク不要）。
 /// 「待っている」ことは所要時間ではなく**出来上がった HEAD**で測る——待たなければ手元の古い
@@ -73,13 +73,13 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
 
   // MARK: - fetch の着地を待ってから切る
 
-  /// Issue 新規は `origin/<既定ブランチ>` から切るので、提示時の fetch が着地してから作る。
-  func testIssueWorktreeIsCutFromTheFetchedDefaultBranch() throws {
+  /// 既定ブランチからの新しいブランチは `origin/<既定ブランチ>` から切るので、提示時の fetch が着地してから作る。
+  func testNewBranchIsCutFromTheFetchedDefaultBranch() throws {
     let provider = try startWithSlowFetch()
     XCTAssertTrue(
       pump({ provider.defaultBranchName == "origin/main" }), "前提: 既定ブランチの解決は着地している")
     let path = try resolve(
-      provider, .issue(number: 44, existingWorktree: nil, existingBranch: false))
+      provider, .newBranch(name: "issue/44", base: .defaultBranch))
     XCTAssertEqual(head(of: path), originTip("main"), "fetch 後の origin/main が base")
   }
 
@@ -115,9 +115,9 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
         .isSuccess)
     let provider = try start()
 
-    let issue = try resolve(
-      provider, .issue(number: 44, existingWorktree: nil, existingBranch: false))
-    XCTAssertEqual(head(of: issue), localRemoteTip("main"), "Issue 新規: 手元の origin/main から続行")
+    let created = try resolve(
+      provider, .newBranch(name: "issue/44", base: .defaultBranch))
+    XCTAssertEqual(head(of: created), localRemoteTip("main"), "新しいブランチ: 手元の origin/main から続行")
     let remote = try resolve(provider, .remoteBranch(name: "origin/feat", existingWorktree: nil))
     XCTAssertEqual(
       head(of: remote), localRemoteTip("feat"), "Remote branch: 手元の origin/feat から続行")
@@ -125,47 +125,47 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
 
   // MARK: - upstream
 
-  /// **`issue/<n>` は upstream を持たない。** `origin/<既定>` を追跡すると `git push` が既定ブランチへ
-  /// 向かって拒否され（`push.default=simple`）、upstream が既にあるので `push.autoSetupRemote` も
-  /// 発動しない。remote ref から起こす経路（Remote branch 行・PR 行の作成）は逆に、同名の remote
-  /// ブランチを追跡する。
-  func testIssueBranchHasNoUpstreamWhileRemoteRefBranchesTrackOrigin() throws {
+  /// **新しいブランチは upstream を持たない。** ベース（`origin/<既定>` 等）を追跡すると `git push` が
+  /// ベースへ向かって拒否され（`push.default=simple`）、upstream が既にあるので
+  /// `push.autoSetupRemote` も発動しない。remote ref から起こす経路（Remote branch 行の作成）は逆に、
+  /// 同名の remote ブランチを追跡する。
+  func testNewBranchHasNoUpstreamWhileRemoteRefBranchesTrackOrigin() throws {
     // 追跡の指定を省くと既定が効いてしまう設定。契約が環境に左右されないことをここで測る。
     XCTAssertTrue(run(["config", "branch.autoSetupMerge", "always"], cwd: local).isSuccess)
     let provider = try start()
-    _ = try resolve(provider, .issue(number: 44, existingWorktree: nil, existingBranch: false))
+    _ = try resolve(provider, .newBranch(name: "issue/44", base: .defaultBranch))
     _ = try resolve(provider, .remoteBranch(name: "origin/feat", existingWorktree: nil))
 
     XCTAssertFalse(
       run(["config", "--get", "branch.issue/44.merge"], cwd: local).isSuccess,
-      "issue ブランチに upstream は付かない")
+      "新しいブランチに upstream は付かない")
     XCTAssertEqual(oid(["config", "--get", "branch.feat.remote"], cwd: local), "origin")
     XCTAssertEqual(oid(["config", "--get", "branch.feat.merge"], cwd: local), "refs/heads/feat")
   }
 
   // MARK: - 既定ブランチが remote から引けない repo
 
-  /// remote を持たないリポジトリでも Issue 新規は成功する（`origin/HEAD` が引けず `main` へ落ちる）。
-  func testIssueWorktreeWorksWithoutARemote() throws {
+  /// remote を持たないリポジトリでも既定ブランチからの新規は成功する（`origin/HEAD` が引けず `main` へ落ちる）。
+  func testNewBranchWorksWithoutARemote() throws {
     XCTAssertTrue(run(["remote", "remove", "origin"], cwd: local).isSuccess)
     let provider = try start()
     let path = try resolve(
-      provider, .issue(number: 44, existingWorktree: nil, existingBranch: false))
+      provider, .newBranch(name: "issue/44", base: .defaultBranch))
     XCTAssertEqual(head(of: path), oid(["rev-parse", "main"], cwd: local))
   }
 
-  /// origin はあるが `origin/HEAD` が未設定（`git remote add` で組んだ repo）でも Issue 新規は成功する。
+  /// origin はあるが `origin/HEAD` が未設定（`git remote add` で組んだ repo）でも既定ブランチからの新規は成功する。
   ///
   /// 作成は fetch の着地を待つので、`followRemoteHEAD` を閉じないと provider 自身の `fetch --prune` が
   /// `origin/HEAD` を作り直し、測りたい「引けない repo」の前提が作成の時点で消えている。
-  func testIssueWorktreeWorksWithoutOriginHead() throws {
+  func testNewBranchWorksWithoutOriginHead() throws {
     XCTAssertTrue(
       run(["config", "remote.origin.followRemoteHEAD", "never"], cwd: local).isSuccess)
     XCTAssertTrue(
       run(["symbolic-ref", "--delete", "refs/remotes/origin/HEAD"], cwd: local).isSuccess)
     let provider = try start()
     let path = try resolve(
-      provider, .issue(number: 44, existingWorktree: nil, existingBranch: false))
+      provider, .newBranch(name: "issue/44", base: .defaultBranch))
     XCTAssertEqual(head(of: path), oid(["rev-parse", "main"], cwd: local))
   }
 
@@ -176,13 +176,13 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
   ///
   /// Enter は fetch が未着地の窓で撃つ——窓を作らないと、fetch が Enter より先に明けた回は名前を
   /// 提示時に捕まえる実装でも緑になる。
-  func testIssueWorktreeUsesTheDefaultBranchDiscoveredByTheFetch() throws {
+  func testNewBranchUsesTheDefaultBranchDiscoveredByTheFetch() throws {
     XCTAssertTrue(
       run(["symbolic-ref", "--delete", "refs/remotes/origin/HEAD"], cwd: local).isSuccess)
     let provider = try startWithSlowFetch()
     XCTAssertEqual(provider.defaultBranchName, "main", "前提: 提示時の名前はフォールバック")
     let path = try resolve(
-      provider, .issue(number: 44, existingWorktree: nil, existingBranch: false))
+      provider, .newBranch(name: "issue/44", base: .defaultBranch))
     XCTAssertEqual(
       oid(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], cwd: local), "origin/main",
       "前提: fetch が origin/HEAD を作り直している")
@@ -260,9 +260,9 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
 
   func prepare(_ provider: WorktreePaletteDataProvider, _ destination: WorktreePaletteDestination)
     throws
-    -> WorktreePaletteDataProvider.WorktreePalettePrepareOutcome
+    -> WorktreePaletteDataProvider.PrepareOutcome
   {
-    var outcome: WorktreePaletteDataProvider.WorktreePalettePrepareOutcome?
+    var outcome: WorktreePaletteDataProvider.PrepareOutcome?
     provider.prepareDirectory(for: destination) { outcome = $0 }
     XCTAssertTrue(pump({ outcome != nil }, timeout: 30), "解決が返らない")
     return try XCTUnwrap(outcome)

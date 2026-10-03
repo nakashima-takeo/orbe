@@ -8,7 +8,7 @@ enum WorktreePaletteFocus: Hashable {
 /// worktree パレットのカード本体。ヘッダ（❯＋絞り込み入力欄＋起動 agent チップ）＋
 /// リスト部（可変セクション・maxHeight 380・内部スクロール）＋フッター（選択連動の実行説明/エラー＋キーヒント）。
 /// 器はそのままに、中身だけ list / clean / 最新化の 3 モードで切り替わる。
-/// 外郭は `GlassPanel(.popup, radius 14)`。list ではヘッダの `TextField` にキーを集約し、↑↓/⇥/esc/↵/⌘↵ を
+/// 外郭は `GlassPanel(.popup, radius 14)`。list ではヘッダの `TextField` にキーを集約し、↑↓/⇥/esc/↵ を
 /// 横取りしてフォーカス逸脱を防ぐ（`PaletteCard`/`SearchField` の field モードと同パターン）。
 struct WorktreePaletteCard: View {
   @Bindable var model: WorktreePaletteModel
@@ -75,8 +75,8 @@ struct WorktreePaletteCard: View {
     .onPreferenceChange(ChromeHeightKey.self) { chromeHeight = $0 }
     .onPreferenceChange(WorktreePaletteContentHeightKey.self) { contentHeight = $0 }
     .modifier(WorktreePaletteCardKeyCapture(model: model, focus: $focus))
-    // カード内のクリックで焦点を確定し直す（汎用 PaletteCard と同じ契約。行タップも行内の「開く」
-    // ボタンもこの契約に乗る）。宛先はモードが決める。
+    // カード内のクリックで焦点を確定し直す（汎用 PaletteCard と同じ契約。行タップもこの契約に乗る）。
+    // 宛先はモードが決める。
     .simultaneousGesture(TapGesture().onEnded { model.focus() })
     .onChange(of: model.focusToken, initial: true) {
       focus = model.mode == .list ? .field : .card
@@ -178,13 +178,6 @@ struct WorktreePaletteCard: View {
       if !model.isPreparing { model.onDismiss() }
       return .handled
     }
-    // ⌘↵＝issue/PR をブラウザで開く。plain ↵（onSubmit）と修飾で分ける（SearchField と同流儀）。
-    .onKeyPress { press in
-      guard press.key == .return, press.modifiers.contains(.command) else { return .ignored }
-      guard !model.isPreparing else { return .handled }
-      if let item = model.selectedItem, item.canOpenWeb { model.onOpenWeb(item) }
-      return .handled
-    }
   }
 
   /// 起動先のチップ（⇥ で巡回・agent は raw command／shell は "shell"）。targets は常に非空。
@@ -217,19 +210,13 @@ struct WorktreePaletteCard: View {
               switch row {
               case .header(let title): sectionLabel(title)
               case .item(let index, let item):
-                if item.isInteractive {
-                  WorktreePaletteRow(
-                    item: item, selected: index == model.selected,
-                    // 行タップ（release）＝決定。↵ と同じ funnel を通り、選択移動と実行が一体で走る。
-                    onTap: { model.activate(at: index) },
-                    // ホバー開始＝選択の追従だけ（決定は走らない）。非対話行は WorktreePaletteInfoRow へ
-                    // 分岐してこの経路を通らず、モデル側の関門でも弾かれる。
-                    onHoverEnter: { model.hoverSelect(index) },
-                    onOpenWeb: item.canOpenWeb ? { model.onOpenWeb(item) } : nil
-                  )
-                } else {
-                  WorktreePaletteInfoRow(item: item)
-                }
+                WorktreePaletteRow(
+                  item: item, selected: index == model.selected,
+                  // 行タップ（release）＝決定。↵ と同じ funnel を通り、選択移動と実行が一体で走る。
+                  onTap: { model.activate(at: index) },
+                  // ホバー開始＝選択の追従だけ（決定は走らない）。
+                  onHoverEnter: { model.hoverSelect(index) }
+                )
               }
             }
           } else {
@@ -327,8 +314,6 @@ struct WorktreePaletteCard: View {
       case .launch(let target, let kind):
         WorktreePaletteLaunchLine(
           target: target, preposition: kind.prepositionKey, agent: model.selectedTargetName)
-      case .browse(let target):
-        WorktreePaletteBrowseLine(target: target)
       case .note(let key):
         Text(l10n.string(key)).foregroundStyle(Color.theme.textMuted)
       case nil:
@@ -337,18 +322,10 @@ struct WorktreePaletteCard: View {
     }
   }
 
-  /// ブラウザで開く行では ⇥（起動先）と ⌘↵（Enter と同じ）を案内しない——効いても意味の無い操作を
-  /// 並べない。起動先チップと ⇥ キーの働きはそのまま。
   private var keyHints: some View {
-    let browses = if case .browse = model.selectedItem?.footer { true } else { false }
-    return HStack(spacing: Theme.Space.step + Theme.Space.hair) {
+    HStack(spacing: Theme.Space.step + Theme.Space.hair) {
       WorktreePaletteKeyHint(key: "↑↓", label: l10n.string(.worktreePaletteHintSelect))
-      if !browses {
-        WorktreePaletteKeyHint(key: "⇥", label: l10n.string(.worktreePaletteHintAgent))
-        if model.selectedItem?.canOpenWeb == true {
-          WorktreePaletteKeyHint(key: "⌘↵", label: l10n.string(.worktreePaletteHintOpen))
-        }
-      }
+      WorktreePaletteKeyHint(key: "⇥", label: l10n.string(.worktreePaletteHintAgent))
       WorktreePaletteKeyHint(key: "esc", label: l10n.string(.worktreePaletteHintClose))
     }
     .font(Font.theme.sectionLabel)

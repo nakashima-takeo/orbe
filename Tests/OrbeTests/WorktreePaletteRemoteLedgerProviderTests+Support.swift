@@ -23,18 +23,6 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     return path
   }
 
-  func section(_ model: WorktreePaletteModel, _ title: String) -> WorktreePaletteSection? {
-    model.sections.first { $0.title == title }
-  }
-
-  func item(_ model: WorktreePaletteModel, _ name: String) -> WorktreePaletteItem? {
-    section(model, "Worktrees")?.items.first { $0.name == name }
-  }
-
-  func pullRequestRow(_ model: WorktreePaletteModel, _ number: Int) -> WorktreePaletteItem? {
-    section(model, "Pull requests")?.items.first { $0.idText == "#\(number)" }
-  }
-
   /// 台帳が確定し、origin を確かめられない。
   func originUnverified(_ provider: WorktreePaletteDataProvider) -> Bool {
     guard case .settled(let resolved) = provider.remoteLedger else { return false }
@@ -42,7 +30,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
   }
 
   /// 偽 `gh` を PATH に置く。認証確認は通り、正式名は `resolve/<owner>__<name>` の中身を返し（無ければ
-  /// 答えずに落ちる）、open PR 一覧は `prs.json`、ブランチの PR は `branch/<name>` を返す。`<種別>.gate`
+  /// 答えずに落ちる）、ブランチの PR は `branch/<name>` を返す。`<種別>.gate`
   /// がある間はその問い合わせが着地しない。正式名とブランチの PR の問い合わせは `calls.log` に残す。
   func stageGh() throws {
     ghDir = dir.appendingPathComponent("gh")
@@ -50,9 +38,6 @@ extension WorktreePaletteRemoteLedgerProviderTests {
       try FileManager.default.createDirectory(
         at: ghDir.appendingPathComponent(sub), withIntermediateDirectories: true)
     }
-    try write(
-      #"{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":null}}"#,
-      to: ghDir.appendingPathComponent("prs.json").path)
     let d = ghDir.path
     let script = """
       #!/bin/sh
@@ -68,13 +53,12 @@ extension WorktreePaletteRemoteLedgerProviderTests {
         if [ -e "$f" ]; then cat "$f"; else printf '[]'; fi
         exit 0
       fi
-      query=""; o=""; n=""; jq=""
+      query=""; o=""; n=""
       while [ $# -gt 0 ]; do
         case "$1" in
           -f|-F)
             case "$2" in query=*) query="${2#query=}" ;; o=*) o="${2#o=}" ;; n=*) n="${2#n=}" ;; esac
             shift ;;
-          --jq) jq="$2"; shift ;;
         esac
         shift
       done
@@ -88,10 +72,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
           [ -e "$f.exit" ] && exit "$(cat "$f.exit")"
           exit 0 ;;
       esac
-      case "$jq" in
-        *pullRequests*) cat "$D/prs.json" ;;
-        *) printf '{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":null}}' ;;
-      esac
+      exit 1
       """
     let gh = ghDir.appendingPathComponent("gh").path
     try script.write(toFile: gh, atomically: true, encoding: .utf8)
@@ -115,27 +96,6 @@ extension WorktreePaletteRemoteLedgerProviderTests {
 
   func resolveFile(_ name: String) -> String {
     ghDir.appendingPathComponent("resolve/\(name.replacingOccurrences(of: "/", with: "__"))").path
-  }
-
-  /// open PR 一覧を、この 1 件だけにする。
-  func servePullRequest(_ number: Int, head: String, from repository: String) throws {
-    try servePullRequests([pullRequestNode(number, head: head, from: repository)])
-  }
-
-  /// open PR 一覧を、この並び（`pullRequestNode` の出力）にする。
-  func servePullRequests(_ nodes: [String]) throws {
-    try write(
-      #"{"nodes":[\#(nodes.joined(separator: ","))],"#
-        + #""pageInfo":{"hasNextPage":false,"endCursor":null}}"#,
-      to: ghDir.appendingPathComponent("prs.json").path)
-  }
-
-  /// open PR 一覧の 1 件（GraphQL の 1 node）。
-  func pullRequestNode(_ number: Int, head: String, from repository: String) -> String {
-    let parts = repository.split(separator: "/").map(String.init)
-    return #"{"number":\#(number),"title":"pr \#(number)","headRefName":"\#(head)","#
-      + #""headRepositoryOwner":{"login":"\#(parts[0])"},"headRepository":{"name":"\#(parts[1])"},"#
-      + #""reviewDecision":null}"#
   }
 
   /// ブランチの PR 1 件（`gh pr list --json` の 1 要素）。

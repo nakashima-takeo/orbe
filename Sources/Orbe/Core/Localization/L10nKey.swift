@@ -60,24 +60,15 @@ enum L10nKey: String, CaseIterable, Sendable {
   case worktreePaletteWorktreeExisting
   case worktreePaletteWorktreeCheckout
   case worktreePaletteWorktreeNew
-  case worktreePaletteNoteBrowser
   case worktreePalettePrepExisting
   case worktreePalettePrepCheckout
   case worktreePalettePrepNew
   case worktreePaletteLaunchSuffix
-  case worktreePaletteBrowseSuffix
-  case worktreePaletteReviewRequired
-  case worktreePaletteChangesRequested
-  case worktreePaletteApproved
-  case worktreePaletteGhMissing
-  case worktreePaletteGhUnauthed
-  case worktreePaletteRepositoryUnverified
   case worktreePaletteAgentOpen
   case worktreePaletteQueryPlaceholder
   case worktreePalettePreparing
   case worktreePaletteHintSelect
   case worktreePaletteHintAgent
-  case worktreePaletteHintOpen
   case worktreePaletteHintClose
   case worktreePaletteErrNotGitRepo
   case worktreeCleanSubtitle

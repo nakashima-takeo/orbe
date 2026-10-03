@@ -27,58 +27,6 @@ struct WorktreePaletteContentHeightKey: PreferenceKey {
   }
 }
 
-/// issue/PR 行末の muted な「開く」アフォーダンス（external-link 系）。⌘↵ と対の副操作。
-struct OpenWebButton: View {
-  let action: () -> Void
-  @Environment(\.localization) private var l10n
-
-  var body: some View {
-    Button(action: action) {
-      HStack(spacing: Theme.Space.tick) {
-        Text("↗")
-        Text(l10n.string(.worktreePaletteHintOpen))
-      }
-      .font(Font.theme.sectionLabel)
-      .foregroundStyle(Color.theme.textMuted)
-      .lineLimit(1)
-      .fixedSize()
-      .padding(.horizontal, 6)
-      .padding(.vertical, 1)
-      .background(Capsule().fill(Color.theme.smallPillFill))
-      .contentShape(Capsule())
-    }
-    .buttonStyle(.plain)
-  }
-}
-
-/// gh 誘導情報・ローディング行（選択・実行の対象外・muted）。ローディング時のみ先頭に working スピナ。
-struct WorktreePaletteInfoRow: View {
-  let item: WorktreePaletteItem
-  @Environment(\.localization) private var l10n
-
-  var body: some View {
-    HStack(spacing: Theme.Space.step) {
-      Group {
-        if item.isLoadingRow {
-          StatusGlyphView(kind: .working, size: 10)
-        } else {
-          Color.clear
-        }
-      }
-      .frame(width: 14, alignment: .center)
-      Text(item.infoKind.map { l10n.string($0.key) } ?? item.name)
-        .font(Font.theme.meta)
-        .foregroundStyle(Color.theme.textMuted)
-        .lineLimit(1)
-        .truncationMode(.tail)
-      Spacer(minLength: 0)
-    }
-    .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
-    .padding(.vertical, 5)
-    .frame(maxWidth: .infinity, alignment: .leading)
-  }
-}
-
 /// 初回ロード中のプレースホルダ行（非対話・静的グレー）。寸法は `WorktreePaletteRow` の envelope に一致させ、
 /// 先頭グリフ列と名前バーを面トークンの小片で表す。`barWidth` を行ごとに変えて均一ブロックに見せない。
 /// 行高は `WorktreePaletteRow` の名前（`workspaceName`）と同じ行ボックスに合わせ、小片はその中で薄く中央に置く。
@@ -112,25 +60,7 @@ struct WorktreePaletteSkeletonRow: View {
   }
 }
 
-/// 行末チップ（`#142` 等）。先頭に branch グリフ・地は `tintDiffAdded`（＝diffAdd .12）・文字 diffAdd。
-struct WorktreePaletteBadgeView: View {
-  let badge: WorktreePaletteBadge
-
-  var body: some View {
-    HStack(spacing: Theme.Space.tick) {
-      GitGlyphView(kind: .branch, size: 10, color: .theme.diffAdded)
-      Text(badge.text).lineLimit(1)
-    }
-    .font(Font.theme.sectionLabel)
-    .foregroundStyle(Color.theme.diffAdded)
-    .padding(.horizontal, 7)
-    .padding(.vertical, 1)
-    .background(Capsule().fill(Color.theme.tintDiffAdded))
-    .fixedSize()
-  }
-}
-
-/// worktree パレットのリスト 1 行。先頭グリフ列（幅 14・中央）＋色付き ID＋名前＋補足＋右端チップ/ノート/「開く」。
+/// worktree パレットのリスト 1 行。先頭グリフ列（幅 14・中央）＋名前＋補足＋右端の印。
 /// 選択行のみ accent 地（`selectionFill`＝accent .14 の淡塗り）でハイライト。
 struct WorktreePaletteRow: View {
   let item: WorktreePaletteItem
@@ -139,10 +69,6 @@ struct WorktreePaletteRow: View {
   let onTap: () -> Void
   /// ホバー開始＝選択の追従（決定は走らない）。効くかどうかは入力モダリティが握る（→ `ModalSelection`）。
   let onHoverEnter: () -> Void
-  /// issue/PR 行の「開く」（ブラウザ表示）。nil で出さない。
-  /// `Button` は行の `onTapGesture` より内側で、SwiftUI は内側のジェスチャを優先するため
-  /// 「開く」クリックが行の決定（worktree 作成）を巻き込むことはない。
-  let onOpenWeb: (() -> Void)?
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -152,15 +78,7 @@ struct WorktreePaletteRow: View {
     let gap = Theme.Space.step
     return HStack(spacing: 0) {
       glyphColumn
-      if let idText = item.idText {
-        Text(idText)
-          .font(Font.theme.chrome)
-          .foregroundStyle(Color.theme.diffAdded)
-          .lineLimit(1)
-          .fixedSize()
-          .padding(.leading, gap)
-      }
-      // 行は割り当て幅を超えない。縮むのは名前・補足が先で、それでも入らないときだけ右側のノートを切る。
+      // 行は割り当て幅を超えない。縮むのは名前・補足が先。
       WorktreePaletteTruncatingSlot(item.name, leading: gap) {
         fontResolver.text($0, base: Theme.Typography.workspaceName)
           .font(Font.theme.workspaceName)
@@ -173,14 +91,6 @@ struct WorktreePaletteRow: View {
             .font(Font.theme.meta)
             .foregroundStyle(Color.theme.textMuted)
         }
-      }
-      if let reviewNote = item.reviewNote {
-        WorktreePaletteTruncatingSlot(l10n.string(reviewNote.key), leading: gap) {
-          Text($0)
-            .font(Font.theme.sectionLabel)
-            .foregroundStyle(Color.theme.textMuted)
-        }
-        .layoutPriority(2)
       }
       Spacer(minLength: gap + Theme.Space.tick + gap)
       trailing
@@ -199,8 +109,8 @@ struct WorktreePaletteRow: View {
     .onHover { if $0 { onHoverEnter() } }
   }
 
-  /// 先頭グリフ列（幅 14・中央）。文字グリフ（▤⎇⇅）と octicon（issue/PR）を種別で出し分ける。
-  @ViewBuilder private var glyphColumn: some View {
+  /// 先頭グリフ列（幅 14・中央）。文字グリフ（▤⎇⇅❯）を種別で出し分ける。
+  private var glyphColumn: some View {
     Group {
       switch item.glyph {
       case .worktree:
@@ -210,78 +120,42 @@ struct WorktreePaletteRow: View {
         Text("⎇").font(Font.theme.chrome).foregroundStyle(Color.theme.textMuted)
       case .remoteBranch:
         Text("⇅").font(Font.theme.chrome).foregroundStyle(Color.theme.textMuted)
-      case .issue:
-        GitGlyphView(kind: .issue, size: 12, color: Color.theme.diffAdded)
-      case .pullRequest:
-        GitGlyphView(kind: .branch, size: 12, color: Color.theme.diffAdded)
       case .clean:
         Text("❯").font(Font.theme.chrome).foregroundStyle(Color.theme.accentPrimary)
-      case .none:
-        Color.clear
       }
     }
     .frame(width: 14, alignment: .center)
   }
 
-  /// 右端: worktree/branch はチップ（＋working リング）、issue/PR は muted ノート。issue/PR は末尾に「開く」。
-  /// clean 行は候補件数バッジ＋`⏎`（**0 件ならバッジだけ消え、行そのものは残る**）。
-  /// Local branch 行は上のどれも無いときだけ同期ピル（`↑N` / `↓N`）。
-  /// ノートと「開く」の間隔はノートが持つ（ノートが縮みきって消えたら、間隔も一緒に消える）。
-  private var trailing: some View {
-    let tick = Theme.Space.tick
-    return HStack(spacing: 0) {
-      if let count = item.candidateCount {
-        HStack(spacing: tick) {
-          if count > 0 {
-            Text(
-              l10n.plural(
-                count, one: .worktreeCleanCandidatesOne, other: .worktreeCleanCandidatesOther)
-            )
-            .font(Font.theme.sectionLabel)
-            .foregroundStyle(Color.theme.accentPrimary)
-            .lineLimit(1)
-            .fixedSize()
-            .padding(.horizontal, 7)
-            .padding(.vertical, 1)
-            .background(Capsule().fill(Color.theme.tintAccent))
-          }
-          Text("⏎")
-            .font(Font.theme.sectionLabel)
-            .foregroundStyle(Color.theme.textMuted)
-            .fixedSize()
+  /// 右端: worktree は working リング、clean 行は候補件数バッジ＋`⏎`（**0 件ならバッジだけ消え、行
+  /// そのものは残る**）、Local branch 行は同期ピル（`↑N` / `↓N`）。
+  @ViewBuilder private var trailing: some View {
+    if let count = item.candidateCount {
+      HStack(spacing: Theme.Space.tick) {
+        if count > 0 {
+          Text(
+            l10n.plural(
+              count, one: .worktreeCleanCandidatesOne, other: .worktreeCleanCandidatesOther)
+          )
+          .font(Font.theme.sectionLabel)
+          .foregroundStyle(Color.theme.accentPrimary)
+          .lineLimit(1)
+          .fixedSize()
+          .padding(.horizontal, 7)
+          .padding(.vertical, 1)
+          .background(Capsule().fill(Color.theme.tintAccent))
         }
-      } else if !item.badges.isEmpty || item.showsWorkingIndicator {
-        HStack(spacing: tick) {
-          ForEach(item.badges) { badge in WorktreePaletteBadgeView(badge: badge) }
-          if item.showsWorkingIndicator {
-            StatusGlyphView(kind: .working, size: 10)
-              .padding(.leading, Theme.Space.hair)
-          }
-        }
-      } else if let note = trailingNote {
-        WorktreePaletteTruncatingSlot(
-          l10n.string(note.noteKey), trailing: onOpenWeb == nil ? 0 : tick
-        ) {
-          Text($0)
-            .font(Font.theme.sectionLabel)
-            .foregroundStyle(Color.theme.textMuted)
-        }
-      } else if let sync = item.sync {
-        WorktreePaletteSyncPills(sync: sync)
+        Text("⏎")
+          .font(Font.theme.sectionLabel)
+          .foregroundStyle(Color.theme.textMuted)
+          .fixedSize()
       }
-      if let onOpenWeb {
-        OpenWebButton(action: onOpenWeb)
-          .padding(.leading, Theme.Space.hair + (trailingNote == nil ? tick : 0))
-      }
+    } else if item.showsWorkingIndicator {
+      StatusGlyphView(kind: .working, size: 10)
+        .padding(.leading, Theme.Space.hair)
+    } else if let sync = item.sync {
+      WorktreePaletteSyncPills(sync: sync)
     }
-  }
-
-  /// 右端に出すノート（件数バッジ・チップ・working リングのある行では出さない）。
-  private var trailingNote: WorktreePaletteEnterNote? {
-    guard item.candidateCount == nil, item.badges.isEmpty, !item.showsWorkingIndicator else {
-      return nil
-    }
-    return item.enterNote
   }
 
   private var nameColor: Color {
