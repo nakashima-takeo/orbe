@@ -47,7 +47,7 @@ chrome キー（`WindowCommand`）は「タブが無くても効くか」の網�
 
 ## cwd の確定
 
-エージェント起動タブの初期 cwd はアクティブタブの実効 cwd（0 タブなら workspace の root path）を**明示指定**して起こす——cwd 未指定の surface は ghostty がホームへ解決してしまうため、ここで必ず確定させる。workspace 新規作成時の初期シェルは rootPath 指定（→ [workspace](../platform/workspace.md)）。
+cwd を指定せずに起こすタブ（エージェント起動・制御 API の `spawn`・初回起動のシェル）の初期 cwd は、アクティブタブの実効 cwd（0 タブなら workspace の root path）を**明示指定**して起こす——cwd 未指定の surface は ghostty がホームへ解決してしまうため、ここで必ず確定させる。[worktree パレット](../palette/worktree.md)がリポジトリを探す基点も同じ値を使う。workspace 新規作成時の初期シェルは rootPath 指定（→ [workspace](../platform/workspace.md)）。
 
 ## GUI エディタ起動（Cmd+Shift+E）
 

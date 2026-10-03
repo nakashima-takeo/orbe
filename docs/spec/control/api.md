@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe）
 description: Unix socket 上の JSON-RPC でタブ/workspace/エージェントを操作する out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
-updated: 2026-09-08
+updated: 2026-10-04
 ---
 
 # 制御 API（外部 → Orbe）
@@ -54,7 +54,7 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 - `get_tab_text {tabId, scrollback?}` → `{text}` … 画面テキスト平文。scrollback 真で履歴全体、偽で可視範囲。
 - `send_text {tabId, text}` … ペースト相当で PTY へ書く。bracketed paste 下では改行を含めても**自己実行せず**プロンプトに留まる。コマンド実行は別途 `send_key` の enter。
 - `send_key {tabId, key}` … キー名（case-insensitive。修飾は `+` 連結）を合成キーイベント（press+release）へ解決して libghostty のキー経路へ送り、端末モード（legacy / kitty keyboard protocol / application cursor 等）に応じた符号化は libghostty に委ねる。Orbe は端末バイトを組まない——ペースト経路は制御文字を strip するため、キーはキー経路でしか届かない。名前付きキー（enter/tab/escape/space/backspace/delete/上下左右/home/end/pageup/pagedown）は実 keycode を持ち、修飾も渡す（`ctrl+enter`・`shift+tab` 等。端末自身の keybind に消費されタブへ届かないことがある）。単一文字（Unicode scalar 1 つ・制御文字以外）は keycode を持たず、生成文字・無修飾文字・修飾を添える——`ctrl+<char>` はレンジ制限なく libghostty が符号化し（`ctrl+1` は端末の標準どおり素の `1`）、`shift+<char>` は大文字化して送る（大文字化しない文字は shift を修飾のまま渡す）。キー名は小文字化して解決するので `A` は `a`、大文字は `shift+a` で指定する。`alt`/`meta`/`option+<char>` が legacy 端末で ESC 前置になるかは `macos-option-as-alt`（層 1 既定 true → [config](../platform/config.md)）に従い、kitty 下は設定に依らず Alt 修飾として届く。`cmd`/`super` 付き単一文字・未知修飾・`+`・複数 scalar の grapheme・制御文字の単一指定は `-32602`——修飾を黙殺して素の文字を注入しないため（grapheme と制御文字は `send_text` で送る）。
-- `spawn {workspaceId?, cwd?, command?}` … 新タブを開く。command 省略はシェル・指定はそれを直接起動。cwd 省略は GUI の新規タブと同じフォールバック（対象 workspace の選択中タブの cwd → その workspace の rootPath）。戻り値は `{tabId}`。workspaceId が未知ならエラーにせずアクティブ workspace へフォールバックする。
+- `spawn {workspaceId?, cwd?, command?}` … 新タブを開く。command 省略はシェル・指定はそれを直接起動。cwd 省略は [cwd を指定せずに起こすタブ](../chrome/layout.md#cwd-の確定)と同じフォールバック（対象 workspace の選択中タブの cwd → その workspace の rootPath）。戻り値は `{tabId}`。workspaceId が未知ならエラーにせずアクティブ workspace へフォールバックする。
 - `spawn_agent {command?, workspaceId?, cwd?, timeoutMs?}` / `resume_agent {command, sessionId, workspaceId?, cwd?, timeoutMs?}` → `{tabId, workspaceId, agent:{command, path}, ready, agentSessionId?, seq}` … 検出済みエージェントを新タブで起こし、**既定で「準備できた」まで待ってから返す**。`spawn` との違いは、**GUI の起動（⌘⇧A / ⌘⇧C）と同じ組成**——検出済みの絶対パスを使い、子プロセス PATH を注入する（[agent/launch](../agent/launch.md)）。`command` を渡さない `spawn_agent` は**対象 workspace の**実効 `default-agent` を解く（アクティブ WS ではない）。`resume_agent` はエージェント自身の再開コマンド形を組み立て、セッション ID の文字集合もそこで検証する。未検出 command は `-32602`、解決できるエージェントが無ければ `-32000`。**未知 workspaceId は `-32004`**——`spawn` のフォールバックを継がないのは、新しい入口が「指定と違う対象を黙って触る」振る舞いを引き継ぐ理由がないため。
   - 「準備できた」は、起動より後にそのタブへ届く最初の `agent_state=idle`。これを起動時に報告できるのは hook に SessionStart を配線した agent（claude）だけで、どの agent が報告できるかは Orbe が持つ（[agent/plugin-package](../agent/plugin-package.md)）——呼ぶ側に agent 差を意識させない。報告できる agent は idle を待って `ready:true` と `agentSessionId`（その報告が運んだ id）を返し、`seq` はその idle イベントの seq。報告できない agent（codex / agy）は待たず `ready:false` で即返す（`agentSessionId` 無し）。`ready:false` は「続けて `prompt_agent` を送れる保証が無い」の意味。
   - 時間切れ（`timeoutMs` 既定 30 秒・上限 24 時間・不正は起動前に `-32602`）は `{…, ready:false, timedOut:true, seq}`——spawn は成功しているので宛先を捨てない。`timedOut` の有無で「報告できない agent」と区別する。待機中にそのタブが消えたら `-32000 "agent exited"`。
