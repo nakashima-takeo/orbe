@@ -141,6 +141,93 @@ final class ScrollPhysicsTests: XCTestCase {
     XCTAssertTrue(p.isReturning)
   }
 
+  /// 端の外へ伸ばした後に指を戻す量は縮めずに当てる（縮めるのは端の外へ向かう量だけ。AppKit・WebKit と同じ）——戻す向き
+  /// まで 1/20 にすると、伸ばした分の 20 倍を動かすまで本文が端に戻らない。
+  func testMovingBackFromTheStretchIsUndamped() {
+    var p = physics()
+    p.apply(finger(1.0, 0, .began))
+    p.apply(finger(1.01, 200))
+    XCTAssertEqual(p.shown(at: 1.01).y, -10, accuracy: 1e-9)
+    p.apply(finger(1.02, -30))
+    XCTAssertEqual(p.shown(at: 1.02).y, 20, accuracy: 1e-9, "端へ戻す量はそのまま当て、端を越えて本文へ入る")
+    p.apply(finger(1.03, 40))
+    XCTAssertEqual(p.shown(at: 1.03).y, -1, accuracy: 1e-9, "端までは 1 倍、端の外へ出た分だけ 1/20")
+  }
+
+  /// 端の外で指を離して戻っている途中に新しく指で動かせば、その時点の位置からその場で動く（戻りを待たない）。
+  func testNewGestureDuringReturnMovesAtOnce() {
+    var p = physics()
+    p.apply(finger(1.0, 0, .began))
+    p.apply(finger(1.01, 200))
+    p.apply(finger(1.02, 0, .ended))
+    let held = p.shown(at: 1.06).y
+    p.apply(finger(1.06, 0, .mayBegin))
+    p.apply(finger(1.07, 0, .began))
+    p.apply(finger(1.08, -30))
+    XCTAssertEqual(p.shown(at: 1.08).y, held + 30, accuracy: 1e-9, "本文へ向かう指の量はそのまま入る")
+    XCTAssertEqual(p.shown(at: 1.5).y, held + 30, accuracy: 1e-9, "戻りの式で上書きされない")
+
+    var q = physics()
+    q.apply(finger(1.0, 0, .began))
+    q.apply(finger(1.01, 200))
+    q.apply(finger(1.02, 0, .ended))
+    let from = q.shown(at: 1.06).y
+    q.apply(finger(1.06, 0, .began))
+    q.apply(finger(1.07, 20))
+    XCTAssertEqual(q.shown(at: 1.07).y, from - 1, accuracy: 1e-9, "同じ向きは今の位置から 1/20 で伸びる")
+  }
+
+  /// はじいて端に当たり戻っている途中（残りの momentum を捨てている間）でも、新しい指の出来事は捨てずにその場で当てる。
+  func testNewGestureAfterMomentumBounceMovesAtOnce() {
+    var p = physics()
+    p.apply(finger(1.0, 0, .began))
+    p.apply(finger(1.01, -20))
+    p.apply(finger(1.02, 0, .ended))
+    p.apply(momentum(1.03, 15, .began))
+    p.apply(momentum(1.04, 15))
+    XCTAssertTrue(p.isReturning)
+    XCTAssertFalse(p.apply(momentum(1.05, 15)))
+    p.apply(momentum(1.10, 0, .ended))
+    let from = p.shown(at: 1.12).y
+    p.apply(finger(1.12, 0, .began))
+    XCTAssertTrue(p.apply(finger(1.13, -40)))
+    XCTAssertEqual(p.shown(at: 1.13).y, from + 40, accuracy: 1e-9)
+    p.apply(finger(1.14, 0, .ended))
+    p.apply(momentum(1.15, -10, .began))
+    XCTAssertEqual(p.shown(at: 1.15).y, from + 50, accuracy: 1e-9, "新しいジェスチャの momentum は当てる")
+  }
+
+  /// 指を置いただけ（mayBegin）では捨てている momentum を解かない——置いた後に古い momentum の残りが届いても止めた位置は
+  /// 動かず、動かし始めた（began）ジェスチャの momentum は当てる（WebKit と同じ）。
+  func testOnlyBeganResumesMomentum() {
+    var p = physics()
+    p.apply(finger(1.0, 0, .began))
+    p.apply(finger(1.01, 200))
+    p.apply(finger(1.02, 0, .ended))
+    p.apply(finger(1.06, 0, .mayBegin))
+    let held = p.shown(at: 1.06).y
+    XCTAssertFalse(p.apply(momentum(1.07, 40)), "置いた後に届いた古い momentum は捨てる")
+    XCTAssertFalse(p.apply(momentum(1.08, 0, .ended)), "古い momentum の終わりで止めた指を離したことにしない")
+    XCTAssertEqual(p.shown(at: 1.5).y, held, accuracy: 1e-9)
+    p.apply(finger(1.5, 0, .began))
+    p.apply(finger(1.51, -30))
+    p.apply(finger(1.52, 0, .ended))
+    p.apply(momentum(1.53, -10, .began))
+    XCTAssertEqual(p.shown(at: 1.53).y, held + 40, accuracy: 1e-9, "動かし始めたジェスチャの momentum は当てる")
+  }
+
+  /// 戻りの途中のホイールは、その時点の位置からその場で当てる。
+  func testWheelDuringReturnMovesAtOnce() {
+    var p = physics()
+    p.apply(finger(1.0, 0, .began))
+    p.apply(finger(1.01, 200))
+    p.apply(finger(1.02, 0, .ended))
+    let from = p.shown(at: 1.04).y
+    p.apply(ScrollInput(timestamp: 1.04, delta: SIMD2(0, -3), precise: false))
+    XCTAssertFalse(p.isActive)
+    XCTAssertEqual(p.shown(at: 1.5).y, from + 30, accuracy: 1e-9)
+  }
+
   /// マウスのホイールの 1 目盛り（量 1）は 10pt——NSScrollView の行送りと同じ。
   func testWheelNotchMatchesNSScrollView() {
     var p = physics()

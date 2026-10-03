@@ -59,10 +59,12 @@ extension ScrollInput.Phase {
 /// - 指の出来事（トラックパッド）の量は 1 倍でその場で位置に足す。OS の momentum の出来事も同じ経路を通り、補間・予測・
 ///   自前の慣性は持たない。
 /// - 動かす軸は、120ms で減衰する縦横の量の累積の大きい方だけ（主でない軸の量は捨てる）。
-/// - 端を越えた量は 1/20 に縮めて見せる。指を離したとき端を越えていれば、そこから端へ戻る。OS の momentum が端を
-///   越えたら、その時点で戻り始め、残りの momentum は次に指が触れるまで捨てる（WebKit・AppKit の形）。戻りは端からの
-///   ずれ `x0` と戻り始めの速さ `v`（指を離したときは 0）から `x(τ) = (x0 + 0.31·v·τ)·e^(−τ/0.08)`（AppKit と同じ
-///   式）。戻りの途中に指が触れたらそこで止まる。
+/// - 端の外へ向かう量は、端を越えた分だけ 1/20 に縮めて当てる。端へ向かう量は縮めない（伸ばした後に戻す指はそのまま
+///   効く。AppKit・WebKit と同じ）。指を離したとき端を越えていれば、そこから端へ戻る。OS の momentum が端を
+///   越えたら、その時点で戻り始め、残りの momentum は次に指で動かし始める（began）まで捨てる（指を置いただけ
+///   〔mayBegin〕では解かない。WebKit・AppKit の形）。戻りは端からのずれ `x0` と戻り始めの速さ `v`（指を離したときは
+///   0）から `x(τ) = (x0 + 0.31·v·τ)·e^(−τ/0.08)`（AppKit と同じ式）。戻りの途中に指が触れたらそこで止まり、新しく
+///   指で動かせばその位置から動く。
 /// - マウスのホイールは 1 目盛り（量 1）を 10pt として、その場で当てる（NSScrollView の行送りと同じ）。
 struct ScrollPhysics: Sendable {
   /// 範囲を決める値。縦は最終行が最上段に来るまで、横は見たことのある最も長い行の右端から 5 桁先まで。
@@ -111,7 +113,7 @@ struct ScrollPhysics: Sendable {
 
   private enum Mode: Sendable {
     case idle
-    /// 指が触れている（または OS の momentum が続いている）。`raw` は弾性を掛ける前の位置。
+    /// 指が触れている（または OS の momentum が続いている）。
     case tracking
     /// 端へ戻っている。`from` は戻り始めの見えている位置、`velocity` はその時の速さ（pt/秒）、`start` はその時刻。
     case returning(from: SIMD2<Double>, velocity: SIMD2<Double>, start: Double)
@@ -119,13 +121,13 @@ struct ScrollPhysics: Sendable {
 
   var limits = Limits()
   private var mode = Mode.idle
-  /// idle のときの位置、tracking のときの弾性を掛ける前の位置。
-  private var raw = SIMD2<Double>(0, 0)
+  /// idle・tracking のときの見えている位置。
+  private var position = SIMD2<Double>(0, 0)
   private var axis = SIMD2<Double>(0, 0)
   private var lastEventTime: Double?
   /// 最後に当てた出来事から見た動く速さ（pt/秒）。
   private var velocity = SIMD2<Double>(0, 0)
-  /// momentum が端を越えたか、端の外で指を離した。次に指が触れるまで momentum の出来事を捨てる。
+  /// momentum が端を越えたか、端の外で指を離した。次に指で動かし始める（began）まで momentum の出来事を捨てる。
   private var ignoresMomentum = false
 
   var maximum: SIMD2<Double> { limits.maximum }
@@ -145,10 +147,8 @@ struct ScrollPhysics: Sendable {
   /// 時刻 `t` に見せる位置。
   func shown(at t: Double) -> SIMD2<Double> {
     switch mode {
-    case .idle:
-      return raw
-    case .tracking:
-      return SIMD2(rubber(raw.x, axis: 0), rubber(raw.y, axis: 1))
+    case .idle, .tracking:
+      return position
     case .returning(let from, let velocity, let start):
       let tau = max(0, t - start)
       var p = from
@@ -172,7 +172,7 @@ struct ScrollPhysics: Sendable {
       edge(of: from[a], axis: a).map { abs(p[a] - $0) < Self.settleDistance } ?? true
     }
     if done {
-      raw = clamp(p)
+      position = clamp(p)
       mode = .idle
     }
   }
@@ -187,7 +187,7 @@ struct ScrollPhysics: Sendable {
       case .began, .changed:
         if case .tracking = mode {} else { startTracking(at: t) }
         guard drag(input) else { return false }
-        if edge(of: raw.x, axis: 0) != nil || edge(of: raw.y, axis: 1) != nil {
+        if edge(of: position.x, axis: 0) != nil || edge(of: position.y, axis: 1) != nil {
           startReturning(at: t, velocity: velocity)
         }
         return true
@@ -203,7 +203,6 @@ struct ScrollPhysics: Sendable {
     }
     switch input.phase {
     case .mayBegin:
-      ignoresMomentum = false
       guard isReturning else { return false }
       startTracking(at: t)
       return true
@@ -224,19 +223,18 @@ struct ScrollPhysics: Sendable {
 
   /// その場で位置を置く（main の操作・ホイール）。範囲に収め、戻りを打ち切る。
   mutating func place(_ p: SIMD2<Double>) {
-    raw = clamp(p)
+    position = clamp(p)
     mode = .idle
   }
 
   /// 範囲が変わった。止まっていれば範囲に収める。
   mutating func setLimits(_ limits: Limits) {
     self.limits = limits
-    if case .idle = mode { raw = clamp(raw) }
+    if case .idle = mode { position = clamp(position) }
   }
 
   private mutating func startTracking(at t: Double) {
-    let p = shown(at: t)
-    raw = SIMD2(unrubber(p.x, axis: 0), unrubber(p.y, axis: 1))
+    position = shown(at: t)
     axis = .zero
     mode = .tracking
   }
@@ -250,8 +248,8 @@ struct ScrollPhysics: Sendable {
     if axis.y >= axis.x { d.x = 0 } else { d.y = 0 }
     if let elapsed, elapsed > 0 { velocity = -d / elapsed }
     guard d != .zero else { return false }
-    raw -= d
-    if maximum.x <= 0 { raw.x = 0 }
+    for a in 0..<2 { position[a] = moved(position[a], by: -d[a], axis: a) }
+    if maximum.x <= 0 { position.x = 0 }
     return true
   }
 
@@ -262,7 +260,7 @@ struct ScrollPhysics: Sendable {
     if edge(of: p.x, axis: 0) != nil || edge(of: p.y, axis: 1) != nil {
       startReturning(at: t, velocity: .zero)
     } else {
-      raw = p
+      position = p
       mode = .idle
     }
     return true
@@ -291,13 +289,11 @@ struct ScrollPhysics: Sendable {
     return nil
   }
 
-  private func rubber(_ x: Double, axis a: Int) -> Double {
-    guard let e = edge(of: x, axis: a) else { return x }
-    return e + (x - e) / Self.stiffness
-  }
-
-  private func unrubber(_ x: Double, axis a: Int) -> Double {
-    guard let e = edge(of: x, axis: a) else { return x }
-    return e + (x - e) * Self.stiffness
+  /// 軸 `a` の位置 `x` を `step` だけ動かした位置。端の外へ出ていく分だけ 1/20 に縮める。
+  private func moved(_ x: Double, by step: Double, axis a: Int) -> Double {
+    let y = x + step
+    guard let e = edge(of: y, axis: a), (y - e) * step > 0 else { return y }
+    let from = (x - e) * step > 0 ? x : e
+    return from + (y - from) / Self.stiffness
   }
 }
