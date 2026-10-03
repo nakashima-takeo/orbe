@@ -301,7 +301,7 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
   /// 最新化の選択画面: 遅れた Local branch 行から入り、↓ でカーソルが「そのまま作成」へ移り
   /// （フッタの前置句も追従する）、esc で一覧へ戻るとカーソルは入った行のまま、という遷移を撮る。
   func testRefresh() throws {
-    let palette = DesignSceneFixtures.worktreePaletteModel()
+    let palette = DesignSceneFixtures.worktreePaletteModel(from: .staleSample)
     try flow(
       "refresh", size: NSSize(width: 640, height: 520),
       render: {

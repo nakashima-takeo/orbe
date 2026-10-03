@@ -7,6 +7,7 @@ import XCTest
 @MainActor
 final class WorktreePaletteTests: OrbeTestCase {
 
+  /// provider の初回 rebuild と同じ順（ロード完了 → 行 → 選択の当て直し）で組む。
   func makeModel(
     _ input: WorktreePaletteSectionBuilder.Input = .designSample,
     agents: [AgentCLI] = [
@@ -16,71 +17,104 @@ final class WorktreePaletteTests: OrbeTestCase {
   ) -> WorktreePaletteModel {
     let model = WorktreePaletteModel()
     model.setTargets(agents: agents, defaultCommand: "claude")
+    model.hasLoadedOnce = true
     model.sections = WorktreePaletteSectionBuilder.build(input)
-    model.clampSelection()
+    model.restoreSelection(matching: nil)
     return model
   }
 
   func testSampleShape() {
     let p = makeModel()
-    XCTAssertEqual(p.sections.count, 3, "Worktrees/Local/Remote の 3 セクション")
-    XCTAssertEqual(p.items.count, 6, "全 6 行（worktree 2 ＋ clean 行 ＋ branch 3）")
-    XCTAssertEqual(p.selected, 0)
-    XCTAssertEqual(p.selectedItem?.name, "agent-hooks", "初期選択は先頭 worktree")
-    XCTAssertTrue(p.selectedItem?.isPrimary ?? false, "先頭 worktree はアクティブ（強調）")
+    XCTAssertEqual(p.sections.count, 2, "worktree とブランチの 2 欄")
+    XCTAssertEqual(p.items.count, 6, "全 6 行（worktree 3 ＋ clean 行 ＋ branch 2）")
+  }
+
+  /// 開いた直後は今の worktree の行が選ばれる（⌘T ↵ ＝今の worktree で既定の agent）。
+  func testInitialSelectionIsTheCurrentWorktree() {
+    let p = makeModel()
+    XCTAssertEqual(p.selectedItem?.name, "issue-212")
+    XCTAssertTrue(p.selectedItem?.isCurrent ?? false)
+  }
+
+  /// 今の worktree が先頭でなくても、その行が選ばれる。
+  func testInitialSelectionFindsTheCurrentWorktreeAnywhere() {
+    var input = WorktreePaletteSectionBuilder.Input.designSample
+    input.currentWorktree = NSHomeDirectory() + "/wt/perf-render-batching"
+    let p = makeModel(input)
+    XCTAssertEqual(p.selectedItem?.name, "perf-render-batching")
   }
 
   func testMoveWrapsAcrossSections() {
     let p = makeModel()
     p.move(-1)
     XCTAssertEqual(p.selected, 5, "先頭で上 → 末尾へ wrap")
-    XCTAssertEqual(p.selectedItem?.name, "origin/feat/session-restore", "末尾は remote branch 行")
+    XCTAssertEqual(p.selectedItem?.name, "origin/feat/fetch-progress", "末尾は remote branch 行")
     p.move(1)
     XCTAssertEqual(p.selected, 0, "末尾から下 → 先頭へ wrap")
   }
 
-  func testCycleTarget() {
-    // agents=[claude,codex]・default=claude → targets=[claude, shell, codex]、初期選択は claude。
-    let p = makeModel()
-    XCTAssertEqual(p.selectedTargetName, "claude", "初期選択は default agent")
-    p.cycleTarget()
-    XCTAssertEqual(p.selectedTargetName, "shell", "⇥ 一回で default agent 直後の shell へ")
-    p.cycleTarget()
-    XCTAssertEqual(p.selectedTargetName, "codex")
-    p.cycleTarget()
-    XCTAssertEqual(p.selectedTargetName, "claude", "巡回は端で wrap")
-  }
+  // MARK: - 起動先
 
-  func testShellSelectableWithoutAgents() {
-    // agent 未検出でも targets は必ず shell を含み、それが選択される（袋小路の解消）。
-    let p = makeModel(agents: [])
-    XCTAssertEqual(p.selectedTarget, .shell, "agent 未検出でも shell が選べる")
-    XCTAssertEqual(p.selectedTargetName, "shell")
-    p.cycleTarget()
-    XCTAssertEqual(p.selectedTarget, .shell, "shell 一択の巡回は shell のまま")
-  }
-
-  func testSetTargetsSplicesShellAfterDefaultAndSelectsDefault() {
-    // 本 PR の中核: shell は「default agent の直後」に挿入し、初期選択は default agent。
-    // default が非先頭（実ユーザーが default を codex に設定した場合）でも連動することを固定する。
+  /// 並びは既定の agent、shell、残りの agent（検出順）。初期は既定の agent。
+  func testTargetsPutDefaultFirstThenShellThenOthers() {
     let codex = AgentCLI(command: "codex", path: "/bin/codex")
     let claude = AgentCLI(command: "claude", path: "/bin/claude")
+    let agy = AgentCLI(command: "agy", path: "/bin/agy")
     let p = WorktreePaletteModel()
-    p.setTargets(agents: [codex, claude], defaultCommand: "codex")
-    XCTAssertEqual(
-      p.targets, [.agent(codex), .shell, .agent(claude)], "shell は default(codex) の直後に挿入")
-    XCTAssertEqual(p.selectedTargetName, "codex", "初期選択は default agent（先頭でなくても）")
+    p.setTargets(agents: [codex, claude, agy], defaultCommand: "claude")
+    XCTAssertEqual(p.targets, [.agent(claude), .shell, .agent(codex), .agent(agy)])
+    XCTAssertEqual(p.selectedTargetName, "claude", "初期は既定の agent")
+    XCTAssertEqual(p.defaultTarget, .agent(claude), "「既定」の札は既定の agent")
   }
 
-  func testSetTargetsFallsBackToFirstWhenDefaultAbsent() {
-    // default が agents に無ければ先頭 agent を初期選択（?? 0 分岐）。
+  func testTargetsFallBackToFirstAgentWhenDefaultIsAbsent() {
     let p = WorktreePaletteModel()
     p.setTargets(
       agents: [
         AgentCLI(command: "codex", path: "/bin/codex"),
         AgentCLI(command: "claude", path: "/bin/claude"),
       ], defaultCommand: "missing")
-    XCTAssertEqual(p.selectedTargetName, "codex", "default 不在なら先頭 agent へフォールバック")
+    XCTAssertEqual(p.selectedTargetName, "codex", "既定が検出に無ければ検出順の先頭")
+  }
+
+  func testCycleTarget() {
+    let p = makeModel()
+    XCTAssertEqual(p.selectedTargetName, "claude")
+    p.cycleTarget()
+    XCTAssertEqual(p.selectedTargetName, "shell", "⇥ 一回で既定の直後の shell へ")
+    p.cycleTarget()
+    XCTAssertEqual(p.selectedTargetName, "codex")
+    p.cycleTarget()
+    XCTAssertEqual(p.selectedTargetName, "claude", "巡回は端で wrap")
+  }
+
+  /// agent 未検出でも shell が選ばれ、「既定」の札は付かない。
+  func testShellSelectableWithoutAgents() {
+    let p = makeModel(agents: [])
+    XCTAssertEqual(p.targets, [.shell])
+    XCTAssertEqual(p.selectedTarget, .shell)
+    XCTAssertNil(p.defaultTarget)
+  }
+
+  /// ボタンのクリックでその起動先を選ぶ。入力ロック中は動かない。
+  func testChooseTargetByClick() {
+    let p = makeModel()
+    p.chooseTarget(at: 2)
+    XCTAssertEqual(p.selectedTargetName, "codex")
+    p.isPreparing = true
+    p.chooseTarget(at: 1)
+    XCTAssertEqual(p.selectedTargetName, "codex", "作成中は変えない")
+  }
+
+  // MARK: - 決定
+
+  /// ↵ は今の worktree のルートを開く。
+  func testEnterOpensTheCurrentWorktreeRoot() {
+    let p = makeModel()
+    var executed: [WorktreePaletteDestination] = []
+    p.onExecute = { executed.append($0) }
+    p.activate()
+    XCTAssertEqual(executed, [.directory(path: NSHomeDirectory() + "/wt/issue-212")])
   }
 
   /// 行タップは ↵ と同じ決定 funnel を通り、選択をその行へ移したうえで同じ行を実行する。
@@ -88,9 +122,9 @@ final class WorktreePaletteTests: OrbeTestCase {
     let p = makeModel()
     var executed: [WorktreePaletteDestination] = []
     p.onExecute = { executed.append($0) }
-    p.activate(at: 3)  // Local branch main の行をタップ
-    XCTAssertEqual(p.selected, 3, "タップで選択もその行へ移る")
-    XCTAssertEqual(executed, [.localBranch(name: "main")])
+    p.activate(at: 4)  // fix/login-blank の行をタップ
+    XCTAssertEqual(p.selected, 4, "タップで選択もその行へ移る")
+    XCTAssertEqual(executed, [.localBranch(name: "fix/login-blank")])
 
     // ↵（選択行の決定）と同一の結果になる＝クリック用の別経路を持たない。
     var byEnter: [WorktreePaletteDestination] = []
@@ -121,19 +155,47 @@ final class WorktreePaletteTests: OrbeTestCase {
     XCTAssertEqual(p.selected, 0)
   }
 
-  func testDismissWiring() {
-    let p = makeModel()
-    var dismissed = false
-    p.onDismiss = { dismissed = true }
-    p.onDismiss()
-    XCTAssertTrue(dismissed)
-  }
-
   func testFocusAdvancesToken() {
     let p = makeModel()
     let before = p.focusToken
     p.focus()
     XCTAssertEqual(p.focusToken, before &+ 1)
+  }
+
+  // MARK: - 行が決まる前の ↵
+
+  /// 初回の一覧が届く前の ↵ は預かり、届いた時点の選択（今の worktree）で実行する。預かっている間は
+  /// 入力ロック。
+  func testEnterBeforeTheFirstListIsHeldThenRunsOnTheCurrentWorktree() {
+    let p = WorktreePaletteModel()
+    p.setTargets(agents: [], defaultCommand: nil)
+    var executed: [WorktreePaletteDestination] = []
+    p.onExecute = { executed.append($0) }
+
+    p.activate()
+    XCTAssertTrue(executed.isEmpty, "行が決まるまで実行しない")
+    XCTAssertTrue(p.isLocked, "預かっている間は入力ロック")
+
+    p.hasLoadedOnce = true
+    p.sections = WorktreePaletteSectionBuilder.build(.designSample)
+    p.restoreSelection(matching: nil)
+
+    XCTAssertEqual(executed, [.directory(path: NSHomeDirectory() + "/wt/issue-212")])
+    XCTAssertFalse(p.hasPendingActivation)
+  }
+
+  /// 非 git の場所では「このディレクトリ」の行が届き、預かった ↵ はそこを開く。
+  func testEnterBeforeTheFirstListInANonGitPlaceOpensThisDirectory() {
+    let p = WorktreePaletteModel()
+    var executed: [WorktreePaletteDestination] = []
+    p.onExecute = { executed.append($0) }
+    p.activate()
+
+    p.hasLoadedOnce = true
+    p.sections = WorktreePaletteSectionBuilder.directorySections(path: "/tmp/plain")
+    p.restoreSelection(matching: nil)
+
+    XCTAssertEqual(executed, [.directory(path: "/tmp/plain")])
   }
 
   // MARK: - ホバー追従（汎用パレットと共有する ModalSelection のガード）
@@ -164,53 +226,10 @@ final class WorktreePaletteTests: OrbeTestCase {
   func testHoverSuppressedAfterQueryChange() {
     let p = makeModel()
     p.inputModality = .pointer
-    p.query = "feat"
+    p.query = "wt"
     p.onQueryChanged()
     p.hoverSelect(2)
     XCTAssertEqual(p.selected, 0, "打鍵後は実マウス移動があるまで追従しない")
-  }
-
-  // MARK: - 選択復元（裏の git 列挙の引き直しによる sections 差し替え）
-
-  /// provider の rebuild と同じ手順（選択 action を控える → sections 差し替え → 復元）。
-  private func rebuild(_ p: WorktreePaletteModel, with input: WorktreePaletteSectionBuilder.Input) {
-    let action = p.selectedItem?.action
-    p.sections = WorktreePaletteSectionBuilder.build(input)
-    p.restoreSelection(matching: action)
-  }
-
-  /// ブランチが増えて index がずれても、選択は同じ行に追従する。
-  func testRestoreSelectionFollowsRowAcrossIndexShift() {
-    let p = makeModel()
-    p.selected = 4
-    XCTAssertEqual(p.selectedItem?.name, "perf/render-batching")
-    p.inputModality = .pointer
-    var input = WorktreePaletteSectionBuilder.Input.designSample
-    input.localBranches.insert(GitBranch(name: "new", relativeDate: "now", upstream: nil), at: 0)
-    rebuild(p, with: input)
-    XCTAssertEqual(p.selected, 5, "行が 1 本増えた分だけ index がずれても同じ行を指す")
-    XCTAssertEqual(p.selectedItem?.name, "perf/render-batching")
-    XCTAssertEqual(p.inputModality, .pointer, "index がずれても裏の更新はモダリティを奪わない")
-  }
-
-  /// 選択していた行が差し替えで消えたら clamp（範囲内）に落ちる。
-  func testRestoreSelectionClampsWhenRowDisappears() {
-    let p = makeModel()
-    p.selected = 5
-    XCTAssertEqual(p.selectedItem?.name, "origin/feat/session-restore", "末尾の remote branch 行")
-    var input = WorktreePaletteSectionBuilder.Input.designSample
-    input.remoteBranches = []
-    rebuild(p, with: input)
-    XCTAssertEqual(p.selected, 4, "消えた行の代わりに範囲内の末尾へ clamp")
-  }
-
-  /// index が変わらない復元では代入せず、ホバー追従（`.pointer`）を殺さない。
-  func testRestoreSelectionKeepsPointerModalityWhenIndexUnchanged() {
-    let p = makeModel()
-    p.inputModality = .pointer
-    rebuild(p, with: .designSample)
-    XCTAssertEqual(p.selected, 0)
-    XCTAssertEqual(p.inputModality, .pointer, "裏の更新はモダリティを奪わない")
   }
 
   /// 範囲外・作成中では追従しない。
@@ -222,5 +241,60 @@ final class WorktreePaletteTests: OrbeTestCase {
     p.isPreparing = true
     p.hoverSelect(2)
     XCTAssertEqual(p.selected, 0, "作成中はキー操作と同様に受け付けない")
+  }
+
+  // MARK: - 選択復元（裏の git 列挙の引き直しによる sections 差し替え）
+
+  /// provider の rebuild と同じ手順（選択 action を控える → sections 差し替え → 復元）。
+  func rebuild(_ p: WorktreePaletteModel, with input: WorktreePaletteSectionBuilder.Input) {
+    let action = p.selectedItem?.action
+    p.sections = WorktreePaletteSectionBuilder.build(input)
+    p.restoreSelection(matching: action)
+  }
+
+  /// ユーザーが動かした選択は、ブランチが増えて index がずれても同じ行に追従する。
+  func testRestoreSelectionFollowsRowAcrossIndexShift() {
+    let p = makeModel()
+    p.move(4)
+    XCTAssertEqual(p.selectedItem?.name, "fix/login-blank")
+    p.inputModality = .pointer
+    var input = WorktreePaletteSectionBuilder.Input.designSample
+    input.localBranches.insert(GitBranch(name: "new", relativeDate: "now", upstream: nil), at: 0)
+    rebuild(p, with: input)
+    XCTAssertEqual(p.selected, 5, "行が 1 本増えた分だけ index がずれても同じ行を指す")
+    XCTAssertEqual(p.selectedItem?.name, "fix/login-blank")
+    XCTAssertEqual(p.inputModality, .pointer, "index がずれても裏の更新はモダリティを奪わない")
+  }
+
+  /// 選択していた行が差し替えで消えたら範囲内に収める。
+  func testRestoreSelectionClampsWhenRowDisappears() {
+    let p = makeModel()
+    p.jump(1)
+    XCTAssertEqual(p.selectedItem?.name, "origin/feat/fetch-progress", "末尾の remote branch 行")
+    var input = WorktreePaletteSectionBuilder.Input.designSample
+    input.remoteBranches = []
+    rebuild(p, with: input)
+    XCTAssertEqual(p.selected, 4, "消えた行の代わりに範囲内の末尾へ収める")
+  }
+
+  /// 選択をまだ動かしていなければ、データの到着でも今の worktree の行を選び直す（初回の一覧より後に
+  /// 今の worktree が分かった場合も、その行が選ばれる）。
+  func testUntouchedSelectionFollowsTheCurrentWorktreeAcrossRebuilds() {
+    var input = WorktreePaletteSectionBuilder.Input.designSample
+    input.currentWorktree = nil
+    let p = makeModel(input)
+    XCTAssertEqual(p.selected, 0)
+    input.currentWorktree = NSHomeDirectory() + "/wt/pr-214"
+    rebuild(p, with: input)
+    XCTAssertEqual(p.selectedItem?.name, "pr-214")
+  }
+
+  /// index が変わらない復元では代入せず、ホバー追従（`.pointer`）を殺さない。
+  func testRestoreSelectionKeepsPointerModalityWhenIndexUnchanged() {
+    let p = makeModel()
+    p.inputModality = .pointer
+    rebuild(p, with: .designSample)
+    XCTAssertEqual(p.selected, 0)
+    XCTAssertEqual(p.inputModality, .pointer, "裏の更新はモダリティを奪わない")
   }
 }

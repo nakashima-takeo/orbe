@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// カード器を常設の first responder 候補にして clean / 最新化モードのキーを捕捉する祖先 modifier。
-/// list モードでは焦点がヘッダの入力欄にあり、キーは子の `TextField` が消費するのでここへは届かない
-/// （`space` が絞り込み入力に打てなくならない）。
+/// 一覧とベースを選ぶ画面では焦点がヘッダの入力欄にあり、キーは子の `TextField` が消費するので
+/// ここへは届かない（`space` が絞り込み入力に打てなくならない）。
 /// 矢印は単一の catch-all に集約する（bare ハンドラが ⌘↑ を食う不確実性を構造で排除する共通規約）。
 /// busy 中の畳み方は各メソッドが持つ（View で分岐しない）。
 struct WorktreePaletteCardKeyCapture: ViewModifier {
@@ -16,7 +16,7 @@ struct WorktreePaletteCardKeyCapture: ViewModifier {
       .focused(focus, equals: .card)
       .onKeyPress { press in
         switch model.mode {
-        case .list: return .ignored
+        case .list, .basePicker: return .ignored
         case .clean: return cleanNavigation(press)
         case .refresh: return refreshNavigation(press)
         }
@@ -25,7 +25,7 @@ struct WorktreePaletteCardKeyCapture: ViewModifier {
       .onKeyPress { press in
         guard press.key == .return else { return .ignored }
         switch model.mode {
-        case .list:
+        case .list, .basePicker:
           return .ignored
         case .clean:
           if press.modifiers.contains(.command) {
@@ -55,7 +55,7 @@ struct WorktreePaletteCardKeyCapture: ViewModifier {
       }
       .onKeyPress(.escape) {
         switch model.mode {
-        case .list: return .ignored
+        case .list, .basePicker: return .ignored
         case .clean: model.exitOrCancelClean()
         case .refresh: model.exitRefresh()
         }

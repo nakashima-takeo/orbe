@@ -34,10 +34,60 @@ enum DesignSceneFixtures {
     return model
   }
 
-  /// worktree パレットシーンの WorktreePaletteModel（実データ形の決定的サンプル・原典 worktree パレット対応）。
+  /// worktree パレットシーンの WorktreePaletteModel（design 正典 XTWorktree）。今の worktree の行が
+  /// 選ばれ、ベースのバーは「なし — 作らずに、既存の worktree を開く」。
   /// live git は叩かず `WorktreePaletteSectionBuilder` に mock 入力を通す。
   static func worktreePaletteModel() -> WorktreePaletteModel {
     worktreePaletteModel(from: .designSample)
+  }
+
+  /// 既存のブランチの行を選んだところ（design 正典 XTBranch）。
+  static func worktreePaletteBranchModel() -> WorktreePaletteModel {
+    let model = worktreePaletteModel(from: .designSample)
+    model.move(4)
+    return model
+  }
+
+  /// 新しいブランチ名を打ったところ（design 正典 XTNew）。作成行が選ばれ、ベースのバーに 前回 / 既定 /
+  /// 現在 / ほか… が出る。
+  static func worktreePaletteNewBranchModel() -> WorktreePaletteModel {
+    let model = worktreePaletteModel(from: .designSample)
+    let home = NSHomeDirectory()
+    model.newBranchRules = WorktreeNewBranchRules(
+      takenNames: ["issue/212", "pr-214", "perf/render-batching", "fix/login-blank"],
+      worktreePaths: ["\(home)/wt/issue-212", "\(home)/wt/pr-214"],
+      template: "~/wt/{slug}", repoPath: "\(home)/src/orbe")
+    model.baseFacts = WorktreeBaseFacts(
+      previous: "origin/release/0.8", defaultBranch: "origin/main", current: "issue/212")
+    model.baseCandidates = [
+      .init(name: "issue/212", relativeDate: "1d ago", isRemote: false),
+      .init(name: "fix/login-blank", relativeDate: "3d ago", isRemote: false),
+      .init(name: "origin/main", relativeDate: "2h ago", isRemote: true),
+      .init(name: "origin/release/0.8", relativeDate: "4d ago", isRemote: true),
+      .init(name: "origin/feat/fetch-progress", relativeDate: "taro · 1d ago", isRemote: true),
+    ]
+    model.query = "feat/base-picker"
+    model.onQueryChanged()
+    model.applyBranchNameCheck("feat/base-picker", isValid: true)
+    return model
+  }
+
+  /// 「ほか…」から入ったベースを選ぶ画面。
+  static func worktreePaletteBasePickerModel() -> WorktreePaletteModel {
+    let model = worktreePaletteNewBranchModel()
+    model.chooseBase(.other)
+    return model
+  }
+
+  /// git でない場所で開いたところ（「このディレクトリ」の 1 行だけ）。
+  static func worktreePaletteDirectoryModel() -> WorktreePaletteModel {
+    let model = WorktreePaletteModel()
+    setDesignTargets(model)
+    model.hasLoadedOnce = true
+    model.sections = WorktreePaletteSectionBuilder.directorySections(
+      path: NSHomeDirectory() + "/Downloads")
+    model.restoreSelection(matching: nil)
+    return model
   }
 
   /// worktree 作成中（prepareDirectory 待機）。フッターにスピナ＋「作成中…」を出し入力を受け付けない。
@@ -50,8 +100,7 @@ enum DesignSceneFixtures {
   /// 初回ロード中（最初の rebuild 前）のスケルトン表示（hasLoadedOnce=false・sections 空）。
   static func worktreePaletteSkeletonModel() -> WorktreePaletteModel {
     let model = WorktreePaletteModel()
-    model.setTargets(
-      agents: [AgentCLI(command: "claude", path: "/usr/bin/claude")], defaultCommand: "claude")
+    setDesignTargets(model)
     return model
   }
 
@@ -67,6 +116,7 @@ enum DesignSceneFixtures {
   static func worktreePaletteManyModel() -> WorktreePaletteModel {
     let home = NSHomeDirectory()
     var input = WorktreePaletteSectionBuilder.Input()
+    input.repositoryName = "orbe"
     input.currentWorktree = "\(home)/wt/feature-0"
     input.worktrees = (0..<6).map {
       GitWorktree(
@@ -84,21 +134,27 @@ enum DesignSceneFixtures {
         upstream: nil)
     }
     let model = worktreePaletteModel(from: input)
-    model.selected = model.items.count - 1  // 末尾選択（scroll-to-end 到達の確認）
+    model.jump(1)  // 末尾選択（scroll-to-end 到達の確認）
     return model
   }
 
-  /// 分冊（+Clean）からも呼ぶ組み立て口。
+  /// 分冊（+Clean）からも呼ぶ組み立て口（provider の初回 rebuild と同じ順）。
   static func worktreePaletteModel(from input: WorktreePaletteSectionBuilder.Input)
     -> WorktreePaletteModel
   {
     let model = WorktreePaletteModel()
-    model.setTargets(
-      agents: [AgentCLI(command: "claude", path: "/usr/bin/claude")], defaultCommand: "claude")
-    model.sections = WorktreePaletteSectionBuilder.build(input)
+    setDesignTargets(model)
     model.hasLoadedOnce = true
-    model.clampSelection()
+    model.sections = WorktreePaletteSectionBuilder.build(input)
+    model.restoreSelection(matching: nil)
     return model
+  }
+
+  /// design 正典の起動先（claude 既定 / shell / codex / agy）。
+  private static func setDesignTargets(_ model: WorktreePaletteModel) {
+    model.setTargets(
+      agents: ["claude", "codex", "agy"].map { AgentCLI(command: $0, path: "/usr/bin/\($0)") },
+      defaultCommand: "claude")
   }
 
   /// Autocomplete シーンの候補モデル（`git ch` の補完）。

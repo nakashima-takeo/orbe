@@ -1,13 +1,13 @@
 import SwiftUI
 
 /// フルウィンドウ overlay。strong scrim（暗幕＋blur）＋上端 54px アンカーの worktree パレットのカード。
-/// カード幅= min(640, 窓幅−32)。scrim タップで閉じる。
+/// カード幅= min(720, 窓幅−32)。scrim タップで閉じる。
 struct WorktreePaletteOverlay: View {
   @Bindable var model: WorktreePaletteModel
 
   /// カード上端の窓上端からの距離・カードの基準幅（worktree パレット専用。汎用 PaletteOverlay の 66/560 とは別値）。
   private let topAnchor: CGFloat = 54
-  private let cardWidth: CGFloat = 640
+  private let cardWidth: CGFloat = 720
 
   var body: some View {
     GeometryReader { geo in
@@ -32,6 +32,10 @@ struct WorktreePaletteOverlay: View {
     // 実マウス移動（NSEvent .mouseMoved）だけを拾ってモダリティを .pointer に落とす透明レイヤ
     // （汎用 PaletteOverlay と同じ機構）。スクロールで行がカーソル下を横切る SwiftUI onHover と違い、
     // mouseMoved は物理移動でのみ出るため、キー操作中の選択奪取が起きない。
-    .overlay(MouseMovedDetector { model.inputModality = .pointer })
+    .overlay(
+      MouseMovedDetector {
+        model.inputModality = .pointer
+        model.basePicker?.inputModality = .pointer
+      })
   }
 }

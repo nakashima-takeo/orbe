@@ -17,7 +17,7 @@ final class WorktreePaletteRowTests: OrbeTestCase {
 
   private func remoteBranchRow() throws -> WorktreePaletteItem {
     let sections = WorktreePaletteSectionBuilder.build(.designSample)
-    return try XCTUnwrap(sections.first { $0.title == "Remote branches" }?.items.first)
+    return try XCTUnwrap(sections.first { $0.title == .branches }?.items.last)
   }
 
   /// 名前と補足の合計にも満たない幅でも、行は割り当て幅を越えない（狭い窓でカードからはみ出さない）。

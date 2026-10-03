@@ -60,11 +60,11 @@ final class WindowControllerWorktreePaletteBaseTests: OrbeTestCase {
     wc.showWorktreePalette()
     let palette = try XCTUnwrap(wc.model.worktreePalette)
     XCTAssertTrue(
-      pump { palette.items.contains { $0.action == .open(.worktree(path: toplevel)) } },
+      pump { palette.items.contains { $0.action == .open(.directory(path: toplevel)) } },
       "root path のリポジトリの worktree 行が並ぶ")
-    palette.selectedTargetIndex = try XCTUnwrap(palette.targets.firstIndex(of: .shell))
+    palette.chooseTarget(at: try XCTUnwrap(palette.targets.firstIndex(of: .shell)))
     let row = try XCTUnwrap(
-      palette.items.firstIndex { $0.action == .open(.worktree(path: toplevel)) })
+      palette.items.firstIndex { $0.action == .open(.directory(path: toplevel)) })
 
     palette.activate(at: row)
 
@@ -74,6 +74,36 @@ final class WindowControllerWorktreePaletteBaseTests: OrbeTestCase {
     let opened = try XCTUnwrap(wc.current.tabs.first)
     XCTAssertTrue(
       pump { wc.window.firstResponder === opened.surface }, "キー入力はその新タブの surface へ入る")
+  }
+
+  /// 開いた後に（制御 API 等で）アクティブな workspace が替わっても、タブは開いた workspace に開く。
+  func testEnterOpensTheTabInTheWorkspaceThePaletteWasOpenedIn() throws {
+    let repo = try makeRepository()
+    let file = WorkspacesFile(
+      version: WorkspacePersistence.version, activeWorkspace: 0,
+      workspaces: [
+        WorkspaceState(name: "opened", rootPath: repo, activeTab: 0, tabs: []),
+        WorkspaceState(name: "other", rootPath: "/tmp", activeTab: 0, tabs: []),
+      ])
+    try JSONEncoder().encode(file).write(to: workspacesFile())
+    let wc = WindowController()
+    let toplevel = GitRunner.shared.runSync(["rev-parse", "--show-toplevel"], cwd: repo)
+      .stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    wc.showWorktreePalette()
+    let palette = try XCTUnwrap(wc.model.worktreePalette)
+    XCTAssertTrue(
+      pump { palette.items.contains { $0.action == .open(.directory(path: toplevel)) } })
+    palette.chooseTarget(at: try XCTUnwrap(palette.targets.firstIndex(of: .shell)))
+    wc.switchWorkspace(to: 1)
+    XCTAssertEqual(wc.current.name, "other", "前提: アクティブな workspace が替わった")
+
+    palette.activate(
+      at: try XCTUnwrap(
+        palette.items.firstIndex { $0.action == .open(.directory(path: toplevel)) }))
+
+    XCTAssertEqual(wc.workspaces[0].tabs.map(\.cwd), [toplevel], "開いた workspace にタブが開く")
+    XCTAssertTrue(wc.workspaces[1].tabs.isEmpty, "切り替わった先の workspace には開かない")
   }
 
   /// root path に置く 1 コミットのリポジトリ（origin 無し＝gh へは問い合わせない）。
@@ -99,5 +129,52 @@ final class WindowControllerWorktreePaletteBaseTests: OrbeTestCase {
       usleep(5_000)
     }
     return condition()
+  }
+}
+
+/// パレットは開いた時点の workspace に結び付く。前回のベースはその workspace から読み、作成に成功したら
+/// その workspace へ書く。
+@MainActor
+final class WorktreePaletteWorkspaceBindingTests: OrbeTestCase {
+
+  private func restore(_ workspaces: [WorkspaceState]) throws -> WindowController {
+    let file = WorkspacesFile(
+      version: WorkspacePersistence.version, activeWorkspace: 0, workspaces: workspaces)
+    try JSONEncoder().encode(file).write(to: workspacesFile())
+    return WindowController()
+  }
+
+  /// 前回のベースは、開いた workspace の値を provider に渡す（再起動後も読み戻る）。
+  func testPreviousBaseIsReadFromTheOpeningWorkspace() throws {
+    let wc = try restore([
+      WorkspaceState(
+        name: "a", rootPath: "/tmp/a", activeTab: 0, tabs: [], lastWorktreeBase: "origin/rel"),
+      WorkspaceState(name: "b", rootPath: "/tmp/b", activeTab: 0, tabs: []),
+    ])
+    wc.showWorktreePalette()
+    XCTAssertEqual(wc.model.worktreePaletteProvider?.previousBase, "origin/rel")
+    wc.dismissPalette()
+
+    wc.switchWorkspace(to: 1)
+    wc.showWorktreePalette()
+    defer { wc.dismissPalette() }
+    XCTAssertNil(wc.model.worktreePaletteProvider?.previousBase, "別の workspace の前回は読まない")
+  }
+
+  /// 書き込みはその workspace にだけ効き、閉じた workspace には書かない。
+  func testRememberWritesOnlyToALiveWorkspace() throws {
+    let wc = try restore([
+      WorkspaceState(name: "a", rootPath: "/tmp/a", activeTab: 0, tabs: []),
+      WorkspaceState(name: "b", rootPath: "/tmp/b", activeTab: 0, tabs: []),
+    ])
+    let a = wc.workspaces[0]
+    let b = wc.workspaces[1]
+    wc.rememberWorktreeBase("origin/main", in: b)
+    XCTAssertNil(a.lastWorktreeBase)
+    XCTAssertEqual(b.lastWorktreeBase, "origin/main")
+
+    wc.closeWorkspace(1, origin: .gesture)
+    wc.rememberWorktreeBase("origin/dev", in: b)
+    XCTAssertEqual(b.lastWorktreeBase, "origin/main", "閉じた workspace には書かない")
   }
 }

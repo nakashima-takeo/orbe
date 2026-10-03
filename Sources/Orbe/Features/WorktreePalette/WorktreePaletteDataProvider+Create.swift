@@ -9,9 +9,12 @@ extension WorktreePaletteDataProvider {
     case failed(String)
   }
 
-  /// Enter の解決の結末。解決したか、作らずにユーザーへ問うか。
+  /// Enter の解決の結末。解決したか、新しいブランチを作ったか、作らずにユーザーへ問うか。
   enum PrepareOutcome {
     case resolved(DirectoryResolution)
+    /// 新しいブランチを切って worktree を作った。base は実際に使ったベースの名前（既定ブランチの意図
+    /// なら解決後の名前）。
+    case created(path: String, base: String)
     /// Local branch が upstream より遅れていて fast-forward できる。worktree は作っていない——
     /// 最新化して作るか、そのまま作るかを選択画面が問う。画面はブランチの事実（遅れとブランチの
     /// 相対日時）だけで組めるので、それを運ぶ。
@@ -28,7 +31,7 @@ extension WorktreePaletteDataProvider {
   ) {
     let resolved = { completion(.resolved($0)) }
     switch destination {
-    case .worktree(let path):
+    case .directory(let path):
       resolved(.ready(path))
 
     case .localBranch(let name):
@@ -39,18 +42,25 @@ extension WorktreePaletteDataProvider {
         resolved(.ready(existing))
         return
       }
-      let local = localName(fromRemote: name)
+      let local = WorktreePaletteSectionBuilder.localName(fromRemote: name)
       createWorktree(
-        at: worktreeDir(forSlug: slug(local)), base: .ref(name),
-        newBranch: GitNewBranch(name: local, tracksBase: true), completion: resolved)
+        at: worktreeDir(forBranch: local), base: .ref(name),
+        newBranch: GitNewBranch(name: local, tracksBase: true)
+      ) { resolution, _ in resolved(resolution) }
 
     case .newBranch(let name, let base):
       // upstream を付けない: ベースを upstream に持つと `git push` がベースへ向かって拒否され、
       // `push.autoSetupRemote` も（upstream が既にあるため）発動しない。upstream 無しなら git が正しい
       // `--set-upstream` へ導く。
       createWorktree(
-        at: worktreeDir(forSlug: slug(name)), base: base,
-        newBranch: GitNewBranch(name: name, tracksBase: false), completion: resolved)
+        at: worktreeDir(forBranch: name), base: base,
+        newBranch: GitNewBranch(name: name, tracksBase: false)
+      ) { resolution, baseName in
+        switch resolution {
+        case .ready(let path): completion(.created(path: path, base: baseName))
+        case .failed: resolved(resolution)
+        }
+      }
     }
   }
 
@@ -83,9 +93,9 @@ extension WorktreePaletteDataProvider {
   func createLocalBranchWorktree(
     name: String, completion: @escaping (DirectoryResolution) -> Void
   ) {
-    createWorktree(
-      at: worktreeDir(forSlug: slug(name)), base: .ref(name), newBranch: nil,
-      completion: completion)
+    createWorktree(at: worktreeDir(forBranch: name), base: .ref(name), newBranch: nil) { r, _ in
+      completion(r)
+    }
   }
 
   /// 最新化画面の「最新化して作成」。fetch → fast-forward → 列挙の引き直し → 作成、を直列に進める
@@ -111,6 +121,7 @@ extension WorktreePaletteDataProvider {
     }
   }
 
+  /// ベースの今の名前（既定ブランチの意図は今の解決値）。
   private func name(of base: WorktreeBase) -> String {
     switch base {
     case .ref(let name): name
@@ -126,12 +137,13 @@ extension WorktreePaletteDataProvider {
   /// まだ走っているなら着地を待ってから撃つ。判定を呼び出し側ではなくここに置くのは、作成経路が
   /// 増えたときの包み忘れを構造で塞ぐため。既存ブランチを checkout するだけの経路は fetch で動く ref を
   /// ベースに取らないので待たない。
+  /// completion の 2 つ目は、作成に使ったベースの名前（撃った時点で解決した値）。
   private func createWorktree(
     at path: String, base: WorktreeBase, newBranch: GitNewBranch?,
-    completion: @escaping (DirectoryResolution) -> Void
+    completion: @escaping (DirectoryResolution, String) -> Void
   ) {
     guard let repo else {
-      completion(.failed(localization.string(.worktreePaletteErrNotGitRepo)))
+      completion(.failed(localization.string(.worktreePaletteErrNotGitRepo)), name(of: base))
       return
     }
     // 除外の対象は作成の**前**に決める——作成後は親が実在してしまい、その親を容れ物として Orbe が
@@ -143,17 +155,18 @@ extension WorktreePaletteDataProvider {
         atPath: (path as NSString).deletingLastPathComponent))
     let localization = self.localization
     let add = {
-      repo.addWorktree(path: path, base: self.name(of: base), newBranch: newBranch) { failure in
+      let baseName = self.name(of: base)
+      repo.addWorktree(path: path, base: baseName, newBranch: newBranch) { failure in
         if let failure {
           switch failure {
-          case .timedOut: completion(.failed(localization.string(.gitTimedOut)))
-          case .reason(let reason): completion(.failed(reason))
+          case .timedOut: completion(.failed(localization.string(.gitTimedOut)), baseName)
+          case .reason(let reason): completion(.failed(reason), baseName)
           }
           return
         }
         // 書くのは作成できたときだけ（失敗した作成の除外を残さない）。この時点では対象が実在するので
         // `check-ignore` の「既にユーザーが塞いでいるか」判定も正しく効く。
-        repo.applyWorktreeExclude(entry, worktreeRoot: root) { completion(.ready(path)) }
+        repo.applyWorktreeExclude(entry, worktreeRoot: root) { completion(.ready(path), baseName) }
       }
     }
     guard newBranch != nil else {
@@ -168,21 +181,14 @@ extension WorktreePaletteDataProvider {
   // MARK: - パス導出
 
   /// テンプレート解決の base。`{repo_path}`/`{parent}`/`{repo}` の導出元であり、repo 内解決の判定
-  /// （除外の自動化）が使う作業ツリー root でもある。
-  private var worktreeBase: String { mainWorktree ?? repo?.root ?? cwd }
+  /// （除外の自動化）が使う作業ツリー root でもある。作成行の衝突の規則（`newBranchRules`）も同じ値で解く。
+  var worktreeBase: String { mainWorktree ?? repo?.root ?? cwd }
 
   /// 実効テンプレート（設定 `worktree-dir`）から作成先を解決する。置換・`~` 展開・standardize は
   /// `WorktreePathTemplate` に一本化する。
-  private func worktreeDir(forSlug slug: String) -> String {
-    WorktreePathTemplate.resolve(template: worktreeTemplate, repoPath: worktreeBase, slug: slug)
-  }
-
-  private func slug(_ name: String) -> String {
-    name.replacingOccurrences(of: "/", with: "-")
-  }
-
-  private func localName(fromRemote name: String) -> String {
-    let parts = name.split(separator: "/", maxSplits: 1)
-    return parts.count == 2 ? String(parts[1]) : name
+  private func worktreeDir(forBranch name: String) -> String {
+    WorktreePathTemplate.resolve(
+      template: worktreeTemplate, repoPath: worktreeBase,
+      slug: WorktreePathTemplate.slug(forBranch: name))
   }
 }

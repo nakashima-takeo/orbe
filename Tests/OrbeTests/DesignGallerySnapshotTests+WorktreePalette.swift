@@ -11,7 +11,21 @@ extension DesignGallerySnapshotTests {
     func write(_ n: String, _ m: WorktreePaletteModel, _ w: CGFloat = 640, _ h: CGFloat = 520)
       throws
     { try writeWorktreePalette(n, m, w, h, dir: dir) }
-    try write("worktree_palette_design.png", DesignSceneFixtures.worktreePaletteModel())
+    // design 正典（XTWorktree / XTBranch / XTNew）と同じカード幅 720 で並べる。
+    try write("worktree_palette_design.png", DesignSceneFixtures.worktreePaletteModel(), 752)
+    try write(
+      "worktree_palette_branch.png", DesignSceneFixtures.worktreePaletteBranchModel(), 752)
+    try write(
+      "worktree_palette_new_branch.png", DesignSceneFixtures.worktreePaletteNewBranchModel(), 752)
+    try write(
+      "worktree_palette_base_picker.png", DesignSceneFixtures.worktreePaletteBasePickerModel(),
+      752)
+    try write(
+      "worktree_palette_directory.png", DesignSceneFixtures.worktreePaletteDirectoryModel(), 752)
+    // 狭い窓でもベースの選択肢がカードからはみ出さない（名前が縮む）。
+    try write(
+      "worktree_palette_new_branch_narrow.png",
+      DesignSceneFixtures.worktreePaletteNewBranchModel(), 480)
     try write(
       "worktree_palette_preparing.png", DesignSceneFixtures.worktreePalettePreparingModel())
     try write(

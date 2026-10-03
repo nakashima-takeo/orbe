@@ -2,16 +2,19 @@ import SwiftUI
 
 /// worktree パレットのリスト行ビュー（`WorktreePaletteCard` から使う従属ビュー）。カード本体は `WorktreePaletteCard.swift`。
 
-/// リスト内の 1 行（見出し or item）。id は header/item で名前空間を分け、`scrollTo` の宛先が
+/// リスト内の 1 行（見出し・注記・item）。id は種類ごとに名前空間を分け、`scrollTo` の宛先が
 /// 見出しの並び位置と item の平坦 index で衝突して空振りするのを防ぐ。
 enum WorktreePaletteListRow: Identifiable {
-  case header(String)
+  case header(sectionID: String, WorktreePaletteSection.Title)
+  /// 行が 0 件の欄の、見出しの下の注記。
+  case note(sectionID: String, L10nKey)
   /// item は可視の平坦 index を持ち、選択・スクロールの単位になる。
   case item(Int, WorktreePaletteItem)
 
   var id: String {
     switch self {
-    case .header(let title): return "header:\(title)"
+    case .header(let section, _): return "header:\(section)"
+    case .note(let section, _): return "note:\(section)"
     case .item(let index, _): return Self.itemID(index)
     }
   }
@@ -60,8 +63,24 @@ struct WorktreePaletteSkeletonRow: View {
   }
 }
 
-/// worktree パレットのリスト 1 行。先頭グリフ列（幅 14・中央）＋名前＋補足＋右端の印。
-/// 選択行のみ accent 地（`selectionFill`＝accent .14 の淡塗り）でハイライト。
+/// 一覧の行と注記の、本文のない行（見出しの下の注記）。
+struct WorktreePaletteEmptyNote: View {
+  let text: String
+
+  var body: some View {
+    Text(text)
+      .font(Font.theme.meta)
+      .foregroundStyle(Color.theme.textMuted)
+      .lineLimit(1)
+      .truncationMode(.tail)
+      .padding(.leading, 14 + Theme.Space.step)
+      .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
+      .padding(.vertical, Theme.Space.hair)
+      .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+/// worktree パレットのリスト 1 行（一覧の行）。先頭グリフ列（幅 14・中央）＋名前＋補足＋右端の印。
 struct WorktreePaletteRow: View {
   let item: WorktreePaletteItem
   let selected: Bool
@@ -70,6 +89,75 @@ struct WorktreePaletteRow: View {
   /// ホバー開始＝選択の追従（決定は走らない）。効くかどうかは入力モダリティが握る（→ `ModalSelection`）。
   let onHoverEnter: () -> Void
   @Environment(\.localization) private var l10n
+
+  var body: some View {
+    WorktreePaletteRowFrame(
+      glyph: item.glyph, name: item.nameKey.map { l10n.string($0) } ?? item.name,
+      nameSuffix: item.glyph == .newBranch ? l10n.string(.worktreePaletteCreateSuffix) : nil,
+      detail: item.detailKey.map { l10n.string($0) } ?? item.detail, selected: selected,
+      onTap: onTap, onHoverEnter: onHoverEnter
+    ) {
+      trailing
+    }
+  }
+
+  /// 右端: 今の worktree は「現在」の札、clean 行は候補件数バッジ＋`⏎`（**0 件ならバッジだけ消え、行
+  /// そのものは残る**）、ブランチ行は同期ピル（`↑N` / `↓N`）か、無ければ `checkout → worktree`。
+  @ViewBuilder private var trailing: some View {
+    if let count = item.candidateCount {
+      HStack(spacing: Theme.Space.tick) {
+        if count > 0 {
+          WorktreePaletteTag(
+            text: l10n.plural(
+              count, one: .worktreeCleanCandidatesOne, other: .worktreeCleanCandidatesOther))
+        }
+        Text("⏎")
+          .font(Font.theme.sectionLabel)
+          .foregroundStyle(Color.theme.textMuted)
+          .fixedSize()
+      }
+    } else if item.isCurrent, item.glyph == .worktree {
+      WorktreePaletteTag(text: l10n.string(.worktreePaletteCurrentTag))
+    } else if let sync = item.sync {
+      WorktreePaletteSyncPills(sync: sync)
+    } else if case .checkout = item.enter {
+      WorktreePaletteTruncatingSlot(l10n.string(.worktreePaletteWorktreeCheckout)) {
+        Text($0)
+          .font(Font.theme.meta)
+          .foregroundStyle(Color.theme.textMuted)
+      }
+    }
+  }
+}
+
+/// 行末の accent の札（「現在」・候補件数）。
+struct WorktreePaletteTag: View {
+  let text: String
+
+  var body: some View {
+    Text(text)
+      .font(Font.theme.sectionLabel)
+      .foregroundStyle(Color.theme.accentPrimary)
+      .lineLimit(1)
+      .fixedSize()
+      .padding(.horizontal, 7)
+      .padding(.vertical, 1)
+      .background(Capsule().fill(Color.theme.tintAccent))
+  }
+}
+
+/// 行の骨格（先頭グリフ列＋名前＋補足＋右端）。一覧の行とベースを選ぶ画面の行が共有する。
+/// 選択行のみ accent 地（`selectionFill`＝accent .14 の淡塗り）でハイライト。
+struct WorktreePaletteRowFrame<Trailing: View>: View {
+  let glyph: WorktreePaletteItem.Glyph
+  let name: String
+  /// 名前の直後に muted で続ける語（作成行の「を作る」）。
+  var nameSuffix: String?
+  let detail: String?
+  let selected: Bool
+  let onTap: () -> Void
+  let onHoverEnter: () -> Void
+  @ViewBuilder let trailing: () -> Trailing
   @Environment(\.chromeFontResolver) private var fontResolver
 
   /// 要素の間隔は HStack の spacing でなく各要素の先頭の余白が運ぶ——縮みきって幅 0 になった枠にも
@@ -79,21 +167,21 @@ struct WorktreePaletteRow: View {
     return HStack(spacing: 0) {
       glyphColumn
       // 行は割り当て幅を超えない。縮むのは名前・補足が先。
-      WorktreePaletteTruncatingSlot(item.name, leading: gap) {
+      WorktreePaletteTruncatingSlot(name, leading: gap) {
         fontResolver.text($0, base: Theme.Typography.workspaceName)
           .font(Font.theme.workspaceName)
-          .foregroundStyle(nameColor)
+          .foregroundStyle(Color.theme.textPrimary)
       }
       .layoutPriority(1)
-      if let detail = item.detailKey.map({ l10n.string($0) }) ?? item.detail {
-        WorktreePaletteTruncatingSlot(detail, leading: gap) {
+      if let suffix = nameSuffix ?? detail {
+        WorktreePaletteTruncatingSlot(suffix, leading: gap) {
           fontResolver.text($0, base: Theme.Typography.meta)
             .font(Font.theme.meta)
             .foregroundStyle(Color.theme.textMuted)
         }
       }
       Spacer(minLength: gap + Theme.Space.tick + gap)
-      trailing
+      trailing()
         .layoutPriority(2)
     }
     .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
@@ -109,57 +197,23 @@ struct WorktreePaletteRow: View {
     .onHover { if $0 { onHoverEnter() } }
   }
 
-  /// 先頭グリフ列（幅 14・中央）。文字グリフ（▤⎇⇅❯）を種別で出し分ける。
+  /// 先頭グリフ列（幅 14・中央）。文字グリフ（▤⎇⇅＋❯）を種別で出し分ける。
   private var glyphColumn: some View {
     Group {
-      switch item.glyph {
-      case .worktree:
-        Text("▤").font(Font.theme.chrome)
-          .foregroundStyle(item.isPrimary ? Color.theme.stateWorking : Color.theme.textMuted)
+      switch glyph {
+      case .worktree, .directory:
+        Text("▤").font(Font.theme.chrome).foregroundStyle(Color.theme.textMuted)
       case .localBranch:
         Text("⎇").font(Font.theme.chrome).foregroundStyle(Color.theme.textMuted)
       case .remoteBranch:
         Text("⇅").font(Font.theme.chrome).foregroundStyle(Color.theme.textMuted)
+      case .newBranch:
+        Text("＋").font(Font.theme.chrome).foregroundStyle(Color.theme.accentPrimary)
       case .clean:
         Text("❯").font(Font.theme.chrome).foregroundStyle(Color.theme.accentPrimary)
       }
     }
     .frame(width: 14, alignment: .center)
-  }
-
-  /// 右端: worktree は working リング、clean 行は候補件数バッジ＋`⏎`（**0 件ならバッジだけ消え、行
-  /// そのものは残る**）、Local branch 行は同期ピル（`↑N` / `↓N`）。
-  @ViewBuilder private var trailing: some View {
-    if let count = item.candidateCount {
-      HStack(spacing: Theme.Space.tick) {
-        if count > 0 {
-          Text(
-            l10n.plural(
-              count, one: .worktreeCleanCandidatesOne, other: .worktreeCleanCandidatesOther)
-          )
-          .font(Font.theme.sectionLabel)
-          .foregroundStyle(Color.theme.accentPrimary)
-          .lineLimit(1)
-          .fixedSize()
-          .padding(.horizontal, 7)
-          .padding(.vertical, 1)
-          .background(Capsule().fill(Color.theme.tintAccent))
-        }
-        Text("⏎")
-          .font(Font.theme.sectionLabel)
-          .foregroundStyle(Color.theme.textMuted)
-          .fixedSize()
-      }
-    } else if item.showsWorkingIndicator {
-      StatusGlyphView(kind: .working, size: 10)
-        .padding(.leading, Theme.Space.hair)
-    } else if let sync = item.sync {
-      WorktreePaletteSyncPills(sync: sync)
-    }
-  }
-
-  private var nameColor: Color {
-    item.isPrimary ? Color.theme.textPrimary : Color.theme.textSecondary
   }
 }
 

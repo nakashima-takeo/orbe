@@ -78,9 +78,12 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
     let provider = try startWithSlowFetch()
     XCTAssertTrue(
       pump({ provider.defaultBranchName == "origin/main" }), "前提: 既定ブランチの解決は着地している")
-    let path = try resolve(
-      provider, .newBranch(name: "issue/44", base: .defaultBranch))
+    let outcome = try prepare(provider, .newBranch(name: "issue/44", base: .defaultBranch))
+    guard case .created(let path, let base) = outcome else {
+      return XCTFail("新しいブランチの作成として返る: \(outcome)")
+    }
     XCTAssertEqual(head(of: path), originTip("main"), "fetch 後の origin/main が base")
+    XCTAssertEqual(base, "origin/main", "使ったベースは意図ではなく解決後の名前で返る（前回として覚える値）")
   }
 
   /// Remote branch 行も remote ref から新しいローカルブランチを切る経路。
@@ -251,11 +254,10 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
     throws
     -> String
   {
-    let outcome = try prepare(provider, destination)
-    guard case .resolved(.ready(let path)) = outcome else {
-      throw CreationFailed(detail: String(describing: outcome))
+    switch try prepare(provider, destination) {
+    case .resolved(.ready(let path)), .created(let path, _): return path
+    case let outcome: throw CreationFailed(detail: String(describing: outcome))
     }
-    return path
   }
 
   func prepare(_ provider: WorktreePaletteDataProvider, _ destination: WorktreePaletteDestination)

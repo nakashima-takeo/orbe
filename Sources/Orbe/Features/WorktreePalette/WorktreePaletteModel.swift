@@ -1,74 +1,12 @@
 import SwiftUI
 
-/// Enter で開く行き先。ディレクトリを解決して（既存 worktree 再利用／新規作成）起動する。解決に要る
-/// 情報（既存 worktree パス等）を純粋ビルダが焼き込み、実行側（`prepareDirectory`）は分岐するだけにする。
-enum WorktreePaletteDestination: Equatable {
-  case worktree(path: String)
-  case localBranch(name: String)
-  /// name は `origin/x`（`refs/remotes/` を除いた正確な名前）。
-  case remoteBranch(name: String, existingWorktree: String?)
-  /// base から name の新しいブランチ（upstream なし）を切り、その worktree を作る。
-  case newBranch(name: String, base: WorktreeBase)
-}
-
-/// 新しいブランチを切るベース。既定ブランチは**参照ではなく意図**として持ち、名前の解決を作成の直前まで
-/// 遅らせる——提示時に読んだ名前を捕まえると、着地を待つあいだに fetch が `origin/HEAD` を作っても
-/// （git の `followRemoteHEAD` 既定）フォールバックの固定名のまま撃ってしまう。
-enum WorktreeBase: Equatable {
-  case ref(String)
-  case defaultBranch
-}
-
-/// 決定（↵／行タップ）の対象。外（`onExecute`）へ届くのは行き先だけで、ディレクトリを解決しない行為
-/// （clean 画面）はパレットの中で畳む。
-enum WorktreePaletteAction: Equatable {
-  case open(WorktreePaletteDestination)
-  /// Worktrees セクション末尾の `clean` 行。決定でパレット内の clean 画面へ入る。
-  case clean
-}
-
-/// worktree パレットの中身。器（カード枠・焦点契約・高さ契約）は共通で、中身だけ切り替わる。
-enum WorktreePaletteMode: Equatable {
-  case list, clean
-  /// 遅れた Local branch を最新化してから作るかを選ぶ画面。
-  case refresh
-}
-
-/// ⇥ 巡回で選ぶ起動先。解決した worktree で agent を走らせるか、素の shell を開くか。
-enum WorktreePaletteTarget: Equatable {
-  case agent(AgentCLI)
-  case shell
-}
-
-/// worktree 解決の種別。trailingNote／footer 前置句を言語別に引くための意味キー（Japanese 直書きを排し
-/// 語順が英語で破綻しないようにする）。既存 worktree 再利用／既存ブランチから checkout／新規作成。
-enum WorktreeOpenKind: Equatable {
-  case existing, checkout, new
-
-  /// 行末 muted ノートの文言キー。
-  var noteKey: L10nKey {
-    switch self {
-    case .existing: return .worktreePaletteWorktreeExisting
-    case .checkout: return .worktreePaletteWorktreeCheckout
-    case .new: return .worktreePaletteWorktreeNew
-    }
-  }
-
-  /// フッター実行説明の前置句キー（対象名の後・agent 名の前）。
-  var prepositionKey: L10nKey {
-    switch self {
-    case .existing: return .worktreePalettePrepExisting
-    case .checkout: return .worktreePalettePrepCheckout
-    case .new: return .worktreePalettePrepNew
-    }
-  }
-}
-
 /// ⌘T で開く worktree パレットの表示状態（@Observable）。実データ（worktree/branch）を
-/// セクションに持ち、フィルタ・⇥ 起動先切替・決定（↵／行タップ）の意図をクロージャで外へ配線する。
-/// 実データ取得と section 組み立ては `WorktreePaletteDataProvider`＋`WorktreePaletteSectionBuilder`（外）が担う。
+/// セクションに持ち、フィルタ・⇥ 起動先切替・⇧⇥ ベース切替・決定（↵／行タップ）の意図をクロージャで
+/// 外へ配線する。実データ取得と section 組み立ては `WorktreePaletteDataProvider`＋
+/// `WorktreePaletteSectionBuilder`（外）が担う。
 @Observable final class WorktreePaletteModel {
-  /// 実データセクション（provider が rebuild で差し替える）。
+  /// 実データセクション（provider が rebuild で差し替える）。作成行と一致なしの注記は含まない——
+  /// 入力と有効性の答えから、この型が可視の並びへ足す。
   var sections: [WorktreePaletteSection] = [] {
     didSet { refreshVisible() }
   }
@@ -92,10 +30,15 @@ enum WorktreeOpenKind: Equatable {
   let clean = WorktreeCleanModel()
   /// 最新化画面の状態。入るたびにブランチの事実（遅れと相対日時）から作り直し、出るときに捨てる。
   private(set) var refresh: WorktreePaletteRefreshModel?
+  /// ベースを選ぶ画面の状態。入るたびに候補から作り直し、出るときに捨てる。
+  private(set) var basePicker: WorktreeBasePickerModel?
   /// 初回ロード完了フラグ。provider の初回 rebuild で立つ。false の間はスケルトン行を出す。
   var hasLoadedOnce = false
   /// 選択とホバー追従ガード（汎用パレットと共有する `ModalSelection`）。
   private var selection = ModalSelection()
+  /// 選択が入力の規則（`applyDefaultSelection`）に従っている。入力が変わると立ち、ユーザーが選択を
+  /// 動かすと下りる——データの到着や有効性の答えで選択を動かしてよいのは、立っている間だけ。
+  private var selectionFollowsInput = true
 
   /// 可視行（visibleSections を平坦化）を数えた選択 index。
   /// ホバー追従以外の代入はモダリティを `.keyboard` へ戻す（→ `ModalSelection`）。
@@ -111,31 +54,63 @@ enum WorktreeOpenKind: Equatable {
   }
 
   /// ホバー開始による選択追従。実マウス移動後（`.pointer`）だけ効き、決定（`onExecute`）は呼ばない。
-  /// 関門は決定（`activate(at:)`）と同じ——作成中・範囲外では選択を動かさない。
+  /// 関門は決定（`activate(at:)`）と同じ——入力ロック中・範囲外では選択を動かさない。
   func hoverSelect(_ index: Int) {
-    guard !isPreparing, items.indices.contains(index) else { return }
+    guard !isLocked, items.indices.contains(index), inputModality == .pointer else { return }
+    selectionFollowsInput = false
     selection.hoverSelect(index)
   }
   /// focus トリガ。`focus()` だけが進め、SwiftUI が監視して `@FocusState` を立てる。
   private(set) var focusToken = 0
 
-  /// ヘッダ ❯ の絞り込み入力（全セクション横断で行を絞る SSOT）。
+  /// ヘッダ ❯ の入力（全セクション横断で行を絞る SSOT・新しいブランチ名）。
   var query = "" {
     didSet { refreshVisible() }
   }
-  /// ⇥ で巡回する起動先（agent もしくは shell）。default agent 直後に shell をスプライスして持つ。
-  var targets: [WorktreePaletteTarget] = []
-  /// ⇥ で巡回する選択起動先の index。初期は default agent の index。
-  var selectedTargetIndex = 0
+  /// ⇥ で巡回する起動先。既定の agent、shell、残りの検出 agent の順。
+  private(set) var targets: [WorktreePaletteTarget] = []
+  /// ⇥ で巡回する選択起動先の index。初期は既定の agent（agent が無ければ shell）。
+  private(set) var selectedTargetIndex = 0
   /// 実行失敗の一時表示（palette は閉じない）。
   var errorMessage: String?
   /// 決定の後、行き先が決まるまでの待ち（`prepareDirectory` の実行中）の進捗表示フラグ（palette は閉じない）。
   /// true の間はフッターにスピナ＋「作成中…」を出し、入力（Enter 再実行・選択移動・検索）を受け付けない。
   var isPreparing = false
+  /// 行がまだ決まらない間に押された ↵ を預かっている（→ `activate()`）。
+  private(set) var hasPendingActivation = false
+
+  // MARK: 新しいブランチとベース（分冊 `+Base`）
+
+  /// 作成行を出すかの、名前と作成先の衝突の規則（provider が rebuild で差し替える）。nil は作成行を
+  /// 出さない（非 git・未ロード）。
+  var newBranchRules: WorktreeNewBranchRules? {
+    didSet { refreshVisible() }
+  }
+  /// 打った名前がブランチ名として有効かの、最後に届いた git の答え。今の入力への答えかは `name` で見る。
+  var branchNameAnswer: (name: String, isValid: Bool)? {
+    didSet { refreshVisible() }
+  }
+  /// ベースの選択肢の材料（provider が rebuild で差し替える）。
+  var baseFacts: WorktreeBaseFacts? {
+    didSet { reconcileBase() }
+  }
+  /// ベースを選ぶ画面の候補（ローカルの後にリモート、それぞれ新しい順）。
+  var baseCandidates: [WorktreeBaseCandidate] = []
+  /// ベースを選ぶ画面で選んだ名前（選んだ後だけ列に出る）。
+  var pickedBase: String? {
+    didSet { reconcileBase() }
+  }
+  /// 選んだ選択肢の役割。nil は「まだ選んでいない」で、初期規則（前回、無ければ既定）が当たる。
+  var selectedBaseRole: WorktreeBaseRole?
+  /// ベースのバーの選択肢（事実と選んだ名前から純関数で組んだ値）。
+  private(set) var baseChoices: [WorktreeBaseChoice] = WorktreeBaseChoices.build(
+    facts: nil, picked: nil)
 
   var onDismiss: () -> Void = {}
   /// プライマリ実行（↵／行タップ）。行き先を解決して agent を起動する。呼ぶのは `activate(at:)` だけ。
   var onExecute: (WorktreePaletteDestination) -> Void = { _ in }
+  /// 入力が変わった。その名前がブランチ名として有効かを問う（答えは `applyBranchNameCheck`）。
+  var onCheckBranchName: (String) -> Void = { _ in }
   /// clean の削除を撃つ（⌘⏎ と失敗分の再試行が共に通る）。中断の札も一緒に渡す。
   var onCleanExecute: ([CleanDeleteRequest], CleanRunToken) -> Void = { _, _ in }
   /// clean の失敗行をタブで開く。パスは解決済み（既存 worktree）なので `prepareDirectory` を通らない。
@@ -145,8 +120,11 @@ enum WorktreeOpenKind: Equatable {
 
   init() {}
 
-  /// 入力を受け付けない状態（worktree 作成中／clean の削除実行中／最新化中）。
-  var isBusy: Bool { isPreparing || clean.phase == .deleting || refresh?.isBusy == true }
+  /// 入力を受け付けない状態（worktree 作成中／預かった ↵ の待ち）。
+  var isLocked: Bool { isPreparing || hasPendingActivation }
+
+  /// scrim で閉じさせない状態（入力ロック中／clean の削除実行中／最新化中）。
+  var isBusy: Bool { isLocked || clean.phase == .deleting || refresh?.isBusy == true }
 
   /// 最新化画面へ入る。Enter の解決経路が「ff できる遅れ」を返したときだけ来る（判定は provider）。
   /// 画面はブランチの事実（遅れと相対日時）だけから組む——どの行から入ったかに依らない。
@@ -192,26 +170,60 @@ enum WorktreeOpenKind: Equatable {
     focus()
   }
 
+  /// ベースを選ぶ画面へ入る。焦点の宛先は一覧と同じ入力欄のまま（中身だけが替わる）。
+  func enterBasePicker() {
+    basePicker = WorktreeBasePickerModel(candidates: baseCandidates)
+    mode = .basePicker
+    focus()
+  }
+
+  /// ベースを選ぶ画面の esc。選ばずに戻る（ベースの選択は「ほか…」のまま）。
+  func exitBasePicker() {
+    basePicker = nil
+    mode = .list
+    focus()
+  }
+
+  /// ベースを選ぶ画面の ↵。カーソルのブランチをベースに決めて一覧へ戻る。
+  func confirmBasePick() {
+    guard let name = basePicker?.selectedItem?.name else { return }
+    pickBase(name)
+    exitBasePicker()
+  }
+
   /// キー操作を受けるため focusToken を進めて first responder を確定させる。
   func focus() { focusToken &+= 1 }
 
-  /// query で絞った可視セクション（空になったセクションは落とす）。`sections` / `query` の変化時に
-  /// 1 回だけ計算して保持する——1 回の打鍵で何度も読まれるので、読むたびに全行を照合し直すと
-  /// 件数が千を超えたとき打鍵がもたつく。
+  /// 可視セクション（絞り込みで空になった欄は落とし、作成行と一致なしの注記を足す）。
+  /// `sections` / `query` / 有効性の答え の変化時に 1 回だけ計算して保持する——1 回の打鍵で何度も
+  /// 読まれるので、読むたびに全行を照合し直すと件数が千を超えたとき打鍵がもたつく。
   private(set) var visibleSections: [WorktreePaletteSection] = []
 
   /// 可視行を平坦化（選択・フッター連動・スクロールの単位）。
   private(set) var items: [WorktreePaletteItem] = []
 
   private func refreshVisible() {
-    visibleSections =
+    let existing =
       query.isEmpty
       ? sections
       : sections.compactMap { section in
         let items = section.items.filter(matches)
-        return items.isEmpty ? nil : WorktreePaletteSection(title: section.title, items: items)
+        return items.isEmpty ? nil : section.with(items: items)
       }
-    items = visibleSections.flatMap(\.items)
+    var visible: [WorktreePaletteSection] = []
+    if let name = creatableName {
+      visible.append(
+        WorktreePaletteSection(
+          title: .newBranch, items: [WorktreePaletteSectionBuilder.newBranchItem(name: name)]))
+    }
+    visible += existing
+    if !query.isEmpty, hasLoadedOnce, existing.isEmpty {
+      visible.append(
+        WorktreePaletteSection(
+          title: .worktreesAndBranches, items: [], emptyNote: .worktreePaletteNoMatch))
+    }
+    visibleSections = visible
+    items = visible.flatMap(\.items)
   }
 
   /// フッター連動の元（選択中の item）。
@@ -219,65 +231,135 @@ enum WorktreeOpenKind: Equatable {
     items.indices.contains(selected) ? items[selected] : nil
   }
 
-  /// ↵ による決定。選択行を対象に唯一の決定 funnel（`activate(at:)`）へ入る。
-  func activate() { activate(at: selected) }
+  /// ↵ による決定。行がまだ決まらない間（`isSettled` が偽）は ↵ を預かり、決まった時点の選択で
+  /// 実行する（`settlePendingActivation`）——開いた直後や名前を打った直後の ↵ を空振りさせない。
+  func activate() {
+    guard mode == .list, !isLocked else { return }
+    guard isSettled else {
+      hasPendingActivation = true
+      return
+    }
+    activate(at: selected)
+  }
 
-  /// 決定の唯一の funnel（↵ と行タップが共に通る）。作成中・範囲外では実行しない。
+  /// 決定の唯一の funnel（↵ と行タップが共に通る）。入力ロック中・範囲外では実行しない。
   /// 選択を対象行へ確定してから、同じ行の行為をそのまま実行する（選択更新と実行の対象がずれない）。
-  /// 外（`onExecute`）へ渡すのは行き先だけ。`clean` 行はパレット内の画面遷移で、ディレクトリを解決しない。
+  /// 外（`onExecute`）へ渡すのは行き先だけ。`clean` 行と「ほか…」の作成行はパレット内の画面遷移で、
+  /// ディレクトリを解決しない。
   func activate(at index: Int) {
-    guard !isPreparing, items.indices.contains(index) else { return }
+    guard !isLocked, items.indices.contains(index) else { return }
+    selectionFollowsInput = false
     selected = index
     switch items[index].action {
-    case .clean: enterClean()
-    case .open(let destination): onExecute(destination)
+    case .clean:
+      enterClean()
+    case .open(let destination):
+      onExecute(destination)
+    case .createBranch(let name):
+      guard let choice = selectedBaseChoice else { return }
+      guard let base = choice.base else { return enterBasePicker() }
+      onExecute(.newBranch(name: name, base: base))
     }
+  }
+
+  /// 行が決まっているか。決まっていないのは、初回の一覧が届く前と、今の入力への有効性の答えが無いまま
+  /// 作成行（または行が 1 つも無い状態）を選んでいるとき。
+  var isSettled: Bool {
+    guard hasLoadedOnce else { return false }
+    guard isAwaitingBranchNameAnswer else { return true }
+    switch selectedItem?.action {
+    case .createBranch, nil: return false
+    case .open, .clean: return true
+    }
+  }
+
+  /// 預かった ↵ を、行が決まっていれば今の選択で実行する。データの到着と有効性の答えの後に呼ぶ。
+  private func settlePendingActivation() {
+    guard hasPendingActivation, isSettled else { return }
+    hasPendingActivation = false
+    guard !items.isEmpty else { return }
+    activate(at: selected)
   }
 
   /// 行を巡回する選択移動（端で wrap）。
   func move(_ direction: Int) {
     guard !items.isEmpty else { return }
+    selectionFollowsInput = false
     selected = (selected + direction + items.count) % items.count
   }
 
   /// 先頭/末尾へジャンプ（d<0=先頭・d>=0=末尾。空は no-op）。
   func jump(_ d: Int) {
     guard !items.isEmpty else { return }
+    selectionFollowsInput = false
     selected = d < 0 ? 0 : items.count - 1
   }
 
-  /// query 変化後・sections 差し替え後に選択を可視の行へ収める。
-  func clampSelection() {
-    selected = min(selected, max(items.count - 1, 0))
-  }
-
-  /// sections 差し替え後の選択復元。差し替え前に選択していた行を同じ行為で探し直し、
-  /// 見つかれば index を合わせる（裏の gh 更新で行数が変わっても選択が別の行を指さない）。
-  /// 見つからなければ clamp する。
+  /// sections 差し替え後の選択復元。入力の規則に従っている間はその規則を当て直し、ユーザーが動かした
+  /// 後は差し替え前に選択していた行を同じ行為で探し直す（裏の列挙の引き直しで行数が変わっても選択が
+  /// 別の行を指さない）。見つからなければ範囲へ収める。最後に預かった ↵ を決着させる。
   /// 裏の更新はユーザの意図ではないのでモダリティを奪わない（→ `ModalSelection.restore`）。
   func restoreSelection(matching action: WorktreePaletteAction?) {
-    if let action,
-      let index = items.firstIndex(where: { $0.action == action })
-    {
+    reselect(previous: action)
+    settlePendingActivation()
+  }
+
+  private func reselect(previous action: WorktreePaletteAction?) {
+    if selectionFollowsInput {
+      selection.restore(defaultSelection)
+    } else if let action, let index = items.firstIndex(where: { $0.action == action }) {
       selection.restore(index)
-      return
+    } else {
+      selection.restore(min(selected, max(items.count - 1, 0)))
     }
-    clampSelection()
   }
 
-  /// 入力欄から query が変わった。選択を先頭の可視行へ戻す。
+  /// 入力欄から query が変わった。選択を入力の規則へ戻し、新しい名前の有効性を問う。
   func onQueryChanged() {
-    selected = 0
+    selectionFollowsInput = true
+    selected = defaultSelection
+    if !query.isEmpty { onCheckBranchName(query) }
   }
 
-  /// 検出済み agent から巡回対象を組む。default agent の直後に shell をスプライスし、初期選択は
-  /// default agent（0 agent 時は index0＝shell）。スプライス/初期選択のロジックをここへ閉じる。
+  /// 入力の規則による選択。入力が空なら今の worktree の行。入力があれば一致した既存の行の先頭、
+  /// 無ければ作成行。
+  private var defaultSelection: Int {
+    if query.isEmpty { return items.firstIndex(where: \.isCurrent) ?? 0 }
+    return items.firstIndex { item in
+      if case .createBranch = item.action { return false }
+      return true
+    } ?? 0
+  }
+
+  /// 打った名前の有効性の答えが届いた。古い問い（今の入力と違う名前）への答えは捨てる。
+  func applyBranchNameCheck(_ name: String, isValid: Bool) {
+    guard name == query else { return }
+    let action = selectedItem?.action
+    branchNameAnswer = (name, isValid)
+    reselect(previous: action)
+    settlePendingActivation()
+  }
+
+  /// 作成行に出す名前（出さないなら nil）。答えがまだ無い間は直前の答えで出すかを決め、名前は今の
+  /// 入力にする——打鍵のたびに行が消えて出直さない。
+  private var creatableName: String? {
+    guard !query.isEmpty, let rules = newBranchRules, rules.allows(query) else { return nil }
+    return branchNameAnswer?.isValid == true ? query : nil
+  }
+
+  /// 検出済み agent から巡回対象を組む。既定の agent を先頭に、shell をその直後に、残りの agent を
+  /// 検出順に並べる。既定が検出に無ければ検出順の先頭を既定とする。初期選択は先頭。
   func setTargets(agents: [AgentCLI], defaultCommand: String?) {
-    var t = agents.map { WorktreePaletteTarget.agent($0) }
-    let defaultIndex = agents.firstIndex { $0.command == defaultCommand } ?? 0
-    t.insert(.shell, at: min(defaultIndex + 1, t.count))
-    targets = t
-    selectedTargetIndex = defaultIndex
+    let defaultAgent = agents.first { $0.command == defaultCommand } ?? agents.first
+    let rest = agents.filter { $0 != defaultAgent }.map(WorktreePaletteTarget.agent)
+    targets = (defaultAgent.map { [.agent($0)] } ?? []) + [.shell] + rest
+    selectedTargetIndex = 0
+  }
+
+  /// 既定の agent（「既定」の札を付ける起動先）。agent が 1 つも無ければ nil。
+  var defaultTarget: WorktreePaletteTarget? {
+    guard case .agent = targets.first else { return nil }
+    return targets.first
   }
 
   /// ⇥ で選択起動先を巡回する。
@@ -286,17 +368,25 @@ enum WorktreeOpenKind: Equatable {
     selectedTargetIndex = (selectedTargetIndex + 1) % targets.count
   }
 
+  /// 起動先のボタンのクリック。
+  func chooseTarget(at index: Int) {
+    guard !isLocked, targets.indices.contains(index) else { return }
+    selectedTargetIndex = index
+  }
+
   /// 選択中の起動先（targets が空なら nil）。
   var selectedTarget: WorktreePaletteTarget? {
     targets.indices.contains(selectedTargetIndex) ? targets[selectedTargetIndex] : nil
   }
 
-  /// ヘッダチップ/フッターに出す起動先名。agent は raw command、shell はリテラル（技術語で日英同一）。
-  var selectedTargetName: String {
-    switch selectedTarget {
-    case .agent(let a): return a.command
-    case .shell: return "shell"
-    case nil: return ""
+  /// フッターに出す起動先名。
+  var selectedTargetName: String { selectedTarget?.name ?? "" }
+
+  /// 事実か選んだ名前が変わった。列を組み直し、選んだ役割が消えたら未選択へ戻す。
+  private func reconcileBase() {
+    baseChoices = WorktreeBaseChoices.build(facts: baseFacts, picked: pickedBase)
+    if let role = selectedBaseRole, !baseChoices.contains(where: { $0.role == role }) {
+      selectedBaseRole = nil
     }
   }
 

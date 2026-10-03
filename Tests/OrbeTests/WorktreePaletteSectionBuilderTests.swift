@@ -5,7 +5,9 @@ import XCTest
 /// WorktreePaletteSectionBuilder（純粋関数）の同期ピル・重複排除・action ペイロード検証。
 final class WorktreePaletteSectionBuilderTests: OrbeTestCase {
 
-  func section(_ sections: [WorktreePaletteSection], _ title: String) -> WorktreePaletteSection? {
+  func section(_ sections: [WorktreePaletteSection], _ title: WorktreePaletteSection.Title)
+    -> WorktreePaletteSection?
+  {
     sections.first { $0.title == title }
   }
 
@@ -36,12 +38,12 @@ final class WorktreePaletteSectionBuilderTests: OrbeTestCase {
     ]
     var input = WorktreePaletteSectionBuilder.Input(localBranches: branches)
     XCTAssertEqual(
-      section(WorktreePaletteSectionBuilder.build(input), "Local branches")?.items.compactMap(
+      section(WorktreePaletteSectionBuilder.build(input), .branches)?.items.compactMap(
         \.sync),
       [], "着地前は全行無印")
 
     input.remoteFetchLanded = true
-    let items = section(WorktreePaletteSectionBuilder.build(input), "Local branches")?.items ?? []
+    let items = section(WorktreePaletteSectionBuilder.build(input), .branches)?.items ?? []
     let synced = Dictionary(uniqueKeysWithValues: items.map { ($0.name, $0.sync) })
     XCTAssertEqual(synced["behind"]??.behind, 3)
     XCTAssertEqual(synced["behind"]??.isFastForwardable, true)
@@ -64,8 +66,8 @@ final class WorktreePaletteSectionBuilderTests: OrbeTestCase {
       ])
     let sections = WorktreePaletteSectionBuilder.build(input)
     XCTAssertEqual(
-      section(sections, "Local branches")?.items.map(\.name), ["feature"],
-      "worktree を持つ main は Local branches から除外（Worktrees に出る）")
+      section(sections, .branches)?.items.map(\.name), ["feature"],
+      "worktree を持つ main はブランチの欄から除外（worktree の欄に出る）")
   }
 
   func testRemoteBranchTrackedLocallyIsExcluded() {
@@ -79,8 +81,8 @@ final class WorktreePaletteSectionBuilderTests: OrbeTestCase {
       ])
     let sections = WorktreePaletteSectionBuilder.build(input)
     XCTAssertEqual(
-      section(sections, "Remote branches")?.items.map(\.name), ["origin/feat/y"],
-      "ローカル追跡済みの origin/feat/x は出さない")
+      section(sections, .branches)?.items.map(\.name), ["feat/x", "origin/feat/y"],
+      "ローカル追跡済みの origin/feat/x は出さない（ローカルの後にリモート）")
   }
 
   func testRemoteBranchReusesExistingWorktree() {
@@ -91,30 +93,56 @@ final class WorktreePaletteSectionBuilderTests: OrbeTestCase {
       ])
     let sections = WorktreePaletteSectionBuilder.build(input)
     XCTAssertEqual(
-      section(sections, "Remote branches")?.items.first?.action,
+      section(sections, .branches)?.items.first?.action,
       .open(.remoteBranch(name: "origin/feat/y", existingWorktree: "/tmp/wt/feat-y")),
       "対応ローカル worktree があれば action に焼き込み再利用させる")
   }
 
   func testEmptyWorktreesHidesSection() {
     let sections = WorktreePaletteSectionBuilder.build(WorktreePaletteSectionBuilder.Input())
-    XCTAssertNil(section(sections, "Worktrees"))
+    XCTAssertTrue(sections.isEmpty, "行の無い欄は出さない")
   }
 
-  // MARK: - action ペイロード
+  // MARK: - 2 欄の並び・action ペイロード
 
-  func testActionPayloads() {
+  /// worktree の欄（見出しにリポジトリ名・末尾に clean）と、ブランチの欄（ローカルの後にリモート）。
+  /// 今の worktree の行にだけ「現在」が立つ。worktree の行はブランチ名を出さず、別名で引ける。
+  func testTwoSectionsWithCurrentWorktreeAndCleanLast() {
     let sections = WorktreePaletteSectionBuilder.build(.designSample)
+    let home = NSHomeDirectory()
+    XCTAssertEqual(sections.map(\.title), [.worktrees(repository: "orbe"), .branches])
+    let worktrees = section(sections, .worktrees(repository: "orbe"))?.items ?? []
     XCTAssertEqual(
-      section(sections, "Worktrees")?.items.map(\.action),
+      worktrees.map(\.action),
       [
-        .open(.worktree(path: NSHomeDirectory() + "/wt/agent-hooks")),
-        .open(.worktree(path: NSHomeDirectory() + "/wt/diff-panel")), .clean,
+        .open(.directory(path: home + "/wt/issue-212")),
+        .open(.directory(path: home + "/wt/pr-214")),
+        .open(.directory(path: home + "/wt/perf-render-batching")), .clean,
+      ])
+    XCTAssertEqual(worktrees.map(\.isCurrent), [true, false, false, false])
+    XCTAssertEqual(worktrees.first?.detail, "~/wt/issue-212")
+    XCTAssertEqual(worktrees.first?.aliases, ["issue/212"])
+    XCTAssertEqual(worktrees.first?.enter, .openWorktree("issue-212"))
+    XCTAssertEqual(
+      section(sections, .branches)?.items.map(\.action),
+      [
+        .open(.localBranch(name: "fix/login-blank")),
+        .open(.remoteBranch(name: "origin/feat/fetch-progress", existingWorktree: nil)),
       ])
     XCTAssertEqual(
-      section(sections, "Local branches")?.items.first?.action, .open(.localBranch(name: "main")))
-    XCTAssertEqual(
-      section(sections, "Remote branches")?.items.first?.action,
-      .open(.remoteBranch(name: "origin/feat/session-restore", existingWorktree: nil)))
+      section(sections, .branches)?.items.map(\.enter),
+      [.checkout("fix/login-blank"), .checkout("origin/feat/fetch-progress")])
+  }
+
+  /// 非 git の場所は「このディレクトリ」の 1 行だけ（見出しなし）。↵ はそのディレクトリをそのまま開く。
+  func testDirectorySectionsHaveOnlyThisDirectory() {
+    let sections = WorktreePaletteSectionBuilder.directorySections(path: "/tmp/plain")
+    XCTAssertEqual(sections.count, 1)
+    XCTAssertNil(sections.first?.title)
+    let item = try? XCTUnwrap(sections.first?.items.first)
+    XCTAssertEqual(sections.first?.items.count, 1)
+    XCTAssertEqual(item?.action, .open(.directory(path: "/tmp/plain")))
+    XCTAssertEqual(item?.enter, .openDirectory("/tmp/plain"))
+    XCTAssertEqual(item?.nameKey, .worktreePaletteThisDirectory)
   }
 }

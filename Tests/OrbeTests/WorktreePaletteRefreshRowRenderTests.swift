@@ -67,8 +67,7 @@ final class WorktreePaletteRefreshRowRenderTests: SnapshotTestCase {
   private func item(sync: WorktreePaletteBranchSync? = nil) -> WorktreePaletteItem {
     WorktreePaletteItem(
       glyph: .localBranch, name: "stale", detail: "1d前", sync: sync,
-      action: .open(.localBranch(name: "stale")),
-      footer: .launch(target: "stale", kind: .checkout))
+      action: .open(.localBranch(name: "stale")), enter: .checkout("stale"))
   }
 
   private func render(_ item: WorktreePaletteItem) throws -> Data {

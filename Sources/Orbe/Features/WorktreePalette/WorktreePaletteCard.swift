@@ -1,15 +1,16 @@
 import SwiftUI
 
-/// worktree パレットのカードの焦点の宛先。list は入力欄、clean と最新化は TextField を持たないのでカード器が受ける。
+/// worktree パレットのカードの焦点の宛先。一覧とベースを選ぶ画面は入力欄、clean と最新化は TextField を
+/// 持たないのでカード器が受ける。
 enum WorktreePaletteFocus: Hashable {
   case field, card
 }
 
-/// worktree パレットのカード本体。ヘッダ（❯＋絞り込み入力欄＋起動 agent チップ）＋
-/// リスト部（可変セクション・maxHeight 380・内部スクロール）＋フッター（選択連動の実行説明/エラー＋キーヒント）。
-/// 器はそのままに、中身だけ list / clean / 最新化の 3 モードで切り替わる。
-/// 外郭は `GlassPanel(.popup, radius 14)`。list ではヘッダの `TextField` にキーを集約し、↑↓/⇥/esc/↵ を
-/// 横取りしてフォーカス逸脱を防ぐ（`PaletteCard`/`SearchField` の field モードと同パターン）。
+/// worktree パレットのカード本体。ヘッダ（❯＋入力欄）＋一覧では起動先とベースのバー＋
+/// リスト部（可変セクション・maxHeight 380・内部スクロール）＋フッター（選択連動の ↵ の説明/エラー＋キーヒント）。
+/// 器はそのままに、中身だけ list / clean / 最新化 / ベースを選ぶ の 4 モードで切り替わる。
+/// 外郭は `GlassPanel(.popup, radius 14)`。入力欄のあるモードではヘッダの `TextField` にキーを集約し、
+/// ↑↓/⇥/⇧⇥/esc/↵ を横取りしてフォーカス逸脱を防ぐ（`PaletteCard`/`SearchField` の field モードと同パターン）。
 struct WorktreePaletteCard: View {
   @Bindable var model: WorktreePaletteModel
   @Environment(\.localization) private var l10n
@@ -18,7 +19,7 @@ struct WorktreePaletteCard: View {
   @FocusState private var focus: WorktreePaletteFocus?
   /// リスト内容の実測高（ハグ用・上限で切った値）。初期は cap にして初回の 0 collapse フラッシュを避ける。
   @State private var contentHeight: CGFloat = Self.listCap
-  /// ヘッダ＋フッターの実測高（リスト cap から差し引き、カードが窓を超えないようにする）。
+  /// ヘッダ＋バー＋フッターの実測高（リスト cap から差し引き、カードが窓を超えないようにする）。
   @State private var chromeHeight: CGFloat = 0
 
   /// リスト部の内容基準の高さ上限（380・コンポーネント局所定数）。
@@ -30,6 +31,9 @@ struct WorktreePaletteCard: View {
     return min(contentHeight, min(Self.listCap, available))
   }
 
+  /// 入力欄が焦点を持つモード。
+  private var hasField: Bool { model.mode == .list || model.mode == .basePicker }
+
   var body: some View {
     // 面/枠は popup 級（α.90・.10/.14）だが、worktree パレットの blur は panel 級（24px）・影は大型
     // フローティング（0 20 60）。level だけでは表せない組み合わせなので material/elevation を明示上書きする。
@@ -39,6 +43,11 @@ struct WorktreePaletteCard: View {
       VStack(spacing: 0) {
         header
         divider
+        if model.mode == .list {
+          WorktreePaletteBars(model: model)
+            .background(chromeProbe)
+          divider
+        }
         switch model.mode {
         case .list:
           list
@@ -52,38 +61,29 @@ struct WorktreePaletteCard: View {
             )
             .frame(height: listHeight, alignment: .top)
           }
-        }
-        divider
-        switch model.mode {
-        case .list:
-          footer
-        case .clean:
-          WorktreeCleanFooter(
-            model: model.clean, onExecute: { model.executeClean() },
-            onClose: { model.exitOrCancelClean() }
-          )
-          .background(chromeProbe)
-        case .refresh:
-          if let refresh = model.refresh {
-            WorktreePaletteRefreshFooter(model: refresh, targetName: model.selectedTargetName)
-              .background(chromeProbe)
+        case .basePicker:
+          if let picker = model.basePicker {
+            WorktreeBasePickerList(model: picker, onConfirm: { model.confirmBasePick(at: $0) })
+              .frame(height: listHeight, alignment: .top)
           }
         }
+        divider
+        footer
       }
     }
     .frame(maxHeight: maxHeight, alignment: .top)
     .onPreferenceChange(ChromeHeightKey.self) { chromeHeight = $0 }
     .onPreferenceChange(WorktreePaletteContentHeightKey.self) { contentHeight = $0 }
     .modifier(WorktreePaletteCardKeyCapture(model: model, focus: $focus))
-    // カード内のクリックで焦点を確定し直す（汎用 PaletteCard と同じ契約。行タップもこの契約に乗る）。
-    // 宛先はモードが決める。
+    // カード内のクリックで焦点を確定し直す（汎用 PaletteCard と同じ契約。行タップ・ボタンもこの契約に
+    // 乗る）。宛先はモードが決める。
     .simultaneousGesture(TapGesture().onEnded { model.focus() })
     .onChange(of: model.focusToken, initial: true) {
-      focus = model.mode == .list ? .field : .card
+      focus = hasField ? .field : .card
     }
   }
 
-  /// ヘッダ／フッターの実測高を合算して chrome 高に集約する probe。
+  /// ヘッダ／バー／フッターの実測高を合算して chrome 高に集約する probe。
   private var chromeProbe: some View {
     GeometryReader { proxy in
       Color.clear.preference(key: ChromeHeightKey.self, value: proxy.size.height)
@@ -94,12 +94,12 @@ struct WorktreePaletteCard: View {
     Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
   }
 
-  // MARK: - ヘッダ（絞り込み入力欄）
+  // MARK: - ヘッダ（入力欄）
 
   /// 枠と ❯ は全モード共通。中身だけ切り替える。
   /// **入力欄は clean / 最新化でも mount したまま**幅 0・opacity 0 で隠す（`PaletteCard` が記録している罠と同じ——
   /// 焦点の宛先が同じ更新 pass で新規 mount されると SwiftUI は `@FocusState` を取りこぼし、
-  /// first responder がカード器に残ってキーが死ぬ）。
+  /// first responder がカード器に残ってキーが死ぬ）。ベースを選ぶ画面も同じ 1 本を使い回す。
   ///
   /// 要素の間隔は HStack の spacing でなく各要素の leading padding が運ぶ——幅 0 で隠した入力欄も
   /// spacing を両側で消費するので、spacing に任せると `❯` と中身の間が 2 倍に開く。
@@ -110,14 +110,22 @@ struct WorktreePaletteCard: View {
         .font(Font.theme.title)
         .foregroundStyle(Color.theme.accentPrimary)
       queryField
-        .frame(maxWidth: model.mode == .list ? .infinity : 0)
+        .frame(maxWidth: hasField ? .infinity : 0)
         .padding(.leading, gap)
-        .opacity(model.mode == .list ? 1 : 0)
-        .allowsHitTesting(model.mode == .list)
+        .opacity(hasField ? 1 : 0)
+        .allowsHitTesting(hasField)
       switch model.mode {
       case .list:
         Spacer(minLength: Theme.Space.step)
-        targetChip.padding(.leading, gap * 2)
+        keyCap("⌘T").padding(.leading, gap)
+      case .basePicker:
+        Spacer(minLength: Theme.Space.step)
+        Text(l10n.string(.worktreeCleanBack))
+          .font(Font.theme.meta)
+          .foregroundStyle(Color.theme.textMuted)
+          .lineLimit(1)
+          .fixedSize()
+          .padding(.leading, gap)
       case .clean:
         WorktreeCleanHeader(model: model.clean)
       case .refresh:
@@ -129,71 +137,53 @@ struct WorktreePaletteCard: View {
     .background(chromeProbe)
   }
 
-  /// 絞り込み入力欄。設計見本の静的「agent」ラベル＋擬似点滅カーソルは、実 `TextField` のキャレットで置き換える。
-  private var queryField: some View {
-    // 作成中は検索入力を受け付けない（keystroke を握り潰す）。focus は保持し、失敗後すぐ操作へ戻れる。
-    TextField(
-      "", text: Binding(get: { model.query }, set: { if !model.isPreparing { model.query = $0 } })
-    )
-    .textFieldStyle(.plain)
-    .font(Font.theme.title)
-    .foregroundStyle(Color.theme.textPrimary)
-    // キャレット/選択色を accent に固定（ヘッダ ❯ プロンプトと同じ affordance。
-    // 既定のシステムアクセント任せだと Orbe の配色から浮くため明示する）。
-    .tint(Color.theme.accentPrimary)
-    .focused($focus, equals: .field)
-    // 純正 placeholder は色を握れず IME 変換中も消えないため、共通モディファイアで muted 描画しつつ
-    // marked text がある間は抑制する。
-    .imePlaceholder(
-      l10n.string(.worktreePaletteQueryPlaceholder), showWhenEmpty: model.query.isEmpty,
-      focused: focus == .field, font: Font.theme.title, color: Color.theme.textMuted
-    )
-    .onChange(of: model.query) { model.onQueryChanged() }
-    // 実行＝onSubmit（IME 変換確定の Enter では発火しない＝誤爆しない）。行タップと同じ決定 funnel。
-    .onSubmit { model.activate() }
-    // ↑↓＝一覧ナビ、⌘↑↓＝対話行の先頭/末尾へジャンプ、⇥＝agent 巡回（握らないとフォーカスが抜けキーが死ぬ）、esc＝閉じる。
-    // 矢印は単一の catch-all に集約し ⌘ 有無で分岐する（bare ハンドラが ⌘↑ を食う不確実性を構造で排除）。
-    // 作成中はいずれも握り潰す（選択移動・ジャンプ・agent 変更・閉じ＝キャンセルをさせず完了まで待つ）。
-    .onKeyPress { press in
-      switch press.key {
-      case .upArrow:
-        if !model.isPreparing {
-          if press.modifiers.contains(.command) { model.jump(-1) } else { model.move(-1) }
-        }
-        return .handled
-      case .downArrow:
-        if !model.isPreparing {
-          if press.modifiers.contains(.command) { model.jump(1) } else { model.move(1) }
-        }
-        return .handled
-      default:
-        return .ignored
-      }
-    }
-    .onKeyPress(.tab) {
-      if !model.isPreparing { model.cycleTarget() }
-      return .handled
-    }
-    .onKeyPress(.escape) {
-      if !model.isPreparing { model.onDismiss() }
-      return .handled
-    }
+  /// 開いたキーの札（右上の `⌘T`）。
+  private func keyCap(_ text: String) -> some View {
+    Text(text)
+      .font(Font.theme.meta)
+      .foregroundStyle(Color.theme.textMuted)
+      .lineLimit(1)
+      .fixedSize()
+      .padding(.horizontal, Theme.Space.note)
+      .padding(.vertical, Theme.Space.hair)
+      .background(RoundedRectangle(cornerRadius: Theme.Radius.sm).fill(Color.theme.smallPillFill))
   }
 
-  /// 起動先のチップ（⇥ で巡回・agent は raw command／shell は "shell"）。targets は常に非空。
-  private var targetChip: some View {
-    HStack(spacing: Theme.Space.note) {
-      Text("◐")
-        .foregroundStyle(Color.theme.glyphGradient)
-      Text(l10n.format(.worktreePaletteAgentOpen, model.selectedTargetName))
-        .foregroundStyle(Color.theme.accentPrimary)
+  /// 入力欄。一覧では検索と新しいブランチ名、ベースを選ぶ画面ではベースの絞り込み。設計見本の静的
+  /// プロンプト＋擬似点滅カーソルは、実 `TextField` のキャレットで置き換える。
+  private var queryField: some View {
+    TextField("", text: queryBinding)
+      .textFieldStyle(.plain)
+      .font(Font.theme.title)
+      .foregroundStyle(Color.theme.textPrimary)
+      // キャレット/選択色を accent に固定（ヘッダ ❯ プロンプトと同じ affordance。
+      // 既定のシステムアクセント任せだと Orbe の配色から浮くため明示する）。
+      .tint(Color.theme.accentPrimary)
+      .focused($focus, equals: .field)
+      // 純正 placeholder は色を握れず IME 変換中も消えないため、共通モディファイアで muted 描画しつつ
+      // marked text がある間は抑制する。
+      .imePlaceholder(
+        l10n.string(placeholderKey), showWhenEmpty: queryBinding.wrappedValue.isEmpty,
+        focused: focus == .field, font: Font.theme.title, color: Color.theme.textMuted
+      )
+      .onChange(of: model.query) { model.onQueryChanged() }
+      // 実行＝onSubmit（IME 変換確定の Enter では発火しない＝誤爆しない）。行タップと同じ決定 funnel。
+      .onSubmit { model.submit() }
+      .onKeyPress { WorktreePaletteFieldKeys.handle($0, model: model) }
+  }
+
+  /// モードに応じた入力の行き先。一覧の入力ロック中（作成中・預かった ↵ の待ち）は打鍵を握り潰す
+  /// （focus は保持し、失敗後すぐ操作へ戻れる）。
+  private var queryBinding: Binding<String> {
+    if model.mode == .basePicker, let picker = model.basePicker {
+      return Binding(get: { picker.query }, set: { picker.query = $0 })
     }
-    .font(Font.theme.meta)
-    .lineLimit(1)
-    .fixedSize()
-    .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
-    .padding(.vertical, Theme.Space.hair + 1)
-    .background(Capsule().fill(Color.theme.tintAccent))
+    return Binding(get: { model.query }, set: { if !model.isLocked { model.query = $0 } })
+  }
+
+  private var placeholderKey: L10nKey {
+    model.mode == .basePicker
+      ? .worktreePaletteBaseQueryPlaceholder : .worktreePaletteQueryPlaceholder
   }
 
   // MARK: - リスト部
@@ -204,11 +194,12 @@ struct WorktreePaletteCard: View {
         // 行は見えている分だけ生成する（件数が数百〜千を超えても ↑↓・打鍵の反応を保つ）。
         LazyVStack(alignment: .leading, spacing: 0) {
           if model.hasLoadedOnce {
-            // 行 identity（row.id）＝ scrollTo の宛先。header と item で id 名前空間を分け（"header:"/"item:"）、
+            // 行 identity（row.id）＝ scrollTo の宛先。見出し・注記と item で id 名前空間を分け、
             // 見出しの並び位置と item の平坦 index が衝突して scrollTo が空振りするのを防ぐ。
             ForEach(rows) { row in
               switch row {
-              case .header(let title): sectionLabel(title)
+              case .header(_, let title): sectionLabel(title)
+              case .note(_, let key): WorktreePaletteEmptyNote(text: l10n.string(key))
               case .item(let index, let item):
                 WorktreePaletteRow(
                   item: item, selected: index == model.selected,
@@ -254,8 +245,8 @@ struct WorktreePaletteCard: View {
   }
 
   /// セクション見出し（選択対象外・大文字・極小・letterSpacing 1・muted）。
-  private func sectionLabel(_ title: String) -> some View {
-    Text(title.uppercased())
+  private func sectionLabel(_ title: WorktreePaletteSection.Title) -> some View {
+    Text(sectionTitle(title))
       .font(Font.theme.sectionLabel)
       .tracking(Theme.Typography.trackingLabel)
       .foregroundStyle(Color.theme.textMuted)
@@ -264,11 +255,24 @@ struct WorktreePaletteCard: View {
       .padding(.bottom, Theme.Space.hair + 1)
   }
 
+  private func sectionTitle(_ title: WorktreePaletteSection.Title) -> String {
+    switch title {
+    case .newBranch: l10n.string(.worktreePaletteSectionNewBranch)
+    case .worktrees(let repository):
+      repository.isEmpty ? "WORKTREES" : "WORKTREES · \(repository.uppercased())"
+    case .branches: "BRANCHES"
+    case .worktreesAndBranches: "WORKTREES・BRANCHES"
+    }
+  }
+
   private var rows: [WorktreePaletteListRow] {
     var out: [WorktreePaletteListRow] = []
     var index = 0
     for section in model.visibleSections {
-      out.append(.header(section.title))
+      if let title = section.title { out.append(.header(sectionID: section.id, title)) }
+      if section.items.isEmpty, let note = section.emptyNote {
+        out.append(.note(sectionID: section.id, note))
+      }
       for item in section.items {
         out.append(.item(index, item))
         index += 1
@@ -279,58 +283,32 @@ struct WorktreePaletteCard: View {
 
   // MARK: - フッター
 
-  private var footer: some View {
-    HStack(spacing: Theme.Space.step) {
-      description
-        .font(Font.theme.meta)
-        .lineLimit(1)
-        .truncationMode(.tail)
-      Spacer(minLength: Theme.Space.step)
-      // 作成中は操作が無効なのでキーヒントも出さない（効かない案内を残さない＝UI が嘘をつかない）。
-      // 注記だけの行（clean 行）でも出さない——実行説明が無い行に実行のキー案内を並べない。
-      if !model.isPreparing, !showsNoteOnly {
-        keyHints
-          .layoutPriority(1)  // 狭幅ではキーヒントを残し説明側を truncate
+  @ViewBuilder private var footer: some View {
+    switch model.mode {
+    case .list:
+      WorktreePaletteListFooter(model: model)
+        .padding(.horizontal, Theme.Space.bar)
+        .padding(.vertical, Theme.Space.step + Theme.Space.hair)
+        .background(chromeProbe)
+    case .clean:
+      WorktreeCleanFooter(
+        model: model.clean, onExecute: { model.executeClean() },
+        onClose: { model.exitOrCancelClean() }
+      )
+      .background(chromeProbe)
+    case .refresh:
+      if let refresh = model.refresh {
+        WorktreePaletteRefreshFooter(model: refresh, targetName: model.selectedTargetName)
+          .background(chromeProbe)
+      }
+    case .basePicker:
+      if let picker = model.basePicker {
+        WorktreeBasePickerFooter(model: picker)
+          .padding(.horizontal, Theme.Space.bar)
+          .padding(.vertical, Theme.Space.step + Theme.Space.hair)
+          .background(chromeProbe)
       }
     }
-    .padding(.horizontal, Theme.Space.bar)
-    .padding(.vertical, Theme.Space.step + Theme.Space.hair)
-    .background(chromeProbe)
-  }
-
-  /// 選択行のフッターが注記のみか（キーヒントを出すかの判断）。
-  private var showsNoteOnly: Bool {
-    guard model.errorMessage == nil, case .note = model.selectedItem?.footer else { return false }
-    return true
-  }
-
-  @ViewBuilder private var description: some View {
-    if model.isPreparing {
-      WorktreePaletteBusyLabel(text: l10n.string(.worktreePalettePreparing))
-    } else if let error = model.errorMessage {
-      Text(error).foregroundStyle(Color.theme.danger)
-    } else {
-      switch model.selectedItem?.footer {
-      case .launch(let target, let kind):
-        WorktreePaletteLaunchLine(
-          target: target, preposition: kind.prepositionKey, agent: model.selectedTargetName)
-      case .note(let key):
-        Text(l10n.string(key)).foregroundStyle(Color.theme.textMuted)
-      case nil:
-        EmptyView()
-      }
-    }
-  }
-
-  private var keyHints: some View {
-    HStack(spacing: Theme.Space.step + Theme.Space.hair) {
-      WorktreePaletteKeyHint(key: "↑↓", label: l10n.string(.worktreePaletteHintSelect))
-      WorktreePaletteKeyHint(key: "⇥", label: l10n.string(.worktreePaletteHintAgent))
-      WorktreePaletteKeyHint(key: "esc", label: l10n.string(.worktreePaletteHintClose))
-    }
-    .font(Font.theme.sectionLabel)
-    .foregroundStyle(Color.theme.textMuted)
-    .fixedSize()
   }
 }
 
@@ -339,22 +317,9 @@ struct WorktreePaletteCard: View {
     let model = WorktreePaletteModel()
     model.setTargets(
       agents: [AgentCLI(command: "claude", path: "/usr/bin/claude")], defaultCommand: "claude")
-    model.sections = WorktreePaletteSectionBuilder.build(.designSample)
     model.hasLoadedOnce = true
-    return ZStack {
-      BackgroundGlow()
-      WorktreePaletteOverlay(model: model)
-    }
-    .frame(width: 720, height: 560)
-  }
-
-  #Preview("worktree パレット — preparing") {
-    let model = WorktreePaletteModel()
-    model.setTargets(
-      agents: [AgentCLI(command: "claude", path: "/usr/bin/claude")], defaultCommand: "claude")
     model.sections = WorktreePaletteSectionBuilder.build(.designSample)
-    model.hasLoadedOnce = true
-    model.isPreparing = true
+    model.restoreSelection(matching: nil)
     return ZStack {
       BackgroundGlow()
       WorktreePaletteOverlay(model: model)

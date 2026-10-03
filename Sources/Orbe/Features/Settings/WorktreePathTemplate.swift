@@ -61,6 +61,11 @@ enum WorktreePathTemplate {
     template.contains("{repo}") || template.contains("{repo_path}")
   }
 
+  /// ブランチ名から `{slug}` の値を導く（`/` → `-`）。
+  static func slug(forBranch name: String) -> String {
+    name.replacingOccurrences(of: "/", with: "-")
+  }
+
   /// プレースホルダ置換 → 先頭 `~` 展開 → 正規化で作成先パスを確定する。
   /// 語彙は repo 本体の場所（main worktree の絶対パス）1 つから導く——`{repo_path}` と `{parent}/{repo}` が
   /// 定義上つねに同値であることを、呼び手の渡し方に頼らずここで担保する。そのため置換の前に場所自体を

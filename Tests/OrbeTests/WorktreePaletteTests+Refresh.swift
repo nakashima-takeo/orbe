@@ -7,7 +7,7 @@ import XCTest
 @MainActor
 extension WorktreePaletteTests {
 
-  /// designSample の遅れた `main` 行（`origin/main` より 12 遅れ）。
+  /// staleSample の遅れた `main` 行（`origin/main` より 12 遅れ）。
   private func staleMain(_ p: WorktreePaletteModel) throws -> (
     WorktreePaletteItem, WorktreePaletteBranchSync
   ) {
@@ -17,15 +17,15 @@ extension WorktreePaletteTests {
 
   /// 同期ピルは着地後の値だけ。ff できる遅れだけが選択画面の条件を満たす。
   func testSyncIsCarriedOnLocalBranchRowsOnlyAfterTheFetchLands() throws {
-    let landed = makeModel()
+    let landed = makeModel(.staleSample)
     let (_, main) = try staleMain(landed)
     XCTAssertEqual(main.ahead, 0)
     XCTAssertEqual(main.behind, 12)
     XCTAssertTrue(main.isFastForwardable)
-    let diverged = try XCTUnwrap(landed.items.first { $0.name == "perf/render-batching" }?.sync)
+    let diverged = try XCTUnwrap(landed.items.first { $0.name == "topic/diverged" }?.sync)
     XCTAssertFalse(diverged.isFastForwardable, "分岐（↑↓）は即作成")
 
-    var input = WorktreePaletteSectionBuilder.Input.designSample
+    var input = WorktreePaletteSectionBuilder.Input.staleSample
     input.remoteFetchLanded = false
     let pending = makeModel(input)
     XCTAssertNil(pending.items.first { $0.name == "main" }?.sync, "着地前は無印")
@@ -33,7 +33,7 @@ extension WorktreePaletteTests {
 
   /// 入ると mode が変わり、カーソルは既定の「最新化して作成」。esc で一覧へ戻り、選択は入った行のまま。
   func testEnterAndExitKeepTheListCursor() throws {
-    let p = makeModel()
+    let p = makeModel(.staleSample)
     let (item, sync) = try staleMain(p)
     p.selected = try XCTUnwrap(p.items.firstIndex { $0.name == "main" })
     p.enterRefresh(sync: sync, relativeDate: item.detail ?? "")
@@ -54,7 +54,7 @@ extension WorktreePaletteTests {
 
   /// ⏎ はカーソルの行を実行する。「最新化して作成」は最新化中へ、「そのまま作成」は作成中へ。
   func testConfirmDispatchesTheCursorChoice() throws {
-    let p = makeModel()
+    let p = makeModel(.staleSample)
     let (item, sync) = try staleMain(p)
     var settled: [(WorktreePaletteStaleChoice, WorktreePaletteBranchSync)] = []
     p.onSettleStale = { settled.append(($0, $1)) }
@@ -76,7 +76,7 @@ extension WorktreePaletteTests {
 
   /// 行タップは決定。カーソルに関係なくその行へ選択を移してから実行する（一覧の行タップと同じ）。
   func testRowTapMovesTheCursorAndConfirms() throws {
-    let p = makeModel()
+    let p = makeModel(.staleSample)
     let (item, sync) = try staleMain(p)
     var settled: [WorktreePaletteStaleChoice] = []
     p.onSettleStale = { choice, _ in settled.append(choice) }
@@ -98,7 +98,7 @@ extension WorktreePaletteTests {
   /// busy（最新化中・作成中）では ⏎・↑↓・esc・r のどれも効かない——fetch は中断できないので、
   /// 中断できる顔をしない。
   func testBusyIgnoresEveryKey() throws {
-    let p = makeModel()
+    let p = makeModel(.staleSample)
     let (item, sync) = try staleMain(p)
     var count = 0
     p.onSettleStale = { _, _ in count += 1 }
@@ -119,7 +119,7 @@ extension WorktreePaletteTests {
   /// ホバー追従は一覧と同じ門（実マウス移動後の `.pointer`）で効き、決定は走らない。
   /// キー移動で `.keyboard` へ戻ると、スクロールで行がカーソル下へ来ても選択を奪われない。
   func testHoverFollowsTheCursorThroughTheSharedModality() throws {
-    let p = makeModel()
+    let p = makeModel(.staleSample)
     let (item, sync) = try staleMain(p)
     var settled = 0
     p.onSettleStale = { _, _ in settled += 1 }
@@ -140,7 +140,7 @@ extension WorktreePaletteTests {
 
   /// busy（最新化中・作成中）ではホバーでも選択が動かない。
   func testHoverIsIgnoredWhileBusy() throws {
-    let p = makeModel()
+    let p = makeModel(.staleSample)
     let (item, sync) = try staleMain(p)
     p.enterRefresh(sync: sync, relativeDate: item.detail ?? "")
     p.inputModality = .pointer
@@ -155,7 +155,7 @@ extension WorktreePaletteTests {
 
   /// 失敗すると同じ画面に戻り、カーソルは「そのまま作成」へ落ちる。`r` と行 0 の ⏎ で再試行できる。
   func testFailureFallsBackToAsIsAndCanRetry() throws {
-    let p = makeModel()
+    let p = makeModel(.staleSample)
     let (item, sync) = try staleMain(p)
     var choices: [WorktreePaletteStaleChoice] = []
     p.onSettleStale = { choice, _ in choices.append(choice) }
@@ -183,7 +183,7 @@ extension WorktreePaletteTests {
   /// 最新化の後の作成が落ちたら、一覧へ戻って理由をフッタに出す（既存の失敗 UI）。
   /// 一覧の Enter の失敗も同じ 1 本を通る。
   func testFailedPreparationReturnsToTheListWithTheReason() throws {
-    let p = makeModel()
+    let p = makeModel(.staleSample)
     let (item, sync) = try staleMain(p)
     p.enterRefresh(sync: sync, relativeDate: item.detail ?? "")
     p.startRefresh()

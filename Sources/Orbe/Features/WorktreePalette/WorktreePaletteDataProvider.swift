@@ -19,6 +19,8 @@ final class WorktreePaletteDataProvider {
   /// 開いた時点のタブ占有スナップショット（`SessionStore` を worktree パレットから見せないための値型）。
   /// 読み手は分冊（`WorktreePaletteDataProvider+CleanProbe.swift`）。
   let tabOccupancies: [TabOccupancy]
+  /// 開いた workspace に保存された前回のベース（読むだけ。書くのはウィンドウ）。
+  let previousBase: String?
   private let runner: GitRunner
   /// gh の実行基盤。読み手は分冊（`WorktreePaletteDataProvider+GitHub.swift`・`+Create.swift`）。
   let gitHub: GitHubCLI
@@ -38,6 +40,11 @@ final class WorktreePaletteDataProvider {
   private(set) var remoteFetchLanded = false
 
   private(set) var repo: GitRepo?
+  /// cwd が git リポジトリの外と分かった（一覧は「このディレクトリ」の 1 行になる）。
+  private(set) var isOutsideRepository = false
+  /// git レーン（worktree・ブランチの列挙）が一度着地した。それまでは描かない——gh レーンが先に着地しても、
+  /// 空の一覧を「ロード済み」として出すと、開いた直後の ↵ が空の一覧で決着して空振りする。
+  private var hasLandedGit = false
   /// 本体 worktree のパス。読み手は分冊（`WorktreePaletteDataProvider+Create.swift`）。
   private(set) var mainWorktree: String?
   /// 既定ブランチの ref。`git symbolic-ref --short refs/remotes/origin/HEAD` の出力なので
@@ -112,14 +119,15 @@ final class WorktreePaletteDataProvider {
 
   init(
     cwd: String, model: WorktreePaletteModel, localization: LocalizationStore,
-    worktreeTemplate: String, tabOccupancies: [TabOccupancy] = [], runner: GitRunner = .shared,
-    gitHub: GitHubCLI = .shared
+    worktreeTemplate: String, tabOccupancies: [TabOccupancy] = [], previousBase: String? = nil,
+    runner: GitRunner = .shared, gitHub: GitHubCLI = .shared
   ) {
     self.cwd = cwd
     self.model = model
     self.localization = localization
     self.worktreeTemplate = worktreeTemplate
     self.tabOccupancies = tabOccupancies
+    self.previousBase = previousBase
     self.runner = runner
     self.gitHub = gitHub
   }
@@ -130,7 +138,8 @@ final class WorktreePaletteDataProvider {
     GitRepo.open(cwd: cwd, runner: runner) { [weak self] repo in
       guard let self else { return }
       guard let repo else {
-        // 非 git: 全セクション空。
+        // 非 git: 「このディレクトリ」の 1 行だけ。
+        self.isOutsideRepository = true
         self.probedGitHubState = .notGitHub
         self.rebuild()
         return
@@ -210,6 +219,7 @@ final class WorktreePaletteDataProvider {
     // 畳むので、何度叩いても安い。
     group.notify(queue: .main) {
       landed?()
+      self.hasLandedGit = true
       self.rebuild()
       // git の事実（ref の中身）が動いた着地なので全行引き直す。
       if classifying { self.startCleanProbe(repo, .all) }
@@ -218,11 +228,25 @@ final class WorktreePaletteDataProvider {
     }
   }
 
+  /// 打った名前が新しいブランチの名前として有効かを git に問い、答えを model へ返す（古い問いの答えは
+  /// model が捨てる）。リポジトリを要さないので、一覧が届く前に打った名前にも答える。
+  func checkBranchName(_ name: String) {
+    GitRepo.checkBranchName(name, cwd: cwd, runner: runner) { [weak self] isValid in
+      self?.model?.applyBranchNameCheck(name, isValid: isValid)
+    }
+  }
+
   /// 手元の状態から model を組み直す（描画の唯一の出口）。gh 着地（分冊
   /// `WorktreePaletteDataProvider+GitHub.swift`）も同じ出口を通る。
   func rebuild() {
-    guard let model else { return }
+    guard let model, isOutsideRepository || hasLandedGit else { return }
     let selectedAction = model.selectedItem?.action
+    guard !isOutsideRepository else {
+      model.hasLoadedOnce = true
+      model.sections = WorktreePaletteSectionBuilder.directorySections(path: cwd)
+      model.restoreSelection(matching: selectedAction)
+      return
+    }
     let prStates = branchPRStates
     let rows = cleanProbes.map {
       WorktreeCleanClassifier.rows(
@@ -235,12 +259,40 @@ final class WorktreePaletteDataProvider {
     model.classificationPending = classificationPending(prStates)
     model.classification = rows
     model.hasLoadedOnce = true
+    model.baseFacts = baseFacts
+    model.baseCandidates = baseCandidates
+    model.newBranchRules = newBranchRules
     model.sections = WorktreePaletteSectionBuilder.build(
       WorktreePaletteSectionBuilder.Input(
         worktrees: worktrees, localBranches: localBranches, remoteBranches: remoteBranches,
+        repositoryName: (worktreeBase as NSString).lastPathComponent,
         currentWorktree: repo?.root,
         cleanCandidates: rows.map(WorktreeCleanClassifier.candidateCount),
         remoteFetchLanded: remoteFetchLanded))
     model.restoreSelection(matching: selectedAction)
+  }
+
+  /// ベースの選択肢の事実。前回は今の列挙にあるときだけ（消えたブランチを前回として出さない）。
+  private var baseFacts: WorktreeBaseFacts {
+    let known = Set((localBranches + remoteBranches).map(\.name))
+    return WorktreeBaseFacts(
+      previous: previousBase.flatMap { known.contains($0) ? $0 : nil },
+      defaultBranch: defaultBranchName,
+      current: worktrees.first { $0.path == repo?.root }?.branch)
+  }
+
+  /// ベースを選ぶ画面の候補。ローカルブランチ（checkout 中のものを含む）の後にリモートブランチを、
+  /// それぞれ列挙の順（新しい順）で。
+  private var baseCandidates: [WorktreeBaseCandidate] {
+    localBranches.map { .init(name: $0.name, relativeDate: $0.relativeDate, isRemote: false) }
+      + remoteBranches.map { .init(name: $0.name, relativeDate: $0.relativeDate, isRemote: true) }
+  }
+
+  /// 作成行の衝突の規則（作成先は作成経路と同じテンプレートと repo の場所で解く）。
+  private var newBranchRules: WorktreeNewBranchRules {
+    WorktreeNewBranchRules(
+      takenNames: Set(localBranches.map(\.name)).union(
+        remoteBranches.map { WorktreePaletteSectionBuilder.localName(fromRemote: $0.name) }),
+      worktreePaths: worktrees.map(\.path), template: worktreeTemplate, repoPath: worktreeBase)
   }
 }

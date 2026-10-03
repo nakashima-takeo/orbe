@@ -1,39 +1,70 @@
 import Foundation
 
-/// worktree パレット（⌘T）の文言。一覧・clean の 3 画面・3 軸の状態語彙をまとめて持つ。
+/// worktree パレット（⌘T）の文言。一覧・ベースを選ぶ画面・clean の 3 画面・最新化・3 軸の状態語彙をまとめて持つ。
 ///
 /// **git / gh の語は訳さない**（`[gone]` / `locked` / `PR #N merged` / `merged → <実マージ先>` /
 /// `remote +N` / `main worktree`）——訳すと出力と対応が取れなくなる技術語なので、
 /// `origin/…` と同じくそのまま出す。ここに無い語はその判断の結果であって、抜けではない。
 extension L10n {
   static let worktreePaletteTable: [L10nKey: (ja: String, en: String)] = [
-    .worktreePaletteWorktreeExisting: ("既存worktree", "existing worktree"),
     .worktreePaletteWorktreeCheckout: ("checkout → worktree", "checkout → worktree"),
-    .worktreePaletteWorktreeNew: ("新規worktree", "new worktree"),
-    .worktreePalettePrepExisting: ("の既存worktreeで", "· existing worktree ·"),
-    .worktreePalettePrepCheckout: ("をcheckoutしたworktreeで", "· checkout worktree ·"),
-    .worktreePalettePrepNew: ("の新規worktreeで", "· new worktree ·"),
     .worktreePaletteLaunchSuffix: ("を新しいタブで起動", "· new tab"),
-    .worktreePaletteAgentOpen: ("%@で開く", "open with %@"),
     .worktreePaletteQueryPlaceholder: (
-      "worktree / branch / issue を絞り込み", "Filter worktree / branch / issue"
+      "worktree・ブランチを検索、または新しいブランチ名",
+      "Search worktrees and branches, or type a new branch name"
     ),
     .worktreePalettePreparing: ("作成中…", "Preparing…"),
     .worktreePaletteHintSelect: ("選択", "Select"),
-    .worktreePaletteHintAgent: ("agent変更", "Change agent"),
     .worktreePaletteHintClose: ("閉じる", "Close"),
     .worktreePaletteErrNotGitRepo: (
       "git リポジトリを解決できませんでした", "Couldn't resolve a git repository"
     ),
+    .worktreePaletteSectionNewBranch: ("新しいブランチ", "NEW BRANCH"),
+    .worktreePaletteThisDirectory: ("このディレクトリ", "This directory"),
+    .worktreePaletteCreateSuffix: ("を作る", "— create"),
+    .worktreePaletteNoMatch: (
+      "一致する worktree・ブランチはありません", "No matching worktrees or branches"
+    ),
+    .worktreePaletteCurrentTag: ("現在", "current"),
+    .worktreePaletteDefaultTag: ("既定", "default"),
+    .worktreePaletteTargetLabel: ("起動先", "Launch"),
+    .worktreePaletteBaseLabel: ("ベース", "Base"),
+    .worktreePaletteHintSwitch: ("切り替え", "Switch"),
+    .worktreePaletteBasePreviousTag: ("前回", "last"),
+    .worktreePaletteBaseOther: ("ほか…", "Other…"),
+    .worktreePaletteBaseNoneWorktree: (
+      "なし — 作らずに、既存の worktree を開く", "None — opens the existing worktree as is"
+    ),
+    .worktreePaletteBaseNoneDirectory: (
+      "なし — このディレクトリをそのまま開く", "None — opens this directory as is"
+    ),
+    .worktreePaletteBaseNoneCheckout: (
+      "なし — 新しいブランチは切らず、%1$@ を worktree にする",
+      "None — no new branch; makes %1$@ a worktree"
+    ),
+    .worktreePaletteBaseNoneClean: (
+      "なし — 作らずに、要らなくなった worktree を掃除する",
+      "None — cleans up worktrees you no longer need"
+    ),
+    .worktreePaletteEnterOpen: ("%1$@ で %2$@ を新しいタブで開く", "Open %2$@ in %1$@ in a new tab"),
+    .worktreePaletteEnterCheckout: (
+      "%1$@ を worktree にして %2$@ で開く", "Make %1$@ a worktree and open %2$@"
+    ),
+    .worktreePaletteEnterCreate: (
+      "%1$@ を %3$@ から作り、%2$@ で開く", "Create %1$@ from %3$@ and open %2$@"
+    ),
+    .worktreePaletteEnterPickBase: ("ベースを選ぶ", "Choose a base"),
+    .worktreePaletteEnterClean: (
+      "要らなくなった worktree を選んで掃除する", "Pick worktrees you no longer need and clean them up"
+    ),
+    .worktreePaletteBaseQueryPlaceholder: ("ベースのブランチを検索", "Search for a base branch"),
+    .worktreePaletteBaseNoMatch: ("一致するブランチはありません", "No matching branches"),
+    .worktreePaletteBasePickEnter: ("%1$@ をベースにする", "Use %1$@ as the base"),
     .worktreeCleanSubtitle: (
       "要らなくなった worktree を掃除", "Clean up worktrees you no longer need"
     ),
     .worktreeCleanCandidatesOne: ("候補 %lld 件", "%lld candidate"),
     .worktreeCleanCandidatesOther: ("候補 %lld 件", "%lld candidates"),
-    .worktreeCleanListNote: (
-      "rm / prune / 掃除 の入力もエイリアスでヒット · 候補 0 件でも行は残る（バッジだけ消える）",
-      "rm / prune / 掃除 also match as aliases · the row stays at 0 candidates (only the badge goes)"
-    ),
     .worktreeCleanSelected: ("%lld 件選択中", "%lld selected"),
     .worktreeCleanBack: ("esc 戻る", "esc Back"),
     .worktreeCleanSectionSafe: (

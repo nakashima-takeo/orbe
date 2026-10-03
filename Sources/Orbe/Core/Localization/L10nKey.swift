@@ -57,24 +57,39 @@ enum L10nKey: String, CaseIterable, Sendable {
   case agentStateDormant
 
   // MARK: - worktree パレット
-  case worktreePaletteWorktreeExisting
   case worktreePaletteWorktreeCheckout
-  case worktreePaletteWorktreeNew
-  case worktreePalettePrepExisting
-  case worktreePalettePrepCheckout
-  case worktreePalettePrepNew
   case worktreePaletteLaunchSuffix
-  case worktreePaletteAgentOpen
   case worktreePaletteQueryPlaceholder
   case worktreePalettePreparing
   case worktreePaletteHintSelect
-  case worktreePaletteHintAgent
   case worktreePaletteHintClose
   case worktreePaletteErrNotGitRepo
+  case worktreePaletteSectionNewBranch
+  case worktreePaletteThisDirectory
+  case worktreePaletteCreateSuffix
+  case worktreePaletteNoMatch
+  case worktreePaletteCurrentTag
+  case worktreePaletteDefaultTag
+  case worktreePaletteTargetLabel
+  case worktreePaletteBaseLabel
+  case worktreePaletteHintSwitch
+  case worktreePaletteBasePreviousTag
+  case worktreePaletteBaseOther
+  case worktreePaletteBaseNoneWorktree
+  case worktreePaletteBaseNoneDirectory
+  case worktreePaletteBaseNoneCheckout
+  case worktreePaletteBaseNoneClean
+  case worktreePaletteEnterOpen
+  case worktreePaletteEnterCheckout
+  case worktreePaletteEnterCreate
+  case worktreePaletteEnterPickBase
+  case worktreePaletteEnterClean
+  case worktreePaletteBaseQueryPlaceholder
+  case worktreePaletteBaseNoMatch
+  case worktreePaletteBasePickEnter
   case worktreeCleanSubtitle
   case worktreeCleanCandidatesOne
   case worktreeCleanCandidatesOther
-  case worktreeCleanListNote
   case worktreeCleanSelected
   case worktreeCleanBack
   case worktreeCleanSectionSafe
