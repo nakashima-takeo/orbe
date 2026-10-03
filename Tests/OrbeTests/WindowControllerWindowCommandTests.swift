@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// window レベルの tab 非依存 chrome コマンド配信（`handleWindowKeyCommand`）の overlay／改名編集ガードと、
-/// タブのインライン改名（Cmd+R）の確定/取消セマンティクスを固定する。0タブでも届く window コマンドが、
+/// タブ行の「＋」の行き先と、タブのインライン改名（Cmd+R）の確定/取消セマンティクスを固定する。0タブでも届く window コマンドが、
 /// パレット/フォーム表示中・改名編集中には暴発しない（＝入力を横取りしない）契約。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
@@ -33,6 +33,17 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
     XCTAssertTrue(
       wc.handleWindowKeyCommand(.showWorktreePalette), "overlay 非表示なら横取りして true を返す")
     XCTAssertEqual(wc.presentedOverlay, .worktreePalette, "⌘T が dispatch され worktree パレットが開く")
+  }
+
+  /// タブ行の「＋」は ⌘T と同じ worktree パレットを開き、素のシェルのタブを足さない（入口は 1 つ）。
+  func testPlusButtonOpensTheWorktreePaletteWithoutAddingATab() throws {
+    let wc = try restoreSingleTab()
+    let before = wc.current.tabs.count
+
+    wc.statusModel.onNewTab()
+
+    XCTAssertEqual(wc.presentedOverlay, .worktreePalette)
+    XCTAssertEqual(wc.current.tabs.count, before, "素のシェルのタブは開かない")
   }
 
   /// overlay（パレット/フォーム）表示中は window コマンドを横取りせず false を返し、dispatch もしない。
