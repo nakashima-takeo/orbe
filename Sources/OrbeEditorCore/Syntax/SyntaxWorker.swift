@@ -10,9 +10,6 @@ import os
 /// 構文木が変わらなくても役割が変わるから。作り直しは区画ずつ、見えている範囲を先に進め、区切りごとに役割の並びの写しと役割が
 /// 変わった字を版つきで置く。見えていない範囲は、最後の編集から `quietDelay` 経つまで始めない（打鍵が続く間は見えている範囲
 /// だけを作る。開いてから編集が無ければ待たない）。区切りの間に新しい編集が来ていれば、それを先に当てる。文書を閉じたら、走っている解析を打ち切って止まる。
-///
-/// アウトラインが要る間は、同じ待ちが明けた時点で、根の構文木の写し（O(1)）と本文の写しと版をアウトラインの裏の仕事へ
-/// 渡す（版ごとに 1 回。取り出しはここでせず、見えている範囲の作り直しを待たせない）。
 actor SyntaxWorker {
   /// 見えている範囲を知らせる前（面を初めて見せる前）に先に作る行の数（高い画面の 1 画面ぶん）。
   static let initialVisibleLines = 120
@@ -29,10 +26,8 @@ actor SyntaxWorker {
     var quietAt: DispatchTime?
     /// 見えていない範囲も待たずに作る（main が文書全体の結果を同期で待っている）。
     var hurry = false
-    /// アウトラインが要る（文書が告げる）。
-    var outlineWanted = false
-    /// 止まったとき、仕事（作り直していない範囲か、まだ渡していないアウトラインの写し）が残っていた。
-    var hasPending = false
+    /// 止まったとき、作り直していない範囲が残っていた。
+    var hasStale = false
     /// 待ちの明けに起こす予約がある。
     var timerPending = false
   }
@@ -46,9 +41,6 @@ actor SyntaxWorker {
   private let parses = OSAllocatedUnfairLock(initialState: 0)
   private let quietDelay: DispatchTimeInterval
   private let layers: SyntaxLayers
-  private let outline: OutlineWorker?
-  /// 最後にアウトラインの裏の仕事へ根の構文木の写しを渡した版。
-  private var outlineSent: Int?
   private var text: TextRope
   private var version: Int
   private var roles: RoleRuns
@@ -62,11 +54,9 @@ actor SyntaxWorker {
 
   init(
     text: TextRope, version: Int, rules: GrammarRules, registry: LanguageRegistry,
-    inbox: AnalysisInbox, outline: OutlineWorker? = nil,
-    quietDelay: DispatchTimeInterval = SyntaxWorker.quietDelay
+    inbox: AnalysisInbox, quietDelay: DispatchTimeInterval = SyntaxWorker.quietDelay
   ) {
     self.quietDelay = quietDelay
-    self.outline = outline
     layers = SyntaxLayers(rules: rules, registry: registry, cancellation: cancellation)
     self.text = text
     self.version = version
@@ -93,18 +83,7 @@ actor SyntaxWorker {
 
   /// 見えている範囲（最新の版のオフセット）。次の区切りから、そこを先に作る——待ちの間に止まっていても、そこは待たずに作る。
   nonisolated func setVisible(_ range: NSRange) {
-    wakeIfPending { $0.visible = range }
-  }
-
-  /// アウトラインが要るか。要る間は、待ちが明けた版ごとに根の構文木の写しを渡す。
-  nonisolated func setOutlineWanted(_ wanted: Bool) {
-    let wake = mailbox.withLock { mail in
-      mail.outlineWanted = wanted
-      guard wanted, !mail.running else { return false }
-      mail.running = true
-      return true
-    }
-    if wake { start() }
+    wakeIfStale { $0.visible = range }
   }
 
   /// main が結果を同期で待つ間、キューの優先度を上げる（待っている main は優先度を譲らない）。
@@ -118,7 +97,7 @@ actor SyntaxWorker {
       mailbox.withLock { $0.hurry = false }
       return
     }
-    wakeIfPending { $0.hurry = true }
+    wakeIfStale { $0.hurry = true }
   }
 
   /// 編集を当てて根を差分で解析した回数。
@@ -133,11 +112,11 @@ actor SyntaxWorker {
     Task.detached(priority: .userInitiated) { [self] in await run() }
   }
 
-  /// 郵便受けを書き換え、仕事を残して止まっていれば起こす。
-  private nonisolated func wakeIfPending(_ change: @Sendable (inout Mail) -> Void) {
+  /// 郵便受けを書き換え、作り直していない範囲を残して止まっていれば起こす。
+  private nonisolated func wakeIfStale(_ change: @Sendable (inout Mail) -> Void) {
     let wake = mailbox.withLock { mail in
       change(&mail)
-      guard !mail.running, mail.hasPending else { return false }
+      guard !mail.running, mail.hasStale else { return false }
       mail.running = true
       return true
     }
@@ -146,7 +125,7 @@ actor SyntaxWorker {
 
   /// 待ちの明け。
   private nonisolated func quietElapsed() {
-    wakeIfPending { $0.timerPending = false }
+    wakeIfStale { $0.timerPending = false }
   }
 
   private func run() {
@@ -159,23 +138,19 @@ actor SyntaxWorker {
       guard !layers.isCancelled else { return }
       let shown = lines(covering: batch.visible)
       let quiet = batch.hurry || batch.quietAt.map { DispatchTime.now() >= $0 } ?? true
-      if quiet, batch.outlineWanted { handOffOutline() }
       if let target = nextTarget(shown: shown, quiet: quiet) {
         rebuild(target, shown: shown)
         continue
       }
       if deposited != version { deposit(visibleReady: true) }
-      let hasPending =
-        !stale.isEmpty || (batch.outlineWanted && outline != nil && outlineSent != version)
+      let hasStale = !stale.isEmpty
       let wait = mailbox.withLock { mail -> DispatchTime?? in
-        guard mail.edits.isEmpty, mail.visible == batch.visible, mail.hurry == batch.hurry,
-          mail.outlineWanted == batch.outlineWanted
-        else {
+        guard mail.edits.isEmpty, mail.visible == batch.visible, mail.hurry == batch.hurry else {
           return nil
         }
         mail.running = false
-        mail.hasPending = hasPending
-        guard hasPending, !mail.timerPending, let quietAt = mail.quietAt else { return .some(nil) }
+        mail.hasStale = hasStale
+        guard hasStale, !mail.timerPending, let quietAt = mail.quietAt else { return .some(nil) }
         mail.timerPending = true
         return .some(quietAt)
       }
@@ -212,13 +187,6 @@ actor SyntaxWorker {
       stale.insert(integersIn: covered.location..<NSMaxRange(covered))
     }
     stale.formUnion(layers.takeInvalidated())
-  }
-
-  /// 今の版の根の構文木の写しをアウトラインの裏の仕事へ渡す（版ごとに 1 回）。
-  private func handOffOutline() {
-    guard let outline, outlineSent != version, let tree = layers.rootTreeCopy() else { return }
-    outline.extract(tree, text: text, version: version)
-    outlineSent = version
   }
 
   /// 次に作り直す区画。見えている行に掛かる部分が先。見えていない部分は待ちが明けてから。

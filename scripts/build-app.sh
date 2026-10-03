@@ -173,14 +173,6 @@ if [ "$QUERY_BUNDLES" != "16" ]; then
   echo "エラー: tree-sitter の queries バンドルが 16 個でない ($QUERY_BUNDLES)。swift build -c release が全文法を焼いたか確認せよ" >&2
   exit 1
 fi
-# アウトラインの規則（言語ごとの outline/<文法>.scm。TSX は typescript.scm を使う）は Orbe 自身の資源バンドル。無ければアウトラインが黙って出ないまま
-# 出荷されるので、ここで落とす。
-cp -R "$ROOT/.build/release/Orbe_OrbeEditorCore.bundle" "$APP/Contents/Resources/"
-OUTLINE_RULES="$(find "$APP/Contents/Resources/Orbe_OrbeEditorCore.bundle" -name '*.scm' | wc -l | tr -d ' ')"
-if [ "$OUTLINE_RULES" != "14" ]; then
-  echo "エラー: アウトラインの規則が 14 個でない ($OUTLINE_RULES)。swift build -c release が Orbe_OrbeEditorCore.bundle を焼いたか確認せよ" >&2
-  exit 1
-fi
 # アプリアイコン: Icon Composer の app/Orbe.icon を actool でコンパイルし、
 # Assets.car（macOS 26+ の light/dark 外観切替）と Orbe.icns（macOS 14–25 フォールバック）を
 # 同時生成して Resources へ出力する。Info.plist は CFBundleIconName=Orbe で参照する。

@@ -28,15 +28,12 @@ protocol RowListSource: AnyObject {
   /// 列の焦点が入った・抜けた。
   func focusDidChange(_ focused: Bool)
 
-  /// 列に焦点がある間の打鍵を、キーとして解く前に源が引き取って処理する。引き取ったら true（列はその打鍵に何もしない）。
-  func takeTyping(_ event: NSEvent) -> Bool
-  /// キーの操作。扱ったら true。扱わなければ、Home / End・PageUp / PageDown は列が送るだけにし、Space は次の
-  /// responder へ回す。
-  func perform(_ key: RowListKey) -> Bool
-  /// 行 `row` のシングルクリック（`x` は行の中の横の位置）。
-  func click(_ row: Int, x: CGFloat)
-  /// 行 `row` のダブルクリック（`x` は行の中の横の位置）。
-  func doubleClick(_ row: Int, x: CGFloat)
+  /// キーの操作。
+  func perform(_ key: RowListKey)
+  /// 行 `row` のシングルクリック。
+  func click(_ row: Int)
+  /// 行 `row` のダブルクリック。
+  func doubleClick(_ row: Int)
   /// VoiceOver がリストの行 `row` を選んだ。
   func select(_ row: Int)
 }
@@ -46,16 +43,7 @@ enum RowListKey {
   /// ↑↓（⇧つきも同じ）。
   case up, down
   case left, right
-  case enter, escape, space
-  case home, end, pageUp, pageDown
-}
-
-/// 行を見せる送り方。
-enum RowListReveal {
-  /// 見えていなければ、見えるところまで最小限だけ送る。
-  case nearest
-  /// 見えていなければ、列の縦の中央へ寄せる。
-  case center
+  case enter, escape
 }
 
 /// 行の列のスクロールの器。持ち主（pane）が持ち続け、載せる SwiftUI が隠れている間も捨てない——出し直すたびに行の
@@ -65,9 +53,9 @@ final class RowList<Source: RowListSource>: NSScrollView {
   private var rowsVersion: Int?
   /// 最後に写した選択。選択が変わったときだけ、その行を見せる（行の番号がずれただけ・列が出ただけでは送らない）。
   private var selection: Source.Selection?
-  /// 大きさが決まる前に選択が変わったときの見せ方。大きさの無い列で送ると、後で大きさが付いても送った位置が残るので、
-  /// 大きさが付いた最初の `tile` で当てる。
-  private var pendingReveal: (selection: Source.Selection, how: RowListReveal)?
+  /// 大きさが決まる前に変わった選択。大きさの無い列で送ると、後で大きさが付いても送った位置が残るので、大きさが付いた
+  /// 最初の `tile` で見せる。
+  private var pendingReveal: Source.Selection?
 
   init(source: Source, rowHeight: CGFloat) {
     list = RowListView(source: source, rowHeight: rowHeight)
@@ -83,11 +71,8 @@ final class RowList<Source: RowListSource>: NSScrollView {
   required init?(coder: NSCoder) { fatalError("not supported") }
 
   /// 行の版が変わった（か絵文字の字体が変わった）ときだけ行を読み直し、選択の行を写す。選択が変わったときだけ、
-  /// その行を `reveal` のやり方で見せる。
-  func update(
-    rowsVersion: Int, selection: Source.Selection?, reveal: RowListReveal, emoji: NSFont?,
-    wantsFocus: Bool
-  ) {
+  /// その行を見えるところまで最小限だけ送る。
+  func update(rowsVersion: Int, selection: Source.Selection?, emoji: NSFont?, wantsFocus: Bool) {
     if rowsVersion != self.rowsVersion || emoji !== list.emoji {
       self.rowsVersion = rowsVersion
       list.emoji = emoji
@@ -99,9 +84,9 @@ final class RowList<Source: RowListSource>: NSScrollView {
       pendingReveal = nil
       if let selection, let row = list.selectedRow {
         if contentSize.height > 0 {
-          list.reveal(row, reveal)
+          list.scrollRowToVisible(row)
         } else {
-          pendingReveal = (selection, reveal)
+          pendingReveal = selection
         }
       }
     }
@@ -117,7 +102,7 @@ final class RowList<Source: RowListSource>: NSScrollView {
     list.layoutRows()
     guard contentSize.height > 0, let pending = pendingReveal else { return }
     pendingReveal = nil
-    if let row = list.source.row(of: pending.selection) { list.reveal(row, pending.how) }
+    if let row = list.source.row(of: pending) { list.scrollRowToVisible(row) }
   }
 
   override func reflectScrolledClipView(_ clipView: NSClipView) {
@@ -130,9 +115,8 @@ final class RowList<Source: RowListSource>: NSScrollView {
 /// r mod 本数 に割り当てて使い回す——送って描き直すのは新しく見えた行だけで、行の数が変わっても列の高さを変えるだけ
 /// （行ごとの仕事をしない）。行の高さは 1 つ。
 ///
-/// キーは源の操作へ渡す（`RowListKey`）。Home / End・PageUp / PageDown は源が扱わなければ送るだけ。文字の打鍵は解かない
-/// ——解く前に源へ渡し、源が引き取れば解かない。押すと焦点を取り、行の番号と行の中の横の位置を源へ渡す。VoiceOver には AX の
-/// リスト（行の総数と、見えている行・選択の行）として見せる。
+/// キーは源の操作へ渡す（`RowListKey`）。Home / End・PageUp / PageDown は列が送るだけ。押すと焦点を取り、行の番号を源へ
+/// 渡す。VoiceOver には AX のリスト（行の総数と、見えている行・選択の行）として見せる。
 final class RowListView<Source: RowListSource>: NSView {
   let source: Source
   let rowHeight: CGFloat
@@ -219,27 +203,9 @@ final class RowListView<Source: RowListSource>: NSView {
     }
   }
 
-  /// 行 `row` を `how` のやり方で見せる（見えていれば動かさない）。
-  func reveal(_ row: Int, _ how: RowListReveal) {
-    switch how {
-    case .nearest: scrollRowToVisible(row)
-    case .center: scrollRowToCenter(row)
-    }
-  }
-
   /// 見えていなければ、見えるところまで最小限だけ送る。
   func scrollRowToVisible(_ row: Int) {
     scrollToVisible(rect(ofRow: row))
-  }
-
-  /// 見えていなければ、列の縦の中央へ寄せる（端では寄せ切らない）。
-  func scrollRowToCenter(_ row: Int) {
-    let rect = rect(ofRow: row)
-    let visible = visibleRect
-    guard visible.minY > rect.minY || visible.maxY < rect.maxY else { return }
-    let top = min(
-      max(0, rect.midY - visible.height / 2), max(0, bounds.height - visible.height))
-    scroll(NSPoint(x: 0, y: top))
   }
 
   private func rect(ofRow row: Int) -> NSRect {
@@ -279,53 +245,43 @@ final class RowListView<Source: RowListSource>: NSView {
     let point = convert(event.locationInWindow, from: nil)
     guard let row = row(at: point) else { return }
     if event.clickCount >= 2 {
-      source.doubleClick(row, x: point.x)
+      source.doubleClick(row)
     } else {
-      source.click(row, x: point.x)
+      source.click(row)
     }
   }
 
   // MARK: - キー
 
   override func keyDown(with event: NSEvent) {
-    guard !source.takeTyping(event) else { return }
     interpretKeyEvents([event])
   }
 
-  override func moveUp(_ sender: Any?) { _ = source.perform(.up) }
-  override func moveDown(_ sender: Any?) { _ = source.perform(.down) }
-  override func moveUpAndModifySelection(_ sender: Any?) { _ = source.perform(.up) }
-  override func moveDownAndModifySelection(_ sender: Any?) { _ = source.perform(.down) }
-  override func moveLeft(_ sender: Any?) { _ = source.perform(.left) }
-  override func moveRight(_ sender: Any?) { _ = source.perform(.right) }
-  override func insertNewline(_ sender: Any?) { _ = source.perform(.enter) }
-  override func cancelOperation(_ sender: Any?) { _ = source.perform(.escape) }
-
-  /// Space は文字として届く。
-  override func insertText(_ insertString: Any) {
-    if insertString as? String == " ", source.perform(.space) { return }
-    super.insertText(insertString)
-  }
+  override func moveUp(_ sender: Any?) { source.perform(.up) }
+  override func moveDown(_ sender: Any?) { source.perform(.down) }
+  override func moveUpAndModifySelection(_ sender: Any?) { source.perform(.up) }
+  override func moveDownAndModifySelection(_ sender: Any?) { source.perform(.down) }
+  override func moveLeft(_ sender: Any?) { source.perform(.left) }
+  override func moveRight(_ sender: Any?) { source.perform(.right) }
+  override func insertNewline(_ sender: Any?) { source.perform(.enter) }
+  override func cancelOperation(_ sender: Any?) { source.perform(.escape) }
 
   override func scrollToBeginningOfDocument(_ sender: Any?) {
-    guard !source.perform(.home) else { return }
     scroll(NSPoint(x: 0, y: 0))
   }
 
   override func scrollToEndOfDocument(_ sender: Any?) {
-    guard !source.perform(.end) else { return }
     scroll(NSPoint(x: 0, y: max(0, bounds.height - visibleRect.height)))
   }
 
-  override func scrollPageUp(_ sender: Any?) { page(.pageUp) }
-  override func scrollPageDown(_ sender: Any?) { page(.pageDown) }
-  override func pageUp(_ sender: Any?) { page(.pageUp) }
-  override func pageDown(_ sender: Any?) { page(.pageDown) }
+  override func scrollPageUp(_ sender: Any?) { page(by: -1) }
+  override func scrollPageDown(_ sender: Any?) { page(by: 1) }
+  override func pageUp(_ sender: Any?) { page(by: -1) }
+  override func pageDown(_ sender: Any?) { page(by: 1) }
 
-  /// 源が扱わなければ 1 画面ぶん送る（1 行ぶん重ねて、読んでいた行を見失わない）。
-  private func page(_ key: RowListKey) {
-    guard !source.perform(key) else { return }
-    let step = max(rowHeight, visibleRect.height - rowHeight) * (key == .pageUp ? -1 : 1)
+  /// 1 画面ぶん送る（1 行ぶん重ねて、読んでいた行を見失わない）。`direction` は上が -1、下が 1。
+  private func page(by direction: CGFloat) {
+    let step = max(rowHeight, visibleRect.height - rowHeight) * direction
     let top = min(
       max(0, visibleRect.minY + step), max(0, bounds.height - visibleRect.height))
     scroll(NSPoint(x: 0, y: top))

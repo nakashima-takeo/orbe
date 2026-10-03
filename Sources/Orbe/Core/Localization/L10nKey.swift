@@ -283,13 +283,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorCollapseAll
   case editorExpandAll
 
-  // MARK: - Editor 面（アウトライン）
-  case editorOutlineTitle
-  case editorOutlineUnavailable
-  case editorOutlineLoading
-  case editorOutlineEmpty
-  case editorOutlineFilterPlaceholder
-
   // MARK: - Editor 面（プロジェクト検索）
   case editorRailSearch
   case editorSearchTitle

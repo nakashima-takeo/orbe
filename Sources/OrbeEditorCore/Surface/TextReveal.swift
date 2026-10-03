@@ -6,9 +6,6 @@ public enum TextReveal: Equatable, Sendable {
   case center
   /// 区間の先頭の行が縦に見えていなければ中央へ、見えていれば最小限。
   case centerIfOutside
-  /// 区間が縦に見えていなければ上寄りに——見えている高さより高ければ先頭の行を上端へ、そうでなければ先頭の行を上から
-  /// max(5 行, 高さの 20%) 下へ（区間の終わりが下へ押し出されない範囲で）。見えていれば動かさない。
-  case nearTopIfOutside
   /// 区間が縦に見えるところまで最小限。
   case minimal
 
@@ -28,10 +25,6 @@ public enum TextReveal: Equatable, Sendable {
       return minimal(from: centered)
     case .centerIfOutside:
       return minimal(from: top < first || top >= first + visible ? centered : first)
-    case .nearTopIfOutside:
-      if bottom - top > visible { return top }
-      guard top < first || bottom > first + visible else { return first }
-      return max(bottom - visible, top - max(5, visible * 0.2))
     case .minimal:
       return minimal(from: first)
     }

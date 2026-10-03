@@ -7,7 +7,6 @@ struct RowListHost<Source: RowListSource>: NSViewRepresentable {
   let list: RowList<Source>
   let rowsVersion: Int
   let selection: Source.Selection?
-  let reveal: RowListReveal
   let emoji: NSFont?
   let wantsFocus: Bool
 
@@ -22,7 +21,6 @@ struct RowListHost<Source: RowListSource>: NSViewRepresentable {
 
   func updateNSView(_ list: RowList<Source>, context: Context) {
     list.update(
-      rowsVersion: rowsVersion, selection: selection, reveal: reveal, emoji: emoji,
-      wantsFocus: wantsFocus)
+      rowsVersion: rowsVersion, selection: selection, emoji: emoji, wantsFocus: wantsFocus)
   }
 }

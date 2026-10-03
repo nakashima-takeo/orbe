@@ -149,21 +149,6 @@ enum L10n {
     .editorCollapseAll: ("すべて折りたたむ", "Collapse All"),
     .editorExpandAll: ("すべて展開", "Expand All"),
 
-    // MARK: Editor 面（アウトライン）。%@ は文書の名前。
-    // 英語は VS Code の原文（outlinePane の 3 文と、tree の絞り込み欄の Type to filter）、日本語は Orbe の訳。
-    .editorOutlineTitle: ("アウトライン", "Outline"),
-    .editorOutlineUnavailable: (
-      "このエディターではアウトラインを表示できません",
-      "The active editor cannot provide outline information."
-    ),
-    .editorOutlineLoading: (
-      "ドキュメント '%@' のシンボルを読み込んでいます…", "Loading document symbols for '%@'..."
-    ),
-    .editorOutlineEmpty: (
-      "ドキュメント '%@' にシンボルが見つかりません", "No symbols found in document '%@'"
-    ),
-    .editorOutlineFilterPlaceholder: ("入力して絞り込み", "Type to filter"),
-
     // MARK: Editor 面（プロジェクト検索）
     .editorRailSearch: ("検索 (⌘⇧F)", "Search (⌘⇧F)"),
     .editorSearchTitle: ("検索", "Search"),

@@ -4,8 +4,7 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorCore
 
-/// エディターの計測（`EditorTypingPerfTests`・`EditorSyntaxPerfTests`・`EditorOutlinePerfTests`）が文書を開く窓と、時間の
-/// 出し方。
+/// エディターの計測（`EditorTypingPerfTests`・`EditorSyntaxPerfTests`）が文書を開く窓と、時間の出し方。
 struct OpenedEditor {
   let tab: TerminalTab
   let pane: EditorPaneView
