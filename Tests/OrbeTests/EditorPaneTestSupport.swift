@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import SwiftUI
 import XCTest
 
 @testable import Orbe
@@ -93,6 +94,49 @@ extension OrbeTestCase {
       until: { (window.firstResponder as? NSView)?.isDescendant(of: pane.sideHost) == true },
       "入力欄が焦点を取る")
     return try XCTUnwrap(window.firstResponder as? NSTextView)
+  }
+
+  /// ファイルタブ `index` の右端の枠（× / ●）の中心（面の座標）。タブの幅は同じ view を単独で組んで測る。
+  @MainActor
+  func fileTabSlotCenter(_ pane: EditorPaneView, _ index: Int) -> NSPoint {
+    let right = pane.shell.tabs.prefix(index + 1).reduce(pane.headerHost.frame.minX) { x, tab in
+      x + NSHostingView(rootView: FileTabView(tab: tab, shell: pane.shell)).fittingSize.width
+    }
+    return NSPoint(
+      x: right - Theme.Layout.editorFileTabTrailing - Theme.Layout.editorTabClose / 2,
+      y: Theme.Layout.editorFileTabs / 2)
+  }
+
+  /// ポインタを列の頭の上の点（面の座標）へ動かす。SwiftUI の onHover はポインタの下の view が受ける
+  /// mouseEntered / mouseMoved で動く。
+  @MainActor
+  func movePointer(_ pane: EditorPaneView, to point: NSPoint) {
+    let host = pane.headerHost
+    let local = host.convert(point, from: pane)
+    guard let target = host.hitTest(host.convert(local, to: host.superview)) else { return }
+    let event = timedMouse(.mouseMoved, at: pane.convert(point, to: nil), in: pane.window)
+    target.mouseExited(with: event)
+    target.mouseEntered(with: event)
+    target.mouseMoved(with: event)
+  }
+
+  /// 面の座標の点を押して離す（窓は ordered-in であること——`sendEvent` はそれ以外に配送しない）。
+  @MainActor
+  func click(_ pane: EditorPaneView, at point: NSPoint) throws {
+    let window = try XCTUnwrap(pane.window)
+    for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+      window.sendEvent(timedMouse(type, at: pane.convert(point, to: nil), in: window))
+    }
+  }
+
+  /// 今の時刻を持つマウスのイベント（SwiftUI のジェスチャーとホバーは時刻 0 のイベントを取りこぼす）。
+  private func timedMouse(_ type: NSEvent.EventType, at location: NSPoint, in window: NSWindow?)
+    -> NSEvent
+  {
+    NSEvent.mouseEvent(
+      with: type, location: location, modifierFlags: [],
+      timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window?.windowNumber ?? 0,
+      context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
   }
 
   /// 配下の最初の NSScrollView（SwiftUI の ScrollView の裏）。

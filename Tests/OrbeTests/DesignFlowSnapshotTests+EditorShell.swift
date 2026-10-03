@@ -5,8 +5,8 @@ import XCTest
 
 /// 骨込みのエディター面の flow（fixture は gallery と同じ `EditorShellFixtures`。状態は本物の操作が生む）。
 /// design-system §5 の Rail / Explorer / File tabs が名指しする状態——サイドバー閉（レールに印なし）・行内の
-/// 新規入力（続けて押しても 1 行）・ファイルタブの衝突ドット（黄）・文書 0 の骨込み空状態——と、狭い列の
-/// 切り詰め中のドラッグ、深い行の可視位置への送りを撮る。
+/// 新規入力（続けて押しても 1 行）・ファイルタブの衝突ドット（黄）・ファイルタブの × と ● のポインタによる出し分け・
+/// 文書 0 の骨込み空状態——と、狭い列の切り詰め中のドラッグ、深い行の可視位置への送りを撮る。
 extension DesignFlowSnapshotTests {
   private func editorScene() throws -> EditorShellFixtures.Scene {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
@@ -88,6 +88,41 @@ extension DesignFlowSnapshotTests {
       let data = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
       let url = previewDir("flows").appendingPathComponent(
         String(format: "editor_shell_reveal_%02d_%@.png", idx, step.label))
+      try data.write(to: url)
+      print("[flow] wrote \(url.path)")
+    }
+  }
+
+  /// ファイルタブの右端の枠: ポインタなし（アクティブは ×・未保存は ●）→ 保存済みのタブの上（× が出る）→ 未保存の
+  /// タブの上（● のまま）→ 未保存のタブの ● の上（× に替わり枠に地）→ 保存済みのタブの × の上（枠の地と明るい ×）、
+  /// 最後に同じ状態を light で。ホバーは窓の中の面に
+  /// 合成のポインタで起こすので、reveal と同じく面を付けた窓の中でそのまま描く。
+  func testEditorTabClose() throws {
+    let scene = try editorScene()
+    defer { scene.cleanup() }
+    let pane = scene.pane
+    scene.warmUp(size: NSSize(width: 1100, height: 240))
+    pane.window?.appearance = NSAppearance(named: .darkAqua)
+    let slot = { (index: Int) in self.fileTabSlotCenter(pane, index) }
+    let steps: [(label: String, action: () -> Void)] = [
+      ("rest", { self.movePointer(pane, to: NSPoint(x: pane.bounds.maxX - 4, y: slot(0).y)) }),
+      ("pointer_on_tab", { self.movePointer(pane, to: NSPoint(x: slot(1).x - 30, y: slot(1).y)) }),
+      (
+        "pointer_on_dirty_tab",
+        { self.movePointer(pane, to: NSPoint(x: slot(0).x - 30, y: slot(0).y)) }
+      ),
+      ("pointer_on_dirty_close", { self.movePointer(pane, to: slot(0)) }),
+      ("pointer_on_close", { self.movePointer(pane, to: slot(1)) }),
+      ("pointer_on_close_light", { pane.window?.appearance = NSAppearance(named: .aqua) }),
+    ]
+    for (idx, step) in steps.enumerated() {
+      step.action()
+      RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+      let rep = try XCTUnwrap(pane.bitmapImageRepForCachingDisplay(in: pane.bounds))
+      pane.cacheDisplay(in: pane.bounds, to: rep)
+      let data = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
+      let url = previewDir("flows").appendingPathComponent(
+        String(format: "editor_tab_close_%02d_%@.png", idx, step.label))
       try data.write(to: url)
       print("[flow] wrote \(url.path)")
     }
