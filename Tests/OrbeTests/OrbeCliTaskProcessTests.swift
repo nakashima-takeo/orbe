@@ -151,7 +151,6 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
   /// メモや待ちの理由は任意の文字列なので、`orb task set 3 --memo "$M"` の `$M` がたまたま `-h` だと、
   /// 何も変えないまま usage を出して exit 0 になる。値の席の `-` 始まりは exit 2 で止まるのが cli.md の規約。
   func testHelpInAValueSlotIsNotTreatedAsHelp() {
-    XCTExpectFailure("バグ疑い: runTask が値の席を抜く前に引数列全体を help 走査している")
     for args in [
       ["task", "set", "3", "--memo", "-h"],
       ["task", "add", "a", "--waiting", "--help"],
@@ -159,6 +158,11 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
       let outcome = ControlProcess.orbWithoutServer(args)
       XCTAssertEqual(
         outcome.status, 2, "`\(args.joined(separator: " "))` が help に化けて exit \(outcome.status)")
+      XCTAssertFalse(outcome.stdout.contains("orb task — "), "usage を出して成功扱いにしない")
     }
+    // `--help` 自体は従来どおり出る（値の席を抜いた後に残っていれば help）。
+    let help = ControlProcess.orbWithoutServer(["task", "set", "--help"])
+    XCTAssertEqual(help.status, 0, "task set --help は exit 0: \(help.stderr)")
+    XCTAssertTrue(help.stdout.contains("orb task — "), "task set --help は usage を出す")
   }
 }
