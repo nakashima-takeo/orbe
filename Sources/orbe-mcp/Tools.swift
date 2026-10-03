@@ -249,6 +249,90 @@ let tools: [[String: Any]] = [
       ])
     ),
   ]),
+  obj([
+    ("name", "list_tasks"),
+    (
+      "description",
+      "人と agent が共有するタスク一覧を、ユーザーが決めた列の順で返す。各要素は taskId・title・status"
+        + "（todo / in_progress / done）・priority（high / medium / low）・memo・createdAt、あれば waiting"
+        + "{reason,since}・due（YYYY-MM-DD）・workspaceId と workspaceName・createdBy（追加した agent）。"
+        + "workspace に付いていないタスク（付き先が削除されたものを含む）は workspaceId を持たない。"
+        + "完了したタスクも削除されるまで残る。memo は人も agent も読む前提の欄。"
+    ),
+    ("inputSchema", schema(["workspaceId": intProp("この workspace のタスクだけに絞る")])),
+  ]),
+  obj([
+    ("name", "add_task"),
+    (
+      "description",
+      "タスクを列の末尾に足し、足したタスクを返す（taskId は使い回されない短い整数）。workspaceId を省くと、"
+        + "呼び出し元タブ（この MCP を起こした agent のタブ）の workspace に付く。null で「workspace なし」。"
+        + "追加者として呼び出し元タブの agent 名が記録される。"
+    ),
+    (
+      "inputSchema",
+      schema(
+        [
+          "title": strProp("タイトル（1 行。前後の空白は除かれる）"),
+          "status": strProp("todo / in_progress / done（既定 todo）"),
+          "priority": strProp("high / medium / low（既定 medium）"),
+          "due": strProp("期限（YYYY-MM-DD）"),
+          "waitingReason": strProp("何を待っているか（待ちにする場合）"),
+          "memo": strProp("メモ（複数行可。人も agent も読む）"),
+          "workspaceId": [
+            "type": ["integer", "null"],
+            "description": "付ける workspace（省略で呼び出し元タブの workspace、null でなし）",
+          ],
+        ], required: ["title"])
+    ),
+  ]),
+  obj([
+    ("name", "update_task"),
+    (
+      "description",
+      "タスクの項目を変え、変えた後のタスクを返す。渡した項目だけが変わる。完了は status: \"done\""
+        + "（待ちは自動で外れる。完了のまま待ちは入れられない）。due / waitingReason / workspaceId は null で外す。"
+    ),
+    (
+      "inputSchema",
+      schema(
+        [
+          "taskId": intProp("対象タスク"),
+          "title": strProp("新しいタイトル"),
+          "status": strProp("todo / in_progress / done"),
+          "priority": strProp("high / medium / low"),
+          "due": ["type": ["string", "null"], "description": "期限（YYYY-MM-DD。null で外す）"],
+          "waitingReason": [
+            "type": ["string", "null"], "description": "待ちの理由（null で待ちを外す）",
+          ],
+          "memo": strProp("メモ（置き換え）"),
+          "workspaceId": [
+            "type": ["integer", "null"], "description": "付ける workspace（null でなし）",
+          ],
+        ], required: ["taskId"])
+    ),
+  ]),
+  obj([
+    ("name", "move_task"),
+    (
+      "description",
+      "タスクを、他のタスクの前（beforeTaskId）か後（afterTaskId）へ移す。どちらか 1 つを渡す。"
+    ),
+    (
+      "inputSchema",
+      schema(
+        [
+          "taskId": intProp("移すタスク"),
+          "beforeTaskId": intProp("このタスクの前へ"),
+          "afterTaskId": intProp("このタスクの後へ"),
+        ], required: ["taskId"])
+    ),
+  ]),
+  obj([
+    ("name", "delete_task"),
+    ("description", "タスクを一覧から消す（完了にするだけなら update_task の status: \"done\"）。"),
+    ("inputSchema", schema(["taskId": intProp("消すタスク")], required: ["taskId"])),
+  ]),
 ]
 
 let toolNames = Set(tools.compactMap { $0["name"] as? String })

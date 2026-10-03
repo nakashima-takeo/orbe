@@ -138,7 +138,10 @@ func handle(_ message: [String: Any]) {
       replyError(id: id, code: -32602, message: "unknown tool")
       return
     }
-    let args = params["arguments"] as? [String: Any] ?? [:]
+    var args = params["arguments"] as? [String: Any] ?? [:]
+    // 呼び出し元タブは、ブリッジを起こした agent のタブ（環境の ORBE_TAB）。どの動詞が読むかを知らずに
+    // 全呼び出しへ添え、agent が引数に書いた値は使わない（名乗り間違いを起こさない）。
+    args["callerTabId"] = ProcessInfo.processInfo.environment["ORBE_TAB"].flatMap(Int.init)
     switch controlRequest(method: name, params: args) {
     case .ok(let value):
       let text = jsonText(value)
