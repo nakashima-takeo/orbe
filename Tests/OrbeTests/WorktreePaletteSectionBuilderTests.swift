@@ -131,7 +131,10 @@ final class WorktreePaletteSectionBuilderTests: OrbeTestCase {
       ])
     XCTAssertEqual(
       section(sections, .branches)?.items.map(\.enter),
-      [.checkout("fix/login-blank"), .checkout("origin/feat/fetch-progress")])
+      [
+        .checkout("fix/login-blank"),
+        .trackRemote(remote: "origin/feat/fetch-progress", local: "feat/fetch-progress"),
+      ])
   }
 
   /// 非 git の場所は「このディレクトリ」の 1 行だけ（見出しなし）。↵ はそのディレクトリをそのまま開く。
