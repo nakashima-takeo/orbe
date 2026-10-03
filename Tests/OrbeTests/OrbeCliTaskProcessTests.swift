@@ -104,7 +104,7 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     let control = try startControlProcess()
     let tab = try XCTUnwrap(control.target.workspaces.first { $0.name == "background" }?.tabs.first)
     control.target.controlReportAgent(
-      tab: tab, report: AgentHookReport(agent: "claude", state: "idle", sessionId: "s-1"))
+      tab: tab, report: AgentHookReport(agent: "claude", state: "working", sessionId: "s-1"))
     let inTab = ["ORBE_TAB": String(tab.id)]
 
     run(control, ["add", "省略"], env: inTab)

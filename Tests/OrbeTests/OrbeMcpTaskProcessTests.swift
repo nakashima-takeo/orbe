@@ -67,7 +67,7 @@ final class OrbeMcpTaskProcessTests: OrbeTestCase {
     let background = try tab(control, in: "background")
     let main = try tab(control, in: "main")
     control.target.controlReportAgent(
-      tab: background, report: AgentHookReport(agent: "claude", state: "idle", sessionId: "s-1"))
+      tab: background, report: AgentHookReport(agent: "claude", state: "working", sessionId: "s-1"))
     let bridgeInBackground = ["ORBE_TAB": String(background.id)]
 
     let fromTab = control.mcpJSON("add_task", ["title": "タブから"], env: bridgeInBackground)

@@ -78,7 +78,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     let wc = try launch()
     let tab = try backgroundTab(wc)
     wc.controlReportAgent(
-      tab: tab, report: AgentHookReport(agent: "claude", state: "idle", sessionId: "s-1"))
+      tab: tab, report: AgentHookReport(agent: "claude", state: "working", sessionId: "s-1"))
 
     let task = try added(wc, callerTabId: tab.id)
 
@@ -87,6 +87,21 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
       "前面の workspace ではなく呼び出し元タブの workspace に付く")
     XCTAssertEqual(task["workspaceName"] as? String, "background")
     XCTAssertEqual(task["createdBy"] as? String, "claude", "追加者として呼び出し元タブの agent 名が残る")
+  }
+
+  /// 追加者が残るのは agent が自分のターンの中（working）で足したときだけ。ターンを終えた agent の
+  /// タブ（終了を報告しない codex / agy が去った後のシェルを含む）から人が打った追加を agent の名で残さない。
+  func testAddFromATabWhoseAgentIsNotWorkingRecordsNoAuthor() throws {
+    let wc = try launch()
+    let tab = try backgroundTab(wc)
+
+    for state in ["idle", "done", "waiting"] {
+      wc.controlReportAgent(
+        tab: tab, report: AgentHookReport(agent: "codex", state: state, sessionId: "s-1"))
+      let task = try added(wc, callerTabId: tab.id)
+      XCTAssertEqual(task["workspaceName"] as? String, "background", "\(state): 付き先は呼び出し元タブのまま")
+      XCTAssertNil(task["createdBy"], "\(state) を報告しているタブからの追加は追加者を残さない")
+    }
   }
 
   func testAddFromATabWithoutAnAgentAttachesButRecordsNoAuthor() throws {
