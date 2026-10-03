@@ -105,35 +105,14 @@ final class WindowControllerWorktreePaletteBaseTests: OrbeTestCase {
     XCTAssertEqual(wc.workspaces[0].tabs.map(\.cwd), [toplevel], "開いた workspace にタブが開く")
     XCTAssertTrue(wc.workspaces[1].tabs.isEmpty, "切り替わった先の workspace には開かない")
   }
-
-  /// root path に置く 1 コミットのリポジトリ（origin 無し＝gh へは問い合わせない）。
-  private func makeRepository() throws -> String {
-    let dir = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
-    try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    try "x".write(
-      toFile: (dir as NSString).appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-    for args in [
-      ["init", "-q", "-b", "main"], ["config", "user.email", "t@example.com"],
-      ["config", "user.name", "t"], ["add", "-A"], ["commit", "-qm", "init"],
-    ] {
-      XCTAssertTrue(GitRunner.shared.runSync(args, cwd: dir).isSuccess, "git \(args[0])")
-    }
-    return dir
-  }
-
-  /// main queue を回しながら条件の成立を待つ（provider の completion と次 tick のフォーカス確定は main で届く）。
-  private func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-      usleep(5_000)
-    }
-    return condition()
-  }
 }
 
 /// パレットは開いた時点の workspace に結び付く。前回のベースはその workspace から読み、作成に成功したら
 /// その workspace へ書く。
+///
+/// 壊れると何が起きるか: 作成の待ち（fetch の着地で数秒かかりうる）の間に workspace が切り替わると、
+/// 別の workspace にタブが開き、その workspace の「前回」が書き換わる。作成に成功しても前回が残らず、
+/// 次の作成行のベースが毎回既定に戻る。
 @MainActor
 final class WorktreePaletteWorkspaceBindingTests: OrbeTestCase {
 
@@ -161,6 +140,35 @@ final class WorktreePaletteWorkspaceBindingTests: OrbeTestCase {
     XCTAssertNil(wc.model.worktreePaletteProvider?.previousBase, "別の workspace の前回は読まない")
   }
 
+  /// 作成行の ↵ で新しいブランチを作れたら、作成の途中で別の workspace へ切り替わっていても、タブと
+  /// 「前回」は開いた workspace に入る。前回は既定ブランチの意図ではなく、実際に使ったベースの名前で残る。
+  func testCreatingANewBranchOpensAndRemembersTheBaseInTheOpeningWorkspace() throws {
+    let repo = try makeRepository()
+    let wc = try restore([
+      WorkspaceState(name: "opened", rootPath: repo, activeTab: 0, tabs: []),
+      WorkspaceState(name: "other", rootPath: "/tmp", activeTab: 0, tabs: []),
+    ])
+    wc.showWorktreePalette()
+    let palette = try XCTUnwrap(wc.model.worktreePalette)
+    palette.chooseTarget(at: try XCTUnwrap(palette.targets.firstIndex(of: .shell)))
+    palette.query = "feat/x"
+    palette.onQueryChanged()
+    XCTAssertTrue(
+      pump { palette.selectedItem?.action == .createBranch(name: "feat/x") }, "前提: 作成行が選ばれている")
+    XCTAssertEqual(palette.selectedBaseChoice?.role, .defaultBranch, "前提: 前回が無いので既定から作る")
+
+    palette.activate()
+    wc.switchWorkspace(to: 1)
+
+    XCTAssertTrue(pump { wc.workspaces[0].tabs.count == 1 }, "開いた workspace にタブが開く")
+    XCTAssertTrue(
+      try XCTUnwrap(wc.workspaces[0].tabs.first).cwd.hasSuffix("/repo-worktrees/feat-x"),
+      "作った worktree で開く")
+    XCTAssertEqual(wc.workspaces[0].lastWorktreeBase, "main", "origin の無い repo の既定ブランチの解決値")
+    XCTAssertTrue(wc.workspaces[1].tabs.isEmpty, "切り替わった先の workspace には開かない")
+    XCTAssertNil(wc.workspaces[1].lastWorktreeBase, "切り替わった先の workspace の前回は書き換えない")
+  }
+
   /// 書き込みはその workspace にだけ効き、閉じた workspace には書かない。
   func testRememberWritesOnlyToALiveWorkspace() throws {
     let wc = try restore([
@@ -176,5 +184,33 @@ final class WorktreePaletteWorkspaceBindingTests: OrbeTestCase {
     wc.closeWorkspace(1, origin: .gesture)
     wc.rememberWorktreeBase("origin/dev", in: b)
     XCTAssertEqual(b.lastWorktreeBase, "origin/main", "閉じた workspace には書かない")
+  }
+}
+
+@MainActor
+private extension OrbeTestCase {
+  /// root path に置く 1 コミットのリポジトリ（origin 無し＝gh へは問い合わせない）。
+  func makeRepository() throws -> String {
+    let dir = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
+    try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    try "x".write(
+      toFile: (dir as NSString).appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+    for args in [
+      ["init", "-q", "-b", "main"], ["config", "user.email", "t@example.com"],
+      ["config", "user.name", "t"], ["add", "-A"], ["commit", "-qm", "init"],
+    ] {
+      XCTAssertTrue(GitRunner.shared.runSync(args, cwd: dir).isSuccess, "git \(args[0])")
+    }
+    return dir
+  }
+
+  /// main queue を回しながら条件の成立を待つ（provider の completion と次 tick のフォーカス確定は main で届く）。
+  func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !condition(), Date() < deadline {
+      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+      usleep(5_000)
+    }
+    return condition()
   }
 }
