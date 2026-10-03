@@ -2,9 +2,9 @@ import XCTest
 
 @testable import Orbe
 
-/// provider が git の事実から組む、作成行とベースのバーの材料（実 git の一時リポジトリ）。壊れると、
-/// git が受け付けない名前や git に拒まれる作成先に作成行が出る・消えたブランチを「前回」として出す・
-/// 非 git で ⌘T ↵ が空振りする、のどれかになる。
+/// provider が git の事実から組む、作成行とベースのバーの材料と「今の worktree」（実 git の一時リポジトリ）。
+/// 壊れると、git が受け付けない名前や git に拒まれる作成先に作成行が出る・消えたブランチを「前回」として
+/// 出す・非 git で ⌘T ↵ が空振りする・⌘T ↵ が今いるのと別の worktree を開く、のどれかになる。
 @MainActor
 final class WorktreePaletteProviderTests: OrbeTestCase {
   private var dir: URL!
@@ -105,6 +105,35 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
     let rules = try XCTUnwrap(model.newBranchRules)
     XCTAssertFalse(rules.allows("issue-1"), "作成先が実体の消えた登録と同じ場所")
     XCTAssertTrue(rules.allows("feat/new"))
+  }
+
+  /// git の一覧が symlink 経由のパスで登録を返す worktree でも、その中で開けば「現在」の札が付き、
+  /// 開いた直後の選択はその worktree になる（⌘T ↵ が別の worktree を開かない）。
+  func testCurrentWorktreeRegisteredThroughASymlinkIsSelected() throws {
+    let repo = try makeRepository()
+    let real = dir.appendingPathComponent("real").path
+    let link = dir.appendingPathComponent("link").path
+    try FileManager.default.createDirectory(atPath: real, withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: real)
+    XCTAssertTrue(
+      run(["worktree", "add", "-q", "-b", "feat", "\(real)/feat"], cwd: repo).isSuccess)
+    try "\(link)/feat/.git\n".write(
+      toFile: "\(repo)/.git/worktrees/feat/gitdir", atomically: true, encoding: .utf8)
+    XCTAssertTrue(
+      run(["worktree", "list", "--porcelain"], cwd: repo).stdoutText.contains(
+        "worktree \(link)/feat\n"), "前提: 一覧は登録を symlink 経由のパスで返す")
+
+    let model = WorktreePaletteModel()
+    let provider = WorktreePaletteDataProvider(
+      cwd: "\(real)/feat", model: model, localization: LocalizationStore(language: .ja),
+      worktreeTemplate: WorktreePathTemplate.defaultTemplate)
+    provider.load()
+    XCTAssertTrue(pump { model.hasLoadedOnce })
+
+    XCTAssertEqual(
+      model.items.filter(\.isCurrent).map(\.action), [.open(.directory(path: "\(link)/feat"))])
+    XCTAssertEqual(model.selectedItem?.action, .open(.directory(path: "\(link)/feat")))
+    XCTAssertEqual(model.baseFacts?.current, "feat", "ベースの「現在」もその worktree のブランチ")
   }
 
   /// `dir/repo` に 1 コミットのリポジトリを作る。
