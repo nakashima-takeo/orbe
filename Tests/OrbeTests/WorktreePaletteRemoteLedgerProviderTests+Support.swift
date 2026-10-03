@@ -31,7 +31,8 @@ extension WorktreePaletteRemoteLedgerProviderTests {
 
   /// 偽 `gh` を PATH に置く。認証確認は通り、正式名は `resolve/<owner>__<name>` の中身を返し（無ければ
   /// 答えずに落ちる）、ブランチの PR は `branch/<name>` を返す。`<種別>.gate`
-  /// がある間はその問い合わせが着地しない。正式名とブランチの PR の問い合わせは `calls.log` に残す。
+  /// がある間はその問い合わせが着地しない。正式名とブランチの PR の問い合わせは `calls.log` に残し、
+  /// それ以外の問い合わせ（open な Issue・PR の一覧など）も `U` として残す。
   func stageGh() throws {
     ghDir = dir.appendingPathComponent("gh")
     for sub in ["resolve", "branch"] {
@@ -72,6 +73,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
           [ -e "$f.exit" ] && exit "$(cat "$f.exit")"
           exit 0 ;;
       esac
+      echo "U $query" >> "$D/calls.log"
       exit 1
       """
     let gh = ghDir.appendingPathComponent("gh").path
@@ -123,7 +125,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     try FileManager.default.removeItem(at: ghDir.appendingPathComponent("\(kind).gate"))
   }
 
-  /// 偽 `gh` が受けた問い合わせ（`R` = 正式名、`H` = ブランチの PR）の対象を順に返す。
+  /// 偽 `gh` が受けた問い合わせ（`R` = 正式名、`H` = ブランチの PR、`U` = それ以外）の対象を順に返す。
   func calls(_ kind: String) -> [String] {
     let text =
       (try? String(contentsOf: ghDir.appendingPathComponent("calls.log"), encoding: .utf8)) ?? ""

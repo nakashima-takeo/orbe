@@ -8,6 +8,7 @@ import XCTest
 /// 壊れると、次のどれかが黙って起きる。
 /// - 問い合わせが揃う前に撃たれて失敗し、clean の PR の事実が取得中のまま固まる。
 /// - 同じ名前を何度も問い合わせる。
+/// - 開くたびに、画面に出さない open な Issue・PR の一覧まで取りに行き、gh の往復と API の枠を使う。
 /// - 確かめられない答えが焼かれ、開き直しても直らない。
 /// - clean が他人の fork の PR で行を塞ぐ、または自分の PR（base を追跡する行・fork の運用）を
 ///   見落として、レビュー中の worktree を安全群に入れる。
@@ -194,6 +195,26 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
     let row = try XCTUnwrap(model.classification?.first { $0.branch == "feat" })
     XCTAssertTrue(row.vocabulary.contains(.mergedPR(5, base: "develop")), "自分の merged PR は事実になる")
     XCTAssertFalse(row.vocabulary.contains(.openPR(6)), "他人の fork のレビュー中 PR は事実にしない")
+  }
+
+  /// ⌘T は open な Issue・PR の一覧を取りに行かない。gh に問うのは認証確認・正式名・clean の対象の
+  /// ブランチの PR だけ。
+  func testOpeningAsksGitHubOnlyForCleanFactsNotForOpenLists() throws {
+    addRemote("origin", "me/r")
+    try answer("me/r", found: "me/r")
+    _ = try addWorktree("wt-feat", branch: "feat")
+    let (model, provider) = makeProvider()
+
+    provider.load()
+    XCTAssertTrue(
+      pump({
+        guard case .loaded = provider.branchPRStates["feat"] else { return false }
+        return model.classification != nil
+      }), "前提: clean の PR の事実まで着地した")
+
+    XCTAssertEqual(calls("R"), ["me/r"])
+    XCTAssertEqual(calls("H"), ["feat"])
+    XCTAssertEqual(calls("U"), [], "それ以外の問い合わせは撃たない")
   }
 
   /// GitHub でない remote へ push する worktree は、PR の事実を「確かめて 0 件」として問い合わせない。
