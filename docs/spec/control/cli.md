@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（orb）
-description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/session/wait サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-09-07
+description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/session/wait サブコマンド・socket 文脈解決・終了コード契約
+updated: 2026-10-04
 ---
 
 # Orbe CLI（`orb`）
@@ -50,6 +50,19 @@ updated: 2026-09-07
 
 `prompt` は「入力欄が空いている状態にだけ届く」動詞で、対象が `working` / `waiting` なら何も送らずエラー（exit 1）——`waiting` へのテキスト送信は承認の確定になるため。waiting への応答は `tab key` で行う。既定 timeout は 1 時間。人間向け stdout は**答えの文言だけ**（`done` の最終応答・`waiting` の質問文。無ければ空）で、`answer=$(orb agent prompt …)` の形で受けられる。止まった状態は終了コードで伝える（下記）。
 
+### task（タスク一覧）
+
+人と agent が共有する[タスク](../platform/tasks.md)一覧を読み書きする。
+
+- `orb task list [--workspace <id|current>] [--json]` … 列の順に 1 行 1 タスク（`id status priority due workspace title 待ちの理由` のタブ区切り。無い値は `-`。制御文字は `session log` と同じく空白に置き換える）。`--workspace` でその workspace のタスクだけ。
+- `orb task add <title> [--status <s>] [--priority <p>] [--due <YYYY-MM-DD>] [--workspace <id|current> | --no-workspace] [--waiting <reason>] [--memo <text>] [--json]` … 列の末尾に足し、新しい ID だけを出す（`id=$(orb task add …)` で受けられる）。
+- `orb task set <id> [--title <t>] [--status <s>] [--priority <p>] [--due <date> | --no-due] [--workspace <id|current> | --no-workspace] [--waiting <reason> | --no-waiting] [--memo <text> | --no-memo] [--json]` … 渡した項目だけを変える。`--no-*` は値を外す。完了は `--status done`（待ちは外れる）。変更フラグが 1 つも無い、または `--x` と `--no-x` を同時に渡すと usage エラー（exit 2）。
+- `orb task move <id> (--before <id> | --after <id>) [--json]` / `orb task rm <id> [--json]`
+
+**`add` で `--workspace` を省くと、呼び出し元タブ（`ORBE_TAB`）の workspace に付く**——タブの外なら「なし」。`tab new` / `agent spawn` の省略が前面の workspace に落ちるのと違うのは、タブ内の agent が背景で足したタスクを、人が見ている別の workspace に付けないため。同じ理由で、`--workspace current` は**前面の** workspace であって自分のタブの workspace ではない。`add` は `ORBE_TAB` を control へ伝え、タブ内の agent が足したタスクにはその agent の名前が追加者として残る。
+
+ステータスと優先度の語彙と日付の妥当性は control が持ち、CLI は素通しする（`--help` の一覧は人が読むための写し）。メモの `-` 始まりや空文字は値必須フラグの規約で渡せず、メモを外すのは `--no-memo`。
+
 ### session（閉じたエージェントセッションの記録と復元）
 
 [寿命ログ](../platform/session-log.md)を読み、閉じたまま戻っていないセッションを戻す。全 workspace 横断。
@@ -70,15 +83,15 @@ kind の語彙と値域の検証は control が持つ（未知 kind は CLI を�
 
 ### 共通
 
-各サブコマンドは対応する [制御 API](api.md) メソッドへそのまま乗る。`--json` は全サブコマンドで効き、control の result をそのまま出す——成功応答に載る `seq`（[api](api.md)）もそのまま出る（例外は 3 つ——`config get` は `config_list` から抽出した 1 行で `seq` を持たない、`session closed` は `session_log` と `list_tabs` から CLI が組む派生ビューで `seq` を持たない、`tab list` は `--workspace` で絞った後の `{"tabs":[…], "seq": N}`）。write が採番した id（`ws new` の workspaceId・`tab new` の tabId）は人間向け出力にも載るが、書式が割れずに読めるのは `--json` だけ。`--help`（`-h` も同じ）は全階層で効き、固有 usage を持つのは `config set` だけで、他はドメインの usage を出す。`<id|current>` の `current` はアクティブ WS。
+各サブコマンドは対応する [制御 API](api.md) メソッドへそのまま乗る。`--json` は全サブコマンドで効き、control の result をそのまま出す——成功応答に載る `seq`（[api](api.md)）もそのまま出る（例外は 3 つ——`config get` は `config_list` から抽出した 1 行で `seq` を持たない、`session closed` は `session_log` と `list_tabs` から CLI が組む派生ビューで `seq` を持たない、`tab list` は `--workspace` で絞った後の `{"tabs":[…], "seq": N}`）。write が採番した id（`ws new` の workspaceId・`tab new` の tabId・`task add` の taskId）は人間向け出力にも載るが、書式が割れずに読めるのは `--json` だけ。`--help`（`-h` も同じ）は全階層で効き、固有 usage を持つのは `config set` だけで、他はドメインの usage を出す。`<id|current>` の `current` はアクティブ WS。
 
-値必須フラグ（`--workspace <id>` / `--dir <path>` / `--cmd "…"` / `--text <text>` / `--key <key>` / `--kind <kind>` / `--value <value>` / `--after <seq>` / `--timeout-ms <ms>`）の値は `-` 始まりも空（空白だけの形も含む）も取らない（usage エラー、exit 2）。`orb tab new --dir "$DIR" --cmd "$CMD"` の `$DIR` が空になる形が両方ここで落ちる——引用符が無ければトークンごと消えて `--cmd` が cwd に化け、引用符があれば空文字が cwd として通ってしまうため。パスは絶対パスで渡す（`-` 始まりのディレクトリは `./-foo` の形）——相対パスは CLI も control も解決せずそのまま格納するので、利用者のシェルの cwd 基準にはならない。`~` 始まりを展開するのは workspace のパス（`ws new --dir` / `ws dir`）だけで、`tab new --dir` は展開せずそのまま cwd にする。
+値必須フラグ（`--workspace <id>` / `--dir <path>` / `--cmd "…"` / `--text <text>` / `--key <key>` / `--kind <kind>` / `--value <value>` / `--after <seq>` / `--timeout-ms <ms>` / task の項目フラグ）の値は `-` 始まりも空（空白だけの形も含む）も取らない（usage エラー、exit 2）。`orb tab new --dir "$DIR" --cmd "$CMD"` の `$DIR` が空になる形が両方ここで落ちる——引用符が無ければトークンごと消えて `--cmd` が cwd に化け、引用符があれば空文字が cwd として通ってしまうため。パスは絶対パスで渡す（`-` 始まりのディレクトリは `./-foo` の形）——相対パスは CLI も control も解決せずそのまま格納するので、利用者のシェルの cwd 基準にはならない。`~` 始まりを展開するのは workspace のパス（`ws new --dir` / `ws dir`）だけで、`tab new --dir` は展開せずそのまま cwd にする。
 
 この規約が禁じる形のテキスト——`-` 始まり・空・空白だけ——をタブへ送りたいときは `tab send --stdin` を使う。標準入力は席ではないので規約の対象外で、0 バイトだけを usage エラーにする。`printf '%s' "$PROMPT" | orb tab send --stdin` の `$PROMPT` 未設定が 0 バイトとして現れる形は規約が守ろうとしているものと同じだが、ファイルや heredoc の中身が空白・改行だけであることは正当にあり得るためこの線を引く。
 
 ## 文脈解決
 
-control.sock の解決順は `ORBE_STATE_DIR`（非空の明示指定・最優先。`$ORBE_STATE_DIR/control.sock` を使い `ORBE_SOCK` は見ない）→ `ORBE_SOCK`（タブ注入の絶対パス）→ 既定の Application Support 直下（自ビルドのチャネルが焼いた bundle id・[channel](../platform/channel.md)）。tab は現タブ既定に `ORBE_TAB`（タブ注入の自 tab id）を読む。config/ws はインスタンス/WS 単位なので `ORBE_TAB` を読まない。外部（`ORBE_TAB` 無し）で tab の対象を省略すると usage エラー（exit 2）。
+control.sock の解決順は `ORBE_STATE_DIR`（非空の明示指定・最優先。`$ORBE_STATE_DIR/control.sock` を使い `ORBE_SOCK` は見ない）→ `ORBE_SOCK`（タブ注入の絶対パス）→ 既定の Application Support 直下（自ビルドのチャネルが焼いた bundle id・[channel](../platform/channel.md)）。tab は現タブ既定に `ORBE_TAB`（タブ注入の自 tab id）を読む。`task add` は呼び出し元タブとして `ORBE_TAB` を control へ伝える。config/ws はインスタンス/WS 単位なので `ORBE_TAB` を読まない。外部（`ORBE_TAB` 無し）で tab の対象を省略すると usage エラー（exit 2）。
 
 ## 終了コード・エラー
 
