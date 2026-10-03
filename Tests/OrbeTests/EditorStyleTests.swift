@@ -35,14 +35,12 @@ final class EditorStyleTests: OrbeTestCase {
     XCTAssertEqual(style.marks.barInset, 2)
     XCTAssertEqual(style.marks.barRadius, 1)
     XCTAssertEqual(style.marks.triangleSize, 6)
-    XCTAssertEqual(style.decorations.indentGuideWidth, 1)
     XCTAssertEqual(style.decorations.whitespaceDiameter, 2)
     XCTAssertEqual(style.decorations.linkUnderlineThickness, 1)
     XCTAssertEqual(style.decorations.linkUnderlineOffset, 3)
   }
 
-  /// 装備の色——印の 3 色は diff トークンの α .85、インデント線は surfaceInk の .06（light は ×0.6）、丸点は
-  /// text.muted の .55——で、どれも外観で解き直される。
+  /// 装備の色——印の 3 色は diff トークンの α .85、丸点は text.muted の .55——で、どれも外観で解き直される。
   func testMarkAndDecorationColorsCarryTheSampleAlphasAndFollowTheAppearance() throws {
     let style = EditorStyle.make()
     let marks = [
@@ -64,12 +62,6 @@ final class EditorStyleTests: OrbeTestCase {
     XCTAssertNotEqual(
       try XCTUnwrap(resolved(style.marks.modified, .darkAqua)),
       try XCTUnwrap(resolved(style.marks.added, .darkAqua)), "追加と変更は色で区別する")
-    XCTAssertEqual(
-      try XCTUnwrap(resolved(style.decorations.indentGuideColor, .darkAqua)).alphaComponent, 0.06,
-      accuracy: 0.001)
-    XCTAssertEqual(
-      try XCTUnwrap(resolved(style.decorations.indentGuideColor, .aqua)).alphaComponent, 0.036,
-      accuracy: 0.001)
     XCTAssertEqual(
       try XCTUnwrap(resolved(style.decorations.whitespaceColor, .darkAqua)).alphaComponent, 0.55,
       accuracy: 0.01)

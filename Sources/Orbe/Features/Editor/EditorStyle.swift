@@ -6,8 +6,6 @@ import OrbeEditorEngine
 enum EditorStyle {
   /// 印のバーと三角の不透明度（見本 tint(diffAdd, 0.85)）。
   private static let markAlpha: CGFloat = 0.85
-  /// インデント線の塗り（見本 fill(0.06)。light は `Theme.Opacity.editorFillLight` を掛ける）。
-  private static let indentGuideAlpha: Double = 0.06
 
   static func make() -> TextSurfaceStyle {
     TextSurfaceStyle(
@@ -31,7 +29,6 @@ enum EditorStyle {
         modified: Theme.Color.diffModified.withAlphaComponent(markAlpha),
         removed: Theme.Color.diffRemoved.withAlphaComponent(markAlpha)),
       decorations: TextSurfaceStyle.Decorations(
-        indentGuideColor: fill(indentGuideAlpha), indentGuideWidth: 1,
         whitespaceColor: Theme.Color.editorWhitespace, whitespaceDiameter: 2,
         linkUnderlineThickness: 1, linkUnderlineOffset: 3),
       highlights: TextSurfaceStyle.Highlights(

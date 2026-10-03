@@ -52,12 +52,6 @@ final class FramePerfTests: EngineTestCase {
       frameLimit: HeadlessDriver.period * 1000, gatesLateCommits: false)
   }
 
-  /// 改行だけが 100 万行続く 1MB の文書。見えている端の行が空行の塊の中にあっても、インデント線の段を決めるために
-  /// 塊をコマごとに歩かない。
-  func testBlankLines() throws {
-    _ = try measure(label: "blank-lines", text: String(repeating: "\n", count: 1_000_000))
-  }
-
   /// 面を 2 枚同時に描き、片方の「画面に出た」を止めても、もう片方はドラッグの間の刻みごとに描き続ける（描画スレッドが
   /// 詰まった面のために待たない）。
   func testOneStuckSurfaceDoesNotStallAnother() throws {

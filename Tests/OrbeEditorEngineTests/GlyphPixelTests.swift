@@ -27,7 +27,6 @@ final class GlyphPixelTests: EngineTestCase {
   /// 字だけを見る見え方（装備は透明に描く——基準の Core Text の行は装備を持たない）。
   private static var glyphsOnly: TextSurfaceStyle {
     var style = EngineTestCase.style()
-    style.decorations.indentGuideColor = .clear
     style.decorations.whitespaceColor = .clear
     return style
   }

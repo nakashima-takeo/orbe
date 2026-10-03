@@ -30,7 +30,7 @@ final class FrameBuilder {
   private(set) var color: [[GlyphInstance]] = []
   private(set) var gutter: [[GlyphInstance]] = []
   var shapes: [ShapeInstance] = []
-  /// 行の装備（インデント線・空白の丸点・URL の下線。本文の列に切り取る）。
+  /// 行の装備（空白の丸点・URL の下線。本文の列に切り取る）。
   var decorShapes: [ShapeInstance] = []
   /// 選択の地と未確定の文字の地（本文の列に切り取る）。
   var underShapes: [ShapeInstance] = []
@@ -49,8 +49,6 @@ final class FrameBuilder {
   var overviewShapes: [ShapeInstance] = []
   /// スクロールバーの印の縦の区間（元が変わったときだけ作り直す）。
   var rulerSpans = RulerSpans()
-  /// インデント線の段を決める空行の塊（版が変わったときだけ歩く）。
-  let blankBlocks = BlankBlocks()
 
   /// GPU の buffer に要る大きさ（配列ごとに 256 バイトに揃える）。
   var byteCount: Int {
@@ -170,12 +168,11 @@ final class FrameBuilder {
     let baseline = (Double(config.baseline) * s).rounded()
     let numberFont = fonts.id(config.gutterFont)
     let rows = layRows(first...last, source, text: content.text, cache: cache, fonts: fonts)
-    let levels = indentLevels(rows.map(\.laid), first: first, content: content, unit: tabColumns)
     var roles = content.roles.cursor(from: rows.first?.start ?? 0)
-    for (index, item) in rows.enumerated() {
+    for item in rows {
       let top = g.rowTop(item.row)
       let visible = visibleGlyphs(item.laid, c)
-      drawDecor(item, level: levels[index], rowTop: top, window: visible.offsets, c)
+      drawDecor(item, rowTop: top, window: visible.offsets, c)
       drawOverlays(item.overlay, item.laid, rowTop: top, c)
       drawHighlights(item, source.material.highlights, rowTop: top, window: visible.offsets, c)
       let width = drawText(item, visible, baseline: top + baseline, roles: &roles, c)

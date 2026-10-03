@@ -6,7 +6,7 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// セッションが開いた本物のテキスト面に載る行の装備——git の印（3 色・三角）がスクロールと編集に追従する、
-/// インデント線・丸点・URL 下線が本文の座標に立つ、⌘クリックだけが URL を開いて素のクリックはキャレットを置く。位置は
+/// 丸点・URL 下線が本文の座標に立つ、⌘クリックだけが URL を開いて素のクリックはキャレットを置く。位置は
 /// 画素で見る。
 ///
 /// 壊れると何が起きるか。印がスクロールで置き去りになり別の行に見える。打鍵しても印が動かず、どの行を変えたか
@@ -236,20 +236,15 @@ final class EditorLineMarksTests: OrbeTestCase {
   }
 
   /// 横にスクロールしても本文の装備は行に付いてくる。長い行で横スクロールが起き、印は行番号の列にあるので無事な
-  /// 一方、線・点・下線だけが置き去りになる壊れ方を守る。
-  ///
-  /// 線を見る位置（2 桁目の左端）は、3 桁送った後も両隣が空白のセル（点はセルの中央）になるよう、3 行目を 8 字の字下げに
-  /// する——隣が字だと、1x の画面では字の縁の画素が見る幅（±0.5pt）にかかる。
+  /// 一方、点・下線だけが置き去りになる壊れ方を守る。
   func testDecorationsFollowHorizontalScrolling() throws {
     let long = String(repeating: "x", count: 100) + "  " + String(repeating: "x", count: 100)
-    let hosted = try host("a\n  b  c \(long)\n        d\n")
+    let hosted = try host("a\n  b  c \(long)\n")
     let ground = hosted.ground
     let document = hosted.document
     let surface = try engine(document)
-    let guide = bodyX + 2 * cell
     let dot = bodyX + 3.5 * cell
-    waitDrawn { try self.hasInk(ground, guide, self.rowMidY(3)) }
-    XCTAssertFalse(isBlack(try rgb(ground, dot, rowMidY(2))), "前提: 丸点が見えている")
+    waitDrawn { !self.isBlack(try self.rgb(ground, dot, self.rowMidY(2))) }
 
     let shift = 3 * cell
     surface.scroll(toX: shift)
@@ -259,15 +254,13 @@ final class EditorLineMarksTests: OrbeTestCase {
       try !self.isBlack(self.rgb(ground, dot - shift, self.rowMidY(2)))
         && self.isBlack(self.rgb(ground, dot, self.rowMidY(2)))
     }
-    XCTAssertFalse(try hasInk(ground, guide, rowMidY(3)), "線は 3 桁ぶん左へ動き、元の位置は空く")
 
     // 100 桁右へ: 1 画面ぶん先の連続スペース（107 桁目）の点が、可視矩形の中に描かれる。
     surface.scroll(toX: 100 * cell)
     waitDrawn { !self.isBlack(try self.rgb(ground, self.bodyX + 7.5 * self.cell, self.rowMidY(2))) }
-    XCTAssertTrue(isBlack(try rgb(ground, dot, rowMidY(3))), "短い行の右は地（線も点も無い）")
+    XCTAssertTrue(isBlack(try rgb(ground, dot, rowMidY(1))), "短い行の右は地")
     surface.scroll(toX: 0)
     waitDrawn { !self.isBlack(try self.rgb(ground, dot, self.rowMidY(2))) }
-    XCTAssertTrue(try hasInk(ground, guide, rowMidY(3)), "戻れば線も戻る")
   }
 
 }

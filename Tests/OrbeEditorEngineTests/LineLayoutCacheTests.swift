@@ -71,33 +71,4 @@ final class LineLayoutCacheTests: XCTestCase {
     expected.text = RowEdit.TextChange(range: NSRange(location: 2, length: 0), replacementLength: 1)
     XCTAssertEqual(typed, expected, "行の中の打鍵はその行だけ")
   }
-
-  /// 空行の塊の上下の外の非空行の段は、行ごとに `LineShaper.source` と `LineDecor` の判定で歩いた答えと同じ（CR だけ・
-  /// タブ・描きうる先頭に収まらない空白だけの行を含む）。同じ版では覚えた塊から引く。
-  func testBlankBlocksAgreeWithWalkingRowByRow() {
-    let long = String(repeating: " ", count: LineShaper.headLimit + 1)
-    let edge = String(repeating: " ", count: LineShaper.headLimit)
-    let pieces = [
-      "", "  ", "\t", " \r", "\r", "x", "  y", "\t\tz", "    w", long, edge, edge + "\r",
-    ]
-    var generator = SystemRandomNumberGenerator()
-    for trial in 0..<60 {
-      let count = Int.random(in: 1...20, using: &generator)
-      let lines = (0..<count).map { _ in pieces.randomElement(using: &generator)! }
-      let text = TextRope(lines.joined(separator: "\n") + (Bool.random() ? "\n" : ""))
-      let shown = lines.map { $0.count > 8 ? "空白×\($0.count)" : $0 }
-      let blocks = BlankBlocks()
-      let decor = (0..<text.lineCount).map {
-        LineDecor(LineShaper.source(row: $0, in: text).source, unit: 2)
-      }
-      for row in 0..<text.lineCount where decor[row].blank {
-        let above = (0..<row).last { !decor[$0].blank }.map { decor[$0].boundaries.count }
-        let below = (row + 1..<text.lineCount).first { !decor[$0].blank }
-          .map { decor[$0].boundaries.count }
-        let around = blocks.around(row, in: text, version: trial, unit: 2)
-        XCTAssertEqual(around.above, above, "\(shown) の行 \(row) の上")
-        XCTAssertEqual(around.below, below, "\(shown) の行 \(row) の下")
-      }
-    }
-  }
 }

@@ -52,8 +52,8 @@ class EngineTestCase: XCTestCase {
         modified: NSColor(srgbRed: 0.3, green: 0.5, blue: 0.9, alpha: 0.85),
         removed: NSColor(srgbRed: 0.9, green: 0.3, blue: 0.3, alpha: 0.85)),
       decorations: .init(
-        indentGuideColor: .gray, indentGuideWidth: 1, whitespaceColor: .gray,
-        whitespaceDiameter: 2, linkUnderlineThickness: 1, linkUnderlineOffset: 3),
+        whitespaceColor: .gray, whitespaceDiameter: 2, linkUnderlineThickness: 1,
+        linkUnderlineOffset: 3),
       highlights: .init(
         findMatch: .yellow, currentFindMatch: .orange, currentFindLine: .gray,
         selectionOccurrence: .gray, selectionOccurrenceInactive: .gray, wordOccurrence: .gray),

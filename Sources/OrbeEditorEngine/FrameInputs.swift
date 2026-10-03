@@ -40,7 +40,6 @@ struct RowMarks: Equatable, Sendable {
 struct SurfaceConfig: @unchecked Sendable {
   /// 装備の寸法。
   struct Decorations: Sendable {
-    var indentGuideWidth: CGFloat
     var whitespaceDiameter: CGFloat
     var linkUnderlineThickness: CGFloat
     var linkUnderlineOffset: CGFloat
@@ -89,7 +88,6 @@ struct SurfaceConfig: @unchecked Sendable {
       barInset: style.marks.barInset, barRadius: style.marks.barRadius,
       triangleSize: style.marks.triangleSize)
     decorations = Decorations(
-      indentGuideWidth: style.decorations.indentGuideWidth,
       whitespaceDiameter: style.decorations.whitespaceDiameter,
       linkUnderlineThickness: style.decorations.linkUnderlineThickness,
       linkUnderlineOffset: style.decorations.linkUnderlineOffset)

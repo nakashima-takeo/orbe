@@ -65,7 +65,6 @@ struct FramePalette: Equatable, Sendable {
   /// 無い未確定の文字の地（NSTextView の既定の `markedTextAttributes`）。IME が選んでいる文節の下線は本文の色。
   var markedUnderline: FrameColor
   var markedBackground: FrameColor
-  var indentGuide: FrameColor
   var whitespace: FrameColor
   var findMatch: FrameColor
   var currentFindMatch: FrameColor
@@ -98,7 +97,6 @@ struct FramePalette: Equatable, Sendable {
     removed = resolve(style.marks.removed)
     markedUnderline = resolve(.tertiaryLabelColor)
     markedBackground = resolve(Self.markedBackgroundColor)
-    indentGuide = resolve(style.decorations.indentGuideColor)
     whitespace = resolve(style.decorations.whitespaceColor)
     findMatch = resolve(style.highlights.findMatch)
     currentFindMatch = resolve(style.highlights.currentFindMatch)
