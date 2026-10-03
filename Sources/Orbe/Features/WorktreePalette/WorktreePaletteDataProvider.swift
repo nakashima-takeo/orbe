@@ -7,7 +7,6 @@ import Foundation
 final class WorktreePaletteDataProvider {
   /// 読み手は分冊（`WorktreePaletteDataProvider+Create.swift`）。
   let cwd: String
-  /// 分冊（`WorktreePaletteDataProvider+GitHub.swift`）も読む（gh 状態の反映）。
   private(set) weak var model: WorktreePaletteModel?
   /// 実行失敗メッセージ（palette 表示）を現在言語で出すためのストア（提示元＝WindowController が渡す）。
   /// 分冊（`WorktreePaletteDataProvider+Clean.swift`）も読む。
@@ -22,7 +21,7 @@ final class WorktreePaletteDataProvider {
   /// 開いた workspace に保存された前回のベース（読むだけ。書くのはウィンドウ）。
   let previousBase: String?
   private let runner: GitRunner
-  /// gh の実行基盤。読み手は分冊（`WorktreePaletteDataProvider+GitHub.swift`・`+Create.swift`）。
+  /// gh の実行基盤。読み手は分冊（`WorktreePaletteDataProvider+GitHub.swift`）。
   let gitHub: GitHubCLI
   /// 提示時に発行した `fetch --prune` の着地。ベースから新しいブランチを切る作成は、この着地を
   /// 待ってから撃つ（`createWorktree`）。1 回きりのイベントなので台帳ではなく `DispatchGroup` で持つ
@@ -66,8 +65,6 @@ final class WorktreePaletteDataProvider {
   /// 「確かめて取得可」を 1 つの値で区別する（両者を潰すと、確認前の状態が「gh 確認済み」を
   /// 名乗ってしまう）。
   var probedGitHubState: GitHubAvailability?
-  /// 画面に出す可用性。probe 未完の間は `.ready` として振る舞う（確定前にセクションを畳まない）。
-  var githubState: GitHubAvailability { probedGitHubState ?? .ready }
   /// ブランチの PR を実際に引ける状態か。取得は git レーン（worktree 一覧）と gh レーン（認証確認）の
   /// 両方が要り、probe 前に発火すると gh 不在の環境で worktree 本数ぶんの失敗プロセスを撒く。
   var githubReady: Bool { probedGitHubState == .ready }
