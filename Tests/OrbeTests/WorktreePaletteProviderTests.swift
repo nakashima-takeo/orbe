@@ -34,6 +34,33 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
     }
   }
 
+  /// git が別のブランチ名へ展開する入力（`@{-1}` など）には作成行を出さない。展開結果の名前で作られ、
+  /// 行に出した名前と別のブランチ・worktree ができるため。普通の名前には出る。
+  func testInputGitExpandsToAnotherBranchHasNoCreateRow() throws {
+    let repo = try makeRepository()
+    XCTAssertTrue(run(["checkout", "-q", "-b", "feat"], cwd: repo).isSuccess)
+    XCTAssertTrue(run(["checkout", "-q", "main"], cwd: repo).isSuccess)
+    let expanded = run(["check-ref-format", "--branch", "@{-1}"], cwd: repo)
+    XCTAssertTrue(expanded.isSuccess, "前提: git は成功として答える")
+    XCTAssertEqual(
+      expanded.stdoutText.trimmingCharacters(in: .newlines), "feat", "前提: 直前のブランチ名へ展開する")
+    let model = WorktreePaletteModel()
+    let provider = WorktreePaletteDataProvider(
+      cwd: repo, model: model, localization: LocalizationStore(language: .ja),
+      worktreeTemplate: WorktreePathTemplate.defaultTemplate)
+    model.onCheckBranchName = { provider.checkBranchName($0) }
+    provider.load()
+    XCTAssertTrue(pump { model.newBranchRules != nil })
+
+    for (name, creatable) in [("@{-1}", false), ("feat/new", true)] {
+      model.query = name
+      model.onQueryChanged()
+      XCTAssertTrue(pump { model.branchNameAnswer?.name == name }, "\(name) に答えが届く")
+      XCTAssertEqual(
+        model.items.contains { $0.action == .createBranch(name: name) }, creatable, name)
+    }
+  }
+
   /// 非 git の場所は「このディレクトリ」の 1 行だけで、作成行もベースのバーも材料を持たない。
   func testOutsideARepositoryListsOnlyThisDirectory() {
     let model = WorktreePaletteModel()
