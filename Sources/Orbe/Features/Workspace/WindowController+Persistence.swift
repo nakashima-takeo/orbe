@@ -11,6 +11,7 @@ extension WindowController {
       let ws = Workspace(name: state.name, rootPath: state.rootPath)
       ws.lastUsedAt = state.lastUsedAt  // MRU 並べ替えキーを読み戻す（旧データは nil）
       ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
+      ws.lastWorktreeBase = state.lastWorktreeBase
       for tab in state.tabs { ws.tabs.append(makeTab(from: tab)) }  // 隣接の正規化は下の store.load
       // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）は空表示
       // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。
@@ -69,6 +70,15 @@ extension WindowController {
     isApplyingRestoredSize = false
   }
 
+  /// worktree パレットで新しいブランチを作れたときのベースを、その workspace の「前回」として覚える
+  /// （workspace の永続値を書く唯一の窓口。パレットとデータ供給には触らせない）。workspace が既に
+  /// 閉じられていたら書かない。
+  func rememberWorktreeBase(_ base: String, in workspace: Workspace) {
+    guard workspaces.contains(where: { $0 === workspace }) else { return }
+    workspace.lastWorktreeBase = base
+    scheduleSave()
+  }
+
   /// 構成が変わったら 1 秒のデバウンス後に 1 回保存する（高頻度な cwd 報告をまとめる）。
   func scheduleSave() {
     pendingSave?.cancel()
@@ -97,7 +107,8 @@ extension WindowController {
         WorkspaceState(
           name: ws.name, rootPath: ws.rootPath, activeTab: ws.active,
           tabs: ws.tabs.map { $0.tabState() },
-          lastUsedAt: ws.lastUsedAt, settingsOverride: ws.settingsOverride)
+          lastUsedAt: ws.lastUsedAt, settingsOverride: ws.settingsOverride,
+          lastWorktreeBase: ws.lastWorktreeBase)
       },
       windowSize: rememberedWindowSize)
   }

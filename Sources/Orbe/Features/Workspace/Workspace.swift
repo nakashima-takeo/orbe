@@ -21,6 +21,9 @@ final class Workspace {
   var lastUsedAt: Date?
   /// この workspace の設定上書き層（全設定を上書き可）。nil＝上書き無し（global 継承）。永続化する。
   var settingsOverride: SettingsLayer?
+  /// worktree パレットで前回新しいブランチを作ったときのベース（ブランチ名）。次の作成行で最初に選ぶ。
+  /// 書き手は `WindowController.rememberWorktreeBase` だけ。永続化する。
+  var lastWorktreeBase: String?
 
   init(name: String, rootPath: String) {
     self.name = name
