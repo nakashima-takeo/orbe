@@ -45,10 +45,6 @@ let taskUsage = """
 
 func runTask(_ args: [String]) -> Never {
   let rest = Array(args.dropFirst())
-  if hasHelp(rest) {
-    print(taskUsage)
-    exit(0)
-  }
   switch args.first {
   case "list": taskList(rest)
   case "add": taskAdd(rest)
@@ -70,6 +66,7 @@ func runTask(_ args: [String]) -> Never {
 private func taskList(_ rest: [String]) -> Never {
   var args = rest
   let workspaceId = takeWorkspaceId(&args)
+  exitIfHelp(args)
   rejectLeftovers(args, positionals: 0)
   var params: [String: Any] = [:]
   if let workspaceId { params["workspaceId"] = workspaceId }
@@ -93,6 +90,7 @@ private func taskList(_ rest: [String]) -> Never {
 private func taskAdd(_ rest: [String]) -> Never {
   var args = rest
   var params = takeFields(&args, update: false)
+  exitIfHelp(args)
   rejectLeftovers(args, positionals: 1)
   guard let title = args.first else { usageDie("task add requires <title>") }
   params["title"] = title
@@ -112,6 +110,7 @@ private func taskSet(_ rest: [String]) -> Never {
   var args = rest
   var params = takeFields(&args, update: true)
   if let title = takeOption(&args, "--title", requires: "a <title>") { params["title"] = title }
+  exitIfHelp(args)
   rejectLeftovers(args, positionals: 1)
   let id = taskIdArg(args, verb: "set")
   guard !params.isEmpty else { usageDie("task set requires at least one field to change") }
@@ -125,6 +124,7 @@ private func taskMove(_ rest: [String]) -> Never {
   var args = rest
   let before = takeIntOption(&args, "--before", requires: "a task <id>")
   let after = takeIntOption(&args, "--after", requires: "a task <id>")
+  exitIfHelp(args)
   rejectLeftovers(args, positionals: 1)
   let id = taskIdArg(args, verb: "move")
   var params: [String: Any] = ["taskId": id]
@@ -139,6 +139,7 @@ private func taskMove(_ rest: [String]) -> Never {
 }
 
 private func taskRemove(_ rest: [String]) -> Never {
+  exitIfHelp(rest)
   rejectLeftovers(rest, positionals: 1)
   let id = taskIdArg(rest, verb: "rm")
   let result = callOrExit("delete_task", ["taskId": id])
@@ -147,6 +148,15 @@ private func taskRemove(_ rest: [String]) -> Never {
 }
 
 // MARK: - 引数
+
+/// help は**値の席を抜き取った後**の残りで見る（`tab send` と同じ）。メモや待ちの理由は任意の文字列で、
+/// 引数列全体を走査すると `--memo -h` の値が help と読まれ、何も変えないまま exit 0 になる。抜き取った
+/// 後なら値の席の `-h` は `takeOption` のダッシュ拒否に落ちて exit 2 で止まる。
+private func exitIfHelp(_ args: [String]) {
+  guard hasHelp(args) else { return }
+  print(taskUsage)
+  exit(0)
+}
 
 /// `add` と `set` が共有する項目フラグを params へ写す。`--no-*` の解除フラグは JSON の null（control の
 /// 「外す」）で、`set` だけが取る（`add` は `--no-workspace` だけ——付き先の省略に意味があるのは workspace だけ）。
