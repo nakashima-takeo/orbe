@@ -20,7 +20,9 @@ extension WindowController {
   {
     var draft = draft
     let caller = callerTabId.flatMap(controlResolveTab)
-    if let caller, case .live(let session, _) = caller.agentSlot {
+    // agent が自分のターンの中で足したときだけ、そのタブの agent は working を報告している。人がシェルから
+    // 打った追加や、終了を報告しない agent（codex / agy）が去った後のタブからの追加を agent の名で残さない。
+    if let caller, caller.agentState == "working", let session = caller.agentSlot.session {
       draft.createdBy = session.command
     }
     switch workspaceId {

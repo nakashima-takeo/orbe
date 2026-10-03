@@ -267,7 +267,9 @@ let tools: [[String: Any]] = [
       "description",
       "タスクを列の末尾に足し、足したタスクを返す（taskId は使い回されない短い整数）。workspaceId を省くと、"
         + "呼び出し元タブ（この MCP を起こした agent のタブ）の workspace に付く。null で「workspace なし」。"
-        + "追加者として呼び出し元タブの agent 名が記録される。"
+        + "呼び出し元タブが分かるのは、この MCP サーバーが Orbe のタブの環境（ORBE_TAB）を受け継いでいるときだけで、"
+        + "受け継がない MCP クライアントからは workspace を省くと「workspace なし」になる。"
+        + "呼び出し元タブの agent が作業中（working）なら、その agent 名が追加者として記録される。"
     ),
     (
       "inputSchema",
