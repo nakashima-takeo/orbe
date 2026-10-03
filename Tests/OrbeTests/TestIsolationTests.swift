@@ -60,7 +60,7 @@ final class TestIsolationTests: OrbeTestCase {
       WorkspacePersistence.fileURLOverride, SettingsPersistence.fileURLOverride,
       AppStatePersistence.fileURLOverride, GuiConfig.fileURLOverride,
       AgentPluginInstaller.stablePluginDirOverride, BundledResources.root,
-      CustomSoundStore.directoryURLOverride,
+      CustomSoundStore.directoryURLOverride, TaskPersistence.fileURLOverride,
     ] {
       let url = try XCTUnwrap(url, "per-test の override が張られていない")
       XCTAssertEqual(url.deletingLastPathComponent().path, dir.path)
