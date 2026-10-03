@@ -67,12 +67,16 @@ final class EditorStyleTests: OrbeTestCase {
       accuracy: 0.01)
   }
 
-  /// 強調と俯瞰の色は VS Code Dark Modern / Light Modern の値（sRGB・α）。選択文字列の出現は焦点が無いとき α 半分。
+  /// 選択・強調・俯瞰の色は VS Code Dark Modern / Light Modern の値（sRGB・α）。選択文字列の出現は焦点が無いとき α 半分。
   func testHighlightAndOverviewColorsAreTheVSCodeValues() throws {
     let highlights = EditorStyle.make().highlights
     let minimap = EditorStyle.make().overview.minimap
     let scrollbar = EditorStyle.make().overview.scrollbar
+    let style = EditorStyle.make()
     let expected: [Expected] = [
+      .init(style.selectionColor, dark: (0x264f78, 1), light: (0xadd6ff, 1)),
+      .init(style.inactiveSelectionColor, dark: (0x3a3d41, 1), light: (0xe5ebf1, 1)),
+      .init(minimap.selection, dark: (0x264f78, 1), light: (0xadd6ff, 1)),
       .init(highlights.findMatch, dark: (0xea5c00, 0.33), light: (0xea5c00, 0.33)),
       .init(highlights.currentFindMatch, dark: (0x9e6a03, 1), light: (0xa8ac94, 1)),
       .init(highlights.currentFindLine, dark: (0xffffff, 0.043), light: (0xfdff00, 0.2)),

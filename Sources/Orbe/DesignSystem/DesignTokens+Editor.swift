@@ -34,7 +34,11 @@ extension Theme.Color {
   /// 見せる空白の丸点。textMuted の α .55（editorLineNumber と値だけ同じ独立トークン）。
   static let editorWhitespace = editorDynA(light: 0x8d85a3, dark: 0x8b8397, alpha: 0.55)
 
-  // 俯瞰と強調（VS Code Dark Modern / Light Modern の値。上書きの無いものは VS Code のレジストリの既定）。
+  // 選択・俯瞰・強調（VS Code Dark Modern / Light Modern の値。上書きの無いものは VS Code のレジストリの既定）。
+  /// 本文の選択の地（editor.selectionBackground）。ミニマップの選択（minimap.selectionHighlight）も同じ色。
+  static let editorSelection = editorDyn(light: 0xadd6ff, dark: 0x264f78)
+  /// 焦点の無い面の選択の地（editor.inactiveSelectionBackground）。
+  static let editorSelectionInactive = editorDyn(light: 0xe5ebf1, dark: 0x3a3d41)
   /// 検索の一致の地（editor.findMatchHighlightBackground）。ミニマップの一致も同じ色。
   static let editorFindMatch = editorDynA(light: 0xea5c00, dark: 0xea5c00, alpha: 0.33)
   /// 現在の一致の地（editor.findMatchBackground）。不透明で選択の地の上に描く。
