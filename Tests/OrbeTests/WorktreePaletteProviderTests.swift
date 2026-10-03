@@ -3,8 +3,8 @@ import XCTest
 @testable import Orbe
 
 /// provider が git の事実から組む、作成行とベースのバーの材料（実 git の一時リポジトリ）。壊れると、
-/// git が受け付けない名前に作成行が出る・消えたブランチを「前回」として出す・非 git で ⌘T ↵ が空振りする、
-/// のどれかになる。
+/// git が受け付けない名前や git に拒まれる作成先に作成行が出る・消えたブランチを「前回」として出す・
+/// 非 git で ⌘T ↵ が空振りする、のどれかになる。
 @MainActor
 final class WorktreePaletteProviderTests: OrbeTestCase {
   private var dir: URL!
@@ -50,11 +50,7 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
   /// ベースの事実: 前回は今の列挙にあるときだけ、現在は今の worktree のブランチ。作成行の規則は
   /// ローカルブランチと既存の worktree の作成先を塞ぐ。
   func testBaseFactsAndNewBranchRulesFollowTheRepository() throws {
-    let repo = dir.appendingPathComponent("repo").path
-    XCTAssertTrue(run(["init", "-q", "-b", "main", repo], cwd: dir.path).isSuccess)
-    XCTAssertTrue(run(["config", "user.email", "t@example.com"], cwd: repo).isSuccess)
-    XCTAssertTrue(run(["config", "user.name", "t"], cwd: repo).isSuccess)
-    XCTAssertTrue(run(["commit", "-q", "--allow-empty", "-m", "init"], cwd: repo).isSuccess)
+    let repo = try makeRepository()
     XCTAssertTrue(run(["branch", "release"], cwd: repo).isSuccess)
     let template = "\(dir.path)/wt/{slug}"
     XCTAssertTrue(
@@ -82,6 +78,43 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
     XCTAssertFalse(r.allows("issue/1"), "worktree で checkout 中のブランチ")
     XCTAssertFalse(r.allows("issue-1"), "作成先が既存の worktree")
     XCTAssertTrue(r.allows("feat/new"))
+  }
+
+  /// 作成先のテンプレートが symlink 配下でも、実体の消えた登録（prunable）と同じ場所になる名前には
+  /// 作成行を出さない。git の一覧は登録を実パスで返し、作成先はまだ無いので、字面では一致しない。
+  func testNameLandingOnAPrunableWorktreeBehindASymlinkIsNotCreatable() throws {
+    let repo = try makeRepository()
+    let real = dir.appendingPathComponent("real").path
+    let link = dir.appendingPathComponent("link").path
+    try FileManager.default.createDirectory(atPath: real, withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: real)
+    XCTAssertTrue(
+      run(["worktree", "add", "-q", "-b", "issue/1", "\(link)/issue-1"], cwd: repo).isSuccess)
+    try FileManager.default.removeItem(atPath: "\(real)/issue-1")
+    XCTAssertTrue(
+      run(["worktree", "list", "--porcelain"], cwd: repo).stdoutText.contains("prunable"),
+      "前提: 登録は残り、実体は消えている")
+
+    let model = WorktreePaletteModel()
+    let provider = WorktreePaletteDataProvider(
+      cwd: repo, model: model, localization: LocalizationStore(language: .ja),
+      worktreeTemplate: "\(link)/{slug}")
+    provider.load()
+    XCTAssertTrue(pump { model.newBranchRules != nil })
+
+    let rules = try XCTUnwrap(model.newBranchRules)
+    XCTAssertFalse(rules.allows("issue-1"), "作成先が実体の消えた登録と同じ場所")
+    XCTAssertTrue(rules.allows("feat/new"))
+  }
+
+  /// `dir/repo` に 1 コミットのリポジトリを作る。
+  private func makeRepository() throws -> String {
+    let repo = dir.appendingPathComponent("repo").path
+    XCTAssertTrue(run(["init", "-q", "-b", "main", repo], cwd: dir.path).isSuccess)
+    XCTAssertTrue(run(["config", "user.email", "t@example.com"], cwd: repo).isSuccess)
+    XCTAssertTrue(run(["config", "user.name", "t"], cwd: repo).isSuccess)
+    XCTAssertTrue(run(["commit", "-q", "--allow-empty", "-m", "init"], cwd: repo).isSuccess)
+    return repo
   }
 
   @discardableResult
