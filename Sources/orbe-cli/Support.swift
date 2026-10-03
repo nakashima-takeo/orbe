@@ -34,6 +34,16 @@ func writeRaw(_ text: String) {
   FileHandle.standardOutput.write(Data(text.utf8))
 }
 
+/// タブ区切りの行に載せるセル。タブは列を、改行は行を壊し、ESC 等は読み手の端末が解釈するため、
+/// 制御文字はまとめて空白にする（hook・OSC 7・人や agent が書いた任意文字列が載る）。
+func tsvCell(_ s: String) -> String {
+  var scalars = String.UnicodeScalarView()
+  for scalar in s.unicodeScalars {
+    scalars.append(CharacterSet.controlCharacters.contains(scalar) ? " " : scalar)
+  }
+  return String(scalars)
+}
+
 /// usage エラー（引数不正）。終了コード 2。
 func usageDie(_ message: String) -> Never {
   stderrLine("error: \(message)")
@@ -333,8 +343,8 @@ func usageBlock(_ lines: [String]) -> String {
 /// トップ help に載る全サーフェス。ドメインを 1 つ足すときに触るのは、そのドメインのファイルと、
 /// ここの 1 語と、`main.swift` のルーティング 1 行の 3 箇所。
 private let allUsageLines =
-  configUsageLines + wsUsageLines + tabUsageLines + agentUsageLines + sessionUsageLines
-  + waitUsageLines
+  configUsageLines + wsUsageLines + tabUsageLines + agentUsageLines + taskUsageLines
+  + sessionUsageLines + waitUsageLines
 
 let topUsage = """
   orb — configure and control the running Orbe instance
