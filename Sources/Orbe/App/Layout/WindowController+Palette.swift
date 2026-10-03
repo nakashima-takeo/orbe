@@ -100,7 +100,7 @@ extension WindowController {
     reconfirmFocusNextTick()  // 切替パレット→作成フォーム等の遷移で去りゆくカードの teardown に勝つ
   }
 
-  /// Cmd+Shift+X。worktree パレット（worktree/branch から起動）を開く。
+  /// Cmd+T・タブ行の「＋」。worktree パレット（worktree/branch から起動）を開く。
   /// git の一覧・フィルタ・⇥ 起動先切替（agent/shell）・Enter 実行（worktree 解決＋新タブ起動）・
   /// clean・最新化を配線する。
   func showWorktreePalette() {

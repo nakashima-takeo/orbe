@@ -1,6 +1,6 @@
 import Foundation
 
-/// worktree パレット（⌘⇧X）の文言。一覧・clean の 3 画面・3 軸の状態語彙をまとめて持つ。
+/// worktree パレット（⌘T）の文言。一覧・clean の 3 画面・3 軸の状態語彙をまとめて持つ。
 ///
 /// **git / gh の語は訳さない**（`[gone]` / `locked` / `PR #N merged` / `merged → <実マージ先>` /
 /// `remote +N` / `main worktree`）——訳すと出力と対応が取れなくなる技術語なので、

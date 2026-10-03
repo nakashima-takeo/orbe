@@ -64,7 +64,7 @@ enum WorktreeOpenKind: Equatable {
   }
 }
 
-/// ⌘⇧X で開く worktree パレットの表示状態（@Observable）。実データ（worktree/branch）を
+/// ⌘T で開く worktree パレットの表示状態（@Observable）。実データ（worktree/branch）を
 /// セクションに持ち、フィルタ・⇥ 起動先切替・決定（↵／行タップ）の意図をクロージャで外へ配線する。
 /// 実データ取得と section 組み立ては `WorktreePaletteDataProvider`＋`WorktreePaletteSectionBuilder`（外）が担う。
 @Observable final class WorktreePaletteModel {

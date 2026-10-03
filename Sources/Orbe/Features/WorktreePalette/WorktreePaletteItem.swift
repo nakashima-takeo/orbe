@@ -36,7 +36,7 @@ struct WorktreePaletteBranchSync: Equatable {
   }
 }
 
-/// worktree パレット（⌘⇧X）が表示する 1 行。実データ（worktree/branch）と実行ペイロードを持つ。
+/// worktree パレット（⌘T）が表示する 1 行。実データ（worktree/branch）と実行ペイロードを持つ。
 /// 色や強調は種別＋`isPrimary` から View が導く。
 struct WorktreePaletteItem: Identifiable {
   /// 先頭グリフ列の種別（見た目とグリフ色を決める）。

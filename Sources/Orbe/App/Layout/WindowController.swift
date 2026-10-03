@@ -152,7 +152,7 @@ final class WindowController: NSObject, NSWindowDelegate {
       tab.resetAgentState()
       self.refreshChrome()  // タブグリフ・横断ストリップ・Attention 一覧を再投影
     }
-    statusModel.onNewTab = { [weak self] in self?.newTab() }
+    statusModel.onNewTab = { [weak self] in self?.showWorktreePalette() }
     statusModel.onAttentionTap = { [weak self] in self?.showAttentionPalette() }
     // タブ非依存 chrome コマンドの window レベル配信（surface が居ない0タブでも届く）。
     hostingView.onWindowCommand = { [weak self] command in

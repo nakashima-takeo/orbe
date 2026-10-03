@@ -7,7 +7,6 @@ enum ChromeAction {
   case decreaseFontSize
   case resetFontSize
   case closeTab
-  case newTab
   case showClosedAgentsPalette  // 閉じたエージェント パレットを開く
   case nextTab
   case prevTab
@@ -15,7 +14,7 @@ enum ChromeAction {
   case switchWorkspace  // workspace コマンドパレットを開く
   case launchDefaultAgent  // デフォルトエージェントを新タブで起動
   case showAgentPalette  // エージェント起動パレットを開く
-  case showWorktreePalette  // worktree パレット（worktree/branch/issue/PR から起動）を開く
+  case showWorktreePalette  // worktree パレット（worktree・ブランチを選んで新しいタブを開く）を開く
   case openEditor  // アクティブタブの cwd を GUI エディタで開く
   case rename  // フォーカス中タブをリネーム
   case showSettings  // 設定パレットを開く
@@ -26,7 +25,6 @@ enum ChromeAction {
 
 /// surface から届く、ウィンドウレベルの chrome 操作（タブ・workspace）。
 enum WindowCommand {
-  case newTab
   case showClosedAgentsPalette
   case nextTab
   case prevTab
@@ -46,7 +44,6 @@ extension ChromeAction {
   /// 共有する単一ソース mapping（網羅 switch）。
   var windowCommand: WindowCommand? {
     switch self {
-    case .newTab: return .newTab
     case .showClosedAgentsPalette: return .showClosedAgentsPalette
     case .nextTab: return .nextTab
     case .prevTab: return .prevTab
@@ -71,7 +68,7 @@ extension WindowCommand {
   /// 網羅 switch（default 無し）＝新ケース追加時に分類漏れをコンパイルエラーで検出する。
   var availableWithoutTabs: Bool {
     switch self {
-    case .newTab, .showClosedAgentsPalette, .switchWorkspace,
+    case .showClosedAgentsPalette, .switchWorkspace,
       .launchDefaultAgent, .showAgentPalette, .showWorktreePalette, .showSettings, .toggleHelp:
       return true
     case .nextTab, .prevTab, .openEditor, .renameTab:
@@ -109,13 +106,12 @@ enum Keybindings {
     case "f": return .find  // Cmd+F
     case "r": return .rename  // Cmd+R
     case "w": return .closeTab  // Cmd+W
-    case "t": return .newTab  // Cmd+T
+    case "t": return .showWorktreePalette  // Cmd+T
     case "T": return .showClosedAgentsPalette  // Cmd+Shift+T
     case "}": return .nextTab  // Cmd+Shift+]
     case "{": return .prevTab  // Cmd+Shift+[
     case "S": return .switchWorkspace  // Cmd+Shift+S
     case "A": return .showAgentPalette  // Cmd+Shift+A
-    case "X": return .showWorktreePalette  // Cmd+Shift+X
     case "C": return .launchDefaultAgent  // Cmd+Shift+C
     case "E": return .openEditor  // Cmd+Shift+E
     case "h": return .toggleHelp  // Cmd+H（macOS Hide から奪取。メニューの Hide は無割当で残す）

@@ -6,7 +6,6 @@ extension WindowController {
   /// （`ChromeHostingView.performKeyEquivalent`）が共有する実体。
   func handleWindowCommand(_ command: WindowCommand) {
     switch command {
-    case .newTab: newTab()
     case .showClosedAgentsPalette: showClosedAgentsPalette()
     case .nextTab: nextTab()
     case .prevTab: prevTab()

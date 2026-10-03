@@ -26,13 +26,13 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
     return WindowController()
   }
 
-  /// overlay 非表示なら window コマンドを消費（true）し、実際に dispatch する（＝newTab でタブが増える）。
+  /// overlay 非表示なら window コマンドを消費（true）し、実際に dispatch する（＝⌘T で worktree パレットが開く）。
   func testWindowKeyCommandDispatchesWhenNoOverlay() throws {
     let wc = try restoreSingleTab()
     XCTAssertEqual(wc.presentedOverlay, .none, "前提: overlay 非表示")
-    let before = wc.current.tabs.count
-    XCTAssertTrue(wc.handleWindowKeyCommand(.newTab), "overlay 非表示なら横取りして true を返す")
-    XCTAssertEqual(wc.current.tabs.count, before + 1, "newTab が dispatch されタブが1枚増える")
+    XCTAssertTrue(
+      wc.handleWindowKeyCommand(.showWorktreePalette), "overlay 非表示なら横取りして true を返す")
+    XCTAssertEqual(wc.presentedOverlay, .worktreePalette, "⌘T が dispatch され worktree パレットが開く")
   }
 
   /// overlay（パレット/フォーム）表示中は window コマンドを横取りせず false を返し、dispatch もしない。
@@ -41,9 +41,9 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
     let wc = try restoreSingleTab()
     wc.showWorkspaceCreate(name: nil)  // overlay を .workspaceCreate に立てる
     XCTAssertNotEqual(wc.presentedOverlay, .none, "前提: overlay 表示中")
-    let before = wc.current.tabs.count
-    XCTAssertFalse(wc.handleWindowKeyCommand(.newTab), "overlay 表示中は横取りせず false を返す")
-    XCTAssertEqual(wc.current.tabs.count, before, "newTab は dispatch されない（暴発防止）")
+    XCTAssertFalse(
+      wc.handleWindowKeyCommand(.showWorktreePalette), "overlay 表示中は横取りせず false を返す")
+    XCTAssertEqual(wc.presentedOverlay, .workspaceCreate, "⌘T は dispatch されない（暴発防止）")
   }
 
   /// インライン改名（Cmd+R）は overlay を出さないが、編集中は window コマンドを横取りせず false を返す。
@@ -54,9 +54,9 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
     wc.beginTabRename()  // editingIndex を立てる（overlay は .none のまま）
     XCTAssertEqual(wc.presentedOverlay, .none, "前提: 改名は overlay を出さない")
     XCTAssertNotNil(wc.statusModel.editingIndex, "前提: 改名編集中")
-    let before = wc.current.tabs.count
-    XCTAssertFalse(wc.handleWindowKeyCommand(.newTab), "改名編集中は横取りせず false を返す")
-    XCTAssertEqual(wc.current.tabs.count, before, "newTab は dispatch されない（暴発防止）")
+    XCTAssertFalse(
+      wc.handleWindowKeyCommand(.showWorktreePalette), "改名編集中は横取りせず false を返す")
+    XCTAssertEqual(wc.presentedOverlay, .none, "⌘T は dispatch されない（暴発防止）")
   }
 
   /// ⌘⌘（Attention パレット）はヘルプ表示中だけ no-op。ヘルプは押下を点灯・行ハイライトにしか
