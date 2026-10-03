@@ -83,8 +83,11 @@ struct WorktreeBasePickerList: View {
         .padding(Theme.Space.note)
         .background(
           GeometryReader { geometry in
+            // 一覧と同じく上限で切る（Lazy の推定高がスクロールのたびに動いても、上限を超える件数では
+            // 値が止まり、カード全体が描き直されない）。
             Color.clear.preference(
-              key: WorktreePaletteContentHeightKey.self, value: geometry.size.height)
+              key: WorktreePaletteContentHeightKey.self,
+              value: min(geometry.size.height, WorktreePaletteCard.listCap))
           }
         )
       }

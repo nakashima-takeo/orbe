@@ -22,8 +22,8 @@ struct WorktreePaletteCard: View {
   /// ヘッダ＋バー＋フッターの実測高（リスト cap から差し引き、カードが窓を超えないようにする）。
   @State private var chromeHeight: CGFloat = 0
 
-  /// リスト部の内容基準の高さ上限（380・コンポーネント局所定数）。
-  private static let listCap: CGFloat = 380
+  /// リスト部の内容基準の高さ上限（380）。実測高を流すリスト（一覧・ベースを選ぶ画面）が共有する。
+  static let listCap: CGFloat = 380
 
   /// リスト部の実効高。内容にハグしつつ 380 と「窓 − chrome」の小さい方で頭打ち（超過は内部スクロール）。
   private var listHeight: CGFloat {
