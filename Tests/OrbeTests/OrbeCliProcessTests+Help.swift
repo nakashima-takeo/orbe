@@ -73,6 +73,28 @@ extension OrbeCliProcessTests {
       "tab --help の KEYS が ControlKey と食い違っている")
   }
 
+  /// `orb task --help` の `STATUSES:` / `PRIORITIES:` は control の `TaskItem.Status` / `Priority` と同じ集合。
+  ///
+  /// 弾くのは control（未知の値は -32602）だが、help は socket 不達でも出す必要があるため CLI に語彙を
+  /// 写している。写しが欠けると、打てば通るステータスが help を読む人と AI から見えなくなる。
+  func testTaskHelpListsEveryStatusAndPriority() throws {
+    let outcome = ControlProcess.orbWithoutServer(["task", "--help"])
+    XCTAssertEqual(outcome.status, 0, "task --help は socket 不達でも exit 0: \(outcome.stderr)")
+    func listed(_ prefix: String) throws -> Set<String> {
+      let line = try XCTUnwrap(
+        outcome.stdout.split(separator: "\n").first { $0.hasPrefix(prefix) },
+        "task --help に \(prefix) 行が無い: \(outcome.stdout)")
+      let words = line.dropFirst(prefix.count).split(separator: "(").first ?? ""
+      return Set(words.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+    }
+    XCTAssertEqual(
+      try listed("STATUSES: "), Set(TaskItem.Status.allCases.map(\.rawValue)),
+      "task --help の STATUSES が TaskItem.Status と食い違っている")
+    XCTAssertEqual(
+      try listed("PRIORITIES: "), Set(TaskItem.Priority.allCases.map(\.rawValue)),
+      "task --help の PRIORITIES が TaskItem.Priority と食い違っている")
+  }
+
   /// `orb config --help` の `KEYS:` は `SettingsRegistry.all` と同じ集合。
   ///
   /// usage は socket 不達でも出す必要があるため `config_list` からは引けず、CLI 側に key を写している。
