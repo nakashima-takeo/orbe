@@ -8,7 +8,8 @@ extension WindowController {
     restoreWindowSize(file.windowSize)
     var restored: [Workspace] = []
     for state in file.workspaces {
-      let ws = Workspace(name: state.name, rootPath: state.rootPath)
+      let ws = Workspace(
+        name: state.name, rootPath: state.rootPath, persistentId: state.persistentId)
       ws.lastUsedAt = state.lastUsedAt  // MRU 並べ替えキーを読み戻す（旧データは nil）
       ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
       for tab in state.tabs { ws.tabs.append(makeTab(from: tab)) }  // 隣接の正規化は下の store.load
@@ -97,7 +98,8 @@ extension WindowController {
         WorkspaceState(
           name: ws.name, rootPath: ws.rootPath, activeTab: ws.active,
           tabs: ws.tabs.map { $0.tabState() },
-          lastUsedAt: ws.lastUsedAt, settingsOverride: ws.settingsOverride)
+          lastUsedAt: ws.lastUsedAt, settingsOverride: ws.settingsOverride,
+          persistentId: ws.persistentId)
       },
       windowSize: rememberedWindowSize)
   }

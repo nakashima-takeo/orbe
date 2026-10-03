@@ -39,14 +39,17 @@ struct WorkspaceState: Codable, Equatable {
   /// この workspace の設定上書き層（全設定を上書き可）。
   /// optional——上書きが 1 項目も無ければ書かれない（＝global 継承）。
   var settingsOverride: SettingsLayer?
+  /// `Workspace.persistentId`。無いか読めない workspace にはその workspace だけ新しく振る（旧形式から
+  /// 読んだ場合も同じ）——後から足したフィールドの異常でファイル全体を落とさない。
+  var persistentId: UUID
 
   enum CodingKeys: String, CodingKey {
-    case name, rootPath, activeTab, tabs, lastUsedAt, settingsOverride
+    case name, rootPath, activeTab, tabs, lastUsedAt, settingsOverride, persistentId
   }
 
   init(
     name: String, rootPath: String, activeTab: Int, tabs: [TabState],
-    lastUsedAt: Date? = nil, settingsOverride: SettingsLayer? = nil
+    lastUsedAt: Date? = nil, settingsOverride: SettingsLayer? = nil, persistentId: UUID = UUID()
   ) {
     self.name = name
     self.rootPath = rootPath
@@ -54,6 +57,7 @@ struct WorkspaceState: Codable, Equatable {
     self.tabs = tabs
     self.lastUsedAt = lastUsedAt
     self.settingsOverride = settingsOverride
+    self.persistentId = persistentId
   }
 
   /// settingsOverride は 1 キー単位で寛容に読む（`SettingsLayer` 自身の decode）——未知 key・型不一致の
@@ -67,6 +71,7 @@ struct WorkspaceState: Codable, Equatable {
     lastUsedAt = try c.decodeIfPresent(Date.self, forKey: .lastUsedAt)
     let layer = try? c.decode(SettingsLayer.self, forKey: .settingsOverride)
     settingsOverride = layer.flatMap { $0.isEmpty ? nil : $0 }
+    persistentId = (try? c.decode(UUID.self, forKey: .persistentId)) ?? UUID()
   }
 }
 
