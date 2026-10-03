@@ -9,7 +9,8 @@ import SwiftUI
 ///
 /// 隠れた端末の中身は最後に見えていた寸法のまま据え置く（隠すたびの pty resize と scrollback の
 /// 再折り返しを避ける）。隠れたまま生まれた端末は「戻したときに得る寸法」で起きる。
-/// 遷移は「中身のサイズは遷移開始時に 1 回・面の clip と中身の位置だけ動く」。背のドラッグ中は
+/// 遷移は「どのコマでも見えている面は中身で覆われ、中身の寸法は始めか終わりの 1 回だけ変わり、間は面の clip と中身の
+/// 位置だけ動く」。背のドラッグ中は
 /// 面と背をポインタごとに置き、中身の resize は表示のフレーム単位に間引く。
 final class TabFacesView: NSView {
   let terminal: SurfaceScrollView
@@ -276,13 +277,24 @@ final class TabFacesView: NSView {
     slideFrame(now: start)
   }
 
-  /// 遷移の終点を据える: 中身のサイズは 1 回で確定し、現れる側は最初の 1 フレームから見せ、隠れる側は
+  /// 遷移の終点を据える: どのコマでも見えている面が中身で覆われるようにする——隠れていく面の中身は最後に見えていた寸法の
+  /// まま（遷移中に器が resize されても据え置く）、残る面の中身は起点と終点の面の幅の大きい方。中身の寸法が変わるのは、
+  /// 現れる・広がる面はここ、縮む・隠れる面は終端の `apply` の 1 回だけ。現れる側は最初の 1 フレームから見せ、隠れる側は
   /// 終端まで倒さない。塗りは終点の規則。
   private func prepareSlide(to target: FaceGeometry.Resolved) {
+    guard case .sliding(let fromRatio, _) = interaction else { return }
     resolved = target
-    applySizes(target)
-    if target.editorWidth > 0 { editorFace.isHidden = false }
-    if target.terminalWidth > 0 { terminalFace.isHidden = false }
+    let fromEditor = CGFloat(fromRatio) * target.contentWidth
+    if target.editorWidth > 0 {
+      setSize(
+        editor, CGSize(width: max(fromEditor, target.editorWidth), height: bounds.height))
+      editorFace.isHidden = false
+    }
+    if target.terminalWidth > 0 {
+      let width = max(target.contentWidth - fromEditor, target.terminalWidth)
+      setSize(terminal, CGSize(width: width, height: bounds.height))
+      terminalFace.isHidden = false
+    }
     paint(target)
     report(target.projection)
   }
