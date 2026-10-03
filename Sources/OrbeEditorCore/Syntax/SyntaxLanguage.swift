@@ -178,12 +178,6 @@ enum Grammar: String, CaseIterable, Sendable {
     }
   }
 
-  /// アウトラインの規則のファイル名（Orbe の資源バンドルの `outline/` の中）。TSX は TypeScript のものを使う（TSX の
-  /// 文法は TypeScript の節をそのまま持つ）。
-  var outlineFile: String {
-    self == .tsx ? "typescript.scm" : "\(rawValue).scm"
-  }
-
   /// injections を持つ文法はその所在。TypeScript / TSX は JavaScript のものを借りる（上流どおり）。
   var injectionFile: QueryFile? {
     switch self {

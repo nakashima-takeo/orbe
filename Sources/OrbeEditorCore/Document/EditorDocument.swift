@@ -27,7 +27,7 @@ public final class EditorDocument {
   /// 文書全体の役割の並び。裏の最新の結果を、その後の編集に合わせてずらしたもの。
   public private(set) var roles: RoleRuns
   /// 本文の版と、届いていない結果を今の版まで写すための編集の記録。
-  private(set) var log = EditLog()
+  private var log = EditLog()
   /// 本文の版（編集 1 回で 1 進む）。
   public var version: Int { log.version }
   /// 面の本文が最後に保存（または開いた）内容と違うか。⌘Z で保存時の状態に戻しても立ったまま。
@@ -64,14 +64,10 @@ public final class EditorDocument {
   public var onTextChange: (([VersionedEdit]) -> Void)?
   /// 区間の列の問い（`analyze`）の結果（今の本文の上へずらしたもの）。問いが今と違うかは受け手が見る。
   public var onAnalysis: ((AnalysisRequest, [NSRange]) -> Void)?
-  /// アウトライン（`outline`）か、その絞り込み（`outlineFilter`）が変わった。
-  public var onOutlineChange: (() -> Void)?
 
   private let inbox: AnalysisInbox
   private(set) var syntax: SyntaxWorker?
   private let analysis: DocumentAnalysis
-  /// アウトラインの状態（→ `EditorDocument+Outline`）。
-  var outlineState: OutlineState
   /// 最後に受け取った構文の結果の版と、そのとき見えている範囲・全体の作り直しが済んでいたか。
   private var syntaxState = SyntaxProgress(version: 0, visibleReady: false, complete: false)
   private var baselineGeneration = 0
@@ -112,13 +108,9 @@ public final class EditorDocument {
     hasBOM = contents.hasBOM
     let inbox = AnalysisInbox()
     self.inbox = inbox
-    let rules = language.flatMap { registry.rules(for: $0) }
-    let outlineState = OutlineState(rules: rules, inbox: inbox)
-    self.outlineState = outlineState
-    syntax = rules.map {
+    syntax = language.flatMap { registry.rules(for: $0) }.map {
       SyntaxWorker(
-        text: text, version: 0, rules: $0, registry: registry, inbox: inbox,
-        outline: outlineState.worker, quietDelay: quietDelay)
+        text: text, version: 0, rules: $0, registry: registry, inbox: inbox, quietDelay: quietDelay)
     }
     analysis = DocumentAnalysis(inbox: inbox)
     inbox.setWake { [weak self] in self?.receive() }
@@ -131,18 +123,13 @@ public final class EditorDocument {
     DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = nil } }
   }
 
-  /// 入れ替えで外れたアウトラインの結果と絞り込みを手放す口（既定は裏で手放す）。テストは手放す時機を差し替える。
-  var releaseOutlines: @Sendable (OSAllocatedUnfairLock<OutlineState.Retired?>) -> Void =
-    { parcel in DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = nil } } }
-
-  /// 構文とアウトラインの裏の仕事を打ち切らせ、閉じた文書の写し・役割の並び・構文木・アウトラインは裏で手放す（大きな
+  /// 構文の裏の仕事に走っている解析を打ち切らせ、閉じた文書の写し・役割の並び・構文木を持つ裏の仕事は裏で手放す（大きな
   /// 木の解放を main で行わない）。裏へ渡す前に文書の欄から外す——欄は deinit の後に main で解放されるので、欄に残すと裏が
   /// 先に済んだとき最後の解放が main で起きる。
   deinit {
     syntax?.cancel()
     let parcel = OSAllocatedUnfairLock<ReleasedParts?>(
-      initialState: ReleasedParts(
-        text: text, roles: roles, syntax: syntax, outline: outlineState.release()))
+      initialState: ReleasedParts(text: text, roles: roles, syntax: syntax))
     text = TextRope()
     roles = RoleRuns(length: 0)
     syntax = nil
@@ -190,11 +177,10 @@ public final class EditorDocument {
     syntax == nil || (syntaxState.version == version && syntaxState.visibleReady)
   }
 
-  /// 受け取った結果で、裏の仕事がすべて今の版に追いついている（待たず、裏を急かさない）。アウトラインが要れば、その結果と
-  /// 絞り込みも。
+  /// 受け取った結果で、裏の仕事がすべて今の版に追いついている（待たず、裏を急かさない）。
   var isCaughtUp: Bool {
     (syntax == nil || (syntaxState.version == version && syntaxState.complete))
-      && pendingHunks == nil && pendingRanges.isEmpty && outlineState.isCaughtUp(version: version)
+      && pendingHunks == nil && pendingRanges.isEmpty
   }
 
   /// 本文の作法（字下げ・改行）を検出し直して面へ押す。
@@ -301,7 +287,6 @@ public final class EditorDocument {
       if pending.version == outcome.version { pendingRanges[outcome.request.kind] = nil }
       onAnalysis?(outcome.request, edits.reduce(outcome.ranges) { $1.edit.track($0) })
     }
-    receiveOutline(contents)
     discardSettledEdits()
     if !changedRoles.isEmpty { surface.rolesDidChange(changedRoles) }
   }
@@ -313,7 +298,6 @@ public final class EditorDocument {
     if syntax != nil { oldest = min(oldest, syntaxState.version) }
     if let pendingHunks { oldest = min(oldest, pendingHunks) }
     for pending in pendingRanges.values { oldest = min(oldest, pending.version) }
-    if let awaited = outlineState.oldestAwaited { oldest = min(oldest, awaited) }
     log.discard(through: oldest)
   }
 }

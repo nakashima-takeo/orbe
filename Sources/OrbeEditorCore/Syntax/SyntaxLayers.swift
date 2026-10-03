@@ -74,11 +74,6 @@ final class SyntaxLayers {
     return edited.union(parse(placedRoot))
   }
 
-  /// 根の構文木の写し（別のスレッドで読む）。まだ解析していなければ nil。
-  func rootTreeCopy() -> TreeCopy? {
-    root.tree?.copy()
-  }
-
   /// 前に取ってから足された「作り直していない範囲」。
   func takeInvalidated() -> IndexSet {
     defer { invalidated = IndexSet() }

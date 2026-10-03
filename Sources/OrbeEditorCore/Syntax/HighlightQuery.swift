@@ -187,23 +187,18 @@ final class InjectionQuery: Sendable {
   }
 }
 
-/// 文法 1 つの、構文の事実を作るもの一式——`TSLanguage` と highlights・injections・outline の問い合わせ。
+/// 文法 1 つの、色付けに要るもの一式——`TSLanguage` と highlights・injections の問い合わせ。
 final class GrammarRules: Sendable {
   let grammar: Grammar
   let language: LanguagePointer
   let highlights: HighlightQuery
   let injections: InjectionQuery?
-  /// アウトラインの取り出し（Orbe の規則。無い・読めない文法は nil）。
-  let outline: OutlineQuery?
 
-  init(
-    grammar: Grammar, highlights: SyntaxQuery, injections: SyntaxQuery?, outline: SyntaxQuery?
-  ) {
+  init(grammar: Grammar, highlights: SyntaxQuery, injections: SyntaxQuery?) {
     self.grammar = grammar
     language = grammar.language
     self.highlights = HighlightQuery(highlights)
     self.injections = injections.map(InjectionQuery.init)
-    self.outline = outline.flatMap(OutlineQuery.init)
   }
 }
 
@@ -213,9 +208,9 @@ struct QueryBounds {
   var containing: Range<Int>?
 }
 
-/// 問い合わせの cursor。裏の仕事（構文・アウトライン）がそれぞれ持ち、その中だけで使う。
+/// 問い合わせの cursor。構文の裏の仕事の中だけで使う。
 final class QueryCursor {
-  let raw: OpaquePointer
+  private let raw: OpaquePointer
 
   init() {
     raw = ts_query_cursor_new()
