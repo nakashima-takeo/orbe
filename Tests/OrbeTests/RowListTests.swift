@@ -4,12 +4,12 @@ import XCTest
 @testable import Orbe
 
 /// 行の列の部品（`RowList`）そのもの——検索に依らない最小の源で、枠の使い回しと新しく見えた行だけの描き直し、キーの
-/// 渡し方（Home / End・Page を源が扱う／扱わない、Space、文字の打鍵の引き取り）、押した行と行の中の横の位置、2 通りの
-/// 送り、選択が変わったときだけ見せること、焦点の要求、VoiceOver のリストを固める。
+/// 渡し方（Home / End・Page は列が送る）、押した行、選択が変わったときだけ見せること、焦点の要求、VoiceOver のリストを
+/// 固める。
 ///
-/// 壊れると何が起きるか。送るたびに見えている行を全部描き直して重い、行の数が変わるたびに枠を作り直す。源が扱う
-/// Home / End でも列が勝手に送る、打鍵が入力欄へ回らず IME が最初の字から効かない。押したシェブロンが開閉しない。
-/// カーソルを追う行が見えているのに送られる、見えていないのに寄らない。結果が届くたびに選択の行へ引き戻される。
+/// 壊れると何が起きるか。送るたびに見えている行を全部描き直して重い、行の数が変わるたびに枠を作り直す。↑↓ や Enter が
+/// 源へ届かない、Home / End で送れない。押した行と違う行が開く。選んだ行が見えているのに送られる、見えていないのに
+/// 寄らない。結果が届くたびに選択の行へ引き戻される。
 @MainActor
 final class RowListTests: OrbeTestCase {
   private let rowHeight: CGFloat = 20
@@ -18,12 +18,7 @@ final class RowListTests: OrbeTestCase {
   final class Source: RowListSource {
     var rowCount = 200
     var wantsFocus = false
-    /// 扱うキー（ほかは扱わない＝false を返す）。
-    var handles: Set<RowListKey> = [.up, .down, .left, .right, .enter, .escape, .space]
-    /// 引き取る打鍵（文字）。
-    var takes: Set<String> = []
     private(set) var keys: [RowListKey] = []
-    private(set) var taken: [String] = []
     private(set) var clicks: [String] = []
     private(set) var selected: [Int] = []
     private(set) var focus: [Bool] = []
@@ -43,20 +38,12 @@ final class RowListTests: OrbeTestCase {
       focusRequestsApplied += 1
     }
     func focusDidChange(_ focused: Bool) { focus.append(focused) }
-    func takeTyping(_ event: NSEvent) -> Bool {
-      guard let characters = event.characters, takes.contains(characters) else { return false }
-      taken.append(characters)
-      return true
-    }
-    func perform(_ key: RowListKey) -> Bool {
-      keys.append(key)
-      return handles.contains(key)
-    }
-    func click(_ row: Int, x: CGFloat) {
+    func perform(_ key: RowListKey) { keys.append(key) }
+    func click(_ row: Int) {
       if row >= rowCount { outOfRange += 1 }
-      clicks.append("click \(row) x\(Int(x))")
+      clicks.append("click \(row)")
     }
-    func doubleClick(_ row: Int, x: CGFloat) { clicks.append("double \(row) x\(Int(x))") }
+    func doubleClick(_ row: Int) { clicks.append("double \(row)") }
     func select(_ row: Int) { selected.append(row) }
   }
 
@@ -91,7 +78,7 @@ final class RowListTests: OrbeTestCase {
       contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.contentView = rows
-    rows.update(rowsVersion: 0, selection: nil, reveal: .nearest, emoji: nil, wantsFocus: false)
+    rows.update(rowsVersion: 0, selection: nil, emoji: nil, wantsFocus: false)
     rows.layoutSubtreeIfNeeded()
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
     return Hosted(source: source, rows: rows, window: window)
@@ -147,7 +134,7 @@ final class RowListTests: OrbeTestCase {
     let kept = slots(list)
     hosted.source.rowCount = 3
     hosted.rows.update(
-      rowsVersion: 1, selection: nil, reveal: .nearest, emoji: nil, wantsFocus: false)
+      rowsVersion: 1, selection: nil, emoji: nil, wantsFocus: false)
     XCTAssertEqual(list.rowCount, 3)
     XCTAssertEqual(list.frame.height, rowHeight * 3, "行の数の変化は列の高さだけで受ける")
     XCTAssertEqual(
@@ -157,7 +144,7 @@ final class RowListTests: OrbeTestCase {
 
     hosted.source.rowCount = 200
     hosted.rows.update(
-      rowsVersion: 1, selection: nil, reveal: .nearest, emoji: nil, wantsFocus: false)
+      rowsVersion: 1, selection: nil, emoji: nil, wantsFocus: false)
     XCTAssertEqual(list.rowCount, 3, "版が同じなら読み直さない")
   }
 
@@ -181,9 +168,8 @@ final class RowListTests: OrbeTestCase {
 
   // MARK: - キー
 
-  /// キーは源の操作へ渡る。Home / End・PageUp / PageDown は源が扱えば列は送らず、扱わなければ送るだけ。Space は
-  /// 文字として届いて源の Space へ。源が引き取る打鍵は、列はキーとして解かない。
-  func testKeysReachTheSourceAndScrollKeysScrollOnlyWhenTheSourceDoesNotHandleThem() {
+  /// ↑↓←→・Enter・Esc は源の操作へ渡る。Home / End・PageUp / PageDown は源へ渡さず、列が送るだけ。
+  func testKeysReachTheSourceAndScrollKeysOnlyScroll() {
     let hosted = host()
     let list = hosted.list
     for special in [NSEvent.SpecialKey.upArrow, .downArrow, .leftArrow, .rightArrow] {
@@ -191,36 +177,24 @@ final class RowListTests: OrbeTestCase {
     }
     list.keyDown(with: .key("\r", []))
     list.keyDown(with: .key("\u{1b}", []))
-    list.keyDown(with: .key(" ", []))
-    XCTAssertEqual(hosted.source.keys, [.up, .down, .left, .right, .enter, .escape, .space])
+    XCTAssertEqual(hosted.source.keys, [.up, .down, .left, .right, .enter, .escape])
 
     let height = list.visibleRect.height
     list.scrollToEndOfDocument(nil)
-    XCTAssertEqual(list.visibleRect.maxY, list.frame.height, accuracy: 0.5, "扱わない End は末尾へ送る")
+    XCTAssertEqual(list.visibleRect.maxY, list.frame.height, accuracy: 0.5, "End は末尾へ送る")
     list.scrollToBeginningOfDocument(nil)
-    XCTAssertEqual(list.visibleRect.minY, 0, "扱わない Home は先頭へ送る")
+    XCTAssertEqual(list.visibleRect.minY, 0, "Home は先頭へ送る")
     list.pageDown(nil)
     XCTAssertEqual(list.visibleRect.minY, height - rowHeight, accuracy: 0.5, "1 行重ねて 1 画面送る")
     list.pageUp(nil)
     XCTAssertEqual(list.visibleRect.minY, 0)
-
-    hosted.source.handles.formUnion([.home, .end, .pageUp, .pageDown])
-    list.scrollToEndOfDocument(nil)
-    list.pageDown(nil)
-    XCTAssertEqual(list.visibleRect.minY, 0, "源が扱えば列は送らない")
-    XCTAssertEqual(hosted.source.keys.suffix(2), [.end, .pageDown])
-
-    hosted.source.takes = [" "]
-    let performed = hosted.source.keys.count
-    list.keyDown(with: .key(" ", []))
-    XCTAssertEqual(hosted.source.taken, [" "], "源が打鍵を引き取る")
-    XCTAssertEqual(hosted.source.keys.count, performed, "引き取った打鍵は解かない")
+    XCTAssertEqual(hosted.source.keys.count, 6, "送るキーは源へ渡さない")
   }
 
   // MARK: - マウス
 
-  /// 押すと焦点を取り、行の番号と行の中の横の位置を源へ渡す（ダブルクリックは別の口）。行の無いところは渡さない。
-  func testClicksPassTheRowAndTheXInTheRow() {
+  /// 押すと焦点を取り、行の番号を源へ渡す（ダブルクリックは別の口）。行の無いところは渡さない。
+  func testClicksPassTheRow() {
     let hosted = host(rowCount: 3)
     let list = hosted.list
     func press(x: CGFloat, y: CGFloat, count: Int) {
@@ -234,68 +208,54 @@ final class RowListTests: OrbeTestCase {
     XCTAssertTrue(hosted.window.firstResponder === list, "押すと焦点を取る")
     press(x: 150, y: 0.5 * rowHeight, count: 2)
     press(x: 20, y: 4.5 * rowHeight, count: 1)
-    XCTAssertEqual(hosted.source.clicks, ["click 2 x13", "double 0 x150"])
+    XCTAssertEqual(hosted.source.clicks, ["click 2", "double 0"])
   }
 
   // MARK: - 送り
 
-  /// 2 通りの送り: 最小限（見えるところまで）と中央へ。どちらも見えている行では動かない。
-  func testTheTwoWaysToRevealARow() {
-    let hosted = host()
-    let list = hosted.list
-    list.reveal(3, .nearest)
-    list.reveal(3, .center)
-    XCTAssertEqual(list.visibleRect.minY, 0, "見えている行では動かない")
-
-    list.reveal(10, .nearest)
-    XCTAssertEqual(list.visibleRect.maxY, 11 * rowHeight, accuracy: 0.5, "最小限: 行の下端が見える下端に")
-    list.reveal(50, .center)
-    XCTAssertEqual(list.visibleRect.midY, 50.5 * rowHeight, accuracy: 0.5, "中央へ")
-    list.reveal(199, .center)
-    XCTAssertEqual(list.visibleRect.maxY, list.frame.height, accuracy: 0.5, "端では寄せ切らない")
-    list.reveal(0, .center)
-    XCTAssertEqual(list.visibleRect.minY, 0)
-  }
-
   /// 大きさが決まる前（SwiftUI の最初の更新）に変わった選択は、大きさが付いてから見せる——大きさの無いまま送った位置が
   /// 残ると、選択の行が上端で半分隠れる。
   func testASelectionRevealedBeforeTheListHasASizeIsShownOnceItDoes() {
-    for (selection, check) in [(50, "中央へ"), (0, "先頭の行は欠けない")] {
+    for (selection, check) in [(50, "見えるところまで"), (0, "先頭の行は欠けない")] {
       let source = Source()
       let rows = RowList(source: source, rowHeight: rowHeight)
       rows.update(
-        rowsVersion: 0, selection: selection, reveal: .center, emoji: nil, wantsFocus: false)
+        rowsVersion: 0, selection: selection, emoji: nil, wantsFocus: false)
       rows.frame = NSRect(x: 0, y: 0, width: 200, height: 100)
       rows.tile()
       if selection == 0 {
         XCTAssertEqual(rows.list.visibleRect.minY, 0, check)
       } else {
         XCTAssertEqual(
-          rows.list.visibleRect.midY, (CGFloat(selection) + 0.5) * rowHeight, accuracy: 0.5, check)
+          rows.list.visibleRect.maxY, CGFloat(selection + 1) * rowHeight, accuracy: 0.5, check)
       }
     }
   }
 
-  /// 選択の行を写し、選択が変わったときだけ、渡されたやり方で見せる。同じ選択のまま行がずれても・版が変わっても送らない。
+  /// 選択の行を写し、選択が変わったときだけ、その行が見えるところまで最小限だけ送る（見えていれば動かさない）。同じ選択の
+  /// まま行がずれても・版が変わっても送らない。
   func testTheSelectionIsMirroredAndRevealedOnlyWhenItChanges() {
     let hosted = host()
     let list = hosted.list
     hosted.rows.update(
-      rowsVersion: 0, selection: 50, reveal: .center, emoji: nil, wantsFocus: false)
+      rowsVersion: 0, selection: 50, emoji: nil, wantsFocus: false)
     XCTAssertEqual(list.selectedRow, 50)
-    XCTAssertEqual(list.visibleRect.midY, 50.5 * rowHeight, accuracy: 0.5, "変わった選択を中央へ")
+    XCTAssertEqual(list.visibleRect.maxY, 51 * rowHeight, accuracy: 0.5, "変わった選択を最小限に")
     XCTAssertEqual(slots(list).filter(\.isSelected).map(\.row), [50], "選択の枠だけが選択")
 
     list.scrollToBeginningOfDocument(nil)
     hosted.rows.update(
-      rowsVersion: 1, selection: 50, reveal: .center, emoji: nil, wantsFocus: false)
+      rowsVersion: 1, selection: 50, emoji: nil, wantsFocus: false)
     XCTAssertEqual(list.visibleRect.minY, 0, "同じ選択では送らない")
 
     hosted.rows.update(
-      rowsVersion: 1, selection: 60, reveal: .nearest, emoji: nil, wantsFocus: false)
+      rowsVersion: 1, selection: 2, emoji: nil, wantsFocus: false)
+    XCTAssertEqual(list.visibleRect.minY, 0, "見えている選択では動かない")
+    hosted.rows.update(
+      rowsVersion: 1, selection: 60, emoji: nil, wantsFocus: false)
     XCTAssertEqual(list.visibleRect.maxY, 61 * rowHeight, accuracy: 0.5, "変わった選択を最小限に")
     hosted.rows.update(
-      rowsVersion: 1, selection: nil, reveal: .nearest, emoji: nil, wantsFocus: false)
+      rowsVersion: 1, selection: nil, emoji: nil, wantsFocus: false)
     XCTAssertNil(list.selectedRow)
     XCTAssertTrue(slots(list).allSatisfy { !$0.isSelected })
   }
@@ -307,7 +267,7 @@ final class RowListTests: OrbeTestCase {
     let hosted = host()
     hosted.source.wantsFocus = true
     hosted.rows.update(
-      rowsVersion: 0, selection: nil, reveal: .nearest, emoji: nil, wantsFocus: true)
+      rowsVersion: 0, selection: nil, emoji: nil, wantsFocus: true)
     pumpMain(until: { hosted.window.firstResponder === hosted.list }, "要求で列に焦点")
     XCTAssertEqual(hosted.source.focusRequestsApplied, 1)
     hosted.window.makeFirstResponder(nil)
@@ -322,7 +282,7 @@ final class RowListTests: OrbeTestCase {
     let hosted = host()
     let list = hosted.list
     hosted.rows.update(
-      rowsVersion: 0, selection: 2, reveal: .nearest, emoji: nil, wantsFocus: false)
+      rowsVersion: 0, selection: 2, emoji: nil, wantsFocus: false)
     XCTAssertEqual(list.accessibilityRole(), .list)
     XCTAssertEqual(list.accessibilityRowCount(), 200)
     list.pageDown(nil)

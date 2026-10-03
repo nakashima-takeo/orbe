@@ -11,6 +11,6 @@ struct SearchResultsList: View {
   var body: some View {
     RowListHost(
       list: results, rowsVersion: search.rowsVersion, selection: search.selection,
-      reveal: .nearest, emoji: fontResolver.emojiFont, wantsFocus: search.focusRequest == .results)
+      emoji: fontResolver.emojiFont, wantsFocus: search.focusRequest == .results)
   }
 }
