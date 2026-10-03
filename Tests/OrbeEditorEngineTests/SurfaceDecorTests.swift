@@ -5,7 +5,7 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 面の行の装備——空白の丸点・⌘ で乗せた URL の下線（規則は Core の純関数）と、タブの表示幅。壊れるとタブが違う幅で
-/// 開く・単語間の空白に点が出る・下線が普段から出る・URL からずれる・選択が装備を覆わない。
+/// 開く・単語間の空白に点が出る・下線が普段から出る・URL からずれる・選択の中で点が消える。
 @MainActor
 final class SurfaceDecorTests: EngineTestCase {
   private let style = EngineTestCase.style()
@@ -121,11 +121,14 @@ final class SurfaceDecorTests: EngineTestCase {
     }
   }
 
-  /// 選択の地は装備を覆う（選択中の行の点は見えない）。
-  func testSelectionCoversTheDecorations() throws {
-    let opened = try open("    a\n", name: "a.txt")
+  /// 装備は選択の地の上、字の下に描く——選択した範囲でも点は選択の外と同じに見える。
+  func testDecorationsAreDrawnOverTheSelection() throws {
+    let opened = try open("    a\n    b\n", name: "a.txt")
     opened.surface.selectedRange = NSRange(location: 0, length: 5)
     let shot = try pixelShot(opened)
-    XCTAssertEqual(shot.rgb(x(opened, 1.5), rowMidY(0)), [59, 61, 66], "点の上も選択の色（焦点が無いので弱い色）")
+    XCTAssertEqual(
+      shot.rgb(x(opened, 1.5), rowMidY(0)), shot.rgb(x(opened, 1.5), rowMidY(1)),
+      "選択の中の点は選択の外の点と同じ色")
+    XCTAssertEqual(shot.rgb(x(opened, 1.05), rowMidY(0)), [59, 61, 66], "点の間は選択の地（焦点が無いので弱い色）")
   }
 }
