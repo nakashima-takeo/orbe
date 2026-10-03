@@ -96,11 +96,16 @@ enum TaskStoreError: Error, Equatable {
       TasksFile(version: TaskPersistence.version, nextId: nextId, tasks: tasks))
   }
 
-  /// 前後の空白を除いて空でなく、改行などの制御文字を含まない 1 行。
+  /// 前後の空白を除いて空でなく、制御文字（Cc）と改行類（U+2028 / U+2029 を含む）を含まない 1 行。
+  /// 書式文字（ZWJ 絵文字の U+200D など）は行を壊さないので通す。
   private static func validTitle(_ raw: String) throws(TaskStoreError) -> String {
     let title = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !title.isEmpty else { throw .invalid("title is empty") }
-    guard title.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }) else {
+    guard
+      !title.unicodeScalars.contains(where: {
+        $0.properties.generalCategory == .control || CharacterSet.newlines.contains($0)
+      })
+    else {
       throw .invalid("title contains control characters")
     }
     return title
