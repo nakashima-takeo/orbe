@@ -73,13 +73,22 @@ final class TaskStoreTests: OrbeTestCase {
   func testAddRejectsBlankOrControlCharacterTitleAndLeavesTheListUnchanged() throws {
     let store = TaskStore()
 
-    for title in ["", "   \n ", "一行目\n二行目", "タブ\t入り"] {
+    for title in ["", "   \n ", "一行目\n二行目", "タブ\t入り", "一行目\u{2028}二行目"] {
       assertInvalid({ _ = try store.add(draft(title)) })
     }
 
     XCTAssertTrue(store.tasks.isEmpty, "拒否した追加は一覧に残らない")
     XCTAssertTrue(relaunched().tasks.isEmpty, "拒否した追加はディスクにも残らない")
     XCTAssertEqual(try store.add(draft("最初")).id, 1, "拒否した追加は ID を消費しない")
+  }
+
+  /// 書式文字は行を壊さないので、ZWJ で組む絵文字やソフトハイフンを含むタイトルは通す。
+  func testTitleWithFormatCharactersIsAccepted() throws {
+    let store = TaskStore()
+
+    for title in ["🧑‍💻 レビュー", "👨‍👩‍👧 買い物", "soft\u{00AD}hyphen"] {
+      XCTAssertEqual(try store.add(draft(title)).title, title)
+    }
   }
 
   func testAddRejectsBlankWaitingReasonOrDoneWithWaiting() throws {
