@@ -3,77 +3,49 @@ import OrbeEditorCore
 import XCTest
 
 @testable import Orbe
+@testable import OrbeEditorEngine
 
-/// 本文の装備——インデント線・タブ幅・丸点・URL 下線。
+/// 本文の装備——タブ幅・丸点・⌘ で乗せた URL の下線。
 extension EditorLineMarksTests {
 
-  /// インデント線は行頭から段の単位ぶんの文字の左端に、段の数だけ立つ（単位は本文から検出）。空行は隣の浅い方。
-  /// 線の有無は、その桁が空白か行の外にある位置で読む——字のあるセルの左端は、字の縁の画素が乗るかどうかが
-  /// 倍率と桁で変わり、線の証人にならない。
-  func testIndentGuidesStandAtTheUnitColumns() throws {
-    let hosted = try host("f {\n  a\n    b\n\n      c\n  d\n}\n")
+  /// タブの表示幅は文書が検出した単位（ここではスペースの行から 2 桁）——2 個のタブの後の字は 4 桁目に立つ（AppKit
+  /// 既定の 28pt 刻みのままなら 56pt）。字の有無は字のセルの中央で読む。
+  func testTabWidthFollowsTheIndentUnit() throws {
+    let hosted = try host("f {\n  a\n\t\tx\n}\n")
     let ground = hosted.ground
-    let guide1 = bodyX + 2 * cell
-    let guide2 = bodyX + 4 * cell
-    let guide3 = bodyX + 6 * cell
-    waitDrawn { try self.hasInk(ground, guide2, self.rowMidY(5)) }
-    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(3)), "2 段の行に段 1 の線")
-    XCTAssertFalse(try hasInk(ground, guide3, rowMidY(3)), "2 段の行に段 3 の線は無い")
-    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(5)), "3 段の行に段 1 の線")
-    XCTAssertTrue(try hasInk(ground, guide2, rowMidY(5)), "3 段の行に段 2 の線")
-    XCTAssertFalse(try hasInk(ground, guide2, rowMidY(2)), "1 段の行に段 2 の線は無い")
-    XCTAssertTrue(try hasInk(ground, guide2, rowMidY(4)), "空行は隣（2 段と 3 段）の浅い方＝2 段")
-    XCTAssertFalse(try hasInk(ground, guide3, rowMidY(4)), "空行に段 3 の線は無い")
-    XCTAssertFalse(try hasInk(ground, guide1, rowMidY(7)), "0 段の行には無い")
-    XCTAssertFalse(try hasInk(ground, guide2 - 2, rowMidY(4)), "線の左は地（空行なので丸点も無い）")
-    XCTAssertFalse(try hasInk(ground, guide2 + 2, rowMidY(4)), "線の右は地")
-  }
-
-  /// タブで書かれた文書では、タブの表示幅が検出した単位（スペースの行が無ければ 4 桁）になり、空白だけの行の線
-  /// （桁幅から置く）がタブの行の線と同じ x に立つ（AppKit 既定の 28pt 刻みのままだと段が深いほど開く）。
-  func testTabWidthFollowsTheIndentUnitSoBlankLineGuidesAlign() throws {
-    let hosted = try host("\tif {\n\n\t\tx\n\t}\n")
-    let ground = hosted.ground
-    let guide1 = bodyX + 4 * cell
-    let guide2 = bodyX + 8 * cell
-    waitDrawn { try self.hasInk(ground, guide1, self.rowMidY(3)) }
-    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(3)), "タブの行の段 1 は 4 桁目（2 個目のタブの左端）")
-    XCTAssertTrue(try hasInk(ground, guide1, rowMidY(2)), "空行の線が同じ x に立つ")
-    XCTAssertFalse(try hasInk(ground, guide2, rowMidY(2)), "空行は隣の浅い方（1 段）")
-    XCTAssertFalse(try hasInk(ground, bodyX + 56, rowMidY(3)), "AppKit 既定の刻み（2 段目 56pt）には無い")
+    let col = { (n: CGFloat) in self.bodyX + n * self.cell }
+    waitDrawn { try self.hasInk(ground, col(4.5), self.rowMidY(3)) }
+    XCTAssertEqual(hosted.document.indentation.unit, 2)
+    XCTAssertTrue(try hasInk(ground, col(4.5), rowMidY(3)), "2 個のタブの後の字は 4 桁目")
+    XCTAssertFalse(try hasInk(ground, bodyX + 56 + cell / 2, rowMidY(3)), "AppKit 既定の刻みには無い")
   }
 
   /// 外部で書き換えられたファイルの差し替え（本文の丸ごと置き換え）で文書はインデント単位を検出し直して面へ押し、
-  /// 線の段とタブの表示幅がその単位に移る——開いたときの単位のままだと、置き換わった本文の段の途中に線が立つ。
+  /// タブの表示幅がその単位に移る。
   func testReplacingTheWholeTextRedetectsTheIndentUnitAndTabWidth() throws {
-    let hosted = try host("f {\n    a\n        b\n\t\tc\n}\n")
+    let hosted = try host("f {\n    a\n        b\n\t\tx\n}\n")
     let ground = hosted.ground
-    let col = { (n: Int) in self.bodyX + CGFloat(n) * self.cell }
-    waitDrawn { try self.hasInk(ground, col(4), self.rowMidY(3)) }
-    XCTAssertTrue(try hasInk(ground, col(4), rowMidY(3)), "前提: 単位 4 の段 1 の線")
-    XCTAssertFalse(try hasInk(ground, col(2), rowMidY(3)))
-    XCTAssertTrue(try hasInk(ground, col(4), rowMidY(4)), "前提: タブの幅も 4 桁（段 1 の線が 2 個目のタブの左端）")
-    XCTAssertFalse(try hasInk(ground, col(2), rowMidY(4)))
+    let col = { (n: CGFloat) in self.bodyX + n * self.cell }
+    waitDrawn { try self.hasInk(ground, col(8.5), self.rowMidY(4)) }
+    XCTAssertEqual(hosted.document.indentation.unit, 4, "前提: 単位 4")
+    XCTAssertTrue(try hasInk(ground, col(8.5), rowMidY(4)), "前提: タブの幅も 4 桁（2 個のタブの後の字は 8 桁目）")
+    XCTAssertFalse(try hasInk(ground, col(4.5), rowMidY(4)))
 
-    try Data("f {\n  a\n    b\n\t\tc\n}\n".utf8).write(to: hosted.document.url)
+    try Data("f {\n  a\n    b\n\t\tx\n}\n".utf8).write(to: hosted.document.url)
     hosted.document.reconcileWithDisk()
     XCTAssertEqual(hosted.document.indentation.unit, 2)
-    waitDrawn { try self.hasInk(ground, col(2), self.rowMidY(3)) }
-    XCTAssertFalse(try hasInk(ground, col(4), rowMidY(2)), "単位 2 の 1 段の行に 4 桁目の線は無い")
-    XCTAssertFalse(try hasInk(ground, col(8), rowMidY(3)), "2 段の行に 8 桁目の線は無い")
-    XCTAssertTrue(try hasInk(ground, col(2), rowMidY(4)), "タブの幅が 2 桁に移る（段 1 の線が 2 個目のタブの左端）")
-    XCTAssertFalse(try hasInk(ground, col(8), rowMidY(4)), "タブが 4 桁のままなら立つ 8 桁目の線は無い")
+    waitDrawn { try self.hasInk(ground, col(4.5), self.rowMidY(4)) }
+    XCTAssertTrue(try hasInk(ground, col(4.5), rowMidY(4)), "タブの幅が 2 桁に移る（字は 4 桁目）")
+    XCTAssertFalse(try hasInk(ground, col(8.5), rowMidY(4)), "タブが 4 桁のままなら立つ 8 桁目には無い")
   }
 
-  /// CRLF の文書でも段落末は行の外——行末の 1 個のスペースに点が出て、空行のインデント線が隣から続く
-  /// （`"\r\n"` は Character 1 個なので、文字単位で改行を落とすと CR が残って両方消える）。
-  func testCRLFParagraphsKeepTrailingSpaceDotsAndBlankLineGuides() throws {
+  /// CRLF の文書でも段落末は行の外——行末の 1 個のスペースに点が出る（`"\r\n"` は Character 1 個なので、文字単位で
+  /// 改行を落とすと CR が残って点が消える）。
+  func testCRLFParagraphsKeepTrailingSpaceDots() throws {
     let hosted = try host("  a \r\n\r\n    b\r\n")
     let ground = hosted.ground
-    let guide = bodyX + 2 * cell
-    waitDrawn { try self.hasInk(ground, guide, self.rowMidY(3)) }
+    waitDrawn { !self.isBlack(try self.rgb(ground, self.bodyX + 3.5 * self.cell, self.rowMidY(1))) }
     XCTAssertFalse(isBlack(try rgb(ground, bodyX + 3.5 * cell, rowMidY(1))), "行末の 1 個に点")
-    XCTAssertTrue(try hasInk(ground, guide, rowMidY(2)), "空行に隣の浅い方（1 段）の線")
   }
 
   /// 丸点は行頭・行末・2 個以上の連続スペースのセルの中央に出て、単語間の 1 個には出ない。
@@ -87,9 +59,9 @@ extension EditorLineMarksTests {
     XCTAssertFalse(isBlack(try rgb(ground, center(6), rowMidY(1))), "行末")
   }
 
-  /// URL の下に、文字と同じ色（コメントの中なら comment の色）の 1px の線が行の下部に連続して出る（字の
-  /// 隙間でも切れない）。
-  func testLinkUnderlineRunsBelowTheURLInTheTextsColor() throws {
+  /// ⌘ を押して URL の上にポインタを乗せると、URL の下に文字と同じ色（コメントの中なら comment の色）の 1px の線が
+  /// 行の下部に連続して出る（字の隙間でも切れない）。普段は出ない。
+  func testLinkUnderlineRunsBelowTheCommandHoveredURLInTheTextsColor() throws {
     let hosted = try host("// see https://a.b/c now\n")
     let ground = hosted.ground
     let x0 = bodyX + 7 * cell
@@ -103,6 +75,13 @@ extension EditorLineMarksTests {
       }
       return nil
     }
+    XCTAssertNil(try underlineY(), "普段は下線が無い")
+    let surface = try engine(hosted.document)
+    surface.updateFocus(true)
+    let view = surface.view
+    surface.textView.pointer.updatePointer(
+      at: view.convert(NSPoint(x: x0 + 3 * cell, y: rowMidY(1)), to: nil), flags: .command,
+      in: view)
     waitDrawn {
       guard let y = try underlineY() else { return false }
       return self.matches(try self.rgb(ground, x0 + self.cell, y), comment)

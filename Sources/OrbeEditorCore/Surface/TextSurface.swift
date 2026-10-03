@@ -191,10 +191,8 @@ public struct TextSurfaceStyle {
     }
   }
 
-  /// 本文に重なる装備（インデント線・空白の丸点・URL の下線）の見え方。
+  /// 本文に重なる装備（空白の丸点・URL の下線）の見え方。
   public struct Decorations {
-    public var indentGuideColor: NSColor
-    public var indentGuideWidth: CGFloat
     public var whitespaceColor: NSColor
     public var whitespaceDiameter: CGFloat
     public var linkUnderlineThickness: CGFloat
@@ -202,11 +200,9 @@ public struct TextSurfaceStyle {
     public var linkUnderlineOffset: CGFloat
 
     public init(
-      indentGuideColor: NSColor, indentGuideWidth: CGFloat, whitespaceColor: NSColor,
-      whitespaceDiameter: CGFloat, linkUnderlineThickness: CGFloat, linkUnderlineOffset: CGFloat
+      whitespaceColor: NSColor, whitespaceDiameter: CGFloat, linkUnderlineThickness: CGFloat,
+      linkUnderlineOffset: CGFloat
     ) {
-      self.indentGuideColor = indentGuideColor
-      self.indentGuideWidth = indentGuideWidth
       self.whitespaceColor = whitespaceColor
       self.whitespaceDiameter = whitespaceDiameter
       self.linkUnderlineThickness = linkUnderlineThickness

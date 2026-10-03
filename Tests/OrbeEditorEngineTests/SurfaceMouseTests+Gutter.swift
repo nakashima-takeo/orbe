@@ -121,7 +121,7 @@ extension SurfaceMouseTests {
     let view = opened.surface.view
     let pointer = opened.surface.textView.pointer
     func shape(at point: CGPoint, _ flags: NSEvent.ModifierFlags = []) -> NSCursor {
-      pointer.updateCursor(at: view.convert(point, to: nil), flags: flags, in: view)
+      pointer.updatePointer(at: view.convert(point, to: nil), flags: flags, in: view)
       return NSCursor.current
     }
     XCTAssertEqual(shape(at: gutter(opened, 0)), .arrow, "行番号の列")

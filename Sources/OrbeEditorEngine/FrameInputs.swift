@@ -40,7 +40,6 @@ struct RowMarks: Equatable, Sendable {
 struct SurfaceConfig: @unchecked Sendable {
   /// 装備の寸法。
   struct Decorations: Sendable {
-    var indentGuideWidth: CGFloat
     var whitespaceDiameter: CGFloat
     var linkUnderlineThickness: CGFloat
     var linkUnderlineOffset: CGFloat
@@ -89,7 +88,6 @@ struct SurfaceConfig: @unchecked Sendable {
       barInset: style.marks.barInset, barRadius: style.marks.barRadius,
       triangleSize: style.marks.triangleSize)
     decorations = Decorations(
-      indentGuideWidth: style.decorations.indentGuideWidth,
       whitespaceDiameter: style.decorations.whitespaceDiameter,
       linkUnderlineThickness: style.decorations.linkUnderlineThickness,
       linkUnderlineOffset: style.decorations.linkUnderlineOffset)
@@ -244,6 +242,9 @@ struct FrameMaterial: Sendable {
   var highlights = Highlights()
   /// 俯瞰の操作の状態。
   var overview = OverviewInput()
+  /// ⌘ を押している間の、本文の上のポインタの位置（面の view の座標、pt）。描画スレッドがそのコマの配置で下の URL に
+  /// 下線を引く（スクロールで URL がポインタの下から外れれば引かない）。
+  var linkPointer: CGPoint?
   var palette: FramePalette?
   var tabColumns = Indentation.fallback.unit
   /// 面の大きさ（pt）と倍率。

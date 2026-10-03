@@ -8,7 +8,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。文書があるのに pane が焦点の行き先だと打鍵がテキスト面に届かない。hitTest が
 /// self 固定のままだとテキスト面をクリックできない。テキスト面の焦点がタブに上がらないと分割中に
-/// エディターを触っても焦点帯とドットが端末を指したまま。
+/// エディターを触っても焦点の印とドットが端末を指したまま。
 @MainActor
 final class EditorPaneViewTests: OrbeTestCase {
   private func file(_ name: String, _ text: String) throws -> URL {

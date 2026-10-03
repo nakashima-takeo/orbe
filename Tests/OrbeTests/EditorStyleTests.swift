@@ -35,14 +35,12 @@ final class EditorStyleTests: OrbeTestCase {
     XCTAssertEqual(style.marks.barInset, 2)
     XCTAssertEqual(style.marks.barRadius, 1)
     XCTAssertEqual(style.marks.triangleSize, 6)
-    XCTAssertEqual(style.decorations.indentGuideWidth, 1)
     XCTAssertEqual(style.decorations.whitespaceDiameter, 2)
     XCTAssertEqual(style.decorations.linkUnderlineThickness, 1)
     XCTAssertEqual(style.decorations.linkUnderlineOffset, 3)
   }
 
-  /// 装備の色——印の 3 色は diff トークンの α .85、インデント線は surfaceInk の .06（light は ×0.6）、丸点は
-  /// text.muted の .55——で、どれも外観で解き直される。
+  /// 装備の色——印の 3 色は diff トークンの α .85、丸点は text.muted の .55——で、どれも外観で解き直される。
   func testMarkAndDecorationColorsCarryTheSampleAlphasAndFollowTheAppearance() throws {
     let style = EditorStyle.make()
     let marks = [
@@ -65,22 +63,20 @@ final class EditorStyleTests: OrbeTestCase {
       try XCTUnwrap(resolved(style.marks.modified, .darkAqua)),
       try XCTUnwrap(resolved(style.marks.added, .darkAqua)), "追加と変更は色で区別する")
     XCTAssertEqual(
-      try XCTUnwrap(resolved(style.decorations.indentGuideColor, .darkAqua)).alphaComponent, 0.06,
-      accuracy: 0.001)
-    XCTAssertEqual(
-      try XCTUnwrap(resolved(style.decorations.indentGuideColor, .aqua)).alphaComponent, 0.036,
-      accuracy: 0.001)
-    XCTAssertEqual(
       try XCTUnwrap(resolved(style.decorations.whitespaceColor, .darkAqua)).alphaComponent, 0.55,
       accuracy: 0.01)
   }
 
-  /// 強調と俯瞰の色は VS Code Dark Modern / Light Modern の値（sRGB・α）。選択文字列の出現は焦点が無いとき α 半分。
+  /// 選択・強調・俯瞰の色は VS Code Dark Modern / Light Modern の値（sRGB・α）。選択文字列の出現は焦点が無いとき α 半分。
   func testHighlightAndOverviewColorsAreTheVSCodeValues() throws {
     let highlights = EditorStyle.make().highlights
     let minimap = EditorStyle.make().overview.minimap
     let scrollbar = EditorStyle.make().overview.scrollbar
+    let style = EditorStyle.make()
     let expected: [Expected] = [
+      .init(style.selectionColor, dark: (0x264f78, 1), light: (0xadd6ff, 1)),
+      .init(style.inactiveSelectionColor, dark: (0x3a3d41, 1), light: (0xe5ebf1, 1)),
+      .init(minimap.selection, dark: (0x264f78, 1), light: (0xadd6ff, 1)),
       .init(highlights.findMatch, dark: (0xea5c00, 0.33), light: (0xea5c00, 0.33)),
       .init(highlights.currentFindMatch, dark: (0x9e6a03, 1), light: (0xa8ac94, 1)),
       .init(highlights.currentFindLine, dark: (0xffffff, 0.043), light: (0xfdff00, 0.2)),

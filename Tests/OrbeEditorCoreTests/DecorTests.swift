@@ -3,8 +3,8 @@ import XCTest
 
 @testable import OrbeEditorCore
 
-/// 装備の規則——インデント単位の検出・段の数と境・見せる空白・行の URL。壊れるとインデント線が違う桁に立つ、
-/// 単語間の 1 個のスペースに点が出る、URL の末尾の句読点までブラウザへ渡る。
+/// 装備の規則——インデント単位の検出・見せる空白・行の URL。壊れるとタブが違う幅で開く、単語間の 1 個の
+/// スペースに点が出る、URL の末尾の句読点までブラウザへ渡る。
 @MainActor
 final class DecorTests: XCTestCase {
   // MARK: - インデント単位
@@ -40,7 +40,7 @@ final class DecorTests: XCTestCase {
     XCTAssertFalse(Indentation.detect(in: "".utf16).usesTabs)
   }
 
-  // MARK: - 段
+  // MARK: - 改行
 
   /// 改行の作法は CRLF と LF の多い方（同数と改行の無い本文は LF）。揃えるときは `\r\n`・`\r`・`\n` のどれも作法の改行に
   /// する。
@@ -53,28 +53,6 @@ final class DecorTests: XCTestCase {
     XCTAssertEqual(LineBreak.crlf.normalize("a\nb\r\nc\rd"), "a\r\nb\r\nc\r\nd")
     XCTAssertEqual(LineBreak.lf.normalize("a\r\nb\rc\n"), "a\nb\nc\n")
     XCTAssertEqual(LineBreak.lf.normalize("🇯🇵\r\n"), "🇯🇵\n", "書記素を割らない")
-  }
-
-  func testIndentGuideBoundariesAndLevels() {
-    XCTAssertEqual(IndentGuides.boundaries(of: "    x".utf16, unit: 2), [2, 4])
-    XCTAssertEqual(IndentGuides.boundaries(of: "     x".utf16, unit: 2), [2, 4], "端数は段にならない")
-    XCTAssertEqual(IndentGuides.boundaries(of: "\t\tx".utf16, unit: 4), [1, 2], "タブは 1 段")
-    XCTAssertEqual(IndentGuides.boundaries(of: "  \tx".utf16, unit: 4), [3], "タブは次の段の境まで")
-    XCTAssertEqual(IndentGuides.boundaries(of: "x".utf16, unit: 4), [])
-    XCTAssertEqual(IndentGuides.boundaries(of: "".utf16, unit: 4), [])
-    XCTAssertTrue(IndentGuides.isBlank("  \t\r".utf16), "スペース・タブ・CR だけの行は空白だけの行")
-    XCTAssertFalse(IndentGuides.isBlank("  x".utf16))
-  }
-
-  /// 空白だけの行は前後の非空行の浅い方——並びの中の非空行でも、並びの外の段でも。片側が無ければ 0。
-  func testBlankLinesTakeTheShallowerNeighbour() {
-    XCTAssertEqual(IndentGuides.levels([2, nil, nil, 1], above: nil, below: nil), [2, 1, 1, 1])
-    XCTAssertEqual(IndentGuides.levels([nil, 3], above: 2, below: nil), [2, 3], "上は並びの外")
-    XCTAssertEqual(IndentGuides.levels([1, nil], above: nil, below: 4), [1, 1], "下は並びの外")
-    XCTAssertEqual(IndentGuides.levels([nil, nil], above: 2, below: 3), [2, 2], "全部が空行")
-    XCTAssertEqual(IndentGuides.levels([nil, 2], above: nil, below: nil), [0, 2], "上に非空行が無い")
-    XCTAssertEqual(IndentGuides.levels([2, nil], above: 5, below: nil), [2, 0], "下に非空行が無い")
-    XCTAssertEqual(IndentGuides.levels([], above: 1, below: 1), [])
   }
 
   // MARK: - 空白

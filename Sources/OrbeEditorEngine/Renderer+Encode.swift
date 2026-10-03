@@ -90,8 +90,8 @@ extension Renderer {
     return buffers.count - 1
   }
 
-  /// 1 コマの重ねる順（ここが唯一の置き場）。下から、本文の列に切り取って 行の装備（インデント線・空白の丸点・URL の
-  /// 下線）→ 選択の地・未確定の文字の地 → 強調の地 → 本文の字と長い行の「ほか N 字」→ 色付きの字（絵文字など）、行番号の列に
+  /// 1 コマの重ねる順（ここが唯一の置き場）。下から、本文の列に切り取って 選択の地・未確定の文字の地 → 強調の地 →
+  /// 行の装備（空白の丸点・URL の下線）→ 本文の字と長い行の「ほか N 字」→ 色付きの字（絵文字など）、行番号の列に
   /// 切り取って 行番号 → git の印、本文の列に切り取って 未確定の文字の下線・キャレット・落とす位置の印、面の全体で 影（上端・
   /// ミニマップの左）→ ミニマップ（字 → 装飾）→ 俯瞰の図形（縦スクロールバーの印 → 縁 → ミニマップの帯・縦横の
   /// つまみ）。地は描かない（透明に消し、下の地を透かす）。ミニマップの装飾は先に画面外の 1 枚に描き、組として不透明度
@@ -123,9 +123,9 @@ extension Renderer {
     var viewport = SIMD2<Float>(Float(texture.width), Float(texture.height))
     encoder.setVertexBytes(&viewport, length: MemoryLayout<SIMD2<Float>>.size, index: 1)
     encoder.setScissorRect(built.textScissor)
-    instances.shapes(built.decorShapes, encoder, pass)
     instances.shapes(built.underShapes, encoder, pass)
     instances.shapes(built.highlightShapes, encoder, pass)
+    instances.shapes(built.decorShapes, encoder, pass)
     instances.glyphs(built.text, pass.atlas.monoPages, pass.pipelines.mono, encoder)
     instances.glyphs(built.color, pass.atlas.colorPages, pass.pipelines.color, encoder)
     encoder.setScissorRect(built.gutterScissor)

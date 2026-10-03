@@ -176,7 +176,7 @@ final class LineLayoutCache {
     shapedInFrame += 1
     let shaped = shape()
     var line = LaidOutLine(
-      shaped, length: source.length, fonts: fonts, decor: LineDecor(source, unit: tabColumns))
+      shaped, length: source.length, fonts: fonts, decor: LineDecor(source))
     if carets || line.decor.needsCarets { line.carets = shaped.carets }
     if line.omitted > 0 {
       line.omittedMark = LaidOutLine.OmittedMark(

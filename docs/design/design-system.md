@@ -20,7 +20,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 ## 1. 原則
 
 1. **温かく、落ち着いて、密に。** 地は温かい炭／藤紙。装飾は最小、情報は密。
-2. **色は状態と自分の出番に。** 無彩に近い土台の上で、色は **エージェントの状態（確定配色の温度分け）** と **自分の出番（電紫 accent＝選択・プロンプト）** にだけ使う。これに **面のキー色（どの面に居るか）** が加わる——タブの中の端末面とエディター面を識別する 2 色（`face.terminal` は無彩の藤、`face.editor` は amber）で、背の印・分割中の焦点帯・位置ドットだけが使う。状態でも選択でもない「居場所」の色なので、状態色・accent とは混ぜない。
+2. **色は状態と自分の出番に。** 無彩に近い土台の上で、色は **エージェントの状態（確定配色の温度分け）** と **自分の出番（電紫 accent＝選択・プロンプト）** にだけ使う。これに **面のキー色（どの面に居るか）** が加わる——タブの中の端末面とエディター面を識別する 2 色（`face.terminal` は無彩の藤、`face.editor` は amber）で、背の印・分割中の焦点の印・位置ドットだけが使う。状態でも選択でもない「居場所」の色なので、状態色・accent とは混ぜない。
 3. **状態は3チャンネルで冗長に。** 動き=working／吹き出し=waiting／チェック=done／zzz=idle。色・形・動きのどれを失っても判別できる（→ §3・§4）。
 4. **選択は tint 塗り、タブだけ反転。** リスト行の選択は `selectionFill` の淡塗り。タブの選択のみ前景色を背景にした**反転表示**（背景を状態色で塗らない）。左 3px バー・下線・太字による選択弁別は使わない。
 5. **ラベルはターミナル語。** UI 本文・プローズはシステムサンセリフ、ターミナル・ラベル・コード・ステータス語は monospace。
@@ -74,7 +74,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `worktree.frame[0…47]` | グループの器の外側 1px 枠 | `WorktreePalette.dark` の各色 .38 | `WorktreePalette.light` の各色 .45 |
 | `tab.divider` | グループ内セルの区切り線（識別色を敷いた地の上でも読める濃さ） | `rgba(255,255,255,.14)` | `rgba(58,49,81,.16)` |
 | `tab.activeText` | 選択セグメント（反転面）の文字 | `#1a1721` | `#f3f0fa` |
-| `face.editor` | エディター面のキー色（背の印・焦点帯・位置ドット） | `#e0a97c` | `#bf6a2e` |
+| `face.editor` | エディター面のキー色（背の印・焦点の印・位置ドット） | `#e0a97c` | `#bf6a2e` |
 | `face.terminal` | 端末面のキー色（同上。dark / light とも `text.secondary` と偶然同値だが別トークン） | `#b8afc4` | `#5f5678` |
 | `editor.ghost` | エディター面の空状態の ◐（沈んだ塗り） | `#3d3752` | `#d9d3e6` |
 | `editor.icon` | エディター面のアイコン・kbd の文字（dark / light とも `kbKeyText` と偶然同値だが別トークン） | `#a99fb8` | `#766e8d` |
@@ -86,6 +86,8 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `sunkInk` | 沈み面の基色（dark は scrim と同じ暗幕の基色）。view 側で α を掛ける（レール .22・サイドバー .45・ファイルタブ行 .22。light は ×0.3） | `#0a080e` | `#3a3151` |
 | `editor.lineNumber` | 行番号（`text.muted` の α .55） | `rgba(139,131,151,.55)` | `rgba(141,133,163,.55)` |
 | `editor.whitespace` | 見せる空白の丸点（`text.muted` の α .55） | `rgba(139,131,151,.55)` | `rgba(141,133,163,.55)` |
+| `editor.selection` | 本文の選択の地・ミニマップの選択 | `#264f78` | `#add6ff` |
+| `editor.selectionInactive` | 焦点の無い面の選択の地 | `#3a3d41` | `#e5ebf1` |
 | `editor.findMatch` | 検索の一致の地・ミニマップの一致 | `rgba(234,92,0,.33)` | `rgba(234,92,0,.33)` |
 | `editor.findMatchCurrent` | 現在の一致の地（不透明・選択の地の上） | `#9e6a03` | `#a8ac94` |
 | `editor.findLine` | 現在の一致の行全体の地 | `rgba(255,255,255,.043)` | `rgba(253,255,0,.2)` |
@@ -110,7 +112,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 `accent.focus` ＝ `accent.primary`／ `text.tertiary` ＝ `text.muted`／
 `success` ＝ `diff.added`（green）／ `danger` ＝ `diff.removed`（red）／
 `state.dormant` ＝ `text.muted`／ `surface.0` ＝ `bg.sunken`。
-**値だけが一致する独立トークン**: `face.terminal` ＝ `text.secondary`／ `editor.icon` ＝ `kbKeyText`／ `editor.text` ＝ `statusText`／ `editor.modified` ＝ `editor.hue.yellow`／ `diff.modified` ＝ `editor.hue.blue`／ `editor.whitespace` ＝ `editor.lineNumber`／ `editor.hue.sky` ＝ `syntax.variable`（上の収束と違い SSOT でも互いを参照せず、片方の値が動いてももう片方は追随しない）。`syntax.*` の dark は VSCode Dark Modern の実在トークン色で、5 色が端末の ANSI（§8）と偶然同値だが、端末色は別レイヤーなので参照しない。俯瞰と強調の `editor.*`（findMatch〜minimapShadow）は VS Code Dark Modern / Light Modern の値（上書きの無いものは VS Code の既定）で、エディターの使い勝手を VS Code に揃えるために借りる。同じ意味の Orbe トークンがあるもの（git の印・キャレット・縁）はそれを使い、git の印とキャレットには VS Code の α を掛ける。
+**値だけが一致する独立トークン**: `face.terminal` ＝ `text.secondary`／ `editor.icon` ＝ `kbKeyText`／ `editor.text` ＝ `statusText`／ `editor.modified` ＝ `editor.hue.yellow`／ `diff.modified` ＝ `editor.hue.blue`／ `editor.whitespace` ＝ `editor.lineNumber`／ `editor.hue.sky` ＝ `syntax.variable`（上の収束と違い SSOT でも互いを参照せず、片方の値が動いてももう片方は追随しない）。`syntax.*` の dark は VSCode Dark Modern の実在トークン色で、5 色が端末の ANSI（§8）と偶然同値だが、端末色は別レイヤーなので参照しない。選択・俯瞰・強調の `editor.*`（selection〜minimapShadow）は VS Code Dark Modern / Light Modern の値（上書きの無いものは VS Code の既定）で、エディターの使い勝手を VS Code に揃えるために借りる。同じ意味の Orbe トークンがあるもの（git の印・キャレット・縁）はそれを使い、git の印とキャレットには VS Code の α を掛ける。
 `state.done`（完了・緑）と `diff.added`（green）、`state.waiting`（要応答・黄）と `conflict`（ANSI黄）は**別トークンとして分離**（light では偶々同値だが dark では異なる。SSOT は状態色を `StateHue`、ANSI 系を端末アンカーから別々に導く）。
 **反転色（`state.*Inverse`）は対テーマの状態色**＝dark/light の値を入れ替えただけ（選択タブの反転面上でコントラストを確保する仕組み）。
 **light の `tab.activeText` `#f3f0fa` は `bg.base` `#fcfbfe` と別値**（on.accent の流用不可）。
@@ -250,12 +252,11 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 - **Search field**: 外枠＝`bg.sunken`＋1px `surface.1`＋radius `md`。focus＝リング `accent.focus`。no-match＝`danger`。件数＝`captionDigit`。
 - **Focus / active tab**: アクティブタブの端末は 2px 内側リング `accent.focus`。カーソル点滅と併走。
 - **Onboarding**: waiting＝`text.muted`。installing＝スピナー（`accent.primary`）。done＝`✓` `success`。failed＝`✗` `danger`＋再試行 secondary。skipped＝`text.muted`・取り消し線。
-- **Code view**（エディター面の文書）: 見本 `CodeView.tsx` の値をそのまま持つ。ただし俯瞰（ミニマップ・スクロールバー・上端の影）と強調の地は見本から外れ、寸法は VS Code の既定、色は VS Code Dark Modern / Light Modern の値（§2.1）。本文 `type.editorCode`・行高 `line.editorCode` 18・上余白 4・素の文字 `editor.text`・役割ごとに `syntax.*`。行番号ガター幅 50・右寄せ・右余白 8・`type.editorLineNumber`・`editor.lineNumber`、その右に git ガター 19、本文は 2 つの右端（最小 69。行番号の桁が増えれば広がる）から始まる。キャレット `accent.bright` 1.5×14。テキスト選択の地はシステムの選択色（焦点が無ければ弱い選択色）。地は面の veil（`bg.base` × 実効不透明度）。
+- **Code view**（エディター面の文書）: 見本 `CodeView.tsx` の値をそのまま持つ。ただし俯瞰（ミニマップ・スクロールバー・上端の影）と強調の地は見本から外れ、寸法は VS Code の既定、色は VS Code Dark Modern / Light Modern の値（§2.1）。本文 `type.editorCode`・行高 `line.editorCode` 18・上余白 4・素の文字 `editor.text`・役割ごとに `syntax.*`。行番号ガター幅 50・右寄せ・右余白 8・`type.editorLineNumber`・`editor.lineNumber`、その右に git ガター 19、本文は 2 つの右端（最小 69。行番号の桁が増えれば広がる）から始まる。キャレット `accent.bright` 1.5×14。テキスト選択の地は `editor.selection`（焦点が無ければ `editor.selectionInactive`）。地は面の veil（`bg.base` × 実効不透明度）。
   - **git ガター**: 追加の行に `diff.added`、変更の行に `diff.modified` の 3px バー（列の左から 2・radius 1・α .85。続く行のバーは 1 本に繋がる）。削除はその境に `diff.removed`（α .85）の右向き三角 6×6 を中央合わせ（先頭行の上は上端から）。**追加と変更は色だけの区別**（形が同じ）——§3 の例外で、本文そのものが一次情報でガターは補助だから。削除は形も違う。
-  - **インデント線**: 1px `surfaceInk` .06（light ×0.6）。段ごとに、その段ぶんの空白の直後の文字の左端に立つ（規則は [code](../spec/editor/code.md)）。
-  - **空白の丸点**: 直径 2・`editor.whitespace`。行頭・行末・2 個以上の連続スペースだけ。
-  - **URL 下線**: 1px・文字と同色・ベースラインの 3 下。⌘押下中だけ指カーソル、⌘クリックで既定ブラウザ。
-  - **ミニマップ**（スクロールバーの左。幅は VS Code の式で本文の幅から計算し、最大 `layout.editorMinimapMaxWidth` 120）: 1 行 2pt・1 字 1pt・行の間に隙間なし。字は本文フォントを太字の trait にした字形（システムの等幅では Semibold）を 1×2（1x）/ 2×4（2x）デバイス px に縮めたものを構文の色（役割の無い字は `editor.text`）で描き、明るさの係数 dark 12/15・light 50/60。字は左 8 デバイス px から。字と装飾（git の印・一致・語の出現・選択）の全体に不透明度 .9。git の印は x 2 デバイス px・幅 2 デバイス px に `diff.added` / `diff.modified` / `diff.removed`。検索の一致は `editor.findMatch`、語の出現は `editor.selectionOccurrence`（範囲とその行の α 半分の地）、選択はシステムの選択色。帯は `editor.minimapSlider`（帯の上 `Hover`・ドラッグ中 `Active`）でミニマップの全幅、普段は隠れホバーで現れる。本文が右に続くときは左端の外にぼかし 6 の影（`editor.minimapShadow`）。
+  - **空白の丸点**: 直径 2・`editor.whitespace`。行頭・行末・2 個以上の連続スペースだけ。選択の地・強調の地の上、字の下に描く（URL 下線も同じ層）。
+  - **URL 下線**: ⌘ を押して URL の上にポインタがある間だけ、その URL に 1px・文字と同色・ベースラインの 3 下。指カーソルも同じ間だけ。⌘クリックで既定ブラウザ。
+  - **ミニマップ**（スクロールバーの左。幅は VS Code の式で本文の幅から計算し、最大 `layout.editorMinimapMaxWidth` 120）: 1 行 2pt・1 字 1pt・行の間に隙間なし。字は本文フォントを太字の trait にした字形（システムの等幅では Semibold）を 1×2（1x）/ 2×4（2x）デバイス px に縮めたものを構文の色（役割の無い字は `editor.text`）で描き、明るさの係数 dark 12/15・light 50/60。字は左 8 デバイス px から。字と装飾（git の印・一致・語の出現・選択）の全体に不透明度 .9。git の印は x 2 デバイス px・幅 2 デバイス px に `diff.added` / `diff.modified` / `diff.removed`。検索の一致は `editor.findMatch`、語の出現は `editor.selectionOccurrence`（範囲とその行の α 半分の地）、選択は `editor.selection`。帯は `editor.minimapSlider`（帯の上 `Hover`・ドラッグ中 `Active`）でミニマップの全幅、普段は隠れホバーで現れる。本文が右に続くときは左端の外にぼかし 6 の影（`editor.minimapShadow`）。
   - **横スクロールバー**（本文の区画の下端に重なる、高さ `layout.editorHorizontalScrollbar` 12、行番号の列の右からミニマップの左まで）: 横に続く本文があるときだけ出る。つまみは縦と同じ `editor.scrollbarSlider`（上 `Hover`・ドラッグ中 `Active`）で最小の長さ 20、現れ方と消え方も縦と同じ。印は持たない。
   - **スクロールバー**（本体の右端、幅 `layout.editorScrollbar` 14）: つまみ `editor.scrollbarSlider`（つまみの上 `Hover`・ドラッグ中 `Active`）、最小の長さ 20。下に印——左 1 デバイス px と上 1 デバイス px の縁（`borderInk` .07・light ×1.4）、残りを 3 レーン: 左に git（`diff.*` α .6）、中央に検索の一致 `editor.rulerFind` と語の出現 `editor.rulerOccurrence`、全幅にキャレット（`accent.bright` α .7・高 2）。印の最小の高さ 6。つまみは印の上に重なる。追加と変更は色だけの区別（git ガターと同じ例外）。
   - **上端の影**: 先頭の行が上へ隠れている間、本文の上端（本文の幅。ミニマップには掛けない）に `editor.scrollShadow` の内側の影（CSS の `0 6px 6px -6px inset`）。

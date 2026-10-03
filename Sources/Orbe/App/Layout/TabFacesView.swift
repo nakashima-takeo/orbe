@@ -9,14 +9,15 @@ import SwiftUI
 ///
 /// 隠れた端末の中身は最後に見えていた寸法のまま据え置く（隠すたびの pty resize と scrollback の
 /// 再折り返しを避ける）。隠れたまま生まれた端末は「戻したときに得る寸法」で起きる。
-/// 遷移は「中身のサイズは遷移開始時に 1 回・面の clip と中身の位置だけ動く」。背のドラッグ中は
+/// 遷移は「どのコマでも見えている面は中身で覆われ、中身の寸法は始めか終わりの 1 回だけ変わり、間は面の clip と中身の
+/// 位置だけ動く」。背のドラッグ中は
 /// 面と背をポインタごとに置き、中身の resize は表示のフレーム単位に間引く。
 final class TabFacesView: NSView {
   let terminal: SurfaceScrollView
   let editor: EditorPaneView
   let spine = SpineView()
-  private let editorFace = FaceClipView()
-  private let terminalFace = FaceClipView()
+  private let editorFace: FaceClipView
+  private let terminalFace: FaceClipView
 
   /// タブが `set` で写す配置の鏡。ドラッグ中は書き換えない。遷移の終点でもある。
   private(set) var faces: FaceLayout
@@ -70,15 +71,13 @@ final class TabFacesView: NSView {
     self.editor = editor
     self.faces = faces
     resolved = FaceGeometry.resolve(faces, width: 0)
+    editorFace = FaceClipView(content: editor)
+    terminalFace = FaceClipView(content: terminal)
     super.init(frame: .zero)
     for view in [editorFace, spine, terminalFace] {
       view.autoresizingMask = []
       addSubview(view)
     }
-    editor.autoresizingMask = []
-    terminal.autoresizingMask = []
-    editorFace.addSubview(editor)
-    terminalFace.addSubview(terminal)
     wireSpine()
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
@@ -184,10 +183,10 @@ final class TabFacesView: NSView {
     terminalFace.isHidden = g.terminalWidth <= 0
   }
 
-  /// 焦点帯と背の見え方。
+  /// 焦点の印と背の見え方。
   private func paint(_ g: FaceGeometry.Resolved) {
-    editorFace.bandColor = g.isSplit && g.faces.focus == .editor ? Theme.Color.faceEditor : nil
-    terminalFace.bandColor =
+    editorFace.markColor = g.isSplit && g.faces.focus == .editor ? Theme.Color.faceEditor : nil
+    terminalFace.markColor =
       g.isSplit && g.faces.focus == .terminal ? Theme.Color.faceTerminal : nil
     spine.look = g.projection.spineLook
   }
@@ -202,20 +201,18 @@ final class TabFacesView: NSView {
     editorFace.frame = NSRect(x: 0, y: 0, width: eW, height: h)
     spine.frame = NSRect(x: eW, y: 0, width: FaceGeometry.spine, height: h)
     terminalFace.frame = NSRect(x: eW + FaceGeometry.spine, y: 0, width: tW, height: h)
-    let band = FaceGeometry.focusBand
-    editor.frame.origin = NSPoint(x: eW - editor.frame.width, y: band)
+    editor.frame.origin = NSPoint(x: eW - editor.frame.width, y: 0)
     let terminalX = g.editorWidth > 0 ? tW - terminal.frame.width : 0
-    terminal.frame.origin = NSPoint(x: terminalX, y: band)
+    terminal.frame.origin = NSPoint(x: terminalX, y: 0)
   }
 
   private func editorContentSize(_ g: FaceGeometry.Resolved) -> CGSize {
-    CGSize(width: g.editorWidth, height: max(0, bounds.height - FaceGeometry.focusBand))
+    CGSize(width: g.editorWidth, height: bounds.height)
   }
 
   private func terminalContentSize(_ g: FaceGeometry.Resolved) -> CGSize {
-    let height = max(0, bounds.height - FaceGeometry.focusBand)
-    if g.terminalWidth > 0 { return CGSize(width: g.terminalWidth, height: height) }
-    return lastVisibleTerminalSize ?? CGSize(width: g.contentWidth, height: height)
+    if g.terminalWidth > 0 { return CGSize(width: g.terminalWidth, height: bounds.height) }
+    return lastVisibleTerminalSize ?? CGSize(width: g.contentWidth, height: bounds.height)
   }
 
   private func setSize(_ view: NSView, _ size: CGSize) {
@@ -280,13 +277,24 @@ final class TabFacesView: NSView {
     slideFrame(now: start)
   }
 
-  /// 遷移の終点を据える: 中身のサイズは 1 回で確定し、現れる側は最初の 1 フレームから見せ、隠れる側は
+  /// 遷移の終点を据える: どのコマでも見えている面が中身で覆われるようにする——隠れていく面の中身は最後に見えていた寸法の
+  /// まま（遷移中に器が resize されても据え置く）、残る面の中身は起点と終点の面の幅の大きい方。中身の寸法が変わるのは、
+  /// 現れる・広がる面はここ、縮む・隠れる面は終端の `apply` の 1 回だけ。現れる側は最初の 1 フレームから見せ、隠れる側は
   /// 終端まで倒さない。塗りは終点の規則。
   private func prepareSlide(to target: FaceGeometry.Resolved) {
+    guard case .sliding(let fromRatio, _) = interaction else { return }
     resolved = target
-    applySizes(target)
-    if target.editorWidth > 0 { editorFace.isHidden = false }
-    if target.terminalWidth > 0 { terminalFace.isHidden = false }
+    let fromEditor = CGFloat(fromRatio) * target.contentWidth
+    if target.editorWidth > 0 {
+      setSize(
+        editor, CGSize(width: max(fromEditor, target.editorWidth), height: bounds.height))
+      editorFace.isHidden = false
+    }
+    if target.terminalWidth > 0 {
+      let width = max(target.contentWidth - fromEditor, target.terminalWidth)
+      setSize(terminal, CGSize(width: width, height: bounds.height))
+      terminalFace.isHidden = false
+    }
     paint(target)
     report(target.projection)
   }
@@ -331,25 +339,55 @@ final class TabFacesView: NSView {
   }
 }
 
-/// 面の clip の器。上辺の焦点帯（分割中かつ焦点の面はその面のキー色、それ以外は透明）を描く。
+/// 面の clip の器。中身を面いっぱいに置き、分割中の焦点の印（面のキー色の細い帯）を中身の上辺へ重ねる——
+/// 印は場所を取らないので、焦点が移っても中身は動かない。
 private final class FaceClipView: NSView {
-  var bandColor: NSColor? {
-    didSet { if bandColor != oldValue { needsDisplay = true } }
+  private let mark = FocusMarkView()
+  /// 印の色。nil なら印を出さない。
+  var markColor: NSColor? {
+    get { mark.color }
+    set { mark.color = newValue }
   }
 
-  override init(frame: NSRect) {
-    super.init(frame: frame)
+  init(content: NSView) {
+    super.init(frame: .zero)
     wantsLayer = true
     clipsToBounds = true
-    layerContentsRedrawPolicy = .duringViewResize
+    content.autoresizingMask = []
+    addSubview(content)
+    addSubview(mark)
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
   override var isFlipped: Bool { true }
 
+  override func setFrameSize(_ newSize: NSSize) {
+    super.setFrameSize(newSize)
+    mark.frame = NSRect(x: 0, y: 0, width: newSize.width, height: FaceGeometry.focusBand)
+  }
+}
+
+/// 焦点の印。中身より手前に重なるが、クリックやドラッグは中身へ通す。
+private final class FocusMarkView: NSView {
+  var color: NSColor? {
+    didSet {
+      guard color != oldValue else { return }
+      isHidden = color == nil
+      needsDisplay = true
+    }
+  }
+
+  override init(frame: NSRect) {
+    super.init(frame: frame)
+    wantsLayer = true
+    isHidden = true
+  }
+  required init?(coder: NSCoder) { fatalError("not supported") }
+
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
   override func draw(_ dirtyRect: NSRect) {
-    guard let bandColor else { return }
-    bandColor.setFill()
-    NSRect(x: 0, y: 0, width: bounds.width, height: FaceGeometry.focusBand).fill()
+    color?.setFill()
+    bounds.fill()
   }
 }
