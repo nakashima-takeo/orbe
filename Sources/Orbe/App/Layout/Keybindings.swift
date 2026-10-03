@@ -15,7 +15,7 @@ enum ChromeAction {
   case switchWorkspace  // workspace コマンドパレットを開く
   case launchDefaultAgent  // デフォルトエージェントを新タブで起動
   case showAgentPalette  // エージェント起動パレットを開く
-  case showDispatchPalette  // Dispatch パレット（worktree/branch/issue/PR から起動）を開く
+  case showWorktreePalette  // worktree パレット（worktree/branch/issue/PR から起動）を開く
   case openEditor  // アクティブタブの cwd を GUI エディタで開く
   case rename  // フォーカス中タブをリネーム
   case showSettings  // 設定パレットを開く
@@ -33,7 +33,7 @@ enum WindowCommand {
   case switchWorkspace
   case launchDefaultAgent
   case showAgentPalette
-  case showDispatchPalette
+  case showWorktreePalette
   case openEditor
   case renameTab
   case showSettings
@@ -53,7 +53,7 @@ extension ChromeAction {
     case .switchWorkspace: return .switchWorkspace
     case .launchDefaultAgent: return .launchDefaultAgent
     case .showAgentPalette: return .showAgentPalette
-    case .showDispatchPalette: return .showDispatchPalette
+    case .showWorktreePalette: return .showWorktreePalette
     case .openEditor: return .openEditor
     case .rename: return .renameTab
     case .showSettings: return .showSettings
@@ -72,7 +72,7 @@ extension WindowCommand {
   var availableWithoutTabs: Bool {
     switch self {
     case .newTab, .showClosedAgentsPalette, .switchWorkspace,
-      .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings, .toggleHelp:
+      .launchDefaultAgent, .showAgentPalette, .showWorktreePalette, .showSettings, .toggleHelp:
       return true
     case .nextTab, .prevTab, .openEditor, .renameTab:
       return false
@@ -115,7 +115,7 @@ enum Keybindings {
     case "{": return .prevTab  // Cmd+Shift+[
     case "S": return .switchWorkspace  // Cmd+Shift+S
     case "A": return .showAgentPalette  // Cmd+Shift+A
-    case "X": return .showDispatchPalette  // Cmd+Shift+X
+    case "X": return .showWorktreePalette  // Cmd+Shift+X
     case "C": return .launchDefaultAgent  // Cmd+Shift+C
     case "E": return .openEditor  // Cmd+Shift+E
     case "h": return .toggleHelp  // Cmd+H（macOS Hide から奪取。メニューの Hide は無割当で残す）

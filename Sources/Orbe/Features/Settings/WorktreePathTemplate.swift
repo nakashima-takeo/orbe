@@ -1,10 +1,10 @@
 import Foundation
 
-/// 設定 `worktree-dir`（Dispatch の worktree 作成先テンプレート）の検証と解決の純関数。
+/// 設定 `worktree-dir`（worktree パレットの worktree 作成先テンプレート）の検証と解決の純関数。
 /// 語彙は `{repo_path}`（main worktree の絶対パス）・`{parent}`（その親）・`{repo}`（その basename）・
 /// `{slug}`（branch 名の `/`→`-`）の 4 語＋先頭 `~` のみ。書込の全経路
 /// （設定パレット・orb config・control config_set）は `SettingDomain.validate` 経由で
-/// `validate(_:)` を通り、読出（DispatchDataProvider）は `resolve` で作成先を確定する。
+/// `validate(_:)` を通り、読出（WorktreePaletteDataProvider）は `resolve` で作成先を確定する。
 enum WorktreePathTemplate {
   static let placeholders = ["{repo_path}", "{parent}", "{repo}", "{slug}"]
   /// 未設定時の既定（従来のハードコード規則 `<親>/<repo名>-worktrees/<slug>` と同一パスに解決する）。

@@ -34,67 +34,67 @@ enum DesignSceneFixtures {
     return model
   }
 
-  /// Dispatch シーンの DispatchPaletteModel（実データ形の決定的サンプル・原典 Dispatch 対応）。
-  /// live git/gh は叩かず `DispatchSectionBuilder` に mock 入力を通す。
-  static func dispatchModel() -> DispatchPaletteModel {
-    dispatchModel(from: .designSample)
+  /// worktree パレットシーンの WorktreePaletteModel（実データ形の決定的サンプル・原典 worktree パレット対応）。
+  /// live git/gh は叩かず `WorktreePaletteSectionBuilder` に mock 入力を通す。
+  static func worktreePaletteModel() -> WorktreePaletteModel {
+    worktreePaletteModel(from: .designSample)
   }
 
   /// worktree 作成中（prepareDirectory 待機）。フッターにスピナ＋「作成中…」を出し入力を受け付けない。
-  static func dispatchPreparingModel() -> DispatchPaletteModel {
-    let model = dispatchModel(from: .designSample)
+  static func worktreePalettePreparingModel() -> WorktreePaletteModel {
+    let model = worktreePaletteModel(from: .designSample)
     model.isPreparing = true
     return model
   }
 
   /// 初回ロード中（最初の rebuild 前）のスケルトン表示（hasLoadedOnce=false・sections 空）。
-  static func dispatchSkeletonModel() -> DispatchPaletteModel {
-    let model = DispatchPaletteModel()
+  static func worktreePaletteSkeletonModel() -> WorktreePaletteModel {
+    let model = WorktreePaletteModel()
     model.setTargets(
       agents: [AgentCLI(command: "claude", path: "/usr/bin/claude")], defaultCommand: "claude")
     return model
   }
 
   /// gh 到着前のプログレッシブ表示（Issues/PR がローディング行）。
-  static func dispatchLoadingModel() -> DispatchPaletteModel {
-    var input = DispatchSectionBuilder.Input.designSample
+  static func worktreePaletteLoadingModel() -> WorktreePaletteModel {
+    var input = WorktreePaletteSectionBuilder.Input.designSample
     input.issues = []
     input.pullRequests = []
     input.issuesFetching = true
     input.pullRequestsFetching = true
-    return dispatchModel(from: input)
+    return worktreePaletteModel(from: input)
   }
 
   /// 一覧の取得が続いている（届いた行の後ろ、セクション末尾にローディング行）。
-  static func dispatchGrowingModel() -> DispatchPaletteModel {
-    var input = DispatchSectionBuilder.Input.designSample
+  static func worktreePaletteGrowingModel() -> WorktreePaletteModel {
+    var input = WorktreePaletteSectionBuilder.Input.designSample
     input.issuesFetching = true
     input.pullRequestsFetching = true
-    return dispatchModel(from: input)
+    return worktreePaletteModel(from: input)
   }
 
   /// 取得中の絞り込み（`feat` で Issues は 0 件だが、「まだ届いていない」ので見出しとローディング行が残る）。
-  static func dispatchGrowingFilteredModel() -> DispatchPaletteModel {
-    let model = dispatchGrowingModel()
+  static func worktreePaletteGrowingFilteredModel() -> WorktreePaletteModel {
+    let model = worktreePaletteGrowingModel()
     model.query = "feat"
     model.onQueryChanged()
     return model
   }
 
   /// gh 未導入のフォールバック（Issues に誘導情報行 1 本・PR 非表示）。
-  static func dispatchGhMissingModel() -> DispatchPaletteModel {
-    var input = DispatchSectionBuilder.Input.designSample
+  static func worktreePaletteGhMissingModel() -> WorktreePaletteModel {
+    var input = WorktreePaletteSectionBuilder.Input.designSample
     input.issues = []
     input.pullRequests = []
     input.githubState = .ghMissing
-    let model = dispatchModel(from: input)
+    let model = worktreePaletteModel(from: input)
     model.githubState = .ghMissing
     return model
   }
 
   /// 絞り込み中（`feat` で横断フィルタ・空セクションが消える）。
-  static func dispatchFilteredModel() -> DispatchPaletteModel {
-    let model = dispatchModel(from: .designSample)
+  static func worktreePaletteFilteredModel() -> WorktreePaletteModel {
+    let model = worktreePaletteModel(from: .designSample)
     model.query = "feat"
     model.onQueryChanged()
     return model
@@ -102,31 +102,31 @@ enum DesignSceneFixtures {
 
   /// worktree にできない PR 行（他人の fork の `main` から出た PR）を選んだところ。行末とフッターが
   /// ブラウザで開くと先に言い、キーヒントから ⇥ と ⌘↵ が外れる（起動先チップは出たまま）。
-  static func dispatchBrowserPullRequestModel() -> DispatchPaletteModel {
-    var input = DispatchSectionBuilder.Input.designSample
+  static func worktreePaletteBrowserPullRequestModel() -> WorktreePaletteModel {
+    var input = WorktreePaletteSectionBuilder.Input.designSample
     input.pullRequests.append(
       GitHubPullRequest(
         number: 146, title: "fix: tab order from a fork", headRefName: "main",
         reviewDecision: nil, headRepository: GitHubRepoName(nameWithOwner: "someone/orbe")))
-    let model = dispatchModel(from: input)
+    let model = worktreePaletteModel(from: input)
     model.selected = model.items.count - 1
     return model
   }
 
   /// origin の正式名を確かめられない（見えない private・問い合わせの失敗等）。Pull requests の見出しの
   /// 直下に情報行が 1 行出て、PR 行はブラウザで開く行になり、worktree / branch 行のチップは消える。
-  static func dispatchRepositoryUnverifiedModel() -> DispatchPaletteModel {
-    var input = DispatchSectionBuilder.Input.designSample
+  static func worktreePaletteRepositoryUnverifiedModel() -> WorktreePaletteModel {
+    var input = WorktreePaletteSectionBuilder.Input.designSample
     input.remoteLedger = .settled(.init(repositories: ["origin": .unverified]))
-    let model = dispatchModel(from: input)
+    let model = worktreePaletteModel(from: input)
     model.selected = model.items.count - 1
     return model
   }
 
   /// 多件数（cap 380 を超え内部スクロールへ回る回帰検証。長い branch 名・PR で狭幅も試す）。
-  static func dispatchManyModel() -> DispatchPaletteModel {
+  static func worktreePaletteManyModel() -> WorktreePaletteModel {
     let home = NSHomeDirectory()
-    var input = DispatchSectionBuilder.Input()
+    var input = WorktreePaletteSectionBuilder.Input()
     input.currentWorktree = "\(home)/wt/feature-0"
     input.worktrees = (0..<6).map {
       GitWorktree(
@@ -151,23 +151,23 @@ enum DesignSceneFixtures {
         number: 300 + $0, title: "feat: それなりに長い PR のタイトル \($0)",
         headRefName: "feature/very-long-branch-name-\($0)",
         reviewDecision: $0.isMultiple(of: 2) ? "REVIEW_REQUIRED" : "APPROVED",
-        headRepository: DispatchSectionBuilder.Input.designRepository)
+        headRepository: WorktreePaletteSectionBuilder.Input.designRepository)
     }
     input.githubState = .ready
-    input.remoteLedger = DispatchSectionBuilder.Input.designLedger
-    let model = dispatchModel(from: input)
+    input.remoteLedger = WorktreePaletteSectionBuilder.Input.designLedger
+    let model = worktreePaletteModel(from: input)
     model.selected = model.items.count - 1  // 末尾選択（scroll-to-end 到達の確認）
     return model
   }
 
   /// 分冊（+Clean）からも呼ぶ組み立て口。
-  static func dispatchModel(from input: DispatchSectionBuilder.Input)
-    -> DispatchPaletteModel
+  static func worktreePaletteModel(from input: WorktreePaletteSectionBuilder.Input)
+    -> WorktreePaletteModel
   {
-    let model = DispatchPaletteModel()
+    let model = WorktreePaletteModel()
     model.setTargets(
       agents: [AgentCLI(command: "claude", path: "/usr/bin/claude")], defaultCommand: "claude")
-    model.sections = DispatchSectionBuilder.build(input)
+    model.sections = WorktreePaletteSectionBuilder.build(input)
     model.hasLoadedOnce = true
     model.clampSelection()
     return model

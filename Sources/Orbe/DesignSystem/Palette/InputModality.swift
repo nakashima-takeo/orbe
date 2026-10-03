@@ -3,7 +3,7 @@ import SwiftUI
 
 /// パレットの入力モダリティ。`.keyboard` 中はホバー追従を抑制し、スクロールで行がカーソル下へ来ても
 /// 選択を奪わない。実マウス移動（`MouseMovedDetector`）でのみ `.pointer` へ移る。
-/// 汎用パレット（`PaletteModel`）と Dispatch（`DispatchPaletteModel`）が共有する。
+/// 汎用パレット（`PaletteModel`）と worktree パレット（`WorktreePaletteModel`）が共有する。
 enum InputModality { case keyboard, pointer }
 
 /// 選択インデックスと入力モダリティの束（ホバー追従ガードの本体・パレット共通）。

@@ -90,9 +90,9 @@ final class KeybindingsTests: OrbeTestCase {
     XCTAssertNil(Keybindings.chromeAction(for: key("H", [.command, .shift])))
   }
 
-  func testDispatchPalette() {
+  func testWorktreePalette() {
     XCTAssertEqual(
-      Keybindings.chromeAction(for: key("X", [.command, .shift])), .showDispatchPalette)
+      Keybindings.chromeAction(for: key("X", [.command, .shift])), .showWorktreePalette)
     // Shift なしの Cmd+X（切り取り系）は奪わない。
     XCTAssertNil(Keybindings.chromeAction(for: key("x")))
   }
@@ -136,7 +136,7 @@ final class KeybindingsTests: OrbeTestCase {
       (.switchWorkspace, .switchWorkspace),
       (.launchDefaultAgent, .launchDefaultAgent),
       (.showAgentPalette, .showAgentPalette),
-      (.showDispatchPalette, .showDispatchPalette),
+      (.showWorktreePalette, .showWorktreePalette),
       (.openEditor, .openEditor),
       (.rename, .renameTab),
       (.showSettings, .showSettings),
@@ -161,7 +161,7 @@ final class KeybindingsTests: OrbeTestCase {
   func testAvailableWithoutTabsClassification() {
     let available: [WindowCommand] = [
       .newTab, .showClosedAgentsPalette, .switchWorkspace,
-      .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings, .toggleHelp,
+      .launchDefaultAgent, .showAgentPalette, .showWorktreePalette, .showSettings, .toggleHelp,
     ]
     for command in available {
       XCTAssertTrue(command.availableWithoutTabs, "\(command) はタブ非依存ゆえ 0タブでも配信する")

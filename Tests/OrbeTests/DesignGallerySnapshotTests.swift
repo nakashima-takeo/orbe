@@ -58,7 +58,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
 
     try renderPaletteSnapshots(dir: dir, cardSize: cardSize)
 
-    try renderDispatchSnapshots(dir: dir)
+    try renderWorktreePaletteSnapshots(dir: dir)
 
     // SearchBar（empty / typing / no-match / match / overflow）。
     try writePNG(

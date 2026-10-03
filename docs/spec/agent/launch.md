@@ -24,7 +24,7 @@ updated: 2026-09-06
 
 ## デフォルト起動（⌘⇧C）
 
-デフォルト（設定値が検出済みならそれ、それ以外〔未設定・未検出〕は検出順の先頭）を即起動する。検出ゼロならパレットの空状態を、初回検出未完了なら検出中パレットを開く。設定値は**アクティブ workspace の実効 `default-agent`** で workspace 上書きに追従する（⌘⇧C・dispatch の既定 agent・起動パレットの ● が同じ解決を読む・[workspace](../platform/workspace.md)）。
+デフォルト（設定値が検出済みならそれ、それ以外〔未設定・未検出〕は検出順の先頭）を即起動する。検出ゼロならパレットの空状態を、初回検出未完了なら検出中パレットを開く。設定値は**アクティブ workspace の実効 `default-agent`** で workspace 上書きに追従する（⌘⇧C・worktree パレットの既定 agent・起動パレットの ● が同じ解決を読む・[workspace](../platform/workspace.md)）。
 
 ## 起動形態
 

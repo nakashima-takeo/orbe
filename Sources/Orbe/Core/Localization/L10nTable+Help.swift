@@ -42,9 +42,9 @@ extension L10n {
     .helpShortcutCloseTab: ("タブを閉じる", "Close tab"),
     .helpShortcutLaunchDefaultAgent: ("デフォルトエージェントを起動", "Launch default agent"),
     .helpShortcutAgentPalette: ("エージェント起動パレット", "Agent launch palette"),
-    .helpShortcutDispatchPalette: (
-      "Dispatch パレット（worktree/branch/issue/PR から起動）",
-      "Dispatch palette (launch from worktree/branch/issue/PR)"
+    .helpShortcutWorktreePalette: (
+      "worktree パレット（worktree/branch/issue/PR から起動）",
+      "Worktree palette (launch from worktree/branch/issue/PR)"
     ),
     // 「⌘ を 2 回」はキー表記 ⌘⌘ が語るのでラベルからは落とす（トップ厳選の 1 行に収める）。
     .helpShortcutAttentionPalette: (

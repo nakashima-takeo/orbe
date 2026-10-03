@@ -1,0 +1,398 @@
+import SwiftUI
+
+/// worktree パレットのカードの焦点の宛先。list は入力欄、clean と最新化は TextField を持たないのでカード器が受ける。
+enum WorktreePaletteFocus: Hashable {
+  case field, card
+}
+
+/// worktree パレットのカード本体。ヘッダ（❯＋絞り込み入力欄＋起動 agent チップ）＋
+/// リスト部（可変セクション・maxHeight 380・内部スクロール）＋フッター（選択連動の実行説明/エラー＋キーヒント）。
+/// 器はそのままに、中身だけ list / clean / 最新化の 3 モードで切り替わる。
+/// 外郭は `GlassPanel(.popup, radius 14)`。list ではヘッダの `TextField` にキーを集約し、↑↓/⇥/esc/↵/⌘↵ を
+/// 横取りしてフォーカス逸脱を防ぐ（`PaletteCard`/`SearchField` の field モードと同パターン）。
+struct WorktreePaletteCard: View {
+  @Bindable var model: WorktreePaletteModel
+  @Environment(\.localization) private var l10n
+  /// カード全体の高さ上限（窓に収める。WorktreePaletteOverlay が窓高から算出して渡す）。
+  let maxHeight: CGFloat
+  @FocusState private var focus: WorktreePaletteFocus?
+  /// リスト内容の実測高（ハグ用・上限で切った値）。初期は cap にして初回の 0 collapse フラッシュを避ける。
+  @State private var contentHeight: CGFloat = Self.listCap
+  /// ヘッダ＋フッターの実測高（リスト cap から差し引き、カードが窓を超えないようにする）。
+  @State private var chromeHeight: CGFloat = 0
+
+  /// リスト部の内容基準の高さ上限（380・コンポーネント局所定数）。
+  private static let listCap: CGFloat = 380
+
+  /// リスト部の実効高。内容にハグしつつ 380 と「窓 − chrome」の小さい方で頭打ち（超過は内部スクロール）。
+  private var listHeight: CGFloat {
+    let available = max(0, maxHeight - chromeHeight)
+    return min(contentHeight, min(Self.listCap, available))
+  }
+
+  var body: some View {
+    // 面/枠は popup 級（α.90・.10/.14）だが、worktree パレットの blur は panel 級（24px）・影は大型
+    // フローティング（0 20 60）。level だけでは表せない組み合わせなので material/elevation を明示上書きする。
+    GlassPanel(
+      level: .popup, cornerRadius: 14, materialOverride: .hudWindow, elevationOverride: .panel
+    ) {
+      VStack(spacing: 0) {
+        header
+        divider
+        switch model.mode {
+        case .list:
+          list
+        case .clean:
+          WorktreeCleanList(model: model.clean).frame(height: listHeight)
+        case .refresh:
+          if let refresh = model.refresh {
+            WorktreePaletteRefreshList(
+              model: refresh, onConfirm: { model.confirmRefresh($0) },
+              onHover: { model.hoverRefresh($0) }
+            )
+            .frame(height: listHeight, alignment: .top)
+          }
+        }
+        divider
+        switch model.mode {
+        case .list:
+          footer
+        case .clean:
+          WorktreeCleanFooter(
+            model: model.clean, onExecute: { model.executeClean() },
+            onClose: { model.exitOrCancelClean() }
+          )
+          .background(chromeProbe)
+        case .refresh:
+          if let refresh = model.refresh {
+            WorktreePaletteRefreshFooter(model: refresh, targetName: model.selectedTargetName)
+              .background(chromeProbe)
+          }
+        }
+      }
+    }
+    .frame(maxHeight: maxHeight, alignment: .top)
+    .onPreferenceChange(ChromeHeightKey.self) { chromeHeight = $0 }
+    .onPreferenceChange(WorktreePaletteContentHeightKey.self) { contentHeight = $0 }
+    .modifier(WorktreePaletteCardKeyCapture(model: model, focus: $focus))
+    // カード内のクリックで焦点を確定し直す（汎用 PaletteCard と同じ契約。行タップも行内の「開く」
+    // ボタンもこの契約に乗る）。宛先はモードが決める。
+    .simultaneousGesture(TapGesture().onEnded { model.focus() })
+    .onChange(of: model.focusToken, initial: true) {
+      focus = model.mode == .list ? .field : .card
+    }
+  }
+
+  /// ヘッダ／フッターの実測高を合算して chrome 高に集約する probe。
+  private var chromeProbe: some View {
+    GeometryReader { proxy in
+      Color.clear.preference(key: ChromeHeightKey.self, value: proxy.size.height)
+    }
+  }
+
+  private var divider: some View {
+    Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
+  }
+
+  // MARK: - ヘッダ（絞り込み入力欄）
+
+  /// 枠と ❯ は全モード共通。中身だけ切り替える。
+  /// **入力欄は clean / 最新化でも mount したまま**幅 0・opacity 0 で隠す（`PaletteCard` が記録している罠と同じ——
+  /// 焦点の宛先が同じ更新 pass で新規 mount されると SwiftUI は `@FocusState` を取りこぼし、
+  /// first responder がカード器に残ってキーが死ぬ）。
+  ///
+  /// 要素の間隔は HStack の spacing でなく各要素の leading padding が運ぶ——幅 0 で隠した入力欄も
+  /// spacing を両側で消費するので、spacing に任せると `❯` と中身の間が 2 倍に開く。
+  private var header: some View {
+    let gap = Theme.Space.step + Theme.Space.hair
+    return HStack(spacing: 0) {
+      Text("❯")
+        .font(Font.theme.title)
+        .foregroundStyle(Color.theme.accentPrimary)
+      queryField
+        .frame(maxWidth: model.mode == .list ? .infinity : 0)
+        .padding(.leading, gap)
+        .opacity(model.mode == .list ? 1 : 0)
+        .allowsHitTesting(model.mode == .list)
+      switch model.mode {
+      case .list:
+        Spacer(minLength: Theme.Space.step)
+        targetChip.padding(.leading, gap * 2)
+      case .clean:
+        WorktreeCleanHeader(model: model.clean)
+      case .refresh:
+        if let refresh = model.refresh { WorktreePaletteRefreshHeader(model: refresh) }
+      }
+    }
+    .padding(.horizontal, Theme.Space.bar)
+    .padding(.vertical, Theme.Space.beat)
+    .background(chromeProbe)
+  }
+
+  /// 絞り込み入力欄。設計見本の静的「agent」ラベル＋擬似点滅カーソルは、実 `TextField` のキャレットで置き換える。
+  private var queryField: some View {
+    // 作成中は検索入力を受け付けない（keystroke を握り潰す）。focus は保持し、失敗後すぐ操作へ戻れる。
+    TextField(
+      "", text: Binding(get: { model.query }, set: { if !model.isPreparing { model.query = $0 } })
+    )
+    .textFieldStyle(.plain)
+    .font(Font.theme.title)
+    .foregroundStyle(Color.theme.textPrimary)
+    // キャレット/選択色を accent に固定（ヘッダ ❯ プロンプトと同じ affordance。
+    // 既定のシステムアクセント任せだと Orbe の配色から浮くため明示する）。
+    .tint(Color.theme.accentPrimary)
+    .focused($focus, equals: .field)
+    // 純正 placeholder は色を握れず IME 変換中も消えないため、共通モディファイアで muted 描画しつつ
+    // marked text がある間は抑制する。
+    .imePlaceholder(
+      l10n.string(.worktreePaletteQueryPlaceholder), showWhenEmpty: model.query.isEmpty,
+      focused: focus == .field, font: Font.theme.title, color: Color.theme.textMuted
+    )
+    .onChange(of: model.query) { model.onQueryChanged() }
+    // 実行＝onSubmit（IME 変換確定の Enter では発火しない＝誤爆しない）。行タップと同じ決定 funnel。
+    .onSubmit { model.activate() }
+    // ↑↓＝一覧ナビ、⌘↑↓＝対話行の先頭/末尾へジャンプ、⇥＝agent 巡回（握らないとフォーカスが抜けキーが死ぬ）、esc＝閉じる。
+    // 矢印は単一の catch-all に集約し ⌘ 有無で分岐する（bare ハンドラが ⌘↑ を食う不確実性を構造で排除）。
+    // 作成中はいずれも握り潰す（選択移動・ジャンプ・agent 変更・閉じ＝キャンセルをさせず完了まで待つ）。
+    .onKeyPress { press in
+      switch press.key {
+      case .upArrow:
+        if !model.isPreparing {
+          if press.modifiers.contains(.command) { model.jump(-1) } else { model.move(-1) }
+        }
+        return .handled
+      case .downArrow:
+        if !model.isPreparing {
+          if press.modifiers.contains(.command) { model.jump(1) } else { model.move(1) }
+        }
+        return .handled
+      default:
+        return .ignored
+      }
+    }
+    .onKeyPress(.tab) {
+      if !model.isPreparing { model.cycleTarget() }
+      return .handled
+    }
+    .onKeyPress(.escape) {
+      if !model.isPreparing { model.onDismiss() }
+      return .handled
+    }
+    // ⌘↵＝issue/PR をブラウザで開く。plain ↵（onSubmit）と修飾で分ける（SearchField と同流儀）。
+    .onKeyPress { press in
+      guard press.key == .return, press.modifiers.contains(.command) else { return .ignored }
+      guard !model.isPreparing else { return .handled }
+      if let item = model.selectedItem, item.canOpenWeb { model.onOpenWeb(item) }
+      return .handled
+    }
+  }
+
+  /// 起動先のチップ（⇥ で巡回・agent は raw command／shell は "shell"）。targets は常に非空。
+  private var targetChip: some View {
+    HStack(spacing: Theme.Space.note) {
+      Text("◐")
+        .foregroundStyle(Color.theme.glyphGradient)
+      Text(l10n.format(.worktreePaletteAgentOpen, model.selectedTargetName))
+        .foregroundStyle(Color.theme.accentPrimary)
+    }
+    .font(Font.theme.meta)
+    .lineLimit(1)
+    .fixedSize()
+    .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
+    .padding(.vertical, Theme.Space.hair + 1)
+    .background(Capsule().fill(Color.theme.tintAccent))
+  }
+
+  // MARK: - リスト部
+
+  private var list: some View {
+    ScrollViewReader { proxy in
+      ScrollView {
+        // 行は見えている分だけ生成する（件数が数百〜千を超えても ↑↓・打鍵の反応を保つ）。
+        LazyVStack(alignment: .leading, spacing: 0) {
+          if model.hasLoadedOnce {
+            // 行 identity（row.id）＝ scrollTo の宛先。header と item で id 名前空間を分け（"header:"/"item:"）、
+            // 見出しの並び位置と item の平坦 index が衝突して scrollTo が空振りするのを防ぐ。
+            ForEach(rows) { row in
+              switch row {
+              case .header(let title): sectionLabel(title)
+              case .item(let index, let item):
+                if item.isInteractive {
+                  WorktreePaletteRow(
+                    item: item, selected: index == model.selected,
+                    // 行タップ（release）＝決定。↵ と同じ funnel を通り、選択移動と実行が一体で走る。
+                    onTap: { model.activate(at: index) },
+                    // ホバー開始＝選択の追従だけ（決定は走らない）。非対話行は WorktreePaletteInfoRow へ
+                    // 分岐してこの経路を通らず、モデル側の関門でも弾かれる。
+                    onHoverEnter: { model.hoverSelect(index) },
+                    onOpenWeb: item.canOpenWeb ? { model.onOpenWeb(item) } : nil
+                  )
+                } else {
+                  WorktreePaletteInfoRow(item: item)
+                }
+              }
+            }
+          } else {
+            // 初回ロード（最初の rebuild）まで、候補行の形をした非対話プレースホルダで空フレームを埋める。
+            ForEach(WorktreePaletteSkeletonRow.widths.indices, id: \.self) { index in
+              WorktreePaletteSkeletonRow(barWidth: WorktreePaletteSkeletonRow.widths[index])
+            }
+          }
+        }
+        .padding(Theme.Space.note)
+        .background(
+          GeometryReader { geometry in
+            // Lazy の内容高は未生成の行を推定で数え、スクロールで行が生成されるたびに動く。上限で切れば
+            // 上限を超える件数では値が止まり、スクロールのたびにカード全体が描き直されない。
+            Color.clear.preference(
+              key: WorktreePaletteContentHeightKey.self,
+              value: min(geometry.size.height, Self.listCap))
+          }
+        )
+      }
+      // 内容にハグしつつ cap/窓で頭打ちの実効高を与える。定高なので超過分は内部スクロールに回り、
+      // 末尾行/セクションまで確実に到達できる（fixedSize だと ScrollView が内容高へ伸び切り、
+      // カードが窓外へはみ出して末尾に届かなくなる）。
+      .frame(height: listHeight)
+      .scrollIndicators(.automatic)
+      .onChange(of: model.selected) { scrollToSelection(proxy) }
+      .onChange(of: listHeight) { scrollToSelection(proxy) }
+      .onAppear { scrollToSelection(proxy) }
+    }
+  }
+
+  /// 選択行（平坦 index）を可視域へ追従させる。狭窓・多件数でも常にハイライトが見える。
+  private func scrollToSelection(_ proxy: ScrollViewProxy) {
+    proxy.scrollTo(WorktreePaletteListRow.itemID(model.selected))
+  }
+
+  /// セクション見出し（選択対象外・大文字・極小・letterSpacing 1・muted）。
+  private func sectionLabel(_ title: String) -> some View {
+    Text(title.uppercased())
+      .font(Font.theme.sectionLabel)
+      .tracking(Theme.Typography.trackingLabel)
+      .foregroundStyle(Color.theme.textMuted)
+      .padding(.top, Theme.Space.step)
+      .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
+      .padding(.bottom, Theme.Space.hair + 1)
+  }
+
+  private var rows: [WorktreePaletteListRow] {
+    var out: [WorktreePaletteListRow] = []
+    var index = 0
+    for section in model.visibleSections {
+      out.append(.header(section.title))
+      for item in section.items {
+        out.append(.item(index, item))
+        index += 1
+      }
+    }
+    return out
+  }
+
+  // MARK: - フッター
+
+  private var footer: some View {
+    HStack(spacing: Theme.Space.step) {
+      description
+        .font(Font.theme.meta)
+        .lineLimit(1)
+        .truncationMode(.tail)
+      Spacer(minLength: Theme.Space.step)
+      // 作成中は操作が無効なのでキーヒントも出さない（効かない案内を残さない＝UI が嘘をつかない）。
+      // 注記だけの行（clean 行）でも出さない——実行説明が無い行に実行のキー案内を並べない。
+      if !model.isPreparing, !showsNoteOnly {
+        keyHints
+          .layoutPriority(1)  // 狭幅ではキーヒントを残し説明側を truncate
+      }
+    }
+    .padding(.horizontal, Theme.Space.bar)
+    .padding(.vertical, Theme.Space.step + Theme.Space.hair)
+    .background(chromeProbe)
+  }
+
+  /// 選択行のフッターが注記のみか（キーヒントを出すかの判断）。
+  private var showsNoteOnly: Bool {
+    guard model.errorMessage == nil, case .note = model.selectedItem?.footer else { return false }
+    return true
+  }
+
+  @ViewBuilder private var description: some View {
+    if model.isPreparing {
+      WorktreePaletteBusyLabel(text: l10n.string(.worktreePalettePreparing))
+    } else if let error = model.errorMessage {
+      Text(error).foregroundStyle(Color.theme.danger)
+    } else {
+      switch model.selectedItem?.footer {
+      case .launch(let target, let kind):
+        WorktreePaletteLaunchLine(
+          target: target, preposition: kind.prepositionKey, agent: model.selectedTargetName)
+      case .browse(let target):
+        WorktreePaletteBrowseLine(target: target)
+      case .note(let key):
+        Text(l10n.string(key)).foregroundStyle(Color.theme.textMuted)
+      case nil:
+        EmptyView()
+      }
+    }
+  }
+
+  /// ブラウザで開く行では ⇥（起動先）と ⌘↵（Enter と同じ）を案内しない——効いても意味の無い操作を
+  /// 並べない。起動先チップと ⇥ キーの働きはそのまま。
+  private var keyHints: some View {
+    let browses = if case .browse = model.selectedItem?.footer { true } else { false }
+    return HStack(spacing: Theme.Space.step + Theme.Space.hair) {
+      WorktreePaletteKeyHint(key: "↑↓", label: l10n.string(.worktreePaletteHintSelect))
+      if !browses {
+        WorktreePaletteKeyHint(key: "⇥", label: l10n.string(.worktreePaletteHintAgent))
+        if model.selectedItem?.canOpenWeb == true {
+          WorktreePaletteKeyHint(key: "⌘↵", label: l10n.string(.worktreePaletteHintOpen))
+        }
+      }
+      WorktreePaletteKeyHint(key: "esc", label: l10n.string(.worktreePaletteHintClose))
+    }
+    .font(Font.theme.sectionLabel)
+    .foregroundStyle(Color.theme.textMuted)
+    .fixedSize()
+  }
+}
+
+#if DEBUG
+  #Preview("worktree パレット — sample") {
+    let model = WorktreePaletteModel()
+    model.setTargets(
+      agents: [AgentCLI(command: "claude", path: "/usr/bin/claude")], defaultCommand: "claude")
+    model.sections = WorktreePaletteSectionBuilder.build(.designSample)
+    model.hasLoadedOnce = true
+    return ZStack {
+      BackgroundGlow()
+      WorktreePaletteOverlay(model: model)
+    }
+    .frame(width: 720, height: 560)
+  }
+
+  #Preview("worktree パレット — preparing") {
+    let model = WorktreePaletteModel()
+    model.setTargets(
+      agents: [AgentCLI(command: "claude", path: "/usr/bin/claude")], defaultCommand: "claude")
+    model.sections = WorktreePaletteSectionBuilder.build(.designSample)
+    model.hasLoadedOnce = true
+    model.isPreparing = true
+    return ZStack {
+      BackgroundGlow()
+      WorktreePaletteOverlay(model: model)
+    }
+    .frame(width: 720, height: 560)
+  }
+
+  #Preview("worktree パレット — skeleton") {
+    let model = WorktreePaletteModel()
+    model.setTargets(
+      agents: [AgentCLI(command: "claude", path: "/usr/bin/claude")], defaultCommand: "claude")
+    return ZStack {
+      BackgroundGlow()
+      WorktreePaletteOverlay(model: model)
+    }
+    .frame(width: 720, height: 560)
+  }
+#endif

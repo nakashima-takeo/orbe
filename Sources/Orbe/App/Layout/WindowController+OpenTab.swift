@@ -9,7 +9,7 @@ extension WindowController {
     let workspaceId: Int
   }
 
-  /// 新タブを 1 枚起こす唯一の経路。GUI（Cmd+T・エージェント起動・Dispatch・workspace 作成）と
+  /// 新タブを 1 枚起こす唯一の経路。GUI（Cmd+T・エージェント起動・worktree パレット・workspace 作成）と
   /// 制御 API（spawn / spawn_agent / resume_agent）が同じ本体を通る——起動のされ方が経路ごとに
   /// 割れると、その差は「GUI からは動くが CLI からは動かない」という形で後から必ず出る。
   ///

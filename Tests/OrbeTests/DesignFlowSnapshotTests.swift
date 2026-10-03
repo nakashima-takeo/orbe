@@ -274,9 +274,9 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
 
   /// clean のサブライン: 確認行をチェックするとブランチの扱いが開き、←→ で選び直せる過程を撮る。
   /// **flow が撮るのは遷移**（開く → `削除` を選ぶ → 外して畳む）で、開いた瞬間の静止画は
-  /// gallery の `dispatch_clean_subline` が持つ。
+  /// gallery の `worktree_clean_subline` が持つ。
   func testCleanSubline() throws {
-    let palette = DesignSceneFixtures.dispatchCleanModel()
+    let palette = DesignSceneFixtures.worktreeCleanModel()
     let clean = palette.clean
     // 最初の確認行（ブランチを持つ＝開くものがある行）へ本物の move() で降りる。
     let target = clean.selectableRows.firstIndex { $0.group == .caution && $0.branch != nil } ?? 0
@@ -285,7 +285,7 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
       render: {
         ZStack {
           BackgroundGlow()
-          DispatchOverlay(model: palette)
+          WorktreePaletteOverlay(model: palette)
         }
       },
       steps: [
@@ -301,13 +301,13 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
   /// 最新化の選択画面: 遅れた Local branch 行から入り、↓ でカーソルが「そのまま作成」へ移り
   /// （フッタの前置句も追従する）、esc で一覧へ戻るとカーソルは入った行のまま、という遷移を撮る。
   func testRefresh() throws {
-    let palette = DesignSceneFixtures.dispatchModel()
+    let palette = DesignSceneFixtures.worktreePaletteModel()
     try flow(
       "refresh", size: NSSize(width: 640, height: 520),
       render: {
         ZStack {
           BackgroundGlow()
-          DispatchOverlay(model: palette)
+          WorktreePaletteOverlay(model: palette)
         }
       },
       steps: [

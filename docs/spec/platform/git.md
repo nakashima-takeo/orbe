@@ -6,7 +6,7 @@ updated: 2026-09-20
 
 # git 実行
 
-Orbe が git に触る操作——Dispatch の worktree 作成・掃除・ブランチの最新化（fetch → fast-forward）（[dispatch](../palette/dispatch.md)）、workspace 作成の clone（[workspace パレット](../palette/workspace.md)）、ブランチ・worktree の一覧——はすべて `/usr/bin/git` の子プロセスとして走る。それらの起動を 1 箇所に集める基盤が持つ契約をここに置く。個々の面が「どう見せるか」は各面の spec が持ち、ここは「どう走らせるか」だけを持つ。
+Orbe が git に触る操作——worktree パレットの worktree 作成・掃除・ブランチの最新化（fetch → fast-forward）（[worktree](../palette/worktree.md)）、workspace 作成の clone（[workspace パレット](../palette/workspace.md)）、ブランチ・worktree の一覧——はすべて `/usr/bin/git` の子プロセスとして走る。それらの起動を 1 箇所に集める基盤が持つ契約をここに置く。個々の面が「どう見せるか」は各面の spec が持ち、ここは「どう走らせるか」だけを持つ。
 
 hooks・署名がユーザーのシェル環境と同等に動くよう、全呼び出しがログインシェル由来の PATH を引き継ぐ（[shell-path](shell-path.md)）。`GIT_TERMINAL_PROMPT=0` を必ず渡す——資格情報の対話プロンプトは GUI からは見えず、待てば無限に待つことになるので、認証が要る操作は待たずに失敗へ落とす。
 
@@ -30,7 +30,7 @@ hooks・署名がユーザーのシェル環境と同等に動くよう、全呼
 
 打ち切った後は pipe の EOF を無期限には待たない。git が終了しても、その出力を継いだ孫プロセス（hook が背景に残した子・`git remote-ext`・gpg）が pipe を握っていれば EOF は来ない——待ちそのものが新しいハングになるので、猶予を過ぎたら諦めて返る。
 
-打ち切りは終了コードと別の値で伝える。終了コードでは起動失敗と区別できないため。打ち切られた操作を成功と読むか失敗と読むかは呼び出し側が決める——worktree 作成のように「実体が出来ていれば成功」と読み替える面がある（[dispatch](../palette/dispatch.md)）。
+打ち切りは終了コードと別の値で伝える。終了コードでは起動失敗と区別できないため。打ち切られた操作を成功と読むか失敗と読むかは呼び出し側が決める——worktree 作成のように「実体が出来ていれば成功」と読み替える面がある（[worktree](../palette/worktree.md)）。
 
 ## 出力の読み方
 

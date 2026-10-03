@@ -7,7 +7,7 @@ import XCTest
 /// **その到達性が信頼してよいのは Orbe が prune する origin だけ**であること、
 /// **素の `git cherry` では multi-commit squash を検出できない**（第1段→第2段が要る）こと。
 ///
-/// 判定へ渡す名前の曖昧さ（同名タグ）だけは `DispatchCleanProber` を通した本番経路でも固定する
+/// 判定へ渡す名前の曖昧さ（同名タグ）だけは `WorktreeCleanProber` を通した本番経路でも固定する
 /// ——名前を組み立てるのはプローブ側なので、git 層だけを直接叩くと本番の入口を素通りする。
 extension GitWorktreeCleanIntegrationTests {
 
@@ -291,14 +291,14 @@ extension GitWorktreeCleanIntegrationTests {
     wait(for: [listed], timeout: 20)
     let path = try XCTUnwrap(worktrees.first { $0.branch == "feat/gf" }?.path)
 
-    let extra = DispatchWorktreeClassifier.extraContainmentTargets(
+    let extra = WorktreeCleanClassifier.extraContainmentTargets(
       worktrees: worktrees, branchPullRequests: ["feat/gf": [pr]],
       remoteBranchNames: ["origin/main", "origin/develop"], defaultBranch: "origin/main")
     XCTAssertEqual(extra[path], ["origin/develop"], "gh ヒントが比較先 1 本になる")
 
-    var probes: [String: DispatchCleanProbe] = [:]
+    var probes: [String: WorktreeCleanProbe] = [:]
     let probed = expectation(description: "probe")
-    DispatchCleanProber(repo: repo, defaultBranch: "main", extraContainmentTargets: extra)
+    WorktreeCleanProber(repo: repo, defaultBranch: "main", extraContainmentTargets: extra)
       .probe(worktrees: worktrees, tabs: []) {
         probes = $0
         probed.fulfill()
@@ -306,8 +306,8 @@ extension GitWorktreeCleanIntegrationTests {
     wait(for: [probed], timeout: 20)
     XCTAssertEqual(probes[path]?.containment, .patchEquivalent(target: "origin/develop"))
 
-    let rows = DispatchWorktreeClassifier.rows(
-      DispatchWorktreeClassifier.Input(
+    let rows = WorktreeCleanClassifier.rows(
+      WorktreeCleanClassifier.Input(
         worktrees: worktrees, branchPRStates: ["feat/gf": .loaded([pr])], probes: probes))
     let row = try XCTUnwrap(rows.first { $0.branch == "feat/gf" })
     XCTAssertEqual(row.group, .safe, "squash × 非既定ブランチ統合の行が安全群に入る")
@@ -335,13 +335,13 @@ extension GitWorktreeCleanIntegrationTests {
     try addOrigin(pushing: ["main", "develop"])
   }
 
-  /// プローブ（`DispatchCleanProber`）を本物の worktree 一覧で回し、対象 worktree の判定を返す。
+  /// プローブ（`WorktreeCleanProber`）を本物の worktree 一覧で回し、対象 worktree の判定を返す。
   /// パスの突き合わせは末尾名で行う（macOS の /var → /private/var 正規化で完全一致が揺れる）。
   private func proberContainment(ofWorktreeNamed name: String) throws -> GitBranchContainment? {
-    var probes: [String: DispatchCleanProbe] = [:]
+    var probes: [String: WorktreeCleanProbe] = [:]
     let done = expectation(description: "probe")
     repo.worktrees { worktrees in
-      DispatchCleanProber(repo: self.repo, defaultBranch: "main")
+      WorktreeCleanProber(repo: self.repo, defaultBranch: "main")
         .probe(worktrees: worktrees, tabs: []) {
           probes = $0
           done.fulfill()
