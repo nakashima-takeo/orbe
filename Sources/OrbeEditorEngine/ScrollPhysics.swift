@@ -61,9 +61,10 @@ extension ScrollInput.Phase {
 /// - 動かす軸は、120ms で減衰する縦横の量の累積の大きい方だけ（主でない軸の量は捨てる）。
 /// - 端の外へ向かう量は、端を越えた分だけ 1/20 に縮めて当てる。端へ向かう量は縮めない（伸ばした後に戻す指はそのまま
 ///   効く。AppKit・WebKit と同じ）。指を離したとき端を越えていれば、そこから端へ戻る。OS の momentum が端を
-///   越えたら、その時点で戻り始め、残りの momentum は次に指が触れるまで捨てる（WebKit・AppKit の形）。戻りは端からの
-///   ずれ `x0` と戻り始めの速さ `v`（指を離したときは 0）から `x(τ) = (x0 + 0.31·v·τ)·e^(−τ/0.08)`（AppKit と同じ
-///   式）。戻りの途中に指が触れたらそこで止まり、新しく指で動かせばその位置から動く。
+///   越えたら、その時点で戻り始め、残りの momentum は次に指で動かし始める（began）まで捨てる（指を置いただけ
+///   〔mayBegin〕では解かない。WebKit・AppKit の形）。戻りは端からのずれ `x0` と戻り始めの速さ `v`（指を離したときは
+///   0）から `x(τ) = (x0 + 0.31·v·τ)·e^(−τ/0.08)`（AppKit と同じ式）。戻りの途中に指が触れたらそこで止まり、新しく
+///   指で動かせばその位置から動く。
 /// - マウスのホイールは 1 目盛り（量 1）を 10pt として、その場で当てる（NSScrollView の行送りと同じ）。
 struct ScrollPhysics: Sendable {
   /// 範囲を決める値。縦は最終行が最上段に来るまで、横は見たことのある最も長い行の右端から 5 桁先まで。
@@ -126,7 +127,7 @@ struct ScrollPhysics: Sendable {
   private var lastEventTime: Double?
   /// 最後に当てた出来事から見た動く速さ（pt/秒）。
   private var velocity = SIMD2<Double>(0, 0)
-  /// momentum が端を越えたか、端の外で指を離した。次に指が触れるまで momentum の出来事を捨てる。
+  /// momentum が端を越えたか、端の外で指を離した。次に指で動かし始める（began）まで momentum の出来事を捨てる。
   private var ignoresMomentum = false
 
   var maximum: SIMD2<Double> { limits.maximum }
@@ -202,7 +203,6 @@ struct ScrollPhysics: Sendable {
     }
     switch input.phase {
     case .mayBegin:
-      ignoresMomentum = false
       guard isReturning else { return false }
       startTracking(at: t)
       return true

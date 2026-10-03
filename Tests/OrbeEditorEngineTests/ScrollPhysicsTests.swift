@@ -197,6 +197,25 @@ final class ScrollPhysicsTests: XCTestCase {
     XCTAssertEqual(p.shown(at: 1.15).y, from + 50, accuracy: 1e-9, "新しいジェスチャの momentum は当てる")
   }
 
+  /// 指を置いただけ（mayBegin）では捨てている momentum を解かない——置いた後に古い momentum の残りが届いても止めた位置は
+  /// 動かず、動かし始めた（began）ジェスチャの momentum は当てる（WebKit と同じ）。
+  func testOnlyBeganResumesMomentum() {
+    var p = physics()
+    p.apply(finger(1.0, 0, .began))
+    p.apply(finger(1.01, 200))
+    p.apply(finger(1.02, 0, .ended))
+    p.apply(finger(1.06, 0, .mayBegin))
+    let held = p.shown(at: 1.06).y
+    XCTAssertFalse(p.apply(momentum(1.07, 40)), "置いた後に届いた古い momentum は捨てる")
+    XCTAssertFalse(p.apply(momentum(1.08, 0, .ended)), "古い momentum の終わりで止めた指を離したことにしない")
+    XCTAssertEqual(p.shown(at: 1.5).y, held, accuracy: 1e-9)
+    p.apply(finger(1.5, 0, .began))
+    p.apply(finger(1.51, -30))
+    p.apply(finger(1.52, 0, .ended))
+    p.apply(momentum(1.53, -10, .began))
+    XCTAssertEqual(p.shown(at: 1.53).y, held + 40, accuracy: 1e-9, "動かし始めたジェスチャの momentum は当てる")
+  }
+
   /// 戻りの途中のホイールは、その時点の位置からその場で当てる。
   func testWheelDuringReturnMovesAtOnce() {
     var p = physics()
