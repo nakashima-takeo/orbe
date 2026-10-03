@@ -86,6 +86,18 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
     XCTAssertEqual(base, "origin/main", "使ったベースは意図ではなく解決後の名前で返る（前回として覚える値）")
   }
 
+  /// ベースのバーで名前のブランチ（前回・現在・ほかで選んだもの）を選んだときも、そのブランチから
+  /// fetch の着地後に切り、使ったベースはその名前で返る。
+  func testNewBranchIsCutFromTheChosenBranchAfterTheFetch() throws {
+    let provider = try startWithSlowFetch()
+    let outcome = try prepare(provider, .newBranch(name: "issue/45", base: .ref("origin/feat")))
+    guard case .created(let path, let base) = outcome else {
+      return XCTFail("新しいブランチの作成として返る: \(outcome)")
+    }
+    XCTAssertEqual(head(of: path), originTip("feat"), "fetch 後の origin/feat が base")
+    XCTAssertEqual(base, "origin/feat")
+  }
+
   /// Remote branch 行も remote ref から新しいローカルブランチを切る経路。
   func testRemoteBranchWorktreeIsCutFromTheFetchedRemoteRef() throws {
     let provider = try startWithSlowFetch()
