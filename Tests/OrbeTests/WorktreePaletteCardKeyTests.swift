@@ -106,9 +106,6 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
 
     send(36, "\r", to: window)
 
-    XCTExpectFailure(
-      "バグ疑い: ↵ で入力欄が同じ絞り込みを書き戻し、WorktreeBasePickerModel.query の didSet がカーソルを先頭へ戻す"
-    )
     XCTAssertEqual(model.selectedBaseChoice?.name, "origin/feat/fetch-progress")
   }
 
