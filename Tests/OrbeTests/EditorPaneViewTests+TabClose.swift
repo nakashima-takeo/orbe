@@ -92,7 +92,9 @@ final class EditorPaneViewTabCloseTests: OrbeTestCase {
     let pane = row.pane
     let names = { pane.shell.tabs.map(\.name) }
     // 写しが変わっても描き直す前のタブ行は古い位置のまま押される——押す前に描画が写しに追いつくのを待つ。
-    let drawn = { (expected: [SlotLook]) in _ = try self.probe(pane) { try self.looks($0, pane) == expected } }
+    let drawn = { (expected: [SlotLook]) in
+      _ = try self.probe(pane) { try self.looks($0, pane) == expected }
+    }
 
     let b = fileTabSlotCenter(pane, 1)
     try click(pane, at: NSPoint(x: b.x + 9, y: b.y))
