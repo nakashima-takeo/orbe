@@ -6,7 +6,7 @@ import Foundation
 enum FaceGeometry {
   /// 背（面の継ぎ目の帯）の幅。
   static let spine: CGFloat = 14
-  /// 面の上辺の焦点帯の高さ（分割中の焦点の面だけ色が付き、それ以外は透明で常に確保する）。
+  /// 分割中、焦点の面の中身の上辺へ重ねる焦点の印の高さ（場所は取らない）。
   static let focusBand: CGFloat = 2
   /// これ未満の移動はクリック扱い。
   static let dragThreshold: CGFloat = 4

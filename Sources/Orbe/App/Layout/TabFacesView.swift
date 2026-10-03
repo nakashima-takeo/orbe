@@ -15,8 +15,8 @@ final class TabFacesView: NSView {
   let terminal: SurfaceScrollView
   let editor: EditorPaneView
   let spine = SpineView()
-  private let editorFace = FaceClipView()
-  private let terminalFace = FaceClipView()
+  private let editorFace: FaceClipView
+  private let terminalFace: FaceClipView
 
   /// タブが `set` で写す配置の鏡。ドラッグ中は書き換えない。遷移の終点でもある。
   private(set) var faces: FaceLayout
@@ -70,15 +70,13 @@ final class TabFacesView: NSView {
     self.editor = editor
     self.faces = faces
     resolved = FaceGeometry.resolve(faces, width: 0)
+    editorFace = FaceClipView(content: editor)
+    terminalFace = FaceClipView(content: terminal)
     super.init(frame: .zero)
     for view in [editorFace, spine, terminalFace] {
       view.autoresizingMask = []
       addSubview(view)
     }
-    editor.autoresizingMask = []
-    terminal.autoresizingMask = []
-    editorFace.addSubview(editor)
-    terminalFace.addSubview(terminal)
     wireSpine()
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
@@ -184,10 +182,10 @@ final class TabFacesView: NSView {
     terminalFace.isHidden = g.terminalWidth <= 0
   }
 
-  /// 焦点帯と背の見え方。
+  /// 焦点の印と背の見え方。
   private func paint(_ g: FaceGeometry.Resolved) {
-    editorFace.bandColor = g.isSplit && g.faces.focus == .editor ? Theme.Color.faceEditor : nil
-    terminalFace.bandColor =
+    editorFace.markColor = g.isSplit && g.faces.focus == .editor ? Theme.Color.faceEditor : nil
+    terminalFace.markColor =
       g.isSplit && g.faces.focus == .terminal ? Theme.Color.faceTerminal : nil
     spine.look = g.projection.spineLook
   }
@@ -202,20 +200,18 @@ final class TabFacesView: NSView {
     editorFace.frame = NSRect(x: 0, y: 0, width: eW, height: h)
     spine.frame = NSRect(x: eW, y: 0, width: FaceGeometry.spine, height: h)
     terminalFace.frame = NSRect(x: eW + FaceGeometry.spine, y: 0, width: tW, height: h)
-    let band = FaceGeometry.focusBand
-    editor.frame.origin = NSPoint(x: eW - editor.frame.width, y: band)
+    editor.frame.origin = NSPoint(x: eW - editor.frame.width, y: 0)
     let terminalX = g.editorWidth > 0 ? tW - terminal.frame.width : 0
-    terminal.frame.origin = NSPoint(x: terminalX, y: band)
+    terminal.frame.origin = NSPoint(x: terminalX, y: 0)
   }
 
   private func editorContentSize(_ g: FaceGeometry.Resolved) -> CGSize {
-    CGSize(width: g.editorWidth, height: max(0, bounds.height - FaceGeometry.focusBand))
+    CGSize(width: g.editorWidth, height: bounds.height)
   }
 
   private func terminalContentSize(_ g: FaceGeometry.Resolved) -> CGSize {
-    let height = max(0, bounds.height - FaceGeometry.focusBand)
-    if g.terminalWidth > 0 { return CGSize(width: g.terminalWidth, height: height) }
-    return lastVisibleTerminalSize ?? CGSize(width: g.contentWidth, height: height)
+    if g.terminalWidth > 0 { return CGSize(width: g.terminalWidth, height: bounds.height) }
+    return lastVisibleTerminalSize ?? CGSize(width: g.contentWidth, height: bounds.height)
   }
 
   private func setSize(_ view: NSView, _ size: CGSize) {
@@ -331,25 +327,55 @@ final class TabFacesView: NSView {
   }
 }
 
-/// 面の clip の器。上辺の焦点帯（分割中かつ焦点の面はその面のキー色、それ以外は透明）を描く。
+/// 面の clip の器。中身を面いっぱいに置き、分割中の焦点の印（面のキー色の細い帯）を中身の上辺へ重ねる——
+/// 印は場所を取らないので、焦点が移っても中身は動かない。
 private final class FaceClipView: NSView {
-  var bandColor: NSColor? {
-    didSet { if bandColor != oldValue { needsDisplay = true } }
+  private let mark = FocusMarkView()
+  /// 印の色。nil なら印を出さない。
+  var markColor: NSColor? {
+    get { mark.color }
+    set { mark.color = newValue }
   }
 
-  override init(frame: NSRect) {
-    super.init(frame: frame)
+  init(content: NSView) {
+    super.init(frame: .zero)
     wantsLayer = true
     clipsToBounds = true
-    layerContentsRedrawPolicy = .duringViewResize
+    content.autoresizingMask = []
+    addSubview(content)
+    addSubview(mark)
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
   override var isFlipped: Bool { true }
 
+  override func setFrameSize(_ newSize: NSSize) {
+    super.setFrameSize(newSize)
+    mark.frame = NSRect(x: 0, y: 0, width: newSize.width, height: FaceGeometry.focusBand)
+  }
+}
+
+/// 焦点の印。中身より手前に重なるが、クリックやドラッグは中身へ通す。
+private final class FocusMarkView: NSView {
+  var color: NSColor? {
+    didSet {
+      guard color != oldValue else { return }
+      isHidden = color == nil
+      needsDisplay = true
+    }
+  }
+
+  override init(frame: NSRect) {
+    super.init(frame: frame)
+    wantsLayer = true
+    isHidden = true
+  }
+  required init?(coder: NSCoder) { fatalError("not supported") }
+
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
   override func draw(_ dirtyRect: NSRect) {
-    guard let bandColor else { return }
-    bandColor.setFill()
-    NSRect(x: 0, y: 0, width: bounds.width, height: FaceGeometry.focusBand).fill()
+    color?.setFill()
+    bounds.fill()
   }
 }

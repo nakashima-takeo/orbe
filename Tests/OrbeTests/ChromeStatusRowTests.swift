@@ -55,11 +55,10 @@ final class ChromeStatusRowTests: OrbeTestCase {
     let host = try rootHost(wc)
     host.layoutSubtreeIfNeeded()
 
-    // chrome はターミナル本文（SurfaceView）より上に位置し、重ならない。本文は chrome の真下の
-    // 面の焦点帯（透明・常に確保）の下から始まる。
+    // chrome はターミナル本文（SurfaceView）より上に位置し、重ならない。本文は chrome の真下から始まる。
     let surface = try XCTUnwrap(findAll(SurfaceView.self, in: host).first, "アクティブタブの surface")
     let surfaceInHost = surface.convert(surface.bounds, to: host)
-    let contentTop = Chrome.barHeight + FaceGeometry.focusBand
+    let contentTop = Chrome.barHeight
     let expectedTop = host.isFlipped ? contentTop : host.bounds.height - contentTop
     let surfaceTop = host.isFlipped ? surfaceInHost.minY : surfaceInHost.maxY
     XCTAssertEqual(surfaceTop, expectedTop, accuracy: 1, "本文は chrome の真下から始まる＝chrome は常時占有")

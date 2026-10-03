@@ -283,7 +283,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
       tab.surface.bounds.size,
       CGSize(
         width: ((content.width - FaceGeometry.spine) / 2).rounded(),
-        height: content.height - FaceGeometry.focusBand), "端末は分割後の面の寸法")
+        height: content.height), "端末は分割後の面の寸法")
   }
 
   // MARK: - 器に包まれた端末
@@ -309,8 +309,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
     let content = wc.model.content.bounds.size
     XCTAssertEqual(
       tab.surface.bounds.size,
-      CGSize(
-        width: content.width - FaceGeometry.spine, height: content.height - FaceGeometry.focusBand),
+      CGSize(width: content.width - FaceGeometry.spine, height: content.height),
       "戻したら今の窓幅で置き直す")
   }
 

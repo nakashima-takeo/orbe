@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// エディター面（⌘E）のトークンが所有する自己完結ファイル（`DesignTokens+Glass.swift` と同型）。
-/// 面のキー色は「どの面に居るか」を示す識別色で、背の印・分割中の焦点帯・位置ドットが共有する。
+/// 面のキー色は「どの面に居るか」を示す識別色で、背の印・分割中の焦点の印・位置ドットが共有する。
 extension Theme.Color {
   /// エディター面のキー色（amber）。
   static let faceEditor = editorDyn(light: 0xbf6a2e, dark: 0xe0a97c)
