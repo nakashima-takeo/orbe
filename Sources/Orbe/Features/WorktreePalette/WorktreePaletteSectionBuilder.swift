@@ -101,7 +101,7 @@ enum WorktreePaletteSectionBuilder {
           .remoteBranch(
             name: branch.name, existingWorktree: input.worktrees.first { $0.branch == local }?.path)
         ),
-        enter: .checkout(branch.name))
+        enter: .trackRemote(remote: branch.name, local: local))
     }
   }
 

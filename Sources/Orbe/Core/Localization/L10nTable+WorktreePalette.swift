@@ -42,6 +42,10 @@ extension L10n {
       "なし — 新しいブランチは切らず、%1$@ を worktree にする",
       "None — no new branch; makes %1$@ a worktree"
     ),
+    .worktreePaletteBaseNoneTrackRemote: (
+      "なし — %1$@ を追跡するブランチ %2$@ を作り、worktree にする",
+      "None — creates branch %2$@ tracking %1$@ and makes it a worktree"
+    ),
     .worktreePaletteBaseNoneClean: (
       "なし — 作らずに、要らなくなった worktree を掃除する",
       "None — cleans up worktrees you no longer need"

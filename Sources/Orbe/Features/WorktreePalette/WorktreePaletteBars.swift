@@ -87,14 +87,18 @@ struct WorktreePaletteBars: View {
     case .openWorktree: .worktreePaletteBaseNoneWorktree
     case .openDirectory: .worktreePaletteBaseNoneDirectory
     case .checkout: .worktreePaletteBaseNoneCheckout
+    case .trackRemote: .worktreePaletteBaseNoneTrackRemote
     case .clean: .worktreePaletteBaseNoneClean
     case .create: nil
     }
   }
 
   private func noteSlots(_ enter: WorktreePaletteEnter) -> [WorktreePaletteEnterLine.Slot] {
-    if case .checkout(let name) = enter { return [.name(name)] }
-    return []
+    switch enter {
+    case .checkout(let name): [.name(name)]
+    case .trackRemote(let remote, let local): [.name(remote), .name(local)]
+    case .openWorktree, .openDirectory, .create, .clean: []
+    }
   }
 }
 

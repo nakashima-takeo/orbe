@@ -78,6 +78,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case worktreePaletteBaseNoneWorktree
   case worktreePaletteBaseNoneDirectory
   case worktreePaletteBaseNoneCheckout
+  case worktreePaletteBaseNoneTrackRemote
   case worktreePaletteBaseNoneClean
   case worktreePaletteEnterOpen
   case worktreePaletteEnterCheckout

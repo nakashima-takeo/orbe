@@ -120,7 +120,7 @@ struct WorktreePaletteRow: View {
       WorktreePaletteTag(text: l10n.string(.worktreePaletteCurrentTag))
     } else if let sync = item.sync {
       WorktreePaletteSyncPills(sync: sync)
-    } else if case .checkout = item.enter {
+    } else if item.glyph == .localBranch || item.glyph == .remoteBranch {
       WorktreePaletteTruncatingSlot(l10n.string(.worktreePaletteWorktreeCheckout)) {
         Text($0)
           .font(Font.theme.meta)

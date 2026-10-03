@@ -72,8 +72,10 @@ enum WorktreePaletteEnter: Equatable {
   case openWorktree(String)
   /// 非 git のディレクトリをそのまま開く（パス）。
   case openDirectory(String)
-  /// 既存のブランチを worktree にして開く（ブランチ名）。
+  /// 既存のローカルブランチを worktree にして開く（ブランチ名）。
   case checkout(String)
+  /// リモートブランチを追跡するローカルブランチを作り、worktree にして開く（リモートの名前・作るローカル名）。
+  case trackRemote(remote: String, local: String)
   /// 新しいブランチを、ベースのバーで選んだベースから作って開く（ブランチ名）。
   case create(String)
   /// clean 画面へ入る。

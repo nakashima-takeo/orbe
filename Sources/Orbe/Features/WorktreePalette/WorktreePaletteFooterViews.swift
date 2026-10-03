@@ -155,7 +155,7 @@ struct WorktreePaletteListFooter: View {
     case .openWorktree(let target), .openDirectory(let target):
       WorktreePaletteEnterLine(
         template: l10n.string(.worktreePaletteEnterOpen), slots: [.name(target), agent])
-    case .checkout(let target):
+    case .checkout(let target), .trackRemote(let target, _):
       WorktreePaletteEnterLine(
         template: l10n.string(.worktreePaletteEnterCheckout), slots: [.name(target), agent])
     case .create(let target):
