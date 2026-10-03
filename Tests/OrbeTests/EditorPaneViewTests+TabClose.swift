@@ -3,8 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// ファイルタブの右端の枠——アクティブは × を常に、それ以外はタブにポインタがあるときだけ出し、未保存はタブにも
-/// × にもポインタが無い間だけ × の代わりに ● を出す。× にポインタを乗せると枠に地が付いて × が明るくなり、
+/// ファイルタブの右端の枠——VS Code のタブと同じく、アクティブは × を常に、それ以外はタブにポインタがあるときだけ
+/// 出し、未保存は × 自体にポインタがあるときのほかは × の代わりに ● を出す。× にポインタを乗せると枠に地が付いて × が明るくなり、
 /// 20 四方の枠のどこを押しても閉じる。
 ///
 /// 壊れると何が起きるか。どのタブを閉じられるのか見えない（アクティブにも × が無い）。小さな × を外して隣のタブを
@@ -67,7 +67,7 @@ final class EditorPaneViewTabCloseTests: OrbeTestCase {
     let cases: [(pointer: NSPoint, expected: [SlotLook])] = [
       (away, [.dot, .empty, .close]),  // ポインタなし
       (onTab(1), [.dot, .close, .close]),  // 保存済みのタブ b の上
-      (onTab(0), [.close, .empty, .close]),  // 未保存のタブ a の上
+      (onTab(0), [.dot, .empty, .close]),  // 未保存のタブ a の上（● のまま）
       (slot(1), [.dot, .closeHovered, .close]),  // b の × の上
       (slot(0), [.closeHovered, .empty, .close]),  // a の × の上
       (slot(2), [.dot, .empty, .closeHovered]),  // アクティブの c の × の上

@@ -203,7 +203,7 @@ extension Theme.Layout {
 
 extension Theme.Radius {
   /// ファイルタブの × の枠。
-  static let editorTabClose: CGFloat = 5
+  static let editorTabClose: CGFloat = 6
 }
 
 extension Theme.Opacity {

@@ -94,7 +94,8 @@ extension DesignFlowSnapshotTests {
   }
 
   /// ファイルタブの右端の枠: ポインタなし（アクティブは ×・未保存は ●）→ 保存済みのタブの上（× が出る）→ 未保存の
-  /// タブの上（● が × に替わる）→ × の上（枠の地と明るい ×）、最後に同じ状態を light で。ホバーは窓の中の面に
+  /// タブの上（● のまま）→ 未保存のタブの ● の上（× に替わり枠に地）→ 保存済みのタブの × の上（枠の地と明るい ×）、
+  /// 最後に同じ状態を light で。ホバーは窓の中の面に
   /// 合成のポインタで起こすので、reveal と同じく面を付けた窓の中でそのまま描く。
   func testEditorTabClose() throws {
     let scene = try editorScene()
@@ -110,6 +111,7 @@ extension DesignFlowSnapshotTests {
         "pointer_on_dirty_tab",
         { self.movePointer(pane, to: NSPoint(x: slot(0).x - 30, y: slot(0).y)) }
       ),
+      ("pointer_on_dirty_close", { self.movePointer(pane, to: slot(0)) }),
       ("pointer_on_close", { self.movePointer(pane, to: slot(1)) }),
       ("pointer_on_close_light", { pane.window?.appearance = NSAppearance(named: .aqua) }),
     ]

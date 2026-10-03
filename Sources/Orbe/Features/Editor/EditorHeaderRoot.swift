@@ -94,17 +94,17 @@ struct FileTabView: View {
   }
 }
 
-/// タブの右端の枠に出すもの。アクティブは × を常に、それ以外はタブにポインタがあるときだけ出し（VS Code のタブと
-/// 同じ）、未保存はタブにも × にもポインタが無い間だけ × の代わりに ● を出す。
+/// タブの右端の枠に出すもの。VS Code のタブと同じく、アクティブは × を常に、それ以外はタブにポインタがあるときだけ
+/// 出し、未保存は × 自体にポインタがあるときのほかは × の代わりに ● を出す。
 private enum FileTabMark {
   case none
   case dirty
   case close
 
-  init(tab: EditorShellModel.FileTab, pointerInside: Bool) {
-    if tab.isDirty && !pointerInside {
+  init(tab: EditorShellModel.FileTab, tabHovered: Bool, closeHovered: Bool) {
+    if tab.isDirty && !closeHovered {
       self = .dirty
-    } else if tab.isActive || pointerInside {
+    } else if tab.isActive || tabHovered || closeHovered {
       self = .close
     } else {
       self = .none
@@ -124,7 +124,7 @@ private struct FileTabCloseSlot: View {
 
   var body: some View {
     ZStack {
-      switch FileTabMark(tab: tab, pointerInside: tabHovered || hovering) {
+      switch FileTabMark(tab: tab, tabHovered: tabHovered, closeHovered: hovering) {
       case .none: EmptyView()
       case .dirty:
         Circle()
