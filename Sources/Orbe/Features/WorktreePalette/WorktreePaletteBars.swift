@@ -66,9 +66,10 @@ struct WorktreePaletteBars: View {
 
   /// 作成行以外の選択中に出す「なし — …」。行が無ければ何も言わない。
   @ViewBuilder private var baseNote: some View {
-    if let enter = model.selectedItem?.enter, let key = noteKey(enter) {
+    if let note = model.selectedItem?.enter.baseNote {
       WorktreePaletteEnterLine(
-        template: l10n.string(key), slots: noteSlots(enter), leadsWithReturn: false
+        template: l10n.string(note.key), slots: note.values.map { .name($0) },
+        leadsWithReturn: false
       )
       .padding(.horizontal, Theme.Space.beat)
       .padding(.vertical, 5)
@@ -78,26 +79,6 @@ struct WorktreePaletteBars: View {
             Color.theme.borderInk.opacity(0.18),
             style: StrokeStyle(lineWidth: Theme.Stroke.hairline, dash: [3, 3]))
       )
-    }
-  }
-
-  /// 作成行は選択肢のボタンを出すので言葉を持たない。
-  private func noteKey(_ enter: WorktreePaletteEnter) -> L10nKey? {
-    switch enter {
-    case .openWorktree: .worktreePaletteBaseNoneWorktree
-    case .openDirectory: .worktreePaletteBaseNoneDirectory
-    case .checkout: .worktreePaletteBaseNoneCheckout
-    case .trackRemote: .worktreePaletteBaseNoneTrackRemote
-    case .clean: .worktreePaletteBaseNoneClean
-    case .create: nil
-    }
-  }
-
-  private func noteSlots(_ enter: WorktreePaletteEnter) -> [WorktreePaletteEnterLine.Slot] {
-    switch enter {
-    case .checkout(let name): [.name(name)]
-    case .trackRemote(let remote, let local): [.name(remote), .name(local)]
-    case .openWorktree, .openDirectory, .create, .clean: []
     }
   }
 }

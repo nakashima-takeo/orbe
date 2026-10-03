@@ -80,6 +80,20 @@ enum WorktreePaletteEnter: Equatable {
   case create(String)
   /// clean 画面へ入る。
   case clean
+
+  /// ベースのバーの「なし — …」の文言キーと、差し込む値（テンプレートの位置順）。作成行は選択肢の
+  /// ボタンを出すので言葉を持たない。
+  var baseNote: (key: L10nKey, values: [String])? {
+    switch self {
+    case .openWorktree: (.worktreePaletteBaseNoneWorktree, [])
+    case .openDirectory: (.worktreePaletteBaseNoneDirectory, [])
+    case .checkout(let name): (.worktreePaletteBaseNoneCheckout, [name])
+    case .trackRemote(let remote, let local):
+      (.worktreePaletteBaseNoneTrackRemote, [remote, local])
+    case .clean: (.worktreePaletteBaseNoneClean, [])
+    case .create: nil
+    }
+  }
 }
 
 /// 見出し（選択対象外）と行の束。
