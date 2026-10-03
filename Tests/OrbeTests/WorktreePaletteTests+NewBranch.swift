@@ -173,6 +173,46 @@ extension WorktreePaletteTests {
     XCTAssertFalse(p.isLocked)
   }
 
+  /// 答えを待っている間（直前の答えで出ている作成行）は、作成行をクリックしても作らない。答えが届いた後の
+  /// クリックで作る。
+  func testTapOnTheCreateRowBeforeTheAnswerDoesNotCreate() throws {
+    let p = makeCreatableModel()
+    var executed: [WorktreePaletteDestination] = []
+    p.onExecute = { executed.append($0) }
+    type("feat/a", into: p)
+    type("feat/ab", into: p, valid: nil)
+    let row = try XCTUnwrap(p.items.firstIndex { $0.action == .createBranch(name: "feat/ab") })
+
+    p.activate(at: row)
+    XCTAssertTrue(executed.isEmpty, "まだ git が有効と答えていない名前では作らない")
+
+    p.applyBranchNameCheck("feat/ab", isValid: true)
+    p.activate(at: row)
+    XCTAssertEqual(executed, [.newBranch(name: "feat/ab", base: .ref("origin/release/0.8"))])
+  }
+
+  /// `-` で始まる名前（`-D` など）は git に問わずに無効とし、作成行を出さない。直前の名前が有効でも、
+  /// ↵ でもクリックでも作成に進まない——作成で `git worktree add -b` のオプションとして渡り、ベースの
+  /// ブランチを消しうるため。
+  func testNameStartingWithADashNeverCreates() {
+    let p = makeCreatableModel()
+    var executed: [WorktreePaletteDestination] = []
+    p.onExecute = { executed.append($0) }
+    type("D", into: p)
+    XCTAssertEqual(p.items.first?.action, .createBranch(name: "D"), "前提: 直前の名前では作成行が出ている")
+    var asked: [String] = []
+    p.onCheckBranchName = { asked.append($0) }
+
+    p.query = "-D"
+    p.onQueryChanged()
+
+    XCTAssertEqual(asked, [], "git に問わない")
+    XCTAssertFalse(p.items.contains { $0.action == .createBranch(name: "-D") })
+    p.activate()
+    p.activate(at: 0)
+    XCTAssertEqual(executed, [], "作成に進まない")
+  }
+
   /// 答えを待っていても、一致する既存の行を選んでいれば ↵ はすぐ効く。
   func testEnterOnAnExistingMatchDoesNotWaitForTheAnswer() {
     let p = makeCreatableModel()
