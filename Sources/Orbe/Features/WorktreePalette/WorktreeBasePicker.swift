@@ -4,9 +4,11 @@ import SwiftUI
 /// 中身（`query`）だけをこの型が持つ。
 @Observable final class WorktreeBasePickerModel {
   private let candidates: [WorktreeBaseCandidate]
-  /// 絞り込みの入力。変わるたびにカーソルを先頭へ戻す。
+  /// 絞り込みの入力。値が変わったときだけカーソルを先頭へ戻す——入力欄は ↵ の時点で同じ値を書き戻すので、
+  /// 代入のたびに戻すと ↑↓ で動かした候補ではなく先頭の候補に決まる。
   var query = "" {
     didSet {
+      guard query != oldValue else { return }
       refreshItems()
       selected = 0
     }
