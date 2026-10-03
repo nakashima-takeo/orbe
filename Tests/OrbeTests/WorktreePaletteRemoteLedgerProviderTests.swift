@@ -9,6 +9,7 @@ import XCTest
 /// - 問い合わせが揃う前に撃たれて失敗し、clean の PR の事実が取得中のまま固まる。
 /// - 同じ名前を何度も問い合わせる。
 /// - 開くたびに、画面に出さない open な Issue・PR の一覧まで取りに行き、gh の往復と API の枠を使う。
+/// - gh の確認が最後に着地した回に描き直さず、clean が「確認中」のまま固まる。
 /// - 確かめられない答えが焼かれ、開き直しても直らない。
 /// - clean が他人の fork の PR で行を塞ぐ、または自分の PR（base を追跡する行・fork の運用）を
 ///   見落として、レビュー中の worktree を安全群に入れる。
@@ -215,6 +216,33 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
     XCTAssertEqual(calls("R"), ["me/r"])
     XCTAssertEqual(calls("H"), ["feat"])
     XCTAssertEqual(calls("U"), [], "それ以外の問い合わせは撃たない")
+  }
+
+  /// gh が使えると分かったのが最後（fetch も分類も済んだ後）で、続けて問い合わせるものが何も無い回でも、
+  /// clean は待機をやめる。
+  func testCleanStopsWaitingWhenGitHubTurnsOutReadyLast() throws {
+    addRemote("origin", "me/r")
+    try answer("me/r", found: "me/r")
+    XCTAssertTrue(git(["remote", "add", "mirror", "/srv/mirror.git"]).isSuccess)
+    XCTAssertTrue(git(["update-ref", "refs/remotes/mirror/side", "HEAD"]).isSuccess)
+    let worktree = try addWorktree("wt-side", branch: "side")
+    XCTAssertTrue(run(["branch", "-q", "--set-upstream-to=mirror/side"], in: worktree).isSuccess)
+    let (_, first) = makeProvider()
+    first.load()
+    XCTAssertTrue(pump({ first.remoteLedger != .pending && !self.originUnverified(first) }))
+
+    try gate("auth")
+    let (model, provider) = makeProvider()
+    provider.load()
+    XCTAssertTrue(
+      pump({
+        provider.remoteFetchLanded && model.classification != nil && provider.probingPaths.isEmpty
+      }), "前提: gh の確認の他はすべて着地した")
+    XCTAssertTrue(model.classificationPending, "前提: gh の確認を待っている")
+
+    try ungate("auth")
+    XCTAssertTrue(pump({ !model.classificationPending }), "gh の確認が着地したら待機をやめる")
+    XCTAssertEqual(calls("H"), [], "前提: 問い合わせるブランチの PR は無い")
   }
 
   /// GitHub でない remote へ push する worktree は、PR の事実を「確かめて 0 件」として問い合わせない。
