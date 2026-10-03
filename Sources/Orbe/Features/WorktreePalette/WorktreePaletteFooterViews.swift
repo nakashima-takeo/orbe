@@ -1,6 +1,7 @@
 import SwiftUI
 
-// worktree パレットのフッターの部品。一覧モードと最新化モードが共有する。
+// worktree パレットのフッターの部品。busy 表示とキーヒントは全モードが共有し、↵ の説明は一覧（`EnterLine`）と
+// 最新化（`LaunchLine`）で描き方が分かれる。
 
 /// フッターの busy 表示（作成中・最新化中）。左端の `↵` を出さず、gh「読み込み中…」行と同語彙の
 /// working スピナ＋muted ラベルのみ。
@@ -16,8 +17,8 @@ struct WorktreePaletteBusyLabel: View {
   }
 }
 
-/// フッターの実行説明。`↵ <target> <前置> <agent> を新しいタブで起動` の骨を 1 つの Text に連結して
-/// 単位で truncate する（狭幅で個々に折り返して崩れるのを防ぐ）。
+/// 最新化画面のフッターの実行説明。`↵ <target> <前置> <agent> を新しいタブで起動` の骨を 1 つの Text に
+/// 連結して単位で truncate する（狭幅で個々に折り返して崩れるのを防ぐ）。
 struct WorktreePaletteLaunchLine: View {
   let target: String
   let preposition: L10nKey

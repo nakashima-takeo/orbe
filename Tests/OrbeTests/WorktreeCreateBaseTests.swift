@@ -211,10 +211,6 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
   }
 
   /// provider を起こし、git レーンの着地（列挙 → 行の組み直し）まで進める。
-  ///
-  /// **待つのは「行が組まれたこと」まで。** gh レーンの着地でも描き直しは走って `hasLoadedOnce` が
-  /// 立つので、旗だけを待つと列挙前（ブランチ 0 件・既定ブランチ未解決）の provider を掴んだまま
-  /// Enter を撃つ回が混ざり、着地を待つ経路が待たずに通る。
   func start(gitHub: GitHubCLI = .shared) throws -> WorktreePaletteDataProvider {
     palette = WorktreePaletteModel()
     let provider = WorktreePaletteDataProvider(

@@ -8,7 +8,7 @@ enum GitHubAvailability: Equatable {
   case ghMissing
   /// gh はあるが認証情報を持っていない。
   case ghUnauthed
-  /// 非 GitHub リポジトリ（origin が github.com でない）。Issues/PR セクションは出さない。
+  /// 非 GitHub リポジトリ（origin が github.com でない）。gh には問い合わせない。
   case notGitHub
 }
 
@@ -53,7 +53,8 @@ final class GitHubCLI {
 
   /// 認証情報の有無で判定する引数。`gh auth token` は keyring/config/`GH_TOKEN` を読むだけで
   /// ネットに触らない。`gh auth status` はトークンを GitHub API で検証するため、疎通不能を未認証と
-  /// 誤判定し、キャッシュ済みの行を「gh 未認証」の誘導情報行に置き換えてしまう。
+  /// 誤判定する。未認証と読まれたリポジトリでは PR を確かめないまま「0 件」と読まれ、PR の有無に頼る
+  /// 安全確認（worktree の掃除）が素通りする。
   /// `--hostname` は `originIsGitHub` が真のときだけ probe される前提に合わせ、実際に取得しに行く
   /// ホストを名指しする（default host が Enterprise の環境でも判定がずれない）。
   static let authProbeArguments = ["auth", "token", "--hostname", "github.com"]

@@ -97,7 +97,7 @@ extension GitRepo {
     }
   }
 
-  /// 既定ブランチ（issue の新規 worktree の base）。解決不能なら `main` へフォールバック。
+  /// 既定ブランチ。解決不能なら `main` へフォールバック。
   func defaultBranch(completion: @escaping (String) -> Void) {
     runner.run(
       ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], cwd: root

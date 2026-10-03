@@ -9,9 +9,9 @@ extension WindowController {
     let workspaceId: Int
   }
 
-  /// 新タブを 1 枚起こす唯一の経路。GUI（Cmd+T・エージェント起動・worktree パレット・workspace 作成）と
-  /// 制御 API（spawn / spawn_agent / resume_agent）が同じ本体を通る——起動のされ方が経路ごとに
-  /// 割れると、その差は「GUI からは動くが CLI からは動かない」という形で後から必ず出る。
+  /// 新タブを 1 枚起こす唯一の経路。GUI（初回起動・エージェント起動・worktree パレット（Cmd+T・タブ行の
+  /// 「＋」）・workspace 作成）と制御 API（spawn / spawn_agent / resume_agent）が同じ本体を通る——起動の
+  /// され方が経路ごとに割れると、その差は「GUI からは動くが CLI からは動かない」という形で後から必ず出る。
   ///
   /// `cwd` に nil を渡すと対象 workspace のアクティブタブの cwd → その workspace の rootPath へ落ちる
   /// （`newTabCwd(inWorkspaceAt:)`）。戻り値は生えたタブ・workspace の id で、

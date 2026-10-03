@@ -71,7 +71,7 @@ extension WindowController {
   }
 
   /// worktree パレットで新しいブランチを作れたときのベースを、その workspace の「前回」として覚える
-  /// （workspace の永続値を書く唯一の窓口。パレットとデータ供給には触らせない）。workspace が既に
+  /// （実行時にこの値を書く唯一の窓口。パレットとデータ供給には触らせない）。workspace が既に
   /// 閉じられていたら書かない。
   func rememberWorktreeBase(_ base: String, in workspace: Workspace) {
     guard workspaces.contains(where: { $0 === workspace }) else { return }

@@ -4,7 +4,7 @@ import XCTest
 
 /// workspace の「前回のベース」（`lastWorktreeBase`）の永続。壊れると、再起動のたびに作成行の初期の
 /// ベースが既定に戻る・読めない値 1 つで workspace ごと失う、のどちらかになる。
-final class WorkspaceLastWorktreeBaseTests: OrbeTestCase {
+final class WorkspaceWorktreeBasePersistenceTests: OrbeTestCase {
 
   func testRoundTripThroughFile() {
     let original = WorkspacesFile(
