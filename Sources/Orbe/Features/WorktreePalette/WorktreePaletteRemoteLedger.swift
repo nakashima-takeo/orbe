@@ -48,20 +48,6 @@ enum WorktreePaletteRemoteLedger: Equatable {
       return repositories[name] ?? .unverified
     }
 
-    /// 既定 remote の正式名を確かめられない（一覧の紐付けを省く判定）。
-    var defaultRemoteUnverified: Bool {
-      repository(forPushRemote: nil) == .unverified
-    }
-
-    /// remote 追跡ブランチ（`origin/feat/x`）。remote 名は台帳の名前で切り分ける（`/` を含む remote 名も
-    /// あるので、一致する最も長い名前を採る）。どの remote にも一致しなければ `notGitHub`。
-    func remoteBranch(_ name: String) -> WorktreePaletteRowIdentity {
-      guard let repositories else { return .unverified }
-      let remote = repositories.keys.filter { name.hasPrefix($0 + "/") }.max { $0.count < $1.count }
-      guard let remote, let repository = repositories[remote] else { return .notGitHub }
-      return Self.identity(repository, branch: String(name.dropFirst(remote.count + 1)))
-    }
-
     static func identity(_ repository: WorktreePaletteRemoteRepository, branch: String)
       -> WorktreePaletteRowIdentity
     {
@@ -123,10 +109,5 @@ struct WorktreePaletteRowIdentities {
   func local(_ name: String) -> WorktreePaletteRowIdentity {
     WorktreePaletteRemoteLedger.Resolved.identity(
       resolved.repository(forPushRemote: localBranches[name]?.pushRemote), branch: name)
-  }
-
-  /// remote 追跡ブランチ（`origin/feat/x`）。
-  func remote(_ name: String) -> WorktreePaletteRowIdentity {
-    resolved.remoteBranch(name)
   }
 }

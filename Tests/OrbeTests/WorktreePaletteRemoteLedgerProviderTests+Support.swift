@@ -26,7 +26,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
   /// 台帳が確定し、origin を確かめられない。
   func originUnverified(_ provider: WorktreePaletteDataProvider) -> Bool {
     guard case .settled(let resolved) = provider.remoteLedger else { return false }
-    return resolved.defaultRemoteUnverified
+    return resolved.repository(forPushRemote: nil) == .unverified
   }
 
   /// 偽 `gh` を PATH に置く。認証確認は通り、正式名は `resolve/<owner>__<name>` の中身を返し（無ければ

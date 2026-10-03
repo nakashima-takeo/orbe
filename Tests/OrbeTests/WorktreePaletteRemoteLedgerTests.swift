@@ -2,13 +2,13 @@ import XCTest
 
 @testable import Orbe
 
-/// remote の台帳（`WorktreePaletteRemoteLedger`）と、行の同一性を求める口（`WorktreePaletteRowIdentities`）。番号チップ・
-/// PR 行の行き先・clean の PR の突き合わせはすべてここを通る。
+/// remote の台帳（`WorktreePaletteRemoteLedger`）と、行の同一性を求める口（`WorktreePaletteRowIdentities`）。clean の
+/// PR の突き合わせはここを通る。
 ///
-/// 確定の判定が甘いと、正式名が分からないうちに行が「GitHub の行でない」と読まれ、チップが付かないまま
-/// PR 行がブラウザに倒れ、clean ではレビュー中の PR を持つ worktree が安全群に入りうる。確かめられない
-/// remote を「GitHub でない」と読むと、clean が PR の事実を「確かめて 0 件」と読む。同一性の求め方が狂うと、
-/// 他人の fork の PR が自分の行に紐づくか、自分の PR が自分の行から外れる。
+/// 確定の判定が甘いと、正式名が分からないうちに行が「GitHub の行でない」と読まれ、clean ではレビュー中の PR を
+/// 持つ worktree が安全群に入りうる。確かめられない remote を「GitHub でない」と読むと、clean が PR の事実を
+/// 「確かめて 0 件」と読む。同一性の求め方が狂うと、他人の fork の PR が自分の行に紐づくか、自分の PR が
+/// 自分の行から外れる。
 final class WorktreePaletteRemoteLedgerTests: OrbeTestCase {
 
   private let mine = GitHubRepoName(nameWithOwner: "me/r")
@@ -104,24 +104,5 @@ final class WorktreePaletteRemoteLedgerTests: OrbeTestCase {
     XCTAssertEqual(identities.local("b"), .unverified)
     XCTAssertEqual(identities.local("c"), .unverified, "URL を直接書いた remote")
     XCTAssertEqual(identities.local("d"), .unverified, "存在しない remote")
-  }
-
-  // MARK: - remote 追跡ブランチの同一性
-
-  /// `<remote>/<branch>` を台帳の remote 名で切り分ける。`/` を含む remote 名は最も長く一致するものを採る。
-  func testRemoteBranchIsSplitByTheLongestKnownRemoteName() {
-    let team = GitHubRepoName(nameWithOwner: "team/r")
-    let ledger = settled([
-      "origin": .github(base), "team": .github(team), "team/me": .github(mine),
-      "gone": .unverified,
-    ])
-    XCTAssertEqual(
-      ledger.remoteBranch("origin/feat/x"), .ref(GitHubBranchRef(repo: base, branch: "feat/x")))
-    XCTAssertEqual(
-      ledger.remoteBranch("team/me/feat"), .ref(GitHubBranchRef(repo: mine, branch: "feat")))
-    XCTAssertEqual(
-      ledger.remoteBranch("team/feat"), .ref(GitHubBranchRef(repo: team, branch: "feat")))
-    XCTAssertEqual(ledger.remoteBranch("gone/feat"), .unverified)
-    XCTAssertEqual(ledger.remoteBranch("unknown/feat"), .notGitHub, "台帳に無い remote")
   }
 }
