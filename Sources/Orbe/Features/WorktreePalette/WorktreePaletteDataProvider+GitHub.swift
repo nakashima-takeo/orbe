@@ -11,12 +11,13 @@ extension WorktreePaletteDataProvider {
       gitHub.probe(cwd: repo.root, isGitHub: isGitHub) { [weak self] state in
         guard let self else { return }
         self.probedGitHubState = state
-        guard state == .ready else {
-          self.rebuild()
-          return
+        if state == .ready {
+          self.resolveRemoteRepositories(repo)
+          self.loadBranchPullRequests(repo)
         }
-        self.resolveRemoteRepositories(repo)
-        self.loadBranchPullRequests(repo)
+        // 状態を問わず描き直す——clean の PR の事実と待機表示は probe の結果から導かれるので、`.ready` で
+        // 着地しても、続く問い合わせが何も撃たない回（GitHub のブランチが無い等）では他に描き直す契機が無い。
+        self.rebuild()
       }
     }
   }
