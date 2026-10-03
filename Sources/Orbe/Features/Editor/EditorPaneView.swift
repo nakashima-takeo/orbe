@@ -48,9 +48,6 @@ final class EditorPaneView: NSView {
   let projectSearch: ProjectSearch
   /// 検索結果の列。検索パネルが隠れている間も持ち、出し直すたびに作り直さない。
   let searchResults: RowList<SearchResultsSource>
-  /// アウトラインの状態（pane ごと）と、その行の列（絞り込みの欄つき。閉じている間も持つ）。
-  let outline = EditorOutline()
-  let outlineList: OutlineListView
   /// F4 / ⇧F4 を拾うイベントの監視（窓に付いている間だけ）。
   var stepKeyMonitor: Any?
   /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
@@ -73,12 +70,10 @@ final class EditorPaneView: NSView {
     let searchResults = RowList(
       source: SearchResultsSource(search: projectSearch), rowHeight: Theme.Layout.editorSearchRow)
     self.searchResults = searchResults
-    let outlineList = OutlineListView(outline: outline)
-    self.outlineList = outlineList
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
         shell: shell, tree: tree, search: projectSearch, searchResults: searchResults,
-        outline: outline, outlineList: outlineList, sidebar: sidebar,
+        sidebar: sidebar,
         localization: localization, fontResolver: fontResolver))
     headerHost = NSHostingView(
       rootView: EditorHeaderRoot(
@@ -106,7 +101,6 @@ final class EditorPaneView: NSView {
     wireShell()
     wireTree()
     wireProjectSearch()
-    wireOutline()
     observeSidebar()
     registerForDraggedTypes([.fileURL])
   }
@@ -135,7 +129,7 @@ final class EditorPaneView: NSView {
   private func installRoots() {
     sideHost.rootView = EditorSideRoot(
       shell: shell, tree: tree, search: projectSearch, searchResults: searchResults,
-      outline: outline, outlineList: outlineList, sidebar: sidebar,
+      sidebar: sidebar,
       localization: localization, fontResolver: fontResolver)
     headerHost.rootView = EditorHeaderRoot(
       shell: shell, localization: localization, fontResolver: fontResolver)
@@ -305,7 +299,6 @@ final class EditorPaneView: NSView {
     if let previous = self.document {
       previous.surface.view.removeFromSuperview()
       observe(previous, false)
-      previous.wantsOutline = false
       previous.surface.setHighlights([], for: .findMatch)
       previous.surface.setHighlights([], for: .currentFindMatch)
     }
@@ -324,8 +317,6 @@ final class EditorPaneView: NSView {
     search.bind(document)
     occurrences.bind(document)
     if let document { projectSearch.documentDidShow(document) }
-    outline.bind(document)
-    updateOutlineWant()
     pushFindGround()
     emptyHost.isHidden = document != nil
     prepareDocumentIfVisible()
@@ -359,7 +350,6 @@ final class EditorPaneView: NSView {
     let live = window != nil && !isHiddenOrHasHiddenAncestor
     tree.isLive = live
     projectSearch.isLive = live
-    updateOutlineWant()
     if live { tab?.editor.prepareSurfaces() }
     prepareDocumentIfVisible()
   }

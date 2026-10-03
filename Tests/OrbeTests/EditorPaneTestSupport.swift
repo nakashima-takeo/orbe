@@ -105,7 +105,7 @@ extension OrbeTestCase {
   }
 }
 
-/// 面の描画 1 枚。色を x, y で引く（y 省略はツリーの下の空き＝根の行より下、下端の閉じたアウトラインの見出しより上）。
+/// 面の描画 1 枚。色を x, y で引く（y 省略はツリーの下の空き＝根の行より下）。
 struct PaneProbe {
   let rep: NSBitmapImageRep
   let scale: CGFloat
@@ -115,7 +115,7 @@ struct PaneProbe {
     rep = try XCTUnwrap(pane.bitmapImageRepForCachingDisplay(in: pane.bounds))
     pane.cacheDisplay(in: pane.bounds, to: rep)
     scale = CGFloat(rep.pixelsWide) / pane.bounds.width
-    bottom = pane.bounds.height - (Theme.Stroke.hairline + Theme.Layout.editorSectionHeader) - 12
+    bottom = pane.bounds.height - 12
   }
 
   func rgb(_ x: CGFloat, y: CGFloat? = nil) throws -> [Int] {

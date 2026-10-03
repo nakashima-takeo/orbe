@@ -66,7 +66,6 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     try renderEditorSnapshots(dir: dir)
     try renderEditorShellSnapshots(dir: dir)
     try renderEditorSearchSnapshots(dir: dir)
-    try renderEditorOutlineSnapshots(dir: dir)
 
     // SearchBar（empty / typing / no-match / match / overflow）。
     try writePNG(

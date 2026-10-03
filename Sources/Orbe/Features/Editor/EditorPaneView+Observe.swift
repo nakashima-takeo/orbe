@@ -2,10 +2,10 @@ import AppKit
 import OrbeEditorCore
 
 /// 文書の「変わった」の扇出と、出現の強調・一致の地への配線。文書側の closure は単一のまま、ここが検索・出現の強調・
-/// プロジェクト検索・アウトラインへ配る（裏から届いた問いとアウトラインの結果も）。一致の地は 2 つの出どころ（ファイル内
-/// 検索とプロジェクト検索）の和を面へ押す（`pushFindGround`）。見えている範囲が変わったときに検索バーを置き直す。
+/// プロジェクト検索へ配る（裏から届いた問いの結果も）。一致の地は 2 つの出どころ（ファイル内検索とプロジェクト検索）の和を
+/// 面へ押す（`pushFindGround`）。見えている範囲が変わったときに検索バーを置き直す。
 extension EditorPaneView {
-  /// 文書の「変わった」を検索・出現の強調・プロジェクト検索・アウトラインへ配る（見せている文書だけ）。
+  /// 文書の「変わった」を検索・出現の強調・プロジェクト検索へ配る（見せている文書だけ）。
   func observe(_ document: EditorDocument, _ on: Bool) {
     document.onViewportChange = on ? { [weak self] in self?.placeSearchBar() } : nil
     document.onSelectionChange =
@@ -14,7 +14,6 @@ extension EditorPaneView {
         guard let self else { return }
         search.selectionDidChange()
         occurrences.selectionDidChange()
-        outline.caretDidMove()
       } : nil
     document.onTextChange =
       on
@@ -24,7 +23,6 @@ extension EditorPaneView {
         occurrences.textDidChange()
         if let document = self.document { projectSearch.documentDidEdit(document, edits) }
       } : nil
-    document.onOutlineChange = on ? { [weak self] in self?.outline.outlineDidChange() } : nil
     document.onAnalysis =
       on
       ? { [weak self] request, ranges in

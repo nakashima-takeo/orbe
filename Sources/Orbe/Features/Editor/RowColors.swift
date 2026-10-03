@@ -17,9 +17,6 @@ struct RowColors {
   let selection: CGColor
   private let chips: [ChipTint: (text: CGColor, ground: CGColor)]
 
-  /// accent のチップの地の α（見本 SymbolChip）。
-  static let accentGroundAlpha: Double = 0.18
-
   @MainActor private static let resolved = PerAppearance { RowColors() }
 
   @MainActor static func of(_ appearance: NSAppearance) -> RowColors { resolved(appearance) }
@@ -32,11 +29,7 @@ struct RowColors {
     tertiary = Theme.Color.editorTertiary.cgColor
     selection = Theme.Color.selectionFill.cgColor
     var chips: [ChipTint: (text: CGColor, ground: CGColor)] = [
-      .mono: (primary, EditorStyle.fill(FileChipView.groundAlpha).cgColor),
-      .accent: (
-        Theme.Color.accentPrimary.cgColor,
-        Theme.Color.accentPrimary.withAlphaComponent(Self.accentGroundAlpha).cgColor
-      ),
+      .mono: (primary, EditorStyle.fill(FileChipView.groundAlpha).cgColor)
     ]
     for hue in FileChip.Hue.allCases {
       chips[.hue(hue)] = (
@@ -57,7 +50,6 @@ enum ChipTint: Hashable {
   /// 色相の無い種別（主文字と淡い塗り）。
   case mono
   case hue(FileChip.Hue)
-  case accent
 }
 
 extension FileChip {
