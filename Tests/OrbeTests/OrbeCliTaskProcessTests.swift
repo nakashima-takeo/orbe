@@ -98,6 +98,16 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     XCTAssertEqual(rows(control).count, 1, "拒否された要求は一覧を変えない")
   }
 
+  /// 人向けの行のセルは、向きを変える制御文字（U+202E など）を空白にし、ZWJ で組む絵文字は残す。
+  /// 向きを変える文字が残ると、後続の列（待ちの理由など）が端末上で入れ替わって見える。
+  func testListCellsBlankDirectionOverridesButKeepJoinedEmoji() throws {
+    let control = try startControlProcess()
+    run(control, ["add", "a\u{202E}b\u{2066}c 🧑‍💻", "--waiting", "x\u{202D}y"])
+
+    XCTAssertEqual(rows(control).first?[5], "a b c 🧑‍💻", "タイトルの向き制御は空白、ZWJ は残る")
+    XCTAssertEqual(rows(control).first?[6], "x y", "待ちの理由も同じ")
+  }
+
   /// タブ内の agent が workspace を省いて足すと、そのタブの workspace に付き、agent が追加者になる。
   /// `--workspace current` は呼び出し元タブではなく前面の workspace を指す。
   func testAddInsideATabAttachesToThatTabsWorkspace() throws {
