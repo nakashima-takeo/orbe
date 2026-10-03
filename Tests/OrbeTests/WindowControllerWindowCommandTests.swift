@@ -46,6 +46,41 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
     XCTAssertEqual(wc.current.tabs.count, before, "素のシェルのタブは開かない")
   }
 
+  /// タブ名の変更中に「＋」や Attention ストリップでパレットを開くと、改名欄の blur（改名の取消）が
+  /// パレットより後に届きうる。そのときも焦点は、改名していないときに開いたのと同じパレットの受け手に
+  /// 残り、打鍵が端末へ流れない。
+  func testRenameBlurAfterOpeningAPaletteLeavesFocusOnThePalette() throws {
+    let openers = [
+      PaletteOpener(name: "＋", overlay: .worktreePalette) { $0.statusModel.onNewTab() },
+      PaletteOpener(name: "Attention", overlay: .attentionPalette) {
+        $0.statusModel.onAttentionTap()
+      },
+    ]
+    for opener in openers {
+      let (name, overlay, open) = (opener.name, opener.overlay, opener.open)
+      let wc = try restoreSingleTab()
+      open(wc)
+      spin(0.3)
+      let receiver = wc.window.firstResponder.map { ObjectIdentifier(type(of: $0)) }
+      wc.dismissPalette()
+      spin(0.3)
+
+      wc.beginTabRename()
+      spin(0.3)
+      open(wc)
+      spin(0.3)
+      XCTAssertEqual(wc.presentedOverlay, overlay, "前提: \(name) でパレットが開いた")
+      wc.statusModel.onCancelRename()
+      spin(0.3)
+
+      XCTAssertFalse(wc.window.firstResponder is SurfaceView, "\(name): 焦点が端末へ戻らない")
+      XCTAssertEqual(
+        wc.window.firstResponder.map { ObjectIdentifier(type(of: $0)) }, receiver,
+        "\(name): 改名していないときと同じパレットの受け手が焦点を持つ")
+      wc.dismissPalette()
+    }
+  }
+
   /// overlay（パレット/フォーム）表示中は window コマンドを横取りせず false を返し、dispatch もしない。
   /// パレット入力中の ⌘T 等の暴発を防ぐ（キーは subtree/keyDown へ流れる）。
   func testWindowKeyCommandInertWhileOverlayShowing() throws {
@@ -126,5 +161,19 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
     wc.statusModel.onCancelRename()
     XCTAssertNil(wc.statusModel.editingIndex, "取消で編集を畳む")
     XCTAssertEqual(wc.current.tabs[0].explicitTitle, "Keep", "取消は明示名を変えない")
+  }
+
+  /// 改名中に押されうる、パレットを開く入口。
+  private struct PaletteOpener {
+    let name: String
+    let overlay: AppShellModel.Overlay
+    let open: (WindowController) -> Void
+  }
+
+  private func spin(_ seconds: TimeInterval) {
+    let end = Date().addingTimeInterval(seconds)
+    while Date() < end {
+      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+    }
   }
 }
