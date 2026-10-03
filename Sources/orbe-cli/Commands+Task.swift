@@ -158,8 +158,8 @@ private func exitIfHelp(_ args: [String]) {
   exit(0)
 }
 
-/// `add` と `set` が共有する項目フラグを params へ写す。`--no-*` の解除フラグは JSON の null（control の
-/// 「外す」）で、`set` だけが取る（`add` は `--no-workspace` だけ——付き先の省略に意味があるのは workspace だけ）。
+/// `add` と `set` が共有する項目フラグを params へ写す。`--no-*` の解除フラグは `set` だけが取る
+/// （`add` は `--no-workspace` だけ——付き先の省略に意味があるのは workspace だけ）。
 private func takeFields(_ args: inout [String], update: Bool) -> [String: Any] {
   var params: [String: Any] = [:]
   if let status = takeOption(&args, "--status", requires: "a <status>") {

@@ -3,7 +3,7 @@ import Foundation
 import OrbePaths
 
 // Orbe 制御チャネルの MCP ブリッジ。MCP(stdio・改行区切り JSON-RPC 2.0) を喋り、
-// tools/call を Orbe.app の control.sock（同じく JSON-RPC）へそのまま転送する薄い層。
+// tools/call を Orbe.app の control.sock（同じく JSON-RPC）へ、呼び出し元タブを添えて転送する薄い層。
 // ツール定義をここに置くことで、Orbe 本体を再ビルド/再起動せずツールを反復できる。
 
 // control.sock の解決は OrbePaths.controlSocketPath() に一本化（GUI 本体・cli と同一実装）。
