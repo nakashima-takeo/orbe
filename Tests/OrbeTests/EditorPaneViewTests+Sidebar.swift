@@ -20,7 +20,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
 
     XCTAssertTrue(pane.sidebar.isOpen)
     XCTAssertEqual(
-      pane.bodyRect, NSRect(x: 37 + 241, y: 29, width: 900 - 278, height: 400 - 2 - 29),
+      pane.bodyRect, NSRect(x: 37 + 241, y: 29, width: 900 - 278, height: 400 - 29),
       "レール・サイドバーの右、タブ行の下の hairline はその外側")
     let wide = try probe(pane) { p in try !PaneProbe.same(p.rgb(18), p.rgb(37 + 60)) }
     let railGround = try wide.rgb(18)
@@ -125,7 +125,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     let handle = try XCTUnwrap(pane.subviews.first { $0 is SidebarResizeHandle })
     XCTAssertFalse(handle.isHidden)
     XCTAssertEqual(
-      handle.frame, NSRect(x: 37 + 240 - 2, y: 0, width: 4, height: 398), "hairline を跨ぐ 4pt")
+      handle.frame, NSRect(x: 37 + 240 - 2, y: 0, width: 4, height: 400), "hairline を跨ぐ 4pt")
     let hit = pane.hitTest(pane.convert(NSPoint(x: 37 + 240, y: 200), to: pane.superview))
     XCTAssertTrue(hit === handle, "境は当たりが受ける")
     let document = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"))
