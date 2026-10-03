@@ -19,6 +19,8 @@ extension Theme.Color {
   static let editorTertiary = editorDyn(light: 0xaca4bd, dark: 0x6d667a)
   /// 変更の黄——M バッジ・外部変更で衝突中のドット。dark は conflict と偶然同値だが light が違い、git 競合でもない。
   static let editorModified = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)
+  /// ファイルタブの × にポインタがあるときの枠の地（VS Code の toolbar.hoverBackground に当たる）。
+  static let editorTabCloseHover = editorDynAB(light: (0x3a3151, 0.10), dark: (0xffffff, 0.10))
   /// 種別チップの色相（見本 palette.ts の hue）。チップの文字色と、その α .16 の地に使う。
   static let editorHueOrange = editorDyn(light: 0xbf5f2a, dark: 0xd98a5f)
   static let editorHueBlue = editorDyn(light: 0x3f6fd6, dark: 0x85adff)
@@ -161,6 +163,12 @@ extension Theme.Layout {
   /// サイドバーと本体の境（hairline）に置くドラッグの当たりの幅。
   static let editorSidebarHandle: CGFloat = 4
   static let editorFileTabs: CGFloat = 28
+  /// ファイルタブの右端の枠（× と未保存の ● の場所。押せる範囲）と、その中の × の字（VS Code の tab-actions の
+  /// action-label 16 ＋ padding 2 と同じ 20 四方）。
+  static let editorTabClose: CGFloat = 20
+  static let editorTabCloseGlyph: CGFloat = 12
+  /// ファイルタブの右の余白（× の枠の右）。
+  static let editorFileTabTrailing: CGFloat = 6
   static let editorBreadcrumb: CGFloat = 20
   static let editorPanelHeader: CGFloat = 28
   static let editorRow: CGFloat = 20
@@ -191,6 +199,11 @@ extension Theme.Layout {
   static let editorSearchChevron: CGFloat = 10
   /// 検索中の進捗の細い線。
   static let editorSearchProgress: CGFloat = 2
+}
+
+extension Theme.Radius {
+  /// ファイルタブの × の枠。
+  static let editorTabClose: CGFloat = 5
 }
 
 extension Theme.Opacity {

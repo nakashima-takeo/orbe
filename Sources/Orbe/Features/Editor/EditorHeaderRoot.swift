@@ -53,8 +53,8 @@ struct FileTabsView: View {
   }
 }
 
-/// タブ 1 枚: チップ ＋ 名前 ＋ 未保存ドット（衝突中は modified 黄）＋ ×（幅は常に確保し、ホバーでだけ見える）。
-/// アクティブは淡い地と上縁 1.5px の accent（design-system §5 のエディター面の例外）。
+/// タブ 1 枚: チップ ＋ 名前 ＋ 右端の枠（未保存の ● か ×）。アクティブは淡い地と上縁 1.5px の accent
+/// （design-system §5 のエディター面の例外）。
 struct FileTabView: View {
   let tab: EditorShellModel.FileTab
   let shell: EditorShellModel
@@ -66,10 +66,7 @@ struct FileTabView: View {
   private static let activeFillAlpha = 0.045
   private static let hairlineAlpha = 0.07
   private let accentBar: CGFloat = 1.5
-  private let padX: CGFloat = 10
-  private let dotSize: CGFloat = 7
-  private let closeGlyph: CGFloat = 10
-  private let closeHit: CGFloat = 14
+  private let padLeading: CGFloat = 10
 
   var body: some View {
     let ink = EditorInk(scheme)
@@ -79,19 +76,10 @@ struct FileTabView: View {
         .font(Font.theme.editorFileTab)
         .foregroundStyle(tab.isActive ? Color.theme.textPrimary : Color.theme.textMuted)
         .lineLimit(1)
-      if tab.isDirty {
-        Circle()
-          .fill(tab.isConflicted ? Color.theme.editorModified : Color.theme.textPrimary)
-          .frame(width: dotSize, height: dotSize)
-          .padding(.leading, Theme.Space.hair)
-      }
-      EditorGlyphView(glyph: EditorGlyphs.close, size: closeGlyph, color: Color.theme.editorIcon)
-        .frame(width: closeHit, height: closeHit)
-        .opacity(hovering ? 1 : 0)
-        .contentShape(Rectangle())
-        .onTapGesture { shell.requestClose(tab.id) }
+      FileTabCloseSlot(tab: tab, tabHovered: hovering, shell: shell)
     }
-    .padding(.horizontal, padX)
+    .padding(.leading, padLeading)
+    .padding(.trailing, Theme.Layout.editorFileTabTrailing)
     .frame(height: Theme.Layout.editorFileTabs)
     .background(tab.isActive ? ink.fill(Self.activeFillAlpha) : .clear)
     .overlay(alignment: .top) {
@@ -103,6 +91,59 @@ struct FileTabView: View {
     .contentShape(Rectangle())
     .onHover { hovering = $0 }
     .onTapGesture { shell.activate(tab.id) }
+  }
+}
+
+/// タブの右端の枠に出すもの。アクティブは × を常に、それ以外はタブにポインタがあるときだけ出し（VS Code のタブと
+/// 同じ）、未保存はタブにも × にもポインタが無い間だけ × の代わりに ● を出す。
+private enum FileTabMark {
+  case none
+  case dirty
+  case close
+
+  init(tab: EditorShellModel.FileTab, pointerInside: Bool) {
+    if tab.isDirty && !pointerInside {
+      self = .dirty
+    } else if tab.isActive || pointerInside {
+      self = .close
+    } else {
+      self = .none
+    }
+  }
+}
+
+/// × の枠（押せる範囲）。× にポインタがあれば枠に地が付き、× の色が上がる。押すと閉じる。
+private struct FileTabCloseSlot: View {
+  let tab: EditorShellModel.FileTab
+  let tabHovered: Bool
+  let shell: EditorShellModel
+  @State private var hovering = false
+
+  // 見本（デザインキャンバス『ファイルタブの閉じるボタン』A）の値。
+  private let dotSize: CGFloat = 8
+
+  var body: some View {
+    ZStack {
+      switch FileTabMark(tab: tab, pointerInside: tabHovered || hovering) {
+      case .none: EmptyView()
+      case .dirty:
+        Circle()
+          .fill(tab.isConflicted ? Color.theme.editorModified : Color.theme.textPrimary)
+          .frame(width: dotSize, height: dotSize)
+      case .close:
+        EditorGlyphView(
+          glyph: EditorGlyphs.close, size: Theme.Layout.editorTabCloseGlyph,
+          color: hovering ? Color.theme.textPrimary : Color.theme.editorIcon)
+      }
+    }
+    .frame(width: Theme.Layout.editorTabClose, height: Theme.Layout.editorTabClose)
+    .background(
+      RoundedRectangle(cornerRadius: Theme.Radius.editorTabClose)
+        .fill(hovering ? Color.theme.editorTabCloseHover : .clear)
+    )
+    .contentShape(Rectangle())
+    .onHover { hovering = $0 }
+    .onTapGesture { shell.requestClose(tab.id) }
   }
 }
 
