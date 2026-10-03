@@ -5,8 +5,7 @@ import SwiftUI
 /// 外へ配線する。実データ取得と section 組み立ては `WorktreePaletteDataProvider`＋
 /// `WorktreePaletteSectionBuilder`（外）が担う。
 @Observable final class WorktreePaletteModel {
-  /// 実データセクション（provider が rebuild で差し替える）。作成行と一致なしの注記は含まない——
-  /// 入力と有効性の答えから、この型が可視の並びへ足す。
+  /// 実データセクション（provider が rebuild で差し替える。作成行と一致なしの注記はこの型が足す）。
   var sections: [WorktreePaletteSection] = [] {
     didSet { refreshVisible() }
   }
@@ -36,7 +35,7 @@ import SwiftUI
   var hasLoadedOnce = false
   /// 選択とホバー追従ガード（汎用パレットと共有する `ModalSelection`）。
   private var selection = ModalSelection()
-  /// 選択が入力の規則（`applyDefaultSelection`）に従っている。入力が変わると立ち、ユーザーが選択を
+  /// 選択が入力の規則（`defaultSelection`）に従っている。入力が変わると立ち、ユーザーが選択を
   /// 動かすと下りる——データの到着や有効性の答えで選択を動かしてよいのは、立っている間だけ。
   private var selectionFollowsInput = true
 
@@ -79,10 +78,7 @@ import SwiftUI
   /// 行がまだ決まらない間に押された ↵ を預かっている（→ `activate()`）。
   private(set) var hasPendingActivation = false
 
-  // MARK: 新しいブランチとベース（分冊 `+Base`）
-
-  /// 作成行を出すかの、名前と作成先の衝突の規則（provider が rebuild で差し替える）。nil は作成行を
-  /// 出さない（非 git・未ロード）。
+  /// 作成行の名前と作成先の衝突の規則（provider が差し替える）。nil は作成行を出さない（非 git・未ロード）。
   var newBranchRules: WorktreeNewBranchRules? {
     didSet { refreshVisible() }
   }
@@ -256,7 +252,8 @@ import SwiftUI
     case .open(let destination):
       onExecute(destination)
     case .createBranch(let name):
-      guard let choice = selectedBaseChoice else { return }
+      // 答え待ち（直前の答えで出ている行）は作らない。↵ は `activate()` が預かるので、来るのはタップだけ。
+      guard !isAwaitingBranchNameAnswer, let choice = selectedBaseChoice else { return }
       guard let base = choice.base else { return enterBasePicker() }
       onExecute(.newBranch(name: name, base: base))
     }
@@ -318,7 +315,10 @@ import SwiftUI
   func onQueryChanged() {
     selectionFollowsInput = true
     selected = defaultSelection
-    if !query.isEmpty { onCheckBranchName(query) }
+    guard !query.isEmpty else { return }
+    // `-` で始まる名前は git に問わず無効とする（作成で `git worktree add -b` のオプションとして渡る余地を消す）。
+    guard !query.hasPrefix("-") else { return applyBranchNameCheck(query, isValid: false) }
+    onCheckBranchName(query)
   }
 
   /// 入力の規則による選択。入力が空なら今の worktree の行。入力があれば一致した既存の行の先頭、
@@ -341,9 +341,10 @@ import SwiftUI
   }
 
   /// 作成行に出す名前（出さないなら nil）。答えがまだ無い間は直前の答えで出すかを決め、名前は今の
-  /// 入力にする——打鍵のたびに行が消えて出直さない。
+  /// 入力にする——打鍵のたびに行が消えて出直さない。`-` で始まる名前は答えを待たずに出さない。
   private var creatableName: String? {
-    guard !query.isEmpty, let rules = newBranchRules, rules.allows(query) else { return nil }
+    guard !query.isEmpty, !query.hasPrefix("-"), let rules = newBranchRules, rules.allows(query)
+    else { return nil }
     return branchNameAnswer?.isValid == true ? query : nil
   }
 
