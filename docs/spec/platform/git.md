@@ -1,7 +1,7 @@
 ---
 title: git 実行
 description: git CLI を起動する共通基盤。3 つの並行レーン、無出力での打ち切り、出力の読み方
-updated: 2026-09-20
+updated: 2026-10-04
 ---
 
 # git 実行

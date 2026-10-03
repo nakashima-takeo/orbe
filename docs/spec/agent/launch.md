@@ -1,7 +1,7 @@
 ---
 title: エージェント起動
 description: claude / codex / agy の自動検出と、⌘⇧A 選択パレット / ⌘⇧C デフォルト起動 / 制御 API による新タブでの直接起動
-updated: 2026-09-06
+updated: 2026-10-04
 ---
 
 # エージェント起動

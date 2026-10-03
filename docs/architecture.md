@@ -60,8 +60,9 @@ Sources/
       Localization/      日英 2 言語 i18n コア
       Shell/             ログインシェル由来の PATH 解決・GUI エディタ起動
     Features/            機能単位（Agent / Attention / Chrome / Completion /
-                         Control / Dispatch / Help / MenuBar /
-                         Search / Settings / Sound / Update / Workspace）
+                         Control / Help / MenuBar /
+                         Search / Settings / Sound / Update / Workspace /
+                         WorktreePalette）
     DesignSystem/        トークン・パレット・共有コンポーネント（正は design/）
   OrbePaths/             state dir / control.sock 解決の共有土台（Foundation のみ）
   OrbeSound/             通知音の純 DSP 層（合成語彙・カタログ・レンダラ・取り込み・解析。Foundation のみ）
@@ -98,7 +99,7 @@ Orbe が**読む**もの（利用者・スクリプトが立てる）:
 - **libghostty** — `vendor/ghostty` submodule を固定 SHA に pin し、自前ビルドした xcframework を `binaryTarget` で取り込む。外部契約は [terminal/libghostty](spec/terminal/libghostty.md)。
 - **swift-markdown**（Apache-2.0） — リリースノート（appcast description）の markdown 描画。
 - **Sparkle**（MIT） — アプリ内アップデート（[platform/update](spec/platform/update.md)）。
-- **git / gh** — サブプロセスとして実行。gh は無くても劣化動作（[palette/dispatch](spec/palette/dispatch.md)）。
+- **git / gh** — サブプロセスとして実行。gh は無くても劣化動作（[palette/worktree](spec/palette/worktree.md)）。
 - **補完エンジン** — `vendor/completion-engine/` の prebuilt JS バンドル（[palette/completion](spec/palette/completion.md)）。
 
 帰属の正は `NOTICE`（[platform/licensing](spec/platform/licensing.md)）。

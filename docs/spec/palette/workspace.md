@@ -1,7 +1,7 @@
 ---
 title: workspace パレット
 description: ⌘⇧S の切替パレットと、その末尾から入る専用作成フォーム。共有 PaletteCard の焦点・入力モダリティ規律もここが持つ
-updated: 2026-09-08
+updated: 2026-10-04
 ---
 
 # workspace パレット（⌘⇧S）
