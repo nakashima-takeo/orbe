@@ -12,9 +12,9 @@ enum WorktreePaletteFieldKeys {
     }
   }
 
-  /// ⇧⇥ は `.tab` に shift が付いた形と、AppKit の backtab 文字の形のどちらでも届きうる。
+  /// ⇧⇥ は `.tab` ではなく AppKit の backtab 文字（U+0019）で届く。拾わないと焦点が入力欄から逃げる。
   private static func isBacktab(_ press: KeyPress) -> Bool {
-    (press.key == .tab && press.modifiers.contains(.shift)) || press.key.character == "\u{19}"
+    press.key.character == "\u{19}"
   }
 
   private static func list(_ press: KeyPress, _ model: WorktreePaletteModel) -> KeyPress.Result {
