@@ -212,7 +212,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.selectedID, .task(2))
   }
 
-  /// ⌫ で結び付きを外す（外した項目に記録する）。行は結び付いていない側へ戻り、選択はその行に残る。
+  /// ⌘⌫ で結び付きを外す（外した項目に記録する）。行は結び付いていない側へ戻り、選択はその行に残る。
   func testUnlinkingReturnsTheRowToTheUnlinkedSide() throws {
     let palette = GitHub.model(
       [task(1, "a") { $0.links = [GitHub.link(5), GitHub.link(6)] }],
@@ -227,6 +227,34 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(
       palette.gitHubSelectableIDs, [.item(GitHub.id(6)), .item(GitHub.id(7)), .item(GitHub.id(5))])
     XCTAssertEqual(palette.selectedGitHubID, .item(GitHub.id(5)))
+  }
+
+  /// 結び付いていない行が 6 件以上あり、外した行が「さらに」の内側に入るなら、区分を開いて選択をその行に残す
+  /// （隠れると選択が同じ位置の別の行へ移り、続けて押した ⌘⌫ が別の項目を外す）。
+  func testUnlinkingIntoTheCollapsedRestExpandsTheSectionAndKeepsTheRow() throws {
+    let palette = GitHub.model(
+      [task(1, "a") { $0.links = [GitHub.link(1), GitHub.link(2)] }],
+      issues: (1...7).map { GitHub.issue($0) })
+    palette.tapGitHubRow(.item(GitHub.id(1)))
+
+    palette.unlinkSelectedGitHubItem()
+
+    XCTAssertEqual(palette.expandedKinds, [.issue])
+    XCTAssertEqual(palette.selectedGitHubID, .item(GitHub.id(1)))
+    XCTAssertEqual(try storedTask(palette, 1).links, [GitHub.link(2)])
+  }
+
+  /// 外した行が先頭 5 件に入るなら、区分は開かない。
+  func testUnlinkingIntoTheVisibleRowsKeepsTheSectionCollapsed() {
+    let palette = GitHub.model(
+      [task(1, "a") { $0.links = [GitHub.link(7)] }], issues: (1...7).map { GitHub.issue($0) })
+    palette.tapGitHubRow(.item(GitHub.id(7)))
+
+    palette.unlinkSelectedGitHubItem()
+
+    XCTAssertEqual(palette.expandedKinds, [])
+    XCTAssertEqual(palette.selectedGitHubID, .item(GitHub.id(7)))
+    XCTAssertTrue(palette.gitHubSelectableIDs.contains(.more(.issue)))
   }
 
   // MARK: - 絞り込み・さらに

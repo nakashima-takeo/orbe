@@ -109,4 +109,28 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.selectedGitHubID, .item(GitHub.id(6)))
     XCTAssertEqual(palette.area, .list)
   }
+
+  /// 右の欄に居る間に、選んでいた項目が一覧の取り直しで消えたら一覧へ戻り、選択は同じ位置の項目へ移る。
+  /// 打ちかけの期限は捨て、続く ↵ は一覧の ↵（入力欄）が受ける——別の項目の欄に既定の値で居続けると、↵ で
+  /// 見ていない項目をタスクにして自分を足す。
+  func testLeavingThePaneWhenTheSelectedItemLeavesTheList() throws {
+    let source = GitHub.Source()
+    let palette = GitHub.model(
+      [], issues: [GitHub.issue(7), GitHub.issue(6), GitHub.issue(5)], source: source)
+    palette.move(1)
+    palette.enterPane()
+    palette.beginPaneDue()
+    palette.draftText = "10/"
+
+    palette.openLists.open(root: TaskPaletteSamples.root)
+    try XCTUnwrap(source.fetches.first { $0.kind == .issue })
+      .finish([GitHub.issue(7), GitHub.issue(5)])
+    palette.reconcile()
+
+    XCTAssertEqual(palette.area, .list)
+    XCTAssertEqual(palette.selectedGitHubID, .item(GitHub.id(5)))
+    XCTAssertNil(palette.draft)
+    XCTAssertEqual(palette.focusTarget, .field)
+    XCTAssertEqual(palette.pane, TaskGitHubPane(owner: .item(GitHub.id(5))))
+  }
 }

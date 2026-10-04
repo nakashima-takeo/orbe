@@ -128,6 +128,21 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.visibleTab, .github)
   }
 
+  /// 選んだタスクが消えた後に確定しても、失敗は表に出さず、選ぶ状態のまま付け直しに任せる。
+  func testConfirmingATaskThatWasJustDeletedShowsNoErrorAndKeepsPicking() throws {
+    let palette = pickingFromIssueFive()
+    palette.linkSelectedGitHubItem()
+    palette.move(1)
+    try palette.store.delete(2)
+
+    palette.confirmPick()
+
+    XCTAssertNil(palette.error)
+    XCTAssertNotNil(palette.pick)
+    XCTAssertEqual(palette.selectedID, .task(1), "同じ位置の行へ付け直す")
+    XCTAssertEqual(try storedTask(palette, 1).links, [], "別のタスクには結び付けない")
+  }
+
   // MARK: - 項目を選ぶ（詳細の「＋ 結び付ける」）
 
   /// 結び付きが 0 件のタスクでも「＋ 結び付ける」に止まる（結び付きの後・ステータスの前）。
