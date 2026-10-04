@@ -242,13 +242,14 @@ enum TaskPaletteError: Error, Equatable {
     }
   }
 
-  /// 完了 ⇄ 未着手。選択は同一性を捨てて同じ位置の行へ移る（完了の欄が開いていても追わない）。
+  /// 完了 ⇄ 未着手。選んでいるタスクなら、選択は同一性を捨てて同じ位置の行へ移る（完了の欄が開いて
+  /// いても追わない）。選んでいないタスク（行のアイコンのクリック）なら、選択はそのまま動かない。
   func toggleDone(_ id: Int) {
     leaveEditingForAction()
     guard let task = store.tasks.first(where: { $0.id == id }) else { return reconcile() }
     var update = TaskUpdate()
     update.status = task.status == .done ? .todo : .done
-    selection.restore(nil)
+    if selectedID == .task(id) { selection.restore(nil) }
     mutate(.failed) { () throws(TaskStoreError) in _ = try store.update(id, update) }
   }
 
