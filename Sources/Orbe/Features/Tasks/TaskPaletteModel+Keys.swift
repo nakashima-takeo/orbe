@@ -29,6 +29,8 @@ extension TaskPaletteModel {
     case .space:
       // 文字があるときの space は空白を打つ。
       guard query.isEmpty, Self.isUnmodified(press), tab == .tasks else { return .ignored }
+      // 押し続けたキーリピートは握り潰す（次の行を次々に完了にしない。入力欄へ空白も入れない）。
+      guard press.phase == .down else { return .handled }
       switch selectedID {
       case .task(let id): toggleDone(id)
       case .doneHeader: toggleDoneExpanded()
@@ -57,7 +59,7 @@ extension TaskPaletteModel {
     case .rightArrow: changeValue(1)
     case .return: if field.isText { beginEditing() }
     case .space:
-      if let task = selectedTask { toggleDone(task.id) }
+      if press.phase == .down, let task = selectedTask { toggleDone(task.id) }
     case _ where Self.isCommandBackspace(press):
       if press.phase == .down, let task = selectedTask { delete(task.id) }
     case .escape: leaveDetail()
