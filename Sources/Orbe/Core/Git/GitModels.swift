@@ -83,6 +83,12 @@ struct GitHubRepoName: Hashable {
     value = nameWithOwner.lowercased()
   }
 
+  /// `owner/name` の owner。
+  var owner: String { String(value.split(separator: "/", maxSplits: 1).first ?? "") }
+
+  /// `owner/name` の name。
+  var name: String { String(value.split(separator: "/", maxSplits: 1).last ?? "") }
+
   /// owner と名前から組む。どちらかが空なら nil。
   init?(owner: String, name: String) {
     guard !owner.isEmpty, !name.isEmpty else { return nil }
@@ -165,15 +171,9 @@ struct GitHubPage<Node: Decodable>: Decodable {
   let pageInfo: PageInfo
 }
 
-/// open issue 一覧（GraphQL `issues`）の 1 issue。
-struct GitHubIssue: Decodable, Equatable, GitHubNumbered {
-  let number: Int
-  let title: String
-}
-
 /// `gh pr list --state all --head <branch> --json number,headRefName,state,baseRefName,headRepository,
 /// headRepositoryOwner,url` の 1 PR。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を
-/// 見るための小さな形で、`GitHubPullRequest`（title 必須）ではこの JSON をデコードできない。
+/// 見るための小さな形。
 struct GitHubBranchPR: Decodable, Equatable {
   let number: Int
   let headRefName: String
@@ -218,35 +218,105 @@ extension GitHubBranchPR {
   }
 }
 
-/// open PR 一覧（GraphQL `pullRequests`）の 1 PR。
-struct GitHubPullRequest: Decodable, Equatable, GitHubNumbered {
+/// open 一覧（GraphQL の `issues` / `pullRequests`）の 1 項目。どのリポジトリの項目かは、一覧を取った
+/// リポジトリが持つ。
+struct GitHubOpenItem: Equatable, GitHubNumbered {
+  /// PR だけが持つ値。
+  struct PullRequest: Equatable {
+    let isDraft: Bool
+    let review: GitHubItemSummary.ReviewDecision?
+    let checks: GitHubItemSummary.Checks?
+    /// 個人宛のレビュー依頼の login。
+    var reviewers: [String]
+    /// チーム宛のレビュー依頼（`org/slug`）。
+    let teams: [String]
+  }
+
   let number: Int
   let title: String
-  let headRefName: String
-  /// `REVIEW_REQUIRED` / `APPROVED` / `CHANGES_REQUESTED` / null。
-  let reviewDecision: String?
-  /// head 側のリポジトリ。消えていれば nil。
-  let headRepository: GitHubRepoName?
+  let updatedAt: Date
+  /// 作成者の login。消えたアカウントなら nil。
+  let author: String?
+  /// 担当者の login（先頭 10 人）。
+  var assignees: [String]
+  /// PR なら値がある。nil は Issue。
+  var pullRequest: PullRequest?
 
-  /// head のリポジトリとブランチ（行との同一性）。head のリポジトリが消えていれば nil で、どの行とも
-  /// 等しくならない。
-  var head: GitHubBranchRef? {
-    headRepository.map { GitHubBranchRef(repo: $0, branch: headRefName) }
+  var kind: GitHubItemKind { pullRequest == nil ? .issue : .pr }
+
+  /// 表示の規則（`GitHubItemText`）に渡す値。open 一覧の項目なので状態は open。
+  var summary: GitHubItemSummary {
+    GitHubItemSummary(
+      title: title, state: .open,
+      pullRequest: pullRequest.map {
+        GitHubItemSummary.PullRequest(
+          isDraft: $0.isDraft, review: $0.review, checks: $0.checks, author: author)
+      })
   }
 }
 
-extension GitHubPullRequest {
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    self.init(
-      number: try container.decode(Int.self, forKey: .number),
-      title: try container.decode(String.self, forKey: .title),
-      headRefName: try container.decode(String.self, forKey: .headRefName),
-      reviewDecision: try container.decodeIfPresent(String.self, forKey: .reviewDecision),
-      headRepository: try PullRequestHeadRepository(from: decoder).name)
+extension GitHubOpenItem: Decodable {
+  private enum CodingKeys: String, CodingKey {
+    case typename = "__typename"
+    case number, title, updatedAt, author, assignees, isDraft, reviewDecision, commits,
+      reviewRequests
   }
 
-  private enum CodingKeys: String, CodingKey {
-    case number, title, headRefName, reviewDecision
+  /// 更新日時が読めない項目は、壊れた応答として 1 ページごと捨てる（並べ直しの鍵が無い）。
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    number = try c.decode(Int.self, forKey: .number)
+    title = try c.decode(String.self, forKey: .title)
+    let updated = try c.decode(String.self, forKey: .updatedAt)
+    guard let updatedAt = ISO8601DateFormatter().date(from: updated) else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .updatedAt, in: c, debugDescription: "not an ISO 8601 date: \(updated)")
+    }
+    self.updatedAt = updatedAt
+    author = try c.decodeIfPresent(OpenItemLogin.self, forKey: .author)?.login
+    assignees =
+      try c.decodeIfPresent(OpenItemLogins.self, forKey: .assignees)?.nodes?.compactMap {
+        $0?.login
+      } ?? []
+    guard try c.decode(String.self, forKey: .typename) == "PullRequest" else {
+      pullRequest = nil
+      return
+    }
+    let reviewers =
+      try c.decodeIfPresent(OpenItemReviewRequests.self, forKey: .reviewRequests)?.nodes?
+      .compactMap { $0?.requestedReviewer } ?? []
+    pullRequest = PullRequest(
+      isDraft: try c.decodeIfPresent(Bool.self, forKey: .isDraft) ?? false,
+      review: try c.decodeIfPresent(String.self, forKey: .reviewDecision).flatMap(
+        GitHubItemSummary.ReviewDecision.init(rawValue:)),
+      checks: try c.decodeIfPresent(GitHubLastCommit.self, forKey: .commits)?.checks,
+      reviewers: reviewers.compactMap { $0.typename == "User" ? $0.login : nil },
+      teams: reviewers.compactMap { reviewer in
+        guard reviewer.typename == "Team", let slug = reviewer.slug,
+          let organization = reviewer.organization?.login
+        else { return nil }
+        return "\(organization)/\(slug)"
+      })
   }
+}
+
+private struct OpenItemLogin: Decodable { let login: String? }
+private struct OpenItemLogins: Decodable { let nodes: [OpenItemLogin?]? }
+
+private struct OpenItemReviewRequests: Decodable {
+  struct Node: Decodable { let requestedReviewer: OpenItemReviewer? }
+  let nodes: [Node?]?
+}
+
+/// `User` は login、`Team` は所属の組織と slug。ほか（`Mannequin`・`Bot`）は読まない。
+private struct OpenItemReviewer: Decodable {
+  enum CodingKeys: String, CodingKey {
+    case typename = "__typename"
+    case login, slug, organization
+  }
+
+  let typename: String
+  let login: String?
+  let slug: String?
+  let organization: OpenItemLogin?
 }

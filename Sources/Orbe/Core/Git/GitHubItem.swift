@@ -209,7 +209,7 @@ private struct ItemNode: Decodable {
   let isDraft: Bool?
   let reviewDecision: String?
   let author: Author?
-  let commits: ItemCommits?
+  let commits: GitHubLastCommit?
   let headRefName: String?
   let headRepositoryOwner: Author?
   let headRepository: Repository?
@@ -231,7 +231,7 @@ private struct ItemNode: Decodable {
         pullRequest: GitHubItemSummary.PullRequest(
           isDraft: isDraft ?? false,
           review: reviewDecision.flatMap(GitHubItemSummary.ReviewDecision.init(rawValue:)),
-          checks: checks, author: author?.login, head: head))
+          checks: commits?.checks, author: author?.login, head: head))
     default:
       return nil
     }
@@ -246,8 +246,15 @@ private struct ItemNode: Decodable {
     return GitHubBranchRef(repo: repo, branch: headRefName)
   }
 
-  private var checks: GitHubItemSummary.Checks? {
-    switch commits?.nodes?.last??.commit.statusCheckRollup?.state {
+}
+
+/// `commits(last:1){nodes{commit{statusCheckRollup{state}}}}`。最後のコミットの CI の集約を読む（結び付いた
+/// 項目の問い合わせと open 一覧が同じ規則で読む）。
+struct GitHubLastCommit: Decodable {
+  private let nodes: [LastCommitNode?]?
+
+  var checks: GitHubItemSummary.Checks? {
+    switch nodes?.last??.commit.statusCheckRollup?.state {
     case "SUCCESS": .success
     case "FAILURE", "ERROR": .failure
     case "PENDING", "EXPECTED": .pending
@@ -256,16 +263,11 @@ private struct ItemNode: Decodable {
   }
 }
 
-/// `commits(last:1){nodes{commit{statusCheckRollup{state}}}}`。
-private struct ItemCommits: Decodable {
-  let nodes: [ItemCommitNode?]?
-}
-
-private struct ItemCommitNode: Decodable {
-  struct Commit: Decodable { let statusCheckRollup: ItemCheckRollup? }
+private struct LastCommitNode: Decodable {
+  struct Commit: Decodable { let statusCheckRollup: CheckRollup? }
   let commit: Commit
 }
 
-private struct ItemCheckRollup: Decodable {
+private struct CheckRollup: Decodable {
   let state: String
 }

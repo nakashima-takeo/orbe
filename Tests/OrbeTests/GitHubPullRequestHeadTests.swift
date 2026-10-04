@@ -2,8 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// PR の head（どのリポジトリのどのブランチか）を、gh の出力から読む口（`GitHubBranchPR` /
-/// `GitHubPullRequest` の decode）。
+/// PR の head（どのリポジトリのどのブランチか）を、gh の出力から読む口（`GitHubBranchPR` の decode）。
 ///
 /// ここが破れると、古い gh（`gh pr list --json headRepository` に `nameWithOwner` が無い・空文字）の利用者
 /// だけ、clean がブランチの PR を 1 件も持てない——全行が取得失敗で安全群が常に空になるか、どの行とも
@@ -40,20 +39,5 @@ final class GitHubPullRequestHeadTests: OrbeTestCase {
       "fork だけ削除された PR")
     XCTAssertNil(
       try branchPR(headRepository: "null", owner: #"{"login":""}"#).head, "作者ごと削除された PR")
-  }
-
-  /// open 一覧（GraphQL）の PR も、同じ owner と名前から head を読む。
-  func testOpenListPullRequestHeadIsReadFromOwnerAndName() throws {
-    func decode(_ head: String) throws -> GitHubPullRequest {
-      let json =
-        #"{"number":1,"title":"t","headRefName":"feat",\#(head),"reviewDecision":null}"#
-      return try JSONDecoder().decode(GitHubPullRequest.self, from: Data(json.utf8))
-    }
-    XCTAssertEqual(
-      try decode(#""headRepositoryOwner":{"login":"Me"},"headRepository":{"name":"R"}"#).head, feat,
-      "大小文字は区別しない")
-    XCTAssertNil(
-      try decode(#""headRepositoryOwner":null,"headRepository":null"#).head,
-      "head のリポジトリが消えた PR")
   }
 }
