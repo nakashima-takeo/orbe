@@ -11,7 +11,7 @@ enum TaskPaletteError: Error, Equatable {
   case title, waiting, due, failed
   /// GitHub に自分をアサイン・レビュアーにする書き込みが失敗した。
   case assign
-  /// 結び付け・付け替え・タスクにするを、ストアが受け付けなかった。
+  /// タスクにするを、ストアが受け付けなかった（間に agent がその項目を結び付けていた）。
   case link
 }
 
@@ -374,7 +374,7 @@ enum TaskPaletteError: Error, Equatable {
       taskList.query = ""
     }
     reconcile()
-    taskList.select(.task(id), in: rows.compactMap(\.selectableID))
+    taskList.select(.task(id), in: selectableIDs)
   }
 
   /// 画面からのストアの変異を呼び、付け直して今見えている一覧の選択へ送る。消えていたタスクは表に出さず

@@ -50,7 +50,7 @@ extension TaskPaletteModel {
       case .task(let id):
         guard pickedItemOwner?.id != id, attach(link, to: id) else { return }
         endPick(returningTo: .list)
-        githubList.select(.item(link.item), in: gitHubSelectableIDs)
+        gitHubList.select(.item(link.item), in: gitHubSelectableIDs)
       case .doneHeader: toggleDoneExpanded()
       case .add, nil: break
       }
@@ -114,17 +114,16 @@ extension TaskPaletteModel {
     focus()
   }
 
-  /// 1 回の変異で結び付ける。ストアが受け付けなければ理由を出して false。
+  /// 1 回の変異で結び付ける。`attach` が拒むのは選んだタスクが消えていたとき（`.notFound`）だけで、そのときは
+  /// 表に出さず付け直しに任せて false。
   private func attach(_ link: TaskLink, to id: Int) -> Bool {
     leaveEditingForAction()
     do throws(TaskStoreError) {
       try store.attach(link, to: id)
       return true
-    } catch .invalid {
-      error = .link
     } catch {
+      reconcile()
+      return false
     }
-    reconcile()
-    return false
   }
 }

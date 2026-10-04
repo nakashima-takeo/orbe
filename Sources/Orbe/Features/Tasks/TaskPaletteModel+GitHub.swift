@@ -179,6 +179,7 @@ extension TaskPaletteModel {
           title: row.item.title, priority: pane.priority, due: pane.due,
           workspace: workspaces.opened.id, links: [link]))
     } catch {
+      // 拒まれうるのは、間に agent がその項目を結び付けていたときだけ（タイトルは GitHub が 1 行に保つ）。
       self.error = .link
       reconcile()
       return nil

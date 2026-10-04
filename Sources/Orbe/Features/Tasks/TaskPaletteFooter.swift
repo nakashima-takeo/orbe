@@ -73,19 +73,11 @@ struct TaskPaletteFooter: View {
             slots: [.emphasis(task.title)])
         }
       case .doneHeader:
-        doneHeaderAction
+        TaskPaletteDoneHeaderAction(model: model)
       case nil:
         EmptyView()
       }
     }
-  }
-
-  private var doneHeaderAction: some View {
-    PaletteActionLine(
-      key: "↵",
-      template: l10n.string(
-        model.doneExpanded ? .taskPaletteActionHideDone : .taskPaletteActionShowDone),
-      slots: [])
   }
 
   private var hints: some View {
@@ -238,11 +230,7 @@ private struct TaskPalettePickAction: View {
           line(item: "#\(link.item.number)", to: task, owner: model.pickedItemOwner)
         }
       case .doneHeader:
-        PaletteActionLine(
-          key: "↵",
-          template: l10n.string(
-            model.doneExpanded ? .taskPaletteActionHideDone : .taskPaletteActionShowDone),
-          slots: [])
+        TaskPaletteDoneHeaderAction(model: model)
       case .add, nil:
         EmptyView()
       }
@@ -275,5 +263,19 @@ private struct TaskPalettePickAction: View {
         key: "↵", template: l10n.string(.taskPaletteActionLinkItem),
         slots: [.emphasis(item), .emphasis(task.title)])
     }
+  }
+}
+
+/// 完了の見出しのフッターの左（↵ で完了の欄を開閉する）。
+private struct TaskPaletteDoneHeaderAction: View {
+  @Bindable var model: TaskPaletteModel
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
+    PaletteActionLine(
+      key: "↵",
+      template: l10n.string(
+        model.doneExpanded ? .taskPaletteActionHideDone : .taskPaletteActionShowDone),
+      slots: [])
   }
 }
