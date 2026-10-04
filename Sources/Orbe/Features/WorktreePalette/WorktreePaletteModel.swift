@@ -1,10 +1,19 @@
 import SwiftUI
 
-/// ⌘T で開く worktree パレットの表示状態（@Observable）。実データ（worktree/branch）を
-/// セクションに持ち、フィルタ・⇥ 起動先切替・⇧⇥ ベース切替・決定（↵／行タップ）の意図をクロージャで
-/// 外へ配線する。実データ取得と section 組み立ては `WorktreePaletteDataProvider`＋
-/// `WorktreePaletteSectionBuilder`（外）が担う。
+/// ⌘T で開く worktree パレットの表示状態（@Observable）。実データ（worktree/branch）をセクションに持ち、
+/// フィルタ・⇥ 起動先切替・⇧⇥ ベース切替・決定の意図をクロージャで外へ配線する（取得と組み立ては
+/// provider と section builder）。タスクから開いたときは、そのタスク（文脈）を ID で持ち、札・先頭の欄・
+/// フッターの副作用は描くたびにストアから引いて導く（タスクが消えたら文脈が無いのと同じ）。
 @Observable final class WorktreePaletteModel {
+  /// 文脈のタスクと worktree の行のタスクの札は、タスクのストア・GitHub の値の置き場・agent の索引から引く。
+  let tasks: TaskStore
+  let githubItems: GitHubItemCache
+  let agents: WorktreeAgentActivity
+  /// 文脈のタスクの ID。⌫ で外すといつもの ⌘T になる。
+  private(set) var taskContextID: Int?
+  /// 先頭の欄がまだ決まらない（provider が rebuild で書く）。決まるまで ↵ を預かる。
+  var taskTargetPending = false
+
   /// 実データセクション（provider が rebuild で差し替える。作成行と一致なしの注記はこの型が足す）。
   var sections: [WorktreePaletteSection] = [] {
     didSet { refreshVisible() }
@@ -66,10 +75,11 @@ import SwiftUI
   var query = "" {
     didSet { refreshVisible() }
   }
-  /// ⇥ で巡回する起動先。既定の agent、shell、残りの検出 agent の順。
-  private(set) var targets: [WorktreePaletteTarget] = []
-  /// ⇥ で巡回する選択起動先の index。初期は既定の agent（agent が無ければ shell）。
-  private(set) var selectedTargetIndex = 0
+  /// ⇥ で巡回する起動先。既定の agent、shell、残りの検出 agent の順。書くのは起動先の操作
+  /// （`WorktreePaletteModel+Target.swift`）だけ。
+  var targets: [WorktreePaletteTarget] = []
+  /// ⇥ で巡回する選択起動先の index。初期は既定の agent（agent が無ければ shell）。書くのは起動先の操作だけ。
+  var selectedTargetIndex = 0
   /// 実行失敗の一時表示（palette は閉じない）。
   var errorMessage: String?
   /// 決定の後、行き先が決まるまでの待ち（`prepareDirectory` の実行中）の進捗表示フラグ（palette は閉じない）。
@@ -113,8 +123,29 @@ import SwiftUI
   var onOpenWorktree: (String) -> Void = { _ in }
   /// 最新化画面の決定。選んだ作り方で worktree を作って起動する（最新化して／そのまま）。
   var onSettleStale: (WorktreePaletteStaleChoice, WorktreePaletteBranchSync) -> Void = { _, _ in }
+  /// 先頭の欄の入力（`taskInputs`）が変わった・文脈を外した。
+  var onTaskInputsChanged: () -> Void = {}
+  var onTaskContextCleared: () -> Void = {}
 
-  init() {}
+  init(
+    tasks: TaskStore = TaskStore(file: nil),
+    githubItems: GitHubItemCache = GitHubItemCache(fetch: { _, _ in }),
+    agents: WorktreeAgentActivity = WorktreeAgentActivity(), task: Int? = nil
+  ) {
+    self.tasks = tasks
+    self.githubItems = githubItems
+    self.agents = agents
+    taskContextID = task
+  }
+
+  /// 入力欄が空の ⌫・札のクリック。文脈を外し、選択を入力の規則へ戻し、いつもの ⌘T へ結び付け直させる。
+  func clearTaskContext() {
+    guard taskContextID != nil, !isLocked else { return }
+    taskContextID = nil
+    selectionFollowsInput = true
+    focus()
+    onTaskContextCleared()
+  }
 
   /// 入力を受け付けない状態（worktree 作成中／預かった ↵ の待ち）。
   var isLocked: Bool { isPreparing || hasPendingActivation }
@@ -207,7 +238,10 @@ import SwiftUI
         return items.isEmpty ? nil : section.with(items: items)
       }
     var visible: [WorktreePaletteSection] = []
-    if let name = creatableName {
+    // 先頭の欄に同じ名前の作成行があれば、入力による作成行は足さない（同じ行を 2 度出さない）。
+    if let name = creatableName,
+      !sections.contains(where: { $0.items.contains { $0.action == .createBranch(name: name) } })
+    {
       visible.append(
         WorktreePaletteSection(
           title: .newBranch, items: [WorktreePaletteSectionBuilder.newBranchItem(name: name)]))
@@ -259,10 +293,10 @@ import SwiftUI
     }
   }
 
-  /// 行が決まっているか。決まっていないのは、初回の一覧が届く前と、今の入力への有効性の答えが無いまま
-  /// 作成行（または行が 1 つも無い状態）を選んでいるとき。
+  /// 行が決まっているか。決まっていないのは、初回の一覧が届く前と、先頭の欄がまだ決まらない間と、今の入力への
+  /// 有効性の答えが無いまま作成行（または行が 1 つも無い状態）を選んでいるとき。
   var isSettled: Bool {
-    guard hasLoadedOnce else { return false }
+    guard hasLoadedOnce, !taskTargetPending else { return false }
     guard isAwaitingBranchNameAnswer else { return true }
     switch selectedItem?.action {
     case .createBranch, nil: return false
@@ -321,10 +355,13 @@ import SwiftUI
     onCheckBranchName(query)
   }
 
-  /// 入力の規則による選択。入力が空なら今の worktree の行。入力があれば一致した既存の行の先頭、
-  /// 無ければ作成行。
+  /// 入力の規則による選択。入力が空なら先頭の欄の行、無ければ今の worktree の行。入力があれば一致した
+  /// 既存の行の先頭、無ければ作成行。
   private var defaultSelection: Int {
-    if query.isEmpty { return items.firstIndex(where: \.isCurrent) ?? 0 }
+    if query.isEmpty {
+      if case .task = visibleSections.first?.title { return 0 }
+      return items.firstIndex(where: \.isCurrent) ?? 0
+    }
     return items.firstIndex { item in
       if case .createBranch = item.action { return false }
       return true
@@ -347,41 +384,6 @@ import SwiftUI
     else { return nil }
     return branchNameAnswer?.isValid == true ? query : nil
   }
-
-  /// 検出済み agent から巡回対象を組む。既定の agent を先頭に、shell をその直後に、残りの agent を
-  /// 検出順に並べる。既定が検出に無ければ検出順の先頭を既定とする。初期選択は先頭。
-  func setTargets(agents: [AgentCLI], defaultCommand: String?) {
-    let defaultAgent = agents.first { $0.command == defaultCommand } ?? agents.first
-    let rest = agents.filter { $0 != defaultAgent }.map(WorktreePaletteTarget.agent)
-    targets = (defaultAgent.map { [.agent($0)] } ?? []) + [.shell] + rest
-    selectedTargetIndex = 0
-  }
-
-  /// 既定の agent（「既定」の札を付ける起動先）。agent が 1 つも無ければ nil。
-  var defaultTarget: WorktreePaletteTarget? {
-    guard case .agent = targets.first else { return nil }
-    return targets.first
-  }
-
-  /// ⇥ で選択起動先を巡回する。
-  func cycleTarget() {
-    guard !targets.isEmpty else { return }
-    selectedTargetIndex = (selectedTargetIndex + 1) % targets.count
-  }
-
-  /// 起動先のボタンのクリック。
-  func chooseTarget(at index: Int) {
-    guard !isLocked, targets.indices.contains(index) else { return }
-    selectedTargetIndex = index
-  }
-
-  /// 選択中の起動先（targets が空なら nil）。
-  var selectedTarget: WorktreePaletteTarget? {
-    targets.indices.contains(selectedTargetIndex) ? targets[selectedTargetIndex] : nil
-  }
-
-  /// フッターに出す起動先名。
-  var selectedTargetName: String { selectedTarget?.name ?? "" }
 
   /// 事実か選んだ名前が変わった。列を組み直し、選んだ役割が消えたら未選択へ戻す。
   private func reconcileBase() {

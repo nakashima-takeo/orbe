@@ -15,10 +15,10 @@ import XCTest
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliTaskProcessTests: OrbeTestCase {
   private func run(
-    _ control: ControlProcess, _ args: [String], env: [String: String] = [:],
+    _ control: ControlProcess, _ args: [String], env: [String: String] = [:], cwd: String? = nil,
     file: StaticString = #filePath, line: UInt = #line
   ) -> String {
-    let outcome = control.orb(["task"] + args, env: env, file: file, line: line)
+    let outcome = control.orb(["task"] + args, env: env, cwd: cwd, file: file, line: line)
     XCTAssertEqual(
       outcome.status, 0, "orb task \(args.joined(separator: " ")) が exit 0 でない: \(outcome.stderr)",
       file: file, line: line)
@@ -55,9 +55,9 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     XCTAssertEqual(
       rows(control),
       [
-        [first, "todo", "high", "2026-10-06", "-", "経費精算を出す", "-", "-"],
-        [second, "todo", "medium", "-", "-", "承認を取る", "部長の返事", "-"],
-      ], "task list: 1 行 1 タスク（ID・ステータス・優先度・期限・workspace・タイトル・待ち・結び付き）で、追加順に末尾へ並ぶ")
+        [first, "todo", "high", "2026-10-06", "-", "経費精算を出す", "-", "-", "-"],
+        [second, "todo", "medium", "-", "-", "承認を取る", "部長の返事", "-", "-"],
+      ], "task list: 1 行 1 タスク（ID・ステータス・優先度・期限・workspace・タイトル・待ち・結び付き・worktree）で、追加順に末尾へ並ぶ")
     XCTAssertEqual(try tasks(control)[1]["memo"] as? String, "メモ", "task add --memo")
 
     run(control, ["set", second, "--status", "done"])
@@ -71,7 +71,7 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
         "--workspace", String(background),
       ])
     XCTAssertEqual(
-      rows(control).first, [first, "todo", "low", "-", "background", "経費精算", "領収書", "-"],
+      rows(control).first, [first, "todo", "low", "-", "background", "経費精算", "領収書", "-", "-"],
       "task set: 渡した項目だけ変わり、--no-due で期限が外れる")
     let filtered = try XCTUnwrap(
       control.orbJSON(["task", "list", "--workspace", String(background)])["tasks"]
@@ -137,6 +137,54 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     XCTAssertEqual(rows(control).count, 1, "拒否された要求は一覧を変えない")
   }
 
+  /// `--worktree` の相対パスは打った場所から読み、worktree の中のサブディレクトリはルートに揃う。
+  /// 別のタスクが持つ worktree は control が拒み、その文に相手の ID が出る。
+  func testWorktreeIsReadFromTheCallersDirectoryAndShownInTheNinthColumn() throws {
+    let control = try startControlProcess()
+    let repo = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
+    let nested = (repo as NSString).appendingPathComponent("Sources/App")
+    try FileManager.default.createDirectory(atPath: nested, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(
+      atPath: repo + "/.git", withIntermediateDirectories: true)
+    let root = GitWorktreeRoot.normalizedPath(repo)
+
+    let outcome = control.orb(["task", "add", "a", "--worktree", "App"], cwd: nested + "/..")
+    XCTAssertEqual(outcome.status, 0, outcome.stderr)
+    let id = outcome.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    XCTAssertEqual(rows(control).first?[8], root, "task list の 9 列目: worktree のルート")
+    XCTAssertEqual(try tasks(control).first?["worktree"] as? String, root, "--json でも同じ値")
+
+    let other = run(control, ["add", "b"]).trimmingCharacters(in: .whitespacesAndNewlines)
+    let clash = control.orb(["task", "set", other, "--worktree", "."], cwd: repo)
+    XCTAssertEqual(clash.status, 1, "別のタスクが持つ worktree は control が弾く")
+    XCTAssertTrue(clash.stderr.contains("-32602"), clash.stderr)
+    XCTAssertTrue(clash.stderr.contains("task \(id)"), "相手のタスクの ID が出る: \(clash.stderr)")
+
+    run(control, ["set", id, "--no-worktree"])
+    XCTAssertEqual(rows(control).map { $0[8] }, ["-", "-"], "task set --no-worktree: 外れる")
+  }
+
+  /// `--worktree` の `~` は展開せず、`/` で始まらない値はすべて打った場所からの相対として読む（`~` を展開する
+  /// のは workspace のパスだけ）。`a/../b` のような値は正規化して通る。
+  func testWorktreeTildeIsNotExpandedAndDotDotIsNormalized() throws {
+    let control = try startControlProcess()
+    let plain = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("plain").path
+    for sub in ["~/x", "a", "b"] {
+      try FileManager.default.createDirectory(
+        atPath: (plain as NSString).appendingPathComponent(sub), withIntermediateDirectories: true)
+    }
+
+    run(control, ["add", "tilde", "--worktree", "~/x"], cwd: plain)
+    run(control, ["add", "dots", "--worktree", "a/../b"], cwd: plain)
+
+    XCTAssertEqual(
+      try tasks(control).map { $0["worktree"] as? String },
+      [
+        GitWorktreeRoot.normalizedPath(plain + "/~/x"),
+        GitWorktreeRoot.normalizedPath(plain + "/b"),
+      ])
+  }
+
   /// 人向けの行のセルは、向きを変える制御文字（U+202E など）を空白にし、ZWJ で組む絵文字は残す。
   /// 向きを変える文字が残ると、後続の列（待ちの理由など）が端末上で入れ替わって見える。
   func testListCellsBlankDirectionOverridesButKeepJoinedEmoji() throws {
@@ -191,6 +239,10 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
       (["task", "add", "a", "--issue", "o/n"], "--issue requires an <owner/name#N>: o/n"),
       (["task", "add", "a", "--pr", "o/n#0"], "--pr requires an <owner/name#N>: o/n#0"),
       (["task", "add", "a", "--pr", "o/n#x"], "--pr requires an <owner/name#N>: o/n#x"),
+      (
+        ["task", "set", "1", "--worktree", ".", "--no-worktree"],
+        "pass only one of --worktree / --no-worktree"
+      ),
       (["task", "rm", "abc"], "invalid task id: abc"),
       (["task", "rm", "0"], "invalid task id: 0"),
     ] {

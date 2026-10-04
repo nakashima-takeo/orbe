@@ -83,6 +83,8 @@ struct WorktreePaletteEmptyNote: View {
 /// worktree パレットのリスト 1 行（一覧の行）。先頭グリフ列（幅 14・中央）＋名前＋補足＋右端の印。
 struct WorktreePaletteRow: View {
   let item: WorktreePaletteItem
+  /// その worktree を持つタスク（worktree の行だけ）。
+  var task: WorktreePaletteRowTask?
   let selected: Bool
   /// 行タップ＝決定（release で発火する `onTapGesture`。押し込みでは走らない）。
   let onTap: () -> Void
@@ -94,15 +96,16 @@ struct WorktreePaletteRow: View {
     WorktreePaletteRowFrame(
       glyph: item.glyph, name: item.nameKey.map { l10n.string($0) } ?? item.name,
       nameSuffix: item.glyph == .newBranch ? l10n.string(.worktreePaletteCreateSuffix) : nil,
-      detail: item.detailKey.map { l10n.string($0) } ?? item.detail, selected: selected,
+      detail: item.pullRequest.map { l10n.format(.worktreePalettePullRequestBranch, $0) }
+        ?? item.detailKey.map { l10n.string($0) } ?? item.detail, selected: selected,
       onTap: onTap, onHoverEnter: onHoverEnter
     ) {
       trailing
     }
   }
 
-  /// 右端: 今の worktree は「現在」の札、clean 行は候補件数バッジ＋`⏎`（**0 件ならバッジだけ消え、行
-  /// そのものは残る**）、ブランチ行は同期ピル（`↑N` / `↓N`）か、無ければ `checkout → worktree`。
+  /// 右端: worktree の行は「現在」の札とその worktree のタスク、clean 行は候補件数バッジ＋`⏎`（**0 件なら
+  /// バッジだけ消え、行そのものは残る**）、ブランチ行は同期ピル（`↑N` / `↓N`）か、無ければ `checkout → worktree`。
   @ViewBuilder private var trailing: some View {
     if let count = item.candidateCount {
       HStack(spacing: Theme.Space.tick) {
@@ -116,11 +119,14 @@ struct WorktreePaletteRow: View {
           .foregroundStyle(Color.theme.textMuted)
           .fixedSize()
       }
-    } else if item.isCurrent, item.glyph == .worktree {
-      PaletteTag(text: l10n.string(.worktreePaletteCurrentTag))
+    } else if item.glyph == .worktree {
+      HStack(spacing: Theme.Space.phrase) {
+        if item.isCurrent { PaletteTag(text: l10n.string(.worktreePaletteCurrentTag)) }
+        if let task { WorktreePaletteRowTaskBadge(task: task) }
+      }
     } else if let sync = item.sync {
       WorktreePaletteSyncPills(sync: sync)
-    } else if item.glyph == .localBranch || item.glyph == .remoteBranch {
+    } else if [.localBranch, .remoteBranch, .pullRequest].contains(item.glyph) {
       TruncatingSlot(l10n.string(.worktreePaletteWorktreeCheckout)) {
         Text($0)
           .font(Font.theme.meta)
@@ -191,6 +197,8 @@ struct WorktreePaletteRowFrame<Trailing: View>: View {
         Text("⎇").font(Font.theme.chrome).foregroundStyle(Color.theme.textMuted)
       case .remoteBranch:
         Text("⇅").font(Font.theme.chrome).foregroundStyle(Color.theme.textMuted)
+      case .pullRequest:
+        TaskLinkGlyph(kind: .pr)
       case .newBranch:
         Text("＋").font(Font.theme.chrome).foregroundStyle(Color.theme.accentPrimary)
       case .clean:

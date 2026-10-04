@@ -66,7 +66,7 @@ struct WorktreePaletteBars: View {
 
   /// 作成行以外の選択中に出す「なし — …」。行が無ければ何も言わない。
   @ViewBuilder private var baseNote: some View {
-    if let note = model.selectedItem?.enter.baseNote {
+    if let note = model.selectedItem?.baseNote {
       PaletteActionLine(
         key: nil, template: l10n.string(note.key), slots: note.values.map { .emphasis($0) }
       )

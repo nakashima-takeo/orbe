@@ -30,6 +30,7 @@ enum TaskStoreError: Error, Equatable {
   func add(_ draft: TaskDraft) throws(TaskStoreError) -> TaskItem {
     let title = try Self.validTitle(draft.title)
     try Self.checkLinks(draft.links, of: nextId, against: tasks)
+    try Self.checkWorktree(draft.worktree, of: nextId, against: tasks)
     let now = TaskItem.storedInstant(Date())
     var waiting: TaskItem.Waiting?
     if let raw = draft.waitingReason {
@@ -39,7 +40,7 @@ enum TaskStoreError: Error, Equatable {
     let item = TaskItem(
       id: nextId, title: title, status: draft.status, waiting: waiting, priority: draft.priority,
       due: draft.due, workspace: draft.workspace, memo: draft.memo, createdAt: now,
-      createdBy: draft.createdBy, links: draft.links)
+      createdBy: draft.createdBy, links: draft.links, worktree: draft.worktree)
     nextId += 1
     tasks.append(item)
     persist()
@@ -47,7 +48,8 @@ enum TaskStoreError: Error, Equatable {
   }
 
   /// 指定した項目だけを変える。完了にすると待ちが外れる。完了のまま待ちを入れることはできない
-  /// （同じ要求でステータスを戻せば入れられる）。結び付きは丸ごと置き換える。
+  /// （同じ要求でステータスを戻せば入れられる）。結び付きは丸ごと置き換え、外れた項目を「外した項目」に
+  /// 足し、足された項目をそこから消す（外した経路を区別しない）。
   func update(_ id: Int, _ update: TaskUpdate) throws(TaskStoreError) -> TaskItem {
     guard let index = tasks.firstIndex(where: { $0.id == id }) else { throw .notFound(id) }
     guard !update.isEmpty else { throw .invalid("no fields to update") }
@@ -58,15 +60,29 @@ enum TaskStoreError: Error, Equatable {
     if let due = update.due { item.due = due.value }
     if let memo = update.memo { item.memo = memo }
     if let workspace = update.workspace { item.workspace = workspace.value }
-    if let links = update.links {
-      try Self.checkLinks(links, of: id, against: tasks)
-      item.links = links
-    }
+    try applyLinksAndWorktree(update, to: &item)
     item.waiting = try Self.waiting(update.waitingReason, of: item)
     if item.status == .done { item.waiting = nil }
     tasks[index] = item
     persist()
     return item
+  }
+
+  /// 結び付きと worktree の変更を当てる（どちらも、ほかのタスクとの不変条件を持つ）。結び付きから外れた
+  /// 項目は外した項目に足し、足された項目はそこから消す。
+  private func applyLinksAndWorktree(_ update: TaskUpdate, to item: inout TaskItem)
+    throws(TaskStoreError)
+  {
+    if let links = update.links {
+      try Self.checkLinks(links, of: item.id, against: tasks)
+      let kept = Set(links.map(\.item))
+      item.unlinked = item.unlinked.union(item.links.map(\.item)).subtracting(kept)
+      item.links = links
+    }
+    if let worktree = update.worktree {
+      try Self.checkWorktree(worktree.value, of: item.id, against: tasks)
+      item.worktree = worktree.value
+    }
   }
 
   /// 待ちの変更を当てた後の待ち。理由だけを変えても待ち始めた日時は動かない。
@@ -95,6 +111,32 @@ enum TaskStoreError: Error, Equatable {
     let at = tasks.firstIndex { $0.id == anchor }!
     tasks.insert(item, at: placement == .before ? at : at + 1)
     persist()
+  }
+
+  /// ⌘T の ↵ で作業を始めた。`worktree` を付け（ほかのタスクが持っていればそこから外し）、未着手・完了なら
+  /// 進行中にする（完了から戻すので待ちは無い）。一度だけ保存する——付け替えを 2 回の変異に分けると、
+  /// 間に読んだ agent に不変条件の破れか「どちらも持たない」状態が見える。外した前の持ち主の ID を返す。
+  @discardableResult func begin(_ id: Int, worktree: TaskWorktree) throws(TaskStoreError) -> Int? {
+    guard let index = tasks.firstIndex(where: { $0.id == id }) else { throw .notFound(id) }
+    let previous = tasks.firstIndex { $0.id != id && $0.worktree == worktree }
+    if let previous { tasks[previous].worktree = nil }
+    tasks[index].worktree = worktree
+    tasks[index].status = .inProgress
+    persist()
+    return previous.map { tasks[$0].id }
+  }
+
+  /// worktree のブランチの PR の自動の結び付け。結び付きの末尾に足す。タスクが無い・完了・その項目を
+  /// 人が外した・どこかのタスクに既に付いている、のどれかなら何もしない（外した項目の記録は変えない）。
+  /// 足したら true。
+  @discardableResult func linkFromBranch(_ id: Int, _ link: TaskLink) -> Bool {
+    guard let index = tasks.firstIndex(where: { $0.id == id }), tasks[index].status != .done,
+      !tasks[index].unlinked.contains(link.item),
+      !tasks.contains(where: { $0.links.contains { $0.item == link.item } })
+    else { return false }
+    tasks[index].links.append(link)
+    persist()
+    return true
   }
 
   func delete(_ id: Int) throws(TaskStoreError) {
@@ -138,6 +180,17 @@ enum TaskStoreError: Error, Equatable {
         throw .invalid("github item \(clash.item.text) is linked to task \(other.id)")
       }
     }
+  }
+
+  /// worktree の不変条件。`worktree` を `id` のタスクの worktree として、`tasks` のほかのタスクが持って
+  /// いないことを確かめる。拒否の文には相手のタスクの ID を入れる（agent が外す相手を知れるように）。
+  static func checkWorktree(_ worktree: TaskWorktree?, of id: Int, against tasks: [TaskItem])
+    throws(TaskStoreError)
+  {
+    guard let worktree,
+      let other = tasks.first(where: { $0.id != id && $0.worktree == worktree })
+    else { return }
+    throw .invalid("worktree \(worktree.path) is linked to task \(other.id)")
   }
 
   private static func validReason(_ raw: String) throws(TaskStoreError) -> String {

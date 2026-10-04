@@ -153,12 +153,13 @@ final class GitHubCLI {
   static func branchPRArguments(head: String) -> [String] {
     [
       "pr", "list", "--state", "all", "--head", head, "--limit", "100", "--json",
-      "number,headRefName,state,baseRefName,headRepository,headRepositoryOwner",
+      "number,headRefName,state,baseRefName,headRepository,headRepositoryOwner,url",
     ]
   }
 
   /// 指定ブランチ群に紐づく PR（ブランチごとに open/closed 両方）。worktree の掃除で
-  /// 「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見る。
+  /// 「レビュー中か／マージ済みか／未マージのまま閉じられたか」を見る。タスクの worktree のブランチの PR の
+  /// 自動の結び付け（`WorktreePullRequestResolver`）も同じ取得を使う。
   ///
   /// **結果は head 単位で返し、失敗もその head に閉じる**（`nil` = その head の取得失敗／
   /// `[]` = 該当なし）——1 本の失敗で全体を捨てると、取れた head の事実まで一緒に消える。

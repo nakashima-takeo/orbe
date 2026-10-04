@@ -24,7 +24,8 @@ final class WorktreePaletteEnterLineTests: OrbeTestCase {
       [.slot(0), .literal(" と "), .literal("%2$@")])
   }
 
-  /// ↵ の説明と「なし — …」のテンプレートは、どの言語でも画面が渡す値をちょうど 1 回ずつ使う。
+  /// ↵ の説明（タスクに起こすことの続きを含む）と「なし — …」のテンプレートは、どの言語でも画面が渡す値を
+  /// ちょうど 1 回ずつ使う。
   func testEveryTemplateUsesEachValueOnceInEveryLanguage() {
     let valueCounts: [(L10nKey, Int)] = [
       (.worktreePaletteEnterOpen, 2),
@@ -38,6 +39,10 @@ final class WorktreePaletteEnterLineTests: OrbeTestCase {
       (.worktreePaletteBaseNoneTrackRemote, 2),
       (.worktreePaletteBaseNoneClean, 0),
       (.worktreePaletteBasePickEnter, 1),
+      (.worktreePaletteBaseNonePullRequest, 2),
+      (.worktreePaletteEffectBegin, 1),
+      (.worktreePaletteEffectBeginReassign, 2),
+      (.worktreePaletteEffectReassign, 2),
     ]
     for (key, count) in valueCounts {
       for language in Language.allCases {

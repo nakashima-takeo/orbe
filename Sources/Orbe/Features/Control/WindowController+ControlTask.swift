@@ -15,10 +15,17 @@ extension WindowController {
     return .success(["tasks": tasks.map(taskJSON)])
   }
 
-  func controlAddTask(_ draft: TaskDraft, workspaceId: ClearableValue<Int>?, callerTabId: Int?)
-    -> Result<Any, ControlError>
-  {
+  func controlAddTask(
+    _ draft: TaskDraft, workspaceId: ClearableValue<Int>?, callerTabId: Int?,
+    worktree: String? = nil
+  ) -> Result<Any, ControlError> {
     var draft = draft
+    if let worktree {
+      guard let resolved = TaskWorktree(directory: worktree) else {
+        return .failure(Self.notADirectory(worktree))
+      }
+      draft.worktree = resolved
+    }
     let caller = callerTabId.flatMap(controlResolveTab)
     // agent が自分のターンの中で足したときだけ、そのタブの agent は working を報告している。人がシェルから
     // 打った追加や、終了を報告しない agent（codex / agy）が去った後のタブからの追加を agent の名で残さない。
@@ -41,10 +48,22 @@ extension WindowController {
     return taskResult { () throws(TaskStoreError) in ["task": taskJSON(try taskStore.add(draft))] }
   }
 
-  func controlUpdateTask(taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?)
-    -> Result<Any, ControlError>
-  {
+  func controlUpdateTask(
+    taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?,
+    worktree: ClearableValue<String>? = nil
+  ) -> Result<Any, ControlError> {
     var update = update
+    switch worktree {
+    case nil:
+      break
+    case .clear:
+      update.worktree = .clear
+    case .set(let path):
+      guard let resolved = TaskWorktree(directory: path) else {
+        return .failure(Self.notADirectory(path))
+      }
+      update.worktree = .set(resolved)
+    }
     switch workspaceId {
     case nil:
       break
@@ -79,6 +98,10 @@ extension WindowController {
 
   private static let workspaceNotFound = ControlError(code: -32004, message: "workspace not found")
 
+  private static func notADirectory(_ path: String) -> ControlError {
+    ControlError(code: -32602, message: "worktree is not an absolute path to a directory: \(path)")
+  }
+
   /// ストアのドメインエラーを制御エラーの語彙へ写す（未知のタスク → -32004・不正な値 → -32602）。
   private func taskResult(_ body: () throws(TaskStoreError) -> [String: Any]) -> Result<
     Any, ControlError
@@ -96,7 +119,8 @@ extension WindowController {
   }
 
   /// list_tasks の要素。workspace は今の workspaceId と名前で見せ、解決できない参照（削除済み）は
-  /// 「なし」と同じくキーごと出さない。無い値はキーごと出さない。
+  /// 「なし」と同じくキーごと出さない。worktree もディレクトリが無ければ出さない。無い値はキーごと出さない。
+  /// 外した項目は出さない（自動の結び付けのための内部の記録）。
   private func taskJSON(_ task: TaskItem) -> [String: Any] {
     var json: [String: Any] = [
       "taskId": task.id, "title": task.title, "status": task.status.rawValue,
@@ -112,6 +136,7 @@ extension WindowController {
       json["workspaceName"] = ws.name
     }
     if let createdBy = task.createdBy { json["createdBy"] = createdBy }
+    if let worktree = task.worktree, worktree.exists { json["worktree"] = worktree.path }
     if !task.links.isEmpty {
       json["links"] = task.links.map {
         ["kind": $0.kind.rawValue, "repo": $0.item.repo.value, "number": $0.item.number]

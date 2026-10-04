@@ -76,6 +76,20 @@ struct TaskPaletteTaskRow: Equatable {
   let pullRequest: GitHubItemText.PullRequestBadge?
   /// 主が自分以外の作成した PR（「レビュー」）。
   let needsReview: Bool
+  let agent: WorktreeAgentActivity.Agent?
+}
+
+extension TaskPaletteTaskRow.Glyph {
+  /// 完了 → 待ち → 進行中 → 未着手 の順に決まる（待ちはステータスと独立した属性なので、完了以外で優先する）。
+  init(_ task: TaskItem) {
+    self =
+      switch (task.status, task.waiting) {
+      case (.done, _): .done
+      case (_, .some): .waiting
+      case (.inProgress, nil): .inProgress
+      case (.todo, nil): .todo
+      }
+  }
 }
 
 /// 一覧の 1 行。
@@ -134,6 +148,8 @@ enum TaskPaletteRows {
     /// 結び付いた項目の GitHub の値（`GitHubItemCache` の答え）。
     let items: [GitHubItemID: GitHubItemAnswer]
     let viewerLogin: String?
+    /// worktree ごとの agent（`WorktreeAgentActivity` の索引）。
+    let agents: [String: WorktreeAgentActivity.Agent]
   }
 
   static func build(_ input: Input) -> [TaskPaletteRow] {
@@ -173,18 +189,11 @@ enum TaskPaletteRows {
   }
 
   private static func taskRow(_ task: TaskItem, _ input: Input) -> TaskPaletteTaskRow {
-    let glyph: TaskPaletteTaskRow.Glyph =
-      switch (task.status, task.waiting) {
-      case (.done, _): .done
-      case (_, .some): .waiting
-      case (.inProgress, nil): .inProgress
-      case (.todo, nil): .todo
-      }
     let workspace: TaskPaletteTaskRow.WorkspaceBadge? = input.workspaces.entry(task.workspace).map {
       $0.id == input.workspaces.opened.id ? .opened($0.name) : .other($0.name)
     }
     return TaskPaletteTaskRow(
-      id: task.id, title: task.title, glyph: glyph,
+      id: task.id, title: task.title, glyph: TaskPaletteTaskRow.Glyph(task),
       priority: task.priority == .medium ? nil : task.priority,
       due: task.due.map { TaskPaletteTaskRow.Due(date: $0, today: input.today) },
       createdBy: task.createdBy,
@@ -197,6 +206,7 @@ enum TaskPaletteRows {
       link: GitHubItemText.mark(task.links),
       pullRequest: GitHubItemText.pullRequestBadge(task.links, input.items),
       needsReview: GitHubItemText.needsReview(
-        task.links, input.items, viewerLogin: input.viewerLogin))
+        task.links, input.items, viewerLogin: input.viewerLogin),
+      agent: task.agent(in: input.agents).flatMap { $0.isBusy ? $0 : nil })
   }
 }

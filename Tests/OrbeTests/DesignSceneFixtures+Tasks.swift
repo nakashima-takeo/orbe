@@ -33,23 +33,25 @@ extension DesignSceneFixtures {
       _ id: Int, _ title: String, _ status: TaskItem.Status = .todo,
       waiting: (String, Int)? = nil, priority: TaskItem.Priority = .medium,
       due: String? = nil, workspace: UUID? = nil, memo: String = "", by: String? = nil,
-      links: [TaskLink] = []
+      links: [TaskLink] = [], worktree: String? = nil
     ) -> TaskItem {
       TaskItem(
         id: id, title: title, status: status,
         waiting: waiting.map { TaskItem.Waiting(reason: $0.0, since: daysAgo($0.1)) },
         priority: priority, due: due.flatMap(TaskItem.DueDate.init), workspace: workspace,
-        memo: memo, createdAt: daysAgo(2), createdBy: by, links: links)
+        memo: memo, createdAt: daysAgo(2), createdBy: by, links: links,
+        worktree: worktree.map(taskWorktree))
     }
     let tasks = [
       task(
         1, "タスク機能の設計", .inProgress, workspace: ws[0],
-        links: [taskLink(.issue, "orbe", 212), taskLink(.pr, "orbe", 213)]),
+        links: [taskLink(.issue, "orbe", 212), taskLink(.pr, "orbe", 213)], worktree: "issue-212"),
       task(
-        2, "レビュー指摘に返信する", .inProgress, workspace: ws[0], links: [taskLink(.pr, "orbe", 209)]),
+        2, "レビュー指摘に返信する", .inProgress, workspace: ws[0], links: [taskLink(.pr, "orbe", 209)],
+        worktree: "pr-209"),
       task(
         3, "設定の検索を速くする", .inProgress, waiting: ("レビュー待ち", 2), workspace: ws[0],
-        links: [taskLink(.pr, "orbe", 214)]),
+        links: [taskLink(.pr, "orbe", 214)], worktree: "pr-214"),
       task(4, "見積もりの数字を経理に確認する", .inProgress, waiting: ("経理の返事", 1)),
       task(
         5, "ログイン直後に白画面になる", priority: .high, workspace: ws[1],
@@ -67,6 +69,24 @@ extension DesignSceneFixtures {
       task(14, "ブランチ名の検証を直す", .done, workspace: ws[0]),
     ]
     return TasksFile(version: TaskPersistence.version, nextId: 15, tasks: tasks)
+  }
+
+  /// 見本の worktree（`~/wt/<name>`。ファイルシステムには無い）。
+  static func taskWorktree(_ name: String) -> TaskWorktree {
+    TaskWorktree(key: "\(NSHomeDirectory())/wt/\(name)")
+  }
+
+  /// 見本の agent（#212 の worktree で claude が 12 分作業中、#209 の worktree で入力待ち）。
+  static func taskAgents() -> WorktreeAgentActivity {
+    let agent = { (name: String, state: AgentStateIcon.Kind, minutes: Double) in
+      WorktreeAgentActivity.Agent(
+        name: "claude", state: state, since: Date().addingTimeInterval(-minutes * 60),
+        tabId: 1, tabTitle: name)
+    }
+    return WorktreeAgentActivity(agents: [
+      taskWorktree("issue-212").path: agent("issue-212", .working, 12),
+      taskWorktree("pr-209").path: agent("pr-209", .waiting, 3),
+    ])
   }
 
   static func taskLink(_ kind: GitHubItemKind, _ repo: String, _ number: Int) -> TaskLink {
@@ -104,6 +124,7 @@ extension DesignSceneFixtures {
   static func taskPaletteModel(_ file: TasksFile? = nil) -> TaskPaletteModel {
     TaskPaletteModel(
       store: TaskStore(file: file ?? taskDesignFile()), githubItems: taskGitHubItems(),
+      agents: taskAgents(),
       workspaces: taskWorkspaces, now: taskToday, timeZone: taskCalendar.timeZone)
   }
 }

@@ -1,7 +1,7 @@
 import Foundation
 
 /// タスクの 5 動詞の dispatch。ここが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と
-/// 不変条件は `TaskStore`、workspace と呼び出し元タブの解決は target が持つ。
+/// 不変条件は `TaskStore`、workspace・呼び出し元タブ・worktree の解決は target が持つ。
 extension ControlServer {
   func runTask(method: String, params: [String: Any], target: ControlTarget)
     -> Result<Any, ControlError>?
@@ -21,7 +21,7 @@ extension ControlServer {
         if let links = try p.links() { draft.links = links }
         return target.controlAddTask(
           draft, workspaceId: try p.nullableInt("workspaceId"),
-          callerTabId: try p.optionalInt("callerTabId"))
+          callerTabId: try p.optionalInt("callerTabId"), worktree: try p.optionalString("worktree"))
       case "update_task":
         let update = TaskUpdate(
           title: try p.optionalString("title"), status: try p.status(),
@@ -29,7 +29,8 @@ extension ControlServer {
           waitingReason: try p.nullableString("waitingReason"),
           memo: try p.optionalString("memo"), links: try p.links())
         return target.controlUpdateTask(
-          taskId: try p.int("taskId"), update, workspaceId: try p.nullableInt("workspaceId"))
+          taskId: try p.int("taskId"), update, workspaceId: try p.nullableInt("workspaceId"),
+          worktree: try p.nullableString("worktree"))
       case "move_task":
         let taskId = try p.int("taskId")
         switch (try p.optionalInt("beforeTaskId"), try p.optionalInt("afterTaskId")) {

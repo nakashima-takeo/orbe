@@ -62,6 +62,13 @@ struct GitBranch: Equatable {
   /// `remote.pushDefault` → `branch.<名前>.remote`）で、ローカルブランチを追跡する行は `.`。
   /// 解決できなければ nil（remote ブランチは常に nil）。
   var pushRemote: String?
+
+  /// `origin/feat/x` → `feat/x`（先頭のリモート名を落とす）。リモートのブランチや既定ブランチの値
+  /// （`origin/main`）を、ローカルのブランチ名と比べるときに通す。
+  static func localName(fromRemote name: String) -> String {
+    let parts = name.split(separator: "/", maxSplits: 1)
+    return parts.count == 2 ? String(parts[1]) : name
+  }
 }
 
 // MARK: - GitHub（gh CLI）
@@ -165,7 +172,7 @@ struct GitHubIssue: Decodable, Equatable, GitHubNumbered {
 }
 
 /// `gh pr list --state all --head <branch> --json number,headRefName,state,baseRefName,headRepository,
-/// headRepositoryOwner` の 1 PR。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を
+/// headRepositoryOwner,url` の 1 PR。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を
 /// 見るための小さな形で、`GitHubPullRequest`（title 必須）ではこの JSON をデコードできない。
 struct GitHubBranchPR: Decodable, Equatable {
   let number: Int
@@ -176,12 +183,21 @@ struct GitHubBranchPR: Decodable, Equatable {
   let baseRefName: String
   /// head 側のリポジトリ。消えていれば nil。
   let headRepository: GitHubRepoName?
+  /// PR のページ（PR が置かれたリポジトリを指す。head のリポジトリとは限らない）。
+  var url: String?
 
-  /// head のリポジトリとブランチ。`--head` はブランチ名でしか絞れず他人の fork の同名ブランチに
-  /// 立った PR も返るので、worktree と突き合わせるのはこれが等しいものだけ。head のリポジトリが
-  /// 消えていれば nil（どの worktree とも等しくならない）。
+  /// head のリポジトリとブランチ。head のリポジトリが消えていれば nil（どのブランチとも等しくならない）。
   var head: GitHubBranchRef? {
     headRepository.map { GitHubBranchRef(repo: $0, branch: headRefName) }
+  }
+
+  /// `ref` のブランチの PR。`--head` はブランチ名でしか絞れず他人の fork の同名ブランチに立った PR も
+  /// 返るので、ブランチと突き合わせるのは head が等しいものだけ（⌘T の clean と PR の自動の結び付けが
+  /// 共にこの規則を通る）。並びは保つ。
+  static func filter(_ pullRequests: [GitHubBranchPR], headedBy ref: GitHubBranchRef)
+    -> [GitHubBranchPR]
+  {
+    pullRequests.filter { $0.head == ref }
   }
 }
 
@@ -193,11 +209,12 @@ extension GitHubBranchPR {
       headRefName: try container.decode(String.self, forKey: .headRefName),
       state: try container.decode(String.self, forKey: .state),
       baseRefName: try container.decode(String.self, forKey: .baseRefName),
-      headRepository: try PullRequestHeadRepository(from: decoder).name)
+      headRepository: try PullRequestHeadRepository(from: decoder).name,
+      url: try container.decodeIfPresent(String.self, forKey: .url))
   }
 
   private enum CodingKeys: String, CodingKey {
-    case number, headRefName, state, baseRefName
+    case number, headRefName, state, baseRefName, url
   }
 }
 

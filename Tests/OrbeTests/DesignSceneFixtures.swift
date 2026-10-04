@@ -52,13 +52,7 @@ enum DesignSceneFixtures {
   /// 現在 / ほか… が出る。
   static func worktreePaletteNewBranchModel() -> WorktreePaletteModel {
     let model = worktreePaletteModel(from: .designSample)
-    let home = NSHomeDirectory()
-    model.newBranchRules = WorktreeNewBranchRules(
-      takenNames: ["issue/212", "pr-214", "perf/render-batching", "fix/login-blank"],
-      worktreePaths: ["\(home)/wt/issue-212", "\(home)/wt/pr-214"],
-      template: "~/wt/{slug}", repoPath: "\(home)/src/orbe")
-    model.baseFacts = WorktreeBaseFacts(
-      previous: "origin/release/0.8", defaultBranch: "origin/main", current: "issue/212")
+    setDesignBase(model)
     model.baseCandidates = [
       .init(name: "issue/212", relativeDate: "1d ago", isRemote: false),
       .init(name: "fix/login-blank", relativeDate: "3d ago", isRemote: false),
@@ -138,11 +132,14 @@ enum DesignSceneFixtures {
     return model
   }
 
-  /// 分冊（+Clean）からも呼ぶ組み立て口（provider の初回 rebuild と同じ順）。
-  static func worktreePaletteModel(from input: WorktreePaletteSectionBuilder.Input)
-    -> WorktreePaletteModel
-  {
-    let model = WorktreePaletteModel()
+  /// 分冊（+Clean・+TaskWorktree）からも呼ぶ組み立て口（provider の初回 rebuild と同じ順）。worktree の行には
+  /// 見本のタスク（#212・#214）の札が出る。
+  static func worktreePaletteModel(
+    from input: WorktreePaletteSectionBuilder.Input, task: Int? = nil
+  ) -> WorktreePaletteModel {
+    let model = WorktreePaletteModel(
+      tasks: worktreePaletteTasks(), githubItems: GitHubItemCache(fetch: { _, _ in }),
+      agents: taskAgents(), task: task)
     setDesignTargets(model)
     model.hasLoadedOnce = true
     model.sections = WorktreePaletteSectionBuilder.build(input)

@@ -39,6 +39,12 @@ struct TaskPaletteFooter: View {
     } else if case .detail(.field(let field)) = model.area {
       PaletteActionLine(
         key: field.isText ? "↵" : "←→", template: l10n.string(fieldActionKey(field)), slots: [])
+    } else if model.area == .detail(.agent) {
+      if let task = model.selectedTask, let agent = model.agent(of: task) {
+        PaletteActionLine(
+          key: "↵", template: l10n.string(.taskPaletteActionGoToTab),
+          slots: [.emphasis(agent.tabTitle)])
+      }
     } else if case .detail(.link(let item)) = model.area {
       PaletteActionLine(
         key: "↵", template: l10n.string(.taskPaletteActionOpenLink),
@@ -79,12 +85,14 @@ struct TaskPaletteFooter: View {
       } else if model.tab == .github {
         PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
       } else if case .detail(let stop) = model.area {
+        PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
         if case .link = stop {
           PaletteKeyHint(key: "⌫", label: l10n.string(.taskPaletteUnlink))
         }
         PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteHintField))
         PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintBack))
       } else {
+        PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
         PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintDetail))
         PaletteKeyHint(key: "⌥↑↓", label: l10n.string(.taskPaletteHintReorder))
         PaletteKeyHint(key: "⇥", label: l10n.string(.taskPaletteHintScope))

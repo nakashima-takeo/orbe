@@ -81,6 +81,12 @@ struct WorktreePaletteCard: View {
     .onChange(of: model.focusToken, initial: true) {
       focus = hasField ? .field : .card
     }
+    // 先頭の欄の入力（文脈のタスクの worktree・主・PR の head）を、開いたときと変わるたびに、描画の外で
+    // provider へ届ける。主の PR の値がまだ無ければ先に頼む（開いている間に主が変わっても）。
+    .onChange(of: model.taskInputs, initial: true) {
+      model.ensurePrimaryPullRequest()
+      model.onTaskInputsChanged()
+    }
   }
 
   /// ヘッダ／バー／フッターの実測高を合算して chrome 高に集約する probe。
@@ -117,6 +123,10 @@ struct WorktreePaletteCard: View {
       switch model.mode {
       case .list:
         Spacer(minLength: Theme.Space.step)
+        if let task = model.task {
+          WorktreePaletteTaskBadge(task: task, onRemove: { model.clearTaskContext() })
+            .padding(.leading, gap)
+        }
         keyCap("⌘T").padding(.leading, gap)
       case .basePicker:
         Spacer(minLength: Theme.Space.step)
@@ -169,7 +179,9 @@ struct WorktreePaletteCard: View {
       .onChange(of: model.query) { model.onQueryChanged() }
       // 実行＝onSubmit（IME 変換確定の Enter では発火しない＝誤爆しない）。行タップと同じ決定 funnel。
       .onSubmit { model.submit() }
-      .onKeyPress { WorktreePaletteFieldKeys.handle($0, model: model) }
+      .onKeyPress {
+        WorktreePaletteFieldKeys.handle($0, model: model, composing: IMEComposition.isActive)
+      }
   }
 
   /// モードに応じた入力の行き先。一覧の入力ロック中（作成中・預かった ↵ の待ち）は打鍵を握り潰す
@@ -182,8 +194,9 @@ struct WorktreePaletteCard: View {
   }
 
   private var placeholderKey: L10nKey {
-    model.mode == .basePicker
-      ? .worktreePaletteBaseQueryPlaceholder : .worktreePaletteQueryPlaceholder
+    if model.mode == .basePicker { return .worktreePaletteBaseQueryPlaceholder }
+    return model.task == nil
+      ? .worktreePaletteQueryPlaceholder : .worktreePaletteTaskQueryPlaceholder
   }
 
   // MARK: - リスト部
@@ -202,7 +215,7 @@ struct WorktreePaletteCard: View {
               case .note(_, let key): WorktreePaletteEmptyNote(text: l10n.string(key))
               case .item(let index, let item):
                 WorktreePaletteRow(
-                  item: item, selected: index == model.selected,
+                  item: item, task: model.rowTask(item), selected: index == model.selected,
                   // 行タップ（release）＝決定。↵ と同じ funnel を通り、選択移動と実行が一体で走る。
                   onTap: { model.activate(at: index) },
                   // ホバー開始＝選択の追従だけ（決定は走らない）。
@@ -262,6 +275,9 @@ struct WorktreePaletteCard: View {
       repository.isEmpty ? "WORKTREES" : "WORKTREES · \(repository.uppercased())"
     case .branches: "BRANCHES"
     case .worktreesAndBranches: "WORKTREES・BRANCHES"
+    case .task(let number):
+      number.map { l10n.format(.worktreePaletteSectionTask, "#\($0)") }
+        ?? l10n.string(.worktreePaletteSectionThisTask)
     }
   }
 

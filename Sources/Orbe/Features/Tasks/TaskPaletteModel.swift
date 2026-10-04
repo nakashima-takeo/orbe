@@ -19,12 +19,13 @@ enum TaskPaletteError: Error, Equatable {
 }
 
 /// ⌘⇧X タスク画面の状態（@Observable）。タスクの値は写さずストア（唯一の正）を直接読み書きし、GitHub の値も
-/// 写さず置き場（`GitHubItemCache`）から引く。ここは入力・範囲・タブ・選択・一覧の送り先・焦点・編集中の
+/// 写さず置き場（`GitHubItemCache`）から、agent の状態も写さず窓の索引（`WorktreeAgentActivity`）から引く。ここは入力・範囲・タブ・選択・一覧の送り先・焦点・編集中の
 /// 下書き・行の掴みだけを持つ。一覧の行は `TaskPaletteRows` が毎回組む。
 /// 列が変わったとき（agent の変更を含む）は `reconcile()` 1 本で選択・焦点・下書き・掴みを付け直す。
 @Observable final class TaskPaletteModel {
   let store: TaskStore
   let githubItems: GitHubItemCache
+  let agents: WorktreeAgentActivity
   let workspaces: TaskPaletteWorkspaces
   let today: TaskItem.DueDate
   /// 時刻を暦日へ落とすためのタイムゾーン。
@@ -71,14 +72,19 @@ enum TaskPaletteError: Error, Equatable {
   var onDismiss: () -> Void = {}
   /// 結び付いた項目の GitHub のページを開く。
   var onOpenURL: (URL) -> Void = { _ in }
+  /// そのタスクのための ⌘T を開く（タスクの ID）。
+  var onOpenWorktreePalette: (Int) -> Void = { _ in }
+  /// agent のタブへ移る（タブの ID）。
+  var onFocusTab: (Int) -> Void = { _ in }
 
   /// 開いた時点で、出ている行の結び付きの値を取り直す（届くまでは前回の答えで描く）。
   init(
-    store: TaskStore, githubItems: GitHubItemCache, workspaces: TaskPaletteWorkspaces, now: Date,
-    timeZone: TimeZone
+    store: TaskStore, githubItems: GitHubItemCache, agents: WorktreeAgentActivity,
+    workspaces: TaskPaletteWorkspaces, now: Date, timeZone: TimeZone
   ) {
     self.store = store
     self.githubItems = githubItems
+    self.agents = agents
     self.workspaces = workspaces
     self.timeZone = timeZone
     today = .today(now, timeZone: timeZone)
@@ -97,7 +103,7 @@ enum TaskPaletteError: Error, Equatable {
     TaskPaletteRows.Input(
       tasks: store.tasks, query: query, scope: scope, doneExpanded: doneExpanded,
       workspaces: workspaces, today: today, timeZone: timeZone, items: githubItems.answers,
-      viewerLogin: githubItems.viewerLogin)
+      viewerLogin: githubItems.viewerLogin, agents: agents.agents)
   }
 
   /// 出ている行（今の範囲・入力で一覧に出るタスク。完了の欄は開いているときだけ）の結び付きの項目。
@@ -167,7 +173,7 @@ enum TaskPaletteError: Error, Equatable {
       area = .list
     }
     if case .detail(let stop) = area, let task = selectedTask {
-      let stops = Self.detailStops(task)
+      let stops = detailStops(task)
       if !stops.contains(stop) { area = .detail(stops[min(detailPosition, stops.count - 1)]) }
     }
     rememberDetailPosition()
@@ -177,7 +183,7 @@ enum TaskPaletteError: Error, Equatable {
   /// 詳細で居る場所の位置を覚え直す。焦点の結び付きが外れたとき、同じ位置の止まる場所へ移すため。
   private func rememberDetailPosition() {
     guard case .detail(let stop) = area, let task = selectedTask,
-      let index = Self.detailStops(task).firstIndex(of: stop)
+      let index = detailStops(task).firstIndex(of: stop)
     else { return }
     detailPosition = index
   }
@@ -260,16 +266,19 @@ enum TaskPaletteError: Error, Equatable {
   }
 
   /// 入力のタイトルで、開いた workspace に付いた未着手のタスクを列の末尾へ足し、入力を空にして選ぶ。
-  func addFromQuery() {
+  /// 足したタスクの ID を返す。
+  @discardableResult func addFromQuery() -> Int? {
     let title = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard tab == .tasks, !title.isEmpty else { return }
+    guard tab == .tasks, !title.isEmpty else { return nil }
     do {
       let item = try store.add(TaskDraft(title: title, workspace: workspaces.opened.id))
       query = ""
       let ids = selectableIDs
       if let index = ids.firstIndex(of: .task(item.id)) { select(at: index, in: ids) }
+      return item.id
     } catch {
       self.error = .title
+      return nil
     }
   }
 

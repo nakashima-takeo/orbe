@@ -13,6 +13,21 @@ extension L10n {
       "worktree・ブランチを検索、または新しいブランチ名",
       "Search worktrees and branches, or type a new branch name"
     ),
+    .worktreePaletteTaskQueryPlaceholder: ("worktree・ブランチを検索", "Search worktrees and branches"),
+    .worktreePaletteSectionTask: ("%@ の worktree", "worktree for %@"),
+    .worktreePaletteSectionThisTask: ("このタスクの worktree", "this task’s worktree"),
+    .worktreePaletteTaskTitle: ("『%@』", "“%@”"),
+    .worktreePalettePullRequestBranch: ("PR #%lld のブランチ", "PR #%lld branch"),
+    .worktreePaletteEffectBegin: (" · %1$@ を進行中に", " · start %1$@"),
+    .worktreePaletteEffectBeginReassign: (
+      " · %1$@ を進行中に（%2$@ から付け替え）", " · start %1$@ (moved from %2$@)"
+    ),
+    .worktreePaletteEffectReassign: (" · %2$@ から %1$@ へ付け替え", " · move from %2$@ to %1$@"),
+    .worktreePaletteHintRemoveTask: ("外す", "Remove"),
+    .worktreePaletteBaseNonePullRequest: (
+      "なし — 新しいブランチは切らず、PR #%1$@ のブランチ %2$@ を worktree にする",
+      "None — no new branch; makes PR #%1$@’s branch %2$@ a worktree"
+    ),
     .worktreePalettePreparing: ("作成中…", "Preparing…"),
     .worktreePaletteHintSelect: ("選択", "Select"),
     .worktreePaletteHintClose: ("閉じる", "Close"),

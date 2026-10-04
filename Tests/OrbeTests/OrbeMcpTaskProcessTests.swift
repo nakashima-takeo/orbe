@@ -49,9 +49,10 @@ final class OrbeMcpTaskProcessTests: OrbeTestCase {
       (add["description"] as? String ?? "").contains("呼び出し元タブ"),
       "add_task の description が「省略 = 呼び出し元タブの workspace」を書く")
     let update = try tool("update_task")
-    for key in ["due", "waitingReason", "workspaceId"] {
+    for key in ["due", "waitingReason", "workspaceId", "worktree"] {
       XCTAssertTrue(acceptsNull(update, key), "update_task の \(key) は null（外す）を受ける")
     }
+    XCTAssertNotNil(properties(add)["worktree"], "add_task は worktree を付けられる")
     for tool in [add, update] {
       let links = properties(tool)["links"] as? [String: Any]
       let item = links?["items"] as? [String: Any]

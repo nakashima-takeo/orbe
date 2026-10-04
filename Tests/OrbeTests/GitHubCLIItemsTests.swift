@@ -31,9 +31,11 @@ final class GitHubCLIItemsTests: OrbeTestCase {
 
     static func pullRequest(
       _ title: String, state: String = "OPEN", isDraft: Bool = false,
-      review: String? = "REVIEW_REQUIRED", author: String? = "nakatake", checks: String? = "SUCCESS"
+      review: String? = "REVIEW_REQUIRED", author: String? = "nakatake",
+      checks: String? = "SUCCESS",
+      head: [String: Any]? = nil
     ) -> [String: Any] {
-      [
+      var node: [String: Any] = [
         "__typename": "PullRequest", "title": title, "state": state, "isDraft": isDraft,
         "reviewDecision": review ?? NSNull(),
         "author": author.map { ["login": $0] } ?? NSNull(),
@@ -41,6 +43,8 @@ final class GitHubCLIItemsTests: OrbeTestCase {
           "nodes": [["commit": ["statusCheckRollup": checks.map { ["state": $0] } ?? NSNull()]]]
         ],
       ]
+      node.merge(head ?? [:]) { $1 }
+      return node
     }
   }
 
@@ -169,6 +173,44 @@ final class GitHubCLIItemsTests: OrbeTestCase {
         .init(
           title: "下書き", state: .open,
           pullRequest: .init(isDraft: true, review: nil, checks: nil, author: nil))))
+  }
+
+  /// PR の head（ブランチ名と、それが載るリポジトリ）を読む。タスクから開いた ⌘T が PR のブランチを探す元。
+  /// head のリポジトリが消えていれば head は無い。
+  func testPullRequestHeadIsReadAndAGoneHeadRepositoryReadsAsNoHead() throws {
+    let fromFork = try id("o/n", 1)
+    let goneFork = try id("o/n", 2)
+    let arguments = GitHubItemQuery.arguments([fromFork, goneFork])
+    for field in ["headRefName", "headRepositoryOwner", "headRepository"] {
+      XCTAssertTrue(arguments.contains { $0.contains(field) }, "問い合わせが \(field) を求める")
+    }
+
+    let batch = try read(
+      [fromFork, goneFork],
+      [
+        "o/n": [
+          1: Node.pullRequest(
+            "英訳",
+            head: [
+              "headRefName": "docs/readme-en", "headRepositoryOwner": ["login": "me"],
+              "headRepository": ["name": "n"],
+            ]),
+          2: Node.pullRequest(
+            "消えた",
+            head: [
+              "headRefName": "fix", "headRepositoryOwner": ["login": "ghost"],
+              "headRepository": NSNull(),
+            ]),
+        ]
+      ])
+
+    guard case .found(let summary) = batch?.answers[fromFork],
+      case .found(let gone) = batch?.answers[goneFork]
+    else { return XCTFail("PR として読めない") }
+    XCTAssertEqual(
+      summary.pullRequest?.head,
+      GitHubBranchRef(repo: GitHubRepoName(nameWithOwner: "me/n"), branch: "docs/readme-en"))
+    XCTAssertNil(gone.pullRequest?.head)
   }
 
   /// CI の集約状態は、成功・失敗（ERROR を含む）・進行中（EXPECTED を含む）の 3 つに畳む。

@@ -12,7 +12,7 @@ import XCTest
 @MainActor
 final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
 
-  private func mount(_ model: WorktreePaletteModel) -> NSWindow {
+  func mount(_ model: WorktreePaletteModel) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
     let window = KeyWindow(
       contentRect: NSRect(x: -20000, y: -20000, width: 760, height: 520),
@@ -126,5 +126,51 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
 
   private func type(_ text: String, into window: NSWindow) {
     for character in text { send(0, String(character), to: window) }
+  }
+
+  private func backspace(repeating: Bool = false, to window: NSWindow) {
+    guard
+      let event = NSEvent.keyEvent(
+        with: .keyDown, location: .zero, modifierFlags: [],
+        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+        context: nil, characters: "\u{7F}", charactersIgnoringModifiers: "\u{7F}",
+        isARepeat: repeating, keyCode: 51)
+    else { return XCTFail("キーイベントを作れない") }
+    NSApp.sendEvent(event)
+    pump(0.15)
+  }
+
+  /// タスクから開いた ⌘T の ⌫ は、打った文字を先に消し、入力欄が空になってから押した ⌫ でタスクの札を外す。
+  /// 文字を消そうと押し続けたキーリピートでは外さない。
+  func testBackspaceRemovesTheTaskOnlyFromAnEmptyFieldAndNotByKeyRepeat() {
+    let model = DesignSceneFixtures.worktreePaletteIssueModel()
+    let window = mount(model)
+    type("i", into: window)
+
+    backspace(to: window)
+    XCTAssertEqual(model.query, "", "まず文字を消す")
+    XCTAssertEqual(model.taskContextID, 3, "文字を消した ⌫ では外さない")
+
+    backspace(repeating: true, to: window)
+    XCTAssertEqual(model.taskContextID, 3, "押し続けたリピートでは外さない")
+
+    backspace(to: window)
+    XCTAssertNil(model.taskContextID, "空の入力欄の ⌫ で外す")
+  }
+
+  /// 開いている間にタスクや GitHub の値が変わると（PR のブランチ名が届く等）、カードが provider に組み直させる。
+  func testTheCardAsksForARebuildWhenTheTasksInputsChange() throws {
+    let model = DesignSceneFixtures.worktreePalettePullRequestModel()
+    var rebuilds = 0
+    model.onTaskInputsChanged = { rebuilds += 1 }
+    _ = mount(model)
+    let before = rebuilds
+
+    var update = TaskUpdate()
+    update.links = []
+    _ = try model.tasks.update(4, update)
+    pump(0.3)
+
+    XCTAssertGreaterThan(rebuilds, before)
   }
 }

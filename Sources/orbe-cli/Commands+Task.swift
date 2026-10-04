@@ -9,11 +9,11 @@ let taskUsageLines = [
   "orb task list [--workspace <id|current>] [--json]",
   "orb task add <title> [--status <s>] [--priority <p>] [--due <YYYY-MM-DD>]"
     + " [--workspace <id|current> | --no-workspace] [--waiting <reason>] [--memo <text>]"
-    + " [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--json]",
+    + " [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--worktree <path>] [--json]",
   "orb task set <id> [--title <t>] [--status <s>] [--priority <p>] [--due <date> | --no-due]"
     + " [--workspace <id|current> | --no-workspace] [--waiting <reason> | --no-waiting]"
     + " [--memo <text> | --no-memo] [--issue <owner/name#N>]... [--pr <owner/name#N>]..."
-    + " [--no-links] [--json]",
+    + " [--no-links] [--worktree <path> | --no-worktree] [--json]",
   "orb task move <id> (--before <id> | --after <id>) [--json]",
   "orb task rm <id> [--json]",
 ]
@@ -43,8 +43,13 @@ let taskUsage = """
   one you pass is the main link. set replaces all links with the ones you pass,
   and --no-links removes them all. An issue or PR can be linked to only one
   task (unlink it from the other task first).
+  --worktree attaches the task to the worktree that contains <path> (relative
+  paths are read from your current directory; a subdirectory is lifted to the
+  worktree root). The directory must exist. A worktree belongs to only one
+  task (detach it from the other task first); --no-worktree detaches it.
   list prints one task per line: id, status, priority, due, workspace, title,
-  waiting reason, links (`-` when absent; links read issue:owner/name#221,pr:…).
+  waiting reason, links, worktree (`-` when absent; links read
+  issue:owner/name#221,pr:…).
   """
 
 // MARK: - サブコマンド
@@ -87,7 +92,7 @@ private func taskList(_ rest: [String]) -> Never {
       print(
         [
           task["taskId"], task["status"], task["priority"], task["due"], task["workspaceName"],
-          task["title"], waiting, links,
+          task["title"], waiting, links, task["worktree"],
         ].map { $0.map(display) ?? "-" }.map(tsvCell).joined(separator: "\t"))
     }
   }
@@ -195,6 +200,10 @@ private func takeFields(_ args: inout [String], update: Bool) -> [String: Any] {
     params["memo"] = memo(&args)
   }
   params["workspaceId"] = takeClearable(&args, "--workspace") { takeWorkspaceId(&$0) }
+  let worktree: (inout [String]) -> Any? = { args in
+    takeOption(&args, "--worktree", requires: "a <path>").map(absolutePath)
+  }
+  params["worktree"] = update ? takeClearable(&args, "--worktree", take: worktree) : worktree(&args)
   let links = takeLinks(&args)
   if update, takeFlag(&args, "--no-links") {
     guard links.isEmpty else { usageDie("pass only one of --issue / --pr / --no-links") }
@@ -220,6 +229,17 @@ private func takeLinks(_ args: inout [String]) -> [[String: Any]] {
     links.append(["kind": kind, "repo": String(raw[..<hash]), "number": number])
   }
   return links
+}
+
+/// 呼び出し元の作業ディレクトリから読んだ絶対パス（control は Orbe の作業ディレクトリを知らないので、
+/// 相対パスはここで解く）。`/` で始まらないものはすべて相対として cwd につなぐ——`~` を展開するのは
+/// workspace のパスだけ（`NSString.isAbsolutePath` は `~` 始まりも絶対とみなし、続く正規化がホームへ展開する）。
+private func absolutePath(_ path: String) -> String {
+  let absolute =
+    path.hasPrefix("/")
+    ? path
+    : (FileManager.default.currentDirectoryPath as NSString).appendingPathComponent(path)
+  return (absolute as NSString).standardizingPath
 }
 
 /// `--x <v>` と `--no-x` の対。どちらも無ければ nil、両方なら usage エラー。`--no-x` は `cleared`

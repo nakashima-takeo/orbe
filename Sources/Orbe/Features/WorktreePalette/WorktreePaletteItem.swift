@@ -40,7 +40,7 @@ struct WorktreePaletteBranchSync: Equatable {
 /// 色や強調は種別＋`isCurrent` から View が導く。
 struct WorktreePaletteItem: Identifiable {
   /// 先頭グリフ列の種別（見た目とグリフ色を決める）。
-  enum Glyph { case worktree, directory, localBranch, remoteBranch, newBranch, clean }
+  enum Glyph { case worktree, directory, localBranch, remoteBranch, pullRequest, newBranch, clean }
 
   let id = UUID()
   /// 先頭グリフ。
@@ -60,10 +60,32 @@ struct WorktreePaletteItem: Identifiable {
   var sync: WorktreePaletteBranchSync?
   /// 今の worktree の行（「現在」の札・入力が空のときの初期選択）。
   var isCurrent = false
+  /// PR のブランチの行（タスクの欄。印は `.pullRequest`）の PR の番号。補足に「PR #N のブランチ」を出す。
+  var pullRequest: Int?
   /// 決定（↵／行タップ）のペイロード。
   var action: WorktreePaletteAction
   /// ↵ が何をするか（フッターとベースのバーの言葉）。
   var enter: WorktreePaletteEnter
+}
+
+extension WorktreePaletteItem {
+  /// ↵ が開く既存の worktree（・「このディレクトリ」）の場所のキー。新しい worktree を作る行は nil。その場所を
+  /// 持つタスクの札と、↵ の付け替えの判定に使う（↵ でタスクに付くのと同じ値）。
+  var worktreeKey: String? {
+    guard case .open(let destination) = action, let path = destination.existingDirectory else {
+      return nil
+    }
+    return GitWorktreeRoot.normalizedPath(path)
+  }
+
+  /// ベースのバーの「なし — …」。PR のブランチの行は、そのブランチが PR のものだと添える。
+  var baseNote: (key: L10nKey, values: [String])? {
+    switch (pullRequest, enter) {
+    case (let number?, .checkout(let name)), (let number?, .trackRemote(_, let name)):
+      (.worktreePaletteBaseNonePullRequest, ["\(number)", name])
+    default: enter.baseNote
+    }
+  }
 }
 
 /// 選択行の ↵ が何をするか。フッターの実行説明と、ベースのバーの「なし — …」の言葉の元。
@@ -106,6 +128,8 @@ struct WorktreePaletteSection: Identifiable {
     case branches
     /// 絞り込みで既存の行が 0 件になったときの注記の見出し。
     case worktreesAndBranches
+    /// タスクから開いたときの先頭の欄（「#221 の worktree」。主が無ければ番号は nil）。
+    case task(number: Int?)
   }
 
   /// nil は見出しを出さない（非 git の「このディレクトリ」だけの一覧）。
@@ -126,6 +150,7 @@ struct WorktreePaletteSection: Identifiable {
     case .worktrees: "worktrees"
     case .branches: "branches"
     case .worktreesAndBranches: "worktreesAndBranches"
+    case .task: "task"
     case nil: "untitled"
     }
   }

@@ -19,6 +19,13 @@ struct TaskPaletteDetail: View {
           }
           titleField(task)
             .padding(.bottom, Theme.Space.bar)
+          if let agent = model.agent(of: task) {
+            TaskAgentDetail(
+              agent: agent, focused: model.area == .detail(.agent),
+              onGoToTab: { model.focusAgentTab() }
+            )
+            .padding(.bottom, Theme.Space.bar)
+          }
           if !task.links.isEmpty {
             TaskPaletteLinks(model: model, task: task)
               .padding(.bottom, Theme.Space.bar)
@@ -118,7 +125,7 @@ struct TaskPaletteDetail: View {
         .tint(Color.theme.accentPrimary)
         .focused(focus, equals: .edit(field))
         .onSubmit { model.endEditing(commit: true) }
-        .onKeyPress { model.handleEditKey($0, composing: TaskPaletteCard.isComposing) }
+        .onKeyPress { model.handleEditKey($0, composing: IMEComposition.isActive) }
         .opacity(isEditing(field) ? 1 : 0)
         .allowsHitTesting(isEditing(field))
       if !isEditing(field) { display() }
@@ -243,7 +250,7 @@ struct TaskPaletteDetail: View {
         .tint(Color.theme.accentPrimary)
         .scrollContentBackground(.hidden)
         .focused(focus, equals: .edit(.memo))
-        .onKeyPress { model.handleEditKey($0, composing: TaskPaletteCard.isComposing) }
+        .onKeyPress { model.handleEditKey($0, composing: IMEComposition.isActive) }
         .opacity(isEditing(.memo) ? 1 : 0)
         .allowsHitTesting(isEditing(.memo))
       if !isEditing(.memo) {

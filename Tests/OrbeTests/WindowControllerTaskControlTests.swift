@@ -16,7 +16,7 @@ import XCTest
 final class WindowControllerTaskControlTests: OrbeTestCase {
   private let backgroundId = UUID()
 
-  private func launch() throws -> WindowController {
+  func launch() throws -> WindowController {
     let tab = TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
@@ -39,7 +39,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     try XCTUnwrap(wc.workspaces.first { $0.name == "background" }?.tabs.first)
   }
 
-  private func success(
+  func success(
     _ result: Result<Any, ControlError>, file: StaticString = #filePath, line: UInt = #line
   ) throws -> [String: Any] {
     switch result {
@@ -51,12 +51,12 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     }
   }
 
-  private func code(_ result: Result<Any, ControlError>) -> Int? {
+  func code(_ result: Result<Any, ControlError>) -> Int? {
     if case .failure(let error) = result { return error.code }
     return nil
   }
 
-  private func added(
+  func added(
     _ wc: WindowController, _ title: String = "a", workspaceId: ClearableValue<Int>? = nil,
     callerTabId: Int? = nil, file: StaticString = #filePath, line: UInt = #line
   ) throws -> [String: Any] {
@@ -67,7 +67,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
         file: file, line: line)["task"] as? [String: Any], file: file, line: line)
   }
 
-  private func listed(_ wc: WindowController, workspaceId: Int? = nil) throws -> [[String: Any]] {
+  func listed(_ wc: WindowController, workspaceId: Int? = nil) throws -> [[String: Any]] {
     try XCTUnwrap(
       success(wc.controlListTasks(workspaceId: workspaceId))["tasks"] as? [[String: Any]])
   }

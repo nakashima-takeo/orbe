@@ -47,6 +47,11 @@ extension WindowController {
       dismissHelp()
       return true
     }
+    // タスク画面の ⌘T は、そのタスクのための ⌘T を開く（入力欄・詳細・編集欄のどこに焦点があっても届く）。
+    if command == .showWorktreePalette, model.overlay == .taskPalette {
+      model.taskPalette?.openWorktreePalette()
+      return true
+    }
     guard model.overlay == .none, statusModel.editingIndex == nil else { return false }
     handleWindowCommand(command)
     return true

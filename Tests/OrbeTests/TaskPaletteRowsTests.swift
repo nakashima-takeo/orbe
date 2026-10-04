@@ -35,12 +35,12 @@ final class TaskPaletteRowsTests: OrbeTestCase {
   func input(
     _ tasks: [TaskItem], query: String = "", scope: TaskPaletteScope = .all,
     doneExpanded: Bool = false, items: [GitHubItemID: GitHubItemAnswer] = [:],
-    viewerLogin: String? = nil
+    viewerLogin: String? = nil, agents: [String: WorktreeAgentActivity.Agent] = [:]
   ) -> TaskPaletteRows.Input {
     TaskPaletteRows.Input(
       tasks: tasks, query: query, scope: scope, doneExpanded: doneExpanded,
       workspaces: workspaces, today: today, timeZone: calendar.timeZone, items: items,
-      viewerLogin: viewerLogin)
+      viewerLogin: viewerLogin, agents: agents)
   }
 
   private func taskIDs(_ rows: [TaskPaletteRow]) -> [Int] {

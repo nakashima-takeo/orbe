@@ -13,15 +13,46 @@ extension WindowController {
       TaskPaletteWorkspaces.Entry(id: ws.persistentId, name: ws.name)
     }
     let p = TaskPaletteModel(
-      store: taskStore, githubItems: .shared,
+      store: taskStore, githubItems: .shared, agents: worktreeAgents,
       workspaces: TaskPaletteWorkspaces(opened: entry(current), all: workspaces.map(entry)),
       now: Date(), timeZone: .current)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
     p.onOpenURL = { NSWorkspace.shared.open($0) }
+    p.onOpenWorktreePalette = { [weak self] id in self?.openWorktreePalette(forTask: id) }
+    p.onFocusTab = { [weak self] tabId in
+      self?.dismissPalette()
+      _ = self?.controlFocusTab(tabId: tabId)
+    }
     model.taskPalette = p
     model.overlay = .taskPalette
     p.focus()
     reconfirmFocusNextTick()  // 別 overlay からの遷移で去りゆくカードの teardown に勝つ
+    linkPullRequestsFromBranches()
+  }
+
+  /// PR の自動の結び付け（⌘⇧X を開いたとき）。完了していないタスクの、実在する worktree のブランチの PR を、
+  /// そのタスクの結び付きの末尾に足す。人が外した項目・既にどこかに付いている項目は足さない
+  /// （`TaskStore.linkFromBranch`）。答えが届くまでに worktree が別のタスクへ移っていれば、今の持ち主に足す。
+  private func linkPullRequestsFromBranches() {
+    let worktrees = taskStore.tasks.filter { $0.status != .done }
+      .compactMap { $0.worktree.flatMap { $0.exists ? $0.path : nil } }
+    guard !worktrees.isEmpty else { return }
+    WorktreePullRequestResolver().resolve(worktrees: worktrees) { [weak self] found in
+      guard let self else { return }
+      for (path, item) in found {
+        guard let task = self.taskStore.tasks.first(where: { $0.worktree?.path == path }) else {
+          continue
+        }
+        self.taskStore.linkFromBranch(task.id, TaskLink(item: item, kind: .pr))
+      }
+    }
+  }
+
+  /// タスク画面の ⌘T。タスク画面を確定して畳み、そのタスクのための ⌘T に差し替える。
+  func openWorktreePalette(forTask id: Int) {
+    settleTaskPaletteEditing()
+    model.taskPalette = nil
+    showWorktreePalette(task: id)
   }
 
   /// タスク画面で打ちかけの編集を確定する。画面を閉じる・別の画面へ差し替わる・アプリの終了の

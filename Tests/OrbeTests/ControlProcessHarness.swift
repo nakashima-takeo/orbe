@@ -110,12 +110,13 @@ final class ControlProcess {
   /// 子プロセスを起こして終了・出力を回収する。main を塞がずに待つのがこの関数の要点。
   static func run(
     _ executable: URL, _ args: [String], env: [String: String], stdin: String? = nil,
-    file: StaticString = #filePath, line: UInt = #line
+    cwd: String? = nil, file: StaticString = #filePath, line: UInt = #line
   ) -> Outcome {
     let process = Process()
     process.executableURL = executable
     process.arguments = args
     process.environment = env
+    if let cwd { process.currentDirectoryURL = URL(fileURLWithPath: cwd) }
     let out = Pipe()
     let err = Pipe()
     let input = Pipe()
@@ -213,12 +214,12 @@ final class ControlProcess {
   /// そこで詰まり、`processTimeout` にも到達しないまま固まる——渡すのは小さな入力だけにすること。
   @discardableResult
   func orb(
-    _ args: [String], env extra: [String: String] = [:], stdin: String? = nil,
+    _ args: [String], env extra: [String: String] = [:], stdin: String? = nil, cwd: String? = nil,
     file: StaticString = #filePath, line: UInt = #line
   ) -> Outcome {
     Self.run(
-      Self.executable("orbe-cli"), args, env: Self.childEnv(extra), stdin: stdin, file: file,
-      line: line)
+      Self.executable("orbe-cli"), args, env: Self.childEnv(extra), stdin: stdin, cwd: cwd,
+      file: file, line: line)
   }
 
   /// `orb <args> --json` の stdout を JSON オブジェクトとして読む。workspace / tab の id は

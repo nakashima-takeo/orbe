@@ -22,6 +22,14 @@ extension DesignGallerySnapshotTests {
       752)
     try write(
       "worktree_palette_directory.png", DesignSceneFixtures.worktreePaletteDirectoryModel(), 752)
+    // タスクから開いた ⌘T（XTIssue / XTIssueMain / XTPR）。
+    try write(
+      "worktree_palette_task_issue.png", DesignSceneFixtures.worktreePaletteIssueModel(), 752)
+    try write(
+      "worktree_palette_task_issue_main.png",
+      DesignSceneFixtures.worktreePaletteIssueModel(base: .defaultBranch), 752)
+    try write(
+      "worktree_palette_task_pr.png", DesignSceneFixtures.worktreePalettePullRequestModel(), 752)
     // 狭い窓でもベースの選択肢がカードからはみ出さない（名前が縮む）。
     try write(
       "worktree_palette_new_branch_narrow.png",
