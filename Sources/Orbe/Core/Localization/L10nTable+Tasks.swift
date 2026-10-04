@@ -57,5 +57,17 @@ extension L10n {
       "期限は 10/6 か 2026-10-06 の形で入れてください", "Enter the due date as 10/6 or 2026-10-06"
     ),
     .taskPaletteErrFailed: ("タスクを変えられませんでした", "Couldn’t change the task"),
+    .taskPaletteFieldLinks: ("Issue・PR", "Issues & PRs"),
+    .taskPaletteIssueOpen: ("open", "open"),
+    .taskPaletteIssueClosed: ("closed", "closed"),
+    .taskPalettePRMerged: ("マージ済み", "Merged"),
+    .taskPalettePRClosed: ("閉じた", "Closed"),
+    .taskPalettePRDraft: ("下書き", "Draft"),
+    .taskPalettePRReviewRequired: ("レビュー待ち", "Review required"),
+    .taskPalettePRApproved: ("承認済み", "Approved"),
+    .taskPalettePRChangesRequested: ("修正依頼", "Changes requested"),
+    .taskPaletteReview: ("レビュー", "Review"),
+    .taskPaletteUnlink: ("外す", "Unlink"),
+    .taskPaletteActionOpenLink: ("%1$@ を GitHub で開く", "Open %1$@ on GitHub"),
   ]
 }

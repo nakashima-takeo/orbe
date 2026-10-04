@@ -62,6 +62,20 @@ struct TaskPaletteTaskRow: Equatable {
     let today: TaskItem.DueDate
   }
 
+  /// 主の結び付きの印と番号（保存した結び付きだけで決まる）。
+  struct LinkMark: Equatable {
+    let kind: GitHubItemKind
+    let number: Int
+  }
+
+  /// 主が Issue のときの、最初に結び付いた PR の札。値が無い・実体が PR でなければ番号だけ。
+  struct PullRequestBadge: Equatable {
+    let number: Int
+    let phase: GitHubItemSummary.PullRequestPhase?
+    /// マージ済み・閉じた PR では出さない。
+    let checks: GitHubItemSummary.Checks?
+  }
+
   let id: Int
   let title: String
   let glyph: Glyph
@@ -72,6 +86,10 @@ struct TaskPaletteTaskRow: Equatable {
   let waiting: Waiting?
   let workspace: WorkspaceBadge?
   let isDone: Bool
+  let link: LinkMark?
+  let pullRequest: PullRequestBadge?
+  /// 主が自分以外の作成した PR（「レビュー」）。
+  let needsReview: Bool
 }
 
 /// 一覧の 1 行。
@@ -114,6 +132,9 @@ enum TaskPaletteRows {
     let today: TaskItem.DueDate
     /// 待ち始めた時刻を暦日へ落とすためのタイムゾーン。
     let timeZone: TimeZone
+    /// 結び付いた項目の GitHub の値（`GitHubItemCache` の答え）。
+    let items: [GitHubItemID: GitHubItemAnswer]
+    let viewerLogin: String?
   }
 
   static func build(_ input: Input) -> [TaskPaletteRow] {
@@ -173,6 +194,40 @@ enum TaskPaletteRows {
           reason: $0.reason,
           days: TaskItem.DueDate($0.since, timeZone: input.timeZone).days(to: input.today))
       },
-      workspace: workspace, isDone: task.status == .done)
+      workspace: workspace, isDone: task.status == .done,
+      link: task.links.first.map { .init(kind: $0.kind, number: $0.item.number) },
+      pullRequest: pullRequestBadge(task, input), needsReview: needsReview(task, input))
+  }
+
+  /// 結び付いた項目の値。保存した種別と実体の種別が違えば無いものとして扱う（番号だけを出す）。
+  static func summary(_ link: TaskLink, _ items: [GitHubItemID: GitHubItemAnswer])
+    -> GitHubItemSummary?
+  {
+    guard case .found(let summary) = items[link.item], summary.kind == link.kind else { return nil }
+    return summary
+  }
+
+  /// 結び付きの番号の表示。主と同じリポジトリなら `#213`、違えば `<リポジトリ名>#213`。
+  static func linkLabel(_ item: GitHubItemID, primary: GitHubItemID?) -> String {
+    item.repo == primary?.repo ? "#\(item.number)" : "\(item.repoName)#\(item.number)"
+  }
+
+  private static func pullRequestBadge(_ task: TaskItem, _ input: Input)
+    -> TaskPaletteTaskRow.PullRequestBadge?
+  {
+    guard task.links.first?.kind == .issue, let link = task.links.first(where: { $0.kind == .pr })
+    else { return nil }
+    let summary = summary(link, input.items)
+    let phase = summary?.pullRequestPhase
+    return TaskPaletteTaskRow.PullRequestBadge(
+      number: link.item.number, phase: phase,
+      checks: phase == .merged || phase == .closed ? nil : summary?.pullRequest?.checks)
+  }
+
+  private static func needsReview(_ task: TaskItem, _ input: Input) -> Bool {
+    guard let primary = task.links.first, primary.kind == .pr, let login = input.viewerLogin,
+      let pullRequest = summary(primary, input.items)?.pullRequest
+    else { return false }
+    return pullRequest.author?.lowercased() != login.lowercased()
   }
 }

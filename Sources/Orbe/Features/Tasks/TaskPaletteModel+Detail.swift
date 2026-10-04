@@ -1,13 +1,19 @@
 import Foundation
 
-/// 詳細の操作（項目の移動・選択式の値・文字の項目の編集と確定）。変異はすべてストアのメソッドをそのまま
-/// 呼び、検証はストアに任せる。
+/// 詳細の操作（項目の移動・選択式の値・文字の項目の編集と確定・結び付きを開く / 外す）。変異はすべて
+/// ストアのメソッドをそのまま呼び、検証はストアに任せる。
 extension TaskPaletteModel {
+  /// 詳細で止まる場所の並び（タイトル → 各結び付き → ステータス → … → メモ）。
+  static func detailStops(_ task: TaskItem) -> [TaskDetailStop] {
+    [.field(.title)] + task.links.map { .link($0.item) }
+      + TaskDetailField.allCases.filter { $0 != .title }.map { .field($0) }
+  }
+
   /// →。タスクの行を選んでいれば、詳細のステータスへ入る。
   func enterDetail() {
     guard tab == .tasks, selectedTask != nil else { return }
     error = nil
-    area = .detail(.status)
+    area = .detail(.field(.status))
   }
 
   /// 詳細から一覧へ（esc・選択式でない項目の ←・入力欄のクリック）。編集中なら確定してから戻る。
@@ -18,17 +24,17 @@ extension TaskPaletteModel {
 
   /// ↑↓。端では止まる。
   func moveField(_ direction: Int) {
-    guard case .detail(let field) = area else { return }
-    let fields = TaskDetailField.allCases
-    let index = fields.firstIndex(of: field)! + direction
-    guard fields.indices.contains(index) else { return }
+    guard case .detail(let stop) = area, let task = selectedTask else { return }
+    let stops = Self.detailStops(task)
+    guard let current = stops.firstIndex(of: stop), stops.indices.contains(current + direction)
+    else { return }
     error = nil
-    area = .detail(fields[index])
+    area = .detail(stops[current + direction])
   }
 
   /// ←→。選択式の項目の値を変える。選択式でない項目では false（← は一覧へ戻る合図）。
   @discardableResult func changeValue(_ direction: Int) -> Bool {
-    guard case .detail(let field) = area, let task = selectedTask else { return false }
+    guard case .detail(.field(let field)) = area, let task = selectedTask else { return false }
     error = nil
     switch field {
     case .status:
@@ -88,9 +94,30 @@ extension TaskPaletteModel {
   func tapField(_ field: TaskDetailField) {
     guard selectedTask != nil else { return }
     leaveEditingForAction()
-    area = .detail(field)
+    area = .detail(.field(field))
     if field.isText { startDraft() }
     focus()
+  }
+
+  /// 結び付きの行の ↵・クリック。その項目の GitHub のページを開く。
+  func openLink(_ item: GitHubItemID) {
+    guard let link = selectedTask?.links.first(where: { $0.item == item }) else { return }
+    leaveEditingForAction()
+    area = .detail(.link(item))
+    focus()
+    onOpenURL(link.url)
+  }
+
+  /// 結び付きの行の ⌫・「外す」のクリック。その項目だけを除いた列で置き換え、焦点は同じ位置の止まる場所へ
+  /// 移る（付け直しが移す）。
+  func unlink(_ item: GitHubItemID) {
+    guard let task = selectedTask, task.links.contains(where: { $0.item == item }) else { return }
+    leaveEditingForAction()
+    area = .detail(.link(item))
+    focus()
+    var update = TaskUpdate()
+    update.links = task.links.filter { $0.item != item }
+    mutate(.failed) { () throws(TaskStoreError) in _ = try store.update(task.id, update) }
   }
 
   /// ↵。今の文字の項目の編集を始める。完了のタスクの待ちは入れられない（ストアの不変条件）。
@@ -99,7 +126,9 @@ extension TaskPaletteModel {
   }
 
   @discardableResult private func startDraft() -> Bool {
-    guard case .detail(let field) = area, field.isText, draft == nil, let task = selectedTask else {
+    guard case .detail(.field(let field)) = area, field.isText, draft == nil,
+      let task = selectedTask
+    else {
       return false
     }
     if field == .waiting, task.status == .done { return false }
@@ -209,7 +238,7 @@ extension TaskPaletteModel {
   private func apply(_ update: TaskUpdate, field: TaskDetailField) {
     guard let task = selectedTask else { return }
     leaveEditingForAction()
-    area = .detail(field)
+    area = .detail(.field(field))
     mutate(Self.error(for: field)) { () throws(TaskStoreError) in
       _ = try store.update(task.id, update)
     }

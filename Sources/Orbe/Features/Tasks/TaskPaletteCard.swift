@@ -46,6 +46,8 @@ struct TaskPaletteCard: View {
     .onChange(of: model.focusToken, initial: true) { focus = model.focusTarget }
     // agent の変更を含む列の変化を、描画の外で付け直しへ届ける。
     .onChange(of: model.store.tasks) { model.reconcile() }
+    // 出ている行の結び付きが増えたら（agent の変更・完了の欄の開閉・範囲・入力）、その値を取りに行く。
+    .onChange(of: model.visibleLinkIDs) { model.ensureVisibleItems() }
   }
 
   private var divider: some View {

@@ -1,7 +1,7 @@
-import Foundation
+import AppKit
 
 /// ⌘⇧X タスク画面の提示。画面はタスクのストア（唯一の正）を直接読み書きし、ここは開いた時点の
-/// workspace の写しを渡して配線するだけ。
+/// workspace の写しと GitHub の値の置き場を渡して配線するだけ。
 extension WindowController {
   /// タスク画面を開く（開いていれば焦点をモデルが決めた行き先へ当て直すだけ）。タブが 0 枚の workspace でも開く。
   func showTaskPalette() {
@@ -13,10 +13,11 @@ extension WindowController {
       TaskPaletteWorkspaces.Entry(id: ws.persistentId, name: ws.name)
     }
     let p = TaskPaletteModel(
-      store: taskStore,
+      store: taskStore, githubItems: .shared,
       workspaces: TaskPaletteWorkspaces(opened: entry(current), all: workspaces.map(entry)),
       now: Date(), timeZone: .current)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
+    p.onOpenURL = { NSWorkspace.shared.open($0) }
     model.taskPalette = p
     model.overlay = .taskPalette
     p.focus()

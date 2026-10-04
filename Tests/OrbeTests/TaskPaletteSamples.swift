@@ -25,7 +25,7 @@ enum TaskPaletteSamples {
     let file = TasksFile(
       version: TaskPersistence.version, nextId: (tasks.map(\.id).max() ?? 0) + 1, tasks: tasks)
     return TaskPaletteModel(
-      store: TaskStore(file: file),
+      store: TaskStore(file: file), githubItems: GitHubItemCache(fetch: { _, _ in }),
       workspaces: TaskPaletteWorkspaces(opened: opened, all: [opened, other]),
       now: DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone)
   }

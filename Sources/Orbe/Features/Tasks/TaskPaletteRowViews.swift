@@ -128,8 +128,8 @@ struct TaskPaletteRowFrame<Content: View>: View {
   }
 }
 
-/// タスクの行。アイコン（クリックで完了 ⇄ 未着手）・タイトル・札（優先度・期限・追加者）、右寄せで
-/// 待ちの札と workspace。縮むのはタイトルが先。
+/// タスクの行。アイコン（クリックで完了 ⇄ 未着手）・主の結び付きの印と番号・タイトル・札（「レビュー」・
+/// PR・優先度・期限・追加者）、右寄せで待ちの札と workspace。縮むのはタイトルが先。
 struct TaskPaletteTaskRowView: View {
   let row: TaskPaletteTaskRow
   let selected: Bool
@@ -145,12 +145,33 @@ struct TaskPaletteTaskRowView: View {
         .frame(width: glyphColumnWidth, height: 40)
         .contentShape(Rectangle())
         .onTapGesture(perform: onToggle)
+      if let link = row.link {
+        HStack(spacing: Theme.Space.note) {
+          TaskLinkGlyph(kind: link.kind)
+          Text("#\(link.number)")
+            .font(Font.theme.codeCompact)
+            .foregroundStyle(Color.theme.textMuted)
+        }
+        .fixedSize()
+        .padding(.leading, Theme.Space.beat)
+      }
       TruncatingSlot(row.title, leading: Theme.Space.beat) {
         fontResolver.text($0, base: Theme.Typography.taskText)
           .font(Font.theme.taskText)
           .foregroundStyle(titleColor)
       }
       .layoutPriority(1)
+      if row.needsReview {
+        Text(l10n.string(.taskPaletteReview))
+          .font(Font.theme.chrome)
+          .foregroundStyle(Color.theme.textMuted)
+          .fixedSize()
+          .padding(.leading, Theme.Space.beat)
+      }
+      if let pullRequest = row.pullRequest {
+        TaskPullRequestBadge(badge: pullRequest)
+          .padding(.leading, Theme.Space.beat)
+      }
       if let priority = row.priority {
         TaskPaletteBadge(
           text: l10n.string(priority == .high ? .taskPalettePriorityHigh : .taskPalettePriorityLow),
@@ -214,6 +235,29 @@ struct TaskPaletteTaskRowView: View {
 
   private func days(_ count: Int) -> String {
     count == 0 ? l10n.string(.taskPaletteToday) : l10n.format(.taskPaletteDays, count)
+  }
+}
+
+/// 一覧の PR の札（「<PR の印> #213 レビュー待ち ✓」）。
+struct TaskPullRequestBadge: View {
+  let badge: TaskPaletteTaskRow.PullRequestBadge
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
+    HStack(spacing: Theme.Space.note) {
+      TaskLinkGlyph(kind: .pr, size: 11)
+      Text("#\(badge.number)").foregroundStyle(Color.theme.textPrimary)
+      if let phase = badge.phase {
+        Text(TaskPullRequestText.phase(phase, l10n)).foregroundStyle(Color.theme.textMuted)
+      }
+      if let checks = badge.checks { TaskPullRequestText.checksMark(checks) }
+    }
+    .font(Font.theme.codeCompact)
+    .lineLimit(1)
+    .fixedSize()
+    .padding(.horizontal, Theme.Space.note)
+    .frame(height: 20)
+    .background(RoundedRectangle(cornerRadius: Theme.Radius.sm + 1).fill(Color.theme.tintAccent))
   }
 }
 

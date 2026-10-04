@@ -213,6 +213,18 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteErrWaiting
   case taskPaletteErrDue
   case taskPaletteErrFailed
+  case taskPaletteFieldLinks
+  case taskPaletteIssueOpen
+  case taskPaletteIssueClosed
+  case taskPalettePRMerged
+  case taskPalettePRClosed
+  case taskPalettePRDraft
+  case taskPalettePRReviewRequired
+  case taskPalettePRApproved
+  case taskPalettePRChangesRequested
+  case taskPaletteReview
+  case taskPaletteUnlink
+  case taskPaletteActionOpenLink
 
   // MARK: - Onboarding
   case onboardingBegin

@@ -13,7 +13,7 @@ extension TaskPaletteCardKeyTests {
 
     arrow(Key.right, to: window)
 
-    XCTAssertEqual(model.area, .detail(.status))
+    XCTAssertEqual(model.area, .detail(.field(.status)))
   }
 
   /// 詳細の項目に入れた状態（焦点はカードの器へ移る）。
@@ -21,7 +21,7 @@ extension TaskPaletteCardKeyTests {
     _ model: TaskPaletteModel, at field: TaskDetailField, in window: NSWindow
   ) {
     model.enterDetail()
-    model.area = .detail(field)
+    model.area = .detail(.field(field))
     flush(window)
   }
 
@@ -35,7 +35,7 @@ extension TaskPaletteCardKeyTests {
 
     arrow(Key.down, to: window)
     arrow(Key.down, to: window)
-    XCTAssertEqual(model.area, .detail(.priority))
+    XCTAssertEqual(model.area, .detail(.field(.priority)))
     arrow(Key.left, to: window)
     XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.priority, .high, "← で値を変える")
 
@@ -68,7 +68,7 @@ extension TaskPaletteCardKeyTests {
     press(Key.space, " ", repeating: true, to: window)
 
     XCTAssertEqual(model.store.tasks.map(\.status), [.todo, .todo, .todo])
-    XCTAssertEqual(model.area, .detail(.priority))
+    XCTAssertEqual(model.area, .detail(.field(.priority)))
   }
 
   /// 詳細で編集している間に入力欄をクリックすると、打った内容を確定して一覧へ戻り、続く打鍵は入力欄に入る。
@@ -108,9 +108,9 @@ extension TaskPaletteCardKeyTests {
     press(Key.escape, "\u{1B}", to: window)
     XCTAssertEqual(
       model.store.tasks.first { $0.id == 1 }?.waiting?.reason, "review", "esc は編集を取り消す")
-    XCTAssertEqual(model.area, .detail(.waiting), "取り消した後も項目に居る")
+    XCTAssertEqual(model.area, .detail(.field(.waiting)), "取り消した後も項目に居る")
     arrow(Key.down, to: window)
-    XCTAssertEqual(model.area, .detail(.priority), "器が再びキーを受ける")
+    XCTAssertEqual(model.area, .detail(.field(.priority)), "器が再びキーを受ける")
   }
 
   func testMemoTakesNewlinesWithEnterAndCommitsWithCommandEnter() {
