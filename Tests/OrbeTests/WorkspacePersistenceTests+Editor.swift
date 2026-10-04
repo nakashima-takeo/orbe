@@ -3,11 +3,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 開いていた文書の永続——`tabs[].editor` の形、無いときの省略、読めない値の寛容 decode、
+/// 開いていた文書の永続——`tabs[].editor` の形、無いときの省略、読めない値の寛容 decode（仮のタブが読めなければ仮無しへ）、
 /// そして「フィールドを足して encode / decode を忘れる」を検出する全キーの往復。
 ///
 /// 壊れると何が起きるか。再起動で開いていたファイルが戻らない。1 タブの editor の破損で全 workspace の復元が
-/// 消える。新しいフィールドが片方だけに書かれて黙って落ちる。
+/// 消える。仮のタブの項目が壊れただけで開いていた文書が戻らない。新しいフィールドが片方だけに書かれて黙って落ちる。
 extension WorkspacePersistenceTests {
   func testTabStateWritesEditorOnlyWhenItHasState() throws {
     let enc = JSONEncoder()
@@ -32,7 +32,9 @@ extension WorkspacePersistenceTests {
       {"cwd":"/a","editor":"garbage"},\
       {"cwd":"/b","editor":{"open":["/b/x"]}},\
       {"cwd":"/c","editor":{"open":[],"active":""}},\
-      {"cwd":"/d","editor":{"open":["/d/x"],"active":"/d/x"}}]}]}
+      {"cwd":"/d","editor":{"open":["/d/x"],"active":"/d/x"}},\
+      {"cwd":"/e","editor":{"open":["/e/x"],"active":"/e/x","preview":7}},\
+      {"cwd":"/f","editor":{"open":["/f/x","/f/y"],"active":"/f/x","preview":"/f/y"}}]}]}
       """
     try Data(json.utf8).write(to: workspacesFile())
     let loaded = try XCTUnwrap(WorkspacePersistence.load())
@@ -41,6 +43,12 @@ extension WorkspacePersistenceTests {
     XCTAssertNil(tabs[1].editor, "active 欠落は nil")
     XCTAssertNil(tabs[2].editor, "空の列は nil")
     XCTAssertEqual(tabs[3].editor, EditorState(documents: .init(open: ["/d/x"], active: "/d/x")))
+    XCTAssertEqual(
+      tabs[4].editor, EditorState(documents: .init(open: ["/e/x"], active: "/e/x")),
+      "読めない仮のタブは仮無し（列とアクティブは残る）")
+    XCTAssertEqual(
+      tabs[5].editor,
+      EditorState(documents: .init(open: ["/f/x", "/f/y"], active: "/f/x", preview: "/f/y")))
   }
 
   /// 全フィールドを非既定にした TabState は、全キーが JSON に現れ、往復で等しい。
@@ -49,7 +57,7 @@ extension WorkspacePersistenceTests {
       cwd: "/w", agent: AgentSession(command: "claude", sessionId: "s-1"), explicitTitle: "t",
       faces: FaceLayout(editorRatio: 0.4, focus: .editor),
       editor: EditorState(
-        documents: .init(open: ["/w/a"], active: "/w/a"),
+        documents: .init(open: ["/w/a"], active: "/w/a", preview: "/w/a"),
         search: SearchQuery(pattern: "p", matchCase: true, wholeWord: true, isRegex: true)))
     let data = try JSONEncoder().encode(full)
     let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])

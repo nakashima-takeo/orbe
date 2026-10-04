@@ -6,9 +6,7 @@ import OrbeEditorCore
 extension EditorPaneView {
   func wireProjectSearch() {
     projectSearch.documents = { [weak self] in self?.tab?.editor.documents ?? [] }
-    projectSearch.onOpen = { [weak self] id, focusText in
-      self?.openProjectMatch(id, focusText: focusText)
-    }
+    projectSearch.onOpen = { [weak self] id, opening in self?.openProjectMatch(id, opening) }
     projectSearch.onGroundChange = { [weak self] in self?.pushFindGround() }
   }
 
@@ -66,15 +64,16 @@ extension EditorPaneView {
     editor.selectAll(nil)
   }
 
-  /// 一致を開く——文書を開いて見せてから、一致を選択に置き、その行を中央へ（見えていても送る。VS Code と同じ）、横に
-  /// 隠れていれば寄せる。`focusText` ならテキスト面へ焦点を移し、そうでなければ焦点は結果に残る。
-  func openProjectMatch(_ id: ProjectSearch.RowID, focusText: Bool) {
+  /// 一致を `opening` の開き方で開く——文書を開いて見せてから、一致を選択に置き、その行を中央へ（見えていても送る。
+  /// VS Code と同じ）、横に隠れていれば寄せる。本文へ焦点を移す開き方でなければ焦点に触らない（クリックでは列が押下で
+  /// 焦点を取っていて、遅れて走るキーの開きは、その間に人が移した焦点を奪わない）。
+  func openProjectMatch(_ id: ProjectSearch.RowID, _ opening: ProjectSearch.Opening) {
     guard let tab else { return }
     let url = URL(fileURLWithPath: projectSearch.root, isDirectory: true)
       .appendingPathComponent(id.path)
     let document: EditorDocument
     do {
-      document = try tab.editor.open(url)
+      document = try tab.editor.open(url, as: opening.mode)
     } catch {
       NSSound.beep()
       return
@@ -86,26 +85,36 @@ extension EditorPaneView {
       document.surface.selectedRange = range
       document.surface.reveal(range, policy: .center)
     }
-    if focusText {
-      window?.makeFirstResponder(document.surface.responder)
-    } else if !focusIsInSidebar {
-      projectSearch.requestFocus(.results)
-    }
+    if opening.focusesText { window?.makeFirstResponder(document.surface.responder) }
     pushFindGround()
   }
 
-  /// F4 / ⇧F4 を拾う口（窓に付いている間だけ）。修飾の無いファンクションキーは key equivalent として pane に届かず
-  /// テキスト面の keyDown へ直行するので、アプリがイベントを配る手前で見る（テキスト面の契約は変えない）。
-  func updateStepKeyMonitor() {
+  /// アプリがイベントを配る手前で見る口（窓に付いている間だけ）。F4 / ⇧F4 を拾う——修飾の無いファンクションキーは key
+  /// equivalent として pane に届かずテキスト面の keyDown へ直行するので（テキスト面の契約は変えない）。結果の列の外を押したら、
+  /// 待っている ↑↓ の開きを捨てる——人の注意が結果から移ったので、後から前の選択が開いて押したものを入れ替えない（焦点が
+  /// 列に残る押下——タブの × など——も含む）。
+  func updateEventMonitor() {
     if window == nil {
-      stepKeyMonitor.map(NSEvent.removeMonitor)
-      stepKeyMonitor = nil
-    } else if stepKeyMonitor == nil {
-      stepKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-        guard let self, event.window === window, handleStepKey(event) else { return event }
-        return nil
+      eventMonitor.map(NSEvent.removeMonitor)
+      eventMonitor = nil
+    } else if eventMonitor == nil {
+      eventMonitor = NSEvent.addLocalMonitorForEvents(
+        matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
+      ) { [weak self] event in
+        guard let self, event.window === window else { return event }
+        if event.type != .keyDown {
+          if !pressIsInResults(event) { projectSearch.dropPendingNavigation() }
+          return event
+        }
+        return handleStepKey(event) ? nil : event
       }
     }
+  }
+
+  /// 押した点が検索結果の列（スクロールバーを含む）の上か。
+  private func pressIsInResults(_ event: NSEvent) -> Bool {
+    guard let view = window?.contentView?.hitTest(event.locationInWindow) else { return false }
+    return view.isDescendant(of: searchResults)
   }
 
   /// エディター面（pane の配下）に焦点があるときの F4 / ⇧F4: 次・前の一致を開く（結果が無ければ素通し）。検索パネルが

@@ -120,23 +120,26 @@ extension OrbeTestCase {
     target.mouseMoved(with: event)
   }
 
-  /// 面の座標の点を押して離す（窓は ordered-in であること——`sendEvent` はそれ以外に配送しない）。
+  /// 面の座標の点を押して離す（窓は ordered-in であること——`sendEvent` はそれ以外に配送しない）。アプリの配送の口
+  /// （`NSApp.sendEvent`）から送るので、ローカルのイベントの監視も本物と同じく見る。`count` は何回目の押下か（2 なら
+  /// ダブルクリックの 2 回目）。
   @MainActor
-  func click(_ pane: EditorPaneView, at point: NSPoint) throws {
+  func click(_ pane: EditorPaneView, at point: NSPoint, count: Int = 1) throws {
     let window = try XCTUnwrap(pane.window)
     for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-      window.sendEvent(timedMouse(type, at: pane.convert(point, to: nil), in: window))
+      NSApp.sendEvent(
+        timedMouse(type, at: pane.convert(point, to: nil), in: window, clickCount: count))
     }
   }
 
   /// 今の時刻を持つマウスのイベント（SwiftUI のジェスチャーとホバーは時刻 0 のイベントを取りこぼす）。
-  private func timedMouse(_ type: NSEvent.EventType, at location: NSPoint, in window: NSWindow?)
-    -> NSEvent
-  {
+  private func timedMouse(
+    _ type: NSEvent.EventType, at location: NSPoint, in window: NSWindow?, clickCount: Int = 1
+  ) -> NSEvent {
     NSEvent.mouseEvent(
       with: type, location: location, modifierFlags: [],
       timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window?.windowNumber ?? 0,
-      context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+      context: nil, eventNumber: 0, clickCount: clickCount, pressure: 1)!
   }
 
   /// 配下の最初の NSScrollView（SwiftUI の ScrollView の裏）。

@@ -161,7 +161,7 @@
       let tab = TerminalTab(
         cwd: dir.path,
         editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot, language: { .ja }))
-      let document = try tab.editor.open(url)
+      let document = try tab.editor.open(url, as: .pinned)
       return Scene(tab: tab, document: document, directory: dir)
     }
 

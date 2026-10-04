@@ -249,7 +249,7 @@ extension EditorSearchTests {
     pane.search.setNeedle("one")
     catchUp(pane)
     let seen = counts(pane)
-    let other = try hosted.tab.editor.open(try caseFile("t.txt", "one\n"))
+    let other = try hosted.tab.editor.open(try caseFile("t.txt", "one\n"), as: .pinned)
     XCTAssertFalse(seen().contains { $0.1 == 0 }, "届く前に一致なしを出さない: \(seen())")
     other.surface.selectedRange = NSRange(location: 2, length: 0)
     XCTAssertFalse(seen().contains { $0.1 == 0 }, "届く前に選択が動いても一致なしを出さない: \(seen())")

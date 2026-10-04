@@ -218,7 +218,9 @@ final class TerminalTab {
     OrbeRuntimeEnv.inject(into: &surface.initialEnv, tabId: id)
     if let pending = pendingDocuments {
       pendingDocuments = nil
-      MainActor.assumeIsolated { editor.restore(paths: pending.open, active: pending.active) }
+      MainActor.assumeIsolated {
+        editor.restore(paths: pending.open, active: pending.active, preview: pending.preview)
+      }
     }
   }
 
@@ -329,9 +331,10 @@ final class TerminalTab {
     MainActor.assumeIsolated { editor.documentsToDiscard() }
   }
 
-  /// エディターでファイルを開いて焦点の文書にする（制御 API の入口）。読めない・UTF-8 でない・テキスト面を作れない（Metal の装置が無い）は throw。
+  /// エディターでファイルを普通のタブで開いて焦点の文書にする（制御 API の入口。エージェントが見せたファイルを人の次の
+  /// クリックが入れ替えない）。読めない・UTF-8 でない・テキスト面を作れない（Metal の装置が無い）は throw。
   func openFile(_ url: URL) throws {
-    _ = try MainActor.assumeIsolated { try editor.open(url) }
+    _ = try MainActor.assumeIsolated { try editor.open(url, as: .pinned) }
   }
 
   /// 面（surface・エディター pane）からのウィンドウレベル chrome キー（タブ・workspace）を上位へ転送する。
@@ -377,7 +380,8 @@ final class TerminalTab {
       let open =
         documents.first.map { first in
           EditorState.OpenDocuments(
-            open: documents.map(\.url.path), active: (editor.activeDocument ?? first).url.path)
+            open: documents.map(\.url.path), active: (editor.activeDocument ?? first).url.path,
+            preview: editor.preview?.url.path)
         } ?? pendingDocuments
       let state = EditorState(documents: open, search: view.editor.projectSearch.query)
       return state.isEmpty ? nil : state

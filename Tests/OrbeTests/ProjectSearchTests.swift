@@ -83,7 +83,7 @@ final class ProjectSearchTests: OrbeTestCase {
   func testAnOpenDocumentIsSearchedWithItsUnsavedText() throws {
     let f = try fixture()
     try f.repo.write("a.txt", "needle on disk\n")
-    let document = try f.session.open(f.repo.url("a.txt"))
+    let document = try f.session.open(f.repo.url("a.txt"), as: .pinned)
     replace(
       document, NSRange(location: 0, length: document.text.length), with: "x\nneedle unsaved\n")
 
@@ -105,7 +105,7 @@ final class ProjectSearchTests: OrbeTestCase {
     let text = "STRASSE\n😀 ÄRGER\n"
     try f.repo.write("disk.txt", text)
     try f.repo.write("open.txt", text)
-    _ = try f.session.open(f.repo.url("open.txt"))
+    _ = try f.session.open(f.repo.url("open.txt"), as: .pinned)
 
     search(f.search, "ärger")
     XCTAssertEqual(paths(f.search), ["disk.txt", "open.txt"])
@@ -155,7 +155,7 @@ final class ProjectSearchTests: OrbeTestCase {
     try f.repo.write("n.txt", "needle\n")
     try f.repo.write("o.txt", "other\n")
     try f.repo.write("open.txt", "nothing here\n")
-    _ = try f.session.open(f.repo.url("open.txt"))
+    _ = try f.session.open(f.repo.url("open.txt"), as: .pinned)
     search(f.search, "needle")
     let gate = try gate(f)
 
@@ -200,7 +200,7 @@ final class ProjectSearchTests: OrbeTestCase {
     let f = try fixture()
     try f.repo.write("open.txt", "needle\n")
     try f.repo.write("disk.txt", "needle\n")
-    _ = try f.session.open(f.repo.url("open.txt"))
+    _ = try f.session.open(f.repo.url("open.txt"), as: .pinned)
     _ = try gate(f)
     var slow: (@MainActor () -> Void)?
     f.search.slowDelay.schedule = { _, fire in slow = fire }
@@ -347,7 +347,7 @@ final class ProjectSearchTests: OrbeTestCase {
   func testEditingADocumentDuringTheSearchKeepsItsResults() throws {
     let f = try fixture()
     try f.repo.write("open.txt", "needle\n")
-    let document = try f.session.open(f.repo.url("open.txt"))
+    let document = try f.session.open(f.repo.url("open.txt"), as: .pinned)
 
     f.search.setPattern("needle")
     f.search.search()
@@ -369,7 +369,7 @@ final class ProjectSearchTests: OrbeTestCase {
     f.search.setPattern("needle")
     f.search.search()
     pumpMain(until: { GrepGate.isGrepRunning }, "git が走る")
-    let document = try f.session.open(f.repo.url("b.txt"))
+    let document = try f.session.open(f.repo.url("b.txt"), as: .pinned)
     replace(document, NSRange(location: 0, length: 0), with: "needle ")
     gate.open()
 

@@ -26,7 +26,7 @@ final class DocumentLinkTests: OrbeTestCase {
 
   func testExternalWriteReplacesTheOpenDocument() throws {
     let session = session()
-    let document = try session.open(repo.url("a.txt"))
+    let document = try session.open(repo.url("a.txt"), as: .pinned)
     var changes = 0
     session.onChange = { changes += 1 }
 
@@ -41,7 +41,7 @@ final class DocumentLinkTests: OrbeTestCase {
 
   func testExternalWriteMarksADirtyDocumentAndSaveFailsUntilForced() throws {
     let session = session()
-    let document = try session.open(repo.url("a.txt"))
+    let document = try session.open(repo.url("a.txt"), as: .pinned)
     document.surface.responder.perform(Selector(("insertText:")), with: "mine ")
     var changes = 0
     session.onChange = { changes += 1 }
@@ -66,8 +66,8 @@ final class DocumentLinkTests: OrbeTestCase {
     let first = session()
     let second = session()
     let url = repo.url("a.txt")
-    let documentA = try first.open(url)
-    let documentB = try second.open(url)
+    let documentA = try first.open(url, as: .pinned)
+    let documentB = try second.open(url, as: .pinned)
     pumpMain(until: { documentA.baseline == "one\n" && documentB.baseline == "one\n" }, "両方に届く")
 
     documentB.surface.responder.perform(Selector(("insertText:")), with: "x")
@@ -89,9 +89,9 @@ final class DocumentLinkTests: OrbeTestCase {
   /// 根のサービスは開いている文書が握っている間だけ生きる。文書を全部閉じれば離され、監視も止まる。
   func testClosingAllDocumentsReleasesTheRootService() throws {
     let session = session()
-    let documentA = try session.open(repo.url("a.txt"))
+    let documentA = try session.open(repo.url("a.txt"), as: .pinned)
     try repo.write("b.txt", "b\n")
-    let documentB = try session.open(repo.url("b.txt"))
+    let documentB = try session.open(repo.url("b.txt"), as: .pinned)
     weak var files = RootFiles.shared(for: repo.root)
     XCTAssertNotNil(files)
 
@@ -99,6 +99,24 @@ final class DocumentLinkTests: OrbeTestCase {
     XCTAssertNotNil(files, "まだ b.txt が握っている")
     session.close(documentB)
     XCTAssertNil(files, "全部閉じれば離される")
+  }
+
+  /// 仮の文書を入れ替えると、閉じるのと同じく古い文書の結線を手放す——根の外のファイルへ入れ替えれば根のサービスは離される。
+  func testReplacingThePreviewReleasesTheRootService() throws {
+    let session = session()
+    try session.open(repo.url("a.txt"), as: .preview)
+    weak var files = RootFiles.shared(for: repo.root)
+    XCTAssertNotNil(files)
+
+    let outside = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "orbe-outside-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: outside) }
+    let other = outside.appendingPathComponent("n.txt")
+    try Data("n\n".utf8).write(to: other)
+    try session.open(other, as: .preview)
+    XCTAssertEqual(session.documents.count, 1, "前提: 入れ替わった")
+    XCTAssertNil(files, "入れ替えで古い文書の結線を手放す")
   }
 
   /// 文書が属する根は文書の実体から解く（タブの根ではない）。管理外のファイルは baseline 無し。
@@ -110,7 +128,7 @@ final class DocumentLinkTests: OrbeTestCase {
     let url = outside.appendingPathComponent("n.txt")
     try Data("n\n".utf8).write(to: url)
     let session = session()
-    let document = try session.open(url)
+    let document = try session.open(url, as: .pinned)
     try Data("m\n".utf8).write(to: url)
     pumpMain(until: { bodyText(document) == "m\n" }, "管理外でも外部変更は反映する")
     XCTAssertNil(document.baseline)

@@ -19,6 +19,7 @@ final class RowListTests: OrbeTestCase {
     var rowCount = 200
     var wantsFocus = false
     private(set) var keys: [RowListKey] = []
+    private(set) var releases = 0
     private(set) var clicks: [String] = []
     private(set) var selected: [Int] = []
     private(set) var focus: [Bool] = []
@@ -39,6 +40,7 @@ final class RowListTests: OrbeTestCase {
     }
     func focusDidChange(_ focused: Bool) { focus.append(focused) }
     func perform(_ key: RowListKey) { keys.append(key) }
+    func keyDidRelease() { releases += 1 }
     func click(_ row: Int) {
       if row >= rowCount { outOfRange += 1 }
       clicks.append("click \(row)")
@@ -168,7 +170,7 @@ final class RowListTests: OrbeTestCase {
 
   // MARK: - キー
 
-  /// ↑↓←→・Enter・Esc は源の操作へ渡る。Home / End・PageUp / PageDown は源へ渡さず、列が送るだけ。
+  /// ↑↓←→・Enter・Esc は源の操作へ、キーリピートかを添えて渡り、離したことも源へ渡る。Home / End・PageUp / PageDown は源へ渡さず、列が送るだけ。
   func testKeysReachTheSourceAndScrollKeysOnlyScroll() {
     let hosted = host()
     let list = hosted.list
@@ -177,7 +179,15 @@ final class RowListTests: OrbeTestCase {
     }
     list.keyDown(with: .key("\r", []))
     list.keyDown(with: .key("\u{1b}", []))
-    XCTAssertEqual(hosted.source.keys, [.up, .down, .left, .right, .enter, .escape])
+    list.keyDown(
+      with: .key(String(UnicodeScalar(NSEvent.SpecialKey.downArrow.rawValue)!), [], isRepeat: true))
+    XCTAssertEqual(
+      hosted.source.keys.map(\.action), [.up, .down, .left, .right, .enter, .escape, .down])
+    XCTAssertEqual(
+      hosted.source.keys.map(\.isRepeat), [false, false, false, false, false, false, true],
+      "キーリピートを運ぶ")
+    list.keyUp(with: .keyRelease(String(UnicodeScalar(NSEvent.SpecialKey.downArrow.rawValue)!)))
+    XCTAssertEqual(hosted.source.releases, 1, "離したことを源へ渡す")
 
     let height = list.visibleRect.height
     list.scrollToEndOfDocument(nil)
@@ -188,7 +198,7 @@ final class RowListTests: OrbeTestCase {
     XCTAssertEqual(list.visibleRect.minY, height - rowHeight, accuracy: 0.5, "1 行重ねて 1 画面送る")
     list.pageUp(nil)
     XCTAssertEqual(list.visibleRect.minY, 0)
-    XCTAssertEqual(hosted.source.keys.count, 6, "送るキーは源へ渡さない")
+    XCTAssertEqual(hosted.source.keys.count, 7, "送るキーは源へ渡さない")
   }
 
   // MARK: - マウス

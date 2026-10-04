@@ -13,6 +13,8 @@ final class EditorShellModel {
     /// 外部変更で衝突中（ドットを modified 黄で描く）。
     let isConflicted: Bool
     let isActive: Bool
+    /// 仮のタブ（名前を斜体、地に斜線）。
+    let isPreview: Bool
   }
 
   struct Crumb: Identifiable, Equatable {
@@ -29,8 +31,10 @@ final class EditorShellModel {
   var activeName: String?
   var activeChip: FileChip?
 
-  @ObservationIgnored var open: (URL) -> Void = { _ in }
+  @ObservationIgnored var open: (URL, EditorSession.OpenMode) -> Void = { _, _ in }
   @ObservationIgnored var activate: (URL) -> Void = { _ in }
+  /// 仮のタブを普通のタブにする（ファイルタブのダブルクリック）。
+  @ObservationIgnored var pin: (URL) -> Void = { _ in }
   @ObservationIgnored var requestClose: (URL) -> Void = { _ in }
   @ObservationIgnored var revealDirectory: (URL) -> Void = { _ in }
   @ObservationIgnored var createFile: () -> Void = {}
@@ -47,11 +51,13 @@ final class EditorShellModel {
 
   func update(from session: EditorSession, root: String) {
     let active = session.activeDocument
+    let preview = session.preview
     tabs = session.documents.map { document in
       FileTab(
         id: document.url, name: document.url.lastPathComponent,
         chip: FileChip.resolve(document.url), isDirty: document.isDirty,
-        isConflicted: document.isDiskChanged, isActive: document === active)
+        isConflicted: document.isDiskChanged, isActive: document === active,
+        isPreview: document === preview)
     }
     activeID = active?.url
     activeName = active?.url.lastPathComponent

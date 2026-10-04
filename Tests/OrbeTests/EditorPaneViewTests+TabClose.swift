@@ -36,10 +36,10 @@ final class EditorPaneViewTabCloseTests: OrbeTestCase {
     window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
     window.orderFront(nil)
     pane.shell.selectPanel(.files)
-    let a = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"))
+    let a = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
     a.surface.responder.perform(Selector(("insertText:")), with: "x")
-    _ = try tab.editor.open(try caseFile("b.txt", "b"))
-    _ = try tab.editor.open(try caseFile("c.md", "c"))
+    _ = try tab.editor.open(try caseFile("b.txt", "b"), as: .pinned)
+    _ = try tab.editor.open(try caseFile("c.md", "c"), as: .pinned)
     tab.view.layoutSubtreeIfNeeded()
     pumpMain(
       until: { pane.shell.tabs.map(\.isDirty) == [true, false, false] }, "a だけ未保存・c がアクティブ")
@@ -106,7 +106,7 @@ final class EditorPaneViewTabCloseTests: OrbeTestCase {
     try click(pane, at: NSPoint(x: c.x, y: c.y + 9))
     pumpMain(until: { names() == ["a.swift"] }, "枠の下端を押して c を閉じる")
 
-    _ = try row.tab.editor.open(try caseFile("d.txt", "d"))
+    _ = try row.tab.editor.open(try caseFile("d.txt", "d"), as: .pinned)
     try drawn([.dot, .close])
     let a = fileTabSlotCenter(pane, 0)
     try click(pane, at: NSPoint(x: a.x + Theme.Layout.editorTabClose / 2 + 2, y: a.y))

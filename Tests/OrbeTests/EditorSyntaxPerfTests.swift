@@ -84,7 +84,7 @@ final class EditorSyntaxPerfTests: OrbeTestCase {
         let host = try editorWindow()
         let url = try caseFile("big-\(UUID().uuidString).\(ext)", text)
         let clock = CPUClock()
-        let document = try host.tab.editor.open(url)
+        let document = try host.tab.editor.open(url, as: .pinned)
         host.pane.layoutSubtreeIfNeeded()
         XCTAssertTrue(pumpUntilCaughtUp(document))
         let elapsed = clock.elapsed

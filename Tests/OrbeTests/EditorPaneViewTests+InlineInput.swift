@@ -36,6 +36,7 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     XCTAssertTrue(
       FileManager.default.fileExists(atPath: dir.appendingPathComponent("fresh.txt").path))
     XCTAssertEqual(pane.document?.url.lastPathComponent, "fresh.txt", "作ったファイルはそのまま開く")
+    XCTAssertNil(tab.editor.preview, "作ったファイルは普通のタブ")
     XCTAssertEqual(pane.tree.selected, "fresh.txt")
     XCTAssertTrue(window.firstResponder === pane.document?.surface.responder, "焦点はテキスト面へ")
     XCTAssertEqual(tab.faces.focus, .editor)
@@ -47,7 +48,7 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
-    let document = try tab.editor.open(try caseFile("a.txt", "a"))
+    let document = try tab.editor.open(try caseFile("a.txt", "a"), as: .pinned)
 
     pane.shell.createDirectory()
     let field = try inputField(pane, in: window)
@@ -137,7 +138,7 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
-    let document = try tab.editor.open(try caseFile("a.txt", "a"))
+    let document = try tab.editor.open(try caseFile("a.txt", "a"), as: .pinned)
     let outsider = NSTextField(frame: NSRect(x: 0, y: 0, width: 50, height: 20))
     tab.view.addSubview(outsider)
     XCTAssertTrue(window.makeFirstResponder(outsider))
@@ -166,7 +167,7 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     let scroll = try XCTUnwrap(scrollView(in: pane.sideHost))
     XCTAssertEqual(scroll.documentVisibleRect.minY, 0, "前提: 先頭に居る")
 
-    pane.shell.open(deep)
+    pane.shell.open(deep, .preview)
     pumpMain(until: { scroll.documentVisibleRect.minY > 0 }, "アクティブにした深い行へ送る")
 
     scroll.contentView.scroll(to: .zero)  // 先頭へ戻してから出す（送りが起きたことを位置で見る）

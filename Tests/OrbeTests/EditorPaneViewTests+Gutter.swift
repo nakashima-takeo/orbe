@@ -74,7 +74,7 @@ final class EditorPaneViewGutterTests: OrbeTestCase {
     window.appearance = NSAppearance(named: .darkAqua)
     defer { window.orderOut(nil) }
     let line = String(repeating: "0123456789", count: 30)
-    let document = try tab.editor.open(try caseFile("long.txt", "\(line)\n\(line)\n"))
+    let document = try tab.editor.open(try caseFile("long.txt", "\(line)\n\(line)\n"), as: .pinned)
     pane.layoutSubtreeIfNeeded()
     let surface = document.surface.view
     let origin = pane.convert(surface.bounds, from: surface).origin
@@ -129,7 +129,7 @@ final class EditorPaneViewGutterTests: OrbeTestCase {
       of: pane, until: { try $0.rgba(center.midX, center.midY)[3] == veil }, "空状態の地")
     _ = empty
 
-    let document = try tab.editor.open(try caseFile("a.txt", "abc\nabc\n"))
+    let document = try tab.editor.open(try caseFile("a.txt", "abc\nabc\n"), as: .pinned)
     pane.layoutSubtreeIfNeeded()
     let surface = document.surface.view
     let origin = pane.convert(surface.bounds, from: surface).origin

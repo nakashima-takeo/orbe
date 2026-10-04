@@ -24,7 +24,8 @@ extension OrbeTestCase {
   @MainActor
   func openEditor(_ text: String, extension ext: String = "swift") throws -> OpenedEditor {
     let host = try editorWindow()
-    let document = try host.tab.editor.open(try caseFile("big-\(UUID().uuidString).\(ext)", text))
+    let url = try caseFile("big-\(UUID().uuidString).\(ext)", text)
+    let document = try host.tab.editor.open(url, as: .pinned)
     host.pane.layoutSubtreeIfNeeded()
     pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "面が大きさを持つ")
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))

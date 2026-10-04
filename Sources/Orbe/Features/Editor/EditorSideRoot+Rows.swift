@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// ツリー行 20: 深さぶんのガイド、ディレクトリはシェブロン／ファイルは種別チップ、名前（色はバッジに従う）、
-/// 右端に git バッジ。ホバーは淡い塗り、選択は selectionFill。
+/// 右端に git バッジ。ホバーは淡い塗り、選択は selectionFill。ファイル行は押すと仮のタブで開き、2 回目の押下
+/// （ダブルクリック）で普通のタブで開く——1 回目をダブルクリックの判定で待たせない。
 struct TreeRowView: View {
   let row: FileTree.Row
   let tree: FileTree
@@ -47,10 +48,14 @@ struct TreeRowView: View {
     .onTapGesture {
       switch row.kind {
       case .directory: tree.toggle(row.id)
-      case .file: shell.open(row.url)
+      case .file: shell.open(row.url, .preview)
       case .input: break
       }
     }
+    .simultaneousGesture(
+      TapGesture(count: 2).onEnded {
+        if case .file = row.kind { shell.open(row.url, .pinned) }
+      })
   }
 }
 

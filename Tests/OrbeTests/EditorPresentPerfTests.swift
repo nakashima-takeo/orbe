@@ -42,7 +42,7 @@ final class EditorPresentPerfTests: OrbeTestCase {
     let host = try editorWindow()
     host.window.orderFrontRegardless()
     let document = try host.tab.editor.open(
-      try caseFile("big.swift", EditorTypingPerfTests.swiftSource(bytes: 1_000_000)))
+      try caseFile("big.swift", EditorTypingPerfTests.swiftSource(bytes: 1_000_000)), as: .pinned)
     host.pane.layoutSubtreeIfNeeded()
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))
     RunLoop.main.run(until: Date().addingTimeInterval(1))

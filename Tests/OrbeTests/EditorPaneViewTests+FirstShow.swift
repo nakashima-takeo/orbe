@@ -15,7 +15,7 @@ extension EditorPaneViewTests {
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
     tab.setFaces(.terminalOnly, animated: false)
     tab.view.layoutSubtreeIfNeeded()
-    let document = try tab.editor.open(try caseFile("h.swift", "let a = 1\n"))
+    let document = try tab.editor.open(try caseFile("h.swift", "let a = 1\n"), as: .pinned)
     XCTAssertTrue(tab.view.editor.isHiddenOrHasHiddenAncestor, "前提: エディター面は畳まれている")
     XCTAssertFalse(document.hasBeenShown, "見えていない面では待たない")
 
@@ -28,7 +28,7 @@ extension EditorPaneViewTests {
     let tab = TerminalTab(
       cwd: try XCTUnwrap(TestIsolation.caseDir).path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let document = try tab.editor.open(try caseFile("w.swift", "let a = 1\n"))
+    let document = try tab.editor.open(try caseFile("w.swift", "let a = 1\n"), as: .pinned)
     XCTAssertNil(tab.view.editor.window, "前提: 窓に無い")
     XCTAssertFalse(document.hasBeenShown, "窓に無い面では待たない")
   }

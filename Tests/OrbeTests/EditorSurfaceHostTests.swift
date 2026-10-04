@@ -18,7 +18,7 @@ final class EditorSurfaceHostTests: OrbeTestCase {
     pane.configure(
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
       fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState())
-    let document = try tab.editor.open(try caseFile("a.txt", "x\n"))
+    let document = try tab.editor.open(try caseFile("a.txt", "x\n"), as: .pinned)
     XCTAssertTrue(document.surface.host === pane, "焦点の文書の面を載せる側は pane")
     let inside = dir.appendingPathComponent("src/b c.swift")
     XCTAssertEqual(
@@ -38,6 +38,7 @@ final class EditorSurfaceHostTests: OrbeTestCase {
     pane.openFiles([dir, other])
     XCTAssertEqual(tab.editor.activeDocument?.url, other, "フォルダは開かず、ファイルを開く")
     XCTAssertEqual(tab.editor.documents.count, 2)
+    XCTAssertNil(tab.editor.preview, "ドロップは普通のタブ")
   }
 
   /// 変換中に pane が解く chrome キーを押すと、走らせる前に変換を確定する。⌘R（タブの名前。タブに依らない window
@@ -51,7 +52,7 @@ final class EditorSurfaceHostTests: OrbeTestCase {
     let window = hostEditor(tab, width: 700)
     defer { window.contentView = nil }
     let url = try caseFile("a.swift", "let a = 1\n")
-    let document = try tab.editor.open(url)
+    let document = try tab.editor.open(url, as: .pinned)
     XCTAssertTrue(document.surface.responder is InputMethodKeyEquivalents, "面の view は窓の根の口に答える")
     window.makeFirstResponder(document.surface.responder)
     let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)

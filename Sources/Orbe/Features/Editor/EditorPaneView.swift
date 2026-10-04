@@ -48,8 +48,8 @@ final class EditorPaneView: NSView {
   let projectSearch: ProjectSearch
   /// 検索結果の列。検索パネルが隠れている間も持ち、出し直すたびに作り直さない。
   let searchResults: RowList<SearchResultsSource>
-  /// F4 / ⇧F4 を拾うイベントの監視（窓に付いている間だけ）。
-  var stepKeyMonitor: Any?
+  /// F4 / ⇧F4 と結果の列の外の押下を拾うイベントの監視（窓に付いている間だけ）。
+  var eventMonitor: Any?
   /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
   private(set) var sidebar = EditorSidebarState() {
     didSet { observeSidebar() }
@@ -107,7 +107,7 @@ final class EditorPaneView: NSView {
   required init?(coder: NSCoder) { fatalError("not supported") }
 
   deinit {
-    stepKeyMonitor.map(NSEvent.removeMonitor)
+    eventMonitor.map(NSEvent.removeMonitor)
   }
 
   override var isFlipped: Bool { true }
@@ -139,13 +139,18 @@ final class EditorPaneView: NSView {
   // MARK: - 骨の操作 → セッション
 
   private func wireShell() {
-    shell.open = { [weak self] url in self?.open(url) }
+    shell.open = { [weak self] url, mode in self?.open(url, as: mode) }
     shell.activate = { [weak self] url in
       guard let self, let tab, let document = tab.editor.documents.first(where: { $0.url == url })
       else { return }
       tab.editor.activate(document)
       tree.reveal(document.url)
       focusEditor()
+    }
+    shell.pin = { [weak self] url in
+      guard let tab = self?.tab, let document = tab.editor.documents.first(where: { $0.url == url })
+      else { return }
+      tab.editor.pin(document)
     }
     shell.requestClose = { [weak self] url in self?.requestClose(url) }
     shell.revealDirectory = { [weak self] url in self?.tree.revealDirectory(url) }
@@ -163,17 +168,17 @@ final class EditorPaneView: NSView {
   }
 
   private func wireTree() {
-    tree.onCreated = { [weak self] url in self?.open(url) }
+    tree.onCreated = { [weak self] url in self?.open(url, as: .pinned) }
     tree.onInputEnded = { [weak self] in self?.inlineInputDidEnd() }
   }
 
-  /// 骨から開く。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）。開けたらその行を
+  /// 骨から `mode` で開く。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）。開けたらその行を
   /// 選択して焦点を面へ——既に焦点の文書ならセッションは変わらないので、選択はここで明示に移す。
-  func open(_ url: URL) {
+  func open(_ url: URL, as mode: EditorSession.OpenMode) {
     guard let tab else { return }
     let document: EditorDocument
     do {
-      document = try tab.editor.open(url)
+      document = try tab.editor.open(url, as: mode)
     } catch {
       NSSound.beep()
       return
@@ -331,7 +336,7 @@ final class EditorPaneView: NSView {
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
     updateLiveness()
-    updateStepKeyMonitor()
+    updateEventMonitor()
   }
 
   override func viewDidHide() {

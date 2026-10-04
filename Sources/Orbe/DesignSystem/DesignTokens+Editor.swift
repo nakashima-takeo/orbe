@@ -21,6 +21,8 @@ extension Theme.Color {
   static let editorModified = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)
   /// ファイルタブの × にポインタがあるときの枠の地（VS Code の toolbar.hoverBackground に当たる）。
   static let editorTabCloseHover = editorDynAB(light: (0x3a3151, 0.10), dark: (0xffffff, 0.10))
+  /// 仮のタブの地の斜線の基色（α は `Theme.Opacity.editorPreviewHatch*`）。dark は editorIcon と同じ色相。
+  static let editorPreviewHatch = editorDyn(light: 0x3a3151, dark: 0xa99fb8)
   /// 種別チップの色相（見本 palette.ts の hue）。チップの文字色と、その α .16 の地に使う。
   static let editorHueOrange = editorDyn(light: 0xbf5f2a, dark: 0xd98a5f)
   static let editorHueBlue = editorDyn(light: 0x3f6fd6, dark: 0x85adff)
@@ -169,6 +171,8 @@ extension Theme.Layout {
   static let editorTabCloseGlyph: CGFloat = 12
   /// ファイルタブの右の余白（× の枠の右）。
   static let editorFileTabTrailing: CGFloat = 6
+  /// 仮のタブの地の斜線の周期（線に直交する向きで測る。線の太さは `Theme.Stroke.editorPreviewHatch`）。
+  static let editorPreviewHatchPeriod: CGFloat = 6
   static let editorBreadcrumb: CGFloat = 20
   static let editorPanelHeader: CGFloat = 28
   static let editorRow: CGFloat = 20
@@ -206,12 +210,20 @@ extension Theme.Radius {
   static let editorTabClose: CGFloat = 6
 }
 
+extension Theme.Stroke {
+  /// 仮のタブの地の斜線の太さ。
+  static let editorPreviewHatch: CGFloat = 1
+}
+
 extension Theme.Opacity {
   /// 見本の半透明面の light 換算。`sunkInk` の沈み面は tabRowBg の比に倣い ×0.3、`surfaceInk` の塗りは
   /// tabSegBg の比に倣い ×0.6、`borderInk` の hairline は紙面で濃くする ×1.4。
   static let editorSunkLight: Double = 0.3
   static let editorFillLight: Double = 0.6
   static let editorHairlineLight: Double = 1.4
+  /// 仮のタブの地の斜線の不透明度——見ているとき／見ていないとき（見ているときの 0.65 倍）。
+  static let editorPreviewHatchActive: Double = 0.06
+  static let editorPreviewHatchInactive: Double = 0.039
 }
 
 extension Theme.Motion {
