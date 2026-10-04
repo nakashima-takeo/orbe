@@ -208,9 +208,6 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
 
     arrow(Key.right, to: window)
 
-    XCTExpectFailure(
-      "バグ疑い: 実機の矢印キーは numericPad・function の修飾を伴うが、入力欄の → は修飾が空のときしか"
-        + "詳細へ入らない")
     XCTAssertEqual(model.area, .detail(.status))
   }
 

@@ -264,7 +264,6 @@ extension TaskPaletteModelTests {
     palette.tapRow(.task(2))
 
     XCTAssertNil(palette.draft)
-    XCTExpectFailure("バグ疑い: tapRow が leaveEditing の直後に error を消し、入力が黙って捨てられる")
     XCTAssertEqual(palette.error, .due)
   }
 
