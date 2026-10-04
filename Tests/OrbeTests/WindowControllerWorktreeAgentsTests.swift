@@ -3,12 +3,13 @@ import XCTest
 
 @testable import Orbe
 
-/// 窓が持つ「worktree → そこで動く agent」の索引が、タブの agent の報告に追従すること（タブの cwd が
-/// worktree の中のどこにあっても、キーは worktree のルート）と、タスク画面の詳細の agent の場所からその
-/// タブへ移れること。
+/// 窓が持つ「worktree → そこで動く agent」の索引が、タブの agent の報告に追従すること（完了・休止でも残り、
+/// タブが去ると外れる。タブの cwd が worktree の中のどこにあっても、キーは worktree のルート）と、タスク画面
+/// の詳細の agent の場所からそのタブへ移れること。
 ///
 /// 壊れると何が起きるか: agent が作業を始めても、入力待ちになっても、タスクの行の札が変わらない（画面を
-/// 開き直すまで古い状態を言う）。worktree の中のサブディレクトリで動く agent がタスクに結び付かない。
+/// 開き直すまで古い状態を言う）。応答を終えた agent のタブへ、結果を見にタスク画面から移れない。worktree の
+/// 中のサブディレクトリで動く agent がタスクに結び付かない。
 /// 詳細の「claude が取り掛かっている」で ↵ を押しても、そのタブへ移れない。
 ///
 /// 重要: 実 NSWindow に SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
@@ -60,8 +61,13 @@ final class WindowControllerWorktreeAgentsTests: OrbeTestCase {
     report("waiting", on: tab, in: wc)
     XCTAssertTrue(pump { wc.worktreeAgents.agents[root]?.state == .waiting }, "入力待ちへ追従する")
 
+    report("done", on: tab, in: wc)
+    XCTAssertTrue(pump { wc.worktreeAgents.agents[root]?.state == .done }, "応答を終えても残る")
     report("idle", on: tab, in: wc)
-    XCTAssertTrue(pump { wc.worktreeAgents.agents[root] == nil }, "作業中・入力待ちでなければ外れる")
+    XCTAssertTrue(pump { wc.worktreeAgents.agents[root]?.state == .idle }, "休止しても残る")
+
+    _ = wc.controlCloseTab(tabId: tab.id)
+    XCTAssertTrue(pump { wc.worktreeAgents.agents[root] == nil }, "タブが去ると外れる")
   }
 
   func testGoingToTheAgentFromTheTaskDetailFocusesItsTabAndClosesTheScreen() throws {

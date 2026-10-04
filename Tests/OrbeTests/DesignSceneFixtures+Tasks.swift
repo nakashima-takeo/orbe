@@ -78,7 +78,7 @@ extension DesignSceneFixtures {
 
   /// 見本の agent（#212 の worktree で claude が 12 分作業中、#209 の worktree で入力待ち）。
   static func taskAgents() -> WorktreeAgentActivity {
-    let agent = { (name: String, state: WorktreeAgentState, minutes: Double) in
+    let agent = { (name: String, state: AgentStateIcon.Kind, minutes: Double) in
       WorktreeAgentActivity.Agent(
         name: "claude", state: state, since: Date().addingTimeInterval(-minutes * 60),
         tabId: 1, tabTitle: name)
