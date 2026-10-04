@@ -11,6 +11,13 @@ extension WorktreePaletteDataProvider {
     case none
   }
 
+  /// 手元のローカルブランチが、PR の head と同じ GitHub のブランチか。
+  private enum HeadMatch {
+    case same, other
+    /// まだ分からない（gh の確認か remote の正式名を待っている）。
+    case pending
+  }
+
   /// 先頭の欄の行き先。決まる順は、文脈 → タスクの worktree が今の一覧にあるか → 主の Issue・PR が手元の
   /// リポジトリから扱えるか。
   func taskTarget(_ inputs: WorktreePaletteTaskInputs) -> WorktreePaletteTaskTarget {
@@ -27,12 +34,34 @@ extension WorktreePaletteDataProvider {
     case (.issue, _):
       return branchTarget("issue/\(primary.item.number)", in: primary.item.repo, pullRequest: nil)
     case (.pr, .found(let head)):
+      // 同じ名前のローカルブランチ（worktree のブランチを含む）は、別のリポジトリ（fork の main 等）のもの
+      // かもしれない。head と同じ GitHub のブランチのときだけその行を使い、違えば欄を出さない（同名の
+      // ローカルがあると、head のリモートブランチの行は一覧に出ない）。
+      if localBranches.contains(where: { $0.name == head.branch }) {
+        switch localBranch(head.branch, matches: head) {
+        case .same: break
+        case .other: return .none
+        case .pending: return .pending
+        }
+      }
       return branchTarget(head.branch, in: head.repo, pullRequest: primary.item.number)
     case (.pr, .pending):
       return .pending
     case (.pr, .none), (.pr, .unavailable):
       return .none
     }
+  }
+
+  /// ローカルブランチの同一性（`GitHubBranchIdentities`。⌘T の clean と PR の自動の結び付けと同じ口）が
+  /// `head` と等しいか。gh が使えないと決まったら、PR の自動の結び付けと同じく確かめられないものとして
+  /// 欄を出さない側に決める。
+  private func localBranch(_ name: String, matches head: GitHubBranchRef) -> HeadMatch {
+    guard let probed = probedGitHubState else { return .pending }
+    guard probed == .ready else { return .other }
+    guard case .settled(let resolved) = remoteLedger else { return .pending }
+    let identity = GitHubBranchIdentities(resolved: resolved, localBranches: localBranches)
+      .local(name)
+    return identity == .ref(head) ? .same : .other
   }
 
   /// `repo` のブランチ。そのリポジトリが手元のいずれかの remote でなければ欄を出さない。

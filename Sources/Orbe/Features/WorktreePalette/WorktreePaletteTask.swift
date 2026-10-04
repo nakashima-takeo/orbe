@@ -52,7 +52,7 @@ extension WorktreePaletteTaskInputs {
 enum WorktreePaletteTaskTarget: Equatable {
   /// 欄を出さない（文脈が無い・手元のリポジトリから扱えない Issue・PR・主が無い）。
   case none
-  /// まだ決まらない（PR のブランチ名を取っている・remote の正式名を待っている）。↵ は預かる。
+  /// まだ決まらない（PR のブランチ名を取っている・remote の正式名や gh の確認を待っている）。↵ は預かる。
   case pending
   /// タスクの worktree（今の一覧にある worktree のパス）。
   case worktree(path: String)
