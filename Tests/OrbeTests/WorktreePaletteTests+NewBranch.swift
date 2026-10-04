@@ -260,15 +260,15 @@ extension WorktreePaletteTests {
   }
 
   /// 選んだ名前は「ほか…」の直前に出て選ばれ、その名前から作る。
-  func testPickedBaseAppearsBeforeOtherAndIsUsed() {
+  func testPickedBaseAppearsBeforeOtherAndIsUsed() throws {
     let p = makeCreatableModel()
     var executed: [WorktreePaletteDestination] = []
     p.onExecute = { executed.append($0) }
     type("feat/x", into: p)
     p.chooseBase(.other)
-    let picker = try? XCTUnwrap(p.basePicker)
-    picker?.query = "0.9"
-    XCTAssertEqual(picker?.items.map(\.name), ["origin/release/0.9"])
+    let picker = try XCTUnwrap(p.basePicker)
+    picker.query = "0.9"
+    XCTAssertEqual(picker.items.map(\.name), ["origin/release/0.9"])
     p.submit()
 
     XCTAssertEqual(p.mode, .list)

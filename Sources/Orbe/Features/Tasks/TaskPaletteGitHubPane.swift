@@ -276,10 +276,10 @@ extension TaskPaletteGitHubPane {
     }
   }
 
-  /// 「進行中 · claude 作業中 12分」（agent の札は u6 の索引。作業中・入力待ちだけ）。
+  /// 「進行中 · claude 作業中 12分」（agent の札は `WorktreeAgentActivity` の索引。作業中・入力待ちだけ）。
   private func linkedTaskState(_ task: TaskItem) -> some View {
     let status = l10n.string(Self.statusKey(task.status))
-    let agent = task.status == .done ? nil : model.agent(of: task).flatMap { $0.isBusy ? $0 : nil }
+    let agent = model.agent(of: task).flatMap { $0.isBusy ? $0 : nil }
     return TimelineView(.periodic(from: agent?.since ?? .distantPast, by: 60)) { context in
       HStack(spacing: Theme.Space.note) {
         Text(status)

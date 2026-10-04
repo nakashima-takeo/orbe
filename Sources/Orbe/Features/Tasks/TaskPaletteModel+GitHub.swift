@@ -55,12 +55,10 @@ extension TaskPaletteModel {
   /// ヘッダーのタブの件数（取れた open の件数）。まだ何も取れていなければ nil。
   var gitHubCount: Int? {
     let repository = gitHubRepository
-    guard let issues = repository?.issues.items, let pullRequests = repository?.pullRequests.items
-    else {
-      let some = repository?.issues.items ?? repository?.pullRequests.items
-      return some?.count
-    }
-    return issues.count + pullRequests.count
+    let issues = repository?.issues.items
+    let pullRequests = repository?.pullRequests.items
+    guard issues != nil || pullRequests != nil else { return nil }
+    return (issues?.count ?? 0) + (pullRequests?.count ?? 0)
   }
 
   var gitHubRows: [TaskPaletteGitHubRow] {

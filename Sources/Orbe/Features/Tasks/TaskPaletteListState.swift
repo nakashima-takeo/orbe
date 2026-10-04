@@ -14,7 +14,7 @@ struct TaskPaletteListState<ID: Hashable> {
   var query = ""
   private var selection = ModalSelection<ID?>(nil)
   /// 選択が最後に居た位置（選べる行の並びでの番号）。
-  private(set) var position = 0
+  private var position = 0
   /// 一覧を送る先。人の操作のたびに今の選択で決め直す。付け直し（agent の変更）では決めない——人が流して
   /// 読んでいる一覧を、選んだ行の位置がずれただけで引き戻さないため。
   private(set) var scrollTarget: TaskPaletteScrollTarget<ID>?

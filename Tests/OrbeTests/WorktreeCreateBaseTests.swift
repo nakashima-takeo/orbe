@@ -211,12 +211,12 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
   }
 
   /// provider を起こし、git レーンの着地（列挙 → 行の組み直し）まで進める。
-  func start(gitHub: GitHubCLI = .shared) throws -> WorktreePaletteDataProvider {
+  func start() throws -> WorktreePaletteDataProvider {
     palette = WorktreePaletteModel()
     let provider = WorktreePaletteDataProvider(
       cwd: local, model: palette, localization: LocalizationStore(language: .ja),
       // 作成先を一時ディレクトリの中へ落とす（後始末に乗せる）。
-      worktreeTemplate: "{parent}/wt-{slug}", gitHub: gitHub)
+      worktreeTemplate: "{parent}/wt-{slug}")
     provider.load()
     XCTAssertTrue(
       pump({
@@ -233,7 +233,7 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
   /// `holdingFetch` は眠りを `releaseFetch()` まで続けさせる。着地を待ち切るまで手が戻らないテスト
   /// （`resolve`・`prepare` の中で着地を待つ等）は fetch が自力で明ける必要があるので数秒の眠りのまま、
   /// 着地の前と後を分けて測るテストが門を使い、自分で `releaseFetch()` を呼ぶ。
-  func startWithSlowFetch(holdingFetch: Bool = false, gitHub: GitHubCLI = .shared) throws
+  func startWithSlowFetch(holdingFetch: Bool = false) throws
     -> WorktreePaletteDataProvider
   {
     let wrapper = dir.appendingPathComponent("slow-upload-pack").path
@@ -246,7 +246,7 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
       toFile: wrapper, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper)
     XCTAssertTrue(run(["config", "remote.origin.uploadpack", wrapper], cwd: local).isSuccess)
-    let provider = try start(gitHub: gitHub)
+    let provider = try start()
     XCTAssertNotEqual(localRemoteTip("main"), originTip("main"), "前提: まだ fetch が着地していない")
     return provider
   }
