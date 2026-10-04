@@ -55,6 +55,15 @@ final class MultiCursorCommandsTests: XCTestCase {
     XCTAssertEqual(Editing.runAll([d, d], on: "東京|都に行く。東京タワー").0, "[東京]都に行く。[東京]タワー")
   }
 
+  /// 日本語の文中の英数字の語も、⌘D が選んだ語と同じ語を次の一致として見つける。
+  func testAddNextOccurrenceFindsLatinWordsInsideJapaneseText() {
+    let d = EditCommand.addNextOccurrence
+    let (text, state) = Editing.runAll([d, d], on: "iPh|one15を買った。iPhone15")
+    XCTAssertEqual(state.cursors.count, 2, text)
+    XCTAssertEqual(
+      Editing.runAll([d, d], on: "言語は「Sw|ift」です。Swift").1.cursors.count, 2)
+  }
+
   /// 語に接していないキャレットの ⌘D は何もしない。
   func testAddNextOccurrenceWithoutAWordDoesNothing() {
     let (text, state) = Editing.runAll([.addNextOccurrence], on: "a  |  b")

@@ -153,14 +153,18 @@ public enum TextSearch {
 
 /// 語の規則の境——VS Code の語の境（どちらかの字が区切り・空白・改行、または本文の端。`isValidMatch`）に、CJK を含む
 /// 通常の字の並びの中の OS の語の分割の境を足したもの（⌘D・⌥←→・ダブルクリックが語を選ぶのと同じ分類 `LineWords`）。
-/// 日本語の並びの中で選んだ語（「東京都に行く」の「東京」）も、同じ語の一致として見つかる。分割した並びは覚えて、同じ並びの
-/// 一致では分割し直さない。
+/// 分割を見るかは、位置を含む通常の字の並びが CJK を含むかで決める——隣の字が約物（「」、。）や英数字でも、並びに日本語が
+/// あれば ⌘D の語と同じ境で切れる（「言語は「Swift」です」の「Swift」も、「東京都に行く」の「東京」も、同じ語の一致として
+/// 見つかる）。並びと分割は覚えて、同じ並びの一致では読み直さない。
 struct WordBoundaries {
   /// 分割を読む並びの、位置の前後それぞれの上限（面の語の規則の窓と同じ大きさ）。
   static let reach = 1024
+  /// 並びの端を探すときに最初に読む、位置の前後それぞれの単位の数（並びが収まらなければ `reach` まで読み直す）。
+  private static let glance = 64
 
   let text: TextRope
-  private var run: (range: Range<Int>, words: LineWords)?
+  /// 覚えた並び（本文の区間）と、CJK を含むならその分割。
+  private var run: (range: Range<Int>, words: LineWords?)?
 
   init(text: TextRope) {
     self.text = text
@@ -175,13 +179,9 @@ struct WordBoundaries {
       return local >= 0 && local < string.length
         ? string.character(at: local) : text.units(in: NSRange(location: at, length: 1))[0]
     }
-    let before = unit(offset - 1)
-    let after = unit(offset)
-    guard Self.isWordUnit(before), Self.isWordUnit(after) else { return true }
-    let leading = UTF16.isTrailSurrogate(before) && offset >= 2 ? unit(offset - 2) : before
-    guard LineWords.isCJK(leading) || LineWords.isCJK(after) else { return false }
-    let words = segmented(around: offset)
-    return words.words.isSegmentBoundary(at: offset - words.range.lowerBound)
+    guard Self.isWordUnit(unit(offset - 1)), Self.isWordUnit(unit(offset)) else { return true }
+    let found = segmented(around: offset)
+    return found.words?.isSegmentBoundary(at: offset - found.range.lowerBound) ?? false
   }
 
   /// 通常の字（区切り・空白・改行でない）か。
@@ -189,20 +189,35 @@ struct WordBoundaries {
     unit != 0x0A && unit != 0x0D && LineWords.wordClass(unit) == .regular
   }
 
-  /// `offset` を含む通常の字の並び（前後 `reach` まで）と、その語の分割。
-  private mutating func segmented(around offset: Int) -> (range: Range<Int>, words: LineWords) {
+  /// `offset` を含む通常の字の並び（前後 `reach` まで）と、並びが CJK を含むならその語の分割（含まなければ nil）。
+  private mutating func segmented(around offset: Int) -> (range: Range<Int>, words: LineWords?) {
     if let run, run.range.lowerBound < offset, offset < run.range.upperBound { return run }
-    let lower = max(0, offset - Self.reach)
-    let upper = min(text.length, offset + Self.reach)
+    var found = Self.run(around: offset, reach: Self.glance, text)
+    if !found.closed { found = Self.run(around: offset, reach: Self.reach, text) }
+    let units = found.units
+    let words = units.contains(where: LineWords.isCJK) ? LineWords(units) : nil
+    run = (found.range, words)
+    return (found.range, words)
+  }
+
+  /// 窓の中で見つけた通常の字の並び。`closed` は並びの両端が窓の中で見つかったか（本文の端を含む）。
+  private struct Run {
+    let range: Range<Int>
+    let units: ContiguousArray<UInt16>
+    let closed: Bool
+  }
+
+  /// `offset` を含む通常の字の並び（前後 `reach` まで）。
+  private static func run(around offset: Int, reach: Int, _ text: TextRope) -> Run {
+    let lower = max(0, offset - reach)
+    let upper = min(text.length, offset + reach)
     let units = text.units(in: NSRange(location: lower, length: upper - lower))
     var start = offset - lower
-    while start > 0, Self.isWordUnit(units[start - 1]) { start -= 1 }
+    while start > 0, isWordUnit(units[start - 1]) { start -= 1 }
     var end = offset - lower
-    while end < units.count, Self.isWordUnit(units[end]) { end += 1 }
-    let found = (
-      range: (lower + start)..<(lower + end), words: LineWords(ContiguousArray(units[start..<end]))
-    )
-    run = found
-    return found
+    while end < units.count, isWordUnit(units[end]) { end += 1 }
+    return Run(
+      range: (lower + start)..<(lower + end), units: ContiguousArray(units[start..<end]),
+      closed: (start > 0 || lower == 0) && (end < units.count || upper == text.length))
   }
 }

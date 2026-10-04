@@ -203,6 +203,21 @@ final class OccurrencesTests: XCTestCase {
       TextSearch.matches(of: "京", in: text, rule: .word), [], "語の途中の一致は語の一致でない")
   }
 
+  /// 区切りでも CJK でもない約物（「」、。（））や英字と数字の境に接する語も、その位置を含む並びに CJK があれば、⌘D の語と
+  /// 同じ OS の語の分割で切れる。英字だけの並びは分割しない。
+  func testWordRuleSplitsRunsThatContainJapaneseAnywhere() {
+    func count(_ needle: String, _ text: String) -> Int {
+      TextSearch.matches(of: needle, in: TextRope(text), rule: .word).count
+    }
+    XCTAssertEqual(count("Swift", "言語は「Swift」です"), 1)
+    XCTAssertEqual(count("iPhone15", "iPhone15を買った。iPhone15"), 2)
+    XCTAssertEqual(count("API", "まず、APIを呼ぶ（API）を使う"), 2)
+    XCTAssertEqual(count("foo_bar", "設定のfoo_barを"), 1)
+    XCTAssertEqual(
+      TextSearch.matches(of: "foo", in: TextRope("foobar foo"), rule: .word),
+      [NSRange(location: 7, length: 3)], "英字だけの並びは分割しない")
+  }
+
   /// 次の一致は、位置以降に始まる最初の一致。無ければ先頭へ回る。
   func testFirstMatchWrapsAround() {
     let text = TextRope("ab x ab x AB")
