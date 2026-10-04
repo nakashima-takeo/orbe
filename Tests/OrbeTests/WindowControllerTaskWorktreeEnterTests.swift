@@ -122,8 +122,8 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
   }
 
   /// 札を外すと、いつもの ⌘T と同じく開いた時点の workspace（main。git の外）に結び付き直す。タスクの
-  /// リポジトリの行は捨てて main の場所を読み直し、↵ は main にタブを開いて、タスクの workspace を前面に
-  /// しない。タスクも変わらない。
+  /// リポジトリの行は捨てて main の場所を読み直す。↵ は、その後に前面の workspace が替わっても main に
+  /// タブを開き、どの workspace も前面にしない。タスクも変わらない。
   func testRemovingTheTaskReturnsToTheOpenedWorkspaceAndEnterLeavesTheTaskAlone() throws {
     let (wc, task) = try launch()
     let repositoryRow = WorktreePaletteAction.open(.directory(path: toplevel))
@@ -136,13 +136,41 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
       pump { palette.items.contains { $0.glyph == .directory } }, "開いた時点の workspace の場所を読み直す")
     XCTAssertFalse(
       palette.items.contains { $0.action == repositoryRow }, "タスクの workspace のリポジトリの行は残らない")
+    wc.switchWorkspace(to: 1)
     palette.activate(at: try XCTUnwrap(palette.items.firstIndex { $0.glyph == .directory }))
 
     XCTAssertEqual(wc.model.overlay, .none, "タブを開いて閉じる")
-    XCTAssertEqual(wc.current.name, "main", "タスクの workspace を前面にしない")
     XCTAssertEqual(wc.workspaces[0].tabs.count, mainTabs + 1, "開いた時点の workspace にタブが開く")
     XCTAssertTrue(wc.workspaces[1].tabs.isEmpty, "タスクの workspace には開かない")
+    XCTAssertEqual(wc.current.name, "web", "前面は動かさない")
     XCTAssertEqual(stored(task, in: wc), task, "札を外した後の ↵ はタスクを変えない")
+  }
+
+  /// 札を外した時点でタスクのリポジトリの読み取り（提示時の fetch）がまだ途中でも、それが後から着地して
+  /// パレットにタスクのリポジトリの行を書き戻すことはない。git の一覧の読み取りは provider を強く捕まえる
+  /// ので、途中の読み取りがある間は前の provider が生き残る——その状態をテストが provider を持つことで作る。
+  func testAReadOfTheTasksRepositoryLandingAfterRemovingTheTaskDoesNotComeBack() throws {
+    let gate = (dir as NSString).appendingPathComponent("fetch-gate")
+    let wrapper = (dir as NSString).appendingPathComponent("held-upload-pack")
+    try FileManager.default.createDirectory(atPath: gate, withIntermediateDirectories: true)
+    try "#!/bin/sh\nwhile [ -d \"\(gate)\" ]; do sleep 0.05; done\nexec git-upload-pack \"$@\"\n"
+      .write(toFile: wrapper, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper)
+    try git(["config", "remote.origin.uploadpack", wrapper], in: local)
+    let (wc, task) = try launch()
+    let repositoryRow = WorktreePaletteAction.open(.directory(path: toplevel))
+    let palette = try open(wc, for: task, row: repositoryRow)
+    let taskProvider = try XCTUnwrap(wc.model.worktreePaletteProvider)
+    XCTAssertFalse(taskProvider.remoteFetchLanded, "前提: タスクのリポジトリの fetch はまだ着地していない")
+
+    palette.clearTaskContext()
+    XCTAssertTrue(pump { palette.items.contains { $0.glyph == .directory } })
+    try FileManager.default.removeItem(atPath: gate)
+
+    XCTAssertTrue(pump { taskProvider.remoteFetchLanded }, "前提: タスクのリポジトリの fetch が着地した")
+    XCTAssertFalse(
+      pump({ palette.items.contains { $0.action == repositoryRow } }, timeout: 1),
+      "タスクのリポジトリの行は戻らない")
   }
 
   /// 遅れたブランチは最新化の画面を通ってから作られる。その経路でもタスクは進行中になり、worktree が付く。
