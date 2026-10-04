@@ -1,5 +1,51 @@
 import Foundation
 
+/// 詳細の項目（上から並ぶ順）。
+enum TaskDetailField: CaseIterable, Equatable, Hashable {
+  case title, status, waiting, priority, due, workspace, memo
+
+  /// ↵ で編集を始める文字の項目。
+  var isText: Bool {
+    switch self {
+    case .title, .waiting, .due, .memo: true
+    case .status, .priority, .workspace: false
+    }
+  }
+}
+
+/// 詳細で ↑↓ で止まる場所。固定の項目と、タスクごとに数が変わる結び付きの行。結び付きは位置でなく項目の
+/// 同一性で持つ（agent が結び付きを変えても、焦点が別の項目へずれない）。
+enum TaskDetailStop: Hashable {
+  case field(TaskDetailField)
+  case link(GitHubItemID)
+}
+
+/// キーを受ける場所（入力欄の一覧か、詳細の止まる場所か）。詳細の編集中かは `draft` が持つ。
+enum TaskPaletteArea: Equatable {
+  case list
+  case detail(TaskDetailStop)
+}
+
+/// SwiftUI の焦点の宛先。モデルから一方向に写す。
+enum TaskPaletteFocusTarget: Hashable {
+  /// ヘッダーの入力欄。
+  case field
+  /// カードの器（詳細の項目にいる間）。
+  case card
+  /// 詳細の文字の項目の入力欄。
+  case edit(TaskDetailField)
+}
+
+/// 詳細の文字の項目の下書き。編集を始めたときの対象に結び付き、確定はその ID へ書く。
+struct TaskEditDraft: Equatable {
+  let field: TaskDetailField
+  let taskID: Int
+  /// 編集を始めたときの値。打っていない下書きは確定しても書かない（その間の agent の変更を、触った
+  /// だけの古い値で上書きしない）。
+  let original: String
+  var text: String
+}
+
 /// 詳細の操作（項目の移動・選択式の値・文字の項目の編集と確定・結び付きを開く / 外す）。変異はすべて
 /// ストアのメソッドをそのまま呼び、検証はストアに任せる。
 extension TaskPaletteModel {

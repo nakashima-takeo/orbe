@@ -79,7 +79,14 @@ struct TaskPaletteTaskRow: Equatable {
 }
 
 /// 一覧の 1 行。
-enum TaskPaletteRow: Equatable {
+enum TaskPaletteRow: Equatable, Identifiable {
+  /// 行の同一性（選べない行を含む）。一覧の中で一意。
+  enum Identity: Hashable {
+    case selectable(TaskPaletteRowID)
+    case sectionHeader(TaskItem.Status)
+    case empty
+  }
+
   case add(title: String)
   /// 「進行中 N」「未着手 N」の見出し（選べない）。
   case sectionHeader(TaskItem.Status, count: Int)
@@ -88,13 +95,19 @@ enum TaskPaletteRow: Equatable {
   /// 範囲にタスクが 1 件も無く、入力も無いときの情報行（選べない）。
   case empty
 
-  var selectableID: TaskPaletteRowID? {
+  var id: Identity {
     switch self {
-    case .add: .add
-    case .task(let row): .task(row.id)
-    case .doneHeader: .doneHeader
-    case .sectionHeader, .empty: nil
+    case .add: .selectable(.add)
+    case .sectionHeader(let status, _): .sectionHeader(status)
+    case .task(let row): .selectable(.task(row.id))
+    case .doneHeader: .selectable(.doneHeader)
+    case .empty: .empty
     }
+  }
+
+  var selectableID: TaskPaletteRowID? {
+    guard case .selectable(let id) = id else { return nil }
+    return id
   }
 }
 

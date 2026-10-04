@@ -6,50 +6,11 @@ enum TaskPaletteTab: Equatable {
   case tasks, github
 }
 
-/// 詳細の項目（上から並ぶ順）。
-enum TaskDetailField: CaseIterable, Equatable, Hashable {
-  case title, status, waiting, priority, due, workspace, memo
-
-  /// ↵ で編集を始める文字の項目。
-  var isText: Bool {
-    switch self {
-    case .title, .waiting, .due, .memo: true
-    case .status, .priority, .workspace: false
-    }
-  }
-}
-
-/// 詳細で ↑↓ で止まる場所。固定の項目と、タスクごとに数が変わる結び付きの行。結び付きは位置でなく項目の
-/// 同一性で持つ（agent が結び付きを変えても、焦点が別の項目へずれない）。
-enum TaskDetailStop: Hashable {
-  case field(TaskDetailField)
-  case link(GitHubItemID)
-}
-
-/// キーを受ける場所（入力欄の一覧か、詳細の止まる場所か）。詳細の編集中かは `draft` が持つ。
-enum TaskPaletteArea: Equatable {
-  case list
-  case detail(TaskDetailStop)
-}
-
-/// SwiftUI の焦点の宛先。モデルから一方向に写す。
-enum TaskPaletteFocusTarget: Hashable {
-  /// ヘッダーの入力欄。
-  case field
-  /// カードの器（詳細の項目にいる間）。
-  case card
-  /// 詳細の文字の項目の入力欄。
-  case edit(TaskDetailField)
-}
-
-/// 詳細の文字の項目の下書き。編集を始めたときの対象に結び付き、確定はその ID へ書く。
-struct TaskEditDraft: Equatable {
-  let field: TaskDetailField
-  let taskID: Int
-  /// 編集を始めたときの値。打っていない下書きは確定しても書かない（その間の agent の変更を、触った
-  /// だけの古い値で上書きしない）。
-  let original: String
-  var text: String
+/// 一覧を見える所まで送る先。同じ行へ続けて送るとき（⌥↑↓ を続けて押す）も変化として届くよう、決めるたびに
+/// 進む番号を持つ。
+struct TaskPaletteScrollTarget: Equatable {
+  let id: TaskPaletteRowID
+  let serial: Int
 }
 
 /// フッターに赤で出す失敗。画面が「何をしようとしたか」から選ぶ（ストアのエラーの文は読まない）。
@@ -58,9 +19,9 @@ enum TaskPaletteError: Error, Equatable {
 }
 
 /// ⌘⇧X タスク画面の状態（@Observable）。タスクの値は写さずストア（唯一の正）を直接読み書きし、GitHub の値も
-/// 写さず置き場（`GitHubItemCache`）から引く。ここは入力・範囲・タブ・選択・焦点・編集中の下書きだけを持つ。
-/// 一覧の行は `TaskPaletteRows` が毎回組む。列が変わったとき（agent の変更を含む）は `reconcile()` 1 本で
-/// 選択・焦点・下書きを付け直す。
+/// 写さず置き場（`GitHubItemCache`）から引く。ここは入力・範囲・タブ・選択・一覧の送り先・焦点・編集中の
+/// 下書き・行の掴みだけを持つ。一覧の行は `TaskPaletteRows` が毎回組む。
+/// 列が変わったとき（agent の変更を含む）は `reconcile()` 1 本で選択・焦点・下書き・掴みを付け直す。
 @Observable final class TaskPaletteModel {
   let store: TaskStore
   let githubItems: GitHubItemCache
@@ -92,12 +53,18 @@ enum TaskPaletteError: Error, Equatable {
   }
   /// 書くのはモデル（拡張を含む）だけ。
   var error: TaskPaletteError?
+  /// 一覧の行の掴み。書くのはモデル（拡張を含む）だけ。
+  var drag: TaskPaletteDrag = .idle
   /// 選択は行の同一性で持つ。位置は付け直しのときだけ使う。
   private var selection = ModalSelection<TaskPaletteRowID?>(nil)
   /// 選択が最後に居た位置（選べる行の並びでの番号）。
   private var selectedPosition = 0
   /// 詳細で居る場所が最後に居た位置（そのタスクの止まる場所の並びでの番号）。
   private var detailPosition = 0
+  /// 一覧を送る先。人の操作（選び直し・並べ替え・範囲や開閉の切り替え・画面からの変異）のたびに今の選択で
+  /// 決め直す。agent の変更（`reconcile()` だけの付け直し）では決めない——人が流して読んでいる一覧を、
+  /// 選んだ行の位置がずれただけで引き戻さないため。
+  private(set) var scrollTarget: TaskPaletteScrollTarget?
   /// focus トリガ。進めると SwiftUI が `focusTarget` を `@FocusState` へ写す。
   private(set) var focusToken = 0
 
@@ -178,7 +145,8 @@ enum TaskPaletteError: Error, Equatable {
 
   /// 列・範囲・タブ・開閉が変わったあとの付け直し。選択の同一性が今の行にあれば位置を覚え直し、無ければ
   /// 覚えている位置（末尾で頭打ち）の行へ移す。詳細に居る間に選択が別の行へ移ったら一覧へ戻り、対象が
-  /// 消えた下書きは捨てる。裏の変化はユーザーの意図ではないので入力モダリティは動かさない。
+  /// 消えた下書きは捨て、並びが変わった掴みも捨てる。裏の変化はユーザーの意図ではないので入力モダリティは
+  /// 動かさない。
   func reconcile() {
     let previous = selection.value
     let ids = selectableIDs
@@ -203,6 +171,7 @@ enum TaskPaletteError: Error, Equatable {
       if !stops.contains(stop) { area = .detail(stops[min(detailPosition, stops.count - 1)]) }
     }
     rememberDetailPosition()
+    discardStaleDrag()
   }
 
   /// 詳細で居る場所の位置を覚え直す。焦点の結び付きが外れたとき、同じ位置の止まる場所へ移すため。
@@ -251,11 +220,19 @@ enum TaskPaletteError: Error, Equatable {
     guard let index = ids.firstIndex(of: id) else { return }
     selection.hoverSelect(id)
     selectedPosition = index
+    followSelection()
   }
 
   private func select(at index: Int, in ids: [TaskPaletteRowID]) {
     selection.value = ids[index]
     selectedPosition = index
+    followSelection()
+  }
+
+  /// 今の選択を一覧の送り先にする。
+  private func followSelection() {
+    guard let id = selectedID else { return }
+    scrollTarget = TaskPaletteScrollTarget(id: id, serial: (scrollTarget?.serial ?? 0) &+ 1)
   }
 
   /// 入力が変わったら、先頭の行（入力があれば追加の行）を選ぶ。
@@ -268,6 +245,7 @@ enum TaskPaletteError: Error, Equatable {
     } else {
       select(at: 0, in: ids)
     }
+    discardStaleDrag()
   }
 
   /// ↵。選んでいる行の操作（追加 / 完了 ⇄ 未着手 / 完了の欄の開閉）。
@@ -316,18 +294,32 @@ enum TaskPaletteError: Error, Equatable {
   /// ⌥↑↓。選んだタスクを、同じ欄の見えている隣のタスクと入れ替える。欄の端と完了のタスクでは何もしない。
   func reorder(_ direction: Int) {
     error = nil
-    guard let task = selectedTask, task.status != .done else { return }
+    guard let task = selectedTask, let siblings = visibleSiblings(of: task.id),
+      let index = siblings.firstIndex(of: task.id), siblings.indices.contains(index + direction)
+    else { return }
+    place(from: index, to: index + direction, among: siblings)
+  }
+
+  /// 同じ欄で一覧に見えている未完了のタスクの ID（一覧の順）。完了のタスクと見えていないタスクは nil。
+  func visibleSiblings(of id: Int) -> [Int]? {
+    guard let status = store.tasks.first(where: { $0.id == id })?.status, status != .done else {
+      return nil
+    }
     let siblings = rows.compactMap { row -> Int? in
       guard case .task(let item) = row,
-        store.tasks.first(where: { $0.id == item.id })?.status == task.status
+        store.tasks.first(where: { $0.id == item.id })?.status == status
       else { return nil }
       return item.id
     }
-    guard let index = siblings.firstIndex(of: task.id), siblings.indices.contains(index + direction)
-    else { return }
-    let anchor = siblings[index + direction]
+    return siblings.contains(id) ? siblings : nil
+  }
+
+  /// 見えている兄弟の `from` 番目を `to` 番目へ。下へなら `to` 番目の直後、上へなら直前に入れる（その先の
+  /// 隠れたタスクは越えない）。同じ番号ならストアを呼ばない。
+  func place(from: Int, to: Int, among siblings: [Int]) {
+    guard from != to else { return }
     mutate(.failed) { () throws(TaskStoreError) in
-      try store.move(task.id, direction < 0 ? .before : .after, anchor)
+      try store.move(siblings[from], to > from ? .after : .before, siblings[to])
     }
   }
 
@@ -339,6 +331,7 @@ enum TaskPaletteError: Error, Equatable {
   private func flipDoneExpanded() {
     doneExpanded.toggle()
     reconcile()
+    followSelection()
   }
 
   /// 別の操作に移る前の共通の手順。前の操作の失敗を消してから、編集中の文字を確定する——この順なので、
@@ -354,6 +347,7 @@ enum TaskPaletteError: Error, Equatable {
     area = .list
     scope = scope == .all ? .opened : .all
     reconcile()
+    followSelection()
   }
 
   func setScope(_ scope: TaskPaletteScope) {
@@ -374,7 +368,7 @@ enum TaskPaletteError: Error, Equatable {
     toggleTab()
   }
 
-  /// ストアの変異を呼び、付け直す。消えていたタスクは表に出さず付け直しに任せる。
+  /// 画面からのストアの変異を呼び、付け直して選択へ送る。消えていたタスクは表に出さず付け直しに任せる。
   func mutate(_ failure: TaskPaletteError, _ body: () throws(TaskStoreError) -> Void) {
     do throws(TaskStoreError) {
       try body()
@@ -383,5 +377,6 @@ enum TaskPaletteError: Error, Equatable {
     } catch {
     }
     reconcile()
+    followSelection()
   }
 }
