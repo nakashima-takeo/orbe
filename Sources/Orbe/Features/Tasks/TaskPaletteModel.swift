@@ -266,18 +266,32 @@ enum TaskPaletteError: Error, Equatable {
   /// ⌥↑↓。選んだタスクを、同じ欄の見えている隣のタスクと入れ替える。欄の端と完了のタスクでは何もしない。
   func reorder(_ direction: Int) {
     error = nil
-    guard let task = selectedTask, task.status != .done else { return }
+    guard let task = selectedTask, let siblings = visibleSiblings(of: task.id),
+      let index = siblings.firstIndex(of: task.id), siblings.indices.contains(index + direction)
+    else { return }
+    place(from: index, to: index + direction, among: siblings)
+  }
+
+  /// 同じ欄で一覧に見えている未完了のタスクの ID（一覧の順）。完了のタスクと見えていないタスクは nil。
+  func visibleSiblings(of id: Int) -> [Int]? {
+    guard let status = store.tasks.first(where: { $0.id == id })?.status, status != .done else {
+      return nil
+    }
     let siblings = rows.compactMap { row -> Int? in
       guard case .task(let item) = row,
-        store.tasks.first(where: { $0.id == item.id })?.status == task.status
+        store.tasks.first(where: { $0.id == item.id })?.status == status
       else { return nil }
       return item.id
     }
-    guard let index = siblings.firstIndex(of: task.id), siblings.indices.contains(index + direction)
-    else { return }
-    let anchor = siblings[index + direction]
+    return siblings.contains(id) ? siblings : nil
+  }
+
+  /// 見えている兄弟の `from` 番目を `to` 番目へ。下へなら `to` 番目の直後、上へなら直前に入れる（その先の
+  /// 隠れたタスクは越えない）。同じ番号ならストアを呼ばない。
+  func place(from: Int, to: Int, among siblings: [Int]) {
+    guard from != to else { return }
     mutate(.failed) { () throws(TaskStoreError) in
-      try store.move(task.id, direction < 0 ? .before : .after, anchor)
+      try store.move(siblings[from], to > from ? .after : .before, siblings[to])
     }
   }
 
