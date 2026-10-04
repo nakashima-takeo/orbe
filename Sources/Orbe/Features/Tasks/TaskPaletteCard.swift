@@ -100,10 +100,11 @@ struct TaskPaletteCard: View {
     .frame(height: 56)
   }
 
-  /// 焦点を持つ入力欄の field editor に未確定の文字（日本語入力の変換中）があるか。キーを受けた時点で
-  /// 直接確かめる（`imePlaceholder` の監視と同じ情報源）。
+  /// 焦点を持つ入力欄の field editor に未確定の文字（日本語入力の変換中）があるか。キーを受けた時点で、
+  /// そのキーが届いた窓（＝カード自身の窓）の first responder を直接確かめる（`imePlaceholder` の監視と
+  /// 同じ情報源）。
   static var isComposing: Bool {
-    (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() ?? false
+    (NSApp.currentEvent?.window?.firstResponder as? NSTextView)?.hasMarkedText() ?? false
   }
 }
 
