@@ -6,13 +6,6 @@ enum TaskPaletteTab: Equatable {
   case tasks, github
 }
 
-/// 一覧を見える所まで送る先。同じ行へ続けて送るとき（⌥↑↓ を続けて押す）も変化として届くよう、決めるたびに
-/// 進む番号を持つ。
-struct TaskPaletteScrollTarget: Equatable {
-  let id: TaskPaletteRowID
-  let serial: Int
-}
-
 /// フッターに赤で出す失敗。画面が「何をしようとしたか」から選ぶ（ストアのエラーの文は読まない）。
 enum TaskPaletteError: Error, Equatable {
   case title, waiting, due, failed
@@ -32,10 +25,15 @@ enum TaskPaletteError: Error, Equatable {
   /// 時刻を暦日へ落とすためのタイムゾーン。
   let timeZone: TimeZone
 
+  /// タスクのタブの一覧の状態。書くのはモデル（拡張を含む）だけ。
+  var tasksList = TaskPaletteListState<TaskPaletteRowID>()
+
   /// ヘッダーの入力（タスクのタイトルの絞り込みと、追加するタイトル）。
-  var query = "" {
-    didSet {
-      guard query != oldValue else { return }
+  var query: String {
+    get { tasksList.query }
+    set {
+      guard newValue != tasksList.query else { return }
+      tasksList.query = newValue
       queryChanged()
     }
   }
@@ -57,16 +55,8 @@ enum TaskPaletteError: Error, Equatable {
   var error: TaskPaletteError?
   /// 一覧の行の掴み。書くのはモデル（拡張を含む）だけ。
   var drag: TaskPaletteDrag = .idle
-  /// 選択は行の同一性で持つ。位置は付け直しのときだけ使う。
-  private var selection = ModalSelection<TaskPaletteRowID?>(nil)
-  /// 選択が最後に居た位置（選べる行の並びでの番号）。
-  private var selectedPosition = 0
   /// 詳細で居る場所が最後に居た位置（そのタスクの止まる場所の並びでの番号）。
   private var detailPosition = 0
-  /// 一覧を送る先。人の操作（選び直し・並べ替え・範囲や開閉の切り替え・画面からの変異）のたびに今の選択で
-  /// 決め直す。agent の変更（`reconcile()` だけの付け直し）では決めない——人が流して読んでいる一覧を、
-  /// 選んだ行の位置がずれただけで引き戻さないため。
-  private(set) var scrollTarget: TaskPaletteScrollTarget?
   /// focus トリガ。進めると SwiftUI が `focusTarget` を `@FocusState` へ写す。
   private(set) var focusToken = 0
 
@@ -125,7 +115,10 @@ enum TaskPaletteError: Error, Equatable {
 
   private var selectableIDs: [TaskPaletteRowID] { rows.compactMap(\.selectableID) }
 
-  var selectedID: TaskPaletteRowID? { selection.value }
+  var selectedID: TaskPaletteRowID? { tasksList.selectedID }
+
+  /// 一覧を送る先。人の操作（選び直し・並べ替え・範囲や開閉の切り替え・画面からの変異）のたびに決め直す。
+  var scrollTarget: TaskPaletteScrollTarget<TaskPaletteRowID>? { tasksList.scrollTarget }
 
   /// 選んでいるタスク（詳細に出すもの）。追加の行・完了の見出しでは nil。
   var selectedTask: TaskItem? {
@@ -146,32 +139,21 @@ enum TaskPaletteError: Error, Equatable {
 
   /// 実マウス移動（`MouseMovedDetector`）が `.pointer` へ落とす。
   var inputModality: InputModality {
-    get { selection.modality }
-    set { selection.modality = newValue }
+    get { tasksList.modality }
+    set { tasksList.modality = newValue }
   }
 
   func focus() { focusToken &+= 1 }
 
-  /// 列・範囲・タブ・開閉が変わったあとの付け直し。選択の同一性が今の行にあれば位置を覚え直し、無ければ
-  /// 覚えている位置（末尾で頭打ち）の行へ移す。詳細に居る間に選択が別の行へ移ったら一覧へ戻り、対象が
-  /// 消えた下書きは捨て、並びが変わった掴みも捨てる。裏の変化はユーザーの意図ではないので入力モダリティは
-  /// 動かさない。
+  /// 列・範囲・タブ・開閉が変わったあとの付け直し。選択は一覧の状態の規則で付け直す（`TaskPaletteListState`）。
+  /// 詳細に居る間に選択が別の行へ移ったら一覧へ戻り、対象が消えた下書きは捨て、並びが変わった掴みも捨てる。
   func reconcile() {
-    let previous = selection.value
-    let ids = selectableIDs
-    if let id = previous, let index = ids.firstIndex(of: id) {
-      selectedPosition = index
-    } else if ids.isEmpty {
-      selection.restore(nil)
-      selectedPosition = 0
-    } else {
-      selectedPosition = min(selectedPosition, ids.count - 1)
-      selection.restore(ids[selectedPosition])
-    }
+    let previous = selectedID
+    tasksList.reconcile(selectableIDs)
     if let draft, !store.tasks.contains(where: { $0.id == draft.taskID }) {
       self.draft = nil
     }
-    if case .detail = area, selection.value != previous || selectedTask == nil {
+    if case .detail = area, selectedID != previous || selectedTask == nil {
       leaveEditing()
       area = .list
     }
@@ -193,27 +175,20 @@ enum TaskPaletteError: Error, Equatable {
 
   func move(_ direction: Int) {
     error = nil
-    let ids = selectableIDs
-    guard !ids.isEmpty else { return }
-    let current = selectedID.flatMap { ids.firstIndex(of: $0) } ?? selectedPosition
-    select(at: (current + direction + ids.count) % ids.count, in: ids)
+    tasksList.move(direction, in: selectableIDs)
   }
 
   /// 先頭（direction < 0）か末尾へ。
   func jump(_ direction: Int) {
     error = nil
-    let ids = selectableIDs
-    guard !ids.isEmpty else { return }
-    select(at: direction < 0 ? 0 : ids.count - 1, in: ids)
+    tasksList.jump(direction, in: selectableIDs)
   }
 
   /// 行のクリック。追加の行は追加し、完了の見出しは開閉し、タスクの行は選ぶ。編集中なら確定してから移る。
   func tapRow(_ id: TaskPaletteRowID) {
     leaveEditingForAction()
     area = .list
-    let ids = selectableIDs
-    guard let index = ids.firstIndex(of: id) else { return }
-    select(at: index, in: ids)
+    guard tasksList.select(id, in: selectableIDs) else { return }
     focus()
     switch id {
     case .add: addFromQuery()
@@ -225,35 +200,13 @@ enum TaskPaletteError: Error, Equatable {
   /// ホバー開始による選択の追従。実マウス移動の後、一覧に居る間だけ効く。
   func hoverSelect(_ id: TaskPaletteRowID) {
     guard area == .list, draft == nil, inputModality == .pointer else { return }
-    let ids = selectableIDs
-    guard let index = ids.firstIndex(of: id) else { return }
-    selection.hoverSelect(id)
-    selectedPosition = index
-    followSelection()
-  }
-
-  private func select(at index: Int, in ids: [TaskPaletteRowID]) {
-    selection.value = ids[index]
-    selectedPosition = index
-    followSelection()
-  }
-
-  /// 今の選択を一覧の送り先にする。
-  private func followSelection() {
-    guard let id = selectedID else { return }
-    scrollTarget = TaskPaletteScrollTarget(id: id, serial: (scrollTarget?.serial ?? 0) &+ 1)
+    tasksList.hoverSelect(id, in: selectableIDs)
   }
 
   /// 入力が変わったら、先頭の行（入力があれば追加の行）を選ぶ。
   private func queryChanged() {
     error = nil
-    let ids = selectableIDs
-    if ids.isEmpty {
-      selection.value = nil
-      selectedPosition = 0
-    } else {
-      select(at: 0, in: ids)
-    }
+    tasksList.selectFirst(in: selectableIDs)
     discardStaleDrag()
   }
 
@@ -276,8 +229,7 @@ enum TaskPaletteError: Error, Equatable {
     do {
       let item = try store.add(TaskDraft(title: title, workspace: workspaces.opened.id))
       query = ""
-      let ids = selectableIDs
-      if let index = ids.firstIndex(of: .task(item.id)) { select(at: index, in: ids) }
+      tasksList.select(.task(item.id), in: selectableIDs)
       return item.id
     } catch {
       self.error = .title
@@ -292,14 +244,14 @@ enum TaskPaletteError: Error, Equatable {
     guard let task = store.tasks.first(where: { $0.id == id }) else { return reconcile() }
     var update = TaskUpdate()
     update.status = task.status == .done ? .todo : .done
-    if selectedID == .task(id) { selection.restore(nil) }
+    if selectedID == .task(id) { tasksList.forget() }
     mutate(.failed) { () throws(TaskStoreError) in _ = try store.update(id, update) }
   }
 
   /// 確認なしで消す。選択は同じ位置の行へ移る。
   func delete(_ id: Int) {
     leaveEditingForAction()
-    selection.restore(nil)
+    tasksList.forget()
     mutate(.failed) { () throws(TaskStoreError) in try store.delete(id) }
   }
 
@@ -343,7 +295,7 @@ enum TaskPaletteError: Error, Equatable {
   private func flipDoneExpanded() {
     doneExpanded.toggle()
     reconcile()
-    followSelection()
+    tasksList.follow()
   }
 
   /// 別の操作に移る前の共通の手順。前の操作の失敗を消してから、編集中の文字を確定する——この順なので、
@@ -359,7 +311,7 @@ enum TaskPaletteError: Error, Equatable {
     area = .list
     scope = scope == .all ? .opened : .all
     reconcile()
-    followSelection()
+    tasksList.follow()
   }
 
   func setScope(_ scope: TaskPaletteScope) {
@@ -389,6 +341,6 @@ enum TaskPaletteError: Error, Equatable {
     } catch {
     }
     reconcile()
-    followSelection()
+    tasksList.follow()
   }
 }
