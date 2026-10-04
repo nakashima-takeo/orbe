@@ -160,7 +160,7 @@ enum TaskPaletteError: Error, Equatable {
 
   private var rowsInput: TaskPaletteRows.Input {
     TaskPaletteRows.Input(
-      tasks: store.tasks, query: taskList.query, addsRow: pick == nil, scope: scope,
+      tasks: store.tasks, query: taskList.query, picking: pick != nil, scope: scope,
       doneExpanded: doneExpanded,
       workspaces: workspaces, today: today, timeZone: timeZone, items: githubItems.answers,
       viewerLogin: viewer.login, agents: agents.agents)

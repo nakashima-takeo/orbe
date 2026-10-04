@@ -72,6 +72,8 @@ struct TaskPaletteTaskRow: Equatable {
   let waiting: Waiting?
   let workspace: WorkspaceBadge?
   let isDone: Bool
+  /// 掴んで同じ欄の中で動かせるか（未完了で、タスクを選ぶ状態でない）。
+  let reorderable: Bool
   let link: GitHubItemText.Mark?
   let pullRequest: GitHubItemText.PullRequestBadge?
   /// 主が自分以外の作成した PR（「レビュー」）。
@@ -139,8 +141,8 @@ enum TaskPaletteRows {
   struct Input {
     let tasks: [TaskItem]
     let query: String
-    /// 入力があるとき先頭に「＋『…』を追加」を出すか（タスクを選ぶ状態では出さない）。
-    var addsRow = true
+    /// 結び付けるタスクを選ぶ状態か。選ぶ間は「＋『…』を追加」を出さず、行を並べ替えられない。
+    var picking = false
     let scope: TaskPaletteScope
     let doneExpanded: Bool
     let workspaces: TaskPaletteWorkspaces
@@ -160,7 +162,7 @@ enum TaskPaletteRows {
       title.isEmpty || $0.title.localizedStandardContains(title)
     }
     var rows: [TaskPaletteRow] = []
-    if !title.isEmpty, input.addsRow { rows.append(.add(title: title)) }
+    if !title.isEmpty, !input.picking { rows.append(.add(title: title)) }
     for status in [TaskItem.Status.inProgress, .todo] {
       let section = visible.filter { $0.status == status }
       guard !section.isEmpty else { continue }
@@ -205,6 +207,7 @@ enum TaskPaletteRows {
           days: TaskItem.DueDate($0.since, timeZone: input.timeZone).days(to: input.today))
       },
       workspace: workspace, isDone: task.status == .done,
+      reorderable: !input.picking && task.status != .done,
       link: GitHubItemText.mark(task.links),
       pullRequest: GitHubItemText.pullRequestBadge(task.links, input.items),
       needsReview: GitHubItemText.needsReview(

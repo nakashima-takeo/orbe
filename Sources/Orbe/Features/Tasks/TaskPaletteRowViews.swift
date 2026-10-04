@@ -120,7 +120,7 @@ struct TaskPaletteList: View {
       }
     }
     .zIndex(grabbed == nil ? 0 : 1)
-    .gesture(dragGesture(task.id), including: task.isDone ? .subviews : .all)
+    .gesture(dragGesture(task.id), including: task.reorderable ? .all : .subviews)
   }
 
   /// 掴んだ行の地。浮いた面（ポップアップ）の面色を不透明な bgBase に重ね、下の行を透かさずカードの地に
@@ -211,7 +211,8 @@ struct TaskPaletteTaskRowView: View {
 
   var body: some View {
     TaskPaletteRowFrame(
-      selected: selected, grip: selected && !row.isDone, onTap: onTap, onHoverEnter: onHoverEnter
+      selected: selected, grip: selected && row.reorderable, onTap: onTap,
+      onHoverEnter: onHoverEnter
     ) {
       TaskStatusGlyph(glyph: row.glyph)
         .frame(width: glyphColumnWidth, height: TaskPaletteRowMetrics.height)

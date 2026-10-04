@@ -41,8 +41,11 @@ struct TaskPaletteFooter: View {
 
   @ViewBuilder private var action: some View {
     if case .detail(.field(let field)) = model.area {
-      PaletteActionLine(
-        key: field.isText ? "↵" : "←→", template: l10n.string(fieldActionKey(field)), slots: [])
+      // 編集できない文字の項目（完了のタスクの待ち）には、効かない ↵ を案内しない。
+      if !field.isText || model.canEdit(field) {
+        PaletteActionLine(
+          key: field.isText ? "↵" : "←→", template: l10n.string(fieldActionKey(field)), slots: [])
+      }
     } else if model.area == .detail(.agent) {
       if let task = model.selectedTask, let agent = model.agent(of: task) {
         PaletteActionLine(

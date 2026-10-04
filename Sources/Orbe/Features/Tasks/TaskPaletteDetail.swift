@@ -169,7 +169,7 @@ struct TaskPaletteDetail: View {
           "\(waiting.reason) · \(days(since: waiting.since))", onClear: { model.clearWaiting() })
       } else {
         placeholder(.taskPaletteAddReason)
-          .opacity(task.status == .done ? Theme.Opacity.disabled : 1)
+          .opacity(model.canEdit(.waiting) ? 1 : Theme.Opacity.disabled)
       }
     }
   }
