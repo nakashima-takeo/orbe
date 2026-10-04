@@ -3,6 +3,11 @@ import SwiftUI
 /// 行の先頭のアイコンの列の幅。
 private let glyphColumnWidth: CGFloat = 14
 
+/// 一覧の選べる行の寸法。ドラッグの落ちる位置は、欄のタスクの行がこの高さで連続して並ぶことから出す。
+enum TaskPaletteRowMetrics {
+  static let height: CGFloat = 40
+}
+
 /// タスク画面の左の一覧。行は `TaskPaletteRows` が組んだ値をそのまま描き、選択は行の同一性で光らせる。
 struct TaskPaletteList: View {
   @Bindable var model: TaskPaletteModel
@@ -116,7 +121,7 @@ struct TaskPaletteList: View {
   }
 }
 
-/// 一覧の選べる行の骨格。高さ 40・選択行は accent の淡塗り。先頭の 22 は並べ替えの取っ手の場所。
+/// 一覧の選べる行の骨格。選択行は accent の淡塗り。先頭の 22 は並べ替えの取っ手の場所。
 struct TaskPaletteRowFrame<Content: View>: View {
   let selected: Bool
   let onTap: () -> Void
@@ -127,7 +132,7 @@ struct TaskPaletteRowFrame<Content: View>: View {
     HStack(spacing: 0, content: content)
       .padding(.leading, 22)
       .padding(.trailing, Theme.Space.beat)
-      .frame(height: 40)
+      .frame(height: TaskPaletteRowMetrics.height)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: Theme.Radius.row)
@@ -153,7 +158,7 @@ struct TaskPaletteTaskRowView: View {
   var body: some View {
     TaskPaletteRowFrame(selected: selected, onTap: onTap, onHoverEnter: onHoverEnter) {
       TaskStatusGlyph(glyph: row.glyph)
-        .frame(width: glyphColumnWidth, height: 40)
+        .frame(width: glyphColumnWidth, height: TaskPaletteRowMetrics.height)
         .contentShape(Rectangle())
         .onTapGesture(perform: onToggle)
       TruncatingSlot(row.title, leading: Theme.Space.beat) {

@@ -80,6 +80,8 @@ enum TaskPaletteError: Error, Equatable {
   }
   /// 書くのはモデル（拡張を含む）だけ。
   var error: TaskPaletteError?
+  /// 一覧の行の掴み。書くのはモデル（拡張を含む）だけ。
+  var drag: TaskPaletteDrag = .idle
   /// 選択は行の同一性で持つ。位置は付け直しのときだけ使う。
   private var selection = ModalSelection<TaskPaletteRowID?>(nil)
   /// 選択が最後に居た位置（選べる行の並びでの番号）。
@@ -141,7 +143,8 @@ enum TaskPaletteError: Error, Equatable {
 
   /// 列・範囲・タブ・開閉が変わったあとの付け直し。選択の同一性が今の行にあれば位置を覚え直し、無ければ
   /// 覚えている位置（末尾で頭打ち）の行へ移す。詳細に居る間に選択が別の行へ移ったら一覧へ戻り、対象が
-  /// 消えた下書きは捨てる。裏の変化はユーザーの意図ではないので入力モダリティは動かさない。
+  /// 消えた下書きは捨て、並びが変わった掴みも捨てる。裏の変化はユーザーの意図ではないので入力モダリティは
+  /// 動かさない。
   func reconcile() {
     let previous = selection.value
     let ids = selectableIDs
@@ -161,6 +164,7 @@ enum TaskPaletteError: Error, Equatable {
       leaveEditing()
       area = .list
     }
+    discardStaleDrag()
   }
 
   func move(_ direction: Int) {
@@ -218,6 +222,7 @@ enum TaskPaletteError: Error, Equatable {
     } else {
       select(at: 0, in: ids)
     }
+    discardStaleDrag()
   }
 
   /// ↵。選んでいる行の操作（追加 / 完了 ⇄ 未着手 / 完了の欄の開閉）。
