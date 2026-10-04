@@ -13,6 +13,7 @@ import Observation
   static let shared = GitHubItemCache(fetch: GitHubCLI.shared.items)
 
   /// 項目の列を問い合わせ、1 回ごとにその回の ID と答え（nil = その回の失敗）をメインで返す取得。
+  /// 渡した ID はどれも、いずれかの回でちょうど 1 回返す（gh が無い・失敗したときは、その回を取れなかったとして返す）。
   typealias Fetch = (
     _ ids: [GitHubItemID], _ batch: @escaping ([GitHubItemID], GitHubItemsBatch?) -> Void
   ) -> Void
