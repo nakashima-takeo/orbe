@@ -5,7 +5,8 @@ import XCTest
 @testable import Orbe
 
 /// 本物の `TaskPaletteCard` を実 `NSWindow` に載せ、実 `NSEvent` のキーを届けて、焦点の行き先（入力欄 /
-/// 詳細の項目 / 詳細の編集欄）ごとにキーが意図した操作になることを固定する。
+/// 詳細の項目 / 詳細の編集欄）ごとにキーが意図した操作になることを固定する。agent の変更をカードが
+/// 付け直しへ届ける配線も、キーの当たり先として測る。
 ///
 /// 壊れると何が起きるか: 入力欄に文字があるのに space がタスクを完了にする、入力を消そうと ⌘⌫ を押し続けた
 /// リピートで次のタスクまで消える。→ で詳細に入れない、詳細で打った文字が編集欄に届かず一覧の入力に入る、
@@ -181,6 +182,21 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     press(Key.escape, "\u{1B}", to: window)
 
     XCTAssertTrue(dismissed)
+  }
+
+  /// agent の変更（ストアの直接の変異）は、カードが付け直しへ届ける。選んでいたタスクが消えたら、
+  /// 直後の space は同じ位置に来た行に効き、消えたタスクの ID には向かわない。
+  func testAgentDeletingTheSelectedTaskMovesTheSelectionBeforeTheNextKey() throws {
+    let model = model()
+    let window = mount(model)
+    arrow(Key.down, to: window)
+    XCTAssertEqual(model.selectedID, .task(2), "前提")
+
+    try model.store.delete(2)
+    flush(window)
+    press(Key.space, " ", to: window)
+
+    XCTAssertEqual(status(model, 3), .done, "同じ位置に来た c を完了にする")
   }
 
   // MARK: - 詳細
