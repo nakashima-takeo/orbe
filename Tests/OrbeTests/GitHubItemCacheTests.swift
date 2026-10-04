@@ -56,7 +56,7 @@ final class GitHubItemCacheTests: OrbeTestCase {
 
     fetches.answer(0, [a], batch([a: found("A")]))
     XCTAssertEqual(cache.answers, [a: found("A")], "先に届いた回の答えから持つ")
-    XCTAssertEqual(cache.viewerLogin, "me")
+    XCTAssertEqual(cache.viewer.login, "me")
     fetches.answer(0, [b], batch([b: .missing]))
     XCTAssertEqual(cache.answers, [a: found("A"), b: .missing])
   }
@@ -64,7 +64,8 @@ final class GitHubItemCacheTests: OrbeTestCase {
   /// 開き直したときは、前回の答えで先に描き、新しい答えが届いたら置き換える。
   func testRefreshKeepsThePreviousAnswerUntilTheNewOneArrives() {
     let fetches = PendingFetches()
-    let cache = GitHubItemCache(answers: [a: found("古い")], viewerLogin: "me", fetch: fetches.fetch)
+    let cache = GitHubItemCache(
+      answers: [a: found("古い")], viewer: GitHubViewer(login: "me"), fetch: fetches.fetch)
 
     cache.refresh([a])
     XCTAssertEqual(cache.answers[a], found("古い"))
@@ -76,13 +77,14 @@ final class GitHubItemCacheTests: OrbeTestCase {
   /// gh が無い・未認証・オフラインで失敗した回は、それまでの答えと自分の login を据え置く。
   func testAFailedQueryKeepsWhatWasKnown() {
     let fetches = PendingFetches()
-    let cache = GitHubItemCache(answers: [a: found("A")], viewerLogin: "me", fetch: fetches.fetch)
+    let cache = GitHubItemCache(
+      answers: [a: found("A")], viewer: GitHubViewer(login: "me"), fetch: fetches.fetch)
 
     cache.refresh([a, b])
     fetches.answer(0, [a, b], nil)
 
     XCTAssertEqual(cache.answers, [a: found("A")])
-    XCTAssertEqual(cache.viewerLogin, "me")
+    XCTAssertEqual(cache.viewer.login, "me")
   }
 
   /// `ensure` は前回の `refresh` 以降にまだ試していない項目だけを頼む。取れなかった項目は次の `refresh` まで

@@ -118,12 +118,13 @@ extension DesignSceneFixtures {
     ]
     return GitHubItemCache(
       answers: Dictionary(uniqueKeysWithValues: answers.map { ($0.0.item, $0.1) }),
-      viewerLogin: "nakatake", fetch: { _, _ in })
+      viewer: GitHubViewer(login: "nakatake"), fetch: { _, _ in })
   }
 
   static func taskPaletteModel(_ file: TasksFile? = nil) -> TaskPaletteModel {
-    TaskPaletteModel(
-      store: TaskStore(file: file ?? taskDesignFile()), githubItems: taskGitHubItems(),
+    let items = taskGitHubItems()
+    return TaskPaletteModel(
+      store: TaskStore(file: file ?? taskDesignFile()), githubItems: items, viewer: items.viewer,
       agents: taskAgents(),
       workspaces: taskWorkspaces, now: taskToday, timeZone: taskCalendar.timeZone)
   }

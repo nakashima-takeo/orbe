@@ -25,6 +25,7 @@ enum TaskPaletteError: Error, Equatable {
 @Observable final class TaskPaletteModel {
   let store: TaskStore
   let githubItems: GitHubItemCache
+  let viewer: GitHubViewer
   let agents: WorktreeAgentActivity
   let workspaces: TaskPaletteWorkspaces
   let today: TaskItem.DueDate
@@ -79,11 +80,13 @@ enum TaskPaletteError: Error, Equatable {
 
   /// 開いた時点で、出ている行の結び付きの値を取り直す（届くまでは前回の答えで描く）。
   init(
-    store: TaskStore, githubItems: GitHubItemCache, agents: WorktreeAgentActivity,
+    store: TaskStore, githubItems: GitHubItemCache, viewer: GitHubViewer,
+    agents: WorktreeAgentActivity,
     workspaces: TaskPaletteWorkspaces, now: Date, timeZone: TimeZone
   ) {
     self.store = store
     self.githubItems = githubItems
+    self.viewer = viewer
     self.agents = agents
     self.workspaces = workspaces
     self.timeZone = timeZone
@@ -103,7 +106,7 @@ enum TaskPaletteError: Error, Equatable {
     TaskPaletteRows.Input(
       tasks: store.tasks, query: query, scope: scope, doneExpanded: doneExpanded,
       workspaces: workspaces, today: today, timeZone: timeZone, items: githubItems.answers,
-      viewerLogin: githubItems.viewerLogin, agents: agents.agents)
+      viewerLogin: viewer.login, agents: agents.agents)
   }
 
   /// 出ている行（今の範囲・入力で一覧に出るタスク。完了の欄は開いているときだけ）の結び付きの項目。
