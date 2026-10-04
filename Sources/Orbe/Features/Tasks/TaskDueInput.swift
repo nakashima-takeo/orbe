@@ -1,0 +1,74 @@
+import Foundation
+
+/// 期限の文字の読み取りと、行と詳細に出す暦日の表示。基準は今日の暦日で、時刻とタイムゾーンは
+/// 呼び出し側が `TaskItem.DueDate.today(_:calendar:)` で暦日へ落としてから渡す。
+enum TaskDueText {
+  /// 「10/6」（今日以降で最も近いその日）と「2026-10-06」を受ける。読めなければ nil。
+  static func parse(_ text: String, today: TaskItem.DueDate) -> TaskItem.DueDate? {
+    let trimmed = text.trimmingCharacters(in: .whitespaces)
+    if let full = TaskItem.DueDate(trimmed) { return full }
+    let parts = trimmed.split(separator: "/", omittingEmptySubsequences: false)
+    let isShortNumber = { (part: Substring) in
+      (1...2).contains(part.count) && part.allSatisfy { $0.isASCII && $0.isNumber }
+    }
+    guard parts.count == 2, parts.allSatisfy(isShortNumber),
+      let month = Int(parts[0]), let day = Int(parts[1])
+    else { return nil }
+    // 2/29 のように今年に無い日は、その日がある最も近い年まで進める（閏年は 8 年以内に必ず来る）。
+    for year in today.year...(today.year + 8) {
+      guard let candidate = TaskItem.DueDate(year: year, month: month, day: day) else { continue }
+      if candidate >= today { return candidate }
+    }
+    return nil
+  }
+
+  /// 「10/6 月」。今日と年が違えば年を付けて「2027/1/5 火」。`weekdays` は日曜始まりの曜日名。
+  static func label(_ due: TaskItem.DueDate, today: TaskItem.DueDate, weekdays: [String])
+    -> String
+  {
+    let monthDay = "\(due.month)/\(due.day)"
+    let date = due.year == today.year ? monthDay : "\(due.year)/\(monthDay)"
+    return "\(date) \(weekdays[due.weekday])"
+  }
+
+  /// 言語に合わせた日曜始まりの短い曜日名。
+  static func weekdays(_ language: Language) -> [String] {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.locale = language.dateLocale
+    return calendar.shortWeekdaySymbols
+  }
+}
+
+extension TaskItem.DueDate: Comparable {
+  init?(year: Int, month: Int, day: Int) {
+    self.init(String(format: "%04d-%02d-%02d", year, month, day))
+  }
+
+  /// `date` が `calendar` で落ちる暦日。
+  static func today(_ date: Date, calendar: Calendar) -> TaskItem.DueDate {
+    let c = calendar.dateComponents([.year, .month, .day], from: date)
+    return TaskItem.DueDate(year: c.year!, month: c.month!, day: c.day!)!
+  }
+
+  static func < (a: TaskItem.DueDate, b: TaskItem.DueDate) -> Bool {
+    (a.year, a.month, a.day) < (b.year, b.month, b.day)
+  }
+
+  /// 0 が日曜。
+  var weekday: Int { Self.gregorianUTC.component(.weekday, from: midnight) - 1 }
+
+  /// `self` から `other` までの暦日の差。
+  func days(to other: TaskItem.DueDate) -> Int {
+    Self.gregorianUTC.dateComponents([.day], from: midnight, to: other.midnight).day!
+  }
+
+  private var midnight: Date {
+    Self.gregorianUTC.date(from: DateComponents(year: year, month: month, day: day))!
+  }
+
+  private static let gregorianUTC: Calendar = {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC")!
+    return calendar
+  }()
+}
