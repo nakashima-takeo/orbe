@@ -105,6 +105,38 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     XCTAssertEqual(rows(control).count, 1, "拒否された要求は一覧を変えない")
   }
 
+  /// `--issue` / `--pr` は引数に現れた順のまま結び付き（先頭が主）、`set` は丸ごと置き換え、
+  /// `--no-links` で全部外す。`owner/name` の形は control が弾く（CLI は素通し）。
+  func testLinksKeepTheArgumentOrderAndSetReplacesOrClearsThem() throws {
+    let control = try startControlProcess()
+
+    let id = run(
+      control, ["add", "a", "--issue", "o/n#221", "--pr", "O/N#214", "--issue", "x/y.js#5"]
+    ).trimmingCharacters(in: .whitespacesAndNewlines)
+    XCTAssertEqual(
+      rows(control).first?[7], "issue:o/n#221,pr:o/n#214,issue:x/y.js#5",
+      "task list の 8 列目: 引数の順のまま kind:repo#number")
+    XCTAssertEqual(
+      (try tasks(control).first?["links"] as? [[String: Any]])?.map {
+        NSDictionary(dictionary: $0)
+      },
+      [
+        ["kind": "issue", "repo": "o/n", "number": 221],
+        ["kind": "pr", "repo": "o/n", "number": 214],
+        ["kind": "issue", "repo": "x/y.js", "number": 5],
+      ], "task list --json: links の列")
+
+    run(control, ["set", id, "--pr", "o/n#5"])
+    XCTAssertEqual(rows(control).first?[7], "pr:o/n#5", "task set: 結び付きを丸ごと置き換える")
+    run(control, ["set", id, "--no-links"])
+    XCTAssertEqual(rows(control).first?[7], "-", "task set --no-links: 全部外す")
+
+    let unshaped = control.orb(["task", "add", "b", "--issue", "orbe#5"])
+    XCTAssertEqual(unshaped.status, 1, "owner/name の形でないリポジトリは control が弾く")
+    XCTAssertTrue(unshaped.stderr.contains("-32602"), unshaped.stderr)
+    XCTAssertEqual(rows(control).count, 1, "拒否された要求は一覧を変えない")
+  }
+
   /// 人向けの行のセルは、向きを変える制御文字（U+202E など）を空白にし、ZWJ で組む絵文字は残す。
   /// 向きを変える文字が残ると、後続の列（待ちの理由など）が端末上で入れ替わって見える。
   func testListCellsBlankDirectionOverridesButKeepJoinedEmoji() throws {
@@ -152,6 +184,13 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
         ["task", "move", "1", "--before", "2", "--after", "3"],
         "task move requires exactly one of --before / --after"
       ),
+      (
+        ["task", "set", "1", "--issue", "o/n#1", "--no-links"],
+        "pass only one of --issue / --pr / --no-links"
+      ),
+      (["task", "add", "a", "--issue", "o/n"], "--issue requires an <owner/name#N>: o/n"),
+      (["task", "add", "a", "--pr", "o/n#0"], "--pr requires an <owner/name#N>: o/n#0"),
+      (["task", "add", "a", "--pr", "o/n#x"], "--pr requires an <owner/name#N>: o/n#x"),
       (["task", "rm", "abc"], "invalid task id: abc"),
       (["task", "rm", "0"], "invalid task id: 0"),
     ] {

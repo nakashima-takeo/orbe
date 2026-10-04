@@ -52,6 +52,14 @@ final class OrbeMcpTaskProcessTests: OrbeTestCase {
     for key in ["due", "waitingReason", "workspaceId"] {
       XCTAssertTrue(acceptsNull(update, key), "update_task の \(key) は null（外す）を受ける")
     }
+    for tool in [add, update] {
+      let links = properties(tool)["links"] as? [String: Any]
+      let item = links?["items"] as? [String: Any]
+      XCTAssertEqual(links?["type"] as? String, "array", "\(tool["name"] ?? "") の links は配列")
+      XCTAssertEqual(
+        Set(item?["required"] as? [String] ?? []), ["kind", "repo", "number"],
+        "\(tool["name"] ?? "") の links の要素は kind・repo・number を必ず持つ")
+    }
     let move = try tool("move_task")
     XCTAssertEqual(Set(properties(move).keys), ["taskId", "beforeTaskId", "afterTaskId"])
 
