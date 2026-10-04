@@ -27,10 +27,8 @@ struct TaskPaletteList: View {
         .padding(.trailing, 10)
       }
       .scrollIndicators(.automatic)
-      .onChange(of: SelectedPlacement(id: model.selectedID, rows: rows)) {
-        scrollToSelection(proxy)
-      }
-      .onAppear { scrollToSelection(proxy) }
+      .onChange(of: model.scrollTarget) { scroll(proxy, to: model.scrollTarget?.id) }
+      .onAppear { scroll(proxy, to: model.selectedID) }
     }
   }
 
@@ -39,20 +37,9 @@ struct TaskPaletteList: View {
   /// これだけ動かして初めてドラッグになる（未満はクリック）。
   private static let dragActivation: CGFloat = 6
 
-  /// 選んだ行の同一性と一覧の中の位置。並べ替えでは位置だけが変わるので、どちらの変化でも送る。
-  private struct SelectedPlacement: Equatable {
-    let id: TaskPaletteRowID?
-    let index: Int?
-
-    init(id: TaskPaletteRowID?, rows: [TaskPaletteRow]) {
-      self.id = id
-      index = id.flatMap { id in rows.firstIndex { $0.selectableID == id } }
-    }
-  }
-
   /// 最小の量だけ送る（見えていれば動かない）。
-  private func scrollToSelection(_ proxy: ScrollViewProxy) {
-    if let id = model.selectedID { proxy.scrollTo(TaskPaletteRow.Identity.selectable(id)) }
+  private func scroll(_ proxy: ScrollViewProxy, to id: TaskPaletteRowID?) {
+    if let id { proxy.scrollTo(TaskPaletteRow.Identity.selectable(id)) }
   }
 
   @ViewBuilder private func row(_ row: TaskPaletteRow) -> some View {
