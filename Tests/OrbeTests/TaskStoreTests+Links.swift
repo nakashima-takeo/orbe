@@ -5,9 +5,8 @@ import XCTest
 /// タスクと GitHub の Issue・PR の結び付きの不変条件（同じタスクの中で重複しない・1 つの項目は 1 つの
 /// タスクにだけ付く）と、結び付きが順ごと保存されること。
 ///
-/// 壊れると何が起きるか: 同じ Issue が 2 つのタスクに付くと、GitHub タブの「結び付いた行」や
-/// 「この Issue の worktree」が、どちらのタスクを指すか決められない。拒否の文に相手のタスクが無いと、
-/// agent は外す相手を知れず付け替えられない。順が崩れると、行の頭に出る主が入れ替わる。
+/// 壊れると何が起きるか: 拒否の文に相手のタスクが無いと、agent は外す相手を知れず付け替えられない。
+/// 順が崩れると、行の頭に出る主が入れ替わる。
 extension TaskStoreTests {
   private func link(_ kind: GitHubItemKind, _ repo: String, _ number: Int) throws -> TaskLink {
     TaskLink(item: try XCTUnwrap(GitHubItemID(repo: repo, number: number)), kind: kind)
