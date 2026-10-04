@@ -123,6 +123,30 @@ final class TaskQuarantineTests: OrbeTestCase {
     }
   }
 
+  private func taskJSON(id: Int, worktree: String) -> String {
+    String(taskJSON(id: id).dropLast()) + #","worktree":"\#(worktree)"}"#
+  }
+
+  /// worktree の値は形だけを見て読む——ディレクトリが消えた worktree も、タスクの値として残る。
+  func testAWorktreeWhoseDirectoryIsGoneStillLoads() throws {
+    try Data(file([taskJSON(id: 1, worktree: "/gone/wt/issue-221")]).utf8).write(to: tasksFile())
+
+    let loaded = try XCTUnwrap(TaskPersistence.load())
+
+    XCTAssertTrue(try quarantineFiles().isEmpty)
+    XCTAssertEqual(loaded.tasks.first?.worktree?.path, "/gone/wt/issue-221")
+  }
+
+  func testAWorktreeOnTwoTasksIsQuarantined() throws {
+    try assertQuarantined(
+      file([taskJSON(id: 1, worktree: "/repo/wt/a"), taskJSON(id: 2, worktree: "/repo/wt/a")]),
+      "2 つのタスクに付いた同じ worktree")
+  }
+
+  func testAWorktreeThatIsNotAnAbsolutePathIsQuarantined() throws {
+    try assertQuarantined(file([taskJSON(id: 1, worktree: "wt/a")]), "絶対パスでない worktree")
+  }
+
   /// u1 で書かれた最小の tasks.json（今の必須フィールドだけ）は、後の版でも読める。
   ///
   /// 壊れると何が起きるか: 後の単位がタスクに既定値付きの非 Optional フィールドを足すと、合成された
