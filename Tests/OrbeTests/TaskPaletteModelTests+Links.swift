@@ -10,10 +10,15 @@ import XCTest
 /// 残る。外したときに焦点が詳細の先頭へ飛ぶ、または消えた項目に残ってキーが効かなくなる。agent が
 /// 結び付きを足しただけで、見ていた項目から焦点がずれ、⌫ が別の項目を外す。
 extension TaskPaletteModelTests {
-  /// 頼まれた項目を順に記録する取得（答えは返さない）。
+  /// 頼まれた項目を順に記録し、その場で全部「無かった」と答える取得（取得中に残る項目は無い）。
   final class FetchLog {
     private(set) var requested: [Set<GitHubItemID>] = []
-    lazy var cache = GitHubItemCache { ids, _ in self.requested.append(Set(ids)) }
+    lazy var cache = GitHubItemCache { ids, batch in
+      self.requested.append(Set(ids))
+      batch(
+        ids,
+        GitHubItemsBatch(viewerLogin: nil, answers: ids.reduce(into: [:]) { $0[$1] = .missing }))
+    }
   }
 
   func link(_ kind: GitHubItemKind, _ number: Int) -> TaskLink {
@@ -24,6 +29,14 @@ extension TaskPaletteModelTests {
     var update = TaskUpdate()
     update.links = links
     _ = try palette.store.update(id, update)
+  }
+
+  /// 未着手 a（Issue 1）と完了 b（Issue 3）。
+  private var todoAndDone: [TaskItem] {
+    [
+      task(1, "a") { $0.links = [self.link(.issue, 1)] },
+      task(2, "b", .done) { $0.links = [self.link(.issue, 3)] },
+    ]
   }
 
   // MARK: - 取りに行く範囲
@@ -41,15 +54,26 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(log.requested, [[link(.issue, 1).item, link(.pr, 2).item]])
   }
 
-  /// 完了の欄を開く・agent が結び付けるなどで新しく出た項目だけを取りに行き、同じ項目は重ねて頼まない。
-  func testNewlyVisibleLinksAreFetchedOnce() throws {
+  /// 置き場はアプリで 1 つ。前に開いたときに取った項目も、開き直せば取り直す。
+  func testReopeningFetchesAgainWhatAnEarlierOpeningAlreadyFetched() {
     let log = FetchLog()
-    let palette = TaskPaletteSamples.model(
-      [
-        task(1, "a") { $0.links = [self.link(.issue, 1)] },
-        task(2, "b", .done) { $0.links = [self.link(.issue, 3)] },
-      ], githubItems: log.cache)
+    _ = TaskPaletteSamples.model(todoAndDone, githubItems: log.cache)
 
+    _ = TaskPaletteSamples.model(todoAndDone, githubItems: log.cache)
+
+    XCTAssertEqual(log.requested, [[link(.issue, 1).item], [link(.issue, 1).item]])
+  }
+
+  /// 完了の欄を開く・agent が結び付けるなどで新しく出た項目は、この開いている間に 1 回だけ取る。
+  /// 前に開いたときの答えがあっても、この開いている間にまだ試していなければ取る。
+  func testNewlyVisibleLinksAreFetchedOnceWhileOpenEvenWithAnEarlierAnswer() throws {
+    let log = FetchLog()
+    let earlier = TaskPaletteSamples.model(todoAndDone, githubItems: log.cache)
+    earlier.toggleDoneExpanded()
+    earlier.ensureVisibleItems()
+    XCTAssertNotNil(log.cache.answers[link(.issue, 3).item], "前提: 完了の欄の項目に前の答えがある")
+
+    let palette = TaskPaletteSamples.model(todoAndDone, githubItems: log.cache)
     palette.toggleDoneExpanded()
     palette.ensureVisibleItems()
     XCTAssertEqual(log.requested.last, [link(.issue, 3).item], "開いた完了の欄の項目")
@@ -59,8 +83,11 @@ extension TaskPaletteModelTests {
     palette.ensureVisibleItems()
     XCTAssertEqual(log.requested.last, [link(.pr, 4).item], "agent が結び付けた項目")
 
+    let count = log.requested.count
     palette.ensureVisibleItems()
-    XCTAssertEqual(log.requested.count, 3, "頼んだ項目は重ねて頼まない")
+    palette.toggleDoneExpanded()
+    palette.ensureVisibleItems()
+    XCTAssertEqual(log.requested.count, count, "答えが届いた後も、この開いている間に試した項目は頼まない")
   }
 
   // MARK: - 詳細の Issue・PR の欄
