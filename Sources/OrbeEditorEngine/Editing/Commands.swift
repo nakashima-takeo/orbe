@@ -51,8 +51,9 @@ enum EditCommand: Equatable, Sendable {
   /// 置き換えと重ならなければ保つ。前後で区切る。
   case replace(NSRange, String)
   /// 貼る（改行は文書の作法へ揃える）。`entireLine` は行ごと写した印——選択が空で文字列の改行が末尾の 1 つだけなら、
-  /// キャレットの行の上に行として入れる。前後で区切る。
-  case paste(String, entireLine: Bool)
+  /// キャレットの行の上に行として入れる。`pieces` は写した断片（選択を 2 つ以上写したとき）——数がカーソルの数と同じなら
+  /// 1 つずつ配る。前後で区切る。
+  case paste(String, entireLine: Bool, pieces: [String]? = nil)
   /// 切り取る——選択を消す。選択が空なら行を消す（改行まで。最終行なら前の行の改行から）。
   case cut
   /// 落とした文字列を `offset` に入れて選ぶ（改行は文書の作法へ揃える）。`moving` があればその範囲を消す（同じ面の中の
@@ -160,8 +161,8 @@ enum EditCommands {
       return CommandResult(
         state: EditState(cursors: state.cursors, mark: state.mark), reveal: .center)
     case .replace(let range, let string): return replace(range, with: string, state)
-    case .paste(let string, let entireLine):
-      return paste(string, entireLine: entireLine, state, env)
+    case .paste(let string, let entireLine, let pieces):
+      return paste(string, entireLine: entireLine, pieces: pieces, state, env)
     case .cut: return cut(state, env)
     case .drop(let string, let offset, let moving):
       return drop(string, at: offset, moving: moving, state, env)

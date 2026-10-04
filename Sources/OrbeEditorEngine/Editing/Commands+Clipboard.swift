@@ -3,11 +3,23 @@ import OrbeEditorCore
 
 /// 貼る・切り取る・落とすの規則（VS Code の `paste`・`cut`・`DragAndDropCommand`）。どれも前後で undo を区切る。
 extension EditCommands {
-  /// 貼る。行ごと写した文字列で条件が揃えば、各カーソルの行の上に行として入れ、カーソルは同じ字の位置のまま下がる
-  /// （VS Code の `ReplaceCommandThatPreservesSelection`）。そうでなければ各選択を置き換え、キャレットは末尾。
+  /// 貼る。カーソルへ配るなら（`ClipboardText.distribution`）、文書の順のカーソルの選択をそれぞれの文字列に置き換える。
+  /// 行ごと写した文字列で条件が揃えば、各カーソルの行の上に行として入れ、カーソルは同じ字の位置のまま下がる（VS Code の
+  /// `ReplaceCommandThatPreservesSelection`）。そうでなければ各選択を置き換える。キャレットはどれも入れた文字列の末尾。
   static func paste(
-    _ string: String, entireLine: Bool, _ state: EditState, _ env: EditingEnvironment
+    _ string: String, entireLine: Bool, pieces: [String]?, _ state: EditState,
+    _ env: EditingEnvironment
   ) -> CommandResult {
+    if let parts = ClipboardText.distribution(
+      string, pieces: pieces, entireLine: entireLine, cursors: state.cursors.count)
+    {
+      let order = state.cursors.all.map(\.selection.location).sorted()
+      var part: [Int: String] = [:]
+      for (location, text) in zip(order, parts) { part[location] = env.lineBreak.normalize(text) }
+      return edit(state, env, undo: .other) { cursor in
+        part[cursor.selection.location].map { Replacement(cursor.selection, $0) }
+      }
+    }
     let units = ContiguousArray(env.lineBreak.normalize(string).utf16)
     guard ClipboardText.pastesAboveLine(units, entireLine: entireLine, state.cursors) else {
       return edit(state, env, undo: .other) { Replacement($0.selection, units: units) }

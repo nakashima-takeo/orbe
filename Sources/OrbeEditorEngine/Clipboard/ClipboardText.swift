@@ -1,11 +1,13 @@
 import Foundation
 import OrbeEditorCore
 
-/// 写すもの——平文と、行ごと写したか、色付きで書き出せる範囲（写したものが本文の 1 つの範囲のとき）。
+/// 写すもの——平文と、行ごと写したか、色付きで書き出せる範囲（写したものが本文の 1 つの範囲のとき）、写した断片（選択を
+/// 2 つ以上写したときの、文書の順の選択ごとの文字列）。
 struct ClipboardCopy: Equatable {
   var text: String
   var entireLine: Bool
   var range: NSRange?
+  var pieces: [String]?
 }
 
 /// 何を写し、どう貼るか（VS Code の既定。`emptySelectionClipboard`）。純関数。
@@ -35,7 +37,38 @@ enum ClipboardText {
     }
     return ClipboardCopy(
       text: pieces.joined(separator: empty ? "" : lineBreak.string),
-      entireLine: empty && all.count == 1, range: ranges.count == 1 ? ranges[0] : nil)
+      entireLine: empty && all.count == 1, range: ranges.count == 1 ? ranges[0] : nil,
+      pieces: !empty && pieces.count > 1 ? pieces : nil)
+  }
+
+  /// 貼る文字列をカーソルへ配るなら、文書の順のカーソルごとの文字列（VS Code の `_distributePasteToCursors`、
+  /// `multiCursorPaste: spread`）。カーソルが 1 本なら配らない。写した断片の数がカーソルの数と同じなら断片を配る。行ごと
+  /// 写した印があれば配らない。末尾の改行 1 つ（`\n` と、その前の `\r`）を除いて行に割った数がカーソルの数と同じなら、
+  /// 1 行ずつ配る（Orbe の外から写した文字列でも）。
+  static func distribution(
+    _ string: String, pieces: [String]?, entireLine: Bool, cursors count: Int
+  ) -> [String]? {
+    guard count > 1 else { return nil }
+    if let pieces, pieces.count == count { return pieces }
+    guard !entireLine else { return nil }
+    var units = Array(string.utf16)
+    if units.last == 0x0A { units.removeLast() }
+    if units.last == 0x0D { units.removeLast() }
+    var lines: [String] = []
+    var start = 0
+    var index = 0
+    while index < units.count {
+      let unit = units[index]
+      guard unit == 0x0A || unit == 0x0D else {
+        index += 1
+        continue
+      }
+      lines.append(String(decoding: units[start..<index], as: UTF16.self))
+      index += unit == 0x0D && index + 1 < units.count && units[index + 1] == 0x0A ? 2 : 1
+      start = index
+    }
+    lines.append(String(decoding: units[start...], as: UTF16.self))
+    return lines.count == count ? lines : nil
   }
 
   /// 選択が空の切り取りで消す範囲（VS Code の `DeleteOperations.cut`）——行を次の行頭まで。最終行なら前の行の改行から、
