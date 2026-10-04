@@ -34,7 +34,9 @@ extension TaskPaletteModel {
       enterDetail()
     case .space:
       // 文字があるときの space は空白を打つ。
-      guard query.isEmpty, Self.isUnmodified(press), pick == nil else { return .ignored }
+      guard query.isEmpty, Self.isUnmodified(press) else { return .ignored }
+      // 結び付けるタスクを選ぶ間は完了にしない。空の入力欄へ空白も入れない。
+      guard pick == nil else { return .handled }
       // 押し続けたキーリピートは握り潰す（次の行を次々に完了にしない。入力欄へ空白も入れない）。
       guard press.phase == .down else { return .handled }
       switch selectedID {
