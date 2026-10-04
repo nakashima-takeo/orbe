@@ -50,4 +50,21 @@ extension WorktreePaletteModel {
     guard begins || previousOwner != nil else { return nil }
     return WorktreePaletteTaskEffect(task: task, begins: begins, previousOwner: previousOwner)
   }
+
+  /// 別のリポジトリを読み直す前に、前のリポジトリから得た事実（行・分類・ベース・名前の答え）を捨てる。
+  /// 新しい一覧が届くまではスケルトンを出し、前のリポジトリの行で ↵ が決まらないようにする。
+  func discardRepositoryFacts() {
+    hasLoadedOnce = false
+    sections = []
+    classification = nil
+    classificationPending = false
+    baseFacts = nil
+    baseCandidates = []
+    newBranchRules = nil
+    branchNameAnswer = nil
+    pickedBase = nil
+    selectedBaseRole = nil
+    taskTargetPending = false
+    errorMessage = nil
+  }
 }

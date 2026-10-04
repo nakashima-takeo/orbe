@@ -129,6 +129,10 @@ final class WorktreePaletteDataProvider {
     self.gitHub = gitHub
   }
 
+  /// パレットから切り離す。進行中の読み取りが後から着地しても、もうパレットを書かない（パレットが別の
+  /// リポジトリを読み直すとき）。
+  func detach() { model = nil }
+
   // MARK: - ロード
 
   func load() {

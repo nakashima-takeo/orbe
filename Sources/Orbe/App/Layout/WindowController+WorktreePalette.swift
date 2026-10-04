@@ -11,7 +11,8 @@ extension WindowController {
   /// タブを開く先・前回のベースの読み書き・worktree の作成先の設定は、どれもこの 1 つの workspace から引く
   /// ——作成中（fetch の着地待ちで数秒かかりうる）に別の workspace へ切り替わっても、別の workspace にタブが
   /// 開いたり、その「前回」が書き換わったりしない。タスクから開いたときは、タブを開いた後にその workspace
-  /// とタブを前面にする。
+  /// とタブを前面にする。札を外したら（文脈を外したら）、いつもの ⌘T と同じく開いた時点の workspace と
+  /// そのリポジトリへ結び付け直す（`returnWorktreePaletteToOpenedWorkspace`）。
   ///
   /// ↵ で worktree が用意できたら、タブを開く前に、決定の時点の文脈のタスクを進行中にしてその worktree を
   /// 付ける（`settleWorktreePalette`）。
@@ -21,30 +22,27 @@ extension WindowController {
       return
     }
     let task = taskID.flatMap { id in taskStore.tasks.first { $0.id == id } }
-    let workspace =
-      task?.workspace.flatMap { id in workspaces.first { $0.persistentId == id } } ?? current
-    guard let workspaceIndex = workspaces.firstIndex(where: { $0 === workspace }) else { return }
-    let frontsWorkspace = task != nil
+    let binding = WorktreePaletteBinding(
+      opened: current,
+      workspace: task?.workspace.flatMap { id in workspaces.first { $0.persistentId == id } }
+        ?? current,
+      frontsWorkspace: task != nil)
     let p = WorktreePaletteModel(
       tasks: taskStore, githubItems: .shared, agents: worktreeAgents, task: task?.id)
+    guard let provider = makeWorktreePaletteProvider(p, binding) else { return }
     p.setTargets(
       agents: agentLauncher.detectedAgents,
       defaultCommand: agentLauncher.resolvedDefaultCommand)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
-
-    let provider = WorktreePaletteDataProvider(
-      cwd: store.newTabCwd(inWorkspaceAt: workspaceIndex), model: p, localization: localization,
-      worktreeTemplate: settingsStore.effective(override: workspace.settingsOverride)[
-        SettingKeys.worktreeDir],
-      tabOccupancies: tabOccupancies(), previousBase: workspace.lastWorktreeBase)
     // 主の PR のブランチ名は GitHub の値の置き場から引く。まだ取っていなければ頼む（届くまで ↵ は預かる）。
     if let primary = task?.links.first, primary.kind == .pr {
       GitHubItemCache.shared.ensure([primary.item])
     }
 
     // クロージャは兄弟パレット同様 [weak self] のみとし、p/provider は self.model 経由で辿る
-    // （p が onExecute を保持するため、p を強参照すると開くたびに自己循環でリークする）。
-    p.onExecute = { [weak self, weak workspace] destination in
+    // （p が onExecute を保持するため、p を強参照すると開くたびに自己循環でリークする）。結び付いた
+    // workspace は決定の時点で `binding` から読む（札を外すと結び付き直すため）。
+    p.onExecute = { [weak self] destination in
       guard let self, let p = self.model.worktreePalette,
         let provider = self.model.worktreePaletteProvider
       else { return }
@@ -53,18 +51,18 @@ extension WindowController {
       // targets は常に非空（shell が常在）のため実質常に成立。非同期 completion で使うため値で capture する。
       // 文脈のタスクも決定の一部として、この時点の値で捕まえる（閉じた後にモデルを読まない）。
       guard let target = p.selectedTarget else { return }
-      let launch = WorktreePaletteLaunch(
-        target: target, task: p.task?.id, frontsWorkspace: frontsWorkspace)
+      let launch = WorktreePaletteLaunch(target: target, task: p.task?.id, binding: binding)
+      let workspace = launch.workspace
       p.errorMessage = nil
       p.isPreparing = true  // 進捗表示 ON。非同期 worktree 作成の待機中だけフッターにスピナが出る。
       provider.prepareDirectory(for: destination) { [weak self, weak workspace] outcome in
         guard let self, let p = self.model.worktreePalette else { return }
         switch outcome {
         case .resolved(let resolution):
-          self.settleWorktreePalette(resolution, launch, in: workspace)
+          self.settleWorktreePalette(resolution, launch)
         case .created(let path, let base):
           if let workspace { self.rememberWorktreeBase(base, in: workspace) }
-          self.settleWorktreePalette(.ready(path), launch, in: workspace)
+          self.settleWorktreePalette(.ready(path), launch)
         case .staleBranch(let sync, let relativeDate):
           // 作っていない。一覧の旗を下ろして最新化画面へ（以後の busy は画面の相が持つ）。
           p.isPreparing = false
@@ -76,8 +74,11 @@ extension WindowController {
       self?.model.worktreePaletteProvider?.checkBranchName(name)
     }
     p.onTaskInputsChanged = { [weak self] in self?.model.worktreePaletteProvider?.rebuild() }
-    wireWorktreeClean(p, in: workspace, frontsWorkspace: frontsWorkspace)
-    wireWorktreePaletteRefresh(p, in: workspace, frontsWorkspace: frontsWorkspace)
+    p.onTaskContextCleared = { [weak self] in
+      self?.returnWorktreePaletteToOpenedWorkspace(binding)
+    }
+    wireWorktreeClean(p, binding)
+    wireWorktreePaletteRefresh(p, binding)
 
     model.worktreePalette = p
     model.worktreePaletteProvider = provider
@@ -85,6 +86,36 @@ extension WindowController {
     provider.load()
     p.focus()
     reconfirmFocusNextTick()  // 別 overlay からの遷移で去りゆくカードの teardown に勝つ
+  }
+
+  /// 結び付いた workspace のリポジトリを読む provider（基点はその workspace のアクティブタブの cwd、0 タブなら
+  /// root path）。workspace が既に消えていれば nil。
+  private func makeWorktreePaletteProvider(
+    _ p: WorktreePaletteModel, _ binding: WorktreePaletteBinding
+  ) -> WorktreePaletteDataProvider? {
+    guard let workspace = binding.workspace,
+      let index = workspaces.firstIndex(where: { $0 === workspace })
+    else { return nil }
+    return WorktreePaletteDataProvider(
+      cwd: store.newTabCwd(inWorkspaceAt: index), model: p, localization: localization,
+      worktreeTemplate: settingsStore.effective(override: workspace.settingsOverride)[
+        SettingKeys.worktreeDir],
+      tabOccupancies: tabOccupancies(), previousBase: workspace.lastWorktreeBase)
+  }
+
+  /// 札を外した。開いた時点の workspace（消えていれば今の workspace）へ結び付け直し、前面化もやめる。
+  /// タスクの workspace が別だったなら、そのリポジトリの一覧を捨てて、開いた時点の workspace のリポジトリを
+  /// 読み直す（前の provider は切り離し、遅れて着地した読み取りがパレットを書かないようにする）。
+  private func returnWorktreePaletteToOpenedWorkspace(_ binding: WorktreePaletteBinding) {
+    binding.frontsWorkspace = false
+    let opened = binding.opened ?? current
+    guard opened !== binding.workspace, let p = model.worktreePalette else { return }
+    binding.workspace = opened
+    model.worktreePaletteProvider?.detach()
+    p.discardRepositoryFacts()
+    let provider = makeWorktreePaletteProvider(p, binding)
+    model.worktreePaletteProvider = provider
+    provider?.load()
   }
 
   /// 解決済みディレクトリで新タブを起こす唯一の 1 本（Enter の実行と clean の `o タブで開く` が共に通る）。
@@ -117,8 +148,7 @@ extension WindowController {
   /// その worktree を付けてから（タスクが消えていたら何もしない）起動し、失敗はモデルが畳む——失敗の経路は
   /// タスクを変えない。
   private func settleWorktreePalette(
-    _ resolution: WorktreePaletteDataProvider.DirectoryResolution,
-    _ launch: WorktreePaletteLaunch, in workspace: Workspace?
+    _ resolution: WorktreePaletteDataProvider.DirectoryResolution, _ launch: WorktreePaletteLaunch
   ) {
     guard let p = model.worktreePalette else { return }
     switch resolution {
@@ -129,7 +159,8 @@ extension WindowController {
         _ = try? taskStore.begin(task, worktree: worktree)
       }
       openResolvedDirectory(
-        dir, target: launch.target, frontsWorkspace: launch.frontsWorkspace, in: workspace)
+        dir, target: launch.target, frontsWorkspace: launch.frontsWorkspace,
+        in: launch.workspace)
     case .failed(let message):
       p.failPreparation(message)
     }
@@ -138,18 +169,17 @@ extension WindowController {
   /// 最新化画面の 2 択を配線する。手順（fetch → fast-forward → 作成）は provider が持ち、ここは
   /// 進行（作成が始まった）と終端をモデルへ流すだけ。
   private func wireWorktreePaletteRefresh(
-    _ p: WorktreePaletteModel, in workspace: Workspace, frontsWorkspace: Bool
+    _ p: WorktreePaletteModel, _ binding: WorktreePaletteBinding
   ) {
-    p.onSettleStale = { [weak self, weak workspace] choice, sync in
+    p.onSettleStale = { [weak self] choice, sync in
       guard let self, let p = self.model.worktreePalette,
         let provider = self.model.worktreePaletteProvider, let target = p.selectedTarget
       else { return }
-      let launch = WorktreePaletteLaunch(
-        target: target, task: p.task?.id, frontsWorkspace: frontsWorkspace)
+      let launch = WorktreePaletteLaunch(target: target, task: p.task?.id, binding: binding)
       switch choice {
       case .asIs:
         provider.createLocalBranchWorktree(name: sync.name) { [weak self] resolution in
-          self?.settleWorktreePalette(resolution, launch, in: workspace)
+          self?.settleWorktreePalette(resolution, launch)
         }
       case .refreshed:
         provider.refreshAndCreate(
@@ -159,7 +189,7 @@ extension WindowController {
             switch result {
             case .failure(let failure): self.model.worktreePalette?.refresh?.fail(failure)
             case .success(let resolution):
-              self.settleWorktreePalette(resolution, launch, in: workspace)
+              self.settleWorktreePalette(resolution, launch)
             }
           })
       }
@@ -168,9 +198,7 @@ extension WindowController {
 
   /// clean の削除の駆動を配線する。1 件ごとの進捗をモデルへ流し、駆動が終わったら終端
   /// （失敗が無ければ一覧へ戻り、あれば一部失敗画面に留まる）はモデルが決める。
-  private func wireWorktreeClean(
-    _ p: WorktreePaletteModel, in workspace: Workspace, frontsWorkspace: Bool
-  ) {
+  private func wireWorktreeClean(_ p: WorktreePaletteModel, _ binding: WorktreePaletteBinding) {
     p.onCleanExecute = { [weak self] requests, token in
       guard let self, let provider = self.model.worktreePaletteProvider else { return }
       provider.deleteWorktrees(requests, token: token) { [weak self] progress in
@@ -184,12 +212,12 @@ extension WindowController {
       }
     }
     // 失敗した worktree は解決済みのパスなので `prepareDirectory` を通さない。
-    p.onOpenWorktree = { [weak self, weak workspace] path in
+    p.onOpenWorktree = { [weak self] path in
       guard let self, let p = self.model.worktreePalette, let target = p.selectedTarget else {
         return
       }
       self.openResolvedDirectory(
-        path, target: target, frontsWorkspace: frontsWorkspace, in: workspace)
+        path, target: target, frontsWorkspace: binding.frontsWorkspace, in: binding.workspace)
     }
   }
 
@@ -200,11 +228,35 @@ extension WindowController {
   }
 }
 
+/// 開いている ⌘T が結び付いた workspace。タスクから開けばタスクの workspace で、札を外すと開いた時点の
+/// workspace へ戻る。workspace は弱く持つ（開いている間に消えたら、タブを開かない）。
+private final class WorktreePaletteBinding {
+  /// ⌘T を開いた時点の workspace（いつもの ⌘T が結び付く先）。
+  weak var opened: Workspace?
+  weak var workspace: Workspace?
+  /// 開いた後に、その workspace と新しいタブを前面にする。
+  var frontsWorkspace: Bool
+
+  init(opened: Workspace, workspace: Workspace, frontsWorkspace: Bool) {
+    self.opened = opened
+    self.workspace = workspace
+    self.frontsWorkspace = frontsWorkspace
+  }
+}
+
 /// ⌘T の決定（一覧の ↵・最新化画面の決定）の時点で捕まえる、起動の値。
 private struct WorktreePaletteLaunch {
   let target: WorktreePaletteTarget
   /// 文脈のタスク。worktree が用意できたら、進行中にしてその worktree を付ける。
   let task: Int?
+  weak var workspace: Workspace?
   /// 開いた後に、パレットが結び付いた workspace と新しいタブを前面にする。
   let frontsWorkspace: Bool
+
+  init(target: WorktreePaletteTarget, task: Int?, binding: WorktreePaletteBinding) {
+    self.target = target
+    self.task = task
+    workspace = binding.workspace
+    frontsWorkspace = binding.frontsWorkspace
+  }
 }

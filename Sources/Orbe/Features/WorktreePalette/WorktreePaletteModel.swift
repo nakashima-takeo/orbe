@@ -1,10 +1,9 @@
 import SwiftUI
 
-/// ⌘T で開く worktree パレットの表示状態（@Observable）。実データ（worktree/branch）を
-/// セクションに持ち、フィルタ・⇥ 起動先切替・⇧⇥ ベース切替・決定（↵／行タップ）の意図をクロージャで
-/// 外へ配線する。実データ取得と section 組み立ては `WorktreePaletteDataProvider`＋
-/// `WorktreePaletteSectionBuilder`（外）が担う。タスクから開いたときは、そのタスク（文脈）を ID で持ち、
-/// 札・先頭の欄・フッターの副作用は描くたびにストアから引いて導く（タスクが消えたら文脈が無いのと同じ）。
+/// ⌘T で開く worktree パレットの表示状態（@Observable）。実データ（worktree/branch）をセクションに持ち、
+/// フィルタ・⇥ 起動先切替・⇧⇥ ベース切替・決定の意図をクロージャで外へ配線する（取得と組み立ては
+/// provider と section builder）。タスクから開いたときは、そのタスク（文脈）を ID で持ち、札・先頭の欄・
+/// フッターの副作用は描くたびにストアから引いて導く（タスクが消えたら文脈が無いのと同じ）。
 @Observable final class WorktreePaletteModel {
   /// 文脈のタスクと worktree の行のタスクの札は、タスクのストア・GitHub の値の置き場・agent の索引から引く。
   let tasks: TaskStore
@@ -124,8 +123,9 @@ import SwiftUI
   var onOpenWorktree: (String) -> Void = { _ in }
   /// 最新化画面の決定。選んだ作り方で worktree を作って起動する（最新化して／そのまま）。
   var onSettleStale: (WorktreePaletteStaleChoice, WorktreePaletteBranchSync) -> Void = { _, _ in }
-  /// 先頭の欄の入力（`taskInputs`）が変わった。provider に組み直させる。
+  /// 先頭の欄の入力（`taskInputs`）が変わった・文脈を外した。
   var onTaskInputsChanged: () -> Void = {}
+  var onTaskContextCleared: () -> Void = {}
 
   init(
     tasks: TaskStore = TaskStore(file: nil),
@@ -138,12 +138,13 @@ import SwiftUI
     taskContextID = task
   }
 
-  /// 入力欄が空の ⌫ と札のクリック。文脈を外し、選択を入力の規則へ戻す（欄は入力の変化で組み直る）。
+  /// 入力欄が空の ⌫・札のクリック。文脈を外し、選択を入力の規則へ戻し、いつもの ⌘T へ結び付け直させる。
   func clearTaskContext() {
     guard taskContextID != nil, !isLocked else { return }
     taskContextID = nil
     selectionFollowsInput = true
     focus()
+    onTaskContextCleared()
   }
 
   /// 入力を受け付けない状態（worktree 作成中／預かった ↵ の待ち）。
