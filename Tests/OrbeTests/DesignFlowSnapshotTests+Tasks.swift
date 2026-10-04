@@ -59,4 +59,39 @@ extension DesignFlowSnapshotTests {
         ),
       ])
   }
+
+  /// 詳細の Issue・PR の欄: 行に入る・⌫ で外すと焦点が同じ位置へ移る・agent が結び付けると番号だけで
+  /// 現れる（値はまだ届いていない）、までを撮る。
+  func testTaskPaletteLinks() throws {
+    let palette = DesignSceneFixtures.taskPaletteModel()
+    try flow(
+      "task_palette_links", size: NSSize(width: 1440, height: 900),
+      render: {
+        ZStack {
+          BackgroundGlow()
+          TaskPaletteOverlay(model: palette)
+        }
+        .environment(\.localization, LocalizationStore(language: .ja))
+      },
+      steps: [
+        ("start", {}),
+        (
+          "link_focused",
+          {
+            palette.enterDetail(); palette.moveField(-1); palette.moveField(-1)
+          }
+        ),
+        ("unlinked", { palette.unlink(palette.selectedTask!.links[0].item) }),
+        (
+          "agent_linked",
+          {
+            var update = TaskUpdate()
+            update.links =
+              palette.selectedTask!.links + [DesignSceneFixtures.taskLink(.issue, "orbe", 230)]
+            _ = try? palette.store.update(1, update)
+            palette.reconcile()
+          }
+        ),
+      ])
+  }
 }
