@@ -657,6 +657,34 @@ enum VSCodeMultiCursorCases {
         .init(action: .command("cursorUpSelect"), text: "abc\ndef\nghi\njkl", cursors: [[2, 10]]),
       ]),
     .init(
+      name: "⌥← は複数のカーソルで 1 字の区切りを飛ばさない", text: "foo.bar(baz) qux\na.b",
+      cursors: [[12, 12], [20, 20]],
+      steps: [
+        .init(
+          action: .command("cursorWordLeft"), text: "foo.bar(baz) qux\na.b",
+          cursors: [[11, 11], [19, 19]]),
+        .init(
+          action: .command("cursorWordLeftSelect"), text: "foo.bar(baz) qux\na.b",
+          cursors: [[11, 8], [19, 18]]),
+      ]),
+    .init(
+      name: "⌥←→ は全カーソルで語を移る", text: "foo.bar(baz) qux\n  let x = a->b;",
+      cursors: [[12, 12], [17, 17]],
+      steps: [
+        .init(
+          action: .command("cursorWordLeft"), text: "foo.bar(baz) qux\n  let x = a->b;",
+          cursors: [[11, 11], [13, 13]]),
+        .init(
+          action: .command("cursorWordLeft"), text: "foo.bar(baz) qux\n  let x = a->b;",
+          cursors: [[8, 8], [11, 11]]),
+        .init(
+          action: .command("cursorWordEndRight"), text: "foo.bar(baz) qux\n  let x = a->b;",
+          cursors: [[11, 11], [12, 12]]),
+        .init(
+          action: .command("cursorWordEndRight"), text: "foo.bar(baz) qux\n  let x = a->b;",
+          cursors: [[12, 12], [16, 16]]),
+      ]),
+    .init(
       name: "⇧⌥←→ は全カーソルで語の単位に伸びる", text: "foo bar baz\nqux quux",
       cursors: [[5, 5], [17, 17]],
       steps: [

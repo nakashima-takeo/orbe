@@ -199,6 +199,8 @@ const scenarios = [
   ["⇧←→ は全カーソルで伸び、重なればまとまる", "a|b|cd e|f", 0, [c("cursorRightSelect"), c("cursorRightSelect"), c("cursorLeftSelect"), c("cursorLeftSelect"), c("cursorLeftSelect"), c("cursorLeftSelect")]],
   ["⇧← で前へ伸ばした選択が重なると最後に足した向きに倣う", "ab|cd|ef", 1, [c("cursorLeftSelect"), c("cursorLeftSelect"), c("cursorLeftSelect")]],
   ["⇧↑↓ は全カーソルで行をまたいで伸びる", "ab|c\nde|f\nghi\njkl", 0, [c("cursorDownSelect"), c("cursorDownSelect"), c("cursorUpSelect")]],
+  ["⌥← は複数のカーソルで 1 字の区切りを飛ばさない", "foo.bar(baz)| qux\na.b|", 0, [c("cursorWordLeft"), c("cursorWordLeftSelect")]],
+  ["⌥←→ は全カーソルで語を移る", "foo.bar(baz)| qux\n|  let x = a->b;", 0, [c("cursorWordLeft"), c("cursorWordLeft"), c("cursorWordEndRight"), c("cursorWordEndRight")]],
   ["⇧⌥←→ は全カーソルで語の単位に伸びる", "foo b|ar baz\nqux q|uux", 0, [c("cursorWordEndRightSelect"), c("cursorWordEndRightSelect"), c("cursorWordLeftSelect"), c("cursorWordLeftSelect"), c("cursorWordLeftSelect")]],
   ["⌘←→ は全カーソルで行頭と行末へ動く", "  ab|c\nde|f\n\tg|h", 0, [c("cursorHome"), c("cursorHome"), c("cursorEnd"), c("cursorHomeSelect")]],
   // コピー・カット・ペースト
