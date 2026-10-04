@@ -1,7 +1,7 @@
 ---
 title: ビルド手順
 description: libghostty の自前ビルドから Orbe.app の生成・起動まで。前提ツール・チャネル・lint / format
-updated: 2026-09-18
+updated: 2026-10-04
 ---
 
 # ビルド手順
@@ -56,6 +56,11 @@ xcrun -sdk macosx metal --version
   API の正はこのコミットの `vendor/ghostty/include/ghostty.h`（外部契約は [spec/terminal/libghostty.md](../spec/terminal/libghostty.md)）。
 - libghostty は alpha・API 非安定のため、**main 追従ではなく固定 SHA で pin**。アップグレード時はヘッダの型差分を確認。
 - `build-app.sh` は焼く前に `vendor/ghostty` の checkout が pin と一致するか確かめ、未取得かずれていれば関係する SHA（checkout の HEAD・pin）と復旧コマンドを示して止める。共有経路（下の worktree の注意）へ進むのは、linked worktree で submodule が未取得のときだけ。pull・rebase で pin が動いたら `git submodule update --init vendor/ghostty`。
+- tree-sitter 本体は `exact: "0.26.11"`（C API を `OrbeEditorCore` から直接呼ぶ）。0.26.12・0.26.13 はエラー回復が退行していて、Orbe のソースを連結した 1.2MB の Swift が文書全体で ERROR 1 つに崩れ、色がほぼ消える。退行は 2 つある——0.26.12 の 3ee7c639（master の 15ea3328）は UTF-16 の入力で、0.26.13 の f837fc98（master の 869638f6、上流 Issue #5910）は UTF-8 でも崩す。どちらも 0.27.0 にある。0.26.12〜13 で入った query の修正は、同梱の queries の結果を変えない（直ったのは量化子のすぐ隣に置いた anchor と `(MISSING)` の扱いで、どちらも使っていない）。
+- tree-sitter を上げるときに確かめること: 実在の大きなファイル（Orbe の `Sources` を連結した Swift など）を UTF-16 で解析して（Orbe の入力。tree-sitter の CLI は UTF-8 で解くので、UTF-16 だけの崩れを見逃す）全体 ERROR に崩れない／同梱の queries（highlights は連結、injections は単独）がすべて組める／誤りの無い見本（16 文法）の構文木と capture の列が前の版と一致する。
+- tree-sitter 0.27 以降は上流の `Package.swift` が無い。上げるときは `lib` の C ソースを取り込む自前の target に移る（sources は `lib/src/lib.c` の 1 本、公開ヘッダは `lib/include`——上流の CMake と同じ組み方。0.27.0 の `lib/src` には wasm 用の C（`src/wasm-stdlib`）があり、`lib/src` を丸ごと sources にするとそれまで拾ってネイティブでは組めない）。
+- 文法のうち javascript 0.23.1 / css 0.23.2 / python 0.23.6 / yaml 0.7.0 は `exact`。これより新しいタグ（javascript / css / python の v0.25.0、yaml の v0.7.1 以降）の `Package.swift` は `sources` を `FileManager.default.fileExists(atPath: "src/scanner.c")` で条件分岐しており、依存として評価されると cwd 相対の判定が false になって scanner.c がリンクされない（ファイル自体は存在する）。上げるときは当該タグの `Package.swift` の `sources` が `fileExists` で分岐していないか確認する——分岐していれば scanner.c を持つ文法は必ずリンクに失敗する。`from:` の文法も上流が同じ manifest へ移れば同じ失敗をする。
+- swift 0.7.3-with-generated-files も `exact`。生成済みの `src/parser.c` を持つのは `-with-generated-files` の付いたタグだけで（素のタグ `0.7.3` の `src/` には無い）、SemVer ではこれはプレリリースなので素のタグより古い版になる。`from:` にすると parser.c の無いタグに解決されてビルドが落ちる。上げるときも `-with-generated-files` の付いたタグを `exact` で指す。
 
 ## ビルド手順（Xcode 導入後）
 
@@ -97,6 +102,8 @@ open build/Orbe.app
 ### リソース解決（GHOSTTY_RESOURCES_DIR は不要）
 
 ghostty は shell-integration / themes / terminfo を**実行体からの相対**で自動検出する（`Contents/Resources/terminfo/78/xterm-ghostty` をセンチネルに climb）。`build-app.sh` がこれらを `Orbe.app/Contents/Resources/{ghostty,terminfo}` に同梱するため、`.app` は **環境変数なしで自己完結**する（ghostty 公式アプリと同じ方式）。
+
+エディターの色付け規則（tree-sitter の queries）は SwiftPM が文法ごとに `TreeSitter<Pkg>_TreeSitter<Target>.bundle` へ写す。`build-app.sh` がそれを `Contents/Resources/` 直下へ並べ（16 個揃わなければ落ちる）、`swift build` ではビルド成果物の隣（`.build/<config>/`）にあるので、どちらでも `LanguageRegistry` が実行体の隣から解く。テストは同梱物を持たない実行体なので `.build/debug` を明示注入する。
 
 `swift build` の **debug バイナリを単体起動する dev 時のみ**、リソースが実行体の隣に無いため env を渡す:
 ```bash

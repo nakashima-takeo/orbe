@@ -10,7 +10,8 @@ enum ChromeAction {
   case showClosedAgentsPalette  // 閉じたエージェント パレットを開く
   case nextTab
   case prevTab
-  case find  // スクロールバック検索バーを開く
+  case find  // 検索（端末はスクロールバック・エディターはファイル内）
+  case findInProject  // プロジェクト全体を検索（エディターの検索パネル）
   case switchWorkspace  // workspace コマンドパレットを開く
   case launchDefaultAgent  // デフォルトエージェントを新タブで起動
   case showAgentPalette  // エージェント起動パレットを開く
@@ -22,10 +23,13 @@ enum ChromeAction {
   case scrollToTop  // スクロールバック先頭へジャンプ
   case scrollToBottom  // スクロールバック末尾へジャンプ
   case toggleHelp  // ヘルプオーバーレイ（ショートカットチートシート）をトグル開閉
+  case toggleEditorFace  // エディター面 ⇄ 端末面（分割中は焦点の往復）
+  case saveDocument  // エディター焦点の文書を保存
 }
 
-/// surface から届く、ウィンドウレベルの chrome 操作（タブ・workspace）。
+/// 面（surface・エディター pane）から届く、ウィンドウレベルの chrome 操作（タブ・workspace）。
 enum WindowCommand {
+  case closeTab
   case showClosedAgentsPalette
   case nextTab
   case prevTab
@@ -38,14 +42,17 @@ enum WindowCommand {
   case renameTab
   case showSettings
   case toggleHelp
+  case toggleEditorFace
+  case findInProject
 }
 
 extension ChromeAction {
   /// WindowController へ届く window コマンドへの写像。surface ローカル操作は nil。
-  /// surface 経路（`SurfaceView.perform`）と window レベル経路（`ChromeHostingView`）が
-  /// 共有する単一ソース mapping（網羅 switch）。
+  /// 面の経路（`SurfaceView.perform`・`EditorPaneView.performKeyEquivalent`）と window レベル経路
+  /// （`ChromeHostingView`）が共有する単一ソース mapping（網羅 switch）。
   var windowCommand: WindowCommand? {
     switch self {
+    case .closeTab: return .closeTab
     case .showClosedAgentsPalette: return .showClosedAgentsPalette
     case .nextTab: return .nextTab
     case .prevTab: return .prevTab
@@ -58,9 +65,36 @@ extension ChromeAction {
     case .rename: return .renameTab
     case .showSettings: return .showSettings
     case .toggleHelp: return .toggleHelp
-    case .increaseFontSize, .decreaseFontSize, .resetFontSize, .closeTab, .find,
-      .scrollToTop, .scrollToBottom:
+    case .toggleEditorFace: return .toggleEditorFace
+    case .findInProject: return .findInProject
+    case .increaseFontSize, .decreaseFontSize, .resetFontSize, .find,
+      .scrollToTop, .scrollToBottom, .saveDocument:
       return nil
+    }
+  }
+
+  /// キーを所有する面。window コマンドは面を問わず上位へ、端末のキーはエディター焦点中に消え、
+  /// エディターのキーは端末焦点中に端末へ素通しし、両面のキーは焦点の面がそれぞれの意味で扱う。
+  enum Owner {
+    case window
+    case terminal
+    case editor
+    case eachFace
+  }
+
+  /// 網羅 switch（default 無し）＝新ケース追加時に所有面の分類をコンパイルで求める。
+  var owner: Owner {
+    switch self {
+    case .closeTab, .showClosedAgentsPalette, .nextTab, .prevTab, .switchWorkspace,
+      .launchDefaultAgent, .showAgentPalette, .showWorktreePalette, .showTaskPalette, .openEditor,
+      .rename, .showSettings, .toggleHelp, .toggleEditorFace, .findInProject:
+      return .window
+    case .increaseFontSize, .decreaseFontSize, .resetFontSize:
+      return .terminal
+    case .saveDocument:
+      return .editor
+    case .find, .scrollToTop, .scrollToBottom:
+      return .eachFace
     }
   }
 }
@@ -75,7 +109,8 @@ extension WindowCommand {
       .launchDefaultAgent, .showAgentPalette, .showWorktreePalette, .showTaskPalette, .showSettings,
       .toggleHelp:
       return true
-    case .nextTab, .prevTab, .openEditor, .renameTab:
+    case .nextTab, .prevTab, .openEditor, .renameTab, .closeTab, .toggleEditorFace,
+      .findInProject:
       return false
     }
   }
@@ -107,8 +142,11 @@ enum Keybindings {
     case "-": return .decreaseFontSize
     case "0": return .resetFontSize
     case ",": return .showSettings  // Cmd+,
+    case "e": return .toggleEditorFace  // Cmd+E
     case "f": return .find  // Cmd+F
+    case "F": return .findInProject  // Cmd+Shift+F
     case "r": return .rename  // Cmd+R
+    case "s": return .saveDocument  // Cmd+S
     case "w": return .closeTab  // Cmd+W
     case "t": return .showWorktreePalette  // Cmd+T
     case "T": return .showClosedAgentsPalette  // Cmd+Shift+T

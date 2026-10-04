@@ -14,8 +14,9 @@ extension SurfaceView {
     // 補完 popup 表示中は popup が ↑/↓/⌘↑/⌘↓/Esc を先取り（端末の chrome キーより優先）。
     // popup 非表示時は completionHandleKey が false を返し、従来どおり chrome→surface へ流れる。
     if completionHandleKey(event) { return }
-    // chrome キーを先取り（surface へ転送しない）
-    if let action = Keybindings.chromeAction(for: event) {
+    // chrome キーを先取り（surface へ転送しない）。エディターが所有するキー（⌘S）は端末には無縁なので
+    // 従来どおり ghostty へ素通しする。
+    if let action = Keybindings.chromeAction(for: event), action.owner != .editor {
       perform(action)
       return
     }

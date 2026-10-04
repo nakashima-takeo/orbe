@@ -36,7 +36,7 @@ final class ChromeTopBarMetricsTests: OrbeTestCase {
     let model = StatusRowModel()
     model.update(
       StatusRowModel.Snapshot(
-        workspace: "WWWW", strip: TabStrip(), active: 0, cwd: nil, rollup: []))
+        workspace: "WWWW", strip: TabStrip(), active: 0, location: nil, faceDots: nil, rollup: []))
     configure(model)
 
     let appearance = NSAppearance(named: .darkAqua)

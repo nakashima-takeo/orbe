@@ -56,7 +56,7 @@ final class ChromeTabRowMetricsTests: OrbeTestCase {
       StatusRowModel.Snapshot(
         workspace: "ws",
         strip: TabStrip(titles: ["a", "b"], tabIds: [0, 1], segments: [0..<2], colorIndices: [0]),
-        active: 0, cwd: nil, rollup: []))
+        active: 0, location: nil, faceDots: nil, rollup: []))
 
     let size = fittingSize(StatusRowView(model: model).frame(width: 800))
 

@@ -17,6 +17,13 @@ enum MainMenu {
     return main
   }
 
+  private static let servicesIdentifier = NSUserInterfaceItemIdentifier("services")
+
+  /// アプリメニューの「サービス」の中身（`NSApp.servicesMenu` に据える）。
+  static func servicesMenu(of main: NSMenu) -> NSMenu? {
+    main.items.first?.submenu?.items.first { $0.identifier == servicesIdentifier }?.submenu
+  }
+
   private static func appMenuItem(appName: String, language: Language) -> NSMenuItem {
     let item = NSMenuItem()
     let menu = NSMenu(title: appName)
@@ -26,6 +33,13 @@ enum MainMenu {
       withTitle: L10n.string(.menuCheckForUpdates, language),
       action: #selector(AppDelegate.checkForUpdates(_:)),
       keyEquivalent: "")
+    menu.addItem(.separator())
+    // 「サービス」。中身は macOS が組む（`servicesMenu` を `NSApp.servicesMenu` に据えると、焦点の受け手が渡せる型の
+    // サービスが並ぶ）。
+    let services = menu.addItem(
+      withTitle: L10n.string(.menuServices, language), action: nil, keyEquivalent: "")
+    services.identifier = servicesIdentifier
+    services.submenu = NSMenu(title: L10n.string(.menuServices, language))
     menu.addItem(.separator())
     // Hide はメニュー項目として残すが、⌘H は chrome（ヘルプオーバーレイ）が先取りするため無割当。
     // keyEquivalent を残すとメニュー表記が嘘になる（機能は Keybindings 側が先に消費する）。

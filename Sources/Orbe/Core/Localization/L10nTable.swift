@@ -17,6 +17,7 @@ enum L10n {
 
   private static let baseTable: [L10nKey: (ja: String, en: String)] = [
     // MARK: Menu
+    .menuServices: ("サービス", "Services"),
     .menuHide: ("%@を隠す", "Hide %@"),
     .menuHideOthers: ("ほかを隠す", "Hide Others"),
     .menuShowAll: ("すべてを表示", "Show All"),
@@ -136,6 +137,65 @@ enum L10n {
       "VS Code・Cursor・Windsurf・Zed・Sublime のいずれかを PATH に追加するか、$VISUAL／$EDITOR に GUI エディタを設定してください。",
       "Add one of VS Code, Cursor, Windsurf, Zed, or Sublime to your PATH, or set a GUI editor in $VISUAL/$EDITOR."
     ),
+
+    // MARK: Editor 面（空状態）
+    .editorEmptyLead: ("ファイルを開いて編集を開始", "Open a file to start editing"),
+    .editorEmptySearchProject: ("プロジェクト全体を検索", "Search the whole project"),
+    .editorEmptyBackToTerminal: ("ターミナルへ戻る", "Back to terminal"),
+
+    // MARK: Editor 面（骨: エクスプローラー）
+    .editorExplorerTitle: ("エクスプローラー", "Explorer"),
+    .editorNewFile: ("新規ファイル", "New File"),
+    .editorNewFolder: ("新規フォルダ", "New Folder"),
+    .editorCollapseAll: ("すべて折りたたむ", "Collapse All"),
+    .editorExpandAll: ("すべて展開", "Expand All"),
+
+    // MARK: Editor 面（プロジェクト検索）
+    .editorRailSearch: ("検索 (⌘⇧F)", "Search (⌘⇧F)"),
+    .editorSearchTitle: ("検索", "Search"),
+    .editorSearchPlaceholder: ("検索", "Search"),
+    .editorSearchMatchCase: ("大文字と小文字を区別 (⌥⌘C)", "Match Case (⌥⌘C)"),
+    .editorSearchWholeWord: ("単語単位で検索 (⌥⌘W)", "Match Whole Word (⌥⌘W)"),
+    .editorSearchRegex: ("正規表現を使用 (⌥⌘R)", "Use Regular Expression (⌥⌘R)"),
+    .editorSearchRefresh: ("更新", "Refresh"),
+    .editorSearchStop: ("停止", "Stop"),
+    .editorSearchClear: ("クリア", "Clear"),
+    // 件数の文: %1$@ はファイル数の句、%2$@ は結果数の句（日英で語順が違う）。
+    .editorSearchSummary: ("%1$@内に %2$@", "%2$@ in %1$@"),
+    .editorSearchFilesOne: ("%lld ファイル", "%lld file"),
+    .editorSearchFilesOther: ("%lld ファイル", "%lld files"),
+    .editorSearchResultsOne: ("%lld 件の結果", "%lld result"),
+    .editorSearchResultsOther: ("%lld 件の結果", "%lld results"),
+    .editorSearchLimited: (
+      "結果は一部だけです。検索を絞り込んでください。",
+      "Only some of the results are shown. Narrow down your search."
+    ),
+    .editorSearchNoResults: (
+      "結果がありません。除外の設定と .gitignore を確認してください。",
+      "No results found. Review your excludes and your .gitignore files."
+    ),
+    .editorSearchInvalidRegex: ("正規表現が正しくありません。", "Invalid regular expression."),
+    .editorSearchCouldNotStart: ("検索を始められませんでした。", "Could not start the search."),
+
+    // MARK: Editor 面（未保存の確認・外部変更の上書き）
+    .editorUnsavedTitle: ("未保存の変更があります", "You have unsaved changes"),
+    .editorUnsavedMessageOne: (
+      "%lld 件の文書に未保存の変更があります。保存しますか？",
+      "%lld document has unsaved changes. Do you want to save it?"
+    ),
+    .editorUnsavedMessageOther: (
+      "%lld 件の文書に未保存の変更があります。保存しますか？",
+      "%lld documents have unsaved changes. Do you want to save them?"
+    ),
+    .editorUnsavedSave: ("保存", "Save"),
+    .editorUnsavedDiscard: ("保存しない", "Don't Save"),
+    .editorOverwriteTitle: ("ディスク上で変更されています", "The file has changed on disk"),
+    .editorOverwriteMessage: (
+      "外で書き換えられた内容を、この文書の本文で上書きしますか？",
+      "Overwrite the changes made outside Orbe with this document's contents?"
+    ),
+    .editorOverwriteConfirm: ("上書き", "Overwrite"),
+    .editorOmittedCharacters: ("ほか %@字", "%@ more"),
 
     // MARK: Link（OSC 8）
     .linkConfirmTitle: ("端末出力のリンクを開きますか？", "Open Link from Terminal Output?"),

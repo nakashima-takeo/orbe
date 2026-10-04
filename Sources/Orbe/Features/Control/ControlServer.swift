@@ -3,7 +3,7 @@ import Foundation
 
 /// 外部やエージェントが Orbe を操作するための domain 操作（main スレッドでのみ呼ぶ）。
 /// 実体は WindowController。ControlServer がリクエストを main へ hop して叩く。
-protocol ControlTarget: AnyObject {
+protocol ControlTarget: ControlTaskTarget {
   func controlListWorkspaces() -> [[String: Any]]
   func controlListTabs() -> [[String: Any]]
   /// 検出済みエージェント CLI を列挙する（読み取り専用）。
@@ -34,6 +34,9 @@ protocol ControlTarget: AnyObject {
   func controlFocusTab(tabId: Int) -> Result<Any, ControlError>
   /// 指定タブ（TerminalTab.id）を閉じる（close_tab）。カスケードは GUI（Cmd+W）と一致。未解決は -32004。
   func controlCloseTab(tabId: Int) -> Result<Any, ControlError>
+  /// 指定タブのエディターでファイルを開き、エディター面を見せてそのタブへフォーカスする（open_file）。
+  /// 未解決は -32004、開けない（読めない・UTF-8 でない・Metal の装置が無くテキスト面を作れない）は -32000。
+  func controlOpenFile(tabId: Int, path: String) -> Result<Any, ControlError>
   /// 全設定項目の実効値・由来 scope・型・値域（domain）を列挙する（config CLI 用・読み取り専用）。
   /// workspaceId 指定でその WS の上書きを重ねる（未指定はアクティブ WS）。未知 id は -32004。
   func controlConfigList(workspaceId: Int?) -> Result<Any, ControlError>
@@ -52,25 +55,6 @@ protocol ControlTarget: AnyObject {
   /// 閉じたセッションを休眠チケットとして戻す（restore_sessions）。id ごとの status
   /// （restored / already-present / unknown）を返す。窓は runOnMain が保証する。
   func controlRestoreSessions(sessionIds: [String]) -> Result<Any, ControlError>
-  /// タスクを列の順に列挙する（list_tasks）。workspaceId 指定でその workspace のタスクだけ。未知 id は -32004。
-  func controlListTasks(workspaceId: Int?) -> Result<Any, ControlError>
-  /// タスクを列の末尾へ足す（add_task）。workspaceId は省略＝呼び出し元タブの workspace（タブが分からなければ
-  /// なし）・`.clear`＝なし・`.set`＝その workspace（未知は -32004）。callerTabId は追加者の agent 名と
-  /// 既定の付き先を引くためだけに読み、未知のタブでもエラーにしない。worktree は実在するディレクトリの
-  /// 絶対パス（それ以外は -32602）で、それを含む worktree のルートに揃えて付ける。
-  func controlAddTask(
-    _ draft: TaskDraft, workspaceId: ClearableValue<Int>?, callerTabId: Int?, worktree: String?
-  ) -> Result<Any, ControlError>
-  /// タスクを変える（update_task）。workspaceId・worktree は省略＝変えない・`.clear`＝なし・`.set`＝付ける。
-  func controlUpdateTask(
-    taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?,
-    worktree: ClearableValue<String>?
-  ) -> Result<Any, ControlError>
-  /// タスクを別のタスクの前か後ろへ移す（move_task）。
-  func controlMoveTask(taskId: Int, _ placement: TaskStore.Placement, anchorTaskId: Int)
-    -> Result<Any, ControlError>
-  /// タスクを消す（delete_task）。
-  func controlDeleteTask(taskId: Int) -> Result<Any, ControlError>
 }
 
 struct ControlError: Error {

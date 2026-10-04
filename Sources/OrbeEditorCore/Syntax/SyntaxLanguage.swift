@@ -1,0 +1,215 @@
+import Foundation
+import TreeSitterBash
+import TreeSitterCSS
+import TreeSitterDockerfile
+import TreeSitterGo
+import TreeSitterHTML
+import TreeSitterJSON
+import TreeSitterJavaScript
+import TreeSitterMarkdown
+import TreeSitterMarkdownInline
+import TreeSitterPython
+import TreeSitterRust
+import TreeSitterSwift
+import TreeSitterTOML
+import TreeSitterTSX
+import TreeSitterTypeScript
+import TreeSitterYAML
+
+/// ファイルとして開ける言語。拡張子／ファイル名から決まり、文法（`Grammar`）を 1 つ指す。
+public enum SyntaxLanguage: String, CaseIterable, Sendable {
+  case swift, markdown, json, typescript, javascript, tsx, css, html, python, go, rust, yaml, toml
+  case bash, dockerfile
+
+  /// 拡張子（小文字比較）とファイル名から言語を決める。決まらなければ nil＝色無し。
+  public static func detect(url: URL) -> SyntaxLanguage? {
+    let name = url.lastPathComponent
+    if name == "Dockerfile" || name.hasPrefix("Dockerfile.") { return .dockerfile }
+    switch url.pathExtension.lowercased() {
+    case "swift": return .swift
+    case "md", "markdown": return .markdown
+    case "json": return .json
+    case "ts", "mts", "cts": return .typescript
+    case "js", "mjs", "cjs", "jsx": return .javascript
+    case "tsx": return .tsx
+    case "css": return .css
+    case "html", "htm": return .html
+    case "py": return .python
+    case "go": return .go
+    case "rs": return .rust
+    case "yaml", "yml": return .yaml
+    case "toml": return .toml
+    case "sh", "bash", "zsh": return .bash
+    case "dockerfile": return .dockerfile
+    default: return nil
+    }
+  }
+
+  var grammar: Grammar {
+    switch self {
+    case .swift: return .swift
+    case .markdown: return .markdown
+    case .json: return .json
+    case .typescript: return .typescript
+    case .javascript: return .javascript
+    case .tsx: return .tsx
+    case .css: return .css
+    case .html: return .html
+    case .python: return .python
+    case .go: return .go
+    case .rust: return .rust
+    case .yaml: return .yaml
+    case .toml: return .toml
+    case .bash: return .bash
+    case .dockerfile: return .dockerfile
+    }
+  }
+}
+
+/// tree-sitter の文法 1 つ。ファイルの言語 15 に、Markdown の inline（injection でしか現れない）を足した 16。
+/// queries の組み方（上流の `tree-sitter.json` が highlights を複数ファイルで重ねる言語がある）と
+/// バンドル名（規則外の 2 つ）をここが持つ。
+enum Grammar: String, CaseIterable, Sendable {
+  case swift, markdown, markdownInline, json, typescript, javascript, tsx, css, html, python, go
+  case rust, yaml, toml, bash, dockerfile
+
+  /// injections.scm が名乗る言語名（と fenced code の慣用名）から文法を引く。
+  init?(injectionName: String) {
+    switch injectionName.lowercased() {
+    case "swift": self = .swift
+    case "markdown", "md": self = .markdown
+    case "markdown_inline": self = .markdownInline
+    case "json": self = .json
+    case "typescript", "ts": self = .typescript
+    case "javascript", "js", "jsx": self = .javascript
+    case "tsx": self = .tsx
+    case "css": self = .css
+    case "html": self = .html
+    case "python", "py": self = .python
+    case "go", "golang": self = .go
+    case "rust", "rs": self = .rust
+    case "yaml", "yml": self = .yaml
+    case "toml": self = .toml
+    case "bash", "sh", "shell", "zsh": self = .bash
+    case "dockerfile", "docker": self = .dockerfile
+    default: return nil
+    }
+  }
+
+  var language: LanguagePointer {
+    switch self {
+    case .swift: return LanguagePointer(tree_sitter_swift())
+    case .markdown: return LanguagePointer(tree_sitter_markdown())
+    case .markdownInline: return LanguagePointer(tree_sitter_markdown_inline())
+    case .json: return LanguagePointer(tree_sitter_json())
+    case .typescript: return LanguagePointer(tree_sitter_typescript())
+    case .javascript: return LanguagePointer(tree_sitter_javascript())
+    case .tsx: return LanguagePointer(tree_sitter_tsx())
+    case .css: return LanguagePointer(tree_sitter_css())
+    case .html: return LanguagePointer(tree_sitter_html())
+    case .python: return LanguagePointer(tree_sitter_python())
+    case .go: return LanguagePointer(tree_sitter_go())
+    case .rust: return LanguagePointer(tree_sitter_rust())
+    case .yaml: return LanguagePointer(tree_sitter_yaml())
+    case .toml: return LanguagePointer(tree_sitter_toml())
+    case .bash: return LanguagePointer(tree_sitter_bash())
+    case .dockerfile: return LanguagePointer(tree_sitter_dockerfile())
+    }
+  }
+
+  /// 差分解析に前の木を使ってよいか。Markdown の inline は、前の木を使うと同じ本文を新しく解いた木と食い違う（上流の文法の
+  /// 性質で、乱択の編集の 1 割強）ので、毎回新しく解く——注入の層は段落ほどの大きさで、構文が変わった区間は前の木と比べて
+  /// 出す。
+  var reusesTrees: Bool { self != .markdownInline }
+
+  /// SwiftPM が queries を写す資源バンドルの名前（`<パッケージ名>_<ターゲット名>`）。
+  var bundleName: String {
+    switch self {
+    case .swift: return "TreeSitterSwift_TreeSitterSwift"
+    case .markdown: return "TreeSitterMarkdown_TreeSitterMarkdown"
+    case .markdownInline: return "TreeSitterMarkdown_TreeSitterMarkdownInline"
+    case .json: return "TreeSitterJSON_TreeSitterJSON"
+    case .typescript: return "TreeSitterTypeScript_TreeSitterTypeScript"
+    case .javascript: return "TreeSitterJavaScript_TreeSitterJavaScript"
+    case .tsx: return "TreeSitterTypeScript_TreeSitterTSX"
+    case .css: return "TreeSitterCSS_TreeSitterCSS"
+    case .html: return "TreeSitterHTML_TreeSitterHTML"
+    case .python: return "TreeSitterPython_TreeSitterPython"
+    case .go: return "TreeSitterGo_TreeSitterGo"
+    case .rust: return "TreeSitterRust_TreeSitterRust"
+    case .yaml: return "TreeSitterYAML_TreeSitterYAML"
+    case .toml: return "TreeSitterTOML_TreeSitterTOML"
+    case .bash: return "TreeSitterBash_TreeSitterBash"
+    case .dockerfile: return "TreeSitterDockerfile_TreeSitterDockerfile"
+    }
+  }
+
+  /// queries ファイル 1 つの所在——資源バンドルの名前と、その `queries/` の中のパス。
+  struct QueryFile: Hashable {
+    let bundle: String
+    let path: String
+
+    /// 文法のパッケージが持つ上流の queries。
+    init(grammar: Grammar, name: String) {
+      bundle = grammar.bundleName
+      path = name
+    }
+
+    /// Orbe が上流の代わりに持つ queries（`<文法>/<ファイル>`）。
+    init(orbe path: String) {
+      bundle = LanguageRegistry.orbeBundleName
+      self.path = path
+    }
+  }
+
+  /// highlights を組むファイルの列（上流の `tree-sitter.json` どおり）。JavaScript は本体・JSX・引数の
+  /// 3 本、TypeScript / TSX は TS 固有の差分の後に JavaScript のものを重ねる（単体の highlights.scm は
+  /// TS 固有の差分しか持たない）。前のファイルが先に塗られ、後のファイルほど優先される（同じ字に当たった
+  /// 後のパターンが勝つ tree-sitter の highlight 規則）ので、上流の並びをそのまま持つ。
+  var highlightFiles: [QueryFile] {
+    switch self {
+    case .javascript:
+      return [
+        QueryFile(grammar: .javascript, name: "highlights.scm"),
+        QueryFile(grammar: .javascript, name: "highlights-jsx.scm"),
+        QueryFile(grammar: .javascript, name: "highlights-params.scm"),
+      ]
+    case .typescript:
+      return [
+        QueryFile(grammar: .typescript, name: "highlights.scm"),
+        QueryFile(grammar: .javascript, name: "highlights.scm"),
+      ]
+    case .tsx:
+      return [
+        QueryFile(grammar: .tsx, name: "highlights.scm"),
+        QueryFile(grammar: .javascript, name: "highlights-jsx.scm"),
+        QueryFile(grammar: .javascript, name: "highlights.scm"),
+      ]
+    default:
+      return [QueryFile(grammar: self, name: "highlights.scm")]
+    }
+  }
+
+  /// injections を持つ文法はその所在。TypeScript / TSX は JavaScript のものを借りる（上流どおり）。Markdown の inline は
+  /// Orbe のもの（段落の中の HTML のタグを束ねる）。
+  var injectionFile: QueryFile? {
+    switch self {
+    case .typescript, .tsx, .javascript:
+      return QueryFile(grammar: .javascript, name: "injections.scm")
+    case .markdownInline:
+      return QueryFile(orbe: "markdown_inline/injections.scm")
+    case .markdown, .html, .rust, .swift:
+      return QueryFile(grammar: self, name: "injections.scm")
+    case .json, .css, .python, .go, .yaml, .toml, .bash, .dockerfile: return nil
+    }
+  }
+}
+
+/// 文法の `TSLanguage` を指す値。文法の表は静的で書き換わらないので、どのスレッドから読んでもよい。
+struct LanguagePointer: @unchecked Sendable {
+  let raw: OpaquePointer
+
+  init(_ raw: OpaquePointer) {
+    self.raw = raw
+  }
+}

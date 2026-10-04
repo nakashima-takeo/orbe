@@ -1,0 +1,43 @@
+import AppKit
+
+/// responder へ直接届ける合成イベント（窓の `sendEvent` は通さない）。
+extension NSEvent {
+  /// `point` は窓座標。
+  static func mouse(_ type: NSEvent.EventType, at point: NSPoint, in window: NSWindow) -> NSEvent {
+    NSEvent.mouseEvent(
+      with: type, location: point, modifierFlags: [], timestamp: 0,
+      windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+  }
+
+  static func key(
+    _ chars: String, _ flags: NSEvent.ModifierFlags = .command, isRepeat: Bool = false
+  ) -> NSEvent {
+    NSEvent.keyEvent(
+      with: .keyDown, location: .zero, modifierFlags: flags,
+      timestamp: 0, windowNumber: 0, context: nil,
+      characters: chars, charactersIgnoringModifiers: chars, isARepeat: isRepeat, keyCode: 0)!
+  }
+
+  /// キーを離した出来事。
+  static func keyRelease(_ chars: String) -> NSEvent {
+    NSEvent.keyEvent(
+      with: .keyUp, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+      context: nil, characters: chars, charactersIgnoringModifiers: chars, isARepeat: false,
+      keyCode: 0)!
+  }
+}
+
+extension NSView {
+  /// この view の座標の点で起きたマウスのイベント（窓に載っていなければ窓番号 0）。
+  func mouseEvent(_ type: NSEvent.EventType, at point: NSPoint) -> NSEvent {
+    NSEvent.mouseEvent(
+      with: type, location: convert(point, to: nil), modifierFlags: [], timestamp: 0,
+      windowNumber: window?.windowNumber ?? 0, context: nil, eventNumber: 0, clickCount: 1,
+      pressure: 1)!
+  }
+
+  /// 窓座標で見た中心点。
+  var centerInWindow: NSPoint {
+    convert(NSPoint(x: bounds.midX, y: bounds.midY), to: nil)
+  }
+}

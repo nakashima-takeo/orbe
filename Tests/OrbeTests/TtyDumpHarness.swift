@@ -179,6 +179,8 @@ struct PhysicalKey {
     keyCode: kVK_Delete, characters: "\u{7f}", unmodified: "\u{7f}", modifiers: .shift)
   static let optionBackspace = PhysicalKey(
     keyCode: kVK_Delete, characters: "\u{7f}", unmodified: "\u{7f}", modifiers: .option)
+  static let commandS = PhysicalKey(
+    keyCode: kVK_ANSI_S, characters: "s", unmodified: "s", modifiers: .command)
 
   func event(_ kind: NSEvent.EventType, in window: NSWindow?) -> NSEvent {
     NSEvent.keyEvent(

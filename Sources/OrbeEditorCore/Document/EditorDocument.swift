@@ -1,0 +1,368 @@
+import CryptoKit
+import Foundation
+import os
+
+/// 開いたファイル 1 つ。識別（URL）・言語・未保存の有無と、本文の写し（ロープ）・版・役割の並びを持つ。テキスト面とは
+/// 開いてから閉じるまで 1 対 1 で、文書は面の delegate として編集（置換後の文字列つき）を受けてロープを追う。本文の正は
+/// このロープで、面は写し（`surfaceContent`）を引いて描く——面の契約に本文を読む口は無い。
+///
+/// 構文色・行差分（ハンク）・検索・出現は、ロープの写し（版つき）から裏の仕事が作る。打鍵 1 回で main がするのは、ロープの
+/// 置換・役割の並びのずらし・裏への依頼だけで、文書の大きさに依らない。裏の結果は受け取り箱に置かれ、main は今の版の結果なら
+/// そのまま、古い版の結果はその後の編集でずらして使う（字から離れない）。面は役割の並びを写しごと引く（色をどこに置くかは
+/// 面が決める）。
+///
+/// ディスクの姿（最後に読んだ／書いたファイルのバイト列のダイジェスト）も持ち、外部変更は監視の通知と保存の直前に
+/// 実ファイルを読み直して比べる（`reconcileWithDisk` / `save`）。baseline（比べる底の本文）を持てば、本文との行差分を
+/// 行の印（git ガター）として面へ押す。
+@MainActor
+public final class EditorDocument {
+  /// 文書を初めて画面に出すとき、最初の色を待つ上限。
+  public static let firstColorsWait: TimeInterval = 0.05
+
+  public let url: URL
+  public let language: SyntaxLanguage?
+  public let surface: any TextSurface
+  /// 本文の写し。面はこれを引いて描く。
+  public private(set) var text: TextRope
+  /// 文書全体の役割の並び。裏の最新の結果を、その後の編集に合わせてずらしたもの。
+  public private(set) var roles: RoleRuns
+  /// 本文の版と、届いていない結果を今の版まで写すための編集の記録。
+  private var log = EditLog()
+  /// 本文の版（編集 1 回で 1 進む）。
+  public var version: Int { log.version }
+  /// 面の本文が最後に保存（または開いた）内容と違うか。⌘Z で保存時の状態に戻しても立ったまま。
+  public private(set) var isDirty = false {
+    didSet { if isDirty != oldValue { onDirtyChange?(isDirty) } }
+  }
+  public var onDirtyChange: ((Bool) -> Void)?
+  /// ディスクの内容が最後に読んだ／書いたものと違い、差し替えられていない（未保存の本文がある、または
+  /// UTF-8 として読めない内容が書かれている）。照合のたびに導出し直す（消えた・同じ・差し替えたなら false）。
+  public private(set) var isDiskChanged = false {
+    didSet { if isDiskChanged != oldValue { onDiskChange?(isDiskChanged) } }
+  }
+  public var onDiskChange: ((Bool) -> Void)?
+  /// テキスト面が first responder になった／やめた。
+  public var onFocusChange: ((Bool) -> Void)?
+  /// 比べる底の本文（index 版など）。無ければハンクは空。置くと裏へ行差分を頼む。
+  public var baseline: String? {
+    didSet {
+      guard baseline != oldValue else { return }
+      baselineGeneration += 1
+      requestHunks()
+    }
+  }
+  /// baseline と本文の行差分。編集の直後はずらした前のハンクで、裏の結果が届くと置き換わる。
+  public private(set) var hunks: [LineHunk] = []
+  /// 字下げの作法（単位とタブか）。開いたとき、および本文を丸ごと置き換えたときに本文から検出し直し、面へ押す。
+  public private(set) var indentation = Indentation.fallback
+  /// 面の見えている範囲が変わった（スクロール・窓の高さ）。
+  public var onViewportChange: (() -> Void)?
+  /// 面の選択が変わった。
+  public var onSelectionChange: (() -> Void)?
+  /// 本文が変わった。面の編集の束ごとに 1 回、適用した順の編集の列（どれもその直前の本文の座標で、行の増減が分かる行と桁
+  /// つき）で、写しと役割の更新の後に届く——受け手は列を順に畳めば、束の途中の本文を見ずに今の本文へ追いつく。
+  public var onTextChange: (([VersionedEdit]) -> Void)?
+  /// 区間の列の問い（`analyze`）の結果（今の本文の上へずらしたもの）。問いが今と違うかは受け手が見る。
+  public var onAnalysis: ((AnalysisRequest, [NSRange]) -> Void)?
+
+  private let inbox: AnalysisInbox
+  private(set) var syntax: SyntaxWorker?
+  private let analysis: DocumentAnalysis
+  /// 最後に受け取った構文の結果の版と、そのとき見えている範囲・全体の作り直しが済んでいたか。
+  private var syntaxState = SyntaxProgress(version: 0, visibleReady: false, complete: false)
+  private var baselineGeneration = 0
+  /// 行差分を頼んで、まだその結果を受け取っていない版。
+  private var pendingHunks: Int?
+  /// 区間の列の問いのうち、まだ結果を受け取っていないもの（種類ごとに最新の問いと版）。
+  private var pendingRanges: [AnalysisRequest.Kind: (request: AnalysisRequest, version: Int)] = [:]
+  private(set) var hasBeenShown = false
+  /// 最後に読んだ／書いたファイルのバイト列のダイジェスト（ディスクの姿）。
+  private var diskDigest: SHA256Digest
+  /// 開いた／差し替えたときにファイルが UTF-8 BOM で始まっていたか。保存で同じように書き戻す。
+  private var hasBOM: Bool
+  /// ディスクの内容で本文を差し替えている間は、その編集で未保存を立てない。
+  private var isReplacingFromDisk = false
+
+  /// `surface` は、まだ文書と結ばれていない面。ロープは読んだ内容から組み、面は結ばれたときに写しを引く。構文の裏の仕事はここで起き、
+  /// 全体の解析と先頭の画面ぶんの役割を作り始める（待たない）。
+  public convenience init(
+    url: URL, contents: Contents, surface: any TextSurface, registry: LanguageRegistry
+  ) {
+    self.init(
+      url: url, contents: contents, surface: surface, registry: registry,
+      quietDelay: SyntaxWorker.quietDelay)
+  }
+
+  /// `quietDelay` は、最後の編集から構文の見えていない範囲を作り始めるまでの待ち（テストが差し替える）。
+  init(
+    url: URL, contents: Contents, surface: any TextSurface, registry: LanguageRegistry,
+    quietDelay: DispatchTimeInterval
+  ) {
+    self.url = url
+    self.surface = surface
+    language = SyntaxLanguage.detect(url: url)
+    let text = TextRope(contents.text)
+    self.text = text
+    roles = RoleRuns(length: text.length)
+    diskDigest = contents.digest
+    hasBOM = contents.hasBOM
+    let inbox = AnalysisInbox()
+    self.inbox = inbox
+    syntax = language.flatMap { registry.rules(for: $0) }.map {
+      SyntaxWorker(
+        text: text, version: 0, rules: $0, registry: registry, inbox: inbox, quietDelay: quietDelay)
+    }
+    analysis = DocumentAnalysis(inbox: inbox)
+    inbox.setWake { [weak self] in self?.receive() }
+    surface.delegate = self
+    applyConventions()
+  }
+
+  /// 閉じた文書の大きな部品を手放す口（既定は裏で手放す）。テストは手放す時機を差し替える。
+  var releaseParts: @Sendable (OSAllocatedUnfairLock<ReleasedParts?>) -> Void = { parcel in
+    DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = nil } }
+  }
+
+  /// 構文の裏の仕事に走っている解析を打ち切らせ、閉じた文書の写し・役割の並び・構文木を持つ裏の仕事は裏で手放す（大きな
+  /// 木の解放を main で行わない）。裏へ渡す前に文書の欄から外す——欄は deinit の後に main で解放されるので、欄に残すと裏が
+  /// 先に済んだとき最後の解放が main で起きる。
+  deinit {
+    syntax?.cancel()
+    let parcel = OSAllocatedUnfairLock<ReleasedParts?>(
+      initialState: ReleasedParts(text: text, roles: roles, syntax: syntax))
+    text = TextRope()
+    roles = RoleRuns(length: 0)
+    syntax = nil
+    releaseParts(parcel)
+  }
+
+  /// 区間の列の問いを裏へ頼む。結果は `onAnalysis` に届く。
+  public func analyze(_ request: AnalysisRequest) {
+    pendingRanges[request.kind] = (request, version)
+    analysis.post(request, text: text, version: version)
+  }
+
+  /// 文書を初めて画面に出す直前に呼ぶ。構文の裏の仕事が見えている範囲の役割を作り終えていなければ、最初の描画に色が
+  /// 間に合うよう最大 `firstColorsWait` 待つ（越えたら無色で出し、後から色が付く）。2 回目以降は何もしない。
+  public func prepareToShow() {
+    guard !hasBeenShown else { return }
+    hasBeenShown = true
+    guard let syntax, !isFirstColorReady else { return }
+    syntax.boost()
+    _ = wait(until: .now() + Self.firstColorsWait) { $0.isFirstColorReady }
+  }
+
+  /// 裏の仕事（構文・行差分・問い）がすべて今の版に追いつき、その結果を受け取るまで待つ（最大 `timeout`）。追いついたら
+  /// true。時間ではなく受け取り箱を見て待つ——描画やテストが、結果の出揃った状態を決定的に得る口。待つ間だけ、構文の
+  /// 見えていない範囲も打鍵が止むのを待たずに作らせる。
+  @discardableResult
+  public func waitUntilCaughtUp(timeout: TimeInterval = 5) -> Bool {
+    syntax?.setHurry(true)
+    defer { syntax?.setHurry(false) }
+    syntax?.boost()
+    return wait(until: .now() + timeout) { $0.isCaughtUp }
+  }
+
+  /// 受け取り箱に結果が届くたびに受け取り、`done` が成り立つか期限が来るまで待つ。
+  private func wait(until deadline: DispatchTime, _ done: (EditorDocument) -> Bool) -> Bool {
+    receive()
+    while !done(self) {
+      guard inbox.wait(until: deadline) else { break }
+      receive()
+    }
+    return done(self)
+  }
+
+  var isFirstColorReady: Bool {
+    syntax == nil || (syntaxState.version == version && syntaxState.visibleReady)
+  }
+
+  /// 受け取った結果で、裏の仕事がすべて今の版に追いついている（待たず、裏を急かさない）。
+  var isCaughtUp: Bool {
+    (syntax == nil || (syntaxState.version == version && syntaxState.complete))
+      && pendingHunks == nil && pendingRanges.isEmpty
+  }
+
+  /// 本文の作法（字下げ・改行）を検出し直して面へ押す。
+  private func applyConventions() {
+    indentation = Indentation.detect(in: text.utf16)
+    surface.setIndentation(indentation)
+    surface.setLineBreak(LineBreak.detect(in: text.utf16))
+  }
+
+  /// 本文をそのまま UTF-8 で書く（改行・末尾改行は本文のまま。開いたとき BOM があれば付け直す）。
+  /// 保存は undo の区切りでもある。force でなければ直前にディスクと照合する（監視の通知が届く前でも
+  /// 同じ判定）——未編集なら差し替えてから書き、未保存の本文があれば `diskChanged` で失敗して
+  /// ディスクに触れない。
+  public func save(force: Bool = false) throws {
+    if !force {
+      reconcileWithDisk()
+      if isDiskChanged { throw EditorDocumentError.diskChanged(url) }
+    }
+    let data = (hasBOM ? Self.bom : Data()) + text.utf8Data()
+    try data.write(to: url, options: .atomic)
+    diskDigest = SHA256.hash(data: data)
+    isDirty = false
+    isDiskChanged = false
+    surface.markUndoBoundary()
+  }
+
+  /// 実ファイルを読み直してディスクの姿と比べる。違っていて未保存でなければ本文を差し替え（undo 可、
+  /// 未保存にならない、undo の区切り）、未保存なら `isDiskChanged` を立てて本文は保つ。
+  /// 消えた・同じ内容なら印を消す。UTF-8 でない内容（別の符号化・バイナリ）が書かれていれば一致を
+  /// 証明できないので、差し替えずに印を立てる（外の書き込みを ⌘S で潰さない）。
+  public func reconcileWithDisk() {
+    let onDisk: Contents
+    do {
+      onDisk = try Self.read(url)
+    } catch EditorDocumentError.notUTF8 {
+      isDiskChanged = true
+      return
+    } catch {
+      isDiskChanged = false
+      return
+    }
+    guard onDisk.digest != diskDigest else {
+      isDiskChanged = false
+      return
+    }
+    guard !isDirty else {
+      isDiskChanged = true
+      return
+    }
+    isReplacingFromDisk = true
+    surface.replaceAll(with: onDisk.text)
+    isReplacingFromDisk = false
+    applyConventions()
+    diskDigest = onDisk.digest
+    hasBOM = onDisk.hasBOM
+    surface.markUndoBoundary()
+    isDiskChanged = false
+  }
+
+  /// 行差分を裏へ頼む。baseline が無ければハンクは空。
+  private func requestHunks() {
+    guard let baseline else {
+      pendingHunks = nil
+      hunks = []
+      pushLineMarks()
+      return
+    }
+    pendingHunks = version
+    analysis.postHunks(
+      text: text, version: version, baseline: baseline, generation: baselineGeneration)
+  }
+
+  /// 行の印を面へ押す。印はハンクが同じでも押す——同じ行の中の打鍵でハンクは変わらず区間のオフセットだけが動く。
+  private func pushLineMarks() {
+    surface.setLineMarks(LineMarks(hunks: hunks).spans(in: text))
+  }
+
+  /// 受け取り箱の結果を取り、今の版へ写して置く。
+  private func receive() {
+    let contents = inbox.take()
+    var changedRoles = IndexSet()
+    for outcome in contents.syntax {
+      guard let edits = log.edits(since: outcome.version) else { continue }
+      changedRoles.formUnion(
+        EditSweep.batches(applied: edits.map(\.edit)).reduce(outcome.changed) { $1.track($0) })
+    }
+    if let outcome = contents.syntax.last, let edits = log.edits(since: outcome.version) {
+      var latest = outcome.roles
+      for record in edits { latest.apply(record.edit) }
+      roles = latest
+      syntaxState = SyntaxProgress(
+        version: outcome.version, visibleReady: outcome.visibleReady, complete: outcome.complete)
+    }
+    if let outcome = contents.hunks, outcome.generation == baselineGeneration,
+      let edits = log.edits(since: outcome.version)
+    {
+      hunks = edits.reduce(outcome.hunks) { $1.track($0) }
+      if pendingHunks == outcome.version { pendingHunks = nil }
+      pushLineMarks()
+    }
+    for outcome in contents.ranges.values {
+      guard let pending = pendingRanges[outcome.request.kind], pending.request == outcome.request,
+        let edits = log.edits(since: outcome.version)
+      else { continue }
+      if pending.version == outcome.version { pendingRanges[outcome.request.kind] = nil }
+      onAnalysis?(
+        outcome.request,
+        EditSweep.batches(applied: edits.map(\.edit)).reduce(outcome.ranges) { $1.track($0) })
+    }
+    discardSettledEdits()
+    if !changedRoles.isEmpty { surface.rolesDidChange(changedRoles) }
+  }
+
+  /// 結果を待っている版のうち最も古いものまでの編集を捨てる。構文の裏の仕事は、最後に受け取った版より後ろのどの版の結果も
+  /// 置きうる。
+  private func discardSettledEdits() {
+    var oldest = version
+    if syntax != nil { oldest = min(oldest, syntaxState.version) }
+    if let pendingHunks { oldest = min(oldest, pendingHunks) }
+    for pending in pendingRanges.values { oldest = min(oldest, pending.version) }
+    log.discard(through: oldest)
+  }
+}
+
+extension EditorDocument: TextSurfaceDelegate {
+  /// 面の編集の束を後ろから 1 つずつ当てる——束の範囲は束の前の座標なので、後ろから当てればどれもその直前の本文の座標のまま
+  /// 使える（座標の変換はここ 1 か所）。どの編集も、変わらない先頭と末尾を落とした最小の区間として写し・役割・構文・配り先へ
+  /// 渡す（外部変更の差し替えでも、変わっていない字は役割を保ち、構文も差分で解析する）。版は編集 1 つで 1 進み、行の印・
+  /// 行差分の依頼・配り先への知らせは束ごとに 1 回。
+  public func surface(_ surface: any TextSurface, didChange edits: [TextEdit]) {
+    guard !edits.isEmpty else { return }
+    var applied: [VersionedEdit] = []
+    applied.reserveCapacity(edits.count)
+    var tracked = hunks
+    for whole in edits.reversed() {
+      let record = apply(whole.narrowed(replacing: text.units(in: whole.range)))
+      if baseline != nil { tracked = record.track(tracked) }
+      applied.append(record)
+    }
+    hunks = tracked
+    if !isReplacingFromDisk { isDirty = true }
+    if baseline != nil {
+      pushLineMarks()
+      requestHunks()
+    }
+    // 届きうる結果が無ければ、写すための記録は要らない（結果が一つも来ない文書で、差し替えの本文が溜まり続けない）。
+    if syntax == nil, pendingHunks == nil, pendingRanges.isEmpty { log.discard(through: version) }
+    onTextChange?(applied)
+  }
+
+  private func apply(_ edit: TextEdit) -> VersionedEdit {
+    let start = text.point(at: edit.range.location)
+    let oldEnd = text.point(at: NSMaxRange(edit.range))
+    text.replace(edit.range, with: edit.replacement)
+    let newEnd = text.point(at: NSMaxRange(edit.newRange))
+    let record = log.append(edit, start: start, oldEnd: oldEnd, newEnd: newEnd)
+    roles.apply(edit)
+    syntax?.post(record, text: text)
+    return record
+  }
+
+  public func surfaceDidChangeViewport(_ surface: any TextSurface) {
+    if let syntax {
+      let viewport = surface.viewport
+      let first = text.row(containing: viewport.firstVisible)
+      let last = first + Int(viewport.visibleLines.rounded(.up))
+      syntax.setVisible(
+        NSRange(location: text.lineStart(first), length: text.lineEnd(last) - text.lineStart(first))
+      )
+    }
+    onViewportChange?()
+  }
+
+  public func surfaceDidChangeSelection(_ surface: any TextSurface) {
+    onSelectionChange?()
+  }
+
+  public func surface(_ surface: any TextSurface, focusDidChange focused: Bool) {
+    onFocusChange?(focused)
+  }
+
+  public func surfaceContent(_ surface: any TextSurface) -> SurfaceContent {
+    SurfaceContent(text: text, roles: roles, version: version)
+  }
+}

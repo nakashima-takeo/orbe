@@ -13,6 +13,7 @@ import Foundation
 enum L10nKey: String, CaseIterable, Sendable {
   // swiftlint:disable:previous type_body_length
   // MARK: - Menu（AppKit メインメニュー）
+  case menuServices
   case menuHide
   case menuHideOthers
   case menuShowAll
@@ -415,6 +416,51 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorNotFoundTitle
   case editorNotFoundMessage
 
+  // MARK: - Editor 面（空状態）
+  case editorEmptyLead
+  case editorEmptySearchProject
+  case editorEmptyBackToTerminal
+
+  // MARK: - Editor 面（骨: エクスプローラー）
+  case editorExplorerTitle
+  case editorNewFile
+  case editorNewFolder
+  case editorCollapseAll
+  case editorExpandAll
+
+  // MARK: - Editor 面（プロジェクト検索）
+  case editorRailSearch
+  case editorSearchTitle
+  case editorSearchPlaceholder
+  case editorSearchMatchCase
+  case editorSearchWholeWord
+  case editorSearchRegex
+  case editorSearchRefresh
+  case editorSearchStop
+  case editorSearchClear
+  case editorSearchSummary
+  case editorSearchFilesOne
+  case editorSearchFilesOther
+  case editorSearchResultsOne
+  case editorSearchResultsOther
+  case editorSearchLimited
+  case editorSearchNoResults
+  case editorSearchInvalidRegex
+  case editorSearchCouldNotStart
+
+  // MARK: - Editor 面（未保存の確認・外部変更の上書き）
+  case editorUnsavedTitle
+  case editorUnsavedMessageOne
+  case editorUnsavedMessageOther
+  case editorUnsavedSave
+  case editorUnsavedDiscard
+  case editorOverwriteTitle
+  case editorOverwriteMessage
+  case editorOverwriteConfirm
+
+  // MARK: - Editor 面（コード）
+  case editorOmittedCharacters
+
   // MARK: - Link（OSC 8 リンクの確認・ブロック）
   case linkConfirmTitle
   case linkConfirmMessage
@@ -567,6 +613,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutHelp
   case helpShortcutSettings
   case helpShortcutOpenEditor
+  case helpShortcutToggleEditorFace
+  case helpShortcutSaveDocument
+  case helpShortcutFindInProject
   case helpShortcutQuit
   case helpShortcutSwitchWorkspace
   case helpShortcutNewTab

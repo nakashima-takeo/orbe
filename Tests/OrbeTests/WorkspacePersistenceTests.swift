@@ -33,7 +33,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
     XCTAssertEqual(back, file, "Codable 往復で構成が一致")
   }
 
-  /// タブは平坦な `{cwd, agent?, explicitTitle?}` で書く（外部契約の形）。
+  /// タブは平坦な `{cwd, agent?, explicitTitle?, faces?}` で書く（外部契約の形）。
   func testTabStateWireShape() throws {
     let enc = JSONEncoder()
     enc.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]

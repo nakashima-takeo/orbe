@@ -1,5 +1,18 @@
 import SwiftUI
 
+/// TopBar の現在地の断片。`dim` は cwd・根（`textMuted`）、`text` は根の下の相対パス・根の外の絶対パス
+/// （`statusText`）。
+struct LocationPart: Equatable {
+  enum Tone: Equatable {
+    case dim, text
+  }
+  let text: String
+  let tone: Tone
+
+  static func dim(_ text: String) -> LocationPart { LocationPart(text: text, tone: .dim) }
+  static func text(_ text: String) -> LocationPart { LocationPart(text: text, tone: .text) }
+}
+
 /// 信号機（close ボタン）の chrome に対する置かれ方。実窓を読む probe（`AppShell` が付ける）が書く。
 enum TrafficLights: Equatable {
   /// chrome の上に無い（ネイティブ・フルスクリーンで AppKit が上端の帯へ移した／窓にボタンが無い）。
@@ -21,8 +34,10 @@ enum TrafficLights: Equatable {
   /// タブ行（セル＋セグメント構造）。1 つの値として代入され、View はこれだけを辿る。
   var strip = TabStrip()
   var active = 0
-  /// `~` 短縮済みのアクティブタブの cwd。
-  var cwd: String?
+  /// 現在地（アクティブタブの焦点の面が居る場所）。`~` 短縮済みのトーン付き断片列。空は出さない。
+  var location: [LocationPart] = []
+  /// アクティブタブの位置ドット（エディター・端末）。0 タブは nil。
+  var faceDots: FaceGeometry.FaceDots?
   /// 全 workspace 横断のエージェント状態ロールアップ（状態順の `[(state, count)]`）。
   var rollup: [(state: String, count: Int)] = []
   /// 検証インスタンス限定の build-id（`ORBE_STATE_DIR` 設定時のみ）。本物では nil。
@@ -71,7 +86,8 @@ enum TrafficLights: Equatable {
     let workspace: String
     let strip: TabStrip
     let active: Int
-    let cwd: String?
+    let location: TerminalTab.Location?
+    let faceDots: FaceGeometry.FaceDots?
     let rollup: [(state: String, count: Int)]
   }
 
@@ -79,8 +95,21 @@ enum TrafficLights: Equatable {
     workspace = s.workspace
     strip = s.strip
     active = s.active
-    cwd = s.cwd.map { ($0 as NSString).abbreviatingWithTildeInPath }
+    location = s.location.map(Self.parts(of:)) ?? []
+    faceDots = s.faceDots
     rollup = s.rollup
+  }
+
+  /// 事実 → 表現の写し（1 か所）。`~` 短縮は純粋なパス片（根・パス）にかけてから区切り `/` を足す
+  /// （`abbreviatingWithTildeInPath` は末尾の `/` を落とす）。
+  static func parts(of location: TerminalTab.Location) -> [LocationPart] {
+    let short = { (path: String) in (path as NSString).abbreviatingWithTildeInPath }
+    switch location {
+    case .cwd(let path): return [.dim(short(path))]
+    case .root(let root): return [.dim(short(root))]
+    case .file(let root, let relative): return [.dim(short(root) + "/"), .text(relative)]
+    case .absolute(let path): return [.text(short(path))]
+    }
   }
 
   /// 検証インスタンス（`ORBE_STATE_DIR` 非空）でだけ、`.app` に刻まれた build-id を返す。
