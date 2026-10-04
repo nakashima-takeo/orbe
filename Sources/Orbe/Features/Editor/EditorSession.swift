@@ -10,7 +10,7 @@ import OrbeEditorCore
 /// 普通の文書は仮に戻らない。
 @MainActor
 final class EditorSession {
-  /// 開き方。入口ごとにどちらかを必ず選ぶ（どの入口が仮かは spec の表が持つ）。
+  /// 開き方。入口ごとにどちらかを必ず選ぶ（どの入口が仮かは `docs/spec/editor/shell.md` の「仮のタブ」が持つ）。
   enum OpenMode {
     /// 仮の文書として開く。既に開いていれば焦点を移すだけ（普通の文書は普通のまま）。
     case preview
