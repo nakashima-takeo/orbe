@@ -68,9 +68,9 @@ extension ProjectSearch: RootFilesObserver {
   /// 行は一致が落ちたときだけ作り直す（行が見せるプレビューは取り直すまで変わらない——打鍵のたびに全部の行を作り直さない）。
   func documentDidEdit(_ document: EditorDocument, _ edits: [VersionedEdit]) {
     guard let path = relativePath(of: document), let before = results[path]?.count else { return }
-    for record in edits {
-      trackAnchor(path, record.edit)
-      results.track(path, record.edit, version: record.version)
+    trackAnchor(path, edits.map(\.edit))
+    if let version = edits.last?.version {
+      results.track(path, EditSweep.batches(applied: edits.map(\.edit)), version: version)
     }
     if results[path]?.count == before { onGroundChange() } else { resultsDidChange() }
     scheduleRefresh(path)

@@ -55,10 +55,11 @@ extension EditCommands {
     let batch = EditBatch(
       accepted.map { TextEdit(range: $0.replacement.range, replacement: $0.replacement.text) })
     guard !batch.isEmpty else { return CommandResult(state: state) }
-    var result = cursors.map { cursor in
+    let mapped = batch.map(cursors.map(\.anchor) + cursors.map(\.position))
+    var result = cursors.indices.map { index in
       Cursor(
-        selectionStart: NSRange(location: batch.map(cursor.anchor), length: 0), unit: .character,
-        position: batch.map(cursor.position))
+        selectionStart: NSRange(location: mapped[index], length: 0), unit: .character,
+        position: mapped[cursors.count + index])
     }
     var delta = 0
     for item in accepted {

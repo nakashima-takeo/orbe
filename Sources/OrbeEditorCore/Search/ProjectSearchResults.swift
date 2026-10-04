@@ -49,16 +49,22 @@ public struct SearchFileMatches: Equatable, Sendable {
 
   public var count: Int { matches.count }
 
-  /// 開いている文書の編集に合わせて区間をずらし、区間の版を編集の後の版 `version` にする（編集に掛かる一致は落とす——
-  /// `TextEdit.track` と同じ規則）。行・行の中の位置・プレビューは取り直すまで前のまま。
-  public mutating func track(_ edit: TextEdit, version: Int) {
+  /// 開いている文書の編集（束の列）に合わせて区間をずらし、区間の版を編集の後の版 `version` にする（編集に掛かる一致は
+  /// 落とす——`EditSweep.track` の規則）。行・行の中の位置・プレビューは取り直すまで前のまま。
+  public mutating func track(_ batches: [EditSweep], version: Int) {
     guard var document else { return }
-    var ranges: [NSRange] = []
-    var kept: [SearchMatch] = []
-    for (range, match) in zip(document.ranges, matches) {
-      guard let moved = edit.track([range]).first else { continue }
-      ranges.append(moved)
-      kept.append(match)
+    var ranges = document.ranges
+    var kept = matches
+    for batch in batches {
+      var nextRanges: [NSRange] = []
+      var nextKept: [SearchMatch] = []
+      for (moved, match) in zip(batch.trackEach(ranges), kept) {
+        guard let moved else { continue }
+        nextRanges.append(moved)
+        nextKept.append(match)
+      }
+      ranges = nextRanges
+      kept = nextKept
     }
     document.ranges = ranges
     document.version = version
@@ -183,11 +189,11 @@ public struct ProjectSearchResults: Equatable, Sendable {
     return true
   }
 
-  /// 開いている文書のまとまりを編集に合わせてずらす（`version` は編集の後の版）。
-  public mutating func track(_ path: String, _ edit: TextEdit, version: Int) {
+  /// 開いている文書のまとまりを編集（束の列）に合わせてずらす（`version` は編集の後の版）。
+  public mutating func track(_ path: String, _ batches: [EditSweep], version: Int) {
     guard let index = index(of: path) else { return }
     total -= files[index].count
-    files[index].track(edit, version: version)
+    files[index].track(batches, version: version)
     total += files[index].count
     if files[index].count == 0 { files.remove(at: index) }
   }

@@ -119,23 +119,38 @@ extension EditCommands {
     }
     let batch = EditBatch(unique)
     guard !batch.isEmpty else { return CommandResult(state: state) }
-    var cursors = state.cursors.map { cursor in
+    let all = state.cursors.all
+    let points = all.map { cursor in
       let selection = cursor.selection
       let row = text.row(containing: selection.location)
-      let lineStart = text.lineStart(row)
       guard selection.length > 0 else {
         let blank = Self.firstNonWhitespace(ofRow: row, text) == nil
         let at = blank ? NSMaxRange(text.contentRange(ofRow: row)) : selection.location
-        return Cursor(batch.map(at))
+        return [at, at, at]
       }
-      let inIndent = selection.location <= (Self.firstNonWhitespace(ofRow: row, text) ?? .max)
-      let kept = batch.map(lineStart) + selection.location - lineStart
-      let start =
-        inIndent ? min(batch.map(selection.location), kept) : batch.map(selection.location)
-      let end = batch.map(NSMaxRange(selection))
-      return Cursor.selecting(
-        NSRange(location: start, length: max(0, end - start)), reversed: cursor.isReversed)
+      return [text.lineStart(row), selection.location, NSMaxRange(selection)]
     }
+    let mapped = batch.map(points.flatMap { $0 })
+    var shifted: [Cursor] = []
+    shifted.reserveCapacity(all.count)
+    for (index, cursor) in all.enumerated() {
+      let selection = cursor.selection
+      let (lineStart, start, end) = (
+        mapped[3 * index], mapped[3 * index + 1], mapped[3 * index + 2]
+      )
+      guard selection.length > 0 else {
+        shifted.append(Cursor(start))
+        continue
+      }
+      let row = text.row(containing: selection.location)
+      let inIndent = selection.location <= (Self.firstNonWhitespace(ofRow: row, text) ?? .max)
+      let kept = lineStart + selection.location - points[index][0]
+      let from = inIndent ? min(start, kept) : start
+      shifted.append(
+        Cursor.selecting(
+          NSRange(location: from, length: max(0, end - from)), reversed: cursor.isReversed))
+    }
+    var cursors = CursorList(shifted[0], others: Array(shifted.dropFirst()))
     cursors.normalize()
     return CommandResult(
       state: EditState(cursors: cursors, mark: state.mark.map(batch.map)), edits: batch,

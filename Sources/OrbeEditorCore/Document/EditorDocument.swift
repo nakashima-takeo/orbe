@@ -264,7 +264,8 @@ public final class EditorDocument {
     var changedRoles = IndexSet()
     for outcome in contents.syntax {
       guard let edits = log.edits(since: outcome.version) else { continue }
-      changedRoles.formUnion(edits.reduce(outcome.changed) { $1.edit.track($0) })
+      changedRoles.formUnion(
+        EditSweep.batches(applied: edits.map(\.edit)).reduce(outcome.changed) { $1.track($0) })
     }
     if let outcome = contents.syntax.last, let edits = log.edits(since: outcome.version) {
       var latest = outcome.roles
@@ -285,7 +286,9 @@ public final class EditorDocument {
         let edits = log.edits(since: outcome.version)
       else { continue }
       if pending.version == outcome.version { pendingRanges[outcome.request.kind] = nil }
-      onAnalysis?(outcome.request, edits.reduce(outcome.ranges) { $1.edit.track($0) })
+      onAnalysis?(
+        outcome.request,
+        EditSweep.batches(applied: edits.map(\.edit)).reduce(outcome.ranges) { $1.track($0) })
     }
     discardSettledEdits()
     if !changedRoles.isEmpty { surface.rolesDidChange(changedRoles) }

@@ -112,7 +112,7 @@ final class EditorSearch {
   /// 本文が変わった（適用した順の編集の列）。一致は編集に合わせてずらし、100ms 後に取り直す。選択は動かさない。
   func textDidChange(_ edits: [VersionedEdit]) {
     guard !needle.isEmpty else { return }
-    matches = edits.reduce(matches) { $1.edit.track($0) }
+    matches = EditSweep.batches(applied: edits.map(\.edit)).reduce(matches) { $1.track($0) }
     publish()
     refreshDelay.run(after: Self.refreshDelay) { [weak self] in
       guard let self, let document, !needle.isEmpty else { return }
