@@ -107,7 +107,7 @@ extension TaskPaletteModel {
     case .rightArrow: changeValue(1)
     case .return:
       switch stop {
-      case .field(let field): if field.isText { beginEditing() }
+      case .field(let field): if field.isText, press.phase == .down { beginEditing() }
       case .agent: if press.phase == .down { focusAgentTab() }
       // 押し続けたキーリピートで、同じページを何度も開かない。
       case .link(let item): if press.phase == .down { openLink(item) }
@@ -155,10 +155,13 @@ extension TaskPaletteModel {
   }
 
   /// 詳細の編集欄。1 行の項目の ↵ は `onSubmit` が受け、メモは ↵ を改行に使って ⌘↵ で確定する。
+  /// `onSubmit` はキーリピートでも発火するので、1 行の項目の ↵ のリピートは握り潰す（押し続けて確定と
+  /// 編集の開始を繰り返さない）。メモのリピートは改行として通す。
   func handleEditKey(_ press: KeyPress, composing: Bool) -> KeyPress.Result {
-    guard !composing, draft != nil else { return .ignored }
+    guard !composing, let draft else { return .ignored }
     if Self.isBacktab(press) { return .handled }
     switch press.key {
+    case .return where press.phase == .repeat && draft.field != .memo: break
     case .escape: endEditing(commit: false)
     case .return where press.modifiers.contains(.command): endEditing(commit: true)
     case .tab: break
