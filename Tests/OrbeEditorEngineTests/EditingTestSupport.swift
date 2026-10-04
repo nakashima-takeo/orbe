@@ -102,7 +102,8 @@ enum Editing {
       case "|":
         cursors.append(Cursor(offset))
       case "[", "]":
-        if let pending = open, pending.character != character {
+        precondition(open?.character != character, "\(character) が閉じられないまま続いた: \(marked)")
+        if let pending = open {
           let (anchor, caret) =
             character == "]" ? (pending.offset, offset) : (offset, pending.offset)
           cursors.append(
@@ -118,6 +119,7 @@ enum Editing {
         offset += character.utf16.count
       }
     }
+    precondition(open == nil, "閉じられていない選択: \(marked)")
     let first = cursors.remove(at: primary)
     return (TextRope(text), EditState(cursors: CursorList(first, others: cursors)))
   }

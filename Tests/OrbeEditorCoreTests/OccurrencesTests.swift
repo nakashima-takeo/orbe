@@ -162,6 +162,18 @@ final class OccurrencesTests: XCTestCase {
       [NSRange(location: 0, length: 2), NSRange(location: 6, length: 2)])
   }
 
+  /// 語の規則の問い（⌘D が語から続いている間）は、検索バーが同じ文字列を探していても出す（検索の一致は ⌘F の規則なので
+  /// 二重にならない——VS Code と同じ）。選択の列は文書の順でなくてもよい（⌘D が回り込んだ後）。
+  func testWordQuestionsShowBesideTheFindBarAndSelectionsMayComeInAnyOrder() {
+    let text = TextRope("ab ab ab ab")
+    let selections = [NSRange(location: 9, length: 2), NSRange(location: 0, length: 2)]
+    XCTAssertEqual(
+      Occurrences.selectionOccurrences(
+        of: SearchQuestion(needle: "ab", rule: .word), selections: selections, in: text,
+        findNeedle: "ab", findFieldFocused: false),
+      [NSRange(location: 3, length: 2), NSRange(location: 6, length: 2)])
+  }
+
   /// 問いは、続きがあればそれ。無ければ、どの選択も空でなく文字列が大小を無視して同じときだけ、主の文字列を ⌘F の規則で。
   func testQuestionNeedsTheSameTextInEverySelection() {
     let text = TextRope("Foo foo bar")

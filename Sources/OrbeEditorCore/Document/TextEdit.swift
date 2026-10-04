@@ -66,6 +66,22 @@ public struct EditSweep: Sendable {
   /// `edits` は重ならない昇順（同じ位置の挿入と置換は挿入が先）。
   public init(_ edits: [TextEdit]) {
     self.edits = edits
+    var chains: [Int] = []
+    chains.reserveCapacity(edits.count)
+    for (k, edit) in edits.enumerated() {
+      let before = k > 0 && Self.ends(edits[k - 1], at: edit.range.location) ? chains[k - 1] : 0
+      chains.append(edit.range.length == 0 ? edit.change + before : before)
+    }
+    self.chains = chains
+  }
+
+  /// 編集 k で終わる「挿入と、その位置で終わる削除」の連なりの挿入の増分（`insertionsAfter` を 1 回で引くため）。
+  private let chains: [Int]
+
+  /// 編集が位置 `point` に掛かる連なりの一部か——その位置の挿入か、その位置で終わる削除。
+  private static func ends(_ edit: TextEdit, at point: Int) -> Bool {
+    (edit.range.length == 0 && edit.range.location == point)
+      || (edit.replacementLength == 0 && NSMaxRange(edit.range) == point)
   }
 
   /// 当てた順の編集の列（どれもその直前の本文の座標）を、続けて当てたのと同じになる束の列に分ける——次の編集が前の編集より
@@ -132,21 +148,7 @@ public struct EditSweep: Sendable {
   /// 位置 `point`（`next` より前の編集をすべて当てる位置）の前に残る挿入の増分——その位置の挿入と、その位置で終わる削除を
   /// 越えた先の位置の挿入。後ろから当てると、位置はそれらの削除で挿入の位置へ寄り、挿入はその位置の後ろに入る。
   private func insertionsAfter(_ point: Int, before next: Int) -> Int {
-    var point = point
-    var total = 0
-    var k = next - 1
-    while k >= 0 {
-      let edit = edits[k]
-      if edit.range.length == 0, edit.range.location == point {
-        total += edit.change
-      } else if edit.replacementLength == 0, NSMaxRange(edit.range) == point {
-        point = edit.range.location
-      } else {
-        break
-      }
-      k -= 1
-    }
-    return total
+    next > 0 && Self.ends(edits[next - 1], at: point) ? chains[next - 1] : 0
   }
 
   /// 区間の列（始まりの昇順）を束の後へ写し、編集に掛かる区間は落とす。
