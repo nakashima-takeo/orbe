@@ -141,7 +141,7 @@ scrim ＋ガラスパネルのカード。上端アンカーで窓に収まり�
 
 開いた workspace のリポジトリの **open な Issue・PR を全部**（自分のものに限らない）出し、タスクにする・タスクに結び付ける入口にする。Issue・PR から作業を始めるのはここで、⌘T には Issue・PR の欄を持たせない。
 
-**リポジトリは 1 つ**——開いた workspace の root で gh が既定とするリポジトリ（set-default、無ければ gh の規則で upstream → origin の順）。origin が自分の fork で upstream が本体という形では本体の一覧が出て、`gh issue list` が出すリポジトリと一致する。結び付きとの突き合わせはこのリポジトリの正式名と番号で行う（リポジトリを改名する前に保存した結び付きは一致せず、結び付いていない側に出る）。
+**リポジトリは 1 つ**——開いた workspace の root で gh が既定とするリポジトリ（set-default、無ければ gh の規則で upstream → origin の順）。github.com のリポジトリに限り、GitHub Enterprise のリポジトリは「見つからない」として扱う（問い合わせと書き込みは github.com へ送るので、同じ owner/name の別のリポジトリを読み書きしないため）。origin が自分の fork で upstream が本体という形では本体の一覧が出て、`gh issue list` が出すリポジトリと一致する。結び付きとの突き合わせはこのリポジトリの正式名と番号で行う（リポジトリを改名する前に保存した結び付きは一致せず、結び付いていない側に出る）。
 
 ### 一覧
 

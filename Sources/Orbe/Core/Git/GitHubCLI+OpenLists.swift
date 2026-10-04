@@ -4,7 +4,9 @@ import Foundation
 extension GitHubCLI {
   /// `root` で gh が既定とするリポジトリ（set-default → upstream → github → origin の順に gh が選ぶ）の
   /// 正式名。gh の有無と認証を先に確かめて理由を分け、`gh repo view` が失敗した・読めないときは
-  /// 「見つからない」（オフラインと区別しない）。メインで返る。
+  /// 「見つからない」（オフラインと区別しない）。github.com 以外のホスト（GitHub Enterprise）のリポジトリも
+  /// 「見つからない」——以後の問い合わせと書き込みは github.com を名指しするので、同じ owner/name の別の
+  /// リポジトリを読み書きしないため。メインで返る。
   func defaultRepository(
     root: String,
     completion: @escaping (Result<GitHubRepoName, GitHubRepositoryUnavailable>) -> Void
@@ -20,14 +22,16 @@ extension GitHubCLI {
           self.fetchSync($0, Self.defaultRepositoryArguments, cwd: root)
         }
         let result: Result<GitHubRepoName, GitHubRepositoryUnavailable> =
-          response.map { .success(GitHubRepoName(nameWithOwner: $0.nameWithOwner)) }
-          ?? .failure(.notFound)
+          response.flatMap { response in
+            GitHubRepoName.isGitHub(remoteURL: response.url)
+              ? .success(GitHubRepoName(nameWithOwner: response.nameWithOwner)) : nil
+          } ?? .failure(.notFound)
         DispatchQueue.main.async { completion(result) }
       }
     }
   }
 
-  static let defaultRepositoryArguments = ["repo", "view", "--json", "nameWithOwner"]
+  static let defaultRepositoryArguments = ["repo", "view", "--json", "nameWithOwner,url"]
 
   /// `repo` の open issue 一覧を作成の新しい順に `openIssueLimit` まで、ページが届くたびに `page` へ渡す。
   /// `finished` は最後に 1 回だけ呼ぶ: `true` = 次のページが無い／上限に達した、`false` = 途中で失敗した
@@ -205,9 +209,11 @@ extension GitHubCLI {
   }
 }
 
-/// `gh repo view --json nameWithOwner` の出力。
+/// `gh repo view --json nameWithOwner,url` の出力。
 private struct DefaultRepositoryResponse: Decodable {
   let nameWithOwner: String
+  /// リポジトリのページ。ホストを確かめる。
+  let url: String
 }
 
 /// 自分の login とレビュー依頼の検索の出力。
