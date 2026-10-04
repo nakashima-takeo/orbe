@@ -61,7 +61,8 @@ final class GitHubCLIOpenListsTests: OrbeTestCase {
 
   /// root で gh に既定のリポジトリを訊き、その正式名を返す（gh は作業ディレクトリの checkout から選ぶ）。
   func testDefaultRepositoryIsTheNameGhReportsInTheRoot() throws {
-    try stageGh(stdout: #"{"nameWithOwner":"Upstream/Orbe"}"#)
+    try stageGh(
+      stdout: #"{"nameWithOwner":"Upstream/Orbe","url":"https://github.com/Upstream/Orbe"}"#)
     let root = dir.appendingPathComponent("root")
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
 
@@ -71,13 +72,31 @@ final class GitHubCLIOpenListsTests: OrbeTestCase {
     XCTAssertTrue(
       cwd.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix(root.path), "root で訊く: \(cwd)")
     XCTAssertEqual(
-      GitHubCLI.defaultRepositoryArguments, ["repo", "view", "--json", "nameWithOwner"])
+      GitHubCLI.defaultRepositoryArguments, ["repo", "view", "--json", "nameWithOwner,url"])
+  }
+
+  /// github.com 以外のホスト（GitHub Enterprise）のリポジトリは「見つからない」——以後の問い合わせと書き込みは
+  /// github.com を名指しするので、同じ owner/name の別のリポジトリを読み書きしないため。ホストを確かめられない
+  /// 答え（url が無い）も同じ。
+  func testRepositoryOutsideGitHubDotComIsNotFound() throws {
+    try stageGh(stdout: #"{"nameWithOwner":"o/n","url":"https://ghe.example.com/o/n"}"#)
+    XCTAssertEqual(defaultRepository(root: dir.path), .failure(.notFound))
+
+    try stageGh(stdout: #"{"nameWithOwner":"o/n"}"#)
+    XCTAssertEqual(defaultRepository(root: dir.path), .failure(.notFound))
+  }
+
+  /// ホスト名が「github.com」で始まるだけの GitHub Enterprise も github.com ではない。
+  func testEnterpriseHostStartingWithGitHubDotComIsNotFound() throws {
+    try stageGh(stdout: #"{"nameWithOwner":"o/n","url":"https://github.company.com/o/n"}"#)
+    XCTExpectFailure("バグ疑い: isGitHub(remoteURL:) が URL の部分一致で判定している")
+    XCTAssertEqual(defaultRepository(root: dir.path), .failure(.notFound))
   }
 
   /// 使えない理由を分ける: 未認証・gh が既定のリポジトリを返さない（GitHub のリポジトリが無い・
   /// オフライン）。gh が無い場合は、PATH の既知の設置場所に本物の gh が居る手元では作れないので測らない。
   func testDefaultRepositoryTellsWhyItIsUnavailable() throws {
-    try stageGh(stdout: #"{"nameWithOwner":"o/n"}"#, authExit: 1)
+    try stageGh(stdout: #"{"nameWithOwner":"o/n","url":"https://github.com/o/n"}"#, authExit: 1)
     XCTAssertEqual(defaultRepository(root: dir.path), .failure(.ghUnauthed))
 
     try stageGh(stdout: "", exit: 1)
