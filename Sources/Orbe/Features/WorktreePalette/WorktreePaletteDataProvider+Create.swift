@@ -42,7 +42,7 @@ extension WorktreePaletteDataProvider {
         resolved(.ready(existing))
         return
       }
-      let local = WorktreePaletteSectionBuilder.localName(fromRemote: name)
+      let local = GitBranch.localName(fromRemote: name)
       createWorktree(
         at: worktreeDir(forBranch: local), base: .ref(name),
         newBranch: GitNewBranch(name: local, tracksBase: true)

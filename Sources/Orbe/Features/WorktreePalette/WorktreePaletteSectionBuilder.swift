@@ -93,7 +93,7 @@ enum WorktreePaletteSectionBuilder {
   private static func remoteBranchItems(_ input: Input) -> [WorktreePaletteItem] {
     let localNames = Set(input.localBranches.map(\.name))
     return input.remoteBranches.compactMap { branch in
-      let local = localName(fromRemote: branch.name)
+      let local = GitBranch.localName(fromRemote: branch.name)
       guard !localNames.contains(local) else { return nil }
       return WorktreePaletteItem(
         glyph: .remoteBranch, name: branch.name, detail: branch.relativeDate,
@@ -106,12 +106,6 @@ enum WorktreePaletteSectionBuilder {
   }
 
   // MARK: - 補助
-
-  /// `origin/feat/x` → `feat/x`（先頭のリモート名を落とす）。
-  static func localName(fromRemote name: String) -> String {
-    let parts = name.split(separator: "/", maxSplits: 1)
-    return parts.count == 2 ? String(parts[1]) : name
-  }
 
   private static func abbreviate(_ path: String) -> String {
     let home = NSHomeDirectory()

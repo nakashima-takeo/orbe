@@ -2,22 +2,22 @@ import XCTest
 
 @testable import Orbe
 
-/// remote の台帳（`WorktreePaletteRemoteLedger`）と、行の同一性を求める口（`WorktreePaletteRowIdentities`）。clean の
+/// remote の台帳（`GitHubRemoteLedger`）と、行の同一性を求める口（`GitHubBranchIdentities`）。clean の
 /// PR の突き合わせはここを通る。
 ///
 /// 確定の判定が甘いと、正式名が分からないうちに行が「GitHub の行でない」と読まれ、clean ではレビュー中の PR を
 /// 持つ worktree が安全群に入りうる。確かめられない remote を「GitHub でない」と読むと、clean が PR の事実を
 /// 「確かめて 0 件」と読む。同一性の求め方が狂うと、他人の fork の PR が自分の行に紐づくか、自分の PR が
 /// 自分の行から外れる。
-final class WorktreePaletteRemoteLedgerTests: OrbeTestCase {
+final class GitHubRemoteLedgerTests: OrbeTestCase {
 
   private let mine = GitHubRepoName(nameWithOwner: "me/r")
   private let base = GitHubRepoName(nameWithOwner: "base/r")
 
-  private func settled(_ repositories: [String: WorktreePaletteRemoteRepository])
-    -> WorktreePaletteRemoteLedger.Resolved
+  private func settled(_ repositories: [String: GitHubRemoteRepository])
+    -> GitHubRemoteLedger.Resolved
   {
-    WorktreePaletteRemoteLedger.Resolved(repositories: repositories)
+    GitHubRemoteLedger.Resolved(repositories: repositories)
   }
 
   private func branch(_ name: String, pushRemote: String?) -> GitBranch {
@@ -34,11 +34,11 @@ final class WorktreePaletteRemoteLedgerTests: OrbeTestCase {
       "local": "/srv/mirror.git",
     ]
     XCTAssertEqual(
-      WorktreePaletteRemoteLedger(remotes: remotes, answers: [mine: .found(mine)]),
+      GitHubRemoteLedger(remotes: remotes, answers: [mine: .found(mine)]),
       .pending, "答えの無い GitHub の remote が残っている間は未確定")
 
     XCTAssertEqual(
-      WorktreePaletteRemoteLedger(
+      GitHubRemoteLedger(
         remotes: remotes, answers: [mine: .found(mine), base: .unverified]),
       .settled(settled(["origin": .github(mine), "upstream": .unverified, "local": .notGitHub])),
       "確かめられない remote は「GitHub でない」と分けて確定する")
@@ -47,7 +47,7 @@ final class WorktreePaletteRemoteLedgerTests: OrbeTestCase {
   /// GitHub の URL なのにリポジトリ名を読めない remote は、「GitHub でない」ではなく「確かめられない」。
   func testGitHubURLWithoutARepositoryNameIsUnverified() {
     XCTAssertEqual(
-      WorktreePaletteRemoteLedger(
+      GitHubRemoteLedger(
         remotes: ["origin": "git@github.com:me/r.git", "odd": "https://github.com/"],
         answers: [mine: .found(mine)]),
       .settled(settled(["origin": .github(mine), "odd": .unverified])))
@@ -56,10 +56,10 @@ final class WorktreePaletteRemoteLedgerTests: OrbeTestCase {
   /// URL が改名前の名前のままでも、GitHub が答えた正式名で行の ref が決まる（PR の head と等しくなる）。
   func testRenamedRemoteIsIdentifiedByItsCanonicalName() {
     let old = GitHubRepoName(nameWithOwner: "me/old-name")
-    let ledger = WorktreePaletteRemoteLedger(
+    let ledger = GitHubRemoteLedger(
       remotes: ["origin": "https://github.com/me/old-name.git"], answers: [old: .found(mine)])
     guard case .settled(let resolved) = ledger else { return XCTFail("答えが揃えば確定する") }
-    let identities = WorktreePaletteRowIdentities(
+    let identities = GitHubBranchIdentities(
       resolved: resolved, localBranches: [branch("feat", pushRemote: "origin")])
     XCTAssertEqual(identities.local("feat"), .ref(GitHubBranchRef(repo: mine, branch: "feat")))
   }
@@ -68,7 +68,7 @@ final class WorktreePaletteRemoteLedgerTests: OrbeTestCase {
 
   /// push 先の remote のリポジトリと、ローカル名。
   func testLocalBranchIsItsPushRemoteRepositoryAndLocalName() {
-    let identities = WorktreePaletteRowIdentities(
+    let identities = GitHubBranchIdentities(
       resolved: settled(["origin": .github(base), "mine": .github(mine)]),
       localBranches: [branch("feat", pushRemote: "mine"), branch("topic", pushRemote: "origin")])
     XCTAssertEqual(
@@ -79,7 +79,7 @@ final class WorktreePaletteRemoteLedgerTests: OrbeTestCase {
 
   /// push 先が無い行と、ローカルブランチを追跡する（`.`）行は、origin の同名ブランチとみなす。
   func testLocalBranchWithoutAPushRemoteIsOriginsSameNamedBranch() {
-    let identities = WorktreePaletteRowIdentities(
+    let identities = GitHubBranchIdentities(
       resolved: settled(["origin": .github(mine), "upstream": .github(base)]),
       localBranches: [branch("feat", pushRemote: nil), branch("stacked", pushRemote: ".")])
     XCTAssertEqual(identities.local("feat"), .ref(GitHubBranchRef(repo: mine, branch: "feat")))
@@ -91,7 +91,7 @@ final class WorktreePaletteRemoteLedgerTests: OrbeTestCase {
   /// 同名ブランチと読み替えない。remote として引けない push 先（URL を直接書いた remote・存在しない
   /// remote）も確かめられない。
   func testLocalBranchOnAnUnusablePushRemoteIsNotReadAsOrigin() {
-    let identities = WorktreePaletteRowIdentities(
+    let identities = GitHubBranchIdentities(
       resolved: settled([
         "origin": .github(mine), "mirror": .notGitHub, "gone": .unverified,
       ]),

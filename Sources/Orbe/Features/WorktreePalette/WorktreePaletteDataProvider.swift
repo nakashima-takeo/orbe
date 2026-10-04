@@ -298,7 +298,7 @@ final class WorktreePaletteDataProvider {
   private var newBranchRules: WorktreeNewBranchRules {
     WorktreeNewBranchRules(
       takenNames: Set(localBranches.map(\.name)).union(
-        remoteBranches.map { WorktreePaletteSectionBuilder.localName(fromRemote: $0.name) }),
+        remoteBranches.map { GitBranch.localName(fromRemote: $0.name) }),
       worktreePaths: worktrees.map(\.path), template: worktreeTemplate, repoPath: worktreeBase)
   }
 }

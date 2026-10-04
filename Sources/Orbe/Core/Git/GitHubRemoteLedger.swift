@@ -1,7 +1,7 @@
 import Foundation
 
 /// remote 1 本が GitHub のどのリポジトリか。
-enum WorktreePaletteRemoteRepository: Equatable {
+enum GitHubRemoteRepository: Equatable {
   /// GitHub が答えた正式名。
   case github(GitHubRepoName)
   /// GitHub の remote でない。
@@ -11,19 +11,19 @@ enum WorktreePaletteRemoteRepository: Equatable {
   case unverified
 }
 
-/// 行（worktree / branch）が GitHub のどのリポジトリのどのブランチか。
+/// ローカルのブランチ（worktree のブランチを含む）が GitHub のどのリポジトリのどのブランチか。
 ///
 /// `unverified` を `notGitHub` と同じに読んではならない——clean は `notGitHub` を「PR を確かめて 0 件」と
 /// 読むので、確かめられない行を安全群に入れてしまう。読み手は 3 つを網羅して分岐する。
-enum WorktreePaletteRowIdentity: Equatable {
+enum GitHubBranchIdentity: Equatable {
   case ref(GitHubBranchRef)
   case notGitHub
   case unverified
 }
 
-/// remote の台帳。remote ごとに GitHub のどのリポジトリかを持つ。provider が remote の一覧（git）と
+/// remote の台帳。remote ごとに GitHub のどのリポジトリかを持つ。使う側が remote の一覧（git）と
 /// 正式名の答え（キャッシュ）から、そのつど導く（保存しない）。
-enum WorktreePaletteRemoteLedger: Equatable {
+enum GitHubRemoteLedger: Equatable {
   /// GitHub の remote に、正式名の答えをまだ一度も得ていないもの（問い合わせ中・未発行）がある。
   case pending
   case settled(Resolved)
@@ -36,20 +36,20 @@ enum WorktreePaletteRemoteLedger: Equatable {
     static let defaultRemote = "origin"
 
     /// remote 名 → 値。`nil` = remote の一覧を読めなかった（どの問いにも `unverified` を返す）。
-    let repositories: [String: WorktreePaletteRemoteRepository]?
+    let repositories: [String: GitHubRemoteRepository]?
 
     /// push 先の remote（`GitBranch.pushRemote`）の値。push 先が無い・`.`（ローカル追跡）なら既定 remote
     /// の値（既定 remote が無ければ push される先が無いので `notGitHub`）。台帳に無い名前（URL を直接
     /// 書いた remote・存在しない remote）は `unverified`——git が既定 remote 以外へ push すると言っている
     /// 行を、既定 remote の同名ブランチとみなさない。
-    func repository(forPushRemote name: String?) -> WorktreePaletteRemoteRepository {
+    func repository(forPushRemote name: String?) -> GitHubRemoteRepository {
       guard let repositories else { return .unverified }
       guard let name, name != "." else { return repositories[Self.defaultRemote] ?? .notGitHub }
       return repositories[name] ?? .unverified
     }
 
-    static func identity(_ repository: WorktreePaletteRemoteRepository, branch: String)
-      -> WorktreePaletteRowIdentity
+    static func identity(_ repository: GitHubRemoteRepository, branch: String)
+      -> GitHubBranchIdentity
     {
       switch repository {
       case .github(let repo): return .ref(GitHubBranchRef(repo: repo, branch: branch))
@@ -67,7 +67,7 @@ enum WorktreePaletteRemoteLedger: Equatable {
       self = .settled(Resolved(repositories: nil))
       return
     }
-    var repositories: [String: WorktreePaletteRemoteRepository] = [:]
+    var repositories: [String: GitHubRemoteRepository] = [:]
     for (remote, url) in remotes {
       if let read = GitHubRepoName(remoteURL: url) {
         switch answers[read] {
@@ -87,27 +87,26 @@ enum WorktreePaletteRemoteLedger: Equatable {
   }
 }
 
-/// 行の同一性を求める唯一の口。clean の PR の事実（provider の `branchPRStates`）とブランチの PR の
-/// 問い合わせ先（`loadBranchPullRequests`）が、同じこの型を通る。
+/// ブランチの同一性を求める唯一の口。⌘T の clean の PR の事実とブランチの PR の問い合わせ先が、同じこの型を通る。
 ///
 /// ローカルブランチは（push 先の remote の正式名, ローカル名）。PR の head は自分が push したブランチ
 /// なので、git が push 先として解決する remote がそのリポジトリになる——base（`origin/main`）や積み上げ元を
 /// 追跡するブランチも、base から出た PR ではなく自分の PR に紐づく。ブランチ名がローカル名なのは、既定の
 /// `push.default=simple` で push されるのがローカル名だから。
-struct WorktreePaletteRowIdentities {
-  private let resolved: WorktreePaletteRemoteLedger.Resolved
+struct GitHubBranchIdentities {
+  private let resolved: GitHubRemoteLedger.Resolved
   /// ローカル名 → ブランチ（同名は先勝ち）。
   private let localBranches: [String: GitBranch]
 
-  init(resolved: WorktreePaletteRemoteLedger.Resolved, localBranches: [GitBranch]) {
+  init(resolved: GitHubRemoteLedger.Resolved, localBranches: [GitBranch]) {
     self.resolved = resolved
     self.localBranches = Dictionary(
       localBranches.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
   }
 
   /// ローカルブランチ（worktree のブランチを含む）。
-  func local(_ name: String) -> WorktreePaletteRowIdentity {
-    WorktreePaletteRemoteLedger.Resolved.identity(
+  func local(_ name: String) -> GitHubBranchIdentity {
+    GitHubRemoteLedger.Resolved.identity(
       resolved.repository(forPushRemote: localBranches[name]?.pushRemote), branch: name)
   }
 }

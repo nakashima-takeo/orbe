@@ -26,4 +26,10 @@ enum GitWorktreeRoot {
       dir = parent
     }
   }
+
+  /// 場所のキー。パスを、それを含む worktree のルート（git の外なら正規化したそのパス）に揃える。
+  /// タブの連（`TerminalTab.groupKey`）はこの規則で比べる。
+  static func locationKey(of path: String) -> String {
+    locate(cwd: path) ?? normalizedPath(path)
+  }
 }

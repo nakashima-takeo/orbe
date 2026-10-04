@@ -62,6 +62,13 @@ struct GitBranch: Equatable {
   /// `remote.pushDefault` → `branch.<名前>.remote`）で、ローカルブランチを追跡する行は `.`。
   /// 解決できなければ nil（remote ブランチは常に nil）。
   var pushRemote: String?
+
+  /// `origin/feat/x` → `feat/x`（先頭のリモート名を落とす）。リモートのブランチや既定ブランチの値
+  /// （`origin/main`）を、ローカルのブランチ名と比べるときに通す。
+  static func localName(fromRemote name: String) -> String {
+    let parts = name.split(separator: "/", maxSplits: 1)
+    return parts.count == 2 ? String(parts[1]) : name
+  }
 }
 
 // MARK: - GitHub（gh CLI）

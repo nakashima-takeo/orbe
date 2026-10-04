@@ -79,17 +79,13 @@ final class TerminalTab {
   /// 新タブの cwd 継承はすべてこの 1 つの定義を読む。
   var cwd: String { surface.currentPwd ?? surface.initialCwd }
 
-  /// 所属セグメントのキー＝cwd が属する git worktree ルート（管理外は cwd 自身）の正準形パス。
+  /// 所属セグメントのキー＝cwd の場所のキー（`GitWorktreeRoot.locationKey`。属する git worktree ルート、
+  /// 管理外は cwd 自身の正準形パス）。
   /// cwd が変わった時に 1 回だけ再計算し（`pwdChanged`）、永続しない（復元時に保存 cwd から同じ規則で
   /// 再計算する）。同キーのタブが配列上で隣接する不変条件は `SessionStore` が保証する。
   /// setter が internal なのは、不変条件の検証がキーの純配列ロジックで済むよう注入口を残すため
   /// （書くのは init・`pwdChanged`・テストだけ）。
   var groupKey: String
-
-  /// 「管理外は cwd 自身」というタブグループの規則。
-  static func groupKey(cwd: String) -> String {
-    GitWorktreeRoot.locate(cwd: cwd) ?? GitWorktreeRoot.normalizedPath(cwd)
-  }
 
   /// このタブの表示タイトル。① explicitTitle ?? ② アプリ報告タイトル ?? ③ derived(cwd, root)。
   /// rootPath は所属 Workspace が持つため呼び出し側（WindowController）から渡す。
@@ -113,7 +109,7 @@ final class TerminalTab {
   init(cwd: String, command: String? = nil, env: [String: String] = [:]) {
     resumeSpawn = nil
     view = SurfaceScrollView(surfaceView: SurfaceView(frame: .zero, cwd: cwd))
-    groupKey = Self.groupKey(cwd: cwd)
+    groupKey = GitWorktreeRoot.locationKey(of: cwd)
     surface.initialCommand = command
     surface.initialEnv = env
     surface.tab = self
@@ -132,7 +128,7 @@ final class TerminalTab {
   init(restoring state: TabState, resumeSpawn: @escaping ResumeSpawn) {
     self.resumeSpawn = resumeSpawn
     view = SurfaceScrollView(surfaceView: SurfaceView(frame: .zero, cwd: state.cwd))
-    groupKey = Self.groupKey(cwd: state.cwd)
+    groupKey = GitWorktreeRoot.locationKey(of: state.cwd)
     explicitTitle = state.explicitTitle
     if let agent = state.agent { agentSlot = .dormant(agent) }
     surface.tab = self
@@ -263,7 +259,7 @@ final class TerminalTab {
   /// surface が OSC 7 で cwd を報告した（`SurfaceView.currentPwd` の didSet が実変化時だけ呼ぶ）。
   func pwdChanged() {
     ControlServer.shared.emit(.pwd(tabId: id, path: surface.currentPwd))
-    groupKey = Self.groupKey(cwd: cwd)
+    groupKey = GitWorktreeRoot.locationKey(of: cwd)
     onPwdChange?()
   }
 

@@ -34,13 +34,13 @@ extension WorktreePaletteDataProvider {
 
   /// remote の台帳（**導出値**。保存しない）。remote の一覧が未着なら未確定。答えはキャッシュだけから
   /// 読む——この回に問い直している名前も、前回の答えで先に描く。
-  var remoteLedger: WorktreePaletteRemoteLedger {
+  var remoteLedger: GitHubRemoteLedger {
     switch remoteListing {
     case nil: return .pending
     case .unreadable:
-      return WorktreePaletteRemoteLedger(remotes: nil, answers: cachedRepositoryNames)
+      return GitHubRemoteLedger(remotes: nil, answers: cachedRepositoryNames)
     case .read(let remotes):
-      return WorktreePaletteRemoteLedger(remotes: remotes, answers: cachedRepositoryNames)
+      return GitHubRemoteLedger(remotes: remotes, answers: cachedRepositoryNames)
     }
   }
 
@@ -107,7 +107,7 @@ extension WorktreePaletteDataProvider {
   /// 開き直せば再取得される。
   func loadBranchPullRequests(_ repo: GitRepo) {
     guard githubReady, case .settled(let resolved) = remoteLedger else { return }
-    let identities = WorktreePaletteRowIdentities(resolved: resolved, localBranches: localBranches)
+    let identities = GitHubBranchIdentities(resolved: resolved, localBranches: localBranches)
     let heads = Self.worktreeBranches(of: worktrees).filter { branch in
       if case .ref = identities.local(branch) { return true }
       return false
@@ -147,7 +147,7 @@ extension WorktreePaletteDataProvider {
     guard let probed = probedGitHubState else { return all(.fetching) }
     guard probed == .ready else { return all(.loaded([])) }
     guard case .settled(let resolved) = remoteLedger else { return all(.fetching) }
-    let identities = WorktreePaletteRowIdentities(resolved: resolved, localBranches: localBranches)
+    let identities = GitHubBranchIdentities(resolved: resolved, localBranches: localBranches)
     let cached =
       repo.flatMap { GitHubCache.shared.entry(for: $0.commonDir)?.branchPullRequests }
       ?? [:]
