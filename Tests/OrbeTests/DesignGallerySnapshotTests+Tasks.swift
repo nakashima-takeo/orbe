@@ -33,11 +33,13 @@ extension DesignGallerySnapshotTests {
     agent.moveField(-1)
     agent.moveField(-1)
     agent.moveField(-1)
+    agent.moveField(-1)
     try write("tasks_detail_agent.png", agent)
 
     // 詳細の Issue・PR の欄の行に居る（「外す」とフッターの「↵ #213 を GitHub で開く」）。
     let link = DesignSceneFixtures.taskPaletteModel()
     link.enterDetail()
+    link.moveField(-1)
     link.moveField(-1)
     try write("tasks_detail_link.png", link)
 
