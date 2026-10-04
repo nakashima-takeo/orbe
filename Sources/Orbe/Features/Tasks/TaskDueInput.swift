@@ -26,9 +26,13 @@ enum TaskDueText {
   static func label(_ due: TaskItem.DueDate, today: TaskItem.DueDate, weekdays: [String])
     -> String
   {
-    let monthDay = "\(due.month)/\(due.day)"
-    let date = due.year == today.year ? monthDay : "\(due.year)/\(monthDay)"
-    return "\(date) \(weekdays[due.weekday])"
+    "\(date(due, today: today)) \(weekdays[due.weekday])"
+  }
+
+  /// 曜日なしの「10/6」。今日と年が違えば年を付けて「2027/1/5」。期限と追加日が同じ書式で出す。
+  static func date(_ day: TaskItem.DueDate, today: TaskItem.DueDate) -> String {
+    let monthDay = "\(day.month)/\(day.day)"
+    return day.year == today.year ? monthDay : "\(day.year)/\(monthDay)"
   }
 
   /// 言語に合わせた日曜始まりの短い曜日名。

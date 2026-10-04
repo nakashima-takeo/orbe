@@ -212,8 +212,8 @@ struct TaskPaletteDetail: View {
   }
 
   private func addedRow(_ task: TaskItem) -> some View {
-    let day = TaskItem.DueDate(task.createdAt, timeZone: model.timeZone)
-    let date = day.year == model.today.year ? "\(day.month)/\(day.day)" : day.text
+    let date = TaskDueText.date(
+      TaskItem.DueDate(task.createdAt, timeZone: model.timeZone), today: model.today)
     return HStack(spacing: 0) {
       Text(l10n.string(.taskPaletteFieldAdded))
         .font(Font.theme.taskText)
