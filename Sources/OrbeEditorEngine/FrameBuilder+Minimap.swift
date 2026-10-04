@@ -128,10 +128,7 @@ private struct MinimapDecorations {
 
   mutating func draw() {
     let gutter = rows.gutter
-    let caret = material.caret
-    let selections =
-      caret.selections.isEmpty
-      ? caret.carets.prefix(1).map { NSRange(location: $0, length: 0) } : caret.selections
+    let selections = rows.visible(Self.cursorRanges(material.caret), lines: placement.lines)
     var highlighted = [Bool](repeating: false, count: placement.lines.count)
     let first = placement.lines.lowerBound
     for selection in selections {
@@ -170,6 +167,22 @@ private struct MinimapDecorations {
       fillRanges(rows.visible(item.ranges, lines: placement.lines), item.color)
     }
     drawGitMarks()
+  }
+
+  /// 全カーソルの、選択があれば選択・無ければ位置（昇順）。
+  private static func cursorRanges(_ caret: CaretMaterial) -> [NSRange] {
+    var ranges: [NSRange] = []
+    ranges.reserveCapacity(caret.selections.count + caret.collapsed.count)
+    var i = 0
+    for offset in caret.collapsed {
+      while i < caret.selections.count, caret.selections[i].location < offset {
+        ranges.append(caret.selections[i])
+        i += 1
+      }
+      ranges.append(NSRange(location: offset, length: 0))
+    }
+    ranges += caret.selections[i...]
+    return ranges
   }
 
   /// 区間を行ごとに x（装飾の桁。タブは固定の桁数）で塗る。区間の終わりの行より前の行は行末（本文の終わり）まで

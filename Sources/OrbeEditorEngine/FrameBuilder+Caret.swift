@@ -37,7 +37,10 @@ struct SelectionCursor {
 struct CaretOverlays {
   private let text: TextRope
   private var selections: SelectionCursor
-  private let carets: [(row: Int, offset: Int)]
+  /// 点滅で見えているコマのキャレット（昇順）と、まだ描いていない最初のキャレット。
+  private let carets: [Int]
+  private var caretNext = 0
+  private let lastRow: Int
   private let marked: MarkedMaterial?
   /// まだ下の行に掛かりうる最初の未確定の範囲。
   private var markedNext = 0
@@ -47,18 +50,12 @@ struct CaretOverlays {
   init(_ material: FrameMaterial, caretVisible: Bool, text: TextRope, from start: Int) {
     self.text = text
     selections = SelectionCursor(material.caret.selections, from: start)
-    carets = (caretVisible ? material.caret.carets : []).map {
-      (row: text.row(containing: $0), offset: $0)
-    }
+    carets = caretVisible ? material.caret.carets : []
+    caretNext = Self.firstIndex(in: carets) { $0 >= start }
+    lastRow = text.lineCount - 1
     marked = material.caret.marked
     if let ranges = marked?.ranges {
-      var low = 0
-      var high = ranges.count
-      while low < high {
-        let mid = (low + high) / 2
-        if NSMaxRange(ranges[mid]) < start { low = mid + 1 } else { high = mid }
-      }
-      markedNext = low
+      markedNext = Self.firstIndex(in: ranges) { NSMaxRange($0) >= start }
     }
     drop = material.drop.map { (row: text.row(containing: $0), offset: $0) }
   }
@@ -70,9 +67,34 @@ struct CaretOverlays {
     return RowOverlays(
       content: selected.isEmpty && marked.isEmpty ? nil : text.contentRange(ofRow: row),
       selections: selected,
-      carets: carets.filter { $0.row == row }.map { $0.offset - line.lowerBound },
+      carets: carets(onRow: row, line: line),
       marked: marked, appearance: self.marked?.appearance ?? MarkedAppearance(),
       drop: drop?.row == row ? drop.map { $0.offset - line.lowerBound } : nil)
+  }
+
+  /// 昇順の列で `isAfter` が初めて真になる位置（無ければ件数）。
+  private static func firstIndex<T>(in items: [T], _ isAfter: (T) -> Bool) -> Int {
+    var low = 0
+    var high = items.count
+    while low < high {
+      let mid = (low + high) / 2
+      if isAfter(items[mid]) { high = mid } else { low = mid + 1 }
+    }
+    return low
+  }
+
+  /// 行 `row`（区間 `line`）のキャレットの行の中の位置（行は下へ進む）。最終行は本文の終わりを含む。
+  private mutating func carets(onRow row: Int, line: Range<Int>) -> [Int] {
+    var result: [Int] = []
+    while caretNext < carets.count, carets[caretNext] < line.lowerBound { caretNext += 1 }
+    while caretNext < carets.count,
+      carets[caretNext] < line.upperBound
+        || (row == lastRow && carets[caretNext] == line.upperBound)
+    {
+      result.append(carets[caretNext] - line.lowerBound)
+      caretNext += 1
+    }
+    return result
   }
 
   /// 行 `row` に掛かる未確定の範囲（行は下へ進む）。

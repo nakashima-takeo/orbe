@@ -188,11 +188,27 @@ extension FrameBuilder {
           x0 + Double(lane.x), Double(span.y1), Double(lane.width), Double(span.y2 - span.y1), ink)
       }
     }
-    if let caret = source.material.caret.carets.first {
-      let full = OverviewRuler.lane(.full, width: area.width, scale: CGFloat(s))
-      let span = ruler.caret(row: text.row(containing: min(caret, text.length)))
+    let carets = source.material.caret.carets.map {
+      NSRange(location: min($0, text.length), length: 0)
+    }
+    let full = OverviewRuler.lane(.full, width: area.width, scale: CGFloat(s))
+    var painted: OverviewRuler.Span?
+    for rows in text.rows(ofAscending: carets) {
+      let span = ruler.caret(row: rows.lowerBound)
+      if let last = painted, span.y1 <= last.y2 {
+        painted = OverviewRuler.Span(y1: last.y1, y2: max(last.y2, span.y2))
+        continue
+      }
+      if let last = painted {
+        rect(
+          x0 + Double(full.x), Double(last.y1), Double(full.width), Double(last.y2 - last.y1),
+          palette.rulerCaret)
+      }
+      painted = span
+    }
+    if let last = painted {
       rect(
-        x0 + Double(full.x), Double(span.y1), Double(full.width), Double(span.y2 - span.y1),
+        x0 + Double(full.x), Double(last.y1), Double(full.width), Double(last.y2 - last.y1),
         palette.rulerCaret)
     }
     let width = (Double(area.width) * s).rounded()

@@ -171,10 +171,11 @@ extension MetalTextSurface {
     let selections = all.map(\.selection).filter { $0.length > 0 }.sorted {
       $0.location < $1.location
     }
+    let collapsed = all.filter { $0.selection.length == 0 }.map(\.position).sorted()
     guard let composition = editor.composition else {
       return CaretMaterial(
-        selections: selections, carets: all.map(\.position), epoch: CACurrentMediaTime(),
-        focused: focused, blinks: caretBlinks)
+        selections: selections, carets: all.map(\.position).sorted(), collapsed: collapsed,
+        epoch: CACurrentMediaTime(), focused: focused, blinks: caretBlinks)
     }
     let attention = composition.selection
     let offset = attention.location - composition.range.location
@@ -185,7 +186,8 @@ extension MetalTextSurface {
       return attention.length == 0 ? marked.location + offset : nil
     }
     return CaretMaterial(
-      selections: selections, carets: carets, epoch: CACurrentMediaTime(), focused: focused,
+      selections: selections, carets: carets.sorted(), collapsed: collapsed,
+      epoch: CACurrentMediaTime(), focused: focused,
       blinks: caretBlinks,
       marked: MarkedMaterial(
         ranges: composition.marked.compactMap { $0 }.sorted { $0.location < $1.location },

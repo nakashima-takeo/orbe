@@ -301,6 +301,25 @@ final class SurfaceMinimapTests: EngineTestCase {
     XCTAssertEqual(map.rowEnd(3), [0, 0, 0])
   }
 
+  /// ミニマップは全カーソルの選択を出す。
+  func testEveryCursorsSelectionShowsInTheMinimap() throws {
+    let text = String(repeating: "plain line\n", count: 20)
+    let opened = try open(text, size: CGSize(width: 800, height: 300), style: style)
+    let rope = opened.document.text
+    let line = { (row: Int) in
+      NSRange(location: rope.lineStart(row), length: rope.lineStart(row + 1) - rope.lineStart(row))
+    }
+    opened.surface.inputScope {
+      opened.surface.editor.select(
+        CursorList(.selecting(line(4)), others: [.selecting(line(9)), Cursor(rope.lineStart(14))]),
+        reveal: .none)
+    }
+    let map = try minimap(opened)
+    XCTAssertGreaterThan(map.rowEnd(4)[1], 60, "主の選択")
+    XCTAssertGreaterThan(map.rowEnd(9)[1], 60, "他のカーソルの選択")
+    XCTAssertEqual(map.rowEnd(6), [0, 0, 0])
+  }
+
   /// 複数行の選択は、途中の行を行末（本文の終わり）まで選択の色で塗り、その先は行の薄い地だけ（VS Code
   /// `renderDecorationOnLine`）。終わりの行は選択の終わりまで。
   func testAMultiLineSelectionFillsTheMiddleRowsUpToTheirEnds() throws {

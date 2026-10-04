@@ -181,8 +181,10 @@ struct RowEdit: Equatable, Sendable {
 struct CaretMaterial: Equatable, Sendable {
   /// 選択の範囲（昇順）。空の選択は含めない。
   var selections: [NSRange] = []
-  /// キャレットのオフセット（主が先頭）。
+  /// キャレットのオフセット（昇順。描画は見えている行のものだけを二分探索で引く）。
   var carets: [Int] = []
+  /// 選択の無いカーソルの位置（昇順。ミニマップがその行を出す）。
+  var collapsed: [Int] = []
   /// 点滅の起点（`CACurrentMediaTime`）。キャレットが動くたびに置き直し、表示から始める。
   var epoch: Double = 0
   /// 面に焦点がある（first responder で、窓が key）。無ければキャレットを描かず、選択の地は弱い色。

@@ -91,6 +91,32 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
       "右に続かなければ無い")
   }
 
+  /// キャレットの印は全カーソルぶん出る。
+  func testEveryCursorGetsACaretMark() throws {
+    let opened = try open(
+      (0..<200).map { "line \($0)\n" }.joined(), size: CGSize(width: 800, height: 400),
+      style: style)
+    let rope = opened.document.text
+    let surface = opened.surface
+    let bar = surface.surfaceLayout.verticalScrollbar
+    let ruler = OverviewRuler(
+      lineCount: rope.lineCount, visibleLines: surface.viewportLines.visible, height: bar.height,
+      scale: 2)
+    surface.inputScope {
+      surface.editor.select(
+        CursorList(Cursor(rope.lineStart(40)), others: [Cursor(rope.lineStart(160))]),
+        reveal: .none)
+    }
+    let shot = try pixelShot(opened)
+    let marked = { (row: Int) -> Bool in
+      let span = ruler.caret(row: row)
+      return shot.rgb(bar.midX, bar.minY + CGFloat(span.y1 + span.y2) / 4) == [255, 255, 255]
+    }
+    XCTAssertTrue(marked(40), "主")
+    XCTAssertTrue(marked(160), "他のカーソル")
+    XCTAssertFalse(marked(100))
+  }
+
   /// キャレットの印は選択の動く側の端（キャレット）の行に出る——後ろへ伸ばせば終わりの行、前へ伸ばせば先頭の行。
   func testTheCaretMarkFollowsTheMovingEndOfTheSelection() throws {
     let opened = try open(
