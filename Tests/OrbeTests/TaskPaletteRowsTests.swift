@@ -8,6 +8,7 @@ import XCTest
 /// 食い違う。絞り込みや範囲の外のタスクが混ざる、または消える。待ちの日数・期限・workspace の札が
 /// 別の値を言い、人が「今日やるもの」「自分の workspace のもの」を見誤る。ヘッダーの件数が打った文字で
 /// 揺れて、残りの量が分からなくなる。
+@MainActor
 final class TaskPaletteRowsTests: OrbeTestCase {
   private let calendar = DesignSceneFixtures.taskCalendar
   private let opened = TaskPaletteWorkspaces.Entry(id: UUID(), name: "orbe")
