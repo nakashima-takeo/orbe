@@ -269,6 +269,17 @@ extension TaskPaletteModelTests {
 
   // MARK: - 詳細での完了・削除と、agent の変更
 
+  func testCompletingAnUnselectedRowFromItsIconKeepsTheDetail() throws {
+    let palette = model([task(1, "a"), task(2, "b"), task(3, "c")])
+    palette.move(1)
+    palette.enterDetail()
+
+    palette.toggleDone(1)
+
+    XCTAssertEqual(palette.area, .detail(.status), "見ている b の詳細に居続ける")
+    XCTAssertEqual(palette.selectedTask?.id, 2)
+  }
+
   func testCompletingFromDetailReturnsToTheListAtTheSamePosition() throws {
     let palette = detailOfFirst()
 
@@ -290,6 +301,44 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.area, .list)
     XCTAssertEqual(palette.selectedID, .task(2))
     XCTAssertEqual(try storedTask(palette, 2).memo, "", "下書きを別のタスクへ書かない")
+  }
+
+  /// 項目をクリックして編集を始めただけ（打っていない）なら、離れるときに古い値を書き戻さない。
+  func testLeavingAnUntypedEditKeepsWhatTheAgentWroteMeanwhile() throws {
+    let palette = detailOfFirst()
+    for field in [TaskDetailField.memo, .title, .waiting, .due] {
+      palette.tapField(field)
+      var update = TaskUpdate()
+      switch field {
+      case .memo: update.memo = "agent のメモ"
+      case .title: update.title = "agent のタイトル"
+      case .waiting: update.waitingReason = .set("agent の理由")
+      default: update.due = .set(TaskItem.DueDate("2025-10-20")!)
+      }
+      _ = try palette.store.update(1, update)
+
+      palette.leaveEditing()
+    }
+
+    let task = try storedTask(palette, 1)
+    XCTAssertEqual(task.memo, "agent のメモ")
+    XCTAssertEqual(task.title, "agent のタイトル")
+    XCTAssertEqual(task.waiting?.reason, "agent の理由")
+    XCTAssertEqual(task.due, TaskItem.DueDate("2025-10-20"))
+  }
+
+  /// 打った内容は、その間に agent が同じ項目を変えていても後勝ちで書く。
+  func testLeavingATypedEditStillOverwritesTheAgent() throws {
+    let palette = detailOfFirst()
+    palette.tapField(.memo)
+    palette.draftText = "人が打ったメモ"
+    var update = TaskUpdate()
+    update.memo = "agent のメモ"
+    _ = try palette.store.update(1, update)
+
+    palette.leaveEditing()
+
+    XCTAssertEqual(try storedTask(palette, 1).memo, "人が打ったメモ")
   }
 
   func testAgentChangingAnotherTaskKeepsTheDetailAndTheDraft() throws {

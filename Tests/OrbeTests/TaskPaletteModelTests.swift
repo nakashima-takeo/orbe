@@ -96,6 +96,17 @@ final class TaskPaletteModelTests: OrbeTestCase {
     XCTAssertEqual(palette.selectedID, .task(3), "完了の欄へ追わず、同じ位置に来た行を選ぶ")
   }
 
+  /// 行のアイコンのクリックで、選んでいない（上の）行を完了にしても、選んでいるタスクは変わらない。
+  func testCompletingAnUnselectedRowKeepsTheSelectedTask() throws {
+    let palette = threeTodos()
+    palette.move(1)
+
+    palette.toggleDone(1)
+
+    XCTAssertEqual(try storedTask(palette, 1).status, .done)
+    XCTAssertEqual(palette.selectedID, .task(2), "行が詰まっても、選んでいた b のまま")
+  }
+
   func testReopeningADoneTaskAlwaysReturnsItToTodo() throws {
     let palette = model([task(1, "a", .inProgress)])
     palette.toggleDone(1)
