@@ -47,11 +47,12 @@ final class GitHubCLI {
   /// ネットに触らない。`gh auth status` はトークンを GitHub API で検証するため、疎通不能を未認証と
   /// 誤判定する。未認証と読まれたリポジトリでは PR を確かめないまま「0 件」と読まれ、PR の有無に頼る
   /// 安全確認（worktree の掃除）が素通りする。
-  /// `--hostname` は `originIsGitHub` が真のときだけ probe される前提に合わせ、実際に取得しに行く
-  /// ホストを名指しする（default host が Enterprise の環境でも判定がずれない）。
+  /// `--hostname` は、以後の問い合わせと書き込みが名指しする github.com の認証を確かめる（default host が
+  /// Enterprise の環境でも判定がずれない）。
   static let authProbeArguments = ["auth", "token", "--hostname", "github.com"]
 
-  /// 取得可否を判定する。`isGitHub` は `GitRepo.originIsGitHub` の結果を渡す。
+  /// 取得可否を判定する。`isGitHub` が偽なら gh を見ずに `.notGitHub` を返す。origin で決める呼び出しは
+  /// `GitRepo.originIsGitHub` の結果を、origin に依らない呼び出し（`defaultRepository`）は `true` を渡す。
   /// 見るのはローカルの事実（gh の有無・認証情報の有無）だけ。今 GitHub に届くかは probe の責務では
   /// なく、届かなければそれぞれの取得が失敗として返る。
   /// `gh auth token` の stdout はトークンそのものなので `status` しか読まない。

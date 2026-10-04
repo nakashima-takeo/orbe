@@ -331,7 +331,7 @@ private struct OpenItemReviewRequests: Decodable {
   let nodes: [Node?]?
 }
 
-/// `User` は login、`Team` は所属の組織と slug。ほか（`Mannequin`・`Bot`）は読まない。
+/// `User` は login、`Team` は所属の組織と slug。ほかの種別は読まない。
 private struct OpenItemReviewer: Decodable {
   enum CodingKeys: String, CodingKey {
     case typename = "__typename"

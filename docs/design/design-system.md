@@ -129,7 +129,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `tint.working` | `rgba(133,173,255,.12)` | `rgba(31,102,201,.12)` | working 件数ピル |
 | `tint.waiting` | `rgba(238,194,90,.12)` | `rgba(177,123,0,.12)` | waiting |
 | `tint.done` | `rgba(130,216,148,.12)` | `rgba(39,154,77,.12)` | done |
-| `tint.diffAdded` | `rgba(129,184,139,.12)` | `rgba(39,154,77,.12)` | git の緑チップ地（merged PR・番号バッジ。文字が `diff.added` なので地も同軸） |
+| `tint.diffAdded` | `rgba(129,184,139,.12)` | `rgba(39,154,77,.12)` | git の緑チップ地（clean の merged PR 等。文字が `diff.added` なので地も同軸） |
 | `tint.red` | `rgba(209,105,105,.14)` | `rgba(224,45,51,.14)` | エラー・削除件数 |
 | `smallPillFill` | `rgba(255,255,255,.04)` | `rgba(58,49,81,.06)` | ⌘⇧S 等のキーバッジ地 |
 | `plainPillFill` | `rgba(255,255,255,.06)` | `rgba(58,49,81,.08)` | 事実だけを述べる無色チップ地（clean の `[gone]` / `prunable`） |

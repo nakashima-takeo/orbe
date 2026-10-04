@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// タスクの worktree の値が、パスを「それを含む worktree のルート」（タブの連と同じ場所のキー）に揃えること。
+/// タスクの worktree の値が、パスを「それを含む worktree のルート」（根。タブの連のキーと同じ値）に揃えること。
 ///
 /// 壊れると何が起きるか: agent が worktree の中のサブディレクトリから `orb task set 12 --worktree .` と打つと、
 /// タスクの worktree がそのサブディレクトリになり、同じ worktree のタブ（キーはルート）と等しくならない。

@@ -6,7 +6,7 @@ import XCTest
 /// （`GitHubRepoName`）。
 ///
 /// ここが破れると、行と PR の同一性がそもそも立たない——読めない形の origin を持つリポジトリでは
-/// 番号チップが 1 つも付かず、PR 行はすべてブラウザ行になり、clean は PR の事実を 1 つも持てない。
+/// clean は PR の事実を 1 つも持てない。
 /// 大小文字で割れると、同じリポジトリの PR が別のリポジトリのものとして弾かれる。github.com かどうかを
 /// ホストで決めないと、GitHub Enterprise（github.company.com）の owner/name で github.com を読み書きする。
 final class GitHubRepoNameTests: OrbeTestCase {

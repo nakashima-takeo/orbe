@@ -222,7 +222,7 @@ import SwiftUI
   func focus() { focusToken &+= 1 }
 
   /// 可視セクション（絞り込みで空になった欄は落とし、作成行と一致なしの注記を足す）。
-  /// `sections` / `query` / 有効性の答え の変化時に 1 回だけ計算して保持する——1 回の打鍵で何度も
+  /// `sections` / `query` / 作成行の規則 / 有効性の答え の変化時に 1 回だけ計算して保持する——1 回の打鍵で何度も
   /// 読まれるので、読むたびに全行を照合し直すと件数が千を超えたとき打鍵がもたつく。
   private(set) var visibleSections: [WorktreePaletteSection] = []
 

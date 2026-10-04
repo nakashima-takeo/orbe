@@ -1,7 +1,7 @@
 ---
 title: workspace 永続
 description: 構成（workspace・タブ・cwd・エージェントセッション）の JSON 保存と起動時復元・エージェント resume・デバウンス保存、タスク一覧の即時保存、壊れた原本の退避
-updated: 2026-10-04
+updated: 2026-10-05
 ---
 
 # workspace 永続
@@ -39,7 +39,7 @@ updated: 2026-10-04
 
 [タスク](tasks.md)一覧（列の順・各タスクの値・次に振る ID）を持つ。workspace は永続 ID で指す。workspaces.json と違い、変更のたびに即座に保存する——タスクの変更は cwd 報告のように高頻度ではなく、即時なら強制終了でも失わず終了時の flush も要らない。後から足すフィールドは欠落を許容する。
 
-不在は空の一覧で始める。在るのに使えない（読めない・構造破損・非互換バージョン・ID の重複や採番位置との矛盾）ときは、workspaces.json と同じ規律で `tasks-broken-<日時>.json` へ退避してから空の一覧で始める。
+不在は空の一覧で始める。在るのに使えない（条件は[タスク](tasks.md#保存)）ときは、workspaces.json と同じ規律で `tasks-broken-<日時>.json` へ退避してから空の一覧で始める。
 
 ## settings.json / app-state.json
 

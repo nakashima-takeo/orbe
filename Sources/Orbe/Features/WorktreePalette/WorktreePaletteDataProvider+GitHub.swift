@@ -2,7 +2,7 @@ import Foundation
 
 /// gh レーンの取得と着地。probe（可否判定）→ 取得（remote の正式名・ブランチの PR）→
 /// 着地の規則（失敗は据え置き）までを持ち、描画は本体の `rebuild()` へ流す。gh の結果は clean の
-/// 判定材料にだけ使う。
+/// 判定材料と、タスクの欄の解決（remote の正式名・ローカルブランチの同一性）にだけ使う。
 extension WorktreePaletteDataProvider {
 
   func loadGitHub(_ repo: GitRepo) {
@@ -15,8 +15,9 @@ extension WorktreePaletteDataProvider {
           self.resolveRemoteRepositories(repo)
           self.loadBranchPullRequests(repo)
         }
-        // 状態を問わず描き直す——clean の PR の事実と待機表示は probe の結果から導かれるので、`.ready` で
-        // 着地しても、続く問い合わせが何も撃たない回（GitHub のブランチが無い等）では他に描き直す契機が無い。
+        // 状態を問わず描き直す——clean の PR の事実と待機表示、タスクの欄の待ちは probe の結果から導かれる
+        // ので、`.ready` で着地しても、続く問い合わせが何も撃たない回（GitHub のブランチが無い等）では他に
+        // 描き直す契機が無い。
         self.rebuild()
       }
     }

@@ -64,7 +64,7 @@ extension TaskItem {
 
 #if DEBUG
   extension TaskWorktree {
-    /// 既に場所のキーであるパスをそのまま持つ（テストと見本の固定値用。ファイルシステムに触らない）。
+    /// 既に根であるパスをそのまま持つ（テストと見本の固定値用。ファイルシステムに触らない）。
     init(key: String) { path = key }
   }
 #endif

@@ -11,8 +11,9 @@ enum AgentRollup {
   static let stateOrder = ["working", "waiting", "done", "idle"]
 
   /// タブグリフに出す（＝リセットできる）状態の集合（`TerminalTab.agentStateKind` / `resetAgentState`）。
-  /// 順序は worktree パレットが同じ worktree の複数タブを 1 状態へ畳むときだけ使う（waiting > working > done、
-  /// `WorktreeCleanClassifier`）。idle はどちらにも入らない。表示順の `stateOrder` とは用途が異なる別概念。
+  /// 順序は同じ worktree の複数タブを 1 状態へ畳むときに使う（waiting > working > done。⌘T の clean の
+  /// `WorktreeCleanClassifier` と、タスク画面・⌘T の行の agent の `WorktreeAgentActivity`）。idle は
+  /// どちらにも入らない。表示順の `stateOrder` とは用途が異なる別概念。
   static let priorityOrder = ["waiting", "working", "done"]
 
   /// 件数に数える状態種別。これ以外（nil 等）はロールアップに数えない。

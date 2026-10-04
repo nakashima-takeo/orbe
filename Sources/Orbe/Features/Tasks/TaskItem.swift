@@ -92,7 +92,7 @@ extension TaskItem {
       worktree, unlinked
   }
 
-  /// 後から足した `links`・`worktree`・`unlinked` は、欠けていれば空として読む。
+  /// `links`・`worktree`・`unlinked` は、欠けていれば空として読む。
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     id = try c.decode(Int.self, forKey: .id)

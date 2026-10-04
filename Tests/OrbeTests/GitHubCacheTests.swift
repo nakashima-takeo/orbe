@@ -55,7 +55,8 @@ final class GitHubCacheTests: OrbeTestCase {
   // MARK: - probe
 
   /// 認証判定はネットに触らない `gh auth token` で行う。`gh auth status` はトークン検証で API を
-  /// 叩き、疎通不能を未認証と誤判定してキャッシュ済みの行を誘導情報行に置き換えてしまう。
+  /// 叩き、疎通不能を未認証と誤判定する。未認証と読まれたリポジトリでは PR を確かめないまま 0 件と読まれ、
+  /// worktree の掃除が素通りする。
   func testAuthProbeDoesNotUseNetworkVerifyingCommand() {
     XCTAssertEqual(
       GitHubCLI.authProbeArguments, ["auth", "token", "--hostname", "github.com"])
