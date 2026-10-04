@@ -17,9 +17,4 @@ import Observation
     if self.login != login { self.login = login }
   }
 
-  /// `other` が自分か（GitHub の login は大小文字を区別しない）。自分が分からなければ false。
-  func isMe(_ other: String?) -> Bool {
-    guard let login, let other else { return false }
-    return login.lowercased() == other.lowercased()
-  }
 }

@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// ヘッダーのタブ。GitHub は器だけで、本体は空。
+/// ヘッダーのタブ。
 enum TaskPaletteTab: Equatable {
   case tasks, github
 }
@@ -9,16 +9,25 @@ enum TaskPaletteTab: Equatable {
 /// フッターに赤で出す失敗。画面が「何をしようとしたか」から選ぶ（ストアのエラーの文は読まない）。
 enum TaskPaletteError: Error, Equatable {
   case title, waiting, due, failed
+  /// GitHub に自分をアサイン・レビュアーにする書き込みが失敗した。
+  case assign
+  /// 結び付け・付け替え・タスクにするを、ストアが受け付けなかった。
+  case link
 }
 
 /// ⌘⇧X タスク画面の状態（@Observable）。タスクの値は写さずストア（唯一の正）を直接読み書きし、GitHub の値も
-/// 写さず置き場（`GitHubItemCache`）から、agent の状態も写さず窓の索引（`WorktreeAgentActivity`）から引く。ここは入力・範囲・タブ・選択・一覧の送り先・焦点・編集中の
-/// 下書き・行の掴みだけを持つ。一覧の行は `TaskPaletteRows` が毎回組む。
-/// 列が変わったとき（agent の変更を含む）は `reconcile()` 1 本で選択・焦点・下書き・掴みを付け直す。
+/// 写さず置き場（結び付いた項目は `GitHubItemCache`、open 一覧は `GitHubOpenLists`、自分は `GitHubViewer`）
+/// から、agent の状態も写さず窓の索引（`WorktreeAgentActivity`）から引く。ここは一覧ごとの状態（入力・選択・
+/// 送り先）・範囲・タブ・絞り込み・焦点・編集中の下書き・右の欄の値・行の掴みだけを持つ。一覧の行は
+/// `TaskPaletteRows` と `TaskPaletteGitHubRows` が毎回組む。
+/// 列か一覧が変わったとき（agent の変更を含む）は `reconcile()` 1 本で選択・焦点・下書き・掴みを付け直す。
 @Observable final class TaskPaletteModel {
   let store: TaskStore
   let githubItems: GitHubItemCache
   let viewer: GitHubViewer
+  let openLists: GitHubOpenLists
+  /// 開いた workspace の root（GitHub タブのリポジトリを解決する場所）。
+  let root: String
   let agents: WorktreeAgentActivity
   let workspaces: TaskPaletteWorkspaces
   let today: TaskItem.DueDate
@@ -27,19 +36,35 @@ enum TaskPaletteError: Error, Equatable {
 
   /// タスクのタブの一覧の状態。書くのはモデル（拡張を含む）だけ。
   var tasksList = TaskPaletteListState<TaskPaletteRowID>()
+  /// GitHub タブの一覧の状態。選択の同一性が変わると右の欄の値を既定に戻す。書くのはモデル（拡張を含む）だけ。
+  var githubList = TaskPaletteListState<TaskPaletteGitHubRowID>() {
+    didSet { resetPaneIfMoved() }
+  }
 
-  /// ヘッダーの入力（タスクのタイトルの絞り込みと、追加するタイトル）。
+  /// ヘッダーの入力（今見えている一覧の絞り込み。タスクのタブでは追加するタイトルも兼ねる）。
   var query: String {
-    get { tasksList.query }
+    get { visibleTab == .tasks ? taskList.query : gitHubList.query }
     set {
-      guard newValue != tasksList.query else { return }
-      tasksList.query = newValue
+      guard newValue != query else { return }
+      switch visibleTab {
+      case .tasks: taskList.query = newValue
+      case .github: gitHubList.query = newValue
+      }
       queryChanged()
     }
   }
   private(set) var scope: TaskPaletteScope = .all
+  /// 保存したタブ。今見えているタブは `visibleTab`。
   private(set) var tab: TaskPaletteTab = .tasks
   private(set) var doneExpanded = false
+  /// GitHub タブの絞り込みの札。書くのはモデル（拡張を含む）だけ。
+  var githubFilter: TaskGitHubFilter = .all
+  /// 「さらに」で全部を出した区分。書くのはモデル（拡張を含む）だけ。
+  var expandedKinds: Set<GitHubItemKind> = []
+  /// 右の欄の値。書くのはモデル（拡張を含む）だけ。
+  var pane = TaskGitHubPane()
+  /// 選ぶ状態（自分の一覧の状態を持つ）。書くのはモデル（拡張を含む）だけ。
+  var pick: TaskPalettePick?
   /// キーを受ける場所。書くのはモデル（拡張を含む）だけ。
   var area: TaskPaletteArea = .list {
     didSet {
@@ -49,7 +74,7 @@ enum TaskPaletteError: Error, Equatable {
   }
   /// 編集中の文字の項目。編集中かどうかはこれだけが持つ。書くのはモデル（拡張を含む）だけ。
   var draft: TaskEditDraft? {
-    didSet { if draft?.field != oldValue?.field { focus() } }
+    didSet { if draft?.target != oldValue?.target { focus() } }
   }
   /// 書くのはモデル（拡張を含む）だけ。
   var error: TaskPaletteError?
@@ -68,15 +93,18 @@ enum TaskPaletteError: Error, Equatable {
   /// agent のタブへ移る（タブの ID）。
   var onFocusTab: (Int) -> Void = { _ in }
 
-  /// 開いた時点で、出ている行の結び付きの値を取り直す（届くまでは前回の答えで描く）。
+  /// 開いた時点で、出ている行の結び付きの値を取り直す（届くまでは前回の答えで描く）。GitHub タブの一覧の
+  /// 取り直し（`openLists.open(root:)`）は開く側が呼ぶ。
   init(
     store: TaskStore, githubItems: GitHubItemCache, viewer: GitHubViewer,
-    agents: WorktreeAgentActivity,
+    openLists: GitHubOpenLists, root: String, agents: WorktreeAgentActivity,
     workspaces: TaskPaletteWorkspaces, now: Date, timeZone: TimeZone
   ) {
     self.store = store
     self.githubItems = githubItems
     self.viewer = viewer
+    self.openLists = openLists
+    self.root = root
     self.agents = agents
     self.workspaces = workspaces
     self.timeZone = timeZone
@@ -85,16 +113,55 @@ enum TaskPaletteError: Error, Equatable {
     githubItems.refresh(visibleLinkIDs)
   }
 
-  var rows: [TaskPaletteRow] {
-    guard tab == .tasks else { return [] }
-    return TaskPaletteRows.build(rowsInput)
+  /// 今見えているタブ。選ぶ状態ならその方向で、無ければ保存したタブ。行・キー・フッター・本体の切り替えは
+  /// すべてこれを見る。
+  var visibleTab: TaskPaletteTab {
+    switch pick {
+    case .task: .tasks
+    case .item: .github
+    case nil: tab
+    }
+  }
+
+  /// タスクのタブの行（見えていなくても組む——タブを行き来しても選んだ行が残るよう、付け直しは自分の行で行う）。
+  var rows: [TaskPaletteRow] { TaskPaletteRows.build(rowsInput) }
+
+  /// タスクのタブの行で使う一覧の状態（タスクを選ぶ状態なら、その状態が持つもの）。
+  var taskList: TaskPaletteListState<TaskPaletteRowID> {
+    get {
+      if case .task(_, let list) = pick { return list }
+      return tasksList
+    }
+    set {
+      if case .task(let link, _) = pick {
+        pick = .task(for: link, list: newValue)
+      } else {
+        tasksList = newValue
+      }
+    }
+  }
+
+  /// GitHub タブの行で使う一覧の状態（項目を選ぶ状態なら、その状態が持つもの）。
+  var gitHubList: TaskPaletteListState<TaskPaletteGitHubRowID> {
+    get {
+      if case .item(_, let list) = pick { return list }
+      return githubList
+    }
+    set {
+      if case .item(let task, _) = pick {
+        pick = .item(for: task, list: newValue)
+      } else {
+        githubList = newValue
+      }
+    }
   }
 
   var counts: TaskPaletteCounts { TaskPaletteRows.counts(rowsInput) }
 
   private var rowsInput: TaskPaletteRows.Input {
     TaskPaletteRows.Input(
-      tasks: store.tasks, query: query, scope: scope, doneExpanded: doneExpanded,
+      tasks: store.tasks, query: taskList.query, addsRow: pick == nil, scope: scope,
+      doneExpanded: doneExpanded,
       workspaces: workspaces, today: today, timeZone: timeZone, items: githubItems.answers,
       viewerLogin: viewer.login, agents: agents.agents)
   }
@@ -113,12 +180,12 @@ enum TaskPaletteError: Error, Equatable {
     githubItems.ensure(visibleLinkIDs)
   }
 
-  private var selectableIDs: [TaskPaletteRowID] { rows.compactMap(\.selectableID) }
+  var selectableIDs: [TaskPaletteRowID] { rows.compactMap(\.selectableID) }
 
-  var selectedID: TaskPaletteRowID? { tasksList.selectedID }
+  var selectedID: TaskPaletteRowID? { taskList.selectedID }
 
   /// 一覧を送る先。人の操作（選び直し・並べ替え・範囲や開閉の切り替え・画面からの変異）のたびに決め直す。
-  var scrollTarget: TaskPaletteScrollTarget<TaskPaletteRowID>? { tasksList.scrollTarget }
+  var scrollTarget: TaskPaletteScrollTarget<TaskPaletteRowID>? { taskList.scrollTarget }
 
   /// 選んでいるタスク（詳細に出すもの）。追加の行・完了の見出しでは nil。
   var selectedTask: TaskItem? {
@@ -127,8 +194,11 @@ enum TaskPaletteError: Error, Equatable {
   }
 
   var focusTarget: TaskPaletteFocusTarget {
-    if let draft { return .edit(draft.field) }
-    return area == .list ? .field : .card
+    switch draft?.target {
+    case .task(_, let field): return .edit(field)
+    case .paneDue: return .paneDue
+    case nil: return area == .list ? .field : .card
+    }
   }
 
   /// 編集中の文字（入力欄の binding）。編集中でなければ書き込みを捨てる。
@@ -139,20 +209,29 @@ enum TaskPaletteError: Error, Equatable {
 
   /// 実マウス移動（`MouseMovedDetector`）が `.pointer` へ落とす。
   var inputModality: InputModality {
-    get { tasksList.modality }
-    set { tasksList.modality = newValue }
+    get { visibleTab == .tasks ? taskList.modality : gitHubList.modality }
+    set {
+      switch visibleTab {
+      case .tasks: taskList.modality = newValue
+      case .github: gitHubList.modality = newValue
+      }
+    }
   }
 
   func focus() { focusToken &+= 1 }
 
-  /// 列・範囲・タブ・開閉が変わったあとの付け直し。選択は一覧の状態の規則で付け直す（`TaskPaletteListState`）。
-  /// 詳細に居る間に選択が別の行へ移ったら一覧へ戻り、対象が消えた下書きは捨て、並びが変わった掴みも捨てる。
+  /// 列・一覧・範囲・タブ・開閉が変わったあとの付け直し。選択は一覧の状態ごとに、その行で付け直す
+  /// （`TaskPaletteListState`）。詳細に居る間に選択が別の行へ移ったら一覧へ戻り、対象が消えた下書きは捨て、
+  /// 並びが変わった掴みも捨てる。右の欄に居る間に、選んだ行が結び付いていない項目でなくなったら一覧へ戻る。
   func reconcile() {
+    endStalePick()
     let previous = selectedID
-    tasksList.reconcile(selectableIDs)
-    if let draft, !store.tasks.contains(where: { $0.id == draft.taskID }) {
-      self.draft = nil
+    taskList.reconcile(selectableIDs)
+    gitHubList.reconcile(gitHubSelectableIDs)
+    if case .task(let id, _) = draft?.target, !store.tasks.contains(where: { $0.id == id }) {
+      draft = nil
     }
+    reconcilePane()
     if case .detail = area, selectedID != previous || selectedTask == nil {
       leaveEditing()
       area = .list
@@ -175,20 +254,26 @@ enum TaskPaletteError: Error, Equatable {
 
   func move(_ direction: Int) {
     error = nil
-    tasksList.move(direction, in: selectableIDs)
+    switch visibleTab {
+    case .tasks: taskList.move(direction, in: selectableIDs)
+    case .github: gitHubList.move(direction, in: gitHubSelectableIDs)
+    }
   }
 
   /// 先頭（direction < 0）か末尾へ。
   func jump(_ direction: Int) {
     error = nil
-    tasksList.jump(direction, in: selectableIDs)
+    switch visibleTab {
+    case .tasks: taskList.jump(direction, in: selectableIDs)
+    case .github: gitHubList.jump(direction, in: gitHubSelectableIDs)
+    }
   }
 
   /// 行のクリック。追加の行は追加し、完了の見出しは開閉し、タスクの行は選ぶ。編集中なら確定してから移る。
   func tapRow(_ id: TaskPaletteRowID) {
     leaveEditingForAction()
     area = .list
-    guard tasksList.select(id, in: selectableIDs) else { return }
+    guard taskList.select(id, in: selectableIDs) else { return }
     focus()
     switch id {
     case .add: addFromQuery()
@@ -200,90 +285,29 @@ enum TaskPaletteError: Error, Equatable {
   /// ホバー開始による選択の追従。実マウス移動の後、一覧に居る間だけ効く。
   func hoverSelect(_ id: TaskPaletteRowID) {
     guard area == .list, draft == nil, inputModality == .pointer else { return }
-    tasksList.hoverSelect(id, in: selectableIDs)
+    taskList.hoverSelect(id, in: selectableIDs)
   }
 
-  /// 入力が変わったら、先頭の行（入力があれば追加の行）を選ぶ。
+  /// 入力が変わったら、先頭の行（タスクのタブで入力があれば追加の行）を選ぶ。
   private func queryChanged() {
     error = nil
-    tasksList.selectFirst(in: selectableIDs)
+    switch visibleTab {
+    case .tasks: taskList.selectFirst(in: selectableIDs)
+    case .github: gitHubList.selectFirst(in: gitHubSelectableIDs)
+    }
     discardStaleDrag()
   }
 
-  /// ↵。選んでいる行の操作（追加 / 完了 ⇄ 未着手 / 完了の欄の開閉）。
+  /// ↵。選んでいる行の操作（タスクのタブは追加 / 完了 ⇄ 未着手 / 完了の欄の開閉、GitHub タブは
+  /// `submitGitHub`、選ぶ状態は `confirmPick`）。
   func submit() {
-    guard tab == .tasks else { return }
+    guard pick == nil else { return confirmPick() }
+    guard visibleTab == .tasks else { return submitGitHub() }
     switch selectedID {
     case .add: addFromQuery()
     case .task(let id): toggleDone(id)
     case .doneHeader: toggleDoneExpanded()
     case nil: break
-    }
-  }
-
-  /// 入力のタイトルで、開いた workspace に付いた未着手のタスクを列の末尾へ足し、入力を空にして選ぶ。
-  /// 足したタスクの ID を返す。
-  @discardableResult func addFromQuery() -> Int? {
-    let title = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard tab == .tasks, !title.isEmpty else { return nil }
-    do {
-      let item = try store.add(TaskDraft(title: title, workspace: workspaces.opened.id))
-      query = ""
-      tasksList.select(.task(item.id), in: selectableIDs)
-      return item.id
-    } catch {
-      self.error = .title
-      return nil
-    }
-  }
-
-  /// 完了 ⇄ 未着手。選んでいるタスクなら、選択は同一性を捨てて同じ位置の行へ移る（完了の欄が開いて
-  /// いても追わない）。選んでいないタスク（行のアイコンのクリック）なら、選択はそのまま動かない。
-  func toggleDone(_ id: Int) {
-    leaveEditingForAction()
-    guard let task = store.tasks.first(where: { $0.id == id }) else { return reconcile() }
-    var update = TaskUpdate()
-    update.status = task.status == .done ? .todo : .done
-    if selectedID == .task(id) { tasksList.forget() }
-    mutate(.failed) { () throws(TaskStoreError) in _ = try store.update(id, update) }
-  }
-
-  /// 確認なしで消す。選択は同じ位置の行へ移る。
-  func delete(_ id: Int) {
-    leaveEditingForAction()
-    tasksList.forget()
-    mutate(.failed) { () throws(TaskStoreError) in try store.delete(id) }
-  }
-
-  /// ⌥↑↓。選んだタスクを、同じ欄の見えている隣のタスクと入れ替える。欄の端と完了のタスクでは何もしない。
-  func reorder(_ direction: Int) {
-    error = nil
-    guard let task = selectedTask, let siblings = visibleSiblings(of: task.id),
-      let index = siblings.firstIndex(of: task.id), siblings.indices.contains(index + direction)
-    else { return }
-    place(from: index, to: index + direction, among: siblings)
-  }
-
-  /// 同じ欄で一覧に見えている未完了のタスクの ID（一覧の順）。完了のタスクと見えていないタスクは nil。
-  func visibleSiblings(of id: Int) -> [Int]? {
-    guard let status = store.tasks.first(where: { $0.id == id })?.status, status != .done else {
-      return nil
-    }
-    let siblings = rows.compactMap { row -> Int? in
-      guard case .task(let item) = row,
-        store.tasks.first(where: { $0.id == item.id })?.status == status
-      else { return nil }
-      return item.id
-    }
-    return siblings.contains(id) ? siblings : nil
-  }
-
-  /// 見えている兄弟の `from` 番目を `to` 番目へ。下へなら `to` 番目の直後、上へなら直前に入れる（その先の
-  /// 隠れたタスクは越えない）。同じ番号ならストアを呼ばない。
-  func place(from: Int, to: Int, among siblings: [Int]) {
-    guard from != to else { return }
-    mutate(.failed) { () throws(TaskStoreError) in
-      try store.move(siblings[from], to > from ? .after : .before, siblings[to])
     }
   }
 
@@ -295,7 +319,7 @@ enum TaskPaletteError: Error, Equatable {
   private func flipDoneExpanded() {
     doneExpanded.toggle()
     reconcile()
-    tasksList.follow()
+    taskList.follow()
   }
 
   /// 別の操作に移る前の共通の手順。前の操作の失敗を消してから、編集中の文字を確定する——この順なので、
@@ -311,7 +335,7 @@ enum TaskPaletteError: Error, Equatable {
     area = .list
     scope = scope == .all ? .opened : .all
     reconcile()
-    tasksList.follow()
+    taskList.follow()
   }
 
   func setScope(_ scope: TaskPaletteScope) {
@@ -319,8 +343,9 @@ enum TaskPaletteError: Error, Equatable {
     toggleScope()
   }
 
-  /// ⇧⇥・タブのクリック。
+  /// ⇧⇥・タブのクリック。選ぶ状態の間は切り替えない。
   func toggleTab() {
+    guard pick == nil else { return }
     leaveEditingForAction()
     area = .list
     tab = tab == .tasks ? .github : .tasks
@@ -332,7 +357,27 @@ enum TaskPaletteError: Error, Equatable {
     toggleTab()
   }
 
-  /// 画面からのストアの変異を呼び、付け直して選択へ送る。消えていたタスクは表に出さず付け直しに任せる。
+  /// 結び付いている行の ↵。タスクのタブへ移り、そのタスクを選ぶ。範囲・入力・完了の欄で隠れていれば、
+  /// 見えるように切り替える。
+  func showTask(_ id: Int) {
+    guard let task = store.tasks.first(where: { $0.id == id }) else { return }
+    leaveEditingForAction()
+    area = .list
+    tab = .tasks
+    if scope == .opened, task.workspace != workspaces.opened.id { scope = .all }
+    if task.status == .done { doneExpanded = true }
+    if !taskList.query.isEmpty,
+      !task.title.localizedStandardContains(
+        taskList.query.trimmingCharacters(in: .whitespacesAndNewlines))
+    {
+      taskList.query = ""
+    }
+    reconcile()
+    taskList.select(.task(id), in: rows.compactMap(\.selectableID))
+  }
+
+  /// 画面からのストアの変異を呼び、付け直して今見えている一覧の選択へ送る。消えていたタスクは表に出さず
+  /// 付け直しに任せる。
   func mutate(_ failure: TaskPaletteError, _ body: () throws(TaskStoreError) -> Void) {
     do throws(TaskStoreError) {
       try body()
@@ -341,6 +386,9 @@ enum TaskPaletteError: Error, Equatable {
     } catch {
     }
     reconcile()
-    tasksList.follow()
+    switch visibleTab {
+    case .tasks: taskList.follow()
+    case .github: gitHubList.follow()
+    }
   }
 }

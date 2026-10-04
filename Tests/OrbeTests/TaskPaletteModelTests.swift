@@ -200,14 +200,14 @@ final class TaskPaletteModelTests: OrbeTestCase {
     XCTAssertEqual(palette.selectedID, .task(3), "見えなくなったら同じ位置の行")
   }
 
-  func testGitHubTabHasNoRowsAndEnterDoesNothing() throws {
+  func testGitHubTabWithoutListsHasNoRowsAndEnterDoesNothing() throws {
     let palette = threeTodos()
 
     palette.toggleTab()
     palette.submit()
 
     XCTAssertEqual(palette.tab, .github)
-    XCTAssertEqual(palette.rows, [])
+    XCTAssertEqual(palette.gitHubRows, [])
     XCTAssertEqual(try storedTask(palette, 1).status, .todo)
   }
 

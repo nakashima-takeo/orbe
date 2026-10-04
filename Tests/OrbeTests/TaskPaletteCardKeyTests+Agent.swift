@@ -51,7 +51,7 @@ extension TaskPaletteCardKeyTests {
 
     agents.update([])
     flush(window)
-    XCTAssertEqual(model.area, .detail(.field(.status)), "同じ位置の止まる場所へ移る")
+    XCTAssertEqual(model.area, .detail(.addLink), "同じ位置の止まる場所へ移る")
 
     arrow(Key.up, to: window)
     XCTAssertEqual(model.area, .detail(.field(.title)), "↑ が効く")

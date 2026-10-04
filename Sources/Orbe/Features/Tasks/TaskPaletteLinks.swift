@@ -17,6 +17,7 @@ struct TaskPrimaryLinkHeading: View {
 
 /// 詳細の「Issue・PR」の欄。各行は ↑↓ で止まる場所で、クリックで開き、ホバーか選択で出る「外す」で外す。
 /// タイトルと状態は置き場の答えから引き、値が無い・実体の種別が保存した種別と違えば番号だけを出す。
+/// 末尾の「＋ 結び付ける」（結び付きが 0 件でも出る）は、↵ かクリックで GitHub タブの項目を選ぶ状態へ入る。
 struct TaskPaletteLinks: View {
   @Bindable var model: TaskPaletteModel
   let task: TaskItem
@@ -32,6 +33,7 @@ struct TaskPaletteLinks: View {
       ForEach(task.links, id: \.item) { link in
         linkRow(link, primary: task.links.first?.item)
       }
+      addRow
     }
     .padding(.horizontal, Theme.Space.beat)
     .padding(.vertical, Theme.Space.beat)
@@ -88,6 +90,32 @@ struct TaskPaletteLinks: View {
         hoveredLink = nil
       }
     }
+  }
+
+  /// 「＋ 結び付ける」と、右に「ブランチの PR は自動」。
+  private var addRow: some View {
+    let focused = model.area == .detail(.addLink)
+    return HStack(spacing: Theme.Space.note) {
+      Text("＋ " + l10n.string(.taskPaletteAddLink))
+        .font(Font.theme.taskText)
+        .foregroundStyle(Color.theme.accentBright)
+        .lineLimit(1)
+        .fixedSize()
+      Spacer(minLength: Theme.Space.step)
+      Text(l10n.string(.taskPaletteBranchPRAuto))
+        .font(Font.theme.codeCompact)
+        .foregroundStyle(Color.theme.textMuted)
+        .lineLimit(1)
+    }
+    .frame(height: 30)
+    .padding(.horizontal, Theme.Space.step)
+    .background(
+      RoundedRectangle(cornerRadius: Theme.Radius.row)
+        .fill(focused ? Color.theme.selectionFill : .clear)
+    )
+    .padding(.horizontal, -Theme.Space.step)
+    .contentShape(Rectangle())
+    .onTapGesture { model.tapAddLink() }
   }
 
   /// 右の状態。Issue は open / closed、PR は「✓ CI · レビュー待ち」「マージ済み」「閉じた」など。

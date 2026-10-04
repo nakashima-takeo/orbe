@@ -139,6 +139,8 @@ enum TaskPaletteRows {
   struct Input {
     let tasks: [TaskItem]
     let query: String
+    /// 入力があるとき先頭に「＋『…』を追加」を出すか（タスクを選ぶ状態では出さない）。
+    var addsRow = true
     let scope: TaskPaletteScope
     let doneExpanded: Bool
     let workspaces: TaskPaletteWorkspaces
@@ -158,7 +160,7 @@ enum TaskPaletteRows {
       title.isEmpty || $0.title.localizedStandardContains(title)
     }
     var rows: [TaskPaletteRow] = []
-    if !title.isEmpty { rows.append(.add(title: title)) }
+    if !title.isEmpty, input.addsRow { rows.append(.add(title: title)) }
     for status in [TaskItem.Status.inProgress, .todo] {
       let section = visible.filter { $0.status == status }
       guard !section.isEmpty else { continue }

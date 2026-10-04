@@ -1,9 +1,10 @@
 import AppKit
 
 /// ⌘⇧X タスク画面の提示。画面はタスクのストア（唯一の正）を直接読み書きし、ここは開いた時点の
-/// workspace の写しと GitHub の値の置き場を渡して配線するだけ。
+/// workspace の写しと root、GitHub の値の置き場を渡して配線するだけ。
 extension WindowController {
   /// タスク画面を開く（開いていれば焦点をモデルが決めた行き先へ当て直すだけ）。タブが 0 枚の workspace でも開く。
+  /// GitHub タブの一覧は、タスクのタブを開いていても取り直す（ヘッダーの「GitHub N」のため）。
   func showTaskPalette() {
     if model.overlay == .taskPalette {
       model.taskPalette?.focus()
@@ -13,7 +14,8 @@ extension WindowController {
       TaskPaletteWorkspaces.Entry(id: ws.persistentId, name: ws.name)
     }
     let p = TaskPaletteModel(
-      store: taskStore, githubItems: .shared, viewer: .shared, agents: worktreeAgents,
+      store: taskStore, githubItems: .shared, viewer: .shared, openLists: .shared,
+      root: current.rootPath, agents: worktreeAgents,
       workspaces: TaskPaletteWorkspaces(opened: entry(current), all: workspaces.map(entry)),
       now: Date(), timeZone: .current)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
@@ -27,6 +29,7 @@ extension WindowController {
     model.overlay = .taskPalette
     p.focus()
     reconfirmFocusNextTick()  // 別 overlay からの遷移で去りゆくカードの teardown に勝つ
+    GitHubOpenLists.shared.open(root: current.rootPath)
     linkPullRequestsFromBranches()
   }
 

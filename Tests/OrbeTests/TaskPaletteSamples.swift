@@ -8,6 +8,8 @@ import Foundation
 enum TaskPaletteSamples {
   static let opened = TaskPaletteWorkspaces.Entry(id: UUID(), name: "orbe")
   static let other = TaskPaletteWorkspaces.Entry(id: UUID(), name: "web-app")
+  /// 開いた workspace の root。
+  static let root = "/work/orbe"
 
   static func task(
     _ id: Int, _ title: String, _ status: TaskItem.Status = .todo,
@@ -24,13 +26,14 @@ enum TaskPaletteSamples {
   /// GitHub の値の置き場は、既定では何も取りに行かない。
   static func model(
     _ tasks: [TaskItem], githubItems: GitHubItemCache = GitHubItemCache(fetch: { _, _ in }),
-    agents: WorktreeAgentActivity = WorktreeAgentActivity()
+    openLists: GitHubOpenLists? = nil, agents: WorktreeAgentActivity = WorktreeAgentActivity()
   ) -> TaskPaletteModel {
     let file = TasksFile(
       version: TaskPersistence.version, nextId: (tasks.map(\.id).max() ?? 0) + 1, tasks: tasks)
     return TaskPaletteModel(
       store: TaskStore(file: file), githubItems: githubItems, viewer: githubItems.viewer,
-      agents: agents,
+      openLists: openLists ?? GitHubOpenLists(source: .idle, viewer: githubItems.viewer),
+      root: root, agents: agents,
       workspaces: TaskPaletteWorkspaces(opened: opened, all: [opened, other]),
       now: DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone)
   }
@@ -42,5 +45,14 @@ enum TaskPaletteSamples {
   /// 未着手 3 件（1 a・2 b・3 c）。
   static func threeTodos() -> TaskPaletteModel {
     model([task(1, "a"), task(2, "b"), task(3, "c")])
+  }
+}
+
+extension GitHubOpenLists.Source {
+  /// 何も問い合わせない・書かない（答えは返らない）。
+  static var idle: Self {
+    Self(
+      defaultRepository: { _, _ in }, openItems: { _, _, _, _ in }, reviewRequests: { _, _ in },
+      addSelf: { _, _, _, _ in })
   }
 }

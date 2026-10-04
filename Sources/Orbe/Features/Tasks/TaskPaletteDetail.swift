@@ -26,10 +26,8 @@ struct TaskPaletteDetail: View {
             )
             .padding(.bottom, Theme.Space.bar)
           }
-          if !task.links.isEmpty {
-            TaskPaletteLinks(model: model, task: task)
-              .padding(.bottom, Theme.Space.bar)
-          }
+          TaskPaletteLinks(model: model, task: task)
+            .padding(.bottom, Theme.Space.bar)
           divider
           fieldRow(.status, label: .taskPaletteFieldStatus) { statusValue(task) }
           divider

@@ -8,9 +8,10 @@ extension TaskPaletteModel {
   }
 
   /// ⌘T。選んでいるタスクのための ⌘T を開く。追加の行なら足してから開く。編集中なら確定してから選択で
-  /// 決める。完了の見出し・GitHub のタブでは何もしない。
+  /// 決める。完了の見出しでは何もしない。GitHub タブは `openWorktreePaletteFromGitHub`。
   func openWorktreePalette() {
-    guard tab == .tasks else { return }
+    guard pick == nil else { return }
+    guard visibleTab == .tasks else { return openWorktreePaletteFromGitHub() }
     leaveEditingForAction()
     switch selectedID {
     case .task(let id): onOpenWorktreePalette(id)

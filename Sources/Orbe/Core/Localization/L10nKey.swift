@@ -238,6 +238,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteElapsedMinutes
   case taskPaletteElapsedHours
   case taskPaletteAgentWaitingBadge
+  case taskPaletteAgentWorkingBadge
   case taskPaletteAgentWorking
   case taskPaletteAgentWaiting
   case taskPaletteAgentDone
@@ -246,6 +247,56 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAgentGoToTab
   case taskPaletteActionGoToTab
   case taskPaletteHintOpenWorktree
+  case taskPaletteGitHubFilterAssigned
+  case taskPaletteGitHubFilterAuthored
+  case taskPaletteGitHubFilterReview
+  case taskPaletteGitHubMore
+  case taskPaletteGitHubEmpty
+  case taskPaletteGitHubLoading
+  case taskPaletteGitHubFailed
+  case taskPaletteGitHubGhMissing
+  case taskPaletteGitHubGhUnauthed
+  case taskPaletteGitHubNotFound
+  case taskPaletteRelationReviewYou
+  case taskPaletteRelationReviewTeam
+  case taskPaletteRelationReview
+  case taskPaletteRelationAuthoredYou
+  case taskPaletteRelationAssignedYou
+  case taskPaletteRelationUnassigned
+  case taskPaletteAssignSelf
+  case taskPaletteAssignSelfNote
+  case taskPaletteReviewSelf
+  case taskPaletteReviewSelfNote
+  case taskPaletteAssignFailed
+  case taskPaletteReviewFailed
+  case taskPaletteMakeTaskNote
+  case taskPaletteMakeTask
+  case taskPaletteMakeTaskOpen
+  case taskPaletteLinkExisting
+  case taskPaletteLinkedTask
+  case taskPaletteOpenTask
+  case taskPaletteRelink
+  case taskPaletteUnlinkTask
+  case taskPaletteActionAssignMake
+  case taskPaletteActionReviewMake
+  case taskPaletteActionMake
+  case taskPaletteActionOpenTask
+  case taskPaletteActionMore
+  case taskPaletteActionToggle
+  case taskPaletteHintLink
+  case taskPaletteHintRelink
+  case taskPaletteHintFilter
+  case taskPaletteErrAssign
+  case taskPaletteErrLink
+  case taskPalettePickTask
+  case taskPalettePickItem
+  case taskPaletteActionLinkItem
+  case taskPaletteActionMoveItem
+  case taskPaletteActionLinkedAlready
+  case taskPaletteHintStopPicking
+  case taskPaletteAddLink
+  case taskPaletteBranchPRAuto
+  case taskPaletteActionAddLink
 
   // MARK: - Onboarding
   case onboardingBegin

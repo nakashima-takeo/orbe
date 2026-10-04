@@ -104,7 +104,7 @@ extension TaskPaletteModelTests {
     let palette = detailWithLinks()
     var visited: [TaskPaletteArea] = []
 
-    for _ in 0..<4 {
+    for _ in 0..<5 {
       palette.moveField(-1)
       visited.append(palette.area)
     }
@@ -112,9 +112,9 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(
       visited,
       [
-        .detail(.link(link(.issue, 3).item)), .detail(.link(link(.pr, 2).item)),
+        .detail(.addLink), .detail(.link(link(.issue, 3).item)), .detail(.link(link(.pr, 2).item)),
         .detail(.link(link(.issue, 1).item)), .detail(.field(.title)),
-      ], "ステータスから上へ: 各結び付き（並びの逆順）→ タイトル")
+      ], "ステータスから上へ: 結び付ける → 各結び付き（並びの逆順）→ タイトル")
   }
 
   func testOpeningALinkHandsItsGitHubPageToTheBrowser() {
@@ -131,7 +131,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.area, .detail(.link(link(.pr, 2).item)), "開いた行に居る")
   }
 
-  /// 外すのはその 1 件だけで、焦点は同じ位置の止まる場所（次の結び付き、末尾ならステータス）へ移る。
+  /// 外すのはその 1 件だけで、焦点は同じ位置の止まる場所（次の結び付き、末尾なら「＋ 結び付ける」）へ移る。
   func testUnlinkingRemovesOnlyThatLinkAndFocusMovesToTheSamePosition() throws {
     let palette = detailWithLinks()
 
@@ -140,7 +140,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.area, .detail(.link(link(.issue, 3).item)))
 
     palette.unlink(link(.issue, 3).item)
-    XCTAssertEqual(palette.area, .detail(.field(.status)))
+    XCTAssertEqual(palette.area, .detail(.addLink))
     XCTAssertEqual(TaskStore().tasks.first?.links, [link(.issue, 1)], "即時に保存される")
   }
 

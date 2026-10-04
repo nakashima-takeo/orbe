@@ -58,7 +58,7 @@ extension DesignSceneFixtures {
         links: [taskLink(.issue, "web-app", 47)]),
       task(6, "Slack で上司に来週の休みを連絡する"),
       task(7, "経費精算を出す", due: "2025-10-06"),
-      task(8, "キャッシュ層を差し替える", workspace: ws[2], links: [taskLink(.pr, "api", 88)]),
+      task(8, "キャッシュ層を差し替える", workspace: ws[2], links: [taskLink(.pr, "orbe", 88)]),
       task(
         9, "Dispatch: fetch 待ちの間 Esc が効かない", workspace: ws[0],
         links: [taskLink(.issue, "orbe", 218)]),
@@ -113,7 +113,7 @@ extension DesignSceneFixtures {
       (taskLink(.pr, "orbe", 209), pr("worktree の掃除を速くする", review: .changesRequested)),
       (taskLink(.pr, "orbe", 214), pr("設定の検索を速くする")),
       (taskLink(.issue, "web-app", 47), issue("ログイン直後に白画面になる")),
-      (taskLink(.pr, "api", 88), pr("キャッシュ層を差し替える", author: "sato")),
+      (taskLink(.pr, "orbe", 88), pr("キャッシュ層を差し替える", author: "sato")),
       (taskLink(.issue, "orbe", 218), issue("Dispatch: fetch 待ちの間 Esc が効かない")),
     ]
     return GitHubItemCache(
@@ -121,10 +121,76 @@ extension DesignSceneFixtures {
       viewer: GitHubViewer(login: "nakatake"), fetch: { _, _ in })
   }
 
-  static func taskPaletteModel(_ file: TasksFile? = nil) -> TaskPaletteModel {
+  /// 見本の root（`nakatake/orbe` に解決済み）。
+  static let taskRoot = "/work/orbe"
+  static let taskRepo = GitHubRepoName(nameWithOwner: "nakatake/orbe")
+
+  /// 見本 XTGitHub1.png・XTGitHub2.png の open 一覧を詰めた置き場（取得は何もしない）。Issue 24 件（自分の
+  /// 担当は #212・#218）・PR 7 件（自分の作成は #213・#214・#229、自分へのレビュー依頼は個人宛の #88 と
+  /// チーム宛の #231・#233）。
+  static func taskOpenLists(viewer: GitHubViewer) -> GitHubOpenLists {
+    let hour = { (hours: Double) in taskToday.addingTimeInterval(-hours * 3600) }
+    func issue(_ number: Int, _ title: String, _ hours: Double, assignees: [String] = [])
+      -> GitHubOpenItem
+    {
+      GitHubOpenItem(
+        number: number, title: title, updatedAt: hour(hours), author: "tanaka",
+        assignees: assignees, pullRequest: nil)
+    }
+    func pr(
+      _ number: Int, _ title: String, _ hours: Double, author: String = "nakatake",
+      reviewers: [String] = [], teams: [String] = []
+    ) -> GitHubOpenItem {
+      GitHubOpenItem(
+        number: number, title: title, updatedAt: hour(hours), author: author, assignees: [],
+        pullRequest: .init(
+          isDraft: false, review: .reviewRequired, checks: .success, reviewers: reviewers,
+          teams: teams))
+    }
+    let fillers = [
+      "ヘルプの検索が遅い", "サイドバーの並びを覚える", "テーマの切り替えでちらつく", "通知の音量を変えたい",
+      "workspace の改名で色が戻る", "タブの複製でスクロールが消える", "設定の書き出しに対応する",
+      "ログの保存先を選べるようにする", "IME の候補窓がずれる", "フォントの太さが反映されない",
+      "起動時に前回の窓の大きさへ戻す", "agent の終了を通知する", "コピー時に末尾の空白を落とす",
+      "検索の結果に件数を出す", "分割の比率を覚える", "リンクのクリックで開くアプリを選ぶ",
+      "選択範囲を共有できるようにする", "最近閉じたタブを戻す", "メニューバーの表示を切り替える",
+      "ダークモードの境界線が見えにくい",
+    ]
+    let issues =
+      [
+        issue(212, "タスク機能の設計", 30, assignees: ["nakatake"]),
+        issue(218, "Dispatch: fetch 待ちの間 Esc が効かない", 50, assignees: ["nakatake"]),
+        issue(221, "fetch 中に進捗が出ない", 2),
+        issue(220, "Settings: フォント幅の候補が狭い", 20, assignees: ["tanaka"]),
+      ]
+      + fillers.enumerated().map {
+        issue(200 - $0.offset, $0.element, 24 + Double($0.offset) * 12, assignees: ["sato"])
+      }
+    let pullRequests = [
+      pr(213, "タスク一覧の土台", 3),
+      pr(214, "設定の検索を速くする", 26),
+      pr(88, "キャッシュ層を差し替える", 40, author: "sato", reviewers: ["nakatake"]),
+      pr(231, "ログ出力を整理する", 5, author: "tanaka", teams: ["orbe/core"]),
+      pr(233, "クラッシュレポートの送信先を変える", 8, author: "tanaka", teams: ["orbe/core"]),
+      pr(230, "docs: README を英訳する", 30, author: "sato"),
+      pr(229, "ベースの既定を覚える", 70),
+    ]
+    var repository = GitHubOpenLists.Repository()
+    repository.issues.items = issues
+    repository.pullRequests.items = pullRequests
+    repository.reviewRequests = [88, 231, 233]
+    return GitHubOpenLists(
+      roots: [taskRoot: .init(resolution: .resolved, repo: taskRepo)],
+      repositories: [taskRepo: repository], source: .idle, viewer: viewer)
+  }
+
+  static func taskPaletteModel(
+    _ file: TasksFile? = nil, openLists: ((GitHubViewer) -> GitHubOpenLists)? = nil
+  ) -> TaskPaletteModel {
     let items = taskGitHubItems()
     return TaskPaletteModel(
       store: TaskStore(file: file ?? taskDesignFile()), githubItems: items, viewer: items.viewer,
+      openLists: (openLists ?? taskOpenLists)(items.viewer), root: taskRoot,
       agents: taskAgents(),
       workspaces: taskWorkspaces, now: taskToday, timeZone: taskCalendar.timeZone)
   }

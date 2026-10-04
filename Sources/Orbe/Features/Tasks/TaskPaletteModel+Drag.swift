@@ -33,10 +33,10 @@ extension TaskPaletteModel {
   }
 
   /// クリックと同じ手順（編集を確定して一覧へ戻り、そのタスクを選ぶ）の後で掴む。掴めないタスク（完了・
-  /// 見えていない）なら、この掴みの続きを無視する。
+  /// 見えていない）と選ぶ状態の間なら、この掴みの続きを無視する。
   private func beginDrag(_ taskID: Int, start: CGPoint, translation: CGFloat) {
     drag = .idle
-    guard visibleSiblings(of: taskID) != nil else {
+    guard pick == nil, visibleSiblings(of: taskID) != nil else {
       drag = .discarded(start: start)
       return
     }
