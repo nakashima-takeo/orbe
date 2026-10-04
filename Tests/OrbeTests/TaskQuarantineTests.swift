@@ -19,8 +19,8 @@ final class TaskQuarantineTests: OrbeTestCase {
   }
 
   private func taskJSON(id: Int) -> String {
-    #"{"id":\#(id),"title":"t\#(id)","status":"todo","priority":"medium","memo":""#
-      + #","createdAt":"2027-01-15T08:00:00.000Z"}"#
+    #"{"id":\#(id),"title":"t\#(id)","status":"todo","priority":"medium","#
+      + #""memo":"","createdAt":"2027-01-15T08:00:00.000Z"}"#
   }
 
   private func assertQuarantined(
@@ -75,6 +75,24 @@ final class TaskQuarantineTests: OrbeTestCase {
 
   private func file(_ tasks: [String]) -> String {
     #"{"version":1,"nextId":\#(tasks.count + 1),"tasks":[\#(tasks.joined(separator: ","))]}"#
+  }
+
+  /// 結び付きは書かれたとおりに読む（下の退避のテストが、壊れた JSON ではなく結び付きの規則で
+  /// 退避していることの対照でもある）。
+  func testDistinctLinksLoadAsWritten() throws {
+    try Data(
+      file([
+        taskJSON(id: 1, links: #"{"kind":"issue","repo":"O/N","number":7}"#),
+        taskJSON(id: 2, links: #"{"kind":"pr","repo":"o/n","number":8}"#),
+      ]).utf8
+    ).write(to: tasksFile())
+
+    let loaded = try XCTUnwrap(TaskPersistence.load())
+
+    XCTAssertTrue(try quarantineFiles().isEmpty)
+    XCTAssertEqual(
+      loaded.tasks.map { $0.links.map(\.item.text) }, [["o/n#7"], ["o/n#8"]], "repo は小文字で持つ")
+    XCTAssertEqual(loaded.tasks.map { $0.links.map(\.kind) }, [[.issue], [.pr]])
   }
 
   /// 同じ項目（リポジトリ＋番号。種別と大小文字は問わない）が 2 つのタスクに付いた原本は、
