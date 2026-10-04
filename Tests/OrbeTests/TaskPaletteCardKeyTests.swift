@@ -73,6 +73,27 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     pump(0.15)
   }
 
+  /// 実アプリと同じく、キューから取り出してから配る（`NSApp.currentEvent` がそのキーを指す）。
+  /// 変換中かの判定は、届いたキーの窓をここから引く。
+  private func pressThroughTheEventQueue(
+    _ keyCode: UInt16, _ characters: String, to window: NSWindow
+  ) {
+    guard
+      let event = NSEvent.keyEvent(
+        with: .keyDown, location: .zero, modifierFlags: [],
+        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+        context: nil, characters: characters, charactersIgnoringModifiers: characters,
+        isARepeat: false, keyCode: keyCode)
+    else { return XCTFail("キーイベントを作れない") }
+    NSApp.postEvent(event, atStart: true)
+    guard
+      let dequeued = NSApp.nextEvent(
+        matching: .keyDown, until: Date().addingTimeInterval(1), inMode: .default, dequeue: true)
+    else { return XCTFail("キーイベントがキューから取れない") }
+    NSApp.sendEvent(dequeued)
+    pump(0.15)
+  }
+
   private func arrow(_ keyCode: UInt16, _ extra: NSEvent.ModifierFlags = [], to window: NSWindow) {
     let character: NSEvent.SpecialKey =
       switch keyCode {
@@ -106,6 +127,29 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     press(Key.space, " ", to: window)
     XCTAssertEqual(model.query, "b ", "文字があるときの space は空白を打つ")
     XCTAssertEqual(status(model, 2), .todo)
+  }
+
+  func testSpaceWithCapsLockOnStillCompletesTheSelectedTask() {
+    let model = model()
+    let window = mount(model)
+
+    press(Key.space, " ", .capsLock, to: window)
+
+    XCTAssertEqual(status(model, 1), .done)
+  }
+
+  func testSpaceWhileComposingGoesToTheInputMethodInsteadOfCompleting() throws {
+    let model = model()
+    let window = mount(model)
+    let editor = try XCTUnwrap(window.firstResponder as? NSTextView, "前提: 入力欄の field editor")
+    editor.setMarkedText(
+      "か", selectedRange: NSRange(location: 1, length: 0),
+      replacementRange: NSRange(location: NSNotFound, length: 0))
+    XCTAssertTrue(editor.hasMarkedText(), "前提: 変換中")
+
+    pressThroughTheEventQueue(Key.space, " ", to: window)
+
+    XCTAssertEqual(status(model, 1), .todo, "変換中の space はタスクを完了にしない")
   }
 
   func testEnterCompletesTheSelectedTaskAndAddsFromTheAddRow() throws {
