@@ -30,7 +30,7 @@ extension TaskPaletteModel {
     case .tab:
       toggleScope()
     case .rightArrow:
-      guard Self.isUnmodified(press), selectedTask != nil else { return .ignored }
+      guard Self.isUnmodified(press), pick == nil, selectedTask != nil else { return .ignored }
       enterDetail()
     case .space:
       // 文字があるときの space は空白を打つ。
