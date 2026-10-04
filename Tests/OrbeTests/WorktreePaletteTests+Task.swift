@@ -87,6 +87,20 @@ extension WorktreePaletteTests {
     XCTAssertEqual(model.taskEffect?.begins, true)
   }
 
+  /// リモートブランチの行でも、↵ が既存の worktree を開くなら、その worktree の持ち主からの付け替えを言う。
+  func testARemoteBranchRowOpeningAnotherTasksWorktreeSaysItMovesFromThatTask() throws {
+    let model = taskModel(.branch(name: "issue/221", pullRequest: nil, remotes: ["origin"])) {
+      $0.localBranches.removeAll { $0.name == "pr-214" }
+      $0.remoteBranches.append(GitBranch(name: "origin/pr-214", relativeDate: "2d", upstream: nil))
+    }
+    let row = WorktreePaletteAction.open(
+      .remoteBranch(name: "origin/pr-214", existingWorktree: NSHomeDirectory() + "/wt/pr-214"))
+
+    try select(row, in: model)
+
+    XCTAssertEqual(model.taskEffect?.previousOwner?.id, 2, "#214 から付け替える")
+  }
+
   /// 進行中のタスクが自分の worktree を開くだけなら、タスクは何も変わらない。
   func testNothingIsSaidWhenAnInProgressTaskOpensItsOwnWorktree() {
     let model = taskModel(.worktree(path: issue212Path), task: 1)

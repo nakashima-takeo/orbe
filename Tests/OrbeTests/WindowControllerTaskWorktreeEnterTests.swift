@@ -5,11 +5,13 @@ import XCTest
 
 /// タスクから開いた ⌘T の ↵ を、実 `WindowController` と実 git で固定する。⌘T はタスクの workspace に
 /// 結び付き、worktree が用意できたら（遅れたブランチの最新化を通っても）タスクを進行中にしてその worktree を
-/// 付け、その workspace とタブを前面にする。用意できなかったら・札を外したら、タスクは変わらない。
+/// 付け、その workspace とタブを前面にする。用意できなかったら、タスクは変わらない。札を外したら、開いた
+/// 時点の workspace とそのリポジトリへ戻り、いつもの ⌘T と同じく振る舞う。
 ///
 /// 壊れると何が起きるか: web-app のタスクから ⌘T を開いたのに、今見ている orbe の workspace に worktree を
 /// 作ってタブを開く。タブが背景の workspace に開いて、↵ の後に何も起きなかったように見える。作成に失敗した
 /// タスクが進行中になる。PR のブランチ（遅れていることが多い）を最新化してから開くと、タスクに何も付かない。
+/// 札を外して「いつもの ⌘T」にしたつもりが、タスクの workspace にタブを開いてそこへ画面が飛ぶ。
 ///
 /// 重要: 実 NSWindow に SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
@@ -119,15 +121,27 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
     XCTAssertEqual(stored(task, in: wc), task, "タスクは変わらない")
   }
 
-  func testEnterAfterRemovingTheTaskFromTheFieldLeavesTheTaskAlone() throws {
+  /// 札を外すと、いつもの ⌘T と同じく開いた時点の workspace（main。git の外）に結び付き直す。タスクの
+  /// リポジトリの行は捨てて main の場所を読み直し、↵ は main にタブを開いて、タスクの workspace を前面に
+  /// しない。タスクも変わらない。
+  func testRemovingTheTaskReturnsToTheOpenedWorkspaceAndEnterLeavesTheTaskAlone() throws {
     let (wc, task) = try launch()
-    let row = WorktreePaletteAction.open(.directory(path: toplevel))
-    let palette = try open(wc, for: task, row: row)
+    let repositoryRow = WorktreePaletteAction.open(.directory(path: toplevel))
+    let palette = try open(wc, for: task, row: repositoryRow)
+    let mainTabs = wc.workspaces[0].tabs.count
 
     palette.clearTaskContext()
-    palette.activate(at: try XCTUnwrap(palette.items.firstIndex { $0.action == row }))
 
-    XCTAssertEqual(wc.model.overlay, .none, "前提: いつもの ⌘T と同じくタブを開いて閉じる")
+    XCTAssertTrue(
+      pump { palette.items.contains { $0.glyph == .directory } }, "開いた時点の workspace の場所を読み直す")
+    XCTAssertFalse(
+      palette.items.contains { $0.action == repositoryRow }, "タスクの workspace のリポジトリの行は残らない")
+    palette.activate(at: try XCTUnwrap(palette.items.firstIndex { $0.glyph == .directory }))
+
+    XCTAssertEqual(wc.model.overlay, .none, "タブを開いて閉じる")
+    XCTAssertEqual(wc.current.name, "main", "タスクの workspace を前面にしない")
+    XCTAssertEqual(wc.workspaces[0].tabs.count, mainTabs + 1, "開いた時点の workspace にタブが開く")
+    XCTAssertTrue(wc.workspaces[1].tabs.isEmpty, "タスクの workspace には開かない")
     XCTAssertEqual(stored(task, in: wc), task, "札を外した後の ↵ はタスクを変えない")
   }
 
