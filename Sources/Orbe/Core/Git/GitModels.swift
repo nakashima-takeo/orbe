@@ -117,10 +117,38 @@ struct GitHubRepoName: Hashable {
     self.init(nameWithOwner: "\(parts[parts.count - 2])/\(name)")
   }
 
-  /// GitHub の remote の URL か（「URL に github.com を含むか」。SSH のホスト別名 `github.com-work` 等も
-  /// 拾う）。可用性の判定（`GitRepo.originIsGitHub`）と台帳が共にこの 1 つの規則を読む。
+  /// github.com のリポジトリの URL か。URL の書き方（https・ssh://・scp 形式の `git@host:o/n`）ごとにホストを
+  /// 取り出し、ホストが github.com か ssh.github.com（443 番の SSH）、または SSH の書き方でホストが
+  /// `github.com-` で始まる別名（`github.com-work`。複数アカウントの ssh config の慣習）のときだけ真。
+  /// `github.company.com` のような GitHub Enterprise は偽——問い合わせと書き込みは github.com を名指しする
+  /// ので、別のホストの owner/name を github.com で読み書きしないため。可用性の判定
+  /// （`GitRepo.originIsGitHub`）・台帳・GitHub タブの既定のリポジトリが共にこの 1 つの規則を読む。
   static func isGitHub(remoteURL url: String) -> Bool {
-    url.contains("github.com")
+    guard let (host, isSSH) = host(of: url) else { return false }
+    return host == "github.com" || host == "ssh.github.com"
+      || (isSSH && host.hasPrefix("github.com-"))
+  }
+
+  /// URL のホスト（小文字）と、SSH の書き方か。`scheme://[user@]host[:port]/path` と scp 形式
+  /// `[user@]host:path`（`:` が最初の `/` より前にある）を読む。どちらでもない（ローカルのパス）なら nil。
+  private static func host(of url: String) -> (host: String, isSSH: Bool)? {
+    let authority: Substring
+    let isSSH: Bool
+    if let scheme = url.range(of: "://") {
+      let rest = url[scheme.upperBound...]
+      authority = rest.prefix { $0 != "/" }
+      isSSH = url[..<scheme.lowerBound].lowercased().contains("ssh")
+    } else if let colon = url.firstIndex(of: ":"),
+      !url[..<colon].contains("/")
+    {
+      authority = url[..<colon]
+      isSSH = true
+    } else {
+      return nil
+    }
+    let hostAndPort = authority.split(separator: "@").last ?? ""
+    let host = hostAndPort.prefix { $0 != ":" }
+    return host.isEmpty ? nil : (host.lowercased(), isSSH)
   }
 }
 
