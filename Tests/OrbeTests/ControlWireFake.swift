@@ -83,11 +83,13 @@ final class FakeControlTarget: ControlTarget {
     let draft: TaskDraft
     let workspaceId: ClearableValue<Int>?
     let callerTabId: Int?
+    let worktree: String?
   }
   struct UpdatedTask {
     let taskId: Int
     let update: TaskUpdate
     let workspaceId: ClearableValue<Int>?
+    let worktree: ClearableValue<String>?
   }
   struct MovedTask {
     let taskId: Int
@@ -244,17 +246,21 @@ final class FakeControlTarget: ControlTarget {
     return outcome(["tasks": []])
   }
 
-  func controlAddTask(_ draft: TaskDraft, workspaceId: ClearableValue<Int>?, callerTabId: Int?)
-    -> Result<Any, ControlError>
-  {
-    addedTasks.append(AddedTask(draft: draft, workspaceId: workspaceId, callerTabId: callerTabId))
+  func controlAddTask(
+    _ draft: TaskDraft, workspaceId: ClearableValue<Int>?, callerTabId: Int?, worktree: String?
+  ) -> Result<Any, ControlError> {
+    addedTasks.append(
+      AddedTask(
+        draft: draft, workspaceId: workspaceId, callerTabId: callerTabId, worktree: worktree))
     return outcome(["task": ["taskId": 1, "title": draft.title]])
   }
 
-  func controlUpdateTask(taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?)
-    -> Result<Any, ControlError>
-  {
-    updatedTasks.append(UpdatedTask(taskId: taskId, update: update, workspaceId: workspaceId))
+  func controlUpdateTask(
+    taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?,
+    worktree: ClearableValue<String>?
+  ) -> Result<Any, ControlError> {
+    updatedTasks.append(
+      UpdatedTask(taskId: taskId, update: update, workspaceId: workspaceId, worktree: worktree))
     return outcome(["task": ["taskId": taskId]])
   }
 

@@ -55,9 +55,9 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     XCTAssertEqual(
       rows(control),
       [
-        [first, "todo", "high", "2026-10-06", "-", "経費精算を出す", "-", "-"],
-        [second, "todo", "medium", "-", "-", "承認を取る", "部長の返事", "-"],
-      ], "task list: 1 行 1 タスク（ID・ステータス・優先度・期限・workspace・タイトル・待ち・結び付き）で、追加順に末尾へ並ぶ")
+        [first, "todo", "high", "2026-10-06", "-", "経費精算を出す", "-", "-", "-"],
+        [second, "todo", "medium", "-", "-", "承認を取る", "部長の返事", "-", "-"],
+      ], "task list: 1 行 1 タスク（ID・ステータス・優先度・期限・workspace・タイトル・待ち・結び付き・worktree）で、追加順に末尾へ並ぶ")
     XCTAssertEqual(try tasks(control)[1]["memo"] as? String, "メモ", "task add --memo")
 
     run(control, ["set", second, "--status", "done"])
@@ -71,7 +71,7 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
         "--workspace", String(background),
       ])
     XCTAssertEqual(
-      rows(control).first, [first, "todo", "low", "-", "background", "経費精算", "領収書", "-"],
+      rows(control).first, [first, "todo", "low", "-", "background", "経費精算", "領収書", "-", "-"],
       "task set: 渡した項目だけ変わり、--no-due で期限が外れる")
     let filtered = try XCTUnwrap(
       control.orbJSON(["task", "list", "--workspace", String(background)])["tasks"]

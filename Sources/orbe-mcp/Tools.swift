@@ -270,7 +270,8 @@ let tools: [[String: Any]] = [
       "人と agent が共有するタスク一覧を、ユーザーが決めた列の順で返す。各要素は taskId・title・status"
         + "（todo / in_progress / done）・priority（high / medium / low）・memo・createdAt、あれば waiting"
         + "{reason,since}・due（YYYY-MM-DD）・workspaceId と workspaceName・createdBy（追加した agent）・"
-        + "links（結び付いた GitHub の Issue・PR の列 [{kind: issue / pr, repo: owner/name, number}]。先頭が主）。"
+        + "links（結び付いた GitHub の Issue・PR の列 [{kind: issue / pr, repo: owner/name, number}]。先頭が主）・"
+        + "worktree（このタスクの作業の場所＝worktree のルートの絶対パス。ディレクトリが無ければ出ない）。"
         + "workspace に付いていないタスク（付き先が削除されたものを含む）は workspaceId を持たない。"
         + "完了したタスクも削除されるまで残る。memo は人も agent も読む前提の欄。"
     ),
@@ -287,6 +288,8 @@ let tools: [[String: Any]] = [
         + "呼び出し元タブの agent が作業中（working）なら、その agent 名が追加者として記録される。"
         + "links で GitHub の Issue・PR を結び付けられる（先頭が主）。1 つの Issue・PR（repo と number が同じもの）は"
         + "1 つのタスクにだけ結び付き、ほかのタスクに付いている項目を渡すと、相手の taskId を添えて拒否される。"
+        + "worktree で作業の場所を付けられる（実在するディレクトリの絶対パス。それを含む worktree のルートに揃う）。"
+        + "1 つの worktree は 1 つのタスクにだけ付き、ほかのタスクに付いている worktree は相手の taskId を添えて拒否される。"
     ),
     (
       "inputSchema",
@@ -299,6 +302,7 @@ let tools: [[String: Any]] = [
           "waitingReason": strProp("何を待っているか（待ちにする場合）"),
           "memo": strProp("メモ（複数行可。人も agent も読む）"),
           "links": taskLinksProp("結び付ける GitHub の Issue・PR（先頭が主）"),
+          "worktree": strProp("このタスクの作業の場所（実在するディレクトリの絶対パス）"),
           "workspaceId": [
             "type": ["integer", "null"],
             "description": "付ける workspace（省略で呼び出し元タブの workspace、null でなし）",
@@ -314,7 +318,8 @@ let tools: [[String: Any]] = [
         + "（待ちは自動で外れる。完了のまま待ちは入れられない）。due / waitingReason / workspaceId は null で外す。"
         + "links は渡した列で丸ごと置き換え、[] で全部外す。結び付きを足すときは、今の links を読み、"
         + "主（先頭）を先頭に保ったまま末尾に足して渡す。ほかのタスクに付いている Issue・PR を付け替えるには、"
-        + "先にそのタスクの links から外してから、このタスクに付ける。"
+        + "先にそのタスクの links から外してから、このタスクに付ける。worktree は null で外す。"
+        + "ほかのタスクに付いている worktree を付け替えるときも、先にそのタスクから外す。"
     ),
     (
       "inputSchema",
@@ -330,6 +335,10 @@ let tools: [[String: Any]] = [
           ],
           "memo": strProp("メモ（置き換え）"),
           "links": taskLinksProp("結び付ける GitHub の Issue・PR（丸ごと置き換え。先頭が主。[] で全部外す）"),
+          "worktree": [
+            "type": ["string", "null"],
+            "description": "このタスクの作業の場所（実在するディレクトリの絶対パス。null で外す）",
+          ],
           "workspaceId": [
             "type": ["integer", "null"], "description": "付ける workspace（null でなし）",
           ],
