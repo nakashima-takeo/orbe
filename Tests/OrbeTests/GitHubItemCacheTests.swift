@@ -135,4 +135,23 @@ final class GitHubItemCacheTests: OrbeTestCase {
     XCTAssertFalse(cache.isAwaitingAnswer(a), "試して取れなかった")
     XCTAssertFalse(cache.isAwaitingAnswer(b), "答えがある")
   }
+
+  /// 取れなかった回は答えを変えないが、「答えを待っているか」は観測で変わったと伝わる。タスクから開いた
+  /// ⌘T はこの観測で PR のブランチ名の待ちを解くので、伝わらないと gh の無い環境で ↵ が預かられたままになる。
+  func testAFailedQueryIsObservedAsNoLongerAwaitingAnAnswer() {
+    let fetches = PendingFetches()
+    let cache = GitHubItemCache(fetch: fetches.fetch)
+    cache.ensure([a])
+    var changed = false
+    withObservationTracking {
+      _ = cache.isAwaitingAnswer(a)
+    } onChange: {
+      changed = true
+    }
+
+    fetches.answer(0, [a], nil)
+
+    XCTAssertTrue(changed)
+    XCTAssertFalse(cache.isAwaitingAnswer(a))
+  }
 }
