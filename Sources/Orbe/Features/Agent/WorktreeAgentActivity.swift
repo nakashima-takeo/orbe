@@ -1,24 +1,24 @@
 import Foundation
 import Observation
 
-/// agent の状態のうち、作業の札に出すもの。
-enum WorktreeAgentState: Equatable {
-  case working, waiting
-}
-
-/// worktree ごとの、そこで作業中か入力待ちの agent（@Observable・main のみ・窓に 1 つ）。タブは観測できない
+/// worktree ごとの、そこで動いている agent（@Observable・main のみ・窓に 1 つ）。タブは観測できない
 /// 値なので、画面がタブを直接読むと描き直しが他の変化のついでに左右される。chrome の更新の合流点
 /// （`flushChrome`）が全タブからこの索引を作り直し、値が変わったときだけ書く。タスク画面と ⌘T が読む。
 @Observable final class WorktreeAgentActivity {
   struct Agent: Equatable {
     /// agent の command 名（`claude`）。
     let name: String
-    let state: WorktreeAgentState
+    /// 報告している状態（作業中・入力待ち・完了・休止）。
+    let state: AgentStateIcon.Kind
     /// その状態になった時刻（経過の表示）。
     let since: Date
     let tabId: Int
     /// タブの表示名。
     let tabTitle: String
+
+    /// 行の札に出す状態（作業中か入力待ち）。完了・休止の agent は、詳細の agent の場所と ↵ でタブへ移る
+    /// 先にだけ出る。
+    var isBusy: Bool { state == .working || state == .waiting }
   }
 
   /// 場所のキー（タブの `groupKey`）→ その worktree の agent。
@@ -34,7 +34,8 @@ enum WorktreeAgentState: Equatable {
     if next != agents { agents = next }
   }
 
-  /// 同じ worktree に複数あれば 1 つにまとめる。入力待ちを優先し（人の手が要る）、同じ状態なら、その状態に
+  /// 同じ worktree に複数あれば 1 つにまとめる。入力待ち > 作業中 > 完了 > 休止の順に優先し（人の手が要る
+  /// ものから。タブのグリフを畳む `AgentRollup.priorityOrder` と同じ順の後ろに休止）、同じ状態なら、その状態に
   /// なったのが新しい方。
   static func index(_ tabs: [(key: String, agent: Agent)]) -> [String: Agent] {
     var index: [String: Agent] = [:]
@@ -43,12 +44,15 @@ enum WorktreeAgentState: Equatable {
         index[key] = agent
         continue
       }
-      if agent.state != other.state {
-        if agent.state == .waiting { index[key] = agent }
-      } else if agent.since > other.since {
+      let (rank, otherRank) = (Self.rank(agent.state), Self.rank(other.state))
+      if rank < otherRank || (rank == otherRank && agent.since > other.since) {
         index[key] = agent
       }
     }
     return index
+  }
+
+  private static func rank(_ state: AgentStateIcon.Kind) -> Int {
+    AgentRollup.priorityOrder.firstIndex(of: state.state) ?? AgentRollup.priorityOrder.count
   }
 }

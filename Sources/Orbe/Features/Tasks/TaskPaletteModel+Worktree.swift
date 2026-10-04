@@ -2,7 +2,7 @@ import Foundation
 
 /// タスクの作業の場所に関わる操作（⌘T でそのタスクのための ⌘T を開く・agent のタブへ移る）。
 extension TaskPaletteModel {
-  /// タスクの worktree で作業中か入力待ちの agent。
+  /// タスクの worktree で動いている agent（状態を問わない。詳細の agent の場所と ↵ でタブへ移る先）。
   func agent(of task: TaskItem) -> WorktreeAgentActivity.Agent? {
     task.agent(in: agents.agents)
   }

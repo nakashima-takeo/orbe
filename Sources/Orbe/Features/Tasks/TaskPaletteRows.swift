@@ -207,6 +207,6 @@ enum TaskPaletteRows {
       pullRequest: GitHubItemText.pullRequestBadge(task.links, input.items),
       needsReview: GitHubItemText.needsReview(
         task.links, input.items, viewerLogin: input.viewerLogin),
-      agent: task.agent(in: input.agents))
+      agent: task.agent(in: input.agents).flatMap { $0.isBusy ? $0 : nil })
   }
 }

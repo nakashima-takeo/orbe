@@ -55,8 +55,8 @@ struct TaskWorktree: Hashable, Codable {
 }
 
 extension TaskItem {
-  /// このタスクの worktree で作業中か入力待ちの agent（`agents` は `WorktreeAgentActivity` の索引）。完了した
-  /// タスクには出さない（今の作業の札が、別の作業を誤って示す）。
+  /// このタスクの worktree で動いている agent（`agents` は `WorktreeAgentActivity` の索引。状態は問わない）。
+  /// 完了したタスクには出さない（今の作業が、別の作業を誤って示す）。
   func agent(in agents: [String: WorktreeAgentActivity.Agent]) -> WorktreeAgentActivity.Agent? {
     status == .done ? nil : worktree.flatMap { agents[$0.path] }
   }

@@ -74,6 +74,8 @@ extension L10n {
     .taskPaletteAgentWaitingBadge: ("入力待ち", "waiting"),
     .taskPaletteAgentWorking: ("%@ が取り掛かっている", "%@ is working on it"),
     .taskPaletteAgentWaiting: ("%@ が入力を待っている", "%@ is waiting for you"),
+    .taskPaletteAgentDone: ("%@ が応答を終えた", "%@ has finished"),
+    .taskPaletteAgentIdle: ("%@ が次の指示を待っている", "%@ is idle"),
     .taskPaletteAgentTab: ("タブ %@", "tab %@"),
     .taskPaletteAgentGoToTab: ("タブへ", "Go to tab"),
     .taskPaletteActionGoToTab: ("%1$@ へ移る", "Go to %1$@"),

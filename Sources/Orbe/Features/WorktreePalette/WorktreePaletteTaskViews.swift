@@ -49,8 +49,8 @@ struct WorktreePaletteRowTaskBadge: View {
         fontResolver.text($0, base: Theme.Typography.meta)
           .foregroundStyle(Color.theme.textSecondary)
       }
-      if let agent = task.agent {
-        StatusGlyphView(kind: agent.state == .working ? .working : .waiting, size: 10)
+      if let agent = task.agent, agent.isBusy {
+        StatusGlyphView(kind: agent.state, size: 10)
       }
     }
     .font(Font.theme.meta)

@@ -240,6 +240,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAgentWaitingBadge
   case taskPaletteAgentWorking
   case taskPaletteAgentWaiting
+  case taskPaletteAgentDone
+  case taskPaletteAgentIdle
   case taskPaletteAgentTab
   case taskPaletteAgentGoToTab
   case taskPaletteActionGoToTab
