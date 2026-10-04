@@ -15,6 +15,7 @@ enum ChromeAction {
   case launchDefaultAgent  // デフォルトエージェントを新タブで起動
   case showAgentPalette  // エージェント起動パレットを開く
   case showWorktreePalette  // worktree パレット（worktree・ブランチを選んで新しいタブを開く）を開く
+  case showTaskPalette  // タスク画面を開く
   case openEditor  // アクティブタブの cwd を GUI エディタで開く
   case rename  // フォーカス中タブをリネーム
   case showSettings  // 設定パレットを開く
@@ -32,6 +33,7 @@ enum WindowCommand {
   case launchDefaultAgent
   case showAgentPalette
   case showWorktreePalette
+  case showTaskPalette
   case openEditor
   case renameTab
   case showSettings
@@ -51,6 +53,7 @@ extension ChromeAction {
     case .launchDefaultAgent: return .launchDefaultAgent
     case .showAgentPalette: return .showAgentPalette
     case .showWorktreePalette: return .showWorktreePalette
+    case .showTaskPalette: return .showTaskPalette
     case .openEditor: return .openEditor
     case .rename: return .renameTab
     case .showSettings: return .showSettings
@@ -69,7 +72,8 @@ extension WindowCommand {
   var availableWithoutTabs: Bool {
     switch self {
     case .showClosedAgentsPalette, .switchWorkspace,
-      .launchDefaultAgent, .showAgentPalette, .showWorktreePalette, .showSettings, .toggleHelp:
+      .launchDefaultAgent, .showAgentPalette, .showWorktreePalette, .showTaskPalette, .showSettings,
+      .toggleHelp:
       return true
     case .nextTab, .prevTab, .openEditor, .renameTab:
       return false
@@ -114,6 +118,7 @@ enum Keybindings {
     case "A": return .showAgentPalette  // Cmd+Shift+A
     case "C": return .launchDefaultAgent  // Cmd+Shift+C
     case "E": return .openEditor  // Cmd+Shift+E
+    case "X": return .showTaskPalette  // Cmd+Shift+X
     case "h": return .toggleHelp  // Cmd+H（macOS Hide から奪取。メニューの Hide は無割当で残す）
     default: return nil
     }

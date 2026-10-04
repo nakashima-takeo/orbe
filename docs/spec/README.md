@@ -19,7 +19,7 @@ Orbe の「今どうなっているか」を機能単位で持つ。読者は人
 |---|---|
 | `terminal/` | ターミナル表面 — libghostty 埋め込みの土台・入力（IME・補完を除く）・スクロールバック検索 |
 | `chrome/` | GUI の枠 — window・レイアウト構成、常駐バー、メニューバー投影、ヘルプ |
-| `palette/` | オーバーレイ型 UI — パレット・ポップアップとして開く面（worktree パレット・設定・workspace 切替・補完・Attention） |
+| `palette/` | オーバーレイ型 UI — パレット・ポップアップとして開く面（worktree パレット・タスク画面・設定・workspace 切替・補完・Attention） |
 | `agent/` | エージェント — 起動、状態報告の配管、配布プラグイン |
 | `control/` | 外部からの操作 — 制御 API・`orb` CLI |
 | `platform/` | アプリ基盤 — workspace コンテナ・設定・永続・ビルドチャネル・アップデート・ライセンス・i18n・git 実行 |

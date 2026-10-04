@@ -31,7 +31,7 @@ final class WorktreePaletteRowTests: OrbeTestCase {
 
   /// 縮みうる文字は、「先頭 1 文字＋…」で読める幅があれば出し、無ければまったく出さない。
   func testTruncatingTextDrawsNothingRatherThanAFragment() {
-    let slot = WorktreePaletteTruncatingSlot("feat: session restore") { Text($0) }
+    let slot = TruncatingSlot("feat: session restore") { Text($0) }
     let natural = renderedWidth(slot, width: 1000)
     XCTAssertGreaterThan(natural, 0)
 
@@ -42,7 +42,7 @@ final class WorktreePaletteRowTests: OrbeTestCase {
     let fullText = renderedWidth(Text("feat: session restore").fixedSize(), width: 1000)
     XCTAssertEqual(natural, fullText, "入る幅なら全文のまま")
 
-    let padded = WorktreePaletteTruncatingSlot("feat: session restore", leading: 8) { Text($0) }
+    let padded = TruncatingSlot("feat: session restore", leading: 8) { Text($0) }
     XCTAssertEqual(renderedWidth(padded, width: 1000), natural + 8, "出すときは余白を足す")
     XCTAssertEqual(renderedWidth(padded, width: 10), 0, "畳むときは余白ごと幅 0")
   }

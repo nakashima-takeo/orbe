@@ -112,6 +112,9 @@ struct ThemeFonts {
   // 情報密度優先の行タイポ（worktree パレットの clean）
   let paneRow = Font(Theme.Typography.paneRow as CTFont)
   let paneSegment = Font(Theme.Typography.paneSegment as CTFont)
+  // タスク画面（⌘⇧X）
+  let taskText = Font(Theme.Typography.taskText as CTFont)
+  let taskHeading = Font(Theme.Typography.taskHeading as CTFont)
   // Help（⌘H チートシート）
   let helpTitle = Font(Theme.Typography.helpTitle as CTFont)
   let helpRow = Font(Theme.Typography.helpRow as CTFont)

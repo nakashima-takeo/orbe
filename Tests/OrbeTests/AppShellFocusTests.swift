@@ -34,6 +34,16 @@ final class AppShellFocusTests: OrbeTestCase {
     XCTAssertEqual(palette.render.focusToken, before &+ 1, "切替パレット絞り込み欄の focusToken を進める")
   }
 
+  func testFocusesTaskPaletteWhenTaskPaletteOverlayActive() {
+    let model = makeModel()
+    let palette = TaskPaletteSamples.threeTodos()
+    model.taskPalette = palette
+    model.overlay = .taskPalette
+    let before = palette.focusToken
+    model.focusCurrentOverlayField()
+    XCTAssertEqual(palette.focusToken, before &+ 1, "タスク画面の focusToken を進める")
+  }
+
   func testNoOverlayIsNoOp() {
     let model = makeModel()
     model.overlay = .none

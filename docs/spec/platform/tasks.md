@@ -6,7 +6,7 @@ updated: 2026-10-04
 
 # タスク
 
-人と agent が同じ一覧を読み書きするための、Orbe が持つタスク一覧。agent は会話をまたいで「やること」を残し、人はそれを workspace をまたいで眺めて並べ替える。入口は[制御 API](../control/api.md)（MCP にも出す）と [`orb task`](../control/cli.md)。
+人と agent が同じ一覧を読み書きするための、Orbe が持つタスク一覧。agent は会話をまたいで「やること」を残し、人はそれを workspace をまたいで眺めて並べ替える。入口は人向けの[タスク画面](../palette/tasks.md)（⌘⇧X）と、[制御 API](../control/api.md)（MCP にも出す）と [`orb task`](../control/cli.md)。
 
 ## 一覧は 1 本の列
 

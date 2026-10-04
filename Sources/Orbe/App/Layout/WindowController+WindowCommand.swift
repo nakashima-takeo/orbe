@@ -13,6 +13,7 @@ extension WindowController {
     case .launchDefaultAgent: agentLauncher.launchDefault()
     case .showAgentPalette: agentLauncher.showPalette()
     case .showWorktreePalette: showWorktreePalette()
+    case .showTaskPalette: showTaskPalette()
     case .openEditor: openEditor()
     case .renameTab: beginTabRename()
     case .showSettings: showSettingsPalette()

@@ -314,12 +314,14 @@ extension WindowController {
   }
 
   func dismissPalette() {
+    settleTaskPaletteEditing()
     model.overlay = .none
     model.languageSelect = nil
     model.workspacePalette = nil
     model.workspaceCreate = nil
     model.worktreePalette = nil
     model.worktreePaletteProvider = nil
+    model.taskPalette = nil
     model.settingsPalette = nil
     model.attentionPalette = nil
     model.closedAgentsPalette = nil
