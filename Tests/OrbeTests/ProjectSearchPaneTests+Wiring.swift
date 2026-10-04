@@ -181,6 +181,7 @@ extension ProjectSearchPaneTests {
       list.keyDown(with: down)
       XCTAssertEqual(hosted.pane.document?.surface.selectedRange, NSRange(location: 0, length: 6))
       list.keyDown(with: down)  // 窓の中: 待つ
+      list.keyUp(with: .keyRelease(down.characters!))
       move()
       let responder = hosted.window.firstResponder
       pumpMain(
@@ -192,6 +193,31 @@ extension ProjectSearchPaneTests {
         },
         "\(name): 焦点は動かない")
     }
+  }
+
+  /// 結果の列で ↓ を押し続けると、リピートの間隔が窓より長くても（macOS の既定 約 90ms）押している間は開かず、離してから
+  /// 開く。
+  func testHoldingDownInTheListOpensOnlyAfterTheRelease() throws {
+    let hosted = try host(["a.txt": "needle\n", "b.txt": "needle\n", "c.txt": "needle\n"])
+    searchAll(hosted, "needle")
+    let list = try list(hosted)
+    hosted.window.makeFirstResponder(list)
+    let arrow = String(UnicodeScalar(NSEvent.SpecialKey.downArrow.rawValue)!)
+    hosted.search.select(RowID(path: "a.txt", match: nil))
+
+    list.keyDown(with: .key(arrow, []))
+    XCTAssertEqual(hosted.pane.document?.url, hosted.repo.url("a.txt"), "押し始めはすぐ開く")
+    RunLoop.main.run(until: Date().addingTimeInterval(0.2))  // 初期遅延
+    for _ in 0..<3 {
+      list.keyDown(with: .key(arrow, [], isRepeat: true))
+      RunLoop.main.run(until: Date().addingTimeInterval(0.09))
+    }
+    XCTAssertEqual(hosted.search.selection, RowID(path: "c.txt", match: nil), "前提: 3 回動いた")
+    XCTAssertEqual(hosted.pane.document?.url, hosted.repo.url("a.txt"), "押している間は開かない")
+    list.keyDown(with: .key(arrow, [], isRepeat: true))
+    list.keyUp(with: .keyRelease(arrow))
+    pumpMain(
+      until: { hosted.pane.document?.url == hosted.repo.url("c.txt") }, "離したら最後の選択を開く")
   }
 
   /// レールの「検索」は検索パネルへ切り替えて入力欄に焦点を入れ、出しているときに押すと閉じる。

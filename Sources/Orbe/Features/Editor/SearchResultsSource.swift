@@ -2,7 +2,7 @@ import AppKit
 
 /// 検索結果の列の源——`ProjectSearch` の平らな行を行の列（`RowList`）へ渡し、列の操作を model の操作へ届ける。
 ///
-/// キー: ↑↓ は選択を動かして一致なら仮のタブで開き（押し続けの間は開かない。→ `ProjectSearch+Open`）、← → は折りたたみと
+/// キー: ↑↓ は選択を動かして一致なら仮のタブで開き（押している間は開かず、離したら開く。→ `ProjectSearch+Open`）、← → は折りたたみと
 /// 親子の移動、Enter は普通のタブで開いてテキスト面へ、Esc は止めるか選択を外す。一致のシングルクリックは選んで仮のタブで
 /// 開き（焦点は列に残る）、ダブルクリックは普通のタブで開いてテキスト面へ。
 final class SearchResultsSource: RowListSource {
@@ -42,6 +42,8 @@ final class SearchResultsSource: RowListSource {
     case .escape: search.escapeInResults()
     }
   }
+
+  func keyDidRelease() { search.navigationKeyDidRelease() }
 
   func click(_ row: Int) { search.click(search.row(at: row).id) }
 

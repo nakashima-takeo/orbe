@@ -79,6 +79,8 @@ final class ProjectSearch {
   /// キーで一致へ動いたときの開きの窓（→ `ProjectSearch+Open`）。
   @ObservationIgnored let navigationDelay = EditorDelay()
   @ObservationIgnored var isNavigationWindowOpen = false
+  /// キーで動かした後、まだ離していない（押し続けている）。
+  @ObservationIgnored var isNavigationKeyHeld = false
   /// 窓の中で動いた（窓が閉じたら、その時点の選択を開く）。
   @ObservationIgnored var hasPendingNavigation = false
   @ObservationIgnored private var run: ProjectSearchRun?
@@ -300,8 +302,9 @@ final class ProjectSearch {
   }
 
   /// 入力欄か結果の列の焦点が入った・抜けた。焦点は片方ずつ入れ替わるので、抜けたほうが今の置き場のときだけ消す（入ったほうの
-  /// 知らせが先に届いても上書きしない）。
+  /// 知らせが先に届いても上書きしない）。結果の列から抜けたら、押していたキーは離したものとして扱う（離した知らせは届かない）。
   func focusDidChange(_ area: Area, focused: Bool) {
+    if area == .results, !focused { navigationKeyDidRelease() }
     if focused {
       focusedArea = area
     } else if focusedArea == area {

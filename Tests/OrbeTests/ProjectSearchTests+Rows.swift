@@ -4,7 +4,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 結果の列の操作——↑↓ で一致へ動けば仮のタブで開き（見出しでは開かない）、押し続けの開きは間引く、← → で畳む・開く・
+/// 結果の列の操作——↑↓ で一致へ動けば仮のタブで開き（見出しでは開かない）、押している間は開かず離した後に開く、← → で畳む・開く・
 /// 親へ・最初の一致へ、Enter は一致なら普通のタブで開いて本文へ（見出しならそのファイルの最後の一致）、⌘↓ / ⌘↑ で入力欄と
 /// 行き来、F4 / ⇧F4 は次・前の一致を仮のタブで開いて端で回り畳んだまとまりは開く。
 ///
@@ -79,51 +79,102 @@ extension ProjectSearchTests {
     XCTAssertEqual(opened().count, 2, "見出しへ動いても開かない")
   }
 
-  /// 押し続けると、押し始めの 1 件はすぐ開き、リピートの間は（窓の外でも）開かず、窓が閉じたら最後の選択だけを開く。窓の
-  /// 中の押下も待って最後の選択だけを開く。
+  /// 押し続けると、押し始めの 1 件はすぐ開き、押している間（キーリピート）は窓が閉じても開かず、離してから窓が閉じたら最後の
+  /// 選択だけを開く。窓の中の押下も待ち、離してから窓が閉じたら最後の選択だけを開く。
   func testHoldingAnArrowOpensOnlyTheFirstAndTheLastMatch() throws {
     let f = try rowsFixture()
-    let search = f.search
-    let opened = f.opened
-    let closeWindow = f.closeWindow
-    search.select(match("a.txt", 0))
+    f.search.select(match("a.txt", 0))
 
-    search.moveSelection(by: 1, isRepeat: false)
-    XCTAssertEqual(opened().map(\.0), [match("a.txt", 1)], "押し始めはすぐ開く")
-    closeWindow()  // リピートが始まるまでの初期遅延で窓が閉じる
-    search.moveSelection(by: 1, isRepeat: true)
-    search.moveSelection(by: 1, isRepeat: true)
-    XCTAssertEqual(opened().count, 1, "リピートは窓の外でも開かない")
-    closeWindow()
-    XCTAssertEqual(opened().map(\.0), [match("a.txt", 1), match("b.txt", 0)], "離して窓が閉じたら最後の選択を開く")
-    XCTAssertEqual(opened().last?.1, .browse)
+    f.search.moveSelection(by: 1, isRepeat: false)
+    XCTAssertEqual(f.opened().map(\.0), [match("a.txt", 1)], "押し始めはすぐ開く")
+    f.closeWindow()  // リピートが始まるまでの初期遅延で窓が閉じる
+    f.search.moveSelection(by: 1, isRepeat: true)
+    f.search.moveSelection(by: 1, isRepeat: true)
+    f.closeWindow()
+    XCTAssertEqual(f.opened().count, 1, "押している間は窓が閉じても開かない")
+    f.search.navigationKeyDidRelease()
+    XCTAssertEqual(f.opened().count, 1, "離してすぐには開かない")
+    f.closeWindow()
+    XCTAssertEqual(
+      f.opened().map(\.0), [match("a.txt", 1), match("b.txt", 0)], "離して窓が閉じたら最後の選択を開く")
+    XCTAssertEqual(f.opened().last?.1, .browse)
 
-    search.select(match("a.txt", 0))
-    search.moveSelection(by: 1, isRepeat: false)
-    search.moveSelection(by: 2, isRepeat: false)
-    XCTAssertEqual(opened().count, 3, "窓の中の押下は待つ")
-    closeWindow()
-    XCTAssertEqual(opened().last?.0, match("b.txt", 0), "窓が閉じたら最後の選択だけ")
-    XCTAssertEqual(opened().count, 4)
+    f.search.select(match("a.txt", 0))
+    f.search.moveSelection(by: 1, isRepeat: false)
+    f.search.navigationKeyDidRelease()
+    f.search.moveSelection(by: 2, isRepeat: false)
+    f.search.navigationKeyDidRelease()
+    XCTAssertEqual(f.opened().count, 3, "窓の中の押下は待つ")
+    f.closeWindow()
+    XCTAssertEqual(f.opened().last?.0, match("b.txt", 0), "窓が閉じたら最後の選択だけ")
+    XCTAssertEqual(f.opened().count, 4)
+  }
+
+  /// リピートの間隔が窓より長くても（macOS の既定は約 83〜90ms）、押している間は開かず、離した後に最後の選択だけを開く。
+  func testHoldingWithRepeatsSlowerThanTheWindowStillDoesNotOpen() throws {
+    let f = try rowsFixture()
+    f.search.select(match("a.txt", 0))
+    f.search.moveSelection(by: 1, isRepeat: false)
+    XCTAssertEqual(f.opened().count, 1, "押し始めはすぐ開く")
+    f.closeWindow()  // 初期遅延
+    for delta in [-1, 1, -1] {
+      f.search.moveSelection(by: delta, isRepeat: true)
+      f.closeWindow()  // 次のリピートまで 90ms（窓の 75ms より長い）
+    }
+    XCTAssertEqual(f.opened().count, 1, "押している間は開かない")
+    f.search.navigationKeyDidRelease()
+    f.closeWindow()
+    XCTAssertEqual(
+      f.opened().map(\.0), [match("a.txt", 1), match("a.txt", 0)], "離した後に最後の選択だけ")
+  }
+
+  /// 離したことが届かないまま（押したまま焦点が移る等）でも、次のリピートでない押下・結果の列から焦点が外れたこと・すぐ開く
+  /// 操作で押し続けは解ける。
+  func testAMissedReleaseIsResolved() throws {
+    let holding = { (f: RowsFixture) in
+      f.search.select(self.match("a.txt", 0))
+      f.search.moveSelection(by: 1, isRepeat: false)
+      f.closeWindow()
+      f.search.moveSelection(by: -1, isRepeat: true)
+      f.closeWindow()
+      XCTAssertEqual(f.opened().count, 1, "前提: 押し続けで待っている")
+    }
+
+    let pressed = try rowsFixture()
+    holding(pressed)
+    pressed.search.moveSelection(by: 3, isRepeat: false)
+    XCTAssertEqual(pressed.opened().last?.0, match("b.txt", 0), "次のリピートでない押下はすぐ開く")
+
+    let blurred = try rowsFixture()
+    holding(blurred)
+    blurred.search.focusDidChange(.results, focused: false)
+    blurred.closeWindow()
+    XCTAssertEqual(blurred.opened().last?.0, match("a.txt", 0), "焦点が外れたら離したものとして開く")
+
+    let committed = try rowsFixture()
+    holding(committed)
+    committed.search.activateSelection()
+    committed.search.moveSelection(by: 1, isRepeat: false)
+    XCTAssertEqual(committed.opened().count, 3, "すぐ開く操作の後の押下はすぐ開く")
   }
 
   /// 窓が閉じたとき、その時点の選択が一致でなければ開かない（見出しへ動いた・選択を外した・結果が差し替わった）。
   func testAPendingOpenSkipsWhatIsNoLongerAMatch() throws {
     let f = try rowsFixture()
-    let search = f.search
-    let opened = f.opened
-    let closeWindow = f.closeWindow
-    search.select(match("a.txt", 0))
-    search.moveSelection(by: 1, isRepeat: false)
-    search.moveSelection(by: 1, isRepeat: false)
-    search.moveLeft()
-    closeWindow()
-    XCTAssertEqual(opened().count, 1, "見出しへ動いていれば開かない")
+    f.search.select(match("a.txt", 0))
+    f.search.moveSelection(by: 1, isRepeat: false)
+    f.search.moveSelection(by: 1, isRepeat: false)
+    f.search.moveLeft()
+    f.search.navigationKeyDidRelease()
+    f.closeWindow()
+    XCTAssertEqual(f.opened().count, 1, "見出しへ動いていれば開かない")
 
-    search.moveSelection(by: 1, isRepeat: true)
-    search.escapeInResults()
-    closeWindow()
-    XCTAssertEqual(opened().count, 1, "選択を外していれば開かない")
+    f.search.select(match("a.txt", 0))
+    f.search.moveSelection(by: 1, isRepeat: true)
+    f.search.escapeInResults()
+    f.search.navigationKeyDidRelease()
+    f.closeWindow()
+    XCTAssertEqual(f.opened().count, 1, "選択を外していれば開かない")
   }
 
   /// すぐ開く操作（クリック・ダブルクリック・Enter・F4）は待っているキーの開きを捨てる——後から前の選択が開かない。
@@ -136,16 +187,14 @@ extension ProjectSearchTests {
     ]
     for (name, openAtOnce) in cases {
       let f = try rowsFixture()
-      let search = f.search
-      let opened = f.opened
-      let closeWindow = f.closeWindow
-      search.select(match("a.txt", 0))
-      search.moveSelection(by: 1, isRepeat: false)
-      search.moveSelection(by: -1, isRepeat: true)
-      openAtOnce(search)
-      let count = opened().count
-      closeWindow()
-      XCTAssertEqual(opened().count, count, "\(name): 待っていた開きは走らない")
+      f.search.select(match("a.txt", 0))
+      f.search.moveSelection(by: 1, isRepeat: false)
+      f.search.moveSelection(by: -1, isRepeat: true)
+      openAtOnce(f.search)
+      let count = f.opened().count
+      f.search.navigationKeyDidRelease()
+      f.closeWindow()
+      XCTAssertEqual(f.opened().count, count, "\(name): 待っていた開きは走らない")
     }
   }
 

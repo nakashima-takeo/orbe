@@ -17,6 +17,14 @@ extension NSEvent {
       timestamp: 0, windowNumber: 0, context: nil,
       characters: chars, charactersIgnoringModifiers: chars, isARepeat: isRepeat, keyCode: 0)!
   }
+
+  /// キーを離した出来事。
+  static func keyRelease(_ chars: String) -> NSEvent {
+    NSEvent.keyEvent(
+      with: .keyUp, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+      context: nil, characters: chars, charactersIgnoringModifiers: chars, isARepeat: false,
+      keyCode: 0)!
+  }
 }
 
 extension NSView {

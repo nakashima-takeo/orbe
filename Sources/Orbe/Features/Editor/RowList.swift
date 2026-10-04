@@ -30,6 +30,8 @@ protocol RowListSource: AnyObject {
 
   /// キーの操作。
   func perform(_ key: RowListKey)
+  /// 列に焦点がある間に押していたキーを離した。
+  func keyDidRelease()
   /// 行 `row` のシングルクリック。
   func click(_ row: Int)
   /// 行 `row` のダブルクリック。
@@ -266,6 +268,10 @@ final class RowListView<Source: RowListSource>: NSView {
     keyIsRepeat = event.isARepeat
     defer { keyIsRepeat = false }
     interpretKeyEvents([event])
+  }
+
+  override func keyUp(with event: NSEvent) {
+    source.keyDidRelease()
   }
 
   private func perform(_ action: RowListKey.Action) {
