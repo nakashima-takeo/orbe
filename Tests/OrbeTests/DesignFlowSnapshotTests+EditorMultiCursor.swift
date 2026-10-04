@@ -10,12 +10,8 @@ import XCTest
 /// 全カーソルの日本語の変換・Esc で主の 1 本へ。キャレットは焦点のある面として描く。
 extension DesignFlowSnapshotTests {
   func testEditorMultiCursor() throws {
-    let scene = try codeScene()
+    let (scene, document) = try longScene()
     defer { scene.cleanup() }
-    let document = try scene.tab.editor.open(
-      scene.directory.appendingPathComponent("Long.swift"))
-    pumpMain(
-      until: { scene.isReady && document.waitUntilCaughtUp(timeout: 0) }, "裏の仕事が追いつく")
     let pane = scene.pane
     pane.occurrences.wordDelay.schedule = { _, fire in fire() }
     let surface = try engine(document)
@@ -27,6 +23,7 @@ extension DesignFlowSnapshotTests {
         "caret_on_word",
         {
           surface.updateFocus(true)
+          pane.occurrences.focusDidChange(surfaceFocused: true, insideFace: true)
           document.surface.selectedRange = NSRange(location: word.location + 2, length: 0)
         }
       ),
@@ -60,23 +57,6 @@ extension DesignFlowSnapshotTests {
       ),
       ("escape", { run("cancelOperation:") }),  // 主の 1 本へ
     ]
-    try hostedFlow("editor_multi_cursor", scene, steps: drawn(steps, pane, surface))
-  }
-
-  /// 各手順の後に裏の仕事が追いつくのを待ち、1 コマ描いてから撮る。
-  private func drawn(
-    _ steps: [(label: String, action: () -> Void)], _ pane: EditorPaneView,
-    _ surface: MetalTextSurface
-  ) -> [(label: String, action: () -> Void)] {
-    steps.map { step in
-      (
-        step.label,
-        {
-          step.action()
-          self.catchUp(pane)
-          _ = surface.snapshot()
-        }
-      )
-    }
+    try hostedFlow("editor_multi_cursor", scene, steps: settled(pane, steps))
   }
 }
