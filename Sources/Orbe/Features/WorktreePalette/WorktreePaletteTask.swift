@@ -23,16 +23,9 @@ struct WorktreePaletteTaskInputs: Equatable {
 
   static let none = WorktreePaletteTaskInputs(
     taskID: nil, worktree: nil, primary: nil, pullRequestHead: .none)
+}
 
-  init(
-    taskID: Int?, worktree: TaskWorktree?, primary: TaskLink?, pullRequestHead: PullRequestHead
-  ) {
-    self.taskID = taskID
-    self.worktree = worktree
-    self.primary = primary
-    self.pullRequestHead = pullRequestHead
-  }
-
+extension WorktreePaletteTaskInputs {
   /// タスクと置き場から導く。
   init(task: TaskItem?, items: GitHubItemCache) {
     guard let task else {
