@@ -223,7 +223,9 @@ final class SurfaceEditor {
         ?? cursors[index].selection
     }
     let targets = CompositionRules.targets(target, bases: bases, in: text)
-    let accepted = CompositionRules.accepted(targets)
+    let accepted = CompositionRules.accepted(
+      targets,
+      candidates: composition.map { current in cursors.indices.map { current.marked[$0] != nil } })
     let order = cursors.indices.filter { accepted[$0] }.sorted {
       targets[$0].location < targets[$1].location
     }

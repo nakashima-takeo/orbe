@@ -67,8 +67,9 @@ enum CompositionRules {
   }
 
   /// 主の当て先 `target` を、各カーソルの基準の範囲 `bases`（主が先頭。未確定か選択）に同じ相対位置で当てた範囲（VS Code
-  /// の `_compositionType`）——主の基準の範囲からの前後のずれを、各カーソルの基準の範囲に足す。主の他は、基準の範囲がある
-  /// 行の中身（改行を除く）に収める（行頭に近いカーソルが前の行の字や改行を消さない）。
+  /// の `_compositionType`）——主の基準の範囲からの前後のずれを、各カーソルの基準の範囲に足す。主の他は、書記素の境へ外側に
+  /// 寄せ（サロゲート対や結合文字を割らない）、基準の範囲がある行の中身（改行を除く）に収める（行頭に近いカーソルが前の行の
+  /// 字や改行を消さない）。
   static func targets(_ target: NSRange, bases: [NSRange], in text: TextRope) -> [NSRange] {
     guard let primary = bases.first else { return [] }
     let before = target.location - primary.location
@@ -81,15 +82,17 @@ enum CompositionRules {
         NSMaxRange(base),
         NSMaxRange(text.contentRange(ofRow: text.row(containing: NSMaxRange(base))))
       )
-      let start = min(max(base.location + before, lower), upper)
-      let end = min(max(NSMaxRange(base) + after, start), upper)
+      var start = min(max(base.location + before, lower), upper)
+      if start < upper { start = max(lower, text.grapheme(containing: start).location) }
+      var end = min(max(NSMaxRange(base) + after, start), upper)
+      if end > start { end = min(upper, NSMaxRange(text.grapheme(containing: end - 1))) }
       return NSRange(location: start, length: end - start)
     }
   }
 
   /// 当てる範囲（主が先頭）のうち、束に入れるもの——主はいつも入れ、他は文書の順に、入れたものと重なれば（同じ位置に
-  /// 始まるものを含む）外す。
-  static func accepted(_ targets: [NSRange]) -> [Bool] {
+  /// 始まるものを含む）外す。`candidates` が偽のカーソル（変換から外れたカーソル）は、重なりを見る前から入れない。
+  static func accepted(_ targets: [NSRange], candidates: [Bool]? = nil) -> [Bool] {
     guard let primary = targets.first else { return [] }
     func conflicts(_ a: NSRange, _ b: NSRange) -> Bool {
       a.location == b.location || (a.location < NSMaxRange(b) && b.location < NSMaxRange(a))
@@ -100,7 +103,9 @@ enum CompositionRules {
     for index in targets.indices.sorted(by: { targets[$0].location < targets[$1].location }) {
       let range = targets[index]
       if index > 0 {
-        guard !conflicts(range, primary), last.map({ !conflicts($0, range) }) ?? true else {
+        guard candidates?[index] ?? true, !conflicts(range, primary),
+          last.map({ !conflicts($0, range) }) ?? true
+        else {
           continue
         }
         accepted[index] = true

@@ -81,4 +81,72 @@ extension SurfaceInputMethodTests {
     XCTAssertEqual(
       opened.surface.cursorSelections, [2, 4].map { NSRange(location: $0, length: 0) })
   }
+
+  /// 主と重なって変換から外れたカーソルは、変換が終わるまで外れたまま——次の候補送りや確定で入り直して、主と同じ字を
+  /// もう一度入れない。
+  func testACursorLeftOutOfTheCompositionStaysOut() throws {
+    let opened = try open("abcdef")
+    _ = host(opened)
+    fakeInputMethod(opened)
+    place(opened, [Cursor(6), Cursor(5)])
+    replay(
+      [.mark("ABC", replacement: NSRange(location: 3, length: 3)), .insert("ABC")], on: opened)
+    XCTAssertEqual(text(opened.document), "abcABC")
+
+    let other = try open("abcdef")
+    _ = host(other)
+    fakeInputMethod(other)
+    place(other, [Cursor(4), Cursor(5)])
+    replay([.mark("x", replacement: NSRange(location: 2, length: 2)), .mark("xy")], on: other)
+    XCTAssertEqual(text(other.document), "abxyef")
+  }
+
+  /// 相対位置で当てた範囲は書記素の境へ外側に寄る——他のカーソルの前の絵文字のサロゲート対を割らない。
+  func testRelativeTargetsDoNotSplitGraphemes() throws {
+    let opened = try open("a😀")
+    _ = host(opened)
+    fakeInputMethod(opened)
+    place(opened, [Cursor(1), Cursor(3)])
+    replay([.mark("X", replacement: NSRange(location: 0, length: 1)), .insert("X")], on: opened)
+    XCTAssertEqual(text(opened.document), "XX")
+  }
+
+  /// 確定した変換の正味の変化が全カーソルで同じ文字列なら、前の打鍵と同じまとまりで undo に載る（⌘Z 1 回で打鍵ごと戻る）。
+  func testCommittedCompositionCoalescesWithTypingAcrossCursors() throws {
+    let opened = try open("ab\ncd\n")
+    _ = host(opened)
+    fakeInputMethod(opened)
+    place(opened, [Cursor(1), Cursor(4)])
+    type(opened, "x")
+    replay([.mark("か"), .insert("か")], on: opened)
+    XCTAssertEqual(text(opened.document), "axかb\ncxかd\n")
+    opened.surface.textView.undoManager?.undo()
+    XCTAssertEqual(text(opened.document), "ab\ncd\n")
+  }
+
+  /// 行末のカーソルへ後ろへ広がる範囲を当てても、次の行の改行を消さない（行の中身に収める）。
+  func testRelativeTargetsStopAtTheEndOfTheLine() throws {
+    let opened = try open("ab\ncd\n")
+    _ = host(opened)
+    fakeInputMethod(opened)
+    place(opened, [Cursor(1), Cursor(2)])
+    replay([.insert("X", replacement: NSRange(location: 1, length: 1))], on: opened)
+    XCTAssertEqual(text(opened.document), "aXX\ncd\n")
+  }
+
+  /// 主が文書の後ろにあっても、IME に答えるのは主の未確定とその中の選択で、確定の後の並び（主が先頭）も保つ。
+  func testThePrimaryMayComeAfterTheOtherCursors() throws {
+    let opened = try open("ab\ncd\n")
+    _ = host(opened)
+    fakeInputMethod(opened)
+    place(opened, [Cursor(4), Cursor(1)])
+    replay([.mark("かな")], on: opened)
+    XCTAssertEqual(text(opened.document), "aかなb\ncかなd\n")
+    XCTAssertEqual(opened.surface.textView.markedRange(), NSRange(location: 6, length: 2))
+    XCTAssertEqual(opened.surface.textView.selectedRange(), NSRange(location: 8, length: 0))
+    XCTAssertEqual(opened.surface.drawn.caret.carets, [3, 8])
+    replay([.insert("仮名")], on: opened)
+    XCTAssertEqual(
+      opened.surface.cursorSelections, [8, 3].map { NSRange(location: $0, length: 0) })
+  }
 }

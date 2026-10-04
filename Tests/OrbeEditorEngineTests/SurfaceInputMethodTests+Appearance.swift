@@ -50,6 +50,34 @@ extension SurfaceInputMethodTests {
       "選んでいない字には本文の色の下線を引かない")
   }
 
+  /// 文節の下線は未確定の位置に描く（文節の範囲は未確定の先頭から）——行の途中から変換しても、変換の前の字に下線が掛からない。
+  func testClauseUnderlinesFollowTheMarkedRange() throws {
+    let opened = try open("xy\n")
+    _ = host(opened, size: CGSize(width: 400, height: 80))
+    fakeInputMethod(opened)
+    opened.surface.selectedRange = NSRange(location: 2, length: 0)
+    let clauses = NSMutableAttributedString(string: "aa")
+    clauses.addAttributes(
+      [
+        .markedClauseSegment: 0, .underlineStyle: NSUnderlineStyle.thick.rawValue,
+        .underlineColor: NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1),
+      ], range: NSRange(location: 0, length: 2))
+    replay([.markAttributed(clauses, selected: NSRange(location: 0, length: 2))], on: opened)
+    let config = opened.surface.config
+    let column = config.columnWidth(lineCount: 2)
+    let underline = Int((config.topInset * 2).rounded() + (config.baseline * 2).rounded() + 3) + 1
+    let x = { (offset: Int) in
+      Int(
+        ((column + opened.surface.editingEnvironment()!.geometry.x(ofColumn: offset, row: 0)) * 2)
+          .rounded())
+    }
+    let image = try XCTUnwrap(opened.surface.snapshot())
+    let marked = pixel(image, x: (x(2) + x(4)) / 2, y: underline)
+    XCTAssertTrue(marked[0] > 200 && marked[1] < 60, "未確定の下に下線 \(marked)")
+    let before = pixel(image, x: (x(0) + x(2)) / 2, y: underline)
+    XCTAssertFalse(before[0] > 200 && before[1] < 60, "変換の前の字には掛からない \(before)")
+  }
+
   /// IME が指定した色も、他の色と同じく面の描く色空間（窓の色空間）に解く。壊れると P3 の窓で、変換中の文節の下線と地が
   /// 指定より鮮やかにずれて描かれる。
   func testTheInputMethodsColorsAreResolvedInTheWindowsColorSpace() throws {
