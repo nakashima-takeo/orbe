@@ -4,9 +4,11 @@ import SwiftUI
 /// 届かない）。矢印は単一の catch-all で修飾の有無を分ける。日本語入力の変換中（`composing`）は
 /// 入力欄のキーを一切握らず、変換に使わせる。
 extension TaskPaletteModel {
-  /// ヘッダーの入力欄（一覧）。↵ は `onSubmit` が受ける（変換確定の ↵ では発火しない）。
+  /// ヘッダーの入力欄（一覧）。↵ は `onSubmit` が受ける（変換確定の ↵ では発火しない）。`onSubmit` は
+  /// キーリピートでも発火するので、↵ のリピートはここで握り潰す（押し続けて次々に完了にする・タスクにしない）。
   func handleFieldKey(_ press: KeyPress, composing: Bool) -> KeyPress.Result {
     guard !composing else { return .ignored }
+    if press.key == .return, press.phase == .repeat { return .handled }
     if Self.isBacktab(press) {
       toggleTab()
       return .handled
