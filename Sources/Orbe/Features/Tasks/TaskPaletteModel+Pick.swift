@@ -3,7 +3,7 @@ import Foundation
 /// 選ぶ状態。2 つの方向があり、それぞれ自分の一覧の状態を持つ——相手のタブの状態を借りると、抜けたときに元の
 /// 絞り込みと選択が消える。
 enum TaskPalettePick {
-  /// GitHub の項目を結び付けるタスクを選ぶ（GitHub タブの L から。タスクのタブの行で選ぶ）。
+  /// GitHub の項目を結び付けるタスクを選ぶ（GitHub タブの ⌘L から。タスクのタブの行で選ぶ）。
   case task(for: TaskLink, list: TaskPaletteListState<TaskPaletteRowID>)
   /// タスクに結び付ける項目を選ぶ（詳細の「＋ 結び付ける」から。GitHub タブの行で選ぶ）。
   case item(for: Int, list: TaskPaletteListState<TaskPaletteGitHubRowID>)
@@ -11,7 +11,7 @@ enum TaskPalettePick {
 
 /// 選ぶ状態に入る・決める・やめる。結び付けと付け替えは、ストアの 1 回の変異（`attach`）で行う。
 extension TaskPaletteModel {
-  /// L（GitHub タブの一覧・右の欄）。選んだ項目を結び付ける（結び付いていれば付け替える）タスクを、タスクの
+  /// ⌘L（GitHub タブの一覧・右の欄）。選んだ項目を結び付ける（結び付いていれば付け替える）タスクを、タスクの
   /// タブで選ぶ状態に入る。
   func linkSelectedGitHubItem() {
     guard pick == nil, let row = selectedGitHubRow else { return }

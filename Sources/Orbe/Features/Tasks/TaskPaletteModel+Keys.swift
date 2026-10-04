@@ -52,8 +52,9 @@ extension TaskPaletteModel {
     return .handled
   }
 
-  /// GitHub タブの入力欄（一覧）。L と ⌫ は、入力欄が空で押した瞬間だけ行の操作にする（文字を打つ・消すのと
-  /// 衝突させない。押し続けたキーリピートで、選択が移った先の行まで操作しない）。
+  /// GitHub タブの入力欄（一覧）。結び付ける（⌘L）と外す（⌘⌫）は修飾付きのキーにして、絞り込みの文字を
+  /// 打つ・消すのと衝突させない。どちらも押した瞬間だけを操作にする（押し続けたキーリピートで、選択が
+  /// 移った先の行まで操作しない）。
   private func handleGitHubFieldKey(_ press: KeyPress) -> KeyPress.Result {
     switch press.key {
     case .upArrow, .downArrow:
@@ -70,11 +71,11 @@ extension TaskPaletteModel {
       else { return .ignored }
       enterPane()
     case _ where Self.isLinkKey(press):
-      guard query.isEmpty, pick == nil else { return .ignored }
-      if press.phase == .down { linkSelectedGitHubItem() }
-    case _ where Self.isBackspace(press):
-      guard query.isEmpty, pick == nil else { return .ignored }
-      if press.phase == .down, selectedGitHubRow?.task != nil { unlinkSelectedGitHubItem() }
+      if press.phase == .down, pick == nil { linkSelectedGitHubItem() }
+    case _ where Self.isCommandBackspace(press):
+      if press.phase == .down, pick == nil, selectedGitHubRow?.task != nil {
+        unlinkSelectedGitHubItem()
+      }
     case .escape:
       if pick == nil { onDismiss() } else { cancelPick() }
     default:
@@ -123,7 +124,7 @@ extension TaskPaletteModel {
     return .handled
   }
 
-  /// 右の欄の項目。↵（期限の項目以外）と L は、行の「タスクにする」「結び付ける」と同じ。
+  /// 右の欄の項目。↵（期限の項目以外）と ⌘L は、行の「タスクにする」「結び付ける」と同じ。
   private func handlePaneKey(_ press: KeyPress, _ stop: TaskGitHubPaneStop) -> KeyPress.Result {
     if Self.isBacktab(press) { return .handled }
     switch press.key {
@@ -173,9 +174,9 @@ extension TaskPaletteModel {
     press.modifiers.contains(.command) && press.key.character == "\u{7F}"
   }
 
-  /// 結び付ける（L）。⇧ は付いてよい。
+  /// 結び付ける（⌘L）。
   private static func isLinkKey(_ press: KeyPress) -> Bool {
-    press.modifiers.isDisjoint(with: [.command, .option, .control])
+    press.modifiers.contains(.command) && press.modifiers.isDisjoint(with: [.option, .control])
       && press.key.character.lowercased() == "l"
   }
 

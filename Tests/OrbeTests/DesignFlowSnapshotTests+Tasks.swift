@@ -118,8 +118,8 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// GitHub タブ: #221 をタスクにする（行が結び付いた側へ移る）・L で別のタスクへ付け替えを選ぶ・↵ で付け替え・
-  /// ⌫ で外す（結び付いていない側へ戻る）、までを撮る。アサインの書き込みは何もしない置き場に頼む。
+  /// GitHub タブ: #221 をタスクにする（行が結び付いた側へ移る）・⌘L で別のタスクへ付け替えを選ぶ・↵ で付け替え・
+  /// ⌘⌫ で外す（結び付いていない側へ戻る）、までを撮る。アサインの書き込みは何もしない置き場に頼む。
   func testTaskPaletteGithub() throws {
     let palette = DesignSceneFixtures.taskPaletteModel()
     let issue221 = TaskPaletteGitHubRowID.item(GitHubItemID(repo: "nakatake/orbe", number: 221)!)

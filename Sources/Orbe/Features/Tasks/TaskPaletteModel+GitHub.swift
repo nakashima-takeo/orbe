@@ -195,7 +195,7 @@ extension TaskPaletteModel {
     return task.id
   }
 
-  /// ⌫（結び付いている行）。その項目だけを除いた列で置き換える。行は結び付いていない側へ戻る。
+  /// ⌘⌫（結び付いている行）。その項目だけを除いた列で置き換える。行は結び付いていない側へ戻る。
   func unlinkSelectedGitHubItem() {
     guard let row = selectedGitHubRow, let owner = row.task,
       let task = store.tasks.first(where: { $0.id == owner.id })

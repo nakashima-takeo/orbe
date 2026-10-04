@@ -208,12 +208,12 @@ private struct TaskPaletteGitHubHints: View {
     } else if let row = model.selectedGitHubRow {
       if row.task == nil {
         PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteMakeTaskOpen))
-        PaletteKeyHint(key: "L", label: l10n.string(.taskPaletteHintLink))
+        PaletteKeyHint(key: "⌘L", label: l10n.string(.taskPaletteHintLink))
         PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintDetail))
       } else {
         PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
-        PaletteKeyHint(key: "L", label: l10n.string(.taskPaletteHintRelink))
-        PaletteKeyHint(key: "⌫", label: l10n.string(.taskPaletteUnlink))
+        PaletteKeyHint(key: "⌘L", label: l10n.string(.taskPaletteHintRelink))
+        PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteUnlink))
       }
       PaletteKeyHint(key: "⇥", label: l10n.string(.taskPaletteHintFilter))
       PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))

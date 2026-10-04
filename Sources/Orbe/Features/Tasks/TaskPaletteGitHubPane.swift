@@ -228,7 +228,7 @@ struct TaskPaletteGitHubPane: View {
         model.linkSelectedGitHubItem()
       } label: {
         HStack(spacing: Theme.Space.step) {
-          Text("L").foregroundStyle(Color.theme.accentBright)
+          Text("⌘L").foregroundStyle(Color.theme.accentBright)
           Text(l10n.string(.taskPaletteLinkExisting)).foregroundStyle(Color.theme.textPrimary)
         }
         .font(Font.theme.taskText)
@@ -310,12 +310,12 @@ extension TaskPaletteGitHubPane {
       wideButton(
         "↵", l10n.format(.taskPaletteOpenTask, number ?? task.label), primary: true
       ) { model.showTask(task.id) }
-      wideButton("L", l10n.string(.taskPaletteRelink)) { model.linkSelectedGitHubItem() }
+      wideButton("⌘L", l10n.string(.taskPaletteRelink)) { model.linkSelectedGitHubItem() }
       Button {
         model.unlinkSelectedGitHubItem()
       } label: {
         HStack(spacing: Theme.Space.step) {
-          Text("⌫")
+          Text("⌘⌫")
           Text(l10n.string(.taskPaletteUnlinkTask))
         }
         .font(Font.theme.taskText)

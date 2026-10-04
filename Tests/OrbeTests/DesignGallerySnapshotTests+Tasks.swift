@@ -110,7 +110,7 @@ extension DesignGallerySnapshotTests {
     expanded.expand(.issue)
     try write("tasks_github_expanded.png", expanded, 1440, 900)
 
-    // L: #221 を結び付けるタスクを、タスクのタブで選ぶ。
+    // ⌘L: #221 を結び付けるタスクを、タスクのタブで選ぶ。
     let pickTask = DesignSceneFixtures.taskPaletteModel()
     pickTask.toggleTab()
     pickTask.tapGitHubRow(id(221))
