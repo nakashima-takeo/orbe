@@ -8,6 +8,7 @@ struct TaskPaletteGitHubPane: View {
   @Bindable var model: TaskPaletteModel
   let focus: FocusState<TaskPaletteFocusTarget?>.Binding
   @Environment(\.localization) private var l10n
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     if model.gitHubBody == .lists, let row = model.selectedGitHubRow {
@@ -48,7 +49,7 @@ struct TaskPaletteGitHubPane: View {
       }
       .font(Font.theme.codeCompact)
       .padding(.bottom, Theme.Space.step)
-      Text(row.item.title)
+      fontResolver.text(row.item.title, base: Theme.Typography.taskHeading)
         .font(Font.theme.taskHeading)
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(2)
@@ -256,7 +257,7 @@ extension TaskPaletteGitHubPane {
         .foregroundStyle(Color.theme.textMuted)
         HStack(spacing: Theme.Space.step) {
           TaskStatusGlyph(glyph: TaskPaletteTaskRow.Glyph(task))
-          Text(row.task?.label ?? task.title)
+          fontResolver.text(row.task?.label ?? task.title, base: Theme.Typography.taskText)
             .font(Font.theme.taskText)
             .foregroundStyle(Color.theme.textPrimary)
             .lineLimit(1)

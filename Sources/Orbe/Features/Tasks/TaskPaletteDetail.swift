@@ -8,6 +8,7 @@ struct TaskPaletteDetail: View {
   @Bindable var model: TaskPaletteModel
   let focus: FocusState<TaskPaletteFocusTarget?>.Binding
   @Environment(\.localization) private var l10n
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     if let task = model.selectedTask {
@@ -94,7 +95,7 @@ struct TaskPaletteDetail: View {
 
   private func titleField(_ task: TaskItem) -> some View {
     editableText(.title, font: Font.theme.taskHeading) {
-      Text(task.title)
+      fontResolver.text(task.title, base: Theme.Typography.taskHeading)
         .font(Font.theme.taskHeading)
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(1)

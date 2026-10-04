@@ -22,6 +22,7 @@ struct TaskPaletteLinks: View {
   @Bindable var model: TaskPaletteModel
   let task: TaskItem
   @Environment(\.localization) private var l10n
+  @Environment(\.chromeFontResolver) private var fontResolver
   @State private var hoveredLink: GitHubItemID?
 
   var body: some View {
@@ -53,7 +54,7 @@ struct TaskPaletteLinks: View {
         .foregroundStyle(Color.theme.textMuted)
         .fixedSize()
       if let summary {
-        Text(summary.title)
+        fontResolver.text(summary.title, base: Theme.Typography.taskText)
           .font(Font.theme.taskText)
           .foregroundStyle(Color.theme.textPrimary)
           .lineLimit(1)
