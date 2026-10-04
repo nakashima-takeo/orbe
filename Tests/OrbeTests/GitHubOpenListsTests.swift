@@ -27,7 +27,11 @@ final class GitHubOpenListsTests: OrbeTestCase {
   /// テストが好きな時に着地させる。
   private final class PendingFetches {
     var roots: [String: GitHubRepoName] = [:]
+    /// 解決できない root と、その理由（`roots` に無い root は「見つからない」）。
+    var unavailable: [String: GitHubRepositoryUnavailable] = [:]
     private(set) var fetches: [PendingOpenListFetch] = []
+    private(set) var reviewRequests: [(GitHubReviewRequests?) -> Void] = []
+    private(set) var writes: [PendingWrite] = []
 
     func started(_ kind: GitHubItemKind, _ repo: GitHubRepoName) -> [PendingOpenListFetch] {
       fetches.filter { $0.kind == kind && $0.repo == repo }
@@ -36,14 +40,18 @@ final class GitHubOpenListsTests: OrbeTestCase {
     var source: GitHubOpenLists.Source {
       GitHubOpenLists.Source(
         defaultRepository: { root, completion in
+          if let reason = self.unavailable[root] { return completion(.failure(reason)) }
           completion(self.roots[root].map { .success($0) } ?? .failure(.notFound))
         },
         openItems: { repo, kind, page, finished in
           self.fetches.append(
             PendingOpenListFetch(repo: repo, kind: kind, page: page, finished: finished))
         },
-        reviewRequests: { _, _ in },
-        addSelf: { _, _, _, _ in })
+        reviewRequests: { _, completion in self.reviewRequests.append(completion) },
+        addSelf: { role, item, login, completion in
+          self.writes.append(
+            PendingWrite(role: role, item: item, login: login, completion: completion))
+        })
     }
   }
 
@@ -162,6 +170,171 @@ final class GitHubOpenListsTests: OrbeTestCase {
     XCTAssertEqual(issueList(lists, other)?.items, [issue(1)])
   }
 
+  // MARK: - root の解決
+
+  /// 解決できなければ理由を持ち、前回解決できたリポジトリは残す——前回の一覧を描いたまま理由を出せる。
+  func testUnresolvableRootKeepsTheReasonAndTheLastRepository() {
+    let fetches = PendingFetches()
+    let lists = lists(fetches)
+    lists.open(root: "/root")
+
+    fetches.unavailable["/root"] = .ghUnauthed
+    lists.open(root: "/root")
+
+    XCTAssertEqual(lists.roots["/root"]?.resolution, .unavailable(.ghUnauthed))
+    XCTAssertEqual(lists.repository(for: "/root"), repo, "先描きに使う前回のリポジトリ")
+  }
+
+  /// gh の既定が前回と違うリポジトリになれば、新しい名前の一覧に切り替える。
+  func testRootResolvingToAnotherRepositorySwitchesToItsLists() {
+    let fetches = PendingFetches()
+    let lists = lists(fetches)
+    lists.open(root: "/root")
+
+    fetches.roots["/root"] = other
+    lists.open(root: "/root")
+
+    XCTAssertEqual(lists.repository(for: "/root"), other)
+    XCTAssertEqual(fetches.started(.issue, other).count, 1)
+  }
+
+  // MARK: - 自分とレビュー依頼
+
+  /// 自分の login はアプリで 1 つの置き場へ、レビュー依頼の番号はリポジトリへ書く。失敗は何も変えない。
+  func testReviewRequestsRecordTheLoginAndTheRequestedNumbers() throws {
+    let fetches = PendingFetches()
+    let viewer = GitHubViewer()
+    fetches.roots["/root"] = repo
+    let lists = GitHubOpenLists(source: fetches.source, viewer: viewer)
+    lists.open(root: "/root")
+
+    try XCTUnwrap(fetches.reviewRequests.first)(GitHubReviewRequests(login: "me", numbers: [7]))
+    XCTAssertEqual(viewer.login, "me")
+    XCTAssertEqual(lists.repositories[repo]?.reviewRequests, [7])
+
+    lists.open(root: "/root")
+    try XCTUnwrap(fetches.reviewRequests.last)(nil)
+    XCTAssertEqual(lists.repositories[repo]?.reviewRequests, [7], "失敗は前回の答えを残す")
+  }
+
+  // MARK: - 自分を足す書き込み
+
+  /// 取り終えた一覧に Issue 1 を持ち、自分が `me` の置き場。
+  private func listsWithIssueOne(_ fetches: PendingFetches) -> GitHubOpenLists {
+    let lists = GitHubOpenLists(source: fetches.source, viewer: GitHubViewer(login: "me"))
+    fetches.roots["/root"] = repo
+    lists.open(root: "/root")
+    fetches.started(.issue, repo)[0].page([issue(1)])
+    fetches.started(.issue, repo)[0].finished(true)
+    return lists
+  }
+
+  private var issueOne: GitHubItemID { GitHubItemID(repo: "o/r", number: 1)! }
+
+  /// 応答の担当者に自分が入っていれば成功で、その 1 件だけを応答の値で置き換える（一覧を取り直さない）。
+  /// login の大小文字は問わない。
+  func testAssignSucceedsWhenTheResponseListsSelfAndPatchesThatItem() throws {
+    let fetches = PendingFetches()
+    let lists = listsWithIssueOne(fetches)
+    var result: Bool?
+
+    lists.addSelf(as: .assignee, to: issueOne, kind: .issue) { result = $0 }
+    let write = try XCTUnwrap(fetches.writes.first)
+    XCTAssertEqual(write.login, "me")
+    write.completion(["alice", "Me"])
+
+    XCTAssertEqual(result, true)
+    XCTAssertEqual(issueList(lists, repo)?.items?.first?.assignees, ["alice", "Me"])
+    XCTAssertNil(lists.writeFailures[issueOne])
+    XCTAssertEqual(fetches.started(.issue, repo).count, 1, "全量を取り直さない")
+  }
+
+  /// GitHub は push 権限の無い担当者を黙って捨てて成功を返す。応答に自分がいなければ、書き込みの失敗を
+  /// 項目に記録する（画面の寿命に依らない）。応答が無いのも同じ。
+  func testAssignFailsWhenTheResponseOmitsSelfOrIsMissing() throws {
+    for response in [["alice"], nil] as [[String]?] {
+      let fetches = PendingFetches()
+      let lists = listsWithIssueOne(fetches)
+      var result: Bool?
+
+      lists.addSelf(as: .assignee, to: issueOne, kind: .issue) { result = $0 }
+      try XCTUnwrap(fetches.writes.first).completion(response)
+
+      XCTAssertEqual(result, false)
+      XCTAssertEqual(lists.writeFailures[issueOne], .assignee)
+      XCTAssertEqual(issueList(lists, repo)?.items?.first?.assignees, [], "一覧は変えない")
+    }
+  }
+
+  /// 失敗の記録は、次に試せば消える。
+  func testRetryingClearsTheRecordedFailure() throws {
+    let fetches = PendingFetches()
+    let lists = listsWithIssueOne(fetches)
+    lists.addSelf(as: .assignee, to: issueOne, kind: .issue) { _ in }
+    try XCTUnwrap(fetches.writes.first).completion(nil)
+
+    lists.addSelf(as: .assignee, to: issueOne, kind: .issue) { _ in }
+
+    XCTAssertNil(lists.writeFailures[issueOne])
+  }
+
+  /// レビュアーの成功は、個人宛のレビュー依頼を応答の値にし、自分へのレビュー依頼にも入れる。
+  func testReviewerSuccessPatchesReviewersAndTheReviewRequests() throws {
+    let fetches = PendingFetches()
+    let lists = GitHubOpenLists(source: fetches.source, viewer: GitHubViewer(login: "me"))
+    fetches.roots["/root"] = repo
+    lists.open(root: "/root")
+    fetches.started(.pr, repo)[0].page([pullRequest(9)])
+    fetches.started(.pr, repo)[0].finished(true)
+    try XCTUnwrap(fetches.reviewRequests.first)(GitHubReviewRequests(login: "me", numbers: []))
+    let id = GitHubItemID(repo: "o/r", number: 9)!
+
+    lists.addSelf(as: .reviewer, to: id, kind: .pr) { _ in }
+    let write = try XCTUnwrap(fetches.writes.first)
+    XCTAssertEqual(write.role, .reviewer)
+    write.completion(["me"])
+
+    XCTAssertEqual(
+      lists.repositories[repo]?.pullRequests.items?.first?.pullRequest?.reviewers, ["me"])
+    XCTAssertEqual(lists.repositories[repo]?.reviewRequests, [9])
+  }
+
+  /// 取得中に差し込んだ値は、差し込む前に問い合わせた古いページが後から届いても、取り終えても消えない。
+  func testPatchSurvivesAnOlderPageArrivingAfterIt() throws {
+    let fetches = PendingFetches()
+    let lists = listsWithIssueOne(fetches)
+    lists.open(root: "/root")
+    let refetch = fetches.started(.issue, repo)[1]
+
+    lists.addSelf(as: .assignee, to: issueOne, kind: .issue) { _ in }
+    try XCTUnwrap(fetches.writes.first).completion(["me"])
+    refetch.page([issue(2), issue(1)])
+    XCTAssertEqual(issueList(lists, repo)?.items?.last?.assignees, ["me"], "届いた古いページ")
+    refetch.finished(true)
+
+    XCTAssertEqual(issueList(lists, repo)?.items?.map(\.number), [2, 1])
+    XCTAssertEqual(issueList(lists, repo)?.items?.last?.assignees, ["me"], "取り終えた後")
+  }
+
+  /// 取っている間に項目が動いて同じ番号が 2 度届いても、一覧には 1 行だけ（先に届いたもの）。
+  func testTheSameNumberArrivingTwiceKeepsTheFirst() {
+    let fetches = PendingFetches()
+    let lists = lists(fetches)
+    lists.open(root: "/root")
+    let fetch = fetches.started(.issue, repo)[0]
+
+    fetch.page([issue(3)])
+    fetch.page([
+      GitHubOpenItem(
+        number: 3, title: "moved", updatedAt: Date(timeIntervalSince1970: 0), author: nil,
+        assignees: [], pullRequest: nil),
+      issue(2),
+    ])
+    fetch.finished(true)
+
+    XCTAssertEqual(issueList(lists, repo)?.items, issues(3, 2))
+  }
+
   // MARK: - 取り直し途中の埋め方（merge）
 
   /// 境目は前回の並び順で決める——今回分に含まれる要素のうち、前回の並びで一番後ろにあるものの後ろを
@@ -178,6 +351,14 @@ final class GitHubOpenListsTests: OrbeTestCase {
       GitHubOpenLists.merge(fresh: issues(7, 6), previous: issues(3, 2)), issues(7, 6, 3, 2))
     XCTAssertEqual(GitHubOpenLists.merge(fresh: [], previous: issues(3, 2)), issues(3, 2))
   }
+}
+
+/// 撃たれた書き込み 1 本（応答の担当者・個人宛のレビュー依頼の login を返す口）。
+private struct PendingWrite {
+  let role: GitHubSelfRole
+  let item: GitHubItemID
+  let login: String
+  let completion: ([String]?) -> Void
 }
 
 /// 撃たれた open 一覧の取得 1 本（ページ口と終わり口）。
