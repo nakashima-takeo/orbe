@@ -1,34 +1,52 @@
 import Foundation
 
 /// 出現の強調の規則——選択文字列の他の出現（VS Code `SelectionHighlighter`）と、キャレットの語の出現（VS Code
-/// `WordHighlighter` の textual provider）。語の定義は VS Code の既定の語（区切り文字と空白で切る）で、全言語共通。
+/// `WordHighlighter` の textual provider）。キャレットの語を拾うのは VS Code の既定の語（区切り文字と空白で切る）で、全言語
+/// 共通。出現の一致は一致の規則（`MatchRule`）から引く。
 public enum Occurrences {
   /// 集める上限（VS Code の LIMIT_FIND_COUNT）。
   public static let limit = 999
-  /// 選択文字列の出現を出す選択の長さの上限（UTF-16。VS Code `selectionHighlightMaxLength`）。
+  /// 選択文字列の出現を出す文字列の長さの上限（UTF-16。VS Code `selectionHighlightMaxLength`）。
   public static let maxSelectionLength = 200
 
-  /// 選択文字列の他の出現（大小無視・語の境界なし）。選択自身と、選択より前に始まって選択と交差する一致は除く。
-  /// 選択が空・複数行・空白だけ・長すぎるときと、検索バーがその文字列を探しているとき（`findNeedle` と大小無視で同じ、
-  /// または `findFieldFocused` で検索語が空でない）は出さない。
+  /// 選択文字列の他の出現——選択の列（`selections`）から決まる問い `question` の一致のうち、どの選択とも同じ区間でなく、
+  /// 選択より前に始まって空でない選択に重なるものでもない出現（VS Code `SelectionHighlighter` の除き方）。探す文字列が
+  /// 複数行・空白だけ・長すぎるときと、検索バーがその文字列を探しているとき（⌘F の規則の問いで `findNeedle` と大小無視で
+  /// 同じ、または `findFieldFocused` で検索語が空でない）は出さない。
   public static func selectionOccurrences(
-    of selection: NSRange, in text: TextRope, findNeedle: String?, findFieldFocused: Bool,
-    window: Int = TextSearch.scanWindow
+    of question: SearchQuestion, selections: [NSRange], in text: TextRope, findNeedle: String?,
+    findFieldFocused: Bool, window: Int = TextSearch.scanWindow
   ) -> [NSRange] {
-    guard selection.length > 0, selection.length <= maxSelectionLength,
-      NSMaxRange(selection) <= text.length
-    else { return [] }
-    let needle = text.substring(selection)
-    guard !needle.contains(where: \.isNewline), !needle.allSatisfy({ $0 == " " || $0 == "\t" })
+    let needle = question.needle
+    guard !needle.isEmpty, (needle as NSString).length <= maxSelectionLength,
+      !needle.contains(where: \.isNewline), !needle.allSatisfy({ $0 == " " || $0 == "\t" })
     else { return [] }
     if let findNeedle, !findNeedle.isEmpty {
-      if findFieldFocused || findNeedle.lowercased() == needle.lowercased() { return [] }
+      if findFieldFocused { return [] }
+      if question.rule == .find, findNeedle.lowercased() == needle.lowercased() { return [] }
     }
-    return TextSearch.matches(of: needle, in: text, limit: limit, window: window).filter { match in
-      if match == selection { return false }
-      return
-        !(match.location < selection.location && NSIntersectionRange(match, selection).length > 0)
+    let matches = TextSearch.matches(
+      of: needle, in: text, rule: question.rule, limit: limit, window: window)
+    let sorted = selections.sorted {
+      $0.location != $1.location ? $0.location < $1.location : $0.length < $1.length
     }
+    var result: [NSRange] = []
+    var j = 0
+    for match in matches {
+      while j < sorted.count, precedes(sorted[j], match) { j += 1 }
+      if j < sorted.count {
+        let selection = sorted[j]
+        if selection == match { continue }
+        if selection.length > 0, NSIntersectionRange(match, selection).length > 0 { continue }
+      }
+      result.append(match)
+    }
+    return result
+  }
+
+  /// 区間の並び（始まり、同じなら終わりの順。VS Code `Range.compareRangesUsingStarts`）で `a` が `b` より前か。
+  private static func precedes(_ a: NSRange, _ b: NSRange) -> Bool {
+    a.location != b.location ? a.location < b.location : NSMaxRange(a) < NSMaxRange(b)
   }
 
   /// 語を探す行の長さの上限（VS Code `getWordAtText` の maxLen）。これより長い行はキャレットの周りの窓（`wordWindow`）で探す。
@@ -72,18 +90,13 @@ public enum Occurrences {
     return found
   }
 
-  /// 語 `word`（本文の区間）の全出現（大小区別・語の境界つき・自分を含む）。
+  /// 語 `word`（本文の区間）の全出現（語の規則。自分を含む）。
   public static func wordOccurrences(
     of word: NSRange, in text: TextRope, window: Int = TextSearch.scanWindow
   ) -> [NSRange] {
     guard word.length > 0, NSMaxRange(word) <= text.length else { return [] }
-    let needle = text.substring(word)
-    return TextSearch.scan(
-      text, maximumLength: word.length, limit: limit, window: window,
-      find: { string, range in string.range(of: needle, options: [.literal], range: range) },
-      accept: { string, found in
-        isWordBoundary(before: found, in: string) && isWordBoundary(after: found, in: string)
-      })
+    return TextSearch.matches(
+      of: text.substring(word), in: text, rule: .word, limit: limit, window: window)
   }
 
   /// VS Code の既定の語の正規表現（`DEFAULT_WORD_REGEXP`）。JS の `\d`・`\w` は ASCII だけに当たる（u フラグ無し）ので、
@@ -94,20 +107,4 @@ public enum Occurrences {
     return try! NSRegularExpression(
       pattern: "(-?[0-9]*\\.[0-9][A-Za-z0-9_]*)|([^\(escaped)\\s]+)")
   }()
-
-  /// 区切り（区切り文字・空白・改行）か。
-  private static func isSeparator(_ unit: UInt16) -> Bool {
-    WordSeparators.units.contains(unit) || unit == 0x20 || unit == 0x09 || unit == 0x0A
-      || unit == 0x0D
-  }
-
-  private static func isWordBoundary(before range: NSRange, in string: NSString) -> Bool {
-    range.location == 0 || isSeparator(string.character(at: range.location - 1))
-      || isSeparator(string.character(at: range.location))
-  }
-
-  private static func isWordBoundary(after range: NSRange, in string: NSString) -> Bool {
-    NSMaxRange(range) == string.length || isSeparator(string.character(at: NSMaxRange(range)))
-      || isSeparator(string.character(at: NSMaxRange(range) - 1))
-  }
 }

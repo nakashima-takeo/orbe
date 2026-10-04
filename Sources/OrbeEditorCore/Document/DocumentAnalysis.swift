@@ -5,8 +5,9 @@ import os
 public enum AnalysisRequest: Equatable, Sendable {
   /// ファイル内検索（`TextSearch.matches`）。
   case find(String)
-  /// 選択文字列の出現（`Occurrences.selectionOccurrences`）。
-  case selectionOccurrences(selection: NSRange, findNeedle: String?, findFieldFocused: Bool)
+  /// 選択文字列の出現（`Occurrences.selectionOccurrences`）——選択の列から決めた問いと、除く選択の列。
+  case selectionOccurrences(
+    SearchQuestion, selections: [NSRange], findNeedle: String?, findFieldFocused: Bool)
   /// キャレットの語の出現（`Occurrences.wordOccurrences`）。
   case wordOccurrences(NSRange)
 
@@ -179,9 +180,10 @@ actor DocumentAnalysis {
     switch request {
     case .find(let needle):
       TextSearch.matches(of: needle, in: text)
-    case .selectionOccurrences(let selection, let findNeedle, let findFieldFocused):
+    case .selectionOccurrences(let question, let selections, let findNeedle, let findFieldFocused):
       Occurrences.selectionOccurrences(
-        of: selection, in: text, findNeedle: findNeedle, findFieldFocused: findFieldFocused)
+        of: question, selections: selections, in: text, findNeedle: findNeedle,
+        findFieldFocused: findFieldFocused)
     case .wordOccurrences(let word):
       Occurrences.wordOccurrences(of: word, in: text)
     }

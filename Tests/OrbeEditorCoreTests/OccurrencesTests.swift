@@ -7,11 +7,23 @@ import XCTest
 /// 文字列の他の出現が出ない・選択自身に地が被る・空白の選択で全体が光る、キャレットの語が区切りを越えて広がる・
 /// 部分一致まで光る、検索バーの一致と二重に出る。
 final class OccurrencesTests: XCTestCase {
+  /// 選択 1 つから決めた問いの出現（1 本のカーソルの強調）。
+  private static func selectionOccurrences(
+    of selection: NSRange, in text: TextRope, findNeedle: String?, findFieldFocused: Bool
+  ) -> [NSRange] {
+    guard let question = SearchQuestion.of([selection], continuing: nil, in: text) else {
+      return []
+    }
+    return Occurrences.selectionOccurrences(
+      of: question, selections: [selection], in: text, findNeedle: findNeedle,
+      findFieldFocused: findFieldFocused)
+  }
+
   func testSelectionOccurrencesAreCaseInsensitiveAndExcludeTheSelection() {
     let text = "foo Foo foo\nfoofoo"
     let selection = NSRange(location: 4, length: 3)
     XCTAssertEqual(
-      Occurrences.selectionOccurrences(
+      Self.selectionOccurrences(
         of: selection, in: TextRope(text), findNeedle: nil, findFieldFocused: false),
       [
         NSRange(location: 0, length: 3), NSRange(location: 8, length: 3),
@@ -22,12 +34,12 @@ final class OccurrencesTests: XCTestCase {
   func testSelectionOccurrencesDropMatchesStartingBeforeAndOverlappingTheSelection() {
     let text = "aaaa"
     XCTAssertEqual(
-      Occurrences.selectionOccurrences(
+      Self.selectionOccurrences(
         of: NSRange(location: 1, length: 2), in: TextRope(text), findNeedle: nil,
         findFieldFocused: false),
       [NSRange(location: 2, length: 2)], "選択より前に始まって交差する一致（0..<2）は除き、選択の中から始まる一致は残す")
     XCTAssertEqual(
-      Occurrences.selectionOccurrences(
+      Self.selectionOccurrences(
         of: NSRange(location: 0, length: 2), in: TextRope("aaaaa"), findNeedle: nil,
         findFieldFocused: false),
       [NSRange(location: 2, length: 2)])
@@ -36,7 +48,7 @@ final class OccurrencesTests: XCTestCase {
   func testSelectionOccurrencesNeedASingleLineNonBlankShortSelection() {
     let text = "ab ab\nab  ab"
     let none = { (range: NSRange) in
-      Occurrences.selectionOccurrences(
+      Self.selectionOccurrences(
         of: range, in: TextRope(text), findNeedle: nil, findFieldFocused: false)
     }
     XCTAssertEqual(none(NSRange(location: 0, length: 0)), [], "空の選択")
@@ -44,7 +56,7 @@ final class OccurrencesTests: XCTestCase {
     XCTAssertEqual(none(NSRange(location: 8, length: 2)), [], "空白だけ")
     let long = String(repeating: "x", count: 201)
     XCTAssertEqual(
-      Occurrences.selectionOccurrences(
+      Self.selectionOccurrences(
         of: NSRange(location: 0, length: 201), in: TextRope(long + " " + long), findNeedle: nil,
         findFieldFocused: false), [], "200 字を超える")
   }
@@ -53,19 +65,19 @@ final class OccurrencesTests: XCTestCase {
     let text = "ab ab ab"
     let selection = NSRange(location: 0, length: 2)
     XCTAssertEqual(
-      Occurrences.selectionOccurrences(
+      Self.selectionOccurrences(
         of: selection, in: TextRope(text), findNeedle: "AB", findFieldFocused: false), [],
       "検索バーが同じ文字列（大小無視）を探している")
     XCTAssertEqual(
-      Occurrences.selectionOccurrences(
+      Self.selectionOccurrences(
         of: selection, in: TextRope(text), findNeedle: "zz", findFieldFocused: true), [],
       "検索語が空でない入力欄に焦点がある")
     XCTAssertEqual(
-      Occurrences.selectionOccurrences(
+      Self.selectionOccurrences(
         of: selection, in: TextRope(text), findNeedle: "zz", findFieldFocused: false
       ).count, 2)
     XCTAssertEqual(
-      Occurrences.selectionOccurrences(
+      Self.selectionOccurrences(
         of: selection, in: TextRope(text), findNeedle: "", findFieldFocused: true
       ).count, 2)
   }
@@ -135,5 +147,74 @@ final class OccurrencesTests: XCTestCase {
         NSRange(location: 0, length: 3), NSRange(location: 15, length: 3),
         NSRange(location: 25, length: 3),
       ])
+  }
+
+  /// 選択が複数でも、どの選択とも同じ区間の出現と、選択より前に始まって選択に重なる出現は除く（VS Code の
+  /// `SelectionHighlighter`）。
+  func testSelectionOccurrencesExcludeEverySelection() {
+    let text = TextRope("ab ab ab ab")
+    let selections = [NSRange(location: 3, length: 2), NSRange(location: 9, length: 2)]
+    let question = SearchQuestion.of(selections, continuing: nil, in: text)
+    XCTAssertEqual(question, SearchQuestion(needle: "ab", rule: .find))
+    XCTAssertEqual(
+      Occurrences.selectionOccurrences(
+        of: question!, selections: selections, in: text, findNeedle: nil, findFieldFocused: false),
+      [NSRange(location: 0, length: 2), NSRange(location: 6, length: 2)])
+  }
+
+  /// 問いは、続きがあればそれ。無ければ、どの選択も空でなく文字列が大小を無視して同じときだけ、主の文字列を ⌘F の規則で。
+  func testQuestionNeedsTheSameTextInEverySelection() {
+    let text = TextRope("Foo foo bar")
+    let foo = NSRange(location: 0, length: 3)
+    XCTAssertEqual(
+      SearchQuestion.of([foo, NSRange(location: 4, length: 3)], continuing: nil, in: text),
+      SearchQuestion(needle: "Foo", rule: .find), "大小を無視して同じ")
+    XCTAssertNil(
+      SearchQuestion.of([foo, NSRange(location: 8, length: 3)], continuing: nil, in: text), "文字列が違う"
+    )
+    XCTAssertNil(
+      SearchQuestion.of([foo, NSRange(location: 8, length: 0)], continuing: nil, in: text),
+      "空の選択がある")
+    XCTAssertNil(SearchQuestion.of([NSRange(location: 1, length: 0)], continuing: nil, in: text))
+    let word = SearchQuestion(needle: "foo", rule: .word)
+    XCTAssertEqual(
+      SearchQuestion.of([foo, NSRange(location: 8, length: 3)], continuing: word, in: text), word,
+      "続きがあればそれ")
+  }
+
+  /// 語の規則の問いは、大小を区別し語の境で切れる一致だけを出す（⌘D が語から続いている間）。
+  func testWordQuestionHighlightsWholeWordsOnly() {
+    let text = TextRope("foo Foo foobar foo")
+    let selections = [NSRange(location: 0, length: 3)]
+    XCTAssertEqual(
+      Occurrences.selectionOccurrences(
+        of: SearchQuestion(needle: "foo", rule: .word), selections: selections, in: text,
+        findNeedle: nil, findFieldFocused: false),
+      [NSRange(location: 15, length: 3)])
+  }
+
+  /// 語の規則の境は、⌘D・⌥←→ と同じ語の分類——日本語の並びの中でも、OS の語の分割の境で切れる一致は語の一致。
+  func testWordRuleSplitsJapaneseRunsLikeWordMotion() {
+    let text = TextRope("東京都に行く。東京タワー。京都")
+    XCTAssertEqual(
+      TextSearch.matches(of: "東京", in: text, rule: .word),
+      [NSRange(location: 0, length: 2), NSRange(location: 7, length: 2)])
+    XCTAssertEqual(
+      TextSearch.matches(of: "京", in: text, rule: .word), [], "語の途中の一致は語の一致でない")
+  }
+
+  /// 次の一致は、位置以降に始まる最初の一致。無ければ先頭へ回る。
+  func testFirstMatchWrapsAround() {
+    let text = TextRope("ab x ab x AB")
+    XCTAssertEqual(
+      TextSearch.firstMatch(of: "ab", in: text, rule: .find, from: 3),
+      NSRange(location: 5, length: 2))
+    XCTAssertEqual(
+      TextSearch.firstMatch(of: "AB", in: text, rule: .word, from: 11),
+      NSRange(location: 10, length: 2))
+    XCTAssertEqual(
+      TextSearch.firstMatch(of: "ab", in: text, rule: .word, from: 8),
+      NSRange(location: 0, length: 2), "末尾まで無ければ先頭から")
+    XCTAssertNil(TextSearch.firstMatch(of: "zz", in: text, rule: .find, from: 3))
   }
 }

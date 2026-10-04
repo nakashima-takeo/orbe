@@ -1,41 +1,41 @@
 import CoreFoundation
 import Foundation
-import OrbeEditorCore
 
 /// 字の種類（VS Code の `WordCharacterClass`）。
-enum WordClass: Sendable {
+public enum WordClass: Sendable {
   case regular, whitespace, separator
 }
 
 /// 語の種類（VS Code の `WordType`）。
-enum WordKind: Sendable {
+public enum WordKind: Sendable {
   case regular, separator
 }
 
 /// 行の中の語（VS Code の `IFindWordResult`）。位置は行の中の UTF-16 の距離。
-struct Word: Equatable, Sendable {
-  var start: Int
-  var end: Int
-  var kind: WordKind
+public struct Word: Equatable, Sendable {
+  public var start: Int
+  public var end: Int
+  public var kind: WordKind
   /// 語の直後（前の語を探したときは直前）の字の種類。
-  var nextClass: WordClass
+  public var nextClass: WordClass
 }
 
 /// 1 行の語の規則（VS Code の `WordCharacterClassifier` と `WordOperations` の行の中の探索）。空白は space と tab、区切りは
 /// VS Code の区切り文字、それ以外は通常の字で、同じ種類の最長の並びが 1 語。通常の字の並びが CJK（漢字・かな・ハングル
 /// など）を含むときは、並びの中で OS の語の分割（ロケールは `ja` に固定）の境でも止まる——VS Code で語の分割のロケールに
-/// `ja` を置いたときと同じ形で、分割の境は記号と空白の規則に足すだけ。
-struct LineWords {
-  let units: ContiguousArray<UInt16>
+/// `ja` を置いたときと同じ形で、分割の境は記号と空白の規則に足すだけ。面の語の移動・削除・選択（⌘D の語を含む）と、検索の
+/// 語の規則の境が、この 1 つの分類を使う。
+public struct LineWords {
+  public let units: ContiguousArray<UInt16>
   /// OS の語の分割で得た語（行の中の区間。CJK を含む通常の字の並びの中だけ）。
   private let segments: [Range<Int>]
 
-  init(_ units: ContiguousArray<UInt16>) {
+  public init(_ units: ContiguousArray<UInt16>) {
     self.units = units
     segments = Self.segments(of: units)
   }
 
-  static func wordClass(_ unit: UInt16) -> WordClass {
+  public static func wordClass(_ unit: UInt16) -> WordClass {
     if unit == 0x20 || unit == 0x09 { return .whitespace }
     return WordSeparators.units.contains(unit) ? .separator : .regular
   }
@@ -43,7 +43,7 @@ struct LineWords {
   private func wordClass(at index: Int) -> WordClass { Self.wordClass(units[index]) }
 
   /// `column` の前で終わる語（VS Code の `_doFindPreviousWordOnLine`。`column` は位置 = 1 始まりの桁 − 1）。
-  func previousWord(before column: Int) -> Word? {
+  public func previousWord(before column: Int) -> Word? {
     var kind: WordKind?
     let segment = previousSegment(atOrBefore: column - 1)
     var index = column - 1
@@ -72,7 +72,7 @@ struct LineWords {
   }
 
   /// `column` 以降で始まる（`column` を含む）語（VS Code の `_doFindNextWordOnLine`）。
-  func nextWord(from column: Int) -> Word? {
+  public func nextWord(from column: Int) -> Word? {
     var kind: WordKind?
     let segment = nextSegment(atOrAfter: column)
     var index = column
@@ -182,8 +182,14 @@ struct LineWords {
     return result
   }
 
+  /// 通常の字どうしの間 `index`（1…`units.count - 1`）が、OS の語の分割の境か（CJK を含む並びの中だけ。それ以外の並びは
+  /// 1 語なので境ではない）。
+  func isSegmentBoundary(at index: Int) -> Bool {
+    segments.contains { $0.lowerBound == index || $0.upperBound == index }
+  }
+
   /// 漢字・かな・ハングル・CJK の記号（々〆ー など）と、補助面の漢字（サロゲートの上位）。
-  private static func isCJK(_ unit: UInt16) -> Bool {
+  static func isCJK(_ unit: UInt16) -> Bool {
     switch unit {
     case 0x1100...0x11FF, 0x2E80...0x2FDF, 0x3005...0x3007, 0x3021...0x3029, 0x3031...0x3035,
       0x3040...0x31FF, 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xA960...0xA97F, 0xAC00...0xD7FF,

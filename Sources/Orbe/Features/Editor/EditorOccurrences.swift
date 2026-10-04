@@ -98,14 +98,17 @@ final class EditorOccurrences {
 
   private func updateSelectionOccurrences() {
     guard let document else { return }
-    let selection = document.surface.selectedRange
-    guard selection.length > 0, selection.length <= Occurrences.maxSelectionLength else {
+    let selections = [document.surface.selectedRange]
+    guard
+      let question = SearchQuestion.of(selections, continuing: nil, in: document.text),
+      (question.needle as NSString).length <= Occurrences.maxSelectionLength
+    else {
       selectionRequest = nil
       setSelectionOccurrences([])
       return
     }
     let request = AnalysisRequest.selectionOccurrences(
-      selection: selection, findNeedle: findNeedle, findFieldFocused: findFieldFocused)
+      question, selections: selections, findNeedle: findNeedle, findFieldFocused: findFieldFocused)
     guard request != selectionRequest else { return }
     selectionRequest = request
     document.analyze(request)
