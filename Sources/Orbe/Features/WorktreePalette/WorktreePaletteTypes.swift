@@ -10,6 +10,15 @@ enum WorktreePaletteDestination: Equatable {
   case remoteBranch(name: String, existingWorktree: String?)
   /// base から name の新しいブランチ（upstream なし）を切り、その worktree を作る。
   case newBranch(name: String, base: WorktreeBase)
+
+  /// 作らずにそのまま開く既存のディレクトリ（リモートブランチの行は、そのブランチの worktree があるとき）。
+  var existingDirectory: String? {
+    switch self {
+    case .directory(let path): path
+    case .remoteBranch(_, let existing): existing
+    case .localBranch, .newBranch: nil
+    }
+  }
 }
 
 /// 新しいブランチを切るベース。既定ブランチは**参照ではなく意図**として持ち、名前の解決を作成の直前まで

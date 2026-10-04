@@ -60,9 +60,6 @@ struct WorktreePaletteItem: Identifiable {
   var sync: WorktreePaletteBranchSync?
   /// 今の worktree の行（「現在」の札・入力が空のときの初期選択）。
   var isCurrent = false
-  /// 既存のディレクトリを開く行（worktree・「このディレクトリ」）の場所のキー。その場所を持つタスクの札と、
-  /// ↵ の付け替えの判定に使う。
-  var worktreeKey: String?
   /// PR のブランチの行（タスクの欄。印は `.pullRequest`）の PR の番号。補足に「PR #N のブランチ」を出す。
   var pullRequest: Int?
   /// 決定（↵／行タップ）のペイロード。
@@ -72,6 +69,15 @@ struct WorktreePaletteItem: Identifiable {
 }
 
 extension WorktreePaletteItem {
+  /// ↵ が開く既存の worktree（・「このディレクトリ」）の場所のキー。新しい worktree を作る行は nil。その場所を
+  /// 持つタスクの札と、↵ の付け替えの判定に使う（↵ でタスクに付くのと同じ値）。
+  var worktreeKey: String? {
+    guard case .open(let destination) = action, let path = destination.existingDirectory else {
+      return nil
+    }
+    return GitWorktreeRoot.normalizedPath(path)
+  }
+
   /// ベースのバーの「なし — …」。PR のブランチの行は、そのブランチが PR のものだと添える。
   var baseNote: (key: L10nKey, values: [String])? {
     switch (pullRequest, enter) {

@@ -62,7 +62,7 @@ enum WorktreePaletteSectionBuilder {
       let branch =
         find(.open(.localBranch(name: name)))
         ?? remotes.lazy.compactMap {
-          find(.open(.remoteBranch(name: "\($0)/\(name)", existingWorktree: nil)))
+          remoteBranch(named: "\($0)/\(name)", in: items)
         }.first
       if var branch {
         if let pullRequest {
@@ -86,7 +86,6 @@ enum WorktreePaletteSectionBuilder {
           WorktreePaletteItem(
             glyph: .directory, name: "", nameKey: .worktreePaletteThisDirectory,
             detail: abbreviate(path), isCurrent: true,
-            worktreeKey: GitWorktreeRoot.normalizedPath(path),
             action: .open(.directory(path: path)),
             enter: .openDirectory(abbreviate(path)))
         ])
@@ -97,6 +96,16 @@ enum WorktreePaletteSectionBuilder {
   static func newBranchItem(name: String) -> WorktreePaletteItem {
     WorktreePaletteItem(
       glyph: .newBranch, name: name, action: .createBranch(name: name), enter: .create(name))
+  }
+
+  /// リモートブランチの行は名前で探す（行き先に焼き込んだ既存の worktree の有無に依らない）。
+  private static func remoteBranch(named name: String, in items: [WorktreePaletteItem])
+    -> WorktreePaletteItem?
+  {
+    items.first {
+      if case .open(.remoteBranch(name, _)) = $0.action { return true }
+      return false
+    }
   }
 
   // MARK: - セクションごとの item 組み立て
@@ -112,7 +121,6 @@ enum WorktreePaletteSectionBuilder {
         glyph: .worktree, name: name, detail: abbreviate(worktree.path),
         aliases: worktree.branch.map { [$0] } ?? [],
         isCurrent: input.currentWorktree == worktree.path,
-        worktreeKey: GitWorktreeRoot.normalizedPath(worktree.path),
         action: .open(.directory(path: worktree.path)), enter: .openWorktree(name))
     } + [cleanItem(input)]
   }
