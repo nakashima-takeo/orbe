@@ -2,6 +2,8 @@ import XCTest
 
 @testable import Orbe
 
+private typealias GitHub = TaskPaletteGitHubSamples
+
 /// GitHub タブの右の欄（アサインするか・優先度・期限）のキーの流儀と値の寿命、agent の変更への追従。
 ///
 /// 壊れると何が起きるか: 結び付いた行で欄に入れてしまい、使えない値を打たされる。期限の打ちかけが黙って
@@ -12,9 +14,9 @@ extension TaskPaletteModelTests {
 
   /// → で入れるのは結び付いていない行だけ。チェックは足すものがある項目でだけ止まる。
   func testRightArrowEntersThePaneOnlyOnAnUnlinkedItem() {
-    let palette = gitHubModel(
-      [task(1, "a") { $0.links = [self.issueLink(7)] }],
-      issues: [openIssue(7), openIssue(6), openIssue(5, author: "me")])
+    let palette = GitHub.model(
+      [task(1, "a") { $0.links = [GitHub.link(7)] }],
+      issues: [GitHub.issue(7), GitHub.issue(6), GitHub.issue(5, author: "me")])
 
     palette.enterPane()
     XCTAssertEqual(palette.area, .list, "結び付いている行")
@@ -31,7 +33,7 @@ extension TaskPaletteModelTests {
 
   /// ↑↓ と優先度の ←→ は端で止まる。
   func testPaneStopsAndPriorityStopAtTheEnds() {
-    let palette = gitHubModel([], issues: [openIssue(5)])
+    let palette = GitHub.model([], issues: [GitHub.issue(5)])
     palette.enterPane()
 
     palette.movePaneStop(-1)
@@ -49,7 +51,7 @@ extension TaskPaletteModelTests {
 
   /// 期限は 10/6・YYYY-MM-DD で読み、空なら期限なし、読めなければ理由を出して編集を続ける。
   func testPaneDueReadsShortDatesAndKeepsEditingUnreadableText() {
-    let palette = gitHubModel([], issues: [openIssue(5)])
+    let palette = GitHub.model([], issues: [GitHub.issue(5)])
 
     palette.beginPaneDue()
     palette.draftText = "10/6"
@@ -69,7 +71,7 @@ extension TaskPaletteModelTests {
 
   /// 選択の同一性が変わると欄の値は既定（オン・中・期限なし）に戻る。agent の変更で同じ行のままなら保つ。
   func testPaneValuesResetWhenTheSelectionMovesButSurviveAnAgentChange() throws {
-    let palette = gitHubModel([], issues: [openIssue(6), openIssue(5)])
+    let palette = GitHub.model([], issues: [GitHub.issue(6), GitHub.issue(5)])
     palette.enterPane()
     palette.togglePaneAssign()
     palette.movePaneStop(1)
@@ -92,17 +94,19 @@ extension TaskPaletteModelTests {
   /// 開いている間に agent が結び付けると、その行は結び付いた側へ移り、選んだ行は同一性で保たれる。右の欄に
   /// 居た行が結び付いたら一覧へ戻る。
   func testAgentLinkingAnItemMovesItsRowAndKeepsTheSelectedItem() throws {
-    let palette = gitHubModel([task(1, "a")], issues: [openIssue(7), openIssue(6), openIssue(5)])
+    let palette = GitHub.model(
+      [task(1, "a")], issues: [GitHub.issue(7), GitHub.issue(6), GitHub.issue(5)])
     palette.move(1)
     palette.enterPane()
 
     var update = TaskUpdate()
-    update.links = [issueLink(6), issueLink(5)]
+    update.links = [GitHub.link(6), GitHub.link(5)]
     _ = try palette.store.update(1, update)
     palette.reconcile()
 
-    XCTAssertEqual(palette.gitHubSelectableIDs, [.item(gid(6)), .item(gid(5)), .item(gid(7))])
-    XCTAssertEqual(palette.selectedGitHubID, .item(gid(6)))
+    XCTAssertEqual(
+      palette.gitHubSelectableIDs, [.item(GitHub.id(6)), .item(GitHub.id(5)), .item(GitHub.id(7))])
+    XCTAssertEqual(palette.selectedGitHubID, .item(GitHub.id(6)))
     XCTAssertEqual(palette.area, .list)
   }
 }
