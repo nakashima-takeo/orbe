@@ -90,8 +90,7 @@ extension TaskPaletteModel {
 
   /// ⌘⌫。⌫ は AppKit から DEL（U+007F）で届き、`KeyEquivalent.delete`（U+0008）とは一致しない。
   private static func isCommandBackspace(_ press: KeyPress) -> Bool {
-    press.modifiers.contains(.command)
-      && (press.key.character == "\u{7F}" || press.key == .delete)
+    press.modifiers.contains(.command) && press.key.character == "\u{7F}"
   }
 
   /// ⇧⇥ は `.tab` ではなく AppKit の backtab 文字（U+0019）で届く。

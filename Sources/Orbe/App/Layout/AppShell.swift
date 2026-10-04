@@ -14,8 +14,7 @@ import SwiftUI
   enum Overlay {
     case none, languageSelect, workspacePalette, workspaceCreate, agentPalette, worktreePalette,
       taskPalette, settingsPalette, onboarding, updateChanges, attentionPalette,
-      closedAgentsPalette,
-      help
+      closedAgentsPalette, help
   }
 
   /// 上段 chrome（ネイティブ SwiftUI `StatusRowView` の状態）。

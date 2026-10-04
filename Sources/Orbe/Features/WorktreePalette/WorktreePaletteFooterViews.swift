@@ -1,6 +1,6 @@
 import SwiftUI
 
-// worktree パレットのフッターの部品。busy 表示とキーヒントは全モードが共有し、↵ の説明は一覧
+// worktree パレットのフッターの部品。busy 表示は一覧と最新化が共有し、↵ の説明は一覧
 // （`PaletteActionLine`）と最新化（`LaunchLine`）で描き方が分かれる。
 
 /// フッターの busy 表示（作成中・最新化中）。左端の `↵` を出さず、gh「読み込み中…」行と同語彙の

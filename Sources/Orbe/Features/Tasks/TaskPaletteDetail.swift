@@ -202,12 +202,10 @@ struct TaskPaletteDetail: View {
   }
 
   private func workspaceValue(_ task: TaskItem) -> some View {
-    Text(model.workspaces.entry(task.workspace)?.name ?? l10n.string(.taskPaletteNoWorkspace))
+    let entry = model.workspaces.entry(task.workspace)
+    return Text(entry?.name ?? l10n.string(.taskPaletteNoWorkspace))
       .font(Font.theme.taskText)
-      .foregroundStyle(
-        task.workspace.flatMap(model.workspaces.entry) == nil
-          ? Color.theme.textMuted : Color.theme.textPrimary
-      )
+      .foregroundStyle(entry == nil ? Color.theme.textMuted : Color.theme.textPrimary)
       .lineLimit(1)
   }
 
