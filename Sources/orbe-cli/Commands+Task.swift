@@ -232,10 +232,11 @@ private func takeLinks(_ args: inout [String]) -> [[String: Any]] {
 }
 
 /// 呼び出し元の作業ディレクトリから読んだ絶対パス（control は Orbe の作業ディレクトリを知らないので、
-/// 相対パスはここで解く）。
+/// 相対パスはここで解く）。`/` で始まらないものはすべて相対として cwd につなぐ——`~` を展開するのは
+/// workspace のパスだけ（`NSString.isAbsolutePath` は `~` 始まりも絶対とみなし、続く正規化がホームへ展開する）。
 private func absolutePath(_ path: String) -> String {
   let absolute =
-    (path as NSString).isAbsolutePath
+    path.hasPrefix("/")
     ? path
     : (FileManager.default.currentDirectoryPath as NSString).appendingPathComponent(path)
   return (absolute as NSString).standardizingPath
