@@ -5,9 +5,9 @@ import XCTest
 @testable import Orbe
 
 /// プロジェクト検索の flow（fixture は骨の `EditorShellFixtures`。状態は本物の操作が生む）: 端末焦点から ⌘⇧F → 打鍵
-/// （300ms 後に検索）→ 結果 → ⌘↓ で結果へ → ↓ → Enter（ファイルが開いて一致が選ばれ中央に。橙の地と現在の一致）→
-/// レールでエクスプローラーへ切り替えると地が消える → F4 で次の一致（検索パネルが戻り、焦点は本文のまま——入力欄は
-/// 焦点の枠を出さない）。
+/// （300ms 後に検索）→ 結果 → ⌘↓ で結果へ → ↓（ファイルが仮のタブで開いて一致が選ばれ中央に。橙の地と現在の一致）→
+/// Enter（普通のタブにして本文へ）→ レールでエクスプローラーへ切り替えると地が消える → F4 で次の一致（検索パネルが戻り、
+/// 焦点は本文のまま——入力欄は焦点の枠を出さない）。
 extension DesignFlowSnapshotTests {
   func testEditorSearch() throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()

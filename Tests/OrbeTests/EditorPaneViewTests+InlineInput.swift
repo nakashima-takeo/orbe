@@ -36,6 +36,7 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     XCTAssertTrue(
       FileManager.default.fileExists(atPath: dir.appendingPathComponent("fresh.txt").path))
     XCTAssertEqual(pane.document?.url.lastPathComponent, "fresh.txt", "作ったファイルはそのまま開く")
+    XCTAssertNil(tab.editor.preview, "作ったファイルは普通のタブ")
     XCTAssertEqual(pane.tree.selected, "fresh.txt")
     XCTAssertTrue(window.firstResponder === pane.document?.surface.responder, "焦点はテキスト面へ")
     XCTAssertEqual(tab.faces.focus, .editor)

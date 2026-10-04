@@ -101,6 +101,24 @@ final class DocumentLinkTests: OrbeTestCase {
     XCTAssertNil(files, "全部閉じれば離される")
   }
 
+  /// 仮の文書を入れ替えると、閉じるのと同じく古い文書の結線を手放す——根の外のファイルへ入れ替えれば根のサービスは離される。
+  func testReplacingThePreviewReleasesTheRootService() throws {
+    let session = session()
+    try session.open(repo.url("a.txt"), as: .preview)
+    weak var files = RootFiles.shared(for: repo.root)
+    XCTAssertNotNil(files)
+
+    let outside = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "orbe-outside-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: outside) }
+    let other = outside.appendingPathComponent("n.txt")
+    try Data("n\n".utf8).write(to: other)
+    try session.open(other, as: .preview)
+    XCTAssertEqual(session.documents.count, 1, "前提: 入れ替わった")
+    XCTAssertNil(files, "入れ替えで古い文書の結線を手放す")
+  }
+
   /// 文書が属する根は文書の実体から解く（タブの根ではない）。管理外のファイルは baseline 無し。
   func testDocumentOutsideAnyRepositoryHasNoBaseline() throws {
     let outside = FileManager.default.temporaryDirectory.appendingPathComponent(

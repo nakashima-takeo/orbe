@@ -80,7 +80,9 @@ final class EditorPaneViewPreviewTabTests: OrbeTestCase {
     let middle = NSPoint(x: fileTabSlotCenter(pane, 1).x - 30, y: Theme.Layout.editorFileTabs / 2)
 
     try click(pane, at: middle)
-    pumpMain(until: { editor.activeDocument === preview }, "押すと切り替わる")
+    pumpMain(
+      until: { editor.activeDocument === preview }, timeout: NSEvent.doubleClickInterval / 2,
+      "押すとすぐ切り替わる（ダブルクリックの判定を待たない）")
     XCTAssertTrue(editor.preview === preview, "1 回目では仮のまま")
     try click(pane, at: middle, count: 2)
     pumpMain(until: { editor.preview == nil }, "ダブルクリックで普通のタブ")
