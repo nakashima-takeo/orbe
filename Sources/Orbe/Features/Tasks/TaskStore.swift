@@ -126,6 +126,24 @@ enum TaskStoreError: Error, Equatable {
     return previous.map { tasks[$0].id }
   }
 
+  /// 画面の付け替え・選んで結び付ける。その項目をどのタスクが持っていても外し、`id` のタスクの結び付きの
+  /// 末尾に足して、一度だけ保存する——外す・付けるの 2 回の変異に分けると、間に読んだ agent に「どこにも
+  /// 付いていない」状態が見え、後の 1 回が拒否されると外れただけで残る。外した側の外した項目に記録し、
+  /// 足した側からは消す（`update` と同じ規則）。`id` が既に持っていれば何もしない。前の持ち主の ID を返す。
+  @discardableResult func attach(_ link: TaskLink, to id: Int) throws(TaskStoreError) -> Int? {
+    guard let index = tasks.firstIndex(where: { $0.id == id }) else { throw .notFound(id) }
+    guard !tasks[index].links.contains(where: { $0.item == link.item }) else { return nil }
+    let previous = tasks.firstIndex { $0.links.contains { $0.item == link.item } }
+    if let previous {
+      tasks[previous].links.removeAll { $0.item == link.item }
+      tasks[previous].unlinked.insert(link.item)
+    }
+    tasks[index].links.append(link)
+    tasks[index].unlinked.remove(link.item)
+    persist()
+    return previous.map { tasks[$0].id }
+  }
+
   /// worktree のブランチの PR の自動の結び付け。結び付きの末尾に足す。タスクが無い・完了・その項目を
   /// 人が外した・どこかのタスクに既に付いている、のどれかなら何もしない（外した項目の記録は変えない）。
   /// 足したら true。
