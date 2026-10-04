@@ -51,7 +51,8 @@ extension WorktreePaletteModel {
     return WorktreePaletteTaskEffect(task: task, begins: begins, previousOwner: previousOwner)
   }
 
-  /// 別のリポジトリを読み直す前に、前のリポジトリから得た事実（行・分類・ベース・名前の答え）を捨てる。
+  /// 別のリポジトリを読み直す前に、前のリポジトリから得た事実（行・分類・ベース）を捨てる。打った名前が
+  /// ブランチ名として有効かの答えはリポジトリに依らないので残す。
   /// 新しい一覧が届くまではスケルトンを出し、前のリポジトリの行で ↵ が決まらないようにする。
   func discardRepositoryFacts() {
     hasLoadedOnce = false
@@ -61,7 +62,6 @@ extension WorktreePaletteModel {
     baseFacts = nil
     baseCandidates = []
     newBranchRules = nil
-    branchNameAnswer = nil
     pickedBase = nil
     selectedBaseRole = nil
     taskTargetPending = false
