@@ -32,10 +32,21 @@ enum WorktreePaletteFieldKeys {
       if !locked { model.cycleTarget() }
     case .escape:
       if !locked { model.onDismiss() }
+    case _ where isBackspace(press):
+      // 入力欄が空の ⌫ はタスクの札を外す（文字があるときは文字を消す）。押し続けたキーリピートでは外さない。
+      guard model.query.isEmpty, model.taskContextID != nil else { return .ignored }
+      if press.phase == .down { model.clearTaskContext() }
     default:
       return .ignored
     }
     return .handled
+  }
+
+  /// 修飾なしの ⌫（AppKit から DEL（U+007F）で届く）。実機のキーは function 等の修飾を伴うことがあるので、
+  /// 修飾の集合が空かでは判定しない。
+  private static func isBackspace(_ press: KeyPress) -> Bool {
+    press.key.character == "\u{7F}"
+      && press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
   }
 
   private static func basePicker(_ press: KeyPress, _ model: WorktreePaletteModel)

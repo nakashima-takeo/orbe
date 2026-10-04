@@ -44,7 +44,7 @@ extension WorktreePaletteDataProvider {
     }
   }
 
-  private var cachedRepositoryNames: [GitHubRepoName: GitHubRepositoryResolution] {
+  var cachedRepositoryNames: [GitHubRepoName: GitHubRepositoryResolution] {
     repo.flatMap { GitHubCache.shared.entry(for: $0.commonDir)?.repositoryNames } ?? [:]
   }
 

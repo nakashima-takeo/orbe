@@ -79,6 +79,19 @@ struct TaskPaletteTaskRow: Equatable {
   let agent: WorktreeAgentActivity.Agent?
 }
 
+extension TaskPaletteTaskRow.Glyph {
+  /// 完了 → 待ち → 進行中 → 未着手 の順に決まる（待ちはステータスと独立した属性なので、完了以外で優先する）。
+  init(_ task: TaskItem) {
+    self =
+      switch (task.status, task.waiting) {
+      case (.done, _): .done
+      case (_, .some): .waiting
+      case (.inProgress, nil): .inProgress
+      case (.todo, nil): .todo
+      }
+  }
+}
+
 /// 一覧の 1 行。
 enum TaskPaletteRow: Equatable, Identifiable {
   /// 行の同一性（選べない行を含む）。一覧の中で一意。
@@ -176,18 +189,11 @@ enum TaskPaletteRows {
   }
 
   private static func taskRow(_ task: TaskItem, _ input: Input) -> TaskPaletteTaskRow {
-    let glyph: TaskPaletteTaskRow.Glyph =
-      switch (task.status, task.waiting) {
-      case (.done, _): .done
-      case (_, .some): .waiting
-      case (.inProgress, nil): .inProgress
-      case (.todo, nil): .todo
-      }
     let workspace: TaskPaletteTaskRow.WorkspaceBadge? = input.workspaces.entry(task.workspace).map {
       $0.id == input.workspaces.opened.id ? .opened($0.name) : .other($0.name)
     }
     return TaskPaletteTaskRow(
-      id: task.id, title: task.title, glyph: glyph,
+      id: task.id, title: task.title, glyph: TaskPaletteTaskRow.Glyph(task),
       priority: task.priority == .medium ? nil : task.priority,
       due: task.due.map { TaskPaletteTaskRow.Due(date: $0, today: input.today) },
       createdBy: task.createdBy,

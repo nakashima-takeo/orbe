@@ -18,16 +18,62 @@ enum WorktreePaletteSectionBuilder {
     /// 提示時の `fetch --prune` が着地した（列挙が fetch 後の値）。Local branch 行の同期ピルは
     /// 着地後の値だけを出す——fetch 前の差は古い remote 追跡 ref との差で、事実として嘘になる。
     var remoteFetchLanded = false
+    /// タスクから開いたときの先頭の欄の行き先（provider が導く）。
+    var taskTarget = WorktreePaletteTaskTarget.none
+    /// 先頭の欄の見出しに添える主の番号（無ければ「このタスクの worktree」）。
+    var taskNumber: Int?
+    /// 作成行の名前と作成先の衝突の規則。先頭の欄の作成行（`issue/<N>`）を出すかに使う。
+    var newBranchRules: WorktreeNewBranchRules?
   }
 
-  /// worktree の欄（末尾に clean）と、ブランチの欄（ローカルの後にリモート）。
+  /// 先頭のタスクの欄（あれば）、worktree の欄（末尾に clean）、ブランチの欄（ローカルの後にリモート）。
+  /// タスクの欄に出した行は、下の欄から外す（同じ行を 2 度出さない）。
   static func build(_ input: Input) -> [WorktreePaletteSection] {
-    [
+    let worktrees = worktreeItems(input)
+    let branches = localBranchItems(input) + remoteBranchItems(input)
+    let taskItem = taskItem(input, among: worktrees + branches)
+    let rest = { (items: [WorktreePaletteItem]) in
+      items.filter { $0.action != taskItem?.action }
+    }
+    return [
       WorktreePaletteSection(
-        title: .worktrees(repository: input.repositoryName), items: worktreeItems(input)),
+        title: .task(number: input.taskNumber), items: taskItem.map { [$0] } ?? []),
       WorktreePaletteSection(
-        title: .branches, items: localBranchItems(input) + remoteBranchItems(input)),
+        title: .worktrees(repository: input.repositoryName), items: rest(worktrees)),
+      WorktreePaletteSection(title: .branches, items: rest(branches)),
     ].filter { !$0.items.isEmpty }
+  }
+
+  /// 先頭の欄の行。worktree → ローカルブランチ → そのリポジトリの remote のブランチの順に、今の一覧の行を
+  /// 探す。どれも無く、作れる Issue のブランチなら作成行。見つからず作りもしないなら nil（欄を出さない）。
+  private static func taskItem(_ input: Input, among items: [WorktreePaletteItem])
+    -> WorktreePaletteItem?
+  {
+    let find = { (action: WorktreePaletteAction) in items.first { $0.action == action } }
+    switch input.taskTarget {
+    case .none, .pending:
+      return nil
+    case .worktree(let path):
+      return find(.open(.directory(path: path)))
+    case .branch(let name, let pullRequest, let remotes):
+      if let worktree = input.worktrees.first(where: { $0.branch == name }) {
+        return find(.open(.directory(path: worktree.path)))
+      }
+      let branch =
+        find(.open(.localBranch(name: name)))
+        ?? remotes.lazy.compactMap {
+          find(.open(.remoteBranch(name: "\($0)/\(name)", existingWorktree: nil)))
+        }.first
+      if var branch {
+        if let pullRequest {
+          branch.glyph = .pullRequest
+          branch.pullRequest = pullRequest
+        }
+        return branch
+      }
+      guard pullRequest == nil, input.newBranchRules?.allows(name) == true else { return nil }
+      return newBranchItem(name: name)
+    }
   }
 
   /// 非 git の場所で開いたときの一覧（「このディレクトリ」の 1 行だけ）。⌘T ↵ の意味（今いる場所で
@@ -39,7 +85,9 @@ enum WorktreePaletteSectionBuilder {
         items: [
           WorktreePaletteItem(
             glyph: .directory, name: "", nameKey: .worktreePaletteThisDirectory,
-            detail: abbreviate(path), isCurrent: true, action: .open(.directory(path: path)),
+            detail: abbreviate(path), isCurrent: true,
+            worktreeKey: GitWorktreeRoot.normalizedPath(path),
+            action: .open(.directory(path: path)),
             enter: .openDirectory(abbreviate(path)))
         ])
     ]
@@ -64,6 +112,7 @@ enum WorktreePaletteSectionBuilder {
         glyph: .worktree, name: name, detail: abbreviate(worktree.path),
         aliases: worktree.branch.map { [$0] } ?? [],
         isCurrent: input.currentWorktree == worktree.path,
+        worktreeKey: GitWorktreeRoot.normalizedPath(worktree.path),
         action: .open(.directory(path: worktree.path)), enter: .openWorktree(name))
     } + [cleanItem(input)]
   }

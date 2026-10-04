@@ -234,11 +234,12 @@ final class WorktreePaletteDataProvider {
   }
 
   /// 手元の状態から model を組み直す（描画の唯一の出口）。gh 着地（分冊
-  /// `WorktreePaletteDataProvider+GitHub.swift`）も同じ出口を通る。
+  /// `WorktreePaletteDataProvider+GitHub.swift`）と、先頭の欄の入力（モデルの `taskInputs`）の変化も同じ出口を通る。
   func rebuild() {
     guard let model, isOutsideRepository || hasLandedGit else { return }
     let selectedAction = model.selectedItem?.action
     guard !isOutsideRepository else {
+      model.taskTargetPending = false
       model.hasLoadedOnce = true
       model.sections = WorktreePaletteSectionBuilder.directorySections(path: cwd)
       model.restoreSelection(matching: selectedAction)
@@ -259,13 +260,17 @@ final class WorktreePaletteDataProvider {
     model.baseFacts = baseFacts
     model.baseCandidates = baseCandidates
     model.newBranchRules = newBranchRules
+    let taskInputs = model.taskInputs
+    let taskTarget = taskTarget(taskInputs)
+    model.taskTargetPending = taskTarget == .pending
     model.sections = WorktreePaletteSectionBuilder.build(
       WorktreePaletteSectionBuilder.Input(
         worktrees: worktrees, localBranches: localBranches, remoteBranches: remoteBranches,
         repositoryName: (worktreeBase as NSString).lastPathComponent,
         currentWorktree: currentWorktree?.path,
         cleanCandidates: rows.map(WorktreeCleanClassifier.candidateCount),
-        remoteFetchLanded: remoteFetchLanded))
+        remoteFetchLanded: remoteFetchLanded, taskTarget: taskTarget,
+        taskNumber: taskInputs.primary?.item.number, newBranchRules: newBranchRules))
     model.restoreSelection(matching: selectedAction)
   }
 

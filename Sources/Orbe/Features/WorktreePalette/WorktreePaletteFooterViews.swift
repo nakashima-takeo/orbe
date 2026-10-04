@@ -39,7 +39,8 @@ struct WorktreePaletteLaunchLine: View {
   }
 }
 
-/// 一覧のフッター。選択行の ↵ が何をするかを言い、右にキーヒント。作成中は busy 表示、失敗は赤。
+/// 一覧のフッター。選択行の ↵ が何をするかを言い（タスクから開いたときは、タスクに起こすことを続けて
+/// 言う）、右にキーヒント。作成中は busy 表示、失敗は赤。
 struct WorktreePaletteListFooter: View {
   @Bindable var model: WorktreePaletteModel
   @Environment(\.localization) private var l10n
@@ -65,39 +66,66 @@ struct WorktreePaletteListFooter: View {
     } else if let error = model.errorMessage {
       Text(error).foregroundStyle(Color.theme.danger)
     } else if let enter = model.selectedItem?.enter {
-      line(enter)
+      let line = line(enter)
+      let effect = effect(model.taskEffect, after: line.slots.count)
+      PaletteActionLine(
+        key: "↵", template: line.template + effect.template, slots: line.slots + effect.slots)
     }
   }
 
-  @ViewBuilder private func line(_ enter: WorktreePaletteEnter) -> some View {
+  private func line(_ enter: WorktreePaletteEnter) -> (
+    template: String, slots: [PaletteActionLine.Slot]
+  ) {
     let agent = PaletteActionLine.Slot.accent(model.selectedTargetName)
     switch enter {
     case .openWorktree(let target), .openDirectory(let target):
-      PaletteActionLine(
-        key: "↵", template: l10n.string(.worktreePaletteEnterOpen),
-        slots: [.emphasis(target), agent])
+      return (l10n.string(.worktreePaletteEnterOpen), [.emphasis(target), agent])
     case .checkout(let target), .trackRemote(let target, _):
-      PaletteActionLine(
-        key: "↵", template: l10n.string(.worktreePaletteEnterCheckout),
-        slots: [.emphasis(target), agent])
+      return (l10n.string(.worktreePaletteEnterCheckout), [.emphasis(target), agent])
     case .create(let target):
       if let base = model.selectedBaseChoice, base.base != nil {
-        PaletteActionLine(
-          key: "↵", template: l10n.string(.worktreePaletteEnterCreate),
-          slots: [.emphasis(target), agent, .emphasis(base.name)])
-      } else {
-        PaletteActionLine(
-          key: "↵", template: l10n.string(.worktreePaletteEnterPickBase), slots: [])
+        return (
+          l10n.string(.worktreePaletteEnterCreate),
+          [.emphasis(target), agent, .emphasis(base.name)]
+        )
       }
+      return (l10n.string(.worktreePaletteEnterPickBase), [])
     case .clean:
-      PaletteActionLine(key: "↵", template: l10n.string(.worktreePaletteEnterClean), slots: [])
+      return (l10n.string(.worktreePaletteEnterClean), [])
     }
   }
 
-  /// 「↑↓ 選択」は選べる行が 2 つ以上あるときだけ出す。
+  /// ↵ がタスクに起こすこと（「 · #221 を進行中に」「 · #212 から #221 へ付け替え」）。差し込み位置は
+  /// ↵ の説明の後ろへずらす。
+  private func effect(_ effect: WorktreePaletteTaskEffect?, after offset: Int) -> (
+    template: String, slots: [PaletteActionLine.Slot]
+  ) {
+    guard let effect else { return ("", []) }
+    let name = { (task: TaskItem) in WorktreePaletteTaskText.name(task, l10n) }
+    let key: L10nKey
+    var slots: [PaletteActionLine.Slot] = [.emphasis(name(effect.task))]
+    switch (effect.begins, effect.previousOwner) {
+    case (true, nil): key = .worktreePaletteEffectBegin
+    case (true, let previous?):
+      key = .worktreePaletteEffectBeginReassign
+      slots.append(.emphasis(name(previous)))
+    case (false, let previous?):
+      key = .worktreePaletteEffectReassign
+      slots.append(.emphasis(name(previous)))
+    case (false, nil): return ("", [])
+    }
+    let template = l10n.string(key).replacing(#/%(\d)\$@/#) { match in
+      "%\(Int(match.output.1)! + offset)$@"
+    }
+    return (template, slots)
+  }
+
+  /// タスクから開いていて入力が空の間は「⌫ 外す」、そうでなければ選べる行が 2 つ以上あるときだけ「↑↓ 選択」。
   private var keyHints: some View {
     HStack(spacing: Theme.Space.step + Theme.Space.hair) {
-      if model.items.count >= 2 {
+      if model.task != nil, model.query.isEmpty {
+        PaletteKeyHint(key: "⌫", label: l10n.string(.worktreePaletteHintRemoveTask))
+      } else if model.items.count >= 2 {
         PaletteKeyHint(key: "↑↓", label: l10n.string(.worktreePaletteHintSelect))
       }
       PaletteKeyHint(key: "esc", label: l10n.string(.worktreePaletteHintClose))

@@ -22,8 +22,8 @@ import Observation
   private(set) var answers: [GitHubItemID: GitHubItemAnswer]
   /// gh で認証しているアカウントの login。
   private(set) var viewerLogin: String?
-  @ObservationIgnored private var inFlight: Set<GitHubItemID> = []
-  @ObservationIgnored private var tried: Set<GitHubItemID> = []
+  private var inFlight: Set<GitHubItemID> = []
+  private var tried: Set<GitHubItemID> = []
   @ObservationIgnored private let fetch: Fetch
 
   init(
@@ -33,6 +33,12 @@ import Observation
     self.answers = answers
     self.viewerLogin = viewerLogin
     self.fetch = fetch
+  }
+
+  /// まだ答えが無い項目について、答えを待っている（まだ試していないか、取得中）か。試して取れなかったなら
+  /// false（gh が無い・失敗。次の `refresh` まで取りに行かない）。
+  func isAwaitingAnswer(_ id: GitHubItemID) -> Bool {
+    answers[id] == nil && (inFlight.contains(id) || !tried.contains(id))
   }
 
   /// 取り直す。前回の答えは、新しい答えが届くまで残す。

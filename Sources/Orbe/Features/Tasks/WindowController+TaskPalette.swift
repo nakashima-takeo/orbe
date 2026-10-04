@@ -18,6 +18,7 @@ extension WindowController {
       now: Date(), timeZone: .current)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
     p.onOpenURL = { NSWorkspace.shared.open($0) }
+    p.onOpenWorktreePalette = { [weak self] id in self?.openWorktreePalette(forTask: id) }
     p.onFocusTab = { [weak self] tabId in
       self?.dismissPalette()
       _ = self?.controlFocusTab(tabId: tabId)
@@ -26,6 +27,13 @@ extension WindowController {
     model.overlay = .taskPalette
     p.focus()
     reconfirmFocusNextTick()  // 別 overlay からの遷移で去りゆくカードの teardown に勝つ
+  }
+
+  /// タスク画面の ⌘T。タスク画面を確定して畳み、そのタスクのための ⌘T に差し替える。
+  func openWorktreePalette(forTask id: Int) {
+    settleTaskPaletteEditing()
+    model.taskPalette = nil
+    showWorktreePalette(task: id)
   }
 
   /// タスク画面で打ちかけの編集を確定する。画面を閉じる・別の画面へ差し替わる・アプリの終了の

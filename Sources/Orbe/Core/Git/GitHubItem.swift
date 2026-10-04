@@ -60,6 +60,8 @@ struct GitHubItemSummary: Equatable {
     let checks: Checks?
     /// 作成者の login。
     let author: String?
+    /// head のリポジトリとブランチ。head のリポジトリが消えていれば nil。
+    var head: GitHubBranchRef?
   }
 
   let title: String
@@ -90,7 +92,8 @@ enum GitHubItemQuery {
   /// 項目 1 つの欄。`__typename` で Issue と PR の欄を分ける。
   private static let itemFields =
     "__typename ...on Issue{title state} ...on PullRequest{title state isDraft reviewDecision "
-    + "author{login} commits(last:1){nodes{commit{statusCheckRollup{state}}}}}"
+    + "author{login} headRefName headRepositoryOwner{login} headRepository{name} "
+    + "commits(last:1){nodes{commit{statusCheckRollup{state}}}}}"
 
   /// 問い合わせの引数。owner と name は `-f`（文字列のまま）で渡す（`resolveRepositoryArguments` と同じく、
   /// 数字だけの名前を整数に変えないため）。番号は検証済みの整数なので問い合わせに直接書く。
@@ -183,9 +186,11 @@ private struct ItemsData: Decodable {
 /// `issueOrPullRequest` の 1 項目。
 private struct ItemNode: Decodable {
   struct Author: Decodable { let login: String? }
+  struct Repository: Decodable { let name: String? }
   enum CodingKeys: String, CodingKey {
     case typename = "__typename"
-    case title, state, isDraft, reviewDecision, author, commits
+    case title, state, isDraft, reviewDecision, author, commits, headRefName,
+      headRepositoryOwner, headRepository
   }
 
   let typename: String
@@ -195,6 +200,9 @@ private struct ItemNode: Decodable {
   let reviewDecision: String?
   let author: Author?
   let commits: ItemCommits?
+  let headRefName: String?
+  let headRepositoryOwner: Author?
+  let headRepository: Repository?
 
   /// 読めない種別・状態は nil（「無かった」と同じに扱う）。
   var summary: GitHubItemSummary? {
@@ -213,10 +221,19 @@ private struct ItemNode: Decodable {
         pullRequest: GitHubItemSummary.PullRequest(
           isDraft: isDraft ?? false,
           review: reviewDecision.flatMap(GitHubItemSummary.ReviewDecision.init(rawValue:)),
-          checks: checks, author: author?.login))
+          checks: checks, author: author?.login, head: head))
     default:
       return nil
     }
+  }
+
+  /// head のリポジトリが消えている（owner か名前が欠ける）・ブランチ名が無いなら nil。
+  private var head: GitHubBranchRef? {
+    guard let headRefName, !headRefName.isEmpty,
+      let repo = GitHubRepoName(
+        owner: headRepositoryOwner?.login ?? "", name: headRepository?.name ?? "")
+    else { return nil }
+    return GitHubBranchRef(repo: repo, branch: headRefName)
   }
 
   private var checks: GitHubItemSummary.Checks? {

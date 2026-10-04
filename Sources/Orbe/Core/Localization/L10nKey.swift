@@ -88,6 +88,15 @@ enum L10nKey: String, CaseIterable, Sendable {
   case worktreePaletteBaseQueryPlaceholder
   case worktreePaletteBaseNoMatch
   case worktreePaletteBasePickEnter
+  case worktreePaletteTaskQueryPlaceholder
+  case worktreePaletteSectionTask
+  case worktreePaletteSectionThisTask
+  case worktreePaletteTaskTitle
+  case worktreePalettePullRequestBranch
+  case worktreePaletteEffectBegin
+  case worktreePaletteEffectBeginReassign
+  case worktreePaletteEffectReassign
+  case worktreePaletteHintRemoveTask
   case worktreeCleanSubtitle
   case worktreeCleanCandidatesOne
   case worktreeCleanCandidatesOther

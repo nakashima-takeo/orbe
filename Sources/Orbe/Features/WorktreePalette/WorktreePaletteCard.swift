@@ -81,6 +81,8 @@ struct WorktreePaletteCard: View {
     .onChange(of: model.focusToken, initial: true) {
       focus = hasField ? .field : .card
     }
+    // 先頭の欄の入力（文脈のタスクの worktree・主・PR の head）の変化を、描画の外で provider へ届ける。
+    .onChange(of: model.taskInputs) { model.onTaskInputsChanged() }
   }
 
   /// ヘッダ／バー／フッターの実測高を合算して chrome 高に集約する probe。
@@ -117,6 +119,10 @@ struct WorktreePaletteCard: View {
       switch model.mode {
       case .list:
         Spacer(minLength: Theme.Space.step)
+        if let task = model.task {
+          WorktreePaletteTaskBadge(task: task, onRemove: { model.clearTaskContext() })
+            .padding(.leading, gap)
+        }
         keyCap("⌘T").padding(.leading, gap)
       case .basePicker:
         Spacer(minLength: Theme.Space.step)
@@ -182,8 +188,9 @@ struct WorktreePaletteCard: View {
   }
 
   private var placeholderKey: L10nKey {
-    model.mode == .basePicker
-      ? .worktreePaletteBaseQueryPlaceholder : .worktreePaletteQueryPlaceholder
+    if model.mode == .basePicker { return .worktreePaletteBaseQueryPlaceholder }
+    return model.task == nil
+      ? .worktreePaletteQueryPlaceholder : .worktreePaletteTaskQueryPlaceholder
   }
 
   // MARK: - リスト部
@@ -202,7 +209,7 @@ struct WorktreePaletteCard: View {
               case .note(_, let key): WorktreePaletteEmptyNote(text: l10n.string(key))
               case .item(let index, let item):
                 WorktreePaletteRow(
-                  item: item, selected: index == model.selected,
+                  item: item, task: model.rowTask(item), selected: index == model.selected,
                   // 行タップ（release）＝決定。↵ と同じ funnel を通り、選択移動と実行が一体で走る。
                   onTap: { model.activate(at: index) },
                   // ホバー開始＝選択の追従だけ（決定は走らない）。
@@ -262,6 +269,9 @@ struct WorktreePaletteCard: View {
       repository.isEmpty ? "WORKTREES" : "WORKTREES · \(repository.uppercased())"
     case .branches: "BRANCHES"
     case .worktreesAndBranches: "WORKTREES・BRANCHES"
+    case .task(let number):
+      number.map { l10n.format(.worktreePaletteSectionTask, "#\($0)") }
+        ?? l10n.string(.worktreePaletteSectionThisTask)
     }
   }
 
