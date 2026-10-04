@@ -19,15 +19,15 @@ public struct SearchQuestion: Equatable, Sendable {
     _ selections: [NSRange], continuing: SearchQuestion?, in text: TextRope
   ) -> SearchQuestion? {
     if let continuing { return continuing }
-    guard let primary = selections.first, primary.length > 0, NSMaxRange(primary) <= text.length
+    guard let primary = selections.first,
+      selections.allSatisfy({ $0.length > 0 && NSMaxRange($0) <= text.length })
     else { return nil }
     let needle = text.substring(primary)
     if selections.count > 1 {
       let folded = needle.lowercased()
-      for selection in selections.dropFirst() {
-        guard selection.length > 0, NSMaxRange(selection) <= text.length,
-          text.substring(selection).lowercased() == folded
-        else { return nil }
+      for selection in selections.dropFirst()
+      where text.substring(selection).lowercased() != folded {
+        return nil
       }
     }
     return SearchQuestion(needle: needle, rule: .find)

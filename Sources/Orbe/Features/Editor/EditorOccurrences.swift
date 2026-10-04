@@ -100,9 +100,12 @@ final class EditorOccurrences {
   private func updateSelectionOccurrences() {
     guard let document else { return }
     let selections = document.surface.cursorSelections
+    let continuation = document.surface.searchContinuation
+    // 長すぎる選択は文字列にする前に断る（大きな選択を持ったままの ⌥クリック・⌥ドラッグで、選択の変化ごとに全文を写さない）。
     guard
-      let question = SearchQuestion.of(
-        selections, continuing: document.surface.searchContinuation, in: document.text),
+      continuation != nil
+        || selections.allSatisfy({ $0.length <= Occurrences.maxSelectionLength }),
+      let question = SearchQuestion.of(selections, continuing: continuation, in: document.text),
       (question.needle as NSString).length <= Occurrences.maxSelectionLength
     else {
       selectionRequest = nil
