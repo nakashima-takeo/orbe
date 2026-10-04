@@ -29,3 +29,31 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(focused, [42])
   }
 }
+
+/// カードが agent の索引の変化を見て、詳細の焦点を付け直す配線。
+///
+/// 壊れると何が起きるか: agent の場所に居る間にタブが去ると、焦点が消えた場所に残り、↑↓ も ↵ も効かなくなる。
+extension TaskPaletteCardKeyTests {
+  func testWhenTheAgentsTabGoesAwayTheArrowsStillMoveFromTheSamePosition() {
+    let worktree = "/r/wt/issue-221"
+    let agents = WorktreeAgentActivity(agents: [
+      worktree: WorktreeAgentActivity.Agent(
+        name: "claude", state: .working, since: DesignSceneFixtures.taskToday, tabId: 42,
+        tabTitle: "issue-221")
+    ])
+    let model = TaskPaletteSamples.model(
+      [TaskPaletteSamples.task(1, "a") { $0.worktree = TaskWorktree(key: worktree) }],
+      agents: agents)
+    let window = mount(model)
+    model.enterDetail()
+    model.area = .detail(.agent)
+    flush(window)
+
+    agents.update([])
+    flush(window)
+    XCTAssertEqual(model.area, .detail(.field(.status)), "同じ位置の止まる場所へ移る")
+
+    arrow(Key.up, to: window)
+    XCTAssertEqual(model.area, .detail(.field(.title)), "↑ が効く")
+  }
+}
