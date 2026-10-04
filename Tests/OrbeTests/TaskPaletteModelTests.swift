@@ -14,34 +14,19 @@ import XCTest
 /// 直接変えてから `reconcile()` を呼んで再現する。
 @MainActor
 final class TaskPaletteModelTests: OrbeTestCase {
-  let openedWorkspace = TaskPaletteWorkspaces.Entry(id: UUID(), name: "orbe")
-  let otherWorkspace = TaskPaletteWorkspaces.Entry(id: UUID(), name: "web-app")
+  let openedWorkspace = TaskPaletteSamples.opened
+  let otherWorkspace = TaskPaletteSamples.other
 
   func task(
     _ id: Int, _ title: String, _ status: TaskItem.Status = .todo,
     _ mutate: (inout TaskItem) -> Void = { _ in }
   ) -> TaskItem {
-    var item = TaskItem(
-      id: id, title: title, status: status, waiting: nil, priority: .medium, due: nil,
-      workspace: nil, memo: "", createdAt: DesignSceneFixtures.taskToday, createdBy: nil)
-    mutate(&item)
-    return item
+    TaskPaletteSamples.task(id, title, status, mutate)
   }
 
-  func model(_ tasks: [TaskItem]) -> TaskPaletteModel {
-    let file = TasksFile(
-      version: TaskPersistence.version, nextId: (tasks.map(\.id).max() ?? 0) + 1, tasks: tasks)
-    return TaskPaletteModel(
-      store: TaskStore(file: file),
-      workspaces: TaskPaletteWorkspaces(
-        opened: openedWorkspace, all: [openedWorkspace, otherWorkspace]),
-      now: DesignSceneFixtures.taskToday, calendar: DesignSceneFixtures.taskCalendar)
-  }
+  func model(_ tasks: [TaskItem]) -> TaskPaletteModel { TaskPaletteSamples.model(tasks) }
 
-  /// 未着手 3 件（a・b・c）。
-  func threeTodos() -> TaskPaletteModel {
-    model([task(1, "a"), task(2, "b"), task(3, "c")])
-  }
+  func threeTodos() -> TaskPaletteModel { TaskPaletteSamples.threeTodos() }
 
   func storedTask(_ palette: TaskPaletteModel, _ id: Int) throws -> TaskItem {
     try XCTUnwrap(palette.store.tasks.first { $0.id == id })
