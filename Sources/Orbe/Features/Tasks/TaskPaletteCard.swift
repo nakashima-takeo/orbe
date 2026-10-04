@@ -71,6 +71,16 @@ struct TaskPaletteCard: View {
         )
         .onSubmit { model.submit() }
         .onKeyPress { model.handleFieldKey($0, composing: Self.isComposing) }
+        // 詳細に居る間は入力欄自身にクリックを渡さず（渡すと焦点だけが入力欄へ移り、モデルの居場所と
+        // 食い違う）、上に被せた面で受けて一覧へ戻る操作としてモデルに伝える。焦点はモデルから写る。
+        .allowsHitTesting(model.focusTarget == .field)
+        .overlay {
+          if model.focusTarget != .field {
+            Color.clear
+              .contentShape(Rectangle())
+              .onTapGesture { model.leaveDetail() }
+          }
+        }
         .padding(.leading, Theme.Space.step + Theme.Space.hair)
       Spacer(minLength: Theme.Space.step)
       HStack(spacing: Theme.Space.beat) {

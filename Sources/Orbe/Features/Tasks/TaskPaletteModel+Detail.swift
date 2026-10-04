@@ -10,7 +10,7 @@ extension TaskPaletteModel {
     area = .detail(.status)
   }
 
-  /// 詳細から一覧へ（esc・選択式でない項目の ←）。
+  /// 詳細から一覧へ（esc・選択式でない項目の ←・入力欄のクリック）。編集中なら確定してから戻る。
   func leaveDetail() {
     leaveEditingForAction()
     area = .list
