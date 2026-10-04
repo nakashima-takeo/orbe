@@ -107,7 +107,7 @@ struct WorktreePaletteRow: View {
     if let count = item.candidateCount {
       HStack(spacing: Theme.Space.tick) {
         if count > 0 {
-          WorktreePaletteTag(
+          PaletteTag(
             text: l10n.plural(
               count, one: .worktreeCleanCandidatesOne, other: .worktreeCleanCandidatesOther))
         }
@@ -117,32 +117,16 @@ struct WorktreePaletteRow: View {
           .fixedSize()
       }
     } else if item.isCurrent, item.glyph == .worktree {
-      WorktreePaletteTag(text: l10n.string(.worktreePaletteCurrentTag))
+      PaletteTag(text: l10n.string(.worktreePaletteCurrentTag))
     } else if let sync = item.sync {
       WorktreePaletteSyncPills(sync: sync)
     } else if item.glyph == .localBranch || item.glyph == .remoteBranch {
-      WorktreePaletteTruncatingSlot(l10n.string(.worktreePaletteWorktreeCheckout)) {
+      TruncatingSlot(l10n.string(.worktreePaletteWorktreeCheckout)) {
         Text($0)
           .font(Font.theme.meta)
           .foregroundStyle(Color.theme.textMuted)
       }
     }
-  }
-}
-
-/// 行末の accent の札（「現在」・候補件数）。
-struct WorktreePaletteTag: View {
-  let text: String
-
-  var body: some View {
-    Text(text)
-      .font(Font.theme.sectionLabel)
-      .foregroundStyle(Color.theme.accentPrimary)
-      .lineLimit(1)
-      .fixedSize()
-      .padding(.horizontal, 7)
-      .padding(.vertical, 1)
-      .background(Capsule().fill(Color.theme.tintAccent))
   }
 }
 
@@ -167,14 +151,14 @@ struct WorktreePaletteRowFrame<Trailing: View>: View {
     return HStack(spacing: 0) {
       glyphColumn
       // 行は割り当て幅を超えない。縮むのは名前・補足が先。
-      WorktreePaletteTruncatingSlot(name, leading: gap) {
+      TruncatingSlot(name, leading: gap) {
         fontResolver.text($0, base: Theme.Typography.workspaceName)
           .font(Font.theme.workspaceName)
           .foregroundStyle(Color.theme.textPrimary)
       }
       .layoutPriority(1)
       if let suffix = nameSuffix ?? detail {
-        WorktreePaletteTruncatingSlot(suffix, leading: gap) {
+        TruncatingSlot(suffix, leading: gap) {
           fontResolver.text($0, base: Theme.Typography.meta)
             .font(Font.theme.meta)
             .foregroundStyle(Color.theme.textMuted)
@@ -214,65 +198,5 @@ struct WorktreePaletteRowFrame<Trailing: View>: View {
       }
     }
     .frame(width: 14, alignment: .center)
-  }
-}
-
-/// 縮みうる 1 行テキストの枠。末尾省略で読める形になる幅（先頭 1 文字＋…）があれば出し、無ければ
-/// まったく出さない——`Text` は「…」を付ける幅も無いと、先頭の文字を「…」なしで途中まで描いてしまう。
-/// 読める最小幅は、同じ描き方の見本（先頭 1 文字＋…）を見えない形で置いて測る。
-/// 前後の余白は出すときだけ幅に足し、出さないときは余白ごと幅 0 になる。
-struct WorktreePaletteTruncatingSlot<Content: View>: View {
-  let text: String
-  let leading: CGFloat
-  let trailing: CGFloat
-  let render: (String) -> Content
-
-  init(
-    _ text: String, leading: CGFloat = 0, trailing: CGFloat = 0,
-    @ViewBuilder render: @escaping (String) -> Content
-  ) {
-    self.text = text
-    self.leading = leading
-    self.trailing = trailing
-    self.render = render
-  }
-
-  var body: some View {
-    TruncatingSlotLayout(leading: leading, trailing: trailing) {
-      render(text).lineLimit(1).truncationMode(.tail)
-      render(String(text.prefix(1)) + "…").lineLimit(1).fixedSize().hidden()
-    }
-    .clipped()
-  }
-}
-
-/// 子 [本体, 見本]。余白を除いた幅が本体の全幅にも見本の幅にも満たなければ、余白ごと幅 0 で本体を
-/// 描かない。
-private struct TruncatingSlotLayout: Layout {
-  let leading: CGFloat
-  let trailing: CGFloat
-
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    guard let content = subviews.first else { return .zero }
-    let insets = leading + trailing
-    let inner = ProposedViewSize(
-      width: proposal.width.map { max(0, $0 - insets) }, height: proposal.height)
-    let fits = content.sizeThatFits(inner)
-    let shown = CGSize(width: fits.width + insets, height: fits.height)
-    guard let width = inner.width, subviews.count == 2 else { return shown }
-    let full = content.sizeThatFits(.unspecified).width
-    let readable = subviews[1].sizeThatFits(.unspecified).width
-    return width >= min(full, readable) ? shown : CGSize(width: 0, height: fits.height)
-  }
-
-  func placeSubviews(
-    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
-  ) {
-    let width = max(0, bounds.width - leading - trailing)
-    for subview in subviews {
-      subview.place(
-        at: CGPoint(x: bounds.minX + leading, y: bounds.minY),
-        proposal: ProposedViewSize(width: width, height: bounds.height))
-    }
   }
 }

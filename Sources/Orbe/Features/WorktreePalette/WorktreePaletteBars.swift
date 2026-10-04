@@ -46,7 +46,7 @@ struct WorktreePaletteBars: View {
       content()
       Spacer(minLength: Theme.Space.step)
       if let hint {
-        WorktreePaletteKeyHint(key: hint.key, label: l10n.string(hint.label))
+        PaletteKeyHint(key: hint.key, label: l10n.string(hint.label))
           .font(Font.theme.sectionLabel)
           .foregroundStyle(Color.theme.textMuted)
           .fixedSize()
@@ -67,9 +67,8 @@ struct WorktreePaletteBars: View {
   /// 作成行以外の選択中に出す「なし — …」。行が無ければ何も言わない。
   @ViewBuilder private var baseNote: some View {
     if let note = model.selectedItem?.enter.baseNote {
-      WorktreePaletteEnterLine(
-        template: l10n.string(note.key), slots: note.values.map { .name($0) },
-        leadsWithReturn: false
+      PaletteActionLine(
+        key: nil, template: l10n.string(note.key), slots: note.values.map { .emphasis($0) }
       )
       .padding(.horizontal, Theme.Space.beat)
       .padding(.vertical, 5)

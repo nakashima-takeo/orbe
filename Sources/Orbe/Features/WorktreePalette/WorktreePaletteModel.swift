@@ -34,7 +34,7 @@ import SwiftUI
   /// 初回ロード完了フラグ。provider の初回 rebuild で立つ。false の間はスケルトン行を出す。
   var hasLoadedOnce = false
   /// 選択とホバー追従ガード（汎用パレットと共有する `ModalSelection`）。
-  private var selection = ModalSelection()
+  private var selection = ModalSelection(0)
   /// 選択が入力の規則（`defaultSelection`）に従っている。入力が変わると立ち、ユーザーが選択を
   /// 動かすと下りる——データの到着や有効性の答えで選択を動かしてよいのは、立っている間だけ。
   private var selectionFollowsInput = true
@@ -42,8 +42,8 @@ import SwiftUI
   /// 可視行（visibleSections を平坦化）を数えた選択 index。
   /// ホバー追従以外の代入はモダリティを `.keyboard` へ戻す（→ `ModalSelection`）。
   var selected: Int {
-    get { selection.index }
-    set { selection.index = newValue }
+    get { selection.value }
+    set { selection.value = newValue }
   }
 
   /// 実マウス移動（`MouseMovedDetector`）が `.pointer` へ落とす。

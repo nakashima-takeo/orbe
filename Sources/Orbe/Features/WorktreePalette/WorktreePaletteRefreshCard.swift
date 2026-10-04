@@ -231,11 +231,11 @@ struct WorktreePaletteRefreshFooter: View {
           agent: targetName)
         Spacer(minLength: Theme.Space.step)
         HStack(spacing: Theme.Space.step + Theme.Space.hair) {
-          WorktreePaletteKeyHint(key: "↑↓", label: l10n.string(.worktreePaletteHintSelect))
+          PaletteKeyHint(key: "↑↓", label: l10n.string(.worktreePaletteHintSelect))
           if model.failure != nil {
-            WorktreePaletteKeyHint(key: "r", label: l10n.string(.worktreePaletteHintRetry))
+            PaletteKeyHint(key: "r", label: l10n.string(.worktreePaletteHintRetry))
           }
-          WorktreePaletteKeyHint(key: "esc", label: l10n.string(.worktreePaletteHintBack))
+          PaletteKeyHint(key: "esc", label: l10n.string(.worktreePaletteHintBack))
         }
         .font(Font.theme.sectionLabel)
         .foregroundStyle(Color.theme.textMuted)

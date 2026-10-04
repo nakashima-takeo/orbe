@@ -16,7 +16,7 @@ import SwiftUI
   /// 可視の候補。
   private(set) var items: [WorktreeBaseCandidate] = []
   /// 選択とホバー追従ガード（一覧と同じ `ModalSelection`）。
-  private var selection = ModalSelection()
+  private var selection = ModalSelection(0)
 
   init(candidates: [WorktreeBaseCandidate]) {
     self.candidates = candidates
@@ -24,8 +24,8 @@ import SwiftUI
   }
 
   var selected: Int {
-    get { selection.index }
-    set { selection.index = newValue }
+    get { selection.value }
+    set { selection.value = newValue }
   }
 
   var inputModality: InputModality {
@@ -105,15 +105,16 @@ struct WorktreeBasePickerFooter: View {
   var body: some View {
     HStack(spacing: Theme.Space.step) {
       if let name = model.selectedItem?.name {
-        WorktreePaletteEnterLine(
-          template: l10n.string(.worktreePaletteBasePickEnter), slots: [.name(name)])
+        PaletteActionLine(
+          key: "↵", template: l10n.string(.worktreePaletteBasePickEnter),
+          slots: [.emphasis(name)])
       }
       Spacer(minLength: Theme.Space.step)
       HStack(spacing: Theme.Space.step + Theme.Space.hair) {
         if model.items.count >= 2 {
-          WorktreePaletteKeyHint(key: "↑↓", label: l10n.string(.worktreePaletteHintSelect))
+          PaletteKeyHint(key: "↑↓", label: l10n.string(.worktreePaletteHintSelect))
         }
-        WorktreePaletteKeyHint(key: "esc", label: l10n.string(.worktreePaletteHintBack))
+        PaletteKeyHint(key: "esc", label: l10n.string(.worktreePaletteHintBack))
       }
       .font(Font.theme.sectionLabel)
       .foregroundStyle(Color.theme.textMuted)

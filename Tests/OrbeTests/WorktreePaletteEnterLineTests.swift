@@ -11,7 +11,7 @@ final class WorktreePaletteEnterLineTests: OrbeTestCase {
   /// 差し込み位置はテンプレートに書かれた順に並び、間の語はそのまま残る。
   func testSegmentsFollowTheTemplateOrder() {
     XCTAssertEqual(
-      WorktreePaletteEnterLine.segments("%1$@ を %3$@ から作り、%2$@ で開く", count: 3),
+      PaletteActionLine.segments("%1$@ を %3$@ から作り、%2$@ で開く", count: 3),
       [
         .slot(0), .literal(" を "), .slot(2), .literal(" から作り、"), .slot(1), .literal(" で開く"),
       ])
@@ -20,7 +20,7 @@ final class WorktreePaletteEnterLineTests: OrbeTestCase {
   /// 渡した値より後ろの位置は、値を作らずに書かれたまま残す（落ちずに読める形で出る）。
   func testPositionBeyondTheValuesStaysAsWritten() {
     XCTAssertEqual(
-      WorktreePaletteEnterLine.segments("%1$@ と %2$@", count: 1),
+      PaletteActionLine.segments("%1$@ と %2$@", count: 1),
       [.slot(0), .literal(" と "), .literal("%2$@")])
   }
 
@@ -41,7 +41,7 @@ final class WorktreePaletteEnterLineTests: OrbeTestCase {
     ]
     for (key, count) in valueCounts {
       for language in Language.allCases {
-        let segments = WorktreePaletteEnterLine.segments(L10n.string(key, language), count: count)
+        let segments = PaletteActionLine.segments(L10n.string(key, language), count: count)
         let slots = segments.compactMap { segment -> Int? in
           if case .slot(let index) = segment { return index }
           return nil
