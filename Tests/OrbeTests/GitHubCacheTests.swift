@@ -267,7 +267,7 @@ final class GitHubCacheTests: OrbeTestCase {
       GitHubCLI.branchPRArguments(head: "refactor/phase2-2b"),
       [
         "pr", "list", "--state", "all", "--head", "refactor/phase2-2b", "--limit", "100",
-        "--json", "number,headRefName,state,baseRefName,headRepository,headRepositoryOwner",
+        "--json", "number,headRefName,state,baseRefName,headRepository,headRepositoryOwner,url",
       ])
   }
 

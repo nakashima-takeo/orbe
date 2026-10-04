@@ -22,6 +22,16 @@ struct GitHubItemID: Hashable {
     self.number = number
   }
 
+  /// PR のページの URL（`https://github.com/owner/name/pull/230`）から読む。読めなければ nil。
+  init?(pullRequestURL url: String) {
+    guard let components = URLComponents(string: url), components.host == "github.com" else {
+      return nil
+    }
+    let parts = components.path.split(separator: "/")
+    guard parts.count == 4, parts[2] == "pull", let number = Int(parts[3]) else { return nil }
+    self.init(repo: "\(parts[0])/\(parts[1])", number: number)
+  }
+
   /// `owner/name#221`。
   var text: String { "\(repo.value)#\(number)" }
 

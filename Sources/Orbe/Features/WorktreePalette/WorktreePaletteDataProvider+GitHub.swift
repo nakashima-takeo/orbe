@@ -165,7 +165,7 @@ extension WorktreePaletteDataProvider {
       case .fetching, nil: fetched = cached[ref.branch].map(BranchPRState.loaded) ?? .fetching
       }
       guard case .loaded(let prs) = fetched else { return (branch, fetched) }
-      return (branch, .loaded(prs.filter { $0.head == ref }))
+      return (branch, .loaded(GitHubBranchPR.filter(prs, headedBy: ref)))
     }
     return Dictionary(uniqueKeysWithValues: states)
   }
