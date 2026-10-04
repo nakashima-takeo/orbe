@@ -20,9 +20,9 @@ extension TaskPaletteCardKeyTests {
       ], githubItems: githubItems)
   }
 
-  /// ↵ はその項目の GitHub のページを開く。⌫ は押し続けても、押した 1 件だけを外す（焦点が移った先の
-  /// 結び付きをリピートで外さない）。
-  func testEnterOpensTheLinkAndBackspaceUnlinksOnlyOneEvenWhenHeldDown() {
+  /// ↵ はその項目の GitHub のページを 1 回だけ開く。⌫ は押し続けても、押した 1 件だけを外す（焦点が
+  /// 移った先の結び付きをリピートで外さない）。
+  func testEnterOpensTheLinkOnceAndBackspaceUnlinksOnlyOneEvenWhenHeldDown() {
     let model = linkedModel()
     var opened: [URL] = []
     model.onOpenURL = { opened.append($0) }
@@ -32,7 +32,10 @@ extension TaskPaletteCardKeyTests {
     flush(window)
 
     press(Key.enter, "\r", to: window)
-    XCTAssertEqual(opened.map(\.absoluteString), ["https://github.com/o/n/issues/1"])
+    press(Key.enter, "\r", repeating: true, to: window)
+    press(Key.enter, "\r", repeating: true, to: window)
+    XCTAssertEqual(
+      opened.map(\.absoluteString), ["https://github.com/o/n/issues/1"], "押し続けても開くのは 1 回だけ")
 
     press(Key.delete, "\u{7F}", to: window)
     press(Key.delete, "\u{7F}", repeating: true, to: window)
