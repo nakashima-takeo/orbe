@@ -1,7 +1,7 @@
 import Foundation
 
 /// 期限の文字の読み取りと、行と詳細に出す暦日の表示。基準は今日の暦日で、時刻とタイムゾーンは
-/// 呼び出し側が `TaskItem.DueDate.today(_:calendar:)` で暦日へ落としてから渡す。
+/// 呼び出し側が `TaskItem.DueDate.today(_:timeZone:)` で暦日へ落としてから渡す。
 enum TaskDueText {
   /// 「10/6」（今日以降で最も近いその日）と「2026-10-06」を受ける。読めなければ nil。
   static func parse(_ text: String, today: TaskItem.DueDate) -> TaskItem.DueDate? {
@@ -44,10 +44,18 @@ extension TaskItem.DueDate: Comparable {
     self.init(String(format: "%04d-%02d-%02d", year, month, day))
   }
 
-  /// `date` が `calendar` で落ちる暦日。
-  static func today(_ date: Date, calendar: Calendar) -> TaskItem.DueDate {
+  /// `date` がタイムゾーン `timeZone` で落ちる暦日。暦は利用者の設定に依らず西暦で数える——期限は
+  /// 西暦の暦日として保存され、ほかの暦の年月日を入れると存在しない日付になる。
+  init(_ date: Date, timeZone: TimeZone) {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = timeZone
     let c = calendar.dateComponents([.year, .month, .day], from: date)
-    return TaskItem.DueDate(year: c.year!, month: c.month!, day: c.day!)!
+    self.init(year: c.year!, month: c.month!, day: c.day!)!
+  }
+
+  /// 今日の暦日。
+  static func today(_ now: Date, timeZone: TimeZone) -> TaskItem.DueDate {
+    TaskItem.DueDate(now, timeZone: timeZone)
   }
 
   static func < (a: TaskItem.DueDate, b: TaskItem.DueDate) -> Bool {

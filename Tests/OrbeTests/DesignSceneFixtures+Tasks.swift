@@ -62,6 +62,6 @@ extension DesignSceneFixtures {
   static func taskPaletteModel(_ file: TasksFile? = nil) -> TaskPaletteModel {
     TaskPaletteModel(
       store: TaskStore(file: file ?? taskDesignFile()), workspaces: taskWorkspaces, now: taskToday,
-      calendar: taskCalendar)
+      timeZone: taskCalendar.timeZone)
   }
 }

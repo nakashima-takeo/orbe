@@ -14,7 +14,7 @@ extension WindowController {
     let p = TaskPaletteModel(
       store: taskStore,
       workspaces: TaskPaletteWorkspaces(opened: entry(current), all: workspaces.map(entry)),
-      now: Date(), calendar: .current)
+      now: Date(), timeZone: .current)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
     model.taskPalette = p
     model.overlay = .taskPalette

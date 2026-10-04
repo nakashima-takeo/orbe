@@ -38,7 +38,7 @@ final class TaskPaletteRowsTests: OrbeTestCase {
   ) -> TaskPaletteRows.Input {
     TaskPaletteRows.Input(
       tasks: tasks, query: query, scope: scope, doneExpanded: doneExpanded,
-      workspaces: workspaces, today: today, calendar: calendar)
+      workspaces: workspaces, today: today, timeZone: calendar.timeZone)
   }
 
   private func taskIDs(_ rows: [TaskPaletteRow]) -> [Int] {

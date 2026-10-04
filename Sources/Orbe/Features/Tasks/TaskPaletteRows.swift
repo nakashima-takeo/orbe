@@ -112,8 +112,8 @@ enum TaskPaletteRows {
     let doneExpanded: Bool
     let workspaces: TaskPaletteWorkspaces
     let today: TaskItem.DueDate
-    /// 待ち始めた時刻を暦日へ落とすための暦。
-    let calendar: Calendar
+    /// 待ち始めた時刻を暦日へ落とすためのタイムゾーン。
+    let timeZone: TimeZone
   }
 
   static func build(_ input: Input) -> [TaskPaletteRow] {
@@ -171,7 +171,7 @@ enum TaskPaletteRows {
       waiting: task.waiting.map {
         TaskPaletteTaskRow.Waiting(
           reason: $0.reason,
-          days: TaskItem.DueDate.today($0.since, calendar: input.calendar).days(to: input.today))
+          days: TaskItem.DueDate($0.since, timeZone: input.timeZone).days(to: input.today))
       },
       workspace: workspace, isDone: task.status == .done)
   }

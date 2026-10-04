@@ -212,7 +212,7 @@ struct TaskPaletteDetail: View {
   }
 
   private func addedRow(_ task: TaskItem) -> some View {
-    let day = TaskItem.DueDate.today(task.createdAt, calendar: model.calendar)
+    let day = TaskItem.DueDate(task.createdAt, timeZone: model.timeZone)
     let date = day.year == model.today.year ? "\(day.month)/\(day.day)" : day.text
     return HStack(spacing: 0) {
       Text(l10n.string(.taskPaletteFieldAdded))
@@ -304,7 +304,7 @@ struct TaskPaletteDetail: View {
   }
 
   private func days(since: Date) -> String {
-    let count = TaskItem.DueDate.today(since, calendar: model.calendar).days(to: model.today)
+    let count = TaskItem.DueDate(since, timeZone: model.timeZone).days(to: model.today)
     return count == 0 ? l10n.string(.taskPaletteToday) : l10n.format(.taskPaletteDays, count)
   }
 }

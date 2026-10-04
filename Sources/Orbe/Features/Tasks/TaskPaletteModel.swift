@@ -54,7 +54,8 @@ enum TaskPaletteError: Error, Equatable {
   let store: TaskStore
   let workspaces: TaskPaletteWorkspaces
   let today: TaskItem.DueDate
-  let calendar: Calendar
+  /// 時刻を暦日へ落とすためのタイムゾーン。
+  let timeZone: TimeZone
 
   /// ヘッダーの入力（タスクのタイトルの絞り込みと、追加するタイトル）。
   var query = "" {
@@ -85,11 +86,11 @@ enum TaskPaletteError: Error, Equatable {
 
   var onDismiss: () -> Void = {}
 
-  init(store: TaskStore, workspaces: TaskPaletteWorkspaces, now: Date, calendar: Calendar) {
+  init(store: TaskStore, workspaces: TaskPaletteWorkspaces, now: Date, timeZone: TimeZone) {
     self.store = store
     self.workspaces = workspaces
-    self.calendar = calendar
-    today = .today(now, calendar: calendar)
+    self.timeZone = timeZone
+    today = .today(now, timeZone: timeZone)
     reconcile()
   }
 
@@ -103,7 +104,7 @@ enum TaskPaletteError: Error, Equatable {
   private var rowsInput: TaskPaletteRows.Input {
     TaskPaletteRows.Input(
       tasks: store.tasks, query: query, scope: scope, doneExpanded: doneExpanded,
-      workspaces: workspaces, today: today, calendar: calendar)
+      workspaces: workspaces, today: today, timeZone: timeZone)
   }
 
   private var selectableIDs: [TaskPaletteRowID] { rows.compactMap(\.selectableID) }

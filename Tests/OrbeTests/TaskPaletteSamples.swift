@@ -27,7 +27,7 @@ enum TaskPaletteSamples {
     return TaskPaletteModel(
       store: TaskStore(file: file),
       workspaces: TaskPaletteWorkspaces(opened: opened, all: [opened, other]),
-      now: DesignSceneFixtures.taskToday, calendar: DesignSceneFixtures.taskCalendar)
+      now: DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone)
   }
 
   /// 未着手 3 件（1 a・2 b・3 c）。
