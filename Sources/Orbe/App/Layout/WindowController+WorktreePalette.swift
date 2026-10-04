@@ -34,10 +34,6 @@ extension WindowController {
       agents: agentLauncher.detectedAgents,
       defaultCommand: agentLauncher.resolvedDefaultCommand)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
-    // 主の PR のブランチ名は GitHub の値の置き場から引く。まだ取っていなければ頼む（届くまで ↵ は預かる）。
-    if let primary = task?.links.first, primary.kind == .pr {
-      GitHubItemCache.shared.ensure([primary.item])
-    }
 
     // クロージャは兄弟パレット同様 [weak self] のみとし、p/provider は self.model 経由で辿る
     // （p が onExecute を保持するため、p を強参照すると開くたびに自己循環でリークする）。結び付いた

@@ -27,6 +27,13 @@ extension WorktreePaletteModel {
     WorktreePaletteTaskInputs(task: task, items: githubItems)
   }
 
+  /// 主が PR なら、その値（head のブランチ）を、この開いている間にまだ試していなければ取りに行く。届くまで
+  /// 先頭の欄は決まらず ↵ は預かるので、頼まないと預かりが解けない。
+  func ensurePrimaryPullRequest() {
+    guard let primary = task?.links.first, primary.kind == .pr else { return }
+    githubItems.ensure([primary.item])
+  }
+
   func rowTask(_ item: WorktreePaletteItem) -> WorktreePaletteRowTask? {
     guard let key = item.worktreeKey,
       let task = tasks.tasks.first(where: { $0.worktree?.path == key })

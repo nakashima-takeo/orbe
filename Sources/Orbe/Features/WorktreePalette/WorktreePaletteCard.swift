@@ -81,8 +81,12 @@ struct WorktreePaletteCard: View {
     .onChange(of: model.focusToken, initial: true) {
       focus = hasField ? .field : .card
     }
-    // 先頭の欄の入力（文脈のタスクの worktree・主・PR の head）の変化を、描画の外で provider へ届ける。
-    .onChange(of: model.taskInputs) { model.onTaskInputsChanged() }
+    // 先頭の欄の入力（文脈のタスクの worktree・主・PR の head）を、開いたときと変わるたびに、描画の外で
+    // provider へ届ける。主の PR の値がまだ無ければ先に頼む（開いている間に主が変わっても）。
+    .onChange(of: model.taskInputs, initial: true) {
+      model.ensurePrimaryPullRequest()
+      model.onTaskInputsChanged()
+    }
   }
 
   /// ヘッダ／バー／フッターの実測高を合算して chrome 高に集約する probe。
