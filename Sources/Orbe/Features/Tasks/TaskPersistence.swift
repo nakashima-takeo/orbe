@@ -26,7 +26,8 @@ enum TaskPersistence {
   }
 
   /// 読み込み。不在は nil（空の一覧で始める）。在るのに使えない原本——読めない・構造破損・
-  /// 非互換 version・ID の不変条件の破れ（1 未満の採番位置を含む）——は退避してから nil を返す。人が書き溜めた内容で、
+  /// 非互換 version・ID の不変条件の破れ（1 未満の採番位置を含む）・結び付きの不変条件の破れ——は
+  /// 退避してから nil を返す。人が書き溜めた内容で、
   /// 直後の保存が原本を潰すと戻らないため。
   static func load() -> TasksFile? {
     quarantine.reset()
@@ -56,6 +57,13 @@ enum TaskPersistence {
       ids.allSatisfy({ $0 >= 1 && $0 < file.nextId })
     else {
       return nil
+    }
+    for (index, task) in file.tasks.enumerated() {
+      do throws(TaskStoreError) {
+        try TaskStore.checkLinks(task.links, of: task.id, against: Array(file.tasks[..<index]))
+      } catch {
+        return nil
+      }
     }
     return file
   }
