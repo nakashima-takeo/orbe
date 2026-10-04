@@ -39,6 +39,9 @@ enum TaskPaletteFocusTarget: Hashable {
 struct TaskEditDraft: Equatable {
   let field: TaskDetailField
   let taskID: Int
+  /// 編集を始めたときの値。打っていない下書きは確定しても書かない（その間の agent の変更を、触った
+  /// だけの古い値で上書きしない）。
+  let original: String
   var text: String
 }
 

@@ -103,7 +103,8 @@ extension TaskPaletteModel {
       return false
     }
     if field == .waiting, task.status == .done { return false }
-    draft = TaskEditDraft(field: field, taskID: task.id, text: Self.initialText(field, task))
+    let text = Self.initialText(field, task)
+    draft = TaskEditDraft(field: field, taskID: task.id, original: text, text: text)
     return true
   }
 
@@ -158,10 +159,11 @@ extension TaskPaletteModel {
     }
   }
 
-  /// 下書きからストアへの変更を組む。nil は変更なし（取り消しと同じ）。
+  /// 下書きからストアへの変更を組む。nil は変更なし（取り消しと同じ）。打っていない下書きは変更なし。
   private func pendingUpdate(_ draft: TaskEditDraft, _ task: TaskItem) -> Result<
     TaskUpdate, TaskPaletteError
   >? {
+    guard draft.text != draft.original else { return nil }
     let trimmed = draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
     var update = TaskUpdate()
     switch draft.field {
