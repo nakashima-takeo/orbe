@@ -3,6 +3,10 @@ import XCTest
 @testable import Orbe
 
 /// open 一覧の置き場・合流点（`GitHubOpenLists`）の検証。gh は叩かず、ページや終わりを手で着地させて判定する。
+///
+/// 壊れると何が起きるか: 開き直すたびに取得が積み上がり、遅れた取得が新しい結果を上書きする。取り直しの間に
+/// 前回の一覧が縮んでまた伸びる。GitHub が黙って捨てたアサインを成功と言う。アサインの後に届いた古いページが、
+/// 差し込んだ担当者を消す。
 @MainActor
 final class GitHubOpenListsTests: OrbeTestCase {
   private let repo = GitHubRepoName(nameWithOwner: "o/r")
