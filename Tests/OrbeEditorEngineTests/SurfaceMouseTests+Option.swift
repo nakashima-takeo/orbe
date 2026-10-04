@@ -30,9 +30,50 @@ extension SurfaceMouseTests {
       cursors(opened), [NSRange(location: 1, length: 0), NSRange(location: 22, length: 0)],
       "既存のカーソルの上なら外す")
     try click(opened, row: 0, column: 1, flags: .option)
-    XCTAssertEqual(cursors(opened), [NSRange(location: 22, length: 0)], "主を外せば次のカーソルが主")
+    XCTAssertEqual(cursors(opened), [NSRange(location: 22, length: 0)])
     try click(opened, row: 2, column: 1, flags: .option)
     XCTAssertEqual(cursors(opened), [NSRange(location: 22, length: 0)], "1 本なら外さない（まとまる）")
+  }
+
+  /// 主を外せば、列で次のカーソル（文書の順ではなく足した順）が主になる。
+  func testRemovingThePrimaryPromotesTheNextCursorInTheList() throws {
+    let opened = try open(lines)
+    _ = host(opened)
+    try click(opened, row: 0, column: 1)
+    try click(opened, row: 2, column: 1, flags: .option)
+    try click(opened, row: 1, column: 2, flags: .option)
+    try click(opened, row: 0, column: 1, flags: .option)
+    XCTAssertEqual(
+      cursors(opened), [NSRange(location: 22, length: 0), NSRange(location: 14, length: 0)])
+  }
+
+  /// 素のクリックの後に ⌥ を押した 2 回目は、素のダブルクリックと同じく語を選ぶ。⌥クリックでカーソルを外した直後の
+  /// ⌥ダブルクリックは何もしない（残ったカーソルを畳まない）。
+  func testOptionOnlyOnTheSecondClickActsLikeAPlainDoubleClick() throws {
+    let opened = try open(lines)
+    _ = host(opened)
+    try click(opened, row: 1, column: 5)
+    try click(opened, row: 1, column: 5, clicks: 2, flags: .option)
+    XCTAssertEqual(cursors(opened), [NSRange(location: 16, length: 4)])
+
+    try click(opened, row: 0, column: 1)
+    try click(opened, row: 2, column: 1, flags: .option)
+    try click(opened, row: 2, column: 1, flags: .option)
+    try click(opened, row: 2, column: 1, clicks: 2, flags: .option)
+    XCTAssertEqual(cursors(opened), [NSRange(location: 1, length: 0)])
+  }
+
+  /// ⌥ドラッグの途中で本文が変われば、マウスの操作はそこで終わる（押す前の古い位置のカーソルを置き直さない）。
+  func testAnEditDuringAnOptionDragEndsTheDrag() throws {
+    let opened = try open(lines)
+    _ = host(opened)
+    try click(opened, row: 0, column: 1)
+    try mouse(opened, .leftMouseDown, at: point(opened, row: 1, column: 2), flags: .option)
+    opened.surface.perform(.insert("Z"))
+    let typed = cursors(opened)
+    try mouse(opened, .leftMouseDragged, at: point(opened, row: 1, column: 6), flags: .option)
+    try mouse(opened, .leftMouseUp, at: point(opened, row: 1, column: 6), flags: .option)
+    XCTAssertEqual(cursors(opened), typed)
   }
 
   /// ⌥ドラッグは足した 1 本だけを伸ばす。途中で他のカーソルに重なってまとまっても、戻せば元に分かれる。
@@ -65,6 +106,18 @@ extension SurfaceMouseTests {
     try click(opened, row: 1, column: 5, clicks: 3, flags: .option)
     XCTAssertEqual(
       cursors(opened), [NSRange(location: 1, length: 0), NSRange(location: 12, length: 9)])
+  }
+
+  /// 行番号の列の ⌥クリックで外す判定は、足すはずの行のカーソルの動く端（次の行頭）で取る——その行頭のカーソルが外れる。
+  func testRemovingFromTheGutterUsesTheMovingEndOfTheLine() throws {
+    let opened = try open(lines)
+    _ = host(opened)
+    try click(opened, row: 0, column: 1)
+    try click(opened, row: 2, column: 0, flags: .option)
+    let gutter = CGPoint(x: 8, y: point(opened, row: 1, column: 0).y)
+    try mouse(opened, .leftMouseDown, at: gutter, flags: .option)
+    try mouse(opened, .leftMouseUp, at: gutter, flags: .option)
+    XCTAssertEqual(cursors(opened), [NSRange(location: 1, length: 0)])
   }
 
   /// 行番号の列の ⌥クリックは行で足し、同じ行の ⌥クリックで外す。

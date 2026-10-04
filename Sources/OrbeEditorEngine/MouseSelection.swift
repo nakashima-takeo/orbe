@@ -41,8 +41,16 @@ final class MouseSelection: NSObject {
   /// 押す前の他のカーソル（列の順）と、押して動かしている 1 本。
   private var others: [Cursor] = []
   private var moving: Cursor?
-  /// ⌥ の押下の続き（2 回目・3 回目の押下）が足し直す、1 回目の押下の前の列。
-  private var optionBase: [Cursor]?
+  /// ⌥ の 1 回目の押下がしたこと——足している（2 回目・3 回目の押下が足し直す、1 回目の押下の前の列）か、カーソルを
+  /// 外したか。直前の押下が ⌥ の 1 回目でなければ nil。
+  private enum OptionPress {
+    case adding([Cursor])
+    case removed
+  }
+
+  private var optionPress: OptionPress?
+  /// 押したときの本文の版（押している間に本文が変われば、マウスの操作をそこで終える）。
+  private var version: Int?
   private var edge: Edge?
   private var link: CADisplayLink?
   private var lastFrame: CFTimeInterval?
@@ -54,6 +62,8 @@ final class MouseSelection: NSObject {
 
   func mouseDown(_ event: NSEvent, in view: NSView) {
     cancel()
+    let previous = optionPress
+    optionPress = nil
     guard let surface else { return }
     let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
     guard !flags.contains(.control) else { return }
@@ -84,21 +94,23 @@ final class MouseSelection: NSObject {
       drag = .candidate(hit.offset, event.locationInWindow)
       return
     }
+    version = surface.currentContent?.version
     let (cursor, reveal) = pressed(hit, clicks: event.clickCount, shift: shift, from: primary, text)
-    guard adds else {
-      optionBase = nil
-      press(others: [], moving: cursor, reveal: reveal)
-      return
-    }
+    guard adds else { return press(others: [], moving: cursor, reveal: reveal) }
     if event.clickCount == 1 || hit.area == .numbers {
-      if removeCursor(at: cursor.position, from: current) { return }
-      optionBase = current.all
+      if removeCursor(at: cursor.position, from: current) {
+        optionPress = .removed
+        return
+      }
+      optionPress = .adding(current.all)
+      return press(others: current.all, moving: cursor, reveal: reveal)
     }
-    guard let base = optionBase else {
-      drag = nil
-      return
+    optionPress = previous
+    switch previous {
+    case .adding(let base)?: press(others: base, moving: cursor, reveal: reveal)
+    case .removed?: drag = nil
+    case nil: press(others: [], moving: cursor, reveal: reveal)
     }
-    press(others: base, moving: cursor, reveal: reveal)
   }
 
   /// 押した場所・回数で決まる、動かす 1 本と見せ方（⇧ なら主から伸ばす）。ドラッグの単位も置く。
@@ -141,7 +153,6 @@ final class MouseSelection: NSObject {
       })
     else { return false }
     drag = nil
-    optionBase = nil
     var remaining = cursors.all
     remaining.remove(at: index)
     if let list = CursorList(remaining) { surface?.editor.select(list, reveal: .none) }
@@ -260,9 +271,11 @@ final class MouseSelection: NSObject {
   private func extend(
     to point: CGPoint, position: SIMD2<Double>? = nil, lineEnd: Bool? = nil, reveal: Reveal
   ) {
-    guard let surface, let drag, let moving, let text = surface.currentContent?.text,
+    guard let surface, let drag, let moving, let content = surface.currentContent,
       var hit = surface.hit(point, position: position)
     else { return }
+    guard content.version == version else { return cancel() }
+    let text = content.text
     if let lineEnd {
       let content = text.contentRange(ofRow: hit.row)
       hit.offset = lineEnd ? NSMaxRange(content) : content.location
