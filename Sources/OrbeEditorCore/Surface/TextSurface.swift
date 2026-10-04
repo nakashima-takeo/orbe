@@ -31,6 +31,13 @@ public protocol TextSurface: AnyObject {
   /// キャレットのオフセット——選択の動く側の端（前へ伸ばした選択なら先頭、それ以外は終わり。選択が空ならその位置）。
   var caretLocation: Int { get }
 
+  /// 全カーソルの選択（主が先頭。カーソルが 1 本なら `selectedRange` だけ）。読むだけで、外から置く選択は `selectedRange`
+  /// の 1 本。
+  var cursorSelections: [NSRange] { get }
+
+  /// 続いている ⌘D・⌘⇧L の問い（続いていなければ nil）。選択文字列の出現の強調が、⌘D と同じ問いで出すために読む。
+  var searchContinuation: SearchQuestion? { get }
+
   /// 強調の地（種類ごと）。選択の地の上・文字の下に描く。本文と undo に載らない描画で、次に置き直すか空を置くまで
   /// 残る。`ranges` は昇順・重ならないこと（面は二分探索で可視ぶんだけ描く）。現在の一致の行は行全体にも地が付く。
   func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind)
@@ -79,6 +86,9 @@ public protocol TextSurfaceHost: AnyObject {
   func contextMenu() -> NSMenu
   /// 本文の URL が ⌘クリックされた。
   func openLink(_ url: URL)
+  /// 面で Esc が押された（変換中でない）。載せる側が使えば true——面は使われなかった Esc だけを自分で使う（カーソルを
+  /// 1 本に戻す・選択を解く）。順序は VS Code と同じく、載せる側の部品（検索バー）が先。
+  func consumeEscape() -> Bool
 }
 
 @MainActor
@@ -89,6 +99,7 @@ public protocol TextSurfaceDelegate: AnyObject {
   func surface(_ surface: any TextSurface, focusDidChange focused: Bool)
   /// `viewport` が変わった（スクロール・窓の高さ）。
   func surfaceDidChangeViewport(_ surface: any TextSurface)
+  /// 選択が変わった——どれかのカーソルの選択か、続いている ⌘D の問いが変わった。
   func surfaceDidChangeSelection(_ surface: any TextSurface)
   /// 文書の写し（本文・役割の並び・版）。面が、結ばれたとき・`rolesDidChange` と `setLineMarks` を受けたとき・自分が
   /// 出した編集の通知から戻ったときに引いて描く。文書はどの知らせも自分の写しを更新した後に出すので、

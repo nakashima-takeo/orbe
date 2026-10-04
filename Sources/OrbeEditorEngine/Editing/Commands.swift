@@ -58,6 +58,18 @@ enum EditCommand: Equatable, Sendable {
   /// 落とした文字列を `offset` に入れて選ぶ（改行は文書の作法へ揃える）。`moving` があればその範囲を消す（同じ面の中の
   /// 移動。消すことと入れることは 1 つの束）。
   case drop(String, at: Int, moving: NSRange?)
+  /// ⌘D——次の出現を選択に足す（VS Code の `addSelectionToNextFindMatch`）。
+  case addNextOccurrence
+  /// ⌘⇧L——全出現を選ぶ（VS Code の `selectHighlights`）。
+  case selectAllOccurrences
+  /// ⌥⌘↑・⌥⌘↓——各カーソルの 1 行上・下に同じ形のカーソルを足す（VS Code の `insertCursorAbove` / `Below`）。
+  case insertCursor(below: Bool)
+  /// Esc——カーソルが複数なら主の 1 本に戻し（選択は保つ）、1 本で選択があれば動く端のキャレットにする（VS Code の
+  /// `removeSecondaryCursors` と `cancelSelection`）。
+  case cancel
+
+  /// ⌘D・⌘⇧L の続きを残すコマンドか。
+  var continuesSearch: Bool { self == .addNextOccurrence || self == .selectAllOccurrences }
 }
 
 /// 見せ方——取引の後にスクロールをどう置くか。
@@ -91,6 +103,8 @@ struct CommandResult {
   var edits = EditBatch.empty
   var undo = UndoKind.other
   var reveal = Reveal.minimal
+  /// 見せる区間（束の後の本文の座標。nil なら主のキャレット）。
+  var revealing: NSRange?
   /// キルバッファへ入れる文字列（入れないなら nil）。
   var kill: String?
 }
@@ -98,13 +112,14 @@ struct CommandResult {
 /// 編集の規則の入口（純関数）。本文の写し・編集の状態・環境から、編集の束・新しい状態・undo の種類・見せ方を返す。
 /// AppKit・Metal に依らないので、窓も装置も無しに VS Code と突き合わせられる。
 enum EditCommands {
-  /// コマンドを実行する。「直前がキルだったか」はここ 1 か所で決める——キルバッファへ何かを入れたコマンドだけがキル（何も
-  /// しなかったキルやマークへの削除は数えない）。
+  /// コマンドを実行する。「直前がキルだったか」と ⌘D の続きは、ここ 1 か所で決める——キルバッファへ何かを入れたコマンド
+  /// だけがキル（何もしなかったキルやマークへの削除は数えない）で、続きは ⌘D・⌘⇧L の結果にだけ残る。
   static func run(_ command: EditCommand, _ state: EditState, _ env: EditingEnvironment)
     -> CommandResult
   {
     var result = result(of: command, state, env)
     result.state.lastWasKill = result.kill != nil
+    if !command.continuesSearch { result.state.continuation = nil }
     return result
   }
 
@@ -150,6 +165,10 @@ enum EditCommands {
     case .cut: return cut(state, env)
     case .drop(let string, let offset, let moving):
       return drop(string, at: offset, moving: moving, state, env)
+    case .addNextOccurrence: return addNextOccurrence(state, env)
+    case .selectAllOccurrences: return selectAllOccurrences(state, env)
+    case .insertCursor(let below): return insertCursor(below: below, state, env)
+    case .cancel: return cancel(state)
     }
   }
 

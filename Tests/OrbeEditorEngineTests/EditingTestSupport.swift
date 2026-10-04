@@ -89,4 +89,67 @@ enum Editing {
       [command], on: marked, indentation: indentation, lineBreak: lineBreak,
       killBuffer: killBuffer)
   }
+
+  /// カーソルを何本でも書いた本文（「|」がキャレット、「[」「]」が選択で `[` が動かない側）の、本文と状態。列の並びは文書の
+  /// 順で、`primary` 番目（文書の順）が主になって先頭に来る。
+  static func parseAll(_ marked: String, primary: Int = 0) -> (TextRope, EditState) {
+    var text = ""
+    var cursors: [Cursor] = []
+    var open: (character: Character, offset: Int)?
+    var offset = 0
+    for character in marked {
+      switch character {
+      case "|":
+        cursors.append(Cursor(offset))
+      case "[", "]":
+        if let pending = open, pending.character != character {
+          let (anchor, caret) =
+            character == "]" ? (pending.offset, offset) : (offset, pending.offset)
+          cursors.append(
+            Cursor(
+              selectionStart: NSRange(location: anchor, length: 0), unit: .character,
+              position: caret))
+          open = nil
+        } else {
+          open = (character, offset)
+        }
+      default:
+        text.append(character)
+        offset += character.utf16.count
+      }
+    }
+    let first = cursors.remove(at: primary)
+    return (TextRope(text), EditState(cursors: CursorList(first, others: cursors)))
+  }
+
+  /// 全カーソルを本文に書き戻す（`parseAll` の逆。主かどうかは書かない）。
+  static func renderAll(_ text: TextRope, _ cursors: CursorList) -> String {
+    var units = Array(text.units(in: NSRange(location: 0, length: text.length)))
+    var marks: [(offset: Int, mark: String)] = []
+    for cursor in cursors.all {
+      if cursor.selection.length == 0 {
+        marks.append((cursor.position, "|"))
+      } else {
+        marks.append((cursor.anchor, "["))
+        marks.append((cursor.position, "]"))
+      }
+    }
+    for (offset, mark) in marks.sorted(by: { $0.offset > $1.offset }) {
+      units.insert(contentsOf: mark.utf16, at: offset)
+    }
+    return String(decoding: units, as: UTF16.self)
+  }
+
+  /// コマンドを順に当て、最後の本文と全カーソルを書いたものと、最後の状態。
+  static func runAll(_ commands: [EditCommand], on marked: String, primary: Int = 0) -> (
+    String, EditState
+  ) {
+    var (text, state) = parseAll(marked, primary: primary)
+    for command in commands {
+      let result = EditCommands.run(command, state, environment(text))
+      text = result.edits.applied(to: text)
+      state = result.state
+    }
+    return (renderAll(text, state.cursors), state)
+  }
 }

@@ -75,6 +75,27 @@ final class MetalTextView: TextSurfaceInputView {
   override var inputContext: NSTextInputContext? { textInputContext }
   override var composing: Bool { surface?.editor.isComposing ?? false }
 
+  /// VS Code の複数カーソルのキー（macOS の標準のキー割り当てに無いもの）→ セレクタ。キーは修飾（⌘⇧⌥⌃）と、矢印か
+  /// 修飾を除いた字で引く。
+  static let multiCursorKeys: [KeyChord: Selector] = [
+    KeyChord("d", [.command]): #selector(addSelectionToNextFindMatch(_:)),
+    KeyChord("l", [.command, .shift]): #selector(selectHighlights(_:)),
+    KeyChord("u", [.command]): #selector(cursorUndo(_:)),
+    KeyChord(.upArrow, [.command, .option]): #selector(insertCursorAbove(_:)),
+    KeyChord(.downArrow, [.command, .option]): #selector(insertCursorBelow(_:)),
+  ]
+
+  /// 複数カーソルのキーは key equivalent の段で引く——view の階層を回るこの段はメインメニュー（サービスを含む）より先なので、
+  /// 選択を渡せるサービスの受け手でも、同じキーのサービス（⌘⇧L の「Google で検索」など）に先を越されない。焦点が自分に
+  /// あるときだけ引くので、端末に焦点があるときのキーには当たらない。変換中は窓の根が先に IME へ渡し、IME が使わなかった
+  /// キーだけがここへ来る（コマンドは変換を確定してから動く）。
+  override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    guard window?.firstResponder === self, let selector = Self.multiCursorKeys[KeyChord(event)]
+    else { return super.performKeyEquivalent(with: event) }
+    surface?.input(keystroke: event.timestamp) { _ = perform(selector, with: nil) }
+    return true
+  }
+
   /// IME が ⌘ キーの間に確定と次の未確定を続けて返しても、描くのは 1 状態だけ。
   override func offerKeyEquivalentToInputMethod(_ event: NSEvent) -> Bool {
     guard composing, let surface else { return false }
@@ -309,14 +330,42 @@ final class MetalTextView: TextSurfaceInputView {
     return result
   }
 
-  /// 焦点を失う前に変換を確定する（窓が key でなくなるだけなら変換は続く）。
+  /// 焦点を失う前に変換を確定する（窓が key でなくなるだけなら変換は続く）。焦点を失えば ⌘D の続きも終わる。
   override func resignFirstResponder() -> Bool {
     surface?.editor.finishComposition(.commit)
     let result = super.resignFirstResponder()
     if result {
+      surface?.inputScope { surface?.editor.focusDidLeave() }
       surface?.focusDidChange(false)
       surface?.updateFocus(false)
     }
     return result
+  }
+}
+
+/// キーの組——修飾（⌘⇧⌥⌃）と、矢印か修飾を除いた字（小文字）。矢印に付く function・numericPad の印は見ない。
+struct KeyChord: Hashable {
+  private let key: String
+  private let modifiers: NSEvent.ModifierFlags.RawValue
+
+  private static let relevant: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
+
+  init(_ character: String, _ modifiers: NSEvent.ModifierFlags) {
+    key = character
+    self.modifiers = modifiers.intersection(Self.relevant).rawValue
+  }
+
+  init(_ special: NSEvent.SpecialKey, _ modifiers: NSEvent.ModifierFlags) {
+    self.init("special:\(special.rawValue)", modifiers)
+  }
+
+  init(_ event: NSEvent) {
+    if let special = event.specialKey,
+      [.upArrow, .downArrow, .leftArrow, .rightArrow].contains(special)
+    {
+      self.init(special, event.modifierFlags)
+    } else {
+      self.init(event.charactersIgnoringModifiers?.lowercased() ?? "", event.modifierFlags)
+    }
   }
 }

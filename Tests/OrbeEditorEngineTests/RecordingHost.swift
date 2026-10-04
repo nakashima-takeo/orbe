@@ -23,4 +23,15 @@ final class RecordingHost: TextSurfaceHost {
   }
 
   func openLink(_ url: URL) { links.append(url) }
+
+  /// 載せる側が使う Esc の数（テストが置く）。使えば数を減らし、受けた数を数える。
+  var escapesToConsume = 0
+  private(set) var escapes = 0
+
+  func consumeEscape() -> Bool {
+    escapes += 1
+    guard escapesToConsume > 0 else { return false }
+    escapesToConsume -= 1
+    return true
+  }
 }

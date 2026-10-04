@@ -25,12 +25,15 @@ struct Transaction {
   var remeasure = false
   /// 取引を起こした打鍵の出来事の時刻（打鍵→画面の遅れを、本文と同じ書き込みで材料へ添える）。
   var keystroke: Double?
-  /// 取引の前のカーソルの列と焦点と、変換中だったか。
+  /// 取引の前のカーソルの列と ⌘D の続きと焦点と、変換中だったか。
   let cursors: CursorList
+  let continuation: SearchQuestion?
   let focused: Bool
   let composing: Bool
   /// 本文を変えたか。
   var edited = false
+  /// カーソルの列を ⌘U で戻した（カーソルの履歴に積まない）。
+  var restoresCursors = false
 }
 
 extension MetalTextSurface {
@@ -66,7 +69,8 @@ extension MetalTextSurface {
     let opens = transaction == nil
     if opens {
       transaction = Transaction(
-        cursors: editor.state.cursors, focused: focused, composing: editor.isComposing)
+        cursors: editor.state.cursors, continuation: editor.state.continuation, focused: focused,
+        composing: editor.isComposing)
     }
     if reveal != .none {
       transaction?.reveal = reveal
@@ -106,6 +110,12 @@ extension MetalTextSurface {
   /// 横の「見えるところまで」）を出す前の状態に積み、選択と見えている範囲を知らせる。箱へは出す 1 か所（`flush`）が
   /// 位置を先・材料を後の順で 1 回で書く。
   private func commit(_ finished: Transaction) {
+    editor.noteTransaction(
+      from: finished.cursors, edited: finished.edited, restored: finished.restoresCursors
+    ) { [self] in
+      scroll.peek(at: CACurrentMediaTime(), limits: pending.limits, place: pending.position)
+        .position
+    }
     let cursors = editor.state.cursors
     let composing = editor.isComposing || finished.composing
     let restarts =
@@ -142,7 +152,8 @@ extension MetalTextSurface {
     }
     flushLater()
     announce(
-      selectionChanged: cursors.primary.selection != finished.cursors.primary.selection,
+      selectionChanged: cursors.selections != finished.cursors.selections
+        || editor.state.continuation != finished.continuation,
       composing: composing)
   }
 

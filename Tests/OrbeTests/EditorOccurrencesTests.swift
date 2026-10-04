@@ -233,6 +233,36 @@ final class EditorOccurrencesTests: OrbeTestCase {
       [NSRange(location: 4, length: 2), NSRange(location: 7, length: 2)], "大文字化の後の選択で取り直す")
   }
 
+  /// カーソルが複数でも、全選択が同じ文字列（大小無視）ならその他の出現を出し、どの選択とも同じ区間の出現は除く。選択が
+  /// ばらばらなら出さない。⌘D が語から続いている間は、⌘D と同じ語の規則（大小区別・語の境）で出す。
+  func testSelectionOccurrencesFollowEveryCursorAndTheContinuingSearch() throws {
+    let clock = Clock()
+    let hosted = try host(" ab ab AB abc\n", clock: clock)
+    let pane = hosted.pane
+    let responder = hosted.document.surface.responder
+    let next = NSSelectorFromString("addSelectionToNextFindMatch:")
+    hosted.document.surface.selectedRange = NSRange(location: 1, length: 2)
+    responder.perform(next, with: nil)
+    catchUp(hosted.document)
+    XCTAssertEqual(hosted.document.surface.cursorSelections.count, 2, "前提")
+    XCTAssertEqual(
+      pane.occurrences.selectionOccurrences,
+      [NSRange(location: 7, length: 2), NSRange(location: 10, length: 2)], "⌘F の規則・選択は除く")
+
+    hosted.document.surface.selectedRange = NSRange(location: 2, length: 0)
+    responder.perform(next, with: nil)
+    catchUp(hosted.document)
+    XCTAssertEqual(hosted.document.surface.cursorSelections, [NSRange(location: 1, length: 2)])
+    XCTAssertEqual(
+      pane.occurrences.selectionOccurrences, [NSRange(location: 4, length: 2)],
+      "語から続く ⌘D の間は語の規則（AB と abc の ab は出ない）")
+
+    hosted.document.surface.selectedRange = NSRange(location: 1, length: 2)
+    responder.perform(NSSelectorFromString("insertCursorBelow:"), with: nil)
+    catchUp(hosted.document)
+    XCTAssertEqual(pane.occurrences.selectionOccurrences, [], "空の選択があれば出さない")
+  }
+
   /// キャレットを動かして 50ms の予約が残っている間に打つと、その予約は出ない（打鍵で消えた地を古い予約が出し直さない）。
   func testTypingCancelsAPendingWordQuery() throws {
     let clock = Clock()

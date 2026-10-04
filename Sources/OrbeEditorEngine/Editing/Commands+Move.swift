@@ -181,6 +181,20 @@ extension EditCommands {
     return NSRange(location: line.start + start, length: end - start)
   }
 
+  /// 位置に接する通常の字の語（VS Code の `getWordAtPosition`——前の語を先に見る）。区切りと空白の上なら nil。
+  static func regularWord(at offset: Int, _ text: TextRope) -> NSRange? {
+    let row = text.row(containing: offset)
+    let line = LineWindow(row: row, around: offset - text.lineStart(row), text)
+    let column = line.local(offset - text.lineStart(row))
+    for word in [line.words.previousWord(before: column), line.words.nextWord(from: column)] {
+      guard let word, word.kind == .regular, word.start <= column, column <= word.end else {
+        continue
+      }
+      return NSRange(location: line.start + word.start, length: word.end - word.start)
+    }
+    return nil
+  }
+
   /// 語の単位のまま動く端を `offset` へ伸ばす（VS Code の `WordOperations.word` の選択中）——語の内側なら語の端へ揃え、
   /// 起点の範囲の中なら起点の範囲を保つ。
   static func extendByWord(_ cursor: Cursor, to offset: Int, _ text: TextRope) -> Cursor {

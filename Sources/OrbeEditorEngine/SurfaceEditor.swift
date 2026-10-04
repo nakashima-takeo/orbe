@@ -29,6 +29,10 @@ final class SurfaceEditor {
   private(set) var composition: Composition?
   /// IME に変換を捨てさせている最中（その間に IME から届く呼び出しは、終えた変換のものなので受けない）。
   private var discarding = false
+  /// カーソルの履歴（⌘U。VS Code の `CursorUndoRedoController`）——本文を変えずにカーソルの列が変わった取引の、前の列と
+  /// スクロールの位置。古いものから `cursorHistoryLimit` 段まで持ち、本文が変わると消える。
+  private var cursorHistory: [(cursors: CursorList, scroll: SIMD2<Double>)] = []
+  static let cursorHistoryLimit = 50
   private unowned let surface: MetalTextSurface
 
   init(surface: MetalTextSurface) {
@@ -46,7 +50,7 @@ final class SurfaceEditor {
       guard let env = surface.editingEnvironment() else { return }
       let before = state
       let result = EditCommands.run(command, before, env)
-      surface.transact(reveal: result.reveal) {
+      surface.transact(reveal: result.reveal, of: result.revealing) {
         record(
           result.edits, kind: result.undo, from: before.cursors, to: result.state.cursors, env.text)
         state = result.state
@@ -55,9 +59,10 @@ final class SurfaceEditor {
     }
   }
 
-  /// カーソルの列を直接置く（マウス・行番号の列）。編集を伴わないので undo のまとまりを切る。
-  func select(_ cursors: CursorList, reveal: Reveal) {
-    surface.transact(reveal: reveal) {
+  /// カーソルの列を直接置く（マウス・行番号の列）。編集を伴わないので undo のまとまりを切る。`range` は見せる区間（nil なら
+  /// 主のキャレット）。
+  func select(_ cursors: CursorList, reveal: Reveal, of range: NSRange? = nil) {
+    surface.transact(reveal: reveal, of: range) {
       finishComposition(.commit)
       guard let length = surface.textLength else { return }
       var cursors = cursors.map { $0.clamped(to: length) }
@@ -94,6 +99,41 @@ final class SurfaceEditor {
   func markBoundary() {
     finishComposition(.commit)
     close()
+  }
+
+  /// 焦点を失った。⌘D・⌘⇧L の続きを終える（VS Code と同じく、焦点が戻っても続かない）。
+  func focusDidLeave() {
+    guard state.continuation != nil else { return }
+    surface.transact { state.continuation = nil }
+  }
+
+  // MARK: - カーソルの履歴（⌘U）
+
+  /// 取引の確定が呼ぶ。本文を変えた取引は履歴を消す。本文を変えずに選択が変わった取引は、前の列と、そのときのスクロールの
+  /// 位置を積む（直前に積んだものと同じなら積まない。⌘U で戻した取引は積まない）。1 打鍵にセレクタが 2 つ届いても、取引
+  /// 1 つで 1 段。
+  func noteTransaction(
+    from before: CursorList, edited: Bool, restored: Bool, scroll: () -> SIMD2<Double>
+  ) {
+    guard !edited else { return cursorHistory.removeAll() }
+    guard !restored, !state.cursors.selects(like: before),
+      cursorHistory.last.map({ !$0.cursors.selects(like: before) }) ?? true
+    else { return }
+    cursorHistory.append((before, scroll()))
+    if cursorHistory.count > Self.cursorHistoryLimit { cursorHistory.removeFirst() }
+  }
+
+  /// ⌘U——最後に積んだカーソルの列とスクロールの位置へ戻す。
+  func undoCursors() {
+    surface.transact {
+      finishComposition(.commit)
+      guard let last = cursorHistory.popLast() else { return }
+      surface.transact(scrollTo: last.scroll) {
+        close()
+        state = EditState(cursors: last.cursors, mark: state.mark)
+        surface.transaction?.restoresCursors = true
+      }
+    }
   }
 
   // MARK: - 変換（IME の入口）

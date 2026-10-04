@@ -4,26 +4,25 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 変換中のキーとメニュー——Esc は載せる側へ渡さず、取り消す・やり直すは変換の取り消しとして有効で、IME へ先に渡した
+/// 変換中のキーとメニュー——Esc は載せる側へ問わず、取り消す・やり直すは変換の取り消しとして有効で、IME へ先に渡した
 /// ⌘ キーの間の確定と次の未確定は 1 コマ。壊れると変換中の Esc で検索バーが閉じる・⌘Z がメニューで無効になり変換を
 /// 取り消せない・中間のコマが出る・変換していない ⌘ キーのたびにコマを描き直す。
 extension SurfaceInputMethodTests {
-  /// 変換中の Esc は、IME が使わなければ上の responder へ渡さない（載せる側の検索バーを閉じない）。変換中でなければ渡す。
+  /// 変換中の Esc は、IME が使わなければ載せる側へ問わない（検索バーを閉じない）。変換中でなければ問う。
   func testEscapeWhileComposingDoesNotReachTheHost() throws {
     let opened = try open("ab\n")
     _ = host(opened)
     fakeInputMethod(opened)
     let view = opened.surface.textView
-    let above = EscapeRecorder()
-    above.nextResponder = view.nextResponder
-    view.nextResponder = above
+    let recorder = RecordingHost()
+    opened.surface.host = recorder
     replay([.mark("か")], on: opened)
     view.cancelOperation(nil)
-    XCTAssertEqual(above.escapes, 0, "変換中は渡さない")
+    XCTAssertEqual(recorder.escapes, 0, "変換中は問わない")
     XCTAssertTrue(view.hasMarkedText())
     replay([.insert("か")], on: opened)
     view.cancelOperation(nil)
-    XCTAssertEqual(above.escapes, 1, "変換中でなければ渡す")
+    XCTAssertEqual(recorder.escapes, 1, "変換中でなければ問う")
   }
 
   /// Edit メニューの取り消す・やり直すは、変換中なら履歴が無くても有効（⌘Z が変換の取り消しとして届く）。
@@ -69,11 +68,4 @@ extension SurfaceInputMethodTests {
     XCTAssertEqual(text(opened.document), "かきab\n")
     XCTAssertEqual(opened.surface.drawn.revision, revision + 1, "描く材料は 1 回")
   }
-}
-
-/// 上の responder（載せる側）に届いた Esc を数える。
-private final class EscapeRecorder: NSResponder {
-  private(set) var escapes = 0
-
-  override func cancelOperation(_ sender: Any?) { escapes += 1 }
 }

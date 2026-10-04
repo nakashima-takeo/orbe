@@ -56,15 +56,6 @@ extension EditorPaneView {
     return seed.contains(where: \.isNewline) ? nil : seed
   }
 
-  /// 本文で Esc（変換中でない）。バーがあれば閉じる（VS Code と同じ）。無ければ上の responder へ。
-  override func cancelOperation(_ sender: Any?) {
-    guard searchBar != nil else {
-      nextResponder?.tryToPerform(#selector(cancelOperation(_:)), with: sender)
-      return
-    }
-    closeSearch()
-  }
-
   /// バーを閉じる。一致の地は消え、選択はそのまま残る。焦点がバーにあればテキスト面へ戻す。
   func closeSearch() {
     guard let bar = searchBar else { return }

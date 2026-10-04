@@ -98,6 +98,10 @@ final class MetalTextSurface: TextSurface {
 
   var caretLocation: Int { editor.state.cursors.primary.position }
 
+  var cursorSelections: [NSRange] { editor.state.cursors.selections }
+
+  var searchContinuation: SearchQuestion? { editor.state.continuation }
+
   func markUndoBoundary() {
     editor.markBoundary()
   }
