@@ -70,6 +70,9 @@ final class ScrollbarGeometryTests: XCTestCase {
     XCTAssertEqual([oneX.caret(row: 0).y1, oneX.caret(row: 0).y2], [0, 2])
     XCTAssertEqual([oneX.caret(row: 499).y1, oneX.caret(row: 499).y2], [194, 196])
     XCTAssertEqual([twoX.caret(row: 999).y1, twoX.caret(row: 999).y2], [781, 785])
+    XCTAssertEqual(
+      oneX.carets(rows: [0, 11]).map { [$0.y1, $0.y2] }, [[0, 5]], "キャレットの印も 1 px の隙間は結ぶ")
+    XCTAssertEqual(oneX.carets(rows: [0, 13]).count, 2, "2 px 離れれば別")
   }
 
   func testRulerLanesSplitTheWidthAfterTheBorderPixel() {
