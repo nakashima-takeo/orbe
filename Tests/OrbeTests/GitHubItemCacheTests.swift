@@ -98,8 +98,10 @@ final class GitHubItemCacheTests: OrbeTestCase {
     XCTAssertEqual(fetches.requested.last, [c], "取れなかった項目は ensure では頼み直さない")
     fetches.answer(1, [c], batch([c: .missing]))
 
-    cache.refresh([a, b, c])
-    XCTAssertEqual(fetches.requested.last, [a, b, c], "refresh は全部を取り直す")
+    cache.refresh([a, c])
+    XCTAssertEqual(fetches.requested.last, [a, c], "refresh は渡した項目を全部取り直す")
+    cache.ensure([b])
+    XCTAssertEqual(fetches.requested.last, [b], "refresh の後は、取れなかった項目も ensure が頼み直す")
   }
 
   /// 取得中の項目は、`refresh` でも `ensure` でも重ねて頼まない。
