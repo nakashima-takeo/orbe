@@ -24,11 +24,11 @@ extension TaskPaletteModel {
     case .tab:
       toggleScope()
     case .rightArrow:
-      guard press.modifiers.isEmpty, selectedTask != nil else { return .ignored }
+      guard Self.isUnmodified(press), selectedTask != nil else { return .ignored }
       enterDetail()
     case .space:
       // 文字があるときの space は空白を打つ。
-      guard query.isEmpty, press.modifiers.isEmpty, tab == .tasks else { return .ignored }
+      guard query.isEmpty, Self.isUnmodified(press), tab == .tasks else { return .ignored }
       switch selectedID {
       case .task(let id): toggleDone(id)
       case .doneHeader: toggleDoneExpanded()
@@ -78,6 +78,12 @@ extension TaskPaletteModel {
     default: return .ignored
     }
     return .handled
+  }
+
+  /// 押している修飾キーが無いか。実機の矢印キーは numericPad と function の修飾を伴って届くので、
+  /// 修飾の集合が空かでは判定しない。
+  private static func isUnmodified(_ press: KeyPress) -> Bool {
+    press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
   }
 
   /// ⌘⌫。⌫ は AppKit から DEL（U+007F）で届き、`KeyEquivalent.delete`（U+0008）とは一致しない。
