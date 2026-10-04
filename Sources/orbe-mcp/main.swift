@@ -3,7 +3,7 @@ import Foundation
 import OrbePaths
 
 // Orbe 制御チャネルの MCP ブリッジ。MCP(stdio・改行区切り JSON-RPC 2.0) を喋り、
-// tools/call を Orbe.app の control.sock（同じく JSON-RPC）へそのまま転送する薄い層。
+// tools/call を Orbe.app の control.sock（同じく JSON-RPC）へ、呼び出し元タブを添えて転送する薄い層。
 // ツール定義をここに置くことで、Orbe 本体を再ビルド/再起動せずツールを反復できる。
 
 // control.sock の解決は OrbePaths.controlSocketPath() に一本化（GUI 本体・cli と同一実装）。
@@ -138,7 +138,10 @@ func handle(_ message: [String: Any]) {
       replyError(id: id, code: -32602, message: "unknown tool")
       return
     }
-    let args = params["arguments"] as? [String: Any] ?? [:]
+    var args = params["arguments"] as? [String: Any] ?? [:]
+    // 呼び出し元タブは、ブリッジを起こした agent のタブ（環境の ORBE_TAB）。どの動詞が読むかを知らずに
+    // 全呼び出しへ添え、agent が引数に書いた値は使わない（名乗り間違いを起こさない）。
+    args["callerTabId"] = ProcessInfo.processInfo.environment["ORBE_TAB"].flatMap(Int.init)
     switch controlRequest(method: name, params: args) {
     case .ok(let value):
       let text = jsonText(value)

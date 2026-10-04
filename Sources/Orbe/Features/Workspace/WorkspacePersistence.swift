@@ -39,14 +39,17 @@ struct WorkspaceState: Codable, Equatable {
   /// この workspace の設定上書き層（全設定を上書き可）。
   /// optional——上書きが 1 項目も無ければ書かれない（＝global 継承）。
   var settingsOverride: SettingsLayer?
+  /// `Workspace.persistentId`。無いか読めない workspace にはその workspace だけ新しく振る（旧形式から
+  /// 読んだ場合も同じ）——後から足したフィールドの異常でファイル全体を落とさない。
+  var persistentId: UUID
 
   enum CodingKeys: String, CodingKey {
-    case name, rootPath, activeTab, tabs, lastUsedAt, settingsOverride
+    case name, rootPath, activeTab, tabs, lastUsedAt, settingsOverride, persistentId
   }
 
   init(
     name: String, rootPath: String, activeTab: Int, tabs: [TabState],
-    lastUsedAt: Date? = nil, settingsOverride: SettingsLayer? = nil
+    lastUsedAt: Date? = nil, settingsOverride: SettingsLayer? = nil, persistentId: UUID = UUID()
   ) {
     self.name = name
     self.rootPath = rootPath
@@ -54,6 +57,7 @@ struct WorkspaceState: Codable, Equatable {
     self.tabs = tabs
     self.lastUsedAt = lastUsedAt
     self.settingsOverride = settingsOverride
+    self.persistentId = persistentId
   }
 
   /// settingsOverride は 1 キー単位で寛容に読む（`SettingsLayer` 自身の decode）——未知 key・型不一致の
@@ -67,6 +71,7 @@ struct WorkspaceState: Codable, Equatable {
     lastUsedAt = try c.decodeIfPresent(Date.self, forKey: .lastUsedAt)
     let layer = try? c.decode(SettingsLayer.self, forKey: .settingsOverride)
     settingsOverride = layer.flatMap { $0.isEmpty ? nil : $0 }
+    persistentId = (try? c.decode(UUID.self, forKey: .persistentId)) ?? UUID()
   }
 }
 
@@ -91,11 +96,8 @@ enum WorkspacePersistence {
   /// テスト用に保存先を差し替える（設定時はこちらを使う）。本番は nil。
   static var fileURLOverride: URL?
 
-  /// 退避に失敗して原位置に残っている原本の場所。この URL への `save()` は書かない
-  /// ——保全できていない原本を既定 workspace で潰すのは、`.atomic` write で書き込み途中の
-  /// 破損を防いでいるのと同じ「原本を壊さない」責務の裏側。`load()` が毎回更新する。
-  /// 場所で持つので、保存先が変われば古い判断を引きずらない。
-  private(set) static var unsalvagedOriginal: URL?
+  /// 使えなかった原本の退避と、退避できなかった原本への書き込み停止。`load()` が毎回更新する。
+  private static var quarantine = StateFileQuarantine()
 
   static var fileURL: URL? {
     if let override = fileURLOverride { return override }
@@ -111,11 +113,11 @@ enum WorkspacePersistence {
   /// `.atomic` write で原本を完全に潰すため、ここで残さないと復元手段が消える。
   /// 不在（初回起動）と空 workspaces は失う構成が無いので退避しない（毎起動のゴミを作らない）。
   static func load() -> WorkspacesFile? {
-    unsalvagedOriginal = nil
+    quarantine.reset()
     guard let url = fileURL else { return nil }  // 保存先が決まらない。save も同じ guard で書かない
     guard FileManager.default.fileExists(atPath: url.path) else { return nil }  // 初回起動
     guard let data = try? Data(contentsOf: url), let file = decode(data) else {
-      quarantine(url)  // 読めない・構造破損・非互換 version＝ユーザー構成が入っている原本
+      quarantine.quarantine(url)  // 読めない・構造破損・非互換 version＝ユーザー構成が入っている原本
       return nil
     }
     guard !file.workspaces.isEmpty else { return nil }  // 中身が無い＝失う構成が無い
@@ -135,42 +137,8 @@ enum WorkspacePersistence {
     }
   }
 
-  /// 使えなかった原本を隣へ退避する（最新 1 件だけ残す）。
-  /// 先に古い退避物を消してから move するので、退避先の名前は常に空いている
-  /// ——秒精度のタイムスタンプが同一秒で衝突する問題を構造的に持たない。
-  /// 消えるのは常により古い控え。退避が 2 回起きる系列では 1 件目（＝ユーザーの構成）が消えて
-  /// 2 件目（＝1 回目の後に書かれた既定構成）だけが残るが、毎起動のゴミを積まない方を採る
-  /// （prune の失敗はゴミが 1 件残るだけなので退避ガードを立てない）。
-  private static func quarantine(_ url: URL) {
-    let fm = FileManager.default
-    let dir = url.deletingLastPathComponent()
-    for old in existingQuarantines(in: dir) { try? fm.removeItem(at: old) }
-
-    let stamp = DateFormatter()
-    stamp.locale = Locale(identifier: "en_US_POSIX")
-    stamp.dateFormat = "yyyyMMdd-HHmmss"
-    let dest = dir.appendingPathComponent("workspaces-broken-\(stamp.string(from: Date())).json")
-    do {
-      try fm.moveItem(at: url, to: dest)
-      NSLog("[workspace] quarantined unreadable workspaces.json to \(dest.path)")
-    } catch {
-      // 原本が実際に残っているときだけガードを立てる。原本ごと消えていたら守る対象が無く、
-      // ここで立てるとそのセッションの構成が無言で一切保存されなくなる。
-      guard fm.fileExists(atPath: url.path) else { return }
-      unsalvagedOriginal = url
-      NSLog("[workspace] quarantine failed, save disabled: \(url.path)")
-    }
-  }
-
-  /// 同じディレクトリに残っている退避物。
-  private static func existingQuarantines(in dir: URL) -> [URL] {
-    let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
-    let broken = names.filter { $0.hasPrefix("workspaces-broken-") && $0.hasSuffix(".json") }
-    return broken.map { dir.appendingPathComponent($0) }
-  }
-
   static func save(_ file: WorkspacesFile) {
-    guard let url = fileURL, url != unsalvagedOriginal else { return }
+    guard let url = fileURL, quarantine.permitsWrite(to: url) else { return }
     let enc = JSONEncoder()
     enc.outputFormatting = [.prettyPrinted, .sortedKeys]
     guard let data = try? enc.encode(file) else { return }

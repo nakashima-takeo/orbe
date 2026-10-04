@@ -52,6 +52,21 @@ protocol ControlTarget: AnyObject {
   /// 閉じたセッションを休眠チケットとして戻す（restore_sessions）。id ごとの status
   /// （restored / already-present / unknown）を返す。窓は runOnMain が保証する。
   func controlRestoreSessions(sessionIds: [String]) -> Result<Any, ControlError>
+  /// タスクを列の順に列挙する（list_tasks）。workspaceId 指定でその workspace のタスクだけ。未知 id は -32004。
+  func controlListTasks(workspaceId: Int?) -> Result<Any, ControlError>
+  /// タスクを列の末尾へ足す（add_task）。workspaceId は省略＝呼び出し元タブの workspace（タブが分からなければ
+  /// なし）・`.clear`＝なし・`.set`＝その workspace（未知は -32004）。callerTabId は追加者の agent 名と
+  /// 既定の付き先を引くためだけに読み、未知のタブでもエラーにしない。
+  func controlAddTask(_ draft: TaskDraft, workspaceId: ClearableValue<Int>?, callerTabId: Int?)
+    -> Result<Any, ControlError>
+  /// タスクを変える（update_task）。workspaceId は省略＝変えない・`.clear`＝なし・`.set`＝その workspace。
+  func controlUpdateTask(taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?)
+    -> Result<Any, ControlError>
+  /// タスクを別のタスクの前か後ろへ移す（move_task）。
+  func controlMoveTask(taskId: Int, _ placement: TaskStore.Placement, anchorTaskId: Int)
+    -> Result<Any, ControlError>
+  /// タスクを消す（delete_task）。
+  func controlDeleteTask(taskId: Int) -> Result<Any, ControlError>
 }
 
 struct ControlError: Error {
@@ -339,11 +354,12 @@ final class ControlServer {
       target.controlReportAgent(tab: t, report: report)
       return .success(["ok": true])
     default:
-      // タブ操作・config / workspace CRUD・セッション復元は拡張の dispatch（ControlServer+Dispatch）へ。
-      // いずれも非該当なら未知メソッド。
+      // タブ操作・config / workspace CRUD・セッション復元・タスクは拡張の dispatch
+      // （ControlServer+Dispatch / +Task）へ。いずれも非該当なら未知メソッド。
       return runTab(method: method, params: params, target: target)
         ?? runConfigWorkspace(method: method, params: params, target: target)
         ?? runSession(method: method, params: params, target: target)
+        ?? runTask(method: method, params: params, target: target)
         ?? .failure(ControlError(code: -32601, message: "method not found: \(method)"))
     }
   }
