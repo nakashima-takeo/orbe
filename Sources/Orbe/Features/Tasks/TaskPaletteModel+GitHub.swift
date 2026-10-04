@@ -195,7 +195,9 @@ extension TaskPaletteModel {
     return task.id
   }
 
-  /// ⌘⌫（結び付いている行）。その項目だけを除いた列で置き換える。行は結び付いていない側へ戻る。
+  /// ⌘⌫（結び付いている行）。その項目だけを除いた列で置き換える。行は結び付いていない側へ戻り、選択はその行に
+  /// 残る。戻った先が「さらに」の内側（閉じた区分の 6 件目以降）なら、その区分を開いて見せる——隠れると選択が
+  /// 同じ位置の別の行へ移り、続けて押した ⌘⌫ が別の項目の結び付きを外す。
   func unlinkSelectedGitHubItem() {
     guard let row = selectedGitHubRow, let owner = row.task,
       let task = store.tasks.first(where: { $0.id == owner.id })
@@ -204,6 +206,10 @@ extension TaskPaletteModel {
     var update = TaskUpdate()
     update.links = task.links.filter { $0.item != row.id }
     mutate(.failed) { () throws(TaskStoreError) in _ = try store.update(task.id, update) }
+    let id = TaskPaletteGitHubRowID.item(row.id)
+    guard !gitHubSelectableIDs.contains(id) else { return }
+    expandedKinds.insert(row.item.kind)
+    gitHubList.select(id, in: gitHubSelectableIDs)
   }
 
   /// ⌘T（GitHub タブ）。結び付いていない行はタスクにしてから、結び付いている行はそのタスクで、⌘T を開く。
