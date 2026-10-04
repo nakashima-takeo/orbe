@@ -1,6 +1,6 @@
 import Foundation
 
-/// 前回取得した gh 結果（正式名・ブランチの PR）を checkout 単位で保持する置き場。⌘T の行の札と clean・PR の
+/// 前回取得した gh 結果（正式名・ブランチの PR）を手元のリポジトリ単位で保持する置き場。⌘T の行の札と clean・PR の
 /// 自動の結び付けが読む。前回結果は次に開いたときの先描き（stale-while-revalidate）の元になる。保存先は
 /// この型に閉じており、ディスク永続へ移す場合もここの中だけを差し替える。
 /// キーは `GitRepo.commonDir`（worktree 間で共有される唯一の識別子）。

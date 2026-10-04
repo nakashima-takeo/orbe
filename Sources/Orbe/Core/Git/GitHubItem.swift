@@ -36,7 +36,7 @@ struct GitHubItemID: Hashable {
   var text: String { "\(repo.value)#\(number)" }
 
   /// owner を除いたリポジトリの名前。
-  var repoName: String { String(repo.value.split(separator: "/").last ?? "") }
+  var repoName: String { repo.name }
 }
 
 /// Issue か PR か。
@@ -118,7 +118,7 @@ enum GitHubItemQuery {
       }
       fields.append(
         "r\(index):repository(owner:$o\(index),name:$n\(index)){\(items.joined(separator: " "))}")
-      variables += ["-f", "o\(index)=\(group.owner)", "-f", "n\(index)=\(group.name)"]
+      variables += ["-f", "o\(index)=\(group.repo.owner)", "-f", "n\(index)=\(group.repo.name)"]
     }
     let query =
       "query(\(declarations.joined(separator: ","))){\(fields.joined(separator: " "))}"
@@ -146,8 +146,6 @@ enum GitHubItemQuery {
   private struct RepositoryGroup {
     let repo: GitHubRepoName
     var ids: [GitHubItemID]
-    var owner: String { String(repo.value.split(separator: "/").first ?? "") }
-    var name: String { String(repo.value.split(separator: "/").last ?? "") }
   }
 
   /// リポジトリごとにまとめる（現れた順）。引数と読み取りが同じ別名を引くための、唯一の並び。
@@ -245,7 +243,6 @@ private struct ItemNode: Decodable {
     else { return nil }
     return GitHubBranchRef(repo: repo, branch: headRefName)
   }
-
 }
 
 /// `commits(last:1){nodes{commit{statusCheckRollup{state}}}}`。最後のコミットの CI の集約を読む（結び付いた

@@ -154,11 +154,6 @@ private struct PullRequestHeadRepository: Decodable {
   }
 }
 
-/// 番号で同一性を持つ GitHub の項目。open 一覧を取り直す途中、前回の一覧との境目を探すのに使う。
-protocol GitHubNumbered {
-  var number: Int { get }
-}
-
 /// GraphQL の connection 1 ページ（`nodes` ＋ `pageInfo`）。
 struct GitHubPage<Node: Decodable>: Decodable {
   struct PageInfo: Decodable {
@@ -220,7 +215,7 @@ extension GitHubBranchPR {
 
 /// open 一覧（GraphQL の `issues` / `pullRequests`）の 1 項目。どのリポジトリの項目かは、一覧を取った
 /// リポジトリが持つ。
-struct GitHubOpenItem: Equatable, GitHubNumbered {
+struct GitHubOpenItem: Equatable {
   /// PR だけが持つ値。
   struct PullRequest: Equatable {
     let isDraft: Bool
@@ -262,7 +257,7 @@ extension GitHubOpenItem: Decodable {
       reviewRequests
   }
 
-  /// 更新日時が読めない項目は、壊れた応答として 1 ページごと捨てる（並べ直しの鍵が無い）。
+  /// 更新日時が読めない項目は、壊れた応答として、その一覧の取得を失敗で終える（並べ直しの鍵が無い）。
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     number = try c.decode(Int.self, forKey: .number)

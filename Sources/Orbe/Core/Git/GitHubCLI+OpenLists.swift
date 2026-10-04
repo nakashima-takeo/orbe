@@ -33,6 +33,15 @@ extension GitHubCLI {
 
   static let defaultRepositoryArguments = ["repo", "view", "--json", "nameWithOwner,url"]
 
+  /// open 一覧の上限。開くたびに裏で取り続ける総量の安全弁で、問い合わせの回数（＝レート消費）と、
+  /// 裏で gh が動き続ける時間を抑える。1 ページ `openListPageSize` 件なので issue 10・PR 5 回まで。
+  /// PR はレビュー状態・CI・レビュー依頼の算出で重く、PR の多いリポジトリでは 1 ページ 7〜9 秒かかる
+  /// （`timeout` の内に収まる）。
+  static let openIssueLimit = 1000
+  static let openPullRequestLimit = 500
+  /// 1 ページの件数（GitHub GraphQL の上限）。
+  static let openListPageSize = 100
+
   /// `repo` の open issue 一覧を作成の新しい順に `openIssueLimit` まで、ページが届くたびに `page` へ渡す。
   /// `finished` は最後に 1 回だけ呼ぶ: `true` = 次のページが無い／上限に達した、`false` = 途中で失敗した
   /// （gh 未解決・非 0 終了・1 ページの打ち切り・デコード失敗）。失敗までに渡したページは有効なまま。
@@ -145,14 +154,13 @@ extension GitHubCLI {
   ) {
     queue.async {
       let result: [String]? = self.resolveGh().flatMap { gh in
+        let args = Self.addSelfArguments(as: role, to: item, login: login)
         switch role {
         case .assignee:
-          let response: AssigneesResponse? = self.fetchSync(
-            gh, Self.addSelfArguments(as: role, to: item, login: login), cwd: NSHomeDirectory())
+          let response: AssigneesResponse? = self.fetchSync(gh, args, cwd: NSHomeDirectory())
           return response?.assignees.map(\.login)
         case .reviewer:
-          let response: ReviewersResponse? = self.fetchSync(
-            gh, Self.addSelfArguments(as: role, to: item, login: login), cwd: NSHomeDirectory())
+          let response: ReviewersResponse? = self.fetchSync(gh, args, cwd: NSHomeDirectory())
           return response?.requestedReviewers.map(\.login)
         }
       }
@@ -161,8 +169,7 @@ extension GitHubCLI {
   }
 
   /// 書き込みの引数（REST）。担当者は Issue も PR も同じ issues の口。`gh issue edit` / `gh pr edit` を
-  /// 使わないのは、`pr edit` が checkout を求め、`--add-reviewer` が `@me` を受けず、権限の無い担当者の
-  /// 黙った無視が終了コードに出ないため。
+  /// 使わないのは、`--add-reviewer` が `@me` を受けず、権限の無い担当者の黙った無視が終了コードに出ないため。
   static func addSelfArguments(as role: GitHubSelfRole, to item: GitHubItemID, login: String)
     -> [String]
   {

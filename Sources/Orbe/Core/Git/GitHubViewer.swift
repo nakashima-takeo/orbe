@@ -16,5 +16,4 @@ import Observation
   func record(_ login: String) {
     if self.login != login { self.login = login }
   }
-
 }

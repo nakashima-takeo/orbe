@@ -37,14 +37,6 @@ final class GitHubCLI {
   /// gh 呼び出しの時間上限（ネット待ちのハングを引きずらない）。open 一覧では 1 ページごとにかかる。
   private let timeout: TimeInterval = 15
 
-  /// open 一覧の上限。開くたびに裏で取り続ける総量の安全弁で、問い合わせの回数（＝レート消費）と、
-  /// 裏で gh が動き続ける時間を抑える。1 ページ `openListPageSize` 件なので issue 10・PR 5 回まで。
-  /// PR はレビュー状態の算出で重く、リポジトリによっては 1 ページ 5 秒前後かかる。
-  static let openIssueLimit = 1000
-  static let openPullRequestLimit = 500
-  /// 1 ページの件数（GitHub GraphQL の上限）。
-  static let openListPageSize = 100
-
   /// 打ち切り後に EOF を待つ猶予。pipe の書き込み端を握る子孫がいると EOF は来ないことがあり、
   /// **無期限に待つと、待ちそのものが新しいハングになる**（`GitRunner.terminationGrace` と同じ規範）。
   private static let terminationGrace: TimeInterval = 2
@@ -148,11 +140,10 @@ final class GitHubCLI {
   /// 正式名の問い合わせ引数。owner と name は `-f`（文字列のまま）で渡す——`-F` は数字だけの名前
   /// （`gabrielecirulli/2048`）を整数に変えて、GraphQL の型が合わず失敗し続ける。
   static func resolveRepositoryArguments(_ name: GitHubRepoName) -> [String] {
-    let parts = name.value.split(separator: "/", maxSplits: 1).map(String.init)
-    return [
+    [
       "api", "graphql", "--hostname", "github.com", "-f",
       "query=query($o:String!,$n:String!){repository(owner:$o,name:$n){nameWithOwner}}",
-      "-f", "o=\(parts.first ?? "")", "-f", "n=\(parts.last ?? "")",
+      "-f", "o=\(name.owner)", "-f", "n=\(name.name)",
     ]
   }
 

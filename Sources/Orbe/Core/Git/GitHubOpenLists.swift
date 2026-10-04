@@ -241,7 +241,7 @@ import Observation
   /// 取り直し途中の一覧。今回届いた分の後ろに、前回の一覧のうち「今回分に含まれる要素で前回の並びの
   /// 一番後ろにあるもの」より後ろをつなぐ（重ならなければ前回を全部つなぐ）。境目は前回の並び順だけで
   /// 決める——番号が作成順に振られている前提を置くと、移された issue で崩れる。
-  static func merge<T: GitHubNumbered>(fresh: [T], previous: [T]?) -> [T] {
+  static func merge(fresh: [GitHubOpenItem], previous: [GitHubOpenItem]?) -> [GitHubOpenItem] {
     guard let previous else { return fresh }
     let numbers = Set(fresh.map(\.number))
     let rest = previous.lastIndex { numbers.contains($0.number) }.map { $0 + 1 } ?? 0
