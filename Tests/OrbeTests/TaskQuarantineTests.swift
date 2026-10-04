@@ -69,6 +69,42 @@ final class TaskQuarantineTests: OrbeTestCase {
     try assertQuarantined(#"{"version":1,"nextId":0,"tasks":[]}"#, "1 未満の採番位置")
   }
 
+  private func taskJSON(id: Int, links: String) -> String {
+    String(taskJSON(id: id).dropLast()) + #","links":[\#(links)]}"#
+  }
+
+  private func file(_ tasks: [String]) -> String {
+    #"{"version":1,"nextId":\#(tasks.count + 1),"tasks":[\#(tasks.joined(separator: ","))]}"#
+  }
+
+  /// 同じ項目（リポジトリ＋番号。種別と大小文字は問わない）が 2 つのタスクに付いた原本は、
+  /// ストアの不変条件が守れないので退避する。
+  func testAnItemLinkedToTwoTasksIsQuarantined() throws {
+    let issue = #"{"kind":"issue","repo":"o/n","number":7}"#
+    let sameItemAsPR = #"{"kind":"pr","repo":"O/N","number":7}"#
+    try assertQuarantined(
+      file([taskJSON(id: 1, links: issue), taskJSON(id: 2, links: sameItemAsPR)]),
+      "2 つのタスクに付いた同じ項目")
+  }
+
+  func testTheSameItemTwiceInOneTaskIsQuarantined() throws {
+    let twice = #"{"kind":"issue","repo":"o/n","number":7},{"kind":"pr","repo":"o/n","number":7}"#
+    try assertQuarantined(file([taskJSON(id: 1, links: twice)]), "1 つのタスクに重複した項目")
+  }
+
+  func testAnUnreadableLinkIsQuarantined() throws {
+    for (link, reason) in [
+      (#"{"kind":"issue","repo":"orbe","number":7}"#, "owner/name の形でないリポジトリ"),
+      (#"{"kind":"issue","repo":"o/n","number":0}"#, "1 未満の番号"),
+      (#"{"kind":"discussion","repo":"o/n","number":7}"#, "issue / pr 以外の種別"),
+    ] {
+      try assertQuarantined(file([taskJSON(id: 1, links: link)]), reason)
+      for quarantined in try quarantineFiles() {
+        try FileManager.default.removeItem(at: quarantined)
+      }
+    }
+  }
+
   /// u1 で書かれた最小の tasks.json（今の必須フィールドだけ）は、後の版でも読める。
   ///
   /// 壊れると何が起きるか: 後の単位がタスクに既定値付きの非 Optional フィールドを足すと、合成された

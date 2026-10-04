@@ -12,7 +12,7 @@ import XCTest
 final class TaskStoreTests: OrbeTestCase {
   private let past = Date(timeIntervalSince1970: 1_800_000_000)
 
-  private func draft(_ title: String, _ mutate: (inout TaskDraft) -> Void = { _ in }) -> TaskDraft {
+  func draft(_ title: String, _ mutate: (inout TaskDraft) -> Void = { _ in }) -> TaskDraft {
     var d = TaskDraft(title: title)
     mutate(&d)
     return d
@@ -23,7 +23,7 @@ final class TaskStoreTests: OrbeTestCase {
   }
 
   /// 再起動相当。ディスクから読み直した一覧。
-  private func relaunched() -> TaskStore { TaskStore() }
+  func relaunched() -> TaskStore { TaskStore() }
 
   private func assertRejected(
     _ expected: TaskStoreError, _ body: () throws -> Void,
@@ -34,7 +34,7 @@ final class TaskStoreTests: OrbeTestCase {
     }
   }
 
-  private func assertInvalid(
+  func assertInvalid(
     _ body: () throws -> Void, file: StaticString = #filePath, line: UInt = #line
   ) {
     XCTAssertThrowsError(try body(), file: file, line: line) { error in
