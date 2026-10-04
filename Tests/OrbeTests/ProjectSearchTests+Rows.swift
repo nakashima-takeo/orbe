@@ -128,8 +128,8 @@ extension ProjectSearchTests {
       f.opened().map(\.0), [match("a.txt", 1), match("a.txt", 0)], "離した後に最後の選択だけ")
   }
 
-  /// 離したことが届かないまま（押したまま焦点が移る等）でも、次のリピートでない押下・結果の列から焦点が外れたこと・すぐ開く
-  /// 操作で押し続けは解ける。
+  /// 離したことが届かないまま（押したまま焦点が移る等）でも、次のリピートでない押下とすぐ開く操作で押し続けは解ける。結果の
+  /// 列から焦点が外れたら、待っている開きは捨てる（人の注意が結果から移った）。
   func testAMissedReleaseIsResolved() throws {
     let holding = { (f: RowsFixture) in
       f.search.select(self.match("a.txt", 0))
@@ -148,8 +148,9 @@ extension ProjectSearchTests {
     let blurred = try rowsFixture()
     holding(blurred)
     blurred.search.focusDidChange(.results, focused: false)
+    blurred.search.navigationKeyDidRelease()
     blurred.closeWindow()
-    XCTAssertEqual(blurred.opened().last?.0, match("a.txt", 0), "焦点が外れたら離したものとして開く")
+    XCTAssertEqual(blurred.opened().count, 1, "焦点が外れたら待っている開きを捨てる")
 
     let committed = try rowsFixture()
     holding(committed)

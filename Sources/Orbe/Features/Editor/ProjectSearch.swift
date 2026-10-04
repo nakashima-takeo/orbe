@@ -302,9 +302,9 @@ final class ProjectSearch {
   }
 
   /// 入力欄か結果の列の焦点が入った・抜けた。焦点は片方ずつ入れ替わるので、抜けたほうが今の置き場のときだけ消す（入ったほうの
-  /// 知らせが先に届いても上書きしない）。結果の列から抜けたら、押していたキーは離したものとして扱う（離した知らせは届かない）。
+  /// 知らせが先に届いても上書きしない）。結果の列から抜けたら、待っている ↑↓ の開きを捨てる。
   func focusDidChange(_ area: Area, focused: Bool) {
-    if area == .results, !focused { navigationKeyDidRelease() }
+    if area == .results, !focused { dropPendingNavigation() }
     if focused {
       focusedArea = area
     } else if focusedArea == area {
@@ -312,8 +312,9 @@ final class ProjectSearch {
     }
   }
 
-  /// パネルが隠れた。焦点の置き場も消える（隠れた view は焦点が抜けたことを知らせない）。
+  /// パネルが隠れた。焦点の置き場も消え（隠れた view は焦点が抜けたことを知らせない）、待っている ↑↓ の開きも捨てる。
   func panelDidHide() {
+    dropPendingNavigation()
     focusedArea = nil
   }
 }

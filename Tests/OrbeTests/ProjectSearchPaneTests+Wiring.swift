@@ -7,12 +7,12 @@ import XCTest
 
 /// 面の結線——一致の地は検索パネルが見えている間だけ ⌘F の一致との和で本文と俯瞰に出る、パネルの中のキー（⌥⌘C / W / R・
 /// ⌘↓ / ⌘↑）、エディター面の F4 / ⇧F4、開き方と焦点（シングルクリックは仮のタブで結果に残り、ダブルクリック・Enter は
-/// 普通のタブで本文へ、一致は中央へ、遅れて走るキーの開きは焦点に触らない）、パネルを隠すと焦点は本文へ戻り、焦点の要求は
+/// 普通のタブで本文へ、一致は中央へ、遅れて走るキーの開きは焦点に触らず、焦点が結果から外れれば走らない）、パネルを隠すと焦点は本文へ戻り、焦点の要求は
 /// 後で奪わない、裏のタブの cd では探さない。
 ///
 /// 壊れると何が起きるか。パネルを隠しても地が残る、⌘F の地が消える。パネルのキーが効かない、本文の打鍵を奪う。端末の F4 が
 /// 奪われる、本文の F4 が効かない。クリックで渡るたびに焦点が本文へ飛ぶ、タブが増える。↓ を離してすぐ本文・端末へ移った
-/// 焦点が結果へ引き戻される。隠れたパネルに焦点が取り残されて打鍵が消える。見ていないタブが cd のたびに根の全体を探す。
+/// 焦点が結果へ引き戻される、移った先で待っていた一致が開く。隠れたパネルに焦点が取り残されて打鍵が消える。見ていないタブが cd のたびに根の全体を探す。
 extension ProjectSearchPaneTests {
   typealias RowID = ProjectSearch.RowID
 
@@ -164,8 +164,8 @@ extension ProjectSearchPaneTests {
     XCTAssertTrue(editor.preview === hosted.pane.document)
   }
 
-  /// ↓ を押して離した直後に焦点を本文・端末へ移しても、遅れて走る開きは開くだけで焦点を結果へ引き戻さない。
-  func testADelayedArrowOpenLeavesTheFocusWhereItIs() throws {
+  /// ↓ を押して離した直後に焦点を本文・端末へ移すと、待っていた開きは捨てて（人の注意が結果から移った）焦点も動かさない。
+  func testMovingTheFocusAwayDropsTheWaitingArrowOpen() throws {
     let hosted = try host(["a.txt": "needle\nneedle\n"])
     searchAll(hosted, "needle")
     let list = try list(hosted)
@@ -179,19 +179,18 @@ extension ProjectSearchPaneTests {
       hosted.search.select(RowID(path: "a.txt", match: nil))
       RunLoop.main.run(until: Date().addingTimeInterval(ProjectSearch.navigationWindow * 2))
       list.keyDown(with: down)
-      XCTAssertEqual(hosted.pane.document?.surface.selectedRange, NSRange(location: 0, length: 6))
+      let first = NSRange(location: 0, length: 6)
+      XCTAssertEqual(hosted.pane.document?.surface.selectedRange, first)
       list.keyDown(with: down)  // 窓の中: 待つ
       list.keyUp(with: .keyRelease(down.characters!))
       move()
       let responder = hosted.window.firstResponder
-      pumpMain(
-        until: { hosted.pane.document?.surface.selectedRange == NSRange(location: 7, length: 6) },
-        "\(name): 窓が閉じたら最後の選択を開く")
       XCTAssertTrue(
-        holds(for: ProjectSearch.navigationWindow * 2) {
-          hosted.window.firstResponder === responder
+        holds(for: ProjectSearch.navigationWindow * 3) {
+          hosted.pane.document?.surface.selectedRange == first
+            && hosted.window.firstResponder === responder
         },
-        "\(name): 焦点は動かない")
+        "\(name): 待っていた開きは走らず、焦点も動かない")
     }
   }
 
@@ -218,6 +217,7 @@ extension ProjectSearchPaneTests {
     list.keyUp(with: .keyRelease(arrow))
     pumpMain(
       until: { hosted.pane.document?.url == hosted.repo.url("c.txt") }, "離したら最後の選択を開く")
+    XCTAssertTrue(hosted.window.firstResponder === list, "遅れて開いても焦点は列のまま")
   }
 
   /// レールの「検索」は検索パネルへ切り替えて入力欄に焦点を入れ、出しているときに押すと閉じる。

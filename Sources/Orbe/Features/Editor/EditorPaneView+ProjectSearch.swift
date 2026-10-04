@@ -89,18 +89,32 @@ extension EditorPaneView {
     pushFindGround()
   }
 
-  /// F4 / ⇧F4 を拾う口（窓に付いている間だけ）。修飾の無いファンクションキーは key equivalent として pane に届かず
-  /// テキスト面の keyDown へ直行するので、アプリがイベントを配る手前で見る（テキスト面の契約は変えない）。
-  func updateStepKeyMonitor() {
+  /// アプリがイベントを配る手前で見る口（窓に付いている間だけ）。F4 / ⇧F4 を拾う——修飾の無いファンクションキーは key
+  /// equivalent として pane に届かずテキスト面の keyDown へ直行するので（テキスト面の契約は変えない）。結果の列の外を押したら、
+  /// 待っている ↑↓ の開きを捨てる——人の注意が結果から移ったので、後から前の選択が開いて押したものを入れ替えない（焦点が
+  /// 列に残る押下——タブの × など——も含む）。
+  func updateEventMonitor() {
     if window == nil {
-      stepKeyMonitor.map(NSEvent.removeMonitor)
-      stepKeyMonitor = nil
-    } else if stepKeyMonitor == nil {
-      stepKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-        guard let self, event.window === window, handleStepKey(event) else { return event }
-        return nil
+      eventMonitor.map(NSEvent.removeMonitor)
+      eventMonitor = nil
+    } else if eventMonitor == nil {
+      eventMonitor = NSEvent.addLocalMonitorForEvents(
+        matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
+      ) { [weak self] event in
+        guard let self, event.window === window else { return event }
+        if event.type != .keyDown {
+          if !pressIsInResults(event) { projectSearch.dropPendingNavigation() }
+          return event
+        }
+        return handleStepKey(event) ? nil : event
       }
     }
+  }
+
+  /// 押した点が検索結果の列（スクロールバーを含む）の上か。
+  private func pressIsInResults(_ event: NSEvent) -> Bool {
+    guard let view = window?.contentView?.hitTest(event.locationInWindow) else { return false }
+    return view.isDescendant(of: searchResults)
   }
 
   /// エディター面（pane の配下）に焦点があるときの F4 / ⇧F4: 次・前の一致を開く（結果が無ければ素通し）。検索パネルが

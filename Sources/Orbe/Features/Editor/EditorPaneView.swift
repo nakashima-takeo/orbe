@@ -48,8 +48,8 @@ final class EditorPaneView: NSView {
   let projectSearch: ProjectSearch
   /// 検索結果の列。検索パネルが隠れている間も持ち、出し直すたびに作り直さない。
   let searchResults: RowList<SearchResultsSource>
-  /// F4 / ⇧F4 を拾うイベントの監視（窓に付いている間だけ）。
-  var stepKeyMonitor: Any?
+  /// F4 / ⇧F4 と結果の列の外の押下を拾うイベントの監視（窓に付いている間だけ）。
+  var eventMonitor: Any?
   /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
   private(set) var sidebar = EditorSidebarState() {
     didSet { observeSidebar() }
@@ -107,7 +107,7 @@ final class EditorPaneView: NSView {
   required init?(coder: NSCoder) { fatalError("not supported") }
 
   deinit {
-    stepKeyMonitor.map(NSEvent.removeMonitor)
+    eventMonitor.map(NSEvent.removeMonitor)
   }
 
   override var isFlipped: Bool { true }
@@ -336,7 +336,7 @@ final class EditorPaneView: NSView {
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
     updateLiveness()
-    updateStepKeyMonitor()
+    updateEventMonitor()
   }
 
   override func viewDidHide() {
