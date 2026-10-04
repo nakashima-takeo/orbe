@@ -19,8 +19,25 @@ extension WorktreePaletteDataProvider {
   }
 
   /// 先頭の欄の行き先。決まる順は、文脈 → タスクの worktree が今の一覧にあるか → 主の Issue・PR が手元の
-  /// リポジトリから扱えるか。
+  /// リポジトリから扱えるか → そのブランチが手元にあるか（無ければ fetch の着地まで決めない）。
   func taskTarget(_ inputs: WorktreePaletteTaskInputs) -> WorktreePaletteTaskTarget {
+    let target = resolvedTaskTarget(inputs)
+    // 提示時の fetch がまだ着地していなければ、手元に無いブランチは fetch で現れうる。今決めると、PR は欄なしで
+    // 今の worktree に、Issue は push 済みのブランチと分岐した作成行に決まってしまう。
+    guard case .branch(let name, _, let remotes) = target, !remoteFetchLanded,
+      !hasBranch(name, on: remotes)
+    else { return target }
+    return .pending
+  }
+
+  /// 名前のブランチが、ローカルブランチ（worktree のブランチを含む）か `remotes` のリモートブランチとして手元にあるか。
+  private func hasBranch(_ name: String, on remotes: [String]) -> Bool {
+    localBranches.contains { $0.name == name }
+      || remoteBranches.contains { branch in remotes.contains { "\($0)/\(name)" == branch.name } }
+  }
+
+  private func resolvedTaskTarget(_ inputs: WorktreePaletteTaskInputs) -> WorktreePaletteTaskTarget
+  {
     guard inputs.taskID != nil, repo != nil else { return .none }
     if let worktree = inputs.worktree,
       let match = worktrees.first(where: {
