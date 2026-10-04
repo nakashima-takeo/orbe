@@ -141,7 +141,8 @@ enum TaskPaletteError: Error, Equatable {
     return Set(store.tasks.filter { ids.contains($0.id) }.flatMap { $0.links.map(\.item) })
   }
 
-  /// 出ている行の結び付きが変わったとき（agent の変更・完了の欄の開閉・範囲・入力）、まだ答えの無い項目を取る。
+  /// 出ている行の結び付きが変わったとき（agent の変更・完了の欄の開閉・範囲・入力）、この開いている間に
+  /// まだ取りに行っていない項目を取る。
   func ensureVisibleItems() {
     githubItems.ensure(visibleLinkIDs)
   }

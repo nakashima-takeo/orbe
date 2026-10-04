@@ -5,7 +5,8 @@ import Observation
 /// 持ち、次に開いたときは前回の答えで先に描く。取得の失敗（gh が無い・未認証・時間切れ・オフライン）は、
 /// それまでの答えを据え置くだけで外に出さない。
 ///
-/// 取りに行く入口は 2 つ。`refresh` は渡した項目を取り直し、`ensure` はまだ答えも試行も無い項目だけを取る。
+/// 取りに行く入口は 2 つ。`refresh` は渡した項目を取り直して試行の記録を始め直し、`ensure` は前回の
+/// `refresh` 以降にまだ試していない項目だけを取る（答えがあっても、この開いている間に試していなければ取る）。
 /// 進行中の取得に含まれる項目は重ねて頼まない（合流）。試行の記録は次の `refresh` まで残すので、取れなかった
 /// 項目を `ensure` は叩き直さない（gh の無い環境で、画面の変化のたびに gh を起こさない）。
 @Observable final class GitHubItemCache {
@@ -39,9 +40,9 @@ import Observation
     request(ids.subtracting(inFlight))
   }
 
-  /// まだ答えも試行も無い項目だけを取る。
+  /// 前回の `refresh` 以降にまだ試していない項目だけを取る。
   func ensure(_ ids: Set<GitHubItemID>) {
-    request(ids.filter { answers[$0] == nil && !tried.contains($0) && !inFlight.contains($0) })
+    request(ids.filter { !tried.contains($0) && !inFlight.contains($0) })
   }
 
   private func request(_ ids: Set<GitHubItemID>) {

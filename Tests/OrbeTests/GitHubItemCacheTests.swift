@@ -85,14 +85,15 @@ final class GitHubItemCacheTests: OrbeTestCase {
     XCTAssertEqual(cache.viewerLogin, "me")
   }
 
-  /// `ensure` は答えも試行も無い項目だけを頼む。取れなかった項目は次の `refresh` まで頼み直さない。
+  /// `ensure` は前回の `refresh` 以降にまだ試していない項目だけを頼む。取れなかった項目は次の `refresh` まで
+  /// 頼み直さない。
   func testEnsureAsksOnlyForUntriedItemsUntilTheNextRefresh() {
     let fetches = PendingFetches()
     let cache = GitHubItemCache(answers: [a: found("A")], fetch: fetches.fetch)
 
     cache.ensure([a, b])
-    XCTAssertEqual(fetches.requested, [[b]], "答えのある項目は頼まない")
-    fetches.answer(0, [b], nil)
+    XCTAssertEqual(fetches.requested, [[a, b]], "答えがあっても、まだ試していない項目は頼む")
+    fetches.answer(0, [a, b], nil)
 
     cache.ensure([a, b, c])
     XCTAssertEqual(fetches.requested.last, [c], "取れなかった項目は ensure では頼み直さない")
