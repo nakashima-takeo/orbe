@@ -115,6 +115,18 @@ extension WorktreePaletteTests {
     XCTAssertEqual(model.taskInputs, .none, "先頭の欄の入力も消える（provider が欄を外す）")
   }
 
+  /// 札とフッターはタスクを主の番号で呼び、結び付きが無ければタイトルで呼ぶ。
+  func testTheTaskIsCalledByItsPrimaryNumberOrElseByItsTitle() {
+    let l10n = LocalizationStore(language: .ja)
+    let linked = TaskPaletteSamples.task(1, "設計") {
+      $0.links = [TaskPaletteSamples.link(.issue, 221), TaskPaletteSamples.link(.pr, 230)]
+    }
+    let bare = TaskPaletteSamples.task(2, "請求書を送る")
+
+    XCTAssertEqual(WorktreePaletteTaskText.name(linked, l10n), "#221")
+    XCTAssertEqual(WorktreePaletteTaskText.name(bare, l10n), "『請求書を送る』")
+  }
+
   // MARK: - worktree の行のタスク
 
   /// いつもの ⌘T（文脈なし）でも、worktree の行にその worktree を持つタスクと agent が出る。

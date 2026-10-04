@@ -119,4 +119,20 @@ final class GitHubItemCacheTests: OrbeTestCase {
     cache.refresh([a])
     XCTAssertEqual(fetches.requested.last, [a], "答えが届いた後は取り直せる")
   }
+
+  /// 答えを待っているのは、まだ試していない項目と取得中の項目だけ。試して取れなかった項目（gh が無い等）は
+  /// 待たない——タスクから開いた ⌘T は PR のブランチ名を待つ間 ↵ を預かるので、ここが待ち続けると ↵ が効かない。
+  func testOnlyUntriedAndInFlightItemsAreAwaitingAnAnswer() {
+    let fetches = PendingFetches()
+    let cache = GitHubItemCache(fetch: fetches.fetch)
+    XCTAssertTrue(cache.isAwaitingAnswer(a), "まだ試していない")
+
+    cache.ensure([a, b])
+    XCTAssertTrue(cache.isAwaitingAnswer(a), "取得中")
+
+    fetches.answer(0, [a], nil)
+    fetches.answer(0, [b], batch([b: found("B")]))
+    XCTAssertFalse(cache.isAwaitingAnswer(a), "試して取れなかった")
+    XCTAssertFalse(cache.isAwaitingAnswer(b), "答えがある")
+  }
 }
