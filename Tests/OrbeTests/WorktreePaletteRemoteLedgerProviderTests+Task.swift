@@ -11,12 +11,12 @@ import XCTest
 /// 今の worktree で決まり、今の worktree がタスクに付いて進行中になる。同じ行が欄と下の一覧に 2 度出る。
 extension WorktreePaletteRemoteLedgerProviderTests {
   /// 撃たれた GitHub の値の取得の答え口。
-  private final class ItemFetches {
+  final class ItemFetches {
     private(set) var batches: [([GitHubItemID], GitHubItemsBatch?) -> Void] = []
     var fetch: GitHubItemCache.Fetch { { _, batch in self.batches.append(batch) } }
   }
 
-  private func makeTaskProvider(
+  func makeTaskProvider(
     _ task: TaskItem, items: GitHubItemCache = GitHubItemCache(fetch: { _, _ in })
   ) -> (WorktreePaletteModel, WorktreePaletteDataProvider) {
     let store = TaskStore(
@@ -28,20 +28,20 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     return (model, provider)
   }
 
-  private func task(_ mutate: (inout TaskItem) -> Void) -> TaskItem {
+  func task(_ mutate: (inout TaskItem) -> Void) -> TaskItem {
     TaskPaletteSamples.task(7, "fetch 中に進捗が出ない", .todo, mutate)
   }
 
-  private func link(_ kind: GitHubItemKind, _ repo: String, _ number: Int) -> TaskLink {
+  func link(_ kind: GitHubItemKind, _ repo: String, _ number: Int) -> TaskLink {
     TaskPaletteSamples.link(kind, number, repo: repo)
   }
 
   /// 欄が決まった（まだ決まらない間ではない）状態まで待つ。
-  private func settle(_ model: WorktreePaletteModel) -> Bool {
+  func settle(_ model: WorktreePaletteModel) -> Bool {
     pump { model.hasLoadedOnce && !model.taskTargetPending && model.newBranchRules != nil }
   }
 
-  private func taskSection(_ model: WorktreePaletteModel) -> WorktreePaletteSection? {
+  func taskSection(_ model: WorktreePaletteModel) -> WorktreePaletteSection? {
     model.visibleSections.first { if case .task = $0.title { true } else { false } }
   }
 
@@ -100,9 +100,10 @@ extension WorktreePaletteRemoteLedgerProviderTests {
   }
 
   /// PR のブランチ名が届くまで欄は決まらず、その間の ↵ は預かる。届いたら、その PR のブランチ（ローカルに
-  /// あればそれ）の行が欄に出て、預かった ↵ がその行で効く。
+  /// あり、push 先が head と同じリポジトリならそれ）の行が欄に出て、預かった ↵ がその行で効く。
   func testEnterBeforeThePullRequestsBranchArrivesActsOnThatBranchOnceItDoes() throws {
     addRemote("origin", "me/r")
+    try answer("me/r", found: "me/r")
     XCTAssertTrue(git(["branch", "docs/readme-en"]).isSuccess)
     let pr = link(.pr, "me/r", 230)
     let fetches = ItemFetches()
@@ -132,6 +133,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
         ]))
     provider.rebuild()
 
+    XCTAssertTrue(pump { !executed.isEmpty })
     XCTAssertEqual(executed, [.localBranch(name: "docs/readme-en")], "届いたブランチで効く")
     let row = try XCTUnwrap(taskSection(model)?.items.first)
     XCTAssertEqual(row.pullRequest, 230, "PR のブランチと分かる")

@@ -108,7 +108,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     let parts = repository.split(separator: "/").map(String.init)
     return #"{"number":\#(number),"headRefName":"\#(head)","state":"\#(state)","#
       + #""baseRefName":"\#(base)","headRepositoryOwner":{"login":"\#(parts[0])"},"#
-      + #""headRepository":{"name":"\#(parts[1])"}"# + (url.map { #","url":"\#($0)"}"# } ?? "}")
+      + #""headRepository":{"name":"\#(parts[1])"}"# + (url.map { #","url":"\#($0)""# } ?? "") + "}"
   }
 
   func serveBranchPullRequests(_ head: String, _ json: String) throws {
