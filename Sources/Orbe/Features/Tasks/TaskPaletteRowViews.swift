@@ -110,7 +110,7 @@ struct TaskPaletteList: View {
     }
   }
 
-  /// タスクの行。未完了の行は掴んで同じ欄の中で動かせ、掴んだ行は指に付いて動き（欄の外へは出ない）、
+  /// タスクの行。未完了の行は掴んで同じ欄の中で動かせ、掴んだ行は指に付いて浮き（欄の外へは出ない）、
   /// 落ちる位置に線を出す。ほかの行はずらさない。
   private func taskRow(_ task: TaskPaletteTaskRow) -> some View {
     let grabbed = model.drag.session.flatMap { $0.taskID == task.id ? $0 : nil }
@@ -120,8 +120,8 @@ struct TaskPaletteList: View {
       onToggle: { model.toggleDone(task.id) },
       onHoverEnter: { model.hoverSelect(.task(task.id)) }
     )
+    .background { if grabbed != nil { floatingGround } }
     .offset(y: grabbed?.offset ?? 0)
-    .opacity(grabbed == nil ? 1 : 0.85)
     // 線の位置は掴んだ行の元の場所から測る（offset はレイアウトの枠を動かさない）。
     .overlay(alignment: .top) {
       if let y = grabbed?.indicatorY {
@@ -134,6 +134,15 @@ struct TaskPaletteList: View {
     }
     .zIndex(grabbed == nil ? 0 : 1)
     .gesture(dragGesture(task.id), including: task.isDone ? .subviews : .all)
+  }
+
+  /// 掴んだ行の地。浮いた面（ポップアップ）の面色を不透明な bgBase に重ね、下の行を透かさずカードの地に
+  /// 揃える。選択の塗りはこの上に行が自分で重ねる。
+  private var floatingGround: some View {
+    let shape = RoundedRectangle(cornerRadius: Theme.Radius.row)
+    return shape.fill(Color.theme.bgBase)
+      .overlay(shape.fill(Color(nsColor: Theme.Glass.surface(.popup))))
+      .elevation(.popup)
   }
 
   private func dragGesture(_ id: Int) -> some Gesture {
