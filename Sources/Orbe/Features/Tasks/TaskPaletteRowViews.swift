@@ -13,10 +13,7 @@ struct TaskPaletteList: View {
     ScrollViewReader { proxy in
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 0) {
-          ForEach(rows.indices, id: \.self) { index in
-            row(rows[index])
-              .id(rows[index].selectableID.map(AnyHashable.init) ?? AnyHashable(index))
-          }
+          ForEach(rows) { row($0) }
         }
         .padding(.top, Theme.Space.tick)
         .padding(.bottom, Theme.Space.beat)
@@ -30,7 +27,7 @@ struct TaskPaletteList: View {
   }
 
   private func scrollToSelection(_ proxy: ScrollViewProxy) {
-    if let id = model.selectedID { proxy.scrollTo(AnyHashable(id)) }
+    if let id = model.selectedID { proxy.scrollTo(TaskPaletteRow.Identity.selectable(id)) }
   }
 
   @ViewBuilder private func row(_ row: TaskPaletteRow) -> some View {
