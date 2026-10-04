@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 /// タスク画面のカード本体。ヘッダー（❯＋入力欄・タブ・範囲）＋本体（左に一覧・右に詳細。GitHub タブは空）
@@ -74,7 +73,7 @@ struct TaskPaletteCard: View {
           color: Color.theme.textMuted
         )
         .onSubmit { model.submit() }
-        .onKeyPress { model.handleFieldKey($0, composing: Self.isComposing) }
+        .onKeyPress { model.handleFieldKey($0, composing: IMEComposition.isActive) }
         // 詳細に居る間は入力欄自身にクリックを渡さず（渡すと焦点だけが入力欄へ移り、モデルの居場所と
         // 食い違う）、上に被せた面で受けて一覧へ戻る操作としてモデルに伝える。焦点はモデルから写る。
         .allowsHitTesting(model.focusTarget == .field)
@@ -112,13 +111,6 @@ struct TaskPaletteCard: View {
     .padding(.leading, Theme.Space.phrase)
     .padding(.trailing, Theme.Space.span)
     .frame(height: 56)
-  }
-
-  /// 焦点を持つ入力欄の field editor に未確定の文字（日本語入力の変換中）があるか。キーを受けた時点で、
-  /// そのキーが届いた窓（＝カード自身の窓）の first responder を直接確かめる（`imePlaceholder` の監視と
-  /// 同じ情報源）。
-  static var isComposing: Bool {
-    (NSApp.currentEvent?.window?.firstResponder as? NSTextView)?.hasMarkedText() ?? false
   }
 }
 

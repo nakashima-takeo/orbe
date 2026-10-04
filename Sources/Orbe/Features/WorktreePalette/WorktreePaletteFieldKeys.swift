@@ -4,9 +4,12 @@ import SwiftUI
 /// 効かなくなるので、⇥・⇧⇥ はどちらの画面でも握る。矢印は単一の catch-all で ⌘ 有無を分ける
 /// （bare ハンドラが ⌘↑ を食う不確実性を構造で排除する共通規約）。入力ロック中はどれも握り潰す。
 enum WorktreePaletteFieldKeys {
-  static func handle(_ press: KeyPress, model: WorktreePaletteModel) -> KeyPress.Result {
+  /// `composing` は日本語入力の変換中か（`IMEComposition.isActive`）。
+  static func handle(_ press: KeyPress, model: WorktreePaletteModel, composing: Bool)
+    -> KeyPress.Result
+  {
     switch model.mode {
-    case .list: list(press, model)
+    case .list: list(press, model, composing: composing)
     case .basePicker: basePicker(press, model)
     case .clean, .refresh: .ignored
     }
@@ -17,7 +20,9 @@ enum WorktreePaletteFieldKeys {
     press.key.character == "\u{19}"
   }
 
-  private static func list(_ press: KeyPress, _ model: WorktreePaletteModel) -> KeyPress.Result {
+  private static func list(_ press: KeyPress, _ model: WorktreePaletteModel, composing: Bool)
+    -> KeyPress.Result
+  {
     let locked = model.isLocked
     if isBacktab(press) {
       if !locked { model.cycleBase() }
@@ -34,7 +39,8 @@ enum WorktreePaletteFieldKeys {
       if !locked { model.onDismiss() }
     case _ where isBackspace(press):
       // 入力欄が空の ⌫ はタスクの札を外す（文字があるときは文字を消す）。押し続けたキーリピートでは外さない。
-      guard model.query.isEmpty, model.taskContextID != nil else { return .ignored }
+      // 変換中の文字は入力欄の文字に入らないので、変換中の ⌫ は変換に使わせる。
+      guard !composing, model.query.isEmpty, model.taskContextID != nil else { return .ignored }
       if press.phase == .down { model.clearTaskContext() }
     default:
       return .ignored

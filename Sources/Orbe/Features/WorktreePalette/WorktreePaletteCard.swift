@@ -175,7 +175,9 @@ struct WorktreePaletteCard: View {
       .onChange(of: model.query) { model.onQueryChanged() }
       // 実行＝onSubmit（IME 変換確定の Enter では発火しない＝誤爆しない）。行タップと同じ決定 funnel。
       .onSubmit { model.submit() }
-      .onKeyPress { WorktreePaletteFieldKeys.handle($0, model: model) }
+      .onKeyPress {
+        WorktreePaletteFieldKeys.handle($0, model: model, composing: IMEComposition.isActive)
+      }
   }
 
   /// モードに応じた入力の行き先。一覧の入力ロック中（作成中・預かった ↵ の待ち）は打鍵を握り潰す
