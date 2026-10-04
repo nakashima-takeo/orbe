@@ -2,7 +2,8 @@ import Foundation
 import OrbeEditorCore
 
 /// 出現の強調の状態（pane ごと）——選択文字列の他の出現と、キャレットの語の出現。規則は Core（`Occurrences`）、面への
-/// 作用は契約（強調の地）だけ。
+/// 作用は契約（強調の地）だけ。選択文字列の出現は、全カーソルの選択と続いている ⌘D の問いから Core の問い
+/// （`SearchQuestion`）を決めて出す——⌘D が次に選ぶものと同じ規則。語の出現は主のキャレットの語。
 ///
 /// 出現は文書の写しから裏で探し（`EditorDocument.analyze`）、届いた結果のうち今の問いのものだけを出す。選択文字列の出現は
 /// 選択の変化で即時に頼む（本文を変える操作——打鍵・undo・大文字化・丸ごと置き換え——はどれも本文の変化の後に選択の
@@ -98,14 +99,21 @@ final class EditorOccurrences {
 
   private func updateSelectionOccurrences() {
     guard let document else { return }
-    let selection = document.surface.selectedRange
-    guard selection.length > 0, selection.length <= Occurrences.maxSelectionLength else {
+    let selections = document.surface.cursorSelections
+    let continuation = document.surface.searchContinuation
+    // 長すぎる選択は文字列にする前に断る（大きな選択を持ったままの ⌥クリック・⌥ドラッグで、選択の変化ごとに全文を写さない）。
+    guard
+      continuation != nil
+        || selections.allSatisfy({ $0.length <= Occurrences.maxSelectionLength }),
+      let question = SearchQuestion.of(selections, continuing: continuation, in: document.text),
+      (question.needle as NSString).length <= Occurrences.maxSelectionLength
+    else {
       selectionRequest = nil
       setSelectionOccurrences([])
       return
     }
     let request = AnalysisRequest.selectionOccurrences(
-      selection: selection, findNeedle: findNeedle, findFieldFocused: findFieldFocused)
+      question, selections: selections, findNeedle: findNeedle, findFieldFocused: findFieldFocused)
     guard request != selectionRequest else { return }
     selectionRequest = request
     document.analyze(request)

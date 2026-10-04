@@ -191,28 +191,41 @@ extension ProjectSearch {
     }
   }
 
-  /// 焦点の文書の編集に選択の位置を追従させる（`results.track` の前に呼ぶ）。選んだ一致が編集に掛かれば、その位置の直前に
-  /// いる扱いにする。
-  func trackAnchor(_ path: String, _ edit: TextEdit) {
+  /// 焦点の文書の編集（当てた順）に選択の位置を追従させる（`results.track` の前に呼ぶ）。選んだ一致が編集に掛かれば、その
+  /// 位置の直前にいる扱いにする。
+  func trackAnchor(_ path: String, _ edits: [TextEdit]) {
     guard let anchor, anchor.path == path else { return }
+    enum Place {
+      case match(NSRange)
+      case gap(Int)
+    }
+    var place: Place
     switch anchor {
     case .match(_, .offset(let offset)):
-      guard let span = results[path]?.document,
-        let range = span.ranges.first(where: { $0.location == offset })
+      guard let range = results[path]?.document?.ranges.first(where: { $0.location == offset })
       else { return }
-      if let moved = edit.track([range]).first {
-        self.anchor = .match(path, .offset(moved.location))
-      } else {
-        self.anchor = .gap(path, .offset(min(range.location, edit.range.location)))
-      }
+      place = .match(range)
     case .gap(_, .offset(let offset)):
-      let delta = edit.replacementLength - edit.range.length
-      let moved =
-        offset <= edit.range.location
-        ? offset : offset >= NSMaxRange(edit.range) ? offset + delta : edit.range.location
-      self.anchor = .gap(path, .offset(moved))
+      place = .gap(offset)
     default:
       return
+    }
+    for edit in edits {
+      switch place {
+      case .match(let range):
+        place =
+          edit.track([range]).first.map { .match($0) }
+          ?? .gap(min(range.location, edit.range.location))
+      case .gap(let offset):
+        place = .gap(
+          offset <= edit.range.location
+            ? offset : offset >= NSMaxRange(edit.range) ? offset + edit.change : edit.range.location
+        )
+      }
+    }
+    switch place {
+    case .match(let range): self.anchor = .match(path, .offset(range.location))
+    case .gap(let offset): self.anchor = .gap(path, .offset(offset))
     }
   }
 

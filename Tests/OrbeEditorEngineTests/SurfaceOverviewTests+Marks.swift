@@ -91,6 +91,59 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
       "右に続かなければ無い")
   }
 
+  /// キャレットの印は全カーソルぶん出る。
+  func testEveryCursorGetsACaretMark() throws {
+    let opened = try open(
+      (0..<200).map { "line \($0)\n" }.joined(), size: CGSize(width: 800, height: 400),
+      style: style)
+    let rope = opened.document.text
+    let surface = opened.surface
+    let bar = surface.surfaceLayout.verticalScrollbar
+    let ruler = OverviewRuler(
+      lineCount: rope.lineCount, visibleLines: surface.viewportLines.visible, height: bar.height,
+      scale: 2)
+    surface.inputScope {
+      surface.editor.select(
+        CursorList(Cursor(rope.lineStart(40)), others: [Cursor(rope.lineStart(160))]),
+        reveal: .none)
+    }
+    let shot = try pixelShot(opened)
+    let marked = { (row: Int) -> Bool in
+      let span = ruler.caret(row: row)
+      return shot.rgb(bar.midX, bar.minY + CGFloat(span.y1 + span.y2) / 4) == [255, 255, 255]
+    }
+    XCTAssertTrue(marked(40), "主")
+    XCTAssertTrue(marked(160), "他のカーソル")
+    XCTAssertFalse(marked(100))
+  }
+
+  /// 本文が丸ごと置き換わって行の数が変わらなくても、キャレットの印はキャレットの今の行に出る。
+  func testTheCaretMarkFollowsTheTextAfterAReplacement() throws {
+    let lines = Array(repeating: "xxxxxxxx", count: 200)
+    let opened = try open(
+      lines.joined(separator: "\n"), size: CGSize(width: 800, height: 400), style: style)
+    let surface = opened.surface
+    let bar = surface.surfaceLayout.verticalScrollbar
+    let caret = opened.document.text.lineStart(150)
+    surface.selectedRange = NSRange(location: caret, length: 0)
+    let ruler = OverviewRuler(
+      lineCount: 200, visibleLines: surface.viewportLines.visible, height: bar.height, scale: 2)
+    let marked = { (row: Int) throws -> Bool in
+      let span = ruler.caret(row: row)
+      return try self.pixelShot(opened).rgb(bar.midX, bar.minY + CGFloat(span.y1 + span.y2) / 4)
+        == [255, 255, 255]
+    }
+    XCTAssertTrue(try marked(150), "前提")
+    var longer = lines
+    longer[0] = String(repeating: "y", count: 900)
+    surface.replaceAll(with: longer.joined(separator: "\n"))
+    let row = opened.document.text.row(containing: surface.caretLocation)
+    XCTAssertEqual(opened.document.text.lineCount, 200, "前提: 行の数は同じ")
+    XCTAssertLessThan(row, 100, "前提: キャレットの行が変わった")
+    XCTAssertTrue(try marked(row), "今の行に出る")
+    XCTAssertFalse(try marked(150), "前の行には残らない")
+  }
+
   /// キャレットの印は選択の動く側の端（キャレット）の行に出る——後ろへ伸ばせば終わりの行、前へ伸ばせば先頭の行。
   func testTheCaretMarkFollowsTheMovingEndOfTheSelection() throws {
     let opened = try open(

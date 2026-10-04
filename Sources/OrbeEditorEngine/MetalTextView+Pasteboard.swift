@@ -6,11 +6,15 @@ import OrbeEditorCore
 extension MetalTextView {
   /// 行ごと写した印（Orbe の型。中身は空）。
   static let entireLineType = NSPasteboard.PasteboardType("dev.orbe.editor.line")
+  /// 写した断片（Orbe の型。選択を 2 つ以上写したときの、文書の順の文字列の列）。他のアプリが書けば型ごと消えるので、
+  /// 古い断片を取り違えない。
+  static let piecesType = NSPasteboard.PasteboardType("dev.orbe.editor.pieces")
 
   // MARK: - コピー・カット・ペースト
 
-  /// 選択を写す。選択が空ならキャレットの行を写し、行ごと写した印を付ける。色の付く文書で、写したものが本文の 1 つの範囲
-  /// （選択 1 つか、選択が空のときの 1 行）で 64KB 未満なら、構文色付きの HTML も載せる。
+  /// 選択を写す。選択が空ならキャレットの行を写し、行ごと写した印を付ける。選択を 2 つ以上写せば断片も載せる。色の付く
+  /// 文書で、写したものが本文の 1 つの範囲（選択 1 つか、選択が空のときの 1 行）で 64KB 未満なら、構文色付きの HTML も
+  /// 載せる。
   @objc func copy(_ sender: Any?) {
     surface?.inputScope { writeCopy() }
   }
@@ -24,7 +28,7 @@ extension MetalTextView {
   }
 
   /// 平文を貼る（Finder でコピーしたファイルならパス）。改行は文書の作法へ揃え、行ごと写した文字列は条件が揃えば行の上へ
-  /// 入れる。RTF と HTML は読まない。
+  /// 入れ、写した断片か行の数がカーソルの数と同じなら 1 つずつ配る。RTF と HTML は読まない。
   @objc func paste(_ sender: Any?) {
     guard let surface else { return }
     surface.input {
@@ -35,7 +39,9 @@ extension MetalTextView {
       }
       guard let string = pasteboard.string(forType: .string) else { return }
       surface.perform(
-        .paste(string, entireLine: pasteboard.availableType(from: [Self.entireLineType]) != nil))
+        .paste(
+          string, entireLine: pasteboard.availableType(from: [Self.entireLineType]) != nil,
+          pieces: pasteboard.propertyList(forType: Self.piecesType) as? [String]))
     }
   }
 
@@ -60,10 +66,12 @@ extension MetalTextView {
     }
     var types: [NSPasteboard.PasteboardType] = [.string]
     if copied.entireLine { types.append(Self.entireLineType) }
+    if copied.pieces != nil { types.append(Self.piecesType) }
     if html != nil { types.append(.html) }
     pasteboard.declareTypes(types, owner: nil)
     pasteboard.setString(copied.text, forType: .string)
     if copied.entireLine { pasteboard.setData(Data(), forType: Self.entireLineType) }
+    if let pieces = copied.pieces { pasteboard.setPropertyList(pieces, forType: Self.piecesType) }
     // 文字コードの指定が無いと、Cocoa のリッチテキストの貼り先は HTML を UTF-8 でなく読んで化ける（Chromium と同じく、
     // 書く側で前に置く）。
     if let html { pasteboard.setString("<meta charset='utf-8'>" + html, forType: .html) }

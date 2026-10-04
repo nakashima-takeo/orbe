@@ -89,4 +89,78 @@ enum Editing {
       [command], on: marked, indentation: indentation, lineBreak: lineBreak,
       killBuffer: killBuffer)
   }
+
+  /// カーソルを何本でも書いた本文（「|」がキャレット、「[」「]」が選択で `[` が動かない側）の、本文と状態。列の並びは文書の
+  /// 順で、`primary` 番目（文書の順）が主になって先頭に来る。
+  static func parseAll(_ marked: String, primary: Int = 0) -> (TextRope, EditState) {
+    var text = ""
+    var cursors: [Cursor] = []
+    var open: (character: Character, offset: Int)?
+    var offset = 0
+    for character in marked {
+      switch character {
+      case "|":
+        cursors.append(Cursor(offset))
+      case "[", "]":
+        precondition(open?.character != character, "\(character) が閉じられないまま続いた: \(marked)")
+        if let pending = open {
+          let (anchor, caret) =
+            character == "]" ? (pending.offset, offset) : (offset, pending.offset)
+          cursors.append(
+            Cursor(
+              selectionStart: NSRange(location: anchor, length: 0), unit: .character,
+              position: caret))
+          open = nil
+        } else {
+          open = (character, offset)
+        }
+      default:
+        text.append(character)
+        offset += character.utf16.count
+      }
+    }
+    precondition(open == nil, "閉じられていない選択: \(marked)")
+    let first = cursors.remove(at: primary)
+    return (TextRope(text), EditState(cursors: CursorList(first, others: cursors)))
+  }
+
+  /// 全カーソルを本文に書き戻す（`parseAll` の逆。主かどうかは書かない）。
+  static func renderAll(_ text: TextRope, _ cursors: CursorList) -> String {
+    struct Mark {
+      let offset: Int
+      let text: String
+      /// 選択の始まりの印か（同じ位置の印は、選択の始まりを後ろに書く）。
+      let starts: Bool
+    }
+    var units = Array(text.units(in: NSRange(location: 0, length: text.length)))
+    var marks: [Mark] = []
+    for cursor in cursors.all {
+      if cursor.selection.length == 0 {
+        marks.append(Mark(offset: cursor.position, text: "|", starts: false))
+      } else {
+        marks.append(Mark(offset: cursor.anchor, text: "[", starts: !cursor.isReversed))
+        marks.append(Mark(offset: cursor.position, text: "]", starts: cursor.isReversed))
+      }
+    }
+    let ordered = marks.sorted {
+      $0.offset != $1.offset ? $0.offset > $1.offset : $0.starts && !$1.starts
+    }
+    for mark in ordered {
+      units.insert(contentsOf: mark.text.utf16, at: mark.offset)
+    }
+    return String(decoding: units, as: UTF16.self)
+  }
+
+  /// コマンドを順に当て、最後の本文と全カーソルを書いたものと、最後の状態。
+  static func runAll(_ commands: [EditCommand], on marked: String, primary: Int = 0) -> (
+    String, EditState
+  ) {
+    var (text, state) = parseAll(marked, primary: primary)
+    for command in commands {
+      let result = EditCommands.run(command, state, environment(text))
+      text = result.edits.applied(to: text)
+      state = result.state
+    }
+    return (renderAll(text, state.cursors), state)
+  }
 }

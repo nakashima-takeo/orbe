@@ -21,6 +21,8 @@ final class FakeTextSurface: TextSurface {
     didSet { delegate?.surfaceDidChangeSelection(self) }
   }
   var caretLocation: Int { NSMaxRange(selectedRange) }
+  var cursorSelections: [NSRange] { [selectedRange] }
+  var searchContinuation: SearchQuestion? { nil }
   private(set) var indentation = Indentation.fallback
   private(set) var lineBreak = LineBreak.lf
 

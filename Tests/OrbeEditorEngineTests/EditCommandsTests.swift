@@ -22,7 +22,8 @@ final class EditCommandsTests: XCTestCase {
     for c in VSCodeEditCases.cases {
       let text = TextRope(c.text)
       let label = "\(c.text.debugDescription) @\(c.offset)"
-      XCTAssertEqual(EditCommands.wordLeft(from: c.offset, text), c.wordLeft, "⌥← \(label)")
+      XCTAssertEqual(
+        EditCommands.wordLeft(from: c.offset, text, alone: true), c.wordLeft, "⌥← \(label)")
       XCTAssertEqual(EditCommands.wordRight(from: c.offset, text), c.wordRight, "⌥→ \(label)")
       let cursor = Cursor(c.offset)
       let left = EditCommands.deleteWordLeftRange(cursor, text)
@@ -32,7 +33,7 @@ final class EditCommandsTests: XCTestCase {
       let word = EditCommands.wordRange(at: c.offset, text)
       XCTAssertEqual([word.location, NSMaxRange(word)], c.word, "語 \(label)")
       let home = EditCommands.move(
-        Cursor(c.offset), .home, extending: false, Editing.environment(text))
+        Cursor(c.offset), .home, extending: false, alone: true, Editing.environment(text))
       XCTAssertEqual(home.position, c.home, "⌘← \(label)")
     }
   }
@@ -363,7 +364,7 @@ final class EditCommandsTests: XCTestCase {
   /// サロゲートの対の中間に掛かっても、⌥←・⌥⌫ は対を割らない。
   func testLongLineWindowsDoNotSplitGraphemes() {
     let text = TextRope(String(repeating: "x😀", count: 1000))
-    let left = EditCommands.wordLeft(from: 1026, text)
+    let left = EditCommands.wordLeft(from: 1026, text, alone: true)
     XCTAssertEqual(text.grapheme(containing: left).location, left, "書記素の境")
     XCTAssertEqual(left, 1)
     let removed = EditCommands.deleteWordLeftRange(Cursor(1026), text)
@@ -374,7 +375,7 @@ final class EditCommandsTests: XCTestCase {
   func testJapaneseRunsStopAtOSWordBoundaries() {
     let text = TextRope("日本語のテキストです。ok")
     XCTAssertEqual(EditCommands.wordRight(from: 0, text), 2)
-    XCTAssertEqual(EditCommands.wordLeft(from: 8, text), 4)
+    XCTAssertEqual(EditCommands.wordLeft(from: 8, text, alone: true), 4)
     XCTAssertEqual(EditCommands.wordRange(at: 5, text), NSRange(location: 4, length: 4))
     XCTAssertEqual(EditCommands.wordRight(from: 0, TextRope("foo.bar")), 3, "ASCII は区切り文字の規則のまま")
   }

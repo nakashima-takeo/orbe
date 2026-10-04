@@ -92,7 +92,8 @@ final class ProjectSearchResultsTests: XCTestCase {
           NSRange(location: 20, length: 3),
         ]))
     results.track(
-      "a", TextEdit(range: NSRange(location: 11, length: 1), replacement: "xyz"), version: 2)
+      "a", [EditSweep([TextEdit(range: NSRange(location: 11, length: 1), replacement: "xyz")])],
+      version: 2)
     XCTAssertEqual(
       results["a"]?.document,
       .init(
@@ -101,7 +102,8 @@ final class ProjectSearchResultsTests: XCTestCase {
     XCTAssertEqual(results.total, 2)
 
     results.track(
-      "a", TextEdit(range: NSRange(location: 0, length: 25), replacement: ""), version: 3)
+      "a", [EditSweep([TextEdit(range: NSRange(location: 0, length: 25), replacement: "")])],
+      version: 3)
     XCTAssertNil(results["a"], "一致が無くなれば消える")
     XCTAssertEqual(results.total, 0)
   }

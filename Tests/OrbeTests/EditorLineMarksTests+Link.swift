@@ -97,4 +97,5 @@ private final class LinkRecorder: TextSurfaceHost {
   func insertionText(forFiles urls: [URL]) -> String { "" }
   func contextMenu() -> NSMenu { NSMenu() }
   func openLink(_ url: URL) { opened.append(url) }
+  func consumeEscape() -> Bool { false }
 }

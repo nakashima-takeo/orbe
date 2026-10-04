@@ -36,6 +36,29 @@ extension FramePerfTests {
     try measureStrokes("composition", Self.compose)
   }
 
+  /// カーソル 1 万本（1MB の 4 行ごとの頭）で止まっている間の 1 コマ——点滅の刻みで描くコマの CPU を記録し、1 刻みに収まる
+  /// （目に見えて詰まらない）。描画は見えている行のキャレットだけを引く。
+  func testManyCursorsDoNotStallTheBlink() throws {
+    let opened = try attach(Self.swiftSource(bytes: 1_000_000))
+    let surface = opened.surface
+    let text = opened.document.text
+    let cursors = (0..<CursorList.limit).map { Cursor(text.lineStart($0 * 4)) }
+    surface.inputScope {
+      surface.editor.select(
+        CursorList(cursors[0], others: Array(cursors.dropFirst())), reveal: .none)
+    }
+    surface.updateFocus(true)
+    waitUntilIdle(surface)
+    reset(surface)
+    RunLoop.main.run(until: Date().addingTimeInterval(2))
+    let cpu = totals(surface).cpu.sorted()
+    XCTAssertGreaterThanOrEqual(cpu.count, 3, "前提: 点滅の刻みで描いた")
+    print(
+      "PERF-FRAMES 10000-cursors idle frame CPU p50", Self.ms(Self.quantile(cpu, 0.5)), "max",
+      Self.ms((cpu.last ?? 0) * 1000))
+    XCTAssertLessThan(cpu.last ?? 0, HeadlessDriver.period, "1 刻みに収まる")
+  }
+
   /// 200KB・1MB の文書の中ほどで、打鍵の間隔 100ms と 33ms で `stroke` を流して関門にかける。
   private func measureStrokes(
     _ scenario: String, _ stroke: @escaping @MainActor (MetalTextSurface, Int) -> Void

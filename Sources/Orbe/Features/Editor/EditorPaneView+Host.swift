@@ -39,6 +39,13 @@ extension EditorPaneView: TextSurfaceHost {
     NSWorkspace.shared.open(url)
   }
 
+  /// 本文で Esc（変換中でない）。検索バーがあれば閉じて使う（VS Code と同じく、カーソルを 1 本に戻すより先）。
+  func consumeEscape() -> Bool {
+    guard searchBar != nil else { return false }
+    closeSearch()
+    return true
+  }
+
   // MARK: - ファイルのドロップ
 
   override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {

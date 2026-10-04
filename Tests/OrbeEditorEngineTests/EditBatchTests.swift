@@ -22,7 +22,7 @@ final class EditBatchTests: XCTestCase {
     XCTAssertEqual(string(batch.inverse(of: text).applied(to: after)), "abcdef")
   }
 
-  /// 続けて当てた束を 1 つに合成しても、当てた結果は同じ（打鍵のまとまり・⌫ の連続・離れた 2 か所）。
+  /// 続けて当てた束を 1 つに合成しても、当てた結果は同じ（打鍵のまとまり・⌫ の連続・離れた 2 か所・接する編集）。
   func testComposedBatchesEqualSequentialApplication() {
     var generator = SplitMix(seed: 0x5eed)
     for _ in 0..<500 {
@@ -62,11 +62,15 @@ final class EditBatchTests: XCTestCase {
     for _ in 0..<Int.random(in: 1...3, using: &generator) {
       guard cursor <= text.length else { break }
       let start = Int.random(in: cursor...text.length, using: &generator)
-      let length = Int.random(in: 0...min(3, text.length - start), using: &generator)
+      var length = Int.random(in: 0...min(3, text.length - start), using: &generator)
+      if let last = edits.last, last.range.length == 0, last.range.location == start, length == 0 {
+        guard start < text.length else { break }
+        length = 1
+      }
       let replacement = String(repeating: "Z", count: Int.random(in: 0...3, using: &generator))
       edits.append(
         TextEdit(range: NSRange(location: start, length: length), replacement: replacement))
-      cursor = start + length + 1
+      cursor = start + length
     }
     return EditBatch(edits)
   }

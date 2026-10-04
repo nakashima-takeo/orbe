@@ -4,14 +4,16 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 乱択の操作列——打鍵・削除・移動・字下げ・大小文字・キル・マウスの選択・外からの選択・undo / redo を何千手流しても、
+/// 乱択の操作列——打鍵・削除・移動・字下げ・大小文字・キル・マウスの選択・外からの選択・undo / redo と、カーソルを増やす
+/// 操作（⌘D・⌘⇧L・⌥⌘↑↓・⌥クリック・Esc）を何千手流しても、
 /// 文書の写し・面の写し・選択とキャレットがどの時点でも本文の範囲に収まり、配り先が編集の列を順に畳んだ本文（行の増減
 /// つき）が文書の本文と一致し続け、undo を尽くすと元の本文、redo を尽くすと履歴の先端の本文に戻る。壊れると「ある並びの
 /// 操作でだけ」本文や選択がずれる、検索の一致やミニマップが本文からずれる。
 ///
-/// IME の呼び出し（変換の始まり・続き・範囲を指した置き換え・確定・取り消し）を他の入口と混ぜて流しても、IME から見える
-/// 状態が本文と一致し続け、undo と redo を尽くすと元と先端の本文に戻る。壊れると「ある順の操作でだけ」未確定の範囲が本文と
-/// ずれて字が重なる・消える、変換の取り消しや確定の後の undo が本文とずれて履歴が空になる。
+/// IME の呼び出し（変換の始まり・続き・範囲を指した置き換え・確定・取り消し）を他の入口と混ぜて流しても（カーソルが複数の
+/// 変換を含む）、IME から見える状態と全カーソルの未確定が本文と一致し続け、undo と redo を尽くすと元と先端の本文に戻る。
+/// 壊れると「ある順の操作でだけ」未確定の範囲が本文とずれて字が重なる・消える、変換の取り消しや確定の後の undo が本文と
+/// ずれて履歴が空になる。
 @MainActor
 final class SurfaceFuzzTests: EngineTestCase {
   private static let commands: [EditCommand] = [
@@ -25,7 +27,9 @@ final class SurfaceFuzzTests: EngineTestCase {
     .move(.down, extending: true), .move(.wordLeft, extending: false),
     .move(.wordRight, extending: true), .move(.home, extending: false),
     .move(.end, extending: true), .move(.pageDown, extending: false),
-    .move(.documentStart, extending: false), .selectLine, .selectWord,
+    .move(.documentStart, extending: false), .selectLine, .selectWord, .addNextOccurrence,
+    .addNextOccurrence, .selectAllOccurrences, .insertCursor(below: true),
+    .insertCursor(below: false), .cancel,
   ]
 
   func testRandomOperationsKeepTheTextSelectionAndUndoConsistent() throws {
@@ -76,7 +80,8 @@ final class SurfaceFuzzTests: EngineTestCase {
         try click(
           opened, row: Int.random(in: 0...8, using: &generator),
           column: CGFloat(Int.random(in: 0...20, using: &generator)),
-          clicks: Int.random(in: 1...3, using: &generator))
+          clicks: Int.random(in: 1...3, using: &generator),
+          flags: Bool.random(using: &generator) ? .option : [])
       case 20..<30:
         inputMethodStep(opened, window, &generator)
       default:
@@ -158,6 +163,13 @@ final class SurfaceFuzzTests: EngineTestCase {
     }
     XCTAssertTrue(caret.carets.allSatisfy { $0 <= length }, "\(step)")
     XCTAssertTrue(caret.selections.allSatisfy { NSMaxRange($0) <= length }, "\(step)")
+    let text = opened.document.text
+    let marked = opened.surface.editor.composition?.marked.compactMap { $0 } ?? []
+    let primary = opened.surface.editor.composition.map { text.units(in: $0.range) }
+    for range in marked {
+      XCTAssertLessThanOrEqual(NSMaxRange(range), length, "\(step)")
+      XCTAssertEqual(text.units(in: range), primary, "\(step): どの未確定も主と同じ字")
+    }
   }
 }
 

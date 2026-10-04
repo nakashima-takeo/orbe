@@ -137,14 +137,25 @@ extension MetalTextView {
   override func deleteToMark(_ sender: Any?) { run(.deleteToMark) }
   override func swapWithMark(_ sender: Any?) { run(.swapWithMark) }
 
-  // MARK: - 何もしない・上へ渡す
+  // MARK: - 複数カーソル（キーは `MetalTextView.multiCursorKeys`）
 
-  /// Esc は面では使わず、上の responder へ渡す（載せる側が検索バーを閉じるのに使う）。変換中（IME が使わなかった）は何も
-  /// しない。
+  @objc func addSelectionToNextFindMatch(_ sender: Any?) { run(.addNextOccurrence) }
+  @objc func selectHighlights(_ sender: Any?) { run(.selectAllOccurrences) }
+  @objc func insertCursorAbove(_ sender: Any?) { run(.insertCursor(below: false)) }
+  @objc func insertCursorBelow(_ sender: Any?) { run(.insertCursor(below: true)) }
+  @objc func cursorUndo(_ sender: Any?) { surface?.inputScope { surface?.editor.undoCursors() } }
+
+  /// Esc——先に載せる側へ問い（検索バーを閉じる）、使われなければカーソルを 1 本に戻すか選択を解く。変換中（IME が
+  /// 使わなかった）は何もしない。
   override func cancelOperation(_ sender: Any?) {
-    guard !composing else { return }
-    nextResponder?.tryToPerform(#selector(cancelOperation(_:)), with: sender)
+    guard !composing, let surface else { return }
+    surface.inputScope {
+      if surface.host?.consumeEscape() == true { return }
+      surface.perform(.cancel)
+    }
   }
+
+  // MARK: - 何もしない
 
   /// 補完は持たない。
   override func complete(_ sender: Any?) {}

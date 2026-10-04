@@ -55,10 +55,11 @@ extension EditCommands {
     let batch = EditBatch(
       accepted.map { TextEdit(range: $0.replacement.range, replacement: $0.replacement.text) })
     guard !batch.isEmpty else { return CommandResult(state: state) }
-    var result = cursors.map { cursor in
+    let mapped = batch.map(cursors.map(\.anchor) + cursors.map(\.position))
+    var result = cursors.indices.map { index in
       Cursor(
-        selectionStart: NSRange(location: batch.map(cursor.anchor), length: 0), unit: .character,
-        position: batch.map(cursor.position))
+        selectionStart: NSRange(location: mapped[index], length: 0), unit: .character,
+        position: mapped[cursors.count + index])
     }
     var delta = 0
     for item in accepted {
@@ -82,18 +83,41 @@ extension EditCommands {
     edit(state, env, undo: undo) { Replacement($0.selection, string) }
   }
 
-  /// `range` を `string` に置き換える（IME が範囲を指して入れた確定）。どのカーソルも NSTextView と同じく、置き換えと重なら
-  /// なければ選択を写して保ち、重なれば入れた文字の終わりへ置く（`CompositionRules.selection`）。
-  static func replace(_ range: NSRange, with string: String, _ state: EditState) -> CommandResult {
-    let edit = TextEdit(range: range, replacement: string)
-    var cursors = state.cursors.map {
-      Cursor.selecting(
-        CompositionRules.selection($0.selection, after: edit), reversed: $0.isReversed)
+  /// `range` を `string` に置き換える（IME が範囲を指して入れた確定——長押しのアクセントなど）。主の選択に対する `range` の
+  /// 前後のずれを、全カーソルの選択に同じに当てる（主の他は選択の行の中に収め、前のカーソルと重なれば外す。変換と同じ
+  /// `CompositionRules.targets`）。どのカーソルも NSTextView と同じく、自分の置き換えと重ならなければ選択を写して保ち、
+  /// 重なれば入れた文字の終わりへ置く（`CompositionRules.selection`）。
+  static func replace(
+    _ range: NSRange, with string: String, _ state: EditState, _ env: EditingEnvironment
+  ) -> CommandResult {
+    let cursors = state.cursors.all
+    let targets = CompositionRules.targets(range, bases: cursors.map(\.selection), in: env.text)
+    let accepted = CompositionRules.accepted(targets)
+    let order = cursors.indices.filter { accepted[$0] }.sorted {
+      targets[$0].location < targets[$1].location
     }
-    cursors.normalize()
-    let batch = EditBatch([edit])
+    let batch = EditBatch(order.map { TextEdit(range: targets[$0], replacement: string) })
+    var inserted = [NSRange?](repeating: nil, count: cursors.count)
+    for (index, new) in zip(order, batch.newRanges) { inserted[index] = new }
+    let shift = batch.shiftingPast
+    let left = cursors.indices.filter { inserted[$0] == nil }
+    var mapped = batch.map(left.flatMap { [cursors[$0].anchor, cursors[$0].position] })[...]
+    let placed = cursors.indices.map { index -> Cursor in
+      guard let new = inserted[index] else {
+        let anchor = mapped.removeFirst()
+        return Cursor(
+          selectionStart: NSRange(location: anchor, length: 0), unit: .character,
+          position: mapped.removeFirst())
+      }
+      return .selecting(
+        CompositionRules.selection(
+          cursors[index].selection, after: TextEdit(range: targets[index], replacement: string),
+          inserted: new, shift: shift), reversed: cursors[index].isReversed)
+    }
+    guard var list = CursorList(placed) else { return CommandResult(state: state) }
+    list.normalize()
     return CommandResult(
-      state: EditState(cursors: cursors, mark: state.mark.map(batch.map)), edits: batch,
+      state: EditState(cursors: list, mark: state.mark.map(batch.map)), edits: batch,
       undo: .other)
   }
 

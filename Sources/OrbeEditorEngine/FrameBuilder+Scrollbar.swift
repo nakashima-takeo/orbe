@@ -99,6 +99,20 @@ struct RulerSpans {
   /// 色ごとの縦の区間（描く順）。
   var groups: [(kind: Kind, spans: [OverviewRuler.Span])] = []
 
+  /// キャレットの印の元（キャレットの列が同じなら、止まっている間の点滅のコマで作り直さない）。
+  struct CaretKey: Equatable {
+    var carets: [Int]
+    /// 本文の版（同じオフセットのキャレットでも、本文が変われば行が変わりうる）。
+    var version: Int
+    var visibleLines: CGFloat
+    var height: CGFloat
+    var scale: CGFloat
+  }
+
+  var caretKey: CaretKey?
+  /// キャレットの印の縦の区間（重なるものはまとめた、上から順）。
+  var caretSpans: [OverviewRuler.Span] = []
+
   /// 印の種類（色とレーン）。
   enum Kind {
     case added, modified, removed, word, find
@@ -188,9 +202,9 @@ extension FrameBuilder {
           x0 + Double(lane.x), Double(span.y1), Double(lane.width), Double(span.y2 - span.y1), ink)
       }
     }
-    if let caret = source.material.caret.carets.first {
-      let full = OverviewRuler.lane(.full, width: area.width, scale: CGFloat(s))
-      let span = ruler.caret(row: text.row(containing: min(caret, text.length)))
+    updateCaretSpans(ruler, area: area, lines: lines, source, content: content)
+    let full = OverviewRuler.lane(.full, width: area.width, scale: CGFloat(s))
+    for span in rulerSpans.caretSpans {
       rect(
         x0 + Double(full.x), Double(span.y1), Double(full.width), Double(span.y2 - span.y1),
         palette.rulerCaret)
@@ -208,6 +222,22 @@ extension FrameBuilder {
       ShapeInstance(
         rect: SIMD4(Float(x), Float(y), Float(width), Float(height)), color: ink.packed, radius: 0,
         kind: 0))
+  }
+
+  /// 全キャレットの印の縦の区間を、キャレット・本文・寸法が変わったときだけ作り直す（`OverviewRuler.carets`）。
+  private func updateCaretSpans(
+    _ ruler: OverviewRuler, area: CGRect, lines: (first: CGFloat, visible: CGFloat),
+    _ source: Source, content: SurfaceContent
+  ) {
+    let carets = source.material.caret.carets
+    let key = RulerSpans.CaretKey(
+      carets: carets, version: content.version, visibleLines: lines.visible, height: area.height,
+      scale: ruler.scale)
+    guard key != rulerSpans.caretKey else { return }
+    rulerSpans.caretKey = key
+    let text = content.text
+    let points = carets.map { NSRange(location: min($0, text.length), length: 0) }
+    rulerSpans.caretSpans = ruler.carets(rows: text.rows(ofAscending: points).map(\.lowerBound))
   }
 
   /// 印の縦の区間を、元が変わったときだけ作り直す。検索の一致が多いときは近い行をまとめ、現在の一致を加える。

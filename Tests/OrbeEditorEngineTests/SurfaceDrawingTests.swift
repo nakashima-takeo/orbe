@@ -59,6 +59,46 @@ final class SurfaceDrawingTests: EngineTestCase {
     XCTAssertEqual(pixel(unfocused, x: x, y: at.y)[3], 0, "焦点が無ければ描かない")
   }
 
+  /// キャレットと選択の地は全カーソルぶん、本文と同じ 1 コマに描く（見えている行のものだけを引く）。
+  func testEveryCursorsCaretAndSelectionAreDrawn() throws {
+    let opened = try open("abc def\nxyz\nabc def\n")
+    _ = host(opened, size: CGSize(width: 400, height: 120))
+    opened.surface.inputScope {
+      opened.surface.editor.select(
+        CursorList(Cursor(7), others: [Cursor(19), .selecting(NSRange(location: 8, length: 2))]),
+        reveal: .none)
+    }
+    opened.surface.updateFocus(true)
+    let image = try XCTUnwrap(opened.surface.snapshot())
+    let dy = opened.surface.config.lineHeight / 2
+    let first = probe(opened, row: 0, column: 7, dy: dy)
+    let third = probe(opened, row: 2, column: 7, dy: dy)
+    XCTAssertEqual(pixel(image, x: first.x + 1, y: first.y), [255, 255, 255, 255], "主のキャレット")
+    XCTAssertEqual(pixel(image, x: third.x + 1, y: third.y), [255, 255, 255, 255], "他のキャレット")
+    let middle = probe(opened, row: 1, column: 6, dy: dy)
+    XCTAssertEqual(pixel(image, x: middle.x + 1, y: middle.y)[3], 0, "カーソルの無い所には描かない")
+    let selected = probe(opened, row: 1, column: 0.5)
+    XCTAssertGreaterThan(pixel(image, x: selected.x, y: selected.y)[3], 0, "他のカーソルの選択の地")
+  }
+
+  /// 行頭のキャレットはその行の桁 0 に、本文の終わり（最後の空行）のキャレットは最後の行に描く——前の行には描かない。
+  func testCaretsAtLineStartsAndTheEndAreDrawnOnTheirOwnRows() throws {
+    let opened = try open("abc def\nxyz\nabc def\n")
+    _ = host(opened, size: CGSize(width: 400, height: 120))
+    opened.surface.inputScope {
+      opened.surface.editor.select(CursorList(Cursor(12), others: [Cursor(20)]), reveal: .none)
+    }
+    opened.surface.updateFocus(true)
+    let image = try XCTUnwrap(opened.surface.snapshot())
+    let dy = opened.surface.config.lineHeight / 2
+    for row in [2, 3] {
+      let at = probe(opened, row: row, column: 0, dy: dy)
+      XCTAssertEqual(pixel(image, x: at.x + 1, y: at.y), [255, 255, 255, 255], "行 \(row) の桁 0")
+    }
+    let end = probe(opened, row: 1, column: 3, dy: dy)
+    XCTAssertEqual(pixel(image, x: end.x + 1, y: end.y)[3], 0, "前の行の終わりには描かない")
+  }
+
   /// 右から左の字を含む行でも、キャレットは位置の字の見た目の縁に描き、選択の地は見た目の区間ごとに塗る——`ab שלום cd` の
   /// ש ל（位置 3〜5）を選べば、右から左の並びの右側だけが塗られ、左側の ו ם は塗られない。
   func testCaretAndSelectionFollowRightToLeftCharacters() throws {

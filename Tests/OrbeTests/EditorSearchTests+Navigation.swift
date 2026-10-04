@@ -111,6 +111,32 @@ extension EditorSearchTests {
     XCTAssertTrue(hosted.window.firstResponder === hosted.document.surface.responder, "焦点は本文のまま")
   }
 
+  /// 本文の Esc は VS Code の順——検索バーが開いていれば閉じ、次にカーソルを主の 1 本に戻し（主の選択は残す）、次に
+  /// 選択を解く。
+  func testEscapeInTheTextClosesTheBarBeforeCollapsingCursors() throws {
+    let hosted = try host("one one one\n")
+    let pane = hosted.pane
+    let surface = hosted.document.surface
+    surface.selectedRange = NSRange(location: 0, length: 3)
+    pane.showSearch()
+    catchUp(pane)
+    hosted.window.makeFirstResponder(surface.responder)
+    surface.responder.perform(NSSelectorFromString("selectHighlights:"), with: nil)
+    XCTAssertEqual(surface.cursorSelections.count, 3, "前提")
+    let escape = try XCTUnwrap(
+      NSEvent.keyEvent(
+        with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+        windowNumber: hosted.window.windowNumber, context: nil, characters: "\u{1b}",
+        charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+    hosted.window.sendEvent(escape)
+    XCTAssertNil(pane.searchBar, "まずバーを閉じる")
+    XCTAssertEqual(surface.cursorSelections.count, 3, "カーソルはそのまま")
+    hosted.window.sendEvent(escape)
+    XCTAssertEqual(surface.cursorSelections, [NSRange(location: 0, length: 3)], "主の 1 本")
+    hosted.window.sendEvent(escape)
+    XCTAssertEqual(surface.cursorSelections, [NSRange(location: 3, length: 0)], "選択を解く")
+  }
+
   /// 検索語を打ち換えた直後（新しい一致が届く前）は前の地と件数が出たままで、その間に押された Enter は、新しい検索語の
   /// 一致が届いてから、起点以降の最初の一致を選んだうえでその次へ行う（同期で探したときと同じ行き先）——前の検索語の一致へ
   /// 飛ばず、届く速さで行き先が変わらない。

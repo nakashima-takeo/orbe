@@ -7,7 +7,10 @@ extension EditCommands {
   static func move(
     _ movement: Movement, extending: Bool, _ state: EditState, _ env: EditingEnvironment
   ) -> CommandResult {
-    var cursors = state.cursors.map { move($0, movement, extending: extending, env) }
+    let alone = state.cursors.count == 1
+    var cursors = state.cursors.map {
+      move($0, movement, extending: extending, alone: alone, env)
+    }
     cursors.normalize()
     let reveal: Reveal
     switch movement {
@@ -18,8 +21,10 @@ extension EditCommands {
     return CommandResult(state: EditState(cursors: cursors, mark: state.mark), reveal: reveal)
   }
 
+  /// カーソル 1 本の移動。`alone` はカーソルが 1 本だけか（⌥← の止まり方が変わる）。
   static func move(
-    _ cursor: Cursor, _ movement: Movement, extending: Bool, _ env: EditingEnvironment
+    _ cursor: Cursor, _ movement: Movement, extending: Bool, alone: Bool,
+    _ env: EditingEnvironment
   ) -> Cursor {
     let text = env.text
     let collapses = cursor.hasSelection && !extending
@@ -35,7 +40,8 @@ extension EditCommands {
     case .down, .pageDown:
       return vertical(cursor, by: movement == .down ? 1 : env.pageLines, extending: extending, env)
     case .wordLeft:
-      return cursor.moved(to: wordLeft(from: cursor.position, text), extending: extending)
+      return cursor.moved(
+        to: wordLeft(from: cursor.position, text, alone: alone), extending: extending)
     case .wordRight:
       return cursor.moved(to: wordRight(from: cursor.position, text), extending: extending)
     case .home:
@@ -83,9 +89,10 @@ extension EditCommands {
     return cursor.moved(to: text.lineStart(target) + column, extending: extending, desiredX: x)
   }
 
-  /// ⌥←（VS Code の `cursorWordLeft`、`WordStartFast`）——前の語の始まりへ。1 字の区切りの直前が通常の字なら、その区切りを
-  /// 飛ばす。行頭なら前の行の行末から探す。
-  static func wordLeft(from offset: Int, _ text: TextRope) -> Int {
+  /// ⌥←（VS Code の `cursorWordLeft`、`WordStartFast`）——前の語の始まりへ。カーソルが 1 本（`alone`）なら、1 字の区切りの
+  /// 直前が通常の字のとき、その区切りを飛ばす（複数なら飛ばさず、カーソルごとに止まる所の種類をそろえる）。行頭なら前の行の
+  /// 行末から探す。
+  static func wordLeft(from offset: Int, _ text: TextRope, alone: Bool) -> Int {
     var row = text.row(containing: offset)
     var column = offset - text.lineStart(row)
     if column == 0, row > 0 {
@@ -94,7 +101,7 @@ extension EditCommands {
     }
     let line = LineWindow(row: row, around: column, text)
     var word = line.words.previousWord(before: line.local(column))
-    if let found = word, found.kind == .separator, found.end - found.start == 1,
+    if alone, let found = word, found.kind == .separator, found.end - found.start == 1,
       found.nextClass == .regular
     {
       word = line.words.previousWord(before: found.start)
@@ -179,6 +186,20 @@ extension EditCommands {
     let start = previous?.end ?? 0
     let end = next?.start ?? line.words.units.count
     return NSRange(location: line.start + start, length: end - start)
+  }
+
+  /// 位置に接する通常の字の語（VS Code の `getWordAtPosition`——前の語を先に見る）。区切りと空白の上なら nil。
+  static func regularWord(at offset: Int, _ text: TextRope) -> NSRange? {
+    let row = text.row(containing: offset)
+    let line = LineWindow(row: row, around: offset - text.lineStart(row), text)
+    let column = line.local(offset - text.lineStart(row))
+    for word in [line.words.previousWord(before: column), line.words.nextWord(from: column)] {
+      guard let word, word.kind == .regular, word.start <= column, column <= word.end else {
+        continue
+      }
+      return NSRange(location: line.start + word.start, length: word.end - word.start)
+    }
+    return nil
   }
 
   /// 語の単位のまま動く端を `offset` へ伸ばす（VS Code の `WordOperations.word` の選択中）——語の内側なら語の端へ揃え、

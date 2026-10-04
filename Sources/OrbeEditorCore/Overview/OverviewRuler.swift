@@ -82,6 +82,20 @@ public struct OverviewRuler: Equatable, Sendable {
     return result
   }
 
+  /// キャレットの印の列——行（昇順）ごとの印を、他の印と同じく `y1 ≤ 直前の y2 + 1` なら結ぶ。
+  public func carets(rows: some Sequence<Int>) -> [Span] {
+    var result: [Span] = []
+    for row in rows {
+      let span = caret(row: row)
+      if let last = result.last, span.y1 <= last.y2 + 1 {
+        result[result.count - 1] = Span(y1: last.y1, y2: max(last.y2, span.y2))
+      } else {
+        result.append(span)
+      }
+    }
+    return result
+  }
+
   /// キャレットの印（全幅・高 2pt、中心は行の上端）。
   public func caret(row: Int) -> Span {
     let height = Int(Self.caretHeight * scale)

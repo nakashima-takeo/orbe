@@ -53,7 +53,7 @@ extension DesignFlowSnapshotTests {
     RunLoop.main.run(until: Date().addingTimeInterval(0.15))
   }
 
-  private func longScene() throws -> (EditorCodeFixtures.Scene, EditorDocument) {
+  func longScene() throws -> (EditorCodeFixtures.Scene, EditorDocument) {
     let scene = try codeScene()
     let long = try scene.tab.editor.open(scene.directory.appendingPathComponent("Long.swift"))
     pumpMain(
@@ -64,7 +64,7 @@ extension DesignFlowSnapshotTests {
 
   /// 各ステップの後に、見せている文書の裏の仕事（検索・出現・色・ハンク）が追いつくのを待ち、帯とつまみが現れ終わってから
   /// 撮る。
-  private func settled(_ pane: EditorPaneView, _ steps: [(label: String, action: () -> Void)])
+  func settled(_ pane: EditorPaneView, _ steps: [(label: String, action: () -> Void)])
     -> [(label: String, action: () -> Void)]
   {
     steps.map { step in

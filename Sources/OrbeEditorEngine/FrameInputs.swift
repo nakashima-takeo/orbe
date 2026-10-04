@@ -181,15 +181,17 @@ struct RowEdit: Equatable, Sendable {
 struct CaretMaterial: Equatable, Sendable {
   /// 選択の範囲（昇順）。空の選択は含めない。
   var selections: [NSRange] = []
-  /// キャレットのオフセット（主が先頭）。
+  /// キャレットのオフセット（昇順。描画は見えている行のものだけを二分探索で引く）。
   var carets: [Int] = []
+  /// 選択の無いカーソルの位置（昇順。ミニマップがその行を出す）。
+  var collapsed: [Int] = []
   /// 点滅の起点（`CACurrentMediaTime`）。キャレットが動くたびに置き直し、表示から始める。
   var epoch: Double = 0
   /// 面に焦点がある（first responder で、窓が key）。無ければキャレットを描かず、選択の地は弱い色。
   var focused = false
   /// 点滅させるか（アクセシビリティの「点滅しない挿入ポイント」が有効なら、点滅せず描き続ける）。
   var blinks = true
-  /// 変換中の文字（変換中でなければ nil）。変換中のキャレットは IME の注目位置で、主のキャレットではない。
+  /// 変換中の文字（変換中でなければ nil）。変換中のキャレットは、変換に入った各カーソルの IME の注目位置。
   var marked: MarkedMaterial?
 
   /// 点滅の刻み（表示・非表示それぞれの長さ）。
@@ -219,9 +221,9 @@ struct HorizontalReveal: Equatable, Sendable {
   var serial: Int
 }
 
-/// 変換中の文字——未確定の範囲と見た目。
+/// 変換中の文字——全カーソルの未確定の範囲（昇順）と、どの範囲にも同じに写す見た目（文節の範囲は未確定の先頭から）。
 struct MarkedMaterial: Equatable, Sendable {
-  var range: NSRange
+  var ranges: [NSRange]
   var appearance: MarkedAppearance
 }
 
