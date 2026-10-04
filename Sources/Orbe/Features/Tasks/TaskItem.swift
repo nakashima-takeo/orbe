@@ -2,8 +2,8 @@ import Foundation
 import OrbeSessionLog
 
 /// タスク 1 件。一覧（`TaskStore.tasks`）は人と agent が共有する 1 本の列で、この値はその要素。
-/// 不変条件（ID の一意・タイトルと待ちの理由が空でない・完了は待ちを持たない・結び付きの項目は 1 つの
-/// タスクにだけ現れる）は `TaskStore` が保証する。
+/// 不変条件（ID の一意・タイトルと待ちの理由が空でない・完了は待ちを持たない・結び付きの項目と worktree は
+/// それぞれ 1 つのタスクにだけ現れる）は `TaskStore` が保証する。
 struct TaskItem: Codable, Equatable, Identifiable {
   /// 永続の短い整数。使い回さない（採番位置は `TasksFile.nextId` が持つ）。
   let id: Int
@@ -22,6 +22,11 @@ struct TaskItem: Codable, Equatable, Identifiable {
   let createdBy: String?
   /// 結び付いた GitHub の Issue・PR。先頭が主。空は結び付きなし。
   var links: [TaskLink] = []
+  /// このタスクの作業の場所。解決できない値（ディレクトリが消えた）は「なし」と同じに扱う（書き換えない）。
+  var worktree: TaskWorktree?
+  /// 結び付きから外れた項目。PR の自動の結び付けはこれを避ける。保つのは `TaskStore` で、tasks.json にだけ
+  /// 出し、ワイヤには出さない。
+  var unlinked: Set<GitHubItemID> = []
 
   enum Status: String, Codable, CaseIterable {
     case todo
@@ -83,10 +88,11 @@ struct TaskItem: Codable, Equatable, Identifiable {
 
 extension TaskItem {
   private enum CodingKeys: String, CodingKey {
-    case id, title, status, waiting, priority, due, workspace, memo, createdAt, createdBy, links
+    case id, title, status, waiting, priority, due, workspace, memo, createdAt, createdBy, links,
+      worktree, unlinked
   }
 
-  /// 後から足した `links` は、欠けていれば空として読む。
+  /// 後から足した `links`・`worktree`・`unlinked` は、欠けていれば空として読む。
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     id = try c.decode(Int.self, forKey: .id)
@@ -100,12 +106,63 @@ extension TaskItem {
     createdAt = try c.decode(Date.self, forKey: .createdAt)
     createdBy = try c.decodeIfPresent(String.self, forKey: .createdBy)
     links = try c.decodeIfPresent([TaskLink].self, forKey: .links) ?? []
+    worktree = try c.decodeIfPresent(TaskWorktree.self, forKey: .worktree)
+    unlinked = Set(try c.decodeIfPresent([UnlinkedItem].self, forKey: .unlinked)?.map(\.item) ?? [])
+  }
+
+  /// `unlinked` は空でも書き、並びは決まった順にする（保存のたびに順が揺れない）。
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(id, forKey: .id)
+    try c.encode(title, forKey: .title)
+    try c.encode(status, forKey: .status)
+    try c.encodeIfPresent(waiting, forKey: .waiting)
+    try c.encode(priority, forKey: .priority)
+    try c.encodeIfPresent(due, forKey: .due)
+    try c.encodeIfPresent(workspace, forKey: .workspace)
+    try c.encode(memo, forKey: .memo)
+    try c.encode(createdAt, forKey: .createdAt)
+    try c.encodeIfPresent(createdBy, forKey: .createdBy)
+    try c.encode(links, forKey: .links)
+    try c.encodeIfPresent(worktree, forKey: .worktree)
+    try c.encode(
+      unlinked.sorted { ($0.repo.value, $0.number) < ($1.repo.value, $1.number) }.map(
+        UnlinkedItem.init), forKey: .unlinked)
   }
 
   /// 永続とワイヤに載る時刻の精度（ミリ秒）へ丸める。丸めずに持つと、保存して読み戻した値が
   /// メモリ上の値と一致しない。
   static func storedInstant(_ date: Date) -> Date {
     SessionEvent.parseISO8601(SessionEvent.iso8601(date)) ?? date
+  }
+}
+
+/// 外した項目 1 つの永続の形（`{repo, number}`）。
+private struct UnlinkedItem: Codable {
+  let item: GitHubItemID
+
+  private enum CodingKeys: String, CodingKey {
+    case repo, number
+  }
+
+  init(_ item: GitHubItemID) { self.item = item }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    let repo = try c.decode(String.self, forKey: .repo)
+    let number = try c.decode(Int.self, forKey: .number)
+    guard let item = GitHubItemID(repo: repo, number: number) else {
+      throw DecodingError.dataCorrupted(
+        .init(
+          codingPath: decoder.codingPath, debugDescription: "not a github item: \(repo)#\(number)"))
+    }
+    self.item = item
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(item.repo.value, forKey: .repo)
+    try c.encode(item.number, forKey: .number)
   }
 }
 
@@ -165,6 +222,7 @@ struct TaskDraft {
   var workspace: UUID?
   var createdBy: String?
   var links: [TaskLink] = []
+  var worktree: TaskWorktree?
 }
 
 /// JSON の `null` に当たる「外す」を、値の指定と区別して運ぶ。
@@ -189,9 +247,10 @@ struct TaskUpdate {
   var workspace: ClearableValue<UUID>?
   /// 丸ごと置き換える。`[]` で全部外す。
   var links: [TaskLink]?
+  var worktree: ClearableValue<TaskWorktree>?
 
   var isEmpty: Bool {
     title == nil && status == nil && priority == nil && due == nil && waitingReason == nil
-      && memo == nil && workspace == nil && links == nil
+      && memo == nil && workspace == nil && links == nil && worktree == nil
   }
 }
