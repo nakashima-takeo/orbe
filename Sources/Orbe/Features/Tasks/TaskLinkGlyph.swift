@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Issue / PR の印。Issue は中心に点のある円（緑）、PR はマージの印（紫）。形で区別し、色は補強に留める。
+/// Issue / PR の印。Issue は中心に点のある円（緑）、PR は pull request の印（紫）。形で区別し、色は補強に留める。
 struct TaskLinkGlyph: View {
   let kind: GitHubItemKind
   var size: CGFloat = 13
