@@ -18,6 +18,7 @@ extension ControlServer {
         draft.due = try p.due()?.value
         draft.waitingReason = try p.nullableString("waitingReason")?.value
         if let memo = try p.optionalString("memo") { draft.memo = memo }
+        if let links = try p.links() { draft.links = links }
         return target.controlAddTask(
           draft, workspaceId: try p.nullableInt("workspaceId"),
           callerTabId: try p.optionalInt("callerTabId"))
@@ -26,7 +27,7 @@ extension ControlServer {
           title: try p.optionalString("title"), status: try p.status(),
           priority: try p.priority(), due: try p.due(),
           waitingReason: try p.nullableString("waitingReason"),
-          memo: try p.optionalString("memo"))
+          memo: try p.optionalString("memo"), links: try p.links())
         return target.controlUpdateTask(
           taskId: try p.int("taskId"), update, workspaceId: try p.nullableInt("workspaceId"))
       case "move_task":
@@ -111,6 +112,25 @@ private struct TaskParams {
     guard let raw = try optionalString("priority") else { return nil }
     guard let priority = TaskItem.Priority(rawValue: raw) else { throw invalid("priority") }
     return priority
+  }
+
+  /// 結び付きの列。配列だけを受け（`null` は型の違反）、各要素の `kind`・`repo`・`number` の型・形・範囲を
+  /// 値の型（`GitHubItemKind`・`GitHubItemID`）で確かめる。
+  func links() throws(ControlError) -> [TaskLink]? {
+    guard let raw = params["links"] else { return nil }
+    guard let elements = raw as? [Any] else { throw invalid("links") }
+    var links: [TaskLink] = []
+    for element in elements {
+      guard let object = element as? [String: Any],
+        let kind = (object["kind"] as? String).flatMap(GitHubItemKind.init(rawValue:)),
+        let repo = object["repo"] as? String, let rawNumber = object["number"]
+      else { throw invalid("links") }
+      guard let item = GitHubItemID(repo: repo, number: try intValue(rawNumber, "links")) else {
+        throw invalid("links")
+      }
+      links.append(TaskLink(item: item, kind: kind))
+    }
+    return links
   }
 
   func due() throws(ControlError) -> ClearableValue<TaskItem.DueDate>? {

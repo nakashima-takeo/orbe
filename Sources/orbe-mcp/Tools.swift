@@ -13,6 +13,20 @@ func strArrayProp(_ desc: String) -> [String: Any] {
   ["type": "array", "items": ["type": "string"], "description": desc]
 }
 
+/// タスクの結び付きの列（`add_task` / `update_task`）。
+func taskLinksProp(_ desc: String) -> [String: Any] {
+  [
+    "type": "array",
+    "items": schema(
+      [
+        "kind": strProp("issue / pr（指定どおりに保存し、GitHub に照合しない）"),
+        "repo": strProp("owner/name"),
+        "number": intProp("Issue・PR の番号"),
+      ], required: ["kind", "repo", "number"]),
+    "description": desc,
+  ]
+}
+
 func schema(_ props: [String: Any], required: [String] = []) -> [String: Any] {
   ["type": "object", "properties": props, "required": required]
 }
@@ -255,7 +269,8 @@ let tools: [[String: Any]] = [
       "description",
       "人と agent が共有するタスク一覧を、ユーザーが決めた列の順で返す。各要素は taskId・title・status"
         + "（todo / in_progress / done）・priority（high / medium / low）・memo・createdAt、あれば waiting"
-        + "{reason,since}・due（YYYY-MM-DD）・workspaceId と workspaceName・createdBy（追加した agent）。"
+        + "{reason,since}・due（YYYY-MM-DD）・workspaceId と workspaceName・createdBy（追加した agent）・"
+        + "links（結び付いた GitHub の Issue・PR の列 [{kind: issue / pr, repo: owner/name, number}]。先頭が主）。"
         + "workspace に付いていないタスク（付き先が削除されたものを含む）は workspaceId を持たない。"
         + "完了したタスクも削除されるまで残る。memo は人も agent も読む前提の欄。"
     ),
@@ -270,6 +285,8 @@ let tools: [[String: Any]] = [
         + "呼び出し元タブが分かるのは、この MCP サーバーが Orbe のタブの環境（ORBE_TAB）を受け継いでいるときだけで、"
         + "受け継がない MCP クライアントからは workspace を省くと「workspace なし」になる。"
         + "呼び出し元タブの agent が作業中（working）なら、その agent 名が追加者として記録される。"
+        + "links で GitHub の Issue・PR を結び付けられる（先頭が主）。1 つの Issue・PR（repo と number が同じもの）は"
+        + "1 つのタスクにだけ結び付き、ほかのタスクに付いている項目を渡すと、相手の taskId を添えて拒否される。"
     ),
     (
       "inputSchema",
@@ -281,6 +298,7 @@ let tools: [[String: Any]] = [
           "due": strProp("期限（YYYY-MM-DD）"),
           "waitingReason": strProp("何を待っているか（待ちにする場合）"),
           "memo": strProp("メモ（複数行可。人も agent も読む）"),
+          "links": taskLinksProp("結び付ける GitHub の Issue・PR（先頭が主）"),
           "workspaceId": [
             "type": ["integer", "null"],
             "description": "付ける workspace（省略で呼び出し元タブの workspace、null でなし）",
@@ -294,6 +312,8 @@ let tools: [[String: Any]] = [
       "description",
       "タスクの項目を変え、変えた後のタスクを返す。渡した項目だけが変わる。完了は status: \"done\""
         + "（待ちは自動で外れる。完了のまま待ちは入れられない）。due / waitingReason / workspaceId は null で外す。"
+        + "links は渡した列で丸ごと置き換え、[] で全部外す。ほかのタスクに付いている Issue・PR を付け替えるには、"
+        + "先にそのタスクの links から外してから、このタスクに付ける。"
     ),
     (
       "inputSchema",
@@ -308,6 +328,7 @@ let tools: [[String: Any]] = [
             "type": ["string", "null"], "description": "待ちの理由（null で待ちを外す）",
           ],
           "memo": strProp("メモ（置き換え）"),
+          "links": taskLinksProp("結び付ける GitHub の Issue・PR（丸ごと置き換え。先頭が主。[] で全部外す）"),
           "workspaceId": [
             "type": ["integer", "null"], "description": "付ける workspace（null でなし）",
           ],

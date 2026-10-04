@@ -112,6 +112,12 @@ extension WindowController {
       json["workspaceName"] = ws.name
     }
     if let createdBy = task.createdBy { json["createdBy"] = createdBy }
+    if !task.links.isEmpty {
+      json["links"] = task.links.map {
+        ["kind": $0.kind.rawValue, "repo": $0.item.repo.value, "number": $0.item.number]
+          as [String: Any]
+      }
+    }
     return json
   }
 }
