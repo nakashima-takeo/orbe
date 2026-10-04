@@ -94,8 +94,8 @@ final class TerminalTab {
   /// 新タブの cwd 継承はすべてこの 1 つの定義を読む。
   var cwd: String { surface.currentPwd ?? surface.initialCwd }
 
-  /// 所属セグメントのキー＝cwd の場所のキー（`GitWorktreeRoot.locationKey`。属する git worktree ルート、
-  /// 管理外は cwd 自身の正準形パス）。
+  /// 所属セグメントのキー＝cwd の根（`GitWorktreeRoot.root(of:)`。属する git worktree ルート、
+  /// 管理外は cwd 自身の正準形パス）。エディター面の根も同じ値。
   /// cwd が変わった時に 1 回だけ再計算し（`pwdChanged`）、永続しない（復元時に保存 cwd から同じ規則で
   /// 再計算する）。同キーのタブが配列上で隣接する不変条件は `SessionStore` が保証する。
   /// setter が internal なのは、不変条件の検証がキーの純配列ロジックで済むよう注入口を残すため
@@ -128,7 +128,7 @@ final class TerminalTab {
     resumeSpawn = nil
     faces = .terminalOnly
     editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
-    groupKey = GitWorktreeRoot.locationKey(of: cwd)
+    groupKey = GitWorktreeRoot.root(of: cwd)
     view = Self.makeView(cwd: cwd, root: groupKey, faces: faces)
     surface.initialCommand = command
     surface.initialEnv = env
@@ -152,7 +152,7 @@ final class TerminalTab {
     self.resumeSpawn = resumeSpawn
     faces = state.faces.normalized
     editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
-    groupKey = GitWorktreeRoot.locationKey(of: state.cwd)
+    groupKey = GitWorktreeRoot.root(of: state.cwd)
     view = Self.makeView(cwd: state.cwd, root: groupKey, faces: faces)
     explicitTitle = state.explicitTitle
     pendingDocuments = state.editor?.documents
@@ -348,7 +348,7 @@ final class TerminalTab {
   /// 根が変わればエディター面のツリーも作り直す。
   func pwdChanged() {
     ControlServer.shared.emit(.pwd(tabId: id, path: surface.currentPwd))
-    groupKey = GitWorktreeRoot.locationKey(of: cwd)
+    groupKey = GitWorktreeRoot.root(of: cwd)
     view.editor.setRoot(groupKey)
     onPwdChange?()
   }

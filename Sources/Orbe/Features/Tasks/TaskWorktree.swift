@@ -1,6 +1,6 @@
 import Foundation
 
-/// タスクの worktree。値は場所のキー（`GitWorktreeRoot.locationKey`）で、タブの連のキーと同じ規則で揃って
+/// タスクの worktree。値は根（`GitWorktreeRoot.root(of:)`）で、タブの連のキーと同じ規則で揃って
 /// いるので、「その worktree のタブ」はキーの等値だけで決まる。等値は中のパスの文字列。
 /// 永続とワイヤの形はパスの文字列。
 struct TaskWorktree: Hashable, Codable {
@@ -16,7 +16,7 @@ struct TaskWorktree: Hashable, Codable {
       FileManager.default.fileExists(atPath: directory, isDirectory: &isDirectory),
       isDirectory.boolValue
     else { return nil }
-    let key = GitWorktreeRoot.locationKey(of: directory)
+    let key = GitWorktreeRoot.root(of: directory)
     guard Self.isWellFormed(key) else { return nil }
     path = key
   }
