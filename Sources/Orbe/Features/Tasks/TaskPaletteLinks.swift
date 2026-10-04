@@ -43,10 +43,10 @@ struct TaskPaletteLinks: View {
 
   private func linkRow(_ link: TaskLink, primary: GitHubItemID?) -> some View {
     let focused = model.area == .detail(.link(link.item))
-    let summary = TaskPaletteRows.summary(link, model.githubItems.answers)
+    let summary = GitHubItemText.summary(link, model.githubItems.answers)
     return HStack(spacing: Theme.Space.note) {
       TaskLinkGlyph(kind: link.kind)
-      Text(TaskPaletteRows.linkLabel(link.item, primary: primary))
+      Text(GitHubItemText.label(link.item, primary: primary))
         .font(Font.theme.codeCompact)
         .foregroundStyle(Color.theme.textMuted)
         .fixedSize()
@@ -93,16 +93,14 @@ struct TaskPaletteLinks: View {
   /// 右の状態。Issue は open / closed、PR は「✓ CI · レビュー待ち」「マージ済み」「閉じた」など。
   private func linkState(_ summary: GitHubItemSummary) -> Text {
     let muted = { (text: String) in Text(text).foregroundStyle(Color.theme.textMuted) }
-    guard let pullRequest = summary.pullRequest else {
-      return muted(
-        l10n.string(summary.state == .open ? .taskPaletteIssueOpen : .taskPaletteIssueClosed))
+    switch GitHubItemText.state(summary) {
+    case .issue(let open):
+      return muted(GitHubItemText.issueStateText(open: open, l10n.language))
+    case .pullRequest(let checks, let phase):
+      var parts: [Text] = []
+      if let checks { parts.append(TaskChecksMark.text(checks) + muted(" CI")) }
+      if let phase { parts.append(muted(GitHubItemText.phaseText(phase, l10n.language))) }
+      return parts.dropFirst().reduce(parts.first ?? Text("")) { $0 + muted(" · ") + $1 }
     }
-    let phase = summary.pullRequestPhase
-    var parts: [Text] = []
-    if let checks = pullRequest.checks, phase != .merged, phase != .closed {
-      parts.append(TaskPullRequestText.checksMark(checks) + muted(" CI"))
-    }
-    if let phase { parts.append(muted(TaskPullRequestText.phase(phase, l10n))) }
-    return parts.dropFirst().reduce(parts.first ?? Text("")) { $0 + muted(" · ") + $1 }
   }
 }

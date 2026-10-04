@@ -52,7 +52,7 @@ extension TaskPaletteRowsTests {
   /// 値が届くまで・無かった・実体が PR でないときは、番号だけの札。
   func testBadgeIsNumberOnlyWithoutAPullRequestValue() throws {
     let task = linked([link(.issue, 212), link(.pr, 213)])
-    let numberOnly = TaskPaletteTaskRow.PullRequestBadge(number: 213, phase: nil, checks: nil)
+    let numberOnly = GitHubItemText.PullRequestBadge(number: 213, phase: nil, checks: nil)
 
     XCTAssertEqual(try taskRow(task).pullRequest, numberOnly, "値が届くまで")
     XCTAssertEqual(
@@ -118,9 +118,9 @@ extension TaskPaletteRowsTests {
     let storedAsIssue = link(.issue, 213)
     let items = [storedAsIssue.item: pullRequest()]
 
-    XCTAssertNil(TaskPaletteRows.summary(storedAsIssue, items), "Issue として付けた番号が実は PR")
-    XCTAssertNotNil(TaskPaletteRows.summary(link(.pr, 213), items))
-    XCTAssertNil(TaskPaletteRows.summary(link(.pr, 213), [:]), "値が届くまで")
+    XCTAssertNil(GitHubItemText.summary(storedAsIssue, items), "Issue として付けた番号が実は PR")
+    XCTAssertNotNil(GitHubItemText.summary(link(.pr, 213), items))
+    XCTAssertNil(GitHubItemText.summary(link(.pr, 213), [:]), "値が届くまで")
   }
 
   /// 詳細の Issue・PR の欄の番号は、主と同じリポジトリなら `#番号`、違えば owner を除いた名前を添える。
@@ -128,10 +128,10 @@ extension TaskPaletteRowsTests {
     let primary = link(.issue, 212, repo: "nakatake/orbe").item
 
     XCTAssertEqual(
-      TaskPaletteRows.linkLabel(link(.pr, 213, repo: "Nakatake/Orbe").item, primary: primary),
+      GitHubItemText.label(link(.pr, 213, repo: "Nakatake/Orbe").item, primary: primary),
       "#213")
     XCTAssertEqual(
-      TaskPaletteRows.linkLabel(link(.pr, 88, repo: "nakatake/api").item, primary: primary),
+      GitHubItemText.label(link(.pr, 88, repo: "nakatake/api").item, primary: primary),
       "api#88")
   }
 }

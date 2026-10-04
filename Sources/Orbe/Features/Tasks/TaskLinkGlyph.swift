@@ -45,22 +45,9 @@ struct TaskLinkGlyph: View {
   }
 }
 
-/// PR の状態の語と CI の印（一覧の PR の札と、詳細の Issue・PR の欄が共に使う）。
-enum TaskPullRequestText {
-  static func phase(_ phase: GitHubItemSummary.PullRequestPhase, _ l10n: LocalizationStore)
-    -> String
-  {
-    switch phase {
-    case .merged: l10n.string(.taskPalettePRMerged)
-    case .closed: l10n.string(.taskPalettePRClosed)
-    case .draft: l10n.string(.taskPalettePRDraft)
-    case .reviewRequired: l10n.string(.taskPalettePRReviewRequired)
-    case .approved: l10n.string(.taskPalettePRApproved)
-    case .changesRequested: l10n.string(.taskPalettePRChangesRequested)
-    }
-  }
-
-  static func checksMark(_ checks: GitHubItemSummary.Checks) -> Text {
+/// CI の印（成功 ✓・失敗 ✗・進行中 ⋯）。色は補強に留める。
+enum TaskChecksMark {
+  static func text(_ checks: GitHubItemSummary.Checks) -> Text {
     switch checks {
     case .success: Text("✓").foregroundStyle(Color.theme.success)
     case .failure: Text("✗").foregroundStyle(Color.theme.danger)

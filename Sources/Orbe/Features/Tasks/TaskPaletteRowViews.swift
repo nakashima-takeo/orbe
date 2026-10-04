@@ -240,7 +240,7 @@ struct TaskPaletteTaskRowView: View {
 
 /// 一覧の PR の札（「<PR の印> #213 レビュー待ち ✓」）。
 struct TaskPullRequestBadge: View {
-  let badge: TaskPaletteTaskRow.PullRequestBadge
+  let badge: GitHubItemText.PullRequestBadge
   @Environment(\.localization) private var l10n
 
   var body: some View {
@@ -248,9 +248,10 @@ struct TaskPullRequestBadge: View {
       TaskLinkGlyph(kind: .pr, size: 11)
       Text("#\(badge.number)").foregroundStyle(Color.theme.textPrimary)
       if let phase = badge.phase {
-        Text(TaskPullRequestText.phase(phase, l10n)).foregroundStyle(Color.theme.textMuted)
+        Text(GitHubItemText.phaseText(phase, l10n.language))
+          .foregroundStyle(Color.theme.textMuted)
       }
-      if let checks = badge.checks { TaskPullRequestText.checksMark(checks) }
+      if let checks = badge.checks { TaskChecksMark.text(checks) }
     }
     .font(Font.theme.codeCompact)
     .lineLimit(1)

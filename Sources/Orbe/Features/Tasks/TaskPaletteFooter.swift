@@ -44,7 +44,7 @@ struct TaskPaletteFooter: View {
         key: "↵", template: l10n.string(.taskPaletteActionOpenLink),
         slots: [
           .emphasis(
-            TaskPaletteRows.linkLabel(item, primary: model.selectedTask?.links.first?.item))
+            GitHubItemText.label(item, primary: model.selectedTask?.links.first?.item))
         ])
     } else {
       switch model.selectedID {

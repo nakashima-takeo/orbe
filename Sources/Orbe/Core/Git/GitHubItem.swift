@@ -62,11 +62,6 @@ struct GitHubItemSummary: Equatable {
     let author: String?
   }
 
-  /// PR の状態を 1 語で言うときの語。強いものを先に取る（マージ済み > 閉じた > 下書き > レビュー状態）。
-  enum PullRequestPhase: Equatable {
-    case merged, closed, draft, reviewRequired, approved, changesRequested
-  }
-
   let title: String
   let state: State
   /// PR なら値がある。nil は Issue。
@@ -74,23 +69,6 @@ struct GitHubItemSummary: Equatable {
 
   /// GitHub 上の実体の種別。
   var kind: GitHubItemKind { pullRequest == nil ? .issue : .pr }
-
-  /// PR でなければ nil。レビュー状態が無い open の PR も nil。
-  var pullRequestPhase: PullRequestPhase? {
-    guard let pullRequest else { return nil }
-    switch state {
-    case .merged: return .merged
-    case .closed: return .closed
-    case .open:
-      if pullRequest.isDraft { return .draft }
-      switch pullRequest.review {
-      case .reviewRequired: return .reviewRequired
-      case .approved: return .approved
-      case .changesRequested: return .changesRequested
-      case nil: return nil
-      }
-    }
-  }
 }
 
 /// 1 項目を問い合わせた答え。
