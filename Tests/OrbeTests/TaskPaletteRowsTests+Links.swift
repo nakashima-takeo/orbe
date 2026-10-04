@@ -113,6 +113,16 @@ extension TaskPaletteRowsTests {
       "主が Issue")
   }
 
+  /// 詳細の Issue・PR の欄に出す値は、保存した種別と GitHub 上の実体の種別が一致するときだけ。
+  func testLinkValueIsWithheldWhenTheStoredKindDiffersFromGitHub() {
+    let storedAsIssue = link(.issue, 213)
+    let items = [storedAsIssue.item: pullRequest()]
+
+    XCTAssertNil(TaskPaletteRows.summary(storedAsIssue, items), "Issue として付けた番号が実は PR")
+    XCTAssertNotNil(TaskPaletteRows.summary(link(.pr, 213), items))
+    XCTAssertNil(TaskPaletteRows.summary(link(.pr, 213), [:]), "値が届くまで")
+  }
+
   /// 詳細の Issue・PR の欄の番号は、主と同じリポジトリなら `#番号`、違えば owner を除いた名前を添える。
   func testLinkLabelNamesTheRepositoryOnlyWhenItDiffersFromThePrimary() {
     let primary = link(.issue, 212, repo: "nakatake/orbe").item
