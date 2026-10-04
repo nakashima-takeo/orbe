@@ -47,3 +47,27 @@ final class WindowControllerFocusRestoreTests: OrbeTestCase {
     XCTAssertFalse(wc.window.firstResponder === surface, "nextTab が届けば隣タブの surface へ移る")
   }
 }
+
+/// 面（エディター pane・端末 surface）のクリックと背の操作が、焦点の面をどう動かすかを実窓で固定する。
+extension WindowControllerFocusRestoreTests {
+  /// 分割中にエディター面をクリックして焦点にし、背をクリックすると、残るのは焦点の面（エディター）。
+  func testSpineClickKeepsTheFocusedEditorFace() throws {
+    let wc = WindowController()
+    let tab = try XCTUnwrap(wc.activeTab)
+    tab.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
+    wc.window.contentView?.layoutSubtreeIfNeeded()
+    let pane = tab.view.editor
+    XCTAssertGreaterThan(pane.bounds.width, 0, "前提: 分割でエディター面が見えている")
+
+    pane.mouseDown(with: .mouse(.leftMouseDown, at: pane.centerInWindow, in: wc.window))
+    XCTAssertTrue(wc.window.firstResponder === pane, "クリックでエディター pane が first responder")
+    XCTAssertEqual(tab.faces.focus, .editor, "タブの焦点の面がエディターへ追従する")
+
+    let spine = tab.view.spine
+    spine.mouseDown(with: .mouse(.leftMouseDown, at: spine.centerInWindow, in: wc.window))
+    spine.mouseUp(with: .mouse(.leftMouseUp, at: spine.centerInWindow, in: wc.window))
+    XCTAssertEqual(
+      tab.faces, FaceLayout(editorRatio: 1, focus: .editor), "背クリックで焦点の面（エディター）が全面に残る")
+    XCTAssertTrue(wc.window.firstResponder === pane, "焦点はエディター pane のまま")
+  }
+}

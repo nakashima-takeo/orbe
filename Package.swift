@@ -9,6 +9,29 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-markdown.git", from: "0.6.0"),
     // アプリ内アップデート（appcast + EdDSA 署名検証 + 終了時適用）。UI は自前（SPUUserDriver 実装）。
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
+    // tree-sitter 本体（C API を OrbeEditorCore から直接呼ぶ）。0.26.12 以降はエラー回復が退行して大きな Swift が
+    // 全体 ERROR に崩れるので exact で固定する（docs/guides/build.md）。
+    .package(url: "https://github.com/tree-sitter/tree-sitter", exact: "0.26.11"),
+    // 文法 14 パッケージ（16 パーサ）。javascript / css / python / yaml の exact は、新しいタグの manifest が
+    // scanner.c を cwd 相対の fileExists で条件付きにしていて依存として評価すると落ち、リンクに失敗するため
+    // 導入前タグへ固定。swift の exact は、生成済みの parser.c を持つのが `-with-generated-files` タグだけで、
+    // SemVer ではプレリリース扱い（素のタグ 0.7.3 の方が新しい）なので、`from:` だと parser.c の無いタグに
+    // 解決されるため（docs/guides/build.md）。
+    .package(url: "https://github.com/tree-sitter/tree-sitter-json", from: "0.24.8"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-typescript", from: "0.23.2"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-html", from: "0.23.2"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-go", from: "0.25.0"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-rust", from: "0.24.2"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-bash", from: "0.25.1"),
+    .package(url: "https://github.com/tree-sitter-grammars/tree-sitter-markdown", from: "0.5.3"),
+    .package(url: "https://github.com/tree-sitter-grammars/tree-sitter-toml", from: "0.7.0"),
+    .package(url: "https://github.com/camdencheek/tree-sitter-dockerfile", from: "0.2.0"),
+    .package(
+      url: "https://github.com/alex-pinkus/tree-sitter-swift", exact: "0.7.3-with-generated-files"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-javascript", exact: "0.23.1"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-css", exact: "0.23.2"),
+    .package(url: "https://github.com/tree-sitter/tree-sitter-python", exact: "0.23.6"),
+    .package(url: "https://github.com/tree-sitter-grammars/tree-sitter-yaml", exact: "0.7.0"),
   ],
   targets: [
     .binaryTarget(
@@ -39,6 +62,40 @@ let package = Package(
         .unsafeFlags(["-O"], .when(configuration: .debug)),
       ]
     ),
+    // コードエディターの中核（文書と本文の写し・言語・tree-sitter の色付け・裏の仕事・テキスト面の契約）。
+    // テキストエンジンも Theme / L10n も知らない——境界は target 依存でコンパイラが保証する。
+    // main と裏の仕事の間で本文や結果を渡すので Swift 6 の言語モードで検査する（取り違えがコンパイルエラーで止まる）。
+    .target(
+      name: "OrbeEditorCore",
+      dependencies: [
+        .product(name: "TreeSitter", package: "tree-sitter"),
+        .product(name: "TreeSitterJSON", package: "tree-sitter-json"),
+        .product(name: "TreeSitterTypeScript", package: "tree-sitter-typescript"),
+        .product(name: "TreeSitterHTML", package: "tree-sitter-html"),
+        .product(name: "TreeSitterGo", package: "tree-sitter-go"),
+        .product(name: "TreeSitterRust", package: "tree-sitter-rust"),
+        .product(name: "TreeSitterBash", package: "tree-sitter-bash"),
+        .product(name: "TreeSitterMarkdown", package: "tree-sitter-markdown"),
+        .product(name: "TreeSitterTOML", package: "tree-sitter-toml"),
+        .product(name: "TreeSitterDockerfile", package: "tree-sitter-dockerfile"),
+        .product(name: "TreeSitterSwift", package: "tree-sitter-swift"),
+        .product(name: "TreeSitterJavaScript", package: "tree-sitter-javascript"),
+        .product(name: "TreeSitterCSS", package: "tree-sitter-css"),
+        .product(name: "TreeSitterPython", package: "tree-sitter-python"),
+        .product(name: "TreeSitterYAML", package: "tree-sitter-yaml"),
+      ],
+      // 上流の代わりに持つ queries（`queries/<文法>/<ファイル>`）。`LanguageRegistry` が queries の根から読む。
+      resources: [.copy("Syntax/Resources/queries")],
+      swiftSettings: [.swiftLanguageMode(.v6)]
+    ),
+    // テキスト面（`TextSurface`）の Metal 実装。本文を持たず、文書の写しを描画専用のスレッドが 1 コマで描く。公開は面を
+    // 作る関数・描く用意を裏で始める関数・面の view の型（変換中の ⌘ キーを IME へ先に渡す口。窓のキーの層の口への準拠は
+    // 合成点が宣言する）だけ。main と描画スレッドの間で値を渡すので Swift 6 の言語モードで検査する。
+    .target(
+      name: "OrbeEditorEngine",
+      dependencies: ["OrbeEditorCore"],
+      swiftSettings: [.swiftLanguageMode(.v6)]
+    ),
     .executableTarget(
       name: "Orbe",
       dependencies: [
@@ -46,6 +103,8 @@ let package = Package(
         "OrbePaths",
         "OrbeSessionLog",
         "OrbeSound",
+        "OrbeEditorCore",
+        "OrbeEditorEngine",
         .product(name: "Markdown", package: "swift-markdown"),
         .product(name: "Sparkle", package: "Sparkle"),
       ],
@@ -115,8 +174,19 @@ let package = Package(
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
+      name: "OrbeEditorCoreTests",
+      dependencies: ["OrbeEditorCore"],
+      resources: [.copy("Fixtures")],
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .testTarget(
+      name: "OrbeEditorEngineTests",
+      dependencies: ["OrbeEditorEngine", "OrbeEditorCore"],
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .testTarget(
       name: "OrbeTests",
-      dependencies: ["Orbe"],
+      dependencies: ["Orbe", "OrbeEditorCore", "OrbeEditorEngine"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(

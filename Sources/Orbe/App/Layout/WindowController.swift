@@ -28,6 +28,9 @@ final class WindowController: NSObject, NSWindowDelegate {
   // chrome 全域のフォント割り当て（絵文字 Noto/Apple・タブタイトルフォント）を届ける観測可能ホルダー。
   // 値は applyActiveWorkspaceConfig が実効設定から同一 tick で更新し、各 NSHostingView root へ注入する。
   let fontResolver = ChromeFontResolver()
+  // エディター面のサイドバーの幅と開閉。アプリ全体で 1 つ（タブ・workspace をまたいで同じ）で、
+  // app-state から起こして各タブの面へ配る。
+  let editorSidebar = MainActor.assumeIsolated { EditorSidebarState.loaded() }
   // 現在の UI 言語ホルダー。起動時に app-state の preferredLanguage（未設定は OS 追従）で解決し、
   // NSHostingView root（AppShell）へ Environment 注入する。言語変更は初回言語画面と
   // 設定パレットの言語行が行い、@Observable 経由で全 chrome を一斉再描画する。
@@ -63,6 +66,10 @@ final class WindowController: NSObject, NSWindowDelegate {
   // メモリに持ち、タブの同一性の遷移（wire の onIdentityTransition）を積む。復元（restore）より先に
   // 出来ていることが要る——復元タブの起床が opened を書く。
   let sessionLog = AgentSessionLog()
+  // タブのエディターが文書を開くときの面の作り方。打ち切った行の印の文言は、面を作る時点の UI の言語で決まる。
+  private(set) lazy var editorSurfaces = EditorSurfaces(
+    queriesRoot: BundledResources.root,
+    language: { [weak self] in self?.localization.language ?? .systemDefault })
 
   // 読みは store へ転送する（制御チャネル・chrome・パレット・永続・テストが多数の箇所で読むため、
   // 従来の可視性（internal）を保って読み site を無改変にする）。所有と全ミューテーションは store。
@@ -204,6 +211,18 @@ final class WindowController: NSObject, NSWindowDelegate {
       self.recordSessionEvent(transition, of: tab)
     }
     tab.onWindowCommand = { [weak self] command in self?.handleWindowCommand(command) }
+    tab.onFacesChange = { [weak self, weak tab] in
+      guard let tab else { return }
+      self?.tabFacesDidChange(tab)
+    }
+    tab.view.onProjectionChange = { [weak self] in self?.refreshChrome() }
+    tab.onEditorChange = { [weak self] in
+      self?.refreshChrome()
+      self?.scheduleSave()
+    }
+    tab.view.configure(
+      translucency: chromeTranslucency, localization: localization, fontResolver: fontResolver,
+      sidebar: editorSidebar)
     return tab
   }
 
@@ -250,15 +269,18 @@ final class WindowController: NSObject, NSWindowDelegate {
   }
 
   /// タブ 1 枚を model.content へ mount（surface 誕生は viewDidMoveToWindow 経由で冪等に 1 度）。
-  /// 隠れタブも実サイズで起こす（pty winsize 正常）。frame/isHidden は既 mount でも毎回更新。
+  /// 隠れタブも実サイズで起こす（pty winsize 正常）。frame/isHidden は既 mount でも毎回更新し、
+  /// addSubview より先に確定させる——窓に付いた瞬間の可視性で面（エクスプローラー）が根のサービスを
+  /// 握るか決まるので、隠れタブを一瞬でも見えている扱いにしない（`materializeOffscreen` と同じ順）。
   private func mountTab(_ tab: TerminalTab, in ws: Workspace, visible: Bool) {
     guard store.recordMaterialization(of: tab, in: ws) else { return }
-    if tab.view.superview !== model.content {
-      tab.view.autoresizingMask = [.width, .height]
-      model.content.addSubview(tab.view)
-    }
     tab.view.frame = model.content.bounds
     tab.view.isHidden = !visible
+    if tab.view.superview !== model.content {
+      tab.view.autoresizingMask = [.width, .height]
+      tab.view.layoutSubtreeIfNeeded()
+      model.content.addSubview(tab.view)
+    }
   }
 
   /// 未 mount の隠れタブを後続 runloop tick で 1 枚ずつ mount（surface 誕生を分割）。
@@ -275,45 +297,19 @@ final class WindowController: NSObject, NSWindowDelegate {
     }
   }
 
+  /// アクティブ workspace のアクティブタブ。0 タブなら nil。
+  var activeTab: TerminalTab? {
+    current.tabs.indices.contains(current.active) ? current.tabs[current.active] : nil
+  }
+
   /// 「見ているタブ」＝ウィンドウがキー（前面）のときの、アクティブ workspace のアクティブ表示タブ。
   /// 背面・0タブなら nil。
   /// done のフォーカス消費・メニューバー②の抑制・通知音の抑制が、この 1 つの判定を共有する。
-  var visibleTab: TerminalTab? {
-    guard window.isKeyWindow, current.tabs.indices.contains(current.active) else { return nil }
-    return current.tabs[current.active]
-  }
+  var visibleTab: TerminalTab? { window.isKeyWindow ? activeTab : nil }
 
   /// 完了通知の消費：見ているタブの done を消費して done バッジを消す。
   /// 背面・背景タブの done は残す。3 トリガ（タブ活性化・done 到着・前面復帰）が共有する。
   private func consumeVisibleTabDone() { visibleTab?.consumeDoneState() }
-
-  /// タブを閉じる唯一の合流点。発火源はユーザー操作（Cmd+W）に限らず、shell の exit
-  /// （close_surface_cb → onClose）が背景タブ・背景 workspace からも届くため、
-  /// アクティブ文脈を前提にせず所属 workspace を特定して処理する。
-  /// 制御 API（`close_tab`）も id 解決の上でここへ委譲する（WindowController+Control）ため internal。
-  /// `origin` は判断せず store へ素通しする（同一性の終わり方としてタブがログへ写す）。
-  func closeTab(_ tab: TerminalTab?, origin: TabCloseOrigin) {
-    guard let tab else { return }
-    // タブ集合が変わると editingIndex（位置 index）が別タブを指しうる。編集中なら畳む
-    // （前方の背景タブが shell exit する等、フォーカスを保ったまま集合が変わる経路を決定的に解除）。
-    if statusModel.editingIndex != nil { endTabRename() }
-    switch store.removeTab(tab, origin: origin) {
-    case .notFound:
-      return
-    case .emptiedActive:
-      // アクティブ workspace が0タブ化。閉じたタブの view を content から外し空表示にする
-      // （従来 select が担う唯一のビュー除去経路をここで明示し surface leak を避ける）。
-      clearActiveContent()
-    case .reselectActive(let i):
-      // 閉じたタブの view を model.content から外す唯一の経路が select() の不要ビュー除去なので、
-      // 背景タブの close も必ず通す（通さないと外れた TerminalTab を retain し続け surface がリークする）。
-      select(i)
-    case .backgroundChanged:
-      refreshChrome()  // 背景タブ/背景 workspace の空化でも chrome 横断 rollup を同期する
-    }
-    reloadPalette()  // パレット表示中の外因変異（shell exit でのタブ消滅・0タブ化）でも表示を実状態へ追従させる
-    scheduleSave()
-  }
 
   /// chrome 更新を要求する。`window.title`（Mission Control 用・O(1)）は即時反映し、重い StatusRow
   /// snapshot（全 workspace×全タブ走査）は dirty を立て runloop tick 末尾に 1 回だけ予約。
@@ -337,7 +333,8 @@ final class WindowController: NSObject, NSWindowDelegate {
         workspace: current.name,
         strip: tabStrip(of: current),
         active: current.active,
-        cwd: store.activeTabCwd(),
+        location: activeTab?.location,
+        faceDots: activeTab?.view.projection.dots,
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
     refreshAttentionSnapshot()  // Attention 一覧も同じ coalesce 契機で追従（WindowController+Attention）
     refreshClosedAgentsPalette()  // ⇧⌘T の一覧も同じ契機で追従（WindowController+ClosedAgents）
@@ -359,10 +356,11 @@ final class WindowController: NSObject, NSWindowDelegate {
       })
   }
 
-  /// アクティブタブの surface へフォーカスを戻す（パレットの dismiss と同じ規則）。
+  /// アクティブタブの焦点の面（端末 surface かエディター pane）へフォーカスを戻す
+  /// （パレットの dismiss と同じ規則）。
   func focusActiveTab() {
-    guard current.tabs.indices.contains(current.active) else { return }
-    window.makeFirstResponder(current.tabs[current.active].surface)
+    guard let tab = activeTab else { return }
+    window.makeFirstResponder(tab.focusTarget)
   }
 
   /// OSC 7 の cwd 報告を受けた。所属キーが変わって隣接不変条件が破れていればタブを移し（アクティブ

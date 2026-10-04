@@ -1,6 +1,6 @@
 import AppKit
 
-/// 窓の ✕ をアプリ終了の要求へ橋渡しする。終了してよいかの判断（実行中プロセスの確認）は
+/// 窓の ✕ をアプリ終了の要求へ橋渡しする。終了してよいかの判断（エディターの未保存と実行中プロセスの確認）は
 /// 唯一の関門である `AppDelegate.applicationShouldTerminate` が持つ。
 extension WindowController {
   /// Orbe は単一ウィンドウなので、この窓を閉じることはアプリを終了することと同義。本当の問いは

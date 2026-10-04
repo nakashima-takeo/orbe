@@ -62,6 +62,7 @@ extension ControlWireTests {
       ("remove_workspace", ["workspaceId": 3]),
       ("focus_tab", ["tabId": 8]),
       ("close_tab", ["tabId": 9]),
+      ("open_file", ["tabId": 8, "path": "/tmp/f.txt"]),
       (
         "report_agent",
         [
@@ -107,6 +108,8 @@ extension ControlWireTests {
       RequiredParam(method: "report_agent", key: "state", code: -32602),
       RequiredParam(method: "focus_tab", key: "tabId", code: -32602),
       RequiredParam(method: "close_tab", key: "tabId", code: -32602),
+      RequiredParam(method: "open_file", key: "tabId", code: -32602),
+      RequiredParam(method: "open_file", key: "path", code: -32602),
       RequiredParam(method: "config_set", key: "key", code: -32602),
       RequiredParam(method: "config_set", key: "value", code: -32602),
       RequiredParam(method: "config_set", key: "scope", code: -32602),

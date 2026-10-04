@@ -137,6 +137,86 @@ Markdown parsing (Contents/MacOS/Orbe)
   License: licenses/swift-cmark-COPYING.txt
 
 --------------------------------------------------------------------------------
+Code editor (Contents/MacOS/Orbe, Contents/Resources/TreeSitter*.bundle)
+--------------------------------------------------------------------------------
+
+Copyright holders are as stated in each component's license file. Where a
+component's license file carries no copyright line, its entry names the
+holder instead, so that the attribution is not lost.
+
+* swift-corelibs-foundation — Apache-2.0 with Runtime Library Exception
+  Copyright (c) Apple Inc. and the Swift project authors (named here because
+  the license file carries no copyright line).
+  CoreFoundation's backward-deletion cluster rule for strings is ported into
+  Orbe's Swift code as the editor's Backspace unit and compiled into
+  Contents/MacOS/Orbe.
+  https://github.com/swiftlang/swift-corelibs-foundation
+  License: licenses/swift-corelibs-foundation-LICENSE.txt
+
+* Visual Studio Code — MIT License
+  Rules of VS Code's editor are ported into Orbe's Swift code and compiled into
+  Contents/MacOS/Orbe: the editing rules of the editor's text surface (word
+  classes, word movement and deletion, cursor movement and selection, Tab and
+  indentation columns, undo grouping, letter transposition, whole-line copy,
+  cut and paste with an empty selection, the syntax-highlighted HTML copy,
+  drag-and-drop move and copy with the drop indicator), the full-width and
+  emoji character tables, the default word separators and word pattern,
+  indentation detection, the drag auto-scroll speed, the minimap (layout, line
+  rendering, glyph downsampling), the overview ruler, the scrollbar thumb
+  geometry, find (match limits and next/previous positions), occurrence
+  highlighting, project search (result line preview, result limit, default
+  excludes) and file name ordering. The editor's and terminal's default colors
+  take values from VS Code's Dark+, Dark Modern and Light Modern themes.
+  https://github.com/microsoft/vscode
+  License: licenses/vscode-LICENSE.txt
+
+* tree-sitter — MIT License
+  The parser runtime (C). Statically linked into Contents/MacOS/Orbe.
+  https://github.com/tree-sitter/tree-sitter
+  License: licenses/tree-sitter-LICENSE.txt
+  The runtime additionally includes ICU-derived Unicode headers, whose macros
+  are expanded into the lexer and query code:
+  - ICU (International Components for Unicode) — Unicode License (ICU 58 and later)
+    https://github.com/unicode-org/icu
+    License: licenses/tree-sitter-unicode-LICENSE.txt
+
+  The grammars below are each a separate work under their own MIT license.
+  Their generated parsers (and external scanners, where present) are
+  statically linked into Contents/MacOS/Orbe, and their query files are
+  bundled verbatim as Contents/Resources/TreeSitter*.bundle.
+
+  - tree-sitter-bash — MIT License
+    https://github.com/tree-sitter/tree-sitter-bash — License: licenses/tree-sitter-bash-LICENSE.txt
+  - tree-sitter-css — MIT License
+    https://github.com/tree-sitter/tree-sitter-css — License: licenses/tree-sitter-css-LICENSE.txt
+  - tree-sitter-dockerfile — MIT License
+    https://github.com/camdencheek/tree-sitter-dockerfile — License: licenses/tree-sitter-dockerfile-LICENSE.txt
+  - tree-sitter-go — MIT License
+    https://github.com/tree-sitter/tree-sitter-go — License: licenses/tree-sitter-go-LICENSE.txt
+  - tree-sitter-html — MIT License
+    https://github.com/tree-sitter/tree-sitter-html — License: licenses/tree-sitter-html-LICENSE.txt
+  - tree-sitter-javascript — MIT License
+    https://github.com/tree-sitter/tree-sitter-javascript — License: licenses/tree-sitter-javascript-LICENSE.txt
+  - tree-sitter-json — MIT License
+    https://github.com/tree-sitter/tree-sitter-json — License: licenses/tree-sitter-json-LICENSE.txt
+  - tree-sitter-markdown (block and inline grammars) — MIT License
+    https://github.com/tree-sitter-grammars/tree-sitter-markdown — License: licenses/tree-sitter-markdown-LICENSE.txt
+    Its inline injections query, adapted by Orbe, is also bundled under
+    Contents/Resources/Orbe_OrbeEditorCore.bundle.
+  - tree-sitter-python — MIT License
+    https://github.com/tree-sitter/tree-sitter-python — License: licenses/tree-sitter-python-LICENSE.txt
+  - tree-sitter-rust — MIT License
+    https://github.com/tree-sitter/tree-sitter-rust — License: licenses/tree-sitter-rust-LICENSE.txt
+  - tree-sitter-swift — MIT License
+    https://github.com/alex-pinkus/tree-sitter-swift — License: licenses/tree-sitter-swift-LICENSE.txt
+  - tree-sitter-toml — MIT License
+    https://github.com/tree-sitter-grammars/tree-sitter-toml — License: licenses/tree-sitter-toml-LICENSE.txt
+  - tree-sitter-typescript (TypeScript and TSX grammars) — MIT License
+    https://github.com/tree-sitter/tree-sitter-typescript — License: licenses/tree-sitter-typescript-LICENSE.txt
+  - tree-sitter-yaml — MIT License
+    https://github.com/tree-sitter-grammars/tree-sitter-yaml — License: licenses/tree-sitter-yaml-LICENSE.txt
+
+--------------------------------------------------------------------------------
 Fonts (Contents/Resources/*.ttf, and fonts embedded in Contents/MacOS/Orbe)
 --------------------------------------------------------------------------------
 

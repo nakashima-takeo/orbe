@@ -60,6 +60,13 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
 
     try renderDispatchSnapshots(dir: dir)
 
+    // エディター面は StatusRow の段より前に撮る。連（segments）の段を撮った後は、この test の中で
+    // main queue のブロックが入れ子の run loop で捌かれなくなり（原因未特定・test 内の状態）、
+    // git の子プロセスの完了（main へ dispatch）を待つ骨の fixture が揃わない。
+    try renderEditorSnapshots(dir: dir)
+    try renderEditorShellSnapshots(dir: dir)
+    try renderEditorSearchSnapshots(dir: dir)
+
     // SearchBar（empty / typing / no-match / match / overflow）。
     try writePNG(
       SearchBarFixtures.gallery(), size: NSSize(width: 320, height: 320),
@@ -105,6 +112,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
         .working, .waiting, nil, .done, .working, .working, .done, .done, nil, .done, .done,
       ])
     normal.active = 0
+    normal.faceDots = .init(editor: .off, terminal: .focus)
     normal.rollup = [("working", 3), ("waiting", 1), ("done", 5), ("idle", 2)]
     try writePNG(chromeBand(normal, size: size), size: size, name: "statusrow_normal.png", dir: dir)
 
@@ -116,7 +124,8 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       titles: (0..<10).map { "terraform-apply-session-\($0)" },
       glyphs: (0..<10).map { glyphCycle[$0 % glyphCycle.count] })
     overflow.active = 6
-    overflow.cwd = "~/work/infra/terraform/modules/network"
+    overflow.location = [.dim("~/work/infra/terraform/modules/network")]
+    overflow.faceDots = .init(editor: .off, terminal: .focus)
     overflow.rollup = [("working", 8), ("waiting", 2), ("idle", 15)]
     try writePNG(
       chromeBand(overflow, size: size), size: size, name: "statusrow_overflow.png", dir: dir)
@@ -144,7 +153,8 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
         WorktreeColor.index(forKey: $0)
       })
     grouped.active = 3
-    grouped.cwd = "~/dev/storefront/src/hooks"
+    grouped.location = [.dim("~/dev/storefront/src/hooks")]
+    grouped.faceDots = .init(editor: .off, terminal: .focus)
     grouped.rollup = [("working", 2), ("waiting", 1), ("done", 2), ("idle", 4)]
     try writePNG(
       chromeBand(grouped, size: size), size: size, name: "statusrow_grouped.png", dir: dir)
@@ -158,7 +168,8 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       segments: [0..<4, 4..<8, 8..<11],
       colorIndices: ["network", "compute", "storage"].map { WorktreeColor.index(forKey: $0) })
     groupedOverflow.active = 5
-    groupedOverflow.cwd = "~/work/infra-worktrees/compute"
+    groupedOverflow.location = [.dim("~/work/infra-worktrees/compute")]
+    groupedOverflow.faceDots = .init(editor: .off, terminal: .focus)
     groupedOverflow.rollup = [("working", 3), ("waiting", 3), ("done", 3), ("idle", 2)]
     try writePNG(
       chromeBand(groupedOverflow, size: size), size: size, name: "statusrow_grouped_overflow.png",
@@ -176,14 +187,20 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       colorIndices: ["core", "web", "scratch", "api", "cli"].map { WorktreeColor.index(forKey: $0) }
     )
     groupedScroll.active = 2
-    groupedScroll.cwd = "~/dev/monorepo/packages/core"
+    groupedScroll.location = [.dim("~/dev/monorepo/packages/core")]
+    groupedScroll.faceDots = .init(editor: .off, terminal: .focus)
     groupedScroll.rollup = [("working", 5), ("waiting", 4), ("done", 5), ("idle", 4)]
     try writePNG(
       chromeBand(groupedScroll, size: size), size: size, name: "statusrow_grouped_scroll.png",
       dir: dir)
 
-    // fitting: 行に余る枚数で、幅が自然幅そのままに出る段。2〜3 文字のタブは床 40 に持ち上がり、
-    // 短い名前ばかりの連でもセルが潰れないことを見る（溢れた段だけでは床が shrink に隠れて見えない）。
+    try renderStatusRowFittingSnapshot(dir: dir)
+  }
+
+  /// fitting: 行に余る枚数で、幅が自然幅そのままに出る段。2〜3 文字のタブは床 40 に持ち上がり、
+  /// 短い名前ばかりの連でもセルが潰れないことを見る（溢れた段だけでは床が shrink に隠れて見えない）。
+  private func renderStatusRowFittingSnapshot(dir: URL) throws {
+    let size = statusRowStageSize
     let fitting = StatusRowModel()
     fitting.workspace = "orbe"
     fitting.strip = TabStrip(
@@ -192,7 +209,8 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       segments: [0..<3, 3..<4],
       colorIndices: ["orbe", "notes"].map { WorktreeColor.index(forKey: $0) })
     fitting.active = 0
-    fitting.cwd = "~/dev/orbe/ui"
+    fitting.location = [.dim("~/dev/orbe/ui")]
+    fitting.faceDots = .init(editor: .off, terminal: .focus)
     fitting.rollup = [("working", 1), ("done", 1), ("idle", 2)]
     try writePNG(
       chromeBand(fitting, size: size), size: size, name: "statusrow_fitting.png", dir: dir)

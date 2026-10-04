@@ -73,6 +73,10 @@ enum TestIsolation {
     //    補完の学習ストアだけ。
     //    子プロセス（`ControlProcess.childEnv`）へ渡すのもこの根で、in-process 側の caseDir とは違う。
     setenv(OrbePaths.stateDirEnvVar, dir.path, 1)
+    // git は開発者の global / system 設定（署名・hook・除外・fsmonitor 等）を読まない。`GitRunner` は
+    // プロセスの環境を土台にするので、`git init` を含む全 fixture の全呼び出しに効く。
+    setenv("GIT_CONFIG_GLOBAL", "/dev/null", 1)
+    setenv("GIT_CONFIG_SYSTEM", "/dev/null", 1)
 
     // 3. 補完の学習ストア。`CompletionLearning.shared` は初回タッチ時の `fileURL` で in-memory
     //    ストアを焼くため、まだ誰も書いていないこの時点で固定して即タッチする。

@@ -1,0 +1,341 @@
+import AppKit
+import OrbeEditorCore
+import XCTest
+
+@testable import Orbe
+@testable import OrbeEditorEngine
+
+/// ファイル内検索——⌘F で本文の右上にバーが出て入力欄に焦点、needle で全一致に地・キャレット以降の一致を選んで
+/// 見せ、Enter / ⇧Enter で循環、本文の編集で一致は追従して選択は動かず、文書の切替は同じ needle で敷き直し、
+/// Esc で閉じて焦点がテキスト面へ戻り選択は残る。
+///
+/// 壊れると何が起きるか。⌘F が端末のスクロールバック検索の意味のまま何も起きない。Enter で同じ一致に留まる。打鍵で
+/// 選択が最初の一致へ飛んで打ち込みが乱れる。Esc の後に焦点が窓に落ちて打鍵が消える。
+@MainActor
+final class EditorSearchTests: OrbeTestCase {
+  let style = EditorStyle.make()
+
+  struct Hosted {
+    let tab: TerminalTab
+    let pane: EditorPaneView
+    let document: EditorDocument
+    let window: NSWindow
+  }
+
+  func host(_ text: String, name: String = "s.txt") throws -> Hosted {
+    let tab = TerminalTab(
+      cwd: try XCTUnwrap(TestIsolation.caseDir).path,
+      editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.view.editor
+    let window = hostEditor(tab, width: 700)
+    window.appearance = NSAppearance(named: .darkAqua)
+    addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+    let document = try tab.editor.open(try caseFile(name, text), as: .pinned)
+    pane.layoutSubtreeIfNeeded()
+    window.makeFirstResponder(document.surface.responder)
+    pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "viewport が出る")
+    return Hosted(tab: tab, pane: pane, document: document, window: window)
+  }
+
+  /// 件数の観測（バーの model は閉じているので、pane が bar へ写す closure に割り込む）。
+  func counts(_ pane: EditorPaneView) -> () -> [(Int?, Int)] {
+    var seen: [(Int?, Int)] = []
+    let forward = pane.search.onCountChange
+    pane.search.onCountChange = { selected, total, limited in
+      seen.append((selected, total))
+      forward?(selected, total, limited)
+    }
+    return { seen }
+  }
+
+  private func row(_ hosted: Hosted, _ offset: Int) -> Int {
+    hosted.document.text.row(containing: offset)
+  }
+
+  /// バー（本文の右上に浮く）の下に入らない行から本文を始めるための空行。地を画素で読むテストが使う。
+  static let belowTheBar = "\n\n\n\n"
+
+  /// 本文の `line` 行目（1 始まり）・`column` 桁目（0 始まり）のセルの中心（pane の座標）。地の有無は字の無いセルで読む。
+  func cellCenter(_ hosted: Hosted, line: Int, column: Int) -> NSPoint {
+    let surface = hosted.document.surface.view
+    let origin = hosted.pane.convert(surface.bounds, from: surface).origin
+    let cell = (" " as NSString).size(withAttributes: [.font: style.font]).width
+    return NSPoint(
+      x: origin.x + style.gutterWidth + style.marks.gutterWidth + (CGFloat(column) + 0.5) * cell,
+      y: origin.y + style.topInset + (CGFloat(line) - 0.5) * style.lineHeight)
+  }
+
+  func testCommandFOpensTheBarAtTheTopRightOfTheSurfaceAndFocusesTheField() throws {
+    let hosted = try host("foo bar\nfoo baz\nFOO\n")
+    let pane = hosted.pane
+    XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
+    catchUp(pane)
+    let bar = try XCTUnwrap(pane.searchBar)
+    pane.layoutSubtreeIfNeeded()
+    XCTAssertEqual(
+      bar.frame.maxX, pane.bodyRect.maxX - pane.rightColumnWidth - 12, accuracy: 0.5,
+      "右列（ミニマップとスクロールバー）の左・右 12")
+    XCTAssertEqual(bar.frame.minY, pane.bodyRect.minY + 12, accuracy: 0.5, "上 12")
+    pumpMain(
+      until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true },
+      "入力欄に焦点")
+    XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")), "表示中の ⌘F は再フォーカスのみ")
+    catchUp(pane)
+    XCTAssertTrue(pane.searchBar === bar, "二重生成しない")
+  }
+
+  /// needle で全一致に地が敷かれ、キャレット以降で最初の一致が選ばれる。件数は selected/total。
+  func testNeedleHighlightsEveryMatchAndSelectsTheFirstMatchAfterTheCaret() throws {
+    let hosted = try host("foo bar\nfoo baz\nFOO\n")
+    let pane = hosted.pane
+    let seen = counts(pane)
+    hosted.document.surface.selectedRange = NSRange(location: 4, length: 0)
+    pane.showSearch()
+    catchUp(pane)
+    pane.search.setNeedle("foo")
+    catchUp(pane)
+    XCTAssertEqual(pane.search.matches.map(\.location), [0, 8, 16], "大小無視")
+    XCTAssertEqual(
+      hosted.document.surface.selectedRange, NSRange(location: 8, length: 3), "キャレット以降で最初")
+    pumpMain(until: { seen().last?.0 == 2 }, "件数 2/3")
+    XCTAssertEqual(seen().last?.1, 3)
+    pane.search.setNeedle("zzz")
+    catchUp(pane)
+    XCTAssertEqual(pane.search.matches, [])
+    XCTAssertEqual(seen().last?.1, 0, "一致なし")
+    XCTAssertEqual(
+      hosted.document.surface.selectedRange, NSRange(location: 8, length: 3), "一致が無ければ選択は残る")
+  }
+
+  /// バーの Enter / ⇧Enter は次・前へ循環し、見えていない一致は中央へスクロールして見せる。
+  func testNextAndPreviousCycleAndRevealOffscreenMatches() throws {
+    var lines = (1...100).map { "line \($0)" }
+    for n in [10, 60, 90] { lines[n - 1] += " needle" }
+    let hosted = try host(lines.joined(separator: "\n") + "\n")
+    let pane = hosted.pane
+    let document = hosted.document
+    pane.showSearch()
+    catchUp(pane)
+    let bar = try XCTUnwrap(pane.searchBar)
+    bar.onNeedleChange?("needle")
+    catchUp(pane)
+    XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 9)
+    XCTAssertEqual(document.surface.viewport.firstVisible, 0, "見えている一致ではスクロールしない")
+
+    bar.onNext?()
+    XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 59)
+    let visible = document.surface.viewport.visibleLines
+    pumpMain(until: { document.surface.viewport.firstVisible > 0 }, "見せる")
+    XCTAssertEqual(
+      CGFloat(row(hosted, document.surface.viewport.firstVisible)), 59 - visible / 2, accuracy: 1.5,
+      "見えていない一致は中央へ")
+
+    bar.onNext?()
+    XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 89)
+    bar.onNext?()
+    XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 9, "末尾で先頭へ")
+    bar.onPrev?()
+    XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 89, "先頭で末尾へ")
+    bar.onPrev?()
+    XCTAssertEqual(row(hosted, document.surface.selectedRange.location), 59)
+  }
+
+  /// 縦に見えていても横に隠れている一致は、横だけ寄せて見せる（縦は動かない）。左端へ戻る一致では横も戻る。
+  func testAMatchHiddenToTheRightIsRevealedByScrollingSideways() throws {
+    let hosted = try host("x" + String(repeating: " ", count: 200) + "needle\nneedle\n")
+    let pane = hosted.pane
+    let document = hosted.document
+    let surface = try engine(document)
+    // 横は描画スレッドが区間の行を組んで寄せる——撮影はその場で出してコマを組む。
+    let x = { () -> Double in
+      _ = surface.snapshot()
+      return surface.scrollPosition.x
+    }
+    XCTAssertEqual(x(), 0)
+    pane.showSearch()
+    catchUp(pane)
+    let bar = try XCTUnwrap(pane.searchBar)
+    bar.onNeedleChange?("needle")
+    catchUp(pane)
+    XCTAssertEqual(document.surface.selectedRange.location, 201)
+    XCTAssertGreaterThan(x(), 0, "横に寄る")
+    XCTAssertEqual(document.surface.viewport.firstVisible, 0, "縦は動かない")
+
+    bar.onNext?()
+    XCTAssertEqual(document.surface.selectedRange.location, 208, "2 行目の先頭")
+    XCTAssertEqual(x(), 0, "左端の一致で横が戻る")
+  }
+
+  /// 本文を編集すると一致と件数は追従し、選択（キャレット）は動かない。
+  func testEditingRefreshesMatchesWithoutMovingTheSelection() throws {
+    let hosted = try host("ab ab\n")
+    let pane = hosted.pane
+    let document = hosted.document
+    let seen = counts(pane)
+    pane.showSearch()
+    catchUp(pane)
+    pane.search.setNeedle("ab")
+    catchUp(pane)
+    XCTAssertEqual(pane.search.matches.count, 2)
+    document.surface.selectedRange = NSRange(location: 5, length: 0)
+    hosted.window.makeFirstResponder(document.surface.responder)
+    var refresh: (() -> Void)?
+    pane.search.refreshDelay.schedule = { delay, fire in
+      XCTAssertEqual(delay, 0.1, "本文の変更から 100ms 間引く")
+      refresh = fire
+    }
+    for character in " ab" { document.surface.responder.keyDown(with: .key(String(character), [])) }
+    XCTAssertEqual(bodyText(document), "ab ab ab\n")
+    XCTAssertEqual(
+      pane.search.matches, [NSRange(location: 0, length: 2), NSRange(location: 3, length: 2)],
+      "取り直すまでの間、一致は編集に合わせて置いたまま")
+    try XCTUnwrap(refresh)()
+    catchUp(pane)
+    XCTAssertEqual(pane.search.matches.count, 3, "間引いた後に取り直す")
+    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 8, length: 0), "キャレットは打った先のまま")
+    pumpMain(until: { seen().last?.1 == 3 }, "件数が追従する")
+  }
+
+  /// 1 回の操作の編集の列（適用した順・どれもその直前の本文の座標）を順に畳んで一致をずらす——後ろの空白を広げ、前の空白
+  /// を消す束で、一致はどちらの編集にも正しく付いていく。
+  func testMatchesFollowAListOfEditsInTheOrderApplied() throws {
+    let hosted = try host("ab ab ab\n")
+    let pane = hosted.pane
+    pane.showSearch()
+    catchUp(pane)
+    pane.search.setNeedle("ab")
+    catchUp(pane)
+    XCTAssertEqual(pane.search.matches.map(\.location), [0, 3, 6])
+    pane.search.refreshDelay.schedule = { _, _ in }
+    var log = EditLog()
+    let widen = log.append(
+      TextEdit(range: NSRange(location: 5, length: 1), replacement: "   "),
+      start: TextPoint(row: 0, column: 5), oldEnd: TextPoint(row: 0, column: 6),
+      newEnd: TextPoint(row: 0, column: 8))
+    let remove = log.append(
+      TextEdit(range: NSRange(location: 2, length: 1), replacement: ""),
+      start: TextPoint(row: 0, column: 2), oldEnd: TextPoint(row: 0, column: 3),
+      newEnd: TextPoint(row: 0, column: 2))
+    pane.search.textDidChange([widen, remove])
+    XCTAssertEqual(pane.search.matches.map(\.location), [0, 2, 7])
+  }
+
+  /// 一致は上限（19999）で打ち切り、件数には打ち切ったことが届く（バーは「19999+」と出す）。
+  func testMatchesStopAtTheLimitAndTheCountSaysSo() throws {
+    let hosted = try host(String(repeating: "a", count: 20_500) + "\n")
+    let pane = hosted.pane
+    var limited: [Bool] = []
+    let forward = pane.search.onCountChange
+    pane.search.onCountChange = { selected, total, isLimited in
+      limited.append(isLimited)
+      forward?(selected, total, isLimited)
+    }
+    pane.showSearch()
+    catchUp(pane)
+    pane.search.setNeedle("a")
+    catchUp(pane)
+    XCTAssertEqual(pane.search.matches.count, 19999)
+    XCTAssertEqual(limited.last, true)
+    pane.search.setNeedle("aa")
+    catchUp(pane)
+    XCTAssertEqual(pane.search.matches.count, 10_250)
+    XCTAssertEqual(limited.last, false)
+  }
+
+  /// ⌘F を押したとき 1 行以内の非空の選択があれば needle に入って即検索される。改行を含む選択は入らない。
+  func testSelectionSeedsTheNeedle() throws {
+    let hosted = try host("alpha beta\nalpha\n")
+    let pane = hosted.pane
+    hosted.document.surface.selectedRange = NSRange(location: 6, length: 4)
+    XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
+    catchUp(pane)
+    XCTAssertEqual(pane.search.needle, "beta")
+    XCTAssertEqual(pane.searchBar?.needle, "beta")
+    XCTAssertEqual(pane.search.matches.count, 1)
+    XCTAssertEqual(pane.search.current, 0, "選択がそのまま現在の一致")
+    pane.closeSearch()
+
+    hosted.document.surface.selectedRange = NSRange(location: 6, length: 10)
+    pane.showSearch()
+    catchUp(pane)
+    XCTAssertEqual(pane.search.needle, "", "改行をまたぐ選択は種にならない")
+  }
+
+  /// 選択が空なら、キャレットの語が種になる（VS Code の seedSearchStringFromSelection の既定）。キャレットは動かず、
+  /// 現在の一致は無い（件数の位置は「?」）。語の外なら空のまま。
+  func testTheWordAtTheCaretSeedsTheNeedleWhenNothingIsSelected() throws {
+    let hosted = try host("alpha beta\nbeta  \n")
+    let pane = hosted.pane
+    hosted.document.surface.selectedRange = NSRange(location: 7, length: 0)
+    XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")))
+    catchUp(pane)
+    XCTAssertEqual(pane.search.needle, "beta")
+    XCTAssertEqual(pane.searchBar?.needle, "beta")
+    XCTAssertEqual(pane.search.matches.count, 2)
+    XCTAssertEqual(hosted.document.surface.selectedRange, NSRange(location: 7, length: 0))
+    XCTAssertNil(pane.search.current)
+    pane.closeSearch()
+
+    hosted.document.surface.selectedRange = NSRange(location: 16, length: 0)
+    pane.showSearch()
+    catchUp(pane)
+    XCTAssertEqual(pane.search.needle, "", "語の外（行末の空白）では種が無い")
+  }
+
+  /// Esc で閉じると一致の地は消え、選択は残り、焦点はテキスト面へ戻る。閉じた後は、残った選択の文字列の他の出現に
+  /// 選択文字列の出現の地が付く（検索バーが同じ文字列を探している間は出ない）。
+  func testClosingKeepsTheSelectionAndReturnsFocusToTheText() throws {
+    let hosted = try host(Self.belowTheBar + "x a b y\nx a b y\n")
+    let pane = hosted.pane
+    let document = hosted.document
+    pane.showSearch()
+    catchUp(pane)
+    pane.search.setNeedle("a b")
+    catchUp(pane)
+    let bar = try XCTUnwrap(pane.searchBar)
+    pumpMain(
+      until: { (hosted.window.firstResponder as? NSView)?.isDescendant(of: bar) == true },
+      "入力欄に焦点")
+    // 地は現在でない一致（選択の地に覆われない）の空白のセルで見る。
+    let match = cellCenter(hosted, line: 6, column: 3)
+    let ground = try PaneProbe(pane).rgb(match.x, y: cellCenter(hosted, line: 10, column: 3).y)
+    let found = try probe(pane) { try !PaneProbe.same($0.rgb(match.x, y: match.y), ground) }
+    let findGround = try found.rgb(match.x, y: match.y)
+    XCTAssertEqual(pane.occurrences.selectionOccurrences, [], "検索バーが同じ文字列を探している間は出ない")
+
+    bar.onClose?()
+    catchUp(pane)
+    XCTAssertNil(pane.searchBar)
+    XCTAssertTrue(hosted.window.firstResponder === document.surface.responder, "焦点はテキスト面へ")
+    XCTAssertEqual(document.surface.selectedRange, NSRange(location: 6, length: 3), "選択は残る")
+    XCTAssertEqual(pane.search.matches, [])
+    XCTAssertEqual(pane.occurrences.selectionOccurrences, [NSRange(location: 14, length: 3)])
+    _ = try probe(pane) { try !PaneProbe.same($0.rgb(match.x, y: match.y), findGround) }
+  }
+
+  /// 文書を切り替えると同じ needle で新しい文書に敷き直す（ジャンプしない）。文書が無くなればバーは閉じる。
+  func testSwitchingDocumentsReappliesTheNeedleAndClosingTheLastDocumentClosesTheBar() throws {
+    let hosted = try host("one two one\n")
+    let pane = hosted.pane
+    let seen = counts(pane)
+    pane.showSearch()
+    catchUp(pane)
+    pane.search.setNeedle("one")
+    catchUp(pane)
+    XCTAssertEqual(pane.search.matches.count, 2)
+
+    let other = try hosted.tab.editor.open(try caseFile("t.txt", "one\n"), as: .pinned)
+    catchUp(pane)
+    XCTAssertTrue(pane.search.document === other)
+    XCTAssertEqual(pane.search.matches.count, 1, "新しい文書の一致")
+    XCTAssertEqual(other.surface.selectedRange, NSRange(location: 0, length: 0), "選択は動かさない")
+    pumpMain(until: { seen().last?.1 == 1 }, "件数")
+    XCTAssertNotNil(pane.searchBar, "バーは残る")
+
+    hosted.tab.editor.close(other)
+    catchUp(pane)
+    XCTAssertEqual(pane.search.matches.count, 2, "戻れば元の文書の一致")
+    hosted.tab.editor.close(hosted.document)
+    XCTAssertNil(pane.searchBar, "文書が無くなればバーは閉じる")
+  }
+}
