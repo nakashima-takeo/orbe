@@ -193,8 +193,9 @@ private struct TaskPaletteGitHubHints: View {
   @Environment(\.localization) private var l10n
 
   var body: some View {
-    if case .pane = model.area {
-      PaletteKeyHint(key: "↵", label: l10n.string(.taskPaletteMakeTask))
+    if case .pane(let stop) = model.area {
+      // 期限の ↵ は期限を打つ（左の 1 行が言う）。
+      if stop != .due { PaletteKeyHint(key: "↵", label: l10n.string(.taskPaletteMakeTask)) }
       PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteHintField))
       PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintBack))
     } else if let row = model.selectedGitHubRow {
