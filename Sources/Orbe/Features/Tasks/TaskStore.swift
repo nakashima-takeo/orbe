@@ -60,7 +60,7 @@ enum TaskStoreError: Error, Equatable {
     if let due = update.due { item.due = due.value }
     if let memo = update.memo { item.memo = memo }
     if let workspace = update.workspace { item.workspace = workspace.value }
-    try applyPlacement(update, to: &item)
+    try applyLinksAndWorktree(update, to: &item)
     item.waiting = try Self.waiting(update.waitingReason, of: item)
     if item.status == .done { item.waiting = nil }
     tasks[index] = item
@@ -70,7 +70,8 @@ enum TaskStoreError: Error, Equatable {
 
   /// 結び付きと worktree の変更を当てる（どちらも、ほかのタスクとの不変条件を持つ）。結び付きから外れた
   /// 項目は外した項目に足し、足された項目はそこから消す。
-  private func applyPlacement(_ update: TaskUpdate, to item: inout TaskItem) throws(TaskStoreError)
+  private func applyLinksAndWorktree(_ update: TaskUpdate, to item: inout TaskItem)
+    throws(TaskStoreError)
   {
     if let links = update.links {
       try Self.checkLinks(links, of: item.id, against: tasks)
@@ -120,7 +121,7 @@ enum TaskStoreError: Error, Equatable {
     let previous = tasks.firstIndex { $0.id != id && $0.worktree == worktree }
     if let previous { tasks[previous].worktree = nil }
     tasks[index].worktree = worktree
-    if tasks[index].status != .inProgress { tasks[index].status = .inProgress }
+    tasks[index].status = .inProgress
     persist()
     return previous.map { tasks[$0].id }
   }
