@@ -12,8 +12,7 @@ extension TaskPaletteModel {
 
   /// 詳細から一覧へ（esc・選択式でない項目の ←）。
   func leaveDetail() {
-    leaveEditing()
-    error = nil
+    leaveEditingForAction()
     area = .list
   }
 
@@ -88,21 +87,24 @@ extension TaskPaletteModel {
   /// 詳細の項目のクリック。文字の項目はそのまま編集を始める。
   func tapField(_ field: TaskDetailField) {
     guard selectedTask != nil else { return }
-    leaveEditing()
-    error = nil
+    leaveEditingForAction()
     area = .detail(field)
-    if field.isText { beginEditing() }
+    if field.isText { startDraft() }
     focus()
   }
 
   /// ↵。今の文字の項目の編集を始める。完了のタスクの待ちは入れられない（ストアの不変条件）。
   func beginEditing() {
+    if startDraft() { error = nil }
+  }
+
+  @discardableResult private func startDraft() -> Bool {
     guard case .detail(let field) = area, field.isText, draft == nil, let task = selectedTask else {
-      return
+      return false
     }
-    if field == .waiting, task.status == .done { return }
-    error = nil
+    if field == .waiting, task.status == .done { return false }
     draft = TaskEditDraft(field: field, taskID: task.id, text: Self.initialText(field, task))
+    return true
   }
 
   /// ↵（メモは ⌘↵）で確定、esc で取り消す。確定できない（期限が読めない・ストアが受け付けない）ときは
@@ -204,8 +206,7 @@ extension TaskPaletteModel {
   /// 詳細の選択式の項目と「解除」の変更。
   private func apply(_ update: TaskUpdate, field: TaskDetailField) {
     guard let task = selectedTask else { return }
-    leaveEditing()
-    error = nil
+    leaveEditingForAction()
     area = .detail(field)
     mutate(Self.error(for: field)) { () throws(TaskStoreError) in
       _ = try store.update(task.id, update)

@@ -160,6 +160,7 @@ enum TaskPaletteError: Error, Equatable {
   }
 
   func move(_ direction: Int) {
+    error = nil
     let ids = selectableIDs
     guard !ids.isEmpty else { return }
     let current = selectedID.flatMap { ids.firstIndex(of: $0) } ?? selectedPosition
@@ -168,6 +169,7 @@ enum TaskPaletteError: Error, Equatable {
 
   /// 先頭（direction < 0）か末尾へ。
   func jump(_ direction: Int) {
+    error = nil
     let ids = selectableIDs
     guard !ids.isEmpty else { return }
     select(at: direction < 0 ? 0 : ids.count - 1, in: ids)
@@ -175,8 +177,7 @@ enum TaskPaletteError: Error, Equatable {
 
   /// 行のクリック。追加の行は追加し、完了の見出しは開閉し、タスクの行は選ぶ。編集中なら確定してから移る。
   func tapRow(_ id: TaskPaletteRowID) {
-    leaveEditing()
-    error = nil
+    leaveEditingForAction()
     area = .list
     let ids = selectableIDs
     guard let index = ids.firstIndex(of: id) else { return }
@@ -184,7 +185,7 @@ enum TaskPaletteError: Error, Equatable {
     focus()
     switch id {
     case .add: addFromQuery()
-    case .doneHeader: toggleDoneExpanded()
+    case .doneHeader: flipDoneExpanded()
     case .task: break
     }
   }
@@ -199,7 +200,6 @@ enum TaskPaletteError: Error, Equatable {
   }
 
   private func select(at index: Int, in ids: [TaskPaletteRowID]) {
-    error = nil
     selection.value = ids[index]
     selectedPosition = index
   }
@@ -243,8 +243,7 @@ enum TaskPaletteError: Error, Equatable {
 
   /// 完了 ⇄ 未着手。選択は同一性を捨てて同じ位置の行へ移る（完了の欄が開いていても追わない）。
   func toggleDone(_ id: Int) {
-    leaveEditing()
-    error = nil
+    leaveEditingForAction()
     guard let task = store.tasks.first(where: { $0.id == id }) else { return reconcile() }
     var update = TaskUpdate()
     update.status = task.status == .done ? .todo : .done
@@ -254,8 +253,7 @@ enum TaskPaletteError: Error, Equatable {
 
   /// 確認なしで消す。選択は同じ位置の行へ移る。
   func delete(_ id: Int) {
-    leaveEditing()
-    error = nil
+    leaveEditingForAction()
     selection.restore(nil)
     mutate(.failed) { () throws(TaskStoreError) in try store.delete(id) }
   }
@@ -280,14 +278,24 @@ enum TaskPaletteError: Error, Equatable {
 
   func toggleDoneExpanded() {
     error = nil
+    flipDoneExpanded()
+  }
+
+  private func flipDoneExpanded() {
     doneExpanded.toggle()
     reconcile()
   }
 
+  /// 別の操作に移る前の共通の手順。前の操作の失敗を消してから、編集中の文字を確定する——この順なので、
+  /// 確定できずに捨てた入力の理由はフッターに残る。
+  func leaveEditingForAction() {
+    error = nil
+    leaveEditing()
+  }
+
   /// ⇥・範囲の札のクリック。
   func toggleScope() {
-    leaveEditing()
-    error = nil
+    leaveEditingForAction()
     area = .list
     scope = scope == .all ? .opened : .all
     reconcile()
@@ -300,8 +308,7 @@ enum TaskPaletteError: Error, Equatable {
 
   /// ⇧⇥・タブのクリック。
   func toggleTab() {
-    leaveEditing()
-    error = nil
+    leaveEditingForAction()
     area = .list
     tab = tab == .tasks ? .github : .tasks
     reconcile()
