@@ -223,6 +223,31 @@ final class GitHubCLI {
     return .found(GitHubRepoName(nameWithOwner: name))
   }
 
+  /// 1 回の問い合わせに載せる項目の上限。1 回を `timeout` に収めるため。
+  static let itemsPerQuery = 50
+
+  /// 結び付いた項目の値を、番号で直接まとめて問い合わせる。`itemsPerQuery` ごとの問い合わせに分けて続けて
+  /// 出し、1 回ごとに、その回の ID と答えを `batch` へメインで渡す（答えが nil = その回の失敗）。問い合わせ先は
+  /// リポジトリ名で決まるので、作業ディレクトリはリポジトリに依らない。
+  func items(_ ids: [GitHubItemID], batch: @escaping ([GitHubItemID], GitHubItemsBatch?) -> Void) {
+    let ordered = ids.sorted { ($0.repo.value, $0.number) < ($1.repo.value, $1.number) }
+    let chunks = stride(from: 0, to: ordered.count, by: Self.itemsPerQuery).map {
+      Array(ordered[$0..<min($0 + Self.itemsPerQuery, ordered.count)])
+    }
+    guard !chunks.isEmpty else { return }
+    queue.async {
+      let gh = self.resolveGh()
+      for chunk in chunks {
+        let result = gh.flatMap { gh in
+          GitHubItemQuery.batch(
+            from: self.runSync(gh, GitHubItemQuery.arguments(chunk), cwd: NSHomeDirectory())
+              .stdout, ids: chunk)
+        }
+        DispatchQueue.main.async { batch(chunk, result) }
+      }
+    }
+  }
+
   /// ページの列を回す。次のページがあり、件数が上限未満の間だけ続け、最後のページは残り件数だけ頼む。
   /// `page` と `finished` はメインへ届いた順に載せる（メインキューへの async は順序を保つ）。
   private func fetchPages<T: Decodable>(

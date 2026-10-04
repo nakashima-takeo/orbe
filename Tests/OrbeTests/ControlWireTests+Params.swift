@@ -79,6 +79,7 @@ extension ControlWireTests {
         [
           "title": "経費精算", "status": "in_progress", "priority": "high", "due": "2026-10-06",
           "waitingReason": "返事", "memo": "メモ", "workspaceId": 3, "callerTabId": tab,
+          "links": [["kind": "pr", "repo": "o/n", "number": 214]],
         ]
       ),
       ("update_task", ["taskId": 7, "title": "改題"]),

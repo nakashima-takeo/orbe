@@ -2,7 +2,8 @@ import Foundation
 import OrbeSessionLog
 
 /// タスク 1 件。一覧（`TaskStore.tasks`）は人と agent が共有する 1 本の列で、この値はその要素。
-/// 不変条件（ID の一意・タイトルと待ちの理由が空でない・完了は待ちを持たない）は `TaskStore` が保証する。
+/// 不変条件（ID の一意・タイトルと待ちの理由が空でない・完了は待ちを持たない・結び付きの項目は 1 つの
+/// タスクにだけ現れる）は `TaskStore` が保証する。
 struct TaskItem: Codable, Equatable, Identifiable {
   /// 永続の短い整数。使い回さない（採番位置は `TasksFile.nextId` が持つ）。
   let id: Int
@@ -19,6 +20,8 @@ struct TaskItem: Codable, Equatable, Identifiable {
   let createdAt: Date
   /// 追加した agent の command 名。人が足したタスクは nil。
   let createdBy: String?
+  /// 結び付いた GitHub の Issue・PR。先頭が主。空は結び付きなし。
+  var links: [TaskLink] = []
 
   enum Status: String, Codable, CaseIterable {
     case todo
@@ -79,10 +82,75 @@ struct TaskItem: Codable, Equatable, Identifiable {
 }
 
 extension TaskItem {
+  private enum CodingKeys: String, CodingKey {
+    case id, title, status, waiting, priority, due, workspace, memo, createdAt, createdBy, links
+  }
+
+  /// 後から足した `links` は、欠けていれば空として読む。
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = try c.decode(Int.self, forKey: .id)
+    title = try c.decode(String.self, forKey: .title)
+    status = try c.decode(Status.self, forKey: .status)
+    waiting = try c.decodeIfPresent(Waiting.self, forKey: .waiting)
+    priority = try c.decode(Priority.self, forKey: .priority)
+    due = try c.decodeIfPresent(DueDate.self, forKey: .due)
+    workspace = try c.decodeIfPresent(UUID.self, forKey: .workspace)
+    memo = try c.decode(String.self, forKey: .memo)
+    createdAt = try c.decode(Date.self, forKey: .createdAt)
+    createdBy = try c.decodeIfPresent(String.self, forKey: .createdBy)
+    links = try c.decodeIfPresent([TaskLink].self, forKey: .links) ?? []
+  }
+
   /// 永続とワイヤに載る時刻の精度（ミリ秒）へ丸める。丸めずに持つと、保存して読み戻した値が
   /// メモリ上の値と一致しない。
   static func storedInstant(_ date: Date) -> Date {
     SessionEvent.parseISO8601(SessionEvent.iso8601(date)) ?? date
+  }
+}
+
+/// タスクと GitHub の Issue・PR の結び付き 1 つ。種別は指定どおりに持ち、GitHub に照合しない。
+/// 永続とワイヤの形は `{kind, repo, number}`。
+struct TaskLink: Codable, Equatable {
+  let item: GitHubItemID
+  let kind: GitHubItemKind
+
+  private enum CodingKeys: String, CodingKey {
+    case kind, repo, number
+  }
+
+  init(item: GitHubItemID, kind: GitHubItemKind) {
+    self.item = item
+    self.kind = kind
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    let repo = try c.decode(String.self, forKey: .repo)
+    let number = try c.decode(Int.self, forKey: .number)
+    guard let item = GitHubItemID(repo: repo, number: number) else {
+      throw DecodingError.dataCorrupted(
+        .init(
+          codingPath: decoder.codingPath, debugDescription: "not a github item: \(repo)#\(number)"))
+    }
+    self.item = item
+    kind = try c.decode(GitHubItemKind.self, forKey: .kind)
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(kind, forKey: .kind)
+    try c.encode(item.repo.value, forKey: .repo)
+    try c.encode(item.number, forKey: .number)
+  }
+
+  /// GitHub のページ。GitHub は名前の大小文字を区別せず、issues と pull の取り違えもリダイレクトするので、
+  /// 保存した種別と小文字の名前のままで開ける。
+  var url: URL {
+    URL(
+      string:
+        "https://github.com/\(item.repo.value)/\(kind == .issue ? "issues" : "pull")/\(item.number)"
+    )!
   }
 }
 
@@ -96,6 +164,7 @@ struct TaskDraft {
   var memo = ""
   var workspace: UUID?
   var createdBy: String?
+  var links: [TaskLink] = []
 }
 
 /// JSON の `null` に当たる「外す」を、値の指定と区別して運ぶ。
@@ -118,9 +187,11 @@ struct TaskUpdate {
   var waitingReason: ClearableValue<String>?
   var memo: String?
   var workspace: ClearableValue<UUID>?
+  /// 丸ごと置き換える。`[]` で全部外す。
+  var links: [TaskLink]?
 
   var isEmpty: Bool {
     title == nil && status == nil && priority == nil && due == nil && waitingReason == nil
-      && memo == nil && workspace == nil
+      && memo == nil && workspace == nil && links == nil
   }
 }

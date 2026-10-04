@@ -23,7 +23,7 @@ extension TaskPaletteModelTests {
   }
 
   func edit(_ palette: TaskPaletteModel, _ field: TaskDetailField, _ text: String) {
-    palette.area = .detail(field)
+    palette.area = .detail(.field(field))
     palette.beginEditing()
     palette.draftText = text
   }
@@ -38,7 +38,7 @@ extension TaskPaletteModelTests {
 
     palette.query = ""
     palette.enterDetail()
-    XCTAssertEqual(palette.area, .detail(.status))
+    XCTAssertEqual(palette.area, .detail(.field(.status)))
     XCTAssertEqual(palette.selectedTask?.id, 1)
   }
 
@@ -47,10 +47,10 @@ extension TaskPaletteModelTests {
 
     palette.moveField(-1)
     palette.moveField(-1)
-    XCTAssertEqual(palette.area, .detail(.title))
+    XCTAssertEqual(palette.area, .detail(.field(.title)))
 
     for _ in 0..<10 { palette.moveField(1) }
-    XCTAssertEqual(palette.area, .detail(.memo))
+    XCTAssertEqual(palette.area, .detail(.field(.memo)))
   }
 
   // MARK: - 選択式の値
@@ -64,7 +64,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(try storedTask(palette, 1).status, .inProgress)
     palette.changeValue(-1)
     XCTAssertEqual(try storedTask(palette, 1).status, .todo)
-    XCTAssertEqual(palette.area, .detail(.status), "値を変えても詳細に居続ける")
+    XCTAssertEqual(palette.area, .detail(.field(.status)), "値を変えても詳細に居続ける")
     XCTAssertEqual(palette.selectedTask?.id, 1)
   }
 
@@ -80,7 +80,7 @@ extension TaskPaletteModelTests {
 
   func testPriorityChoiceStepsHighMediumLowAndStopsAtTheEnds() throws {
     let palette = detailOfFirst()
-    palette.area = .detail(.priority)
+    palette.area = .detail(.field(.priority))
 
     palette.changeValue(-1)
     palette.changeValue(-1)
@@ -93,7 +93,7 @@ extension TaskPaletteModelTests {
 
   func testWorkspaceChoiceCyclesNoneThenTheSidebarOrder() throws {
     let palette = detailOfFirst()
-    palette.area = .detail(.workspace)
+    palette.area = .detail(.field(.workspace))
 
     palette.changeValue(1)
     XCTAssertEqual(try storedTask(palette, 1).workspace, openedWorkspace.id)
@@ -108,7 +108,7 @@ extension TaskPaletteModelTests {
   /// 削除された workspace を指すタスクは「なし」として扱い、そこから巡回する。
   func testWorkspaceChoiceFromAnUnresolvableReferenceStartsFromNone() throws {
     let palette = detailOfFirst([task(1, "a") { $0.workspace = UUID() }])
-    palette.area = .detail(.workspace)
+    palette.area = .detail(.field(.workspace))
 
     palette.changeValue(1)
 
@@ -156,7 +156,7 @@ extension TaskPaletteModelTests {
 
   func testWaitingCannotBeEditedOnADoneTask() {
     let palette = detailOfDone()
-    palette.area = .detail(.waiting)
+    palette.area = .detail(.field(.waiting))
 
     palette.beginEditing()
 
@@ -203,7 +203,7 @@ extension TaskPaletteModelTests {
 
     XCTAssertEqual(try storedTask(palette, 1).memo, "")
     XCTAssertNil(palette.draft)
-    XCTAssertEqual(palette.area, .detail(.memo))
+    XCTAssertEqual(palette.area, .detail(.field(.memo)))
   }
 
   // MARK: - 別の操作で編集を抜けると確定する
@@ -276,7 +276,7 @@ extension TaskPaletteModelTests {
 
     palette.toggleDone(1)
 
-    XCTAssertEqual(palette.area, .detail(.status), "見ている b の詳細に居続ける")
+    XCTAssertEqual(palette.area, .detail(.field(.status)), "見ている b の詳細に居続ける")
     XCTAssertEqual(palette.selectedTask?.id, 2)
   }
 

@@ -19,8 +19,8 @@ final class TaskQuarantineTests: OrbeTestCase {
   }
 
   private func taskJSON(id: Int) -> String {
-    #"{"id":\#(id),"title":"t\#(id)","status":"todo","priority":"medium","memo":""#
-      + #","createdAt":"2027-01-15T08:00:00.000Z"}"#
+    #"{"id":\#(id),"title":"t\#(id)","status":"todo","priority":"medium","#
+      + #""memo":"","createdAt":"2027-01-15T08:00:00.000Z"}"#
   }
 
   private func assertQuarantined(
@@ -67,6 +67,60 @@ final class TaskQuarantineTests: OrbeTestCase {
   /// 空の一覧でも、1 未満の採番位置からは 1 から振る ID を振れない（振れば次の起動で自分のファイルを弾く）。
   func testNextIdBelowOneIsQuarantinedEvenWithNoTasks() throws {
     try assertQuarantined(#"{"version":1,"nextId":0,"tasks":[]}"#, "1 未満の採番位置")
+  }
+
+  private func taskJSON(id: Int, links: String) -> String {
+    String(taskJSON(id: id).dropLast()) + #","links":[\#(links)]}"#
+  }
+
+  private func file(_ tasks: [String]) -> String {
+    #"{"version":1,"nextId":\#(tasks.count + 1),"tasks":[\#(tasks.joined(separator: ","))]}"#
+  }
+
+  /// 結び付きは書かれたとおりに読む（下の退避のテストが、壊れた JSON ではなく結び付きの規則で
+  /// 退避していることの対照でもある）。
+  func testDistinctLinksLoadAsWritten() throws {
+    try Data(
+      file([
+        taskJSON(id: 1, links: #"{"kind":"issue","repo":"O/N","number":7}"#),
+        taskJSON(id: 2, links: #"{"kind":"pr","repo":"o/n","number":8}"#),
+      ]).utf8
+    ).write(to: tasksFile())
+
+    let loaded = try XCTUnwrap(TaskPersistence.load())
+
+    XCTAssertTrue(try quarantineFiles().isEmpty)
+    XCTAssertEqual(
+      loaded.tasks.map { $0.links.map(\.item.text) }, [["o/n#7"], ["o/n#8"]], "repo は小文字で持つ")
+    XCTAssertEqual(loaded.tasks.map { $0.links.map(\.kind) }, [[.issue], [.pr]])
+  }
+
+  /// 同じ項目（リポジトリ＋番号。種別と大小文字は問わない）が 2 つのタスクに付いた原本は、
+  /// ストアの不変条件が守れないので退避する。
+  func testAnItemLinkedToTwoTasksIsQuarantined() throws {
+    let issue = #"{"kind":"issue","repo":"o/n","number":7}"#
+    let sameItemAsPR = #"{"kind":"pr","repo":"O/N","number":7}"#
+    try assertQuarantined(
+      file([taskJSON(id: 1, links: issue), taskJSON(id: 2, links: sameItemAsPR)]),
+      "2 つのタスクに付いた同じ項目")
+  }
+
+  func testTheSameItemTwiceInOneTaskIsQuarantined() throws {
+    let twice = #"{"kind":"issue","repo":"o/n","number":7},{"kind":"pr","repo":"o/n","number":7}"#
+    try assertQuarantined(file([taskJSON(id: 1, links: twice)]), "1 つのタスクに重複した項目")
+  }
+
+  func testAnUnreadableLinkIsQuarantined() throws {
+    for (link, reason) in [
+      (#"{"kind":"issue","repo":"orbe","number":7}"#, "owner/name の形でないリポジトリ"),
+      (#"{"kind":"issue","repo":"o/n","number":0}"#, "1 未満の番号"),
+      (#"{"kind":"discussion","repo":"o/n","number":7}"#, "issue / pr 以外の種別"),
+    ] {
+      try assertQuarantined(file([taskJSON(id: 1, links: link)]), reason)
+      for quarantined in try quarantineFiles() {
+        try FileManager.default.removeItem(at: quarantined)
+      }
+    }
   }
 
   /// u1 で書かれた最小の tasks.json（今の必須フィールドだけ）は、後の版でも読める。

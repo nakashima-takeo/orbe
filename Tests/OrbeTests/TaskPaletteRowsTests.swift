@@ -21,7 +21,7 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     calendar.date(from: DateComponents(year: 2025, month: 10, day: 4, hour: 10))!
   }
 
-  private func task(
+  func task(
     _ id: Int, _ title: String = "タスク", _ status: TaskItem.Status = .todo, by: String? = nil,
     _ mutate: (inout TaskItem) -> Void = { _ in }
   ) -> TaskItem {
@@ -32,21 +32,26 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     return item
   }
 
-  private func input(
+  func input(
     _ tasks: [TaskItem], query: String = "", scope: TaskPaletteScope = .all,
-    doneExpanded: Bool = false
+    doneExpanded: Bool = false, items: [GitHubItemID: GitHubItemAnswer] = [:],
+    viewerLogin: String? = nil
   ) -> TaskPaletteRows.Input {
     TaskPaletteRows.Input(
       tasks: tasks, query: query, scope: scope, doneExpanded: doneExpanded,
-      workspaces: workspaces, today: today, timeZone: calendar.timeZone)
+      workspaces: workspaces, today: today, timeZone: calendar.timeZone, items: items,
+      viewerLogin: viewerLogin)
   }
 
   private func taskIDs(_ rows: [TaskPaletteRow]) -> [Int] {
     rows.compactMap { if case .task(let row) = $0 { row.id } else { nil } }
   }
 
-  private func taskRow(_ item: TaskItem) throws -> TaskPaletteTaskRow {
-    let rows = TaskPaletteRows.build(input([item], doneExpanded: true))
+  func taskRow(
+    _ item: TaskItem, items: [GitHubItemID: GitHubItemAnswer] = [:], viewerLogin: String? = nil
+  ) throws -> TaskPaletteTaskRow {
+    let rows = TaskPaletteRows.build(
+      input([item], doneExpanded: true, items: items, viewerLogin: viewerLogin))
     return try XCTUnwrap(
       rows.lazy.compactMap { if case .task(let row) = $0 { row } else { nil } }.first)
   }

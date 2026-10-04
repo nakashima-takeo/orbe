@@ -72,6 +72,10 @@ struct TaskPaletteTaskRow: Equatable {
   let waiting: Waiting?
   let workspace: WorkspaceBadge?
   let isDone: Bool
+  let link: GitHubItemText.Mark?
+  let pullRequest: GitHubItemText.PullRequestBadge?
+  /// 主が自分以外の作成した PR（「レビュー」）。
+  let needsReview: Bool
 }
 
 /// 一覧の 1 行。
@@ -127,6 +131,9 @@ enum TaskPaletteRows {
     let today: TaskItem.DueDate
     /// 待ち始めた時刻を暦日へ落とすためのタイムゾーン。
     let timeZone: TimeZone
+    /// 結び付いた項目の GitHub の値（`GitHubItemCache` の答え）。
+    let items: [GitHubItemID: GitHubItemAnswer]
+    let viewerLogin: String?
   }
 
   static func build(_ input: Input) -> [TaskPaletteRow] {
@@ -186,6 +193,10 @@ enum TaskPaletteRows {
           reason: $0.reason,
           days: TaskItem.DueDate($0.since, timeZone: input.timeZone).days(to: input.today))
       },
-      workspace: workspace, isDone: task.status == .done)
+      workspace: workspace, isDone: task.status == .done,
+      link: GitHubItemText.mark(task.links),
+      pullRequest: GitHubItemText.pullRequestBadge(task.links, input.items),
+      needsReview: GitHubItemText.needsReview(
+        task.links, input.items, viewerLogin: input.viewerLogin))
   }
 }

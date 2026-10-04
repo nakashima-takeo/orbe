@@ -6,45 +6,6 @@ enum TaskPaletteTab: Equatable {
   case tasks, github
 }
 
-/// 詳細の項目（上から並ぶ順）。
-enum TaskDetailField: CaseIterable, Equatable, Hashable {
-  case title, status, waiting, priority, due, workspace, memo
-
-  /// ↵ で編集を始める文字の項目。
-  var isText: Bool {
-    switch self {
-    case .title, .waiting, .due, .memo: true
-    case .status, .priority, .workspace: false
-    }
-  }
-}
-
-/// キーを受ける場所（入力欄の一覧か、詳細の項目か）。詳細の編集中かは `draft` が持つ。
-enum TaskPaletteArea: Equatable {
-  case list
-  case detail(TaskDetailField)
-}
-
-/// SwiftUI の焦点の宛先。モデルから一方向に写す。
-enum TaskPaletteFocusTarget: Hashable {
-  /// ヘッダーの入力欄。
-  case field
-  /// カードの器（詳細の項目にいる間）。
-  case card
-  /// 詳細の文字の項目の入力欄。
-  case edit(TaskDetailField)
-}
-
-/// 詳細の文字の項目の下書き。編集を始めたときの対象に結び付き、確定はその ID へ書く。
-struct TaskEditDraft: Equatable {
-  let field: TaskDetailField
-  let taskID: Int
-  /// 編集を始めたときの値。打っていない下書きは確定しても書かない（その間の agent の変更を、触った
-  /// だけの古い値で上書きしない）。
-  let original: String
-  var text: String
-}
-
 /// 一覧を見える所まで送る先。同じ行へ続けて送るとき（⌥↑↓ を続けて押す）も変化として届くよう、決めるたびに
 /// 進む番号を持つ。
 struct TaskPaletteScrollTarget: Equatable {
@@ -57,12 +18,13 @@ enum TaskPaletteError: Error, Equatable {
   case title, waiting, due, failed
 }
 
-/// ⌘⇧X タスク画面の状態（@Observable）。タスクの値は写さずストア（唯一の正）を直接読み書きし、ここは
-/// 入力・範囲・タブ・選択・一覧の送り先・焦点・編集中の下書き・行の掴みだけを持つ。一覧の行は
-/// `TaskPaletteRows` が毎回組む。
+/// ⌘⇧X タスク画面の状態（@Observable）。タスクの値は写さずストア（唯一の正）を直接読み書きし、GitHub の値も
+/// 写さず置き場（`GitHubItemCache`）から引く。ここは入力・範囲・タブ・選択・一覧の送り先・焦点・編集中の
+/// 下書き・行の掴みだけを持つ。一覧の行は `TaskPaletteRows` が毎回組む。
 /// 列が変わったとき（agent の変更を含む）は `reconcile()` 1 本で選択・焦点・下書き・掴みを付け直す。
 @Observable final class TaskPaletteModel {
   let store: TaskStore
+  let githubItems: GitHubItemCache
   let workspaces: TaskPaletteWorkspaces
   let today: TaskItem.DueDate
   /// 時刻を暦日へ落とすためのタイムゾーン。
@@ -80,7 +42,10 @@ enum TaskPaletteError: Error, Equatable {
   private(set) var doneExpanded = false
   /// キーを受ける場所。書くのはモデル（拡張を含む）だけ。
   var area: TaskPaletteArea = .list {
-    didSet { if area != oldValue { focus() } }
+    didSet {
+      if area != oldValue { focus() }
+      rememberDetailPosition()
+    }
   }
   /// 編集中の文字の項目。編集中かどうかはこれだけが持つ。書くのはモデル（拡張を含む）だけ。
   var draft: TaskEditDraft? {
@@ -94,6 +59,8 @@ enum TaskPaletteError: Error, Equatable {
   private var selection = ModalSelection<TaskPaletteRowID?>(nil)
   /// 選択が最後に居た位置（選べる行の並びでの番号）。
   private var selectedPosition = 0
+  /// 詳細で居る場所が最後に居た位置（そのタスクの止まる場所の並びでの番号）。
+  private var detailPosition = 0
   /// 一覧を送る先。人の操作（選び直し・並べ替え・範囲や開閉の切り替え・画面からの変異）のたびに今の選択で
   /// 決め直す。agent の変更（`reconcile()` だけの付け直し）では決めない——人が流して読んでいる一覧を、
   /// 選んだ行の位置がずれただけで引き戻さないため。
@@ -102,13 +69,21 @@ enum TaskPaletteError: Error, Equatable {
   private(set) var focusToken = 0
 
   var onDismiss: () -> Void = {}
+  /// 結び付いた項目の GitHub のページを開く。
+  var onOpenURL: (URL) -> Void = { _ in }
 
-  init(store: TaskStore, workspaces: TaskPaletteWorkspaces, now: Date, timeZone: TimeZone) {
+  /// 開いた時点で、出ている行の結び付きの値を取り直す（届くまでは前回の答えで描く）。
+  init(
+    store: TaskStore, githubItems: GitHubItemCache, workspaces: TaskPaletteWorkspaces, now: Date,
+    timeZone: TimeZone
+  ) {
     self.store = store
+    self.githubItems = githubItems
     self.workspaces = workspaces
     self.timeZone = timeZone
     today = .today(now, timeZone: timeZone)
     reconcile()
+    githubItems.refresh(visibleLinkIDs)
   }
 
   var rows: [TaskPaletteRow] {
@@ -121,7 +96,22 @@ enum TaskPaletteError: Error, Equatable {
   private var rowsInput: TaskPaletteRows.Input {
     TaskPaletteRows.Input(
       tasks: store.tasks, query: query, scope: scope, doneExpanded: doneExpanded,
-      workspaces: workspaces, today: today, timeZone: timeZone)
+      workspaces: workspaces, today: today, timeZone: timeZone, items: githubItems.answers,
+      viewerLogin: githubItems.viewerLogin)
+  }
+
+  /// 出ている行（今の範囲・入力で一覧に出るタスク。完了の欄は開いているときだけ）の結び付きの項目。
+  /// GitHub の値を取りに行く範囲はこれで決まる。
+  var visibleLinkIDs: Set<GitHubItemID> {
+    let ids = Set(
+      rows.compactMap { row -> Int? in if case .task(let task) = row { task.id } else { nil } })
+    return Set(store.tasks.filter { ids.contains($0.id) }.flatMap { $0.links.map(\.item) })
+  }
+
+  /// 出ている行の結び付きが変わったとき（agent の変更・完了の欄の開閉・範囲・入力）、この開いている間に
+  /// まだ取りに行っていない項目を取る。
+  func ensureVisibleItems() {
+    githubItems.ensure(visibleLinkIDs)
   }
 
   private var selectableIDs: [TaskPaletteRowID] { rows.compactMap(\.selectableID) }
@@ -176,7 +166,20 @@ enum TaskPaletteError: Error, Equatable {
       leaveEditing()
       area = .list
     }
+    if case .detail(let stop) = area, let task = selectedTask {
+      let stops = Self.detailStops(task)
+      if !stops.contains(stop) { area = .detail(stops[min(detailPosition, stops.count - 1)]) }
+    }
+    rememberDetailPosition()
     discardStaleDrag()
+  }
+
+  /// 詳細で居る場所の位置を覚え直す。焦点の結び付きが外れたとき、同じ位置の止まる場所へ移すため。
+  private func rememberDetailPosition() {
+    guard case .detail(let stop) = area, let task = selectedTask,
+      let index = Self.detailStops(task).firstIndex(of: stop)
+    else { return }
+    detailPosition = index
   }
 
   func move(_ direction: Int) {

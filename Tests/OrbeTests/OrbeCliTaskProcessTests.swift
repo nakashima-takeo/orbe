@@ -55,9 +55,9 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     XCTAssertEqual(
       rows(control),
       [
-        [first, "todo", "high", "2026-10-06", "-", "経費精算を出す", "-"],
-        [second, "todo", "medium", "-", "-", "承認を取る", "部長の返事"],
-      ], "task list: 1 行 1 タスク（ID・ステータス・優先度・期限・workspace・タイトル・待ち）で、追加順に末尾へ並ぶ")
+        [first, "todo", "high", "2026-10-06", "-", "経費精算を出す", "-", "-"],
+        [second, "todo", "medium", "-", "-", "承認を取る", "部長の返事", "-"],
+      ], "task list: 1 行 1 タスク（ID・ステータス・優先度・期限・workspace・タイトル・待ち・結び付き）で、追加順に末尾へ並ぶ")
     XCTAssertEqual(try tasks(control)[1]["memo"] as? String, "メモ", "task add --memo")
 
     run(control, ["set", second, "--status", "done"])
@@ -71,7 +71,7 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
         "--workspace", String(background),
       ])
     XCTAssertEqual(
-      rows(control).first, [first, "todo", "low", "-", "background", "経費精算", "領収書"],
+      rows(control).first, [first, "todo", "low", "-", "background", "経費精算", "領収書", "-"],
       "task set: 渡した項目だけ変わり、--no-due で期限が外れる")
     let filtered = try XCTUnwrap(
       control.orbJSON(["task", "list", "--workspace", String(background)])["tasks"]
@@ -102,6 +102,38 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     let unknownStatus = control.orb(["task", "add", "x", "--status", "finished"])
     XCTAssertEqual(unknownStatus.status, 1, "語彙の外のステータスは control が弾く（CLI は素通し）")
     XCTAssertTrue(unknownStatus.stderr.contains("-32602"), unknownStatus.stderr)
+    XCTAssertEqual(rows(control).count, 1, "拒否された要求は一覧を変えない")
+  }
+
+  /// `--issue` / `--pr` は引数に現れた順のまま結び付き（先頭が主）、`set` は丸ごと置き換え、
+  /// `--no-links` で全部外す。`owner/name` の形は control が弾く（CLI は素通し）。
+  func testLinksKeepTheArgumentOrderAndSetReplacesOrClearsThem() throws {
+    let control = try startControlProcess()
+
+    let id = run(
+      control, ["add", "a", "--issue", "o/n#221", "--pr", "O/N#214", "--issue", "x/y.js#5"]
+    ).trimmingCharacters(in: .whitespacesAndNewlines)
+    XCTAssertEqual(
+      rows(control).first?[7], "issue:o/n#221,pr:o/n#214,issue:x/y.js#5",
+      "task list の 8 列目: 引数の順のまま kind:repo#number")
+    XCTAssertEqual(
+      (try tasks(control).first?["links"] as? [[String: Any]])?.map {
+        NSDictionary(dictionary: $0)
+      },
+      [
+        ["kind": "issue", "repo": "o/n", "number": 221],
+        ["kind": "pr", "repo": "o/n", "number": 214],
+        ["kind": "issue", "repo": "x/y.js", "number": 5],
+      ], "task list --json: links の列")
+
+    run(control, ["set", id, "--pr", "o/n#5"])
+    XCTAssertEqual(rows(control).first?[7], "pr:o/n#5", "task set: 結び付きを丸ごと置き換える")
+    run(control, ["set", id, "--no-links"])
+    XCTAssertEqual(rows(control).first?[7], "-", "task set --no-links: 全部外す")
+
+    let unshaped = control.orb(["task", "add", "b", "--issue", "orbe#5"])
+    XCTAssertEqual(unshaped.status, 1, "owner/name の形でないリポジトリは control が弾く")
+    XCTAssertTrue(unshaped.stderr.contains("-32602"), unshaped.stderr)
     XCTAssertEqual(rows(control).count, 1, "拒否された要求は一覧を変えない")
   }
 
@@ -152,6 +184,13 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
         ["task", "move", "1", "--before", "2", "--after", "3"],
         "task move requires exactly one of --before / --after"
       ),
+      (
+        ["task", "set", "1", "--issue", "o/n#1", "--no-links"],
+        "pass only one of --issue / --pr / --no-links"
+      ),
+      (["task", "add", "a", "--issue", "o/n"], "--issue requires an <owner/name#N>: o/n"),
+      (["task", "add", "a", "--pr", "o/n#0"], "--pr requires an <owner/name#N>: o/n#0"),
+      (["task", "add", "a", "--pr", "o/n#x"], "--pr requires an <owner/name#N>: o/n#x"),
       (["task", "rm", "abc"], "invalid task id: abc"),
       (["task", "rm", "0"], "invalid task id: 0"),
     ] {

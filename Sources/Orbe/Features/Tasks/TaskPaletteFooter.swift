@@ -36,9 +36,16 @@ struct TaskPaletteFooter: View {
       PaletteActionLine(
         key: draft.field == .memo ? "⌘↵" : "↵", template: l10n.string(.taskPaletteActionCommit),
         slots: [])
-    } else if case .detail(let field) = model.area {
+    } else if case .detail(.field(let field)) = model.area {
       PaletteActionLine(
         key: field.isText ? "↵" : "←→", template: l10n.string(fieldActionKey(field)), slots: [])
+    } else if case .detail(.link(let item)) = model.area {
+      PaletteActionLine(
+        key: "↵", template: l10n.string(.taskPaletteActionOpenLink),
+        slots: [
+          .emphasis(
+            GitHubItemText.label(item, primary: model.selectedTask?.links.first?.item))
+        ])
     } else {
       switch model.selectedID {
       case .add:
@@ -71,7 +78,10 @@ struct TaskPaletteFooter: View {
         PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintCancel))
       } else if model.tab == .github {
         PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
-      } else if case .detail = model.area {
+      } else if case .detail(let stop) = model.area {
+        if case .link = stop {
+          PaletteKeyHint(key: "⌫", label: l10n.string(.taskPaletteUnlink))
+        }
         PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteHintField))
         PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintBack))
       } else {

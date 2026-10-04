@@ -152,6 +152,10 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     draft.due = TaskItem.DueDate("2026-10-06")
     draft.waitingReason = "返事"
     draft.memo = "一行目\n二行目"
+    draft.links = [
+      TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "Owner/Name", number: 221)), kind: .issue),
+      TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "o/n", number: 214)), kind: .pr),
+    ]
     _ = try success(wc.controlAddTask(draft, workspaceId: nil, callerTabId: nil))
     _ = try added(wc, "最小")
 
@@ -164,6 +168,12 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     XCTAssertEqual(full["memo"] as? String, "一行目\n二行目")
     let waiting = try XCTUnwrap(full["waiting"] as? [String: Any])
     XCTAssertEqual(waiting["reason"] as? String, "返事")
+    XCTAssertEqual(
+      (full["links"] as? [[String: Any]])?.map { NSDictionary(dictionary: $0) },
+      [
+        ["kind": "issue", "repo": "owner/name", "number": 221],
+        ["kind": "pr", "repo": "o/n", "number": 214],
+      ], "結び付きは順のまま {kind, repo, number}、repo は小文字")
     let iso = #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"#
     for stamp in [full["createdAt"], waiting["since"]] {
       let text = try XCTUnwrap(stamp as? String)
@@ -176,7 +186,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     XCTAssertEqual(minimal["status"] as? String, "todo")
     XCTAssertEqual(minimal["priority"] as? String, "medium")
     XCTAssertEqual(minimal["memo"] as? String, "")
-    for key in ["waiting", "due", "workspaceId", "workspaceName", "createdBy"] {
+    for key in ["waiting", "due", "workspaceId", "workspaceName", "createdBy", "links"] {
       XCTAssertNil(minimal[key], "無い値はキーごと出さない: \(key)")
     }
   }
@@ -223,6 +233,13 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
   func testStoreRejectionsMapToTheControlErrorVocabulary() throws {
     let wc = try launch()
     let taskId = try XCTUnwrap(try added(wc)["taskId"] as? Int)
+    let issue = TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "o/n", number: 221)), kind: .issue)
+    var owner = TaskDraft(title: "owner")
+    owner.links = [issue]
+    let ownerTask = try XCTUnwrap(
+      try success(wc.controlAddTask(owner, workspaceId: nil, callerTabId: nil))["task"]
+        as? [String: Any])
+    let ownerId = try XCTUnwrap(ownerTask["taskId"] as? Int)
     let before = try listed(wc)
 
     XCTAssertEqual(
@@ -242,6 +259,13 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
           taskId: taskId, TaskUpdate(status: .done, waitingReason: .set("返事")), workspaceId: nil)),
       -32602, "完了と待ちの同時指定は -32602")
     XCTAssertEqual(code(wc.controlMoveTask(taskId: taskId, .after, anchorTaskId: taskId)), -32602)
+    var relink = TaskUpdate()
+    relink.links = [issue]
+    guard case .failure(let clash) = wc.controlUpdateTask(taskId: taskId, relink, workspaceId: nil)
+    else { return XCTFail("ほかのタスクに付いた項目の結び付けが通った") }
+    XCTAssertEqual(clash.code, -32602, "ほかのタスクに付いた項目は -32602")
+    XCTAssertTrue(
+      clash.message.contains("task \(ownerId)"), "拒否の文に相手のタスクの ID: \(clash.message)")
 
     XCTAssertEqual(
       try listed(wc).map { NSDictionary(dictionary: $0) },

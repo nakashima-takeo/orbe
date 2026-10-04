@@ -27,6 +27,12 @@ extension DesignGallerySnapshotTests {
     detail.moveField(1)
     try write("tasks_detail.png", detail)
 
+    // 詳細の Issue・PR の欄の行に居る（「外す」とフッターの「↵ #213 を GitHub で開く」）。
+    let link = DesignSceneFixtures.taskPaletteModel()
+    link.enterDetail()
+    link.moveField(-1)
+    try write("tasks_detail_link.png", link)
+
     let filtered = DesignSceneFixtures.taskPaletteModel()
     filtered.query = "経"
     try write("tasks_filtered.png", filtered)

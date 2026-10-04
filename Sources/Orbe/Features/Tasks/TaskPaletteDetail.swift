@@ -13,8 +13,16 @@ struct TaskPaletteDetail: View {
     if let task = model.selectedTask {
       ScrollView {
         VStack(alignment: .leading, spacing: 0) {
+          if let primary = task.links.first {
+            TaskPrimaryLinkHeading(link: primary)
+              .padding(.bottom, Theme.Space.step)
+          }
           titleField(task)
             .padding(.bottom, Theme.Space.bar)
+          if !task.links.isEmpty {
+            TaskPaletteLinks(model: model, task: task)
+              .padding(.bottom, Theme.Space.bar)
+          }
           divider
           fieldRow(.status, label: .taskPaletteFieldStatus) { statusValue(task) }
           divider
@@ -48,7 +56,7 @@ struct TaskPaletteDetail: View {
   }
 
   private func isFocused(_ field: TaskDetailField) -> Bool {
-    model.area == .detail(field)
+    model.area == .detail(.field(field))
   }
 
   private func isEditing(_ field: TaskDetailField) -> Bool {

@@ -21,13 +21,20 @@ enum TaskPaletteSamples {
   }
 
   /// `tasks` の列で開いたタスク画面。開いた workspace は `opened`、サイドバーの順は `opened`・`other`。
-  static func model(_ tasks: [TaskItem]) -> TaskPaletteModel {
+  /// GitHub の値の置き場は、既定では何も取りに行かない。
+  static func model(
+    _ tasks: [TaskItem], githubItems: GitHubItemCache = GitHubItemCache(fetch: { _, _ in })
+  ) -> TaskPaletteModel {
     let file = TasksFile(
       version: TaskPersistence.version, nextId: (tasks.map(\.id).max() ?? 0) + 1, tasks: tasks)
     return TaskPaletteModel(
-      store: TaskStore(file: file),
+      store: TaskStore(file: file), githubItems: githubItems,
       workspaces: TaskPaletteWorkspaces(opened: opened, all: [opened, other]),
       now: DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone)
+  }
+
+  static func link(_ kind: GitHubItemKind, _ number: Int, repo: String = "o/n") -> TaskLink {
+    TaskLink(item: GitHubItemID(repo: repo, number: number)!, kind: kind)
   }
 
   /// 未着手 3 件（1 a・2 b・3 c）。

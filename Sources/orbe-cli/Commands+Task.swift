@@ -8,10 +8,12 @@ import Foundation
 let taskUsageLines = [
   "orb task list [--workspace <id|current>] [--json]",
   "orb task add <title> [--status <s>] [--priority <p>] [--due <YYYY-MM-DD>]"
-    + " [--workspace <id|current> | --no-workspace] [--waiting <reason>] [--memo <text>] [--json]",
+    + " [--workspace <id|current> | --no-workspace] [--waiting <reason>] [--memo <text>]"
+    + " [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--json]",
   "orb task set <id> [--title <t>] [--status <s>] [--priority <p>] [--due <date> | --no-due]"
     + " [--workspace <id|current> | --no-workspace] [--waiting <reason> | --no-waiting]"
-    + " [--memo <text> | --no-memo] [--json]",
+    + " [--memo <text> | --no-memo] [--issue <owner/name#N>]... [--pr <owner/name#N>]..."
+    + " [--no-links] [--json]",
   "orb task move <id> (--before <id> | --after <id>) [--json]",
   "orb task rm <id> [--json]",
 ]
@@ -37,8 +39,12 @@ let taskUsage = """
   --waiting marks the task as waiting on something (kept apart from status);
   --status done clears it, and a done task cannot be waiting. --no-due /
   --no-waiting / --no-workspace / --no-memo clear the value.
+  --issue / --pr link GitHub issues and PRs to the task (repeatable); the first
+  one you pass is the main link. set replaces all links with the ones you pass,
+  and --no-links removes them all. An issue or PR can be linked to only one
+  task (unlink it from the other task first).
   list prints one task per line: id, status, priority, due, workspace, title,
-  waiting reason (`-` when absent).
+  waiting reason, links (`-` when absent; links read issue:owner/name#221,pr:…).
   """
 
 // MARK: - サブコマンド
@@ -77,14 +83,21 @@ private func taskList(_ rest: [String]) -> Never {
     let tasks = (result as? [String: Any])?["tasks"] as? [[String: Any]] ?? []
     for task in tasks {
       let waiting = (task["waiting"] as? [String: Any])?["reason"]
+      let links = (task["links"] as? [[String: Any]])?.map(linkCell).joined(separator: ",")
       print(
         [
           task["taskId"], task["status"], task["priority"], task["due"], task["workspaceName"],
-          task["title"], waiting,
+          task["title"], waiting, links,
         ].map { $0.map(display) ?? "-" }.map(tsvCell).joined(separator: "\t"))
     }
   }
   exit(0)
+}
+
+/// 結び付き 1 つの表示（`issue:owner/name#221`）。
+private func linkCell(_ link: [String: Any]) -> String {
+  let field = { (key: String) in link[key].map(display) ?? "-" }
+  return "\(field("kind")):\(field("repo"))#\(field("number"))"
 }
 
 private func taskAdd(_ rest: [String]) -> Never {
@@ -182,7 +195,31 @@ private func takeFields(_ args: inout [String], update: Bool) -> [String: Any] {
     params["memo"] = memo(&args)
   }
   params["workspaceId"] = takeClearable(&args, "--workspace") { takeWorkspaceId(&$0) }
+  let links = takeLinks(&args)
+  if update, takeFlag(&args, "--no-links") {
+    guard links.isEmpty else { usageDie("pass only one of --issue / --pr / --no-links") }
+    params["links"] = [Any]()
+  } else if !links.isEmpty {
+    params["links"] = links
+  }
   return params
+}
+
+/// `--issue` と `--pr` を、引数に現れた順のまま抜き取る（先頭が主になるので、種別ごとに抜き出して
+/// つなぐと順が崩れる）。値の席の規則は `takeOption` と同じ。`owner/name#N` は最後の `#` で割り、後ろが
+/// 正の整数でなければ usage エラー。`owner/name` の形は control が確かめる。
+private func takeLinks(_ args: inout [String]) -> [[String: Any]] {
+  let kinds = ["--issue": "issue", "--pr": "pr"]
+  var links: [[String: Any]] = []
+  while let flag = args.first(where: { kinds[$0] != nil }), let kind = kinds[flag],
+    let raw = takeOption(&args, flag, requires: "an <owner/name#N>")
+  {
+    guard let hash = raw.lastIndex(of: "#"), let number = Int(raw[raw.index(after: hash)...]),
+      number >= 1
+    else { usageDie("\(flag) requires an <owner/name#N>: \(raw)") }
+    links.append(["kind": kind, "repo": String(raw[..<hash]), "number": number])
+  }
+  return links
 }
 
 /// `--x <v>` と `--no-x` の対。どちらも無ければ nil、両方なら usage エラー。`--no-x` は `cleared`

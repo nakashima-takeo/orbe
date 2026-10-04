@@ -20,7 +20,7 @@ extension ControlWireTests {
     }
   }
 
-  func testAddTaskCarriesEveryFieldToTheTarget() {
+  func testAddTaskCarriesEveryFieldToTheTarget() throws {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
 
@@ -35,6 +35,9 @@ extension ControlWireTests {
     XCTAssertEqual(added?.draft.due?.text, "2026-10-06")
     XCTAssertEqual(added?.draft.waitingReason, "返事")
     XCTAssertEqual(added?.draft.memo, "メモ")
+    XCTAssertEqual(
+      added?.draft.links,
+      [TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "o/n", number: 214)), kind: .pr)])
     XCTAssertEqual(describe(added?.workspaceId), "set(3)")
     XCTAssertEqual(added?.callerTabId, fake.tabId, "呼び出し元タブは target が解決できるよう届く")
   }
@@ -159,6 +162,63 @@ extension ControlWireTests {
     XCTAssertTrue(fake.taskLists.isEmpty)
     XCTAssertTrue(fake.movedTasks.isEmpty)
     XCTAssertTrue(fake.deletedTaskIds.isEmpty)
+  }
+
+  /// `links` は `{kind, repo, number}` の配列で、順を保って届く。update では省略が「変えない」、`[]` が全部外す。
+  func testLinksReachTheTargetInOrderAndAnEmptyListIsDistinctFromOmitted() throws {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+    let links: [[String: Any]] = [
+      ["kind": "pr", "repo": "Owner/Repo.js", "number": 214],
+      ["kind": "issue", "repo": "o/n", "number": 221],
+    ]
+    let expected = [
+      TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "owner/repo.js", number: 214)), kind: .pr),
+      TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "o/n", number: 221)), kind: .issue),
+    ]
+
+    _ = wire.request(id: 1, method: "add_task", params: ["title": "a", "links": links])
+    _ = wire.request(id: 2, method: "update_task", params: ["taskId": 7, "links": links])
+    _ = wire.request(id: 3, method: "update_task", params: ["taskId": 7, "links": [Any]()])
+    _ = wire.request(id: 4, method: "update_task", params: ["taskId": 7, "memo": "m"])
+
+    XCTAssertEqual(fake.addedTasks.last?.draft.links, expected)
+    XCTAssertEqual(fake.updatedTasks.map(\.update.links), [expected, [], nil])
+  }
+
+  /// 配列でない `links`（`null` を含む）と、形・範囲の合わない要素は、target へ届く前に -32602。
+  func testMalformedLinksAreRejectedBeforeReachingTheTarget() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+    let valid: [String: Any] = ["kind": "issue", "repo": "o/n", "number": 1]
+    let malformed: [Any] = [
+      NSNull(), valid, "o/n#1", [NSNull()], ["o/n#1"],
+      [valid.merging(["kind": "discussion"]) { $1 }],
+      [valid.merging(["repo": "orbe"]) { $1 }],
+      [valid.merging(["repo": "o/n/x"]) { $1 }],
+      [valid.merging(["repo": "o/"]) { $1 }],
+      [valid.merging(["repo": "o n/x"]) { $1 }],
+      [valid.merging(["number": 0]) { $1 }],
+      [valid.merging(["number": "1"]) { $1 }],
+      [valid.merging(["number": 1.5]) { $1 }],
+      [valid.merging(["number": true]) { $1 }],
+      [valid.filter { $0.key != "kind" }],
+    ]
+
+    for (index, links) in malformed.enumerated() {
+      XCTAssertEqual(
+        errorCode(
+          wire.request(id: index * 2, method: "add_task", params: ["title": "a", "links": links])),
+        -32602, "add_task links: \(links) は -32602")
+      XCTAssertEqual(
+        errorCode(
+          wire.request(
+            id: index * 2 + 1, method: "update_task", params: ["taskId": 7, "links": links])
+        ),
+        -32602, "update_task links: \(links) は -32602")
+    }
+    XCTAssertTrue(fake.addedTasks.isEmpty)
+    XCTAssertTrue(fake.updatedTasks.isEmpty)
   }
 
   func testListAndDeleteCarryTheirIdsToTheTarget() {

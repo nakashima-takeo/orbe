@@ -50,18 +50,27 @@ extension TaskPaletteModel {
 
   /// カードの器（詳細の項目に居て、編集していない間）。
   func handleCardKey(_ press: KeyPress) -> KeyPress.Result {
-    guard draft == nil, case .detail(let field) = area else { return .ignored }
+    guard draft == nil, case .detail(let stop) = area else { return .ignored }
     if Self.isBacktab(press) { return .handled }
     switch press.key {
     case .upArrow: moveField(-1)
     case .downArrow: moveField(1)
     case .leftArrow: if !changeValue(-1) { leaveDetail() }
     case .rightArrow: changeValue(1)
-    case .return: if field.isText { beginEditing() }
+    case .return:
+      switch stop {
+      case .field(let field): if field.isText { beginEditing() }
+      // 押し続けたキーリピートで、同じページを何度も開かない。
+      case .link(let item): if press.phase == .down { openLink(item) }
+      }
     case .space:
       if press.phase == .down, let task = selectedTask { toggleDone(task.id) }
     case _ where Self.isCommandBackspace(press):
       if press.phase == .down, let task = selectedTask { delete(task.id) }
+    case _ where Self.isBackspace(press):
+      // 押し続けたキーリピートで、焦点が移った先の結び付きまで外さない。
+      guard case .link(let item) = stop else { return .ignored }
+      if press.phase == .down { unlink(item) }
     case .escape: leaveDetail()
     case .tab: break
     default: return .ignored
@@ -91,6 +100,11 @@ extension TaskPaletteModel {
   /// ⌘⌫。⌫ は AppKit から DEL（U+007F）で届き、`KeyEquivalent.delete`（U+0008）とは一致しない。
   private static func isCommandBackspace(_ press: KeyPress) -> Bool {
     press.modifiers.contains(.command) && press.key.character == "\u{7F}"
+  }
+
+  /// 修飾なしの ⌫。
+  private static func isBackspace(_ press: KeyPress) -> Bool {
+    isUnmodified(press) && press.key.character == "\u{7F}"
   }
 
   /// ⇧⇥ は `.tab` ではなく AppKit の backtab 文字（U+0019）で届く。
