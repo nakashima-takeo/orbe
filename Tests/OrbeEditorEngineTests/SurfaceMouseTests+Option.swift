@@ -35,6 +35,21 @@ extension SurfaceMouseTests {
     XCTAssertEqual(cursors(opened), [NSRange(location: 22, length: 0)], "1 本なら外さない（まとまる）")
   }
 
+  /// 外す判定は選択の両端を含む——選択の始まりや終わりを ⌥クリックしても、そのカーソルを外す。
+  func testOptionClickOnEitherEndOfASelectionRemovesThatCursor() throws {
+    let opened = try open(lines)
+    _ = host(opened)
+    for column in [0, 3] {
+      opened.surface.inputScope {
+        opened.surface.editor.select(
+          CursorList(.selecting(NSRange(location: 0, length: 3)), others: [Cursor(22)]),
+          reveal: .none)
+      }
+      try click(opened, row: 0, column: CGFloat(column), flags: .option)
+      XCTAssertEqual(cursors(opened), [NSRange(location: 22, length: 0)], "桁 \(column)")
+    }
+  }
+
   /// 主を外せば、列で次のカーソル（文書の順ではなく足した順）が主になる。
   func testRemovingThePrimaryPromotesTheNextCursorInTheList() throws {
     let opened = try open(lines)

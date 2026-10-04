@@ -41,6 +41,13 @@ final class SurfaceMultiCursorTests: EngineTestCase {
     XCTAssertTrue(try keyEquivalent(window, down, [.command, .option, .function, .numericPad]))
     XCTAssertEqual(
       selections(opened), [NSRange(location: 1, length: 0), NSRange(location: 9, length: 0)])
+    let up = String(UnicodeScalar(NSUpArrowFunctionKey)!)
+    opened.surface.selectedRange = NSRange(location: 9, length: 0)
+    XCTAssertTrue(try keyEquivalent(window, up, [.command, .option, .function, .numericPad]))
+    XCTAssertEqual(
+      selections(opened), [NSRange(location: 9, length: 0), NSRange(location: 1, length: 0)])
+    XCTAssertTrue(try keyEquivalent(window, "u", .command))
+    XCTAssertEqual(selections(opened), [NSRange(location: 9, length: 0)], "⌘U で足す前へ")
 
     let other = NSTextField()
     window.contentView?.addSubview(other)
@@ -72,6 +79,28 @@ final class SurfaceMultiCursorTests: EngineTestCase {
     XCTAssertEqual(
       selections(opened), [0, 3, 6].map { NSRange(location: $0, length: 2) },
       "カーソルの数と主も戻る")
+  }
+
+  /// ⌘Z・⌘⇧Z は、本文とカーソルの列（数と主）をその時点へ戻す——主が文書の後ろにあっても主のまま。
+  func testUndoAndRedoRestoreTheCursorListWithItsPrimary() throws {
+    let opened = try open("abc abc\n")
+    _ = host(opened)
+    let surface = opened.surface
+    surface.inputScope {
+      surface.editor.select(CursorList(Cursor(4), others: [Cursor(0)]), reveal: .none)
+    }
+    type(opened, "x")
+    XCTAssertEqual(selections(opened), [6, 1].map { NSRange(location: $0, length: 0) })
+    surface.textView.cancelOperation(nil)
+    XCTAssertEqual(selections(opened), [NSRange(location: 6, length: 0)])
+    let undo = try XCTUnwrap(surface.responder.undoManager)
+    undo.undo()
+    XCTAssertEqual(text(opened.document), "abc abc\n")
+    XCTAssertEqual(
+      selections(opened), [4, 0].map { NSRange(location: $0, length: 0) }, "主が先頭のまま戻る")
+    undo.redo()
+    XCTAssertEqual(text(opened.document), "xabc xabc\n")
+    XCTAssertEqual(selections(opened), [6, 1].map { NSRange(location: $0, length: 0) })
   }
 
   /// ⌘U は本文を変えないカーソルの変化を 1 つずつ戻し、そのときのスクロールの位置へ戻す。本文を変えると履歴は消える。

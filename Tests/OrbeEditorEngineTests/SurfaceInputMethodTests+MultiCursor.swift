@@ -38,6 +38,26 @@ extension SurfaceInputMethodTests {
       "カーソルの並びも戻る")
   }
 
+  /// 選択のあるカーソル（⌘D の後など）で変換を始めると、選択の向きに依らず全選択が同じ未確定に置き換わり、確定は ⌘Z 1 回で
+  /// 選択ごと戻る。
+  func testCompositionReplacesEverySelection() throws {
+    let opened = try open("ab ab\n")
+    _ = host(opened)
+    fakeInputMethod(opened)
+    let selections = [NSRange(location: 0, length: 2), NSRange(location: 3, length: 2)]
+    place(opened, [.selecting(selections[0]), .selecting(selections[1], reversed: true)])
+    replay([.mark("か")], on: opened)
+    XCTAssertEqual(text(opened.document), "か か\n")
+    XCTAssertEqual(
+      opened.surface.drawn.caret.marked?.ranges,
+      [NSRange(location: 0, length: 1), NSRange(location: 2, length: 1)])
+    replay([.insert("火")], on: opened)
+    XCTAssertEqual(text(opened.document), "火 火\n")
+    opened.surface.textView.undoManager?.undo()
+    XCTAssertEqual(text(opened.document), "ab ab\n")
+    XCTAssertEqual(opened.surface.cursorSelections, selections)
+  }
+
   /// IME が未確定の外の範囲を指して置き換えると、各カーソルにも同じ相対位置で当たる。行頭に近いカーソルでは行の中に
   /// 収まり、前の行の改行を消さない。
   func testRelativeReplacementsStayInsideEachCursorsLine() throws {
