@@ -99,6 +99,19 @@ struct RulerSpans {
   /// 色ごとの縦の区間（描く順）。
   var groups: [(kind: Kind, spans: [OverviewRuler.Span])] = []
 
+  /// キャレットの印の元（キャレットの列が同じなら、止まっている間の点滅のコマで作り直さない）。
+  struct CaretKey: Equatable {
+    var carets: [Int]
+    var lineCount: Int
+    var visibleLines: CGFloat
+    var height: CGFloat
+    var scale: CGFloat
+  }
+
+  var caretKey: CaretKey?
+  /// キャレットの印の縦の区間（重なるものはまとめた、上から順）。
+  var caretSpans: [OverviewRuler.Span] = []
+
   /// 印の種類（色とレーン）。
   enum Kind {
     case added, modified, removed, word, find
@@ -188,27 +201,11 @@ extension FrameBuilder {
           x0 + Double(lane.x), Double(span.y1), Double(lane.width), Double(span.y2 - span.y1), ink)
       }
     }
-    let carets = source.material.caret.carets.map {
-      NSRange(location: min($0, text.length), length: 0)
-    }
+    updateCaretSpans(ruler, area: area, lines: lines, source, text: text)
     let full = OverviewRuler.lane(.full, width: area.width, scale: CGFloat(s))
-    var painted: OverviewRuler.Span?
-    for rows in text.rows(ofAscending: carets) {
-      let span = ruler.caret(row: rows.lowerBound)
-      if let last = painted, span.y1 <= last.y2 {
-        painted = OverviewRuler.Span(y1: last.y1, y2: max(last.y2, span.y2))
-        continue
-      }
-      if let last = painted {
-        rect(
-          x0 + Double(full.x), Double(last.y1), Double(full.width), Double(last.y2 - last.y1),
-          palette.rulerCaret)
-      }
-      painted = span
-    }
-    if let last = painted {
+    for span in rulerSpans.caretSpans {
       rect(
-        x0 + Double(full.x), Double(last.y1), Double(full.width), Double(last.y2 - last.y1),
+        x0 + Double(full.x), Double(span.y1), Double(full.width), Double(span.y2 - span.y1),
         palette.rulerCaret)
     }
     let width = (Double(area.width) * s).rounded()
@@ -224,6 +221,30 @@ extension FrameBuilder {
       ShapeInstance(
         rect: SIMD4(Float(x), Float(y), Float(width), Float(height)), color: ink.packed, radius: 0,
         kind: 0))
+  }
+
+  /// 全キャレットの印の縦の区間を、キャレットか寸法が変わったときだけ作り直す（重なる印はまとめる）。
+  private func updateCaretSpans(
+    _ ruler: OverviewRuler, area: CGRect, lines: (first: CGFloat, visible: CGFloat),
+    _ source: Source, text: TextRope
+  ) {
+    let carets = source.material.caret.carets
+    let key = RulerSpans.CaretKey(
+      carets: carets, lineCount: text.lineCount, visibleLines: lines.visible,
+      height: area.height, scale: ruler.scale)
+    guard key != rulerSpans.caretKey else { return }
+    rulerSpans.caretKey = key
+    var spans: [OverviewRuler.Span] = []
+    let points = carets.map { NSRange(location: min($0, text.length), length: 0) }
+    for rows in text.rows(ofAscending: points) {
+      let span = ruler.caret(row: rows.lowerBound)
+      if let last = spans.last, span.y1 <= last.y2 {
+        spans[spans.count - 1] = OverviewRuler.Span(y1: last.y1, y2: max(last.y2, span.y2))
+      } else {
+        spans.append(span)
+      }
+    }
+    rulerSpans.caretSpans = spans
   }
 
   /// 印の縦の区間を、元が変わったときだけ作り直す。検索の一致が多いときは近い行をまとめ、現在の一致を加える。

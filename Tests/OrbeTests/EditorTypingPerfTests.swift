@@ -100,6 +100,61 @@ final class EditorTypingPerfTests: OrbeTestCase {
     }
   }
 
+  /// 複数カーソルの打鍵 1 回の main の仕事——1MB で ⌘F の一致（`offset`、約 1.2 万件）を出したまま、⌘⇧L で作った
+  /// カーソル 1,000 本（`marker` の出現）と 1 万本（`offset` の出現。上限で切れる）で打ったとき、キーの出来事を受けてから
+  /// 面の編集係・文書・Orbe の配り先が戻るまでの main のスレッドの CPU 時間。1,000 本で p95 16ms（1 コマ）以下、1 万本で
+  /// p95 160ms 以下（手間がカーソルの数に比例するだけ）。
+  func testMultiCursorKeystrokeMainTime() throws {
+    let warm = try openEditor("warm\n")
+    warm.document.surface.responder.keyDown(with: .key("/", []))
+    warm.window.orderOut(nil)
+    for (label, needle, limit) in [("1000", "marker", 16.0), ("10000", "offset", 160.0)] {
+      let opened = try openEditor(Self.markedSource(bytes: 1_000_000, markers: 1000))
+      let document = opened.document
+      opened.pane.showSearch()
+      opened.pane.search.setNeedle("offset")
+      XCTAssertTrue(pumpUntilCaughtUp(document))
+      pumpMain(until: { !opened.pane.search.matches.isEmpty }, "一致が届く")
+      let matches = opened.pane.search.matches.count
+      let surface = document.surface
+      opened.window.makeFirstResponder(surface.responder)
+      let first =
+        (document.text.substring(NSRange(location: 0, length: document.text.length))
+        as NSString).range(of: needle)
+      surface.selectedRange = first
+      surface.responder.perform(NSSelectorFromString("selectHighlights:"), with: nil)
+      let cursors = surface.cursorSelections.count
+      var cpu: [Double] = []
+      for character in String(repeating: "abc ", count: 8) {
+        let began = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
+        surface.responder.keyDown(with: .key(String(character), []))
+        cpu.append(Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - began) / 1e6)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+      }
+      reportPerf(
+        "1MB cursors \(cursors) find \(matches)", "multi-cursor keystroke-main", cpu, digits: 2)
+      let sorted = cpu.sorted()
+      XCTAssertEqual(cursors, label == "1000" ? 1000 : 10_000, "前提: カーソルの数")
+      XCTAssertLessThanOrEqual(
+        sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))], limit,
+        "\(label) 本: 打鍵 1 回の main のスレッドの CPU 時間の p95")
+      opened.window.orderOut(nil)
+    }
+  }
+
+  /// `swiftSource` と同じ形で、`markers` 個の宣言（等間隔）の注釈を `marker` にした本文。
+  static func markedSource(bytes: Int, markers: Int) -> String {
+    let lines = swiftSource(bytes: bytes).components(separatedBy: "\n")
+    let comments = lines.indices.filter { lines[$0].hasSuffix("// counter") }
+    let step = max(1, comments.count / markers)
+    var marked = lines
+    for index in stride(from: 0, to: comments.count, by: step).prefix(markers) {
+      let row = comments[index]
+      marked[row] = marked[row].replacingOccurrences(of: "// counter", with: "// marker")
+    }
+    return marked.joined(separator: "\n")
+  }
+
   /// main の仕事の時間（ms）——main のスレッドの CPU 時間（関門が見る）と壁時計の時間（参考）。
   private struct MainTimes {
     var cpu: [Double] = []
