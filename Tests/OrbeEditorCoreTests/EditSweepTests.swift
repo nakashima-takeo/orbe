@@ -130,4 +130,15 @@ final class EditSweepTests: XCTestCase {
     XCTAssertLessThan(Date().timeIntervalSince(began), 0.5)
     XCTAssertEqual(tracked.last, NSRange(location: 999_950 + 10_000, length: 3))
   }
+
+  /// 接する削除が連なる束（接する 1 字の選択を全部消す ⌫）でも、位置の掃引は編集の数と位置の数の和に比例する。
+  func testSweepOfAdjoiningDeletionsIsLinear() {
+    let edits = (0..<10_000).map {
+      TextEdit(range: NSRange(location: $0, length: 1), replacement: "")
+    }
+    let began = Date()
+    let mapped = EditSweep(edits).map(Array(0...10_000))
+    XCTAssertLessThan(Date().timeIntervalSince(began), 0.5)
+    XCTAssertEqual(Set(mapped), [0], "どの位置も消した区間の始まりへ寄る")
+  }
 }

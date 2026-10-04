@@ -132,6 +132,22 @@ final class MultiCursorCommandsTests: XCTestCase {
     XCTAssertEqual(Editing.runAll([.cancel], on: "a|b").0, "a|b")
   }
 
+  // MARK: - 全カーソルでの編集
+
+  /// 大小文字・入れ替え・行頭までの削除・⌃K・⌃Y は、全カーソルに 1 回の操作として当たる。
+  func testTextCommandsReachEveryCursor() {
+    XCTAssertEqual(Editing.runAll([.changeCase(.upper)], on: "a|b c|d").0, "[AB] [CD]")
+    XCTAssertEqual(Editing.runAll([.transpose], on: "ab|\ncd|").0, "ba|\ndc|")
+    XCTAssertEqual(Editing.runAll([.deleteToLineStart], on: "ab|\ncd|").0, "|\n|")
+    let (text, state) = Editing.parseAll("a|b\nc|d")
+    let kill = EditCommands.run(.kill(forward: true), state, Editing.environment(text))
+    XCTAssertEqual(Editing.renderAll(kill.edits.applied(to: text), kill.state.cursors), "a|\nc|")
+    XCTAssertNotNil(kill.kill)
+    let yank = EditCommands.run(.yank, state, Editing.environment(text, killBuffer: "Z"))
+    XCTAssertEqual(
+      Editing.renderAll(yank.edits.applied(to: text), yank.state.cursors), "aZ|b\ncZ|d")
+  }
+
   // MARK: - カーソルの列
 
   /// 重なったカーソルは 1 本にまとまり、列で先にある方の場所に残る。向きは、負けた方が最後に足したカーソルならそちら、
