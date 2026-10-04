@@ -160,7 +160,8 @@ enum TaskPaletteGitHubRows {
   }
 
   /// 「タスクにする」で自分を足す役割。チーム宛だけで頼まれている PR はレビュアー、それ以外は担当者。自分が
-  /// 分からない・自分が作成者・既に担当・個人宛にレビュー依頼済みなら nil（足すものが無い）。
+  /// 分からない・自分が作成者・既に担当・個人宛にレビュー依頼済みなら nil（足すものが無い）。チーム宛の依頼が
+  /// ある PR で自分へのレビュー依頼がまだ分からない間も nil（レビュアーか担当者か決まらない）。
   static func selfRole(
     _ item: GitHubOpenItem, login: String?, reviewRequests: Set<Int>?
   ) -> GitHubSelfRole? {
@@ -170,7 +171,11 @@ enum TaskPaletteGitHubRows {
     switch relation(item, login: login, reviewRequests: reviewRequests) {
     case .reviewRequestedYou: return nil
     case .reviewRequestedTeam: return .reviewer
-    default: return .assignee
+    default:
+      if let pullRequest = item.pullRequest, !pullRequest.teams.isEmpty, reviewRequests == nil {
+        return nil
+      }
+      return .assignee
     }
   }
 
