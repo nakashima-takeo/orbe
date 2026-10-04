@@ -60,6 +60,7 @@ extension TaskPaletteModel {
     case .return:
       switch stop {
       case .field(let field): if field.isText { beginEditing() }
+      case .agent: if press.phase == .down { focusAgentTab() }
       // 押し続けたキーリピートで、同じページを何度も開かない。
       case .link(let item): if press.phase == .down { openLink(item) }
       }

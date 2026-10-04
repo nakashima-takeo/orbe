@@ -19,6 +19,13 @@ struct TaskPaletteDetail: View {
           }
           titleField(task)
             .padding(.bottom, Theme.Space.bar)
+          if let agent = model.agent(of: task) {
+            TaskAgentDetail(
+              agent: agent, focused: model.area == .detail(.agent),
+              onGoToTab: { model.focusAgentTab() }
+            )
+            .padding(.bottom, Theme.Space.bar)
+          }
           if !task.links.isEmpty {
             TaskPaletteLinks(model: model, task: task)
               .padding(.bottom, Theme.Space.bar)

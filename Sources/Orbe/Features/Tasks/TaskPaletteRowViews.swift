@@ -198,7 +198,7 @@ private struct TaskPaletteGrip: View {
 }
 
 /// タスクの行。アイコン（クリックで完了 ⇄ 未着手）・主の結び付きの印と番号・タイトル・札（「レビュー」・
-/// PR・優先度・期限・追加者）、右寄せで待ちの札と workspace。縮むのはタイトルが先。
+/// PR・優先度・期限・追加者）、右寄せで agent の札・待ちの札と workspace。縮むのはタイトルが先。
 struct TaskPaletteTaskRowView: View {
   let row: TaskPaletteTaskRow
   let selected: Bool
@@ -266,6 +266,11 @@ struct TaskPaletteTaskRowView: View {
         }
       }
       Spacer(minLength: Theme.Space.beat)
+      if let agent = row.agent {
+        TaskAgentBadge(agent: agent)
+          .layoutPriority(2)
+          .padding(.trailing, row.waiting == nil ? 0 : Theme.Space.step)
+      }
       if let waiting = row.waiting {
         TaskPaletteBadge(
           symbol: "clock",

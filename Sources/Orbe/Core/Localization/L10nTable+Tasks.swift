@@ -69,5 +69,14 @@ extension L10n {
     .taskPaletteReview: ("レビュー", "Review"),
     .taskPaletteUnlink: ("外す", "Unlink"),
     .taskPaletteActionOpenLink: ("%1$@ を GitHub で開く", "Open %1$@ on GitHub"),
+    .taskPaletteElapsedMinutes: ("%lld分", "%lldm"),
+    .taskPaletteElapsedHours: ("%lld時間", "%lldh"),
+    .taskPaletteAgentWaitingBadge: ("入力待ち", "waiting"),
+    .taskPaletteAgentWorking: ("%@ が取り掛かっている", "%@ is working on it"),
+    .taskPaletteAgentWaiting: ("%@ が入力を待っている", "%@ is waiting for you"),
+    .taskPaletteAgentTab: ("タブ %@", "tab %@"),
+    .taskPaletteAgentGoToTab: ("タブへ", "Go to tab"),
+    .taskPaletteActionGoToTab: ("%1$@ へ移る", "Go to %1$@"),
+    .taskPaletteHintOpenWorktree: ("開く", "Open"),
   ]
 }

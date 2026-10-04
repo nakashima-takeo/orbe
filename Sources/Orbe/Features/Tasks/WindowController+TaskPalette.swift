@@ -13,11 +13,15 @@ extension WindowController {
       TaskPaletteWorkspaces.Entry(id: ws.persistentId, name: ws.name)
     }
     let p = TaskPaletteModel(
-      store: taskStore, githubItems: .shared,
+      store: taskStore, githubItems: .shared, agents: worktreeAgents,
       workspaces: TaskPaletteWorkspaces(opened: entry(current), all: workspaces.map(entry)),
       now: Date(), timeZone: .current)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
     p.onOpenURL = { NSWorkspace.shared.open($0) }
+    p.onFocusTab = { [weak self] tabId in
+      self?.dismissPalette()
+      _ = self?.controlFocusTab(tabId: tabId)
+    }
     model.taskPalette = p
     model.overlay = .taskPalette
     p.focus()

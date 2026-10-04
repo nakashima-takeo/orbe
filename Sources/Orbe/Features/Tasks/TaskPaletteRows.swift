@@ -76,6 +76,7 @@ struct TaskPaletteTaskRow: Equatable {
   let pullRequest: GitHubItemText.PullRequestBadge?
   /// 主が自分以外の作成した PR（「レビュー」）。
   let needsReview: Bool
+  let agent: WorktreeAgentActivity.Agent?
 }
 
 /// 一覧の 1 行。
@@ -134,6 +135,8 @@ enum TaskPaletteRows {
     /// 結び付いた項目の GitHub の値（`GitHubItemCache` の答え）。
     let items: [GitHubItemID: GitHubItemAnswer]
     let viewerLogin: String?
+    /// worktree ごとの agent（`WorktreeAgentActivity` の索引）。
+    let agents: [String: WorktreeAgentActivity.Agent]
   }
 
   static func build(_ input: Input) -> [TaskPaletteRow] {
@@ -197,6 +200,7 @@ enum TaskPaletteRows {
       link: GitHubItemText.mark(task.links),
       pullRequest: GitHubItemText.pullRequestBadge(task.links, input.items),
       needsReview: GitHubItemText.needsReview(
-        task.links, input.items, viewerLogin: input.viewerLogin))
+        task.links, input.items, viewerLogin: input.viewerLogin),
+      agent: task.agent(in: input.agents))
   }
 }

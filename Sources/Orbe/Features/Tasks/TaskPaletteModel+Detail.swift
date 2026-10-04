@@ -13,10 +13,12 @@ enum TaskDetailField: CaseIterable, Equatable, Hashable {
   }
 }
 
-/// 詳細で ↑↓ で止まる場所。固定の項目と、タスクごとに数が変わる結び付きの行。結び付きは位置でなく項目の
-/// 同一性で持つ（agent が結び付きを変えても、焦点が別の項目へずれない）。
+/// 詳細で ↑↓ で止まる場所。固定の項目と、タスクごとに数が変わる結び付きの行・agent の場所。結び付きは位置で
+/// なく項目の同一性で持つ（agent が結び付きを変えても、焦点が別の項目へずれない）。
 enum TaskDetailStop: Hashable {
   case field(TaskDetailField)
+  /// タスクの worktree で動いている agent（↵ でそのタブへ）。
+  case agent
   case link(GitHubItemID)
 }
 
@@ -49,9 +51,9 @@ struct TaskEditDraft: Equatable {
 /// 詳細の操作（項目の移動・選択式の値・文字の項目の編集と確定・結び付きを開く / 外す）。変異はすべて
 /// ストアのメソッドをそのまま呼び、検証はストアに任せる。
 extension TaskPaletteModel {
-  /// 詳細で止まる場所の並び（タイトル → 各結び付き → ステータス → … → メモ）。
-  static func detailStops(_ task: TaskItem) -> [TaskDetailStop] {
-    [.field(.title)] + task.links.map { .link($0.item) }
+  /// 詳細で止まる場所の並び（タイトル → agent → 各結び付き → ステータス → … → メモ）。
+  func detailStops(_ task: TaskItem) -> [TaskDetailStop] {
+    [.field(.title)] + (agent(of: task) == nil ? [] : [.agent]) + task.links.map { .link($0.item) }
       + TaskDetailField.allCases.filter { $0 != .title }.map { .field($0) }
   }
 
@@ -71,7 +73,7 @@ extension TaskPaletteModel {
   /// ↑↓。端では止まる。
   func moveField(_ direction: Int) {
     guard case .detail(let stop) = area, let task = selectedTask else { return }
-    let stops = Self.detailStops(task)
+    let stops = detailStops(task)
     guard let current = stops.firstIndex(of: stop), stops.indices.contains(current + direction)
     else { return }
     error = nil
