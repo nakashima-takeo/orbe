@@ -82,6 +82,7 @@ final class WindowControllerWorktreeAgentsTests: OrbeTestCase {
     XCTAssertEqual(palette.selectedID, .task(task.id))
     palette.enterDetail()
     palette.moveField(-1)
+    palette.moveField(-1)
     XCTAssertEqual(palette.area, .detail(.agent), "前提: 詳細の agent の場所にいる")
     XCTAssertNotEqual(wc.current.active, 0, "前提: 前面は別のタブ")
 
