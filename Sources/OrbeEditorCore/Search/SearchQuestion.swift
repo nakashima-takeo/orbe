@@ -32,9 +32,4 @@ public struct SearchQuestion: Equatable, Sendable {
     }
     return SearchQuestion(needle: needle, rule: .find)
   }
-
-  /// 本文の中の、この問いの一致（昇順。`limit` 件まで）。
-  public func matches(in text: TextRope, limit: Int = TextSearch.limit) -> [NSRange] {
-    TextSearch.matches(of: needle, in: text, rule: rule, limit: limit)
-  }
 }
