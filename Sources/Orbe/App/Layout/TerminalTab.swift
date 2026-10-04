@@ -1,22 +1,37 @@
 import AppKit
 import GhosttyKit
+import OrbeEditorCore
 import OrbeSessionLog
 
 /// タブ 1 枚。端末 surface 1 枚（`SurfaceView`）と「タブとしての状態」——制御チャネルの宛先 ID・
-/// エージェントスロット・明示タイトル・復元単位——を所有する。外部から指す単位・エージェントが走る
-/// 単位・永続の単位はすべてこのタブで、`SurfaceView` はシェルが報告する事実（タイトル・cwd）と
+/// エージェントスロット・明示タイトル・面の配置・復元単位——を所有する。外部から指す単位・エージェントが
+/// 走る単位・永続の単位はすべてこのタブで、`SurfaceView` はシェルが報告する事実（タイトル・cwd）と
 /// 端末 I/O だけを持つ。
 ///
-/// `view`（`SurfaceScrollView`）は AppKit の NSView として作り直さずに mount / 隠す / 外すだけを行う。
+/// `view`（`TabFacesView`）は AppKit の NSView として作り直さずに mount / 隠す / 外すだけを行う。
 /// SwiftUI に所有させて再生成すると scrollback と非アクティブ workspace の keep-alive
 /// （NSView 同一性に依存）を壊す（cf. ghostty-org/ghostty#9444）。
 final class TerminalTab {
   /// 制御チャネルの宛先 ID（外部からこのタブを一意に指す）。
   let id = IdGen.next()
-  /// mount 単位（ネイティブ overlay スクロールバー付きの surface ラップ）。`WindowController` が
-  /// content へ載せる／隠す／外す。
-  let view: SurfaceScrollView
-  var surface: SurfaceView { view.surfaceView }
+  /// mount 単位（エディター面・背・端末面の器）。`WindowController` が content へ載せる／隠す／外す。
+  let view: TabFacesView
+  var surface: SurfaceView { view.terminal.surfaceView }
+
+  /// 面の配置（エディター幅の割合・焦点の面）。正規形に限り、書き換えは `setFaces` だけが行う。
+  private(set) var faces: FaceLayout
+  /// 面の配置が変わった通知（永続保存・chrome 更新・焦点の追従は上位）。
+  var onFacesChange: (() -> Void)?
+
+  /// エディター面のセッション（開いた文書の列と焦点の文書）。書き手はタブとその pane（`EditorPaneView`）で、
+  /// 外（制御 API）は `openFile` を通る。エディターの型は UI に閉じた `@MainActor` で、タブはその外（main スレッド規律の
+  /// nonisolated）にいるため、タブの中でこのプロパティに触る箇所はいずれも `MainActor.assumeIsolated` で境を越える。
+  let editor: EditorSession
+  /// 開いた文書の列・焦点の文書・未保存の有無・検索の問いが変わった通知（chrome 更新・永続保存は上位）。
+  var onEditorChange: (() -> Void)?
+  /// 未消費の復元状態（開いていた文書）。休眠チケットと同じく materialize で消費する。未消費のまま終了
+  /// しても同じ形で書き戻す（一度も見なかったタブの文書は失われない）。
+  private var pendingDocuments: EditorState.OpenDocuments?
 
   /// このタブが materialize 済み側にある現在状態。現仕様の遷移は false → true のみだが、
   /// 履歴bitではなく、将来の再休眠では false へ戻せる責務として扱う。
@@ -79,8 +94,8 @@ final class TerminalTab {
   /// 新タブの cwd 継承はすべてこの 1 つの定義を読む。
   var cwd: String { surface.currentPwd ?? surface.initialCwd }
 
-  /// 所属セグメントのキー＝cwd の場所のキー（`GitWorktreeRoot.locationKey`。属する git worktree ルート、
-  /// 管理外は cwd 自身の正準形パス）。
+  /// 所属セグメントのキー＝cwd の根（`GitWorktreeRoot.root(of:)`。属する git worktree ルート、
+  /// 管理外は cwd 自身の正準形パス）。エディター面の根も同じ値。
   /// cwd が変わった時に 1 回だけ再計算し（`pwdChanged`）、永続しない（復元時に保存 cwd から同じ規則で
   /// 再計算する）。同キーのタブが配列上で隣接する不変条件は `SessionStore` が保証する。
   /// setter が internal なのは、不変条件の検証がキーの純配列ロジックで済むよう注入口を残すため
@@ -106,13 +121,18 @@ final class TerminalTab {
   }
 
   /// 通常タブは cwd だけ。エージェント起動タブは起動コマンド・追加環境変数も指定して起こす。
-  init(cwd: String, command: String? = nil, env: [String: String] = [:]) {
+  init(
+    cwd: String, command: String? = nil, env: [String: String] = [:],
+    editorSurfaces: EditorSurfaces = .shared
+  ) {
     resumeSpawn = nil
-    view = SurfaceScrollView(surfaceView: SurfaceView(frame: .zero, cwd: cwd))
-    groupKey = GitWorktreeRoot.locationKey(of: cwd)
+    faces = .terminalOnly
+    editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
+    groupKey = GitWorktreeRoot.root(of: cwd)
+    view = Self.makeView(cwd: cwd, root: groupKey, faces: faces)
     surface.initialCommand = command
     surface.initialEnv = env
-    surface.tab = self
+    wireView()
   }
 
   /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する。
@@ -125,13 +145,48 @@ final class TerminalTab {
 
   /// 永続スナップショット（TabState）から起こす。agent 付きなら休眠チケット（`.dormant`）のまま
   /// 起こし、resume 解決は消費時（`recordMaterializationStarted`）まで遅延する。
-  init(restoring state: TabState, resumeSpawn: @escaping ResumeSpawn) {
+  init(
+    restoring state: TabState, resumeSpawn: @escaping ResumeSpawn,
+    editorSurfaces: EditorSurfaces = .shared
+  ) {
     self.resumeSpawn = resumeSpawn
-    view = SurfaceScrollView(surfaceView: SurfaceView(frame: .zero, cwd: state.cwd))
-    groupKey = GitWorktreeRoot.locationKey(of: state.cwd)
+    faces = state.faces.normalized
+    editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
+    groupKey = GitWorktreeRoot.root(of: state.cwd)
+    view = Self.makeView(cwd: state.cwd, root: groupKey, faces: faces)
     explicitTitle = state.explicitTitle
+    pendingDocuments = state.editor?.documents
     if let agent = state.agent { agentSlot = .dormant(agent) }
+    wireView()
+    if let editor = state.editor {
+      MainActor.assumeIsolated { view.editor.projectSearch.restore(editor.search) }
+    }
+  }
+
+  private static func makeView(cwd: String, root: String, faces: FaceLayout) -> TabFacesView {
+    TabFacesView(
+      terminal: SurfaceScrollView(surfaceView: SurfaceView(frame: .zero, cwd: cwd)),
+      editor: EditorPaneView(root: root), faces: faces)
+  }
+
+  /// 両面がタブを知り（事実の通知先）、背の求める配置がタブの状態を通って器へ戻るよう配線する。
+  /// セッションの変化は器（面の骨と中身）へ写してから上位へ 1 本で上げる。
+  private func wireView() {
     surface.tab = self
+    view.editor.tab = self
+    view.onFacesRequested = { [weak self] faces, animated in
+      self?.setFaces(faces, animated: animated)
+    }
+    view.onFaceFocused = { [weak self] face in self?.paneDidFocus(face) }
+    MainActor.assumeIsolated {
+      editor.onChange = { [weak self] in
+        guard let self else { return }
+        view.editor.sessionDidChange()
+        onEditorChange?()
+      }
+      view.editor.projectSearch.onQueryChange = { [weak self] in self?.onEditorChange?() }
+      editor.onFocusChange = { [weak self] in self?.view.editor.focusDidChange() }
+    }
   }
 
   /// materialize 開始を記録し、起動指示を確定する。休眠チケットは一度きり消費する——resume を
@@ -157,6 +212,12 @@ final class TerminalTab {
       }
     }
     OrbeRuntimeEnv.inject(into: &surface.initialEnv, tabId: id)
+    if let pending = pendingDocuments {
+      pendingDocuments = nil
+      MainActor.assumeIsolated {
+        editor.restore(paths: pending.open, active: pending.active, preview: pending.preview)
+      }
+    }
   }
 
   /// エージェント hook の状態報告を slot へ適用する（`report_agent`）。戻り値は state の実変化
@@ -245,7 +306,34 @@ final class TerminalTab {
     return SessionEvent.Agent(command: session.command, sessionId: sessionId)
   }
 
-  /// surface からのウィンドウレベル chrome キー（タブ・workspace）を上位へ転送する。
+  /// 配置を書き換える唯一の口。正規化し、同じなら何もしない。器へ写し、上位へ通知する。
+  func setFaces(_ faces: FaceLayout, animated: Bool) {
+    let normalized = faces.normalized
+    guard normalized != self.faces else { return }
+    self.faces = normalized
+    view.set(normalized, animated: animated)
+    onFacesChange?()
+  }
+
+  /// first responder が面の配下に入った（器が告げる）。焦点の記憶を面に追従させる（面の外へ出ても触らない——パレットで
+  /// 一時的に焦点を失っても面の記憶は残る）。
+  func paneDidFocus(_ face: Face) {
+    guard faces.focus != face else { return }
+    setFaces(FaceLayout(editorRatio: faces.editorRatio, focus: face), animated: false)
+  }
+
+  /// 閉じれば失われる文書（未保存の列）。閉じる・終了の確認が読む。
+  func unsavedDocuments() -> [EditorDocument] {
+    MainActor.assumeIsolated { editor.documentsToDiscard() }
+  }
+
+  /// エディターでファイルを普通のタブで開いて焦点の文書にする（制御 API の入口。エージェントが見せたファイルを人の次の
+  /// クリックが入れ替えない）。読めない・UTF-8 でない・テキスト面を作れない（Metal の装置が無い）は throw。
+  func openFile(_ url: URL) throws {
+    _ = try MainActor.assumeIsolated { try editor.open(url, as: .pinned) }
+  }
+
+  /// 面（surface・エディター pane）からのウィンドウレベル chrome キー（タブ・workspace）を上位へ転送する。
   func requestWindowCommand(_ command: WindowCommand) {
     onWindowCommand?(command)
   }
@@ -257,9 +345,11 @@ final class TerminalTab {
   }
 
   /// surface が OSC 7 で cwd を報告した（`SurfaceView.currentPwd` の didSet が実変化時だけ呼ぶ）。
+  /// 根が変わればエディター面のツリーも作り直す。
   func pwdChanged() {
     ControlServer.shared.emit(.pwd(tabId: id, path: surface.currentPwd))
-    groupKey = GitWorktreeRoot.locationKey(of: cwd)
+    groupKey = GitWorktreeRoot.root(of: cwd)
+    view.editor.setRoot(groupKey)
     onPwdChange?()
   }
 
@@ -270,13 +360,28 @@ final class TerminalTab {
     DispatchQueue.main.async { [weak self] in self?.onClose?(origin) }
   }
 
-  /// このタブの復元単位（cwd・エージェントセッション・明示タイトル）。起動時の一括保存
-  /// （WorkspacePersistence）が読み、復元は `TerminalTab(restoring:)` が同じ形を受ける。
-  /// 永続化するのは sessionId が確定している同一性だけ（resume 不能な記録を書かない）。
+  /// このタブの復元単位（cwd・エージェントセッション・明示タイトル・面の配置・エディターの状態）。起動時の
+  /// 一括保存（WorkspacePersistence）が読み、復元は `TerminalTab(restoring:)` が同じ形を受ける。
+  /// 永続化するのは sessionId が確定している同一性だけ（resume 不能な記録を書かない）。文書は開いている
+  /// もの、無ければ未消費の復元状態。
   func tabState() -> TabState {
     TabState(
       cwd: cwd, agent: agentSlot.session.flatMap { $0.sessionId != nil ? $0 : nil },
-      explicitTitle: explicitTitle)
+      explicitTitle: explicitTitle, faces: faces, editor: editorState())
+  }
+
+  private func editorState() -> EditorState? {
+    MainActor.assumeIsolated {
+      let documents = editor.documents
+      let open =
+        documents.first.map { first in
+          EditorState.OpenDocuments(
+            open: documents.map(\.url.path), active: (editor.activeDocument ?? first).url.path,
+            preview: editor.preview?.url.path)
+        } ?? pendingDocuments
+      let state = EditorState(documents: open, search: view.editor.projectSearch.query)
+      return state.isEmpty ? nil : state
+    }
   }
 
   deinit {

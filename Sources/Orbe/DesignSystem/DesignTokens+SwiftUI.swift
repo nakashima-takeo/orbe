@@ -83,9 +83,20 @@ struct ThemeColors {
   // 基色 ink はフルアルファ。view 側で .opacity(α) を掛けて実際の面色にする
   let surfaceInk = Color(nsColor: Theme.Color.surfaceInk)
   let borderInk = Color(nsColor: Theme.Color.borderInk)
+  let sunkInk = Color(nsColor: Theme.Color.sunkInk)
   let inputWash = Color(nsColor: Theme.Color.inputWash)
   let inputBorder = Color(nsColor: Theme.Color.inputBorder)
   let tintAccent = Color(nsColor: Theme.Color.tintAccent)
+  // エディター面（面のキー色・空状態）
+  let faceEditor = Color(nsColor: Theme.Color.faceEditor)
+  let faceTerminal = Color(nsColor: Theme.Color.faceTerminal)
+  let editorGhost = Color(nsColor: Theme.Color.editorGhost)
+  let editorIcon = Color(nsColor: Theme.Color.editorIcon)
+  let editorText = Color(nsColor: Theme.Color.editorText)
+  let editorTertiary = Color(nsColor: Theme.Color.editorTertiary)
+  let editorModified = Color(nsColor: Theme.Color.editorModified)
+  let editorTabCloseHover = Color(nsColor: Theme.Color.editorTabCloseHover)
+  let editorPreviewHatch = Color(nsColor: Theme.Color.editorPreviewHatch)
 }
 
 extension Font {
@@ -125,4 +136,17 @@ struct ThemeFonts {
   let helpCaption = Font(Theme.Typography.helpCaption as CTFont)
   let helpKeyFn = Font(Theme.Typography.helpKeyFn as CTFont)
   let helpKeyArrow = Font(Theme.Typography.helpKeyArrow as CTFont)
+  // エディター面の空状態
+  let editorLead = Font(Theme.Typography.editorLead as CTFont)
+  let editorHint = Font(Theme.Typography.editorHint as CTFont)
+  // エディター面の骨
+  let editorPanelTitle = Font(Theme.Typography.editorPanelTitle as CTFont)
+  let editorRootLabel = Font(Theme.Typography.editorRootLabel as CTFont)
+  let editorTreeRow = Font(Theme.Typography.editorTreeRow as CTFont)
+  let editorBadge = Font(Theme.Typography.editorBadge as CTFont)
+  let editorFileTab = Font(Theme.Typography.editorFileTab as CTFont)
+  let editorBreadcrumb = Font(Theme.Typography.editorBreadcrumb as CTFont)
+  let editorSearchField = Font(Theme.Typography.editorSearchField as CTFont)
+  let editorSearchOption = Font(Theme.Typography.editorSearchOption as CTFont)
+  let editorSearchNote = Font(Theme.Typography.editorSearchNote as CTFont)
 }

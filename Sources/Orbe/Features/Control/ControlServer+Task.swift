@@ -1,9 +1,32 @@
 import Foundation
 
+/// タスクの 5 動詞の domain 操作（`ControlTarget` の一部。main スレッドでのみ呼ぶ）。
+protocol ControlTaskTarget: AnyObject {
+  /// タスクを列の順に列挙する（list_tasks）。workspaceId 指定でその workspace のタスクだけ。未知 id は -32004。
+  func controlListTasks(workspaceId: Int?) -> Result<Any, ControlError>
+  /// タスクを列の末尾へ足す（add_task）。workspaceId は省略＝呼び出し元タブの workspace（タブが分からなければ
+  /// なし）・`.clear`＝なし・`.set`＝その workspace（未知は -32004）。callerTabId は追加者の agent 名と
+  /// 既定の付き先を引くためだけに読み、未知のタブでもエラーにしない。worktree は実在するディレクトリの
+  /// 絶対パス（それ以外は -32602）で、それを含む worktree のルートに揃えて付ける。
+  func controlAddTask(
+    _ draft: TaskDraft, workspaceId: ClearableValue<Int>?, callerTabId: Int?, worktree: String?
+  ) -> Result<Any, ControlError>
+  /// タスクを変える（update_task）。workspaceId・worktree は省略＝変えない・`.clear`＝なし・`.set`＝付ける。
+  func controlUpdateTask(
+    taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?,
+    worktree: ClearableValue<String>?
+  ) -> Result<Any, ControlError>
+  /// タスクを別のタスクの前か後ろへ移す（move_task）。
+  func controlMoveTask(taskId: Int, _ placement: TaskStore.Placement, anchorTaskId: Int)
+    -> Result<Any, ControlError>
+  /// タスクを消す（delete_task）。
+  func controlDeleteTask(taskId: Int) -> Result<Any, ControlError>
+}
+
 /// タスクの 5 動詞の dispatch。ここが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と
 /// 不変条件は `TaskStore`、workspace・呼び出し元タブ・worktree の解決は target が持つ。
 extension ControlServer {
-  func runTask(method: String, params: [String: Any], target: ControlTarget)
+  func runTask(method: String, params: [String: Any], target: ControlTaskTarget)
     -> Result<Any, ControlError>?
   {
     let p = TaskParams(params)

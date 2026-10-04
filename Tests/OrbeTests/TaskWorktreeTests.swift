@@ -24,7 +24,7 @@ final class TaskWorktreeTests: OrbeTestCase {
     let worktree = try XCTUnwrap(TaskWorktree(directory: nested))
 
     XCTAssertEqual(worktree.path, GitWorktreeRoot.normalizedPath(repo))
-    XCTAssertEqual(worktree.path, GitWorktreeRoot.locationKey(of: repo), "タブの連のキーと同じ値")
+    XCTAssertEqual(worktree.path, GitWorktreeRoot.root(of: repo), "タブの連のキーと同じ値")
   }
 
   func testADirectoryOutsideGitIsKeptAsItsNormalizedPath() throws {
@@ -50,7 +50,7 @@ final class TaskWorktreeTests: OrbeTestCase {
       let path = try directory(name)
       let written = TaskWorktree(directory: path)
       let read = try? JSONDecoder().decode(
-        TaskWorktree.self, from: JSONEncoder().encode(GitWorktreeRoot.locationKey(of: path)))
+        TaskWorktree.self, from: JSONEncoder().encode(GitWorktreeRoot.root(of: path)))
 
       XCTAssertEqual(written != nil, read != nil, "\(name.debugDescription): 書き込みと読み込みで同じ判定")
       XCTAssertEqual(written != nil, name == "notes", "\(name.debugDescription)")

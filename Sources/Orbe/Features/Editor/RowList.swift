@@ -1,0 +1,331 @@
+import AppKit
+
+/// 行の列（`RowList`）の源。行の数・行の中身・操作の意味を答える。列は見えている行の枠（行の view）だけを持ち、行を
+/// 番号で源に問うて描かせる。選択は源（model）が持ち、列は操作を渡すだけで自分では動かさない。
+@MainActor
+protocol RowListSource: AnyObject {
+  associatedtype RowView: ListRowView
+  /// 選択の同一性（行の番号がずれても同じ選択を指す値）。
+  associatedtype Selection: Hashable
+
+  /// 行の数。列は行を問う上限にもこの今の値を使う（行の数は列が読み直すより先に変わりうる）。
+  var rowCount: Int { get }
+  /// 枠を 1 つ作る。列は見えている行の数＋1 本まで作って使い回す。
+  func makeRowView() -> RowView
+  /// 枠 `view` に行 `row` の中身を写す。列は並べるたび（送るたびを含む）に見えている全行について呼ぶので、中身が
+  /// 前と同じなら描き直さない。
+  /// `emoji` は chrome の絵文字の字体（ユーザー由来の名前に充てる）。
+  func show(_ row: Int, in view: RowView, emoji: NSFont?)
+  /// 選択 `selection` の行の番号（今の行に無ければ nil）。
+  func row(of selection: Selection) -> Int?
+  /// 最初の行を描く前に 1 度だけ要る準備（字体の読み込み・初回の字組み・色の解決）。列が窓に載った次の周回で呼ぶ。
+  func prepareRows(for appearance: NSAppearance)
+
+  /// 列へ焦点を入れる要求があるか（列が窓に載ったとき・`update` で求められたときに見る）。
+  var wantsFocus: Bool { get }
+  /// 列が焦点の要求を当てた。
+  func focusRequestDidApply()
+  /// 列の焦点が入った・抜けた。
+  func focusDidChange(_ focused: Bool)
+
+  /// キーの操作。
+  func perform(_ key: RowListKey)
+  /// 列に焦点がある間に押していたキーを離した。
+  func keyDidRelease()
+  /// 行 `row` のシングルクリック。
+  func click(_ row: Int)
+  /// 行 `row` のダブルクリック。
+  func doubleClick(_ row: Int)
+  /// VoiceOver がリストの行 `row` を選んだ。
+  func select(_ row: Int)
+}
+
+/// 列が源へ渡すキーの操作。
+struct RowListKey: Equatable {
+  enum Action {
+    /// ↑↓（⇧つきも同じ）。
+    case up, down
+    case left, right
+    case enter, escape
+  }
+
+  let action: Action
+  /// 押し続けて自動で繰り返された押下（`NSEvent.isARepeat`）。
+  let isRepeat: Bool
+}
+
+/// 行の列のスクロールの器。持ち主（pane）が持ち続け、載せる SwiftUI が隠れている間も捨てない——出し直すたびに行の
+/// view を作り直さない。読む値（行の版・選択・焦点の要求・絵文字の字体）は `update` で受ける。
+final class RowList<Source: RowListSource>: NSScrollView {
+  let list: RowListView<Source>
+  private var rowsVersion: Int?
+  /// 最後に写した選択。選択が変わったときだけ、その行を見せる（行の番号がずれただけ・列が出ただけでは送らない）。
+  private var selection: Source.Selection?
+  /// 大きさが決まる前に変わった選択。大きさの無い列で送ると、後で大きさが付いても送った位置が残るので、大きさが付いた
+  /// 最初の `tile` で見せる。
+  private var pendingReveal: Source.Selection?
+
+  init(source: Source, rowHeight: CGFloat) {
+    list = RowListView(source: source, rowHeight: rowHeight)
+    super.init(frame: .zero)
+    documentView = list
+    drawsBackground = false
+    borderType = .noBorder
+    hasVerticalScroller = true
+    hasHorizontalScroller = false
+    autohidesScrollers = true
+    automaticallyAdjustsContentInsets = false
+  }
+  required init?(coder: NSCoder) { fatalError("not supported") }
+
+  /// 行の版が変わった（か絵文字の字体が変わった）ときだけ行を読み直し、選択の行を写す。選択が変わったときだけ、
+  /// その行を見えるところまで最小限だけ送る。
+  func update(rowsVersion: Int, selection: Source.Selection?, emoji: NSFont?, wantsFocus: Bool) {
+    if rowsVersion != self.rowsVersion || emoji !== list.emoji {
+      self.rowsVersion = rowsVersion
+      list.emoji = emoji
+      list.reloadRows()
+    }
+    list.selectedRow = selection.flatMap { list.source.row(of: $0) }
+    if selection != self.selection {
+      self.selection = selection
+      pendingReveal = nil
+      if let selection, let row = list.selectedRow {
+        if contentSize.height > 0 {
+          list.scrollRowToVisible(row)
+        } else {
+          pendingReveal = selection
+        }
+      }
+    }
+    if wantsFocus {
+      // 焦点を移すと載せている SwiftUI の焦点も変わるので、この更新の外で当てる。
+      DispatchQueue.main.async { [weak self] in self?.list.applyFocusRequest() }
+    }
+  }
+
+  override func tile() {
+    super.tile()
+    list.fitWidth(to: contentSize.width)
+    list.layoutRows()
+    guard contentSize.height > 0, let pending = pendingReveal else { return }
+    pendingReveal = nil
+    if let row = list.source.row(of: pending) { list.scrollRowToVisible(row) }
+  }
+
+  override func reflectScrolledClipView(_ clipView: NSClipView) {
+    super.reflectScrolledClipView(clipView)
+    list.layoutRows()
+  }
+}
+
+/// 行を並べる列（`RowList` の文書）。行は数万になりうるので、見えている行の数＋1 本の枠だけを持ち、行 r を枠
+/// r mod 本数 に割り当てて使い回す——送って描き直すのは新しく見えた行だけで、行の数が変わっても列の高さを変えるだけ
+/// （行ごとの仕事をしない）。行の高さは 1 つ。
+///
+/// キーは源の操作へ渡す（`RowListKey`）。Home / End・PageUp / PageDown は列が送るだけ。押すと焦点を取り、行の番号を源へ
+/// 渡す。VoiceOver には AX のリスト（行の総数と、見えている行・選択の行）として見せる。
+final class RowListView<Source: RowListSource>: NSView {
+  let source: Source
+  let rowHeight: CGFloat
+  var emoji: NSFont?
+  /// 列の高さを決めた行の数（`reloadRows` で源から写す）。行を問う上限は源の今の行の数。
+  private(set) var rowCount = 0
+  private var slots: [Source.RowView] = []
+
+  /// 選んでいる行の番号（源の選択を写したもの）。
+  var selectedRow: Int? {
+    didSet {
+      guard selectedRow != oldValue else { return }
+      for slot in slots { slot.isSelected = slot.row != nil && slot.row == selectedRow }
+      NSAccessibility.post(element: self, notification: .selectedRowsChanged)
+    }
+  }
+
+  init(source: Source, rowHeight: CGFloat) {
+    self.source = source
+    self.rowHeight = rowHeight
+    super.init(frame: .zero)
+    setAccessibilityElement(true)
+    setAccessibilityRole(.list)
+  }
+  required init?(coder: NSCoder) { fatalError("not supported") }
+
+  override var isFlipped: Bool { true }
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    guard window != nil else { return }
+    applyFocusRequest()
+    // 列が出た更新そのものには載せず、次の周回で済ませる。
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      source.prepareRows(for: effectiveAppearance)
+    }
+  }
+
+  // MARK: - 行
+
+  /// 行の数と中身を読み直す。見えている行の枠は捨てずに中身だけを差し替える。
+  func reloadRows() {
+    rowCount = source.rowCount
+    setFrameSize(NSSize(width: frame.width, height: CGFloat(rowCount) * rowHeight))
+    layoutRows()
+  }
+
+  func fitWidth(to width: CGFloat) {
+    guard width != frame.width else { return }
+    setFrameSize(NSSize(width: width, height: frame.height))
+    for slot in slots { slot.setFrameSize(NSSize(width: width, height: rowHeight)) }
+  }
+
+  /// 見えている行に枠を割り当てて描かせる（行が見えなくなった枠は隠す）。
+  func layoutRows() {
+    let visible = visibleRect
+    let capacity = Int((max(visible.height, rowHeight) / rowHeight).rounded(.up)) + 1
+    while slots.count < capacity {
+      let slot = source.makeRowView()
+      slot.frame = NSRect(x: 0, y: 0, width: bounds.width, height: rowHeight)
+      addSubview(slot)
+      slots.append(slot)
+    }
+    let first = max(0, Int(visible.minY / rowHeight))
+    let last = min(source.rowCount, Int((visible.maxY / rowHeight).rounded(.up)))
+    var shown = Set<Int>()
+    for row in first..<max(first, last) {
+      let index = row % slots.count
+      shown.insert(index)
+      let slot = slots[index]
+      if slot.row != row {
+        slot.row = row
+        slot.setFrameOrigin(NSPoint(x: 0, y: CGFloat(row) * rowHeight))
+      }
+      source.show(row, in: slot, emoji: emoji)
+      slot.isSelected = row == selectedRow
+      slot.isHidden = false
+    }
+    for (index, slot) in slots.enumerated() where !shown.contains(index) {
+      slot.isHidden = true
+      slot.row = nil
+      slot.isSelected = false
+    }
+  }
+
+  /// 見えていなければ、見えるところまで最小限だけ送る。
+  func scrollRowToVisible(_ row: Int) {
+    scrollToVisible(rect(ofRow: row))
+  }
+
+  private func rect(ofRow row: Int) -> NSRect {
+    NSRect(x: 0, y: CGFloat(row) * rowHeight, width: 1, height: rowHeight)
+  }
+
+  private func row(at point: NSPoint) -> Int? {
+    let row = Int(point.y / rowHeight)
+    return point.y >= 0 && row < source.rowCount ? row : nil
+  }
+
+  // MARK: - 焦点
+
+  /// 列へ焦点を入れる要求を当てる（窓に載っていなければ、載ったときにもう一度呼ばれる）。
+  func applyFocusRequest() {
+    guard source.wantsFocus, let window else { return }
+    window.makeFirstResponder(self)
+    source.focusRequestDidApply()
+  }
+
+  override var acceptsFirstResponder: Bool { true }
+
+  override func becomeFirstResponder() -> Bool {
+    source.focusDidChange(true)
+    return true
+  }
+
+  override func resignFirstResponder() -> Bool {
+    source.focusDidChange(false)
+    return true
+  }
+
+  // MARK: - マウス
+
+  override func mouseDown(with event: NSEvent) {
+    window?.makeFirstResponder(self)
+    let point = convert(event.locationInWindow, from: nil)
+    guard let row = row(at: point) else { return }
+    if event.clickCount >= 2 {
+      source.doubleClick(row)
+    } else {
+      source.click(row)
+    }
+  }
+
+  // MARK: - キー
+
+  /// 解釈中の押下がキーリピートか（`interpretKeyEvents` が同期に呼ぶ操作へ添える）。
+  private var keyIsRepeat = false
+
+  override func keyDown(with event: NSEvent) {
+    keyIsRepeat = event.isARepeat
+    defer { keyIsRepeat = false }
+    interpretKeyEvents([event])
+  }
+
+  override func keyUp(with event: NSEvent) {
+    source.keyDidRelease()
+  }
+
+  private func perform(_ action: RowListKey.Action) {
+    source.perform(RowListKey(action: action, isRepeat: keyIsRepeat))
+  }
+
+  override func moveUp(_ sender: Any?) { perform(.up) }
+  override func moveDown(_ sender: Any?) { perform(.down) }
+  override func moveUpAndModifySelection(_ sender: Any?) { perform(.up) }
+  override func moveDownAndModifySelection(_ sender: Any?) { perform(.down) }
+  override func moveLeft(_ sender: Any?) { perform(.left) }
+  override func moveRight(_ sender: Any?) { perform(.right) }
+  override func insertNewline(_ sender: Any?) { perform(.enter) }
+  override func cancelOperation(_ sender: Any?) { perform(.escape) }
+
+  override func scrollToBeginningOfDocument(_ sender: Any?) {
+    scroll(NSPoint(x: 0, y: 0))
+  }
+
+  override func scrollToEndOfDocument(_ sender: Any?) {
+    scroll(NSPoint(x: 0, y: max(0, bounds.height - visibleRect.height)))
+  }
+
+  override func scrollPageUp(_ sender: Any?) { page(by: -1) }
+  override func scrollPageDown(_ sender: Any?) { page(by: 1) }
+  override func pageUp(_ sender: Any?) { page(by: -1) }
+  override func pageDown(_ sender: Any?) { page(by: 1) }
+
+  /// 1 画面ぶん送る（1 行ぶん重ねて、読んでいた行を見失わない）。`direction` は上が -1、下が 1。
+  private func page(by direction: CGFloat) {
+    let step = max(rowHeight, visibleRect.height - rowHeight) * direction
+    let top = min(
+      max(0, visibleRect.minY + step), max(0, bounds.height - visibleRect.height))
+    scroll(NSPoint(x: 0, y: top))
+  }
+
+  // MARK: - アクセシビリティ
+
+  override func accessibilityRows() -> [Any]? {
+    slots.filter { $0.row != nil }.sorted { $0.row! < $1.row! }
+  }
+
+  override func accessibilityChildren() -> [Any]? { accessibilityRows() }
+
+  override func accessibilityVisibleRows() -> [Any]? { accessibilityRows() }
+
+  override func accessibilitySelectedRows() -> [Any]? {
+    slots.filter(\.isSelected)
+  }
+
+  override func setAccessibilitySelectedRows(_ rows: [Any]?) {
+    guard let row = (rows?.first as? ListRowView)?.row else { return }
+    source.select(row)
+  }
+
+  override func accessibilityRowCount() -> Int { source.rowCount }
+}

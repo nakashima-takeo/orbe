@@ -11,6 +11,13 @@ enum GitWorktreeRoot {
     ((path as NSString).standardizingPath as NSString).resolvingSymlinksInPath
   }
 
+  /// パスが属する根。「それを含む worktree のルート、git の外なら正規化したそのパス」の規則の唯一の置き場。
+  /// タブの連（`TerminalTab.groupKey`）・エディターの根（文書の結線が属する根のサービス）・タスクの worktree
+  /// （`TaskWorktree`）が同じこの値で比べる。
+  static func root(of path: String) -> String {
+    locate(cwd: path) ?? normalizedPath(path)
+  }
+
   /// 正規化した cwd から自身を含めて `/` まで上へ辿り、最初に `.git` を持つディレクトリ（正準形）。
   /// 無ければ nil。存在しないパス（消えた worktree）は `.git` が見つからないまま祖先へ上がるだけ——
   /// cwd が不在だと入口の正規化は効かないので、見つけたルートを改めて正準化して返す（`.git` が
@@ -25,11 +32,5 @@ enum GitWorktreeRoot {
       guard parent != dir else { return nil }
       dir = parent
     }
-  }
-
-  /// 場所のキー。パスを、それを含む worktree のルート（git の外なら正規化したそのパス）に揃える。
-  /// タブの連（`TerminalTab.groupKey`）とタスクの worktree（`TaskWorktree`）が同じこの規則で比べる。
-  static func locationKey(of path: String) -> String {
-    locate(cwd: path) ?? normalizedPath(path)
   }
 }

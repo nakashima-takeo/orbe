@@ -9,7 +9,7 @@ import XCTest
 final class TerminalTabTests: OrbeTestCase {
   func testViewWrapsSingleSurface() {
     let tab = TerminalTab(cwd: "/tmp")
-    XCTAssertTrue(tab.view.surfaceView === tab.surface)
+    XCTAssertTrue(tab.view.terminal.surfaceView === tab.surface)
     XCTAssertTrue(tab.surface.tab === tab, "surface は所属タブを知る（事実の通知先）")
     XCTAssertEqual(tab.surface.initialCwd, "/tmp")
   }
@@ -36,20 +36,14 @@ final class TerminalTabTests: OrbeTestCase {
     }
   }
 
-  /// ⌘W（`.closeTab`）は人のジェスチャとして届く。キーから close までの唯一の分岐点で、
-  /// ここが `.process` に化けると寿命ログの終わり方が「落ちた」になり、⇧⌘T のバッジと
-  /// `orb session closed` の群の切り方が人の操作を事故として扱う。
-  func testCloseTabChromeActionReportsGestureOrigin() {
+  /// ⌘W（`.closeTab`）はタブ水準の window コマンドとして上位へ届く（端末・エディターのどちらの面からも
+  /// 同じ経路）。閉じる実体と発火源（`.gesture`）は `WindowController.handleWindowCommand` が持つ。
+  func testCloseTabChromeActionRequestsWindowCommand() {
     let tab = TerminalTab(cwd: "/tmp")
-    let exp = expectation(description: "onClose fires")
-    var received: TabCloseOrigin?
-    tab.onClose = {
-      received = $0
-      exp.fulfill()
-    }
+    var received: [WindowCommand] = []
+    tab.onWindowCommand = { received.append($0) }
     tab.surface.perform(.closeTab)  // ⌘W の届き先（Keybindings → SurfaceView.perform）
-    wait(for: [exp], timeout: 1.0)
-    XCTAssertEqual(received, .gesture, "⌘W は人のジェスチャとして届く")
+    XCTAssertEqual(received, [.closeTab], "⌘W は window コマンドとして上位へ渡す")
   }
 
   func testRequestWindowCommandForwardsToHandler() {

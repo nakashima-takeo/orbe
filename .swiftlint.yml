@@ -27,6 +27,26 @@ custom_rules:
     message: "同梱リソースの解決は BundledResources.root を通す（唯一の注入点）"
     severity: error
 
+  editor_engine_composition_seam:
+    name: "テキストエンジンは合成点からだけ使う"
+    included: ".*/Sources/.*\\.swift"
+    excluded: ".*/Sources/(OrbeEditorEngine/.*|Orbe/Features/Editor/EditorStyle\\.swift)"
+    # 面の作り方を決めるのは合成点（EditorSurfaces）1 か所。エンジンに触れる口を、そこと target の依存だけに閉じる。
+    # 属性付き（@preconcurrency 等）と `import class X.Y` の綴りも塞ぐ。
+    regex: "import\\s+(?:\\w+\\s+)?OrbeEditorEngine\\b"
+    match_kinds: [keyword, identifier, typeidentifier]
+    message: "OrbeEditorEngine は Sources/Orbe/Features/Editor/EditorStyle.swift（合成点）からだけ import する"
+    severity: error
+
+  editor_syntax_engine_seam:
+    name: "tree-sitter は OrbeEditorCore に閉じる"
+    included: ".*/Sources/.*\\.swift"
+    excluded: ".*/Sources/OrbeEditorCore/.*"
+    regex: "import\\s+(?:\\w+\\s+)?TreeSitter\\w*\\b"
+    match_kinds: [keyword, identifier, typeidentifier]
+    message: "tree-sitter は Sources/OrbeEditorCore からだけ import する（色は役割付き区間で受け取る）"
+    severity: error
+
   test_isolation_harness:
     name: "テストの基底は OrbeTestCase"
     included: ".*/Tests/OrbeTests/.*\\.swift"

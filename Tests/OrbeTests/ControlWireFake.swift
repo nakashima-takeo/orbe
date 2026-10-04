@@ -109,6 +109,7 @@ final class FakeControlTarget: ControlTarget {
   private(set) var removedWorkspaceIds: [Int] = []
   private(set) var activatedWorkspaceIds: [Int] = []
   private(set) var focusedTabIds: [Int] = []
+  private(set) var openedFiles: [(tabId: Int, path: String)] = []
   private(set) var closedTabIds: [Int] = []
   private(set) var resolvedTabIds: [Int] = []
   private(set) var restoredSessionIds: [[String]] = []
@@ -201,6 +202,11 @@ final class FakeControlTarget: ControlTarget {
 
   func controlCloseTab(tabId: Int) -> Result<Any, ControlError> {
     closedTabIds.append(tabId)
+    return outcome(["ok": true])
+  }
+
+  func controlOpenFile(tabId: Int, path: String) -> Result<Any, ControlError> {
+    openedFiles.append((tabId, path))
     return outcome(["ok": true])
   }
 

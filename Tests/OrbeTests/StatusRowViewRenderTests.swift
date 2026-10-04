@@ -33,7 +33,7 @@ final class StatusRowViewRenderTests: OrbeTestCase {
       strip: TabStrip(
         titles: keys, tabIds: Array(keys.indices), segments: segments,
         colorIndices: segments.map { WorktreeColor.index(forKey: keys[$0.lowerBound]) }),
-      active: active, cwd: nil, rollup: [])
+      active: active, location: nil, faceDots: nil, rollup: [])
   }
 
   private func host(_ model: StatusRowModel) -> NSWindow {
