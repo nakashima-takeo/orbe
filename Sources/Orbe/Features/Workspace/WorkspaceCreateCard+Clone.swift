@@ -43,7 +43,7 @@ extension WorkspaceCreateCard {
     .disabled(model.isCloning)  // clone 待機中はソース切替も止める
   }
 
-  /// clone 失敗理由を inline 表示（フッター直上・DispatchCard と同じ danger）。
+  /// clone 失敗理由を inline 表示（フッター直上・WorktreePaletteCard と同じ danger）。
   @ViewBuilder var cloneErrorBanner: some View {
     if let error = model.cloneError {
       Text(error)

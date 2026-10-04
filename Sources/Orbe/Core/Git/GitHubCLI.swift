@@ -8,7 +8,7 @@ enum GitHubAvailability: Equatable {
   case ghMissing
   /// gh はあるが認証情報を持っていない。
   case ghUnauthed
-  /// 非 GitHub リポジトリ（origin が github.com でない）。Issues/PR セクションは出さない。
+  /// 非 GitHub リポジトリ（origin が github.com でない）。gh には問い合わせない。
   case notGitHub
 }
 
@@ -19,13 +19,9 @@ final class GitHubCLI {
 
   /// probe と一覧取得のレーン。並行にするのは、issue と PR の一覧が互いを待たないため（一覧 1 本は
   /// ページを送り終えるまで数十秒スレッドを 1 本ふさぎうる）。同じ一覧の二重取得は呼び出し側の合流
-  /// （`DispatchGitHubCache`）が防ぐ。
+  /// （`GitHubCache`）が防ぐ。
   private let queue = DispatchQueue(
     label: "dev.orbe.gh", qos: .userInitiated, attributes: .concurrent)
-  /// ブラウザで開く操作の口。取得（`queue`）とは分ける——結果を待たない即時操作なので、
-  /// 取得のレーンに載せると一覧の取得が捌けるまでブラウザが開かない。決定は Enter 一発という
-  /// 前提がそこで崩れる。
-  private let webQueue = DispatchQueue(label: "dev.orbe.gh.web", qos: .userInitiated)
   /// ブランチ PR 取得のレーン。本数を `branchFetchConcurrency` で抑えるため、一覧取得（`queue`）とは
   /// 分ける（1 本あたり実測 0.75〜1.0 秒）。
   private let branchQueue = DispatchQueue(
@@ -57,7 +53,8 @@ final class GitHubCLI {
 
   /// 認証情報の有無で判定する引数。`gh auth token` は keyring/config/`GH_TOKEN` を読むだけで
   /// ネットに触らない。`gh auth status` はトークンを GitHub API で検証するため、疎通不能を未認証と
-  /// 誤判定し、キャッシュ済みの行を「gh 未認証」の誘導情報行に置き換えてしまう。
+  /// 誤判定する。未認証と読まれたリポジトリでは PR を確かめないまま「0 件」と読まれ、PR の有無に頼る
+  /// 安全確認（worktree の掃除）が素通りする。
   /// `--hostname` は `originIsGitHub` が真のときだけ probe される前提に合わせ、実際に取得しに行く
   /// ホストを名指しする（default host が Enterprise の環境でも判定がずれない）。
   static let authProbeArguments = ["auth", "token", "--hostname", "github.com"]
@@ -65,7 +62,7 @@ final class GitHubCLI {
   /// 取得可否を判定する。`isGitHub` は `GitRepo.originIsGitHub` の結果を渡す。
   /// 見るのはローカルの事実（gh の有無・認証情報の有無）だけ。今 GitHub に届くかは probe の責務では
   /// なく、届かなければ `openIssues`/`openPullRequests` が `finished(false)` で終わり、
-  /// `DispatchGitHubCache` が届いた範囲と前回の残りを据え置く。
+  /// `GitHubCache` が届いた範囲と前回の残りを据え置く。
   /// `gh auth token` の stdout はトークンそのものなので `status` しか読まない。
   func probe(cwd: String, isGitHub: Bool, completion: @escaping (GitHubAvailability) -> Void) {
     guard isGitHub else {
@@ -264,18 +261,6 @@ final class GitHubCLI {
     let out = runSync(gh, args, cwd: cwd)
     guard out.status == 0 else { return nil }
     return try? JSONDecoder().decode(T.self, from: out.stdout)
-  }
-
-  // MARK: - ブラウザで開く（fire-and-forget）
-
-  func openIssueWeb(number: Int, cwd: String) { openWeb("issue", number: number, cwd: cwd) }
-  func openPRWeb(number: Int, cwd: String) { openWeb("pr", number: number, cwd: cwd) }
-
-  private func openWeb(_ kind: String, number: Int, cwd: String) {
-    webQueue.async {
-      guard let gh = self.resolveGh() else { return }
-      _ = self.runSync(gh, [kind, "view", String(number), "--web"], cwd: cwd)
-    }
   }
 
   // MARK: - 実行基盤

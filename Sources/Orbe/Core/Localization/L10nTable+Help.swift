@@ -34,7 +34,9 @@ extension L10n {
     .helpShortcutSwitchWorkspace: (
       "ワークスペースを切り替え・作成", "Switch / create workspace"
     ),
-    .helpShortcutNewTab: ("新しいタブ", "New tab"),
+    .helpShortcutNewTab: (
+      "新しいタブ（worktree・ブランチを選んで開く）", "New tab (pick a worktree or branch)"
+    ),
     .helpShortcutClosedAgents: ("閉じたエージェント", "Closed agents"),
     .helpShortcutRenameTab: ("タブをリネーム", "Rename tab"),
     .helpShortcutNextTab: ("次のタブへ", "Next tab"),
@@ -42,10 +44,6 @@ extension L10n {
     .helpShortcutCloseTab: ("タブを閉じる", "Close tab"),
     .helpShortcutLaunchDefaultAgent: ("デフォルトエージェントを起動", "Launch default agent"),
     .helpShortcutAgentPalette: ("エージェント起動パレット", "Agent launch palette"),
-    .helpShortcutDispatchPalette: (
-      "Dispatch パレット（worktree/branch/issue/PR から起動）",
-      "Dispatch palette (launch from worktree/branch/issue/PR)"
-    ),
     // 「⌘ を 2 回」はキー表記 ⌘⌘ が語るのでラベルからは落とす（トップ厳選の 1 行に収める）。
     .helpShortcutAttentionPalette: (
       "Attention パレット（要対応のタブ）", "Attention palette (tabs needing you)"

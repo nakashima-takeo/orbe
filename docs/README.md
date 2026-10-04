@@ -38,7 +38,7 @@ Orbe は、作業場所の準備・エージェントの起動・状態確認を
 
 **palette/ — オーバーレイ型 UI**
 
-- [dispatch](spec/palette/dispatch.md) — 作業コンテキストから始める（⌘⇧X）
+- [worktree](spec/palette/worktree.md) — worktree・ブランチを選んで新しいタブを開く（⌘T）
 - [workspace](spec/palette/workspace.md) — workspace 切替・作成（⌘⇧S）・共有 PaletteCard 規律
 - [settings](spec/palette/settings.md) — 設定パレット（⌘,）
 - [attention](spec/palette/attention.md) — 対応すべきエージェントの一覧（⌘⌘）
@@ -80,7 +80,7 @@ Orbe は、作業場所の準備・エージェントの起動・状態確認を
 | surface | libghostty が描くターミナル 1 枚。`SurfaceView`（NSView）1 つに対応する |
 | workspace | プロジェクトごとにタブ・作業ディレクトリ・設定を束ねる名前付きコンテナ |
 | mount / 休眠 | mount はタブの端末をウィンドウ階層へ載せること。休眠タブは構成を保持し、端末をまだ起動していない状態。表示から外れた起動済みタブとは異なる |
-| Dispatch | worktree / ブランチ / Issue / PR から作業を開始するパレット（⌘⇧X） |
+| worktree パレット | worktree・ブランチを選ぶか新しいブランチ名を打ち、エージェントを起動したタブを開くパレット（⌘T） |
 | Attention | 起動済みエージェントの working / waiting / done を横断集約する単一情報源とその表示面。メニューバーの要対応件数は waiting / done のみ |
 | エージェント状態 | タブ単位の `working / waiting / done / idle`。hook 報告で遷移する |
 | チャネル | dev / release のビルド identity。bundle ID から state まで全分離 |

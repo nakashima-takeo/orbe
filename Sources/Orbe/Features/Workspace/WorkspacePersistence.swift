@@ -39,17 +39,22 @@ struct WorkspaceState: Codable, Equatable {
   /// この workspace の設定上書き層（全設定を上書き可）。
   /// optional——上書きが 1 項目も無ければ書かれない（＝global 継承）。
   var settingsOverride: SettingsLayer?
+  /// worktree パレットで前回新しいブランチを作ったときのベース（ブランチ名）。
+  /// optional——一度も作っていない workspace では書かれない。
+  var lastWorktreeBase: String?
   /// `Workspace.persistentId`。無いか読めない workspace にはその workspace だけ新しく振る（旧形式から
   /// 読んだ場合も同じ）——後から足したフィールドの異常でファイル全体を落とさない。
   var persistentId: UUID
 
   enum CodingKeys: String, CodingKey {
-    case name, rootPath, activeTab, tabs, lastUsedAt, settingsOverride, persistentId
+    case name, rootPath, activeTab, tabs, lastUsedAt, settingsOverride, lastWorktreeBase
+    case persistentId
   }
 
   init(
     name: String, rootPath: String, activeTab: Int, tabs: [TabState],
-    lastUsedAt: Date? = nil, settingsOverride: SettingsLayer? = nil, persistentId: UUID = UUID()
+    lastUsedAt: Date? = nil, settingsOverride: SettingsLayer? = nil,
+    lastWorktreeBase: String? = nil, persistentId: UUID = UUID()
   ) {
     self.name = name
     self.rootPath = rootPath
@@ -57,11 +62,13 @@ struct WorkspaceState: Codable, Equatable {
     self.tabs = tabs
     self.lastUsedAt = lastUsedAt
     self.settingsOverride = settingsOverride
+    self.lastWorktreeBase = lastWorktreeBase
     self.persistentId = persistentId
   }
 
   /// settingsOverride は 1 キー単位で寛容に読む（`SettingsLayer` 自身の decode）——未知 key・型不一致の
   /// 1 項目で層ごと失わない（global 層と同じ家風）。読めた項目が 1 つも無ければ nil（上書き無し＝global 継承）。
+  /// lastWorktreeBase も読めなければ nil（前回が無いだけで、workspace は失わない）。
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     name = try c.decode(String.self, forKey: .name)
@@ -71,6 +78,7 @@ struct WorkspaceState: Codable, Equatable {
     lastUsedAt = try c.decodeIfPresent(Date.self, forKey: .lastUsedAt)
     let layer = try? c.decode(SettingsLayer.self, forKey: .settingsOverride)
     settingsOverride = layer.flatMap { $0.isEmpty ? nil : $0 }
+    lastWorktreeBase = try? c.decodeIfPresent(String.self, forKey: .lastWorktreeBase)
     persistentId = (try? c.decode(UUID.self, forKey: .persistentId)) ?? UUID()
   }
 }

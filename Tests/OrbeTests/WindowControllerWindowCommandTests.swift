@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// window レベルの tab 非依存 chrome コマンド配信（`handleWindowKeyCommand`）の overlay／改名編集ガードと、
-/// タブのインライン改名（Cmd+R）の確定/取消セマンティクスを固定する。0タブでも届く window コマンドが、
+/// タブ行の「＋」の行き先と、タブのインライン改名（Cmd+R）の確定/取消セマンティクスを固定する。0タブでも届く window コマンドが、
 /// パレット/フォーム表示中・改名編集中には暴発しない（＝入力を横取りしない）契約。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
@@ -26,13 +26,59 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
     return WindowController()
   }
 
-  /// overlay 非表示なら window コマンドを消費（true）し、実際に dispatch する（＝newTab でタブが増える）。
+  /// overlay 非表示なら window コマンドを消費（true）し、実際に dispatch する（＝⌘T で worktree パレットが開く）。
   func testWindowKeyCommandDispatchesWhenNoOverlay() throws {
     let wc = try restoreSingleTab()
     XCTAssertEqual(wc.presentedOverlay, .none, "前提: overlay 非表示")
+    XCTAssertTrue(
+      wc.handleWindowKeyCommand(.showWorktreePalette), "overlay 非表示なら横取りして true を返す")
+    XCTAssertEqual(wc.presentedOverlay, .worktreePalette, "⌘T が dispatch され worktree パレットが開く")
+  }
+
+  /// タブ行の「＋」は ⌘T と同じ worktree パレットを開き、素のシェルのタブを足さない（入口は 1 つ）。
+  func testPlusButtonOpensTheWorktreePaletteWithoutAddingATab() throws {
+    let wc = try restoreSingleTab()
     let before = wc.current.tabs.count
-    XCTAssertTrue(wc.handleWindowKeyCommand(.newTab), "overlay 非表示なら横取りして true を返す")
-    XCTAssertEqual(wc.current.tabs.count, before + 1, "newTab が dispatch されタブが1枚増える")
+
+    wc.statusModel.onNewTab()
+
+    XCTAssertEqual(wc.presentedOverlay, .worktreePalette)
+    XCTAssertEqual(wc.current.tabs.count, before, "素のシェルのタブは開かない")
+  }
+
+  /// タブ名の変更中に「＋」や Attention ストリップでパレットを開くと、改名欄の blur（改名の取消）が
+  /// パレットより後に届きうる。そのときも焦点は、改名していないときに開いたのと同じパレットの受け手に
+  /// 残り、打鍵が端末へ流れない。
+  func testRenameBlurAfterOpeningAPaletteLeavesFocusOnThePalette() throws {
+    let openers = [
+      PaletteOpener(name: "＋", overlay: .worktreePalette) { $0.statusModel.onNewTab() },
+      PaletteOpener(name: "Attention", overlay: .attentionPalette) {
+        $0.statusModel.onAttentionTap()
+      },
+    ]
+    for opener in openers {
+      let (name, overlay, open) = (opener.name, opener.overlay, opener.open)
+      let wc = try restoreSingleTab()
+      open(wc)
+      spin(0.3)
+      let receiver = wc.window.firstResponder.map { ObjectIdentifier(type(of: $0)) }
+      wc.dismissPalette()
+      spin(0.3)
+
+      wc.beginTabRename()
+      spin(0.3)
+      open(wc)
+      spin(0.3)
+      XCTAssertEqual(wc.presentedOverlay, overlay, "前提: \(name) でパレットが開いた")
+      wc.statusModel.onCancelRename()
+      spin(0.3)
+
+      XCTAssertFalse(wc.window.firstResponder is SurfaceView, "\(name): 焦点が端末へ戻らない")
+      XCTAssertEqual(
+        wc.window.firstResponder.map { ObjectIdentifier(type(of: $0)) }, receiver,
+        "\(name): 改名していないときと同じパレットの受け手が焦点を持つ")
+      wc.dismissPalette()
+    }
   }
 
   /// overlay（パレット/フォーム）表示中は window コマンドを横取りせず false を返し、dispatch もしない。
@@ -41,9 +87,9 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
     let wc = try restoreSingleTab()
     wc.showWorkspaceCreate(name: nil)  // overlay を .workspaceCreate に立てる
     XCTAssertNotEqual(wc.presentedOverlay, .none, "前提: overlay 表示中")
-    let before = wc.current.tabs.count
-    XCTAssertFalse(wc.handleWindowKeyCommand(.newTab), "overlay 表示中は横取りせず false を返す")
-    XCTAssertEqual(wc.current.tabs.count, before, "newTab は dispatch されない（暴発防止）")
+    XCTAssertFalse(
+      wc.handleWindowKeyCommand(.showWorktreePalette), "overlay 表示中は横取りせず false を返す")
+    XCTAssertEqual(wc.presentedOverlay, .workspaceCreate, "⌘T は dispatch されない（暴発防止）")
   }
 
   /// インライン改名（Cmd+R）は overlay を出さないが、編集中は window コマンドを横取りせず false を返す。
@@ -54,9 +100,9 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
     wc.beginTabRename()  // editingIndex を立てる（overlay は .none のまま）
     XCTAssertEqual(wc.presentedOverlay, .none, "前提: 改名は overlay を出さない")
     XCTAssertNotNil(wc.statusModel.editingIndex, "前提: 改名編集中")
-    let before = wc.current.tabs.count
-    XCTAssertFalse(wc.handleWindowKeyCommand(.newTab), "改名編集中は横取りせず false を返す")
-    XCTAssertEqual(wc.current.tabs.count, before, "newTab は dispatch されない（暴発防止）")
+    XCTAssertFalse(
+      wc.handleWindowKeyCommand(.showWorktreePalette), "改名編集中は横取りせず false を返す")
+    XCTAssertEqual(wc.presentedOverlay, .none, "⌘T は dispatch されない（暴発防止）")
   }
 
   /// ⌘⌘（Attention パレット）はヘルプ表示中だけ no-op。ヘルプは押下を点灯・行ハイライトにしか
@@ -115,5 +161,19 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
     wc.statusModel.onCancelRename()
     XCTAssertNil(wc.statusModel.editingIndex, "取消で編集を畳む")
     XCTAssertEqual(wc.current.tabs[0].explicitTitle, "Keep", "取消は明示名を変えない")
+  }
+
+  /// 改名中に押されうる、パレットを開く入口。
+  private struct PaletteOpener {
+    let name: String
+    let overlay: AppShellModel.Overlay
+    let open: (WindowController) -> Void
+  }
+
+  private func spin(_ seconds: TimeInterval) {
+    let end = Date().addingTimeInterval(seconds)
+    while Date() < end {
+      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+    }
   }
 }

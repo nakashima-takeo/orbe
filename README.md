@@ -15,20 +15,20 @@
 
 </div>
 
-Orbe は、作業場所の準備、エージェントの起動、入力待ち・完了の確認をまとめて扱うターミナルです。Issue / PR / ブランチを選ぶと、Git worktree を用意し、エージェントを起動したタブを開けます。複数のプロジェクトを並行して進めるときも、各エージェントの状態を一覧できます。
+Orbe は、作業場所の準備、エージェントの起動、入力待ち・完了の確認をまとめて扱うターミナルです。`⌘T` で worktree やブランチを選ぶか新しいブランチ名を打つと、Git worktree を用意し、エージェントを起動したタブを開けます。複数のプロジェクトを並行して進めるときも、各エージェントの状態を一覧できます。
 
 ターミナルエンジンは [Ghostty](https://ghostty.org) の **libghostty**。Metal で描画し、アプリの UI は SwiftUI / AppKit で実装しています。
 
 <!-- 画像の生成: ORBE_GALLERY=1 swift test --filter DesignGallerySnapshotTests/testRenderGallery
-     .preview/gallery/dispatch_design{,_light}.png → docs/assets/hero-dispatch{,-light}.png
+     .preview/gallery/worktree_palette_design{,_light}.png → docs/assets/hero-worktree{,-light}.png
      .preview/gallery/attention_palette{,_light}.png → docs/assets/attention{,-light}.png -->
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/assets/hero-dispatch-light.png">
-    <img src="docs/assets/hero-dispatch.png" width="640" alt="Dispatch パレット。worktree、ローカル・リモートブランチ、GitHub Issue・PR の一覧と、worktree を掃除する clean 行が並ぶ">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/hero-worktree-light.png">
+    <img src="docs/assets/hero-worktree.png" width="752" alt="worktree パレット。起動先とベースのバー、worktree とブランチの一覧、worktree を掃除する clean 行が並ぶ">
   </picture>
   <br>
-  <em>Dispatch（⌘⇧X）で作業を選び、Enter で開始。画像は現行 UI にサンプルデータを表示したものです。</em>
+  <em>⌘T で worktree を選び、Enter で開始。画像は現行 UI にサンプルデータを表示したものです。</em>
 </p>
 
 ## インストール
@@ -48,13 +48,13 @@ Orbe は、作業場所の準備、エージェントの起動、入力待ち・
 |---|---|
 | エージェントの起動・状態表示 | `claude` / `codex` / `agy` のいずれかと、初回案内でのプラグイン導入 |
 | ブランチ・worktree の操作 | `git` コマンドが使えること |
-| GitHub Issue / PR の表示 | `origin` が GitHub.com のリポジトリと、[GitHub CLI](https://cli.github.com)（`gh auth login` で認証） |
+| worktree の掃除で PR のマージ状態も確かめる | `origin` が GitHub.com のリポジトリと、[GitHub CLI](https://cli.github.com)（`gh auth login` で認証） |
 
 ### 最初の作業を始める
 
 1. **Orbe を起動**し、表示言語とデフォルトエージェントを選びます。初回案内で、検出済み CLI に[状態追跡プラグイン](docs/spec/agent/plugin-package.md)を登録します。
 2. **`⌘⇧S` でワークスペースを作成**します。パレット末尾の「＋ 新規ワークスペース」行から作成画面へ入り、既存フォルダを指定するか、リポジトリ URL から `git clone` できます。パレットに名前を打ってからこの行を選ぶと、その名前が作成画面へ引き継がれます。
-3. **`⌘⇧X` で Dispatch を開き**、ブランチ・worktree・Issue・PR を選んで **Enter**。必要な worktree が用意され、新しいタブでエージェントが起動します。**Tab** で別のエージェントや通常のシェルに切り替えられます。
+3. **`⌘T` で worktree パレットを開き**、worktree・ブランチを選ぶか、新しいブランチ名を打って **Enter**。必要な worktree が用意され、新しいタブでエージェントが起動します。そのまま Enter なら今の worktree で既定のエージェントが開きます。**Tab** で別のエージェントや通常のシェルに、**Shift+Tab** で新しいブランチのベースに切り替えられます。
 4. エージェントを複数動かしたら、**Command キーを単独で 2 回押す**（`⌘⌘`）と状態を一覧できます。行を選んで Enter を押すと、そのタブへ移動します。
 
 現在の作業ディレクトリでエージェントを起動するだけなら `⌘⇧C`、エージェントを選んで起動するなら `⌘⇧A` を使います。
@@ -63,9 +63,9 @@ Orbe は、作業場所の準備、エージェントの起動、入力待ち・
 
 ### worktree の作成から片付けまで
 
-Dispatch は既存の worktree を再利用し、必要なときだけ新しく作成します。GitHub の情報が取得できなくても、ローカルのブランチ・worktree は操作できます。
+worktree パレットは既存の worktree を再利用し、必要なときだけ新しく作成します。新しいブランチは、前回のベース・既定ブランチ・今のブランチ、または一覧から選んだブランチから切れます。
 
-作業後は同じパレットの **`clean` 行**から、不要になった worktree をまとめて削除できます。使用中・未コミット変更あり・未マージなどの状態を確認して対象を選びます。作成先は既定でリポジトリの隣の `<リポジトリ名>-worktrees/`。`⌘,` の設定から変更できます。詳しくは [Dispatch の仕様](docs/spec/palette/dispatch.md)を参照してください。
+作業後は同じパレットの **`clean` 行**から、不要になった worktree をまとめて削除できます。使用中・未コミット変更あり・未マージなどの状態を確認して対象を選びます。作成先は既定でリポジトリの隣の `<リポジトリ名>-worktrees/`。`⌘,` の設定から変更できます。詳しくは [worktree パレットの仕様](docs/spec/palette/worktree.md)を参照してください。
 
 ### エージェントの状態を見渡す
 
@@ -106,11 +106,10 @@ zsh では、コマンド・オプション・パスの補完候補を説明付�
 
 | キー | 動作 |
 |---|---|
-| `⌘⇧X` | Dispatch を開く |
 | `⌘⇧C` / `⌘⇧A` | デフォルトエージェントを起動 / エージェントを選んで起動 |
 | `⌘⌘` | Attention を開く（Orbe が前面のとき、Command 単独を 2 回） |
 | `⌘⇧S` | ワークスペースを切り替え・作成 |
-| `⌘T` / `⌘W` | 新しいシェルタブ / タブを閉じる |
+| `⌘T` / `⌘W` | 新しいタブ（worktree パレット） / タブを閉じる |
 | `⌘⇧T` | 閉じたエージェントの一覧から復元 |
 | `⌘⇧←` / `⌘⇧→` | 前のタブ / 次のタブ |
 | `⌘R` | タブの名前を変更 |

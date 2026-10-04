@@ -1,6 +1,6 @@
 import Foundation
 
-// MARK: - worktree / branch（Dispatch パレット）
+// MARK: - worktree / branch（worktree パレット）
 
 /// `git worktree list --porcelain` の 1 チェックアウト。
 struct GitWorktree: Equatable {

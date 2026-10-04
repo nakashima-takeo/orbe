@@ -224,7 +224,7 @@ final class SettingsRegistryTests: OrbeTestCase {
   func testWorktreeDirHasNoGuiConf() {
     XCTAssertNil(
       SettingsRegistry.descriptor(.worktreeDir).guiConf,
-      "worktree-dir は gui.conf に出さない（Dispatch が実効値を pull する）")
+      "worktree-dir は gui.conf に出さない（worktree パレットが実効値を pull する）")
   }
 
   func testBackgroundOpacityGuiConfEmitsLineOrNil() {

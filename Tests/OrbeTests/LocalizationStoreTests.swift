@@ -41,7 +41,7 @@ final class LocalizationStoreTests: OrbeTestCase {
 
   /// 同一引数が、日本語では先頭・英語では末尾に来る。format は各言語テンプレート内の位置へ埋める。
   func testFormatPlacesArgPerLanguageWordOrder() {
-    XCTAssertEqual(store(.ja).format(.dispatchAgentOpen, "claude"), "claudeで開く")
-    XCTAssertEqual(store(.en).format(.dispatchAgentOpen, "claude"), "open with claude")
+    XCTAssertEqual(store(.ja).format(.worktreePaletteBasePickEnter, "main"), "main をベースにする")
+    XCTAssertEqual(store(.en).format(.worktreePaletteBasePickEnter, "main"), "Use main as the base")
   }
 }

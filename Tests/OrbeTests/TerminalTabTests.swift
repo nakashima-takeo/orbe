@@ -56,9 +56,9 @@ final class TerminalTabTests: OrbeTestCase {
     let tab = TerminalTab(cwd: "/tmp")
     var received: [WindowCommand] = []
     tab.onWindowCommand = { received.append($0) }
-    tab.requestWindowCommand(.newTab)
+    tab.requestWindowCommand(.showWorktreePalette)
     tab.requestWindowCommand(.switchWorkspace)
-    XCTAssertEqual(received, [.newTab, .switchWorkspace])
+    XCTAssertEqual(received, [.showWorktreePalette, .switchWorkspace])
   }
 
   /// 変化判定は値を持つ surface 側にある——同値の再代入は通知しない。

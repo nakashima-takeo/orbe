@@ -198,7 +198,7 @@ enum Theme {
     static let display = NSFont.systemFont(ofSize: 26, weight: .regular)  // ページタイトル
 
     // 情報密度を優先する行タイポ（汎用 type スケールの4段丸めには寄せない）
-    // paneRow=Dispatch clean のアクションボタン / paneSegment=Dispatch clean の群見出し・チェック記号
+    // paneRow=worktree パレットの clean のアクションボタン / paneSegment=worktree パレットの clean の群見出し・チェック記号
     static let paneRow = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
     static let paneSegment = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
 
