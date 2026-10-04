@@ -60,7 +60,8 @@ extension TaskPaletteModel {
     case .return:
       switch stop {
       case .field(let field): if field.isText { beginEditing() }
-      case .link(let item): openLink(item)
+      // 押し続けたキーリピートで、同じページを何度も開かない。
+      case .link(let item): if press.phase == .down { openLink(item) }
       }
     case .space:
       if press.phase == .down, let task = selectedTask { toggleDone(task.id) }
