@@ -45,16 +45,14 @@ struct WorktreePaletteRowTaskBadge: View {
       if let primary = task.task.links.first {
         Text("#\(primary.item.number)").foregroundStyle(Color.theme.textMuted).fixedSize()
       }
-      fontResolver.text(task.task.title, base: Theme.Typography.meta)
-        .foregroundStyle(Color.theme.textSecondary)
-        .lineLimit(1)
-        .truncationMode(.tail)
+      TruncatingSlot(task.task.title) {
+        fontResolver.text($0, base: Theme.Typography.meta)
+          .foregroundStyle(Color.theme.textSecondary)
+      }
       if let agent = task.agent {
         StatusGlyphView(kind: agent.state == .working ? .working : .waiting, size: 10)
       }
     }
     .font(Font.theme.meta)
-    .frame(maxWidth: 280, alignment: .trailing)
-    .fixedSize(horizontal: false, vertical: true)
   }
 }

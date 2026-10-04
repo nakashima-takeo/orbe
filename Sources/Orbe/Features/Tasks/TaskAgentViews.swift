@@ -1,18 +1,19 @@
 import SwiftUI
 
-/// タスクの行の agent の札（「◌ claude 12分」「▪ claude 入力待ち」）。経過は 1 分ごとに描き直す。
+/// タスクの行の agent の札（「◌ claude 12分」「▪ claude 入力待ち」）。経過は 1 分ごとに描き直し、描いた
+/// 時刻から測る（`TimelineView` の予定の時刻は分の区切りに揃って、今より最大 1 分前になる）。
 struct TaskAgentBadge: View {
   let agent: WorktreeAgentActivity.Agent
   @Environment(\.localization) private var l10n
 
   var body: some View {
-    TimelineView(.everyMinute) { context in
+    TimelineView(.everyMinute) { _ in
       HStack(spacing: Theme.Space.note) {
         StatusGlyphView(kind: agent.state == .working ? .working : .waiting, size: 10)
         Text(agent.name)
         Text(
           agent.state == .working
-            ? TaskElapsedText.label(since: agent.since, now: context.date, l10n: l10n)
+            ? TaskElapsedText.label(since: agent.since, now: Date(), l10n: l10n)
             : l10n.string(.taskPaletteAgentWaitingBadge))
       }
       .font(Font.theme.codeCompact)
@@ -36,7 +37,7 @@ struct TaskAgentDetail: View {
   @Environment(\.localization) private var l10n
 
   var body: some View {
-    TimelineView(.everyMinute) { context in
+    TimelineView(.everyMinute) { _ in
       VStack(alignment: .leading, spacing: Theme.Space.tick) {
         HStack(spacing: Theme.Space.note) {
           StatusGlyphView(kind: agent.state == .working ? .working : .waiting, size: 11)
@@ -63,7 +64,7 @@ struct TaskAgentDetail: View {
         Text(
           [
             agent.state == .working ? "working" : "waiting",
-            TaskElapsedText.label(since: agent.since, now: context.date, l10n: l10n),
+            TaskElapsedText.label(since: agent.since, now: Date(), l10n: l10n),
             "·", l10n.format(.taskPaletteAgentTab, agent.tabTitle),
           ].joined(separator: " ")
         )

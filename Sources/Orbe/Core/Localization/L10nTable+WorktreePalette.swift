@@ -24,6 +24,10 @@ extension L10n {
     ),
     .worktreePaletteEffectReassign: (" · %2$@ から %1$@ へ付け替え", " · move from %2$@ to %1$@"),
     .worktreePaletteHintRemoveTask: ("外す", "Remove"),
+    .worktreePaletteBaseNonePullRequest: (
+      "なし — 新しいブランチは切らず、PR #%1$@ のブランチ %2$@ を worktree にする",
+      "None — no new branch; makes PR #%1$@’s branch %2$@ a worktree"
+    ),
     .worktreePalettePreparing: ("作成中…", "Preparing…"),
     .worktreePaletteHintSelect: ("選択", "Select"),
     .worktreePaletteHintClose: ("閉じる", "Close"),

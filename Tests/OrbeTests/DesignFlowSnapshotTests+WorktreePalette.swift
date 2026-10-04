@@ -28,3 +28,34 @@ extension DesignFlowSnapshotTests {
       ])
   }
 }
+
+extension DesignFlowSnapshotTests {
+  /// タスクから開いた ⌘T: 先頭の「＋ issue/221 を作る」（XTIssue）→ ⇧⇥ で既定のベース（XTIssueMain）→
+  /// 別のタスク（#214）が持つ worktree の行でフッターが付け替えを言う → ⌫ で札を外すといつもの ⌘T
+  /// （欄の組み直しは provider の代わりに同じ入力から組む）。
+  func testTaskWorktree() throws {
+    let palette = DesignSceneFixtures.worktreePaletteIssueModel()
+    try flow(
+      "task_worktree", size: NSSize(width: 752, height: 560),
+      render: {
+        ZStack {
+          BackgroundGlow()
+          WorktreePaletteOverlay(model: palette)
+        }
+      },
+      steps: [
+        ("issue", {}),
+        ("default_base", { palette.cycleBase() }),
+        ("reassign", { palette.move(2) }),
+        (
+          "removed",
+          {
+            palette.jump(-1)
+            palette.clearTaskContext()
+            palette.sections = WorktreePaletteSectionBuilder.build(.designSample)
+            palette.restoreSelection(matching: nil)
+          }
+        ),
+      ])
+  }
+}

@@ -97,6 +97,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case worktreePaletteEffectBeginReassign
   case worktreePaletteEffectReassign
   case worktreePaletteHintRemoveTask
+  case worktreePaletteBaseNonePullRequest
   case worktreeCleanSubtitle
   case worktreeCleanCandidatesOne
   case worktreeCleanCandidatesOther

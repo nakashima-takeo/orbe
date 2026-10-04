@@ -27,6 +27,14 @@ extension DesignGallerySnapshotTests {
     detail.moveField(1)
     try write("tasks_detail.png", detail)
 
+    // 詳細の agent の場所に居る（「claude が取り掛かっている」とフッターの「↵ issue-212 へ移る」）。
+    let agent = DesignSceneFixtures.taskPaletteModel()
+    agent.enterDetail()
+    agent.moveField(-1)
+    agent.moveField(-1)
+    agent.moveField(-1)
+    try write("tasks_detail_agent.png", agent)
+
     // 詳細の Issue・PR の欄の行に居る（「外す」とフッターの「↵ #213 を GitHub で開く」）。
     let link = DesignSceneFixtures.taskPaletteModel()
     link.enterDetail()

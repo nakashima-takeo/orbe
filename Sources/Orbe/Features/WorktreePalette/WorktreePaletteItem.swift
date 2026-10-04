@@ -71,6 +71,17 @@ struct WorktreePaletteItem: Identifiable {
   var enter: WorktreePaletteEnter
 }
 
+extension WorktreePaletteItem {
+  /// ベースのバーの「なし — …」。PR のブランチの行は、そのブランチが PR のものだと添える。
+  var baseNote: (key: L10nKey, values: [String])? {
+    switch (pullRequest, enter) {
+    case (let number?, .checkout(let name)), (let number?, .trackRemote(_, let name)):
+      (.worktreePaletteBaseNonePullRequest, ["\(number)", name])
+    default: enter.baseNote
+    }
+  }
+}
+
 /// 選択行の ↵ が何をするか。フッターの実行説明と、ベースのバーの「なし — …」の言葉の元。
 enum WorktreePaletteEnter: Equatable {
   /// 既存の worktree をそのまま開く（対象名）。
