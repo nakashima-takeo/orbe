@@ -190,6 +190,8 @@ const scenarios = [
   ["⌦ は文書の終わりのキャレットでは消さない", "ab|c|", 0, [c("deleteRight"), c("deleteRight")]],
   ["⌥⌫ は全キャレットの前の語を消す", "foo bar|\nbaz.qux|  x|", 0, [c("deleteWordLeft"), c("deleteWordLeft")]],
   ["改行は全カーソルで字下げを引き継ぐ", "  a|b\n    c|d", 0, [type("\n")]],
+  ["Tab は複数行の選択を字下げしキャレットには空白を入れる", "[ab\ncd]\nx|y", 0, [c("tab"), c("outdent")]],
+  ["Tab は行全体の選択を字下げし行の中の選択は空白に置き換える", "]abc[\nx[y]z\n    |w", 1, [c("tab")]],
   // 全カーソルでの移動・伸縮
   ["←→ は全カーソルで選択の端へ畳み、重なればまとまる", "[ab]|c d]ef[", 0, [c("cursorLeft"), c("cursorRight"), c("cursorLeft"), c("cursorLeft")]],
   ["← は行頭のキャレットを前の行の終わりへ動かす", "ab\n|cd\n|ef", 0, [c("cursorLeft"), c("cursorRight"), c("cursorRight")]],

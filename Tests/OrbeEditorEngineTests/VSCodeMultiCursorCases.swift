@@ -580,6 +580,22 @@ enum VSCodeMultiCursorCases {
         .init(action: .type("\n"), text: "  a\n  b\n    c\n    d", cursors: [[6, 6], [18, 18]])
       ]),
     .init(
+      name: "Tab は複数行の選択を字下げしキャレットには空白を入れる", text: "ab\ncd\nxy",
+      cursors: [[0, 5], [7, 7]],
+      steps: [
+        .init(
+          action: .command("tab"), text: "    ab\n    cd\nx   y", cursors: [[0, 13], [18, 18]]),
+        .init(action: .command("outdent"), text: "ab\ncd\nx   y", cursors: [[0, 5], [10, 10]]),
+      ]),
+    .init(
+      name: "Tab は行全体の選択を字下げし行の中の選択は空白に置き換える", text: "abc\nxyz\n    w",
+      cursors: [[5, 6], [3, 0], [12, 12]],
+      steps: [
+        .init(
+          action: .command("tab"), text: "    abc\nx   z\n        w",
+          cursors: [[12, 12], [7, 0], [22, 22]])
+      ]),
+    .init(
       name: "←→ は全カーソルで選択の端へ畳み、重なればまとまる", text: "abc def",
       cursors: [[0, 2], [2, 2], [7, 5]],
       steps: [
