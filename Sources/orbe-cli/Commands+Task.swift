@@ -211,15 +211,13 @@ private func takeFields(_ args: inout [String], update: Bool) -> [String: Any] {
 private func takeLinks(_ args: inout [String]) -> [[String: Any]] {
   let kinds = ["--issue": "issue", "--pr": "pr"]
   var links: [[String: Any]] = []
-  while let index = args.firstIndex(where: { kinds[$0] != nil }) {
-    let flag = args[index]
-    var rest = Array(args[index...])
-    guard let raw = takeOption(&rest, flag, requires: "an <owner/name#N>") else { break }
-    args.replaceSubrange(index..., with: rest)
+  while let flag = args.first(where: { kinds[$0] != nil }), let kind = kinds[flag],
+    let raw = takeOption(&args, flag, requires: "an <owner/name#N>")
+  {
     guard let hash = raw.lastIndex(of: "#"), let number = Int(raw[raw.index(after: hash)...]),
       number >= 1
     else { usageDie("\(flag) requires an <owner/name#N>: \(raw)") }
-    links.append(["kind": kinds[flag]!, "repo": String(raw[..<hash]), "number": number])
+    links.append(["kind": kind, "repo": String(raw[..<hash]), "number": number])
   }
   return links
 }
