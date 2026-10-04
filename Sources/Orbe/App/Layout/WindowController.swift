@@ -51,6 +51,9 @@ final class WindowController: NSObject, NSWindowDelegate {
   private var chromeFlushScheduled = false
   // 設定の in-memory SSOT（global 層）。パレット・control・opacity 系・AgentLauncher の default 解決が読む。
   let settingsStore = SettingsStore()
+  // タスク一覧の唯一の正。制御 API と画面が同じ変異メソッドを呼び、変異ごとに tasks.json へ即時保存される。
+  // workspace の参照は表示・応答のときに解くので、workspace の復元との順序の依存は無い。
+  let taskStore = TaskStore()
   // パレット提示の拡張（WindowController+Palette）が設定パレットの defaultAgent 配線で触るため internal。
   let agentLauncher = AgentLauncher()
   // アップデート面。状態（UI 唯一の情報源）は updaterService が生成・所有し、提示配線は WindowController+Update。

@@ -6,6 +6,9 @@ import Foundation
 final class Workspace {
   /// 制御チャネルの宛先 ID。
   let id = IdGen.next()
+  /// 起動をまたいで変わらない内部専用の ID。タスクが workspace を指すのに使い、外には見せない
+  /// （外に見せるのは起動ごとの `id`）。改名・root の変更では変わらず、使い回さない。
+  let persistentId: UUID
   var name: String
   var rootPath: String
   /// 並びは「同じ `groupKey` のタブは配列上で必ず隣接する」不変条件を持ち、保証者は `SessionStore` だけ
@@ -25,8 +28,9 @@ final class Workspace {
   /// 書き手は起動時の復元と `WindowController.rememberWorktreeBase` だけ。永続化する。
   var lastWorktreeBase: String?
 
-  init(name: String, rootPath: String) {
+  init(name: String, rootPath: String, persistentId: UUID = UUID()) {
     self.name = name
     self.rootPath = rootPath
+    self.persistentId = persistentId
   }
 }

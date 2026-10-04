@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// `orb` が**解釈できなかったトークン**を捨てずに落とすことを、全 25 サブコマンドで固定する。
+/// `orb` が**解釈できなかったトークン**を捨てずに落とすことを、全 30 サブコマンドで固定する。
 /// 契約そのもの（終了コード・`--workspace` の意味論）は `OrbeCliProcessTests+Contract` が持ち、
 /// こちらは「取り切った後に残ったトークン」と「値の席に来た形」の 2 経路だけを見る。
 /// 残余は `-` 始まりだけでなく**席から溢れた位置引数**も見る——`--dir` を書き忘れた `orb tab new /repo`
@@ -146,7 +146,7 @@ extension OrbeCliProcessTests {
   /// `orb tab list 2` は絞り込みが効かず全 WS のタブが出て、`orb tab close 5 6` は 6 に触れない。
   /// いずれも exit 0 で、終了コードにも stdout にも stderr にも現れない。
   ///
-  /// 24 サブコマンド（`session restore` は位置引数が可変長で溢れが無い）を全て並べるのは、席の数が
+  /// 29 サブコマンド（`session restore` は位置引数が可変長で溢れが無い）を全て並べるのは、席の数が
   /// 各コマンドの申告制だから——1 つ書き忘れても他が緑なら気づけない。`ORBE_TAB` を置くのは、tab 系が既定へ逸れる前に落ちることを見るため。
   func testExcessPositionalsAreRejectedInsteadOfSilentlyDropped() {
     for args in [
@@ -174,6 +174,11 @@ extension OrbeCliProcessTests {
       ["session", "log", "extra"],
       ["session", "closed", "extra"],
       ["wait", "5", "6"],
+      ["task", "list", "3"],
+      ["task", "add", "経費", "精算"],  // 引用符の付け忘れ
+      ["task", "set", "1", "2", "--title", "t"],
+      ["task", "move", "1", "2", "--before", "3"],
+      ["task", "rm", "1", "2"],
     ] {
       failure(
         ControlProcess.orbWithoutServer(args, env: ["ORBE_TAB": "1"]), code: 2,
@@ -221,6 +226,10 @@ extension OrbeCliProcessTests {
       // なく「値が空いている」として落ちる（どちらも exit 2 で、後者の方が誤りの所在に近い）。
       (["tab", "list", "--workspace", "   "], "--workspace requires an <id>"),
       (["agent", "spawn", "--workspace"], "--workspace requires an <id>"),
+      (["task", "add", "a", "--memo", ""], "--memo requires a <text>"),
+      (["task", "add", "a", "--waiting", "--due", "2026-10-06"], "--waiting requires a <reason>"),
+      (["task", "set", "1", "--due"], "--due requires a <YYYY-MM-DD> date"),
+      (["task", "set", "1", "--title", " "], "--title requires a <title>"),
     ] {
       failure(
         ControlProcess.orbWithoutServer(args), code: 2, message: message,

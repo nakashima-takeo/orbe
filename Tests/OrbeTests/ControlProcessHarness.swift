@@ -247,7 +247,7 @@ final class ControlProcess {
   /// `orbe-mcp` を 1 往復させる: `method` の要求 1 行を stdin へ流し、stdout の **1 行目**を応答として
   /// `result` を返す（応答の前に何かを出す変更が入れば、ここが唯一の破れ口）。`label` は診断用。
   private static func mcpRoundTrip(
-    method: String, params: [String: Any], label: String,
+    method: String, params: [String: Any], label: String, env extra: [String: String] = [:],
     file: StaticString = #filePath, line: UInt = #line
   ) -> [String: Any]? {
     let request: [String: Any] = ["jsonrpc": "2.0", "id": 1, "method": method, "params": params]
@@ -258,7 +258,8 @@ final class ControlProcess {
       return nil
     }
     let outcome = run(
-      executable("orbe-mcp"), [], env: childEnv(), stdin: requestLine + "\n", file: file, line: line
+      executable("orbe-mcp"), [], env: childEnv(extra), stdin: requestLine + "\n", file: file,
+      line: line
     )
     guard let out = outcome.stdout.split(separator: "\n").first,
       let payload = out.data(using: .utf8),
@@ -274,15 +275,15 @@ final class ControlProcess {
   }
 
   /// `tools/call` を 1 往復させ `result.content[0].text` を読む。MCP ブリッジの転送と `isError` の
-  /// 畳み込みも同時に踏む。
+  /// 畳み込みも同時に踏む。`env` はブリッジの環境（`ORBE_TAB` でブリッジを起こした agent のタブを装う）。
   func mcpCall(
-    _ tool: String, _ arguments: [String: Any] = [:],
+    _ tool: String, _ arguments: [String: Any] = [:], env: [String: String] = [:],
     file: StaticString = #filePath, line: UInt = #line
   ) -> (text: String, isError: Bool) {
     guard
       let result = Self.mcpRoundTrip(
         method: "tools/call", params: ["name": tool, "arguments": arguments],
-        label: "tools/call（\(tool)）", file: file, line: line)
+        label: "tools/call（\(tool)）", env: env, file: file, line: line)
     else { return ("", true) }
     guard let content = result["content"] as? [[String: Any]],
       let text = content.first?["text"] as? String
@@ -308,10 +309,10 @@ final class ControlProcess {
 
   /// `mcpCall` の本文を JSON オブジェクトとして読む（成功系の read ツール用）。
   func mcpJSON(
-    _ tool: String, _ arguments: [String: Any] = [:],
+    _ tool: String, _ arguments: [String: Any] = [:], env: [String: String] = [:],
     file: StaticString = #filePath, line: UInt = #line
   ) -> [String: Any] {
-    let call = mcpCall(tool, arguments, file: file, line: line)
+    let call = mcpCall(tool, arguments, env: env, file: file, line: line)
     XCTAssertFalse(call.isError, "\(tool) が error を返した: \(call.text)", file: file, line: line)
     guard let data = call.text.data(using: .utf8),
       let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
