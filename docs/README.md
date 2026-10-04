@@ -39,6 +39,7 @@ Orbe は、作業場所の準備・エージェントの起動・状態確認を
 **palette/ — オーバーレイ型 UI**
 
 - [worktree](spec/palette/worktree.md) — worktree・ブランチを選んで新しいタブを開く（⌘T）
+- [tasks](spec/palette/tasks.md) — タスク画面（⌘⇧X）
 - [workspace](spec/palette/workspace.md) — workspace 切替・作成（⌘⇧S）・共有 PaletteCard 規律
 - [settings](spec/palette/settings.md) — 設定パレット（⌘,）
 - [attention](spec/palette/attention.md) — 対応すべきエージェントの一覧（⌘⌘）
@@ -60,6 +61,7 @@ Orbe は、作業場所の準備・エージェントの起動・状態確認を
 **platform/ — アプリ基盤**
 
 - [workspace](spec/platform/workspace.md) — 名前付きコンテナの保持・切替・設定上書き
+- [tasks](spec/platform/tasks.md) — 人と agent が共有するタスク一覧（値・不変条件・保存）
 - [config](spec/platform/config.md) — 設定の 3 層読み込みとテーマ
 - [persistence](spec/platform/persistence.md) — 構成の永続と復元・resume
 - [session-log](spec/platform/session-log.md) — エージェントセッションの開始・終了の記録と復元
@@ -81,6 +83,7 @@ Orbe は、作業場所の準備・エージェントの起動・状態確認を
 | workspace | プロジェクトごとにタブ・作業ディレクトリ・設定を束ねる名前付きコンテナ |
 | mount / 休眠 | mount はタブの端末をウィンドウ階層へ載せること。休眠タブは構成を保持し、端末をまだ起動していない状態。表示から外れた起動済みタブとは異なる |
 | worktree パレット | worktree・ブランチを選ぶか新しいブランチ名を打ち、エージェントを起動したタブを開くパレット（⌘T） |
+| タスク画面 | 人と agent が共有するタスク一覧を眺め、足し、片付け、並べ替える画面（⌘⇧X） |
 | Attention | 起動済みエージェントの working / waiting / done を横断集約する単一情報源とその表示面。メニューバーの要対応件数は waiting / done のみ |
 | エージェント状態 | タブ単位の `working / waiting / done / idle`。hook 報告で遷移する |
 | チャネル | dev / release のビルド identity。bundle ID から state まで全分離 |
