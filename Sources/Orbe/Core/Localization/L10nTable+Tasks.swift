@@ -72,6 +72,7 @@ extension L10n {
     .taskPaletteElapsedMinutes: ("%lld分", "%lldm"),
     .taskPaletteElapsedHours: ("%lld時間", "%lldh"),
     .taskPaletteAgentWaitingBadge: ("入力待ち", "waiting"),
+    .taskPaletteAgentWorkingBadge: ("作業中", "working"),
     .taskPaletteAgentWorking: ("%@ が取り掛かっている", "%@ is working on it"),
     .taskPaletteAgentWaiting: ("%@ が入力を待っている", "%@ is waiting for you"),
     .taskPaletteAgentDone: ("%@ が応答を終えた", "%@ has finished"),
@@ -80,5 +81,68 @@ extension L10n {
     .taskPaletteAgentGoToTab: ("タブへ", "Go to tab"),
     .taskPaletteActionGoToTab: ("%1$@ へ移る", "Go to %1$@"),
     .taskPaletteHintOpenWorktree: ("開く", "Open"),
+    .taskPaletteGitHubFilterAssigned: ("担当が自分", "Assigned to me"),
+    .taskPaletteGitHubFilterAuthored: ("作成者が自分", "Created by me"),
+    .taskPaletteGitHubFilterReview: ("レビュー依頼", "Review requests"),
+    .taskPaletteGitHubMore: ("さらに %lld 件", "%lld more"),
+    .taskPaletteGitHubEmpty: ("該当する Issue・PR はありません", "No matching issues or PRs"),
+    .taskPaletteGitHubLoading: ("Issue・PR を読み込み中…", "Loading issues and PRs…"),
+    .taskPaletteGitHubFailed: ("Issue・PR を取得できませんでした", "Couldn’t fetch issues and PRs"),
+    .taskPaletteGitHubGhMissing: (
+      "gh が見つかりません — Issue・PR を出すには gh を入れてください",
+      "gh isn’t installed — install gh to list issues and PRs"
+    ),
+    .taskPaletteGitHubGhUnauthed: (
+      "gh が認証されていません — gh auth login で認証してください", "gh isn’t signed in — run gh auth login"
+    ),
+    .taskPaletteGitHubNotFound: (
+      "この workspace の GitHub のリポジトリが見つかりません", "No GitHub repository found for this workspace"
+    ),
+    .taskPaletteRelationReviewYou: ("レビュー依頼 · あなた宛", "Review requested · you"),
+    .taskPaletteRelationReviewTeam: ("レビュー依頼 · @%@ 宛", "Review requested · @%@"),
+    .taskPaletteRelationReview: ("レビュー依頼", "Review requested"),
+    .taskPaletteRelationAuthoredYou: ("作成者: あなた", "Created by you"),
+    .taskPaletteRelationAssignedYou: ("担当: あなた", "Assigned to you"),
+    .taskPaletteRelationUnassigned: ("担当なし", "Unassigned"),
+    .taskPaletteAssignSelf: ("自分をアサインする", "Assign me"),
+    .taskPaletteAssignSelfNote: ("GitHub の担当者に自分を追加する", "Add me as an assignee on GitHub"),
+    .taskPaletteReviewSelf: ("自分をレビュアーにする", "Request my review"),
+    .taskPaletteReviewSelfNote: ("GitHub のレビュアーに自分を追加する", "Add me as a reviewer on GitHub"),
+    .taskPaletteAssignFailed: (
+      "GitHub の担当者に自分を追加できませんでした", "Couldn’t add you as an assignee on GitHub"
+    ),
+    .taskPaletteReviewFailed: (
+      "GitHub のレビュアーに自分を追加できませんでした", "Couldn’t add you as a reviewer on GitHub"
+    ),
+    .taskPaletteMakeTaskNote: (
+      "⌘T で、タスクにしてから worktree を選んで開く", "⌘T makes it a task, then opens a worktree"
+    ),
+    .taskPaletteMakeTask: ("タスクにする", "Make a task"),
+    .taskPaletteMakeTaskOpen: ("タスクにして開く", "Make a task and open"),
+    .taskPaletteLinkExisting: ("既存のタスクに結び付ける", "Link to an existing task"),
+    .taskPaletteLinkedTask: ("結び付いているタスク", "Linked task"),
+    .taskPaletteOpenTask: ("%@ を開く", "Open %@"),
+    .taskPaletteRelink: ("別のタスクに付け替える", "Move to another task"),
+    .taskPaletteUnlinkTask: ("結び付けを外す", "Unlink"),
+    .taskPaletteActionAssignMake: ("%1$@ をアサインしてタスクにする", "Assign me to %1$@ and make a task"),
+    .taskPaletteActionReviewMake: ("%1$@ のレビュアーになってタスクにする", "Review %1$@ and make a task"),
+    .taskPaletteActionMake: ("%1$@ をタスクにする", "Make %1$@ a task"),
+    .taskPaletteActionOpenTask: ("%1$@ を開く", "Open %1$@"),
+    .taskPaletteActionMore: ("残り %1$@ 件を出す", "Show %1$@ more"),
+    .taskPaletteActionToggle: ("切り替える", "Toggle"),
+    .taskPaletteHintLink: ("結び付ける", "Link"),
+    .taskPaletteHintRelink: ("付け替える", "Move"),
+    .taskPaletteHintFilter: ("絞り込み", "Filter"),
+    .taskPaletteErrAssign: ("GitHub に自分を追加できませんでした", "Couldn’t add you on GitHub"),
+    .taskPaletteErrLink: ("結び付けられませんでした", "Couldn’t link"),
+    .taskPalettePickTask: ("%@ を結び付けるタスクを選ぶ", "Choose a task to link %@ to"),
+    .taskPalettePickItem: ("%@ に結び付ける Issue・PR を選ぶ", "Choose an issue or PR to link to %@"),
+    .taskPaletteActionLinkItem: ("%1$@ を「%2$@」に結び付ける", "Link %1$@ to “%2$@”"),
+    .taskPaletteActionMoveItem: ("%1$@ を %3$@ から「%2$@」へ付け替える", "Move %1$@ from %3$@ to “%2$@”"),
+    .taskPaletteActionLinkedAlready: ("%1$@ は「%2$@」に結び付いている", "%1$@ is already linked to “%2$@”"),
+    .taskPaletteHintStopPicking: ("やめる", "Cancel"),
+    .taskPaletteAddLink: ("結び付ける", "Link"),
+    .taskPaletteBranchPRAuto: ("ブランチの PR は自動", "Branch PRs link automatically"),
+    .taskPaletteActionAddLink: ("Issue・PR を選んで結び付ける", "Choose an issue or PR to link"),
   ]
 }

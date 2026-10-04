@@ -9,6 +9,7 @@ import XCTest
 /// 上限を越えて裏で問い合わせ続ける。PATH に偽の `gh` を置いて本物の子プロセスで測る。
 final class GitHubCLIOpenListFetchTests: OrbeTestCase {
   private var dir: URL!
+  private let repo = GitHubRepoName(nameWithOwner: "o/2048")
 
   /// 偽 `gh` の振る舞い。`available` 件の open 一覧を持ち、1 回に最大 `pageMax` 件返す。
   /// `failAt` の位置から始まるページは非 0 で落ちる。
@@ -46,10 +47,8 @@ final class GitHubCLIOpenListFetchTests: OrbeTestCase {
       while [ "$i" -le "$count" ]; do
         [ "$i" -gt 1 ] && printf ','
         n=$((offset + i))
-        printf '{"number":%d,"title":"t%d",' "$n" "$n"
-        printf '"headRefName":"h%d","headRepositoryOwner":{"login":"o"},' "$n"
-        printf '"headRepository":{"name":"r"},'
-        printf '"reviewDecision":null}'
+        printf '{"__typename":"Issue","number":%d,"title":"t%d",' "$n" "$n"
+        printf '"updatedAt":"2026-10-01T00:00:00Z"}'
         i=$((i + 1))
       done
       end=$((offset + count))
@@ -99,7 +98,7 @@ final class GitHubCLIOpenListFetchTests: OrbeTestCase {
     var finished: [Bool] = []
     let done = expectation(description: "openIssues")
     GitHubCLI().openIssues(
-      cwd: dir.path, page: { pages.append($0.map(\.number)) },
+      repo: repo, page: { pages.append($0.map(\.number)) },
       finished: {
         finished.append($0)
         done.fulfill()
@@ -110,19 +109,19 @@ final class GitHubCLIOpenListFetchTests: OrbeTestCase {
 
   // MARK: - 問い合わせ
 
-  /// 1 ページの問い合わせは GraphQL の connection を新しい順・open だけで引き、位置はアプリが持つ
+  /// 1 ページの問い合わせは GraphQL の connection を作成の新しい順・open だけで引き、位置はアプリが持つ
   /// カーソルで渡す。ホストは認証確認と同じ github.com を名指しする（`gh api` は作業ディレクトリから
-  /// ホストを決めないので、名指ししないと確かめた先と取りに行く先がずれうる）。owner / name は gh が
-  /// 作業ディレクトリのリポジトリで埋める（`-F` の置き換え。`-f` では文字どおり `{owner}` が送られる）。
-  func testPageQueryNamesHostCursorAndOrder() throws {
-    let firstPage = GitHubCLI.openIssuesPageArguments(first: 100, after: nil)
-    let nextPage = GitHubCLI.openPullRequestsPageArguments(first: 40, after: "Y3Vyc29y")
+  /// ホストを決めないので、名指ししないと確かめた先と取りに行く先がずれうる）。リポジトリは解決した名前で
+  /// 名指しし、`-f`（文字列のまま）で渡す——`-F` は数字だけの名前を整数に変える。
+  func testPageQueryNamesHostRepositoryCursorAndOrder() throws {
+    let firstPage = GitHubCLI.openIssuesPageArguments(repo: repo, first: 100, after: nil)
+    let nextPage = GitHubCLI.openPullRequestsPageArguments(repo: repo, first: 40, after: "Y3Vyc29y")
 
     XCTAssertEqual(Array(firstPage.prefix(4)), ["api", "graphql", "--hostname", "github.com"])
     for page in [firstPage, nextPage] {
-      for field in ["owner={owner}", "name={repo}"] {
+      for field in ["owner=o", "name=2048"] {
         let index = try XCTUnwrap(page.firstIndex(of: field), "\(field) を渡す")
-        XCTAssertEqual(page[index - 1], "-F", "\(field) の置き換えは -F でだけ効く")
+        XCTAssertEqual(page[index - 1], "-f", "\(field) は文字列のまま渡す")
       }
     }
     XCTAssertTrue(firstPage.contains("first=100"))
@@ -132,18 +131,21 @@ final class GitHubCLIOpenListFetchTests: OrbeTestCase {
     let issueQuery = try XCTUnwrap(firstPage.first { $0.hasPrefix("query=") })
     XCTAssertTrue(issueQuery.contains("issues(states:OPEN,first:$first,after:$endCursor,"))
     XCTAssertTrue(issueQuery.contains("orderBy:{field:CREATED_AT,direction:DESC}"))
-    XCTAssertTrue(issueQuery.contains("nodes{number title}"))
+    XCTAssertTrue(
+      issueQuery.contains(
+        "nodes{__typename number title updatedAt author{login} assignees(first:10){nodes{login}}}"))
 
     XCTAssertTrue(nextPage.contains("first=40"))
     XCTAssertTrue(nextPage.contains("endCursor=Y3Vyc29y"), "2 ページ目以降は前のページの位置から")
     XCTAssertEqual(
       Array(nextPage.suffix(2)), ["--jq", ".data.repository.pullRequests | {nodes, pageInfo}"])
     let prQuery = try XCTUnwrap(nextPage.first { $0.hasPrefix("query=") })
-    XCTAssertTrue(
-      prQuery.contains(
-        "nodes{number title headRefName headRepositoryOwner{login} headRepository{name}"
-          + " reviewDecision}"),
-      "PR 行が描く項目（レビュー状態・行との同一性に使う head のリポジトリを含む）を取る")
+    for field in [
+      "isDraft reviewDecision", "commits(last:1){nodes{commit{statusCheckRollup{state}}}}",
+      "reviewRequests(first:20)",
+    ] {
+      XCTAssertTrue(prQuery.contains(field), "PR 行が描く \(field) を取る")
+    }
   }
 
   // MARK: - ページの列
@@ -171,7 +173,7 @@ final class GitHubCLIOpenListFetchTests: OrbeTestCase {
     var pullRequests = 0
     let done = expectation(description: "openPullRequests")
     GitHubCLI().openPullRequests(
-      cwd: dir.path, page: { pullRequests += $0.count }, finished: { _ in done.fulfill() })
+      repo: repo, page: { pullRequests += $0.count }, finished: { _ in done.fulfill() })
     wait(for: [done], timeout: 60)
     XCTAssertEqual(pullRequests, 500, "PR は 500 件で止まる")
   }
@@ -191,8 +193,8 @@ final class GitHubCLIOpenListFetchTests: OrbeTestCase {
     let done = expectation(description: "both")
     done.expectedFulfillmentCount = 2
     let cli = GitHubCLI()
-    cli.openIssues(cwd: dir.path, page: { _ in }, finished: { _ in done.fulfill() })
-    cli.openPullRequests(cwd: dir.path, page: { _ in }, finished: { _ in done.fulfill() })
+    cli.openIssues(repo: repo, page: { _ in }, finished: { _ in done.fulfill() })
+    cli.openPullRequests(repo: repo, page: { _ in }, finished: { _ in done.fulfill() })
     wait(for: [done], timeout: 30)
     XCTAssertEqual(maxOverlap(), 2, "issue と PR の問い合わせが同時に走る")
   }

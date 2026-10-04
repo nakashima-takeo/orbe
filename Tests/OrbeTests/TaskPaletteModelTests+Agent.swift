@@ -39,7 +39,7 @@ extension TaskPaletteModelTests {
     let palette = detailWithAgent(.working)
     var visited: [TaskPaletteArea] = []
 
-    for _ in 0..<4 {
+    for _ in 0..<5 {
       palette.moveField(-1)
       visited.append(palette.area)
     }
@@ -47,9 +47,10 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(
       visited,
       [
-        .detail(.link(link(.pr, 2).item)), .detail(.link(link(.issue, 1).item)), .detail(.agent),
+        .detail(.addLink), .detail(.link(link(.pr, 2).item)), .detail(.link(link(.issue, 1).item)),
+        .detail(.agent),
         .detail(.field(.title)),
-      ], "ステータスから上へ: 結び付き（逆順）→ agent → タイトル")
+      ], "ステータスから上へ: 結び付ける → 結び付き（逆順）→ agent → タイトル")
   }
 
   /// 応答を終えた・休止中の agent でも詳細に場所があり、↵ でそのタブへ移る。

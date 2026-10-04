@@ -157,6 +157,7 @@ struct TaskPaletteRowFrame<Content: View>: View {
   let selected: Bool
   /// 並べ替えの取っ手を出すか（選ばれている未完了のタスクの行）。取っ手は印で、掴む場所は行全体。
   var grip = false
+  var height = TaskPaletteRowMetrics.height
   let onTap: () -> Void
   let onHoverEnter: () -> Void
   @ViewBuilder let content: () -> Content
@@ -165,7 +166,7 @@ struct TaskPaletteRowFrame<Content: View>: View {
     HStack(spacing: 0, content: content)
       .padding(.leading, 22)
       .padding(.trailing, Theme.Space.beat)
-      .frame(height: TaskPaletteRowMetrics.height)
+      .frame(height: height)
       .frame(maxWidth: .infinity, alignment: .leading)
       .overlay(alignment: .leading) {
         if grip { TaskPaletteGrip().padding(.leading, 8) }

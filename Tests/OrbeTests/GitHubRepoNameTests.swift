@@ -7,7 +7,8 @@ import XCTest
 ///
 /// ここが破れると、行と PR の同一性がそもそも立たない——読めない形の origin を持つリポジトリでは
 /// 番号チップが 1 つも付かず、PR 行はすべてブラウザ行になり、clean は PR の事実を 1 つも持てない。
-/// 大小文字で割れると、同じリポジトリの PR が別のリポジトリのものとして弾かれる。
+/// 大小文字で割れると、同じリポジトリの PR が別のリポジトリのものとして弾かれる。github.com かどうかを
+/// ホストで決めないと、GitHub Enterprise（github.company.com）の owner/name で github.com を読み書きする。
 final class GitHubRepoNameTests: OrbeTestCase {
 
   /// git が remote に書く GitHub の URL の形（https・資格情報つき・scp 形式・SSH のホスト別名・
@@ -46,5 +47,39 @@ final class GitHubRepoNameTests: OrbeTestCase {
     let answered = GitHubRepoName(nameWithOwner: "Owner/Repo")
     XCTAssertEqual(GitHubRepoName(remoteURL: "git@github.com:OWNER/repo.git"), answered)
     XCTAssertEqual(GitHubRepoName(owner: "owner", name: "REPO"), answered)
+  }
+
+  // MARK: - github.com か
+
+  /// github.com・ssh.github.com（443 番の SSH）・SSH の書き方での `github.com-` の別名だけが github.com。
+  /// ホスト名の大小文字は問わない。
+  func testGitHubDotComHostsAreGitHub() {
+    for url in [
+      "https://github.com/o/r",
+      "https://user@github.com/o/r",
+      "git@github.com:o/r.git",
+      "ssh://git@github.com:22/o/r.git",
+      "ssh://git@ssh.github.com:443/o/r.git",
+      "git@github.com-work:o/r.git",
+      "HTTPS://GitHub.COM/o/r",
+    ] {
+      XCTAssertTrue(GitHubRepoName.isGitHub(remoteURL: url), "\(url) は github.com")
+    }
+  }
+
+  /// ホストが github.com でなければ、URL のどこかに github.com を含んでも github.com ではない（GitHub
+  /// Enterprise・github.com で始まる別のドメイン・https の別名・ローカルのパス）。
+  func testOtherHostsAndLocalPathsAreNotGitHub() {
+    for url in [
+      "https://github.company.com/o/n",
+      "git@github.company.com:o/n.git",
+      "ssh://git@github.company.com/o/n.git",
+      "ssh://git@github.company.com:22/o/n.git",
+      "https://github.com.evil.example/o/n",
+      "https://github.com-work/o/n",
+      "/tmp/github.com/o/r.git",
+    ] {
+      XCTAssertFalse(GitHubRepoName.isGitHub(remoteURL: url), "\(url) は github.com ではない")
+    }
   }
 }

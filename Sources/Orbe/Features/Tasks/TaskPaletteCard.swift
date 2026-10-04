@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// タスク画面のカード本体。ヘッダー（❯＋入力欄・タブ・範囲）＋本体（左に一覧・右に詳細。GitHub タブは空）
-/// ＋フッター（主な操作の 1 行・キーヒント）。焦点の行き先（入力欄 / 詳細の項目 / 詳細の編集欄）はモデルの
+/// タスク画面のカード本体。ヘッダー（❯＋入力欄・タブ・範囲）＋選ぶ状態の帯＋本体（左に一覧・右に詳細。
+/// GitHub タブは左に open な Issue・PR、右に項目の欄）＋フッター（主な操作の 1 行・キーヒント）。焦点の行き先（入力欄 / 詳細の項目 / 詳細の編集欄）はモデルの
 /// `focusTarget` から一方向に写し、カード内のクリックでも当て直す（⌘T 画面と同じ契約）。
 struct TaskPaletteCard: View {
   @Bindable var model: TaskPaletteModel
@@ -17,17 +17,28 @@ struct TaskPaletteCard: View {
       VStack(spacing: 0) {
         header
         divider
+        if model.pick != nil {
+          TaskPalettePickBanner(model: model)
+          divider
+        }
         Group {
-          switch model.tab {
+          switch model.visibleTab {
           case .tasks:
             HStack(spacing: 0) {
               TaskPaletteList(model: model)
               Rectangle().fill(Color.theme.surface1).frame(width: Theme.Stroke.hairline)
+              // 選ぶ状態の間は、詳細からタスクを変えさせない（キーは一覧の選択だけが効く）。
               TaskPaletteDetail(model: model, focus: $focus)
                 .frame(width: detailWidth)
+                .allowsHitTesting(model.pick == nil)
             }
           case .github:
-            Color.clear
+            HStack(spacing: 0) {
+              TaskPaletteGitHubList(model: model)
+              Rectangle().fill(Color.theme.surface1).frame(width: Theme.Stroke.hairline)
+              TaskPaletteGitHubPane(model: model, focus: $focus)
+                .frame(width: detailWidth)
+            }
           }
         }
         .frame(maxHeight: .infinity)
@@ -47,6 +58,8 @@ struct TaskPaletteCard: View {
     .onChange(of: model.store.tasks) { model.reconcile() }
     // agent の状態が変わると詳細の止まる場所（agent の場所）が増減するので、同じく付け直す。
     .onChange(of: model.agents.agents) { model.reconcile() }
+    // GitHub タブの行はストア（結び付き）と一覧の置き場の両方で変わるので、行の変化でも付け直す。
+    .onChange(of: model.gitHubRows) { model.reconcile() }
     // 出ている行の結び付きが増えたら（agent の変更・完了の欄の開閉・範囲・入力）、その値を取りに行く。
     .onChange(of: model.visibleLinkIDs) { model.ensureVisibleItems() }
   }
@@ -68,7 +81,7 @@ struct TaskPaletteCard: View {
         .focused($focus, equals: .field)
         .imePlaceholder(
           l10n.string(
-            model.tab == .tasks ? .taskPalettePlaceholder : .taskPaletteGitHubPlaceholder),
+            model.visibleTab == .tasks ? .taskPalettePlaceholder : .taskPaletteGitHubPlaceholder),
           showWhenEmpty: model.query.isEmpty, focused: focus == .field, font: Font.theme.title,
           color: Color.theme.textMuted
         )
@@ -91,9 +104,9 @@ struct TaskPaletteCard: View {
           segments: [
             .init(
               title: l10n.string(.taskPaletteTabTasks), count: model.counts.scoped,
-              selected: model.tab == .tasks, action: { model.setTab(.tasks) }),
+              selected: model.visibleTab == .tasks, action: { model.setTab(.tasks) }),
             .init(
-              title: "GitHub", count: nil, selected: model.tab == .github,
+              title: "GitHub", count: model.gitHubCount, selected: model.visibleTab == .github,
               action: { model.setTab(.github) }),
           ], font: Font.theme.code, height: 26, selectedFill: Color.theme.surfaceInk.opacity(0.08))
         TaskPaletteSegments(
@@ -160,5 +173,45 @@ struct TaskPaletteSegments: View {
     .padding(3)
     .background(
       RoundedRectangle(cornerRadius: Theme.Radius.row).fill(Color.theme.surfaceInk.opacity(0.04)))
+  }
+}
+
+/// 選ぶ状態の帯（「#221 … を結び付けるタスクを選ぶ」「#212 … に結び付ける Issue・PR を選ぶ」）。
+struct TaskPalettePickBanner: View {
+  @Bindable var model: TaskPaletteModel
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
+    HStack(spacing: Theme.Space.step) {
+      Image(systemName: "link")
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(Color.theme.accentBright)
+      Text(title)
+        .font(Font.theme.taskText)
+        .foregroundStyle(Color.theme.textPrimary)
+        .lineLimit(1)
+        .truncationMode(.tail)
+      Spacer(minLength: 0)
+    }
+    .padding(.horizontal, Theme.Space.phrase)
+    .frame(height: 36)
+    .background(Color.theme.tintAccent)
+  }
+
+  private var title: String {
+    switch model.pick {
+    case .task(let link, _):
+      let title = model.openItem(link.item)?.title
+      return l10n.format(
+        .taskPalettePickTask,
+        ["#\(link.item.number)", title].compactMap { $0 }.joined(separator: " "))
+    case .item(let id, _):
+      let task = model.store.tasks.first { $0.id == id }
+      let number = task?.links.first.map { "#\($0.item.number)" }
+      return l10n.format(
+        .taskPalettePickItem, [number, task?.title].compactMap { $0 }.joined(separator: " "))
+    case nil:
+      return ""
+    }
   }
 }

@@ -10,7 +10,7 @@ import Observation
 /// 進行中の取得に含まれる項目は重ねて頼まない（合流）。試行の記録は次の `refresh` まで残すので、取れなかった
 /// 項目を `ensure` は叩き直さない（gh の無い環境で、画面の変化のたびに gh を起こさない）。
 @Observable final class GitHubItemCache {
-  static let shared = GitHubItemCache(fetch: GitHubCLI.shared.items)
+  static let shared = GitHubItemCache(viewer: .shared, fetch: GitHubCLI.shared.items)
 
   /// 項目の列を問い合わせ、1 回ごとにその回の ID と答え（nil = その回の失敗）をメインで返す取得。
   /// 渡した ID はどれも、いずれかの回でちょうど 1 回返す（gh が無い・失敗したときは、その回を取れなかったとして返す）。
@@ -20,18 +20,18 @@ import Observation
 
   /// 項目ごとの答え。キーが無い＝まだ答えを得ていない。
   private(set) var answers: [GitHubItemID: GitHubItemAnswer]
-  /// gh で認証しているアカウントの login。
-  private(set) var viewerLogin: String?
+  /// 答えに載った自分の login の書き先。
+  @ObservationIgnored let viewer: GitHubViewer
   private var inFlight: Set<GitHubItemID> = []
   private var tried: Set<GitHubItemID> = []
   @ObservationIgnored private let fetch: Fetch
 
   init(
-    answers: [GitHubItemID: GitHubItemAnswer] = [:], viewerLogin: String? = nil,
+    answers: [GitHubItemID: GitHubItemAnswer] = [:], viewer: GitHubViewer = GitHubViewer(),
     fetch: @escaping Fetch
   ) {
     self.answers = answers
-    self.viewerLogin = viewerLogin
+    self.viewer = viewer
     self.fetch = fetch
   }
 
@@ -60,7 +60,7 @@ import Observation
       guard let self else { return }
       inFlight.subtract(batchIDs)
       guard let batch else { return }
-      if let login = batch.viewerLogin { viewerLogin = login }
+      if let login = batch.viewerLogin { viewer.record(login) }
       answers.merge(batch.answers) { $1 }
     }
   }

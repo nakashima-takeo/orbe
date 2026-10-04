@@ -11,17 +11,38 @@ import XCTest
 /// issue/<N> と分岐した同名のブランチを切る。fork の main から出た PR のタスクで、自分の main の worktree が
 /// 「#N の worktree」として選ばれる。gh の無い環境で ↵ が預かられたまま、パレットを閉じられなくなる。
 extension WorktreePaletteRemoteLedgerProviderTests {
-  /// `repository`（owner/name）として読まれる origin を、ローカルの bare リポジトリで立てる。パスに github.com を
-  /// 含めて GitHub の remote として読ませ、fetch はローカルで済ませる。main を置き、`branches` を main から切る。
+  /// `repository`（owner/name）の github.com の origin（`ssh://git@github.com/<repository>.git`）を、ローカルの
+  /// bare リポジトリで立てる。ssh は起こさない: リポジトリの `core.sshCommand` を、git が渡す upload-pack の
+  /// コマンドを bare リポジトリに向けて走らせるスクリプトにする（`ssh.variant=simple` で ssh の選択肢を付けさせ
+  /// ない）。台帳は insteadOf を展開した後の URL を読むので、insteadOf ではローカルへ向けられない。main を置き、
+  /// `branches` を main から切る。
   private func serveOrigin(_ repository: String, branches: [String] = []) throws {
-    let bare = dir.appendingPathComponent("github.com/\(repository).git").path
-    try FileManager.default.createDirectory(atPath: bare, withIntermediateDirectories: true)
+    let bare = dir.appendingPathComponent("origin.git").path
     XCTAssertTrue(run(["init", "-q", "--bare", "-b", "main", bare], in: dir.path).isSuccess)
     XCTAssertTrue(git(["push", "-q", bare, "main"]).isSuccess)
     for branch in branches {
       XCTAssertTrue(run(["branch", branch, "main"], in: bare).isSuccess)
     }
-    XCTAssertTrue(git(["remote", "add", "origin", bare]).isSuccess)
+    let ssh = dir.appendingPathComponent("local-ssh").path
+    try write(
+      """
+      #!/bin/sh
+      echo "$@" >> "\(sshLog)"
+      for last; do :; done
+      exec sh -c "$(printf '%s' "$last" | sed "s#'/\(repository).git'#'\(bare)'#")"
+      """, to: ssh)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ssh)
+    XCTAssertTrue(
+      git(["remote", "add", "origin", "ssh://git@github.com/\(repository).git"]).isSuccess)
+    XCTAssertTrue(git(["config", "core.sshCommand", ssh]).isSuccess)
+    XCTAssertTrue(git(["config", "ssh.variant", "simple"]).isSuccess)
+  }
+
+  /// `serveOrigin` の ssh の代役が受けた呼び出し。fetch がネットワークに出ず代役を通ったことを確かめる。
+  private var sshLog: String { dir.appendingPathComponent("local-ssh.log").path }
+
+  private func fetchWentThroughTheLocalOrigin() -> Bool {
+    (try? String(contentsOfFile: sshLog, encoding: .utf8))?.contains("github.com") == true
   }
 
   /// 提示時の fetch を `releaseFetch()` まで着地させない（origin の upload-pack を門で止める）。
@@ -83,6 +104,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     try releaseFetch()
 
     XCTAssertTrue(pump { !executed.isEmpty })
+    XCTAssertTrue(fetchWentThroughTheLocalOrigin(), "前提: fetch はローカルの origin で済んだ")
     XCTAssertEqual(
       executed, [.remoteBranch(name: "origin/feat", existingWorktree: nil)], "届いたブランチで効く")
   }
@@ -103,6 +125,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     try releaseFetch()
 
     XCTAssertTrue(pump { !executed.isEmpty })
+    XCTAssertTrue(fetchWentThroughTheLocalOrigin(), "前提: fetch はローカルの origin で済んだ")
     XCTAssertNil(taskSection(model), "欄を出さない")
     XCTAssertEqual(executed, [.directory(path: root)], "今の worktree に効く")
     withExtendedLifetime(provider) {}
@@ -123,6 +146,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     try releaseFetch()
 
     XCTAssertTrue(pump { !executed.isEmpty })
+    XCTAssertTrue(fetchWentThroughTheLocalOrigin(), "前提: fetch はローカルの origin で済んだ")
     XCTAssertEqual(
       executed, [.remoteBranch(name: "origin/issue/221", existingWorktree: nil)],
       "push 済みのブランチで効く（同名のブランチを新しく切らない）")

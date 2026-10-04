@@ -36,7 +36,7 @@ struct GitHubItemID: Hashable {
   var text: String { "\(repo.value)#\(number)" }
 
   /// owner を除いたリポジトリの名前。
-  var repoName: String { String(repo.value.split(separator: "/").last ?? "") }
+  var repoName: String { repo.name }
 }
 
 /// Issue か PR か。
@@ -118,7 +118,7 @@ enum GitHubItemQuery {
       }
       fields.append(
         "r\(index):repository(owner:$o\(index),name:$n\(index)){\(items.joined(separator: " "))}")
-      variables += ["-f", "o\(index)=\(group.owner)", "-f", "n\(index)=\(group.name)"]
+      variables += ["-f", "o\(index)=\(group.repo.owner)", "-f", "n\(index)=\(group.repo.name)"]
     }
     let query =
       "query(\(declarations.joined(separator: ","))){\(fields.joined(separator: " "))}"
@@ -146,8 +146,6 @@ enum GitHubItemQuery {
   private struct RepositoryGroup {
     let repo: GitHubRepoName
     var ids: [GitHubItemID]
-    var owner: String { String(repo.value.split(separator: "/").first ?? "") }
-    var name: String { String(repo.value.split(separator: "/").last ?? "") }
   }
 
   /// リポジトリごとにまとめる（現れた順）。引数と読み取りが同じ別名を引くための、唯一の並び。
@@ -209,7 +207,7 @@ private struct ItemNode: Decodable {
   let isDraft: Bool?
   let reviewDecision: String?
   let author: Author?
-  let commits: ItemCommits?
+  let commits: GitHubLastCommit?
   let headRefName: String?
   let headRepositoryOwner: Author?
   let headRepository: Repository?
@@ -231,7 +229,7 @@ private struct ItemNode: Decodable {
         pullRequest: GitHubItemSummary.PullRequest(
           isDraft: isDraft ?? false,
           review: reviewDecision.flatMap(GitHubItemSummary.ReviewDecision.init(rawValue:)),
-          checks: checks, author: author?.login, head: head))
+          checks: commits?.checks, author: author?.login, head: head))
     default:
       return nil
     }
@@ -245,9 +243,15 @@ private struct ItemNode: Decodable {
     else { return nil }
     return GitHubBranchRef(repo: repo, branch: headRefName)
   }
+}
 
-  private var checks: GitHubItemSummary.Checks? {
-    switch commits?.nodes?.last??.commit.statusCheckRollup?.state {
+/// `commits(last:1){nodes{commit{statusCheckRollup{state}}}}`。最後のコミットの CI の集約を読む（結び付いた
+/// 項目の問い合わせと open 一覧が同じ規則で読む）。
+struct GitHubLastCommit: Decodable {
+  private let nodes: [LastCommitNode?]?
+
+  var checks: GitHubItemSummary.Checks? {
+    switch nodes?.last??.commit.statusCheckRollup?.state {
     case "SUCCESS": .success
     case "FAILURE", "ERROR": .failure
     case "PENDING", "EXPECTED": .pending
@@ -256,16 +260,11 @@ private struct ItemNode: Decodable {
   }
 }
 
-/// `commits(last:1){nodes{commit{statusCheckRollup{state}}}}`。
-private struct ItemCommits: Decodable {
-  let nodes: [ItemCommitNode?]?
-}
-
-private struct ItemCommitNode: Decodable {
-  struct Commit: Decodable { let statusCheckRollup: ItemCheckRollup? }
+private struct LastCommitNode: Decodable {
+  struct Commit: Decodable { let statusCheckRollup: CheckRollup? }
   let commit: Commit
 }
 
-private struct ItemCheckRollup: Decodable {
+private struct CheckRollup: Decodable {
   let state: String
 }
