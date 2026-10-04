@@ -110,7 +110,7 @@ struct TaskPaletteList: View {
     }
   }
 
-  /// タスクの行。未完了の行は掴んで同じ欄の中で動かせ、掴んだ行は指に付いて浮き（欄の外へは出ない）、
+  /// タスクの行。未完了の行は掴んで同じ欄の中で動かせ、掴んだ行は指に付いて動き（欄の外へは出ない）、
   /// 落ちる位置に線を出す。ほかの行はずらさない。
   private func taskRow(_ task: TaskPaletteTaskRow) -> some View {
     let grabbed = model.drag.session.flatMap { $0.taskID == task.id ? $0 : nil }
@@ -142,7 +142,6 @@ struct TaskPaletteList: View {
     let shape = RoundedRectangle(cornerRadius: Theme.Radius.row)
     return shape.fill(Color.theme.bgBase)
       .overlay(shape.fill(Color(nsColor: Theme.Glass.surface(.popup))))
-      .elevation(.popup)
   }
 
   private func dragGesture(_ id: Int) -> some Gesture {
