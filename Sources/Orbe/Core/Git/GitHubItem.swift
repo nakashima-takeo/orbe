@@ -122,7 +122,9 @@ enum GitHubItemQuery {
     var variables: [String] = []
     for (index, group) in repositories(ids).enumerated() {
       declarations.append("$o\(index):String!,$n\(index):String!")
-      let items = group.numbers.map { "n\($0):issueOrPullRequest(number:\($0)){\(itemFields)}" }
+      let items = group.ids.map {
+        "n\($0.number):issueOrPullRequest(number:\($0.number)){\(itemFields)}"
+      }
       fields.append(
         "r\(index):repository(owner:$o\(index),name:$n\(index)){\(items.joined(separator: " "))}")
       variables += ["-f", "o\(index)=\(group.owner)", "-f", "n\(index)=\(group.name)"]
@@ -142,9 +144,8 @@ enum GitHubItemQuery {
     var answers: [GitHubItemID: GitHubItemAnswer] = [:]
     for (index, group) in repositories(ids).enumerated() {
       let nodes = data.repositories["r\(index)"] ?? nil
-      for number in group.numbers {
-        guard let id = GitHubItemID(repo: group.repo.value, number: number) else { continue }
-        let summary = (nodes?["n\(number)"] ?? nil)?.summary
+      for id in group.ids {
+        let summary = (nodes?["n\(id.number)"] ?? nil)?.summary
         answers[id] = summary.map(GitHubItemAnswer.found) ?? .missing
       }
     }
@@ -153,7 +154,7 @@ enum GitHubItemQuery {
 
   private struct RepositoryGroup {
     let repo: GitHubRepoName
-    var numbers: [Int]
+    var ids: [GitHubItemID]
     var owner: String { String(repo.value.split(separator: "/").first ?? "") }
     var name: String { String(repo.value.split(separator: "/").last ?? "") }
   }
@@ -163,9 +164,9 @@ enum GitHubItemQuery {
     var groups: [RepositoryGroup] = []
     for id in ids {
       if let index = groups.firstIndex(where: { $0.repo == id.repo }) {
-        if !groups[index].numbers.contains(id.number) { groups[index].numbers.append(id.number) }
+        if !groups[index].ids.contains(id) { groups[index].ids.append(id) }
       } else {
-        groups.append(RepositoryGroup(repo: id.repo, numbers: [id.number]))
+        groups.append(RepositoryGroup(repo: id.repo, ids: [id]))
       }
     }
     return groups
