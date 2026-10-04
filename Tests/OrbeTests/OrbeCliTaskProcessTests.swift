@@ -137,6 +137,32 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     XCTAssertEqual(rows(control).count, 1, "拒否された要求は一覧を変えない")
   }
 
+  /// `--worktree` の相対パスは打った場所から読み、worktree の中のサブディレクトリはルートに揃う。
+  /// 別のタスクが持つ worktree は control が拒み、その文に相手の ID が出る。
+  func testWorktreeIsReadFromTheCallersDirectoryAndShownInTheNinthColumn() throws {
+    let control = try startControlProcess()
+    let repo = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
+    let nested = (repo as NSString).appendingPathComponent("Sources/App")
+    try FileManager.default.createDirectory(atPath: nested, withIntermediateDirectories: true)
+    XCTAssertTrue(GitRunner.shared.runSync(["init", "-q"], cwd: repo).isSuccess)
+    let root = GitWorktreeRoot.normalizedPath(repo)
+
+    let outcome = control.orb(["task", "add", "a", "--worktree", "App"], cwd: nested + "/..")
+    XCTAssertEqual(outcome.status, 0, outcome.stderr)
+    let id = outcome.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    XCTAssertEqual(rows(control).first?[8], root, "task list の 9 列目: worktree のルート")
+    XCTAssertEqual(try tasks(control).first?["worktree"] as? String, root, "--json でも同じ値")
+
+    let other = run(control, ["add", "b"]).trimmingCharacters(in: .whitespacesAndNewlines)
+    let clash = control.orb(["task", "set", other, "--worktree", "."], cwd: repo)
+    XCTAssertEqual(clash.status, 1, "別のタスクが持つ worktree は control が弾く")
+    XCTAssertTrue(clash.stderr.contains("-32602"), clash.stderr)
+    XCTAssertTrue(clash.stderr.contains("task \(id)"), "相手のタスクの ID が出る: \(clash.stderr)")
+
+    run(control, ["set", id, "--no-worktree"])
+    XCTAssertEqual(rows(control).map { $0[8] }, ["-", "-"], "task set --no-worktree: 外れる")
+  }
+
   /// 人向けの行のセルは、向きを変える制御文字（U+202E など）を空白にし、ZWJ で組む絵文字は残す。
   /// 向きを変える文字が残ると、後続の列（待ちの理由など）が端末上で入れ替わって見える。
   func testListCellsBlankDirectionOverridesButKeepJoinedEmoji() throws {
@@ -191,6 +217,10 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
       (["task", "add", "a", "--issue", "o/n"], "--issue requires an <owner/name#N>: o/n"),
       (["task", "add", "a", "--pr", "o/n#0"], "--pr requires an <owner/name#N>: o/n#0"),
       (["task", "add", "a", "--pr", "o/n#x"], "--pr requires an <owner/name#N>: o/n#x"),
+      (
+        ["task", "set", "1", "--worktree", ".", "--no-worktree"],
+        "pass only one of --worktree / --no-worktree"
+      ),
       (["task", "rm", "abc"], "invalid task id: abc"),
       (["task", "rm", "0"], "invalid task id: 0"),
     ] {

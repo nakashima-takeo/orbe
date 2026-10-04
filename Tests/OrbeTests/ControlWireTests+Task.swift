@@ -81,6 +81,39 @@ extension ControlWireTests {
     }
   }
 
+  /// worktree は add では文字列だけ、update では「省略（変えない）」「null（外す）」「パス」の 3 値。
+  /// 文字列でない値は target へ届く前に -32602。
+  func testWorktreeReachesTheTargetAsGivenAndUpdateDistinguishesNull() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+
+    _ = wire.request(id: 1, method: "add_task", params: ["title": "a", "worktree": "/r/wt"])
+    XCTAssertEqual(fake.addedTasks.last?.worktree, "/r/wt")
+    _ = wire.request(id: 2, method: "add_task", params: ["title": "a"])
+    XCTAssertNil(fake.addedTasks.last?.worktree)
+
+    let cases: [(params: [String: Any], expected: String)] = [
+      ([:], "omitted"), (["worktree": NSNull()], "clear"), (["worktree": "/r/wt"], "set(/r/wt)"),
+    ]
+    for (index, entry) in cases.enumerated() {
+      _ = wire.request(
+        id: 10 + index, method: "update_task",
+        params: entry.params.merging(["taskId": 7, "memo": "m"]) { a, _ in a })
+      XCTAssertEqual(
+        describe(fake.updatedTasks.last?.worktree), entry.expected, "update_task: \(entry.params)")
+    }
+
+    let added = fake.addedTasks.count
+    let updated = fake.updatedTasks.count
+    let rejected = [
+      wire.request(id: 20, method: "add_task", params: ["title": "a", "worktree": 5]),
+      wire.request(id: 21, method: "update_task", params: ["taskId": 7, "worktree": ["/r"]]),
+    ]
+    XCTAssertEqual(rejected.map(errorCode), [-32602, -32602])
+    XCTAssertEqual(fake.addedTasks.count, added, "型違いは target へ届かない")
+    XCTAssertEqual(fake.updatedTasks.count, updated)
+  }
+
   func testUpdateTaskDistinguishesOmittedAndNullForClearableFields() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
