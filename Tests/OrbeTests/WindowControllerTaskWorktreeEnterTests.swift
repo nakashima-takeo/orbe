@@ -48,14 +48,20 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
     try git(["config", "user.name", "t"], in: repo)
   }
 
-  /// 前面は main（git の外）。タスクは 0 タブの web（root path が手元のリポジトリ）に付く。
-  private func launch() throws -> (WindowController, TaskItem) {
+  /// 前面は main（git の外。`mainRepository` を渡せば、それを root path にした 0 タブの workspace）。タスクは
+  /// 0 タブの web（root path が手元のリポジトリ）に付く。
+  private func launch(mainRepository: String? = nil) throws -> (WindowController, TaskItem) {
+    let main =
+      mainRepository.map {
+        WorkspaceState(name: "main", rootPath: $0, activeTab: 0, tabs: [])
+      }
+      ?? WorkspaceState(
+        name: "main", rootPath: "/tmp", activeTab: 0,
+        tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)])
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
-        WorkspaceState(
-          name: "main", rootPath: "/tmp", activeTab: 0,
-          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)]),
+        main,
         WorkspaceState(name: "web", rootPath: local, activeTab: 0, tabs: [], persistentId: webId),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
@@ -190,5 +196,31 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
     XCTAssertEqual(
       GitRunner.shared.runSync(["branch", "--show-current"], cwd: worktree.path).stdoutText
         .trimmingCharacters(in: .whitespacesAndNewlines), "stale", "作った stale の worktree が付く")
+  }
+
+  /// 名前を打ったまま札をクリックして別のリポジトリへ読み直しても、その名前がブランチ名として有効かの答え
+  /// （リポジトリに依らない）は残り、↵ が預かられたまま固まらない。
+  func testRemovingTheTaskWithANameTypedKeepsItsAnswerAndEnterDoesNotHang() throws {
+    let home = (dir as NSString).appendingPathComponent("home")
+    try git(["init", "-q", "-b", "main", home], in: dir)
+    try identify(home)
+    try git(["commit", "-q", "--allow-empty", "-m", "a"], in: home)
+    let (wc, task) = try launch(mainRepository: home)
+    let palette = try open(wc, for: task, row: .open(.directory(path: toplevel)))
+    let name = "feat/new-name"
+    palette.query = name
+    palette.onQueryChanged()
+    XCTAssertTrue(
+      pump { palette.items.contains { $0.action == .createBranch(name: name) } },
+      "前提: 打った名前の作成行が出る")
+
+    palette.clearTaskContext()
+
+    XCTAssertTrue(
+      pump { wc.model.worktreePaletteProvider?.cwd == home && palette.newBranchRules != nil },
+      "前提: 開いた時点の workspace のリポジトリを読み直した")
+    XCTAssertFalse(palette.isAwaitingBranchNameAnswer, "名前の答えは残る")
+    palette.activate()
+    XCTAssertFalse(palette.hasPendingActivation, "↵ は預かられたままにならない")
   }
 }
