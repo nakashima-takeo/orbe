@@ -17,7 +17,8 @@ final class TaskWorktreeTests: OrbeTestCase {
 
   func testADirectoryInsideAWorktreeIsLiftedToTheWorktreeRoot() throws {
     let repo = try directory("repo")
-    XCTAssertTrue(GitRunner.shared.runSync(["init", "-q"], cwd: repo).isSuccess)
+    try FileManager.default.createDirectory(
+      atPath: repo + "/.git", withIntermediateDirectories: true)
     let nested = try directory("repo/Sources/App")
 
     let worktree = try XCTUnwrap(TaskWorktree(directory: nested))
@@ -40,5 +41,19 @@ final class TaskWorktreeTests: OrbeTestCase {
     XCTAssertNil(TaskWorktree(directory: "notes"), "相対パス")
     XCTAssertNil(TaskWorktree(directory: plain + "/gone"), "実在しない")
     XCTAssertNil(TaskWorktree(directory: file), "ファイル")
+  }
+
+  /// 書き込み（`init?(directory:)`）と読み込み（decode）は同じ形の規則で受け・拒む。書いた値を次の起動の
+  /// 読み込みが拒むと、tasks.json が丸ごと退避されて一覧が空で始まる。
+  func testWritingAndReadingAcceptTheSameDirectories() throws {
+    for name in ["notes", "a\nb", "a\rb", "a\tb", "a\u{7}b", "a\u{2028}b"] {
+      let path = try directory(name)
+      let written = TaskWorktree(directory: path)
+      let read = try? JSONDecoder().decode(
+        TaskWorktree.self, from: JSONEncoder().encode(GitWorktreeRoot.locationKey(of: path)))
+
+      XCTAssertEqual(written != nil, read != nil, "\(name.debugDescription): 書き込みと読み込みで同じ判定")
+      XCTAssertEqual(written != nil, name == "notes", "\(name.debugDescription)")
+    }
   }
 }

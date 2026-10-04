@@ -14,7 +14,8 @@ extension WindowControllerTaskControlTests {
     let root = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
     let nested = (root as NSString).appendingPathComponent("Sources/App")
     try FileManager.default.createDirectory(atPath: nested, withIntermediateDirectories: true)
-    XCTAssertTrue(GitRunner.shared.runSync(["init", "-q"], cwd: root).isSuccess)
+    try FileManager.default.createDirectory(
+      atPath: root + "/.git", withIntermediateDirectories: true)
     return (root, nested)
   }
 
@@ -50,6 +51,28 @@ extension WindowControllerTaskControlTests {
           taskId: taskId, TaskUpdate(), workspaceId: nil, worktree: .set("repo"))), -32602,
       "相対パス")
     XCTAssertEqual(try listed(wc).count, 1, "拒否した追加は一覧に残らない")
+  }
+
+  /// 改行・制御文字を含む実在のディレクトリは拒む（受けると、次の起動で tasks.json が丸ごと退避される）。
+  func testADirectoryWithANewlineOrControlCharacterIsRejected() throws {
+    let wc = try launch()
+    let taskId = try XCTUnwrap(try added(wc)["taskId"] as? Int)
+    let before = try listed(wc).map { NSDictionary(dictionary: $0) }
+
+    for name in ["a\nb", "a\u{7}b"] {
+      let path = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent(name).path
+      try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+
+      XCTAssertEqual(
+        code(addTask(wc, "b", worktree: path)), -32602, "add_task: \(name.debugDescription)")
+      XCTAssertEqual(
+        code(
+          wc.controlUpdateTask(
+            taskId: taskId, TaskUpdate(), workspaceId: nil, worktree: .set(path))), -32602,
+        "update_task: \(name.debugDescription)")
+    }
+    XCTAssertEqual(
+      try listed(wc).map { NSDictionary(dictionary: $0) }, before, "拒否した要求は一覧を変えない")
   }
 
   func testAWorktreeHeldByAnotherTaskIsRejectedWithThatTasksId() throws {

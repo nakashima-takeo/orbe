@@ -15,10 +15,10 @@ import XCTest
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliTaskProcessTests: OrbeTestCase {
   private func run(
-    _ control: ControlProcess, _ args: [String], env: [String: String] = [:],
+    _ control: ControlProcess, _ args: [String], env: [String: String] = [:], cwd: String? = nil,
     file: StaticString = #filePath, line: UInt = #line
   ) -> String {
-    let outcome = control.orb(["task"] + args, env: env, file: file, line: line)
+    let outcome = control.orb(["task"] + args, env: env, cwd: cwd, file: file, line: line)
     XCTAssertEqual(
       outcome.status, 0, "orb task \(args.joined(separator: " ")) が exit 0 でない: \(outcome.stderr)",
       file: file, line: line)
@@ -144,7 +144,8 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     let repo = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
     let nested = (repo as NSString).appendingPathComponent("Sources/App")
     try FileManager.default.createDirectory(atPath: nested, withIntermediateDirectories: true)
-    XCTAssertTrue(GitRunner.shared.runSync(["init", "-q"], cwd: repo).isSuccess)
+    try FileManager.default.createDirectory(
+      atPath: repo + "/.git", withIntermediateDirectories: true)
     let root = GitWorktreeRoot.normalizedPath(repo)
 
     let outcome = control.orb(["task", "add", "a", "--worktree", "App"], cwd: nested + "/..")
@@ -161,6 +162,27 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
 
     run(control, ["set", id, "--no-worktree"])
     XCTAssertEqual(rows(control).map { $0[8] }, ["-", "-"], "task set --no-worktree: 外れる")
+  }
+
+  /// `--worktree` の `~` は展開せず、`/` で始まらない値はすべて打った場所からの相対として読む（`~` を展開する
+  /// のは workspace のパスだけ）。`a/../b` のような値は正規化して通る。
+  func testWorktreeTildeIsNotExpandedAndDotDotIsNormalized() throws {
+    let control = try startControlProcess()
+    let plain = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("plain").path
+    for sub in ["~/x", "a", "b"] {
+      try FileManager.default.createDirectory(
+        atPath: (plain as NSString).appendingPathComponent(sub), withIntermediateDirectories: true)
+    }
+
+    run(control, ["add", "tilde", "--worktree", "~/x"], cwd: plain)
+    run(control, ["add", "dots", "--worktree", "a/../b"], cwd: plain)
+
+    XCTAssertEqual(
+      try tasks(control).map { $0["worktree"] as? String },
+      [
+        GitWorktreeRoot.normalizedPath(plain + "/~/x"),
+        GitWorktreeRoot.normalizedPath(plain + "/b"),
+      ])
   }
 
   /// 人向けの行のセルは、向きを変える制御文字（U+202E など）を空白にし、ZWJ で組む絵文字は残す。
