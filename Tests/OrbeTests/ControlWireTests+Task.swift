@@ -20,7 +20,7 @@ extension ControlWireTests {
     }
   }
 
-  func testAddTaskCarriesEveryFieldToTheTarget() {
+  func testAddTaskCarriesEveryFieldToTheTarget() throws {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
 
@@ -35,6 +35,9 @@ extension ControlWireTests {
     XCTAssertEqual(added?.draft.due?.text, "2026-10-06")
     XCTAssertEqual(added?.draft.waitingReason, "返事")
     XCTAssertEqual(added?.draft.memo, "メモ")
+    XCTAssertEqual(
+      added?.draft.links,
+      [TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "o/n", number: 214)), kind: .pr)])
     XCTAssertEqual(describe(added?.workspaceId), "set(3)")
     XCTAssertEqual(added?.callerTabId, fake.tabId, "呼び出し元タブは target が解決できるよう届く")
   }
