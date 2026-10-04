@@ -293,16 +293,18 @@ extension TaskPaletteModel {
     return endEditing(commit: true)
   }
 
-  /// 選択の同一性が変わったら、右の欄の値を既定に戻す（打ちかけの期限も捨てる）。agent の変更で同じ行の
-  /// ままなら、打った値を保つ。
+  /// 選択の同一性が変わったら、右の欄の値を既定に戻し（打ちかけの期限も捨てる）、欄に居たなら一覧へ戻る
+  /// ——別の項目の欄に既定の値（チェックはオン）で居続けると、↵ で見ていない項目をタスクにして自分を足す。
+  /// agent の変更で同じ行のままなら、打った値を保つ。
   func resetPaneIfMoved() {
     guard pane.owner != githubList.selectedID else { return }
     pane = TaskGitHubPane(owner: githubList.selectedID)
     if draft?.target == .paneDue { draft = nil }
+    if case .pane = area { area = .list }
   }
 
   /// 右の欄に居る間に、選んだ行が結び付いていない項目でなくなったら一覧へ戻り、止まる場所が消えたら
-  /// （チェックが出なくなった）残る場所へ移る。
+  /// （チェックが出なくなった）残る場所へ移る。選択の同一性が変わったときは `resetPaneIfMoved` が一覧へ戻す。
   func reconcilePane() {
     guard case .pane(let stop) = area else { return }
     guard visibleTab == .github, let row = selectedGitHubRow, row.task == nil else {
