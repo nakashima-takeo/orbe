@@ -58,7 +58,7 @@ struct GitHubItemSummary: Equatable {
     let isDraft: Bool
     let review: ReviewDecision?
     let checks: Checks?
-    /// 作成者の login。消えたアカウントでは nil。
+    /// 作成者の login。
     let author: String?
   }
 
