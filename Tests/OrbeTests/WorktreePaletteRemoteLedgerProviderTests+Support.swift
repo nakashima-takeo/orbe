@@ -102,12 +102,13 @@ extension WorktreePaletteRemoteLedgerProviderTests {
 
   /// ブランチの PR 1 件（`gh pr list --json` の 1 要素）。
   func branchPR(
-    _ number: Int, head: String, state: String, base: String = "main", from repository: String
+    _ number: Int, head: String, state: String, base: String = "main", from repository: String,
+    url: String? = nil
   ) -> String {
     let parts = repository.split(separator: "/").map(String.init)
     return #"{"number":\#(number),"headRefName":"\#(head)","state":"\#(state)","#
       + #""baseRefName":"\#(base)","headRepositoryOwner":{"login":"\#(parts[0])"},"#
-      + #""headRepository":{"name":"\#(parts[1])"}}"#
+      + #""headRepository":{"name":"\#(parts[1])"}"# + (url.map { #","url":"\#($0)"}"# } ?? "}")
   }
 
   func serveBranchPullRequests(_ head: String, _ json: String) throws {
