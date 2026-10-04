@@ -3,74 +3,6 @@ import OrbeEditorCore
 import QuartzCore
 import simd
 
-/// 面の上の場所——行番号の数字の列・git の印の列・本文（最終行より下の空き地を含む）・俯瞰（ミニマップと縦横の
-/// スクロールバー）。
-enum PointerArea {
-  case numbers, marks, text, overview
-}
-
-/// view の点を本文の言葉にしたもの。
-struct PointerHit {
-  var area: PointerArea
-  var row: Int
-  /// いちばん近い書記素の境（最終行より下なら本文の終わり）。
-  var offset: Int
-}
-
-extension MetalTextSurface {
-  /// view の点（flipped、pt）の場所。行は `y = 行 × 行高` で、推定が無い——遠くへ飛んだ直後でも、ポインタの下の行・字に
-  /// 当たる。`position` はスクロールの位置（省けば今の位置）。
-  func hit(_ point: CGPoint, position: SIMD2<Double>? = nil) -> PointerHit? {
-    guard let env = editingEnvironment() else { return nil }
-    let text = env.text
-    let p = position ?? scrollPosition
-    let column = config.columnWidth(lineCount: text.lineCount)
-    let area: PointerArea =
-      textView.overview.area(at: point) != nil
-      ? .overview
-      : point.x < column - config.marks.gutterWidth ? .numbers : point.x < column ? .marks : .text
-    let y = Double(point.y - config.topInset) + p.y
-    let lineHeight = Double(config.lineHeight)
-    guard y < Double(text.lineCount) * lineHeight else {
-      return PointerHit(area: area, row: text.lineCount - 1, offset: text.length)
-    }
-    let row = min(max(0, Int((y / lineHeight).rounded(.down))), text.lineCount - 1)
-    let x = CGFloat(Double(point.x - column) + p.x)
-    return PointerHit(
-      area: area, row: row, offset: text.lineStart(row) + env.geometry.column(atX: x, row: row))
-  }
-
-  /// 点を含む書記素。点が行の字の上でなければ（行番号の列・行末より右・字の無い行・最終行より下の空き地）nil。当たりと
-  /// 同じ組版の行から引くので、右から左の字の並びでも見た目の字に当たる。`position` はスクロールの位置（省けば今の位置）。
-  func character(at point: CGPoint, position: SIMD2<Double>? = nil) -> NSRange? {
-    guard let text = currentContent?.text else { return nil }
-    let p = position ?? scrollPosition
-    let column = config.columnWidth(lineCount: text.lineCount)
-    let y = Double(point.y - config.topInset) + p.y
-    let lineHeight = Double(config.lineHeight)
-    guard point.x >= column, point.y >= config.topInset, y < Double(text.lineCount) * lineHeight
-    else { return nil }
-    let row = Int((y / lineHeight).rounded(.down))
-    let x = CGFloat(Double(point.x - column) + p.x)
-    let (source, start) = LineShaper.source(row: row, in: text)
-    let stops = lineStops.stops(source, tabWidth: config.tabWidth(columns: indentation.unit))
-    guard x < stops.width, let glyph = stops.glyph(atX: x) else { return nil }
-    return text.grapheme(containing: start + stops.offsets[glyph])
-  }
-
-  /// 点の下の字が URL の中なら、その URL。
-  func link(at point: CGPoint) -> URL? {
-    guard let text = currentContent?.text, let character = character(at: point) else { return nil }
-    let row = text.row(containing: character.location)
-    let start = text.lineStart(row)
-    let length = min(NSMaxRange(text.contentRange(ofRow: row)) - start, LineShaper.limit)
-    let line = text.substring(NSRange(location: start, length: length))
-    return LinkDetector.links(in: line).first {
-      NSLocationInRange(character.location - start, $0.range)
-    }?.url
-  }
-}
-
 /// マウスの選択の状態機械——クリックの回数で単位（文字・語・行・全体）を決め、その後のドラッグと ⇧クリックは起点の範囲と
 /// 単位を保って伸ばす（VS Code の `SelectionStartKind`）。4 回以上のクリックの全体はドラッグで縮めない。行番号の列は行の
 /// 単位。ドラッグが本文の上下左右の外へ出ると、ポインタが止まっていても VS Code の速さの式で自動スクロールし、選択が伸び
@@ -79,6 +11,13 @@ extension MetalTextSurface {
 /// 離したときに開く（動けば開かない。その間は選択が伸びない）。選択の字の上の 1 回のクリック（⇧・⌘ なし）は本文のドラッグ
 /// の候補で、押した位置から 4pt を越えて動かせば文字のドラッグが始まり（時間の待ちは置かない）、越えずに離せばその位置に
 /// キャレットを置く。
+///
+/// ⌥（⌘・⇧・⌃ なし）の押下はカーソルを足す（VS Code の `CreateCursor` と `LastCursor*Select`）。押したときに「押す前の他の
+/// カーソル」と「動かす 1 本」に分け、ドラッグと自動スクロールは動かす 1 本だけを今の単位で伸ばして、その都度 2 つを合わせて
+/// 置く（途中で重なってまとまっても、戻せば元に分かれる）。素の押下は他のカーソルが空の同じ形。⌥ の 2 回目・3 回目の押下は、
+/// 1 回目の押下の前の列に、押した位置の語・行を足し直す。カーソルが 2 本以上で、足すはずのカーソルの動く端がどれかの選択の
+/// 中（両端を含む）なら、足さずにそのカーソルを外す（その後のドラッグは無い）。⌥ の押下は選択の上でも本文のドラッグの候補に
+/// しない。
 @MainActor
 final class MouseSelection: NSObject {
   weak var surface: MetalTextSurface?
@@ -99,6 +38,11 @@ final class MouseSelection: NSObject {
   }
 
   private var drag: Drag?
+  /// 押す前の他のカーソル（列の順）と、押して動かしている 1 本。
+  private var others: [Cursor] = []
+  private var moving: Cursor?
+  /// ⌥ の押下の続き（2 回目・3 回目の押下）が足し直す、1 回目の押下の前の列。
+  private var optionBase: [Cursor]?
   private var edge: Edge?
   private var link: CADisplayLink?
   private var lastFrame: CFTimeInterval?
@@ -125,42 +69,96 @@ final class MouseSelection: NSObject {
       drag = .link(url, event.locationInWindow)
       return
     }
-    let primary = surface.editor.state.cursors.primary
+    let current = surface.editor.state.cursors
+    let primary = current.primary
     let shift = flags.contains(.shift)
+    let adds =
+      flags.contains(.option) && flags.isDisjoint(with: [.command, .shift])
+      && (hit.area == .numbers || event.clickCount <= 3)
     let selection = primary.selection
-    if hit.area == .text, event.clickCount == 1, flags.isDisjoint(with: [.shift, .command]),
+    if hit.area == .text, event.clickCount == 1,
+      flags.isDisjoint(with: [.shift, .command, .option]),
       selection.length > 0, hit.offset >= selection.location, hit.offset <= NSMaxRange(selection),
       surface.character(at: point) != nil
     {
       drag = .candidate(hit.offset, event.locationInWindow)
       return
     }
-    let cursor: Cursor
-    var reveal = Reveal.minimal
+    let (cursor, reveal) = pressed(hit, clicks: event.clickCount, shift: shift, from: primary, text)
+    guard adds else {
+      optionBase = nil
+      press(others: [], moving: cursor, reveal: reveal)
+      return
+    }
+    if event.clickCount == 1 || hit.area == .numbers {
+      if removeCursor(at: cursor.position, from: current) { return }
+      optionBase = current.all
+    }
+    guard let base = optionBase else {
+      drag = nil
+      return
+    }
+    press(others: base, moving: cursor, reveal: reveal)
+  }
+
+  /// 押した場所・回数で決まる、動かす 1 本と見せ方（⇧ なら主から伸ばす）。ドラッグの単位も置く。
+  private func pressed(
+    _ hit: PointerHit, clicks: Int, shift: Bool, from primary: Cursor, _ text: TextRope
+  ) -> (Cursor, Reveal) {
     if hit.area == .numbers {
       drag = .numbers
-      cursor =
-        shift ? EditCommands.extendByLine(primary, toRow: hit.row, text) : Self.line(hit.row, text)
-    } else {
-      drag = .text
-      switch event.clickCount {
-      case ...1: cursor = shift ? Self.extend(primary, to: hit, text) : Cursor(hit.offset)
-      case 2:
-        cursor =
-          shift
-          ? EditCommands.extendByWord(primary, to: hit.offset, text)
-          : EditCommands.wordSelection(at: hit.offset, text)
-      case 3:
-        cursor =
-          shift
-          ? EditCommands.extendByLine(primary, toRow: hit.row, text) : Self.line(hit.row, text)
-      default:
-        drag = nil
-        cursor = .selecting(NSRange(location: 0, length: text.length))
-        reveal = .none
-      }
+      return (
+        shift ? EditCommands.extendByLine(primary, toRow: hit.row, text) : Self.line(hit.row, text),
+        .minimal
+      )
     }
-    surface.editor.select(CursorList(cursor), reveal: reveal)
+    drag = .text
+    switch clicks {
+    case ...1: return (shift ? Self.extend(primary, to: hit, text) : Cursor(hit.offset), .minimal)
+    case 2:
+      return (
+        shift
+          ? EditCommands.extendByWord(primary, to: hit.offset, text)
+          : EditCommands.wordSelection(at: hit.offset, text), .minimal
+      )
+    case 3:
+      return (
+        shift
+          ? EditCommands.extendByLine(primary, toRow: hit.row, text) : Self.line(hit.row, text),
+        .minimal
+      )
+    default:
+      drag = nil
+      return (.selecting(NSRange(location: 0, length: text.length)), .none)
+    }
+  }
+
+  /// カーソルが 2 本以上で、`offset` を選択の中（両端を含む）に持つカーソルがあれば外す（VS Code の `CreateCursor`）。
+  private func removeCursor(at offset: Int, from cursors: CursorList) -> Bool {
+    guard cursors.count > 1,
+      let index = cursors.all.firstIndex(where: {
+        $0.selection.location <= offset && offset <= NSMaxRange($0.selection)
+      })
+    else { return false }
+    drag = nil
+    optionBase = nil
+    var remaining = cursors.all
+    remaining.remove(at: index)
+    if let list = CursorList(remaining) { surface?.editor.select(list, reveal: .none) }
+    return true
+  }
+
+  /// 押す前の他のカーソル `others` に、動かす 1 本 `moving` を足して置き、動かす 1 本を見せる。
+  private func press(others: [Cursor], moving: Cursor, reveal: Reveal) {
+    self.others = others
+    self.moving = moving
+    place(reveal: reveal)
+  }
+
+  /// 他のカーソルと動かす 1 本を合わせて置く（重なればまとまる）。
+  private func place(reveal: Reveal) {
+    guard let surface, let moving, let list = CursorList(others + [moving]) else { return }
+    surface.editor.select(list, reveal: reveal, of: NSRange(location: moving.position, length: 0))
   }
 
   func mouseDragged(_ event: NSEvent, in view: NSView) {
@@ -217,6 +215,8 @@ final class MouseSelection: NSObject {
   func cancel() {
     stopAutoscroll()
     drag = nil
+    others = []
+    moving = nil
   }
 
   /// ポインタの形と URL の下線——行番号と印の列は矢印、本文は I ビーム、⌘ を押して URL の上なら指（面に焦点があるとき）。
@@ -260,21 +260,19 @@ final class MouseSelection: NSObject {
   private func extend(
     to point: CGPoint, position: SIMD2<Double>? = nil, lineEnd: Bool? = nil, reveal: Reveal
   ) {
-    guard let surface, let drag, let text = surface.currentContent?.text,
+    guard let surface, let drag, let moving, let text = surface.currentContent?.text,
       var hit = surface.hit(point, position: position)
     else { return }
     if let lineEnd {
       let content = text.contentRange(ofRow: hit.row)
       hit.offset = lineEnd ? NSMaxRange(content) : content.location
     }
-    let primary = surface.editor.state.cursors.primary
-    let cursor: Cursor
     if case .numbers = drag {
-      cursor = EditCommands.extendByLine(primary, toRow: hit.row, text)
+      self.moving = EditCommands.extendByLine(moving, toRow: hit.row, text)
     } else {
-      cursor = Self.extend(primary, to: hit, text)
+      self.moving = Self.extend(moving, to: hit, text)
     }
-    surface.editor.select(CursorList(cursor), reveal: reveal)
+    place(reveal: reveal)
   }
 
   // MARK: - 自動スクロール
