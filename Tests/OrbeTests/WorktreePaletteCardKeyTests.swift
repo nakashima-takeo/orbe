@@ -12,7 +12,7 @@ import XCTest
 @MainActor
 final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
 
-  private func mount(_ model: WorktreePaletteModel) -> NSWindow {
+  func mount(_ model: WorktreePaletteModel) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
     let window = KeyWindow(
       contentRect: NSRect(x: -20000, y: -20000, width: 760, height: 520),
