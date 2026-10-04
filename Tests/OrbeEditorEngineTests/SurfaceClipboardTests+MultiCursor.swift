@@ -68,4 +68,37 @@ extension SurfaceClipboardTests {
       ClipboardText.distribution("a\rb", pieces: nil, entireLine: false, cursors: 2), ["a", "b"])
     XCTAssertNil(ClipboardText.distribution("a\nb", pieces: nil, entireLine: false, cursors: 1))
   }
+
+  /// 選択の無いカーソルが複数なら、各カーソルの行（同じ行は 1 回）を改行込みの断片として写し、平文は断片を改行でつなぐ
+  /// （VS Code の `getPlainTextToCopy`）。同じカーソルへ貼ると 1 行ずつ配られ、行が複製される。
+  func testEmptyCursorsCopyTheirLinesAsPieces() throws {
+    let opened = try open("line1\nline2\nline3")
+    _ = host(opened)
+    let board = privatePasteboard(opened)
+    let view = opened.surface.textView
+    let surface = opened.surface
+    let carets = { CursorList(Cursor(0), others: [Cursor(6), Cursor(8)]) }
+    surface.inputScope { surface.editor.select(carets(), reveal: .none) }
+    view.copy(nil)
+    XCTAssertEqual(board.string(forType: .string), "line1\n\nline2\n")
+    XCTAssertEqual(
+      board.propertyList(forType: MetalTextView.piecesType) as? [String], ["line1\n", "line2\n"])
+    surface.inputScope {
+      surface.editor.select(CursorList(Cursor(0), others: [Cursor(6)]), reveal: .none)
+    }
+    view.paste(nil)
+    XCTAssertEqual(text(opened.document), "line1\nline1\nline2\nline2\nline3")
+  }
+
+  /// 選択のあるカーソルと空のカーソルが混ざれば、空のカーソルは行を改行込みで写す（選択の始まりと同じ行の空のカーソルは
+  /// 写さない）。
+  func testMixedCursorsCopyLinesForTheEmptyOnes() {
+    let text = TextRope("ab\ncd\nef\n")
+    let cursors = CursorList(
+      .selecting(NSRange(location: 0, length: 1)),
+      others: [Cursor(2), Cursor(4), .selecting(NSRange(location: 6, length: 2))])
+    let copied = ClipboardText.copy(cursors, text, lineBreak: .lf)
+    XCTAssertEqual(copied.pieces, ["a", "cd\n", "ef"])
+    XCTAssertEqual(copied.text, "a\ncd\n\nef")
+  }
 }
