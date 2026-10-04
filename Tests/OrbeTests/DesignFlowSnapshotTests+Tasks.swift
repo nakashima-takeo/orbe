@@ -117,4 +117,39 @@ extension DesignFlowSnapshotTests {
         ("dropped", { palette.dragEnded() }),
       ])
   }
+
+  /// GitHub タブ: #221 をタスクにする（行が結び付いた側へ移る）・L で別のタスクへ付け替えを選ぶ・↵ で付け替え・
+  /// ⌫ で外す（結び付いていない側へ戻る）、までを撮る。アサインの書き込みは何もしない置き場に頼む。
+  func testTaskPaletteGithub() throws {
+    let palette = DesignSceneFixtures.taskPaletteModel()
+    let issue221 = TaskPaletteGitHubRowID.item(GitHubItemID(repo: "nakatake/orbe", number: 221)!)
+    try flow(
+      "task_palette_github", size: NSSize(width: 1440, height: 900),
+      render: {
+        ZStack {
+          BackgroundGlow()
+          TaskPaletteOverlay(model: palette)
+        }
+        .environment(\.localization, LocalizationStore(language: .ja))
+      },
+      steps: [
+        (
+          "start",
+          {
+            palette.toggleTab(); palette.tapGitHubRow(issue221)
+          }
+        ),
+        (
+          "pane_priority",
+          {
+            palette.enterPane(); palette.movePaneStop(1); palette.changePaneValue(-1)
+          }
+        ),
+        ("made_task", { palette.submit() }),
+        ("pick_task", { palette.linkSelectedGitHubItem() }),
+        ("pick_moved", { palette.move(1) }),
+        ("relinked", { palette.submit() }),
+        ("unlinked", { palette.unlinkSelectedGitHubItem() }),
+      ])
+  }
 }
