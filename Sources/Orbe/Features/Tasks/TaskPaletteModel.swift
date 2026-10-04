@@ -51,8 +51,8 @@ enum TaskPaletteError: Error, Equatable {
 }
 
 /// ⌘⇧X タスク画面の状態（@Observable）。タスクの値は写さずストア（唯一の正）を直接読み書きし、ここは
-/// 入力・範囲・タブ・選択・焦点・編集中の下書きだけを持つ。一覧の行は `TaskPaletteRows` が毎回組む。
-/// 列が変わったとき（agent の変更を含む）は `reconcile()` 1 本で選択・焦点・下書きを付け直す。
+/// 入力・範囲・タブ・選択・焦点・編集中の下書き・行の掴みだけを持つ。一覧の行は `TaskPaletteRows` が毎回組む。
+/// 列が変わったとき（agent の変更を含む）は `reconcile()` 1 本で選択・焦点・下書き・掴みを付け直す。
 @Observable final class TaskPaletteModel {
   let store: TaskStore
   let workspaces: TaskPaletteWorkspaces
