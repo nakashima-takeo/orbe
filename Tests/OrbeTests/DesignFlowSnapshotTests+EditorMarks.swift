@@ -11,7 +11,8 @@ extension DesignFlowSnapshotTests {
   func testEditorDecor() throws {
     let scene = try codeScene()
     defer { scene.cleanup() }
-    let go = try scene.tab.editor.open(scene.directory.appendingPathComponent("main.go"))
+    let go = try scene.tab.editor.open(
+      scene.directory.appendingPathComponent("main.go"), as: .pinned)
     let pane = scene.pane
     let surface = try engine(go)
     pumpMain(

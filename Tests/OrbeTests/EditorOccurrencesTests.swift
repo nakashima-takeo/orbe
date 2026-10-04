@@ -36,7 +36,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
     let file = try caseFile("o-\(UUID().uuidString).txt", text)
     let hosted = Hosted(
-      tab: tab, pane: pane, document: try tab.editor.open(file), window: window)
+      tab: tab, pane: pane, document: try tab.editor.open(file, as: .pinned), window: window)
     pane.layoutSubtreeIfNeeded()
     pumpMain(until: { hosted.document.surface.viewport.visibleLines > 0 }, "viewport が出る")
     let occurrences = hosted.pane.occurrences

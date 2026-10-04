@@ -78,16 +78,17 @@ struct EditorState: Codable, Equatable {
   var documents: OpenDocuments?
   var search: SearchQuery
 
-  /// 開いていた文書の列（実体パス）と、その中のアクティブ。位置ではなくパスで指す——復元で読めないパスを落としても列が
-  /// ずれず、「列があるのにアクティブが無い」という表せない状態を持たない（落ちていれば先頭）。
+  /// 開いていた文書の列（実体パス）と、その中のアクティブと仮のタブ。位置ではなくパスで指す——復元で読めないパスを落としても
+  /// 列がずれず、「列があるのにアクティブが無い」という表せない状態を持たない（落ちていれば先頭。仮は無しへ）。
   struct OpenDocuments: Equatable {
     var open: [String]
     var active: String
+    var preview: String?
   }
 
   /// `CaseIterable` は TabState と同じ seam（encode / decode を手書きにしたので、足したキーの書き忘れを全キーの往復テストが見る）。
   enum CodingKeys: String, CodingKey, CaseIterable {
-    case open, active, search
+    case open, active, preview, search
   }
 
   init(documents: OpenDocuments? = nil, search: SearchQuery = SearchQuery()) {
@@ -103,7 +104,8 @@ struct EditorState: Codable, Equatable {
     if let open = try? c.decode([String].self, forKey: .open), !open.isEmpty,
       let active = try? c.decode(String.self, forKey: .active)
     {
-      documents = OpenDocuments(open: open, active: active)
+      documents = OpenDocuments(
+        open: open, active: active, preview: try? c.decodeIfPresent(String.self, forKey: .preview))
     }
     search = (try? c.decodeIfPresent(SearchQuery.self, forKey: .search)) ?? SearchQuery()
   }
@@ -113,6 +115,7 @@ struct EditorState: Codable, Equatable {
     if let documents {
       try c.encode(documents.open, forKey: .open)
       try c.encode(documents.active, forKey: .active)
+      try c.encodeIfPresent(documents.preview, forKey: .preview)
     }
     if search != SearchQuery() { try c.encode(search, forKey: .search) }
   }

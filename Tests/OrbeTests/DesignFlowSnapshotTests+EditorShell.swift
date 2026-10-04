@@ -6,7 +6,7 @@ import XCTest
 /// 骨込みのエディター面の flow（fixture は gallery と同じ `EditorShellFixtures`。状態は本物の操作が生む）。
 /// design-system §5 の Rail / Explorer / File tabs が名指しする状態——サイドバー閉（レールに印なし）・行内の
 /// 新規入力（続けて押しても 1 行）・ファイルタブの衝突ドット（黄）・ファイルタブの × と ● のポインタによる出し分け・
-/// 文書 0 の骨込み空状態——と、狭い列の切り詰め中のドラッグ、深い行の可視位置への送りを撮る。
+/// 仮のタブの斜体と斜線の地・文書 0 の骨込み空状態——と、狭い列の切り詰め中のドラッグ、深い行の可視位置への送りを撮る。
 extension DesignFlowSnapshotTests {
   private func editorScene() throws -> EditorShellFixtures.Scene {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
@@ -123,6 +123,51 @@ extension DesignFlowSnapshotTests {
       let data = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
       let url = previewDir("flows").appendingPathComponent(
         String(format: "editor_tab_close_%02d_%@.png", idx, step.label))
+      try data.write(to: url)
+      print("[flow] wrote \(url.path)")
+    }
+  }
+
+  /// 仮のタブ（名前の斜体と斜線の地）: 見ていないとき → 見ているとき → 日本語名・絵文字入りの名前で入れ替えたとき
+  /// （斜体の face が無い字でも斜線の地で見分けられるか）を、dark と light で。reveal と同じく面を付けた窓の中でそのまま描く。
+  func testEditorPreviewTab() throws {
+    let scene = try editorScene()
+    defer { scene.cleanup() }
+    let pane = scene.pane
+    let editor = scene.tab.editor
+    let directory = scene.directory
+    let tokens = directory.appendingPathComponent("docs/design/tokens.json")
+    let fileTree = try XCTUnwrap(
+      editor.documents.first { $0.url.lastPathComponent == "FileTree.swift" })
+    let japanese = directory.appendingPathComponent("仮のメモ.md")
+    let emoji = directory.appendingPathComponent("🚀 launch notes.md")
+    try "# メモ\n".write(to: japanese, atomically: true, encoding: .utf8)
+    try "# launch\n".write(to: emoji, atomically: true, encoding: .utf8)
+    scene.warmUp(size: NSSize(width: 1100, height: 240))
+    var steps: [(label: String, action: () -> Void)] = []
+    for (name, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
+      steps += [
+        (
+          "\(name)_inactive",
+          {
+            pane.window?.appearance = NSAppearance(named: appearance)
+            _ = try? editor.open(tokens, as: .preview)
+            editor.activate(fileTree)
+          }
+        ),
+        ("\(name)_active", { _ = try? editor.open(tokens, as: .preview) }),
+        ("\(name)_japanese", { _ = try? editor.open(japanese, as: .preview) }),
+        ("\(name)_emoji", { _ = try? editor.open(emoji, as: .preview) }),
+      ]
+    }
+    for (idx, step) in steps.enumerated() {
+      step.action()
+      RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+      let rep = try XCTUnwrap(pane.bitmapImageRepForCachingDisplay(in: pane.bounds))
+      pane.cacheDisplay(in: pane.bounds, to: rep)
+      let data = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
+      let url = previewDir("flows").appendingPathComponent(
+        String(format: "editor_preview_tab_%02d_%@.png", idx, step.label))
       try data.write(to: url)
       print("[flow] wrote \(url.path)")
     }

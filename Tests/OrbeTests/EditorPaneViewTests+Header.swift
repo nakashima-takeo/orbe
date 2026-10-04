@@ -25,7 +25,7 @@ final class EditorPaneViewHeaderTests: OrbeTestCase {
       PaneProbe.same(try drawn.rgb(x, y: 14), try drawn.rgb(x, y: 200)),
       "文書が無くてもファイルタブ行の帯（沈み面）は本体の地と違う色で残る")
 
-    _ = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"))
+    _ = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(pane.headerHeight, 49)
     pumpMain(until: { pane.headerHost.fittingSize.height == 49 }, "文書があればパンくずの段が加わる")
@@ -40,7 +40,7 @@ final class EditorPaneViewHeaderTests: OrbeTestCase {
     defer { window.orderOut(nil) }
     pane.shell.selectPanel(.files)  // 列を本体だけにして溢れを作る（本体 363）
     let documents = try (0..<8).map { index in
-      try tab.editor.open(try caseFile("a-long-file-name-\(index).swift", "x"))
+      try tab.editor.open(try caseFile("a-long-file-name-\(index).swift", "x"), as: .pinned)
     }
     let scroll = try XCTUnwrap(scrollView(in: pane.headerHost))
     pumpMain(until: { scroll.documentVisibleRect.minX > 0 }, "末尾のタブがアクティブなら可視位置へ")

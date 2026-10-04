@@ -20,7 +20,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
-    let document = try tab.editor.open(try caseFile("a.txt", "a"))
+    let document = try tab.editor.open(try caseFile("a.txt", "a"), as: .pinned)
 
     pane.shell.createFile()
     XCTAssertTrue(window.firstResponder === pane, "入力を出す前に面自身が焦点を取る")
@@ -85,11 +85,17 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertTrue(window.firstResponder === pane)
     XCTAssertEqual(pane.tree.newEntry?.directory, "")
 
-    pane.shell.open(a)
+    pane.shell.open(a, .preview)
     XCTAssertEqual(pane.document?.url.lastPathComponent, "a.swift", "ツリーの行で開く")
+    XCTAssertTrue(tab.editor.preview === pane.document, "ツリーの行の 1 回目は仮のタブ")
     XCTAssertTrue(window.firstResponder === pane.document?.surface.responder, "焦点はテキスト面へ")
-    pane.shell.open(b)
+    pane.shell.open(a, .pinned)
+    XCTAssertNil(tab.editor.preview, "2 回目（ダブルクリック）で普通のタブ")
+    pane.shell.open(b, .preview)
+    let preview = try XCTUnwrap(tab.editor.preview)
     window.makeFirstResponder(nil)
+    pane.shell.pin(preview.url)
+    XCTAssertNil(tab.editor.preview, "ファイルタブのダブルクリックで普通のタブ")
     pane.shell.activate(a)
     XCTAssertEqual(pane.document?.url.lastPathComponent, "a.swift", "ファイルタブで切り替える")
     XCTAssertTrue(window.firstResponder === pane.document?.surface.responder, "切り替えても焦点はテキスト面へ")
@@ -188,8 +194,8 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
 
-    let a = try tab.editor.open(try caseFile("a.swift", "a"))
-    let b = try tab.editor.open(try caseFile("b.md", "b"))
+    let a = try tab.editor.open(try caseFile("a.swift", "a"), as: .pinned)
+    let b = try tab.editor.open(try caseFile("b.md", "b"), as: .pinned)
     XCTAssertEqual(pane.shell.tabs.map(\.name), ["a.swift", "b.md"])
     XCTAssertEqual(pane.shell.activeName, "b.md")
     XCTAssertEqual(pane.tree.selected, "b.md", "アクティブにした文書の行を選択表示する")
@@ -201,7 +207,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
       at: dir.appendingPathComponent("docs"), withIntermediateDirectories: true)
     pane.tree.toggle("docs")
     XCTAssertEqual(pane.tree.selected, "docs")
-    pane.shell.open(b.url)
+    pane.shell.open(b.url, .preview)
     XCTAssertEqual(pane.tree.selected, "b.md", "既に焦点の文書の行を押しても選択はそこへ移る")
     pane.tree.toggle("docs")
     pane.shell.activate(b.url)

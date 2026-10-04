@@ -99,7 +99,7 @@ final class FindInProjectTests: OrbeTestCase {
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900)
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
-    let document = try tab.editor.open(try caseFile("seed.txt", text))
+    let document = try tab.editor.open(try caseFile("seed.txt", text), as: .pinned)
     tab.view.editor.layoutSubtreeIfNeeded()
     window.makeFirstResponder(document.surface.responder)
     tab.view.editor.projectSearch.restore(SearchQuery(pattern: "previous"))

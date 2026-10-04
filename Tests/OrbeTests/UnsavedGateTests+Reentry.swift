@@ -24,12 +24,12 @@ extension UnsavedGateTests {
     let tab = TerminalTab(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostPane(tab)
     defer { window.orderOut(nil) }
-    let a = try tab.editor.open(repo.url("a.txt"))
+    let a = try tab.editor.open(repo.url("a.txt"), as: .pinned)
     edit(a)
 
     tab.view.editor.shell.requestClose(a.url)
     try repo.write("b.txt", "b\n")
-    let b = try tab.editor.open(repo.url("b.txt"))  // sheet の間にエージェントが別の文書を開く
+    let b = try tab.editor.open(repo.url("b.txt"), as: .pinned)  // sheet の間にエージェントが別の文書を開く
     window.endSheet(try XCTUnwrap(window.attachedSheet), returnCode: .alertSecondButtonReturn)
 
     XCTAssertEqual(tab.editor.documents.map(\.url.lastPathComponent), ["b.txt"], "確認した文書だけ閉じる")
@@ -42,7 +42,7 @@ extension UnsavedGateTests {
     let window = hostPane(tab)
     defer { window.orderOut(nil) }
     let pane = tab.view.editor
-    let a = try tab.editor.open(repo.url("a.txt"))
+    let a = try tab.editor.open(repo.url("a.txt"), as: .pinned)
     window.makeFirstResponder(a.surface.responder)
     edit(a)
     try repo.write("a.txt", "outside\n")
@@ -61,7 +61,7 @@ extension UnsavedGateTests {
     let window = hostPane(tab)
     defer { window.orderOut(nil) }
     let pane = tab.view.editor
-    let a = try tab.editor.open(repo.url("a.txt"))
+    let a = try tab.editor.open(repo.url("a.txt"), as: .pinned)
     window.makeFirstResponder(a.surface.responder)
     edit(a)
     try repo.write("a.txt", "outside\n")
@@ -88,7 +88,7 @@ extension UnsavedGateTests {
     ])
     let first = try XCTUnwrap(wc.activeTab)
     let second = wc.current.tabs[1]
-    edit(try first.editor.open(repo.url("a.txt")))
+    edit(try first.editor.open(repo.url("a.txt"), as: .pinned))
 
     wc.closeTab(first, origin: .gesture)
     let sheet = try XCTUnwrap(wc.window.attachedSheet)
@@ -106,7 +106,7 @@ extension UnsavedGateTests {
     let wc = try restore([TabState(cwd: repo.root, agent: nil, explicitTitle: nil)])
     wc.createWorkspace(name: "other", rootPath: repo.root)
     let other = wc.activeWorkspace
-    edit(try XCTUnwrap(wc.activeTab).editor.open(repo.url("a.txt")))
+    edit(try XCTUnwrap(wc.activeTab).editor.open(repo.url("a.txt"), as: .pinned))
     wc.createWorkspace(name: "third", rootPath: repo.root)
     XCTAssertEqual(wc.workspaces.map(\.name), ["main", "other", "third"])
 

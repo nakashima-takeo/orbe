@@ -5,9 +5,9 @@ import OrbeEditorCore
 /// 本文の上のドロップは面が受け（⇧ でパスを入れる・無ければここへ「開く」を渡す）、ツリー・タブ行・空状態の上は pane が
 /// 受けて開く。
 extension EditorPaneView: TextSurfaceHost {
-  /// 開く（フォルダは開かない）。焦点は最後に開いた文書の面へ。
+  /// 普通のタブで開く（フォルダは開かない）。焦点は最後に開いた文書の面へ。
   func openFiles(_ urls: [URL]) {
-    for url in urls where !Self.isDirectory(url) { open(url) }
+    for url in urls where !Self.isDirectory(url) { open(url, as: .pinned) }
   }
 
   /// 根からの相対パス（根の外なら絶対パス）を空白で区切ったもの（VS Code と同じ）。

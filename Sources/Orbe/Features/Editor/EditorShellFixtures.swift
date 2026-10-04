@@ -4,7 +4,7 @@
   import SwiftUI
 
   /// 骨込みのエディター面の gallery fixture。一時ディレクトリに実在のソース断片（このリポジトリのファイル）を
-  /// 写して git リポジトリにし、M / A / U を 1 つずつ作り、文書を 3 つ開く（1 つは未保存）。展示データは作らない。
+  /// 写して git リポジトリにし、M / A / U を 1 つずつ作り、文書を 3 つ開く（1 つは未保存、1 つは仮のタブ）。展示データは作らない。
   /// status は git の子プロセス後に、色とハンクは文書の裏の仕事の後に届くので、撮る側は `warmUp()` の後 `isReady`
   /// を待つ。プロジェクト検索はこのリポジトリを実際に探す（`search` の後 `isSearchDone` を待つ）。
   enum EditorShellFixtures {
@@ -101,11 +101,11 @@
 
       let tab = TerminalTab(
         cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot, language: { .ja }))
-      let readmeDocument = try tab.editor.open(readme)
+      let readmeDocument = try tab.editor.open(readme, as: .pinned)
       readmeDocument.surface.responder.perform(Selector(("insertText:")), with: "# ")
-      _ = try tab.editor.open(dir.appendingPathComponent("docs/design/tokens.json"))
+      _ = try tab.editor.open(dir.appendingPathComponent("docs/design/tokens.json"), as: .preview)
       _ = try tab.editor.open(
-        dir.appendingPathComponent("Sources/Orbe/Features/Editor/FileTree.swift"))
+        dir.appendingPathComponent("Sources/Orbe/Features/Editor/FileTree.swift"), as: .pinned)
       return Scene(tab: tab, directory: dir)
     }
 

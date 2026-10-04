@@ -22,8 +22,8 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
     let outsider = NSTextField(frame: NSRect(x: 0, y: 0, width: 50, height: 20))
     tab.view.addSubview(outsider)
     XCTAssertTrue(window.makeFirstResponder(outsider))
-    let a = try tab.editor.open(try caseFile("a.txt", "a"))
-    let b = try tab.editor.open(try caseFile("b.txt", "b"))
+    let a = try tab.editor.open(try caseFile("a.txt", "a"), as: .pinned)
+    let b = try tab.editor.open(try caseFile("b.txt", "b"), as: .pinned)
     XCTAssertTrue(pane.document === b)
 
     pane.shell.requestClose(b.url)
@@ -48,7 +48,7 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
     try autoreleasepool {
       let tab = TerminalTab(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
       let window = hostEditor(tab, width: 900)
-      let opened = try tab.editor.open(repo.url("a.txt"))
+      let opened = try tab.editor.open(repo.url("a.txt"), as: .pinned)
       window.makeFirstResponder(opened.surface.responder)
       pane = tab.view.editor
       tree = tab.view.editor.tree

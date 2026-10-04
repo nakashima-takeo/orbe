@@ -46,7 +46,7 @@ final class ProjectSearchPaneTests: OrbeTestCase {
   }
 
   func open(_ hosted: Hosted, _ path: String) throws -> EditorDocument {
-    let document = try hosted.tab.editor.open(hosted.repo.url(path))
+    let document = try hosted.tab.editor.open(hosted.repo.url(path), as: .pinned)
     hosted.pane.layoutSubtreeIfNeeded()
     return document
   }

@@ -96,6 +96,7 @@ struct ThemeColors {
   let editorTertiary = Color(nsColor: Theme.Color.editorTertiary)
   let editorModified = Color(nsColor: Theme.Color.editorModified)
   let editorTabCloseHover = Color(nsColor: Theme.Color.editorTabCloseHover)
+  let editorPreviewHatch = Color(nsColor: Theme.Color.editorPreviewHatch)
 }
 
 extension Font {

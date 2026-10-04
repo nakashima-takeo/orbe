@@ -20,8 +20,8 @@ final class EditorShellModelTests: OrbeTestCase {
 
   func testTabsMirrorTheSessionAndCrumbsFollowTheRoot() throws {
     let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
-    let a = try session.open(try file("a.swift"))
-    let b = try session.open(try file("b.md"))
+    let a = try session.open(try file("a.swift"), as: .pinned)
+    let b = try session.open(try file("b.md"), as: .pinned)
     let root = a.url.deletingLastPathComponent().deletingLastPathComponent().path
     let shell = EditorShellModel()
 
@@ -57,7 +57,7 @@ final class EditorShellModelTests: OrbeTestCase {
     let repo = try TempGitRepo()
     defer { repo.cleanup() }
     let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
-    let document = try session.open(repo.url("a.txt"))
+    let document = try session.open(repo.url("a.txt"), as: .pinned)
     document.surface.responder.perform(Selector(("insertText:")), with: "Z")
     let shell = EditorShellModel()
     shell.update(from: session, root: repo.root)

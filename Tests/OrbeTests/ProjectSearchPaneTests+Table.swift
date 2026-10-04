@@ -47,7 +47,9 @@ extension ProjectSearchPaneTests {
     XCTAssertEqual(hosted.search.focusedArea, .results)
 
     list.keyDown(with: key(.downArrow))
-    XCTAssertEqual(hosted.search.selection, RowID(path: "a.txt", match: 0), "↓ は選択だけを動かす")
+    XCTAssertEqual(hosted.search.selection, RowID(path: "a.txt", match: 0))
+    XCTAssertEqual(hosted.pane.document?.url, hosted.repo.url("a.txt"), "↓ で動いた一致を開く")
+    XCTAssertTrue(hosted.window.firstResponder === list, "焦点は列に残る")
     pumpMain(
       until: { list.selectedRow == 1 && self.rowView(list, 1)?.isSelected == true },
       "列の選択は model の選択を写す")

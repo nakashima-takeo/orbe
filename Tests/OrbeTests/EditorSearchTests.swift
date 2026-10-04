@@ -30,7 +30,7 @@ final class EditorSearchTests: OrbeTestCase {
     let window = hostEditor(tab, width: 700)
     window.appearance = NSAppearance(named: .darkAqua)
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
-    let document = try tab.editor.open(try caseFile(name, text))
+    let document = try tab.editor.open(try caseFile(name, text), as: .pinned)
     pane.layoutSubtreeIfNeeded()
     window.makeFirstResponder(document.surface.responder)
     pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "viewport が出る")
@@ -324,7 +324,7 @@ final class EditorSearchTests: OrbeTestCase {
     catchUp(pane)
     XCTAssertEqual(pane.search.matches.count, 2)
 
-    let other = try hosted.tab.editor.open(try caseFile("t.txt", "one\n"))
+    let other = try hosted.tab.editor.open(try caseFile("t.txt", "one\n"), as: .pinned)
     catchUp(pane)
     XCTAssertTrue(pane.search.document === other)
     XCTAssertEqual(pane.search.matches.count, 1, "新しい文書の一致")

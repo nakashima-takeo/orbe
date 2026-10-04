@@ -15,6 +15,8 @@ final class ProjectSearch {
   static let typingDelay: TimeInterval = 0.3
   static let progressDelay: TimeInterval = 0.3
   static let slowAfter: TimeInterval = 2
+  /// キーで一致へ動いたときの開きを間引く窓（VS Code の検索結果と同じ 75ms）。
+  static let navigationWindow: TimeInterval = 0.075
 
   enum Phase: Equatable {
     case idle
@@ -64,8 +66,8 @@ final class ProjectSearch {
   @ObservationIgnored private(set) var root: String
   /// 範囲に入りうる開いている文書（タブのセッションの列）。
   @ObservationIgnored var documents: () -> [EditorDocument] = { [] }
-  /// 一致を開く（`focusText` ならテキスト面へ焦点を移す）。
-  @ObservationIgnored var onOpen: (RowID, _ focusText: Bool) -> Void = { _, _ in }
+  /// 一致を開く。呼ぶのは出口（`open(_:_:)`）だけ。
+  @ObservationIgnored var onOpen: (RowID, Opening) -> Void = { _, _ in }
   /// 焦点の文書の一致の地が変わりうる（結果・選択・見え隠れ）。
   @ObservationIgnored var onGroundChange: () -> Void = {}
   /// 永続する問いが変わった。
@@ -74,6 +76,11 @@ final class ProjectSearch {
   @ObservationIgnored let typingDelay = EditorDelay()
   @ObservationIgnored let progressDelay = EditorDelay()
   @ObservationIgnored let slowDelay = EditorDelay()
+  /// キーで一致へ動いたときの開きの窓（→ `ProjectSearch+Open`）。
+  @ObservationIgnored let navigationDelay = EditorDelay()
+  @ObservationIgnored var isNavigationWindowOpen = false
+  /// 窓の中で動いた（窓が閉じたら、その時点の選択を開く）。
+  @ObservationIgnored var hasPendingNavigation = false
   @ObservationIgnored private var run: ProjectSearchRun?
   @ObservationIgnored private(set) var compiled: CompiledSearchQuery?
   @ObservationIgnored private(set) var generation = 0

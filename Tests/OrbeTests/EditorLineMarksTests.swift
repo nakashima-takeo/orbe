@@ -38,7 +38,7 @@ final class EditorLineMarksTests: OrbeTestCase {
     let session = EditorSession(
       surfaces: EditorSurfaces(
         queriesRoot: Bundle(for: Self.self).bundleURL.deletingLastPathComponent()))
-    let document = try session.open(url)
+    let document = try session.open(url, as: .pinned)
     let ground = Ground(frame: NSRect(origin: .zero, size: size))
     document.surface.view.frame = ground.bounds
     ground.addSubview(document.surface.view)

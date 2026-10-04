@@ -9,11 +9,13 @@ extension NSEvent {
       windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
   }
 
-  static func key(_ chars: String, _ flags: NSEvent.ModifierFlags = .command) -> NSEvent {
+  static func key(
+    _ chars: String, _ flags: NSEvent.ModifierFlags = .command, isRepeat: Bool = false
+  ) -> NSEvent {
     NSEvent.keyEvent(
       with: .keyDown, location: .zero, modifierFlags: flags,
       timestamp: 0, windowNumber: 0, context: nil,
-      characters: chars, charactersIgnoringModifiers: chars, isARepeat: false, keyCode: 0)!
+      characters: chars, charactersIgnoringModifiers: chars, isARepeat: isRepeat, keyCode: 0)!
   }
 }
 

@@ -39,11 +39,17 @@ protocol RowListSource: AnyObject {
 }
 
 /// 列が源へ渡すキーの操作。
-enum RowListKey {
-  /// ↑↓（⇧つきも同じ）。
-  case up, down
-  case left, right
-  case enter, escape
+struct RowListKey: Equatable {
+  enum Action {
+    /// ↑↓（⇧つきも同じ）。
+    case up, down
+    case left, right
+    case enter, escape
+  }
+
+  let action: Action
+  /// 押し続けて自動で繰り返された押下（`NSEvent.isARepeat`）。
+  let isRepeat: Bool
 }
 
 /// 行の列のスクロールの器。持ち主（pane）が持ち続け、載せる SwiftUI が隠れている間も捨てない——出し直すたびに行の
@@ -253,18 +259,27 @@ final class RowListView<Source: RowListSource>: NSView {
 
   // MARK: - キー
 
+  /// 解釈中の押下がキーリピートか（`interpretKeyEvents` が同期に呼ぶ操作へ添える）。
+  private var keyIsRepeat = false
+
   override func keyDown(with event: NSEvent) {
+    keyIsRepeat = event.isARepeat
+    defer { keyIsRepeat = false }
     interpretKeyEvents([event])
   }
 
-  override func moveUp(_ sender: Any?) { source.perform(.up) }
-  override func moveDown(_ sender: Any?) { source.perform(.down) }
-  override func moveUpAndModifySelection(_ sender: Any?) { source.perform(.up) }
-  override func moveDownAndModifySelection(_ sender: Any?) { source.perform(.down) }
-  override func moveLeft(_ sender: Any?) { source.perform(.left) }
-  override func moveRight(_ sender: Any?) { source.perform(.right) }
-  override func insertNewline(_ sender: Any?) { source.perform(.enter) }
-  override func cancelOperation(_ sender: Any?) { source.perform(.escape) }
+  private func perform(_ action: RowListKey.Action) {
+    source.perform(RowListKey(action: action, isRepeat: keyIsRepeat))
+  }
+
+  override func moveUp(_ sender: Any?) { perform(.up) }
+  override func moveDown(_ sender: Any?) { perform(.down) }
+  override func moveUpAndModifySelection(_ sender: Any?) { perform(.up) }
+  override func moveDownAndModifySelection(_ sender: Any?) { perform(.down) }
+  override func moveLeft(_ sender: Any?) { perform(.left) }
+  override func moveRight(_ sender: Any?) { perform(.right) }
+  override func insertNewline(_ sender: Any?) { perform(.enter) }
+  override func cancelOperation(_ sender: Any?) { perform(.escape) }
 
   override func scrollToBeginningOfDocument(_ sender: Any?) {
     scroll(NSPoint(x: 0, y: 0))

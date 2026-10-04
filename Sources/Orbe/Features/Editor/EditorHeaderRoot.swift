@@ -54,7 +54,8 @@ struct FileTabsView: View {
 }
 
 /// タブ 1 枚: チップ ＋ 名前 ＋ 右端の枠（未保存の ● か ×）。アクティブは淡い地と上縁 1.5px の accent
-/// （design-system §5 のエディター面の例外）。
+/// （design-system §5 のエディター面の例外）。仮のタブは名前を斜体にし、地に斜線を敷く（アクティブなら淡い地の上）。
+/// 押すと切り替え、2 回目の押下（ダブルクリック）で普通のタブにする——1 回目をダブルクリックの判定で待たせない。
 struct FileTabView: View {
   let tab: EditorShellModel.FileTab
   let shell: EditorShellModel
@@ -73,6 +74,7 @@ struct FileTabView: View {
     HStack(spacing: Theme.Space.note) {
       FileChipView(chip: tab.chip)
       fontResolver.text(tab.name, base: Theme.Typography.editorFileTab)
+        .italic(tab.isPreview)
         .font(Font.theme.editorFileTab)
         .foregroundStyle(tab.isActive ? Color.theme.textPrimary : Color.theme.textMuted)
         .lineLimit(1)
@@ -81,7 +83,12 @@ struct FileTabView: View {
     .padding(.leading, padLeading)
     .padding(.trailing, Theme.Layout.editorFileTabTrailing)
     .frame(height: Theme.Layout.editorFileTabs)
-    .background(tab.isActive ? ink.fill(Self.activeFillAlpha) : .clear)
+    .background {
+      ZStack {
+        if tab.isActive { ink.fill(Self.activeFillAlpha) }
+        if tab.isPreview { PreviewHatch(isActive: tab.isActive) }
+      }
+    }
     .overlay(alignment: .top) {
       if tab.isActive { Rectangle().fill(Color.theme.accentPrimary).frame(height: accentBar) }
     }
@@ -91,6 +98,31 @@ struct FileTabView: View {
     .contentShape(Rectangle())
     .onHover { hovering = $0 }
     .onTapGesture { shell.activate(tab.id) }
+    .simultaneousGesture(TapGesture(count: 2).onEnded { shell.pin(tab.id) })
+  }
+}
+
+/// 仮のタブの地の斜線（135°。線と周期はタブの左上から数えるので、タブの幅に依らず揃い、横スクロールでタブと一緒に動く）。
+private struct PreviewHatch: View {
+  let isActive: Bool
+
+  var body: some View {
+    let color = Color.theme.editorPreviewHatch.opacity(
+      isActive ? Theme.Opacity.editorPreviewHatchActive : Theme.Opacity.editorPreviewHatchInactive)
+    Canvas { context, size in
+      let line = Theme.Stroke.editorPreviewHatch
+      // 線は x + y = c（右上がり）。周期と線の太さは線に直交する向きで測る。
+      let step = Theme.Layout.editorPreviewHatchPeriod * 2.squareRoot()
+      var path = Path()
+      var c = line / 2 * 2.squareRoot()
+      while c < size.width + size.height {
+        path.move(to: CGPoint(x: c, y: 0))
+        path.addLine(to: CGPoint(x: c - size.height, y: size.height))
+        c += step
+      }
+      context.stroke(path, with: .color(color), lineWidth: line)
+    }
+    .allowsHitTesting(false)
   }
 }
 

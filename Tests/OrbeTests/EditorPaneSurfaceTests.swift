@@ -27,8 +27,8 @@ final class EditorPaneSurfaceTests: OrbeTestCase {
     let tab = TerminalTab(cwd: try XCTUnwrap(TestIsolation.caseDir).path, editorSurfaces: surfaces)
     let window = hostEditor(tab, width: 900, height: 500)
     defer { window.contentView = nil }
-    let a = try tab.editor.open(try caseFile("a.swift", lines(400)))
-    let b = try tab.editor.open(try caseFile("b.swift", lines(10)))
+    let a = try tab.editor.open(try caseFile("a.swift", lines(400)), as: .pinned)
+    let b = try tab.editor.open(try caseFile("b.swift", lines(10)), as: .pinned)
     tab.editor.activate(a)
     tab.view.editor.layoutSubtreeIfNeeded()
     XCTAssertGreaterThan(a.surface.viewport.visibleLines, 0, "焦点の文書の面が本体に載って大きさを持つ")
@@ -41,7 +41,7 @@ final class EditorPaneSurfaceTests: OrbeTestCase {
     let tab = TerminalTab(cwd: try XCTUnwrap(TestIsolation.caseDir).path, editorSurfaces: surfaces)
     let window = hostEditor(tab, width: 900, height: 500)
     defer { window.contentView = nil }
-    let document = try tab.editor.open(try caseFile("a.swift", lines(2000)))
+    let document = try tab.editor.open(try caseFile("a.swift", lines(2000)), as: .pinned)
     let pane = tab.view.editor
     pane.layoutSubtreeIfNeeded()
     let view = document.surface.view
@@ -99,7 +99,7 @@ final class EditorPaneSurfaceTests: OrbeTestCase {
     let tab = TerminalTab(cwd: try XCTUnwrap(TestIsolation.caseDir).path, editorSurfaces: surfaces)
     let window = hostEditor(tab, width: 900, height: 500)
     defer { window.contentView = nil }
-    let document = try tab.editor.open(try caseFile("a.swift", lines(400)))
+    let document = try tab.editor.open(try caseFile("a.swift", lines(400)), as: .pinned)
     tab.view.editor.layoutSubtreeIfNeeded()
     let surface = try engine(document)
     let lineScroll = NSScrollView().verticalLineScroll
@@ -122,7 +122,7 @@ final class EditorPaneSurfaceTests: OrbeTestCase {
     let tab = TerminalTab(cwd: try XCTUnwrap(TestIsolation.caseDir).path, editorSurfaces: surfaces)
     let window = hostEditor(tab, width: 900, height: 500)
     defer { window.contentView = nil }
-    let document = try tab.editor.open(try caseFile("a.swift", lines(400)))
+    let document = try tab.editor.open(try caseFile("a.swift", lines(400)), as: .pinned)
     let pane = tab.view.editor
     pane.layoutSubtreeIfNeeded()
     let surface = try engine(document)
@@ -142,7 +142,7 @@ final class EditorPaneSurfaceTests: OrbeTestCase {
     let tab = TerminalTab(cwd: try XCTUnwrap(TestIsolation.caseDir).path, editorSurfaces: surfaces)
     let window = hostEditor(tab, width: 900, height: 500)
     defer { window.contentView = nil }
-    let document = try tab.editor.open(try caseFile("a.swift", lines(2000)))
+    let document = try tab.editor.open(try caseFile("a.swift", lines(2000)), as: .pinned)
     let pane = tab.view.editor
     pane.showSearch()
     let surface = document.surface
@@ -163,7 +163,7 @@ final class EditorPaneSurfaceTests: OrbeTestCase {
     let tab = TerminalTab(cwd: try XCTUnwrap(TestIsolation.caseDir).path, editorSurfaces: surfaces)
     let window = hostEditor(tab, width: 900, height: 500)
     defer { window.contentView = nil }
-    let document = try tab.editor.open(try caseFile("a.swift", lines(30)))
+    let document = try tab.editor.open(try caseFile("a.swift", lines(30)), as: .pinned)
     let pane = tab.view.editor
     pane.layoutSubtreeIfNeeded()
     pane.showSearch()

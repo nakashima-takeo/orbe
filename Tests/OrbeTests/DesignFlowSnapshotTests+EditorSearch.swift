@@ -31,7 +31,7 @@ extension DesignFlowSnapshotTests {
           }
         ),
         ("results_focused", { search.focusResults() }),
-        ("down", { search.moveSelection(by: 1) }),
+        ("down", { search.moveSelection(by: 1, isRepeat: false) }),
         ("enter_opens", { search.activateSelection() }),
         ("explorer_hides_ground", { pane.selectPanel(.files) }),
         (

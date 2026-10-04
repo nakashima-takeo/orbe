@@ -6,9 +6,7 @@ import OrbeEditorCore
 extension EditorPaneView {
   func wireProjectSearch() {
     projectSearch.documents = { [weak self] in self?.tab?.editor.documents ?? [] }
-    projectSearch.onOpen = { [weak self] id, focusText in
-      self?.openProjectMatch(id, focusText: focusText)
-    }
+    projectSearch.onOpen = { [weak self] id, opening in self?.openProjectMatch(id, opening) }
     projectSearch.onGroundChange = { [weak self] in self?.pushFindGround() }
   }
 
@@ -66,15 +64,16 @@ extension EditorPaneView {
     editor.selectAll(nil)
   }
 
-  /// 一致を開く——文書を開いて見せてから、一致を選択に置き、その行を中央へ（見えていても送る。VS Code と同じ）、横に
-  /// 隠れていれば寄せる。`focusText` ならテキスト面へ焦点を移し、そうでなければ焦点は結果に残る。
-  func openProjectMatch(_ id: ProjectSearch.RowID, focusText: Bool) {
+  /// 一致を `opening` の開き方で開く——文書を開いて見せてから、一致を選択に置き、その行を中央へ（見えていても送る。
+  /// VS Code と同じ）、横に隠れていれば寄せる。本文へ焦点を移す開き方でなければ焦点に触らない（クリックでは列が押下で
+  /// 焦点を取っていて、遅れて走るキーの開きは、その間に人が移した焦点を奪わない）。
+  func openProjectMatch(_ id: ProjectSearch.RowID, _ opening: ProjectSearch.Opening) {
     guard let tab else { return }
     let url = URL(fileURLWithPath: projectSearch.root, isDirectory: true)
       .appendingPathComponent(id.path)
     let document: EditorDocument
     do {
-      document = try tab.editor.open(url)
+      document = try tab.editor.open(url, as: opening.mode)
     } catch {
       NSSound.beep()
       return
@@ -86,11 +85,7 @@ extension EditorPaneView {
       document.surface.selectedRange = range
       document.surface.reveal(range, policy: .center)
     }
-    if focusText {
-      window?.makeFirstResponder(document.surface.responder)
-    } else if !focusIsInSidebar {
-      projectSearch.requestFocus(.results)
-    }
+    if opening.focusesText { window?.makeFirstResponder(document.surface.responder) }
     pushFindGround()
   }
 

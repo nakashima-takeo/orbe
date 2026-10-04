@@ -4,7 +4,6 @@ import OrbeEditorCore
 /// 結果の平らな行（まとまりの見出しと一致の 2 種）と、選択・折りたたみ・キーボードの移動。行は結果か折りたたみが変わる
 /// たびに数え直し、面は番号で引いて読むだけ（エクスプローラーのツリーと同じ分担）。行は最大で約 2 万になるので、行の列は
 /// 作らず、まとまりの見出しの位置の表から番号で引く——結果が届くたびの手間はまとまりの数に比例し、一致の数に依らない。
-/// ↑↓ は選択だけを動かして開かない。
 ///
 /// 選択は位置で持つ（`Anchor`）——行の番号は編集・取り直し・開いた文書への写し替えで一致が落ちるとずれるので、番号で持つと
 /// 別の一致を指す。選んだ一致が落ちたら、その位置の直前にいる扱いになり（行は選ばない）、F4 / ⇧F4 はそこから次・前へ進む。
@@ -229,25 +228,6 @@ extension ProjectSearch {
     }
   }
 
-  // MARK: - マウス
-
-  /// 一致のシングルクリック: 選んで開く（焦点は結果に残る）。見出しのクリック: 開閉。
-  func click(_ id: RowID) {
-    select(id)
-    guard id.match != nil else {
-      toggleCollapse(id.path)
-      return
-    }
-    onOpen(id, false)
-  }
-
-  /// 一致のダブルクリック: 開いてテキスト面へ焦点を移す。
-  func doubleClick(_ id: RowID) {
-    guard id.match != nil else { return }
-    select(id)
-    onOpen(id, true)
-  }
-
   // MARK: - キーボード（結果の列に焦点があるとき）
 
   /// ⌘↓（入力欄から）: 結果へ。未選択なら先頭を選ぶ。
@@ -264,14 +244,16 @@ extension ProjectSearch {
     return true
   }
 
-  /// ↑↓: 選択を動かす（開かない）。未選択なら先頭。
-  func moveSelection(by delta: Int) {
+  /// ↑↓: 選択を動かし、一致へ動けば仮で開く（間引く）。未選択なら先頭。`isRepeat` はキーリピートの押下。
+  func moveSelection(by delta: Int, isRepeat: Bool) {
     guard rowCount > 0 else { return }
-    guard let selection, let index = rowIndex(of: selection) else {
+    let before = selection
+    if let selection, let index = rowIndex(of: selection) {
+      select(row(at: min(max(0, index + delta), rowCount - 1)).id)
+    } else {
       select(row(at: 0).id)
-      return
     }
-    select(row(at: min(max(0, index + delta), rowCount - 1)).id)
+    if selection != before { selectionDidNavigate(isRepeat: isRepeat) }
   }
 
   /// ←: 一致なら親の見出しへ、見出しなら畳む。
@@ -284,23 +266,24 @@ extension ProjectSearch {
     }
   }
 
-  /// →: 畳んだ見出しなら開き、開いた見出しなら最初の一致へ。
-  func moveRight() {
+  /// →: 畳んだ見出しなら開き、開いた見出しなら最初の一致へ動いて仮で開く（間引く）。
+  func moveRight(isRepeat: Bool) {
     guard let selection, selection.match == nil else { return }
     if collapsed.contains(selection.path) {
       toggleCollapse(selection.path)
     } else {
       select(RowID(path: selection.path, match: 0))
+      selectionDidNavigate(isRepeat: isRepeat)
     }
   }
 
-  /// Enter: 開いてテキスト面へ焦点。見出しならそのまとまりの最後の一致を開く（VS Code と同じ。開閉は ← → と見出しの
-  /// クリック）。
+  /// Enter: 普通に開いてテキスト面へ焦点。見出しならそのまとまりの最後の一致を開く（VS Code と同じ。開閉は ← → と
+  /// 見出しのクリック）。
   func activateSelection() {
     guard let selection, let file = results[selection.path] else { return }
     let target = selection.match == nil ? RowID(path: file.path, match: file.count - 1) : selection
     select(target)
-    onOpen(target, true)
+    open(target, .commit)
   }
 
   /// Esc: 検索中なら止める。そうでなければ選択を外す。
@@ -312,8 +295,8 @@ extension ProjectSearch {
     }
   }
 
-  /// F4 / ⇧F4: 選択の次・前の一致を選んで開き、テキスト面へ焦点を移す。畳まれたまとまりは開き、端では先頭・末尾へ回る。
-  /// 結果が無ければ false。
+  /// F4 / ⇧F4: 選択の次・前の一致を選んで仮で開き、テキスト面へ焦点を移す。畳まれたまとまりは開き、端では先頭・末尾へ
+  /// 回る。結果が無ければ false。
   @discardableResult
   func step(forward: Bool) -> Bool {
     let files = results.files
@@ -321,7 +304,7 @@ extension ProjectSearch {
     let target = neighbor(of: anchor, forward: forward, in: files)
     if collapsed.remove(target.path) != nil { indexRows() }
     select(target)
-    onOpen(target, true)
+    open(target, .step)
     return true
   }
 

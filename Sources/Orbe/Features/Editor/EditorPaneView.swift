@@ -139,13 +139,18 @@ final class EditorPaneView: NSView {
   // MARK: - 骨の操作 → セッション
 
   private func wireShell() {
-    shell.open = { [weak self] url in self?.open(url) }
+    shell.open = { [weak self] url, mode in self?.open(url, as: mode) }
     shell.activate = { [weak self] url in
       guard let self, let tab, let document = tab.editor.documents.first(where: { $0.url == url })
       else { return }
       tab.editor.activate(document)
       tree.reveal(document.url)
       focusEditor()
+    }
+    shell.pin = { [weak self] url in
+      guard let tab = self?.tab, let document = tab.editor.documents.first(where: { $0.url == url })
+      else { return }
+      tab.editor.pin(document)
     }
     shell.requestClose = { [weak self] url in self?.requestClose(url) }
     shell.revealDirectory = { [weak self] url in self?.tree.revealDirectory(url) }
@@ -163,17 +168,17 @@ final class EditorPaneView: NSView {
   }
 
   private func wireTree() {
-    tree.onCreated = { [weak self] url in self?.open(url) }
+    tree.onCreated = { [weak self] url in self?.open(url, as: .pinned) }
     tree.onInputEnded = { [weak self] in self?.inlineInputDidEnd() }
   }
 
-  /// 骨から開く。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）。開けたらその行を
+  /// 骨から `mode` で開く。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）。開けたらその行を
   /// 選択して焦点を面へ——既に焦点の文書ならセッションは変わらないので、選択はここで明示に移す。
-  func open(_ url: URL) {
+  func open(_ url: URL, as mode: EditorSession.OpenMode) {
     guard let tab else { return }
     let document: EditorDocument
     do {
-      document = try tab.editor.open(url)
+      document = try tab.editor.open(url, as: mode)
     } catch {
       NSSound.beep()
       return

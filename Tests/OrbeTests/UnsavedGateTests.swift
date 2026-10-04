@@ -33,7 +33,7 @@ final class UnsavedGateTests: OrbeTestCase {
 
   func testProceedSavesDiscardsOrCancels() throws {
     let session = session()
-    let a = try session.open(repo.url("a.txt"))
+    let a = try session.open(repo.url("a.txt"), as: .pinned)
     edit(a)
     XCTAssertEqual(session.documentsToDiscard().map(\.url), [a.url])
 
@@ -49,7 +49,7 @@ final class UnsavedGateTests: OrbeTestCase {
   /// 保存が外部変更で失敗すれば進まない（印は立ったまま。⌘S の上書き確認へ）。
   func testProceedRefusesWhenASaveFailsOnDiskChange() throws {
     let session = session()
-    let a = try session.open(repo.url("a.txt"))
+    let a = try session.open(repo.url("a.txt"), as: .pinned)
     edit(a)
     try repo.write("a.txt", "outside\n")
     XCTAssertFalse(UnsavedGate.proceed(.alertFirstButtonReturn, discarding: [a]))
@@ -91,8 +91,8 @@ final class UnsavedGateTests: OrbeTestCase {
     ])
     let first = try XCTUnwrap(wc.activeTab)
     let second = wc.current.tabs[1]
-    edit(try first.editor.open(repo.url("a.txt")))
-    edit(try second.editor.open(repo.url("a.txt")))
+    edit(try first.editor.open(repo.url("a.txt"), as: .pinned))
+    edit(try second.editor.open(repo.url("a.txt"), as: .pinned))
 
     wc.closeTab(first, origin: .gesture)
     XCTAssertEqual(wc.current.tabs.count, 2, "未保存なら即座には閉じない")
@@ -114,7 +114,7 @@ final class UnsavedGateTests: OrbeTestCase {
   func testGestureCloseStaysWhenTheSaveFails() throws {
     let wc = try restore([TabState(cwd: repo.root, agent: nil, explicitTitle: nil)])
     let tab = try XCTUnwrap(wc.activeTab)
-    let document = try tab.editor.open(repo.url("a.txt"))
+    let document = try tab.editor.open(repo.url("a.txt"), as: .pinned)
     edit(document)
     try repo.write("a.txt", "outside\n")
 
@@ -130,7 +130,7 @@ final class UnsavedGateTests: OrbeTestCase {
     wc.createWorkspace(name: "other", rootPath: repo.root)
     let index = wc.activeWorkspace
     let tab = try XCTUnwrap(wc.activeTab)
-    edit(try tab.editor.open(repo.url("a.txt")))
+    edit(try tab.editor.open(repo.url("a.txt"), as: .pinned))
 
     wc.closeWorkspace(index, origin: .gesture)
     XCTAssertEqual(wc.workspaces.count, 2)
@@ -138,7 +138,7 @@ final class UnsavedGateTests: OrbeTestCase {
     XCTAssertEqual(wc.workspaces.count, 1, "保存しないで閉じる")
 
     wc.createWorkspace(name: "third", rootPath: repo.root)
-    edit(try XCTUnwrap(wc.activeTab).editor.open(repo.url("a.txt")))
+    edit(try XCTUnwrap(wc.activeTab).editor.open(repo.url("a.txt"), as: .pinned))
     wc.closeWorkspace(wc.activeWorkspace, origin: .controlAPI)
     XCTAssertNil(wc.window.attachedSheet)
     XCTAssertEqual(wc.workspaces.count, 1, "制御 API は黙って捨てる")
@@ -147,10 +147,10 @@ final class UnsavedGateTests: OrbeTestCase {
   /// 終了の関門が集める未保存は全 workspace の全タブ。
   func testUnsavedDocumentsSpanAllWorkspaces() throws {
     let wc = try restore([TabState(cwd: repo.root, agent: nil, explicitTitle: nil)])
-    edit(try XCTUnwrap(wc.activeTab).editor.open(repo.url("a.txt")))
+    edit(try XCTUnwrap(wc.activeTab).editor.open(repo.url("a.txt"), as: .pinned))
     wc.createWorkspace(name: "other", rootPath: repo.root)
     try repo.write("b.txt", "b\n")
-    edit(try XCTUnwrap(wc.activeTab).editor.open(repo.url("b.txt")))
+    edit(try XCTUnwrap(wc.activeTab).editor.open(repo.url("b.txt"), as: .pinned))
     XCTAssertEqual(Set(wc.unsavedDocuments().map(\.url.lastPathComponent)), ["a.txt", "b.txt"])
   }
 
@@ -166,8 +166,8 @@ final class UnsavedGateTests: OrbeTestCase {
     defer { window.orderOut(nil) }
     let pane = tab.view.editor
     try repo.write("b.txt", "b\n")
-    let a = try tab.editor.open(repo.url("a.txt"))
-    let b = try tab.editor.open(repo.url("b.txt"))
+    let a = try tab.editor.open(repo.url("a.txt"), as: .pinned)
+    let b = try tab.editor.open(repo.url("b.txt"), as: .pinned)
 
     pane.shell.requestClose(b.url)
     XCTAssertEqual(tab.editor.documents.count, 1, "未保存でなければそのまま閉じる")
@@ -194,7 +194,7 @@ final class UnsavedGateTests: OrbeTestCase {
     tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
     defer { window.orderOut(nil) }
     let pane = tab.view.editor
-    let a = try tab.editor.open(repo.url("a.txt"))
+    let a = try tab.editor.open(repo.url("a.txt"), as: .pinned)
     window.makeFirstResponder(a.surface.responder)
     edit(a)
     try repo.write("a.txt", "outside\n")
@@ -208,7 +208,7 @@ final class UnsavedGateTests: OrbeTestCase {
 
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("s")))
     try repo.write("b.txt", "b\n")
-    let b = try tab.editor.open(repo.url("b.txt"))  // sheet の間にエージェントが別の文書を開く
+    let b = try tab.editor.open(repo.url("b.txt"), as: .pinned)  // sheet の間にエージェントが別の文書を開く
     XCTAssertTrue(tab.editor.activeDocument === b)
     window.endSheet(try XCTUnwrap(window.attachedSheet), returnCode: .alertFirstButtonReturn)
     XCTAssertEqual(
@@ -227,26 +227,32 @@ final class UnsavedGateTests: OrbeTestCase {
     session.onChange = { changes += 1 }
     session.restore(
       paths: [repo.url("a.txt").path, repo.root + "/missing.txt", repo.url("b.txt").path],
-      active: repo.url("a.txt").path)
+      active: repo.url("a.txt").path, preview: repo.url("b.txt").path)
     XCTAssertEqual(
       session.documents.map(\.url.lastPathComponent), ["a.txt", "b.txt"], "読めないパスは落ちる")
     XCTAssertEqual(session.activeDocument?.url, repo.url("a.txt"))
+    XCTAssertEqual(session.preview?.url, repo.url("b.txt"), "仮のタブは仮のまま戻る")
     XCTAssertEqual(changes, 1, "通知は 1 本")
 
     let other = self.session()
-    other.restore(paths: [repo.url("b.txt").path], active: repo.root + "/gone.txt")
+    other.restore(
+      paths: [repo.url("b.txt").path], active: repo.root + "/gone.txt",
+      preview: repo.root + "/missing.txt")
     XCTAssertEqual(other.activeDocument?.url, repo.url("b.txt"), "アクティブが落ちていれば先頭")
+    XCTAssertNil(other.preview, "仮のタブが落ちていれば仮無し")
   }
 
-  /// materialize より先に `open_file` が開いた文書は、復元に焦点を奪われない。
+  /// materialize より先に `open_file` が開いた文書は、復元に焦点を奪われず、仮のタブにも下がらない。
   func testRestoreKeepsADocumentOpenedBeforeIt() throws {
     let session = session()
     try repo.write("b.txt", "b\n")
     try repo.write("c.txt", "c\n")
-    let c = try session.open(repo.url("c.txt"))
+    let c = try session.open(repo.url("c.txt"), as: .pinned)
     session.restore(
-      paths: [repo.url("a.txt").path, repo.url("b.txt").path], active: repo.url("b.txt").path)
+      paths: [repo.url("a.txt").path, repo.url("b.txt").path, repo.url("c.txt").path],
+      active: repo.url("b.txt").path, preview: repo.url("c.txt").path)
     XCTAssertEqual(session.documents.map(\.url.lastPathComponent), ["c.txt", "a.txt", "b.txt"])
     XCTAssertTrue(session.activeDocument === c, "先に居た焦点を保つ")
+    XCTAssertNil(session.preview, "先に普通に開いていた文書は仮に下げない")
   }
 }

@@ -26,7 +26,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     let railGround = try wide.rgb(18)
     let explorerGround = try wide.rgb(37 + 60)
 
-    let document = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"))
+    let document = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(pane.bodyRect.minY, 29 + 20, "文書があればパンくずの分だけ下がる")
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
@@ -128,7 +128,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
       handle.frame, NSRect(x: 37 + 240 - 2, y: 0, width: 4, height: 400), "hairline を跨ぐ 4pt")
     let hit = pane.hitTest(pane.convert(NSPoint(x: 37 + 240, y: 200), to: pane.superview))
     XCTAssertTrue(hit === handle, "境は当たりが受ける")
-    let document = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"))
+    let document = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
     tab.view.layoutSubtreeIfNeeded()
     let edge = pane.hitTest(
       pane.convert(NSPoint(x: pane.bodyRect.minX + 0.5, y: 200), to: pane.superview))
