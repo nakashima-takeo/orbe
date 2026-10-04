@@ -39,7 +39,8 @@ struct CaretOverlays {
   private var selections: SelectionCursor
   private let carets: [(row: Int, offset: Int)]
   private let marked: MarkedMaterial?
-  private let markedRows: ClosedRange<Int>?
+  /// まだ下の行に掛かりうる最初の未確定の範囲。
+  private var markedNext = 0
   private let drop: (row: Int, offset: Int)?
 
   /// 行頭 `start` の行から下へ引く。キャレットは点滅で見えているコマだけ。
@@ -50,20 +51,47 @@ struct CaretOverlays {
       (row: text.row(containing: $0), offset: $0)
     }
     marked = material.caret.marked
-    markedRows = marked.map { text.rows(of: $0.range) }
+    if let ranges = marked?.ranges {
+      var low = 0
+      var high = ranges.count
+      while low < high {
+        let mid = (low + high) / 2
+        if NSMaxRange(ranges[mid]) < start { low = mid + 1 } else { high = mid }
+      }
+      markedNext = low
+    }
     drop = material.drop.map { (row: text.row(containing: $0), offset: $0) }
   }
 
   /// 行 `row`（行頭から次の行頭までの区間 `line`。最終行なら本文の終わりまで）に重ねるもの。
   mutating func next(row: Int, line: Range<Int>) -> RowOverlays {
     let selected = selections.remaining ? Array(selections.next(in: line)) : []
-    let marked = markedRows?.contains(row) == true ? marked : nil
+    let marked = markedRanges(onRow: row)
     return RowOverlays(
-      content: selected.isEmpty && marked == nil ? nil : text.contentRange(ofRow: row),
+      content: selected.isEmpty && marked.isEmpty ? nil : text.contentRange(ofRow: row),
       selections: selected,
       carets: carets.filter { $0.row == row }.map { $0.offset - line.lowerBound },
-      marked: marked,
+      marked: marked, appearance: self.marked?.appearance ?? MarkedAppearance(),
       drop: drop?.row == row ? drop.map { $0.offset - line.lowerBound } : nil)
+  }
+
+  /// 行 `row` に掛かる未確定の範囲（行は下へ進む）。
+  private mutating func markedRanges(onRow row: Int) -> [NSRange] {
+    guard let ranges = marked?.ranges else { return [] }
+    var result: [NSRange] = []
+    var index = markedNext
+    while index < ranges.count {
+      let rows = text.rows(of: ranges[index])
+      if rows.upperBound < row {
+        index += 1
+        markedNext = index
+        continue
+      }
+      if rows.lowerBound > row { break }
+      result.append(ranges[index])
+      index += 1
+    }
+    return result
   }
 }
 
@@ -73,12 +101,14 @@ struct RowOverlays {
   let content: NSRange?
   let selections: [NSRange]
   let carets: [Int]
-  let marked: MarkedMaterial?
+  /// 行に掛かる未確定の範囲と、その見た目（文節の範囲は未確定の先頭から）。
+  let marked: [NSRange]
+  let appearance: MarkedAppearance
   let drop: Int?
 
   /// 位置と x の対応（組版の `CaretMap`）が要るか。
   var needsCarets: Bool {
-    !selections.isEmpty || !carets.isEmpty || marked != nil || drop != nil
+    !selections.isEmpty || !carets.isEmpty || !marked.isEmpty || drop != nil
   }
 }
 
@@ -91,8 +121,8 @@ extension FrameBuilder {
       for selection in overlay.selections {
         drawSelection(selection, line, content: content, rowTop: rowTop, c)
       }
-      if let marked = overlay.marked {
-        drawMarked(marked, line, content: content, rowTop: rowTop, c)
+      for range in overlay.marked {
+        drawMarked((range, overlay.appearance), line, content: content, rowTop: rowTop, c)
       }
     }
     for column in overlay.carets { drawCaret(at: column, line, rowTop: rowTop, c) }
@@ -160,14 +190,16 @@ extension FrameBuilder {
   /// 変換中の文字を行に描く。文節ごとに角の丸い下線（IME が選んでいる文節は本文の色、他は灰色。太さは同じで、文節の境を
   /// 少し空ける）。属性の無い文字列は既定の未確定の地で塗る。IME が下線や地の色を指定したら従う。
   func drawMarked(
-    _ marked: MarkedMaterial, _ line: LaidOutLine, content: NSRange, rowTop: Double, _ c: Context
+    _ marked: (range: NSRange, appearance: MarkedAppearance), _ line: LaidOutLine,
+    content: NSRange, rowTop: Double, _ c: Context
   ) {
+    let (range, appearance) = marked
     guard let carets = line.carets else { return }
     let g = c.g
     let baseline = rowTop + (Double(c.config.baseline) * g.scale).rounded()
     let bottom = rowTop + g.lineHeight.rounded()
-    if marked.appearance.filled {
-      for (x0, x1) in extents(marked.range, carets, content, c) {
+    if appearance.filled {
+      for (x0, x1) in extents(range, carets, content, c) {
         underShapes.append(
           ShapeInstance(
             rect: SIMD4(Float(x0), Float(rowTop), Float(x1 - x0), Float(bottom - rowTop)),
@@ -177,11 +209,13 @@ extension FrameBuilder {
     let thickness = max(1, (1.5 * g.scale).rounded())
     let inset = g.scale.rounded()
     let top = (baseline + 1.5 * g.scale).rounded()
-    for clause in marked.appearance.clauses {
+    for clause in appearance.clauses {
       let ink =
         clause.underline
         ?? (clause.active ? c.palette.text.color : c.palette.markedUnderline).packed
-      for (x0, x1) in extents(clause.range, carets, content, c) {
+      let clauseRange = NSRange(
+        location: range.location + clause.range.location, length: clause.range.length)
+      for (x0, x1) in extents(clauseRange, carets, content, c) {
         if let background = clause.background {
           underShapes.append(
             ShapeInstance(

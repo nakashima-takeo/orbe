@@ -48,6 +48,27 @@ struct EditBatch: Equatable, Sendable {
     EditSweep(edits).map(offsets)
   }
 
+  /// 位置を束の後へ写す写し——その位置以前で終わる置き換え（位置にある挿入を含む）の増減を足し、置き換えた区間の中なら
+  /// 置換の終わり。NSTextView が範囲を指した置き換えの後に選択を写す向き（`map` は位置にある挿入の前に残す）。
+  var shiftingPast: (Int) -> Int {
+    let edits = edits
+    let ends = edits.map { NSMaxRange($0.range) }
+    let replaced = newRanges
+    var sums = [0]
+    sums.reserveCapacity(edits.count + 1)
+    for edit in edits { sums.append(sums[sums.count - 1] + edit.change) }
+    return { offset in
+      var low = 0
+      var high = ends.count
+      while low < high {
+        let mid = (low + high) / 2
+        if ends[mid] <= offset { low = mid + 1 } else { high = mid }
+      }
+      if low < edits.count, edits[low].range.location < offset { return NSMaxRange(replaced[low]) }
+      return offset + sums[low]
+    }
+  }
+
   /// この束の後に `next` を当てたのと同じ、1 つの束。`result` は両方を当てた後の本文。
   ///
   /// 2 つの束の変えた区間（この束の置換後の区間と `next` の範囲、どちらも中間の本文の座標）を、重なる・接するものごとに

@@ -160,7 +160,7 @@ enum EditCommands {
     case .centerSelection:
       return CommandResult(
         state: EditState(cursors: state.cursors, mark: state.mark), reveal: .center)
-    case .replace(let range, let string): return replace(range, with: string, state)
+    case .replace(let range, let string): return replace(range, with: string, state, env)
     case .paste(let string, let entireLine, let pieces):
       return paste(string, entireLine: entireLine, pieces: pieces, state, env)
     case .cut: return cut(state, env)

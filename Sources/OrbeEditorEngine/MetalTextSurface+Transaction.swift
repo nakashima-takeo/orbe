@@ -164,17 +164,32 @@ extension MetalTextSurface {
     if composing { inputMethodCoordinatesDidChange() }
   }
 
-  /// 選択の地・キャレット・変換中の文字。変換中のキャレットは IME の注目位置（文節を選んでいる間は無し）。
+  /// 選択の地・キャレット・変換中の文字。変換中は、変換に入った各カーソルのキャレットが IME の注目位置（主の注目位置と同じ
+  /// 相対位置。文節を選んでいる間は無し）。
   private func caretMaterial(_ cursors: CursorList) -> CaretMaterial {
-    let composition = editor.composition
+    let all = cursors.all
+    let selections = all.map(\.selection).filter { $0.length > 0 }.sorted {
+      $0.location < $1.location
+    }
+    guard let composition = editor.composition else {
+      return CaretMaterial(
+        selections: selections, carets: all.map(\.position), epoch: CACurrentMediaTime(),
+        focused: focused, blinks: caretBlinks)
+    }
+    let attention = composition.selection
+    let offset = attention.location - composition.range.location
+    let carets = all.indices.compactMap { index -> Int? in
+      guard index < composition.marked.count, let marked = composition.marked[index] else {
+        return all[index].position
+      }
+      return attention.length == 0 ? marked.location + offset : nil
+    }
     return CaretMaterial(
-      selections: cursors.all.map(\.selection).filter { $0.length > 0 }.sorted {
-        $0.location < $1.location
-      },
-      carets: composition.map { $0.selection.length == 0 ? [$0.selection.location] : [] }
-        ?? cursors.all.map(\.position),
-      epoch: CACurrentMediaTime(), focused: focused, blinks: caretBlinks,
-      marked: composition.map { MarkedMaterial(range: $0.range, appearance: $0.appearance) })
+      selections: selections, carets: carets, epoch: CACurrentMediaTime(), focused: focused,
+      blinks: caretBlinks,
+      marked: MarkedMaterial(
+        ranges: composition.marked.compactMap { $0 }.sorted { $0.location < $1.location },
+        appearance: composition.appearance))
   }
 
   /// 変換の文字の座標が変わった（候補窓を追従させる）。変換中と変換の終わりだけ知らせる。選択の変化の知らせ

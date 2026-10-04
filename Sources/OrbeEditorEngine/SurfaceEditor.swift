@@ -138,30 +138,31 @@ final class SurfaceEditor {
 
   // MARK: - 変換（IME の入口）
 
-  /// 未確定の文字を置く。`replacement`（文書の座標。指していなければ未確定、無ければ選択）を `string` で置き換え、変換を
-  /// 始めるか続ける。`selected` は `string` の中の選択、`appearance` の範囲は `string` の先頭から。空の文字列は IME 自身の
-  /// 取り消しで、未確定を消した今の本文のまま変換を終える（NSTextView と同じく、再変換で置き換えた元の字は戻さない）。
+  /// 未確定の文字を置く。`replacement`（文書の座標。指していなければ主の未確定、無ければ主の選択）を `string` で置き換え、
+  /// 全カーソルに同じ相対位置で当てて、変換を始めるか続ける。`selected` は `string` の中の選択、`appearance` の範囲は
+  /// `string` の先頭から。空の文字列は IME 自身の取り消しで、未確定を消した今の本文のまま変換を終える（NSTextView と同じく、
+  /// 再変換で置き換えた元の字は戻さない）。
   func setMarkedText(
     _ string: String, selected: NSRange, replacement: NSRange, appearance: MarkedAppearance
   ) {
     guard !discarding, let text = surface.editingEnvironment()?.text else { return }
     guard composition != nil || !string.isEmpty else { return }
     let units = ContiguousArray(string.utf16)
-    let target = target(replacement, in: text)
     surface.transact(reveal: .minimal) {
-      compose(TextEdit(range: target, replacement: units), text)
+      guard let placed = compose(replacement, units, text) else { return }
       if units.isEmpty { return end(.commit) }
       guard var current = composition else { return }
       current.selection = CompositionRules.innerSelection(
-        selected, at: target.location, length: units.count)
-      current.appearance = appearance.shifted(by: target.location)
+        selected, at: placed.marked.location, length: units.count)
+      current.appearance = appearance
       composition = current
     }
   }
 
-  /// 確定の文字を入れる。変換中なら `replacement`（指していなければ未確定）を置き換えて確定で終え、そうでなければ打鍵
-  /// （`replacement` が本文の範囲を指していれば、その範囲の置き換え）。範囲を指した置き換えの後の選択は NSTextView と同じ
-  /// （`CompositionRules.selection`。変換中は IME の選択に当てる）。
+  /// 確定の文字を入れる。変換中なら `replacement`（指していなければ主の未確定）を全カーソルで置き換えて確定で終え、そうで
+  /// なければ打鍵（`replacement` が本文の範囲を指していれば、その範囲の置き換え）。範囲を指した置き換えの後の選択は
+  /// NSTextView と同じ（`CompositionRules.selection`。変換中は IME の選択に当て、他のカーソルは自分の置き換えた範囲に
+  /// 対して主と同じ相対の位置）。
   func insertText(_ string: String, replacement: NSRange) {
     guard !discarding else { return }
     guard let composing = composition else {
@@ -173,11 +174,19 @@ final class SurfaceEditor {
       return perform(.replace(range, string))
     }
     guard let text = surface.editingEnvironment()?.text else { return }
-    let edit = TextEdit(range: target(replacement, in: text), replacement: string)
     surface.transact(reveal: .minimal) {
-      if compose(edit, text) {
-        state.cursors = CursorList(
-          .selecting(CompositionRules.selection(composing.selection, after: edit)))
+      if let placed = compose(replacement, ContiguousArray(string.utf16), text),
+        let marked = composition?.marked, let length = surface.textLength
+      {
+        let inner = CompositionRules.selection(composing.selection, after: placed.edit)
+        let offset = inner.location - placed.edit.range.location
+        let cursors = zip(state.cursors.all, marked).map { cursor, range -> Cursor in
+          guard let range else { return cursor }
+          let start = min(max(0, range.location + offset), length)
+          return .selecting(
+            NSRange(location: start, length: min(start + inner.length, length) - start))
+        }
+        if let list = CursorList(cursors) { state.cursors = list }
       }
       end(.commit)
     }
@@ -198,40 +207,63 @@ final class SurfaceEditor {
     discarding = false
   }
 
-  /// 置き換える範囲（`replacement` は文書の座標）。
-  private func target(_ replacement: NSRange, in text: TextRope) -> NSRange {
-    CompositionRules.target(
-      replacement, marked: composition?.range, selection: state.cursors.primary.selection,
-      length: text.length)
-  }
-
-  /// 変換の中の変化 1 つを文書へ渡し（undo には積まない）、変換の状態へ合成する。主のカーソルは未確定の末尾。本文が
-  /// 変わらない呼び出し（文節の選び直し）は文書へ渡さない。文書が受けなければ何も変えず false。
-  @discardableResult
-  private func compose(_ edit: TextEdit, _ text: TextRope) -> Bool {
-    let batch = EditBatch([edit])
-    let committed = CompositionRules.replacesCommitted(
-      edit.range, marked: composition?.range, selection: state.cursors.primary.selection)
-    let noop = text.units(in: edit.range) == edit.replacement
-    guard let result = noop ? text : surface.deliver(batch) else { return false }
+  /// 変換の中の変化 1 つ——IME が指した範囲 `replacement`（文書の座標。指していなければ主の未確定、無ければ主の選択）を、
+  /// 全カーソルに同じ相対位置で `units` に置き換える 1 つの束——を文書へ渡し（undo には積まない）、変換の状態へ合成する。
+  /// 変換に入ったカーソルは自分の未確定の末尾。本文が変わらない置き換え（文節の選び直し）は文書へ渡さない。文書が受け
+  /// なければ何も変えず nil。返すのは主の置き換え（束の前の座標）と主の新しい未確定。
+  private func compose(
+    _ replacement: NSRange, _ units: ContiguousArray<UInt16>, _ text: TextRope
+  ) -> (edit: TextEdit, marked: NSRange)? {
+    let cursors = state.cursors.all
+    let selection = state.cursors.primary.selection
+    let target = CompositionRules.target(
+      replacement, marked: composition?.range, selection: selection, length: text.length)
+    let bases = cursors.indices.map { index in
+      composition.flatMap { index < $0.marked.count ? $0.marked[index] : nil }
+        ?? cursors[index].selection
+    }
+    let targets = CompositionRules.targets(target, bases: bases, in: text)
+    let accepted = CompositionRules.accepted(targets)
+    let order = cursors.indices.filter { accepted[$0] }.sorted {
+      targets[$0].location < targets[$1].location
+    }
+    let batch = EditBatch(order.map { TextEdit(range: targets[$0], replacement: units) })
+    let changed = EditBatch(batch.edits.filter { text.units(in: $0.range) != $0.replacement })
+    guard let result = changed.isEmpty ? text : surface.deliver(changed) else { return nil }
+    var placed = [NSRange?](repeating: nil, count: cursors.count)
+    for (index, range) in zip(order, batch.newRanges) { placed[index] = range }
+    guard let primary = placed[0] else { return nil }
+    let left = cursors.indices.filter { !accepted[$0] }
+    var mapped = changed.map(left.flatMap { [cursors[$0].anchor, cursors[$0].position] })[...]
+    let next = placed.map { range -> Cursor in
+      if let range { return Cursor(NSMaxRange(range)) }
+      let anchor = mapped.removeFirst()
+      return Cursor(
+        selectionStart: NSRange(location: anchor, length: 0), unit: .character,
+        position: mapped.removeFirst())
+    }
     var current =
       composition
       ?? Composition(
-        range: edit.newRange, selection: NSRange(location: NSMaxRange(edit.newRange), length: 0),
-        appearance: MarkedAppearance(), cursorsBefore: state.cursors, textBefore: text,
-        changes: .empty, replacesCommitted: false)
-    if !noop { current.changes = current.changes.then(batch, result: result) }
-    current.replacesCommitted = current.replacesCommitted || committed
-    current.range = edit.newRange
-    current.selection = NSRange(location: NSMaxRange(edit.newRange), length: 0)
+        marked: [], selection: selection, appearance: MarkedAppearance(),
+        cursorsBefore: state.cursors, textBefore: text, changes: .empty, replacesCommitted: false)
+    if !changed.isEmpty { current.changes = current.changes.then(changed, result: result) }
+    current.replacesCommitted =
+      current.replacesCommitted
+      || CompositionRules.replacesCommitted(
+        target, marked: composition?.range, selection: selection)
+    current.marked = placed
+    current.selection = NSRange(location: NSMaxRange(primary), length: 0)
     composition = current
-    state = EditState(
-      cursors: CursorList(Cursor(NSMaxRange(edit.newRange))), mark: state.mark.map(batch.map))
-    return true
+    if let list = CursorList(next) {
+      state = EditState(cursors: list, mark: state.mark.map(changed.map))
+    }
+    return (TextEdit(range: target, replacement: units), primary)
   }
 
-  /// 変換を終える。確定なら変換の中の変化の正味を 1 回だけ undo に記録する。取り消しなら変換が無かったことにする——正味の
-  /// 変化の逆を文書へ渡し（再変換で置き換えた元の字も戻る）、カーソルを変換の前へ戻し、undo には触れない。
+  /// 変換を終える。確定なら変換の中の変化の正味を 1 回だけ undo に記録し、重なったカーソルをまとめる。取り消しなら変換が
+  /// 無かったことにする——正味の変化の逆を文書へ渡し（再変換で置き換えた元の字も戻る）、カーソルを変換の前へ戻し、undo
+  /// には触れない。
   private func end(_ how: CompositionEnd) {
     guard let finished = composition else { return }
     surface.transact {
@@ -239,6 +271,7 @@ final class SurfaceEditor {
       let net = CompositionRules.net(finished.changes, before: finished.textBefore)
       switch how {
       case .commit:
+        state.cursors.normalize()
         guard !net.isEmpty else { return }
         register(
           net, kind: CompositionRules.undoKind(net, replacesCommitted: finished.replacesCommitted),
@@ -339,42 +372,4 @@ final class SurfaceEditor {
     }
     return true
   }
-}
-
-/// undo の要素 1 つ——最初の本文に当てる前向きの束、閉じたときに作る逆向きの束、前後のカーソルの列。
-@MainActor
-final class UndoElement {
-  private(set) var forward: EditBatch
-  private(set) var backward: EditBatch?
-  private(set) var kind: UndoKind
-  let before: CursorList
-  private(set) var after: CursorList
-  /// 要素の前の本文（閉じるまで。逆向きの束を作るのに使う）。
-  private var base: TextRope?
-
-  init(base: TextRope, forward: EditBatch, kind: UndoKind, before: CursorList, after: CursorList) {
-    self.base = base
-    self.forward = forward
-    self.kind = kind
-    self.before = before
-    self.after = after
-  }
-
-  /// まとまりの続きの束を合成する。`result` は束を当てた後の本文。
-  func append(_ batch: EditBatch, result: TextRope, kind: UndoKind, after: CursorList) {
-    forward = forward.then(batch, result: result)
-    self.kind = kind
-    self.after = after
-  }
-
-  func close() {
-    guard let base else { return }
-    backward = forward.inverse(of: base)
-    self.base = nil
-  }
-}
-
-extension EditBatch {
-  /// 各編集の置換の中身（逆向きの束が置き換える、束の後の本文の中身）。
-  var newRangesContent: [ContiguousArray<UInt16>] { edits.map(\.replacement) }
 }

@@ -189,7 +189,7 @@ struct CaretMaterial: Equatable, Sendable {
   var focused = false
   /// 点滅させるか（アクセシビリティの「点滅しない挿入ポイント」が有効なら、点滅せず描き続ける）。
   var blinks = true
-  /// 変換中の文字（変換中でなければ nil）。変換中のキャレットは IME の注目位置で、主のキャレットではない。
+  /// 変換中の文字（変換中でなければ nil）。変換中のキャレットは、変換に入った各カーソルの IME の注目位置。
   var marked: MarkedMaterial?
 
   /// 点滅の刻み（表示・非表示それぞれの長さ）。
@@ -219,9 +219,9 @@ struct HorizontalReveal: Equatable, Sendable {
   var serial: Int
 }
 
-/// 変換中の文字——未確定の範囲と見た目。
+/// 変換中の文字——全カーソルの未確定の範囲（昇順）と、どの範囲にも同じに写す見た目（文節の範囲は未確定の先頭から）。
 struct MarkedMaterial: Equatable, Sendable {
-  var range: NSRange
+  var ranges: [NSRange]
   var appearance: MarkedAppearance
 }
 
