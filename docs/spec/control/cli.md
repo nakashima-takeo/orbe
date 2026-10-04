@@ -54,9 +54,10 @@ updated: 2026-10-04
 
 人と agent が共有する[タスク](../platform/tasks.md)一覧を読み書きする。
 
-- `orb task list [--workspace <id|current>] [--json]` … 列の順に 1 行 1 タスク（`id status priority due workspace title 待ちの理由` のタブ区切り。無い値は `-`。制御文字は `session log` と同じく空白に置き換える）。`--workspace` でその workspace のタスクだけ。
-- `orb task add <title> [--status <s>] [--priority <p>] [--due <YYYY-MM-DD>] [--workspace <id|current> | --no-workspace] [--waiting <reason>] [--memo <text>] [--json]` … 列の末尾に足し、新しい ID だけを出す（`id=$(orb task add …)` で受けられる）。
-- `orb task set <id> [--title <t>] [--status <s>] [--priority <p>] [--due <date> | --no-due] [--workspace <id|current> | --no-workspace] [--waiting <reason> | --no-waiting] [--memo <text> | --no-memo] [--json]` … 渡した項目だけを変える。`--no-*` は値を外す。完了は `--status done`（待ちは外れる）。変更フラグが 1 つも無い、または `--x` と `--no-x` を同時に渡すと usage エラー（exit 2）。
+- `orb task list [--workspace <id|current>] [--json]` … 列の順に 1 行 1 タスク（`id status priority due workspace title 待ちの理由 結び付き` のタブ区切り。結び付きは `issue:owner/name#221,pr:owner/name#214` の形で先頭が主。無い値は `-`。制御文字は `session log` と同じく空白に置き換える）。`--workspace` でその workspace のタスクだけ。
+- `orb task add <title> [--status <s>] [--priority <p>] [--due <YYYY-MM-DD>] [--workspace <id|current> | --no-workspace] [--waiting <reason>] [--memo <text>] [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--json]` … 列の末尾に足し、新しい ID だけを出す（`id=$(orb task add …)` で受けられる）。
+- `orb task set <id> [--title <t>] [--status <s>] [--priority <p>] [--due <date> | --no-due] [--workspace <id|current> | --no-workspace] [--waiting <reason> | --no-waiting] [--memo <text> | --no-memo] [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--no-links] [--json]` … 渡した項目だけを変える。`--no-*` は値を外す。完了は `--status done`（待ちは外れる）。変更フラグが 1 つも無い、または `--x` と `--no-x` を同時に渡すと usage エラー（exit 2）。
+- `--issue` / `--pr` は GitHub の Issue・PR を結び付ける（くり返し可）。**引数に現れた順を保ち、先頭が主**になる。`set` では渡した結び付きで丸ごと置き換え、`--no-links` で全部外す（`--issue` / `--pr` と同時なら usage エラー）。1 つの Issue・PR は 1 つのタスクにだけ付き、ほかのタスクに付いているものは拒否される（[タスク](../platform/tasks.md)）。`owner/name#N` は最後の `#` で割り、後ろが正の整数でなければ usage エラー（exit 2）。`owner/name` の形は control が確かめる。
 - `orb task move <id> (--before <id> | --after <id>) [--json]` / `orb task rm <id> [--json]`
 
 **`add` で `--workspace` を省くと、呼び出し元タブ（`ORBE_TAB`）の workspace に付く**——タブの外なら「なし」。`tab new` / `agent spawn` の省略が前面の workspace に落ちるのと違うのは、タブ内の agent が背景で足したタスクを、人が見ている別の workspace に付けないため。同じ理由で、`--workspace current` は**前面の** workspace であって自分のタブの workspace ではない。`add` は `ORBE_TAB` を control へ伝え、タブ内の agent が足したタスクにはその agent の名前が追加者として残る。
