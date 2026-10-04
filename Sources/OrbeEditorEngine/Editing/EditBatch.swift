@@ -18,7 +18,7 @@ struct EditBatch: Equatable, Sendable {
   var newRanges: [NSRange] {
     var delta = 0
     return edits.map { edit in
-      defer { delta += edit.replacementLength - edit.range.length }
+      defer { delta += edit.change }
       return NSRange(location: edit.range.location + delta, length: edit.replacementLength)
     }
   }
@@ -138,7 +138,7 @@ struct EditBatch: Equatable, Sendable {
 
     mutating func start(_ offset: Int) -> Int {
       while startIndex < edits.count, newRanges[startIndex].location < offset {
-        startDelta += edits[startIndex].replacementLength - edits[startIndex].range.length
+        startDelta += edits[startIndex].change
         startIndex += 1
       }
       if startIndex < edits.count, newRanges[startIndex].location == offset {
@@ -149,7 +149,7 @@ struct EditBatch: Equatable, Sendable {
 
     mutating func end(_ offset: Int) -> Int {
       while endIndex < edits.count, NSMaxRange(newRanges[endIndex]) <= offset {
-        endDelta += edits[endIndex].replacementLength - edits[endIndex].range.length
+        endDelta += edits[endIndex].change
         endIndex += 1
       }
       if endIndex > 0, NSMaxRange(newRanges[endIndex - 1]) == offset {
@@ -174,7 +174,7 @@ struct EditBatch: Equatable, Sendable {
 
     mutating func start(_ offset: Int) -> Int {
       while startIndex < edits.count, NSMaxRange(edits[startIndex].range) < offset {
-        startDelta += edits[startIndex].replacementLength - edits[startIndex].range.length
+        startDelta += edits[startIndex].change
         startIndex += 1
       }
       return offset + startDelta
@@ -182,7 +182,7 @@ struct EditBatch: Equatable, Sendable {
 
     mutating func end(_ offset: Int) -> Int {
       while endIndex < edits.count, edits[endIndex].range.location <= offset {
-        endDelta += edits[endIndex].replacementLength - edits[endIndex].range.length
+        endDelta += edits[endIndex].change
         endIndex += 1
       }
       return offset + endDelta

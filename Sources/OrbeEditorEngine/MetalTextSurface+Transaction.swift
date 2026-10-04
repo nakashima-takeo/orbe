@@ -111,11 +111,7 @@ extension MetalTextSurface {
   /// 位置を先・材料を後の順で 1 回で書く。
   private func commit(_ finished: Transaction) {
     editor.noteTransaction(
-      from: finished.cursors, edited: finished.edited, restored: finished.restoresCursors
-    ) { [self] in
-      scroll.peek(at: CACurrentMediaTime(), limits: pending.limits, place: pending.position)
-        .position
-    }
+      from: finished.cursors, edited: finished.edited, restored: finished.restoresCursors)
     let cursors = editor.state.cursors
     let composing = editor.isComposing || finished.composing
     let restarts =

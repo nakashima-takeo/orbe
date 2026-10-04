@@ -124,18 +124,27 @@ enum Editing {
 
   /// 全カーソルを本文に書き戻す（`parseAll` の逆。主かどうかは書かない）。
   static func renderAll(_ text: TextRope, _ cursors: CursorList) -> String {
+    struct Mark {
+      let offset: Int
+      let text: String
+      /// 選択の始まりの印か（同じ位置の印は、選択の始まりを後ろに書く）。
+      let starts: Bool
+    }
     var units = Array(text.units(in: NSRange(location: 0, length: text.length)))
-    var marks: [(offset: Int, mark: String)] = []
+    var marks: [Mark] = []
     for cursor in cursors.all {
       if cursor.selection.length == 0 {
-        marks.append((cursor.position, "|"))
+        marks.append(Mark(offset: cursor.position, text: "|", starts: false))
       } else {
-        marks.append((cursor.anchor, "["))
-        marks.append((cursor.position, "]"))
+        marks.append(Mark(offset: cursor.anchor, text: "[", starts: !cursor.isReversed))
+        marks.append(Mark(offset: cursor.position, text: "]", starts: cursor.isReversed))
       }
     }
-    for (offset, mark) in marks.sorted(by: { $0.offset > $1.offset }) {
-      units.insert(contentsOf: mark.utf16, at: offset)
+    let ordered = marks.sorted {
+      $0.offset != $1.offset ? $0.offset > $1.offset : $0.starts && !$1.starts
+    }
+    for mark in ordered {
+      units.insert(contentsOf: mark.text.utf16, at: mark.offset)
     }
     return String(decoding: units, as: UTF16.self)
   }

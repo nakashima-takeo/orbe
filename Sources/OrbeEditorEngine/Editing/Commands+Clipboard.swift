@@ -25,19 +25,10 @@ extension EditCommands {
       return edit(state, env, undo: .other) { Replacement($0.selection, units: units) }
     }
     let starts = Set(
-      state.cursors.all.map { env.text.lineStart(env.text.row(containing: $0.position)) }
-    ).sorted()
+      state.cursors.all.map { env.text.lineStart(env.text.row(containing: $0.position)) })
     let batch = EditBatch(
       starts.map { TextEdit(range: NSRange(location: $0, length: 0), replacement: units) })
-    let shift = { (offset: Int) in
-      var low = 0
-      var high = starts.count
-      while low < high {
-        let mid = (low + high) / 2
-        if starts[mid] <= offset { low = mid + 1 } else { high = mid }
-      }
-      return offset + units.count * low
-    }
+    let shift = batch.shiftingPast
     return CommandResult(
       state: EditState(
         cursors: state.cursors.map { Cursor(shift($0.position)) }, mark: state.mark.map(shift)),

@@ -108,7 +108,7 @@ final class EditorTypingPerfTests: OrbeTestCase {
     let warm = try openEditor("warm\n")
     warm.document.surface.responder.keyDown(with: .key("/", []))
     warm.window.orderOut(nil)
-    for (label, needle, limit) in [("1000", "marker", 16.0), ("10000", "offset", 160.0)] {
+    for (expected, needle, limit) in [(1000, "marker", 16.0), (10_000, "offset", 160.0)] {
       let opened = try openEditor(Self.markedSource(bytes: 1_000_000, markers: 1000))
       let document = opened.document
       opened.pane.showSearch()
@@ -134,10 +134,10 @@ final class EditorTypingPerfTests: OrbeTestCase {
       reportPerf(
         "1MB cursors \(cursors) find \(matches)", "multi-cursor keystroke-main", cpu, digits: 2)
       let sorted = cpu.sorted()
-      XCTAssertEqual(cursors, label == "1000" ? 1000 : 10_000, "前提: カーソルの数")
+      XCTAssertEqual(cursors, expected, "前提: カーソルの数")
       XCTAssertLessThanOrEqual(
         sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))], limit,
-        "\(label) 本: 打鍵 1 回の main のスレッドの CPU 時間の p95")
+        "\(expected) 本: 打鍵 1 回の main のスレッドの CPU 時間の p95")
       opened.window.orderOut(nil)
     }
   }

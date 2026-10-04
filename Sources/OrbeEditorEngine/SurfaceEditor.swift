@@ -112,14 +112,12 @@ final class SurfaceEditor {
   /// 取引の確定が呼ぶ。本文を変えた取引は履歴を消す。本文を変えずに選択が変わった取引は、前の列と、そのときのスクロールの
   /// 位置を積む（直前に積んだものと同じなら積まない。⌘U で戻した取引は積まない）。1 打鍵にセレクタが 2 つ届いても、取引
   /// 1 つで 1 段。
-  func noteTransaction(
-    from before: CursorList, edited: Bool, restored: Bool, scroll: () -> SIMD2<Double>
-  ) {
+  func noteTransaction(from before: CursorList, edited: Bool, restored: Bool) {
     guard !edited else { return cursorHistory.removeAll() }
     guard !restored, !state.cursors.selects(like: before),
       cursorHistory.last.map({ !$0.cursors.selects(like: before) }) ?? true
     else { return }
-    cursorHistory.append((before, scroll()))
+    cursorHistory.append((before, surface.scrollPosition))
     if cursorHistory.count > Self.cursorHistoryLimit { cursorHistory.removeFirst() }
   }
 

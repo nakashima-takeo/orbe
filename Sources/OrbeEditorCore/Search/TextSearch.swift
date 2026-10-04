@@ -1,7 +1,7 @@
 import Foundation
 
-/// 一致の規則。⌘F・出現の強調・⌘D・⌘⇧L は、どれもここから一致を引く（⌘D は ⌘F の設定に従う——VS Code の
-/// `MultiCursorSession` が検索の設定を使うのと同じ関係）。
+/// 一致の規則。⌘F・出現の強調・⌘D・⌘⇧L は、どれもここから一致を引く（⌘D・⌘⇧L は、カーソルが 1 本で空のキャレットから
+/// 始めたときだけ語の規則、それ以外は ⌘F の規則——VS Code の `MultiCursorSession.create` と同じ選び方）。
 public enum MatchRule: Equatable, Sendable {
   /// ⌘F の規則——大小を区別しない素の文字列。
   case find
@@ -37,43 +37,21 @@ public enum TextSearch {
   /// 本文の写しを探す窓の大きさ（UTF-16）。
   public static let scanWindow = 65_536
 
+  /// 本文の写しを `start` から窓ごとの NSString にして、問いの重ならない一致を順に集める——全文を 1 つの文字列に写さない
+  /// （窓の大きさぶんだけを一時に持つ）。窓は一致の長さの上限を越える重なりを持ち、窓の終わりの重なりより手前で始まる一致
+  /// だけを受けるので、全文を 1 つの NSString にして探したのと同じ一致を同じ順に返す。窓は一致の前後 1 単位を含むので、
+  /// 語の規則の境はたいてい窓の中で判定できる。
   private static func search(
     _ question: SearchQuestion, in text: TextRope, from start: Int, limit: Int, window: Int
   ) -> [NSRange] {
     let needle = question.needle
     guard !needle.isEmpty else { return [] }
     let length = (needle as NSString).length
-    switch question.rule {
-    case .find:
-      // 大小無視の一致は、畳み込みで字数が変わる字（合字など）があると needle より長くなりうる（1 字が最大 3 字に開く）。
-      return scan(
-        text, from: start, maximumLength: length * 4, limit: limit, window: window,
-        find: { string, range in
-          string.range(of: needle, options: [.caseInsensitive, .literal], range: range)
-        })
-    case .word:
-      var boundaries = WordBoundaries(text: text)
-      return scan(
-        text, from: start, maximumLength: length, limit: limit, window: window,
-        find: { string, range in string.range(of: needle, options: [.literal], range: range) },
-        accept: { string, found, base in
-          boundaries.isBoundary(at: base + found.location, in: string, base: base)
-            && boundaries.isBoundary(at: base + NSMaxRange(found), in: string, base: base)
-        })
-    }
-  }
-
-  /// 本文の写しを `start` から窓ごとの NSString にして、重ならない一致を順に集める——全文を 1 つの文字列に写さない（窓の
-  /// 大きさぶんだけを一時に持つ）。窓は `maximumLength` を越える重なりを持ち、窓の終わりの重なりより手前で始まる
-  /// 一致だけを受けるので、全文を 1 つの NSString にして探したのと同じ一致を同じ順に返す。`find` は窓の中の探す区間から
-  /// 最初の一致（窓の中の区間。無ければ `NSNotFound`）、`accept` はその一致を受けるか（窓は一致の前後 1 単位を含む。
-  /// `base` は窓の始まりのオフセット）。
-  static func scan(
-    _ text: TextRope, from start: Int = 0, maximumLength: Int, limit: Int, window: Int,
-    find: (NSString, NSRange) -> NSRange,
-    accept: (NSString, NSRange, Int) -> Bool = { _, _, _ in true }
-  ) -> [NSRange] {
-    let overlap = maximumLength + 1
+    let options: NSString.CompareOptions =
+      question.rule == .find ? [.caseInsensitive, .literal] : [.literal]
+    // 大小無視の一致は、畳み込みで字数が変わる字（合字など）があると needle より長くなりうる（1 字が最大 3 字に開く）。
+    let overlap = (question.rule == .find ? length * 4 : length) + 1
+    var boundaries = WordBoundaries(text: text)
     var result: [NSRange] = []
     var cursor = max(0, start)
     while cursor < text.length, result.count < limit {
@@ -86,9 +64,14 @@ public enum TextSearch {
       let acceptable = end == text.length ? end : end - overlap
       var local = cursor - base
       while local < string.length {
-        let found = find(string, NSRange(location: local, length: string.length - local))
+        let found = string.range(
+          of: needle, options: options,
+          range: NSRange(location: local, length: string.length - local))
         guard found.location != NSNotFound, base + found.location < acceptable else { break }
-        if accept(string, found, base) {
+        if question.rule == .find
+          || (boundaries.isBoundary(at: base + found.location, in: string, base: base)
+            && boundaries.isBoundary(at: base + NSMaxRange(found), in: string, base: base))
+        {
           result.append(NSRange(location: base + found.location, length: found.length))
           guard result.count < limit else { return result }
         }

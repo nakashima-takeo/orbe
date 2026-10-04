@@ -36,7 +36,7 @@ extension FramePerfTests {
     try measureStrokes("composition", Self.compose)
   }
 
-  /// カーソル 1 万本（1MB の各行の頭）で止まっている間の 1 コマ——点滅の刻みで描くコマの CPU を記録し、1 刻みに収まる
+  /// カーソル 1 万本（1MB の 4 行ごとの頭）で止まっている間の 1 コマ——点滅の刻みで描くコマの CPU を記録し、1 刻みに収まる
   /// （目に見えて詰まらない）。描画は見えている行のキャレットだけを引く。
   func testManyCursorsDoNotStallTheBlink() throws {
     let opened = try attach(Self.swiftSource(bytes: 1_000_000))

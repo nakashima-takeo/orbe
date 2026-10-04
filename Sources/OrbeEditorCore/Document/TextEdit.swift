@@ -57,8 +57,8 @@ public struct TextEdit: Equatable, Sendable {
   public var change: Int { replacementLength - range.length }
 }
 
-/// 位置の掃引——束（重ならない昇順の編集の列。どれも束の前の本文の座標）で、位置・区間の列を 1 回の走査でずらす。ずらし方の
-/// 定義はここだけにあり、どの結果も束の編集を後ろから 1 つずつ当てたのと同じ。手間は編集の数と位置の数の和に比例する
+/// 位置の掃引——束（重ならない昇順の編集の列。どれも束の前の本文の座標）で、位置・区間の列を 1 回の走査でずらす。
+/// どの結果も束の編集を後ろから 1 つずつ当てたのと同じ。手間は編集の数と位置の数の和に比例する
 /// （カーソルが多い編集で、編集の数 × 位置の数にならない）。
 public struct EditSweep: Sendable {
   public let edits: [TextEdit]
