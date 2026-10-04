@@ -82,18 +82,18 @@ final class KeybindingsTests: OrbeTestCase {
     XCTAssertNil(Keybindings.chromeAction(for: key("c")))
   }
 
+  /// ⌘⇧X はタスク画面。Shift なしの Cmd+X（切り取り系）は奪わない。
+  func testTaskPalette() {
+    XCTAssertEqual(Keybindings.chromeAction(for: key("X", [.command, .shift])), .showTaskPalette)
+    XCTAssertNil(Keybindings.chromeAction(for: key("x")))
+  }
+
   func testHelpToggle() {
     // ⌘H はヘルプオーバーレイのトグル（macOS Hide から奪取）。
     XCTAssertEqual(Keybindings.chromeAction(for: key("h")), .toggleHelp)
     // ⌘⌥H（ほかを隠す）・⌘⇧H は奪わない。
     XCTAssertNil(Keybindings.chromeAction(for: key("h", [.command, .option])))
     XCTAssertNil(Keybindings.chromeAction(for: key("H", [.command, .shift])))
-  }
-
-  /// ⌘⇧X は割り当てない（タスク画面の入口として空けてある）。Shift なしの Cmd+X（切り取り系）も奪わない。
-  func testCommandXIsUnassigned() {
-    XCTAssertNil(Keybindings.chromeAction(for: key("X", [.command, .shift])))
-    XCTAssertNil(Keybindings.chromeAction(for: key("x")))
   }
 
   /// ChromeHostingView は window レベルでタブ非依存 window コマンド（availableWithoutTabs）だけを
@@ -126,7 +126,7 @@ final class KeybindingsTests: OrbeTestCase {
   }
 
   /// `ChromeAction.windowCommand`（surface 経路・window レベル経路が共有する単一ソース mapping）を網羅固定する。
-  /// window 系11アクションは対応する WindowCommand へ、surface ローカル7アクションは nil へ写す。
+  /// window 系12アクションは対応する WindowCommand へ、surface ローカル7アクションは nil へ写す。
   /// この分類が回帰すると 0タブ配信の可否（availableWithoutTabs）とキー振り分け全体がズレる。
   func testWindowCommandMappingIsExhaustive() {
     let mapped: [(ChromeAction, WindowCommand)] = [
@@ -137,6 +137,7 @@ final class KeybindingsTests: OrbeTestCase {
       (.launchDefaultAgent, .launchDefaultAgent),
       (.showAgentPalette, .showAgentPalette),
       (.showWorktreePalette, .showWorktreePalette),
+      (.showTaskPalette, .showTaskPalette),
       (.openEditor, .openEditor),
       (.rename, .renameTab),
       (.showSettings, .showSettings),
@@ -156,12 +157,13 @@ final class KeybindingsTests: OrbeTestCase {
   }
 
   /// `WindowCommand.availableWithoutTabs`（0タブでも window レベルで配信してよいか）の分類を網羅固定する。
-  /// タブ非依存7コマンドのみ true、content 依存4コマンドは false。この分類が回帰すると
+  /// タブ非依存8コマンドのみ true、content 依存4コマンドは false。この分類が回帰すると
   /// 0タブで効くべきキーが死ぬ／効くべきでない content 依存キーが暴発する。
   func testAvailableWithoutTabsClassification() {
     let available: [WindowCommand] = [
       .showClosedAgentsPalette, .switchWorkspace,
-      .launchDefaultAgent, .showAgentPalette, .showWorktreePalette, .showSettings, .toggleHelp,
+      .launchDefaultAgent, .showAgentPalette, .showWorktreePalette, .showTaskPalette, .showSettings,
+      .toggleHelp,
     ]
     for command in available {
       XCTAssertTrue(command.availableWithoutTabs, "\(command) はタブ非依存ゆえ 0タブでも配信する")

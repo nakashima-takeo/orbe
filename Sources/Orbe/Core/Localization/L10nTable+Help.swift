@@ -44,6 +44,7 @@ extension L10n {
     .helpShortcutCloseTab: ("タブを閉じる", "Close tab"),
     .helpShortcutLaunchDefaultAgent: ("デフォルトエージェントを起動", "Launch default agent"),
     .helpShortcutAgentPalette: ("エージェント起動パレット", "Agent launch palette"),
+    .helpShortcutTasks: ("タスク", "Tasks"),
     // 「⌘ を 2 回」はキー表記 ⌘⌘ が語るのでラベルからは落とす（トップ厳選の 1 行に収める）。
     .helpShortcutAttentionPalette: (
       "Attention パレット（要対応のタブ）", "Attention palette (tabs needing you)"

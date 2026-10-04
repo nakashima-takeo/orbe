@@ -202,6 +202,10 @@ enum Theme {
     static let paneRow = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
     static let paneSegment = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
 
+    // タスク画面（⌘⇧X）の実寸タイポ。taskText=一覧の行のタイトル・詳細の項目 / taskHeading=詳細のタイトル
+    static let taskText = NSFont.monospacedSystemFont(ofSize: 13.5, weight: .medium)
+    static let taskHeading = NSFont.monospacedSystemFont(ofSize: 18, weight: .medium)
+
     // Help（⌘H チートシート）専用の実寸タイポ（デザイン px をそのまま pt に。
     // 11=chrome / 10=meta は既存トークンを再利用し、無いサイズだけ持つ）
     // helpTitle=見出し・検索・プロンプト / helpRow=行ラベル・凡例語 / helpSidebarItem=カテゴリ名 /

@@ -160,6 +160,60 @@ enum L10nKey: String, CaseIterable, Sendable {
   case worktreePalettePrepAsIs
   case worktreePaletteRefreshing
 
+  // MARK: - タスク画面（⌘⇧X）
+  case taskPalettePlaceholder
+  case taskPaletteGitHubPlaceholder
+  case taskPaletteTabTasks
+  case taskPaletteScopeAll
+  case taskPaletteSectionInProgress
+  case taskPaletteSectionTodo
+  case taskPaletteSectionDone
+  case taskPaletteAdd
+  case taskPaletteEmpty
+  case taskPaletteAddedBy
+  case taskPaletteToday
+  case taskPaletteDays
+  case taskPalettePriorityHigh
+  case taskPalettePriorityMedium
+  case taskPalettePriorityLow
+  case taskPaletteFieldStatus
+  case taskPaletteFieldWaiting
+  case taskPaletteFieldPriority
+  case taskPaletteFieldDue
+  case taskPaletteFieldWorkspace
+  case taskPaletteFieldAdded
+  case taskPaletteMemoPlaceholder
+  case taskPaletteAddReason
+  case taskPaletteSetDue
+  case taskPaletteClear
+  case taskPaletteNoWorkspace
+  case taskPaletteMarkDone
+  case taskPaletteReopen
+  case taskPaletteDelete
+  case taskPaletteActionDone
+  case taskPaletteActionReopen
+  case taskPaletteActionShowDone
+  case taskPaletteActionHideDone
+  case taskPaletteActionChangeStatus
+  case taskPaletteActionChangePriority
+  case taskPaletteActionChangeWorkspace
+  case taskPaletteActionEditTitle
+  case taskPaletteActionEditWaiting
+  case taskPaletteActionEditDue
+  case taskPaletteActionEditMemo
+  case taskPaletteActionCommit
+  case taskPaletteHintDetail
+  case taskPaletteHintReorder
+  case taskPaletteHintScope
+  case taskPaletteHintField
+  case taskPaletteHintBack
+  case taskPaletteHintCancel
+  case taskPaletteHintClose
+  case taskPaletteErrTitle
+  case taskPaletteErrWaiting
+  case taskPaletteErrDue
+  case taskPaletteErrFailed
+
   // MARK: - Onboarding
   case onboardingBegin
   case onboardingDetecting
@@ -439,6 +493,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case helpShortcutCloseTab
   case helpShortcutLaunchDefaultAgent
   case helpShortcutAgentPalette
+  case helpShortcutTasks
   case helpShortcutAttentionPalette
   case helpShortcutFind
   case helpShortcutScrollTop
