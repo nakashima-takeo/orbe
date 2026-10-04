@@ -89,7 +89,6 @@ final class GitHubCLIOpenListsTests: OrbeTestCase {
   /// ホスト名が「github.com」で始まるだけの GitHub Enterprise も github.com ではない。
   func testEnterpriseHostStartingWithGitHubDotComIsNotFound() throws {
     try stageGh(stdout: #"{"nameWithOwner":"o/n","url":"https://github.company.com/o/n"}"#)
-    XCTExpectFailure("バグ疑い: isGitHub(remoteURL:) が URL の部分一致で判定している")
     XCTAssertEqual(defaultRepository(root: dir.path), .failure(.notFound))
   }
 
