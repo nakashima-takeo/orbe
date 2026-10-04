@@ -34,13 +34,15 @@ extension GitHubCLI {
   static let defaultRepositoryArguments = ["repo", "view", "--json", "nameWithOwner,url"]
 
   /// open 一覧の上限。開くたびに裏で取り続ける総量の安全弁で、問い合わせの回数（＝レート消費）と、
-  /// 裏で gh が動き続ける時間を抑える。1 ページ `openListPageSize` 件なので issue 10・PR 5 回まで。
-  /// PR はレビュー状態・CI・レビュー依頼の算出で重く、PR の多いリポジトリでは 1 ページ 7〜9 秒かかる
-  /// （`timeout` の内に収まる）。
+  /// 裏で gh が動き続ける時間を抑える。issue 10・PR 10 回まで。
   static let openIssueLimit = 1000
   static let openPullRequestLimit = 500
-  /// 1 ページの件数（GitHub GraphQL の上限）。
-  static let openListPageSize = 100
+  /// issue の 1 ページの件数（GitHub GraphQL の上限）。
+  static let openIssuePageSize = 100
+  /// PR の 1 ページの件数。PR はレビュー状態・CI・レビュー依頼の算出で重く、PR の多いリポジトリでは
+  /// 100 件で 1 ページ 6〜11 秒かかり、GitHub がサーバ側で打ち切る 10 秒に届く（打ち切られると一覧ごと
+  /// 取れない）。50 件なら 3〜5 秒で収まる。
+  static let openPullRequestPageSize = 50
 
   /// `repo` の open issue 一覧を作成の新しい順に `openIssueLimit` まで、ページが届くたびに `page` へ渡す。
   /// `finished` は最後に 1 回だけ呼ぶ: `true` = 次のページが無い／上限に達した、`false` = 途中で失敗した
@@ -51,7 +53,7 @@ extension GitHubCLI {
     finished: @escaping (Bool) -> Void
   ) {
     fetchPages(
-      limit: Self.openIssueLimit,
+      limit: Self.openIssueLimit, pageSize: Self.openIssuePageSize,
       arguments: { Self.openIssuesPageArguments(repo: repo, first: $0, after: $1) }, page: page,
       finished: finished)
   }
@@ -62,7 +64,7 @@ extension GitHubCLI {
     finished: @escaping (Bool) -> Void
   ) {
     fetchPages(
-      limit: Self.openPullRequestLimit,
+      limit: Self.openPullRequestLimit, pageSize: Self.openPullRequestPageSize,
       arguments: { Self.openPullRequestsPageArguments(repo: repo, first: $0, after: $1) },
       page: page, finished: finished)
   }
@@ -185,7 +187,7 @@ extension GitHubCLI {
   /// ページの列を回す。次のページがあり、件数が上限未満の間だけ続け、最後のページは残り件数だけ頼む。
   /// `page` と `finished` はメインへ届いた順に載せる（メインキューへの async は順序を保つ）。
   private func fetchPages<T: Decodable>(
-    limit: Int, arguments: @escaping (Int, String?) -> [String],
+    limit: Int, pageSize: Int, arguments: @escaping (Int, String?) -> [String],
     page: @escaping ([T]) -> Void, finished: @escaping (Bool) -> Void
   ) {
     queue.async {
@@ -196,7 +198,7 @@ extension GitHubCLI {
       var fetched = 0
       var cursor: String?
       while true {
-        let first = min(Self.openListPageSize, limit - fetched)
+        let first = min(pageSize, limit - fetched)
         guard
           let result: GitHubPage<T> = self.fetchSync(
             gh, arguments(first, cursor), cwd: NSHomeDirectory())
