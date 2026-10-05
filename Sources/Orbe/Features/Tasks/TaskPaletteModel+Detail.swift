@@ -11,6 +11,9 @@ enum TaskDetailField: CaseIterable, Equatable, Hashable {
     case .status, .priority, .workspace: false
     }
   }
+
+  /// 複数行の文字の項目。↵ は改行なので、編集は esc で確定して抜ける（取り消しのキーは無い）。
+  var isMultiline: Bool { self == .description }
 }
 
 /// 詳細で ↑↓ で止まる場所。固定の項目と、タスクごとに数が変わる結び付きの行・agent の場所。結び付きは位置で
@@ -65,6 +68,9 @@ struct TaskEditDraft: Equatable {
     guard case .task(_, let field) = target else { return nil }
     return field
   }
+
+  /// 複数行の項目の下書きか（esc で確定する）。
+  var isMultiline: Bool { field?.isMultiline == true }
 }
 
 /// 詳細の操作（項目の移動・選択式の値・文字の項目の編集と確定・結び付きを開く / 外す）。変異はすべて
@@ -209,7 +215,7 @@ extension TaskPaletteModel {
     return true
   }
 
-  /// ↵（詳細の欄は ⌘↵）で確定、esc で取り消す。確定できない（期限が読めない・ストアが受け付けない）ときは
+  /// 編集を抜ける（確定か取り消し）。確定できない（期限が読めない・ストアが受け付けない）ときは
   /// 理由を出して編集を続け、false を返す。
   @discardableResult func endEditing(commit: Bool) -> Bool {
     guard finishDraft(commit: commit) else { return false }

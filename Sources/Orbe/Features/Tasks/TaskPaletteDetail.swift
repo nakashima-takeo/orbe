@@ -256,7 +256,7 @@ struct TaskPaletteDetail: View {
     .frame(height: 38)
   }
 
-  /// 詳細の欄。複数行で、↵ は改行、⌘↵ で確定。
+  /// 詳細の欄。複数行で、↵ は改行、esc で確定。
   private func descriptionField(_ task: TaskItem) -> some View {
     ZStack(alignment: .topLeading) {
       TextEditor(text: $model.draftText)

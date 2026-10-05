@@ -149,45 +149,13 @@ extension TaskPaletteCardKeyTests {
     press(Key.enter, "\r", repeating: true, to: window)
     press(Key.enter, "\r", repeating: true, to: window)
     type("2", into: window)
-    press(Key.enter, "\r", .command, to: window)
+    press(Key.escape, "\u{1B}", to: window)
 
     XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.description, "1\n\n\n2")
   }
 
-  /// 詳細の ⌘↵ を押し続けても確定は 1 回——リピートだけでは確定せず、確定の後に続くリピートで編集を
-  /// 始め直さない。
-  func testCommandEnterHeldInTheDescriptionCommitsOnce() {
-    let model = model()
-    let window = mount(model)
-    enterDetail(model, at: .description, in: window)
-    press(Key.enter, "\r", to: window)
-    type("1", into: window)
-
-    press(Key.enter, "\r", .command, repeating: true, to: window)
-    XCTAssertNotNil(model.draft, "リピートだけでは確定しない")
-
-    press(Key.enter, "\r", .command, to: window)
-    press(Key.enter, "\r", .command, repeating: true, to: window)
-    press(Key.enter, "\r", .command, repeating: true, to: window)
-
-    XCTAssertNil(model.draft, "確定した後に編集を始め直さない")
-    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.description, "1")
-    XCTAssertEqual(model.area, .detail(.field(.description)))
-  }
-
-  /// ⌘↵ は確定のキーなので、詳細の文字の項目（編集していない状態）で押しても編集を始めない。
-  func testCommandEnterOnATextFieldDoesNotStartEditing() {
-    let model = model()
-    let window = mount(model)
-
-    for field in [TaskDetailField.title, .description] {
-      enterDetail(model, at: field, in: window)
-      press(Key.enter, "\r", .command, to: window)
-      XCTAssertNil(model.draft, "\(field)")
-    }
-  }
-
-  func testDescriptionTakesNewlinesWithEnterAndCommitsWithCommandEnter() {
+  /// 詳細の欄は ↵ が改行で、esc で確定して欄に居たまま編集を終える。もう一度の esc で一覧へ戻る。
+  func testDescriptionTakesNewlinesWithEnterAndCommitsWithEscape() {
     let model = model()
     let window = mount(model)
     enterDetail(model, at: .description, in: window)
@@ -196,8 +164,13 @@ extension TaskPaletteCardKeyTests {
     type("1", into: window)
     press(Key.enter, "\r", to: window)
     type("2", into: window)
-    press(Key.enter, "\r", .command, to: window)
+    press(Key.escape, "\u{1B}", to: window)
 
     XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.description, "1\n2")
+    XCTAssertNil(model.draft)
+    XCTAssertEqual(model.area, .detail(.field(.description)))
+
+    press(Key.escape, "\u{1B}", to: window)
+    XCTAssertEqual(model.area, .list)
   }
 }
