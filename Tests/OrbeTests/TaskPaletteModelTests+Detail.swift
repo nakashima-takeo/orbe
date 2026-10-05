@@ -154,9 +154,12 @@ extension TaskPaletteModelTests {
     XCTAssertNil(try storedTask(palette, 1).waiting)
   }
 
+  /// 完了したタスクの待ちは編集できない（フッターもその ↵ を案内しない）。他の文字の項目は編集できる。
   func testWaitingCannotBeEditedOnADoneTask() {
     let palette = detailOfDone()
     palette.area = .detail(.field(.waiting))
+    XCTAssertFalse(palette.canEdit(.waiting))
+    XCTAssertTrue(palette.canEdit(.title))
 
     palette.beginEditing()
 

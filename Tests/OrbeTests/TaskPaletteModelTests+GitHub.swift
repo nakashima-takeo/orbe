@@ -4,7 +4,7 @@ import XCTest
 
 private typealias GitHub = TaskPaletteGitHubSamples
 
-/// GitHub タブ（開いた workspace のリポジトリの open な Issue・PR）の操作: 本体の出し方、タスクにする（右の欄の
+/// GitHub タブ（⌘T と同じ基点で解決したリポジトリの open な Issue・PR）の操作: 本体の出し方、タスクにする（右の欄の
 /// 値と、自分を GitHub に足す書き込み）、⌘T、結び付いたタスクへ移る・外す、絞り込み、「さらに」、右の欄、
 /// タブごとの入力と選択、agent の変更への追従。
 ///
@@ -52,6 +52,48 @@ extension TaskPaletteModelTests {
       body(.init(resolution: .resolved, repo: GitHub.repo), stillGrowing), .loading)
     XCTAssertEqual(body(.init(resolution: .resolving, repo: nil), nil), .loading)
     XCTAssertNil(TaskPaletteSamples.model([]).gitHubCount, "まだ何も取れていなければ件数を出さない")
+  }
+
+  /// 一覧がまだ届いていない区分と取り直し中の区分は、読み込み中の行を出して「該当なし」と言い切らない。
+  /// 取得に失敗した区分は読み込み中に数えない。
+  func testSectionsStillFetchingShowTheLoadingRowInsteadOfNothing() {
+    func rows(query: String = "", _ change: (inout GitHubOpenLists.Repository) -> Void)
+      -> [TaskPaletteGitHubRow.Identity]
+    {
+      var repository = GitHubOpenLists.Repository()
+      repository.issues.items = [GitHub.issue(5)]
+      change(&repository)
+      let lists = GitHub.lists(
+        [TaskPaletteSamples.root: .init(resolution: .resolved, repo: GitHub.repo)],
+        [GitHub.repo: repository])
+      let palette = TaskPaletteSamples.model([], openLists: lists)
+      palette.toggleTab()
+      palette.query = query
+      return palette.gitHubRows.map(\.id)
+    }
+
+    XCTAssertEqual(
+      rows { $0.pullRequests.items = nil },
+      [.header(.issue), .selectable(.item(GitHub.id(5))), .header(.pr), .loading(.pr)],
+      "PR がまだ 1 件も届いていない")
+    XCTAssertEqual(
+      rows(query: "zzz") {
+        $0.issues.growing = true
+        $0.pullRequests.items = []
+      },
+      [.header(.issue), .loading(.issue)], "取り直し中に絞り込みで 0 件")
+    XCTAssertEqual(
+      rows { $0.pullRequests.failed = true },
+      [.header(.issue), .selectable(.item(GitHub.id(5)))], "取得に失敗した区分")
+  }
+
+  /// 基点の場所に GitHub のリポジトリが見つからないときの 1 行は、workspace のこととは言わない（基点は
+  /// アクティブタブの cwd）。
+  func testNotFoundSaysNoGitHubRepositoryWithoutNamingTheWorkspace() {
+    let key = TaskPaletteGitHubList.reasonKey(.notFound)
+
+    XCTAssertEqual(LocalizationStore(language: .ja).string(key), "GitHub のリポジトリが見つかりません")
+    XCTAssertEqual(LocalizationStore(language: .en).string(key), "No GitHub repository found")
   }
 
   // MARK: - タスクにする

@@ -48,16 +48,15 @@ extension WindowController {
       // 文脈のタスクも決定の一部として、この時点の値で捕まえる（閉じた後にモデルを読まない）。
       guard let target = p.selectedTarget else { return }
       let launch = WorktreePaletteLaunch(target: target, task: p.task?.id, binding: binding)
-      let workspace = launch.workspace
       p.errorMessage = nil
       p.isPreparing = true  // 進捗表示 ON。非同期 worktree 作成の待機中だけフッターにスピナが出る。
-      provider.prepareDirectory(for: destination) { [weak self, weak workspace] outcome in
+      provider.prepareDirectory(for: destination) { [weak self] outcome in
         guard let self, let p = self.model.worktreePalette else { return }
         switch outcome {
         case .resolved(let resolution):
           self.settleWorktreePalette(resolution, launch)
         case .created(let path, let base):
-          if let workspace { self.rememberWorktreeBase(base, in: workspace) }
+          if let workspace = launch.workspace { self.rememberWorktreeBase(base, in: workspace) }
           self.settleWorktreePalette(.ready(path), launch)
         case .staleBranch(let sync, let relativeDate):
           // 作っていない。一覧の旗を下ろして最新化画面へ（以後の busy は画面の相が持つ）。

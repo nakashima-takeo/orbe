@@ -22,6 +22,7 @@ struct TaskPaletteLinks: View {
   @Bindable var model: TaskPaletteModel
   let task: TaskItem
   @Environment(\.localization) private var l10n
+  @Environment(\.chromeFontResolver) private var fontResolver
   @State private var hoveredLink: GitHubItemID?
 
   var body: some View {
@@ -53,7 +54,7 @@ struct TaskPaletteLinks: View {
         .foregroundStyle(Color.theme.textMuted)
         .fixedSize()
       if let summary {
-        Text(summary.title)
+        fontResolver.text(summary.title, base: Theme.Typography.taskText)
           .font(Font.theme.taskText)
           .foregroundStyle(Color.theme.textPrimary)
           .lineLimit(1)
@@ -83,6 +84,7 @@ struct TaskPaletteLinks: View {
     .padding(.horizontal, -Theme.Space.step)
     .contentShape(Rectangle())
     .onTapGesture { model.openLink(link.item) }
+    .id(TaskDetailStop.link(link.item))
     .onHover { hovering in
       if hovering {
         hoveredLink = link.item
@@ -116,6 +118,7 @@ struct TaskPaletteLinks: View {
     .padding(.horizontal, -Theme.Space.step)
     .contentShape(Rectangle())
     .onTapGesture { model.tapAddLink() }
+    .id(TaskDetailStop.addLink)
   }
 
   /// 右の状態。Issue は open / closed、PR は「✓ CI · レビュー待ち」「マージ済み」「閉じた」など。

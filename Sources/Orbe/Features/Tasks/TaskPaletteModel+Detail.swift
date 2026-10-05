@@ -192,13 +192,18 @@ extension TaskPaletteModel {
     if startDraft() { error = nil }
   }
 
+  /// 文字の項目を今編集できるか。完了のタスクの待ちは入れられない（ストアの不変条件）。
+  func canEdit(_ field: TaskDetailField) -> Bool {
+    guard field.isText, let task = selectedTask else { return false }
+    return !(field == .waiting && task.status == .done)
+  }
+
   @discardableResult private func startDraft() -> Bool {
-    guard case .detail(.field(let field)) = area, field.isText, draft == nil,
+    guard case .detail(.field(let field)) = area, canEdit(field), draft == nil,
       let task = selectedTask
     else {
       return false
     }
-    if field == .waiting, task.status == .done { return false }
     let text = Self.initialText(field, task)
     draft = TaskEditDraft(target: .task(id: task.id, field: field), original: text, text: text)
     return true

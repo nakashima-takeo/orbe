@@ -304,6 +304,7 @@ final class GitHubOpenListsTests: OrbeTestCase {
   }
 
   /// 取得中に差し込んだ値は、差し込む前に問い合わせた古いページが後から届いても、取り終えても消えない。
+  /// その項目を含まないページが先に届いた間は、後ろを埋める前回の一覧の側で残る。
   func testPatchSurvivesAnOlderPageArrivingAfterIt() throws {
     let fetches = PendingFetches()
     let lists = listsWithIssueOne(fetches)
@@ -312,12 +313,31 @@ final class GitHubOpenListsTests: OrbeTestCase {
 
     lists.addSelf(as: .assignee, to: issueOne, kind: .issue) { _ in }
     try XCTUnwrap(fetches.writes.first).completion(["me"])
-    refetch.page([issue(2), issue(1)])
+    refetch.page([issue(2)])
+    XCTAssertEqual(issueList(lists, repo)?.items?.last?.assignees, ["me"], "その項目を含まないページ")
+    refetch.page([issue(1)])
     XCTAssertEqual(issueList(lists, repo)?.items?.last?.assignees, ["me"], "届いた古いページ")
     refetch.finished(true)
 
     XCTAssertEqual(issueList(lists, repo)?.items?.map(\.number), [2, 1])
     XCTAssertEqual(issueList(lists, repo)?.items?.last?.assignees, ["me"], "取り終えた後")
+  }
+
+  /// 取り直しで既に届いていた項目へ差し込んだ値は、続くページが届いて取り終えても残る。
+  func testPatchOnAnAlreadyFetchedItemSurvivesTheFollowingPagesAndCompletion() throws {
+    let fetches = PendingFetches()
+    let lists = listsWithIssueOne(fetches)
+    lists.open(root: "/root")
+    let refetch = fetches.started(.issue, repo)[1]
+    refetch.page([issue(1)])
+
+    lists.addSelf(as: .assignee, to: issueOne, kind: .issue) { _ in }
+    try XCTUnwrap(fetches.writes.first).completion(["me"])
+    refetch.page([issue(2)])
+    refetch.finished(true)
+
+    XCTAssertEqual(issueList(lists, repo)?.items?.map(\.number), [1, 2])
+    XCTAssertEqual(issueList(lists, repo)?.items?.first?.assignees, ["me"])
   }
 
   /// 取っている間に項目が動いて同じ番号が 2 度届いても、一覧には 1 行だけ（先に届いたもの）。

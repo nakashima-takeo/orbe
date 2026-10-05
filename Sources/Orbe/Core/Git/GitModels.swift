@@ -119,14 +119,15 @@ struct GitHubRepoName: Hashable {
 
   /// github.com のリポジトリの URL か。URL の書き方（https・ssh://・scp 形式の `git@host:o/n`）ごとにホストを
   /// 取り出し、ホストが github.com か ssh.github.com（443 番の SSH）、または SSH の書き方でホストが
-  /// `github.com-` で始まる別名（`github.com-work`。複数アカウントの ssh config の慣習）のときだけ真。
+  /// `github.com-` で始まるか `.github.com` で終わる別名（`github.com-work`・`work.github.com`。複数
+  /// アカウントの ssh config の慣習）のときだけ真。
   /// `github.company.com` のような GitHub Enterprise は偽——問い合わせと書き込みは github.com を名指しする
   /// ので、別のホストの owner/name を github.com で読み書きしないため。可用性の判定
   /// （`GitRepo.originIsGitHub`）・台帳・GitHub タブの既定のリポジトリが共にこの 1 つの規則を読む。
   static func isGitHub(remoteURL url: String) -> Bool {
     guard let (host, isSSH) = host(of: url) else { return false }
     return host == "github.com" || host == "ssh.github.com"
-      || (isSSH && host.hasPrefix("github.com-"))
+      || (isSSH && (host.hasPrefix("github.com-") || host.hasSuffix(".github.com")))
   }
 
   /// URL のホスト（小文字）と、SSH の書き方か。`scheme://[user@]host[:port]/path` と scp 形式
@@ -331,7 +332,7 @@ private struct OpenItemReviewRequests: Decodable {
   let nodes: [Node?]?
 }
 
-/// `User` は login、`Team` は所属の組織と slug。ほか（`Mannequin`・`Bot`）は読まない。
+/// `User` は login、`Team` は所属の組織と slug。ほかの種別は読まない。
 private struct OpenItemReviewer: Decodable {
   enum CodingKeys: String, CodingKey {
     case typename = "__typename"

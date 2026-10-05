@@ -59,4 +59,12 @@ extension WorktreePaletteModel {
   var isAwaitingBranchNameAnswer: Bool {
     !query.isEmpty && newBranchRules != nil && branchNameAnswer?.name != query
   }
+
+  /// 作成行を出すかがまだ決まらない。今の入力への有効性の答えが無いか、作成行が出ている名前で提示時の fetch
+  /// がまだ着地していない（リモートに現れれば作成行は消え、そのリモートブランチの行が正しい入口になる）。
+  /// 作成行が出ない名前は、着地しても出ることは無いので待たない。
+  var isCreateRowUndecided: Bool {
+    isAwaitingBranchNameAnswer
+      || (creatableName != nil && newBranchRules?.remoteBranchesLanded == false)
+  }
 }

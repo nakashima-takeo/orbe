@@ -47,18 +47,20 @@ final class TaskPaletteGitHubRowsTests: OrbeTestCase {
   private func input(
     issues: [GitHubOpenItem] = [], pullRequests: [GitHubOpenItem] = [], tasks: [TaskItem] = [],
     login: String? = "me", reviewRequests: Set<Int>? = [], filter: TaskGitHubFilter = .all,
-    query: String = "", expanded: Set<GitHubItemKind> = []
+    query: String = "", expanded: Set<GitHubItemKind> = [], loading: Set<GitHubItemKind> = []
   ) -> TaskPaletteGitHubRows.Input {
     TaskPaletteGitHubRows.Input(
       repo: repo, issues: issues, pullRequests: pullRequests, tasks: tasks, login: login,
-      reviewRequests: reviewRequests, filter: filter, query: query, expanded: expanded)
+      reviewRequests: reviewRequests, filter: filter, query: query, expanded: expanded,
+      loading: loading)
   }
 
-  /// 行を読みやすい形に（見出し・項目の番号・さらに・空）。
+  /// 行を読みやすい形に（見出し・項目の番号・さらに・読み込み中・空）。
   private enum Shape: Equatable {
     case header(GitHubItemKind, Int)
     case item(Int)
     case more(GitHubItemKind, Int)
+    case loading(GitHubItemKind)
     case empty
   }
 
@@ -68,6 +70,7 @@ final class TaskPaletteGitHubRowsTests: OrbeTestCase {
       case .header(let kind, let count): .header(kind, count)
       case .item(let row): .item(row.item.number)
       case .more(let kind, let count): .more(kind, count)
+      case .loading(let kind): .loading(kind)
       case .empty: .empty
       }
     }
@@ -128,6 +131,17 @@ final class TaskPaletteGitHubRowsTests: OrbeTestCase {
   func testEmptySectionsAreOmittedAndNothingMatchingShowsTheEmptyRow() {
     XCTAssertEqual(shape(input(pullRequests: [pr(9)])), [.header(.pr, 1), .item(9)])
     XCTAssertEqual(shape(input(issues: [issue(1)], query: "zzz")), [.empty])
+  }
+
+  /// 取得中の区分は、当たる項目の後ろに読み込み中の行を足し、0 件でも見出しを残す。取得中の区分がある間は
+  /// 「該当なし」と言い切らない。
+  func testLoadingSectionKeepsItsHeaderAndEndsWithTheLoadingRow() {
+    XCTAssertEqual(
+      shape(input(issues: [issue(1)], loading: [.issue, .pr])),
+      [.header(.issue, 1), .item(1), .loading(.issue), .header(.pr, 0), .loading(.pr)])
+    XCTAssertEqual(
+      shape(input(issues: [issue(1)], query: "zzz", loading: [.issue])),
+      [.header(.issue, 0), .loading(.issue)])
   }
 
   /// 結び付いた行には、そのタスクの主の番号とタイトルを添える。
@@ -232,5 +246,16 @@ final class TaskPaletteGitHubRowsTests: OrbeTestCase {
     XCTAssertNil(role(issue(3, assignees: ["me"])), "既に担当")
     XCTAssertNil(role(pr(1, reviewers: ["me"])), "個人宛にレビュー依頼済み")
     XCTAssertNil(role(issue(3), login: nil), "自分が分からない")
+  }
+
+  /// チーム宛の依頼がある PR は、自分へのレビュー依頼がまだ分からない間は足す役割が決まらない（担当者として
+  /// 書き込まない）。チーム宛の依頼が無い PR は担当者のまま。
+  func testNoSelfRoleForATeamRequestedPullRequestWhileReviewRequestsAreUnknown() {
+    func role(_ item: GitHubOpenItem) -> GitHubSelfRole? {
+      TaskPaletteGitHubRows.selfRole(item, login: me, reviewRequests: nil)
+    }
+
+    XCTAssertNil(role(pr(1, teams: ["o/core"])))
+    XCTAssertEqual(role(pr(2)), .assignee)
   }
 }

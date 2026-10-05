@@ -10,8 +10,7 @@ import XCTest
 /// upstream と track が他の列の値にすり替わって clean の安全確認が事実と食い違う・author 名が途中で
 /// 切れる、が黙って起きる（エラーにはならない）。
 ///
-/// remote 一覧は、読み違えると行が GitHub のどのリポジトリか決まらず、番号チップと clean の PR の事実が
-/// 黙って消える。
+/// remote 一覧は、読み違えると行が GitHub のどのリポジトリか決まらず、clean の PR の事実が黙って消える。
 final class GitRepoWorktreesListingTests: OrbeTestCase {
   private var dir: URL!
   /// 本体 worktree。追加の worktree はその外（`dir` 直下）に並べる。

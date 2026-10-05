@@ -14,7 +14,8 @@ extension TaskPaletteModelTests {
   private func agent(_ state: AgentStateIcon.Kind, tab: Int = 42) -> WorktreeAgentActivity.Agent {
     WorktreeAgentActivity.Agent(
       name: "claude", state: state, since: DesignSceneFixtures.taskToday, tabId: tab,
-      tabTitle: "issue-221")
+      tabTitle: "issue-221", branch: nil,
+      defaultBranch: nil)
   }
 
   /// worktree を持ち Issue 1 と PR 2 が結び付いたタスクを選び、その worktree に `state` の agent がいる詳細。

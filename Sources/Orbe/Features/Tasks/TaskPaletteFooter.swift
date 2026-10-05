@@ -41,8 +41,11 @@ struct TaskPaletteFooter: View {
 
   @ViewBuilder private var action: some View {
     if case .detail(.field(let field)) = model.area {
-      PaletteActionLine(
-        key: field.isText ? "↵" : "←→", template: l10n.string(fieldActionKey(field)), slots: [])
+      // 編集できない文字の項目（完了のタスクの待ち）には、効かない ↵ を案内しない。
+      if !field.isText || model.canEdit(field) {
+        PaletteActionLine(
+          key: field.isText ? "↵" : "←→", template: l10n.string(fieldActionKey(field)), slots: [])
+      }
     } else if model.area == .detail(.agent) {
       if let task = model.selectedTask, let agent = model.agent(of: task) {
         PaletteActionLine(
@@ -196,6 +199,7 @@ private struct TaskPaletteGitHubHints: View {
     if case .pane(let stop) = model.area {
       // 期限の ↵ は期限を打つ（左の 1 行が言う）。
       if stop != .due { PaletteKeyHint(key: "↵", label: l10n.string(.taskPaletteMakeTask)) }
+      PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenInBrowser))
       PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteHintField))
       PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintBack))
     } else if let row = model.selectedGitHubRow {
@@ -208,6 +212,7 @@ private struct TaskPaletteGitHubHints: View {
         PaletteKeyHint(key: "⌘L", label: l10n.string(.taskPaletteHintRelink))
         PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteUnlink))
       }
+      PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenInBrowser))
       PaletteKeyHint(key: "⇥", label: l10n.string(.taskPaletteHintFilter))
       PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
     } else {

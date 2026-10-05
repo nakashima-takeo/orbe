@@ -40,7 +40,8 @@ enum TaskStoreError: Error, Equatable {
     let item = TaskItem(
       id: nextId, title: title, status: draft.status, waiting: waiting, priority: draft.priority,
       due: draft.due, workspace: draft.workspace, memo: draft.memo, createdAt: now,
-      createdBy: draft.createdBy, links: draft.links, worktree: draft.worktree)
+      createdBy: draft.createdBy, links: draft.links, worktree: draft.worktree,
+      worktreeBranch: draft.worktree?.currentBranch)
     nextId += 1
     tasks.append(item)
     persist()
@@ -82,6 +83,7 @@ enum TaskStoreError: Error, Equatable {
     if let worktree = update.worktree {
       try Self.checkWorktree(worktree.value, of: item.id, against: tasks)
       item.worktree = worktree.value
+      item.worktreeBranch = worktree.value?.currentBranch
     }
   }
 
@@ -119,8 +121,12 @@ enum TaskStoreError: Error, Equatable {
   @discardableResult func begin(_ id: Int, worktree: TaskWorktree) throws(TaskStoreError) -> Int? {
     guard let index = tasks.firstIndex(where: { $0.id == id }) else { throw .notFound(id) }
     let previous = tasks.firstIndex { $0.id != id && $0.worktree == worktree }
-    if let previous { tasks[previous].worktree = nil }
+    if let previous {
+      tasks[previous].worktree = nil
+      tasks[previous].worktreeBranch = nil
+    }
     tasks[index].worktree = worktree
+    tasks[index].worktreeBranch = worktree.currentBranch
     tasks[index].status = .inProgress
     persist()
     return previous.map { tasks[$0].id }
@@ -142,6 +148,17 @@ enum TaskStoreError: Error, Equatable {
     tasks[index].unlinked.remove(link.item)
     persist()
     return previous.map { tasks[$0].id }
+  }
+
+  /// worktree での作業のブランチを確定する（PR の自動の結び付けが、未確定の記録を持つ worktree が既定
+  /// ブランチ以外にいるのを見たとき）。タスクが無い・worktree が `path` でない・記録が既に `branch` なら
+  /// 何もしない。
+  func confirmWorktreeBranch(_ id: Int, path: String, branch: String) {
+    guard let index = tasks.firstIndex(where: { $0.id == id }),
+      tasks[index].worktree?.path == path, tasks[index].worktreeBranch != branch
+    else { return }
+    tasks[index].worktreeBranch = branch
+    persist()
   }
 
   /// worktree のブランチの PR の自動の結び付け。結び付きの末尾に足す。タスクが無い・完了・その項目を

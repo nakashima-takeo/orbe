@@ -1,7 +1,7 @@
 import AppKit
 
 /// ⌘⇧X タスク画面の提示。画面はタスクのストア（唯一の正）を直接読み書きし、ここは開いた時点の
-/// workspace の写しと root、GitHub の値の置き場を渡して配線するだけ。
+/// workspace の写しと GitHub タブのリポジトリの基点、GitHub の値の置き場を渡して配線するだけ。
 extension WindowController {
   /// タスク画面を開く（開いていれば焦点をモデルが決めた行き先へ当て直すだけ）。タブが 0 枚の workspace でも開く。
   /// GitHub タブの一覧は、タスクのタブを開いていても取り直す（ヘッダーの「GitHub N」のため）。
@@ -10,12 +10,14 @@ extension WindowController {
       model.taskPalette?.focus()
       return
     }
+    // GitHub タブのリポジトリは ⌘T と同じ基点で決める（「⌘T タスクにして開く」が同じリポジトリを開くため）。
+    let base = store.newTabCwd(inWorkspaceAt: store.activeWorkspace)
     let entry = { (ws: Workspace) in
       TaskPaletteWorkspaces.Entry(id: ws.persistentId, name: ws.name)
     }
     let p = TaskPaletteModel(
       store: taskStore, githubItems: .shared, viewer: .shared, openLists: .shared,
-      root: current.rootPath, agents: worktreeAgents,
+      root: base, agents: worktreeAgents,
       workspaces: TaskPaletteWorkspaces(opened: entry(current), all: workspaces.map(entry)),
       now: Date(), timeZone: .current)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
@@ -29,24 +31,34 @@ extension WindowController {
     model.overlay = .taskPalette
     p.focus()
     reconfirmFocusNextTick()  // 別 overlay からの遷移で去りゆくカードの teardown に勝つ
-    GitHubOpenLists.shared.open(root: current.rootPath)
+    GitHubOpenLists.shared.open(root: base)
     linkPullRequestsFromBranches()
   }
 
   /// PR の自動の結び付け（⌘⇧X を開いたとき）。完了していないタスクの、実在する worktree のブランチの PR を、
-  /// そのタスクの結び付きの末尾に足す。人が外した項目・既にどこかに付いている項目は足さない
-  /// （`TaskStore.linkFromBranch`）。答えが届くまでに worktree が別のタスクへ移っていれば、今の持ち主に足す。
+  /// そのタスクの結び付きの末尾に足す。worktree での作業のブランチが確定していれば、そのブランチにいる間だけ
+  /// 引く（ブランチを切り替えて使い回す main worktree で、別の作業の PR を足さない）。未確定（無い・既定
+  /// ブランチ）なら今のブランチで引き、既定ブランチ以外にいればそのブランチで確定する。人が外した項目・既に
+  /// どこかに付いている項目は足さない（`TaskStore.linkFromBranch`）。答えが届くまでに worktree が別のタスクへ
+  /// 移っていれば、今の持ち主の記録が引いたときと同じときだけ、その持ち主に足す。
   private func linkPullRequestsFromBranches() {
-    let worktrees = taskStore.tasks.filter { $0.status != .done }
-      .compactMap { $0.worktree.flatMap { $0.exists ? $0.path : nil } }
+    var worktrees: [String: String?] = [:]
+    for task in taskStore.tasks where task.status != .done {
+      guard let worktree = task.worktree, worktree.exists else { continue }
+      worktrees[worktree.path] = task.worktreeBranch
+    }
     guard !worktrees.isEmpty else { return }
     WorktreePullRequestResolver().resolve(worktrees: worktrees) { [weak self] found in
       guard let self else { return }
-      for (path, item) in found {
-        guard let task = self.taskStore.tasks.first(where: { $0.worktree?.path == path }) else {
-          continue
+      for (path, match) in found {
+        guard
+          let task = self.taskStore.tasks.first(where: { $0.worktree?.path == path }),
+          worktrees[path] == .some(task.worktreeBranch)
+        else { continue }
+        self.taskStore.confirmWorktreeBranch(task.id, path: path, branch: match.branch)
+        if let item = match.pullRequest {
+          self.taskStore.linkFromBranch(task.id, TaskLink(item: item, kind: .pr))
         }
-        self.taskStore.linkFromBranch(task.id, TaskLink(item: item, kind: .pr))
       }
     }
   }

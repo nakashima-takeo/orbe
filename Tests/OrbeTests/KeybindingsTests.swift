@@ -150,7 +150,7 @@ final class KeybindingsTests: OrbeTestCase {
   }
 
   /// `ChromeAction.windowCommand`（面の経路・window レベル経路が共有する単一ソース mapping）を網羅固定する。
-  /// window 系15アクションは対応する WindowCommand へ、surface ローカル6アクションは nil へ写す。
+  /// window 系15アクションは対応する WindowCommand へ、surface ローカル7アクションは nil へ写す。
   /// この分類が回帰すると 0タブ配信の可否（availableWithoutTabs）とキー振り分け全体がズレる。
   func testWindowCommandMappingIsExhaustive() {
     let mapped: [(ChromeAction, WindowCommand)] = [
@@ -176,7 +176,7 @@ final class KeybindingsTests: OrbeTestCase {
     // surface ローカル操作（WindowController へ届けない）は nil。
     let surfaceLocal: [ChromeAction] = [
       .increaseFontSize, .decreaseFontSize, .resetFontSize, .find,
-      .scrollToTop, .scrollToBottom,
+      .scrollToTop, .scrollToBottom, .saveDocument,
     ]
     for action in surfaceLocal {
       XCTAssertNil(action.windowCommand, "\(action) は surface ローカルゆえ windowCommand は nil")

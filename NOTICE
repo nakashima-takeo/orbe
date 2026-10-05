@@ -288,13 +288,3 @@ regeneration procedure).
   Inlined into the bundle through the prebuilt @withfig/autocomplete specs.
   https://github.com/withfig/autocomplete-tools
   License: licenses/fig-autocomplete-generators-LICENSE.txt
-
---------------------------------------------------------------------------------
-Icons
---------------------------------------------------------------------------------
-
-* GitHub Octicons — MIT License
-  Octicon path data is ported into Orbe's SwiftUI code and compiled into
-  Contents/MacOS/Orbe.
-  https://github.com/primer/octicons
-  License: licenses/octicons-LICENSE.txt

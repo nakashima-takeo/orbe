@@ -147,22 +147,22 @@ final class TaskQuarantineTests: OrbeTestCase {
     try assertQuarantined(file([taskJSON(id: 1, worktree: "wt/a")]), "絶対パスでない worktree")
   }
 
-  /// u1 で書かれた最小の tasks.json（今の必須フィールドだけ）は、後の版でも読める。
+  /// 必須フィールドだけの tasks.json は読める。
   ///
-  /// 壊れると何が起きるか: 後の単位がタスクに既定値付きの非 Optional フィールドを足すと、合成された
-  /// decode が欠けたキーで失敗し、更新した全利用者の tasks.json が初回起動で丸ごと退避されて一覧が
-  /// 空で始まる。この fixture は u1 の形で凍結しておく（足したフィールドに合わせて書き換えない）。
-  func testMinimalU1FileStillLoads() throws {
-    let u1 = """
+  /// 壊れると何が起きるか: タスクに既定値付きの非 Optional フィールドを足すと、合成された decode が
+  /// 欠けたキーで失敗し、更新した全利用者の tasks.json が初回起動で丸ごと退避されて一覧が空で始まる。
+  /// この fixture はこの形で凍結しておく（足したフィールドに合わせて書き換えない）。
+  func testFileWithOnlyTheRequiredFieldsLoads() throws {
+    let minimal = """
       {"version":1,"nextId":5,"tasks":[\
       {"id":3,"title":"後","status":"done","priority":"low","memo":"","createdAt":"2027-01-15T08:00:00.000Z"},\
       {"id":1,"title":"先","status":"todo","priority":"medium","memo":"m","createdAt":"2027-01-15T08:00:00.000Z"}]}
       """
-    try Data(u1.utf8).write(to: tasksFile())
+    try Data(minimal.utf8).write(to: tasksFile())
 
-    let loaded = try XCTUnwrap(TaskPersistence.load(), "u1 の最小形は読める")
+    let loaded = try XCTUnwrap(TaskPersistence.load(), "必須フィールドだけの形は読める")
 
-    XCTAssertTrue(try quarantineFiles().isEmpty, "u1 の最小形を退避しない")
+    XCTAssertTrue(try quarantineFiles().isEmpty, "必須フィールドだけの形を退避しない")
     XCTAssertEqual(loaded.nextId, 5)
     XCTAssertEqual(loaded.tasks.map(\.id), [3, 1], "列の順を保つ")
     XCTAssertEqual(loaded.tasks.map(\.status), [.done, .todo])

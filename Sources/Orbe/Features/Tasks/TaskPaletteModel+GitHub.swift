@@ -1,7 +1,7 @@
 import Foundation
 
 /// GitHub タブの右の欄の止まる場所（上から並ぶ順）。
-enum TaskGitHubPaneStop: Equatable {
+enum TaskGitHubPaneStop: Hashable {
   /// 「自分をアサインする」（レビュアーにする）のチェック。足すものがある項目でだけ止まる。
   case assign
   case priority
@@ -27,10 +27,10 @@ enum TaskPaletteGitHubBody: Equatable {
   case unavailable(GitHubRepositoryUnavailable)
 }
 
-/// GitHub タブ（開いた workspace のリポジトリの open な Issue・PR）の操作。一覧は置き場（`GitHubOpenLists`）を
+/// GitHub タブ（⌘T と同じ基点で解決したリポジトリの open な Issue・PR）の操作。一覧は置き場（`GitHubOpenLists`）を
 /// 写さずに読み、変異はストアのメソッドをそのまま呼ぶ。
 extension TaskPaletteModel {
-  /// 開いた workspace のリポジトリ（解決中・使えない間は前回の答え）。
+  /// GitHub タブのリポジトリ（⌘T と同じ基点で解決。解決中・使えない間は前回の答え）。
   var gitHubRepo: GitHubRepoName? { openLists.repository(for: root) }
 
   private var gitHubRepository: GitHubOpenLists.Repository? {
@@ -55,12 +55,10 @@ extension TaskPaletteModel {
   /// ヘッダーのタブの件数（取れた open の件数）。まだ何も取れていなければ nil。
   var gitHubCount: Int? {
     let repository = gitHubRepository
-    guard let issues = repository?.issues.items, let pullRequests = repository?.pullRequests.items
-    else {
-      let some = repository?.issues.items ?? repository?.pullRequests.items
-      return some?.count
-    }
-    return issues.count + pullRequests.count
+    let issues = repository?.issues.items
+    let pullRequests = repository?.pullRequests.items
+    guard issues != nil || pullRequests != nil else { return nil }
+    return (issues?.count ?? 0) + (pullRequests?.count ?? 0)
   }
 
   var gitHubRows: [TaskPaletteGitHubRow] {
@@ -73,13 +71,19 @@ extension TaskPaletteModel {
   }
 
   private var gitHubRowsInput: TaskPaletteGitHubRows.Input? {
-    guard let repo = gitHubRepo, gitHubBody == .lists else { return nil }
-    let repository = gitHubRepository
+    guard let repo = gitHubRepo, gitHubBody == .lists, let repository = gitHubRepository else {
+      return nil
+    }
     return TaskPaletteGitHubRows.Input(
-      repo: repo, issues: repository?.issues.items ?? [],
-      pullRequests: repository?.pullRequests.items ?? [], tasks: store.tasks, login: viewer.login,
-      reviewRequests: repository?.reviewRequests, filter: githubFilter, query: gitHubList.query,
-      expanded: expandedKinds)
+      repo: repo, issues: repository.issues.items ?? [],
+      pullRequests: repository.pullRequests.items ?? [], tasks: store.tasks, login: viewer.login,
+      reviewRequests: repository.reviewRequests, filter: githubFilter, query: gitHubList.query,
+      expanded: expandedKinds,
+      loading: Set(
+        [GitHubItemKind.issue, .pr].filter { kind in
+          let list = repository.list(kind)
+          return list.growing || (list.items == nil && !list.failed)
+        }))
   }
 
   var gitHubSelectableIDs: [TaskPaletteGitHubRowID] { gitHubRows.compactMap(\.selectableID) }
@@ -197,8 +201,7 @@ extension TaskPaletteModel {
   }
 
   /// ⌘⌫（結び付いている行）。その項目だけを除いた列で置き換える。行は結び付いていない側へ戻り、選択はその行に
-  /// 残る。戻った先が「さらに」の内側（閉じた区分の 6 件目以降）なら、その区分を開いて見せる——隠れると選択が
-  /// 同じ位置の別の行へ移り、続けて押した ⌘⌫ が別の項目の結び付きを外す。
+  /// 残る（「さらに」の内側へ戻るなら、付け直しがその区分を開く）。
   func unlinkSelectedGitHubItem() {
     guard let row = selectedGitHubRow, let owner = row.task,
       let task = store.tasks.first(where: { $0.id == owner.id })
@@ -207,10 +210,26 @@ extension TaskPaletteModel {
     var update = TaskUpdate()
     update.links = task.links.filter { $0.item != row.id }
     mutate(.failed) { () throws(TaskStoreError) in _ = try store.update(task.id, update) }
-    let id = TaskPaletteGitHubRowID.item(row.id)
-    guard !gitHubSelectableIDs.contains(id) else { return }
-    expandedKinds.insert(row.item.kind)
-    gitHubList.select(id, in: gitHubSelectableIDs)
+  }
+
+  /// 選んでいる項目が一覧に残ったまま閉じた区分の「さらに」の内側（6 件目以降）へ隠れたら、その区分を開く。
+  /// 隠れたままだと付け直しが選択を同じ位置の別の項目へ移し、↵ で見ていない項目をタスクにして自分を書き込み、
+  /// ⌘⌫ で別の項目の結び付きを外す。隠れる契機は人の ⌘⌫ に限らない（agent が結び付きを外す・消す、
+  /// 一覧の後続のページで上位が入れ替わる）。
+  func revealHiddenGitHubSelection() {
+    guard case .item(let id) = gitHubList.selectedID,
+      !gitHubSelectableIDs.contains(.item(id)), var input = gitHubRowsInput
+    else { return }
+    input.expanded = [.issue, .pr]
+    for case .item(let row) in TaskPaletteGitHubRows.build(input) where row.id == id {
+      expandedKinds.insert(row.item.kind)
+    }
+  }
+
+  /// ⌘↵（GitHub タブ）。選んでいる項目の GitHub のページをブラウザで開く（結び付きの有無を問わない）。
+  func openSelectedGitHubItemInBrowser() {
+    guard let row = selectedGitHubRow else { return }
+    onOpenURL(TaskLink(item: row.id, kind: row.item.kind).url)
   }
 
   /// ⌘T（GitHub タブ）。結び付いていない行はタスクにしてから、結び付いている行はそのタスクで、⌘T を開く。
@@ -303,9 +322,9 @@ extension TaskPaletteModel {
   /// 選択の同一性が変わったら、右の欄の値を既定に戻し（打ちかけの期限も捨てる）、欄に居たなら一覧へ戻る
   /// ——別の項目の欄に既定の値（チェックはオン）で居続けると、↵ で見ていない項目をタスクにして自分を足す。
   /// agent の変更で同じ行のままなら、打った値を保つ。
-  func resetPaneIfMoved() {
-    guard pane.owner != githubList.selectedID else { return }
-    pane = TaskGitHubPane(owner: githubList.selectedID)
+  func resetPaneIfMoved(to owner: TaskPaletteGitHubRowID?) {
+    guard pane.owner != owner else { return }
+    pane = TaskGitHubPane(owner: owner)
     if draft?.target == .paneDue { draft = nil }
     if case .pane = area { area = .list }
   }

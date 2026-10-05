@@ -8,32 +8,55 @@ struct TaskPaletteGitHubPane: View {
   @Bindable var model: TaskPaletteModel
   let focus: FocusState<TaskPaletteFocusTarget?>.Binding
   @Environment(\.localization) private var l10n
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     if model.gitHubBody == .lists, let row = model.selectedGitHubRow {
-      VStack(alignment: .leading, spacing: 0) {
-        heading(row)
-        if let task = row.task {
-          linkedTask(task.id, row: row)
-            .padding(.top, Theme.Space.bar)
-          Spacer(minLength: Theme.Space.bar)
-          if model.pick == nil { linkedActions(row, task) }
-        } else if model.pick == nil {
-          divider.padding(.top, Theme.Space.bar)
-          values(row)
-          Spacer(minLength: Theme.Space.bar)
-          unlinkedActions(row)
-        } else {
-          Spacer(minLength: 0)
+      GeometryReader { geometry in
+        ScrollViewReader { proxy in
+          ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+              Color.clear.frame(height: Theme.Space.span).id(Self.top)
+              heading(row)
+              if let task = row.task {
+                linkedTask(task.id, row: row)
+                  .padding(.top, Theme.Space.bar)
+                Spacer(minLength: Theme.Space.bar)
+                if model.pick == nil { linkedActions(row, task) }
+              } else if model.pick == nil {
+                divider.padding(.top, Theme.Space.bar)
+                values(row)
+                Spacer(minLength: Theme.Space.bar)
+                unlinkedActions(row)
+              } else {
+                Spacer(minLength: 0)
+              }
+            }
+            .padding(.horizontal, Theme.Space.phrase)
+            .padding(.bottom, Theme.Space.span)
+            // 幅は欄の幅に留める（縦のスクロールは中身の幅を縛らないので、留めないと長い行が欄を押し広げ、
+            // 区切り線と強調の地がカードの端まで伸びる）。収まる間は欄の高さいっぱいに広げ、ボタン群を下端へ
+            // 押す。収まらなければ欄ごとスクロールする。
+            .frame(width: geometry.size.width)
+            .frame(minHeight: geometry.size.height, alignment: .top)
+          }
+          .scrollIndicators(.automatic)
+          // キーで移った場所を見える位置へ最小の量だけ送る（詳細と同じ規約）。
+          .onChange(of: model.area) {
+            if case .pane(let stop) = model.area { proxy.scrollTo(stop) }
+          }
+          // 別の項目を選んだら先頭から見せる（前の項目で送った位置のまま、見出しを隠して出さない）。
+          .onChange(of: row.id) { proxy.scrollTo(Self.top, anchor: .top) }
         }
       }
-      .padding(.horizontal, Theme.Space.phrase)
-      .padding(.top, Theme.Space.span)
-      .padding(.bottom, Theme.Space.span)
     } else {
       Color.clear
     }
   }
+
+  /// 欄の上の余白（送りの的。余白そのものを的にして、余白ごと先頭へ送り、最初に開いたときと同じ見え方に
+  /// 戻す）。
+  private static let top = "TaskPaletteGitHubPane.top"
 
   private var divider: some View {
     Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
@@ -48,7 +71,7 @@ struct TaskPaletteGitHubPane: View {
       }
       .font(Font.theme.codeCompact)
       .padding(.bottom, Theme.Space.step)
-      Text(row.item.title)
+      fontResolver.text(row.item.title, base: Theme.Typography.taskHeading)
         .font(Font.theme.taskHeading)
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(2)
@@ -131,6 +154,7 @@ struct TaskPaletteGitHubPane: View {
     .padding(.horizontal, -Theme.Space.step)
     .contentShape(Rectangle())
     .onTapGesture { model.togglePaneAssign() }
+    .id(TaskGitHubPaneStop.assign)
   }
 
   /// その項目の書き込みの失敗（画面を閉じた後の失敗も、次に選んだときに出る）。
@@ -161,6 +185,7 @@ struct TaskPaletteGitHubPane: View {
     .background(focusFill(stop))
     .padding(.horizontal, -Theme.Space.step)
     .contentShape(Rectangle())
+    .id(stop)
   }
 
   private func focusFill(_ stop: TaskGitHubPaneStop) -> some View {
@@ -180,7 +205,7 @@ struct TaskPaletteGitHubPane: View {
         .foregroundStyle(Color.theme.textPrimary)
         .tint(Color.theme.accentPrimary)
         .focused(focus, equals: .paneDue)
-        .onSubmit { model.endEditing(commit: true) }
+        .onSubmitIgnoringKeyRepeat { model.endEditing(commit: true) }
         .onKeyPress { model.handleEditKey($0, composing: IMEComposition.isActive) }
         .opacity(isEditingDue ? 1 : 0)
         .allowsHitTesting(isEditingDue)
@@ -213,15 +238,25 @@ struct TaskPaletteGitHubPane: View {
     }
   }
 
+  @ViewBuilder private func makeTaskButtons(_ row: TaskPaletteGitHubItemRow) -> some View {
+    TaskPaneButton(key: "↵", title: l10n.string(.taskPaletteMakeTask), primary: true) {
+      model.makeTask(row)
+    }
+    TaskPaneButton(key: "⌘T", title: l10n.string(.taskPaletteMakeTaskOpen)) {
+      model.openWorktreePaletteFromGitHub()
+    }
+  }
+
   private func unlinkedActions(_ row: TaskPaletteGitHubItemRow) -> some View {
     VStack(alignment: .leading, spacing: Theme.Space.beat) {
       Text(l10n.string(.taskPaletteMakeTaskNote))
         .font(Font.theme.codeCompact)
         .foregroundStyle(Color.theme.textMuted)
         .lineLimit(1)
-      HStack(spacing: Theme.Space.beat) {
-        actionButton("↵", .taskPaletteMakeTask, primary: true) { model.makeTask(row) }
-        actionButton("⌘T", .taskPaletteMakeTaskOpen) { model.openWorktreePaletteFromGitHub() }
+      // 横に並びきらない狭い欄では縦に積む（ボタンの文字は縮めない）。
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: Theme.Space.beat) { makeTaskButtons(row) }
+        VStack(alignment: .leading, spacing: Theme.Space.beat) { makeTaskButtons(row) }
       }
       divider.padding(.top, Theme.Space.tick)
       Button {
@@ -240,7 +275,7 @@ struct TaskPaletteGitHubPane: View {
   }
 }
 
-/// 結び付いている行の欄と、ボタンの部品。
+/// 結び付いている行の欄。
 extension TaskPaletteGitHubPane {
   // MARK: - 結び付いている行
 
@@ -256,7 +291,7 @@ extension TaskPaletteGitHubPane {
         .foregroundStyle(Color.theme.textMuted)
         HStack(spacing: Theme.Space.step) {
           TaskStatusGlyph(glyph: TaskPaletteTaskRow.Glyph(task))
-          Text(row.task?.label ?? task.title)
+          fontResolver.text(row.task?.label ?? task.title, base: Theme.Typography.taskText)
             .font(Font.theme.taskText)
             .foregroundStyle(Color.theme.textPrimary)
             .lineLimit(1)
@@ -276,10 +311,10 @@ extension TaskPaletteGitHubPane {
     }
   }
 
-  /// 「進行中 · claude 作業中 12分」（agent の札は u6 の索引。作業中・入力待ちだけ）。
+  /// 「進行中 · claude 作業中 12分」（agent の札は `WorktreeAgentActivity` の索引。作業中・入力待ちだけ）。
   private func linkedTaskState(_ task: TaskItem) -> some View {
     let status = l10n.string(Self.statusKey(task.status))
-    let agent = task.status == .done ? nil : model.agent(of: task).flatMap { $0.isBusy ? $0 : nil }
+    let agent = model.agent(of: task).flatMap { $0.isBusy ? $0 : nil }
     return TimelineView(.periodic(from: agent?.since ?? .distantPast, by: 60)) { context in
       HStack(spacing: Theme.Space.note) {
         Text(status)
@@ -307,10 +342,13 @@ extension TaskPaletteGitHubPane {
       GitHubItemText.label($0.item, primary: row.id)
     }
     return VStack(alignment: .leading, spacing: Theme.Space.beat) {
-      wideButton(
-        "↵", l10n.format(.taskPaletteOpenTask, number ?? task.label), primary: true
+      TaskPaneButton(
+        key: "↵", title: l10n.format(.taskPaletteOpenTask, number ?? task.label), primary: true,
+        wide: true
       ) { model.showTask(task.id) }
-      wideButton("⌘L", l10n.string(.taskPaletteRelink)) { model.linkSelectedGitHubItem() }
+      TaskPaneButton(key: "⌘L", title: l10n.string(.taskPaletteRelink), wide: true) {
+        model.linkSelectedGitHubItem()
+      }
       Button {
         model.unlinkSelectedGitHubItem()
       } label: {
@@ -327,52 +365,6 @@ extension TaskPaletteGitHubPane {
       .buttonStyle(.plain)
       .focusable(false)
     }
-  }
-
-  private func actionButton(
-    _ key: String, _ title: L10nKey, primary: Bool = false, action: @escaping () -> Void
-  ) -> some View {
-    Button(action: action) {
-      HStack(spacing: Theme.Space.step) {
-        Text(key).foregroundStyle(primary ? Color.theme.accentBright : Color.theme.textMuted)
-        Text(l10n.string(title)).foregroundStyle(Color.theme.textPrimary)
-      }
-      .font(Font.theme.taskText)
-      .lineLimit(1)
-      .fixedSize()
-      .padding(.horizontal, Theme.Space.beat)
-      .frame(height: 34)
-      .background(
-        RoundedRectangle(cornerRadius: Theme.Radius.row)
-          .fill(primary ? Color.theme.tintAccent : Color.theme.surfaceInk.opacity(0.06))
-      )
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .focusable(false)
-  }
-
-  private func wideButton(
-    _ key: String, _ title: String, primary: Bool = false, action: @escaping () -> Void
-  ) -> some View {
-    Button(action: action) {
-      HStack(spacing: Theme.Space.step) {
-        Text(key).foregroundStyle(primary ? Color.theme.accentBright : Color.theme.textMuted)
-        Text(title).foregroundStyle(Color.theme.textPrimary)
-        Spacer(minLength: 0)
-      }
-      .font(Font.theme.taskText)
-      .lineLimit(1)
-      .padding(.horizontal, Theme.Space.beat)
-      .frame(height: 34)
-      .background(
-        RoundedRectangle(cornerRadius: Theme.Radius.row)
-          .fill(primary ? Color.theme.tintAccent : Color.theme.surfaceInk.opacity(0.06))
-      )
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .focusable(false)
   }
 
   private static func priorityKey(_ priority: TaskItem.Priority) -> L10nKey {

@@ -49,6 +49,7 @@ Orbe は、作業場所の準備、エージェントの起動、入力待ち・
 | エージェントの起動・状態表示 | `claude` / `codex` / `agy` のいずれかと、初回案内でのプラグイン導入 |
 | ブランチ・worktree の操作 | `git` コマンドが使えること |
 | worktree の掃除で PR のマージ状態も確かめる | `origin` が GitHub.com のリポジトリと、[GitHub CLI](https://cli.github.com)（`gh auth login` で認証） |
+| タスク画面（`⌘⇧X`）で GitHub の Issue・PR を扱う | GitHub.com のリポジトリと、[GitHub CLI](https://cli.github.com)（`gh auth login` で認証） |
 
 ### 最初の作業を始める
 

@@ -65,7 +65,7 @@ final class AgentHookWiringTests: OrbeTestCase {
 
   // MARK: codex / agy
 
-  /// codex は working / waiting / done のみ。
+  /// codex は working / waiting / done と、turn の中断（Esc。Stop は出ない）の idle。
   func testCodexWiring() throws {
     XCTAssertEqual(
       try wiring("hooks/codex-hooks.json"),
@@ -73,6 +73,7 @@ final class AgentHookWiringTests: OrbeTestCase {
         "UserPromptSubmit": [Entry(matcher: nil, state: "working")],
         "PermissionRequest": [Entry(matcher: nil, state: "waiting")],
         "Stop": [Entry(matcher: nil, state: "done")],
+        "Interrupt": [Entry(matcher: nil, state: "idle")],
       ])
   }
 

@@ -29,12 +29,16 @@ extension L10n {
       "None — no new branch; makes PR #%1$@’s branch %2$@ a worktree"
     ),
     .worktreePalettePreparing: ("作成中…", "Preparing…"),
+    .worktreePaletteCheckingRemote: ("リモートのブランチを確かめています…", "Checking remote branches…"),
+    .worktreePaletteCheckingTaskWorktree: (
+      "このタスクの worktree を確かめています…", "Checking this task’s worktree…"
+    ),
     .worktreePaletteHintSelect: ("選択", "Select"),
     .worktreePaletteHintClose: ("閉じる", "Close"),
     .worktreePaletteErrNotGitRepo: (
       "git リポジトリを解決できませんでした", "Couldn't resolve a git repository"
     ),
-    .worktreePaletteSectionNewBranch: ("新しいブランチ", "NEW BRANCH"),
+    .worktreePaletteSectionNewBranch: ("新しいブランチ", "New branch"),
     .worktreePaletteThisDirectory: ("このディレクトリ", "This directory"),
     .worktreePaletteCreateSuffix: ("を作る", "— create"),
     .worktreePaletteNoMatch: (

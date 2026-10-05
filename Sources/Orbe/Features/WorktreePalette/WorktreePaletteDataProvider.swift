@@ -1,7 +1,8 @@
 import Foundation
 
 /// worktree パレットの非同期オーケストレータ。git（local・即時）で一覧を描き、gh（ネット）は clean の
-/// 判定材料（ブランチの PR）として追従させ、Enter 実行の対象ディレクトリ解決（既存 worktree 再利用／新規作成）も担う。
+/// 判定材料（ブランチの PR）とタスクの欄の解決として追従させ、Enter 実行の対象ディレクトリ解決
+/// （既存 worktree 再利用／新規作成）も担う。
 /// section 組み立ては純粋な `WorktreePaletteSectionBuilder`、実データ取得は `GitRepo`/`GitHubCLI` に委ねる。
 /// 全メソッドはメインスレッドで呼ばれ、`GitRepo`/`GitHubCLI` の completion もメインで返る（`GitRunner` 契約）。
 final class WorktreePaletteDataProvider {
@@ -306,8 +307,8 @@ final class WorktreePaletteDataProvider {
   /// 作成行の衝突の規則（作成先は作成経路と同じテンプレートと repo の場所で解く）。
   private var newBranchRules: WorktreeNewBranchRules {
     WorktreeNewBranchRules(
-      takenNames: Set(localBranches.map(\.name)).union(
-        remoteBranches.map { GitBranch.localName(fromRemote: $0.name) }),
-      worktreePaths: worktrees.map(\.path), template: worktreeTemplate, repoPath: worktreeBase)
+      localBranches: localBranches.map(\.name), remoteBranches: remoteBranches.map(\.name),
+      remoteBranchesLanded: remoteFetchLanded, worktreePaths: worktrees.map(\.path),
+      template: worktreeTemplate, repoPath: worktreeBase)
   }
 }

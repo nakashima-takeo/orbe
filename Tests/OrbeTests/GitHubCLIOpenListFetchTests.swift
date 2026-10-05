@@ -78,6 +78,16 @@ final class GitHubCLIOpenListFetchTests: OrbeTestCase {
     }
   }
 
+  /// 偽 `gh` が `connection`（issues / pullRequests）について受けた 1 ページの件数を順に返す。
+  private func requestedFirsts(_ connection: String) -> [Int] {
+    let lines =
+      (try? String(contentsOf: dir.appendingPathComponent("calls.log"), encoding: .utf8))?
+      .split(separator: "\n") ?? []
+    return lines.map { $0.split(separator: " ").map(String.init) }
+      .filter { $0.first == "S" && $0[1] == connection }
+      .map { Int($0[2]) ?? -1 }
+  }
+
   /// 走っていた gh の最大本数。
   private func maxOverlap() -> Int {
     let lines =
@@ -176,6 +186,21 @@ final class GitHubCLIOpenListFetchTests: OrbeTestCase {
       repo: repo, page: { pullRequests += $0.count }, finished: { _ in done.fulfill() })
     wait(for: [done], timeout: 60)
     XCTAssertEqual(pullRequests, 500, "PR は 500 件で止まる")
+  }
+
+  /// PR は 1 ページ 50 件ずつ、issue は 100 件ずつ頼む——PR はレビュー状態・CI・レビュー依頼の算出で重く、
+  /// 100 件では GitHub がサーバ側で打ち切る 10 秒に届き、一覧ごと取れなくなる。
+  func testPullRequestPagesAskForFiftyAndIssuePagesForAHundred() throws {
+    try stageGh(available: 120, pageMax: 1000)
+    let done = expectation(description: "both")
+    done.expectedFulfillmentCount = 2
+    let cli = GitHubCLI()
+    cli.openIssues(repo: repo, page: { _ in }, finished: { _ in done.fulfill() })
+    cli.openPullRequests(repo: repo, page: { _ in }, finished: { _ in done.fulfill() })
+    wait(for: [done], timeout: 60)
+
+    XCTAssertEqual(requestedFirsts("pullRequests"), [50, 50, 50])
+    XCTAssertEqual(requestedFirsts("issues"), [100, 100])
   }
 
   /// 途中のページが落ちたら失敗で終わるが、それまでに渡したページはそのまま（取り消しは来ない）。

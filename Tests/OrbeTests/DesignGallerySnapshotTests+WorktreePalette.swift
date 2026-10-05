@@ -30,6 +30,15 @@ extension DesignGallerySnapshotTests {
       DesignSceneFixtures.worktreePaletteIssueModel(base: .defaultBranch), 752)
     try write(
       "worktree_palette_task_pr.png", DesignSceneFixtures.worktreePalettePullRequestModel(), 752)
+    // 先頭の欄が決まるのを待つ間（↵ を押す前。キーヒントは残る）と、預けた作成がリモートのブランチも待つ間。
+    try write(
+      "worktree_palette_task_pending.png", taskPendingModel(enterWithName: nil), 752)
+    try write(
+      "worktree_palette_task_pending_remote.png", taskPendingModel(enterWithName: "221"), 752)
+    // 英語 UI でも見出しはどれも大文字（タスクの見出し WORKTREE FOR #221 を含む）。
+    try writeWorktreePalette(
+      "worktree_palette_task_issue_en.png", DesignSceneFixtures.worktreePaletteIssueModel(), 752,
+      520, language: .en, dir: dir)
     // 狭い窓でもベースの選択肢がカードからはみ出さない（名前が縮む）。
     try write(
       "worktree_palette_new_branch_narrow.png",
@@ -82,14 +91,40 @@ extension DesignGallerySnapshotTests {
       DesignSceneFixtures.worktreePaletteRefreshFailedModel())
   }
 
+  /// #221 のタスクから開き、先頭の欄がまだ決まらない（手元に無いブランチを待つ）モデル。`enterWithName` を
+  /// 渡すと、着地前にその名前を打って ↵ を押したところ。
+  private func taskPendingModel(enterWithName name: String?) -> WorktreePaletteModel {
+    var input = WorktreePaletteSectionBuilder.Input.designSample
+    input.taskTarget = .pending
+    input.taskNumber = 221
+    let model = DesignSceneFixtures.worktreePaletteModel(from: input, task: 3)
+    DesignSceneFixtures.setDesignBase(model)
+    let home = NSHomeDirectory()
+    model.newBranchRules = WorktreeNewBranchRules(
+      localBranches: input.localBranches.map(\.name),
+      remoteBranches: input.remoteBranches.map(\.name),
+      remoteBranchesLanded: false, worktreePaths: input.worktrees.map(\.path),
+      template: "~/wt/{slug}", repoPath: "\(home)/src/orbe")
+    model.taskTargetPending = true
+    if let name {
+      model.query = name
+      model.onQueryChanged()
+      model.applyBranchNameCheck(name, isValid: true)
+      model.activate()
+    }
+    return model
+  }
+
   private func writeWorktreePalette(
-    _ name: String, _ model: WorktreePaletteModel, _ w: CGFloat, _ h: CGFloat, dir: URL
+    _ name: String, _ model: WorktreePaletteModel, _ w: CGFloat, _ h: CGFloat,
+    language: Language = .systemDefault, dir: URL
   ) throws {
     try writePNG(
       ZStack {
         BackgroundGlow()
         WorktreePaletteOverlay(model: model)
-      }.frame(width: w, height: h),
+      }.frame(width: w, height: h)
+        .environment(\.localization, LocalizationStore(language: language)),
       size: NSSize(width: w, height: h), name: name, dir: dir)
   }
 }

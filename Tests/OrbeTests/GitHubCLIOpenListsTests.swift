@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// GitHub タブの問い合わせと書き込み（`GitHubCLI+OpenLists`）: workspace の root で gh が既定とする
+/// GitHub タブの問い合わせと書き込み（`GitHubCLI+OpenLists`）: 基点のディレクトリで gh が既定とする
 /// リポジトリ、自分の login とレビュー依頼、自分を担当者・レビュアーに足す書き込み。PATH に偽の `gh` を置き、
 /// 本物の子プロセスで測る。
 ///

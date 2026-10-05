@@ -24,6 +24,13 @@ struct TaskItem: Codable, Equatable, Identifiable {
   var links: [TaskLink] = []
   /// このタスクの作業の場所。解決できない値（ディレクトリが消えた）は「なし」と同じに扱う（書き換えない）。
   var worktree: TaskWorktree?
+  /// worktree での作業のブランチ。worktree を付けるたびに、そこで checkout していたブランチを記録し
+  /// （detached・git の外・読めなければ nil）、無い・既定ブランチの記録は未確定とみなす——未確定の間は
+  /// ブランチで絞らない。⌘⇧X を開いたときの PR の自動の結び付けが、未確定の worktree が既定ブランチ以外に
+  /// いるのを見たら、そのブランチで確定する。確定した後は、worktree の今のブランチがこれと同じ間だけ、そこを
+  /// このタスクの作業とみなす（ブランチを切り替えて使い回す main worktree で、別の作業の PR・agent を
+  /// このタスクに付けない）。保つのは `TaskStore`。tasks.json にだけ出し、ワイヤには出さない。
+  var worktreeBranch: String?
   /// 結び付きから外れた項目。PR の自動の結び付けはこれを避ける。保つのは `TaskStore` で、tasks.json にだけ
   /// 出し、ワイヤには出さない。
   var unlinked: Set<GitHubItemID> = []
@@ -89,10 +96,10 @@ struct TaskItem: Codable, Equatable, Identifiable {
 extension TaskItem {
   private enum CodingKeys: String, CodingKey {
     case id, title, status, waiting, priority, due, workspace, memo, createdAt, createdBy, links,
-      worktree, unlinked
+      worktree, worktreeBranch, unlinked
   }
 
-  /// 後から足した `links`・`worktree`・`unlinked` は、欠けていれば空として読む。
+  /// `links`・`worktree`・`worktreeBranch`・`unlinked` は、欠けていれば空として読む。
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     id = try c.decode(Int.self, forKey: .id)
@@ -107,6 +114,7 @@ extension TaskItem {
     createdBy = try c.decodeIfPresent(String.self, forKey: .createdBy)
     links = try c.decodeIfPresent([TaskLink].self, forKey: .links) ?? []
     worktree = try c.decodeIfPresent(TaskWorktree.self, forKey: .worktree)
+    worktreeBranch = try c.decodeIfPresent(String.self, forKey: .worktreeBranch)
     unlinked = Set(try c.decodeIfPresent([UnlinkedItem].self, forKey: .unlinked)?.map(\.item) ?? [])
   }
 
@@ -125,6 +133,7 @@ extension TaskItem {
     try c.encodeIfPresent(createdBy, forKey: .createdBy)
     try c.encode(links, forKey: .links)
     try c.encodeIfPresent(worktree, forKey: .worktree)
+    try c.encodeIfPresent(worktreeBranch, forKey: .worktreeBranch)
     try c.encode(
       unlinked.sorted { ($0.repo.value, $0.number) < ($1.repo.value, $1.number) }.map(
         UnlinkedItem.init), forKey: .unlinked)

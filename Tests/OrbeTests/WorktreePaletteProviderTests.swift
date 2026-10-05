@@ -52,7 +52,7 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
     provider.load()
     XCTAssertTrue(pump { model.newBranchRules != nil })
 
-    for (name, creatable) in [("@{-1}", false), ("feat/new", true)] {
+    for (name, creatable) in [("@{-1}", false), ("topic/new", true)] {
       model.query = name
       model.onQueryChanged()
       XCTAssertTrue(pump { model.branchNameAnswer?.name == name }, "\(name) に答えが届く")
@@ -105,6 +105,51 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
     XCTAssertFalse(r.allows("issue/1"), "worktree で checkout 中のブランチ")
     XCTAssertFalse(r.allows("issue-1"), "作成先が既存の worktree")
     XCTAssertTrue(r.allows("feat/new"))
+  }
+
+  /// origin にあるブランチの名前には作成行を出さない（そのリモートブランチの行が作るローカル名と同じ名前の
+  /// 別物になる）。
+  func testNameOfARemoteBranchIsNotCreatable() throws {
+    let origin = try makeRepository()
+    XCTAssertTrue(run(["branch", "feat/x"], cwd: origin).isSuccess)
+    let clone = dir.appendingPathComponent("clone").path
+    XCTAssertTrue(run(["clone", "-q", origin, clone], cwd: dir.path).isSuccess)
+    XCTAssertTrue(
+      run(["branch", "--list", "feat/x"], cwd: clone).stdoutText.isEmpty,
+      "前提: 手元に feat/x のローカルブランチは無い")
+
+    let model = WorktreePaletteModel()
+    let provider = WorktreePaletteDataProvider(
+      cwd: clone, model: model, localization: LocalizationStore(language: .ja),
+      worktreeTemplate: WorktreePathTemplate.defaultTemplate)
+    provider.load()
+    XCTAssertTrue(pump { model.newBranchRules != nil })
+
+    let rules = try XCTUnwrap(model.newBranchRules)
+    XCTAssertFalse(rules.allows("feat/x"), "origin/feat/x の行が作るローカル名")
+    XCTAssertTrue(rules.allows("topic/new"))
+  }
+
+  /// git の列挙が着地するまでは、描き直しの契機が来ても一覧を「ロード済み」にしない。開いた直後の ↵ は
+  /// 預かられ、一覧が届いてから今の worktree を 1 回だけ開く。
+  func testEnterBeforeTheGitListingLandsOpensTheCurrentWorktreeOnceItArrives() throws {
+    let repo = try makeRepository()
+    let model = WorktreePaletteModel()
+    var executed: [WorktreePaletteDestination] = []
+    model.onExecute = { executed.append($0) }
+    let provider = WorktreePaletteDataProvider(
+      cwd: repo, model: model, localization: LocalizationStore(language: .ja),
+      worktreeTemplate: WorktreePathTemplate.defaultTemplate)
+
+    provider.rebuild()
+    XCTAssertFalse(model.hasLoadedOnce, "git の列挙の前は描かない")
+    model.activate()
+    XCTAssertEqual(executed, [], "↵ は預かられる")
+
+    provider.load()
+    XCTAssertTrue(pump { !executed.isEmpty })
+    XCTAssertTrue(pump { provider.remoteFetchLanded })
+    XCTAssertEqual(executed, [.directory(path: repo)])
   }
 
   /// 作成先のテンプレートが symlink 配下でも、実体の消えた登録（prunable）と同じ場所になる名前には

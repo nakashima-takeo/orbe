@@ -8,53 +8,69 @@ struct TaskPaletteDetail: View {
   @Bindable var model: TaskPaletteModel
   let focus: FocusState<TaskPaletteFocusTarget?>.Binding
   @Environment(\.localization) private var l10n
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     if let task = model.selectedTask {
-      ScrollView {
-        VStack(alignment: .leading, spacing: 0) {
-          if let primary = task.links.first {
-            TaskPrimaryLinkHeading(link: primary)
-              .padding(.bottom, Theme.Space.step)
+      ScrollViewReader { proxy in
+        ScrollView {
+          VStack(alignment: .leading, spacing: 0) {
+            Color.clear.frame(height: Theme.Space.span).id(Self.top)
+            if let primary = task.links.first {
+              TaskPrimaryLinkHeading(link: primary)
+                .padding(.bottom, Theme.Space.step)
+            }
+            titleField(task)
+              .id(TaskDetailStop.field(.title))
+              .padding(.bottom, Theme.Space.bar)
+            if let agent = model.agent(of: task) {
+              TaskAgentDetail(
+                agent: agent, focused: model.area == .detail(.agent),
+                onGoToTab: { model.focusAgentTab() }
+              )
+              .id(TaskDetailStop.agent)
+              .padding(.bottom, Theme.Space.bar)
+            }
+            TaskPaletteLinks(model: model, task: task)
+              .padding(.bottom, Theme.Space.bar)
+            divider
+            fieldRow(.status, label: .taskPaletteFieldStatus) { statusValue(task) }
+            divider
+            fieldRow(.waiting, label: .taskPaletteFieldWaiting) { waitingValue(task) }
+            divider
+            fieldRow(.priority, label: .taskPaletteFieldPriority) { priorityValue(task) }
+            divider
+            fieldRow(.due, label: .taskPaletteFieldDue) { dueValue(task) }
+            divider
+            fieldRow(.workspace, label: .taskPaletteFieldWorkspace) { workspaceValue(task) }
+            divider
+            addedRow(task)
+            divider
+            memoField(task)
+              .id(TaskDetailStop.field(.memo))
+              .padding(.top, Theme.Space.bar)
+            actions(task)
+              .padding(.top, Theme.Space.bar)
           }
-          titleField(task)
-            .padding(.bottom, Theme.Space.bar)
-          if let agent = model.agent(of: task) {
-            TaskAgentDetail(
-              agent: agent, focused: model.area == .detail(.agent),
-              onGoToTab: { model.focusAgentTab() }
-            )
-            .padding(.bottom, Theme.Space.bar)
-          }
-          TaskPaletteLinks(model: model, task: task)
-            .padding(.bottom, Theme.Space.bar)
-          divider
-          fieldRow(.status, label: .taskPaletteFieldStatus) { statusValue(task) }
-          divider
-          fieldRow(.waiting, label: .taskPaletteFieldWaiting) { waitingValue(task) }
-          divider
-          fieldRow(.priority, label: .taskPaletteFieldPriority) { priorityValue(task) }
-          divider
-          fieldRow(.due, label: .taskPaletteFieldDue) { dueValue(task) }
-          divider
-          fieldRow(.workspace, label: .taskPaletteFieldWorkspace) { workspaceValue(task) }
-          divider
-          addedRow(task)
-          divider
-          memoField(task)
-            .padding(.top, Theme.Space.bar)
-          actions(task)
-            .padding(.top, Theme.Space.bar)
+          .padding(.horizontal, Theme.Space.phrase)
+          .padding(.bottom, Theme.Space.span)
         }
-        .padding(.horizontal, Theme.Space.phrase)
-        .padding(.top, Theme.Space.span)
-        .padding(.bottom, Theme.Space.span)
+        .scrollIndicators(.automatic)
+        // キーで移った場所を見える位置へ最小の量だけ送る（一覧と同じ規約）。
+        .onChange(of: model.area) {
+          if case .detail(let stop) = model.area { proxy.scrollTo(stop) }
+        }
+        // 別のタスクを選んだら先頭から見せる（前のタスクで送った位置のまま、見出しを隠して出さない）。
+        .onChange(of: task.id) { proxy.scrollTo(Self.top, anchor: .top) }
       }
-      .scrollIndicators(.automatic)
     } else {
       Color.clear
     }
   }
+
+  /// 詳細の上の余白（送りの的。余白そのものを的にして、余白ごと先頭へ送り、最初に開いたときと同じ見え方に
+  /// 戻す）。
+  private static let top = "TaskPaletteDetail.top"
 
   private var divider: some View {
     Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
@@ -90,11 +106,12 @@ struct TaskPaletteDetail: View {
     .padding(.horizontal, -Theme.Space.step)
     .contentShape(Rectangle())
     .onTapGesture { if !isEditing(field) { model.tapField(field) } }
+    .id(TaskDetailStop.field(field))
   }
 
   private func titleField(_ task: TaskItem) -> some View {
     editableText(.title, font: Font.theme.taskHeading) {
-      Text(task.title)
+      fontResolver.text(task.title, base: Theme.Typography.taskHeading)
         .font(Font.theme.taskHeading)
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(1)
@@ -122,7 +139,7 @@ struct TaskPaletteDetail: View {
         .foregroundStyle(Color.theme.textPrimary)
         .tint(Color.theme.accentPrimary)
         .focused(focus, equals: .edit(field))
-        .onSubmit { model.endEditing(commit: true) }
+        .onSubmitIgnoringKeyRepeat { model.endEditing(commit: true) }
         .onKeyPress { model.handleEditKey($0, composing: IMEComposition.isActive) }
         .opacity(isEditing(field) ? 1 : 0)
         .allowsHitTesting(isEditing(field))
@@ -169,7 +186,7 @@ struct TaskPaletteDetail: View {
           "\(waiting.reason) · \(days(since: waiting.since))", onClear: { model.clearWaiting() })
       } else {
         placeholder(.taskPaletteAddReason)
-          .opacity(task.status == .done ? Theme.Opacity.disabled : 1)
+          .opacity(model.canEdit(.waiting) ? 1 : Theme.Opacity.disabled)
       }
     }
   }

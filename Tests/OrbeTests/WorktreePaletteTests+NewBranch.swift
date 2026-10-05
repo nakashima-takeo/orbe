@@ -10,14 +10,12 @@ import XCTest
 extension WorktreePaletteTests {
 
   /// designSample の衝突の規則（作成先は `~/wt/<slug>`）と、前回・既定・現在が揃ったベースの事実。
-  func makeCreatableModel(previous: String? = "origin/release/0.8") -> WorktreePaletteModel {
+  func makeCreatableModel(
+    previous: String? = "origin/release/0.8", remoteBranchesLanded: Bool = true
+  ) -> WorktreePaletteModel {
     let input = WorktreePaletteSectionBuilder.Input.designSample
     let p = makeModel(input)
-    p.newBranchRules = WorktreeNewBranchRules(
-      takenNames: Set(input.localBranches.map(\.name)).union(
-        input.remoteBranches.map { GitBranch.localName(fromRemote: $0.name) }),
-      worktreePaths: input.worktrees.map(\.path), template: "~/wt/{slug}",
-      repoPath: NSHomeDirectory() + "/src/orbe")
+    p.newBranchRules = newBranchRules(input, remoteBranchesLanded: remoteBranchesLanded)
     p.baseFacts = WorktreeBaseFacts(
       previous: previous, defaultBranch: "origin/main", current: "issue/212")
     p.baseCandidates = [
@@ -27,6 +25,17 @@ extension WorktreePaletteTests {
       .init(name: "origin/release/0.9", relativeDate: "2d", isRemote: true),
     ]
     return p
+  }
+
+  /// `input` の列挙から組む衝突の規則（作成先は `~/wt/<slug>`）。
+  func newBranchRules(
+    _ input: WorktreePaletteSectionBuilder.Input, remoteBranchesLanded: Bool = true
+  ) -> WorktreeNewBranchRules {
+    WorktreeNewBranchRules(
+      localBranches: input.localBranches.map(\.name),
+      remoteBranches: input.remoteBranches.map(\.name), remoteBranchesLanded: remoteBranchesLanded,
+      worktreePaths: input.worktrees.map(\.path), template: "~/wt/{slug}",
+      repoPath: NSHomeDirectory() + "/src/orbe")
   }
 
   /// 打って、その名前への git の答えを返す（provider の配線と同じ順）。
@@ -55,8 +64,8 @@ extension WorktreePaletteTests {
   /// 一致する既存の行があれば、作成行は出ても既存の行の先頭が選ばれる。
   func testExistingMatchIsSelectedOverTheCreateRow() {
     let p = makeCreatableModel()
-    type("fix", into: p)
-    XCTAssertEqual(p.items.first?.action, .createBranch(name: "fix"))
+    type("login", into: p)
+    XCTAssertEqual(p.items.first?.action, .createBranch(name: "login"))
     XCTAssertEqual(p.selectedItem?.name, "fix/login-blank")
   }
 
@@ -76,6 +85,20 @@ extension WorktreePaletteTests {
         p.items.contains { if case .createBranch = $0.action { true } else { false } },
         "\(name) は作れない")
     }
+  }
+
+  /// ローカルブランチと親子になる名前（`fix/login-blank` があるときの `fix`・`fix/login-blank/sub`）は、git の
+  /// ref が親子の名前を同時に持てず作成が必ず失敗するので、作成行を出さない。兄弟の名前には出る。
+  func testNamesNestingWithALocalBranchHaveNoCreateRow() {
+    let p = makeCreatableModel()
+    for name in ["fix", "fix/login-blank/sub"] {
+      type(name, into: p)
+      XCTAssertFalse(
+        p.items.contains { if case .createBranch = $0.action { true } else { false } },
+        "\(name) は fix/login-blank と親子")
+    }
+    type("fix/login", into: p)
+    XCTAssertEqual(p.items.first?.action, .createBranch(name: "fix/login"))
   }
 
   /// 作成先が既存の worktree と同じ場所になる名前（`issue-212` と `issue/212` は同じ slug でも、
@@ -109,15 +132,55 @@ extension WorktreePaletteTests {
   /// 選択を動かした後は、答えの到着で選択を動かさない。
   func testAnswerDoesNotMoveASelectionTheUserMoved() {
     let p = makeCreatableModel()
-    type("fix", into: p, valid: nil)
+    type("login", into: p, valid: nil)
     XCTAssertEqual(p.selectedItem?.name, "fix/login-blank")
-    p.applyBranchNameCheck("fix", isValid: true)
+    p.applyBranchNameCheck("login", isValid: true)
     XCTAssertEqual(p.selectedItem?.name, "fix/login-blank", "既存の一致の先頭のまま")
 
     p.move(-1)
-    XCTAssertEqual(p.selectedItem?.action, .createBranch(name: "fix"), "前提: ユーザーが作成行へ動かした")
+    XCTAssertEqual(
+      p.selectedItem?.action, .createBranch(name: "login"), "前提: ユーザーが作成行へ動かした")
     rebuild(p, with: .designSample)
-    XCTAssertEqual(p.selectedItem?.action, .createBranch(name: "fix"), "データの到着でも同じ行のまま")
+    XCTAssertEqual(
+      p.selectedItem?.action, .createBranch(name: "login"), "データの到着でも同じ行のまま")
+  }
+
+  /// 手元に無い名前は提示時の fetch の着地まで作成行を出すか決まらず、↵ は預かる。着地した一覧にその名前の
+  /// リモートブランチが現れたら、その行を開く（同じ名前の別物を作らない）。
+  func testEnterOnANameUnknownBeforeTheFetchLandsOpensTheRemoteBranchThatAppears() {
+    let p = makeCreatableModel(remoteBranchesLanded: false)
+    var executed: [WorktreePaletteDestination] = []
+    p.onExecute = { executed.append($0) }
+    type("feat/x", into: p)
+    XCTAssertTrue(p.isCreateRowUndecided)
+    XCTAssertFalse(p.isSettled)
+
+    p.activate()
+    XCTAssertTrue(p.hasPendingActivation, "↵ は預かる")
+    XCTAssertEqual(executed, [])
+
+    var landed = WorktreePaletteSectionBuilder.Input.designSample
+    landed.remoteBranches.append(
+      GitBranch(name: "origin/feat/x", relativeDate: "taro · now", upstream: nil))
+    p.newBranchRules = newBranchRules(landed)
+    rebuild(p, with: landed)
+
+    XCTAssertEqual(executed, [.remoteBranch(name: "origin/feat/x", existingWorktree: nil)])
+  }
+
+  /// 出すかが決まらない間の作成行は、タップしてもその場では作らず、↵ と同じく預かる。
+  func testTappingTheCreateRowBeforeTheFetchLandsIsHeldLikeEnter() throws {
+    let p = makeCreatableModel(remoteBranchesLanded: false)
+    var executed: [WorktreePaletteDestination] = []
+    p.onExecute = { executed.append($0) }
+    type("feat/x", into: p)
+    let index = try XCTUnwrap(
+      p.items.firstIndex { $0.action == .createBranch(name: "feat/x") }, "前提: 作成行は見えている")
+
+    p.activate(at: index)
+
+    XCTAssertEqual(executed, [])
+    XCTAssertTrue(p.hasPendingActivation, "タップも預かる")
   }
 
   // MARK: - 決定
@@ -173,9 +236,9 @@ extension WorktreePaletteTests {
     XCTAssertFalse(p.isLocked)
   }
 
-  /// 答えを待っている間（直前の答えで出ている作成行）は、作成行をクリックしても作らない。答えが届いた後の
-  /// クリックで作る。
-  func testTapOnTheCreateRowBeforeTheAnswerDoesNotCreate() throws {
+  /// 答えを待っている間（直前の答えで出ている作成行）は、作成行をクリックしてもその場では作らず預かり、
+  /// 有効と答えが届いたら作る。
+  func testTapOnTheCreateRowBeforeTheAnswerIsHeldUntilTheAnswer() throws {
     let p = makeCreatableModel()
     var executed: [WorktreePaletteDestination] = []
     p.onExecute = { executed.append($0) }
@@ -187,7 +250,6 @@ extension WorktreePaletteTests {
     XCTAssertTrue(executed.isEmpty, "まだ git が有効と答えていない名前では作らない")
 
     p.applyBranchNameCheck("feat/ab", isValid: true)
-    p.activate(at: row)
     XCTAssertEqual(executed, [.newBranch(name: "feat/ab", base: .ref("origin/release/0.8"))])
   }
 
@@ -260,15 +322,15 @@ extension WorktreePaletteTests {
   }
 
   /// 選んだ名前は「ほか…」の直前に出て選ばれ、その名前から作る。
-  func testPickedBaseAppearsBeforeOtherAndIsUsed() {
+  func testPickedBaseAppearsBeforeOtherAndIsUsed() throws {
     let p = makeCreatableModel()
     var executed: [WorktreePaletteDestination] = []
     p.onExecute = { executed.append($0) }
     type("feat/x", into: p)
     p.chooseBase(.other)
-    let picker = try? XCTUnwrap(p.basePicker)
-    picker?.query = "0.9"
-    XCTAssertEqual(picker?.items.map(\.name), ["origin/release/0.9"])
+    let picker = try XCTUnwrap(p.basePicker)
+    picker.query = "0.9"
+    XCTAssertEqual(picker.items.map(\.name), ["origin/release/0.9"])
     p.submit()
 
     XCTAssertEqual(p.mode, .list)

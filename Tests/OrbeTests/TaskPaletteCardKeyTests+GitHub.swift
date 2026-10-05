@@ -165,6 +165,109 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.selectedGitHubID, .item(GitHub.id(5)))
   }
 
+  // MARK: - ブラウザで開く（⌘↵）
+
+  /// 一覧でも右の欄でも、⌘↵ は選んでいる項目の GitHub のページをブラウザで開く（結び付きの有無を問わない）。
+  /// タスクにはしない。
+  func testCommandEnterOpensTheSelectedItemInTheBrowserFromTheListAndThePane() {
+    let model = GitHub.model(
+      [TaskPaletteSamples.task(1, "a") { $0.links = [GitHub.link(6)] }],
+      issues: [GitHub.issue(6), GitHub.issue(5)], pullRequests: [GitHub.pullRequest(9)])
+    var opened: [String] = []
+    model.onOpenURL = { opened.append($0.absoluteString) }
+    let window = mount(model)
+
+    for id in [GitHub.id(6), GitHub.id(5), GitHub.id(9)] {
+      model.tapGitHubRow(.item(id))
+      flush(window)
+      press(Key.enter, "\r", .command, to: window)
+    }
+    arrow(Key.right, to: window)
+    XCTAssertEqual(model.area, .pane(.assign), "前提: 結び付いていない PR の右の欄")
+    press(Key.enter, "\r", .command, to: window)
+
+    XCTAssertEqual(
+      opened,
+      [
+        "https://github.com/o/n/issues/6", "https://github.com/o/n/issues/5",
+        "https://github.com/o/n/pull/9", "https://github.com/o/n/pull/9",
+      ])
+    XCTAssertEqual(model.store.tasks.count, 1, "タスクにしない")
+  }
+
+  /// 結び付ける項目を選ぶ間の ⌘↵ は、開きもせず、↵ の結び付けとしても働かない。
+  func testCommandEnterWhilePickingAnItemNeitherOpensNorLinks() {
+    let model = GitHub.model([TaskPaletteSamples.task(1, "a")], issues: [GitHub.issue(5)])
+    var opened: [URL] = []
+    model.onOpenURL = { opened.append($0) }
+    model.setTab(.tasks)
+    model.area = .detail(.addLink)
+    model.beginPickingItem()
+    let window = mount(model)
+    XCTAssertEqual(model.selectedGitHubID, .item(GitHub.id(5)), "前提: 項目を選ぶ状態")
+
+    press(Key.enter, "\r", .command, to: window)
+
+    XCTAssertEqual(opened, [])
+    XCTAssertEqual(model.store.tasks.first?.links, [])
+    XCTAssertNotNil(model.pick)
+  }
+
+  /// 右の欄の期限を打っている間の ⌘↵ は、打った期限の確定で、ブラウザでは開かない。
+  func testCommandEnterWhileTypingThePaneDueCommitsIt() {
+    let model = GitHub.model([], issues: [GitHub.issue(5)])
+    var opened: [URL] = []
+    model.onOpenURL = { opened.append($0) }
+    let window = mount(model)
+    arrow(Key.right, to: window)
+    arrow(Key.down, to: window)
+    arrow(Key.down, to: window)
+    press(Key.enter, "\r", to: window)
+    type("10/6", into: window)
+
+    press(Key.enter, "\r", .command, to: window)
+
+    XCTAssertEqual(model.pane.due, TaskItem.DueDate("2025-10-06"))
+    XCTAssertNil(model.draft)
+    XCTAssertEqual(opened, [])
+  }
+
+  /// 右の欄の期限で ↵ を押し続けても、押した ↵ で打ち始め、続くリピートで確定しない（編集のまま）。
+  func testEnterHeldOnThePaneDueStartsTypingOnceAndKeepsTyping() {
+    let model = GitHub.model([], issues: [GitHub.issue(5)])
+    let window = mount(model)
+    arrow(Key.right, to: window)
+    arrow(Key.down, to: window)
+    arrow(Key.down, to: window)
+    XCTAssertEqual(model.area, .pane(.due), "前提: 期限")
+
+    press(Key.enter, "\r", to: window)
+    press(Key.enter, "\r", repeating: true, to: window)
+    press(Key.enter, "\r", repeating: true, to: window)
+
+    XCTAssertEqual(model.draft?.target, .paneDue, "リピートで確定しない")
+    XCTAssertTrue(model.store.tasks.isEmpty)
+  }
+
+  // MARK: - 選ぶ状態の入力欄の →
+
+  /// タスクを選ぶ間、タスクの行を選んでいても入力欄の → は文字のカーソルを進める（詳細へ入らない）。
+  func testRightArrowWhilePickingATaskMovesTheCaretInTheField() throws {
+    let model = GitHub.model([TaskPaletteSamples.task(1, "abc")], issues: [GitHub.issue(5)])
+    let window = mount(model)
+    press(GitHubKey.l, "l", .command, to: window)
+    type("ab", into: window)
+    XCTAssertEqual(model.selectedID, .task(1), "前提: タスクの行を選んでいる")
+    let editor = try XCTUnwrap(window.firstResponder as? NSTextView, "前提: 入力欄の field editor")
+    arrow(Key.left, to: window)
+    XCTAssertEqual(editor.selectedRange().location, 1, "前提: ← でカーソルが戻る")
+
+    arrow(Key.right, to: window)
+
+    XCTAssertEqual(editor.selectedRange().location, 2)
+    XCTAssertEqual(model.area, .list)
+  }
+
   // MARK: - 押し続けた ↵
 
   /// 「さらに」で ↵ を押し続けても、区分が開くだけでタスクは増えない（出てきた項目に自分を足さない）。

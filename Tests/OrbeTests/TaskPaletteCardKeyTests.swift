@@ -64,6 +64,8 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     super.tearDown()
   }
 
+  /// 実アプリと同じく、キューから取り出してから配る（`NSApp.currentEvent` がそのキーを指す）。変換中か・
+  /// キーリピートかの判定は、届いたキーをここから引く。
   func press(
     _ keyCode: UInt16, _ characters: String, _ flags: NSEvent.ModifierFlags = [],
     repeating: Bool = false, to window: NSWindow
@@ -74,22 +76,6 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
         timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
         context: nil, characters: characters, charactersIgnoringModifiers: characters,
         isARepeat: repeating, keyCode: keyCode)
-    else { return XCTFail("キーイベントを作れない") }
-    NSApp.sendEvent(event)
-    pump(0.15)
-  }
-
-  /// 実アプリと同じく、キューから取り出してから配る（`NSApp.currentEvent` がそのキーを指す）。
-  /// 変換中かの判定は、届いたキーの窓をここから引く。
-  private func pressThroughTheEventQueue(
-    _ keyCode: UInt16, _ characters: String, to window: NSWindow
-  ) {
-    guard
-      let event = NSEvent.keyEvent(
-        with: .keyDown, location: .zero, modifierFlags: [],
-        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-        context: nil, characters: characters, charactersIgnoringModifiers: characters,
-        isARepeat: false, keyCode: keyCode)
     else { return XCTFail("キーイベントを作れない") }
     NSApp.postEvent(event, atStart: true)
     guard
@@ -178,7 +164,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
       replacementRange: NSRange(location: NSNotFound, length: 0))
     XCTAssertTrue(editor.hasMarkedText(), "前提: 変換中")
 
-    pressThroughTheEventQueue(Key.space, " ", to: window)
+    press(Key.space, " ", to: window)
 
     XCTAssertEqual(status(model, 1), .todo, "変換中の space はタスクを完了にしない")
   }
@@ -194,6 +180,20 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     press(Key.enter, "\r", to: window)
     XCTAssertEqual(model.store.tasks.last?.title, "新しい")
     XCTAssertEqual(model.query, "")
+  }
+
+  /// 押し始めを見ていない ↵ のリピートだけが入力欄に届いても、完了にも追加にもならない。
+  func testEnterKeyRepeatAloneInTheFieldDoesNothing() {
+    let model = model()
+    let window = mount(model)
+
+    press(Key.enter, "\r", repeating: true, to: window)
+    type("新しい", into: window)
+    press(Key.enter, "\r", repeating: true, to: window)
+
+    XCTAssertEqual(model.store.tasks.map(\.status), [.todo, .todo, .todo], "完了にしない")
+    XCTAssertEqual(model.store.tasks.count, 3, "追加しない")
+    XCTAssertEqual(model.query, "新しい")
   }
 
   func testCommandBackspaceDeletesOneTaskEvenWhenHeldDown() {

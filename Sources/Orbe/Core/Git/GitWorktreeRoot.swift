@@ -1,7 +1,8 @@
 import Foundation
 
 /// cwd が属する git worktree ルートを、`.git`（ディレクトリでも file でも＝linked worktree は file）を
-/// 親方向へ探して同期で求める。サブプロセスを使わない（OSC 7 はプロンプトごとに届く）。
+/// 親方向へ探して同期で求める（ルートが checkout しているブランチも同じく `.git` から読む）。サブプロセスを
+/// 使わない（OSC 7 はプロンプトごとに届く）。
 enum GitWorktreeRoot {
   /// 比較用の正準形（standardizingPath → resolvingSymlinksInPath）。symlink を解いたうえで先頭の
   /// `/private` を畳むので、返るのは実パスではなく短縮形（`/private/tmp` → `/tmp`）。OSC 7 の論理パス・
@@ -32,5 +33,52 @@ enum GitWorktreeRoot {
       guard parent != dir else { return nil }
       dir = parent
     }
+  }
+
+  /// worktree のルートが今 checkout しているブランチの名前。gitdir の HEAD を同期で読む——サブプロセスを
+  /// 使わない（chrome の更新ごとに読む）。detached・git の外・HEAD をファイルから読めないとき（reftable の
+  /// リポジトリの HEAD は `refs/heads/.invalid` を指す互換の置き物で、ブランチは ref の表にある）は nil
+  /// （ブランチ不明）。
+  static func branch(at root: String) -> String? {
+    guard let gitDir = GitWorktreeOperationProbe.gitDir(worktreeAt: root) else { return nil }
+    return symbolicRef(
+      atPath: (gitDir as NSString).appendingPathComponent("HEAD"), under: "refs/heads/")
+  }
+
+  /// worktree のリポジトリの既定ブランチ（`refs/remotes/origin/HEAD` の指すブランチのローカル名）。
+  /// common dir（linked worktree では gitdir の `commondir` が指す先）のそのファイルを同期で読み、
+  /// 無ければ `main`（reftable のリポジトリは ref をファイルに持たないので、origin/HEAD があっても
+  /// `main`）。git の外・ファイルを読めない・形が違うときは nil。
+  static func defaultBranch(at root: String) -> String? {
+    guard let gitDir = GitWorktreeOperationProbe.gitDir(worktreeAt: root) else { return nil }
+    var commonDir = gitDir
+    if let pointer = try? String(
+      contentsOfFile: (gitDir as NSString).appendingPathComponent("commondir"), encoding: .utf8),
+      let line = pointer.split(whereSeparator: \.isNewline).first
+    {
+      let path = String(line)
+      commonDir =
+        path.hasPrefix("/")
+        ? path
+        : ((gitDir as NSString).appendingPathComponent(path) as NSString)
+          .standardizingPath
+    }
+    let originHead = (commonDir as NSString).appendingPathComponent("refs/remotes/origin/HEAD")
+    guard FileManager.default.fileExists(atPath: originHead) else { return "main" }
+    return symbolicRef(atPath: originHead, under: "refs/remotes/origin/")
+  }
+
+  /// `ref: <prefix><name>` を書いたファイルの name。読めない・形が違う・ブランチ名として不正（`.` で始まる段
+  /// を持つ。reftable の置き物の `.invalid` を含む）なら nil。
+  private static func symbolicRef(atPath path: String, under prefix: String) -> String? {
+    guard let content = try? String(contentsOfFile: path, encoding: .utf8),
+      let line = content.split(whereSeparator: \.isNewline).first,
+      line.hasPrefix("ref: " + prefix)
+    else { return nil }
+    let name = String(line.dropFirst(("ref: " + prefix).count))
+    guard !name.isEmpty, !name.split(separator: "/").contains(where: { $0.hasPrefix(".") }) else {
+      return nil
+    }
+    return name
   }
 }

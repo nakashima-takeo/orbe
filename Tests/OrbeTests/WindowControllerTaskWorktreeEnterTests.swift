@@ -199,7 +199,7 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
   }
 
   /// 名前を打ったまま札をクリックして別のリポジトリへ読み直しても、その名前がブランチ名として有効かの答え
-  /// （リポジトリに依らない）は残り、↵ が預かられたまま固まらない。
+  /// （リポジトリに依らない）は残り、↵ が預かられたまま固まらない（読み直した先の fetch の着地で決まる）。
   func testRemovingTheTaskWithANameTypedKeepsItsAnswerAndEnterDoesNotHang() throws {
     let home = (dir as NSString).appendingPathComponent("home")
     try git(["init", "-q", "-b", "main", home], in: dir)
@@ -221,6 +221,6 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
       "前提: 開いた時点の workspace のリポジトリを読み直した")
     XCTAssertFalse(palette.isAwaitingBranchNameAnswer, "名前の答えは残る")
     palette.activate()
-    XCTAssertFalse(palette.hasPendingActivation, "↵ は預かられたままにならない")
+    XCTAssertTrue(pump { !palette.hasPendingActivation }, "↵ は預かられたままにならない")
   }
 }
