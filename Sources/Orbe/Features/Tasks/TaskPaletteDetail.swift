@@ -49,7 +49,7 @@ struct TaskPaletteDetail: View {
             memoField(task)
               .id(TaskDetailStop.field(.memo))
               .padding(.top, Theme.Space.bar)
-            actions(task)
+            TaskPaletteDetailActions(model: model, task: task)
               .padding(.top, Theme.Space.bar)
           }
           .padding(.horizontal, Theme.Space.phrase)
@@ -292,7 +292,19 @@ struct TaskPaletteDetail: View {
     .onTapGesture { if !isEditing(.memo) { model.tapField(.memo) } }
   }
 
-  private func actions(_ task: TaskItem) -> some View {
+  private func days(since: Date) -> String {
+    let count = TaskItem.DueDate(since, timeZone: model.timeZone).days(to: model.today)
+    return count == 0 ? l10n.string(.taskPaletteToday) : l10n.format(.taskPaletteDays, count)
+  }
+}
+
+/// 詳細の末尾のボタン（「space 完了にする」「⌘⌫ 削除」）。
+private struct TaskPaletteDetailActions: View {
+  let model: TaskPaletteModel
+  let task: TaskItem
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
     HStack {
       Button {
         model.toggleDone(task.id)
@@ -329,10 +341,5 @@ struct TaskPaletteDetail: View {
       .buttonStyle(.plain)
       .focusable(false)
     }
-  }
-
-  private func days(since: Date) -> String {
-    let count = TaskItem.DueDate(since, timeZone: model.timeZone).days(to: model.today)
-    return count == 0 ? l10n.string(.taskPaletteToday) : l10n.format(.taskPaletteDays, count)
   }
 }
