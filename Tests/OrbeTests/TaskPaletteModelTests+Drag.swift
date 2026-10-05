@@ -154,6 +154,27 @@ extension TaskPaletteModelTests {
       dropped(tallOnTop, 3, by: -(rowHeight + 0.6 * tallRowHeight)), [3, 1, 2], "上へ、中点を越えた")
   }
 
+  /// 背の高い行を下へ掴むと、掴んだ行の下端が下の行の中点を越えたところで 1 つ進む。
+  func testGrabbingATallerRowDownPassesTheNextRowAtItsMidpoint() {
+    let palette = model([task(1, "a") { $0.description = "詳細" }, task(2, "b"), task(3, "c")])
+
+    drop(palette, 1, by: 0.6)
+
+    XCTAssertEqual(order(palette), [2, 1, 3])
+  }
+
+  /// 背の高い行を、ずれが止まる位置（欄の末尾の行の下端にそろう）まで下へ動かすと、末尾に落ちる。
+  func testGrabbingATallerRowDownToWhereItStopsLandsAtTheEnd() throws {
+    let palette = model([task(1, "a") { $0.description = "詳細" }, task(2, "b"), task(3, "c")])
+
+    palette.dragChanged(1, start: grabPoint, translation: 10 * tallRowHeight)
+    let stop = try XCTUnwrap(palette.drag.session).offset
+    palette.dragChanged(1, start: grabPoint, translation: stop)
+    palette.dragEnded()
+
+    XCTAssertEqual(order(palette), [2, 3, 1])
+  }
+
   /// 線は、高さの違う行が混ざっていても、落ちる行の縁（下へなら下端、上へなら上端）に出る。
   func testDropLineMarksTheEdgeOfTheRowItLandsOnAmongRowsOfDifferentHeights() throws {
     let palette = model([task(1, "a"), task(2, "b") { $0.description = "詳細" }, task(3, "c")])
