@@ -116,6 +116,47 @@ final class GitWorktreeRootTests: OrbeTestCase {
     XCTAssertNil(GitWorktreeRoot.branch(at: canonical("plain")), "git の外")
   }
 
+  /// reftable のリポジトリの HEAD は互換の置き物（`refs/heads/.invalid`）で、ブランチはファイルから読めない。
+  /// その名前をブランチとして返さず、分からない（nil）とする。
+  func testBranchIsUnknownInAReftableRepository() throws {
+    let repo = canonical("repo")
+    try mkdir("repo")
+    XCTAssertTrue(
+      GitRunner.shared.runSync(["init", "-q", "-b", "main", "--ref-format=reftable"], cwd: repo)
+        .isSuccess)
+    XCTAssertTrue(
+      try String(contentsOfFile: "\(repo)/.git/HEAD", encoding: .utf8).contains(".invalid"),
+      "前提: HEAD は置き物")
+
+    XCTAssertNil(GitWorktreeRoot.branch(at: repo))
+  }
+
+  /// 既定ブランチは、linked worktree でも本体（common dir）の `origin/HEAD` が指すブランチ。指していなければ
+  /// main。git の外は nil。
+  func testDefaultBranchFollowsOriginHeadOfTheCommonDir() throws {
+    let repo = canonical("repo")
+    let linked = canonical("wt")
+    let git = { (args: [String]) in
+      XCTAssertTrue(
+        GitRunner.shared.runSync(args, cwd: repo).isSuccess, args.joined(separator: " "))
+    }
+    try mkdir("repo")
+    git(["init", "-q", "-b", "trunk"])
+    git([
+      "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m",
+      "init",
+    ])
+    git(["worktree", "add", "-q", "-b", "feat", linked])
+
+    XCTAssertEqual(GitWorktreeRoot.defaultBranch(at: linked), "main", "origin/HEAD が無い")
+
+    git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop"])
+    XCTAssertEqual(GitWorktreeRoot.defaultBranch(at: repo), "develop")
+    XCTAssertEqual(GitWorktreeRoot.defaultBranch(at: linked), "develop", "linked worktree")
+    try mkdir("plain")
+    XCTAssertNil(GitWorktreeRoot.defaultBranch(at: canonical("plain")), "git の外")
+  }
+
   // MARK: - normalizedPath
 
   /// symlink と `..` を解いた正準形を返す。symlink 越しの cwd でもルートは正準形で出る。
