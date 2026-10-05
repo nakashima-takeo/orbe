@@ -160,24 +160,24 @@ extension DesignFlowSnapshotTests {
     try hostedTaskPaletteFlow(
       "task_palette_small_detail", palette, size: NSSize(width: 800, height: 560),
       steps: [
-        ("status", { palette.enterDetail() }),
+        ("status", { _ in palette.enterDetail() }),
         (
           "due",
-          {
+          { _ in
             palette.moveField(1); palette.moveField(1); palette.moveField(1)
           }
         ),
         (
           "memo",
-          {
+          { _ in
             palette.moveField(1); palette.moveField(1)
           }
         ),
       ])
   }
 
-  /// 窓が低い（800×480）とき、GitHub タブの結び付いていない行の右の欄は欄ごとスクロールしてフッターを切らず、
-  /// ↓ で期限まで進むと見える位置へ送られる、までを撮る。
+  /// 窓が低い（800×480）とき、GitHub タブの結び付いていない行の右の欄は欄の幅に収まってフッターを切らず、
+  /// ↓ で期限まで進むと見える位置へ送られ、下端まで送るとボタンが縦に積まれている、までを撮る。
   func testTaskPaletteSmallGithub() throws {
     let palette = DesignSceneFixtures.taskPaletteModel()
     let issue221 = TaskPaletteGitHubRowID.item(GitHubItemID(repo: "nakatake/orbe", number: 221)!)
@@ -186,24 +186,41 @@ extension DesignFlowSnapshotTests {
       steps: [
         (
           "pane_assign",
-          {
+          { _ in
             palette.toggleTab(); palette.tapGitHubRow(issue221); palette.enterPane()
           }
         ),
         (
           "pane_due",
-          {
+          { _ in
             palette.movePaneStop(1); palette.movePaneStop(1)
           }
         ),
+        ("pane_bottom", { host in self.scrollRightmostToBottom(in: host) }),
       ])
+  }
+
+  /// いちばん右のスクロール（GitHub タブの右の欄）を下端まで送る。
+  private func scrollRightmostToBottom(in host: NSView) {
+    func scrollViews(_ view: NSView) -> [NSScrollView] {
+      (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrollViews)
+    }
+    guard
+      let pane = scrollViews(host).max(by: {
+        $0.convert($0.bounds, to: host).minX < $1.convert($1.bounds, to: host).minX
+      }),
+      let document = pane.documentView
+    else { return XCTFail("右の欄のスクロールが見つからない") }
+    let bottom = document.isFlipped ? document.bounds.height - pane.contentView.bounds.height : 0
+    pane.contentView.scroll(to: NSPoint(x: 0, y: bottom))
+    pane.reflectScrolledClipView(pane.contentView)
   }
 
   /// タスク画面を 1 つの窓に載せたまま、手順ごとに撮る（名前と置き場は `flow` と同じ）。撮るたびに載せ直すと、
   /// キーで移った場所へ送ったスクロールが消える。
   private func hostedTaskPaletteFlow(
     _ name: String, _ palette: TaskPaletteModel, size: NSSize,
-    steps: [(label: String, action: () -> Void)]
+    steps: [(label: String, action: (NSView) -> Void)]
   ) throws {
     let appearance = NSAppearance(named: .darkAqua)
     let host = NSHostingView(
@@ -222,7 +239,7 @@ extension DesignFlowSnapshotTests {
     defer { window.contentView = nil }
     let dir = previewDir("flows")
     for (index, step) in steps.enumerated() {
-      step.action()
+      step.action(host)
       host.layoutSubtreeIfNeeded()
       RunLoop.current.run(until: Date().addingTimeInterval(0.3))
       let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
