@@ -182,6 +182,20 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.query, "")
   }
 
+  /// 押し始めを見ていない ↵ のリピートだけが入力欄に届いても、完了にも追加にもならない。
+  func testEnterKeyRepeatAloneInTheFieldDoesNothing() {
+    let model = model()
+    let window = mount(model)
+
+    press(Key.enter, "\r", repeating: true, to: window)
+    type("新しい", into: window)
+    press(Key.enter, "\r", repeating: true, to: window)
+
+    XCTAssertEqual(model.store.tasks.map(\.status), [.todo, .todo, .todo], "完了にしない")
+    XCTAssertEqual(model.store.tasks.count, 3, "追加しない")
+    XCTAssertEqual(model.query, "新しい")
+  }
+
   func testCommandBackspaceDeletesOneTaskEvenWhenHeldDown() {
     let model = model()
     let window = mount(model)

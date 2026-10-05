@@ -124,8 +124,6 @@ extension TaskPaletteCardKeyTests {
     press(Key.enter, "\r", repeating: true, to: window)
     press(Key.enter, "\r", repeating: true, to: window)
 
-    XCTExpectFailure(
-      "バグ疑い: 押し始めを見ていない編集欄にはリピートが onKeyPress へ届かず、onSubmit が確定する")
     XCTAssertNotNil(model.draft, "リピートで確定しない")
   }
 
@@ -139,19 +137,42 @@ extension TaskPaletteCardKeyTests {
     XCTAssertNil(model.draft)
   }
 
-  /// メモの編集中の ↵ のリピートは改行として入る。
-  func testEnterKeyRepeatInTheMemoTypesNewlines() {
+  /// メモの編集中に ↵ を押し続けると、リピートも改行として入る。
+  func testEnterHeldInTheMemoTypesANewlinePerRepeat() {
     let model = model()
     let window = mount(model)
     enterDetail(model, at: .memo, in: window)
 
     press(Key.enter, "\r", to: window)
     type("1", into: window)
+    press(Key.enter, "\r", to: window)
+    press(Key.enter, "\r", repeating: true, to: window)
     press(Key.enter, "\r", repeating: true, to: window)
     type("2", into: window)
     press(Key.enter, "\r", .command, to: window)
 
-    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.memo, "1\n2")
+    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.memo, "1\n\n\n2")
+  }
+
+  /// メモの ⌘↵ を押し続けても確定は 1 回——リピートだけでは確定せず、確定の後に続くリピートで編集を
+  /// 始め直さない。
+  func testCommandEnterHeldInTheMemoCommitsOnce() {
+    let model = model()
+    let window = mount(model)
+    enterDetail(model, at: .memo, in: window)
+    press(Key.enter, "\r", to: window)
+    type("1", into: window)
+
+    press(Key.enter, "\r", .command, repeating: true, to: window)
+    XCTAssertNotNil(model.draft, "リピートだけでは確定しない")
+
+    press(Key.enter, "\r", .command, to: window)
+    press(Key.enter, "\r", .command, repeating: true, to: window)
+    press(Key.enter, "\r", .command, repeating: true, to: window)
+
+    XCTAssertNil(model.draft, "確定した後に編集を始め直さない")
+    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.memo, "1")
+    XCTAssertEqual(model.area, .detail(.field(.memo)))
   }
 
   func testMemoTakesNewlinesWithEnterAndCommitsWithCommandEnter() {

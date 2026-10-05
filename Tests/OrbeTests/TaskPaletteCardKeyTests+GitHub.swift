@@ -232,6 +232,23 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(opened, [])
   }
 
+  /// 右の欄の期限で ↵ を押し続けても、押した ↵ で打ち始め、続くリピートで確定しない（編集のまま）。
+  func testEnterHeldOnThePaneDueStartsTypingOnceAndKeepsTyping() {
+    let model = GitHub.model([], issues: [GitHub.issue(5)])
+    let window = mount(model)
+    arrow(Key.right, to: window)
+    arrow(Key.down, to: window)
+    arrow(Key.down, to: window)
+    XCTAssertEqual(model.area, .pane(.due), "前提: 期限")
+
+    press(Key.enter, "\r", to: window)
+    press(Key.enter, "\r", repeating: true, to: window)
+    press(Key.enter, "\r", repeating: true, to: window)
+
+    XCTAssertEqual(model.draft?.target, .paneDue, "リピートで確定しない")
+    XCTAssertTrue(model.store.tasks.isEmpty)
+  }
+
   // MARK: - 選ぶ状態の入力欄の →
 
   /// タスクを選ぶ間、タスクの行を選んでいても入力欄の → は文字のカーソルを進める（詳細へ入らない）。
