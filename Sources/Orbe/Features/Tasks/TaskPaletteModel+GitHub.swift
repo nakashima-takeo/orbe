@@ -1,7 +1,7 @@
 import Foundation
 
 /// GitHub タブの右の欄の止まる場所（上から並ぶ順）。
-enum TaskGitHubPaneStop: Equatable {
+enum TaskGitHubPaneStop: Hashable {
   /// 「自分をアサインする」（レビュアーにする）のチェック。足すものがある項目でだけ止まる。
   case assign
   case priority

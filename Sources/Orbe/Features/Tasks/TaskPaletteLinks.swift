@@ -84,6 +84,7 @@ struct TaskPaletteLinks: View {
     .padding(.horizontal, -Theme.Space.step)
     .contentShape(Rectangle())
     .onTapGesture { model.openLink(link.item) }
+    .id(TaskDetailStop.link(link.item))
     .onHover { hovering in
       if hovering {
         hoveredLink = link.item
@@ -117,6 +118,7 @@ struct TaskPaletteLinks: View {
     .padding(.horizontal, -Theme.Space.step)
     .contentShape(Rectangle())
     .onTapGesture { model.tapAddLink() }
+    .id(TaskDetailStop.addLink)
   }
 
   /// 右の状態。Issue は open / closed、PR は「✓ CI · レビュー待ち」「マージ済み」「閉じた」など。

@@ -12,25 +12,38 @@ struct TaskPaletteGitHubPane: View {
 
   var body: some View {
     if model.gitHubBody == .lists, let row = model.selectedGitHubRow {
-      VStack(alignment: .leading, spacing: 0) {
-        heading(row)
-        if let task = row.task {
-          linkedTask(task.id, row: row)
-            .padding(.top, Theme.Space.bar)
-          Spacer(minLength: Theme.Space.bar)
-          if model.pick == nil { linkedActions(row, task) }
-        } else if model.pick == nil {
-          divider.padding(.top, Theme.Space.bar)
-          values(row)
-          Spacer(minLength: Theme.Space.bar)
-          unlinkedActions(row)
-        } else {
-          Spacer(minLength: 0)
+      GeometryReader { geometry in
+        ScrollViewReader { proxy in
+          ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+              heading(row)
+              if let task = row.task {
+                linkedTask(task.id, row: row)
+                  .padding(.top, Theme.Space.bar)
+                Spacer(minLength: Theme.Space.bar)
+                if model.pick == nil { linkedActions(row, task) }
+              } else if model.pick == nil {
+                divider.padding(.top, Theme.Space.bar)
+                values(row)
+                Spacer(minLength: Theme.Space.bar)
+                unlinkedActions(row)
+              } else {
+                Spacer(minLength: 0)
+              }
+            }
+            .padding(.horizontal, Theme.Space.phrase)
+            .padding(.top, Theme.Space.span)
+            .padding(.bottom, Theme.Space.span)
+            // 収まる間は欄の高さいっぱいに広げ、ボタン群を下端へ押す。収まらなければ欄ごとスクロールする。
+            .frame(minHeight: geometry.size.height, alignment: .top)
+          }
+          .scrollIndicators(.automatic)
+          // キーで移った場所を見える位置へ最小の量だけ送る（詳細と同じ規約）。
+          .onChange(of: model.area) {
+            if case .pane(let stop) = model.area { proxy.scrollTo(stop) }
+          }
         }
       }
-      .padding(.horizontal, Theme.Space.phrase)
-      .padding(.top, Theme.Space.span)
-      .padding(.bottom, Theme.Space.span)
     } else {
       Color.clear
     }
@@ -132,6 +145,7 @@ struct TaskPaletteGitHubPane: View {
     .padding(.horizontal, -Theme.Space.step)
     .contentShape(Rectangle())
     .onTapGesture { model.togglePaneAssign() }
+    .id(TaskGitHubPaneStop.assign)
   }
 
   /// その項目の書き込みの失敗（画面を閉じた後の失敗も、次に選んだときに出る）。
@@ -162,6 +176,7 @@ struct TaskPaletteGitHubPane: View {
     .background(focusFill(stop))
     .padding(.horizontal, -Theme.Space.step)
     .contentShape(Rectangle())
+    .id(stop)
   }
 
   private func focusFill(_ stop: TaskGitHubPaneStop) -> some View {
@@ -221,8 +236,12 @@ struct TaskPaletteGitHubPane: View {
         .foregroundStyle(Color.theme.textMuted)
         .lineLimit(1)
       HStack(spacing: Theme.Space.beat) {
-        actionButton("↵", .taskPaletteMakeTask, primary: true) { model.makeTask(row) }
-        actionButton("⌘T", .taskPaletteMakeTaskOpen) { model.openWorktreePaletteFromGitHub() }
+        TaskPaneButton(key: "↵", title: l10n.string(.taskPaletteMakeTask), primary: true) {
+          model.makeTask(row)
+        }
+        TaskPaneButton(key: "⌘T", title: l10n.string(.taskPaletteMakeTaskOpen)) {
+          model.openWorktreePaletteFromGitHub()
+        }
       }
       divider.padding(.top, Theme.Space.tick)
       Button {
@@ -241,7 +260,7 @@ struct TaskPaletteGitHubPane: View {
   }
 }
 
-/// 結び付いている行の欄と、ボタンの部品。
+/// 結び付いている行の欄。
 extension TaskPaletteGitHubPane {
   // MARK: - 結び付いている行
 
@@ -308,10 +327,13 @@ extension TaskPaletteGitHubPane {
       GitHubItemText.label($0.item, primary: row.id)
     }
     return VStack(alignment: .leading, spacing: Theme.Space.beat) {
-      wideButton(
-        "↵", l10n.format(.taskPaletteOpenTask, number ?? task.label), primary: true
+      TaskPaneButton(
+        key: "↵", title: l10n.format(.taskPaletteOpenTask, number ?? task.label), primary: true,
+        wide: true
       ) { model.showTask(task.id) }
-      wideButton("⌘L", l10n.string(.taskPaletteRelink)) { model.linkSelectedGitHubItem() }
+      TaskPaneButton(key: "⌘L", title: l10n.string(.taskPaletteRelink), wide: true) {
+        model.linkSelectedGitHubItem()
+      }
       Button {
         model.unlinkSelectedGitHubItem()
       } label: {
@@ -328,52 +350,6 @@ extension TaskPaletteGitHubPane {
       .buttonStyle(.plain)
       .focusable(false)
     }
-  }
-
-  private func actionButton(
-    _ key: String, _ title: L10nKey, primary: Bool = false, action: @escaping () -> Void
-  ) -> some View {
-    Button(action: action) {
-      HStack(spacing: Theme.Space.step) {
-        Text(key).foregroundStyle(primary ? Color.theme.accentBright : Color.theme.textMuted)
-        Text(l10n.string(title)).foregroundStyle(Color.theme.textPrimary)
-      }
-      .font(Font.theme.taskText)
-      .lineLimit(1)
-      .fixedSize()
-      .padding(.horizontal, Theme.Space.beat)
-      .frame(height: 34)
-      .background(
-        RoundedRectangle(cornerRadius: Theme.Radius.row)
-          .fill(primary ? Color.theme.tintAccent : Color.theme.surfaceInk.opacity(0.06))
-      )
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .focusable(false)
-  }
-
-  private func wideButton(
-    _ key: String, _ title: String, primary: Bool = false, action: @escaping () -> Void
-  ) -> some View {
-    Button(action: action) {
-      HStack(spacing: Theme.Space.step) {
-        Text(key).foregroundStyle(primary ? Color.theme.accentBright : Color.theme.textMuted)
-        Text(title).foregroundStyle(Color.theme.textPrimary)
-        Spacer(minLength: 0)
-      }
-      .font(Font.theme.taskText)
-      .lineLimit(1)
-      .padding(.horizontal, Theme.Space.beat)
-      .frame(height: 34)
-      .background(
-        RoundedRectangle(cornerRadius: Theme.Radius.row)
-          .fill(primary ? Color.theme.tintAccent : Color.theme.surfaceInk.opacity(0.06))
-      )
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .focusable(false)
   }
 
   private static func priorityKey(_ priority: TaskItem.Priority) -> L10nKey {
