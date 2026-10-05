@@ -27,10 +27,10 @@ enum TaskPaletteGitHubBody: Equatable {
   case unavailable(GitHubRepositoryUnavailable)
 }
 
-/// GitHub タブ（開いた workspace のリポジトリの open な Issue・PR）の操作。一覧は置き場（`GitHubOpenLists`）を
+/// GitHub タブ（⌘T と同じ基点で解決したリポジトリの open な Issue・PR）の操作。一覧は置き場（`GitHubOpenLists`）を
 /// 写さずに読み、変異はストアのメソッドをそのまま呼ぶ。
 extension TaskPaletteModel {
-  /// 開いた workspace のリポジトリ（解決中・使えない間は前回の答え）。
+  /// GitHub タブのリポジトリ（⌘T と同じ基点で解決。解決中・使えない間は前回の答え）。
   var gitHubRepo: GitHubRepoName? { openLists.repository(for: root) }
 
   private var gitHubRepository: GitHubOpenLists.Repository? {
@@ -71,17 +71,18 @@ extension TaskPaletteModel {
   }
 
   private var gitHubRowsInput: TaskPaletteGitHubRows.Input? {
-    guard let repo = gitHubRepo, gitHubBody == .lists else { return nil }
-    let repository = gitHubRepository
+    guard let repo = gitHubRepo, gitHubBody == .lists, let repository = gitHubRepository else {
+      return nil
+    }
     return TaskPaletteGitHubRows.Input(
-      repo: repo, issues: repository?.issues.items ?? [],
-      pullRequests: repository?.pullRequests.items ?? [], tasks: store.tasks, login: viewer.login,
-      reviewRequests: repository?.reviewRequests, filter: githubFilter, query: gitHubList.query,
+      repo: repo, issues: repository.issues.items ?? [],
+      pullRequests: repository.pullRequests.items ?? [], tasks: store.tasks, login: viewer.login,
+      reviewRequests: repository.reviewRequests, filter: githubFilter, query: gitHubList.query,
       expanded: expandedKinds,
       loading: Set(
         [GitHubItemKind.issue, .pr].filter { kind in
-          let list = kind == .issue ? repository?.issues : repository?.pullRequests
-          return list.map { $0.growing || ($0.items == nil && !$0.failed) } ?? true
+          let list = repository.list(kind)
+          return list.growing || (list.items == nil && !list.failed)
         }))
   }
 

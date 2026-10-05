@@ -84,7 +84,7 @@ extension TaskPaletteModel {
     return store.tasks.first { $0.links.contains { $0.item == link.item } }
   }
 
-  /// 開いた workspace のリポジトリの open 一覧にある項目の値（絞り込みに依らない）。
+  /// GitHub タブのリポジトリ（`gitHubRepo`）の open 一覧にある項目の値（絞り込みに依らない）。
   func openItem(_ id: GitHubItemID) -> GitHubOpenItem? {
     guard id.repo == gitHubRepo, let repository = openLists.repositories[id.repo] else {
       return nil
