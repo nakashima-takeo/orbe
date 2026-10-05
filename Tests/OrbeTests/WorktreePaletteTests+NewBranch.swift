@@ -168,8 +168,8 @@ extension WorktreePaletteTests {
     XCTAssertEqual(executed, [.remoteBranch(name: "origin/feat/x", existingWorktree: nil)])
   }
 
-  /// 出すかが決まらない間の作成行は、タップしても作らない。
-  func testTappingTheCreateRowBeforeTheFetchLandsCreatesNothing() throws {
+  /// 出すかが決まらない間の作成行は、タップしてもその場では作らず、↵ と同じく預かる。
+  func testTappingTheCreateRowBeforeTheFetchLandsIsHeldLikeEnter() throws {
     let p = makeCreatableModel(remoteBranchesLanded: false)
     var executed: [WorktreePaletteDestination] = []
     p.onExecute = { executed.append($0) }
@@ -180,6 +180,7 @@ extension WorktreePaletteTests {
     p.activate(at: index)
 
     XCTAssertEqual(executed, [])
+    XCTAssertTrue(p.hasPendingActivation, "タップも預かる")
   }
 
   // MARK: - 決定
@@ -235,9 +236,9 @@ extension WorktreePaletteTests {
     XCTAssertFalse(p.isLocked)
   }
 
-  /// 答えを待っている間（直前の答えで出ている作成行）は、作成行をクリックしても作らない。答えが届いた後の
-  /// クリックで作る。
-  func testTapOnTheCreateRowBeforeTheAnswerDoesNotCreate() throws {
+  /// 答えを待っている間（直前の答えで出ている作成行）は、作成行をクリックしてもその場では作らず預かり、
+  /// 有効と答えが届いたら作る。
+  func testTapOnTheCreateRowBeforeTheAnswerIsHeldUntilTheAnswer() throws {
     let p = makeCreatableModel()
     var executed: [WorktreePaletteDestination] = []
     p.onExecute = { executed.append($0) }
@@ -249,7 +250,6 @@ extension WorktreePaletteTests {
     XCTAssertTrue(executed.isEmpty, "まだ git が有効と答えていない名前では作らない")
 
     p.applyBranchNameCheck("feat/ab", isValid: true)
-    p.activate(at: row)
     XCTAssertEqual(executed, [.newBranch(name: "feat/ab", base: .ref("origin/release/0.8"))])
   }
 

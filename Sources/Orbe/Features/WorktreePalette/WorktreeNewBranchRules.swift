@@ -8,7 +8,8 @@ struct WorktreeNewBranchRules: Equatable {
   /// 作れない名前。ローカルブランチと、リモートブランチの行が作るローカル名——リモートブランチと同じ名前を
   /// 別のベースから切ると、その行と同じ名前の別物になる。
   let takenNames: Set<String>
-  /// リモートブランチの列挙が、提示時の `fetch --prune` の着地後の値か。
+  /// リモートブランチの列挙が、提示時の `fetch --prune` の着地後の値か。着地前は、作れる名前もリモートに
+  /// 現れうる（現れれば正しい入口はそのリモートブランチの行で、同じ名前の別物を作らない）。
   let remoteBranchesLanded: Bool
   /// 既存の worktree のパス（`canonical` で解いた値）。
   let worktreePaths: Set<String>
@@ -40,12 +41,6 @@ struct WorktreeNewBranchRules: Equatable {
     let path = WorktreePathTemplate.resolve(
       template: template, repoPath: repoPath, slug: WorktreePathTemplate.slug(forBranch: name))
     return !worktreePaths.contains(Self.canonical(path))
-  }
-
-  /// その名前の作成行を出すかが、まだ決まらないか。手元のどのブランチとも違う名前は、提示時の fetch が
-  /// 着地するまでリモートに現れうる——現れれば正しい入口はそのリモートブランチの行で、同じ名前の別物を作らない。
-  func awaitsRemoteBranches(_ name: String) -> Bool {
-    !remoteBranchesLanded && !takenNames.contains(name)
   }
 
   /// 同じ場所かを比べる形。実在する祖先までを `GitWorktreeRoot.normalizedPath`（symlink と

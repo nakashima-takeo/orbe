@@ -85,8 +85,10 @@ import SwiftUI
   /// 決定の後、行き先が決まるまでの待ち（`prepareDirectory` の実行中）の進捗表示フラグ（palette は閉じない）。
   /// true の間はフッターにスピナ＋「作成中…」を出し、入力（Enter 再実行・選択移動・検索）を受け付けない。
   var isPreparing = false
-  /// 行がまだ決まらない間に押された ↵ を預かっている（→ `activate()`）。
-  private(set) var hasPendingActivation = false
+  /// 行がまだ決まらない間に押された ↵（と、出すかが決まらない作成行のタップ）の預かり（→ `activate()`）。
+  /// 書くのはモデル（拡張を含む）だけ。
+  var pendingActivation: WorktreePalettePendingActivation?
+  var hasPendingActivation: Bool { pendingActivation != nil }
 
   /// 作成行の名前と作成先の衝突の規則（provider が差し替える）。nil は作成行を出さない（非 git・未ロード）。
   var newBranchRules: WorktreeNewBranchRules? {
@@ -261,17 +263,6 @@ import SwiftUI
     items.indices.contains(selected) ? items[selected] : nil
   }
 
-  /// ↵ による決定。行がまだ決まらない間（`isSettled` が偽）は ↵ を預かり、決まった時点の選択で
-  /// 実行する（`settlePendingActivation`）——開いた直後や名前を打った直後の ↵ を空振りさせない。
-  func activate() {
-    guard mode == .list, !isLocked else { return }
-    guard isSettled else {
-      hasPendingActivation = true
-      return
-    }
-    activate(at: selected)
-  }
-
   /// 決定の唯一の funnel（↵ と行タップが共に通る）。入力ロック中・範囲外では実行しない。
   /// 選択を対象行へ確定してから、同じ行の行為をそのまま実行する（選択更新と実行の対象がずれない）。
   /// 外（`onExecute`）へ渡すのは行き先だけ。`clean` 行と「ほか…」の作成行はパレット内の画面遷移で、
@@ -286,30 +277,12 @@ import SwiftUI
     case .open(let destination):
       onExecute(destination)
     case .createBranch(let name):
-      // 出すかが決まらない作成行は作らない。↵ は `activate()` が預かるので、来るのはタップだけ。
-      guard !isCreateRowUndecided, let choice = selectedBaseChoice else { return }
+      // 出すかが決まらない作成行は、↵ と同じく作成の意図として預かる。
+      guard !isCreateRowUndecided else { return pendingActivation = .create(name: name) }
+      guard let choice = selectedBaseChoice else { return }
       guard let base = choice.base else { return enterBasePicker() }
       onExecute(.newBranch(name: name, base: base))
     }
-  }
-
-  /// 行が決まっているか。決まっていないのは、初回の一覧が届く前と、先頭の欄がまだ決まらない間と、作成行を
-  /// 出すかが決まらないまま作成行（または行が 1 つも無い状態）を選んでいるとき。
-  var isSettled: Bool {
-    guard hasLoadedOnce, !taskTargetPending else { return false }
-    guard isCreateRowUndecided else { return true }
-    switch selectedItem?.action {
-    case .createBranch, nil: return false
-    case .open, .clean: return true
-    }
-  }
-
-  /// 預かった ↵ を、行が決まっていれば今の選択で実行する。データの到着と有効性の答えの後に呼ぶ。
-  private func settlePendingActivation() {
-    guard hasPendingActivation, isSettled else { return }
-    hasPendingActivation = false
-    guard !items.isEmpty else { return }
-    activate(at: selected)
   }
 
   /// 行を巡回する選択移動（端で wrap）。
@@ -379,7 +352,7 @@ import SwiftUI
 
   /// 作成行に出す名前（出さないなら nil）。答えがまだ無い間は直前の答えで出すかを決め、名前は今の
   /// 入力にする——打鍵のたびに行が消えて出直さない。`-` で始まる名前は答えを待たずに出さない。
-  private var creatableName: String? {
+  var creatableName: String? {
     guard !query.isEmpty, !query.hasPrefix("-"), let rules = newBranchRules, rules.allows(query)
     else { return nil }
     return branchNameAnswer?.isValid == true ? query : nil

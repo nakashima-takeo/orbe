@@ -3,7 +3,7 @@ import SwiftUI
 // worktree パレットのフッターの部品。busy 表示は一覧と最新化が共有し、↵ の説明は一覧
 // （`PaletteActionLine`）と最新化（`LaunchLine`）で描き方が分かれる。
 
-/// フッターの busy 表示（作成中・最新化中）。左端の `↵` を出さず、gh「読み込み中…」行と同語彙の
+/// フッターの busy 表示（作成中・最新化中・リモートのブランチの確かめ待ち）。左端の `↵` を出さず、gh「読み込み中…」行と同語彙の
 /// working スピナ＋muted ラベルのみ。
 struct WorktreePaletteBusyLabel: View {
   let text: String
@@ -40,7 +40,7 @@ struct WorktreePaletteLaunchLine: View {
 }
 
 /// 一覧のフッター。選択行の ↵ が何をするかを言い（タスクから開いたときは、タスクに起こすことを続けて
-/// 言う）、右にキーヒント。作成中は busy 表示、失敗は赤。
+/// 言う）、右にキーヒント。作成中と、預かった作成がリモートのブランチを待つ間は busy 表示、失敗は赤。
 struct WorktreePaletteListFooter: View {
   @Bindable var model: WorktreePaletteModel
   @Environment(\.localization) private var l10n
@@ -63,6 +63,8 @@ struct WorktreePaletteListFooter: View {
   @ViewBuilder private var description: some View {
     if model.isPreparing {
       WorktreePaletteBusyLabel(text: l10n.string(.worktreePalettePreparing))
+    } else if model.isAwaitingRemoteBranches {
+      WorktreePaletteBusyLabel(text: l10n.string(.worktreePaletteCheckingRemote))
     } else if let error = model.errorMessage {
       Text(error).foregroundStyle(Color.theme.danger)
     } else if let enter = model.selectedItem?.enter {

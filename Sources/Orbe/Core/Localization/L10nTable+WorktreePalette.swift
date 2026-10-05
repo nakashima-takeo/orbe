@@ -29,6 +29,7 @@ extension L10n {
       "None — no new branch; makes PR #%1$@’s branch %2$@ a worktree"
     ),
     .worktreePalettePreparing: ("作成中…", "Preparing…"),
+    .worktreePaletteCheckingRemote: ("リモートのブランチを確かめています…", "Checking remote branches…"),
     .worktreePaletteHintSelect: ("選択", "Select"),
     .worktreePaletteHintClose: ("閉じる", "Close"),
     .worktreePaletteErrNotGitRepo: (

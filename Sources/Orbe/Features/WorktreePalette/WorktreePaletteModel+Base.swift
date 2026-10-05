@@ -60,11 +60,11 @@ extension WorktreePaletteModel {
     !query.isEmpty && newBranchRules != nil && branchNameAnswer?.name != query
   }
 
-  /// 作成行を出すかがまだ決まらない。今の入力への有効性の答えが無いか、打った名前が手元のどのブランチとも
-  /// 違い、提示時の fetch がまだ着地していない（リモートに現れれば作成行は消え、そのリモートブランチの行が
-  /// 正しい入口になる）。
+  /// 作成行を出すかがまだ決まらない。今の入力への有効性の答えが無いか、作成行が出ている名前で提示時の fetch
+  /// がまだ着地していない（リモートに現れれば作成行は消え、そのリモートブランチの行が正しい入口になる）。
+  /// 作成行が出ない名前は、着地しても出ることは無いので待たない。
   var isCreateRowUndecided: Bool {
     isAwaitingBranchNameAnswer
-      || (!query.isEmpty && newBranchRules?.awaitsRemoteBranches(query) == true)
+      || (creatableName != nil && newBranchRules?.remoteBranchesLanded == false)
   }
 }
