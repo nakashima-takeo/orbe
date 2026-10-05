@@ -154,7 +154,7 @@ extension DesignFlowSnapshotTests {
   }
 
   /// 小さい窓（tasks_small と同じ 800×560）で、詳細を ↓ で下端のメモまで進むと、強調された項目が見える位置へ
-  /// 送られる、までを撮る。
+  /// 送られ、esc → ↓ で次のタスクを選ぶと詳細が先頭から見える、までを撮る。
   func testTaskPaletteSmallDetail() throws {
     let palette = DesignSceneFixtures.taskPaletteModel()
     try hostedTaskPaletteFlow(
@@ -173,14 +173,22 @@ extension DesignFlowSnapshotTests {
             palette.moveField(1); palette.moveField(1)
           }
         ),
+        (
+          "next_task",
+          { _ in
+            palette.leaveDetail(); palette.move(1)
+          }
+        ),
       ])
   }
 
   /// 窓が低い（800×480）とき、GitHub タブの結び付いていない行の右の欄は欄の幅に収まってフッターを切らず、
-  /// ↓ で期限まで進むと見える位置へ送られ、下端まで送るとボタンが縦に積まれている、までを撮る。
+  /// ↓ で期限まで進むと見える位置へ送られ、下端まで送るとボタンが縦に積まれ、別の項目を選ぶと欄が先頭から
+  /// 見える、までを撮る。
   func testTaskPaletteSmallGithub() throws {
     let palette = DesignSceneFixtures.taskPaletteModel()
     let issue221 = TaskPaletteGitHubRowID.item(GitHubItemID(repo: "nakatake/orbe", number: 221)!)
+    let issue220 = TaskPaletteGitHubRowID.item(GitHubItemID(repo: "nakatake/orbe", number: 220)!)
     try hostedTaskPaletteFlow(
       "task_palette_small_github", palette, size: NSSize(width: 800, height: 480),
       steps: [
@@ -197,6 +205,7 @@ extension DesignFlowSnapshotTests {
           }
         ),
         ("pane_bottom", { host in self.scrollRightmostToBottom(in: host) }),
+        ("next_item", { _ in palette.tapGitHubRow(issue220) }),
       ])
   }
 
