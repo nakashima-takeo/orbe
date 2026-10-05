@@ -321,9 +321,9 @@ extension TaskPaletteModel {
   /// 選択の同一性が変わったら、右の欄の値を既定に戻し（打ちかけの期限も捨てる）、欄に居たなら一覧へ戻る
   /// ——別の項目の欄に既定の値（チェックはオン）で居続けると、↵ で見ていない項目をタスクにして自分を足す。
   /// agent の変更で同じ行のままなら、打った値を保つ。
-  func resetPaneIfMoved() {
-    guard pane.owner != githubList.selectedID else { return }
-    pane = TaskGitHubPane(owner: githubList.selectedID)
+  func resetPaneIfMoved(to owner: TaskPaletteGitHubRowID?) {
+    guard pane.owner != owner else { return }
+    pane = TaskGitHubPane(owner: owner)
     if draft?.target == .paneDue { draft = nil }
     if case .pane = area { area = .list }
   }

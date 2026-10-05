@@ -35,11 +35,13 @@ enum TaskPaletteError: Error, Equatable {
   /// 時刻を暦日へ落とすためのタイムゾーン。
   let timeZone: TimeZone
 
-  /// タスクのタブの一覧の状態。書くのはモデル（拡張を含む）だけ。
-  var tasksList = TaskPaletteListState<TaskPaletteRowID>()
-  /// GitHub タブの一覧の状態。選択の同一性が変わると右の欄の値を既定に戻す。書くのはモデル（拡張を含む）だけ。
-  var githubList = TaskPaletteListState<TaskPaletteGitHubRowID>() {
-    didSet { resetPaneIfMoved() }
+  /// タスクのタブが持つ一覧の状態。読み書きは選ぶ状態を振り分ける `taskList` を通す（選ぶ状態の間に
+  /// 隠れたタブの一覧を書き換えないため、ここ以外から触れないようにしておく）。
+  private var tabTaskList = TaskPaletteListState<TaskPaletteRowID>()
+  /// GitHub タブが持つ一覧の状態。読み書きは `gitHubList` を通す。選択の同一性が変わると右の欄の値を既定に
+  /// 戻す。
+  private var tabGitHubList = TaskPaletteListState<TaskPaletteGitHubRowID>() {
+    didSet { resetPaneIfMoved(to: tabGitHubList.selectedID) }
   }
 
   /// ヘッダーの入力（今見えている一覧の絞り込み。タスクのタブでは追加するタイトルも兼ねる）。
@@ -131,13 +133,13 @@ enum TaskPaletteError: Error, Equatable {
   var taskList: TaskPaletteListState<TaskPaletteRowID> {
     get {
       if case .task(_, let list) = pick { return list }
-      return tasksList
+      return tabTaskList
     }
     set {
       if case .task(let link, _) = pick {
         pick = .task(for: link, list: newValue)
       } else {
-        tasksList = newValue
+        tabTaskList = newValue
       }
     }
   }
@@ -146,13 +148,13 @@ enum TaskPaletteError: Error, Equatable {
   var gitHubList: TaskPaletteListState<TaskPaletteGitHubRowID> {
     get {
       if case .item(_, let list) = pick { return list }
-      return githubList
+      return tabGitHubList
     }
     set {
       if case .item(let task, _) = pick {
         pick = .item(for: task, list: newValue)
       } else {
-        githubList = newValue
+        tabGitHubList = newValue
       }
     }
   }
