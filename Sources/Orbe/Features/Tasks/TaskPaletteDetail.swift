@@ -15,7 +15,7 @@ struct TaskPaletteDetail: View {
       ScrollViewReader { proxy in
         ScrollView {
           VStack(alignment: .leading, spacing: 0) {
-            Color.clear.frame(height: 0).id(Self.top)
+            Color.clear.frame(height: Theme.Space.span).id(Self.top)
             if let primary = task.links.first {
               TaskPrimaryLinkHeading(link: primary)
                 .padding(.bottom, Theme.Space.step)
@@ -53,7 +53,6 @@ struct TaskPaletteDetail: View {
               .padding(.top, Theme.Space.bar)
           }
           .padding(.horizontal, Theme.Space.phrase)
-          .padding(.top, Theme.Space.span)
           .padding(.bottom, Theme.Space.span)
         }
         .scrollIndicators(.automatic)
@@ -69,7 +68,8 @@ struct TaskPaletteDetail: View {
     }
   }
 
-  /// 詳細の先頭（送りの的）。
+  /// 詳細の上の余白（送りの的。余白そのものを的にして、余白ごと先頭へ送り、最初に開いたときと同じ見え方に
+  /// 戻す）。
   private static let top = "TaskPaletteDetail.top"
 
   private var divider: some View {

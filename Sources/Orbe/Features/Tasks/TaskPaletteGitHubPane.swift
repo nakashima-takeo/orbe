@@ -16,7 +16,8 @@ struct TaskPaletteGitHubPane: View {
         ScrollViewReader { proxy in
           ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-              heading(row).id(Self.top)
+              Color.clear.frame(height: Theme.Space.span).id(Self.top)
+              heading(row)
               if let task = row.task {
                 linkedTask(task.id, row: row)
                   .padding(.top, Theme.Space.bar)
@@ -32,7 +33,6 @@ struct TaskPaletteGitHubPane: View {
               }
             }
             .padding(.horizontal, Theme.Space.phrase)
-            .padding(.top, Theme.Space.span)
             .padding(.bottom, Theme.Space.span)
             // 幅は欄の幅に留める（縦のスクロールは中身の幅を縛らないので、留めないと長い行が欄を押し広げ、
             // 区切り線と強調の地がカードの端まで伸びる）。収まる間は欄の高さいっぱいに広げ、ボタン群を下端へ
@@ -54,7 +54,8 @@ struct TaskPaletteGitHubPane: View {
     }
   }
 
-  /// 欄の先頭（送りの的）。
+  /// 欄の上の余白（送りの的。余白そのものを的にして、余白ごと先頭へ送り、最初に開いたときと同じ見え方に
+  /// 戻す）。
   private static let top = "TaskPaletteGitHubPane.top"
 
   private var divider: some View {
