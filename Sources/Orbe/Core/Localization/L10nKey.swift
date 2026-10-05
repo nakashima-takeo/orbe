@@ -63,6 +63,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case worktreePaletteQueryPlaceholder
   case worktreePalettePreparing
   case worktreePaletteCheckingRemote
+  case worktreePaletteCheckingTaskWorktree
   case worktreePaletteHintSelect
   case worktreePaletteHintClose
   case worktreePaletteErrNotGitRepo

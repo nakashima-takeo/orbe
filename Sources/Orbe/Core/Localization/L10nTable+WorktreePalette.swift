@@ -30,6 +30,9 @@ extension L10n {
     ),
     .worktreePalettePreparing: ("作成中…", "Preparing…"),
     .worktreePaletteCheckingRemote: ("リモートのブランチを確かめています…", "Checking remote branches…"),
+    .worktreePaletteCheckingTaskWorktree: (
+      "このタスクの worktree を確かめています…", "Checking this task’s worktree…"
+    ),
     .worktreePaletteHintSelect: ("選択", "Select"),
     .worktreePaletteHintClose: ("閉じる", "Close"),
     .worktreePaletteErrNotGitRepo: (
