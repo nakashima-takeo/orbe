@@ -140,4 +140,77 @@ extension WorktreePaletteTests {
     XCTAssertTrue(p.hasPendingActivation, "前提: 答えを待って預かる")
     XCTAssertFalse(p.isAwaitingRemoteBranches)
   }
+
+  // MARK: - タスクから開いた ⌘T
+
+  /// #221（未着手）の文脈で開き、先頭の欄が `target` のモデル。`landed` は提示時の fetch が着地したか。
+  private func taskContextModel(
+    _ target: WorktreePaletteTaskTarget, landed: Bool, remotes: [String] = []
+  ) -> (WorktreePaletteModel, WorktreePaletteSectionBuilder.Input) {
+    var input = WorktreePaletteSectionBuilder.Input.designSample
+    input.taskTarget = target
+    input.taskNumber = 221
+    input.remoteBranches.insert(
+      contentsOf: remotes.map { GitBranch(name: $0, relativeDate: "now", upstream: nil) }, at: 0)
+    input.newBranchRules = newBranchRules(input, remoteBranchesLanded: landed)
+    let p = DesignSceneFixtures.worktreePaletteModel(from: input, task: 3)
+    DesignSceneFixtures.setDesignBase(p)
+    p.newBranchRules = input.newBranchRules
+    p.taskTargetPending = target == .pending
+    return (p, input)
+  }
+
+  /// 打った名前の有効性の答えを待つ間に、先頭の欄の作成行を選んで ↵ を押すと、答えが届いたときに作るのは
+  /// その行のブランチで、打った名前のブランチではない。同じ行をタップしても同じ結果になる。
+  func testHeldEnterOnTheTaskCreateRowCreatesThatRowsBranchLikeATap() throws {
+    var results: [[WorktreePaletteDestination]] = []
+    for tap in [false, true] {
+      let (p, _) = taskContextModel(
+        .branch(name: "issue/221", pullRequest: nil, remotes: ["origin"]), landed: true)
+      var executed: [WorktreePaletteDestination] = []
+      p.onExecute = { executed.append($0) }
+      type("issue/22", into: p, valid: nil)
+      let row = try XCTUnwrap(
+        p.items.firstIndex { $0.action == .createBranch(name: "issue/221") }, "前提: 欄の作成行")
+      p.move(row - p.selected)
+
+      if tap { p.activate(at: row) } else { p.activate() }
+      XCTAssertTrue(p.hasPendingActivation, "前提: 答えを待って預かる")
+      p.applyBranchNameCheck("issue/22", isValid: true)
+
+      XCTAssertEqual(executed.count, 1, tap ? "タップ" : "↵")
+      guard case .newBranch(let name, _) = executed.first else {
+        return XCTFail("作成されない: \(executed)")
+      }
+      XCTAssertEqual(name, "issue/221", tap ? "タップ" : "↵")
+      results.append(executed)
+    }
+    XCTAssertEqual(results[0], results[1], "↵ とタップで同じ")
+  }
+
+  /// 先頭の欄が決まる前（手元に無いブランチを待つ間）に、手元に無い名前を打って ↵ を押すと、その時点で打った
+  /// 名前を作る意図として預かる。着地で名前の一部が一致するだけのリモートブランチが届いても、作るのは打った
+  /// 名前のブランチ。
+  func testEnterBeforeTheTaskTargetLandsKeepsTheTypedNameToCreate() {
+    let (p, _) = taskContextModel(.pending, landed: false)
+    var executed: [WorktreePaletteDestination] = []
+    p.onExecute = { executed.append($0) }
+    type("221", into: p)
+
+    p.activate()
+    XCTAssertEqual(p.pendingActivation, .create(name: "221"))
+
+    let (_, landed) = taskContextModel(
+      .branch(name: "issue/221", pullRequest: nil, remotes: ["origin"]), landed: true,
+      remotes: ["origin/feature/221-x"])
+    p.taskTargetPending = false
+    p.newBranchRules = newBranchRules(landed)
+    rebuild(p, with: landed)
+
+    XCTAssertEqual(executed.count, 1)
+    guard case .newBranch(let name, _) = executed.first else {
+      return XCTFail("作成されない: \(executed)")
+    }
+    XCTAssertEqual(name, "221")
+  }
 }
