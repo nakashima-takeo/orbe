@@ -109,8 +109,11 @@ extension TaskPaletteModel {
     case .rightArrow: changeValue(1)
     case .return:
       switch stop {
+      // ⌘↵ は 1 行の項目の確定のキーなので編集を始めない（確定した直後の ⌘↵ で、また編集に入らない）。
       case .field(let field):
-        if field.isText, press.phase == .down { beginEditing() }
+        if field.isText, press.phase == .down, !press.modifiers.contains(.command) {
+          beginEditing()
+        }
       case .agent: if press.phase == .down { focusAgentTab() }
       // 押し続けたキーリピートで、同じページを何度も開かない。
       case .link(let item): if press.phase == .down { openLink(item) }
