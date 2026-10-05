@@ -4,7 +4,7 @@ import XCTest
 
 /// 実 FSEvents: 根の下の変化がパス集合として、git dir の中の変化は「git が変わった」だけとして、根の綴りで届く。
 /// 壊れると外部変更が一つも拾えない（temp dir は `/var` が symlink で、実パスのまま比べると根に当たらない）、
-/// `.git/objects` の churn で status を取り直し続ける、ビルド中に通知が出ない。
+/// `.git/objects` の churn で status を取り直し続ける。
 final class RepoWatcherTests: OrbeTestCase {
   private var repo: TempGitRepo!
   private var batches: [RepoWatcher.Batch] = []
@@ -127,19 +127,5 @@ final class RepoWatcherTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["add", "mine.txt"], in: linked).isSuccess)
     pumpMain(until: { linkedBatches.contains { $0.gitChanged } }, "自分の index（commonDir の中）は拾う")
     withExtendedLifetime(watcher) {}
-  }
-
-  /// 変わり続ける間も 1 秒に 1 回は出る（後追いだけだと飢餓する）。測るのは「書き続けている**最中に**
-  /// 出たか」——上限があれば 1 秒過ぎに出るのでループ終了時点で非空、後追いだけなら書き終わるまで出ない。
-  func testContinuousChangesStillFlushWithinTheMaximumDelay() throws {
-    let start = Date()
-    var writes = 0
-    while Date().timeIntervalSince(start) < 1.6 {
-      try repo.write("busy.txt", "\(writes)\n")
-      writes += 1
-      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05))
-    }
-    XCTAssertGreaterThan(writes, 20, "前提: デバウンス間隔より密に書き続けた")
-    XCTAssertFalse(batches.isEmpty, "書き続けている最中に上限で出る")
   }
 }

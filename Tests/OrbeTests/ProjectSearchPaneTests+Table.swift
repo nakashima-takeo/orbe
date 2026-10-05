@@ -4,13 +4,13 @@ import XCTest
 
 @testable import Orbe
 
-/// 結果の列（自前の仮想化した列）——キーとマウスは model の操作に届き（列は自分で選択を動かさない）、列の選択は model の
-/// 選択を写す。見えている行の view だけを持って使い回し、結果が変わっても・パネルを隠して出し直しても作り直さない。
-/// Home / End・PageUp / PageDown は送るだけで、キーで選択を動かせば見えるところまで送る。VoiceOver には行の総数を持つ
-/// リストとして、見えている行（中身の文字列・行の番号・選択）を見せる。
+/// 結果の列（行の列の部品 `RowList` に検索結果の源をつないだもの）——キーとマウスは model の操作に届き（列は自分で選択を
+/// 動かさない）、列の選択は model の選択を写す。行の view は結果が変わっても・パネルを隠して出し直しても作り直さず、中身と
+/// VoiceOver の読み（見出しはファイル名・件数、一致は行のプレビュー）だけが揃う。送りキー・選択を見せる送り・VoiceOver の
+/// リストの形は部品そのもの（`RowListTests`）が固める。
 ///
-/// 壊れると何が起きるか。列に焦点があっても ↑↓ が効かない、選択が画面の外へ出て見失う。新しい結果が届いても前の結果の
-/// 行が残る、パネルを出し直すたびに列が作り直されて重い。VoiceOver が行を読めない、何行中の何行目か分からない。
+/// 壊れると何が起きるか。列に焦点があっても ↑↓ が効かない。新しい結果が届いても前の結果の行が残る、パネルを出し直す
+/// たびに列が作り直されて重い。VoiceOver が行の中身を読めない。
 extension ProjectSearchPaneTests {
   func list(_ hosted: Hosted) throws -> RowListView<SearchResultsSource> {
     pumpMain(until: { hosted.pane.searchResults.window != nil }, "結果の列が出る")
@@ -115,72 +115,6 @@ extension ProjectSearchPaneTests {
     pumpMain(until: { hosted.pane.searchResults.window != nil }, "出し直すと同じ列が載る")
     XCTAssertTrue(hosted.pane.searchResults.list === list)
     XCTAssertTrue(rowView(list, 0) === first, "出し直しても行の view を作り直さない")
-  }
-
-  /// Home / End・PageUp / PageDown は送るだけで選択を動かさない。キーで選択を動かせば、その行が見えるところまで送る。
-  func testScrollKeysScrollAndMovingTheSelectionKeepsItVisible() throws {
-    let text = (0..<200).map { "needle \($0)" }.joined(separator: "\n") + "\n"
-    let hosted = try host(["a.txt": text])
-    searchAll(hosted, "needle")
-    let list = try list(hosted)
-    pumpMain(until: { list.rowCount == 201 })
-    let height = list.visibleRect.height
-    XCTAssertGreaterThan(list.frame.height, height, "前提: 列は見えている高さより長い")
-
-    list.scrollToEndOfDocument(nil)
-    XCTAssertEqual(list.visibleRect.maxY, list.frame.height, accuracy: 0.5, "End で末尾へ")
-    XCTAssertNotNil(rowView(list, 200), "末尾の行が見えて描かれる")
-    list.scrollToBeginningOfDocument(nil)
-    XCTAssertEqual(list.visibleRect.minY, 0, "Home で先頭へ")
-    list.pageDown(nil)
-    XCTAssertEqual(
-      list.visibleRect.minY, height - Theme.Layout.editorSearchRow, accuracy: 0.5,
-      "PageDown は 1 行重ねて 1 画面送る")
-    list.pageUp(nil)
-    XCTAssertEqual(list.visibleRect.minY, 0)
-    XCTAssertNil(hosted.search.selection, "送るだけで選択は動かさない")
-
-    hosted.search.focusResults()
-    pumpMain(until: { hosted.window.firstResponder === list })
-    for _ in 0..<60 { list.keyDown(with: key(.downArrow)) }
-    pumpMain(until: { list.selectedRow == 60 })
-    pumpMain(
-      until: {
-        list.visibleRect.contains(NSPoint(x: 1, y: 60.5 * Theme.Layout.editorSearchRow))
-      }, "選んだ行が見えるところまで送る")
-    XCTAssertEqual(
-      list.visibleRect.maxY, 61 * Theme.Layout.editorSearchRow, accuracy: 0.5,
-      "最小限に送る（中央へ寄せない）")
-  }
-
-  /// VoiceOver には行の総数を持つリストとして、見えている行を上から順に（中身の文字列・何行目か）見せ、選択を伝える。
-  /// リストの行を選べば model の選択になる。
-  func testTheListIsAnAccessibilityListOfTheVisibleRows() throws {
-    let text = (0..<200).map { "needle \($0)" }.joined(separator: "\n") + "\n"
-    let hosted = try host(["a.txt": text])
-    searchAll(hosted, "needle")
-    let list = try list(hosted)
-    pumpMain(until: { list.rowCount == 201 })
-
-    XCTAssertEqual(list.accessibilityRole(), .list)
-    XCTAssertEqual(list.accessibilityRowCount(), 201, "行の総数")
-    var rows = try XCTUnwrap(list.accessibilityRows() as? [SearchResultRowView])
-    XCTAssertEqual(rows.first?.accessibilityRole(), .row)
-    XCTAssertEqual(rows.first?.accessibilityLabel(), "a.txt, 200")
-    XCTAssertEqual(rows.map { $0.accessibilityIndex() }, Array(0..<rows.count), "上から順に何行目か")
-    XCTAssertLessThan(rows.count, 201, "見えている行だけ")
-
-    list.scrollToEndOfDocument(nil)
-    rows = try XCTUnwrap(list.accessibilityRows() as? [SearchResultRowView])
-    XCTAssertEqual(rows.last?.accessibilityIndex(), 200)
-    XCTAssertEqual(rows.last?.accessibilityLabel(), "needle 199")
-
-    list.setAccessibilitySelectedRows([rows.last!])
-    XCTAssertEqual(hosted.search.selection, RowID(path: "a.txt", match: 199), "リストの行を選ぶと model の選択")
-    pumpMain(until: {
-      (list.accessibilitySelectedRows() as? [SearchResultRowView])?.first === rows.last
-    })
-    XCTAssertTrue(rows.last?.isAccessibilitySelected() == true)
   }
 
   /// 送ったとき描き直すのは新しく見えた行だけ（端で見え方の変わる行を含めて 2 行まで）。見えたままの行は描き直さない。

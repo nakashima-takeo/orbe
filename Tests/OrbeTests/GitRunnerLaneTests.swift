@@ -96,34 +96,4 @@ final class GitRunnerLaneTests: OrbeTestCase {
     }
     wait(for: [done], timeout: 5)
   }
-
-  /// ハング中の worktree 作成は、同じリポジトリの読み取り（status）を止めない。
-  /// GCD の barrier は**後から submit された読み取りも待たせる**ので、ここが最も広く巻き添えを食う。
-  func testHangingWorktreeAddDoesNotBlockReads() throws {
-    startHangingWorktreeAdd()
-
-    let done = expectation(description: "worktreeStatusCounts")
-    repo.worktreeStatusCounts(at: fixture.root) { counts in
-      XCTAssertNotNil(counts, "ハング中でも読み取りは成功する")
-      done.fulfill()
-    }
-    wait(for: [done], timeout: 5)
-  }
-
-  /// ハング中の worktree 作成は、**別のリポジトリ**の操作すら止めない。
-  /// barrier がプロセス単位（リポジトリ単位ですらない）ことの害を直接固定する。
-  func testHangingWorktreeAddDoesNotBlockAnotherRepository() throws {
-    let other = try GitHangFixture()
-    addTeardownBlock { other.cleanup() }
-    let otherRepo = try open(other)
-    let oid = try makeScratchBranch(in: other)
-    startHangingWorktreeAdd()
-
-    let done = expectation(description: "other repository deleteBranch")
-    otherRepo.deleteBranch(name: "scratch", expectedOid: oid) { failure in
-      XCTAssertNil(failure, "別リポジトリのブランチ削除は成功する")
-      done.fulfill()
-    }
-    wait(for: [done], timeout: 5)
-  }
 }

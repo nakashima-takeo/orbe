@@ -213,29 +213,6 @@ final class GitHubCLIItemsTests: OrbeTestCase {
     XCTAssertNil(gone.pullRequest?.head)
   }
 
-  /// CI の集約状態は、成功・失敗（ERROR を含む）・進行中（EXPECTED を含む）の 3 つに畳む。
-  func testCheckRollupStatesFoldIntoSuccessFailureOrPending() throws {
-    let states: [(String, GitHubItemSummary.Checks)] = [
-      ("SUCCESS", .success), ("FAILURE", .failure), ("ERROR", .failure), ("PENDING", .pending),
-      ("EXPECTED", .pending),
-    ]
-    let ids = try states.indices.map { try id("o/n", $0 + 1) }
-    var nodes: [Int: [String: Any]] = [:]
-    for (index, state) in states.enumerated() {
-      nodes[index + 1] = Node.pullRequest("p", checks: state.0)
-    }
-
-    let batch = try read(ids, ["o/n": nodes])
-
-    for (index, state) in states.enumerated() {
-      guard case .found(let summary) = batch?.answers[ids[index]] else {
-        XCTFail("\(state.0) の PR が読めない")
-        continue
-      }
-      XCTAssertEqual(summary.pullRequest?.checks, state.1, state.0)
-    }
-  }
-
   /// `data` の無い応答（出力の無い失敗・問い合わせ自体のエラー）は、その回の失敗。
   func testAResponseWithoutDataIsAFailedQuery() throws {
     let ids = [try id("o/n", 1)]

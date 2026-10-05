@@ -35,41 +35,24 @@ final class FolderSuggestionsTests: OrbeTestCase {
     compute(input).map(\.name)
   }
 
-  func testPrefixMatchesDirectoriesOnly() throws {
+  func testPrefixMatchesChildDirectoriesIgnoringCase() throws {
     try mkdir("api")
-    try mkdir("app")
+    try mkdir("App")
     try mkdir("web")
     try mkfile("apple.txt")  // ファイルは候補にしない
-    XCTAssertEqual(names(root.path + "/ap"), ["api", "app"], "末尾 'ap' 前方一致・名前昇順・dir のみ")
+    XCTAssertEqual(names(root.path + "/ap"), ["api", "App"], "末尾 'ap' の前方一致（大小無視）・名前昇順・dir のみ")
+    XCTAssertEqual(names(root.path + "/"), ["api", "App", "web"], "末尾 / はキー空＝全子")
   }
 
-  func testEmptyKeyListsAllChildren() throws {
-    try mkdir("api")
-    try mkdir("web")
-    XCTAssertEqual(names(root.path + "/"), ["api", "web"], "末尾 / はキー空＝全子")
-  }
-
-  func testCaseInsensitivePrefix() throws {
-    try mkdir("API")
-    try mkdir("Web")
-    XCTAssertEqual(names(root.path + "/ap"), ["API"], "前方一致は大小無視")
-  }
-
-  func testGitDirectoryTagged() throws {
+  func testAChildWithGitIsTaggedAsARepo() throws {
     try mkdir("repo")
-    try fm.createDirectory(
-      at: root.appendingPathComponent("repo/.git"), withIntermediateDirectories: true)
-    try mkdir("plain")
-    let out = compute(root.path + "/")
-    XCTAssertEqual(out.first { $0.name == "repo" }?.isRepo, true, "child/.git があれば isRepo")
-    XCTAssertEqual(out.first { $0.name == "plain" }?.isRepo, false)
-  }
-
-  func testGitWorktreeFileTagged() throws {
-    // worktree の .git は「ファイル」。それでも isRepo は真。
+    try mkdir("repo/.git")
     try mkdir("wt")
-    try mkfile("wt/.git", "gitdir: /somewhere")
-    XCTAssertEqual(compute(root.path + "/").first { $0.name == "wt" }?.isRepo, true)
+    try mkfile("wt/.git", "gitdir: /somewhere")  // worktree の .git はファイル
+    try mkdir("plain")
+    let isRepo = Dictionary(
+      uniqueKeysWithValues: compute(root.path + "/").map { ($0.name, $0.isRepo) })
+    XCTAssertEqual(isRepo, ["repo": true, "wt": true, "plain": false])
   }
 
   func testHiddenExcludedUnlessDotKey() throws {

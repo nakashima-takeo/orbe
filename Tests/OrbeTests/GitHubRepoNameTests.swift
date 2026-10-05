@@ -51,17 +51,10 @@ final class GitHubRepoNameTests: OrbeTestCase {
 
   // MARK: - github.com か
 
-  /// github.com・ssh.github.com（443 番の SSH）・SSH の書き方での `github.com-` で始まる別名と `.github.com` で
-  /// 終わる別名だけが github.com。
-  /// ホスト名の大小文字は問わない。
+  /// SSH の書き方での `.github.com` で終わる別名も github.com（github.com・ssh.github.com・`github.com-` で
+  /// 始まる別名は、URL の形を読むテストが通す）。ホスト名の大小文字は問わない。
   func testGitHubDotComHostsAreGitHub() {
     for url in [
-      "https://github.com/o/r",
-      "https://user@github.com/o/r",
-      "git@github.com:o/r.git",
-      "ssh://git@github.com:22/o/r.git",
-      "ssh://git@ssh.github.com:443/o/r.git",
-      "git@github.com-work:o/r.git",
       "git@work.github.com:o/r.git",
       "ssh://git@work.github.com/o/r.git",
       "HTTPS://GitHub.COM/o/r",
