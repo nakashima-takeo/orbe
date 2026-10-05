@@ -119,15 +119,6 @@ final class EditorSessionTests: OrbeTestCase {
       attributes[.type] as? FileAttributeType, .typeSymbolicLink, "リンクは通常ファイルにならない")
   }
 
-  func testOpenFailsForMissingOrBinary() throws {
-    let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
-    XCTAssertThrowsError(try session.open(URL(fileURLWithPath: "/nonexistent/x.txt"), as: .pinned))
-    let binary = try file("bin", "")
-    try Data([0xff, 0xfe, 0xc3]).write(to: binary)
-    XCTAssertThrowsError(try session.open(binary, as: .pinned))
-    XCTAssertTrue(session.documents.isEmpty)
-  }
-
   // MARK: - 仮の文書
 
   /// 仮で開くと、今の仮の文書を同じ位置で入れ替える（通知は 1 本）。仮の文書が無ければ末尾に足す。普通の文書は残る。

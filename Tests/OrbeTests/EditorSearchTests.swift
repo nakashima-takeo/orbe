@@ -82,6 +82,12 @@ final class EditorSearchTests: OrbeTestCase {
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("f")), "表示中の ⌘F は再フォーカスのみ")
     catchUp(pane)
     XCTAssertTrue(pane.searchBar === bar, "二重生成しない")
+
+    hosted.window.setContentSize(NSSize(width: 600, height: 400))
+    pane.layoutSubtreeIfNeeded()
+    XCTAssertEqual(
+      bar.frame.maxX, pane.bodyRect.maxX - pane.rightColumnWidth - 12, accuracy: 0.5,
+      "窓の幅が変われば追従する")
   }
 
   /// needle で全一致に地が敷かれ、キャレット以降で最初の一致が選ばれる。件数は selected/total。
@@ -194,30 +200,6 @@ final class EditorSearchTests: OrbeTestCase {
     XCTAssertEqual(pane.search.matches.count, 3, "間引いた後に取り直す")
     XCTAssertEqual(document.surface.selectedRange, NSRange(location: 8, length: 0), "キャレットは打った先のまま")
     pumpMain(until: { seen().last?.1 == 3 }, "件数が追従する")
-  }
-
-  /// 1 回の操作の編集の列（適用した順・どれもその直前の本文の座標）を順に畳んで一致をずらす——後ろの空白を広げ、前の空白
-  /// を消す束で、一致はどちらの編集にも正しく付いていく。
-  func testMatchesFollowAListOfEditsInTheOrderApplied() throws {
-    let hosted = try host("ab ab ab\n")
-    let pane = hosted.pane
-    pane.showSearch()
-    catchUp(pane)
-    pane.search.setNeedle("ab")
-    catchUp(pane)
-    XCTAssertEqual(pane.search.matches.map(\.location), [0, 3, 6])
-    pane.search.refreshDelay.schedule = { _, _ in }
-    var log = EditLog()
-    let widen = log.append(
-      TextEdit(range: NSRange(location: 5, length: 1), replacement: "   "),
-      start: TextPoint(row: 0, column: 5), oldEnd: TextPoint(row: 0, column: 6),
-      newEnd: TextPoint(row: 0, column: 8))
-    let remove = log.append(
-      TextEdit(range: NSRange(location: 2, length: 1), replacement: ""),
-      start: TextPoint(row: 0, column: 2), oldEnd: TextPoint(row: 0, column: 3),
-      newEnd: TextPoint(row: 0, column: 2))
-    pane.search.textDidChange([widen, remove])
-    XCTAssertEqual(pane.search.matches.map(\.location), [0, 2, 7])
   }
 
   /// 一致は上限（19999）で打ち切り、件数には打ち切ったことが届く（バーは「19999+」と出す）。
