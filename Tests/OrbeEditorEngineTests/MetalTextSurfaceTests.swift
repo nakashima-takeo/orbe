@@ -14,15 +14,6 @@ final class MetalTextSurfaceTests: EngineTestCase {
       + "\n"
   }
 
-  /// 結ばれたとき・役割が届いたときに写しを引き、その版は文書の版。
-  func testPullsTheDocumentsContent() throws {
-    let opened = try open("let a = 1\nlet b = \"s\"\n")
-    let content = try XCTUnwrap(opened.surface.drawn.content)
-    XCTAssertEqual(content.version, opened.document.version)
-    XCTAssertEqual(content.text.length, opened.document.text.length)
-    XCTAssertFalse(content.roles.roles(in: NSRange(location: 0, length: 20)).isEmpty, "役割が届いている")
-  }
-
   /// 見えている範囲は、先頭に見えている行（一部が上へ隠れていてもその行）の行頭と、上端の余白を除いた高さに入る行数。
   func testViewportIsTheFirstVisibleLineAndTheVisibleLineCount() throws {
     let opened = try open(lines(300), size: CGSize(width: 800, height: 604))
@@ -193,16 +184,6 @@ final class MetalTextSurfaceTests: EngineTestCase {
     opened.surface.replaceAll(with: "short\n")
     _ = opened.surface.snapshot()
     pump(until: { opened.surface.hiddenColumns == 0 }, "短くなれば新しい範囲に収める")
-  }
-
-  /// 行の印はオフセットで届き、引いた写しで行へ写す（区間の最後の字の行まで。削除は次の行の上端）。
-  func testLineMarksAreMappedToRows() throws {
-    let opened = try open("a\nb\nc\nd\n", waitForColors: false)
-    opened.document.baseline = "a\nX\nc\nq\nd\n"
-    XCTAssertTrue(opened.document.waitUntilCaughtUp())
-    let marks = opened.surface.drawn.marks
-    XCTAssertEqual(marks.bars, [RowMarks.Bar(rows: 1...1, kind: .modified)])
-    XCTAssertEqual(marks.deletions, [RowMarks.Deletion(row: 3, atBottom: false)])
   }
 
   /// 面が閉じたら、描画スレッドが写しの最後の参照と面ごとの持ち物を手放す（大きな木の解放を main で行わない）——

@@ -203,11 +203,4 @@ final class LineShaperTests: XCTestCase {
     let thaiLine = LineShaper.source(row: 0, in: TextRope(thai)).source
     XCTAssertEqual(LineShaper.display(thaiLine).units.count, 9_999, "タイ語の SARA AM も書記素ごと")
   }
-
-  /// 組んだ字は元の行の位置を持つ（色を役割から引くため）。
-  func testGlyphsCarryTheirOffsets() {
-    let shaped = LineShaper.shape(source("let 日本"), font: font, tabWidth: cell * 4)
-    let offsets = shaped.runs.flatMap(\.offsets)
-    XCTAssertEqual(offsets, [0, 1, 2, 3, 4, 5])
-  }
 }

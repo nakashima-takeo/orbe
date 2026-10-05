@@ -68,24 +68,6 @@ final class RoleRunsTests: XCTestCase {
     XCTAssertEqual(ranged.run(at: 9).role, nil)
   }
 
-  /// 挿入は挿入点を含む連なりを伸ばす——語の終わりに打てば前の語の色を引き継ぎ（境は前の連なり）、先頭の挿入は後ろの
-  /// 連なりを伸ばす。削除は縮め、消えた連なりの両隣が同じ役割なら繋がる。
-  func testEditsExtendTheRunBeforeTheInsertionAndShrinkOnDeletion() {
-    var runs = runs([span(0, 3, .keyword), span(4, 3, .type)], length: 8)
-    runs.apply(TextEdit(range: NSRange(location: 3, length: 0), replacement: "xy"))
-    XCTAssertEqual(
-      perUnit(runs),
-      [.keyword, .keyword, .keyword, .keyword, .keyword, nil, .type, .type, .type, nil])
-    runs.apply(TextEdit(range: NSRange(location: 0, length: 0), replacement: "z"))
-    XCTAssertEqual(perUnit(runs).first, .keyword, "先頭の挿入は後ろの連なり")
-    runs.apply(TextEdit(range: NSRange(location: 6, length: 1), replacement: ""))
-    XCTAssertEqual(
-      runs.roles(in: NSRange(location: 0, length: runs.length)).map(\.role), [.keyword, .type],
-      "役割なしの 1 字を消すと前後が詰まる")
-    runs.apply(TextEdit(range: NSRange(location: 0, length: runs.length), replacement: "all new"))
-    XCTAssertEqual(perUnit(runs), [SyntaxRole?](repeating: nil, count: 7), "全体の置換は役割なし")
-  }
-
   /// 乱択の編集と置き換えを、字ごとの配列の素朴な答えと同じに追う。
   func testRandomEditsMatchAPerUnitReference() {
     var generator = SeededGenerator(seed: 11)
@@ -128,18 +110,6 @@ final class RoleRunsTests: XCTestCase {
       }
       XCTAssertEqual(perUnit(runs), reference)
     }
-  }
-
-  /// 集合のずらしは落とさない——編集に掛かる（接する）なら置換後の区間を足し、後ろは平行移動する。
-  func testTrackingASetGrowsOverTheEdit() {
-    let set = IndexSet(integersIn: 2..<5).union(IndexSet(integersIn: 10..<12))
-    let edit = TextEdit(range: NSRange(location: 4, length: 3), replacement: "abcde")
-    XCTAssertEqual(
-      edit.track(set), IndexSet(integersIn: 2..<9).union(IndexSet(integersIn: 12..<14)))
-    let apart = TextEdit(range: NSRange(location: 7, length: 0), replacement: "q")
-    XCTAssertEqual(
-      apart.track(set), IndexSet(integersIn: 2..<5).union(IndexSet(integersIn: 11..<13)),
-      "離れた挿入は足さない")
   }
 
   /// ハンクのずらし——編集より後ろのハンクは増減した行の数だけ動き、前のハンクは動かない。

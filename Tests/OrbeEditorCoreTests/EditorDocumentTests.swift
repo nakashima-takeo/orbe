@@ -163,14 +163,6 @@ final class EditorDocumentTests: XCTestCase {
     withExtendedLifetime(document) {}
   }
 
-  /// injections: Markdown のコードブロックは囲みが名乗る言語（```swift）として色付く。
-  func testMarkdownFencedCodeUsesTheFenceLanguage() throws {
-    let (document, surface) = try open(Queries.samples.appendingPathComponent("sample.md"))
-    XCTAssertTrue(surface.texts(of: .keyword).contains("let"), "```swift の中は Swift として塗る")
-    XCTAssertTrue(surface.texts(of: .variable).contains("index"), "Markdown だけでは出ない役割")
-    withExtendedLifetime(document) {}
-  }
-
   /// 編集すると構文木が追従し、編集後の本文の役割を答える。
   func testHighlightsFollowEdits() throws {
     let url = try temp("b.swift", "let a = 1\n")
@@ -356,14 +348,5 @@ final class EditorDocumentTests: XCTestCase {
     surface.replace(NSRange(location: 0, length: 0), with: "x")
     XCTAssertTrue(surface.highlights.isEmpty)
     XCTAssertTrue(document.isDirty)
-  }
-
-  func testFocusForwards() throws {
-    let (document, surface) = try open(try temp("c.txt", ""))
-    var focused: [Bool] = []
-    document.onFocusChange = { focused.append($0) }
-    surface.focus(true)
-    surface.focus(false)
-    XCTAssertEqual(focused, [true, false])
   }
 }

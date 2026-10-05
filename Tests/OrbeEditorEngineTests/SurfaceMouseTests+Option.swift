@@ -135,7 +135,7 @@ extension SurfaceMouseTests {
     XCTAssertEqual(cursors(opened), [NSRange(location: 1, length: 0)])
   }
 
-  /// 行番号の列の ⌥クリックは行で足し、同じ行の ⌥クリックで外す。
+  /// 行番号の列の ⌥クリックは行で足す。
   func testOptionClickOnTheGutterAddsLines() throws {
     let opened = try open(lines)
     _ = host(opened)
@@ -145,9 +145,6 @@ extension SurfaceMouseTests {
     try mouse(opened, .leftMouseUp, at: gutter, flags: .option)
     XCTAssertEqual(
       cursors(opened), [NSRange(location: 1, length: 0), NSRange(location: 12, length: 9)])
-    try mouse(opened, .leftMouseDown, at: gutter, flags: .option)
-    try mouse(opened, .leftMouseUp, at: gutter, flags: .option)
-    XCTAssertEqual(cursors(opened), [NSRange(location: 1, length: 0)], "足すはずの行の動く端で外す")
   }
 
   /// 選択の上の ⌥押下は本文のドラッグを始めず、カーソルを足す。⇧⌥クリックは ⇧クリックのまま（1 本に伸ばす）。

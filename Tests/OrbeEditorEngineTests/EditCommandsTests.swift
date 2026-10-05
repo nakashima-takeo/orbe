@@ -9,10 +9,6 @@ import XCTest
 /// 止まる、絵文字や CRLF を割る、Tab が文書の作法と違う字を入れる、⌃K を続けても足されない。
 @MainActor
 final class EditCommandsTests: XCTestCase {
-  private func env(_ text: String) -> EditingEnvironment {
-    Editing.environment(TextRope(text))
-  }
-
   // MARK: - VS Code との突き合わせ
 
   /// ⌥←（cursorWordLeft）・⌥→（cursorWordEndRight）・⌥⌫（deleteWordLeft）・⌥⌦（deleteWordRight）・ダブルクリックの語・
@@ -49,15 +45,9 @@ final class EditCommandsTests: XCTestCase {
 
   // MARK: - 書記素と削除の単位
 
-  /// ←→・⌦ は書記素（UAX #29 の拡張書記素クラスタ。絵文字の ZWJ・国旗・肌の色・結合文字・CRLF）を割らない。
-  func testArrowsAndForwardDeleteMoveByGraphemes() {
-    let family = "👨‍👩‍👧‍👦"
-    XCTAssertEqual(Editing.run(.move(.right, extending: false), on: "|\(family)x"), "\(family)|x")
-    XCTAssertEqual(Editing.run(.move(.left, extending: false), on: "🇯🇵|🇺🇸"), "|🇯🇵🇺🇸")
-    XCTAssertEqual(Editing.run(.deleteForward, on: "|👍🏽a"), "|a")
-    XCTAssertEqual(Editing.run(.move(.right, extending: false), on: "e\u{301}|x"), "e\u{301}x|")
-    XCTAssertEqual(
-      Editing.run(.move(.right, extending: false), on: "ab|\r\ncd"), "ab\r\n|cd", "CRLF は 1 つ")
+  /// ←→・⌦ は CRLF を 1 つの字として扱う（他の書記素の境は下の NSTextView との突き合わせが見る）。
+  func testArrowsAndForwardDeleteKeepCRLFWhole() {
+    XCTAssertEqual(Editing.run(.move(.right, extending: false), on: "ab|\r\ncd"), "ab\r\n|cd")
     XCTAssertEqual(Editing.run(.move(.left, extending: false), on: "ab\r\n|cd"), "ab|\r\ncd")
     XCTAssertEqual(Editing.run(.deleteForward, on: "ab|\r\ncd"), "ab|cd")
   }
@@ -362,13 +352,13 @@ final class EditCommandsTests: XCTestCase {
 
   /// 長い行（2048 単位を超える）では、語の規則はキャレットの前後の窓だけを読み、窓の端は書記素の境へ広げる——窓の端が
   /// サロゲートの対の中間に掛かっても、⌥←・⌥⌫ は対を割らない。
-  func testLongLineWindowsDoNotSplitGraphemes() {
+  func testLongLineWindowsDoNotSplitGraphemes() throws {
     let text = TextRope(String(repeating: "x😀", count: 1000))
     let left = EditCommands.wordLeft(from: 1026, text, alone: true)
-    XCTAssertEqual(text.grapheme(containing: left).location, left, "書記素の境")
-    XCTAssertEqual(left, 1)
-    let removed = EditCommands.deleteWordLeftRange(Cursor(1026), text)
-    XCTAssertEqual(removed?.location, 1)
+    XCTAssertEqual(text.grapheme(containing: left).location, left, "⌥← は書記素の境")
+    let removed = try XCTUnwrap(EditCommands.deleteWordLeftRange(Cursor(1026), text))
+    XCTAssertEqual(
+      text.grapheme(containing: removed.location).location, removed.location, "⌥⌫ は書記素の境から")
   }
 
   /// 日本語の並びでは OS の語の分割の境でも止まる（記号と空白の規則はそのまま）。

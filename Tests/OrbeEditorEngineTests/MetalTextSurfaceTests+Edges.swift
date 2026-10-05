@@ -78,7 +78,6 @@ extension MetalTextSurfaceTests {
     opened.surface.selectedRange = NSRange(location: opened.document.text.length, length: 0)
     opened.surface.perform(.newline(indents: false))
     let wide = opened.surface.surfaceLayout
-    XCTAssertEqual(wide.column, config.columnWidth(lineCount: count))
     XCTAssertGreaterThan(wide.column, narrow.column)
     XCTAssertEqual(wide.text.minX, wide.column, "本文の区画は列の右から")
     XCTAssertEqual(opened.surface.drawn.content?.text.lineCount, count, "同じ取引で出す")

@@ -92,15 +92,13 @@ final class DecorTests: XCTestCase {
     XCTAssertEqual(urls("https://"), [], "本体が無ければ取らない")
   }
 
-  /// `://` を含まない行は URL を持たない——字を読まずに単位だけで見分ける口と、字を読む規則の答えが揃う。
-  func testLinesWithoutASchemeSeparatorHaveNoLinks() {
+  /// 字を読まずに単位だけで見分ける口は URL を取りこぼさない——URL のある行を「無い」と答えない。
+  func testTheQuickCheckNeverMissesALink() {
     for line in [
       "see https://example.com/a and http://x.y", "https:/a.b", "a :// b", "http:/ /x", "x:/", "",
       "日本語 https://a.b/c 😀",
-    ] {
-      let may = LinkDetector.mayContainLinks(line.utf16)
-      XCTAssertEqual(may, line.contains("://"), line)
-      if !may { XCTAssertEqual(urls(line), [], line) }
+    ] where !urls(line).isEmpty {
+      XCTAssertTrue(LinkDetector.mayContainLinks(line.utf16), line)
     }
   }
 

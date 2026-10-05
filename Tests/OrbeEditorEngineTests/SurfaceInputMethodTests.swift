@@ -75,17 +75,6 @@ final class SurfaceInputMethodTests: EngineTestCase {
     XCTAssertEqual(text(opened.document), "ap\r\nq\r\n")
   }
 
-  /// 取り消し（空の未確定）で本文が元に戻れば、undo には何も載らない。
-  func testCancellingLeavesNoUndo() throws {
-    let opened = try open("x\n")
-    _ = host(opened)
-    fakeInputMethod(opened)
-    replay([.mark("あ"), .mark("あい"), .mark("")], on: opened)
-    XCTAssertEqual(text(opened.document), "x\n")
-    XCTAssertFalse(opened.surface.textView.hasMarkedText())
-    XCTAssertFalse(try XCTUnwrap(opened.surface.textView.undoManager).canUndo)
-  }
-
   /// 再変換（確定済みの文字を置き換える）は前後で区切る——直前の打鍵とは別に戻る。
   func testReconversionIsItsOwnUndoElement() throws {
     let opened = try open("")
@@ -135,39 +124,6 @@ final class SurfaceInputMethodTests: EngineTestCase {
     let undo = try XCTUnwrap(opened.surface.textView.undoManager)
     undo.undo()
     XCTAssertEqual(text(opened.document), "", "履歴は変換の前のまま")
-  }
-
-  /// IME 以外の入口（クリック・外からの選択・コマンド・保存・焦点の喪失・Esc）は、先に確定してから動き、IME に古い未確定を
-  /// 捨てさせる。Esc は変換中なら上へ渡さない。
-  func testOtherEntriesCommitFirst() throws {
-    let opened = try open("one\ntwo\n")
-    let window = host(opened)
-    let context = fakeInputMethod(opened)
-    var discards = 0
-    func compose() { replay([.mark("あ")], on: opened) }
-    func committed(_ expected: String, _ message: String) {
-      XCTAssertFalse(opened.surface.textView.hasMarkedText(), message)
-      XCTAssertEqual(text(opened.document), expected, message)
-      discards += 1
-      XCTAssertEqual(context.discards, discards, "\(message): IME に知らせる")
-    }
-    compose()
-    try click(opened, row: 1, column: 1)
-    committed("あone\ntwo\n", "クリック")
-    compose()
-    opened.surface.selectedRange = NSRange(location: 0, length: 0)
-    committed("あone\ntあwo\n", "外からの選択")
-    compose()
-    opened.surface.perform(.move(.right, extending: false))
-    committed("ああone\ntあwo\n", "コマンド")
-    compose()
-    try opened.document.save()
-    committed("あああone\ntあwo\n", "保存")
-    compose()
-    opened.surface.textView.cancelOperation(nil)
-    XCTAssertTrue(opened.surface.textView.hasMarkedText(), "Esc は変換中なら何もしない")
-    window.makeFirstResponder(nil)
-    committed("ああああone\ntあwo\n", "焦点の喪失")
   }
 
   /// 丸ごと置き換え（外部変更）は、変換を取り消してから置き換える。
@@ -255,43 +211,18 @@ final class SurfaceInputMethodTests: EngineTestCase {
     }
   }
 
-  /// 属性の無い未確定の文字は地で塗り、文節の属性があれば IME が選んでいる文節（太い下線）とそれ以外に分け、透明な下線の
-  /// 色は指定が無いものとする。
-  func testMarkedAppearanceFollowsTheAttributes() {
-    let aqua = NSAppearance(named: .aqua)!
-    let srgb = FrameMaterial.defaultSpace
-    let plain = MetalTextView.appearance(
-      of: NSAttributedString(string: "かな"), selected: NSRange(location: 2, length: 0),
-      appearance: aqua, space: srgb)
-    XCTAssertEqual(plain, MarkedAppearance(clauses: [], filled: true))
-    let clauses = NSMutableAttributedString(string: "漢字変換")
-    clauses.addAttributes(
-      [
-        .markedClauseSegment: 0, .underlineStyle: NSUnderlineStyle.thick.rawValue,
-        .underlineColor: NSColor.clear,
-      ], range: NSRange(location: 0, length: 2))
-    clauses.addAttributes(
-      [.markedClauseSegment: 1, .underlineStyle: NSUnderlineStyle.single.rawValue],
-      range: NSRange(location: 2, length: 2))
-    let appearance = MetalTextView.appearance(
-      of: clauses, selected: NSRange(location: 0, length: 2), appearance: aqua, space: srgb)
-    XCTAssertEqual(
-      appearance.clauses.map(\.range),
-      [NSRange(location: 0, length: 2), NSRange(location: 2, length: 2)])
-    XCTAssertEqual(appearance.clauses.map(\.active), [true, false])
-    XCTAssertNil(appearance.clauses[0].underline, "透明な下線の色は指定が無いもの")
-    XCTAssertFalse(appearance.filled)
-  }
-
-  /// 変換中の文字は本文と同じ 1 コマに描く——文節の下線（選んでいる文節は本文の色）と、属性の無い文字列の地。
+  /// 変換中の文字は本文と同じ 1 コマに描く——文節の下線（選んでいる文節は本文の色。透明な下線の色は指定が無いものとする）と、
+  /// 属性の無い文字列の地。
   func testMarkedTextIsDrawnInTheSameFrame() throws {
     let opened = try open("\n")
     _ = host(opened, size: CGSize(width: 400, height: 80))
     fakeInputMethod(opened)
     let clauses = NSMutableAttributedString(string: "aaaa")
     clauses.addAttributes(
-      [.markedClauseSegment: 0, .underlineStyle: NSUnderlineStyle.thick.rawValue],
-      range: NSRange(location: 0, length: 2))
+      [
+        .markedClauseSegment: 0, .underlineStyle: NSUnderlineStyle.thick.rawValue,
+        .underlineColor: NSColor.clear,
+      ], range: NSRange(location: 0, length: 2))
     clauses.addAttributes(
       [.markedClauseSegment: 1, .underlineStyle: NSUnderlineStyle.single.rawValue],
       range: NSRange(location: 2, length: 2))

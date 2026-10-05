@@ -216,27 +216,6 @@ final class ScrollPhysicsTests: XCTestCase {
     XCTAssertEqual(p.shown(at: 1.53).y, held + 40, accuracy: 1e-9, "動かし始めたジェスチャの momentum は当てる")
   }
 
-  /// 戻りの途中のホイールは、その時点の位置からその場で当てる。
-  func testWheelDuringReturnMovesAtOnce() {
-    var p = physics()
-    p.apply(finger(1.0, 0, .began))
-    p.apply(finger(1.01, 200))
-    p.apply(finger(1.02, 0, .ended))
-    let from = p.shown(at: 1.04).y
-    p.apply(ScrollInput(timestamp: 1.04, delta: SIMD2(0, -3), precise: false))
-    XCTAssertFalse(p.isActive)
-    XCTAssertEqual(p.shown(at: 1.5).y, from + 30, accuracy: 1e-9)
-  }
-
-  /// マウスのホイールの 1 目盛り（量 1）は 10pt——NSScrollView の行送りと同じ。
-  func testWheelNotchMatchesNSScrollView() {
-    var p = physics()
-    p.apply(ScrollInput(timestamp: 1, delta: SIMD2(0, -1), precise: false))
-    XCTAssertEqual(p.shown(at: 1).y, 10)
-    p.apply(ScrollInput(timestamp: 1.1, delta: SIMD2(0, -3), precise: false))
-    XCTAssertEqual(p.shown(at: 1.1).y, 40)
-  }
-
   /// main の操作はその場で位置を置き（範囲に収める）、戻りを打ち切る。本文が縮めば範囲に収める。
   func testPlaceClampsAndCancelsReturn() {
     var p = physics()

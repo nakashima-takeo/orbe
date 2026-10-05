@@ -116,20 +116,6 @@ class EngineTestCase: XCTestCase {
   /// queries はテスト実行体の隣（`.build/<config>`）の資源バンドルから解く。
   static let registry = LanguageRegistry(
     queriesRoot: Bundle(for: EngineTestCase.self).bundleURL.deletingLastPathComponent())
-
-  /// 出力先（`.preview/engine`）。
-  func previewURL(_ name: String) -> URL {
-    let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .deletingLastPathComponent().appendingPathComponent(".preview/engine", isDirectory: true)
-    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    return dir.appendingPathComponent(name)
-  }
-
-  func writePNG(_ image: CGImage, _ url: URL) {
-    let rep = NSBitmapImageRep(cgImage: image)
-    try? rep.representation(using: .png, properties: [:])?.write(to: url)
-  }
 }
 
 extension MetalTextSurface {

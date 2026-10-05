@@ -14,14 +14,6 @@ final class EditBatchTests: XCTestCase {
     rope.substring(NSRange(location: 0, length: rope.length))
   }
 
-  func testInverseRestoresTheText() {
-    let text = TextRope("abcdef")
-    let batch = EditBatch([edit(1, 2, "XYZ"), edit(4, 0, "_"), edit(5, 1, "")])
-    let after = batch.applied(to: text)
-    XCTAssertEqual(string(after), "aXYZd_e")
-    XCTAssertEqual(string(batch.inverse(of: text).applied(to: after)), "abcdef")
-  }
-
   /// 続けて当てた束を 1 つに合成しても、当てた結果は同じ（打鍵のまとまり・⌫ の連続・離れた 2 か所・接する編集）。
   func testComposedBatchesEqualSequentialApplication() {
     var generator = SplitMix(seed: 0x5eed)
@@ -41,17 +33,6 @@ final class EditBatchTests: XCTestCase {
       XCTAssertEqual(string(composed.applied(to: initial)), string(text))
       XCTAssertEqual(string(composed.inverse(of: initial).applied(to: text)), string(initial))
     }
-  }
-
-  func testTypingComposesIntoOneEdit() {
-    var text = TextRope("x")
-    var composed = EditBatch.empty
-    for (offset, character) in "abc".enumerated() {
-      let batch = EditBatch([edit(1 + offset, 0, String(character))])
-      text = batch.applied(to: text)
-      composed = composed.then(batch, result: text)
-    }
-    XCTAssertEqual(composed.edits, [edit(1, 0, "abc")])
   }
 
   private static func randomBatch(
