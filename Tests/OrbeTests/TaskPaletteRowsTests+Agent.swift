@@ -27,7 +27,7 @@ extension TaskPaletteRowsTests {
     XCTAssertEqual(tabs, [7, nil, nil], "worktree が一致する行だけ")
   }
 
-  /// 応答を終えた・休止中の agent は行の札に出さない（詳細の agent の場所にだけ出る）。
+  /// 応答を終えた・休止中の agent は行の札に出さない（右の欄の agent の場所にだけ出る）。
   func testRowShowsTheAgentOnlyWhileItIsWorkingOrWaiting() throws {
     let worktree = "/r/wt/issue-221"
     for state in AgentStateIcon.Kind.allCases {

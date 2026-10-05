@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 詳細の Issue・PR の欄の行に焦点があるときのキーと、開いている間に agent が結び付けた項目を
+/// 右の欄の Issue・PR の欄の行に焦点があるときのキーと、開いている間に agent が結び付けた項目を
 /// カードが取りに行く配線。
 extension TaskPaletteCardKeyTests {
   private func link(_ kind: GitHubItemKind, _ number: Int) -> TaskLink {

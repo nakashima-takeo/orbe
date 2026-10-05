@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// タスク画面の ⌘T が、焦点の居場所（ヘッダーの入力欄・詳細のカード・詳細の編集欄）に依らず窓のキーの経路で
+/// タスク画面の ⌘T が、焦点の居場所（ヘッダーの入力欄・右の欄のカード・右の欄の編集欄）に依らず窓のキーの経路で
 /// 受けられ、選んでいるタスクのための ⌘T に差し替わることを、実 `WindowController` の窓に実 `NSEvent` を
 /// 渡して固定する。
 ///
@@ -11,8 +11,8 @@ import XCTest
 /// key window のこの入口へ流す（ここで消費されれば入力欄には届かない）。テストの窓は非アクティブなアプリの
 /// 窓で key window になれず、`NSApp.sendEvent` はこの入口を通らないため、入口を直接叩く。
 ///
-/// 壊れると何が起きるか: 詳細を見ているときや、メモを打っている途中に ⌘T を押しても何も起きない（または
-/// 入力欄に文字として入る）。メモを打ちかけのまま ⌘T を押すと、打った内容が消える。追加の行で ⌘T を
+/// 壊れると何が起きるか: 右の欄を見ているときや、詳細を打っている途中に ⌘T を押しても何も起きない（または
+/// 入力欄に文字として入る）。詳細を打ちかけのまま ⌘T を押すと、打った内容が消える。追加の行で ⌘T を
 /// 押しても、タスクが足されないまま ⌘T が開く。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
@@ -89,28 +89,28 @@ final class WindowControllerTaskWorktreePaletteTests: OrbeTestCase {
     palette.enterDetail()
     pump()
     XCTAssertEqual(palette.focusTarget, .card)
-    XCTAssertFalse(wc.window.firstResponder is NSText, "前提: 焦点は詳細のカード（文字の入力欄ではない）")
+    XCTAssertFalse(wc.window.firstResponder is NSText, "前提: 焦点は右の欄のカード（文字の入力欄ではない）")
 
     XCTAssertTrue(try pressCommandT(wc))
 
     assertOpenedTheWorktreePalette(for: task, in: wc)
   }
 
-  func testCommandTWhileEditingTheMemoCommitsItThenOpensTheWorktreePalette() throws {
+  func testCommandTWhileEditingTheDescriptionCommitsItThenOpensTheWorktreePalette() throws {
     let wc = try launch()
     let (palette, task) = try openTaskPalette(wc)
     palette.enterDetail()
-    palette.tapField(.memo)
+    palette.tapField(.description)
     pump()
-    palette.draftText = "打ちかけのメモ"
-    XCTAssertEqual(palette.focusTarget, .edit(.memo))
-    XCTAssertTrue(wc.window.firstResponder is NSText, "前提: 焦点は詳細のメモの編集欄にある")
+    palette.draftText = "打ちかけの詳細"
+    XCTAssertEqual(palette.focusTarget, .edit(.description))
+    XCTAssertTrue(wc.window.firstResponder is NSText, "前提: 焦点は右の欄の詳細の編集欄にある")
 
     XCTAssertTrue(try pressCommandT(wc))
 
     assertOpenedTheWorktreePalette(for: task, in: wc)
     XCTAssertEqual(
-      wc.taskStore.tasks.first { $0.id == task.id }?.memo, "打ちかけのメモ", "打っていたメモは確定してから開く")
+      wc.taskStore.tasks.first { $0.id == task.id }?.description, "打ちかけの詳細", "打っていた詳細は確定してから開く")
   }
 
   func testCommandTOnTheAddRowAddsTheTaskThenOpensItsWorktreePalette() throws {

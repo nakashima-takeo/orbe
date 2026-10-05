@@ -39,7 +39,7 @@ enum TaskStoreError: Error, Equatable {
     }
     let item = TaskItem(
       id: nextId, title: title, status: draft.status, waiting: waiting, priority: draft.priority,
-      due: draft.due, workspace: draft.workspace, memo: draft.memo, createdAt: now,
+      due: draft.due, workspace: draft.workspace, description: draft.description, createdAt: now,
       createdBy: draft.createdBy, links: draft.links, worktree: draft.worktree,
       worktreeBranch: draft.worktree?.currentBranch)
     nextId += 1
@@ -59,7 +59,7 @@ enum TaskStoreError: Error, Equatable {
     if let status = update.status { item.status = status }
     if let priority = update.priority { item.priority = priority }
     if let due = update.due { item.due = due.value }
-    if let memo = update.memo { item.memo = memo }
+    if let description = update.description { item.description = description }
     if let workspace = update.workspace { item.workspace = workspace.value }
     try applyLinksAndWorktree(update, to: &item)
     item.waiting = try Self.waiting(update.waitingReason, of: item)

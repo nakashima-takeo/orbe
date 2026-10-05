@@ -8,9 +8,13 @@ import XCTest
 /// 壊れると何が起きるか: 離した場所と別の位置へ落ちる、欄をまたいでステータスが変わる、絞り込み中に
 /// 隠れたタスクを飛び越えて並びが崩れる。agent が掴み中に並びを変えたのに古い並びで確定し、agent の
 /// 並べ替えを潰す。捨てた掴みの続きや、終わりの届かなかった前の掴みが、次の操作で勝手に確定する。
-/// 掴んだ行が欄の外へはみ出して描かれ、線が落ちる位置と違う行の縁に出る。
+/// 掴んだ行が欄の外へはみ出して描かれ、線が落ちる位置と違う行の縁に出る。詳細つきの行（背が高い）が
+/// 混ざると、指の位置と落ちる位置・線がずれる。agent が詳細を書いて行の高さが変わったのに掴みを続け、
+/// 指と行がずれたまま確定する。
 extension TaskPaletteModelTests {
-  var rowHeight: CGFloat { TaskPaletteRowMetrics.height }
+  var rowHeight: CGFloat { TaskPaletteRowMetrics.line }
+  /// 詳細の 1 行を持つ行の高さ。
+  var tallRowHeight: CGFloat { TaskPaletteRowMetrics.taskWithDescription }
   var grabPoint: CGPoint { CGPoint(x: 120, y: 80) }
   var nextGrabPoint: CGPoint { CGPoint(x: 120, y: 160) }
 
@@ -88,11 +92,11 @@ extension TaskPaletteModelTests {
 
   func testGrabbingWhileEditingCommitsTheEditAndReturnsToTheList() throws {
     let palette = detailOfFirst()
-    edit(palette, .memo, "掴む前に書いた")
+    edit(palette, .description, "掴む前に書いた")
 
     palette.dragChanged(2, start: grabPoint, translation: -rowHeight)
 
-    XCTAssertEqual(try storedTask(palette, 1).memo, "掴む前に書いた", "編集していたタスクへ書く")
+    XCTAssertEqual(try storedTask(palette, 1).description, "掴む前に書いた", "編集していたタスクへ書く")
     XCTAssertNil(palette.draft)
     XCTAssertEqual(palette.area, .list)
     XCTAssertEqual(palette.selectedID, .task(2))
@@ -127,6 +131,73 @@ extension TaskPaletteModelTests {
 
     palette.dragChanged(2, start: grabPoint, translation: -0.6 * rowHeight)
     XCTAssertEqual(try XCTUnwrap(palette.drag.session).indicatorY, -rowHeight, "a の上端")
+  }
+
+  // MARK: - 高さの違う行が混ざった欄
+
+  /// 落ちる位置は行ごとの高さで決まる——詳細つきの背の高い行は、その中点を越えるまで越えない。
+  func testDropPassesATallerRowOnlyBeyondItsMidpointInEitherDirection() {
+    func dropped(_ tasks: [TaskItem], _ id: Int, by translation: CGFloat) -> [Int] {
+      let palette = model(tasks)
+      palette.dragChanged(id, start: grabPoint, translation: translation)
+      palette.dragEnded()
+      return order(palette)
+    }
+    let tallInTheMiddle = [task(1, "a"), task(2, "b") { $0.description = "詳細" }, task(3, "c")]
+    XCTAssertEqual(dropped(tallInTheMiddle, 1, by: 0.4 * tallRowHeight), [1, 2, 3], "下へ、中点の手前")
+    XCTAssertEqual(dropped(tallInTheMiddle, 1, by: 0.6 * tallRowHeight), [2, 1, 3], "下へ、中点を越えた")
+
+    let tallOnTop = [task(1, "a") { $0.description = "詳細" }, task(2, "b"), task(3, "c")]
+    XCTAssertEqual(
+      dropped(tallOnTop, 3, by: -(rowHeight + 0.4 * tallRowHeight)), [1, 3, 2], "上へ、中点の手前")
+    XCTAssertEqual(
+      dropped(tallOnTop, 3, by: -(rowHeight + 0.6 * tallRowHeight)), [3, 1, 2], "上へ、中点を越えた")
+  }
+
+  /// 背の高い行を下へ掴むと、掴んだ行の下端が下の行の中点を越えたところで 1 つ進む。
+  func testGrabbingATallerRowDownPassesTheNextRowAtItsMidpoint() {
+    let palette = model([task(1, "a") { $0.description = "詳細" }, task(2, "b"), task(3, "c")])
+
+    drop(palette, 1, by: 0.6)
+
+    XCTAssertEqual(order(palette), [2, 1, 3])
+  }
+
+  /// 背の高い行を、ずれが止まる位置（欄の末尾の行の下端にそろう）まで下へ動かすと、末尾に落ちる。
+  func testGrabbingATallerRowDownToWhereItStopsLandsAtTheEnd() throws {
+    let palette = model([task(1, "a") { $0.description = "詳細" }, task(2, "b"), task(3, "c")])
+
+    palette.dragChanged(1, start: grabPoint, translation: 10 * tallRowHeight)
+    let stop = try XCTUnwrap(palette.drag.session).offset
+    palette.dragChanged(1, start: grabPoint, translation: stop)
+    palette.dragEnded()
+
+    XCTAssertEqual(order(palette), [2, 3, 1])
+  }
+
+  /// 線は、高さの違う行が混ざっていても、落ちる行の縁（下へなら下端、上へなら上端）に出る。
+  func testDropLineMarksTheEdgeOfTheRowItLandsOnAmongRowsOfDifferentHeights() throws {
+    let palette = model([task(1, "a"), task(2, "b") { $0.description = "詳細" }, task(3, "c")])
+
+    palette.dragChanged(1, start: grabPoint, translation: 0.6 * tallRowHeight)
+    XCTAssertEqual(
+      try XCTUnwrap(palette.drag.session).indicatorY, rowHeight + tallRowHeight, "b の下端")
+
+    palette.dragChanged(3, start: nextGrabPoint, translation: -(0.6 * tallRowHeight))
+    XCTAssertEqual(try XCTUnwrap(palette.drag.session).indicatorY, -tallRowHeight, "b の上端")
+  }
+
+  /// 掴んだ行は、高さの違う行が混ざっていても、欄の先頭の行の上端から末尾の行の下端までに収まる。
+  func testGrabbedRowStaysWithinItsSectionAmongRowsOfDifferentHeights() throws {
+    let palette = model([task(1, "a") { $0.description = "詳細" }, task(2, "b"), task(3, "c")])
+
+    palette.dragChanged(1, start: grabPoint, translation: 10 * tallRowHeight)
+    XCTAssertEqual(
+      try XCTUnwrap(palette.drag.session).offset, 2 * rowHeight, "下端が c の下端にそろう")
+
+    palette.dragChanged(3, start: nextGrabPoint, translation: -10 * tallRowHeight)
+    XCTAssertEqual(
+      try XCTUnwrap(palette.drag.session).offset, -(tallRowHeight + rowHeight), "上端が a の上端にそろう")
   }
 
   // MARK: - 絞り込み中（⌥↑↓ と同じ落とし先）
@@ -203,16 +274,53 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(order(palette), [1, 2, 3])
   }
 
+  /// 兄弟の詳細が空から入ると、掴んだ行の上端は動かなくても、その行の高さが変わって落ちる位置の土台が
+  /// ずれるので捨てる。
+  func testSiblingsDescriptionAppearingDiscardsTheGrab() throws {
+    let palette = threeTodos()
+    palette.dragChanged(1, start: grabPoint, translation: 2 * rowHeight)
+
+    var update = TaskUpdate()
+    update.description = "agent が下の兄弟に詳細を書いた"
+    _ = try palette.store.update(3, update)
+    palette.reconcile()
+    XCTAssertNil(palette.drag.session)
+
+    palette.dragEnded()
+    XCTAssertEqual(order(palette), [1, 2, 3])
+  }
+
+  /// 上の欄の行の詳細が空になると、兄弟の並びと高さが同じでも、掴んだ行の上端がずれるので捨てる。
+  func testRowAboveLosingItsDescriptionDiscardsTheGrab() throws {
+    let palette = model([
+      task(1, "進行中", .inProgress) { $0.description = "人が書いた" }, task(2, "a"), task(3, "b"),
+    ])
+    palette.dragChanged(3, start: grabPoint, translation: -rowHeight)
+
+    var update = TaskUpdate()
+    update.description = ""
+    _ = try palette.store.update(1, update)
+    palette.reconcile()
+    XCTAssertNil(palette.drag.session)
+
+    palette.dragEnded()
+    XCTAssertEqual(order(palette), [1, 2, 3])
+  }
+
   func testChangesOutsideTheGrabbedSectionKeepTheGrab() throws {
-    let palette = model([task(1, "進行中 1", .inProgress), task(2, "進行中 2", .inProgress)])
-    palette.dragChanged(2, start: grabPoint, translation: -rowHeight)
+    let palette = model([
+      task(1, "進行中 1", .inProgress) { $0.description = "人が書いた" },
+      task(2, "進行中 2", .inProgress),
+    ])
+    palette.dragChanged(
+      2, start: grabPoint, translation: -TaskPaletteRowMetrics.taskWithDescription)
 
     let added = try palette.store.add(TaskDraft(title: "agent が未着手に足した"))
-    var memo = TaskUpdate()
-    memo.memo = "agent が兄弟のメモを書いた"
-    _ = try palette.store.update(1, memo)
+    var update = TaskUpdate()
+    update.description = "agent が兄弟の詳細を書き換えた"
+    _ = try palette.store.update(1, update)
     palette.reconcile()
-    XCTAssertNotNil(palette.drag.session, "下の欄の変化と兄弟のメモでは捨てない")
+    XCTAssertNotNil(palette.drag.session, "下の欄の変化と、空かどうかが変わらない兄弟の詳細では捨てない")
 
     palette.dragEnded()
     XCTAssertEqual(order(palette), [2, 1, added.id])

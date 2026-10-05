@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 結び付いた Issue・PR の表示規則（`GitHubItemText`）。一覧の行と詳細の Issue・PR の欄は、どちらも
+/// 結び付いた Issue・PR の表示規則（`GitHubItemText`）。一覧の行と右の欄の Issue・PR の欄は、どちらも
 /// この規則を読むだけで出し方を決める。
 ///
 /// 壊れると何が起きるか: GitHub の値が届くまで（再起動直後・オフライン・gh が無い）行から番号まで消え、
@@ -107,7 +107,7 @@ final class GitHubItemTextTests: OrbeTestCase {
       .init(number: 213, phase: .reviewRequired, checks: .pending))
   }
 
-  /// 終わった PR の札には CI を出さない（詳細の状態と同じ規則）。
+  /// 終わった PR の札には CI を出さない（右の欄の状態と同じ規則）。
   func testBadgeHidesChecksOnceThePullRequestIsOver() {
     let links = [link(.issue, 212), link(.pr, 213)]
 

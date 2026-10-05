@@ -27,7 +27,7 @@ extension DesignGallerySnapshotTests {
     detail.moveField(1)
     try write("tasks_detail.png", detail)
 
-    // 詳細の agent の場所に居る（「claude が取り掛かっている」とフッターの「↵ issue-212 へ移る」）。
+    // 右の欄の agent の場所に居る（「claude が取り掛かっている」とフッターの「↵ issue-212 へ移る」）。
     let agent = DesignSceneFixtures.taskPaletteModel()
     agent.enterDetail()
     agent.moveField(-1)
@@ -36,7 +36,7 @@ extension DesignGallerySnapshotTests {
     agent.moveField(-1)
     try write("tasks_detail_agent.png", agent)
 
-    // 詳細の Issue・PR の欄の行に居る（「外す」とフッターの「↵ #213 を GitHub で開く」）。
+    // 右の欄の Issue・PR の欄の行に居る（「外す」とフッターの「↵ #213 を GitHub で開く」）。
     let link = DesignSceneFixtures.taskPaletteModel()
     link.enterDetail()
     link.moveField(-1)
@@ -52,7 +52,7 @@ extension DesignGallerySnapshotTests {
     expanded.submit()
     try write("tasks_done_expanded.png", expanded)
 
-    // 詳細の「＋ 結び付ける」に居る（右に「ブランチの PR は自動」）。
+    // 右の欄の「＋ 結び付ける」に居る（右に「ブランチの PR は自動」）。
     let addLink = DesignSceneFixtures.taskPaletteModel()
     addLink.enterDetail()
     addLink.moveField(-1)
@@ -65,7 +65,7 @@ extension DesignGallerySnapshotTests {
       DesignSceneFixtures.taskPaletteModel(
         TasksFile(version: TaskPersistence.version, nextId: 1, tasks: [])))
 
-    // 小さい窓: カードは窓に収まり、詳細の欄はカードの 1/3 で一緒に縮む。
+    // 小さい窓: カードは窓に収まり、右の欄は選択式の値が並びきる幅で止まる。
     try write("tasks_small.png", DesignSceneFixtures.taskPaletteModel(), 800, 560)
   }
 }
@@ -120,7 +120,7 @@ extension DesignGallerySnapshotTests {
     pickTask.move(1)
     try write("tasks_github_pick_task.png", pickTask, 1440, 900)
 
-    // 詳細の「＋ 結び付ける」から、#212 に結び付ける項目を GitHub タブで選ぶ（#213 は付け替え）。
+    // 右の欄の「＋ 結び付ける」から、#212 に結び付ける項目を GitHub タブで選ぶ（#213 は付け替え）。
     let pickItem = DesignSceneFixtures.taskPaletteModel()
     pickItem.enterDetail()
     pickItem.moveField(-1)

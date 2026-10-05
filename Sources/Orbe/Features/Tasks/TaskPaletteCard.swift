@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// タスク画面のカード本体。ヘッダー（❯＋入力欄・タブ・範囲）＋選ぶ状態の帯＋本体（左に一覧・右に詳細。
-/// GitHub タブは左に open な Issue・PR、右に項目の欄）＋フッター（主な操作の 1 行・キーヒント）。焦点の行き先（入力欄 / 詳細の項目 / 詳細の編集欄）はモデルの
+/// タスク画面のカード本体。ヘッダー（❯＋入力欄・タブ・範囲）＋選ぶ状態の帯＋本体（左に一覧・右の欄にタスク。
+/// GitHub タブは左に open な Issue・PR、右の欄に項目）＋フッター（主な操作の 1 行・キーヒント）。焦点の行き先（入力欄 / 右の欄の項目 / 右の欄の編集欄）はモデルの
 /// `focusTarget` から一方向に写し、カード内のクリックでも当て直す（⌘T 画面と同じ契約）。
 struct TaskPaletteCard: View {
   @Bindable var model: TaskPaletteModel
@@ -27,7 +27,7 @@ struct TaskPaletteCard: View {
             HStack(spacing: 0) {
               TaskPaletteList(model: model)
               Rectangle().fill(Color.theme.surface1).frame(width: Theme.Stroke.hairline)
-              // 選ぶ状態の間は、詳細からタスクを変えさせない（キーは一覧の選択だけが効く）。
+              // 選ぶ状態の間は、右の欄からタスクを変えさせない（キーは一覧の選択だけが効く）。
               TaskPaletteDetail(model: model, focus: $focus)
                 .frame(width: detailWidth)
                 .allowsHitTesting(model.pick == nil)
@@ -46,8 +46,8 @@ struct TaskPaletteCard: View {
         TaskPaletteFooter(model: model)
       }
     }
-    // 詳細の項目に居る間はカードの器がキーを受ける。入力欄・編集欄に焦点がある間は、そこが先に受けて
-    // 握らなかったキーだけがここへ来るので、器側は詳細の項目に居るときしか握らない。
+    // 右の欄の項目に居る間はカードの器がキーを受ける。入力欄・編集欄に焦点がある間は、そこが先に受けて
+    // 握らなかったキーだけがここへ来るので、器側は右の欄の項目に居るときしか握らない。
     .focusable()
     .focusEffectDisabled()
     .focused($focus, equals: .card)
@@ -56,7 +56,7 @@ struct TaskPaletteCard: View {
     .onChange(of: model.focusToken, initial: true) { focus = model.focusTarget }
     // agent の変更を含む列の変化を、描画の外で付け直しへ届ける。
     .onChange(of: model.store.tasks) { model.reconcile() }
-    // agent の状態が変わると詳細の止まる場所（agent の場所）が増減するので、同じく付け直す。
+    // agent の状態が変わると右の欄の止まる場所（agent の場所）が増減するので、同じく付け直す。
     .onChange(of: model.agents.agents) { model.reconcile() }
     // GitHub タブの行はストア（結び付き）と一覧の置き場の両方で変わるので、行の変化でも付け直す。
     .onChange(of: model.gitHubRows) { model.reconcile() }
@@ -87,7 +87,7 @@ struct TaskPaletteCard: View {
         )
         .onSubmitIgnoringKeyRepeat { model.submit() }
         .onKeyPress { model.handleFieldKey($0, composing: IMEComposition.isActive) }
-        // 詳細に居る間は入力欄自身にクリックを渡さず（渡すと焦点だけが入力欄へ移り、モデルの居場所と
+        // 右の欄に居る間は入力欄自身にクリックを渡さず（渡すと焦点だけが入力欄へ移り、モデルの居場所と
         // 食い違う）、上に被せた面で受けて一覧へ戻る操作としてモデルに伝える。焦点はモデルから写る。
         .allowsHitTesting(model.focusTarget == .field)
         .overlay {
@@ -99,7 +99,7 @@ struct TaskPaletteCard: View {
         }
         .padding(.leading, Theme.Space.step + Theme.Space.hair)
       Spacer(minLength: Theme.Space.step)
-      HStack(spacing: Theme.Space.beat) {
+      HStack(spacing: Theme.Space.step) {
         TaskPaletteSegments(
           segments: [
             .init(
@@ -108,7 +108,8 @@ struct TaskPaletteCard: View {
             .init(
               title: "GitHub", count: model.gitHubCount, selected: model.visibleTab == .github,
               action: { model.setTab(.github) }),
-          ], font: Font.theme.code, height: 26, selectedFill: Color.theme.surfaceInk.opacity(0.08))
+          ], font: Font.theme.chrome, height: 20, selectedFill: Color.theme.surfaceInk.opacity(0.08)
+        )
         TaskPaletteSegments(
           segments: [
             .init(
@@ -117,17 +118,19 @@ struct TaskPaletteCard: View {
             .init(
               title: model.workspaces.opened.name, count: model.counts.opened,
               selected: model.scope == .opened, action: { model.setScope(.opened) }),
-          ], font: Font.theme.code, height: 26, selectedFill: Color.theme.tintAccent)
+          ], font: Font.theme.chrome, height: 20, selectedFill: Color.theme.tintAccent)
       }
       .fixedSize()
     }
-    .padding(.leading, Theme.Space.phrase)
-    .padding(.trailing, Theme.Space.span)
-    .frame(height: 56)
+    .padding(.horizontal, Theme.Space.span)
+    .frame(height: Self.headerHeight)
   }
+
+  /// ヘッダーの高さ。⌘⇧S のヘッダー（上下 16 ＋ 14pt の 1 行）と同じ。札の組はこの中に収まる。
+  private static let headerHeight: CGFloat = 48
 }
 
-/// 切り替えの札の組（ヘッダーのタブ・範囲、詳細の選択式の値）。焦点は取らない——クリックで入力欄から
+/// 切り替えの札の組（ヘッダーのタブ・範囲、右の欄の選択式の値）。焦点は取らない——クリックで入力欄から
 /// 焦点を奪わない。
 struct TaskPaletteSegments: View {
   struct Segment {
@@ -158,7 +161,7 @@ struct TaskPaletteSegments: View {
           .font(font)
           .lineLimit(1)
           .fixedSize()
-          .padding(.horizontal, Theme.Space.beat)
+          .padding(.horizontal, Theme.Space.step)
           .frame(height: height)
           .background(
             RoundedRectangle(cornerRadius: Theme.Radius.sm + Theme.Space.hair)
@@ -170,7 +173,7 @@ struct TaskPaletteSegments: View {
         .focusable(false)
       }
     }
-    .padding(3)
+    .padding(Theme.Space.hair)
     .background(
       RoundedRectangle(cornerRadius: Theme.Radius.row).fill(Color.theme.surfaceInk.opacity(0.04)))
   }
@@ -185,17 +188,17 @@ struct TaskPalettePickBanner: View {
   var body: some View {
     HStack(spacing: Theme.Space.step) {
       Image(systemName: "link")
-        .font(.system(size: 11, weight: .semibold))
+        .font(.system(size: 10, weight: .semibold))
         .foregroundStyle(Color.theme.accentBright)
-      fontResolver.text(title, base: Theme.Typography.taskText)
-        .font(Font.theme.taskText)
+      fontResolver.text(title, base: Theme.Typography.workspaceName)
+        .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(1)
         .truncationMode(.tail)
       Spacer(minLength: 0)
     }
-    .padding(.horizontal, Theme.Space.phrase)
-    .frame(height: 36)
+    .padding(.horizontal, Theme.Space.span)
+    .frame(height: TaskPaletteRowMetrics.line + Theme.Space.tick)
     .background(Color.theme.tintAccent)
   }
 

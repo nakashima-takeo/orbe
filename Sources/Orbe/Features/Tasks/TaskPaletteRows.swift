@@ -64,6 +64,8 @@ struct TaskPaletteTaskRow: Equatable {
 
   let id: Int
   let title: String
+  /// 詳細の先頭（改行と連続する空白を 1 つの空白にまとめ、前後の空白を除いたもの）。空なら nil。
+  let descriptionLine: String?
   let glyph: Glyph
   /// 高と低だけ（中は札を出さない）。
   let priority: TaskItem.Priority?
@@ -124,6 +126,40 @@ enum TaskPaletteRow: Equatable, Identifiable {
   var selectableID: TaskPaletteRowID? {
     guard case .selectable(let id) = id else { return nil }
     return id
+  }
+}
+
+/// 一覧の行の寸法。行の高さは行の値だけで決まり、描画（各行の枠）とドラッグの落ちる位置の計算が同じ値を
+/// 読む。選べる 1 行の行は ⌘⇧S の行（上下 5 ＋ 12pt の 1 行）と同じ高さ。
+enum TaskPaletteRowMetrics {
+  /// 行の上下の余白。
+  static let inset: CGFloat = 4
+  /// 1 行目（タイトルと札）の高さ。
+  static let firstLine: CGFloat = 16
+  /// 詳細の先頭の 1 行の高さ。
+  static let descriptionLine: CGFloat = 14
+  /// 選べる 1 行の行（追加・1 行のタスク・空の行）。
+  static let line: CGFloat = inset * 2 + firstLine
+  /// 詳細のあるタスクの行。
+  static let taskWithDescription: CGFloat = line + descriptionLine
+  /// 「進行中 N」「未着手 N」の見出し。
+  static let sectionHeader: CGFloat = 26
+  /// 「完了 N ⌄」の見出し（上の罫線と余白を含む）。
+  static let doneHeader: CGFloat = doneRuleGap + Theme.Stroke.hairline + line
+  /// 完了の見出しの上の、罫線までの余白。
+  static let doneRuleGap: CGFloat = Theme.Space.note
+  /// 行の先頭のアイコンの列の幅。
+  static let glyphColumn: CGFloat = 12
+  /// 一覧の内側の余白（⌘⇧S のリストと同じ）。
+  static let listPadding: CGFloat = Theme.Space.note
+
+  static func height(_ row: TaskPaletteRow) -> CGFloat {
+    switch row {
+    case .add, .empty: line
+    case .sectionHeader: sectionHeader
+    case .task(let task): task.descriptionLine == nil ? line : taskWithDescription
+    case .doneHeader: doneHeader
+    }
   }
 }
 
@@ -197,7 +233,8 @@ enum TaskPaletteRows {
       $0.id == input.workspaces.opened.id ? .opened($0.name) : .other($0.name)
     }
     return TaskPaletteTaskRow(
-      id: task.id, title: task.title, glyph: TaskPaletteTaskRow.Glyph(task),
+      id: task.id, title: task.title, descriptionLine: descriptionLine(task.description),
+      glyph: TaskPaletteTaskRow.Glyph(task),
       priority: task.priority == .medium ? nil : task.priority,
       due: task.due.map { TaskPaletteTaskRow.Due(date: $0, today: input.today) },
       createdBy: task.createdBy,
@@ -213,5 +250,10 @@ enum TaskPaletteRows {
       needsReview: GitHubItemText.needsReview(
         task.links, input.items, viewerLogin: input.viewerLogin),
       agent: task.agent(in: input.agents).flatMap { $0.isBusy ? $0 : nil })
+  }
+
+  private static func descriptionLine(_ description: String) -> String? {
+    let line = description.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    return line.isEmpty ? nil : line
   }
 }

@@ -3,7 +3,7 @@ import SwiftUI
 /// GitHub タブの右の欄。選んでいる項目の見出し・タイトル・関係の文に続けて、結び付いていない行では「タスクに
 /// する」ための値（自分を足すか・優先度・期限）とボタン、結び付いている行では結び付いたタスクとボタンを出す。
 /// 選ぶ状態の間は、見出しと結び付いたタスクだけを出す（操作は一覧の ↵ だけ）。期限の入力欄は常に mount して
-/// おく（新しく mount した入力欄は `@FocusState` を取りこぼす。詳細と同じ規約）。
+/// おく（新しく mount した入力欄は `@FocusState` を取りこぼす。タスクのタブの右の欄と同じ規約）。
 struct TaskPaletteGitHubPane: View {
   @Bindable var model: TaskPaletteModel
   let focus: FocusState<TaskPaletteFocusTarget?>.Binding
@@ -16,24 +16,24 @@ struct TaskPaletteGitHubPane: View {
         ScrollViewReader { proxy in
           ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-              Color.clear.frame(height: Theme.Space.span).id(Self.top)
+              Color.clear.frame(height: Theme.Space.bar).id(Self.top)
               heading(row)
               if let task = row.task {
                 linkedTask(task.id, row: row)
-                  .padding(.top, Theme.Space.bar)
-                Spacer(minLength: Theme.Space.bar)
+                  .padding(.top, Theme.Space.beat)
+                Spacer(minLength: Theme.Space.beat)
                 if model.pick == nil { linkedActions(row, task) }
               } else if model.pick == nil {
-                divider.padding(.top, Theme.Space.bar)
+                divider.padding(.top, Theme.Space.beat)
                 values(row)
-                Spacer(minLength: Theme.Space.bar)
+                Spacer(minLength: Theme.Space.beat)
                 unlinkedActions(row)
               } else {
                 Spacer(minLength: 0)
               }
             }
-            .padding(.horizontal, Theme.Space.phrase)
-            .padding(.bottom, Theme.Space.span)
+            .padding(.horizontal, Theme.Space.span)
+            .padding(.bottom, Theme.Space.bar)
             // 幅は欄の幅に留める（縦のスクロールは中身の幅を縛らないので、留めないと長い行が欄を押し広げ、
             // 区切り線と強調の地がカードの端まで伸びる）。収まる間は欄の高さいっぱいに広げ、ボタン群を下端へ
             // 押す。収まらなければ欄ごとスクロールする。
@@ -41,7 +41,7 @@ struct TaskPaletteGitHubPane: View {
             .frame(minHeight: geometry.size.height, alignment: .top)
           }
           .scrollIndicators(.automatic)
-          // キーで移った場所を見える位置へ最小の量だけ送る（詳細と同じ規約）。
+          // キーで移った場所を見える位置へ最小の量だけ送る（タスクのタブの右の欄と同じ規約）。
           .onChange(of: model.area) {
             if case .pane(let stop) = model.area { proxy.scrollTo(stop) }
           }
@@ -66,19 +66,19 @@ struct TaskPaletteGitHubPane: View {
   private func heading(_ row: TaskPaletteGitHubItemRow) -> some View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(spacing: Theme.Space.note) {
-        TaskLinkGlyph(kind: row.item.kind)
+        TaskLinkGlyph(kind: row.item.kind, size: 12)
         meta(row).lineLimit(1)
       }
-      .font(Font.theme.codeCompact)
-      .padding(.bottom, Theme.Space.step)
-      fontResolver.text(row.item.title, base: Theme.Typography.taskHeading)
-        .font(Font.theme.taskHeading)
+      .font(Font.theme.meta)
+      .padding(.bottom, Theme.Space.note)
+      fontResolver.text(row.item.title, base: Theme.Typography.title)
+        .font(Font.theme.title)
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(2)
         .padding(.bottom, Theme.Space.tick)
       if let relation = TaskGitHubRelationText.text(row.relation, l10n) {
         Text(relation)
-          .font(Font.theme.taskText)
+          .font(Font.theme.workspaceName)
           .foregroundStyle(Color.theme.textMuted)
           .lineLimit(1)
       }
@@ -118,7 +118,8 @@ struct TaskPaletteGitHubPane: View {
               title: l10n.string(Self.priorityKey(priority)), count: nil,
               selected: model.pane.priority == priority,
               action: { model.setPanePriority(priority) })
-          }, font: Font.theme.taskText, height: 24, selectedFill: Color.theme.tintAccent)
+          }, font: Font.theme.workspaceName, height: TaskPaletteFieldMetrics.choiceHeight,
+          selectedFill: Color.theme.tintAccent)
       }
       .onTapGesture { model.setPanePriority(model.pane.priority) }
       divider
@@ -130,25 +131,25 @@ struct TaskPaletteGitHubPane: View {
 
   /// 「☑ 自分をアサインする / GitHub の担当者に自分を追加する」。
   private func assignCheck(_ role: GitHubSelfRole) -> some View {
-    HStack(alignment: .top, spacing: Theme.Space.beat) {
+    HStack(alignment: .top, spacing: Theme.Space.step + Theme.Space.hair) {
       Image(systemName: model.pane.assignsSelf ? "checkmark.square.fill" : "square")
-        .font(.system(size: 14))
+        .font(.system(size: 12))
         .foregroundStyle(
           model.pane.assignsSelf ? Color.theme.accentPrimary : Color.theme.textMuted)
-      VStack(alignment: .leading, spacing: Theme.Space.tick) {
+      VStack(alignment: .leading, spacing: Theme.Space.hair) {
         Text(l10n.string(role == .assignee ? .taskPaletteAssignSelf : .taskPaletteReviewSelf))
-          .font(Font.theme.taskText)
+          .font(Font.theme.workspaceName)
           .foregroundStyle(Color.theme.textPrimary)
         Text(
           l10n.string(role == .assignee ? .taskPaletteAssignSelfNote : .taskPaletteReviewSelfNote)
         )
-        .font(Font.theme.codeCompact)
+        .font(Font.theme.meta)
         .foregroundStyle(Color.theme.textMuted)
       }
       .lineLimit(1)
       Spacer(minLength: 0)
     }
-    .padding(.vertical, Theme.Space.beat)
+    .padding(.vertical, Theme.Space.step)
     .padding(.horizontal, Theme.Space.step)
     .background(focusFill(.assign))
     .padding(.horizontal, -Theme.Space.step)
@@ -161,10 +162,10 @@ struct TaskPaletteGitHubPane: View {
   @ViewBuilder private func failure(_ row: TaskPaletteGitHubItemRow) -> some View {
     if let role = model.writeFailure(row.id) {
       Text(l10n.string(role == .assignee ? .taskPaletteAssignFailed : .taskPaletteReviewFailed))
-        .font(Font.theme.codeCompact)
+        .font(Font.theme.meta)
         .foregroundStyle(Color.theme.danger)
         .lineLimit(2)
-        .padding(.bottom, Theme.Space.beat)
+        .padding(.bottom, Theme.Space.step)
     }
   }
 
@@ -173,14 +174,14 @@ struct TaskPaletteGitHubPane: View {
   ) -> some View {
     HStack(spacing: 0) {
       Text(l10n.string(label))
-        .font(Font.theme.taskText)
+        .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textMuted)
         .lineLimit(1)
-        .frame(width: 84, alignment: .leading)
+        .frame(width: TaskPaletteFieldMetrics.labelWidth, alignment: .leading)
       value()
       Spacer(minLength: 0)
     }
-    .frame(height: 38)
+    .frame(height: TaskPaletteFieldMetrics.rowHeight)
     .padding(.horizontal, Theme.Space.step)
     .background(focusFill(stop))
     .padding(.horizontal, -Theme.Space.step)
@@ -201,7 +202,7 @@ struct TaskPaletteGitHubPane: View {
     ZStack(alignment: .leading) {
       TextField("", text: $model.draftText)
         .textFieldStyle(.plain)
-        .font(Font.theme.taskText)
+        .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textPrimary)
         .tint(Color.theme.accentPrimary)
         .focused(focus, equals: .paneDue)
@@ -226,11 +227,11 @@ struct TaskPaletteGitHubPane: View {
             .buttonStyle(.plain)
             .focusable(false)
           }
-          .font(Font.theme.taskText)
+          .font(Font.theme.workspaceName)
           .lineLimit(1)
         } else {
           Text("＋ " + l10n.string(.taskPaletteSetDue))
-            .font(Font.theme.taskText)
+            .font(Font.theme.workspaceName)
             .foregroundStyle(Color.theme.textSecondary)
             .lineLimit(1)
         }
@@ -248,15 +249,15 @@ struct TaskPaletteGitHubPane: View {
   }
 
   private func unlinkedActions(_ row: TaskPaletteGitHubItemRow) -> some View {
-    VStack(alignment: .leading, spacing: Theme.Space.beat) {
+    VStack(alignment: .leading, spacing: Theme.Space.step) {
       Text(l10n.string(.taskPaletteMakeTaskNote))
-        .font(Font.theme.codeCompact)
+        .font(Font.theme.meta)
         .foregroundStyle(Color.theme.textMuted)
         .lineLimit(1)
       // 横に並びきらない狭い欄では縦に積む（ボタンの文字は縮めない）。
       ViewThatFits(in: .horizontal) {
-        HStack(spacing: Theme.Space.beat) { makeTaskButtons(row) }
-        VStack(alignment: .leading, spacing: Theme.Space.beat) { makeTaskButtons(row) }
+        HStack(spacing: Theme.Space.step) { makeTaskButtons(row) }
+        VStack(alignment: .leading, spacing: Theme.Space.step) { makeTaskButtons(row) }
       }
       divider.padding(.top, Theme.Space.tick)
       Button {
@@ -266,7 +267,7 @@ struct TaskPaletteGitHubPane: View {
           Text("⌘L").foregroundStyle(Color.theme.accentBright)
           Text(l10n.string(.taskPaletteLinkExisting)).foregroundStyle(Color.theme.textPrimary)
         }
-        .font(Font.theme.taskText)
+        .font(Font.theme.workspaceName)
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
@@ -284,25 +285,26 @@ extension TaskPaletteGitHubPane {
     if let task = model.store.tasks.first(where: { $0.id == id }) {
       VStack(alignment: .leading, spacing: Theme.Space.tick) {
         HStack(spacing: Theme.Space.note) {
-          Image(systemName: "link").font(.system(size: 10, weight: .semibold))
+          Image(systemName: "link").font(.system(size: 9, weight: .semibold))
           Text(l10n.string(.taskPaletteLinkedTask))
         }
-        .font(Font.theme.codeCompact)
+        .font(Font.theme.meta)
         .foregroundStyle(Color.theme.textMuted)
         HStack(spacing: Theme.Space.step) {
-          TaskStatusGlyph(glyph: TaskPaletteTaskRow.Glyph(task))
-          fontResolver.text(row.task?.label ?? task.title, base: Theme.Typography.taskText)
-            .font(Font.theme.taskText)
+          TaskStatusGlyph(
+            glyph: TaskPaletteTaskRow.Glyph(task), size: TaskPaletteRowMetrics.glyphColumn)
+          fontResolver.text(row.task?.label ?? task.title, base: Theme.Typography.workspaceName)
+            .font(Font.theme.workspaceName)
             .foregroundStyle(Color.theme.textPrimary)
             .lineLimit(1)
             .truncationMode(.tail)
         }
         linkedTaskState(task)
-          .font(Font.theme.codeCompact)
+          .font(Font.theme.meta)
           .lineLimit(1)
-          .padding(.leading, 14 + Theme.Space.step)
+          .padding(.leading, TaskPaletteRowMetrics.glyphColumn + Theme.Space.step)
       }
-      .padding(Theme.Space.beat)
+      .padding(Theme.Space.step + Theme.Space.hair)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: Theme.Radius.md)
@@ -341,7 +343,7 @@ extension TaskPaletteGitHubPane {
     let number = model.store.tasks.first { $0.id == task.id }?.links.first.map {
       GitHubItemText.label($0.item, primary: row.id)
     }
-    return VStack(alignment: .leading, spacing: Theme.Space.beat) {
+    return VStack(alignment: .leading, spacing: Theme.Space.step) {
       TaskPaneButton(
         key: "↵", title: l10n.format(.taskPaletteOpenTask, number ?? task.label), primary: true,
         wide: true
@@ -356,10 +358,10 @@ extension TaskPaletteGitHubPane {
           Text("⌘⌫")
           Text(l10n.string(.taskPaletteUnlinkTask))
         }
-        .font(Font.theme.taskText)
+        .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.danger)
-        .padding(.horizontal, Theme.Space.beat)
-        .frame(height: 30)
+        .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
+        .frame(height: TaskPaletteFieldMetrics.buttonHeight)
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)

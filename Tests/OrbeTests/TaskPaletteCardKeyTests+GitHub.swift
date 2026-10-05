@@ -251,7 +251,7 @@ extension TaskPaletteCardKeyTests {
 
   // MARK: - 選ぶ状態の入力欄の →
 
-  /// タスクを選ぶ間、タスクの行を選んでいても入力欄の → は文字のカーソルを進める（詳細へ入らない）。
+  /// タスクを選ぶ間、タスクの行を選んでいても入力欄の → は文字のカーソルを進める（右の欄へ入らない）。
   func testRightArrowWhilePickingATaskMovesTheCaretInTheField() throws {
     let model = GitHub.model([TaskPaletteSamples.task(1, "abc")], issues: [GitHub.issue(5)])
     let window = mount(model)

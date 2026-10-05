@@ -4,7 +4,7 @@ import XCTest
 
 private typealias GitHub = TaskPaletteGitHubSamples
 
-/// 選ぶ状態の両方向: GitHub タブの L からタスクを選ぶ（結び付ける・付け替える）、詳細の「＋ 結び付ける」から
+/// 選ぶ状態の両方向: GitHub タブの L からタスクを選ぶ（結び付ける・付け替える）、右の欄の「＋ 結び付ける」から
 /// 項目を選ぶ。決めると 1 回の変異で結び付けて元の場所へ戻り、やめると何も変えずに戻る。
 ///
 /// 壊れると何が起きるか: 選ぶ途中の space や ⌘⌫ がタスクを完了・削除する。付け替えた項目が前のタスクにも
@@ -89,7 +89,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.selectedID, .task(2))
   }
 
-  /// タスクを選ぶ間は、選ぶこと以外でタスクを変えない（完了・削除・並べ替え・ドラッグ・詳細・タブ切替・⌘T）。
+  /// タスクを選ぶ間は、選ぶこと以外でタスクを変えない（完了・削除・並べ替え・ドラッグ・右の欄・タブ切替・⌘T）。
   func testPickingATaskCannotChangeTasks() {
     let palette = pickingFromIssueFive()
     var opened: [Int] = []
@@ -144,7 +144,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(try storedTask(palette, 1).links, [], "別のタスクには結び付けない")
   }
 
-  // MARK: - 項目を選ぶ（詳細の「＋ 結び付ける」）
+  // MARK: - 項目を選ぶ（右の欄の「＋ 結び付ける」）
 
   /// 結び付きが 0 件のタスクでも「＋ 結び付ける」に止まる（結び付きの後・ステータスの前）。
   func testAddLinkStopIsThereEvenWithoutLinks() throws {
@@ -155,7 +155,7 @@ extension TaskPaletteModelTests {
       [.field(.title), .addLink, .field(.status)])
   }
 
-  /// タスク 1 の詳細の「＋ 結び付ける」に居る画面（Issue 6・5、Issue 6 はタスク 2 のもの）。
+  /// タスク 1 の右の欄の「＋ 結び付ける」に居る画面（Issue 6・5、Issue 6 はタスク 2 のもの）。
   private func atAddLink() -> TaskPaletteModel {
     let palette = GitHub.model(
       [task(1, "a"), task(2, "b") { $0.links = [GitHub.link(6)] }],
@@ -165,7 +165,7 @@ extension TaskPaletteModelTests {
     return palette
   }
 
-  /// ↵ で GitHub タブの行から選び、↵ でそのタスクに結び付けて詳細のその結び付きへ戻る。
+  /// ↵ で GitHub タブの行から選び、↵ でそのタスクに結び付けて右の欄のその結び付きへ戻る。
   func testAddLinkPicksAnItemAndEnterLinksItReturningToThatLink() throws {
     let palette = atAddLink()
 

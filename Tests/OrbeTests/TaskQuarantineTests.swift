@@ -20,7 +20,7 @@ final class TaskQuarantineTests: OrbeTestCase {
 
   private func taskJSON(id: Int) -> String {
     #"{"id":\#(id),"title":"t\#(id)","status":"todo","priority":"medium","#
-      + #""memo":"","createdAt":"2027-01-15T08:00:00.000Z"}"#
+      + #""description":"","createdAt":"2027-01-15T08:00:00.000Z"}"#
   }
 
   private func assertQuarantined(
@@ -155,8 +155,9 @@ final class TaskQuarantineTests: OrbeTestCase {
   func testFileWithOnlyTheRequiredFieldsLoads() throws {
     let minimal = """
       {"version":1,"nextId":5,"tasks":[\
-      {"id":3,"title":"後","status":"done","priority":"low","memo":"","createdAt":"2027-01-15T08:00:00.000Z"},\
-      {"id":1,"title":"先","status":"todo","priority":"medium","memo":"m","createdAt":"2027-01-15T08:00:00.000Z"}]}
+      {"id":3,"title":"後","status":"done","priority":"low","description":"","createdAt":"2027-01-15T08:00:00.000Z"},\
+      {"id":1,"title":"先","status":"todo","priority":"medium",\
+      "description":"m","createdAt":"2027-01-15T08:00:00.000Z"}]}
       """
     try Data(minimal.utf8).write(to: tasksFile())
 
@@ -166,7 +167,7 @@ final class TaskQuarantineTests: OrbeTestCase {
     XCTAssertEqual(loaded.nextId, 5)
     XCTAssertEqual(loaded.tasks.map(\.id), [3, 1], "列の順を保つ")
     XCTAssertEqual(loaded.tasks.map(\.status), [.done, .todo])
-    XCTAssertEqual(loaded.tasks.last?.memo, "m")
+    XCTAssertEqual(loaded.tasks.last?.description, "m")
   }
 
   func testMissingFileStartsEmptyWithoutQuarantine() throws {

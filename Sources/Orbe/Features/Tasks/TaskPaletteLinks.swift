@@ -1,21 +1,21 @@
 import SwiftUI
 
-/// 詳細のタイトルの上の、主の結び付き（「⊙ orbe#212」。owner は出さない）。
+/// 右の欄のタイトルの上の、主の結び付き（「⊙ orbe#212」。owner は出さない）。
 struct TaskPrimaryLinkHeading: View {
   let link: TaskLink
 
   var body: some View {
     HStack(spacing: Theme.Space.note) {
-      TaskLinkGlyph(kind: link.kind)
+      TaskLinkGlyph(kind: link.kind, size: 12)
       Text("\(link.item.repoName)#\(link.item.number)")
-        .font(Font.theme.codeCompact)
+        .font(Font.theme.meta)
         .foregroundStyle(Color.theme.accentBright)
         .lineLimit(1)
     }
   }
 }
 
-/// 詳細の「Issue・PR」の欄。各行は ↑↓ で止まる場所で、クリックで開き、ホバーか選択で出る「外す」で外す。
+/// 右の欄の「Issue・PR」の欄。各行は ↑↓ で止まる場所で、クリックで開き、ホバーか選択で出る「外す」で外す。
 /// タイトルと状態は置き場の答えから引き、値が無い・実体の種別が保存した種別と違えば番号だけを出す。
 /// 末尾の「＋ 結び付ける」（結び付きが 0 件でも出る）は、↵ かクリックで GitHub タブの項目を選ぶ状態へ入る。
 struct TaskPaletteLinks: View {
@@ -36,8 +36,8 @@ struct TaskPaletteLinks: View {
       }
       addRow
     }
-    .padding(.horizontal, Theme.Space.beat)
-    .padding(.vertical, Theme.Space.beat)
+    .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
+    .padding(.vertical, Theme.Space.step)
     .background(
       RoundedRectangle(cornerRadius: Theme.Radius.md)
         .fill(Color.theme.surfaceInk.opacity(0.04))
@@ -48,34 +48,34 @@ struct TaskPaletteLinks: View {
     let focused = model.area == .detail(.link(link.item))
     let summary = GitHubItemText.summary(link, model.githubItems.answers)
     return HStack(spacing: Theme.Space.note) {
-      TaskLinkGlyph(kind: link.kind)
+      TaskLinkGlyph(kind: link.kind, size: 12)
       Text(GitHubItemText.label(link.item, primary: primary))
-        .font(Font.theme.codeCompact)
+        .font(Font.theme.meta)
         .foregroundStyle(Color.theme.textMuted)
         .fixedSize()
       if let summary {
-        fontResolver.text(summary.title, base: Theme.Typography.taskText)
-          .font(Font.theme.taskText)
+        fontResolver.text(summary.title, base: Theme.Typography.workspaceName)
+          .font(Font.theme.workspaceName)
           .foregroundStyle(Color.theme.textPrimary)
           .lineLimit(1)
           .truncationMode(.tail)
       }
       Spacer(minLength: Theme.Space.step)
-      if let summary { linkState(summary).font(Font.theme.codeCompact).fixedSize() }
+      if let summary { linkState(summary).font(Font.theme.meta).fixedSize() }
       if focused || hoveredLink == link.item {
-        Text("·").font(Font.theme.codeCompact).foregroundStyle(Color.theme.textMuted)
+        Text("·").font(Font.theme.meta).foregroundStyle(Color.theme.textMuted)
         Button {
           model.unlink(link.item)
         } label: {
           Text(l10n.string(.taskPaletteUnlink))
-            .font(Font.theme.codeCompact)
+            .font(Font.theme.meta)
             .foregroundStyle(Color.theme.textMuted)
         }
         .buttonStyle(.plain)
         .focusable(false)
       }
     }
-    .frame(height: 30)
+    .frame(height: TaskPaletteFieldMetrics.buttonHeight)
     .padding(.horizontal, Theme.Space.step)
     .background(
       RoundedRectangle(cornerRadius: Theme.Radius.row)
@@ -99,17 +99,17 @@ struct TaskPaletteLinks: View {
     let focused = model.area == .detail(.addLink)
     return HStack(spacing: Theme.Space.note) {
       Text("＋ " + l10n.string(.taskPaletteAddLink))
-        .font(Font.theme.taskText)
+        .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.accentBright)
         .lineLimit(1)
         .fixedSize()
       Spacer(minLength: Theme.Space.step)
       Text(l10n.string(.taskPaletteBranchPRAuto))
-        .font(Font.theme.codeCompact)
+        .font(Font.theme.meta)
         .foregroundStyle(Color.theme.textMuted)
         .lineLimit(1)
     }
-    .frame(height: 30)
+    .frame(height: TaskPaletteFieldMetrics.buttonHeight)
     .padding(.horizontal, Theme.Space.step)
     .background(
       RoundedRectangle(cornerRadius: Theme.Radius.row)

@@ -17,7 +17,7 @@ enum TaskPaletteSamples {
   ) -> TaskItem {
     var item = TaskItem(
       id: id, title: title, status: status, waiting: nil, priority: .medium, due: nil,
-      workspace: nil, memo: "", createdAt: DesignSceneFixtures.taskToday, createdBy: nil)
+      workspace: nil, description: "", createdAt: DesignSceneFixtures.taskToday, createdBy: nil)
     mutate(&item)
     return item
   }

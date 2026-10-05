@@ -128,6 +128,6 @@ extension WindowControllerTaskControlTests {
     XCTAssertEqual(wc.taskStore.tasks.first?.unlinked.count, 1, "前提: 外した PR を覚えている")
     XCTAssertEqual(
       Set(try XCTUnwrap(listed(wc).first).keys),
-      ["taskId", "title", "status", "priority", "memo", "createdAt"], "外した項目のキーは無い")
+      ["taskId", "title", "status", "priority", "description", "createdAt"], "外した項目のキーは無い")
   }
 }

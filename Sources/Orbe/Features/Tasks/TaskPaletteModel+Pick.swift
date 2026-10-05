@@ -5,7 +5,7 @@ import Foundation
 enum TaskPalettePick {
   /// GitHub の項目を結び付けるタスクを選ぶ（GitHub タブの ⌘L から。タスクのタブの行で選ぶ）。
   case task(for: TaskLink, list: TaskPaletteListState<TaskPaletteRowID>)
-  /// タスクに結び付ける項目を選ぶ（詳細の「＋ 結び付ける」から。GitHub タブの行で選ぶ）。
+  /// タスクに結び付ける項目を選ぶ（右の欄の「＋ 結び付ける」から。GitHub タブの行で選ぶ）。
   case item(for: Int, list: TaskPaletteListState<TaskPaletteGitHubRowID>)
 }
 
@@ -22,7 +22,7 @@ extension TaskPaletteModel {
     focus()
   }
 
-  /// 詳細の「＋ 結び付ける」の ↵・クリック。そのタスクに結び付ける項目を、GitHub タブで選ぶ状態に入る。
+  /// 右の欄の「＋ 結び付ける」の ↵・クリック。そのタスクに結び付ける項目を、GitHub タブで選ぶ状態に入る。
   func beginPickingItem() {
     guard pick == nil, let task = selectedTask else { return }
     leaveEditingForAction()
@@ -41,7 +41,7 @@ extension TaskPaletteModel {
   }
 
   /// 選ぶ状態の ↵。タスクを選ぶ状態はそのタスクへ結び付けて GitHub タブのその行へ、項目を選ぶ状態はその項目を
-  /// 結び付けて詳細のその結び付きへ戻る。その項目を既に持つタスクでは何もしない。完了の見出しは開閉し、
+  /// 結び付けて右の欄のその結び付きへ戻る。その項目を既に持つタスクでは何もしない。完了の見出しは開閉し、
   /// 「さらに」は区分を開く。
   func confirmPick() {
     switch pick {

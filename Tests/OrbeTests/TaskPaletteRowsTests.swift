@@ -7,7 +7,7 @@ import XCTest
 /// 壊れると何が起きるか: 人と agent が決めた列の順が画面で組み替わり、`orb task list` と画面の並びが
 /// 食い違う。絞り込みや範囲の外のタスクが混ざる、または消える。待ちの日数・期限・workspace の札が
 /// 別の値を言い、人が「今日やるもの」「自分の workspace のもの」を見誤る。ヘッダーの件数が打った文字で
-/// 揺れて、残りの量が分からなくなる。
+/// 揺れて、残りの量が分からなくなる。詳細の改行がそのまま一覧の行に出て、行の高さが崩れる。
 @MainActor
 final class TaskPaletteRowsTests: OrbeTestCase {
   private let calendar = DesignSceneFixtures.taskCalendar
@@ -27,7 +27,7 @@ final class TaskPaletteRowsTests: OrbeTestCase {
   ) -> TaskItem {
     var item = TaskItem(
       id: id, title: title, status: status, waiting: nil, priority: .medium, due: nil,
-      workspace: nil, memo: "", createdAt: now, createdBy: by)
+      workspace: nil, description: "", createdAt: now, createdBy: by)
     mutate(&item)
     return item
   }
@@ -220,5 +220,18 @@ final class TaskPaletteRowsTests: OrbeTestCase {
       try taskRow(task(1) { $0.workspace = self.other.id }).workspace, .other("web-app"))
     XCTAssertNil(try taskRow(task(1)).workspace)
     XCTAssertNil(try taskRow(task(1) { $0.workspace = UUID() }).workspace, "削除された workspace は「なし」")
+  }
+
+  /// 一覧に出す詳細は 1 行——改行と続く空白を 1 つの空白にまとめ、前後の空白を除く。
+  func testDescriptionLineJoinsLinesAndRunsOfWhitespaceIntoSingleSpaces() throws {
+    let row = try taskRow(task(1) { $0.description = "  ⌘⇧S にそろえる。\n\n  行と\tフッター  \n" })
+
+    XCTAssertEqual(row.descriptionLine, "⌘⇧S にそろえる。 行と フッター")
+  }
+
+  /// 空白だけの詳細は、詳細が無いのと同じく行に出さない（行は 1 行のまま）。
+  func testWhitespaceOnlyDescriptionShowsNoDescriptionLine() throws {
+    XCTAssertNil(try taskRow(task(1)).descriptionLine)
+    XCTAssertNil(try taskRow(task(1) { $0.description = " \n\t\n " }).descriptionLine)
   }
 }

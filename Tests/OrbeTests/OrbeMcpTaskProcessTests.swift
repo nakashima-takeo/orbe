@@ -54,6 +54,10 @@ final class OrbeMcpTaskProcessTests: OrbeTestCase {
     }
     XCTAssertNotNil(properties(add)["worktree"], "add_task は worktree を付けられる")
     for tool in [add, update] {
+      XCTAssertNotNil(
+        properties(tool)["description"], "\(tool["name"] ?? "") はタスクの詳細を control と同じ名前で書ける")
+    }
+    for tool in [add, update] {
       let links = properties(tool)["links"] as? [String: Any]
       let item = links?["items"] as? [String: Any]
       XCTAssertEqual(links?["type"] as? String, "array", "\(tool["name"] ?? "") の links は配列")

@@ -11,9 +11,9 @@ struct TaskPaletteGitHubList: View {
     case .lists:
       VStack(alignment: .leading, spacing: 0) {
         TaskGitHubFilterChips(model: model)
-          .padding(.leading, 22 + 11)
-          .padding(.top, Theme.Space.span)
-          .padding(.bottom, Theme.Space.step)
+          .padding(.leading, 22 + TaskPaletteRowMetrics.listPadding)
+          .padding(.top, Theme.Space.beat)
+          .padding(.bottom, Theme.Space.tick)
         rows
       }
     case .loading: line(.taskPaletteGitHubLoading)
@@ -30,9 +30,7 @@ struct TaskPaletteGitHubList: View {
         LazyVStack(alignment: .leading, spacing: 0) {
           ForEach(rows) { row($0) }
         }
-        .padding(.bottom, Theme.Space.beat)
-        .padding(.leading, 11)
-        .padding(.trailing, 10)
+        .padding(TaskPaletteRowMetrics.listPadding)
       }
       .scrollIndicators(.automatic)
       .onChange(of: list.scrollTarget) { scroll(proxy, to: list.scrollTarget?.id) }
@@ -46,10 +44,10 @@ struct TaskPaletteGitHubList: View {
 
   private func line(_ key: L10nKey) -> some View {
     Text(l10n.string(key))
-      .font(Font.theme.chrome)
+      .font(Font.theme.workspaceName)
       .foregroundStyle(Color.theme.textMuted)
-      .padding(.leading, 22 + 11)
-      .padding(.top, Theme.Space.span)
+      .padding(.leading, 22 + TaskPaletteRowMetrics.listPadding)
+      .padding(.top, Theme.Space.beat)
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 
@@ -72,28 +70,28 @@ struct TaskPaletteGitHubList: View {
         onHoverEnter: { model.hoverGitHubRow(.item(item.id)) })
     case .more(let kind, let count):
       TaskPaletteRowFrame(
-        selected: model.selectedGitHubID == .more(kind), height: 30,
+        selected: model.selectedGitHubID == .more(kind),
         onTap: { model.tapGitHubRow(.more(kind)) },
         onHoverEnter: { model.hoverGitHubRow(.more(kind)) },
         content: {
           Text("↓ " + l10n.format(.taskPaletteGitHubMore, count))
-            .font(Font.theme.chrome)
+            .font(Font.theme.meta)
             .foregroundStyle(Color.theme.textMuted)
-            .padding(.leading, 14 + Theme.Space.beat)
+            .padding(.leading, TaskPaletteRowMetrics.glyphColumn + Theme.Space.step)
           Spacer(minLength: 0)
         })
     case .loading:
       Text(l10n.string(.commonLoading))
-        .font(Font.theme.chrome)
+        .font(Font.theme.meta)
         .foregroundStyle(Color.theme.textMuted)
-        .padding(.leading, 22 + 14 + Theme.Space.beat)
-        .frame(height: 30)
+        .padding(.leading, 22 + TaskPaletteRowMetrics.glyphColumn + Theme.Space.step)
+        .frame(height: TaskPaletteRowMetrics.line)
     case .empty:
       Text(l10n.string(.taskPaletteGitHubEmpty))
-        .font(Font.theme.chrome)
+        .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textMuted)
         .padding(.leading, 22)
-        .frame(height: 40)
+        .frame(height: TaskPaletteRowMetrics.line)
     }
   }
 
@@ -102,13 +100,13 @@ struct TaskPaletteGitHubList: View {
     let title = kind == .issue ? "ISSUES" : "PULL REQUESTS"
     let repo = model.gitHubRepo?.name.uppercased() ?? ""
     return Text("\(title) · \(repo) \(count)")
-      .font(Font.theme.codeCompact)
-      .tracking(1.5)
+      .font(Font.theme.sectionLabel)
+      .tracking(Theme.Typography.trackingLabel)
       .foregroundStyle(Color.theme.textMuted)
       .lineLimit(1)
       .padding(.leading, 22)
-      .padding(.top, Theme.Space.beat)
-      .padding(.bottom, Theme.Space.step)
+      .padding(.top, Theme.Space.step)
+      .padding(.bottom, Theme.Space.tick)
       .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
@@ -121,7 +119,7 @@ struct TaskGitHubFilterChips: View {
 
   var body: some View {
     let counts = model.gitHubFilterCounts
-    HStack(spacing: Theme.Space.step) {
+    HStack(spacing: Theme.Space.note) {
       chip(.all, l10n.string(.taskPaletteScopeAll), nil)
       chip(.assigned, l10n.string(.taskPaletteGitHubFilterAssigned), counts?.assigned)
       chip(.authored, l10n.string(.taskPaletteGitHubFilterAuthored), counts?.authored)
@@ -141,11 +139,11 @@ struct TaskGitHubFilterChips: View {
           Text("\(count)").foregroundStyle(Color.theme.textMuted)
         }
       }
-      .font(Font.theme.code)
+      .font(Font.theme.chrome)
       .lineLimit(1)
       .fixedSize()
-      .padding(.horizontal, Theme.Space.beat)
-      .frame(height: 26)
+      .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
+      .frame(height: 22)
       .background(
         RoundedRectangle(cornerRadius: Theme.Radius.row)
           .fill(selected ? Color.theme.tintAccent : Color.theme.surfaceInk.opacity(0.04))
@@ -169,33 +167,33 @@ struct TaskPaletteGitHubItemRowView: View {
 
   var body: some View {
     TaskPaletteRowFrame(selected: selected, onTap: onTap, onHoverEnter: onHoverEnter) {
-      TaskLinkGlyph(kind: row.item.kind)
-        .frame(width: 14)
+      TaskLinkGlyph(kind: row.item.kind, size: 12)
+        .frame(width: TaskPaletteRowMetrics.glyphColumn)
       Text("#\(row.item.number)")
-        .font(Font.theme.codeCompact)
+        .font(Font.theme.meta)
         .foregroundStyle(Color.theme.textMuted)
         .fixedSize()
-        .padding(.leading, Theme.Space.beat)
+        .padding(.leading, Theme.Space.step)
       TruncatingSlot(row.item.title, leading: Theme.Space.step) {
-        fontResolver.text($0, base: Theme.Typography.taskText)
-          .font(Font.theme.taskText)
+        fontResolver.text($0, base: Theme.Typography.workspaceName)
+          .font(Font.theme.workspaceName)
           .foregroundStyle(Color.theme.textPrimary)
       }
       .layoutPriority(1)
       if let relation = TaskGitHubRelationText.text(row.relation, l10n) {
         Text(relation)
-          .font(Font.theme.chrome)
+          .font(Font.theme.meta)
           .foregroundStyle(Color.theme.textMuted)
           .lineLimit(1)
           .fixedSize()
-          .padding(.leading, Theme.Space.beat)
+          .padding(.leading, Theme.Space.step)
       }
-      Spacer(minLength: Theme.Space.beat)
+      Spacer(minLength: Theme.Space.step)
       if let task = row.task {
         TruncatingSlot(task.label, leading: 0) {
-          (Text(Image(systemName: "link")).font(.system(size: 10, weight: .semibold)) + Text(" ")
-            + fontResolver.text($0, base: Theme.Typography.codeCompact))
-            .font(Font.theme.codeCompact)
+          (Text(Image(systemName: "link")).font(.system(size: 9, weight: .semibold)) + Text(" ")
+            + fontResolver.text($0, base: Theme.Typography.meta))
+            .font(Font.theme.meta)
             .foregroundStyle(Color.theme.accentBright)
         }
         .layoutPriority(0.5)

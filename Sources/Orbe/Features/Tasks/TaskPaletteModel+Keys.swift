@@ -90,7 +90,7 @@ extension TaskPaletteModel {
     return .handled
   }
 
-  /// カードの器（詳細か右の欄の項目に居て、編集していない間）。
+  /// カードの器（右の欄の項目に居て、編集していない間）。
   func handleCardKey(_ press: KeyPress) -> KeyPress.Result {
     guard draft == nil else { return .ignored }
     switch area {
@@ -109,7 +109,7 @@ extension TaskPaletteModel {
     case .rightArrow: changeValue(1)
     case .return:
       switch stop {
-      // ⌘↵ は確定のキーなので編集を始めない（メモを確定した直後の ⌘↵ で、また編集に入らない）。
+      // ⌘↵ は 1 行の項目の確定のキーなので編集を始めない（確定した直後の ⌘↵ で、また編集に入らない）。
       case .field(let field):
         if field.isText, press.phase == .down, !press.modifiers.contains(.command) {
           beginEditing()
@@ -163,14 +163,17 @@ extension TaskPaletteModel {
     return .handled
   }
 
-  /// 詳細の編集欄。1 行の項目の ↵ は `onSubmit` が受け（押し続けたキーリピートは確定の入口が捨てる——押し
-  /// 続けて確定と編集の開始を繰り返さない）、メモは ↵ を改行に使って（リピートも改行）⌘↵ で確定する。
+  /// 文字の項目の編集欄。1 行の項目の ↵ は `onSubmit` が受けて確定し（押し続けたキーリピートは確定の入口が
+  /// 捨てる——押し続けて確定と編集の開始を繰り返さない）、esc で取り消す。⌘↵ も確定で、GitHub タブの右の欄の
+  /// 期限ではブラウザを開かせない。複数行の項目は ↵ を改行に使う（リピートも改行）ので、esc で確定し、⌘↵ では
+  /// 何もしない。
   func handleEditKey(_ press: KeyPress, composing: Bool) -> KeyPress.Result {
-    guard !composing, draft != nil else { return .ignored }
+    guard !composing, let draft else { return .ignored }
     if Self.isBacktab(press) { return .handled }
     switch press.key {
-    case .escape: endEditing(commit: false)
-    case .return where press.modifiers.contains(.command): endEditing(commit: true)
+    case .escape: endEditing(commit: draft.isMultiline)
+    case .return where press.modifiers.contains(.command):
+      if !draft.isMultiline { endEditing(commit: true) }
     case .tab: break
     default: return .ignored
     }

@@ -5,12 +5,12 @@ import XCTest
 
 /// 窓が持つ「worktree → そこで動く agent」の索引が、タブの agent の報告に追従すること（完了・休止でも残り、
 /// タブが去ると外れる。タブの cwd が worktree の中のどこにあっても、キーは worktree のルート）と、タスク画面
-/// の詳細の agent の場所からそのタブへ移れること。
+/// の右の欄の agent の場所からそのタブへ移れること。
 ///
 /// 壊れると何が起きるか: agent が作業を始めても、入力待ちになっても、タスクの行の札が変わらない（画面を
 /// 開き直すまで古い状態を言う）。応答を終えた agent のタブへ、結果を見にタスク画面から移れない。worktree の
 /// 中のサブディレクトリで動く agent がタスクに結び付かない。
-/// 詳細の「claude が取り掛かっている」で ↵ を押しても、そのタブへ移れない。
+/// 右の欄の「claude が取り掛かっている」で ↵ を押しても、そのタブへ移れない。
 ///
 /// 重要: 実 NSWindow に SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerWorktreeAgentsTests: OrbeTestCase {
@@ -113,7 +113,7 @@ final class WindowControllerWorktreeAgentsTests: OrbeTestCase {
     palette.enterDetail()
     palette.moveField(-1)
     palette.moveField(-1)
-    XCTAssertEqual(palette.area, .detail(.agent), "前提: 詳細の agent の場所にいる")
+    XCTAssertEqual(palette.area, .detail(.agent), "前提: 右の欄の agent の場所にいる")
     XCTAssertNotEqual(wc.current.active, 0, "前提: 前面は別のタブ")
 
     palette.focusAgentTab()

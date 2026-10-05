@@ -8,27 +8,27 @@ struct TaskAgentBadge: View {
 
   var body: some View {
     TimelineView(.periodic(from: agent.since, by: 60)) { context in
-      HStack(spacing: Theme.Space.note) {
-        StatusGlyphView(kind: agent.state, size: 10)
+      HStack(spacing: Theme.Space.tick) {
+        StatusGlyphView(kind: agent.state, size: 9)
         Text(agent.name)
         Text(
           agent.state == .working
             ? TaskElapsedText.label(since: agent.since, now: context.date, l10n: l10n)
             : l10n.string(.taskPaletteAgentWaitingBadge))
       }
-      .font(Font.theme.codeCompact)
+      .font(Font.theme.meta)
       .foregroundStyle(agent.state.stateColor)
       .lineLimit(1)
       .fixedSize()
-      .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
-      .frame(height: 20)
+      .padding(.horizontal, Theme.Space.step)
+      .frame(height: TaskPaletteRowMetrics.firstLine)
       .background(
         RoundedRectangle(cornerRadius: Theme.Radius.pill).fill(TaskAgentColors.tint(agent.state)))
     }
   }
 }
 
-/// 詳細の agent の場所（「claude が取り掛かっている ／ working 12分 · タブ <名前>」と「↗ タブへ」）。状態を
+/// 右の欄の agent の場所（「claude が取り掛かっている ／ working 12分 · タブ <名前>」と「↗ タブへ」）。状態を
 /// 問わず出し（完了・休止でも、続きを頼みにタブへ移れる）、↵ かクリックでそのタブへ移る。
 struct TaskAgentDetail: View {
   let agent: WorktreeAgentActivity.Agent
@@ -38,21 +38,21 @@ struct TaskAgentDetail: View {
 
   var body: some View {
     TimelineView(.periodic(from: agent.since, by: 60)) { context in
-      VStack(alignment: .leading, spacing: Theme.Space.tick) {
+      VStack(alignment: .leading, spacing: Theme.Space.hair) {
         HStack(spacing: Theme.Space.note) {
-          StatusGlyphView(kind: agent.state, size: 11)
+          StatusGlyphView(kind: agent.state, size: 10)
           Text(l10n.format(Self.headline(agent.state), agent.name))
-            .font(Font.theme.taskText)
+            .font(Font.theme.workspaceName)
             .foregroundStyle(agent.state.stateColor)
             .lineLimit(1)
           Spacer(minLength: Theme.Space.step)
           Text("↗ " + l10n.string(.taskPaletteAgentGoToTab))
-            .font(Font.theme.codeCompact)
+            .font(Font.theme.meta)
             .foregroundStyle(Color.theme.textSecondary)
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, Theme.Space.step)
-            .frame(height: 22)
+            .padding(.horizontal, Theme.Space.note)
+            .frame(height: 18)
             .background(
               RoundedRectangle(cornerRadius: Theme.Radius.sm + 1)
                 .fill(Color.theme.surfaceInk.opacity(0.06)))
@@ -64,14 +64,14 @@ struct TaskAgentDetail: View {
             "·", l10n.format(.taskPaletteAgentTab, agent.tabTitle),
           ].joined(separator: " ")
         )
-        .font(Font.theme.codeCompact)
+        .font(Font.theme.meta)
         .foregroundStyle(Color.theme.textMuted)
         .lineLimit(1)
         .truncationMode(.tail)
-        .padding(.leading, 11 + Theme.Space.note)
+        .padding(.leading, 10 + Theme.Space.note)
       }
-      .padding(.horizontal, Theme.Space.beat)
-      .padding(.vertical, Theme.Space.beat)
+      .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
+      .padding(.vertical, Theme.Space.step)
       .background(
         RoundedRectangle(cornerRadius: Theme.Radius.md)
           .fill(focused ? Color.theme.selectionFill : Color.theme.surfaceInk.opacity(0.04))

@@ -32,19 +32,21 @@ extension DesignSceneFixtures {
     func task(
       _ id: Int, _ title: String, _ status: TaskItem.Status = .todo,
       waiting: (String, Int)? = nil, priority: TaskItem.Priority = .medium,
-      due: String? = nil, workspace: UUID? = nil, memo: String = "", by: String? = nil,
+      due: String? = nil, workspace: UUID? = nil, description: String = "", by: String? = nil,
       links: [TaskLink] = [], worktree: String? = nil
     ) -> TaskItem {
       TaskItem(
         id: id, title: title, status: status,
         waiting: waiting.map { TaskItem.Waiting(reason: $0.0, since: daysAgo($0.1)) },
         priority: priority, due: due.flatMap(TaskItem.DueDate.init), workspace: workspace,
-        memo: memo, createdAt: daysAgo(2), createdBy: by, links: links,
+        description: description, createdAt: daysAgo(2), createdBy: by, links: links,
         worktree: worktree.map(taskWorktree))
     }
     let tasks = [
       task(
         1, "タスク機能の設計", .inProgress, workspace: ws[0],
+        description: "人と agent が同じ一覧を見て動けるようにする。並べ替え・結び付き・worktree の起動までを"
+          + "一続きにし、agent には制御 API と MCP から同じ操作を渡す。見た目は ⌘⇧S の尺度にそろえる。",
         links: [taskLink(.issue, "orbe", 212), taskLink(.pr, "orbe", 213)], worktree: "issue-212"),
       task(
         2, "レビュー指摘に返信する", .inProgress, workspace: ws[0], links: [taskLink(.pr, "orbe", 209)],
@@ -57,14 +59,14 @@ extension DesignSceneFixtures {
         5, "ログイン直後に白画面になる", priority: .high, workspace: ws[1],
         links: [taskLink(.issue, "web-app", 47)]),
       task(6, "Slack で上司に来週の休みを連絡する"),
-      task(7, "経費精算を出す", due: "2025-10-06"),
+      task(7, "経費精算を出す", due: "2025-10-06", description: "交通費 3 件\n  会議室代は別に申請する\n"),
       task(8, "キャッシュ層を差し替える", workspace: ws[2], links: [taskLink(.pr, "orbe", 88)]),
       task(
         9, "Dispatch: fetch 待ちの間 Esc が効かない", workspace: ws[0],
         links: [taskLink(.issue, "orbe", 218)]),
       task(10, "control/api.md にタスクのツール節を足す", workspace: ws[0], by: "claude"),
       task(11, "歯医者の予約を取り直す", priority: .low),
-      task(12, "ヘルプに ⌘⇧X を載せる", .done, workspace: ws[0]),
+      task(12, "ヘルプに ⌘⇧X を載せる", .done, workspace: ws[0], description: "キーの一覧の末尾に足した"),
       task(13, "請求書を送る", .done),
       task(14, "ブランチ名の検証を直す", .done, workspace: ws[0]),
     ]

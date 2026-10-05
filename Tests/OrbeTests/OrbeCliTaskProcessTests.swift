@@ -49,7 +49,7 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
 
     let first = run(control, ["add", "経費精算を出す", "--due", "2026-10-06", "--priority", "high"])
       .trimmingCharacters(in: .whitespacesAndNewlines)
-    let second = run(control, ["add", "承認を取る", "--waiting", "部長の返事", "--memo", "メモ"])
+    let second = run(control, ["add", "承認を取る", "--waiting", "部長の返事", "--description", "詳細"])
       .trimmingCharacters(in: .whitespacesAndNewlines)
     XCTAssertNotNil(Int(first), "task add: 新しいタスクの ID を出す: \(first)")
     XCTAssertEqual(
@@ -58,7 +58,7 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
         [first, "todo", "high", "2026-10-06", "-", "経費精算を出す", "-", "-", "-"],
         [second, "todo", "medium", "-", "-", "承認を取る", "部長の返事", "-", "-"],
       ], "task list: 1 行 1 タスク（ID・ステータス・優先度・期限・workspace・タイトル・待ち・結び付き・worktree）で、追加順に末尾へ並ぶ")
-    XCTAssertEqual(try tasks(control)[1]["memo"] as? String, "メモ", "task add --memo")
+    XCTAssertEqual(try tasks(control)[1]["description"] as? String, "詳細", "task add --description")
 
     run(control, ["set", second, "--status", "done"])
     XCTAssertEqual(rows(control).last?[1], "done", "task set --status")
@@ -81,12 +81,12 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
       "task list --workspace: その workspace のタスクだけに絞る")
 
     run(control, ["set", first, "--no-waiting", "--no-workspace", "--status", "in_progress"])
-    run(control, ["set", second, "--no-memo"])
+    run(control, ["set", second, "--no-description"])
     let afterClear = try tasks(control)
     XCTAssertNil(afterClear[0]["waiting"], "task set --no-waiting")
     XCTAssertNil(afterClear[0]["workspaceId"], "task set --no-workspace")
     XCTAssertEqual(afterClear[0]["status"] as? String, "in_progress")
-    XCTAssertEqual(afterClear[1]["memo"] as? String, "", "task set --no-memo")
+    XCTAssertEqual(afterClear[1]["description"] as? String, "", "task set --no-description")
 
     run(control, ["move", second, "--before", first])
     XCTAssertEqual(rows(control).map { $0[0] }, [second, first], "task move --before")
@@ -222,7 +222,10 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
       (
         ["task", "set", "1", "--due", "2026-10-06", "--no-due"], "pass only one of --due / --no-due"
       ),
-      (["task", "set", "1", "--memo", "m", "--no-memo"], "pass only one of --memo / --no-memo"),
+      (
+        ["task", "set", "1", "--description", "m", "--no-description"],
+        "pass only one of --description / --no-description"
+      ),
       (
         ["task", "add", "a", "--workspace", "1", "--no-workspace"],
         "pass only one of --workspace / --no-workspace"
@@ -256,11 +259,11 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
   }
 
   /// 値の席に置かれた `-h` を help と読まない（`testHelpInAValueSlotIsNotTreatedAsHelp` の task 版）。
-  /// メモや待ちの理由は任意の文字列なので、`orb task set 3 --memo "$M"` の `$M` がたまたま `-h` だと、
+  /// 詳細や待ちの理由は任意の文字列なので、`orb task set 3 --description "$M"` の `$M` がたまたま `-h` だと、
   /// 何も変えないまま usage を出して exit 0 になる。値の席の `-` 始まりは exit 2 で止まるのが cli.md の規約。
   func testHelpInAValueSlotIsNotTreatedAsHelp() {
     for args in [
-      ["task", "set", "3", "--memo", "-h"],
+      ["task", "set", "3", "--description", "-h"],
       ["task", "add", "a", "--waiting", "--help"],
     ] {
       let outcome = ControlProcess.orbWithoutServer(args)

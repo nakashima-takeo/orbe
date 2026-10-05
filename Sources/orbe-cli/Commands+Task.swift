@@ -8,11 +8,11 @@ import Foundation
 let taskUsageLines = [
   "orb task list [--workspace <id|current>] [--json]",
   "orb task add <title> [--status <s>] [--priority <p>] [--due <YYYY-MM-DD>]"
-    + " [--workspace <id|current> | --no-workspace] [--waiting <reason>] [--memo <text>]"
+    + " [--workspace <id|current> | --no-workspace] [--waiting <reason>] [--description <text>]"
     + " [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--worktree <path>] [--json]",
   "orb task set <id> [--title <t>] [--status <s>] [--priority <p>] [--due <date> | --no-due]"
     + " [--workspace <id|current> | --no-workspace] [--waiting <reason> | --no-waiting]"
-    + " [--memo <text> | --no-memo] [--issue <owner/name#N>]... [--pr <owner/name#N>]..."
+    + " [--description <text> | --no-description] [--issue <owner/name#N>]... [--pr <owner/name#N>]..."
     + " [--no-links] [--worktree <path> | --no-worktree] [--json]",
   "orb task move <id> (--before <id> | --after <id>) [--json]",
   "orb task rm <id> [--json]",
@@ -38,7 +38,7 @@ let taskUsage = """
   --no-workspace attaches to no workspace.
   --waiting marks the task as waiting on something (kept apart from status);
   --status done clears it, and a done task cannot be waiting. --no-due /
-  --no-waiting / --no-workspace / --no-memo clear the value.
+  --no-waiting / --no-workspace / --no-description clear the value.
   --issue / --pr link GitHub issues and PRs to the task (repeatable); the first
   one you pass is the main link. set replaces all links with the ones you pass,
   and --no-links removes them all. An issue or PR can be linked to only one
@@ -167,8 +167,8 @@ private func taskRemove(_ rest: [String]) -> Never {
 
 // MARK: - 引数
 
-/// help は**値の席を抜き取った後**の残りで見る（`tab send` と同じ）。メモや待ちの理由は任意の文字列で、
-/// 引数列全体を走査すると `--memo -h` の値が help と読まれ、何も変えないまま exit 0 になる。抜き取った
+/// help は**値の席を抜き取った後**の残りで見る（`tab send` と同じ）。詳細や待ちの理由は任意の文字列で、
+/// 引数列全体を走査すると `--description -h` の値が help と読まれ、何も変えないまま exit 0 になる。抜き取った
 /// 後なら値の席の `-h` は `takeOption` のダッシュ拒否に落ちて exit 2 で止まる。
 private func exitIfHelp(_ args: [String]) {
   guard hasHelp(args) else { return }
@@ -188,16 +188,18 @@ private func takeFields(_ args: inout [String], update: Bool) -> [String: Any] {
   }
   let due: (inout [String]) -> Any? = { takeOption(&$0, "--due", requires: "a <YYYY-MM-DD> date") }
   let waiting: (inout [String]) -> Any? = { takeOption(&$0, "--waiting", requires: "a <reason>") }
-  let memo: (inout [String]) -> Any? = { takeOption(&$0, "--memo", requires: "a <text>") }
+  let description: (inout [String]) -> Any? = {
+    takeOption(&$0, "--description", requires: "a <text>")
+  }
   if update {
     params["due"] = takeClearable(&args, "--due", take: due)
     params["waitingReason"] = takeClearable(&args, "--waiting", take: waiting)
-    // メモは「無い」と「空」を区別しないので、外すのは空文字への置き換え。
-    params["memo"] = takeClearable(&args, "--memo", cleared: "", take: memo)
+    // 詳細は「無い」と「空」を区別しないので、外すのは空文字への置き換え。
+    params["description"] = takeClearable(&args, "--description", cleared: "", take: description)
   } else {
     params["due"] = due(&args)
     params["waitingReason"] = waiting(&args)
-    params["memo"] = memo(&args)
+    params["description"] = description(&args)
   }
   params["workspaceId"] = takeClearable(&args, "--workspace") { takeWorkspaceId(&$0) }
   let worktree: (inout [String]) -> Any? = { args in

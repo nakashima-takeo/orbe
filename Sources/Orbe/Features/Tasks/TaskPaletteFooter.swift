@@ -8,27 +8,27 @@ struct TaskPaletteFooter: View {
 
   var body: some View {
     HStack(spacing: Theme.Space.step) {
-      description
+      actionLine
         .font(Font.theme.meta)
         .lineLimit(1)
         .truncationMode(.tail)
       Spacer(minLength: Theme.Space.step)
       hints
-        .font(Font.theme.sectionLabel)
+        .font(Font.theme.meta)
         .foregroundStyle(Color.theme.textMuted)
         .fixedSize()
         .layoutPriority(1)
     }
-    .padding(.horizontal, Theme.Space.phrase)
-    .frame(height: 44)
+    .padding(.horizontal, Theme.Space.span)
+    .padding(.vertical, 9)
   }
 
-  @ViewBuilder private var description: some View {
+  @ViewBuilder private var actionLine: some View {
     if let error = model.error {
       Text(l10n.string(errorKey(error))).foregroundStyle(Color.theme.danger)
     } else if let draft = model.draft {
       PaletteActionLine(
-        key: draft.field == .memo ? "⌘↵" : "↵", template: l10n.string(.taskPaletteActionCommit),
+        key: draft.isMultiline ? "esc" : "↵", template: l10n.string(.taskPaletteActionCommit),
         slots: [])
     } else if model.pick != nil {
       TaskPalettePickAction(model: model)
@@ -84,9 +84,12 @@ struct TaskPaletteFooter: View {
   }
 
   private var hints: some View {
-    HStack(spacing: Theme.Space.step + Theme.Space.hair) {
-      if model.draft != nil {
-        PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintCancel))
+    HStack(spacing: Theme.Space.beat + Theme.Space.hair) {
+      if let draft = model.draft {
+        // 複数行の項目は esc が確定（左の 1 行が言う）で、取り消しのキーは無い。
+        if !draft.isMultiline {
+          PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintCancel))
+        }
       } else if model.pick != nil {
         PaletteKeyHint(
           key: "⇥",
@@ -104,7 +107,7 @@ struct TaskPaletteFooter: View {
         PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintBack))
       } else {
         PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
-        PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintDetail))
+        PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintEdit))
         PaletteKeyHint(key: "⌥↑↓", label: l10n.string(.taskPaletteHintReorder))
         PaletteKeyHint(key: "⇥", label: l10n.string(.taskPaletteHintScope))
         PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteDelete))
@@ -121,7 +124,7 @@ struct TaskPaletteFooter: View {
     case .priority: .taskPaletteActionChangePriority
     case .due: .taskPaletteActionEditDue
     case .workspace: .taskPaletteActionChangeWorkspace
-    case .memo: .taskPaletteActionEditMemo
+    case .description: .taskPaletteActionEditDescription
     }
   }
 
@@ -206,7 +209,7 @@ private struct TaskPaletteGitHubHints: View {
       if row.task == nil {
         PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteMakeTaskOpen))
         PaletteKeyHint(key: "⌘L", label: l10n.string(.taskPaletteHintLink))
-        PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintDetail))
+        PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintEdit))
       } else {
         PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
         PaletteKeyHint(key: "⌘L", label: l10n.string(.taskPaletteHintRelink))

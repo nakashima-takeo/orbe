@@ -34,7 +34,7 @@ extension ControlWireTests {
     XCTAssertEqual(added?.draft.priority, .high)
     XCTAssertEqual(added?.draft.due?.text, "2026-10-06")
     XCTAssertEqual(added?.draft.waitingReason, "返事")
-    XCTAssertEqual(added?.draft.memo, "メモ")
+    XCTAssertEqual(added?.draft.description, "詳細")
     XCTAssertEqual(
       added?.draft.links,
       [TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "o/n", number: 214)), kind: .pr)])
@@ -53,7 +53,7 @@ extension ControlWireTests {
     XCTAssertEqual(added?.draft.priority, .medium)
     XCTAssertNil(added?.draft.due)
     XCTAssertNil(added?.draft.waitingReason)
-    XCTAssertEqual(added?.draft.memo, "")
+    XCTAssertEqual(added?.draft.description, "")
     XCTAssertNil(added?.callerTabId)
   }
 
@@ -72,7 +72,7 @@ extension ControlWireTests {
         params: entry.params.merging(["title": "a"]) { a, _ in a })
       _ = wire.request(
         id: index * 2 + 1, method: "update_task",
-        params: entry.params.merging(["taskId": 7, "memo": "m"]) { a, _ in a })
+        params: entry.params.merging(["taskId": 7, "description": "m"]) { a, _ in a })
       XCTAssertEqual(
         describe(fake.addedTasks.last?.workspaceId), entry.expected, "add_task: \(entry.params)")
       XCTAssertEqual(
@@ -98,7 +98,7 @@ extension ControlWireTests {
     for (index, entry) in cases.enumerated() {
       _ = wire.request(
         id: 10 + index, method: "update_task",
-        params: entry.params.merging(["taskId": 7, "memo": "m"]) { a, _ in a })
+        params: entry.params.merging(["taskId": 7, "description": "m"]) { a, _ in a })
       XCTAssertEqual(
         describe(fake.updatedTasks.last?.worktree), entry.expected, "update_task: \(entry.params)")
     }
@@ -128,13 +128,13 @@ extension ControlWireTests {
     XCTAssertNil(cleared?.update.title, "渡していない項目は変えない")
     XCTAssertNil(cleared?.update.status)
     XCTAssertNil(cleared?.update.priority)
-    XCTAssertNil(cleared?.update.memo)
+    XCTAssertNil(cleared?.update.description)
 
     _ = wire.request(
       id: 2, method: "update_task",
       params: [
         "taskId": 8, "title": "t", "status": "done", "priority": "low", "due": "2028-02-29",
-        "waitingReason": "返事", "memo": "",
+        "waitingReason": "返事", "description": "",
       ])
     let set = fake.updatedTasks.last
     XCTAssertEqual(set?.taskId, 8)
@@ -143,7 +143,7 @@ extension ControlWireTests {
     XCTAssertEqual(set?.update.priority, .low)
     XCTAssertEqual(set?.update.due?.value?.text, "2028-02-29")
     XCTAssertEqual(set?.update.waitingReason?.value, "返事")
-    XCTAssertEqual(set?.update.memo, "", "空のメモは「変えない」ではなく空への置き換え")
+    XCTAssertEqual(set?.update.description, "", "空の詳細は「変えない」ではなく空への置き換え")
   }
 
   func testMoveTaskTakesExactlyOneOfBeforeOrAfter() {
@@ -179,7 +179,7 @@ extension ControlWireTests {
       ("add_task", ["title": "a", "workspaceId": true]),
       ("update_task", ["taskId": 7, "status": "DONE"]),
       ("update_task", ["taskId": 7, "due": "tomorrow"]),
-      ("update_task", ["taskId": true, "memo": "m"]),
+      ("update_task", ["taskId": true, "description": "m"]),
       ("list_tasks", ["workspaceId": "3"]),
       ("move_task", ["taskId": 7, "beforeTaskId": false]),
       ("delete_task", ["taskId": 7.5]),
@@ -213,7 +213,7 @@ extension ControlWireTests {
     _ = wire.request(id: 1, method: "add_task", params: ["title": "a", "links": links])
     _ = wire.request(id: 2, method: "update_task", params: ["taskId": 7, "links": links])
     _ = wire.request(id: 3, method: "update_task", params: ["taskId": 7, "links": [Any]()])
-    _ = wire.request(id: 4, method: "update_task", params: ["taskId": 7, "memo": "m"])
+    _ = wire.request(id: 4, method: "update_task", params: ["taskId": 7, "description": "m"])
 
     XCTAssertEqual(fake.addedTasks.last?.draft.links, expected)
     XCTAssertEqual(fake.updatedTasks.map(\.update.links), [expected, [], nil])
