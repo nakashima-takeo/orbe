@@ -105,10 +105,23 @@ final class WindowControllerTaskWorktreeBranchTests: OrbeTestCase {
 
   /// 確定は、答えが届いた時点の記録が、問い合わせたときの記録と同じ場合だけ——その間に人が付け直した記録を、
   /// 古い問い合わせの答えで上書きしない。
+  ///
+  /// 答えは全 worktree の分が 1 回で届くので、別のリポジトリのタスク（付け直さない）が確定したことで、
+  /// 答えが届き終えたことを知る。
   func testTheConfirmationDoesNotOverwriteARecordChangedWhileAsking() throws {
     let (wc, root) = try launch()
     let task = try wc.taskStore.add(TaskDraft(title: "a", worktree: TaskWorktree(key: root)))
     git(["switch", "-q", "-c", "feat"], in: root)
+    let other = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("other").path
+    git(["init", "-q", "-b", "main", other], in: try XCTUnwrap(TestIsolation.caseDir).path)
+    git(
+      [
+        "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty",
+        "-m", "init",
+      ], in: other)
+    let sentinel = try wc.taskStore.add(
+      TaskDraft(title: "b", worktree: TaskWorktree(key: GitWorktreeRoot.normalizedPath(other))))
+    git(["switch", "-q", "-c", "side"], in: other)
 
     XCTAssertTrue(wc.handleWindowKeyCommand(.showTaskPalette))
     git(["switch", "-q", "--detach"], in: root)
@@ -118,6 +131,8 @@ final class WindowControllerTaskWorktreeBranchTests: OrbeTestCase {
     XCTAssertNil(try stored(wc, task.id).worktreeBranch, "前提: 問い合わせの後に付け直した")
     git(["switch", "-q", "feat"], in: root)
 
-    XCTAssertFalse(pump({ (try? stored(wc, task.id).worktreeBranch) != nil }, timeout: 3))
+    XCTAssertTrue(
+      pump { (try? stored(wc, sentinel.id).worktreeBranch) == "side" }, "前提: 答えが届き終えた")
+    XCTAssertNil(try stored(wc, task.id).worktreeBranch)
   }
 }

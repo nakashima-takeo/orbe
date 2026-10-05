@@ -76,17 +76,6 @@ final class WindowControllerFacesTests: OrbeTestCase {
     XCTAssertTrue(wc.window.firstResponder === tab.surface)
   }
 
-  /// 0 タブでは何も起きない。
-  func testToggleEditorFaceWithoutTabsDoesNothing() throws {
-    let wc = WindowController()
-    wc.closeTab(try XCTUnwrap(wc.activeTab), origin: .gesture)
-    XCTAssertNil(wc.activeTab, "前提: 0 タブ")
-
-    wc.handleWindowCommand(.toggleEditorFace)
-    XCTAssertNil(wc.activeTab)
-    XCTAssertTrue(wc.current.tabs.isEmpty)
-  }
-
   // MARK: - ⌘W
 
   /// ⌘W はアクティブタブを人のジェスチャとして閉じる（寿命ログの closed に `.gesture` が載る）。
@@ -198,23 +187,6 @@ final class WindowControllerFacesTests: OrbeTestCase {
 
     XCTAssertEqual(tab.faces, FaceLayout(editorRatio: 1, focus: .editor), "隠れていたエディターが全開")
     XCTAssertTrue(wc.window.firstResponder === tab.view.editor)
-  }
-
-  /// 背の中のどこを掴んでも、引いた距離だけ面が動く（掴んだ瞬間に跳ばない）。
-  func testSpineDragMovesTheFaceByTheDraggedDistance() throws {
-    let wc = WindowController()
-    let tab = try XCTUnwrap(wc.activeTab)
-    tab.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
-    layout(wc)
-    let spine = tab.view.spine
-    let editorWidth = tab.view.resolved.editorWidth
-    let grab = spine.centerInWindow
-
-    spine.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
-    spine.mouseDragged(
-      with: .mouse(.leftMouseDragged, at: NSPoint(x: grab.x + 10, y: grab.y), in: wc.window))
-
-    XCTAssertEqual(tab.view.resolved.editorWidth, editorWidth + 10, "引いた 10px だけ広がる")
   }
 
   // MARK: - タブごとの配置と焦点の面

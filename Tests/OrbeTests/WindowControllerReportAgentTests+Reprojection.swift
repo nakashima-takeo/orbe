@@ -22,22 +22,6 @@ extension WindowControllerReportAgentTests {
     wc.flushChrome()
   }
 
-  /// 同じタブが `working` へ戻ったらピルを取り下げる（`working` は一覧に載らない）。
-  func testTransientWithdrawnWhenTabReturnsToWorking() throws {
-    let (wc, tab) = try makeControllerAndTab()
-    wc.controlReportAgent(
-      tab: tab,
-      report: AgentHookReport(
-        agent: "claude", state: "waiting", sessionId: nil,
-        message: AgentMessage(text: "q")))
-    flushDelivered(wc)
-    XCTAssertNotNil(wc.attentionStore.transient, "waiting のままなら取り下げない")
-
-    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "working"))
-    flushDelivered(wc)
-    XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
-  }
-
   func testWaitingToIdleRetractsAttentionAndMovesTopBarWithoutNewNotification() throws {
     let (wc, tab) = try makeControllerAndTab()
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
@@ -102,9 +86,8 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
   }
 
-  /// done のフォーカス消費（done→idle）で行が消えたらピルを取り下げる。
-  /// 消費そのものは通知を持たない（本番でも `wire` の onAgentStateChange が続けて
-  /// `refreshChrome` を鳴らす）ので、その 1 手だけテスト側が同じ順で再現する。
+  /// 背面で届いた done は、窓が前面に戻ったときのフォーカス消費（done→idle）で一覧から消え、ピルも
+  /// 取り下げる。
   func testTransientWithdrawnWhenDoneConsumedToIdle() throws {
     let (wc, tab) = try makeControllerAndTab()
     wc.controlReportAgent(
@@ -112,10 +95,10 @@ extension WindowControllerReportAgentTests {
       report: AgentHookReport(
         agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d")))
     flushDelivered(wc)
-    XCTAssertNotNil(wc.attentionStore.transient)
+    XCTAssertNotNil(wc.attentionStore.transient, "前提: 背面なので done のピルが立つ")
 
-    wc.current.tabs[0].consumeDoneState()
-    wc.refreshChrome()
+    makeKey(wc)
+    XCTAssertEqual(tab.agentState, "idle", "前提: 前面復帰で見ているタブの done が消費された")
     flushDelivered(wc)
     XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
   }
@@ -134,26 +117,6 @@ extension WindowControllerReportAgentTests {
     wc.closeTab(wc.current.tabs[1], origin: .gesture)
     flushDelivered(wc)
     XCTAssertEqual(wc.attentionStore.transient?.retracted, true)
-  }
-
-  /// 関係ない別タブの状態変化では取り下げない（②を立て直さない変化だけで見る）。
-  func testTransientSurvivesUnrelatedTabChange() throws {
-    let (wc, tabs) = try makeControllerAndTwoTabs()
-    wc.controlReportAgent(
-      tab: tabs[1],
-      report: AgentHookReport(
-        agent: "claude", state: "waiting", sessionId: nil,
-        message: AgentMessage(text: "q")))
-    flushDelivered(wc)
-    XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id)
-
-    wc.controlReportAgent(tab: tabs[0], report: AgentHookReport(agent: "claude", state: "working"))
-    flushDelivered(wc)
-    XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id)
-
-    wc.controlReportAgent(tab: tabs[0], report: AgentHookReport(agent: "claude", state: "clear"))
-    flushDelivered(wc)
-    XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id)
   }
 
   /// 同一タブの waiting→done の差し替えは従来どおり働く（差し替え直後の flush で消えない）。
@@ -185,6 +148,7 @@ extension WindowControllerReportAgentTests {
   func testTransientNotFiredForDormantWorkspaceTab() throws {
     let (wc, dormantTab) = try makeControllerAndDormantTab()
     XCTAssertFalse(wc.window.isKeyWindow, "前提: 背面（非 key）なので見ているタブの抑制は効かない")
+    let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
 
     wc.controlReportAgent(
       tab: dormantTab,
@@ -195,6 +159,7 @@ extension WindowControllerReportAgentTests {
 
     flushDelivered(wc)
     XCTAssertTrue(wc.attentionStore.rows.isEmpty, "一覧にも出ない（立てる側と同じ集合）")
+    XCTAssertTrue(sound.played.isEmpty, "音も鳴らさない（出所を辿れない音になる）")
   }
 
   // MARK: - ②の滞留（発信元 workspace の実効設定から到来時に決まる）

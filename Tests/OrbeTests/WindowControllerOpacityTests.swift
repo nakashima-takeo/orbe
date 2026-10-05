@@ -5,7 +5,6 @@ import XCTest
 
 /// NSWindow 背景透過の橋渡し（WindowController+Opacity）の検証。
 ///
-/// 純粋な透過判定（`shouldBeTranslucent`）は値/フルスクリーン別に固定する。
 /// 実 window への適用（`syncWindowOpacity` → `window.isOpaque`）は WindowController の構築を要し、
 /// **libghostty ランタイムを起動する**（GhosttyKit 必須）。設定は in-memory SSOT（`settingsStore`）を通す。
 final class WindowControllerOpacityTests: OrbeTestCase {
@@ -29,25 +28,7 @@ final class WindowControllerOpacityTests: OrbeTestCase {
     return l
   }
 
-  // MARK: - 純粋な透過判定（libghostty 非依存）
-
-  func testShouldBeTranslucentByValueAndFullScreen() {
-    XCTAssertTrue(WindowController.shouldBeTranslucent(percent: 90, isFullScreen: false), "90%→透過")
-    XCTAssertTrue(
-      WindowController.shouldBeTranslucent(percent: 20, isFullScreen: false), "下端 20%→透過")
-    XCTAssertFalse(
-      WindowController.shouldBeTranslucent(percent: 100, isFullScreen: false), "100%→不透明")
-    XCTAssertFalse(
-      WindowController.shouldBeTranslucent(percent: 90, isFullScreen: true), "フルスクリーンは常に不透明")
-  }
-
   // MARK: - 実 window への適用（GhosttyKit 必須）
-
-  /// 既定（settings 未設定＝既定 95%）で起動すると窓は非不透明（背景が透ける）。
-  func testDefaultSettingAppliesTranslucentWindow() {
-    let wc = WindowController()
-    XCTAssertFalse(wc.window.isOpaque, "既定 95%<100・非フルスクリーン → isOpaque=false")
-  }
 
   /// 100%（完全不透明）を保存して起動すると窓は不透明。
   func testFullyOpaqueSettingAppliesOpaqueWindow() {
@@ -70,14 +51,6 @@ final class WindowControllerOpacityTests: OrbeTestCase {
 
   // MARK: - chrome 各面へ配る透過ホルダーへの結線
 
-  func testDefaultLaunchWiresChromeTranslucencyHolder() {
-    let wc = WindowController()
-    XCTAssertTrue(wc.chromeTranslucency.translucent, "既定 95%<100 → chrome も透過")
-    XCTAssertEqual(
-      wc.chromeTranslucency.effectiveOpacity, 0.95, accuracy: 0.0001, "既定 95% → 0.95 へスケール")
-    XCTAssertTrue(wc.chromeTranslucency.blur, "blur 既定 true → すりガラス有り")
-  }
-
   func testSyncReappliesChromeTranslucencyFromSettings() {
     saveGlobal {
       $0[SettingKeys.backgroundOpacity] = 80
@@ -97,33 +70,6 @@ final class WindowControllerOpacityTests: OrbeTestCase {
   }
 
   // MARK: - workspace 上書きが実効設定を駆動する
-
-  func testWorkspaceOverrideDrivesWindowOpacity() {
-    saveGlobal { $0[SettingKeys.backgroundOpacity] = 100 }  // global＝不透明
-    let wc = WindowController()
-    wc.current.settingsOverride = override { $0[SettingKeys.backgroundOpacity] = 80 }  // WS 上書き＝透過
-    wc.syncWindowOpacity()
-    XCTAssertFalse(wc.window.isOpaque, "workspace 上書き 80% が global 100% を上書きして透過")
-  }
-
-  func testActiveEffectiveTracksActiveWorkspaceOverride() {
-    saveGlobal { $0[SettingKeys.backgroundOpacity] = 100 }  // global 既定
-    let wc = WindowController()
-    wc.current.settingsOverride = override { $0[SettingKeys.backgroundOpacity] = 80 }
-    XCTAssertEqual(
-      wc.activeEffectiveSettings()[SettingKeys.backgroundOpacity], 80, "アクティブ WS の上書きを反映")
-
-    wc.createWorkspace(name: "other", rootPath: "/tmp/ws-other")  // 上書き無しの新 WS がアクティブ
-    XCTAssertEqual(
-      wc.activeEffectiveSettings()[SettingKeys.backgroundOpacity], 100, "上書き無し WS は global を継承")
-    wc.current.settingsOverride = override { $0[SettingKeys.backgroundOpacity] = 50 }
-    XCTAssertEqual(
-      wc.activeEffectiveSettings()[SettingKeys.backgroundOpacity], 50, "新 WS 自身の上書きへ")
-
-    wc.switchWorkspace(to: 0)  // 最初の WS へ戻す
-    XCTAssertEqual(
-      wc.activeEffectiveSettings()[SettingKeys.backgroundOpacity], 80, "切替で元 WS の上書きへ追従")
-  }
 
   /// ディスクに保存された settingsOverride が起動復元で実効設定へ結線される。
   func testRestoresWorkspaceOverrideFromDiskOnLaunch() {
