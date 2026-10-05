@@ -96,8 +96,7 @@ struct TaskItem: Codable, Equatable, Identifiable {
 extension TaskItem {
   private enum CodingKeys: String, CodingKey {
     case id, title, status, waiting, priority, due, workspace, description, createdAt, createdBy,
-      links,
-      worktree, worktreeBranch, unlinked
+      links, worktree, worktreeBranch, unlinked
   }
 
   /// `links`・`worktree`・`worktreeBranch`・`unlinked` は、欠けていれば空として読む。

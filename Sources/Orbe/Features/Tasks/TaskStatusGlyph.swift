@@ -4,7 +4,7 @@ import SwiftUI
 /// （未着手＝空の円、進行中＝◐ のブランドグリフ、待ち＝破線の円と時計の針、完了＝塗りの円に ✓）。
 struct TaskStatusGlyph: View {
   let glyph: TaskPaletteTaskRow.Glyph
-  var size: CGFloat = 14
+  let size: CGFloat
 
   var body: some View {
     if glyph == .inProgress {
