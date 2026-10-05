@@ -4,7 +4,7 @@ import Foundation
 enum WorktreePalettePendingActivation: Equatable {
   /// 行が決まった時点の選択で実行する（初回の一覧・先頭の欄の待ち）。
   case selection
-  /// 打った名前を作る意図。作成行を出すかが決まったら、作成行が残っていれば作り、消えて同じ名前のリモート
+  /// 選んでいた作成行の名前（行が無ければ打った名前）を作る意図。作成行を出すかが決まったら、作成行が残っていれば作り、消えて同じ名前のリモート
   /// ブランチの行が現れていればそれを開き、どちらも無ければ何もしない——決まった後の一覧で選択を組み直すと、
   /// 名前の一部が一致するだけの別の行を開いてしまう。
   case create(name: String)
@@ -34,22 +34,35 @@ extension WorktreePaletteModel {
     }
   }
 
+  /// 選択で預かった ↵ が作る名前。選んでいる作成行の名前（タップと同じ規則）、行が無ければ打った名前。ほかの
+  /// 行を選んでいれば nil（作成の意図ではない）。
+  private var createIntentName: String? {
+    switch selectedItem?.action {
+    case .createBranch(let name): name
+    case nil: query
+    case .open, .clean: nil
+    }
+  }
+
   /// 預かりが今の入力のリモートブランチを待っている（提示時の fetch の着地待ち）。
   var isAwaitingRemoteBranches: Bool {
     guard case .create = pendingActivation else { return false }
     return newBranchRules?.remoteBranchesLanded == false
   }
 
-  /// 預かった ↵ を、決まっていれば実行する。データの到着と有効性の答えの後に呼ぶ。選択で預かった ↵ は、残る
-  /// 待ちが作成行を出すかだけになった時点で、打った名前を作る意図に置き換える（作成行か何も無い行を選んで
-  /// いる）。
+  /// 預かった ↵ を、決まっていれば実行する。データの到着と有効性の答えの後に呼ぶ。選択で預かった ↵ は、作成行
+  /// を出すかが決まらない間に作成行か何も無い行を選んでいれば、先頭の欄の待ちより先に作成の意図に置き換える
+  /// ——選択のまま欄の着地を待つと、着地後に入力の規則で選び直した、名前の一部が一致するだけの行で実行される。
   func settlePendingActivation() {
     switch pendingActivation {
     case nil:
       return
     case .selection:
-      guard hasLoadedOnce, !taskTargetPending else { return }
-      guard isSettled else { return pendingActivation = .create(name: query) }
+      if isCreateRowUndecided, let name = createIntentName {
+        pendingActivation = .create(name: name)
+        return
+      }
+      guard isSettled else { return }
       pendingActivation = nil
       guard !items.isEmpty else { return }
       activate(at: selected)
