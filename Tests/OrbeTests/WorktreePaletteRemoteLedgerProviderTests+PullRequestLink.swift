@@ -95,4 +95,51 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     XCTAssertEqual(resolve([root: "main"]), [:])
     XCTAssertFalse(calls("H").contains("main"), "既定ブランチの PR は問い合わせない")
   }
+
+  /// ブランチと PR の答え（ブランチを見ない worktree はキーごと無い）。
+  private func resolveBranches(_ worktrees: [String: String?]) -> [String:
+    WorktreeBranchPullRequest]?
+  {
+    var found: [String: WorktreeBranchPullRequest]?
+    WorktreePullRequestResolver(gitHub: GitHubCLI(), cache: GitHubCache()).resolve(
+      worktrees: worktrees
+    ) {
+      found = $0
+    }
+    XCTAssertTrue(pump { found != nil })
+    return found
+  }
+
+  /// 期待が未確定（無い・既定ブランチ）なら、worktree の今のブランチ（既定ブランチ以外）を見てその PR を引き、
+  /// ブランチも答える。期待が確定していれば、そのブランチにいる間だけ答える。
+  func testAnUnconfirmedExpectationAnswersTheCurrentBranchAndItsPullRequest() throws {
+    addRemote("origin", "me/r")
+    try answer("me/r", found: "me/r")
+    XCTAssertTrue(git(["checkout", "-q", "-b", "feat"]).isSuccess)
+    try serveBranchPullRequests(
+      "feat", "[\(branchPR(7, head: "feat", state: "OPEN", from: "me/r", url: pullURL("me/r", 7)))]"
+    )
+    let feat = WorktreeBranchPullRequest(
+      branch: "feat", pullRequest: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 7)))
+
+    XCTAssertEqual(resolveBranches([root: nil]), [root: feat], "記録が無い")
+    XCTAssertEqual(resolveBranches([root: "main"]), [root: feat], "既定ブランチの記録")
+    XCTAssertEqual(resolveBranches([root: "feat"]), [root: feat], "確定した記録と同じブランチ")
+    XCTAssertTrue(git(["checkout", "-q", "-b", "other"]).isSuccess)
+    XCTAssertEqual(resolveBranches([root: "feat"]), [:], "確定した記録と別のブランチ")
+    XCTAssertEqual(
+      resolveBranches([root: nil]),
+      [root: WorktreeBranchPullRequest(branch: "other", pullRequest: nil)],
+      "PR の無いブランチも答える")
+  }
+
+  /// GitHub に届かないリポジトリでも、未確定の期待にはブランチを答える（PR だけが無い）。
+  func testAnUnconfirmedExpectationAnswersTheBranchWithoutGitHub() throws {
+    XCTAssertTrue(git(["checkout", "-q", "-b", "feat"]).isSuccess)
+
+    XCTAssertEqual(
+      resolveBranches([root: nil]),
+      [root: WorktreeBranchPullRequest(branch: "feat", pullRequest: nil)])
+    XCTAssertTrue(calls("H").isEmpty, "PR は問い合わせない")
+  }
 }
