@@ -308,6 +308,7 @@ final class WorktreePaletteDataProvider {
   private var newBranchRules: WorktreeNewBranchRules {
     WorktreeNewBranchRules(
       localBranches: localBranches.map(\.name), remoteBranches: remoteBranches.map(\.name),
-      worktreePaths: worktrees.map(\.path), template: worktreeTemplate, repoPath: worktreeBase)
+      remoteBranchesLanded: remoteFetchLanded, worktreePaths: worktrees.map(\.path),
+      template: worktreeTemplate, repoPath: worktreeBase)
   }
 }

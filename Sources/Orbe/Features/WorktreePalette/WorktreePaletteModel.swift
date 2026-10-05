@@ -286,18 +286,18 @@ import SwiftUI
     case .open(let destination):
       onExecute(destination)
     case .createBranch(let name):
-      // 答え待ち（直前の答えで出ている行）は作らない。↵ は `activate()` が預かるので、来るのはタップだけ。
-      guard !isAwaitingBranchNameAnswer, let choice = selectedBaseChoice else { return }
+      // 出すかが決まらない作成行は作らない。↵ は `activate()` が預かるので、来るのはタップだけ。
+      guard !isCreateRowUndecided, let choice = selectedBaseChoice else { return }
       guard let base = choice.base else { return enterBasePicker() }
       onExecute(.newBranch(name: name, base: base))
     }
   }
 
-  /// 行が決まっているか。決まっていないのは、初回の一覧が届く前と、先頭の欄がまだ決まらない間と、今の入力への
-  /// 有効性の答えが無いまま作成行（または行が 1 つも無い状態）を選んでいるとき。
+  /// 行が決まっているか。決まっていないのは、初回の一覧が届く前と、先頭の欄がまだ決まらない間と、作成行を
+  /// 出すかが決まらないまま作成行（または行が 1 つも無い状態）を選んでいるとき。
   var isSettled: Bool {
     guard hasLoadedOnce, !taskTargetPending else { return false }
-    guard isAwaitingBranchNameAnswer else { return true }
+    guard isCreateRowUndecided else { return true }
     switch selectedItem?.action {
     case .createBranch, nil: return false
     case .open, .clean: return true

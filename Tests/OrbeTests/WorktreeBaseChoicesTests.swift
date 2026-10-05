@@ -46,7 +46,7 @@ final class WorktreeBaseChoicesTests: OrbeTestCase {
   // MARK: - 作成行の衝突の規則
 
   private let rules = WorktreeNewBranchRules(
-    localBranches: ["main"], remoteBranches: ["origin/feat/x"],
+    localBranches: ["main"], remoteBranches: ["origin/feat/x"], remoteBranchesLanded: true,
     worktreePaths: ["/src/repo-worktrees/issue-1"],
     template: WorktreePathTemplate.defaultTemplate, repoPath: "/src/repo")
 

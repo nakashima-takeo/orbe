@@ -59,7 +59,7 @@ extension DesignSceneFixtures {
     let home = NSHomeDirectory()
     return WorktreeNewBranchRules(
       localBranches: ["issue/212", "pr-214", "perf/render-batching", "fix/login-blank"],
-      remoteBranches: ["origin/feat/fetch-progress"],
+      remoteBranches: ["origin/feat/fetch-progress"], remoteBranchesLanded: true,
       worktreePaths: ["\(home)/wt/issue-212", "\(home)/wt/pr-214"],
       template: "~/wt/{slug}", repoPath: "\(home)/src/orbe")
   }

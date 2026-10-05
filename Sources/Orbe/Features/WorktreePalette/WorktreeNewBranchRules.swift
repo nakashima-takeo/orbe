@@ -5,8 +5,11 @@ import Foundation
 struct WorktreeNewBranchRules: Equatable {
   /// ローカルブランチの名前（worktree で checkout 中のものを含む）。
   let localNames: Set<String>
-  /// 作れない名前。ローカルブランチと、リモートブランチの行が作るローカル名——リモートブランチと同じ名前を別のベースから切ると、その行と同じ名前の別物になる。
+  /// 作れない名前。ローカルブランチと、リモートブランチの行が作るローカル名——リモートブランチと同じ名前を
+  /// 別のベースから切ると、その行と同じ名前の別物になる。
   let takenNames: Set<String>
+  /// リモートブランチの列挙が、提示時の `fetch --prune` の着地後の値か。
+  let remoteBranchesLanded: Bool
   /// 既存の worktree のパス（`canonical` で解いた値）。
   let worktreePaths: Set<String>
   /// 作成先のテンプレート（設定 `worktree-dir` の実効値）と、それを解決する repo の場所。
@@ -15,11 +18,12 @@ struct WorktreeNewBranchRules: Equatable {
 
   /// `remoteBranches` はリモートブランチの名前（`origin/feat/x`）。
   init(
-    localBranches: [String], remoteBranches: [String], worktreePaths: [String], template: String,
-    repoPath: String
+    localBranches: [String], remoteBranches: [String], remoteBranchesLanded: Bool,
+    worktreePaths: [String], template: String, repoPath: String
   ) {
     localNames = Set(localBranches)
     takenNames = localNames.union(remoteBranches.map(GitBranch.localName(fromRemote:)))
+    self.remoteBranchesLanded = remoteBranchesLanded
     self.worktreePaths = Set(worktreePaths.map(Self.canonical))
     self.template = template
     self.repoPath = repoPath
@@ -36,6 +40,12 @@ struct WorktreeNewBranchRules: Equatable {
     let path = WorktreePathTemplate.resolve(
       template: template, repoPath: repoPath, slug: WorktreePathTemplate.slug(forBranch: name))
     return !worktreePaths.contains(Self.canonical(path))
+  }
+
+  /// その名前の作成行を出すかが、まだ決まらないか。手元のどのブランチとも違う名前は、提示時の fetch が
+  /// 着地するまでリモートに現れうる——現れれば正しい入口はそのリモートブランチの行で、同じ名前の別物を作らない。
+  func awaitsRemoteBranches(_ name: String) -> Bool {
+    !remoteBranchesLanded && !takenNames.contains(name)
   }
 
   /// 同じ場所かを比べる形。実在する祖先までを `GitWorktreeRoot.normalizedPath`（symlink と
