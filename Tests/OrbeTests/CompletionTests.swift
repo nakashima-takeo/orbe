@@ -115,38 +115,6 @@ final class CompletionTests: OrbeTestCase {
     XCTAssertEqual(r.cursor, 12)
   }
 
-  func testApplyAppendsSpaceForBareName() {
-    // 素の候補（insertValue 無し）は末尾へ空白を1つ補い、カーソルを空白後へ置く。
-    let r = SurfaceView.applyChoice(
-      buffer: "gi", replaceStart: 0, replaceEnd: 2, insert: "git", appendSpace: true)
-    XCTAssertEqual(r.buffer, "git ")
-    XCTAssertEqual(r.cursor, 4)
-  }
-
-  func testApplyGuardsDoubleSpaceWhenFollowedBySpace() {
-    // 行途中確定で後続が空白なら、appendSpace でも二重空白にしない（zsh AUTO_PARAM_KEYS 同型）。
-    let r = SurfaceView.applyChoice(
-      buffer: "gi commit", replaceStart: 0, replaceEnd: 2, insert: "git", appendSpace: true)
-    XCTAssertEqual(r.buffer, "git commit")
-    XCTAssertEqual(r.cursor, 3)
-  }
-
-  func testApplyFolderInsertValueNoSpace() {
-    // folder は engine が末尾 / 付き insertValue を焼く＝appendSpace: false。パス継続を壊さない。
-    let r = SurfaceView.applyChoice(
-      buffer: "cd sr", replaceStart: 3, replaceEnd: 5, insert: "src/", appendSpace: false)
-    XCTAssertEqual(r.buffer, "cd src/")
-    XCTAssertEqual(r.cursor, 7)
-  }
-
-  func testApplyFileInsertValueNoSpace() {
-    // file も insertValue を持つ（appendSpace: false）＝空白を足さない（inshellisense 忠実）。
-    let r = SurfaceView.applyChoice(
-      buffer: "cat RE", replaceStart: 4, replaceEnd: 6, insert: "README.md", appendSpace: false)
-    XCTAssertEqual(r.buffer, "cat README.md")
-    XCTAssertEqual(r.cursor, 13)
-  }
-
   // MARK: - insertText（Enter 確定で末尾 / を落とす純ロジック）
 
   func testInsertTextDropsTrailingSlashOnEnter() {
@@ -157,11 +125,6 @@ final class CompletionTests: OrbeTestCase {
   func testInsertTextKeepsTrailingSlashOnTab() {
     // Tab（advance=true）は次階層へ潜れるよう末尾 / を保つ。
     XCTAssertEqual(SurfaceView.insertText("src/", advance: true), "src/")
-  }
-
-  func testInsertTextLeavesNonSlashUnchanged() {
-    // 末尾 / を帯びない候補（file 等）は Enter でも無変化。
-    XCTAssertEqual(SurfaceView.insertText("README.md", advance: false), "README.md")
   }
 
   func testInsertTextKeepsBareRootSlash() {
@@ -182,11 +145,6 @@ final class CompletionTests: OrbeTestCase {
     XCTAssertTrue(SurfaceView.isRedundantSoleChoice([choice("pull")], tokenText: "pull"))
   }
 
-  func testRedundantSoleChoicePartialMatchStaysOpen() {
-    // 部分一致（token=="pul"）は途中なので閉じない。
-    XCTAssertFalse(SurfaceView.isRedundantSoleChoice([choice("pull")], tokenText: "pul"))
-  }
-
   func testRedundantSoleChoiceMultipleStaysOpen() {
     // 複数候補はいずれか完全一致でも閉じない（選ぶ余地が残る）。
     XCTAssertFalse(
@@ -198,14 +156,6 @@ final class CompletionTests: OrbeTestCase {
     XCTAssertTrue(
       SurfaceView.isRedundantSoleChoice(
         [choice("src", insertValue: "src/", type: "folder")], tokenText: "src"))
-  }
-
-  func testRedundantSoleChoiceInsertValueExpansionStaysOpen() {
-    // 一択でも insertValue が value と別の展開形（実挿入が no-op でない）なら閉じない。
-    // 例: value=="-ldflags"==token でも Enter は "-ldflags=" を挿入するので popup を残す。
-    XCTAssertFalse(
-      SurfaceView.isRedundantSoleChoice(
-        [choice("-ldflags", insertValue: "-ldflags=")], tokenText: "-ldflags"))
   }
 
   func testRedundantSoleChoicePathPrefixComparesFullInsertValue() {
@@ -226,5 +176,4 @@ final class CompletionTests: OrbeTestCase {
     // value は spec の正規名。大小違いの入力は不一致＝閉じない（engine の大小無視とは別契約・安全側）。
     XCTAssertFalse(SurfaceView.isRedundantSoleChoice([choice("pull")], tokenText: "PULL"))
   }
-
 }

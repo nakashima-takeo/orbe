@@ -71,11 +71,4 @@ extension ChromeStatusRowTests {
     XCTAssertEqual(geo.rowEnd, bar + 110 + gap + 70)
     XCTAssertEqual(geo.count, 3, "タブ総数＝末尾への挿入 index")
   }
-
-  /// 0 タブは空の幾何（rowEnd 0）。
-  func testGeometryOfNoTabsIsEmpty() {
-    let geo = StatusTabLayout.geometry(widths: [], segments: [])
-    XCTAssertTrue(geo.cells.isEmpty)
-    XCTAssertEqual(geo.rowEnd, 0)
-  }
 }

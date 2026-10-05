@@ -34,18 +34,8 @@ final class MainMenuTests: OrbeTestCase {
       }
       XCTAssertEqual(item.action, selector, "⌘\(key) は \(selector) を responder chain へ配る")
       XCTAssertNil(item.target, "target=nil＝first responder（field editor 等）へ配送")
-      XCTAssertTrue(
-        item.keyEquivalentModifierMask.contains(.command), "⌘ 修飾で発火")
+      XCTAssertEqual(item.keyEquivalentModifierMask, [.command], "⌘\(key)（Shift/Opt 無し）で発火")
     }
-  }
-
-  func testPasteItemIsCommandVOnly() {
-    let edit = editMenu()
-    guard let paste = edit.items.first(where: { $0.action == Selector(("paste:")) }) else {
-      return XCTFail("ペースト項目が無い")
-    }
-    XCTAssertEqual(paste.keyEquivalent, "v")
-    XCTAssertEqual(paste.keyEquivalentModifierMask, [.command], "⌘V（Shift/Opt 無し）")
   }
 
   /// build(language:) が言語を各 title へ通す（回帰＝language 引数のドロップ / 文言ハードコード）。
@@ -64,9 +54,9 @@ final class MainMenuTests: OrbeTestCase {
     XCTAssertEqual(editMenuTitle(.en), "Edit")
   }
 
-  /// ⌘H は chrome（ヘルプオーバーレイ）が先取りするため、Hide 項目は無割当で残す
-  /// （keyEquivalent を残すとメニュー表記が嘘になる）。⌘⌥H の「ほかを隠す」は従来どおり。
-  func testHideItemHasNoKeyEquivalent() {
+  /// アプリメニューのキー割当。⌘Q で終了。⌘H は chrome（ヘルプオーバーレイ）が先取りするため、
+  /// Hide 項目は無割当で残す（keyEquivalent を残すとメニュー表記が嘘になる）。⌘⌥H の「ほかを隠す」は従来どおり。
+  func testAppMenuKeyEquivalents() {
     let main = MainMenu.build(appName: "Orbe", language: .en)
     guard let appMenu = main.items[0].submenu else {
       return XCTFail("items[0] がアプリメニューでない")
@@ -76,6 +66,8 @@ final class MainMenuTests: OrbeTestCase {
       return XCTFail("Hide 項目が無い")
     }
     XCTAssertEqual(hide.keyEquivalent, "", "Hide は無割当（⌘H はヘルプが使う）")
+    let quit = appMenu.items.first { $0.action == #selector(NSApplication.terminate(_:)) }
+    XCTAssertEqual(quit?.keyEquivalent, "q", "⌘Q で終了")
     guard
       let hideOthers = appMenu.items.first(where: {
         $0.action == #selector(NSApplication.hideOtherApplications(_:))
@@ -85,19 +77,5 @@ final class MainMenuTests: OrbeTestCase {
     }
     XCTAssertEqual(hideOthers.keyEquivalent, "h")
     XCTAssertEqual(hideOthers.keyEquivalentModifierMask, [.command, .option], "⌘⌥H は現状維持")
-  }
-
-  func testAppMenuIsFirstAndHasQuit() {
-    let main = MainMenu.build(appName: "orbe", language: .en)
-    XCTAssertGreaterThanOrEqual(main.items.count, 2, "アプリメニュー＋Edit メニュー")
-    guard let appMenu = main.items[0].submenu else {
-      return XCTFail("items[0] がアプリメニューでない")
-    }
-    guard
-      let quit = appMenu.items.first(where: { $0.action == #selector(NSApplication.terminate(_:)) })
-    else {
-      return XCTFail("終了項目が無い")
-    }
-    XCTAssertEqual(quit.keyEquivalent, "q", "⌘Q で終了")
   }
 }

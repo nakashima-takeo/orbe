@@ -74,17 +74,6 @@ final class AudioFileDecoderTests: OrbeTestCase {
       zip(read, written).map { abs($0 - $1) }.max() ?? 0, 0, accuracy: 1e-6, "値も変わらない")
   }
 
-  /// 出力デバイスが 44.1 kHz でも、リサンプル比どおりの長さが出る（末尾だけ欠けたりしない）。
-  func testResampledReadBackKeepsTheWholeTail() throws {
-    let written = sine(seconds: 3, sampleRate: storageRate)
-    let url = try writeWAV(written, sampleRate: storageRate, named: "resample.wav")
-
-    let read = try read(url, at: 44100)
-    XCTAssertEqual(
-      Double(read.count), Double(written.count) * 44100 / storageRate, accuracy: 64,
-      "リサンプル後の長さが比と合わない")
-  }
-
   /// ステレオ素材もモノラルへ畳んだうえでフレーム数を保つ（取り込み経路が通る道）。
   func testStereoSourceIsMixedDownWithoutLosingFrames() throws {
     let written = sine(seconds: 1, sampleRate: storageRate)

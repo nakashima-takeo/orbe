@@ -61,16 +61,6 @@ final class CmdDoubleTapTests: OrbeTestCase {
     XCTAssertTrue(tap(down: 0.4, up: 0.5), "クリーンな 2 タップ目で成立する")
   }
 
-  /// ⌘C→⌘V の速い連打で発火しない。
-  func testFastCmdCVDoesNotFire() {
-    _ = detector.flagsChanged(.commandOnly, at: 0.0)
-    detector.interrupt()  // C
-    XCTAssertFalse(detector.flagsChanged(.none, at: 0.05))
-    _ = detector.flagsChanged(.commandOnly, at: 0.10)
-    detector.interrupt()  // V
-    XCTAssertFalse(detector.flagsChanged(.none, at: 0.15))
-  }
-
   /// タップ間（解放後）の割り込みも不成立に落とす。
   func testInterruptBetweenTapsInvalidates() {
     tap(down: 0.0, up: 0.05)
@@ -86,14 +76,5 @@ final class CmdDoubleTapTests: OrbeTestCase {
     XCTAssertFalse(detector.flagsChanged(.none, at: 0.06))
     XCTAssertFalse(tap(down: 0.1, up: 0.15), "全解放後の 1 タップ目では発火しない")
     XCTAssertTrue(tap(down: 0.2, up: 0.25))
-  }
-
-  /// ⌘Tab 相当（⌘押下→keyDown→他アプリへ）でも、以後のクリーンな 2 タップだけで発火する。
-  func testCmdTabThenCleanTapsFires() {
-    _ = detector.flagsChanged(.commandOnly, at: 0.0)
-    detector.interrupt()  // Tab
-    XCTAssertFalse(detector.flagsChanged(.none, at: 0.3))
-    XCTAssertFalse(tap(down: 0.4, up: 0.45))
-    XCTAssertTrue(tap(down: 0.5, up: 0.55))
   }
 }

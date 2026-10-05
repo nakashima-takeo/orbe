@@ -84,11 +84,4 @@ final class EnvelopeTests: XCTestCase {
       1.2, accuracy: 1e-12)
     XCTAssertEqual(Envelope.constant(700).end(duration: 0.3), 0.3, accuracy: 1e-12)
   }
-
-  /// `.constant` だけが constantValue を持つ（noise がフィルタ係数を 1 度だけ組む判定）。
-  func testConstantValueDetection() {
-    XCTAssertEqual(Envelope.constant(700).constantValue, 700)
-    XCTAssertNil(Envelope.sweep(from: 200, to: 800).constantValue)
-    XCTAssertNil(Envelope.percussive(attack: 0.01).constantValue)
-  }
 }

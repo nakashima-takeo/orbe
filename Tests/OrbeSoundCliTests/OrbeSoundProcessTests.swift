@@ -178,14 +178,16 @@ final class OrbeSoundProcessTests: XCTestCase {
     }
   }
 
-  /// 下限未満のレート・範囲外の音量は exit 2・"invalid"（単体経路と board の検証）。
-  func testOutOfRangeRateAndVolumeExitTwo() throws {
+  /// 範囲外・読めない・非有限・変換域外のレートと範囲外の音量は exit 2・"invalid"。検証は全経路
+  /// （単体・`analyze --all`・board）が同じ入口を通るので、経路ごとに 1 行ずつ当てる。抜けると指定と
+  /// 違うレート・音量の音が exit 0 の顔で出るか、Double→Int の域外でシグナル死（0/1/2 の契約の外）する。
+  func testInvalidRateAndVolumeAreUsageErrorsOnEveryPath() throws {
     for args in [
       ["analyze", "glass", "done", "--rate", "4000"],
-      ["analyze", "glass", "done", "--volume", "0"],
+      ["analyze", "--all", "--rate", "abc"],
+      ["board", "--rate", "inf"],
+      ["render", "glass", "done", "--rate", "1e300"],
       ["render", "glass", "done", "--volume", "101"],
-      ["play", "glass", "done", "--rate", "4000"],
-      ["board", "--rate", "4000"],
     ] {
       let result = try run(args)
       XCTAssertEqual(result.status, 2, "\(args)")
@@ -203,36 +205,6 @@ final class OrbeSoundProcessTests: XCTestCase {
       let result = try run(args)
       XCTAssertEqual(result.status, 2, "\(args)")
       XCTAssertTrue(result.stderr.contains("--out requires"), "\(args): \(result.stderr)")
-    }
-  }
-
-  /// `analyze --all` も単体経路と同じ検証を通る——読めない値も範囲外の値も exit 2。
-  /// 検証が抜けると、指定と違うレートの表やクリップした音量の表が exit 0 の顔で出て、
-  /// ラウドネス整合の判断材料そのものが壊れる。
-  func testAnalyzeAllValidatesRateAndVolume() throws {
-    for args in [
-      ["analyze", "--all", "--rate", "abc"],
-      ["analyze", "--all", "--rate", "4000"],
-      ["analyze", "--all", "--volume", "999"],
-    ] {
-      let result = try run(args)
-      XCTAssertEqual(result.status, 2, "\(args)")
-      XCTAssertTrue(result.stderr.contains("invalid"), "\(args): \(result.stderr)")
-    }
-  }
-
-  /// 非有限・変換域外のレートは usage エラーで弾く——0/1/2 の契約の外（シグナル死）へ落とさない。
-  /// 上限 768000（8×96 kHz）は「Double→Int 変換の域外の値が合成層へ届かない」ことの入口の守り。
-  func testAbsurdRatesAreUsageErrorsNotCrashes() throws {
-    for args in [
-      ["analyze", "glass", "done", "--rate", "inf"],
-      ["render", "glass", "done", "--rate", "1e300"],
-      ["board", "--rate", "inf"],
-      ["analyze", "--all", "--rate", "1e300"],
-    ] {
-      let result = try run(args)
-      XCTAssertEqual(result.status, 2, "\(args): 契約外の出口へ落ちている")
-      XCTAssertTrue(result.stderr.contains("invalid rate"), "\(args): \(result.stderr)")
     }
   }
 

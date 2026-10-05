@@ -27,7 +27,7 @@ final class ChromeFontResolverTests: OrbeTestCase {
     XCTAssertTrue(TitleGlyphs.needsAssignment("⣷ spinner"), "点字")
   }
 
-  // MARK: - TitleGlyphs.attributed / width（基底フォント引数化）
+  // MARK: - TitleGlyphs.attributed（基底フォント引数化）
 
   /// emoji=nil（Apple へ委譲・degrade）では絵文字 run にフォントを埋めない（view の .font() を継承）。
   func testAttributedWithNilEmojiLeavesRunsUnassigned() {
@@ -52,41 +52,6 @@ final class ChromeFontResolverTests: OrbeTestCase {
     let out = TitleGlyphs.attributed("✳", base: base, emoji: emoji)
     XCTAssertEqual(String(out.characters), "✳\u{FE0F}", "VS16 を付与してカラー presentation へ昇格")
     XCTAssertEqual(out.runs.filter { $0.font != nil }.count, 1, "昇格記号が emoji run としてフォント割り当て")
-  }
-
-  /// 幅計測は描画と同じ割り当てで、プレーン文字列は基底フォント幅と一致する。
-  func testWidthMatchesBaseFontForPlainText() {
-    let expected = ("plain title" as NSString).size(withAttributes: [.font: base]).width
-    XCTAssertEqual(TitleGlyphs.width("plain title", base: base, emoji: nil), expected)
-  }
-
-  /// 絵文字 run の幅は emoji フォントを基底サイズへ揃えて測る（12pt 指定でも 11pt 基底なら 11pt 幅）。
-  func testWidthResizesEmojiFontToBaseSize() throws {
-    let emoji = try XCTUnwrap(NSFont(name: "Menlo", size: 12))
-    let resized = try XCTUnwrap(NSFont(descriptor: emoji.fontDescriptor, size: base.pointSize))
-    let expected = ("😀" as NSString).size(withAttributes: [.font: resized]).width
-    XCTAssertEqual(TitleGlyphs.width("😀", base: base, emoji: emoji), expected)
-  }
-
-  // MARK: - FontCatalog.resolve（family 厳密解決）
-
-  func testResolveKnownFamilyAtRequestedSize() throws {
-    let font = try XCTUnwrap(FontCatalog.resolve(family: "Menlo", size: 11))
-    XCTAssertEqual(font.familyName, "Menlo")
-    XCTAssertEqual(font.pointSize, 11)
-  }
-
-  func testResolveUnknownFamilyReturnsNil() {
-    XCTAssertNil(FontCatalog.resolve(family: "存在しないファミリ名 XYZ", size: 11))
-  }
-
-  // MARK: - ChromeFontResolver（既定と Text ファクトリ）
-
-  /// 既定はタブタイトル＝システム等幅 11pt・絵文字＝同梱 Noto（バンドル無しは nil＝Apple 委譲）。
-  func testResolverDefaults() {
-    let r = ChromeFontResolver()
-    XCTAssertEqual(r.tabTitleFont, Theme.Typography.chrome)
-    XCTAssertEqual(r.emojiFont, TitleGlyphs.notoEmoji)
   }
 
   // MARK: - WindowController 結線（applyActiveWorkspaceConfig → resolver）

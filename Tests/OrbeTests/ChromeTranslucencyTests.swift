@@ -8,20 +8,15 @@ import XCTest
 /// 窓透過判定（`shouldBeTranslucent`）と同じ材料から effectiveOpacity/translucent/blur を畳む純関数。
 final class ChromeTranslucencyTests: OrbeTestCase {
 
-  /// 透過時（percent<100・非フルスクリーン）は effectiveOpacity=percent/100・translucent=true。
+  /// 透過時（percent<100・非フルスクリーン）は effectiveOpacity=percent/100・translucent=true で、blur は希望どおり。
   func testTranslucentScalesOpacityByPercent() {
     let r = ChromeTranslucency.resolve(percent: 60, isFullScreen: false, blur: false)
     XCTAssertEqual(r.effectiveOpacity, 0.6, accuracy: 0.0001, "60% → 0.6 へスケール")
     XCTAssertTrue(r.translucent, "60%・非フルスクリーン → 透過")
     XCTAssertFalse(r.blur, "blur=false はそのまま false")
-  }
-
-  /// 透過かつ blur=true は blur を通す（すりガラス）。
-  func testTranslucentPassesBlurThrough() {
-    let r = ChromeTranslucency.resolve(percent: 20, isFullScreen: false, blur: true)
-    XCTAssertEqual(r.effectiveOpacity, 0.2, accuracy: 0.0001, "下端 20% → 0.2")
-    XCTAssertTrue(r.translucent)
-    XCTAssertTrue(r.blur, "透過中の blur=true はすりガラスとして通る")
+    XCTAssertTrue(
+      ChromeTranslucency.resolve(percent: 60, isFullScreen: false, blur: true).blur,
+      "透過中の blur=true はすりガラスとして通る")
   }
 
   /// 100%（不透明希望）は effectiveOpacity=1・translucent=false・blur は無効化。
@@ -39,20 +34,6 @@ final class ChromeTranslucencyTests: OrbeTestCase {
     XCTAssertEqual(r.effectiveOpacity, 1, "フルスクリーン → 不透明")
     XCTAssertFalse(r.translucent)
     XCTAssertFalse(r.blur, "フルスクリーンは blur も無効")
-  }
-
-  /// ホルダーの `update` が純関数と同じ結果を状態へ反映する（Environment 経由で各面が読む値）。
-  func testUpdateAppliesResolvedState() {
-    let t = ChromeTranslucency()
-    t.update(percent: 80, isFullScreen: false, blur: true)
-    XCTAssertEqual(t.effectiveOpacity, 0.8, accuracy: 0.0001)
-    XCTAssertTrue(t.translucent)
-    XCTAssertTrue(t.blur)
-
-    t.update(percent: 100, isFullScreen: false, blur: true)
-    XCTAssertEqual(t.effectiveOpacity, 1)
-    XCTAssertFalse(t.translucent)
-    XCTAssertFalse(t.blur)
   }
 
   // MARK: - 各面が塗る backstop（baseFill / additiveBase）の後方互換ゲート

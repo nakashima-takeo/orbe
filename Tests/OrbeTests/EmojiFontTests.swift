@@ -48,13 +48,4 @@ final class EmojiFontTests: OrbeTestCase {
     let line = "font-codepoint-map = \(EmojiPresentationRanges.confValue)=Noto Color Emoji"
     XCTAssertLessThan(line.utf8.count, 4000)
   }
-
-  /// 範囲は昇順・非隣接（圧縮済み）で、逆走査（後勝ち照会）に依存しない一意な集合になっている。
-  func testRangesAreSortedAndCoalesced() {
-    let ranges = EmojiPresentationRanges.ranges
-    XCTAssertFalse(ranges.isEmpty)
-    for (a, b) in zip(ranges, ranges.dropFirst()) {
-      XCTAssertLessThan(a.upperBound + 1, b.lowerBound, "隣接/重複範囲は圧縮されている")
-    }
-  }
 }

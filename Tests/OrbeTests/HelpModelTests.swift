@@ -14,6 +14,7 @@ final class HelpModelTests: OrbeTestCase {
   /// 完全一致だけがハイライトする（修飾のみ・部分一致は対象外）。
   /// 修飾のみを外すのは ⌘⌘（combo が ⌘ 単独）が載って以降も同じ——許すと他のショートカットを
   /// 試し押しする途中の ⌘ 押下で毎回ハイライトと自動スクロールが走る（点灯は従来どおり効く）。
+  /// トップビューに該当行があればトップの行 id でハイライトし、ビューは変えない。
   func testExactMatchOnly() {
     let m = model()
     m.pressed = ["cmd"]
@@ -27,6 +28,7 @@ final class HelpModelTests: OrbeTestCase {
 
     m.pressed = ["cmd", "t"]
     m.syncPressedMatch(l10n)
+    XCTAssertTrue(m.isTopView, "トップに該当行があればビューは変えない")
     XCTAssertEqual(m.pressedRowIDs, ["top/\(L10nKey.helpCatWorkspaceTabs.rawValue)/⌘T"])
     XCTAssertEqual(m.revealRowID, "top/\(L10nKey.helpCatWorkspaceTabs.rawValue)/⌘T")
   }
@@ -53,15 +55,6 @@ final class HelpModelTests: OrbeTestCase {
         "\(L10nKey.helpCatTerminal.rawValue)/⌘↓",
       ])
     XCTAssertEqual(m.revealRowID, "\(L10nKey.helpCatTerminal.rawValue)/⌘↑")
-  }
-
-  /// トップビューに該当行があればトップの行 id でハイライトし、ビューは変えない。
-  func testTopViewMatchStaysTop() {
-    let m = model()
-    m.pressed = ["cmd", "shift", "a"]
-    m.syncPressedMatch(l10n)
-    XCTAssertTrue(m.isTopView)
-    XCTAssertEqual(m.pressedRowIDs, ["top/\(L10nKey.helpCatAgents.rawValue)/⌘⇧A"])
   }
 
   /// トップビューに無い combo（⌘R）は「すべて」一覧へ自動遷移して見せる。
