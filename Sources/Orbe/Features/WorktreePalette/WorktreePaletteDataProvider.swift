@@ -307,8 +307,7 @@ final class WorktreePaletteDataProvider {
   /// 作成行の衝突の規則（作成先は作成経路と同じテンプレートと repo の場所で解く）。
   private var newBranchRules: WorktreeNewBranchRules {
     WorktreeNewBranchRules(
-      takenNames: Set(localBranches.map(\.name)).union(
-        remoteBranches.map { GitBranch.localName(fromRemote: $0.name) }),
+      localBranches: localBranches.map(\.name), remoteBranches: remoteBranches.map(\.name),
       worktreePaths: worktrees.map(\.path), template: worktreeTemplate, repoPath: worktreeBase)
   }
 }

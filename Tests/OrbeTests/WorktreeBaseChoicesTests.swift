@@ -46,7 +46,8 @@ final class WorktreeBaseChoicesTests: OrbeTestCase {
   // MARK: - 作成行の衝突の規則
 
   private let rules = WorktreeNewBranchRules(
-    takenNames: ["main", "feat/x"], worktreePaths: ["/src/repo-worktrees/issue-1"],
+    localBranches: ["main"], remoteBranches: ["origin/feat/x"],
+    worktreePaths: ["/src/repo-worktrees/issue-1"],
     template: WorktreePathTemplate.defaultTemplate, repoPath: "/src/repo")
 
   func testTakenNamesAreNotCreatable() {

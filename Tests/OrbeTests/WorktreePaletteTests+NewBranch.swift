@@ -14,8 +14,8 @@ extension WorktreePaletteTests {
     let input = WorktreePaletteSectionBuilder.Input.designSample
     let p = makeModel(input)
     p.newBranchRules = WorktreeNewBranchRules(
-      takenNames: Set(input.localBranches.map(\.name)).union(
-        input.remoteBranches.map { GitBranch.localName(fromRemote: $0.name) }),
+      localBranches: input.localBranches.map(\.name),
+      remoteBranches: input.remoteBranches.map(\.name),
       worktreePaths: input.worktrees.map(\.path), template: "~/wt/{slug}",
       repoPath: NSHomeDirectory() + "/src/orbe")
     p.baseFacts = WorktreeBaseFacts(
