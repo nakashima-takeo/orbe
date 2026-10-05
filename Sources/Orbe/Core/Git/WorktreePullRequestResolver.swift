@@ -5,7 +5,8 @@ import Foundation
 /// 等しいものだけを数える。選ぶのは open の最新、無ければ最新（`gh pr list` は作成日時の降順で返す）。
 ///
 /// worktree はリポジトリ（commonDir）ごとにまとめ、gh の可否・remote の一覧・正式名・台帳はリポジトリごとに
-/// 1 回だけ求め、ブランチの PR はその本数をまとめて引く。detached・既定ブランチの worktree、GitHub に
+/// 1 回だけ求め、ブランチの PR はその本数をまとめて引く。今のブランチが期待したブランチと違う worktree、
+/// detached・既定ブランチの worktree、GitHub に
 /// 届かない（GitHub でない・gh が無い・未認証）リポジトリ、同一性を確かめられないブランチは答えを持たない。
 /// 失敗（オフライン等）も答えが無いだけで、外に出さない。全メソッドはメインで呼ばれ、メインで返る。
 final class WorktreePullRequestResolver {
@@ -19,13 +20,13 @@ final class WorktreePullRequestResolver {
     self.cache = cache
   }
 
-  /// `worktrees`（worktree のパス）ごとの PR。答えの無い worktree はキーごと無い。
+  /// `worktrees`（worktree のパス → そこにいるはずのブランチ）ごとの PR。答えの無い worktree はキーごと無い。
   func resolve(
-    worktrees: [String], completion: @escaping ([String: GitHubItemID]) -> Void
+    worktrees: [String: String], completion: @escaping ([String: GitHubItemID]) -> Void
   ) {
     var repositories: [String: (repo: GitRepo, paths: [String])] = [:]
     let opened = DispatchGroup()
-    for path in worktrees {
+    for path in worktrees.keys {
       opened.enter()
       GitRepo.open(cwd: path, runner: runner) { repo in
         if let repo {
@@ -39,7 +40,7 @@ final class WorktreePullRequestResolver {
       let resolved = DispatchGroup()
       for (repo, paths) in repositories.values {
         resolved.enter()
-        self.resolve(repo, paths: paths) { answers in
+        self.resolve(repo, branches: worktrees.filter { paths.contains($0.key) }) { answers in
           found.merge(answers) { $1 }
           resolved.leave()
         }
@@ -48,9 +49,10 @@ final class WorktreePullRequestResolver {
     }
   }
 
-  /// リポジトリ 1 つ分。
+  /// リポジトリ 1 つ分（`expected` はパス → そこにいるはずのブランチ）。
   private func resolve(
-    _ repo: GitRepo, paths: [String], completion: @escaping ([String: GitHubItemID]) -> Void
+    _ repo: GitRepo, branches expected: [String: String],
+    completion: @escaping ([String: GitHubItemID]) -> Void
   ) {
     var checkouts: [GitWorktree] = []
     var localBranches: [GitBranch] = []
@@ -84,13 +86,13 @@ final class WorktreePullRequestResolver {
       facts.leave()
     }
     facts.notify(queue: .main) {
-      // パス → ブランチ（detached・既定ブランチは PR の head として見ない）。
+      // パス → ブランチ（期待と違うブランチ・detached・既定ブランチは PR の head として見ない）。
       var branches: [String: String] = [:]
-      for path in paths {
+      for (path, expectedBranch) in expected {
         let key = GitWorktreeRoot.normalizedPath(path)
         guard
           let branch = checkouts.first(where: { GitWorktreeRoot.normalizedPath($0.path) == key })?
-            .branch, branch != defaultBranch
+            .branch, branch == expectedBranch, branch != defaultBranch
         else { continue }
         branches[path] = branch
       }

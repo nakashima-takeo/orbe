@@ -1,7 +1,8 @@
 import Foundation
 
 /// cwd が属する git worktree ルートを、`.git`（ディレクトリでも file でも＝linked worktree は file）を
-/// 親方向へ探して同期で求める。サブプロセスを使わない（OSC 7 はプロンプトごとに届く）。
+/// 親方向へ探して同期で求める（ルートが checkout しているブランチも同じく `.git` から読む）。サブプロセスを
+/// 使わない（OSC 7 はプロンプトごとに届く）。
 enum GitWorktreeRoot {
   /// 比較用の正準形（standardizingPath → resolvingSymlinksInPath）。symlink を解いたうえで先頭の
   /// `/private` を畳むので、返るのは実パスではなく短縮形（`/private/tmp` → `/tmp`）。OSC 7 の論理パス・
@@ -32,5 +33,32 @@ enum GitWorktreeRoot {
       guard parent != dir else { return nil }
       dir = parent
     }
+  }
+
+  /// worktree のルートが今 checkout しているブランチの名前。`.git`（ディレクトリ、linked worktree では
+  /// `gitdir:` を書いた file）が指す HEAD を同期で読む——サブプロセスを使わない（chrome の更新ごとに読む）。
+  /// detached・読めない・git の外なら nil。
+  static func branch(at root: String) -> String? {
+    let dotGit = (root as NSString).appendingPathComponent(".git")
+    var isDirectory: ObjCBool = false
+    guard FileManager.default.fileExists(atPath: dotGit, isDirectory: &isDirectory) else {
+      return nil
+    }
+    let gitDir: String
+    if isDirectory.boolValue {
+      gitDir = dotGit
+    } else {
+      guard let pointer = try? String(contentsOfFile: dotGit, encoding: .utf8),
+        let line = pointer.split(whereSeparator: \.isNewline).first, line.hasPrefix("gitdir: ")
+      else { return nil }
+      let path = String(line.dropFirst("gitdir: ".count))
+      gitDir = path.hasPrefix("/") ? path : (root as NSString).appendingPathComponent(path)
+    }
+    let head = (gitDir as NSString).appendingPathComponent("HEAD")
+    guard let content = try? String(contentsOfFile: head, encoding: .utf8),
+      let line = content.split(whereSeparator: \.isNewline).first,
+      line.hasPrefix("ref: refs/heads/")
+    else { return nil }
+    return String(line.dropFirst("ref: refs/heads/".count))
   }
 }

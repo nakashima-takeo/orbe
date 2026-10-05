@@ -36,11 +36,17 @@ extension WindowController {
   }
 
   /// PR の自動の結び付け（⌘⇧X を開いたとき）。完了していないタスクの、実在する worktree のブランチの PR を、
-  /// そのタスクの結び付きの末尾に足す。人が外した項目・既にどこかに付いている項目は足さない
-  /// （`TaskStore.linkFromBranch`）。答えが届くまでに worktree が別のタスクへ移っていれば、今の持ち主に足す。
+  /// そのタスクの結び付きの末尾に足す。worktree が付けたときと別のブランチにいる間は引かない（ブランチを
+  /// 切り替えて使い回す main worktree で、別の作業の PR を足さない）。人が外した項目・既にどこかに付いている
+  /// 項目は足さない（`TaskStore.linkFromBranch`）。答えが届くまでに worktree が別のタスクへ移っていれば、
+  /// 今の持ち主に足す。
   private func linkPullRequestsFromBranches() {
-    let worktrees = taskStore.tasks.filter { $0.status != .done }
-      .compactMap { $0.worktree.flatMap { $0.exists ? $0.path : nil } }
+    var worktrees: [String: String] = [:]
+    for task in taskStore.tasks where task.status != .done {
+      guard let worktree = task.worktree, worktree.exists, let branch = task.worktreeBranch
+      else { continue }
+      worktrees[worktree.path] = branch
+    }
     guard !worktrees.isEmpty else { return }
     WorktreePullRequestResolver().resolve(worktrees: worktrees) { [weak self] found in
       guard let self else { return }

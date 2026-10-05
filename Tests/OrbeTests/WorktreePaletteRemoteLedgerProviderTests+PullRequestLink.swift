@@ -10,7 +10,7 @@ import XCTest
 /// の PR を差し置いて付く。fork から本体へ出した PR が、fork のリポジトリの番号として付き、存在しない PR を
 /// 指す。main の worktree のタスクに、main を head にした無関係な PR が付く。
 extension WorktreePaletteRemoteLedgerProviderTests {
-  private func resolve(_ worktrees: [String]) -> [String: GitHubItemID]? {
+  private func resolve(_ worktrees: [String: String]) -> [String: GitHubItemID]? {
     var found: [String: GitHubItemID]?
     WorktreePullRequestResolver(gitHub: GitHubCLI(), cache: GitHubCache()).resolve(
       worktrees: worktrees
@@ -40,7 +40,8 @@ extension WorktreePaletteRemoteLedgerProviderTests {
           branchPR(7, head: "feat", state: "OPEN", from: "me/r", url: pullURL("org/r", 7)),
         ].joined(separator: ",") + "]")
 
-    XCTAssertEqual(resolve([path]), [path: try XCTUnwrap(GitHubItemID(repo: "org/r", number: 7))])
+    XCTAssertEqual(
+      resolve([path: "feat"]), [path: try XCTUnwrap(GitHubItemID(repo: "org/r", number: 7))])
   }
 
   func testWithoutAnOpenPullRequestTheLatestIsChosen() throws {
@@ -55,7 +56,8 @@ extension WorktreePaletteRemoteLedgerProviderTests {
           branchPR(4, head: "feat", state: "CLOSED", from: "me/r", url: pullURL("me/r", 4)),
         ].joined(separator: ",") + "]")
 
-    XCTAssertEqual(resolve([path]), [path: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 5))])
+    XCTAssertEqual(
+      resolve([path: "feat"]), [path: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 5))])
   }
 
   /// 既定ブランチの worktree は PR の head として見ない（問い合わせもしない）。
@@ -68,7 +70,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
       "main", "[\(branchPR(3, head: "main", state: "OPEN", from: "me/r", url: pullURL("me/r", 3)))]"
     )
 
-    XCTAssertEqual(resolve([root]), [:])
+    XCTAssertEqual(resolve([root: "main"]), [:])
     XCTAssertFalse(calls("H").contains("main"), "既定ブランチの PR は問い合わせない")
   }
 }

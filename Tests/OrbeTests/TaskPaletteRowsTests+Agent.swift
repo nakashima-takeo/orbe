@@ -11,7 +11,7 @@ extension TaskPaletteRowsTests {
   func testRowCarriesTheAgentOfItsWorktreeOnly() throws {
     let agent = WorktreeAgentActivity.Agent(
       name: "claude", state: .waiting, since: Date(timeIntervalSince1970: 0), tabId: 7,
-      tabTitle: "issue-221")
+      tabTitle: "issue-221", branch: nil)
     let agents = ["/r/wt/issue-221": agent]
     let rows = TaskPaletteRows.build(
       input(
@@ -32,7 +32,7 @@ extension TaskPaletteRowsTests {
     for state in AgentStateIcon.Kind.allCases {
       let agent = WorktreeAgentActivity.Agent(
         name: "claude", state: state, since: Date(timeIntervalSince1970: 0), tabId: 7,
-        tabTitle: "issue-221")
+        tabTitle: "issue-221", branch: nil)
       let rows = TaskPaletteRows.build(
         input([task(1) { $0.worktree = TaskWorktree(key: worktree) }], agents: [worktree: agent]))
       let row = try XCTUnwrap(

@@ -12,7 +12,7 @@ extension TaskPaletteCardKeyTests {
   func testEnterOnTheAgentGoesToItsTabOnce() {
     let agent = WorktreeAgentActivity.Agent(
       name: "claude", state: .waiting, since: DesignSceneFixtures.taskToday, tabId: 42,
-      tabTitle: "issue-221")
+      tabTitle: "issue-221", branch: nil)
     let model = TaskPaletteSamples.model(
       [TaskPaletteSamples.task(1, "a") { $0.worktree = TaskWorktree(key: "/r/wt/issue-221") }],
       agents: WorktreeAgentActivity(agents: ["/r/wt/issue-221": agent]))
@@ -39,7 +39,7 @@ extension TaskPaletteCardKeyTests {
     let agents = WorktreeAgentActivity(agents: [
       worktree: WorktreeAgentActivity.Agent(
         name: "claude", state: .working, since: DesignSceneFixtures.taskToday, tabId: 42,
-        tabTitle: "issue-221")
+        tabTitle: "issue-221", branch: nil)
     ])
     let model = TaskPaletteSamples.model(
       [TaskPaletteSamples.task(1, "a") { $0.worktree = TaskWorktree(key: worktree) }],
