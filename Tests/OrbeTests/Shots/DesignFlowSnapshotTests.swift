@@ -3,9 +3,10 @@ import XCTest
 
 @testable import Orbe
 
+/// 撮影道具であってテストではない（仕様を判定しない・CI では skip）。
 /// chrome の「振る舞い」を本物のアクションメソッドで駆動し、各ステップを連番 PNG にするフィルムストリップ。
 /// gallery（fixture で状態を置く静止）と 1 点だけ違う: 遷移後の状態を手で置かず、アクションが状態を生む過程を撮る。
-/// アクションが壊れればフィルムストリップに出る。dark のみ（振る舞いに集中・見た目の Light/Dark は gallery が担う）。
+/// dark のみ（振る舞いに集中・見た目の Light/Dark は gallery が担う）。
 /// 通常の `swift test` を汚さないよう `ORBE_FLOWS=1` でゲート。出力先 <repo>/.preview/flows（gitignore 済）。
 /// flow ごとに独立した test メソッドへ分け、`--filter "…/test<Flow>"` で 1 本だけ撮れる。
 @MainActor
