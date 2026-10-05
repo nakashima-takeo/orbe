@@ -185,4 +185,21 @@ extension TaskPaletteCardKeyTests {
     press(Key.escape, "\u{1B}", to: window)
     XCTAssertEqual(model.area, .list)
   }
+
+  /// 詳細の欄の編集中の ⌘↵ は何もしない——確定も改行もせず、編集が続く。
+  func testCommandEnterWhileEditingTheDescriptionDoesNothing() {
+    let model = model()
+    let window = mount(model)
+    enterDetail(model, at: .description, in: window)
+    press(Key.enter, "\r", to: window)
+    type("1", into: window)
+
+    press(Key.enter, "\r", .command, to: window)
+
+    XCTAssertNotNil(model.draft, "編集が続く")
+    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.description, "", "確定しない")
+    type("2", into: window)
+    press(Key.escape, "\u{1B}", to: window)
+    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.description, "12", "同じ編集が続き、改行は入らない")
+  }
 }
