@@ -88,6 +88,34 @@ final class GitWorktreeRootTests: OrbeTestCase {
       "不在の cwd を symlink 越しに渡してもルートは正準形")
   }
 
+  // MARK: - branch
+
+  /// ルートが checkout しているブランチを読む。linked worktree（`.git` が file）は指す先の HEAD を読む。
+  /// detached と git の外は nil。
+  func testBranchIsTheHeadOfTheRootIncludingALinkedWorktree() throws {
+    let repo = canonical("repo")
+    let linked = canonical("wt")
+    let git = { (args: [String], cwd: String) in
+      XCTAssertTrue(GitRunner.shared.runSync(args, cwd: cwd).isSuccess, args.joined(separator: " "))
+    }
+    try mkdir("repo")
+    git(["init", "-q", "-b", "main"], repo)
+    git(
+      [
+        "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty",
+        "-m", "init",
+      ], repo)
+    git(["worktree", "add", "-q", "-b", "feat/x", linked], repo)
+
+    XCTAssertEqual(GitWorktreeRoot.branch(at: repo), "main")
+    XCTAssertEqual(GitWorktreeRoot.branch(at: linked), "feat/x")
+
+    git(["checkout", "-q", "--detach"], linked)
+    XCTAssertNil(GitWorktreeRoot.branch(at: linked), "detached")
+    try mkdir("plain")
+    XCTAssertNil(GitWorktreeRoot.branch(at: canonical("plain")), "git の外")
+  }
+
   // MARK: - normalizedPath
 
   /// symlink と `..` を解いた正準形を返す。symlink 越しの cwd でもルートは正準形で出る。

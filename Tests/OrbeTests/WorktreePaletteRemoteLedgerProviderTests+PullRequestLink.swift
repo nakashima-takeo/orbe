@@ -60,6 +60,27 @@ extension WorktreePaletteRemoteLedgerProviderTests {
       resolve([path: "feat"]), [path: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 5))])
   }
 
+  /// worktree が期待したブランチ（タスクに付けたときのブランチ）と別のブランチにいる間は答えない——ブランチを
+  /// 切り替えて使い回す main worktree で、別の作業の PR をタスクに付けない。戻れば答える。
+  func testAWorktreeOnAnotherBranchThanExpectedGetsNoPullRequestUntilItReturns() throws {
+    addRemote("origin", "me/r")
+    try answer("me/r", found: "me/r")
+    XCTAssertTrue(git(["checkout", "-q", "-b", "feat"]).isSuccess)
+    try serveBranchPullRequests(
+      "feat", "[\(branchPR(7, head: "feat", state: "OPEN", from: "me/r", url: pullURL("me/r", 7)))]"
+    )
+    try serveBranchPullRequests(
+      "other",
+      "[\(branchPR(6, head: "other", state: "OPEN", from: "me/r", url: pullURL("me/r", 6)))]")
+    let feat = try XCTUnwrap(GitHubItemID(repo: "me/r", number: 7))
+
+    XCTAssertEqual(resolve([root: "feat"]), [root: feat])
+    XCTAssertTrue(git(["checkout", "-q", "-b", "other"]).isSuccess)
+    XCTAssertEqual(resolve([root: "feat"]), [:], "別のブランチにいる間")
+    XCTAssertTrue(git(["checkout", "-q", "feat"]).isSuccess)
+    XCTAssertEqual(resolve([root: "feat"]), [root: feat], "戻った後")
+  }
+
   /// 既定ブランチの worktree は PR の head として見ない（問い合わせもしない）。
   func testTheDefaultBranchsWorktreeGetsNoPullRequest() throws {
     addRemote("origin", "me/r")

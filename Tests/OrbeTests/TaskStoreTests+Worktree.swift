@@ -102,6 +102,39 @@ extension TaskStoreTests {
     XCTAssertEqual(store.tasks.first?.worktree, worktree, "持ち主から外さない")
   }
 
+  // MARK: - 付けたときのブランチ
+
+  /// worktree を付けると（追加・変更・begin のどれでも）、その時そこで checkout していたブランチを記録し、
+  /// 再起動しても残る。
+  func testAttachingAWorktreeRecordsTheBranchCheckedOutThere() throws {
+    let main = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
+    let linked = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("wt").path
+    let git = { (args: [String]) in
+      XCTAssertTrue(
+        GitRunner.shared.runSync(args, cwd: main).isSuccess, args.joined(separator: " "))
+    }
+    try FileManager.default.createDirectory(atPath: main, withIntermediateDirectories: true)
+    git(["init", "-q", "-b", "main"])
+    git([
+      "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty",
+      "-m", "init",
+    ])
+    git(["worktree", "add", "-q", "-b", "feat", linked])
+    let store = TaskStore()
+
+    _ = try store.add(draft("added") { $0.worktree = TaskWorktree(key: main) })
+    XCTAssertEqual(store.tasks.last?.worktreeBranch, "main", "追加")
+    let updated = try store.add(draft("updated"))
+    _ = try store.update(updated.id, update { $0.worktree = .set(TaskWorktree(key: linked)) })
+    XCTAssertEqual(store.tasks.last?.worktreeBranch, "feat", "変更")
+    git(["checkout", "-q", "-b", "other"])
+    let begun = try store.add(draft("begun"))
+    try store.begin(begun.id, worktree: TaskWorktree(key: main))
+    XCTAssertEqual(store.tasks.last?.worktreeBranch, "other", "begin")
+
+    XCTAssertEqual(relaunched().tasks.map(\.worktreeBranch), store.tasks.map(\.worktreeBranch))
+  }
+
   // MARK: - 外した項目
 
   func testUnlinkingRemembersTheItemAndLinkingItAgainForgetsIt() throws {

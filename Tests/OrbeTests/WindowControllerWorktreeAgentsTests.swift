@@ -70,6 +70,35 @@ final class WindowControllerWorktreeAgentsTests: OrbeTestCase {
     XCTAssertTrue(pump { wc.worktreeAgents.agents[root] == nil }, "タブが去ると外れる")
   }
 
+  /// タスクがその worktree の agent を示すのは、worktree が付けたときと同じブランチにいる間だけ——ブランチを
+  /// 切り替えて使い回す main worktree で、別の作業の agent をタスクに示さない。戻ればまた示す。
+  func testATaskShowsTheAgentOnlyWhileItsWorktreeIsOnTheBranchItWasAttachedAt() throws {
+    let (wc, root) = try launch()
+    let git = { (args: [String]) in
+      XCTAssertTrue(
+        GitRunner.shared.runSync(args, cwd: root).isSuccess, args.joined(separator: " "))
+    }
+    git([
+      "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty",
+      "-m", "init",
+    ])
+    git(["checkout", "-q", "-b", "task"])
+    let tab = try XCTUnwrap(wc.current.tabs.first)
+    let task = try wc.taskStore.add(TaskDraft(title: "a", worktree: TaskWorktree(key: root)))
+
+    report("working", on: tab, in: wc)
+    XCTAssertTrue(pump { task.agent(in: wc.worktreeAgents.agents) != nil }, "付けたときのブランチ")
+
+    git(["checkout", "-q", "-b", "other"])
+    report("waiting", on: tab, in: wc)
+    XCTAssertTrue(pump { wc.worktreeAgents.agents[root]?.state == .waiting })
+    XCTAssertNil(task.agent(in: wc.worktreeAgents.agents), "別のブランチにいる間")
+
+    git(["checkout", "-q", "task"])
+    report("working", on: tab, in: wc)
+    XCTAssertTrue(pump { task.agent(in: wc.worktreeAgents.agents) != nil }, "戻った後")
+  }
+
   func testGoingToTheAgentFromTheTaskDetailFocusesItsTabAndClosesTheScreen() throws {
     let (wc, root) = try launch()
     let tab = try XCTUnwrap(wc.current.tabs.first)
