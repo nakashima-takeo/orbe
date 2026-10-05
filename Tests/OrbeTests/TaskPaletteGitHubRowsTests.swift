@@ -133,6 +133,17 @@ final class TaskPaletteGitHubRowsTests: OrbeTestCase {
     XCTAssertEqual(shape(input(issues: [issue(1)], query: "zzz")), [.empty])
   }
 
+  /// 取得中の区分は、当たる項目の後ろに読み込み中の行を足し、0 件でも見出しを残す。取得中の区分がある間は
+  /// 「該当なし」と言い切らない。
+  func testLoadingSectionKeepsItsHeaderAndEndsWithTheLoadingRow() {
+    XCTAssertEqual(
+      shape(input(issues: [issue(1)], loading: [.issue, .pr])),
+      [.header(.issue, 1), .item(1), .loading(.issue), .header(.pr, 0), .loading(.pr)])
+    XCTAssertEqual(
+      shape(input(issues: [issue(1)], query: "zzz", loading: [.issue])),
+      [.header(.issue, 0), .loading(.issue)])
+  }
+
   /// 結び付いた行には、そのタスクの主の番号とタイトルを添える。
   func testLinkedRowNamesTheTaskWithItsPrimaryNumber() throws {
     let task = linkedTask(4, "タスク機能の設計", [id(212), id(221)])
@@ -236,4 +247,5 @@ final class TaskPaletteGitHubRowsTests: OrbeTestCase {
     XCTAssertNil(role(pr(1, reviewers: ["me"])), "個人宛にレビュー依頼済み")
     XCTAssertNil(role(issue(3), login: nil), "自分が分からない")
   }
+
 }

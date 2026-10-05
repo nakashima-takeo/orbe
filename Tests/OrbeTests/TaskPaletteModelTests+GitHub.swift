@@ -54,6 +54,39 @@ extension TaskPaletteModelTests {
     XCTAssertNil(TaskPaletteSamples.model([]).gitHubCount, "まだ何も取れていなければ件数を出さない")
   }
 
+  /// 一覧がまだ届いていない区分と取り直し中の区分は、読み込み中の行を出して「該当なし」と言い切らない。
+  /// 取得に失敗した区分は読み込み中に数えない。
+  func testSectionsStillFetchingShowTheLoadingRowInsteadOfNothing() {
+    func rows(query: String = "", _ change: (inout GitHubOpenLists.Repository) -> Void)
+      -> [TaskPaletteGitHubRow.Identity]
+    {
+      var repository = GitHubOpenLists.Repository()
+      repository.issues.items = [GitHub.issue(5)]
+      change(&repository)
+      let lists = GitHub.lists(
+        [TaskPaletteSamples.root: .init(resolution: .resolved, repo: GitHub.repo)],
+        [GitHub.repo: repository])
+      let palette = TaskPaletteSamples.model([], openLists: lists)
+      palette.toggleTab()
+      palette.query = query
+      return palette.gitHubRows.map(\.id)
+    }
+
+    XCTAssertEqual(
+      rows { $0.pullRequests.items = nil },
+      [.header(.issue), .selectable(.item(GitHub.id(5))), .header(.pr), .loading(.pr)],
+      "PR がまだ 1 件も届いていない")
+    XCTAssertEqual(
+      rows(query: "zzz") {
+        $0.issues.growing = true
+        $0.pullRequests.items = []
+      },
+      [.header(.issue), .loading(.issue)], "取り直し中に絞り込みで 0 件")
+    XCTAssertEqual(
+      rows { $0.pullRequests.failed = true },
+      [.header(.issue), .selectable(.item(GitHub.id(5)))], "取得に失敗した区分")
+  }
+
   // MARK: - タスクにする
 
   /// ↵ で、開いた workspace の未着手のタスクを、右の欄の優先度と期限、その項目を主の結び付きとして足す。
