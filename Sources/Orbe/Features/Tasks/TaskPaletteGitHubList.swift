@@ -82,6 +82,12 @@ struct TaskPaletteGitHubList: View {
             .padding(.leading, 14 + Theme.Space.beat)
           Spacer(minLength: 0)
         })
+    case .loading:
+      Text(l10n.string(.commonLoading))
+        .font(Font.theme.chrome)
+        .foregroundStyle(Color.theme.textMuted)
+        .padding(.leading, 22 + 14 + Theme.Space.beat)
+        .frame(height: 30)
     case .empty:
       Text(l10n.string(.taskPaletteGitHubEmpty))
         .font(Font.theme.chrome)

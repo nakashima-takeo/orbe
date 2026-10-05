@@ -47,18 +47,20 @@ final class TaskPaletteGitHubRowsTests: OrbeTestCase {
   private func input(
     issues: [GitHubOpenItem] = [], pullRequests: [GitHubOpenItem] = [], tasks: [TaskItem] = [],
     login: String? = "me", reviewRequests: Set<Int>? = [], filter: TaskGitHubFilter = .all,
-    query: String = "", expanded: Set<GitHubItemKind> = []
+    query: String = "", expanded: Set<GitHubItemKind> = [], loading: Set<GitHubItemKind> = []
   ) -> TaskPaletteGitHubRows.Input {
     TaskPaletteGitHubRows.Input(
       repo: repo, issues: issues, pullRequests: pullRequests, tasks: tasks, login: login,
-      reviewRequests: reviewRequests, filter: filter, query: query, expanded: expanded)
+      reviewRequests: reviewRequests, filter: filter, query: query, expanded: expanded,
+      loading: loading)
   }
 
-  /// 行を読みやすい形に（見出し・項目の番号・さらに・空）。
+  /// 行を読みやすい形に（見出し・項目の番号・さらに・読み込み中・空）。
   private enum Shape: Equatable {
     case header(GitHubItemKind, Int)
     case item(Int)
     case more(GitHubItemKind, Int)
+    case loading(GitHubItemKind)
     case empty
   }
 
@@ -68,6 +70,7 @@ final class TaskPaletteGitHubRowsTests: OrbeTestCase {
       case .header(let kind, let count): .header(kind, count)
       case .item(let row): .item(row.item.number)
       case .more(let kind, let count): .more(kind, count)
+      case .loading(let kind): .loading(kind)
       case .empty: .empty
       }
     }

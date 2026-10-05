@@ -54,6 +54,7 @@ enum TaskPaletteGitHubRow: Equatable, Identifiable {
   enum Identity: Hashable {
     case selectable(TaskPaletteGitHubRowID)
     case header(GitHubItemKind)
+    case loading(GitHubItemKind)
     case empty
   }
 
@@ -61,7 +62,9 @@ enum TaskPaletteGitHubRow: Equatable, Identifiable {
   case header(GitHubItemKind, count: Int)
   case item(TaskPaletteGitHubItemRow)
   case more(GitHubItemKind, count: Int)
-  /// 絞り込みと入力に当たる項目が 1 件も無いときの情報行（選べない）。
+  /// 区分の一覧を取得中であることを示す末尾の行（選べない）。
+  case loading(GitHubItemKind)
+  /// 絞り込みと入力に当たる項目が 1 件も無く、取得中の区分も無いときの情報行（選べない）。
   case empty
 
   var id: Identity {
@@ -69,6 +72,7 @@ enum TaskPaletteGitHubRow: Equatable, Identifiable {
     case .header(let kind, _): .header(kind)
     case .item(let row): .selectable(.item(row.id))
     case .more(let kind, _): .selectable(.more(kind))
+    case .loading(let kind): .loading(kind)
     case .empty: .empty
     }
   }
@@ -102,13 +106,16 @@ enum TaskPaletteGitHubRows {
     let query: String
     /// 「さらに」で全部を出した区分。
     var expanded: Set<GitHubItemKind>
+    /// 一覧を取得中の区分（まだ 1 件も届いていない区分を含む）。
+    let loading: Set<GitHubItemKind>
   }
 
   /// 結び付いていない行を、区分を開くまでに出す件数。
   static let collapsedCount = 5
 
   /// 各区分は、結び付いた行（全部）→ 結び付いていない行（更新の新しい順。開いていなければ先頭
-  /// `collapsedCount` 件と「さらに」）。当たる項目の無い区分は見出しごと出さない。
+  /// `collapsedCount` 件と「さらに」）→ 取得中なら読み込み中の行。当たる項目の無い区分は見出しごと出さない
+  /// が、取得中の区分は 0 件でも見出しと読み込み中の行を残す（「無い」と「まだ届いていない」を分ける）。
   static func build(_ input: Input) -> [TaskPaletteGitHubRow] {
     let owners = owners(input.tasks)
     var rows: [TaskPaletteGitHubRow] = []
@@ -119,7 +126,8 @@ enum TaskPaletteGitHubRows {
           ($0.element.updatedAt, -$0.offset) > ($1.element.updatedAt, -$1.offset)
         }
         .compactMap { itemRow($0.element, owners, input) }
-      guard !items.isEmpty else { continue }
+      let loading = input.loading.contains(kind)
+      guard !items.isEmpty || loading else { continue }
       rows.append(.header(kind, count: items.count))
       let linked = items.filter { $0.task != nil }
       let unlinked = items.filter { $0.task == nil }
@@ -130,6 +138,7 @@ enum TaskPaletteGitHubRows {
         rows += unlinked.prefix(collapsedCount).map(TaskPaletteGitHubRow.item)
         rows.append(.more(kind, count: unlinked.count - collapsedCount))
       }
+      if loading { rows.append(.loading(kind)) }
     }
     if rows.isEmpty { rows.append(.empty) }
     return rows

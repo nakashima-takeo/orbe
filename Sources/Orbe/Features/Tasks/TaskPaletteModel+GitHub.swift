@@ -77,7 +77,12 @@ extension TaskPaletteModel {
       repo: repo, issues: repository?.issues.items ?? [],
       pullRequests: repository?.pullRequests.items ?? [], tasks: store.tasks, login: viewer.login,
       reviewRequests: repository?.reviewRequests, filter: githubFilter, query: gitHubList.query,
-      expanded: expandedKinds)
+      expanded: expandedKinds,
+      loading: Set(
+        [GitHubItemKind.issue, .pr].filter { kind in
+          let list = kind == .issue ? repository?.issues : repository?.pullRequests
+          return list.map { $0.growing || ($0.items == nil && !$0.failed) } ?? true
+        }))
   }
 
   var gitHubSelectableIDs: [TaskPaletteGitHubRowID] { gitHubRows.compactMap(\.selectableID) }
