@@ -195,8 +195,7 @@ extension TaskPaletteModel {
   }
 
   /// ⌘⌫（結び付いている行）。その項目だけを除いた列で置き換える。行は結び付いていない側へ戻り、選択はその行に
-  /// 残る。戻った先が「さらに」の内側（閉じた区分の 6 件目以降）なら、その区分を開いて見せる——隠れると選択が
-  /// 同じ位置の別の行へ移り、続けて押した ⌘⌫ が別の項目の結び付きを外す。
+  /// 残る（「さらに」の内側へ戻るなら、付け直しがその区分を開く）。
   func unlinkSelectedGitHubItem() {
     guard let row = selectedGitHubRow, let owner = row.task,
       let task = store.tasks.first(where: { $0.id == owner.id })
@@ -205,10 +204,20 @@ extension TaskPaletteModel {
     var update = TaskUpdate()
     update.links = task.links.filter { $0.item != row.id }
     mutate(.failed) { () throws(TaskStoreError) in _ = try store.update(task.id, update) }
-    let id = TaskPaletteGitHubRowID.item(row.id)
-    guard !gitHubSelectableIDs.contains(id) else { return }
-    expandedKinds.insert(row.item.kind)
-    gitHubList.select(id, in: gitHubSelectableIDs)
+  }
+
+  /// 選んでいる項目が一覧に残ったまま閉じた区分の「さらに」の内側（6 件目以降）へ隠れたら、その区分を開く。
+  /// 隠れたままだと付け直しが選択を同じ位置の別の項目へ移し、↵ で見ていない項目をタスクにして自分を書き込み、
+  /// ⌘⌫ で別の項目の結び付きを外す。隠れる契機は人の ⌘⌫ に限らない（agent が結び付きを外す・消す、
+  /// 一覧の後続のページで上位が入れ替わる）。
+  func revealHiddenGitHubSelection() {
+    guard case .item(let id) = gitHubList.selectedID,
+      !gitHubSelectableIDs.contains(.item(id)), var input = gitHubRowsInput
+    else { return }
+    input.expanded = [.issue, .pr]
+    for case .item(let row) in TaskPaletteGitHubRows.build(input) where row.id == id {
+      expandedKinds.insert(row.item.kind)
+    }
   }
 
   /// ⌘T（GitHub タブ）。結び付いていない行はタスクにしてから、結び付いている行はそのタスクで、⌘T を開く。

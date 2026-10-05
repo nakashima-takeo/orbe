@@ -101,7 +101,7 @@ enum TaskPaletteGitHubRows {
     let filter: TaskGitHubFilter
     let query: String
     /// 「さらに」で全部を出した区分。
-    let expanded: Set<GitHubItemKind>
+    var expanded: Set<GitHubItemKind>
   }
 
   /// 結び付いていない行を、区分を開くまでに出す件数。

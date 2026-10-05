@@ -228,6 +228,7 @@ enum TaskPaletteError: Error, Equatable {
     endStalePick()
     let previous = selectedID
     taskList.reconcile(selectableIDs)
+    revealHiddenGitHubSelection()
     gitHubList.reconcile(gitHubSelectableIDs)
     if case .task(let id, _) = draft?.target, !store.tasks.contains(where: { $0.id == id }) {
       draft = nil
